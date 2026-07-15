@@ -10,6 +10,7 @@ const mocks = vi.hoisted(() => ({
   tableProps: null as null | Record<string, unknown>,
   resourceGridParams: null as null | Record<string, unknown>,
   persistenceParams: null as null | Record<string, unknown>,
+  openWithObject: vi.fn(),
 }));
 
 const namespace = (clusterId: string, clusterName: string, name: string) => ({
@@ -111,6 +112,10 @@ vi.mock('@core/contexts/SidebarStateContext', () => ({
   }),
 }));
 
+vi.mock('@modules/object-panel/hooks/useObjectPanel', () => ({
+  useObjectPanel: () => ({ openWithObject: mocks.openWithObject }),
+}));
+
 vi.mock('@shared/components/tables/persistence/useGridTablePersistence', () => ({
   useGridTablePersistence: (params: Record<string, unknown>) => {
     mocks.persistenceParams = params;
@@ -157,6 +162,7 @@ vi.mock('@modules/resource-grid/ResourceInventoryTable', () => ({
     }>;
     const namespaceColumn = columns.find(({ key }) => key === 'name');
     const clusterColumn = columns.find(({ key }) => key === 'cluster');
+    const kindColumn = columns.find(({ key }) => key === 'kind');
     return (
       <div data-testid="global-namespace-table">
         {source.rows.map((row) => (
@@ -164,6 +170,9 @@ vi.mock('@modules/resource-grid/ResourceInventoryTable', () => ({
             key={`${String(row.clusterId)}:${String(row.name)}`}
             data-testid={`namespace-row-${String(row.clusterId)}-${String(row.name)}`}
           >
+            <span data-testid={`kind-${String(row.clusterId)}-${String(row.name)}`}>
+              {kindColumn?.render(row)}
+            </span>
             <span data-testid={`namespace-link-${String(row.clusterId)}-${String(row.name)}`}>
               {namespaceColumn?.render(row)}
             </span>
@@ -228,6 +237,7 @@ describe('GlobalViewNamespaces', () => {
       render?: (row: Record<string, unknown>) => ReactNode;
     }>;
     expect(columns.map(({ key }) => key)).toEqual([
+      'kind',
       'name',
       'cluster',
       'status',
@@ -360,6 +370,33 @@ describe('GlobalViewNamespaces', () => {
     expect(mocks.setSidebarSelectionForCluster.mock.invocationCallOrder[0]).toBeLessThan(
       mocks.setActiveKubeconfig.mock.invocationCallOrder[0]
     );
+
+    await unmount();
+  });
+
+  it('opens the namespace Object Panel from Kind without staging navigation', async () => {
+    const { container, unmount } = await renderView();
+
+    await act(async () => {
+      container
+        .querySelector<HTMLButtonElement>('[data-testid="kind-cluster-b-payments"] button')
+        ?.click();
+    });
+
+    expect(mocks.openWithObject).toHaveBeenCalledWith(
+      expect.objectContaining({
+        clusterId: 'cluster-b',
+        group: '',
+        version: 'v1',
+        kind: 'Namespace',
+        resource: 'namespaces',
+        name: 'payments',
+      })
+    );
+    expect(mocks.setSelectedNamespace).not.toHaveBeenCalled();
+    expect(mocks.setClusterNavigationTarget).not.toHaveBeenCalled();
+    expect(mocks.setSidebarSelectionForCluster).not.toHaveBeenCalled();
+    expect(mocks.setActiveKubeconfig).not.toHaveBeenCalled();
 
     await unmount();
   });

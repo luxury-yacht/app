@@ -11,6 +11,7 @@ const mocks = vi.hoisted(() => ({
   persistenceParams: null as null | Record<string, unknown>,
   namespaceLoading: false,
   namespaceRefreshing: false,
+  openWithObject: vi.fn(),
 }));
 
 const namespacePayload = {
@@ -76,6 +77,10 @@ vi.mock('@core/contexts/ViewStateContext', () => ({
   useViewState: () => ({ onNamespaceSelect: mocks.onNamespaceSelect }),
 }));
 
+vi.mock('@modules/object-panel/hooks/useObjectPanel', () => ({
+  useObjectPanel: () => ({ openWithObject: mocks.openWithObject }),
+}));
+
 vi.mock('@shared/components/tables/persistence/useGridTablePersistence', () => ({
   useGridTablePersistence: (params: Record<string, unknown>) => {
     mocks.persistenceParams = params;
@@ -119,17 +124,24 @@ vi.mock('@modules/resource-grid/ResourceInventoryTable', () => ({
     const onRowPointerClick = props.onRowPointerClick as
       | ((row: Record<string, unknown>) => void)
       | undefined;
+    const columns = props.columns as Array<{
+      key: string;
+      render: (row: Record<string, unknown>) => ReactNode;
+    }>;
+    const kindColumn = columns.find(({ key }) => key === 'kind');
     return (
       <div data-testid="namespace-table">
         {source.rows.map((row) => (
-          <button
-            key={String(row.name)}
-            type="button"
-            data-testid={`namespace-${row.name}`}
-            onClick={() => onRowPointerClick?.(row)}
-          >
-            {String(row.name)}
-          </button>
+          <div key={String(row.name)}>
+            <span data-testid={`kind-${String(row.name)}`}>{kindColumn?.render(row)}</span>
+            <button
+              type="button"
+              data-testid={`namespace-${row.name}`}
+              onClick={() => onRowPointerClick?.(row)}
+            >
+              {String(row.name)}
+            </button>
+          </div>
         ))}
       </div>
     );
@@ -192,6 +204,7 @@ describe('ClusterViewNamespaces', () => {
       render?: (row: Record<string, unknown>) => ReactNode;
     }>;
     expect(columns.map(({ key }) => key)).toEqual([
+      'kind',
       'name',
       'status',
       'workloads',
@@ -330,6 +343,29 @@ describe('ClusterViewNamespaces', () => {
     expect(mocks.setSelectedNamespace.mock.invocationCallOrder[0]).toBeLessThan(
       mocks.onNamespaceSelect.mock.invocationCallOrder[0]
     );
+
+    await unmount();
+  });
+
+  it('opens the namespace Object Panel from Kind without activating row navigation', async () => {
+    const { container, unmount } = await renderView();
+
+    await act(async () => {
+      container.querySelector<HTMLButtonElement>('[data-testid="kind-payments"] button')?.click();
+    });
+
+    expect(mocks.openWithObject).toHaveBeenCalledWith(
+      expect.objectContaining({
+        clusterId: 'cluster-a',
+        group: '',
+        version: 'v1',
+        kind: 'Namespace',
+        resource: 'namespaces',
+        name: 'payments',
+      })
+    );
+    expect(mocks.setSelectedNamespace).not.toHaveBeenCalled();
+    expect(mocks.onNamespaceSelect).not.toHaveBeenCalled();
 
     await unmount();
   });

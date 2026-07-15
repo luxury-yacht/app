@@ -15,6 +15,9 @@ workflow and that exception is documented.
   `alignData` with `left`, `center`, or `right`. Each defaults to `left` when
   omitted; use `className` only for styling outside this alignment contract.
 - Prefer shared column factories for common Kubernetes/resource fields.
+- Interactive cell actions must declare whether they also participate in the
+  row action. Use the shared factory option for that distinction; a Kind badge
+  that opens an Object Panel independently must suppress row activation.
 - Keep rendering, filtering, sorting, focus, keyboard, context menus,
   persistence, and virtualization in the shared table system.
 - Do not disable virtualization to work around focus, hover, width, or context

@@ -215,6 +215,20 @@ describe('columnFactories', () => {
       badge.props.onClick?.({ stopPropagation: () => undefined } as unknown);
       expect(onKindClick).toHaveBeenCalledTimes(1);
     });
+
+    it('can suppress the row action for an interactive kind badge', () => {
+      const column = createKindColumn<RowSample>({
+        getKind: (row) => row.kind ?? '',
+        onClick: vi.fn(),
+        allowRowClick: false,
+      });
+
+      const badge = column.render({ id: 'namespace', kind: 'Namespace' }) as React.ReactElement<{
+        'data-gridtable-rowclick'?: string;
+      }>;
+
+      expect(badge.props['data-gridtable-rowclick']).toBe('suppress');
+    });
   });
 
   describe('createResourceBarColumn', () => {

@@ -1,4 +1,5 @@
 import { namespaceAggregateUsageDisplay } from '@core/resource-metrics';
+import { useObjectPanel } from '@modules/object-panel/hooks/useObjectPanel';
 import { type BoundedRowsMode, boundedRowsSource } from '@modules/resource-grid/boundedRowsSource';
 import ResourceInventoryTable from '@modules/resource-grid/ResourceInventoryTable';
 import { useClusterResourceGridTable } from '@modules/resource-grid/useResourceGridTable';
@@ -8,7 +9,10 @@ import type { GridColumnDefinition } from '@shared/components/tables/GridTable';
 import { TABLE_PAGE_SIZE_OPTIONS } from '@shared/components/tables/pageSizeOptions';
 import { useGridTablePersistence } from '@shared/components/tables/persistence/useGridTablePersistence';
 import { backendStatusTextClass } from '@shared/utils/backendStatusPresentation';
-import { buildRequiredCanonicalObjectRowKey } from '@shared/utils/objectIdentity';
+import {
+  buildRequiredCanonicalObjectRowKey,
+  buildRequiredObjectReference,
+} from '@shared/utils/objectIdentity';
 import React, { useCallback, useMemo } from 'react';
 import type { NamespaceSignalState, NamespaceSummary } from '@/core/refresh/types';
 import { useDefaultTablePageSize } from '@/hooks/useDefaultTablePageSize';
@@ -154,8 +158,19 @@ const NamespaceSummaryTable: React.FC<NamespaceSummaryTableProps> = ({
   emptyMessage,
 }) => {
   const defaultPageSize = useDefaultTablePageSize();
+  const { openWithObject } = useObjectPanel();
+  const openNamespaceObject = useCallback(
+    (row: NamespaceTableRow) => openWithObject(buildRequiredObjectReference(row.ref)),
+    [openWithObject]
+  );
   const columns = useMemo<GridColumnDefinition<NamespaceTableRow>[]>(() => {
     const result: GridColumnDefinition<NamespaceTableRow>[] = [
+      cf.createKindColumn<NamespaceTableRow>({
+        getKind: (row) => row.kind,
+        onClick: openNamespaceObject,
+        isInteractive: (row) => !row.scopeStatus,
+        allowRowClick: false,
+      }),
       cf.createTextColumn<NamespaceTableRow>('name', 'Namespace', (row) => row.name, {
         onClick: navigate,
         getClassName: () => 'object-panel-link',
@@ -229,6 +244,7 @@ const NamespaceSummaryTable: React.FC<NamespaceSummaryTableProps> = ({
       cf.createAgeColumn<NamespaceTableRow>()
     );
     cf.applyColumnSizing(result, {
+      kind: { autoWidth: true },
       name: { autoWidth: true },
       cluster: { autoWidth: true },
       status: { autoWidth: true },
@@ -241,7 +257,7 @@ const NamespaceSummaryTable: React.FC<NamespaceSummaryTableProps> = ({
       age: { autoWidth: true },
     });
     return result;
-  }, [navigate, navigateCluster, showClusterColumn]);
+  }, [navigate, navigateCluster, openNamespaceObject, showClusterColumn]);
 
   const keyExtractor = useCallback(
     (row: NamespaceTableRow) => buildRequiredCanonicalObjectRowKey(row),
@@ -283,6 +299,7 @@ const NamespaceSummaryTable: React.FC<NamespaceSummaryTableProps> = ({
     filterAccessors: {
       getCluster: (row) => row.clusterId,
       getSearchText: (row) => [
+        row.kind,
         row.name,
         ...(showClusterColumn ? [row.clusterName, row.clusterId] : []),
         row.status ?? row.phase,

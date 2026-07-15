@@ -419,6 +419,8 @@ export interface CreateKindColumnOptions<T> extends GridColumnAlignmentOptions {
   sortValue?: (item: T) => string | number;
   className?: string;
   disableShortcuts?: boolean | ((item: T) => boolean);
+  /** Whether activating the Kind badge may also activate its row. Defaults to true. */
+  allowRowClick?: boolean;
 }
 
 export const createKindColumn = <T,>(
@@ -438,6 +440,7 @@ export const createKindColumn = <T,>(
     alignHeader,
     alignData,
     disableShortcuts,
+    allowRowClick = true,
   } = options;
   const resolveDisplayText = (item: T) => {
     if (getDisplayText) {
@@ -490,7 +493,7 @@ export const createKindColumn = <T,>(
           data-kind-value={kindValue}
           data-kind-interactive="true"
           data-gridtable-shortcut-optout="true"
-          data-gridtable-rowclick="allow"
+          data-gridtable-rowclick={allowRowClick ? 'allow' : 'suppress'}
           onClick={handleClick}
         >
           {displayText}
