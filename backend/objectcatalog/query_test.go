@@ -97,6 +97,9 @@ func TestQueryFiltersAndPublishesAPIGroupAndResourceScopeFacets(t *testing.T) {
 	if !reflect.DeepEqual(result.ResourceScopes, []Scope{ScopeCluster, ScopeNamespace}) {
 		t.Fatalf("unexpected resource-scope facets: %+v", result.ResourceScopes)
 	}
+	if !reflect.DeepEqual(result.Kinds, []KindInfo{{Kind: "Deployment", Namespaced: true}}) {
+		t.Fatalf("expected selected API groups to constrain Kinds, got %+v", result.Kinds)
+	}
 	if result.ContinueToken == "" {
 		t.Fatal("expected a cursor for the second apps row")
 	}

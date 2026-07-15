@@ -45,6 +45,10 @@ workflow and that exception is documented.
   controlled dropdown remains distinct from Select None. Query adapters may
   remove a full-dimension selection only when building an equivalent backend
   query; they must not write that query optimization back into dropdown state.
+- Query facets may declare `placement: 'before-kinds'` when they constrain the
+  Kind vocabulary. They must also declare `invalidates: ['kinds']` so changing
+  the upstream facet clears the previous Kind selection in the same state
+  transition; the provider then supplies the dependent Kind options.
 - Shared filter and Columns dropdown menus measure both viewport axes when they
   open. Right-edge menus end-align when start alignment would overflow, and menu
   width remains capped to the visible viewport.

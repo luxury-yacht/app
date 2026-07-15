@@ -88,6 +88,10 @@ export interface GridTableQueryFacetDefinition {
   options: DropdownOption[];
   searchable?: boolean;
   bulkActions?: boolean;
+  /** Position relative to GridTable's built-in structural filters. */
+  placement?: 'before-kinds' | 'after-structural';
+  /** Structural selections made invalid when this facet changes. */
+  invalidates?: ReadonlyArray<'kinds' | 'namespaces' | 'clusters'>;
 }
 
 export interface GridTableFilterAccessors<T> {

@@ -262,14 +262,26 @@ export function useGridTableFilters<T>({
 
   const handleFilterQueryFacetChange = useCallback(
     (key: string, values: string[]) => {
+      const currentValues = activeFilters.queryFacets?.[key] ?? [];
+      const selectionChanged =
+        currentValues.length !== values.length ||
+        currentValues.some((value) => !values.includes(value));
+      const invalidates = selectionChanged
+        ? new Set(
+            resolvedFilterOptions.queryFacets?.find((facet) => facet.key === key)?.invalidates ?? []
+          )
+        : new Set<string>();
       updateFilters({
+        ...(invalidates.has('kinds') ? { kinds: [] } : {}),
+        ...(invalidates.has('namespaces') ? { namespaces: [] } : {}),
+        ...(invalidates.has('clusters') ? { clusters: [] } : {}),
         queryFacets: {
           ...(activeFilters.queryFacets ?? {}),
           [key]: values,
         },
       });
     },
-    [activeFilters.queryFacets, updateFilters]
+    [activeFilters.queryFacets, resolvedFilterOptions.queryFacets, updateFilters]
   );
 
   const handleFilterReset = useCallback(() => {

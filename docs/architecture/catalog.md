@@ -19,15 +19,19 @@ Keep `catalog-first`. Do not turn that into `catalog-only`.
   guess from current selection.
 - If discovery is degraded, preserve known identity where safe and surface
   degraded confidence instead of acting on ambiguous objects.
-- Metadata controls that describe the object universe, such as namespace, kind,
-  API-group, and resource-scope filters, should use catalog-derived metadata
-  rather than the current row slice. The core API group uses the non-empty
-  `"(core)"` query value and a `core` display label.
-- Catalog queries carry a structural resource scope and optional pinned
-  namespaces separately from user filters. The user resource-scope facet is a
-  distinct filter and must not replace that structural boundary.
-  `unfilteredTotal` removes search, kind, user namespace, API-group, and user
-  resource-scope filters while retaining the structural boundary.
+- Metadata controls that describe the object universe, such as namespace, Kind,
+  and API-group filters, use catalog-derived metadata rather than the current
+  row slice. The core API group uses the non-empty `"(core)"` query value and a
+  `core` display label.
+- Browse queries carry a structural resource scope and optional pinned
+  namespaces separately from user filters. That structural scope is not a
+  second user-selectable filter.
+- API Groups is upstream of Kinds in Browse. The API Groups vocabulary describes
+  the complete structural scope, while the Kinds vocabulary is recomputed for
+  the selected API groups. Changing API Groups invalidates the existing Kind
+  selection before the dependent query runs.
+- `unfilteredTotal` removes search, Kind, user namespace, and API-group filters
+  while retaining the structural boundary.
 
 ## Layer Model
 

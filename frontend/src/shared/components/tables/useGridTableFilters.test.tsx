@@ -184,6 +184,48 @@ describe('useGridTableFilters', () => {
     expect(result?.tableData.length).toBe(rows.length);
   });
 
+  it('invalidates dependent Kind selections in the same query-facet change', async () => {
+    const onChange = vi.fn();
+    const { getResult } = await renderHook({
+      enabled: true,
+      value: {
+        search: '',
+        kinds: ['Deployment'],
+        namespaces: [],
+        queryFacets: { apiGroups: ['apps'] },
+        caseSensitive: false,
+        includeMetadata: false,
+      },
+      onChange,
+      options: {
+        searchBehavior: 'query',
+        queryFacets: [
+          {
+            key: 'apiGroups',
+            label: 'API groups',
+            placeholder: 'All API groups',
+            options: [],
+            invalidates: ['kinds'],
+          },
+        ],
+      },
+    });
+
+    await act(async () => {
+      getResult()?.handleFilterQueryFacetChange('apiGroups', ['(core)']);
+      await Promise.resolve();
+    });
+
+    expect(onChange).toHaveBeenCalledWith({
+      search: '',
+      kinds: [],
+      namespaces: [],
+      queryFacets: { apiGroups: ['(core)'] },
+      caseSensitive: false,
+      includeMetadata: false,
+    });
+  });
+
   it('honours controlled filter state and invokes onChange callbacks', async () => {
     const onChange = vi.fn();
     const controlledValue: GridTableFilterState = {

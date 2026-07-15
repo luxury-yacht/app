@@ -545,8 +545,8 @@ func catalogEngineStructuralMetadata(store *querypage.Store[Summary], opts Query
 
 // catalogEngineFacets derives the maintained-store path's Kinds/Namespaces facets over
 // the store snapshot, using the publish-time cached lists:
-//   - Kinds: customOnly → kinds among custom matches; namespace filter → kinds present
-//     in the filtered namespaces; otherwise the full cached kinds list.
+//   - Kinds: customOnly → kinds among custom matches; namespace/API group/resource-scope
+//     filters → kinds present in their intersection; otherwise the full cached kinds list.
 //   - Namespaces: the full cached namespaces list (or, when none were cached but matches
 //     contribute namespaces, the matched namespaces).
 //
@@ -557,27 +557,41 @@ func catalogEngineFacets(rows []Summary, opts QueryOptions, cachedKinds []KindIn
 	namespaceMatcher := newNamespaceMatcher(opts.Namespaces)
 	searchMatcher := newSearchMatcher(opts.Search)
 	customMatcher := newCustomOnlyMatcher(opts.CustomOnly)
+	groupFilters := make(map[string]struct{}, len(opts.Groups))
+	for _, group := range normalizeCatalogAPIGroups(opts.Groups) {
+		groupFilters[group] = struct{}{}
+	}
+	resourceScopeFilters := make(map[string]struct{}, len(opts.ResourceScopes))
+	for _, scope := range normalizeCatalogResourceScopes(opts.ResourceScopes) {
+		resourceScopeFilters[scope] = struct{}{}
+	}
 
-	matchKinds := make(map[string]bool)
 	matchNamespaces := make(map[string]struct{})
-	namespaceKinds := make(map[string]bool)
+	allKinds := make(map[string]bool)
 	hasNamespaceFilter := len(opts.Namespaces) > 0
+	hasDependentKindFilter :=
+		hasNamespaceFilter || len(groupFilters) > 0 || len(resourceScopeFilters) > 0
+	dependentKinds := make(map[string]bool)
 
 	if metadataExact {
 		for _, item := range rows {
 			if !customMatcher(item) {
 				continue
 			}
-			if hasNamespaceFilter && namespaceMatcher(item.Namespace, item.Scope) && item.Kind != "" {
-				namespaceKinds[item.Kind] = item.Scope == ScopeNamespace
-			}
-			if !matchesCatalogQuery(item, kindMatcher, namespaceMatcher, searchMatcher) {
-				continue
-			}
 			if item.Kind != "" {
-				matchKinds[item.Kind] = item.Scope == ScopeNamespace
+				allKinds[item.Kind] = item.Scope == ScopeNamespace
 			}
-			if item.Namespace != "" {
+			matchesDependentFilters := !hasNamespaceFilter || namespaceMatcher(item.Namespace, item.Scope)
+			if matchesDependentFilters && len(groupFilters) > 0 {
+				_, matchesDependentFilters = groupFilters[catalogAPIGroupFacetValue(item.Group)]
+			}
+			if matchesDependentFilters && len(resourceScopeFilters) > 0 {
+				_, matchesDependentFilters = resourceScopeFilters[strings.ToLower(string(item.Scope))]
+			}
+			if matchesDependentFilters && item.Kind != "" {
+				dependentKinds[item.Kind] = item.Scope == ScopeNamespace
+			}
+			if matchesCatalogQuery(item, kindMatcher, namespaceMatcher, searchMatcher) && item.Namespace != "" {
 				matchNamespaces[item.Namespace] = struct{}{}
 			}
 		}
@@ -585,16 +599,10 @@ func catalogEngineFacets(rows []Summary, opts QueryOptions, cachedKinds []KindIn
 
 	kinds := cachedKinds
 	switch {
-	case opts.CustomOnly:
-		kinds = snapshotSortedKindInfos(matchKinds)
-	case hasNamespaceFilter:
-		if len(namespaceKinds) > 0 {
-			kinds = snapshotSortedKindInfos(namespaceKinds)
-		} else {
-			kinds = []KindInfo{}
-		}
-	case len(cachedKinds) == 0 && len(matchKinds) > 0:
-		kinds = snapshotSortedKindInfos(matchKinds)
+	case opts.CustomOnly || hasDependentKindFilter:
+		kinds = snapshotSortedKindInfos(dependentKinds)
+	case len(cachedKinds) == 0 && len(allKinds) > 0:
+		kinds = snapshotSortedKindInfos(allKinds)
 	}
 
 	namespaces := cachedNamespaces
@@ -610,17 +618,27 @@ func catalogEngineFacets(rows []Summary, opts QueryOptions, cachedKinds []KindIn
 // the Namespaces facet is the FULL in-scope namespace set (every custom-matched namespace
 // in the snapshot), independent of the kind/namespace/search filter — so a cluster-scope
 // filter still surfaces the cluster's namespaces in the facet list. Kinds are the full
-// custom-matched kind set, scoped to the filtered namespaces only when a namespace filter
-// is active. CustomOnly is honored solely by customMatcher gating the universe — there is
-// no separate CustomOnly kind branch.
+// custom-matched kind set, scoped to the intersection of namespace/API group/resource-scope
+// filters when any are active. CustomOnly is honored solely by customMatcher gating the
+// universe — there is no separate CustomOnly kind branch.
 func catalogEngineSnapshotFacets(rows []Summary, opts QueryOptions, metadataExact bool) ([]KindInfo, []string) {
 	namespaceMatcher := newNamespaceMatcher(opts.Namespaces)
 	customMatcher := newCustomOnlyMatcher(opts.CustomOnly)
 	hasNamespaceFilter := len(opts.Namespaces) > 0
+	groupFilters := make(map[string]struct{}, len(opts.Groups))
+	for _, group := range normalizeCatalogAPIGroups(opts.Groups) {
+		groupFilters[group] = struct{}{}
+	}
+	resourceScopeFilters := make(map[string]struct{}, len(opts.ResourceScopes))
+	for _, scope := range normalizeCatalogResourceScopes(opts.ResourceScopes) {
+		resourceScopeFilters[scope] = struct{}{}
+	}
+	hasDependentKindFilter :=
+		hasNamespaceFilter || len(groupFilters) > 0 || len(resourceScopeFilters) > 0
 
 	kindSet := make(map[string]bool)
 	namespaceSet := make(map[string]struct{})
-	namespaceKinds := make(map[string]bool)
+	dependentKinds := make(map[string]bool)
 
 	if metadataExact {
 		for _, item := range rows {
@@ -633,15 +651,22 @@ func catalogEngineSnapshotFacets(rows []Summary, opts QueryOptions, metadataExac
 			if item.Namespace != "" {
 				namespaceSet[item.Namespace] = struct{}{}
 			}
-			if hasNamespaceFilter && namespaceMatcher(item.Namespace, item.Scope) && item.Kind != "" {
-				namespaceKinds[item.Kind] = item.Scope == ScopeNamespace
+			matchesDependentFilters := !hasNamespaceFilter || namespaceMatcher(item.Namespace, item.Scope)
+			if matchesDependentFilters && len(groupFilters) > 0 {
+				_, matchesDependentFilters = groupFilters[catalogAPIGroupFacetValue(item.Group)]
+			}
+			if matchesDependentFilters && len(resourceScopeFilters) > 0 {
+				_, matchesDependentFilters = resourceScopeFilters[strings.ToLower(string(item.Scope))]
+			}
+			if matchesDependentFilters && item.Kind != "" {
+				dependentKinds[item.Kind] = item.Scope == ScopeNamespace
 			}
 		}
 	}
 
 	kindSource := kindSet
-	if hasNamespaceFilter {
-		kindSource = namespaceKinds
+	if hasDependentKindFilter {
+		kindSource = dependentKinds
 	}
 	return snapshotSortedKindInfos(kindSource), snapshotSortedKeys(namespaceSet)
 }

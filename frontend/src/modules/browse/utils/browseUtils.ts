@@ -155,7 +155,6 @@ export interface BuildCatalogScopeParams {
   kinds: string[];
   namespaces: string[];
   apiGroups?: string[];
-  resourceScopes?: Array<'Cluster' | 'Namespace'>;
   sort?: string;
   sortDirection?: string;
   continueToken?: string | null;
@@ -207,13 +206,6 @@ export const buildCatalogScope = (params: BuildCatalogScopeParams): string => {
     .sort()
     .forEach((group) => {
       query.append('apiGroup', group);
-    });
-
-  (params.resourceScopes ?? [])
-    .slice()
-    .sort()
-    .forEach((scope) => {
-      query.append('resourceScopeFilter', scope);
     });
 
   params.namespaces
@@ -294,11 +286,6 @@ export const normalizeCatalogScope = (
     const resourceScope = params.get('resourceScope');
     const kinds = params.getAll('kind');
     const apiGroups = params.getAll('apiGroup');
-    const resourceScopes = params
-      .getAll('resourceScopeFilter')
-      .filter(
-        (value): value is 'Cluster' | 'Namespace' => value === 'Cluster' || value === 'Namespace'
-      );
     // Use pinned namespaces if provided, otherwise use namespaces from the scope.
     const namespaces = pinnedNamespaces.length > 0 ? pinnedNamespaces : params.getAll('namespace');
     const scopeNamespaces =
@@ -313,7 +300,6 @@ export const normalizeCatalogScope = (
       kinds,
       namespaces,
       apiGroups,
-      resourceScopes,
       sort,
       sortDirection,
       continueToken,

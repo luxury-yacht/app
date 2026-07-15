@@ -244,6 +244,31 @@ describe('GridTableFiltersBar', () => {
     expect(onQueryFacetChange).toHaveBeenCalledWith('apiGroups', ['(core)']);
   });
 
+  it('renders leading query facets before Kinds', async () => {
+    await renderFilters({
+      showKindDropdown: true,
+      resolvedFilterOptions: {
+        kinds: [{ label: 'Pods', value: 'Pod' }],
+        namespaces: [],
+        queryFacets: [
+          {
+            key: 'apiGroups',
+            label: 'API groups',
+            placeholder: 'All API groups',
+            options: [{ label: 'core', value: '(core)' }],
+            placement: 'before-kinds',
+          },
+        ],
+      },
+      queryFacetDropdownIdPrefix: 'facet',
+    });
+
+    const controls = Array.from(
+      container.querySelectorAll<HTMLSelectElement>('.gridtable-filter-subcluster select')
+    ).map((element) => element.dataset.testid);
+    expect(controls).toEqual(['facet-apiGroups', 'kinds']);
+  });
+
   it('passes searchable through to kind and namespace dropdowns when enabled', async () => {
     await renderFilters({
       showKindDropdown: true,

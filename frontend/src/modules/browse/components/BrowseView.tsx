@@ -18,7 +18,7 @@
  */
 
 import type React from 'react';
-import { useCallback, useMemo } from 'react';
+import { useCallback, useEffect, useMemo } from 'react';
 import './BrowseView.css';
 import { useViewState } from '@core/contexts/ViewStateContext';
 import { useBrowseCatalog } from '@modules/browse/hooks/useBrowseCatalog';
@@ -277,7 +277,7 @@ const BrowseView: React.FC<BrowseViewProps> = ({
     filterOptions: {
       kinds: [],
       namespaces: [],
-      queryFacets: { apiGroups: [], resourceScopes: [] },
+      queryFacets: { apiGroups: [] },
       isNamespaceScoped: false,
     },
     pageSizeOptions: TABLE_PAGE_SIZE_OPTIONS,
@@ -294,7 +294,7 @@ const BrowseView: React.FC<BrowseViewProps> = ({
     filterOptions: {
       kinds: [],
       namespaces: [],
-      queryFacets: { apiGroups: [], resourceScopes: [] },
+      queryFacets: { apiGroups: [] },
       isNamespaceScoped: true,
     },
     pageSizeOptions: TABLE_PAGE_SIZE_OPTIONS,
@@ -312,6 +312,7 @@ const BrowseView: React.FC<BrowseViewProps> = ({
     hasLoadedOnce,
     error: catalogError,
     filterOptions,
+    filterOptionsResolved,
     totalCount,
     unfilteredTotal,
     totalIsExact,
@@ -327,15 +328,36 @@ const BrowseView: React.FC<BrowseViewProps> = ({
       kinds: persistence.filters.kinds ?? [],
       namespaces: persistence.filters.namespaces ?? [],
       apiGroups: persistence.filters.queryFacets?.apiGroups ?? [],
-      resourceScopes: (persistence.filters.queryFacets?.resourceScopes ?? []).filter(
-        (value): value is 'Cluster' | 'Namespace' => value === 'Cluster' || value === 'Namespace'
-      ),
     },
     sort: persistence.sortConfig,
     pageLimit: persistence.pageSize ?? undefined,
     onPageLimitChange: persistence.setPageSize,
     diagnosticLabel: scope === 'namespace' ? 'Namespace Browse' : 'Browse',
   });
+
+  const selectedApiGroups = persistence.filters.queryFacets?.apiGroups ?? [];
+  const selectedKinds = persistence.filters.kinds ?? [];
+  useEffect(() => {
+    if (!filterOptionsResolved || selectedApiGroups.length === 0 || selectedKinds.length === 0) {
+      return;
+    }
+    const availableKinds = new Set(filterOptions.kinds.map((kind) => kind.toLowerCase()));
+    const nextKinds = selectedKinds.filter((kind) => availableKinds.has(kind.toLowerCase()));
+    if (nextKinds.length === selectedKinds.length) {
+      return;
+    }
+    persistence.setFilters({
+      ...persistence.filters,
+      kinds: nextKinds,
+    });
+  }, [
+    filterOptions.kinds,
+    filterOptionsResolved,
+    persistence.filters,
+    persistence.setFilters,
+    selectedApiGroups.length,
+    selectedKinds,
+  ]);
 
   // Convert items to table rows
   const rows = useMemo(
@@ -374,14 +396,8 @@ const BrowseView: React.FC<BrowseViewProps> = ({
           options: filterOptions.apiGroups,
           searchable: true,
           bulkActions: true,
-        },
-        {
-          key: 'resourceScopes',
-          label: 'Resource scopes',
-          placeholder: 'All resource scopes',
-          options: filterOptions.resourceScopes,
-          searchable: false,
-          bulkActions: false,
+          placement: 'before-kinds' as const,
+          invalidates: ['kinds'] as const,
         },
       ],
       showKindDropdown: true,
@@ -401,7 +417,6 @@ const BrowseView: React.FC<BrowseViewProps> = ({
       filterOptions.kinds,
       filterOptions.namespaces,
       filterOptions.apiGroups,
-      filterOptions.resourceScopes,
       filterOptions.partialDataLabel,
       showNamespaceColumn,
       totalCount,

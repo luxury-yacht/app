@@ -9,7 +9,7 @@ import {
   splitClusterScope,
 } from '@modules/browse/utils/browseUtils';
 import { buildClusterScope } from '@/core/refresh/clusterScope';
-import type { CatalogItem, CatalogItemScope, CatalogSnapshotPayload } from '@/core/refresh/types';
+import type { CatalogItem, CatalogSnapshotPayload } from '@/core/refresh/types';
 import { compareUtf16Strings } from '@/shared/utils/sort';
 
 export interface BrowseFilters {
@@ -17,7 +17,6 @@ export interface BrowseFilters {
   kinds: string[];
   namespaces: string[];
   apiGroups?: string[];
-  resourceScopes?: CatalogItemScope[];
 }
 
 export interface BrowseFacetOption {
@@ -29,7 +28,6 @@ export interface BrowseFilterOptions {
   kinds: string[];
   namespaces: string[];
   apiGroups: BrowseFacetOption[];
-  resourceScopes: BrowseFacetOption[];
   isNamespaceScoped: boolean;
   partialDataLabel?: string;
 }
@@ -107,7 +105,6 @@ export const buildBrowseCatalogPlan = ({
     search: filters.search ?? '',
     kinds: filters.kinds ?? [],
     apiGroups: filters.apiGroups ?? [],
-    resourceScopes: filters.resourceScopes ?? [],
     namespaces: namespacesToQuery,
     sort: sortScope.sort,
     sortDirection: sortScope.sortDirection,
@@ -128,8 +125,7 @@ export const buildBrowseCatalogPlan = ({
     scopeNamespaces,
     search: '',
     kinds: [],
-    apiGroups: [],
-    resourceScopes: [],
+    apiGroups: filters.apiGroups ?? [],
     namespaces: metadataNamespaces,
     customOnly,
   });
@@ -171,7 +167,6 @@ export const buildBrowseCatalogPageScope = (
     search: input.filters.search ?? '',
     kinds: input.filters.kinds ?? [],
     apiGroups: input.filters.apiGroups ?? [],
-    resourceScopes: input.filters.resourceScopes ?? [],
     namespaces: plan.namespacesToQuery,
     sort: catalogSortScope(input.sort).sort,
     sortDirection: catalogSortScope(input.sort).sortDirection,
@@ -288,16 +283,6 @@ export const deriveBrowseFilterOptions = ({
       .slice()
       .sort()
       .map((value) => ({ value, label: value === '(core)' ? 'core' : value })),
-    resourceScopes: (payload?.resourceScopes ?? [])
-      .slice()
-      .sort((left, right) => {
-        const order: Record<CatalogItemScope, number> = { Cluster: 0, Namespace: 1 };
-        return order[left] - order[right];
-      })
-      .map((value) => ({
-        value,
-        label: value === 'Cluster' ? 'Cluster-scoped' : 'Namespace-scoped',
-      })),
     isNamespaceScoped,
     partialDataLabel: [issueLabel, facetsLabel, totalLabel].filter(Boolean).join('\n') || undefined,
   };

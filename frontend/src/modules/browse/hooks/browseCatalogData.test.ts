@@ -47,17 +47,16 @@ describe('browseCatalogData', () => {
         kinds: ['Pod'],
         namespaces: [],
         apiGroups: ['(core)', 'apps'],
-        resourceScopes: ['Namespace'],
       },
       availableNamespaces: ['default', 'kube-system'],
       pageLimit: 200,
     });
 
     expect(plan.catalogScope).toBe(
-      'cluster-1|limit=200&resourceScope=namespace&search=api&kind=Pod&apiGroup=%28core%29&apiGroup=apps&resourceScopeFilter=Namespace&namespace=default&scopeNamespace=default'
+      'cluster-1|limit=200&resourceScope=namespace&search=api&kind=Pod&apiGroup=%28core%29&apiGroup=apps&namespace=default&scopeNamespace=default'
     );
     expect(plan.metadataScope).toBe(
-      'cluster-1|limit=1&resourceScope=namespace&namespace=default&scopeNamespace=default'
+      'cluster-1|limit=1&resourceScope=namespace&apiGroup=%28core%29&apiGroup=apps&namespace=default&scopeNamespace=default'
     );
     expect(plan.metadataUsesActiveScope).toBe(false);
     expect(plan.hasUserNamespaceScope).toBe(true);
@@ -72,7 +71,6 @@ describe('browseCatalogData', () => {
             kinds: ['Pod'],
             namespaces: [],
             apiGroups: ['(core)', 'apps'],
-            resourceScopes: ['Namespace'],
           },
           pageLimit: 200,
           pinnedNamespaces: ['default'],
@@ -80,7 +78,7 @@ describe('browseCatalogData', () => {
         '200'
       )
     ).toBe(
-      'cluster-1|limit=200&resourceScope=namespace&search=api&kind=Pod&apiGroup=%28core%29&apiGroup=apps&resourceScopeFilter=Namespace&namespace=default&scopeNamespace=default&continue=200'
+      'cluster-1|limit=200&resourceScope=namespace&search=api&kind=Pod&apiGroup=%28core%29&apiGroup=apps&namespace=default&scopeNamespace=default&continue=200'
     );
   });
 
@@ -207,7 +205,6 @@ describe('browseCatalogData', () => {
       ],
       namespaces: ['kube-system', 'default'],
       groups: ['apps', '(core)'],
-      resourceScopes: ['Namespace'],
     });
 
     expect(
@@ -223,7 +220,6 @@ describe('browseCatalogData', () => {
         { value: '(core)', label: 'core' },
         { value: 'apps', label: 'apps' },
       ],
-      resourceScopes: [{ value: 'Namespace', label: 'Namespace-scoped' }],
       isNamespaceScoped: false,
       partialDataLabel: undefined,
     });

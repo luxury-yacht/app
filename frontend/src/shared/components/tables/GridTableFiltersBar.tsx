@@ -13,6 +13,7 @@ import SearchInput from '@shared/components/inputs/SearchInput';
 import Tooltip from '@shared/components/Tooltip';
 import type {
   GridTableFilterState,
+  GridTableQueryFacetDefinition,
   InternalFilterOptions,
 } from '@shared/components/tables/GridTable.types';
 import {
@@ -125,6 +126,38 @@ const GridTableFiltersBar: React.FC<GridTableFiltersBarProps> = ({
   // a narrowing filter (search/kind/namespace/cluster/provider query facet) is active.
   const hasNarrowingFilters = hasNarrowingGridTableFilters(activeFilters);
   const showCaseSensitiveToggle = resolvedFilterOptions.searchBehavior !== 'query';
+  const queryFacets = resolvedFilterOptions.queryFacets ?? [];
+  const leadingQueryFacets = queryFacets.filter((facet) => facet.placement === 'before-kinds');
+  const trailingQueryFacets = queryFacets.filter((facet) => facet.placement !== 'before-kinds');
+
+  const renderQueryFacet = (facet: GridTableQueryFacetDefinition) => {
+    const selected = activeFilters.queryFacets?.[facet.key] ?? [];
+    const count = selected.length;
+    return (
+      <div
+        key={facet.key}
+        className="gridtable-filter-group"
+        data-gridtable-filter-role={`query-facet-${facet.key}`}
+      >
+        <Dropdown
+          id={`${queryFacetDropdownIdPrefix ?? 'gridtable-query-facet'}-${facet.key}`}
+          name={`gridtable-filter-${facet.key}`}
+          multiple
+          size="compact"
+          searchable={facet.searchable}
+          showBulkActions={facet.bulkActions}
+          placeholder={facet.placeholder}
+          value={selected}
+          options={facet.options}
+          disabled={!facet.options.length}
+          onChange={(value) => onQueryFacetChange?.(facet.key, value)}
+          dropdownClassName="dropdown-filter-menu"
+          renderOption={renderOption}
+          renderValue={() => (count > 0 ? `${facet.label} (${count})` : facet.label)}
+        />
+      </div>
+    );
+  };
 
   const handleSearchKeyDown = (event: React.KeyboardEvent<HTMLInputElement>) => {
     if ((event.metaKey || event.ctrlKey) && event.key.toLowerCase() === 'a') {
@@ -196,6 +229,7 @@ const GridTableFiltersBar: React.FC<GridTableFiltersBarProps> = ({
           (resolvedFilterOptions.queryFacets?.length ?? 0) > 0
         ) && (
           <div className="gridtable-filter-subcluster">
+            {leadingQueryFacets.map(renderQueryFacet)}
             {!!showKindDropdown && (
               <div className="gridtable-filter-group" data-gridtable-filter-role="kind">
                 <Dropdown
@@ -256,34 +290,7 @@ const GridTableFiltersBar: React.FC<GridTableFiltersBarProps> = ({
                 />
               </div>
             )}
-            {(resolvedFilterOptions.queryFacets ?? []).map((facet) => {
-              const selected = activeFilters.queryFacets?.[facet.key] ?? [];
-              const count = selected.length;
-              return (
-                <div
-                  key={facet.key}
-                  className="gridtable-filter-group"
-                  data-gridtable-filter-role={`query-facet-${facet.key}`}
-                >
-                  <Dropdown
-                    id={`${queryFacetDropdownIdPrefix ?? 'gridtable-query-facet'}-${facet.key}`}
-                    name={`gridtable-filter-${facet.key}`}
-                    multiple
-                    size="compact"
-                    searchable={facet.searchable}
-                    showBulkActions={facet.bulkActions}
-                    placeholder={facet.placeholder}
-                    value={selected}
-                    options={facet.options}
-                    disabled={!facet.options.length}
-                    onChange={(value) => onQueryFacetChange?.(facet.key, value)}
-                    dropdownClassName="dropdown-filter-menu"
-                    renderOption={renderOption}
-                    renderValue={() => (count > 0 ? `${facet.label} (${count})` : facet.label)}
-                  />
-                </div>
-              );
-            })}
+            {trailingQueryFacets.map(renderQueryFacet)}
           </div>
         )}
         <div className="gridtable-filter-subcluster">
