@@ -434,7 +434,7 @@
   padding: 0 2rem 0 var(--spacing-md);
   min-height: 12px;
   font-size: var(--font-size-button);
-  min-width: 150px;
+  min-width: 100px;
 }
 
 /* ============================================
