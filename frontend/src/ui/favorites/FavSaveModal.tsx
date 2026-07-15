@@ -10,6 +10,14 @@ import { useKubeconfig } from '@modules/kubernetes/config/KubeconfigContext';
 import { ALL_NAMESPACES_SCOPE } from '@modules/namespace/constants';
 import { useNamespace } from '@modules/namespace/contexts/NamespaceContext';
 import { Dropdown } from '@shared/components/dropdowns/Dropdown';
+import {
+  ALL_MULTISELECT_FILTER,
+  filterSelectionFromDropdownValues,
+  filterSelectionToDropdownValues,
+  filterSelectionValues,
+  type MultiSelectFilterSelection,
+  normalizeMultiSelectFilterSelection,
+} from '@shared/components/dropdowns/multiSelectFilterSelection';
 import { FavoriteGenericIcon } from '@shared/components/icons/FavoriteIcons';
 import ConfirmationModal from '@shared/components/modals/ConfirmationModal';
 import ModalHeader from '@shared/components/modals/ModalHeader';
@@ -114,8 +122,12 @@ const resolveViewId = (label: string, viewType: string): string => {
 };
 
 /** Compare current form state against an existing favorite to detect changes. */
-const arraysEqual = (a: string[], b: string[]): boolean =>
-  a.length === b.length && a.every((v, i) => v === b[i]);
+const filterSelectionsEqual = (
+  left: MultiSelectFilterSelection,
+  right: MultiSelectFilterSelection
+): boolean =>
+  JSON.stringify(normalizeMultiSelectFilterSelection(left)) ===
+  JSON.stringify(normalizeMultiSelectFilterSelection(right));
 
 /** Compare current form state against an existing favorite to detect changes. */
 interface FavoriteFormState {
@@ -126,8 +138,8 @@ interface FavoriteFormState {
   view: string;
   namespace: string;
   filterText: string;
-  filterKinds: string[];
-  filterNamespaces: string[];
+  filterKinds: MultiSelectFilterSelection;
+  filterNamespaces: MultiSelectFilterSelection;
   caseSensitive: boolean;
   includeMetadata: boolean;
 }
@@ -173,10 +185,10 @@ const hasFormChanges = (
     if (filterText !== (existing.filters.search ?? '')) {
       return true;
     }
-    if (!arraysEqual(filterKinds, existing.filters.kinds ?? [])) {
+    if (!filterSelectionsEqual(filterKinds, existing.filters.kinds)) {
       return true;
     }
-    if (!arraysEqual(filterNamespaces, existing.filters.namespaces ?? [])) {
+    if (!filterSelectionsEqual(filterNamespaces, existing.filters.namespaces)) {
       return true;
     }
     if (caseSensitive !== (existing.filters.caseSensitive ?? false)) {
@@ -224,8 +236,10 @@ const FavSaveModal: React.FC<FavSaveModalProps> = ({
   const [selectedView, setSelectedView] = useState('cluster:browse');
   const [selectedNamespace, setSelectedNamespace] = useState(ALL_NAMESPACES_SCOPE);
   const [filterText, setFilterText] = useState('');
-  const [filterKinds, setFilterKinds] = useState<string[]>([]);
-  const [filterNamespaces, setFilterNamespaces] = useState<string[]>([]);
+  const [filterKinds, setFilterKinds] =
+    useState<MultiSelectFilterSelection>(ALL_MULTISELECT_FILTER);
+  const [filterNamespaces, setFilterNamespaces] =
+    useState<MultiSelectFilterSelection>(ALL_MULTISELECT_FILTER);
   const [caseSensitive, setCaseSensitive] = useState(false);
   const [includeMetadataState, setIncludeMetadataState] = useState(false);
   const [showDeleteConfirm, setShowDeleteConfirm] = useState(false);
@@ -245,8 +259,8 @@ const FavSaveModal: React.FC<FavSaveModalProps> = ({
       setSelectedView(buildViewValue(existingRoute.scope, existingRoute.view));
       setSelectedNamespace(existingFavorite.namespace || ALL_NAMESPACES_SCOPE);
       setFilterText(existingFavorite.filters?.search ?? '');
-      setFilterKinds(existingFavorite.filters?.kinds ?? []);
-      setFilterNamespaces(existingFavorite.filters?.namespaces ?? []);
+      setFilterKinds(existingFavorite.filters?.kinds ?? ALL_MULTISELECT_FILTER);
+      setFilterNamespaces(existingFavorite.filters?.namespaces ?? ALL_MULTISELECT_FILTER);
       setCaseSensitive(existingFavorite.filters?.caseSensitive ?? false);
       setIncludeMetadataState(existingFavorite.filters?.includeMetadata ?? false);
     } else {
@@ -257,8 +271,8 @@ const FavSaveModal: React.FC<FavSaveModalProps> = ({
       setSelectedView(buildViewValue(initialRoute.scope, initialRoute.view));
       setSelectedNamespace(namespace || ALL_NAMESPACES_SCOPE);
       setFilterText(filters.search);
-      setFilterKinds(filters.kinds ?? []);
-      setFilterNamespaces(filters.namespaces ?? []);
+      setFilterKinds(filters.kinds ?? ALL_MULTISELECT_FILTER);
+      setFilterNamespaces(filters.namespaces ?? ALL_MULTISELECT_FILTER);
       setCaseSensitive(filters.caseSensitive);
       setIncludeMetadataState(includeMetadata);
     }
@@ -327,7 +341,7 @@ const FavSaveModal: React.FC<FavSaveModalProps> = ({
   // Kind filter dropdown: merge available kinds with any saved kinds not in the list.
   const kindDropdownOptions = useMemo(() => {
     const all = new Set(availableKinds ?? []);
-    filterKinds.forEach((k) => {
+    filterSelectionValues(filterKinds).forEach((k) => {
       all.add(k);
     });
     return Array.from(all)
@@ -338,7 +352,7 @@ const FavSaveModal: React.FC<FavSaveModalProps> = ({
   // Namespace filter dropdown: merge available filter namespaces with saved ones.
   const nsFilterDropdownOptions = useMemo(() => {
     const all = new Set(availableFilterNamespaces ?? []);
-    filterNamespaces.forEach((ns) => {
+    filterSelectionValues(filterNamespaces).forEach((ns) => {
       all.add(ns);
     });
     return Array.from(all)
@@ -406,7 +420,7 @@ const FavSaveModal: React.FC<FavSaveModalProps> = ({
         search: filterText,
         kinds: filterKinds,
         namespaces: filterNamespaces,
-        clusters: filters.clusters ?? existingFavorite?.filters?.clusters,
+        clusters: filters.clusters ?? existingFavorite?.filters?.clusters ?? ALL_MULTISELECT_FILTER,
         queryFacets: filters.queryFacets ?? existingFavorite?.filters?.queryFacets,
         caseSensitive,
         includeMetadata: includeMetadataState,
@@ -573,8 +587,15 @@ const FavSaveModal: React.FC<FavSaveModalProps> = ({
                     id={`${elementIdPrefix}-favorite-kinds`}
                     dropdownClassName="fav-save-dropdown-menu"
                     options={kindDropdownOptions}
-                    value={filterKinds}
-                    onChange={(val) => setFilterKinds(Array.isArray(val) ? val : val ? [val] : [])}
+                    value={filterSelectionToDropdownValues(filterKinds, kindDropdownOptions)}
+                    onChange={(val) =>
+                      setFilterKinds(
+                        filterSelectionFromDropdownValues(
+                          Array.isArray(val) ? val : val ? [val] : [],
+                          kindDropdownOptions
+                        )
+                      )
+                    }
                     placeholder="All kinds"
                     multiple
                     renderValue={(val) => {
@@ -599,9 +620,17 @@ const FavSaveModal: React.FC<FavSaveModalProps> = ({
                     id={`${elementIdPrefix}-favorite-filter-namespaces`}
                     dropdownClassName="fav-save-dropdown-menu"
                     options={nsFilterDropdownOptions}
-                    value={filterNamespaces}
+                    value={filterSelectionToDropdownValues(
+                      filterNamespaces,
+                      nsFilterDropdownOptions
+                    )}
                     onChange={(val) =>
-                      setFilterNamespaces(Array.isArray(val) ? val : val ? [val] : [])
+                      setFilterNamespaces(
+                        filterSelectionFromDropdownValues(
+                          Array.isArray(val) ? val : val ? [val] : [],
+                          nsFilterDropdownOptions
+                        )
+                      )
                     }
                     placeholder="All namespaces"
                     multiple

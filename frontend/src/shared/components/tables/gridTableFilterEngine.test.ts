@@ -1,5 +1,8 @@
+import {
+  ALL_MULTISELECT_FILTER,
+  NONE_MULTISELECT_FILTER,
+} from '@shared/components/dropdowns/multiSelectFilterSelection';
 import type { GridTableFilterState } from '@shared/components/tables/GridTable.types';
-
 import {
   applyGridTableFilters,
   buildGridTableFilterOptions,
@@ -62,8 +65,9 @@ const defaultGetSearchText = (row: Row) => [row.name, row.description];
 
 const defaultState: GridTableFilterState = {
   search: '',
-  kinds: [],
-  namespaces: [],
+  kinds: ALL_MULTISELECT_FILTER,
+  namespaces: ALL_MULTISELECT_FILTER,
+  clusters: ALL_MULTISELECT_FILTER,
   caseSensitive: false,
   includeMetadata: false,
 };
@@ -126,7 +130,7 @@ describe('gridTableFilterEngine', () => {
       data: rows,
       activeFilters: {
         ...defaultState,
-        clusters: ['cluster-b'],
+        clusters: { mode: 'some', values: ['cluster-b'] },
       },
       accessors: clusterAccessors,
       defaultGetKind,
@@ -141,7 +145,7 @@ describe('gridTableFilterEngine', () => {
       data: rows,
       activeFilters: {
         ...defaultState,
-        clusters: ['CLUSTER-B'],
+        clusters: { mode: 'some', values: ['CLUSTER-B'] },
       },
       accessors: clusterAccessors,
       defaultGetKind,
@@ -203,7 +207,7 @@ describe('gridTableFilterEngine', () => {
       data: rows,
       activeFilters: {
         ...defaultState,
-        namespaces: [''],
+        namespaces: { mode: 'some', values: [''] },
       },
       accessors: clusterScopedAccessors,
       defaultGetKind,
@@ -222,8 +226,8 @@ describe('gridTableFilterEngine', () => {
       activeFilters: {
         ...defaultState,
         search: 'frontend',
-        kinds: ['Pod'],
-        namespaces: ['default'],
+        kinds: { mode: 'some', values: ['Pod'] },
+        namespaces: { mode: 'some', values: ['default'] },
       },
       accessors,
       defaultGetKind,
@@ -232,5 +236,22 @@ describe('gridTableFilterEngine', () => {
     });
 
     expect(filtered).toBe(rows);
+  });
+
+  it('returns no local rows when any structural multiselect is explicitly none', () => {
+    const filtered = applyGridTableFilters({
+      filteringEnabled: true,
+      data: rows,
+      activeFilters: {
+        ...defaultState,
+        kinds: NONE_MULTISELECT_FILTER,
+      },
+      accessors,
+      defaultGetKind,
+      defaultGetNamespace,
+      defaultGetSearchText,
+    });
+
+    expect(filtered).toEqual([]);
   });
 });

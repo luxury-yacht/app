@@ -1,4 +1,5 @@
 import type { SortConfig } from '@hooks/useTableSort';
+import { ALL_MULTISELECT_FILTER } from '@shared/components/dropdowns/multiSelectFilterSelection';
 import type {
   GridTableFilterOptions,
   GridTableFilterState,
@@ -233,8 +234,9 @@ export function useTypedResourceQuery<TPayload extends TypedQueryPayload, TRow>(
         baseScope,
         filters: {
           search: '',
-          kinds: [],
-          namespaces: [],
+          kinds: ALL_MULTISELECT_FILTER,
+          namespaces: ALL_MULTISELECT_FILTER,
+          clusters: ALL_MULTISELECT_FILTER,
           caseSensitive: false,
           includeMetadata: false,
         },

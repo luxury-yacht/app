@@ -124,6 +124,12 @@ func applyTypedTableQuery[T any](items []T, query typedTableQuery, adapter typed
 		return typedTableSortedItemLess(filtered[i], filtered[j], desc)
 	})
 	total := len(filtered)
+	if query.Request.MatchNone {
+		for _, item := range items {
+			addTypedTableFacetValue(namespaceFacets, adapter.Namespace(item))
+			addTypedTableFacetValue(kindFacets, adapter.Kind(item))
+		}
+	}
 
 	start := 0
 	cursorInvalid := false

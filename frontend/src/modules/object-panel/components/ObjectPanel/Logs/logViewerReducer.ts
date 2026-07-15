@@ -4,6 +4,11 @@
  * Consolidates the multiple useState calls in LogViewer into a single reducer
  * for better state management and reduced complexity.
  */
+
+import {
+  ALL_MULTISELECT_FILTER,
+  type MultiSelectFilterSelection,
+} from '@shared/components/dropdowns/multiSelectFilterSelection';
 import type { LogDisplayMode, LogTimestampMode, LogViewerPrefs } from '../types';
 
 // Empty string means "all containers" in both the backend API and the filter UI
@@ -53,7 +58,7 @@ export interface LogViewerState {
   // Pod and container state (for workload view)
   availablePods: string[];
   availableContainers: string[];
-  selectedFilters: string[];
+  selectedFilters: MultiSelectFilterSelection;
 
   // UI settings (user preferences)
   autoRefresh: boolean;
@@ -87,7 +92,7 @@ export type LogViewerAction =
   // Workload filter actions
   | { type: 'SET_AVAILABLE_PODS'; payload: string[] }
   | { type: 'SET_AVAILABLE_CONTAINERS'; payload: string[] }
-  | { type: 'SET_SELECTED_FILTERS'; payload: string[] }
+  | { type: 'SET_SELECTED_FILTERS'; payload: MultiSelectFilterSelection }
 
   // UI settings actions
   | { type: 'TOGGLE_AUTO_REFRESH' }
@@ -128,7 +133,7 @@ export const initialLogViewerState: LogViewerState = {
   // Workload filter state
   availablePods: [],
   availableContainers: [],
-  selectedFilters: [],
+  selectedFilters: ALL_MULTISELECT_FILTER,
 
   // UI settings
   autoRefresh: true,
@@ -187,7 +192,7 @@ export const applyLogViewerPrefs = (
 ): LogViewerState => ({
   ...base,
   selectedContainer: prefs.selectedContainer,
-  selectedFilters: prefs.selectedFilters ?? [],
+  selectedFilters: prefs.selectedFilters ?? ALL_MULTISELECT_FILTER,
   autoRefresh: prefs.autoRefresh,
   timestampMode: prefs.timestampMode ?? (prefs.showTimestamps ? 'default' : 'hidden'),
   wrapText: prefs.wrapText,
@@ -321,7 +326,7 @@ export function logViewerReducer(state: LogViewerState, action: LogViewerAction)
     case 'RESET_FOR_NEW_SCOPE':
       return {
         ...state,
-        selectedFilters: [],
+        selectedFilters: ALL_MULTISELECT_FILTER,
         selectedContainer: action.isWorkload ? state.selectedContainer : '',
         textFilter: '',
         highlightMatches: false,

@@ -8,6 +8,14 @@
 
 import ClusterDataPausedState from '@shared/components/ClusterDataPausedState';
 import { Dropdown, type DropdownOption } from '@shared/components/dropdowns/Dropdown';
+import {
+  ALL_MULTISELECT_FILTER,
+  filterSelectionFromDropdownValues,
+  filterSelectionToDropdownValues,
+  filterSelectionValues,
+  isNarrowingFilterSelection,
+  pruneFilterSelectionToOptions,
+} from '@shared/components/dropdowns/multiSelectFilterSelection';
 import IconBar, { type IconBarItem } from '@shared/components/IconBar/IconBar';
 import {
   AnsiColorIcon,
@@ -441,61 +449,68 @@ const LogViewerInner: React.FC<LogViewerProps> = ({
   const resourceKindKey = resourceKind?.toLowerCase() ?? '';
   const isWorkload = resourceKindKey !== 'pod';
   const supportsPreviousContainerLogs = resourceKindKey === 'pod';
+  const selectedFilterValues = useMemo(
+    () => filterSelectionValues(selectedFilters),
+    [selectedFilters]
+  );
   const selectedInitContainers = useMemo(
     () =>
       new Set(
-        selectedFilters
+        selectedFilterValues
           .filter((filterValue) => filterValue.startsWith(INIT_FILTER_PREFIX))
           .map((filterValue) => filterValue.substring(INIT_FILTER_PREFIX.length))
       ),
-    [selectedFilters]
+    [selectedFilterValues]
   );
   const selectedRegularContainers = useMemo(
     () =>
       new Set(
-        selectedFilters
+        selectedFilterValues
           .filter((filterValue) => filterValue.startsWith(CONTAINER_FILTER_PREFIX))
           .map((filterValue) => filterValue.substring(CONTAINER_FILTER_PREFIX.length))
       ),
-    [selectedFilters]
+    [selectedFilterValues]
   );
   const selectedEphemeralContainers = useMemo(
     () =>
       new Set(
-        selectedFilters
+        selectedFilterValues
           .filter((filterValue) => filterValue.startsWith(DEBUG_FILTER_PREFIX))
           .map((filterValue) => filterValue.substring(DEBUG_FILTER_PREFIX.length))
       ),
-    [selectedFilters]
+    [selectedFilterValues]
   );
   const selectedContainerFilterCount =
     selectedInitContainers.size + selectedRegularContainers.size + selectedEphemeralContainers.size;
   const handleSelectPodFilter = useCallback(
     (pod: string) => {
-      const preservedContainerFilters = selectedFilters.filter(
+      const preservedContainerFilters = selectedFilterValues.filter(
         (filterValue) => !filterValue.startsWith(POD_FILTER_PREFIX)
       );
       dispatch({
         type: 'SET_SELECTED_FILTERS',
-        payload: [toPodFilterValue(pod), ...preservedContainerFilters],
+        payload: { mode: 'some', values: [toPodFilterValue(pod), ...preservedContainerFilters] },
       });
     },
-    [selectedFilters]
+    [selectedFilterValues]
   );
   const handleSelectContainerFilter = useCallback(
     (container: string, isInit: boolean, isEphemeral: boolean) => {
-      const preservedPodFilters = selectedFilters.filter((filterValue) =>
+      const preservedPodFilters = selectedFilterValues.filter((filterValue) =>
         filterValue.startsWith(POD_FILTER_PREFIX)
       );
       dispatch({
         type: 'SET_SELECTED_FILTERS',
-        payload: [
-          ...preservedPodFilters,
-          toContainerFilterValueForKind(container, isInit, isEphemeral),
-        ],
+        payload: {
+          mode: 'some',
+          values: [
+            ...preservedPodFilters,
+            toContainerFilterValueForKind(container, isInit, isEphemeral),
+          ],
+        },
       });
     },
-    [selectedFilters]
+    [selectedFilterValues]
   );
   const highlightRegex = useMemo(
     () =>
@@ -511,9 +526,10 @@ const LogViewerInner: React.FC<LogViewerProps> = ({
       container: '',
       includeInit: true,
       includeEphemeral: true,
-      selectedFilters,
+      selectedFilters: selectedFilterValues,
+      matchNone: selectedFilters.mode === 'none',
     };
-  }, [selectedFilters]);
+  }, [selectedFilterValues, selectedFilters.mode]);
 
   // Reset state when scope changes - do this during render, not in an effect,
   // to avoid causing a re-render that would interrupt streaming startup
@@ -702,6 +718,7 @@ const LogViewerInner: React.FC<LogViewerProps> = ({
         const request: types.ContainerLogsFetchRequest = {
           scope: containerLogsScope,
           selectedFilters: backendLogSelection.selectedFilters,
+          matchNone: backendLogSelection.matchNone,
           container: backendLogSelection.container,
           includeInit: backendLogSelection.includeInit,
           includeEphemeral: backendLogSelection.includeEphemeral,
@@ -768,6 +785,7 @@ const LogViewerInner: React.FC<LogViewerProps> = ({
       backendLogSelection.includeEphemeral,
       backendLogSelection.includeInit,
       backendLogSelection.selectedFilters,
+      backendLogSelection.matchNone,
       resolvedClusterId,
     ]
   );
@@ -1108,7 +1126,7 @@ const LogViewerInner: React.FC<LogViewerProps> = ({
       });
     }
 
-    selectedFilters.forEach((filterValue) => {
+    selectedFilterValues.forEach((filterValue) => {
       const label = formatSelectedFilterLabel(filterValue, selectorOptionLabelsByValue);
       chips.push({
         key: `selected-filter:${filterValue}`,
@@ -1117,7 +1135,10 @@ const LogViewerInner: React.FC<LogViewerProps> = ({
         onRemove: () =>
           dispatch({
             type: 'SET_SELECTED_FILTERS',
-            payload: selectedFilters.filter((value) => value !== filterValue),
+            payload: (() => {
+              const values = selectedFilterValues.filter((value) => value !== filterValue);
+              return values.length > 0 ? { mode: 'some' as const, values } : ALL_MULTISELECT_FILTER;
+            })(),
           }),
       });
     });
@@ -1165,14 +1186,14 @@ const LogViewerInner: React.FC<LogViewerProps> = ({
     highlightMatches,
     inverseMatches,
     regexMatches,
-    selectedFilters,
+    selectedFilterValues,
     selectorOptionLabelsByValue,
     showPreviousContainerLogs,
     textFilter,
   ]);
   const handleClearAllFilters = useCallback(() => {
     dispatch({ type: 'SET_TEXT_FILTER', payload: '' });
-    dispatch({ type: 'SET_SELECTED_FILTERS', payload: [] });
+    dispatch({ type: 'SET_SELECTED_FILTERS', payload: ALL_MULTISELECT_FILTER });
     if (showPreviousContainerLogs) {
       dispatch({ type: 'STOP_PREVIOUS_LOGS' });
       hasPrimedScopeRef.current = false;
@@ -1198,10 +1219,10 @@ const LogViewerInner: React.FC<LogViewerProps> = ({
   ]);
 
   useEffect(() => {
-    if (selectedFilters.length === 0) {
+    if (selectedFilters.mode !== 'some') {
       return;
     }
-    const hasSelectedContainerFilters = selectedFilters.some(
+    const hasSelectedContainerFilters = selectedFilters.values.some(
       (filterValue) =>
         filterValue.startsWith(INIT_FILTER_PREFIX) ||
         filterValue.startsWith(CONTAINER_FILTER_PREFIX)
@@ -1215,11 +1236,9 @@ const LogViewerInner: React.FC<LogViewerProps> = ({
     if (validFilterValues.size === 0) {
       return;
     }
-    const nextSelectedFilters = selectedFilters.filter((filterValue) =>
-      validFilterValues.has(filterValue)
-    );
-    if (nextSelectedFilters.length !== selectedFilters.length) {
-      dispatch({ type: 'SET_SELECTED_FILTERS', payload: nextSelectedFilters });
+    const nextSelection = pruneFilterSelectionToOptions(selectedFilters, selectorOptions);
+    if (nextSelection !== selectedFilters) {
+      dispatch({ type: 'SET_SELECTED_FILTERS', payload: nextSelection });
     }
   }, [containers.length, selectedFilters, selectorOptions]);
 
@@ -1242,7 +1261,10 @@ const LogViewerInner: React.FC<LogViewerProps> = ({
     if (showPreviousContainerLogs) {
       return 'no_previous_logs';
     }
-    if ((textFilter.trim().length > 0 || selectedFilters.length > 0) && logEntries.length > 0) {
+    if (
+      (textFilter.trim().length > 0 || isNarrowingFilterSelection(selectedFilters)) &&
+      logEntries.length > 0
+    ) {
       return 'no_filter_matches';
     }
     return 'no_logs_yet';
@@ -1250,7 +1272,7 @@ const LogViewerInner: React.FC<LogViewerProps> = ({
     filteredEntries.length,
     isPendingLogs,
     logEntries.length,
-    selectedFilters.length,
+    selectedFilters,
     showPreviousContainerLogs,
     textFilter,
     unavailableLogMessage,
@@ -1358,7 +1380,8 @@ const LogViewerInner: React.FC<LogViewerProps> = ({
     () => rawLogEntries.some((entry) => containsAnsi(entry.line)),
     [rawLogEntries]
   );
-  const hasActiveResultFilter = selectedFilters.length > 0 || textFilter.trim().length > 0;
+  const hasActiveResultFilter =
+    isNarrowingFilterSelection(selectedFilters) || textFilter.trim().length > 0;
   const displayedLogCount = filteredEntries.length;
   const countLabel = `${displayedLogCount} matching log${
     displayedLogCount === 1 ? '' : 's'
@@ -2000,11 +2023,14 @@ const LogViewerInner: React.FC<LogViewerProps> = ({
                 <div className="logs-viewer-control-group">
                   <Dropdown
                     options={selectorOptions}
-                    value={selectedFilters}
+                    value={filterSelectionToDropdownValues(selectedFilters, selectorOptions)}
                     onChange={(value) =>
                       dispatch({
                         type: 'SET_SELECTED_FILTERS',
-                        payload: Array.isArray(value) ? value : [value],
+                        payload: filterSelectionFromDropdownValues(
+                          Array.isArray(value) ? value : value ? [value] : [],
+                          selectorOptions
+                        ),
                       })
                     }
                     multiple

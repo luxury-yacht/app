@@ -24,6 +24,7 @@ type Options struct {
 	PodInclude       string
 	PodExclude       string
 	SelectedFilters  []string
+	MatchNone        bool
 	Selection        containerlogs.ScopeSelection
 	Container        string
 	IncludeInit      bool

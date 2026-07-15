@@ -161,6 +161,7 @@ export interface BuildCatalogScopeParams {
   /** Numbered page jump: 0-based start rank; mutually exclusive with continueToken. */
   startRank?: number | null;
   customOnly?: boolean;
+  matchNone?: boolean;
 }
 
 /**
@@ -172,6 +173,9 @@ export const buildCatalogScope = (params: BuildCatalogScopeParams): string => {
   query.set('limit', String(params.limit));
   if (params.customOnly) {
     query.set('customOnly', 'true');
+  }
+  if (params.matchNone) {
+    query.set('matchNone', 'true');
   }
   if (params.resourceScope) {
     query.set('resourceScope', params.resourceScope);
@@ -283,6 +287,7 @@ export const normalizeCatalogScope = (
         ? Number(startRankRaw)
         : undefined;
     const customOnly = params.get('customOnly') === 'true';
+    const matchNone = params.get('matchNone') === 'true';
     const resourceScope = params.get('resourceScope');
     const kinds = params.getAll('kind');
     const apiGroups = params.getAll('apiGroup');
@@ -305,6 +310,7 @@ export const normalizeCatalogScope = (
       continueToken,
       startRank,
       customOnly,
+      matchNone,
     });
     if (prefix) {
       return `${prefix}|${normalized}`;

@@ -5,6 +5,7 @@
  */
 
 import type { ObjectMapReference } from '@core/refresh/types';
+import type { MultiSelectFilterSelection } from '@shared/components/dropdowns/multiSelectFilterSelection';
 import { useSyncExternalStore } from 'react';
 import type {
   ObjectMapG6CardDetailLevel,
@@ -41,7 +42,7 @@ export interface ObjectMapDebugSnapshot {
   activeNodeId: string | null;
   focusMode: boolean;
   autoFit: boolean;
-  selectedKinds: string[];
+  selectedKinds: MultiSelectFilterSelection;
   enabledEdgeTypes: string[] | null;
   preserveViewportNodeId: string | null;
   payload: {

@@ -1384,6 +1384,7 @@ export interface ResourceQueryRequest {
   namespaces?: Array<string>;
   kinds?: Array<string>;
   facets?: Record<string, Array<string> | null>;
+  matchNone?: boolean;
   search?: string;
   includeMetadata?: boolean;
   predicates?: Array<ResourceQueryPredicate>;

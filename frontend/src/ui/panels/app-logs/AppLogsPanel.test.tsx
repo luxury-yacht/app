@@ -408,12 +408,8 @@ describe('AppLogsPanel', () => {
     const countBadge = container.querySelector('.app-logs-count');
     expect(countBadge?.textContent).toBe('(2)');
 
-    const logLevelsDropdown = dropdownInstances.find(
-      (instance) => instance.renderValue() === 'Log Levels'
-    );
-    const componentsDropdown = dropdownInstances.find(
-      (instance) => instance.renderValue() === 'Components'
-    );
+    const logLevelsDropdown = latestDropdown('Log Levels');
+    const componentsDropdown = latestDropdown('Components');
     expect(logLevelsDropdown).toBeTruthy();
     expect(componentsDropdown).toBeTruthy();
 
@@ -423,18 +419,25 @@ describe('AppLogsPanel', () => {
     });
 
     await act(async () => {
-      componentsDropdown?.onChange(['core']);
+      latestDropdown('Components')?.onChange(['core']);
       await Promise.resolve();
     });
 
     expect(countBadge?.textContent).toBe('(1 / 2)');
 
     await act(async () => {
-      componentsDropdown?.onChange(['core', 'worker']);
+      latestDropdown('Components')?.onChange(['core', 'worker']);
       await Promise.resolve();
     });
 
     expect(countBadge?.textContent).toBe('(2)');
+
+    await act(async () => {
+      latestDropdown('Components')?.onChange([]);
+      await Promise.resolve();
+    });
+
+    expect(countBadge?.textContent).toBe('(0 / 2)');
 
     cleanup();
   });

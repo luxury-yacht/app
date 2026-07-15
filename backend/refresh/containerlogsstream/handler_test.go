@@ -31,6 +31,7 @@ func TestParseOptions(t *testing.T) {
 		name             string
 		query            url.Values
 		expectError      bool
+		matchNone        bool
 		kind             string
 		podFilter        string
 		podInclude       string
@@ -52,6 +53,18 @@ func TestParseOptions(t *testing.T) {
 		{
 			name:        "valid scope with defaults",
 			query:       url.Values{"scope": []string{"cluster-a|default:/v1:pod:nginx"}},
+			kind:        "pod",
+			clusterID:   "cluster-a",
+			namespace:   "default",
+			version:     "v1",
+			objectName:  "nginx",
+			scopeString: "cluster-a|default:/v1:pod:nginx",
+			tail:        config.ContainerLogsStreamDefaultTailLines,
+		},
+		{
+			name:        "explicit empty selection",
+			query:       url.Values{"scope": []string{"cluster-a|default:/v1:pod:nginx"}, "matchNone": []string{"true"}},
+			matchNone:   true,
 			kind:        "pod",
 			clusterID:   "cluster-a",
 			namespace:   "default",
@@ -214,6 +227,7 @@ func TestParseOptions(t *testing.T) {
 		if opts.Container != tt.container {
 			t.Fatalf("%s: expected container %q, got %q", tt.name, tt.container, opts.Container)
 		}
+		require.Equal(t, tt.matchNone, opts.MatchNone)
 		if tt.name == "custom tail and filters" {
 			require.Equal(t, []string{"pod:web-2", "debug:debug-abc"}, opts.SelectedFilters)
 			require.True(t, opts.Selection.MatchPod("web-2"))

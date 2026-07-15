@@ -11,6 +11,7 @@
 export interface ContainerLogsStreamScopeParams {
   container?: string;
   selectedFilters?: string[];
+  matchNone?: boolean;
 }
 
 const cache = new Map<string, ContainerLogsStreamScopeParams>();
@@ -31,6 +32,9 @@ const normalize = (params: ContainerLogsStreamScopeParams): ContainerLogsStreamS
   if (selectedFilters.length > 0) {
     next.selectedFilters = selectedFilters;
   }
+  if (params.matchNone === true) {
+    next.matchNone = true;
+  }
   return next;
 };
 
@@ -39,7 +43,8 @@ const areEqual = (
   right: ContainerLogsStreamScopeParams
 ): boolean =>
   (left.container ?? '') === (right.container ?? '') &&
-  JSON.stringify(left.selectedFilters ?? []) === JSON.stringify(right.selectedFilters ?? []);
+  JSON.stringify(left.selectedFilters ?? []) === JSON.stringify(right.selectedFilters ?? []) &&
+  (left.matchNone ?? false) === (right.matchNone ?? false);
 
 export const getContainerLogsStreamScopeParams = (
   scope: string

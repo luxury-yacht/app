@@ -15,6 +15,9 @@ rendering, and interaction state.
 - Map scopes must be single-cluster and cluster-prefixed.
 - Frontend filtering, collapse, layout, and viewport state must not rewrite
   backend identity.
+- The Kind multiselect distinguishes `all`, `some`, and `none`. `all` includes
+  kinds discovered later, while `none` renders an empty visible graph without
+  changing the backend graph or its object identities.
 - Debug snapshots should describe raw backend graph, frontend-visible graph, and
   renderer state separately.
 - Adding support for a kind means updating backend graph facts and frontend

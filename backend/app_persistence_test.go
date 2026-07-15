@@ -25,11 +25,12 @@ func TestAppFavoritesRoundTrip(t *testing.T) {
 		View:             "pods",
 		Namespace:        "default",
 		Filters: &FavoriteFilters{
-			Search: "nginx",
-			Kinds:  []string{"Pod"},
-			QueryFacets: map[string][]string{
-				"apiGroups":      {"apps"},
-				"resourceScopes": {"Namespace"},
+			Search:     "nginx",
+			Kinds:      FavoriteFilterSelection{Mode: "some", Values: []string{"Pod"}},
+			Namespaces: FavoriteFilterSelection{Mode: "some", Values: []string{""}},
+			QueryFacets: map[string]FavoriteFilterSelection{
+				"apiGroups":      {Mode: "some", Values: []string{"apps"}},
+				"resourceScopes": {Mode: "some", Values: []string{"Namespace"}},
 			},
 		},
 		TableState: &FavoriteTableState{SortColumn: "name", SortDirection: "asc"},
@@ -46,6 +47,7 @@ func TestAppFavoritesRoundTrip(t *testing.T) {
 	require.Len(t, favs, 1)
 	require.Equal(t, added.ID, favs[0].ID)
 	require.Equal(t, fav.Filters.QueryFacets, favs[0].Filters.QueryFacets)
+	require.Equal(t, FavoriteFilterSelection{Mode: "some", Values: []string{""}}, favs[0].Filters.Namespaces)
 
 	// Update the name.
 	added.Name = "Renamed"
@@ -59,6 +61,41 @@ func TestAppFavoritesRoundTrip(t *testing.T) {
 	favs, err = app.GetFavorites()
 	require.NoError(t, err)
 	require.Empty(t, favs)
+}
+
+func TestLoadFavoritesFileMigratesLegacyFilterSelections(t *testing.T) {
+	setTestConfigEnv(t)
+	app := newTestAppWithDefaults(t)
+	path, err := app.getFavoritesFilePath()
+	require.NoError(t, err)
+	require.NoError(t, os.WriteFile(path, []byte(`{
+		"schemaVersion": 1,
+		"favorites": [{
+			"id": "legacy",
+			"name": "Legacy",
+			"clusterSelection": "",
+			"viewType": "cluster",
+			"view": "browse",
+			"namespace": "",
+			"filters": {
+				"search": "",
+				"kinds": [],
+				"namespaces": ["team-a"],
+				"queryFacets": {"apiGroups": []},
+				"caseSensitive": false,
+				"includeMetadata": false
+			},
+			"tableState": null,
+			"order": 0
+		}]
+	}`), 0o644))
+
+	state, err := app.loadFavoritesFile()
+	require.NoError(t, err)
+	require.Equal(t, favoritesSchemaVersion, state.SchemaVersion)
+	require.Equal(t, FavoriteFilterSelection{Mode: "all"}, state.Favorites[0].Filters.Kinds)
+	require.Equal(t, FavoriteFilterSelection{Mode: "some", Values: []string{"team-a"}}, state.Favorites[0].Filters.Namespaces)
+	require.Equal(t, FavoriteFilterSelection{Mode: "all"}, state.Favorites[0].Filters.QueryFacets["apiGroups"])
 }
 
 func TestAppFavoritesOrdering(t *testing.T) {

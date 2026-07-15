@@ -7,6 +7,11 @@
 
 import type { ObjectMapEdge, ObjectMapNode } from '@core/refresh/types';
 import type { DropdownOption } from '@shared/components/dropdowns/Dropdown';
+import {
+  ALL_MULTISELECT_FILTER,
+  filterSelectionValues,
+  type MultiSelectFilterSelection,
+} from '@shared/components/dropdowns/multiSelectFilterSelection';
 import { getDisplayKind } from '@/utils/kindAliasMap';
 import { OBJECT_MAP_EDGE_KINDS } from './objectMapEdgeStyle';
 import { contractObjectMapKindFilter, FILTERED_PATH_EDGE_TYPE } from './objectMapKindFilter';
@@ -26,7 +31,7 @@ export interface ObjectMapVisibleStateInput {
   seedNodeId: string;
   activeNodeId: string | null;
   focusMode: boolean;
-  selectedKinds: string[];
+  selectedKinds: MultiSelectFilterSelection;
   enabledEdgeTypes: Set<string> | null;
   searchQuery: string;
   useShortResourceNames: boolean;
@@ -220,19 +225,22 @@ export const deriveObjectMapVisibleState = ({
   searchQuery,
   useShortResourceNames,
 }: ObjectMapVisibleStateInput): ObjectMapVisibleState => {
-  const hasSelectedKinds = selectedKinds.length > 0;
+  const hasSelectedKinds = selectedKinds.mode === 'some';
   const realEdgeTypes = computeRealEdgeTypes(layout.edges);
   const visibleEdgeTypes = computeVisibleEdgeTypes(realEdgeTypes, hasSelectedKinds);
   const legendEntries = OBJECT_MAP_EDGE_KINDS.filter((entry) => visibleEdgeTypes.has(entry.type));
   const kindOptions = computeKindOptions(layout.nodes, useShortResourceNames);
-  const selectedKindSet = new Set(selectedKinds);
+  const selectedKindSet = new Set(filterSelectionValues(selectedKinds));
   const edgeFilteredLayout = applyEdgeTypeFilter(layout, enabledEdgeTypes);
-  const kindFilteredLayout = applyKindFilter({
-    layout: edgeFilteredLayout,
-    selectedKindSet,
-    enabledEdgeTypes,
-    seedNodeId,
-  });
+  const kindFilteredLayout =
+    selectedKinds.mode === 'none'
+      ? computeObjectMapLayout([], [], '')
+      : applyKindFilter({
+          layout: edgeFilteredLayout,
+          selectedKindSet,
+          enabledEdgeTypes,
+          seedNodeId,
+        });
   const visibleLayout = applyFocusMode(kindFilteredLayout, focusMode, activeNodeId);
   const visibleSelectionState = computeObjectMapSelectionState(visibleLayout.edges, activeNodeId);
   const normalizedSearchQuery = searchQuery.trim().toLowerCase();
@@ -267,13 +275,16 @@ export const pruneObjectMapEnabledEdgeTypes = (
 };
 
 export const pruneObjectMapSelectedKinds = (
-  selectedKinds: string[],
+  selectedKinds: MultiSelectFilterSelection,
   kindOptions: DropdownOption[]
-): string[] => {
-  if (selectedKinds.length === 0) {
+): MultiSelectFilterSelection => {
+  if (selectedKinds.mode !== 'some') {
     return selectedKinds;
   }
   const available = new Set(kindOptions.map((option) => option.value));
-  const next = selectedKinds.filter((kind) => available.has(kind));
-  return next.length === selectedKinds.length ? selectedKinds : next;
+  const next = selectedKinds.values.filter((kind) => available.has(kind));
+  if (next.length === selectedKinds.values.length) {
+    return selectedKinds;
+  }
+  return next.length > 0 ? { mode: 'some', values: next } : ALL_MULTISELECT_FILTER;
 };

@@ -443,6 +443,7 @@ func parseOptions(r *http.Request) (Options, error) {
 	podInclude := strings.TrimSpace(r.URL.Query().Get("podInclude"))
 	podExclude := strings.TrimSpace(r.URL.Query().Get("podExclude"))
 	selectedFilters := trimQueryValues(r.URL.Query()["selectedFilter"])
+	matchNone := strings.TrimSpace(r.URL.Query().Get("matchNone")) == "true"
 	container := strings.TrimSpace(r.URL.Query().Get("container"))
 	includeInit := parseBoolQueryWithDefault(r, "includeInit", true)
 	includeEphemeral := parseBoolQueryWithDefault(r, "includeEphemeral", true)
@@ -483,6 +484,7 @@ func parseOptions(r *http.Request) (Options, error) {
 		PodInclude:       podInclude,
 		PodExclude:       podExclude,
 		SelectedFilters:  selectedFilters,
+		MatchNone:        matchNone,
 		Selection:        selection,
 		Container:        container,
 		IncludeInit:      includeInit,

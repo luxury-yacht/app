@@ -15,6 +15,10 @@ Kubernetes container logs or node logs.
 - Clearing Application Logs clears the app diagnostic buffer only; it must not
   affect Kubernetes log viewers.
 - Keep source names and levels stable enough for filters and support workflows.
+- Cluster, component, and level multiselects use explicit `all`, `some`, and
+  `none` states. Deselecting the final option must show no entries; it must not
+  revert to the unrestricted state. Dynamic cluster and component options keep
+  `all` open-ended as new log sources appear.
 
 ## Ownership
 

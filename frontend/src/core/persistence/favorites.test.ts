@@ -72,6 +72,25 @@ describe('favorites persistence', () => {
     expect(getFavorites()).toEqual(favs);
   });
 
+  it('preserves explicit empty filter selections across the backend adapter', async () => {
+    const favorite = makeFavorite({
+      filters: {
+        search: '',
+        kinds: { mode: 'none' },
+        namespaces: { mode: 'all' },
+        clusters: { mode: 'some', values: ['cluster-a'] },
+        queryFacets: { apiGroups: { mode: 'none' } },
+        caseSensitive: false,
+        includeMetadata: false,
+      },
+    });
+    mockApp.GetFavorites.mockResolvedValue([favorite]);
+
+    const hydratedFavorites = await hydrateFavorites();
+
+    expect(hydratedFavorites[0]?.filters).toEqual(favorite.filters);
+  });
+
   // Test 2: second hydrateFavorites call returns cached data without re-fetching
   it('second hydrateFavorites call returns cached data without re-fetching', async () => {
     const favs = [makeFavorite()];

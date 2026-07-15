@@ -5,6 +5,10 @@
  * Mirrors the pattern established in clusterTabOrder.ts.
  */
 
+import {
+  type MultiSelectFilterSelection,
+  migrateLegacyMultiSelectFilterSelection,
+} from '@shared/components/dropdowns/multiSelectFilterSelection';
 import { backend } from '@wailsjs/go/models';
 import { requestAppState } from '@/core/app-state-access';
 import { eventBus } from '@/core/events';
@@ -13,10 +17,10 @@ import { eventBus } from '@/core/events';
 
 export interface FavoriteFilters {
   search: string;
-  kinds: string[];
-  namespaces: string[];
-  clusters?: string[];
-  queryFacets?: Record<string, string[]>;
+  kinds: MultiSelectFilterSelection;
+  namespaces: MultiSelectFilterSelection;
+  clusters: MultiSelectFilterSelection;
+  queryFacets?: Record<string, MultiSelectFilterSelection>;
   caseSensitive: boolean;
   includeMetadata: boolean;
 }
@@ -41,6 +45,34 @@ export interface Favorite {
   order: number;
 }
 
+const fromBackendSelection = (
+  selection: backend.FavoriteFilterSelection | undefined
+): MultiSelectFilterSelection => migrateLegacyMultiSelectFilterSelection(selection);
+
+const fromBackendFilters = (
+  filters: backend.FavoriteFilters | undefined
+): FavoriteFilters | null => {
+  if (!filters) {
+    return null;
+  }
+  return {
+    search: filters.search ?? '',
+    kinds: fromBackendSelection(filters.kinds),
+    namespaces: fromBackendSelection(filters.namespaces),
+    clusters: fromBackendSelection(filters.clusters),
+    queryFacets: filters.queryFacets
+      ? Object.fromEntries(
+          Object.entries(filters.queryFacets).map(([key, selection]) => [
+            key,
+            fromBackendSelection(selection),
+          ])
+        )
+      : undefined,
+    caseSensitive: filters.caseSensitive ?? false,
+    includeMetadata: filters.includeMetadata ?? false,
+  };
+};
+
 const fromBackendFavorite = (favorite: backend.Favorite): Favorite => ({
   id: favorite.id,
   name: favorite.name,
@@ -50,7 +82,7 @@ const fromBackendFavorite = (favorite: backend.Favorite): Favorite => ({
   viewType: favorite.viewType,
   view: favorite.view,
   namespace: favorite.namespace,
-  filters: favorite.filters ?? null,
+  filters: fromBackendFilters(favorite.filters),
   tableState: favorite.tableState ?? null,
   order: favorite.order,
 });
@@ -58,7 +90,22 @@ const fromBackendFavorite = (favorite: backend.Favorite): Favorite => ({
 const toBackendFavorite = (favorite: Favorite): backend.Favorite =>
   new backend.Favorite({
     ...favorite,
-    filters: favorite.filters ?? undefined,
+    filters: favorite.filters
+      ? new backend.FavoriteFilters({
+          ...favorite.filters,
+          kinds: new backend.FavoriteFilterSelection(favorite.filters.kinds),
+          namespaces: new backend.FavoriteFilterSelection(favorite.filters.namespaces),
+          clusters: new backend.FavoriteFilterSelection(favorite.filters.clusters),
+          queryFacets: favorite.filters.queryFacets
+            ? Object.fromEntries(
+                Object.entries(favorite.filters.queryFacets).map(([key, selection]) => [
+                  key,
+                  new backend.FavoriteFilterSelection(selection),
+                ])
+              )
+            : undefined,
+        })
+      : undefined,
     tableState: favorite.tableState ?? undefined,
   });
 

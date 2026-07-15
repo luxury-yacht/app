@@ -88,8 +88,9 @@ describe('GridTableKeys filter target selectors', () => {
     const defaultProps: React.ComponentProps<typeof GridTableFiltersBar> = {
       activeFilters: {
         search: '',
-        kinds: [],
-        namespaces: [],
+        kinds: { mode: 'all' },
+        namespaces: { mode: 'all' },
+        clusters: { mode: 'all' },
         caseSensitive: false,
         includeMetadata: false,
       },
@@ -220,9 +221,10 @@ describe('GridTableKeys filter target selectors', () => {
             containerRef={filtersContainerRef}
             activeFilters={{
               search: '',
-              kinds: [],
-              namespaces: [],
-              queryFacets: { apiGroups: [] },
+              kinds: { mode: 'all' },
+              namespaces: { mode: 'all' },
+              clusters: { mode: 'all' },
+              queryFacets: { apiGroups: { mode: 'all' } },
               caseSensitive: false,
               includeMetadata: false,
             }}
@@ -339,8 +341,9 @@ describe('GridTableKeys filter target selectors', () => {
             containerRef={filtersContainerRef}
             activeFilters={{
               search: '',
-              kinds: [],
-              namespaces: [],
+              kinds: { mode: 'all' },
+              namespaces: { mode: 'all' },
+              clusters: { mode: 'all' },
               caseSensitive: false,
               includeMetadata: false,
             }}

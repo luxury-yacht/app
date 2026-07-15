@@ -167,8 +167,8 @@ describe('useTypedResourceQuery', () => {
           ...DEFAULT_GRID_TABLE_FILTER_STATE,
           search: 'api',
           includeMetadata: true,
-          namespaces: ['team-b', 'team-a'],
-          kinds: ['Pod'],
+          namespaces: { mode: 'some', values: ['team-b', 'team-a'] },
+          kinds: { mode: 'some', values: ['Pod'] },
         },
         sortConfig: { key: 'cpu', direction: 'desc' },
         pageLimit: 25,
@@ -281,7 +281,10 @@ describe('useTypedResourceQuery', () => {
         clusterId: 'cluster-a',
         domain: 'pods',
         label: 'All Namespaces Pods',
-        filters: { ...DEFAULT_GRID_TABLE_FILTER_STATE, kinds },
+        filters: {
+          ...DEFAULT_GRID_TABLE_FILTER_STATE,
+          kinds: kinds.length > 0 ? { mode: 'some', values: kinds } : { mode: 'all' },
+        },
         sortConfig,
         selectRows,
       });
@@ -517,7 +520,8 @@ describe('useTypedResourceQuery', () => {
         label: 'All Namespaces Pods',
         filters: {
           ...DEFAULT_GRID_TABLE_FILTER_STATE,
-          queryFacets: reasons.length > 0 ? { reasons } : undefined,
+          queryFacets:
+            reasons.length > 0 ? { reasons: { mode: 'some', values: reasons } } : undefined,
         },
         sortConfig,
         liveDataVersion: 'v1',

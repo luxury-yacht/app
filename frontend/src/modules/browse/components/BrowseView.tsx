@@ -34,8 +34,13 @@ import { useNamespaceGridTablePersistence } from '@modules/namespace/hooks/useNa
 import { useObjectPanel } from '@modules/object-panel/hooks/useObjectPanel';
 import { backendQuerySource } from '@modules/resource-grid/backendQuerySource';
 import ResourceInventoryTable from '@modules/resource-grid/ResourceInventoryTable';
+import { hasExplicitNoneResourceQueryFilter } from '@modules/resource-grid/typedResourceQueryScope';
 import { useQueryResourceGridTable } from '@modules/resource-grid/useResourceGridTable';
 import type { ContextMenuItem } from '@shared/components/ContextMenu';
+import {
+  ALL_MULTISELECT_FILTER,
+  filterSelectionValues,
+} from '@shared/components/dropdowns/multiSelectFilterSelection';
 import { GRIDTABLE_VIRTUALIZATION_DEFAULT } from '@shared/components/tables/GridTable';
 import { TABLE_PAGE_SIZE_OPTIONS } from '@shared/components/tables/pageSizeOptions';
 import { useGridTablePersistence } from '@shared/components/tables/persistence/useGridTablePersistence';
@@ -325,9 +330,12 @@ const BrowseView: React.FC<BrowseViewProps> = ({
     clusterScopedOnly,
     filters: {
       search: persistence.filters.search ?? '',
-      kinds: persistence.filters.kinds ?? [],
-      namespaces: persistence.filters.namespaces ?? [],
-      apiGroups: persistence.filters.queryFacets?.apiGroups ?? [],
+      kinds: filterSelectionValues(persistence.filters.kinds),
+      namespaces: filterSelectionValues(persistence.filters.namespaces),
+      apiGroups: filterSelectionValues(
+        persistence.filters.queryFacets?.apiGroups ?? ALL_MULTISELECT_FILTER
+      ),
+      matchNone: hasExplicitNoneResourceQueryFilter(persistence.filters),
     },
     sort: persistence.sortConfig,
     pageLimit: persistence.pageSize ?? undefined,
@@ -335,27 +343,31 @@ const BrowseView: React.FC<BrowseViewProps> = ({
     diagnosticLabel: scope === 'namespace' ? 'Namespace Browse' : 'Browse',
   });
 
-  const selectedApiGroups = persistence.filters.queryFacets?.apiGroups ?? [];
-  const selectedKinds = persistence.filters.kinds ?? [];
+  const selectedApiGroups = persistence.filters.queryFacets?.apiGroups ?? ALL_MULTISELECT_FILTER;
+  const selectedKinds = persistence.filters.kinds;
   useEffect(() => {
-    if (!filterOptionsResolved || selectedApiGroups.length === 0 || selectedKinds.length === 0) {
+    if (
+      !filterOptionsResolved ||
+      selectedApiGroups.mode !== 'some' ||
+      selectedKinds.mode !== 'some'
+    ) {
       return;
     }
     const availableKinds = new Set(filterOptions.kinds.map((kind) => kind.toLowerCase()));
-    const nextKinds = selectedKinds.filter((kind) => availableKinds.has(kind.toLowerCase()));
-    if (nextKinds.length === selectedKinds.length) {
+    const nextKinds = selectedKinds.values.filter((kind) => availableKinds.has(kind.toLowerCase()));
+    if (nextKinds.length === selectedKinds.values.length) {
       return;
     }
     persistence.setFilters({
       ...persistence.filters,
-      kinds: nextKinds,
+      kinds: nextKinds.length > 0 ? { mode: 'some', values: nextKinds } : ALL_MULTISELECT_FILTER,
     });
   }, [
     filterOptions.kinds,
     filterOptionsResolved,
     persistence.filters,
     persistence.setFilters,
-    selectedApiGroups.length,
+    selectedApiGroups,
     selectedKinds,
   ]);
 

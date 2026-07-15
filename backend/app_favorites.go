@@ -5,6 +5,7 @@ import (
 	"fmt"
 	"os"
 	"path/filepath"
+	"strings"
 	"sync"
 	"time"
 
@@ -28,12 +29,20 @@ type Favorite struct {
 
 // FavoriteFilters holds the search and filter state for a favorite.
 type FavoriteFilters struct {
-	Search          string              `json:"search"`
-	Kinds           []string            `json:"kinds"`
-	Namespaces      []string            `json:"namespaces"`
-	QueryFacets     map[string][]string `json:"queryFacets,omitempty"`
-	CaseSensitive   bool                `json:"caseSensitive"`
-	IncludeMetadata bool                `json:"includeMetadata"`
+	Search          string                             `json:"search"`
+	Kinds           FavoriteFilterSelection            `json:"kinds"`
+	Namespaces      FavoriteFilterSelection            `json:"namespaces"`
+	Clusters        FavoriteFilterSelection            `json:"clusters"`
+	QueryFacets     map[string]FavoriteFilterSelection `json:"queryFacets,omitempty"`
+	CaseSensitive   bool                               `json:"caseSensitive"`
+	IncludeMetadata bool                               `json:"includeMetadata"`
+}
+
+// FavoriteFilterSelection preserves the semantic difference between every,
+// no, and some selected dropdown values.
+type FavoriteFilterSelection struct {
+	Mode   string   `json:"mode"`
+	Values []string `json:"values,omitempty"`
 }
 
 // FavoriteTableState holds the table display state for a favorite.
@@ -50,7 +59,107 @@ type favoritesFile struct {
 	Favorites     []Favorite `json:"favorites"`
 }
 
-const favoritesSchemaVersion = 1
+const favoritesSchemaVersion = 2
+
+type legacyFavoriteFilters struct {
+	Search          string              `json:"search"`
+	Kinds           []string            `json:"kinds"`
+	Namespaces      []string            `json:"namespaces"`
+	Clusters        []string            `json:"clusters,omitempty"`
+	QueryFacets     map[string][]string `json:"queryFacets,omitempty"`
+	CaseSensitive   bool                `json:"caseSensitive"`
+	IncludeMetadata bool                `json:"includeMetadata"`
+}
+
+type legacyFavorite struct {
+	ID               string                 `json:"id"`
+	Name             string                 `json:"name"`
+	ClusterSelection string                 `json:"clusterSelection"`
+	ClusterID        string                 `json:"clusterId,omitempty"`
+	ClusterName      string                 `json:"clusterName,omitempty"`
+	ViewType         string                 `json:"viewType"`
+	View             string                 `json:"view"`
+	Namespace        string                 `json:"namespace"`
+	Filters          *legacyFavoriteFilters `json:"filters"`
+	TableState       *FavoriteTableState    `json:"tableState"`
+	Order            int                    `json:"order"`
+}
+
+type legacyFavoritesFile struct {
+	SchemaVersion int              `json:"schemaVersion"`
+	UpdatedAt     time.Time        `json:"updatedAt"`
+	Favorites     []legacyFavorite `json:"favorites"`
+}
+
+func normalizeFavoriteFilterSelection(selection FavoriteFilterSelection) FavoriteFilterSelection {
+	if selection.Mode == "none" {
+		return FavoriteFilterSelection{Mode: "none"}
+	}
+	if selection.Mode != "some" {
+		return FavoriteFilterSelection{Mode: "all"}
+	}
+	seen := make(map[string]struct{}, len(selection.Values))
+	values := make([]string, 0, len(selection.Values))
+	for _, raw := range selection.Values {
+		value := strings.TrimSpace(raw)
+		key := "__empty__"
+		if value != "" {
+			key = strings.ToLower(value)
+		}
+		if _, ok := seen[key]; ok {
+			continue
+		}
+		seen[key] = struct{}{}
+		values = append(values, value)
+	}
+	if len(values) == 0 {
+		return FavoriteFilterSelection{Mode: "none"}
+	}
+	return FavoriteFilterSelection{Mode: "some", Values: values}
+}
+
+func migrateLegacyFavoriteFilterSelection(values []string) FavoriteFilterSelection {
+	if len(values) == 0 {
+		return FavoriteFilterSelection{Mode: "all"}
+	}
+	return normalizeFavoriteFilterSelection(FavoriteFilterSelection{Mode: "some", Values: values})
+}
+
+func normalizeFavoriteFilters(filters *FavoriteFilters) {
+	if filters == nil {
+		return
+	}
+	filters.Kinds = normalizeFavoriteFilterSelection(filters.Kinds)
+	filters.Namespaces = normalizeFavoriteFilterSelection(filters.Namespaces)
+	filters.Clusters = normalizeFavoriteFilterSelection(filters.Clusters)
+	for key, selection := range filters.QueryFacets {
+		filters.QueryFacets[key] = normalizeFavoriteFilterSelection(selection)
+	}
+}
+
+func migrateLegacyFavorite(favorite legacyFavorite) Favorite {
+	migrated := Favorite{
+		ID: favorite.ID, Name: favorite.Name, ClusterSelection: favorite.ClusterSelection,
+		ClusterID: favorite.ClusterID, ClusterName: favorite.ClusterName, ViewType: favorite.ViewType,
+		View: favorite.View, Namespace: favorite.Namespace, TableState: favorite.TableState, Order: favorite.Order,
+	}
+	if favorite.Filters != nil {
+		facets := make(map[string]FavoriteFilterSelection, len(favorite.Filters.QueryFacets))
+		for key, values := range favorite.Filters.QueryFacets {
+			facets[key] = migrateLegacyFavoriteFilterSelection(values)
+		}
+		migrated.Filters = &FavoriteFilters{
+			Search:          favorite.Filters.Search,
+			Kinds:           migrateLegacyFavoriteFilterSelection(favorite.Filters.Kinds),
+			Namespaces:      migrateLegacyFavoriteFilterSelection(favorite.Filters.Namespaces),
+			Clusters:        migrateLegacyFavoriteFilterSelection(favorite.Filters.Clusters),
+			QueryFacets:     facets,
+			CaseSensitive:   favorite.Filters.CaseSensitive,
+			IncludeMetadata: favorite.Filters.IncludeMetadata,
+		}
+	}
+	return migrated
+}
 
 // favoritesMu guards favorites.json read/write operations.
 // Separate from persistenceMu so favorites IO doesn't block grid table persistence.
@@ -80,10 +189,35 @@ func (a *App) loadFavoritesFile() (*favoritesFile, error) {
 	if err != nil {
 		return nil, fmt.Errorf("failed to read favorites file: %w", err)
 	}
+	header := struct {
+		SchemaVersion int `json:"schemaVersion"`
+	}{}
+	if err := json.Unmarshal(data, &header); err != nil {
+		return nil, fmt.Errorf("failed to parse favorites file: %w", err)
+	}
+	if header.SchemaVersion < favoritesSchemaVersion {
+		legacy := legacyFavoritesFile{}
+		if err := json.Unmarshal(data, &legacy); err != nil {
+			return nil, fmt.Errorf("failed to parse legacy favorites file: %w", err)
+		}
+		state := &favoritesFile{
+			SchemaVersion: favoritesSchemaVersion,
+			UpdatedAt:     legacy.UpdatedAt,
+			Favorites:     make([]Favorite, 0, len(legacy.Favorites)),
+		}
+		for _, favorite := range legacy.Favorites {
+			state.Favorites = append(state.Favorites, migrateLegacyFavorite(favorite))
+		}
+		return state, nil
+	}
 	state := &favoritesFile{}
 	if err := json.Unmarshal(data, state); err != nil {
 		return nil, fmt.Errorf("failed to parse favorites file: %w", err)
 	}
+	for index := range state.Favorites {
+		normalizeFavoriteFilters(state.Favorites[index].Filters)
+	}
+	state.SchemaVersion = favoritesSchemaVersion
 	return state, nil
 }
 
@@ -124,6 +258,7 @@ func (a *App) GetFavorites() ([]Favorite, error) {
 // AddFavorite generates an ID, assigns Order, appends the favorite, and persists.
 func (a *App) AddFavorite(fav Favorite) (Favorite, error) {
 	fav.ID = uuid.New().String()
+	normalizeFavoriteFilters(fav.Filters)
 
 	favoritesMu.Lock()
 	defer favoritesMu.Unlock()
@@ -142,6 +277,7 @@ func (a *App) AddFavorite(fav Favorite) (Favorite, error) {
 
 // UpdateFavorite replaces a favorite by ID, preserving its Order. Returns an error if not found.
 func (a *App) UpdateFavorite(fav Favorite) error {
+	normalizeFavoriteFilters(fav.Filters)
 	favoritesMu.Lock()
 	defer favoritesMu.Unlock()
 

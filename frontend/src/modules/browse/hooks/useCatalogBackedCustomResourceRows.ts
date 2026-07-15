@@ -1,4 +1,6 @@
 import type { ResourceGridPersistence } from '@modules/resource-grid/resourceGridTableTypes';
+import { hasExplicitNoneResourceQueryFilter } from '@modules/resource-grid/typedResourceQueryScope';
+import { filterSelectionValues } from '@shared/components/dropdowns/multiSelectFilterSelection';
 import { useCallback } from 'react';
 import type { CatalogBackedCustomResourceRow } from './customCatalogRowAdapter';
 import { useBrowseCatalog } from './useBrowseCatalog';
@@ -44,8 +46,9 @@ export function useCatalogBackedCustomResourceRows({
     customOnly: true,
     filters: {
       search: persistence.filters.search ?? '',
-      kinds: persistence.filters.kinds ?? [],
-      namespaces: persistence.filters.namespaces ?? [],
+      kinds: filterSelectionValues(persistence.filters.kinds),
+      namespaces: filterSelectionValues(persistence.filters.namespaces),
+      matchNone: hasExplicitNoneResourceQueryFilter(persistence.filters),
     },
     sort: persistence.sortConfig,
     pageLimit: persistence.pageSize ?? undefined,

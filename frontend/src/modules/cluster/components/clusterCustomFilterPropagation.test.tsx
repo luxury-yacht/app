@@ -75,7 +75,11 @@ const emptyBrowseResult = () => ({
   loading: false,
   hasLoadedOnce: true,
   error: null,
-  filterOptions: { kinds: ['Widget', 'DBCluster'], namespaces: [], isNamespaceScoped: false },
+  filterOptions: {
+    kinds: ['Widget', 'DBCluster'],
+    namespaces: { mode: 'all' },
+    isNamespaceScoped: false,
+  },
   totalCount: 0,
   unfilteredTotal: 0,
   totalIsExact: true,
@@ -146,8 +150,9 @@ describe('ClusterViewCustom kind filter propagation', () => {
         'expected filter change handler'
       )({
         search: '',
-        kinds: ['Widget'],
-        namespaces: [],
+        kinds: { mode: 'some', values: ['Widget'] },
+        namespaces: { mode: 'all' },
+        clusters: { mode: 'all' },
         caseSensitive: false,
         includeMetadata: false,
       });

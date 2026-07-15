@@ -184,6 +184,9 @@ class ContainerLogsStreamConnection {
           for (const selectedFilter of streamParams?.selectedFilters ?? []) {
             url.searchParams.append('selectedFilter', selectedFilter);
           }
+          if (streamParams?.matchNone) {
+            url.searchParams.set('matchNone', 'true');
+          }
         },
         listeners: {
           log: this.handleLogEvent as EventListener,

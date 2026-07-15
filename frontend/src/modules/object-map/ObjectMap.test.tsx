@@ -1024,10 +1024,24 @@ describe('ObjectMap', () => {
     const podOption = Array.from(
       document.body.querySelectorAll<HTMLElement>('.dropdown-option')
     ).find((option) => option.textContent?.includes('Pod'));
+    const selectNone = document.body.querySelector<HTMLButtonElement>(
+      'button[aria-label="Select none"]'
+    );
     expect(podOption).toBeTruthy();
+    expect(selectNone).toBeTruthy();
 
     await act(async () => {
-      requireValue(podOption, 'expected test value in ObjectMap.test.tsx').dispatchEvent(
+      requireValue(selectNone, 'expected Select none in ObjectMap.test.tsx').dispatchEvent(
+        mouseEvent('click')
+      );
+      await Promise.resolve();
+    });
+
+    const nextPodOption = Array.from(
+      document.body.querySelectorAll<HTMLElement>('.dropdown-option')
+    ).find((option) => option.textContent?.includes('Pod'));
+    await act(async () => {
+      requireValue(nextPodOption, 'expected test value in ObjectMap.test.tsx').dispatchEvent(
         mouseEvent('click')
       );
       await Promise.resolve();
@@ -1068,9 +1082,23 @@ describe('ObjectMap', () => {
 
     expect(podOption).toBeTruthy();
     expect(serviceOption).toBeTruthy();
+    const selectNone = document.body.querySelector<HTMLButtonElement>(
+      'button[aria-label="Select none"]'
+    );
+    expect(selectNone).toBeTruthy();
 
     await act(async () => {
-      requireValue(serviceOption, 'expected test value in ObjectMap.test.tsx').dispatchEvent(
+      requireValue(selectNone, 'expected Select none in ObjectMap.test.tsx').dispatchEvent(
+        mouseEvent('click')
+      );
+      await Promise.resolve();
+    });
+
+    const nextServiceOption = optionByText('Service');
+    expect(nextServiceOption).toBeTruthy();
+
+    await act(async () => {
+      requireValue(nextServiceOption, 'expected test value in ObjectMap.test.tsx').dispatchEvent(
         mouseEvent('click')
       );
       await Promise.resolve();

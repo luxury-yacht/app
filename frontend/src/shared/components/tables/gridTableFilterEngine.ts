@@ -195,16 +195,34 @@ export function applyGridTableFilters<T>({
     return data;
   }
 
+  if (
+    activeFilters.kinds.mode === 'none' ||
+    activeFilters.namespaces.mode === 'none' ||
+    activeFilters.clusters.mode === 'none'
+  ) {
+    return [];
+  }
+
   const searchNeedle = activeFilters.caseSensitive
     ? activeFilters.search.trim()
     : activeFilters.search.trim().toLowerCase();
   const shouldFilterSearch = searchNeedle.length > 0;
-  const kindSet = new Set(activeFilters.kinds.map((value) => value.toLowerCase()));
-  const namespaceSet = new Set(activeFilters.namespaces.map((value) => value.toLowerCase()));
-  const clusterSet = new Set(activeFilters.clusters ?? []);
-  const shouldFilterKinds = kindSet.size > 0;
-  const shouldFilterNamespaces = namespaceSet.size > 0;
-  const shouldFilterClusters = clusterSet.size > 0;
+  const kindSet = new Set(
+    activeFilters.kinds.mode === 'some'
+      ? activeFilters.kinds.values.map((value) => value.toLowerCase())
+      : []
+  );
+  const namespaceSet = new Set(
+    activeFilters.namespaces.mode === 'some'
+      ? activeFilters.namespaces.values.map((value) => value.toLowerCase())
+      : []
+  );
+  const clusterSet = new Set(
+    activeFilters.clusters.mode === 'some' ? activeFilters.clusters.values : []
+  );
+  const shouldFilterKinds = activeFilters.kinds.mode === 'some';
+  const shouldFilterNamespaces = activeFilters.namespaces.mode === 'some';
+  const shouldFilterClusters = activeFilters.clusters.mode === 'some';
 
   return data.filter((row) => {
     const clusterValueRaw = accessors.getCluster?.(row);

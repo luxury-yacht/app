@@ -1,6 +1,7 @@
 import type { SortConfig } from '@hooks/useTableSort';
 
 import { ALL_NAMESPACES_SCOPE } from '@modules/namespace/constants';
+import { ALL_MULTISELECT_FILTER } from '@shared/components/dropdowns/multiSelectFilterSelection';
 import type {
   GridTableFilterOptions,
   GridTableFilterState,
@@ -77,12 +78,21 @@ export function queryBackedFacetFilterOptions(
 export function removeQueryBackedNamespaceFilterSentinels(
   filters: GridTableFilterState
 ): GridTableFilterState {
-  const namespaceFilters = filters.namespaces.filter(
+  if (filters.namespaces.mode !== 'some') {
+    return filters;
+  }
+  const namespaceFilters = filters.namespaces.values.filter(
     (namespace) => !isAllNamespacesFilterSentinel(namespace)
   );
-  return namespaceFilters.length === filters.namespaces.length
+  return namespaceFilters.length === filters.namespaces.values.length
     ? filters
-    : { ...filters, namespaces: namespaceFilters };
+    : {
+        ...filters,
+        namespaces:
+          namespaceFilters.length > 0
+            ? { mode: 'some', values: namespaceFilters }
+            : ALL_MULTISELECT_FILTER,
+      };
 }
 
 export function normalizeQueryBackedNamespaceQueryFilters(
@@ -90,7 +100,10 @@ export function normalizeQueryBackedNamespaceQueryFilters(
   availableNamespaces: string[] | undefined
 ): GridTableFilterState {
   const available = normalizeOptionSet(availableNamespaces);
-  const selected = normalizeOptionSet(filters.namespaces);
+  if (filters.namespaces.mode !== 'some') {
+    return filters;
+  }
+  const selected = normalizeOptionSet(filters.namespaces.values);
   if (available.size === 0 || selected.size !== available.size) {
     return filters;
   }
@@ -99,7 +112,7 @@ export function normalizeQueryBackedNamespaceQueryFilters(
       return filters;
     }
   }
-  return { ...filters, namespaces: [] };
+  return { ...filters, namespaces: ALL_MULTISELECT_FILTER };
 }
 
 function queryBackedTableStateEquals(left: QueryBackedTableState, right: QueryBackedTableState) {

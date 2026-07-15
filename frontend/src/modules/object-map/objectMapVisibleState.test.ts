@@ -5,6 +5,11 @@
  */
 
 import type { ObjectMapEdge, ObjectMapNode, ObjectMapReference } from '@core/refresh/types';
+import {
+  ALL_MULTISELECT_FILTER,
+  type MultiSelectFilterSelection,
+  NONE_MULTISELECT_FILTER,
+} from '@shared/components/dropdowns/multiSelectFilterSelection';
 import { describe, expect, it } from 'vitest';
 import { compareUtf16Strings } from '@/shared/utils/sort';
 import { requireValue } from '@/test-utils/requireValue';
@@ -57,7 +62,7 @@ const derive = ({
   seedId = nodes[0]?.id ?? '',
   activeNodeId = null,
   focusMode = false,
-  selectedKinds = [],
+  selectedKinds = ALL_MULTISELECT_FILTER,
   enabledEdgeTypes = null,
   searchQuery = '',
 }: {
@@ -66,7 +71,7 @@ const derive = ({
   seedId?: string;
   activeNodeId?: string | null;
   focusMode?: boolean;
-  selectedKinds?: string[];
+  selectedKinds?: MultiSelectFilterSelection;
   enabledEdgeTypes?: Set<string> | null;
   searchQuery?: string;
 }) =>
@@ -105,7 +110,7 @@ describe('deriveObjectMapVisibleState', () => {
         edge('service-slice', 'service', 'slice', 'endpoint', 'has endpoints'),
         edge('slice-pod', 'slice', 'pod', 'routes', 'routes to'),
       ],
-      selectedKinds: ['Service', 'Pod'],
+      selectedKinds: { mode: 'some', values: ['Service', 'Pod'] },
     });
 
     expect(result.visibleLayout.nodes.map((n) => n.id).sort(compareUtf16Strings)).toEqual([
@@ -141,14 +146,14 @@ describe('deriveObjectMapVisibleState', () => {
       nodes,
       edges,
       seedId: 'service',
-      selectedKinds: ['Service', 'Pod'],
+      selectedKinds: { mode: 'some', values: ['Service', 'Pod'] },
     });
     const selected = derive({
       nodes,
       edges,
       seedId: 'service',
       activeNodeId: 'pod-b',
-      selectedKinds: ['Service', 'Pod'],
+      selectedKinds: { mode: 'some', values: ['Service', 'Pod'] },
     });
 
     expect(
@@ -239,11 +244,22 @@ describe('deriveObjectMapVisibleState', () => {
         edge('service-slice', 'service', 'slice', 'endpoint'),
         edge('slice-pod', 'slice', 'pod', 'routes'),
       ],
-      selectedKinds: ['Service', 'Pod'],
+      selectedKinds: { mode: 'some', values: ['Service', 'Pod'] },
       searchQuery: 'endpoint',
     });
 
     expect(result.searchMatches).toHaveLength(0);
+  });
+
+  it('shows no objects when every kind is explicitly deselected', () => {
+    const result = derive({
+      nodes: [node('deploy', 'Deployment', 'web', 0), node('pod', 'Pod', 'web-a', 1)],
+      edges: [edge('owner-1', 'deploy', 'pod', 'owner', 'owns')],
+      selectedKinds: NONE_MULTISELECT_FILTER,
+    });
+
+    expect(result.visibleLayout.nodes).toEqual([]);
+    expect(result.visibleLayout.edges).toEqual([]);
   });
 });
 
@@ -258,13 +274,10 @@ describe('object map visible state pruning', () => {
       )
     ).toEqual(['owner']);
     expect(
-      pruneObjectMapSelectedKinds(
-        ['Deployment', 'Stale'],
-        [
-          { value: 'Deployment', label: 'Deployment' },
-          { value: 'Pod', label: 'Pod' },
-        ]
-      )
-    ).toEqual(['Deployment']);
+      pruneObjectMapSelectedKinds({ mode: 'some', values: ['Deployment', 'Stale'] }, [
+        { value: 'Deployment', label: 'Deployment' },
+        { value: 'Pod', label: 'Pod' },
+      ])
+    ).toEqual({ mode: 'some', values: ['Deployment'] });
   });
 });

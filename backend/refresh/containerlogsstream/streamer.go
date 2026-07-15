@@ -173,6 +173,10 @@ func (s *Streamer) run(
 	errCh chan<- error,
 	dropCh chan<- int,
 ) {
+	if opts.MatchNone {
+		<-ctx.Done()
+		return
+	}
 	var (
 		mu              sync.Mutex
 		targetWG        sync.WaitGroup
@@ -698,6 +702,9 @@ func (s *Streamer) shouldContinueStreaming(ctx context.Context, target container
 }
 
 func (s *Streamer) listPods(ctx context.Context, opts Options) ([]*corev1.Pod, string, error) {
+	if opts.MatchNone {
+		return nil, "", nil
+	}
 	kind := strings.ToLower(opts.Kind)
 	switch kind {
 	case "pod":

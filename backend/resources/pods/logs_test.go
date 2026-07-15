@@ -72,6 +72,26 @@ func TestFetchContainerLogsRequiresScope(t *testing.T) {
 	}
 }
 
+func TestFetchContainerLogsExplicitEmptySelectionSkipsKubernetesReads(t *testing.T) {
+	client := fake.NewClientset()
+	client.PrependReactor("*", "*", func(k8stesting.Action) (bool, runtime.Object, error) {
+		return true, nil, errors.New("unexpected kubernetes read")
+	})
+	service := NewService(common.Dependencies{
+		Context:          context.Background(),
+		Logger:           applog.Noop,
+		KubernetesClient: client,
+	})
+
+	response := service.FetchContainerLogs(types.ContainerLogsFetchRequest{
+		Scope:     podLogScope("default", "demo"),
+		MatchNone: true,
+	})
+
+	require.Empty(t, response.Error)
+	require.Empty(t, response.Entries)
+}
+
 func TestFetchContainerLogsUnsupportedWorkload(t *testing.T) {
 	pods := fake.NewClientset()
 	service := NewService(common.Dependencies{

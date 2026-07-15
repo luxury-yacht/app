@@ -52,6 +52,7 @@ type ResourceQueryRequest struct {
 	Namespaces []string              `json:"namespaces,omitempty"`
 	Kinds      []string              `json:"kinds,omitempty"`
 	Facets     map[string][]string   `json:"facets,omitempty"`
+	MatchNone  bool                  `json:"matchNone,omitempty"`
 	Search     string                `json:"search,omitempty"`
 	// IncludeMetadata extends Search to also match each row's labels and annotations.
 	IncludeMetadata bool                     `json:"includeMetadata,omitempty"`
@@ -326,6 +327,7 @@ func resourceQueryRequestFromValues(clusterID, table string, values url.Values, 
 	request.Namespaces = resourceQueryListValues(values, "namespaces", "namespace")
 	request.Kinds = resourceQueryListValues(values, "kinds", "kind")
 	request.Facets = resourceQueryFacetSelections(values)
+	request.MatchNone = strings.TrimSpace(values.Get("matchNone")) == "true"
 	request.SortField = strings.TrimSpace(values.Get("sort"))
 	if request.SortField == "" {
 		request.SortField = defaults.SortField

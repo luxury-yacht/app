@@ -111,11 +111,12 @@ describe('gridTablePersistence', () => {
     expect(pruned?.sort).toBeUndefined();
     expect(pruned?.filters).toEqual({
       search: 'pods',
-      kinds: ['Pod'],
-      namespaces: [],
+      kinds: { mode: 'some', values: ['Pod'] },
+      namespaces: { mode: 'all' },
+      clusters: { mode: 'all' },
       queryFacets: {
-        apiGroups: ['apps'],
-        resourceScopes: ['Namespace'],
+        apiGroups: { mode: 'some', values: ['apps'] },
+        resourceScopes: { mode: 'some', values: ['Namespace'] },
       },
       caseSensitive: false,
       includeMetadata: false,
@@ -191,9 +192,9 @@ describe('gridTablePersistence', () => {
       sort: { key: 'name', direction: 'asc' },
       filters: {
         search: 'abc',
-        kinds: ['Pod'],
-        namespaces: ['team-a'],
-        clusters: ['cluster-a'],
+        kinds: { mode: 'some', values: ['Pod'] },
+        namespaces: { mode: 'some', values: ['team-a'] },
+        clusters: { mode: 'some', values: ['cluster-a'] },
         caseSensitive: false,
         includeMetadata: false,
       },
@@ -203,15 +204,15 @@ describe('gridTablePersistence', () => {
     });
 
     expect(state).toEqual({
-      version: 1,
+      version: 2,
       columnVisibility: { status: false },
       columnWidths: { status: sampleWidthState },
       sort: { key: 'name', direction: 'asc' },
       filters: {
         search: 'abc',
-        kinds: ['Pod'],
-        namespaces: [],
-        clusters: ['cluster-a'],
+        kinds: { mode: 'some', values: ['Pod'] },
+        namespaces: { mode: 'all' },
+        clusters: { mode: 'some', values: ['cluster-a'] },
         caseSensitive: false,
         includeMetadata: false,
       },
@@ -222,8 +223,9 @@ describe('gridTablePersistence', () => {
   it('preserves non-default toggles and cluster-scoped namespace filters when saving and pruning', () => {
     const filters = {
       search: '',
-      kinds: [],
-      namespaces: [''],
+      kinds: { mode: 'all' as const },
+      namespaces: { mode: 'some' as const, values: [''] },
+      clusters: { mode: 'all' as const },
       caseSensitive: false,
       includeMetadata: true,
     };
@@ -237,13 +239,13 @@ describe('gridTablePersistence', () => {
     });
 
     expect(state).toEqual({
-      version: 1,
+      version: 2,
       filters,
     });
 
     const pruned = prunePersistedState(
       {
-        version: 1,
+        version: 2,
         filters,
       },
       {

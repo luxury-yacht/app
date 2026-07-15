@@ -7,6 +7,10 @@
 
 import type { DropdownOption } from '@shared/components/dropdowns/Dropdown';
 import { Dropdown } from '@shared/components/dropdowns/Dropdown';
+import {
+  ALL_MULTISELECT_FILTER,
+  filterSelectionToDropdownValues,
+} from '@shared/components/dropdowns/multiSelectFilterSelection';
 import IconBar, { type IconBarItem } from '@shared/components/IconBar/IconBar';
 import { CaseSensitiveIcon, ResetFiltersIcon } from '@shared/components/icons/SharedIcons';
 import SearchInput from '@shared/components/inputs/SearchInput';
@@ -131,8 +135,9 @@ const GridTableFiltersBar: React.FC<GridTableFiltersBarProps> = ({
   const trailingQueryFacets = queryFacets.filter((facet) => facet.placement !== 'before-kinds');
 
   const renderQueryFacet = (facet: GridTableQueryFacetDefinition) => {
-    const selected = activeFilters.queryFacets?.[facet.key] ?? [];
-    const count = selected.length;
+    const selection = activeFilters.queryFacets?.[facet.key] ?? ALL_MULTISELECT_FILTER;
+    const selected = filterSelectionToDropdownValues(selection, facet.options);
+    const count = selection.mode === 'some' ? selection.values.length : 0;
     return (
       <div
         key={facet.key}
@@ -240,7 +245,10 @@ const GridTableFiltersBar: React.FC<GridTableFiltersBarProps> = ({
                   searchable={resolvedFilterOptions.kindDropdownSearchable}
                   showBulkActions={resolvedFilterOptions.kindDropdownBulkActions}
                   placeholder="All kinds"
-                  value={activeFilters.kinds}
+                  value={filterSelectionToDropdownValues(
+                    activeFilters.kinds,
+                    resolvedFilterOptions.kinds
+                  )}
                   options={resolvedFilterOptions.kinds}
                   disabled={!resolvedFilterOptions.kinds?.length}
                   onChange={onKindsChange}
@@ -260,7 +268,10 @@ const GridTableFiltersBar: React.FC<GridTableFiltersBarProps> = ({
                   searchable={resolvedFilterOptions.namespaceDropdownSearchable}
                   showBulkActions={resolvedFilterOptions.namespaceDropdownBulkActions}
                   placeholder="All namespaces"
-                  value={activeFilters.namespaces}
+                  value={filterSelectionToDropdownValues(
+                    activeFilters.namespaces,
+                    resolvedFilterOptions.namespaces
+                  )}
                   options={resolvedFilterOptions.namespaces}
                   disabled={!resolvedFilterOptions.namespaces?.length}
                   onChange={onNamespacesChange}
@@ -280,7 +291,10 @@ const GridTableFiltersBar: React.FC<GridTableFiltersBarProps> = ({
                   searchable={resolvedFilterOptions.clusterDropdownSearchable}
                   showBulkActions={resolvedFilterOptions.clusterDropdownBulkActions}
                   placeholder="All clusters"
-                  value={activeFilters.clusters ?? []}
+                  value={filterSelectionToDropdownValues(
+                    activeFilters.clusters,
+                    resolvedFilterOptions.clusters ?? []
+                  )}
                   options={resolvedFilterOptions.clusters ?? []}
                   disabled={!resolvedFilterOptions.clusters?.length}
                   onChange={onClustersChange}

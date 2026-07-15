@@ -1,4 +1,6 @@
 import type { SortConfig } from '@hooks/useTableSort';
+import type { MultiSelectFilterSelection } from '@shared/components/dropdowns/multiSelectFilterSelection';
+import { migrateLegacyMultiSelectFilterSelection } from '@shared/components/dropdowns/multiSelectFilterSelection';
 import type {
   GridTableFilterOptions,
   GridTableFilterState,
@@ -69,13 +71,23 @@ const stableTypedQueryList = (values: string[]) =>
     .filter(Boolean)
     .sort((a, b) => a.localeCompare(b));
 
-const stableTypedQueryFacets = (facets: Record<string, string[]> | undefined) =>
+const stableTypedQuerySelection = (selection: unknown) => {
+  const normalized = migrateLegacyMultiSelectFilterSelection(selection);
+  return normalized.mode === 'some' ? stableTypedQueryList(normalized.values) : [];
+};
+
+const stableTypedQueryFacets = (facets: Record<string, MultiSelectFilterSelection> | undefined) =>
   Object.fromEntries(
     Object.entries(facets ?? {})
-      .map(([key, values]) => [key, stableTypedQueryList(values)] as const)
+      .map(([key, selection]) => [key, stableTypedQuerySelection(selection)] as const)
       .filter(([, values]) => values.length > 0)
       .sort(([left], [right]) => left.localeCompare(right))
   );
+
+export const hasExplicitNoneResourceQueryFilter = (filters: GridTableFilterState): boolean =>
+  [filters.kinds, filters.namespaces, filters.clusters, ...Object.values(filters.queryFacets ?? {})]
+    .map(migrateLegacyMultiSelectFilterSelection)
+    .some((selection) => selection.mode === 'none');
 
 export const typedResourceQueryIdentity = ({
   filters,
@@ -86,8 +98,9 @@ export const typedResourceQueryIdentity = ({
     search: filters.search,
     caseSensitive: filters.caseSensitive,
     includeMetadata: filters.includeMetadata,
-    kinds: stableTypedQueryList(filters.kinds),
-    namespaces: stableTypedQueryList(filters.namespaces),
+    matchNone: hasExplicitNoneResourceQueryFilter(filters),
+    kinds: stableTypedQuerySelection(filters.kinds),
+    namespaces: stableTypedQuerySelection(filters.namespaces),
     queryFacets: stableTypedQueryFacets(filters.queryFacets),
     sort: sortConfig,
     predicates: Object.fromEntries(
@@ -135,11 +148,14 @@ export function buildTypedResourceQueryScope(
   if (descriptor.filters.includeMetadata) {
     params.set('includeMetadata', 'true');
   }
-  const namespaces = stableTypedQueryList(descriptor.filters.namespaces);
+  if (hasExplicitNoneResourceQueryFilter(descriptor.filters)) {
+    params.set('matchNone', 'true');
+  }
+  const namespaces = stableTypedQuerySelection(descriptor.filters.namespaces);
   if (namespaces.length > 0) {
     params.set('namespaces', namespaces.join(','));
   }
-  const kinds = stableTypedQueryList(descriptor.filters.kinds);
+  const kinds = stableTypedQuerySelection(descriptor.filters.kinds);
   if (kinds.length > 0) {
     params.set('kinds', kinds.join(','));
   }

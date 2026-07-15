@@ -1897,10 +1897,18 @@ describe('LogViewer active pod synchronisation', () => {
     expect(getContainerLogsStreamScopeParams(defaultScope)).toEqual({
       selectedFilters: ['pod:web-1', 'container:app'],
     });
-    expect(getLogViewerPrefs('obj:test:deployment:team-a:api')?.selectedFilters).toEqual([
-      'pod:web-1',
-      'container:app',
-    ]);
+    expect(getLogViewerPrefs('obj:test:deployment:team-a:api')?.selectedFilters).toEqual({
+      mode: 'some',
+      values: ['pod:web-1', 'container:app'],
+    });
+
+    await setMultiSelectValues(workloadFilter, []);
+    await flushAsync();
+
+    expect(container.querySelector('.log-viewer-line')?.textContent).toContain(
+      'No logs match the current filters'
+    );
+    expect(getContainerLogsStreamScopeParams(defaultScope)).toEqual({ matchNone: true });
   });
 
   it('filters workload logs when pod and container metadata are clicked', async () => {
@@ -1946,7 +1954,10 @@ describe('LogViewer active pod synchronisation', () => {
       await Promise.resolve();
     });
 
-    expect(getLogViewerPrefs(panelId)?.selectedFilters).toEqual(['pod:web-1']);
+    expect(getLogViewerPrefs(panelId)?.selectedFilters).toEqual({
+      mode: 'some',
+      values: ['pod:web-1'],
+    });
     expect(container.textContent).toContain('matched log');
     expect(container.textContent).toContain('wrong container');
     expect(container.textContent).not.toContain('wrong pod');
@@ -1962,7 +1973,10 @@ describe('LogViewer active pod synchronisation', () => {
       await Promise.resolve();
     });
 
-    expect(getLogViewerPrefs(panelId)?.selectedFilters).toEqual(['pod:web-1', 'container:app']);
+    expect(getLogViewerPrefs(panelId)?.selectedFilters).toEqual({
+      mode: 'some',
+      values: ['pod:web-1', 'container:app'],
+    });
     expect(container.textContent).toContain('matched log');
     expect(container.textContent).not.toContain('wrong container');
   });
@@ -2010,7 +2024,10 @@ describe('LogViewer active pod synchronisation', () => {
       await Promise.resolve();
     });
 
-    expect(getLogViewerPrefs(panelId)?.selectedFilters).toEqual(['container:sidecar']);
+    expect(getLogViewerPrefs(panelId)?.selectedFilters).toEqual({
+      mode: 'some',
+      values: ['container:sidecar'],
+    });
     expect(container.textContent).toContain('sidecar log line');
     expect(container.textContent).not.toContain('main log line');
   });
@@ -2552,7 +2569,10 @@ describe('LogViewer active pod synchronisation', () => {
       'button[aria-label="Highlight matching text - disabled when Invert is enabled"]'
     );
     expect(highlightButton?.getAttribute('aria-pressed')).toBe('true');
-    expect(getLogViewerPrefs(panelId)?.selectedFilters).toEqual(['pod:web-1']);
+    expect(getLogViewerPrefs(panelId)?.selectedFilters).toEqual({
+      mode: 'some',
+      values: ['pod:web-1'],
+    });
     expect(getContainerLogsStreamScopeParams(defaultScope)).toEqual({
       selectedFilters: ['pod:web-1'],
     });
@@ -2567,7 +2587,7 @@ describe('LogViewer active pod synchronisation', () => {
     const initial = getLogViewerPrefs(panelId);
     expect(initial).toBeDefined();
     expect(initial?.textFilter).toBe('');
-    expect(initial?.selectedFilters).toEqual([]);
+    expect(initial?.selectedFilters).toEqual({ mode: 'all' });
     expect(initial?.highlightMatches).toBe(false);
     expect(initial?.inverseMatches).toBe(false);
     expect(initial?.caseSensitiveMatches).toBe(false);
@@ -2656,7 +2676,10 @@ describe('LogViewer active pod synchronisation', () => {
       ['pod:web-1', 'container:app']
     );
 
-    expect(getLogViewerPrefs(panelId)?.selectedFilters).toEqual(['pod:web-1', 'container:app']);
+    expect(getLogViewerPrefs(panelId)?.selectedFilters).toEqual({
+      mode: 'some',
+      values: ['pod:web-1', 'container:app'],
+    });
   });
 
   it('preserves workload pod color metadata when using a custom timestamp format', async () => {

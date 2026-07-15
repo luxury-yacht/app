@@ -13,6 +13,12 @@ import ContextMenu, { type ContextMenuItem } from '@shared/components/ContextMen
 import type { DropdownOption } from '@shared/components/dropdowns/Dropdown';
 import { Dropdown } from '@shared/components/dropdowns/Dropdown';
 import {
+  ALL_MULTISELECT_FILTER,
+  filterSelectionFromDropdownValues,
+  filterSelectionToDropdownValues,
+  type MultiSelectFilterSelection,
+} from '@shared/components/dropdowns/multiSelectFilterSelection';
+import {
   AutoFitIcon,
   FitToViewIcon,
   FocusModeIcon,
@@ -110,7 +116,8 @@ const ObjectMap: React.FC<ObjectMapProps> = ({
   const [showLegend, setShowLegend] = useState(true);
   const [focusMode, setFocusMode] = useState(false);
   const [enabledEdgeTypes, setEnabledEdgeTypes] = useState<Set<string> | null>(null);
-  const [selectedKinds, setSelectedKinds] = useState<string[]>([]);
+  const [selectedKinds, setSelectedKinds] =
+    useState<MultiSelectFilterSelection>(ALL_MULTISELECT_FILTER);
   const [searchQuery, setSearchQuery] = useState('');
   const [searchIndex, setSearchIndex] = useState(0);
   const [contextMenu, setContextMenu] = useState<ObjectMapMenuState | null>(null);
@@ -219,9 +226,13 @@ const ObjectMap: React.FC<ObjectMapProps> = ({
     g6ViewportControls?.focusNode(node.id);
   }, [g6ViewportControls, model, searchIndex, visibleState.searchMatches]);
 
-  const handleKindsChange = useCallback((value: string | string[]) => {
-    setSelectedKinds(Array.isArray(value) ? value : value ? [value] : []);
-  }, []);
+  const handleKindsChange = useCallback(
+    (value: string | string[]) => {
+      const values = Array.isArray(value) ? value : value ? [value] : [];
+      setSelectedKinds(filterSelectionFromDropdownValues(values, visibleState.kindOptions));
+    },
+    [visibleState.kindOptions]
+  );
 
   const renderFilterOption = useCallback(
     (option: DropdownOption, isSelected: boolean) => (
@@ -479,7 +490,7 @@ const ObjectMap: React.FC<ObjectMapProps> = ({
             searchable
             showBulkActions
             placeholder="All kinds"
-            value={selectedKinds}
+            value={filterSelectionToDropdownValues(selectedKinds, visibleState.kindOptions)}
             options={visibleState.kindOptions}
             disabled={visibleState.kindOptions.length === 0}
             onChange={handleKindsChange}

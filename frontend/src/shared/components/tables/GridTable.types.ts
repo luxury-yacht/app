@@ -7,6 +7,7 @@
 
 import type { ContextMenuItem } from '@shared/components/ContextMenu';
 import type { DropdownOption } from '@shared/components/dropdowns/Dropdown';
+import type { MultiSelectFilterSelection } from '@shared/components/dropdowns/multiSelectFilterSelection';
 import type { IconBarItem } from '@shared/components/IconBar/IconBar';
 import type React from 'react';
 
@@ -71,12 +72,12 @@ export const GRIDTABLE_VIRTUALIZATION_DEFAULT: GridTableVirtualizationOptions = 
 
 export interface GridTableFilterState {
   search: string;
-  kinds: string[];
-  namespaces: string[];
+  kinds: MultiSelectFilterSelection;
+  namespaces: MultiSelectFilterSelection;
   /** Selected cluster IDs for multi-cluster local tables. */
-  clusters?: string[];
+  clusters: MultiSelectFilterSelection;
   /** Backend-owned query facet selections keyed by the provider's facet name. */
-  queryFacets?: Record<string, string[]>;
+  queryFacets?: Record<string, MultiSelectFilterSelection>;
   caseSensitive: boolean;
   includeMetadata: boolean;
 }

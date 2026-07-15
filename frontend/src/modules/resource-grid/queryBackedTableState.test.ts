@@ -1,3 +1,4 @@
+import type { GridTableFilterState } from '@shared/components/tables/GridTable';
 import { DEFAULT_GRID_TABLE_FILTER_STATE } from '@shared/components/tables/gridTableFilterState';
 import { describe, expect, it } from 'vitest';
 import {
@@ -29,9 +30,9 @@ describe('queryBackedTableState', () => {
   });
 
   it('preserves an explicit selection containing every namespace', () => {
-    const filters = {
+    const filters: GridTableFilterState = {
       ...DEFAULT_GRID_TABLE_FILTER_STATE,
-      namespaces: ['team-b', 'team-a'],
+      namespaces: { mode: 'some', values: ['team-b', 'team-a'] },
     };
 
     expect(removeQueryBackedNamespaceFilterSentinels(filters)).toBe(filters);
@@ -42,13 +43,13 @@ describe('queryBackedTableState', () => {
       normalizeQueryBackedNamespaceQueryFilters(
         {
           ...DEFAULT_GRID_TABLE_FILTER_STATE,
-          namespaces: ['team-b', 'team-a'],
+          namespaces: { mode: 'some', values: ['team-b', 'team-a'] },
         },
         ['team-a', 'team-b']
       )
     ).toEqual({
       ...DEFAULT_GRID_TABLE_FILTER_STATE,
-      namespaces: [],
+      namespaces: { mode: 'all' },
     });
   });
 
@@ -56,18 +57,18 @@ describe('queryBackedTableState', () => {
     expect(
       removeQueryBackedNamespaceFilterSentinels({
         ...DEFAULT_GRID_TABLE_FILTER_STATE,
-        namespaces: ['namespace:all'],
+        namespaces: { mode: 'some', values: ['namespace:all'] },
       })
     ).toEqual({
       ...DEFAULT_GRID_TABLE_FILTER_STATE,
-      namespaces: [],
+      namespaces: { mode: 'all' },
     });
   });
 
   it('preserves real namespace subsets', () => {
-    const filters = {
+    const filters: GridTableFilterState = {
       ...DEFAULT_GRID_TABLE_FILTER_STATE,
-      namespaces: ['team-a'],
+      namespaces: { mode: 'some', values: ['team-a'] },
     };
 
     expect(removeQueryBackedNamespaceFilterSentinels(filters)).toBe(filters);

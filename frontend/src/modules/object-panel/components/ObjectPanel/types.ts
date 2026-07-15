@@ -5,6 +5,7 @@
  * Defines shared interfaces and payload shapes for the object panel feature.
  */
 import type { ResourceRef } from '@core/refresh/types';
+import type { MultiSelectFilterSelection } from '@shared/components/dropdowns/multiSelectFilterSelection';
 
 type NullableResourceRefFields = {
   [K in keyof ResourceRef]?: ResourceRef[K] | null;
@@ -154,7 +155,7 @@ export type LogTimestampMode = 'hidden' | 'default' | 'short' | 'localized';
  */
 export interface LogViewerPrefs {
   selectedContainer: string;
-  selectedFilters: string[];
+  selectedFilters: MultiSelectFilterSelection;
   autoRefresh: boolean;
   timestampMode: LogTimestampMode;
   showTimestamps: boolean;

@@ -5,6 +5,10 @@
  * Encapsulates state and side effects for the shared components.
  */
 
+import {
+  ALL_MULTISELECT_FILTER,
+  filterSelectionFromDropdownValues,
+} from '@shared/components/dropdowns/multiSelectFilterSelection';
 import type {
   GridTableFilterConfig,
   GridTableFilterState,
@@ -241,43 +245,45 @@ export function useGridTableFilters<T>({
 
   const handleFilterKindsChange = useCallback(
     (next: string[]) => {
-      updateFilters({ kinds: next });
+      updateFilters({
+        kinds: filterSelectionFromDropdownValues(next, resolvedFilterOptions.kinds),
+      });
     },
-    [updateFilters]
+    [resolvedFilterOptions.kinds, updateFilters]
   );
 
   const handleFilterNamespacesChange = useCallback(
     (next: string[]) => {
-      updateFilters({ namespaces: next });
+      updateFilters({
+        namespaces: filterSelectionFromDropdownValues(next, resolvedFilterOptions.namespaces),
+      });
     },
-    [updateFilters]
+    [resolvedFilterOptions.namespaces, updateFilters]
   );
 
   const handleFilterClustersChange = useCallback(
     (next: string[]) => {
-      updateFilters({ clusters: next });
+      updateFilters({
+        clusters: filterSelectionFromDropdownValues(next, resolvedFilterOptions.clusters ?? []),
+      });
     },
-    [updateFilters]
+    [resolvedFilterOptions.clusters, updateFilters]
   );
 
   const handleFilterQueryFacetChange = useCallback(
     (key: string, values: string[]) => {
-      const currentValues = activeFilters.queryFacets?.[key] ?? [];
-      const selectionChanged =
-        currentValues.length !== values.length ||
-        currentValues.some((value) => !values.includes(value));
-      const invalidates = selectionChanged
-        ? new Set(
-            resolvedFilterOptions.queryFacets?.find((facet) => facet.key === key)?.invalidates ?? []
-          )
-        : new Set<string>();
+      const facet = resolvedFilterOptions.queryFacets?.find((candidate) => candidate.key === key);
+      const nextSelection = filterSelectionFromDropdownValues(values, facet?.options ?? []);
+      const currentSelection = activeFilters.queryFacets?.[key] ?? ALL_MULTISELECT_FILTER;
+      const selectionChanged = JSON.stringify(currentSelection) !== JSON.stringify(nextSelection);
+      const invalidates = selectionChanged ? new Set(facet?.invalidates ?? []) : new Set<string>();
       updateFilters({
-        ...(invalidates.has('kinds') ? { kinds: [] } : {}),
-        ...(invalidates.has('namespaces') ? { namespaces: [] } : {}),
-        ...(invalidates.has('clusters') ? { clusters: [] } : {}),
+        ...(invalidates.has('kinds') ? { kinds: ALL_MULTISELECT_FILTER } : {}),
+        ...(invalidates.has('namespaces') ? { namespaces: ALL_MULTISELECT_FILTER } : {}),
+        ...(invalidates.has('clusters') ? { clusters: ALL_MULTISELECT_FILTER } : {}),
         queryFacets: {
           ...(activeFilters.queryFacets ?? {}),
-          [key]: values,
+          [key]: nextSelection,
         },
       });
     },

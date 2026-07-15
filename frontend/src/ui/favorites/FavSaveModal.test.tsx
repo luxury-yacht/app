@@ -177,11 +177,12 @@ import FavSaveModal from './FavSaveModal';
 
 const defaultFilters: FavoriteFilters = {
   search: '',
-  kinds: [],
-  namespaces: [],
+  kinds: { mode: 'all' },
+  namespaces: { mode: 'all' },
+  clusters: { mode: 'all' },
   queryFacets: {
-    apiGroups: ['apps'],
-    resourceScopes: ['Namespace'],
+    apiGroups: { mode: 'some', values: ['apps'] },
+    resourceScopes: { mode: 'some', values: ['Namespace'] },
   },
   caseSensitive: false,
   includeMetadata: false,
@@ -349,10 +350,10 @@ describe('FavSaveModal', () => {
     const filters: FavoriteFilters = {
       ...defaultFilters,
       queryFacets: {
-        types: ['Warning'],
-        reasons: ['BackOff'],
-        sources: ['kubelet'],
-        statuses: ['Needs attention'],
+        types: { mode: 'some', values: ['Warning'] },
+        reasons: { mode: 'some', values: ['BackOff'] },
+        sources: { mode: 'some', values: ['kubelet'] },
+        statuses: { mode: 'some', values: ['Needs attention'] },
       },
     };
     await renderComponent(makeProps({ onSave, filters, viewLabel: 'Events' }));
@@ -371,7 +372,7 @@ describe('FavSaveModal', () => {
     const onSave = vi.fn();
     const filters: FavoriteFilters = {
       ...defaultFilters,
-      clusters: ['cluster-a', 'cluster-b'],
+      clusters: { mode: 'some', values: ['cluster-a', 'cluster-b'] },
     };
     await renderComponent(makeProps({ onSave, filters, viewLabel: 'Namespaces' }));
 
@@ -381,7 +382,10 @@ describe('FavSaveModal', () => {
     });
 
     const saved = onSave.mock.calls[0]?.[0] as Favorite;
-    expect(saved.filters?.clusters).toEqual(['cluster-a', 'cluster-b']);
+    expect(saved.filters?.clusters).toEqual({
+      mode: 'some',
+      values: ['cluster-a', 'cluster-b'],
+    });
   });
 
   // -----------------------------------------------------------------------

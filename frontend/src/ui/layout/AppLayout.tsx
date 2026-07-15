@@ -929,7 +929,11 @@ const MapDebugOverlay: React.FC<OverlayCloseProps> = ({ onClose }) => {
               <div className="debug-overlay__label">Filters</div>
               <dl className="map-debug-grid">
                 <dt>kinds</dt>
-                <dd>{map.selectedKinds.length ? map.selectedKinds.join(', ') : 'all'}</dd>
+                <dd>
+                  {map.selectedKinds.mode === 'some'
+                    ? map.selectedKinds.values.join(', ')
+                    : map.selectedKinds.mode}
+                </dd>
                 <dt>links</dt>
                 <dd>{map.enabledEdgeTypes ? map.enabledEdgeTypes.join(', ') || 'none' : 'all'}</dd>
                 <dt>search</dt>

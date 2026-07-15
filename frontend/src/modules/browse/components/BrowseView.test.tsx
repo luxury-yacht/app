@@ -9,7 +9,8 @@ import type { BrowseTableRow } from '@modules/browse/hooks/useBrowseColumns';
 import { ALL_NAMESPACES_SCOPE } from '@modules/namespace/constants';
 import type { NamespaceGridTablePersistenceParams } from '@modules/namespace/hooks/useNamespaceGridTablePersistence';
 import { OBJECT_ACTION_IDS } from '@shared/actions/objectActionContract';
-import type { GridTableProps } from '@shared/components/tables/GridTable';
+import { ALL_MULTISELECT_FILTER } from '@shared/components/dropdowns/multiSelectFilterSelection';
+import type { GridTableFilterState, GridTableProps } from '@shared/components/tables/GridTable';
 import type { UseGridTablePersistenceParams } from '@shared/components/tables/persistence/useGridTablePersistence';
 import { act } from 'react';
 import * as ReactDOM from 'react-dom/client';
@@ -70,16 +71,20 @@ const persistenceArgsRef: {
   cluster: null,
   namespace: null,
 };
-const persistenceFiltersRef: {
-  current: {
-    search: string;
-    kinds: string[];
-    namespaces: string[];
-    queryFacets?: Record<string, string[]>;
-    caseSensitive: boolean;
-  };
-} = {
-  current: { search: '', kinds: [], namespaces: [], caseSensitive: false },
+const makePersistenceFilters = (
+  overrides: Partial<GridTableFilterState> = {}
+): GridTableFilterState => ({
+  search: '',
+  kinds: ALL_MULTISELECT_FILTER,
+  namespaces: ALL_MULTISELECT_FILTER,
+  clusters: ALL_MULTISELECT_FILTER,
+  caseSensitive: false,
+  includeMetadata: false,
+  ...overrides,
+});
+
+const persistenceFiltersRef: { current: GridTableFilterState } = {
+  current: makePersistenceFilters(),
 };
 
 vi.mock('@shared/components/tables/GridTable', async () => {
@@ -333,7 +338,7 @@ describe('BrowseView', () => {
     persistenceMocks.clusterSetFilters.mockReset();
     persistenceMocks.namespaceOnSortChange.mockReset();
     persistenceMocks.namespaceSetFilters.mockReset();
-    persistenceFiltersRef.current = { search: '', kinds: [], namespaces: [], caseSensitive: false };
+    persistenceFiltersRef.current = makePersistenceFilters();
   });
 
   afterEach(() => {
@@ -728,13 +733,9 @@ describe('BrowseView', () => {
     });
 
     it('publishes API groups without a redundant resource-scope control or hidden filter', async () => {
-      persistenceFiltersRef.current = {
-        search: '',
-        kinds: [],
-        namespaces: [],
-        queryFacets: { resourceScopes: ['Cluster'] },
-        caseSensitive: false,
-      };
+      persistenceFiltersRef.current = makePersistenceFilters({
+        queryFacets: { resourceScopes: { mode: 'some', values: ['Cluster'] } },
+      });
       refreshMocks.catalogDomain.status = 'ready';
       refreshMocks.catalogDomain.data = catalogPayload([], {
         groups: ['(core)', 'apps'],
@@ -769,13 +770,10 @@ describe('BrowseView', () => {
     });
 
     it('prunes a persisted Kind that is unavailable in the selected API groups', async () => {
-      persistenceFiltersRef.current = {
-        search: '',
-        kinds: ['Pod'],
-        namespaces: [],
-        queryFacets: { apiGroups: ['apps'] },
-        caseSensitive: false,
-      };
+      persistenceFiltersRef.current = makePersistenceFilters({
+        kinds: { mode: 'some', values: ['Pod'] },
+        queryFacets: { apiGroups: { mode: 'some', values: ['apps'] } },
+      });
       refreshMocks.catalogDomain.status = 'ready';
       refreshMocks.catalogDomain.data = catalogPayload([], {
         kinds: [{ kind: 'Deployment', namespaced: true }],
@@ -789,20 +787,17 @@ describe('BrowseView', () => {
 
       expect(persistenceMocks.clusterSetFilters).toHaveBeenCalledWith(
         expect.objectContaining({
-          kinds: [],
-          queryFacets: { apiGroups: ['apps'] },
+          kinds: ALL_MULTISELECT_FILTER,
+          queryFacets: { apiGroups: { mode: 'some', values: ['apps'] } },
         })
       );
     });
 
     it('retains a persisted Kind that is available in the selected API groups', async () => {
-      persistenceFiltersRef.current = {
-        search: '',
-        kinds: ['Deployment'],
-        namespaces: [],
-        queryFacets: { apiGroups: ['apps'] },
-        caseSensitive: false,
-      };
+      persistenceFiltersRef.current = makePersistenceFilters({
+        kinds: { mode: 'some', values: ['Deployment'] },
+        queryFacets: { apiGroups: { mode: 'some', values: ['apps'] } },
+      });
       refreshMocks.catalogDomain.status = 'ready';
       refreshMocks.catalogDomain.data = catalogPayload([], {
         kinds: [{ kind: 'Deployment', namespaced: true }],
@@ -818,12 +813,11 @@ describe('BrowseView', () => {
     });
 
     it('keeps kind and namespace filter options stable while active browse filters change', async () => {
-      persistenceFiltersRef.current = {
+      persistenceFiltersRef.current = makePersistenceFilters({
         search: 'api',
-        kinds: ['Pod'],
-        namespaces: ['default'],
-        caseSensitive: false,
-      };
+        kinds: { mode: 'some', values: ['Pod'] },
+        namespaces: { mode: 'some', values: ['default'] },
+      });
       refreshMocks.scopedDomains.set(
         'cluster-1|limit=50&resourceScope=namespace&search=api&kind=Pod&namespace=default',
         {

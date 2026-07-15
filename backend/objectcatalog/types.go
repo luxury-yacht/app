@@ -208,6 +208,7 @@ type QueryOptions struct {
 	Limit           int      // maximum number of items to return
 	Continue        string   // token for continuing a paginated query
 	CustomOnly      bool     // restricts results to non-built-in discovered resources
+	MatchNone       bool     // explicit empty multiselect: no catalog item can match
 	// Anchor asks for the page CONTAINING this object instead of a
 	// cursor-addressed page (mutually exclusive with Continue — the snapshot
 	// layer validates before calling). See QueryAnchor.

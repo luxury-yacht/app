@@ -1,7 +1,7 @@
 import { describe, expect, it } from 'vitest';
 
 import type { CatalogItem } from '@/core/refresh/types';
-import { reconcileByUID } from './browseUtils';
+import { normalizeCatalogScope, reconcileByUID } from './browseUtils';
 
 const makeItem = (overrides: Partial<CatalogItem>): CatalogItem => ({
   clusterId: 'cluster-a',
@@ -56,5 +56,18 @@ describe('reconcileByUID', () => {
     expect(result.changed).toBe(true);
     expect(result.nextItems).toHaveLength(1);
     expect(result.nextItems[0]).toBe(current[0]);
+  });
+});
+
+describe('normalizeCatalogScope', () => {
+  it('preserves an explicit match-none query through normalization', () => {
+    expect(
+      normalizeCatalogScope(
+        'limit=50&matchNone=true&resourceScope=cluster&namespace=cluster',
+        50,
+        [],
+        'cluster-a'
+      )
+    ).toBe('cluster-a|limit=50&matchNone=true&resourceScope=cluster&namespace=cluster');
   });
 });

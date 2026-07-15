@@ -6,6 +6,15 @@
  */
 
 import { Dropdown } from '@shared/components/dropdowns/Dropdown';
+import {
+  ALL_MULTISELECT_FILTER,
+  filterSelectionFromDropdownValues,
+  filterSelectionMatches,
+  filterSelectionToDropdownValues,
+  isNarrowingFilterSelection,
+  type MultiSelectFilterSelection,
+  pruneFilterSelectionToOptions,
+} from '@shared/components/dropdowns/multiSelectFilterSelection';
 import IconBar, { type IconBarItem } from '@shared/components/IconBar/IconBar';
 import { AutoScrollIcon, CopyIcon } from '@shared/components/icons/LogIcons';
 import { DeleteIcon } from '@shared/components/icons/SharedIcons';
@@ -49,8 +58,6 @@ const LOG_LEVEL_BASE_OPTIONS = [
   { value: 'error', label: 'Error' },
   { value: 'debug', label: 'Debug' },
 ];
-const ALL_LEVEL_VALUES = LOG_LEVEL_BASE_OPTIONS.map((option) => option.value);
-const DEFAULT_LOG_LEVELS = ALL_LEVEL_VALUES;
 const GLOBAL_LOG_SCOPE_VALUE = '__app_global__';
 const GLOBAL_LOG_SCOPE_LABEL = 'Global';
 const DEFAULT_LOG_COLUMN_WIDTHS = {
@@ -147,9 +154,12 @@ function AppLogsPanel({ isOpen, onClose }: AppLogsPanelProps) {
   const [isLoading, setIsLoading] = useState(false);
   const [copyFeedback, setCopyFeedback] = useState<'idle' | 'copied' | 'error'>('idle');
 
-  const [logLevelFilter, setLogLevelFilter] = useState<string[]>(DEFAULT_LOG_LEVELS);
-  const [componentFilter, setComponentFilter] = useState<string[]>([]);
-  const [clusterFilter, setClusterFilter] = useState<string[]>([]);
+  const [logLevelFilter, setLogLevelFilter] =
+    useState<MultiSelectFilterSelection>(ALL_MULTISELECT_FILTER);
+  const [componentFilter, setComponentFilter] =
+    useState<MultiSelectFilterSelection>(ALL_MULTISELECT_FILTER);
+  const [clusterFilter, setClusterFilter] =
+    useState<MultiSelectFilterSelection>(ALL_MULTISELECT_FILTER);
   const [textFilter, setTextFilter] = useState<string>('');
   const [columnWidths, setColumnWidths] = useState(DEFAULT_LOG_COLUMN_WIDTHS);
   const logsContainerRef = useRef<HTMLDivElement>(null);
@@ -442,11 +452,8 @@ function AppLogsPanel({ isOpen, onClose }: AppLogsPanelProps) {
   }, []);
 
   const handleLogLevelDropdownChange = useCallback((value: string | string[]) => {
-    if (!Array.isArray(value)) {
-      return;
-    }
-
-    setLogLevelFilter(value);
+    const values = Array.isArray(value) ? value : value ? [value] : [];
+    setLogLevelFilter(filterSelectionFromDropdownValues(values, LOG_LEVEL_BASE_OPTIONS));
   }, []);
 
   const renderLogLevelOption = useCallback(
@@ -501,48 +508,33 @@ function AppLogsPanel({ isOpen, onClose }: AppLogsPanelProps) {
     return options;
   }, [logs]);
 
-  const clusterValues = useMemo(
-    () => clusterOptions.map((option) => option.value),
-    [clusterOptions]
+  const handleComponentDropdownChange = useCallback(
+    (value: string | string[]) => {
+      const values = Array.isArray(value) ? value : value ? [value] : [];
+      setComponentFilter(filterSelectionFromDropdownValues(values, componentOptions));
+    },
+    [componentOptions]
   );
-
-  const handleComponentDropdownChange = useCallback((value: string | string[]) => {
-    if (!Array.isArray(value)) {
-      return;
-    }
-
-    setComponentFilter(value);
-  }, []);
 
   useEffect(() => {
     setComponentFilter((prev) => {
-      if (prev.length === 0) {
-        return prev;
-      }
-
-      const validSelections = prev.filter((name) => componentNames.includes(name));
-      return validSelections.length === prev.length ? prev : validSelections;
+      return pruneFilterSelectionToOptions(prev, componentOptions);
     });
-  }, [componentNames]);
+  }, [componentOptions]);
 
-  const handleClusterDropdownChange = useCallback((value: string | string[]) => {
-    if (!Array.isArray(value)) {
-      return;
-    }
-
-    setClusterFilter(value);
-  }, []);
+  const handleClusterDropdownChange = useCallback(
+    (value: string | string[]) => {
+      const values = Array.isArray(value) ? value : value ? [value] : [];
+      setClusterFilter(filterSelectionFromDropdownValues(values, clusterOptions));
+    },
+    [clusterOptions]
+  );
 
   useEffect(() => {
     setClusterFilter((prev) => {
-      if (prev.length === 0) {
-        return prev;
-      }
-
-      const validSelections = prev.filter((name) => clusterValues.includes(name));
-      return validSelections.length === prev.length ? prev : validSelections;
+      return pruneFilterSelectionToOptions(prev, clusterOptions);
     });
-  }, [clusterValues]);
+  }, [clusterOptions]);
 
   const renderComponentOption = useCallback(
     (option: { value: string; label: string }, isSelected: boolean) => {
@@ -644,16 +636,16 @@ function AppLogsPanel({ isOpen, onClose }: AppLogsPanelProps) {
       logs.filter((log) => {
         // Filter by level
         const level = normalizeLevel(log.level);
-        if (logLevelFilter.length > 0 && !logLevelFilter.includes(level)) {
+        if (!filterSelectionMatches(logLevelFilter, level)) {
           return false;
         }
         // Filter by component
-        if (componentFilter.length > 0 && !componentFilter.includes(log.source ?? '')) {
+        if (!filterSelectionMatches(componentFilter, log.source ?? '')) {
           return false;
         }
         // Filter by cluster
         const clusterValue = getLogScopeValue(log);
-        if (clusterFilter.length > 0 && !clusterFilter.includes(clusterValue)) {
+        if (!filterSelectionMatches(clusterFilter, clusterValue)) {
           return false;
         }
         // Filter by text (case-insensitive search in message and source)
@@ -691,9 +683,9 @@ function AppLogsPanel({ isOpen, onClose }: AppLogsPanelProps) {
   }, []);
 
   const showFilteredCount =
-    (logLevelFilter.length > 0 && logLevelFilter.length !== ALL_LEVEL_VALUES.length) ||
-    (componentFilter.length > 0 && componentFilter.length !== componentNames.length) ||
-    (clusterFilter.length > 0 && clusterFilter.length !== clusterValues.length) ||
+    isNarrowingFilterSelection(logLevelFilter) ||
+    isNarrowingFilterSelection(componentFilter) ||
+    isNarrowingFilterSelection(clusterFilter) ||
     textFilter.trim().length > 0;
 
   // Add shortcuts for Application Logs Panel actions.
@@ -877,7 +869,7 @@ function AppLogsPanel({ isOpen, onClose }: AppLogsPanelProps) {
         <div className="app-logs-panel-controls">
           <Dropdown
             options={clusterOptions}
-            value={clusterFilter}
+            value={filterSelectionToDropdownValues(clusterFilter, clusterOptions)}
             onChange={handleClusterDropdownChange}
             multiple
             size="small"
@@ -890,7 +882,7 @@ function AppLogsPanel({ isOpen, onClose }: AppLogsPanelProps) {
 
           <Dropdown
             options={componentOptions}
-            value={componentFilter}
+            value={filterSelectionToDropdownValues(componentFilter, componentOptions)}
             onChange={handleComponentDropdownChange}
             multiple
             size="small"
@@ -903,7 +895,7 @@ function AppLogsPanel({ isOpen, onClose }: AppLogsPanelProps) {
 
           <Dropdown
             options={LOG_LEVEL_BASE_OPTIONS}
-            value={logLevelFilter}
+            value={filterSelectionToDropdownValues(logLevelFilter, LOG_LEVEL_BASE_OPTIONS)}
             onChange={handleLogLevelDropdownChange}
             multiple
             size="small"

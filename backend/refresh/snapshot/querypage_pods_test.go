@@ -109,6 +109,7 @@ func TestPodsQueryViaStoreEquivalent(t *testing.T) {
 		nodes      []string
 		search     string
 		predicates []ResourceQueryPredicate
+		matchNone  bool
 	}
 	sorts := []string{"", "name", "namespace", "status", "ready", "restarts", "owner", "node", "age"}
 	dirs := []string{"asc", "desc"}
@@ -127,6 +128,7 @@ func TestPodsQueryViaStoreEquivalent(t *testing.T) {
 		{predicates: []ResourceQueryPredicate{{Field: "health", Value: "not-ready"}}},
 		{predicates: []ResourceQueryPredicate{{Field: "health", Value: "unhealthy"}}},
 		{ns: []string{"default"}, predicates: []ResourceQueryPredicate{{Field: "health", Value: "restarts"}}},
+		{matchNone: true},
 	}
 
 	for _, sf := range sorts {
@@ -136,7 +138,7 @@ func TestPodsQueryViaStoreEquivalent(t *testing.T) {
 					Enabled: true,
 					Request: ResourceQueryRequest{
 						ClusterID: "c", SortField: sf, SortDirection: d, Limit: 17,
-						Namespaces: f.ns, Kinds: f.kinds, Facets: map[string][]string{"statuses": f.statuses, "nodes": f.nodes}, Search: f.search, Predicates: f.predicates,
+						Namespaces: f.ns, Kinds: f.kinds, Facets: map[string][]string{"statuses": f.statuses, "nodes": f.nodes}, Search: f.search, Predicates: f.predicates, MatchNone: f.matchNone,
 					},
 				}
 				liveKeys, liveFirst := paginate(func(q typedTableQuery) typedTableQueryPage[PodSummary] {

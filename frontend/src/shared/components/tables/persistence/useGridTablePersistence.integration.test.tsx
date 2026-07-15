@@ -160,8 +160,9 @@ describe('useGridTablePersistence integration', () => {
       getLatestState().setColumnVisibility({ status: false });
       getLatestState().setFilters({
         search: 'abc',
-        kinds: ['Pod'],
-        namespaces: [],
+        kinds: { mode: 'some', values: ['Pod'] },
+        namespaces: { mode: 'all' },
+        clusters: { mode: 'all' },
         caseSensitive: false,
         includeMetadata: false,
       });
@@ -176,8 +177,9 @@ describe('useGridTablePersistence integration', () => {
     expect(stateAfterReset.columnVisibility).toEqual({});
     expect(stateAfterReset.filters).toEqual({
       search: '',
-      kinds: [],
-      namespaces: [],
+      kinds: { mode: 'all' },
+      namespaces: { mode: 'all' },
+      clusters: { mode: 'all' },
       caseSensitive: false,
       includeMetadata: false,
     });

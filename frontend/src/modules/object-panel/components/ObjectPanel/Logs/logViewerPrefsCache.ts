@@ -23,15 +23,26 @@
  * entries and don't collide.
  */
 
+import {
+  type MultiSelectFilterSelection,
+  migrateLegacyMultiSelectFilterSelection,
+} from '@shared/components/dropdowns/multiSelectFilterSelection';
 import type { LogViewerPrefs } from '../types';
+
+type LogViewerPrefsInput = Omit<LogViewerPrefs, 'selectedFilters'> & {
+  selectedFilters: MultiSelectFilterSelection | string[];
+};
 
 const cache = new Map<string, LogViewerPrefs>();
 
 export const getLogViewerPrefs = (panelId: string): LogViewerPrefs | undefined =>
   cache.get(panelId);
 
-export const setLogViewerPrefs = (panelId: string, prefs: LogViewerPrefs): void => {
-  cache.set(panelId, prefs);
+export const setLogViewerPrefs = (panelId: string, prefs: LogViewerPrefsInput): void => {
+  cache.set(panelId, {
+    ...prefs,
+    selectedFilters: migrateLegacyMultiSelectFilterSelection(prefs.selectedFilters),
+  });
 };
 
 export const clearLogViewerPrefs = (panelId: string): void => {

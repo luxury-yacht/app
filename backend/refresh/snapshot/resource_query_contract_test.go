@@ -225,6 +225,18 @@ func TestResourceQueryRequestCarriesProviderAndScope(t *testing.T) {
 	}
 }
 
+func TestResourceQueryRequestParsesMatchNone(t *testing.T) {
+	request := resourceQueryRequestFromValues(
+		"cluster-a",
+		"pods",
+		url.Values{"matchNone": []string{"true"}},
+		ResourceQueryRequest{},
+	)
+	if !request.MatchNone {
+		t.Fatal("expected matchNone=true to be preserved in the resource query request")
+	}
+}
+
 // The "every typed-resource payload embeds the normalized envelope" conformance
 // gate now lives in typed_provider_discovery_test.go
 // (TestEveryTypedResourceDomainEmbedsTheNormalizedEnvelope), driven by source

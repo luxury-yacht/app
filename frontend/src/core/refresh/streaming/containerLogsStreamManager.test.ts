@@ -595,6 +595,41 @@ describe('ContainerLogsStreamManager', () => {
     expect(streamURL.searchParams.getAll('selectedFilter')).toEqual(['pod:web-2', 'container:app']);
   });
 
+  test('startStream preserves an explicit empty selection in the stream URL', async () => {
+    class MockEventSource {
+      static instances: MockEventSource[] = [];
+      listeners: Record<string, (evt?: unknown) => void> = {};
+      url: string;
+      constructor(url: string) {
+        this.url = url;
+        MockEventSource.instances.push(this);
+      }
+      addEventListener(type: string, handler: (evt?: unknown) => void) {
+        this.listeners[type] = handler;
+      }
+      removeEventListener(): void {
+        // The test only observes stream creation and its URL.
+      }
+      close(): void {
+        // The test only observes stream creation and its URL.
+      }
+    }
+    installEventSource(MockEventSource);
+
+    const logScope = 'cluster-a|default:apps/v1:deployment:web';
+    setContainerLogsStreamScopeParams(logScope, { matchNone: true });
+    const { ContainerLogsStreamManager } = await import('./containerLogsStreamManager');
+    const manager = new ContainerLogsStreamManager();
+
+    await manager.startStream(logScope);
+
+    const streamURL = new URL(
+      requireValue(MockEventSource.instances[0], 'expected explicit-empty stream').url
+    );
+    expect(streamURL.searchParams.get('matchNone')).toBe('true');
+    expect(streamURL.searchParams.getAll('selectedFilter')).toEqual([]);
+  });
+
   test('refreshOnce rejects and marks error when the stream fails', async () => {
     class MockEventSource {
       static instances: MockEventSource[] = [];

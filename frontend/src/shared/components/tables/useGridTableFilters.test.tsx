@@ -5,6 +5,10 @@
  * Covers key behaviors and edge cases for useGridTableFilters.
  */
 
+import {
+  ALL_MULTISELECT_FILTER,
+  NONE_MULTISELECT_FILTER,
+} from '@shared/components/dropdowns/multiSelectFilterSelection';
 import type {
   GridTableFilterConfig,
   GridTableFilterState,
@@ -135,7 +139,7 @@ describe('useGridTableFilters', () => {
       enabled: true,
       initial: {
         search: 'front',
-        kinds: ['Deployment'],
+        kinds: { mode: 'some', values: ['Deployment'] },
       },
     };
 
@@ -165,8 +169,17 @@ describe('useGridTableFilters', () => {
     await flush();
 
     result = getResult();
-    expect(result?.activeFilters.namespaces).toEqual(['platform']);
+    expect(result?.activeFilters.namespaces).toEqual({ mode: 'some', values: ['platform'] });
     expect(result?.tableData.map((row) => row.id)).toEqual(['3']);
+
+    await act(async () => {
+      result?.handleFilterNamespacesChange([]);
+    });
+    await flush();
+
+    result = getResult();
+    expect(result?.activeFilters.namespaces).toEqual(NONE_MULTISELECT_FILTER);
+    expect(result?.tableData).toEqual([]);
 
     await act(async () => {
       result?.handleFilterReset();
@@ -176,8 +189,9 @@ describe('useGridTableFilters', () => {
     result = getResult();
     expect(result?.activeFilters).toEqual({
       search: '',
-      kinds: [],
-      namespaces: [],
+      kinds: ALL_MULTISELECT_FILTER,
+      namespaces: ALL_MULTISELECT_FILTER,
+      clusters: ALL_MULTISELECT_FILTER,
       caseSensitive: false,
       includeMetadata: false,
     });
@@ -190,9 +204,10 @@ describe('useGridTableFilters', () => {
       enabled: true,
       value: {
         search: '',
-        kinds: ['Deployment'],
-        namespaces: [],
-        queryFacets: { apiGroups: ['apps'] },
+        kinds: { mode: 'some', values: ['Deployment'] },
+        namespaces: ALL_MULTISELECT_FILTER,
+        clusters: ALL_MULTISELECT_FILTER,
+        queryFacets: { apiGroups: { mode: 'some', values: ['apps'] } },
         caseSensitive: false,
         includeMetadata: false,
       },
@@ -218,9 +233,10 @@ describe('useGridTableFilters', () => {
 
     expect(onChange).toHaveBeenCalledWith({
       search: '',
-      kinds: [],
-      namespaces: [],
-      queryFacets: { apiGroups: ['(core)'] },
+      kinds: ALL_MULTISELECT_FILTER,
+      namespaces: ALL_MULTISELECT_FILTER,
+      clusters: ALL_MULTISELECT_FILTER,
+      queryFacets: { apiGroups: { mode: 'some', values: ['(core)'] } },
       caseSensitive: false,
       includeMetadata: false,
     });
@@ -230,8 +246,9 @@ describe('useGridTableFilters', () => {
     const onChange = vi.fn();
     const controlledValue: GridTableFilterState = {
       search: '',
-      kinds: ['configmap'],
-      namespaces: [''],
+      kinds: { mode: 'some', values: ['configmap'] },
+      namespaces: { mode: 'some', values: [''] },
+      clusters: ALL_MULTISELECT_FILTER,
       caseSensitive: false,
       includeMetadata: false,
     };
@@ -252,8 +269,9 @@ describe('useGridTableFilters', () => {
 
     expect(onChange).toHaveBeenCalledWith({
       search: 'gateway',
-      kinds: ['configmap'],
-      namespaces: [''],
+      kinds: { mode: 'some', values: ['configmap'] },
+      namespaces: { mode: 'some', values: [''] },
+      clusters: ALL_MULTISELECT_FILTER,
       caseSensitive: false,
       includeMetadata: false,
     });
@@ -361,18 +379,32 @@ describe('useGridTableFilters', () => {
 
     // Initial render with kind filter for Deployment.
     await act(async () => {
-      root.render(<Harness filters={{ enabled: true, initial: { kinds: ['Deployment'] } }} />);
+      root.render(
+        <Harness
+          filters={{
+            enabled: true,
+            initial: { kinds: { mode: 'some', values: ['Deployment'] } },
+          }}
+        />
+      );
       await Promise.resolve();
     });
-    expect(resultRef.current?.activeFilters.kinds).toEqual(['Deployment']);
+    expect(resultRef.current?.activeFilters.kinds).toEqual({
+      mode: 'some',
+      values: ['Deployment'],
+    });
     expect(resultRef.current?.tableData.map((r) => r.id)).toEqual(['1', '3']);
 
     // Parent changes initial to a different kind — hook must reapply.
     await act(async () => {
-      root.render(<Harness filters={{ enabled: true, initial: { kinds: ['Pod'] } }} />);
+      root.render(
+        <Harness
+          filters={{ enabled: true, initial: { kinds: { mode: 'some', values: ['Pod'] } } }}
+        />
+      );
       await Promise.resolve();
     });
-    expect(resultRef.current?.activeFilters.kinds).toEqual(['Pod']);
+    expect(resultRef.current?.activeFilters.kinds).toEqual({ mode: 'some', values: ['Pod'] });
     expect(resultRef.current?.tableData.map((r) => r.id)).toEqual(['2']);
   });
 

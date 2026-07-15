@@ -40,6 +40,16 @@ func TestParseBrowseScope(t *testing.T) {
 	}
 }
 
+func TestParseBrowseScopePreservesMatchNone(t *testing.T) {
+	opts, err := parseBrowseScope("cluster-a|matchNone=true&limit=50")
+	if err != nil {
+		t.Fatalf("parseBrowseScope returned error: %v", err)
+	}
+	if !opts.MatchNone || !opts.toQueryOptions().MatchNone {
+		t.Fatal("expected matchNone to reach object catalog query options")
+	}
+}
+
 func TestBuildCatalogSnapshotCarriesInventoryFacets(t *testing.T) {
 	payload, _ := buildCatalogSnapshot(
 		objectcatalog.QueryResult{
@@ -151,6 +161,21 @@ func TestCatalogBuildUsesCatalogOnly(t *testing.T) {
 	}
 	if !reflect.DeepEqual(payload.Namespaces, []string{"default"}) {
 		t.Fatalf("unexpected namespaces in payload: %+v", payload.Namespaces)
+	}
+}
+
+func TestCatalogMatchNoneReturnsNoRowsAndRetainsFacets(t *testing.T) {
+	svc := seedCatalogService(t, []objectcatalog.Summary{
+		{Kind: "Pod", Version: "v1", Namespace: "default", Name: "pod-a", UID: "uid-a", Scope: objectcatalog.ScopeNamespace},
+		{Kind: "Deployment", Group: "apps", Version: "v1", Namespace: "platform", Name: "deploy-b", UID: "uid-b", Scope: objectcatalog.ScopeNamespace},
+	})
+
+	result := svc.Query(objectcatalog.QueryOptions{Limit: 50, MatchNone: true})
+	if len(result.Items) != 0 || result.TotalItems != 0 {
+		t.Fatalf("match-none catalog result must be empty, got total=%d items=%+v", result.TotalItems, result.Items)
+	}
+	if result.UnfilteredTotal != 2 || len(result.Kinds) != 2 || len(result.Namespaces) != 2 {
+		t.Fatalf("match-none catalog facets were not retained: %+v", result)
 	}
 }
 

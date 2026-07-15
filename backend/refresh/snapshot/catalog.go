@@ -105,6 +105,7 @@ type browseQueryOptions struct {
 	Limit           int
 	Continue        string
 	CustomOnly      bool
+	MatchNone       bool
 	Anchor          *ResourceQueryAnchor
 	StartRank       *int
 }
@@ -416,6 +417,7 @@ func parseBrowseScope(scope string) (browseQueryOptions, error) {
 		Continue:        request.Continue,
 		Limit:           request.Limit,
 		CustomOnly:      values.Get("customOnly") == "true",
+		MatchNone:       request.MatchNone,
 		Anchor:          request.Anchor,
 		StartRank:       request.StartRank,
 	}
@@ -436,6 +438,7 @@ func (o browseQueryOptions) toQueryOptions() objectcatalog.QueryOptions {
 		Limit:           o.Limit,
 		Continue:        o.Continue,
 		CustomOnly:      o.CustomOnly,
+		MatchNone:       o.MatchNone,
 	}
 	if a := o.Anchor; a != nil {
 		// ClusterID stays behind: parseBrowseScope already enforced the

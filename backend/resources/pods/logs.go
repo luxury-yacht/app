@@ -53,6 +53,12 @@ func (s *Service) FetchContainerLogs(req types.ContainerLogsFetchRequest) types.
 	if err != nil {
 		return types.ContainerLogsFetchResponse{Error: fmt.Sprintf("invalid container state filter: %v", err)}
 	}
+	if req.MatchNone {
+		if _, err := s.resolveLogTarget(req); err != nil {
+			return types.ContainerLogsFetchResponse{Error: err.Error()}
+		}
+		return types.ContainerLogsFetchResponse{}
+	}
 
 	pods, err := s.resolveTargetPodObjects(req, podNameFilter, selection)
 	if err != nil {

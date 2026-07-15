@@ -5,6 +5,12 @@
  * Handles rendering and interactions for the shared components.
  */
 
+import {
+  ALL_MULTISELECT_FILTER,
+  type MultiSelectFilterSelection,
+  migrateLegacyMultiSelectFilterSelection,
+  normalizeMultiSelectFilterSelection,
+} from '@shared/components/dropdowns/multiSelectFilterSelection';
 import type {
   ColumnWidthState,
   GridColumnDefinition,
@@ -13,21 +19,30 @@ import type {
 import { isSortableColumn } from '@shared/components/tables/GridTable.utils';
 import {
   hasNonDefaultGridTableFilters,
-  normalizeGridTableFilterArray,
   normalizeGridTableFilterState,
-  normalizeGridTableIdentityFilterArray,
   normalizeGridTableQueryFacets,
 } from '@shared/components/tables/gridTableFilterState';
 import { requestAppState } from '@/core/app-state-access';
 
 export interface GridTablePersistedState {
-  version: 1;
+  version: 2;
   columnVisibility?: Record<string, boolean>;
   columnWidths?: Record<string, ColumnWidthState>;
   sort?: { key: string; direction: 'asc' | 'desc' | null };
   filters?: GridTableFilterState;
   pageSize?: number;
 }
+
+interface LegacyGridTablePersistedState {
+  version: 1;
+  columnVisibility?: Record<string, boolean>;
+  columnWidths?: Record<string, ColumnWidthState>;
+  sort?: { key: string; direction: 'asc' | 'desc' | null };
+  filters?: unknown;
+  pageSize?: number;
+}
+
+type GridTablePersistedInput = GridTablePersistedState | LegacyGridTablePersistedState;
 
 export interface GridTablePersistenceKeyParts {
   clusterHash: string;
@@ -60,7 +75,8 @@ export interface GridTableSaveContext<T> extends GridTablePruneContext<T> {
 }
 
 const STORAGE_PREFIX = 'gridtable';
-const STORAGE_VERSION = 1;
+const STORAGE_KEY_VERSION = 1;
+const STORAGE_VERSION = 2;
 const LOCKED_COLUMNS = new Set(['kind', 'type', 'name', 'age']);
 
 const normalizeNamespaceKey = (namespace?: string | null): string | null => {
@@ -81,7 +97,7 @@ export const buildGridTableStorageKey = (parts: GridTablePersistenceKeyParts): s
     return null;
   }
   const namespaceSegment = namespaceKey ? `:${encodeKeySegment(namespaceKey)}` : '';
-  return `${STORAGE_PREFIX}:v${STORAGE_VERSION}:${clusterHash}:${encodeKeySegment(viewId)}${namespaceSegment}`;
+  return `${STORAGE_PREFIX}:v${STORAGE_KEY_VERSION}:${clusterHash}:${encodeKeySegment(viewId)}${namespaceSegment}`;
 };
 
 const toHexString = (buffer: ArrayBuffer): string =>
@@ -141,17 +157,65 @@ const getRuntimeApp = () => {
   return window.go?.backend?.App;
 };
 
+const migratePersistedQueryFacets = (
+  value: unknown
+): Record<string, MultiSelectFilterSelection> | undefined => {
+  if (!value || typeof value !== 'object' || Array.isArray(value)) {
+    return undefined;
+  }
+  const migrated: Record<string, MultiSelectFilterSelection> = {};
+  for (const [rawKey, rawSelection] of Object.entries(value)) {
+    const key = rawKey.trim();
+    if (!key) {
+      continue;
+    }
+    const selection = migrateLegacyMultiSelectFilterSelection(rawSelection);
+    if (selection.mode !== 'all') {
+      migrated[key] = selection;
+    }
+  }
+  return Object.keys(migrated).length > 0 ? migrated : undefined;
+};
+
+const migratePersistedFilters = (value: unknown): GridTableFilterState | undefined => {
+  if (!value || typeof value !== 'object' || Array.isArray(value)) {
+    return undefined;
+  }
+  const legacy = value as Record<string, unknown>;
+  return normalizeGridTableFilterState({
+    search: typeof legacy.search === 'string' ? legacy.search : '',
+    kinds: migrateLegacyMultiSelectFilterSelection(legacy.kinds),
+    namespaces: migrateLegacyMultiSelectFilterSelection(legacy.namespaces),
+    clusters: migrateLegacyMultiSelectFilterSelection(legacy.clusters),
+    queryFacets: migratePersistedQueryFacets(legacy.queryFacets),
+    caseSensitive: legacy.caseSensitive === true,
+    includeMetadata: legacy.includeMetadata === true,
+  });
+};
+
+const migratePersistedState = (value: unknown): GridTablePersistedState | null => {
+  if (!value || typeof value !== 'object' || Array.isArray(value)) {
+    return null;
+  }
+  const input = value as GridTablePersistedInput;
+  if (input.version !== 1 && input.version !== STORAGE_VERSION) {
+    return null;
+  }
+  const filters = migratePersistedFilters(input.filters);
+  return {
+    ...input,
+    version: STORAGE_VERSION,
+    ...(filters ? { filters } : {}),
+  } as GridTablePersistedState;
+};
+
 const normalizePersistenceMap = (entries: Record<string, unknown>): GridTablePersistenceMap => {
   const normalized: GridTablePersistenceMap = {};
   Object.entries(entries).forEach(([key, value]) => {
-    if (!value || typeof value !== 'object') {
-      return;
+    const migrated = migratePersistedState(value);
+    if (migrated) {
+      normalized[key] = migrated;
     }
-    const version = (value as GridTablePersistedState).version;
-    if (version !== STORAGE_VERSION) {
-      return;
-    }
-    normalized[key] = value as GridTablePersistedState;
   });
   return normalized;
 };
@@ -301,8 +365,10 @@ export const resetGridTablePersistenceCacheForTesting = (): void => {
 };
 
 // Test helper to seed the cache without calling the backend.
-export const setGridTablePersistenceCacheForTesting = (entries: GridTablePersistenceMap): void => {
-  persistenceCache = { ...entries };
+export const setGridTablePersistenceCacheForTesting = (
+  entries: Record<string, GridTablePersistedInput>
+): void => {
+  persistenceCache = normalizePersistenceMap(entries);
   hydrated = true;
 };
 
@@ -322,18 +388,33 @@ const intersectsAllowedIdentities = (values: string[], allowed?: string[]): stri
   return values.filter((value) => allowedSet.has(value));
 };
 
+const pruneFilterSelection = (
+  selection: MultiSelectFilterSelection,
+  allowed: string[] | undefined,
+  identitySensitive = false
+): MultiSelectFilterSelection => {
+  const normalized = normalizeMultiSelectFilterSelection(selection);
+  if (normalized.mode !== 'some') {
+    return normalized;
+  }
+  const values = identitySensitive
+    ? intersectsAllowedIdentities(normalized.values, allowed)
+    : intersectsAllowed(normalized.values, allowed);
+  return values.length > 0 ? { mode: 'some', values } : ALL_MULTISELECT_FILTER;
+};
+
 const pruneQueryFacets = (
-  facets: Record<string, string[]>,
+  facets: Record<string, MultiSelectFilterSelection>,
   allowed?: Record<string, string[]>
-): Record<string, string[]> => {
-  const pruned: Record<string, string[]> = {};
+): Record<string, MultiSelectFilterSelection> => {
+  const pruned: Record<string, MultiSelectFilterSelection> = {};
   const allowedKeys = allowed ? new Set(Object.keys(allowed)) : null;
-  for (const [key, values] of Object.entries(facets)) {
+  for (const [key, selection] of Object.entries(facets)) {
     if (allowedKeys && !allowedKeys.has(key)) {
       continue;
     }
-    const selected = intersectsAllowed(values, allowed?.[key]);
-    if (selected.length > 0) {
+    const selected = pruneFilterSelection(selection, allowed?.[key]);
+    if (selected.mode !== 'all') {
       pruned[key] = selected;
     }
   }
@@ -348,10 +429,11 @@ const isAllowedPageSize = (value: number, options?: readonly number[]): boolean 
 };
 
 export const prunePersistedState = <T>(
-  persisted: GridTablePersistedState | null | undefined,
+  persisted: GridTablePersistedInput | null | undefined,
   context: GridTablePruneContext<T>
 ): GridTablePersistedState | null => {
-  if (!persisted || persisted.version !== STORAGE_VERSION) {
+  const migrated = migratePersistedState(persisted);
+  if (!migrated) {
     return null;
   }
 
@@ -361,9 +443,9 @@ export const prunePersistedState = <T>(
     columnMap.set(column.key, column);
   });
 
-  if (persisted.columnVisibility) {
+  if (migrated.columnVisibility) {
     const visibility: Record<string, boolean> = {};
-    Object.entries(persisted.columnVisibility).forEach(([key, value]) => {
+    Object.entries(migrated.columnVisibility).forEach(([key, value]) => {
       if (LOCKED_COLUMNS.has(key)) {
         return;
       }
@@ -376,9 +458,9 @@ export const prunePersistedState = <T>(
     }
   }
 
-  if (persisted.columnWidths) {
+  if (migrated.columnWidths) {
     const widths: Record<string, ColumnWidthState> = {};
-    Object.entries(persisted.columnWidths).forEach(([key, value]) => {
+    Object.entries(migrated.columnWidths).forEach(([key, value]) => {
       if (!columnMap.has(key)) {
         return;
       }
@@ -391,27 +473,28 @@ export const prunePersistedState = <T>(
     }
   }
 
-  if (persisted.sort?.key) {
-    const column = columnMap.get(persisted.sort.key);
+  if (migrated.sort?.key) {
+    const column = columnMap.get(migrated.sort.key);
     if (isSortableColumn(column)) {
       pruned.sort = {
-        key: persisted.sort.key,
-        direction: persisted.sort.direction ?? null,
+        key: migrated.sort.key,
+        direction: migrated.sort.direction ?? null,
       };
     }
   }
 
-  if (persisted.filters) {
+  if (migrated.filters) {
     const isNamespaceScoped = context.filterOptions?.isNamespaceScoped ?? false;
-    const normalized = normalizeGridTableFilterState(persisted.filters);
+    const normalized = normalizeGridTableFilterState(migrated.filters);
 
-    const kinds = intersectsAllowed(normalized.kinds, context.filterOptions?.kinds);
+    const kinds = pruneFilterSelection(normalized.kinds, context.filterOptions?.kinds);
     const namespaces = isNamespaceScoped
-      ? []
-      : intersectsAllowed(normalized.namespaces, context.filterOptions?.namespaces);
-    const clusters = intersectsAllowedIdentities(
-      normalized.clusters ?? [],
-      context.filterOptions?.clusters
+      ? ALL_MULTISELECT_FILTER
+      : pruneFilterSelection(normalized.namespaces, context.filterOptions?.namespaces);
+    const clusters = pruneFilterSelection(
+      normalized.clusters,
+      context.filterOptions?.clusters,
+      true
     );
     const queryFacets = pruneQueryFacets(
       normalizeGridTableQueryFacets(normalized.queryFacets),
@@ -422,7 +505,7 @@ export const prunePersistedState = <T>(
       search: normalized.search,
       kinds,
       namespaces,
-      ...(clusters.length > 0 ? { clusters } : {}),
+      clusters,
       ...(Object.keys(queryFacets).length > 0 ? { queryFacets } : {}),
       caseSensitive: normalized.caseSensitive,
       includeMetadata: normalized.includeMetadata,
@@ -434,10 +517,10 @@ export const prunePersistedState = <T>(
   }
 
   if (
-    typeof persisted.pageSize === 'number' &&
-    isAllowedPageSize(persisted.pageSize, context.pageSizeOptions)
+    typeof migrated.pageSize === 'number' &&
+    isAllowedPageSize(migrated.pageSize, context.pageSizeOptions)
   ) {
-    pruned.pageSize = persisted.pageSize;
+    pruned.pageSize = migrated.pageSize;
   }
 
   if (
@@ -508,12 +591,18 @@ export const buildPersistedStateForSave = <T>(
       normalizeGridTableQueryFacets(normalized.queryFacets),
       context.filterOptions?.queryFacets
     );
-    const clusters = normalizeGridTableIdentityFilterArray(normalized.clusters);
+    const clusters = pruneFilterSelection(
+      normalized.clusters,
+      context.filterOptions?.clusters,
+      true
+    );
     const filters: GridTableFilterState = {
       search: normalized.search,
-      kinds: normalizeGridTableFilterArray(normalized.kinds),
-      namespaces: isNamespaceScoped ? [] : normalizeGridTableFilterArray(normalized.namespaces),
-      ...(clusters.length > 0 ? { clusters } : {}),
+      kinds: pruneFilterSelection(normalized.kinds, context.filterOptions?.kinds),
+      namespaces: isNamespaceScoped
+        ? ALL_MULTISELECT_FILTER
+        : pruneFilterSelection(normalized.namespaces, context.filterOptions?.namespaces),
+      clusters,
       ...(Object.keys(queryFacets).length > 0 ? { queryFacets } : {}),
       caseSensitive: normalized.caseSensitive,
       includeMetadata: normalized.includeMetadata,

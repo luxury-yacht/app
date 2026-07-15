@@ -13,11 +13,11 @@ describe('typedResourceQueryScope', () => {
       filters: {
         ...DEFAULT_GRID_TABLE_FILTER_STATE,
         search: 'api',
-        kinds: ['Pod', 'Deployment'],
-        namespaces: ['zeta', 'apps'],
+        kinds: { mode: 'some', values: ['Pod', 'Deployment'] },
+        namespaces: { mode: 'some', values: ['zeta', 'apps'] },
         queryFacets: {
-          statuses: ['Pending', 'Running'],
-          nodes: ['node-b', 'node-a'],
+          statuses: { mode: 'some', values: ['Pending', 'Running'] },
+          nodes: { mode: 'some', values: ['node-b', 'node-a'] },
         },
       },
       sortConfig: { key: 'cpu', direction: 'desc' },
@@ -37,12 +37,12 @@ describe('typedResourceQueryScope', () => {
       filters: {
         ...DEFAULT_GRID_TABLE_FILTER_STATE,
         queryFacets: {
-          types: ['Warning'],
-          reasons: ['BackOff'],
-          sources: ['kubelet'],
-          statuses: ['Needs attention'],
-          confidences: ['low'],
-          hasIssues: ['true'],
+          types: { mode: 'some', values: ['Warning'] },
+          reasons: { mode: 'some', values: ['BackOff'] },
+          sources: { mode: 'some', values: ['kubelet'] },
+          statuses: { mode: 'some', values: ['Needs attention'] },
+          confidences: { mode: 'some', values: ['low'] },
+          hasIssues: { mode: 'some', values: ['true'] },
         },
       },
       sortConfig: { key: 'name', direction: 'asc' },
@@ -87,12 +87,18 @@ describe('typedResourceQueryScope', () => {
     expect(
       typedResourceQueryIdentity({
         ...base,
-        filters: { ...base.filters, queryFacets: { statuses: ['Running'] } },
+        filters: {
+          ...base.filters,
+          queryFacets: { statuses: { mode: 'some', values: ['Running'] } },
+        },
       })
     ).not.toBe(
       typedResourceQueryIdentity({
         ...base,
-        filters: { ...base.filters, queryFacets: { statuses: ['Pending'] } },
+        filters: {
+          ...base.filters,
+          queryFacets: { statuses: { mode: 'some', values: ['Pending'] } },
+        },
       })
     );
   });
@@ -101,9 +107,12 @@ describe('typedResourceQueryScope', () => {
     const left = typedResourceQueryIdentity({
       filters: {
         ...DEFAULT_GRID_TABLE_FILTER_STATE,
-        kinds: ['Pod', 'Deployment'],
-        namespaces: ['zeta', 'apps'],
-        queryFacets: { statuses: ['Running', 'Pending'], nodes: ['node-b', 'node-a'] },
+        kinds: { mode: 'some', values: ['Pod', 'Deployment'] },
+        namespaces: { mode: 'some', values: ['zeta', 'apps'] },
+        queryFacets: {
+          statuses: { mode: 'some', values: ['Running', 'Pending'] },
+          nodes: { mode: 'some', values: ['node-b', 'node-a'] },
+        },
       },
       sortConfig: { key: 'name', direction: 'asc' },
       predicates: { health: 'unhealthy', phase: 'pending' },
@@ -111,9 +120,12 @@ describe('typedResourceQueryScope', () => {
     const right = typedResourceQueryIdentity({
       filters: {
         ...DEFAULT_GRID_TABLE_FILTER_STATE,
-        kinds: ['Deployment', 'Pod'],
-        namespaces: ['apps', 'zeta'],
-        queryFacets: { nodes: ['node-a', 'node-b'], statuses: ['Pending', 'Running'] },
+        kinds: { mode: 'some', values: ['Deployment', 'Pod'] },
+        namespaces: { mode: 'some', values: ['apps', 'zeta'] },
+        queryFacets: {
+          nodes: { mode: 'some', values: ['node-a', 'node-b'] },
+          statuses: { mode: 'some', values: ['Pending', 'Running'] },
+        },
       },
       sortConfig: { key: 'name', direction: 'asc' },
       predicates: { phase: 'pending', health: 'unhealthy' },

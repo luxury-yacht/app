@@ -179,25 +179,30 @@ export function useGridTableFiltersWiring<T>({
     []
   );
 
-  const renderKindsValue = useCallback((value: string | string[], _options: DropdownOption[]) => {
-    // Include the selected count so multi-select status is visible at a glance.
-    const count = Array.isArray(value) ? value.length : value ? 1 : 0;
-    return count > 0 ? `Kinds (${count})` : 'Kinds';
-  }, []);
+  const renderKindsValue = useCallback(
+    (_value: string | string[], _options: DropdownOption[]) => {
+      const count = activeFilters.kinds.mode === 'some' ? activeFilters.kinds.values.length : 0;
+      return count > 0 ? `Kinds (${count})` : 'Kinds';
+    },
+    [activeFilters.kinds]
+  );
   const renderNamespacesValue = useCallback(
     (value: string | string[], _options: DropdownOption[]) => {
-      // Include the selected count so multi-select status is visible at a glance.
-      const count = Array.isArray(value) ? value.length : value ? 1 : 0;
+      void value;
+      const count =
+        activeFilters.namespaces.mode === 'some' ? activeFilters.namespaces.values.length : 0;
       return count > 0 ? `Namespaces (${count})` : 'Namespaces';
     },
-    []
+    [activeFilters.namespaces]
   );
   const renderClustersValue = useCallback(
     (value: string | string[], _options: DropdownOption[]) => {
-      const count = Array.isArray(value) ? value.length : value ? 1 : 0;
+      void value;
+      const count =
+        activeFilters.clusters.mode === 'some' ? activeFilters.clusters.values.length : 0;
       return count > 0 ? `Clusters (${count})` : 'Clusters';
     },
-    []
+    [activeFilters.clusters]
   );
   const renderColumnsValue = useCallback(
     (_value: string | string[], _options: DropdownOption[]) => 'Columns',

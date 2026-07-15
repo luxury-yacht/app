@@ -159,6 +159,7 @@ type ContainerLogsFetchRequest struct {
 	PodInclude       string   `json:"podInclude,omitempty"`
 	PodExclude       string   `json:"podExclude,omitempty"`
 	SelectedFilters  []string `json:"selectedFilters,omitempty"`
+	MatchNone        bool     `json:"matchNone,omitempty"`
 	Container        string   `json:"container,omitempty"` // empty means all containers
 	IncludeInit      *bool    `json:"includeInit,omitempty"`
 	IncludeEphemeral *bool    `json:"includeEphemeral,omitempty"`

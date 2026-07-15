@@ -51,10 +51,15 @@ workflow and that exception is documented.
   renderer publishes `aria-selected`.
 - The Columns menu uses `Dropdown`'s shared bulk-action controls. Its options are
   hideable columns only; do not add synthetic show-all or hide-all options.
-- Multi-select filter state preserves an explicit Select All selection so the
-  controlled dropdown remains distinct from Select None. Query adapters may
-  remove a full-dimension selection only when building an equivalent backend
-  query; they must not write that query optimization back into dropdown state.
+- Filter-style multiselects use three explicit states: `all` is unrestricted
+  and includes options discovered later, `some` matches only its stored values,
+  and `none` matches no rows. Controlled Dropdown values project `all` to every
+  current option and `none` to an empty selection. Query adapters serialize
+  `none` as `matchNone=true`; they may remove a full-dimension `all` selection
+  only when building an equivalent backend query and must not write that query
+  optimization back into dropdown state. The Columns dropdown is intentionally
+  different: its selected values are enabled columns, so none hides every
+  hideable column.
 - Query facets may declare `placement: 'before-kinds'` when they constrain the
   Kind vocabulary. They must also declare `invalidates: ['kinds']` so changing
   the upstream facet clears the previous Kind selection in the same state

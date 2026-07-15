@@ -263,6 +263,7 @@ type typedTableQueryMatcher[T any] struct {
 	facetSets       map[string]map[string]struct{}
 	searchNeedle    string
 	predicates      map[string]string
+	matchNone       bool
 }
 
 func newTypedTableQueryMatcher[T any](query typedTableQuery, adapter typedTableQueryAdapter[T]) typedTableQueryMatcher[T] {
@@ -274,10 +275,14 @@ func newTypedTableQueryMatcher[T any](query typedTableQuery, adapter typedTableQ
 		facetSets:       typedTableFacetSelectionSets(query.Request.Facets),
 		searchNeedle:    strings.ToLower(strings.TrimSpace(query.Request.Search)),
 		predicates:      resourceQueryPredicatesToMap(query.Request.Predicates),
+		matchNone:       query.Request.MatchNone,
 	}
 }
 
 func (m typedTableQueryMatcher[T]) Matches(item T) bool {
+	if m.matchNone {
+		return false
+	}
 	if len(m.namespaceSet) > 0 {
 		if _, ok := m.namespaceSet[strings.ToLower(strings.TrimSpace(m.adapter.Namespace(item)))]; !ok {
 			return false

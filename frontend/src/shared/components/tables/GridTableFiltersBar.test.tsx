@@ -85,8 +85,9 @@ describe('GridTableFiltersBar', () => {
           <GridTableFiltersBar
             activeFilters={{
               search: '',
-              kinds: [],
-              namespaces: [],
+              kinds: { mode: 'all' },
+              namespaces: { mode: 'all' },
+              clusters: { mode: 'all' },
               caseSensitive: false,
               includeMetadata: false,
             }}
@@ -138,8 +139,9 @@ describe('GridTableFiltersBar', () => {
       showNamespaceDropdown: true,
       activeFilters: {
         search: 'pods',
-        kinds: [],
-        namespaces: [],
+        kinds: { mode: 'all' },
+        namespaces: { mode: 'all' },
+        clusters: { mode: 'all' },
         caseSensitive: false,
         includeMetadata: false,
       },
@@ -204,9 +206,10 @@ describe('GridTableFiltersBar', () => {
     await renderFilters({
       activeFilters: {
         search: '',
-        kinds: [],
-        namespaces: [],
-        queryFacets: { apiGroups: ['apps'] },
+        kinds: { mode: 'all' },
+        namespaces: { mode: 'all' },
+        clusters: { mode: 'all' },
+        queryFacets: { apiGroups: { mode: 'some', values: ['apps'] } },
         caseSensitive: false,
         includeMetadata: false,
       },
@@ -362,8 +365,9 @@ describe('GridTableFiltersBar', () => {
           <GridTableFiltersBar
             activeFilters={{
               search,
-              kinds: [],
-              namespaces: [],
+              kinds: { mode: 'all' },
+              namespaces: { mode: 'all' },
+              clusters: { mode: 'all' },
               caseSensitive: false,
               includeMetadata: false,
             }}
@@ -442,8 +446,9 @@ describe('GridTableFiltersBar', () => {
     await renderFilters({
       activeFilters: {
         search: 'web',
-        kinds: [],
-        namespaces: [],
+        kinds: { mode: 'all' },
+        namespaces: { mode: 'all' },
+        clusters: { mode: 'all' },
         caseSensitive: false,
         includeMetadata: false,
       },
@@ -472,8 +477,9 @@ describe('GridTableFiltersBar', () => {
     await renderFilters({
       activeFilters: {
         search: 'web',
-        kinds: [],
-        namespaces: [],
+        kinds: { mode: 'all' },
+        namespaces: { mode: 'all' },
+        clusters: { mode: 'all' },
         caseSensitive: false,
         includeMetadata: false,
       },
@@ -503,8 +509,9 @@ describe('GridTableFiltersBar', () => {
     await renderFilters({
       activeFilters: {
         search: 'web',
-        kinds: [],
-        namespaces: [],
+        kinds: { mode: 'all' },
+        namespaces: { mode: 'all' },
+        clusters: { mode: 'all' },
         caseSensitive: false,
         includeMetadata: false,
       },
@@ -521,8 +528,9 @@ describe('GridTableFiltersBar', () => {
     await renderFilters({
       activeFilters: {
         search: 'web',
-        kinds: [],
-        namespaces: [],
+        kinds: { mode: 'all' },
+        namespaces: { mode: 'all' },
+        clusters: { mode: 'all' },
         caseSensitive: false,
         includeMetadata: false,
       },
@@ -608,8 +616,9 @@ describe('GridTableFiltersBar', () => {
     await renderFilters({
       activeFilters: {
         search: '',
-        kinds: [],
-        namespaces: [],
+        kinds: { mode: 'all' },
+        namespaces: { mode: 'all' },
+        clusters: { mode: 'all' },
         caseSensitive: false,
         includeMetadata: true,
       },

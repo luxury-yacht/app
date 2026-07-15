@@ -46,6 +46,35 @@ type typedQueryTestRow struct {
 	cpu       float64
 }
 
+func TestTypedTableQueryMatchNoneReturnsNoRowsAndRetainsOptions(t *testing.T) {
+	query := typedTableQuery{
+		Enabled: true,
+		Request: ResourceQueryRequest{
+			ClusterID: "cluster-a",
+			Table:     "pods",
+			Limit:     50,
+			MatchNone: true,
+		},
+	}
+	page := applyTypedTableQuery([]typedQueryTestRow{
+		{key: "default/a", name: "a", namespace: "default", kind: "Pod"},
+		{key: "platform/b", name: "b", namespace: "platform", kind: "Deployment"},
+	}, query, typedQueryTestAdapter())
+
+	if len(page.Rows) != 0 || page.Total != 0 {
+		t.Fatalf("match-none page must be empty, got total=%d rows=%+v", page.Total, page.Rows)
+	}
+	if !equalStringSlices(page.Namespaces, []string{"default", "platform"}) {
+		t.Fatalf("match-none namespaces = %v", page.Namespaces)
+	}
+	if !equalStringSlices(page.Kinds, []string{"Deployment", "Pod"}) {
+		t.Fatalf("match-none kinds = %v", page.Kinds)
+	}
+	if page.UnfilteredTotal != 2 || !page.TotalIsExact {
+		t.Fatalf("match-none totals = %d/%d exact=%v", page.Total, page.UnfilteredTotal, page.TotalIsExact)
+	}
+}
+
 func TestTypedTableQueryReportsInvalidCursor(t *testing.T) {
 	query := typedTableQuery{
 		Enabled: true,

@@ -12,6 +12,10 @@ Panel. They are not Application Logs and they are not Node Logs.
   retrieval.
 - Frontend filters such as search, regex, display mode, timestamps, wrapping,
   and ANSI rendering must not change backend target identity.
+- Pod/container source selection uses explicit `all`, `some`, and `none`
+  states. `none` must produce an empty frontend result and carry
+  `matchNone=true` through both live-stream and fallback requests without
+  dropping the cluster-prefixed object/log scope.
 - Previous logs, tail lines, follow, timestamps, and target caps are backend log
   query concerns.
 - Do not start both duplicate scoped-domain enablement and explicit stream

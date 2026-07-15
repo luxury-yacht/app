@@ -391,6 +391,7 @@ func (s *Service) queryViaEngineWithStore(
 		Limit:     limit,
 		Search:    opts.Search,
 		Filters:   filters,
+		MatchNone: opts.MatchNone,
 	}
 	var page querypage.Page[Summary]
 	var err error

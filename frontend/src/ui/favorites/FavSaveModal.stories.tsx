@@ -17,8 +17,9 @@ import FavSaveModal from './FavSaveModal';
 
 const mockFilters: FavoriteFilters = {
   search: '',
-  kinds: [],
-  namespaces: [],
+  kinds: { mode: 'all' },
+  namespaces: { mode: 'all' },
+  clusters: { mode: 'all' },
   caseSensitive: false,
   includeMetadata: false,
 };
@@ -38,8 +39,9 @@ const mockExistingFavorite: Favorite = {
   namespace: 'default',
   filters: {
     search: 'nginx',
-    kinds: [],
-    namespaces: [],
+    kinds: { mode: 'all' },
+    namespaces: { mode: 'all' },
+    clusters: { mode: 'all' },
     caseSensitive: true,
     includeMetadata: false,
   },

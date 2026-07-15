@@ -35,6 +35,7 @@ type Query struct {
 	Limit     int
 	Search    string              // case-insensitive substring filter over SearchText
 	Filters   map[string][]string // facet filters: facet name -> allowed values (set membership; OR within, AND across facets)
+	MatchNone bool                // explicit empty multiselect: no row can match
 	Cursor    string              // opaque continueToken from a previous Page
 }
 
@@ -551,6 +552,9 @@ func (s *Store[R]) matcherFor(q Query) (matchesUID func(string) bool, searchLowe
 	searchLower = strings.ToLower(q.Search)
 	candidates, narrow = s.searchCandidates(searchLower)
 	matchesUID = func(uid string) bool {
+		if q.MatchNone {
+			return false
+		}
 		rowID, ok := s.rows.rowID(uid)
 		if !ok {
 			return false
@@ -566,7 +570,9 @@ func (s *Store[R]) matcherFor(q Query) (matchesUID func(string) bool, searchLowe
 // shared by every serve entry point. Callers must hold s.mu.
 func (s *Store[R]) facetsAndTotal(q Query, searchLower string, candidates map[uint32]struct{}, narrow bool) (map[string]map[string]int, int) {
 	total := s.rows.len()
-	if len(q.Filters) > 0 || q.Search != "" {
+	if q.MatchNone {
+		total = 0
+	} else if len(q.Filters) > 0 || q.Search != "" {
 		total = 0
 		for rowID, mv := range s.match {
 			if s.matchValuesMatches(rowID, mv, q, searchLower, candidates, narrow) {

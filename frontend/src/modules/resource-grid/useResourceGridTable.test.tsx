@@ -275,28 +275,30 @@ describe('useNamespaceResourceGridTable', () => {
     act(() => {
       harness.result.current?.gridTableProps.filters?.onChange?.({
         ...DEFAULT_GRID_TABLE_FILTER_STATE,
-        namespaces: ['team-a', 'team-b'],
+        namespaces: { mode: 'some', values: ['team-a', 'team-b'] },
       });
     });
 
-    expect(harness.result.current?.gridTableProps.filters?.value?.namespaces).toEqual([
-      'team-a',
-      'team-b',
-    ]);
+    expect(harness.result.current?.gridTableProps.filters?.value?.namespaces).toEqual({
+      mode: 'some',
+      values: ['team-a', 'team-b'],
+    });
     expect(harness.onTableStateChange).toHaveBeenLastCalledWith(
       expect.objectContaining({
-        filters: expect.objectContaining({ namespaces: [] }),
+        filters: expect.objectContaining({ namespaces: { mode: 'all' } }),
       })
     );
 
     act(() => {
       harness.result.current?.gridTableProps.filters?.onChange?.({
         ...DEFAULT_GRID_TABLE_FILTER_STATE,
-        namespaces: [],
+        namespaces: { mode: 'all' },
       });
     });
 
-    expect(harness.result.current?.gridTableProps.filters?.value?.namespaces).toEqual([]);
+    expect(harness.result.current?.gridTableProps.filters?.value?.namespaces).toEqual({
+      mode: 'all',
+    });
 
     harness.cleanup();
   });

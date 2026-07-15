@@ -11,6 +11,11 @@ import { useFavorites } from '@core/contexts/FavoritesContext';
 import { useViewState } from '@core/contexts/ViewStateContext';
 import { useKubeconfig } from '@modules/kubernetes/config/KubeconfigContext';
 import { useNamespace } from '@modules/namespace/contexts/NamespaceContext';
+import {
+  ALL_MULTISELECT_FILTER,
+  isNarrowingFilterSelection,
+  normalizeMultiSelectFilterSelection,
+} from '@shared/components/dropdowns/multiSelectFilterSelection';
 import type { IconBarItem } from '@shared/components/IconBar/IconBar';
 import { FavoriteFilledIcon, FavoriteOutlineIcon } from '@shared/components/icons/FavoriteIcons';
 import type { GridTableFilterState } from '@shared/components/tables/GridTable.types';
@@ -113,20 +118,24 @@ export function useFavToggle(state: FavToggleState): {
           continue;
         }
 
-        const kinds = [...state.filters.kinds].sort().join(',');
-        const favKinds = [...(fav.filters.kinds ?? [])].sort().join(',');
+        const kinds = JSON.stringify(normalizeMultiSelectFilterSelection(state.filters.kinds));
+        const favKinds = JSON.stringify(normalizeMultiSelectFilterSelection(fav.filters.kinds));
         if (kinds !== favKinds) {
           continue;
         }
 
-        const ns = [...state.filters.namespaces].sort().join(',');
-        const favNs = [...(fav.filters.namespaces ?? [])].sort().join(',');
+        const ns = JSON.stringify(normalizeMultiSelectFilterSelection(state.filters.namespaces));
+        const favNs = JSON.stringify(normalizeMultiSelectFilterSelection(fav.filters.namespaces));
         if (ns !== favNs) {
           continue;
         }
 
-        const clusters = [...(state.filters.clusters ?? [])].sort().join(',');
-        const favClusters = [...(fav.filters.clusters ?? [])].sort().join(',');
+        const clusters = JSON.stringify(
+          normalizeMultiSelectFilterSelection(state.filters.clusters)
+        );
+        const favClusters = JSON.stringify(
+          normalizeMultiSelectFilterSelection(fav.filters.clusters)
+        );
         if (clusters !== favClusters) {
           continue;
         }
@@ -198,9 +207,9 @@ export function useFavToggle(state: FavToggleState): {
     if (pendingFavorite.filters && state.setFilters) {
       state.setFilters({
         search: pendingFavorite.filters.search ?? '',
-        kinds: pendingFavorite.filters.kinds ?? [],
-        namespaces: pendingFavorite.filters.namespaces ?? [],
-        clusters: pendingFavorite.filters.clusters,
+        kinds: pendingFavorite.filters.kinds ?? ALL_MULTISELECT_FILTER,
+        namespaces: pendingFavorite.filters.namespaces ?? ALL_MULTISELECT_FILTER,
+        clusters: pendingFavorite.filters.clusters ?? ALL_MULTISELECT_FILTER,
         queryFacets: pendingFavorite.filters.queryFacets,
         caseSensitive: pendingFavorite.filters.caseSensitive ?? false,
         includeMetadata: pendingFavorite.filters.includeMetadata ?? false,
@@ -252,9 +261,9 @@ export function useFavToggle(state: FavToggleState): {
     const base = parts.join(' / ');
     const hasActiveFilters =
       state.filters.search.trim().length > 0 ||
-      state.filters.kinds.length > 0 ||
-      state.filters.namespaces.length > 0 ||
-      (state.filters.clusters?.length ?? 0) > 0 ||
+      isNarrowingFilterSelection(state.filters.kinds) ||
+      isNarrowingFilterSelection(state.filters.namespaces) ||
+      isNarrowingFilterSelection(state.filters.clusters) ||
       Object.keys(normalizeGridTableQueryFacets(state.filters.queryFacets)).length > 0;
     return hasActiveFilters ? `${base} (filtered)` : base;
   }, [selectedClusterName, viewType, selectedNamespace, viewLabel, state.filters]);
@@ -263,9 +272,9 @@ export function useFavToggle(state: FavToggleState): {
   const currentFilters = useMemo(
     (): FavoriteFilters => ({
       search: state.filters.search,
-      kinds: [...state.filters.kinds],
-      namespaces: [...state.filters.namespaces],
-      clusters: [...(state.filters.clusters ?? [])],
+      kinds: normalizeMultiSelectFilterSelection(state.filters.kinds),
+      namespaces: normalizeMultiSelectFilterSelection(state.filters.namespaces),
+      clusters: normalizeMultiSelectFilterSelection(state.filters.clusters),
       queryFacets: normalizeGridTableQueryFacets(state.filters.queryFacets),
       caseSensitive: state.filters.caseSensitive ?? false,
       includeMetadata: state.includeMetadata ?? false,

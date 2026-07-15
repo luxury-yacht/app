@@ -86,6 +86,9 @@ func stableFacetSelection(in []string) []string {
 func typedQuerySignature(sortField string, dir querypage.Direction, limit int, baseScope string, request ResourceQueryRequest) string {
 	var b strings.Builder
 	fmt.Fprintf(&b, "%s|%s|%d|", sortField, dir, limit)
+	if request.MatchNone {
+		b.WriteString("match-none;")
+	}
 	// Mirror the historical sorted-key filter map: emit "kind=" before "namespace="
 	// only when the corresponding list is non-empty, so an empty filter set produces
 	// no segment at all (byte-identical to the pre-predicate signature).
@@ -210,6 +213,10 @@ func perBuildCacheKey(query typedTableQuery, versionToken string) string {
 	b.WriteByte('\n')
 	b.WriteString(strings.ToLower(strings.TrimSpace(query.Request.Search)))
 	b.WriteByte('\n')
+	if query.Request.MatchNone {
+		b.WriteString("match-none")
+	}
+	b.WriteByte('\n')
 	if query.Request.IncludeMetadata {
 		b.WriteByte('m')
 	}
@@ -304,6 +311,10 @@ func applyTypedTableQueryViaStore[T any](items []T, query typedTableQuery, adapt
 		matchedTotal = len(matched)
 		matchedNamespaces = collectTypedTableFacet(matched, adapter.Namespace)
 		matchedKinds = collectTypedTableFacet(matched, adapter.Kind)
+		if query.Request.MatchNone {
+			matchedNamespaces = collectTypedTableFacet(items, adapter.Namespace)
+			matchedKinds = collectTypedTableFacet(items, adapter.Kind)
+		}
 		scopeFacetValues = collectTypedTableFacetValues(items, adapter.Facets, true)
 		if cfg.cache != nil {
 			cfg.cache.put(cacheKey, store, matchedTotal, matchedNamespaces, matchedKinds, scopeFacetValues)
@@ -578,8 +589,9 @@ func resolveMaintainedDirect[T any](
 		Limit:     limit,
 		// Request.Search is already trimmed at parse time (resourceQueryRequestFromValues);
 		// Query lowercases internally, matching the live matcher's needle exactly.
-		Search:  query.Request.Search,
-		Filters: pageBase,
+		Search:    query.Request.Search,
+		Filters:   pageBase,
+		MatchNone: query.Request.MatchNone,
 	}
 	var page querypage.Page[T]
 	var anchorResult *ResourceQueryAnchorResult
@@ -603,6 +615,10 @@ func resolveMaintainedDirect[T any](
 	matchedFacets, matchedTotal := store.Scope(pageBase, searchLower)
 	scopeOnlyBase := maintainedScopeBase(availableKinds, namespace, nil, nil, false)
 	scopeOnlyFacets, unfilteredTotal := store.Scope(scopeOnlyBase, "")
+	if query.Request.MatchNone {
+		matchedFacets = map[string]map[string]int{}
+		matchedTotal = 0
+	}
 
 	// availableKinds keys are the original-cased Kind the rows carry (the descriptor
 	// identity), so lowered facet value -> original casing for the kind facet list.
@@ -611,6 +627,12 @@ func resolveMaintainedDirect[T any](
 		kindCasing[strings.ToLower(strings.TrimSpace(kind))] = kind
 	}
 
+	namespaceFacets := matchedFacets["namespace"]
+	kindFacets := matchedFacets["kind"]
+	if query.Request.MatchNone {
+		namespaceFacets = scopeOnlyFacets["namespace"]
+		kindFacets = scopeOnlyFacets["kind"]
+	}
 	resultPage := typedTableQueryPage[T]{
 		Rows:            page.Rows,
 		Continue:        page.NextCursor,
@@ -623,8 +645,8 @@ func resolveMaintainedDirect[T any](
 		UnfilteredTotal: unfilteredTotal,
 		TotalIsExact:    true,
 		FacetsExact:     true,
-		Namespaces:      maintainedFacetValues(matchedFacets["namespace"], nil),
-		Kinds:           maintainedFacetValues(matchedFacets["kind"], kindCasing),
+		Namespaces:      maintainedFacetValues(namespaceFacets, nil),
+		Kinds:           maintainedFacetValues(kindFacets, kindCasing),
 		FacetValues:     maintainedQueryFacetValues(scopeOnlyFacets, adapter.Facets, true),
 		Dynamic:         query.dynamicRef(),
 		SortField:       query.Request.SortField,

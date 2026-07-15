@@ -17,6 +17,7 @@ export interface BrowseFilters {
   kinds: string[];
   namespaces: string[];
   apiGroups?: string[];
+  matchNone?: boolean;
 }
 
 export interface BrowseFacetOption {
@@ -109,6 +110,7 @@ export const buildBrowseCatalogPlan = ({
     sort: sortScope.sort,
     sortDirection: sortScope.sortDirection,
     customOnly,
+    matchNone: filters.matchNone,
   });
   const catalogScope =
     normalizeCatalogScope(baseScope, pageLimit, pinnedNamespaces, clusterId) ??
@@ -128,6 +130,7 @@ export const buildBrowseCatalogPlan = ({
     apiGroups: filters.apiGroups ?? [],
     namespaces: metadataNamespaces,
     customOnly,
+    matchNone: filters.matchNone,
   });
   const metadataScope =
     normalizeCatalogScope(metadataBaseScope, 1, pinnedNamespaces, clusterId) ??
@@ -173,6 +176,7 @@ export const buildBrowseCatalogPageScope = (
     continueToken,
     startRank,
     customOnly: input.customOnly ?? false,
+    matchNone: input.filters.matchNone,
   });
   return (
     normalizeCatalogScope(pageScope, input.pageLimit, input.pinnedNamespaces, input.clusterId) ??

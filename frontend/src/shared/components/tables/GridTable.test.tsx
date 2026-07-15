@@ -14,6 +14,7 @@ import GridTable, {
   GRIDTABLE_VIRTUALIZATION_DEFAULT,
   type GridColumnDefinition,
   type GridTableFilterConfig,
+  type GridTableFilterState,
   type GridTableProps,
 } from '@shared/components/tables/GridTable';
 import { KeyboardProvider } from '@ui/shortcuts';
@@ -881,10 +882,11 @@ describe('GridTable interactions (non-virtualized)', () => {
 
   it('renders filter controls and propagates search changes', async () => {
     const onFilterChange = vi.fn();
-    let currentFilters = {
+    let currentFilters: GridTableFilterState = {
       search: '',
-      kinds: [] as string[],
-      namespaces: [] as string[],
+      kinds: { mode: 'all' },
+      namespaces: { mode: 'all' },
+      clusters: { mode: 'all' },
       caseSensitive: false,
       includeMetadata: false,
     };
@@ -933,8 +935,9 @@ describe('GridTable interactions (non-virtualized)', () => {
 
     await applyFilters({
       search: 'Row 1',
-      kinds: [],
-      namespaces: [],
+      kinds: { mode: 'all' },
+      namespaces: { mode: 'all' },
+      clusters: { mode: 'all' },
       caseSensitive: false,
       includeMetadata: false,
     });
@@ -957,8 +960,9 @@ describe('GridTable interactions (non-virtualized)', () => {
     });
     expect(onFilterChange).toHaveBeenCalledWith({
       search: '',
-      kinds: [],
-      namespaces: [],
+      kinds: { mode: 'all' },
+      namespaces: { mode: 'all' },
+      clusters: { mode: 'all' },
       caseSensitive: false,
       includeMetadata: false,
     });
@@ -970,10 +974,11 @@ describe('GridTable interactions (non-virtualized)', () => {
   });
 
   it('tabs from the last filter control into the table body', async () => {
-    let currentFilters = {
+    let currentFilters: GridTableFilterState = {
       search: 'Row 1',
-      kinds: [] as string[],
-      namespaces: [] as string[],
+      kinds: { mode: 'all' },
+      namespaces: { mode: 'all' },
+      clusters: { mode: 'all' },
       caseSensitive: false,
       includeMetadata: false,
     };
@@ -1026,10 +1031,11 @@ describe('GridTable interactions (non-virtualized)', () => {
   });
 
   it('shift-tabs from the table body back to the last filter control', async () => {
-    let currentFilters = {
+    let currentFilters: GridTableFilterState = {
       search: 'Row 1',
-      kinds: [] as string[],
-      namespaces: [] as string[],
+      kinds: { mode: 'all' },
+      namespaces: { mode: 'all' },
+      clusters: { mode: 'all' },
       caseSensitive: false,
       includeMetadata: false,
     };
@@ -1109,10 +1115,11 @@ describe('GridTable interactions (non-virtualized)', () => {
   });
 
   it('shows selection counts in kind and namespace dropdown labels', async () => {
-    let currentFilters = {
+    let currentFilters: GridTableFilterState = {
       search: '',
-      kinds: ['Pod', 'Deployment'],
-      namespaces: ['team-a', 'team-b', 'team-c'],
+      kinds: { mode: 'some', values: ['Pod', 'Deployment'] },
+      namespaces: { mode: 'some', values: ['team-a', 'team-b', 'team-c'] },
+      clusters: { mode: 'all' },
       caseSensitive: false,
       includeMetadata: false,
     };
@@ -1150,8 +1157,9 @@ describe('GridTable interactions (non-virtualized)', () => {
 
     currentFilters = {
       search: '',
-      kinds: [],
-      namespaces: [],
+      kinds: { mode: 'all' },
+      namespaces: { mode: 'all' },
+      clusters: { mode: 'all' },
       caseSensitive: false,
       includeMetadata: false,
     };
@@ -1353,10 +1361,11 @@ it('paginates a local row set after the table pipeline and renders exact footer 
 });
 
 it('resets local pagination after filters change and paginates the filtered result', async () => {
-  let filterValue = {
+  let filterValue: GridTableFilterState = {
     search: '',
-    kinds: [] as string[],
-    namespaces: [] as string[],
+    kinds: { mode: 'all' },
+    namespaces: { mode: 'all' },
+    clusters: { mode: 'all' },
     caseSensitive: false,
     includeMetadata: false,
   };
@@ -1936,7 +1945,7 @@ it('filters rows using the kind dropdown initial state', () => {
     virtualization: { enabled: false },
     filters: {
       enabled: true,
-      initial: { kinds: ['Alpha'] },
+      initial: { kinds: { mode: 'some', values: ['Alpha'] } },
       accessors: {
         getKind: (row) => (row.label.startsWith('Alpha') ? 'Alpha' : 'Beta'),
         getNamespace: () => '',

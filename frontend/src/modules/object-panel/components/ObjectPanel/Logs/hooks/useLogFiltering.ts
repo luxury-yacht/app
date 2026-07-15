@@ -4,6 +4,11 @@
  * Handles filtering and JSON parsing of log entries.
  * Pure transformation logic extracted from LogViewer.
  */
+
+import {
+  filterSelectionValues,
+  type MultiSelectFilterSelection,
+} from '@shared/components/dropdowns/multiSelectFilterSelection';
 import { useMemo } from 'react';
 import type { ContainerLogsEntry } from '@/core/refresh/types';
 import { stripAnsi } from '../ansi';
@@ -14,7 +19,7 @@ import { tryParseJSONObject } from '../parsedLogUtils';
 interface UseLogFilteringParams {
   logEntries: ContainerLogsEntry[];
   isWorkload: boolean;
-  selectedFilters: string[];
+  selectedFilters: MultiSelectFilterSelection;
   textFilter: string;
   inverseMatches: boolean;
   caseSensitiveMatches: boolean;
@@ -94,25 +99,31 @@ export function useLogFiltering({
 
     let entries = orderedEntries;
 
+    if (selectedFilters.mode === 'none') {
+      return [] as ContainerLogsEntry[];
+    }
+
+    const selectedFilterValues = filterSelectionValues(selectedFilters);
+
     // Filter by selected pods/containers.
-    if (selectedFilters.length > 0) {
+    if (selectedFilterValues.length > 0) {
       const selectedPods = new Set(
-        selectedFilters
+        selectedFilterValues
           .filter((filterValue) => filterValue.startsWith('pod:'))
           .map((filterValue) => filterValue.substring(4))
       );
       const selectedInitContainers = new Set(
-        selectedFilters
+        selectedFilterValues
           .filter((filterValue) => filterValue.startsWith('init:'))
           .map((filterValue) => filterValue.substring(5))
       );
       const selectedContainers = new Set(
-        selectedFilters
+        selectedFilterValues
           .filter((filterValue) => filterValue.startsWith('container:'))
           .map((filterValue) => filterValue.substring(10))
       );
       const selectedDebugContainers = new Set(
-        selectedFilters
+        selectedFilterValues
           .filter((filterValue) => filterValue.startsWith('debug:'))
           .map((filterValue) => filterValue.substring(6))
       );

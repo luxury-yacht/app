@@ -92,7 +92,7 @@ vi.mock('@core/contexts/ViewStateContext', () => ({
 
 vi.mock('@modules/namespace/contexts/NamespaceContext', () => ({
   useNamespace: () => ({
-    namespaces: [],
+    namespaces: { mode: 'all' },
     selectedNamespace: 'default',
     namespaceLoading: false,
     namespaceRefreshing: false,
@@ -164,7 +164,14 @@ const makeFavorite = (overrides: Partial<Favorite> = {}): Favorite => ({
   viewType: 'namespace',
   view: 'pods',
   namespace: 'default',
-  filters: { search: '', kinds: [], namespaces: [], caseSensitive: false, includeMetadata: false },
+  filters: {
+    search: '',
+    kinds: { mode: 'all' },
+    namespaces: { mode: 'all' },
+    clusters: { mode: 'all' },
+    caseSensitive: false,
+    includeMetadata: false,
+  },
   tableState: null,
   order: 0,
   ...overrides,
@@ -178,8 +185,9 @@ const HookWrapper: React.FC = () => {
   const { item, modal } = useFavToggle({
     filters: {
       search: '',
-      kinds: [],
-      namespaces: [],
+      kinds: { mode: 'all' },
+      namespaces: { mode: 'all' },
+      clusters: { mode: 'all' },
       caseSensitive: false,
       includeMetadata: false,
     },

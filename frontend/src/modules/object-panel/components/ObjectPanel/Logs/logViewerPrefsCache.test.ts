@@ -13,7 +13,7 @@ import {
 
 const samplePrefs = (overrides: Partial<LogViewerPrefs> = {}): LogViewerPrefs => ({
   selectedContainer: 'app',
-  selectedFilters: [],
+  selectedFilters: { mode: 'all' },
   autoRefresh: true,
   timestampMode: 'default',
   showTimestamps: true,
