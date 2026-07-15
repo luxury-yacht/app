@@ -8,40 +8,6 @@
   overflow: hidden;
 }
 
-.workloads-pods-split--25 {
-  --workloads-pods-upper-size: 25%;
-}
-.workloads-pods-split--30 {
-  --workloads-pods-upper-size: 30%;
-}
-.workloads-pods-split--35 {
-  --workloads-pods-upper-size: 35%;
-}
-.workloads-pods-split--40 {
-  --workloads-pods-upper-size: 40%;
-}
-.workloads-pods-split--45 {
-  --workloads-pods-upper-size: 45%;
-}
-.workloads-pods-split--50 {
-  --workloads-pods-upper-size: 50%;
-}
-.workloads-pods-split--55 {
-  --workloads-pods-upper-size: 55%;
-}
-.workloads-pods-split--60 {
-  --workloads-pods-upper-size: 60%;
-}
-.workloads-pods-split--65 {
-  --workloads-pods-upper-size: 65%;
-}
-.workloads-pods-split--70 {
-  --workloads-pods-upper-size: 70%;
-}
-.workloads-pods-split--75 {
-  --workloads-pods-upper-size: 75%;
-}
-
 .workloads-pods-split--collapsed {
   grid-template-rows: minmax(0, 1fr) auto;
 }
@@ -66,11 +32,35 @@
 
 .workloads-pods-split__resizer {
   position: absolute;
-  inset: 0;
-  z-index: 0;
+  top: -5px;
+  right: 0;
+  left: 0;
+  z-index: 2;
+  height: 10px;
   margin: 0;
   border: 0;
-  cursor: row-resize;
+  background: transparent;
+  cursor:
+    url("../../../shared/components/icons/cursors/ns-resize.svg") 12 12,
+    row-resize;
+  touch-action: none;
+}
+
+.workloads-pods-split__resizer::after {
+  position: absolute;
+  top: 50%;
+  right: 0;
+  left: 0;
+  height: 4px;
+  background: transparent;
+  content: "";
+  transform: translateY(-50%);
+  transition: background var(--transition-fast);
+}
+
+.workloads-pods-split__resizer:hover::after,
+.workloads-pods-split--resizing .workloads-pods-split__resizer::after {
+  background: var(--color-resize-handle);
 }
 
 .workloads-pods-split__resizer:focus-visible {
@@ -99,4 +89,18 @@
   min-height: 1.5rem;
   padding: 0.15rem;
   cursor: pointer;
+}
+
+body.workloads-pods-resizing {
+  user-select: none;
+}
+
+body.workloads-pods-resizing::after {
+  position: fixed;
+  z-index: 2147483647;
+  inset: 0;
+  content: "";
+  cursor:
+    url("../../../shared/components/icons/cursors/ns-resize.svg") 12 12,
+    row-resize;
 }

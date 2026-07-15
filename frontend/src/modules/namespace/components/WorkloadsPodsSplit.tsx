@@ -1,10 +1,10 @@
 import './WorkloadsPodsSplit.css';
 import type React from 'react';
-import { useCallback, useRef, useState } from 'react';
+import { useCallback, useEffect, useRef, useState } from 'react';
 
 const MIN_UPPER_PERCENT = 25;
 const MAX_UPPER_PERCENT = 75;
-const RESIZE_STEP = 5;
+const KEYBOARD_RESIZE_STEP_PX = 16;
 
 interface WorkloadsPodsSplitProps {
   upper: React.ReactNode;
@@ -14,11 +14,8 @@ interface WorkloadsPodsSplitProps {
   onCollapsedChange?: (collapsed: boolean) => void;
 }
 
-const clampAndSnap = (value: number) =>
-  Math.min(
-    MAX_UPPER_PERCENT,
-    Math.max(MIN_UPPER_PERCENT, Math.round(value / RESIZE_STEP) * RESIZE_STEP)
-  );
+const clampResizePercent = (value: number) =>
+  Math.round(Math.min(MAX_UPPER_PERCENT, Math.max(MIN_UPPER_PERCENT, value)) * 1000) / 1000;
 
 export default function WorkloadsPodsSplit({
   upper,
@@ -29,9 +26,25 @@ export default function WorkloadsPodsSplit({
 }: WorkloadsPodsSplitProps) {
   const rootRef = useRef<HTMLDivElement | null>(null);
   const resizingRef = useRef(false);
+  const resizeStartRef = useRef({ clientY: 0, upperPercent: 50 });
+  const [isResizing, setIsResizing] = useState(false);
   const [upperPercent, setUpperPercent] = useState(50);
   const [internalCollapsed, setInternalCollapsed] = useState(false);
   const collapsed = controlledCollapsed ?? internalCollapsed;
+
+  useEffect(() => {
+    if (!isResizing) {
+      return;
+    }
+    document.body.classList.add('workloads-pods-resizing');
+    return () => document.body.classList.remove('workloads-pods-resizing');
+  }, [isResizing]);
+
+  const applyUpperPercent = useCallback((value: number) => {
+    const next = clampResizePercent(value);
+    rootRef.current?.style.setProperty('--workloads-pods-upper-size', `${next}%`);
+    setUpperPercent(next);
+  }, []);
 
   const setCollapsed = useCallback(
     (next: boolean) => {
@@ -45,13 +58,15 @@ export default function WorkloadsPodsSplit({
 
   const handleResizeKeyDown = useCallback(
     (event: React.KeyboardEvent<HTMLHRElement>) => {
+      const rootHeight = rootRef.current?.getBoundingClientRect().height ?? 0;
+      const keyboardStepPercent = rootHeight > 0 ? (KEYBOARD_RESIZE_STEP_PX / rootHeight) * 100 : 2;
       let next: number | null = null;
       switch (event.key) {
         case 'ArrowUp':
-          next = upperPercent - RESIZE_STEP;
+          next = upperPercent - keyboardStepPercent;
           break;
         case 'ArrowDown':
-          next = upperPercent + RESIZE_STEP;
+          next = upperPercent + keyboardStepPercent;
           break;
         case 'Home':
           next = MIN_UPPER_PERCENT;
@@ -63,46 +78,43 @@ export default function WorkloadsPodsSplit({
           return;
       }
       event.preventDefault();
-      setUpperPercent(clampAndSnap(next));
+      applyUpperPercent(next);
     },
-    [upperPercent]
+    [applyUpperPercent, upperPercent]
   );
-
-  const resizeFromPointer = useCallback((clientY: number) => {
-    const rect = rootRef.current?.getBoundingClientRect();
-    if (!rect || rect.height <= 0) {
-      return;
-    }
-    setUpperPercent(clampAndSnap(((clientY - rect.top) / rect.height) * 100));
-  }, []);
 
   const handlePointerDown = useCallback(
     (event: React.PointerEvent<HTMLHRElement>) => {
       resizingRef.current = true;
+      resizeStartRef.current = { clientY: event.clientY, upperPercent };
+      setIsResizing(true);
       event.currentTarget.setPointerCapture?.(event.pointerId);
-      resizeFromPointer(event.clientY);
     },
-    [resizeFromPointer]
+    [upperPercent]
   );
 
   const handlePointerMove = useCallback(
     (event: React.PointerEvent<HTMLHRElement>) => {
-      if (resizingRef.current) {
-        resizeFromPointer(event.clientY);
+      const rootHeight = rootRef.current?.getBoundingClientRect().height ?? 0;
+      if (!resizingRef.current || rootHeight <= 0) {
+        return;
       }
+      const deltaPercent = ((event.clientY - resizeStartRef.current.clientY) / rootHeight) * 100;
+      applyUpperPercent(resizeStartRef.current.upperPercent + deltaPercent);
     },
-    [resizeFromPointer]
+    [applyUpperPercent]
   );
 
   const stopPointerResize = useCallback((event: React.PointerEvent<HTMLHRElement>) => {
     resizingRef.current = false;
+    setIsResizing(false);
     event.currentTarget.releasePointerCapture?.(event.pointerId);
   }, []);
 
   return (
     <div
       ref={rootRef}
-      className={`workloads-pods-split workloads-pods-split--${upperPercent}${collapsed ? ' workloads-pods-split--collapsed' : ''}`}
+      className={`workloads-pods-split${collapsed ? ' workloads-pods-split--collapsed' : ''}${isResizing ? ' workloads-pods-split--resizing' : ''}`}
     >
       <section
         className="workloads-pods-split__pane workloads-pods-split__pane--upper"

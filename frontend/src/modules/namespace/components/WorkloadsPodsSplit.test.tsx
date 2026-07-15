@@ -1,13 +1,21 @@
+import { readFileSync } from 'node:fs';
+import { resolve } from 'node:path';
 import WorkloadsPodsSplit from '@modules/namespace/components/WorkloadsPodsSplit';
 import { act } from 'react';
 import * as ReactDOM from 'react-dom/client';
 import { afterEach, beforeEach, describe, expect, it } from 'vitest';
+
+const splitStyles = readFileSync(
+  resolve(process.cwd(), 'src/modules/namespace/components/WorkloadsPodsSplit.css'),
+  'utf8'
+);
 
 describe('WorkloadsPodsSplit', () => {
   let container: HTMLDivElement;
   let root: ReactDOM.Root;
 
   beforeEach(() => {
+    document.body.classList.remove('workloads-pods-resizing');
     container = document.createElement('div');
     document.body.appendChild(container);
     root = ReactDOM.createRoot(container);
@@ -16,6 +24,7 @@ describe('WorkloadsPodsSplit', () => {
   afterEach(() => {
     act(() => root.unmount());
     container.remove();
+    document.body.classList.remove('workloads-pods-resizing');
   });
 
   it('starts evenly split and supports accessible keyboard resizing', () => {
@@ -26,18 +35,23 @@ describe('WorkloadsPodsSplit', () => {
     });
 
     const separator = container.querySelector<HTMLElement>('hr[aria-orientation="horizontal"]');
+    const split = container.querySelector<HTMLElement>('.workloads-pods-split');
+    if (split) {
+      split.getBoundingClientRect = () =>
+        ({ top: 100, height: 400, bottom: 500, left: 0, right: 800, width: 800 }) as DOMRect;
+    }
     expect(separator?.getAttribute('aria-orientation')).toBe('horizontal');
     expect(separator?.getAttribute('aria-valuenow')).toBe('50');
-    expect(container.querySelector('.workloads-pods-split--50')).not.toBeNull();
+    expect(split).not.toBeNull();
 
     act(() =>
       separator?.dispatchEvent(new KeyboardEvent('keydown', { key: 'ArrowDown', bubbles: true }))
     );
-    expect(separator?.getAttribute('aria-valuenow')).toBe('55');
-    expect(container.querySelector('.workloads-pods-split--55')).not.toBeNull();
+    expect(separator?.getAttribute('aria-valuenow')).toBe('54');
+    expect(split?.style.getPropertyValue('--workloads-pods-upper-size')).toBe('54%');
   });
 
-  it('resizes from pointer movement within the split container', () => {
+  it('tracks fine-grained pointer movement without snapping', () => {
     act(() => {
       root.render(
         <WorkloadsPodsSplit upper={<div>Workloads table</div>} lower={<div>Pods table</div>} />
@@ -56,11 +70,74 @@ describe('WorkloadsPodsSplit', () => {
 
     act(() => {
       separator.dispatchEvent(new MouseEvent('pointerdown', { bubbles: true, clientY: 300 }));
-      separator.dispatchEvent(new MouseEvent('pointermove', { bubbles: true, clientY: 380 }));
+      separator.dispatchEvent(new MouseEvent('pointermove', { bubbles: true, clientY: 306 }));
     });
 
-    expect(separator.getAttribute('aria-valuenow')).toBe('70');
-    expect(container.querySelector('.workloads-pods-split--70')).not.toBeNull();
+    expect(separator.getAttribute('aria-valuenow')).toBe('51.5');
+    expect(split.style.getPropertyValue('--workloads-pods-upper-size')).toBe('51.5%');
+  });
+
+  it('resizes from the drag delta without jumping on pointer down', () => {
+    act(() => {
+      root.render(
+        <WorkloadsPodsSplit upper={<div>Workloads table</div>} lower={<div>Pods table</div>} />
+      );
+    });
+
+    const split = container.querySelector<HTMLElement>('.workloads-pods-split');
+    const separator = container.querySelector<HTMLElement>('hr[aria-orientation="horizontal"]');
+    expect(split).toBeTruthy();
+    expect(separator).toBeTruthy();
+    if (!split || !separator) {
+      return;
+    }
+    split.getBoundingClientRect = () =>
+      ({ top: 100, height: 400, bottom: 500, left: 0, right: 800, width: 800 }) as DOMRect;
+
+    act(() => {
+      separator.dispatchEvent(new MouseEvent('pointerdown', { bubbles: true, clientY: 306 }));
+    });
+    expect(separator.getAttribute('aria-valuenow')).toBe('50');
+
+    act(() => {
+      separator.dispatchEvent(new MouseEvent('pointermove', { bubbles: true, clientY: 312 }));
+    });
+    expect(separator.getAttribute('aria-valuenow')).toBe('51.5');
+  });
+
+  it('publishes the active resize state from pointer down through pointer up', () => {
+    act(() => {
+      root.render(
+        <WorkloadsPodsSplit upper={<div>Workloads table</div>} lower={<div>Pods table</div>} />
+      );
+    });
+
+    const split = container.querySelector<HTMLElement>('.workloads-pods-split');
+    const separator = container.querySelector<HTMLElement>('hr[aria-orientation="horizontal"]');
+    expect(split).toBeTruthy();
+    expect(separator).toBeTruthy();
+
+    act(() => {
+      separator?.dispatchEvent(new MouseEvent('pointerdown', { bubbles: true, clientY: 300 }));
+    });
+    expect(split?.classList.contains('workloads-pods-split--resizing')).toBe(true);
+    expect(document.body.classList.contains('workloads-pods-resizing')).toBe(true);
+
+    act(() => {
+      separator?.dispatchEvent(new MouseEvent('pointerup', { bubbles: true, clientY: 300 }));
+    });
+    expect(split?.classList.contains('workloads-pods-split--resizing')).toBe(false);
+    expect(document.body.classList.contains('workloads-pods-resizing')).toBe(false);
+  });
+
+  it('places the resize hit area across the top edge instead of over the divider content', () => {
+    const resizerRule = splitStyles.match(/\.workloads-pods-split__resizer\s*{([^}]*)}/)?.[1];
+
+    expect(resizerRule).toContain('top: -5px;');
+    expect(resizerRule).toContain('right: 0;');
+    expect(resizerRule).toContain('left: 0;');
+    expect(resizerRule).toContain('height: 10px;');
+    expect(resizerRule).not.toContain('inset: 0;');
   });
 
   it('collapses and restores the Pods pane without removing its header control', () => {
