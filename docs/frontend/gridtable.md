@@ -83,7 +83,11 @@ workflow and that exception is documented.
   transition; the provider then supplies the dependent Kind options.
 - Shared filter and Columns dropdown menus measure both viewport axes when they
   open. Right-edge menus end-align when start alignment would overflow, and menu
-  width remains capped to the visible viewport.
+  width remains capped to the visible viewport. Because these menus are
+  portaled, positioning under CSS app zoom must convert the visually scaled
+  trigger `getBoundingClientRect()` into unscaled CSS coordinates before
+  combining it with fixed `left`/`top`, `offsetWidth`/`offsetHeight`, or the
+  zoom-adjusted viewport dimensions.
 - Query-backed filter feedback displays the backend's filtered total against the
   unfiltered total for the same view scope. Producers must not widen the
   denominator beyond cluster-scoped, all-namespaces, or pinned-namespace

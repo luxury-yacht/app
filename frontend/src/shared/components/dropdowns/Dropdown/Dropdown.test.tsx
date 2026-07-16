@@ -228,6 +228,98 @@ describe('Dropdown', () => {
     }
   });
 
+  it('anchors the portaled menu to the trigger at 80% app zoom', async () => {
+    const originalInnerWidth = window.innerWidth;
+    const originalInnerHeight = window.innerHeight;
+    const originalZoom = document.documentElement.style.zoom;
+    const originalZoomFactor = document.documentElement.style.getPropertyValue('--app-zoom-factor');
+    const offsetWidthDescriptor = Object.getOwnPropertyDescriptor(
+      HTMLElement.prototype,
+      'offsetWidth'
+    );
+    const offsetHeightDescriptor = Object.getOwnPropertyDescriptor(
+      HTMLElement.prototype,
+      'offsetHeight'
+    );
+
+    try {
+      Object.defineProperty(window, 'innerWidth', { configurable: true, value: 800 });
+      Object.defineProperty(window, 'innerHeight', { configurable: true, value: 600 });
+      document.documentElement.style.zoom = '80%';
+      document.documentElement.style.setProperty('--app-zoom-factor', '0.8');
+      Object.defineProperty(HTMLElement.prototype, 'offsetWidth', {
+        configurable: true,
+        get() {
+          return this.classList.contains('dropdown-menu')
+            ? 240
+            : (offsetWidthDescriptor?.get?.call(this) ?? 0);
+        },
+      });
+      Object.defineProperty(HTMLElement.prototype, 'offsetHeight', {
+        configurable: true,
+        get() {
+          return this.classList.contains('dropdown-menu')
+            ? 180
+            : (offsetHeightDescriptor?.get?.call(this) ?? 0);
+        },
+      });
+
+      await mount(<Dropdown options={OPTIONS} value="" onChange={vi.fn()} />);
+      const trigger = requireValue(
+        container.querySelector<HTMLElement>('.dropdown-trigger'),
+        'expected dropdown trigger'
+      );
+      trigger.getBoundingClientRect = () =>
+        ({
+          top: 440,
+          bottom: 464,
+          height: 24,
+          width: 64,
+          left: 560,
+          right: 624,
+          x: 560,
+          y: 440,
+          toJSON: () => undefined,
+        }) as DOMRect;
+
+      click(trigger);
+
+      const menu = requireValue(
+        document.body.querySelector<HTMLElement>('.dropdown-menu'),
+        'expected portaled dropdown menu'
+      );
+      expect(menu.style.left).toBe('700px');
+      expect(menu.style.top).toBe('368px');
+      expect(menu.style.getPropertyValue('--dropdown-menu-anchor-width')).toBe('80px');
+      expect(menu.className).toContain('position-top');
+    } finally {
+      Object.defineProperty(window, 'innerWidth', {
+        configurable: true,
+        value: originalInnerWidth,
+      });
+      Object.defineProperty(window, 'innerHeight', {
+        configurable: true,
+        value: originalInnerHeight,
+      });
+      document.documentElement.style.zoom = originalZoom;
+      if (originalZoomFactor) {
+        document.documentElement.style.setProperty('--app-zoom-factor', originalZoomFactor);
+      } else {
+        document.documentElement.style.removeProperty('--app-zoom-factor');
+      }
+      if (offsetWidthDescriptor) {
+        Object.defineProperty(HTMLElement.prototype, 'offsetWidth', offsetWidthDescriptor);
+      } else {
+        Reflect.deleteProperty(HTMLElement.prototype, 'offsetWidth');
+      }
+      if (offsetHeightDescriptor) {
+        Object.defineProperty(HTMLElement.prototype, 'offsetHeight', offsetHeightDescriptor);
+      } else {
+        Reflect.deleteProperty(HTMLElement.prototype, 'offsetHeight');
+      }
+    }
+  });
+
   it('treats pointer interaction inside the portaled menu as inside the dropdown', async () => {
     await mount(<Dropdown options={OPTIONS} value={[]} onChange={vi.fn()} multiple />);
 

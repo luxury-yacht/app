@@ -323,12 +323,22 @@ const Dropdown = <TMetadata,>({
     const menu = menuRef.current;
 
     const positionMenu = () => {
-      const triggerRect = trigger.getBoundingClientRect();
+      const visualTriggerRect = trigger.getBoundingClientRect();
       const parsedZoomFactor = Number.parseFloat(
         getComputedStyle(document.documentElement).getPropertyValue('--app-zoom-factor')
       );
       const zoomFactor =
         Number.isFinite(parsedZoomFactor) && parsedZoomFactor > 0 ? parsedZoomFactor : 1;
+      // CSS zoom scales client rectangles, but the fixed menu's left/top and
+      // offset dimensions are authored in the document's unscaled CSS space.
+      const triggerRect = {
+        top: visualTriggerRect.top / zoomFactor,
+        right: visualTriggerRect.right / zoomFactor,
+        bottom: visualTriggerRect.bottom / zoomFactor,
+        left: visualTriggerRect.left / zoomFactor,
+        width: visualTriggerRect.width / zoomFactor,
+        height: visualTriggerRect.height / zoomFactor,
+      };
       const viewportHeight = window.innerHeight / zoomFactor;
       const viewportWidth = window.innerWidth / zoomFactor;
       const viewportMenuWidth = Math.max(0, viewportWidth - DROPDOWN_VIEWPORT_PADDING * 2);
