@@ -20,6 +20,8 @@
   ReplicaSet and Job ancestry and preserving ownerless Pods.
 - Rendered shared dropdown menus in a viewport-aware overlay so opening one no
   longer resizes or clips tables beside split panes and docked panels.
+- Hid table pagination controls when an exact result contains 25 or fewer
+  objects and no previous or next page is available.
 - Made every multi-select Kinds filter searchable and gave each one explicit
   Select all and Select none controls.
 - Removed the visible Workloads/Pods divider band and moved the expand/collapse

@@ -25,7 +25,9 @@ without an explicit cap or pagination model.
 - Query-backed pagination controls belong together in the table footer. Show
   page size and visible range. Show exact totals and page counts only when the
   backend result says the total is exact; otherwise make the count approximate
-  and avoid random page-jump UI.
+  and avoid random page-jump UI. Do not render the footer for an exact result at
+  or below the smallest supported page size unless previous or next navigation
+  is available.
 - Browse page size is user-selectable only from bounded options. Changing page
   size starts a new backend query scope and invalidates prior page cursors.
 - Make truncation, load-more, degraded data, stale data, unavailable metrics,

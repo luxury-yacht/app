@@ -26,7 +26,11 @@ workflow and that exception is documented.
   characters that are not selector-safe.
 - Do not split pagination controls across unrelated parts of the view. For
   query-backed tables, the control group belongs with the table footer and must
-  show page size, visible range, and honest total/page-count state.
+  show page size, visible range, and honest total/page-count state. Omit the
+  entire footer when an exact result contains no more rows than the smallest
+  supported page size and neither page direction is available. Keep it visible
+  when navigation is available or an approximate count cannot prove that the
+  result fits on one page.
 - Complete or explicitly partial local row sets may use `localPagination` for
   presentation paging. `GridTable` applies it after local filter and sort, shows
   an exact filtered range and total, and keeps Copy scoped to every locally

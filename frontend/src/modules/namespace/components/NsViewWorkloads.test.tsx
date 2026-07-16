@@ -570,14 +570,7 @@ describe('NsViewWorkloads', () => {
     });
 
     expect(gridTablePropsRef.current?.data).toEqual([queryWorkload]);
-    expect(gridTablePropsRef.current?.paginationControls?.props).toMatchObject({
-      pageIndex: 1,
-      pageSize: 50,
-      totalCount: 1,
-      totalIsExact: true,
-      hasPrevious: false,
-      hasNext: false,
-    });
+    expect(gridTablePropsRef.current?.paginationControls).toBeNull();
     expect(requestRefreshDomainStateMock).toHaveBeenCalledWith(
       expect.objectContaining({
         domain: 'namespace-workloads',

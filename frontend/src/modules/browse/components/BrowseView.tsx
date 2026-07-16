@@ -51,7 +51,10 @@ import {
 } from '@shared/utils/objectIdentity';
 import { useShortNames } from '@/hooks/useShortNames';
 import type { BrowseScope, BrowseViewProps } from './BrowseView.types';
-import CatalogPaginationFooter, { catalogPaginationPageKeyProps } from './CatalogPaginationFooter';
+import CatalogPaginationFooter, {
+  catalogPaginationPageKeyProps,
+  shouldRenderCatalogPaginationFooter,
+} from './CatalogPaginationFooter';
 
 const VIRTUALIZATION_THRESHOLD = 80;
 
@@ -385,13 +388,14 @@ const BrowseView: React.FC<BrowseViewProps> = ({
   );
 
   const paginationControls = useMemo(
-    () => (
-      <CatalogPaginationFooter
-        idPrefix={resolvedViewId}
-        visibleItemCount={rows.length}
-        pagination={pagination}
-      />
-    ),
+    () =>
+      shouldRenderCatalogPaginationFooter(pagination) ? (
+        <CatalogPaginationFooter
+          idPrefix={resolvedViewId}
+          visibleItemCount={rows.length}
+          pagination={pagination}
+        />
+      ) : null,
     [pagination, resolvedViewId, rows.length]
   );
 

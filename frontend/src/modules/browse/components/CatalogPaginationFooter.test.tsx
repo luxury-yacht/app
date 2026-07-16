@@ -44,6 +44,20 @@ describe('CatalogPaginationFooter', () => {
     container.remove();
   });
 
+  it('hides pagination when the exact result fits within the smallest page size', () => {
+    act(() => {
+      root.render(
+        <CatalogPaginationFooter
+          idPrefix="browse"
+          visibleItemCount={25}
+          pagination={pagination({ totalCount: 25 })}
+        />
+      );
+    });
+
+    expect(container.querySelector('.table-pagination-controls')).toBeNull();
+  });
+
   it('shows an exact visible range when the backend total is exact', () => {
     act(() => {
       root.render(

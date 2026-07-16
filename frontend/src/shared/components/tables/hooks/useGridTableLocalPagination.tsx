@@ -1,5 +1,7 @@
 import type { GridTableLocalPaginationConfig } from '@shared/components/tables/GridTable.types';
-import TablePaginationControls from '@shared/components/tables/TablePaginationControls';
+import TablePaginationControls, {
+  shouldRenderTablePaginationControls,
+} from '@shared/components/tables/TablePaginationControls';
 import type { ReactNode } from 'react';
 import { useCallback, useMemo, useState } from 'react';
 
@@ -67,7 +69,16 @@ export function useGridTableLocalPagination<T>({
   );
   const canPagePrevious = Boolean(config) && pageIndex > 1;
   const canPageNext = Boolean(config) && pageIndex < pageCount;
-  const controls = config ? (
+  const showControls =
+    config &&
+    shouldRenderTablePaginationControls({
+      pageSizeOptions: config.pageSizeOptions,
+      totalCount: data.length,
+      totalIsExact: true,
+      hasPrevious: canPagePrevious,
+      hasNext: canPageNext,
+    });
+  const controls = showControls ? (
     <TablePaginationControls
       idPrefix={config.idPrefix}
       pageIndex={pageIndex}

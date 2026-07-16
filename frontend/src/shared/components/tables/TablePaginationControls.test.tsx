@@ -25,6 +25,78 @@ describe('TablePaginationControls', () => {
     container.remove();
   });
 
+  it.each([0, 1, 25])('hides controls for an exact total of %i items', (totalCount) => {
+    act(() => {
+      root.render(
+        <TablePaginationControls
+          idPrefix="small-table"
+          pageIndex={1}
+          pageSize={50}
+          visibleItemCount={totalCount}
+          pageSizeOptions={[25, 50, 100, 250, 500, 1000]}
+          totalCount={totalCount}
+          totalIsExact
+          hasPrevious={false}
+          hasNext={false}
+          loading={false}
+          onPrevious={vi.fn()}
+          onNext={vi.fn()}
+          onPageSizeChange={vi.fn()}
+        />
+      );
+    });
+
+    expect(container.querySelector('.table-pagination-controls')).toBeNull();
+  });
+
+  it('shows controls when an exact total exceeds the smallest page size', () => {
+    act(() => {
+      root.render(
+        <TablePaginationControls
+          idPrefix="larger-table"
+          pageIndex={1}
+          pageSize={50}
+          visibleItemCount={26}
+          pageSizeOptions={[25, 50, 100, 250, 500, 1000]}
+          totalCount={26}
+          totalIsExact
+          hasPrevious={false}
+          hasNext={false}
+          loading={false}
+          onPrevious={vi.fn()}
+          onNext={vi.fn()}
+          onPageSizeChange={vi.fn()}
+        />
+      );
+    });
+
+    expect(container.querySelector('.table-pagination-controls')).not.toBeNull();
+  });
+
+  it('shows controls when navigation proves an approximate result has another page', () => {
+    act(() => {
+      root.render(
+        <TablePaginationControls
+          idPrefix="approximate-table"
+          pageIndex={1}
+          pageSize={50}
+          visibleItemCount={25}
+          pageSizeOptions={[25, 50, 100, 250, 500, 1000]}
+          totalCount={25}
+          totalIsExact={false}
+          hasPrevious={false}
+          hasNext
+          loading={false}
+          onPrevious={vi.fn()}
+          onNext={vi.fn()}
+          onPageSizeChange={vi.fn()}
+        />
+      );
+    });
+
+    expect(container.querySelector('.table-pagination-controls')).not.toBeNull();
+  });
+
   it('opens the rows-per-page dropdown and dispatches a supported page size', () => {
     const onPageSizeChange = vi.fn();
 

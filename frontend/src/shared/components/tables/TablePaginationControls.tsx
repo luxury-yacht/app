@@ -23,6 +23,28 @@ export interface TablePaginationControlsProps {
   onPageJump?: (page: number) => void;
 }
 
+type TablePaginationVisibility = Pick<
+  TablePaginationControlsProps,
+  'pageSizeOptions' | 'totalCount' | 'totalIsExact' | 'hasPrevious' | 'hasNext'
+>;
+
+export const shouldRenderTablePaginationControls = ({
+  pageSizeOptions,
+  totalCount,
+  totalIsExact,
+  hasPrevious,
+  hasNext,
+}: TablePaginationVisibility): boolean => {
+  const smallestPageSize = pageSizeOptions.length > 0 ? Math.min(...pageSizeOptions) : 0;
+  return !(
+    totalIsExact &&
+    smallestPageSize > 0 &&
+    totalCount <= smallestPageSize &&
+    !hasPrevious &&
+    !hasNext
+  );
+};
+
 const formatCount = (value: number): string => Math.max(0, value).toLocaleString();
 
 const PaginationArrowIcon: React.FC<{ direction: 'previous' | 'next' }> = ({ direction }) => (
@@ -66,6 +88,18 @@ const TablePaginationControls: React.FC<TablePaginationControlsProps> = ({
       })),
     [pageSizeOptions]
   );
+  if (
+    !shouldRenderTablePaginationControls({
+      pageSizeOptions,
+      totalCount,
+      totalIsExact,
+      hasPrevious,
+      hasNext,
+    })
+  ) {
+    return null;
+  }
+
   const rangeStart =
     totalCount === 0 || visibleItemCount === 0 ? 0 : (pageIndex - 1) * pageSize + 1;
   const rawRangeEnd = (pageIndex - 1) * pageSize + visibleItemCount;

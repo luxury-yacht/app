@@ -959,7 +959,7 @@ describe('useQueryBackedResourceGridTable live invalidation', () => {
     });
 
     expect(result?.source.loading).toBe(false);
-    expect(paginationLoading(result)).toBe(false);
+    expect(paginationLoading(result)).toBeUndefined();
   });
 
   it('exposes table loading during a query load with no rows yet', async () => {
@@ -1015,7 +1015,7 @@ describe('useQueryBackedResourceGridTable live invalidation', () => {
     });
 
     expect(result?.source.loading).toBe(true);
-    expect(paginationLoading(result)).toBe(false);
+    expect(paginationLoading(result)).toBeUndefined();
   });
 
   it('uses empty query results by default when local rows exist', async () => {
@@ -1211,7 +1211,7 @@ describe('useQueryBackedResourceGridTable live invalidation', () => {
       loadPrevious: vi.fn(),
       pageIndex: 1,
       pageSize: 250,
-      totalCount: 1,
+      totalCount: 1000,
       totalIsExact: true,
       filterOptions: {},
       dynamic: null,

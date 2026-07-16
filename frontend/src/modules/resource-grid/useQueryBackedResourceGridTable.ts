@@ -12,7 +12,9 @@ import {
 } from '@shared/components/tables/pageSizeOptions';
 import type { UseGridTablePersistenceResult } from '@shared/components/tables/persistence/useGridTablePersistence';
 import { useGridTablePersistence } from '@shared/components/tables/persistence/useGridTablePersistence';
-import TablePaginationControls from '@shared/components/tables/TablePaginationControls';
+import TablePaginationControls, {
+  shouldRenderTablePaginationControls,
+} from '@shared/components/tables/TablePaginationControls';
 import { buildRequiredCanonicalObjectRowKey } from '@shared/utils/objectIdentity';
 import { errorHandler } from '@utils/errorHandler';
 import React, { useCallback, useEffect, useMemo, useRef, useState } from 'react';
@@ -460,6 +462,28 @@ function useQueryBackedGridResult<
   const fetchAllRows = useCallback((): Promise<TRow[]> => query.fetchAllRows(), [query]);
 
   const gridTableProps = useMemo(() => {
+    const paginationProps = {
+      idPrefix: viewId,
+      pageIndex: query.pageIndex,
+      pageSize: query.pageSize,
+      visibleItemCount: data.length,
+      pageSizeOptions: TABLE_PAGE_SIZE_OPTIONS,
+      totalCount: query.totalCount,
+      totalIsExact: query.totalIsExact,
+      hasPrevious: query.hasPrevious,
+      hasNext: Boolean(query.continueToken),
+      loading: query.isRequestingMore,
+      onPrevious: query.loadPrevious,
+      onNext: query.loadMore,
+      onPageSizeChange: (value: number) => {
+        if (isTablePageSize(value)) {
+          persistence.setPageSize(value);
+        }
+      },
+      // Numbered jumps ride the bounded startRank contract; the control
+      // renders only while the total is exact.
+      onPageJump: query.jumpToPage,
+    };
     const base = {
       ...table.gridTableProps,
       // Mirrors the footer buttons' disabled logic so the modified-arrow
@@ -468,28 +492,9 @@ function useQueryBackedGridResult<
       onPageNext: query.loadMore,
       canPagePrevious: query.hasPrevious && !query.isRequestingMore,
       canPageNext: Boolean(query.continueToken) && !query.isRequestingMore,
-      paginationControls: React.createElement(TablePaginationControls, {
-        idPrefix: viewId,
-        pageIndex: query.pageIndex,
-        pageSize: query.pageSize,
-        visibleItemCount: data.length,
-        pageSizeOptions: TABLE_PAGE_SIZE_OPTIONS,
-        totalCount: query.totalCount,
-        totalIsExact: query.totalIsExact,
-        hasPrevious: query.hasPrevious,
-        hasNext: Boolean(query.continueToken),
-        loading: query.isRequestingMore,
-        onPrevious: query.loadPrevious,
-        onNext: query.loadMore,
-        onPageSizeChange: (value: number) => {
-          if (isTablePageSize(value)) {
-            persistence.setPageSize(value);
-          }
-        },
-        // Numbered jumps ride the bounded startRank contract; the control
-        // renders only while the total is exact.
-        onPageJump: query.jumpToPage,
-      }),
+      paginationControls: shouldRenderTablePaginationControls(paginationProps)
+        ? React.createElement(TablePaginationControls, paginationProps)
+        : null,
     };
     return { ...base, fetchAllRows, exportFilename: viewId };
   }, [data.length, fetchAllRows, persistence, query, table.gridTableProps, viewId]);

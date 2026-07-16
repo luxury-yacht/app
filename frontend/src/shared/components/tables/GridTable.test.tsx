@@ -1402,7 +1402,7 @@ it('resets local pagination after filters change and paginates the filtered resu
   expect(
     Array.from(container.querySelectorAll('.gridtable-row'), (row) => row.textContent)
   ).toEqual(['Row 0']);
-  expect(container.querySelector('.gridtable-pagination')?.textContent).toContain('1-1 of 1');
+  expect(container.querySelector('.gridtable-pagination')).toBeNull();
 
   cleanup();
 });

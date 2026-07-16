@@ -1,6 +1,8 @@
 import type { BrowseCatalogPagination } from '@modules/browse/hooks/useBrowseCatalog';
 import type { TablePageSize } from '@shared/components/tables/pageSizeOptions';
-import TablePaginationControls from '@shared/components/tables/TablePaginationControls';
+import TablePaginationControls, {
+  shouldRenderTablePaginationControls,
+} from '@shared/components/tables/TablePaginationControls';
 import type React from 'react';
 
 interface CatalogPaginationFooterProps {
@@ -24,6 +26,15 @@ export const catalogPaginationPageKeyProps = (pagination: BrowseCatalogPaginatio
     canPageNext: pagination.hasMore && !busy,
   };
 };
+
+export const shouldRenderCatalogPaginationFooter = (pagination: BrowseCatalogPagination): boolean =>
+  shouldRenderTablePaginationControls({
+    pageSizeOptions: pagination.pageLimitOptions,
+    totalCount: pagination.totalCount,
+    totalIsExact: pagination.totalIsExact,
+    hasPrevious: pagination.hasPrevious,
+    hasNext: pagination.hasMore,
+  });
 
 /**
  * The one catalog pagination footer. Renders the shared TablePaginationControls

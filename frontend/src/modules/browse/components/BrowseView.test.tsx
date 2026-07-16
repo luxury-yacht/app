@@ -848,6 +848,39 @@ describe('BrowseView', () => {
   });
 
   describe('Row cap UI', () => {
+    it('omits the pagination footer when the exact result has 25 items', async () => {
+      refreshMocks.catalogDomain.scope =
+        'cluster-1|limit=50&resourceScope=cluster&namespace=cluster';
+      refreshMocks.catalogDomain.data = {
+        items: [
+          {
+            uid: '1',
+            kind: 'Node',
+            name: 'node-a',
+            namespace: null,
+            scope: 'Cluster',
+            resource: 'nodes',
+            group: '',
+            version: 'v1',
+            resourceVersion: '1',
+            creationTimestamp: new Date().toISOString(),
+            clusterId: 'cluster-1',
+          },
+        ],
+        continue: '',
+        batchSize: 25,
+        total: 25,
+      };
+      refreshMocks.catalogDomain.status = 'ready';
+
+      await act(async () => {
+        root.render(<BrowseView namespace={undefined} />);
+        await Promise.resolve();
+      });
+
+      expect(gridTablePropsRef.current.paginationControls).toBeNull();
+    });
+
     it('renders query pagination in the table footer with the filter-feedback banner enabled', async () => {
       refreshMocks.catalogDomain.scope =
         'cluster-1|limit=50&resourceScope=cluster&namespace=cluster';
