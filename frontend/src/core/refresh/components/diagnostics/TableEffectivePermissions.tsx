@@ -5,6 +5,7 @@
  * Handles rendering and interactions for the shared components.
  */
 
+import { TABLE_NO_VALUE_TEXT, TableCellValue } from '@shared/components/tables/tableNoValue';
 import type React from 'react';
 import { useCallback, useEffect, useMemo, useState } from 'react';
 import type { PermissionRow } from './diagnosticsPanelTypes';
@@ -15,6 +16,9 @@ interface PermissionsTableProps {
 
 const INITIAL_VISIBLE_ROWS = 250;
 const ROW_INCREMENT = 250;
+
+const displayInFlightCount = (count: number | null | undefined): number | string =>
+  count !== null && count !== undefined && count > 0 ? count : TABLE_NO_VALUE_TEXT;
 
 const matchesSearch = (row: PermissionRow, query: string): boolean => {
   if (!query) {
@@ -144,16 +148,28 @@ export const EffectivePermissionsTable: React.FC<PermissionsTableProps> = ({ row
                   <td>{row.descriptorLabel}</td>
                   <td>
                     <span className="diagnostics-table-feature" title={row.feature ?? undefined}>
-                      {row.featureLabel ?? row.feature ?? '—'}
+                      <TableCellValue>
+                        {row.featureLabel ?? row.feature ?? TABLE_NO_VALUE_TEXT}
+                      </TableCellValue>
                     </span>
                   </td>
-                  <td>{row.inFlightCount ? row.inFlightCount : '—'}</td>
-                  <td>{row.lastDurationDisplay}</td>
-                  <td title={row.age.tooltip}>{row.age.display}</td>
+                  <td>
+                    <TableCellValue>{displayInFlightCount(row.inFlightCount)}</TableCellValue>
+                  </td>
+                  <td>
+                    <TableCellValue>{row.lastDurationDisplay}</TableCellValue>
+                  </td>
+                  <td title={row.age.tooltip}>
+                    <TableCellValue>{row.age.display}</TableCellValue>
+                  </td>
                   <td>{row.consecutiveFailureCount}</td>
                   <td>{row.allowed}</td>
-                  <td className="diagnostics-permission-reason">{row.lastError ?? '—'}</td>
-                  <td className="diagnostics-permission-reason">{row.reason ?? '—'}</td>
+                  <td className="diagnostics-permission-reason">
+                    <TableCellValue>{row.lastError ?? TABLE_NO_VALUE_TEXT}</TableCellValue>
+                  </td>
+                  <td className="diagnostics-permission-reason">
+                    <TableCellValue>{row.reason ?? TABLE_NO_VALUE_TEXT}</TableCellValue>
+                  </td>
                 </tr>
               ))
             )}

@@ -5,6 +5,11 @@
  * Renders stream telemetry details for the diagnostics panel.
  */
 
+import {
+  isTableNoValueText,
+  TABLE_NO_VALUE_TEXT,
+  TableCellValue,
+} from '@shared/components/tables/tableNoValue';
 import type React from 'react';
 import type { DiagnosticsStreamRow } from './diagnosticsPanelTypes';
 import { formatLastUpdated } from './diagnosticsPanelUtils';
@@ -58,12 +63,15 @@ export const DiagnosticsStreamsTable: React.FC<DiagnosticsStreamsTableProps> = (
 };
 
 // LastErrorCell colours an actual error with the warning colour and appends the
-// relative age of when it occurred; the "—" placeholder renders as a plain cell
-// so it keeps the default text colour and shows no age.
+// relative age of when it occurred; the no-value marker stays dimmed and shows no age.
 const LastErrorCell: React.FC<{ value: string; at?: number }> = ({ value, at }) => {
-  const hasError = Boolean(value) && value !== '—';
+  const hasError = Boolean(value) && !isTableNoValueText(value);
   if (!hasError) {
-    return <td>{value}</td>;
+    return (
+      <td>
+        <TableCellValue>{value}</TableCellValue>
+      </td>
+    );
   }
   const age = at ? formatLastUpdated(at) : null;
   return (
@@ -90,9 +98,15 @@ const StreamTableRow: React.FC<{ row: DiagnosticsStreamRow }> = ({ row }) => {
         <td>{row.delivered}</td>
         <td>{row.dropped}</td>
         <td>{row.errors}</td>
-        <td>—</td>
-        <td>—</td>
-        <td title={row.lastEventTooltip}>{row.lastEvent}</td>
+        <td>
+          <TableCellValue>{TABLE_NO_VALUE_TEXT}</TableCellValue>
+        </td>
+        <td>
+          <TableCellValue>{TABLE_NO_VALUE_TEXT}</TableCellValue>
+        </td>
+        <td title={row.lastEventTooltip}>
+          <TableCellValue>{row.lastEvent}</TableCellValue>
+        </td>
         <LastErrorCell value={row.lastError} at={row.lastErrorAt} />
       </tr>
     );
@@ -120,9 +134,15 @@ const StreamTableRow: React.FC<{ row: DiagnosticsStreamRow }> = ({ row }) => {
         <td>{row.leaf.delivered}</td>
         <td>{row.leaf.dropped}</td>
         <td>{row.leaf.errors}</td>
-        <td>—</td>
-        <td>—</td>
-        <td title={row.leaf.lastEventTooltip}>{row.leaf.lastEvent}</td>
+        <td>
+          <TableCellValue>{TABLE_NO_VALUE_TEXT}</TableCellValue>
+        </td>
+        <td>
+          <TableCellValue>{TABLE_NO_VALUE_TEXT}</TableCellValue>
+        </td>
+        <td title={row.leaf.lastEventTooltip}>
+          <TableCellValue>{row.leaf.lastEvent}</TableCellValue>
+        </td>
         <LastErrorCell value={row.leaf.lastError} at={row.leaf.lastErrorAt} />
       </tr>
     );
@@ -133,9 +153,15 @@ const StreamTableRow: React.FC<{ row: DiagnosticsStreamRow }> = ({ row }) => {
       <td>{row.delivered}</td>
       <td>{row.dropped}</td>
       <td>{row.errors}</td>
-      <td title={row.resyncsTooltip ?? ''}>{row.resyncs ?? '—'}</td>
-      <td title={row.fallbacksTooltip ?? ''}>{row.fallbacks ?? '—'}</td>
-      <td title={row.lastEventTooltip}>{row.lastEvent}</td>
+      <td title={row.resyncsTooltip ?? ''}>
+        <TableCellValue>{row.resyncs ?? TABLE_NO_VALUE_TEXT}</TableCellValue>
+      </td>
+      <td title={row.fallbacksTooltip ?? ''}>
+        <TableCellValue>{row.fallbacks ?? TABLE_NO_VALUE_TEXT}</TableCellValue>
+      </td>
+      <td title={row.lastEventTooltip}>
+        <TableCellValue>{row.lastEvent}</TableCellValue>
+      </td>
       <LastErrorCell value={row.lastError} at={row.lastErrorAt} />
     </tr>
   );

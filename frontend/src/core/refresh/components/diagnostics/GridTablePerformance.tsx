@@ -7,6 +7,7 @@ import {
   getGridTableRowCountTitle,
 } from '@shared/components/tables/performance/gridTableDiagnosticsMode';
 import type { GridTablePerformanceEntry } from '@shared/components/tables/performance/gridTablePerformanceStore';
+import { TABLE_NO_VALUE_TEXT, TableCellValue } from '@shared/components/tables/tableNoValue';
 import type React from 'react';
 import { useMemo, useState } from 'react';
 
@@ -42,13 +43,15 @@ const TimingHeader: React.FC<{ label: string; detail?: string }> = ({
 );
 
 const formatTiming = (samples: number, averageMs: number, maxMs: number, latestMs: number) =>
-  samples > 0 ? `${averageMs.toFixed(2)} / ${maxMs.toFixed(2)} / ${latestMs.toFixed(2)}` : '—';
+  samples > 0
+    ? `${averageMs.toFixed(2)} / ${maxMs.toFixed(2)} / ${latestMs.toFixed(2)}`
+    : TABLE_NO_VALUE_TEXT;
 
 const formatPercent = (value: number) => `${(value * 100).toFixed(0)}%`;
 
 const formatReferenceChurn = (inputReferenceChanges: number, updates: number) => {
   if (updates <= 0) {
-    return '—';
+    return TABLE_NO_VALUE_TEXT;
   }
 
   return `${inputReferenceChanges} (${formatPercent(inputReferenceChanges / updates)})`;
@@ -56,7 +59,7 @@ const formatReferenceChurn = (inputReferenceChanges: number, updates: number) =>
 
 const formatScrollFrameTiming = (row: GridTablePerformanceEntry) => {
   if (!row.scrollFrame) {
-    return '—';
+    return TABLE_NO_VALUE_TEXT;
   }
 
   return `${row.scrollFrame.avgMs.toFixed(2)} / ${row.scrollFrame.p95Ms.toFixed(2)} / ${row.scrollFrame.maxMs.toFixed(2)} / ${row.scrollFrame.latestMs.toFixed(2)}`;
@@ -345,57 +348,71 @@ export const GridTablePerformance: React.FC<GridTablePerformanceProps> = ({
                           : undefined
                       }
                     >
-                      {formatReferenceChurn(row.inputReferenceChanges, row.updates)}
+                      <TableCellValue>
+                        {formatReferenceChurn(row.inputReferenceChanges, row.updates)}
+                      </TableCellValue>
                     </td>
                     <td title={dominantTiming?.title ?? undefined}>
-                      {dominantTiming?.label ?? '—'}
+                      <TableCellValue>
+                        {dominantTiming?.label ?? TABLE_NO_VALUE_TEXT}
+                      </TableCellValue>
                     </td>
                     <td
                       className="diagnostics-table-performance-signals"
                       title={signalsTitle || undefined}
                     >
-                      {signals.length > 0
-                        ? signals.map((signal) => (
-                            <span
-                              key={signal.label}
-                              className={`diagnostics-table-performance-signal diagnostics-table-performance-signal--${signal.severity}`}
-                            >
-                              {signal.label}
-                            </span>
-                          ))
-                        : '—'}
-                    </td>
-                    <td>
-                      {formatTiming(
-                        row.filterOptions.samples,
-                        row.filterOptions.averageMs,
-                        row.filterOptions.maxMs,
-                        row.filterOptions.latestMs
+                      {signals.length > 0 ? (
+                        signals.map((signal) => (
+                          <span
+                            key={signal.label}
+                            className={`diagnostics-table-performance-signal diagnostics-table-performance-signal--${signal.severity}`}
+                          >
+                            {signal.label}
+                          </span>
+                        ))
+                      ) : (
+                        <TableCellValue>{TABLE_NO_VALUE_TEXT}</TableCellValue>
                       )}
                     </td>
                     <td>
-                      {formatTiming(
-                        row.filterPass.samples,
-                        row.filterPass.averageMs,
-                        row.filterPass.maxMs,
-                        row.filterPass.latestMs
-                      )}
+                      <TableCellValue>
+                        {formatTiming(
+                          row.filterOptions.samples,
+                          row.filterOptions.averageMs,
+                          row.filterOptions.maxMs,
+                          row.filterOptions.latestMs
+                        )}
+                      </TableCellValue>
                     </td>
                     <td>
-                      {formatTiming(
-                        row.sort.samples,
-                        row.sort.averageMs,
-                        row.sort.maxMs,
-                        row.sort.latestMs
-                      )}
+                      <TableCellValue>
+                        {formatTiming(
+                          row.filterPass.samples,
+                          row.filterPass.averageMs,
+                          row.filterPass.maxMs,
+                          row.filterPass.latestMs
+                        )}
+                      </TableCellValue>
                     </td>
                     <td>
-                      {formatTiming(
-                        row.render.samples,
-                        row.render.averageMs,
-                        row.render.maxMs,
-                        row.render.latestMs
-                      )}
+                      <TableCellValue>
+                        {formatTiming(
+                          row.sort.samples,
+                          row.sort.averageMs,
+                          row.sort.maxMs,
+                          row.sort.latestMs
+                        )}
+                      </TableCellValue>
+                    </td>
+                    <td>
+                      <TableCellValue>
+                        {formatTiming(
+                          row.render.samples,
+                          row.render.averageMs,
+                          row.render.maxMs,
+                          row.render.latestMs
+                        )}
+                      </TableCellValue>
                     </td>
                     <td
                       title={
@@ -404,9 +421,11 @@ export const GridTablePerformance: React.FC<GridTablePerformanceProps> = ({
                           : undefined
                       }
                     >
-                      {formatScrollFrameTiming(row)}
+                      <TableCellValue>{formatScrollFrameTiming(row)}</TableCellValue>
                     </td>
-                    <td>{row.lastRenderPhase ?? '—'}</td>
+                    <td>
+                      <TableCellValue>{row.lastRenderPhase ?? TABLE_NO_VALUE_TEXT}</TableCellValue>
+                    </td>
                   </tr>
                 );
               })

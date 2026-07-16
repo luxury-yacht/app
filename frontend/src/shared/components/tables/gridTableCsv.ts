@@ -8,6 +8,7 @@
  */
 
 import type { GridColumnDefinition } from '@shared/components/tables/GridTable.types';
+import { normalizeTableNoValueText } from '@shared/components/tables/tableNoValue';
 import dayjs from 'dayjs';
 import type { ReactNode } from 'react';
 
@@ -34,7 +35,9 @@ export function buildGridTableCsv<T>(
     escapeCsvCell(getTextContent(column.header).trim() || column.key)
   );
   const dataRows = rows.map((item) =>
-    columns.map((column) => escapeCsvCell(getTextContent(column.render(item)).trim()))
+    columns.map((column) =>
+      escapeCsvCell(normalizeTableNoValueText(getTextContent(column.render(item)).trim()))
+    )
   );
   return [headerRow, ...dataRows].map((row) => row.join(',')).join('\n');
 }

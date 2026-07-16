@@ -5,12 +5,18 @@
  * Handles rendering and interactions for the shared components.
  */
 
+import { TABLE_NO_VALUE_TEXT, TableCellValue } from '@shared/components/tables/tableNoValue';
 import type React from 'react';
 import type { DiagnosticsRow, SummaryCardData } from './diagnosticsPanelTypes';
 
 interface DiagnosticsTableProps {
   rows: DiagnosticsRow[];
 }
+
+const displayTelemetryCounts = (row: DiagnosticsRow): string =>
+  row.telemetrySuccess === undefined
+    ? TABLE_NO_VALUE_TEXT
+    : `${row.telemetrySuccess} / ${row.telemetryFailure ?? 0}`;
 
 export const DiagnosticsTable: React.FC<DiagnosticsTableProps> = ({ rows }) => {
   return (
@@ -68,37 +74,63 @@ export const DiagnosticsTable: React.FC<DiagnosticsTableProps> = ({ rows }) => {
                       ))}
                     </span>
                   ) : (
-                    row.scope
+                    <TableCellValue>{row.scope}</TableCellValue>
                   )}
                 </td>
-                <td title={row.roleTooltip ?? ''}>{row.role}</td>
-                <td>{row.namespace}</td>
-                <td title={row.modeTooltip ?? ''}>{row.mode}</td>
-                <td title={row.healthTooltip ?? ''}>{row.healthStatus}</td>
-                <td>{row.status}</td>
-                <td title={row.pollingTooltip ?? ''}>{row.pollingStatus}</td>
-                <td>{row.interval}</td>
-                <td className={row.countClassName} title={row.countTooltip ?? ''}>
-                  {row.countDisplay}
+                <td title={row.roleTooltip ?? ''}>
+                  <TableCellValue>{row.role}</TableCellValue>
                 </td>
-                <td>{row.version}</td>
-                <td title={row.lastUpdatedTooltip}>{row.lastUpdated}</td>
-                <td title={row.telemetryTooltip ?? ''}>{row.telemetryStatus ?? '—'}</td>
-                <td>{row.duration ?? '—'}</td>
-                <td title="Peak time a Build for this domain waited on the informer-sync gate (initial-LIST gating) before building">
-                  {row.syncWait ?? '—'}
-                </td>
-                <td title={row.metricsTooltip}>{row.metricsStatus}</td>
                 <td>
-                  {row.telemetrySuccess !== undefined
-                    ? `${row.telemetrySuccess} / ${row.telemetryFailure ?? 0}`
-                    : '—'}
+                  <TableCellValue>{row.namespace}</TableCellValue>
                 </td>
-                <td>{row.dropped}</td>
+                <td title={row.modeTooltip ?? ''}>
+                  <TableCellValue>{row.mode}</TableCellValue>
+                </td>
+                <td title={row.healthTooltip ?? ''}>
+                  <TableCellValue>{row.healthStatus}</TableCellValue>
+                </td>
+                <td>
+                  <TableCellValue>{row.status}</TableCellValue>
+                </td>
+                <td title={row.pollingTooltip ?? ''}>
+                  <TableCellValue>{row.pollingStatus}</TableCellValue>
+                </td>
+                <td>
+                  <TableCellValue>{row.interval}</TableCellValue>
+                </td>
+                <td className={row.countClassName} title={row.countTooltip ?? ''}>
+                  <TableCellValue>{row.countDisplay}</TableCellValue>
+                </td>
+                <td>
+                  <TableCellValue>{row.version}</TableCellValue>
+                </td>
+                <td title={row.lastUpdatedTooltip}>
+                  <TableCellValue>{row.lastUpdated}</TableCellValue>
+                </td>
+                <td title={row.telemetryTooltip ?? ''}>
+                  <TableCellValue>{row.telemetryStatus ?? TABLE_NO_VALUE_TEXT}</TableCellValue>
+                </td>
+                <td>
+                  <TableCellValue>{row.duration ?? TABLE_NO_VALUE_TEXT}</TableCellValue>
+                </td>
+                <td title="Peak time a Build for this domain waited on the informer-sync gate (initial-LIST gating) before building">
+                  <TableCellValue>{row.syncWait ?? TABLE_NO_VALUE_TEXT}</TableCellValue>
+                </td>
+                <td title={row.metricsTooltip}>
+                  <TableCellValue>{row.metricsStatus}</TableCellValue>
+                </td>
+                <td>
+                  <TableCellValue>{displayTelemetryCounts(row)}</TableCellValue>
+                </td>
+                <td>
+                  <TableCellValue>{row.dropped}</TableCellValue>
+                </td>
                 <td className={row.stale ? 'diagnostics-stale-cell' : undefined}>
                   {row.stale ? 'Yes' : 'No'}
                 </td>
-                <td className="diagnostics-error">{row.error}</td>
+                <td className="diagnostics-error">
+                  <TableCellValue>{row.error}</TableCellValue>
+                </td>
               </tr>
             ))
           )}

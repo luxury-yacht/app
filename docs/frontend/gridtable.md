@@ -15,6 +15,11 @@ workflow and that exception is documented.
   `alignData` with `left`, `center`, or `right`. Each defaults to `left` when
   omitted; use `className` only for styling outside this alignment contract.
 - Prefer shared column factories for common Kubernetes/resource fields.
+- An absent table value renders as the ASCII hyphen-minus (`-`) in
+  `--color-text-tertiary`. `GridTable` normalizes both `-` and the legacy em
+  dash through `tableNoValue`; native tables must render potentially absent
+  scalar values through `TableCellValue`. Copy and CSV export use the same
+  canonical hyphen.
 - Interactive cell actions must declare whether they also participate in the
   row action. Use the shared factory option for that distinction; a Kind badge
   that opens an Object Panel independently must suppress row activation.

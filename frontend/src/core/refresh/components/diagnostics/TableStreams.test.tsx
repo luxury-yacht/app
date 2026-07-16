@@ -5,13 +5,13 @@ import type { DiagnosticsStreamRow } from './diagnosticsPanelTypes';
 import { DiagnosticsStreamsTable } from './TableStreams';
 
 describe('DiagnosticsStreamsTable', () => {
-  it('only colours an actual Last Error (warning class); the "—" placeholder stays plain', async () => {
+  it('uses the shared no-value marker while only colouring an actual Last Error', async () => {
     const host = document.createElement('div');
     document.body.appendChild(host);
     const root = ReactDOM.createRoot(host);
 
-    // Two domain leaves: one with no error ("—"), one with a real error. Domain
-    // rows are the case that regressed — they must not render "—" in red.
+    // Two domain leaves: one with no error, one with a real error. Domain rows
+    // are the case that regressed — the no-value marker must not render in red.
     const rows: DiagnosticsStreamRow[] = [
       {
         kind: 'domain',
@@ -52,9 +52,9 @@ describe('DiagnosticsStreamsTable', () => {
     const placeholderCell = bodyRows[0].querySelectorAll('td')[7];
     const errorCell = bodyRows[1].querySelectorAll('td')[7];
 
-    // Placeholder: plain cell — neither the red error class nor the warning class,
-    // and no relative-age element.
-    expect(placeholderCell.textContent?.trim()).toBe('—');
+    // Placeholder: canonical dimmed hyphen, neither error class, and no age.
+    expect(placeholderCell.textContent?.trim()).toBe('-');
+    expect(placeholderCell.querySelector('.table-no-value')).not.toBeNull();
     expect(placeholderCell.classList.contains('diagnostics-error')).toBe(false);
     expect(placeholderCell.classList.contains('diagnostics-error-warning')).toBe(false);
     expect(placeholderCell.querySelector('.diagnostics-error-age')).toBeNull();

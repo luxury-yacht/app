@@ -1,3 +1,4 @@
+import { TableCellValue } from '@shared/components/tables/tableNoValue';
 import type React from 'react';
 import { useDeferredValue, useMemo, useState } from 'react';
 
@@ -133,18 +134,32 @@ export const BrokerReadsTable: React.FC<BrokerReadsTableProps> = ({ rows, summar
                       <span className="diagnostics-table-secondary">{row.resource}</span>
                     </div>
                   </td>
-                  <td title={row.scopeTooltip}>{row.scope}</td>
-                  <td>{row.adapter}</td>
-                  <td>{row.reason}</td>
+                  <td title={row.scopeTooltip}>
+                    <TableCellValue>{row.scope}</TableCellValue>
+                  </td>
+                  <td>
+                    <TableCellValue>{row.adapter}</TableCellValue>
+                  </td>
+                  <td>
+                    <TableCellValue>{row.reason}</TableCellValue>
+                  </td>
                   <td>{row.inFlightCount}</td>
                   <td>{row.totalRequests}</td>
                   <td>{row.successCount}</td>
                   <td>{row.blockedCount}</td>
                   <td>{row.errorCount}</td>
-                  <td>{row.lastStatus}</td>
-                  <td>{row.lastDuration}</td>
-                  <td title={row.lastUpdatedTooltip}>{row.lastUpdated}</td>
-                  <td className="diagnostics-error">{row.lastError}</td>
+                  <td>
+                    <TableCellValue>{row.lastStatus}</TableCellValue>
+                  </td>
+                  <td>
+                    <TableCellValue>{row.lastDuration}</TableCellValue>
+                  </td>
+                  <td title={row.lastUpdatedTooltip}>
+                    <TableCellValue>{row.lastUpdated}</TableCellValue>
+                  </td>
+                  <td className="diagnostics-error">
+                    <TableCellValue>{row.lastError}</TableCellValue>
+                  </td>
                 </tr>
               ))
             )}

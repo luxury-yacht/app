@@ -4,6 +4,7 @@
  * Renders Kubernetes API client usage in the diagnostics panel.
  */
 
+import { TableCellValue } from '@shared/components/tables/tableNoValue';
 import type React from 'react';
 import type { KubernetesAPIClientRow } from './diagnosticsPanelTypes';
 
@@ -53,16 +54,36 @@ export const KubernetesAPIClientsTable: React.FC<KubernetesAPIClientsTableProps>
                       {row.cluster}
                     </span>
                   </td>
-                  <td>{row.configured}</td>
-                  <td>{row.qps1s}</td>
-                  <td>{row.qps10s}</td>
-                  <td>{row.qps60s}</td>
-                  <td>{row.peakQPS1s}</td>
-                  <td>{row.totalRequests}</td>
-                  <td>{row.status429}</td>
-                  <td>{row.status5xx}</td>
-                  <td>{row.errors}</td>
-                  <td title={row.lastRequestTooltip}>{row.lastRequest}</td>
+                  <td>
+                    <TableCellValue>{row.configured}</TableCellValue>
+                  </td>
+                  <td>
+                    <TableCellValue>{row.qps1s}</TableCellValue>
+                  </td>
+                  <td>
+                    <TableCellValue>{row.qps10s}</TableCellValue>
+                  </td>
+                  <td>
+                    <TableCellValue>{row.qps60s}</TableCellValue>
+                  </td>
+                  <td>
+                    <TableCellValue>{row.peakQPS1s}</TableCellValue>
+                  </td>
+                  <td>
+                    <TableCellValue>{row.totalRequests}</TableCellValue>
+                  </td>
+                  <td>
+                    <TableCellValue>{row.status429}</TableCellValue>
+                  </td>
+                  <td>
+                    <TableCellValue>{row.status5xx}</TableCellValue>
+                  </td>
+                  <td>
+                    <TableCellValue>{row.errors}</TableCellValue>
+                  </td>
+                  <td title={row.lastRequestTooltip}>
+                    <TableCellValue>{row.lastRequest}</TableCellValue>
+                  </td>
                 </tr>
               ))
             )}

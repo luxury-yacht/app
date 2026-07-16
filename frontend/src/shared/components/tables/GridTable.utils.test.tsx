@@ -55,6 +55,7 @@ describe('GridTable utils', () => {
     expect(defaultGetKind(row)).toBe('Pod');
     expect(defaultGetNamespace(row)).toBe('kube-system');
     expect(defaultGetNamespace({ namespaceDisplay: '—' })).toBe('');
+    expect(defaultGetNamespace({ namespaceDisplay: '-' })).toBe('');
 
     const search = defaultGetSearchText(row);
     expect(search).toContain('pod-1');

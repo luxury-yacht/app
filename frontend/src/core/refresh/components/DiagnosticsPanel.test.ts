@@ -583,10 +583,10 @@ describe('DiagnosticsPanel component', () => {
     const nodesRow = Array.from(
       rendered.container.querySelectorAll('.diagnostics-table tbody tr')
     ).find((row) => row.querySelector('td')?.textContent?.includes('Nodes'));
-    // Sync Wait (no informer-sync-wait telemetry → em dash); Metrics shifted to 15.
+    // Sync Wait (no informer-sync-wait telemetry → dimmed hyphen); Metrics shifted to 15.
     // Nodes carries the joined-usage freshness block on its base payload now,
     // so the Metrics column reflects it directly.
-    expect(nodesRow?.querySelectorAll('td')[14]?.textContent?.trim()).toBe('—');
+    expect(nodesRow?.querySelectorAll('td')[14]?.textContent?.trim()).toBe('-');
     expect(nodesRow?.querySelectorAll('td')[15]?.textContent?.trim()).toBe('OK (2 polls)');
 
     const clusterIndex = markup.indexOf('Cluster Overview');
@@ -1286,11 +1286,12 @@ describe('DiagnosticsPanel component', () => {
     const cells = resourcesRow?.querySelectorAll('td') ?? [];
     // Domain-less fixture → a stream header row (Name | Delivered | Dropped |
     // Errors | Resyncs | Fallbacks | Last Event | Last Error); resyncs/fallbacks
-    // are per-domain only, so the header shows '—'.
-    expect(cells[4]?.textContent?.trim()).toBe('—');
-    expect(cells[5]?.textContent?.trim()).toBe('—');
-    // The Last Error placeholder is a plain cell — no error colour for '—'.
-    expect(cells[7]?.textContent?.trim()).toBe('—');
+    // are per-domain only, so the header shows the canonical no-value hyphen.
+    expect(cells[4]?.textContent?.trim()).toBe('-');
+    expect(cells[5]?.textContent?.trim()).toBe('-');
+    // The Last Error placeholder is dimmed and has no error colour.
+    expect(cells[7]?.textContent?.trim()).toBe('-');
+    expect(cells[7]?.querySelector('.table-no-value')).not.toBeNull();
     expect(cells[7]?.classList.contains('diagnostics-error-warning')).toBe(false);
 
     await rendered.unmount();
@@ -1638,8 +1639,8 @@ describe('DiagnosticsPanel component', () => {
       'expected test value in DiagnosticsPanel.test.ts'
     ).querySelectorAll('td');
     expect(catalogCells[3]?.textContent?.trim()).toBe('1');
-    expect(catalogCells[4]?.textContent?.trim()).toBe('—');
-    expect(catalogCells[5]?.textContent?.trim()).toBe('—');
+    expect(catalogCells[4]?.textContent?.trim()).toBe('-');
+    expect(catalogCells[5]?.textContent?.trim()).toBe('-');
     expect(catalogCells[7]?.textContent?.trim()).toBe('Catalog stream disconnected');
 
     const resourceCells = requireValue(
@@ -1647,8 +1648,8 @@ describe('DiagnosticsPanel component', () => {
       'expected test value in DiagnosticsPanel.test.ts'
     ).querySelectorAll('td');
     expect(resourceCells[3]?.textContent?.trim()).toBe('1');
-    expect(resourceCells[4]?.textContent?.trim()).toBe('—');
-    expect(resourceCells[5]?.textContent?.trim()).toBe('—');
+    expect(resourceCells[4]?.textContent?.trim()).toBe('-');
+    expect(resourceCells[5]?.textContent?.trim()).toBe('-');
     expect(resourceCells[7]?.textContent?.trim()).toBe('Resource stream disconnected');
     // An actual error is coloured with the warning class (not red, not the placeholder).
     expect(resourceCells[7]?.classList.contains('diagnostics-error-warning')).toBe(true);

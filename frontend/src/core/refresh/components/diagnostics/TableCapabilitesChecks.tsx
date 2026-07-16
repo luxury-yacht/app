@@ -5,6 +5,7 @@
  * Handles rendering and interactions for the shared components.
  */
 
+import { TABLE_NO_VALUE_TEXT, TableCellValue } from '@shared/components/tables/tableNoValue';
 import type React from 'react';
 import { useCallback, useEffect, useMemo, useState } from 'react';
 import { permissionFeatureLabel } from '@/core/capabilities';
@@ -18,6 +19,16 @@ interface CapabilityChecksTableProps {
 
 const INITIAL_VISIBLE_ROWS = 250;
 const ROW_INCREMENT = 250;
+
+const displayInFlightCount = (count: number | null | undefined): number | string =>
+  count !== null && count !== undefined && count > 0 ? count : TABLE_NO_VALUE_TEXT;
+
+const displayIncomplete = (incomplete: boolean | null | undefined): string => {
+  if (incomplete === null || incomplete === undefined) {
+    return TABLE_NO_VALUE_TEXT;
+  }
+  return incomplete ? 'Yes' : 'No';
+};
 
 const matchesSearch = (row: CapabilityBatchRow, query: string): boolean => {
   if (!query) {
@@ -62,24 +73,36 @@ const CapabilityRow: React.FC<{
     style={{ cursor: 'pointer' }}
   >
     <td>{row.scope}</td>
-    <td>{row.inFlightCount ? row.inFlightCount : '—'}</td>
-    <td title={row.runtimeMs ? `${row.runtimeMs}ms elapsed` : ''}>{row.runtimeDisplay}</td>
-    <td>{row.lastDurationDisplay}</td>
-    <td title={row.age.tooltip}>{row.age.display}</td>
+    <td>
+      <TableCellValue>{displayInFlightCount(row.inFlightCount)}</TableCellValue>
+    </td>
+    <td title={row.runtimeMs ? `${row.runtimeMs}ms elapsed` : ''}>
+      <TableCellValue>{row.runtimeDisplay}</TableCellValue>
+    </td>
+    <td>
+      <TableCellValue>{row.lastDurationDisplay}</TableCellValue>
+    </td>
+    <td title={row.age.tooltip}>
+      <TableCellValue>{row.age.display}</TableCellValue>
+    </td>
     <td>{row.lastResult}</td>
     <td>{row.consecutiveFailureCount}</td>
     <td>{row.totalChecks}</td>
-    <td className="diagnostics-permission-reason">{row.lastError ?? '—'}</td>
-    <td>{row.method ?? '—'}</td>
-    <td>
-      {row.ssrrIncomplete !== null && row.ssrrIncomplete !== undefined
-        ? row.ssrrIncomplete
-          ? 'Yes'
-          : 'No'
-        : '—'}
+    <td className="diagnostics-permission-reason">
+      <TableCellValue>{row.lastError ?? TABLE_NO_VALUE_TEXT}</TableCellValue>
     </td>
-    <td>{row.ssrrRuleCount ?? '—'}</td>
-    <td>{row.ssarFallbackCount ?? '—'}</td>
+    <td>
+      <TableCellValue>{row.method ?? TABLE_NO_VALUE_TEXT}</TableCellValue>
+    </td>
+    <td>
+      <TableCellValue>{displayIncomplete(row.ssrrIncomplete)}</TableCellValue>
+    </td>
+    <td>
+      <TableCellValue>{row.ssrrRuleCount ?? TABLE_NO_VALUE_TEXT}</TableCellValue>
+    </td>
+    <td>
+      <TableCellValue>{row.ssarFallbackCount ?? TABLE_NO_VALUE_TEXT}</TableCellValue>
+    </td>
     <td>
       {row.descriptorsByFeature && row.descriptorsByFeature.length > 0 ? (
         <button
@@ -106,7 +129,9 @@ const CapabilityRow: React.FC<{
             : 'Click to expand'}
         </button>
       ) : (
-        <span className="diagnostics-table-descriptor">—</span>
+        <span className="diagnostics-table-descriptor">
+          <TableCellValue>{TABLE_NO_VALUE_TEXT}</TableCellValue>
+        </span>
       )}
     </td>
   </tr>

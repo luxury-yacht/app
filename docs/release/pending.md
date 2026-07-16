@@ -22,6 +22,8 @@
   longer resizes or clips tables beside split panes and docked panels.
 - Hid table pagination controls when an exact result contains 25 or fewer
   objects and no previous or next page is available.
+- Standardized absent table values on a dimmed hyphen across resource,
+  object-panel, parsed-log, and diagnostics tables.
 - Made every multi-select Kinds filter searchable and gave each one explicit
   Select all and Select none controls.
 - Removed the visible Workloads/Pods divider band and moved the expand/collapse

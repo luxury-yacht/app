@@ -6,6 +6,11 @@
  */
 
 import type { GridColumnDefinition } from '@shared/components/tables/GridTable.types';
+import {
+  isTableNoValueText,
+  renderTableNoValue,
+  TABLE_NO_VALUE_TEXT,
+} from '@shared/components/tables/tableNoValue';
 import React, { useCallback, useEffect, useRef } from 'react';
 
 // Caches rendered cell content per column/value so virtualization and hover
@@ -116,7 +121,12 @@ export function useGridTableCellCache<T>({
       const rawText = getTextContent(rawContent);
 
       let content: React.ReactNode = rawContent;
-      const text = rawText;
+      let text = rawText;
+
+      if (isTableNoValueText(rawText)) {
+        content = renderTableNoValue();
+        text = TABLE_NO_VALUE_TEXT;
+      }
 
       if (isKindColumnKey(column.key)) {
         let canonicalKind: string | undefined;

@@ -36,6 +36,19 @@ describe('buildGridTableCsv', () => {
     expect(csv).toBe('Name,Note\n"a,b","he said ""hi"""');
   });
 
+  it('exports legacy and canonical no-value markers as the canonical hyphen', () => {
+    const csv = buildGridTableCsv(
+      [
+        { name: 'legacy', note: '—' },
+        { name: 'canonical', note: '-' },
+      ],
+      columns,
+      getTextContent
+    );
+
+    expect(csv).toBe('Name,Note\nlegacy,-\ncanonical,-');
+  });
+
   it('returns an empty string when there are no columns', () => {
     expect(buildGridTableCsv([{ name: 'a', note: 'b' }], [], getTextContent)).toBe('');
   });

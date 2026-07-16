@@ -5,6 +5,7 @@ import type {
   GridTableFilterState,
   InternalFilterOptions,
 } from '@shared/components/tables/GridTable.types';
+import { isTableNoValueText } from '@shared/components/tables/tableNoValue';
 
 interface ResolveGridTableFilterAccessorsOptions<T> {
   accessors?: GridTableFilterAccessors<T>;
@@ -120,7 +121,7 @@ export function buildGridTableFilterOptions<T>({
   const namespaces = collectOptions(
     options?.namespaces,
     (row) => accessors.getNamespace?.(row) ?? defaultGetNamespace(row),
-    (value) => (value === '—' ? '' : value)
+    (value) => (isTableNoValueText(value) ? '' : value)
   );
   const clusterMap = new Map<string, DropdownOption>();
   if (!queryBacked && options?.clusters?.length) {
@@ -239,7 +240,7 @@ export function applyGridTableFilters<T>({
     const namespaceValueRaw = accessors.getNamespace?.(row) ?? defaultGetNamespace(row);
     const namespaceCandidate =
       typeof namespaceValueRaw === 'string' ? namespaceValueRaw.trim() : '';
-    const normalizedNamespace = namespaceCandidate === '—' ? '' : namespaceCandidate;
+    const normalizedNamespace = isTableNoValueText(namespaceCandidate) ? '' : namespaceCandidate;
 
     if (shouldFilterNamespaces && !namespaceSet.has(normalizedNamespace.toLowerCase())) {
       return false;

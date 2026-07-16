@@ -10,6 +10,7 @@ import type {
   ColumnWidthUnit,
   GridColumnDefinition,
 } from '@shared/components/tables/GridTable.types';
+import { isTableNoValueText } from '@shared/components/tables/tableNoValue';
 import { getKindColorClass } from '@shared/utils/kindBadgeColors';
 import React from 'react';
 
@@ -67,7 +68,7 @@ export const defaultGetNamespace = (row: unknown): string | null => {
         : typeof item?.namespace === 'string'
           ? item.namespace
           : null;
-  if (value === '—') {
+  if (isTableNoValueText(value)) {
     return '';
   }
   return value;
