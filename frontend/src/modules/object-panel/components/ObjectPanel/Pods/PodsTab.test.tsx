@@ -8,6 +8,7 @@
 
 import { OBJECT_ACTION_IDS } from '@shared/actions/objectActionContract';
 import type { GridTableProps } from '@shared/components/tables/GridTable';
+import { getTextContent } from '@shared/components/tables/GridTable.utils';
 import React, { act } from 'react';
 import * as ReactDOM from 'react-dom/client';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
@@ -446,6 +447,18 @@ describe('PodsTab (query-backed)', () => {
       'expected status cell element in PodsTab.test.tsx'
     );
     expect(cell.props.className).toBe('status-text warning');
+  });
+
+  it('renders zero pod restarts as no value without changing numeric sorting', async () => {
+    const pods = [createPod(), createPod({ name: 'restarted', restarts: 2 })];
+    mockQueryRows(pods);
+    await renderPods();
+
+    const column = getGridColumn('restarts');
+    expect(getTextContent(column.render(pods[0]))).toBe('-');
+    expect(getTextContent(column.render(pods[1]))).toBe('2');
+    expect(column.sortValue?.(pods[0])).toBe(0);
+    expect(column.sortValue?.(pods[1])).toBe(2);
   });
 
   it('opens the Map from the pod context menu using the pod identity', async () => {

@@ -24,6 +24,8 @@
   objects and no previous or next page is available.
 - Standardized absent table values on a dimmed hyphen across resource,
   object-panel, parsed-log, and diagnostics tables.
+- Displayed zero restart counts as the dimmed no-value hyphen in Nodes,
+  Workloads, and Pods tables while preserving numeric restart sorting.
 - Made every multi-select Kinds filter searchable and gave each one explicit
   Select all and Select none controls.
 - Removed the visible Workloads/Pods divider band and moved the expand/collapse

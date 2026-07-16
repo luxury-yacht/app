@@ -10,6 +10,7 @@ import { ALL_NAMESPACES_SCOPE } from '@modules/namespace/constants';
 import { CollapseIcon, ExpandIcon } from '@shared/components/icons/SharedIcons';
 import type ConfirmationModal from '@shared/components/modals/ConfirmationModal';
 import type { GridTableProps } from '@shared/components/tables/GridTable';
+import { getTextContent } from '@shared/components/tables/GridTable.utils';
 import type React from 'react';
 import { act } from 'react';
 import * as ReactDOM from 'react-dom/client';
@@ -779,6 +780,20 @@ describe('NsViewPods', () => {
       'expected the pod status cell element'
     );
     expect(cell.props.className).toBe('status-text warning');
+  });
+
+  it('renders zero pod restarts as no value without changing numeric sorting', async () => {
+    const pods = [createPod(), createPod({ name: 'restarted', restarts: 2 })];
+    await renderPods({ data: pods });
+
+    const column = requireValue(
+      gridTablePropsRef.current.columns.find(({ key }) => key === 'restarts'),
+      'expected pod restarts column'
+    );
+    expect(getTextContent(column.render(pods[0]))).toBe('-');
+    expect(getTextContent(column.render(pods[1]))).toBe('2');
+    expect(column.sortValue?.(pods[0])).toBe(0);
+    expect(column.sortValue?.(pods[1])).toBe(2);
   });
 
   it('passes keyed sort reuse and numeric pod sort values into useTableSort', async () => {

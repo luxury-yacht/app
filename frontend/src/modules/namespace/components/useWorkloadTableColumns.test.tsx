@@ -5,10 +5,12 @@
  * Covers key behaviors and edge cases for useWorkloadTableColumns.
  */
 
+import { getTextContent } from '@shared/components/tables/GridTable.utils';
 import React, { act } from 'react';
 import * as ReactDOM from 'react-dom/client';
 import { describe, expect, it, vi } from 'vitest';
 import { requireReactElement } from '@/test-utils/requireReactElement';
+import { requireValue } from '@/test-utils/requireValue';
 
 vi.mock('@modules/namespace/components/useNamespaceColumnLink', () => ({
   useNamespaceColumnLink: () => ({
@@ -132,6 +134,27 @@ describe('useWorkloadTableColumns', () => {
     expect(
       requireReactElement<{ className?: string }>(cell, 'expected status element').props.className
     ).toBe('status-text unknown');
+    hook.cleanup();
+  });
+
+  it('renders zero workload restarts as no value without changing numeric sorting', () => {
+    const hook = renderHook(() =>
+      useWorkloadTableColumns({
+        handleWorkloadClick: vi.fn(),
+        showNamespaceColumn: false,
+        useShortResourceNames: false,
+        metrics: null,
+      })
+    );
+    const column = requireValue(
+      hook.get().find(({ key }) => key === 'restarts'),
+      'expected workload restarts column'
+    );
+
+    expect(getTextContent(column.render(workload))).toBe('-');
+    expect(getTextContent(column.render({ ...workload, restarts: 3 }))).toBe('3');
+    expect(column.sortValue?.(workload)).toBe(0);
+    expect(column.sortValue?.({ ...workload, restarts: 3 })).toBe(3);
     hook.cleanup();
   });
 });

@@ -18,6 +18,7 @@ import type { ContextMenuItem } from '@shared/components/ContextMenu';
 import { DrainIcon } from '@shared/components/icons/SharedIcons';
 import * as cf from '@shared/components/tables/columnFactories';
 import type { GridColumnDefinition } from '@shared/components/tables/GridTable';
+import { formatRestartCount } from '@shared/components/tables/restartCount';
 import { useNavigateToView } from '@shared/hooks/useNavigateToView';
 import { useNodeMaintenanceActions } from '@shared/hooks/useNodeMaintenanceActions';
 import { useObjectActionController } from '@shared/hooks/useObjectActionController';
@@ -145,7 +146,7 @@ const NodesViewGrid: React.FC<NodesViewProps> = React.memo(({ error }) => {
       const restartCount = node.restarts ?? 0;
       const className = restartCount > 0 ? 'status-text warning' : 'status-text';
       return {
-        text: String(restartCount),
+        text: formatRestartCount(restartCount),
         className,
       };
     };

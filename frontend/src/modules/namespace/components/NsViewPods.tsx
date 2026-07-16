@@ -36,6 +36,7 @@ import {
 } from '@shared/components/icons/SharedIcons';
 import * as cf from '@shared/components/tables/columnFactories';
 import type { GridColumnDefinition } from '@shared/components/tables/GridTable';
+import { formatRestartCount } from '@shared/components/tables/restartCount';
 import { useMetricsBannerInfo } from '@shared/hooks/useMetricsBannerInfo';
 import { useNavigateToView } from '@shared/hooks/useNavigateToView';
 import { useObjectActionController } from '@shared/hooks/useObjectActionController';
@@ -334,12 +335,18 @@ const NsViewPods: React.FC<PodsViewProps> = React.memo(
           alignHeader: 'center',
           alignData: 'center',
         }),
-        cf.createTextColumn<PodSnapshotEntry>('restarts', 'Restarts', (pod) => pod.restarts ?? 0, {
-          alignHeader: 'center',
-          alignData: 'center',
-          getTitle: (pod) => `${pod.restarts ?? 0} restarts`,
-          getClassName: (pod) => getRestartsClassName(pod),
-        }),
+        cf.createTextColumn<PodSnapshotEntry>(
+          'restarts',
+          'Restarts',
+          (pod) => formatRestartCount(pod.restarts),
+          {
+            alignHeader: 'center',
+            alignData: 'center',
+            sortValue: (pod) => pod.restarts ?? 0,
+            getTitle: (pod) => `${pod.restarts ?? 0} restarts`,
+            getClassName: (pod) => getRestartsClassName(pod),
+          }
+        ),
         cf.createTextColumn<PodSnapshotEntry>(
           'owner',
           'Owner',

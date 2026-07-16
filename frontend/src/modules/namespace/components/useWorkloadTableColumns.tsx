@@ -9,6 +9,7 @@ import type { WorkloadData } from '@modules/namespace/components/NsViewWorkloads
 import { useNamespaceColumnLink } from '@modules/namespace/components/useNamespaceColumnLink';
 import * as cf from '@shared/components/tables/columnFactories';
 import type { GridColumnDefinition } from '@shared/components/tables/GridTable';
+import { formatRestartCount } from '@shared/components/tables/restartCount';
 import { backendStatusTextClass } from '@shared/utils/backendStatusPresentation';
 import { useMemo } from 'react';
 import { workloadRowCpuValue, workloadRowMemoryValue } from '@/core/resource-metrics';
@@ -136,7 +137,7 @@ const useWorkloadTableColumns = ({
     const restartsColumn = cf.createTextColumn<WorkloadData>(
       'restarts',
       'Restarts',
-      (row) => String(row.restarts ?? 0),
+      (row) => formatRestartCount(row.restarts),
       {
         alignHeader: 'center',
         alignData: 'center',

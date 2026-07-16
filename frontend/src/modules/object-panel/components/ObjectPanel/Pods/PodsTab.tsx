@@ -20,6 +20,7 @@ import {
   upsertNamespaceColumn,
 } from '@shared/components/tables/columnFactories';
 import type { GridColumnDefinition } from '@shared/components/tables/GridTable';
+import { formatRestartCount } from '@shared/components/tables/restartCount';
 import { useMetricsBannerInfo } from '@shared/hooks/useMetricsBannerInfo';
 import { useNavigateToView } from '@shared/hooks/useNavigateToView';
 import { useObjectLink } from '@shared/hooks/useObjectLink';
@@ -161,11 +162,17 @@ export const PodsTab: React.FC<PodsTabProps> = ({ isActive }) => {
       createTextColumn<PodSnapshotEntry>('ready', 'Ready', (pod) => pod.ready || '—', {
         alignData: 'right',
       }),
-      createTextColumn<PodSnapshotEntry>('restarts', 'Restarts', (pod) => pod.restarts ?? 0, {
-        alignData: 'right',
-        getTitle: (pod) => `${pod.restarts ?? 0} restarts`,
-        getClassName: (pod) => getRestartsClassName(pod),
-      }),
+      createTextColumn<PodSnapshotEntry>(
+        'restarts',
+        'Restarts',
+        (pod) => formatRestartCount(pod.restarts),
+        {
+          alignData: 'right',
+          sortValue: (pod) => pod.restarts ?? 0,
+          getTitle: (pod) => `${pod.restarts ?? 0} restarts`,
+          getClassName: (pod) => getRestartsClassName(pod),
+        }
+      ),
       createTextColumn<PodSnapshotEntry>('owner', 'Owner', (pod) => workloadNameFromOwner(pod), {
         ...objectLink((pod) =>
           pod.ownerKind && pod.ownerName

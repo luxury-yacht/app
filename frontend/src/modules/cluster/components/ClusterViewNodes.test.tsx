@@ -9,6 +9,7 @@ import ClusterViewNodes from '@modules/cluster/components/ClusterViewNodes';
 import { OBJECT_ACTION_IDS } from '@shared/actions/objectActionContract';
 import type ResourceLoadingBoundary from '@shared/components/ResourceLoadingBoundary';
 import type { GridTableProps } from '@shared/components/tables/GridTable';
+import { getTextContent } from '@shared/components/tables/GridTable.utils';
 import { act } from 'react';
 import * as ReactDOM from 'react-dom/client';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
@@ -433,6 +434,19 @@ describe('ClusterViewNodes', () => {
     ).toBeGreaterThan(
       Number(ageColumn?.sortValue?.({ ...baseNode, ageTimestamp: 1_700_003_600_000 }))
     );
+  });
+
+  it('renders zero node restarts as no value without changing numeric sorting', async () => {
+    await renderNodes([baseNode]);
+
+    const column = requireValue(
+      gridTablePropsRef.current.columns.find(({ key }) => key === 'restarts'),
+      'expected node restarts column'
+    );
+    expect(getTextContent(column.render(baseNode))).toBe('-');
+    expect(getTextContent(column.render({ ...baseNode, restarts: 4 }))).toBe('4');
+    expect(column.sortValue?.(baseNode)).toBe(0);
+    expect(column.sortValue?.({ ...baseNode, restarts: 4 })).toBe(4);
   });
 
   it('renders the backend node status without reinterpreting cordon state', async () => {
