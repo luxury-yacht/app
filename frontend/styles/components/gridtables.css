@@ -594,9 +594,9 @@ body.gridtable-disable-hover .gridtable-hover-overlay {
   justify-content: flex-end;
   gap: var(--grid-spacing-md);
   min-height: 1rem;
-  padding: 0.15rem var(--grid-spacing-cell-x);
+  padding: 0.25rem var(--grid-spacing-cell-x);
   border-top: 1px solid var(--grid-border-color);
-  background-color: var(--color-bg-secondary);
+  /* background-color: var(--color-bg-secondary); */
   overflow: visible;
   box-sizing: border-box;
 }
