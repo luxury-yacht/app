@@ -37,7 +37,6 @@ import {
 import * as cf from '@shared/components/tables/columnFactories';
 import type { GridColumnDefinition } from '@shared/components/tables/GridTable';
 import { formatRestartCount } from '@shared/components/tables/restartCount';
-import { useMetricsBannerInfo } from '@shared/hooks/useMetricsBannerInfo';
 import { useNavigateToView } from '@shared/hooks/useNavigateToView';
 import { useObjectActionController } from '@shared/hooks/useObjectActionController';
 import { backendStatusTextClass } from '@shared/utils/backendStatusPresentation';
@@ -65,7 +64,6 @@ interface PodsViewProps {
   metrics?: PodMetricsInfo | null;
   workloadFilterRequest?: PodWorkloadFilterRequest;
   onWorkloadFilterMismatch?: () => void;
-  showMetricsBanner?: boolean;
   collapsed?: boolean;
   onPodsCollapsedChange?: (collapsed: boolean) => void;
 }
@@ -143,7 +141,6 @@ const NsViewPods: React.FC<PodsViewProps> = React.memo(
     metrics,
     workloadFilterRequest,
     onWorkloadFilterMismatch,
-    showMetricsBanner = true,
     collapsed = false,
     onPodsCollapsedChange,
   }) => {
@@ -637,8 +634,6 @@ const NsViewPods: React.FC<PodsViewProps> = React.memo(
     // joined onto the rows at serve.
     const tableMetrics = queryPayload?.metrics ?? null;
     const effectiveMetrics = tableMetrics ?? fallbackMetrics;
-    const metricsBanner = useMetricsBannerInfo(effectiveMetrics ?? null);
-
     useEffect(() => {
       metricsStateRef.current = podMetricsState(effectiveMetrics);
     }, [effectiveMetrics]);
@@ -789,12 +784,6 @@ const NsViewPods: React.FC<PodsViewProps> = React.memo(
 
     return (
       <>
-        {showMetricsBanner && metricsBanner ? (
-          <div className="metrics-warning-banner" title={metricsBanner.tooltip}>
-            <span className="metrics-warning-banner__dot" />
-            {metricsBanner.message}
-          </div>
-        ) : null}
         <ResourceInventoryTable
           source={source}
           gridTableProps={gridTableProps}

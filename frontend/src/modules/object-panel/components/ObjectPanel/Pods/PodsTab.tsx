@@ -21,7 +21,6 @@ import {
 } from '@shared/components/tables/columnFactories';
 import type { GridColumnDefinition } from '@shared/components/tables/GridTable';
 import { formatRestartCount } from '@shared/components/tables/restartCount';
-import { useMetricsBannerInfo } from '@shared/hooks/useMetricsBannerInfo';
 import { useNavigateToView } from '@shared/hooks/useNavigateToView';
 import { useObjectLink } from '@shared/hooks/useObjectLink';
 import React, { useCallback, useEffect, useMemo } from 'react';
@@ -75,10 +74,10 @@ export const PodsTab: React.FC<PodsTabProps> = ({ isActive }) => {
   const objectLink = useObjectLink();
   const viewState = useViewState();
   const namespaceContext = useNamespace();
-  // The banner + per-pod staleness come from the pods query payload's metrics
-  // meta, which is scoped to the PANEL OBJECT's cluster (the globally selected
-  // cluster can be a different one). The query hook needs `columns`, so the
-  // column callbacks read this ref instead of closing over the query result.
+  // Per-pod staleness comes from the pods query payload's metrics meta, which
+  // is scoped to the PANEL OBJECT's cluster (the globally selected cluster can
+  // be a different one). The query hook needs `columns`, so the column
+  // callbacks read this ref instead of closing over the query result.
   const metricsRef = React.useRef<PodMetricsInfo | null>(null);
   const metricsLastUpdated = useCallback(() => {
     const collectedAt = metricsRef.current?.collectedAt;
@@ -289,8 +288,6 @@ export const PodsTab: React.FC<PodsTabProps> = ({ isActive }) => {
   // joined onto the rows at serve.
   const effectiveMetrics = queryPayload?.metrics ?? null;
   metricsRef.current = effectiveMetrics;
-  const metricsBanner = useMetricsBannerInfo(effectiveMetrics);
-
   // Query pod-action permissions for every (cluster, namespace) pair visible
   // in this tab. Workload-scoped pods share the panel object's namespace, but
   // node-scoped pods span arbitrary namespaces that the panel-level namespace
@@ -347,12 +344,6 @@ export const PodsTab: React.FC<PodsTabProps> = ({ isActive }) => {
 
   return (
     <div className="object-panel-pods">
-      {metricsBanner && (
-        <div className="metrics-warning-banner" title={metricsBanner.tooltip}>
-          <span className="metrics-warning-banner__dot" />
-          {metricsBanner.message}
-        </div>
-      )}
       <div className="object-panel-pods__table">
         <ResourceInventoryTable<PodSnapshotEntry>
           source={source}

@@ -27,7 +27,6 @@ import type { ContextMenuItem } from '@shared/components/ContextMenu';
 import type { IconBarItem } from '@shared/components/IconBar/IconBar';
 import { CloseIcon } from '@shared/components/icons/SharedIcons';
 import type { GridColumnDefinition } from '@shared/components/tables/GridTable.types';
-import { useMetricsBannerInfo } from '@shared/hooks/useMetricsBannerInfo';
 import { useNavigateToView } from '@shared/hooks/useNavigateToView';
 import { useObjectActionController } from '@shared/hooks/useObjectActionController';
 import {
@@ -163,8 +162,6 @@ export const WorkloadsTable: React.FC<WorkloadsTableProps> = React.memo(
       [selectedClusterId]
     );
 
-    const metricsBanner = useMetricsBannerInfo(metricsInfo);
-
     const tableColumns = useWorkloadTableColumns({
       handleWorkloadClick,
       onAltClick: handleWorkloadAltClick,
@@ -268,12 +265,6 @@ export const WorkloadsTable: React.FC<WorkloadsTableProps> = React.memo(
 
     return (
       <div className="workloads-pods-table-surface">
-        {metricsBanner && (
-          <div className="metrics-warning-banner" title={metricsBanner.tooltip}>
-            <span className="metrics-warning-banner__dot" />
-            {metricsBanner.message}
-          </div>
-        )}
         <div className="workloads-pods-table-surface__table">
           <ResourceInventoryTable
             source={source}
@@ -375,7 +366,6 @@ const ScopedWorkloadsView: React.FC<ScopedWorkloadsViewProps> = ({
             setSelectedWorkload(null);
             setPodFilterRequest(undefined);
           }}
-          showMetricsBanner={false}
           collapsed={podsCollapsed}
           onPodsCollapsedChange={setPodsCollapsed}
         />

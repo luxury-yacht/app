@@ -324,7 +324,6 @@ describe('NsViewWorkloads', () => {
           name: 'api',
         },
       },
-      showMetricsBanner: false,
     });
     expect(gridTablePropsRef.current.getRowClassName?.(workload, 0)).toContain(
       'gridtable-row--selected'
@@ -357,7 +356,6 @@ describe('NsViewWorkloads', () => {
     expect(podsViewPropsRef.current).toMatchObject({
       namespace: 'team-a',
       workloadFilterRequest: { type: 'clear' },
-      showMetricsBanner: false,
     });
     expect(gridTablePropsRef.current.getRowClassName?.(workload, 0)).not.toContain(
       'gridtable-row--selected'
@@ -763,6 +761,38 @@ describe('NsViewWorkloads', () => {
       'namespace-workloads',
       'clusters=path:context,other:context|namespace:team-a',
     ]);
+  });
+
+  it('keeps metrics availability out of the Workloads table surface', async () => {
+    requestRefreshDomainStateMock.mockResolvedValue({
+      status: 'executed',
+      data: {
+        status: 'ready',
+        data: {
+          rows: [],
+          total: 0,
+          totalIsExact: true,
+          namespaces: ['team-a'],
+          kinds: ['Deployment'],
+          facetsExact: true,
+          metrics: {
+            stale: false,
+            lastError: 'metrics api unavailable',
+            collectedAt: 1700000000,
+            successCount: 0,
+            failureCount: 1,
+          },
+        },
+      },
+    });
+
+    await act(async () => {
+      root.render(<NsViewWorkloads namespace="team-a" metrics={null} />);
+      await Promise.resolve();
+      await Promise.resolve();
+    });
+
+    expect(container.querySelector('.metrics-warning-banner')).toBeNull();
   });
 
   it('preserves the column definitions across rerenders with unchanged inputs', async () => {

@@ -620,7 +620,6 @@ describe('NsViewPods', () => {
       namespace: ALL_NAMESPACES_SCOPE,
       workloadFilterRequest,
       onWorkloadFilterMismatch,
-      showMetricsBanner: false,
     };
     await renderPods(props);
 
@@ -842,7 +841,7 @@ describe('NsViewPods', () => {
     );
   });
 
-  it('treats a missing query payload as warm-up and still renders the metrics banner', async () => {
+  it('treats a missing query payload as warm-up without adding table-level metrics status', async () => {
     // A null query payload is a backend warm-up condition, not a failure: the
     // table stays in its loading presentation with no error surface, and the
     // next live-data identity change retries.
@@ -869,12 +868,9 @@ describe('NsViewPods', () => {
 
     expect(container.querySelector('.resource-inventory-error')).toBeNull();
     expect(container.textContent).not.toContain('returned no data');
-    expect(container.querySelector('.metrics-warning-banner')?.textContent).toContain(
-      'Awaiting metrics data...'
-    );
   });
 
-  it('prefers trimmed metrics error messages over stale warnings', async () => {
+  it('keeps metrics errors out of the Pods table surface', async () => {
     await renderPods({
       metrics: {
         stale: false,
@@ -885,9 +881,7 @@ describe('NsViewPods', () => {
       },
     });
 
-    expect(container.querySelector('.metrics-warning-banner')?.textContent).toContain(
-      'Metrics API not found'
-    );
+    expect(container.querySelector('.metrics-warning-banner')).toBeNull();
   });
 
   it('falls back to cluster metrics when pod metrics are unavailable', async () => {
@@ -910,9 +904,15 @@ describe('NsViewPods', () => {
       metrics: null,
     });
 
-    expect(container.querySelector('.metrics-warning-banner')?.textContent).toContain(
-      'Metrics API not found'
+    const cpuColumn = requireValue(
+      gridTablePropsRef.current.columns.find((col) => col.key === 'cpu'),
+      'expected the pod CPU column'
     );
+    const cpuElement = requireReactElement<{ metricsError?: string }>(
+      cpuColumn.render(gridTablePropsRef.current.data[0]),
+      'expected the pod CPU cell element'
+    );
+    expect(cpuElement.props.metricsError).toBe('metrics api unavailable');
   });
 
   it('toggles namespace styling when the column is shown', async () => {

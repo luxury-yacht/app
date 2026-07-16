@@ -24,7 +24,6 @@ const {
   useTableSortMock,
   requestRefreshDomainStateMock,
   useGridTablePersistenceMock,
-  clusterMetricsRef,
   queryNamespacesPermissionsMock,
   POD_PERMISSIONS_SENTINEL,
 } = vi.hoisted(() => ({
@@ -35,7 +34,6 @@ const {
   useTableSortMock: vi.fn(),
   requestRefreshDomainStateMock: vi.fn(),
   useGridTablePersistenceMock: vi.fn(),
-  clusterMetricsRef: { current: null as unknown },
   queryNamespacesPermissionsMock: vi.fn(),
   POD_PERMISSIONS_SENTINEL: { feature: 'namespace-pods', specs: [] },
 }));
@@ -156,10 +154,6 @@ vi.mock('@/core/refresh', () => ({
   refreshManager: { triggerManualRefresh: vi.fn() },
 }));
 
-vi.mock('@/core/refresh/hooks/useMetricsAvailability', () => ({
-  useClusterMetricsAvailability: () => clusterMetricsRef.current,
-}));
-
 vi.mock('@wailsjs/go/backend/App', () => ({
   RunObjectAction: vi.fn(),
   FindCatalogObjectByUID: vi.fn(),
@@ -262,7 +256,6 @@ describe('PodsTab (query-backed)', () => {
     root = ReactDOM.createRoot(container);
     gridTablePropsRef.current = null;
     objectPanelRef.current = DEPLOYMENT_OBJECT_DATA;
-    clusterMetricsRef.current = null;
     mockOpenWithObject.mockReset();
     navigateToViewMock.mockReset();
     requestRefreshDomainStateMock.mockReset();
@@ -537,9 +530,7 @@ describe('PodsTab (query-backed)', () => {
     );
   });
 
-  it('renders the metrics banner from the pods query payload (the panel cluster)', async () => {
-    // The rows query is scoped to the panel object's cluster and its payload
-    // carries that cluster's metrics meta — the banner must come from there.
+  it('keeps metrics availability out of the object-panel Pods table surface', async () => {
     requestRefreshDomainStateMock.mockResolvedValue({
       status: 'executed',
       data: {
@@ -554,42 +545,6 @@ describe('PodsTab (query-backed)', () => {
             collectedAt: 1700000000,
             successCount: 0,
             failureCount: 1,
-          },
-        },
-      },
-    });
-
-    await renderPods();
-
-    expect(container.querySelector('.metrics-warning-banner')?.textContent).toContain(
-      'Metrics API not found'
-    );
-  });
-
-  it('ignores the globally selected cluster metrics state (wrong cluster)', async () => {
-    // The globally selected cluster is failing, but the panel object's cluster
-    // (the query payload) is healthy — no banner may show.
-    clusterMetricsRef.current = {
-      stale: true,
-      lastError: 'metrics api unavailable',
-      collectedAt: 1700000000,
-      successCount: 0,
-      failureCount: 5,
-    };
-    requestRefreshDomainStateMock.mockResolvedValue({
-      status: 'executed',
-      data: {
-        status: 'ready',
-        data: {
-          rows: [createPod()],
-          total: 1,
-          totalIsExact: true,
-          metrics: {
-            stale: false,
-            lastError: '',
-            collectedAt: 1700000000,
-            successCount: 5,
-            failureCount: 0,
           },
         },
       },

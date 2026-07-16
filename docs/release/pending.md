@@ -28,6 +28,8 @@
   object-panel, parsed-log, and diagnostics tables.
 - Displayed zero restart counts as the dimmed no-value hyphen in Nodes,
   Workloads, and Pods tables while preserving numeric restart sorting.
+- Removed redundant metrics-availability banners from Workloads and Pods
+  tables; the app-level metrics status remains the availability indicator.
 - Made every multi-select Kinds filter searchable and gave each one explicit
   Select all and Select none controls.
 - Removed the visible Workloads/Pods divider band and moved the expand/collapse
