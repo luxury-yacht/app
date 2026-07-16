@@ -19,7 +19,9 @@ const {
   kubeconfigStateRef,
   setSelectedNamespaceMock,
   setActiveNamespaceTabMock,
+  setActiveClusterViewMock,
   setSidebarSelectionMock,
+  navigateToClusterViewMock,
   navigateToNamespaceMock,
   emitPodsUnhealthySignalMock,
   getAppInfoMock,
@@ -55,7 +57,9 @@ const {
     },
     setSelectedNamespaceMock: vi.fn(),
     setActiveNamespaceTabMock: vi.fn(),
+    setActiveClusterViewMock: vi.fn(),
     setSidebarSelectionMock: vi.fn(),
+    navigateToClusterViewMock: vi.fn(),
     navigateToNamespaceMock: vi.fn(),
     emitPodsUnhealthySignalMock: vi.fn(),
     getAppInfoMock: vi.fn(),
@@ -158,7 +162,7 @@ vi.mock('@/core/contexts/ViewStateContext', () => ({
     setViewType: vi.fn(),
     setPreviousView: vi.fn(),
     setActiveNamespaceTab: setActiveNamespaceTabMock,
-    setActiveClusterView: vi.fn(),
+    setActiveClusterView: setActiveClusterViewMock,
     setIsSettingsOpen: vi.fn(),
     setIsAboutOpen: vi.fn(),
     toggleSidebar: vi.fn(),
@@ -170,7 +174,7 @@ vi.mock('@/core/contexts/ViewStateContext', () => ({
     onRowClick: vi.fn(),
     onCloseObjectPanel: vi.fn(),
     onNavigate: vi.fn(),
-    navigateToClusterView: vi.fn(),
+    navigateToClusterView: navigateToClusterViewMock,
     navigateToNamespace: navigateToNamespaceMock,
     onNamespaceSelect: vi.fn(),
     onClusterObjectsClick: vi.fn(),
@@ -782,6 +786,44 @@ describe('ClusterOverview', () => {
     });
     expect(navigateToNamespaceMock).toHaveBeenCalled();
     expect(emitPodsUnhealthySignalMock).not.toHaveBeenCalled();
+  });
+
+  it('navigates from non-ready and cordoned node signals to Cluster Nodes', async () => {
+    mockLifecycleState = 'loading';
+    domainStateRef.current = createDomainState('ready', {
+      overview: {
+        ...EMPTY_OVERVIEW_DATA,
+        totalNodes: 5,
+        readyNodes: 3,
+        notReadyNodes: 2,
+        cordonedNodes: 1,
+      },
+    });
+
+    const { container, cleanup } = renderClusterOverview();
+    cleanupRoot = cleanup;
+    await flushEffects();
+
+    const readyItem = container.querySelector('[data-testid="cluster-node-health-ready"]');
+    const notReadyItem = container.querySelector('[data-testid="cluster-node-health-notReady"]');
+    const cordonedItem = container.querySelector('[data-testid="cluster-node-health-cordoned"]');
+    expect(readyItem?.tagName).toBe('DIV');
+    expect(notReadyItem?.tagName).toBe('BUTTON');
+    expect(cordonedItem?.tagName).toBe('BUTTON');
+
+    act(() => {
+      notReadyItem?.dispatchEvent(new MouseEvent('click', { bubbles: true }));
+    });
+
+    expect(setActiveClusterViewMock).toHaveBeenCalledWith('nodes');
+    expect(navigateToClusterViewMock).toHaveBeenCalledWith('cluster');
+    expect(setSidebarSelectionMock).toHaveBeenCalledWith({ type: 'cluster', value: 'cluster' });
+
+    act(() => {
+      cordonedItem?.dispatchEvent(new MouseEvent('click', { bubbles: true }));
+    });
+    expect(setActiveClusterViewMock).toHaveBeenCalledTimes(2);
+    expect(setActiveClusterViewMock).toHaveBeenLastCalledWith('nodes');
   });
 
   it('opens the recent event target via the UID-aware resolver and selects the events tab', async () => {

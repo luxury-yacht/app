@@ -76,10 +76,11 @@ show ready, loading, reconnecting, disconnected, and authentication-required
 rows together, and it does not start overview refresh for a cluster whose
 lifecycle cannot activate that domain.
 
-Navigation from a Clusters row prepares the destination cluster's navigation and
-sidebar state before activating its kubeconfig selection. Row activation opens
-that cluster's Overview. The Needs Attention cell is a non-interactive summary
-of not-ready nodes and failing pods.
+The Cluster link in a Clusters row prepares the destination cluster's navigation
+and sidebar state before activating its kubeconfig selection and opening that
+cluster's Overview. The rest of the row is non-interactive. The Needs Attention
+cell summarizes not-ready nodes and failing pods without becoming a separate
+navigation target.
 
 The user-facing scope and label are **Global → Clusters**. The internal `fleet`
 Global route and `cluster-fleet` table-persistence id remain compatibility

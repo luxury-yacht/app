@@ -25,6 +25,30 @@ one retained workspace per open cluster.
 - Foreground-cluster blocking overlays must not cover Global views. Each Global
   row owns and presents its originating cluster's lifecycle/auth state.
 
+## Cluster Attention Routing
+
+Cluster Overview is the cluster-level landing surface for health, capacity, and
+attention signals. Do not add a separate Needs Attention route. Global Clusters
+summarizes not-ready nodes and failing pods, and its Cluster link opens the
+originating cluster's Overview.
+
+Overview keeps diagnosis in the owning resource views:
+
+- non-ready and cordoned node signals open Cluster Nodes;
+- pod health and restart signals open the All Namespaces Workloads/Pods surface
+  with the corresponding pod predicate;
+- an individual warning event opens its fully resolved object reference on the
+  object panel Events tab; and
+- namespace-level attention, warning, utilization, and quota comparisons remain
+  in Cluster Namespaces.
+
+Overview warning events can involve both cluster-scoped and namespaced objects.
+Do not link the whole warning section to Cluster Events: that view intentionally
+contains only events involving cluster-scoped objects.
+
+Permission restrictions and unavailable inputs are data-availability states,
+not resource-health or access-comparison columns.
+
 ## Ownership
 
 - Route vocabulary: `frontend/src/core/navigation/viewRegistry.ts`,

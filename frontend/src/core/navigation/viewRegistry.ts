@@ -24,8 +24,8 @@ export const GLOBAL_VIEW_DESCRIPTORS = [
     scope: 'global',
     id: 'fleet',
     label: 'Clusters',
-    description: 'Compare health, capacity, and access across open clusters',
-    keywords: ['fleet', 'clusters', 'global', 'compare', 'health', 'capacity', 'access'],
+    description: 'Compare health, capacity, and metrics across open clusters',
+    keywords: ['fleet', 'clusters', 'global', 'compare', 'health', 'capacity', 'metrics'],
     refresher: null,
   },
   {

@@ -1,12 +1,9 @@
 ### Added
 
-- Added a Global Clusters view that compares health, capacity, metrics, and
-  access across open clusters and links each cluster name to that cluster's
-  Overview.
+- Added a Global Clusters view that compares health, capacity, and metrics across
+  open clusters and links each cluster name to that cluster's Overview.
 - Added backend-query Owner and Node filters to namespace and All Namespaces
   Pods tables, with options covering the full selected scope.
-- Added backend-query Status filters to Workloads and Cluster Nodes, with stable
-  options covering the full selected namespace or cluster scope.
 - Added backend-query Type, Reason, and Source filters to cluster, namespace,
   and All Namespaces Events, with searchable high-cardinality options.
 
@@ -14,6 +11,9 @@
 
 - Made Global a first-class workspace with its own tab and retained navigation,
   independent of the foreground cluster tab.
+- Made Cluster Overview the attention landing surface: node problem signals link
+  to Cluster Nodes, pod problem signals link to the relevant Workloads/Pods
+  results, and warning events link to the involved object.
 - Combined namespace Workloads and Pods into independently filterable,
   sortable, paginated tables with a collapsible, resizable split. Selecting a
   workload now populates the standard Namespace and Owner filters, resolving

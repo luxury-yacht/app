@@ -62,6 +62,7 @@ import {
   clusterWorkloadUsageValue,
 } from '@/core/resource-metrics';
 import { useClusterHealthListener } from '@/hooks/useWailsRuntimeEvents';
+import type { ClusterViewType } from '@/types/navigation/views';
 import ClusterOverviewRestrictionNotice, {
   type OverviewRestriction,
 } from './ClusterOverviewRestrictionNotice';
@@ -211,7 +212,13 @@ const ClusterOverview: React.FC<ClusterOverviewProps> = ({ clusterContext }) => 
     selectedClusterId,
   ]);
   const metricsBanner = useMetricsBannerInfo(metricsInfo);
-  const { setActiveNamespaceTab, setSidebarSelection, navigateToNamespace } = useViewState();
+  const {
+    setActiveNamespaceTab,
+    setActiveClusterView,
+    setSidebarSelection,
+    navigateToClusterView,
+    navigateToNamespace,
+  } = useViewState();
 
   const selectedOverview = useMemo(() => {
     const overviewByCluster = overviewDomain.data?.overviewByCluster;
@@ -386,6 +393,15 @@ const ClusterOverview: React.FC<ClusterOverviewProps> = ({ clusterContext }) => 
       setSelectedNamespace,
       setSidebarSelection,
     ]
+  );
+
+  const handleClusterViewNavigate = useCallback(
+    (view: ClusterViewType) => {
+      setActiveClusterView(view);
+      navigateToClusterView('cluster');
+      setSidebarSelection({ type: 'cluster', value: 'cluster' });
+    },
+    [navigateToClusterView, setActiveClusterView, setSidebarSelection]
   );
 
   const podStatusItems = [
@@ -813,23 +829,41 @@ const ClusterOverview: React.FC<ClusterOverviewProps> = ({ clusterContext }) => 
     label: string;
     value: number;
     variant: string;
-  }) => (
-    <div
-      key={item.key}
-      className="metric-legend__item"
-      aria-disabled={item.value === 0}
-      data-testid={`cluster-node-health-${item.key}`}
-    >
-      <span
-        className={`metric-legend__dot metric-legend__dot--${item.variant}`}
-        aria-hidden="true"
-      />
-      <span className="metric-legend__count">
-        {showSkeleton || nodesUnavailable ? DASH : item.value}
-      </span>
-      <span className="metric-legend__label">{item.label}</span>
-    </div>
-  );
+  }) => {
+    const clickable = item.key !== 'ready' && item.value > 0 && !showSkeleton && !nodesUnavailable;
+    const content = (
+      <>
+        <span
+          className={`metric-legend__dot metric-legend__dot--${item.variant}`}
+          aria-hidden="true"
+        />
+        <span className="metric-legend__count">
+          {showSkeleton || nodesUnavailable ? DASH : item.value}
+        </span>
+        <span className="metric-legend__label">{item.label}</span>
+      </>
+    );
+    return clickable ? (
+      <button
+        type="button"
+        key={item.key}
+        className="metric-legend__item metric-legend__item--clickable cluster-overview__node-link"
+        onClick={() => handleClusterViewNavigate('nodes')}
+        data-testid={`cluster-node-health-${item.key}`}
+      >
+        {content}
+      </button>
+    ) : (
+      <div
+        key={item.key}
+        className="metric-legend__item"
+        aria-disabled={item.value === 0}
+        data-testid={`cluster-node-health-${item.key}`}
+      >
+        {content}
+      </div>
+    );
+  };
 
   // Before the initial snapshot arrives we don't have real values yet —
   // render a dash placeholder instead of zeros so the UI reads as "loading"

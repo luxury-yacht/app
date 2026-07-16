@@ -287,6 +287,23 @@
   color: var(--color-text-tertiary);
 }
 
+.cluster-overview__node-link {
+  border: 0;
+  padding: 0;
+  background: transparent;
+  color: var(--color-link);
+  cursor: pointer;
+}
+
+.cluster-overview__node-link:hover {
+  text-decoration: underline;
+}
+
+.cluster-overview__node-link:focus-visible {
+  outline: 2px solid var(--color-accent);
+  outline-offset: 2px;
+}
+
 .recent-events__empty {
   color: var(--color-text-secondary);
   font-size: 0.85rem;

@@ -24,6 +24,10 @@ describe('view registry', () => {
       { id: 'global-namespaces', label: 'Namespaces', scope: 'global' },
     ]);
     expect(GLOBAL_VIEW_DESCRIPTORS.some((descriptor) => 'intent' in descriptor)).toBe(false);
+    expect(GLOBAL_VIEW_DESCRIPTORS[0].description).toBe(
+      'Compare health, capacity, and metrics across open clusters'
+    );
+    expect(GLOBAL_VIEW_DESCRIPTORS[0].keywords).not.toContain('access');
   });
 
   it('defines the canonical ordered cluster navigation vocabulary', () => {
