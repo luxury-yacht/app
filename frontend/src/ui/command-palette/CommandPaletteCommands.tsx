@@ -33,6 +33,7 @@ import {
   RefreshIcon,
   ResetFiltersIcon,
   SettingsIcon,
+  WarningIcon,
 } from '@shared/components/icons/SharedIcons';
 import { clearAllGridTableState } from '@shared/components/tables/persistence/gridTablePersistenceReset';
 import { navigateToFavorite } from '@ui/favorites/navigateToFavorite';
@@ -454,7 +455,12 @@ export function useCommandPaletteCommands() {
       ...CLUSTER_VIEW_DESCRIPTORS.map((view) => ({
         id: `cluster-${view.id}`,
         label: `Cluster - ${view.label}`,
-        icon: <CategoryIcon width={16} height={16} />,
+        icon:
+          view.id === 'attention' ? (
+            <WarningIcon width={16} height={16} />
+          ) : (
+            <CategoryIcon width={16} height={16} />
+          ),
         description: view.description,
         category: 'Navigation',
         action: () => openClusterTab(view.id),

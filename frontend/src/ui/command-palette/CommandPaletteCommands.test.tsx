@@ -5,9 +5,10 @@
  * Covers key behaviors and edge cases for CommandPaletteCommands.
  */
 
+import { WarningIcon } from '@shared/components/icons/SharedIcons';
 import { DockablePanelProvider } from '@ui/dockable/DockablePanelProvider';
 import type { types } from '@wailsjs/go/models';
-import { act } from 'react';
+import { act, isValidElement } from 'react';
 import * as ReactDOM from 'react-dom/client';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import {
@@ -257,6 +258,19 @@ describe('CommandPaletteCommands', () => {
       (command) => command.id === 'global-global-namespaces'
     );
     expect(globalNamespaces?.label).toBe('Global - Namespaces');
+
+    unmount();
+  });
+
+  it('uses the Attention warning icon for the Cluster Attention command', () => {
+    const { getCommands, unmount } = renderHook();
+    const command = getCommands().find((entry) => entry.id === 'cluster-attention');
+
+    expect(isValidElement(command?.icon)).toBe(true);
+    if (!isValidElement(command?.icon)) {
+      throw new Error('expected Cluster Attention command icon');
+    }
+    expect(command.icon.type).toBe(WarningIcon);
 
     unmount();
   });
