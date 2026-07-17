@@ -190,8 +190,8 @@ describe('ClusterViewAttention', () => {
       | undefined;
     expect(columns?.map((column) => column.header)).toEqual([
       'Kind',
-      'Name',
       'Namespace',
+      'Name',
       'Severity',
       'Status',
       'Finding',

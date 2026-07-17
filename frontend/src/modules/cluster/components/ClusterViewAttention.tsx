@@ -67,12 +67,12 @@ export default function ClusterViewAttention() {
         onClick: openObject,
         onAltClick: navigateObject,
       }),
+      cf.createTextColumn('namespace', 'Namespace', (row) => row.namespace || '-'),
       cf.createTextColumn('name', 'Name', (row) => row.name, {
         onClick: openObject,
         onAltClick: navigateObject,
         getClassName: () => 'object-panel-link',
       }),
-      cf.createTextColumn('namespace', 'Namespace', (row) => row.namespace || '-'),
       {
         key: 'severity',
         header: 'Severity',

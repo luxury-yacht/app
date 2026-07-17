@@ -203,6 +203,7 @@ func clusterAttentionQueryCapabilities() ResourceQueryCapabilities {
 type attentionSourceRecord struct {
 	Ref                resourcemodel.ResourceRef
 	Source             attentionSource
+	objectNamespace    string
 	Status             string
 	StatusPresentation string
 	StatusReason       string
@@ -718,7 +719,6 @@ func (i *clusterAttentionIndex) applyFindingLocked(key string, finding *Attentio
 	row.ClusterMeta = i.meta
 	row.Kind = row.Ref.Kind
 	row.Name = row.Ref.Name
-	row.Namespace = row.Ref.Namespace
 	if existed && reflect.DeepEqual(previous, row) {
 		return
 	}
@@ -1206,11 +1206,12 @@ func attentionRecordFromEvent(meta ClusterMeta, event *corev1.Event) (attentionS
 			Name:      event.Name,
 			UID:       string(event.UID),
 		},
-		Source:       attentionSourceEvent,
-		Status:       event.Type,
-		StatusReason: event.Reason,
-		Message:      event.Message,
-		AgeTimestamp: timestamp.UnixMilli(),
+		Source:          attentionSourceEvent,
+		objectNamespace: event.InvolvedObject.Namespace,
+		Status:          event.Type,
+		StatusReason:    event.Reason,
+		Message:         event.Message,
+		AgeTimestamp:    timestamp.UnixMilli(),
 	}
 	return record, completeAttentionRef(record.Ref)
 }
@@ -1329,12 +1330,20 @@ func findingEvaluation(record attentionSourceRecord, causes []AttentionCause) at
 	}
 	return attentionEvaluation{Finding: &AttentionFinding{
 		Ref:          record.Ref,
+		Namespace:    attentionFindingNamespace(record),
 		Severity:     attentionCauseSeverity(causes),
 		Status:       firstNonEmpty(record.Status, causes[0].Message),
 		Causes:       causes,
 		Age:          formatAge(time.UnixMilli(record.AgeTimestamp)),
 		AgeTimestamp: record.AgeTimestamp,
 	}}
+}
+
+func attentionFindingNamespace(record attentionSourceRecord) string {
+	if record.Source == attentionSourceEvent {
+		return strings.TrimSpace(record.objectNamespace)
+	}
+	return strings.TrimSpace(record.Ref.Namespace)
 }
 
 func classificationCause(rule attentionClassificationRule, record attentionSourceRecord) AttentionCause {

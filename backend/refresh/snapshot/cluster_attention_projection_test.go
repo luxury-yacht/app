@@ -93,4 +93,38 @@ func TestAttentionRecordFromEventUsesEventIdentityNotInvolvedObjectIdentity(t *t
 	require.Equal(t, "checkout.abc", record.Ref.Name)
 	require.Equal(t, "event-uid", record.Ref.UID)
 	require.Equal(t, observedAt.UnixMilli(), record.AgeTimestamp)
+
+	index := newClusterAttentionIndex(ClusterMeta{ClusterID: "cluster-a", ClusterName: "A"}, func() time.Time {
+		return observedAt.Add(time.Hour)
+	})
+	t.Cleanup(index.Stop)
+	index.UpsertSource("events", record)
+	rows := index.Snapshot()
+	require.Len(t, rows, 1)
+	require.Equal(t, "payments", rows[0].Namespace)
+}
+
+func TestAttentionFindingForClusterScopedEventHasNoDisplayNamespace(t *testing.T) {
+	observedAt := time.Date(2026, time.July, 16, 11, 0, 0, 0, time.UTC)
+	event := &corev1.Event{
+		ObjectMeta:     metav1.ObjectMeta{Name: "worker-a.not-ready", Namespace: "default", UID: "event-uid"},
+		InvolvedObject: corev1.ObjectReference{APIVersion: "v1", Kind: "Node", Name: "worker-a"},
+		Type:           "Warning", Reason: "NodeNotReady", Message: "Node is not ready",
+		LastTimestamp: metav1.NewTime(observedAt),
+	}
+
+	record, ok := attentionRecordFromEvent(ClusterMeta{ClusterID: "cluster-a", ClusterName: "A"}, event)
+	require.True(t, ok)
+	require.Equal(t, "default", record.Ref.Namespace, "event identity must retain the Event object's namespace")
+
+	index := newClusterAttentionIndex(ClusterMeta{ClusterID: "cluster-a", ClusterName: "A"}, func() time.Time {
+		return observedAt.Add(time.Hour)
+	})
+	t.Cleanup(index.Stop)
+	index.UpsertSource("events", record)
+
+	rows := index.Snapshot()
+	require.Len(t, rows, 1)
+	require.Equal(t, "default", rows[0].Ref.Namespace, "event identity must retain the Event object's namespace")
+	require.Empty(t, rows[0].Namespace)
 }
