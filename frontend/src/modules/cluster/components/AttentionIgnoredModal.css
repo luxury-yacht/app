@@ -38,6 +38,10 @@
   border-bottom: 1px solid var(--color-border);
 }
 
+.attention-ignored-body li:last-child {
+  border-bottom: 0;
+}
+
 .attention-ignored-body li span {
   min-width: 0;
   overflow: hidden;

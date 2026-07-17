@@ -121,7 +121,7 @@ export default function AttentionIgnoredModal({
                   </span>
                   <button
                     type="button"
-                    className="button"
+                    className="button cancel"
                     disabled={busyKey !== null}
                     onClick={() => void restoreObjectFinding(ignore)}
                   >
@@ -141,7 +141,7 @@ export default function AttentionIgnoredModal({
                   <span>{labels.get(findingType) ?? findingType}</span>
                   <button
                     type="button"
-                    className="button"
+                    className="button cancel"
                     disabled={busyKey !== null}
                     onClick={() => void restoreType('cluster', findingType, onRestoreClusterType)}
                   >
@@ -161,7 +161,7 @@ export default function AttentionIgnoredModal({
                   <span>{labels.get(findingType) ?? findingType}</span>
                   <button
                     type="button"
-                    className="button"
+                    className="button cancel"
                     disabled={busyKey !== null}
                     onClick={() => void restoreType('global', findingType, onRestoreGlobalType)}
                   >
@@ -174,7 +174,7 @@ export default function AttentionIgnoredModal({
         )}
       </div>
       <div className="attention-ignored-footer">
-        <button type="button" className="button" onClick={onClose} data-modal-initial-focus>
+        <button type="button" className="button generic" onClick={onClose} data-modal-initial-focus>
           Close
         </button>
       </div>
