@@ -44,6 +44,25 @@ and event expiry. The distinct `attention` stream clock is a change signal: the
 frontend refetches the current query page, with polling only as the stream-down
 fallback.
 
+Attention severity is a closed `info`, `warning`, or `error` vocabulary. The
+ordered status rules, restart/replica signal policies, severity precedence, and
+sort order live together in
+`backend/refresh/snapshot/cluster_attention_policy.go`; add or revise
+classifications there rather than branching in individual evaluators.
+
+- `info`: intentional inactive states that are operationally useful to see but
+  do not require remediation. Deployment and StatefulSet `Scaled to 0`, and
+  CronJob `Idle`, are info findings.
+- `warning`: restarts, insufficient ready replicas, warning Events, and
+  non-ready Pod, workload, or Node states that are not errors.
+- `error`: Pod, workload, or Node states whose canonical status presentation is
+  `error`.
+
+When more than one signal applies to an object, the finding uses the highest
+severity while retaining all reasons. Intentional inactive info findings are
+immediate. Restarts and error states are immediate; transient Pod/workload
+warnings and replica mismatches retain the Attention grace period.
+
 Global Clusters summarizes not-ready nodes and failing pods, and its Cluster
 link opens the originating cluster's Overview. Namespace-level warning,
 utilization, and quota comparisons remain in Cluster Namespaces.

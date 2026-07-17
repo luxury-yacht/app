@@ -50,7 +50,7 @@ export default function ClusterViewAttention() {
       }),
       cf.createTextColumn('namespace', 'Namespace', (row) => row.namespace || '-'),
       cf.createTextColumn('severity', 'Severity', (row) => row.severity, {
-        getClassName: (row) => `status-text ${row.severity === 'error' ? 'error' : 'warning'}`,
+        getClassName: (row) => `status-text ${row.severity}`,
       }),
       cf.createTextColumn('status', 'Status', (row) => row.status || '-'),
       cf.createTextColumn('reason', 'Finding', (row) => row.reasons?.join(' · ') || '-'),

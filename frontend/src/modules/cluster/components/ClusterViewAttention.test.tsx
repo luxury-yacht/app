@@ -138,4 +138,23 @@ describe('ClusterViewAttention', () => {
       uid: undefined,
     });
   });
+
+  it('renders info findings with the info status style', async () => {
+    await act(async () => {
+      root.render(<ClusterViewAttention />);
+      await Promise.resolve();
+    });
+
+    const columns = queryParamsRef.current?.columns as
+      | GridColumnDefinition<ClusterAttentionFinding>[]
+      | undefined;
+    const severityCell = columns
+      ?.find((column) => column.key === 'severity')
+      ?.render({ ...finding, severity: 'info' });
+
+    expect(severityCell).toBeTruthy();
+    expect((severityCell as React.ReactElement<{ className?: string }>).props.className).toBe(
+      'status-text info'
+    );
+  });
 });

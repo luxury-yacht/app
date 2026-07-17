@@ -50,7 +50,7 @@ type AttentionFinding struct {
 	Kind         string                    `json:"kind"`
 	Name         string                    `json:"name"`
 	Namespace    string                    `json:"namespace,omitempty"`
-	Severity     string                    `json:"severity"`
+	Severity     AttentionSeverity         `json:"severity"`
 	Status       string                    `json:"status"`
 	Reasons      []string                  `json:"reasons"`
 	Age          string                    `json:"age"`
@@ -562,11 +562,11 @@ func attentionTableQueryAdapter() typedTableQueryAdapter[AttentionFinding] {
 		Facets: []typedTableQueryFacet[AttentionFinding]{
 			{
 				Descriptor: ResourceQueryFacetDescriptor{Key: "severities", Label: "Severity", Placeholder: "All severities", BulkActions: true},
-				Value:      func(row AttentionFinding) string { return row.Severity },
+				Value:      func(row AttentionFinding) string { return string(row.Severity) },
 			},
 		},
 		SearchText: func(row AttentionFinding) []string {
-			return []string{row.Kind, row.Name, row.Namespace, row.Severity, row.Status, strings.Join(row.Reasons, " ")}
+			return []string{row.Kind, row.Name, row.Namespace, string(row.Severity), row.Status, strings.Join(row.Reasons, " ")}
 		},
 		Predicate: func(AttentionFinding, string, string) bool { return true },
 		SortValue: func(row AttentionFinding, field string) string {
@@ -576,7 +576,7 @@ func attentionTableQueryAdapter() typedTableQueryAdapter[AttentionFinding] {
 			case "namespace":
 				return row.Namespace
 			case "severity":
-				return row.Severity
+				return string(row.Severity)
 			case "status":
 				return row.Status
 			case "reason":
@@ -588,6 +588,9 @@ func attentionTableQueryAdapter() typedTableQueryAdapter[AttentionFinding] {
 			}
 		},
 		NumericSort: func(row AttentionFinding, field string) (float64, bool) {
+			if strings.EqualFold(field, "severity") {
+				return attentionSeveritySortRank(row.Severity)
+			}
 			if strings.EqualFold(field, "age") || strings.EqualFold(field, "ageTimestamp") {
 				return numericAgeSortValue(row.AgeTimestamp)
 			}
@@ -874,10 +877,9 @@ func attentionRecordFromEvent(meta ClusterMeta, event *corev1.Event) (attentionS
 }
 
 func evaluatePodAttention(record attentionSourceRecord, now time.Time) attentionEvaluation {
-	presentation := strings.ToLower(strings.TrimSpace(record.StatusPresentation))
-	statusNeedsAttention := presentation != "" && presentation != "ready" && presentation != "success"
-	if statusNeedsAttention && presentation != "error" {
-		if deadline, deferred := warningGraceDeadline(record.AgeTimestamp, now); deferred && record.Restarts == 0 {
+	classification, statusNeedsAttention := classifyAttentionSource(record)
+	if statusNeedsAttention && classification.Grace > 0 && record.Restarts == 0 {
+		if deadline, deferred := warningGraceDeadline(record.AgeTimestamp, now); deferred {
 			return attentionEvaluation{NextEvaluation: deadline}
 		}
 	}
@@ -887,34 +889,53 @@ func evaluatePodAttention(record attentionSourceRecord, now time.Time) attention
 
 	reasons := make([]string, 0, 2)
 	if statusNeedsAttention {
-		reasons = appendReason(reasons, firstNonEmpty(record.StatusReason, record.Status))
+		reasons = appendReason(reasons, attentionClassificationReason(classification, record))
+	}
+	severity := AttentionSeverity("")
+	if statusNeedsAttention {
+		severity = classification.Severity
 	}
 	if record.Restarts > 0 {
+		restartPolicy := attentionPolicyForSignal(attentionSignalRestarts)
 		reasons = appendReason(reasons, fmt.Sprintf("%d restarts", record.Restarts))
-	}
-	severity := "warning"
-	if presentation == "error" {
-		severity = "error"
+		severity = moreSevereAttentionLevel(severity, restartPolicy.Severity)
 	}
 	return findingEvaluation(record, severity, reasons)
 }
 
 func evaluateWorkloadAttention(record attentionSourceRecord, now time.Time) attentionEvaluation {
-	presentation := strings.ToLower(strings.TrimSpace(record.StatusPresentation))
-	statusNeedsAttention := presentation != "" && presentation != "ready" && presentation != "success"
+	classification, statusNeedsAttention := classifyAttentionSource(record)
 	replicaMismatch := readyReplicaMismatch(record.Ready)
 	if !statusNeedsAttention && !replicaMismatch && record.Restarts == 0 {
 		return attentionEvaluation{}
 	}
-	if presentation != "error" {
-		if deadline, deferred := warningGraceDeadline(record.AgeTimestamp, now); deferred && record.Restarts == 0 {
+	severity := AttentionSeverity("")
+	grace := time.Duration(0)
+	if statusNeedsAttention {
+		severity = classification.Severity
+		grace = classification.Grace
+	}
+	if replicaMismatch {
+		replicaPolicy := attentionPolicyForSignal(attentionSignalReplicaMismatch)
+		severity = moreSevereAttentionLevel(severity, replicaPolicy.Severity)
+		if replicaPolicy.Grace > grace {
+			grace = replicaPolicy.Grace
+		}
+	}
+	if record.Restarts > 0 {
+		restartPolicy := attentionPolicyForSignal(attentionSignalRestarts)
+		severity = moreSevereAttentionLevel(severity, restartPolicy.Severity)
+		grace = restartPolicy.Grace
+	}
+	if grace > 0 && record.Restarts == 0 {
+		if deadline, deferred := warningGraceDeadline(record.AgeTimestamp, now); deferred {
 			return attentionEvaluation{NextEvaluation: deadline}
 		}
 	}
 
 	reasons := make([]string, 0, 3)
 	if statusNeedsAttention {
-		reasons = appendReason(reasons, firstNonEmpty(record.StatusReason, record.Status))
+		reasons = appendReason(reasons, attentionClassificationReason(classification, record))
 	}
 	if replicaMismatch {
 		reasons = appendReason(reasons, strings.TrimSpace(record.Ready)+" ready")
@@ -922,27 +943,20 @@ func evaluateWorkloadAttention(record attentionSourceRecord, now time.Time) atte
 	if record.Restarts > 0 {
 		reasons = appendReason(reasons, fmt.Sprintf("%d restarts", record.Restarts))
 	}
-	severity := "warning"
-	if presentation == "error" {
-		severity = "error"
-	}
 	return findingEvaluation(record, severity, reasons)
 }
 
 func evaluateNodeAttention(record attentionSourceRecord) attentionEvaluation {
-	presentation := strings.ToLower(strings.TrimSpace(record.StatusPresentation))
-	if presentation == "" || presentation == "ready" || presentation == "success" {
+	classification, needsAttention := classifyAttentionSource(record)
+	if !needsAttention {
 		return attentionEvaluation{}
 	}
-	severity := "warning"
-	if presentation == "error" {
-		severity = "error"
-	}
-	return findingEvaluation(record, severity, []string{firstNonEmpty(record.StatusReason, record.Status)})
+	return findingEvaluation(record, classification.Severity, []string{attentionClassificationReason(classification, record)})
 }
 
 func evaluateEventAttention(record attentionSourceRecord, now time.Time) attentionEvaluation {
-	if !strings.EqualFold(strings.TrimSpace(record.Status), "warning") || record.AgeTimestamp <= 0 {
+	classification, needsAttention := classifyAttentionSource(record)
+	if !needsAttention || record.AgeTimestamp <= 0 {
 		return attentionEvaluation{}
 	}
 	observedAt := time.UnixMilli(record.AgeTimestamp).UTC()
@@ -952,7 +966,7 @@ func evaluateEventAttention(record attentionSourceRecord, now time.Time) attenti
 	}
 	reasons := appendReason(nil, record.StatusReason)
 	reasons = appendReason(reasons, record.Message)
-	evaluation := findingEvaluation(record, "warning", reasons)
+	evaluation := findingEvaluation(record, classification.Severity, reasons)
 	evaluation.NextEvaluation = expiresAt
 	return evaluation
 }
@@ -975,7 +989,7 @@ func readyReplicaMismatch(ready string) bool {
 	return availableErr == nil && desiredErr == nil && desired > 0 && available < desired
 }
 
-func findingEvaluation(record attentionSourceRecord, severity string, reasons []string) attentionEvaluation {
+func findingEvaluation(record attentionSourceRecord, severity AttentionSeverity, reasons []string) attentionEvaluation {
 	reasons = compactReasons(reasons)
 	if len(reasons) == 0 {
 		return attentionEvaluation{}

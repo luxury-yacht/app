@@ -9,11 +9,8 @@ import (
 )
 
 func attentionTestRef(kind, namespace, name string) resourcemodel.ResourceRef {
-	group := "apps"
-	resource := "deployments"
-	if kind == "Pod" || kind == "Node" || kind == "Event" {
-		group = ""
-	}
+	group := ""
+	resource := ""
 	switch kind {
 	case "Pod":
 		resource = "pods"
@@ -21,6 +18,16 @@ func attentionTestRef(kind, namespace, name string) resourcemodel.ResourceRef {
 		resource = "nodes"
 	case "Event":
 		resource = "events"
+	case "Deployment":
+		group, resource = "apps", "deployments"
+	case "StatefulSet":
+		group, resource = "apps", "statefulsets"
+	case "DaemonSet":
+		group, resource = "apps", "daemonsets"
+	case "Job":
+		group, resource = "batch", "jobs"
+	case "CronJob":
+		group, resource = "batch", "cronjobs"
 	}
 	return resourcemodel.ResourceRef{
 		ClusterID: "cluster-a",
@@ -31,6 +38,67 @@ func attentionTestRef(kind, namespace, name string) resourcemodel.ResourceRef {
 		Namespace: namespace,
 		Name:      name,
 		UID:       "uid-" + name,
+	}
+}
+
+func TestAttentionPoliciesUseTheClosedSeverityCatalog(t *testing.T) {
+	require.Equal(t, map[AttentionSeverity]attentionSeverityDefinition{
+		AttentionSeverityInfo:    {Priority: 1, SortRank: 2},
+		AttentionSeverityWarning: {Priority: 2, SortRank: 1},
+		AttentionSeverityError:   {Priority: 3, SortRank: 0},
+	}, attentionSeverityDefinitions)
+
+	ruleIDs := make(map[string]bool, len(attentionClassificationRules))
+	for _, rule := range attentionClassificationRules {
+		require.NotEmpty(t, rule.ID)
+		require.False(t, ruleIDs[rule.ID], "duplicate Attention classification rule %q", rule.ID)
+		ruleIDs[rule.ID] = true
+		require.Contains(t, attentionSeverityDefinitions, rule.Severity, "rule %q uses an undeclared severity", rule.ID)
+	}
+	for signal, policy := range attentionSignalPolicies {
+		require.Contains(t, attentionSeverityDefinitions, policy.Severity, "signal %q uses an undeclared severity", signal)
+	}
+}
+
+func TestEvaluateAttentionSourceClassifiesIntentionalInactiveWorkloadsAsInfo(t *testing.T) {
+	now := time.Date(2026, time.July, 16, 12, 0, 0, 0, time.UTC)
+	tests := []struct {
+		name   string
+		record attentionSourceRecord
+	}{
+		{
+			name: "deployment scaled to zero",
+			record: attentionSourceRecord{
+				Ref: attentionTestRef("Deployment", "payments", "api"), Source: attentionSourceWorkload,
+				Status: "Scaled to 0", StatusPresentation: "inactive", StatusReason: "ScaledToZero", Ready: "0/0",
+				AgeTimestamp: now.Add(-time.Minute).UnixMilli(),
+			},
+		},
+		{
+			name: "statefulset scaled to zero",
+			record: attentionSourceRecord{
+				Ref: attentionTestRef("StatefulSet", "payments", "queue"), Source: attentionSourceWorkload,
+				Status: "Scaled to 0", StatusPresentation: "inactive", StatusReason: "ScaledToZero", Ready: "0/0",
+				AgeTimestamp: now.Add(-time.Minute).UnixMilli(),
+			},
+		},
+		{
+			name: "cronjob idle",
+			record: attentionSourceRecord{
+				Ref: attentionTestRef("CronJob", "payments", "backup"), Source: attentionSourceWorkload,
+				Status: "Idle", StatusPresentation: "inactive", Ready: "0",
+				AgeTimestamp: now.Add(-time.Minute).UnixMilli(),
+			},
+		},
+	}
+
+	for _, test := range tests {
+		t.Run(test.name, func(t *testing.T) {
+			evaluation := evaluateAttentionSource(test.record, now)
+			require.NotNil(t, evaluation.Finding)
+			require.Equal(t, AttentionSeverityInfo, evaluation.Finding.Severity)
+			require.True(t, evaluation.NextEvaluation.IsZero())
+		})
 	}
 }
 
@@ -49,7 +117,7 @@ func TestEvaluateAttentionSourceCombinesPodReasonsAndPreservesIdentity(t *testin
 	evaluation := evaluateAttentionSource(record, now)
 	require.NotNil(t, evaluation.Finding)
 	require.Equal(t, record.Ref, evaluation.Finding.Ref)
-	require.Equal(t, "error", evaluation.Finding.Severity)
+	require.Equal(t, AttentionSeverityError, evaluation.Finding.Severity)
 	require.Equal(t, "CrashLoopBackOff", evaluation.Finding.Status)
 	require.Equal(t, []string{"CrashLoopBackOff", "4 restarts"}, evaluation.Finding.Reasons)
 	require.True(t, evaluation.NextEvaluation.IsZero())
@@ -90,7 +158,7 @@ func TestEvaluateAttentionSourceReportsInsufficientWorkloadReplicasAfterGrace(t 
 
 	evaluation := evaluateAttentionSource(record, now)
 	require.NotNil(t, evaluation.Finding)
-	require.Equal(t, "warning", evaluation.Finding.Severity)
+	require.Equal(t, AttentionSeverityWarning, evaluation.Finding.Severity)
 	require.Equal(t, []string{"Updating", "2/3 ready"}, evaluation.Finding.Reasons)
 }
 

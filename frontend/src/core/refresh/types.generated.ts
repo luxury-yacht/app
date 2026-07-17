@@ -40,6 +40,8 @@ export type NamespaceSignalState = 'available' | 'loading' | 'unavailable';
 
 export type NamespaceQuotaPressure = '' | 'warning' | 'critical';
 
+export type AttentionSeverity = 'info' | 'warning' | 'error';
+
 export type ResourceQueryAnchorReason = 'filtered' | 'not-found';
 
 export type ResourceSource = 'kubernetes' | 'synthetic';
@@ -152,7 +154,7 @@ export interface ClusterAttentionFinding {
   kind: string;
   name: string;
   namespace?: string;
-  severity: string;
+  severity: AttentionSeverity;
   status: string;
   reasons: Array<string> | null;
   age: string;
