@@ -9,7 +9,7 @@
   padding: 2px 8px;
   border-radius: var(--border-radius-round);
   /* Matches StatusChip variant="info" for a consistent info-chip outline. */
-  border: 1px solid rgba(59, 130, 246, 0.25);
+  border: 1px solid var(--badge-blue-border);
   background: var(--badge-blue-bg);
   color: var(--badge-blue-text);
   font-family: inherit;
