@@ -95,8 +95,14 @@ export interface AttentionFindingTypeDefinition {
 }
 
 export interface AttentionIgnoreRules {
-  ignoredObjects: Array<ResourceRef> | null;
-  findingTypes: Array<string> | null;
+  objectFindings: Array<AttentionObjectFindingIgnore> | null;
+  clusterFindingTypes: Array<string> | null;
+  globalFindingTypes: Array<string> | null;
+}
+
+export interface AttentionObjectFindingIgnore {
+  ref: ResourceRef;
+  findingType: string;
 }
 
 export interface AttentionSeverityCounts {

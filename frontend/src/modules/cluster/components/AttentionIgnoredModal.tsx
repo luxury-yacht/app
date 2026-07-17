@@ -6,6 +6,7 @@ import { useEffect, useMemo, useRef, useState } from 'react';
 import type {
   AttentionFindingTypeDefinition,
   AttentionIgnoreRules,
+  AttentionObjectFindingIgnore,
   ResourceRef,
 } from '@/core/refresh/types';
 import './AttentionIgnoredModal.css';
@@ -14,8 +15,9 @@ interface AttentionIgnoredModalProps {
   isOpen: boolean;
   rules: AttentionIgnoreRules;
   findingTypes: AttentionFindingTypeDefinition[];
-  onRestoreObject: (ref: ResourceRef) => Promise<AttentionIgnoreRules>;
-  onRestoreType: (findingType: string) => Promise<AttentionIgnoreRules>;
+  onRestoreObjectFinding: (ignore: AttentionObjectFindingIgnore) => Promise<AttentionIgnoreRules>;
+  onRestoreClusterType: (findingType: string) => Promise<AttentionIgnoreRules>;
+  onRestoreGlobalType: (findingType: string) => Promise<AttentionIgnoreRules>;
   onClose: () => void;
 }
 
@@ -31,8 +33,9 @@ export default function AttentionIgnoredModal({
   isOpen,
   rules,
   findingTypes,
-  onRestoreObject,
-  onRestoreType,
+  onRestoreObjectFinding,
+  onRestoreClusterType,
+  onRestoreGlobalType,
   onClose,
 }: AttentionIgnoredModalProps) {
   const modalRef = useRef<HTMLDivElement>(null);
@@ -60,28 +63,34 @@ export default function AttentionIgnoredModal({
     return null;
   }
 
-  const restoreObject = async (ref: ResourceRef) => {
-    const key = `object:${refKey(ref)}`;
+  const restoreObjectFinding = async (ignore: AttentionObjectFindingIgnore) => {
+    const key = `object:${refKey(ignore.ref)}:${ignore.findingType}`;
     setBusyKey(key);
     try {
-      setCurrentRules(await onRestoreObject(ref));
+      setCurrentRules(await onRestoreObjectFinding(ignore));
     } finally {
       setBusyKey(null);
     }
   };
-  const restoreType = async (findingType: string) => {
-    const key = `type:${findingType}`;
+  const restoreType = async (
+    scope: 'cluster' | 'global',
+    findingType: string,
+    restore: (findingType: string) => Promise<AttentionIgnoreRules>
+  ) => {
+    const key = `${scope}:${findingType}`;
     setBusyKey(key);
     try {
-      setCurrentRules(await onRestoreType(findingType));
+      setCurrentRules(await restore(findingType));
     } finally {
       setBusyKey(null);
     }
   };
 
-  const ignoredTypes = currentRules.findingTypes ?? [];
-  const ignoredObjects = currentRules.ignoredObjects ?? [];
-  const empty = ignoredTypes.length === 0 && ignoredObjects.length === 0;
+  const clusterTypes = currentRules.clusterFindingTypes ?? [];
+  const globalTypes = currentRules.globalFindingTypes ?? [];
+  const objectFindings = currentRules.objectFindings ?? [];
+  const empty =
+    clusterTypes.length === 0 && globalTypes.length === 0 && objectFindings.length === 0;
 
   return (
     <ModalSurface
@@ -100,18 +109,21 @@ export default function AttentionIgnoredModal({
       />
       <div className="attention-ignored-body">
         {!!empty && <p className="attention-ignored-empty">No findings are ignored.</p>}
-        {ignoredTypes.length > 0 && (
+        {objectFindings.length > 0 && (
           <section>
-            <h3>Finding types</h3>
+            <h3>This object</h3>
             <ul>
-              {ignoredTypes.map((findingType) => (
-                <li key={findingType}>
-                  <span>{labels.get(findingType) ?? findingType}</span>
+              {objectFindings.map((ignore) => (
+                <li key={`${refKey(ignore.ref)}:${ignore.findingType}`}>
+                  <span>
+                    {labels.get(ignore.findingType) ?? ignore.findingType} —{' '}
+                    {objectLabel(ignore.ref)}
+                  </span>
                   <button
                     type="button"
                     className="button"
                     disabled={busyKey !== null}
-                    onClick={() => void restoreType(findingType)}
+                    onClick={() => void restoreObjectFinding(ignore)}
                   >
                     Restore
                   </button>
@@ -120,18 +132,38 @@ export default function AttentionIgnoredModal({
             </ul>
           </section>
         )}
-        {ignoredObjects.length > 0 && (
+        {clusterTypes.length > 0 && (
           <section>
-            <h3>Objects</h3>
+            <h3>This cluster</h3>
             <ul>
-              {ignoredObjects.map((ref) => (
-                <li key={refKey(ref)}>
-                  <span>{objectLabel(ref)}</span>
+              {clusterTypes.map((findingType) => (
+                <li key={findingType}>
+                  <span>{labels.get(findingType) ?? findingType}</span>
                   <button
                     type="button"
                     className="button"
                     disabled={busyKey !== null}
-                    onClick={() => void restoreObject(ref)}
+                    onClick={() => void restoreType('cluster', findingType, onRestoreClusterType)}
+                  >
+                    Restore
+                  </button>
+                </li>
+              ))}
+            </ul>
+          </section>
+        )}
+        {globalTypes.length > 0 && (
+          <section>
+            <h3>All clusters</h3>
+            <ul>
+              {globalTypes.map((findingType) => (
+                <li key={findingType}>
+                  <span>{labels.get(findingType) ?? findingType}</span>
+                  <button
+                    type="button"
+                    className="button"
+                    disabled={busyKey !== null}
+                    onClick={() => void restoreType('global', findingType, onRestoreGlobalType)}
                   >
                     Restore
                   </button>

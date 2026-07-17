@@ -3,7 +3,7 @@
   // project stricter where additional rules describe this React application.
   // Keep the schema version aligned with the installed @biomejs/biome version so editors validate
   // exactly the options accepted by CI.
-  "$schema": "https://biomejs.dev/schemas/2.5.3/schema.json",
+  "$schema": "https://biomejs.dev/schemas/2.5.4/schema.json",
   // Resolve ignore rules from the repository-level Git configuration, not only the frontend folder.
   "vcs": {
     "enabled": true,

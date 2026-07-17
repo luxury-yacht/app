@@ -354,22 +354,21 @@ describe('Sidebar', () => {
     expect(clusterViews.querySelector('[data-sidebar-target-view="global-namespaces"]')).toBeNull();
   });
 
-  it.each([
-    'overview',
-    'cluster',
-    'namespace',
-  ] as const)('does not show Global navigation while the %s workspace is active', (viewType) => {
-    viewStateMock.viewType = viewType;
-    renderSidebar();
+  it.each(['overview', 'cluster', 'namespace'] as const)(
+    'does not show Global navigation while the %s workspace is active',
+    (viewType) => {
+      viewStateMock.viewType = viewType;
+      renderSidebar();
 
-    const host = requireValue(container, 'expected Sidebar test container');
-    expect(host.querySelector('[data-sidebar-scope="global"]')).toBeNull();
-    expect(
-      Array.from(host.querySelectorAll('.sidebar-section > h3'), (heading) =>
-        heading.textContent?.trim()
-      )
-    ).toEqual(['Cluster', 'Namespaces']);
-  });
+      const host = requireValue(container, 'expected Sidebar test container');
+      expect(host.querySelector('[data-sidebar-scope="global"]')).toBeNull();
+      expect(
+        Array.from(host.querySelectorAll('.sidebar-section > h3'), (heading) =>
+          heading.textContent?.trim()
+        )
+      ).toEqual(['Cluster', 'Namespaces']);
+    }
+  );
 
   it('enters Global through a Global sidebar target', () => {
     viewStateMock.viewType = 'global' as never;

@@ -1,8 +1,10 @@
 import {
   IgnoreClusterAttentionFindingType,
-  IgnoreClusterAttentionObject,
+  IgnoreClusterAttentionObjectFinding,
+  IgnoreGlobalAttentionFindingType,
   RestoreClusterAttentionFindingType,
-  RestoreClusterAttentionObject,
+  RestoreClusterAttentionObjectFinding,
+  RestoreGlobalAttentionFindingType,
 } from '@/core/backend-api';
 import type { AttentionIgnoreRules, ResourceRef } from '@/core/refresh/types';
 
@@ -13,24 +15,27 @@ const requireClusterId = (clusterId: string) => {
 };
 
 const normalizeRules = (rules: AttentionIgnoreRules | null): AttentionIgnoreRules => ({
-  ignoredObjects: rules?.ignoredObjects ?? [],
-  findingTypes: rules?.findingTypes ?? [],
+  objectFindings: rules?.objectFindings ?? [],
+  clusterFindingTypes: rules?.clusterFindingTypes ?? [],
+  globalFindingTypes: rules?.globalFindingTypes ?? [],
 });
 
-export async function ignoreClusterAttentionObject(
+export async function ignoreClusterAttentionObjectFinding(
   clusterId: string,
-  ref: ResourceRef
+  ref: ResourceRef,
+  findingType: string
 ): Promise<AttentionIgnoreRules> {
   requireClusterId(clusterId);
-  return normalizeRules(await IgnoreClusterAttentionObject(clusterId, ref));
+  return normalizeRules(await IgnoreClusterAttentionObjectFinding(clusterId, ref, findingType));
 }
 
-export async function restoreClusterAttentionObject(
+export async function restoreClusterAttentionObjectFinding(
   clusterId: string,
-  ref: ResourceRef
+  ref: ResourceRef,
+  findingType: string
 ): Promise<AttentionIgnoreRules> {
   requireClusterId(clusterId);
-  return normalizeRules(await RestoreClusterAttentionObject(clusterId, ref));
+  return normalizeRules(await RestoreClusterAttentionObjectFinding(clusterId, ref, findingType));
 }
 
 export async function ignoreClusterAttentionFindingType(
@@ -47,4 +52,20 @@ export async function restoreClusterAttentionFindingType(
 ): Promise<AttentionIgnoreRules> {
   requireClusterId(clusterId);
   return normalizeRules(await RestoreClusterAttentionFindingType(clusterId, findingType));
+}
+
+export async function ignoreGlobalAttentionFindingType(
+  clusterId: string,
+  findingType: string
+): Promise<AttentionIgnoreRules> {
+  requireClusterId(clusterId);
+  return normalizeRules(await IgnoreGlobalAttentionFindingType(clusterId, findingType));
+}
+
+export async function restoreGlobalAttentionFindingType(
+  clusterId: string,
+  findingType: string
+): Promise<AttentionIgnoreRules> {
+  requireClusterId(clusterId);
+  return normalizeRules(await RestoreGlobalAttentionFindingType(clusterId, findingType));
 }

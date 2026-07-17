@@ -2,22 +2,21 @@ import { describe, expect, it } from 'vitest';
 import { collectSuppressionErrors, readSourceFiles } from './check-biome-suppressions.mjs';
 
 describe('Biome inline suppression policy', () => {
-  it.each([
-    'biome-ignore-all',
-    'biome-ignore-start',
-    'biome-ignore-end',
-  ])('rejects broad %s directives', (directive) => {
-    const errors = collectSuppressionErrors([
-      {
-        file: 'src/widget.tsx',
-        content: `// ${directive} lint/a11y/noAutofocus: broad suppression`,
-      },
-    ]);
+  it.each(['biome-ignore-all', 'biome-ignore-start', 'biome-ignore-end'])(
+    'rejects broad %s directives',
+    (directive) => {
+      const errors = collectSuppressionErrors([
+        {
+          file: 'src/widget.tsx',
+          content: `// ${directive} lint/a11y/noAutofocus: broad suppression`,
+        },
+      ]);
 
-    expect(errors).toEqual([
-      `src/widget.tsx:1 Biome suppression form ${directive} is prohibited; use an exact inline biome-ignore directive`,
-    ]);
-  });
+      expect(errors).toEqual([
+        `src/widget.tsx:1 Biome suppression form ${directive} is prohibited; use an exact inline biome-ignore directive`,
+      ]);
+    }
+  );
 
   it('requires an exact rule instead of a rule category', () => {
     const errors = collectSuppressionErrors([

@@ -10,20 +10,40 @@ const {
   openWithObjectMock,
   ignoreObjectMock,
   ignoreTypeMock,
+  ignoreGlobalTypeMock,
   restoreTypeMock,
+  restoreGlobalTypeMock,
   restoreObjectMock,
   queryPayloadRef,
   queryParamsRef,
   tablePropsRef,
 } = vi.hoisted(() => ({
   openWithObjectMock: vi.fn(),
-  ignoreObjectMock: vi.fn().mockResolvedValue({ ignoredObjects: [], findingTypes: [] }),
-  ignoreTypeMock: vi.fn().mockResolvedValue({ ignoredObjects: [], findingTypes: [] }),
-  restoreTypeMock: vi.fn().mockResolvedValue({ ignoredObjects: [], findingTypes: [] }),
-  restoreObjectMock: vi.fn().mockResolvedValue({ ignoredObjects: [], findingTypes: [] }),
+  ignoreObjectMock: vi
+    .fn()
+    .mockResolvedValue({ objectFindings: [], clusterFindingTypes: [], globalFindingTypes: [] }),
+  ignoreTypeMock: vi
+    .fn()
+    .mockResolvedValue({ objectFindings: [], clusterFindingTypes: [], globalFindingTypes: [] }),
+  ignoreGlobalTypeMock: vi
+    .fn()
+    .mockResolvedValue({ objectFindings: [], clusterFindingTypes: [], globalFindingTypes: [] }),
+  restoreTypeMock: vi
+    .fn()
+    .mockResolvedValue({ objectFindings: [], clusterFindingTypes: [], globalFindingTypes: [] }),
+  restoreGlobalTypeMock: vi
+    .fn()
+    .mockResolvedValue({ objectFindings: [], clusterFindingTypes: [], globalFindingTypes: [] }),
+  restoreObjectMock: vi
+    .fn()
+    .mockResolvedValue({ objectFindings: [], clusterFindingTypes: [], globalFindingTypes: [] }),
   queryPayloadRef: {
     current: {
-      ignoreRules: { ignoredObjects: [], findingTypes: ['restarts'] },
+      ignoreRules: {
+        objectFindings: [],
+        clusterFindingTypes: ['restarts'],
+        globalFindingTypes: [],
+      },
       findingTypes: [
         { id: 'restarts', label: 'Restarts' },
         { id: 'replica-mismatch', label: 'Replica mismatch' },
@@ -35,10 +55,12 @@ const {
 }));
 
 vi.mock('@/core/settings/clusterAttentionIgnores', () => ({
-  ignoreClusterAttentionObject: ignoreObjectMock,
+  ignoreClusterAttentionObjectFinding: ignoreObjectMock,
   ignoreClusterAttentionFindingType: ignoreTypeMock,
+  ignoreGlobalAttentionFindingType: ignoreGlobalTypeMock,
   restoreClusterAttentionFindingType: restoreTypeMock,
-  restoreClusterAttentionObject: restoreObjectMock,
+  restoreGlobalAttentionFindingType: restoreGlobalTypeMock,
+  restoreClusterAttentionObjectFinding: restoreObjectMock,
 }));
 
 vi.mock('@modules/kubernetes/config/KubeconfigContext', () => ({
@@ -114,10 +136,16 @@ describe('ClusterViewAttention', () => {
     openWithObjectMock.mockClear();
     ignoreObjectMock.mockClear();
     ignoreTypeMock.mockClear();
+    ignoreGlobalTypeMock.mockClear();
     restoreTypeMock.mockClear();
+    restoreGlobalTypeMock.mockClear();
     restoreObjectMock.mockClear();
     queryPayloadRef.current = {
-      ignoreRules: { ignoredObjects: [], findingTypes: ['restarts'] },
+      ignoreRules: {
+        objectFindings: [],
+        clusterFindingTypes: ['restarts'],
+        globalFindingTypes: [],
+      },
       findingTypes: [
         { id: 'restarts', label: 'Restarts' },
         { id: 'replica-mismatch', label: 'Replica mismatch' },
@@ -226,7 +254,7 @@ describe('ClusterViewAttention', () => {
     expect(columns.find((column) => column.key === 'reason')?.render(finding)).toBe('1/2 ready');
   });
 
-  it('offers exact-object and stable finding-type ignore actions', async () => {
+  it('offers object, cluster, and global ignore scopes for each finding', async () => {
     await act(async () => {
       root.render(<ClusterViewAttention />);
       await Promise.resolve();
@@ -238,17 +266,20 @@ describe('ClusterViewAttention', () => {
     ) => Array<{ label?: string; onClick?: () => void }>;
     const items = getItems(finding, 'name');
     expect(items.map((item) => item.label)).toEqual([
-      'Ignore this Deployment',
-      'Ignore all “Replica mismatch” findings',
+      'Ignore "Replica mismatch" for this object only',
+      'Ignore "Replica mismatch" in this cluster',
+      'Ignore "Replica mismatch" in all clusters',
     ]);
 
     await act(async () => {
       items[0].onClick?.();
       items[1].onClick?.();
+      items[2].onClick?.();
       await Promise.resolve();
     });
-    expect(ignoreObjectMock).toHaveBeenCalledWith('cluster-a', finding.ref);
+    expect(ignoreObjectMock).toHaveBeenCalledWith('cluster-a', finding.ref, 'replica-mismatch');
     expect(ignoreTypeMock).toHaveBeenCalledWith('cluster-a', 'replica-mismatch');
+    expect(ignoreGlobalTypeMock).toHaveBeenCalledWith('cluster-a', 'replica-mismatch');
   });
 
   it('opens ignored-findings management and restores a type rule', async () => {
@@ -277,9 +308,13 @@ describe('ClusterViewAttention', () => {
     expect(restoreTypeMock).toHaveBeenCalledWith('cluster-a', 'restarts');
   });
 
-  it('restores an ignored exact object from management', async () => {
+  it('restores an object-scoped finding from management', async () => {
     queryPayloadRef.current = {
-      ignoreRules: { ignoredObjects: [finding.ref], findingTypes: [] },
+      ignoreRules: {
+        objectFindings: [{ ref: finding.ref, findingType: 'replica-mismatch' }],
+        clusterFindingTypes: [],
+        globalFindingTypes: [],
+      },
       findingTypes: [],
     };
     await act(async () => {
@@ -301,6 +336,37 @@ describe('ClusterViewAttention', () => {
       restore?.click();
       await Promise.resolve();
     });
-    expect(restoreObjectMock).toHaveBeenCalledWith('cluster-a', finding.ref);
+    expect(restoreObjectMock).toHaveBeenCalledWith('cluster-a', finding.ref, 'replica-mismatch');
+  });
+
+  it('restores an all-cluster finding type from management', async () => {
+    queryPayloadRef.current = {
+      ignoreRules: {
+        objectFindings: [],
+        clusterFindingTypes: [],
+        globalFindingTypes: ['warning-event'],
+      },
+      findingTypes: [{ id: 'warning-event', label: 'Warning events' }],
+    };
+    await act(async () => {
+      root.render(<ClusterViewAttention />);
+      await Promise.resolve();
+    });
+
+    const postActions = (
+      queryParamsRef.current?.filterOptionOverrides as
+        | { postActions?: Array<{ onClick: () => void }> }
+        | undefined
+    )?.postActions;
+    act(() => postActions?.[0].onClick());
+    expect(document.body.textContent).toContain('All clusters');
+    const restore = Array.from(document.body.querySelectorAll('button')).find(
+      (button) => button.textContent === 'Restore'
+    );
+    await act(async () => {
+      restore?.click();
+      await Promise.resolve();
+    });
+    expect(restoreGlobalTypeMock).toHaveBeenCalledWith('cluster-a', 'warning-event');
   });
 });

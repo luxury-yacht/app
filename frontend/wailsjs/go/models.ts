@@ -4262,10 +4262,43 @@ export namespace serviceaccount {
 }
 
 export namespace snapshot {
-	
+
+	export class AttentionObjectFindingIgnore {
+	    ref: resourcemodel.ResourceRef;
+	    findingType: string;
+
+	    static createFrom(source: any = {}) {
+	        return new AttentionObjectFindingIgnore(source);
+	    }
+
+	    constructor(source: any = {}) {
+	        if ('string' === typeof source) source = JSON.parse(source);
+	        this.ref = this.convertValues(source["ref"], resourcemodel.ResourceRef);
+	        this.findingType = source["findingType"];
+	    }
+
+		convertValues(a: any, classs: any, asMap: boolean = false): any {
+		    if (!a) {
+		        return a;
+		    }
+		    if (a.slice && a.map) {
+		        return (a as any[]).map(elem => this.convertValues(elem, classs));
+		    } else if ("object" === typeof a) {
+		        if (asMap) {
+		            for (const key of Object.keys(a)) {
+		                a[key] = new classs(a[key]);
+		            }
+		            return a;
+		        }
+		        return new classs(a);
+		    }
+		    return a;
+		}
+	}
 	export class AttentionIgnoreRules {
-	    ignoredObjects: resourcemodel.ResourceRef[];
-	    findingTypes: string[];
+	    objectFindings: AttentionObjectFindingIgnore[];
+	    clusterFindingTypes: string[];
+	    globalFindingTypes: string[];
 	
 	    static createFrom(source: any = {}) {
 	        return new AttentionIgnoreRules(source);
@@ -4273,8 +4306,9 @@ export namespace snapshot {
 	
 	    constructor(source: any = {}) {
 	        if ('string' === typeof source) source = JSON.parse(source);
-	        this.ignoredObjects = this.convertValues(source["ignoredObjects"], resourcemodel.ResourceRef);
-	        this.findingTypes = source["findingTypes"];
+	        this.objectFindings = this.convertValues(source["objectFindings"], AttentionObjectFindingIgnore);
+	        this.clusterFindingTypes = source["clusterFindingTypes"];
+	        this.globalFindingTypes = source["globalFindingTypes"];
 	    }
 	
 		convertValues(a: any, classs: any, asMap: boolean = false): any {
@@ -4295,6 +4329,7 @@ export namespace snapshot {
 		    return a;
 		}
 	}
+
 	export class CustomResourceSummary {
 	    clusterId: string;
 	    clusterName: string;
@@ -6050,4 +6085,3 @@ export namespace v1 {
 	}
 
 }
-

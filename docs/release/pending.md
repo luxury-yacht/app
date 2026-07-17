@@ -6,6 +6,8 @@
   Pods tables, with options covering the full selected scope.
 - Added backend-query Type, Reason, and Source filters to cluster, namespace,
   and All Namespaces Events, with searchable high-cardinality options.
+- Added object, cluster, and all-cluster ignore scopes for each Attention
+  finding, with persisted rules that can be restored from the Attention view.
 
 ### Changed
 

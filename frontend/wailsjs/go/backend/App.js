@@ -394,8 +394,12 @@ export function IgnoreClusterAttentionFindingType(arg1, arg2) {
   return window['go']['backend']['App']['IgnoreClusterAttentionFindingType'](arg1, arg2);
 }
 
-export function IgnoreClusterAttentionObject(arg1, arg2) {
-  return window['go']['backend']['App']['IgnoreClusterAttentionObject'](arg1, arg2);
+export function IgnoreClusterAttentionObjectFinding(arg1, arg2, arg3) {
+  return window['go']['backend']['App']['IgnoreClusterAttentionObjectFinding'](arg1, arg2, arg3);
+}
+
+export function IgnoreGlobalAttentionFindingType(arg1, arg2) {
+  return window['go']['backend']['App']['IgnoreGlobalAttentionFindingType'](arg1, arg2);
 }
 
 export function IsAppLogsPanelVisible() {
@@ -466,8 +470,12 @@ export function RestoreClusterAttentionFindingType(arg1, arg2) {
   return window['go']['backend']['App']['RestoreClusterAttentionFindingType'](arg1, arg2);
 }
 
-export function RestoreClusterAttentionObject(arg1, arg2) {
-  return window['go']['backend']['App']['RestoreClusterAttentionObject'](arg1, arg2);
+export function RestoreClusterAttentionObjectFinding(arg1, arg2, arg3) {
+  return window['go']['backend']['App']['RestoreClusterAttentionObjectFinding'](arg1, arg2, arg3);
+}
+
+export function RestoreGlobalAttentionFindingType(arg1, arg2) {
+  return window['go']['backend']['App']['RestoreGlobalAttentionFindingType'](arg1, arg2);
 }
 
 export function RetryAuth() {

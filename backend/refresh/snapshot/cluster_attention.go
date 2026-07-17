@@ -66,11 +66,21 @@ type AttentionCause struct {
 	Severity AttentionSeverity `json:"severity"`
 }
 
-// AttentionIgnoreRules is the complete persisted suppression state for one
-// cluster. IgnoredObjects use exact object identity, including UID.
+// AttentionObjectFindingIgnore suppresses one finding type for one exact
+// object identity. The UID prevents a replacement object from inheriting the
+// old object's suppression.
+type AttentionObjectFindingIgnore struct {
+	Ref         resourcemodel.ResourceRef `json:"ref"`
+	FindingType string                    `json:"findingType"`
+}
+
+// AttentionIgnoreRules is the effective suppression state for one cluster.
+// ClusterFindingTypes apply only to this cluster; GlobalFindingTypes apply to
+// every cluster, including clusters opened after the rule was persisted.
 type AttentionIgnoreRules struct {
-	IgnoredObjects []resourcemodel.ResourceRef `json:"ignoredObjects"`
-	FindingTypes   []string                    `json:"findingTypes"`
+	ObjectFindings      []AttentionObjectFindingIgnore `json:"objectFindings"`
+	ClusterFindingTypes []string                       `json:"clusterFindingTypes"`
+	GlobalFindingTypes  []string                       `json:"globalFindingTypes"`
 }
 
 // AttentionFindingTypeDefinition is one stable type users can suppress.
@@ -332,15 +342,24 @@ func (i *clusterAttentionIndex) SetIgnoredObjectPruner(pruner func(resourcemodel
 
 func cloneAttentionIgnoreRules(rules AttentionIgnoreRules) AttentionIgnoreRules {
 	return AttentionIgnoreRules{
-		IgnoredObjects: append([]resourcemodel.ResourceRef(nil), rules.IgnoredObjects...),
-		FindingTypes:   append([]string(nil), rules.FindingTypes...),
+		ObjectFindings:      append([]AttentionObjectFindingIgnore(nil), rules.ObjectFindings...),
+		ClusterFindingTypes: append([]string(nil), rules.ClusterFindingTypes...),
+		GlobalFindingTypes:  append([]string(nil), rules.GlobalFindingTypes...),
 	}
 }
 
 func normalizeAttentionIgnoreRules(rules AttentionIgnoreRules) AttentionIgnoreRules {
-	types := make([]string, 0, len(rules.FindingTypes))
-	seenTypes := make(map[string]struct{}, len(rules.FindingTypes))
-	for _, raw := range rules.FindingTypes {
+	return AttentionIgnoreRules{
+		ObjectFindings:      dedupeAttentionObjectFindings(rules.ObjectFindings),
+		ClusterFindingTypes: normalizeAttentionFindingTypes(rules.ClusterFindingTypes),
+		GlobalFindingTypes:  normalizeAttentionFindingTypes(rules.GlobalFindingTypes),
+	}
+}
+
+func normalizeAttentionFindingTypes(rawTypes []string) []string {
+	types := make([]string, 0, len(rawTypes))
+	seenTypes := make(map[string]struct{}, len(rawTypes))
+	for _, raw := range rawTypes {
 		findingType := strings.TrimSpace(raw)
 		if findingType == "" {
 			continue
@@ -351,27 +370,26 @@ func normalizeAttentionIgnoreRules(rules AttentionIgnoreRules) AttentionIgnoreRu
 		seenTypes[findingType] = struct{}{}
 		types = append(types, findingType)
 	}
-	return AttentionIgnoreRules{
-		IgnoredObjects: dedupeAttentionRefs(rules.IgnoredObjects),
-		FindingTypes:   types,
-	}
+	return types
 }
 
 func (i *clusterAttentionIndex) filterIgnoredEvaluationLocked(evaluation attentionEvaluation) attentionEvaluation {
 	if evaluation.Finding == nil {
 		return evaluation
 	}
-	if i.objectIgnoredLocked(evaluation.Finding.Ref) {
-		evaluation.Finding = nil
-		return evaluation
+	ignoredTypes := make(map[string]struct{}, len(i.ignoreRules.ClusterFindingTypes)+len(i.ignoreRules.GlobalFindingTypes))
+	for _, findingType := range i.ignoreRules.ClusterFindingTypes {
+		ignoredTypes[strings.TrimSpace(findingType)] = struct{}{}
 	}
-	ignoredTypes := make(map[string]struct{}, len(i.ignoreRules.FindingTypes))
-	for _, findingType := range i.ignoreRules.FindingTypes {
+	for _, findingType := range i.ignoreRules.GlobalFindingTypes {
 		ignoredTypes[strings.TrimSpace(findingType)] = struct{}{}
 	}
 	causes := make([]AttentionCause, 0, len(evaluation.Finding.Causes))
 	for _, cause := range evaluation.Finding.Causes {
 		if _, ignored := ignoredTypes[cause.Type]; ignored {
+			continue
+		}
+		if i.objectFindingIgnoredLocked(evaluation.Finding.Ref, cause.Type) {
 			continue
 		}
 		causes = append(causes, cause)
@@ -385,13 +403,13 @@ func (i *clusterAttentionIndex) filterIgnoredEvaluationLocked(evaluation attenti
 	return evaluation
 }
 
-func (i *clusterAttentionIndex) objectIgnoredLocked(ref resourcemodel.ResourceRef) bool {
-	target := attentionIgnoredObjectKey(ref)
+func (i *clusterAttentionIndex) objectFindingIgnoredLocked(ref resourcemodel.ResourceRef, findingType string) bool {
+	target := attentionIgnoredObjectFindingKey(AttentionObjectFindingIgnore{Ref: ref, FindingType: findingType})
 	if target == "" {
 		return false
 	}
-	for _, ignored := range i.ignoreRules.IgnoredObjects {
-		if attentionIgnoredObjectKey(ignored) == target {
+	for _, ignored := range i.ignoreRules.ObjectFindings {
+		if attentionIgnoredObjectFindingKey(ignored) == target {
 			return true
 		}
 	}
@@ -403,16 +421,16 @@ func (i *clusterAttentionIndex) pruneIgnoredObjectLocked(ref resourcemodel.Resou
 	if target == "" {
 		return false
 	}
-	kept := i.ignoreRules.IgnoredObjects[:0]
+	kept := i.ignoreRules.ObjectFindings[:0]
 	removed := false
-	for _, ignored := range i.ignoreRules.IgnoredObjects {
-		if attentionIgnoredObjectKey(ignored) == target {
+	for _, ignored := range i.ignoreRules.ObjectFindings {
+		if attentionIgnoredObjectKey(ignored.Ref) == target {
 			removed = true
 			continue
 		}
 		kept = append(kept, ignored)
 	}
-	i.ignoreRules.IgnoredObjects = kept
+	i.ignoreRules.ObjectFindings = kept
 	if removed {
 		i.revision++
 		i.markDirtyLocked()
@@ -427,6 +445,33 @@ func attentionIgnoredObjectKey(ref resourcemodel.ResourceRef) string {
 	return strings.ToLower(strings.Join([]string{
 		ref.ClusterID, ref.Group, ref.Version, ref.Kind, ref.Namespace, ref.Name, ref.UID,
 	}, "\x00"))
+}
+
+func attentionIgnoredObjectFindingKey(ignore AttentionObjectFindingIgnore) string {
+	objectKey := attentionIgnoredObjectKey(ignore.Ref)
+	findingType := strings.TrimSpace(ignore.FindingType)
+	if objectKey == "" || findingType == "" {
+		return ""
+	}
+	return objectKey + "\x00" + strings.ToLower(findingType)
+}
+
+func dedupeAttentionObjectFindings(ignores []AttentionObjectFindingIgnore) []AttentionObjectFindingIgnore {
+	deduped := make([]AttentionObjectFindingIgnore, 0, len(ignores))
+	seen := make(map[string]struct{}, len(ignores))
+	for _, ignore := range ignores {
+		ignore.FindingType = strings.TrimSpace(ignore.FindingType)
+		key := attentionIgnoredObjectFindingKey(ignore)
+		if key == "" {
+			continue
+		}
+		if _, exists := seen[key]; exists {
+			continue
+		}
+		seen[key] = struct{}{}
+		deduped = append(deduped, ignore)
+	}
+	return deduped
 }
 
 func dedupeAttentionRefs(refs []resourcemodel.ResourceRef) []resourcemodel.ResourceRef {
@@ -512,15 +557,15 @@ func (i *clusterAttentionIndex) replaceSource(owner string, records []attentionS
 		i.applyFindingLocked(key, nil)
 	}
 	if pruneMissingIgnores {
-		for _, ignored := range append([]resourcemodel.ResourceRef(nil), i.ignoreRules.IgnoredObjects...) {
-			if _, ownedKind := i.ownerKinds[owner][ignored.Kind]; !ownedKind {
+		for _, ignored := range append([]AttentionObjectFindingIgnore(nil), i.ignoreRules.ObjectFindings...) {
+			if _, ownedKind := i.ownerKinds[owner][ignored.Ref.Kind]; !ownedKind {
 				continue
 			}
-			if _, exists := presentIgnoredKeys[attentionIgnoredObjectKey(ignored)]; exists {
+			if _, exists := presentIgnoredKeys[attentionIgnoredObjectKey(ignored.Ref)]; exists {
 				continue
 			}
-			if i.pruneIgnoredObjectLocked(ignored) {
-				pruned = append(pruned, ignored)
+			if i.pruneIgnoredObjectLocked(ignored.Ref) {
+				pruned = append(pruned, ignored.Ref)
 			}
 		}
 	}

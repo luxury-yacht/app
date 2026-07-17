@@ -7,7 +7,6 @@ import (
 	"time"
 
 	"github.com/luxury-yacht/app/backend/refresh"
-	"github.com/luxury-yacht/app/backend/resourcemodel"
 	"github.com/stretchr/testify/require"
 )
 
@@ -132,8 +131,9 @@ func TestClusterAttentionBuilderPublishesIgnoreRulesAndFindingTypeCatalog(t *tes
 	t.Cleanup(index.Stop)
 	ignored := attentionTestRef("Deployment", "payments", "checkout")
 	index.SetIgnoreRules(AttentionIgnoreRules{
-		IgnoredObjects: []resourcemodel.ResourceRef{ignored},
-		FindingTypes:   []string{"restarts"},
+		ObjectFindings:      []AttentionObjectFindingIgnore{{Ref: ignored, FindingType: "replica-mismatch"}},
+		ClusterFindingTypes: []string{"restarts"},
+		GlobalFindingTypes:  []string{"warning-event"},
 	})
 
 	result, err := (&ClusterAttentionBuilder{index: index}).Build(
@@ -142,7 +142,8 @@ func TestClusterAttentionBuilderPublishesIgnoreRulesAndFindingTypeCatalog(t *tes
 	)
 	require.NoError(t, err)
 	payload := result.Payload.(ClusterAttentionSnapshot)
-	require.Equal(t, []resourcemodel.ResourceRef{ignored}, payload.IgnoreRules.IgnoredObjects)
-	require.Equal(t, []string{"restarts"}, payload.IgnoreRules.FindingTypes)
+	require.Equal(t, []AttentionObjectFindingIgnore{{Ref: ignored, FindingType: "replica-mismatch"}}, payload.IgnoreRules.ObjectFindings)
+	require.Equal(t, []string{"restarts"}, payload.IgnoreRules.ClusterFindingTypes)
+	require.Equal(t, []string{"warning-event"}, payload.IgnoreRules.GlobalFindingTypes)
 	require.Contains(t, payload.FindingTypes, AttentionFindingTypeDefinition{ID: "restarts", Label: "Restarts"})
 }

@@ -111,6 +111,10 @@ type App struct {
 	selectionDiag       selectionDiagnosticsState
 	// settingsMu guards appSettings access in runtime watcher/selection/settings flows.
 	settingsMu sync.Mutex
+	// attentionRulesMu serializes persisted Attention mutations with their live
+	// index updates so cluster-scoped and global rules cannot be applied out of
+	// order across multiple cluster runtimes.
+	attentionRulesMu sync.Mutex
 	// requestClusterScopeRebuildFn overrides the per-cluster rebuild request
 	// issued when a cluster's allowed-namespaces scope changes (tests inject a
 	// recorder). Nil selects the production teardown+rebuild path.

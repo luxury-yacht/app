@@ -83,7 +83,7 @@ func (a *App) SetClusterAllowedNamespaces(clusterID string, namespaces []string)
 func clusterSettingsSectionEmpty(section settingsClusterSection) bool {
 	return len(section.AllowedNamespaces) == 0 &&
 		(section.Attention == nil ||
-			(len(section.Attention.IgnoredObjects) == 0 && len(section.Attention.FindingTypes) == 0))
+			(len(section.Attention.ObjectFindings) == 0 && len(section.Attention.FindingTypes) == 0))
 }
 
 // allowedNamespacesForCluster is the subsystem-construction read of the

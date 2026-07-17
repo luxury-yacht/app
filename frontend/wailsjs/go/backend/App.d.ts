@@ -241,7 +241,9 @@ export function HydrateCatalogCustomRows(arg1:string,arg2:Array<snapshot.Resourc
 
 export function IgnoreClusterAttentionFindingType(arg1:string,arg2:string):Promise<snapshot.AttentionIgnoreRules>;
 
-export function IgnoreClusterAttentionObject(arg1:string,arg2:resourcemodel.ResourceRef):Promise<snapshot.AttentionIgnoreRules>;
+export function IgnoreClusterAttentionObjectFinding(arg1:string,arg2:resourcemodel.ResourceRef,arg3:string):Promise<snapshot.AttentionIgnoreRules>;
+
+export function IgnoreGlobalAttentionFindingType(arg1:string,arg2:string):Promise<snapshot.AttentionIgnoreRules>;
 
 export function IsAppLogsPanelVisible():Promise<boolean>;
 
@@ -277,7 +279,9 @@ export function ResizeShellSession(arg1:string,arg2:number,arg3:number):Promise<
 
 export function RestoreClusterAttentionFindingType(arg1:string,arg2:string):Promise<snapshot.AttentionIgnoreRules>;
 
-export function RestoreClusterAttentionObject(arg1:string,arg2:resourcemodel.ResourceRef):Promise<snapshot.AttentionIgnoreRules>;
+export function RestoreClusterAttentionObjectFinding(arg1:string,arg2:resourcemodel.ResourceRef,arg3:string):Promise<snapshot.AttentionIgnoreRules>;
+
+export function RestoreGlobalAttentionFindingType(arg1:string,arg2:string):Promise<snapshot.AttentionIgnoreRules>;
 
 export function RetryAuth():Promise<void>;
 

@@ -77,6 +77,7 @@ var contractTypes = []typeSpec{
 	{name: "ClusterAttentionFinding", typeOf: typeOf[snapshot.AttentionFinding]()},
 	{name: "AttentionCause", typeOf: typeOf[snapshot.AttentionCause]()},
 	{name: "AttentionFindingTypeDefinition", typeOf: typeOf[snapshot.AttentionFindingTypeDefinition]()},
+	{name: "AttentionObjectFindingIgnore", typeOf: typeOf[snapshot.AttentionObjectFindingIgnore]()},
 	{name: "AttentionIgnoreRules", typeOf: typeOf[snapshot.AttentionIgnoreRules]()},
 	{name: "AttentionSeverityCounts", typeOf: typeOf[snapshot.AttentionSeverityCounts]()},
 	{name: "ClusterAttentionSnapshot", typeOf: typeOf[snapshot.ClusterAttentionSnapshot]()},

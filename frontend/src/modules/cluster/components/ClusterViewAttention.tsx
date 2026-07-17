@@ -17,9 +17,11 @@ import { useCallback, useMemo, useState } from 'react';
 import type { ClusterAttentionFinding, ClusterAttentionSnapshot } from '@/core/refresh/types';
 import {
   ignoreClusterAttentionFindingType,
-  ignoreClusterAttentionObject,
+  ignoreClusterAttentionObjectFinding,
+  ignoreGlobalAttentionFindingType,
   restoreClusterAttentionFindingType,
-  restoreClusterAttentionObject,
+  restoreClusterAttentionObjectFinding,
+  restoreGlobalAttentionFindingType,
 } from '@/core/settings/clusterAttentionIgnores';
 import { useShortNames } from '@/hooks/useShortNames';
 import { errorHandler } from '@/utils/errorHandler';
@@ -110,30 +112,38 @@ export default function ClusterViewAttention() {
     (row: ClusterAttentionFinding): ContextMenuItem[] => {
       const causes = row.causes ?? [];
       const seenTypes = new Set<string>();
-      const items: ContextMenuItem[] = [
-        {
-          actionId: 'attention-ignore-object',
-          label: `Ignore this ${row.kind}`,
-          disabled: !row.ref.uid,
-          disabledReason: !row.ref.uid ? 'The object has no UID' : undefined,
-          onClick: () => {
-            void ignoreClusterAttentionObject(selectedClusterId, row.ref).catch((error) =>
-              reportIgnoreError(error, 'ignoreAttentionObject')
-            );
-          },
-        },
-      ];
+      const items: ContextMenuItem[] = [];
       for (const cause of causes) {
         if (seenTypes.has(cause.type)) {
           continue;
         }
         seenTypes.add(cause.type);
         items.push({
-          actionId: `attention-ignore-type:${cause.type}`,
-          label: `Ignore all “${cause.label}” findings`,
+          actionId: `attention-ignore-object-finding:${cause.type}`,
+          label: `Ignore "${cause.label}" for this object only`,
+          disabled: !row.ref.uid,
+          disabledReason: !row.ref.uid ? 'The object has no UID' : undefined,
+          onClick: () => {
+            void ignoreClusterAttentionObjectFinding(selectedClusterId, row.ref, cause.type).catch(
+              (error) => reportIgnoreError(error, 'ignoreAttentionObjectFinding')
+            );
+          },
+        });
+        items.push({
+          actionId: `attention-ignore-cluster-type:${cause.type}`,
+          label: `Ignore "${cause.label}" in this cluster`,
           onClick: () => {
             void ignoreClusterAttentionFindingType(selectedClusterId, cause.type).catch((error) =>
               reportIgnoreError(error, 'ignoreAttentionFindingType')
+            );
+          },
+        });
+        items.push({
+          actionId: `attention-ignore-global-type:${cause.type}`,
+          label: `Ignore "${cause.label}" in all clusters`,
+          onClick: () => {
+            void ignoreGlobalAttentionFindingType(selectedClusterId, cause.type).catch((error) =>
+              reportIgnoreError(error, 'ignoreGlobalAttentionFindingType')
             );
           },
         });
@@ -178,7 +188,11 @@ export default function ClusterViewAttention() {
     filterOptionOverrides,
   });
 
-  const ignoreRules = queryPayload?.ignoreRules ?? { ignoredObjects: [], findingTypes: [] };
+  const ignoreRules = queryPayload?.ignoreRules ?? {
+    objectFindings: [],
+    clusterFindingTypes: [],
+    globalFindingTypes: [],
+  };
   const findingTypes = queryPayload?.findingTypes ?? [];
 
   return (
@@ -198,19 +212,31 @@ export default function ClusterViewAttention() {
         isOpen={ignoredModalOpen}
         rules={ignoreRules}
         findingTypes={findingTypes}
-        onRestoreObject={async (ref) => {
+        onRestoreObjectFinding={async (ignore) => {
           try {
-            return await restoreClusterAttentionObject(selectedClusterId, ref);
+            return await restoreClusterAttentionObjectFinding(
+              selectedClusterId,
+              ignore.ref,
+              ignore.findingType
+            );
           } catch (error) {
-            reportIgnoreError(error, 'restoreAttentionObject');
+            reportIgnoreError(error, 'restoreAttentionObjectFinding');
             return ignoreRules;
           }
         }}
-        onRestoreType={async (findingType) => {
+        onRestoreClusterType={async (findingType) => {
           try {
             return await restoreClusterAttentionFindingType(selectedClusterId, findingType);
           } catch (error) {
             reportIgnoreError(error, 'restoreAttentionFindingType');
+            return ignoreRules;
+          }
+        }}
+        onRestoreGlobalType={async (findingType) => {
+          try {
+            return await restoreGlobalAttentionFindingType(selectedClusterId, findingType);
+          } catch (error) {
+            reportIgnoreError(error, 'restoreGlobalAttentionFindingType');
             return ignoreRules;
           }
         }}

@@ -50,15 +50,18 @@ sort order live together in
 `backend/refresh/snapshot/cluster_attention_policy.go`; add or revise
 classifications there rather than branching in individual evaluators.
 
-Users can ignore an exact object identity or a stable finding type from an
-Attention row's context menu. Exact-object rules include the cluster, full GVK,
-namespace/name, and UID; they suppress every cause for that object. Type rules
-suppress only that cause, so another active cause can keep the object visible.
-Rules are persisted per cluster and can be restored from the filter bar's
-Ignored findings control. Authoritative reflector delete/replace updates prune
-exact-object rules when their UID no longer exists. An unavailable input does
-not prune rules because missing permission is not proof that the object was
-deleted. Type rules remain until the user restores them.
+Each cause in an Attention row exposes three ignore scopes: that finding for
+the exact object, every finding of that type in the current cluster, or every
+finding of that type in all clusters. Object-finding rules include the cluster,
+full GVK, namespace/name, UID, and stable finding type, so they suppress only
+that cause and never transfer to a replacement object. Cluster type rules are
+persisted with the cluster; global type rules apply to current and future
+clusters. Another active, non-ignored cause can keep the object visible. All
+three scopes can be restored from the filter bar's Ignored findings control.
+Authoritative reflector delete/replace updates prune object-finding rules when
+their UID no longer exists. An unavailable input does not prune rules because
+missing permission is not proof that the object was deleted. Type rules remain
+until the user restores them.
 
 - `info`: intentional inactive states that are operationally useful to see but
   do not require remediation. Deployment and StatefulSet `Scaled to 0`, and
