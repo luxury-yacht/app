@@ -78,6 +78,19 @@ func TestDaemonSetServiceReturnsDetail(t *testing.T) {
 	require.Contains(t, detail.Details, "Misscheduled: 1")
 }
 
+func TestDaemonSetServiceProjectsNoEligibleNodesStatus(t *testing.T) {
+	ds := testsupport.DaemonSetFixture("default", "agent")
+	ds.Status = appsv1.DaemonSetStatus{}
+	client := cgofake.NewClientset(ds.DeepCopy())
+
+	detail, err := daemonset.NewService(newDeps(t, client)).DaemonSet("default", "agent")
+	require.NoError(t, err)
+	require.Equal(t, "No eligible nodes", detail.Status)
+	require.Equal(t, "0/0", detail.StatusState)
+	require.Equal(t, "warning", detail.StatusPresentation)
+	require.Equal(t, "NoEligibleNodes", detail.StatusReason)
+}
+
 func newDeps(t testing.TB, client *cgofake.Clientset) common.Dependencies {
 	t.Helper()
 	return testsupport.NewResourceDependencies(

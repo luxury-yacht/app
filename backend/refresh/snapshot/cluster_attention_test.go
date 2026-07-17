@@ -102,6 +102,21 @@ func TestEvaluateAttentionSourceClassifiesIntentionalInactiveWorkloadsAsInfo(t *
 	}
 }
 
+func TestEvaluateAttentionSourceUsesFriendlyDaemonSetNoEligibleNodesFinding(t *testing.T) {
+	now := time.Date(2026, time.July, 16, 12, 0, 0, 0, time.UTC)
+	record := attentionSourceRecord{
+		Ref: attentionTestRef("DaemonSet", "monitoring", "node-agent"), Source: attentionSourceWorkload,
+		Status: "No eligible nodes", StatusPresentation: "warning", StatusReason: "NoEligibleNodes", Ready: "0/0",
+		AgeTimestamp: now.Add(-10 * time.Minute).UnixMilli(),
+	}
+
+	evaluation := evaluateAttentionSource(record, now)
+	require.NotNil(t, evaluation.Finding)
+	require.Equal(t, AttentionSeverityWarning, evaluation.Finding.Severity)
+	require.Equal(t, []string{"No eligible nodes"}, evaluation.Finding.Reasons)
+	require.True(t, evaluation.NextEvaluation.IsZero())
+}
+
 func TestEvaluateAttentionSourceCombinesPodReasonsAndPreservesIdentity(t *testing.T) {
 	now := time.Date(2026, time.July, 16, 12, 0, 0, 0, time.UTC)
 	record := attentionSourceRecord{

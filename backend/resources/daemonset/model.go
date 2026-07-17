@@ -85,6 +85,11 @@ func BuildStatusPresentation(daemonSet *appsv1.DaemonSet) resourcemodel.Resource
 	if status, ok := resourcemodel.DeletingWorkloadStatus(daemonSet.ObjectMeta, resourcemodel.ReplicaState(facts.WorkloadCommonFacts), signals, lifecycle); ok {
 		return status
 	}
+	// DaemonSets derive their desired count from eligible nodes; they are not
+	// scaled through a replica count like Deployments and StatefulSets.
+	if facts.DesiredReplicas == 0 {
+		return resourcemodel.WorkloadSourceStatus("No eligible nodes", resourcemodel.ReplicaState(facts.WorkloadCommonFacts), "NoEligibleNodes", "", "warning", signals, lifecycle)
+	}
 	return resourcemodel.ReplicaStatusPresentation(facts.WorkloadCommonFacts, signals, lifecycle)
 }
 

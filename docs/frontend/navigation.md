@@ -53,8 +53,9 @@ classifications there rather than branching in individual evaluators.
 - `info`: intentional inactive states that are operationally useful to see but
   do not require remediation. Deployment and StatefulSet `Scaled to 0`, and
   CronJob `Idle`, are info findings.
-- `warning`: restarts, insufficient ready replicas, warning Events, and
-  non-ready Pod, workload, or Node states that are not errors.
+- `warning`: restarts, insufficient ready replicas, DaemonSets with no eligible
+  nodes, warning Events, and non-ready Pod, workload, or Node states that are
+  not errors.
 - `error`: Pod, workload, or Node states whose canonical status presentation is
   `error`.
 

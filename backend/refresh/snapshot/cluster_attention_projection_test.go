@@ -4,9 +4,12 @@ import (
 	"testing"
 	"time"
 
+	"github.com/luxury-yacht/app/backend/kind/objectmapnode"
 	"github.com/luxury-yacht/app/backend/objectcatalog"
 	"github.com/luxury-yacht/app/backend/refresh/ingest"
+	"github.com/luxury-yacht/app/backend/resources/daemonset"
 	"github.com/stretchr/testify/require"
+	appsv1 "k8s.io/api/apps/v1"
 	corev1 "k8s.io/api/core/v1"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 )
@@ -31,6 +34,47 @@ func TestAttentionRecordFromBundleUsesCatalogIdentityAndTypedSummary(t *testing.
 	require.Equal(t, "pod-uid", record.Ref.UID)
 	require.Equal(t, "CrashLoopBackOff", record.Status)
 	require.Equal(t, int32(4), record.Restarts)
+}
+
+func TestDaemonSetNoEligibleNodesProjectsConsistentlyIntoAttention(t *testing.T) {
+	now := time.Date(2026, time.July, 16, 12, 0, 0, 0, time.UTC)
+	meta := ClusterMeta{ClusterID: "cluster-a", ClusterName: "A"}
+	daemonSet := &appsv1.DaemonSet{
+		ObjectMeta: metav1.ObjectMeta{
+			Name: "node-agent", Namespace: "monitoring", UID: "daemonset-uid",
+			CreationTimestamp: metav1.NewTime(now.Add(-10 * time.Minute)),
+		},
+		Spec: appsv1.DaemonSetSpec{
+			Template: corev1.PodTemplateSpec{Spec: corev1.PodSpec{Containers: []corev1.Container{{Name: "agent"}}}},
+		},
+	}
+
+	raw, err := NewDaemonSetIngestProjector(meta)(daemonSet)
+	require.NoError(t, err)
+	bundle, ok := raw.(ingest.Bundle)
+	require.True(t, ok)
+
+	row, ok := bundle.Table.(WorkloadSummary)
+	require.True(t, ok)
+	require.Equal(t, "No eligible nodes", row.Status)
+	require.Equal(t, "NoEligibleNodes", row.StatusReason)
+	require.Equal(t, "warning", row.StatusPresentation)
+
+	node, ok := bundle.ObjectMap.(objectmapnode.Node)
+	require.True(t, ok)
+	require.NotNil(t, node.Status)
+	require.Equal(t, "No eligible nodes", node.Status.Label)
+	require.Equal(t, "NoEligibleNodes", node.Status.Reason)
+	require.Equal(t, "warning", node.Status.Presentation)
+
+	record, ok := attentionRecordFromBundle(attentionSourceWorkload, bundle)
+	require.True(t, ok)
+	evaluation := evaluateAttentionSource(record, now)
+	require.NotNil(t, evaluation.Finding)
+	require.Equal(t, AttentionSeverityWarning, evaluation.Finding.Severity)
+	require.Equal(t, []string{"No eligible nodes"}, evaluation.Finding.Reasons)
+	require.Equal(t, daemonset.Identity.Kind, evaluation.Finding.Ref.Kind)
+	require.Equal(t, meta.ClusterID, evaluation.Finding.Ref.ClusterID)
 }
 
 func TestAttentionRecordFromEventUsesEventIdentityNotInvolvedObjectIdentity(t *testing.T) {

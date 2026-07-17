@@ -44,6 +44,11 @@ var attentionClassificationRules = []attentionClassificationRule{
 		Severity: AttentionSeverityInfo, FindingReason: "Idle",
 	},
 	{
+		ID: "daemonset-no-eligible-nodes", Sources: []attentionSource{attentionSourceWorkload},
+		Kinds: []string{"DaemonSet"}, Presentations: []string{"warning"}, StatusReasons: []string{"NoEligibleNodes"},
+		Severity: AttentionSeverityWarning, Grace: attentionWarningGrace, FindingReason: "No eligible nodes",
+	},
+	{
 		ID: "error-presentation", Sources: []attentionSource{attentionSourcePod, attentionSourceWorkload, attentionSourceNode},
 		Presentations: []string{"error"}, Severity: AttentionSeverityError,
 	},

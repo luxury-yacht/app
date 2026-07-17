@@ -3,6 +3,7 @@ import { useObjectPanel } from '@modules/object-panel/hooks/useObjectPanel';
 import ResourceInventoryTable from '@modules/resource-grid/ResourceInventoryTable';
 import { selectPayloadRows } from '@modules/resource-grid/typedResourceQueryScope';
 import { useQueryBackedClusterResourceGridTable } from '@modules/resource-grid/useQueryBackedResourceGridTable';
+import { StatusChip, type StatusChipVariant } from '@shared/components/StatusChip';
 import * as cf from '@shared/components/tables/columnFactories';
 import type { GridColumnDefinition } from '@shared/components/tables/GridTable';
 import { useNavigateToView } from '@shared/hooks/useNavigateToView';
@@ -14,6 +15,12 @@ import { useCallback, useMemo } from 'react';
 import type { ClusterAttentionFinding, ClusterAttentionSnapshot } from '@/core/refresh/types';
 import { useShortNames } from '@/hooks/useShortNames';
 import { getDisplayKind } from '@/utils/kindAliasMap';
+
+const severityChipVariants = {
+  info: 'info',
+  warning: 'warning',
+  error: 'unhealthy',
+} satisfies Record<ClusterAttentionFinding['severity'], StatusChipVariant>;
 
 export default function ClusterViewAttention() {
   const { selectedClusterId } = useKubeconfig();
@@ -49,9 +56,15 @@ export default function ClusterViewAttention() {
         getClassName: () => 'object-panel-link',
       }),
       cf.createTextColumn('namespace', 'Namespace', (row) => row.namespace || '-'),
-      cf.createTextColumn('severity', 'Severity', (row) => row.severity, {
-        getClassName: (row) => `status-text ${row.severity}`,
-      }),
+      {
+        key: 'severity',
+        header: 'Severity',
+        sortable: true,
+        sortValue: (row) => row.severity,
+        render: (row) => (
+          <StatusChip variant={severityChipVariants[row.severity]}>{row.severity}</StatusChip>
+        ),
+      },
       cf.createTextColumn('status', 'Status', (row) => row.status || '-'),
       cf.createTextColumn('reason', 'Finding', (row) => row.reasons?.join(' · ') || '-'),
       cf.createAgeColumn<ClusterAttentionFinding>('age', 'Age', (row) => row.age),

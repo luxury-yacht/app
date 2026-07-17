@@ -38,3 +38,12 @@ func TestBuildResourceModelStatus(t *testing.T) {
 	require.Equal(t, "Running", model.Status.Label)
 	require.Equal(t, "ready", model.Status.Presentation)
 }
+
+func TestBuildResourceModelStatusReportsNoEligibleNodes(t *testing.T) {
+	model := daemonset.BuildResourceModel("cluster-a", daemonSetWithReplicas(0, 0, 0, 0))
+
+	require.Equal(t, "0/0", model.Status.State)
+	require.Equal(t, "No eligible nodes", model.Status.Label)
+	require.Equal(t, "NoEligibleNodes", model.Status.Reason)
+	require.Equal(t, "warning", model.Status.Presentation)
+}

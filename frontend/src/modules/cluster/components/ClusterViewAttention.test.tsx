@@ -1,4 +1,5 @@
 import ClusterViewAttention from '@modules/cluster/components/ClusterViewAttention';
+import { StatusChip } from '@shared/components/StatusChip';
 import type { GridColumnDefinition } from '@shared/components/tables/GridTable';
 import { act } from 'react';
 import * as ReactDOM from 'react-dom/client';
@@ -139,7 +140,7 @@ describe('ClusterViewAttention', () => {
     });
   });
 
-  it('renders info findings with the info status style', async () => {
+  it('renders every severity with the matching status chip', async () => {
     await act(async () => {
       root.render(<ClusterViewAttention />);
       await Promise.resolve();
@@ -148,13 +149,19 @@ describe('ClusterViewAttention', () => {
     const columns = queryParamsRef.current?.columns as
       | GridColumnDefinition<ClusterAttentionFinding>[]
       | undefined;
-    const severityCell = columns
-      ?.find((column) => column.key === 'severity')
-      ?.render({ ...finding, severity: 'info' });
+    const severityColumn = columns?.find((column) => column.key === 'severity');
+    for (const [severity, variant] of [
+      ['info', 'info'],
+      ['warning', 'warning'],
+      ['error', 'unhealthy'],
+    ] as const) {
+      const severityCell = severityColumn?.render({ ...finding, severity });
 
-    expect(severityCell).toBeTruthy();
-    expect((severityCell as React.ReactElement<{ className?: string }>).props.className).toBe(
-      'status-text info'
-    );
+      expect(severityCell).toBeTruthy();
+      expect((severityCell as React.ReactElement).type).toBe(StatusChip);
+      expect(
+        (severityCell as React.ReactElement<{ variant: string; children: React.ReactNode }>).props
+      ).toEqual(expect.objectContaining({ variant, children: severity }));
+    }
   });
 });
