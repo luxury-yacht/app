@@ -14,6 +14,8 @@ import {
   USAGE_HIGH_THRESHOLD_PERCENT,
 } from '@shared/components/resourceBarThresholds';
 import Tooltip from '@shared/components/Tooltip';
+import { DEFAULT_GRID_TABLE_FILTER_STATE } from '@shared/components/tables/gridTableFilterState';
+import { requestGridTableFilters } from '@shared/components/tables/hooks/useGridTableExternalFilters';
 import {
   calculateResourceMetrics,
   formatCpuValue,
@@ -59,6 +61,7 @@ import {
 } from '@/core/resource-metrics';
 import { useClusterHealthListener } from '@/hooks/useWailsRuntimeEvents';
 import type { ClusterViewType } from '@/types/navigation/views';
+import { CLUSTER_ATTENTION_FINDING_TYPES } from '../clusterAttentionFindingTypes';
 import ClusterOverviewRestrictionNotice, {
   type OverviewRestriction,
 } from './ClusterOverviewRestrictionNotice';
@@ -112,6 +115,19 @@ const EMPTY_OVERVIEW: ClusterOverviewPayload = {
   notReadyNodes: 0,
   cordonedNodes: 0,
   recentEvents: [],
+};
+
+type PodStatusFilter = 'none' | 'starting' | 'failing' | 'terminating' | 'restarts' | 'not-ready';
+
+const POD_ATTENTION_FINDINGS: Record<Exclude<PodStatusFilter, 'none'>, string[]> = {
+  starting: [CLUSTER_ATTENTION_FINDING_TYPES.podUnhealthy],
+  failing: [CLUSTER_ATTENTION_FINDING_TYPES.errorPresentation],
+  terminating: [CLUSTER_ATTENTION_FINDING_TYPES.podUnhealthy],
+  restarts: [CLUSTER_ATTENTION_FINDING_TYPES.restarts],
+  'not-ready': [
+    CLUSTER_ATTENTION_FINDING_TYPES.errorPresentation,
+    CLUSTER_ATTENTION_FINDING_TYPES.podUnhealthy,
+  ],
 };
 
 const ClusterOverview: React.FC<ClusterOverviewProps> = ({ clusterContext }) => {
@@ -367,14 +383,25 @@ const ClusterOverview: React.FC<ClusterOverviewProps> = ({ clusterContext }) => 
     };
   }, [canActivateOverviewRefresh, overviewScope]);
 
-  type PodStatusFilter = 'none' | 'unhealthy' | 'restarts' | 'not-ready';
-
   const handlePodStatusNavigate = useCallback(
     (filter: PodStatusFilter, count: number) => {
       if (count <= 0) {
         return;
       }
       if (filter !== 'none') {
+        if (selectedClusterId) {
+          requestGridTableFilters({
+            clusterId: selectedClusterId,
+            destinationViewId: 'cluster-attention',
+            filters: {
+              ...DEFAULT_GRID_TABLE_FILTER_STATE,
+              kinds: { mode: 'some', values: ['Pod'] },
+              queryFacets: {
+                findings: { mode: 'some', values: POD_ATTENTION_FINDINGS[filter] },
+              },
+            },
+          });
+        }
         setActiveClusterView('attention');
         navigateToClusterView('cluster');
         setSidebarSelection({ type: 'cluster', value: 'cluster' });
@@ -388,6 +415,7 @@ const ClusterOverview: React.FC<ClusterOverviewProps> = ({ clusterContext }) => 
     [
       navigateToClusterView,
       navigateToNamespace,
+      selectedClusterId,
       setActiveClusterView,
       setActiveNamespaceTab,
       setSelectedNamespace,
@@ -417,21 +445,21 @@ const ClusterOverview: React.FC<ClusterOverviewProps> = ({ clusterContext }) => 
       label: 'starting',
       value: displayOverview.startingPods,
       variant: 'starting',
-      filter: 'unhealthy' as const,
+      filter: 'starting' as const,
     },
     {
       key: 'failing',
       label: 'failing',
       value: displayOverview.failingPods,
       variant: 'failing',
-      filter: 'unhealthy' as const,
+      filter: 'failing' as const,
     },
     {
       key: 'terminating',
       label: 'terminating',
       value: displayOverview.terminatingPods,
       variant: 'terminating',
-      filter: 'unhealthy' as const,
+      filter: 'terminating' as const,
     },
   ];
   const podSignalItems = [

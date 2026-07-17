@@ -9,6 +9,7 @@
  */
 
 import type { ObjectDiffOpenRequest } from '@shared/components/diff/objectDiffSelection';
+import type { GridTableFilterRequest } from '@shared/components/tables/hooks/gridTableFilterRequest';
 import type { GridTableFocusRequest } from '@shared/components/tables/hooks/gridTableFocusRequest';
 import type { ClusterLifecycleState } from '@/core/contexts/clusterLifecycleState';
 import type { RefresherState } from '@/core/refresh/RefreshManager';
@@ -150,6 +151,7 @@ export interface AppEvents {
   // Grid table external focus — emitted to request that a visible GridTable
   // finds and focuses a specific row matching the given resource fields.
   'gridtable:focus-request': GridTableFocusRequest;
+  'gridtable:filter-request': GridTableFilterRequest;
 
   // Cluster lifecycle events — bridged from Wails runtime by ClusterLifecycleContext,
   // which closes the state union at the ingestion boundary.

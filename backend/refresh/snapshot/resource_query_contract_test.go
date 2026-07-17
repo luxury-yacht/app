@@ -122,6 +122,7 @@ func TestPublishedQueryFacetsHaveBackendExecutionAndOptionProjections(t *testing
 		"pods":                {podQueryCapabilities(), typedTableFacetKeys(podQueryFacets())},
 		"nodes":               {nodeQueryCapabilities(), typedTableFacetKeys(nodeQueryFacets())},
 		"cluster-events":      {clusterEventsQueryCapabilities(), typedTableFacetKeys(clusterEventTableQueryAdapter().Facets)},
+		"cluster-attention":   {clusterAttentionQueryCapabilities(), typedTableFacetKeys(attentionTableQueryAdapter().Facets)},
 		"namespace-events":    {namespaceEventsQueryCapabilities(), typedTableFacetKeys(namespacedEventTableQueryAdapter().Facets)},
 		"namespace-workloads": {namespaceWorkloadsQueryCapabilities(), typedTableFacetKeys(workloadQueryFacets())},
 	}
@@ -151,7 +152,7 @@ func TestPublishedQueryFacetsHaveBackendExecutionAndOptionProjections(t *testing
 func typedTableFacetKeys[T any](facets []typedTableQueryFacet[T]) []string {
 	keys := make([]string, 0, len(facets))
 	for _, facet := range facets {
-		if facet.Value == nil {
+		if facet.Value == nil && facet.Values == nil {
 			continue
 		}
 		keys = append(keys, facet.Descriptor.Key)

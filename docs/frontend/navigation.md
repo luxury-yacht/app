@@ -32,10 +32,21 @@ Cluster Attention is the inventory of objects that currently warrant operator
 action. It appears between Overview and Resources and is scoped to exactly one
 cluster.
 
-Overview pod-health and restart signals open Cluster Attention. Attention rows
+Overview pod-health and restart signals open Cluster Attention with `Kind = Pod`
+and the corresponding Findings filters staged before navigation. Starting and
+terminating select `pod-unhealthy`; failing selects `error-presentation`;
+not-ready selects both because that signal spans warning and error
+presentations; restarts select `restarts`. The ready Pod count continues to open
+the all-namespaces Workloads view. Attention rows
 combine the active typed causes for one object and carry the object's complete
 cluster/GVR identity; their Kind and Name links open that object. Resource views
 remain the place for browsing and operating on the full unfiltered inventory.
+
+The Attention Findings dropdown is a backend-owned typed query facet. One row
+can publish several finding type IDs; values are ORed within Findings and ANDed
+with Kind, Namespace, Severity, and the other active filters. User-facing labels
+come from the centralized Attention finding policy while requests and persisted
+filter state use stable finding type IDs.
 
 The backend owns the Attention finding set in a per-cluster maintained query
 store. Existing Pod, workload, and Node reflector bundles plus the shared Event

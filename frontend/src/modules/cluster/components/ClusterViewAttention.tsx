@@ -8,6 +8,7 @@ import { SettingsIcon } from '@shared/components/icons/SharedIcons';
 import { StatusChip, type StatusChipVariant } from '@shared/components/StatusChip';
 import * as cf from '@shared/components/tables/columnFactories';
 import type { GridColumnDefinition } from '@shared/components/tables/GridTable';
+import { useGridTableExternalFilters } from '@shared/components/tables/hooks/useGridTableExternalFilters';
 import { useNavigateToView } from '@shared/hooks/useNavigateToView';
 import {
   buildRequiredCanonicalObjectRowKey,
@@ -204,24 +205,28 @@ export default function ClusterViewAttention() {
     []
   );
 
-  const { gridTableProps, favModal, source, queryPayload } = useQueryBackedClusterResourceGridTable<
-    ClusterAttentionSnapshot,
-    ClusterAttentionFinding
-  >({
-    queryTableMode: 'Query Backed Static',
+  const { gridTableProps, favModal, source, queryPayload, persistence } =
+    useQueryBackedClusterResourceGridTable<ClusterAttentionSnapshot, ClusterAttentionFinding>({
+      queryTableMode: 'Query Backed Static',
+      clusterId: selectedClusterId,
+      domain: 'cluster-attention',
+      label: 'Cluster Attention',
+      selectRows: selectPayloadRows,
+      viewId: 'cluster-attention',
+      columns,
+      keyExtractor,
+      showKindDropdown: true,
+      showNamespaceFilters: true,
+      defaultSortKey: 'severity',
+      defaultSortDirection: 'asc',
+      diagnosticsLabel: 'Cluster Attention',
+      filterOptionOverrides,
+    });
+
+  useGridTableExternalFilters({
     clusterId: selectedClusterId,
-    domain: 'cluster-attention',
-    label: 'Cluster Attention',
-    selectRows: selectPayloadRows,
-    viewId: 'cluster-attention',
-    columns,
-    keyExtractor,
-    showKindDropdown: true,
-    showNamespaceFilters: true,
-    defaultSortKey: 'severity',
-    defaultSortDirection: 'asc',
-    diagnosticsLabel: 'Cluster Attention',
-    filterOptionOverrides,
+    destinationViewId: 'cluster-attention',
+    persistence,
   });
 
   const ignoreRules = queryPayload?.ignoreRules ?? {

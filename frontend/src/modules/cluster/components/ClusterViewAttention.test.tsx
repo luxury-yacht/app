@@ -1,6 +1,11 @@
 import ClusterViewAttention from '@modules/cluster/components/ClusterViewAttention';
 import { StatusChip } from '@shared/components/StatusChip';
 import type { GridColumnDefinition } from '@shared/components/tables/GridTable';
+import { DEFAULT_GRID_TABLE_FILTER_STATE } from '@shared/components/tables/gridTableFilterState';
+import {
+  requestGridTableFilters,
+  setPendingGridTableFilterRequest,
+} from '@shared/components/tables/hooks/useGridTableExternalFilters';
 import { act } from 'react';
 import * as ReactDOM from 'react-dom/client';
 import { renderToStaticMarkup } from 'react-dom/server';
@@ -18,6 +23,7 @@ const {
   queryPayloadRef,
   queryParamsRef,
   tablePropsRef,
+  persistenceRef,
 } = vi.hoisted(() => ({
   openWithObjectMock: vi.fn(),
   ignoreObjectMock: vi
@@ -53,6 +59,9 @@ const {
   },
   queryParamsRef: { current: null as Record<string, unknown> | null },
   tablePropsRef: { current: null as Record<string, unknown> | null },
+  persistenceRef: {
+    current: { hydrated: true, setFilters: vi.fn() },
+  },
 }));
 
 vi.mock('@/core/settings/clusterAttentionIgnores', () => ({
@@ -86,6 +95,7 @@ vi.mock('@modules/resource-grid/useQueryBackedResourceGridTable', () => ({
       favModal: null,
       source: { rows: [], loading: false, loaded: true, error: null },
       queryPayload: queryPayloadRef.current,
+      persistence: persistenceRef.current,
     };
   },
 }));
@@ -154,11 +164,42 @@ describe('ClusterViewAttention', () => {
     };
     queryParamsRef.current = null;
     tablePropsRef.current = null;
+    persistenceRef.current = { hydrated: true, setFilters: vi.fn() };
+    setPendingGridTableFilterRequest(null);
   });
 
   afterEach(() => {
     act(() => root.unmount());
     container.remove();
+    setPendingGridTableFilterRequest(null);
+  });
+
+  it('applies a staged Overview filter request after table persistence hydrates', async () => {
+    persistenceRef.current = { hydrated: false, setFilters: vi.fn() };
+    const filters = {
+      ...DEFAULT_GRID_TABLE_FILTER_STATE,
+      kinds: { mode: 'some' as const, values: ['Pod'] },
+      queryFacets: { findings: { mode: 'some' as const, values: ['restarts'] } },
+    };
+    requestGridTableFilters({
+      clusterId: 'cluster-a',
+      destinationViewId: 'cluster-attention',
+      filters,
+    });
+
+    await act(async () => {
+      root.render(<ClusterViewAttention />);
+      await Promise.resolve();
+    });
+    expect(persistenceRef.current.setFilters).not.toHaveBeenCalled();
+
+    persistenceRef.current = { ...persistenceRef.current, hydrated: true };
+    await act(async () => {
+      root.render(<ClusterViewAttention />);
+      await Promise.resolve();
+    });
+
+    expect(persistenceRef.current.setFilters).toHaveBeenCalledWith(filters);
   });
 
   it('binds the cluster-scoped Attention query with kind and namespace filters', async () => {

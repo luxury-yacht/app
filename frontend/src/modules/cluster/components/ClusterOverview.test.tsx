@@ -6,6 +6,7 @@
  */
 
 import { ALL_NAMESPACES_SCOPE } from '@modules/namespace/constants';
+import { DEFAULT_GRID_TABLE_FILTER_STATE } from '@shared/components/tables/gridTableFilterState';
 import { act, type ReactNode } from 'react';
 import * as ReactDOM from 'react-dom/client';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
@@ -29,6 +30,7 @@ const {
   setObjectPanelActiveTabMock,
   canResolveEventObjectReferenceMock,
   resolveEventObjectReferenceMock,
+  requestGridTableFiltersMock,
 } = vi.hoisted(() => {
   return {
     mockRefreshOrchestrator: {
@@ -66,6 +68,7 @@ const {
     setObjectPanelActiveTabMock: vi.fn(),
     canResolveEventObjectReferenceMock: vi.fn(() => false),
     resolveEventObjectReferenceMock: vi.fn(),
+    requestGridTableFiltersMock: vi.fn(),
   };
 });
 let mockLifecycleState = 'ready';
@@ -89,6 +92,10 @@ vi.mock('@/core/refresh', () => ({
 vi.mock('@modules/kubernetes/config/KubeconfigContext', () => ({
   __esModule: true,
   useKubeconfig: () => kubeconfigStateRef.current,
+}));
+
+vi.mock('@shared/components/tables/hooks/useGridTableExternalFilters', () => ({
+  requestGridTableFilters: requestGridTableFiltersMock,
 }));
 
 vi.mock('@shared/components/ResourceBar', () => ({
@@ -679,12 +686,14 @@ describe('ClusterOverview', () => {
     expect(container.textContent).not.toContain('Loading cluster overview...');
   });
 
-  it('navigates to Cluster Attention from a non-ready pod status card', async () => {
+  it('opens Cluster Attention with the matching Pod finding filters from each non-ready status', async () => {
     mockLifecycleState = 'loading';
     domainStateRef.current = createDomainState('ready', {
       overview: {
         ...EMPTY_OVERVIEW_DATA,
         startingPods: 3,
+        failingPods: 2,
+        terminatingPods: 1,
       },
     });
 
@@ -692,12 +701,28 @@ describe('ClusterOverview', () => {
     cleanupRoot = cleanup;
     await flushEffects();
 
-    const startingCard = container.querySelector('[data-testid="cluster-pod-status-starting"]');
-    expect(startingCard).not.toBeNull();
+    for (const [status, findings] of [
+      ['starting', ['pod-unhealthy']],
+      ['failing', ['error-presentation']],
+      ['terminating', ['pod-unhealthy']],
+    ] as const) {
+      const card = container.querySelector(`[data-testid="cluster-pod-status-${status}"]`);
+      expect(card).not.toBeNull();
 
-    act(() => {
-      startingCard?.dispatchEvent(new MouseEvent('click', { bubbles: true }));
-    });
+      act(() => {
+        card?.dispatchEvent(new MouseEvent('click', { bubbles: true }));
+      });
+
+      expect(requestGridTableFiltersMock).toHaveBeenLastCalledWith({
+        clusterId: 'cluster-1',
+        destinationViewId: 'cluster-attention',
+        filters: {
+          ...DEFAULT_GRID_TABLE_FILTER_STATE,
+          kinds: { mode: 'some', values: ['Pod'] },
+          queryFacets: { findings: { mode: 'some', values: [...findings] } },
+        },
+      });
+    }
 
     expect(setActiveClusterViewMock).toHaveBeenCalledWith('attention');
     expect(setSidebarSelectionMock).toHaveBeenCalledWith({
@@ -730,11 +755,31 @@ describe('ClusterOverview', () => {
       restartedCard?.dispatchEvent(new MouseEvent('click', { bubbles: true }));
     });
     expect(setActiveClusterViewMock).toHaveBeenLastCalledWith('attention');
+    expect(requestGridTableFiltersMock).toHaveBeenLastCalledWith({
+      clusterId: 'cluster-1',
+      destinationViewId: 'cluster-attention',
+      filters: {
+        ...DEFAULT_GRID_TABLE_FILTER_STATE,
+        kinds: { mode: 'some', values: ['Pod'] },
+        queryFacets: { findings: { mode: 'some', values: ['restarts'] } },
+      },
+    });
 
     act(() => {
       notReadyCard?.dispatchEvent(new MouseEvent('click', { bubbles: true }));
     });
     expect(setActiveClusterViewMock).toHaveBeenLastCalledWith('attention');
+    expect(requestGridTableFiltersMock).toHaveBeenLastCalledWith({
+      clusterId: 'cluster-1',
+      destinationViewId: 'cluster-attention',
+      filters: {
+        ...DEFAULT_GRID_TABLE_FILTER_STATE,
+        kinds: { mode: 'some', values: ['Pod'] },
+        queryFacets: {
+          findings: { mode: 'some', values: ['error-presentation', 'pod-unhealthy'] },
+        },
+      },
+    });
     expect(navigateToClusterViewMock).toHaveBeenCalledWith('cluster');
   });
 
@@ -766,6 +811,7 @@ describe('ClusterOverview', () => {
       value: ALL_NAMESPACES_SCOPE,
     });
     expect(navigateToNamespaceMock).toHaveBeenCalled();
+    expect(requestGridTableFiltersMock).not.toHaveBeenCalled();
   });
 
   it('navigates from non-ready and cordoned node signals to Cluster Nodes', async () => {

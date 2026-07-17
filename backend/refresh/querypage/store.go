@@ -20,10 +20,24 @@ import (
 // identity chain — never an arbitrary identifier like the Kubernetes object UID.
 // Pinned by TestTiedSortValuesOrderByHumanKey.
 type Schema[R any] struct {
-	UID        func(R) string
-	SortKeys   map[string]func(R) string
-	Facets     map[string]func(R) string
-	SearchText func(R) string
+	UID         func(R) string
+	SortKeys    map[string]func(R) string
+	Facets      map[string]func(R) string
+	MultiFacets map[string]func(R) []string
+	SearchText  func(R) string
+}
+
+func uniqueFacetValues(values []string) []string {
+	seen := make(map[string]struct{}, len(values))
+	unique := make([]string, 0, len(values))
+	for _, value := range values {
+		if _, exists := seen[value]; exists {
+			continue
+		}
+		seen[value] = struct{}{}
+		unique = append(unique, value)
+	}
+	return unique
 }
 
 // Query is one page request against a kind's store.
@@ -169,7 +183,7 @@ func NewStore[R any](schema Schema[R]) *Store[R] {
 		rows:   newColumnStore[R](newRowCodec[R]()),
 		match:  make(map[uint32]matchValues),
 		idx:    make(map[string]*sortIndex, len(schema.SortKeys)),
-		facets: make(map[string]map[string]int, len(schema.Facets)),
+		facets: make(map[string]map[string]int, len(schema.Facets)+len(schema.MultiFacets)),
 		tri:    newTrigramIndex(0),
 	}
 	for name := range schema.SortKeys {
@@ -179,6 +193,12 @@ func NewStore[R any](schema Schema[R]) *Store[R] {
 		}
 	}
 	for name := range schema.Facets {
+		s.facets[name] = make(map[string]int)
+	}
+	for name := range schema.MultiFacets {
+		if _, exists := s.facets[name]; exists {
+			panic(fmt.Sprintf("querypage: facet %q is both single- and multi-valued", name))
+		}
 		s.facets[name] = make(map[string]int)
 	}
 	return s
@@ -246,8 +266,11 @@ func (s *Store[R]) replaceAllLocked(rows []R) {
 			desc: btree.NewG[indexEntry](32, descLess),
 		}
 	}
-	s.facets = make(map[string]map[string]int, len(s.schema.Facets))
+	s.facets = make(map[string]map[string]int, len(s.schema.Facets)+len(s.schema.MultiFacets))
 	for name := range s.schema.Facets {
+		s.facets[name] = make(map[string]int)
+	}
+	for name := range s.schema.MultiFacets {
 		s.facets[name] = make(map[string]int)
 	}
 	if s.tri != nil {
@@ -305,6 +328,11 @@ func (s *Store[R]) reindex(uid string, row R) {
 	for name, get := range s.schema.Facets {
 		s.facets[name][get(row)]++
 	}
+	for name, get := range s.schema.MultiFacets {
+		for _, value := range uniqueFacetValues(get(row)) {
+			s.facets[name][value]++
+		}
+	}
 }
 
 func (s *Store[R]) deindex(uid string, row R) {
@@ -317,6 +345,15 @@ func (s *Store[R]) deindex(uid string, row R) {
 			delete(s.facets[name], v)
 		} else {
 			s.facets[name][v]--
+		}
+	}
+	for name, get := range s.schema.MultiFacets {
+		for _, value := range uniqueFacetValues(get(row)) {
+			if s.facets[name][value] <= 1 {
+				delete(s.facets[name], value)
+			} else {
+				s.facets[name][value]--
+			}
 		}
 	}
 }
@@ -360,15 +397,31 @@ func (s *Store[R]) scopeMatchesBase(rowID uint32, mv matchValues, base map[strin
 		if len(allowed) == 0 {
 			continue
 		}
-		if _, isFacet := s.schema.Facets[fname]; !isFacet {
+		_, isSingleFacet := s.schema.Facets[fname]
+		_, isMultiFacet := s.schema.MultiFacets[fname]
+		if !isSingleFacet && !isMultiFacet {
 			return false
 		}
-		v := mv.facets[fname]
 		matched := false
-		for _, a := range allowed {
-			if v == a {
-				matched = true
-				break
+		if isSingleFacet {
+			value := mv.facets[fname]
+			for _, candidate := range allowed {
+				if value == candidate {
+					matched = true
+					break
+				}
+			}
+		} else {
+			for _, value := range mv.multiFacets[fname] {
+				for _, candidate := range allowed {
+					if value == candidate {
+						matched = true
+						break
+					}
+				}
+				if matched {
+					break
+				}
 			}
 		}
 		if !matched {
@@ -407,8 +460,8 @@ func (s *Store[R]) Scope(base map[string][]string, search string) (map[string]ma
 
 	searchLower := strings.ToLower(search)
 	candidates, narrow := s.searchCandidates(searchLower)
-	counts := make(map[string]map[string]int, len(s.schema.Facets))
-	for name := range s.schema.Facets {
+	counts := make(map[string]map[string]int, len(s.facets))
+	for name := range s.facets {
 		counts[name] = make(map[string]int)
 	}
 	total := 0
@@ -419,6 +472,11 @@ func (s *Store[R]) Scope(base map[string][]string, search string) (map[string]ma
 		total++
 		for name, value := range mv.facets {
 			counts[name][value]++
+		}
+		for name, values := range mv.multiFacets {
+			for _, value := range values {
+				counts[name][value]++
+			}
 		}
 	}
 	return counts, total

@@ -885,6 +885,11 @@ func attentionTableQueryAdapter() typedTableQueryAdapter[AttentionFinding] {
 				Descriptor: ResourceQueryFacetDescriptor{Key: "severities", Label: "Severity", Placeholder: "All severities", BulkActions: true},
 				Value:      func(row AttentionFinding) string { return string(row.Severity) },
 			},
+			{
+				Descriptor: ResourceQueryFacetDescriptor{Key: "findings", Label: "Findings", Placeholder: "All findings", Searchable: true, BulkActions: true},
+				Values:     func(row AttentionFinding) []string { return attentionCauseTypes(row.Causes) },
+				Label:      attentionFindingTypeLabel,
+			},
 		},
 		SearchText: func(row AttentionFinding) []string {
 			return []string{
@@ -926,6 +931,23 @@ func attentionTableQueryAdapter() typedTableQueryAdapter[AttentionFinding] {
 			return 0, false
 		},
 	}
+}
+
+func attentionCauseTypes(causes []AttentionCause) []string {
+	types := make([]string, 0, len(causes))
+	for _, cause := range causes {
+		types = appendReason(types, cause.Type)
+	}
+	return types
+}
+
+func attentionFindingTypeLabel(findingType string) string {
+	for _, definition := range AttentionFindingTypes() {
+		if definition.ID == findingType {
+			return definition.Label
+		}
+	}
+	return findingType
 }
 
 func attentionCauseLabels(causes []AttentionCause) []string {

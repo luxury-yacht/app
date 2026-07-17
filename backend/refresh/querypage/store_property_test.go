@@ -30,12 +30,26 @@ func (g *groundTruth) matches(r podRow, q Query) bool {
 		if len(allowed) == 0 {
 			continue
 		}
-		v := g.schema.Facets[fname](r)
 		ok := false
-		for _, a := range allowed {
-			if v == a {
-				ok = true
-				break
+		if get := g.schema.Facets[fname]; get != nil {
+			value := get(r)
+			for _, candidate := range allowed {
+				if value == candidate {
+					ok = true
+					break
+				}
+			}
+		} else if get := g.schema.MultiFacets[fname]; get != nil {
+			for _, value := range uniqueFacetValues(get(r)) {
+				for _, candidate := range allowed {
+					if value == candidate {
+						ok = true
+						break
+					}
+				}
+				if ok {
+					break
+				}
 			}
 		}
 		if !ok {
@@ -80,6 +94,15 @@ func (g *groundTruth) query(q Query) (keys []string, total int, facets map[strin
 		m := map[string]int{}
 		for _, r := range g.rows {
 			m[get(r)]++
+		}
+		facets[fname] = m
+	}
+	for fname, get := range g.schema.MultiFacets {
+		m := map[string]int{}
+		for _, r := range g.rows {
+			for _, value := range uniqueFacetValues(get(r)) {
+				m[value]++
+			}
 		}
 		facets[fname] = m
 	}

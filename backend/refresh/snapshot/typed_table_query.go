@@ -78,6 +78,7 @@ type typedTableQueryAdapter[T any] struct {
 type typedTableQueryFacet[T any] struct {
 	Descriptor ResourceQueryFacetDescriptor
 	Value      func(T) string
+	Values     func(T) []string
 	Label      func(string) string
 }
 
@@ -295,10 +296,17 @@ func (m typedTableQueryMatcher[T]) Matches(item T) bool {
 	}
 	for key, selected := range m.facetSets {
 		facet, ok := typedTableFacetByKey(m.adapter.Facets, key)
-		if !ok || facet.Value == nil {
+		if !ok || (facet.Value == nil && facet.Values == nil) {
 			return false
 		}
-		if _, ok := selected[strings.ToLower(strings.TrimSpace(facet.Value(item)))]; !ok {
+		matched := false
+		for _, value := range typedTableFacetItemValues(facet, item) {
+			if _, exists := selected[strings.ToLower(strings.TrimSpace(value))]; exists {
+				matched = true
+				break
+			}
+		}
+		if !matched {
 			return false
 		}
 	}
@@ -317,6 +325,16 @@ func (m typedTableQueryMatcher[T]) Matches(item T) bool {
 		}
 	}
 	return true
+}
+
+func typedTableFacetItemValues[T any](facet typedTableQueryFacet[T], item T) []string {
+	if facet.Values != nil {
+		return facet.Values(item)
+	}
+	if facet.Value != nil {
+		return []string{facet.Value(item)}
+	}
+	return nil
 }
 
 func typedTableFacetSelectionSets(selections map[string][]string) map[string]map[string]struct{} {
@@ -395,7 +413,13 @@ func collectTypedTableFacet[T any](items []T, accessor func(T) string) []string 
 func collectTypedTableFacetValues[T any](items []T, facets []typedTableQueryFacet[T], exact bool) []ResourceQueryFacetValues {
 	values := make([]ResourceQueryFacetValues, 0, len(facets))
 	for _, facet := range facets {
-		options := collectTypedTableFacet(items, facet.Value)
+		seen := map[string]string{}
+		for _, item := range items {
+			for _, value := range typedTableFacetItemValues(facet, item) {
+				addTypedTableFacetValue(seen, value)
+			}
+		}
+		options := typedTableFacetMapValues(seen)
 		projected := make([]ResourceQueryFacetOption, 0, len(options))
 		for _, value := range options {
 			label := value

@@ -54,6 +54,43 @@ func TestClusterAttentionBuilderServesQueryBackedPages(t *testing.T) {
 	require.Equal(t, meta.ClusterID, payload.Rows[0].Ref.ClusterID)
 }
 
+func TestClusterAttentionBuilderFiltersRowsByAnyFindingCause(t *testing.T) {
+	meta := ClusterMeta{ClusterID: "cluster-a", ClusterName: "A"}
+	index := newClusterAttentionIndex(meta, time.Now)
+	t.Cleanup(index.Stop)
+	for _, row := range []AttentionFinding{
+		{
+			Ref: attentionTestRef("Pod", "payments", "crash"), Kind: "Pod", Name: "crash", Namespace: "payments",
+			Severity: AttentionSeverityError, Status: "CrashLoopBackOff",
+			Causes: []AttentionCause{
+				{Type: "error-presentation", Label: "Error status", Message: "CrashLoopBackOff", Severity: AttentionSeverityError},
+				{Type: "restarts", Label: "Restarts", Message: "4 restarts", Severity: AttentionSeverityWarning},
+			},
+		},
+		{
+			Ref: attentionTestRef("Pod", "payments", "failed"), Kind: "Pod", Name: "failed", Namespace: "payments",
+			Severity: AttentionSeverityError, Status: "Failed",
+			Causes: []AttentionCause{{Type: "error-presentation", Label: "Error status", Message: "Failed", Severity: AttentionSeverityError}},
+		},
+	} {
+		row.ClusterMeta = meta
+		index.maintained.store.Upsert(row)
+	}
+
+	result, err := (&ClusterAttentionBuilder{index: index}).Build(
+		WithClusterMeta(context.Background(), meta),
+		refresh.JoinClusterScope(meta.ClusterID, "?limit=10&facet.findings=restarts"),
+	)
+	require.NoError(t, err)
+	payload := result.Payload.(ClusterAttentionSnapshot)
+	require.Len(t, payload.Rows, 1)
+	require.Equal(t, "crash", payload.Rows[0].Name)
+	require.Equal(t, []ResourceQueryFacetOption{
+		{Value: "error-presentation", Label: "Error status"},
+		{Value: "restarts", Label: "Restarts"},
+	}, testFacetOptions(payload.FacetValues, "findings"))
+}
+
 func TestClusterAttentionBuilderSortsSeverityByOperationalPriority(t *testing.T) {
 	now := time.Date(2026, time.July, 16, 12, 0, 0, 0, time.UTC)
 	meta := ClusterMeta{ClusterID: "cluster-a", ClusterName: "A"}

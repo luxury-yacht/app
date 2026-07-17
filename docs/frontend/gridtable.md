@@ -94,6 +94,11 @@ workflow and that exception is documented.
   unfiltered total for the same view scope. Producers must not widen the
   denominator beyond cluster-scoped, all-namespaces, or pinned-namespace
   boundaries when clearing user filters.
+- Cross-view filter navigation uses the shared one-shot GridTable filter request.
+  Every request must name the exact destination `viewId` and `clusterId`; the
+  destination applies it only after its persisted table state hydrates, then
+  consumes it. Stage the request before activating the destination route so
+  another table or cluster cannot receive it and hydration cannot overwrite it.
 
 ## Ownership
 
