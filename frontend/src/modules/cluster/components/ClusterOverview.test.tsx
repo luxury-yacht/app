@@ -776,7 +776,7 @@ describe('ClusterOverview', () => {
         ...DEFAULT_GRID_TABLE_FILTER_STATE,
         kinds: { mode: 'some', values: ['Pod'] },
         queryFacets: {
-          findings: { mode: 'some', values: ['error-presentation', 'pod-unhealthy'] },
+          findings: { mode: 'some', values: ['pod-not-ready'] },
         },
       },
     });

@@ -55,12 +55,18 @@ func TestAttentionPoliciesUseTheClosedSeverityCatalog(t *testing.T) {
 		require.False(t, ruleIDs[rule.ID], "duplicate Attention classification rule %q", rule.ID)
 		ruleIDs[rule.ID] = true
 		require.Contains(t, attentionSeverityDefinitions, rule.Severity, "rule %q uses an undeclared severity", rule.ID)
+		if rule.GraceSeverity != "" {
+			require.Contains(t, attentionSeverityDefinitions, rule.GraceSeverity, "rule %q uses an undeclared grace severity", rule.ID)
+		}
 	}
 	for signal, policy := range attentionSignalPolicies {
 		require.NotEmpty(t, policy.Label)
 		require.False(t, ruleIDs[string(signal)], "duplicate Attention finding type %q", signal)
 		ruleIDs[string(signal)] = true
 		require.Contains(t, attentionSeverityDefinitions, policy.Severity, "signal %q uses an undeclared severity", signal)
+		if policy.GraceSeverity != "" {
+			require.Contains(t, attentionSeverityDefinitions, policy.GraceSeverity, "signal %q uses an undeclared grace severity", signal)
+		}
 	}
 	require.Len(t, AttentionFindingTypes(), len(ruleIDs))
 }
@@ -163,7 +169,7 @@ func TestEvaluateAttentionSourceProjectsStableCauseTypes(t *testing.T) {
 	}, evaluation.Finding.Causes)
 }
 
-func TestEvaluateAttentionSourceDefersTransientPodWarningsUntilGracePeriod(t *testing.T) {
+func TestEvaluateAttentionSourcePublishesTransientPodWarningsAsInfoUntilGracePeriod(t *testing.T) {
 	now := time.Date(2026, time.July, 16, 12, 0, 0, 0, time.UTC)
 	createdAt := now.Add(-2 * time.Minute)
 	record := attentionSourceRecord{
@@ -176,13 +182,53 @@ func TestEvaluateAttentionSourceDefersTransientPodWarningsUntilGracePeriod(t *te
 	}
 
 	beforeGrace := evaluateAttentionSource(record, now)
-	require.Nil(t, beforeGrace.Finding)
+	require.NotNil(t, beforeGrace.Finding)
+	require.Equal(t, AttentionSeverityInfo, beforeGrace.Finding.Severity)
+	require.Equal(t, []AttentionCause{{
+		Type: "pod-unhealthy", Label: "Unhealthy pods", Message: "ContainerCreating", Severity: AttentionSeverityInfo,
+	}}, beforeGrace.Finding.Causes)
 	require.Equal(t, createdAt.Add(attentionWarningGrace), beforeGrace.NextEvaluation)
 
 	afterGrace := evaluateAttentionSource(record, createdAt.Add(attentionWarningGrace))
 	require.NotNil(t, afterGrace.Finding)
-	require.Equal(t, []string{"ContainerCreating"}, attentionCauseMessages(afterGrace.Finding.Causes))
+	require.Equal(t, AttentionSeverityWarning, afterGrace.Finding.Severity)
+	require.Equal(t, []AttentionCause{{
+		Type: "pod-unhealthy", Label: "Unhealthy pods", Message: "ContainerCreating", Severity: AttentionSeverityWarning,
+	}}, afterGrace.Finding.Causes)
 	require.True(t, afterGrace.NextEvaluation.IsZero())
+}
+
+func TestEvaluateAttentionSourceTracksContainerReadinessIndependentlyOfPresentation(t *testing.T) {
+	now := time.Date(2026, time.July, 16, 12, 0, 0, 0, time.UTC)
+	createdAt := now.Add(-2 * time.Minute)
+	record := attentionSourceRecord{
+		Ref:                attentionTestRef("Pod", "payments", "checkout-1"),
+		Source:             attentionSourcePod,
+		Status:             "Running",
+		StatusState:        "Running",
+		StatusPresentation: "ready",
+		Ready:              "0/1",
+		AgeTimestamp:       createdAt.UnixMilli(),
+	}
+
+	beforeGrace := evaluateAttentionSource(record, now)
+	require.NotNil(t, beforeGrace.Finding)
+	require.Equal(t, AttentionSeverityInfo, beforeGrace.Finding.Severity)
+	require.Equal(t, []AttentionCause{{
+		Type: "pod-not-ready", Label: "Pods not ready", Message: "0/1 ready", Severity: AttentionSeverityInfo,
+	}}, beforeGrace.Finding.Causes)
+	require.Equal(t, createdAt.Add(attentionWarningGrace), beforeGrace.NextEvaluation)
+
+	afterGrace := evaluateAttentionSource(record, createdAt.Add(attentionWarningGrace))
+	require.NotNil(t, afterGrace.Finding)
+	require.Equal(t, AttentionSeverityWarning, afterGrace.Finding.Severity)
+	require.Equal(t, []AttentionCause{{
+		Type: "pod-not-ready", Label: "Pods not ready", Message: "0/1 ready", Severity: AttentionSeverityWarning,
+	}}, afterGrace.Finding.Causes)
+
+	record.Status = "Succeeded"
+	record.StatusState = "Succeeded"
+	require.Nil(t, evaluateAttentionSource(record, now).Finding)
 }
 
 func TestEvaluateAttentionSourceReportsInsufficientWorkloadReplicasAfterGrace(t *testing.T) {

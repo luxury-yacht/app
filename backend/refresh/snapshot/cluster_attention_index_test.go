@@ -42,20 +42,50 @@ func TestClusterAttentionIndexIgnoresStaleDeadlineGenerations(t *testing.T) {
 	createdAt := now.Add(-2 * time.Minute)
 	record := attentionSourceRecord{
 		Ref: attentionTestRef("Pod", "payments", "checkout-0"), Source: attentionSourcePod,
-		Status: "ContainerCreating", StatusPresentation: "warning",
+		Status: "ContainerCreating", StatusState: "Pending", StatusPresentation: "warning",
 		AgeTimestamp: createdAt.UnixMilli(),
 	}
 	index.UpsertSource("pods", record)
-	require.Empty(t, index.Snapshot())
+	require.Len(t, index.Snapshot(), 1)
+	require.Equal(t, uint64(1), index.Revision())
 
 	record.Status = "Running"
 	record.StatusPresentation = "ready"
 	index.UpsertSource("pods", record)
+	require.Empty(t, index.Snapshot())
+	require.Equal(t, uint64(2), index.Revision())
 	now = createdAt.Add(attentionWarningGrace)
 	index.EvaluateDue(now)
 
 	require.Empty(t, index.Snapshot())
-	require.Equal(t, uint64(0), index.Revision())
+	require.Equal(t, uint64(2), index.Revision())
+}
+
+func TestClusterAttentionIndexElevatesTransientPodFindingAtGraceDeadline(t *testing.T) {
+	now := time.Date(2026, time.July, 16, 12, 0, 0, 0, time.UTC)
+	createdAt := now.Add(-2 * time.Minute)
+	index := newClusterAttentionIndex(ClusterMeta{ClusterID: "cluster-a", ClusterName: "A"}, func() time.Time { return now })
+	t.Cleanup(index.Stop)
+	record := attentionSourceRecord{
+		Ref: attentionTestRef("Pod", "payments", "checkout-0"), Source: attentionSourcePod,
+		Status: "Running", StatusState: "Running", StatusPresentation: "ready", Ready: "0/1",
+		AgeTimestamp: createdAt.UnixMilli(),
+	}
+
+	index.UpsertSource("pods", record)
+	rows := index.Snapshot()
+	require.Len(t, rows, 1)
+	require.Equal(t, AttentionSeverityInfo, rows[0].Severity)
+	require.Equal(t, "pod-not-ready", rows[0].Causes[0].Type)
+	require.Equal(t, uint64(1), index.Revision())
+
+	now = createdAt.Add(attentionWarningGrace)
+	index.EvaluateDue(now)
+	rows = index.Snapshot()
+	require.Len(t, rows, 1)
+	require.Equal(t, AttentionSeverityWarning, rows[0].Severity)
+	require.Equal(t, "pod-not-ready", rows[0].Causes[0].Type)
+	require.Equal(t, uint64(2), index.Revision())
 }
 
 func TestClusterAttentionIndexAdvancesRevisionOnlyWhenFindingChanges(t *testing.T) {

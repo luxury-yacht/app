@@ -205,6 +205,7 @@ type attentionSourceRecord struct {
 	Source             attentionSource
 	objectNamespace    string
 	Status             string
+	StatusState        string
 	StatusPresentation string
 	StatusReason       string
 	Ready              string
@@ -1196,6 +1197,7 @@ func attentionRecordFromBundle(source attentionSource, bundle ingest.Bundle) (at
 			return attentionSourceRecord{}, false
 		}
 		record.Status = row.Status
+		record.StatusState = row.StatusState
 		record.StatusPresentation = row.StatusPresentation
 		record.StatusReason = row.StatusReason
 		record.Ready = row.Ready
@@ -1256,24 +1258,57 @@ func attentionRecordFromEvent(meta ClusterMeta, event *corev1.Event) (attentionS
 
 func evaluatePodAttention(record attentionSourceRecord, now time.Time) attentionEvaluation {
 	classification, statusNeedsAttention := classifyAttentionSource(record)
-	if statusNeedsAttention && classification.Grace > 0 && record.Restarts == 0 {
-		if deadline, deferred := warningGraceDeadline(record.AgeTimestamp, now); deferred {
-			return attentionEvaluation{NextEvaluation: deadline}
-		}
-	}
-	if !statusNeedsAttention && record.Restarts == 0 {
+	podNotReady := podReadyMismatch(record)
+	if !statusNeedsAttention && !podNotReady && record.Restarts == 0 {
 		return attentionEvaluation{}
 	}
 
-	causes := make([]AttentionCause, 0, 2)
-	if statusNeedsAttention {
-		causes = appendAttentionCause(causes, classificationCause(classification, record))
+	nextEvaluation := time.Time{}
+	graceDeadline, beforeGrace := warningGraceDeadline(record.AgeTimestamp, now)
+	causes := make([]AttentionCause, 0, 3)
+
+	includeClassification := statusNeedsAttention
+	classificationSeverity := classification.Severity
+	if statusNeedsAttention && classification.Grace > 0 && record.Restarts == 0 {
+		if beforeGrace {
+			if classification.GraceSeverity == "" {
+				includeClassification = false
+			} else {
+				classificationSeverity = classification.GraceSeverity
+			}
+			nextEvaluation = graceDeadline
+		}
+	}
+	if includeClassification {
+		cause := classificationCause(classification, record)
+		cause.Severity = classificationSeverity
+		causes = appendAttentionCause(causes, cause)
+	}
+	if podNotReady {
+		policy := attentionPolicyForSignal(attentionSignalPodNotReady)
+		cause := signalCause(attentionSignalPodNotReady, policy, strings.TrimSpace(record.Ready)+" ready")
+		if policy.Grace > 0 && beforeGrace {
+			if policy.GraceSeverity != "" {
+				cause.Severity = policy.GraceSeverity
+				causes = appendAttentionCause(causes, cause)
+			}
+			nextEvaluation = graceDeadline
+		} else {
+			causes = appendAttentionCause(causes, cause)
+		}
 	}
 	if record.Restarts > 0 {
 		restartPolicy := attentionPolicyForSignal(attentionSignalRestarts)
 		causes = appendAttentionCause(causes, signalCause(attentionSignalRestarts, restartPolicy, fmt.Sprintf("%d restarts", record.Restarts)))
 	}
-	return findingEvaluation(record, causes)
+	evaluation := findingEvaluation(record, causes)
+	evaluation.NextEvaluation = nextEvaluation
+	return evaluation
+}
+
+func podReadyMismatch(record attentionSourceRecord) bool {
+	ready, total, ok := parseReadyCounts(record.Ready)
+	return ok && podCountsAsNotReadySignal(record.StatusState, ready, total)
 }
 
 func evaluateWorkloadAttention(record attentionSourceRecord, now time.Time) attentionEvaluation {
@@ -1352,13 +1387,18 @@ func warningGraceDeadline(ageTimestamp int64, now time.Time) (time.Time, bool) {
 }
 
 func readyReplicaMismatch(ready string) bool {
+	available, desired, ok := parseReadyCounts(ready)
+	return ok && desired > 0 && available < desired
+}
+
+func parseReadyCounts(ready string) (int32, int32, bool) {
 	parts := strings.Split(strings.TrimSpace(ready), "/")
 	if len(parts) != 2 {
-		return false
+		return 0, 0, false
 	}
 	available, availableErr := strconv.ParseInt(strings.TrimSpace(parts[0]), 10, 32)
 	desired, desiredErr := strconv.ParseInt(strings.TrimSpace(parts[1]), 10, 32)
-	return availableErr == nil && desiredErr == nil && desired > 0 && available < desired
+	return int32(available), int32(desired), availableErr == nil && desiredErr == nil
 }
 
 func findingEvaluation(record attentionSourceRecord, causes []AttentionCause) attentionEvaluation {

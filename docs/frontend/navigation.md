@@ -35,9 +35,9 @@ cluster.
 Overview pod-health and restart signals open Cluster Attention with `Kind = Pod`
 and the corresponding Findings filters staged before navigation. Starting and
 terminating select `pod-unhealthy`; failing selects `error-presentation`;
-not-ready selects both because that signal spans warning and error
-presentations; restarts select `restarts`. The ready Pod count continues to open
-the all-namespaces Workloads view. Attention rows
+not-ready selects the readiness-derived `pod-not-ready`; restarts select
+`restarts`. The ready Pod count continues to open the all-namespaces Workloads
+view. Attention rows
 combine the active typed causes for one object and carry the object's complete
 cluster/GVR identity; their Kind and Name links open that object. Resource views
 remain the place for browsing and operating on the full unfiltered inventory.
@@ -74,18 +74,25 @@ their UID no longer exists. An unavailable input does not prune rules because
 missing permission is not proof that the object was deleted. Type rules remain
 until the user restores them.
 
-- `info`: intentional inactive states that are operationally useful to see but
-  do not require remediation. Deployment and StatefulSet `Scaled to 0`, and
-  CronJob `Idle`, and DaemonSets with no eligible nodes are info findings.
+- `info`: states that are operationally useful to see but do not yet require
+  remediation. Deployment and StatefulSet `Scaled to 0`, CronJob `Idle`,
+  DaemonSets with no eligible nodes, and transient unhealthy Pods within their
+  grace period are info findings.
 - `warning`: restarts, insufficient ready replicas, warning Events, and
-  non-ready Pod, workload, or Node states that are not errors.
+  non-ready Pod states after their grace period plus workload or Node states
+  that are not errors.
 - `error`: Pod, workload, or Node states whose canonical status presentation is
   `error`.
 
 When more than one signal applies to an object, the finding uses the highest
 severity while retaining all causes. Intentional inactive info findings are
-immediate. Restarts and error states are immediate; transient Pod/workload
-warnings and replica mismatches retain the Attention grace period.
+immediate. Restarts and error states are immediate. A transient unhealthy Pod
+is visible immediately as `info` under the stable `pod-unhealthy` finding type
+and is promoted to `warning` when its grace deadline expires. Transient workload
+warnings and replica mismatches remain suppressed until their grace period ends.
+Pod container-readiness is independently represented by `pod-not-ready`, using
+the same immediate `info` to delayed `warning` transition. Both the Overview
+count and that finding exclude Succeeded Pods and Pods with no containers.
 
 Global Clusters summarizes not-ready nodes and failing pods, and its Cluster
 link opens the originating cluster's Overview. Namespace-level warning,

@@ -91,6 +91,29 @@ func TestClusterAttentionBuilderFiltersRowsByAnyFindingCause(t *testing.T) {
 	}, testFacetOptions(payload.FacetValues, "findings"))
 }
 
+func TestClusterAttentionBuilderReturnsTransientNotReadyPodForOverviewFilters(t *testing.T) {
+	now := time.Date(2026, time.July, 16, 12, 0, 0, 0, time.UTC)
+	meta := ClusterMeta{ClusterID: "cluster-a", ClusterName: "A"}
+	index := newClusterAttentionIndex(meta, func() time.Time { return now })
+	t.Cleanup(index.Stop)
+	index.UpsertSource("pods", attentionSourceRecord{
+		Ref: attentionTestRef("Pod", "payments", "checkout-0"), Source: attentionSourcePod,
+		Status: "Running", StatusState: "Running", StatusPresentation: "ready", Ready: "0/1",
+		AgeTimestamp: now.Add(-2 * time.Minute).UnixMilli(),
+	})
+
+	result, err := (&ClusterAttentionBuilder{index: index}).Build(
+		WithClusterMeta(context.Background(), meta),
+		refresh.JoinClusterScope(meta.ClusterID, "?limit=10&kinds=Pod&facet.findings=pod-not-ready"),
+	)
+	require.NoError(t, err)
+	payload := result.Payload.(ClusterAttentionSnapshot)
+	require.Len(t, payload.Rows, 1)
+	require.Equal(t, "checkout-0", payload.Rows[0].Name)
+	require.Equal(t, AttentionSeverityInfo, payload.Rows[0].Severity)
+	require.Equal(t, AttentionSeverityCounts{Info: 1}, payload.SeverityCounts)
+}
+
 func TestClusterAttentionBuilderSortsSeverityByOperationalPriority(t *testing.T) {
 	now := time.Date(2026, time.July, 16, 12, 0, 0, 0, time.UTC)
 	meta := ClusterMeta{ClusterID: "cluster-a", ClusterName: "A"}

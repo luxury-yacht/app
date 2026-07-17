@@ -29,6 +29,7 @@ type attentionClassificationRule struct {
 	StatusReasons         []string
 	Severity              AttentionSeverity
 	Grace                 time.Duration
+	GraceSeverity         AttentionSeverity
 	FindingReason         string
 }
 
@@ -56,7 +57,7 @@ var attentionClassificationRules = []attentionClassificationRule{
 	{
 		ID: "pod-unhealthy", Label: "Unhealthy pods", Sources: []attentionSource{attentionSourcePod},
 		ExcludedPresentations: []string{"", "ready", "success"},
-		Severity:              AttentionSeverityWarning, Grace: attentionWarningGrace,
+		Severity:              AttentionSeverityWarning, Grace: attentionWarningGrace, GraceSeverity: AttentionSeverityInfo,
 	},
 	{
 		ID: "workload-unhealthy", Label: "Unhealthy workloads", Sources: []attentionSource{attentionSourceWorkload},
@@ -76,22 +77,26 @@ var attentionClassificationRules = []attentionClassificationRule{
 type attentionSignal string
 
 const (
+	attentionSignalPodNotReady     attentionSignal = "pod-not-ready"
 	attentionSignalRestarts        attentionSignal = "restarts"
 	attentionSignalReplicaMismatch attentionSignal = "replica-mismatch"
 )
 
 type attentionSignalPolicy struct {
-	Severity AttentionSeverity
-	Grace    time.Duration
-	Label    string
+	Severity      AttentionSeverity
+	Grace         time.Duration
+	GraceSeverity AttentionSeverity
+	Label         string
 }
 
 var attentionSignalPolicies = map[attentionSignal]attentionSignalPolicy{
+	attentionSignalPodNotReady:     {Severity: AttentionSeverityWarning, Grace: attentionWarningGrace, GraceSeverity: AttentionSeverityInfo, Label: "Pods not ready"},
 	attentionSignalRestarts:        {Severity: AttentionSeverityWarning, Label: "Restarts"},
 	attentionSignalReplicaMismatch: {Severity: AttentionSeverityWarning, Grace: attentionWarningGrace, Label: "Replica mismatch"},
 }
 
 var attentionSignalOrder = []attentionSignal{
+	attentionSignalPodNotReady,
 	attentionSignalRestarts,
 	attentionSignalReplicaMismatch,
 }

@@ -124,10 +124,7 @@ const POD_ATTENTION_FINDINGS: Record<Exclude<PodStatusFilter, 'none'>, string[]>
   failing: [CLUSTER_ATTENTION_FINDING_TYPES.errorPresentation],
   terminating: [CLUSTER_ATTENTION_FINDING_TYPES.podUnhealthy],
   restarts: [CLUSTER_ATTENTION_FINDING_TYPES.restarts],
-  'not-ready': [
-    CLUSTER_ATTENTION_FINDING_TYPES.errorPresentation,
-    CLUSTER_ATTENTION_FINDING_TYPES.podUnhealthy,
-  ],
+  'not-ready': [CLUSTER_ATTENTION_FINDING_TYPES.podNotReady],
 };
 
 const ClusterOverview: React.FC<ClusterOverviewProps> = ({ clusterContext }) => {

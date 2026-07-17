@@ -663,9 +663,7 @@ func buildClusterOverviewSnapshot(
 		overview.TotalInitContainers += agg.InitContainerCount
 
 		countPodStatusPresentation(&overview, agg.StatusPresentation)
-		// Not-ready signal: an unfinished pod (not Succeeded) whose containers are
-		// not all ready. Mirrors the prior podCountsAsNotReadySignal check.
-		if agg.Phase != string(corev1.PodSucceeded) && agg.TotalContainers > 0 && agg.ReadyContainers < agg.TotalContainers {
+		if podCountsAsNotReadySignal(agg.Phase, agg.ReadyContainers, agg.TotalContainers) {
 			overview.NotReadyPods++
 		}
 
