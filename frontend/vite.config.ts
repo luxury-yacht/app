@@ -21,6 +21,9 @@ export default defineConfig({
     },
   },
   envPrefix: ['VITE_', 'ENABLE_', 'ERROR_'],
+  optimizeDeps: {
+    include: ['@antv/g6'],
+  },
   build: {
     outDir: 'dist',
   },
