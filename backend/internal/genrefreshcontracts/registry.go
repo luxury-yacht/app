@@ -75,6 +75,7 @@ var contractTypes = []typeSpec{
 	{name: "RecentEventEntry", typeOf: typeOf[snapshot.RecentEvent]()},
 	{name: "ClusterOverviewSnapshotPayload", typeOf: typeOf[snapshot.ClusterOverviewSnapshot]()},
 	{name: "ClusterAttentionFinding", typeOf: typeOf[snapshot.AttentionFinding]()},
+	{name: "AttentionSeverityCounts", typeOf: typeOf[snapshot.AttentionSeverityCounts]()},
 	{name: "ClusterAttentionSnapshot", typeOf: typeOf[snapshot.ClusterAttentionSnapshot]()},
 	{name: "ClusterRBACEntry", typeOf: typeOf[streamrows.ClusterRBACEntry]()},
 	{name: "ClusterRBACSnapshotPayload", typeOf: typeOf[snapshot.ClusterRBACSnapshot]()},

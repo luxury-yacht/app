@@ -157,6 +157,32 @@
   white-space: nowrap;
 }
 
+.sidebar-attention-label {
+  min-width: 0;
+}
+
+.sidebar-item .sidebar-attention-badges {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.2rem;
+  flex-shrink: 0;
+  margin-left: auto;
+  overflow: visible;
+}
+
+.sidebar-item .sidebar-attention-badge {
+  min-width: 1.1rem;
+  padding: 0 0.25rem;
+  line-height: 1.2;
+  text-align: center;
+  overflow: visible;
+}
+
+.sidebar-item .sidebar-attention-badge-wrapper {
+  display: inline-flex;
+  overflow: visible;
+}
+
 .sidebar-item svg {
   flex-shrink: 0;
 }

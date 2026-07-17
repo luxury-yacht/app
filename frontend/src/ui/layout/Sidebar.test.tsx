@@ -31,6 +31,16 @@ const autoRefreshLoadingState = vi.hoisted(() => ({
   suppressPassiveLoading: false,
 }));
 
+const attentionState = vi.hoisted(() => ({
+  byScope: {
+    'cluster-a|': {
+      severityCounts: { info: 2, warning: 3, error: 1 },
+    },
+  } as Record<string, { severityCounts: { info: number; warning: number; error: number } }>,
+  useRefreshDomainHandle: vi.fn(),
+  useStreamSignalRefetch: vi.fn(),
+}));
+
 const kubeconfigState = vi.hoisted(() => ({
   selectedClusterId: 'cluster-a',
   selectedClusterIds: ['cluster-a', 'cluster-b'],
@@ -50,6 +60,17 @@ vi.mock('@modules/kubernetes/config/KubeconfigContext', () => ({
 
 vi.mock('@/core/refresh/hooks/useAutoRefreshLoadingState', () => ({
   useAutoRefreshLoadingState: () => autoRefreshLoadingState,
+}));
+
+vi.mock('@/core/data-access', () => ({
+  useRefreshDomainHandle: (options: { scope?: string }) => {
+    attentionState.useRefreshDomainHandle(options);
+    return { data: options.scope ? attentionState.byScope[options.scope] : null };
+  },
+}));
+
+vi.mock('@/core/refresh/hooks/useStreamSignalRefetch', () => ({
+  useStreamSignalRefetch: (...args: unknown[]) => attentionState.useStreamSignalRefetch(...args),
 }));
 
 type NamespaceEntry = {
@@ -192,6 +213,46 @@ describe('Sidebar', () => {
 
     act(() => resources?.click());
     expect(resources?.getAttribute('aria-expanded')).toBe('false');
+  });
+
+  it('shows active-cluster Attention severity counts beside the label', () => {
+    renderSidebar();
+
+    const getAttention = () =>
+      requireValue(container, 'expected Sidebar test container').querySelector<HTMLElement>(
+        '[data-sidebar-target-view="attention"]'
+      );
+    const attention = getAttention();
+    expect(attention?.querySelector('.sidebar-attention-badge--info')?.textContent).toBe('2');
+    expect(attention?.querySelector('.sidebar-attention-badge--warning')?.textContent).toBe('3');
+    expect(attention?.querySelector('.sidebar-attention-badge--error')?.textContent).toBe('1');
+    expect(attention?.getAttribute('aria-label')).toBe('Attention: 2 info, 3 warnings, 1 error');
+    expect(attentionState.useRefreshDomainHandle).toHaveBeenCalledWith(
+      expect.objectContaining({
+        domain: 'cluster-attention',
+        scope: 'cluster-a|',
+        enabled: true,
+        preserveState: true,
+      })
+    );
+    expect(attentionState.useStreamSignalRefetch).toHaveBeenCalledWith('cluster-attention', [
+      'cluster-a|',
+    ]);
+
+    attentionState.byScope['cluster-b|'] = {
+      severityCounts: { info: 0, warning: 4, error: 2 },
+    };
+    kubeconfigState.selectedClusterId = 'cluster-b';
+    renderSidebar();
+
+    expect(getAttention()?.querySelector('.sidebar-attention-badge--info')).toBeNull();
+    expect(getAttention()?.querySelector('.sidebar-attention-badge--warning')?.textContent).toBe(
+      '4'
+    );
+    expect(getAttention()?.querySelector('.sidebar-attention-badge--error')?.textContent).toBe('2');
+    expect(attentionState.useRefreshDomainHandle).toHaveBeenLastCalledWith(
+      expect.objectContaining({ scope: 'cluster-b|' })
+    );
   });
 
   it('renders flat cluster and namespace view lists in canonical order', () => {
@@ -414,6 +475,12 @@ describe('Sidebar', () => {
     viewStateMock = createViewState();
     autoRefreshLoadingState.suppressPassiveLoading = false;
     kubeconfigState.selectedClusterIds = ['cluster-a', 'cluster-b'];
+    kubeconfigState.selectedClusterId = 'cluster-a';
+    attentionState.byScope = {
+      'cluster-a|': {
+        severityCounts: { info: 2, warning: 3, error: 1 },
+      },
+    };
     resetAppPreferencesCacheForTesting();
   });
 

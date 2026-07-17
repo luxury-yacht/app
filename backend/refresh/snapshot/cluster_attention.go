@@ -57,10 +57,19 @@ type AttentionFinding struct {
 	AgeTimestamp int64                     `json:"ageTimestamp,omitempty"`
 }
 
+// AttentionSeverityCounts summarizes every current finding in the cluster,
+// independent of the table's active query, page, or filters.
+type AttentionSeverityCounts struct {
+	Info    int `json:"info"`
+	Warning int `json:"warning"`
+	Error   int `json:"error"`
+}
+
 type ClusterAttentionSnapshot struct {
 	ClusterMeta
 	ResourceQueryEnvelope
-	Rows []AttentionFinding `json:"rows"`
+	SeverityCounts AttentionSeverityCounts `json:"severityCounts"`
+	Rows           []AttentionFinding      `json:"rows"`
 }
 
 type ClusterAttentionBuilder struct {
@@ -82,6 +91,7 @@ func (b *ClusterAttentionBuilder) Build(ctx context.Context, scope string) (*ref
 		return nil, fmt.Errorf("%s scope must be cluster-wide", clusterAttentionDomainName)
 	}
 	rows := b.index.Snapshot()
+	severityCounts := countAttentionSeverities(rows)
 	availableKinds := make(map[string]bool)
 	for _, row := range rows {
 		availableKinds[row.Kind] = true
@@ -121,10 +131,26 @@ func (b *ClusterAttentionBuilder) Build(ctx context.Context, scope string) (*ref
 		Payload: ClusterAttentionSnapshot{
 			ClusterMeta:           meta,
 			ResourceQueryEnvelope: resolved.Envelope,
+			SeverityCounts:        severityCounts,
 			Rows:                  resolved.Rows,
 		},
 		Stats: resolved.Stats,
 	}, nil
+}
+
+func countAttentionSeverities(rows []AttentionFinding) AttentionSeverityCounts {
+	var counts AttentionSeverityCounts
+	for _, row := range rows {
+		switch row.Severity {
+		case AttentionSeverityInfo:
+			counts.Info++
+		case AttentionSeverityWarning:
+			counts.Warning++
+		case AttentionSeverityError:
+			counts.Error++
+		}
+	}
+	return counts
 }
 
 func clusterAttentionQueryCapabilities() ResourceQueryCapabilities {

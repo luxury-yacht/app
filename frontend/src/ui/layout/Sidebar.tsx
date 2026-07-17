@@ -25,6 +25,8 @@ import {
   WarningIcon,
 } from '@shared/components/icons/SharedIcons';
 import LoadingSpinner from '@shared/components/LoadingSpinner';
+import { StatusChip, type StatusChipVariant } from '@shared/components/StatusChip';
+import { useRefreshDomainHandle } from '@/core/data-access';
 import { eventBus } from '@/core/events';
 import {
   CLUSTER_VIEW_DESCRIPTORS,
@@ -33,6 +35,8 @@ import {
 } from '@/core/navigation/viewRegistry';
 import { buildClusterScope } from '@/core/refresh/clusterScope';
 import { useAutoRefreshLoadingState } from '@/core/refresh/hooks/useAutoRefreshLoadingState';
+import { useStreamSignalRefetch } from '@/core/refresh/hooks/useStreamSignalRefetch';
+import type { AttentionSeverity } from '@/core/refresh/types';
 import { useDimInactiveNamespaces } from '@/hooks/useDimInactiveNamespaces';
 import { useExclusiveNamespaces } from '@/hooks/useExclusiveNamespaces';
 import type { ClusterViewType, GlobalViewType, NamespaceViewType } from '@/types/navigation/views';
@@ -47,6 +51,12 @@ const toNamespaceKey = (clusterId: string | undefined, scope: string): string =>
 
 const escapeAttributeSelectorValue = (value: string): string =>
   value.replace(/\\/g, '\\\\').replace(/"/g, '\\"');
+
+const attentionBadgeVariants = {
+  info: 'info',
+  warning: 'warning',
+  error: 'unhealthy',
+} satisfies Record<AttentionSeverity, StatusChipVariant>;
 
 function Sidebar() {
   const elementIdPrefix = useId();
@@ -78,6 +88,15 @@ function Sidebar() {
 
   const width = viewState.isSidebarVisible ? viewState.sidebarWidth : 50;
   const isCollapsed = !viewState.isSidebarVisible;
+  const attentionScope = buildClusterScope(selectedClusterId, '');
+  const attentionBadgesEnabled = Boolean(attentionScope) && viewState.viewType !== 'global';
+  const { data: attentionData } = useRefreshDomainHandle({
+    domain: 'cluster-attention',
+    scope: attentionScope,
+    enabled: attentionBadgesEnabled,
+    preserveState: true,
+  });
+  useStreamSignalRefetch('cluster-attention', attentionBadgesEnabled ? [attentionScope] : []);
   const sidebarSelection = viewState.sidebarSelection;
   const selectedNamespaceRef = useRef<HTMLButtonElement>(null);
   const sidebarRef = useRef<HTMLDivElement>(null);
@@ -412,6 +431,11 @@ function Sidebar() {
                     data-sidebar-target-kind="cluster-view"
                     data-sidebar-target-view={attentionView.id}
                     tabIndex={-1}
+                    aria-label={
+                      attentionData?.severityCounts
+                        ? `${attentionView.label}: ${attentionData.severityCounts.info} info, ${attentionData.severityCounts.warning} warning${attentionData.severityCounts.warning === 1 ? '' : 's'}, ${attentionData.severityCounts.error} error${attentionData.severityCounts.error === 1 ? '' : 's'}`
+                        : attentionView.label
+                    }
                     aria-current={
                       isTargetSelected({ kind: 'cluster-view', view: attentionView.id })
                         ? 'page'
@@ -419,7 +443,34 @@ function Sidebar() {
                     }
                   >
                     <WarningIcon width={14} height={14} />
-                    <span>{attentionView.label}</span>
+                    <span className="sidebar-attention-label">{attentionView.label}</span>
+                    {attentionData?.severityCounts ? (
+                      <span className="sidebar-attention-badges">
+                        {(
+                          [
+                            ['info', attentionData.severityCounts.info],
+                            ['warning', attentionData.severityCounts.warning],
+                            ['error', attentionData.severityCounts.error],
+                          ] as const
+                        ).map(([severity, count]) =>
+                          count > 0 ? (
+                            <span
+                              key={severity}
+                              className="sidebar-attention-badge-wrapper"
+                              aria-hidden="true"
+                              title={`${count} ${severity} finding${count === 1 ? '' : 's'}`}
+                            >
+                              <StatusChip
+                                variant={attentionBadgeVariants[severity]}
+                                className={`sidebar-attention-badge sidebar-attention-badge--${severity}`}
+                              >
+                                {count}
+                              </StatusChip>
+                            </span>
+                          ) : null
+                        )}
+                      </span>
+                    ) : null}
                   </button>
                 ) : null}
                 <button

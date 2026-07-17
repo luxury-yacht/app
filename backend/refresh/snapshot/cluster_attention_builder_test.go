@@ -2,6 +2,7 @@ package snapshot
 
 import (
 	"context"
+	"encoding/json"
 	"testing"
 	"time"
 
@@ -68,4 +69,54 @@ func TestClusterAttentionBuilderSortsSeverityByOperationalPriority(t *testing.T)
 	require.Equal(t, []AttentionSeverity{AttentionSeverityError, AttentionSeverityWarning, AttentionSeverityInfo}, []AttentionSeverity{
 		rows[0].Severity, rows[1].Severity, rows[2].Severity,
 	})
+}
+
+func TestClusterAttentionBuilderPublishesFullSeverityCounts(t *testing.T) {
+	now := time.Date(2026, time.July, 16, 12, 0, 0, 0, time.UTC)
+	meta := ClusterMeta{ClusterID: "cluster-a", ClusterName: "A"}
+	index := newClusterAttentionIndex(meta, func() time.Time { return now })
+	t.Cleanup(index.Stop)
+	for _, test := range []struct {
+		name     string
+		severity AttentionSeverity
+	}{
+		{name: "informational", severity: AttentionSeverityInfo},
+		{name: "warning", severity: AttentionSeverityWarning},
+		{name: "error", severity: AttentionSeverityError},
+	} {
+		ref := attentionTestRef("Deployment", "payments", test.name)
+		index.maintained.store.Upsert(AttentionFinding{
+			ClusterMeta: meta,
+			Ref:         ref,
+			Kind:        ref.Kind,
+			Name:        ref.Name,
+			Namespace:   ref.Namespace,
+			Severity:    test.severity,
+			Status:      test.name,
+			Reasons:     []string{test.name},
+		})
+	}
+	builder := &ClusterAttentionBuilder{index: index}
+	ctx := WithClusterMeta(context.Background(), meta)
+
+	result, err := builder.Build(ctx, refresh.JoinClusterScope(
+		meta.ClusterID,
+		"?limit=1&facet.severities=warning",
+	))
+	require.NoError(t, err)
+	require.Len(t, result.Payload.(ClusterAttentionSnapshot).Rows, 1)
+
+	wire, err := json.Marshal(result.Payload)
+	require.NoError(t, err)
+	var payload struct {
+		SeverityCounts struct {
+			Info    int `json:"info"`
+			Warning int `json:"warning"`
+			Error   int `json:"error"`
+		} `json:"severityCounts"`
+	}
+	require.NoError(t, json.Unmarshal(wire, &payload))
+	require.Equal(t, 1, payload.SeverityCounts.Info)
+	require.Equal(t, 1, payload.SeverityCounts.Warning)
+	require.Equal(t, 1, payload.SeverityCounts.Error)
 }

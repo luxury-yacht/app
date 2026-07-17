@@ -1581,6 +1581,46 @@ describe('refreshOrchestrator', () => {
     expect(getScopedDomainState('cluster-overview', firstScope).status).toBe('idle');
   });
 
+  it('keeps the leased cluster-attention base scope while a table query scope is active', () => {
+    refreshOrchestrator.registerDomain({
+      domain: 'cluster-attention',
+      refresherName: CLUSTER_REFRESHERS.attention,
+      category: 'cluster',
+    });
+
+    const baseScope = buildClusterScope('cluster-a', '');
+    const queryScope = buildClusterScope('cluster-a', '?limit=50&sort=severity');
+    const severityCounts = { info: 5, warning: 16, error: 0 };
+
+    refreshOrchestrator.acquireScopedDomainLease('cluster-attention', baseScope, {
+      preserveState: true,
+    });
+    setScopedDomainState('cluster-attention', baseScope, (previous) => ({
+      ...previous,
+      status: 'ready',
+      data: { severityCounts } as never,
+      scope: baseScope,
+    }));
+
+    // Typed table queries temporarily enable their full query scope, then
+    // disable it after reading the result. That transient scope must not evict
+    // the sidebar's independently leased base snapshot.
+    refreshOrchestrator.setScopedDomainEnabled('cluster-attention', queryScope, true);
+    refreshOrchestrator.setScopedDomainEnabled('cluster-attention', queryScope, false);
+
+    const scopedMap = orchestratorInternals.clusterRuntimes
+      .get('cluster-a')
+      ?.scopedEnabledState.get('cluster-attention');
+    expect(scopedMap?.get(baseScope)).toBe(true);
+    expect(getScopedDomainState('cluster-attention', baseScope).data?.severityCounts).toEqual(
+      severityCounts
+    );
+
+    refreshOrchestrator.releaseScopedDomainLease('cluster-attention', baseScope, {
+      preserveState: true,
+    });
+  });
+
   it('allows object-panel domains to keep multiple active object scopes', () => {
     const objectPanelDomains: Array<[RefreshDomain, SystemRefresherName]> = [
       ['container-logs', SYSTEM_REFRESHERS.containerLogs],

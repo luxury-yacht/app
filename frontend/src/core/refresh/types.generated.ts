@@ -82,6 +82,12 @@ export const RESOURCE_STREAM_SIGNALS = ['changed', 'reset', 'error'] as const;
 
 export type ResourceStreamSignal = (typeof RESOURCE_STREAM_SIGNALS)[number];
 
+export interface AttentionSeverityCounts {
+  info: number;
+  warning: number;
+  error: number;
+}
+
 export interface CatalogActionFacts {
   status?: string;
   unschedulable?: boolean;
@@ -184,6 +190,7 @@ export interface ClusterAttentionSnapshot {
   issues?: Array<ResourceQueryIssue>;
   dynamic?: ResourceQueryDynamicRef;
   capabilities: ResourceQueryCapabilities;
+  severityCounts: AttentionSeverityCounts;
   rows: Array<ClusterAttentionFinding> | null;
 }
 
