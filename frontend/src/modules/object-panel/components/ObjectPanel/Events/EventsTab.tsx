@@ -19,12 +19,14 @@ import {
 } from '@shared/components/tables/columnFactories';
 import GridTable, { type GridColumnDefinition } from '@shared/components/tables/GridTable';
 import { buildClusterScopedKey } from '@shared/components/tables/GridTable.utils';
+import { createEventTypeColumn } from '@shared/events/eventColumns';
 import {
   eventGridCanOpenRelatedObject,
   eventGridRelatedObjectInput,
   objectPanelEventGridRow,
   resolveEventGridRelatedObject,
 } from '@shared/events/eventGridModel';
+import { EVENT_LABELS } from '@shared/events/eventPresentation';
 import { useNavigateToView } from '@shared/hooks/useNavigateToView';
 import {
   buildEventObjectReference,
@@ -388,20 +390,17 @@ const EventsTab: React.FC<EventsTabProps> = ({ objectData, isActive, eventsScope
 
   const columns = useMemo<GridColumnDefinition<EventDisplay>[]>(() => {
     const base: GridColumnDefinition<EventDisplay>[] = [
-      createTextColumn<EventDisplay>('type', 'Type', (item) => item.type || 'Normal', {
-        getClassName: (item) => `event-badge ${(item.type || 'normal').toLowerCase()}`,
-      }),
-      createTextColumn<EventDisplay>('source', 'Source', (item) => item.source || 'Unknown'),
-      createTextColumn<EventDisplay>('reason', 'Reason', (item) => item.reason || '-'),
-      createTextColumn<EventDisplay>('message', 'Message', (item) => item.message || '-', {
-        getClassName: (item) => (item.message ? 'event-message' : undefined),
-        getTitle: (item) => (item.message ? item.message : undefined),
-      }),
+      createEventTypeColumn<EventDisplay>(),
+      createTextColumn<EventDisplay>('source', EVENT_LABELS.source, (item) => item.source || '-'),
       // Split the involved object into type/name columns for readability.
-      createTextColumn<EventDisplay>('objectType', 'Object Type', (item) => item.objectKind || '-'),
+      createTextColumn<EventDisplay>(
+        'objectType',
+        EVENT_LABELS.objectType,
+        (item) => item.objectKind || '-'
+      ),
       createTextColumn<EventDisplay>(
         'objectName',
-        'Object Name',
+        EVENT_LABELS.objectName,
         (item) => item.objectName || '-',
         {
           onClick: (item) => {
@@ -414,10 +413,20 @@ const EventsTab: React.FC<EventsTabProps> = ({ objectData, isActive, eventsScope
           isInteractive: canOpenRelatedObject,
         }
       ),
+      createTextColumn<EventDisplay>('reason', EVENT_LABELS.reason, (item) => item.reason || '-'),
+      createTextColumn<EventDisplay>(
+        'message',
+        EVENT_LABELS.message,
+        (item) => item.message || '-',
+        {
+          getClassName: (item) => (item.message ? 'event-message' : undefined),
+          getTitle: (item) => (item.message ? item.message : undefined),
+        }
+      ),
       (() => {
         const column = createTextColumn<EventDisplay>(
           'age',
-          'Age',
+          EVENT_LABELS.lastSeen,
           (item) => formatLiveAgeText(item.ageTimestamp, Date.now(), item.age),
           {
             getClassName: () => 'age-cell',

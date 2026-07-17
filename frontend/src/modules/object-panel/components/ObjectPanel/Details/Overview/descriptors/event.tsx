@@ -1,6 +1,7 @@
 import type { ResourceLink } from '@core/refresh/types';
 import { LiveAgeText } from '@shared/components/LiveAgeText';
 import { ObjectPanelLink } from '@shared/components/ObjectPanelLink';
+import { EVENT_LABELS } from '@shared/events/eventPresentation';
 import { resourceLinkToObjectReference } from '@shared/utils/resourceLinkIdentity';
 import { events, type resourcemodel } from '@wailsjs/go/models';
 import type React from 'react';
@@ -44,77 +45,82 @@ export const eventDescriptor: OverviewDescriptor<EventDetails> = {
   dtoClass: events.EventDetails,
   schema: {
     items: [
-      { kind: 'status' },
+      { kind: 'status', label: EVENT_LABELS.type },
       {
         field: 'involvedObject',
-        label: 'Object',
+        label: EVENT_LABELS.object,
         hidden: (d) => !resourceLinkLabel(d.involvedObject),
         render: (d, context) => renderResourceLink(d.involvedObject, context),
       },
       {
         field: 'involvedObjectFieldPath',
-        label: 'Field',
+        label: EVENT_LABELS.subobject,
         hidden: (d) => !d.involvedObjectFieldPath,
         mono: true,
       },
-      { field: 'reason', label: 'Reason', hidden: (d) => !d.reason },
-      { field: 'message', label: 'Message', hidden: (d) => !d.message, fullWidth: true },
-      { field: 'count', label: 'Occurrences' },
+      { field: 'reason', label: EVENT_LABELS.reason, hidden: (d) => !d.reason },
+      {
+        field: 'message',
+        label: EVENT_LABELS.message,
+        hidden: (d) => !d.message,
+        fullWidth: true,
+      },
+      { field: 'count', label: EVENT_LABELS.count },
       {
         field: 'firstTimestamp',
-        label: 'First Observed',
+        label: EVENT_LABELS.firstSeen,
         render: (d) => renderTimestamp(d.firstTimestamp),
       },
       {
         field: 'lastTimestamp',
-        label: 'Last Observed',
+        label: EVENT_LABELS.lastSeen,
         render: (d) => renderTimestamp(d.lastTimestamp),
       },
       {
         field: 'eventTime',
-        label: 'Event Time',
+        label: EVENT_LABELS.eventTime,
         hidden: (d) => !normalizeTimestamp(d.eventTime),
         render: (d) => renderTimestamp(d.eventTime),
       },
       {
         field: 'seriesCount',
-        label: 'Series',
+        label: EVENT_LABELS.seriesCount,
         hidden: (d) => d.seriesCount === undefined || d.seriesCount === null,
       },
       {
         field: 'seriesLastObservedTime',
-        label: 'Series Last Observed',
+        label: EVENT_LABELS.seriesLastSeen,
         hidden: (d) => !normalizeTimestamp(d.seriesLastObservedTime),
         render: (d) => renderTimestamp(d.seriesLastObservedTime),
       },
-      { field: 'source', label: 'Source', hidden: (d) => !d.source },
-      { field: 'action', label: 'Action', hidden: (d) => !d.action },
+      { field: 'source', label: EVENT_LABELS.source, hidden: (d) => !d.source },
+      { field: 'action', label: EVENT_LABELS.action, hidden: (d) => !d.action },
       {
         field: 'reportingController',
-        label: 'Controller',
+        label: EVENT_LABELS.reportingController,
         hidden: (d) => !d.reportingController,
         mono: true,
       },
       {
         field: 'reportingInstance',
-        label: 'Instance',
+        label: EVENT_LABELS.reportingInstance,
         hidden: (d) => !d.reportingInstance,
         mono: true,
       },
       {
         field: 'relatedObject',
-        label: 'Related Object',
+        label: EVENT_LABELS.relatedObject,
         hidden: (d) => !resourceLinkLabel(d.relatedObject),
         render: (d, context) => renderResourceLink(d.relatedObject, context),
       },
       {
         field: 'relatedObjectFieldPath',
-        label: 'Related Field',
+        label: EVENT_LABELS.relatedSubobject,
         hidden: (d) => !d.relatedObjectFieldPath,
         mono: true,
       },
     ],
   },
-  // Event type is the canonical status state and is rendered by ResourceStatus.
+  // Event type is the canonical status state and is rendered by ResourceStatus as Type.
   coveredElsewhere: ['eventType'],
 };

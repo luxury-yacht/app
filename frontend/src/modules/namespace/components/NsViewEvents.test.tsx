@@ -291,7 +291,7 @@ describe('NsViewEvents', () => {
     return gridTablePropsRef.current;
   };
 
-  it('defines Age as the visible event timestamp sort column', async () => {
+  it('defines Last Seen as the visible Event timestamp sort column', async () => {
     const event = baseEvent({ ageTimestamp: 42 });
     const props = await renderEventsView();
     const ageColumn = requireValue(
@@ -611,23 +611,39 @@ describe('NsViewEvents', () => {
     expect(namespaceColumn).toBeUndefined();
   });
 
-  it('respects short name preferences when sizing columns', async () => {
-    shortNamesMock.mockReturnValue(true);
+  it('renders Event types with status chips', async () => {
     const props = await renderEventsView();
 
     const typeColumn = requireValue(
       props.columns.find((column) => column.key === 'type'),
       'expected the event type column'
     );
-    // Type column renders with event-badge styling
-    const cell = requireReactElement<{ children?: React.ReactNode; className?: string }>(
+    const warning = requireReactElement<{ children?: React.ReactNode; variant?: string }>(
       typeColumn.render(baseEvent({ type: 'Warning' })),
-      'expected the event type badge element'
+      'expected the warning event type chip'
     );
-    expect(cell.props.children).toBe('Warning');
-    expect(cell.props.className).toContain('event-badge');
-    expect(cell.props.className).toContain('warning');
-    expect(cell.props.className).not.toContain('kind-badge');
-    expect(cell.props.className).not.toMatch(/hash-color-\d+/);
+    const normal = requireReactElement<{ children?: React.ReactNode; variant?: string }>(
+      typeColumn.render(baseEvent({ type: 'Normal' })),
+      'expected the normal event type chip'
+    );
+
+    expect(warning.props).toMatchObject({ children: 'Warning', variant: 'warning' });
+    expect(normal.props).toMatchObject({ children: 'Normal', variant: 'healthy' });
+  });
+
+  it('uses the canonical Event table labels', async () => {
+    const props = await renderEventsView();
+
+    expect(props.columns.map((column) => column.header)).toEqual([
+      'Kind',
+      'Type',
+      'Namespace',
+      'Source',
+      'Object Type',
+      'Object Name',
+      'Reason',
+      'Message',
+      'Last Seen',
+    ]);
   });
 });

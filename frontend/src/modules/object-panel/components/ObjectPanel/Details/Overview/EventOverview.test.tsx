@@ -19,8 +19,13 @@ vi.mock('@shared/components/kubernetes/ResourceMetadata', () => ({
 }));
 
 vi.mock('@shared/components/kubernetes/ResourceStatus', () => ({
-  ResourceStatus: (props: { status?: string }) => (
-    <div data-testid="resource-status">{props.status}</div>
+  ResourceStatus: (props: { status?: string; customLabel?: string }) => (
+    <div>
+      <span className="overview-label">{props.customLabel ?? 'Status'}</span>
+      <span className="overview-value" data-testid="resource-status">
+        {props.status}
+      </span>
+    </div>
   ),
 }));
 
@@ -112,18 +117,20 @@ describe('EventOverview', () => {
     });
 
     expect(container.querySelector('[data-testid="resource-status"]')?.textContent).toBe('Warning');
-    expect(getValueForLabel(container, 'Involved Object')?.textContent).toBe('Pod/orders-abc');
-    expect(getValueForLabel(container, 'Involved Object')?.querySelector('a')).toBeTruthy();
+    expect(getValueForLabel(container, 'Type')?.textContent).toBe('Warning');
+    expect(getValueForLabel(container, 'Status')).toBeNull();
+    expect(getValueForLabel(container, 'Object')?.textContent).toBe('Pod/orders-abc');
+    expect(getValueForLabel(container, 'Object')?.querySelector('a')).toBeTruthy();
     expect(getValueForLabel(container, 'Reason')?.textContent).toBe('BackOff');
     expect(getValueForLabel(container, 'Message')?.textContent).toBe(
       'Back-off restarting failed container'
     );
-    expect(getValueForLabel(container, 'Occurrences')?.textContent).toBe('4');
-    expect(getValueForLabel(container, 'First Observed')?.textContent).toBe('2026-01-03T12:00:00Z');
-    expect(getValueForLabel(container, 'Last Observed')?.textContent).toBe('2026-01-03T12:05:00Z');
+    expect(getValueForLabel(container, 'Count')?.textContent).toBe('4');
+    expect(getValueForLabel(container, 'First Seen')?.textContent).toBe('2026-01-03T12:00:00Z');
+    expect(getValueForLabel(container, 'Last Seen')?.textContent).toBe('2026-01-03T12:05:00Z');
     expect(getValueForLabel(container, 'Event Time')?.textContent).toBe('2026-01-03T12:00:01Z');
-    expect(getValueForLabel(container, 'Series')?.textContent).toBe('7');
-    expect(getValueForLabel(container, 'Series Last Observed')?.textContent).toBe(
+    expect(getValueForLabel(container, 'Series Count')?.textContent).toBe('7');
+    expect(getValueForLabel(container, 'Series Last Seen')?.textContent).toBe(
       '2026-01-03T12:05:01Z'
     );
     expect(getValueForLabel(container, 'Source')?.textContent).toBe('kubelet on node-a');
@@ -132,10 +139,10 @@ describe('EventOverview', () => {
       'kubernetes.io/kubelet'
     );
     expect(getValueForLabel(container, 'Reporting Instance')?.textContent).toBe('kubelet-node-a');
-    expect(getValueForLabel(container, 'Involved Field')?.textContent).toBe('spec.containers{api}');
+    expect(getValueForLabel(container, 'Subobject')?.textContent).toBe('spec.containers{api}');
     expect(getValueForLabel(container, 'Related Object')?.textContent).toBe('Node/node-a');
     expect(getValueForLabel(container, 'Related Object')?.querySelector('a')).toBeTruthy();
-    expect(getValueForLabel(container, 'Related Field')?.textContent).toBe(
+    expect(getValueForLabel(container, 'Related Subobject')?.textContent).toBe(
       'status.conditions{Ready}'
     );
   });

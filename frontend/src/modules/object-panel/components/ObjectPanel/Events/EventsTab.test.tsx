@@ -7,10 +7,11 @@
 
 import type { GridTableProps } from '@shared/components/tables/GridTable';
 import { withStableListKeys } from '@shared/utils/stableListKeys';
-import { act } from 'react';
+import { act, type ReactNode } from 'react';
 import * as ReactDOM from 'react-dom/client';
 import { afterEach, beforeAll, beforeEach, describe, expect, it, vi } from 'vitest';
 import type { ObjectEventSummary } from '@/core/refresh/types';
+import { requireReactElement } from '@/test-utils/requireReactElement';
 import { requireValue } from '@/test-utils/requireValue';
 
 type CapturedEventRow = Record<string, unknown>;
@@ -248,7 +249,7 @@ describe('EventsTab', () => {
     );
   });
 
-  it('defaults the visible Age column to newest-event sorting', async () => {
+  it('defaults the visible Last Seen column to newest-event sorting', async () => {
     hoistedSnapshot.data = {
       events: [makeEvent()],
     };
@@ -268,7 +269,7 @@ describe('EventsTab', () => {
     expect(gridTableState.lastProps?.sortConfig).toEqual({ key: 'age', direction: 'desc' });
   });
 
-  it('renders event Age from the live event timestamp', async () => {
+  it('renders Event Last Seen from the live event timestamp', async () => {
     vi.useFakeTimers();
     vi.setSystemTime(new Date('2026-01-01T00:00:10Z'));
     hoistedSnapshot.data = {
@@ -313,6 +314,50 @@ describe('EventsTab', () => {
       act(() => cellRoot.unmount());
       cellContainer.remove();
     }
+  });
+
+  it('uses the canonical Event columns and status chip', async () => {
+    hoistedSnapshot.data = {
+      events: [makeEvent({ eventType: 'Warning' })],
+    };
+    hoistedSnapshot.status = 'ready';
+
+    act(() => {
+      root.render(
+        <EventsTab
+          objectData={parentObjectData}
+          panelId={PANEL_ID}
+          isActive={true}
+          eventsScope="parent-cluster|default:apps/v1:Deployment:my-deploy"
+        />
+      );
+    });
+
+    const gridProps = requireValue(
+      gridTableState.lastProps,
+      'expected captured GridTable props in EventsTab.test.tsx'
+    );
+    expect(gridProps.columns.map((column) => column.header)).toEqual([
+      'Type',
+      'Source',
+      'Object Type',
+      'Object Name',
+      'Reason',
+      'Message',
+      'Last Seen',
+    ]);
+
+    const typeColumn = requireValue(
+      gridProps.columns.find((column) => column.key === 'type'),
+      'expected Event Type column in EventsTab.test.tsx'
+    );
+    const typeCell = requireReactElement<{ children?: ReactNode; variant?: string }>(
+      typeColumn.render(
+        requireValue(gridProps.data[0], 'expected Event row in EventsTab.test.tsx')
+      ),
+      'expected Event status chip in EventsTab.test.tsx'
+    );
+    expect(typeCell.props).toMatchObject({ children: 'Warning', variant: 'warning' });
   });
 
   it('prefers per-event clusterId over parent panel cluster when opening related objects', async () => {

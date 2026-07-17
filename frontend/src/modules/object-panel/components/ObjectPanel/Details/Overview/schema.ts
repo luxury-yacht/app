@@ -52,6 +52,8 @@ export interface OverviewField<T> {
 /** The shared ResourceStatus block (status/statusState/statusPresentation). */
 export interface OverviewStatusItem {
   kind: 'status';
+  /** Override the generic Status label when a resource has canonical domain terminology. */
+  label?: string;
 }
 
 /** An escape hatch for irreducible per-kind UI. `consumes` lists the DTO keys it reads. */

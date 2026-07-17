@@ -16,6 +16,7 @@ import { useQueryBackedClusterResourceGridTable } from '@modules/resource-grid/u
 import type { ContextMenuItem } from '@shared/components/ContextMenu';
 import * as cf from '@shared/components/tables/columnFactories';
 import type { GridColumnDefinition } from '@shared/components/tables/GridTable';
+import { createEventTypeColumn } from '@shared/events/eventColumns';
 import {
   clusterEventRowIdentity,
   eventGridActionReference,
@@ -24,6 +25,7 @@ import {
   eventGridStableKey,
   resolveEventGridRelatedObject,
 } from '@shared/events/eventGridModel';
+import { EVENT_LABELS } from '@shared/events/eventPresentation';
 import { useNavigateToView } from '@shared/hooks/useNavigateToView';
 import { useObjectActionController } from '@shared/hooks/useObjectActionController';
 import { splitEventObjectTarget } from '@shared/utils/eventObjectIdentity';
@@ -109,17 +111,15 @@ const ClusterEventsView: React.FC<EventViewProps> = React.memo(({ error }) => {
         getKind: () => 'Event',
         getDisplayText: () => getDisplayKind('Event', useShortResourceNames),
       }),
-      cf.createTextColumn<EventData>('type', 'Type', (event) => event.type || 'Normal', {
-        getClassName: (event) => `event-badge ${(event.type || 'normal').toLowerCase()}`,
-      }),
-      cf.createTextColumn('source', 'Source', (event) => event.source || '-'),
-      cf.createTextColumn<EventData>('objectType', 'Object Type', (event) => {
+      createEventTypeColumn<EventData>(),
+      cf.createTextColumn('source', EVENT_LABELS.source, (event) => event.source || '-'),
+      cf.createTextColumn<EventData>('objectType', EVENT_LABELS.objectType, (event) => {
         const parsed = splitEventObjectTarget(event.object);
         return parsed.objectType;
       }),
       cf.createTextColumn<EventData>(
         'objectName',
-        'Object Name',
+        EVENT_LABELS.objectName,
         (event) => {
           const parsed = splitEventObjectTarget(event.object);
           return parsed.objectName;
@@ -135,9 +135,9 @@ const ClusterEventsView: React.FC<EventViewProps> = React.memo(({ error }) => {
           isInteractive: canOpenEventObject,
         }
       ),
-      cf.createTextColumn('reason', 'Reason', (event) => event.reason || '-'),
-      cf.createTextColumn('message', 'Message', (event) => event.message || '-'),
-      cf.createAgeColumn<EventData>('age', 'Age', (event) => event.age),
+      cf.createTextColumn('reason', EVENT_LABELS.reason, (event) => event.reason || '-'),
+      cf.createTextColumn('message', EVENT_LABELS.message, (event) => event.message || '-'),
+      cf.createAgeColumn<EventData>('age', EVENT_LABELS.lastSeen, (event) => event.age),
     ];
 
     const sizing: cf.ColumnSizingMap = {

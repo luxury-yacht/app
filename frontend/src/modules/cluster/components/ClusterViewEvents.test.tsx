@@ -181,7 +181,7 @@ describe('ClusterViewEvents', () => {
     container.remove();
   });
 
-  it('passes the query-backed newest-first Age sort to GridTable when no persisted sort exists', async () => {
+  it('passes the query-backed newest-first Last Seen sort to GridTable when no persisted sort exists', async () => {
     await act(async () => {
       root.render(<ClusterViewEvents />);
       await Promise.resolve();
@@ -203,7 +203,7 @@ describe('ClusterViewEvents', () => {
     expect(props.columnWidths).toBe(null);
   });
 
-  it('uses the shared newest-first Age sort value for local table fallback rows', async () => {
+  it('uses the shared newest-first Last Seen sort value for local table fallback rows', async () => {
     await act(async () => {
       root.render(<ClusterViewEvents />);
       await Promise.resolve();
@@ -217,6 +217,52 @@ describe('ClusterViewEvents', () => {
     expect(
       requireValue(ageColumn.sortValue, 'expected the cluster event age sort accessor')(baseEvent)
     ).toBe(-123);
+  });
+
+  it('renders Event types with status chips', async () => {
+    await act(async () => {
+      root.render(<ClusterViewEvents />);
+      await Promise.resolve();
+    });
+
+    const typeColumn = requireValue(
+      gridTablePropsRef.current.columns.find((column) => column.key === 'type'),
+      'expected the cluster event type column'
+    );
+    const warning = requireReactElement<{ children?: React.ReactNode; variant?: string }>(
+      typeColumn.render(baseEvent),
+      'expected the cluster event type chip'
+    );
+    const normal = requireReactElement<{ children?: React.ReactNode; variant?: string }>(
+      typeColumn.render({ ...baseEvent, type: 'Normal' }),
+      'expected the cluster normal event type chip'
+    );
+    const custom = requireReactElement<{ children?: React.ReactNode; variant?: string }>(
+      typeColumn.render({ ...baseEvent, type: 'Notice' }),
+      'expected the cluster custom event type chip'
+    );
+
+    expect(warning.props).toMatchObject({ children: 'Warning', variant: 'warning' });
+    expect(normal.props).toMatchObject({ children: 'Normal', variant: 'healthy' });
+    expect(custom.props).toMatchObject({ children: 'Notice', variant: 'info' });
+  });
+
+  it('uses the canonical Event table labels', async () => {
+    await act(async () => {
+      root.render(<ClusterViewEvents />);
+      await Promise.resolve();
+    });
+
+    expect(gridTablePropsRef.current.columns.map((column) => column.header)).toEqual([
+      'Kind',
+      'Type',
+      'Source',
+      'Object Type',
+      'Object Name',
+      'Reason',
+      'Message',
+      'Last Seen',
+    ]);
   });
 
   it('opens the involved object with group/version when object name is clicked', async () => {

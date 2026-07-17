@@ -11,7 +11,13 @@ import { ResourceMetadata } from '@shared/components/kubernetes/ResourceMetadata
 import { ResourceStatus } from '@shared/components/kubernetes/ResourceStatus';
 import { withStableListKeys } from '@shared/utils/stableListKeys';
 import React from 'react';
-import type { OverviewContext, OverviewDescriptor, OverviewField, OverviewWidget } from './schema';
+import type {
+  OverviewContext,
+  OverviewDescriptor,
+  OverviewField,
+  OverviewStatusItem,
+  OverviewWidget,
+} from './schema';
 import { OverviewItem } from './shared/OverviewItem';
 
 /** Frame fields read off any DTO (optional so T is not over-constrained). */
@@ -94,12 +100,14 @@ export function OverviewRenderer<T>({
       }).map(({ key, value: item }) => {
         const itemKind = (item as { kind?: string }).kind;
         if (itemKind === 'status') {
+          const statusItem = item as OverviewStatusItem;
           return (
             <ResourceStatus
               key={key}
               status={frame.status}
               statusState={frame.statusState}
               statusPresentation={frame.statusPresentation}
+              customLabel={statusItem.label}
             />
           );
         }
