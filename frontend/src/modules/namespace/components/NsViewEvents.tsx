@@ -2,8 +2,8 @@
  * frontend/src/modules/namespace/components/NsViewEvents.tsx
  *
  * Renders namespace-scoped Kubernetes Events. It displays event rows, links
- * involved objects through ResourceLink-aware navigation, and wires event
- * context menu actions into the shared object action controller.
+ * Event details through the object panel, links involved objects through
+ * ResourceLink-aware navigation, and wires both into shared object actions.
  */
 
 import './NsViewEvents.css';
@@ -23,6 +23,7 @@ import {
   eventGridActionReference,
   eventGridCanOpenRelatedObject,
   eventGridObjectNamespace,
+  eventGridObjectReference,
   eventGridSearchText,
   eventGridStableKey,
   namespaceEventRowIdentity,
@@ -40,6 +41,9 @@ import { getDisplayKind } from '@/utils/kindAliasMap';
 export interface EventData {
   kind: string;
   kindAlias?: string;
+  name: string;
+  uid: string;
+  resourceVersion: string;
   type: string; // Event severity (Normal, Warning)
   source: string;
   reason: string;
@@ -51,7 +55,7 @@ export interface EventData {
   objectUid?: string;
   objectApiVersion?: string;
   involvedObject?: ResourceLink;
-  namespace?: string;
+  namespace: string;
   age?: string;
   ageTimestamp?: number;
 }
@@ -81,7 +85,7 @@ const NsEventsTable: React.FC<EventViewProps> = React.memo(
       []
     );
 
-    const canOpenEventObject = useCallback(
+    const canOpenInvolvedObject = useCallback(
       (event: EventData) =>
         eventGridCanOpenRelatedObject(event, {
           defaultNamespace: namespace,
@@ -90,7 +94,7 @@ const NsEventsTable: React.FC<EventViewProps> = React.memo(
       [namespace, selectedClusterId]
     );
 
-    const handleEventClick = useCallback(
+    const openInvolvedObject = useCallback(
       async (event: EventData) => {
         const ref = await resolveEventGridRelatedObject(event, {
           defaultNamespace: namespace,
@@ -103,7 +107,7 @@ const NsEventsTable: React.FC<EventViewProps> = React.memo(
       [namespace, openWithObject, selectedClusterId]
     );
 
-    const handleEventAltClick = useCallback(
+    const navigateToInvolvedObject = useCallback(
       async (event: EventData) => {
         const ref = await resolveEventGridRelatedObject(event, {
           defaultNamespace: namespace,
@@ -114,6 +118,20 @@ const NsEventsTable: React.FC<EventViewProps> = React.memo(
         }
       },
       [namespace, navigateToView, selectedClusterId]
+    );
+
+    const openEvent = useCallback(
+      (event: EventData) => {
+        openWithObject(eventGridObjectReference(event, selectedClusterId));
+      },
+      [openWithObject, selectedClusterId]
+    );
+
+    const navigateToEvent = useCallback(
+      (event: EventData) => {
+        navigateToView(eventGridObjectReference(event, selectedClusterId));
+      },
+      [navigateToView, selectedClusterId]
     );
 
     const keyExtractor = useCallback(
@@ -132,6 +150,8 @@ const NsEventsTable: React.FC<EventViewProps> = React.memo(
         cf.createKindColumn<EventData>({
           getKind: () => 'Event',
           getDisplayText: () => getDisplayKind('Event', useShortResourceNames),
+          onClick: openEvent,
+          onAltClick: navigateToEvent,
         }),
         createEventTypeColumn<EventData>(),
       ];
@@ -162,13 +182,14 @@ const NsEventsTable: React.FC<EventViewProps> = React.memo(
           },
           {
             onClick: (event) => {
-              void handleEventClick(event);
+              void openInvolvedObject(event);
             },
             onAltClick: (event) => {
-              void handleEventAltClick(event);
+              void navigateToInvolvedObject(event);
             },
             getClassName: () => 'object-panel-link',
-            isInteractive: canOpenEventObject,
+            isInteractive: canOpenInvolvedObject,
+            allowRowClick: false,
           }
         ),
         cf.createTextColumn('reason', EVENT_LABELS.reason, (event) => event.reason || '-'),
@@ -191,10 +212,12 @@ const NsEventsTable: React.FC<EventViewProps> = React.memo(
 
       return baseColumns;
     }, [
-      canOpenEventObject,
-      handleEventAltClick,
-      handleEventClick,
+      canOpenInvolvedObject,
+      navigateToEvent,
+      navigateToInvolvedObject,
       namespaceColumnLink,
+      openEvent,
+      openInvolvedObject,
       showNamespaceColumn,
       useShortResourceNames,
     ]);
@@ -239,16 +262,17 @@ const NsEventsTable: React.FC<EventViewProps> = React.memo(
     const objectActions = useObjectActionController({
       context: 'gridtable',
       useDefaultHandlers: false,
+      onOpen: (object) => openWithObject(object),
       onViewInvolvedObject: (object) => {
         const event = displayedEvents.find(
           (candidate) =>
             candidate.clusterId === object.clusterId &&
             candidate.namespace === object.namespace &&
-            candidate.reason === object.name &&
+            candidate.name === object.name &&
             candidate.object === object.involvedObject
         );
         if (event) {
-          void handleEventClick(event);
+          void openInvolvedObject(event);
         }
       },
     });
@@ -257,18 +281,19 @@ const NsEventsTable: React.FC<EventViewProps> = React.memo(
     const getContextMenuItems = useCallback(
       (event: EventData): ContextMenuItem[] => {
         const parsed = splitEventObjectTarget(event.object);
-        if (!parsed.isLinkable || !canOpenEventObject(event)) {
-          return [];
-        }
+        const involvedObjectExtras =
+          parsed.isLinkable && canOpenInvolvedObject(event)
+            ? {
+                involvedObject: event.object,
+                involvedObjectRef: event.involvedObject,
+              }
+            : {};
 
         return objectActions.getMenuItems(
-          eventGridActionReference(event, event.reason, selectedClusterId, {
-            involvedObject: event.object,
-            involvedObjectRef: event.involvedObject,
-          })
+          eventGridActionReference(event, selectedClusterId, involvedObjectExtras)
         );
       },
-      [canOpenEventObject, objectActions, selectedClusterId]
+      [canOpenInvolvedObject, objectActions, selectedClusterId]
     );
 
     const emptyMessage = useMemo(
@@ -292,7 +317,7 @@ const NsEventsTable: React.FC<EventViewProps> = React.memo(
             namespace === ALL_NAMESPACES_SCOPE ? 'All Namespaces Events' : 'Namespace Events'
           }
           diagnosticsMode="live"
-          onRowClick={handleEventClick}
+          onRowClick={openEvent}
           tableClassName="gridtable-ns-events"
           enableContextMenu={true}
           getCustomContextMenuItems={getContextMenuItems}

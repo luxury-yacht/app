@@ -1962,7 +1962,7 @@ export namespace endpointslice {
 }
 
 export namespace events {
-
+	
 	export class EventDetails {
 	    kind: string;
 	    name: string;
@@ -1990,11 +1990,11 @@ export namespace events {
 	    relatedObjectFieldPath?: string;
 	    labels?: Record<string, string>;
 	    annotations?: Record<string, string>;
-
+	
 	    static createFrom(source: any = {}) {
 	        return new EventDetails(source);
 	    }
-
+	
 	    constructor(source: any = {}) {
 	        if ('string' === typeof source) source = JSON.parse(source);
 	        this.kind = source["kind"];
@@ -2024,7 +2024,7 @@ export namespace events {
 	        this.labels = source["labels"];
 	        this.annotations = source["annotations"];
 	    }
-
+	
 		convertValues(a: any, classs: any, asMap: boolean = false): any {
 		    if (!a) {
 		        return a;
@@ -3816,17 +3816,17 @@ export namespace resourcemodel {
 	export class ResourceLink {
 	    ref?: ResourceRef;
 	    display?: DisplayRef;
-
+	
 	    static createFrom(source: any = {}) {
 	        return new ResourceLink(source);
 	    }
-
+	
 	    constructor(source: any = {}) {
 	        if ('string' === typeof source) source = JSON.parse(source);
 	        this.ref = this.convertValues(source["ref"], ResourceRef);
 	        this.display = this.convertValues(source["display"], DisplayRef);
 	    }
-
+	
 		convertValues(a: any, classs: any, asMap: boolean = false): any {
 		    if (!a) {
 		        return a;
@@ -4266,17 +4266,17 @@ export namespace snapshot {
 	export class AttentionIgnoreRules {
 	    ignoredObjects: resourcemodel.ResourceRef[];
 	    findingTypes: string[];
-
+	
 	    static createFrom(source: any = {}) {
 	        return new AttentionIgnoreRules(source);
 	    }
-
+	
 	    constructor(source: any = {}) {
 	        if ('string' === typeof source) source = JSON.parse(source);
 	        this.ignoredObjects = this.convertValues(source["ignoredObjects"], resourcemodel.ResourceRef);
 	        this.findingTypes = source["findingTypes"];
 	    }
-
+	
 		convertValues(a: any, classs: any, asMap: boolean = false): any {
 		    if (!a) {
 		        return a;
@@ -6050,3 +6050,4 @@ export namespace v1 {
 	}
 
 }
+

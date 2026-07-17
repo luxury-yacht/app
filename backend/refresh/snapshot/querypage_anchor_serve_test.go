@@ -283,6 +283,7 @@ func TestAdapterAnchorKeyMatchesKey(t *testing.T) {
 		{"rbac", rbacTableQueryAdapter().AnchorKey, rbacTableQueryAdapter().Key(RBACSummary{Kind: "Role", Namespace: "ns-a", Name: "obj"}), "Role", "ns-a", "obj"},
 		{"helm", helmTableQueryAdapter().AnchorKey, helmTableQueryAdapter().Key(NamespaceHelmSummary{Namespace: "ns-a", Name: "obj"}), "HelmRelease", "ns-a", "obj"},
 		{"events", namespacedEventTableQueryAdapter().AnchorKey, namespacedEventTableQueryAdapter().Key(EventSummary{Kind: "Pod", Namespace: "ns-a", Name: "obj"}), "Event", "ns-a", "obj"},
+		{"cluster-events", clusterEventTableQueryAdapter().AnchorKey, clusterEventTableQueryAdapter().Key(ClusterEventEntry{Namespace: "ns-a", Name: "evt-1"}), "Event", "ns-a", "evt-1"},
 		{"pods", podTableQueryAdapter().AnchorKey, podTableQueryAdapter().Key(PodSummary{Namespace: "ns-a", Name: "obj"}), "Pod", "ns-a", "obj"},
 		{"workloads", workloadTableQueryAdapter().AnchorKey, workloadTableQueryAdapter().Key(WorkloadSummary{Kind: "Deployment", Namespace: "ns-a", Name: "obj"}), "Deployment", "ns-a", "obj"},
 	}
@@ -308,7 +309,6 @@ func TestClusterAdapterAnchorKeyMatchesKey(t *testing.T) {
 		name      string
 	}{
 		{"nodes", nodeTableQueryAdapter().AnchorKey, nodeTableQueryAdapter().Key(NodeSummary{Name: "node-1"}), "Node", "node-1"},
-		{"cluster-events", clusterEventTableQueryAdapter().AnchorKey, clusterEventTableQueryAdapter().Key(ClusterEventEntry{Name: "evt-1"}), "Event", "evt-1"},
 		{"cluster-config", clusterConfigTableQueryAdapter().AnchorKey, clusterConfigTableQueryAdapter().Key(ClusterConfigEntry{Kind: "StorageClass", Name: "gp3"}), "StorageClass", "gp3"},
 		{"cluster-storage", clusterStorageTableQueryAdapter().AnchorKey, clusterStorageTableQueryAdapter().Key(ClusterStorageEntry{Kind: "PersistentVolume", Name: "pv-1"}), "PersistentVolume", "pv-1"},
 		{"cluster-rbac", clusterRBACTableQueryAdapter().AnchorKey, clusterRBACTableQueryAdapter().Key(ClusterRBACEntry{Kind: "ClusterRole", Name: "admin"}), "ClusterRole", "admin"},

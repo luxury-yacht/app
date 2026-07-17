@@ -282,6 +282,8 @@ describe('ClusterViewEvents', () => {
       'expected the cluster event object-name cell element'
     );
 
+    expect(cell.props).toMatchObject({ 'data-gridtable-rowclick': 'suppress' });
+
     await act(async () => {
       cell.props.onClick({ altKey: false });
       await Promise.resolve();
@@ -294,6 +296,88 @@ describe('ClusterViewEvents', () => {
         group: '',
         version: 'v1',
         clusterId: 'test-cluster',
+      })
+    );
+  });
+
+  it('opens the Event object from the row and Kind badge', async () => {
+    await act(async () => {
+      root.render(<ClusterViewEvents />);
+      await Promise.resolve();
+    });
+
+    const props = gridTablePropsRef.current;
+    const onRowClick = requireValue(props.onRowClick, 'expected the cluster Event row action');
+
+    act(() => {
+      onRowClick(baseEvent);
+    });
+
+    expect(openWithObjectMock).toHaveBeenLastCalledWith(
+      expect.objectContaining({
+        clusterId: 'test-cluster',
+        clusterName: 'alpha',
+        group: '',
+        version: 'v1',
+        kind: 'Event',
+        resource: 'events',
+        namespace: 'team-a',
+        name: 'test',
+        uid: 'event-uid',
+      })
+    );
+
+    openWithObjectMock.mockClear();
+    const kindColumn = requireValue(
+      props.columns.find((column) => column.key === 'kind'),
+      'expected the cluster Event kind column'
+    );
+    const kindCell = requireReactElement<{
+      onClick: (event: { altKey: boolean }) => void;
+      'data-gridtable-rowclick'?: string;
+    }>(kindColumn.render(baseEvent), 'expected the cluster Event kind badge');
+
+    expect(kindCell.props['data-gridtable-rowclick']).toBe('suppress');
+
+    act(() => {
+      kindCell.props.onClick({ altKey: false });
+    });
+
+    expect(openWithObjectMock).toHaveBeenLastCalledWith(
+      expect.objectContaining({
+        clusterId: 'test-cluster',
+        group: '',
+        version: 'v1',
+        kind: 'Event',
+        namespace: 'team-a',
+        name: 'test',
+      })
+    );
+  });
+
+  it('opens the Event object from pointer row activation', async () => {
+    await act(async () => {
+      root.render(<ClusterViewEvents />);
+      await Promise.resolve();
+    });
+
+    const onRowPointerClick = requireValue(
+      gridTablePropsRef.current.onRowPointerClick,
+      'expected the cluster Event pointer row action'
+    );
+
+    act(() => {
+      onRowPointerClick(baseEvent);
+    });
+
+    expect(openWithObjectMock).toHaveBeenCalledWith(
+      expect.objectContaining({
+        clusterId: 'test-cluster',
+        group: '',
+        version: 'v1',
+        kind: 'Event',
+        namespace: 'team-a',
+        name: 'test',
       })
     );
   });

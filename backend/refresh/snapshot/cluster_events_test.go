@@ -100,7 +100,7 @@ func TestClusterEventsBuilder(t *testing.T) {
 	require.Equal(t, "node-uid-new", first.ObjectUID)
 	require.Equal(t, "v1", first.ObjectAPIVersion)
 	require.Equal(t, clusterEventNew.LastTimestamp.UnixMilli(), first.AgeTimestamp)
-	require.Equal(t, "", first.Namespace)
+	require.Equal(t, "kube-system", first.Namespace)
 
 	require.Equal(t, "event-old", second.Name)
 	require.Equal(t, "Warning", second.Type)
@@ -108,7 +108,7 @@ func TestClusterEventsBuilder(t *testing.T) {
 	require.Equal(t, "PersistentVolume/pv-old", second.Object)
 	require.Equal(t, "FailedMount", second.Message) // falls back to reason when message empty
 	require.Equal(t, clusterEventOld.LastTimestamp.UnixMilli(), second.AgeTimestamp)
-	require.Equal(t, "", second.Namespace)
+	require.Equal(t, "kube-system", second.Namespace)
 }
 
 func TestClusterEventsBuilderUsesDeterministicTieBreakers(t *testing.T) {

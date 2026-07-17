@@ -35,11 +35,10 @@ func makeEventSummaryRows(n int) []EventSummary {
 	return rows
 }
 
-// makeClusterEventRows builds varied ClusterEventEntry rows. Cluster events are
-// cluster-scoped (no namespace), so the adapter keys/searches/sorts without a
-// namespace dimension; this still exercises kind/type/source/reason/object/message
-// sorts and searches plus the age tiebreak.
+// makeClusterEventRows builds varied ClusterEventEntry rows. These Events involve
+// cluster-scoped objects, but the Event resources themselves remain namespaced.
 func makeClusterEventRows(n int) []ClusterEventEntry {
+	namespaces := []string{"default", "kube-system"}
 	types := []string{"Normal", "Warning"}
 	sources := []string{"node-controller", "kubelet", "scheduler"}
 	reasons := []string{"RegisteredNode", "NodeNotReady", "Rebooted", "Starting"}
@@ -48,6 +47,7 @@ func makeClusterEventRows(n int) []ClusterEventEntry {
 		rows[i] = ClusterEventEntry{
 			Kind:         "Event",
 			Name:         fmt.Sprintf("cevt-%03d", i), // unique -> unique row key
+			Namespace:    namespaces[i%len(namespaces)],
 			Type:         types[i%len(types)],
 			Source:       sources[i%len(sources)],
 			Reason:       reasons[i%len(reasons)],
@@ -58,6 +58,22 @@ func makeClusterEventRows(n int) []ClusterEventEntry {
 		}
 	}
 	return rows
+}
+
+func TestClusterEventQueryIdentityIncludesEventNamespace(t *testing.T) {
+	adapter := clusterEventTableQueryAdapter()
+	first := ClusterEventEntry{Kind: "Event", Namespace: "default", Name: "node-ready.123"}
+	second := ClusterEventEntry{Kind: "Event", Namespace: "kube-system", Name: "node-ready.123"}
+
+	if adapter.Key(first) == adapter.Key(second) {
+		t.Fatalf("cluster Event row keys collapse namespaces: %q", adapter.Key(first))
+	}
+	if got := adapter.Namespace(first); got != "default" {
+		t.Fatalf("cluster Event adapter namespace = %q, want default", got)
+	}
+	if got := adapter.AnchorKey("Event", first.Namespace, first.Name); got != adapter.Key(first) {
+		t.Fatalf("cluster Event anchor key = %q, want row key %q", got, adapter.Key(first))
+	}
 }
 
 func TestNamespaceEventsQueryFacetsFilterAndKeepStructuralScopeOptions(t *testing.T) {

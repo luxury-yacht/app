@@ -11,6 +11,7 @@ import {
   eventGridActionReference,
   eventGridCanOpenRelatedObject,
   eventGridObjectNamespace,
+  eventGridObjectReference,
   eventGridRelatedObjectInput,
   eventGridSearchText,
   eventGridStableKey,
@@ -80,16 +81,14 @@ describe('eventGridModel', () => {
     expect(
       namespaceEventRowIdentity(
         {
-          reason: 'FailedMount',
-          source: 'kubelet',
-          object: 'Pod/api',
+          name: 'api.123',
           objectNamespace: 'prod',
           clusterId: 'cluster-a',
         },
         'default',
         'unused'
       )
-    ).toBe('cluster-a|/v1/Event/prod/FailedMount:kubelet:Pod/api');
+    ).toBe('cluster-a|/v1/Event/prod/api.123');
   });
 
   it('carries cluster identity and fallback GVK into related-object inputs', () => {
@@ -163,24 +162,54 @@ describe('eventGridModel', () => {
     expect(
       eventGridActionReference(
         {
+          name: 'api.123',
+          uid: 'event-uid',
           namespace: 'prod',
           clusterId: 'cluster-a',
           clusterName: 'alpha',
         },
-        'FailedMount',
         'unused',
         { involvedObject: 'Pod/api' }
       )
     ).toEqual(
       expect.objectContaining({
         kind: 'Event',
-        name: 'FailedMount',
+        name: 'api.123',
         namespace: 'prod',
         clusterId: 'cluster-a',
         clusterName: 'alpha',
         group: '',
         version: 'v1',
+        resource: 'events',
+        uid: 'event-uid',
         involvedObject: 'Pod/api',
+      })
+    );
+  });
+
+  it('builds the Event object-panel reference from the Event itself', () => {
+    expect(
+      eventGridObjectReference(
+        {
+          name: 'api.123',
+          uid: 'event-uid',
+          namespace: 'prod',
+          clusterId: 'cluster-a',
+          clusterName: 'alpha',
+        },
+        'unused'
+      )
+    ).toEqual(
+      expect.objectContaining({
+        clusterId: 'cluster-a',
+        clusterName: 'alpha',
+        group: '',
+        version: 'v1',
+        kind: 'Event',
+        resource: 'events',
+        namespace: 'prod',
+        name: 'api.123',
+        uid: 'event-uid',
       })
     );
   });

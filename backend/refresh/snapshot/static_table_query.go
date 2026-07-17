@@ -398,9 +398,9 @@ func namespacedEventTableQueryAdapter() typedTableQueryAdapter[EventSummary] {
 
 func clusterEventTableQueryAdapter() typedTableQueryAdapter[ClusterEventEntry] {
 	return typedTableQueryAdapter[ClusterEventEntry]{
-		Key:       func(row ClusterEventEntry) string { return clusterTableKey("Event", row.Name) },
-		AnchorKey: func(_, _, name string) string { return clusterTableKey("Event", name) },
-		Namespace: func(ClusterEventEntry) string { return "" },
+		Key:       func(row ClusterEventEntry) string { return namespacedTableKey("Event", row.Namespace, row.Name) },
+		AnchorKey: func(_, namespace, name string) string { return namespacedTableKey("Event", namespace, name) },
+		Namespace: func(row ClusterEventEntry) string { return row.Namespace },
 		Kind:      func(row ClusterEventEntry) string { return row.Kind },
 		Facets: eventQueryFacets(
 			func(row ClusterEventEntry) string { return row.Type },

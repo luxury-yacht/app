@@ -12,11 +12,12 @@ import (
 	"k8s.io/client-go/tools/cache"
 )
 
-// clusterEventObj builds a cluster-scoped Event (empty involved-object namespace, so it is
-// kept by the cluster-events filter). secs offsets the timestamp so the age ordering varies.
+// clusterEventObj builds a namespaced Event involving a cluster-scoped object (empty
+// involved-object namespace, so it is kept by the cluster-events filter). secs offsets the
+// timestamp so the age ordering varies.
 func clusterEventObj(name, rv, reason, msg string, secs int64) *corev1.Event {
 	return &corev1.Event{
-		ObjectMeta: metav1.ObjectMeta{Name: name, ResourceVersion: rv},
+		ObjectMeta: metav1.ObjectMeta{Name: name, Namespace: "kube-system", ResourceVersion: rv},
 		InvolvedObject: corev1.ObjectReference{
 			Kind: "Node", Name: "node-1", APIVersion: "v1",
 		},

@@ -263,6 +263,8 @@ export interface CreateTextColumnOptions<T> extends GridColumnAlignmentOptions {
   getClassName?: (item: T) => string | undefined;
   isInteractive?: (item: T) => boolean;
   disableShortcuts?: boolean | ((item: T) => boolean);
+  /** Whether activating the interactive cell may also activate its row. Defaults to true. */
+  allowRowClick?: boolean;
 }
 
 export function createTextColumn<T extends { name?: string }>(
@@ -347,7 +349,7 @@ export function createTextColumn<T>(
           className={className}
           title={title}
           data-gridtable-shortcut-optout="true"
-          data-gridtable-rowclick="allow"
+          data-gridtable-rowclick={options?.allowRowClick === false ? 'suppress' : 'allow'}
           onClick={(event) => {
             if (event.altKey && options?.onAltClick) {
               event.preventDefault();

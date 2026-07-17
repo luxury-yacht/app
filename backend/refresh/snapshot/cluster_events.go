@@ -47,8 +47,10 @@ var clusterEventsAvailableKinds = map[string]bool{"Event": true}
 // projectClusterEventEntry projects a Kubernetes Event into a ClusterEventEntry, or
 // reports ok=false to skip it. Cluster events involve cluster-scoped objects only, so an
 // event whose involved object carries a namespace is skipped — the same gate the list path
-// applies. Shared by the list path and the maintained-store handler so both project
-// byte-identically.
+// applies. The Event resource itself remains namespaced even when its involved object is
+// cluster-scoped, so Namespace comes from Event metadata while ObjectNamespace comes from
+// the involved object. Shared by the list path and the maintained-store handler so both
+// project byte-identically.
 func projectClusterEventEntry(meta ClusterMeta, evt *corev1.Event) (ClusterEventEntry, bool) {
 	if evt == nil {
 		return ClusterEventEntry{}, false
@@ -72,7 +74,7 @@ func projectClusterEventEntry(meta ClusterMeta, evt *corev1.Event) (ClusterEvent
 		Name:             evt.Name,
 		UID:              string(evt.UID),
 		ResourceVersion:  evt.ResourceVersion,
-		Namespace:        evt.InvolvedObject.Namespace,
+		Namespace:        evt.Namespace,
 		ObjectNamespace:  evt.InvolvedObject.Namespace,
 		ObjectUID:        string(evt.InvolvedObject.UID),
 		ObjectAPIVersion: evt.InvolvedObject.APIVersion,

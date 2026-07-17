@@ -22,6 +22,7 @@ import {
 export interface EventGridRowIdentity {
   kind?: string;
   name?: string;
+  uid?: string | null;
   namespace?: string | null;
   clusterId?: string | null;
   clusterName?: string | null;
@@ -143,7 +144,7 @@ export const namespaceEventRowIdentity = (
   buildRequiredCanonicalObjectRowKey(
     {
       kind: 'Event',
-      name: `${event.reason ?? ''}:${event.source ?? ''}:${event.object ?? ''}`,
+      name: event.name,
       namespace: eventGridObjectNamespace(event, defaultNamespace),
       clusterId: event.clusterId,
     },
@@ -166,20 +167,25 @@ export const objectPanelEventGridRow = (
   clusterName: event.clusterName ?? undefined,
 });
 
+const eventGridObjectIdentity = (event: EventGridRowIdentity) => ({
+  group: '',
+  version: 'v1',
+  kind: 'Event',
+  resource: 'events',
+  name: event.name,
+  uid: event.uid ?? undefined,
+  namespace: event.namespace ?? undefined,
+  clusterId: event.clusterId ?? undefined,
+  clusterName: event.clusterName ?? undefined,
+});
+
 export const eventGridActionReference = <TExtras extends object>(
   event: EventGridRowIdentity,
-  name: string | null | undefined,
   fallbackClusterId: string | null | undefined,
   extras: TExtras
-) =>
-  buildRequiredObjectReference(
-    {
-      kind: 'Event',
-      name,
-      namespace: event.namespace ?? undefined,
-      clusterId: event.clusterId ?? undefined,
-      clusterName: event.clusterName ?? undefined,
-    },
-    { fallbackClusterId },
-    extras
-  );
+) => buildRequiredObjectReference(eventGridObjectIdentity(event), { fallbackClusterId }, extras);
+
+export const eventGridObjectReference = (
+  event: EventGridRowIdentity,
+  fallbackClusterId?: string | null
+) => buildRequiredObjectReference(eventGridObjectIdentity(event), { fallbackClusterId });

@@ -231,6 +231,21 @@ describe('columnFactories', () => {
     });
   });
 
+  describe('createTextColumn', () => {
+    it('can suppress the row action for an independent interactive target', () => {
+      const column = createTextColumn<RowSample>('name', 'Name', (row) => row.name ?? '', {
+        onClick: vi.fn(),
+        allowRowClick: false,
+      });
+
+      const button = column.render({ id: 'pod', name: 'api' }) as React.ReactElement<{
+        'data-gridtable-rowclick'?: string;
+      }>;
+
+      expect(button.props['data-gridtable-rowclick']).toBe('suppress');
+    });
+  });
+
   describe('createResourceBarColumn', () => {
     it('preserves independent header and data alignment', () => {
       const column = createResourceBarColumn<RowSample>({
