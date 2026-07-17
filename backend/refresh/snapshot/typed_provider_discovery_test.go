@@ -20,6 +20,7 @@ var typedCapabilityConformance = map[string]ResourceQueryCapabilities{
 	"cluster-rbac":          clusterRBACQueryCapabilities(),
 	"cluster-crds":          clusterCRDQueryCapabilities(),
 	"cluster-events":        clusterEventsQueryCapabilities(),
+	"cluster-attention":     clusterAttentionQueryCapabilities(),
 	"namespace-config":      namespaceConfigQueryCapabilities(),
 	"namespace-network":     namespaceNetworkQueryCapabilities(),
 	"namespace-storage":     namespaceStorageQueryCapabilities(),
@@ -91,7 +92,8 @@ func discoverTypedResourceDomains(t *testing.T) []typedDomainSource {
 				// canonical envelope constructors, so it satisfies the same guarantee.
 				if bodyCallsFunc(node.Body, "typedQueryEnvelope") ||
 					bodyCallsFunc(node.Body, "typedWindowEnvelope") ||
-					bodyCallsFunc(node.Body, "resolveTypedSnapshotPageViaStore") {
+					bodyCallsFunc(node.Body, "resolveTypedSnapshotPageViaStore") ||
+					bodyCallsFunc(node.Body, "resolveMaintainedDirect") {
 					usesHelper = true
 				}
 			case *ast.TypeSpec:

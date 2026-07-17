@@ -47,6 +47,7 @@ describe('refresh domain registry', () => {
   it('keeps priority diagnostics domains in the registry instead of panel config', () => {
     expect(PRIORITY_DOMAINS).toEqual([
       'namespaces',
+      'cluster-attention',
       'nodes',
       'object-maintenance',
       'cluster-overview',

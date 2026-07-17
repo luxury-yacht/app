@@ -5,6 +5,7 @@
  * Each view handles its own data, loading state, and error handling.
  */
 
+import ClusterViewAttention from '@modules/cluster/components/ClusterViewAttention';
 import ClusterViewConfig from '@modules/cluster/components/ClusterViewConfig';
 import ClusterViewCRDs from '@modules/cluster/components/ClusterViewCRDs';
 import ClusterViewCustom from '@modules/cluster/components/ClusterViewCustom';
@@ -66,6 +67,8 @@ function ClusterResourcesViews({
     }
 
     switch (activeTab) {
+      case 'attention':
+        return <ClusterViewAttention />;
       case 'namespaces':
         return <ClusterViewNamespaces />;
       case 'nodes':

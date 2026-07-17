@@ -33,10 +33,6 @@ import type { ClusterOverviewPayload } from '@/core/refresh/types';
 import './ClusterOverview.css';
 import { useClusterLifecycle } from '@core/contexts/ClusterLifecycleContext';
 import { useKubeconfig } from '@modules/kubernetes/config/KubeconfigContext';
-import {
-  emitPodsUnhealthySignal,
-  type PodsFilterMode,
-} from '@modules/namespace/components/podsFilterSignals';
 import { ALL_NAMESPACES_SCOPE } from '@modules/namespace/constants';
 import { useNamespace } from '@modules/namespace/contexts/NamespaceContext';
 import {
@@ -371,24 +367,28 @@ const ClusterOverview: React.FC<ClusterOverviewProps> = ({ clusterContext }) => 
     };
   }, [canActivateOverviewRefresh, overviewScope]);
 
-  type PodStatusFilter = 'none' | PodsFilterMode;
+  type PodStatusFilter = 'none' | 'unhealthy' | 'restarts' | 'not-ready';
 
   const handlePodStatusNavigate = useCallback(
     (filter: PodStatusFilter, count: number) => {
       if (count <= 0) {
         return;
       }
+      if (filter !== 'none') {
+        setActiveClusterView('attention');
+        navigateToClusterView('cluster');
+        setSidebarSelection({ type: 'cluster', value: 'cluster' });
+        return;
+      }
       setSelectedNamespace(ALL_NAMESPACES_SCOPE);
       setActiveNamespaceTab('workloads');
       setSidebarSelection({ type: 'namespace', value: ALL_NAMESPACES_SCOPE });
       navigateToNamespace();
-      if (filter !== 'none' && selectedClusterId) {
-        emitPodsUnhealthySignal(selectedClusterId, ALL_NAMESPACES_SCOPE, filter);
-      }
     },
     [
+      navigateToClusterView,
       navigateToNamespace,
-      selectedClusterId,
+      setActiveClusterView,
       setActiveNamespaceTab,
       setSelectedNamespace,
       setSidebarSelection,

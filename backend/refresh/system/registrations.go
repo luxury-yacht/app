@@ -34,6 +34,7 @@ type registrationDeps struct {
 	// noteObjectEventsNotifier is the object-events doorbell counterpart of
 	// noteNamespaceNotifier; same wiring lifecycle.
 	noteObjectEventsNotifier func(*snapshot.ObjectEventsChangeNotifier)
+	noteAttentionIndex       func(*snapshot.ClusterAttentionIndex)
 }
 
 // domainRegistration describes a single domain registration entry.
@@ -316,6 +317,32 @@ func domainRegistrations(deps registrationDeps) []domainRegistration {
 			},
 			fallbackLog:  "Registering cluster overview domain using list fallback due to missing informer permissions",
 			deniedReason: "cluster overview requires nodes, pods, or namespaces",
+		}),
+
+		accessListRegistration(runtimeAccess, listDomainConfig{
+			name: "cluster-attention",
+			register: func(allowed domainpermissions.AllowedResources) error {
+				index, err := snapshot.RegisterClusterAttentionDomain(
+					deps.registry,
+					deps.informerFactory.SharedInformerFactory(),
+					snapshot.ClusterAttentionPermissions{
+						IncludePods:         allowed.Allows("", "pods"),
+						IncludeDeployments:  allowed.Allows("apps", "deployments"),
+						IncludeStatefulSets: allowed.Allows("apps", "statefulsets"),
+						IncludeDaemonSets:   allowed.Allows("apps", "daemonsets"),
+						IncludeJobs:         allowed.Allows("batch", "jobs"),
+						IncludeCronJobs:     allowed.Allows("batch", "cronjobs"),
+						IncludeNodes:        allowed.Allows("", "nodes"),
+						IncludeEvents:       allowed.Allows("", "events"),
+					},
+					snapshot.ClusterMeta{ClusterID: deps.cfg.ClusterID, ClusterName: deps.cfg.ClusterName},
+					deps.ingestManager,
+				)
+				if err == nil && deps.noteAttentionIndex != nil {
+					deps.noteAttentionIndex(index)
+				}
+				return err
+			},
 		}),
 
 		withSkipUnless(directRegistration("catalog", func() error {

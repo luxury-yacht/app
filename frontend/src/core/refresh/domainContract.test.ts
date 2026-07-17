@@ -76,7 +76,7 @@ type OrchestratorKind =
 type ContractDomain = {
   domain: RefreshDomain;
   category: DomainCategory;
-  sourceClocks?: Array<'object' | 'metric' | 'event' | 'catalog'>;
+  sourceClocks?: Array<'object' | 'metric' | 'event' | 'catalog' | 'attention'>;
   backend: {
     resourceStream: boolean;
   };
@@ -305,10 +305,10 @@ describe('refresh domain contract', () => {
           break;
         case 'doorbell-snapshot':
           // Doorbell-refetched snapshot domains (namespaces, object-events,
-          // cluster-overview): streaming wiring exists for the signal-only
+          // cluster-overview, cluster-attention): streaming wiring exists for the signal-only
           // doorbell, but they are not resource table domains. Each declares
           // exactly the one clock its doorbell rides (namespaces: object;
-          // object-events: event; cluster-overview: metric — and its polls
+          // object-events: event; cluster-overview: metric; cluster-attention: attention — and overview polls
           // STAY ON, since metric doorbells only ring on successful
           // collections). The doorbell rides the resources WebSocket, so
           // diagnostics reflect that stream instead of mislabeling the
@@ -320,7 +320,9 @@ describe('refresh domain contract', () => {
               ? ['event']
               : entry.domain === 'cluster-overview'
                 ? ['metric']
-                : ['object']
+                : entry.domain === 'cluster-attention'
+                  ? ['attention']
+                  : ['object']
           );
           expect(entry.frontend.diagnosticsStream).toBe('resources');
           break;
@@ -484,7 +486,12 @@ describe('refresh domain contract', () => {
           // object-events (event-snapshot, per-object event doorbell), and
           // cluster-overview (aggregate-snapshot, metric doorbell with polls
           // kept on).
-          expect(['namespaces', 'object-events', 'cluster-overview']).toContain(entry.domain);
+          expect([
+            'namespaces',
+            'object-events',
+            'cluster-overview',
+            'cluster-attention',
+          ]).toContain(entry.domain);
           expect(inventory.behaviorClass).toBe(
             entry.domain === 'object-events'
               ? 'event-snapshot'

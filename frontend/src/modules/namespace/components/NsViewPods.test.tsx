@@ -5,7 +5,6 @@
  * Covers key behaviors and edge cases for NsViewPods.
  */
 
-import { getPodsUnhealthyStorageKey } from '@modules/namespace/components/podsFilterSignals';
 import { ALL_NAMESPACES_SCOPE } from '@modules/namespace/constants';
 import { CollapseIcon, ExpandIcon } from '@shared/components/icons/SharedIcons';
 import type ConfirmationModal from '@shared/components/modals/ConfirmationModal';
@@ -15,7 +14,6 @@ import type React from 'react';
 import { act } from 'react';
 import * as ReactDOM from 'react-dom/client';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
-import { eventBus } from '@/core/events';
 import type { PodMetricsInfo, PodSnapshotEntry } from '@/core/refresh/types';
 import { requireReactElement } from '@/test-utils/requireReactElement';
 import { requireValue } from '@/test-utils/requireValue';
@@ -306,7 +304,7 @@ vi.mock('@utils/errorHandler', () => ({
   errorHandler: errorHandlerMock,
 }));
 
-import NsViewPods, { matchesPodsFilter } from '@modules/namespace/components/NsViewPods';
+import NsViewPods from '@modules/namespace/components/NsViewPods';
 
 const createPod = (override: Partial<PodSnapshotEntry> = {}): PodSnapshotEntry => ({
   name: 'pod-default',
@@ -429,16 +427,8 @@ describe('NsViewPods', () => {
     const effectiveMetrics =
       'metrics' in props ? (props.metrics ?? clusterMetricsMock.current ?? null) : defaultMetrics;
     if (effectiveNamespace !== ALL_NAMESPACES_SCOPE && !skipDefaultQueryMock) {
-      requestRefreshDomainStateMock.mockImplementation((request?: unknown) => {
-        const args = request as { domain?: string; scope?: string } | undefined;
-        // Mirror the backend: apply the health predicate carried in the query scope, so the
-        // unhealthy/restarts/not-ready toggle (a server-side predicate now) yields filtered rows.
-        const healthMatch = /predicate\.health=([^&]+)/.exec(args?.scope ?? '');
-        const rows = healthMatch
-          ? effectiveData.filter((pod) =>
-              matchesPodsFilter(healthMatch[1] as Parameters<typeof matchesPodsFilter>[0], pod)
-            )
-          : effectiveData;
+      requestRefreshDomainStateMock.mockImplementation(() => {
+        const rows = effectiveData;
         return Promise.resolve({
           status: 'executed',
           data: {
@@ -453,16 +443,6 @@ describe('NsViewPods', () => {
               // Usage rides the pod rows; the base payload carries the poller
               // freshness block joined at serve.
               metrics: effectiveMetrics,
-              // Scope counts mirror the backend: over all scope pods (effectiveData),
-              // not the health-filtered page, so the unhealthy badge stays correct.
-              totalCount: effectiveData.length,
-              healthCounts: {
-                unhealthy: effectiveData.filter((pod) => matchesPodsFilter('unhealthy', pod))
-                  .length,
-                restarts: effectiveData.filter((pod) => matchesPodsFilter('restarts', pod)).length,
-                'not-ready': effectiveData.filter((pod) => matchesPodsFilter('not-ready', pod))
-                  .length,
-              },
             },
           },
         });
@@ -1054,333 +1034,16 @@ describe('NsViewPods', () => {
     expect(gridTablePropsRef.current.columns).toBe(firstColumnsRef);
   });
 
-  it('filters pods when the unhealthy toggle is enabled', async () => {
-    const pods = [
-      createPod({ name: 'healthy', status: 'Running', ready: '1/1', restarts: 0 }),
-      createPod({
-        name: 'pending',
-        status: 'Pending',
-        statusPresentation: 'warning',
-        ready: '0/1',
-        restarts: 0,
-      }),
-      createPod({
-        name: 'failing',
-        status: 'CrashLoopBackOff',
-        statusPresentation: 'error',
-        ready: '0/1',
-        restarts: 2,
-      }),
-    ];
-
-    await renderPods({ data: pods });
-
-    const toggle = container.querySelector<HTMLButtonElement>(
-      'button[title="Show unhealthy pods (2/3)"]'
-    );
-    expect(toggle).not.toBeNull();
-    expect(toggle?.getAttribute('aria-pressed')).toBe('false');
-    expect(gridTablePropsRef.current.data).toEqual(pods);
-
-    await act(async () => {
-      toggle?.click();
-      await Promise.resolve();
-    });
-    expect(gridTablePropsRef.current.data).toEqual([pods[1], pods[2]]);
-    const activeToggle = container.querySelector<HTMLButtonElement>(
-      'button[title="Show all pods"]'
-    );
-    expect(activeToggle).not.toBeNull();
-    expect(activeToggle?.getAttribute('aria-pressed')).toBe('true');
-
-    await act(async () => {
-      activeToggle?.click();
-      await Promise.resolve();
-    });
-    expect(gridTablePropsRef.current.data).toEqual(pods);
-  });
-
-  it('uses backend statusPresentation for the unhealthy filter', async () => {
-    const pods = [
-      createPod({ name: 'healthy', status: 'Running', ready: '1/1', restarts: 0 }),
-      createPod({
-        name: 'frontend-mismatch-only',
-        status: 'Pending',
-        statusPresentation: 'ready',
-        ready: '0/1',
-        restarts: 5,
-      }),
-      createPod({
-        name: 'pending',
-        status: 'Running',
-        statusPresentation: 'warning',
-        ready: '1/1',
-        restarts: 0,
-      }),
-    ];
-
-    await renderPods({ data: pods });
-
-    const toggle = container.querySelector<HTMLButtonElement>(
-      'button[title="Show unhealthy pods (1/3)"]'
-    );
-    expect(toggle).not.toBeNull();
-    expect(toggle?.getAttribute('aria-pressed')).toBe('false');
-
-    await act(async () => {
-      toggle?.click();
-      await Promise.resolve();
-    });
-    expect(gridTablePropsRef.current.data).toEqual([pods[2]]);
-  });
-
-  it('enables the unhealthy filter when an event targets the namespace and cluster', async () => {
-    const pods = [
-      createPod({ name: 'healthy', status: 'Running', ready: '1/1', restarts: 0 }),
-      createPod({
-        name: 'pending',
-        status: 'Pending',
-        statusPresentation: 'warning',
-        ready: '0/1',
-        restarts: 0,
-      }),
-    ];
-
-    await renderPods({ data: pods });
-
-    await act(async () => {
-      // Event must include clusterId to match the current cluster context.
-      eventBus.emit('pods:show-unhealthy', { clusterId: 'alpha:ctx', scope: 'team-a' });
-      // The filter is a backend predicate now → re-query; let it resolve.
-      await Promise.resolve();
-      await Promise.resolve();
-    });
-
-    expect(gridTablePropsRef.current.data).toEqual([pods[1]]);
-  });
-
-  it('enables the unhealthy filter when an event targets all namespaces', async () => {
-    const pods = [
-      createPod({ name: 'healthy', namespace: 'team-a', status: 'Running', ready: '1/1' }),
-      createPod({
-        name: 'pending',
-        namespace: 'team-b',
-        status: 'Pending',
-        statusPresentation: 'warning',
-        ready: '0/1',
-      }),
-    ];
-    requestRefreshDomainStateMock.mockImplementation((request?: unknown) => {
-      const { scope = '' } = (request as { domain?: string; scope?: string }) ?? {};
-      const rows = scope.includes('predicate.health=unhealthy') ? [pods[1]] : [];
-      return Promise.resolve({
-        status: 'executed',
-        data: {
-          status: 'ready',
-          data: {
-            rows,
-            total: rows.length,
-            totalIsExact: true,
-            namespaces: ['team-a', 'team-b'],
-            kinds: ['Pod'],
-            facetsExact: true,
-            metrics: { stale: false, successCount: 1, failureCount: 0 },
-          },
-        },
-      });
-    });
-
-    await renderPods({
-      namespace: ALL_NAMESPACES_SCOPE,
-      data: pods,
-      showNamespaceColumn: true,
-    });
-
-    await act(async () => {
-      await Promise.resolve();
-      await Promise.resolve();
-    });
-
-    expect(gridTablePropsRef.current.data).toEqual([]);
-
-    await act(async () => {
-      eventBus.emit('pods:show-unhealthy', {
-        clusterId: 'alpha:ctx',
-        scope: ALL_NAMESPACES_SCOPE,
-      });
-      await Promise.resolve();
-      await Promise.resolve();
-    });
-
-    expect(gridTablePropsRef.current.data).toEqual([pods[1]]);
-    expect(requestRefreshDomainStateMock).toHaveBeenCalledWith(
-      expect.objectContaining({
-        domain: 'pods',
-        scope: expect.stringContaining('predicate.health=unhealthy'),
-      })
-    );
-  });
-
-  it('filters restarted pods when a restart signal targets the namespace and cluster', async () => {
-    const pods = [
-      createPod({ name: 'healthy', status: 'Running', ready: '1/1', restarts: 0 }),
-      createPod({ name: 'restarted', status: 'Running', ready: '1/1', restarts: 2 }),
-      createPod({
-        name: 'pending',
-        status: 'Pending',
-        statusPresentation: 'warning',
-        ready: '0/1',
-        restarts: 0,
-      }),
-    ];
-
-    await renderPods({ data: pods });
-
-    await act(async () => {
-      eventBus.emit('pods:show-unhealthy', {
-        clusterId: 'alpha:ctx',
-        scope: 'team-a',
-        filter: 'restarts',
-      });
-      await Promise.resolve();
-      await Promise.resolve();
-    });
-
-    expect(gridTablePropsRef.current.data).toEqual([pods[1]]);
-  });
-
-  it('filters not-ready pods when a not-ready signal targets the namespace and cluster', async () => {
-    const pods = [
-      createPod({ name: 'healthy', status: 'Running', ready: '1/1', restarts: 0 }),
-      createPod({ name: 'not-ready', status: 'Running', ready: '0/1', restarts: 0 }),
-      createPod({
-        name: 'completed',
-        status: 'Completed',
-        statusState: 'Succeeded',
-        statusPresentation: 'ready',
-        ready: '0/1',
-        restarts: 0,
-      }),
-      createPod({
-        name: 'pending',
-        status: 'Pending',
-        statusPresentation: 'warning',
-        ready: '0/1',
-        restarts: 0,
-      }),
-    ];
-
-    await renderPods({ data: pods });
-
-    await act(async () => {
-      eventBus.emit('pods:show-unhealthy', {
-        clusterId: 'alpha:ctx',
-        scope: 'team-a',
-        filter: 'not-ready',
-      });
-      await Promise.resolve();
-      await Promise.resolve();
-    });
-
-    expect(gridTablePropsRef.current.data).toEqual([pods[1], pods[3]]);
-  });
-
-  it('ignores unhealthy filter events for other clusters', async () => {
-    const pods = [
-      createPod({ name: 'healthy', status: 'Running', ready: '1/1', restarts: 0 }),
-      createPod({
-        name: 'pending',
-        status: 'Pending',
-        statusPresentation: 'warning',
-        ready: '0/1',
-        restarts: 0,
-      }),
-    ];
-
-    await renderPods({ data: pods });
-
-    act(() => {
-      // Event for a different cluster should be ignored.
-      eventBus.emit('pods:show-unhealthy', { clusterId: 'other-cluster', scope: 'team-a' });
-    });
-
-    // Should still show all pods since the event was for a different cluster.
-    expect(gridTablePropsRef.current.data).toEqual(pods);
-  });
-
-  it('applies pending unhealthy filter requests from session storage', async () => {
-    // Use the cluster-specific storage key.
-    const storageKey = getPodsUnhealthyStorageKey('alpha:ctx');
-    window.sessionStorage.setItem(storageKey, 'team-a');
-    const pods = [
-      createPod({ name: 'healthy', status: 'Running', ready: '1/1', restarts: 0 }),
-      createPod({
-        name: 'failing',
-        status: 'CrashLoopBackOff',
-        statusPresentation: 'error',
-        ready: '0/1',
-        restarts: 5,
-      }),
-    ];
-
-    await renderPods({ data: pods });
-
-    expect(gridTablePropsRef.current.data).toEqual([pods[1]]);
-    expect(window.sessionStorage.getItem(storageKey)).toBeNull();
-  });
-
-  it('keeps the unhealthy toggle visible while active when no unhealthy pods remain', async () => {
-    const pods = [
-      createPod({ name: 'healthy', status: 'Running', ready: '1/1' }),
-      createPod({
-        name: 'pending',
-        status: 'Pending',
-        statusPresentation: 'warning',
-        ready: '0/1',
-      }),
-    ];
-
-    await renderPods({ data: pods });
-
-    const toggle = container.querySelector<HTMLButtonElement>(
-      'button[title="Show unhealthy pods (1/2)"]'
-    );
-    expect(toggle).not.toBeNull();
-
-    await act(async () => {
-      toggle?.click();
-      await Promise.resolve();
-    });
-    expect(gridTablePropsRef.current.data).toEqual([pods[1]]);
-
+  it('does not render a competing unhealthy-pods filter action', async () => {
     await renderPods({
       data: [
-        createPod({ name: 'healthy', status: 'Running', ready: '1/1' }),
-        createPod({
-          name: 'recovered',
-          status: 'Running',
-          statusPresentation: 'ready',
-          ready: '1/1',
-        }),
+        createPod({ name: 'healthy', statusPresentation: 'ready' }),
+        createPod({ name: 'failing', statusPresentation: 'error', restarts: 2 }),
       ],
     });
 
-    // The toggle stays active and visible even though the live snapshot now has no unhealthy
-    // pods — its count comes from the live snapshot, while the filtered table is query-backed.
-    const activeToggle = container.querySelector<HTMLButtonElement>(
-      'button[title="Show all pods"]'
-    );
-    expect(activeToggle).not.toBeNull();
-    expect(activeToggle?.getAttribute('aria-pressed')).toBe('true');
-
-    await act(async () => {
-      activeToggle?.click();
-      await Promise.resolve();
-    });
-    expect(gridTablePropsRef.current.data.map((pod: PodSnapshotEntry) => pod.name)).toEqual([
-      'healthy',
-      'recovered',
-    ]);
+    expect(container.querySelector('[title^="Show unhealthy pods"]')).toBeNull();
+    expect(container.querySelector('[title="Show all pods"]')).toBeNull();
   });
 
   it('deletes a pod when confirmation succeeds', async () => {

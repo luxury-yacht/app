@@ -66,7 +66,13 @@ export const RESOURCE_STREAM_MESSAGE_TYPES = [
 
 export type ResourceStreamMessageType = (typeof RESOURCE_STREAM_MESSAGE_TYPES)[number];
 
-export const RESOURCE_STREAM_SOURCES = ['object', 'metric', 'event', 'catalog'] as const;
+export const RESOURCE_STREAM_SOURCES = [
+  'object',
+  'metric',
+  'event',
+  'catalog',
+  'attention',
+] as const;
 
 export type ResourceStreamSource = (typeof RESOURCE_STREAM_SOURCES)[number];
 
@@ -137,6 +143,46 @@ export interface CatalogSnapshotPayload {
   totalBatches: number;
   isFinal: boolean;
   firstBatchLatencyMs?: number;
+}
+
+export interface ClusterAttentionFinding {
+  clusterId: string;
+  clusterName: string;
+  ref: ResourceRef;
+  kind: string;
+  name: string;
+  namespace?: string;
+  severity: string;
+  status: string;
+  reasons: Array<string> | null;
+  age: string;
+  ageTimestamp?: number;
+}
+
+export interface ClusterAttentionSnapshot {
+  clusterId: string;
+  clusterName: string;
+  provider: ResourceQueryProvider;
+  table: string;
+  queryIdentity?: string;
+  continue?: string;
+  previous?: string;
+  self?: string;
+  cursorInvalid?: boolean;
+  anchor?: ResourceQueryAnchorResult;
+  pageStartRank?: number;
+  total: number;
+  unfilteredTotal: number;
+  totalIsExact: boolean;
+  kinds?: Array<string>;
+  namespaces?: Array<string>;
+  facetValues?: Array<ResourceQueryFacetValues>;
+  facetsExact: boolean;
+  completeness?: ResourceQueryCompleteness;
+  issues?: Array<ResourceQueryIssue>;
+  dynamic?: ResourceQueryDynamicRef;
+  capabilities: ResourceQueryCapabilities;
+  rows: Array<ClusterAttentionFinding> | null;
 }
 
 export interface ClusterCRDEntry {
@@ -1592,6 +1638,7 @@ export type ClusterNodeRow = ClusterNodeSnapshotEntry;
 export const REFRESH_DOMAINS = [
   'namespaces',
   'cluster-overview',
+  'cluster-attention',
   'catalog',
   'catalog-diff',
   'nodes',
@@ -1849,6 +1896,7 @@ export function assertTelemetrySummary(value: unknown): asserts value is Telemet
 export interface BackendDomainPayloadMap {
   namespaces: NamespaceSnapshotPayload;
   'cluster-overview': ClusterOverviewSnapshotPayload;
+  'cluster-attention': ClusterAttentionSnapshot;
   catalog: CatalogSnapshotPayload;
   'catalog-diff': CatalogSnapshotPayload;
   nodes: ClusterNodeSnapshotPayload;

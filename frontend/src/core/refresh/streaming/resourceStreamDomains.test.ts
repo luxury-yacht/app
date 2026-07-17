@@ -63,6 +63,7 @@ const EXPECTED_DOORBELL_DOMAINS: DoorbellDomain[] = [
   'namespaces',
   'object-events',
   'cluster-overview',
+  'cluster-attention',
 ];
 
 describe('resource stream domain descriptors', () => {
@@ -137,6 +138,7 @@ describe('resource stream domain descriptors', () => {
     expect(domainSupportsSourceClock('cluster-events', 'event')).toBe(true);
     expect(domainSupportsSourceClock('namespace-events', 'event')).toBe(true);
     expect(domainSupportsSourceClock('catalog', 'object')).toBe(false);
+    expect(domainSupportsSourceClock('cluster-attention', 'attention')).toBe(true);
   });
 
   // Locks the frontend descriptor table to the backend-authored projection

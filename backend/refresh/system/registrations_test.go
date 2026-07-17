@@ -490,7 +490,9 @@ func TestRefreshDomainSourceClocksAuthored(t *testing.T) {
 	// The serve-time metric join gives the three metric-bearing table domains a
 	// metric source clock alongside the object clock.
 	metricDomains := map[string]bool{"pods": true, "nodes": true, "namespace-workloads": true}
-	validSources := map[string]bool{"object": true, "metric": true, "event": true, "catalog": true}
+	validSources := map[string]bool{
+		"object": true, "metric": true, "event": true, "catalog": true, "attention": true,
+	}
 
 	for _, entry := range contract.Domains {
 		inventory := contract.DomainInventory[entry.Domain]
@@ -519,6 +521,8 @@ func TestRefreshDomainSourceClocksAuthored(t *testing.T) {
 				expected = []string{"event"}
 			case "cluster-overview":
 				expected = []string{"metric"}
+			case "cluster-attention":
+				expected = []string{"attention"}
 			}
 			require.ElementsMatchf(t, expected, entry.SourceClocks, "domain %s doorbell-snapshot source clock", entry.Domain)
 			continue

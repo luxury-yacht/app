@@ -257,6 +257,7 @@ func TestTypedResourceProvidersPublishKindVocabulary(t *testing.T) {
 		"cluster-rbac":          {"ClusterRole", "ClusterRoleBinding"},
 		"cluster-crds":          {"CustomResourceDefinition"},
 		"cluster-events":        nil,
+		"cluster-attention":     {"Pod", "Deployment", "StatefulSet", "DaemonSet", "Job", "CronJob", "Node", "Event"},
 		"namespace-config":      {"ConfigMap", "Secret"},
 		"namespace-network":     {"Service", "Ingress", "EndpointSlice", "NetworkPolicy", "Gateway", "HTTPRoute", "GRPCRoute", "TLSRoute", "ListenerSet", "ReferenceGrant", "BackendTLSPolicy"},
 		"namespace-storage":     {"PersistentVolumeClaim"},

@@ -27,20 +27,26 @@ one retained workspace per open cluster.
 
 ## Cluster Attention Routing
 
-Cluster Overview is the cluster-level landing surface for health, capacity, and
-attention signals. Do not add a separate Needs Attention route. Global Clusters
-summarizes not-ready nodes and failing pods, and its Cluster link opens the
-originating cluster's Overview.
+Cluster Overview is the cluster-level landing surface for health and capacity.
+Cluster Attention is the inventory of objects that currently warrant operator
+action. It appears between Overview and Resources and is scoped to exactly one
+cluster.
 
-Overview keeps diagnosis in the owning resource views:
+Overview pod-health and restart signals open Cluster Attention. Attention rows
+combine the active reasons for one object and carry the object's complete
+cluster/GVR identity; their Kind and Name links open that object. Resource views
+remain the place for browsing and operating on the full unfiltered inventory.
 
-- non-ready and cordoned node signals open Cluster Nodes;
-- pod health and restart signals open the All Namespaces Workloads/Pods surface
-  with the corresponding pod predicate;
-- an individual warning event opens its fully resolved object reference on the
-  object panel Events tab; and
-- namespace-level attention, warning, utilization, and quota comparisons remain
-  in Cluster Namespaces.
+The backend owns the Attention finding set in a per-cluster maintained query
+store. Existing Pod, workload, and Node reflector bundles plus the shared Event
+informer update it incrementally. A domain-owned timer advances grace periods
+and event expiry. The distinct `attention` stream clock is a change signal: the
+frontend refetches the current query page, with polling only as the stream-down
+fallback.
+
+Global Clusters summarizes not-ready nodes and failing pods, and its Cluster
+link opens the originating cluster's Overview. Namespace-level warning,
+utilization, and quota comparisons remain in Cluster Namespaces.
 
 Overview warning events can involve both cluster-scoped and namespaced objects.
 Do not link the whole warning section to Cluster Events: that view intentionally

@@ -6,7 +6,6 @@
  * independently per cluster without leaking between clusters.
  */
 
-import { getPodsUnhealthyStorageKey } from '@modules/namespace/components/podsFilterSignals';
 import React, { act } from 'react';
 import * as ReactDOM from 'react-dom/client';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
@@ -148,28 +147,6 @@ describe('Wails Runtime Event Listener Cleanup', () => {
 
     expect(mockRuntime.handlers.size).toBe(0);
     expect(mockRuntime.EventsOff).not.toHaveBeenCalled();
-  });
-});
-
-// Tests for pods filter isolation
-describe('Pods Filter Isolation', () => {
-  it('generates cluster-specific storage keys', () => {
-    const keyA = getPodsUnhealthyStorageKey('cluster-a');
-    const keyB = getPodsUnhealthyStorageKey('cluster-b');
-
-    // Keys should include the cluster ID
-    expect(keyA).toContain('cluster-a');
-    expect(keyB).toContain('cluster-b');
-
-    // Keys should be different for different clusters
-    expect(keyA).not.toBe(keyB);
-  });
-
-  it('generates consistent keys for the same cluster', () => {
-    const key1 = getPodsUnhealthyStorageKey('my-cluster');
-    const key2 = getPodsUnhealthyStorageKey('my-cluster');
-
-    expect(key1).toBe(key2);
   });
 });
 

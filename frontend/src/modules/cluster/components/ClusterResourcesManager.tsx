@@ -19,6 +19,7 @@ import type { RefreshDomain } from '@/core/refresh/types';
 // stale per-cluster rows survive into the next selection. (Catalog is
 // excluded — browse owns its own lifecycle.)
 const CLUSTER_DOMAIN_SET = new Set<RefreshDomain>([
+  'cluster-attention',
   'nodes',
   'cluster-rbac',
   'cluster-storage',

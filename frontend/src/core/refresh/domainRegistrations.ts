@@ -69,6 +69,7 @@ export function registerDefaultRefreshDomains(registrar: RefreshDomainRegistrar)
   // its polls STAY ON via the descriptor's pollingContinuesWhileStreaming
   // (the doorbell may never ring on metrics-less clusters).
   doorbellStreamDomain('cluster-overview');
+  doorbellStreamDomain('cluster-attention');
   registerSnapshotDomains(
     'object-maintenance',
     'object-details',

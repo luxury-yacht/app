@@ -26,6 +26,7 @@ describe('diagnosticsPanelConfig domain behavior sets', () => {
     // client-side metrics polling remains.
     expect(sortedDomains(PAUSE_POLLING_WHEN_STREAMING_DOMAINS)).toEqual([
       'catalog',
+      'cluster-attention',
       'cluster-config',
       'cluster-crds',
       'cluster-custom',

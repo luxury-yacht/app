@@ -23,7 +23,6 @@ const {
   setSidebarSelectionMock,
   navigateToClusterViewMock,
   navigateToNamespaceMock,
-  emitPodsUnhealthySignalMock,
   getAppInfoMock,
   browserOpenURLMock,
   openWithObjectMock,
@@ -61,7 +60,6 @@ const {
     setSidebarSelectionMock: vi.fn(),
     navigateToClusterViewMock: vi.fn(),
     navigateToNamespaceMock: vi.fn(),
-    emitPodsUnhealthySignalMock: vi.fn(),
     getAppInfoMock: vi.fn(),
     browserOpenURLMock: vi.fn(),
     openWithObjectMock: vi.fn(),
@@ -179,10 +177,6 @@ vi.mock('@/core/contexts/ViewStateContext', () => ({
     onNamespaceSelect: vi.fn(),
     onClusterObjectsClick: vi.fn(),
   }),
-}));
-vi.mock('@modules/namespace/components/podsFilterSignals', () => ({
-  __esModule: true,
-  emitPodsUnhealthySignal: emitPodsUnhealthySignalMock,
 }));
 vi.mock('@wailsjs/go/backend/App', () => ({
   __esModule: true,
@@ -685,7 +679,7 @@ describe('ClusterOverview', () => {
     expect(container.textContent).not.toContain('Loading cluster overview...');
   });
 
-  it('navigates to the Workloads Pods table with an unhealthy filter from a non-ready status card', async () => {
+  it('navigates to Cluster Attention from a non-ready pod status card', async () => {
     mockLifecycleState = 'loading';
     domainStateRef.current = createDomainState('ready', {
       overview: {
@@ -705,21 +699,15 @@ describe('ClusterOverview', () => {
       startingCard?.dispatchEvent(new MouseEvent('click', { bubbles: true }));
     });
 
-    expect(setSelectedNamespaceMock).toHaveBeenCalledWith(ALL_NAMESPACES_SCOPE);
-    expect(setActiveNamespaceTabMock).toHaveBeenCalledWith('workloads');
+    expect(setActiveClusterViewMock).toHaveBeenCalledWith('attention');
     expect(setSidebarSelectionMock).toHaveBeenCalledWith({
-      type: 'namespace',
-      value: ALL_NAMESPACES_SCOPE,
+      type: 'cluster',
+      value: 'cluster',
     });
-    expect(navigateToNamespaceMock).toHaveBeenCalled();
-    expect(emitPodsUnhealthySignalMock).toHaveBeenCalledWith(
-      'cluster-1',
-      ALL_NAMESPACES_SCOPE,
-      'unhealthy'
-    );
+    expect(navigateToClusterViewMock).toHaveBeenCalledWith('cluster');
   });
 
-  it('navigates to the filtered Workloads Pods table from signal cards', async () => {
+  it('navigates to Cluster Attention from restart and not-ready pod cards', async () => {
     mockLifecycleState = 'loading';
     domainStateRef.current = createDomainState('ready', {
       overview: {
@@ -741,20 +729,13 @@ describe('ClusterOverview', () => {
     act(() => {
       restartedCard?.dispatchEvent(new MouseEvent('click', { bubbles: true }));
     });
-    expect(emitPodsUnhealthySignalMock).toHaveBeenLastCalledWith(
-      'cluster-1',
-      ALL_NAMESPACES_SCOPE,
-      'restarts'
-    );
+    expect(setActiveClusterViewMock).toHaveBeenLastCalledWith('attention');
 
     act(() => {
       notReadyCard?.dispatchEvent(new MouseEvent('click', { bubbles: true }));
     });
-    expect(emitPodsUnhealthySignalMock).toHaveBeenLastCalledWith(
-      'cluster-1',
-      ALL_NAMESPACES_SCOPE,
-      'not-ready'
-    );
+    expect(setActiveClusterViewMock).toHaveBeenLastCalledWith('attention');
+    expect(navigateToClusterViewMock).toHaveBeenCalledWith('cluster');
   });
 
   it('navigates to the Workloads Pods table without an unhealthy filter from the ready item', async () => {
@@ -785,7 +766,6 @@ describe('ClusterOverview', () => {
       value: ALL_NAMESPACES_SCOPE,
     });
     expect(navigateToNamespaceMock).toHaveBeenCalled();
-    expect(emitPodsUnhealthySignalMock).not.toHaveBeenCalled();
   });
 
   it('navigates from non-ready and cordoned node signals to Cluster Nodes', async () => {

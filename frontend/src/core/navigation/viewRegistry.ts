@@ -42,6 +42,14 @@ export const GLOBAL_VIEW_DESCRIPTORS = [
 export const CLUSTER_VIEW_DESCRIPTORS = [
   {
     scope: 'cluster',
+    id: 'attention',
+    label: 'Attention',
+    description: 'Review cluster objects that currently need operator attention',
+    keywords: ['attention', 'cluster', 'health', 'failures', 'warnings', 'restarts', 'unready'],
+    refresher: 'cluster-attention',
+  },
+  {
+    scope: 'cluster',
     id: 'namespaces',
     label: 'Namespaces',
     description: 'Compare health, workloads, events, utilization, and quotas across namespaces',

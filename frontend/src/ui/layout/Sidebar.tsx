@@ -150,7 +150,8 @@ function Sidebar() {
     });
 
   // Cluster view items (always visible)
-  const resourceViews = CLUSTER_VIEW_DESCRIPTORS;
+  const attentionView = CLUSTER_VIEW_DESCRIPTORS.find((view) => view.id === 'attention');
+  const resourceViews = CLUSTER_VIEW_DESCRIPTORS.filter((view) => view.id !== 'attention');
 
   // Scroll selected namespace into view when it changes
   useEffect(() => {
@@ -399,6 +400,28 @@ function Sidebar() {
                   <ClusterOverviewIcon width={14} height={14} />
                   <span>Overview</span>
                 </button>
+                {attentionView ? (
+                  <button
+                    type="button"
+                    className={buildSidebarItemClassName(['sidebar-item'], {
+                      kind: 'cluster-view',
+                      view: attentionView.id,
+                    })}
+                    onClick={() => handleClusterViewSelect(attentionView.id)}
+                    data-sidebar-focusable="true"
+                    data-sidebar-target-kind="cluster-view"
+                    data-sidebar-target-view={attentionView.id}
+                    tabIndex={-1}
+                    aria-current={
+                      isTargetSelected({ kind: 'cluster-view', view: attentionView.id })
+                        ? 'page'
+                        : undefined
+                    }
+                  >
+                    <WarningIcon width={14} height={14} />
+                    <span>{attentionView.label}</span>
+                  </button>
+                ) : null}
                 <button
                   type="button"
                   className={buildSidebarItemClassName(['sidebar-item', 'header', 'clickable'], {

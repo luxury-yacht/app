@@ -35,6 +35,23 @@
       "coverageContract": "aggregate-snapshot-permission-fallback",
       "coverageStatus": "enforced"
     },
+    "cluster-attention": {
+      "behaviorClass": "snapshot-table",
+      "scopeContract": {
+        "kind": "cluster",
+        "clusterPrefix": "required",
+        "parser": "backend/refresh/snapshot/cluster_attention.go:ClusterAttentionBuilder.Build",
+        "frontendBuilder": "frontend/src/core/refresh/clusterScope.ts:buildClusterScope",
+        "acceptedEncodings": [""]
+      },
+      "singleCluster": true,
+      "payloadOwner": "backend/refresh/snapshot.ClusterAttentionBuilder",
+      "refreshPayloadType": "ClusterAttentionSnapshot",
+      "cachePolicy": "snapshot-cache",
+      "streamSemantics": ["snapshot-replace", "change-signal"],
+      "coverageContract": "snapshot-table-payload",
+      "coverageStatus": "enforced"
+    },
     "catalog": {
       "behaviorClass": "catalog-stream",
       "scopeContract": {
@@ -731,6 +748,19 @@
         "diagnosticsStream": "resources",
         "timing": { "interval": 10000, "cooldown": 1000, "timeout": 10 },
         "priority": 3
+      }
+    },
+    {
+      "domain": "cluster-attention",
+      "category": "cluster",
+      "sourceClocks": ["attention"],
+      "backend": { "registration": "list", "permission": "runtime", "resourceStream": false },
+      "frontend": {
+        "refresherName": "cluster-attention",
+        "orchestrator": "doorbell-snapshot",
+        "diagnosticsStream": "resources",
+        "timing": { "interval": 5000, "cooldown": 500, "timeout": 10 },
+        "priority": 1
       }
     },
     {

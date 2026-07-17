@@ -98,6 +98,9 @@ const (
 	// SnapshotClusterCRDEntryLimit caps cluster CRD snapshot rows.
 	SnapshotClusterCRDEntryLimit = 1000
 
+	// SnapshotClusterAttentionEntryLimit caps cluster attention snapshot rows.
+	SnapshotClusterAttentionEntryLimit = 1000
+
 	// SnapshotClusterOverviewRecentEventsLimit caps recent warning events in cluster overview snapshots.
 	SnapshotClusterOverviewRecentEventsLimit = 20
 

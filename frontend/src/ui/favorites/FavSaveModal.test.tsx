@@ -536,6 +536,7 @@ describe('FavSaveModal', () => {
     expect(Array.from(viewSelect.options, (option) => option.value)).toEqual([
       'global:fleet',
       'global:global-namespaces',
+      'cluster:attention',
       'cluster:namespaces',
       'cluster:browse',
       'cluster:events',

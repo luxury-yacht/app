@@ -38,7 +38,8 @@ type DoorbellStreamDomain =
   | 'namespace-events'
   | 'namespaces'
   | 'object-events'
-  | 'cluster-overview';
+  | 'cluster-overview'
+  | 'cluster-attention';
 
 type ResourceStreamHealthStatus = 'healthy' | 'degraded' | 'unhealthy';
 type ResourceStreamConnectionStatus = 'connected' | 'disconnected';
@@ -144,11 +145,6 @@ export interface AppEvents {
   'settings:appearance-mode-resolved': 'light' | 'dark';
 
   // Feature events
-  'pods:show-unhealthy': {
-    clusterId: string;
-    scope: string;
-    filter?: 'unhealthy' | 'restarts' | 'not-ready';
-  };
   'gridtable:persistence-mode': 'namespaced' | 'shared';
 
   // Grid table external focus — emitted to request that a visible GridTable

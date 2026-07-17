@@ -100,6 +100,7 @@ type Subsystem struct {
 	// into the torn-down stream manager.
 	NamespaceNotifier    *snapshot.NamespaceChangeNotifier
 	ObjectEventsNotifier *snapshot.ObjectEventsChangeNotifier
+	AttentionIndex       *snapshot.ClusterAttentionIndex
 	// NamespacesDoorbell is the post-broadcast observer slot on the namespaces
 	// doorbell; the app attaches the cluster-Ready self-build hook here (see
 	// app_refresh_setup) once the aggregate service exists.
@@ -299,6 +300,7 @@ func NewSubsystemWithServices(cfg Config) (*Subsystem, error) {
 
 	var namespaceNotifier *snapshot.NamespaceChangeNotifier
 	var objectEventsNotifier *snapshot.ObjectEventsChangeNotifier
+	var attentionIndex *snapshot.ClusterAttentionIndex
 	deps := registrationDeps{
 		registry:        registry,
 		informerFactory: informerFactory,
@@ -312,6 +314,9 @@ func NewSubsystemWithServices(cfg Config) (*Subsystem, error) {
 		},
 		noteObjectEventsNotifier: func(notifier *snapshot.ObjectEventsChangeNotifier) {
 			objectEventsNotifier = notifier
+		},
+		noteAttentionIndex: func(index *snapshot.ClusterAttentionIndex) {
+			attentionIndex = index
 		},
 	}
 
@@ -392,6 +397,9 @@ func NewSubsystemWithServices(cfg Config) (*Subsystem, error) {
 	if resourceManager != nil && objectEventsNotifier != nil {
 		wireObjectEventsDoorbell(snapshotService, objectEventsNotifier, resourceManager)
 	}
+	if resourceManager != nil && attentionIndex != nil {
+		wireClusterAttentionDoorbell(snapshotService, attentionIndex, resourceManager)
+	}
 
 	return &Subsystem{
 		Manager:              manager,
@@ -409,12 +417,13 @@ func NewSubsystemWithServices(cfg Config) (*Subsystem, error) {
 		ClusterMeta:          clusterMeta,
 		NamespaceNotifier:    namespaceNotifier,
 		ObjectEventsNotifier: objectEventsNotifier,
+		AttentionIndex:       attentionIndex,
 		NamespacesDoorbell:   namespacesDoorbellObserver,
 	}, nil
 }
 
 // StopDoorbellNotifiers silences every doorbell notifier (namespaces,
-// object-events); nil-safe for subsystems built without them (tests, failed
+// object-events, cluster-attention); nil-safe for subsystems built without them (tests, failed
 // registration). Every teardown/cool path must call this or the notifiers'
 // debounce/rearm timers keep broadcasting into the dead stream manager.
 func (s *Subsystem) StopDoorbellNotifiers() {
@@ -426,6 +435,9 @@ func (s *Subsystem) StopDoorbellNotifiers() {
 	}
 	if s.ObjectEventsNotifier != nil {
 		s.ObjectEventsNotifier.Stop()
+	}
+	if s.AttentionIndex != nil {
+		s.AttentionIndex.Stop()
 	}
 }
 
@@ -491,6 +503,21 @@ func wireObjectEventsDoorbell(
 	notifier.SetBroadcast(func(version string, matches func(scope string) bool) {
 		service.InvalidateDomainCache("object-events")
 		resourceManager.BroadcastObjectEventsRefresh(version, matches)
+	})
+}
+
+type attentionDoorbellNotifier interface {
+	SetBroadcast(func(version string))
+}
+
+func wireClusterAttentionDoorbell(
+	service *snapshot.Service,
+	notifier attentionDoorbellNotifier,
+	resourceManager *resourcestream.Manager,
+) {
+	notifier.SetBroadcast(func(version string) {
+		service.InvalidateDomainCache("cluster-attention")
+		resourceManager.BroadcastClusterAttentionRefresh(version)
 	})
 }
 

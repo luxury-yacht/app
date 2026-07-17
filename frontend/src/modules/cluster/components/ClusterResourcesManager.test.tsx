@@ -97,6 +97,7 @@ describe('ClusterResourcesManager', () => {
 
     const resetDomains = orchestratorMocks.resetDomain.mock.calls.map((call) => call[0]).sort();
     expect(resetDomains).toEqual([
+      'cluster-attention',
       'cluster-config',
       'cluster-crds',
       'cluster-events',

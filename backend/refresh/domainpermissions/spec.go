@@ -448,6 +448,21 @@ var policySpecs = []policySpec{
 		},
 	},
 	{
+		Domain: "cluster-attention",
+		Mode:   ModeAny,
+		Reason: "attention resources",
+		Runtime: []Resource{
+			fromIdentity(pods.Identity),
+			fromIdentity(deployment.Identity),
+			fromIdentity(statefulset.Identity),
+			fromIdentity(daemonset.Identity),
+			fromIdentity(job.Identity),
+			fromIdentity(cronjob.Identity),
+			fromIdentity(nodes.Identity),
+			fromIdentity(events.Identity),
+		},
+	},
+	{
 		Domain:  "cluster-rbac",
 		Mode:    ModeAny,
 		Reason:  "rbac.authorization.k8s.io",

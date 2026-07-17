@@ -199,6 +199,27 @@ func TestManagerBroadcastsNamespacesDoorbell(t *testing.T) {
 	require.Nil(t, update.Ref)
 }
 
+func TestManagerBroadcastsClusterAttentionDoorbell(t *testing.T) {
+	manager := &Manager{
+		clusterMeta: snapshot.ClusterMeta{ClusterID: "c1", ClusterName: "cluster"},
+		logger:      applog.Noop,
+		subscribers: make(map[string]map[string]map[uint64]*subscription),
+		buffers:     make(map[string]*updateBuffer),
+		sequences:   make(map[string]uint64),
+	}
+	sub, err := subscribeForTest(t, manager, domainClusterAttention, "")
+	require.NoError(t, err)
+
+	manager.BroadcastClusterAttentionRefresh("attention-7")
+
+	update := requireNextUpdate(t, sub)
+	require.Equal(t, domainClusterAttention, update.Domain)
+	require.Equal(t, SourceAttention, update.Source)
+	require.Equal(t, SignalChanged, update.Signal)
+	require.Equal(t, "attention-7", update.Version)
+	require.Nil(t, update.Ref)
+}
+
 // The namespaces doorbell subscription must be accepted as a cluster-scope
 // selector, exactly like the catalog/cluster-events doorbells.
 func TestParseStreamSelectorAcceptsNamespacesClusterScope(t *testing.T) {

@@ -228,6 +228,11 @@ const doorbellDomainDescriptors = [
     isClusterScoped: true,
     pollingContinuesWhileStreaming: true,
   },
+  {
+    domain: 'cluster-attention',
+    scopeKind: 'cluster',
+    isClusterScoped: true,
+  },
 ] satisfies ResourceStreamDomainDescriptor[];
 
 export const DOORBELL_STREAM_DOMAINS = doorbellDomainDescriptors.map(
@@ -253,7 +258,11 @@ export const isSupportedDomain = (value: string | undefined): value is DoorbellD
   Boolean(value && doorbellDescriptorByDomain.has(value as DoorbellDomain));
 
 export const isResourceStreamSourceClock = (value: unknown): value is ResourceStreamSourceClock =>
-  value === 'object' || value === 'metric' || value === 'event' || value === 'catalog';
+  value === 'object' ||
+  value === 'metric' ||
+  value === 'event' ||
+  value === 'catalog' ||
+  value === 'attention';
 
 // The doorbell clocks a domain declares in the contract. Signal-driven refetch
 // hooks key on THESE clock values (never the folded sourceVersion): payload
