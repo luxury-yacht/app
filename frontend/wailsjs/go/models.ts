@@ -4262,21 +4262,21 @@ export namespace serviceaccount {
 }
 
 export namespace snapshot {
-
+	
 	export class AttentionObjectFindingIgnore {
 	    ref: resourcemodel.ResourceRef;
 	    findingType: string;
-
+	
 	    static createFrom(source: any = {}) {
 	        return new AttentionObjectFindingIgnore(source);
 	    }
-
+	
 	    constructor(source: any = {}) {
 	        if ('string' === typeof source) source = JSON.parse(source);
 	        this.ref = this.convertValues(source["ref"], resourcemodel.ResourceRef);
 	        this.findingType = source["findingType"];
 	    }
-
+	
 		convertValues(a: any, classs: any, asMap: boolean = false): any {
 		    if (!a) {
 		        return a;
@@ -4329,7 +4329,7 @@ export namespace snapshot {
 		    return a;
 		}
 	}
-
+	
 	export class CustomResourceSummary {
 	    clusterId: string;
 	    clusterName: string;
@@ -6085,3 +6085,4 @@ export namespace v1 {
 	}
 
 }
+
