@@ -53,12 +53,11 @@ const compactFindingText = (values: string[]): string[] => {
 const renderFinding = (row: ClusterAttentionFinding) => {
   const causes = row.causes ?? [];
   const labels = compactFindingText(causes.map((cause) => cause.label));
-  const status = row.status.trim().toLocaleLowerCase();
-  const details = compactFindingText(
-    causes
-      .map((cause) => cause.message)
-      .filter((message) => message.trim().toLocaleLowerCase() !== status)
-  );
+  const status = row.status.trim();
+  const details = compactFindingText([
+    ...(status.toLocaleLowerCase() === row.severity.toLocaleLowerCase() ? [] : [status]),
+    ...causes.map((cause) => cause.message),
+  ]);
 
   return (
     <div className="attention-finding-cell">
@@ -118,7 +117,6 @@ export default function ClusterViewAttention() {
           <StatusChip variant={severityChipVariants[row.severity]}>{row.severity}</StatusChip>
         ),
       },
-      cf.createTextColumn('status', 'Status', (row) => row.status || '-'),
       {
         key: 'reason',
         header: 'Finding',
@@ -134,7 +132,6 @@ export default function ClusterViewAttention() {
       name: { width: 220 },
       namespace: { width: 180 },
       severity: { autoWidth: true },
-      status: { width: 180 },
       reason: { width: 320 },
       age: { autoWidth: true },
     });

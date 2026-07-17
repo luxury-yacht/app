@@ -194,7 +194,6 @@ describe('ClusterViewAttention', () => {
       'Namespace',
       'Name',
       'Severity',
-      'Status',
       'Finding',
       'Age',
     ]);
@@ -244,7 +243,7 @@ describe('ClusterViewAttention', () => {
     }
   });
 
-  it('renders context-menu finding labels with only nonduplicative supporting details', async () => {
+  it('folds the current status into Finding without duplicating cause details', async () => {
     await act(async () => {
       root.render(<ClusterViewAttention />);
       await Promise.resolve();
@@ -274,8 +273,42 @@ describe('ClusterViewAttention', () => {
     expect(cell.querySelector('.attention-finding-labels')?.textContent).toBe(
       'Unhealthy workloads · Replica mismatch'
     );
-    expect(cell.querySelector('.attention-finding-details')?.textContent).toBe('1/2 ready');
-    expect(cell.textContent).not.toContain('UpdatingUpdating');
+    expect(cell.querySelector('.attention-finding-details')?.textContent).toBe(
+      'Updating · 1/2 ready'
+    );
+  });
+
+  it('does not repeat a status that matches the finding severity', async () => {
+    await act(async () => {
+      root.render(<ClusterViewAttention />);
+      await Promise.resolve();
+    });
+
+    const columns = queryParamsRef.current
+      ?.columns as GridColumnDefinition<ClusterAttentionFinding>[];
+    const rendered = columns
+      .find((column) => column.key === 'reason')
+      ?.render({
+        ...finding,
+        kind: 'Event',
+        severity: 'warning',
+        status: 'Warning',
+        causes: [
+          {
+            type: 'warning-event',
+            label: 'Warning events',
+            message: 'BackOff · Back-off restarting failed container',
+            severity: 'warning',
+          },
+        ],
+      });
+    const markup = renderToStaticMarkup(rendered);
+    const cell = document.createElement('div');
+    cell.innerHTML = markup;
+
+    expect(cell.querySelector('.attention-finding-details')?.textContent).toBe(
+      'BackOff · Back-off restarting failed container'
+    );
   });
 
   it('offers object, cluster, and global ignore scopes for each finding', async () => {
