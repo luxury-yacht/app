@@ -275,6 +275,41 @@ func TestServiceSourceVersionIncludesEpoch(t *testing.T) {
 	require.Equal(t, first.SourceVersions, second.SourceVersions)
 }
 
+// Versionless snapshot domains such as object-map still need a payload-sensitive
+// validator. Otherwise a changed graph keeps the same source version and the
+// conditional snapshot request returns 304 with deleted objects still visible.
+func TestServiceVersionlessPayloadChangeAdvancesSourceVersion(t *testing.T) {
+	reg := domain.New()
+	jobCount := 1
+	require.NoError(t, reg.Register(refresh.DomainConfig{
+		Name: "object-map",
+		BuildSnapshot: func(_ context.Context, scope string) (*refresh.Snapshot, error) {
+			return &refresh.Snapshot{
+				Domain:  "object-map",
+				Scope:   scope,
+				Version: 0,
+				Payload: map[string]int{"jobCount": jobCount},
+			}, nil
+		},
+	}))
+
+	service := NewService(reg, nil, testClusterMeta())
+	service.cacheTTL = 0
+
+	first, err := service.Build(context.Background(), "object-map", "cluster-a|namespace:default")
+	require.NoError(t, err)
+	jobCount = 0
+	second, err := service.Build(context.Background(), "object-map", "cluster-a|namespace:default")
+	require.NoError(t, err)
+	third, err := service.Build(context.Background(), "object-map", "cluster-a|namespace:default")
+	require.NoError(t, err)
+
+	require.NotEqual(t, first.Checksum, second.Checksum)
+	require.NotEqual(t, first.SourceVersion, second.SourceVersion)
+	require.Equal(t, second.Checksum, third.Checksum)
+	require.Equal(t, second.SourceVersion, third.SourceVersion)
+}
+
 func TestServiceDoesNotCacheMetricSourceDomains(t *testing.T) {
 	for _, domainName := range []string{
 		"pods",

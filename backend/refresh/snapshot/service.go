@@ -538,25 +538,39 @@ func (s *Service) finalizeSourceVersion(snap *refresh.Snapshot) {
 	if strings.TrimSpace(snap.SourceVersions["object"]) == "" {
 		snap.SourceVersions["object"] = strconv.FormatUint(snap.Version, 10)
 	}
-	snap.SourceVersion = s.sourceVersionToken(snap.Domain, snap.Scope, snap.SourceVersions)
+	// Source clocks describe producer progress, while the checksum guarantees the
+	// HTTP validator also changes for versionless domains when their payload does.
+	snap.SourceVersion = s.sourceVersionToken(
+		snap.Domain,
+		snap.Scope,
+		snap.SourceVersions,
+		snap.Checksum,
+	)
 }
 
-func (s *Service) sourceVersionToken(domainName, scope string, sourceVersions map[string]string) string {
+func (s *Service) sourceVersionToken(
+	domainName,
+	scope string,
+	sourceVersions map[string]string,
+	checksum string,
+) string {
 	type sourceClock struct {
 		Source  string `json:"source"`
 		Version string `json:"version"`
 	}
 	payload := struct {
-		Epoch   string        `json:"epoch"`
-		Cluster string        `json:"cluster"`
-		Domain  string        `json:"domain"`
-		Scope   string        `json:"scope"`
-		Sources []sourceClock `json:"sources"`
+		Epoch    string        `json:"epoch"`
+		Cluster  string        `json:"cluster"`
+		Domain   string        `json:"domain"`
+		Scope    string        `json:"scope"`
+		Checksum string        `json:"checksum"`
+		Sources  []sourceClock `json:"sources"`
 	}{
-		Epoch:   s.epoch,
-		Cluster: s.cluster.ClusterID,
-		Domain:  domainName,
-		Scope:   scope,
+		Epoch:    s.epoch,
+		Cluster:  s.cluster.ClusterID,
+		Domain:   domainName,
+		Scope:    scope,
+		Checksum: checksum,
 	}
 	keys := make([]string, 0, len(sourceVersions))
 	for key, version := range sourceVersions {
