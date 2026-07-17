@@ -81,6 +81,9 @@ const (
 	CatalogGateway
 	// CatalogAPIExtensions lists the kind from the apiextensions informer factory.
 	CatalogAPIExtensions
+	// CatalogNone excludes a built-in kind from object-catalog collection. The
+	// kind can still participate in other descriptor-driven subsystems.
+	CatalogNone
 )
 
 // Descriptor is the one place a kind hands the rest of the app everything it needs.
@@ -94,7 +97,7 @@ type Descriptor struct {
 	Identity resourcekind.Identity
 
 	// CatalogSource tells the object catalog which informer factory (or the dynamic
-	// client) backs this kind's list/watch.
+	// client) backs this kind's list/watch, or excludes it with CatalogNone.
 	CatalogSource CatalogSource
 
 	// DetailCacheable marks kinds whose informer drives response-cache eviction of

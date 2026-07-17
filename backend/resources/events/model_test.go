@@ -53,3 +53,60 @@ func TestBuildEventResourceModelInvolvedObjectLinks(t *testing.T) {
 	require.Equal(t, "Deployment", partialFacts.InvolvedObject.Display.Kind)
 	require.Equal(t, "orders", partialFacts.InvolvedObject.Display.Name)
 }
+
+func TestBuildFactsProjectsCompleteEventDetails(t *testing.T) {
+	eventTime := metav1.NewMicroTime(time.Date(2026, 1, 3, 12, 0, 0, 0, time.UTC))
+	lastObserved := metav1.NewMicroTime(time.Date(2026, 1, 3, 12, 5, 0, 0, time.UTC))
+	event := &corev1.Event{
+		Action:              "Killing",
+		ReportingController: "kubernetes.io/kubelet",
+		ReportingInstance:   "kubelet-node-a",
+		EventTime:           eventTime,
+		Series: &corev1.EventSeries{
+			Count:            7,
+			LastObservedTime: lastObserved,
+		},
+		InvolvedObject: corev1.ObjectReference{
+			APIVersion: "v1",
+			Kind:       "Pod",
+			Namespace:  "apps",
+			Name:       "orders-abc",
+			FieldPath:  "spec.containers{api}",
+		},
+		Related: &corev1.ObjectReference{
+			APIVersion: "v1",
+			Kind:       "Node",
+			Name:       "node-a",
+			FieldPath:  "status.conditions{Ready}",
+		},
+	}
+
+	facts := BuildFacts("cluster-a", event)
+
+	require.Equal(t, "Killing", facts.Action)
+	require.Equal(t, "kubernetes.io/kubelet", facts.ReportingController)
+	require.Equal(t, "kubelet-node-a", facts.ReportingInstance)
+	require.Equal(t, eventTime.Time, facts.EventTime.Time)
+	require.Equal(t, eventTime.Time, facts.FirstTimestamp.Time)
+	require.Equal(t, lastObserved.Time, facts.LastTimestamp.Time)
+	require.NotNil(t, facts.SeriesCount)
+	require.Equal(t, int32(7), *facts.SeriesCount)
+	require.NotNil(t, facts.SeriesLastObservedTime)
+	require.Equal(t, lastObserved.Time, facts.SeriesLastObservedTime.Time)
+	require.Equal(t, "spec.containers{api}", facts.InvolvedObjectFieldPath)
+	require.NotNil(t, facts.RelatedObject)
+	require.NotNil(t, facts.RelatedObject.Ref)
+	require.Equal(t, "cluster-a", facts.RelatedObject.Ref.ClusterID)
+	require.Equal(t, "", facts.RelatedObject.Ref.Group)
+	require.Equal(t, "v1", facts.RelatedObject.Ref.Version)
+	require.Equal(t, "Node", facts.RelatedObject.Ref.Kind)
+	require.Equal(t, "node-a", facts.RelatedObject.Ref.Name)
+	require.Equal(t, "status.conditions{Ready}", facts.RelatedObjectFieldPath)
+}
+
+func TestBuildFactsOmitsMissingSeriesObservationTime(t *testing.T) {
+	facts := BuildFacts("cluster-a", &corev1.Event{Series: &corev1.EventSeries{Count: 2}})
+
+	require.NotNil(t, facts.SeriesCount)
+	require.Nil(t, facts.SeriesLastObservedTime)
+}

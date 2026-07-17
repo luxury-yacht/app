@@ -26,6 +26,7 @@ import (
 	"github.com/luxury-yacht/app/backend/resources/daemonset"
 	"github.com/luxury-yacht/app/backend/resources/deployment"
 	"github.com/luxury-yacht/app/backend/resources/endpointslice"
+	"github.com/luxury-yacht/app/backend/resources/events"
 	"github.com/luxury-yacht/app/backend/resources/gateway"
 	"github.com/luxury-yacht/app/backend/resources/gatewayclass"
 	"github.com/luxury-yacht/app/backend/resources/grpcroute"
@@ -95,6 +96,7 @@ var All = []kindspec.Descriptor{
 	admission.MutatingDescriptor,
 	admission.ValidatingDescriptor,
 	apiextensions.Descriptor,
+	events.Descriptor,
 	gatewayclass.Descriptor,
 	gateway.Descriptor,
 	httproute.Descriptor,

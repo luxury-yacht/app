@@ -122,9 +122,8 @@ func fromSpecs(specs []appbinding.Spec) []binding {
 }
 
 // Bindings is the aggregated source for the generated App.Get wrappers, derived
-// from the single kind registry: every kind declares its own appbinding.Spec
-// (resources/<kind>/appbinding.go) and registers it once in kindregistry.All. The
-// generator sorts by Name for stable output, so registry order is immaterial.
+// from the kind registry. The generator sorts by Name for stable output, so
+// registry order is immaterial.
 var Bindings = bindingsFromRegistry()
 
 func bindingsFromRegistry() []binding {

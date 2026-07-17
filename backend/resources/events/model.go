@@ -32,16 +32,37 @@ func BuildFacts(clusterID string, event *corev1.Event) Facts {
 		return Facts{}
 	}
 	first, last := eventTimes(event)
-	return Facts{
-		EventType:      event.Type,
-		Reason:         strings.TrimSpace(event.Reason),
-		Message:        strings.TrimSpace(event.Message),
-		Count:          event.Count,
-		Source:         FormatEventSource(*event, ""),
-		FirstTimestamp: first,
-		LastTimestamp:  last,
-		InvolvedObject: eventInvolvedObjectLink(clusterID, event.InvolvedObject),
+	facts := Facts{
+		EventType:               event.Type,
+		Reason:                  strings.TrimSpace(event.Reason),
+		Message:                 strings.TrimSpace(event.Message),
+		Count:                   event.Count,
+		Source:                  FormatEventSource(*event, ""),
+		FirstTimestamp:          first,
+		LastTimestamp:           last,
+		Action:                  strings.TrimSpace(event.Action),
+		ReportingController:     strings.TrimSpace(event.ReportingController),
+		ReportingInstance:       strings.TrimSpace(event.ReportingInstance),
+		InvolvedObject:          eventObjectLink(clusterID, event.InvolvedObject),
+		InvolvedObjectFieldPath: strings.TrimSpace(event.InvolvedObject.FieldPath),
 	}
+	if !event.EventTime.IsZero() {
+		eventTime := metav1.NewTime(event.EventTime.Time)
+		facts.EventTime = &eventTime
+	}
+	if event.Series != nil {
+		seriesCount := event.Series.Count
+		facts.SeriesCount = &seriesCount
+		if !event.Series.LastObservedTime.IsZero() {
+			lastObserved := metav1.NewTime(event.Series.LastObservedTime.Time)
+			facts.SeriesLastObservedTime = &lastObserved
+		}
+	}
+	if event.Related != nil {
+		facts.RelatedObject = eventObjectLink(clusterID, *event.Related)
+		facts.RelatedObjectFieldPath = strings.TrimSpace(event.Related.FieldPath)
+	}
+	return facts
 }
 
 func statusPresentation(event *corev1.Event, facts Facts) resourcemodel.ResourceStatusPresentation {
@@ -129,24 +150,33 @@ func eventTimes(event *corev1.Event) (first, last metav1.Time) {
 	}
 	if !event.EventTime.IsZero() {
 		first = metav1.NewTime(event.EventTime.Time)
-		last = metav1.NewTime(event.EventTime.Time)
 	}
 	if first.IsZero() {
 		first = event.FirstTimestamp
 	}
-	if last.IsZero() {
-		last = event.LastTimestamp
-	}
 	if first.IsZero() {
 		first = event.CreationTimestamp
 	}
+	last = first
+	for _, candidate := range []metav1.Time{event.LastTimestamp, eventSeriesLastObservedTime(event)} {
+		if !candidate.IsZero() && (last.IsZero() || candidate.After(last.Time)) {
+			last = candidate
+		}
+	}
 	if last.IsZero() {
-		last = first
+		last = event.CreationTimestamp
 	}
 	return first, last
 }
 
-func eventInvolvedObjectLink(clusterID string, ref corev1.ObjectReference) *resourcemodel.ResourceLink {
+func eventSeriesLastObservedTime(event *corev1.Event) metav1.Time {
+	if event == nil || event.Series == nil || event.Series.LastObservedTime.IsZero() {
+		return metav1.Time{}
+	}
+	return metav1.NewTime(event.Series.LastObservedTime.Time)
+}
+
+func eventObjectLink(clusterID string, ref corev1.ObjectReference) *resourcemodel.ResourceLink {
 	apiVersion := strings.TrimSpace(ref.APIVersion)
 	group, version := "", ""
 	if apiVersion != "" {

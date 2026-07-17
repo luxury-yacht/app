@@ -17,7 +17,7 @@ import "testing"
 // participates in no facet the other guards pin: bumping it forces a conscious
 // review of all of them.
 func TestRegistryKindCount(t *testing.T) {
-	const want = 39
+	const want = 40
 	if len(All) != want {
 		t.Errorf("kindregistry.All has %d kinds, want %d — update the per-subsystem drift guards listed in this test's doc comment", len(All), want)
 	}

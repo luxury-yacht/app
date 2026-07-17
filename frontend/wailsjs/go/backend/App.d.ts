@@ -14,6 +14,7 @@ import {apiextensions} from '../models';
 import {daemonset} from '../models';
 import {deployment} from '../models';
 import {endpointslice} from '../models';
+import {events} from '../models';
 import {gateway} from '../models';
 import {gatewayclass} from '../models';
 import {json} from '../models';
@@ -137,6 +138,8 @@ export function GetDaemonSet(arg1:string,arg2:string,arg3:string):Promise<daemon
 export function GetDeployment(arg1:string,arg2:string,arg3:string):Promise<deployment.DeploymentDetails>;
 
 export function GetEndpointSlice(arg1:string,arg2:string,arg3:string):Promise<endpointslice.EndpointSliceDetails>;
+
+export function GetEvent(arg1:string,arg2:string,arg3:string):Promise<events.EventDetails>;
 
 export function GetFavorites():Promise<Array<backend.Favorite>>;
 

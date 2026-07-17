@@ -45,6 +45,11 @@ Two top-level families. Keep them distinct; do not merge their concerns.
   - `kind/objectmapnode`, `kind/objectmapspec`, `kind/objectmap` — object-map
     collector, edge declarations, and neutral node status/action facts.
 
+`CatalogSource` is also the catalog-participation boundary. `CatalogNone` keeps
+high-churn or separately managed kinds such as Event out of the general object
+catalog while allowing their detail binding, cache invalidation, and other
+facets to remain registry-driven.
+
 `backend/resourcemodel` is a separate concern (object refs, status, facts, and
 relationship links) — see [shared-resource-model.md](shared-resource-model.md).
 

@@ -14,6 +14,7 @@ import (
 	"github.com/luxury-yacht/app/backend/resources/daemonset"
 	"github.com/luxury-yacht/app/backend/resources/deployment"
 	"github.com/luxury-yacht/app/backend/resources/endpointslice"
+	"github.com/luxury-yacht/app/backend/resources/events"
 	"github.com/luxury-yacht/app/backend/resources/gateway"
 	"github.com/luxury-yacht/app/backend/resources/gatewayclass"
 	"github.com/luxury-yacht/app/backend/resources/grpcroute"
@@ -98,6 +99,12 @@ var objectDetailFetchers = map[string]objectDetailFetcher{
 	"endpointslice": {
 		withDeps: func(deps common.Dependencies, namespace, name string) (interface{}, error) {
 			detail, err := endpointslice.NewService(deps).EndpointSlice(namespace, name)
+			return detail, err
+		},
+	},
+	"event": {
+		withDeps: func(deps common.Dependencies, namespace, name string) (interface{}, error) {
+			detail, err := events.NewService(deps).Event(namespace, name)
 			return detail, err
 		},
 	},

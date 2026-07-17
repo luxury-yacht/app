@@ -190,6 +190,10 @@ export function GetEndpointSlice(arg1, arg2, arg3) {
   return window['go']['backend']['App']['GetEndpointSlice'](arg1, arg2, arg3);
 }
 
+export function GetEvent(arg1, arg2, arg3) {
+  return window['go']['backend']['App']['GetEvent'](arg1, arg2, arg3);
+}
+
 export function GetFavorites() {
   return window['go']['backend']['App']['GetFavorites']();
 }

@@ -40,12 +40,13 @@ func TestObjectDetailProviderFetchesKnownKinds(t *testing.T) {
 	configMap := &corev1.ConfigMap{ObjectMeta: metav1.ObjectMeta{Name: "demo-cm", Namespace: "default"}}
 	clusterRole := &rbacv1.ClusterRole{ObjectMeta: metav1.ObjectMeta{Name: "demo-cr"}}
 	namespace := &corev1.Namespace{ObjectMeta: metav1.ObjectMeta{Name: "demo-ns"}}
+	event := &corev1.Event{ObjectMeta: metav1.ObjectMeta{Name: "demo-event", Namespace: "default"}}
 
 	app := NewApp()
 	app.Ctx = context.Background()
 	// Per-cluster clients are stored in clusterClients, not in global fields.
 	clusterID := "config:ctx"
-	fakeClient := fake.NewClientset(deploy, configMap, clusterRole, namespace)
+	fakeClient := fake.NewClientset(deploy, configMap, clusterRole, namespace, event)
 	app.clusterClients = map[string]*clusterClients{
 		clusterID: {
 			meta:              ClusterMeta{ID: clusterID, Name: "ctx"},
@@ -69,6 +70,7 @@ func TestObjectDetailProviderFetchesKnownKinds(t *testing.T) {
 		{schema.GroupVersionKind{Version: "v1", Kind: "ConfigMap"}, "default", "demo-cm"},
 		{schema.GroupVersionKind{Group: "rbac.authorization.k8s.io", Version: "v1", Kind: "ClusterRole"}, "", "demo-cr"},
 		{schema.GroupVersionKind{Version: "v1", Kind: "Namespace"}, "", "demo-ns"},
+		{schema.GroupVersionKind{Version: "v1", Kind: "Event"}, "default", "demo-event"},
 	}
 
 	for _, tt := range tests {

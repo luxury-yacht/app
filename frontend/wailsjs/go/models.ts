@@ -1961,6 +1961,91 @@ export namespace endpointslice {
 
 }
 
+export namespace events {
+
+	export class EventDetails {
+	    kind: string;
+	    name: string;
+	    namespace: string;
+	    status: string;
+	    statusState?: string;
+	    statusPresentation?: string;
+	    statusReason?: string;
+	    eventType: string;
+	    reason?: string;
+	    message?: string;
+	    count: number;
+	    firstTimestamp: v1.Time;
+	    lastTimestamp: v1.Time;
+	    eventTime?: v1.Time;
+	    seriesCount?: number;
+	    seriesLastObservedTime?: v1.Time;
+	    source?: string;
+	    action?: string;
+	    reportingController?: string;
+	    reportingInstance?: string;
+	    involvedObject?: resourcemodel.ResourceLink;
+	    involvedObjectFieldPath?: string;
+	    relatedObject?: resourcemodel.ResourceLink;
+	    relatedObjectFieldPath?: string;
+	    labels?: Record<string, string>;
+	    annotations?: Record<string, string>;
+
+	    static createFrom(source: any = {}) {
+	        return new EventDetails(source);
+	    }
+
+	    constructor(source: any = {}) {
+	        if ('string' === typeof source) source = JSON.parse(source);
+	        this.kind = source["kind"];
+	        this.name = source["name"];
+	        this.namespace = source["namespace"];
+	        this.status = source["status"];
+	        this.statusState = source["statusState"];
+	        this.statusPresentation = source["statusPresentation"];
+	        this.statusReason = source["statusReason"];
+	        this.eventType = source["eventType"];
+	        this.reason = source["reason"];
+	        this.message = source["message"];
+	        this.count = source["count"];
+	        this.firstTimestamp = this.convertValues(source["firstTimestamp"], v1.Time);
+	        this.lastTimestamp = this.convertValues(source["lastTimestamp"], v1.Time);
+	        this.eventTime = this.convertValues(source["eventTime"], v1.Time);
+	        this.seriesCount = source["seriesCount"];
+	        this.seriesLastObservedTime = this.convertValues(source["seriesLastObservedTime"], v1.Time);
+	        this.source = source["source"];
+	        this.action = source["action"];
+	        this.reportingController = source["reportingController"];
+	        this.reportingInstance = source["reportingInstance"];
+	        this.involvedObject = this.convertValues(source["involvedObject"], resourcemodel.ResourceLink);
+	        this.involvedObjectFieldPath = source["involvedObjectFieldPath"];
+	        this.relatedObject = this.convertValues(source["relatedObject"], resourcemodel.ResourceLink);
+	        this.relatedObjectFieldPath = source["relatedObjectFieldPath"];
+	        this.labels = source["labels"];
+	        this.annotations = source["annotations"];
+	    }
+
+		convertValues(a: any, classs: any, asMap: boolean = false): any {
+		    if (!a) {
+		        return a;
+		    }
+		    if (a.slice && a.map) {
+		        return (a as any[]).map(elem => this.convertValues(elem, classs));
+		    } else if ("object" === typeof a) {
+		        if (asMap) {
+		            for (const key of Object.keys(a)) {
+		                a[key] = new classs(a[key]);
+		            }
+		            return a;
+		        }
+		        return new classs(a);
+		    }
+		    return a;
+		}
+	}
+
+}
+
 export namespace gateway {
 	
 	export class GatewayDetails {
@@ -3727,6 +3812,38 @@ export namespace resourcemodel {
 	        this.name = source["name"];
 	        this.uid = source["uid"];
 	    }
+	}
+	export class ResourceLink {
+	    ref?: ResourceRef;
+	    display?: DisplayRef;
+
+	    static createFrom(source: any = {}) {
+	        return new ResourceLink(source);
+	    }
+
+	    constructor(source: any = {}) {
+	        if ('string' === typeof source) source = JSON.parse(source);
+	        this.ref = this.convertValues(source["ref"], ResourceRef);
+	        this.display = this.convertValues(source["display"], DisplayRef);
+	    }
+
+		convertValues(a: any, classs: any, asMap: boolean = false): any {
+		    if (!a) {
+		        return a;
+		    }
+		    if (a.slice && a.map) {
+		        return (a as any[]).map(elem => this.convertValues(elem, classs));
+		    } else if ("object" === typeof a) {
+		        if (asMap) {
+		            for (const key of Object.keys(a)) {
+		                a[key] = new classs(a[key]);
+		            }
+		            return a;
+		        }
+		        return new classs(a);
+		    }
+		    return a;
+		}
 	}
 
 }

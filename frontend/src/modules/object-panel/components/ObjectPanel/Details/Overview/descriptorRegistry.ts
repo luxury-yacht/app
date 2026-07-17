@@ -16,6 +16,7 @@ import {
 } from './descriptors/clusterresource';
 import { configMapDescriptor } from './descriptors/configmap';
 import { endpointSliceDescriptor } from './descriptors/endpointslice';
+import { eventDescriptor } from './descriptors/event';
 import {
   backendTLSPolicyDescriptor,
   gatewayClassDescriptor,
@@ -67,6 +68,7 @@ const registration = <T>(kinds: string[], descriptor: OverviewDescriptor<T>): Re
 });
 
 const registrations: Registration[] = [
+  registration(['event'], eventDescriptor),
   registration(['configmap'], configMapDescriptor),
   registration(['service'], serviceDescriptor),
   registration(['secret'], secretDescriptor),

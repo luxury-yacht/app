@@ -18,9 +18,9 @@ import (
 // browse/catalog views. The catalog derives which kinds each informer factory
 // serves from kindregistry.All by CatalogSource facet (informer_registry.go), so
 // these guards pin each source's kind set to a golden list — a changed or dropped
-// CatalogSource facet, or a new kind, fails loudly. The four sources partition
-// every kind (CatalogDynamic is the zero value), so adding any kind also breaks one
-// of these sets. Literal kind names in tests are sanctioned by the
+// CatalogSource facet, or a new kind, fails loudly. The four collection sources
+// plus CatalogNone partition every kind (CatalogDynamic is the zero value), so
+// adding any kind also breaks one of these sets. Literal kind names in tests are sanctioned by the
 // resource-kind-registry contract (docs/architecture/resource-kind-registry.md).
 
 func catalogSourceKinds(source kindspec.CatalogSource) []string {
@@ -92,6 +92,10 @@ func TestCatalogDynamicSourceKindsDoNotDrift(t *testing.T) {
 		"IngressClass", "MutatingWebhookConfiguration", "PodDisruptionBudget",
 		"ServiceAccount", "ValidatingWebhookConfiguration",
 	}, catalogSourceKinds(kindspec.CatalogDynamic))
+}
+
+func TestCatalogExcludedKindsDoNotDrift(t *testing.T) {
+	assertCatalogKindSet(t, "non-catalog kinds", []string{"Event"}, catalogSourceKinds(kindspec.CatalogNone))
 }
 
 // TestCatalogSharedInformerResourcesResolve proves every GVR the catalog declares

@@ -12,6 +12,7 @@ import (
 	"github.com/luxury-yacht/app/backend/resources/daemonset"
 	"github.com/luxury-yacht/app/backend/resources/deployment"
 	"github.com/luxury-yacht/app/backend/resources/endpointslice"
+	"github.com/luxury-yacht/app/backend/resources/events"
 	"github.com/luxury-yacht/app/backend/resources/gateway"
 	"github.com/luxury-yacht/app/backend/resources/gatewayclass"
 	"github.com/luxury-yacht/app/backend/resources/grpcroute"
@@ -119,6 +120,16 @@ func (a *App) GetEndpointSlice(clusterID, namespace, name string) (*endpointslic
 	}
 	return FetchNamespacedResource(a, deps, selectionKey, "EndpointSlice", namespace, name, func() (*endpointslice.EndpointSliceDetails, error) {
 		return endpointslice.NewService(deps).EndpointSlice(namespace, name)
+	})
+}
+
+func (a *App) GetEvent(clusterID, namespace, name string) (*events.EventDetails, error) {
+	deps, selectionKey, err := a.resolveClusterDependencies(clusterID)
+	if err != nil {
+		return nil, err
+	}
+	return FetchNamespacedResource(a, deps, selectionKey, "Event", namespace, name, func() (*events.EventDetails, error) {
+		return events.NewService(deps).Event(namespace, name)
 	})
 }
 
