@@ -5,6 +5,7 @@ import {context} from '../models';
 import {types} from '../models';
 import {objectcatalog} from '../models';
 import {backendtlspolicy} from '../models';
+import {snapshot} from '../models';
 import {clusterrole} from '../models';
 import {clusterrolebinding} from '../models';
 import {configmap} from '../models';
@@ -40,7 +41,7 @@ import {service} from '../models';
 import {serviceaccount} from '../models';
 import {statefulset} from '../models';
 import {storageclass} from '../models';
-import {snapshot} from '../models';
+import {resourcemodel} from '../models';
 import {capabilities} from '../models';
 
 export function AddFavorite(arg1:backend.Favorite):Promise<backend.Favorite>;
@@ -108,6 +109,8 @@ export function GetBackendTLSPolicy(arg1:string,arg2:string,arg3:string):Promise
 export function GetCatalogDiagnostics():Promise<backend.CatalogDiagnostics>;
 
 export function GetClusterAllowedNamespaces(arg1:string):Promise<Array<string>>;
+
+export function GetClusterAttentionIgnoreRules(arg1:string):Promise<snapshot.AttentionIgnoreRules>;
 
 export function GetClusterAuthState(arg1:string):Promise<string|string>;
 
@@ -233,6 +236,10 @@ export function GetZoomLevel():Promise<number>;
 
 export function HydrateCatalogCustomRows(arg1:string,arg2:Array<snapshot.ResourceQueryRow>):Promise<Array<snapshot.CustomResourceSummary>>;
 
+export function IgnoreClusterAttentionFindingType(arg1:string,arg2:string):Promise<snapshot.AttentionIgnoreRules>;
+
+export function IgnoreClusterAttentionObject(arg1:string,arg2:resourcemodel.ResourceRef):Promise<snapshot.AttentionIgnoreRules>;
+
 export function IsAppLogsPanelVisible():Promise<boolean>;
 
 export function IsDiagnosticsPanelVisible():Promise<boolean>;
@@ -264,6 +271,10 @@ export function QueryPermissions(arg1:Array<capabilities.PermissionQuery>):Promi
 export function ReorderThemes(arg1:Array<string>):Promise<void>;
 
 export function ResizeShellSession(arg1:string,arg2:number,arg3:number):Promise<void>;
+
+export function RestoreClusterAttentionFindingType(arg1:string,arg2:string):Promise<snapshot.AttentionIgnoreRules>;
+
+export function RestoreClusterAttentionObject(arg1:string,arg2:resourcemodel.ResourceRef):Promise<snapshot.AttentionIgnoreRules>;
 
 export function RetryAuth():Promise<void>;
 

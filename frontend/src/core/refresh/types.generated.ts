@@ -82,6 +82,23 @@ export const RESOURCE_STREAM_SIGNALS = ['changed', 'reset', 'error'] as const;
 
 export type ResourceStreamSignal = (typeof RESOURCE_STREAM_SIGNALS)[number];
 
+export interface AttentionCause {
+  type: string;
+  label: string;
+  message: string;
+  severity: AttentionSeverity;
+}
+
+export interface AttentionFindingTypeDefinition {
+  id: string;
+  label: string;
+}
+
+export interface AttentionIgnoreRules {
+  ignoredObjects: Array<ResourceRef> | null;
+  findingTypes: Array<string> | null;
+}
+
 export interface AttentionSeverityCounts {
   info: number;
   warning: number;
@@ -162,7 +179,7 @@ export interface ClusterAttentionFinding {
   namespace?: string;
   severity: AttentionSeverity;
   status: string;
-  reasons: Array<string> | null;
+  causes: Array<AttentionCause> | null;
   age: string;
   ageTimestamp?: number;
 }
@@ -191,6 +208,8 @@ export interface ClusterAttentionSnapshot {
   dynamic?: ResourceQueryDynamicRef;
   capabilities: ResourceQueryCapabilities;
   severityCounts: AttentionSeverityCounts;
+  ignoreRules: AttentionIgnoreRules;
+  findingTypes: Array<AttentionFindingTypeDefinition> | null;
   rows: Array<ClusterAttentionFinding> | null;
 }
 

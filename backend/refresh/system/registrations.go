@@ -337,6 +337,10 @@ func domainRegistrations(deps registrationDeps) []domainRegistration {
 					},
 					snapshot.ClusterMeta{ClusterID: deps.cfg.ClusterID, ClusterName: deps.cfg.ClusterName},
 					deps.ingestManager,
+					snapshot.ClusterAttentionOptions{
+						IgnoreRules:         deps.cfg.AttentionIgnoreRules,
+						IgnoredObjectPruner: deps.cfg.AttentionIgnoredObjectPruner,
+					},
 				)
 				if err == nil && deps.noteAttentionIndex != nil {
 					deps.noteAttentionIndex(index)

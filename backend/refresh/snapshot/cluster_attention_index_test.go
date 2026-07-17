@@ -4,6 +4,7 @@ import (
 	"testing"
 	"time"
 
+	"github.com/luxury-yacht/app/backend/resourcemodel"
 	"github.com/stretchr/testify/require"
 )
 
@@ -78,6 +79,108 @@ func TestClusterAttentionIndexAdvancesRevisionOnlyWhenFindingChanges(t *testing.
 	require.Empty(t, index.Snapshot())
 }
 
+func TestClusterAttentionIndexAppliesTypeAndObjectIgnoresToActiveCauses(t *testing.T) {
+	now := time.Date(2026, time.July, 16, 12, 0, 0, 0, time.UTC)
+	index := newClusterAttentionIndex(ClusterMeta{ClusterID: "cluster-a", ClusterName: "A"}, func() time.Time { return now })
+	t.Cleanup(index.Stop)
+	record := attentionSourceRecord{
+		Ref: attentionTestRef("Pod", "payments", "checkout-0"), Source: attentionSourcePod,
+		Status: "CrashLoopBackOff", StatusPresentation: "error", StatusReason: "CrashLoopBackOff", Restarts: 3,
+		AgeTimestamp: now.Add(-time.Hour).UnixMilli(),
+	}
+	index.UpsertSource("pods", record)
+
+	index.SetIgnoreRules(AttentionIgnoreRules{FindingTypes: []string{"restarts"}})
+	rows := index.Snapshot()
+	require.Len(t, rows, 1)
+	require.Equal(t, []AttentionCause{{
+		Type: "error-presentation", Label: "Error status", Message: "CrashLoopBackOff", Severity: AttentionSeverityError,
+	}}, rows[0].Causes)
+
+	index.SetIgnoreRules(AttentionIgnoreRules{
+		FindingTypes:   []string{"restarts"},
+		IgnoredObjects: []resourcemodel.ResourceRef{record.Ref},
+	})
+	require.Empty(t, index.Snapshot())
+}
+
+func TestClusterAttentionIndexPrunesIndividualIgnoreWhenObjectDisappears(t *testing.T) {
+	now := time.Date(2026, time.July, 16, 12, 0, 0, 0, time.UTC)
+	index := newClusterAttentionIndex(ClusterMeta{ClusterID: "cluster-a", ClusterName: "A"}, func() time.Time { return now })
+	t.Cleanup(index.Stop)
+	record := attentionSourceRecord{
+		Ref: attentionTestRef("Pod", "payments", "checkout-0"), Source: attentionSourcePod,
+		Status: "Running", StatusPresentation: "ready", Restarts: 3,
+		AgeTimestamp: now.Add(-time.Hour).UnixMilli(),
+	}
+	var pruned []resourcemodel.ResourceRef
+	index.SetIgnoredObjectPruner(func(ref resourcemodel.ResourceRef) { pruned = append(pruned, ref) })
+	index.SetIgnoreRules(AttentionIgnoreRules{IgnoredObjects: []resourcemodel.ResourceRef{record.Ref}})
+	index.UpsertSource("pods", record)
+	require.Empty(t, index.Snapshot())
+
+	index.DeleteSource("pods", record.Ref)
+	require.Equal(t, []resourcemodel.ResourceRef{record.Ref}, pruned)
+	require.Empty(t, index.IgnoreRules().IgnoredObjects)
+}
+
+func TestClusterAttentionIndexPrunesPersistedIgnoreWhenInitialOwnerSnapshotOmitsObject(t *testing.T) {
+	now := time.Date(2026, time.July, 16, 12, 0, 0, 0, time.UTC)
+	index := newClusterAttentionIndex(ClusterMeta{ClusterID: "cluster-a", ClusterName: "A"}, func() time.Time { return now })
+	t.Cleanup(index.Stop)
+	ignored := attentionTestRef("Pod", "payments", "deleted-pod")
+	var pruned []resourcemodel.ResourceRef
+	index.registerOwnerKind("pods", "Pod")
+	index.SetIgnoredObjectPruner(func(ref resourcemodel.ResourceRef) { pruned = append(pruned, ref) })
+	index.SetIgnoreRules(AttentionIgnoreRules{IgnoredObjects: []resourcemodel.ResourceRef{ignored}})
+
+	index.ReplaceSource("pods", nil)
+
+	require.Equal(t, []resourcemodel.ResourceRef{ignored}, pruned)
+	require.Empty(t, index.IgnoreRules().IgnoredObjects)
+}
+
+func TestClusterAttentionIndexDoesNotPruneIgnoresWhenOwnerIsUnavailable(t *testing.T) {
+	index := newClusterAttentionIndex(ClusterMeta{ClusterID: "cluster-a"}, time.Now)
+	t.Cleanup(index.Stop)
+	ignored := attentionTestRef("Pod", "payments", "checkout-0")
+	index.registerOwnerKind("pods", "Pod")
+	index.SetIgnoreRules(AttentionIgnoreRules{IgnoredObjects: []resourcemodel.ResourceRef{ignored}})
+	var pruned []resourcemodel.ResourceRef
+	index.SetIgnoredObjectPruner(func(ref resourcemodel.ResourceRef) { pruned = append(pruned, ref) })
+	index.markOwnerUnavailable("pods")
+
+	index.Reconcile()
+
+	require.Empty(t, pruned)
+	require.Equal(t, []resourcemodel.ResourceRef{ignored}, index.IgnoreRules().IgnoredObjects)
+}
+
+func TestClusterAttentionIndexPrunesOldUIDIgnoreWhenObjectIsRecreated(t *testing.T) {
+	now := time.Date(2026, time.July, 16, 12, 0, 0, 0, time.UTC)
+	index := newClusterAttentionIndex(ClusterMeta{ClusterID: "cluster-a", ClusterName: "A"}, func() time.Time { return now })
+	t.Cleanup(index.Stop)
+	oldRecord := attentionSourceRecord{
+		Ref: attentionTestRef("Pod", "payments", "checkout-0"), Source: attentionSourcePod,
+		Status: "Running", StatusPresentation: "ready", Restarts: 3,
+		AgeTimestamp: now.Add(-time.Hour).UnixMilli(),
+	}
+	newRecord := oldRecord
+	newRecord.Ref.UID = "replacement-uid"
+	var pruned []resourcemodel.ResourceRef
+	index.SetIgnoredObjectPruner(func(ref resourcemodel.ResourceRef) { pruned = append(pruned, ref) })
+	index.SetIgnoreRules(AttentionIgnoreRules{IgnoredObjects: []resourcemodel.ResourceRef{oldRecord.Ref}})
+	index.UpsertSource("pods", oldRecord)
+
+	index.UpsertSource("pods", newRecord)
+
+	require.Equal(t, []resourcemodel.ResourceRef{oldRecord.Ref}, pruned)
+	require.Empty(t, index.IgnoreRules().IgnoredObjects)
+	rows := index.Snapshot()
+	require.Len(t, rows, 1)
+	require.Equal(t, newRecord.Ref, rows[0].Ref)
+}
+
 func TestClusterAttentionIndexRestoredRowsReconcilePerOwnerKind(t *testing.T) {
 	now := time.Date(2026, time.July, 16, 12, 0, 0, 0, time.UTC)
 	meta := ClusterMeta{ClusterID: "cluster-a", ClusterName: "A"}
@@ -130,5 +233,26 @@ func TestClusterAttentionIndexReconcileRemovesRestoredRowsForUnavailableOwner(t 
 	require.Len(t, restored.Snapshot(), 1)
 
 	restored.Reconcile()
+	require.Empty(t, restored.Snapshot())
+}
+
+func TestClusterAttentionIndexDoesNotRestoreIgnoredSpillRows(t *testing.T) {
+	now := time.Date(2026, time.July, 16, 12, 0, 0, 0, time.UTC)
+	meta := ClusterMeta{ClusterID: "cluster-a", ClusterName: "A"}
+	record := attentionSourceRecord{
+		Ref: attentionTestRef("Pod", "payments", "checkout-0"), Source: attentionSourcePod,
+		Status: "Running", StatusPresentation: "ready", Restarts: 2,
+		AgeTimestamp: now.Add(-time.Hour).UnixMilli(),
+	}
+	original := newClusterAttentionIndex(meta, func() time.Time { return now })
+	original.UpsertSource("pods", record)
+	spillPath := t.TempDir() + "/attention.spill"
+	require.NoError(t, original.SpillTo(spillPath))
+	original.Stop()
+
+	restored := newClusterAttentionIndex(meta, func() time.Time { return now })
+	t.Cleanup(restored.Stop)
+	restored.SetIgnoreRules(AttentionIgnoreRules{FindingTypes: []string{"restarts"}})
+	require.NoError(t, restored.RestoreFrom(spillPath))
 	require.Empty(t, restored.Snapshot())
 }

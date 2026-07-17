@@ -16,6 +16,7 @@ import (
 	"github.com/luxury-yacht/app/backend/refresh/domain"
 	"github.com/luxury-yacht/app/backend/refresh/system"
 	"github.com/luxury-yacht/app/backend/refresh/telemetry"
+	"github.com/luxury-yacht/app/backend/resourcemodel"
 )
 
 func (a *App) resolveMetricsInterval() time.Duration {
@@ -227,6 +228,12 @@ func (a *App) buildRefreshSubsystemForSelection(
 		ClusterID:                  clusterMeta.ID,
 		ClusterName:                clusterMeta.Name,
 		AllowedNamespaces:          a.allowedNamespacesForCluster(clusterMeta.ID),
+		AttentionIgnoreRules:       a.attentionIgnoreRulesForCluster(clusterMeta.ID),
+		AttentionIgnoredObjectPruner: func(ref resourcemodel.ResourceRef) {
+			if err := a.pruneClusterAttentionIgnoredObject(clusterMeta.ID, ref); err != nil {
+				a.logger.Warn(fmt.Sprintf("Could not prune obsolete Attention ignore for cluster %s: %v", clusterMeta.ID, err), logsources.Settings, clusterMeta.ID, clusterMeta.ID)
+			}
+		},
 	}
 
 	cfg.ObjectCatalogService = func() *objectcatalog.Service {

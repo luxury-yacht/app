@@ -11,6 +11,7 @@ import (
 	"github.com/luxury-yacht/app/backend/internal/config"
 	"github.com/luxury-yacht/app/backend/internal/containerlogs"
 	"github.com/luxury-yacht/app/backend/internal/logsources"
+	"github.com/luxury-yacht/app/backend/refresh/snapshot"
 	"github.com/wailsapp/wails/v2/pkg/runtime"
 )
 
@@ -81,7 +82,8 @@ type settingsClusterSection struct {
 	// AllowedNamespaces is the cluster's namespace scope
 	// (docs/plans/namespace-scope.md). Empty means no scope: every namespaced
 	// data path runs cluster-wide.
-	AllowedNamespaces []string `json:"allowedNamespaces,omitempty"`
+	AllowedNamespaces []string                       `json:"allowedNamespaces,omitempty"`
+	Attention         *snapshot.AttentionIgnoreRules `json:"attention,omitempty"`
 }
 
 // settingsPreferences captures user-configurable preferences.

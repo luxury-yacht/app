@@ -134,6 +134,10 @@ export function GetClusterAllowedNamespaces(arg1) {
   return window['go']['backend']['App']['GetClusterAllowedNamespaces'](arg1);
 }
 
+export function GetClusterAttentionIgnoreRules(arg1) {
+  return window['go']['backend']['App']['GetClusterAttentionIgnoreRules'](arg1);
+}
+
 export function GetClusterAuthState(arg1) {
   return window['go']['backend']['App']['GetClusterAuthState'](arg1);
 }
@@ -382,6 +386,14 @@ export function HydrateCatalogCustomRows(arg1, arg2) {
   return window['go']['backend']['App']['HydrateCatalogCustomRows'](arg1, arg2);
 }
 
+export function IgnoreClusterAttentionFindingType(arg1, arg2) {
+  return window['go']['backend']['App']['IgnoreClusterAttentionFindingType'](arg1, arg2);
+}
+
+export function IgnoreClusterAttentionObject(arg1, arg2) {
+  return window['go']['backend']['App']['IgnoreClusterAttentionObject'](arg1, arg2);
+}
+
 export function IsAppLogsPanelVisible() {
   return window['go']['backend']['App']['IsAppLogsPanelVisible']();
 }
@@ -444,6 +456,14 @@ export function ReorderThemes(arg1) {
 
 export function ResizeShellSession(arg1, arg2, arg3) {
   return window['go']['backend']['App']['ResizeShellSession'](arg1, arg2, arg3);
+}
+
+export function RestoreClusterAttentionFindingType(arg1, arg2) {
+  return window['go']['backend']['App']['RestoreClusterAttentionFindingType'](arg1, arg2);
+}
+
+export function RestoreClusterAttentionObject(arg1, arg2) {
+  return window['go']['backend']['App']['RestoreClusterAttentionObject'](arg1, arg2);
 }
 
 export function RetryAuth() {

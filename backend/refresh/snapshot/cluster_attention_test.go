@@ -51,13 +51,18 @@ func TestAttentionPoliciesUseTheClosedSeverityCatalog(t *testing.T) {
 	ruleIDs := make(map[string]bool, len(attentionClassificationRules))
 	for _, rule := range attentionClassificationRules {
 		require.NotEmpty(t, rule.ID)
+		require.NotEmpty(t, rule.Label)
 		require.False(t, ruleIDs[rule.ID], "duplicate Attention classification rule %q", rule.ID)
 		ruleIDs[rule.ID] = true
 		require.Contains(t, attentionSeverityDefinitions, rule.Severity, "rule %q uses an undeclared severity", rule.ID)
 	}
 	for signal, policy := range attentionSignalPolicies {
+		require.NotEmpty(t, policy.Label)
+		require.False(t, ruleIDs[string(signal)], "duplicate Attention finding type %q", signal)
+		ruleIDs[string(signal)] = true
 		require.Contains(t, attentionSeverityDefinitions, policy.Severity, "signal %q uses an undeclared severity", signal)
 	}
+	require.Len(t, AttentionFindingTypes(), len(ruleIDs))
 }
 
 func TestEvaluateAttentionSourceClassifiesIntentionalInactiveWorkloadsAsInfo(t *testing.T) {
@@ -112,8 +117,8 @@ func TestEvaluateAttentionSourceUsesFriendlyDaemonSetNoEligibleNodesFinding(t *t
 
 	evaluation := evaluateAttentionSource(record, now)
 	require.NotNil(t, evaluation.Finding)
-	require.Equal(t, AttentionSeverityWarning, evaluation.Finding.Severity)
-	require.Equal(t, []string{"No eligible nodes"}, evaluation.Finding.Reasons)
+	require.Equal(t, AttentionSeverityInfo, evaluation.Finding.Severity)
+	require.Equal(t, []string{"No eligible nodes"}, attentionCauseMessages(evaluation.Finding.Causes))
 	require.True(t, evaluation.NextEvaluation.IsZero())
 }
 
@@ -134,8 +139,28 @@ func TestEvaluateAttentionSourceCombinesPodReasonsAndPreservesIdentity(t *testin
 	require.Equal(t, record.Ref, evaluation.Finding.Ref)
 	require.Equal(t, AttentionSeverityError, evaluation.Finding.Severity)
 	require.Equal(t, "CrashLoopBackOff", evaluation.Finding.Status)
-	require.Equal(t, []string{"CrashLoopBackOff", "4 restarts"}, evaluation.Finding.Reasons)
+	require.Equal(t, []string{"CrashLoopBackOff", "4 restarts"}, attentionCauseMessages(evaluation.Finding.Causes))
 	require.True(t, evaluation.NextEvaluation.IsZero())
+}
+
+func TestEvaluateAttentionSourceProjectsStableCauseTypes(t *testing.T) {
+	now := time.Date(2026, time.July, 16, 12, 0, 0, 0, time.UTC)
+	record := attentionSourceRecord{
+		Ref:                attentionTestRef("Pod", "payments", "checkout-0"),
+		Source:             attentionSourcePod,
+		Status:             "CrashLoopBackOff",
+		StatusPresentation: "error",
+		StatusReason:       "CrashLoopBackOff",
+		Restarts:           4,
+		AgeTimestamp:       now.Add(-10 * time.Minute).UnixMilli(),
+	}
+
+	evaluation := evaluateAttentionSource(record, now)
+	require.NotNil(t, evaluation.Finding)
+	require.Equal(t, []AttentionCause{
+		{Type: "error-presentation", Label: "Error status", Message: "CrashLoopBackOff", Severity: AttentionSeverityError},
+		{Type: "restarts", Label: "Restarts", Message: "4 restarts", Severity: AttentionSeverityWarning},
+	}, evaluation.Finding.Causes)
 }
 
 func TestEvaluateAttentionSourceDefersTransientPodWarningsUntilGracePeriod(t *testing.T) {
@@ -156,7 +181,7 @@ func TestEvaluateAttentionSourceDefersTransientPodWarningsUntilGracePeriod(t *te
 
 	afterGrace := evaluateAttentionSource(record, createdAt.Add(attentionWarningGrace))
 	require.NotNil(t, afterGrace.Finding)
-	require.Equal(t, []string{"ContainerCreating"}, afterGrace.Finding.Reasons)
+	require.Equal(t, []string{"ContainerCreating"}, attentionCauseMessages(afterGrace.Finding.Causes))
 	require.True(t, afterGrace.NextEvaluation.IsZero())
 }
 
@@ -174,7 +199,7 @@ func TestEvaluateAttentionSourceReportsInsufficientWorkloadReplicasAfterGrace(t 
 	evaluation := evaluateAttentionSource(record, now)
 	require.NotNil(t, evaluation.Finding)
 	require.Equal(t, AttentionSeverityWarning, evaluation.Finding.Severity)
-	require.Equal(t, []string{"Updating", "2/3 ready"}, evaluation.Finding.Reasons)
+	require.Equal(t, []string{"Updating", "2/3 ready"}, attentionCauseMessages(evaluation.Finding.Causes))
 }
 
 func TestEvaluateAttentionSourceReportsOnlyNodesThatNeedAttention(t *testing.T) {
@@ -192,7 +217,7 @@ func TestEvaluateAttentionSourceReportsOnlyNodesThatNeedAttention(t *testing.T) 
 	cordoned.StatusPresentation = "cordoned"
 	evaluation := evaluateAttentionSource(cordoned, now)
 	require.NotNil(t, evaluation.Finding)
-	require.Equal(t, []string{"Ready (Cordoned)"}, evaluation.Finding.Reasons)
+	require.Equal(t, []string{"Ready (Cordoned)"}, attentionCauseMessages(evaluation.Finding.Causes))
 }
 
 func TestEvaluateAttentionSourceExpiresWarningEventsAtTheLookbackBoundary(t *testing.T) {
@@ -209,7 +234,7 @@ func TestEvaluateAttentionSourceExpiresWarningEventsAtTheLookbackBoundary(t *tes
 
 	evaluation := evaluateAttentionSource(record, now)
 	require.NotNil(t, evaluation.Finding)
-	require.Equal(t, []string{"BackOff", "Back-off restarting failed container"}, evaluation.Finding.Reasons)
+	require.Equal(t, []string{"BackOff · Back-off restarting failed container"}, attentionCauseMessages(evaluation.Finding.Causes))
 	require.Equal(t, observedAt.Add(attentionEventLookback), evaluation.NextEvaluation)
 
 	expired := evaluateAttentionSource(record, observedAt.Add(attentionEventLookback))

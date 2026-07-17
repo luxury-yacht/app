@@ -33,7 +33,7 @@ action. It appears between Overview and Resources and is scoped to exactly one
 cluster.
 
 Overview pod-health and restart signals open Cluster Attention. Attention rows
-combine the active reasons for one object and carry the object's complete
+combine the active typed causes for one object and carry the object's complete
 cluster/GVR identity; their Kind and Name links open that object. Resource views
 remain the place for browsing and operating on the full unfiltered inventory.
 
@@ -50,17 +50,26 @@ sort order live together in
 `backend/refresh/snapshot/cluster_attention_policy.go`; add or revise
 classifications there rather than branching in individual evaluators.
 
+Users can ignore an exact object identity or a stable finding type from an
+Attention row's context menu. Exact-object rules include the cluster, full GVK,
+namespace/name, and UID; they suppress every cause for that object. Type rules
+suppress only that cause, so another active cause can keep the object visible.
+Rules are persisted per cluster and can be restored from the filter bar's
+Ignored findings control. Authoritative reflector delete/replace updates prune
+exact-object rules when their UID no longer exists. An unavailable input does
+not prune rules because missing permission is not proof that the object was
+deleted. Type rules remain until the user restores them.
+
 - `info`: intentional inactive states that are operationally useful to see but
   do not require remediation. Deployment and StatefulSet `Scaled to 0`, and
-  CronJob `Idle`, are info findings.
-- `warning`: restarts, insufficient ready replicas, DaemonSets with no eligible
-  nodes, warning Events, and non-ready Pod, workload, or Node states that are
-  not errors.
+  CronJob `Idle`, and DaemonSets with no eligible nodes are info findings.
+- `warning`: restarts, insufficient ready replicas, warning Events, and
+  non-ready Pod, workload, or Node states that are not errors.
 - `error`: Pod, workload, or Node states whose canonical status presentation is
   `error`.
 
 When more than one signal applies to an object, the finding uses the highest
-severity while retaining all reasons. Intentional inactive info findings are
+severity while retaining all causes. Intentional inactive info findings are
 immediate. Restarts and error states are immediate; transient Pod/workload
 warnings and replica mismatches retain the Attention grace period.
 

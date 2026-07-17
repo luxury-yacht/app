@@ -3,6 +3,8 @@ import { useObjectPanel } from '@modules/object-panel/hooks/useObjectPanel';
 import ResourceInventoryTable from '@modules/resource-grid/ResourceInventoryTable';
 import { selectPayloadRows } from '@modules/resource-grid/typedResourceQueryScope';
 import { useQueryBackedClusterResourceGridTable } from '@modules/resource-grid/useQueryBackedResourceGridTable';
+import type { ContextMenuItem } from '@shared/components/ContextMenu';
+import { SettingsIcon } from '@shared/components/icons/SharedIcons';
 import { StatusChip, type StatusChipVariant } from '@shared/components/StatusChip';
 import * as cf from '@shared/components/tables/columnFactories';
 import type { GridColumnDefinition } from '@shared/components/tables/GridTable';
@@ -11,10 +13,18 @@ import {
   buildRequiredCanonicalObjectRowKey,
   buildRequiredObjectReference,
 } from '@shared/utils/objectIdentity';
-import { useCallback, useMemo } from 'react';
+import { useCallback, useMemo, useState } from 'react';
 import type { ClusterAttentionFinding, ClusterAttentionSnapshot } from '@/core/refresh/types';
+import {
+  ignoreClusterAttentionFindingType,
+  ignoreClusterAttentionObject,
+  restoreClusterAttentionFindingType,
+  restoreClusterAttentionObject,
+} from '@/core/settings/clusterAttentionIgnores';
 import { useShortNames } from '@/hooks/useShortNames';
+import { errorHandler } from '@/utils/errorHandler';
 import { getDisplayKind } from '@/utils/kindAliasMap';
+import AttentionIgnoredModal from './AttentionIgnoredModal';
 
 const severityChipVariants = {
   info: 'info',
@@ -27,6 +37,11 @@ export default function ClusterViewAttention() {
   const { openWithObject } = useObjectPanel();
   const { navigateToView } = useNavigateToView();
   const useShortResourceNames = useShortNames();
+  const [ignoredModalOpen, setIgnoredModalOpen] = useState(false);
+
+  const reportIgnoreError = useCallback((error: unknown, action: string) => {
+    errorHandler.handle(error instanceof Error ? error : new Error(String(error)), { action });
+  }, []);
 
   const objectReference = useCallback(
     (row: ClusterAttentionFinding) =>
@@ -66,7 +81,11 @@ export default function ClusterViewAttention() {
         ),
       },
       cf.createTextColumn('status', 'Status', (row) => row.status || '-'),
-      cf.createTextColumn('reason', 'Finding', (row) => row.reasons?.join(' · ') || '-'),
+      cf.createTextColumn(
+        'reason',
+        'Finding',
+        (row) => row.causes?.map((cause) => cause.message).join(' · ') || '-'
+      ),
       cf.createAgeColumn<ClusterAttentionFinding>('age', 'Age', (row) => row.age),
     ];
     cf.applyColumnSizing(result, {
@@ -86,7 +105,60 @@ export default function ClusterViewAttention() {
       buildRequiredCanonicalObjectRowKey(row.ref, { fallbackClusterId: selectedClusterId }),
     [selectedClusterId]
   );
-  const { gridTableProps, favModal, source } = useQueryBackedClusterResourceGridTable<
+
+  const getCustomContextMenuItems = useCallback(
+    (row: ClusterAttentionFinding): ContextMenuItem[] => {
+      const causes = row.causes ?? [];
+      const seenTypes = new Set<string>();
+      const items: ContextMenuItem[] = [
+        {
+          actionId: 'attention-ignore-object',
+          label: `Ignore this ${row.kind}`,
+          disabled: !row.ref.uid,
+          disabledReason: !row.ref.uid ? 'The object has no UID' : undefined,
+          onClick: () => {
+            void ignoreClusterAttentionObject(selectedClusterId, row.ref).catch((error) =>
+              reportIgnoreError(error, 'ignoreAttentionObject')
+            );
+          },
+        },
+      ];
+      for (const cause of causes) {
+        if (seenTypes.has(cause.type)) {
+          continue;
+        }
+        seenTypes.add(cause.type);
+        items.push({
+          actionId: `attention-ignore-type:${cause.type}`,
+          label: `Ignore all “${cause.label}” findings`,
+          onClick: () => {
+            void ignoreClusterAttentionFindingType(selectedClusterId, cause.type).catch((error) =>
+              reportIgnoreError(error, 'ignoreAttentionFindingType')
+            );
+          },
+        });
+      }
+      return items;
+    },
+    [reportIgnoreError, selectedClusterId]
+  );
+
+  const filterOptionOverrides = useMemo(
+    () => ({
+      postActions: [
+        {
+          type: 'action' as const,
+          id: 'attention-ignored-findings',
+          icon: <SettingsIcon width={18} height={18} />,
+          title: 'Manage ignored findings',
+          onClick: () => setIgnoredModalOpen(true),
+        },
+      ],
+    }),
+    []
+  );
+
+  const { gridTableProps, favModal, source, queryPayload } = useQueryBackedClusterResourceGridTable<
     ClusterAttentionSnapshot,
     ClusterAttentionFinding
   >({
@@ -103,17 +175,47 @@ export default function ClusterViewAttention() {
     defaultSortKey: 'severity',
     defaultSortDirection: 'asc',
     diagnosticsLabel: 'Cluster Attention',
+    filterOptionOverrides,
   });
 
+  const ignoreRules = queryPayload?.ignoreRules ?? { ignoredObjects: [], findingTypes: [] };
+  const findingTypes = queryPayload?.findingTypes ?? [];
+
   return (
-    <ResourceInventoryTable
-      source={source}
-      gridTableProps={gridTableProps}
-      spinnerMessage="Loading attention findings..."
-      favModal={favModal}
-      columns={columns}
-      diagnosticsLabel="Cluster Attention"
-      emptyMessage="No cluster objects need attention"
-    />
+    <>
+      <ResourceInventoryTable
+        source={source}
+        gridTableProps={gridTableProps}
+        spinnerMessage="Loading attention findings..."
+        favModal={favModal}
+        columns={columns}
+        diagnosticsLabel="Cluster Attention"
+        emptyMessage="No cluster objects need attention"
+        enableContextMenu
+        getCustomContextMenuItems={getCustomContextMenuItems}
+      />
+      <AttentionIgnoredModal
+        isOpen={ignoredModalOpen}
+        rules={ignoreRules}
+        findingTypes={findingTypes}
+        onRestoreObject={async (ref) => {
+          try {
+            return await restoreClusterAttentionObject(selectedClusterId, ref);
+          } catch (error) {
+            reportIgnoreError(error, 'restoreAttentionObject');
+            return ignoreRules;
+          }
+        }}
+        onRestoreType={async (findingType) => {
+          try {
+            return await restoreClusterAttentionFindingType(selectedClusterId, findingType);
+          } catch (error) {
+            reportIgnoreError(error, 'restoreAttentionFindingType');
+            return ignoreRules;
+          }
+        }}
+        onClose={() => setIgnoredModalOpen(false)}
+      />
+    </>
   );
 }

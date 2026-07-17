@@ -54,17 +54,17 @@ func (a *App) SetClusterAllowedNamespaces(clusterID string, namespaces []string)
 		return nil, err
 	}
 	previous := settings.Clusters[clusterID].AllowedNamespaces
+	section := settings.Clusters[clusterID]
 	scopeChanged := !equalStringSets(previous, normalized)
 	if !slices.Equal(previous, normalized) {
-		if len(normalized) == 0 {
+		section.AllowedNamespaces = normalized
+		if clusterSettingsSectionEmpty(section) {
 			delete(settings.Clusters, clusterID)
 		} else {
 			if settings.Clusters == nil {
 				settings.Clusters = map[string]settingsClusterSection{}
 			}
-			settings.Clusters[clusterID] = settingsClusterSection{
-				AllowedNamespaces: normalized,
-			}
+			settings.Clusters[clusterID] = section
 		}
 		if err := a.saveSettingsFile(settings); err != nil {
 			a.settingsMu.Unlock()
@@ -78,6 +78,12 @@ func (a *App) SetClusterAllowedNamespaces(clusterID string, namespaces []string)
 		a.requestClusterScopeRebuild(clusterID)
 	}
 	return normalized, nil
+}
+
+func clusterSettingsSectionEmpty(section settingsClusterSection) bool {
+	return len(section.AllowedNamespaces) == 0 &&
+		(section.Attention == nil ||
+			(len(section.Attention.IgnoredObjects) == 0 && len(section.Attention.FindingTypes) == 0))
 }
 
 // allowedNamespacesForCluster is the subsystem-construction read of the

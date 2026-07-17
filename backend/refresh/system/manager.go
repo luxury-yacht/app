@@ -42,6 +42,7 @@ import (
 	"github.com/luxury-yacht/app/backend/refresh/resourcestream"
 	"github.com/luxury-yacht/app/backend/refresh/snapshot"
 	"github.com/luxury-yacht/app/backend/refresh/telemetry"
+	"github.com/luxury-yacht/app/backend/resourcemodel"
 	"github.com/luxury-yacht/app/backend/resources/common"
 )
 
@@ -54,24 +55,26 @@ type PermissionIssue struct {
 
 // Config contains the dependencies required to initialise the refresh manager.
 type Config struct {
-	KubernetesClient           kubernetes.Interface                     // Kubernetes client for API interactions.
-	MetricsClient              *metricsclient.Clientset                 // Metrics client for collecting cluster metrics.
-	RestConfig                 *rest.Config                             // REST configuration for Kubernetes client.
-	ResyncInterval             time.Duration                            // Interval for resyncing informers.
-	MetricsInterval            time.Duration                            // Interval for collecting metrics.
-	APIExtensionsClient        apiextensionsclientset.Interface         // Client for API extensions.
-	GatewayClient              gatewayversioned.Interface               // Gateway API client for direct Gateway API resource access.
-	GatewayInformerFactory     gatewayinformers.SharedInformerFactory   // Informers for Gateway API resources.
-	GatewayAPIPresence         common.GatewayAPIPresence                // Installed Gateway API kind set.
-	DynamicClient              dynamic.Interface                        // Dynamic client for interacting with Kubernetes resources.
-	ObjectDetailsProvider      snapshot.ObjectDetailProvider            // Provider for detailed object information.
-	Logger                     containerlogsstream.Logger               // Logger for recording refresh operations.
-	ObjectCatalogEnabled       func() bool                              // Function to check if the object catalog is enabled.
-	ObjectCatalogService       func() *objectcatalog.Service            // Function to get the object catalog service.
-	ObjectCatalogNamespaces    func() []snapshot.CatalogNamespaceGroup  // Function to get the object catalog namespaces.
-	ContainerLogsTargetLimiter *containerlogsstream.GlobalTargetLimiter // Shared global limiter for container logs stream targets.
-	ClusterID                  string                                   // stable identifier for cluster-scoped keys
-	ClusterName                string                                   // display name for cluster in payloads
+	KubernetesClient             kubernetes.Interface                     // Kubernetes client for API interactions.
+	MetricsClient                *metricsclient.Clientset                 // Metrics client for collecting cluster metrics.
+	RestConfig                   *rest.Config                             // REST configuration for Kubernetes client.
+	ResyncInterval               time.Duration                            // Interval for resyncing informers.
+	MetricsInterval              time.Duration                            // Interval for collecting metrics.
+	APIExtensionsClient          apiextensionsclientset.Interface         // Client for API extensions.
+	GatewayClient                gatewayversioned.Interface               // Gateway API client for direct Gateway API resource access.
+	GatewayInformerFactory       gatewayinformers.SharedInformerFactory   // Informers for Gateway API resources.
+	GatewayAPIPresence           common.GatewayAPIPresence                // Installed Gateway API kind set.
+	DynamicClient                dynamic.Interface                        // Dynamic client for interacting with Kubernetes resources.
+	ObjectDetailsProvider        snapshot.ObjectDetailProvider            // Provider for detailed object information.
+	Logger                       containerlogsstream.Logger               // Logger for recording refresh operations.
+	ObjectCatalogEnabled         func() bool                              // Function to check if the object catalog is enabled.
+	ObjectCatalogService         func() *objectcatalog.Service            // Function to get the object catalog service.
+	ObjectCatalogNamespaces      func() []snapshot.CatalogNamespaceGroup  // Function to get the object catalog namespaces.
+	ContainerLogsTargetLimiter   *containerlogsstream.GlobalTargetLimiter // Shared global limiter for container logs stream targets.
+	ClusterID                    string                                   // stable identifier for cluster-scoped keys
+	ClusterName                  string                                   // display name for cluster in payloads
+	AttentionIgnoreRules         snapshot.AttentionIgnoreRules
+	AttentionIgnoredObjectPruner func(resourcemodel.ResourceRef)
 	// AllowedNamespaces is the cluster's namespace scope
 	// (docs/plans/namespace-scope.md). Empty means cluster-wide. Enforced by
 	// the permission checker's scope fan-out, the scoped namespaces domain,

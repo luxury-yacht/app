@@ -7,6 +7,7 @@ import (
 	"time"
 
 	"github.com/luxury-yacht/app/backend/refresh"
+	"github.com/luxury-yacht/app/backend/resourcemodel"
 	"github.com/stretchr/testify/require"
 )
 
@@ -57,7 +58,9 @@ func TestClusterAttentionBuilderSortsSeverityByOperationalPriority(t *testing.T)
 			Namespace:   ref.Namespace,
 			Severity:    test.severity,
 			Status:      test.name,
-			Reasons:     []string{test.name},
+			Causes: []AttentionCause{{
+				Type: test.name, Label: test.name, Message: test.name, Severity: test.severity,
+			}},
 		})
 	}
 	builder := &ClusterAttentionBuilder{index: index}
@@ -93,7 +96,9 @@ func TestClusterAttentionBuilderPublishesFullSeverityCounts(t *testing.T) {
 			Namespace:   ref.Namespace,
 			Severity:    test.severity,
 			Status:      test.name,
-			Reasons:     []string{test.name},
+			Causes: []AttentionCause{{
+				Type: test.name, Label: test.name, Message: test.name, Severity: test.severity,
+			}},
 		})
 	}
 	builder := &ClusterAttentionBuilder{index: index}
@@ -119,4 +124,25 @@ func TestClusterAttentionBuilderPublishesFullSeverityCounts(t *testing.T) {
 	require.Equal(t, 1, payload.SeverityCounts.Info)
 	require.Equal(t, 1, payload.SeverityCounts.Warning)
 	require.Equal(t, 1, payload.SeverityCounts.Error)
+}
+
+func TestClusterAttentionBuilderPublishesIgnoreRulesAndFindingTypeCatalog(t *testing.T) {
+	meta := ClusterMeta{ClusterID: "cluster-a", ClusterName: "A"}
+	index := newClusterAttentionIndex(meta, time.Now)
+	t.Cleanup(index.Stop)
+	ignored := attentionTestRef("Deployment", "payments", "checkout")
+	index.SetIgnoreRules(AttentionIgnoreRules{
+		IgnoredObjects: []resourcemodel.ResourceRef{ignored},
+		FindingTypes:   []string{"restarts"},
+	})
+
+	result, err := (&ClusterAttentionBuilder{index: index}).Build(
+		WithClusterMeta(context.Background(), meta),
+		refresh.JoinClusterScope(meta.ClusterID, ""),
+	)
+	require.NoError(t, err)
+	payload := result.Payload.(ClusterAttentionSnapshot)
+	require.Equal(t, []resourcemodel.ResourceRef{ignored}, payload.IgnoreRules.IgnoredObjects)
+	require.Equal(t, []string{"restarts"}, payload.IgnoreRules.FindingTypes)
+	require.Contains(t, payload.FindingTypes, AttentionFindingTypeDefinition{ID: "restarts", Label: "Restarts"})
 }

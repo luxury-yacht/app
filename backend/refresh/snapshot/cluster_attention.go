@@ -43,7 +43,7 @@ const (
 )
 
 // AttentionFinding is one Kubernetes object that currently warrants operator
-// attention. Reasons combines every active finding for that source object.
+// attention. Causes combines every active finding for that source object.
 type AttentionFinding struct {
 	ClusterMeta
 	Ref          resourcemodel.ResourceRef `json:"ref"`
@@ -52,9 +52,31 @@ type AttentionFinding struct {
 	Namespace    string                    `json:"namespace,omitempty"`
 	Severity     AttentionSeverity         `json:"severity"`
 	Status       string                    `json:"status"`
-	Reasons      []string                  `json:"reasons"`
+	Causes       []AttentionCause          `json:"causes"`
 	Age          string                    `json:"age"`
 	AgeTimestamp int64                     `json:"ageTimestamp,omitempty"`
+}
+
+// AttentionCause is one stable, independently suppressible reason an object
+// appears in Attention. Type is persisted; Message is current display data.
+type AttentionCause struct {
+	Type     string            `json:"type"`
+	Label    string            `json:"label"`
+	Message  string            `json:"message"`
+	Severity AttentionSeverity `json:"severity"`
+}
+
+// AttentionIgnoreRules is the complete persisted suppression state for one
+// cluster. IgnoredObjects use exact object identity, including UID.
+type AttentionIgnoreRules struct {
+	IgnoredObjects []resourcemodel.ResourceRef `json:"ignoredObjects"`
+	FindingTypes   []string                    `json:"findingTypes"`
+}
+
+// AttentionFindingTypeDefinition is one stable type users can suppress.
+type AttentionFindingTypeDefinition struct {
+	ID    string `json:"id"`
+	Label string `json:"label"`
 }
 
 // AttentionSeverityCounts summarizes every current finding in the cluster,
@@ -68,8 +90,10 @@ type AttentionSeverityCounts struct {
 type ClusterAttentionSnapshot struct {
 	ClusterMeta
 	ResourceQueryEnvelope
-	SeverityCounts AttentionSeverityCounts `json:"severityCounts"`
-	Rows           []AttentionFinding      `json:"rows"`
+	SeverityCounts AttentionSeverityCounts          `json:"severityCounts"`
+	IgnoreRules    AttentionIgnoreRules             `json:"ignoreRules"`
+	FindingTypes   []AttentionFindingTypeDefinition `json:"findingTypes"`
+	Rows           []AttentionFinding               `json:"rows"`
 }
 
 type ClusterAttentionBuilder struct {
@@ -132,6 +156,8 @@ func (b *ClusterAttentionBuilder) Build(ctx context.Context, scope string) (*ref
 			ClusterMeta:           meta,
 			ResourceQueryEnvelope: resolved.Envelope,
 			SeverityCounts:        severityCounts,
+			IgnoreRules:           b.index.IgnoreRules(),
+			FindingTypes:          AttentionFindingTypes(),
 			Rows:                  resolved.Rows,
 		},
 		Stats: resolved.Stats,
@@ -216,20 +242,22 @@ type clusterAttentionIndex struct {
 	maintained *typedMaintainedStore[AttentionFinding]
 	now        func() time.Time
 
-	mu                sync.Mutex
-	sources           map[string]attentionSourceState
-	owners            map[string]map[string]struct{}
-	ownerKinds        map[string]map[string]struct{}
-	unavailableOwners map[string]struct{}
-	findings          map[string]AttentionFinding
-	deadlines         attentionDeadlineHeap
-	timer             *time.Timer
-	notify            *time.Timer
-	broadcast         func(version string)
-	dirty             bool
-	revision          uint64
-	stopped           bool
-	eventRows         func() []attentionSourceRecord
+	mu                  sync.Mutex
+	sources             map[string]attentionSourceState
+	owners              map[string]map[string]struct{}
+	ownerKinds          map[string]map[string]struct{}
+	unavailableOwners   map[string]struct{}
+	findings            map[string]AttentionFinding
+	deadlines           attentionDeadlineHeap
+	timer               *time.Timer
+	notify              *time.Timer
+	broadcast           func(version string)
+	dirty               bool
+	revision            uint64
+	stopped             bool
+	eventRows           func() []attentionSourceRecord
+	ignoreRules         AttentionIgnoreRules
+	ignoredObjectPruner func(resourcemodel.ResourceRef)
 }
 
 // ClusterAttentionIndex is the subsystem-owned lifecycle handle for the
@@ -255,29 +283,203 @@ func newClusterAttentionIndex(meta ClusterMeta, now func() time.Time) *clusterAt
 	return index
 }
 
+// SetIgnoreRules replaces the cluster's suppression rules and immediately
+// reprojects every maintained source so both the table and sidebar counts
+// reflect the new state without rebuilding the refresh subsystem.
+func (i *clusterAttentionIndex) SetIgnoreRules(rules AttentionIgnoreRules) {
+	if i == nil {
+		return
+	}
+	i.mu.Lock()
+	defer i.mu.Unlock()
+	if i.stopped {
+		return
+	}
+	rules = normalizeAttentionIgnoreRules(rules)
+	rulesChanged := !reflect.DeepEqual(i.ignoreRules, rules)
+	i.ignoreRules = rules
+	now := i.now()
+	for key, state := range i.sources {
+		evaluation := i.filterIgnoredEvaluationLocked(evaluateAttentionSource(state.record, now))
+		state.deadline = evaluation.NextEvaluation
+		i.sources[key] = state
+		i.applyFindingLocked(key, evaluation.Finding)
+	}
+	if rulesChanged {
+		i.revision++
+		i.markDirtyLocked()
+	}
+	i.armTimerLocked()
+}
+
+func (i *clusterAttentionIndex) IgnoreRules() AttentionIgnoreRules {
+	if i == nil {
+		return AttentionIgnoreRules{}
+	}
+	i.mu.Lock()
+	defer i.mu.Unlock()
+	return cloneAttentionIgnoreRules(i.ignoreRules)
+}
+
+func (i *clusterAttentionIndex) SetIgnoredObjectPruner(pruner func(resourcemodel.ResourceRef)) {
+	if i == nil {
+		return
+	}
+	i.mu.Lock()
+	i.ignoredObjectPruner = pruner
+	i.mu.Unlock()
+}
+
+func cloneAttentionIgnoreRules(rules AttentionIgnoreRules) AttentionIgnoreRules {
+	return AttentionIgnoreRules{
+		IgnoredObjects: append([]resourcemodel.ResourceRef(nil), rules.IgnoredObjects...),
+		FindingTypes:   append([]string(nil), rules.FindingTypes...),
+	}
+}
+
+func normalizeAttentionIgnoreRules(rules AttentionIgnoreRules) AttentionIgnoreRules {
+	types := make([]string, 0, len(rules.FindingTypes))
+	seenTypes := make(map[string]struct{}, len(rules.FindingTypes))
+	for _, raw := range rules.FindingTypes {
+		findingType := strings.TrimSpace(raw)
+		if findingType == "" {
+			continue
+		}
+		if _, exists := seenTypes[findingType]; exists {
+			continue
+		}
+		seenTypes[findingType] = struct{}{}
+		types = append(types, findingType)
+	}
+	return AttentionIgnoreRules{
+		IgnoredObjects: dedupeAttentionRefs(rules.IgnoredObjects),
+		FindingTypes:   types,
+	}
+}
+
+func (i *clusterAttentionIndex) filterIgnoredEvaluationLocked(evaluation attentionEvaluation) attentionEvaluation {
+	if evaluation.Finding == nil {
+		return evaluation
+	}
+	if i.objectIgnoredLocked(evaluation.Finding.Ref) {
+		evaluation.Finding = nil
+		return evaluation
+	}
+	ignoredTypes := make(map[string]struct{}, len(i.ignoreRules.FindingTypes))
+	for _, findingType := range i.ignoreRules.FindingTypes {
+		ignoredTypes[strings.TrimSpace(findingType)] = struct{}{}
+	}
+	causes := make([]AttentionCause, 0, len(evaluation.Finding.Causes))
+	for _, cause := range evaluation.Finding.Causes {
+		if _, ignored := ignoredTypes[cause.Type]; ignored {
+			continue
+		}
+		causes = append(causes, cause)
+	}
+	if len(causes) == 0 {
+		evaluation.Finding = nil
+		return evaluation
+	}
+	evaluation.Finding.Causes = causes
+	evaluation.Finding.Severity = attentionCauseSeverity(causes)
+	return evaluation
+}
+
+func (i *clusterAttentionIndex) objectIgnoredLocked(ref resourcemodel.ResourceRef) bool {
+	target := attentionIgnoredObjectKey(ref)
+	if target == "" {
+		return false
+	}
+	for _, ignored := range i.ignoreRules.IgnoredObjects {
+		if attentionIgnoredObjectKey(ignored) == target {
+			return true
+		}
+	}
+	return false
+}
+
+func (i *clusterAttentionIndex) pruneIgnoredObjectLocked(ref resourcemodel.ResourceRef) bool {
+	target := attentionIgnoredObjectKey(ref)
+	if target == "" {
+		return false
+	}
+	kept := i.ignoreRules.IgnoredObjects[:0]
+	removed := false
+	for _, ignored := range i.ignoreRules.IgnoredObjects {
+		if attentionIgnoredObjectKey(ignored) == target {
+			removed = true
+			continue
+		}
+		kept = append(kept, ignored)
+	}
+	i.ignoreRules.IgnoredObjects = kept
+	if removed {
+		i.revision++
+		i.markDirtyLocked()
+	}
+	return removed
+}
+
+func attentionIgnoredObjectKey(ref resourcemodel.ResourceRef) string {
+	if strings.TrimSpace(ref.UID) == "" {
+		return ""
+	}
+	return strings.ToLower(strings.Join([]string{
+		ref.ClusterID, ref.Group, ref.Version, ref.Kind, ref.Namespace, ref.Name, ref.UID,
+	}, "\x00"))
+}
+
+func dedupeAttentionRefs(refs []resourcemodel.ResourceRef) []resourcemodel.ResourceRef {
+	deduped := make([]resourcemodel.ResourceRef, 0, len(refs))
+	seen := make(map[string]struct{}, len(refs))
+	for _, ref := range refs {
+		key := attentionIgnoredObjectKey(ref)
+		if key == "" {
+			continue
+		}
+		if _, exists := seen[key]; exists {
+			continue
+		}
+		seen[key] = struct{}{}
+		deduped = append(deduped, ref)
+	}
+	return deduped
+}
+
 func (i *clusterAttentionIndex) UpsertSource(owner string, record attentionSourceRecord) {
 	if i == nil || strings.TrimSpace(owner) == "" || !completeAttentionRef(record.Ref) {
 		return
 	}
 	i.mu.Lock()
-	defer i.mu.Unlock()
 	if i.stopped {
+		i.mu.Unlock()
 		return
 	}
-	i.upsertSourceLocked(owner, record, i.now())
+	pruned := i.upsertSourceLocked(owner, record, i.now())
+	pruner := i.ignoredObjectPruner
 	i.armTimerLocked()
+	i.mu.Unlock()
+	if pruned != nil && pruner != nil {
+		pruner(*pruned)
+	}
 }
 
 func (i *clusterAttentionIndex) ReplaceSource(owner string, records []attentionSourceRecord) {
+	i.replaceSource(owner, records, true)
+}
+
+func (i *clusterAttentionIndex) replaceSource(owner string, records []attentionSourceRecord, pruneMissingIgnores bool) {
 	if i == nil || strings.TrimSpace(owner) == "" {
 		return
 	}
 	i.mu.Lock()
-	defer i.mu.Unlock()
 	if i.stopped {
+		i.mu.Unlock()
 		return
 	}
 	want := make(map[string]struct{}, len(records))
+	presentIgnoredKeys := make(map[string]struct{}, len(records))
+	pruned := make([]resourcemodel.ResourceRef, 0)
 	now := i.now()
 	for _, record := range records {
 		if !completeAttentionRef(record.Ref) {
@@ -285,13 +487,20 @@ func (i *clusterAttentionIndex) ReplaceSource(owner string, records []attentionS
 		}
 		key := attentionRefKey(record.Ref)
 		want[key] = struct{}{}
-		i.upsertSourceLocked(owner, record, now)
+		presentIgnoredKeys[attentionIgnoredObjectKey(record.Ref)] = struct{}{}
+		if replaced := i.upsertSourceLocked(owner, record, now); replaced != nil {
+			pruned = append(pruned, *replaced)
+		}
 	}
 	for key := range i.owners[owner] {
 		if _, keep := want[key]; keep {
 			continue
 		}
+		state := i.sources[key]
 		i.deleteSourceLocked(owner, key)
+		if i.pruneIgnoredObjectLocked(state.record.Ref) {
+			pruned = append(pruned, state.record.Ref)
+		}
 	}
 	for key, finding := range i.findings {
 		if _, ownedKind := i.ownerKinds[owner][finding.Kind]; !ownedKind {
@@ -302,8 +511,28 @@ func (i *clusterAttentionIndex) ReplaceSource(owner string, records []attentionS
 		}
 		i.applyFindingLocked(key, nil)
 	}
+	if pruneMissingIgnores {
+		for _, ignored := range append([]resourcemodel.ResourceRef(nil), i.ignoreRules.IgnoredObjects...) {
+			if _, ownedKind := i.ownerKinds[owner][ignored.Kind]; !ownedKind {
+				continue
+			}
+			if _, exists := presentIgnoredKeys[attentionIgnoredObjectKey(ignored)]; exists {
+				continue
+			}
+			if i.pruneIgnoredObjectLocked(ignored) {
+				pruned = append(pruned, ignored)
+			}
+		}
+	}
 	i.owners[owner] = want
 	i.armTimerLocked()
+	pruner := i.ignoredObjectPruner
+	i.mu.Unlock()
+	if pruner != nil {
+		for _, ref := range dedupeAttentionRefs(pruned) {
+			pruner(ref)
+		}
+	}
 }
 
 func (i *clusterAttentionIndex) registerOwnerKind(owner, kind string) {
@@ -332,8 +561,16 @@ func (i *clusterAttentionIndex) RestoreFrom(path string) error {
 	i.mu.Lock()
 	defer i.mu.Unlock()
 	for _, row := range i.maintained.store.Snapshot() {
-		i.findings[attentionRefKey(row.Ref)] = row
+		key := attentionRefKey(row.Ref)
+		filtered := i.filterIgnoredEvaluationLocked(attentionEvaluation{Finding: &row}).Finding
+		if filtered == nil {
+			i.maintained.store.Delete(key)
+			continue
+		}
+		i.findings[key] = *filtered
+		i.maintained.store.Upsert(*filtered)
 	}
+	i.maintained.bumpSinkVersion()
 	i.revision++
 	return nil
 }
@@ -354,7 +591,7 @@ func (i *clusterAttentionIndex) Reconcile() {
 	eventRows := i.eventRows
 	i.mu.Unlock()
 	for _, owner := range unavailableOwners {
-		i.ReplaceSource(owner, nil)
+		i.replaceSource(owner, nil, false)
 	}
 	if eventRows != nil {
 		i.ReplaceSource("events", eventRows())
@@ -366,24 +603,36 @@ func (i *clusterAttentionIndex) DeleteSource(owner string, ref resourcemodel.Res
 		return
 	}
 	i.mu.Lock()
-	defer i.mu.Unlock()
 	if i.stopped {
+		i.mu.Unlock()
 		return
 	}
 	i.deleteSourceLocked(owner, attentionRefKey(ref))
+	pruned := i.pruneIgnoredObjectLocked(ref)
+	pruner := i.ignoredObjectPruner
 	i.armTimerLocked()
+	i.mu.Unlock()
+	if pruned && pruner != nil {
+		pruner(ref)
+	}
 }
 
-func (i *clusterAttentionIndex) upsertSourceLocked(owner string, record attentionSourceRecord, now time.Time) {
+func (i *clusterAttentionIndex) upsertSourceLocked(owner string, record attentionSourceRecord, now time.Time) *resourcemodel.ResourceRef {
 	key := attentionRefKey(record.Ref)
 	previous := i.sources[key]
+	var pruned *resourcemodel.ResourceRef
+	if previous.owner != "" && attentionIgnoredObjectKey(previous.record.Ref) != attentionIgnoredObjectKey(record.Ref) &&
+		i.pruneIgnoredObjectLocked(previous.record.Ref) {
+		removed := previous.record.Ref
+		pruned = &removed
+	}
 	if previous.owner != "" && previous.owner != owner {
 		delete(i.owners[previous.owner], key)
 	}
 	state := attentionSourceState{
 		record: record, owner: owner, generation: previous.generation + 1,
 	}
-	evaluation := evaluateAttentionSource(record, now)
+	evaluation := i.filterIgnoredEvaluationLocked(evaluateAttentionSource(record, now))
 	state.deadline = evaluation.NextEvaluation
 	i.sources[key] = state
 	if i.owners[owner] == nil {
@@ -394,6 +643,7 @@ func (i *clusterAttentionIndex) upsertSourceLocked(owner string, record attentio
 	if !state.deadline.IsZero() {
 		heap.Push(&i.deadlines, attentionDeadline{key: key, generation: state.generation, at: state.deadline})
 	}
+	return pruned
 }
 
 func (i *clusterAttentionIndex) deleteSourceLocked(owner, key string) {
@@ -453,7 +703,7 @@ func (i *clusterAttentionIndex) EvaluateDue(now time.Time) {
 		if !exists || state.generation != deadline.generation || !state.deadline.Equal(deadline.at) {
 			continue
 		}
-		evaluation := evaluateAttentionSource(state.record, now)
+		evaluation := i.filterIgnoredEvaluationLocked(evaluateAttentionSource(state.record, now))
 		state.deadline = evaluation.NextEvaluation
 		i.sources[deadline.key] = state
 		i.applyFindingLocked(deadline.key, evaluation.Finding)
@@ -592,7 +842,7 @@ func attentionTableQueryAdapter() typedTableQueryAdapter[AttentionFinding] {
 			},
 		},
 		SearchText: func(row AttentionFinding) []string {
-			return []string{row.Kind, row.Name, row.Namespace, string(row.Severity), row.Status, strings.Join(row.Reasons, " ")}
+			return []string{row.Kind, row.Name, row.Namespace, string(row.Severity), row.Status, strings.Join(attentionCauseMessages(row.Causes), " ")}
 		},
 		Predicate: func(AttentionFinding, string, string) bool { return true },
 		SortValue: func(row AttentionFinding, field string) string {
@@ -606,7 +856,7 @@ func attentionTableQueryAdapter() typedTableQueryAdapter[AttentionFinding] {
 			case "status":
 				return row.Status
 			case "reason":
-				return strings.Join(row.Reasons, ", ")
+				return strings.Join(attentionCauseMessages(row.Causes), ", ")
 			case "age", "agetimestamp":
 				return strconv.FormatInt(row.AgeTimestamp, 10)
 			default:
@@ -625,6 +875,16 @@ func attentionTableQueryAdapter() typedTableQueryAdapter[AttentionFinding] {
 	}
 }
 
+func attentionCauseMessages(causes []AttentionCause) []string {
+	messages := make([]string, 0, len(causes))
+	for _, cause := range causes {
+		if message := strings.TrimSpace(cause.Message); message != "" {
+			messages = append(messages, message)
+		}
+	}
+	return messages
+}
+
 type ClusterAttentionPermissions struct {
 	IncludePods         bool
 	IncludeDeployments  bool
@@ -636,17 +896,25 @@ type ClusterAttentionPermissions struct {
 	IncludeEvents       bool
 }
 
+type ClusterAttentionOptions struct {
+	IgnoreRules         AttentionIgnoreRules
+	IgnoredObjectPruner func(resourcemodel.ResourceRef)
+}
+
 func RegisterClusterAttentionDomain(
 	reg *domain.Registry,
 	factory informers.SharedInformerFactory,
 	permissions ClusterAttentionPermissions,
 	meta ClusterMeta,
 	ingestManager *ingest.IngestManager,
+	options ClusterAttentionOptions,
 ) (*ClusterAttentionIndex, error) {
 	if reg == nil {
 		return nil, fmt.Errorf("%s registry is nil", clusterAttentionDomainName)
 	}
 	index := newClusterAttentionIndex(meta, time.Now)
+	index.SetIgnoreRules(options.IgnoreRules)
+	index.SetIgnoredObjectPruner(options.IgnoredObjectPruner)
 	sources := []typedTableResourceSource{
 		{Kind: "Pod", Group: "", Resource: "pods", Available: permissions.IncludePods},
 		{Kind: "Deployment", Group: "apps", Resource: "deployments", Available: permissions.IncludeDeployments},
@@ -913,20 +1181,15 @@ func evaluatePodAttention(record attentionSourceRecord, now time.Time) attention
 		return attentionEvaluation{}
 	}
 
-	reasons := make([]string, 0, 2)
+	causes := make([]AttentionCause, 0, 2)
 	if statusNeedsAttention {
-		reasons = appendReason(reasons, attentionClassificationReason(classification, record))
-	}
-	severity := AttentionSeverity("")
-	if statusNeedsAttention {
-		severity = classification.Severity
+		causes = appendAttentionCause(causes, classificationCause(classification, record))
 	}
 	if record.Restarts > 0 {
 		restartPolicy := attentionPolicyForSignal(attentionSignalRestarts)
-		reasons = appendReason(reasons, fmt.Sprintf("%d restarts", record.Restarts))
-		severity = moreSevereAttentionLevel(severity, restartPolicy.Severity)
+		causes = appendAttentionCause(causes, signalCause(attentionSignalRestarts, restartPolicy, fmt.Sprintf("%d restarts", record.Restarts)))
 	}
-	return findingEvaluation(record, severity, reasons)
+	return findingEvaluation(record, causes)
 }
 
 func evaluateWorkloadAttention(record attentionSourceRecord, now time.Time) attentionEvaluation {
@@ -935,22 +1198,18 @@ func evaluateWorkloadAttention(record attentionSourceRecord, now time.Time) atte
 	if !statusNeedsAttention && !replicaMismatch && record.Restarts == 0 {
 		return attentionEvaluation{}
 	}
-	severity := AttentionSeverity("")
 	grace := time.Duration(0)
 	if statusNeedsAttention {
-		severity = classification.Severity
 		grace = classification.Grace
 	}
 	if replicaMismatch {
 		replicaPolicy := attentionPolicyForSignal(attentionSignalReplicaMismatch)
-		severity = moreSevereAttentionLevel(severity, replicaPolicy.Severity)
 		if replicaPolicy.Grace > grace {
 			grace = replicaPolicy.Grace
 		}
 	}
 	if record.Restarts > 0 {
 		restartPolicy := attentionPolicyForSignal(attentionSignalRestarts)
-		severity = moreSevereAttentionLevel(severity, restartPolicy.Severity)
 		grace = restartPolicy.Grace
 	}
 	if grace > 0 && record.Restarts == 0 {
@@ -959,17 +1218,19 @@ func evaluateWorkloadAttention(record attentionSourceRecord, now time.Time) atte
 		}
 	}
 
-	reasons := make([]string, 0, 3)
+	causes := make([]AttentionCause, 0, 3)
 	if statusNeedsAttention {
-		reasons = appendReason(reasons, attentionClassificationReason(classification, record))
+		causes = appendAttentionCause(causes, classificationCause(classification, record))
 	}
 	if replicaMismatch {
-		reasons = appendReason(reasons, strings.TrimSpace(record.Ready)+" ready")
+		policy := attentionPolicyForSignal(attentionSignalReplicaMismatch)
+		causes = appendAttentionCause(causes, signalCause(attentionSignalReplicaMismatch, policy, strings.TrimSpace(record.Ready)+" ready"))
 	}
 	if record.Restarts > 0 {
-		reasons = appendReason(reasons, fmt.Sprintf("%d restarts", record.Restarts))
+		policy := attentionPolicyForSignal(attentionSignalRestarts)
+		causes = appendAttentionCause(causes, signalCause(attentionSignalRestarts, policy, fmt.Sprintf("%d restarts", record.Restarts)))
 	}
-	return findingEvaluation(record, severity, reasons)
+	return findingEvaluation(record, causes)
 }
 
 func evaluateNodeAttention(record attentionSourceRecord) attentionEvaluation {
@@ -977,7 +1238,7 @@ func evaluateNodeAttention(record attentionSourceRecord) attentionEvaluation {
 	if !needsAttention {
 		return attentionEvaluation{}
 	}
-	return findingEvaluation(record, classification.Severity, []string{attentionClassificationReason(classification, record)})
+	return findingEvaluation(record, []AttentionCause{classificationCause(classification, record)})
 }
 
 func evaluateEventAttention(record attentionSourceRecord, now time.Time) attentionEvaluation {
@@ -990,9 +1251,10 @@ func evaluateEventAttention(record attentionSourceRecord, now time.Time) attenti
 	if !now.Before(expiresAt) {
 		return attentionEvaluation{}
 	}
-	reasons := appendReason(nil, record.StatusReason)
-	reasons = appendReason(reasons, record.Message)
-	evaluation := findingEvaluation(record, classification.Severity, reasons)
+	message := strings.Join(compactReasons([]string{record.StatusReason, record.Message}), " · ")
+	evaluation := findingEvaluation(record, []AttentionCause{{
+		Type: classification.ID, Label: classification.Label, Message: message, Severity: classification.Severity,
+	}})
 	evaluation.NextEvaluation = expiresAt
 	return evaluation
 }
@@ -1015,19 +1277,57 @@ func readyReplicaMismatch(ready string) bool {
 	return availableErr == nil && desiredErr == nil && desired > 0 && available < desired
 }
 
-func findingEvaluation(record attentionSourceRecord, severity AttentionSeverity, reasons []string) attentionEvaluation {
-	reasons = compactReasons(reasons)
-	if len(reasons) == 0 {
+func findingEvaluation(record attentionSourceRecord, causes []AttentionCause) attentionEvaluation {
+	causes = compactAttentionCauses(causes)
+	if len(causes) == 0 {
 		return attentionEvaluation{}
 	}
 	return attentionEvaluation{Finding: &AttentionFinding{
 		Ref:          record.Ref,
-		Severity:     severity,
-		Status:       firstNonEmpty(record.Status, reasons[0]),
-		Reasons:      reasons,
+		Severity:     attentionCauseSeverity(causes),
+		Status:       firstNonEmpty(record.Status, causes[0].Message),
+		Causes:       causes,
 		Age:          formatAge(time.UnixMilli(record.AgeTimestamp)),
 		AgeTimestamp: record.AgeTimestamp,
 	}}
+}
+
+func classificationCause(rule attentionClassificationRule, record attentionSourceRecord) AttentionCause {
+	return AttentionCause{
+		Type: rule.ID, Label: rule.Label, Message: attentionClassificationReason(rule, record), Severity: rule.Severity,
+	}
+}
+
+func signalCause(signal attentionSignal, policy attentionSignalPolicy, message string) AttentionCause {
+	return AttentionCause{Type: string(signal), Label: policy.Label, Message: message, Severity: policy.Severity}
+}
+
+func appendAttentionCause(causes []AttentionCause, cause AttentionCause) []AttentionCause {
+	if strings.TrimSpace(cause.Type) == "" || strings.TrimSpace(cause.Message) == "" {
+		return causes
+	}
+	for _, existing := range causes {
+		if existing.Type == cause.Type && existing.Message == cause.Message {
+			return causes
+		}
+	}
+	return append(causes, cause)
+}
+
+func compactAttentionCauses(causes []AttentionCause) []AttentionCause {
+	compacted := make([]AttentionCause, 0, len(causes))
+	for _, cause := range causes {
+		compacted = appendAttentionCause(compacted, cause)
+	}
+	return compacted
+}
+
+func attentionCauseSeverity(causes []AttentionCause) AttentionSeverity {
+	severity := AttentionSeverity("")
+	for _, cause := range causes {
+		severity = moreSevereAttentionLevel(severity, cause.Severity)
+	}
+	return severity
 }
 
 func completeAttentionRef(ref resourcemodel.ResourceRef) bool {

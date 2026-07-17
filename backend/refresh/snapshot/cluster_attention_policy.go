@@ -20,6 +20,7 @@ const (
 // states precede the generic unhealthy-presentation rules.
 type attentionClassificationRule struct {
 	ID                    string
+	Label                 string
 	Sources               []attentionSource
 	Kinds                 []string
 	Presentations         []string
@@ -33,41 +34,41 @@ type attentionClassificationRule struct {
 
 var attentionClassificationRules = []attentionClassificationRule{
 	{
-		ID: "workload-scaled-to-zero", Sources: []attentionSource{attentionSourceWorkload},
+		ID: "workload-scaled-to-zero", Label: "Scaled to zero", Sources: []attentionSource{attentionSourceWorkload},
 		Kinds: []string{"Deployment", "StatefulSet"}, Presentations: []string{"inactive"},
 		StatusReasons: []string{"ScaledToZero"}, Severity: AttentionSeverityInfo,
 		FindingReason: "Scaled to 0",
 	},
 	{
-		ID: "cronjob-idle", Sources: []attentionSource{attentionSourceWorkload},
+		ID: "cronjob-idle", Label: "Idle CronJobs", Sources: []attentionSource{attentionSourceWorkload},
 		Kinds: []string{"CronJob"}, Presentations: []string{"inactive"}, Statuses: []string{"Idle"},
 		Severity: AttentionSeverityInfo, FindingReason: "Idle",
 	},
 	{
-		ID: "daemonset-no-eligible-nodes", Sources: []attentionSource{attentionSourceWorkload},
+		ID: "daemonset-no-eligible-nodes", Label: "DaemonSets with no eligible nodes", Sources: []attentionSource{attentionSourceWorkload},
 		Kinds: []string{"DaemonSet"}, Presentations: []string{"warning"}, StatusReasons: []string{"NoEligibleNodes"},
 		Severity: AttentionSeverityInfo, FindingReason: "No eligible nodes",
 	},
 	{
-		ID: "error-presentation", Sources: []attentionSource{attentionSourcePod, attentionSourceWorkload, attentionSourceNode},
+		ID: "error-presentation", Label: "Error status", Sources: []attentionSource{attentionSourcePod, attentionSourceWorkload, attentionSourceNode},
 		Presentations: []string{"error"}, Severity: AttentionSeverityError,
 	},
 	{
-		ID: "pod-unhealthy", Sources: []attentionSource{attentionSourcePod},
+		ID: "pod-unhealthy", Label: "Unhealthy pods", Sources: []attentionSource{attentionSourcePod},
 		ExcludedPresentations: []string{"", "ready", "success"},
 		Severity:              AttentionSeverityWarning, Grace: attentionWarningGrace,
 	},
 	{
-		ID: "workload-unhealthy", Sources: []attentionSource{attentionSourceWorkload},
+		ID: "workload-unhealthy", Label: "Unhealthy workloads", Sources: []attentionSource{attentionSourceWorkload},
 		ExcludedPresentations: []string{"", "ready", "success"},
 		Severity:              AttentionSeverityWarning, Grace: attentionWarningGrace,
 	},
 	{
-		ID: "node-unhealthy", Sources: []attentionSource{attentionSourceNode},
+		ID: "node-unhealthy", Label: "Unhealthy nodes", Sources: []attentionSource{attentionSourceNode},
 		ExcludedPresentations: []string{"", "ready", "success"}, Severity: AttentionSeverityWarning,
 	},
 	{
-		ID: "warning-event", Sources: []attentionSource{attentionSourceEvent},
+		ID: "warning-event", Label: "Warning events", Sources: []attentionSource{attentionSourceEvent},
 		Statuses: []string{"Warning"}, Severity: AttentionSeverityWarning,
 	},
 }
@@ -82,11 +83,53 @@ const (
 type attentionSignalPolicy struct {
 	Severity AttentionSeverity
 	Grace    time.Duration
+	Label    string
 }
 
 var attentionSignalPolicies = map[attentionSignal]attentionSignalPolicy{
-	attentionSignalRestarts:        {Severity: AttentionSeverityWarning},
-	attentionSignalReplicaMismatch: {Severity: AttentionSeverityWarning, Grace: attentionWarningGrace},
+	attentionSignalRestarts:        {Severity: AttentionSeverityWarning, Label: "Restarts"},
+	attentionSignalReplicaMismatch: {Severity: AttentionSeverityWarning, Grace: attentionWarningGrace, Label: "Replica mismatch"},
+}
+
+var attentionSignalOrder = []attentionSignal{
+	attentionSignalRestarts,
+	attentionSignalReplicaMismatch,
+}
+
+// AttentionFindingTypes returns the stable, display-labeled suppression
+// vocabulary in policy order.
+func AttentionFindingTypes() []AttentionFindingTypeDefinition {
+	definitions := make([]AttentionFindingTypeDefinition, 0, len(attentionClassificationRules)+len(attentionSignalOrder))
+	seen := make(map[string]struct{}, cap(definitions))
+	for _, rule := range attentionClassificationRules {
+		if _, exists := seen[rule.ID]; exists {
+			continue
+		}
+		seen[rule.ID] = struct{}{}
+		definitions = append(definitions, AttentionFindingTypeDefinition{ID: rule.ID, Label: rule.Label})
+	}
+	for _, signal := range attentionSignalOrder {
+		policy := attentionSignalPolicies[signal]
+		id := string(signal)
+		if _, exists := seen[id]; exists {
+			continue
+		}
+		seen[id] = struct{}{}
+		definitions = append(definitions, AttentionFindingTypeDefinition{ID: id, Label: policy.Label})
+	}
+	return definitions
+}
+
+// IsAttentionFindingType reports whether id belongs to the centralized
+// suppression vocabulary.
+func IsAttentionFindingType(id string) bool {
+	id = strings.TrimSpace(id)
+	for _, definition := range AttentionFindingTypes() {
+		if definition.ID == id {
+			return true
+		}
+	}
+	return false
 }
 
 type attentionSeverityDefinition struct {
