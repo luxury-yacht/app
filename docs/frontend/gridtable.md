@@ -219,8 +219,10 @@ invalidators even though the callback does not read them.
   actions must be scoped to that window.
 - Local presentation pagination does not change either local table mode. Its
   page index is transient, resets when filter, sort, scope, or page size changes,
-  and clamps when the filtered result shrinks. Page size uses the table's
-  persisted state and shared supported options.
+  and clamps when the filtered result shrinks. A reset commits page one as the
+  new transient state, so returning to an earlier filter or sort identity cannot
+  restore that identity's previous page. Page size uses the table's persisted
+  state and shared supported options.
 - `Query Backed Static` and `Query Backed Dynamic` mean the backend owns global
   search, filters, sort, counts, facets, and pagination. `GridTable` renders the
   current page/window and emits query changes.

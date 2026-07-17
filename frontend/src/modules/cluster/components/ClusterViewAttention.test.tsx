@@ -136,6 +136,21 @@ const finding: ClusterAttentionFinding = {
   age: '2m',
 };
 
+const openIgnoredFindings = () => {
+  const postActions = (
+    queryParamsRef.current?.filterOptionOverrides as
+      | {
+          postActions?: Array<{ id?: string; onClick?: () => void }>;
+        }
+      | undefined
+  )?.postActions;
+  const manageAction = postActions?.find((item) => item.id === 'attention-ignored-findings');
+  if (!manageAction?.onClick) {
+    throw new Error('expected Manage ignored findings action');
+  }
+  act(() => manageAction.onClick?.());
+};
+
 describe('ClusterViewAttention', () => {
   let container: HTMLDivElement;
   let root: ReactDOM.Root;
@@ -386,14 +401,7 @@ describe('ClusterViewAttention', () => {
       await Promise.resolve();
     });
 
-    const postActions = (
-      queryParamsRef.current?.filterOptionOverrides as
-        | {
-            postActions?: Array<{ onClick: () => void }>;
-          }
-        | undefined
-    )?.postActions;
-    act(() => postActions?.[0].onClick());
+    openIgnoredFindings();
     expect(document.body.textContent).toContain('Ignored findings');
     const restore = Array.from(document.body.querySelectorAll('button')).find(
       (button) => button.textContent === 'Restore'
@@ -420,12 +428,7 @@ describe('ClusterViewAttention', () => {
       await Promise.resolve();
     });
 
-    const postActions = (
-      queryParamsRef.current?.filterOptionOverrides as
-        | { postActions?: Array<{ onClick: () => void }> }
-        | undefined
-    )?.postActions;
-    act(() => postActions?.[0].onClick());
+    openIgnoredFindings();
     expect(document.body.textContent).toContain('Deployment payments/checkout');
     const restore = Array.from(document.body.querySelectorAll('button')).find(
       (button) => button.textContent === 'Restore'
@@ -455,12 +458,7 @@ describe('ClusterViewAttention', () => {
       await Promise.resolve();
     });
 
-    const postActions = (
-      queryParamsRef.current?.filterOptionOverrides as
-        | { postActions?: Array<{ onClick: () => void }> }
-        | undefined
-    )?.postActions;
-    act(() => postActions?.[0].onClick());
+    openIgnoredFindings();
 
     const sections = Array.from(document.body.querySelectorAll('.attention-ignored-section'));
     expect(
@@ -485,12 +483,7 @@ describe('ClusterViewAttention', () => {
       await Promise.resolve();
     });
 
-    const postActions = (
-      queryParamsRef.current?.filterOptionOverrides as
-        | { postActions?: Array<{ onClick: () => void }> }
-        | undefined
-    )?.postActions;
-    act(() => postActions?.[0].onClick());
+    openIgnoredFindings();
     expect(document.body.textContent).toContain('All Clusters');
     const restore = Array.from(document.body.querySelectorAll('button')).find(
       (button) => button.textContent === 'Restore'

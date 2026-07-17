@@ -3,7 +3,7 @@ import TablePaginationControls, {
   shouldRenderTablePaginationControls,
 } from '@shared/components/tables/TablePaginationControls';
 import type { ReactNode } from 'react';
-import { useCallback, useMemo, useState } from 'react';
+import { useCallback, useEffect, useMemo, useState } from 'react';
 
 interface UseGridTableLocalPaginationOptions<T> {
   data: T[];
@@ -38,6 +38,12 @@ export function useGridTableLocalPagination<T>({
   const pageSize = Math.max(1, config?.pageSize ?? 1);
   const pageCount = Math.max(1, Math.ceil(data.length / pageSize));
   const pageIndex = pageState.resetKey === resetKey ? Math.min(pageState.pageIndex, pageCount) : 1;
+
+  useEffect(() => {
+    setPageState((current) =>
+      current.resetKey === resetKey ? current : { resetKey, pageIndex: 1 }
+    );
+  }, [resetKey]);
 
   const onPrevious = useCallback(() => {
     setPageState((current) => {

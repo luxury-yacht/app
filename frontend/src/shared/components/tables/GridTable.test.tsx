@@ -1360,7 +1360,7 @@ it('paginates a local row set after the table pipeline and renders exact footer 
   cleanup();
 });
 
-it('resets local pagination after filters change and paginates the filtered result', async () => {
+it('keeps local pagination on the first page after a filter is applied and removed', async () => {
   let filterValue: GridTableFilterState = {
     search: '',
     kinds: { mode: 'all' },
@@ -1403,6 +1403,17 @@ it('resets local pagination after filters change and paginates the filtered resu
     Array.from(container.querySelectorAll('.gridtable-row'), (row) => row.textContent)
   ).toEqual(['Row 0']);
   expect(container.querySelector('.gridtable-pagination')).toBeNull();
+
+  filterValue = { ...filterValue, search: '' };
+  await act(async () => {
+    rerender({ filters: filters() });
+    await Promise.resolve();
+  });
+
+  expect(
+    Array.from(container.querySelectorAll('.gridtable-row'), (row) => row.textContent)
+  ).toEqual(['Row 0', 'Row 1']);
+  expect(container.querySelector('.gridtable-pagination')?.textContent).toContain('1-2 of 6');
 
   cleanup();
 });

@@ -193,6 +193,7 @@ export default function ClusterViewAttention() {
   const filterOptionOverrides = useMemo(
     () => ({
       postActions: [
+        { type: 'separator' as const },
         {
           type: 'action' as const,
           id: 'attention-ignored-findings',
