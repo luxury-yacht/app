@@ -887,7 +887,15 @@ func attentionTableQueryAdapter() typedTableQueryAdapter[AttentionFinding] {
 			},
 		},
 		SearchText: func(row AttentionFinding) []string {
-			return []string{row.Kind, row.Name, row.Namespace, string(row.Severity), row.Status, strings.Join(attentionCauseMessages(row.Causes), " ")}
+			return []string{
+				row.Kind,
+				row.Name,
+				row.Namespace,
+				string(row.Severity),
+				row.Status,
+				strings.Join(attentionCauseLabels(row.Causes), " "),
+				strings.Join(attentionCauseMessages(row.Causes), " "),
+			}
 		},
 		Predicate: func(AttentionFinding, string, string) bool { return true },
 		SortValue: func(row AttentionFinding, field string) string {
@@ -901,7 +909,7 @@ func attentionTableQueryAdapter() typedTableQueryAdapter[AttentionFinding] {
 			case "status":
 				return row.Status
 			case "reason":
-				return strings.Join(attentionCauseMessages(row.Causes), ", ")
+				return strings.Join(attentionCauseLabels(row.Causes), ", ")
 			case "age", "agetimestamp":
 				return strconv.FormatInt(row.AgeTimestamp, 10)
 			default:
@@ -918,6 +926,14 @@ func attentionTableQueryAdapter() typedTableQueryAdapter[AttentionFinding] {
 			return 0, false
 		},
 	}
+}
+
+func attentionCauseLabels(causes []AttentionCause) []string {
+	labels := make([]string, 0, len(causes))
+	for _, cause := range causes {
+		labels = appendReason(labels, cause.Label)
+	}
+	return labels
 }
 
 func attentionCauseMessages(causes []AttentionCause) []string {

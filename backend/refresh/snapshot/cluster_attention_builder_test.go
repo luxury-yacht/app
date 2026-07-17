@@ -3,12 +3,31 @@ package snapshot
 import (
 	"context"
 	"encoding/json"
+	"strings"
 	"testing"
 	"time"
 
 	"github.com/luxury-yacht/app/backend/refresh"
 	"github.com/stretchr/testify/require"
 )
+
+func TestAttentionQueryAdapterUsesFindingLabelsForSearchAndSort(t *testing.T) {
+	row := AttentionFinding{
+		Kind: "Pod", Name: "checkout-0", Namespace: "payments", Status: "CrashLoopBackOff",
+		Causes: []AttentionCause{
+			{Type: "error-presentation", Label: "Error status", Message: "CrashLoopBackOff"},
+			{Type: "restarts", Label: "Restarts", Message: "4 restarts"},
+		},
+	}
+	adapter := attentionTableQueryAdapter()
+
+	searchText := strings.Join(adapter.SearchText(row), " ")
+	require.Contains(t, searchText, "Error status")
+	require.Contains(t, searchText, "Restarts")
+	require.Contains(t, searchText, "CrashLoopBackOff")
+	require.Contains(t, searchText, "4 restarts")
+	require.Equal(t, "Error status, Restarts", adapter.SortValue(row, "reason"))
+}
 
 func TestClusterAttentionBuilderServesQueryBackedPages(t *testing.T) {
 	now := time.Date(2026, time.July, 16, 12, 0, 0, 0, time.UTC)

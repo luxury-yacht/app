@@ -135,9 +135,7 @@ describe('EventOverview', () => {
     );
     expect(getValueForLabel(container, 'Source')?.textContent).toBe('kubelet on node-a');
     expect(getValueForLabel(container, 'Action')?.textContent).toBe('Killing');
-    expect(getValueForLabel(container, 'Reporting Controller')?.textContent).toBe(
-      'kubernetes.io/kubelet'
-    );
+    expect(getValueForLabel(container, 'Controller')?.textContent).toBe('kubernetes.io/kubelet');
     expect(getValueForLabel(container, 'Reporting Instance')?.textContent).toBe('kubelet-node-a');
     expect(getValueForLabel(container, 'Subobject')?.textContent).toBe('spec.containers{api}');
     expect(getValueForLabel(container, 'Related Object')?.textContent).toBe('Node/node-a');

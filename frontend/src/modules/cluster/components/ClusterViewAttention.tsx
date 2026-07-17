@@ -27,12 +27,48 @@ import { useShortNames } from '@/hooks/useShortNames';
 import { errorHandler } from '@/utils/errorHandler';
 import { getDisplayKind } from '@/utils/kindAliasMap';
 import AttentionIgnoredModal from './AttentionIgnoredModal';
+import './ClusterViewAttention.css';
 
 const severityChipVariants = {
   info: 'info',
   warning: 'warning',
   error: 'unhealthy',
 } satisfies Record<ClusterAttentionFinding['severity'], StatusChipVariant>;
+
+const compactFindingText = (values: string[]): string[] => {
+  const seen = new Set<string>();
+  const result: string[] = [];
+  for (const value of values) {
+    const trimmed = value.trim();
+    const key = trimmed.toLocaleLowerCase();
+    if (!trimmed || seen.has(key)) {
+      continue;
+    }
+    seen.add(key);
+    result.push(trimmed);
+  }
+  return result;
+};
+
+const renderFinding = (row: ClusterAttentionFinding) => {
+  const causes = row.causes ?? [];
+  const labels = compactFindingText(causes.map((cause) => cause.label));
+  const status = row.status.trim().toLocaleLowerCase();
+  const details = compactFindingText(
+    causes
+      .map((cause) => cause.message)
+      .filter((message) => message.trim().toLocaleLowerCase() !== status)
+  );
+
+  return (
+    <div className="attention-finding-cell">
+      <span className="attention-finding-labels">{labels.join(' · ') || '-'}</span>
+      {details.length > 0 && (
+        <span className="attention-finding-details">{details.join(' · ')}</span>
+      )}
+    </div>
+  );
+};
 
 export default function ClusterViewAttention() {
   const { selectedClusterId } = useKubeconfig();
@@ -83,11 +119,14 @@ export default function ClusterViewAttention() {
         ),
       },
       cf.createTextColumn('status', 'Status', (row) => row.status || '-'),
-      cf.createTextColumn(
-        'reason',
-        'Finding',
-        (row) => row.causes?.map((cause) => cause.message).join(' · ') || '-'
-      ),
+      {
+        key: 'reason',
+        header: 'Finding',
+        sortable: true,
+        sortValue: (row) =>
+          compactFindingText((row.causes ?? []).map((cause) => cause.label)).join(', '),
+        render: renderFinding,
+      },
       cf.createAgeColumn<ClusterAttentionFinding>('age', 'Age', (row) => row.age),
     ];
     cf.applyColumnSizing(result, {

@@ -1,0 +1,18 @@
+.attention-finding-cell {
+  display: flex;
+  min-width: 0;
+  flex-direction: column;
+  line-height: 1.1rem;
+}
+
+.attention-finding-labels,
+.attention-finding-details {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.attention-finding-details {
+  color: var(--color-text-tertiary);
+  font-size: var(--font-size-sm);
+}

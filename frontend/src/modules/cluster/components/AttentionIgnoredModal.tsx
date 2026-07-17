@@ -110,8 +110,8 @@ export default function AttentionIgnoredModal({
       <div className="attention-ignored-body">
         {!!empty && <p className="attention-ignored-empty">No findings are ignored.</p>}
         {objectFindings.length > 0 && (
-          <section>
-            <h3>This object</h3>
+          <section className="attention-ignored-section">
+            <h3 className="attention-ignored-section-title">Object-Specific</h3>
             <ul>
               {objectFindings.map((ignore) => (
                 <li key={`${refKey(ignore.ref)}:${ignore.findingType}`}>
@@ -133,8 +133,8 @@ export default function AttentionIgnoredModal({
           </section>
         )}
         {clusterTypes.length > 0 && (
-          <section>
-            <h3>This cluster</h3>
+          <section className="attention-ignored-section">
+            <h3 className="attention-ignored-section-title">This Cluster</h3>
             <ul>
               {clusterTypes.map((findingType) => (
                 <li key={findingType}>
@@ -153,8 +153,8 @@ export default function AttentionIgnoredModal({
           </section>
         )}
         {globalTypes.length > 0 && (
-          <section>
-            <h3>All clusters</h3>
+          <section className="attention-ignored-section">
+            <h3 className="attention-ignored-section-title">All Clusters</h3>
             <ul>
               {globalTypes.map((findingType) => (
                 <li key={findingType}>

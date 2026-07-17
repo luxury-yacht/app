@@ -3,6 +3,7 @@ import { StatusChip } from '@shared/components/StatusChip';
 import type { GridColumnDefinition } from '@shared/components/tables/GridTable';
 import { act } from 'react';
 import * as ReactDOM from 'react-dom/client';
+import { renderToStaticMarkup } from 'react-dom/server';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import type { ClusterAttentionFinding } from '@/core/refresh/types';
 
@@ -243,7 +244,7 @@ describe('ClusterViewAttention', () => {
     }
   });
 
-  it('renders the active cause messages in the Finding column', async () => {
+  it('renders context-menu finding labels with only nonduplicative supporting details', async () => {
     await act(async () => {
       root.render(<ClusterViewAttention />);
       await Promise.resolve();
@@ -251,7 +252,30 @@ describe('ClusterViewAttention', () => {
 
     const columns = queryParamsRef.current
       ?.columns as GridColumnDefinition<ClusterAttentionFinding>[];
-    expect(columns.find((column) => column.key === 'reason')?.render(finding)).toBe('1/2 ready');
+    const rendered = columns
+      .find((column) => column.key === 'reason')
+      ?.render({
+        ...finding,
+        status: 'Updating',
+        causes: [
+          {
+            type: 'workload-unhealthy',
+            label: 'Unhealthy workloads',
+            message: 'Updating',
+            severity: 'warning',
+          },
+          ...(finding.causes ?? []),
+        ],
+      });
+    const markup = renderToStaticMarkup(rendered);
+    const cell = document.createElement('div');
+    cell.innerHTML = markup;
+
+    expect(cell.querySelector('.attention-finding-labels')?.textContent).toBe(
+      'Unhealthy workloads · Replica mismatch'
+    );
+    expect(cell.querySelector('.attention-finding-details')?.textContent).toBe('1/2 ready');
+    expect(cell.textContent).not.toContain('UpdatingUpdating');
   });
 
   it('offers object, cluster, and global ignore scopes for each finding', async () => {
@@ -339,6 +363,40 @@ describe('ClusterViewAttention', () => {
     expect(restoreObjectMock).toHaveBeenCalledWith('cluster-a', finding.ref, 'replica-mismatch');
   });
 
+  it('renders each ignored scope as an independently styled modal section', async () => {
+    queryPayloadRef.current = {
+      ignoreRules: {
+        objectFindings: [{ ref: finding.ref, findingType: 'replica-mismatch' }],
+        clusterFindingTypes: ['restarts'],
+        globalFindingTypes: ['warning-event'],
+      },
+      findingTypes: [
+        { id: 'replica-mismatch', label: 'Replica mismatch' },
+        { id: 'restarts', label: 'Restarts' },
+        { id: 'warning-event', label: 'Warning events' },
+      ],
+    };
+    await act(async () => {
+      root.render(<ClusterViewAttention />);
+      await Promise.resolve();
+    });
+
+    const postActions = (
+      queryParamsRef.current?.filterOptionOverrides as
+        | { postActions?: Array<{ onClick: () => void }> }
+        | undefined
+    )?.postActions;
+    act(() => postActions?.[0].onClick());
+
+    const sections = Array.from(document.body.querySelectorAll('.attention-ignored-section'));
+    expect(
+      sections.map(
+        (section) => section.querySelector('.attention-ignored-section-title')?.textContent
+      )
+    ).toEqual(['Object-Specific', 'This Cluster', 'All Clusters']);
+    expect(document.body.querySelector('.object-panel-section')).toBeNull();
+  });
+
   it('restores an all-cluster finding type from management', async () => {
     queryPayloadRef.current = {
       ignoreRules: {
@@ -359,7 +417,7 @@ describe('ClusterViewAttention', () => {
         | undefined
     )?.postActions;
     act(() => postActions?.[0].onClick());
-    expect(document.body.textContent).toContain('All clusters');
+    expect(document.body.textContent).toContain('All Clusters');
     const restore = Array.from(document.body.querySelectorAll('button')).find(
       (button) => button.textContent === 'Restore'
     );

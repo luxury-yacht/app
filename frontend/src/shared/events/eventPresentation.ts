@@ -15,7 +15,7 @@ export const EVENT_LABELS = {
   seriesCount: 'Series Count',
   seriesLastSeen: 'Series Last Seen',
   action: 'Action',
-  reportingController: 'Reporting Controller',
+  reportingController: 'Controller',
   reportingInstance: 'Reporting Instance',
   relatedObject: 'Related Object',
   relatedSubobject: 'Related Subobject',
