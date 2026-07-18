@@ -951,12 +951,12 @@ describe('GridTable interactions (non-virtualized)', () => {
 
     onFilterChange.mockClear();
 
-    const resetButton = container.querySelector<HTMLButtonElement>(
-      '.gridtable-filter-actions button'
+    const clearAllButton = container.querySelector<HTMLButtonElement>(
+      'button[aria-label="Clear all filters"]'
     );
-    expect(resetButton).not.toBeNull();
+    expect(clearAllButton).not.toBeNull();
     act(() => {
-      requireValue(resetButton, 'expected test value in GridTable.test.tsx').dispatchEvent(
+      requireValue(clearAllButton, 'expected test value in GridTable.test.tsx').dispatchEvent(
         new MouseEvent('click', { bubbles: true })
       );
     });

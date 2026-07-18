@@ -13,7 +13,7 @@ import {
   filterSelectionToDropdownValues,
 } from '@shared/components/dropdowns/multiSelectFilterSelection';
 import IconBar, { type IconBarItem } from '@shared/components/IconBar/IconBar';
-import { CaseSensitiveIcon, ResetFiltersIcon } from '@shared/components/icons/SharedIcons';
+import { CaseSensitiveIcon } from '@shared/components/icons/SharedIcons';
 import SearchInput from '@shared/components/inputs/SearchInput';
 import Tooltip from '@shared/components/Tooltip';
 import type {
@@ -21,10 +21,7 @@ import type {
   GridTableQueryFacetDefinition,
   InternalFilterOptions,
 } from '@shared/components/tables/GridTable.types';
-import {
-  hasNarrowingGridTableFilters,
-  hasNonDefaultGridTableFilters,
-} from '@shared/components/tables/gridTableFilterState';
+import { hasNarrowingGridTableFilters } from '@shared/components/tables/gridTableFilterState';
 import { useSearchShortcutTarget } from '@ui/shortcuts';
 import type React from 'react';
 import { useMemo, useRef } from 'react';
@@ -62,9 +59,9 @@ interface GridTableFiltersBarProps {
   searchShortcutActive?: boolean;
   searchShortcutPriority?: number;
   containerRef?: React.Ref<HTMLDivElement>;
-  /** IconBar items rendered before the built-in Reset action (e.g. Favorite toggle). */
+  /** IconBar items rendered after the built-in filter toggles (e.g. Favorite toggle). */
   preActions?: IconBarItem[];
-  /** IconBar items rendered after a separator following Reset (e.g. Load More). */
+  /** IconBar items rendered after a separator following the preceding actions (e.g. Load More). */
   postActions?: IconBarItem[];
   /** Arbitrary content rendered after the IconBar (e.g. text toggle buttons). */
   customActions?: React.ReactNode;
@@ -146,7 +143,6 @@ const GridTableFiltersBar: React.FC<GridTableFiltersBarProps> = ({
   resultCount,
 }) => {
   const searchInputRef = useRef<HTMLInputElement | null>(null);
-  const hasActiveFilters = hasNonDefaultGridTableFilters(activeFilters);
   // The result count is filter feedback (how many rows match the active filter), not
   // pagination/total info — that lives in the pagination footer. So it shows only when
   // a narrowing filter (search/kind/namespace/cluster/provider query facet) is active.
@@ -296,16 +292,7 @@ const GridTableFiltersBar: React.FC<GridTableFiltersBarProps> = ({
   });
 
   const iconBarItems = useMemo<IconBarItem[]>(() => {
-    const items: IconBarItem[] = [
-      {
-        type: 'action',
-        id: 'reset',
-        icon: <ResetFiltersIcon width={20} height={20} />,
-        onClick: onReset,
-        title: 'Reset filters',
-        disabled: !hasActiveFilters,
-      },
-    ];
+    const items: IconBarItem[] = [];
     if (showCaseSensitiveToggle) {
       items.push({
         type: 'toggle',
@@ -320,13 +307,13 @@ const GridTableFiltersBar: React.FC<GridTableFiltersBarProps> = ({
       items.push(...preActions);
     }
     if (postActions && postActions.length > 0) {
-      items.push({ type: 'separator' });
+      if (items.length > 0) {
+        items.push({ type: 'separator' });
+      }
       items.push(...postActions);
     }
     return items;
   }, [
-    onReset,
-    hasActiveFilters,
     activeFilters.caseSensitive,
     onToggleCaseSensitive,
     showCaseSensitiveToggle,
@@ -479,7 +466,7 @@ const GridTableFiltersBar: React.FC<GridTableFiltersBarProps> = ({
               />
             </div>
             <div className="gridtable-filter-actions">
-              <IconBar items={iconBarItems} />
+              {!!iconBarItems.length && <IconBar items={iconBarItems} />}
               {!!customActions && (
                 <div
                   className="gridtable-filter-custom-actions"

@@ -133,7 +133,6 @@ describe('GridTableFiltersBar', () => {
     const onKindsChange = vi.fn();
     const onNamespacesChange = vi.fn();
     const onSearchChange = vi.fn();
-    const onReset = vi.fn();
 
     await renderFilters({
       showKindDropdown: true,
@@ -149,7 +148,6 @@ describe('GridTableFiltersBar', () => {
       onKindsChange,
       onNamespacesChange,
       onSearchChange,
-      onReset,
     });
 
     const kindDropdown = container.querySelector('[data-testid="kinds"]') as HTMLSelectElement;
@@ -167,12 +165,6 @@ describe('GridTableFiltersBar', () => {
       nsDropdown.dispatchEvent(new Event('change', { bubbles: true }));
     });
     expect(onNamespacesChange).toHaveBeenCalledWith(['team-b']);
-
-    const resetButton = container.querySelector('button');
-    await act(async () => {
-      resetButton?.dispatchEvent(new MouseEvent('click', { bubbles: true }));
-    });
-    expect(onReset).toHaveBeenCalledTimes(1);
   });
 
   it('renders a cluster dropdown and propagates cluster IDs', async () => {
@@ -815,7 +807,7 @@ describe('GridTableFiltersBar', () => {
     selectSpy.mockRestore();
   });
 
-  it('enables reset when filter toggles are non-default', async () => {
+  it('does not render the redundant reset-filters icon', async () => {
     await renderFilters({
       activeFilters: {
         search: '',
@@ -830,7 +822,29 @@ describe('GridTableFiltersBar', () => {
     const resetButton = container.querySelector<HTMLButtonElement>(
       '.icon-bar-button[title="Reset filters"]'
     );
-    expect(resetButton?.disabled).toBe(false);
+    expect(resetButton).toBeNull();
+  });
+
+  it('does not add a leading separator when only post-actions are rendered', async () => {
+    await renderFilters({
+      resolvedFilterOptions: {
+        searchBehavior: 'query',
+        kinds: [],
+        namespaces: [],
+      },
+      postActions: [
+        {
+          type: 'action',
+          id: 'load-more',
+          icon: <span>Load</span>,
+          onClick: vi.fn(),
+          title: 'Load more',
+        },
+      ],
+    });
+
+    expect(container.querySelector('.icon-bar-button[title="Load more"]')).not.toBeNull();
+    expect(container.querySelector('.icon-bar-separator')).toBeNull();
   });
 
   it('renders the columns dropdown when enabled', async () => {

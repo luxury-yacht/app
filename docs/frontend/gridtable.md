@@ -81,7 +81,8 @@ workflow and that exception is documented.
   hideable column.
 - Non-default GridTable filters render as removable chips beneath the filter
   controls, with one `Clear all` action that uses the table's existing reset
-  contract. Search and boolean filters use descriptive labels. A multiselect
+  contract. The filter-bar icon group does not duplicate that action with a
+  reset button. Search and boolean filters use descriptive labels. A multiselect
   containing exactly one value uses the singular filter type and selected
   option label, such as `Namespace: kube-system`; if that option is no longer
   available, the stored value is the label fallback. Zero or multiple selected

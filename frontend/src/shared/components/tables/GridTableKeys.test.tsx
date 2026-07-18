@@ -73,7 +73,6 @@ describe('GridTableKeys filter target selectors', () => {
   // These selectors identify the controls whose keyboard order the tests exercise.
   const SELECTORS = {
     search: '[data-gridtable-filter-role="search"] input',
-    reset: '.icon-bar-button[title="Reset filters"]',
     caseSensitive: '.icon-bar-button[title="Match case"]',
     kind: '[data-gridtable-filter-role="kind"] .dropdown-trigger',
     namespace: '[data-gridtable-filter-role="namespace"] .dropdown-trigger',
@@ -137,16 +136,6 @@ describe('GridTableKeys filter target selectors', () => {
     expect(searchInput).not.toBeNull();
     expect(requireValue(searchInput, 'expected test value in GridTableKeys.test.tsx').tagName).toBe(
       'INPUT'
-    );
-  });
-
-  it('reset selector matches the reset button', async () => {
-    const el = await renderFiltersBar();
-
-    const resetBtn = el.querySelector<HTMLElement>(SELECTORS.reset);
-    expect(resetBtn).not.toBeNull();
-    expect(requireValue(resetBtn, 'expected test value in GridTableKeys.test.tsx').tagName).toBe(
-      'BUTTON'
     );
   });
 
