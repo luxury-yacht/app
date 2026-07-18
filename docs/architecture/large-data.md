@@ -321,8 +321,11 @@ directly, and an ownerless Pod uses its own core/v1 identity. The projected Pod
 row retains both direct-controller and resolved-ancestor identities; no
 generated name parsing is part of the descendant contract. Manually changing
 Namespace or Owner clears the Workloads row highlight without restoring the
-previous filters. The former standalone Pods navigation value is parsed as
-Workloads for persisted-state compatibility.
+previous filters. Changing the cluster or pinned namespace while a workload row
+is selected clears that selection's Owner filter before querying the new scope;
+an Owner filter with no active workload selection remains ordinary persisted
+table state. The former standalone Pods navigation value is parsed as Workloads
+for persisted-state compatibility.
 
 Custom resources: cluster and namespace custom table row universes come from
 the object catalog query path with `customOnly=true`. Search, kind filters,

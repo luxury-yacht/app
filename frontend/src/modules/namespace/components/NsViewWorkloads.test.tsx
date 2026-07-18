@@ -414,7 +414,7 @@ describe('NsViewWorkloads', () => {
     expect(podsViewPropsRef.current).toMatchObject({ collapsed: false });
   });
 
-  it('does not revive a prior workload selection after the namespace scope changes', async () => {
+  it('clears a workload-owned Pods filter when the namespace scope changes', async () => {
     const workload: WorkloadData = {
       kind: 'Deployment',
       name: 'api',
@@ -450,12 +450,18 @@ describe('NsViewWorkloads', () => {
       root.render(<NsViewWorkloads namespace="team-b" metrics={null} />);
       await Promise.resolve();
     });
+
+    expect(podsViewPropsRef.current).toMatchObject({
+      namespace: 'team-b',
+      workloadFilterRequest: { type: 'clear' },
+    });
+
     await act(async () => {
       root.render(<NsViewWorkloads namespace="team-a" metrics={null} />);
       await Promise.resolve();
     });
 
-    expect(podsViewPropsRef.current?.workloadFilterRequest).toBeUndefined();
+    expect(podsViewPropsRef.current?.workloadFilterRequest).toEqual({ type: 'clear' });
   });
 
   it('issues a namespace-scoped typed query for a single namespace and renders the query rows', async () => {

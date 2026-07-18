@@ -49,6 +49,7 @@ interface WorkloadsViewProps {
 }
 
 const WORKLOAD_FAVORITE_PANES = ['workloads', 'pods'] as const;
+const CLEAR_POD_WORKLOAD_FILTER_REQUEST: PodWorkloadFilterRequest = { type: 'clear' };
 
 interface WorkloadsTableProps extends WorkloadsViewProps {
   clusterId?: string | null;
@@ -319,6 +320,27 @@ const ScopedWorkloadsView: React.FC<ScopedWorkloadsViewProps> = ({
   const [podFilterRequest, setPodFilterRequest] = useState<PodWorkloadFilterRequest>();
   const [podsCollapsed, setPodsCollapsed] = useState(false);
 
+  // Keep selection provenance across a scope change long enough to remove only
+  // its Owner facet from shared persistence. Manual and favorite Owner filters
+  // have no selected workload and remain ordinary persisted table state.
+  const selectedWorkloadMatchesScope =
+    selectedWorkload === null ||
+    (selectedWorkload.clusterId === selectedClusterId &&
+      (namespace === ALL_NAMESPACES_SCOPE || selectedWorkload.namespace === namespace));
+  const scopedSelectedWorkload = selectedWorkloadMatchesScope ? selectedWorkload : null;
+  const scopedPodFilterRequest = selectedWorkloadMatchesScope
+    ? podFilterRequest
+    : CLEAR_POD_WORKLOAD_FILTER_REQUEST;
+
+  useEffect(() => {
+    if (selectedWorkloadMatchesScope) {
+      return;
+    }
+    setSelectedWorkload(null);
+    setPodFilterRequest(CLEAR_POD_WORKLOAD_FILTER_REQUEST);
+    setPodsCollapsed(false);
+  }, [selectedWorkloadMatchesScope]);
+
   const handleWorkloadSelect = useCallback(
     (workload: WorkloadData) => {
       const ref = buildRequiredObjectReference(
@@ -340,16 +362,16 @@ const ScopedWorkloadsView: React.FC<ScopedWorkloadsViewProps> = ({
 
   const selectedWorkloadKey = useMemo(
     () =>
-      selectedWorkload
-        ? buildRequiredCanonicalObjectRowKey(selectedWorkload, {
+      scopedSelectedWorkload
+        ? buildRequiredCanonicalObjectRowKey(scopedSelectedWorkload, {
             fallbackClusterId: selectedClusterId,
           })
         : null,
-    [selectedClusterId, selectedWorkload]
+    [scopedSelectedWorkload, selectedClusterId]
   );
   const handleWorkloadSelectionClear = useCallback(() => {
     setSelectedWorkload(null);
-    setPodFilterRequest({ type: 'clear' });
+    setPodFilterRequest(CLEAR_POD_WORKLOAD_FILTER_REQUEST);
   }, []);
   return (
     <FavoritePaneGroup primaryPaneId="workloads" expectedPaneIds={WORKLOAD_FAVORITE_PANES}>
@@ -371,7 +393,7 @@ const ScopedWorkloadsView: React.FC<ScopedWorkloadsViewProps> = ({
             namespace={namespace}
             showNamespaceColumn={showNamespaceColumn}
             metrics={metrics}
-            workloadFilterRequest={podFilterRequest}
+            workloadFilterRequest={scopedPodFilterRequest}
             onWorkloadFilterMismatch={() => {
               setSelectedWorkload(null);
               setPodFilterRequest(undefined);
@@ -389,8 +411,7 @@ const NsViewWorkloads: React.FC<WorkloadsViewProps> = (props) => {
   const { selectedClusterId } = useKubeconfig();
   const { selectedNamespaceClusterId } = useNamespace();
   const queryClusterId = selectedNamespaceClusterId ?? selectedClusterId;
-  const scopeKey = `${queryClusterId ?? ''}\u0000${props.namespace}`;
-  return <ScopedWorkloadsView key={scopeKey} {...props} selectedClusterId={queryClusterId} />;
+  return <ScopedWorkloadsView {...props} selectedClusterId={queryClusterId} />;
 };
 
 NsViewWorkloads.displayName = 'NsViewWorkloads';
