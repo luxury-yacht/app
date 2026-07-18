@@ -66,6 +66,109 @@ type favoritesFile struct {
 
 const favoritesSchemaVersion = 3
 
+// favoriteV2 is the flat, single-table favorite written by schema v2. Keep the
+// decoder private: it exists only at the on-disk migration boundary.
+type favoriteV2 struct {
+	ID               string              `json:"id"`
+	Name             string              `json:"name"`
+	ClusterSelection string              `json:"clusterSelection"`
+	ClusterID        string              `json:"clusterId,omitempty"`
+	ClusterName      string              `json:"clusterName,omitempty"`
+	ViewType         string              `json:"viewType"`
+	View             string              `json:"view"`
+	Namespace        string              `json:"namespace"`
+	Filters          *FavoriteFilters    `json:"filters"`
+	TableState       *FavoriteTableState `json:"tableState"`
+	Order            int                 `json:"order"`
+}
+
+type favoritesFileV2 struct {
+	SchemaVersion int               `json:"schemaVersion"`
+	Favorites     []json.RawMessage `json:"favorites"`
+}
+
+func defaultFavoritePaneState() FavoritePaneState {
+	return FavoritePaneState{
+		Filters: FavoriteFilters{
+			Kinds:      FavoriteFilterSelection{Mode: "all"},
+			Namespaces: FavoriteFilterSelection{Mode: "all"},
+			Clusters:   FavoriteFilterSelection{Mode: "all"},
+		},
+		TableState: FavoriteTableState{
+			SortColumn:       "name",
+			SortDirection:    "asc",
+			ColumnVisibility: map[string]bool{},
+		},
+	}
+}
+
+func migrateFavoriteV2(raw json.RawMessage) (Favorite, error) {
+	legacy := favoriteV2{}
+	if err := json.Unmarshal(raw, &legacy); err != nil {
+		return Favorite{}, err
+	}
+	if strings.TrimSpace(legacy.ID) == "" || strings.TrimSpace(legacy.Name) == "" ||
+		strings.TrimSpace(legacy.ViewType) == "" || strings.TrimSpace(legacy.View) == "" {
+		return Favorite{}, fmt.Errorf("favorite is missing required identity or route fields")
+	}
+	if legacy.Filters == nil || legacy.TableState == nil {
+		return Favorite{}, fmt.Errorf("favorite is missing filters or table state")
+	}
+
+	pane := FavoritePaneState{Filters: *legacy.Filters, TableState: *legacy.TableState}
+	normalizeFavoriteFilters(&pane.Filters)
+	migrated := Favorite{
+		ID:               legacy.ID,
+		Name:             legacy.Name,
+		ClusterSelection: legacy.ClusterSelection,
+		ClusterID:        legacy.ClusterID,
+		ClusterName:      legacy.ClusterName,
+		ViewType:         legacy.ViewType,
+		View:             legacy.View,
+		Namespace:        legacy.Namespace,
+		Panes:            map[string]FavoritePaneState{"main": pane},
+		Order:            legacy.Order,
+	}
+	if legacy.ViewType == "namespace" {
+		switch legacy.View {
+		case "pods":
+			migrated.View = "workloads"
+			migrated.Panes = map[string]FavoritePaneState{
+				"workloads": defaultFavoritePaneState(),
+				"pods":      pane,
+			}
+		case "workloads":
+			migrated.Panes = map[string]FavoritePaneState{
+				"workloads": pane,
+				"pods":      defaultFavoritePaneState(),
+			}
+		}
+	}
+
+	return migrated, nil
+}
+
+func migrateFavoritesFileV2(data []byte) *favoritesFile {
+	legacy := favoritesFileV2{}
+	if err := json.Unmarshal(data, &legacy); err != nil {
+		return &favoritesFile{SchemaVersion: favoritesSchemaVersion, Favorites: []Favorite{}}
+	}
+
+	migrated := &favoritesFile{
+		SchemaVersion: favoritesSchemaVersion,
+		Favorites:     make([]Favorite, 0, len(legacy.Favorites)),
+	}
+	for _, raw := range legacy.Favorites {
+		favorite, err := migrateFavoriteV2(raw)
+		if err != nil {
+			continue
+		}
+		favorite.Order = len(migrated.Favorites)
+		migrated.Favorites = append(migrated.Favorites, favorite)
+	}
+	return migrated
+}
+
 func normalizeFavoriteFilterSelection(selection FavoriteFilterSelection) FavoriteFilterSelection {
 	if selection.Mode == "none" {
 		return FavoriteFilterSelection{Mode: "none"}
@@ -154,6 +257,13 @@ func (a *App) loadFavoritesFile() (*favoritesFile, error) {
 	}{}
 	if err := json.Unmarshal(data, &header); err != nil {
 		return nil, fmt.Errorf("failed to parse favorites file: %w", err)
+	}
+	if header.SchemaVersion == 2 {
+		state := migrateFavoritesFileV2(data)
+		if err := a.saveFavoritesFile(state); err != nil {
+			return nil, fmt.Errorf("failed to save migrated favorites file: %w", err)
+		}
+		return state, nil
 	}
 	if header.SchemaVersion < favoritesSchemaVersion {
 		return &favoritesFile{SchemaVersion: favoritesSchemaVersion, Favorites: []Favorite{}}, nil

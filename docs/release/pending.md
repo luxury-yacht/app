@@ -39,9 +39,11 @@
 - Made every multi-select Kinds filter searchable and gave each one explicit
   Select all and Select none controls.
 - Favorites now save every filter declared by a GridTable and save both the
-  Workloads and Pods panes together. This resets favorites created by older
-  releases because the saved-state format changed. Files from a newer schema
-  are rejected without being rewritten so a newer app's data is preserved.
+  Workloads and Pods panes together. Version 2 favorites are silently migrated
+  on app start; an individual favorite that cannot be migrated is deleted while
+  migration continues for the remaining favorites. Favorites from earlier
+  formats are reset. Files from a newer schema are rejected without being
+  rewritten so a newer app's data is preserved.
 - Removed the visible Workloads/Pods divider band and moved the expand/collapse
   control to the left edge of the Pods filter bar. Collapsed Pods now retains a
   compact `Show Pods` header instead of removing its expansion control. The
