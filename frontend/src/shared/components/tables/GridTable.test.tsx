@@ -1362,6 +1362,46 @@ it('paginates a local row set after the table pipeline and renders exact footer 
   cleanup();
 });
 
+it('commits the clamped local page when the row set shrinks and later regrows', async () => {
+  const { container, cleanup, rerender } = renderGridTable({
+    data: createRows(6),
+    virtualization: { enabled: false },
+    localPagination: {
+      idPrefix: 'local-shrinking-table',
+      pageSize: 2,
+      pageSizeOptions: [2, 3],
+      onPageSizeChange: vi.fn(),
+    },
+  });
+  cleanupRoot = cleanup;
+
+  await act(async () => {
+    container.querySelector<HTMLButtonElement>('button[aria-label="Next page"]')?.click();
+    container.querySelector<HTMLButtonElement>('button[aria-label="Next page"]')?.click();
+  });
+  expect(container.querySelector('.gridtable-pagination')?.textContent).toContain('5-6 of 6');
+
+  await act(async () => {
+    rerender({ data: createRows(3) });
+    await Promise.resolve();
+  });
+  expect(
+    Array.from(container.querySelectorAll('.gridtable-row'), (row) => row.textContent)
+  ).toEqual(['Row 2']);
+  expect(container.querySelector('.gridtable-pagination')?.textContent).toContain('3-3 of 3');
+
+  await act(async () => {
+    rerender({ data: createRows(6) });
+    await Promise.resolve();
+  });
+  expect(
+    Array.from(container.querySelectorAll('.gridtable-row'), (row) => row.textContent)
+  ).toEqual(['Row 2', 'Row 3']);
+  expect(container.querySelector('.gridtable-pagination')?.textContent).toContain('3-4 of 6');
+
+  cleanup();
+});
+
 it('keeps local pagination on the first page after a filter is applied and removed', async () => {
   let filterValue: GridTableFilterState = {
     search: '',

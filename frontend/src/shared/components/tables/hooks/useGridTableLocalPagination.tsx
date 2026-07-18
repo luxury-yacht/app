@@ -40,10 +40,16 @@ export function useGridTableLocalPagination<T>({
   const pageIndex = pageState.resetKey === resetKey ? Math.min(pageState.pageIndex, pageCount) : 1;
 
   useEffect(() => {
-    setPageState((current) =>
-      current.resetKey === resetKey ? current : { resetKey, pageIndex: 1 }
-    );
-  }, [resetKey]);
+    setPageState((current) => {
+      if (current.resetKey !== resetKey) {
+        return { resetKey, pageIndex: 1 };
+      }
+      if (current.pageIndex <= pageCount) {
+        return current;
+      }
+      return { resetKey, pageIndex: pageCount };
+    });
+  }, [pageCount, resetKey]);
 
   const onPrevious = useCallback(() => {
     setPageState((current) => {

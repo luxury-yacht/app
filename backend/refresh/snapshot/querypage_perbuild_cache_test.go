@@ -113,6 +113,50 @@ func TestPerBuildCacheInvalidates(t *testing.T) {
 	}
 }
 
+func TestPerBuildCacheSeparatesOpaqueFacetSelections(t *testing.T) {
+	items := []ConfigSummary{
+		{Kind: "ConfigMap", Name: "first-a-b", Namespace: "default", TypeAlias: "a,b"},
+		{Kind: "ConfigMap", Name: "first-c", Namespace: "default", TypeAlias: "c"},
+		{Kind: "ConfigMap", Name: "second-a", Namespace: "default", TypeAlias: "a"},
+		{Kind: "ConfigMap", Name: "second-b-c", Namespace: "default", TypeAlias: "b,c"},
+	}
+	adapter := configTableQueryAdapter()
+	adapter.Facets = []typedTableQueryFacet[ConfigSummary]{
+		{
+			Descriptor: ResourceQueryFacetDescriptor{Key: "values", Label: "Values"},
+			Value:      func(row ConfigSummary) string { return row.TypeAlias },
+		},
+	}
+	cache := &perBuildStoreCache[ConfigSummary]{}
+
+	first := perBuildQuery("name", "asc", "")
+	first.Request.Facets = map[string][]string{"values": {"a,b", "c"}}
+	applyTypedTableQueryViaStore(
+		items,
+		first,
+		adapter,
+		configQuerypageSchema(),
+		withPerBuildCache(cache, "v1"),
+	)
+
+	second := perBuildQuery("name", "asc", "")
+	second.Request.Facets = map[string][]string{"values": {"a", "b,c"}}
+	page := applyTypedTableQueryViaStore(
+		items,
+		second,
+		adapter,
+		configQuerypageSchema(),
+		withPerBuildCache(cache, "v1"),
+	)
+
+	if len(page.Rows) != 2 {
+		t.Fatalf("second opaque facet selection returned %d rows", len(page.Rows))
+	}
+	if page.Rows[0].Name != "second-a" || page.Rows[1].Name != "second-b-c" {
+		t.Fatalf("second opaque facet selection returned rows %q and %q", page.Rows[0].Name, page.Rows[1].Name)
+	}
+}
+
 // Cached serves must be byte-equivalent to fresh builds — pages, totals, and
 // facets — across sorts and cursors.
 func TestPerBuildCacheServesIdenticalPagesToFreshBuild(t *testing.T) {

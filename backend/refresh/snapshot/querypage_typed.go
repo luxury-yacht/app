@@ -85,6 +85,15 @@ func stableFacetSelection(in []string) []string {
 	return out
 }
 
+// Length prefixes preserve selection boundaries when opaque facet values contain
+// commas or other delimiters used by the surrounding signature format.
+func writeLengthPrefixedStrings(b *strings.Builder, values []string) {
+	for _, value := range values {
+		fmt.Fprintf(b, "%d:", len(value))
+		b.WriteString(value)
+	}
+}
+
 // typedQuerySignature pins a cursor to its query shape so a cursor issued for one
 // query can never mispage a different one (it is rejected → CursorInvalid). It
 // folds EVERY field that changes the matched set — base scope, namespaces, kinds,
@@ -124,7 +133,7 @@ func typedQuerySignature(sortField string, dir querypage.Direction, limit int, b
 			b.WriteString("facet.")
 			b.WriteString(key)
 			b.WriteByte('=')
-			b.WriteString(strings.Join(values, ","))
+			writeLengthPrefixedStrings(&b, values)
 			b.WriteByte(';')
 		}
 	}
@@ -247,7 +256,7 @@ func perBuildCacheKey(query typedTableQuery, versionToken string) string {
 	for _, key := range facetKeys {
 		b.WriteString(key)
 		b.WriteByte('=')
-		b.WriteString(strings.Join(stableFacetSelection(query.Request.Facets[key]), ","))
+		writeLengthPrefixedStrings(&b, stableFacetSelection(query.Request.Facets[key]))
 		b.WriteByte(';')
 	}
 	b.WriteByte('\n')
