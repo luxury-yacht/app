@@ -6,6 +6,7 @@
  * preference persistence.
  */
 
+import ActiveFilterChips, { type ActiveFilterChip } from '@shared/components/ActiveFilterChips';
 import ClusterDataPausedState from '@shared/components/ClusterDataPausedState';
 import { Dropdown, type DropdownOption } from '@shared/components/dropdowns/Dropdown';
 import {
@@ -1092,12 +1093,7 @@ const LogViewerInner: React.FC<LogViewerProps> = ({
     [regexMatches, textFilter]
   );
   const activeFilterChips = useMemo(() => {
-    const chips: Array<{
-      key: string;
-      label: string;
-      title: string;
-      onRemove: () => void;
-    }> = [];
+    const chips: ActiveFilterChip[] = [];
 
     const trimmedTextFilter = textFilter.trim();
     if (trimmedTextFilter) {
@@ -1109,7 +1105,7 @@ const LogViewerInner: React.FC<LogViewerProps> = ({
             : regexMatches
               ? `Regex: ${trimmedTextFilter}`
               : `Text: ${trimmedTextFilter}`,
-        title: 'Clear text filter',
+        removeLabel: 'Clear text filter',
         onRemove: () => dispatch({ type: 'SET_TEXT_FILTER', payload: '' }),
       });
     }
@@ -1118,7 +1114,7 @@ const LogViewerInner: React.FC<LogViewerProps> = ({
       chips.push({
         key: 'previous-logs',
         label: 'Showing previous logs',
-        title: 'Return to live logs',
+        removeLabel: 'Return to live logs',
         onRemove: () => {
           dispatch({ type: 'STOP_PREVIOUS_LOGS' });
           hasPrimedScopeRef.current = false;
@@ -1131,7 +1127,7 @@ const LogViewerInner: React.FC<LogViewerProps> = ({
       chips.push({
         key: `selected-filter:${filterValue}`,
         label,
-        title: `Remove filter ${label}`,
+        removeLabel: `Remove filter ${label}`,
         onRemove: () =>
           dispatch({
             type: 'SET_SELECTED_FILTERS',
@@ -1147,7 +1143,7 @@ const LogViewerInner: React.FC<LogViewerProps> = ({
       chips.push({
         key: 'highlight',
         label: 'Highlight',
-        title: 'Disable highlight matches',
+        removeLabel: 'Disable highlight matches',
         onRemove: () => dispatch({ type: 'TOGGLE_HIGHLIGHT_MATCHES' }),
       });
     }
@@ -1156,7 +1152,7 @@ const LogViewerInner: React.FC<LogViewerProps> = ({
       chips.push({
         key: 'invert',
         label: 'Invert',
-        title: 'Disable invert filter',
+        removeLabel: 'Disable invert filter',
         onRemove: () => dispatch({ type: 'TOGGLE_INVERSE_MATCHES' }),
       });
     }
@@ -1165,7 +1161,7 @@ const LogViewerInner: React.FC<LogViewerProps> = ({
       chips.push({
         key: 'case-sensitive',
         label: 'Match case',
-        title: 'Disable case-sensitive matching',
+        removeLabel: 'Disable case-sensitive matching',
         onRemove: () => dispatch({ type: 'TOGGLE_CASE_SENSITIVE_MATCHES' }),
       });
     }
@@ -1174,7 +1170,7 @@ const LogViewerInner: React.FC<LogViewerProps> = ({
       chips.push({
         key: 'regex',
         label: 'Regex',
-        title: 'Disable regex matching',
+        removeLabel: 'Disable regex matching',
         onRemove: () => dispatch({ type: 'TOGGLE_REGEX_MATCHES' }),
       });
     }
@@ -2241,36 +2237,12 @@ const LogViewerInner: React.FC<LogViewerProps> = ({
             </div>
           </div>
 
-          {activeFilterChips.length > 0 && (
-            <fieldset className="logs-viewer-active-filters" aria-label="Active log filters">
-              <legend className="logs-viewer-active-filters__legend">Active log filters</legend>
-              {activeFilterChips.length > 0 && (
-                <button
-                  type="button"
-                  className="logs-viewer-filter-chip logs-viewer-filter-chip--clear-all"
-                  onClick={handleClearAllFilters}
-                  aria-label="Clear all filters"
-                  title="Clear all filters"
-                >
-                  Clear all
-                </button>
-              )}
-              {activeFilterChips.map((chip) => (
-                <span key={chip.key} className="logs-viewer-filter-chip">
-                  <span className="logs-viewer-filter-chip-label">{chip.label}</span>
-                  <button
-                    type="button"
-                    className="logs-viewer-filter-chip-remove"
-                    onClick={chip.onRemove}
-                    aria-label={chip.title}
-                    title={chip.title}
-                  >
-                    ×
-                  </button>
-                </span>
-              ))}
-            </fieldset>
-          )}
+          <ActiveFilterChips
+            ariaLabel="Active log filters"
+            chips={activeFilterChips}
+            onClearAll={handleClearAllFilters}
+            className="logs-viewer-active-filters"
+          />
 
           {visibleLogWarnings.length > 0 && (
             <div className="logs-viewer-warning-bar" role="status" aria-label="Log warnings">

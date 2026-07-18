@@ -79,6 +79,19 @@ workflow and that exception is documented.
   optimization back into dropdown state. The Columns dropdown is intentionally
   different: its selected values are enabled columns, so none hides every
   hideable column.
+- Non-default GridTable filters render as removable chips beneath the filter
+  controls, with one `Clear all` action that uses the table's existing reset
+  contract. Search and boolean filters use descriptive labels. A multiselect
+  containing exactly one value uses the singular filter type and selected
+  option label, such as `Namespace: kube-system`; if that option is no longer
+  available, the stored value is the label fallback. Zero or multiple selected
+  values use the plural filter type and count, such as `Namespaces: 0` or
+  `Statuses: 2`. Chip visibility and counts come from the stored selection mode:
+  `all` renders no chip, `some` renders its stored value count, and `none`
+  renders zero. Removing a multiselect chip restores that dimension to `all`;
+  it must not synthesize a selection from the currently available options. When
+  a narrowing filter is active, the same row begins with plain
+  `Showing N of M items` summary text before `Clear all`.
 - Query facets may declare `placement: 'before-kinds'` when they constrain the
   Kind vocabulary. They must also declare `invalidates: ['kinds']` so changing
   the upstream facet clears the previous Kind selection in the same state

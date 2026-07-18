@@ -918,7 +918,7 @@ describe('BrowseView', () => {
         )
       ).toBe(false);
       expect(gridTablePropsRef.current.filters.options.customActions).toBeUndefined();
-      // Pagination totals live in the footer; the filter bar's "showing N of M due to filters"
+      // Pagination totals live in the footer; the filter chip's "Showing N of M items"
       // banner renders only while a narrowing filter is active (complementary, not
       // a duplicate top count) — consistent with every other view.
       expect(gridTablePropsRef.current.paginationControls?.props).toMatchObject({

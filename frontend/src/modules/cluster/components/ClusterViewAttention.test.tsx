@@ -136,7 +136,7 @@ const finding: ClusterAttentionFinding = {
   age: '2m',
 };
 
-const openIgnoredFindings = () => {
+const getManageIgnoredFindingsAction = () => {
   const postActions = (
     queryParamsRef.current?.filterOptionOverrides as
       | {
@@ -144,7 +144,11 @@ const openIgnoredFindings = () => {
         }
       | undefined
   )?.postActions;
-  const manageAction = postActions?.find((item) => item.id === 'attention-ignored-findings');
+  return postActions?.find((item) => item.id === 'attention-ignored-findings');
+};
+
+const openIgnoredFindings = () => {
+  const manageAction = getManageIgnoredFindingsAction();
   if (!manageAction?.onClick) {
     throw new Error('expected Manage ignored findings action');
   }
@@ -234,6 +238,15 @@ describe('ClusterViewAttention', () => {
       })
     );
     expect(tablePropsRef.current).not.toHaveProperty('onRowClick');
+  });
+
+  it('keeps ignored-findings management as a standard action when ignore rules exist', async () => {
+    await act(async () => {
+      root.render(<ClusterViewAttention />);
+      await Promise.resolve();
+    });
+
+    expect(getManageIgnoredFindingsAction()).not.toHaveProperty('active');
   });
 
   it('opens the complete object reference from the Name link', async () => {

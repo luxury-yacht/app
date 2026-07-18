@@ -113,6 +113,7 @@ describe('GridTableFiltersBar', () => {
             onKindsChange={vi.fn()}
             onNamespacesChange={vi.fn()}
             onClustersChange={vi.fn()}
+            onFiltersChange={vi.fn()}
             onSearchChange={vi.fn()}
             onReset={vi.fn()}
             onToggleCaseSensitive={vi.fn()}
@@ -245,6 +246,164 @@ describe('GridTableFiltersBar', () => {
       dropdown.dispatchEvent(new Event('change', { bubbles: true }));
     });
     expect(onQueryFacetChange).toHaveBeenCalledWith('apiGroups', ['(core)']);
+  });
+
+  it('renders built-in multiselect chips from the stored selection modes', async () => {
+    const onFiltersChange = vi.fn();
+    await renderFilters({
+      activeFilters: {
+        search: '',
+        kinds: { mode: 'some', values: ['Pod', 'Kind no longer available'] },
+        namespaces: { mode: 'none' },
+        clusters: { mode: 'all' },
+        caseSensitive: false,
+        includeMetadata: false,
+      },
+      onFiltersChange,
+    });
+
+    const chips = container.querySelector('[aria-label="Active GridTable filters"]');
+    expect(chips?.textContent).toContain('Clear all');
+    expect(chips?.textContent).toContain('Kinds: 2');
+    expect(chips?.textContent).toContain('Namespaces: 0');
+    expect(chips?.textContent).not.toContain('Clusters');
+
+    await act(async () => {
+      container
+        .querySelector<HTMLButtonElement>('button[aria-label="Clear Kinds filter"]')
+        ?.click();
+    });
+    expect(onFiltersChange).toHaveBeenCalledWith({ kinds: { mode: 'all' } });
+  });
+
+  it('uses the selected option label when a built-in filter has one value', async () => {
+    await renderFilters({
+      activeFilters: {
+        search: '',
+        kinds: { mode: 'some', values: ['Pod'] },
+        namespaces: { mode: 'some', values: ['kube-system'] },
+        clusters: { mode: 'some', values: ['cluster-a'] },
+        caseSensitive: false,
+        includeMetadata: false,
+      },
+      resolvedFilterOptions: {
+        kinds: [{ label: 'Pods', value: 'Pod' }],
+        namespaces: [{ label: 'kube-system', value: 'kube-system' }],
+        clusters: [{ label: 'alpha', value: 'cluster-a' }],
+      },
+    });
+
+    const chips = container.querySelector('[aria-label="Active GridTable filters"]');
+    expect(chips?.textContent).toContain('Kind: Pods');
+    expect(chips?.textContent).toContain('Namespace: kube-system');
+    expect(chips?.textContent).toContain('Cluster: alpha');
+    expect(chips?.textContent).not.toContain('Namespaces: 1');
+  });
+
+  it('renders query facet counts and clears one facet back to all', async () => {
+    const onFiltersChange = vi.fn();
+    await renderFilters({
+      activeFilters: {
+        search: '',
+        kinds: { mode: 'all' },
+        namespaces: { mode: 'all' },
+        clusters: { mode: 'all' },
+        queryFacets: {
+          status: { mode: 'some', values: ['Running', 'Pending'] },
+          owner: { mode: 'none' },
+        },
+        caseSensitive: false,
+        includeMetadata: false,
+      },
+      resolvedFilterOptions: {
+        kinds: [],
+        namespaces: [],
+        queryFacets: [
+          { key: 'status', label: 'Status', placeholder: 'All statuses', options: [] },
+          { key: 'owner', label: 'Owner', placeholder: 'All owners', options: [] },
+        ],
+      },
+      onFiltersChange,
+    });
+
+    const chips = container.querySelector('[aria-label="Active GridTable filters"]');
+    expect(chips?.textContent).toContain('Statuses: 2');
+    expect(chips?.textContent).toContain('Owners: 0');
+
+    await act(async () => {
+      container
+        .querySelector<HTMLButtonElement>('button[aria-label="Clear Status filter"]')
+        ?.click();
+    });
+
+    expect(onFiltersChange).toHaveBeenCalledWith({
+      queryFacets: {
+        status: { mode: 'all' },
+        owner: { mode: 'none' },
+      },
+    });
+  });
+
+  it('uses the selected option label when a query facet has one value', async () => {
+    await renderFilters({
+      activeFilters: {
+        search: '',
+        kinds: { mode: 'all' },
+        namespaces: { mode: 'all' },
+        clusters: { mode: 'all' },
+        queryFacets: { apiGroups: { mode: 'some', values: ['(core)'] } },
+        caseSensitive: false,
+        includeMetadata: false,
+      },
+      resolvedFilterOptions: {
+        kinds: [],
+        namespaces: [],
+        queryFacets: [
+          {
+            key: 'apiGroups',
+            label: 'API groups',
+            placeholder: 'All API groups',
+            options: [{ label: 'core', value: '(core)' }],
+          },
+        ],
+      },
+    });
+
+    const chips = container.querySelector('[aria-label="Active GridTable filters"]');
+    expect(chips?.textContent).toContain('API group: core');
+    expect(chips?.textContent).not.toContain('API groups: 1');
+  });
+
+  it('renders text and boolean chips with individual and clear-all actions', async () => {
+    const onFiltersChange = vi.fn();
+    const onReset = vi.fn();
+    await renderFilters({
+      activeFilters: {
+        search: 'web',
+        kinds: { mode: 'all' },
+        namespaces: { mode: 'all' },
+        clusters: { mode: 'all' },
+        caseSensitive: true,
+        includeMetadata: true,
+      },
+      onFiltersChange,
+      onReset,
+    });
+
+    const chips = container.querySelector('[aria-label="Active GridTable filters"]');
+    expect(chips?.textContent).toContain('Text: web');
+    expect(chips?.textContent).toContain('Match case');
+    expect(chips?.textContent).toContain('Include metadata');
+
+    await act(async () => {
+      container.querySelector<HTMLButtonElement>('button[aria-label="Clear text filter"]')?.click();
+    });
+    expect(onFiltersChange).toHaveBeenCalledWith({ search: '' });
+
+    await act(async () => {
+      container.querySelector<HTMLButtonElement>('button[aria-label="Clear all filters"]')?.click();
+    });
+    expect(onReset).toHaveBeenCalledTimes(1);
   });
 
   it('renders leading query facets before Kinds', async () => {
@@ -411,6 +570,7 @@ describe('GridTableFiltersBar', () => {
             onKindsChange={vi.fn()}
             onNamespacesChange={vi.fn()}
             onClustersChange={vi.fn()}
+            onFiltersChange={vi.fn()}
             onSearchChange={setSearch}
             onReset={vi.fn()}
             onToggleCaseSensitive={vi.fn()}
@@ -489,7 +649,9 @@ describe('GridTableFiltersBar', () => {
     });
 
     const resultCount = container.querySelector('[data-gridtable-filter-role="result-count"]');
-    expect(resultCount?.textContent).toContain('showing 100 of 100001+ items due to filters');
+    expect(resultCount?.textContent).toContain('Showing 100 of 100001+ items');
+    expect(resultCount?.classList.contains('active-filter-chips__summary')).toBe(true);
+    expect(resultCount?.classList.contains('active-filter-chip')).toBe(false);
     const trigger = resultCount?.querySelector('.tooltip-trigger');
     expect(trigger).not.toBeNull();
     await act(async () => {
@@ -520,7 +682,7 @@ describe('GridTableFiltersBar', () => {
     });
 
     const resultCount = container.querySelector('[data-gridtable-filter-role="result-count"]');
-    expect(resultCount?.textContent).toContain('showing 250 of 5000 items due to filters');
+    expect(resultCount?.textContent).toContain('Showing 250 of 5000 items');
   });
 
   it('hides the result count and tooltip when no narrowing filter is active', async () => {
@@ -546,9 +708,22 @@ describe('GridTableFiltersBar', () => {
       resultCount: { filtered: 12, unfiltered: 100 },
     });
 
-    const resultCount = container.querySelector('[data-gridtable-filter-role="result-count"]');
-    expect(resultCount).not.toBeNull();
-    expect(resultCount?.textContent).toContain('showing 12 of 100 items due to filters');
+    const resultCount = requireValue(
+      container.querySelector('[data-gridtable-filter-role="result-count"]'),
+      'expected result count summary'
+    );
+    expect(resultCount.textContent).toBe('Showing 12 of 100 items');
+    expect(resultCount.classList.contains('active-filter-chips__summary')).toBe(true);
+    expect(resultCount.classList.contains('active-filter-chip')).toBe(false);
+    expect(resultCount.closest('.active-filter-chips')).not.toBeNull();
+    expect(resultCount.closest('.gridtable-filter-actions')).toBeNull();
+    const clearAll = requireValue(
+      container.querySelector('button[aria-label="Clear all filters"]'),
+      'expected Clear all button'
+    );
+    expect(
+      Boolean(resultCount.compareDocumentPosition(clearAll) & Node.DOCUMENT_POSITION_FOLLOWING)
+    ).toBe(true);
   });
 
   it('surfaces the partial-window note in the result-count tooltip', async () => {
@@ -571,7 +746,7 @@ describe('GridTableFiltersBar', () => {
     });
 
     const resultCount = container.querySelector('[data-gridtable-filter-role="result-count"]');
-    expect(resultCount?.textContent).toContain('showing 50 of 500 items due to filters');
+    expect(resultCount?.textContent).toContain('Showing 50 of 500 items');
     const trigger = resultCount?.querySelector('.tooltip-trigger');
     expect(trigger).not.toBeNull();
     await act(async () => {

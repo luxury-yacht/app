@@ -103,6 +103,7 @@ export function useGridTableFiltersWiring<T>({
     handleFilterNamespacesChange,
     handleFilterClustersChange,
     handleFilterQueryFacetChange,
+    handleFiltersChange,
     handleFilterReset,
     toggleCaseSensitive,
   } = useGridTableFilters({
@@ -322,6 +323,7 @@ export function useGridTableFiltersWiring<T>({
       onNamespacesChange: handleNamespaceDropdownChange,
       onClustersChange: handleClusterDropdownChange,
       onQueryFacetChange: handleQueryFacetDropdownChange,
+      onFiltersChange: handleFiltersChange,
       onReset: handleFilterReset,
       onToggleCaseSensitive: toggleCaseSensitive,
       showKindDropdown,
@@ -357,6 +359,7 @@ export function useGridTableFiltersWiring<T>({
       handleNamespaceDropdownChange,
       handleClusterDropdownChange,
       handleQueryFacetDropdownChange,
+      handleFiltersChange,
       handleFilterReset,
       toggleCaseSensitive,
       showKindDropdown,

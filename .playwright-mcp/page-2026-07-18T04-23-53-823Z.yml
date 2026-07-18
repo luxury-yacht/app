@@ -1,0 +1,163 @@
+- generic [ref=e4]:
+  - banner [ref=e5]:
+    - button "Toggle window maximize" [ref=e6]
+    - generic [ref=e7]:
+      - generic [ref=e8]:
+        - 'status "Connectivity: Loading namespaces. fusionauth-dev-us-west-2 is connected, but the namespace list is not ready to render yet." [ref=e10] [cursor=pointer]'
+        - 'status "Metrics: Awaiting metrics data..." [ref=e13] [cursor=pointer]'
+        - 'status "Sessions: Shell Sessions: 0. Port Forwards: 0." [ref=e16] [cursor=pointer]'
+      - button "Favorites" [ref=e19] [cursor=pointer]
+      - button "Command Palette" [ref=e22] [cursor=pointer]
+  - generic [ref=e26]:
+    - tablist "Cluster Tabs" [ref=e27]:
+      - tab "fusionauth-dev-us-west-2 Close fusionauth-dev-us-west-2" [selected] [ref=e28] [cursor=pointer]:
+        - generic [ref=e29]: fusionauth-dev-us-west-2
+        - button "Close fusionauth-dev-us-west-2"
+    - button "Open Cluster" [ref=e30] [cursor=pointer]
+  - main [ref=e34]:
+    - paragraph [ref=e38]: Loading sidebar...
+    - separator "Resize sidebar" [ref=e39]
+    - generic [ref=e44]:
+      - generic [ref=e45]:
+        - generic [ref=e46]:
+          - heading "fusionauth-dev-us-west-2" [level=1] [ref=e47]
+          - generic [ref=e48]:
+            - generic [ref=e49]:
+              - generic [ref=e50]: Cluster Type
+              - generic [ref=e51]: —
+            - generic [ref=e52]:
+              - generic [ref=e53]: Version
+              - generic [ref=e54]: —
+            - generic [ref=e55]:
+              - generic [ref=e56]: Status
+              - generic [ref=e57]: Loading namespaces
+        - generic [ref=e58]:
+          - img "Captain K8s" [ref=e59]
+          - img "Luxury Yacht" [ref=e60]
+      - generic [ref=e61]:
+        - generic [ref=e62]:
+          - heading "Resource Utilization" [level=2] [ref=e64]
+          - generic [ref=e65]:
+            - generic [ref=e66]:
+              - generic [ref=e67]:
+                - heading "CPU" [level=3] [ref=e68]
+                - generic [ref=e69]: —
+              - generic [ref=e70]: —
+            - generic [ref=e71]: No data
+          - generic [ref=e79]:
+            - generic [ref=e80]:
+              - generic [ref=e82]: —
+              - generic [ref=e83]: deployments
+            - generic [ref=e84]:
+              - generic [ref=e86]: —
+              - generic [ref=e87]: statefulsets
+            - generic [ref=e88]:
+              - generic [ref=e90]: —
+              - generic [ref=e91]: daemonsets
+            - generic [ref=e92]:
+              - generic [ref=e94]: —
+              - generic [ref=e95]: jobs
+          - generic [ref=e97]:
+            - generic [ref=e98]:
+              - generic [ref=e99]:
+                - heading "Memory" [level=3] [ref=e100]
+                - generic [ref=e101]: —
+              - generic [ref=e102]: —
+            - generic [ref=e103]: No data
+          - generic [ref=e111]:
+            - generic [ref=e112]:
+              - generic [ref=e114]: —
+              - generic [ref=e115]: deployments
+            - generic [ref=e116]:
+              - generic [ref=e118]: —
+              - generic [ref=e119]: statefulsets
+            - generic [ref=e120]:
+              - generic [ref=e122]: —
+              - generic [ref=e123]: daemonsets
+            - generic [ref=e124]:
+              - generic [ref=e126]: —
+              - generic [ref=e127]: jobs
+          - button "Legend" [ref=e129] [cursor=pointer]
+        - generic [ref=e131]:
+          - heading "Nodes" [level=2] [ref=e132]
+          - generic [ref=e134]:
+            - generic [ref=e135]: —
+            - generic [ref=e136]: total
+          - generic [ref=e137]:
+            - generic [ref=e138]:
+              - heading "Node Health" [level=3] [ref=e139]
+              - generic [ref=e140]: — total
+            - generic [ref=e142]:
+              - generic [ref=e143]:
+                - generic [ref=e144]:
+                  - generic [ref=e146]: —
+                  - generic [ref=e147]: ready
+                - generic [ref=e148]:
+                  - generic [ref=e150]: —
+                  - generic [ref=e151]: not ready
+              - generic [ref=e153]:
+                - generic [ref=e155]: —
+                - generic [ref=e156]: cordoned
+        - generic [ref=e157]:
+          - heading "Workloads" [level=2] [ref=e158]
+          - generic [ref=e159]:
+            - generic [ref=e160]:
+              - generic [ref=e161]: —
+              - generic [ref=e162]: namespaces
+            - generic [ref=e163]:
+              - generic [ref=e164]: —
+              - generic [ref=e165]: pods
+            - generic [ref=e166]:
+              - generic [ref=e167]: —
+              - generic [ref=e168]: containers
+          - generic [ref=e169]:
+            - generic [ref=e170]:
+              - heading "By Type" [level=3] [ref=e171]
+              - generic [ref=e172]: — total
+            - generic [ref=e175]:
+              - generic [ref=e176]:
+                - generic [ref=e178]: —
+                - generic [ref=e179]: deployments
+              - generic [ref=e180]:
+                - generic [ref=e182]: —
+                - generic [ref=e183]: statefulsets
+              - generic [ref=e184]:
+                - generic [ref=e186]: —
+                - generic [ref=e187]: daemonsets
+              - generic [ref=e188]:
+                - generic [ref=e190]: —
+                - generic [ref=e191]: cronjobs
+          - generic [ref=e193]:
+            - generic [ref=e194]:
+              - generic [ref=e195]:
+                - heading "Pod Status" [level=3] [ref=e196]
+                - generic [ref=e197]: — total
+              - generic [ref=e198]:
+                - generic [ref=e199]:
+                  - generic [ref=e200]: —
+                  - generic "ready" [ref=e201]
+                - generic [ref=e202]:
+                  - generic [ref=e203]: —
+                  - generic "starting" [ref=e204]
+                - generic [ref=e205]:
+                  - generic [ref=e206]: —
+                  - generic "failing" [ref=e207]
+                - generic [ref=e208]:
+                  - generic [ref=e209]: —
+                  - generic "terminating" [ref=e210]
+            - generic [ref=e211]:
+              - heading "Pod Signals" [level=3] [ref=e213]
+              - generic [ref=e214]:
+                - generic [ref=e215]:
+                  - generic [ref=e216]: —
+                  - generic "restarts" [ref=e217]
+                - generic [ref=e218]:
+                  - generic [ref=e219]: —
+                  - generic "not ready" [ref=e220]
+        - generic [ref=e222]:
+          - heading "Latest Warning Events" [level=2] [ref=e223]
+          - generic [ref=e224]: 0 events
+  - paragraph [ref=e229]: Loading Application Logs Panel...
+  - paragraph [ref=e233]: Loading settings...
+  - paragraph [ref=e237]: Loading about...
+  - paragraph [ref=e241]: Loading diff viewer...

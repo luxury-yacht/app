@@ -420,7 +420,7 @@ const BrowseView: React.FC<BrowseViewProps> = ({
       showNamespaceDropdown: showNamespaceColumn,
       namespaceDropdownSearchable: true,
       includeClusterScopedSyntheticNamespace: false,
-      // Show the "showing N of M items due to filters" banner like every other view (the bar only
+      // Show the "Showing N of M items" filter chip like every other view (the bar only
       // renders it while a narrowing filter is active). totalCount is N; unfilteredTotal is M.
       totalCount,
       unfilteredTotal,

@@ -146,7 +146,7 @@ export interface UseBrowseCatalogResult {
   filterOptionsResolved: boolean;
   /** Total count of items matching the current query (before pagination) */
   totalCount: number;
-  /** In-scope count before filters — the "of M" in "showing N of M items due to filters". */
+  /** In-scope count before filters — the "of M" in "Showing N of M items". */
   unfilteredTotal: number;
   /** Whether totalCount is exact for the current backend query */
   totalIsExact: boolean;

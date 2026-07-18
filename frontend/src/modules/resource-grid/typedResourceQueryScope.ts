@@ -29,7 +29,7 @@ export interface TypedQueryPayload {
   pageStartRank?: number;
   cursorInvalid?: boolean;
   total?: number;
-  // Items in scope before the request's filters — the "of M" in "showing N of M due to filters".
+  // Items in scope before the request's filters — the "of M" in "Showing N of M items".
   unfilteredTotal?: number;
   totalIsExact?: boolean;
   namespaces?: string[];

@@ -131,7 +131,7 @@ export interface GridTableFilterOptions {
   /** Override the total item count shown in the filter bar (e.g. server-side total for paginated views). */
   totalCount?: number;
   /**
-   * Items in scope before the active filters (the "of M" in "showing N of M items due to filters").
+   * Items in scope before the active filters (the "of M" in "Showing N of M items").
    * Server-paginated views supply it from the backend; local tables derive it from their row count.
    */
   unfilteredTotal?: number;

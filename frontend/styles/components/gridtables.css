@@ -777,15 +777,6 @@ body.dockable-panel-resizing .content-body .gridtable-pagination {
   margin-left: var(--spacing-lg);
 }
 
-.gridtable-filter-result-count {
-  font-size: 0.75rem;
-  color: var(--color-text-secondary);
-  white-space: nowrap;
-  display: inline-flex;
-  align-items: center;
-  gap: 0.35rem;
-}
-
 .gridtable-filter-result-tooltip-paragraph {
   margin: 0;
 }

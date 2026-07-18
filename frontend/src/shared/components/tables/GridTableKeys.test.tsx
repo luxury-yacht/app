@@ -106,6 +106,7 @@ describe('GridTableKeys filter target selectors', () => {
       onKindsChange: vi.fn(),
       onNamespacesChange: vi.fn(),
       onClustersChange: vi.fn(),
+      onFiltersChange: vi.fn(),
       onSearchChange: vi.fn(),
       onReset: vi.fn(),
       onToggleCaseSensitive: vi.fn(),
@@ -250,6 +251,7 @@ describe('GridTableKeys filter target selectors', () => {
             onNamespacesChange={vi.fn()}
             onClustersChange={vi.fn()}
             onQueryFacetChange={vi.fn()}
+            onFiltersChange={vi.fn()}
             onSearchChange={vi.fn()}
             onReset={vi.fn()}
             onToggleCaseSensitive={vi.fn()}
@@ -359,6 +361,7 @@ describe('GridTableKeys filter target selectors', () => {
             onKindsChange={vi.fn()}
             onNamespacesChange={vi.fn()}
             onClustersChange={vi.fn()}
+            onFiltersChange={vi.fn()}
             onSearchChange={vi.fn()}
             onReset={vi.fn()}
             onToggleCaseSensitive={vi.fn()}

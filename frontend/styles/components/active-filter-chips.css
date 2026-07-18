@@ -1,0 +1,89 @@
+.active-filter-chips {
+  min-width: 0;
+  margin: 0;
+  border: 0;
+  display: flex;
+  align-items: center;
+  align-content: center;
+  gap: var(--spacing-sm);
+  flex-wrap: wrap;
+  padding: 0 0.8rem 0.6rem;
+  background-color: var(--active-filter-chips-bg, var(--color-bg-secondary));
+  border-bottom: 1px solid var(--active-filter-chips-border, var(--color-border));
+}
+
+.active-filter-chips__legend {
+  position: absolute;
+  width: 1px;
+  height: 1px;
+  padding: 0;
+  margin: -1px;
+  overflow: hidden;
+  clip: rect(0, 0, 0, 0);
+  white-space: nowrap;
+  border: 0;
+}
+
+.active-filter-chip {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  max-width: min(100%, 22rem);
+  min-height: 22px;
+  padding: 0 4px 0 8px;
+  border-radius: 90px;
+  background-color: var(--color-bg-tertiary);
+  color: var(--color-text);
+  font-size: 0.75rem;
+  font-weight: 400;
+}
+
+.active-filter-chip--clear-all {
+  appearance: none;
+  cursor: pointer;
+  border: 0;
+  background: var(--color-text-secondary);
+  color: var(--color-bg);
+  font-weight: 600;
+  padding: 0 8px;
+}
+
+.active-filter-chip--clear-all:hover {
+  background: var(--color-accent);
+}
+
+.active-filter-chips__summary {
+  color: var(--color-text-secondary);
+  font-size: 0.75rem;
+  white-space: nowrap;
+}
+
+.active-filter-chip__label {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.active-filter-chip__remove {
+  appearance: none;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 1rem;
+  height: 1rem;
+  flex: 0 0 auto;
+  background: var(--color-bg-tertiary);
+  border: 0;
+  color: inherit;
+  cursor: pointer;
+  font: inherit;
+  line-height: 1;
+  margin: 0;
+  padding: 0;
+  border-radius: 999px;
+}
+
+.active-filter-chip__remove:hover {
+  background-color: var(--color-accent);
+  color: var(--color-text);
+}
