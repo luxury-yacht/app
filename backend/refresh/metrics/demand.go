@@ -95,9 +95,9 @@ func (d *DemandPoller) SetInterval(interval time.Duration) {
 	}
 }
 
-// SetCollectionObserver passes the observer through to the wrapped poller (the
-// metric doorbell wiring holds this wrapper, not the inner Poller). A wrapped
-// poller without observer support is a no-op.
+// SetCollectionObserver passes the collection-attempt observer through to the
+// wrapped poller (the metric doorbell wiring holds this wrapper, not the inner
+// Poller). A wrapped poller without observer support is a no-op.
 func (d *DemandPoller) SetCollectionObserver(observer func(Metadata)) {
 	if d == nil {
 		return

@@ -192,11 +192,18 @@ func NewSubsystemWithServices(cfg Config) (*Subsystem, error) {
 	// the shared factory's RS lister — the RS informer stays registered (only pods is
 	// cut). Registered BEFORE the hub starts so the pod reflector launches with the
 	// rest and the initial relist is sync-gated.
-	registerPodReflector(ingestManager, informerFactory, snapshot.ClusterMeta{ClusterID: cfg.ClusterID, ClusterName: cfg.ClusterName})
+	jobControllerOwners := snapshot.NewJobControllerOwnerIndex()
+	registerPodReflector(
+		ingestManager,
+		informerFactory,
+		snapshot.ClusterMeta{ClusterID: cfg.ClusterID, ClusterName: cfg.ClusterName},
+		jobControllerOwners.Lookup,
+	)
 	// The five workload kinds (Deployment/StatefulSet/DaemonSet/Job/CronJob) have no Stream
 	// descriptor either (their table is the bespoke cross-kind WorkloadSummary), so they too
 	// are wired with explicit bespoke projectors. ReplicaSet stays on its typed informer.
 	registerWorkloadReflectors(ingestManager, snapshot.ClusterMeta{ClusterID: cfg.ClusterID, ClusterName: cfg.ClusterName})
+	ingestManager.AddBundleSink(snapshot.JobGVR, jobControllerOwners)
 	// Service and EndpointSlice have no Stream descriptor either (a Service row is the bespoke
 	// Service↔EndpointSlice join), so they are wired with explicit bespoke projectors. Ingress
 	// and NetworkPolicy ARE Stream-backed and handled by the generic loop above.
@@ -444,11 +451,11 @@ func (s *Subsystem) StopDoorbellNotifiers() {
 	}
 }
 
-// metricsSignalObserver maps a successful poller collection to a SourceMetric
-// doorbell on the resource stream. The version is the collection revision
-// (CollectedAt nanos) — identical to the snapshot builders' metric source clock
-// (metricRevisionFromMetadata), so the doorbell and the snapshot ETag advance
-// together. A zero CollectedAt means no sample exists yet; nothing to announce.
+// metricsSignalObserver sends every completed attempt to the namespace health
+// notifier, while only successful samples ring the shared SourceMetric
+// doorbell. This preserves polling for poll-augmented domains while allowing a
+// first failure to move Namespaces out of loading. An empty revision means no
+// attempt has completed yet.
 // wireNamespacesDoorbell and wireObjectEventsDoorbell attach a notifier's
 // broadcast with the ORDERING CONTRACT every doorbell must honor: invalidate
 // the domain's snapshot cache FIRST, then broadcast. The doorbell-triggered
@@ -524,12 +531,22 @@ func wireClusterAttentionDoorbell(
 	})
 }
 
-func metricsSignalObserver(resourceManager *resourcestream.Manager, namespaceNotifier *snapshot.NamespaceChangeNotifier) func(metrics.Metadata) {
+type metricsChangeNotifier interface {
+	MetricsChanged()
+}
+
+func metricsSignalObserver(resourceManager *resourcestream.Manager, namespaceNotifier metricsChangeNotifier) func(metrics.Metadata) {
 	return func(metadata metrics.Metadata) {
-		if resourceManager == nil || metadata.CollectedAt.IsZero() {
+		revision := metrics.Revision(metadata)
+		if revision == "" {
 			return
 		}
-		namespaceNotifier.MetricsChanged()
+		if namespaceNotifier != nil {
+			namespaceNotifier.MetricsChanged()
+		}
+		if resourceManager == nil || metadata.CollectedAt.IsZero() || metadata.ConsecutiveFailures > 0 || metadata.LastError != "" {
+			return
+		}
 		resourceManager.BroadcastMetricsRefresh(strconv.FormatInt(metadata.CollectedAt.UnixNano(), 10))
 	}
 }

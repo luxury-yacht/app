@@ -268,6 +268,12 @@ func TestParseOptions(t *testing.T) {
 	}
 }
 
+func TestMatchNoneStreamDoesNotReportHeartbeatTimeout(t *testing.T) {
+	now := time.Now()
+	require.False(t, shouldRecordHeartbeatTimeout(true, now.Add(-time.Hour), now))
+	require.True(t, shouldRecordHeartbeatTimeout(false, now.Add(-time.Hour), now))
+}
+
 func TestMatchContainerFilter(t *testing.T) {
 	if !matchContainerFilter("nginx", "nginx", false, false) {
 		t.Fatal("expected direct match for regular container")

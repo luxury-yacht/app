@@ -2,10 +2,12 @@ import { describe, expect, it } from 'vitest';
 import {
   ALL_MULTISELECT_FILTER,
   filterSelectionFromDropdownValues,
+  filterSelectionFromDropdownValuesExact,
   filterSelectionMatches,
   filterSelectionToDropdownValues,
   migrateLegacyMultiSelectFilterSelection,
   NONE_MULTISELECT_FILTER,
+  normalizeExactMultiSelectFilterSelection,
   normalizeMultiSelectFilterSelection,
 } from './multiSelectFilterSelection';
 
@@ -67,5 +69,20 @@ describe('multiSelectFilterSelection', () => {
       mode: 'some',
       values: ['Pod'],
     });
+  });
+
+  it('preserves case-distinct identity values for exact selections', () => {
+    expect(
+      normalizeExactMultiSelectFilterSelection({ mode: 'some', values: ['Cluster-A', 'cluster-a'] })
+    ).toEqual({ mode: 'some', values: ['Cluster-A', 'cluster-a'] });
+    expect(
+      filterSelectionFromDropdownValuesExact(
+        ['Cluster-A'],
+        [
+          { value: 'Cluster-A', label: 'upper' },
+          { value: 'cluster-a', label: 'lower' },
+        ]
+      )
+    ).toEqual({ mode: 'some', values: ['Cluster-A'] });
   });
 });

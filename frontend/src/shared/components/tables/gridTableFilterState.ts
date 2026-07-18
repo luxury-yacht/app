@@ -2,6 +2,7 @@ import {
   ALL_MULTISELECT_FILTER,
   isNarrowingFilterSelection,
   type MultiSelectFilterSelection,
+  normalizeExactMultiSelectFilterSelection,
   normalizeMultiSelectFilterSelection,
 } from '@shared/components/dropdowns/multiSelectFilterSelection';
 import type { GridTableFilterState } from '@shared/components/tables/GridTable.types';
@@ -43,7 +44,7 @@ export const normalizeGridTableFilterState = (
     search: state?.search?.trim() ?? '',
     kinds: normalizeMultiSelectFilterSelection(state?.kinds ?? ALL_MULTISELECT_FILTER),
     namespaces: normalizeMultiSelectFilterSelection(state?.namespaces ?? ALL_MULTISELECT_FILTER),
-    clusters: normalizeMultiSelectFilterSelection(state?.clusters ?? ALL_MULTISELECT_FILTER),
+    clusters: normalizeExactMultiSelectFilterSelection(state?.clusters ?? ALL_MULTISELECT_FILTER),
     ...(Object.keys(queryFacets).length > 0 ? { queryFacets } : {}),
     caseSensitive: state?.caseSensitive ?? false,
     includeMetadata: state?.includeMetadata ?? false,
@@ -61,8 +62,8 @@ export const areGridTableFilterStatesEqual = (
     JSON.stringify(normalizeMultiSelectFilterSelection(b.kinds)) &&
   JSON.stringify(normalizeMultiSelectFilterSelection(a.namespaces)) ===
     JSON.stringify(normalizeMultiSelectFilterSelection(b.namespaces)) &&
-  JSON.stringify(normalizeMultiSelectFilterSelection(a.clusters)) ===
-    JSON.stringify(normalizeMultiSelectFilterSelection(b.clusters)) &&
+  JSON.stringify(normalizeExactMultiSelectFilterSelection(a.clusters)) ===
+    JSON.stringify(normalizeExactMultiSelectFilterSelection(b.clusters)) &&
   JSON.stringify(normalizeGridTableQueryFacets(a.queryFacets)) ===
     JSON.stringify(normalizeGridTableQueryFacets(b.queryFacets));
 

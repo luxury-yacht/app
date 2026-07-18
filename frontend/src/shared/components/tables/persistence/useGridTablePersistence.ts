@@ -49,7 +49,7 @@ export interface UseGridTablePersistenceParams<T> {
 export interface UseGridTablePersistenceResult {
   storageKey: string | null;
   sortConfig: SortConfig | null;
-  setSortConfig: (config: SortConfig) => void;
+  setSortConfig: (config: SortConfig | null) => void;
   columnVisibility: Record<string, boolean> | null;
   setColumnVisibility: (visibility: Record<string, boolean>) => void;
   columnWidths: Record<string, ColumnWidthState> | null;

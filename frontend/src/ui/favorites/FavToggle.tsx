@@ -67,7 +67,7 @@ export interface FavToggleState {
   hydrated?: boolean;
   /** Setters for restoring state from a pending favorite. */
   setFilters?: (filters: GridTableFilterState) => void;
-  setSortConfig?: (config: { key: string; direction: 'asc' | 'desc' }) => void;
+  setSortConfig?: (config: { key: string; direction: 'asc' | 'desc' } | null) => void;
   setColumnVisibility?: (visibility: Record<string, boolean>) => void;
   setIncludeMetadata?: (value: boolean) => void;
 }
@@ -342,21 +342,32 @@ export function useFavToggle(state: FavToggleState): {
       return;
     }
 
-    for (const pane of panesToRestore) {
+    const restorablePanes = panesToRestore.map((pane) => {
       if (!pane) {
-        return;
+        return null;
       }
       const savedPane = pendingFavorite.panes[pane.id];
-      if (!savedPane) {
-        return;
+      return savedPane ? { pane, savedPane } : null;
+    });
+    if (restorablePanes.some((entry) => !entry)) {
+      setPendingFavorite(null);
+      return;
+    }
+
+    for (const entry of restorablePanes) {
+      if (!entry) {
+        continue;
       }
+      const { pane, savedPane } = entry;
       pane.state.setFilters?.(savedPane.filters);
-      if (savedPane.tableState.sortColumn) {
-        pane.state.setSortConfig?.({
-          key: savedPane.tableState.sortColumn,
-          direction: savedPane.tableState.sortDirection as 'asc' | 'desc',
-        });
-      }
+      pane.state.setSortConfig?.(
+        savedPane.tableState.sortColumn
+          ? {
+              key: savedPane.tableState.sortColumn,
+              direction: savedPane.tableState.sortDirection as 'asc' | 'desc',
+            }
+          : null
+      );
       pane.state.setColumnVisibility?.(savedPane.tableState.columnVisibility);
       pane.state.setIncludeMetadata?.(savedPane.filters.includeMetadata);
     }

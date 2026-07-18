@@ -20,11 +20,12 @@ import (
 // identity chain — never an arbitrary identifier like the Kubernetes object UID.
 // Pinned by TestTiedSortValuesOrderByHumanKey.
 type Schema[R any] struct {
-	UID         func(R) string
-	SortKeys    map[string]func(R) string
-	Facets      map[string]func(R) string
-	MultiFacets map[string]func(R) []string
-	SearchText  func(R) string
+	UID              func(R) string
+	SortKeys         map[string]func(R) string
+	Facets           map[string]func(R) string
+	MultiFacets      map[string]func(R) []string
+	FacetNormalizers map[string]func(string) string
+	SearchText       func(R) string
 }
 
 func uniqueFacetValues(values []string) []string {
@@ -403,9 +404,16 @@ func (s *Store[R]) scopeMatchesBase(rowID uint32, mv matchValues, base map[strin
 			return false
 		}
 		matched := false
+		normalize := s.schema.FacetNormalizers[fname]
 		if isSingleFacet {
 			value := mv.facets[fname]
+			if normalize != nil {
+				value = normalize(value)
+			}
 			for _, candidate := range allowed {
+				if normalize != nil {
+					candidate = normalize(candidate)
+				}
 				if value == candidate {
 					matched = true
 					break
@@ -413,7 +421,13 @@ func (s *Store[R]) scopeMatchesBase(rowID uint32, mv matchValues, base map[strin
 			}
 		} else {
 			for _, value := range mv.multiFacets[fname] {
+				if normalize != nil {
+					value = normalize(value)
+				}
 				for _, candidate := range allowed {
+					if normalize != nil {
+						candidate = normalize(candidate)
+					}
 					if value == candidate {
 						matched = true
 						break
@@ -703,7 +717,7 @@ func (s *Store[R]) QueryAround(q Query, anchorKey string) (Page[R], AnchorOutcom
 	// and an absent anchor skips the counted walk entirely.
 	outcome := AnchorOutcome{Rank: -1}
 	if rowID, present := s.rows.rowID(anchorKey); present {
-		if s.matchValuesMatches(rowID, s.match[rowID], q, searchLower, candidates, narrow) {
+		if !q.MatchNone && s.matchValuesMatches(rowID, s.match[rowID], q, searchLower, candidates, narrow) {
 			outcome.Found = true
 		} else {
 			outcome.Filtered = true

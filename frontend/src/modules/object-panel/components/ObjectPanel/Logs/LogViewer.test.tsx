@@ -2678,7 +2678,7 @@ describe('LogViewer active pod synchronisation', () => {
 
     expect(getLogViewerPrefs(panelId)?.selectedFilters).toEqual({
       mode: 'some',
-      values: ['pod:web-1', 'container:app'],
+      values: ['pod:web-1'],
     });
   });
 

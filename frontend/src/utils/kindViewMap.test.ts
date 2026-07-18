@@ -10,10 +10,10 @@ import { getViewForKind, isNamespaceScopedKind } from './kindViewMap';
 
 describe('getViewForKind', () => {
   // Namespace-scoped kinds
-  it.each([
-    ['Pod', 'namespace', 'workloads'],
-    ['pod', 'namespace', 'workloads'],
-    ['POD', 'namespace', 'workloads'],
+  const namespaceKindCases: Array<[string, string, string, string?]> = [
+    ['Pod', 'namespace', 'workloads', 'namespace-pods'],
+    ['pod', 'namespace', 'workloads', 'namespace-pods'],
+    ['POD', 'namespace', 'workloads', 'namespace-pods'],
     ['Deployment', 'namespace', 'workloads'],
     ['StatefulSet', 'namespace', 'workloads'],
     ['DaemonSet', 'namespace', 'workloads'],
@@ -41,10 +41,18 @@ describe('getViewForKind', () => {
     ['LimitRange', 'namespace', 'quotas'],
     ['HelmRelease', 'namespace', 'helm'],
     ['Event', 'namespace', 'events'],
-  ])('maps %s to %s/%s', (kind, expectedViewType, expectedTab) => {
-    const result = getViewForKind(kind);
-    expect(result).toEqual({ viewType: expectedViewType, tab: expectedTab });
-  });
+  ];
+  it.each(namespaceKindCases)(
+    'maps %s to %s/%s',
+    (kind, expectedViewType, expectedTab, destinationViewId) => {
+      const result = getViewForKind(kind);
+      expect(result).toEqual({
+        viewType: expectedViewType,
+        tab: expectedTab,
+        ...(destinationViewId ? { destinationViewId } : {}),
+      });
+    }
+  );
 
   // Cluster-scoped kinds
   it.each([

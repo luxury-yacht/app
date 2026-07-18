@@ -8,6 +8,7 @@
 import {
   ALL_MULTISELECT_FILTER,
   filterSelectionFromDropdownValues,
+  filterSelectionFromDropdownValuesExact,
 } from '@shared/components/dropdowns/multiSelectFilterSelection';
 import type {
   GridTableFilterConfig,
@@ -265,7 +266,10 @@ export function useGridTableFilters<T>({
   const handleFilterClustersChange = useCallback(
     (next: string[]) => {
       updateFilters({
-        clusters: filterSelectionFromDropdownValues(next, resolvedFilterOptions.clusters ?? []),
+        clusters: filterSelectionFromDropdownValuesExact(
+          next,
+          resolvedFilterOptions.clusters ?? []
+        ),
       });
     },
     [resolvedFilterOptions.clusters, updateFilters]

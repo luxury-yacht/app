@@ -46,9 +46,6 @@ export const applyPodWorkloadFilterRequest = (
     }
   } else {
     delete queryFacets[POD_OWNER_QUERY_FACET_KEY];
-    if (showNamespaceFilter) {
-      namespaces = { mode: 'all' };
-    }
   }
 
   const next = normalizeGridTableFilterState({

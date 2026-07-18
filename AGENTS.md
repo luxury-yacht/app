@@ -139,9 +139,8 @@ machine-wide Playwright MCP server instead.
   direct tool is exposed and the `playwright` row is enabled, use it; do not
   initialize `node_repl`, call `agent.browsers.getForUrl`, or ask the user for
   screenshots.
-- The one-time installation is under
-  `~/.codex/browser-tools/playwright`, and the global MCP server is named
-  `playwright`. It is already registered on the primary development machine.
+- The global MCP server is named `playwright`. Use the executable path reported
+  by `codex mcp list`; do not assume a user-specific installation directory.
 - At the start of a future CLI session that needs rendered UI inspection, use
   the Playwright MCP browser tools directly. The tools are loaded when Codex
   starts, so do not reinstall anything merely because they are absent from an
@@ -150,10 +149,9 @@ machine-wide Playwright MCP server instead.
   `playwright` row is enabled, restart Codex CLI once so it can load the tools.
   Only repair the installation when the row is missing or its command path no
   longer exists.
-- Use the active Wails development-server URL supplied for the run. The current
-  known target is `http://localhost:34115`; confirm it responds before browser
-  work because Wails may choose a different port on a later run. If it is not
-  reachable, ask for the current URL, not screenshots.
+- Use the active Wails development-server URL supplied for the run. Confirm it
+  responds before browser work because Wails may choose a different port on a
+  later run. If it is not reachable, ask for the current URL, not screenshots.
 - Use browser snapshots/DOM inspection for structure and interaction, and take
   screenshots yourself for layout or visual checks. Exercise relevant clicks,
   filters, navigation, loading, empty, error, and populated states in proportion
@@ -162,18 +160,10 @@ machine-wide Playwright MCP server instead.
   instructions with an available in-app browser. In Codex CLI, an empty browser
   backend list means to use the registered Playwright MCP server.
 
-The registered server currently launches this command in headless isolated
-mode at a 1440x1000 viewport:
-
-```text
-~/.codex/browser-tools/playwright/node_modules/.bin/playwright-mcp
-```
-
-Its exact arguments and executable path are visible with `codex mcp list` and
-in `~/.codex/config.toml` under `[mcp_servers.playwright]`. If repair is ever
-required, use the latest stable `playwright` and `@playwright/mcp` packages,
-install Chromium into the same `~/.codex/browser-tools/playwright` tree, and
-re-register that absolute command with `codex mcp add playwright -- ...`.
+Its exact arguments and executable path are visible with `codex mcp list`. If
+repair is required, use the latest stable `playwright` and `@playwright/mcp`
+packages and register the resulting absolute command with
+`codex mcp add playwright -- ...`.
 
 ## Claude Code Setup
 

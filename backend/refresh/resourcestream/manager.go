@@ -230,6 +230,8 @@ type Manager struct {
 	nextID      uint64
 	buffers     map[string]*updateBuffer
 	sequences   map[string]uint64
+
+	jobPodOwnerHealSink *ingest.AsyncBundleSink
 }
 
 // NewManager wires informer handlers into a resource stream manager. ingestManager,
@@ -298,6 +300,9 @@ func NewManager(
 func (m *Manager) Stop() {
 	if m == nil {
 		return
+	}
+	if m.jobPodOwnerHealSink != nil {
+		m.jobPodOwnerHealSink.Stop()
 	}
 	m.customInformerMu.Lock()
 	defer m.customInformerMu.Unlock()

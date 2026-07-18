@@ -13,11 +13,12 @@ import type { ClusterViewType, NamespaceViewType, ViewType } from '@/types/navig
 export interface ViewDestination {
   viewType: ViewType;
   tab: NamespaceViewType | ClusterViewType;
+  destinationViewId?: string;
 }
 
 // Namespace-scoped resource kind → view destination
 const NAMESPACE_SCOPED_MAP: Record<string, ViewDestination> = {
-  pod: { viewType: 'namespace', tab: 'workloads' },
+  pod: { viewType: 'namespace', tab: 'workloads', destinationViewId: 'namespace-pods' },
   deployment: { viewType: 'namespace', tab: 'workloads' },
   statefulset: { viewType: 'namespace', tab: 'workloads' },
   daemonset: { viewType: 'namespace', tab: 'workloads' },

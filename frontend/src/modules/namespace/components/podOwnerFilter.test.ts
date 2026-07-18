@@ -57,7 +57,7 @@ describe('podOwnerFilter', () => {
     expect(podFiltersMatchWorkload(selected, deployment, true)).toBe(true);
 
     expect(applyPodWorkloadFilterRequest(selected, { type: 'clear' }, true)).toMatchObject({
-      namespaces: { mode: 'all' },
+      namespaces: { mode: 'some', values: ['team-a'] },
       queryFacets: { nodes: { mode: 'some', values: ['node-a'] } },
     });
   });

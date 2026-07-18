@@ -347,6 +347,7 @@ describe('GlobalViewClusters', () => {
       key: string;
       header?: React.ReactNode;
       render?: (row: Record<string, unknown>) => React.ReactNode;
+      sortValue?: (row: Record<string, unknown>) => string | number;
     }>;
     expect(columns.map(({ key }) => key)).toEqual([
       'name',
@@ -409,6 +410,8 @@ describe('GlobalViewClusters', () => {
     });
     expect(columns.find(({ key }) => key === 'cpu')?.render?.(rows[1])).toBe('—');
     expect(columns.find(({ key }) => key === 'memory')?.render?.(rows[1])).toBe('—');
+    expect(columns.find(({ key }) => key === 'cpu')?.sortValue?.(rows[0])).toBe(1200);
+    expect(columns.find(({ key }) => key === 'memory')?.sortValue?.(rows[0])).toBe(8192);
     const keyExtractor = (
       tableProps.gridTableProps as {
         keyExtractor: (row: Record<string, unknown>) => string;

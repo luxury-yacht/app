@@ -349,7 +349,7 @@ func (h *Handler) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 			}
 			f.Flush()
 		case <-heartbeat.C:
-			if time.Since(lastDelivery) > config.StreamHeartbeatTimeout {
+			if shouldRecordHeartbeatTimeout(opts.MatchNone, lastDelivery, time.Now()) {
 				if h.telemetry != nil {
 					h.telemetry.RecordStreamErrorForDomain(streamName, target, fmt.Errorf("containerlogsstream heartbeat timeout"))
 				}
@@ -377,6 +377,10 @@ func (h *Handler) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 			}
 		}
 	}
+}
+
+func shouldRecordHeartbeatTimeout(matchNone bool, lastDelivery, now time.Time) bool {
+	return !matchNone && now.Sub(lastDelivery) > config.StreamHeartbeatTimeout
 }
 
 func composeStreamWarnings(selectionWarnings []string, transportDropObserved bool) []string {

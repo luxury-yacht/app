@@ -148,8 +148,8 @@ func (n *NamespaceChangeNotifier) EventChanged() {
 	n.arm()
 }
 
-// MetricsChanged records a successful metrics collection. The collection
-// revision is compared at flush so duplicate observer deliveries stay silent.
+// MetricsChanged records a metrics collection attempt. The source revision is
+// compared at flush so duplicate observer deliveries stay silent.
 func (n *NamespaceChangeNotifier) MetricsChanged() {
 	if n == nil {
 		return

@@ -755,6 +755,7 @@ const FavSaveModal: React.FC<FavSaveModalProps> = ({
                   value={selectedView}
                   onChange={(val) => setSelectedView(val as string)}
                   placeholder="Select view..."
+                  disabled
                 />
               </div>
               {isNamespaceScope && (

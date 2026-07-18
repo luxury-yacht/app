@@ -106,8 +106,8 @@ export function useNamespaceGridTablePersistence<T extends ResourceGridTableRow>
   );
 
   const handleSortChange = useMemo(
-    () => (next: SortConfig) => {
-      setLocalSort(next);
+    () => (next: SortConfig | null) => {
+      setLocalSort(next ?? { key: '', direction: null });
       setPersistedSort(next);
     },
     [setPersistedSort]

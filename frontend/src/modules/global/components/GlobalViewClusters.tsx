@@ -16,6 +16,7 @@ import * as cf from '@shared/components/tables/columnFactories';
 import type { GridColumnDefinition } from '@shared/components/tables/GridTable';
 import { buildClusterScopedKey } from '@shared/components/tables/GridTable.utils';
 import { useGridTablePersistence } from '@shared/components/tables/persistence/useGridTablePersistence';
+import { parseCpuToMillicores, parseMemToMB } from '@utils/resourceCalculations';
 import React, { useCallback, useMemo } from 'react';
 import { useRefreshScopedDomainStates } from '@/core/refresh';
 import type {
@@ -152,7 +153,13 @@ const createClusterResourceColumn = (
     getVariant: () => 'compact',
     getAnimationKey: (row) => `cluster:${row.clusterId}:${type}`,
     sortable: true,
-    sortValue: (row) => (type === 'cpu' ? row.cpu : row.memory),
+    sortValue: (row) => {
+      if (!row.overview) {
+        return -1;
+      }
+      const usage = value(row.overview, 'usage');
+      return type === 'cpu' ? parseCpuToMillicores(usage) : parseMemToMB(usage);
+    },
   });
 
   return {

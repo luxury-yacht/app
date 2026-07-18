@@ -2066,22 +2066,6 @@ describe('refreshOrchestrator', () => {
     expect(resourceStreamMocks.start).toHaveBeenCalledWith(scope);
   });
 
-  it('streams a standalone-Pod object scope regardless of the active main view', async () => {
-    registerStreamingPodsDomain();
-    refreshOrchestrator.updateContext({
-      currentView: 'cluster',
-      activeClusterView: 'nodes',
-      selectedClusterId: 'cluster-a',
-      selectedClusterIds: ['cluster-a'],
-    });
-
-    const scope = buildClusterScope('cluster-a', 'object:team-a::v1:Pod:lonely');
-    refreshOrchestrator.setScopedDomainEnabled('pods', scope, true);
-    await Promise.resolve();
-
-    expect(resourceStreamMocks.start).toHaveBeenCalledWith(scope);
-  });
-
   it('streams a node-scoped pods window regardless of the active main view', async () => {
     registerStreamingPodsDomain();
     refreshOrchestrator.updateContext({

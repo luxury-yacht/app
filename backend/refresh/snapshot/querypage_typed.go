@@ -38,8 +38,12 @@ func querypageSchemaFromAdapter[T any](adapter typedTableQueryAdapter[T], sortFi
 		"namespace": func(r T) string { return strings.ToLower(strings.TrimSpace(adapter.Namespace(r))) },
 	}
 	multiFacets := map[string]func(T) []string{}
+	facetNormalizers := map[string]func(string) string{}
 	for _, queryFacet := range adapter.Facets {
 		facet := queryFacet
+		facetNormalizers[facet.Descriptor.Key] = func(value string) string {
+			return strings.ToLower(strings.TrimSpace(value))
+		}
 		if facet.Values != nil {
 			multiFacets[facet.Descriptor.Key] = func(r T) []string {
 				return lowerTrimAll(facet.Values(r))
@@ -51,10 +55,11 @@ func querypageSchemaFromAdapter[T any](adapter typedTableQueryAdapter[T], sortFi
 		}
 	}
 	return querypage.Schema[T]{
-		UID:         adapter.Key,
-		SortKeys:    sortKeys,
-		Facets:      facets,
-		MultiFacets: multiFacets,
+		UID:              adapter.Key,
+		SortKeys:         sortKeys,
+		Facets:           facets,
+		MultiFacets:      multiFacets,
+		FacetNormalizers: facetNormalizers,
 		// Join with NUL: the live search is "any SearchText element contains the
 		// needle"; a NUL separator makes a single Contains equivalent because no real
 		// needle contains NUL, so a match can never span the boundary.

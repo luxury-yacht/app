@@ -31,6 +31,7 @@ import (
 	"github.com/luxury-yacht/app/backend/kind/objectmapnode"
 	"github.com/luxury-yacht/app/backend/objectcatalog"
 	"github.com/luxury-yacht/app/backend/refresh/ingest"
+	"github.com/luxury-yacht/app/backend/resourcemodel"
 	"github.com/luxury-yacht/app/backend/resources/cronjob"
 	"github.com/luxury-yacht/app/backend/resources/daemonset"
 	"github.com/luxury-yacht/app/backend/resources/deployment"
@@ -62,26 +63,34 @@ var (
 // retained as the Job bundle's aggregate half so Pod projection can resolve
 // Job->CronJob without a second typed Job cache.
 type JobControllerOwner struct {
-	Namespace  string
-	JobName    string
-	APIVersion string
-	Kind       string
-	Name       string
+	Job        resourcemodel.ResourceRef
+	Controller resourcemodel.ResourceRef
 }
 
-func projectJobControllerOwner(job *batchv1.Job) JobControllerOwner {
+func projectJobControllerOwner(meta ClusterMeta, job *batchv1.Job) JobControllerOwner {
 	if job == nil {
 		return JobControllerOwner{}
 	}
+	result := JobControllerOwner{Job: resourcemodel.NewResourceRef(
+		meta.ClusterID,
+		jobres.Identity.Group, jobres.Identity.Version, jobres.Identity.Kind, jobres.Identity.Resource,
+		job.Namespace, job.Name, string(job.UID),
+	)}
 	for _, owner := range job.OwnerReferences {
 		if owner.Controller != nil && *owner.Controller && owner.Kind == cronjob.Identity.Kind && owner.Name != "" {
-			return JobControllerOwner{
-				Namespace: job.Namespace, JobName: job.Name,
-				APIVersion: owner.APIVersion, Kind: owner.Kind, Name: owner.Name,
+			gv, err := schema.ParseGroupVersion(owner.APIVersion)
+			if err != nil {
+				return result
 			}
+			result.Controller = resourcemodel.NewResourceRef(
+				meta.ClusterID,
+				gv.Group, gv.Version, owner.Kind, cronjob.Identity.Resource,
+				job.Namespace, owner.Name, string(owner.UID),
+			)
+			return result
 		}
 	}
-	return JobControllerOwner{Namespace: job.Namespace, JobName: job.Name}
+	return result
 }
 
 // workloadProjectionError is the typed guard error a workload projector returns when the
@@ -172,7 +181,7 @@ func NewJobIngestProjector(meta ClusterMeta) ingest.ProjectFunc {
 		var metaObj metav1.Object = job
 		return ingest.Bundle{
 			Table:     summary,
-			Aggregate: projectJobControllerOwner(job),
+			Aggregate: projectJobControllerOwner(meta, job),
 			Catalog:   catalogProject(metaObj),
 			ObjectMap: nodeProject(meta.ClusterID, metaObj),
 		}, nil

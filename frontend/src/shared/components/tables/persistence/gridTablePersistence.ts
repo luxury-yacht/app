@@ -8,6 +8,7 @@
 import {
   ALL_MULTISELECT_FILTER,
   type MultiSelectFilterSelection,
+  migrateLegacyExactMultiSelectFilterSelection,
   migrateLegacyMultiSelectFilterSelection,
   normalizeMultiSelectFilterSelection,
 } from '@shared/components/dropdowns/multiSelectFilterSelection';
@@ -186,7 +187,7 @@ const migratePersistedFilters = (value: unknown): GridTableFilterState | undefin
     search: typeof legacy.search === 'string' ? legacy.search : '',
     kinds: migrateLegacyMultiSelectFilterSelection(legacy.kinds),
     namespaces: migrateLegacyMultiSelectFilterSelection(legacy.namespaces),
-    clusters: migrateLegacyMultiSelectFilterSelection(legacy.clusters),
+    clusters: migrateLegacyExactMultiSelectFilterSelection(legacy.clusters),
     queryFacets: migratePersistedQueryFacets(legacy.queryFacets),
     caseSensitive: legacy.caseSensitive === true,
     includeMetadata: legacy.includeMetadata === true,

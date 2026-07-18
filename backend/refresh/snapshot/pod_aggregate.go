@@ -20,6 +20,7 @@ import (
 	replicasetpkg "github.com/luxury-yacht/app/backend/resources/replicaset"
 	statefulsetpkg "github.com/luxury-yacht/app/backend/resources/statefulset"
 	corev1 "k8s.io/api/core/v1"
+	"k8s.io/apimachinery/pkg/runtime/schema"
 	appslisters "k8s.io/client-go/listers/apps/v1"
 )
 
@@ -137,7 +138,10 @@ func jobOwnerLookupAdapter(lookup func(namespace, jobName string) (JobController
 	}
 	return func(namespace, jobName string) (string, string, string, bool) {
 		owner, ok := lookup(namespace, jobName)
-		return owner.APIVersion, owner.Kind, owner.Name, ok
+		if !ok || owner.Controller.Kind == "" || owner.Controller.Name == "" {
+			return "", "", "", false
+		}
+		return schema.GroupVersion{Group: owner.Controller.Group, Version: owner.Controller.Version}.String(), owner.Controller.Kind, owner.Controller.Name, true
 	}
 }
 

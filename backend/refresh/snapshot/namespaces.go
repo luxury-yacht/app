@@ -574,6 +574,9 @@ func namespaceUtilizationRollups(provider metrics.Provider) (map[string]namespac
 		return rollups, info, NamespaceSignalUnavailable, ""
 	}
 	if sample.Metadata.CollectedAt.IsZero() {
+		if sample.Metadata.FailureCount > 0 {
+			return rollups, info, NamespaceSignalUnavailable, metricRevisionFromMetadata(sample.Metadata)
+		}
 		return rollups, info, NamespaceSignalLoading, ""
 	}
 	for key, usage := range sample.PodUsage {

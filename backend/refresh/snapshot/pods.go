@@ -217,24 +217,36 @@ func podOwnerQueryFacet() typedTableQueryFacet[PodSummary] {
 			Searchable:  true,
 			BulkActions: true,
 		},
-		Value: podOwnerFacetValue,
-		Label: podOwnerFacetLabel,
+		Values: podOwnerFacetValues,
+		Label:  podOwnerFacetLabel,
 	}
 }
 
-// Pod Owner facet values carry a complete object identity in a stable JSON
-// tuple: [scope, kind, name, clusterId, group, version, namespace]. A standalone
+// Pod Owner facet values carry complete object identities in stable JSON
+// tuples: [scope, kind, name, clusterId, group, version, namespace]. A standalone
 // Pod uses its own identity so selecting that row in Workloads isolates exactly
 // that Pod instead of every ownerless Pod in the namespace.
-func podOwnerFacetValue(pod PodSummary) string {
+func podOwnerFacetValues(pod PodSummary) []string {
 	if strings.EqualFold(strings.TrimSpace(pod.OwnerKind), "none") || strings.TrimSpace(pod.OwnerName) == "" {
-		return encodePodOwnerFacetValue("pod", podres.Identity.Kind, pod.Name, pod.ClusterID, podres.Identity.Group, podres.Identity.Version, pod.Namespace)
+		return []string{encodePodOwnerFacetValue("pod", podres.Identity.Kind, pod.Name, pod.ClusterID, podres.Identity.Group, podres.Identity.Version, pod.Namespace)}
 	}
 	gv, err := schema.ParseGroupVersion(strings.TrimSpace(pod.OwnerAPIVersion))
 	if err != nil || strings.TrimSpace(pod.OwnerKind) == "" {
-		return ""
+		return nil
 	}
-	return encodePodOwnerFacetValue("owner", pod.OwnerKind, pod.OwnerName, pod.ClusterID, gv.Group, gv.Version, pod.Namespace)
+	values := []string{encodePodOwnerFacetValue("owner", pod.OwnerKind, pod.OwnerName, pod.ClusterID, gv.Group, gv.Version, pod.Namespace)}
+	if pod.DirectOwnerKind == "" || pod.DirectOwnerName == "" {
+		return values
+	}
+	directGV, err := schema.ParseGroupVersion(strings.TrimSpace(pod.DirectOwnerAPIVersion))
+	if err != nil {
+		return values
+	}
+	direct := encodePodOwnerFacetValue("owner", pod.DirectOwnerKind, pod.DirectOwnerName, pod.ClusterID, directGV.Group, directGV.Version, pod.Namespace)
+	if direct != values[0] {
+		values = append(values, direct)
+	}
+	return values
 }
 
 func encodePodOwnerFacetValue(scope, kind, name, clusterID, group, version, namespace string) string {

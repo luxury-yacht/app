@@ -205,6 +205,23 @@ func TestQueryAroundMissingAndFilteredAnchor(t *testing.T) {
 	}
 }
 
+func TestQueryAroundMatchNoneNeverFindsAnchor(t *testing.T) {
+	s := storeOfN(t, 10)
+	q := nameQuery(20)
+	q.MatchNone = true
+
+	page, outcome, err := s.QueryAround(q, "u0003")
+	if err != nil {
+		t.Fatal(err)
+	}
+	if outcome.Found || !outcome.Filtered || outcome.Rank != -1 {
+		t.Fatalf("match-none anchor outcome = %+v, want filtered rank -1", outcome)
+	}
+	if len(page.Rows) != 0 || page.Total != 0 {
+		t.Fatalf("match-none page = %d rows total %d, want empty", len(page.Rows), page.Total)
+	}
+}
+
 func TestQueryAtServesOffsetPageAndClamps(t *testing.T) {
 	s := storeOfN(t, 95)
 	q := nameQuery(20)

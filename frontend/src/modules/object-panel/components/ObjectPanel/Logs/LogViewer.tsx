@@ -11,8 +11,6 @@ import ClusterDataPausedState from '@shared/components/ClusterDataPausedState';
 import { Dropdown, type DropdownOption } from '@shared/components/dropdowns/Dropdown';
 import {
   ALL_MULTISELECT_FILTER,
-  filterSelectionFromDropdownValues,
-  filterSelectionToDropdownValues,
   filterSelectionValues,
   isNarrowingFilterSelection,
   pruneFilterSelectionToOptions,
@@ -74,6 +72,12 @@ import { setContainerLogsStreamScopeParams } from './containerLogsStreamScopePar
 import { useLogScrollRestoration } from './hooks/useLogScrollRestoration';
 import { useTerminalTheme } from './hooks/useTerminalTheme';
 import { buildCsv } from './logExport';
+import {
+  logFilterBackendValues,
+  logFilterSelectionFromDropdownValues,
+  logFilterSelectionMatchesNone,
+  logFilterSelectionToDropdownValues,
+} from './logFilterSelection';
 import { buildLogSearchRegex, isValidRegexPattern } from './logSearch';
 import {
   getLogViewerPrefs,
@@ -527,10 +531,10 @@ const LogViewerInner: React.FC<LogViewerProps> = ({
       container: '',
       includeInit: true,
       includeEphemeral: true,
-      selectedFilters: selectedFilterValues,
-      matchNone: selectedFilters.mode === 'none',
+      selectedFilters: logFilterBackendValues(selectedFilters),
+      matchNone: logFilterSelectionMatchesNone(selectedFilters),
     };
-  }, [selectedFilterValues, selectedFilters.mode]);
+  }, [selectedFilters]);
 
   // Reset state when scope changes - do this during render, not in an effect,
   // to avoid causing a re-render that would interrupt streaming startup
@@ -2019,11 +2023,11 @@ const LogViewerInner: React.FC<LogViewerProps> = ({
                 <div className="logs-viewer-control-group">
                   <Dropdown
                     options={selectorOptions}
-                    value={filterSelectionToDropdownValues(selectedFilters, selectorOptions)}
+                    value={logFilterSelectionToDropdownValues(selectedFilters, selectorOptions)}
                     onChange={(value) =>
                       dispatch({
                         type: 'SET_SELECTED_FILTERS',
-                        payload: filterSelectionFromDropdownValues(
+                        payload: logFilterSelectionFromDropdownValues(
                           Array.isArray(value) ? value : value ? [value] : [],
                           selectorOptions
                         ),

@@ -83,10 +83,8 @@ func TestPollerRefreshSuccess(t *testing.T) {
 	require.Empty(t, summary.Metrics.LastError)
 }
 
-// A successful collection must notify the observer with the fresh metadata (the
-// metric doorbell rides this hook); a failed collection must NOT notify, because
-// failures do not advance the metric revision and a doorbell would only trigger
-// refetches that 304.
+// Every collection attempt must notify the observer because both fresh samples
+// and failure metadata are user-visible and advance the metric source revision.
 func TestPollerNotifiesObserverAfterSuccessfulCollection(t *testing.T) {
 	ctx := context.Background()
 
@@ -124,12 +122,13 @@ func TestPollerNotifiesObserverAfterSuccessfulCollection(t *testing.T) {
 	require.False(t, notified[0].CollectedAt.IsZero())
 	require.Equal(t, uint64(1), notified[0].SuccessCount)
 
-	// A failing collection advances failure metadata but must not notify.
+	// A failing collection advances failure metadata and notifies.
 	poller.podLister = func(context.Context, *metricsclient.Clientset) (*metricsv1beta1.PodMetricsList, error) {
 		return nil, errors.New("pods down")
 	}
 	require.Error(t, poller.refresh(ctx))
-	require.Len(t, notified, 1)
+	require.Len(t, notified, 2)
+	require.Equal(t, uint64(1), notified[1].FailureCount)
 }
 
 // The demand wrapper must pass the observer through to the inner poller so the

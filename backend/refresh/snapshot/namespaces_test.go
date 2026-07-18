@@ -228,6 +228,12 @@ func TestNamespaceBuilderAggregateStatesDistinguishLoadingAndUnavailable(t *test
 	require.Equal(t, NamespaceSignalLoading, warmingPayload.MetricsState)
 	require.Equal(t, NamespaceSignalLoading, warmingPayload.Namespaces[0].QuotaPressureState)
 
+	builder.metrics = fakeMetricsProvider{metadata: metrics.Metadata{FailureCount: 1, LastError: "metrics request failed"}}
+	failed, err := builder.Build(context.Background(), "")
+	require.NoError(t, err)
+	failedPayload := failed.Payload.(NamespaceSnapshot)
+	require.Equal(t, NamespaceSignalUnavailable, failedPayload.MetricsState)
+
 	builder.metrics = fakeMetricsProvider{metadata: metrics.Metadata{Disabled: true, LastError: "metrics unavailable"}}
 	builder.ingest = quotaSource.withPermissionSkipped(ResourceQuotaGVR)
 	unavailable, err := builder.Build(context.Background(), "")

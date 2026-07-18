@@ -340,7 +340,7 @@ describe('NsViewWorkloads', () => {
       }
       onWorkloadFilterMismatch();
     });
-    expect(podsViewPropsRef.current?.workloadFilterRequest).toBeUndefined();
+    expect(podsViewPropsRef.current?.workloadFilterRequest).toEqual({ type: 'clear' });
     expect(gridTablePropsRef.current.getRowClassName?.(workload, 0)).not.toContain(
       'gridtable-row--selected'
     );

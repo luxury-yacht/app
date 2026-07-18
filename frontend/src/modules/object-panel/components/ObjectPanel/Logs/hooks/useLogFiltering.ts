@@ -12,6 +12,7 @@ import {
 import { useMemo } from 'react';
 import type { ContainerLogsEntry } from '@/core/refresh/types';
 import { stripAnsi } from '../ansi';
+import { logFilterSelectionMatchesNone } from '../logFilterSelection';
 import { buildLogSearchRegex } from '../logSearch';
 import type { ParsedLogEntry } from '../logViewerReducer';
 import { tryParseJSONObject } from '../parsedLogUtils';
@@ -99,7 +100,7 @@ export function useLogFiltering({
 
     let entries = orderedEntries;
 
-    if (selectedFilters.mode === 'none') {
+    if (logFilterSelectionMatchesNone(selectedFilters)) {
       return [] as ContainerLogsEntry[];
     }
 

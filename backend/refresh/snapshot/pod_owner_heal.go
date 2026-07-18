@@ -26,8 +26,8 @@ import (
 	"github.com/luxury-yacht/app/backend/kind/streamrows"
 	"github.com/luxury-yacht/app/backend/refresh/ingest"
 	deploymentpkg "github.com/luxury-yacht/app/backend/resources/deployment"
-	jobpkg "github.com/luxury-yacht/app/backend/resources/job"
 	replicasetpkg "github.com/luxury-yacht/app/backend/resources/replicaset"
+	"k8s.io/apimachinery/pkg/runtime/schema"
 )
 
 // PodOwnerKeyIndexName is the pod bundle secondary index keyed by the row's
@@ -87,21 +87,22 @@ func HealPodBundleReplicaSetOwner(
 // available, replacing the resolved owner with the Job's actual CronJob parent.
 // The direct Job identity remains intact so both Job and CronJob scopes match.
 func HealPodBundleJobOwner(bundle ingest.Bundle, owner JobControllerOwner) (ingest.Bundle, bool) {
-	if owner.Namespace == "" || owner.JobName == "" || owner.APIVersion == "" || owner.Kind == "" || owner.Name == "" {
+	if !completeAttentionRef(owner.Job) || !completeAttentionRef(owner.Controller) {
 		return bundle, false
 	}
 	table, ok := bundle.Table.(PodSummary)
-	if !ok || table.Namespace != owner.Namespace ||
-		table.DirectOwnerKind != jobpkg.Identity.Kind || table.DirectOwnerName != owner.JobName {
+	if !ok || table.ClusterID != owner.Job.ClusterID || table.Namespace != owner.Job.Namespace ||
+		table.DirectOwnerKind != owner.Job.Kind || table.DirectOwnerName != owner.Job.Name {
 		return bundle, false
 	}
-	if table.OwnerAPIVersion == owner.APIVersion && table.OwnerKind == owner.Kind && table.OwnerName == owner.Name {
+	controllerAPIVersion := schema.GroupVersion{Group: owner.Controller.Group, Version: owner.Controller.Version}.String()
+	if table.OwnerAPIVersion == controllerAPIVersion && table.OwnerKind == owner.Controller.Kind && table.OwnerName == owner.Controller.Name {
 		return bundle, false
 	}
 
-	table.OwnerAPIVersion = owner.APIVersion
-	table.OwnerKind = owner.Kind
-	table.OwnerName = owner.Name
+	table.OwnerAPIVersion = controllerAPIVersion
+	table.OwnerKind = owner.Controller.Kind
+	table.OwnerName = owner.Controller.Name
 	bundle.Table = table
 	return bundle, true
 }

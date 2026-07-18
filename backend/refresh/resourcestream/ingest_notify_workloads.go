@@ -125,7 +125,11 @@ func (m *Manager) registerWorkloadIngestNotify(ingestManager *ingest.IngestManag
 		ingestManager.AddCatalogSink(gvr, workloadNotifyCatalogSink{manager: m, identity: identity})
 	}
 	if m.canListWatch(jobres.Identity.Group, jobres.Identity.Resource) {
-		ingestManager.AddBundleSink(snapshot.JobGVR, jobPodOwnerHealBundleSink{manager: m})
+		m.jobPodOwnerHealSink = ingest.NewAsyncBundleSink(jobPodOwnerHealBundleSink{manager: m})
+		if !ingestManager.AddBundleSink(snapshot.JobGVR, m.jobPodOwnerHealSink) {
+			m.jobPodOwnerHealSink.Stop()
+			m.jobPodOwnerHealSink = nil
+		}
 	}
 }
 
@@ -139,13 +143,13 @@ type jobPodOwnerHealBundleSink struct {
 
 func (s jobPodOwnerHealBundleSink) UpsertBundle(bundle ingest.Bundle) {
 	owner, ok := bundle.Aggregate.(snapshot.JobControllerOwner)
-	if !ok || s.manager == nil || s.manager.podIngest == nil || owner.Kind == "" || owner.Name == "" {
+	if !ok || s.manager == nil || s.manager.podIngest == nil || owner.Controller.Kind == "" || owner.Controller.Name == "" {
 		return
 	}
 	s.manager.podIngest.RewriteBundlesByIndex(
 		podGVR,
 		snapshot.PodOwnerKeyIndexName,
-		[]string{snapshot.WorkloadOwnerKey(jobres.Identity.Kind, owner.Namespace, owner.JobName)},
+		[]string{snapshot.WorkloadOwnerKey(owner.Job.Kind, owner.Job.Namespace, owner.Job.Name)},
 		func(podBundle ingest.Bundle) (ingest.Bundle, bool) {
 			return snapshot.HealPodBundleJobOwner(podBundle, owner)
 		},

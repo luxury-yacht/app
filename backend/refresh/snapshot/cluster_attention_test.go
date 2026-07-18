@@ -1,12 +1,24 @@
 package snapshot
 
 import (
+	"os"
+	"regexp"
 	"testing"
 	"time"
 
 	"github.com/luxury-yacht/app/backend/resourcemodel"
 	"github.com/stretchr/testify/require"
 )
+
+func TestFrontendAttentionFindingTypeConstantsBelongToBackendCatalog(t *testing.T) {
+	source, err := os.ReadFile("../../../frontend/src/modules/cluster/clusterAttentionFindingTypes.ts")
+	require.NoError(t, err)
+	matches := regexp.MustCompile(`:\s*'([^']+)'`).FindAllSubmatch(source, -1)
+	require.NotEmpty(t, matches)
+	for _, match := range matches {
+		require.True(t, IsAttentionFindingType(string(match[1])), "frontend finding type %q is absent from backend catalog", match[1])
+	}
+}
 
 func attentionTestRef(kind, namespace, name string) resourcemodel.ResourceRef {
 	group := ""
@@ -167,6 +179,28 @@ func TestEvaluateAttentionSourceProjectsStableCauseTypes(t *testing.T) {
 		{Type: "error-presentation", Label: "Error status", Message: "CrashLoopBackOff", Severity: AttentionSeverityError},
 		{Type: "restarts", Label: "Restarts", Message: "4 restarts", Severity: AttentionSeverityWarning},
 	}, evaluation.Finding.Causes)
+}
+
+func TestEvaluateYoungErroredWorkloadDoesNotHideBehindReplicaGrace(t *testing.T) {
+	now := time.Date(2026, time.July, 16, 12, 0, 0, 0, time.UTC)
+	createdAt := now.Add(-time.Minute)
+	record := attentionSourceRecord{
+		Ref:                attentionTestRef("Deployment", "payments", "checkout"),
+		Source:             attentionSourceWorkload,
+		Status:             "Failed",
+		StatusPresentation: "error",
+		StatusReason:       "ProgressDeadlineExceeded",
+		Ready:              "0/3",
+		AgeTimestamp:       createdAt.UnixMilli(),
+	}
+
+	evaluation := evaluateAttentionSource(record, now)
+	require.NotNil(t, evaluation.Finding)
+	require.Equal(t, AttentionSeverityError, evaluation.Finding.Severity)
+	require.Equal(t, []AttentionCause{{
+		Type: "error-presentation", Label: "Error status", Message: "ProgressDeadlineExceeded", Severity: AttentionSeverityError,
+	}}, evaluation.Finding.Causes)
+	require.Equal(t, createdAt.Add(attentionWarningGrace), evaluation.NextEvaluation)
 }
 
 func TestEvaluateAttentionSourcePublishesTransientPodWarningsAsInfoUntilGracePeriod(t *testing.T) {

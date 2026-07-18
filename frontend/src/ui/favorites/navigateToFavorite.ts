@@ -65,9 +65,12 @@ export function navigateToFavorite(
     const alreadyActive =
       favoriteClusterId && selectedClusterId ? selectedClusterId === favoriteClusterId : false;
     const alreadyOpen = selectedKubeconfigs.includes(clusterSelection);
-    if (!alreadyOpen) {
+    if (alreadyActive) {
+      // The same logical cluster can be open under a different kubeconfig path.
+      // Cluster identity wins over the persisted path.
+    } else if (!alreadyOpen) {
       void openKubeconfig(clusterSelection);
-    } else if (!alreadyActive) {
+    } else {
       setActiveKubeconfig(clusterSelection);
     }
   }

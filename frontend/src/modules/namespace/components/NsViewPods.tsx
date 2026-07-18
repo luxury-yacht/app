@@ -453,6 +453,7 @@ const NsViewPods: React.FC<PodsViewProps> = React.memo(
       queryPayload,
     } = useQueryBackedNamespaceResourceGridTable<PodSnapshotPayload, PodSnapshotEntry>({
       queryTableMode: 'Query Backed Dynamic',
+      enabled: !collapsed,
       clusterId: queryClusterId,
       domain: 'pods',
       excludedQueryFacetKeys: RESOURCE_STATUS_QUERY_FACET_KEYS,
@@ -477,24 +478,32 @@ const NsViewPods: React.FC<PodsViewProps> = React.memo(
     const setFilters = resolvedGridTableProps.filters?.onChange;
     const appliedWorkloadFilterRequestRef = useRef<PodWorkloadFilterRequest | undefined>(undefined);
     useEffect(() => {
-      if (
-        !workloadFilterRequest ||
-        appliedWorkloadFilterRequestRef.current === workloadFilterRequest ||
-        !currentFilters ||
-        !setFilters
-      ) {
+      if (!currentFilters || !setFilters) {
         return;
       }
-      appliedWorkloadFilterRequestRef.current = workloadFilterRequest;
+      if (workloadFilterRequest) {
+        if (appliedWorkloadFilterRequestRef.current === workloadFilterRequest) {
+          return;
+        }
+        appliedWorkloadFilterRequestRef.current = workloadFilterRequest;
+      } else if (!onWorkloadFilterMismatch) {
+        return;
+      }
       const next = applyPodWorkloadFilterRequest(
         currentFilters,
-        workloadFilterRequest,
+        workloadFilterRequest ?? { type: 'clear' },
         showNamespaceFilter
       );
       if (next !== currentFilters) {
         setFilters(next);
       }
-    }, [currentFilters, setFilters, showNamespaceFilter, workloadFilterRequest]);
+    }, [
+      currentFilters,
+      onWorkloadFilterMismatch,
+      setFilters,
+      showNamespaceFilter,
+      workloadFilterRequest,
+    ]);
 
     const gridTableProps = useMemo(() => {
       const filters = resolvedGridTableProps.filters;

@@ -222,6 +222,16 @@ func TestMaintainedDirectAppliesProviderFacetsAndPublishesStructuralOptions(t *t
 	if got := testFacetOptionValues(resolved.Envelope.FacetValues, "statuses"); !equalStringSlices(got, wantOptions) {
 		t.Fatalf("maintained status options = %v, want %v", got, wantOptions)
 	}
+
+	query.Request.Facets = map[string][]string{"statuses": {"notready"}}
+	caseFolded := resolveMaintainedDirect(
+		store, query, map[string]bool{"Node": true}, "", nodeTableQueryAdapter(),
+		nodesQuerypageSchema(), nodeQueryCapabilities(), 100, "nodes",
+		func(NodeSummary) string { return "Node" }, func() []NodeSummary { return nil }, nil,
+	)
+	if len(caseFolded.Rows) != 1 || caseFolded.Rows[0].Status != "NotReady" {
+		t.Fatalf("case-folded maintained facet rows = %#v, want NotReady only", caseFolded.Rows)
+	}
 }
 
 // Metric-sort anchor regression (plan P3): metric-joined domains are per-Build

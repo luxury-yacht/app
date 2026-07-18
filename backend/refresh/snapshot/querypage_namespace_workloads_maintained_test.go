@@ -151,6 +151,7 @@ func TestNamespaceWorkloadsMaintainedAppliesProviderFacetAndKeepsOptionsStable(t
 		require.Equal(t, selected, row.Status)
 	}
 	require.Equal(t, options, testFacetOptionValues(filteredPayload.FacetValues, "statuses"))
+
 }
 
 // TestNamespaceWorkloadsMaintainedOwnedPodNeverStandalone pins the workloads-view rule: the view

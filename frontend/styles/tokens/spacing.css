@@ -18,4 +18,8 @@
   /* Page-size dropdowns (pagination footers and Settings ▸ Display ▸ Tables)
      share this width so the same option list renders the same everywhere. */
   --page-size-dropdown-width: 4.75rem;
+  --modal-width-md: 32.5rem;
+  --modal-height-lg: 40rem;
+  --modal-viewport-gutter: var(--spacing-xxl);
+  --control-height-md: 2.25rem;
 }

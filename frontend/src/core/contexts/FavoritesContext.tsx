@@ -73,14 +73,27 @@ interface FavoritesProviderProps {
 
 export const FavoritesProvider: React.FC<FavoritesProviderProps> = ({ children }) => {
   const [favorites, setFavorites] = useState<Favorite[]>([]);
-  const [pendingFavorite, setPendingFavorite] = useState<Favorite | null>(null);
+  const [pendingFavorite, setPendingFavoriteState] = useState<Favorite | null>(null);
+  const navigationAppliedRef = useRef(false);
+  const setPendingFavorite = useCallback((favorite: Favorite | null) => {
+    navigationAppliedRef.current = false;
+    setPendingFavoriteState(favorite);
+  }, []);
   const { selectedKubeconfig, selectedClusterId } = useKubeconfig();
   const { isClusterReady } = useClusterLifecycle();
   const viewState = useViewState();
   const namespaceCtx = useNamespace();
   const namespaceReady = namespaceCtx.namespaceReady;
-  // Track whether navigation state has been applied for the current pending favorite.
-  const navigationAppliedRef = useRef(false);
+
+  useEffect(() => {
+    if (!pendingFavorite) {
+      return;
+    }
+    const timer = window.setTimeout(() => {
+      setPendingFavoriteState((current) => (current === pendingFavorite ? null : current));
+    }, 15_000);
+    return () => window.clearTimeout(timer);
+  }, [pendingFavorite]);
 
   // Hydrate the favorites cache from the backend on mount.
   useEffect(() => {
@@ -222,6 +235,7 @@ export const FavoritesProvider: React.FC<FavoritesProviderProps> = ({ children }
       handleDeleteFavorite,
       handleReorderFavorites,
       pendingFavorite,
+      setPendingFavorite,
     ]
   );
 

@@ -156,6 +156,17 @@ func TestLoadFavoritesFileResetsLegacyFilterSelections(t *testing.T) {
 	require.Empty(t, state.Favorites)
 }
 
+func TestLoadFavoritesFileRejectsFutureSchema(t *testing.T) {
+	setTestConfigEnv(t)
+	app := newTestAppWithDefaults(t)
+	path, err := app.getFavoritesFilePath()
+	require.NoError(t, err)
+	require.NoError(t, os.WriteFile(path, []byte(`{"schemaVersion":999,"favorites":[]}`), 0o644))
+
+	_, err = app.loadFavoritesFile()
+	require.ErrorContains(t, err, "newer than supported")
+}
+
 func TestAppFavoritesOrdering(t *testing.T) {
 	setTestConfigEnv(t)
 	app := newTestAppWithDefaults(t)

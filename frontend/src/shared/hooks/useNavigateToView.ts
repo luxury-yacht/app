@@ -83,7 +83,8 @@ export function useNavigateToView(): NavigateToViewResult {
       if (focusRequest) {
         const request = {
           ...focusRequest,
-          destinationViewId: `${destination.viewType}-${destination.tab}`,
+          destinationViewId:
+            destination.destinationViewId ?? `${destination.viewType}-${destination.tab}`,
         };
         setPendingFocusRequest(request);
         eventBus.emit('gridtable:focus-request', request);

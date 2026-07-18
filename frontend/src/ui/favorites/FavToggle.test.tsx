@@ -535,4 +535,68 @@ describe('useFavToggle', () => {
     expect(paneSetters.pods.visibility).toHaveBeenCalledWith({ cpu: false });
     expect(mockSetPendingFavorite).toHaveBeenCalledWith(null);
   });
+
+  it('clears a pending grouped favorite that is missing a required saved pane', async () => {
+    mockPendingFavorite = makeFavorite({
+      panes: {
+        workloads: {
+          filters: {
+            search: '',
+            kinds: { mode: 'all' },
+            namespaces: { mode: 'all' },
+            clusters: { mode: 'all' },
+            caseSensitive: false,
+            includeMetadata: false,
+          },
+          tableState: { sortColumn: 'name', sortDirection: 'asc', columnVisibility: {} },
+        },
+      },
+    });
+
+    await act(async () => {
+      root.render(<GroupedWrapper />);
+      await Promise.resolve();
+    });
+
+    expect(mockSetPendingFavorite).toHaveBeenCalledWith(null);
+    expect(paneSetters.workloads.filters).not.toHaveBeenCalled();
+    expect(paneSetters.pods.filters).not.toHaveBeenCalled();
+  });
+
+  it('restores an explicitly unsorted pane', async () => {
+    mockPendingFavorite = makeFavorite({
+      panes: {
+        workloads: {
+          filters: {
+            search: '',
+            kinds: { mode: 'all' },
+            namespaces: { mode: 'all' },
+            clusters: { mode: 'all' },
+            caseSensitive: false,
+            includeMetadata: false,
+          },
+          tableState: { sortColumn: '', sortDirection: 'asc', columnVisibility: {} },
+        },
+        pods: {
+          filters: {
+            search: '',
+            kinds: { mode: 'all' },
+            namespaces: { mode: 'all' },
+            clusters: { mode: 'all' },
+            caseSensitive: false,
+            includeMetadata: false,
+          },
+          tableState: { sortColumn: '', sortDirection: 'asc', columnVisibility: {} },
+        },
+      },
+    });
+
+    await act(async () => {
+      root.render(<GroupedWrapper />);
+      await Promise.resolve();
+    });
+
+    expect(paneSetters.workloads.sort).toHaveBeenCalledWith(null);
+    expect(paneSetters.pods.sort).toHaveBeenCalledWith(null);
+  });
 });

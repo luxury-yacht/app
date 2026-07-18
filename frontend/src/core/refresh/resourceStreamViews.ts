@@ -48,7 +48,7 @@ export const isResourceStreamDomain = (
 // so they remain active independently of the broad namespace-table view gate.
 const isFocusedPodsScope = (scope?: string): boolean => {
   const base = stripClusterScope(scope);
-  return base.startsWith('workload:') || base.startsWith('object:') || base.startsWith('node:');
+  return base.startsWith('workload:') || base.startsWith('node:');
 };
 
 export const isResourceStreamViewActive = (

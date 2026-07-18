@@ -8,7 +8,7 @@
 import { ALL_NAMESPACES_SCOPE } from '@modules/namespace/constants';
 import { CollapseIcon, ExpandIcon } from '@shared/components/icons/SharedIcons';
 import type ConfirmationModal from '@shared/components/modals/ConfirmationModal';
-import type { GridTableProps } from '@shared/components/tables/GridTable';
+import type { GridTableFilterState, GridTableProps } from '@shared/components/tables/GridTable';
 import { getTextContent } from '@shared/components/tables/GridTable.utils';
 import type React from 'react';
 import { act } from 'react';
@@ -45,7 +45,9 @@ const {
   useUserPermissionsMock,
   queryNamespacesPermissionsMock,
   requestRefreshDomainStateMock,
+  scopedLifecycleMock,
   setFiltersMock,
+  persistedFiltersRef,
   runObjectActionMock,
   errorHandlerMock,
 } = vi.hoisted(() => ({
@@ -62,7 +64,18 @@ const {
   useUserPermissionsMock: vi.fn(),
   queryNamespacesPermissionsMock: vi.fn(),
   requestRefreshDomainStateMock: vi.fn(),
+  scopedLifecycleMock: vi.fn(),
   setFiltersMock: vi.fn(),
+  persistedFiltersRef: {
+    current: {
+      search: '',
+      kinds: { mode: 'all' },
+      namespaces: { mode: 'all' },
+      clusters: { mode: 'all' },
+      caseSensitive: false,
+      includeMetadata: false,
+    } as GridTableFilterState,
+  },
   runObjectActionMock: vi.fn().mockResolvedValue(undefined),
   errorHandlerMock: { handle: vi.fn() },
 }));
@@ -183,13 +196,7 @@ vi.mock('@modules/namespace/hooks/useNamespaceGridTablePersistence', () => {
       },
       columnVisibility: null,
       setColumnVisibility: vi.fn(),
-      filters: {
-        search: '',
-        kinds: [],
-        namespaces: [],
-        caseSensitive: false,
-        includeMetadata: false,
-      },
+      filters: persistedFiltersRef.current,
       setFilters: setFiltersMock,
       pageSize: null,
       setPageSize: vi.fn(),
@@ -216,13 +223,7 @@ vi.mock('@shared/components/tables/persistence/useGridTablePersistence', () => {
       },
       columnVisibility: null,
       setColumnVisibility: vi.fn(),
-      filters: {
-        search: '',
-        kinds: [],
-        namespaces: [],
-        caseSensitive: false,
-        includeMetadata: false,
-      },
+      filters: persistedFiltersRef.current,
       setFilters: setFiltersMock,
       pageSize: null,
       setPageSize: vi.fn(),
@@ -253,7 +254,7 @@ vi.mock('@shared/components/modals/ConfirmationModal', () => ({
 
 vi.mock('@/core/data-access', () => ({
   requestRefreshDomainState: (...args: unknown[]) => requestRefreshDomainStateMock(...(args as [])),
-  useScopedRefreshDomainLifecycle: vi.fn(),
+  useScopedRefreshDomainLifecycle: (...args: unknown[]) => scopedLifecycleMock(...args),
 }));
 
 vi.mock('@/core/refresh', () => ({
@@ -344,7 +345,16 @@ describe('NsViewPods', () => {
     runObjectActionMock.mockClear();
     queryNamespacesPermissionsMock.mockReset();
     requestRefreshDomainStateMock.mockReset();
+    scopedLifecycleMock.mockReset();
     setFiltersMock.mockReset();
+    persistedFiltersRef.current = {
+      search: '',
+      kinds: { mode: 'all' },
+      namespaces: { mode: 'all' },
+      clusters: { mode: 'all' },
+      caseSensitive: false,
+      includeMetadata: false,
+    };
     useTableSortMock.mockReset();
     useUserPermissionsMock.mockReset();
     errorHandlerMock.handle.mockClear();
@@ -511,6 +521,10 @@ describe('NsViewPods', () => {
     const onPodsCollapsedChange = vi.fn();
     await renderPods({ collapsed: true, onPodsCollapsedChange });
 
+    expect(scopedLifecycleMock).toHaveBeenCalledWith(
+      expect.objectContaining({ domain: 'pods', enabled: false })
+    );
+
     expect(container.querySelector('[data-testid="grid-table"]')).toBeNull();
     expect(container.querySelector('.gridtable-filter-bar')?.textContent).toBe('Show Pods');
     expect(container.querySelectorAll('.gridtable-filter-bar button')).toHaveLength(1);
@@ -605,7 +619,7 @@ describe('NsViewPods', () => {
 
     expect(setFiltersMock).toHaveBeenCalledWith({
       search: '',
-      kinds: { mode: 'none' },
+      kinds: { mode: 'all' },
       namespaces: { mode: 'some', values: ['team-a'] },
       clusters: { mode: 'all' },
       queryFacets: {
@@ -642,6 +656,34 @@ describe('NsViewPods', () => {
 
     await renderPods(props);
     expect(setFiltersMock).toHaveBeenCalledOnce();
+  });
+
+  it('removes a persisted workload owner facet when the embedded pane has no selection', async () => {
+    persistedFiltersRef.current = {
+      search: '',
+      kinds: { mode: 'none' },
+      namespaces: { mode: 'some', values: ['team-b'] },
+      clusters: { mode: 'all' },
+      queryFacets: {
+        nodes: { mode: 'some', values: ['node-a'] },
+        owners: {
+          mode: 'some',
+          values: ['["owner","Deployment","api","alpha:ctx","apps","v1","team-a"]'],
+        },
+      },
+      caseSensitive: false,
+      includeMetadata: false,
+    };
+
+    await renderPods({
+      namespace: ALL_NAMESPACES_SCOPE,
+      onWorkloadFilterMismatch: vi.fn(),
+    });
+
+    expect(setFiltersMock).toHaveBeenCalledWith({
+      ...persistedFiltersRef.current,
+      queryFacets: { nodes: { mode: 'some', values: ['node-a'] } },
+    });
   });
 
   it('omits Status while preserving the backend-owned Node query facet', async () => {

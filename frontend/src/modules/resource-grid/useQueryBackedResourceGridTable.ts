@@ -169,6 +169,7 @@ interface QueryBackedGridParamsCommon<
   TRow extends ResourceGridTableRow,
 > {
   clusterId?: string | null;
+  enabled?: boolean;
   domain: RefreshDomain;
   label: string;
   baseScope?: string;
@@ -204,6 +205,7 @@ function useTypedQueryLifecycle<
   TRow extends ResourceGridTableRow,
 >({
   clusterId,
+  enabled,
   domain,
   viewId,
   label,
@@ -218,6 +220,7 @@ function useTypedQueryLifecycle<
   liveScope,
 }: {
   clusterId?: string | null;
+  enabled: boolean;
   domain: RefreshDomain;
   viewId: string;
   label: string;
@@ -247,7 +250,7 @@ function useTypedQueryLifecycle<
   useScopedRefreshDomainLifecycle({
     domain,
     scope: liveScope || null,
-    enabled: true,
+    enabled,
     preserveState: true,
     fetchOnEnable: false,
   });
@@ -274,7 +277,11 @@ function useTypedQueryLifecycle<
   // ever issued, so the query path could never settle. Gating here holds the table in its gating
   // (empty + loading) state until a cluster and persistence are ready.
   const queryEnabled =
-    Boolean(clusterId) && tableStateReady && persistence.hydrated && !liveDomainInitialLoadPending;
+    enabled &&
+    Boolean(clusterId) &&
+    tableStateReady &&
+    persistence.hydrated &&
+    !liveDomainInitialLoadPending;
 
   // One query serves every sort, including cpu/memory: the backend joins live
   // usage onto the rows at serve and sorts by it, so there is no separate
@@ -312,6 +319,7 @@ function useTypedQueryLifecycle<
 
   useAnchorOnUnmatchedFocusRequest({
     clusterId,
+    enabled: queryEnabled,
     domain,
     viewId,
     loaded,
@@ -346,6 +354,7 @@ const anchorDecisionKeyExtractor = () => '';
 // (filtered/not-found) is reported through the app's notification channel.
 export function useAnchorOnUnmatchedFocusRequest<TRow>({
   clusterId,
+  enabled = true,
   domain,
   viewId,
   loaded,
@@ -354,6 +363,7 @@ export function useAnchorOnUnmatchedFocusRequest<TRow>({
   anchorResult,
 }: {
   clusterId?: string | null;
+  enabled?: boolean;
   domain: RefreshDomain;
   viewId: string;
   loaded: boolean;
@@ -364,7 +374,7 @@ export function useAnchorOnUnmatchedFocusRequest<TRow>({
   const anchoredRequestRef = useRef<GridTableFocusRequest | null>(null);
 
   useEffect(() => {
-    if (!clusterId || !loaded) {
+    if (!enabled || !clusterId || !loaded) {
       return;
     }
     const request = peekPendingFocusRequest();
@@ -406,7 +416,7 @@ export function useAnchorOnUnmatchedFocusRequest<TRow>({
       name: request.name,
       uid: request.uid,
     });
-  }, [anchorTo, clusterId, loaded, rows, viewId]);
+  }, [anchorTo, clusterId, enabled, loaded, rows, viewId]);
 
   useEffect(() => {
     if (!anchorResult || anchorResult.found) {
@@ -552,6 +562,7 @@ export function useQueryBackedNamespaceResourceGridTable<
   TRow extends ResourceGridTableRow,
 >({
   clusterId,
+  enabled = true,
   domain,
   label,
   baseScope,
@@ -590,6 +601,7 @@ export function useQueryBackedNamespaceResourceGridTable<
   );
   const lifecycle = useTypedQueryLifecycle<TPayload, TRow>({
     clusterId,
+    enabled,
     domain,
     viewId: tableParams.viewId,
     label,
@@ -658,6 +670,7 @@ export function useQueryBackedClusterResourceGridTable<
   TRow extends ResourceGridTableRow,
 >({
   clusterId,
+  enabled = true,
   domain,
   label,
   baseScope = '',
@@ -696,6 +709,7 @@ export function useQueryBackedClusterResourceGridTable<
   );
   const lifecycle = useTypedQueryLifecycle<TPayload, TRow>({
     clusterId,
+    enabled,
     domain,
     viewId: tableParams.viewId,
     label,

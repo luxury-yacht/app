@@ -158,6 +158,9 @@ func (a *App) loadFavoritesFile() (*favoritesFile, error) {
 	if header.SchemaVersion < favoritesSchemaVersion {
 		return &favoritesFile{SchemaVersion: favoritesSchemaVersion, Favorites: []Favorite{}}, nil
 	}
+	if header.SchemaVersion > favoritesSchemaVersion {
+		return nil, fmt.Errorf("favorites schema version %d is newer than supported version %d", header.SchemaVersion, favoritesSchemaVersion)
+	}
 	state := &favoritesFile{}
 	if err := json.Unmarshal(data, state); err != nil {
 		return nil, fmt.Errorf("failed to parse favorites file: %w", err)

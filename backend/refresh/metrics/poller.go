@@ -159,8 +159,8 @@ func (p *Poller) SetInterval(interval time.Duration) {
 	}
 }
 
-// SetCollectionObserver registers a callback invoked with the fresh Metadata
-// after each successful collection. One observer; last write wins.
+// SetCollectionObserver registers a callback invoked with fresh Metadata after
+// each collection attempt. One observer; last write wins.
 func (p *Poller) SetCollectionObserver(observer func(Metadata)) {
 	p.observerMu.Lock()
 	p.collectionObserver = observer
@@ -497,7 +497,6 @@ func (p *Poller) listPodMetricsInNamespaceWithRetry(ctx context.Context, client 
 
 func (p *Poller) recordFailure(err error, api string, duration time.Duration) {
 	p.mu.Lock()
-	defer p.mu.Unlock()
 	p.consecutiveFailure++
 	p.failureCount++
 	if errors.Is(err, errMetricsAPIUnavailable) {
@@ -507,8 +506,12 @@ func (p *Poller) recordFailure(err error, api string, duration time.Duration) {
 		p.lastError = err.Error()
 	}
 	consecutive := p.consecutiveFailure
-	log.Printf("[refresh:metrics] poll failed (%s): %v (failures=%d)", api, err, p.failureCount)
+	failureCount := p.failureCount
+	p.mu.Unlock()
+
+	log.Printf("[refresh:metrics] poll failed (%s): %v (failures=%d)", api, err, failureCount)
 	p.recordMetricsTelemetry(duration, time.Time{}, err, consecutive, false)
+	p.notifyCollectionObserver()
 }
 
 func (p *Poller) recordMetricsTelemetry(duration time.Duration, collectedAt time.Time, err error, consecutive int, success bool) {

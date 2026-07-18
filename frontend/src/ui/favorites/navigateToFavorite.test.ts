@@ -40,6 +40,26 @@ describe('navigateToFavorite', () => {
     expect(setActiveKubeconfig).not.toHaveBeenCalled();
   });
 
+  it('does not reopen a stale favorite path when the same clusterId is already active', () => {
+    const openKubeconfig = vi.fn().mockResolvedValue(undefined);
+    const setActiveKubeconfig = vi.fn();
+
+    navigateToFavorite(
+      makeFavorite({ clusterSelection: '/stale/path:dev', clusterId: 'alpha:dev' }),
+      {
+        selectedKubeconfigs: ['/current/path:dev'],
+        selectedClusterId: 'alpha:dev',
+        openKubeconfig,
+        setActiveKubeconfig,
+        getClusterMeta: () => ({ id: 'alpha:dev', name: 'dev' }),
+        setPendingFavorite: vi.fn(),
+      }
+    );
+
+    expect(openKubeconfig).not.toHaveBeenCalled();
+    expect(setActiveKubeconfig).not.toHaveBeenCalled();
+  });
+
   it('can resolve an open cluster selection from a persisted clusterId', () => {
     const openKubeconfig = vi.fn().mockResolvedValue(undefined);
     const setActiveKubeconfig = vi.fn();

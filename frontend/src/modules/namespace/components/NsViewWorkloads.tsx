@@ -369,7 +369,7 @@ const ScopedWorkloadsView: React.FC<ScopedWorkloadsViewProps> = ({
             workloadFilterRequest={podFilterRequest}
             onWorkloadFilterMismatch={() => {
               setSelectedWorkload(null);
-              setPodFilterRequest(undefined);
+              setPodFilterRequest({ type: 'clear' });
             }}
             collapsed={podsCollapsed}
             onPodsCollapsedChange={setPodsCollapsed}

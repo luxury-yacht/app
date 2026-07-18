@@ -122,7 +122,7 @@ export interface ObjectPanelResourceGridTableParams<T extends ResourceGridTableR
 
 export interface ResourceGridPersistence<T extends ResourceGridTableRow> {
   sortConfig: SortConfig | null;
-  setSortConfig: (next: SortConfig) => void;
+  setSortConfig: (next: SortConfig | null) => void;
   columnWidths: Record<string, ColumnWidthState> | null;
   setColumnWidths: (next: Record<string, ColumnWidthState>) => void;
   columnVisibility: Record<string, boolean> | null;

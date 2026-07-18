@@ -50,7 +50,7 @@ truth.
   on the same resource WebSocket, but their rows are still fetched from their
   snapshot/query domains.
 - `doorbell-snapshot` domains (`namespaces`, `object-events`,
-  `cluster-overview`) are snapshot domains whose refetch trigger is a
+  `cluster-overview`, `cluster-attention`) are snapshot domains whose refetch trigger is a
   signal-only doorbell; each declares exactly the one clock its doorbell rides.
   `cluster-overview` is POLL-AUGMENTED: its metric doorbell only rings on
   successful collections, so its polls stay on
@@ -58,7 +58,7 @@ truth.
   must never suppress polls for a domain whose signal producer can be
   permanently absent.
 - `sourceClocks` names the producer clocks that can affect a domain:
-  `object`, `metric`, `catalog`, or `event`.
+  `object`, `metric`, `catalog`, `event`, or `attention`.
 - `complete-resync-stream` domains, such as Helm, keep
   `coverageContract: "complete-resync-only"` because the stream sends
   scope-level resync signals rather than object-change signals.
@@ -75,6 +75,9 @@ truth.
   (see [`resource-metrics.md`](./resource-metrics.md)).
 - `catalog` changes catalog-backed identity or Browse results.
 - `event` changes event-backed query results.
+- `attention` changes the maintained Attention index, including time-based
+  reevaluation and ignore-rule changes. The `cluster-attention` doorbell rides
+  this clock after invalidating the corresponding snapshot cache.
 
 Metric-dependent visible pages should throttle automatic refetches using the
 metrics refresh interval. Object-sorted metric pages should keep the same object

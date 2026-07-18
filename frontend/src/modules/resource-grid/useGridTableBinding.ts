@@ -19,7 +19,7 @@ import { isQueryBackedResourceGridTableMode } from './resourceGridTableTypes';
 
 interface GridTableBindingPersistence {
   sortConfig?: SortConfig | null;
-  setSortConfig?: (next: SortConfig) => void;
+  setSortConfig?: (next: SortConfig | null) => void;
   columnWidths?: Record<string, ColumnWidthState> | null;
   setColumnWidths?: (next: Record<string, ColumnWidthState>) => void;
   columnVisibility?: Record<string, boolean> | null;

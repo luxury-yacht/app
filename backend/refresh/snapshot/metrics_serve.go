@@ -7,7 +7,6 @@ package snapshot
 // freshness/error state as the payload's Metrics block.
 
 import (
-	"strconv"
 	"time"
 
 	"github.com/luxury-yacht/app/backend/internal/config"
@@ -33,15 +32,11 @@ func latestNodeMetrics(provider metrics.Provider) (map[string]metrics.NodeUsage,
 	return nodeUsageOrEmpty(sample.NodeUsage), podUsageOrEmpty(sample.PodUsage), sample.Metadata
 }
 
-// metricRevisionFromMetadata is the metric source clock: it advances exactly when the
-// poller collects a new sample, so the snapshot's 304 validator breaks on a metric
-// tick without moving the object Version. An empty revision (no sample yet, or no
-// provider) contributes no metric clock at all.
+// metricRevisionFromMetadata is the metric source clock. It advances after
+// successful samples and failed attempts so snapshot validators expose both
+// fresh data and health-state transitions.
 func metricRevisionFromMetadata(metadata metrics.Metadata) string {
-	if metadata.CollectedAt.IsZero() {
-		return ""
-	}
-	return strconv.FormatInt(metadata.CollectedAt.UnixNano(), 10)
+	return metrics.Revision(metadata)
 }
 
 func podMetricsInfoFromMetadata(metadata metrics.Metadata) PodMetricsInfo {

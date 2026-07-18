@@ -268,6 +268,7 @@ type clusterAttentionIndex struct {
 	revision            uint64
 	stopped             bool
 	eventRows           func() []attentionSourceRecord
+	eventRowsSynced     func() bool
 	ignoreRules         AttentionIgnoreRules
 	ignoredObjectPruner func(resourcemodel.ResourceRef)
 }
@@ -640,7 +641,7 @@ func (i *clusterAttentionIndex) Reconcile() {
 	for _, owner := range unavailableOwners {
 		i.replaceSource(owner, nil, false)
 	}
-	if eventRows != nil {
+	if eventRows != nil && (i.eventRowsSynced == nil || i.eventRowsSynced()) {
 		i.ReplaceSource("events", eventRows())
 	}
 }
@@ -1038,6 +1039,7 @@ func RegisterClusterAttentionDomain(
 			return nil, fmt.Errorf("%s shared informer factory is nil", clusterAttentionDomainName)
 		}
 		events := factory.Core().V1().Events().Informer()
+		index.eventRowsSynced = events.HasSynced
 		index.eventRows = func() []attentionSourceRecord {
 			objects := events.GetIndexer().List()
 			rows := make([]attentionSourceRecord, 0, len(objects))
@@ -1317,39 +1319,41 @@ func evaluateWorkloadAttention(record attentionSourceRecord, now time.Time) atte
 	if !statusNeedsAttention && !replicaMismatch && record.Restarts == 0 {
 		return attentionEvaluation{}
 	}
-	grace := time.Duration(0)
-	if statusNeedsAttention {
-		grace = classification.Grace
-	}
-	if replicaMismatch {
-		replicaPolicy := attentionPolicyForSignal(attentionSignalReplicaMismatch)
-		if replicaPolicy.Grace > grace {
-			grace = replicaPolicy.Grace
-		}
-	}
-	if record.Restarts > 0 {
-		restartPolicy := attentionPolicyForSignal(attentionSignalRestarts)
-		grace = restartPolicy.Grace
-	}
-	if grace > 0 && record.Restarts == 0 {
-		if deadline, deferred := warningGraceDeadline(record.AgeTimestamp, now); deferred {
-			return attentionEvaluation{NextEvaluation: deadline}
-		}
-	}
-
+	graceDeadline, beforeGrace := warningGraceDeadline(record.AgeTimestamp, now)
+	nextEvaluation := time.Time{}
 	causes := make([]AttentionCause, 0, 3)
 	if statusNeedsAttention {
-		causes = appendAttentionCause(causes, classificationCause(classification, record))
+		cause := classificationCause(classification, record)
+		if classification.Grace > 0 && record.Restarts == 0 && beforeGrace {
+			if classification.GraceSeverity != "" {
+				cause.Severity = classification.GraceSeverity
+				causes = appendAttentionCause(causes, cause)
+			}
+			nextEvaluation = graceDeadline
+		} else {
+			causes = appendAttentionCause(causes, cause)
+		}
 	}
 	if replicaMismatch {
 		policy := attentionPolicyForSignal(attentionSignalReplicaMismatch)
-		causes = appendAttentionCause(causes, signalCause(attentionSignalReplicaMismatch, policy, strings.TrimSpace(record.Ready)+" ready"))
+		cause := signalCause(attentionSignalReplicaMismatch, policy, strings.TrimSpace(record.Ready)+" ready")
+		if policy.Grace > 0 && record.Restarts == 0 && beforeGrace {
+			if policy.GraceSeverity != "" {
+				cause.Severity = policy.GraceSeverity
+				causes = appendAttentionCause(causes, cause)
+			}
+			nextEvaluation = graceDeadline
+		} else {
+			causes = appendAttentionCause(causes, cause)
+		}
 	}
 	if record.Restarts > 0 {
 		policy := attentionPolicyForSignal(attentionSignalRestarts)
 		causes = appendAttentionCause(causes, signalCause(attentionSignalRestarts, policy, fmt.Sprintf("%d restarts", record.Restarts)))
 	}
-	return findingEvaluation(record, causes)
+	evaluation := findingEvaluation(record, causes)
+	evaluation.NextEvaluation = nextEvaluation
+	return evaluation
 }
 
 func evaluateNodeAttention(record attentionSourceRecord) attentionEvaluation {

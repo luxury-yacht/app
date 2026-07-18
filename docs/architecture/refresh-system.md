@@ -93,7 +93,8 @@ Use behavior classes to preserve correctness, not to force inheritance:
   WebSocket change signals
 - event and catalog domains also use resource WebSocket doorbells for liveness
   and refetch rows through their snapshot/query domains
-- doorbell-snapshot domains (`namespaces`, `object-events`, `cluster-overview`)
+- doorbell-snapshot domains (`namespaces`, `object-events`, `cluster-overview`,
+  `cluster-attention`)
   are snapshot domains refetched by a signal-only doorbell; `cluster-overview`
   additionally keeps polling (poll-augmented — its metric doorbell only rings
   on successful collections)

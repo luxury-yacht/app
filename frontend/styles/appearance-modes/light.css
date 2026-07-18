@@ -86,7 +86,6 @@
   --badge-purple-text: #9333ea;
   --badge-teal-bg: rgba(20, 184, 166, 0.15);
   --badge-teal-text: var(--color-accent-light-700);
-  --badge-warning-bg: rgba(245, 158, 11, 0.15);
   --badge-green-soft-bg: rgba(34, 197, 94, 0.15);
   --badge-green-soft-text: #16a34a;
   --badge-hover-overlay: rgb(0 0 0 / 5%);
@@ -100,7 +99,7 @@
   --status-failed-text: var(--badge-red-text);
   --status-released-bg: rgba(249, 115, 22, 0.15);
   --status-released-text: var(--badge-orange-text);
-  --status-warning-bg: rgba(249, 115, 22, 0.15);
+  --status-warning-bg: rgba(245, 158, 11, 0.15);
   --status-warning-border: rgba(249, 115, 22, 0.25);
   --status-text-ready: var(--color-text);
   --status-text-error: var(--status-failed-text);

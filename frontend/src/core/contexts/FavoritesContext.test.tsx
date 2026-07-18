@@ -278,6 +278,21 @@ describe('FavoritesContext', () => {
     });
   });
 
+  it('applies each newly activated favorite without requiring an intermediate clear', async () => {
+    await renderProvider();
+
+    act(() => stateRef.current?.setPendingFavorite(makeFavorite({ id: 'first' })));
+    expect(mockSetActiveNamespaceTab).toHaveBeenCalledTimes(1);
+
+    act(() =>
+      stateRef.current?.setPendingFavorite(
+        makeFavorite({ id: 'second', viewType: 'cluster', view: 'nodes', namespace: '' })
+      )
+    );
+    expect(mockSetViewType).toHaveBeenLastCalledWith('cluster');
+    expect(mockSetActiveClusterView).toHaveBeenCalledWith('nodes');
+  });
+
   it('opens new and legacy Global favorites without applying cluster navigation', async () => {
     await renderProvider();
 

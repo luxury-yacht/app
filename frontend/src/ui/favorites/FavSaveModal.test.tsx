@@ -707,7 +707,7 @@ describe('FavSaveModal', () => {
   // 8. View dropdown changes update the scope correctly
   // -----------------------------------------------------------------------
 
-  it('view dropdown changes update the scope', async () => {
+  it('does not allow retargeting saved pane state to a different view', async () => {
     const onSave = vi.fn();
     const props = makeProps({ onSave });
     await renderComponent(props);
@@ -717,22 +717,9 @@ describe('FavSaveModal', () => {
       'select[data-testid="dropdown-Select view..."]'
     );
     expect(viewSelect).toBeTruthy();
-
-    await act(async () => {
-      // Change to cluster:nodes
-      const nativeInputValueSetter = Object.getOwnPropertyDescriptor(
-        window.HTMLSelectElement.prototype,
-        'value'
-      )?.set;
-      nativeInputValueSetter?.call(
-        requireValue(viewSelect, 'expected test value in FavSaveModal.test.tsx'),
-        'cluster:nodes'
-      );
-      requireValue(viewSelect, 'expected test value in FavSaveModal.test.tsx').dispatchEvent(
-        new Event('change', { bubbles: true })
-      );
-      await Promise.resolve();
-    });
+    expect(requireValue(viewSelect, 'expected test value in FavSaveModal.test.tsx').disabled).toBe(
+      true
+    );
 
     // Save and verify the scope changed to cluster.
     const saveBtn = container.querySelector<HTMLButtonElement>('button.save');
@@ -743,10 +730,12 @@ describe('FavSaveModal', () => {
 
     expect(onSave).toHaveBeenCalledTimes(1);
     const savedFav = onSave.mock.calls[0][0] as Favorite;
-    expect(savedFav.viewType).toBe('cluster');
-    expect(savedFav.view).toBe('nodes');
-    // Cluster views don't have a namespace.
-    expect(savedFav.namespace).toBe('');
+    expect(savedFav.viewType).toBe('namespace');
+    expect(savedFav.view).toBe('pods');
+    expect(savedFav.namespace).toBe('default');
+    expect(savedFav.panes).toEqual({
+      main: { filters: defaultFilters, tableState: defaultTableState },
+    });
   });
 
   it('offers every registered global, cluster, and namespace view', async () => {

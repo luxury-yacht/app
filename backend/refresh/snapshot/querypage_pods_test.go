@@ -248,12 +248,15 @@ func TestPodsQueryViaStoreFiltersOwnersByFullIdentity(t *testing.T) {
 			OwnerAPIVersion: "apps/v1",
 		},
 		{
-			ClusterMeta:     streamrows.ClusterMeta{ClusterID: "c"},
-			Name:            "cron-pod",
-			Namespace:       "team-a",
-			OwnerKind:       "CronJob",
-			OwnerName:       "nightly",
-			OwnerAPIVersion: "batch/v1",
+			ClusterMeta:           streamrows.ClusterMeta{ClusterID: "c"},
+			Name:                  "cron-pod",
+			Namespace:             "team-a",
+			OwnerKind:             "CronJob",
+			OwnerName:             "nightly",
+			OwnerAPIVersion:       "batch/v1",
+			DirectOwnerKind:       "Job",
+			DirectOwnerName:       "nightly-29123456",
+			DirectOwnerAPIVersion: "batch/v1",
 		},
 		{
 			ClusterMeta: streamrows.ClusterMeta{ClusterID: "c"},
@@ -278,9 +281,16 @@ func TestPodsQueryViaStoreFiltersOwnersByFullIdentity(t *testing.T) {
 	page := applyTypedTableQueryViaStore(items, query, podTableQueryAdapter(), podQuerypageSchema())
 
 	require.Equal(t, []string{"deploy-pod"}, podSummaryNames(page.Rows))
+
+	jobOwner := podOwnerFacetValueForTest(t, "owner", "Job", "nightly-29123456", "c", "batch", "v1", "team-a")
+	query.Request.Facets = map[string][]string{"owners": {jobOwner}}
+	page = applyTypedTableQueryViaStore(items, query, podTableQueryAdapter(), podQuerypageSchema())
+	require.Equal(t, []string{"cron-pod"}, podSummaryNames(page.Rows))
+
 	require.Equal(t, []ResourceQueryFacetOption{
 		{Value: podOwnerFacetValueForTest(t, "owner", "CronJob", "nightly", "c", "batch", "v1", "team-a"), Label: "CronJob/nightly"},
 		{Value: deploymentOwner, Label: "Deployment/api"},
+		{Value: jobOwner, Label: "Job/nightly-29123456"},
 		{Value: podOwnerFacetValueForTest(t, "pod", "Pod", "standalone", "c", "", "v1", "team-a"), Label: "No owner: standalone"},
 	}, testFacetOptions(page.FacetValues, "owners"))
 	require.Equal(t, []string{"statuses", "owners", "nodes"}, typedTableFacetKeys(podQueryFacets()))

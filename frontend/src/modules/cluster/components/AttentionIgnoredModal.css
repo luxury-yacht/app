@@ -1,10 +1,10 @@
 .attention-ignored-modal {
-  width: min(520px, calc(100vw - 48px));
-  max-height: min(640px, calc(100vh - 48px));
+  width: min(var(--modal-width-md), calc(100vw - var(--modal-viewport-gutter)));
+  max-height: min(var(--modal-height-lg), calc(100vh - var(--modal-viewport-gutter)));
 }
 
 .attention-ignored-body {
-  padding: var(--spacing-lg) 1.5rem;
+  padding: var(--spacing-lg) var(--spacing-xl);
   overflow: auto;
 }
 
@@ -16,7 +16,7 @@
 }
 
 .attention-ignored-section-title {
-  margin: 0 0 1rem;
+  margin: 0 0 var(--spacing-lg);
   padding-bottom: var(--spacing-sm);
   color: var(--color-text);
   font-size: var(--font-size-title);
@@ -31,7 +31,7 @@
 
 .attention-ignored-body li {
   display: flex;
-  min-height: 36px;
+  min-height: var(--control-height-md);
   align-items: center;
   justify-content: space-between;
   gap: var(--spacing-lg);
@@ -57,6 +57,6 @@
 .attention-ignored-footer {
   display: flex;
   justify-content: flex-end;
-  padding: var(--spacing-lg) 1.5rem;
+  padding: var(--spacing-lg) var(--spacing-xl);
   border-top: 1px solid var(--color-border);
 }
