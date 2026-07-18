@@ -67,7 +67,7 @@ const renderOwner = (d: PodDetailInfo, context: OverviewContext): React.ReactNod
   let ownerRef: ReturnType<typeof buildRequiredRelatedObjectReference> | null = null;
   try {
     ownerRef = buildRequiredRelatedObjectReference({
-      kind: d.ownerKind.toLowerCase(),
+      kind: d.ownerKind,
       apiVersion: d.ownerApiVersion,
       name: d.ownerName,
       namespace: d.namespace,

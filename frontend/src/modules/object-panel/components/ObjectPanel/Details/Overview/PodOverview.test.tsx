@@ -9,6 +9,8 @@ import type React from 'react';
 import { act } from 'react';
 import * as ReactDOM from 'react-dom/client';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
+import { buildObjectPanelPodsScope } from '../../Pods/objectPanelPodsScope';
+import type { PanelObjectData } from '../../types';
 import { podDescriptor } from './descriptors/pod';
 import { OverviewRenderer } from './OverviewRenderer';
 
@@ -139,12 +141,13 @@ describe('PodOverview', () => {
     expect(hostNetworkChip).toBeTruthy();
   });
 
-  it('navigates to owner resources when owner link is clicked', async () => {
+  it('preserves the owner GVK needed by the owner panel Pods scope', async () => {
     await renderComponent({
       name: 'worker-0',
       namespace: 'cluster',
       ownerKind: 'StatefulSet',
       ownerName: 'worker',
+      ownerApiVersion: 'apps/v1',
     });
 
     const ownerLink = getLinkByText('StatefulSet/worker') ?? getElementByText('StatefulSet/worker');
@@ -155,11 +158,18 @@ describe('PodOverview', () => {
 
     expect(openWithObjectMock).toHaveBeenCalledWith(
       expect.objectContaining({
-        kind: 'statefulset',
+        kind: 'StatefulSet',
         name: 'worker',
         namespace: 'cluster',
         clusterId: defaultClusterId,
+        group: 'apps',
+        version: 'v1',
       })
+    );
+
+    const ownerRef = openWithObjectMock.mock.calls[0]?.[0] as PanelObjectData;
+    expect(buildObjectPanelPodsScope(ownerRef, ownerRef.kind ?? null)).toBe(
+      'workload:cluster:apps:v1:StatefulSet:worker'
     );
   });
 
