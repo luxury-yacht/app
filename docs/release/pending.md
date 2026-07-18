@@ -34,6 +34,9 @@
   tables; the app-level metrics status remains the availability indicator.
 - Made every multi-select Kinds filter searchable and gave each one explicit
   Select all and Select none controls.
+- Favorites now save every filter declared by a GridTable and save both the
+  Workloads and Pods panes together. This resets favorites created by older
+  releases because the saved-state format changed.
 - Removed the visible Workloads/Pods divider band and moved the expand/collapse
   control to the left edge of the Pods filter bar. Collapsed Pods now retains a
   compact `Show Pods` header instead of removing its expansion control. The

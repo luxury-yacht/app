@@ -150,8 +150,7 @@ const makeFavorite = (overrides: Partial<Favorite> = {}): Favorite => ({
   viewType: 'namespace',
   view: 'pods',
   namespace: 'default',
-  filters: null,
-  tableState: null,
+  panes: {},
   order: 0,
   ...overrides,
 });

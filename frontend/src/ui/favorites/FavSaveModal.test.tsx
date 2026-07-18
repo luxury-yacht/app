@@ -121,23 +121,38 @@ vi.mock('@shared/components/dropdowns/Dropdown', () => ({
     disabled,
     searchable,
     showBulkActions,
+    displayValue,
   }: DropdownProps) => {
     const opts = options.filter((option) => !option.group);
     return (
-      <select
-        data-testid={`dropdown-${placeholder ?? 'select'}`}
-        value={Array.isArray(value) ? value.join(',') : (value ?? '')}
-        disabled={disabled}
-        data-searchable={searchable ? 'true' : 'false'}
-        data-bulk-actions={showBulkActions ? 'true' : 'false'}
-        onChange={(e) => onChange(e.target.value)}
-      >
-        {opts.map((option) => (
-          <option key={option.value} value={option.value}>
-            {option.label}
-          </option>
-        ))}
-      </select>
+      <>
+        <select
+          data-testid={`dropdown-${placeholder ?? 'select'}`}
+          value={Array.isArray(value) ? value.join(',') : (value ?? '')}
+          disabled={disabled}
+          data-searchable={searchable ? 'true' : 'false'}
+          data-bulk-actions={showBulkActions ? 'true' : 'false'}
+          data-display-value={typeof displayValue === 'string' ? displayValue : undefined}
+          onChange={(e) => onChange(e.target.value)}
+        >
+          {opts.map((option) => (
+            <option key={option.value} value={option.value}>
+              {option.label}
+            </option>
+          ))}
+        </select>
+        {showBulkActions ? (
+          <button
+            type="button"
+            data-testid={`select-all-${placeholder ?? 'select'}`}
+            onClick={() =>
+              onChange(opts.filter((option) => !option.disabled).map((option) => option.value))
+            }
+          >
+            Select all
+          </button>
+        ) : null}
+      </>
     );
   },
 }));
@@ -211,8 +226,9 @@ const makeFavorite = (overrides: Partial<Favorite> = {}): Favorite => ({
   viewType: 'namespace',
   view: 'pods',
   namespace: 'default',
-  filters: { ...defaultFilters },
-  tableState: { ...defaultTableState },
+  panes: {
+    main: { filters: { ...defaultFilters }, tableState: { ...defaultTableState } },
+  },
   order: 0,
   ...overrides,
 });
@@ -287,12 +303,169 @@ describe('FavSaveModal', () => {
     expect(container.querySelector('.modal-header h2')?.textContent).toBe('Save Favorite');
   });
 
+  it('renders and saves all declared filters for both Workloads panes', async () => {
+    const onSave = vi.fn();
+    await renderComponent(
+      makeProps({
+        onSave,
+        panes: [
+          {
+            id: 'workloads',
+            label: 'Workloads',
+            filters: defaultFilters,
+            tableState: defaultTableState,
+            filterOptions: { showKindDropdown: true, kinds: ['Deployment'] },
+          },
+          {
+            id: 'pods',
+            label: 'Pods',
+            filters: {
+              ...defaultFilters,
+              clusters: { mode: 'some', values: ['cluster-a'] },
+              queryFacets: { owners: { mode: 'some', values: ['Deployment/api'] } },
+            },
+            tableState: { ...defaultTableState, sortColumn: 'node' },
+            filterOptions: {
+              showClusterDropdown: true,
+              clusters: [{ value: 'cluster-a', label: 'Production' }],
+              queryFacets: [
+                {
+                  key: 'owners',
+                  label: 'Owners',
+                  placeholder: 'All owners',
+                  options: [
+                    { value: 'Deployment/api', label: 'Deployment/api' },
+                    { value: 'StatefulSet/db', label: 'StatefulSet/db' },
+                  ],
+                },
+              ],
+            },
+          },
+        ],
+      })
+    );
+
+    expect(container.textContent).toContain('Workloads Filters');
+    expect(container.textContent).toContain('Pods Filters');
+    expect(container.textContent).toContain('Clusters');
+    expect(container.textContent).toContain('Owners');
+
+    await act(async () => {
+      const owners = container.querySelector<HTMLSelectElement>(
+        '[data-testid="dropdown-All owners"]'
+      );
+      requireValue(owners, 'expected Owners filter in FavSaveModal.test.tsx').value =
+        'StatefulSet/db';
+      requireValue(owners, 'expected Owners filter in FavSaveModal.test.tsx').dispatchEvent(
+        new Event('change', { bubbles: true })
+      );
+      await Promise.resolve();
+    });
+    await act(async () => {
+      container.querySelector<HTMLButtonElement>('button.save')?.click();
+      await Promise.resolve();
+    });
+
+    const saved = onSave.mock.calls[0]?.[0] as Favorite;
+    expect(saved.panes.pods.filters.clusters).toEqual({
+      mode: 'some',
+      values: ['cluster-a'],
+    });
+    expect(saved.panes.pods.filters.queryFacets?.owners).toEqual({
+      mode: 'some',
+      values: ['StatefulSet/db'],
+    });
+    expect(saved.panes.pods.tableState.sortColumn).toBe('node');
+  });
+
+  it('saves Select all as a semantic all selection for provider facets', async () => {
+    const onSave = vi.fn();
+    await renderComponent(
+      makeProps({
+        onSave,
+        panes: [
+          {
+            id: 'main',
+            label: 'Pods',
+            filters: {
+              ...defaultFilters,
+              queryFacets: { owners: { mode: 'some', values: ['Deployment/api'] } },
+            },
+            tableState: defaultTableState,
+            filterOptions: {
+              queryFacets: [
+                {
+                  key: 'owners',
+                  label: 'Owners',
+                  placeholder: 'All owners',
+                  options: [
+                    { value: 'Deployment/api', label: 'Deployment/api' },
+                    { value: 'StatefulSet/db', label: 'StatefulSet/db' },
+                  ],
+                },
+              ],
+            },
+          },
+        ],
+      })
+    );
+
+    const selectAll = container.querySelector<HTMLButtonElement>(
+      '[data-testid="select-all-All owners"]'
+    );
+    expect(selectAll).toBeTruthy();
+    await act(async () => {
+      selectAll?.click();
+      await Promise.resolve();
+    });
+    await act(async () => {
+      container.querySelector<HTMLButtonElement>('button.save')?.click();
+      await Promise.resolve();
+    });
+
+    const saved = onSave.mock.calls[0]?.[0] as Favorite;
+    expect(saved.panes.main.filters.queryFacets?.owners).toEqual({ mode: 'all' });
+  });
+
   it('enables search and bulk actions for the Kinds dropdown', async () => {
     await renderComponent(makeProps({ availableKinds: ['Pod', 'Deployment'] }));
 
     const kinds = container.querySelector('[data-testid="dropdown-All kinds"]');
     expect(kinds?.getAttribute('data-searchable')).toBe('true');
     expect(kinds?.getAttribute('data-bulk-actions')).toBe('true');
+  });
+
+  it('summarizes semantic all and none selections instead of listing option values', async () => {
+    await renderComponent(
+      makeProps({
+        filters: {
+          ...defaultFilters,
+          namespaces: { mode: 'none' },
+        },
+        availableKinds: ['Pod', 'Deployment'],
+        availableFilterNamespaces: ['default', 'kube-system'],
+      })
+    );
+
+    const kinds = container.querySelector('[data-testid="dropdown-All kinds"]');
+    const namespaces = container.querySelector('[data-testid="dropdown-All namespaces"]');
+    expect(kinds?.getAttribute('data-display-value')).toBe('All');
+    expect(namespaces?.getAttribute('data-display-value')).toBe('None');
+  });
+
+  it('summarizes explicit selections with their count', async () => {
+    await renderComponent(
+      makeProps({
+        filters: {
+          ...defaultFilters,
+          kinds: { mode: 'some', values: ['Pod', 'Deployment'] },
+        },
+        availableKinds: ['Pod', 'Deployment', 'StatefulSet'],
+      })
+    );
+
+    const kinds = container.querySelector('[data-testid="dropdown-All kinds"]');
+    expect(kinds?.getAttribute('data-display-value')).toBe('2 selected');
   });
 
   it('does not close when overlay is clicked', async () => {
@@ -358,7 +531,7 @@ describe('FavSaveModal', () => {
     expect(savedFav.clusterSelection).toBe('/home/user/.kube/config:prod-cluster');
     expect(savedFav.clusterId).toBe('config:prod-cluster');
     expect(savedFav.clusterName).toBe('prod-cluster');
-    expect(savedFav.filters?.queryFacets).toEqual(defaultFilters.queryFacets);
+    expect(savedFav.panes.main.filters.queryFacets).toEqual(defaultFilters.queryFacets);
     expect(savedFav.id).toBe(''); // New favorite has empty id.
     expect(onClose).toHaveBeenCalledTimes(1);
   });
@@ -382,7 +555,7 @@ describe('FavSaveModal', () => {
     });
 
     const saved = onSave.mock.calls[0]?.[0] as Favorite;
-    expect(saved.filters?.queryFacets).toEqual(filters.queryFacets);
+    expect(saved.panes.main.filters.queryFacets).toEqual(filters.queryFacets);
     expect(saved.clusterId).toBe('config:prod-cluster');
   });
 
@@ -400,7 +573,7 @@ describe('FavSaveModal', () => {
     });
 
     const saved = onSave.mock.calls[0]?.[0] as Favorite;
-    expect(saved.filters?.clusters).toEqual({
+    expect(saved.panes.main.filters.clusters).toEqual({
       mode: 'some',
       values: ['cluster-a', 'cluster-b'],
     });
@@ -468,7 +641,7 @@ describe('FavSaveModal', () => {
       viewType: existingFav.viewType,
       viewLabel: 'Pods',
       namespace: existingFav.namespace,
-      filters: requireValue(existingFav.filters, 'expected test value in FavSaveModal.test.tsx'),
+      filters: existingFav.panes.main.filters,
     });
     await renderComponent(props);
 

@@ -470,6 +470,7 @@ const NsViewPods: React.FC<PodsViewProps> = React.memo(
       filterOptions: { isNamespaceScoped: namespace !== ALL_NAMESPACES_SCOPE },
       filterOptionOverrides:
         podsPaneActions.length > 0 ? { beforeNamespaceActions: podsPaneActions } : undefined,
+      favoritePane: { id: 'pods', label: 'Pods' },
     });
 
     const currentFilters = resolvedGridTableProps.filters?.value;

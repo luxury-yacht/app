@@ -205,6 +205,29 @@ invalidators even though the callback does not read them.
   selection writes Namespace and Owner through the same controlled filter state
   used by direct dropdown interaction.
 
+### Favorite snapshots
+
+- A favorite snapshots the complete `GridTableFilterState` and table display
+  state as one named pane. Favorites code must compare, edit, save, and restore
+  the state object as a whole; it must not maintain a separate allowlist of
+  Kinds, Namespaces, or provider facet keys.
+- The save modal derives editable controls from the pane's
+  `GridTableFilterOptions`. Built-in structural filters and every declared
+  `queryFacets` entry therefore use the same option vocabulary and selection
+  semantics as the live table. Every favorite multi-select must expose the
+  semantic `all` selection and persist it as `mode: all`, never as a snapshot
+  of the option values that happened to exist when the favorite was saved. Its
+  closed control displays `All` for `mode: all` and `None` for `mode: none`;
+  `mode: some` displays the stored value count as `n selected` instead of
+  listing the selected option labels.
+- A route with multiple tables stores one favorite containing a named snapshot
+  for every pane. The Workloads route owns `workloads` and `pods`; it exposes one
+  favorite action, waits for both persistence stores to hydrate, then restores
+  both panes before consuming the pending favorite.
+- Favorites schema v3 stores named panes exclusively. Loading an older schema
+  starts a new empty Favorites collection; no legacy top-level filter/table
+  compatibility path is maintained.
+
 ## Sorting
 
 - Sort keys emitted by `GridTable` must be visible column keys. Hidden data

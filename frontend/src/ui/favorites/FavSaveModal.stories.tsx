@@ -37,15 +37,19 @@ const mockExistingFavorite: Favorite = {
   viewType: 'namespace',
   view: 'pods',
   namespace: 'default',
-  filters: {
-    search: 'nginx',
-    kinds: { mode: 'all' },
-    namespaces: { mode: 'all' },
-    clusters: { mode: 'all' },
-    caseSensitive: true,
-    includeMetadata: false,
+  panes: {
+    main: {
+      filters: {
+        search: 'nginx',
+        kinds: { mode: 'all' },
+        namespaces: { mode: 'all' },
+        clusters: { mode: 'all' },
+        caseSensitive: true,
+        includeMetadata: false,
+      },
+      tableState: mockTableState,
+    },
   },
-  tableState: mockTableState,
   order: 0,
 };
 
@@ -140,7 +144,7 @@ export const EditExisting: Story = {
   args: {
     existingFavorite: mockExistingFavorite,
     defaultName: mockExistingFavorite.name,
-    filters: mockExistingFavorite.filters ?? undefined,
+    filters: mockExistingFavorite.panes.main.filters,
   },
   decorators: [
     (Story) => {

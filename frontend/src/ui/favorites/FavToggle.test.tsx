@@ -18,6 +18,8 @@ import type { FavSaveModalProps } from './FavSaveModal';
 // ---------------------------------------------------------------------------
 
 let mockFavorites: Favorite[] = [];
+let mockPendingFavorite: Favorite | null = null;
+const mockSetPendingFavorite = vi.fn();
 const mockAddFavorite = vi.fn().mockResolvedValue({ id: 'new-fav' });
 const mockUpdateFavorite = vi.fn().mockResolvedValue(undefined);
 const mockDeleteFavorite = vi.fn().mockResolvedValue(undefined);
@@ -29,8 +31,8 @@ vi.mock('@core/contexts/FavoritesContext', () => ({
     updateFavorite: mockUpdateFavorite,
     deleteFavorite: mockDeleteFavorite,
     reorderFavorites: vi.fn().mockResolvedValue(undefined),
-    pendingFavorite: null,
-    setPendingFavorite: vi.fn(),
+    pendingFavorite: mockPendingFavorite,
+    setPendingFavorite: mockSetPendingFavorite,
   }),
 }));
 
@@ -121,8 +123,7 @@ vi.mock('./FavSaveModal', () => ({
               viewType: 'namespace',
               view: 'pods',
               namespace: 'default',
-              filters: null,
-              tableState: null,
+              panes: {},
               order: 0,
             });
             onClose();
@@ -151,7 +152,7 @@ vi.mock('./FavSaveModal', () => ({
 }));
 
 // Import after mocks
-import { useFavToggle } from './FavToggle';
+import { FavoritePaneGroup, useFavToggle } from './FavToggle';
 
 // ---------------------------------------------------------------------------
 // Helpers — wrapper component that renders the hook result into the DOM.
@@ -164,15 +165,19 @@ const makeFavorite = (overrides: Partial<Favorite> = {}): Favorite => ({
   viewType: 'namespace',
   view: 'pods',
   namespace: 'default',
-  filters: {
-    search: '',
-    kinds: { mode: 'all' },
-    namespaces: { mode: 'all' },
-    clusters: { mode: 'all' },
-    caseSensitive: false,
-    includeMetadata: false,
+  panes: {
+    main: {
+      filters: {
+        search: '',
+        kinds: { mode: 'all' },
+        namespaces: { mode: 'all' },
+        clusters: { mode: 'all' },
+        caseSensitive: false,
+        includeMetadata: false,
+      },
+      tableState: { sortColumn: '', sortDirection: 'asc', columnVisibility: {} },
+    },
   },
-  tableState: null,
   order: 0,
   ...overrides,
 });
@@ -196,7 +201,7 @@ const HookWrapper: React.FC = () => {
     columnVisibility: {},
   });
 
-  if (item.type === 'toggle') {
+  if (item?.type === 'toggle') {
     return (
       <div data-testid="fav-toggle-wrapper">
         <button
@@ -215,6 +220,51 @@ const HookWrapper: React.FC = () => {
 
   return null;
 };
+
+const WORKLOAD_PANES = ['workloads', 'pods'] as const;
+const paneSetters = {
+  workloads: { filters: vi.fn(), sort: vi.fn(), visibility: vi.fn() },
+  pods: { filters: vi.fn(), sort: vi.fn(), visibility: vi.fn() },
+};
+
+const GroupedPane: React.FC<{ pane: 'workloads' | 'pods' }> = ({ pane }) => {
+  const { item, modal } = useFavToggle({
+    paneId: pane,
+    paneLabel: pane === 'workloads' ? 'Workloads' : 'Pods',
+    filters: {
+      search: pane === 'workloads' ? 'api' : '',
+      kinds: { mode: 'all' },
+      namespaces: { mode: 'all' },
+      clusters: { mode: 'all' },
+      queryFacets: pane === 'pods' ? { owners: { mode: 'none' } } : undefined,
+      caseSensitive: false,
+      includeMetadata: false,
+    },
+    sortColumn: 'name',
+    sortDirection: 'asc',
+    columnVisibility: {},
+    hydrated: true,
+    setFilters: paneSetters[pane].filters,
+    setSortConfig: paneSetters[pane].sort,
+    setColumnVisibility: paneSetters[pane].visibility,
+    filterOptions: {},
+  });
+  return (
+    <>
+      {item?.type === 'toggle' ? (
+        <button type="button" data-testid={`group-toggle-${pane}`} />
+      ) : null}
+      {modal}
+    </>
+  );
+};
+
+const GroupedWrapper: React.FC = () => (
+  <FavoritePaneGroup primaryPaneId="workloads" expectedPaneIds={WORKLOAD_PANES}>
+    <GroupedPane pane="workloads" />
+    <GroupedPane pane="pods" />
+  </FavoritePaneGroup>
+);
 
 // ---------------------------------------------------------------------------
 // Tests
@@ -241,9 +291,16 @@ describe('useFavToggle', () => {
 
   beforeEach(() => {
     mockFavorites = [];
+    mockPendingFavorite = null;
+    mockSetPendingFavorite.mockClear();
     mockAddFavorite.mockClear();
     mockUpdateFavorite.mockClear();
     mockDeleteFavorite.mockClear();
+    Object.values(paneSetters).forEach((setters) => {
+      setters.filters.mockClear();
+      setters.sort.mockClear();
+      setters.visibility.mockClear();
+    });
 
     container = document.createElement('div');
     document.body.appendChild(container);
@@ -420,5 +477,62 @@ describe('useFavToggle', () => {
 
     expect(document.querySelector('[data-testid="fav-save-modal"]')).toBeNull();
     expect(mockAddFavorite).not.toHaveBeenCalled();
+  });
+
+  it('exposes one favorite action for a grouped two-pane view', async () => {
+    await act(async () => {
+      root.render(<GroupedWrapper />);
+      await Promise.resolve();
+    });
+
+    expect(container.querySelector('[data-testid="group-toggle-workloads"]')).toBeTruthy();
+    expect(container.querySelector('[data-testid="group-toggle-pods"]')).toBeNull();
+  });
+
+  it('restores both hydrated panes before consuming a grouped favorite', async () => {
+    mockPendingFavorite = makeFavorite({
+      panes: {
+        workloads: {
+          filters: {
+            search: 'saved workloads',
+            kinds: { mode: 'all' },
+            namespaces: { mode: 'all' },
+            clusters: { mode: 'all' },
+            caseSensitive: false,
+            includeMetadata: false,
+          },
+          tableState: { sortColumn: 'kind', sortDirection: 'desc', columnVisibility: {} },
+        },
+        pods: {
+          filters: {
+            search: 'saved pods',
+            kinds: { mode: 'all' },
+            namespaces: { mode: 'all' },
+            clusters: { mode: 'all' },
+            queryFacets: { owners: { mode: 'none' } },
+            caseSensitive: false,
+            includeMetadata: false,
+          },
+          tableState: {
+            sortColumn: 'node',
+            sortDirection: 'asc',
+            columnVisibility: { cpu: false },
+          },
+        },
+      },
+    });
+
+    await act(async () => {
+      root.render(<GroupedWrapper />);
+      await Promise.resolve();
+    });
+
+    expect(paneSetters.workloads.filters).toHaveBeenCalledWith(
+      mockPendingFavorite.panes.workloads.filters
+    );
+    expect(paneSetters.pods.filters).toHaveBeenCalledWith(mockPendingFavorite.panes.pods.filters);
+    expect(paneSetters.pods.sort).toHaveBeenCalledWith({ key: 'node', direction: 'asc' });
+    expect(paneSetters.pods.visibility).toHaveBeenCalledWith({ cpu: false });
+    expect(mockSetPendingFavorite).toHaveBeenCalledWith(null);
   });
 });

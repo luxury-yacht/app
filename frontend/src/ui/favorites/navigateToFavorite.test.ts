@@ -11,8 +11,7 @@ const makeFavorite = (overrides: Partial<Favorite> = {}): Favorite => ({
   viewType: 'cluster',
   view: 'nodes',
   namespace: '',
-  filters: null,
-  tableState: null,
+  panes: {},
   order: 0,
   ...overrides,
 });

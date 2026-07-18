@@ -73,3 +73,6 @@ debug.log
 
 .claude/impact-analysis.md
 .claude/settings.local.json
+
+# playwright
+.playwright-mcp/

@@ -191,6 +191,7 @@ export function useQueryResourceGridTable<T extends ResourceGridTableRow>({
   keyExtractor,
   rowIdentity,
   virtualization = GRIDTABLE_VIRTUALIZATION_DEFAULT,
+  favoritePane,
 }: QueryResourceGridTableParams<T>): ResourceGridTableResult<T> {
   const defaultKeyExtractor = useDefaultResourceGridKey<T>();
   const resolvedKeyExtractor = keyExtractor ?? defaultKeyExtractor;
@@ -218,6 +219,9 @@ export function useQueryResourceGridTable<T extends ResourceGridTableRow>({
     hydrated: persistence.hydrated,
     availableKinds: filterOptions.kinds,
     availableFilterNamespaces: filterOptions.namespaces,
+    paneId: favoritePane?.id,
+    paneLabel: favoritePane?.label,
+    filterOptions,
   });
 
   const filters = useMemo<GridTableFilterConfig<T>>(
@@ -233,7 +237,7 @@ export function useQueryResourceGridTable<T extends ResourceGridTableRow>({
           ? 'query'
           : (filterOptions.searchBehavior ?? 'local'),
         partialDataLabel: filterOptions.partialDataLabel ?? resourceGridPartialDataLabel(tableMode),
-        preActions: [...(filterOptions.preActions ?? []), favToggle],
+        preActions: [...(filterOptions.preActions ?? []), ...(favToggle ? [favToggle] : [])],
       },
     }),
     [
@@ -280,6 +284,7 @@ function useResourceGridTableCommon<T extends ResourceGridTableRow>({
   showKindDropdown = false,
   getTrailingFilterActions,
   transformSortedData,
+  favoritePane,
 }: ResourceGridCommonParams<T>): ResourceGridTableResult<T> {
   const binding = useGridTableBinding({
     data,
@@ -393,6 +398,25 @@ function useResourceGridTableCommon<T extends ResourceGridTableRow>({
     [filterAccessors, metadata.getSearchText, useMetadata]
   );
 
+  const favoriteFilterOptions = useMemo(
+    () => ({
+      ...filterOptionOverrides,
+      kinds: kindFilterOptions ?? availableKinds,
+      namespaces: showNamespaceFilters ? namespaceFilterOptions : undefined,
+      showKindDropdown,
+      showNamespaceDropdown: showNamespaceFilters,
+      namespaceDropdownSearchable: showNamespaceFilters,
+      namespaceDropdownBulkActions: showNamespaceFilters,
+    }),
+    [
+      availableKinds,
+      filterOptionOverrides,
+      kindFilterOptions,
+      namespaceFilterOptions,
+      showKindDropdown,
+      showNamespaceFilters,
+    ]
+  );
   const { item: favToggle, modal: favModal } = useFavToggle({
     filters: persistence.filters,
     includeMetadata: useMetadata ? metadata.includeMetadata : undefined,
@@ -406,6 +430,9 @@ function useResourceGridTableCommon<T extends ResourceGridTableRow>({
     hydrated: persistence.hydrated,
     availableKinds,
     availableFilterNamespaces: showNamespaceFilters ? availableFilterNamespaces : undefined,
+    paneId: favoritePane?.id,
+    paneLabel: favoritePane?.label,
+    filterOptions: favoriteFilterOptions,
   });
   const trailingFilterActions = useMemo(
     () => getTrailingFilterActions?.(sortedData) ?? [],
@@ -418,7 +445,7 @@ function useResourceGridTableCommon<T extends ResourceGridTableRow>({
       ...(metadataToggle ? [metadataToggle] : []),
       ...leadingFilterActions,
       ...trailingFilterActions,
-      favToggle,
+      ...(favToggle ? [favToggle] : []),
     ],
     [favToggle, leadingFilterActions, metadataToggle, trailingFilterActions]
   );
@@ -435,31 +462,20 @@ function useResourceGridTableCommon<T extends ResourceGridTableRow>({
       onChange: handleFiltersChange,
       onReset: persistence.resetState,
       options: {
-        ...filterOptionOverrides,
-        kinds: kindFilterOptions ?? availableKinds,
-        namespaces: showNamespaceFilters ? namespaceFilterOptions : undefined,
+        ...favoriteFilterOptions,
         searchBehavior: isQueryBackedResourceGridTableMode(tableMode) ? 'query' : 'local',
-        showKindDropdown,
-        showNamespaceDropdown: showNamespaceFilters,
-        namespaceDropdownSearchable: showNamespaceFilters,
-        namespaceDropdownBulkActions: showNamespaceFilters,
         partialDataLabel:
-          filterOptionOverrides?.partialDataLabel ?? resourceGridPartialDataLabel(tableMode),
+          favoriteFilterOptions.partialDataLabel ?? resourceGridPartialDataLabel(tableMode),
         preActions: filterPreActions,
       },
     }),
     [
-      availableKinds,
       effectiveFilterAccessors,
       filterValue,
       handleFiltersChange,
-      filterOptionOverrides,
+      favoriteFilterOptions,
       filterPreActions,
-      kindFilterOptions,
       persistence.resetState,
-      showKindDropdown,
-      showNamespaceFilters,
-      namespaceFilterOptions,
       tableMode,
     ]
   );

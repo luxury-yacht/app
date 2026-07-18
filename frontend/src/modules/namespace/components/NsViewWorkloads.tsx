@@ -34,6 +34,7 @@ import {
   buildRequiredObjectReference,
   type ClusterObjectReference,
 } from '@shared/utils/objectIdentity';
+import { FavoritePaneGroup } from '@ui/favorites/FavToggle';
 import React, { useCallback, useEffect, useMemo, useState } from 'react';
 import type { NamespaceWorkloadSnapshotPayload, PodMetricsInfo } from '@/core/refresh/types';
 import { useShortNames } from '@/hooks/useShortNames';
@@ -45,6 +46,8 @@ interface WorkloadsViewProps {
   showNamespaceColumn?: boolean;
   metrics?: PodMetricsInfo | null;
 }
+
+const WORKLOAD_FAVORITE_PANES = ['workloads', 'pods'] as const;
 
 interface WorkloadsTableProps extends WorkloadsViewProps {
   selectedWorkloadKey?: string | null;
@@ -225,6 +228,7 @@ export const WorkloadsTable: React.FC<WorkloadsTableProps> = React.memo(
       filterOptions: { isNamespaceScoped: namespace !== ALL_NAMESPACES_SCOPE },
       filterOptionOverrides:
         beforeNamespaceActions.length > 0 ? { beforeNamespaceActions } : undefined,
+      favoritePane: { id: 'workloads', label: 'Workloads' },
     });
 
     // The base query payload carries the poller freshness block for the usage
@@ -344,33 +348,35 @@ const ScopedWorkloadsView: React.FC<ScopedWorkloadsViewProps> = ({
     setPodFilterRequest({ type: 'clear' });
   }, []);
   return (
-    <WorkloadsPodsSplit
-      collapsed={podsCollapsed}
-      upper={
-        <WorkloadsTable
-          namespace={namespace}
-          showNamespaceColumn={showNamespaceColumn}
-          metrics={metrics}
-          selectedWorkloadKey={selectedWorkloadKey}
-          onWorkloadSelect={handleWorkloadSelect}
-          onWorkloadSelectionClear={handleWorkloadSelectionClear}
-        />
-      }
-      lower={
-        <NsViewPods
-          namespace={namespace}
-          showNamespaceColumn={showNamespaceColumn}
-          metrics={metrics}
-          workloadFilterRequest={podFilterRequest}
-          onWorkloadFilterMismatch={() => {
-            setSelectedWorkload(null);
-            setPodFilterRequest(undefined);
-          }}
-          collapsed={podsCollapsed}
-          onPodsCollapsedChange={setPodsCollapsed}
-        />
-      }
-    />
+    <FavoritePaneGroup primaryPaneId="workloads" expectedPaneIds={WORKLOAD_FAVORITE_PANES}>
+      <WorkloadsPodsSplit
+        collapsed={podsCollapsed}
+        upper={
+          <WorkloadsTable
+            namespace={namespace}
+            showNamespaceColumn={showNamespaceColumn}
+            metrics={metrics}
+            selectedWorkloadKey={selectedWorkloadKey}
+            onWorkloadSelect={handleWorkloadSelect}
+            onWorkloadSelectionClear={handleWorkloadSelectionClear}
+          />
+        }
+        lower={
+          <NsViewPods
+            namespace={namespace}
+            showNamespaceColumn={showNamespaceColumn}
+            metrics={metrics}
+            workloadFilterRequest={podFilterRequest}
+            onWorkloadFilterMismatch={() => {
+              setSelectedWorkload(null);
+              setPodFilterRequest(undefined);
+            }}
+            collapsed={podsCollapsed}
+            onPodsCollapsedChange={setPodsCollapsed}
+          />
+        }
+      />
+    </FavoritePaneGroup>
   );
 };
 

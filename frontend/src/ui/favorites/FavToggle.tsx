@@ -12,19 +12,32 @@ import { useViewState } from '@core/contexts/ViewStateContext';
 import { useKubeconfig } from '@modules/kubernetes/config/KubeconfigContext';
 import { useNamespace } from '@modules/namespace/contexts/NamespaceContext';
 import {
-  ALL_MULTISELECT_FILTER,
   isNarrowingFilterSelection,
   normalizeMultiSelectFilterSelection,
 } from '@shared/components/dropdowns/multiSelectFilterSelection';
 import type { IconBarItem } from '@shared/components/IconBar/IconBar';
 import { FavoriteFilledIcon, FavoriteOutlineIcon } from '@shared/components/icons/FavoriteIcons';
-import type { GridTableFilterState } from '@shared/components/tables/GridTable.types';
-import { normalizeGridTableQueryFacets } from '@shared/components/tables/gridTableFilterState';
+import type {
+  GridTableFilterOptions,
+  GridTableFilterState,
+} from '@shared/components/tables/GridTable.types';
+import {
+  areGridTableFilterStatesEqual,
+  normalizeGridTableQueryFacets,
+} from '@shared/components/tables/gridTableFilterState';
 import type React from 'react';
-import { useCallback, useEffect, useMemo, useState } from 'react';
+import {
+  createContext,
+  useCallback,
+  useContext,
+  useEffect,
+  useMemo,
+  useRef,
+  useState,
+} from 'react';
 import { resolveFavoriteRoute } from '@/core/navigation/favoriteRoute';
 import { getViewDescriptor } from '@/core/navigation/viewRegistry';
-import type { Favorite, FavoriteFilters, FavoriteTableState } from '@/core/persistence/favorites';
+import type { Favorite, FavoritePaneState } from '@/core/persistence/favorites';
 import FavSaveModal from './FavSaveModal';
 
 /** Current view state that the FavToggle needs to snapshot when saving a favorite.
@@ -44,6 +57,12 @@ export interface FavToggleState {
   availableKinds?: string[];
   /** Available namespace values for the favorites modal namespace filter dropdown. */
   availableFilterNamespaces?: string[];
+  /** Stable pane key used when a route owns multiple GridTables. */
+  paneId?: string;
+  /** User-facing pane label shown in the save modal. */
+  paneLabel?: string;
+  /** Complete live filter-control contract for this pane. */
+  filterOptions?: GridTableFilterOptions;
   /** Whether the persistence layer has finished hydrating. Restore waits for this. */
   hydrated?: boolean;
   /** Setters for restoring state from a pending favorite. */
@@ -53,16 +72,121 @@ export interface FavToggleState {
   setIncludeMetadata?: (value: boolean) => void;
 }
 
+interface RegisteredFavoritePane {
+  id: string;
+  label: string;
+  state: FavToggleState;
+  snapshot: FavoritePaneState;
+  filterOptions: GridTableFilterOptions;
+  signature: string;
+}
+
+interface FavoritePaneGroupValue {
+  primaryPaneId: string;
+  expectedPaneIds: readonly string[];
+  version: number;
+  updatePane: (pane: RegisteredFavoritePane) => void;
+  removePane: (paneId: string) => void;
+  getPane: (paneId: string) => RegisteredFavoritePane | undefined;
+}
+
+const FavoritePaneGroupContext = createContext<FavoritePaneGroupValue | null>(null);
+
+export interface FavoritePaneGroupProps {
+  primaryPaneId: string;
+  expectedPaneIds: readonly string[];
+  children: React.ReactNode;
+}
+
+/** Coordinates one route-level favorite across multiple independently persisted GridTables. */
+export const FavoritePaneGroup: React.FC<FavoritePaneGroupProps> = ({
+  primaryPaneId,
+  expectedPaneIds,
+  children,
+}) => {
+  const panesRef = useRef(new Map<string, RegisteredFavoritePane>());
+  const [version, setVersion] = useState(0);
+  const updatePane = useCallback((pane: RegisteredFavoritePane) => {
+    const previous = panesRef.current.get(pane.id);
+    panesRef.current.set(pane.id, pane);
+    if (!previous || previous.signature !== pane.signature) {
+      setVersion((current) => current + 1);
+    }
+  }, []);
+  const removePane = useCallback((paneId: string) => {
+    if (panesRef.current.delete(paneId)) {
+      setVersion((current) => current + 1);
+    }
+  }, []);
+  const getPane = useCallback((paneId: string) => panesRef.current.get(paneId), []);
+  const value = useMemo(
+    () => ({ primaryPaneId, expectedPaneIds, version, updatePane, removePane, getPane }),
+    [expectedPaneIds, getPane, primaryPaneId, removePane, updatePane, version]
+  );
+  return (
+    <FavoritePaneGroupContext.Provider value={value}>{children}</FavoritePaneGroupContext.Provider>
+  );
+};
+
 // ---------------------------------------------------------------------------
 // useFavToggle hook
 // ---------------------------------------------------------------------------
+
+const snapshotFavoritePane = (state: FavToggleState): FavoritePaneState => {
+  const queryFacets = normalizeGridTableQueryFacets(state.filters.queryFacets);
+  return {
+    filters: {
+      search: state.filters.search,
+      kinds: normalizeMultiSelectFilterSelection(state.filters.kinds),
+      namespaces: normalizeMultiSelectFilterSelection(state.filters.namespaces),
+      clusters: normalizeMultiSelectFilterSelection(state.filters.clusters),
+      queryFacets: Object.keys(queryFacets).length > 0 ? queryFacets : undefined,
+      caseSensitive: state.filters.caseSensitive ?? false,
+      includeMetadata: state.includeMetadata ?? state.filters.includeMetadata ?? false,
+    },
+    tableState: {
+      sortColumn: state.sortColumn ?? '',
+      sortDirection: state.sortDirection,
+      columnVisibility: { ...state.columnVisibility },
+    },
+  };
+};
+
+const favoritePaneMatches = (left: FavoritePaneState, right: FavoritePaneState): boolean =>
+  areGridTableFilterStatesEqual(left.filters, right.filters) &&
+  left.tableState.sortColumn === right.tableState.sortColumn &&
+  left.tableState.sortDirection === right.tableState.sortDirection &&
+  JSON.stringify(Object.entries(left.tableState.columnVisibility).sort()) ===
+    JSON.stringify(Object.entries(right.tableState.columnVisibility).sort());
+
+const favoriteFilterOptionsSignature = (options: GridTableFilterOptions): string =>
+  JSON.stringify({
+    kinds: options.kinds,
+    namespaces: options.namespaces,
+    clusters: options.clusters?.map((option) => [option.value, String(option.label)]),
+    showKindDropdown: options.showKindDropdown,
+    showNamespaceDropdown: options.showNamespaceDropdown,
+    showClusterDropdown: options.showClusterDropdown,
+    namespaceDropdownSearchable: options.namespaceDropdownSearchable,
+    namespaceDropdownBulkActions: options.namespaceDropdownBulkActions,
+    clusterDropdownSearchable: options.clusterDropdownSearchable,
+    clusterDropdownBulkActions: options.clusterDropdownBulkActions,
+    queryFacets: options.queryFacets?.map((facet) => ({
+      key: facet.key,
+      label: facet.label,
+      placeholder: facet.placeholder,
+      searchable: facet.searchable,
+      bulkActions: facet.bulkActions,
+      options: facet.options.map((option) => [option.value, String(option.label)]),
+    })),
+  });
 
 /**
  * Returns an IconBarItem (toggle type) for the heart favorite button
  * in the GridTableFiltersBar's preActions slot.
  */
 export function useFavToggle(state: FavToggleState): {
-  item: IconBarItem;
+  item: IconBarItem | null;
   modal: React.JSX.Element;
 } {
   const {
@@ -76,6 +200,49 @@ export function useFavToggle(state: FavToggleState): {
   const { selectedKubeconfig, selectedClusterId, selectedClusterName } = useKubeconfig();
   const { viewType, activeNamespaceTab, activeClusterTab, activeGlobalTab } = useViewState();
   const { selectedNamespace } = useNamespace();
+  const paneGroup = useContext(FavoritePaneGroupContext);
+  const paneId = state.paneId ?? 'main';
+  const paneLabel = state.paneLabel ?? 'Table';
+  const filterOptions = useMemo<GridTableFilterOptions>(
+    () =>
+      state.filterOptions ?? {
+        kinds: state.availableKinds,
+        namespaces: state.availableFilterNamespaces,
+        showKindDropdown: Boolean(state.availableKinds?.length),
+        showNamespaceDropdown: Boolean(state.availableFilterNamespaces?.length),
+      },
+    [state.availableFilterNamespaces, state.availableKinds, state.filterOptions]
+  );
+  const currentPane = useMemo(() => snapshotFavoritePane(state), [state]);
+  const paneSignature = useMemo(
+    () => JSON.stringify(currentPane) + favoriteFilterOptionsSignature(filterOptions),
+    [currentPane, filterOptions]
+  );
+  const updateGroupedPane = paneGroup?.updatePane;
+  const removeGroupedPane = paneGroup?.removePane;
+
+  useEffect(() => {
+    updateGroupedPane?.({
+      id: paneId,
+      label: paneLabel,
+      state,
+      snapshot: currentPane,
+      filterOptions,
+      signature: paneSignature,
+    });
+  }, [currentPane, filterOptions, paneId, paneLabel, paneSignature, state, updateGroupedPane]);
+  useEffect(
+    () => () => {
+      removeGroupedPane?.(paneId);
+    },
+    [paneId, removeGroupedPane]
+  );
+
+  const groupedPanes = paneGroup
+    ? paneGroup.expectedPaneIds.map((id) => paneGroup.getPane(id)).filter(Boolean)
+    : [];
+  const groupReady = !paneGroup || groupedPanes.length === paneGroup.expectedPaneIds.length;
+  const isPrimaryPane = !paneGroup || paneId === paneGroup.primaryPaneId;
 
   // Derive the active view tab.
   const activeViewTab =
@@ -110,52 +277,19 @@ export function useFavToggle(state: FavToggleState): {
         continue;
       }
 
-      // Compare the full persisted filter state, including provider-owned query facets.
-      if (fav.filters) {
-        const search = state.filters.search.trim();
-        const favSearch = (fav.filters.search ?? '').trim();
-        if (search !== favSearch) {
-          continue;
-        }
-
-        const kinds = JSON.stringify(normalizeMultiSelectFilterSelection(state.filters.kinds));
-        const favKinds = JSON.stringify(normalizeMultiSelectFilterSelection(fav.filters.kinds));
-        if (kinds !== favKinds) {
-          continue;
-        }
-
-        const ns = JSON.stringify(normalizeMultiSelectFilterSelection(state.filters.namespaces));
-        const favNs = JSON.stringify(normalizeMultiSelectFilterSelection(fav.filters.namespaces));
-        if (ns !== favNs) {
-          continue;
-        }
-
-        const clusters = JSON.stringify(
-          normalizeMultiSelectFilterSelection(state.filters.clusters)
-        );
-        const favClusters = JSON.stringify(
-          normalizeMultiSelectFilterSelection(fav.filters.clusters)
-        );
-        if (clusters !== favClusters) {
-          continue;
-        }
-
-        const queryFacets = JSON.stringify(
-          normalizeGridTableQueryFacets(state.filters.queryFacets)
-        );
-        const favoriteQueryFacets = JSON.stringify(
-          normalizeGridTableQueryFacets(fav.filters.queryFacets)
-        );
-        if (queryFacets !== favoriteQueryFacets) {
-          continue;
-        }
-
-        if ((state.filters.caseSensitive ?? false) !== (fav.filters.caseSensitive ?? false)) {
-          continue;
-        }
-        if ((state.includeMetadata ?? false) !== (fav.filters.includeMetadata ?? false)) {
-          continue;
-        }
+      const panesToMatch = paneGroup
+        ? paneGroup.expectedPaneIds.map((id) => paneGroup.getPane(id))
+        : [{ id: paneId, snapshot: currentPane }];
+      if (
+        panesToMatch.some((pane) => {
+          if (!pane) {
+            return true;
+          }
+          const savedPane = fav.panes[pane.id];
+          return !savedPane || !favoritePaneMatches(pane.snapshot, savedPane);
+        })
+      ) {
+        continue;
       }
 
       return fav;
@@ -168,8 +302,9 @@ export function useFavToggle(state: FavToggleState): {
     viewType,
     activeViewTab,
     selectedNamespace,
-    state.filters,
-    state.includeMetadata,
+    currentPane,
+    paneGroup,
+    paneId,
   ]);
 
   // Restore filter/table state from a pending favorite once:
@@ -179,10 +314,13 @@ export function useFavToggle(state: FavToggleState): {
   // The FavoritesContext effect handles cluster switching and view navigation.
   // This effect waits for those to settle before applying filter/table state.
   useEffect(() => {
-    if (!pendingFavorite) {
+    if (!pendingFavorite || !isPrimaryPane || !groupReady) {
       return;
     }
-    if (!state.hydrated) {
+    const panesToRestore = paneGroup
+      ? paneGroup.expectedPaneIds.map((id) => paneGroup.getPane(id))
+      : [{ id: paneId, state }];
+    if (panesToRestore.some((pane) => !pane?.state.hydrated)) {
       return;
     }
 
@@ -204,25 +342,23 @@ export function useFavToggle(state: FavToggleState): {
       return;
     }
 
-    if (pendingFavorite.filters && state.setFilters) {
-      state.setFilters({
-        search: pendingFavorite.filters.search ?? '',
-        kinds: pendingFavorite.filters.kinds ?? ALL_MULTISELECT_FILTER,
-        namespaces: pendingFavorite.filters.namespaces ?? ALL_MULTISELECT_FILTER,
-        clusters: pendingFavorite.filters.clusters ?? ALL_MULTISELECT_FILTER,
-        queryFacets: pendingFavorite.filters.queryFacets,
-        caseSensitive: pendingFavorite.filters.caseSensitive ?? false,
-        includeMetadata: pendingFavorite.filters.includeMetadata ?? false,
-      });
-    }
-    if (pendingFavorite.tableState?.sortColumn && state.setSortConfig) {
-      state.setSortConfig({
-        key: pendingFavorite.tableState.sortColumn,
-        direction: (pendingFavorite.tableState.sortDirection as 'asc' | 'desc') ?? 'asc',
-      });
-    }
-    if (pendingFavorite.tableState?.columnVisibility && state.setColumnVisibility) {
-      state.setColumnVisibility(pendingFavorite.tableState.columnVisibility);
+    for (const pane of panesToRestore) {
+      if (!pane) {
+        return;
+      }
+      const savedPane = pendingFavorite.panes[pane.id];
+      if (!savedPane) {
+        return;
+      }
+      pane.state.setFilters?.(savedPane.filters);
+      if (savedPane.tableState.sortColumn) {
+        pane.state.setSortConfig?.({
+          key: savedPane.tableState.sortColumn,
+          direction: savedPane.tableState.sortDirection as 'asc' | 'desc',
+        });
+      }
+      pane.state.setColumnVisibility?.(savedPane.tableState.columnVisibility);
+      pane.state.setIncludeMetadata?.(savedPane.filters.includeMetadata);
     }
     setPendingFavorite(null);
   }, [
@@ -234,6 +370,10 @@ export function useFavToggle(state: FavToggleState): {
     activeGlobalTab,
     selectedNamespace,
     state,
+    paneGroup,
+    paneId,
+    isPrimaryPane,
+    groupReady,
   ]);
 
   const [modalOpen, setModalOpen] = useState(false);
@@ -259,36 +399,44 @@ export function useFavToggle(state: FavToggleState): {
     }
     parts.push(viewLabel);
     const base = parts.join(' / ');
-    const hasActiveFilters =
-      state.filters.search.trim().length > 0 ||
-      isNarrowingFilterSelection(state.filters.kinds) ||
-      isNarrowingFilterSelection(state.filters.namespaces) ||
-      isNarrowingFilterSelection(state.filters.clusters) ||
-      Object.keys(normalizeGridTableQueryFacets(state.filters.queryFacets)).length > 0;
+    const panes = paneGroup
+      ? paneGroup.expectedPaneIds.map((id) => paneGroup.getPane(id)?.snapshot).filter(Boolean)
+      : [currentPane];
+    const hasActiveFilters = panes.some(
+      (pane) =>
+        pane &&
+        (pane.filters.search.trim().length > 0 ||
+          isNarrowingFilterSelection(pane.filters.kinds) ||
+          isNarrowingFilterSelection(pane.filters.namespaces) ||
+          isNarrowingFilterSelection(pane.filters.clusters) ||
+          Object.keys(normalizeGridTableQueryFacets(pane.filters.queryFacets)).length > 0 ||
+          pane.filters.caseSensitive ||
+          pane.filters.includeMetadata)
+    );
     return hasActiveFilters ? `${base} (filtered)` : base;
-  }, [selectedClusterName, viewType, selectedNamespace, viewLabel, state.filters]);
+  }, [currentPane, paneGroup, selectedClusterName, selectedNamespace, viewLabel, viewType]);
 
-  // Snapshot current filter and table state for the modal.
-  const currentFilters = useMemo(
-    (): FavoriteFilters => ({
-      search: state.filters.search,
-      kinds: normalizeMultiSelectFilterSelection(state.filters.kinds),
-      namespaces: normalizeMultiSelectFilterSelection(state.filters.namespaces),
-      clusters: normalizeMultiSelectFilterSelection(state.filters.clusters),
-      queryFacets: normalizeGridTableQueryFacets(state.filters.queryFacets),
-      caseSensitive: state.filters.caseSensitive ?? false,
-      includeMetadata: state.includeMetadata ?? false,
-    }),
-    [state.filters, state.includeMetadata]
-  );
-
-  const currentTableState = useMemo(
-    (): FavoriteTableState => ({
-      sortColumn: state.sortColumn ?? '',
-      sortDirection: state.sortDirection,
-      columnVisibility: { ...state.columnVisibility },
-    }),
-    [state.sortColumn, state.sortDirection, state.columnVisibility]
+  const modalPanes = useMemo(
+    () =>
+      paneGroup
+        ? paneGroup.expectedPaneIds
+            .map((id) => paneGroup.getPane(id))
+            .filter((pane): pane is RegisteredFavoritePane => Boolean(pane))
+            .map((pane) => ({
+              id: pane.id,
+              label: pane.label,
+              ...pane.snapshot,
+              filterOptions: pane.filterOptions,
+            }))
+        : [
+            {
+              id: paneId,
+              label: paneLabel,
+              ...currentPane,
+              filterOptions,
+            },
+          ],
+    [currentPane, filterOptions, paneGroup, paneId, paneLabel]
   );
 
   const handleSave = useCallback(
@@ -310,7 +458,10 @@ export function useFavToggle(state: FavToggleState): {
   );
 
   // Build the IconBarItem returned to the caller.
-  const item = useMemo<IconBarItem>(() => {
+  const item = useMemo<IconBarItem | null>(() => {
+    if (!isPrimaryPane) {
+      return null;
+    }
     return {
       type: 'toggle' as const,
       id: 'favorite',
@@ -320,10 +471,11 @@ export function useFavToggle(state: FavToggleState): {
         <FavoriteOutlineIcon width={18} height={18} />
       ),
       active: isFavorited,
+      disabled: !groupReady,
       onClick: () => setModalOpen(true),
       title: isFavorited ? 'Edit favorite' : 'Save as favorite',
     };
-  }, [isFavorited]);
+  }, [groupReady, isFavorited, isPrimaryPane]);
 
   return {
     item,
@@ -337,11 +489,12 @@ export function useFavToggle(state: FavToggleState): {
         viewType={viewType}
         viewLabel={viewLabel}
         namespace={viewType === 'namespace' ? (selectedNamespace ?? '') : ''}
-        filters={currentFilters}
-        tableState={currentTableState}
+        filters={currentPane.filters}
+        tableState={currentPane.tableState}
         includeMetadata={state.includeMetadata ?? false}
         availableKinds={state.availableKinds}
         availableFilterNamespaces={state.availableFilterNamespaces}
+        panes={modalPanes}
         onSave={handleSave}
         onDelete={handleDelete}
       />
