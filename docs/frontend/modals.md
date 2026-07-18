@@ -12,6 +12,9 @@ own focus trap, backdrop, escape handling, or app-background blocking.
   interaction while blocked.
 - Modal form state belongs to the modal workflow; focus/backdrop/escape behavior
   belongs to the shared modal layer.
+- A modal draft initializes once when the modal opens. Background refreshes may
+  update source props while it remains open, but must not overwrite user-edited
+  form state; closing and reopening starts a new draft from the latest props.
 - Do not add direct document listeners unless the shared layer cannot express
   the behavior.
 - Do not let command palette or global shortcuts bypass a blocking modal.

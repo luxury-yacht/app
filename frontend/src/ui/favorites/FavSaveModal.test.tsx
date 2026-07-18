@@ -504,6 +504,57 @@ describe('FavSaveModal', () => {
     );
   });
 
+  it('preserves an edited name when live pane props refresh while open', async () => {
+    const pane = {
+      id: 'main',
+      label: 'Pods',
+      filters: defaultFilters,
+      tableState: defaultTableState,
+      filterOptions: { showKindDropdown: true, kinds: ['Pod', 'Deployment'] },
+    };
+    const props = makeProps({ panes: [pane] });
+    await renderComponent(props);
+
+    const input = requireValue(
+      container.querySelector<HTMLInputElement>('[id$="-fav-name"]'),
+      'expected favorite name input in FavSaveModal.test.tsx'
+    );
+    await act(async () => {
+      const setValue = Object.getOwnPropertyDescriptor(
+        window.HTMLInputElement.prototype,
+        'value'
+      )?.set;
+      setValue?.call(input, 'My custom favorite');
+      input.dispatchEvent(new Event('input', { bubbles: true }));
+      await Promise.resolve();
+    });
+
+    await renderComponent({
+      ...props,
+      panes: [
+        {
+          ...pane,
+          filterOptions: { ...pane.filterOptions, kinds: [...pane.filterOptions.kinds] },
+        },
+      ],
+    });
+
+    expect(input.value).toBe('My custom favorite');
+  });
+
+  it('starts a new draft from current props after the modal reopens', async () => {
+    const props = makeProps({ defaultName: 'Initial name' });
+    await renderComponent(props);
+    await renderComponent({ ...props, isOpen: false, defaultName: 'Updated name' });
+    await renderComponent({ ...props, isOpen: true, defaultName: 'Updated name' });
+
+    const input = requireValue(
+      container.querySelector<HTMLInputElement>('[id$="-fav-name"]'),
+      'expected reopened favorite name input in FavSaveModal.test.tsx'
+    );
+    expect(input.value).toBe('Updated name');
+  });
+
   // -----------------------------------------------------------------------
   // 4. Clicking Save calls onSave with correct favorite data
   // -----------------------------------------------------------------------

@@ -400,6 +400,8 @@ const FavSaveModal: React.FC<FavSaveModalProps> = ({
   const { kubeconfigs, getClusterMeta } = useKubeconfig();
   const { namespaces } = useNamespace();
   const modalRef = useRef<HTMLDivElement>(null);
+  // Live table snapshots may change while the modal is open; only reopening starts a new draft.
+  const draftOpenRef = useRef(false);
 
   // ----- Form state -----
   const [name, setName] = useState('');
@@ -414,8 +416,13 @@ const FavSaveModal: React.FC<FavSaveModalProps> = ({
   // ----- Initialize form when modal opens -----
   useEffect(() => {
     if (!isOpen) {
+      draftOpenRef.current = false;
       return;
     }
+    if (draftOpenRef.current) {
+      return;
+    }
+    draftOpenRef.current = true;
     if (existingFavorite) {
       const existingRoute = resolveFavoriteRoute(existingFavorite.viewType, existingFavorite.view);
       setName(existingFavorite.name);
