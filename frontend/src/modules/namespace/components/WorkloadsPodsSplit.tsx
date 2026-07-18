@@ -2,8 +2,8 @@ import './WorkloadsPodsSplit.css';
 import type React from 'react';
 import { useCallback, useEffect, useRef, useState } from 'react';
 
-const MIN_UPPER_PERCENT = 25;
-const MAX_UPPER_PERCENT = 75;
+const MIN_UPPER_PERCENT = 10;
+const MAX_UPPER_PERCENT = 90;
 const KEYBOARD_RESIZE_STEP_PX = 16;
 
 interface WorkloadsPodsSplitProps {
@@ -69,6 +69,7 @@ export default function WorkloadsPodsSplit({
 
   const handlePointerDown = useCallback(
     (event: React.PointerEvent<HTMLHRElement>) => {
+      event.preventDefault();
       resizingRef.current = true;
       resizeStartRef.current = { clientY: event.clientY, upperPercent };
       setIsResizing(true);

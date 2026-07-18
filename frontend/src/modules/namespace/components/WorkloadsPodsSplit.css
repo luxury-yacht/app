@@ -92,8 +92,10 @@ body.dockable-panel-resizing .content-body .workloads-pods-split {
   outline-offset: -2px;
 }
 
-body.workloads-pods-resizing {
+body.workloads-pods-resizing .app,
+body.workloads-pods-resizing .app * {
   user-select: none;
+  -webkit-user-select: none;
 }
 
 body.workloads-pods-resizing::after {

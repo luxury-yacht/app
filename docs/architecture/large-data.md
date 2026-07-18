@@ -310,7 +310,9 @@ hovering or dragging thickens it to the shared resize highlight. The Pods pane
 can be collapsed from the left edge of its own GridTable filter bar. While
 collapsed, the one-pixel boundary remains and the Pods row becomes a compact
 header containing only the expand control and `Show Pods`; expanding restores
-the full filter bar and table.
+the full filter bar and table. Pointer resizing cancels native selection at
+gesture start and disables both standard and WebKit text selection for the
+gesture, including while the pointer crosses the native app-window boundary.
 Selecting a Workloads row writes the normal Pods GridTable filters: Namespace
 when the table spans all namespaces, plus the provider-owned Owner facet. Owner
 values carry cluster, group, version, kind, namespace, and name. Deployments

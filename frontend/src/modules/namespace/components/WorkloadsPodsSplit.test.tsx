@@ -130,6 +130,38 @@ describe('WorkloadsPodsSplit', () => {
     expect(document.body.classList.contains('workloads-pods-resizing')).toBe(false);
   });
 
+  it('cancels the native pointer-down action when resizing starts', () => {
+    act(() => {
+      root.render(
+        <WorkloadsPodsSplit upper={<div>Workloads table</div>} lower={<div>Pods table</div>} />
+      );
+    });
+
+    const separator = container.querySelector<HTMLElement>('hr[aria-orientation="horizontal"]');
+    const pointerDown = new MouseEvent('pointerdown', {
+      bubbles: true,
+      cancelable: true,
+      clientY: 300,
+    });
+    let dispatched = true;
+    act(() => {
+      dispatched = separator?.dispatchEvent(pointerDown) ?? true;
+    });
+
+    expect(dispatched).toBe(false);
+    expect(pointerDown.defaultPrevented).toBe(true);
+  });
+
+  it('disables standard and WebKit text selection while resizing', () => {
+    const resizingRule = splitStyles.match(
+      /body\.workloads-pods-resizing \.app,\s*body\.workloads-pods-resizing \.app \*\s*{([^}]*)}/
+    )?.[1];
+
+    expect(resizingRule).toContain('user-select: none;');
+    expect(resizingRule).toContain('-webkit-user-select: none;');
+    expect(resizingRule).not.toContain('!important');
+  });
+
   it('places the resize hit area directly on the split boundary', () => {
     const resizerRule = splitStyles.match(/\.workloads-pods-split__resizer\s*{([^}]*)}/)?.[1];
 
