@@ -1,8 +1,7 @@
 ### Added
 
 - Added a Cluster Attention view with severity, kind, namespace, finding-type,
-  and status filters; active filter chips; persisted ignore scopes; and a Fixed
-  section for recently resolved findings.
+  and status filters; active filter chips; and persisted ignore scopes.
 - Added Global → Namespaces and Cluster → Namespaces views for comparing and
   opening namespace state at the appropriate scope.
 - Added a Global Clusters view that compares health, capacity, and metrics across
@@ -51,14 +50,5 @@
 
 ### Fixed
 
-- Prevented a Pod/Job ingest-store lock cycle during Job-to-CronJob owner
-  resolution and startup healing.
-- Kept young workload errors visible while replica mismatch remains in its
-  grace period, and made `MatchNone` anchored queries report a filtered anchor.
-- Kept CronJob Job selections matched to their Pods, routed Pod focus to the
-  embedded Pods table, and cleared orphaned Workloads/Pods owner filters.
-- Kept rollout log filters open to newly created Pods when only the container
-  selection is narrowed.
-- Cleared or expired unrestorable favorites, preserved unsorted table state,
-  and prevented stale kubeconfig paths or incompatible cross-view pane state
-  from being restored.
+- Refreshed YAML and object maps when versionless snapshot payloads change, so
+  deleted or updated objects no longer remain visible from a stale response.

@@ -202,8 +202,12 @@ func NewSubsystemWithServices(cfg Config) (*Subsystem, error) {
 	// The five workload kinds (Deployment/StatefulSet/DaemonSet/Job/CronJob) have no Stream
 	// descriptor either (their table is the bespoke cross-kind WorkloadSummary), so they too
 	// are wired with explicit bespoke projectors. ReplicaSet stays on its typed informer.
-	registerWorkloadReflectors(ingestManager, snapshot.ClusterMeta{ClusterID: cfg.ClusterID, ClusterName: cfg.ClusterName})
-	ingestManager.AddBundleSink(snapshot.JobGVR, jobControllerOwners)
+	if err := registerWorkloadReflectors(ingestManager, snapshot.ClusterMeta{ClusterID: cfg.ClusterID, ClusterName: cfg.ClusterName}); err != nil {
+		return nil, err
+	}
+	if !ingestManager.AddBundleSink(snapshot.JobGVR, jobControllerOwners) {
+		return nil, fmt.Errorf("register Job owner sink: Job ingest store is unavailable")
+	}
 	// Service and EndpointSlice have no Stream descriptor either (a Service row is the bespoke
 	// Service↔EndpointSlice join), so they are wired with explicit bespoke projectors. Ingress
 	// and NetworkPolicy ARE Stream-backed and handled by the generic loop above.

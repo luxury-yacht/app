@@ -29,6 +29,7 @@ type fakeNamespaceIngest struct {
 	presentation string
 	podRows      []streamrows.PodAggregate
 	quotaRows    []streamrows.ResourceQuotaAggregate
+	quotaReads   int
 }
 
 func (f *fakeNamespaceIngest) Tracks(schema.GroupVersionResource) bool { return true }
@@ -68,6 +69,7 @@ func (f *fakeNamespaceIngest) AggregateRows(gvr schema.GroupVersionResource) []i
 	if gvr != ResourceQuotaGVR {
 		return nil
 	}
+	f.quotaReads++
 	rows := make([]interface{}, 0, len(f.quotaRows))
 	for _, row := range f.quotaRows {
 		rows = append(rows, row)
@@ -114,6 +116,18 @@ func (f *fakeNamespaceIngest) setQuotaRows(rows ...streamrows.ResourceQuotaAggre
 	f.mu.Lock()
 	f.quotaRows = append([]streamrows.ResourceQuotaAggregate(nil), rows...)
 	f.mu.Unlock()
+}
+
+func (f *fakeNamespaceIngest) resetQuotaReads() {
+	f.mu.Lock()
+	f.quotaReads = 0
+	f.mu.Unlock()
+}
+
+func (f *fakeNamespaceIngest) quotaReadCount() int {
+	f.mu.Lock()
+	defer f.mu.Unlock()
+	return f.quotaReads
 }
 
 type mutableNamespaceMetrics struct {
@@ -332,6 +346,23 @@ func TestNamespaceNotifierGatesQuotaEventsOnPressureRollup(t *testing.T) {
 	notifier.QuotaChanged()
 	waitForBroadcasts(t, recorder, 2)
 	require.Contains(t, recorder.lastReason(), "quota pressure changed")
+}
+
+func TestNamespaceNotifierSkipsQuotaRollupWhenQuotaStateIsClean(t *testing.T) {
+	ingest := &fakeNamespaceIngest{}
+	ingest.set(true)
+	recorder := &broadcastRecorder{}
+	notifier := newNotifierForTest(ingest, recorder)
+	defer notifier.Stop()
+
+	notifier.NamespaceChanged()
+	waitForBroadcasts(t, recorder, 1)
+	ingest.resetQuotaReads()
+
+	notifier.NamespaceChanged()
+	waitForBroadcasts(t, recorder, 2)
+
+	require.Zero(t, ingest.quotaReadCount())
 }
 
 func TestNamespaceNotifierBroadcastsOnlyWhenWarningEventRollupChanges(t *testing.T) {

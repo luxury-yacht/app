@@ -9,6 +9,8 @@ import (
 	"time"
 
 	"github.com/luxury-yacht/app/backend/internal/applog"
+	"github.com/luxury-yacht/app/backend/kind/streamrows"
+	"github.com/luxury-yacht/app/backend/refresh/ingest"
 	"github.com/luxury-yacht/app/backend/refresh/snapshot"
 	"github.com/luxury-yacht/app/backend/testsupport"
 	"github.com/stretchr/testify/require"
@@ -20,6 +22,21 @@ import (
 	"k8s.io/client-go/rest"
 	cgotesting "k8s.io/client-go/testing"
 )
+
+func TestRegisterWorkloadReflectorsRejectsMissingRequiredStore(t *testing.T) {
+	mgr := ingest.NewIngestManager(
+		streamrows.ClusterMeta{ClusterID: "cluster-a"},
+		kubernetesfake.NewClientset(),
+		nil,
+		nil,
+	)
+	meta := snapshot.ClusterMeta{ClusterID: "cluster-a"}
+	require.True(t, mgr.RegisterReflector(snapshot.JobGVR, snapshot.JobGVK, snapshot.NewJobIngestProjector(meta), false))
+
+	err := registerWorkloadReflectors(mgr, meta)
+
+	require.ErrorContains(t, err, "Job")
+}
 
 func TestNewSubsystemRequiresDynamicClient(t *testing.T) {
 	cfg := Config{

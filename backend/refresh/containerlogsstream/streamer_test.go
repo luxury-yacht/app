@@ -152,6 +152,55 @@ func TestListPodsForPodKind(t *testing.T) {
 	}
 }
 
+func TestMatchNoneTailAndStreamDoNotTouchKubernetes(t *testing.T) {
+	client := fake.NewClientset()
+	streamer := NewStreamer(client, nil, nil)
+	opts := Options{
+		ClusterID: "cluster-a",
+		Namespace: "default",
+		Group:     "",
+		Version:   "v1",
+		Kind:      "Pod",
+		Name:      "pod-1",
+		MatchNone: true,
+	}
+
+	initial, states, pods, selector, warnings, _, _, err := streamer.tail(context.Background(), opts, nil)
+	require.NoError(t, err)
+	require.Empty(t, initial)
+	require.Empty(t, states)
+	require.Empty(t, pods)
+	require.Empty(t, selector)
+	require.Empty(t, warnings)
+	require.Empty(t, client.Actions())
+
+	ctx, cancel := context.WithCancel(context.Background())
+	done := make(chan struct{})
+	go func() {
+		defer close(done)
+		streamer.run(
+			ctx,
+			opts,
+			pods,
+			selector,
+			states,
+			nil,
+			warnings,
+			make(chan Entry),
+			make(chan []string),
+			make(chan error),
+			make(chan int),
+		)
+	}()
+	cancel()
+	select {
+	case <-done:
+	case <-time.After(time.Second):
+		t.Fatal("MatchNone stream did not stop after cancellation")
+	}
+	require.Empty(t, client.Actions())
+}
+
 func TestTailSortsInitialEntriesByTimestampAcrossTargets(t *testing.T) {
 	pod := &corev1.Pod{
 		ObjectMeta: metav1.ObjectMeta{Namespace: "default", Name: "demo"},

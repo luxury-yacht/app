@@ -39,6 +39,7 @@ let mockActiveNamespaceTab = 'workloads';
 let mockActiveClusterTab: string | null = null;
 let mockSelectedNamespace: string | undefined = 'default';
 let mockNamespaceReady = true;
+let mockClusterLifecycleState = 'ready';
 const mockSetViewType = vi.fn();
 const mockSetActiveNamespaceTab = vi.fn();
 const mockSetActiveClusterView = vi.fn();
@@ -56,8 +57,8 @@ vi.mock('@modules/kubernetes/config/KubeconfigContext', () => ({
 
 vi.mock('@core/contexts/ClusterLifecycleContext', () => ({
   useClusterLifecycle: () => ({
-    getClusterState: () => 'ready',
-    isClusterReady: () => true,
+    getClusterState: () => mockClusterLifecycleState,
+    isClusterReady: () => mockClusterLifecycleState === 'ready',
   }),
   ClusterLifecycleProvider: ({ children }: { children: React.ReactNode }) => children,
 }));
@@ -130,6 +131,7 @@ describe('FavoritesContext', () => {
     mockActiveClusterTab = null;
     mockSelectedNamespace = 'default';
     mockNamespaceReady = true;
+    mockClusterLifecycleState = 'ready';
     mockSetViewType.mockReset();
     mockSetActiveNamespaceTab.mockReset();
     mockSetActiveClusterView.mockReset();
@@ -358,6 +360,33 @@ describe('FavoritesContext', () => {
 
     expect(mockSetViewType).toHaveBeenCalledWith('cluster');
     expect(mockSetActiveClusterView).toHaveBeenCalledWith('nodes');
+  });
+
+  it('expires a pending favorite only after 15 seconds without lifecycle progress', async () => {
+    vi.useFakeTimers();
+    mockClusterLifecycleState = 'connecting';
+    try {
+      await renderProvider();
+
+      act(() => stateRef.current?.setPendingFavorite(makeFavorite()));
+      act(() => vi.advanceTimersByTime(14_000));
+
+      mockClusterLifecycleState = 'connected';
+      await act(async () => {
+        root.render(
+          <FavoritesProvider>
+            <Harness />
+          </FavoritesProvider>
+        );
+      });
+      act(() => vi.advanceTimersByTime(2_000));
+      expect(stateRef.current?.pendingFavorite?.id).toBe('fav-1');
+
+      act(() => vi.advanceTimersByTime(13_000));
+      expect(stateRef.current?.pendingFavorite).toBeNull();
+    } finally {
+      vi.useRealTimers();
+    }
   });
 
   // Note: currentFavoriteMatch was moved from FavoritesContext to useFavToggle

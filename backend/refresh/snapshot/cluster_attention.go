@@ -318,6 +318,14 @@ func (i *clusterAttentionIndex) SetIgnoreRules(rules AttentionIgnoreRules) {
 		i.sources[key] = state
 		i.applyFindingLocked(key, evaluation.Finding)
 	}
+	for _, row := range i.maintained.store.Snapshot() {
+		key := attentionRefKey(row.Ref)
+		if _, hasLiveSource := i.sources[key]; hasLiveSource {
+			continue
+		}
+		filtered := i.filterIgnoredEvaluationLocked(attentionEvaluation{Finding: &row}).Finding
+		i.applyFindingLocked(key, filtered)
+	}
 	if rulesChanged {
 		i.revision++
 		i.markDirtyLocked()
@@ -637,11 +645,12 @@ func (i *clusterAttentionIndex) Reconcile() {
 		unavailableOwners = append(unavailableOwners, owner)
 	}
 	eventRows := i.eventRows
+	eventRowsSynced := i.eventRowsSynced
 	i.mu.Unlock()
 	for _, owner := range unavailableOwners {
 		i.replaceSource(owner, nil, false)
 	}
-	if eventRows != nil && (i.eventRowsSynced == nil || i.eventRowsSynced()) {
+	if eventRows != nil && (eventRowsSynced == nil || eventRowsSynced()) {
 		i.ReplaceSource("events", eventRows())
 	}
 }

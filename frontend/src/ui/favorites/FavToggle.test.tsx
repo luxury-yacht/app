@@ -23,6 +23,7 @@ const mockSetPendingFavorite = vi.fn();
 const mockAddFavorite = vi.fn().mockResolvedValue({ id: 'new-fav' });
 const mockUpdateFavorite = vi.fn().mockResolvedValue(undefined);
 const mockDeleteFavorite = vi.fn().mockResolvedValue(undefined);
+const favSaveModalPropsRef: { current: FavSaveModalProps | null } = { current: null };
 
 vi.mock('@core/contexts/FavoritesContext', () => ({
   useFavorites: () => ({
@@ -106,7 +107,9 @@ vi.mock('@modules/namespace/contexts/NamespaceContext', () => ({
 }));
 
 vi.mock('./FavSaveModal', () => ({
-  default: ({ isOpen, onClose, onSave, onDelete, existingFavorite }: FavSaveModalProps) => {
+  default: (props: FavSaveModalProps) => {
+    favSaveModalPropsRef.current = props;
+    const { isOpen, onClose, onSave, onDelete, existingFavorite } = props;
     if (!isOpen) {
       return null;
     }
@@ -186,13 +189,15 @@ const makeFavorite = (overrides: Partial<Favorite> = {}): Favorite => ({
  * Wrapper component that calls useFavToggle() and renders the returned
  * IconBarItem as a button with the icon inside — mirroring how IconBar renders it.
  */
-const HookWrapper: React.FC = () => {
+const HookWrapper: React.FC<{
+  clusters?: { mode: 'all' } | { mode: 'some'; values: string[] };
+}> = ({ clusters = { mode: 'all' } }) => {
   const { item, modal } = useFavToggle({
     filters: {
       search: '',
       kinds: { mode: 'all' },
       namespaces: { mode: 'all' },
-      clusters: { mode: 'all' },
+      clusters,
       caseSensitive: false,
       includeMetadata: false,
     },
@@ -296,6 +301,7 @@ describe('useFavToggle', () => {
     mockAddFavorite.mockClear();
     mockUpdateFavorite.mockClear();
     mockDeleteFavorite.mockClear();
+    favSaveModalPropsRef.current = null;
     Object.values(paneSetters).forEach((setters) => {
       setters.filters.mockClear();
       setters.sort.mockClear();
@@ -317,6 +323,19 @@ describe('useFavToggle', () => {
   // -------------------------------------------------------------------------
   // 1. Returns outline heart when not favorited
   // -------------------------------------------------------------------------
+
+  it('preserves case-distinct cluster IDs in a favorite snapshot', async () => {
+    await act(async () => {
+      root.render(<HookWrapper clusters={{ mode: 'some', values: ['Cluster-A', 'cluster-a'] }} />);
+      await Promise.resolve();
+    });
+    await clickToggle();
+
+    expect(favSaveModalPropsRef.current?.filters.clusters).toEqual({
+      mode: 'some',
+      values: ['Cluster-A', 'cluster-a'],
+    });
+  });
 
   it('returns outline heart when not favorited', async () => {
     mockFavorites = [];

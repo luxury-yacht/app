@@ -13,7 +13,6 @@ import {
   ALL_MULTISELECT_FILTER,
   filterSelectionValues,
   isNarrowingFilterSelection,
-  pruneFilterSelectionToOptions,
 } from '@shared/components/dropdowns/multiSelectFilterSelection';
 import IconBar, { type IconBarItem } from '@shared/components/IconBar/IconBar';
 import {
@@ -74,9 +73,13 @@ import { useTerminalTheme } from './hooks/useTerminalTheme';
 import { buildCsv } from './logExport';
 import {
   logFilterBackendValues,
+  logFilterSelectionForOnlyContainer,
+  logFilterSelectionForOnlyPod,
   logFilterSelectionFromDropdownValues,
+  logFilterSelectionLabel,
   logFilterSelectionMatchesNone,
   logFilterSelectionToDropdownValues,
+  pruneLogFilterSelectionToOptions,
 } from './logFilterSelection';
 import { buildLogSearchRegex, isValidRegexPattern } from './logSearch';
 import {
@@ -489,33 +492,24 @@ const LogViewerInner: React.FC<LogViewerProps> = ({
     selectedInitContainers.size + selectedRegularContainers.size + selectedEphemeralContainers.size;
   const handleSelectPodFilter = useCallback(
     (pod: string) => {
-      const preservedContainerFilters = selectedFilterValues.filter(
-        (filterValue) => !filterValue.startsWith(POD_FILTER_PREFIX)
-      );
       dispatch({
         type: 'SET_SELECTED_FILTERS',
-        payload: { mode: 'some', values: [toPodFilterValue(pod), ...preservedContainerFilters] },
+        payload: logFilterSelectionForOnlyPod(selectedFilters, pod),
       });
     },
-    [selectedFilterValues]
+    [selectedFilters]
   );
   const handleSelectContainerFilter = useCallback(
     (container: string, isInit: boolean, isEphemeral: boolean) => {
-      const preservedPodFilters = selectedFilterValues.filter((filterValue) =>
-        filterValue.startsWith(POD_FILTER_PREFIX)
-      );
       dispatch({
         type: 'SET_SELECTED_FILTERS',
-        payload: {
-          mode: 'some',
-          values: [
-            ...preservedPodFilters,
-            toContainerFilterValueForKind(container, isInit, isEphemeral),
-          ],
-        },
+        payload: logFilterSelectionForOnlyContainer(
+          selectedFilters,
+          toContainerFilterValueForKind(container, isInit, isEphemeral)
+        ),
       });
     },
-    [selectedFilterValues]
+    [selectedFilters]
   );
   const highlightRegex = useMemo(
     () =>
@@ -1127,7 +1121,9 @@ const LogViewerInner: React.FC<LogViewerProps> = ({
     }
 
     selectedFilterValues.forEach((filterValue) => {
-      const label = formatSelectedFilterLabel(filterValue, selectorOptionLabelsByValue);
+      const label =
+        logFilterSelectionLabel(filterValue) ??
+        formatSelectedFilterLabel(filterValue, selectorOptionLabelsByValue);
       chips.push({
         key: `selected-filter:${filterValue}`,
         label,
@@ -1236,7 +1232,7 @@ const LogViewerInner: React.FC<LogViewerProps> = ({
     if (validFilterValues.size === 0) {
       return;
     }
-    const nextSelection = pruneFilterSelectionToOptions(selectedFilters, selectorOptions);
+    const nextSelection = pruneLogFilterSelectionToOptions(selectedFilters, selectorOptions);
     if (nextSelection !== selectedFilters) {
       dispatch({ type: 'SET_SELECTED_FILTERS', payload: nextSelection });
     }

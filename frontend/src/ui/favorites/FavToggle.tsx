@@ -13,6 +13,7 @@ import { useKubeconfig } from '@modules/kubernetes/config/KubeconfigContext';
 import { useNamespace } from '@modules/namespace/contexts/NamespaceContext';
 import {
   isNarrowingFilterSelection,
+  normalizeExactMultiSelectFilterSelection,
   normalizeMultiSelectFilterSelection,
 } from '@shared/components/dropdowns/multiSelectFilterSelection';
 import type { IconBarItem } from '@shared/components/IconBar/IconBar';
@@ -139,7 +140,7 @@ const snapshotFavoritePane = (state: FavToggleState): FavoritePaneState => {
       search: state.filters.search,
       kinds: normalizeMultiSelectFilterSelection(state.filters.kinds),
       namespaces: normalizeMultiSelectFilterSelection(state.filters.namespaces),
-      clusters: normalizeMultiSelectFilterSelection(state.filters.clusters),
+      clusters: normalizeExactMultiSelectFilterSelection(state.filters.clusters),
       queryFacets: Object.keys(queryFacets).length > 0 ? queryFacets : undefined,
       caseSensitive: state.filters.caseSensitive ?? false,
       includeMetadata: state.includeMetadata ?? state.filters.includeMetadata ?? false,

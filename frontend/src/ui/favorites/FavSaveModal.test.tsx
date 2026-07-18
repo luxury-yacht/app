@@ -587,6 +587,23 @@ describe('FavSaveModal', () => {
     expect(onClose).toHaveBeenCalledTimes(1);
   });
 
+  it('keeps the modal open and reports a rejected save', async () => {
+    const onSave = vi.fn().mockRejectedValue(new Error('Favorites use a newer schema'));
+    const onClose = vi.fn();
+    await renderComponent(makeProps({ onSave, onClose }));
+
+    await act(async () => {
+      container.querySelector<HTMLButtonElement>('button.save')?.click();
+      await Promise.resolve();
+      await Promise.resolve();
+    });
+
+    expect(onClose).not.toHaveBeenCalled();
+    expect(container.querySelector('[role="alert"]')?.textContent).toContain(
+      'Favorites use a newer schema'
+    );
+  });
+
   it('saves Event provider facet selections in favorites', async () => {
     const onSave = vi.fn();
     const filters: FavoriteFilters = {

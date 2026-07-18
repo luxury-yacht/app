@@ -280,7 +280,7 @@ export interface FavSaveModalProps {
   /** Named table panes. Multi-table views supply every pane in route order. */
   panes?: FavoriteModalPane[];
   /** Called to save (add or update) the favorite. */
-  onSave: (fav: Favorite) => void;
+  onSave: (fav: Favorite) => void | Promise<void>;
   /** Called to delete the favorite (only when editing an existing one). */
   onDelete: (id: string) => void;
 }
@@ -412,6 +412,8 @@ const FavSaveModal: React.FC<FavSaveModalProps> = ({
   const [selectedNamespace, setSelectedNamespace] = useState(ALL_NAMESPACES_SCOPE);
   const [paneStates, setPaneStates] = useState<Record<string, FavoritePaneState>>({});
   const [showDeleteConfirm, setShowDeleteConfirm] = useState(false);
+  const [saving, setSaving] = useState(false);
+  const [saveError, setSaveError] = useState('');
 
   // ----- Initialize form when modal opens -----
   useEffect(() => {
@@ -464,6 +466,8 @@ const FavSaveModal: React.FC<FavSaveModalProps> = ({
       );
     }
     setShowDeleteConfirm(false);
+    setSaving(false);
+    setSaveError('');
   }, [
     isOpen,
     existingFavorite,
@@ -484,7 +488,7 @@ const FavSaveModal: React.FC<FavSaveModalProps> = ({
     ref: modalRef,
     disabled: !isOpen || showDeleteConfirm,
     onEscape: () => {
-      if (!isOpen || showDeleteConfirm) {
+      if (!isOpen || showDeleteConfirm || saving) {
         return false;
       }
       onClose();
@@ -609,7 +613,10 @@ const FavSaveModal: React.FC<FavSaveModalProps> = ({
 
   // ----- Handlers -----
 
-  const handleSave = () => {
+  const handleSave = async () => {
+    if (saving) {
+      return;
+    }
     const bindsCluster = !isGlobalScope && clusterSpecific;
     const selectedClusterMeta = bindsCluster ? getClusterMeta(clusterSelection) : null;
     const fav: Favorite = {
@@ -624,8 +631,16 @@ const FavSaveModal: React.FC<FavSaveModalProps> = ({
       panes: paneStates,
       order: existingFavorite?.order ?? 0,
     };
-    onSave(fav);
-    onClose();
+    setSaving(true);
+    setSaveError('');
+    try {
+      await onSave(fav);
+      setSaving(false);
+      onClose();
+    } catch (error) {
+      setSaveError(error instanceof Error ? error.message : String(error));
+      setSaving(false);
+    }
   };
 
   const handleDelete = () => {
@@ -657,6 +672,7 @@ const FavSaveModal: React.FC<FavSaveModalProps> = ({
           titleId="fav-save-modal-title"
           icon={FavoriteGenericIcon}
           onClose={onClose}
+          closeDisabled={saving}
         />
 
         <div className="modal-content modal-form">
@@ -794,17 +810,22 @@ const FavSaveModal: React.FC<FavSaveModalProps> = ({
               Delete
             </button>
           )}
+          {saveError ? (
+            <div className="fav-save-error" role="alert">
+              {saveError}
+            </div>
+          ) : null}
           <div className="fav-save-footer-spacer" />
-          <button type="button" className="button cancel" onClick={onClose}>
+          <button type="button" className="button cancel" onClick={onClose} disabled={saving}>
             Cancel
           </button>
           <button
             type="button"
             className="button save"
             onClick={handleSave}
-            disabled={isEditing && !changesDetected}
+            disabled={saving || (isEditing && !changesDetected)}
           >
-            Save
+            {saving ? 'Saving…' : 'Save'}
           </button>
         </div>
       </ModalSurface>

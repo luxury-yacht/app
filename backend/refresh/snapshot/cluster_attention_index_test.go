@@ -333,3 +333,27 @@ func TestClusterAttentionIndexDoesNotRestoreIgnoredSpillRows(t *testing.T) {
 	require.NoError(t, restored.RestoreFrom(spillPath))
 	require.Empty(t, restored.Snapshot())
 }
+
+func TestClusterAttentionIndexRefiltersRestoredRowsWhenIgnoreRulesChange(t *testing.T) {
+	now := time.Date(2026, time.July, 16, 12, 0, 0, 0, time.UTC)
+	meta := ClusterMeta{ClusterID: "cluster-a", ClusterName: "A"}
+	record := attentionSourceRecord{
+		Ref: attentionTestRef("Pod", "payments", "checkout-0"), Source: attentionSourcePod,
+		Status: "Running", StatusPresentation: "ready", Restarts: 2,
+		AgeTimestamp: now.Add(-time.Hour).UnixMilli(),
+	}
+	original := newClusterAttentionIndex(meta, func() time.Time { return now })
+	original.UpsertSource("pods", record)
+	spillPath := t.TempDir() + "/attention.spill"
+	require.NoError(t, original.SpillTo(spillPath))
+	original.Stop()
+
+	restored := newClusterAttentionIndex(meta, func() time.Time { return now })
+	t.Cleanup(restored.Stop)
+	require.NoError(t, restored.RestoreFrom(spillPath))
+	require.Len(t, restored.Snapshot(), 1)
+
+	restored.SetIgnoreRules(AttentionIgnoreRules{ClusterFindingTypes: []string{"restarts"}})
+
+	require.Empty(t, restored.Snapshot())
+}

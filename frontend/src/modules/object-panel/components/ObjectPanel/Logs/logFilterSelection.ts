@@ -96,3 +96,67 @@ export const logFilterBackendValues = (selection: MultiSelectFilterSelection): s
         (value) => value !== LOG_PODS_NONE_FILTER && value !== LOG_CONTAINERS_NONE_FILTER
       )
     : [];
+
+export const logFilterSelectionLabel = (value: string): string | null => {
+  if (value === LOG_PODS_NONE_FILTER) {
+    return 'No pods';
+  }
+  if (value === LOG_CONTAINERS_NONE_FILTER) {
+    return 'No containers';
+  }
+  return null;
+};
+
+const sameValues = (left: readonly string[], right: readonly string[]) =>
+  left.length === right.length && left.every((value, index) => value === right[index]);
+
+export const pruneLogFilterSelectionToOptions = (
+  selection: MultiSelectFilterSelection,
+  options: readonly DropdownOption[]
+): MultiSelectFilterSelection => {
+  if (selection.mode !== 'some') {
+    return selection;
+  }
+
+  const pods = selectableValues(options, isPodValue);
+  const containers = selectableValues(options, isContainerValue);
+  const available = new Set([...pods, ...containers]);
+  const values = selection.values.filter(
+    (value) =>
+      available.has(value) ||
+      (value === LOG_PODS_NONE_FILTER && pods.length > 0) ||
+      (value === LOG_CONTAINERS_NONE_FILTER && containers.length > 0)
+  );
+
+  if (values.includes(LOG_PODS_NONE_FILTER) && values.includes(LOG_CONTAINERS_NONE_FILTER)) {
+    return NONE_MULTISELECT_FILTER;
+  }
+  if (values.length === 0) {
+    return ALL_MULTISELECT_FILTER;
+  }
+  return sameValues(values, selection.values) ? selection : { mode: 'some', values };
+};
+
+export const logFilterSelectionForOnlyPod = (
+  selection: MultiSelectFilterSelection,
+  pod: string
+): MultiSelectFilterSelection => {
+  const preservedContainers =
+    selection.mode === 'some'
+      ? selection.values.filter((value) => value !== LOG_PODS_NONE_FILTER && !isPodValue(value))
+      : [];
+  return { mode: 'some', values: [`pod:${pod}`, ...preservedContainers] };
+};
+
+export const logFilterSelectionForOnlyContainer = (
+  selection: MultiSelectFilterSelection,
+  containerValue: string
+): MultiSelectFilterSelection => {
+  const preservedPods =
+    selection.mode === 'some'
+      ? selection.values.filter(
+          (value) => value !== LOG_CONTAINERS_NONE_FILTER && !isContainerValue(value)
+        )
+      : [];
+  return { mode: 'some', values: [...preservedPods, containerValue] };
+};

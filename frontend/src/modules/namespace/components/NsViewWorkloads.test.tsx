@@ -37,6 +37,7 @@ const { useTableSortMock, requestRefreshDomainStateMock } = vi.hoisted(() => ({
 }));
 
 const podsViewPropsRef = vi.hoisted(() => ({ current: null as Record<string, unknown> | null }));
+const namespaceClusterIdRef = vi.hoisted(() => ({ current: 'path:context' }));
 
 vi.mock('@modules/namespace/components/NsViewPods', () => ({
   default: (props: Record<string, unknown>) => {
@@ -52,6 +53,15 @@ vi.mock('@modules/namespace/components/useNamespaceColumnLink', () => ({
     isInteractive: () => true,
   }),
 }));
+
+vi.mock('@modules/namespace/contexts/NamespaceContext', async (importOriginal) => {
+  const actual =
+    await importOriginal<typeof import('@modules/namespace/contexts/NamespaceContext')>();
+  return {
+    ...actual,
+    useNamespace: () => ({ selectedNamespaceClusterId: namespaceClusterIdRef.current }),
+  };
+});
 
 import NsViewWorkloads from '@modules/namespace/components/NsViewWorkloads';
 
@@ -239,6 +249,7 @@ describe('NsViewWorkloads', () => {
     useTableSortMock.mockClear();
     requestRefreshDomainStateMock.mockReset();
     podsViewPropsRef.current = null;
+    namespaceClusterIdRef.current = 'path:context';
     requestRefreshDomainStateMock.mockResolvedValue({
       status: 'executed',
       data: {
@@ -280,6 +291,22 @@ describe('NsViewWorkloads', () => {
     });
     expect(props.columnVisibility).toBe(null);
     expect(props.columnWidths).toBe(null);
+  });
+
+  it('queries the cluster bound to the namespace selection when it differs from the active tab', async () => {
+    namespaceClusterIdRef.current = 'namespace:context';
+
+    await act(async () => {
+      root.render(<NsViewWorkloads namespace="team-a" metrics={null} />);
+      await Promise.resolve();
+      await Promise.resolve();
+    });
+
+    expect(requestRefreshDomainStateMock).toHaveBeenCalledWith(
+      expect.objectContaining({
+        scope: 'namespace:context|namespace:team-a?limit=50&sort=name&sortDirection=asc',
+      })
+    );
   });
 
   it('selects a workload row by populating the Pods table filters without opening the object', async () => {
@@ -340,7 +367,7 @@ describe('NsViewWorkloads', () => {
       }
       onWorkloadFilterMismatch();
     });
-    expect(podsViewPropsRef.current?.workloadFilterRequest).toEqual({ type: 'clear' });
+    expect(podsViewPropsRef.current?.workloadFilterRequest).toBeUndefined();
     expect(gridTablePropsRef.current.getRowClassName?.(workload, 0)).not.toContain(
       'gridtable-row--selected'
     );

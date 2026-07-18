@@ -302,12 +302,13 @@ func (n *NamespaceChangeNotifier) flush() {
 		n.mu.Unlock()
 	}
 
-	quotaRollups, quotaState := namespaceQuotaRollupsFromIngest(n.ingest)
-	quotaReady := quotaState != NamespaceSignalLoading
 	n.mu.Lock()
 	needQuotaSignature := quotaDirty || !n.quotaSignatureKnown || !n.lastQuotaReady
+	quotaReady := n.lastQuotaReady
 	n.mu.Unlock()
 	if needQuotaSignature {
+		quotaRollups, quotaState := namespaceQuotaRollupsFromIngest(n.ingest)
+		quotaReady = quotaState != NamespaceSignalLoading
 		signature := namespaceQuotaRollupSignature(quotaRollups, quotaState)
 		n.mu.Lock()
 		if !n.quotaSignatureKnown || signature != n.lastQuotaSignature {

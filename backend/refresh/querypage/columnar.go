@@ -514,9 +514,11 @@ func deepCopyValue(v reflect.Value) reflect.Value {
 // the lowercased search text, both extracted ONCE at put time so Query can match on
 // columns without reconstructing the full row.
 type matchValues struct {
-	facets      map[string]string   // facet name -> raw facet value (as the schema extractor returns)
-	multiFacets map[string][]string // facet name -> unique raw facet values for one row
-	searchText  string              // lowercased SearchText(row)
+	facets                map[string]string   // facet name -> raw facet value (as the schema extractor returns)
+	multiFacets           map[string][]string // facet name -> unique raw facet values for one row
+	normalizedFacets      map[string]string   // normalized once at ingest for facets with a normalizer
+	normalizedMultiFacets map[string][]string // normalized once at ingest for multi-facets with a normalizer
+	searchText            string              // lowercased SearchText(row)
 }
 
 // columnStore holds rows for one kind in interned columnar form.
@@ -650,13 +652,31 @@ func extractMatchValues[R any](schema Schema[R], r R) matchValues {
 	if len(schema.Facets) > 0 {
 		mv.facets = make(map[string]string, len(schema.Facets))
 		for name, get := range schema.Facets {
-			mv.facets[name] = get(r)
+			value := get(r)
+			mv.facets[name] = value
+			if normalize := schema.FacetNormalizers[name]; normalize != nil {
+				if mv.normalizedFacets == nil {
+					mv.normalizedFacets = make(map[string]string)
+				}
+				mv.normalizedFacets[name] = normalize(value)
+			}
 		}
 	}
 	if len(schema.MultiFacets) > 0 {
 		mv.multiFacets = make(map[string][]string, len(schema.MultiFacets))
 		for name, get := range schema.MultiFacets {
-			mv.multiFacets[name] = uniqueFacetValues(get(r))
+			values := uniqueFacetValues(get(r))
+			mv.multiFacets[name] = values
+			if normalize := schema.FacetNormalizers[name]; normalize != nil {
+				if mv.normalizedMultiFacets == nil {
+					mv.normalizedMultiFacets = make(map[string][]string)
+				}
+				normalized := make([]string, len(values))
+				for i, value := range values {
+					normalized[i] = normalize(value)
+				}
+				mv.normalizedMultiFacets[name] = uniqueFacetValues(normalized)
+			}
 		}
 	}
 	if schema.SearchText != nil {

@@ -26,6 +26,8 @@ import IconBar, { type IconBarItem } from '@shared/components/IconBar/IconBar';
 import { CollapseIcon, ExpandIcon } from '@shared/components/icons/SharedIcons';
 import * as cf from '@shared/components/tables/columnFactories';
 import type { GridColumnDefinition } from '@shared/components/tables/GridTable';
+import type { GridTableFocusRequest } from '@shared/components/tables/hooks/gridTableFocusRequest';
+import { peekPendingFocusRequest } from '@shared/components/tables/hooks/useGridTableExternalFocus';
 import { formatRestartCount } from '@shared/components/tables/restartCount';
 import { useNavigateToView } from '@shared/hooks/useNavigateToView';
 import { useObjectActionController } from '@shared/hooks/useObjectActionController';
@@ -42,6 +44,7 @@ import {
   POD_PERMISSIONS,
   queryNamespacesPermissions,
 } from '@/core/capabilities';
+import { eventBus } from '@/core/events';
 import { useClusterMetricsAvailability } from '@/core/refresh/hooks/useMetricsAvailability';
 import type { PodMetricsInfo, PodSnapshotEntry, PodSnapshotPayload } from '@/core/refresh/types';
 import { podRowCpuValue, podRowMemoryValue } from '@/core/resource-metrics';
@@ -106,6 +109,23 @@ const NsViewPods: React.FC<PodsViewProps> = React.memo(
     const { selectedClusterId } = useKubeconfig();
     const { selectedNamespaceClusterId } = useNamespace();
     const queryClusterId = selectedNamespaceClusterId ?? selectedClusterId;
+
+    useEffect(() => {
+      if (!collapsed || !onPodsCollapsedChange) {
+        return;
+      }
+      const expandForPodFocus = (request: GridTableFocusRequest | null) => {
+        if (
+          request?.destinationViewId === 'namespace-pods' &&
+          request.clusterId === queryClusterId &&
+          request.kind.toLowerCase() === 'pod'
+        ) {
+          onPodsCollapsedChange(false);
+        }
+      };
+      expandForPodFocus(peekPendingFocusRequest());
+      return eventBus.on('gridtable:focus-request', expandForPodFocus);
+    }, [collapsed, onPodsCollapsedChange, queryClusterId]);
 
     // Include cluster metadata so object details stay scoped to the active tab.
     const handlePodOpen = useCallback(
@@ -481,29 +501,23 @@ const NsViewPods: React.FC<PodsViewProps> = React.memo(
       if (!currentFilters || !setFilters) {
         return;
       }
-      if (workloadFilterRequest) {
-        if (appliedWorkloadFilterRequestRef.current === workloadFilterRequest) {
-          return;
-        }
-        appliedWorkloadFilterRequestRef.current = workloadFilterRequest;
-      } else if (!onWorkloadFilterMismatch) {
+      if (!workloadFilterRequest) {
+        appliedWorkloadFilterRequestRef.current = undefined;
         return;
       }
+      if (appliedWorkloadFilterRequestRef.current === workloadFilterRequest) {
+        return;
+      }
+      appliedWorkloadFilterRequestRef.current = workloadFilterRequest;
       const next = applyPodWorkloadFilterRequest(
         currentFilters,
-        workloadFilterRequest ?? { type: 'clear' },
+        workloadFilterRequest,
         showNamespaceFilter
       );
       if (next !== currentFilters) {
         setFilters(next);
       }
-    }, [
-      currentFilters,
-      onWorkloadFilterMismatch,
-      setFilters,
-      showNamespaceFilter,
-      workloadFilterRequest,
-    ]);
+    }, [currentFilters, setFilters, showNamespaceFilter, workloadFilterRequest]);
 
     const gridTableProps = useMemo(() => {
       const filters = resolvedGridTableProps.filters;

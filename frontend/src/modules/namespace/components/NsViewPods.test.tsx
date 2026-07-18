@@ -14,6 +14,7 @@ import type React from 'react';
 import { act } from 'react';
 import * as ReactDOM from 'react-dom/client';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
+import { eventBus } from '@/core/events';
 import type { PodMetricsInfo, PodSnapshotEntry } from '@/core/refresh/types';
 import { requireReactElement } from '@/test-utils/requireReactElement';
 import { requireValue } from '@/test-utils/requireValue';
@@ -551,6 +552,25 @@ describe('NsViewPods', () => {
     expect(onPodsCollapsedChange).toHaveBeenCalledWith(false);
   });
 
+  it('expands a collapsed Pods pane when a Pod focus request targets it', async () => {
+    const onPodsCollapsedChange = vi.fn();
+    await renderPods({ collapsed: true, onPodsCollapsedChange });
+
+    act(() => {
+      eventBus.emit('gridtable:focus-request', {
+        clusterId: 'alpha:ctx',
+        group: '',
+        version: 'v1',
+        kind: 'Pod',
+        namespace: 'team-a',
+        name: 'web-1',
+        destinationViewId: 'namespace-pods',
+      });
+    });
+
+    expect(onPodsCollapsedChange).toHaveBeenCalledWith(false);
+  });
+
   it('uses the typed query result for all-namespaces pods on first render', async () => {
     const localPod = createPod({ name: 'local-provider-row', namespace: 'team-a' });
     const queryPod = createPod({ name: 'query-row', namespace: 'team-b' });
@@ -658,7 +678,7 @@ describe('NsViewPods', () => {
     expect(setFiltersMock).toHaveBeenCalledOnce();
   });
 
-  it('removes a persisted workload owner facet when the embedded pane has no selection', async () => {
+  it('preserves a persisted owner facet when the embedded pane has no workload selection', async () => {
     persistedFiltersRef.current = {
       search: '',
       kinds: { mode: 'none' },
@@ -680,10 +700,7 @@ describe('NsViewPods', () => {
       onWorkloadFilterMismatch: vi.fn(),
     });
 
-    expect(setFiltersMock).toHaveBeenCalledWith({
-      ...persistedFiltersRef.current,
-      queryFacets: { nodes: { mode: 'some', values: ['node-a'] } },
-    });
+    expect(setFiltersMock).not.toHaveBeenCalled();
   });
 
   it('omits Status while preserving the backend-owned Node query facet', async () => {

@@ -16,6 +16,7 @@ import type { PodWorkloadFilterRequest } from '@modules/namespace/components/pod
 import useWorkloadTableColumns from '@modules/namespace/components/useWorkloadTableColumns';
 import WorkloadsPodsSplit from '@modules/namespace/components/WorkloadsPodsSplit';
 import { ALL_NAMESPACES_SCOPE } from '@modules/namespace/constants';
+import { useNamespace } from '@modules/namespace/contexts/NamespaceContext';
 import { useObjectPanel } from '@modules/object-panel/hooks/useObjectPanel';
 import ResourceInventoryTable from '@modules/resource-grid/ResourceInventoryTable';
 import {
@@ -50,6 +51,7 @@ interface WorkloadsViewProps {
 const WORKLOAD_FAVORITE_PANES = ['workloads', 'pods'] as const;
 
 interface WorkloadsTableProps extends WorkloadsViewProps {
+  clusterId?: string | null;
   selectedWorkloadKey?: string | null;
   onWorkloadSelect?: (workload: WorkloadData) => void;
   onWorkloadSelectionClear?: () => void;
@@ -61,6 +63,7 @@ interface WorkloadsTableProps extends WorkloadsViewProps {
 export const WorkloadsTable: React.FC<WorkloadsTableProps> = React.memo(
   ({
     namespace,
+    clusterId,
     showNamespaceColumn = false,
     metrics = null,
     selectedWorkloadKey = null,
@@ -71,6 +74,7 @@ export const WorkloadsTable: React.FC<WorkloadsTableProps> = React.memo(
     const { navigateToView } = useNavigateToView();
     const useShortResourceNames = useShortNames();
     const { selectedClusterId } = useKubeconfig();
+    const queryClusterId = clusterId ?? selectedClusterId;
     const [tableMetricsInfo, setTableMetricsInfo] = useState<PodMetricsInfo | null>(null);
     const metricsInfo = tableMetricsInfo ?? metrics ?? null;
 
@@ -85,11 +89,11 @@ export const WorkloadsTable: React.FC<WorkloadsTableProps> = React.memo(
               clusterId: workload.clusterId,
               clusterName: workload.clusterName ?? undefined,
             },
-            { fallbackClusterId: selectedClusterId }
+            { fallbackClusterId: queryClusterId }
           )
         );
       },
-      [openWithObject, selectedClusterId]
+      [openWithObject, queryClusterId]
     );
 
     const handleWorkloadAltClick = useCallback(
@@ -103,11 +107,11 @@ export const WorkloadsTable: React.FC<WorkloadsTableProps> = React.memo(
               clusterId: workload.clusterId,
               clusterName: workload.clusterName ?? undefined,
             },
-            { fallbackClusterId: selectedClusterId }
+            { fallbackClusterId: queryClusterId }
           )
         );
       },
-      [navigateToView, selectedClusterId]
+      [navigateToView, queryClusterId]
     );
 
     const objectActions = useObjectActionController({
@@ -126,7 +130,7 @@ export const WorkloadsTable: React.FC<WorkloadsTableProps> = React.memo(
               resource: object.resource,
               uid: object.uid,
             },
-            { fallbackClusterId: selectedClusterId }
+            { fallbackClusterId: queryClusterId }
           )
         );
       },
@@ -144,7 +148,7 @@ export const WorkloadsTable: React.FC<WorkloadsTableProps> = React.memo(
               resource: object.resource,
               uid: object.uid,
             },
-            { fallbackClusterId: selectedClusterId }
+            { fallbackClusterId: queryClusterId }
           ),
           { initialTab: 'map' }
         );
@@ -160,9 +164,9 @@ export const WorkloadsTable: React.FC<WorkloadsTableProps> = React.memo(
             namespace: row.namespace,
             clusterId: row.clusterId,
           },
-          { fallbackClusterId: selectedClusterId }
+          { fallbackClusterId: queryClusterId }
         ),
-      [selectedClusterId]
+      [queryClusterId]
     );
 
     const tableColumns = useWorkloadTableColumns({
@@ -206,7 +210,7 @@ export const WorkloadsTable: React.FC<WorkloadsTableProps> = React.memo(
       queryPayload,
     } = useQueryBackedNamespaceResourceGridTable<NamespaceWorkloadSnapshotPayload, WorkloadData>({
       queryTableMode: 'Query Backed Dynamic',
-      clusterId: selectedClusterId,
+      clusterId: queryClusterId,
       domain: 'namespace-workloads',
       excludedQueryFacetKeys: RESOURCE_STATUS_QUERY_FACET_KEYS,
       label: diagnosticsLabel,
@@ -239,9 +243,9 @@ export const WorkloadsTable: React.FC<WorkloadsTableProps> = React.memo(
 
     const getContextMenuItems = useCallback(
       (row: WorkloadData): ContextMenuItem[] => {
-        return objectActions.getMenuItems(buildWorkloadActionReference(row, selectedClusterId));
+        return objectActions.getMenuItems(buildWorkloadActionReference(row, queryClusterId));
       },
-      [objectActions, selectedClusterId]
+      [objectActions, queryClusterId]
     );
 
     const getRowClassName = useCallback(
@@ -354,6 +358,7 @@ const ScopedWorkloadsView: React.FC<ScopedWorkloadsViewProps> = ({
         upper={
           <WorkloadsTable
             namespace={namespace}
+            clusterId={selectedClusterId}
             showNamespaceColumn={showNamespaceColumn}
             metrics={metrics}
             selectedWorkloadKey={selectedWorkloadKey}
@@ -369,7 +374,7 @@ const ScopedWorkloadsView: React.FC<ScopedWorkloadsViewProps> = ({
             workloadFilterRequest={podFilterRequest}
             onWorkloadFilterMismatch={() => {
               setSelectedWorkload(null);
-              setPodFilterRequest({ type: 'clear' });
+              setPodFilterRequest(undefined);
             }}
             collapsed={podsCollapsed}
             onPodsCollapsedChange={setPodsCollapsed}
@@ -382,8 +387,10 @@ const ScopedWorkloadsView: React.FC<ScopedWorkloadsViewProps> = ({
 
 const NsViewWorkloads: React.FC<WorkloadsViewProps> = (props) => {
   const { selectedClusterId } = useKubeconfig();
-  const scopeKey = `${selectedClusterId ?? ''}\u0000${props.namespace}`;
-  return <ScopedWorkloadsView key={scopeKey} {...props} selectedClusterId={selectedClusterId} />;
+  const { selectedNamespaceClusterId } = useNamespace();
+  const queryClusterId = selectedNamespaceClusterId ?? selectedClusterId;
+  const scopeKey = `${queryClusterId ?? ''}\u0000${props.namespace}`;
+  return <ScopedWorkloadsView key={scopeKey} {...props} selectedClusterId={queryClusterId} />;
 };
 
 NsViewWorkloads.displayName = 'NsViewWorkloads';

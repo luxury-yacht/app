@@ -3,8 +3,42 @@ package querypage
 import (
 	"fmt"
 	"sort"
+	"strings"
 	"testing"
 )
+
+func TestFacetNormalizerRunsAtIngestAndOncePerQueryValue(t *testing.T) {
+	normalizeCalls := 0
+	schema := podSchema()
+	schema.FacetNormalizers = map[string]func(string) string{
+		"status": func(value string) string {
+			normalizeCalls++
+			return strings.ToLower(value)
+		},
+	}
+	s := NewStore(schema)
+	for i := 0; i < 3; i++ {
+		s.Upsert(podRow{uid: fmt.Sprintf("u%d", i), name: fmt.Sprintf("pod-%d", i), status: "Running"})
+	}
+	normalizeCalls = 0
+
+	page, err := s.Query(Query{
+		ClusterID: "c",
+		Signature: "sig",
+		Sort:      "name",
+		Direction: Ascending,
+		Filters:   map[string][]string{"status": {"RUNNING"}},
+	})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(page.Rows) != 3 {
+		t.Fatalf("rows = %d, want 3", len(page.Rows))
+	}
+	if normalizeCalls != 1 {
+		t.Fatalf("normalizer calls during query = %d, want 1", normalizeCalls)
+	}
+}
 
 type podRow struct {
 	uid       string

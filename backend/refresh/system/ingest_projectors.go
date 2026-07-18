@@ -12,6 +12,8 @@
 package system
 
 import (
+	"fmt"
+
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 
 	"github.com/luxury-yacht/app/backend/kind/kindregistry"
@@ -102,15 +104,26 @@ func registerPodReflector(
 // only the workload's own typed object — no lister needed (unlike pods, which resolve the RS
 // owner). It must run before the hub starts so the workload reflectors launch with the rest
 // and their initial relists are sync-gated.
-func registerWorkloadReflectors(mgr *ingest.IngestManager, meta snapshot.ClusterMeta) {
+func registerWorkloadReflectors(mgr *ingest.IngestManager, meta snapshot.ClusterMeta) error {
 	if mgr == nil {
-		return
+		return fmt.Errorf("register workload reflectors: ingest manager is nil")
 	}
-	mgr.RegisterReflector(snapshot.DeploymentGVR, snapshot.DeploymentGVK, snapshot.NewDeploymentIngestProjector(meta), false)
-	mgr.RegisterReflector(snapshot.StatefulSetGVR, snapshot.StatefulSetGVK, snapshot.NewStatefulSetIngestProjector(meta), false)
-	mgr.RegisterReflector(snapshot.DaemonSetGVR, snapshot.DaemonSetGVK, snapshot.NewDaemonSetIngestProjector(meta), false)
-	mgr.RegisterReflector(snapshot.JobGVR, snapshot.JobGVK, snapshot.NewJobIngestProjector(meta), false)
-	mgr.RegisterReflector(snapshot.CronJobGVR, snapshot.CronJobGVK, snapshot.NewCronJobIngestProjector(meta), false)
+	if !mgr.RegisterReflector(snapshot.DeploymentGVR, snapshot.DeploymentGVK, snapshot.NewDeploymentIngestProjector(meta), false) {
+		return fmt.Errorf("register workload reflector: Deployment")
+	}
+	if !mgr.RegisterReflector(snapshot.StatefulSetGVR, snapshot.StatefulSetGVK, snapshot.NewStatefulSetIngestProjector(meta), false) {
+		return fmt.Errorf("register workload reflector: StatefulSet")
+	}
+	if !mgr.RegisterReflector(snapshot.DaemonSetGVR, snapshot.DaemonSetGVK, snapshot.NewDaemonSetIngestProjector(meta), false) {
+		return fmt.Errorf("register workload reflector: DaemonSet")
+	}
+	if !mgr.RegisterReflector(snapshot.JobGVR, snapshot.JobGVK, snapshot.NewJobIngestProjector(meta), false) {
+		return fmt.Errorf("register workload reflector: Job")
+	}
+	if !mgr.RegisterReflector(snapshot.CronJobGVR, snapshot.CronJobGVK, snapshot.NewCronJobIngestProjector(meta), false) {
+		return fmt.Errorf("register workload reflector: CronJob")
+	}
+	return nil
 }
 
 // registerNodeReflector wires the bespoke node reflector onto the manager. Node has no

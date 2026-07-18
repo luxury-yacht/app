@@ -80,20 +80,29 @@ export const FavoritesProvider: React.FC<FavoritesProviderProps> = ({ children }
     setPendingFavoriteState(favorite);
   }, []);
   const { selectedKubeconfig, selectedClusterId } = useKubeconfig();
-  const { isClusterReady } = useClusterLifecycle();
+  const { getClusterState, isClusterReady } = useClusterLifecycle();
   const viewState = useViewState();
   const namespaceCtx = useNamespace();
   const namespaceReady = namespaceCtx.namespaceReady;
+  const pendingClusterId = pendingFavorite?.clusterId?.trim() || selectedClusterId;
+  const pendingClusterState = pendingClusterId ? getClusterState(pendingClusterId) : undefined;
+  const pendingProgressKey = `${pendingClusterId}\u0000${pendingClusterState ?? ''}`;
+  const pendingProgressRef = useRef('');
 
   useEffect(() => {
     if (!pendingFavorite) {
       return;
     }
+    pendingProgressRef.current = pendingProgressKey;
     const timer = window.setTimeout(() => {
-      setPendingFavoriteState((current) => (current === pendingFavorite ? null : current));
+      setPendingFavoriteState((current) =>
+        current === pendingFavorite && pendingProgressRef.current === pendingProgressKey
+          ? null
+          : current
+      );
     }, 15_000);
     return () => window.clearTimeout(timer);
-  }, [pendingFavorite]);
+  }, [pendingFavorite, pendingProgressKey]);
 
   // Hydrate the favorites cache from the backend on mount.
   useEffect(() => {
