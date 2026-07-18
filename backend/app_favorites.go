@@ -82,7 +82,31 @@ type favoriteV2 struct {
 	Order            int                 `json:"order"`
 }
 
-type favoritesFileV2 struct {
+type favoriteFiltersV1 struct {
+	Search          string              `json:"search"`
+	Kinds           []string            `json:"kinds"`
+	Namespaces      []string            `json:"namespaces"`
+	Clusters        []string            `json:"clusters,omitempty"`
+	QueryFacets     map[string][]string `json:"queryFacets,omitempty"`
+	CaseSensitive   bool                `json:"caseSensitive"`
+	IncludeMetadata bool                `json:"includeMetadata"`
+}
+
+type favoriteV1 struct {
+	ID               string              `json:"id"`
+	Name             string              `json:"name"`
+	ClusterSelection string              `json:"clusterSelection"`
+	ClusterID        string              `json:"clusterId,omitempty"`
+	ClusterName      string              `json:"clusterName,omitempty"`
+	ViewType         string              `json:"viewType"`
+	View             string              `json:"view"`
+	Namespace        string              `json:"namespace"`
+	Filters          *favoriteFiltersV1  `json:"filters"`
+	TableState       *FavoriteTableState `json:"tableState"`
+	Order            int                 `json:"order"`
+}
+
+type flatFavoritesFile struct {
 	SchemaVersion int               `json:"schemaVersion"`
 	Favorites     []json.RawMessage `json:"favorites"`
 }
@@ -102,11 +126,7 @@ func defaultFavoritePaneState() FavoritePaneState {
 	}
 }
 
-func migrateFavoriteV2(raw json.RawMessage) (Favorite, error) {
-	legacy := favoriteV2{}
-	if err := json.Unmarshal(raw, &legacy); err != nil {
-		return Favorite{}, err
-	}
+func migrateFlatFavorite(legacy favoriteV2) (Favorite, error) {
 	if strings.TrimSpace(legacy.ID) == "" || strings.TrimSpace(legacy.Name) == "" ||
 		strings.TrimSpace(legacy.ViewType) == "" || strings.TrimSpace(legacy.View) == "" {
 		return Favorite{}, fmt.Errorf("favorite is missing required identity or route fields")
@@ -148,8 +168,59 @@ func migrateFavoriteV2(raw json.RawMessage) (Favorite, error) {
 	return migrated, nil
 }
 
-func migrateFavoritesFileV2(data []byte) *favoritesFile {
-	legacy := favoritesFileV2{}
+func migrateFavoriteV2(raw json.RawMessage) (Favorite, error) {
+	legacy := favoriteV2{}
+	if err := json.Unmarshal(raw, &legacy); err != nil {
+		return Favorite{}, err
+	}
+	return migrateFlatFavorite(legacy)
+}
+
+func migrateFavoriteFilterSelectionV1(values []string) FavoriteFilterSelection {
+	if len(values) == 0 {
+		return FavoriteFilterSelection{Mode: "all"}
+	}
+	return normalizeFavoriteFilterSelection(FavoriteFilterSelection{Mode: "some", Values: values})
+}
+
+func migrateFavoriteV1(raw json.RawMessage) (Favorite, error) {
+	legacy := favoriteV1{}
+	if err := json.Unmarshal(raw, &legacy); err != nil {
+		return Favorite{}, err
+	}
+	var filters *FavoriteFilters
+	if legacy.Filters != nil {
+		queryFacets := make(map[string]FavoriteFilterSelection, len(legacy.Filters.QueryFacets))
+		for key, values := range legacy.Filters.QueryFacets {
+			queryFacets[key] = migrateFavoriteFilterSelectionV1(values)
+		}
+		filters = &FavoriteFilters{
+			Search:          legacy.Filters.Search,
+			Kinds:           migrateFavoriteFilterSelectionV1(legacy.Filters.Kinds),
+			Namespaces:      migrateFavoriteFilterSelectionV1(legacy.Filters.Namespaces),
+			Clusters:        migrateFavoriteFilterSelectionV1(legacy.Filters.Clusters),
+			QueryFacets:     queryFacets,
+			CaseSensitive:   legacy.Filters.CaseSensitive,
+			IncludeMetadata: legacy.Filters.IncludeMetadata,
+		}
+	}
+	return migrateFlatFavorite(favoriteV2{
+		ID:               legacy.ID,
+		Name:             legacy.Name,
+		ClusterSelection: legacy.ClusterSelection,
+		ClusterID:        legacy.ClusterID,
+		ClusterName:      legacy.ClusterName,
+		ViewType:         legacy.ViewType,
+		View:             legacy.View,
+		Namespace:        legacy.Namespace,
+		Filters:          filters,
+		TableState:       legacy.TableState,
+		Order:            legacy.Order,
+	})
+}
+
+func migrateFlatFavoritesFile(data []byte, migrate func(json.RawMessage) (Favorite, error)) *favoritesFile {
+	legacy := flatFavoritesFile{}
 	if err := json.Unmarshal(data, &legacy); err != nil {
 		return &favoritesFile{SchemaVersion: favoritesSchemaVersion, Favorites: []Favorite{}}
 	}
@@ -159,7 +230,7 @@ func migrateFavoritesFileV2(data []byte) *favoritesFile {
 		Favorites:     make([]Favorite, 0, len(legacy.Favorites)),
 	}
 	for _, raw := range legacy.Favorites {
-		favorite, err := migrateFavoriteV2(raw)
+		favorite, err := migrate(raw)
 		if err != nil {
 			continue
 		}
@@ -258,8 +329,15 @@ func (a *App) loadFavoritesFile() (*favoritesFile, error) {
 	if err := json.Unmarshal(data, &header); err != nil {
 		return nil, fmt.Errorf("failed to parse favorites file: %w", err)
 	}
-	if header.SchemaVersion == 2 {
-		state := migrateFavoritesFileV2(data)
+	var migrate func(json.RawMessage) (Favorite, error)
+	switch header.SchemaVersion {
+	case 1:
+		migrate = migrateFavoriteV1
+	case 2:
+		migrate = migrateFavoriteV2
+	}
+	if migrate != nil {
+		state := migrateFlatFavoritesFile(data, migrate)
 		if err := a.saveFavoritesFile(state); err != nil {
 			return nil, fmt.Errorf("failed to save migrated favorites file: %w", err)
 		}
