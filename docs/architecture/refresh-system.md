@@ -87,11 +87,18 @@ kind metadata. See [large-data.md](large-data.md) and
 A view lease can flap enable/disable/re-enable during mount. An obsolete
 cancellation must restart if the scope is enabled again, cleanup must have one
 owner, and a newly healthy stream with no retained data must perform one
-immediate non-manual reconciliation fetch. Snapshotless streams are exempt.
+immediate non-manual reconciliation fetch. A reconnect may keep retained data
+without another fetch only after the server successfully replays from its
+resume token. A reset that cannot prove continuity advances a declared signal
+clock and performs one immediate non-manual reconciliation before that retained
+snapshot is trusted. Snapshotless streams are exempt.
 
-The regression harness is
-`frontend/src/core/refresh/orchestrator.streamingFlap.test.ts`; first-paint
-latency near a fallback interval indicates this contract regressed.
+The regression harnesses are
+`frontend/src/core/refresh/orchestrator.streamingFlap.test.ts` for lease flaps
+and `frontend/src/core/refresh/streaming/resourceStreamManager.test.ts` for
+resume/reset gaps. First-paint latency near a fallback interval, or retained
+data surviving a non-replayable reset without a clock change, indicates this
+contract regressed.
 
 ## Change checklist
 

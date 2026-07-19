@@ -514,6 +514,9 @@ describe('refresh domain contract', () => {
                 ? 'aggregate-snapshot'
                 : 'snapshot-table'
           );
+          expect(inventory.streamSemantics).toEqual(
+            expect.arrayContaining(['snapshot-replace', 'change-signal'])
+          );
           break;
         case 'snapshot':
           expect(['resource-stream-table', 'complete-resync-stream', 'log-stream']).not.toContain(

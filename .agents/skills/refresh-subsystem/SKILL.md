@@ -119,8 +119,10 @@ checklist when touching anything they name.
    path, never merge clusters into one result.
 4. **Single-cluster scopes** — refresh domains target exactly one cluster;
    fan out per-cluster, never pass multi-cluster scopes.
-5. **Stream resume overflow** — failed resume must fall back to full
-   re-snapshot or the UI silently shows stale rows.
+5. **Stream resume gaps** — failed resume must fall back to full re-snapshot or
+   the UI silently shows stale rows. A token-less subscription with retained
+   data has the same requirement: the server's RESET advances a declared
+   signal clock; it is not only an acknowledgement.
 6. **Rapid context changes** — abort→retrigger races when context updates beat
    abort completion.
 7. **Informer shutdown** — cancellation stops informers; `Shutdown()` only
@@ -181,11 +183,12 @@ checklist when touching anything they name.
        (re-warm serving is continuous).
 10. **Stream health = connected + server-confirmed synchronized**, not
     recently-delivered (`computeSubscriptionHealth`;
-    `markSubscriptionSynchronized` only on the mux subscribe ACK or an
-    absorbed RESET). Marking synchronized on merely SENDING a subscribe lets a
-    backend that rejects the domain freeze it with polls skipped. If health
-    regresses to delivery-only, every quiet domain reverts to timer polling.
-    Token-less subscriptions force-resync on (re)connect.
+    `markSubscriptionSynchronized` only after the mux confirms the subscribe).
+    A token-less RESET may confirm the tail only after it advances a declared
+    signal clock when retained data exists. Marking synchronized on merely
+    SENDING a subscribe lets a backend that rejects the domain freeze it with
+    polls skipped. If health regresses to delivery-only, every quiet domain
+    reverts to timer polling.
 
 **Consumer rule**: any reader of a stream-domain scope's `state.data` needs
 `useStreamSignalRefetch(domain, scopes)` or the query-table `liveDataVersion`

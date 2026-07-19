@@ -257,6 +257,16 @@ func TestDomainInventoryIsCompatibleWithExistingContractHomes(t *testing.T) {
 		default:
 			require.Failf(t, "unknown registration", "domain=%s registration=%s", domainID, domain.Backend.Registration)
 		}
+
+		if domain.Frontend.Orchestrator == "doorbell-snapshot" {
+			require.ElementsMatchf(
+				t,
+				[]string{"snapshot-replace", "change-signal"},
+				inventory.StreamSemantics,
+				"doorbell-snapshot domain %q stream semantics",
+				domainID,
+			)
+		}
 	}
 
 	catalog := contract.DomainInventory["catalog"]
@@ -290,7 +300,7 @@ func TestDomainInventoryIsCompatibleWithExistingContractHomes(t *testing.T) {
 	require.Equal(t, "object-ref", objectEvents.ScopeContract.Kind)
 	require.Equal(t, "backend/refresh/snapshot.ObjectEventsBuilder", objectEvents.PayloadOwner)
 	require.Equal(t, "snapshot-cache", objectEvents.CachePolicy)
-	require.Equal(t, []string{"snapshot-replace"}, objectEvents.StreamSemantics)
+	require.ElementsMatch(t, []string{"snapshot-replace", "change-signal"}, objectEvents.StreamSemantics)
 	require.Equal(t, "event-snapshot-payload", objectEvents.CoverageContract)
 
 	for _, domainID := range []string{"object-details", "object-yaml"} {

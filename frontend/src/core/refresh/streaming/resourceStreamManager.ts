@@ -16,7 +16,7 @@ import {
 } from '@/core/logging/appLogsClient';
 import { stripClusterScope } from '../clusterScope';
 import { isPermissionDeniedStatus, resolvePermissionDeniedMessage } from '../permissionErrors';
-import { setScopedDomainState } from '../store';
+import { getScopedDomainState, setScopedDomainState } from '../store';
 import {
   RESOURCE_STREAM_MESSAGE_TYPES,
   RESOURCE_STREAM_SIGNALS,
@@ -28,6 +28,7 @@ import { ResourceStreamConnection } from './resourceStreamConnection';
 import {
   type DoorbellDomain,
   domainSupportsSourceClock,
+  doorbellSourceClocks,
   isClusterScopedDomain,
   isCompleteResyncStreamDomain,
   isResourceStreamSourceClock,
@@ -376,6 +377,16 @@ export class ResourceStreamManager {
         case 'reset':
           if (subscription.pendingReset) {
             subscription.pendingReset = false;
+            if (this.hasRetainedData(subscription)) {
+              this.bumpSourceVersionOnly(
+                subscription,
+                Date.now(),
+                {
+                  [resolvedUpdate.signalEnvelope.source]: resolvedUpdate.signalEnvelope.version,
+                },
+                resolvedUpdate.signalEnvelope.version
+              );
+            }
             this.updateHealthForSubscription(subscription);
             return;
           }
@@ -427,8 +438,12 @@ export class ResourceStreamManager {
       case 'RESET':
         if (subscription.pendingReset) {
           subscription.pendingReset = false;
-          // A post-subscribe RESET is also a server confirmation (backends
-          // that predate the ACK frame confirm fresh subscribes this way).
+          // With no resume token, RESET means the server cannot prove that the
+          // retained snapshot spans the disconnected interval. Invalidate its
+          // doorbell clock so the existing consumer contract reconciles it.
+          if (this.hasRetainedData(subscription)) {
+            this.bumpLegacyResyncSourceVersion(subscription, resolvedUpdate);
+          }
           this.markSubscriptionSynchronized(subscription);
           this.updateHealthForSubscription(subscription);
           return;
@@ -847,7 +862,14 @@ export class ResourceStreamManager {
     if (domainSupportsSourceClock(domain, 'object')) {
       return 'object';
     }
-    return null;
+    return doorbellSourceClocks(domain)[0] ?? null;
+  }
+
+  private hasRetainedData(subscription: StreamSubscription): boolean {
+    return this.reportScopes(subscription).some((reportScope) => {
+      const data = getScopedDomainState(subscription.domain, reportScope).data;
+      return data !== null && data !== undefined;
+    });
   }
 
   private bumpSourceVersionOnly(

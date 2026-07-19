@@ -147,6 +147,8 @@ beforeEach(() => {
   resetAllScopedDomainStates('cluster-custom');
   resetAllScopedDomainStates('catalog');
   resetAllScopedDomainStates('pods');
+  resetAllScopedDomainStates('namespaces');
+  resetAllScopedDomainStates('namespace-metrics');
 });
 
 afterEach(() => {
@@ -167,6 +169,8 @@ afterEach(() => {
   resetAllScopedDomainStates('cluster-custom');
   resetAllScopedDomainStates('catalog');
   resetAllScopedDomainStates('pods');
+  resetAllScopedDomainStates('namespaces');
+  resetAllScopedDomainStates('namespace-metrics');
   Reflect.deleteProperty(globalThis, 'WebSocket');
   vi.useRealTimers();
 });
@@ -1179,11 +1183,93 @@ describe('ResourceStreamManager', () => {
     (manager as unknown as { resumeFromVisibility: () => void }).resumeFromVisibility();
     await flushPromises();
 
-    // Resume re-opens + re-subscribes the stream; signal-only needs no snapshot fetch.
+    // With no retained snapshot, resume only re-opens and re-subscribes the stream.
     expect(createdSockets[1]).toBeDefined();
   });
 
-  test('treats the first reset after subscribe as an acknowledgement', async () => {
+  test('invalidates a retained namespace snapshot when visibility resume cannot be replayed', async () => {
+    vi.useFakeTimers();
+    installWindowTimers();
+    const manager = new ResourceStreamManager();
+    const storeScope = buildClusterScope('cluster-a', '');
+
+    setScopedDomainState('namespaces', storeScope, (previous) => ({
+      ...previous,
+      status: 'ready',
+      data: {
+        clusterId: 'cluster-a',
+        clusterName: 'Cluster A',
+        namespaces: [],
+      },
+      sourceVersion: 'object:before-gap',
+      signalVersions: { object: 'object:before-gap' },
+    }));
+
+    await manager.start('namespaces', storeScope);
+    await flushPromises();
+
+    const firstSocket = createdSockets[0];
+    expect(firstSocket).toBeDefined();
+    firstSocket.onopen?.(new Event('open'));
+    manager.handleMessage(
+      'cluster-a',
+      JSON.stringify({ type: 'ACK', domain: 'namespaces', scope: '' })
+    );
+    manager.handleMessage(
+      'cluster-a',
+      JSON.stringify({ type: 'RESET', domain: 'namespaces', scope: '' })
+    );
+    const versionBeforeGap = getScopedDomainState('namespaces', storeScope).signalVersions?.object;
+
+    (manager as unknown as { suspendForVisibility: () => void }).suspendForVisibility();
+    vi.advanceTimersByTime(1100);
+    (manager as unknown as { resumeFromVisibility: () => void }).resumeFromVisibility();
+    await flushPromises();
+
+    const secondSocket = createdSockets[1];
+    expect(secondSocket).toBeDefined();
+    secondSocket.onopen?.(new Event('open'));
+    manager.handleMessage(
+      'cluster-a',
+      JSON.stringify({ type: 'ACK', domain: 'namespaces', scope: '' })
+    );
+    manager.handleMessage(
+      'cluster-a',
+      JSON.stringify({ type: 'RESET', domain: 'namespaces', scope: '' })
+    );
+
+    expect(getScopedDomainState('namespaces', storeScope).signalVersions?.object).not.toBe(
+      versionBeforeGap
+    );
+  });
+
+  test('invalidates the declared non-object clock when a retained doorbell snapshot cannot be replayed', async () => {
+    const manager = new ResourceStreamManager();
+    const storeScope = buildClusterScope('cluster-a', '');
+
+    setScopedDomainState('namespace-metrics', storeScope, (previous) => ({
+      ...previous,
+      status: 'ready',
+      data: {} as never,
+      signalVersions: { metric: 'metric:before-gap' },
+    }));
+
+    await manager.start('namespace-metrics', storeScope);
+    await flushPromises();
+    const socket = createdSockets[0];
+    expect(socket).toBeDefined();
+    socket.onopen?.(new Event('open'));
+    manager.handleMessage(
+      'cluster-a',
+      JSON.stringify({ type: 'RESET', domain: 'namespace-metrics', scope: '' })
+    );
+
+    expect(getScopedDomainState('namespace-metrics', storeScope).signalVersions?.metric).not.toBe(
+      'metric:before-gap'
+    );
+  });
+
+  test('treats the first reset without retained data as an acknowledgement', async () => {
     vi.useFakeTimers();
     installWindowTimers();
     const manager = new ResourceStreamManager();
@@ -1216,7 +1302,7 @@ describe('ResourceStreamManager', () => {
     );
     await flushPromises();
 
-    // The first reset only acks the subscription; initial start already set diagnostic state.
+    // With no retained snapshot to reconcile, the first reset only acknowledges the subscription.
     expect(getScopedDomainState('namespace-config', storeScope).streamRevision ?? 0).toBe(1);
 
     vi.advanceTimersByTime(1100);

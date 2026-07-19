@@ -64,6 +64,16 @@ The authored domain contract declares which clocks can change a payload:
 - Stream messages do not carry table rows, query state, positions, or cursors.
 - A source must advance only the payload it owns. In particular, a metric tick
   must not advance an object clock or make an object snapshot appear changed.
+- `namespaces` advances its `object` signal clock when a Namespace add, update,
+  or delete can change the list. The producer invalidates the namespace
+  snapshot cache before ringing that doorbell, and every leased namespace
+  consumer performs one `stream-signal` reconciliation for the new clock.
+- A reconnect may reuse retained data without fetching only when the server
+  successfully replays from the client's resume token. If the server sends a
+  reset because it cannot prove continuity, retained data is invalidated by
+  advancing one of the domain's declared signal clocks; consumers then perform
+  one `stream-signal` reconciliation. A reset must never be accepted as only an
+  acknowledgement while retained data remains visible.
 
 ## Metrics
 
@@ -114,8 +124,10 @@ For a freshness change, test the contract at the producer/consumer seam:
 3. an inactive retained scope does not create producer demand or periodic
    requests;
 4. the declared source signal refetches the affected payload once;
-5. a metric-only change leaves object clocks and object snapshots unchanged;
-6. permission, stream-down fallback, teardown, and multi-cluster isolation still
+5. a reconnect that cannot replay invalidates retained data and refetches it
+   once, while a successful replay does not add a snapshot request;
+6. a metric-only change leaves object clocks and object snapshots unchanged;
+7. permission, stream-down fallback, teardown, and multi-cluster isolation still
    converge.
 
 Finish non-documentation changes with `mage qc:prerelease`.

@@ -14,7 +14,7 @@
       "payloadOwner": "backend/refresh/snapshot.NamespaceBuilder",
       "refreshPayloadType": "NamespaceSnapshotPayload",
       "cachePolicy": "snapshot-cache-with-merge",
-      "streamSemantics": ["snapshot-replace"],
+      "streamSemantics": ["snapshot-replace", "change-signal"],
       "coverageContract": "snapshot-table-payload",
       "coverageStatus": "enforced"
     },
@@ -48,7 +48,7 @@
       "payloadOwner": "backend/refresh/snapshot/cluster_overview.go:ClusterOverviewBuilder.Build",
       "refreshPayloadType": "ClusterOverviewSnapshotPayload",
       "cachePolicy": "snapshot-cache",
-      "streamSemantics": ["snapshot-replace"],
+      "streamSemantics": ["snapshot-replace", "change-signal"],
       "coverageContract": "aggregate-snapshot-permission-fallback",
       "coverageStatus": "enforced"
     },
@@ -490,7 +490,7 @@
       "payloadOwner": "backend/refresh/snapshot.ObjectEventsBuilder",
       "refreshPayloadType": "ObjectEventsSnapshotPayload",
       "cachePolicy": "snapshot-cache",
-      "streamSemantics": ["snapshot-replace"],
+      "streamSemantics": ["snapshot-replace", "change-signal"],
       "coverageContract": "event-snapshot-payload",
       "coverageStatus": "enforced"
     },
