@@ -13,8 +13,24 @@ type MuxConfig struct {
 	SnapshotService refresh.SnapshotService
 	ManualQueue     refresh.ManualQueue
 	Telemetry       telemetry.Summarizer
-	Metrics         any
+	Metrics         refresh.ClusterMetricsDemandController
 	HealthHub       refresh.InformerHub
+}
+
+type singleClusterMetricsDemandController struct {
+	clusterID string
+	manager   *refresh.Manager
+}
+
+func (c singleClusterMetricsDemandController) SetMetricsActiveForClusters(clusterIDs []string) {
+	active := false
+	for _, clusterID := range clusterIDs {
+		if clusterID == c.clusterID {
+			active = true
+			break
+		}
+	}
+	c.manager.SetMetricsActive(active)
 }
 
 // BuildRefreshMux constructs a ServeMux with the refresh API and optional health route.

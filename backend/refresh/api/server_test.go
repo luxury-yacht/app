@@ -76,14 +76,6 @@ func (errorQueue) Next(ctx context.Context) (*refresh.ManualRefreshJob, error) {
 	return nil, ctx.Err()
 }
 
-type fakeMetricsController struct {
-	activeValues []bool
-}
-
-func (f *fakeMetricsController) SetMetricsActive(active bool) {
-	f.activeValues = append(f.activeValues, active)
-}
-
 type fakeClusterMetricsController struct {
 	clusterIDs [][]string
 }
@@ -428,8 +420,8 @@ func TestTelemetrySummaryWithoutRecorderReturnsEmptyArrays(t *testing.T) {
 	}
 }
 
-func TestMetricsActiveEndpoint(t *testing.T) {
-	controller := &fakeMetricsController{}
+func TestMetricsActiveEndpointRequiresClusterIDs(t *testing.T) {
+	controller := &fakeClusterMetricsController{}
 	server := api.NewServer(snapshotService(), &fakeQueue{}, nil, controller)
 	mux := http.NewServeMux()
 	server.Register(mux)
@@ -439,11 +431,11 @@ func TestMetricsActiveEndpoint(t *testing.T) {
 	rr := httptest.NewRecorder()
 	mux.ServeHTTP(rr, req)
 
-	if rr.Code != http.StatusNoContent {
-		t.Fatalf("expected status 204 got %d", rr.Code)
+	if rr.Code != http.StatusBadRequest {
+		t.Fatalf("expected status 400 got %d", rr.Code)
 	}
-	if len(controller.activeValues) != 1 || controller.activeValues[0] != true {
-		t.Fatalf("expected metrics controller to receive active=true")
+	if len(controller.clusterIDs) != 0 {
+		t.Fatalf("expected legacy metrics demand to be rejected")
 	}
 }
 

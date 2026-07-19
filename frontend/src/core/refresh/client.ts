@@ -51,6 +51,9 @@ let refreshReadyPromise: Promise<string> | null = null;
 const REFRESH_NOT_READY_PATTERN = /refresh subsystem not initialised/i;
 const MAX_REFRESH_URL_ATTEMPTS = 30;
 const INITIAL_REFRESH_URL_DELAY_MS = 200;
+const MANUAL_REFRESH_TIMEOUT_MS = 60_000;
+const INITIAL_MANUAL_JOB_POLL_MS = 50;
+const MAX_MANUAL_JOB_POLL_MS = 1_000;
 
 const toError = (error: unknown): Error => {
   if (error instanceof Error) {
@@ -60,6 +63,23 @@ const toError = (error: unknown): Error => {
 };
 
 const delay = (ms: number) => new Promise((resolve) => setTimeout(resolve, ms));
+
+const abortableDelay = (ms: number, signal: AbortSignal): Promise<void> =>
+  new Promise((resolve, reject) => {
+    if (signal.aborted) {
+      reject(new DOMException('Manual refresh aborted', 'AbortError'));
+      return;
+    }
+    const onAbort = () => {
+      clearTimeout(timeoutId);
+      reject(new DOMException('Manual refresh aborted', 'AbortError'));
+    };
+    const timeoutId = setTimeout(() => {
+      signal.removeEventListener('abort', onAbort);
+      resolve();
+    }, ms);
+    signal.addEventListener('abort', onAbort, { once: true });
+  });
 
 const parseManualRefreshJob = async (response: Response): Promise<ManualRefreshJob> => {
   if (!response.ok) {
@@ -79,27 +99,53 @@ const waitForManualRefresh = async (
   scope: string,
   signal?: AbortSignal
 ): Promise<void> => {
-  const enqueueURL = new URL(`/api/v2/refresh/${domain}`, baseURL);
-  let job = await parseManualRefreshJob(
-    await fetch(enqueueURL.toString(), {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ scope, reason: 'user' }),
-      signal,
-    })
-  );
-  while (job.state === 'queued' || job.state === 'running') {
-    if (signal?.aborted) {
-      throw new DOMException('Manual refresh aborted', 'AbortError');
-    }
-    const statusURL = new URL(`/api/v2/jobs/${job.jobId}`, baseURL);
-    job = await parseManualRefreshJob(await fetch(statusURL.toString(), { signal }));
-    if (job.state === 'queued' || job.state === 'running') {
-      await delay(50);
-    }
+  const controller = new AbortController();
+  let timedOut = false;
+  const onAbort = () => controller.abort();
+  if (signal?.aborted) {
+    controller.abort();
+  } else {
+    signal?.addEventListener('abort', onAbort, { once: true });
   }
-  if (job.state === 'failed' || job.state === 'cancelled') {
-    throw new Error(job.error || `Manual refresh failed for ${domain}`);
+  const timeoutId = setTimeout(() => {
+    timedOut = true;
+    controller.abort();
+  }, MANUAL_REFRESH_TIMEOUT_MS);
+
+  try {
+    const enqueueURL = new URL(`/api/v2/refresh/${domain}`, baseURL);
+    let job = await parseManualRefreshJob(
+      await fetch(enqueueURL.toString(), {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ scope, reason: 'user' }),
+        signal: controller.signal,
+      })
+    );
+    let pollDelayMs = INITIAL_MANUAL_JOB_POLL_MS;
+    while (job.state === 'queued' || job.state === 'running') {
+      const statusURL = new URL(`/api/v2/jobs/${job.jobId}`, baseURL);
+      job = await parseManualRefreshJob(
+        await fetch(statusURL.toString(), { signal: controller.signal })
+      );
+      if (job.state === 'queued' || job.state === 'running') {
+        await abortableDelay(pollDelayMs, controller.signal);
+        pollDelayMs = Math.min(MAX_MANUAL_JOB_POLL_MS, pollDelayMs * 2);
+      }
+    }
+    if (job.state === 'failed' || job.state === 'cancelled') {
+      throw new Error(job.error || `Manual refresh failed for ${domain}`);
+    }
+  } catch (error) {
+    if (timedOut) {
+      throw new Error(
+        `Manual refresh timed out after ${MANUAL_REFRESH_TIMEOUT_MS / 1_000} seconds for ${domain}`
+      );
+    }
+    throw error;
+  } finally {
+    clearTimeout(timeoutId);
+    signal?.removeEventListener('abort', onAbort);
   }
 };
 

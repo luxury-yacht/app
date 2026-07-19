@@ -367,8 +367,11 @@ func NewSubsystemWithServices(cfg Config) (*Subsystem, error) {
 		SnapshotService: snapshotService,
 		ManualQueue:     queue,
 		Telemetry:       telemetryRecorder,
-		Metrics:         manager,
-		HealthHub:       informerHub,
+		Metrics: singleClusterMetricsDemandController{
+			clusterID: clusterMeta.ClusterID,
+			manager:   manager,
+		},
+		HealthHub: informerHub,
 	})
 
 	eventManager, resourceManager, err := registerStreamHandlers(mux, streamDeps{

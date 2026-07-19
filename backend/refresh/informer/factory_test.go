@@ -16,9 +16,18 @@ import (
 	"k8s.io/apimachinery/pkg/watch"
 	"k8s.io/client-go/kubernetes/fake"
 	"k8s.io/client-go/tools/cache"
+	gatewayfake "sigs.k8s.io/gateway-api/pkg/client/clientset/versioned/fake"
+	gatewayinformers "sigs.k8s.io/gateway-api/pkg/client/informers/externalversions"
 
 	"github.com/luxury-yacht/app/backend/refresh/permissions"
 )
+
+type testGatewayPresence map[string]bool
+
+func (p testGatewayPresence) AnyPresent() bool { return len(p) > 0 }
+func (p testGatewayPresence) Has(kind string) bool {
+	return p[kind]
+}
 
 // brokenInformer returns an informer whose initial list always fails with err,
 // so its cache can never sync. Mirrors a Gateway API informer watching a
@@ -299,6 +308,26 @@ func TestNewFactoryDoesNotRegisterNodeInformer(t *testing.T) {
 	}
 }
 
+func TestNewFactoryRegistersBothHPAInformerVersions(t *testing.T) {
+	client := fake.NewClientset()
+	checker := permissions.NewCheckerWithReview("test", time.Minute, func(_ context.Context, _, _, _, _ string) (bool, error) {
+		return true, nil
+	})
+	factory := New(client, nil, time.Minute, checker)
+
+	factory.syncStatesMu.Lock()
+	defer factory.syncStatesMu.Unlock()
+	count := 0
+	for _, state := range factory.syncStates {
+		if state.key == "autoscaling/horizontalpodautoscalers" {
+			count++
+		}
+	}
+	if count != 2 {
+		t.Fatalf("expected v1 table/stream and v2 object-map HPA informers, got %d", count)
+	}
+}
+
 func TestCanListResourceCachesResults(t *testing.T) {
 	var sarCalls atomic.Int32
 	checker := permissions.NewCheckerWithReview("test", time.Minute, func(_ context.Context, _, _, _, _ string) (bool, error) {
@@ -390,6 +419,24 @@ func TestProcessPendingClusterInformersSkipsWithoutPermissions(t *testing.T) {
 	}
 	if called {
 		t.Fatalf("expected informer factory to be skipped when permissions denied")
+	}
+}
+
+func TestWithGatewayFactoryDoesNotRegisterClusterWideInformerWhenDenied(t *testing.T) {
+	checker := permissions.NewCheckerWithReview("test", time.Minute, func(_ context.Context, group, resource, _, _ string) (bool, error) {
+		return group != gatewayGroup || resource != "gateways", nil
+	})
+	factory := New(fake.NewClientset(), nil, time.Minute, checker)
+	gatewayFactory := gatewayinformers.NewSharedInformerFactory(gatewayfake.NewClientset(), time.Minute)
+
+	factory.WithGatewayFactory(gatewayFactory, testGatewayPresence{"Gateway": true})
+
+	factory.syncStatesMu.Lock()
+	defer factory.syncStatesMu.Unlock()
+	for _, state := range factory.syncStates {
+		if state.key == "gateway.networking.k8s.io/gateways" {
+			t.Fatal("denied cluster-wide Gateway informer must not be registered")
+		}
 	}
 }
 

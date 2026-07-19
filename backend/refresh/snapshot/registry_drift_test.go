@@ -85,7 +85,7 @@ func TestObjectMapGatewayCollectorKindsDoNotDrift(t *testing.T) {
 
 func TestObjectMapEdgeKindsDoNotDrift(t *testing.T) {
 	// HorizontalPodAutoscaler contributes edges but has no Collector (its v2 node
-	// is projected bespoke from the autoscaling/v1 informer), so it appears here
+	// is projected bespoke from the autoscaling/v2 informer), so it appears here
 	// but not in the collector guard.
 	assertKindSet(t, "object-map edges", []string{
 		"BackendTLSPolicy", "ClusterRole", "ClusterRoleBinding", "CronJob", "DaemonSet",

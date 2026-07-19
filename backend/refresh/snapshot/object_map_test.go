@@ -11,7 +11,7 @@ import (
 
 	"github.com/stretchr/testify/require"
 	appsv1 "k8s.io/api/apps/v1"
-	autoscalingv1 "k8s.io/api/autoscaling/v1"
+	autoscalingv2 "k8s.io/api/autoscaling/v2"
 	batchv1 "k8s.io/api/batch/v1"
 	corev1 "k8s.io/api/core/v1"
 	discoveryv1 "k8s.io/api/discovery/v1"
@@ -71,6 +71,7 @@ func newObjectMapTestBuilder(t *testing.T, client kubernetes.Interface) *objectM
 	shared.Rbac().V1().ClusterRoles().Informer()
 	shared.Rbac().V1().ClusterRoleBindings().Informer()
 	shared.Autoscaling().V1().HorizontalPodAutoscalers().Informer()
+	shared.Autoscaling().V2().HorizontalPodAutoscalers().Informer()
 	stop := make(chan struct{})
 	t.Cleanup(func() { close(stop) })
 	shared.Start(stop)
@@ -277,15 +278,15 @@ func TestObjectMapBuildsRecursiveCoreRelationships(t *testing.T) {
 func TestObjectMapBuildDoesNotListHPAFromKubernetes(t *testing.T) {
 	client := fake.NewSimpleClientset(objectMapFixtureObjects()...)
 	builder := newObjectMapTestBuilder(t, client)
-	before := len(client.Actions())
+	before := countActionsWithVerb(client.Actions(), "list")
 	ctx := WithClusterMeta(context.Background(), ClusterMeta{ClusterID: "cluster-a", ClusterName: "Cluster A"})
 
 	_, err := builder.Build(ctx, "default:apps/v1:Deployment:web?maxDepth=5&maxNodes=100")
 	require.NoError(t, err)
-	require.Len(t, client.Actions(), before, "object-map builds must read the existing HPA informer cache")
+	require.Equal(t, before, countActionsWithVerb(client.Actions(), "list"), "object-map builds must read the existing HPA informer cache")
 }
 
-func TestObjectMapBuildsPrimaryV2HPASeedFromV1Informer(t *testing.T) {
+func TestObjectMapBuildsPrimaryV2HPASeedFromV2Informer(t *testing.T) {
 	client := fake.NewSimpleClientset(objectMapFixtureObjects()...)
 	builder := newObjectMapTestBuilder(t, client)
 	ctx := WithClusterMeta(context.Background(), ClusterMeta{ClusterID: "cluster-a", ClusterName: "Cluster A"})
@@ -294,6 +295,38 @@ func TestObjectMapBuildsPrimaryV2HPASeedFromV1Informer(t *testing.T) {
 	require.NoError(t, err)
 	payload := snap.Payload.(ObjectMapSnapshotPayload)
 	assertEdge(t, payload, "HorizontalPodAutoscaler", "web", "Deployment", "web", "scales")
+}
+
+func TestObjectMapPreservesV2HPAConditionStatusFromInformer(t *testing.T) {
+	client := fake.NewSimpleClientset(
+		deploymentFixture("default", "web", "deploy-uid", "", ""),
+		&autoscalingv2.HorizontalPodAutoscaler{
+			ObjectMeta: metav1.ObjectMeta{Name: "web", Namespace: "default", UID: types.UID("hpa-uid")},
+			Spec: autoscalingv2.HorizontalPodAutoscalerSpec{
+				ScaleTargetRef: autoscalingv2.CrossVersionObjectReference{APIVersion: "apps/v1", Kind: "Deployment", Name: "web"},
+				MaxReplicas:    3,
+			},
+			Status: autoscalingv2.HorizontalPodAutoscalerStatus{
+				CurrentReplicas: 1,
+				DesiredReplicas: 1,
+				Conditions: []autoscalingv2.HorizontalPodAutoscalerCondition{{
+					Type:   autoscalingv2.ScalingActive,
+					Status: corev1.ConditionFalse,
+					Reason: "FailedGetResourceMetric",
+				}},
+			},
+		},
+	)
+	builder := newObjectMapTestBuilder(t, client)
+	ctx := WithClusterMeta(context.Background(), ClusterMeta{ClusterID: "cluster-a", ClusterName: "Cluster A"})
+
+	snap, err := builder.Build(ctx, "namespace:default?maxNodes=100")
+	require.NoError(t, err)
+	payload := snap.Payload.(ObjectMapSnapshotPayload)
+	status := nodeByKindName(t, payload, "HorizontalPodAutoscaler", "web").Status
+	require.NotNil(t, status)
+	require.Equal(t, "warning", status.Presentation)
+	require.Equal(t, "ScalingActive: FailedGetResourceMetric", status.Label)
 }
 
 func TestObjectMapBuildsFromPodDisruptionBudget(t *testing.T) {
@@ -769,19 +802,30 @@ func TestObjectMapBuildDoesNotListGatewayAPIFromKubernetes(t *testing.T) {
 	gatewayClient := newObjectMapGatewayClient(t)
 	builder := newObjectMapTestBuilder(t, client)
 	builder.gatewayShared = startObjectMapGatewayFactory(t, gatewayClient)
-	before := len(gatewayClient.Actions())
+	before := countActionsWithVerb(gatewayClient.Actions(), "list")
 	ctx := WithClusterMeta(context.Background(), ClusterMeta{ClusterID: "cluster-a", ClusterName: "Cluster A"})
 
 	_, err := builder.Build(ctx, "default:gateway.networking.k8s.io/v1:Gateway:edge?maxDepth=5&maxNodes=100")
 	require.NoError(t, err)
-	require.Len(t, gatewayClient.Actions(), before, "object-map builds must read the existing Gateway informer cache")
+	require.Equal(t, before, countActionsWithVerb(gatewayClient.Actions(), "list"), "object-map builds must read the existing Gateway informer cache")
 }
 
-func TestObjectMapSkipsGatewayInformerWithoutPermission(t *testing.T) {
+func countActionsWithVerb(actions []k8stesting.Action, verb string) int {
+	count := 0
+	for _, action := range actions {
+		if action.GetVerb() == verb {
+			count++
+		}
+	}
+	return count
+}
+
+func TestObjectMapNamespaceScopeSkipsGatewayInformerWithoutClusterWidePermission(t *testing.T) {
 	client := fake.NewSimpleClientset(serviceFixture("default", "web", "svc-web-uid", nil))
 	gatewayClient := newObjectMapGatewayClient(t)
 	builder := newObjectMapTestBuilder(t, client)
 	builder.gatewayShared = startObjectMapGatewayFactory(t, gatewayClient)
+	builder.allowedNamespaces = []string{"default"}
 	builder.permissions = denyPermissions{denied: map[string]bool{"gateways": true}}
 	ctx := WithClusterMeta(context.Background(), ClusterMeta{ClusterID: "cluster-a", ClusterName: "Cluster A"})
 
@@ -902,10 +946,10 @@ func objectMapFixtureObjects() []runtime.Object {
 		},
 	}
 	pv := &corev1.PersistentVolume{ObjectMeta: metav1.ObjectMeta{Name: "pv-data", UID: types.UID("pv-uid")}}
-	hpa := &autoscalingv1.HorizontalPodAutoscaler{
+	hpa := &autoscalingv2.HorizontalPodAutoscaler{
 		ObjectMeta: metav1.ObjectMeta{Name: "web", Namespace: "default", UID: types.UID("hpa-uid")},
-		Spec: autoscalingv1.HorizontalPodAutoscalerSpec{
-			ScaleTargetRef: autoscalingv1.CrossVersionObjectReference{APIVersion: "apps/v1", Kind: "Deployment", Name: "web"},
+		Spec: autoscalingv2.HorizontalPodAutoscalerSpec{
+			ScaleTargetRef: autoscalingv2.CrossVersionObjectReference{APIVersion: "apps/v1", Kind: "Deployment", Name: "web"},
 			MinReplicas:    int32Ptr(1),
 			MaxReplicas:    3,
 		},

@@ -68,6 +68,11 @@ type MetricsPoller interface {
 	Stop(ctx context.Context) error
 }
 
+// ClusterMetricsDemandController applies frontend metrics demand to explicit clusters.
+type ClusterMetricsDemandController interface {
+	SetMetricsActiveForClusters(clusterIDs []string)
+}
+
 // ManualQueue manages manual refresh jobs.
 type ManualQueue interface {
 	Enqueue(ctx context.Context, domain, scope, reason string) (*ManualRefreshJob, error)

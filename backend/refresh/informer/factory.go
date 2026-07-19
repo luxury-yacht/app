@@ -202,7 +202,14 @@ func New(client kubernetes.Interface, apiextClient apiextensionsclientset.Interf
 	// longer caches them as typed objects. Their consumers (the rbac/storage/config/network
 	// maintained stores, catalog, object map, response-cache) read the ingest projections
 	// instead.
+	// HPA tables and resource streams use the v1 representation. The object map
+	// also keeps a v2 informer because v1 cannot represent the condition signals
+	// that drive its warning status. Both are shared caches; object-map builds do
+	// not issue a live v2 LIST.
 	result.registerInformer("autoscaling", "horizontalpodautoscalers", kubeFactory.Autoscaling().V1().HorizontalPodAutoscalers().Informer())
+	result.registerClusterInformer("autoscaling", "horizontalpodautoscalers", func() cache.SharedIndexInformer {
+		return kubeFactory.Autoscaling().V2().HorizontalPodAutoscalers().Informer()
+	})
 	// Events is often the slowest initial LIST on a busy cluster; only the event
 	// domains need it, and they declare per-resource readiness on core/events. It
 	// must not hold the factory-wide gate (metrics poller, undeclared domains).
@@ -267,29 +274,30 @@ func (f *Factory) WithGatewayFactory(factory gatewayinformers.SharedInformerFact
 	f.gatewayFactory = factory
 	gateway := factory.Gateway().V1()
 	if presence.Has("GatewayClass") {
-		f.registerInformer(gatewayGroup, "gatewayclasses", gateway.GatewayClasses().Informer())
+		f.registerClusterInformer(gatewayGroup, "gatewayclasses", func() cache.SharedIndexInformer { return gateway.GatewayClasses().Informer() })
 	}
 	if presence.Has(gatewaypkg.Identity.Kind) {
-		f.registerInformer(gatewayGroup, "gateways", gateway.Gateways().Informer())
+		f.registerClusterInformer(gatewayGroup, "gateways", func() cache.SharedIndexInformer { return gateway.Gateways().Informer() })
 	}
 	if presence.Has(httproutepkg.Identity.Kind) {
-		f.registerInformer(gatewayGroup, "httproutes", gateway.HTTPRoutes().Informer())
+		f.registerClusterInformer(gatewayGroup, "httproutes", func() cache.SharedIndexInformer { return gateway.HTTPRoutes().Informer() })
 	}
 	if presence.Has(grpcroutepkg.Identity.Kind) {
-		f.registerInformer(gatewayGroup, "grpcroutes", gateway.GRPCRoutes().Informer())
+		f.registerClusterInformer(gatewayGroup, "grpcroutes", func() cache.SharedIndexInformer { return gateway.GRPCRoutes().Informer() })
 	}
 	if presence.Has(tlsroutepkg.Identity.Kind) {
-		f.registerInformer(gatewayGroup, "tlsroutes", gateway.TLSRoutes().Informer())
+		f.registerClusterInformer(gatewayGroup, "tlsroutes", func() cache.SharedIndexInformer { return gateway.TLSRoutes().Informer() })
 	}
 	if presence.Has("ListenerSet") {
-		f.registerInformer(gatewayGroup, "listenersets", gateway.ListenerSets().Informer())
+		f.registerClusterInformer(gatewayGroup, "listenersets", func() cache.SharedIndexInformer { return gateway.ListenerSets().Informer() })
 	}
 	if presence.Has("ReferenceGrant") {
-		f.registerInformer(gatewayGroup, "referencegrants", gateway.ReferenceGrants().Informer())
+		f.registerClusterInformer(gatewayGroup, "referencegrants", func() cache.SharedIndexInformer { return gateway.ReferenceGrants().Informer() })
 	}
 	if presence.Has("BackendTLSPolicy") {
-		f.registerInformer(gatewayGroup, "backendtlspolicies", gateway.BackendTLSPolicies().Informer())
+		f.registerClusterInformer(gatewayGroup, "backendtlspolicies", func() cache.SharedIndexInformer { return gateway.BackendTLSPolicies().Informer() })
 	}
+	f.processPendingClusterInformers()
 	return f
 }
 

@@ -95,9 +95,12 @@ checker, so the SSAR cache resets with it
 - **Metrics**: the pod-metrics poll runs per scope namespace and merges the
   successes (`backend/refresh/metrics/poller.go`); node metrics stay
   cluster-scoped and permission-degrade as before.
-- **Object map**: Gateway API and HPA collectors read synchronized informer
-  caches and filter namespaced objects to the configured scope; graph builds do
-  not issue Kubernetes LIST calls.
+- **Object map**: Gateway API and HPA collectors read synchronized cluster-wide
+  informer caches and filter namespaced objects to the configured scope; graph
+  builds do not issue Kubernetes LIST calls. Because those sources are
+  cluster-wide, a namespace-scoped identity without cluster-wide list+watch is
+  shown an insufficient-permissions warning for the affected kinds instead of
+  receiving a per-namespace live-LIST fallback.
 - **UI**: the sidebar namespaces section IS the editor — add affordance +
   per-row hover delete (`frontend/src/ui/layout/NamespaceScopeEditor.tsx`).
   The editing affordances are also the only "scope active" indicator by
@@ -138,7 +141,7 @@ namespace-scope change or auth recovery.
 ## Deliberately cluster-wide (follow-up: scope the factory-backed kinds)
 
 The typed shared-informer factory's namespaced informers (events,
-replicasets, HPA v1), the Gateway API informer factory, and the helm-storage
+replicasets, HPA v1/v2), the Gateway API informer factory, and the helm-storage
 factory still watch cluster-wide. Under a scope their domains stay
 permission-gated on the cluster-wide check (honest denial). Scoping them
 means N per-namespace client-go factories plus multiplexed listers/handlers

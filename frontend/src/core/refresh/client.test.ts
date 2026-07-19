@@ -28,6 +28,7 @@ beforeEach(() => {
 });
 
 afterEach(async () => {
+  vi.useRealTimers();
   const { invalidateRefreshBaseURL } = await import('./client');
   invalidateRefreshBaseURL();
 
@@ -209,6 +210,38 @@ describe('fetchSnapshot', () => {
       fetchSnapshot('object-details', { scope: 'cluster-a|object', manual: true })
     ).rejects.toThrow('cluster closed');
     expect(fetchMock).toHaveBeenCalledTimes(2);
+  });
+
+  test('manual refresh times out with bounded backoff when a job never finishes', async () => {
+    vi.useFakeTimers();
+    mockGetBaseURL.mockResolvedValue('http://127.0.0.1:0/');
+    const fetchMock = vi.fn().mockResolvedValue({
+      ok: true,
+      status: 200,
+      json: vi.fn().mockResolvedValue({ jobId: 'job-1', state: 'running' }),
+    });
+    globalThis.fetch = fetchMock;
+    const { fetchSnapshot } = await import('./client');
+
+    let outcome: unknown;
+    void fetchSnapshot('object-details', {
+      scope: 'cluster-a|object',
+      manual: true,
+    }).then(
+      (value) => {
+        outcome = value;
+      },
+      (error) => {
+        outcome = error;
+      }
+    );
+
+    await vi.advanceTimersByTimeAsync(60_000);
+
+    expect(outcome).toEqual(
+      new Error('Manual refresh timed out after 60 seconds for object-details')
+    );
+    expect(fetchMock.mock.calls.length).toBeLessThan(100);
   });
 
   test('rejects a successful response without a snapshot payload', async () => {

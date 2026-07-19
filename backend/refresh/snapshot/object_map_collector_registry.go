@@ -14,7 +14,7 @@ var objectMapIngestOwnedGVRs = kindregistry.IngestOwnedGVRs()
 // objectMapCollectors is every kind read into the object map from the shared
 // informer cache, derived from the single kind registry. Each kind declares how it
 // is listed and projected in its own package; the collector loop never names a
-// kind. HorizontalPodAutoscaler is collected bespoke from the v1 informer, and
+// kind. HorizontalPodAutoscaler is collected bespoke from the v2 informer, and
 // Gateway-API projections come via objectMapGatewayCollectors.
 var objectMapCollectors = objectMapCollectorsFromRegistry()
 

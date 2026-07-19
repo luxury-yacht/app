@@ -29,7 +29,7 @@ import (
 	"github.com/luxury-yacht/app/backend/resources/ingressclass"
 	podres "github.com/luxury-yacht/app/backend/resources/pods"
 
-	autoscalingv1 "k8s.io/api/autoscaling/v1"
+	autoscalingv2 "k8s.io/api/autoscaling/v2"
 	corev1 "k8s.io/api/core/v1"
 	discoveryv1 "k8s.io/api/discovery/v1"
 	apierrors "k8s.io/apimachinery/pkg/api/errors"
@@ -545,7 +545,7 @@ func (idx *objectMapIndex) collectHPAs(shared informers.SharedInformerFactory) {
 	if shared == nil {
 		return
 	}
-	items, err := shared.Autoscaling().V1().HorizontalPodAutoscalers().Lister().List(labels.Everything())
+	items, err := shared.Autoscaling().V2().HorizontalPodAutoscalers().Lister().List(labels.Everything())
 	if idx.skipListError("horizontalpodautoscalers", err) {
 		return
 	}
@@ -555,8 +555,6 @@ func (idx *objectMapIndex) collectHPAs(shared informers.SharedInformerFactory) {
 			continue
 		}
 		idx.addRecord(&objectMapRecord{
-			// The app's canonical HPA reference is autoscaling/v2. The shared v1
-			// informer supplies the same persisted object without a per-build LIST.
 			ref:               refFromObject(&hpa.ObjectMeta, hpapkg.Identity.Group, hpapkg.Identity.Version, hpapkg.Identity.Kind, hpapkg.Identity.Resource, hpa.Namespace),
 			obj:               hpa,
 			creationTimestamp: objectCreationTimestamp(&hpa.ObjectMeta),
@@ -660,11 +658,11 @@ func (idx *objectMapIndex) enrichActionFacts() {
 		if record == nil {
 			continue
 		}
-		hpa, ok := record.obj.(*autoscalingv1.HorizontalPodAutoscaler)
+		hpa, ok := record.obj.(*autoscalingv2.HorizontalPodAutoscaler)
 		if !ok {
 			continue
 		}
-		facts := hpapkg.BuildV1Facts(idx.meta.ClusterID, hpa)
+		facts := hpapkg.BuildFacts(idx.meta.ClusterID, hpa)
 		target := idx.recordForResourceLink(facts.ScaleTarget)
 		if target == nil {
 			continue
