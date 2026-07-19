@@ -1010,6 +1010,96 @@ describe('LogViewer active pod synchronisation', () => {
     expect(container.textContent).not.toContain('log line 200');
   });
 
+  it('freezes visible log rows while paused and resumes from a bottom overlay', async () => {
+    const originalScrollHeight = Object.getOwnPropertyDescriptor(
+      HTMLElement.prototype,
+      'scrollHeight'
+    );
+    const originalClientHeight = Object.getOwnPropertyDescriptor(
+      HTMLElement.prototype,
+      'clientHeight'
+    );
+    Object.defineProperty(HTMLElement.prototype, 'scrollHeight', {
+      configurable: true,
+      get() {
+        return this.classList.contains('logs-viewer-content') ? 400 : 0;
+      },
+    });
+    Object.defineProperty(HTMLElement.prototype, 'clientHeight', {
+      configurable: true,
+      get() {
+        return this.classList.contains('logs-viewer-content') ? 100 : 0;
+      },
+    });
+
+    const entry = (sequence: number): ContainerLogsEntry => ({
+      _seq: sequence,
+      pod: 'web-1',
+      container: 'app',
+      line: `anchored line ${sequence}`,
+      timestamp: `2024-05-01T10:00:0${sequence}Z`,
+      isInit: false,
+    });
+
+    try {
+      seedLogSnapshot([entry(1), entry(2), entry(3)]);
+      await renderViewer({ activePodNames: ['web-1'] });
+      await flushAsync();
+
+      const content = await waitForElement(() =>
+        container.querySelector<HTMLDivElement>('.logs-viewer-content')
+      );
+      content.scrollTop = 100;
+
+      await act(async () => {
+        seedLogSnapshot([entry(2), entry(3), entry(4)]);
+        await Promise.resolve();
+      });
+
+      expect(container.textContent).toContain('anchored line 1');
+      expect(container.textContent).toContain('anchored line 4');
+      expect(content.scrollTop).toBe(100);
+
+      let resumeButton = container.querySelector<HTMLButtonElement>(
+        'button[aria-label="Resume scrolling"]'
+      );
+      expect(resumeButton).not.toBeNull();
+
+      await act(async () => {
+        content.scrollTop = 300;
+        content.dispatchEvent(new Event('scroll'));
+      });
+      expect(
+        container.querySelector<HTMLButtonElement>('button[aria-label="Resume scrolling"]')
+      ).toBeNull();
+      expect(container.textContent).not.toContain('anchored line 1');
+
+      await act(async () => {
+        content.scrollTop = 100;
+        content.dispatchEvent(new Event('scroll'));
+      });
+      resumeButton = container.querySelector<HTMLButtonElement>(
+        'button[aria-label="Resume scrolling"]'
+      );
+      expect(resumeButton).not.toBeNull();
+      await act(async () => {
+        resumeButton?.dispatchEvent(new MouseEvent('click', { bubbles: true }));
+        await Promise.resolve();
+      });
+
+      expect(container.textContent).not.toContain('anchored line 1');
+      expect(container.textContent).toContain('anchored line 4');
+      expect(content.scrollTop).toBe(400);
+    } finally {
+      if (originalScrollHeight) {
+        Object.defineProperty(HTMLElement.prototype, 'scrollHeight', originalScrollHeight);
+      }
+      if (originalClientHeight) {
+        Object.defineProperty(HTMLElement.prototype, 'clientHeight', originalClientHeight);
+      }
+    }
+  });
+
   it('colors API timestamps and container metadata only when showing all containers', async () => {
     (GetContainerLogsScopeContainers as unknown as ViMock).mockResolvedValue(['app', 'sidecar']);
     seedLogSnapshot(

@@ -68,7 +68,8 @@ import {
 import { INACTIVE_SCOPE } from '../constants';
 import { containsAnsi, parseAnsiTextSegments, stripAnsi } from './ansi';
 import { setContainerLogsStreamScopeParams } from './containerLogsStreamScopeParamsCache';
-import { useLogScrollRestoration } from './hooks/useLogScrollRestoration';
+import { useAnchoredLogEntries } from './hooks/useAnchoredLogEntries';
+import { isLogScrollAtBottom, useLogScrollRestoration } from './hooks/useLogScrollRestoration';
 import { useTerminalTheme } from './hooks/useTerminalTheme';
 import { buildCsv } from './logExport';
 import {
@@ -387,6 +388,7 @@ const LogViewerInner: React.FC<LogViewerProps> = ({
   const [apiTimestampUseLocalTimeZone, setApiTimestampUseLocalTimeZoneState] =
     React.useState<boolean>(() => getObjPanelLogsApiTimestampUseLocalTimeZone());
   const [isObjPanelLogsSettingsOpen, setIsObjPanelLogsSettingsOpen] = React.useState(false);
+  const [isTailFollowing, setIsTailFollowing] = React.useState(true);
 
   // Destructure commonly used state for readability
   const {
@@ -551,15 +553,33 @@ const LogViewerInner: React.FC<LogViewerProps> = ({
   const payloadEntries = containerLogsScope ? logSnapshot.data?.entries : undefined;
   const rawLogEntries: ContainerLogsEntry[] = useMemo(() => payloadEntries ?? [], [payloadEntries]);
 
-  // ContainerLogsStreamManager already caps rawLogEntries at the user-configured
-  // buffer size, so we can use it directly. The old stable-list merge
-  // logic existed to keep the viewport anchored while reading in place
-  // with autoScroll off, but now that tail-following is derived from
-  // scroll position (see the smart auto-scroll effect below), the
-  // stable list is unnecessary — new entries arrive at the bottom,
-  // buffer rotation drops the oldest, and the smart-scroll effect only
-  // tail-follows when the user is already at the bottom anyway.
-  const logEntries: ContainerLogsEntry[] = rawLogEntries;
+  const anchoredLogSourceKey = useMemo(
+    () =>
+      JSON.stringify([
+        resolvedClusterId,
+        containerLogsScope,
+        backendLogSelection.selectedFilters,
+        backendLogSelection.matchNone,
+        showPreviousContainerLogs,
+      ]),
+    [
+      backendLogSelection.matchNone,
+      backendLogSelection.selectedFilters,
+      containerLogsScope,
+      resolvedClusterId,
+      showPreviousContainerLogs,
+    ]
+  );
+  const activeScrollContainer = isParsedView
+    ? logsContentRef.current?.querySelector<HTMLElement>('.gridtable-wrapper')
+    : logsContentRef.current;
+  const shouldFollowTailForCurrentRender =
+    isTailFollowing && (!activeScrollContainer || isLogScrollAtBottom(activeScrollContainer));
+  const logEntries = useAnchoredLogEntries(
+    rawLogEntries,
+    shouldFollowTailForCurrentRender,
+    anchoredLogSourceKey
+  );
   const snapshotStatus = containerLogsScope ? logSnapshot.status : 'idle';
   const snapshotError = containerLogsScope ? logSnapshot.error : null;
   // sequence 1 = connected event, sequence >= 2 = initial logs received (may be empty)
@@ -1682,7 +1702,7 @@ const LogViewerInner: React.FC<LogViewerProps> = ({
     };
   }, [isWorkload, containerLogsScope, resolvedClusterId]);
 
-  useLogScrollRestoration({
+  const { resumeTailFollowing } = useLogScrollRestoration({
     rootRef: logsContentRef,
     isParsedView,
     rowCount: isParsedView ? parsedContainerLogs.length : logEntries.length,
@@ -1690,6 +1710,7 @@ const LogViewerInner: React.FC<LogViewerProps> = ({
     cacheKey: panelId,
     getScrollTop: getLogViewerScrollTop,
     setScrollTop: setLogViewerScrollTop,
+    onTailFollowingChange: setIsTailFollowing,
   });
 
   const derivedFieldKeys = useMemo(
@@ -2250,27 +2271,39 @@ const LogViewerInner: React.FC<LogViewerProps> = ({
             </div>
           )}
 
-          <div className="logs-viewer-content selectable" ref={logsContentRef} tabIndex={-1}>
-            {isParsedView ? (
-              <ParsedLogTable
-                rows={parsedContainerLogs}
-                columns={tableColumns}
-                expandedRows={expandedRows}
-                onToggleRow={handleToggleParsedRow}
-              />
-            ) : displayLogs ? (
-              <RawLogViewer
-                rows={renderedDisplayRows}
-                scrollContainerRef={logsContentRef}
-                wrapText={wrapText}
-                renderRow={renderRawLogRow}
-                virtualizationThreshold={RAW_LOG_VIRTUALIZATION_THRESHOLD}
-                virtualizationOverscan={RAW_LOG_VIRTUALIZATION_OVERSCAN}
-                estimateRowHeight={RAW_LOG_ESTIMATE_ROW_HEIGHT}
-                verticalPaddingPx={RAW_LOG_VERTICAL_PADDING_PX}
-              />
-            ) : (
-              emptyStateMessage
+          <div className="logs-viewer-content-frame">
+            <div className="logs-viewer-content selectable" ref={logsContentRef} tabIndex={-1}>
+              {isParsedView ? (
+                <ParsedLogTable
+                  rows={parsedContainerLogs}
+                  columns={tableColumns}
+                  expandedRows={expandedRows}
+                  onToggleRow={handleToggleParsedRow}
+                />
+              ) : displayLogs ? (
+                <RawLogViewer
+                  rows={renderedDisplayRows}
+                  scrollContainerRef={logsContentRef}
+                  wrapText={wrapText}
+                  renderRow={renderRawLogRow}
+                  virtualizationThreshold={RAW_LOG_VIRTUALIZATION_THRESHOLD}
+                  virtualizationOverscan={RAW_LOG_VIRTUALIZATION_OVERSCAN}
+                  estimateRowHeight={RAW_LOG_ESTIMATE_ROW_HEIGHT}
+                  verticalPaddingPx={RAW_LOG_VERTICAL_PADDING_PX}
+                />
+              ) : (
+                emptyStateMessage
+              )}
+            </div>
+            {!isTailFollowing && (
+              <button
+                type="button"
+                className="logs-viewer-resume-scrolling"
+                aria-label="Resume scrolling"
+                onClick={resumeTailFollowing}
+              >
+                Resume scrolling
+              </button>
             )}
           </div>
         </div>

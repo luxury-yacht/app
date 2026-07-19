@@ -9,9 +9,35 @@ interface LogScrollRestorationOptions {
   getScrollTop: (cacheKey: string) => number | undefined;
   setScrollTop: (cacheKey: string, scrollTop: number) => void;
   forceTailOnNextRestore?: boolean;
+  onTailFollowingChange?: (isTailFollowing: boolean) => void;
 }
 
 const AT_BOTTOM_THRESHOLD_PX = 16;
+
+interface KnownScrollPosition {
+  element: HTMLElement;
+  scrollTop: number;
+  scrollHeight: number;
+}
+
+export const isLogScrollAtBottom = (scrollElement: HTMLElement): boolean =>
+  scrollElement.scrollTop + scrollElement.clientHeight >=
+  scrollElement.scrollHeight - AT_BOTTOM_THRESHOLD_PX;
+
+const captureScrollPosition = (scrollElement: HTMLElement): KnownScrollPosition => ({
+  element: scrollElement,
+  scrollTop: scrollElement.scrollTop,
+  scrollHeight: scrollElement.scrollHeight,
+});
+
+const reachedKnownBottom = (
+  scrollElement: HTMLElement,
+  knownPosition: KnownScrollPosition | null
+): boolean =>
+  knownPosition?.element === scrollElement &&
+  scrollElement.scrollTop > knownPosition.scrollTop &&
+  scrollElement.scrollTop + scrollElement.clientHeight >=
+    knownPosition.scrollHeight - AT_BOTTOM_THRESHOLD_PX;
 
 export const useLogScrollRestoration = ({
   rootRef,
@@ -22,17 +48,34 @@ export const useLogScrollRestoration = ({
   getScrollTop,
   setScrollTop,
   forceTailOnNextRestore = false,
+  onTailFollowingChange,
 }: LogScrollRestorationOptions) => {
   const scrollRestoredRef = useRef(false);
   const wasAtBottomRef = useRef(true);
+  const knownScrollPositionRef = useRef<KnownScrollPosition | null>(null);
   const forceTailRestoreRef = useRef(forceTailOnNextRestore);
   const previousCacheKeyRef = useRef(cacheKey);
 
-  const resetScrollRestoration = useCallback((options: { forceTail?: boolean } = {}) => {
-    scrollRestoredRef.current = false;
-    wasAtBottomRef.current = true;
-    forceTailRestoreRef.current = Boolean(options.forceTail);
-  }, []);
+  const setTailFollowing = useCallback(
+    (isTailFollowing: boolean) => {
+      if (wasAtBottomRef.current === isTailFollowing) {
+        return;
+      }
+      wasAtBottomRef.current = isTailFollowing;
+      onTailFollowingChange?.(isTailFollowing);
+    },
+    [onTailFollowingChange]
+  );
+
+  const resetScrollRestoration = useCallback(
+    (options: { forceTail?: boolean } = {}) => {
+      scrollRestoredRef.current = false;
+      setTailFollowing(true);
+      knownScrollPositionRef.current = null;
+      forceTailRestoreRef.current = Boolean(options.forceTail);
+    },
+    [setTailFollowing]
+  );
 
   useEffect(() => {
     if (previousCacheKeyRef.current === cacheKey) {
@@ -54,15 +97,24 @@ export const useLogScrollRestoration = ({
   }, [isParsedView, rootRef]);
 
   useEffect(() => {
+    // The scroll container is conditionally mounted after loading. Re-check it
+    // when rows arrive so scrolling does not depend on a later refresh.
+    void rowCount;
     const scrollEl = getScrollContainer();
     if (!scrollEl) {
       return;
     }
 
     const handler = () => {
-      wasAtBottomRef.current =
-        scrollEl.scrollTop + scrollEl.clientHeight >=
-        scrollEl.scrollHeight - AT_BOTTOM_THRESHOLD_PX;
+      const knownPosition = knownScrollPositionRef.current;
+      const shouldFollowTail =
+        isLogScrollAtBottom(scrollEl) ||
+        reachedKnownBottom(scrollEl, knownPosition) ||
+        (wasAtBottomRef.current &&
+          knownPosition?.element === scrollEl &&
+          knownPosition.scrollTop === scrollEl.scrollTop);
+      knownScrollPositionRef.current = captureScrollPosition(scrollEl);
+      setTailFollowing(shouldFollowTail);
       if (!scrollRestoredRef.current) {
         return;
       }
@@ -73,7 +125,7 @@ export const useLogScrollRestoration = ({
     return () => {
       scrollEl.removeEventListener('scroll', handler);
     };
-  }, [cacheKey, getScrollContainer, setScrollTop]);
+  }, [cacheKey, getScrollContainer, rowCount, setScrollTop, setTailFollowing]);
 
   useEffect(() => {
     if (scrollRestoredRef.current || rowCount === 0) {
@@ -93,14 +145,34 @@ export const useLogScrollRestoration = ({
         : maxScrollTop;
 
     scrollEl.scrollTop = targetScrollTop;
+    knownScrollPositionRef.current = captureScrollPosition(scrollEl);
+    setTailFollowing(isLogScrollAtBottom(scrollEl));
     scrollRestoredRef.current = true;
     forceTailRestoreRef.current = false;
-  }, [cacheKey, getScrollContainer, getScrollTop, rowCount]);
+  }, [cacheKey, getScrollContainer, getScrollTop, rowCount, setTailFollowing]);
 
   useEffect(() => {
     void rowCount;
     void tailFollowSignal;
-    if (!wasAtBottomRef.current || !scrollRestoredRef.current) {
+    const shouldFollowTail = () => {
+      const element = getScrollContainer();
+      if (!element || !scrollRestoredRef.current) {
+        return false;
+      }
+
+      // A scrollbar drag or wheel update can change scrollTop before the browser
+      // dispatches its scroll event. Compare the live DOM position with the last
+      // position we observed so a refresh cannot overtake that manual movement.
+      const knownPosition = knownScrollPositionRef.current;
+      if (knownPosition?.element === element && knownPosition.scrollTop !== element.scrollTop) {
+        setTailFollowing(
+          isLogScrollAtBottom(element) || reachedKnownBottom(element, knownPosition)
+        );
+      }
+      knownScrollPositionRef.current = captureScrollPosition(element);
+      return wasAtBottomRef.current;
+    };
+    if (!shouldFollowTail()) {
       return;
     }
 
@@ -111,17 +183,24 @@ export const useLogScrollRestoration = ({
 
     let rafId: number | undefined;
     const scrollToBottom = () => {
+      if (!shouldFollowTail()) {
+        return;
+      }
       const element = getScrollContainer();
       if (!element) {
         return;
       }
       element.scrollTop = element.scrollHeight;
+      knownScrollPositionRef.current = captureScrollPosition(element);
     };
 
     if (isParsedView) {
       let attempts = 0;
       const maxAttempts = 20;
       const checkAndScroll = () => {
+        if (!shouldFollowTail()) {
+          return;
+        }
         const element = getScrollContainer();
         if (element && element.scrollHeight > element.clientHeight) {
           rafId = requestAnimationFrame(scrollToBottom);
@@ -140,7 +219,19 @@ export const useLogScrollRestoration = ({
         cancelAnimationFrame(rafId);
       }
     };
-  }, [getScrollContainer, isParsedView, tailFollowSignal, rowCount]);
+  }, [getScrollContainer, isParsedView, tailFollowSignal, rowCount, setTailFollowing]);
 
-  return { getScrollContainer, resetScrollRestoration };
+  const resumeTailFollowing = useCallback(() => {
+    const scrollEl = getScrollContainer();
+    if (!scrollEl) {
+      return;
+    }
+    scrollEl.scrollTop = scrollEl.scrollHeight;
+    knownScrollPositionRef.current = captureScrollPosition(scrollEl);
+    scrollRestoredRef.current = true;
+    setScrollTop(cacheKey, scrollEl.scrollTop);
+    setTailFollowing(true);
+  }, [cacheKey, getScrollContainer, setScrollTop, setTailFollowing]);
+
+  return { getScrollContainer, resetScrollRestoration, resumeTailFollowing };
 };
