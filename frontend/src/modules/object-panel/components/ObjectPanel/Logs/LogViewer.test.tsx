@@ -1082,11 +1082,20 @@ describe('LogViewer active pod synchronisation', () => {
         'button[aria-label="Resume scrolling"]'
       );
       expect(resumeButton).not.toBeNull();
+      const autoRefreshButton = container.querySelector<HTMLButtonElement>(
+        'button[aria-label="Toggle auto-refresh"]'
+      );
+      expect(autoRefreshButton?.getAttribute('aria-pressed')).toBe('true');
+      await act(async () => {
+        autoRefreshButton?.dispatchEvent(new MouseEvent('click', { bubbles: true }));
+      });
+      expect(autoRefreshButton?.getAttribute('aria-pressed')).toBe('false');
       await act(async () => {
         resumeButton?.dispatchEvent(new MouseEvent('click', { bubbles: true }));
         await Promise.resolve();
       });
 
+      expect(autoRefreshButton?.getAttribute('aria-pressed')).toBe('true');
       expect(container.textContent).not.toContain('anchored line 1');
       expect(container.textContent).toContain('anchored line 4');
       expect(content.scrollTop).toBe(400);

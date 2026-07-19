@@ -1712,6 +1712,12 @@ const LogViewerInner: React.FC<LogViewerProps> = ({
     setScrollTop: setLogViewerScrollTop,
     onTailFollowingChange: setIsTailFollowing,
   });
+  const handleResumeScrolling = useCallback(() => {
+    if (!autoRefresh) {
+      dispatch({ type: 'TOGGLE_AUTO_REFRESH' });
+    }
+    resumeTailFollowing();
+  }, [autoRefresh, resumeTailFollowing]);
 
   const derivedFieldKeys = useMemo(
     () => deriveParsedLogFieldKeys(parsedContainerLogs),
@@ -2300,7 +2306,7 @@ const LogViewerInner: React.FC<LogViewerProps> = ({
                 type="button"
                 className="logs-viewer-resume-scrolling"
                 aria-label="Resume scrolling"
-                onClick={resumeTailFollowing}
+                onClick={handleResumeScrolling}
               >
                 Resume scrolling
               </button>
