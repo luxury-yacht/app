@@ -554,7 +554,11 @@ describe('NamespaceProvider selection behaviour', () => {
       'gamma',
     ]);
     expect(namespaceRef.current?.namespaceLoading).toBe(false);
-    expect(mockRefreshOrchestrator.fetchScopedDomain).not.toHaveBeenCalled();
+    expect(mockRefreshOrchestrator.fetchScopedDomain).toHaveBeenCalledWith(
+      'namespaces',
+      'cluster-b|',
+      { isManual: true, streamSignal: false }
+    );
     // Switching the ACTIVE tab must not disable any still-open cluster's scope
     // — both leases stay live so both stay warm (no disable/re-enable churn).
     const disables = mockRefreshOrchestrator.setScopedDomainEnabled.mock.calls.filter(

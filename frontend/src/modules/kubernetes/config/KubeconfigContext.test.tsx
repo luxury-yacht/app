@@ -229,7 +229,7 @@ describe('KubeconfigContext', () => {
     unmount();
   });
 
-  it('publishes a switched tab to refresh consumers only after backend foreground activation', async () => {
+  it('publishes a switched tab to data consumers while backend foreground activation is pending', async () => {
     const kubeconfigs: types.KubeconfigInfo[] = [
       {
         name: 'alpha',
@@ -272,8 +272,14 @@ describe('KubeconfigContext', () => {
 
     expect(setVisibleClusterMock).toHaveBeenCalledWith('beta:prod');
     expect(getContext().selectedKubeconfig).toBe('/kube/beta:prod');
-    expect(getContext().selectedClusterId).toBe('alpha:dev');
-    expect(mocks.refreshOrchestrator.updateContext).not.toHaveBeenCalled();
+    expect(getContext().selectedClusterId).toBe('beta:prod');
+    expect(mocks.refreshOrchestrator.updateContext).toHaveBeenLastCalledWith(
+      expect.objectContaining({
+        selectedClusterId: 'beta:prod',
+        selectedClusterIds: ['beta:prod'],
+        allConnectedClusterIds: ['alpha:dev', 'beta:prod'],
+      })
+    );
 
     await act(async () => {
       resolveActivation();
@@ -291,7 +297,7 @@ describe('KubeconfigContext', () => {
     unmount();
   });
 
-  it('restores the committed tab when backend foreground activation fails', async () => {
+  it('keeps showing retained tab data when backend foreground activation fails', async () => {
     const kubeconfigs: types.KubeconfigInfo[] = [
       {
         name: 'alpha',
@@ -326,9 +332,14 @@ describe('KubeconfigContext', () => {
       await flushPromises();
     });
 
-    expect(getContext().selectedKubeconfig).toBe('/kube/alpha:dev');
-    expect(getContext().selectedClusterId).toBe('alpha:dev');
-    expect(mocks.refreshOrchestrator.updateContext).not.toHaveBeenCalled();
+    expect(getContext().selectedKubeconfig).toBe('/kube/beta:prod');
+    expect(getContext().selectedClusterId).toBe('beta:prod');
+    expect(mocks.refreshOrchestrator.updateContext).toHaveBeenLastCalledWith(
+      expect.objectContaining({
+        selectedClusterId: 'beta:prod',
+        selectedClusterIds: ['beta:prod'],
+      })
+    );
 
     unmount();
   });

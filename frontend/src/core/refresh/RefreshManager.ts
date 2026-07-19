@@ -510,9 +510,9 @@ class RefreshManager {
       previous.allConnectedClusterIds ?? previous.selectedClusterIds,
       current.allConnectedClusterIds ?? current.selectedClusterIds
     );
-    // Foreground identity is intentionally absent from this decision. Switching
-    // an already-open tab retains its cluster-scoped state; the mounted scope's
-    // stream lifecycle reconciles only when that scope has no snapshot yet.
+    // A foreground tab switch repaints retained scoped state immediately, then
+    // refreshes the visible view so that snapshot is replaced with current data.
+    const clusterChanged = previous.selectedClusterId !== current.selectedClusterId;
 
     // Namespace scope changes include the cluster identity tied to the selection.
     const namespaceChanged =
@@ -546,6 +546,19 @@ class RefreshManager {
       if (clusterRefresher) {
         targets.add(clusterRefresher);
       }
+    }
+
+    if (clusterChanged && current.currentView === 'cluster') {
+      const clusterRefresher = current.activeClusterView
+        ? clusterViewToRefresher[current.activeClusterView]
+        : null;
+      if (clusterRefresher) {
+        targets.add(clusterRefresher);
+      }
+    }
+
+    if (clusterChanged && current.currentView === 'overview') {
+      targets.add(SYSTEM_REFRESHERS.clusterOverview);
     }
 
     return Array.from(targets);

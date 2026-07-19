@@ -404,7 +404,7 @@ describe('RefreshManager context updates', () => {
     expect(manualSpy).toHaveBeenCalledWith(expect.arrayContaining([NAME]));
   });
 
-  it('does not turn a foreground cluster-tab switch into a manual data refresh', async () => {
+  it('immediately refreshes the visible cluster view on a foreground tab switch', async () => {
     const manualSpy = vi.spyOn(refreshManager, 'triggerManualRefreshMany').mockResolvedValue();
 
     refreshManager.updateContext({
@@ -424,7 +424,7 @@ describe('RefreshManager context updates', () => {
     });
 
     await Promise.resolve();
-    expect(manualSpy).not.toHaveBeenCalled();
+    expect(manualSpy).toHaveBeenCalledWith(['cluster-config']);
   });
 });
 
@@ -974,7 +974,7 @@ describe('RefreshManager guard paths and helpers', () => {
     expect(manualTargets).toEqual([]);
   });
 
-  it('skips cluster manual targets when background refresh covers open tabs', () => {
+  it('refreshes the visible cluster after a tab switch even when background refresh is enabled', () => {
     const previous: RefreshContext = {
       currentView: 'cluster',
       activeClusterView: 'config',
@@ -992,10 +992,10 @@ describe('RefreshManager guard paths and helpers', () => {
 
     const manualTargets = unsafeRefreshManager.getManualRefreshTargets(previous, current);
 
-    expect(manualTargets).toEqual([]);
+    expect(manualTargets).toEqual(['cluster-config']);
   });
 
-  it('does not create cluster manual targets from a tab switch when background refresh is disabled', () => {
+  it('refreshes the visible cluster after a tab switch when background refresh is disabled', () => {
     const previous: RefreshContext = {
       currentView: 'cluster',
       activeClusterView: 'config',
@@ -1013,7 +1013,7 @@ describe('RefreshManager guard paths and helpers', () => {
 
     const manualTargets = unsafeRefreshManager.getManualRefreshTargets(previous, current);
 
-    expect(manualTargets).toEqual([]);
+    expect(manualTargets).toEqual(['cluster-config']);
   });
 
   it('refreshes the active cluster view when the selected cluster set changes', () => {

@@ -52,7 +52,8 @@
 
 ### Fixed
 
-- Kept cluster-scoped data in place when switching open cluster tabs instead of
-  triggering a manual refresh or racing the backend foreground re-warm.
+- Made open-cluster tab switches repaint retained cluster-scoped data
+  immediately, refresh only the newly visible cluster scopes, and replace the
+  retained snapshot when fresh backend data arrives.
 - Refreshed YAML and object maps when versionless snapshot payloads change, so
   deleted or updated objects no longer remain visible from a stale response.

@@ -25,7 +25,25 @@ type aggregateManualQueue struct {
 // aggregateManualJob tracks the child job created for a cluster-scoped refresh.
 type aggregateManualJob struct {
 	job         *refresh.ManualRefreshJob
-	clusterJobs map[string]string
+	clusterJobs map[string]aggregateManualChildJob
+}
+
+// aggregateManualChildJob binds a child job to the queue that owns its status.
+// A succeeded child remains there; an unfinished child moves to a replacement
+// queue when its cluster subsystem is rebuilt.
+type aggregateManualChildJob struct {
+	jobID string
+	queue refresh.ManualQueue
+}
+
+type aggregateManualJobMigration struct {
+	aggregateJobID string
+	clusterID      string
+	domain         string
+	scope          string
+	reason         string
+	previous       aggregateManualChildJob
+	replacement    refresh.ManualQueue
 }
 
 func newAggregateManualQueue(clusterOrder []string, subsystems map[string]*system.Subsystem) *aggregateManualQueue {
@@ -76,7 +94,9 @@ func (q *aggregateManualQueue) Enqueue(ctx context.Context, domain, scope, reaso
 	if err != nil {
 		return nil, err
 	}
-	clusterJobs := map[string]string{target: job.ID}
+	clusterJobs := map[string]aggregateManualChildJob{
+		target: {jobID: job.ID, queue: queue},
+	}
 
 	aggregateJob := &refresh.ManualRefreshJob{
 		ID:       generateAggregateJobID(),
@@ -103,14 +123,13 @@ func (q *aggregateManualQueue) Status(jobID string) (*refresh.ManualRefreshJob, 
 		return nil, false
 	}
 	base := *agg.job
-	clusterJobs := make(map[string]string, len(agg.clusterJobs))
+	clusterJobs := make(map[string]aggregateManualChildJob, len(agg.clusterJobs))
 	for id, child := range agg.clusterJobs {
 		clusterJobs[id] = child
 	}
 	q.mu.RUnlock()
 
-	queues := q.snapshotConfig()
-	return q.buildAggregateStatus(&base, clusterJobs, queues), true
+	return buildAggregateStatus(&base, clusterJobs), true
 }
 
 // Update stores the aggregated job when invoked directly.
@@ -150,10 +169,9 @@ func (q *aggregateManualQueue) resolveTarget(
 	return target, nil
 }
 
-func (q *aggregateManualQueue) buildAggregateStatus(
+func buildAggregateStatus(
 	base *refresh.ManualRefreshJob,
-	clusterJobs map[string]string,
-	queues map[string]refresh.ManualQueue,
+	clusterJobs map[string]aggregateManualChildJob,
 ) *refresh.ManualRefreshJob {
 	state := refresh.JobStateQueued
 	var (
@@ -167,8 +185,8 @@ func (q *aggregateManualQueue) buildAggregateStatus(
 		finishedAt   int64
 	)
 
-	for clusterID, jobID := range clusterJobs {
-		queue := queues[clusterID]
+	for clusterID, child := range clusterJobs {
+		queue := child.queue
 		if queue == nil {
 			hasFailed = true
 			if firstErr == "" {
@@ -176,7 +194,7 @@ func (q *aggregateManualQueue) buildAggregateStatus(
 			}
 			continue
 		}
-		job, ok := queue.Status(jobID)
+		job, ok := queue.Status(child.jobID)
 		if !ok || job == nil {
 			hasFailed = true
 			if firstErr == "" {
@@ -251,6 +269,66 @@ func (q *aggregateManualQueue) UpdateConfig(clusterOrder []string, subsystems ma
 	q.clusterOrder = next.clusterOrder
 	q.queues = next.queues
 	q.configMu.Unlock()
+
+	q.moveUnfinishedJobs(next.queues)
+}
+
+// moveUnfinishedJobs preserves refresh intent across a subsystem re-warm. The
+// old manager has stopped consuming its queue, so an unfinished child must be
+// re-enqueued on the replacement manager instead of remaining queued forever.
+func (q *aggregateManualQueue) moveUnfinishedJobs(queues map[string]refresh.ManualQueue) {
+	q.mu.RLock()
+	migrations := make([]aggregateManualJobMigration, 0)
+	for aggregateJobID, aggregateJob := range q.jobs {
+		if aggregateJob == nil || aggregateJob.job == nil {
+			continue
+		}
+		for clusterID, child := range aggregateJob.clusterJobs {
+			replacement := queues[clusterID]
+			if replacement == nil || child.queue == replacement {
+				continue
+			}
+			if status, ok := child.queue.Status(child.jobID); ok && status != nil && status.State == refresh.JobStateSucceeded {
+				continue
+			}
+			_, scopeValue := refresh.SplitClusterScopeList(aggregateJob.job.Scope)
+			migrations = append(migrations, aggregateManualJobMigration{
+				aggregateJobID: aggregateJobID,
+				clusterID:      clusterID,
+				domain:         aggregateJob.job.Domain,
+				scope:          refresh.JoinClusterScope(clusterID, scopeValue),
+				reason:         aggregateJob.job.Reason,
+				previous:       child,
+				replacement:    replacement,
+			})
+		}
+	}
+	q.mu.RUnlock()
+
+	for _, migration := range migrations {
+		job, err := migration.replacement.Enqueue(
+			context.Background(),
+			migration.domain,
+			migration.scope,
+			migration.reason,
+		)
+		if err != nil || job == nil {
+			continue
+		}
+
+		q.mu.Lock()
+		aggregateJob := q.jobs[migration.aggregateJobID]
+		if aggregateJob != nil {
+			current, ok := aggregateJob.clusterJobs[migration.clusterID]
+			if ok && current.jobID == migration.previous.jobID && current.queue == migration.previous.queue {
+				aggregateJob.clusterJobs[migration.clusterID] = aggregateManualChildJob{
+					jobID: job.ID,
+					queue: migration.replacement,
+				}
+			}
+		}
+		q.mu.Unlock()
+	}
 }
 
 // generateAggregateJobID returns a unique identifier for aggregate manual refresh jobs.

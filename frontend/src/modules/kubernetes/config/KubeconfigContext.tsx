@@ -116,7 +116,6 @@ export const KubeconfigProvider: React.FC<KubeconfigProviderProps> = ({ children
   const committedSelectionsRef = useRef<string[]>([]);
   const committedActiveRef = useRef<string>('');
   const latestSelectionRequestIdRef = useRef(0);
-  const latestForegroundActivationRequestIdRef = useRef(0);
   // Prevent refresh context churn until the backend confirms selection updates.
   const selectionPendingRef = useRef(false);
 
@@ -148,8 +147,8 @@ export const KubeconfigProvider: React.FC<KubeconfigProviderProps> = ({ children
     return { id: `${filename}:${context}`, name: context };
   }, []);
 
-  // The selection strings can move optimistically for tab chrome, while the
-  // cluster-data identity below remains committed to backend-ready state.
+  // Selection-set mutations stay on the last backend-confirmed open set. A
+  // switch among those already-open tabs commits immediately below.
   const committedSelectedClusterMeta = useMemo(
     () => resolveClusterMeta(committedSelectedKubeconfig, kubeconfigs),
     [resolveClusterMeta, committedSelectedKubeconfig, kubeconfigs]
@@ -357,8 +356,6 @@ export const KubeconfigProvider: React.FC<KubeconfigProviderProps> = ({ children
       const nextMeta = resolveClusterMeta(nextActive, kubeconfigsRef.current);
 
       try {
-        // Any selection-set mutation supersedes an in-flight tab-only activation.
-        latestForegroundActivationRequestIdRef.current += 1;
         selectionPendingRef.current = true;
         // Keep refs in sync immediately so superseding requests read the latest state.
         selectedKubeconfigsRef.current = normalizedSelections;
@@ -535,39 +532,21 @@ export const KubeconfigProvider: React.FC<KubeconfigProviderProps> = ({ children
       selectedKubeconfigRef.current = config;
       setSelectedKubeconfigState(config);
       if (committedSelectionsRef.current.includes(config)) {
-        const activationRequestId = latestForegroundActivationRequestIdRef.current + 1;
-        latestForegroundActivationRequestIdRef.current = activationRequestId;
+        // An already-open tab owns retained, cluster-scoped data. Publish its
+        // identity immediately so consumers can repaint that snapshot while
+        // backend foreground activation proceeds independently.
+        committedActiveRef.current = config;
+        setCommittedSelectedKubeconfig(config);
         const meta = resolveClusterMeta(config, kubeconfigsRef.current);
-        void (async () => {
-          if (meta.id) {
-            try {
-              // A Cold cluster is rebuilt by this call. Do not expose its identity
-              // to refresh consumers until the backend has finished re-warming it.
-              await SetVisibleCluster(meta.id);
-            } catch {
-              // The backend method has no application-level error result. If the
-              // binding itself is temporarily unavailable, restore the committed
-              // tab and data identity instead of leaving the UI split across clusters.
-              if (
-                activationRequestId === latestForegroundActivationRequestIdRef.current &&
-                selectedKubeconfigRef.current === config
-              ) {
-                selectedKubeconfigRef.current = committedActiveRef.current;
-                setSelectedKubeconfigState(committedActiveRef.current);
-              }
-              return;
-            }
-          }
-          if (
-            activationRequestId !== latestForegroundActivationRequestIdRef.current ||
-            selectedKubeconfigRef.current !== config ||
-            !committedSelectionsRef.current.includes(config)
-          ) {
-            return;
-          }
-          committedActiveRef.current = config;
-          setCommittedSelectedKubeconfig(config);
-        })();
+        if (meta.id) {
+          // Foreground activation starts immediately but does not gate retained
+          // data. Publishing the active identity drives a fresh scoped request
+          // while this backend work proceeds.
+          void SetVisibleCluster(meta.id).catch(() => {
+            // The retained snapshot remains usable if the Wails binding is
+            // temporarily unavailable; the refresh path reports its own error.
+          });
+        }
       }
     },
     [resolveClusterMeta, selectedKubeconfig, selectedKubeconfigs]
@@ -634,9 +613,9 @@ export const KubeconfigProvider: React.FC<KubeconfigProviderProps> = ({ children
       kubeconfigs,
       selectedKubeconfigs,
       selectedKubeconfig,
-      // Kubeconfig strings drive the optimistic tab chrome. Cluster-data identity
-      // stays on the backend-confirmed foreground/open set so a tab click cannot
-      // race reads against a governor re-warm or a selection mutation.
+      // Existing tabs publish their active identity immediately. The available
+      // cluster IDs still come from the backend-confirmed open set so pending
+      // add/close mutations cannot leak uncommitted identities to data consumers.
       selectedClusterId: committedSelectedClusterMeta.id,
       selectedClusterName: committedSelectedClusterMeta.name,
       selectedClusterIds: committedSelectedClusterIds,

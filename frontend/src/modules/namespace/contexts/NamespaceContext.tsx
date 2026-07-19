@@ -178,6 +178,7 @@ export const NamespaceProvider: React.FC<NamespaceProviderProps> = ({ children }
   const namespaceScopesRef = useRef<string[]>([]);
   const lastEvaluatedNamespaceRef = useRef<string | null>(null);
   const requestedNamespaceScopesRef = useRef<Set<string>>(new Set());
+  const previousForegroundNamespacesScopeRef = useRef(namespacesScope);
 
   // Keep a ref to the latest namespace selections map for stable callback access.
   const namespaceSelectionsRef = useRef(namespaceSelections);
@@ -448,6 +449,23 @@ export const NamespaceProvider: React.FC<NamespaceProviderProps> = ({ children }
       });
     });
   }, [clearSelection, namespaceScopes, selectedKubeconfig, updateNamespaces]);
+
+  useEffect(() => {
+    const previousScope = previousForegroundNamespacesScopeRef.current;
+    previousForegroundNamespacesScopeRef.current = namespacesScope;
+    if (!previousScope || !namespacesScope || previousScope === namespacesScope) {
+      return;
+    }
+
+    // Every open cluster keeps its namespace lease and retained snapshot. A
+    // foreground switch repaints that snapshot first, then refreshes only the
+    // newly visible cluster instead of fanning out across every open tab.
+    void requestRefreshDomain({
+      domain: 'namespaces',
+      scope: namespacesScope,
+      reason: 'user',
+    });
+  }, [namespacesScope]);
 
   // Unmount-only teardown: release whatever scopes are currently held. Kept
   // separate from the reconciliation effect above so re-runs never release

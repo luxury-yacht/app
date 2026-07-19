@@ -124,6 +124,65 @@ func TestAggregateManualQueueStatusReflectsChildFailure(t *testing.T) {
 	require.Contains(t, aggStatus.Error, "cluster-a")
 }
 
+func TestAggregateManualQueueStatusSurvivesQueueReplacement(t *testing.T) {
+	oldQueue := newStubManualQueue()
+	aggregate := newAggregateManualQueue([]string{"restricted-cluster-admin"}, map[string]*system.Subsystem{
+		"restricted-cluster-admin": {ManualQueue: oldQueue},
+	})
+
+	job, err := aggregate.Enqueue(context.Background(), "namespaces", "restricted-cluster-admin|", "user")
+	require.NoError(t, err)
+	for _, child := range oldQueue.jobs {
+		child.State = refresh.JobStateSucceeded
+		oldQueue.Update(child)
+	}
+
+	newQueue := newStubManualQueue()
+	aggregate.UpdateConfig([]string{"restricted-cluster-admin"}, map[string]*system.Subsystem{
+		"restricted-cluster-admin": {ManualQueue: newQueue},
+	})
+
+	status, ok := aggregate.Status(job.ID)
+	require.True(t, ok)
+	require.Equal(t, refresh.JobStateSucceeded, status.State)
+	require.Empty(t, status.Error)
+
+	_, err = aggregate.Enqueue(context.Background(), "namespaces", "restricted-cluster-admin|", "user")
+	require.NoError(t, err)
+	require.Len(t, oldQueue.scopes, 1)
+	require.Len(t, newQueue.scopes, 1)
+	require.Equal(t, "restricted-cluster-admin|", newQueue.scopes[0])
+	require.Equal(t, "namespaces", newQueue.domain)
+	require.Equal(t, "user", newQueue.reason)
+}
+
+func TestAggregateManualQueueMovesUnfinishedJobToReplacementQueue(t *testing.T) {
+	oldQueue := newStubManualQueue()
+	aggregate := newAggregateManualQueue([]string{"restricted-cluster-admin"}, map[string]*system.Subsystem{
+		"restricted-cluster-admin": {ManualQueue: oldQueue},
+	})
+
+	job, err := aggregate.Enqueue(context.Background(), "namespaces", "restricted-cluster-admin|", "user")
+	require.NoError(t, err)
+
+	newQueue := newStubManualQueue()
+	aggregate.UpdateConfig([]string{"restricted-cluster-admin"}, map[string]*system.Subsystem{
+		"restricted-cluster-admin": {ManualQueue: newQueue},
+	})
+
+	require.Len(t, oldQueue.scopes, 1)
+	require.Len(t, newQueue.scopes, 1)
+	for _, child := range newQueue.jobs {
+		child.State = refresh.JobStateSucceeded
+		newQueue.Update(child)
+	}
+
+	status, ok := aggregate.Status(job.ID)
+	require.True(t, ok)
+	require.Equal(t, refresh.JobStateSucceeded, status.State)
+	require.Empty(t, status.Error)
+}
+
 func TestAggregateManualQueueUpdateReplacesJob(t *testing.T) {
 	queue := newStubManualQueue()
 	subsystems := map[string]*system.Subsystem{

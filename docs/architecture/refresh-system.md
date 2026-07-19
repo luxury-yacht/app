@@ -33,6 +33,10 @@ then stored by the frontend under cluster-aware scopes.
   waits for it to finish, then reads the snapshot without an HTTP validator.
   Resource-stream table domains use their active stream's `refreshOnce` path
   instead of enqueueing a duplicate snapshot job.
+- Aggregate manual jobs retain the per-cluster queue that accepted each child.
+  If a governor re-warm replaces that queue before the child succeeds, the
+  unfinished refresh intent moves to the replacement queue so polling follows
+  a live worker.
 - Permission-denied domains should surface diagnostics and stable denied
   payloads instead of disappearing. The frontend checks a denied scope ONCE per
   session (typed 403 → `permissionDenied` scoped state, background refetches
