@@ -215,7 +215,9 @@ export const requestContextRefresh = async ({
     label: label ?? 'refresh-context',
     scope,
     read: async () => {
-      await refreshOrchestrator.triggerManualRefreshForContext(context);
+      if (reason === 'user') {
+        await refreshOrchestrator.triggerManualRefreshForContext(context);
+      }
     },
   });
 

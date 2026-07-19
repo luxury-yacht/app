@@ -7,8 +7,12 @@
 package backend
 
 import (
+	"net/http/httptest"
+	"strings"
 	"testing"
+	"time"
 
+	"github.com/gorilla/websocket"
 	"github.com/stretchr/testify/require"
 
 	"github.com/luxury-yacht/app/backend/refresh/resourcestream"
@@ -56,4 +60,56 @@ func TestAggregateResourceStreamSessionsSeeClustersAddedAfterConnect(t *testing.
 	require.NoError(t, err, "existing sessions must see clusters added after they connected")
 	require.NotNil(t, sub)
 	sub.Cancel()
+}
+
+func TestAggregateResourceStreamExistingSubscriptionFollowsManagerReplacement(t *testing.T) {
+	const clusterID = "cluster-rewarmed"
+	clusterMeta := snapshot.ClusterMeta{ClusterID: clusterID, ClusterName: "rewarmed"}
+	oldManager := resourcestream.NewManager(nil, nil, nil, nil, clusterMeta, nil, nil)
+	handler, err := newAggregateResourceStreamHandler(map[string]*system.Subsystem{
+		clusterID: {ResourceStream: oldManager, ClusterMeta: clusterMeta},
+	}, nil, nil)
+	require.NoError(t, err)
+	server := httptest.NewServer(handler)
+	t.Cleanup(server.Close)
+
+	conn, _, err := websocket.DefaultDialer.Dial("ws"+strings.TrimPrefix(server.URL, "http"), nil)
+	require.NoError(t, err)
+	t.Cleanup(func() { _ = conn.Close() })
+	require.NoError(t, conn.SetReadDeadline(time.Now().Add(time.Second)))
+
+	subscribe := resourcestream.ClientMessage{
+		Type:      resourcestream.MessageTypeRequest,
+		ClusterID: clusterID,
+		Domain:    "namespaces",
+	}
+	require.NoError(t, conn.WriteJSON(subscribe))
+	require.Equal(t, resourcestream.MessageTypeAck, readResourceStreamMessage(t, conn).Type)
+	require.Equal(t, resourcestream.MessageTypeReset, readResourceStreamMessage(t, conn).Type)
+
+	newManager := resourcestream.NewManager(nil, nil, nil, nil, clusterMeta, nil, nil)
+	require.NoError(t, handler.Update(map[string]*system.Subsystem{
+		clusterID: {ResourceStream: newManager, ClusterMeta: clusterMeta},
+	}))
+	require.Equal(t, resourcestream.MessageTypeComplete, readResourceStreamMessage(t, conn).Type)
+
+	// COMPLETE makes the existing client session re-subscribe. That request must
+	// now bind to the replacement manager and establish a new synchronized tail.
+	require.NoError(t, conn.WriteJSON(subscribe))
+	require.Equal(t, resourcestream.MessageTypeAck, readResourceStreamMessage(t, conn).Type)
+	require.Equal(t, resourcestream.MessageTypeReset, readResourceStreamMessage(t, conn).Type)
+
+	newManager.BroadcastNamespacesRefresh("ns-1", "namespace object changed")
+	update := readResourceStreamMessage(t, conn)
+	require.Equal(t, resourcestream.MessageTypeModified, update.Type)
+	require.Equal(t, clusterID, update.ClusterID)
+	require.Equal(t, "namespaces", update.Domain)
+	require.Equal(t, "ns-1", update.Version)
+}
+
+func readResourceStreamMessage(t *testing.T, conn *websocket.Conn) resourcestream.ServerMessage {
+	t.Helper()
+	var message resourcestream.ServerMessage
+	require.NoError(t, conn.ReadJSON(&message))
+	return message
 }

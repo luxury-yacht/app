@@ -59,7 +59,7 @@ export type RefreshDomainStateResult<K extends RefreshDomain = RefreshDomain> = 
 >;
 
 export interface ContextRefreshRequest {
-  reason: DataRequestReason;
+  reason: 'user';
   context?: Partial<RefreshContext>;
   resource?: string;
   label?: string;

@@ -29,7 +29,7 @@ type aggregateResourceStreamHandler struct {
 	clusterNames map[string]string
 }
 
-func (h *aggregateResourceStreamHandler) setTopology(subsystems map[string]*system.Subsystem) {
+func (h *aggregateResourceStreamHandler) setTopology(subsystems map[string]*system.Subsystem) []string {
 	managers := make(map[string]*resourcestream.Manager)
 	clusterNames := make(map[string]string)
 	for id, subsystem := range subsystems {
@@ -42,9 +42,18 @@ func (h *aggregateResourceStreamHandler) setTopology(subsystems map[string]*syst
 		}
 	}
 	h.topologyMu.Lock()
+	previousManagers := h.managers
 	h.managers = managers
 	h.clusterNames = clusterNames
 	h.topologyMu.Unlock()
+
+	replacedClusterIDs := make([]string, 0)
+	for clusterID, previousManager := range previousManagers {
+		if previousManager != nil && managers[clusterID] != previousManager {
+			replacedClusterIDs = append(replacedClusterIDs, clusterID)
+		}
+	}
+	return replacedClusterIDs
 }
 
 func (h *aggregateResourceStreamHandler) managerFor(clusterID string) *resourcestream.Manager {
@@ -105,13 +114,16 @@ func (h *aggregateResourceStreamHandler) ServeHTTP(w http.ResponseWriter, r *htt
 	mux.ServeHTTP(w, r)
 }
 
-// Update swaps the live cluster topology after selection changes. The mux and
-// adapter stay the same instances, so sessions already bound to them resolve
-// the new managers immediately — no reconnect needed.
+// Update swaps the live cluster topology after selection changes. Existing
+// sessions stay connected; subscriptions for replaced managers receive
+// COMPLETE and re-subscribe through the adapter's new topology.
 func (h *aggregateResourceStreamHandler) Update(subsystems map[string]*system.Subsystem) error {
 	if h == nil {
 		return nil
 	}
-	h.setTopology(subsystems)
+	replacedClusterIDs := h.setTopology(subsystems)
+	for _, clusterID := range replacedClusterIDs {
+		h.mux.InvalidateClusterSubscriptions(clusterID)
+	}
 	return nil
 }

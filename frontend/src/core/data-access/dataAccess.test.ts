@@ -264,4 +264,17 @@ describe('dataAccess', () => {
 
     expect(hoisted.triggerManualRefreshForContext).toHaveBeenCalledTimes(1);
   });
+
+  it('never creates a manual job for an automatic context refresh intent', async () => {
+    await expect(
+      requestContextRefresh({
+        reason: 'startup',
+      } as unknown as Parameters<typeof requestContextRefresh>[0])
+    ).resolves.toEqual({
+      status: 'executed',
+      blockedReason: undefined,
+    });
+
+    expect(hoisted.triggerManualRefreshForContext).not.toHaveBeenCalled();
+  });
 });

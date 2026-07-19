@@ -179,7 +179,7 @@ export const NamespaceProvider: React.FC<NamespaceProviderProps> = ({ children }
   const selectedNamespace = namespaceSelections[clusterKey];
   const selectedNamespaceClusterId =
     selectedNamespace && selectedClusterId ? selectedClusterId : undefined;
-  const lastErrorRef = useRef<string | null>(null);
+  const lastErrorByScopeRef = useRef<Map<string, string>>(new Map());
   const namespaceScopesRef = useRef<string[]>([]);
   const lastEvaluatedNamespaceRef = useRef<string | null>(null);
   const requestedNamespaceScopesRef = useRef<Set<string>>(new Set());
@@ -416,6 +416,7 @@ export const NamespaceProvider: React.FC<NamespaceProviderProps> = ({ children }
         refreshOrchestrator.resetDomain('namespaces');
         updateNamespaces([]);
         lastEvaluatedNamespaceRef.current = null;
+        lastErrorByScopeRef.current.clear();
         requestedNamespaceScopesRef.current.clear();
       }
       return;
@@ -431,6 +432,7 @@ export const NamespaceProvider: React.FC<NamespaceProviderProps> = ({ children }
     requestedNamespaceScopesRef.current.forEach((scope) => {
       if (!activeScopeSet.has(scope)) {
         setRefreshDomainEnabled({ domain: 'namespaces', scope, enabled: false });
+        lastErrorByScopeRef.current.delete(scope);
         requestedNamespaceScopesRef.current.delete(scope);
       }
     });
@@ -448,6 +450,7 @@ export const NamespaceProvider: React.FC<NamespaceProviderProps> = ({ children }
       refreshOrchestrator.resetDomain('namespaces');
       updateNamespaces([]);
       lastEvaluatedNamespaceRef.current = null;
+      lastErrorByScopeRef.current.clear();
       requestedNamespaceScopesRef.current.clear();
       return;
     }
@@ -623,6 +626,7 @@ export const NamespaceProvider: React.FC<NamespaceProviderProps> = ({ children }
       refreshOrchestrator.resetDomain('namespaces');
       clearSelection();
       updateNamespaces([]);
+      lastErrorByScopeRef.current.clear();
     };
 
     const handleKubeconfigChanging = () => {
@@ -633,6 +637,7 @@ export const NamespaceProvider: React.FC<NamespaceProviderProps> = ({ children }
       refreshOrchestrator.resetDomain('namespaces');
       clearSelection();
       updateNamespaces([]);
+      lastErrorByScopeRef.current.clear();
     };
 
     const handleKubeconfigChanged = () => {
@@ -678,15 +683,18 @@ export const NamespaceProvider: React.FC<NamespaceProviderProps> = ({ children }
   const namespacesPermissionDenied = namespaceDomain.permissionDenied === true;
 
   useEffect(() => {
+    if (!namespacesScope) {
+      return;
+    }
     if (namespaceDomain.status === 'error' && namespaceDomain.error) {
       // Permission denial is a designed, rendered state (the sidebar shows the
       // message) — not an error to toast.
       if (namespacesPermissionDenied) {
-        lastErrorRef.current = namespaceDomain.error;
+        lastErrorByScopeRef.current.set(namespacesScope, namespaceDomain.error);
         return;
       }
-      if (namespaceDomain.error !== lastErrorRef.current) {
-        lastErrorRef.current = namespaceDomain.error;
+      if (namespaceDomain.error !== lastErrorByScopeRef.current.get(namespacesScope)) {
+        lastErrorByScopeRef.current.set(namespacesScope, namespaceDomain.error);
         errorHandler.handle(
           new Error(namespaceDomain.error),
           {
@@ -697,12 +705,13 @@ export const NamespaceProvider: React.FC<NamespaceProviderProps> = ({ children }
         );
       }
     } else {
-      lastErrorRef.current = null;
+      lastErrorByScopeRef.current.delete(namespacesScope);
     }
   }, [
     namespaceDomain.status,
     namespaceDomain.error,
     namespacesPermissionDenied,
+    namespacesScope,
     selectedKubeconfig,
   ]);
 

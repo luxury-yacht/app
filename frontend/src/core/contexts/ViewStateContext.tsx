@@ -31,7 +31,6 @@ import {
   useRef,
   useState,
 } from 'react';
-import { requestContextRefresh } from '@/core/data-access';
 import { eventBus } from '@/core/events';
 import { shouldSyncClusterNavigationTarget } from '@/core/navigation/workspace';
 import { refreshOrchestrator } from '@/core/refresh';
@@ -226,21 +225,15 @@ const NavigationStateProvider: React.FC<NavigationStateProviderProps> = ({ child
             currentView: 'global',
             activeClusterView: undefined,
           });
-          void requestContextRefresh({ reason: 'startup' });
         }
         return;
       }
-      const viewIsChanging = view !== viewType;
       setWorkspace('cluster');
       updateActiveState((prev) => ({ ...prev, viewType: view }));
 
       refreshOrchestrator.updateContext({ currentView: view });
-
-      if (viewIsChanging) {
-        void requestContextRefresh({ reason: 'startup' });
-      }
     },
-    [selectedClusterIds.length, updateActiveState, viewType]
+    [selectedClusterIds.length, updateActiveState]
   );
 
   const navigateToGlobal = useCallback(
@@ -256,7 +249,6 @@ const NavigationStateProvider: React.FC<NavigationStateProviderProps> = ({ child
         currentView: 'global',
         activeClusterView: undefined,
       });
-      void requestContextRefresh({ reason: 'startup' });
     },
     [selectedClusterIds.length]
   );
@@ -277,7 +269,6 @@ const NavigationStateProvider: React.FC<NavigationStateProviderProps> = ({ child
           activeNamespaceView: targetState.activeNamespaceView,
           activeClusterView: targetState.activeClusterView ?? undefined,
         });
-        void requestContextRefresh({ reason: 'startup' });
       }
     },
     [clusterKey, selectedClusterId]
@@ -316,7 +307,6 @@ const NavigationStateProvider: React.FC<NavigationStateProviderProps> = ({ child
                 activeClusterView: target.activeClusterView ?? undefined,
               }
         );
-        void requestContextRefresh({ reason: 'startup' });
       }
     },
     [resolvedWorkspace, selectedClusterId]

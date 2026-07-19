@@ -69,6 +69,8 @@ type Handler struct {
 	allowClusterScopedRequests bool
 	resolveClusterName         func(clusterID string) string
 	upgrader                   websocket.Upgrader
+	sessionsMu                 sync.Mutex
+	sessions                   map[*session]struct{}
 }
 
 // NewHandler constructs a websocket stream multiplexer handler.
@@ -93,6 +95,7 @@ func NewHandler(cfg Config) (*Handler, error) {
 		sendReset:                  cfg.SendReset,
 		allowClusterScopedRequests: cfg.AllowClusterScopedRequests,
 		resolveClusterName:         cfg.ResolveClusterName,
+		sessions:                   make(map[*session]struct{}),
 		upgrader: websocket.Upgrader{
 			ReadBufferSize:  config.StreamMuxReadBufferSize,
 			WriteBufferSize: config.StreamMuxWriteBufferSize,
@@ -133,7 +136,34 @@ func (h *Handler) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 		h.allowClusterScopedRequests,
 		h.resolveClusterName,
 	)
+	h.sessionsMu.Lock()
+	h.sessions[session] = struct{}{}
+	h.sessionsMu.Unlock()
+	defer func() {
+		h.sessionsMu.Lock()
+		delete(h.sessions, session)
+		h.sessionsMu.Unlock()
+	}()
 	session.run(r.Context())
+}
+
+// InvalidateClusterSubscriptions ends every active subscription for one
+// cluster. Each session emits COMPLETE for the ended scopes, causing clients to
+// subscribe again through the adapter's current topology.
+func (h *Handler) InvalidateClusterSubscriptions(clusterID string) {
+	if h == nil || strings.TrimSpace(clusterID) == "" {
+		return
+	}
+	h.sessionsMu.Lock()
+	sessions := make([]*session, 0, len(h.sessions))
+	for active := range h.sessions {
+		sessions = append(sessions, active)
+	}
+	h.sessionsMu.Unlock()
+
+	for _, active := range sessions {
+		active.invalidateClusterSubscriptions(clusterID)
+	}
 }
 
 type session struct {
@@ -223,6 +253,21 @@ func (s *session) shutdown() {
 		s.mu.Unlock()
 		_ = s.conn.Close()
 	})
+}
+
+func (s *session) invalidateClusterSubscriptions(clusterID string) {
+	s.mu.Lock()
+	subscriptions := make([]*Subscription, 0)
+	for _, entry := range s.subs {
+		if entry.clusterID == clusterID {
+			subscriptions = append(subscriptions, entry.sub)
+		}
+	}
+	s.mu.Unlock()
+
+	for _, sub := range subscriptions {
+		sub.Cancel()
+	}
 }
 
 func (s *session) readLoop() {

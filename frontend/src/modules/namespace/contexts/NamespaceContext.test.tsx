@@ -988,6 +988,38 @@ describe('NamespaceProvider selection behaviour', () => {
     expect(errorHandlerMock.handle).toHaveBeenCalled();
     cleanup();
   });
+
+  it('does not replay a retained namespace error when switching away and back', () => {
+    namespaceDomainsByScopeRef.current = {
+      'cluster-a|': {
+        ...createNamespaceDomainWithCluster('ready', ['alpha'], 'cluster-a', 'alpha'),
+        status: 'error',
+        error: 'Manual refresh timed out after 60 seconds for namespaces',
+      },
+      'cluster-b|': createNamespaceDomainWithCluster('ready', ['beta'], 'cluster-b', 'beta'),
+    };
+
+    const { rerender, cleanup } = renderWithProvider();
+    act(() => {
+      vi.runAllTimers();
+    });
+    expect(errorHandlerMock.handle).toHaveBeenCalledTimes(1);
+
+    mockClusterId = 'cluster-b';
+    rerender();
+    act(() => {
+      vi.runAllTimers();
+    });
+
+    mockClusterId = 'cluster-a';
+    rerender();
+    act(() => {
+      vi.runAllTimers();
+    });
+
+    expect(errorHandlerMock.handle).toHaveBeenCalledTimes(1);
+    cleanup();
+  });
 });
 
 function getSelected(): string {
