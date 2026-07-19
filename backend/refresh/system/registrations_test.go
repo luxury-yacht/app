@@ -175,6 +175,7 @@ func TestDomainInventoryCoversAuthoredDomainsAndUsesKnownVocabulary(t *testing.T
 		"snapshot-cache-with-merge",
 		"snapshot-cache-bypass",
 		"snapshot-cache-plus-provider-cache",
+		"provider-cache",
 		"external-catalog-cache",
 		"external-catalog-cache-with-merge",
 		"stream-only",
@@ -296,7 +297,11 @@ func TestDomainInventoryIsCompatibleWithExistingContractHomes(t *testing.T) {
 		detail := contract.DomainInventory[domainID]
 		require.Equal(t, "detail-payload", detail.BehaviorClass)
 		require.Equal(t, "object-ref", detail.ScopeContract.Kind)
-		require.Equal(t, "snapshot-cache-plus-provider-cache", detail.CachePolicy)
+		if domainID == "object-details" {
+			require.Equal(t, "provider-cache", detail.CachePolicy)
+		} else {
+			require.Equal(t, "snapshot-cache-plus-provider-cache", detail.CachePolicy)
+		}
 		require.Equal(t, []string{"snapshot-replace"}, detail.StreamSemantics)
 		require.Equal(t, "detail-payload-shape", detail.CoverageContract)
 	}

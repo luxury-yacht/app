@@ -11,7 +11,7 @@ import (
 // recordingGovernorExecutor captures the transitions reconcile dispatches so the
 // pure decision-to-action wiring can be asserted without real subsystems.
 type recordingGovernorExecutor struct {
-	ensured   map[string]bool // clusterID -> metricsActive
+	ensured   map[string]bool
 	tornDown  []string
 	ensureSeq []string
 }
@@ -20,8 +20,8 @@ func newRecordingGovernorExecutor() *recordingGovernorExecutor {
 	return &recordingGovernorExecutor{ensured: map[string]bool{}}
 }
 
-func (r *recordingGovernorExecutor) ensureRunning(clusterID string, metricsActive bool) {
-	r.ensured[clusterID] = metricsActive
+func (r *recordingGovernorExecutor) ensureRunning(clusterID string) {
+	r.ensured[clusterID] = true
 	r.ensureSeq = append(r.ensureSeq, clusterID)
 }
 
@@ -74,10 +74,9 @@ func TestReconcileGovernorColdStartTiers(t *testing.T) {
 	exec := newRecordingGovernorExecutor()
 	app.reconcileGovernorWith(exec)
 
-	// a -> Foreground (running, metrics active); b -> Background (running, metrics
-	// paused); c -> Cold (torn down).
-	require.True(t, exec.ensured[a], "visible cluster metrics active")
-	require.False(t, exec.ensured[b], "warm cluster metrics paused")
+	// Foreground and Background stay running; Cold is torn down.
+	require.True(t, exec.ensured[a])
+	require.True(t, exec.ensured[b])
 	require.NotContains(t, exec.ensureSeq, c, "cold cluster not started")
 	require.Equal(t, []string{c}, exec.tornDown, "cold cluster torn down")
 
@@ -110,7 +109,7 @@ func TestReconcileGovernorIdempotentNoOp(t *testing.T) {
 	require.Empty(t, exec.tornDown, "no teardowns when already at desired tier")
 }
 
-func TestReconcileGovernorPromotePausesNothingAndActivatesMetrics(t *testing.T) {
+func TestReconcileGovernorPromotionKeepsBothWarmClustersRunning(t *testing.T) {
 	selections := []kubeconfigSelection{
 		{Path: "/p/a", Context: "a"},
 		{Path: "/p/b", Context: "b"},
@@ -129,10 +128,20 @@ func TestReconcileGovernorPromotePausesNothingAndActivatesMetrics(t *testing.T) 
 	exec := newRecordingGovernorExecutor()
 	app.reconcileGovernorWith(exec)
 
-	// b promoted -> running + metrics active; a demoted -> running + metrics paused.
-	require.True(t, exec.ensured[b], "new visible cluster metrics active")
-	require.False(t, exec.ensured[a], "old visible cluster metrics paused")
+	// Promotion/demotion changes tiers without tying metrics demand to visibility.
+	require.True(t, exec.ensured[b], "new visible cluster stays running")
+	require.True(t, exec.ensured[a], "old visible cluster stays warm")
 	require.Empty(t, exec.tornDown, "keepWarm=1 keeps both warm")
+}
+
+func TestGovernorTierTransitionDoesNotOverrideLeaseDrivenMetricsDemand(t *testing.T) {
+	app := newTestAppWithDefaults(t)
+	poller := &recordingMetricsPoller{}
+	app.setRefreshSubsystem("cluster-a", metricsSubsystem(poller))
+
+	app.realGovernorExecutor().ensureRunning("cluster-a")
+
+	require.Empty(t, poller.active, "governor visibility must not create metrics demand")
 }
 
 func TestReconcileGovernorMemoryPressureCoolsNonVisible(t *testing.T) {

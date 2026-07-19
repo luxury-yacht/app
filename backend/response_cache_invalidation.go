@@ -21,6 +21,7 @@ import (
 	"github.com/luxury-yacht/app/backend/refresh/ingest"
 	"github.com/luxury-yacht/app/backend/refresh/permissions"
 	"github.com/luxury-yacht/app/backend/refresh/system"
+	"github.com/luxury-yacht/app/backend/resourcekind"
 	"github.com/luxury-yacht/app/backend/resourcemodel"
 )
 
@@ -29,11 +30,6 @@ const (
 	helmReleaseOwnerLabel = "owner"
 	helmReleaseOwnerValue = "helm"
 )
-
-var responseCacheInvalidationSkipKinds = map[string]struct{}{
-	// Skip high-churn kinds where short cache TTL already bounds staleness.
-	"pod": {},
-}
 
 type responseCacheInvalidationEvent int
 
@@ -119,16 +115,16 @@ func (a *App) registerResponseCacheInvalidation(subsystem *system.Subsystem, sel
 		default:
 			informer = sharedFactoryInformer(shared, gvr)
 		}
-		a.addResponseCacheInvalidationHandler(informer, selectionKey, d.Identity.Kind, guard)
+		a.addResponseCacheInvalidationHandler(informer, selectionKey, d.Identity, guard)
 	}
 
 	if subsystem.ResourceStream != nil {
 		// Use custom resource stream updates to evict cached YAML for dynamic resources.
-		subsystem.ResourceStream.SetCustomResourceCacheInvalidator(func(kind, namespace, name string) {
-			if kind == "" || name == "" {
+		subsystem.ResourceStream.SetCustomResourceCacheInvalidator(func(ref resourcemodel.ResourceRef) {
+			if ref.ClusterID == "" || ref.Group == "" || ref.Version == "" || ref.Kind == "" || ref.Name == "" {
 				return
 			}
-			a.invalidateResponseCacheForResource(selectionKey, kind, namespace, name)
+			a.invalidateResponseCacheForResource(selectionKey, ref)
 		})
 	}
 }
@@ -183,7 +179,8 @@ func apiextensionsFactoryInformer(factory apiextensionsinformers.SharedInformerF
 // addResponseCacheInvalidationHandler evicts cached responses when an informer update arrives.
 func (a *App) addResponseCacheInvalidationHandler(
 	informer cache.SharedIndexInformer,
-	selectionKey, kind string,
+	selectionKey string,
+	identity resourcekind.Identity,
 	guard responseCacheInvalidationGuard,
 ) {
 	if a == nil || a.responseCache == nil || informer == nil {
@@ -191,23 +188,23 @@ func (a *App) addResponseCacheInvalidationHandler(
 	}
 	handler := cache.ResourceEventHandlerFuncs{
 		AddFunc: func(obj interface{}) {
-			a.invalidateResponseCacheForObjectEvent(selectionKey, kind, obj, responseCacheInvalidationAdd, guard)
+			a.invalidateResponseCacheForObjectEvent(selectionKey, identity, obj, responseCacheInvalidationAdd, guard)
 		},
 		UpdateFunc: func(_, newObj interface{}) {
-			a.invalidateResponseCacheForObjectEvent(selectionKey, kind, newObj, responseCacheInvalidationUpdate, guard)
+			a.invalidateResponseCacheForObjectEvent(selectionKey, identity, newObj, responseCacheInvalidationUpdate, guard)
 		},
 		DeleteFunc: func(obj interface{}) {
-			a.invalidateResponseCacheForObjectEvent(selectionKey, kind, obj, responseCacheInvalidationDelete, guard)
+			a.invalidateResponseCacheForObjectEvent(selectionKey, identity, obj, responseCacheInvalidationDelete, guard)
 		},
 	}
 	informer.AddEventHandler(handler)
 }
 
 // invalidateResponseCacheForObject clears cached detail/YAML/helm data for the given resource.
-func (a *App) invalidateResponseCacheForObject(selectionKey, kind string, obj interface{}) {
+func (a *App) invalidateResponseCacheForObject(selectionKey string, identity resourcekind.Identity, obj interface{}) {
 	a.invalidateResponseCacheForObjectEvent(
 		selectionKey,
-		kind,
+		identity,
 		obj,
 		responseCacheInvalidationUpdate,
 		responseCacheInvalidationGuard{},
@@ -216,7 +213,8 @@ func (a *App) invalidateResponseCacheForObject(selectionKey, kind string, obj in
 
 // invalidateResponseCacheForObjectEvent clears cached detail/YAML/helm data for the given event.
 func (a *App) invalidateResponseCacheForObjectEvent(
-	selectionKey, kind string,
+	selectionKey string,
+	identity resourcekind.Identity,
 	obj interface{},
 	eventType responseCacheInvalidationEvent,
 	guard responseCacheInvalidationGuard,
@@ -224,7 +222,7 @@ func (a *App) invalidateResponseCacheForObjectEvent(
 	if a == nil || a.responseCache == nil {
 		return
 	}
-	if shouldSkipResponseCacheInvalidationKind(kind) {
+	if identity.Version == "" || identity.Kind == "" || identity.Resource == "" {
 		return
 	}
 	obj = unwrapCacheTombstone(obj)
@@ -240,7 +238,16 @@ func (a *App) invalidateResponseCacheForObjectEvent(
 		return
 	}
 	namespace := strings.TrimSpace(metaObj.GetNamespace())
-	a.invalidateResponseCache(selectionKey, kind, namespace, name)
+	a.invalidateResponseCacheForResource(selectionKey, resourcemodel.NewResourceRef(
+		selectionKey,
+		identity.Group,
+		identity.Version,
+		identity.Kind,
+		identity.Resource,
+		namespace,
+		name,
+		string(metaObj.GetUID()),
+	))
 	a.invalidateHelmCacheIfNeeded(selectionKey, obj)
 }
 
@@ -269,24 +276,39 @@ func (s ingestResponseCacheSink) invalidate(row interface{}) {
 	if !ok {
 		return
 	}
-	s.app.invalidateResponseCacheForResource(s.selectionKey, summary.Kind, summary.Namespace, summary.Name)
+	s.app.invalidateResponseCacheForResource(s.selectionKey, resourcemodel.NewResourceRef(
+		summary.ClusterID,
+		summary.Group,
+		summary.Version,
+		summary.Kind,
+		summary.Resource,
+		summary.Namespace,
+		summary.Name,
+		summary.UID,
+	))
 }
 
 // invalidateResponseCacheForResource clears cached detail/YAML entries for a resource key.
-func (a *App) invalidateResponseCacheForResource(selectionKey, kind, namespace, name string) {
-	if shouldSkipResponseCacheInvalidationKind(kind) {
+func (a *App) invalidateResponseCacheForResource(selectionKey string, ref resourcemodel.ResourceRef) {
+	if ref.ClusterID == "" || ref.Version == "" || ref.Kind == "" || ref.Resource == "" || ref.Name == "" {
 		return
 	}
-	a.invalidateResponseCache(selectionKey, kind, namespace, name)
+	a.invalidateResponseCacheForGVK(
+		selectionKey,
+		schema.GroupVersionKind{Group: ref.Group, Version: ref.Version, Kind: ref.Kind},
+		ref.Namespace,
+		ref.Name,
+	)
 }
 
-// invalidateResponseCacheForGVK drops the exact GVK detail entry and the
-// legacy kind-only detail key used by typed detail fetchers.
+// invalidateResponseCacheForGVK drops the exact GVK detail/header entries and
+// the legacy kind-only detail key used by typed detail fetchers.
 func (a *App) invalidateResponseCacheForGVK(selectionKey string, gvk schema.GroupVersionKind, namespace, name string) {
 	if strings.TrimSpace(gvk.Kind) == "" || strings.TrimSpace(name) == "" {
 		return
 	}
 	a.responseCacheDelete(selectionKey, objectDetailCacheKeyForGVK(gvk, namespace, name))
+	a.responseCacheDelete(selectionKey, objectHeaderMetadataCacheKey(gvk, namespace, name))
 	a.responseCacheDelete(selectionKey, objectDetailCacheKey(gvk.Kind, namespace, name))
 }
 
@@ -365,16 +387,6 @@ func unwrapCacheTombstone(obj interface{}) interface{} {
 	default:
 		return obj
 	}
-}
-
-// shouldSkipResponseCacheInvalidationKind returns true for kinds excluded from invalidation.
-func shouldSkipResponseCacheInvalidationKind(kind string) bool {
-	normalized := strings.ToLower(strings.TrimSpace(kind))
-	if normalized == "" {
-		return true
-	}
-	_, ok := responseCacheInvalidationSkipKinds[normalized]
-	return ok
 }
 
 // shouldSkipWarmupInvalidation skips add events for older objects during informer warm-up.

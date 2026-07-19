@@ -73,14 +73,14 @@ func moveToFront(mru []string, id string) []string {
 }
 
 // governorExecutor applies a single tier transition. The production
-// implementation reuses the existing per-cluster build/teardown and the
-// demand-driven metrics poller; tests substitute a recorder so reconcile's
-// dispatch decisions can be verified without standing up real subsystems.
+// implementation reuses the existing per-cluster build/teardown; tests
+// substitute a recorder so reconcile's dispatch decisions can be verified
+// without standing up real subsystems.
 type governorExecutor interface {
 	// ensureRunning builds+starts the cluster's subsystem if it is not already
-	// running, then applies the metrics poller demand state (active for
-	// Foreground, idle for Background).
-	ensureRunning(clusterID string, metricsActive bool)
+	// running. Metrics activity is owned independently by cluster-scoped
+	// frontend leases.
+	ensureRunning(clusterID string)
 	// teardown stops the cluster's subsystem and reclaims its heap.
 	teardown(clusterID string)
 }
@@ -135,7 +135,7 @@ func (a *App) reconcileGovernorWith(exec governorExecutor) {
 		case t.Teardown:
 			exec.teardown(t.ClusterID)
 		case t.EnsureRunning:
-			exec.ensureRunning(t.ClusterID, t.MetricsActive)
+			exec.ensureRunning(t.ClusterID)
 		}
 	}
 }
@@ -180,7 +180,7 @@ func intersectOrdered(ids []string, open map[string]bool) []string {
 }
 
 // realGovernorExecutor wires the governor's tier transitions to the existing
-// per-cluster build/teardown and metrics poller APIs.
+// per-cluster build/teardown APIs.
 func (a *App) realGovernorExecutor() governorExecutor {
 	return &appGovernorExecutor{app: a}
 }
@@ -189,9 +189,9 @@ type appGovernorExecutor struct {
 	app *App
 }
 
-// ensureRunning builds+starts the subsystem if absent (reusing the existing
-// per-cluster rebuild path), then pins/unpins the demand-driven metrics poller.
-func (e *appGovernorExecutor) ensureRunning(clusterID string, metricsActive bool) {
+// ensureRunning builds+starts the subsystem if absent, reusing the existing
+// per-cluster rebuild path. Metrics demand is routed separately by cluster ID.
+func (e *appGovernorExecutor) ensureRunning(clusterID string) {
 	a := e.app
 	if a == nil {
 		return
@@ -207,11 +207,6 @@ func (e *appGovernorExecutor) ensureRunning(clusterID string, metricsActive bool
 		// A cooled subsystem is non-nil but NOT live: it serves cooled queries from its
 		// mmap-backed stores. Re-warm it to a fresh, live, mutable subsystem.
 		a.rewarmCooledClusterSubsystem(clusterID)
-	}
-	if subsystem := a.getRefreshSubsystem(clusterID); subsystem != nil && subsystem.Manager != nil {
-		// Foreground pins the demand poller active; Background lets it idle out so
-		// a warm-but-not-visible cluster stops paying for metrics polling.
-		subsystem.Manager.SetMetricsActive(metricsActive)
 	}
 }
 

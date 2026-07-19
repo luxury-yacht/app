@@ -137,6 +137,7 @@ const CACHE_POLICIES = new Set([
   'snapshot-cache-with-merge',
   'snapshot-cache-bypass',
   'snapshot-cache-plus-provider-cache',
+  'provider-cache',
   'external-catalog-cache',
   'external-catalog-cache-with-merge',
   'stream-only',
@@ -268,6 +269,16 @@ describe('refresh domain contract', () => {
       expect(entry.frontend.timing.cooldown).toBeGreaterThan(0);
       expect(entry.frontend.timing.timeout).toBeGreaterThan(0);
     }
+  });
+
+  it('does not poll object-map faster than its five-second snapshot cache', () => {
+    expect(getRefreshDomainDescriptor('object-map').timing.interval).toBe(5_000);
+  });
+
+  it('records object-details as provider-cache only', () => {
+    expect(refreshDomainContract.domainInventory['object-details'].cachePolicy).toBe(
+      'provider-cache'
+    );
   });
 
   it('covers frontend descriptors, orchestrator registrations, streams, and diagnostics', () => {
@@ -529,7 +540,11 @@ describe('refresh domain contract', () => {
           if (inventory.behaviorClass === 'detail-payload') {
             expect(['object-details', 'object-yaml']).toContain(entry.domain);
             expect(inventory.scopeContract.kind).toBe('object-ref');
-            expect(inventory.cachePolicy).toBe('snapshot-cache-plus-provider-cache');
+            expect(inventory.cachePolicy).toBe(
+              entry.domain === 'object-details'
+                ? 'provider-cache'
+                : 'snapshot-cache-plus-provider-cache'
+            );
             expect(inventory.streamSemantics).toEqual(['snapshot-replace']);
             expect(inventory.coverageContract).toBe('detail-payload-shape');
           }

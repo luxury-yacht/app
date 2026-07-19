@@ -18,13 +18,11 @@ func (b *objectMapBuilder) newObjectMapAssembler(ctx context.Context) (*objectMa
 	index := newObjectMapIndex(meta, b.allowedNamespaces)
 	index.addCatalog(b.catalog())
 	index.collectTyped(objectMapTypedSource{
-		ctx:         ctx,
-		client:      b.client,
 		shared:      b.shared,
 		permissions: b.permissions,
 		ingest:      b.ingest,
 	})
-	index.collectGatewayTyped(ctx, b.gatewayClient, b.gatewayPresence)
+	index.collectGatewayTyped(b.gatewayShared, b.gatewayPresence, b.permissions)
 	if err := index.listError(); err != nil {
 		return nil, err
 	}

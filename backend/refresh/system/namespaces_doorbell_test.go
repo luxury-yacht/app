@@ -49,6 +49,7 @@ func TestNamespaceNotifierInvalidatesCacheThenBroadcastsDoorbell(t *testing.T) {
 		},
 	}))
 	service := snapshot.NewService(reg, nil, snapshot.ClusterMeta{ClusterID: "c1"})
+	manager.SetSnapshotDomainInvalidator(service.InvalidateDomainCache)
 	_, err = service.Build(context.Background(), "namespaces", "c1|")
 	require.NoError(t, err)
 	_, err = service.Build(context.Background(), "namespaces", "c1|")
@@ -57,7 +58,7 @@ func TestNamespaceNotifierInvalidatesCacheThenBroadcastsDoorbell(t *testing.T) {
 
 	notifier := snapshot.NewNamespaceChangeNotifier(nil, snapshot.NewNamespaceWorkloadTracker(nil), nil)
 	defer notifier.Stop()
-	wireNamespacesDoorbell(service, notifier, manager, nil)
+	wireNamespacesDoorbell(notifier, manager, nil)
 
 	notifier.NamespaceChanged()
 
@@ -112,6 +113,7 @@ func TestNamespacesDoorbellInvokesObserverAfterBroadcast(t *testing.T) {
 		},
 	}))
 	service := snapshot.NewService(reg, nil, snapshot.ClusterMeta{ClusterID: "c1"})
+	manager.SetSnapshotDomainInvalidator(service.InvalidateDomainCache)
 
 	notifier := snapshot.NewNamespaceChangeNotifier(nil, snapshot.NewNamespaceWorkloadTracker(nil), nil)
 	defer notifier.Stop()
@@ -121,7 +123,7 @@ func TestNamespacesDoorbellInvokesObserverAfterBroadcast(t *testing.T) {
 	// Attached AFTER wiring — mirroring the app, which can only build the
 	// aggregate service (and thus the readiness hook) once every subsystem
 	// exists.
-	wireNamespacesDoorbell(service, notifier, manager, observer)
+	wireNamespacesDoorbell(notifier, manager, observer)
 	observer.Set(func(version, reason string) {
 		observed <- version
 	})

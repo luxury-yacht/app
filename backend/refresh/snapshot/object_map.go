@@ -29,16 +29,16 @@ import (
 	"github.com/luxury-yacht/app/backend/resources/ingressclass"
 	podres "github.com/luxury-yacht/app/backend/resources/pods"
 
-	autoscalingv2 "k8s.io/api/autoscaling/v2"
+	autoscalingv1 "k8s.io/api/autoscaling/v1"
 	corev1 "k8s.io/api/core/v1"
 	discoveryv1 "k8s.io/api/discovery/v1"
 	apierrors "k8s.io/apimachinery/pkg/api/errors"
+	"k8s.io/apimachinery/pkg/api/meta"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/labels"
 	"k8s.io/apimachinery/pkg/runtime/schema"
 	"k8s.io/client-go/informers"
-	"k8s.io/client-go/kubernetes"
-	gatewayversioned "sigs.k8s.io/gateway-api/pkg/client/clientset/versioned"
+	gatewayinformers "sigs.k8s.io/gateway-api/pkg/client/informers/externalversions"
 )
 
 const (
@@ -125,8 +125,7 @@ type objectMapIngestSource interface {
 }
 
 type objectMapBuilder struct {
-	client          kubernetes.Interface
-	gatewayClient   gatewayversioned.Interface
+	gatewayShared   gatewayinformers.SharedInformerFactory
 	gatewayPresence objectMapGatewayPresence
 	catalogService  func() *objectcatalog.Service
 	// shared supplies typed listers backed by the factory's already-synced
@@ -137,17 +136,13 @@ type objectMapBuilder struct {
 	// ingest supplies projected object-map nodes for ingest-owned (cut) kinds. nil
 	// when no kind in the build is ingest-owned (e.g. a unit test with no cut kinds).
 	ingest objectMapIngestSource
-	// allowedNamespaces is the cluster's namespace scope
-	// (docs/plans/namespace-scope.md) for the live-LIST collectors.
+	// allowedNamespaces is the cluster's namespace scope. Informer-backed
+	// collectors filter their cluster-wide caches to this set.
 	allowedNamespaces []string
 }
 
-// objectMapTypedSource carries everything collectTyped needs for one build: the
-// informer-backed listers, the permission gate, and (for the autoscaling/v2 HPA
-// path, which has no matching v2 informer) the live client.
+// objectMapTypedSource carries everything collectTyped needs for one build.
 type objectMapTypedSource struct {
-	ctx         context.Context
-	client      kubernetes.Interface
 	shared      informers.SharedInformerFactory
 	permissions objectMapPermissionChecker
 	// ingest supplies projected nodes for ingest-owned kinds; nil when none.
@@ -199,9 +194,8 @@ type objectMapRecord struct {
 
 type objectMapIndex struct {
 	meta ClusterMeta
-	// scope is the cluster's namespace scope (docs/plans/namespace-scope.md):
-	// the live-LIST collectors (gateway kinds, HPA) fan out over it instead
-	// of listing cluster-wide. Empty means cluster-wide.
+	// scope is the cluster's namespace scope. Informer-backed collectors filter
+	// their cached namespaced objects to it. Empty means cluster-wide.
 	scope      []string
 	records    map[string]*objectMapRecord
 	byUID      map[string]*objectMapRecord
@@ -235,24 +229,19 @@ const (
 // it may be nil when no kind is cut over to the ingest path.
 func RegisterObjectMapDomain(
 	reg *domain.Registry,
-	client kubernetes.Interface,
 	shared informers.SharedInformerFactory,
 	permissions objectMapPermissionChecker,
-	gatewayClient gatewayversioned.Interface,
+	gatewayShared gatewayinformers.SharedInformerFactory,
 	gatewayPresence objectMapGatewayPresence,
 	catalogService func() *objectcatalog.Service,
 	ingestSource objectMapIngestSource,
 	allowedNamespaces []string,
 ) error {
-	if client == nil {
-		return fmt.Errorf("kubernetes client is required for object map domain")
-	}
 	if shared == nil {
 		return fmt.Errorf("shared informer factory is required for object map domain")
 	}
 	builder := &objectMapBuilder{
-		client:            client,
-		gatewayClient:     gatewayClient,
+		gatewayShared:     gatewayShared,
 		gatewayPresence:   gatewayPresence,
 		catalogService:    catalogService,
 		shared:            shared,
@@ -425,10 +414,8 @@ func (idx *objectMapIndex) collectTyped(src objectMapTypedSource) {
 			idx.addRecord(rec)
 		}
 	}
-	// HorizontalPodAutoscaler has no matching v2 informer, so it stays a live LIST
-	// via the client rather than reading from the shared informer cache.
 	if src.allowed("autoscaling", "horizontalpodautoscalers") {
-		idx.collectHPAs(src.ctx, src.client)
+		idx.collectHPAs(src.shared)
 	} else {
 		idx.warnSkippedPermission("horizontalpodautoscalers")
 	}
@@ -482,8 +469,12 @@ func (idx *objectMapIndex) warnSkippedPermission(resource string) {
 	idx.warnings = append(idx.warnings, fmt.Sprintf("skipped %s: insufficient permissions", resource))
 }
 
-func (idx *objectMapIndex) collectGatewayTyped(ctx context.Context, client gatewayversioned.Interface, presence objectMapGatewayPresence) {
-	if idx == nil || client == nil {
+func (idx *objectMapIndex) collectGatewayTyped(
+	factory gatewayinformers.SharedInformerFactory,
+	presence objectMapGatewayPresence,
+	permissions objectMapPermissionChecker,
+) {
+	if idx == nil || factory == nil {
 		return
 	}
 	clusterID := idx.meta.ClusterID
@@ -491,15 +482,29 @@ func (idx *objectMapIndex) collectGatewayTyped(ctx context.Context, client gatew
 		if !gatewayKindPresent(presence, collector.Identity.Kind) {
 			continue
 		}
+		if permissions != nil && !permissions.CanListWatch(collector.Identity.Group, collector.Identity.Resource) {
+			idx.warnSkippedPermission(collector.Identity.Resource)
+			continue
+		}
+		generic, err := factory.ForResource(collector.Identity.GVR())
+		if err != nil {
+			if idx.skipListError(collector.Identity.Resource, err) && idx.hasListError() {
+				return
+			}
+			continue
+		}
+		listed, err := generic.Lister().List(labels.Everything())
 		var items []metav1.Object
-		var err error
-		for _, namespace := range idx.listNamespaces(collector.Identity.Namespaced) {
-			listed, listErr := collector.List(ctx, client, namespace)
-			if listErr != nil {
-				err = listErr
+		for _, raw := range listed {
+			obj, accessorErr := meta.Accessor(raw)
+			if accessorErr != nil {
+				err = accessorErr
 				break
 			}
-			items = append(items, listed...)
+			if collector.Identity.Namespaced && !idx.namespaceAllowed(obj.GetNamespace()) {
+				continue
+			}
+			items = append(items, obj)
 		}
 		if idx.skipListError(collector.Identity.Resource, err) {
 			if idx.hasListError() {
@@ -520,51 +525,40 @@ func (idx *objectMapIndex) collectGatewayTyped(ctx context.Context, client gatew
 	}
 }
 
-// listNamespaces returns the namespaces a live-LIST collector runs in: the
-// configured scope for a namespaced kind under a namespace scope, otherwise
-// the single cluster-wide "" — the unscoped degenerate of the same loop. A
-// per-namespace Forbidden is swallowed by skipListError exactly as before.
-func (idx *objectMapIndex) listNamespaces(namespaced bool) []string {
-	if !namespaced || len(idx.scope) == 0 {
-		return []string{""}
+func (idx *objectMapIndex) namespaceAllowed(namespace string) bool {
+	if len(idx.scope) == 0 {
+		return true
 	}
-	return idx.scope
+	for _, allowed := range idx.scope {
+		if namespace == allowed {
+			return true
+		}
+	}
+	return false
 }
 
 func gatewayKindPresent(presence objectMapGatewayPresence, kind string) bool {
 	return presence == nil || presence.Has(kind)
 }
 
-// collectHPAs is the one object-map collector that still issues a live LIST: the
-// shared factory caches autoscaling/v1, but the object map needs the v2 shape, so
-// there is no matching informer to read from. It is therefore not declared as an
-// objectmapnode.Collector.
-func (idx *objectMapIndex) collectHPAs(ctx context.Context, client kubernetes.Interface) {
-	if client == nil {
+func (idx *objectMapIndex) collectHPAs(shared informers.SharedInformerFactory) {
+	if shared == nil {
 		return
 	}
-	var items []autoscalingv2.HorizontalPodAutoscaler
-	var err error
-	for _, namespace := range idx.listNamespaces(true) {
-		if namespace == "" {
-			namespace = metav1.NamespaceAll
-		}
-		list, listErr := client.AutoscalingV2().HorizontalPodAutoscalers(namespace).List(ctx, metav1.ListOptions{})
-		if listErr != nil {
-			err = listErr
-			break
-		}
-		items = append(items, list.Items...)
-	}
+	items, err := shared.Autoscaling().V1().HorizontalPodAutoscalers().Lister().List(labels.Everything())
 	if idx.skipListError("horizontalpodautoscalers", err) {
 		return
 	}
 	idx.hpaListed = true
-	for i := range items {
-		hpa := items[i]
+	for _, hpa := range items {
+		if !idx.namespaceAllowed(hpa.Namespace) {
+			continue
+		}
 		idx.addRecord(&objectMapRecord{
+			// The app's canonical HPA reference is autoscaling/v2. The shared v1
+			// informer supplies the same persisted object without a per-build LIST.
 			ref:               refFromObject(&hpa.ObjectMeta, hpapkg.Identity.Group, hpapkg.Identity.Version, hpapkg.Identity.Kind, hpapkg.Identity.Resource, hpa.Namespace),
-			obj:               &hpa,
+			obj:               hpa,
 			creationTimestamp: objectCreationTimestamp(&hpa.ObjectMeta),
 			status:            hpapkg.ObjectMapStatus(idx.meta.ClusterID, hpa),
 			owners:            hpa.OwnerReferences,
@@ -666,11 +660,11 @@ func (idx *objectMapIndex) enrichActionFacts() {
 		if record == nil {
 			continue
 		}
-		hpa, ok := record.obj.(*autoscalingv2.HorizontalPodAutoscaler)
+		hpa, ok := record.obj.(*autoscalingv1.HorizontalPodAutoscaler)
 		if !ok {
 			continue
 		}
-		facts := hpapkg.BuildFacts(idx.meta.ClusterID, hpa)
+		facts := hpapkg.BuildV1Facts(idx.meta.ClusterID, hpa)
 		target := idx.recordForResourceLink(facts.ScaleTarget)
 		if target == nil {
 			continue

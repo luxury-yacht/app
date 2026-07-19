@@ -702,6 +702,30 @@ func TestServiceBuildDoesNotCacheObjectMaintenance(t *testing.T) {
 	}
 }
 
+func TestServiceBuildDoesNotCacheObjectDetails(t *testing.T) {
+	reg := domain.New()
+	builds := 0
+	require.NoError(t, reg.Register(refresh.DomainConfig{
+		Name: "object-details",
+		BuildSnapshot: func(context.Context, string) (*refresh.Snapshot, error) {
+			builds++
+			return &refresh.Snapshot{
+				Domain:  "object-details",
+				Payload: map[string]int{"build": builds},
+			}, nil
+		},
+	}))
+	service := NewService(reg, nil, testClusterMeta())
+
+	_, err := service.Build(context.Background(), "object-details", "cluster-a|default:/v1:Pod:pod-a")
+	require.NoError(t, err)
+	_, err = service.Build(context.Background(), "object-details", "cluster-a|default:/v1:Pod:pod-a")
+	require.NoError(t, err)
+
+	require.Equal(t, 2, builds, "object details must defer caching to the event-invalidated provider cache")
+	require.NotContains(t, service.cache, "object-details:cluster-a|default:/v1:Pod:pod-a")
+}
+
 func TestServiceBuildDoesNotSingleflightObjectMaintenance(t *testing.T) {
 	reg := domain.New()
 	started := make(chan struct{})

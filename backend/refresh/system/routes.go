@@ -13,7 +13,7 @@ type MuxConfig struct {
 	SnapshotService refresh.SnapshotService
 	ManualQueue     refresh.ManualQueue
 	Telemetry       telemetry.Summarizer
-	Metrics         interface{ SetMetricsActive(bool) }
+	Metrics         any
 	HealthHub       refresh.InformerHub
 }
 

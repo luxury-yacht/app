@@ -2,17 +2,18 @@
  * backend/resources/hpa/objectmap.go
  *
  * HorizontalPodAutoscaler's object-map status projection, co-located with its
- * model. The object map uses the v2 model.
+ * model. The synchronized v1 informer supplies the projection.
  */
 
 package hpa
 
 import (
 	"github.com/luxury-yacht/app/backend/kind/objectmap"
-	autoscalingv2 "k8s.io/api/autoscaling/v2"
+	autoscalingv1 "k8s.io/api/autoscaling/v1"
 )
 
-// ObjectMapStatus projects a HorizontalPodAutoscaler into its object-map node status.
-func ObjectMapStatus(clusterID string, h autoscalingv2.HorizontalPodAutoscaler) *objectmap.Status {
-	return objectmap.FromResourceModel(BuildResourceModel(clusterID, &h))
+// ObjectMapStatus projects the informer-backed v1 representation into its
+// object-map node status.
+func ObjectMapStatus(clusterID string, h *autoscalingv1.HorizontalPodAutoscaler) *objectmap.Status {
+	return objectmap.FromResourceModel(BuildV1ResourceModel(clusterID, h))
 }

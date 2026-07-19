@@ -9,13 +9,18 @@ import type { RefreshDomain } from './types';
 type ResourceStreamDomainName = Parameters<typeof resourceStreamManager.start>[0];
 
 export function registerDefaultRefreshDomains(registrar: RefreshDomainRegistrar): void {
-  const registerRefreshDomain = (domain: RefreshDomain, streaming?: StreamingRegistration) => {
+  const registerRefreshDomain = (
+    domain: RefreshDomain,
+    streaming?: StreamingRegistration,
+    scheduled = true
+  ) => {
     const descriptor = getRefreshDomainDescriptor(domain);
     registrar.registerDomain({
       domain,
       refresherName: descriptor.refresherName,
       category: descriptor.category,
       ...(streaming ? { streaming } : {}),
+      ...(scheduled ? {} : { scheduled: false }),
     });
   };
 
@@ -70,9 +75,11 @@ export function registerDefaultRefreshDomains(registrar: RefreshDomainRegistrar)
   // (the doorbell may never ring on metrics-less clusters).
   doorbellStreamDomain('cluster-overview');
   doorbellStreamDomain('cluster-attention');
+  registerSnapshotDomains('object-maintenance');
+  // Each open panel owns a distinct 2s/5s object-details refresher; registering
+  // the shared 10s refresher as well would schedule every scope twice.
+  registerRefreshDomain('object-details', undefined, false);
   registerSnapshotDomains(
-    'object-maintenance',
-    'object-details',
     'object-map',
     'object-yaml',
     'object-helm-manifest',

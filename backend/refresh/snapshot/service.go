@@ -258,7 +258,9 @@ func (s *Service) BuildRequest(req BuildRequest) (*refresh.Snapshot, error) {
 			snap.Stats.TimeToFirstRowMs,
 			syncWait.Milliseconds(),
 		)
-		s.storeCache(cacheKey, snap)
+		if !bypassSnapshotCache {
+			s.storeCache(cacheKey, snap)
+		}
 		return snap, nil
 	})
 	if err != nil {
@@ -466,10 +468,9 @@ func (s *Service) storeCache(key string, snap *refresh.Snapshot) {
 }
 
 // InvalidateDomainCache drops every cached snapshot for the domain. The
-// doorbell notifiers call this BEFORE broadcasting: the doorbell-triggered
-// refetch arrives well inside the cache TTL, and without invalidation it
-// would be served the PRE-change snapshot — permanently, because doorbells
-// fire once per change and polling skips while the stream is healthy.
+// resource-stream manager calls this before signal delivery: the triggered
+// refetch can arrive inside the cache TTL, and without invalidation it would
+// be served the pre-change snapshot.
 // Matching on the cached snapshot's Domain keeps this independent of the
 // cache-key format.
 func (s *Service) InvalidateDomainCache(domain string) {
@@ -516,7 +517,7 @@ func (s *Service) shouldBypassSingleflight(domainName string) bool {
 
 func (s *Service) shouldBypassSnapshotCache(domainName string) bool {
 	switch domainName {
-	case "pods", "namespace-workloads", "nodes":
+	case "pods", "namespace-workloads", "nodes", "object-details":
 		return true
 	default:
 		return false

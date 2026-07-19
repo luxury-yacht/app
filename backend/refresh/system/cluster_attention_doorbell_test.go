@@ -41,6 +41,7 @@ func TestClusterAttentionDoorbellInvalidatesCacheBeforeBroadcast(t *testing.T) {
 		},
 	}))
 	service := snapshot.NewService(registry, nil, snapshot.ClusterMeta{ClusterID: "c1"})
+	manager.SetSnapshotDomainInvalidator(service.InvalidateDomainCache)
 	_, err = service.Build(context.Background(), "cluster-attention", "c1|")
 	require.NoError(t, err)
 	_, err = service.Build(context.Background(), "cluster-attention", "c1|")
@@ -48,7 +49,7 @@ func TestClusterAttentionDoorbellInvalidatesCacheBeforeBroadcast(t *testing.T) {
 	require.Equal(t, 1, builds)
 
 	notifier := &fakeAttentionDoorbell{}
-	wireClusterAttentionDoorbell(service, notifier, manager)
+	wireClusterAttentionDoorbell(notifier, manager)
 	notifier.broadcast("attention-2")
 
 	var update resourcestream.Update

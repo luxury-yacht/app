@@ -32,11 +32,15 @@ type Server struct {
 	snapshots refresh.SnapshotService
 	queue     refresh.ManualQueue
 	telemetry telemetry.Summarizer
-	metrics   metricsController
+	metrics   any
 }
 
 type metricsController interface {
 	SetMetricsActive(active bool)
+}
+
+type clusterMetricsController interface {
+	SetMetricsActiveForClusters(clusterIDs []string)
 }
 
 // NewServer constructs an API server instance.
@@ -44,7 +48,7 @@ func NewServer(
 	snapshots refresh.SnapshotService,
 	queue refresh.ManualQueue,
 	recorder telemetry.Summarizer,
-	metrics metricsController,
+	metrics any,
 ) *Server {
 	return &Server{
 		snapshots: snapshots,
@@ -238,7 +242,8 @@ func (s *Server) handleMetricsActive(w http.ResponseWriter, r *http.Request) {
 	}
 
 	var body struct {
-		Active bool `json:"active"`
+		Active     bool      `json:"active"`
+		ClusterIDs *[]string `json:"clusterIds"`
 	}
 	if r.Body != nil {
 		defer r.Body.Close()
@@ -252,7 +257,13 @@ func (s *Server) handleMetricsActive(w http.ResponseWriter, r *http.Request) {
 	}
 
 	if s.metrics != nil {
-		s.metrics.SetMetricsActive(body.Active)
+		if body.ClusterIDs != nil {
+			if scoped, ok := s.metrics.(clusterMetricsController); ok {
+				scoped.SetMetricsActiveForClusters(*body.ClusterIDs)
+			}
+		} else if legacy, ok := s.metrics.(metricsController); ok {
+			legacy.SetMetricsActive(body.Active)
+		}
 	}
 
 	setCorrelationID(w, correlationID)

@@ -109,8 +109,9 @@ the completed `v2` rewrite plan.
 ## Lifecycle & governor
 
 - **Foreground / Background / Cold** per cluster (`system/governor.go`,
-  `app_refresh_governor.go`). Background idles the metrics poller (object liveness
-  untouched). A memory-pressure poll (`runtime.ReadMemStats` HeapInuse vs budget — **not**
+  `app_refresh_governor.go`). Foreground and Background both keep the subsystem
+  live; metrics polling follows cluster-scoped frontend lease demand rather than
+  governor visibility. A memory-pressure poll (`runtime.ReadMemStats` HeapInuse vs budget — **not**
   `GOMEMLIMIT`) collapses the warm set under pressure and `FreeOSMemory`s.
 - **Spill + Cold-serving.** Maintained stores spill to a per-cluster cache dir in the
   columnar format, warm-paint on re-warm (cross-restart, format-version-guarded), and

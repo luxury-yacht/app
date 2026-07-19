@@ -14,12 +14,12 @@ var objectMapIngestOwnedGVRs = kindregistry.IngestOwnedGVRs()
 // objectMapCollectors is every kind read into the object map from the shared
 // informer cache, derived from the single kind registry. Each kind declares how it
 // is listed and projected in its own package; the collector loop never names a
-// kind. HorizontalPodAutoscaler (no v2 informer) is collected bespoke, and the
-// Gateway-API kinds (live client) come via objectMapGatewayCollectors.
+// kind. HorizontalPodAutoscaler is collected bespoke from the v1 informer, and
+// Gateway-API projections come via objectMapGatewayCollectors.
 var objectMapCollectors = objectMapCollectorsFromRegistry()
 
-// objectMapGatewayCollectors is the Gateway-API equivalent, listed via the Gateway
-// client and gated by the cluster's Gateway-API presence.
+// objectMapGatewayCollectors is the Gateway-API projection registry. Objects are
+// read from the Gateway informer factory and gated by cluster API presence.
 var objectMapGatewayCollectors = objectMapGatewayCollectorsFromRegistry()
 
 func objectMapCollectorsFromRegistry() []objectmapnode.Collector {

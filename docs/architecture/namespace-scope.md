@@ -95,8 +95,9 @@ checker, so the SSAR cache resets with it
 - **Metrics**: the pod-metrics poll runs per scope namespace and merges the
   successes (`backend/refresh/metrics/poller.go`); node metrics stay
   cluster-scoped and permission-degrade as before.
-- **Object map**: the live-LIST collectors (gateway kinds, HPA v2) list per
-  scope namespace; cluster-scoped kinds keep one cluster-wide list.
+- **Object map**: Gateway API and HPA collectors read synchronized informer
+  caches and filter namespaced objects to the configured scope; graph builds do
+  not issue Kubernetes LIST calls.
 - **UI**: the sidebar namespaces section IS the editor — add affordance +
   per-row hover delete (`frontend/src/ui/layout/NamespaceScopeEditor.tsx`).
   The editing affordances are also the only "scope active" indicator by

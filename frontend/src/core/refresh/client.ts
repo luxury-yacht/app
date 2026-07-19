@@ -35,7 +35,14 @@ interface FetchSnapshotOptions {
   scope?: string;
   signal?: AbortSignal;
   ifNoneMatch?: string;
+  manual?: boolean;
 }
+
+type ManualRefreshJob = {
+  jobId: string;
+  state: 'queued' | 'running' | 'succeeded' | 'failed' | 'cancelled';
+  error?: string;
+};
 
 let cachedRefreshBaseURL: string | null = null;
 let refreshBaseURLPromise: Promise<string> | null = null;
@@ -53,6 +60,48 @@ const toError = (error: unknown): Error => {
 };
 
 const delay = (ms: number) => new Promise((resolve) => setTimeout(resolve, ms));
+
+const parseManualRefreshJob = async (response: Response): Promise<ManualRefreshJob> => {
+  if (!response.ok) {
+    const { message } = await safeParseError(response);
+    throw new Error(message);
+  }
+  const job = (await response.json()) as Partial<ManualRefreshJob>;
+  if (!job.jobId || !job.state) {
+    throw new Error('Manual refresh returned an invalid job');
+  }
+  return job as ManualRefreshJob;
+};
+
+const waitForManualRefresh = async (
+  baseURL: string,
+  domain: RefreshDomain,
+  scope: string,
+  signal?: AbortSignal
+): Promise<void> => {
+  const enqueueURL = new URL(`/api/v2/refresh/${domain}`, baseURL);
+  let job = await parseManualRefreshJob(
+    await fetch(enqueueURL.toString(), {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ scope, reason: 'user' }),
+      signal,
+    })
+  );
+  while (job.state === 'queued' || job.state === 'running') {
+    if (signal?.aborted) {
+      throw new DOMException('Manual refresh aborted', 'AbortError');
+    }
+    const statusURL = new URL(`/api/v2/jobs/${job.jobId}`, baseURL);
+    job = await parseManualRefreshJob(await fetch(statusURL.toString(), { signal }));
+    if (job.state === 'queued' || job.state === 'running') {
+      await delay(50);
+    }
+  }
+  if (job.state === 'failed' || job.state === 'cancelled') {
+    throw new Error(job.error || `Manual refresh failed for ${domain}`);
+  }
+};
 
 async function attemptResolveRefreshBaseURL(attempt = 0): Promise<string> {
   try {
@@ -116,6 +165,17 @@ export async function fetchSnapshot<TPayload>(
   domain: RefreshDomain,
   options: FetchSnapshotOptions = {}
 ): Promise<{ snapshot?: Snapshot<TPayload>; etag?: string; notModified: boolean }> {
+  if (options.manual) {
+    if (!options.scope) {
+      throw new Error(`Manual refresh for ${domain} requires a cluster scope`);
+    }
+    await waitForManualRefresh(
+      await resolveRefreshBaseURL(),
+      domain,
+      options.scope,
+      options.signal
+    );
+  }
   const buildRequest = async () => {
     const baseURL = await resolveRefreshBaseURL();
     const url = new URL(`/api/v2/snapshots/${domain}`, baseURL);
@@ -125,7 +185,7 @@ export async function fetchSnapshot<TPayload>(
     }
 
     const headers: Record<string, string> = {};
-    if (options.ifNoneMatch) {
+    if (options.ifNoneMatch && !options.manual) {
       headers['If-None-Match'] = options.ifNoneMatch;
     }
 
@@ -244,14 +304,14 @@ export async function fetchTelemetrySummary(): Promise<NormalizedTelemetrySummar
   };
 }
 
-export async function setMetricsActive(active: boolean): Promise<void> {
+export async function setMetricsActive(clusterIds: readonly string[]): Promise<void> {
   const baseURL = await resolveRefreshBaseURL();
   const url = new URL('/api/v2/metrics/active', baseURL);
 
   const response = await fetch(url.toString(), {
     method: 'POST',
     headers: { 'Content-Type': 'application/json' },
-    body: JSON.stringify({ active }),
+    body: JSON.stringify({ clusterIds }),
   });
   if (!response.ok) {
     throw new Error(`Metrics activity request failed: ${response.status} ${response.statusText}`);

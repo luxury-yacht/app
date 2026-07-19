@@ -73,12 +73,12 @@ func TestPlanGovernorTransitions(t *testing.T) {
 		want        map[string]GovernorTransition
 	}{
 		{
-			name:        "cold start: foreground built+active, background built+idle, cold torn down",
+			name:        "cold start: foreground and background built, cold torn down",
 			lastApplied: nil,
 			desired:     map[string]ResourceTier{"a": TierForeground, "b": TierBackground, "c": TierCold},
 			want: map[string]GovernorTransition{
-				"a": {ClusterID: "a", Tier: TierForeground, EnsureRunning: true, MetricsActive: true},
-				"b": {ClusterID: "b", Tier: TierBackground, EnsureRunning: true, MetricsActive: false},
+				"a": {ClusterID: "a", Tier: TierForeground, EnsureRunning: true},
+				"b": {ClusterID: "b", Tier: TierBackground, EnsureRunning: true},
 				"c": {ClusterID: "c", Tier: TierCold, Teardown: true},
 			},
 		},
@@ -89,19 +89,19 @@ func TestPlanGovernorTransitions(t *testing.T) {
 			want:        map[string]GovernorTransition{},
 		},
 		{
-			name:        "promote background->foreground pins metrics active without rebuild churn flag",
+			name:        "promote background->foreground keeps subsystem running",
 			lastApplied: map[string]ResourceTier{"a": TierBackground},
 			desired:     map[string]ResourceTier{"a": TierForeground},
 			want: map[string]GovernorTransition{
-				"a": {ClusterID: "a", Tier: TierForeground, EnsureRunning: true, MetricsActive: true},
+				"a": {ClusterID: "a", Tier: TierForeground, EnsureRunning: true},
 			},
 		},
 		{
-			name:        "demote foreground->background pauses metrics but keeps it running",
+			name:        "demote foreground->background keeps subsystem running",
 			lastApplied: map[string]ResourceTier{"a": TierForeground},
 			desired:     map[string]ResourceTier{"a": TierBackground},
 			want: map[string]GovernorTransition{
-				"a": {ClusterID: "a", Tier: TierBackground, EnsureRunning: true, MetricsActive: false},
+				"a": {ClusterID: "a", Tier: TierBackground, EnsureRunning: true},
 			},
 		},
 		{
@@ -113,11 +113,11 @@ func TestPlanGovernorTransitions(t *testing.T) {
 			},
 		},
 		{
-			name:        "re-warm cold->foreground rebuilds and activates",
+			name:        "re-warm cold->foreground rebuilds",
 			lastApplied: map[string]ResourceTier{"a": TierCold},
 			desired:     map[string]ResourceTier{"a": TierForeground},
 			want: map[string]GovernorTransition{
-				"a": {ClusterID: "a", Tier: TierForeground, EnsureRunning: true, MetricsActive: true},
+				"a": {ClusterID: "a", Tier: TierForeground, EnsureRunning: true},
 			},
 		},
 		{

@@ -77,7 +77,8 @@ truth.
 - `event` changes event-backed query results.
 - `attention` changes the maintained Attention index, including time-based
   reevaluation and ignore-rule changes. The `cluster-attention` doorbell rides
-  this clock after invalidating the corresponding snapshot cache.
+  this clock. Before any resource-stream signal is delivered, the stream manager
+  invalidates that domain's snapshot cache through the subsystem callback.
 
 Metric-dependent visible pages should throttle automatic refetches using the
 metrics refresh interval. Object-sorted metric pages should keep the same object

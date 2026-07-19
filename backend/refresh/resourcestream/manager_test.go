@@ -1,6 +1,7 @@
 package resourcestream
 
 import (
+	"context"
 	"testing"
 	"time"
 
@@ -25,6 +26,8 @@ import (
 
 	"github.com/luxury-yacht/app/backend/internal/applog"
 	"github.com/luxury-yacht/app/backend/internal/config"
+	"github.com/luxury-yacht/app/backend/refresh"
+	"github.com/luxury-yacht/app/backend/refresh/domain"
 	"github.com/luxury-yacht/app/backend/refresh/ingest"
 	"github.com/luxury-yacht/app/backend/refresh/snapshot"
 	"github.com/luxury-yacht/app/backend/resourcemodel"
@@ -417,6 +420,51 @@ func TestManagerResumeReturnsBufferedUpdates(t *testing.T) {
 	require.Equal(t, "pod-2", updates[0].Ref.Name)
 }
 
+func TestManagerChangeSignalInvalidatesSnapshotCacheBeforeDelivery(t *testing.T) {
+	reg := domain.New()
+	builds := 0
+	require.NoError(t, reg.Register(refresh.DomainConfig{
+		Name: domainClusterRBAC,
+		BuildSnapshot: func(context.Context, string) (*refresh.Snapshot, error) {
+			builds++
+			return &refresh.Snapshot{Domain: domainClusterRBAC}, nil
+		},
+	}))
+	service := snapshot.NewService(reg, nil, snapshot.ClusterMeta{ClusterID: "c1"})
+	_, err := service.Build(context.Background(), domainClusterRBAC, "c1|")
+	require.NoError(t, err)
+	_, err = service.Build(context.Background(), domainClusterRBAC, "c1|")
+	require.NoError(t, err)
+	require.Equal(t, 1, builds, "pre-change snapshot must come from cache")
+
+	manager := &Manager{
+		clusterMeta: snapshot.ClusterMeta{ClusterID: "c1", ClusterName: "cluster"},
+		logger:      applog.Noop,
+		subscribers: make(map[string]map[string]map[uint64]*subscription),
+		buffers:     make(map[string]*updateBuffer),
+		sequences:   make(map[string]uint64),
+	}
+	manager.SetSnapshotDomainInvalidator(service.InvalidateDomainCache)
+	sub, err := subscribeForTest(t, manager, domainClusterRBAC, "")
+	require.NoError(t, err)
+	defer sub.Cancel()
+
+	update := Update{
+		Type:            MessageTypeModified,
+		Domain:          domainClusterRBAC,
+		ClusterID:       "c1",
+		ClusterName:     "cluster",
+		ResourceVersion: "2",
+		Ref:             refPtr(resourcemodel.NewResourceRef("c1", "rbac.authorization.k8s.io", "v1", "ClusterRole", "clusterroles", "", "admin", "uid-admin")),
+	}
+	manager.broadcast(domainClusterRBAC, []string{""}, update)
+	require.Equal(t, domainClusterRBAC, requireNextUpdate(t, sub).Domain)
+
+	_, err = service.Build(context.Background(), domainClusterRBAC, "c1|")
+	require.NoError(t, err)
+	require.Equal(t, 2, builds, "signal delivery must invalidate the pre-change snapshot")
+}
+
 func TestManagerEvictsResumeBufferWhenLastSubscriberCancels(t *testing.T) {
 	manager := &Manager{
 		clusterMeta: snapshot.ClusterMeta{ClusterID: "c1", ClusterName: "cluster"},
@@ -707,12 +755,10 @@ func TestManagerCustomUpdateInvalidatesCache(t *testing.T) {
 	require.NoError(t, err)
 
 	var called bool
-	var gotKind, gotNamespace, gotName string
-	manager.SetCustomResourceCacheInvalidator(func(kind, namespace, name string) {
+	var gotRef resourcemodel.ResourceRef
+	manager.SetCustomResourceCacheInvalidator(func(ref resourcemodel.ResourceRef) {
 		called = true
-		gotKind = kind
-		gotNamespace = namespace
-		gotName = name
+		gotRef = ref
 	})
 
 	resource := &unstructured.Unstructured{}
@@ -732,9 +778,9 @@ func TestManagerCustomUpdateInvalidatesCache(t *testing.T) {
 	manager.handleCustomResource(resource, MessageTypeModified, info)
 
 	require.True(t, called)
-	require.Equal(t, "Widget", gotKind)
-	require.Equal(t, "default", gotNamespace)
-	require.Equal(t, "widget-1", gotName)
+	require.Equal(t, resourcemodel.NewResourceRef(
+		"c1", "example.com", "v1", "Widget", "widgets", "default", "widget-1", "",
+	), gotRef)
 }
 
 func TestManagerSkipsCustomInformerForFirstClassGatewayCRD(t *testing.T) {

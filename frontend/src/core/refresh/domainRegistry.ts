@@ -63,6 +63,7 @@ export type RefreshCachePolicy =
   | 'snapshot-cache-with-merge'
   | 'snapshot-cache-bypass'
   | 'snapshot-cache-plus-provider-cache'
+  | 'provider-cache'
   | 'external-catalog-cache'
   | 'external-catalog-cache-with-merge'
   | 'stream-only';

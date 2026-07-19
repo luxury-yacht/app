@@ -26,7 +26,13 @@ then stored by the frontend under cluster-aware scopes.
   and permission behavior.
 - Snapshot caching is allowed only when the data can tolerate it. Live
   app-managed state such as node maintenance must bypass stale cache and
-  singleflight paths.
+  singleflight paths. Object details bypass the snapshot cache and use only the
+  provider response cache, which informer/ingest events invalidate by exact
+  object identity (including Pods).
+- A user-initiated refresh of a snapshot domain enqueues the backend manual job,
+  waits for it to finish, then reads the snapshot without an HTTP validator.
+  Resource-stream table domains use their active stream's `refreshOnce` path
+  instead of enqueueing a duplicate snapshot job.
 - Permission-denied domains should surface diagnostics and stable denied
   payloads instead of disappearing. The frontend checks a denied scope ONCE per
   session (typed 403 → `permissionDenied` scoped state, background refetches

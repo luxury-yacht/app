@@ -57,6 +57,7 @@ func TestObjectEventsNotifierInvalidatesCacheThenBroadcastsDoorbell(t *testing.T
 		},
 	}))
 	service := snapshot.NewService(reg, nil, snapshot.ClusterMeta{ClusterID: "c1"})
+	manager.SetSnapshotDomainInvalidator(service.InvalidateDomainCache)
 	_, err = service.Build(context.Background(), "object-events", "c1|team-a:/v1:Pod:web-1")
 	require.NoError(t, err)
 	_, err = service.Build(context.Background(), "object-events", "c1|team-a:/v1:Pod:web-1")
@@ -65,7 +66,7 @@ func TestObjectEventsNotifierInvalidatesCacheThenBroadcastsDoorbell(t *testing.T
 
 	notifier := snapshot.NewObjectEventsChangeNotifier()
 	defer notifier.Stop()
-	wireObjectEventsDoorbell(service, notifier, manager)
+	wireObjectEventsDoorbell(notifier, manager)
 
 	notifier.EventChanged(&corev1.Event{
 		ObjectMeta: metav1.ObjectMeta{Namespace: "team-a", Name: "web-1.evt"},

@@ -223,7 +223,12 @@ type Manager struct {
 	stopped bool
 	// customInvalidator evicts cached YAML/details when custom resources change.
 	customInvalidatorMu sync.RWMutex
-	customInvalidator   func(kind, namespace, name string)
+	customInvalidator   func(ref resourcemodel.ResourceRef)
+	// snapshotDomainInvalidator evicts query snapshots before a change signal is
+	// delivered. A healthy stream suppresses polling, so serving the pre-change
+	// snapshot from cache after this one-shot signal would leave the query stale.
+	snapshotDomainInvalidatorMu sync.RWMutex
+	snapshotDomainInvalidator   func(domain string)
 
 	mu          sync.RWMutex
 	subscribers map[string]map[string]map[uint64]*subscription
@@ -335,7 +340,7 @@ func (m *Manager) logDebug(message string) {
 }
 
 // SetCustomResourceCacheInvalidator registers a cache eviction callback for custom resources.
-func (m *Manager) SetCustomResourceCacheInvalidator(invalidator func(kind, namespace, name string)) {
+func (m *Manager) SetCustomResourceCacheInvalidator(invalidator func(ref resourcemodel.ResourceRef)) {
 	if m == nil {
 		return
 	}
@@ -344,14 +349,37 @@ func (m *Manager) SetCustomResourceCacheInvalidator(invalidator func(kind, names
 	m.customInvalidatorMu.Unlock()
 }
 
-func (m *Manager) invalidateCustomResourceCache(kind, namespace, name string) {
+// SetSnapshotDomainInvalidator installs the per-cluster snapshot-cache eviction
+// callback used by every resource-stream signal producer.
+func (m *Manager) SetSnapshotDomainInvalidator(invalidator func(domain string)) {
+	if m == nil {
+		return
+	}
+	m.snapshotDomainInvalidatorMu.Lock()
+	m.snapshotDomainInvalidator = invalidator
+	m.snapshotDomainInvalidatorMu.Unlock()
+}
+
+func (m *Manager) invalidateSnapshotDomain(domain string) {
+	if m == nil {
+		return
+	}
+	m.snapshotDomainInvalidatorMu.RLock()
+	invalidator := m.snapshotDomainInvalidator
+	m.snapshotDomainInvalidatorMu.RUnlock()
+	if invalidator != nil {
+		invalidator(domain)
+	}
+}
+
+func (m *Manager) invalidateCustomResourceCache(ref resourcemodel.ResourceRef) {
 	m.customInvalidatorMu.RLock()
 	invalidator := m.customInvalidator
 	m.customInvalidatorMu.RUnlock()
 	if invalidator == nil {
 		return
 	}
-	invalidator(kind, namespace, name)
+	invalidator(ref)
 }
 
 func (m *Manager) initCustomResourceInformers(factory *informer.Factory) {
@@ -579,12 +607,12 @@ func (m *Manager) handleCustomResource(obj interface{}, updateType MessageType, 
 	if domain == "" {
 		domain = domainNamespaceCustom
 	}
-	if kind != "" && resource.GetName() != "" {
+	ref := m.resourceRefForObject(resource, info.gvr.Group, info.gvr.Version, kind, info.gvr.Resource)
+	if ref.Kind != "" && ref.Name != "" {
 		// Invalidate cached YAML/details on custom resource updates.
-		m.invalidateCustomResourceCache(kind, resource.GetNamespace(), resource.GetName())
+		m.invalidateCustomResourceCache(ref)
 	}
 
-	ref := m.resourceRefForObject(resource, info.gvr.Group, info.gvr.Version, kind, info.gvr.Resource)
 	var row interface{}
 	if updateType != MessageTypeDeleted {
 		// The CRD name is the canonical Kubernetes form `<plural>.<group>`,
@@ -1094,6 +1122,7 @@ func (m *Manager) subscribedScopes(domain string) []string {
 }
 
 func (m *Manager) broadcast(domain string, scopes []string, update Update) {
+	m.invalidateSnapshotDomain(domain)
 	m.streamHub().broadcast(domain, scopes, update)
 }
 

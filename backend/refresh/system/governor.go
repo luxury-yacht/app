@@ -4,9 +4,12 @@ package system
 // governor to bound RAM when many clusters are open (see
 // docs/architecture/data-layer.md, "Lifecycle & governor").
 //
-//   - Foreground: the cluster the user is viewing — full ingestion + metrics poller.
-//   - Background: recently-viewed, kept warm (informers live, metrics poller paused),
-//     up to a small LRU budget so a tab-switch back is instant.
+//   - Foreground: the cluster the user is viewing — full ingestion.
+//   - Background: recently-viewed, kept warm with informers live, up to a small
+//     LRU budget so a tab-switch back is instant.
+//
+// Metrics demand is independent of governor tier and follows active frontend
+// leases for each cluster.
 //   - Cold: torn down, heap reclaimed; re-warmed (re-synced) when the user revisits.
 type ResourceTier int
 
@@ -73,10 +76,6 @@ type GovernorTransition struct {
 	// EnsureRunning is true when the cluster must be built+started if it is not
 	// already (Foreground and Background both require a live subsystem).
 	EnsureRunning bool
-	// MetricsActive is the demand-driven metrics poller state to apply once the
-	// subsystem is running: Foreground pins it active, Background lets it idle out.
-	// Only meaningful when EnsureRunning is true.
-	MetricsActive bool
 	// Teardown is true when the cluster must be torn down and its heap reclaimed
 	// (Cold). When Teardown is true, EnsureRunning is false.
 	Teardown bool
@@ -98,10 +97,8 @@ func PlanGovernorTransitions(lastApplied, desired map[string]ResourceTier) []Gov
 		switch tier {
 		case TierForeground:
 			t.EnsureRunning = true
-			t.MetricsActive = true
 		case TierBackground:
 			t.EnsureRunning = true
-			t.MetricsActive = false
 		default: // TierCold
 			t.Teardown = true
 		}

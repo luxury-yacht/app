@@ -5,6 +5,8 @@ import (
 	"sync/atomic"
 	"testing"
 	"time"
+
+	"github.com/stretchr/testify/require"
 )
 
 type fakeDemandPoller struct {
@@ -102,4 +104,35 @@ func TestDemandPollerStopsAfterIdle(t *testing.T) {
 	if err := poller.Stop(context.Background()); err != nil {
 		t.Fatalf("unexpected stop error: %v", err)
 	}
+}
+
+func TestDemandPollerStopBlocksProviderRestartsUntilExplicitStart(t *testing.T) {
+	fake := newFakeDemandPoller()
+	poller := NewDemandPoller(fake, fake, time.Minute)
+
+	require.NoError(t, poller.Start(context.Background()))
+	poller.LatestNodeUsage()
+	select {
+	case <-fake.startCh:
+	case <-time.After(100 * time.Millisecond):
+		t.Fatal("expected initial provider read to start polling")
+	}
+	require.NoError(t, poller.Stop(context.Background()))
+
+	poller.LatestPodUsage()
+	select {
+	case <-fake.startCh:
+		t.Fatal("provider read restarted polling after terminal stop")
+	case <-time.After(50 * time.Millisecond):
+	}
+	require.Equal(t, int32(1), atomic.LoadInt32(&fake.startCalls))
+
+	require.NoError(t, poller.Start(context.Background()))
+	poller.LatestPodUsage()
+	select {
+	case <-fake.startCh:
+	case <-time.After(100 * time.Millisecond):
+		t.Fatal("explicit Start did not re-arm demand polling")
+	}
+	require.Equal(t, int32(2), atomic.LoadInt32(&fake.startCalls))
 }

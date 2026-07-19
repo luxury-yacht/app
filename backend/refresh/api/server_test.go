@@ -6,6 +6,7 @@ import (
 	"errors"
 	"net/http"
 	"net/http/httptest"
+	"slices"
 	"strings"
 	"testing"
 	"time"
@@ -81,6 +82,14 @@ type fakeMetricsController struct {
 
 func (f *fakeMetricsController) SetMetricsActive(active bool) {
 	f.activeValues = append(f.activeValues, active)
+}
+
+type fakeClusterMetricsController struct {
+	clusterIDs [][]string
+}
+
+func (f *fakeClusterMetricsController) SetMetricsActiveForClusters(clusterIDs []string) {
+	f.clusterIDs = append(f.clusterIDs, append([]string(nil), clusterIDs...))
 }
 
 func TestSnapshotEndpoint(t *testing.T) {
@@ -435,6 +444,28 @@ func TestMetricsActiveEndpoint(t *testing.T) {
 	}
 	if len(controller.activeValues) != 1 || controller.activeValues[0] != true {
 		t.Fatalf("expected metrics controller to receive active=true")
+	}
+}
+
+func TestMetricsActiveEndpointRoutesClusterScopedDemand(t *testing.T) {
+	controller := &fakeClusterMetricsController{}
+	server := api.NewServer(snapshotService(), &fakeQueue{}, nil, controller)
+	mux := http.NewServeMux()
+	server.Register(mux)
+
+	req := httptest.NewRequest(http.MethodPost, "/api/v2/metrics/active", strings.NewReader(`{"clusterIds":["cluster-b","cluster-a"]}`))
+	req.Header.Set("Content-Type", "application/json")
+	rr := httptest.NewRecorder()
+	mux.ServeHTTP(rr, req)
+
+	if rr.Code != http.StatusNoContent {
+		t.Fatalf("expected status 204 got %d", rr.Code)
+	}
+	if len(controller.clusterIDs) != 1 {
+		t.Fatalf("expected one cluster-scoped demand update, got %#v", controller.clusterIDs)
+	}
+	if !slices.Equal(controller.clusterIDs[0], []string{"cluster-b", "cluster-a"}) {
+		t.Fatalf("unexpected cluster demand: %#v", controller.clusterIDs[0])
 	}
 }
 

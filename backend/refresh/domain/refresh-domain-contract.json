@@ -404,7 +404,7 @@
       "singleCluster": true,
       "payloadOwner": "backend/refresh/snapshot.ObjectDetailsBuilder",
       "refreshPayloadType": "ObjectDetailsSnapshotPayload",
-      "cachePolicy": "snapshot-cache-plus-provider-cache",
+      "cachePolicy": "provider-cache",
       "streamSemantics": ["snapshot-replace"],
       "coverageContract": "detail-payload-shape",
       "coverageStatus": "enforced"
@@ -1069,7 +1069,7 @@
         "refresherName": "object-map",
         "orchestrator": "snapshot",
         "diagnosticsStream": null,
-        "timing": { "interval": 2000, "cooldown": 1000, "timeout": 10 }
+        "timing": { "interval": 5000, "cooldown": 1000, "timeout": 10 }
       }
     },
     {

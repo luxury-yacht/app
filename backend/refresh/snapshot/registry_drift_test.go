@@ -84,8 +84,8 @@ func TestObjectMapGatewayCollectorKindsDoNotDrift(t *testing.T) {
 }
 
 func TestObjectMapEdgeKindsDoNotDrift(t *testing.T) {
-	// HorizontalPodAutoscaler contributes edges but has no Collector (its node is
-	// collected bespoke — no autoscaling/v2 shared informer), so it appears here
+	// HorizontalPodAutoscaler contributes edges but has no Collector (its v2 node
+	// is projected bespoke from the autoscaling/v1 informer), so it appears here
 	// but not in the collector guard.
 	assertKindSet(t, "object-map edges", []string{
 		"BackendTLSPolicy", "ClusterRole", "ClusterRoleBinding", "CronJob", "DaemonSet",
@@ -144,7 +144,7 @@ func TestStreamSummaryDomainKindsDoNotDrift(t *testing.T) {
 }
 
 func TestStreamCustomHandlerKindsDoNotDrift(t *testing.T) {
-	// HPA keeps a bespoke live-stream handler (no autoscaling/v2 shared informer). The
+	// HPA keeps a bespoke live-stream handler over its autoscaling/v1 informer. The
 	// snapshot side still streams it via the registry, so dropping the flag would
 	// silently double-stream it — guard the set. ConfigMap/Secret previously carried
 	// this flag only for their Helm-release refresh side-effect; that is now served by

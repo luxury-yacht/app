@@ -254,14 +254,9 @@ const gatewayGroup = "gateway.networking.k8s.io"
 //  1. No value. These objects are few and conditional — the whole factory only exists
 //     when Gateway-API is installed (the AnyPresent guard below). The typed cache is a
 //     handful of small objects, so a cut reclaims near-nothing.
-//  2. The typed objects are not actually eliminated by a cut. The object map collects
-//     every Gateway-API kind through its OWN independent live-LIST path
-//     (snapshot/object_map.go collectGatewayTyped over objectMapGatewayCollectors),
-//     which ignores the IngestOwned facet entirely — gateway kinds carry a
-//     GatewayCollector, not a Collector, so collectTyped's ingest-cut branch never
-//     touches them. Each object-map build therefore still materialises the full typed
-//     Gateway objects regardless of a cut, so the cut would not remove that footprint;
-//     it would only add a second copy of the list-decode path in an ingest reflector.
+//  2. The object map already reads these typed objects from this synchronized cache.
+//     Cutting them would require a second projection path without eliminating the
+//     cache used by the current graph collector.
 //
 // Cutting would add a bespoke-projector reflector and a parallel data path for no
 // memory win, so these kinds stay on the typed informer.

@@ -135,6 +135,82 @@ describe('fetchSnapshot', () => {
     });
   });
 
+  test('manual refresh waits for the uncached backend job before reading the snapshot', async () => {
+    mockGetBaseURL.mockResolvedValue('http://127.0.0.1:0/');
+    const snapshot = {
+      domain: 'object-details',
+      version: 2,
+      checksum: 'fresh',
+      generatedAt: 1700000000000,
+      sequence: 2,
+      payload: { details: { name: 'pod-a' } },
+      stats: { itemCount: 1, buildDurationMs: 1 },
+    };
+    const fetchMock = vi
+      .fn()
+      .mockResolvedValueOnce({
+        ok: true,
+        status: 202,
+        json: vi.fn().mockResolvedValue({ jobId: 'job-1', state: 'queued' }),
+      })
+      .mockResolvedValueOnce({
+        ok: true,
+        status: 200,
+        json: vi.fn().mockResolvedValue({ jobId: 'job-1', state: 'succeeded' }),
+      })
+      .mockResolvedValueOnce({
+        ok: true,
+        status: 200,
+        json: vi.fn().mockResolvedValue(snapshot),
+        headers: new Headers({ ETag: 'fresh' }),
+      });
+    globalThis.fetch = fetchMock;
+    const { fetchSnapshot } = await import('./client');
+
+    await expect(
+      fetchSnapshot('object-details', { scope: 'cluster-a|object', manual: true })
+    ).resolves.toMatchObject({ snapshot, notModified: false });
+
+    expect(fetchMock.mock.calls[0]).toEqual([
+      'http://127.0.0.1:0/api/v2/refresh/object-details',
+      expect.objectContaining({
+        method: 'POST',
+        body: JSON.stringify({ scope: 'cluster-a|object', reason: 'user' }),
+      }),
+    ]);
+    expect(fetchMock.mock.calls[1][0]).toBe('http://127.0.0.1:0/api/v2/jobs/job-1');
+    expect(fetchMock.mock.calls[2][0]).toBe(
+      'http://127.0.0.1:0/api/v2/snapshots/object-details?scope=cluster-a%7Cobject'
+    );
+  });
+
+  test('manual refresh stops when the backend job is cancelled', async () => {
+    mockGetBaseURL.mockResolvedValue('http://127.0.0.1:0/');
+    const fetchMock = vi
+      .fn()
+      .mockResolvedValueOnce({
+        ok: true,
+        status: 202,
+        json: vi.fn().mockResolvedValue({ jobId: 'job-1', state: 'queued' }),
+      })
+      .mockResolvedValueOnce({
+        ok: true,
+        status: 200,
+        json: vi.fn().mockResolvedValue({
+          jobId: 'job-1',
+          state: 'cancelled',
+          error: 'cluster closed',
+        }),
+      });
+    globalThis.fetch = fetchMock;
+    const { fetchSnapshot } = await import('./client');
+
+    await expect(
+      fetchSnapshot('object-details', { scope: 'cluster-a|object', manual: true })
+    ).rejects.toThrow('cluster closed');
+    expect(fetchMock).toHaveBeenCalledTimes(2);
+  });
+
   test('rejects a successful response without a snapshot payload', async () => {
     mockGetBaseURL.mockResolvedValue('http://127.0.0.1:0');
     globalThis.fetch = vi.fn().mockResolvedValue({

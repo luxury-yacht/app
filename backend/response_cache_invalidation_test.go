@@ -13,6 +13,14 @@ import (
 	"github.com/luxury-yacht/app/backend/objectcatalog"
 	"github.com/luxury-yacht/app/backend/refresh/informer"
 	"github.com/luxury-yacht/app/backend/refresh/permissions"
+	"github.com/luxury-yacht/app/backend/resourcekind"
+	"github.com/luxury-yacht/app/backend/resourcemodel"
+)
+
+var (
+	configMapCacheIdentity = resourcekind.Identity{Version: "v1", Kind: "ConfigMap", Resource: "configmaps", Namespaced: true}
+	secretCacheIdentity    = resourcekind.Identity{Version: "v1", Kind: "Secret", Resource: "secrets", Namespaced: true}
+	podCacheIdentity       = resourcekind.Identity{Version: "v1", Kind: "Pod", Resource: "pods", Namespaced: true}
 )
 
 func TestInvalidateResponseCacheForObjectEvictsDetailAndYAML(t *testing.T) {
@@ -30,7 +38,7 @@ func TestInvalidateResponseCacheForObjectEvictsDetailAndYAML(t *testing.T) {
 	detailKey := objectDetailCacheKey("ConfigMap", "default", "demo")
 	app.responseCacheStore(selectionKey, detailKey, "detail")
 
-	app.invalidateResponseCacheForObject(selectionKey, "ConfigMap", configMap)
+	app.invalidateResponseCacheForObject(selectionKey, configMapCacheIdentity, configMap)
 
 	if _, ok := app.responseCacheLookup(selectionKey, detailKey); ok {
 		t.Fatalf("expected detail cache entry to be evicted")
@@ -55,7 +63,9 @@ func TestInvalidateResponseCacheEvictsHeaderMetadata(t *testing.T) {
 	app.responseCacheStore(selectionKey, headerKey, "header")
 
 	// The ingest Catalog sink evicts by kind/namespace/name on every object change.
-	app.invalidateResponseCacheForResource(selectionKey, "Deployment", "default", "demo")
+	app.invalidateResponseCacheForResource(selectionKey, resourcemodel.NewResourceRef(
+		"cluster-a", "apps", "v1", "Deployment", "deployments", "default", "demo", "",
+	))
 
 	if _, ok := app.responseCacheLookup(selectionKey, detailKey); ok {
 		t.Fatalf("expected detail cache entry to be evicted")
@@ -86,7 +96,7 @@ func TestInvalidateResponseCacheForObjectEvictsHelmCaches(t *testing.T) {
 	app.responseCacheStore(selectionKey, manifestKey, "manifest")
 	app.responseCacheStore(selectionKey, valuesKey, "values")
 
-	app.invalidateResponseCacheForObject(selectionKey, "Secret", secret)
+	app.invalidateResponseCacheForObject(selectionKey, secretCacheIdentity, secret)
 
 	if _, ok := app.responseCacheLookup(selectionKey, releaseKey); ok {
 		t.Fatalf("expected helm release cache entry to be evicted")
@@ -175,7 +185,7 @@ func TestInvalidateResponseCacheSkipsWarmupAddsForOldObjects(t *testing.T) {
 	}
 	app.invalidateResponseCacheForObjectEvent(
 		selectionKey,
-		"ConfigMap",
+		configMapCacheIdentity,
 		configMap,
 		responseCacheInvalidationAdd,
 		guard,
@@ -186,7 +196,7 @@ func TestInvalidateResponseCacheSkipsWarmupAddsForOldObjects(t *testing.T) {
 	}
 }
 
-func TestInvalidateResponseCacheSkipsKindsOnUpdate(t *testing.T) {
+func TestInvalidateResponseCacheEvictsPodDetailsOnUpdate(t *testing.T) {
 	app := NewApp()
 	app.responseCache = newResponseCache(time.Minute, 10)
 	selectionKey := "cluster-a"
@@ -207,14 +217,14 @@ func TestInvalidateResponseCacheSkipsKindsOnUpdate(t *testing.T) {
 	}
 	app.invalidateResponseCacheForObjectEvent(
 		selectionKey,
-		"Pod",
+		podCacheIdentity,
 		pod,
 		responseCacheInvalidationUpdate,
 		guard,
 	)
 
-	if _, ok := app.responseCacheLookup(selectionKey, detailKey); !ok {
-		t.Fatalf("expected detail cache entry to remain for skipped kinds")
+	if _, ok := app.responseCacheLookup(selectionKey, detailKey); ok {
+		t.Fatalf("expected pod detail cache entry to be evicted after an update")
 	}
 }
 
@@ -282,14 +292,20 @@ func TestIngestResponseCacheSinkEvictsOnUpsertAndDelete(t *testing.T) {
 
 	upsertKey := objectDetailCacheKey("ResourceQuota", "default", "rq-a")
 	app.responseCacheStore(selectionKey, upsertKey, "detail")
-	sink.Upsert(objectcatalog.Summary{Kind: "ResourceQuota", Namespace: "default", Name: "rq-a"})
+	sink.Upsert(objectcatalog.Summary{
+		ClusterID: "cluster-a", Version: "v1", Kind: "ResourceQuota", Resource: "resourcequotas",
+		Namespace: "default", Name: "rq-a",
+	})
 	if _, ok := app.responseCacheLookup(selectionKey, upsertKey); ok {
 		t.Fatalf("expected detail cache entry to be evicted on ingest Upsert")
 	}
 
 	deleteKey := objectDetailCacheKey("LimitRange", "default", "lr-b")
 	app.responseCacheStore(selectionKey, deleteKey, "detail")
-	sink.Delete(objectcatalog.Summary{Kind: "LimitRange", Namespace: "default", Name: "lr-b"})
+	sink.Delete(objectcatalog.Summary{
+		ClusterID: "cluster-a", Version: "v1", Kind: "LimitRange", Resource: "limitranges",
+		Namespace: "default", Name: "lr-b",
+	})
 	if _, ok := app.responseCacheLookup(selectionKey, deleteKey); ok {
 		t.Fatalf("expected detail cache entry to be evicted on ingest Delete")
 	}

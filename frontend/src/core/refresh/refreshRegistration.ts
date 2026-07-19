@@ -19,6 +19,9 @@ export type DomainRegistration<K extends RefreshDomain> = {
   refresherName: RefresherName;
   category: DomainCategory;
   streaming?: StreamingRegistration;
+  // False when a feature owns a scope-specific scheduler with a different
+  // cadence (object-details uses one refresher per open panel).
+  scheduled?: boolean;
 };
 
 export type RefreshDomainRegistrar = {

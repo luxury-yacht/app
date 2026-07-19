@@ -608,10 +608,9 @@ func domainRegistrations(deps registrationDeps) []domainRegistration {
 		directRegistration("object-map", func() error {
 			return snapshot.RegisterObjectMapDomain(
 				deps.registry,
-				deps.cfg.KubernetesClient,
 				deps.informerFactory.SharedInformerFactory(),
 				deps.informerFactory,
-				deps.cfg.GatewayClient,
+				deps.informerFactory.GatewayInformerFactory(),
 				deps.cfg.GatewayAPIPresence,
 				deps.cfg.ObjectCatalogService,
 				deps.ingestManager,

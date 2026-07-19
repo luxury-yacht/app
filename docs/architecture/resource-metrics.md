@@ -63,9 +63,12 @@ polls stay on even while its stream is healthy (descriptor
 successful collections and would otherwise freeze the overview's
 object-derived counts on metrics-less clusters.
 
-Backend metrics-poller demand is any active lease on `cluster-overview`,
-`namespaces`, `nodes`, `pods`, or `namespace-workloads`
-(`frontend/src/core/refresh/orchestrator.ts` `isMetricsDemandActive`).
+Backend metrics-poller demand is routed by cluster ID from active leases on
+`cluster-overview`, `namespaces`, `nodes`, `pods`, or `namespace-workloads`.
+The aggregate controller applies that set to the matching per-cluster pollers
+and preserves it when a subsystem is replaced
+(`frontend/src/core/refresh/orchestrator.ts` `metricsDemandClusterIds`,
+`backend/refresh_aggregate_metrics.go`).
 
 ## Design history and trade-offs
 

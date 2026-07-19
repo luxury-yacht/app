@@ -3,15 +3,15 @@ package snapshot
 import (
 	"context"
 	"strings"
-	"sync"
 	"testing"
 	"time"
 
 	"github.com/luxury-yacht/app/backend/kind/objectmapnode"
 	"github.com/luxury-yacht/app/backend/objectcatalog"
 
+	"github.com/stretchr/testify/require"
 	appsv1 "k8s.io/api/apps/v1"
-	autoscalingv2 "k8s.io/api/autoscaling/v2"
+	autoscalingv1 "k8s.io/api/autoscaling/v1"
 	batchv1 "k8s.io/api/batch/v1"
 	corev1 "k8s.io/api/core/v1"
 	discoveryv1 "k8s.io/api/discovery/v1"
@@ -32,6 +32,7 @@ import (
 	k8stesting "k8s.io/client-go/testing"
 	gatewayv1 "sigs.k8s.io/gateway-api/apis/v1"
 	gatewayfake "sigs.k8s.io/gateway-api/pkg/client/clientset/versioned/fake"
+	gatewayinformers "sigs.k8s.io/gateway-api/pkg/client/informers/externalversions"
 )
 
 // allowAllPermissions satisfies objectMapPermissionChecker for tests, where every
@@ -42,8 +43,7 @@ func (allowAllPermissions) CanListWatch(string, string) bool { return true }
 
 // newObjectMapTestBuilder builds an objectMapBuilder whose typed listers are backed
 // by a started+synced informer factory over the fake clientset, mirroring how
-// RegisterObjectMapDomain wires the production builder. HPA still reads live from
-// the client (the autoscaling/v2 hybrid path), so the same fake clientset is kept.
+// RegisterObjectMapDomain wires the production builder.
 func newObjectMapTestBuilder(t *testing.T, client kubernetes.Interface) *objectMapBuilder {
 	t.Helper()
 	shared := informers.NewSharedInformerFactory(client, 0)
@@ -70,6 +70,7 @@ func newObjectMapTestBuilder(t *testing.T, client kubernetes.Interface) *objectM
 	shared.Networking().V1().IngressClasses().Informer()
 	shared.Rbac().V1().ClusterRoles().Informer()
 	shared.Rbac().V1().ClusterRoleBindings().Informer()
+	shared.Autoscaling().V1().HorizontalPodAutoscalers().Informer()
 	stop := make(chan struct{})
 	t.Cleanup(func() { close(stop) })
 	shared.Start(stop)
@@ -80,7 +81,6 @@ func newObjectMapTestBuilder(t *testing.T, client kubernetes.Interface) *objectM
 	defer cancel()
 	shared.WaitForCacheSync(syncCtx.Done())
 	builder := &objectMapBuilder{
-		client:      client,
 		shared:      shared,
 		permissions: allowAllPermissions{},
 		// Ingest-owned (cut) kinds are no longer read from the shared listers; project
@@ -272,6 +272,28 @@ func TestObjectMapBuildsRecursiveCoreRelationships(t *testing.T) {
 	if snap.Domain != objectMapDomain || snap.Stats.ItemCount != len(payload.Nodes) || snap.Stats.Truncated {
 		t.Fatalf("unexpected snapshot stats: %#v", snap.Stats)
 	}
+}
+
+func TestObjectMapBuildDoesNotListHPAFromKubernetes(t *testing.T) {
+	client := fake.NewSimpleClientset(objectMapFixtureObjects()...)
+	builder := newObjectMapTestBuilder(t, client)
+	before := len(client.Actions())
+	ctx := WithClusterMeta(context.Background(), ClusterMeta{ClusterID: "cluster-a", ClusterName: "Cluster A"})
+
+	_, err := builder.Build(ctx, "default:apps/v1:Deployment:web?maxDepth=5&maxNodes=100")
+	require.NoError(t, err)
+	require.Len(t, client.Actions(), before, "object-map builds must read the existing HPA informer cache")
+}
+
+func TestObjectMapBuildsPrimaryV2HPASeedFromV1Informer(t *testing.T) {
+	client := fake.NewSimpleClientset(objectMapFixtureObjects()...)
+	builder := newObjectMapTestBuilder(t, client)
+	ctx := WithClusterMeta(context.Background(), ClusterMeta{ClusterID: "cluster-a", ClusterName: "Cluster A"})
+
+	snap, err := builder.Build(ctx, "default:autoscaling/v2:HorizontalPodAutoscaler:web?maxDepth=5&maxNodes=100")
+	require.NoError(t, err)
+	payload := snap.Payload.(ObjectMapSnapshotPayload)
+	assertEdge(t, payload, "HorizontalPodAutoscaler", "web", "Deployment", "web", "scales")
 }
 
 func TestObjectMapBuildsFromPodDisruptionBudget(t *testing.T) {
@@ -710,7 +732,7 @@ func TestObjectMapBuildsGatewayAPIRelationships(t *testing.T) {
 		t.Fatalf("gateway fixture did not seed fake client: count=%d err=%v", len(list.Items), err)
 	}
 	builder := newObjectMapTestBuilder(t, client)
-	builder.gatewayClient = gatewayClient
+	builder.gatewayShared = startObjectMapGatewayFactory(t, gatewayClient)
 	ctx := WithClusterMeta(context.Background(), ClusterMeta{ClusterID: "cluster-a", ClusterName: "Cluster A"})
 
 	snap, err := builder.Build(ctx, "default:gateway.networking.k8s.io/v1:Gateway:edge?maxDepth=5&maxNodes=100")
@@ -742,11 +764,39 @@ func TestObjectMapBuildsGatewayAPIRelationships(t *testing.T) {
 	}
 }
 
+func TestObjectMapBuildDoesNotListGatewayAPIFromKubernetes(t *testing.T) {
+	client := fake.NewSimpleClientset(serviceFixture("default", "web", "svc-web-uid", nil))
+	gatewayClient := newObjectMapGatewayClient(t)
+	builder := newObjectMapTestBuilder(t, client)
+	builder.gatewayShared = startObjectMapGatewayFactory(t, gatewayClient)
+	before := len(gatewayClient.Actions())
+	ctx := WithClusterMeta(context.Background(), ClusterMeta{ClusterID: "cluster-a", ClusterName: "Cluster A"})
+
+	_, err := builder.Build(ctx, "default:gateway.networking.k8s.io/v1:Gateway:edge?maxDepth=5&maxNodes=100")
+	require.NoError(t, err)
+	require.Len(t, gatewayClient.Actions(), before, "object-map builds must read the existing Gateway informer cache")
+}
+
+func TestObjectMapSkipsGatewayInformerWithoutPermission(t *testing.T) {
+	client := fake.NewSimpleClientset(serviceFixture("default", "web", "svc-web-uid", nil))
+	gatewayClient := newObjectMapGatewayClient(t)
+	builder := newObjectMapTestBuilder(t, client)
+	builder.gatewayShared = startObjectMapGatewayFactory(t, gatewayClient)
+	builder.permissions = denyPermissions{denied: map[string]bool{"gateways": true}}
+	ctx := WithClusterMeta(context.Background(), ClusterMeta{ClusterID: "cluster-a", ClusterName: "Cluster A"})
+
+	snap, err := builder.Build(ctx, "namespace:default?maxNodes=100")
+	require.NoError(t, err)
+	payload := snap.Payload.(ObjectMapSnapshotPayload)
+	require.Contains(t, payload.Warnings, "skipped gateways: insufficient permissions")
+	assertMissingNode(t, payload, "Gateway", "edge")
+}
+
 func TestObjectMapBuildsGatewayAPIPolicyAndGrantRelationships(t *testing.T) {
 	client := fake.NewSimpleClientset(serviceFixture("default", "web", "svc-web-uid", nil))
 	gatewayClient := newObjectMapGatewayClient(t)
 	builder := newObjectMapTestBuilder(t, client)
-	builder.gatewayClient = gatewayClient
+	builder.gatewayShared = startObjectMapGatewayFactory(t, gatewayClient)
 	ctx := WithClusterMeta(context.Background(), ClusterMeta{ClusterID: "cluster-a", ClusterName: "Cluster A"})
 
 	snap, err := builder.Build(ctx, "default:/v1:Service:web?maxDepth=3&maxNodes=100")
@@ -765,7 +815,7 @@ func TestObjectMapNamespaceGraphIncludesGatewayAPIResources(t *testing.T) {
 	client := fake.NewSimpleClientset(serviceFixture("default", "web", "svc-web-uid", nil))
 	gatewayClient := newObjectMapGatewayClient(t)
 	builder := newObjectMapTestBuilder(t, client)
-	builder.gatewayClient = gatewayClient
+	builder.gatewayShared = startObjectMapGatewayFactory(t, gatewayClient)
 	ctx := WithClusterMeta(context.Background(), ClusterMeta{ClusterID: "cluster-a", ClusterName: "Cluster A"})
 
 	snap, err := builder.Build(ctx, "namespace:default?maxNodes=100")
@@ -852,10 +902,10 @@ func objectMapFixtureObjects() []runtime.Object {
 		},
 	}
 	pv := &corev1.PersistentVolume{ObjectMeta: metav1.ObjectMeta{Name: "pv-data", UID: types.UID("pv-uid")}}
-	hpa := &autoscalingv2.HorizontalPodAutoscaler{
+	hpa := &autoscalingv1.HorizontalPodAutoscaler{
 		ObjectMeta: metav1.ObjectMeta{Name: "web", Namespace: "default", UID: types.UID("hpa-uid")},
-		Spec: autoscalingv2.HorizontalPodAutoscalerSpec{
-			ScaleTargetRef: autoscalingv2.CrossVersionObjectReference{APIVersion: "apps/v1", Kind: "Deployment", Name: "web"},
+		Spec: autoscalingv1.HorizontalPodAutoscalerSpec{
+			ScaleTargetRef: autoscalingv1.CrossVersionObjectReference{APIVersion: "apps/v1", Kind: "Deployment", Name: "web"},
 			MinReplicas:    int32Ptr(1),
 			MaxReplicas:    3,
 		},
@@ -1202,6 +1252,25 @@ func newObjectMapGatewayClient(t *testing.T) *gatewayfake.Clientset {
 	return client
 }
 
+func startObjectMapGatewayFactory(t *testing.T, client *gatewayfake.Clientset) gatewayinformers.SharedInformerFactory {
+	t.Helper()
+	factory := gatewayinformers.NewSharedInformerFactory(client, 0)
+	for _, collector := range objectMapGatewayCollectors {
+		generic, err := factory.ForResource(collector.Identity.GVR())
+		require.NoError(t, err)
+		generic.Informer()
+	}
+	stop := make(chan struct{})
+	t.Cleanup(func() { close(stop) })
+	factory.Start(stop)
+	syncCtx, cancel := context.WithTimeout(context.Background(), 10*time.Second)
+	defer cancel()
+	for _, synced := range factory.WaitForCacheSync(syncCtx.Done()) {
+		require.True(t, synced)
+	}
+	return factory
+}
+
 func podDisruptionBudgetFixture(namespace, name, uid string) *policyv1.PodDisruptionBudget {
 	minAvailable := intstr.FromInt32(1)
 	return &policyv1.PodDisruptionBudget{
@@ -1423,50 +1492,29 @@ func objectNamePtr(value string) *gatewayv1.ObjectName {
 	return &name
 }
 
-// Scoped clusters (docs/plans/namespace-scope.md): the object map's live-LIST
-// collectors run once per configured namespace and never cluster-wide — the
-// scoped identity could not perform that LIST. The fake clientset does not
-// enforce server-side namespace filtering, so the assertion is on the
-// namespaces REQUESTED (the contract this code owns).
-func TestObjectMapScopedGatewayCollectionListsOnlyScopeNamespaces(t *testing.T) {
+func TestObjectMapScopedGatewayCollectionFiltersInformerCache(t *testing.T) {
 	client := fake.NewSimpleClientset(serviceFixture("default", "web", "svc-web-uid", nil))
 	gatewayClient := newObjectMapGatewayClient(t)
-
-	var mu sync.Mutex
-	requested := map[string]map[string]bool{}
-	gatewayClient.PrependReactor("list", "*", func(action k8stesting.Action) (bool, runtime.Object, error) {
-		mu.Lock()
-		resource := action.GetResource().Resource
-		if requested[resource] == nil {
-			requested[resource] = map[string]bool{}
-		}
-		requested[resource][action.GetNamespace()] = true
-		mu.Unlock()
-		return false, nil, nil
+	gatewayClient.PrependReactor("list", "gateways", func(k8stesting.Action) (bool, runtime.Object, error) {
+		return true, &gatewayv1.GatewayList{Items: []gatewayv1.Gateway{
+			{
+				ObjectMeta: metav1.ObjectMeta{Name: "edge", Namespace: "default", UID: types.UID("gateway-edge-uid")},
+			},
+			{
+				ObjectMeta: metav1.ObjectMeta{Name: "outside", Namespace: "outside", UID: types.UID("gateway-outside-uid")},
+			},
+		}}, nil
 	})
 
 	builder := newObjectMapTestBuilder(t, client)
-	builder.gatewayClient = gatewayClient
+	builder.gatewayShared = startObjectMapGatewayFactory(t, gatewayClient)
 	builder.allowedNamespaces = []string{"default", "team-b"}
+	before := len(gatewayClient.Actions())
 	ctx := WithClusterMeta(context.Background(), ClusterMeta{ClusterID: "cluster-a", ClusterName: "Cluster A"})
-	if _, err := builder.Build(ctx, "default:gateway.networking.k8s.io/v1:Gateway:edge?maxDepth=5&maxNodes=100"); err != nil {
-		t.Fatalf("scoped build failed: %v", err)
-	}
-
-	for _, resource := range []string{"gateways", "httproutes", "tlsroutes", "grpcroutes"} {
-		got := requested[resource]
-		if got == nil {
-			t.Fatalf("no list recorded for %s", resource)
-		}
-		if got[""] {
-			t.Fatalf("%s was listed cluster-wide under a namespace scope: %v", resource, got)
-		}
-		if !got["default"] || !got["team-b"] {
-			t.Fatalf("%s must be listed in every scope namespace, got %v", resource, got)
-		}
-	}
-	// Cluster-scoped gateway kinds keep their single cluster-wide list.
-	if got := requested["gatewayclasses"]; got == nil || !got[""] || len(got) != 1 {
-		t.Fatalf("gatewayclasses must keep one cluster-wide list, got %v", got)
-	}
+	snap, err := builder.Build(ctx, "default:gateway.networking.k8s.io/v1:Gateway:edge?maxDepth=5&maxNodes=100")
+	require.NoError(t, err)
+	require.Len(t, gatewayClient.Actions(), before, "object-map builds must not list Gateway API resources")
+	payload := snap.Payload.(ObjectMapSnapshotPayload)
+	assertNode(t, payload, "Gateway", "edge")
+	assertMissingNode(t, payload, "Gateway", "outside")
 }

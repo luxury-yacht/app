@@ -93,7 +93,8 @@ assertion. Typed table payloads must embed the normalized query envelope
 
 `backend/refresh/snapshot/service.go`: singleflight per cache key; truncated
 and partial-batch snapshots are never cached; only final batches are. Doorbell
-domains invalidate their cache before broadcasting (fragility point 9.1).
+and resource-stream domains invalidate their cache in
+`resourcestream.Manager.broadcast` before signal delivery (fragility point 9.1).
 
 ## Frontend scheduling in one paragraph
 
@@ -133,10 +134,11 @@ checklist when touching anything they name.
    failure. See `docs/architecture/resource-metrics.md`.
 9. **Doorbell-snapshot domains** (`namespaces` object clock, `object-events`
    event clock, `cluster-overview` metric clock — poll-augmented):
-   1. **Invalidate before broadcast** (`wireNamespacesDoorbell`/
-      `wireObjectEventsDoorbell` → `InvalidateDomainCache`): the refetch lands
-      inside the 5s cache TTL; served from cache it applies the pre-change
-      snapshot forever. Tests wire through the same helpers.
+   1. **Invalidate before broadcast** (`resourcestream.Manager.broadcast` →
+      the subsystem's `SnapshotService.InvalidateDomainCache` callback): the
+      refetch lands inside the 5s cache TTL; served from cache it applies the
+      pre-change snapshot forever. The manager test pins this ordering for all
+      resource-stream signal producers.
    2. **Doorbell refetches carry `reason: 'stream-signal'`** or the
       skip-while-stream-healthy gate swallows them.
    3. **Key refetch identity on `signalVersions` only** (never folded
