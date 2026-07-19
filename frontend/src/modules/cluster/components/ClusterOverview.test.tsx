@@ -289,11 +289,6 @@ describe('ClusterOverview', () => {
     cleanupRoot = cleanup;
     await flushEffects();
 
-    expect(mockRefreshOrchestrator.fetchScopedDomain).toHaveBeenCalledWith(
-      'cluster-overview',
-      'cluster-1|',
-      expect.objectContaining({ isManual: false })
-    );
     expect(mockRefreshOrchestrator.setScopedDomainEnabled).toHaveBeenCalledWith(
       'cluster-overview',
       'cluster-1|',
@@ -302,6 +297,7 @@ describe('ClusterOverview', () => {
       // resets scoped state without it, blanking the overview per switch.
       { preserveState: true }
     );
+    expect(mockRefreshOrchestrator.fetchScopedDomain).not.toHaveBeenCalled();
     expect(container.querySelector('.cluster-overview')?.classList.contains('selectable')).toBe(
       true
     );
@@ -495,11 +491,43 @@ describe('ClusterOverview', () => {
       // resets scoped state without it, blanking the overview per switch.
       { preserveState: true }
     );
-    expect(mockRefreshOrchestrator.fetchScopedDomain).toHaveBeenCalledWith(
-      'cluster-overview',
-      'cluster-1|',
-      expect.objectContaining({ isManual: false })
-    );
+    expect(mockRefreshOrchestrator.fetchScopedDomain).not.toHaveBeenCalled();
+  });
+
+  it('repaints cached overview data on a cluster-tab switch without requesting a reload', async () => {
+    domainStateRef.current = createDomainState('ready', {
+      clusterId: 'cluster-1',
+      overview: {
+        ...EMPTY_OVERVIEW_DATA,
+        totalNodes: 3,
+      },
+    });
+    const { container, rerender, cleanup } = renderClusterOverview();
+    cleanupRoot = cleanup;
+    await flushEffects();
+    mockRefreshOrchestrator.fetchScopedDomain.mockClear();
+
+    kubeconfigStateRef.current = {
+      ...kubeconfigStateRef.current,
+      selectedKubeconfigs: ['cluster-1', 'cluster-2'],
+      selectedKubeconfig: 'cluster-2',
+      selectedClusterId: 'cluster-2',
+      selectedClusterName: 'cluster-2',
+      selectedClusterIds: ['cluster-1', 'cluster-2'],
+    };
+    domainStateRef.current = createDomainState('ready', {
+      clusterId: 'cluster-2',
+      overview: {
+        ...EMPTY_OVERVIEW_DATA,
+        totalNodes: 9,
+      },
+    });
+
+    rerender();
+    await flushEffects();
+
+    expect(statValueFor(container, 'total')).toBe('9');
+    expect(mockRefreshOrchestrator.fetchScopedDomain).not.toHaveBeenCalled();
   });
 
   it('stays empty and paused on a new cluster tab even if overview data exists for another cluster', async () => {
@@ -1257,7 +1285,7 @@ function statValueFor(container: HTMLElement, label: string): string {
 
 function createDomainState(
   status: 'loading' | 'idle' | 'ready' | 'updating' | 'error',
-  overrides: Partial<{ overview: ClusterOverviewPayload; error: string }> = {}
+  overrides: Partial<{ clusterId: string; overview: ClusterOverviewPayload; error: string }> = {}
 ): {
   status: 'loading' | 'idle' | 'ready' | 'updating' | 'error';
   data:
@@ -1271,7 +1299,7 @@ function createDomainState(
     }
     return {
       status,
-      data: { overview: overrides.overview },
+      data: { clusterId: overrides.clusterId, overview: overrides.overview },
       error: null,
     };
   }

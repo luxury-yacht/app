@@ -506,17 +506,13 @@ class RefreshManager {
       }
       return true;
     };
-    // Switching active clusters should refresh the active view even if the view type is unchanged.
-    const clusterChanged = previous.selectedClusterId !== current.selectedClusterId;
     const connectedClusterSelectionChanged = !hasSameClusterSelection(
       previous.allConnectedClusterIds ?? previous.selectedClusterIds,
       current.allConnectedClusterIds ?? current.selectedClusterIds
     );
-    const connectedClusterIds = normalizeClusterIds(
-      current.allConnectedClusterIds ?? current.selectedClusterIds
-    );
-    const backgroundRefreshCoversTabs =
-      Boolean(current.backgroundRefreshEnabled) && connectedClusterIds.length > 1;
+    // Foreground identity is intentionally absent from this decision. Switching
+    // an already-open tab retains its cluster-scoped state; the mounted scope's
+    // stream lifecycle reconciles only when that scope has no snapshot yet.
 
     // Namespace scope changes include the cluster identity tied to the selection.
     const namespaceChanged =
@@ -543,16 +539,6 @@ class RefreshManager {
       }
     }
 
-    // Avoid forced refreshes on cluster switches when background refresh already covers open tabs.
-    if (clusterChanged && current.currentView === 'cluster' && !backgroundRefreshCoversTabs) {
-      const clusterRefresher = current.activeClusterView
-        ? clusterViewToRefresher[current.activeClusterView]
-        : null;
-      if (clusterRefresher) {
-        targets.add(clusterRefresher);
-      }
-    }
-
     if (connectedClusterSelectionChanged && current.currentView === 'cluster') {
       const clusterRefresher = current.activeClusterView
         ? clusterViewToRefresher[current.activeClusterView]
@@ -560,10 +546,6 @@ class RefreshManager {
       if (clusterRefresher) {
         targets.add(clusterRefresher);
       }
-    }
-
-    if (clusterChanged && current.currentView === 'overview' && !backgroundRefreshCoversTabs) {
-      targets.add(SYSTEM_REFRESHERS.clusterOverview);
     }
 
     return Array.from(targets);

@@ -403,6 +403,29 @@ describe('RefreshManager context updates', () => {
     expect(abortSpy).toHaveBeenCalledWith(NAME);
     expect(manualSpy).toHaveBeenCalledWith(expect.arrayContaining([NAME]));
   });
+
+  it('does not turn a foreground cluster-tab switch into a manual data refresh', async () => {
+    const manualSpy = vi.spyOn(refreshManager, 'triggerManualRefreshMany').mockResolvedValue();
+
+    refreshManager.updateContext({
+      currentView: 'cluster',
+      activeClusterView: 'config',
+      selectedClusterId: 'cluster-a',
+      selectedClusterIds: ['cluster-a'],
+      allConnectedClusterIds: ['cluster-a', 'cluster-b'],
+      backgroundRefreshEnabled: false,
+      objectPanel: { isOpen: false },
+    });
+    manualSpy.mockClear();
+
+    refreshManager.updateContext({
+      selectedClusterId: 'cluster-b',
+      selectedClusterIds: ['cluster-b'],
+    });
+
+    await Promise.resolve();
+    expect(manualSpy).not.toHaveBeenCalled();
+  });
 });
 
 describe('RefreshManager global controls', () => {
@@ -972,7 +995,7 @@ describe('RefreshManager guard paths and helpers', () => {
     expect(manualTargets).toEqual([]);
   });
 
-  it('refreshes cluster manual targets on tab switch when background refresh is disabled', () => {
+  it('does not create cluster manual targets from a tab switch when background refresh is disabled', () => {
     const previous: RefreshContext = {
       currentView: 'cluster',
       activeClusterView: 'config',
@@ -990,7 +1013,7 @@ describe('RefreshManager guard paths and helpers', () => {
 
     const manualTargets = unsafeRefreshManager.getManualRefreshTargets(previous, current);
 
-    expect(manualTargets).toEqual(['cluster-config']);
+    expect(manualTargets).toEqual([]);
   });
 
   it('refreshes the active cluster view when the selected cluster set changes', () => {

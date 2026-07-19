@@ -52,5 +52,7 @@
 
 ### Fixed
 
+- Kept cluster-scoped data in place when switching open cluster tabs instead of
+  triggering a manual refresh or racing the backend foreground re-warm.
 - Refreshed YAML and object maps when versionless snapshot payloads change, so
   deleted or updated objects no longer remain visible from a stale response.

@@ -22,7 +22,7 @@ import {
   formatMemoryValue,
 } from '@shared/utils/resourceCalculations';
 import React, { useCallback, useEffect, useMemo, useState } from 'react';
-import { requestRefreshDomain, setRefreshDomainEnabled } from '@/core/data-access';
+import { setRefreshDomainEnabled } from '@/core/data-access';
 import { eventBus } from '@/core/events';
 import { useRefreshScopedDomain } from '@/core/refresh';
 import {
@@ -330,18 +330,6 @@ const ClusterOverview: React.FC<ClusterOverviewProps> = ({ clusterContext }) => 
         enabled: canActivateOverviewRefresh,
         preserveState: true,
       });
-      if (!canActivateOverviewRefresh) {
-        return;
-      }
-      requestRefreshDomain({
-        domain: 'cluster-overview',
-        scope: overviewScope,
-        reason: 'startup',
-      }).catch(() => {
-        setOverviewData(EMPTY_OVERVIEW);
-        setIsHydrated(false);
-        setIsSwitching(true);
-      });
     };
 
     // Clear local component state without touching the domain lifecycle.
@@ -369,15 +357,10 @@ const ClusterOverview: React.FC<ClusterOverviewProps> = ({ clusterContext }) => 
       const unsubChanged = eventBus.on('kubeconfig:changed', handleKubeconfigChanged);
 
       return () => {
-        clearLocalState();
         unsubChanging();
         unsubChanged();
       };
     }
-
-    return () => {
-      clearLocalState();
-    };
   }, [canActivateOverviewRefresh, overviewScope]);
 
   const handlePodStatusNavigate = useCallback(

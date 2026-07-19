@@ -16,24 +16,30 @@ import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { eventBus } from '@/core/events';
 import { KubeconfigProvider, useKubeconfig } from './KubeconfigContext';
 
-const { getKubeconfigsMock, getSelectedKubeconfigsMock, setSelectedKubeconfigsMock, mocks } =
-  vi.hoisted(() => ({
-    getKubeconfigsMock: vi.fn(),
-    getSelectedKubeconfigsMock: vi.fn(),
-    setSelectedKubeconfigsMock: vi.fn(),
-    mocks: {
-      refreshOrchestrator: {
-        updateContext: vi.fn(),
-      },
-      backgroundRefreshState: { enabled: true },
+const {
+  getKubeconfigsMock,
+  getSelectedKubeconfigsMock,
+  setSelectedKubeconfigsMock,
+  setVisibleClusterMock,
+  mocks,
+} = vi.hoisted(() => ({
+  getKubeconfigsMock: vi.fn(),
+  getSelectedKubeconfigsMock: vi.fn(),
+  setSelectedKubeconfigsMock: vi.fn(),
+  setVisibleClusterMock: vi.fn(),
+  mocks: {
+    refreshOrchestrator: {
+      updateContext: vi.fn(),
     },
-  }));
+    backgroundRefreshState: { enabled: true },
+  },
+}));
 
 vi.mock('@wailsjs/go/backend/App', () => ({
   GetKubeconfigs: () => getKubeconfigsMock(),
   GetSelectedKubeconfigs: () => getSelectedKubeconfigsMock(),
   SetSelectedKubeconfigs: (configs: string[]) => setSelectedKubeconfigsMock(configs),
-  SetVisibleCluster: () => Promise.resolve(),
+  SetVisibleCluster: (clusterId: string) => setVisibleClusterMock(clusterId),
 }));
 
 vi.mock('@/core/refresh', () => ({
@@ -97,6 +103,8 @@ describe('KubeconfigContext', () => {
     getSelectedKubeconfigsMock.mockReset();
     setSelectedKubeconfigsMock.mockReset();
     setSelectedKubeconfigsMock.mockResolvedValue(undefined);
+    setVisibleClusterMock.mockReset();
+    setVisibleClusterMock.mockResolvedValue(undefined);
     mocks.backgroundRefreshState.enabled = true;
     resetClusterTabOrderCacheForTesting();
   });
@@ -180,7 +188,7 @@ describe('KubeconfigContext', () => {
     unmount();
   });
 
-  it('updates cluster-data identity immediately when activating an already committed tab', async () => {
+  it('updates cluster-data identity after activating an already committed tab', async () => {
     const kubeconfigs: types.KubeconfigInfo[] = [
       {
         name: 'alpha',
@@ -210,9 +218,117 @@ describe('KubeconfigContext', () => {
       getContext().setActiveKubeconfig('/kube/beta:prod');
     });
 
+    await act(async () => {
+      await flushPromises();
+    });
+
     expect(getContext().selectedKubeconfig).toBe('/kube/beta:prod');
     expect(getContext().selectedClusterId).toBe('beta:prod');
     expect(getContext().selectedClusterIds).toEqual(['alpha:dev', 'beta:prod']);
+
+    unmount();
+  });
+
+  it('publishes a switched tab to refresh consumers only after backend foreground activation', async () => {
+    const kubeconfigs: types.KubeconfigInfo[] = [
+      {
+        name: 'alpha',
+        path: '/kube/alpha',
+        context: 'dev',
+        isDefault: false,
+        isCurrentContext: false,
+        invalid: false,
+        invalidReason: '',
+      },
+      {
+        name: 'beta',
+        path: '/kube/beta',
+        context: 'prod',
+        isDefault: false,
+        isCurrentContext: false,
+        invalid: false,
+        invalidReason: '',
+      },
+    ];
+    getKubeconfigsMock.mockResolvedValue(kubeconfigs);
+    getSelectedKubeconfigsMock.mockResolvedValue(['/kube/alpha:dev', '/kube/beta:prod']);
+
+    const { getContext, unmount } = await renderProvider();
+    mocks.refreshOrchestrator.updateContext.mockClear();
+    setVisibleClusterMock.mockClear();
+    let resolveActivation!: () => void;
+    setVisibleClusterMock.mockReturnValueOnce(
+      new Promise<void>((resolve) => {
+        resolveActivation = resolve;
+      })
+    );
+
+    act(() => {
+      getContext().setActiveKubeconfig('/kube/beta:prod');
+    });
+    await act(async () => {
+      await flushPromises();
+    });
+
+    expect(setVisibleClusterMock).toHaveBeenCalledWith('beta:prod');
+    expect(getContext().selectedKubeconfig).toBe('/kube/beta:prod');
+    expect(getContext().selectedClusterId).toBe('alpha:dev');
+    expect(mocks.refreshOrchestrator.updateContext).not.toHaveBeenCalled();
+
+    await act(async () => {
+      resolveActivation();
+      await flushPromises();
+    });
+
+    expect(mocks.refreshOrchestrator.updateContext).toHaveBeenLastCalledWith(
+      expect.objectContaining({
+        selectedClusterId: 'beta:prod',
+        selectedClusterIds: ['beta:prod'],
+        allConnectedClusterIds: ['alpha:dev', 'beta:prod'],
+      })
+    );
+
+    unmount();
+  });
+
+  it('restores the committed tab when backend foreground activation fails', async () => {
+    const kubeconfigs: types.KubeconfigInfo[] = [
+      {
+        name: 'alpha',
+        path: '/kube/alpha',
+        context: 'dev',
+        isDefault: false,
+        isCurrentContext: false,
+        invalid: false,
+        invalidReason: '',
+      },
+      {
+        name: 'beta',
+        path: '/kube/beta',
+        context: 'prod',
+        isDefault: false,
+        isCurrentContext: false,
+        invalid: false,
+        invalidReason: '',
+      },
+    ];
+    getKubeconfigsMock.mockResolvedValue(kubeconfigs);
+    getSelectedKubeconfigsMock.mockResolvedValue(['/kube/alpha:dev', '/kube/beta:prod']);
+
+    const { getContext, unmount } = await renderProvider();
+    mocks.refreshOrchestrator.updateContext.mockClear();
+    setVisibleClusterMock.mockRejectedValueOnce(new Error('binding unavailable'));
+
+    act(() => {
+      getContext().setActiveKubeconfig('/kube/beta:prod');
+    });
+    await act(async () => {
+      await flushPromises();
+    });
+
+    expect(getContext().selectedKubeconfig).toBe('/kube/alpha:dev');
+    expect(getContext().selectedClusterId).toBe('alpha:dev');
+    expect(mocks.refreshOrchestrator.updateContext).not.toHaveBeenCalled();
 
     unmount();
   });
@@ -400,7 +516,7 @@ describe('KubeconfigContext', () => {
     unmount();
   });
 
-  it('exposes the pending active tab identity while keeping refresh context committed until activation completes', async () => {
+  it('keeps cluster-data identity committed while exposing a pending active tab', async () => {
     const kubeconfigs: types.KubeconfigInfo[] = [
       {
         name: 'alpha',
@@ -440,8 +556,8 @@ describe('KubeconfigContext', () => {
 
     expect(getContext().selectedKubeconfig).toBe('/kube/beta:prod');
     expect(getContext().selectedKubeconfigs).toEqual(['/kube/alpha:dev', '/kube/beta:prod']);
-    expect(getContext().selectedClusterId).toBe('beta:prod');
-    expect(getContext().selectedClusterIds).toEqual(['alpha:dev', 'beta:prod']);
+    expect(getContext().selectedClusterId).toBe('alpha:dev');
+    expect(getContext().selectedClusterIds).toEqual(['alpha:dev']);
     expect(mocks.refreshOrchestrator.updateContext).toHaveBeenLastCalledWith({
       selectedClusterId: 'alpha:dev',
       selectedClusterName: 'dev',

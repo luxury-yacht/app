@@ -116,6 +116,7 @@ export const KubeconfigProvider: React.FC<KubeconfigProviderProps> = ({ children
   const committedSelectionsRef = useRef<string[]>([]);
   const committedActiveRef = useRef<string>('');
   const latestSelectionRequestIdRef = useRef(0);
+  const latestForegroundActivationRequestIdRef = useRef(0);
   // Prevent refresh context churn until the backend confirms selection updates.
   const selectionPendingRef = useRef(false);
 
@@ -147,13 +148,8 @@ export const KubeconfigProvider: React.FC<KubeconfigProviderProps> = ({ children
     return { id: `${filename}:${context}`, name: context };
   }, []);
 
-  // Public selection follows the active tab immediately; refresh context below
-  // stays on committed backend selections until cluster activation completes.
-  const selectedClusterMeta = useMemo(
-    () => resolveClusterMeta(selectedKubeconfig, kubeconfigs),
-    [resolveClusterMeta, selectedKubeconfig, kubeconfigs]
-  );
-
+  // The selection strings can move optimistically for tab chrome, while the
+  // cluster-data identity below remains committed to backend-ready state.
   const committedSelectedClusterMeta = useMemo(
     () => resolveClusterMeta(committedSelectedKubeconfig, kubeconfigs),
     [resolveClusterMeta, committedSelectedKubeconfig, kubeconfigs]
@@ -225,14 +221,6 @@ export const KubeconfigProvider: React.FC<KubeconfigProviderProps> = ({ children
     (meta: { id: string; name: string }, clusterIds: string[]) => {
       // Foreground view-specific domains only refresh for the active cluster.
       const foregroundClusterIds = meta.id ? [meta.id] : [];
-      // Tell the backend resource governor which cluster is now visible so it can
-      // keep that cluster (plus a small warm set) running fully and cool the rest
-      // to bound RAM. Fire-and-forget: tiering is best-effort orchestration.
-      if (meta.id) {
-        void SetVisibleCluster(meta.id).catch(() => {
-          // Governor signalling is non-critical; ignore transient binding errors.
-        });
-      }
       refreshOrchestrator.updateContext({
         selectedClusterId: meta.id || undefined,
         selectedClusterName: meta.name || undefined,
@@ -296,20 +284,6 @@ export const KubeconfigProvider: React.FC<KubeconfigProviderProps> = ({ children
       setKubeconfigsLoading(false);
     }
   }, [normalizeSelections]);
-
-  const buildClusterIdList = useCallback(
-    (selections: string[]) => {
-      const ids = new Set<string>();
-      selections.forEach((selection) => {
-        const meta = resolveClusterMeta(selection, kubeconfigsRef.current);
-        if (meta.id) {
-          ids.add(meta.id);
-        }
-      });
-      return Array.from(ids);
-    },
-    [resolveClusterMeta]
-  );
 
   const resolveNextActiveSelection = useCallback(
     (
@@ -381,9 +355,10 @@ export const KubeconfigProvider: React.FC<KubeconfigProviderProps> = ({ children
       const shouldEmitChanged = !willBeEmpty && wasEmpty;
       const shouldEmitSelectionChanged = selectionChanged && !willBeEmpty;
       const nextMeta = resolveClusterMeta(nextActive, kubeconfigsRef.current);
-      const nextClusterIds = buildClusterIdList(normalizedSelections);
 
       try {
+        // Any selection-set mutation supersedes an in-flight tab-only activation.
+        latestForegroundActivationRequestIdRef.current += 1;
         selectionPendingRef.current = true;
         // Keep refs in sync immediately so superseding requests read the latest state.
         selectedKubeconfigsRef.current = normalizedSelections;
@@ -408,6 +383,16 @@ export const KubeconfigProvider: React.FC<KubeconfigProviderProps> = ({ children
           return;
         }
 
+        // SetSelectedKubeconfigs makes the cluster open; SetVisibleCluster then
+        // completes any governor re-warm before its identity reaches data consumers.
+        if (nextMeta.id) {
+          await SetVisibleCluster(nextMeta.id);
+        }
+
+        if (requestId !== latestSelectionRequestIdRef.current) {
+          return;
+        }
+
         // Emit after backend updates to avoid refreshing with inactive clusters.
         if (shouldEmitSelectionChanged) {
           eventBus.emit('kubeconfig:selection-changed');
@@ -419,7 +404,6 @@ export const KubeconfigProvider: React.FC<KubeconfigProviderProps> = ({ children
         committedActiveRef.current = nextActive;
         setCommittedSelectedKubeconfigs(normalizedSelections);
         setCommittedSelectedKubeconfig(nextActive);
-        updateRefreshContext(nextMeta, nextClusterIds);
 
         // 4. Perform a manual refresh (will be triggered by kubeconfig:changed event).
         if (shouldEmitChanged) {
@@ -468,13 +452,7 @@ export const KubeconfigProvider: React.FC<KubeconfigProviderProps> = ({ children
         throw error;
       }
     },
-    [
-      buildClusterIdList,
-      normalizeSelections,
-      resolveClusterMeta,
-      resolveNextActiveSelection,
-      updateRefreshContext,
-    ]
+    [normalizeSelections, resolveClusterMeta, resolveNextActiveSelection]
   );
 
   const setSelectedKubeconfigs = useCallback(
@@ -557,11 +535,42 @@ export const KubeconfigProvider: React.FC<KubeconfigProviderProps> = ({ children
       selectedKubeconfigRef.current = config;
       setSelectedKubeconfigState(config);
       if (committedSelectionsRef.current.includes(config)) {
-        committedActiveRef.current = config;
-        setCommittedSelectedKubeconfig(config);
+        const activationRequestId = latestForegroundActivationRequestIdRef.current + 1;
+        latestForegroundActivationRequestIdRef.current = activationRequestId;
+        const meta = resolveClusterMeta(config, kubeconfigsRef.current);
+        void (async () => {
+          if (meta.id) {
+            try {
+              // A Cold cluster is rebuilt by this call. Do not expose its identity
+              // to refresh consumers until the backend has finished re-warming it.
+              await SetVisibleCluster(meta.id);
+            } catch {
+              // The backend method has no application-level error result. If the
+              // binding itself is temporarily unavailable, restore the committed
+              // tab and data identity instead of leaving the UI split across clusters.
+              if (
+                activationRequestId === latestForegroundActivationRequestIdRef.current &&
+                selectedKubeconfigRef.current === config
+              ) {
+                selectedKubeconfigRef.current = committedActiveRef.current;
+                setSelectedKubeconfigState(committedActiveRef.current);
+              }
+              return;
+            }
+          }
+          if (
+            activationRequestId !== latestForegroundActivationRequestIdRef.current ||
+            selectedKubeconfigRef.current !== config ||
+            !committedSelectionsRef.current.includes(config)
+          ) {
+            return;
+          }
+          committedActiveRef.current = config;
+          setCommittedSelectedKubeconfig(config);
+        })();
       }
     },
-    [selectedKubeconfig, selectedKubeconfigs]
+    [resolveClusterMeta, selectedKubeconfig, selectedKubeconfigs]
   );
 
   // Load kubeconfigs on mount
@@ -625,9 +634,12 @@ export const KubeconfigProvider: React.FC<KubeconfigProviderProps> = ({ children
       kubeconfigs,
       selectedKubeconfigs,
       selectedKubeconfig,
-      selectedClusterId: selectedClusterMeta.id,
-      selectedClusterName: selectedClusterMeta.name,
-      selectedClusterIds,
+      // Kubeconfig strings drive the optimistic tab chrome. Cluster-data identity
+      // stays on the backend-confirmed foreground/open set so a tab click cannot
+      // race reads against a governor re-warm or a selection mutation.
+      selectedClusterId: committedSelectedClusterMeta.id,
+      selectedClusterName: committedSelectedClusterMeta.name,
+      selectedClusterIds: committedSelectedClusterIds,
       kubeconfigsLoading,
       setSelectedKubeconfigs,
       openKubeconfig,
@@ -640,9 +652,9 @@ export const KubeconfigProvider: React.FC<KubeconfigProviderProps> = ({ children
       kubeconfigs,
       selectedKubeconfigs,
       selectedKubeconfig,
-      selectedClusterMeta.id,
-      selectedClusterMeta.name,
-      selectedClusterIds,
+      committedSelectedClusterMeta.id,
+      committedSelectedClusterMeta.name,
+      committedSelectedClusterIds,
       kubeconfigsLoading,
       setSelectedKubeconfigs,
       openKubeconfig,
