@@ -18,6 +18,23 @@
       "coverageContract": "snapshot-table-payload",
       "coverageStatus": "enforced"
     },
+    "namespace-metrics": {
+      "behaviorClass": "snapshot-table",
+      "scopeContract": {
+        "kind": "cluster",
+        "clusterPrefix": "required",
+        "parser": "backend/refresh/resourcestream/selector.go:ParseStreamSelector",
+        "frontendBuilder": "frontend/src/core/refresh/clusterScope.ts:buildClusterScope",
+        "acceptedEncodings": [""]
+      },
+      "singleCluster": true,
+      "payloadOwner": "backend/refresh/snapshot.NamespaceMetricsBuilder",
+      "refreshPayloadType": "NamespaceMetricsSnapshotPayload",
+      "cachePolicy": "snapshot-cache",
+      "streamSemantics": ["snapshot-replace", "change-signal"],
+      "coverageContract": "snapshot-table-payload",
+      "coverageStatus": "enforced"
+    },
     "cluster-overview": {
       "behaviorClass": "aggregate-snapshot",
       "scopeContract": {
@@ -734,6 +751,19 @@
         "orchestrator": "doorbell-snapshot",
         "diagnosticsStream": "resources",
         "timing": { "interval": 2000, "cooldown": 1000, "timeout": 10 },
+        "priority": 0
+      }
+    },
+    {
+      "domain": "namespace-metrics",
+      "category": "system",
+      "sourceClocks": ["metric"],
+      "backend": { "registration": "direct", "permission": "exempt", "resourceStream": false },
+      "frontend": {
+        "refresherName": "namespace-metrics",
+        "orchestrator": "doorbell-snapshot",
+        "diagnosticsStream": "resources",
+        "timing": { "interval": 5000, "cooldown": 1000, "timeout": 10 },
         "priority": 0
       }
     },

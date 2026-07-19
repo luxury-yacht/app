@@ -41,6 +41,8 @@ export interface RefreshContext {
   };
 }
 
+type RefreshInvocation = 'automatic' | 'foreground' | 'manual';
+
 export interface RefresherState {
   status: 'idle' | 'refreshing' | 'cooldown' | 'error' | 'paused' | 'disabled';
   lastRefreshTime: Date | null;
@@ -262,26 +264,26 @@ class RefreshManager {
     const previousContext = { ...this.context };
     this.context = { ...this.context, ...context };
 
-    const manualTargets = this.getManualRefreshTargets(previousContext, this.context);
+    const foregroundTargets = this.getForegroundRefreshTargets(previousContext, this.context);
     // Treat namespace cluster changes as namespace changes so refreshers re-scope correctly.
     const namespaceChanged =
       previousContext.selectedNamespace !== this.context.selectedNamespace ||
       previousContext.selectedNamespaceClusterId !== this.context.selectedNamespaceClusterId;
 
-    if (manualTargets.length > 0) {
+    if (foregroundTargets.length > 0) {
       if (namespaceChanged) {
-        manualTargets.forEach((name) => {
+        foregroundTargets.forEach((name) => {
           this.abortRefresher(name);
         });
       } else if (previousContext.currentView !== this.context.currentView) {
-        manualTargets
+        foregroundTargets
           .filter((name) => name.startsWith('namespace-'))
           .forEach((name) => {
             this.abortRefresher(name);
           });
       }
 
-      void this.triggerManualRefreshMany(manualTargets);
+      void this.triggerForegroundRefreshMany(foregroundTargets);
     }
   }
 
@@ -289,7 +291,7 @@ class RefreshManager {
    * Trigger a manual refresh
    */
   public async triggerManualRefresh(name: RefresherName): Promise<void> {
-    await this.refreshSingle(name, true);
+    await this.refreshSingle(name, 'manual');
   }
 
   public getRefresherInterval(name: RefresherName): number | null {
@@ -327,7 +329,7 @@ class RefreshManager {
     // Reset the cadence without forcing an immediate refresh.
     instance.intervalTimer = window.setInterval(() => {
       if (instance.state.status === 'idle') {
-        this.refreshSingle(name, false);
+        this.refreshSingle(name, 'automatic');
       }
     }, instance.config.interval);
 
@@ -340,7 +342,14 @@ class RefreshManager {
   public async triggerManualRefreshMany(names: RefresherName[]): Promise<void> {
     const uniqueNames = Array.from(new Set(names));
     await Promise.allSettled(
-      uniqueNames.map((refresherName) => this.refreshSingle(refresherName, true))
+      uniqueNames.map((refresherName) => this.refreshSingle(refresherName, 'manual'))
+    );
+  }
+
+  public async triggerForegroundRefreshMany(names: RefresherName[]): Promise<void> {
+    const uniqueNames = Array.from(new Set(names));
+    await Promise.allSettled(
+      uniqueNames.map((refresherName) => this.refreshSingle(refresherName, 'foreground'))
     );
   }
 
@@ -456,7 +465,7 @@ class RefreshManager {
     // Set up the interval
     instance.intervalTimer = window.setInterval(() => {
       if (instance.state.status === 'idle') {
-        this.refreshSingle(name, false);
+        this.refreshSingle(name, 'automatic');
       }
     }, instance.config.interval);
 
@@ -466,7 +475,7 @@ class RefreshManager {
     this.emitStateChange(name);
 
     if (!hasCompletedInitialRun && !instance.refreshPromise) {
-      void this.refreshSingle(name, false);
+      void this.refreshSingle(name, 'automatic');
     }
   }
 
@@ -486,7 +495,7 @@ class RefreshManager {
     this.emitStateChange(name);
   }
 
-  private getManualRefreshTargets(
+  private getForegroundRefreshTargets(
     previous: RefreshContext,
     current: RefreshContext
   ): RefresherName[] {
@@ -591,30 +600,33 @@ class RefreshManager {
   /**
    * Perform a single refresh
    */
-  private async refreshSingle(name: RefresherName, isManual: boolean): Promise<void> {
+  private async refreshSingle(name: RefresherName, invocation: RefreshInvocation): Promise<void> {
     const instance = this.refreshers.get(name);
     if (!instance) {
       return;
     }
 
-    if (!instance.isEnabled && !isManual) {
+    const isManual = invocation === 'manual';
+    const isForeground = invocation === 'foreground';
+
+    if (!instance.isEnabled && !isManual && !isForeground) {
       return;
     }
 
     // Don't refresh if globally paused (unless manual refresh)
-    if (this.isGloballyPaused && !isManual) {
+    if (this.isGloballyPaused && !isManual && !isForeground) {
       return;
     }
 
     // Don't refresh if individually paused (unless manual refresh)
-    if (instance.state.status === 'paused' && !isManual) {
+    if (instance.state.status === 'paused' && !isManual && !isForeground) {
       return;
     }
 
     // Handle concurrent refresh based on type
     if (instance.state.status === 'refreshing') {
-      if (isManual) {
-        // Manual can interrupt any refresh
+      if (isManual || isForeground) {
+        // A manual request or a newly visible context supersedes stale work.
         if (instance.abortController) {
           instance.abortController.abort();
           instance.abortController = undefined;
@@ -634,7 +646,7 @@ class RefreshManager {
     }
 
     // Don't start auto-refresh if in cooldown
-    if (!isManual && instance.state.status === 'cooldown') {
+    if (!isManual && !isForeground && instance.state.status === 'cooldown') {
       return;
     }
 
@@ -859,7 +871,7 @@ class RefreshManager {
         this.emitStateChange(name);
         if (hadError) {
           // Retry immediately after cooldown so errors don't stall until the next interval tick.
-          void this.refreshSingle(name, false);
+          void this.refreshSingle(name, 'automatic');
         }
       }
     }, cooldownMs);

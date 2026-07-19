@@ -180,6 +180,9 @@ Add this to `.claude/settings.local.json` so memories are stored in the project
   reading this file. It routes common tasks to the right skills, docs, code
   paths, and validation checks.
 - Start with `docs/README.md` when you are unsure which contract applies.
+- For refresh timing, retained-first rendering, foreground/background work,
+  streams, polling fallback, or metrics demand, start with
+  `docs/architecture/data-freshness.md`.
 - Durable architecture docs go in `docs/architecture`; frontend infrastructure
   docs go in `docs/frontend`; workflow-specific docs go in `docs/workflows`.
 - Phased implementation plans go in `docs/plans`; mark items ✅ as completed.

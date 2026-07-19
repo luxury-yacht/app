@@ -61,6 +61,7 @@ const EXPECTED_DOORBELL_DOMAINS: DoorbellDomain[] = [
   'cluster-events',
   'namespace-events',
   'namespaces',
+  'namespace-metrics',
   'object-events',
   'cluster-overview',
   'cluster-attention',
@@ -128,6 +129,7 @@ describe('resource stream domain descriptors', () => {
     expect(isSupportedDomain('catalog')).toBe(true);
     expect(isSupportedDomain('cluster-events')).toBe(true);
     expect(isSupportedDomain('namespace-events')).toBe(true);
+    expect(isSupportedDomain('namespace-metrics')).toBe(true);
 
     expect(normalizeResourceScope('catalog', '')).toBe('');
     expect(normalizeResourceScope('cluster-events', 'cluster')).toBe('');
@@ -137,6 +139,7 @@ describe('resource stream domain descriptors', () => {
     expect(domainSupportsSourceClock('catalog', 'catalog')).toBe(true);
     expect(domainSupportsSourceClock('cluster-events', 'event')).toBe(true);
     expect(domainSupportsSourceClock('namespace-events', 'event')).toBe(true);
+    expect(domainSupportsSourceClock('namespace-metrics', 'metric')).toBe(true);
     expect(domainSupportsSourceClock('catalog', 'object')).toBe(false);
     expect(domainSupportsSourceClock('cluster-attention', 'attention')).toBe(true);
   });

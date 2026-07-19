@@ -39,6 +39,7 @@ const CLUSTER_REFRESHERS = {
 
 const SYSTEM_REFRESHERS = {
   namespaces: 'namespaces',
+  namespaceMetrics: 'namespace-metrics',
   clusterOverview: 'cluster-overview',
   unifiedPods: 'unified-pods',
   objectDetails: 'object-details',

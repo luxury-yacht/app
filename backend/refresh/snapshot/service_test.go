@@ -314,6 +314,7 @@ func TestServiceDoesNotCacheMetricSourceDomains(t *testing.T) {
 	for _, domainName := range []string{
 		"pods",
 		"namespace-workloads",
+		"namespace-metrics",
 		"nodes",
 	} {
 		t.Run(domainName, func(t *testing.T) {

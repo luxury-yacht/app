@@ -11,7 +11,7 @@ import type { DomainPayloadMap, RefreshDomain } from '@/core/refresh/types';
 // 'stream-signal' marks a fetch triggered by a stream doorbell: auto-refresh
 // gating applies (paused means paused), but the orchestrator must not skip it
 // for a healthy stream — the signal is the stream announcing changed data.
-export type DataRequestReason = 'background' | 'startup' | 'user' | 'stream-signal';
+export type DataRequestReason = 'background' | 'startup' | 'foreground' | 'user' | 'stream-signal';
 export type DataAccessAdapter =
   | 'refresh-domain'
   | 'context-refresh'

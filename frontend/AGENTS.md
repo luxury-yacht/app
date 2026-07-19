@@ -14,7 +14,8 @@ Applies to React/TypeScript code under `frontend/`.
   `frontend/src/core/resource-metrics`; follow
   `docs/architecture/resource-metrics.md` before adding metric consumers.
 - Wire namespace/cluster data through the refresh orchestrator + diagnostics flow (`frontend/src/core/refresh`); no ad-hoc polling loops.
-  Follow `docs/architecture/refresh-system.md` and
+  Follow `docs/architecture/data-freshness.md`,
+  `docs/architecture/refresh-system.md`, and
   `docs/architecture/data-access.md`.
 - Treat backend `statusPresentation` and `ResourceLink.ref` as authoritative.
   Before adding frontend status styling, relationship navigation, or object

@@ -18,9 +18,9 @@ completed phase plans, or test lists that can be discovered with `rg`.
 | Question | Start here |
 | --- | --- |
 | How is cluster data isolated? | [architecture/multi-cluster.md](architecture/multi-cluster.md) |
+| When should retained data paint, refresh, stream, poll, or create background work? | [architecture/data-freshness.md](architecture/data-freshness.md) |
 | How do refresh domains, snapshots, streams, and scopes work? | [architecture/refresh-system.md](architecture/refresh-system.md) |
 | How does the backend store, ingest, and serve table data (store, ingest, governor, delivery)? | [architecture/data-layer.md](architecture/data-layer.md) |
-| How do query-backed resource-stream domains refetch from change signals? | [architecture/resource-stream-signals.md](architecture/resource-stream-signals.md) |
 | How should resource utilization metrics be read and refreshed? | [architecture/resource-metrics.md](architecture/resource-metrics.md) |
 | What owns object existence and GVK/GVR identity? | [architecture/catalog.md](architecture/catalog.md) |
 | What owns object refs, status, facts, and links? | [architecture/shared-resource-model.md](architecture/shared-resource-model.md) |

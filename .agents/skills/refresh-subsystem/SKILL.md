@@ -14,7 +14,7 @@ Architecture lives in the docs; read the one that owns your change first:
 | --- | --- |
 | Domain contract, scope rules, behavior classes, normalized query envelope | `docs/architecture/refresh-system.md` |
 | Store, ingest, governor/lifecycle, spill/Cold-serving, delivery | `docs/architecture/data-layer.md` |
-| Stream signal envelope, source clocks, signal-keying contract | `docs/architecture/resource-stream-signals.md` |
+| Retained-first activation, stream signals, source clocks, polling fallback | `docs/architecture/data-freshness.md` |
 | Serve-time metric join, metric doorbell, staleness/collecting states | `docs/architecture/resource-metrics.md` |
 | Multi-cluster identity and scope rules | `docs/architecture/multi-cluster.md` |
 
@@ -100,8 +100,9 @@ and resource-stream domains invalidate their cache in
 
 `RefreshManager.ts` runs refreshers `idle → refreshing → cooldown` with
 exponential backoff (capped 60s); callbacks via `Promise.allSettled`; context
-changes abort then re-trigger; global pause blocks automatic but not manual
-refresh; streams suspend on hidden tabs. The orchestrator
+changes abort then issue a foreground (non-manual) reconciliation; global pause
+blocks passive automatic work but not foreground or manual refresh; streams
+suspend when the app document is hidden. The orchestrator
 (`orchestrator.ts`) owns per-cluster runtimes: enabled scopes, in-flight
 dedupe, stream health gating, metrics demand.
 
@@ -126,14 +127,16 @@ checklist when touching anything they name.
    clears references. Cancel first or leak.
 8. **Metric doorbell chain** — poller collection observer
    (`system/manager.go`) → `BroadcastMetricsRefresh` → metric-clock domains
-   (projection descriptors + explicit `cluster-overview` fan-out) → contract
+   (projection descriptors + explicit `namespace-metrics` and
+   `cluster-overview` fan-out) → contract
    `metric` source clock → `signalVersions` advance → refetch. Severing any
    link silently freezes live usage between object events. The staleness
    banner deliberately rides OUTSIDE this chain (client-side timer at
    `collectedAt + staleAfterSeconds`) because the poller rings no doorbell on
    failure. See `docs/architecture/resource-metrics.md`.
-9. **Doorbell-snapshot domains** (`namespaces` object clock, `object-events`
-   event clock, `cluster-overview` metric clock — poll-augmented):
+9. **Doorbell-snapshot domains** (`namespaces` object clock,
+   `namespace-metrics` metric clock, `object-events` event clock,
+   `cluster-overview` metric clock — poll-augmented):
    1. **Invalidate before broadcast** (`resourcestream.Manager.broadcast` →
       the subsystem's `SnapshotService.InvalidateDomainCache` callback): the
       refetch lands inside the 5s cache TTL; served from cache it applies the

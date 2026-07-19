@@ -12,11 +12,9 @@ another cluster.
 - Do not infer a cluster from the active tab after data has crossed a boundary.
 - Treat the active tab as foreground selection only. Open inactive tabs are
   retained workspaces, not disposed views.
-- Switching among open cluster tabs publishes the new `clusterId` immediately,
-  so data consumers repaint that cluster's retained scoped snapshots without
-  waiting for backend governor re-warm. In parallel, foreground activation and
-  a refresh of the visible cluster scopes start immediately; refreshed
-  snapshots replace the retained data when they arrive.
+- Tab activation and retained/background refresh behavior follows the single
+  [data freshness contract](data-freshness.md); cluster selection must not add a
+  readiness delay or turn inactive tabs into producer demand.
 - Refresh domains are single-cluster. Cross-cluster summaries fan out over
   per-cluster state instead of inventing aggregate refresh scopes.
 - Cluster add, close, replace, and clear actions must go through the unified

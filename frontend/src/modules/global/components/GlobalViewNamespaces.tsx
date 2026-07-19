@@ -10,10 +10,17 @@ import { useKubeconfig } from '@modules/kubernetes/config/KubeconfigContext';
 import {
   isNamespaceRefreshAvailable,
   useNamespace,
+  useNamespaceMetricStatesByScope,
   useNamespaceStatesByScope,
 } from '@modules/namespace/contexts/NamespaceContext';
-import React, { useCallback, useMemo } from 'react';
-import type { NamespaceSnapshotPayload } from '@/core/refresh/types';
+import { joinNamespaceMetrics } from '@modules/namespace/contexts/namespaceMetrics';
+import React, { useCallback, useEffect, useEffectEvent, useMemo, useRef } from 'react';
+import { requestRefreshDomain, setRefreshDomainEnabled } from '@/core/data-access';
+import { useStreamSignalRefetch } from '@/core/refresh/hooks/useStreamSignalRefetch';
+import type {
+  NamespaceMetricsSnapshotPayload,
+  NamespaceSnapshotPayload,
+} from '@/core/refresh/types';
 import { GLOBAL_TABLE_OWNERS } from '../globalTableOwner';
 
 interface GlobalNamespaceTarget {
@@ -27,6 +34,7 @@ const GlobalViewNamespaces: React.FC = () => {
   const { getClusterState } = useClusterLifecycle();
   const { setSelectedNamespace } = useNamespace();
   const namespaceStatesByScope = useNamespaceStatesByScope();
+  const namespaceMetricStatesByScope = useNamespaceMetricStatesByScope();
   const { setClusterNavigationTarget, activateClusterWorkspace } = useViewState();
   const { setSidebarSelectionForCluster } = useSidebarState();
 
@@ -40,6 +48,64 @@ const GlobalViewNamespaces: React.FC = () => {
       }),
     [getClusterMeta, selectedKubeconfigs]
   );
+
+  const metricScopes = useMemo(
+    () =>
+      targets
+        .filter((target) => {
+          if (!isNamespaceRefreshAvailable(getClusterState(target.clusterId))) {
+            return false;
+          }
+          const data = namespaceStatesByScope[buildClusterScope(target.clusterId, '')]?.data as
+            | NamespaceSnapshotPayload
+            | null
+            | undefined;
+          return data?.clusterId === target.clusterId;
+        })
+        .map((target) => buildClusterScope(target.clusterId, '')),
+    [getClusterState, namespaceStatesByScope, targets]
+  );
+  useStreamSignalRefetch('namespace-metrics', metricScopes);
+
+  const leasedMetricScopesRef = useRef<Set<string>>(new Set());
+  useEffect(() => {
+    const nextScopes = new Set(metricScopes);
+    leasedMetricScopesRef.current.forEach((scope) => {
+      if (!nextScopes.has(scope)) {
+        setRefreshDomainEnabled({
+          domain: 'namespace-metrics',
+          scope,
+          enabled: false,
+          preserveState: true,
+        });
+      }
+    });
+    metricScopes.forEach((scope) => {
+      if (leasedMetricScopesRef.current.has(scope)) {
+        return;
+      }
+      setRefreshDomainEnabled({
+        domain: 'namespace-metrics',
+        scope,
+        enabled: true,
+        preserveState: true,
+      });
+      void requestRefreshDomain({ domain: 'namespace-metrics', scope, reason: 'foreground' });
+    });
+    leasedMetricScopesRef.current = nextScopes;
+  }, [metricScopes]);
+
+  const releaseMetricScopes = useEffectEvent(() => () => {
+    leasedMetricScopesRef.current.forEach((scope) => {
+      setRefreshDomainEnabled({
+        domain: 'namespace-metrics',
+        scope,
+        enabled: false,
+        preserveState: true,
+      });
+    });
+  });
+  useEffect(() => releaseMetricScopes(), []);
 
   const resolvedTargets = useMemo(
     () =>
@@ -57,15 +123,27 @@ const GlobalViewNamespaces: React.FC = () => {
   const rows = useMemo<NamespaceTableRow[]>(
     () =>
       resolvedTargets.flatMap(({ target, data }) =>
-        (data.namespaces ?? [])
+        joinNamespaceMetrics(
+          data.namespaces ?? [],
+          (
+            namespaceMetricStatesByScope[buildClusterScope(target.clusterId, '')]?.data as
+              | NamespaceMetricsSnapshotPayload
+              | null
+              | undefined
+          )?.namespaces
+        )
           .filter(
             (namespace) =>
               namespace.clusterId === target.clusterId &&
               namespace.ref.clusterId === target.clusterId
           )
-          .map((namespace) => projectNamespaceSummary(namespace, data.metricsState))
+          .map((namespace) => {
+            const metrics = namespaceMetricStatesByScope[buildClusterScope(target.clusterId, '')]
+              ?.data as NamespaceMetricsSnapshotPayload | null | undefined;
+            return projectNamespaceSummary(namespace, metrics?.metricsState ?? 'unavailable');
+          })
       ),
-    [resolvedTargets]
+    [namespaceMetricStatesByScope, resolvedTargets]
   );
 
   const targetByClusterId = useMemo(

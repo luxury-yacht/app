@@ -93,6 +93,7 @@ const state: RefreshStoreState = {
     // exist for type safety and are never read at runtime for scoped domains.
     'object-maintenance': createInitialDomainState(),
     namespaces: createInitialDomainState(),
+    'namespace-metrics': createInitialDomainState(),
     'cluster-overview': createInitialDomainState(),
     'cluster-attention': createInitialDomainState(),
     // Scoped domains use scopedDomains map below; these entries exist for type safety.

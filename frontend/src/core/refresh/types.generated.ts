@@ -829,6 +829,20 @@ export interface NamespaceHelmSummary {
   ageTimestamp?: number;
 }
 
+export interface NamespaceMetric {
+  ref: ResourceRef;
+  cpuUsageMilli?: number;
+  memoryUsageBytes?: number;
+}
+
+export interface NamespaceMetricsSnapshotPayload {
+  clusterId: string;
+  clusterName: string;
+  namespaces: Array<NamespaceMetric> | null;
+  metrics: PodMetricsInfo;
+  metricsState: NamespaceSignalState;
+}
+
 export interface NamespaceNetworkSnapshotPayload {
   clusterId: string;
   clusterName: string;
@@ -947,8 +961,6 @@ export interface NamespaceSnapshotPayload {
   clusterId: string;
   clusterName: string;
   namespaces: Array<NamespaceSummary> | null;
-  metrics: PodMetricsInfo;
-  metricsState: NamespaceSignalState;
 }
 
 export interface NamespaceStorageSnapshotPayload {
@@ -1010,10 +1022,8 @@ export interface NamespaceSummary {
   unhealthyWorkloads?: number;
   warningEvents?: number;
   warningEventsState: NamespaceSignalState;
-  cpuUsageMilli?: number;
   cpuRequestsMilli?: number;
   cpuLimitsMilli?: number;
-  memoryUsageBytes?: number;
   memoryRequestsBytes?: number;
   memoryLimitsBytes?: number;
   quotaCount?: number;
@@ -1671,6 +1681,7 @@ export type ClusterNodeRow = ClusterNodeSnapshotEntry;
 
 export const REFRESH_DOMAINS = [
   'namespaces',
+  'namespace-metrics',
   'cluster-overview',
   'cluster-attention',
   'catalog',
@@ -1929,6 +1940,7 @@ export function assertTelemetrySummary(value: unknown): asserts value is Telemet
 
 export interface BackendDomainPayloadMap {
   namespaces: NamespaceSnapshotPayload;
+  'namespace-metrics': NamespaceMetricsSnapshotPayload;
   'cluster-overview': ClusterOverviewSnapshotPayload;
   'cluster-attention': ClusterAttentionSnapshot;
   catalog: CatalogSnapshotPayload;

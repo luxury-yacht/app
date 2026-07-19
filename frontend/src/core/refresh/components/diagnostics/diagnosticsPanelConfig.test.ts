@@ -38,6 +38,7 @@ describe('diagnosticsPanelConfig domain behavior sets', () => {
       'namespace-custom',
       'namespace-events',
       'namespace-helm',
+      'namespace-metrics',
       'namespace-network',
       'namespace-quotas',
       'namespace-rbac',

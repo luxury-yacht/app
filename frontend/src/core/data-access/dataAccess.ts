@@ -26,7 +26,7 @@ import type {
 } from './types';
 
 const isReasonAllowedWhilePaused = (reason: DataRequestReason): boolean => {
-  return reason === 'user';
+  return reason === 'foreground' || reason === 'user';
 };
 
 export const isDataAccessBlocked = (

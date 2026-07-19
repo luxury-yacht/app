@@ -52,7 +52,8 @@ the docs own the architecture contracts, while this file points to the code.
 ## High-Risk Contracts
 
 - Multi-cluster behavior: `docs/architecture/multi-cluster.md`.
-- Refresh system: `docs/architecture/refresh-system.md`.
+- Freshness behavior: `docs/architecture/data-freshness.md`; refresh domain
+  implementation: `docs/architecture/refresh-system.md`.
 - Shared resource model: `docs/architecture/shared-resource-model.md`.
 - Object catalog: `docs/architecture/catalog.md`.
 - Frontend data access: `docs/architecture/data-access.md`.

@@ -274,6 +274,7 @@ func domainRegistrations(deps registrationDeps) []domainRegistration {
 		// the runtime policy exempted to match its permissionless data
 		// source.
 		namespacesRegistration(deps),
+		namespaceMetricsRegistration(deps),
 
 		// Cluster overview degrades per resource (issue #244): the informer path
 		// needs only the namespaces informer — nodes, pods, and the workload
@@ -718,7 +719,6 @@ func namespacesRegistration(deps registrationDeps) domainRegistration {
 			deps.registry,
 			deps.informerFactory.SharedInformerFactory(),
 			deps.ingestManager,
-			deps.metricsProvider,
 			deps.cfg.AllowedNamespaces,
 			deps.cfg.KubernetesClient,
 			eventsExpected,
@@ -749,6 +749,20 @@ func namespacesRegistration(deps registrationDeps) domainRegistration {
 		registerInformer: registerScopedOrUnscoped,
 		deniedReason:     "core/namespaces",
 	})
+}
+
+func namespaceMetricsRegistration(deps registrationDeps) domainRegistration {
+	return domainRegistration{
+		name: "namespace-metrics",
+		direct: func() error {
+			return snapshot.RegisterNamespaceMetricsDomain(
+				deps.registry,
+				deps.metricsProvider,
+				snapshot.ClusterMeta{ClusterID: deps.cfg.ClusterID, ClusterName: deps.cfg.ClusterName},
+			)
+		},
+		skipRuntimePolicy: true,
+	}
 }
 
 func listWatchRegistration(cfg listWatchDomainConfig) domainRegistration {

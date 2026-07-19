@@ -1,4 +1,5 @@
 import { namespaceAggregateUsageDisplay } from '@core/resource-metrics';
+import type { NamespaceSummaryWithMetrics } from '@modules/namespace/contexts/namespaceMetrics';
 import { useObjectPanel } from '@modules/object-panel/hooks/useObjectPanel';
 import { type BoundedRowsMode, boundedRowsSource } from '@modules/resource-grid/boundedRowsSource';
 import ResourceInventoryTable from '@modules/resource-grid/ResourceInventoryTable';
@@ -14,10 +15,10 @@ import {
   buildRequiredObjectReference,
 } from '@shared/utils/objectIdentity';
 import React, { useCallback, useMemo } from 'react';
-import type { NamespaceSignalState, NamespaceSummary } from '@/core/refresh/types';
+import type { NamespaceSignalState } from '@/core/refresh/types';
 import { useDefaultTablePageSize } from '@/hooks/useDefaultTablePageSize';
 
-export interface NamespaceTableRow extends NamespaceSummary {
+export interface NamespaceTableRow extends NamespaceSummaryWithMetrics {
   group: string;
   version: string;
   kind: string;
@@ -46,7 +47,7 @@ interface NamespaceSummaryTableProps {
 }
 
 export const projectNamespaceSummary = (
-  namespace: NamespaceSummary,
+  namespace: NamespaceSummaryWithMetrics,
   metricsState: NamespaceSignalState
 ): NamespaceTableRow => ({
   ...namespace,

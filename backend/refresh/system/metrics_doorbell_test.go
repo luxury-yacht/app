@@ -11,14 +11,6 @@ import (
 	"github.com/stretchr/testify/require"
 )
 
-type recordingMetricsChangeNotifier struct {
-	calls int
-}
-
-func (n *recordingMetricsChangeNotifier) MetricsChanged() {
-	n.calls++
-}
-
 // The metrics collection observer must fan a SourceMetric doorbell (versioned by
 // the collection revision, the same CollectedAt-nanos value the snapshot builders
 // stamp as SourceVersions["metric"]) to the metric-clock domains' subscribers —
@@ -42,13 +34,15 @@ func TestMetricsSignalObserverBroadcastsMetricDoorbells(t *testing.T) {
 	require.NoError(t, err)
 	nodesSub, err := manager.SubscribeSelector(nodesSelector)
 	require.NoError(t, err)
+	namespaceMetricsSelector, err := resourcestream.ParseStreamSelector("c1", "namespace-metrics", "cluster")
+	require.NoError(t, err)
+	namespaceMetricsSub, err := manager.SubscribeSelector(namespaceMetricsSelector)
+	require.NoError(t, err)
 
-	notifier := &recordingMetricsChangeNotifier{}
-	observer := metricsSignalObserver(manager, notifier)
+	observer := metricsSignalObserver(manager)
 
 	collectedAt := time.Unix(1700000000, 42)
 	observer(metrics.Metadata{CollectedAt: collectedAt})
-	require.Equal(t, 1, notifier.calls)
 
 	wantVersion := strconv.FormatInt(collectedAt.UnixNano(), 10)
 	podsUpdate := requireSystemDoorbellUpdate(t, podsSub)
@@ -63,9 +57,14 @@ func TestMetricsSignalObserverBroadcastsMetricDoorbells(t *testing.T) {
 	require.Equal(t, resourcestream.SourceMetric, nodesUpdate.Source)
 	require.Equal(t, wantVersion, nodesUpdate.Version)
 
+	namespaceMetricsUpdate := requireSystemDoorbellUpdate(t, namespaceMetricsSub)
+	require.Equal(t, "namespace-metrics", namespaceMetricsUpdate.Domain)
+	require.Equal(t, "", namespaceMetricsUpdate.Scope)
+	require.Equal(t, resourcestream.SourceMetric, namespaceMetricsUpdate.Source)
+	require.Equal(t, wantVersion, namespaceMetricsUpdate.Version)
+
 	// No sample yet -> no doorbell.
 	observer(metrics.Metadata{})
-	require.Equal(t, 1, notifier.calls)
 	select {
 	case update := <-podsSub.Updates:
 		t.Fatalf("zero CollectedAt must not broadcast, got %+v", update)
@@ -73,7 +72,6 @@ func TestMetricsSignalObserverBroadcastsMetricDoorbells(t *testing.T) {
 	}
 
 	observer(metrics.Metadata{FailureCount: 1, LastError: "metrics request failed"})
-	require.Equal(t, 2, notifier.calls)
 	select {
 	case update := <-podsSub.Updates:
 		t.Fatalf("failed collection must not broadcast a sample doorbell, got %+v", update)

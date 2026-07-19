@@ -7,7 +7,8 @@ Applies to Go code under `backend/`.
 - `backend/` hosts Kubernetes integrations.
   - `backend/refresh/snapshot` is the canonical source for refresh-domain
     list/table payloads. Add table/list data there, not in `backend/resources`.
-    Follow `docs/architecture/refresh-system.md`.
+    Follow `docs/architecture/data-freshness.md` and
+    `docs/architecture/refresh-system.md`.
   - `backend/resources` is the detail/action service layer for rich object
     details, logs/debug helpers, and imperative operations. Each built-in kind
     lives in its own package `backend/resources/<kind>/` (`identity.go`,
@@ -63,7 +64,8 @@ Applies to Go code under `backend/`.
 - Lifecycle: refresh subsystem setup in `backend/app_refresh_setup.go`, selection updates in `backend/app_refresh_update.go`, replacement helpers in `backend/app_refresh_subsystems.go`, teardown/rebuild in `backend/app_refresh_recovery.go`, base URL in `backend/app_refresh.go`.
 - Client init: `backend/app_kubernetes_client.go` owns client setup and triggers refresh subsystem + object catalog start.
 - Multi-cluster refresh behavior is documented in
-  `docs/architecture/multi-cluster.md` and `docs/architecture/refresh-system.md`.
+  `docs/architecture/multi-cluster.md`, `docs/architecture/data-freshness.md`,
+  and `docs/architecture/refresh-system.md`.
 - Refresh permission gates and UI action permission rules are documented in
   `docs/architecture/permissions.md`.
 - Per-cluster auth failure and recovery behavior is documented in

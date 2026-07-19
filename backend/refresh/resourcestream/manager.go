@@ -85,6 +85,10 @@ const (
 	// projected rows — namespace object changes and workload-presence flips
 	// tell the frontend to refetch the namespaces snapshot.
 	domainNamespaces = "namespaces"
+	// domainNamespaceMetrics is the namespace-list metric doorbell domain:
+	// signal-only, no projected rows. A successful metrics collection tells a
+	// visible namespace surface to refetch its metric-only snapshot.
+	domainNamespaceMetrics = "namespace-metrics"
 	// domainObjectEvents is the per-object events doorbell domain: signal-only,
 	// no projected rows — an event for a panel's object tells the frontend to
 	// refetch that object's events snapshot.
@@ -1031,6 +1035,10 @@ func (m *Manager) BroadcastMetricsRefresh(version string) {
 	// projection descriptor (snapshot domain), so fan its doorbell explicitly.
 	m.broadcastDoorbellRefresh(
 		domainClusterOverview, m.subscribedScopes(domainClusterOverview), SourceMetric, version)
+	// Namespace utilization is served by a metric-only snapshot rather than the
+	// namespaces object snapshot, so it has no projection descriptor.
+	m.broadcastDoorbellRefresh(
+		domainNamespaceMetrics, m.subscribedScopes(domainNamespaceMetrics), SourceMetric, version)
 }
 
 // BroadcastNamespacesRefresh fans a SourceObject doorbell to the namespaces

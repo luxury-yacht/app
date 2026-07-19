@@ -13,11 +13,18 @@ const mocks = vi.hoisted(() => ({
   resourceGridParams: null as null | Record<string, unknown>,
   persistenceParams: null as null | Record<string, unknown>,
   openWithObject: vi.fn(),
+  requestRefreshDomain: vi.fn(() => Promise.resolve()),
+  setRefreshDomainEnabled: vi.fn(),
   selectedKubeconfigs: [
     '/kube/config:alpha',
     '/kube/config:beta',
     '/kube/config:gamma',
   ] as string[],
+}));
+
+vi.mock('@/core/data-access', () => ({
+  requestRefreshDomain: mocks.requestRefreshDomain,
+  setRefreshDomainEnabled: mocks.setRefreshDomainEnabled,
 }));
 
 const namespace = (clusterId: string, clusterName: string, name: string) => ({
@@ -83,7 +90,7 @@ vi.mock('@modules/namespace/contexts/NamespaceContext', () => ({
         clusterName: 'alpha',
         namespaces: [namespace('cluster-a', 'alpha', 'payments')],
         metrics: { successCount: 1, failureCount: 0 },
-        metricsState: 'available',
+        metricsState: 'loading',
       },
       error: null,
       permissionDenied: false,
@@ -95,7 +102,7 @@ vi.mock('@modules/namespace/contexts/NamespaceContext', () => ({
         clusterName: 'beta',
         namespaces: [namespace('cluster-b', 'beta', 'payments')],
         metrics: { successCount: 0, failureCount: 1 },
-        metricsState: 'unavailable',
+        metricsState: 'loading',
       },
       error: null,
       permissionDenied: false,
@@ -105,6 +112,34 @@ vi.mock('@modules/namespace/contexts/NamespaceContext', () => ({
       data: null,
       error: 'forbidden',
       permissionDenied: true,
+    },
+  }),
+  useNamespaceMetricStatesByScope: () => ({
+    'cluster-a|': {
+      status: 'ready',
+      data: {
+        clusterId: 'cluster-a',
+        clusterName: 'alpha',
+        namespaces: [
+          {
+            ref: namespace('cluster-a', 'alpha', 'payments').ref,
+            cpuUsageMilli: 100,
+            memoryUsageBytes: 128 * 1024 * 1024,
+          },
+        ],
+        metrics: { successCount: 1, failureCount: 0 },
+        metricsState: 'available',
+      },
+    },
+    'cluster-b|': {
+      status: 'ready',
+      data: {
+        clusterId: 'cluster-b',
+        clusterName: 'beta',
+        namespaces: [],
+        metrics: { successCount: 0, failureCount: 1 },
+        metricsState: 'unavailable',
+      },
     },
   }),
 }));
@@ -317,6 +352,21 @@ describe('GlobalViewNamespaces', () => {
       partialLabel: string | null;
     };
     expect(source.rows).toHaveLength(2);
+    expect(mocks.setRefreshDomainEnabled).toHaveBeenCalledWith({
+      domain: 'namespace-metrics',
+      scope: 'cluster-a|',
+      enabled: true,
+      preserveState: true,
+    });
+    expect(mocks.setRefreshDomainEnabled).toHaveBeenCalledWith({
+      domain: 'namespace-metrics',
+      scope: 'cluster-b|',
+      enabled: true,
+      preserveState: true,
+    });
+    expect(mocks.setRefreshDomainEnabled).not.toHaveBeenCalledWith(
+      expect.objectContaining({ domain: 'namespace-metrics', scope: 'cluster-c|', enabled: true })
+    );
     expect(
       source.rows.map(({ clusterId, clusterName, name, metricsState }) => ({
         clusterId,
@@ -399,6 +449,12 @@ describe('GlobalViewNamespaces', () => {
     );
 
     await unmount();
+    expect(mocks.setRefreshDomainEnabled).toHaveBeenCalledWith({
+      domain: 'namespace-metrics',
+      scope: 'cluster-a|',
+      enabled: false,
+      preserveState: true,
+    });
   });
 
   it('stages the target namespace navigation before activating its cluster', async () => {

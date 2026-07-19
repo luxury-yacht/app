@@ -30,3 +30,19 @@ func TestNamespacesRegistrationUnscopedKeepsFailFastGate(t *testing.T) {
 	require.False(t, reg.skipRuntimePolicy)
 	require.Equal(t, []listWatchCheck{{group: "", resource: "namespaces"}}, reg.listWatch.checks)
 }
+
+func TestNamespaceMetricsRegistrationIsIndependentFromNamespaceObjectPermissions(t *testing.T) {
+	registrations := domainRegistrations(registrationDeps{cfg: Config{ClusterID: "cluster-a"}})
+
+	var metricRegistration *domainRegistration
+	for i := range registrations {
+		if registrations[i].name == "namespace-metrics" {
+			metricRegistration = &registrations[i]
+			break
+		}
+	}
+
+	require.NotNil(t, metricRegistration)
+	require.NotNil(t, metricRegistration.direct)
+	require.True(t, metricRegistration.skipRuntimePolicy)
+}

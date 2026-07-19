@@ -67,6 +67,10 @@ export function registerDefaultRefreshDomains(registrar: RefreshDomainRegistrar)
   // (namespace object changes + workload-presence flips); its 2s timing is now
   // only the stream-down fallback.
   doorbellStreamDomain('namespaces');
+  // Namespace utilization has an independent metric clock and payload. Only
+  // visible namespace surfaces lease it, so open background tabs do not turn
+  // the shared Kubernetes metrics poller on.
+  doorbellStreamDomain('namespace-metrics');
   // The Object Panel Events tab refetches on the backend's per-object events
   // doorbell; its 10s timing is now only the stream-down fallback.
   doorbellStreamDomain('object-events');

@@ -6,7 +6,6 @@ import (
 	"sync"
 	"time"
 
-	"github.com/luxury-yacht/app/backend/refresh/metrics"
 	corelisters "k8s.io/client-go/listers/core/v1"
 	"k8s.io/client-go/tools/cache"
 )
@@ -46,7 +45,6 @@ const namespaceNotifierNotReadySettleInterval = 2 * time.Second
 type NamespaceChangeNotifier struct {
 	ingest  namespacePodIngestSource
 	tracker *NamespaceWorkloadTracker
-	metrics metrics.Provider
 
 	eventLister    corelisters.EventLister
 	eventsExpected bool
@@ -59,22 +57,19 @@ type NamespaceChangeNotifier struct {
 	namespaceDirty bool
 	workloadDirty  bool
 	eventDirty     bool
-	metricDirty    bool
 	quotaDirty     bool
 	signatureKnown bool
 	lastSignature  string
 	// lastSignatureReady records whether lastSignature was computed AFTER the
 	// tracker settled; a not-ready signature must be recomputed on the rearm
 	// tick even with no new events, so the readiness flip itself broadcasts.
-	lastSignatureReady   bool
-	eventSignatureKnown  bool
-	lastEventSignature   string
-	lastEventReady       bool
-	metricSignatureKnown bool
-	lastMetricSignature  string
-	quotaSignatureKnown  bool
-	lastQuotaSignature   string
-	lastQuotaReady       bool
+	lastSignatureReady  bool
+	eventSignatureKnown bool
+	lastEventSignature  string
+	lastEventReady      bool
+	quotaSignatureKnown bool
+	lastQuotaSignature  string
+	lastQuotaReady      bool
 	// notReadyMinInterval floors presence-only broadcasts while settling; see
 	// namespaceNotifierNotReadySettleInterval. Overridable in tests.
 	notReadyMinInterval time.Duration
@@ -86,11 +81,10 @@ type NamespaceChangeNotifier struct {
 // NewNamespaceChangeNotifier builds a notifier over the same ingest source and
 // tracker the namespaces builder reads, so the presence signature can never
 // drift from what Build serves.
-func NewNamespaceChangeNotifier(ingest namespacePodIngestSource, tracker *NamespaceWorkloadTracker, metricsProvider metrics.Provider) *NamespaceChangeNotifier {
+func NewNamespaceChangeNotifier(ingest namespacePodIngestSource, tracker *NamespaceWorkloadTracker) *NamespaceChangeNotifier {
 	return &NamespaceChangeNotifier{
 		ingest:              ingest,
 		tracker:             tracker,
-		metrics:             metricsProvider,
 		debounce:            namespaceNotifierDebounce,
 		notReadyMinInterval: namespaceNotifierNotReadySettleInterval,
 	}
@@ -105,7 +99,7 @@ func (n *NamespaceChangeNotifier) SetBroadcast(broadcast func(version, reason st
 	}
 	n.mu.Lock()
 	n.broadcast = broadcast
-	pending := n.namespaceDirty || n.workloadDirty || n.eventDirty || n.metricDirty || n.quotaDirty
+	pending := n.namespaceDirty || n.workloadDirty || n.eventDirty || n.quotaDirty
 	n.mu.Unlock()
 	if pending {
 		n.arm()
@@ -144,18 +138,6 @@ func (n *NamespaceChangeNotifier) EventChanged() {
 	}
 	n.mu.Lock()
 	n.eventDirty = true
-	n.mu.Unlock()
-	n.arm()
-}
-
-// MetricsChanged records a metrics collection attempt. The source revision is
-// compared at flush so duplicate observer deliveries stay silent.
-func (n *NamespaceChangeNotifier) MetricsChanged() {
-	if n == nil {
-		return
-	}
-	n.mu.Lock()
-	n.metricDirty = true
 	n.mu.Unlock()
 	n.arm()
 }
@@ -212,12 +194,10 @@ func (n *NamespaceChangeNotifier) flush() {
 	namespaceDirty := n.namespaceDirty
 	workloadDirty := n.workloadDirty
 	eventDirty := n.eventDirty
-	metricDirty := n.metricDirty
 	quotaDirty := n.quotaDirty
 	n.namespaceDirty = false
 	n.workloadDirty = false
 	n.eventDirty = false
-	n.metricDirty = false
 	n.quotaDirty = false
 	n.mu.Unlock()
 
@@ -282,23 +262,6 @@ func (n *NamespaceChangeNotifier) flush() {
 			}
 		}
 		n.lastEventReady = eventReady
-		n.mu.Unlock()
-	}
-
-	if metricDirty {
-		_, _, state, revision := namespaceUtilizationRollups(n.metrics)
-		signature := string(state) + ":" + revision
-		n.mu.Lock()
-		if !n.metricSignatureKnown || signature != n.lastMetricSignature {
-			hadSignature := n.metricSignatureKnown
-			n.metricSignatureKnown = true
-			n.lastMetricSignature = signature
-			if !hadSignature {
-				reasons = append(reasons, "namespace utilization baseline established")
-			} else {
-				reasons = append(reasons, "namespace utilization changed")
-			}
-		}
 		n.mu.Unlock()
 	}
 

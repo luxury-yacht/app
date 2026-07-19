@@ -315,11 +315,13 @@ describe('refresh domain contract', () => {
           expect(resourceStreamDomains.has(entry.domain)).toBe(false);
           break;
         case 'doorbell-snapshot':
-          // Doorbell-refetched snapshot domains (namespaces, object-events,
-          // cluster-overview, cluster-attention): streaming wiring exists for the signal-only
+          // Doorbell-refetched snapshot domains (namespaces,
+          // namespace-metrics, object-events, cluster-overview,
+          // cluster-attention): streaming wiring exists for the signal-only
           // doorbell, but they are not resource table domains. Each declares
           // exactly the one clock its doorbell rides (namespaces: object;
-          // object-events: event; cluster-overview: metric; cluster-attention: attention — and overview polls
+          // namespace-metrics/cluster-overview: metric; object-events: event;
+          // cluster-attention: attention — and overview polls
           // STAY ON, since metric doorbells only ring on successful
           // collections). The doorbell rides the resources WebSocket, so
           // diagnostics reflect that stream instead of mislabeling the
@@ -329,7 +331,7 @@ describe('refresh domain contract', () => {
           expect(entry.sourceClocks).toEqual(
             entry.domain === 'object-events'
               ? ['event']
-              : entry.domain === 'cluster-overview'
+              : entry.domain === 'namespace-metrics' || entry.domain === 'cluster-overview'
                 ? ['metric']
                 : entry.domain === 'cluster-attention'
                   ? ['attention']
@@ -494,11 +496,13 @@ describe('refresh domain contract', () => {
         case 'doorbell-snapshot':
           // A snapshot payload whose refetch trigger includes a signal-only
           // doorbell: namespaces (snapshot-table, object doorbell),
+          // namespace-metrics (snapshot-table, metric doorbell),
           // object-events (event-snapshot, per-object event doorbell), and
           // cluster-overview (aggregate-snapshot, metric doorbell with polls
           // kept on).
           expect([
             'namespaces',
+            'namespace-metrics',
             'object-events',
             'cluster-overview',
             'cluster-attention',

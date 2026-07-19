@@ -63,11 +63,11 @@ checker, so the SSAR cache resets with it
   snapshot's `warning-events` source clock when a visible count or source state
   changes. Events remain cluster-wide under a configured namespace scope, so
   this optional aggregate is enabled only when the identity can list and watch
-  that cluster-wide source. Namespace utilization is joined at snapshot serve
-  from one consistent metrics-poller sample and carries the shared freshness
-  block plus an explicit `metricsState` (`loading`, `available`, or
-  `unavailable`); successful metric collections feed the same namespace
-  notifier, which invalidates the snapshot before broadcasting. ResourceQuota
+  that cluster-wide source. Namespace utilization is served independently by
+  the metric-only `namespace-metrics` domain and joined in visible namespace
+  consumers by full Namespace identity. Metric collections advance only that
+  domain's metric clock; they do not invalidate `namespaces` or ring its object
+  doorbell. ResourceQuota
   ingest retains a compact aggregate half (namespace + highest used percentage)
   rather than the typed object or table row. Namespace rows expose quota count,
   the strongest percentage, explicit source state, and backend-owned pressure

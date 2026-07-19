@@ -29,11 +29,16 @@ feature hooks should not call backend read transports directly.
 Request reasons for cluster/resource reads are:
 
 - `background`: scheduler-driven upkeep
-- `startup`: passive view activation
+- `startup`: first passive scope acquisition
+- `foreground`: a retained scope became visible; non-manual and allowed while
+  passive automatic refresh is paused
 - `user`: explicit user action
 - `stream-signal`: doorbell/change-signal-triggered refetch — bypasses the
   skip-while-stream-healthy gate (a doorbell refetch issued as `background`
-  is silently swallowed; see `resource-stream-signals.md`)
+  is silently swallowed)
+
+The owning timing, retention, and background-work rules are in
+[data-freshness.md](data-freshness.md).
 
 When auto-refresh is disabled, blocked non-user reads should not show passive
 loading spinners.

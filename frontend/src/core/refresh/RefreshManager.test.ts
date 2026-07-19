@@ -28,8 +28,14 @@ type TestRefresherInstance = {
 type UnsafeRefreshManager = {
   emitStateChange: (name: RefresherName) => void;
   startRefresher: (name: RefresherName) => void;
-  refreshSingle: (name: RefresherName, isManual: boolean) => Promise<void>;
-  getManualRefreshTargets: (previous: RefreshContext, current: RefreshContext) => RefresherName[];
+  refreshSingle: (
+    name: RefresherName,
+    invocation: 'automatic' | 'foreground' | 'manual'
+  ) => Promise<void>;
+  getForegroundRefreshTargets: (
+    previous: RefreshContext,
+    current: RefreshContext
+  ) => RefresherName[];
   getRefresherTargetsForContext: (context: RefreshContext) => RefresherName[];
   abortRefresher: (name: RefresherName) => void;
   pauseRefresher: (name: RefresherName, instance: TestRefresherInstance) => void;
@@ -215,7 +221,7 @@ describe('RefreshManager scheduling and state handling', () => {
     instance.isEnabled = true;
     instance.state.status = 'idle';
 
-    await unsafeRefreshManager.refreshSingle(AUTO_NAME, false).catch(() => undefined);
+    await unsafeRefreshManager.refreshSingle(AUTO_NAME, 'automatic').catch(() => undefined);
     expect(callback).toHaveBeenCalledTimes(1);
     expect(refreshManager.getState(AUTO_NAME)?.status).toBe('cooldown');
 
@@ -343,9 +349,11 @@ describe('RefreshManager context updates', () => {
     vi.restoreAllMocks();
   });
 
-  it('aborts running refreshers and triggers manual refresh for namespace switches', async () => {
+  it('aborts running refreshers and triggers foreground refresh for namespace switches', async () => {
     vi.useFakeTimers();
-    const manualSpy = vi.spyOn(refreshManager, 'triggerManualRefreshMany').mockResolvedValue();
+    const foregroundSpy = vi
+      .spyOn(refreshManager, 'triggerForegroundRefreshMany')
+      .mockResolvedValue();
     const abortSpy = vi.spyOn(
       refreshManager as unknown as { abortRefresher: (name: RefresherName) => void },
       'abortRefresher'
@@ -367,12 +375,14 @@ describe('RefreshManager context updates', () => {
 
     await Promise.resolve();
     expect(abortSpy).toHaveBeenCalledWith(NAME);
-    expect(manualSpy).toHaveBeenCalledWith(expect.arrayContaining([NAME]));
+    expect(foregroundSpy).toHaveBeenCalledWith(expect.arrayContaining([NAME]));
   });
 
   it('aborts running refreshers when the namespace cluster changes', async () => {
     vi.useFakeTimers();
-    const manualSpy = vi.spyOn(refreshManager, 'triggerManualRefreshMany').mockResolvedValue();
+    const foregroundSpy = vi
+      .spyOn(refreshManager, 'triggerForegroundRefreshMany')
+      .mockResolvedValue();
     const abortSpy = vi.spyOn(
       refreshManager as unknown as { abortRefresher: (name: RefresherName) => void },
       'abortRefresher'
@@ -392,7 +402,7 @@ describe('RefreshManager context updates', () => {
       selectedNamespaceClusterId: 'cluster-a',
     });
 
-    manualSpy.mockClear();
+    foregroundSpy.mockClear();
     abortSpy.mockClear();
 
     refreshManager.updateContext({
@@ -401,11 +411,13 @@ describe('RefreshManager context updates', () => {
 
     await Promise.resolve();
     expect(abortSpy).toHaveBeenCalledWith(NAME);
-    expect(manualSpy).toHaveBeenCalledWith(expect.arrayContaining([NAME]));
+    expect(foregroundSpy).toHaveBeenCalledWith(expect.arrayContaining([NAME]));
   });
 
   it('immediately refreshes the visible cluster view on a foreground tab switch', async () => {
-    const manualSpy = vi.spyOn(refreshManager, 'triggerManualRefreshMany').mockResolvedValue();
+    const foregroundSpy = vi
+      .spyOn(refreshManager, 'triggerForegroundRefreshMany')
+      .mockResolvedValue();
 
     refreshManager.updateContext({
       currentView: 'cluster',
@@ -416,7 +428,7 @@ describe('RefreshManager context updates', () => {
       backgroundRefreshEnabled: false,
       objectPanel: { isOpen: false },
     });
-    manualSpy.mockClear();
+    foregroundSpy.mockClear();
 
     refreshManager.updateContext({
       selectedClusterId: 'cluster-b',
@@ -424,7 +436,7 @@ describe('RefreshManager context updates', () => {
     });
 
     await Promise.resolve();
-    expect(manualSpy).toHaveBeenCalledWith(['cluster-config']);
+    expect(foregroundSpy).toHaveBeenCalledWith(['cluster-config']);
   });
 });
 
@@ -621,7 +633,7 @@ describe('RefreshManager global controls', () => {
 
   it('updates interval timers when cadence changes', () => {
     vi.useFakeTimers();
-    const intervalName = 'namespace-metrics' as RefresherName;
+    const intervalName = 'object-cadence-test' as RefresherName;
 
     refreshManager.register({
       name: intervalName,
@@ -922,7 +934,7 @@ describe('RefreshManager guard paths and helpers', () => {
     expect(unsafeRefreshManager.subscribers.has(name)).toBe(false);
   });
 
-  it('detects namespace manual targets when the namespace changes', () => {
+  it('detects namespace foreground targets when the namespace changes', () => {
     const previous: RefreshContext = {
       currentView: 'namespace',
       activeNamespaceView: 'config',
@@ -934,12 +946,12 @@ describe('RefreshManager guard paths and helpers', () => {
       selectedNamespace: 'team-b',
     };
 
-    const manualTargets = unsafeRefreshManager.getManualRefreshTargets(previous, current);
+    const foregroundTargets = unsafeRefreshManager.getForegroundRefreshTargets(previous, current);
 
-    expect(manualTargets).toEqual(['config']);
+    expect(foregroundTargets).toEqual(['config']);
   });
 
-  it('detects namespace manual targets when the namespace cluster changes', () => {
+  it('detects namespace foreground targets when the namespace cluster changes', () => {
     const previous: RefreshContext = {
       currentView: 'namespace',
       activeNamespaceView: 'config',
@@ -952,12 +964,12 @@ describe('RefreshManager guard paths and helpers', () => {
       selectedNamespaceClusterId: 'cluster-b',
     };
 
-    const manualTargets = unsafeRefreshManager.getManualRefreshTargets(previous, current);
+    const foregroundTargets = unsafeRefreshManager.getForegroundRefreshTargets(previous, current);
 
-    expect(manualTargets).toEqual(['config']);
+    expect(foregroundTargets).toEqual(['config']);
   });
 
-  it('omits cluster manual targets when the active cluster view becomes undefined', () => {
+  it('omits cluster foreground targets when the active cluster view becomes undefined', () => {
     const previous: RefreshContext = {
       currentView: 'cluster',
       activeClusterView: 'events',
@@ -969,9 +981,9 @@ describe('RefreshManager guard paths and helpers', () => {
       objectPanel: { isOpen: false },
     };
 
-    const manualTargets = unsafeRefreshManager.getManualRefreshTargets(previous, current);
+    const foregroundTargets = unsafeRefreshManager.getForegroundRefreshTargets(previous, current);
 
-    expect(manualTargets).toEqual([]);
+    expect(foregroundTargets).toEqual([]);
   });
 
   it('refreshes the visible cluster after a tab switch even when background refresh is enabled', () => {
@@ -990,9 +1002,9 @@ describe('RefreshManager guard paths and helpers', () => {
       selectedClusterIds: ['cluster-b'],
     };
 
-    const manualTargets = unsafeRefreshManager.getManualRefreshTargets(previous, current);
+    const foregroundTargets = unsafeRefreshManager.getForegroundRefreshTargets(previous, current);
 
-    expect(manualTargets).toEqual(['cluster-config']);
+    expect(foregroundTargets).toEqual(['cluster-config']);
   });
 
   it('refreshes the visible cluster after a tab switch when background refresh is disabled', () => {
@@ -1011,9 +1023,9 @@ describe('RefreshManager guard paths and helpers', () => {
       selectedClusterIds: ['cluster-b'],
     };
 
-    const manualTargets = unsafeRefreshManager.getManualRefreshTargets(previous, current);
+    const foregroundTargets = unsafeRefreshManager.getForegroundRefreshTargets(previous, current);
 
-    expect(manualTargets).toEqual(['cluster-config']);
+    expect(foregroundTargets).toEqual(['cluster-config']);
   });
 
   it('refreshes the active cluster view when the selected cluster set changes', () => {
@@ -1030,14 +1042,14 @@ describe('RefreshManager guard paths and helpers', () => {
       allConnectedClusterIds: ['cluster-a', 'cluster-b'],
     };
 
-    const manualTargets = unsafeRefreshManager.getManualRefreshTargets(previous, current);
+    const foregroundTargets = unsafeRefreshManager.getForegroundRefreshTargets(previous, current);
 
-    expect(manualTargets).toEqual(['cluster-config']);
+    expect(foregroundTargets).toEqual(['cluster-config']);
   });
 
-  it('skips manual refreshes when the cluster view is cleared', () => {
-    const manualSpy = vi
-      .spyOn(refreshManager, 'triggerManualRefreshMany')
+  it('skips foreground refreshes when the cluster view is cleared', () => {
+    const foregroundSpy = vi
+      .spyOn(refreshManager, 'triggerForegroundRefreshMany')
       .mockResolvedValue(undefined as unknown as undefined);
 
     refreshManager.updateContext({
@@ -1046,14 +1058,14 @@ describe('RefreshManager guard paths and helpers', () => {
       objectPanel: { isOpen: false },
     });
 
-    manualSpy.mockClear();
+    foregroundSpy.mockClear();
 
     refreshManager.updateContext({
       activeClusterView: undefined,
     });
 
-    expect(manualSpy).not.toHaveBeenCalled();
-    manualSpy.mockRestore();
+    expect(foregroundSpy).not.toHaveBeenCalled();
+    foregroundSpy.mockRestore();
 
     refreshManager.updateContext({
       currentView: 'namespace',
@@ -1077,12 +1089,12 @@ describe('RefreshManager guard paths and helpers', () => {
       allConnectedClusterIds: ['cluster-a', 'cluster-b'],
     };
 
-    const manualTargets = unsafeRefreshManager.getManualRefreshTargets(previous, current);
+    const foregroundTargets = unsafeRefreshManager.getForegroundRefreshTargets(previous, current);
 
-    expect(manualTargets).toEqual(['cluster-config']);
+    expect(foregroundTargets).toEqual(['cluster-config']);
   });
 
-  it('produces no manual targets for object panel open/close changes', () => {
+  it('produces no foreground targets for object panel open/close changes', () => {
     // Panels self-refresh via their per-panel refreshers; the context cannot
     // name them (it carries no panel identity), so panel changes contribute
     // nothing here.
@@ -1097,12 +1109,12 @@ describe('RefreshManager guard paths and helpers', () => {
       objectPanel: { isOpen: true },
     };
 
-    expect(unsafeRefreshManager.getManualRefreshTargets(previous, current)).toEqual([]);
+    expect(unsafeRefreshManager.getForegroundRefreshTargets(previous, current)).toEqual([]);
   });
 
   it('filters namespace aborts when switching views with object panel changes', async () => {
-    const manualSpy = vi
-      .spyOn(refreshManager, 'triggerManualRefreshMany')
+    const foregroundSpy = vi
+      .spyOn(refreshManager, 'triggerForegroundRefreshMany')
       .mockResolvedValue(undefined as unknown as undefined);
     const abortSpy = vi.spyOn(unsafeRefreshManager, 'abortRefresher');
 
@@ -1114,7 +1126,7 @@ describe('RefreshManager guard paths and helpers', () => {
     });
 
     abortSpy.mockClear();
-    manualSpy.mockClear();
+    foregroundSpy.mockClear();
 
     refreshManager.updateContext({
       currentView: 'cluster',
@@ -1123,9 +1135,9 @@ describe('RefreshManager guard paths and helpers', () => {
     });
 
     expect(abortSpy).not.toHaveBeenCalled();
-    expect(manualSpy).toHaveBeenCalledWith(expect.arrayContaining(['cluster-events']));
+    expect(foregroundSpy).toHaveBeenCalledWith(expect.arrayContaining(['cluster-events']));
 
-    manualSpy.mockRestore();
+    foregroundSpy.mockRestore();
     abortSpy.mockRestore();
 
     refreshManager.updateContext({
@@ -1281,7 +1293,7 @@ describe('RefreshManager guard paths and helpers', () => {
 
   it('refreshSingle returns immediately for unknown refreshers', async () => {
     await expect(
-      unsafeRefreshManager.refreshSingle('shadow' as RefresherName, true)
+      unsafeRefreshManager.refreshSingle('shadow' as RefresherName, 'manual')
     ).resolves.toBeUndefined();
   });
 
@@ -1293,7 +1305,7 @@ describe('RefreshManager guard paths and helpers', () => {
     );
     instance.state.status = 'idle';
 
-    await unsafeRefreshManager.refreshSingle(name, false);
+    await unsafeRefreshManager.refreshSingle(name, 'automatic');
 
     expect(instance.state.status).toBe('idle');
   });
@@ -1308,7 +1320,7 @@ describe('RefreshManager guard paths and helpers', () => {
     instance.isEnabled = true;
     instance.state.status = 'paused';
 
-    await unsafeRefreshManager.refreshSingle(name, false);
+    await unsafeRefreshManager.refreshSingle(name, 'automatic');
 
     expect(instance.state.status).toBe('paused');
     refreshManager.resume();
@@ -1323,7 +1335,7 @@ describe('RefreshManager guard paths and helpers', () => {
     instance.isEnabled = true;
     instance.state.status = 'paused';
 
-    await unsafeRefreshManager.refreshSingle(name, false);
+    await unsafeRefreshManager.refreshSingle(name, 'automatic');
 
     expect(instance.state.status).toBe('paused');
   });
@@ -1338,7 +1350,7 @@ describe('RefreshManager guard paths and helpers', () => {
     instance.state.status = 'refreshing';
     instance.refreshPromise = Promise.resolve({ successCount: 0, failures: [] });
 
-    await unsafeRefreshManager.refreshSingle(name, false);
+    await unsafeRefreshManager.refreshSingle(name, 'automatic');
 
     expect(instance.state.status).toBe('refreshing');
   });
@@ -1356,7 +1368,7 @@ describe('RefreshManager guard paths and helpers', () => {
     const subscriber = vi.fn();
     refreshManager.subscribe(name, subscriber);
 
-    await unsafeRefreshManager.refreshSingle(name, true);
+    await unsafeRefreshManager.refreshSingle(name, 'manual');
     await vi.advanceTimersByTimeAsync(100);
 
     expect(subscriber).toHaveBeenCalled();
@@ -1373,7 +1385,7 @@ describe('RefreshManager guard paths and helpers', () => {
     );
     instance.state.status = 'cooldown';
 
-    await unsafeRefreshManager.refreshSingle(name, false);
+    await unsafeRefreshManager.refreshSingle(name, 'automatic');
 
     expect(instance.state.status).toBe('cooldown');
   });

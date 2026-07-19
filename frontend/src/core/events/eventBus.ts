@@ -38,6 +38,7 @@ type DoorbellStreamDomain =
   | 'cluster-events'
   | 'namespace-events'
   | 'namespaces'
+  | 'namespace-metrics'
   | 'object-events'
   | 'cluster-overview'
   | 'cluster-attention';

@@ -207,6 +207,13 @@ const doorbellDomainDescriptors = [
     scopeKind: 'cluster',
     isClusterScoped: true,
   },
+  // Signal-only metric doorbell for the separate namespace utilization
+  // payload. It never advances the namespaces object clock.
+  {
+    domain: 'namespace-metrics',
+    scopeKind: 'cluster',
+    isClusterScoped: true,
+  },
   // Signal-only per-object doorbell for the object-events snapshot domain: an
   // event for a panel's object replaces the Events tab's poll. The scope is
   // the snapshot domain's object-scope tail, passed through verbatim.

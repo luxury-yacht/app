@@ -1372,10 +1372,10 @@ class RefreshOrchestrator {
   private metricsDemandClusterIds(): string[] {
     const metricDomains: readonly RefreshDomain[] = [
       'cluster-overview',
-      'namespaces',
       'nodes',
       'pods',
       'namespace-workloads',
+      'namespace-metrics',
     ];
     const demanded: string[] = [];
     this.clusterRuntimes.forEach((runtime, clusterId) => {

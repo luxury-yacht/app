@@ -17,7 +17,6 @@ import (
 	"github.com/luxury-yacht/app/backend/kind/objectmapnode"
 	"github.com/luxury-yacht/app/backend/kind/streamrows"
 	"github.com/luxury-yacht/app/backend/objectcatalog"
-	"github.com/luxury-yacht/app/backend/refresh/metrics"
 )
 
 // fakeNamespaceIngest is a minimal namespacePodIngestSource whose presence rows
@@ -130,35 +129,6 @@ func (f *fakeNamespaceIngest) quotaReadCount() int {
 	return f.quotaReads
 }
 
-type mutableNamespaceMetrics struct {
-	mu     sync.Mutex
-	sample metrics.Sample
-}
-
-func (m *mutableNamespaceMetrics) set(sample metrics.Sample) {
-	m.mu.Lock()
-	m.sample = sample
-	m.mu.Unlock()
-}
-
-func (m *mutableNamespaceMetrics) Sample() metrics.Sample {
-	m.mu.Lock()
-	defer m.mu.Unlock()
-	return metrics.Sample{
-		NodeUsage: map[string]metrics.NodeUsage{},
-		PodUsage:  m.sample.PodUsage,
-		Metadata:  m.sample.Metadata,
-	}
-}
-
-func (m *mutableNamespaceMetrics) LatestNodeUsage() map[string]metrics.NodeUsage {
-	return m.Sample().NodeUsage
-}
-func (m *mutableNamespaceMetrics) LatestPodUsage() map[string]metrics.PodUsage {
-	return m.Sample().PodUsage
-}
-func (m *mutableNamespaceMetrics) Metadata() metrics.Metadata { return m.Sample().Metadata }
-
 type broadcastRecorder struct {
 	mu       sync.Mutex
 	versions []string
@@ -206,7 +176,7 @@ func requireNoMoreBroadcasts(t *testing.T, r *broadcastRecorder, have int) {
 }
 
 func newNotifierForTest(ingest *fakeNamespaceIngest, recorder *broadcastRecorder) *NamespaceChangeNotifier {
-	notifier := NewNamespaceChangeNotifier(ingest, NewNamespaceWorkloadTracker(ingest), nil)
+	notifier := NewNamespaceChangeNotifier(ingest, NewNamespaceWorkloadTracker(ingest))
 	notifier.debounce = 20 * time.Millisecond
 	if recorder != nil {
 		notifier.SetBroadcast(recorder.record)
@@ -299,34 +269,6 @@ func TestNamespaceNotifierBroadcastsWhenPodReservationsChange(t *testing.T) {
 	notifier.WorkloadChanged()
 	waitForBroadcasts(t, recorder, 2)
 	require.Contains(t, recorder.lastReason(), "workload rollup changed")
-}
-
-func TestNamespaceNotifierGatesMetricCollectionsOnRevision(t *testing.T) {
-	ingest := &fakeNamespaceIngest{}
-	ingest.set(true)
-	provider := &mutableNamespaceMetrics{}
-	provider.set(metrics.Sample{
-		PodUsage: map[string]metrics.PodUsage{"team-a/api": {CPUUsageMilli: 50}},
-		Metadata: metrics.Metadata{CollectedAt: time.Unix(1700000000, 0), SuccessCount: 1},
-	})
-	recorder := &broadcastRecorder{}
-	notifier := NewNamespaceChangeNotifier(ingest, NewNamespaceWorkloadTracker(ingest), provider)
-	notifier.debounce = 20 * time.Millisecond
-	notifier.SetBroadcast(recorder.record)
-	defer notifier.Stop()
-
-	notifier.MetricsChanged()
-	waitForBroadcasts(t, recorder, 1)
-	notifier.MetricsChanged()
-	requireNoMoreBroadcasts(t, recorder, 1)
-
-	provider.set(metrics.Sample{
-		PodUsage: map[string]metrics.PodUsage{"team-a/api": {CPUUsageMilli: 75}},
-		Metadata: metrics.Metadata{CollectedAt: time.Unix(1700000030, 0), SuccessCount: 2},
-	})
-	notifier.MetricsChanged()
-	waitForBroadcasts(t, recorder, 2)
-	require.Contains(t, recorder.lastReason(), "namespace utilization changed")
 }
 
 func TestNamespaceNotifierGatesQuotaEventsOnPressureRollup(t *testing.T) {
@@ -506,7 +448,7 @@ func TestNamespaceNotifierRetainsEventsUntilBroadcastWired(t *testing.T) {
 	ingest := &fakeNamespaceIngest{}
 	ingest.set(true)
 	recorder := &broadcastRecorder{}
-	notifier := NewNamespaceChangeNotifier(ingest, NewNamespaceWorkloadTracker(ingest), nil)
+	notifier := NewNamespaceChangeNotifier(ingest, NewNamespaceWorkloadTracker(ingest))
 	notifier.debounce = 20 * time.Millisecond
 	defer notifier.Stop()
 

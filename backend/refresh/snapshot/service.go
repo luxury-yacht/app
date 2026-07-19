@@ -517,7 +517,7 @@ func (s *Service) shouldBypassSingleflight(domainName string) bool {
 
 func (s *Service) shouldBypassSnapshotCache(domainName string) bool {
 	switch domainName {
-	case "pods", "namespace-workloads", "nodes", "object-details":
+	case "pods", "namespace-workloads", "namespace-metrics", "nodes", "object-details":
 		return true
 	default:
 		return false

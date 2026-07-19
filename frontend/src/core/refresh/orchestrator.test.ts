@@ -1521,7 +1521,7 @@ describe('refreshOrchestrator', () => {
     expect(clientMocks.setMetricsActiveMock).toHaveBeenLastCalledWith(['cluster-b']);
   });
 
-  it('treats the namespace aggregate lease as metrics demand', () => {
+  it('does not treat a retained namespace workspace as metrics demand', () => {
     refreshOrchestrator.registerDomain({
       domain: 'namespaces',
       refresherName: SYSTEM_REFRESHERS.namespaces,
@@ -1529,9 +1529,23 @@ describe('refreshOrchestrator', () => {
     });
 
     refreshOrchestrator.setScopedDomainEnabled('namespaces', 'cluster-a|', true);
-    expect(clientMocks.setMetricsActiveMock).toHaveBeenCalledWith(['cluster-a']);
+    expect(clientMocks.setMetricsActiveMock).not.toHaveBeenCalled();
 
     refreshOrchestrator.setScopedDomainEnabled('namespaces', 'cluster-a|', false);
+    expect(clientMocks.setMetricsActiveMock).not.toHaveBeenCalled();
+  });
+
+  it('treats a visible namespace-metrics lease as metrics demand', () => {
+    refreshOrchestrator.registerDomain({
+      domain: 'namespace-metrics',
+      refresherName: SYSTEM_REFRESHERS.namespaceMetrics,
+      category: 'system',
+    });
+
+    refreshOrchestrator.setScopedDomainEnabled('namespace-metrics', 'cluster-a|', true);
+    expect(clientMocks.setMetricsActiveMock).toHaveBeenLastCalledWith(['cluster-a']);
+
+    refreshOrchestrator.setScopedDomainEnabled('namespace-metrics', 'cluster-a|', false);
     expect(clientMocks.setMetricsActiveMock).toHaveBeenLastCalledWith([]);
   });
 

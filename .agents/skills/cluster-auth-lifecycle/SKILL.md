@@ -16,9 +16,10 @@ add/remove behavior.
 2. `backend/AGENTS.md` for backend lifecycle/client changes
 3. `frontend/AGENTS.md` for frontend cluster state or UI changes
 4. `docs/architecture/multi-cluster.md`
-5. `docs/architecture/auth.md`
-6. `docs/architecture/refresh-system.md`
-7. `docs/architecture/catalog.md` when object catalog lifecycle is involved
+5. `docs/architecture/data-freshness.md`
+6. `docs/architecture/auth.md`
+7. `docs/architecture/refresh-system.md`
+8. `docs/architecture/catalog.md` when object catalog lifecycle is involved
 
 ## Backend Entry Points
 
@@ -46,8 +47,8 @@ add/remove behavior.
       cluster in a backend/API/cache/action path.
 - [ ] Selected and background cluster sets stay distinct and refresh scopes are
       rebuilt or cleared when cluster selection changes.
-- [ ] Refresh domains stay single-cluster; background cluster refresh fans out
-      through per-cluster runtime/scope work.
+- [ ] Refresh domains stay single-cluster. Cross-cluster displays fan out only
+      for clusters they display; retained inactive tabs stay passive.
 - [ ] Cluster add/remove updates aggregate refresh handlers and object catalog
       services through the live update path, not only initial setup.
 - [ ] Auth-failed clusters do not block healthy clusters.
