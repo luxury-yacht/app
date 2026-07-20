@@ -58,6 +58,35 @@ func TestClusterLifecycleFullTransitionSequence(t *testing.T) {
 	require.Equal(t, emittedEvent{"cluster-a", "ready", "loading"}, events[3])
 }
 
+func TestClusterLifecycleRejectsLateClientPhaseAfterSubsystemStarted(t *testing.T) {
+	emitter, getEvents := collectingEmitter()
+	cl := newClusterLifecycleWithSlowThreshold(emitter, time.Minute)
+
+	cl.SetState("cluster-a", ClusterStateConnecting)
+	cl.SetState("cluster-a", ClusterStateConnected)
+	cl.SetState("cluster-a", ClusterStateLoading)
+
+	// A stale client initialization may complete after the refresh subsystem has
+	// already started. It must not move the lifecycle back behind the serving gate.
+	cl.SetState("cluster-a", ClusterStateConnecting)
+	require.Equal(t, ClusterStateLoading, cl.GetState("cluster-a"))
+	cl.SetState("cluster-a", ClusterStateConnected)
+	require.Equal(t, ClusterStateLoading, cl.GetState("cluster-a"))
+
+	cl.SetState("cluster-a", ClusterStateReady)
+	cl.SetState("cluster-a", ClusterStateConnecting)
+	require.Equal(t, ClusterStateReady, cl.GetState("cluster-a"))
+	cl.SetState("cluster-a", ClusterStateConnected)
+	require.Equal(t, ClusterStateReady, cl.GetState("cluster-a"))
+
+	require.Equal(t, []emittedEvent{
+		{"cluster-a", ClusterStateConnecting, ""},
+		{"cluster-a", ClusterStateConnected, ClusterStateConnecting},
+		{"cluster-a", ClusterStateLoading, ClusterStateConnected},
+		{"cluster-a", ClusterStateReady, ClusterStateLoading},
+	}, getEvents())
+}
+
 func TestClusterLifecycleSlowLoading(t *testing.T) {
 	emitter, getEvents := collectingEmitter()
 	threshold := 50 * time.Millisecond

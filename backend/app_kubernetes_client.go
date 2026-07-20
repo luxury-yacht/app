@@ -6,6 +6,38 @@ import (
 	"github.com/luxury-yacht/app/backend/internal/logsources"
 )
 
+func (a *App) initializeSelectedClustersAtStartup() (int, error) {
+	selectedCount := 0
+	err := a.runSelectionMutation("startup-initialize-selected-clusters", func(*selectionMutation) error {
+		a.settingsMu.Lock()
+		settingsErr := a.loadAppSettings()
+		if settingsErr != nil {
+			a.appSettings = getDefaultAppSettings()
+		}
+		a.settingsMu.Unlock()
+		if settingsErr != nil {
+			a.logger.Warn(fmt.Sprintf("Failed to load app settings: %v", settingsErr), logsources.App)
+			a.logger.Info("Initialized app settings with defaults", logsources.App)
+		} else {
+			a.logger.Debug("Application settings loaded successfully", logsources.App)
+		}
+
+		a.restoreKubeconfigSelection()
+		selectedCount = len(a.GetSelectedKubeconfigs())
+		if selectedCount == 0 {
+			return nil
+		}
+
+		a.logger.Info(fmt.Sprintf("Connecting to %d selected cluster(s)", selectedCount), logsources.App)
+		initializer := a.kubeClientInitializer
+		if initializer == nil {
+			initializer = a.initKubernetesClient
+		}
+		return initializer()
+	})
+	return selectedCount, err
+}
+
 func (a *App) initKubernetesClient() (err error) {
 	a.logger.Info("Initializing Kubernetes client", logsources.KubernetesClient)
 
@@ -40,11 +72,17 @@ func (a *App) initKubernetesClient() (err error) {
 }
 
 func (a *App) restoreKubeconfigSelection() {
-	a.selectedKubeconfigs = nil
+	a.settingsMu.Lock()
+	var savedSelections []string
+	if a.appSettings != nil {
+		savedSelections = append(savedSelections, a.appSettings.SelectedKubeconfigs...)
+	}
+	a.settingsMu.Unlock()
 
-	if a.appSettings != nil && len(a.appSettings.SelectedKubeconfigs) > 0 {
-		normalized := make([]string, 0, len(a.appSettings.SelectedKubeconfigs))
-		for _, selection := range a.appSettings.SelectedKubeconfigs {
+	var normalized []string
+	if len(savedSelections) > 0 {
+		normalized = make([]string, 0, len(savedSelections))
+		for _, selection := range savedSelections {
 			parsed, err := a.normalizeKubeconfigSelection(selection)
 			if err != nil {
 				continue
@@ -54,9 +92,17 @@ func (a *App) restoreKubeconfigSelection() {
 			}
 			normalized = append(normalized, parsed.String())
 		}
-		if len(normalized) > 0 {
-			a.selectedKubeconfigs = normalized
+	}
+
+	a.kubeconfigsMu.Lock()
+	a.selectedKubeconfigs = append([]string(nil), normalized...)
+	a.kubeconfigsMu.Unlock()
+
+	if len(normalized) > 0 {
+		a.settingsMu.Lock()
+		if a.appSettings != nil {
 			a.appSettings.SelectedKubeconfigs = normalized
 		}
+		a.settingsMu.Unlock()
 	}
 }

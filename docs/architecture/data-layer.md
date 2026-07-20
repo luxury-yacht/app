@@ -117,7 +117,9 @@ the completed `v2` rewrite plan.
   columnar format, warm-paint on re-warm (cross-restart, format-version-guarded), and
   reconcile after sync. A Cold cluster can serve from read-only **mmap-aliased** stores
   (column data off-heap/OS-reclaimable, indexes resident) rather than full teardown;
-  re-warm unroutes then closes the mappings safely. Starting points:
+  re-warm unroutes then closes the mappings safely. Cold clusters do not run object-catalog
+  discovery, capability checks, or sync loops against their stopped feeds; the catalog
+  restarts as part of re-warm. Starting points:
   `domain/maintained_stores.go`, `querypage/columnstore_mmap.go`, `app_refresh_spill.go`.
 - **Re-warm keeps Ready.** Governor re-warms rebuild the subsystem through the same
   per-cluster chokepoint as first builds, but serving is continuous (cooled mmap stores
@@ -127,12 +129,25 @@ the completed `v2` rewrite plan.
   only that cluster's old-manager subscriptions so they re-establish against the
   replacement without reconnecting other clusters; continuity follows
   [the freshness contract](data-freshness.md#signals-and-source-clocks).
+- **Tier application is serialized.** Cooling and re-warming are multi-step subsystem
+  replacements. A newer visible-cluster intent may be recorded while one is running,
+  but its reconciliation waits until the in-flight transition has reached a consistent
+  Cold or live state. Foreground activation must never inspect or accept the interval
+  after feeds stop but before the subsystem is marked Cold. After reconciliation,
+  activation replays the cluster's current lifecycle state so a frontend that missed
+  an earlier transition converges even when the backend state did not change.
 - **Cluster-Ready is server-driven.** The loading→ready transition rides a namespaces
   snapshot build after the workload stores settle; the backend self-builds it on each
   pre-Ready namespaces doorbell (`runNamespacesReadinessSelfBuild` via the
   `Subsystem.NamespacesDoorbell` observer, wired per cluster in
   `buildRefreshSubsystemForSelection`). Readiness never depends on the frontend
   asking first.
+- **Client publication and lifecycle are ordered per cluster.** Startup settings and
+  saved-selection restore run through the runtime selection coordinator. A completed
+  client is installed inside its per-cluster operation before that operation publishes
+  `connected`, without waiting for sibling builds. Building the refresh subsystem then
+  advances the cluster to `loading`; stale client-build completions cannot demote
+  `loading`, `loading_slow`, or `ready` back to `connecting`/`connected`.
 
 ## Delivery — page + refetch-on-signal
 

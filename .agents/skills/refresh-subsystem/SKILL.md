@@ -182,6 +182,26 @@ checklist when touching anything they name.
        clusters through the build chokepoint on tab switch;
        `transitionClusterToLoading` keeps an already-ready cluster ready
        (re-warm serving is continuous).
+   12. **Governor tier application is serialized**: `reconcileGovernorWith`
+       may record newer visible-cluster intent while another call is cooling,
+       but executor actions cannot overlap. Otherwise `ensureRunning` can observe
+       the interval after feeds stop and before `Cooled` is published, accept it
+       as live, and leave every refresh domain without producers.
+   13. **Cold clusters do not start object catalogs**:
+       `startObjectCatalogForTarget` gates on the serialized governor tier before
+       discovery or capability work. A Cold subsystem's ingest and informer feeds
+       are stopped, so starting its catalog creates API traffic and an endless
+       all-ingest-kinds-unsynced retry loop.
+   14. **Foreground activation replays lifecycle truth**: after serialized governor
+       reconciliation, `SetVisibleCluster` emits the cluster's current lifecycle
+       state even if it is unchanged. The Wails relay must reach both React state and
+       `eventBus` refresh-readiness consumers; otherwise a missed earlier edge leaves
+       the tab permanently behind its serving gate.
+   15. **Read scope is not refresh eligibility**: derive retained-data reads from the
+       selected cluster identity. Lifecycle may gate signals, leases, and requests,
+       but never the read key or rendered retained rows. When an open cluster becomes
+       temporarily ineligible, disable its scope with `preserveState: true`; clear the
+       scope only when the cluster is actually removed.
 10. **Stream health = connected + server-confirmed synchronized**, not
     recently-delivered (`computeSubscriptionHealth`;
     `markSubscriptionSynchronized` only after the mux confirms the subscribe).

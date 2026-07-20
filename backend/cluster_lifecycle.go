@@ -71,6 +71,10 @@ func (cl *clusterLifecycle) SetState(clusterId string, state ClusterLifecycleSta
 	}
 
 	previousState := entry.state
+	if isRefreshServingState(previousState) && isClientInitializationState(state) {
+		cl.mu.Unlock()
+		return
+	}
 
 	// Cancel any pending slow-loading timer before changing state.
 	if entry.slowTimer != nil {
@@ -107,6 +111,14 @@ func (cl *clusterLifecycle) SetState(clusterId string, state ClusterLifecycleSta
 	}
 }
 
+func isClientInitializationState(state ClusterLifecycleState) bool {
+	return state == ClusterStateConnecting || state == ClusterStateConnected
+}
+
+func isRefreshServingState(state ClusterLifecycleState) bool {
+	return state == ClusterStateLoading || state == ClusterStateLoadingSlow || state == ClusterStateReady
+}
+
 // GetState returns the current lifecycle state for a cluster.
 // Returns an empty string if the cluster is not tracked.
 func (cl *clusterLifecycle) GetState(clusterId string) ClusterLifecycleState {
@@ -130,6 +142,26 @@ func (cl *clusterLifecycle) GetAllStates() map[string]ClusterLifecycleState {
 		result[id] = entry.state
 	}
 	return result
+}
+
+// Replay emits the cluster's current authoritative state without changing the
+// state machine or restarting its slow-loading timer. Foreground activation uses
+// this after governor reconciliation so a frontend that missed an earlier edge
+// converges even when the backend state itself did not change.
+func (cl *clusterLifecycle) Replay(clusterId string) {
+	cl.mu.Lock()
+	entry := cl.entries[clusterId]
+	if entry == nil {
+		cl.mu.Unlock()
+		return
+	}
+	state := entry.state
+	emitter := cl.emitter
+	cl.mu.Unlock()
+
+	if emitter != nil {
+		emitter(clusterId, state, state)
+	}
 }
 
 // Remove deletes a cluster's lifecycle entry and cancels any pending slow timer.

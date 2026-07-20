@@ -6,6 +6,7 @@ import (
 	"path/filepath"
 	"sync"
 	"testing"
+	"time"
 
 	"github.com/luxury-yacht/app/backend/internal/authstate"
 	appconfig "github.com/luxury-yacht/app/backend/internal/config"
@@ -389,4 +390,62 @@ func TestSyncClusterClientPool_ConcurrentAccess(t *testing.T) {
 	defer app.clusterClientsMu.Unlock()
 	require.Len(t, app.clusterClients, 1)
 	require.NotNil(t, app.clusterClients[id])
+}
+
+func TestSyncClusterClientPoolPublishesEachBuiltClientWithoutWaitingForSiblingBuilds(t *testing.T) {
+	app := newTestAppWithDefaults(t)
+	app.Ctx = context.Background()
+	app.clusterClients = make(map[string]*clusterClients)
+	app.clusterOps = newClusterOperationCoordinator()
+
+	selA := kubeconfigSelection{Path: "/tmp/config-a", Context: "ctx-a"}
+	selB := kubeconfigSelection{Path: "/tmp/config-b", Context: "ctx-b"}
+	app.availableKubeconfigs = []KubeconfigInfo{
+		{Name: "config-a", Path: selA.Path, Context: selA.Context},
+		{Name: "config-b", Path: selB.Path, Context: selB.Context},
+	}
+	idA := app.clusterMetaForSelection(selA).ID
+
+	aBuilt := make(chan struct{})
+	releaseB := make(chan struct{})
+	var aBuiltOnce sync.Once
+	var releaseBOnce sync.Once
+	t.Cleanup(func() { releaseBOnce.Do(func() { close(releaseB) }) })
+
+	build := func(ctx context.Context, selection kubeconfigSelection, meta ClusterMeta) (*clusterClients, error) {
+		if selection == selB {
+			select {
+			case <-releaseB:
+			case <-ctx.Done():
+				return nil, ctx.Err()
+			}
+		}
+		clients := &clusterClients{
+			meta:              meta,
+			kubeconfigPath:    selection.Path,
+			kubeconfigContext: selection.Context,
+		}
+		if selection == selA {
+			aBuiltOnce.Do(func() { close(aBuilt) })
+		}
+		return clients, nil
+	}
+
+	result := make(chan error, 1)
+	go func() {
+		result <- app.syncClusterClientPoolWithBuilder(context.Background(), []kubeconfigSelection{selA, selB}, build)
+	}()
+
+	select {
+	case <-aBuilt:
+	case <-time.After(time.Second):
+		t.Fatal("cluster A client build did not finish")
+	}
+
+	require.Eventually(t, func() bool {
+		return app.clusterClientsForID(idA) != nil
+	}, 250*time.Millisecond, 10*time.Millisecond, "one slow cluster must not delay publishing another cluster's completed client")
+
+	releaseBOnce.Do(func() { close(releaseB) })
+	require.NoError(t, <-result)
 }

@@ -156,6 +156,12 @@ func (a *App) startObjectCatalogForTarget(target catalogTarget) error {
 	if target.meta.ID == "" {
 		return fmt.Errorf("cluster identifier missing")
 	}
+	// Cold clusters deliberately have no live informer/ingest producers. Starting
+	// their catalogs would run discovery and capability checks, then repeatedly try
+	// to collect from stores whose feeds the governor intentionally stopped.
+	if a.governorKeepsClusterCold(target.meta.ID) {
+		return nil
+	}
 
 	clients := a.clusterClientsForID(target.meta.ID)
 	if clients == nil {

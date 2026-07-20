@@ -17,7 +17,8 @@ payload shape; they link here instead of restating freshness behavior.
    service-unavailable errors. When reconciliation completes, its snapshot
    replaces the retained data. This activation boundary applies to every refresh
    domain and every dispatch path, including scheduled work, stream-triggered
-   snapshots, and stream-only domains.
+   snapshots, and stream-only domains. Backend cool/re-warm transitions are
+   serialized so this boundary cannot complete against a half-cooled subsystem.
 3. **Keep background work passive.** An open inactive cluster retains snapshots
    and object-change subscriptions. It does not continuously fetch snapshots,
    start metrics collection, or produce manual-refresh errors merely because
@@ -50,7 +51,12 @@ stream reconciliation path rather than creating a ManualQueue job.
 ## Retention and leases
 
 - Refresh state is keyed by one `clusterId` plus the domain-owned scope.
+- The selected cluster and domain scope determine the retained-data read key.
+  Lifecycle/readiness may gate leases and requests, but must not remove that read
+  key or hide a retained snapshot.
 - Disabling or switching a visible scope preserves its last successful data.
+- If an open cluster temporarily loses refresh eligibility, stop its active work
+  with state preservation. Only closing/removing the cluster clears that scope.
 - Re-enabling paints that data before the activation request settles.
 - Cross-cluster views acquire one lease per displayed cluster; membership
   changes acquire/release only the changed clusters.
@@ -124,6 +130,17 @@ The authored domain contract declares which clocks can change a payload:
   error state clears that scope's dedupe so a later failure can notify again.
 - Loading gates may block invalid early reads, but must still allow the request
   that advances the cluster to ready.
+- After foreground governor reconciliation, the backend replays that cluster's
+  current authoritative lifecycle state even when no transition occurred. The
+  frontend relay applies it to both React lifecycle consumers and refresh
+  readiness consumers so a missed earlier event cannot leave the tab behind the
+  serving gate.
+- Startup settings restore, saved-selection restore, and client initialization
+  use the same serialized selection-mutation boundary as runtime selection
+  changes. Each completed cluster client is published independently; one slow
+  sibling may not delay it. After a cluster enters `loading`, `loading_slow`, or
+  `ready`, a late `connecting`/`connected` result cannot move it back behind the
+  frontend serving gate.
 - When a cluster subsystem is replaced, queued or running manual work moves to
   its replacement queue. Succeeded, failed, and cancelled jobs remain terminal
   and are never re-enqueued.
@@ -163,5 +180,9 @@ For a freshness change, test the contract at the producer/consumer seam:
     domain, aborts in-flight work for only the activating cluster, preserves
     visible request intent, and never converts passive background work into
     queued demand.
+11. a temporarily unavailable open cluster stops refresh work without losing its
+    retained snapshot, including when every open cluster is unavailable;
+12. tab activation replays the backend's unchanged authoritative lifecycle state
+    to both frontend lifecycle consumer paths.
 
 Finish non-documentation changes with `mage qc:prerelease`.

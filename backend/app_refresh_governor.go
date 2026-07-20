@@ -39,6 +39,20 @@ func (a *App) ensureGovernorStateLocked() {
 	}
 }
 
+// governorKeepsClusterCold reports whether the latest serialized governor
+// assignment intentionally keeps clusterID without live producers. It reads the
+// assignment rather than Subsystem.Cooled: during cooling the assignment changes
+// before feeds stop, and during re-warm it changes before the fresh catalog starts.
+func (a *App) governorKeepsClusterCold(clusterID string) bool {
+	if a == nil || clusterID == "" {
+		return false
+	}
+	a.governorMu.Lock()
+	defer a.governorMu.Unlock()
+	tier, tracked := a.governorApplied[clusterID]
+	return tracked && tier == system.TierCold
+}
+
 // SetVisibleCluster records the cluster the user is currently viewing and
 // re-tiers the open clusters accordingly. It is Wails-bound so the frontend
 // calls it whenever the active cluster tab changes.
@@ -57,6 +71,9 @@ func (a *App) SetVisibleCluster(clusterID string) {
 	a.governorMu.Unlock()
 
 	a.reconcileGovernor()
+	if a.clusterLifecycle != nil {
+		a.clusterLifecycle.Replay(clusterID)
+	}
 }
 
 // moveToFront returns mru with id at the front, preserving the relative order of
@@ -93,13 +110,19 @@ func (a *App) reconcileGovernor() {
 }
 
 // reconcileGovernorWith is the testable core: it reads the governor state under
-// the lock, computes transitions, then dispatches them through exec. exec calls
-// run OUTSIDE the lock because building/tearing down a subsystem is slow and must
-// not block SetVisibleCluster or the pressure loop.
+// governorMu, computes transitions, then dispatches them through exec. Slow executor
+// calls run outside governorMu so newer visibility and pressure intent can still be
+// recorded; governorReconcileMu orders their application so executor calls cannot
+// overlap on an intermediate subsystem state.
 func (a *App) reconcileGovernorWith(exec governorExecutor) {
 	if a == nil || exec == nil {
 		return
 	}
+	// Applying a tier is a multi-step lifecycle operation: cooling stops feeds
+	// before publishing the cooled subsystem, while warming replaces the entire
+	// subsystem. Never let another reconcile act on that intermediate state.
+	a.governorReconcileMu.Lock()
+	defer a.governorReconcileMu.Unlock()
 
 	open := a.openClusterIDs()
 
@@ -123,8 +146,8 @@ func (a *App) reconcileGovernorWith(exec governorExecutor) {
 	}
 	desired := a.governorPolicy.Assign(mru, a.governorVisible, a.governorPressure)
 	transitions := system.PlanGovernorTransitions(a.governorApplied, desired)
-	// Record the new tiers now; the executor calls below are idempotent, so a
-	// concurrent reconcile observing the updated map will simply find no work.
+	// Record the tiers being applied. A later serialized reconcile computes from
+	// this applied intent and any visibility or pressure changes recorded meanwhile.
 	for id, tier := range desired {
 		a.governorApplied[id] = tier
 	}
@@ -334,14 +357,11 @@ func (a *App) seedGovernorFromOpenClusters() {
 			a.governorVisible = a.governorMRU[0]
 		}
 	}
-	// Mark every open cluster as currently Foreground: the initial build path
-	// already started them all fully, so reconcile only needs to DEMOTE the ones
-	// the policy wants Background/Cold (idempotent for the visible one).
-	for id := range open {
-		a.governorApplied[id] = system.TierForeground
-	}
 	a.governorMu.Unlock()
 
+	// Leave last-applied tier updates to the serialized reconcile path. The initial
+	// build already started every subsystem, so its ensureRunning calls are idempotent;
+	// Cold assignments still perform the required cooling transition.
 	a.reconcileGovernor()
 }
 

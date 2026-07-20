@@ -5,7 +5,6 @@ import (
 	"fmt"
 	"net/http"
 	"runtime"
-	"sync"
 
 	appconfig "github.com/luxury-yacht/app/backend/internal/config"
 	"github.com/luxury-yacht/app/backend/internal/logsources"
@@ -54,6 +53,12 @@ type clusterClients struct {
 	fallbackResourceResolver common.ResourceResolver
 }
 
+type clusterClientBuilder func(
+	context.Context,
+	kubeconfigSelection,
+	ClusterMeta,
+) (*clusterClients, error)
+
 func (a *App) clusterClientsForID(clusterID string) *clusterClients {
 	if a == nil || clusterID == "" {
 		return nil
@@ -72,8 +77,12 @@ func (a *App) clusterClientsForSelection(selection kubeconfigSelection) *cluster
 	}
 	a.clusterClientsMu.Lock()
 	defer a.clusterClientsMu.Unlock()
+	return a.clusterClientsForSelectionLocked(selection)
+}
+
+func (a *App) clusterClientsForSelectionLocked(selection kubeconfigSelection) *clusterClients {
 	for _, c := range a.clusterClients {
-		if c.kubeconfigPath == selection.Path && c.kubeconfigContext == selection.Context {
+		if c != nil && c.kubeconfigPath == selection.Path && c.kubeconfigContext == selection.Context {
 			return c
 		}
 	}
@@ -87,8 +96,19 @@ func (a *App) syncClusterClientPool(selections []kubeconfigSelection) error {
 
 // syncClusterClientPoolWithContext builds missing clients for the provided selections and drops stale entries.
 func (a *App) syncClusterClientPoolWithContext(ctx context.Context, selections []kubeconfigSelection) error {
+	return a.syncClusterClientPoolWithBuilder(ctx, selections, a.buildClusterClientsWithContext)
+}
+
+func (a *App) syncClusterClientPoolWithBuilder(
+	ctx context.Context,
+	selections []kubeconfigSelection,
+	build clusterClientBuilder,
+) error {
 	if a == nil {
 		return fmt.Errorf("app is nil")
+	}
+	if build == nil {
+		return fmt.Errorf("cluster client builder is nil")
 	}
 	if ctx == nil {
 		ctx = context.Background()
@@ -125,11 +145,6 @@ func (a *App) syncClusterClientPoolWithContext(ctx context.Context, selections [
 	a.clusterClientsMu.Unlock()
 
 	if len(toCreate) > 0 {
-		type builtClient struct {
-			id      string
-			clients *clusterClients
-		}
-
 		// Pre-build metadata so worker goroutines do not repeatedly derive IDs.
 		type createTask struct {
 			selection kubeconfigSelection
@@ -150,50 +165,55 @@ func (a *App) syncClusterClientPoolWithContext(ctx context.Context, selections [
 			}
 		}
 
-		built := make([]builtClient, 0, len(tasks))
 		limit := clusterClientBuildConcurrencyLimit(len(tasks))
-		var builtMu sync.Mutex
 		err := parallel.ForEach(ctx, tasks, limit, func(taskCtx context.Context, task createTask) error {
 			return a.runClusterOperation(taskCtx, task.meta.ID, func(opCtx context.Context) error {
 				if err := opCtx.Err(); err != nil {
 					return err
 				}
-				clients, buildErr := a.buildClusterClientsWithContext(opCtx, task.selection, task.meta)
+
+				// Another selection sync may have installed this client while this task
+				// waited for its per-cluster operation slot.
+				if a.clusterClientsForID(task.meta.ID) != nil || a.clusterClientsForSelection(task.selection) != nil {
+					return nil
+				}
+
+				clients, buildErr := build(opCtx, task.selection, task.meta)
 				if buildErr != nil {
 					return buildErr
 				}
+				if clients == nil {
+					return fmt.Errorf("cluster client builder returned nil clients for %s", task.meta.ID)
+				}
 				if err := opCtx.Err(); err != nil {
-					if clients != nil && clients.authManager != nil {
+					if clients.authManager != nil {
 						clients.authManager.Shutdown()
 					}
 					return err
 				}
-				builtMu.Lock()
-				built = append(built, builtClient{id: task.meta.ID, clients: clients})
-				builtMu.Unlock()
+
+				installed := false
+				a.clusterClientsMu.Lock()
+				if a.clusterClients[task.meta.ID] == nil && a.clusterClientsForSelectionLocked(task.selection) == nil {
+					a.clusterClients[task.meta.ID] = clients
+					installed = true
+				}
+				a.clusterClientsMu.Unlock()
+
+				if !installed {
+					if clients.authManager != nil {
+						clients.authManager.Shutdown()
+					}
+					return nil
+				}
+				if a.clusterLifecycle != nil {
+					a.clusterLifecycle.SetState(task.meta.ID, ClusterStateConnected)
+				}
 				return nil
 			})
 		})
 		if err != nil {
-			// Cleanup any successfully created auth managers on partial failure.
-			for _, item := range built {
-				if item.clients != nil && item.clients.authManager != nil {
-					item.clients.authManager.Shutdown()
-				}
-			}
 			return err
-		}
-
-		a.clusterClientsMu.Lock()
-		for _, item := range built {
-			a.clusterClients[item.id] = item.clients
-		}
-		a.clusterClientsMu.Unlock()
-
-		for _, item := range built {
-			if a.clusterLifecycle != nil {
-				a.clusterLifecycle.SetState(item.id, ClusterStateConnected)
-			}
 		}
 	}
 

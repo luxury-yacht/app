@@ -140,22 +140,11 @@ func (a *App) Startup(ctx context.Context) {
 		a.logger.Info(fmt.Sprintf("Found %d kubeconfig file(s)", len(a.availableKubeconfigs)), logsources.App)
 	}
 
-	// Startup is single-threaded here: the kubeconfig watcher has not started and
-	// Wails RPC handlers are not yet dispatching, so loadAppSettings is safe
-	// without settingsMu.
-	if err := a.loadAppSettings(); err != nil {
-		a.logger.Warn(fmt.Sprintf("Failed to load app settings: %v", err), logsources.App)
-		a.appSettings = getDefaultAppSettings()
-		a.logger.Info("Initialized app settings with defaults", logsources.App)
-	} else {
-		a.logger.Debug("Application settings loaded successfully", logsources.App)
-	}
-
-	a.restoreKubeconfigSelection()
-
-	if len(a.selectedKubeconfigs) > 0 {
-		a.logger.Info(fmt.Sprintf("Connecting to %d selected cluster(s)", len(a.selectedKubeconfigs)), logsources.App)
-		if err := a.initKubernetesClient(); err != nil {
+	// The window is already visible, so settings restore and client initialization
+	// share the runtime selection coordinator with any frontend mutation.
+	selectedCount, err := a.initializeSelectedClustersAtStartup()
+	if selectedCount > 0 {
+		if err != nil {
 			a.logger.Error(fmt.Sprintf("Failed to connect to cluster(s): %v", err), logsources.App)
 		} else {
 			a.logger.Info("Successfully connected to Kubernetes cluster(s)", logsources.App)

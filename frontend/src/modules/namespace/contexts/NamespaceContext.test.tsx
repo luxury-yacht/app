@@ -584,6 +584,45 @@ describe('NamespaceProvider selection behaviour', () => {
     cleanup();
   });
 
+  it('stops every temporarily unavailable open scope without clearing retained snapshots', () => {
+    const { rerender, cleanup } = renderWithProvider();
+    act(() => {
+      vi.runAllTimers();
+    });
+    mockRefreshOrchestrator.setScopedDomainEnabled.mockClear();
+    mockRefreshOrchestrator.fetchScopedDomain.mockClear();
+
+    mockClusterLifecycleStates = new Map([
+      ['cluster-a', 'connected'],
+      ['cluster-b', 'connected'],
+    ]);
+    rerender();
+    act(() => {
+      vi.runAllTimers();
+    });
+
+    expect(mockRefreshOrchestrator.setScopedDomainEnabled).toHaveBeenCalledWith(
+      'namespaces',
+      'cluster-a|',
+      false,
+      { preserveState: true }
+    );
+    expect(mockRefreshOrchestrator.setScopedDomainEnabled).toHaveBeenCalledWith(
+      'namespaces',
+      'cluster-b|',
+      false,
+      { preserveState: true }
+    );
+    expect(mockRefreshOrchestrator.fetchScopedDomain).not.toHaveBeenCalled();
+    expect(namespaceRef.current?.namespaces.map((item) => item.name)).toEqual([
+      ALL_NAMESPACES_DISPLAY_NAME,
+      'alpha',
+      'beta',
+    ]);
+
+    cleanup();
+  });
+
   it('keeps namespace selection scoped to the active cluster tab', () => {
     namespaceDomainRef.current = createNamespaceDomainMulti('ready', [
       {
@@ -700,6 +739,93 @@ describe('NamespaceProvider selection behaviour', () => {
       (call) => call[0] === 'namespaces' && call[2] === false
     );
     expect(disables).toEqual([]);
+
+    cleanup();
+  });
+
+  it('paints retained namespaces before a stale lifecycle gate allows refresh', () => {
+    namespaceDomainsByScopeRef.current = {
+      'cluster-a|': createNamespaceDomainWithCluster('ready', ['alpha'], 'cluster-a', 'alpha'),
+      'cluster-b|': createNamespaceDomainWithCluster('ready', ['gamma'], 'cluster-b', 'beta'),
+    };
+    mockClusterLifecycleStates = new Map([
+      ['cluster-a', 'loading'],
+      ['cluster-b', 'loading'],
+    ]);
+
+    const { rerender, cleanup } = renderWithProvider();
+    act(() => {
+      vi.runAllTimers();
+    });
+    mockRefreshOrchestrator.setScopedDomainEnabled.mockClear();
+    mockRefreshOrchestrator.fetchScopedDomain.mockClear();
+
+    // A late/stale lifecycle edge makes an open cluster temporarily ineligible
+    // for refresh. Its lease must stop without erasing its retained snapshot.
+    mockClusterLifecycleStates = new Map([
+      ['cluster-a', 'loading'],
+      ['cluster-b', 'connected'],
+    ]);
+    rerender();
+    act(() => {
+      vi.runAllTimers();
+    });
+    expect(mockRefreshOrchestrator.setScopedDomainEnabled).toHaveBeenCalledWith(
+      'namespaces',
+      'cluster-b|',
+      false,
+      { preserveState: true }
+    );
+    mockRefreshOrchestrator.setScopedDomainEnabled.mockClear();
+    mockRefreshOrchestrator.fetchScopedDomain.mockClear();
+
+    // The backend activation boundary has not converged yet, but retained data
+    // belongs to the selected cluster and must paint during this render.
+    mockClusterId = 'cluster-b';
+    rerender();
+    act(() => {
+      vi.runAllTimers();
+    });
+
+    expect(namespaceRef.current?.namespaces.map((item) => item.name)).toEqual([
+      ALL_NAMESPACES_DISPLAY_NAME,
+      'gamma',
+    ]);
+    expect(namespaceRef.current?.namespaceLoading).toBe(false);
+    expect(mockRefreshOrchestrator.setScopedDomainEnabled).not.toHaveBeenCalledWith(
+      'namespaces',
+      'cluster-b|',
+      true,
+      expect.anything()
+    );
+    expect(mockRefreshOrchestrator.fetchScopedDomain).not.toHaveBeenCalledWith(
+      'namespaces',
+      'cluster-b|',
+      expect.anything()
+    );
+
+    // Once lifecycle catches up, the same retained scope becomes eligible for
+    // its ordinary non-manual reconciliation.
+    mockClusterLifecycleStates = new Map([
+      ['cluster-a', 'loading'],
+      ['cluster-b', 'loading'],
+    ]);
+    rerender();
+    act(() => {
+      vi.runAllTimers();
+    });
+
+    expect(mockRefreshOrchestrator.setScopedDomainEnabled).toHaveBeenCalledWith(
+      'namespaces',
+      'cluster-b|',
+      true,
+      { preserveState: true }
+    );
+    expect(mockRefreshOrchestrator.fetchScopedDomain).toHaveBeenCalledWith(
+      'namespaces',
+      'cluster-b|',
+      { isManual: false, streamSignal: false }
+    );
 
     cleanup();
   });
@@ -934,6 +1060,11 @@ describe('NamespaceProvider selection behaviour', () => {
         (call) => call[1] === 'cluster-a|' && call[2] === false
       );
     expect(clusterADisablesAfterClose).toEqual([]);
+    expect(mockRefreshOrchestrator.setScopedDomainEnabled).toHaveBeenCalledWith(
+      'namespaces',
+      'cluster-b|',
+      false
+    );
     cleanup();
   });
 

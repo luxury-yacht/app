@@ -3,10 +3,37 @@ package backend
 import (
 	"sort"
 	"testing"
+	"time"
 
 	"github.com/luxury-yacht/app/backend/refresh/system"
 	"github.com/stretchr/testify/require"
 )
+
+type blockingGovernorExecutor struct {
+	teardownStarted  chan struct{}
+	allowTeardown    chan struct{}
+	teardownFinished chan struct{}
+	ensureStarted    chan struct{}
+}
+
+func newBlockingGovernorExecutor() *blockingGovernorExecutor {
+	return &blockingGovernorExecutor{
+		teardownStarted:  make(chan struct{}),
+		allowTeardown:    make(chan struct{}),
+		teardownFinished: make(chan struct{}),
+		ensureStarted:    make(chan struct{}),
+	}
+}
+
+func (e *blockingGovernorExecutor) ensureRunning(string) {
+	close(e.ensureStarted)
+}
+
+func (e *blockingGovernorExecutor) teardown(string) {
+	close(e.teardownStarted)
+	<-e.allowTeardown
+	close(e.teardownFinished)
+}
 
 // recordingGovernorExecutor captures the transitions reconcile dispatches so the
 // pure decision-to-action wiring can be asserted without real subsystems.
@@ -107,6 +134,53 @@ func TestReconcileGovernorIdempotentNoOp(t *testing.T) {
 
 	require.Empty(t, exec.ensureSeq, "no rebuilds when already at desired tier")
 	require.Empty(t, exec.tornDown, "no teardowns when already at desired tier")
+}
+
+func TestReconcileGovernorDoesNotPromoteClusterUntilItsInFlightCoolingFinishes(t *testing.T) {
+	selections := []kubeconfigSelection{{Path: "/p/a", Context: "a"}}
+	app, ids := governorTestApp(t, selections, 0)
+	clusterID := ids[0]
+
+	// The cluster is open but not visible, so the first reconciliation cools it.
+	app.governorMRU = []string{clusterID}
+	app.governorApplied = map[string]system.ResourceTier{clusterID: system.TierBackground}
+
+	exec := newBlockingGovernorExecutor()
+	firstDone := make(chan struct{})
+	go func() {
+		app.reconcileGovernorWith(exec)
+		close(firstDone)
+	}()
+	<-exec.teardownStarted
+
+	// The user returns to the cluster while cooling is still between stopping the
+	// feeds and publishing the cooled state.
+	app.governorMu.Lock()
+	app.governorVisible = clusterID
+	app.governorMRU = moveToFront(app.governorMRU, clusterID)
+	app.governorMu.Unlock()
+
+	secondDone := make(chan struct{})
+	go func() {
+		app.reconcileGovernorWith(exec)
+		close(secondDone)
+	}()
+
+	select {
+	case <-exec.ensureStarted:
+		t.Fatal("foreground promotion ran before the in-flight cooling action finished")
+	case <-time.After(100 * time.Millisecond):
+	}
+
+	close(exec.allowTeardown)
+	<-firstDone
+	<-secondDone
+
+	select {
+	case <-exec.ensureStarted:
+	case <-time.After(time.Second):
+		t.Fatal("foreground promotion did not run after cooling finished")
+	}
 }
 
 func TestReconcileGovernorPromotionKeepsBothWarmClustersRunning(t *testing.T) {
@@ -226,4 +300,36 @@ func TestSetVisibleClusterMovesToFrontOfMRU(t *testing.T) {
 
 	require.Equal(t, y, app.governorVisible)
 	require.Equal(t, []string{y, x}, app.governorMRU)
+}
+
+func TestSetVisibleClusterReplaysCurrentLifecycleState(t *testing.T) {
+	selections := []kubeconfigSelection{{Path: "/p/x", Context: "x"}}
+	app, ids := governorTestApp(t, selections, 0)
+	clusterID := ids[0]
+
+	type lifecycleEvent struct {
+		clusterID string
+		state     ClusterLifecycleState
+		previous  ClusterLifecycleState
+	}
+	var events []lifecycleEvent
+	app.clusterLifecycle = newClusterLifecycle(func(clusterID string, state, previous ClusterLifecycleState) {
+		events = append(events, lifecycleEvent{clusterID: clusterID, state: state, previous: previous})
+	})
+	app.clusterLifecycle.SetState(clusterID, ClusterStateReady)
+	events = nil
+
+	// The backend may already be ready while the frontend still holds an older
+	// connected event. Activating the tab is the deterministic convergence point:
+	// it must replay the current state even though no lifecycle transition occurs.
+	app.governorVisible = clusterID
+	app.governorMRU = []string{clusterID}
+	app.governorApplied[clusterID] = system.TierForeground
+	app.SetVisibleCluster(clusterID)
+
+	require.Equal(t, []lifecycleEvent{{
+		clusterID: clusterID,
+		state:     ClusterStateReady,
+		previous:  ClusterStateReady,
+	}}, events)
 }
