@@ -30,6 +30,7 @@ export interface NamespaceTableRow extends NamespaceSummaryWithMetrics {
 interface NamespaceSummaryTableProps {
   rows: NamespaceTableRow[];
   navigate: (row: NamespaceTableRow) => void;
+  navigateAttention?: (row: NamespaceTableRow, signal: 'unhealthy' | 'warnings') => void;
   navigateCluster?: (row: NamespaceTableRow) => void;
   enableRowNavigation?: boolean;
   showClusterColumn?: boolean;
@@ -143,6 +144,7 @@ const createNamespaceResourceColumn = (
 const NamespaceSummaryTable: React.FC<NamespaceSummaryTableProps> = ({
   rows,
   navigate,
+  navigateAttention,
   navigateCluster,
   enableRowNavigation = true,
   showClusterColumn = false,
@@ -202,23 +204,25 @@ const NamespaceSummaryTable: React.FC<NamespaceSummaryTableProps> = ({
         alignHeader: 'center',
         alignData: 'center',
       }),
-      {
-        key: 'unhealthyWorkloads',
-        header: 'Attn',
-        alignHeader: 'center',
-        alignData: 'center',
-        sortable: true,
-        sortValue: (row) => row.unhealthyWorkloads ?? 0,
-        render: (row) => {
+      cf.createTextColumn(
+        'unhealthyWorkloads',
+        'Unhealthy',
+        (row) => {
           const count = row.unhealthyWorkloads ?? 0;
-          return (
-            <span className={count > 0 ? 'status-text warning' : 'status-text'}>
-              {count > 0 ? count : '-'}
-            </span>
-          );
+          return count > 0 ? count : '-';
         },
-      },
-      cf.createTextColumn('warningEvents', 'Warn', warningEventText, {
+        {
+          alignHeader: 'center',
+          alignData: 'center',
+          sortValue: (row) => row.unhealthyWorkloads ?? 0,
+          onClick: (row) => navigateAttention?.(row, 'unhealthy'),
+          isInteractive: (row) => Boolean(navigateAttention) && (row.unhealthyWorkloads ?? 0) > 0,
+          getClassName: (row) =>
+            (row.unhealthyWorkloads ?? 0) > 0 ? 'status-text warning' : 'status-text',
+          allowRowClick: false,
+        }
+      ),
+      cf.createTextColumn('warningEvents', 'Warnings', warningEventText, {
         alignHeader: 'center',
         alignData: 'center',
         sortValue: (row) =>
@@ -227,6 +231,12 @@ const NamespaceSummaryTable: React.FC<NamespaceSummaryTableProps> = ({
           row.warningEventsState === 'available' && (row.warningEvents ?? 0) > 0
             ? 'status-text warning'
             : 'status-text',
+        onClick: (row) => navigateAttention?.(row, 'warnings'),
+        isInteractive: (row) =>
+          Boolean(navigateAttention) &&
+          row.warningEventsState === 'available' &&
+          (row.warningEvents ?? 0) > 0,
+        allowRowClick: false,
       }),
       createNamespaceResourceColumn('cpu'),
       createNamespaceResourceColumn('memory'),
@@ -258,7 +268,7 @@ const NamespaceSummaryTable: React.FC<NamespaceSummaryTableProps> = ({
       age: { autoWidth: true },
     });
     return result;
-  }, [navigate, navigateCluster, openNamespaceObject, showClusterColumn]);
+  }, [navigate, navigateAttention, navigateCluster, openNamespaceObject, showClusterColumn]);
 
   const keyExtractor = useCallback(
     (row: NamespaceTableRow) => buildRequiredCanonicalObjectRowKey(row),

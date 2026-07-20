@@ -28,6 +28,7 @@ export type {
   GridTableDiagnosticsMode,
   GridTableFilterAccessors,
   GridTableFilterConfig,
+  GridTableFilteredEmptyState,
   GridTableFilterOptions,
   GridTableFilterState,
   GridTableLocalPaginationConfig,
@@ -47,6 +48,7 @@ const GridTable = memo(function GridTableComponent<T>(props: GridTableProps<T>) 
     hideHeader = false,
     useShortNames = false,
     emptyMessage = 'No data available',
+    filteredEmptyState,
     allowHorizontalOverflow = true,
     showTrailingColumnBoundary = true,
     keyExtractor,
@@ -115,6 +117,7 @@ const GridTable = memo(function GridTableComponent<T>(props: GridTableProps<T>) 
       tableData={tableData}
       keyExtractor={keyExtractor}
       emptyMessage={emptyMessage}
+      filteredEmptyState={filteredEmptyState}
       shouldVirtualize={shouldVirtualize}
       virtualRows={virtualRows}
       virtualRangeStart={virtualRange.start}

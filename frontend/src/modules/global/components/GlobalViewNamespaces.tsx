@@ -14,6 +14,8 @@ import {
   useNamespaceStatesByScope,
 } from '@modules/namespace/contexts/NamespaceContext';
 import { joinNamespaceMetrics } from '@modules/namespace/contexts/namespaceMetrics';
+import { DEFAULT_GRID_TABLE_FILTER_STATE } from '@shared/components/tables/gridTableFilterState';
+import { requestGridTableFilters } from '@shared/components/tables/hooks/useGridTableExternalFilters';
 import React, { useCallback, useEffect, useEffectEvent, useMemo, useRef } from 'react';
 import { requestRefreshDomain, setRefreshDomainEnabled } from '@/core/data-access';
 import { useStreamSignalRefetch } from '@/core/refresh/hooks/useStreamSignalRefetch';
@@ -28,6 +30,11 @@ interface GlobalNamespaceTarget {
   clusterName: string;
   selection: string;
 }
+
+const attentionKindsBySignal = {
+  unhealthy: ['Pod', 'Deployment', 'StatefulSet', 'DaemonSet', 'Job', 'CronJob'],
+  warnings: ['Event'],
+} as const;
 
 const GlobalViewNamespaces: React.FC = () => {
   const { selectedKubeconfigs, getClusterMeta, setActiveKubeconfig } = useKubeconfig();
@@ -205,6 +212,43 @@ const GlobalViewNamespaces: React.FC = () => {
       targetByClusterId,
     ]
   );
+  const navigateAttention = useCallback(
+    (row: NamespaceTableRow, signal: keyof typeof attentionKindsBySignal) => {
+      if (row.scopeStatus) {
+        return;
+      }
+      const target = targetByClusterId.get(row.clusterId);
+      if (!target) {
+        return;
+      }
+      requestGridTableFilters({
+        clusterId: row.clusterId,
+        destinationViewId: 'cluster-attention',
+        filters: {
+          ...DEFAULT_GRID_TABLE_FILTER_STATE,
+          kinds: { mode: 'some', values: [...attentionKindsBySignal[signal]] },
+          namespaces: { mode: 'some', values: [row.name] },
+        },
+      });
+      setClusterNavigationTarget(row.clusterId, {
+        viewType: 'cluster',
+        activeClusterView: 'attention',
+      });
+      setSidebarSelectionForCluster(row.clusterId, {
+        type: 'cluster',
+        value: 'cluster',
+      });
+      activateClusterWorkspace(row.clusterId);
+      setActiveKubeconfig(target.selection);
+    },
+    [
+      activateClusterWorkspace,
+      setActiveKubeconfig,
+      setClusterNavigationTarget,
+      setSidebarSelectionForCluster,
+      targetByClusterId,
+    ]
+  );
 
   const pending = targets.some((target) => {
     if (!isNamespaceRefreshAvailable(getClusterState(target.clusterId))) {
@@ -230,6 +274,7 @@ const GlobalViewNamespaces: React.FC = () => {
       <NamespaceSummaryTable
         rows={rows}
         navigate={navigate}
+        navigateAttention={navigateAttention}
         navigateCluster={navigateCluster}
         enableRowNavigation={false}
         showClusterColumn

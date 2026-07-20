@@ -11,6 +11,7 @@ import {
   AriaGridRow,
   AriaGridRowGroup,
 } from '@shared/components/tables/AriaGridPrimitives';
+import type { GridTableFilteredEmptyState } from '@shared/components/tables/GridTable.types';
 import type { RenderRowContentFn } from '@shared/components/tables/hooks/useGridTableRowRenderer';
 import type React from 'react';
 import type { RefObject } from 'react';
@@ -35,6 +36,7 @@ interface GridTableBodyProps<T> {
   tableData: T[];
   keyExtractor: (item: T, index: number) => string;
   emptyMessage: string;
+  filteredEmptyState?: GridTableFilteredEmptyState;
   shouldVirtualize: boolean;
   virtualRows: T[];
   virtualRangeStart: number;
@@ -65,6 +67,7 @@ function GridTableBody<T>({
   tableData,
   keyExtractor,
   emptyMessage,
+  filteredEmptyState,
   shouldVirtualize,
   virtualRows,
   virtualRangeStart,
@@ -142,7 +145,37 @@ function GridTableBody<T>({
           <AriaGridCell colSpan={1000}>
             <div className="gridtable-empty">
               {hasActiveFilters ? 'No matching items' : (emptyMessage ?? '')}
-              {!!hasActiveFilters && (
+              {hasActiveFilters && filteredEmptyState ? (
+                <>
+                  <div className="gridtable-empty-filter-hint">
+                    {filteredEmptyState.description}
+                  </div>
+                  <div className="gridtable-empty-filter-actions">
+                    <button
+                      type="button"
+                      className="gridtable-empty-filter-hint__link"
+                      onClick={(e) => {
+                        e.preventDefault();
+                        onClearFilters();
+                      }}
+                    >
+                      {filteredEmptyState.clearFiltersLabel ?? 'Clear filters'}
+                    </button>
+                    {!!filteredEmptyState.secondaryAction && (
+                      <>
+                        <span aria-hidden="true">•</span>
+                        <button
+                          type="button"
+                          className="gridtable-empty-filter-hint__link"
+                          onClick={filteredEmptyState.secondaryAction.onClick}
+                        >
+                          {filteredEmptyState.secondaryAction.label}
+                        </button>
+                      </>
+                    )}
+                  </div>
+                </>
+              ) : hasActiveFilters ? (
                 <div className="gridtable-empty-filter-hint">
                   Filters are enabled that may be hiding objects.{' '}
                   <button
@@ -156,7 +189,7 @@ function GridTableBody<T>({
                     Clear filters
                   </button>
                 </div>
-              )}
+              ) : null}
             </div>
           </AriaGridCell>
         </AriaGridRow>

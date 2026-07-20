@@ -535,6 +535,14 @@ body.gridtable-disable-hover .gridtable-hover-overlay {
   text-decoration: underline;
 }
 
+.gridtable-empty-filter-actions {
+  display: flex;
+  justify-content: center;
+  gap: 0.5rem;
+  margin-top: 0.25rem;
+  color: var(--grid-text-secondary);
+}
+
 /* Initial loading state - consistent positioning */
 .gridtable-container.gridtable-initial-loading {
   min-height: 400px;

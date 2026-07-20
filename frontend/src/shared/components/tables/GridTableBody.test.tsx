@@ -222,6 +222,48 @@ describe('GridTableBody', () => {
     expect(onClearFilters).toHaveBeenCalledTimes(1);
   });
 
+  it('renders a custom filtered-empty explanation and secondary action', async () => {
+    const onClearFilters = vi.fn();
+    const onSecondaryAction = vi.fn();
+    const { container } = await renderTableBody({
+      tableData: [],
+      virtualRows: [],
+      shouldVirtualize: false,
+      hasActiveFilters: true,
+      onClearFilters,
+      filteredEmptyState: {
+        description: 'Items could be hidden due to filters or ignored findings',
+        clearFiltersLabel: 'Clear filters',
+        secondaryAction: {
+          label: 'Manage ignored findings',
+          onClick: onSecondaryAction,
+        },
+      },
+    });
+
+    const empty = container.querySelector('.gridtable-empty');
+    expect(empty?.textContent).toContain('No matching items');
+    expect(empty?.textContent).toContain(
+      'Items could be hidden due to filters or ignored findings'
+    );
+
+    const actions = Array.from(
+      container.querySelectorAll<HTMLButtonElement>('.gridtable-empty-filter-hint__link')
+    );
+    expect(actions.map((action) => action.textContent)).toEqual([
+      'Clear Filters',
+      'Manage Ignored Findings',
+    ]);
+
+    await act(async () => {
+      actions[0]?.click();
+      actions[1]?.click();
+    });
+
+    expect(onClearFilters).toHaveBeenCalledTimes(1);
+    expect(onSecondaryAction).toHaveBeenCalledTimes(1);
+  });
+
   it('prevents native right-click text selection inside grid cells', async () => {
     const renderRowContent: RenderRowContentFn<TestRow> = (item) => (
       <div key={item.id} className="gridtable-row">

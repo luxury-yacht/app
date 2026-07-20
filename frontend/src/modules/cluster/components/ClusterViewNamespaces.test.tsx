@@ -229,8 +229,8 @@ describe('ClusterViewNamespaces', () => {
     };
     localPagination.onPageSizeChange(100);
     expect(mocks.setPageSize).toHaveBeenCalledWith(100);
-    expect(columns.find(({ key }) => key === 'unhealthyWorkloads')?.header).toBe('Attn');
-    expect(columns.find(({ key }) => key === 'warningEvents')?.header).toBe('Warn');
+    expect(columns.find(({ key }) => key === 'unhealthyWorkloads')?.header).toBe('Unhealthy');
+    expect(columns.find(({ key }) => key === 'warningEvents')?.header).toBe('Warnings');
 
     const rows = (tableProps.source as { rows: Array<Record<string, unknown>> }).rows;
     expect(rows[0]).toMatchObject({
