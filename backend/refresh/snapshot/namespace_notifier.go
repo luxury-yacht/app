@@ -90,6 +90,13 @@ func NewNamespaceChangeNotifier(ingest namespacePodIngestSource, tracker *Namesp
 	}
 }
 
+// WorkloadsReady reports whether this notifier's workload tracker has settled.
+// The notifier and tracker belong to one refresh subsystem generation, so this
+// is the generation-local readiness check used before that subsystem may cool.
+func (n *NamespaceChangeNotifier) WorkloadsReady() bool {
+	return n != nil && n.tracker != nil && n.tracker.Synced()
+}
+
 // SetBroadcast wires the doorbell sink. Events recorded before wiring are
 // flushed on the next debounce tick. The reason describes what rang the
 // doorbell, for the debug log at the broadcast site.

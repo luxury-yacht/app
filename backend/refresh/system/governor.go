@@ -10,7 +10,8 @@ package system
 //
 // Metrics demand is independent of governor tier and follows active frontend
 // leases for each cluster.
-//   - Cold: torn down, heap reclaimed; re-warmed (re-synced) when the user revisits.
+//   - Cold: live producers stopped only after a retained serving baseline exists;
+//     re-warmed (re-synced) when the user revisits.
 type ResourceTier int
 
 const (

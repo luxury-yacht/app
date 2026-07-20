@@ -202,6 +202,15 @@ checklist when touching anything they name.
        but never the read key or rendered retained rows. When an open cluster becomes
        temporarily ineligible, disable its scope with `preserveState: true`; clear the
        scope only when the cluster is actually removed.
+   16. **Cold entry requires a retained baseline**: never stop a subsystem's producers
+       before server-owned `namespaces` readiness and the exact per-cluster
+       `cluster-overview` snapshot have built. A deferred transition must remain at its
+       actual live applied tier, then reconcile again when preparation succeeds. Use
+       both the aggregate service's server-owned Ready transition and the current
+       subsystem generation's `NamespaceNotifier.WorkloadsReady()` as proof of the
+       namespace baseline. The generation-local check is required because lifecycle
+       Ready may be retained across re-warm. Do not poll namespace snapshots from Cold
+       preparation (scoped builds may issue per-namespace API probes).
 10. **Stream health = connected + server-confirmed synchronized**, not
     recently-delivered (`computeSubscriptionHealth`;
     `markSubscriptionSynchronized` only after the mux confirms the subscribe).

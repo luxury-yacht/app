@@ -116,6 +116,31 @@ type Subsystem struct {
 	// cooled, always-settled informer hub). A cooled subsystem is non-nil but NOT live:
 	// the governor re-warm path detects this and rebuilds a fresh, live subsystem.
 	Cooled bool
+
+	// coldPreparation is the server-owned gate in front of Cooled. A subsystem may
+	// stop its live producers only after the retained namespace and cluster-overview
+	// snapshots have been built from settled sources. State transitions are:
+	// 0 = not started, 1 = preparing, 2 = ready.
+	coldPreparation atomic.Uint32
+}
+
+// BeginColdPreparation elects one goroutine to prepare the retained snapshots
+// required before this subsystem may stop its live producers.
+func (s *Subsystem) BeginColdPreparation() bool {
+	return s != nil && s.coldPreparation.CompareAndSwap(0, 1)
+}
+
+// MarkColdServingReady records that the retained baseline has been built from
+// settled sources and this subsystem is eligible for the Cold serving tier.
+func (s *Subsystem) MarkColdServingReady() {
+	if s != nil {
+		s.coldPreparation.Store(2)
+	}
+}
+
+// ColdServingReady reports whether the server-owned retained baseline exists.
+func (s *Subsystem) ColdServingReady() bool {
+	return s != nil && s.coldPreparation.Load() == 2
 }
 
 // NewSubsystem prepares the refresh manager, HTTP handler, and supporting services.

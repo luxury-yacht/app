@@ -121,6 +121,16 @@ the completed `v2` rewrite plan.
   discovery, capability checks, or sync loops against their stopped feeds; the catalog
   restarts as part of re-warm. Starting points:
   `domain/maintained_stores.go`, `querypage/columnstore_mmap.go`, `app_refresh_spill.go`.
+- **Cold has a server-owned entry gate.** A desired Cold tier stays unapplied while
+  the live subsystem builds settled `namespaces` and `cluster-overview` snapshots
+  for its cluster scope. The namespace build uses the aggregate lifecycle callback,
+  so Ready and the retained sidebar/Global payloads exist before any producer stops.
+  Preparation waits on that lifecycle state and the current subsystem generation's
+  namespace workload tracker without polling namespace snapshots, retries the overview
+  from the backend, and does not wait for tab activation. This generation-local gate
+  prevents a retained Ready state from cooling a replacement subsystem before its own
+  stores settle. Only a successful preparation marks the subsystem eligible for
+  cooling; the governor records Cold after the executor reaches it.
 - **Re-warm keeps Ready.** Governor re-warms rebuild the subsystem through the same
   per-cluster chokepoint as first builds, but serving is continuous (cooled mmap stores
   serve until the aggregate re-routes; fresh stores warm-paint from spill) —

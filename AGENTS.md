@@ -151,7 +151,11 @@ machine-wide Playwright MCP server instead.
   longer exists.
 - Use the active Wails development-server URL supplied for the run. Confirm it
   responds before browser work because Wails may choose a different port on a
-  later run. If it is not reachable, ask for the current URL, not screenshots.
+  later run. If it is not reachable, check whether the development process is
+  running. Start it with `mage dev` when needed, wait for the command to report
+  the active URL, and use that URL. Ask the user for the current URL only when
+  an existing development process is running but its URL cannot be determined;
+  do not ask for screenshots.
 - Use browser snapshots/DOM inspection for structure and interaction, and take
   screenshots yourself for layout or visual checks. Exercise relevant clicks,
   filters, navigation, loading, empty, error, and populated states in proportion

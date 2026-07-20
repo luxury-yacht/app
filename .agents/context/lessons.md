@@ -111,3 +111,9 @@ sessions. Keep it short, durable, and tied to code contracts.
   automated generation is unreliable in the local environment, manually verify
   `frontend/wailsjs/go/models.ts` against the Go shape and run frontend
   typecheck.
+
+## Local Development
+
+- If the Wails development server is not running, start it with `mage dev`,
+  wait for the command to report its active URL, and use that URL for rendered
+  UI diagnosis.

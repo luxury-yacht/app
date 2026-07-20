@@ -9,6 +9,7 @@ import (
 
 	"github.com/luxury-yacht/app/backend/internal/config"
 	"github.com/luxury-yacht/app/backend/internal/logsources"
+	"github.com/luxury-yacht/app/backend/refresh"
 	"github.com/luxury-yacht/app/backend/refresh/snapshot"
 	"github.com/luxury-yacht/app/backend/refresh/system"
 )
@@ -96,10 +97,11 @@ func moveToFront(mru []string, id string) []string {
 type governorExecutor interface {
 	// ensureRunning builds+starts the cluster's subsystem if it is not already
 	// running. Metrics activity is owned independently by cluster-scoped
-	// frontend leases.
-	ensureRunning(clusterID string)
-	// teardown stops the cluster's subsystem and reclaims its heap.
-	teardown(clusterID string)
+	// frontend leases. It reports whether the requested live tier was reached.
+	ensureRunning(clusterID string) bool
+	// teardown reaches Cold only after its retained serving baseline exists. It
+	// reports false while that server-owned preparation is still running.
+	teardown(clusterID string) bool
 }
 
 // reconcileGovernor computes the desired tier for every open cluster and applies
@@ -146,19 +148,23 @@ func (a *App) reconcileGovernorWith(exec governorExecutor) {
 	}
 	desired := a.governorPolicy.Assign(mru, a.governorVisible, a.governorPressure)
 	transitions := system.PlanGovernorTransitions(a.governorApplied, desired)
-	// Record the tiers being applied. A later serialized reconcile computes from
-	// this applied intent and any visibility or pressure changes recorded meanwhile.
-	for id, tier := range desired {
-		a.governorApplied[id] = tier
-	}
 	a.governorMu.Unlock()
 
 	for _, t := range transitions {
+		applied := false
 		switch {
 		case t.Teardown:
-			exec.teardown(t.ClusterID)
+			applied = exec.teardown(t.ClusterID)
 		case t.EnsureRunning:
-			exec.ensureRunning(t.ClusterID)
+			applied = exec.ensureRunning(t.ClusterID)
+		}
+		if applied {
+			// Record the tier only after the executor reaches it. A deferred Cold
+			// transition remains at its live tier, so the retained-baseline callback
+			// can reconcile it again instead of leaving it permanently misclassified.
+			a.governorMu.Lock()
+			a.governorApplied[t.ClusterID] = t.Tier
+			a.governorMu.Unlock()
 		}
 	}
 }
@@ -214,10 +220,10 @@ type appGovernorExecutor struct {
 
 // ensureRunning builds+starts the subsystem if absent, reusing the existing
 // per-cluster rebuild path. Metrics demand is routed separately by cluster ID.
-func (e *appGovernorExecutor) ensureRunning(clusterID string) {
+func (e *appGovernorExecutor) ensureRunning(clusterID string) bool {
 	a := e.app
 	if a == nil {
-		return
+		return false
 	}
 	subsystem := a.getRefreshSubsystem(clusterID)
 	switch {
@@ -231,6 +237,8 @@ func (e *appGovernorExecutor) ensureRunning(clusterID string) {
 		// mmap-backed stores. Re-warm it to a fresh, live, mutable subsystem.
 		a.rewarmCooledClusterSubsystem(clusterID)
 	}
+	subsystem = a.getRefreshSubsystem(clusterID)
+	return subsystem != nil && !subsystem.Cooled
 }
 
 // rewarmCooledClusterSubsystem replaces a cooled (mmap-serving) subsystem with a fresh, live
@@ -266,15 +274,100 @@ func (a *App) rewarmCooledClusterSubsystem(clusterID string) {
 // keeping the subsystem registered so it still serves Build queries — and only falls back to a
 // full teardown (heap fully reclaimed, blank until re-warm) if cooling fails at any step. Either
 // way the cluster's informer/metrics heap is reclaimed.
-func (e *appGovernorExecutor) teardown(clusterID string) {
+func (e *appGovernorExecutor) teardown(clusterID string) bool {
 	a := e.app
 	if a == nil {
-		return
+		return false
 	}
-	if a.getRefreshSubsystem(clusterID) == nil {
-		return
+	subsystem := a.getRefreshSubsystem(clusterID)
+	if subsystem == nil {
+		return true
+	}
+	if !subsystem.ColdServingReady() {
+		a.startColdPreparation(clusterID, subsystem)
+		return false
 	}
 	a.coolClusterToMmapServing(clusterID)
+	subsystem = a.getRefreshSubsystem(clusterID)
+	return subsystem == nil || subsystem.Cooled
+}
+
+const coldPreparationRetryInterval = 250 * time.Millisecond
+
+// startColdPreparation waits for and builds the retained snapshots needed by
+// surfaces that remain visible while a cluster is Cold. The work is server-owned
+// and independent of frontend leases: until it succeeds, the subsystem stays live.
+func (a *App) startColdPreparation(clusterID string, subsystem *system.Subsystem) {
+	if a == nil || clusterID == "" || subsystem == nil || subsystem.SnapshotService == nil || a.refreshCtx == nil || a.clusterLifecycle == nil {
+		return
+	}
+	if !subsystem.BeginColdPreparation() {
+		return
+	}
+	go func() {
+		namespaceBaselineReady := func() bool {
+			if a.clusterLifecycle.GetState(clusterID) != ClusterStateReady {
+				return false
+			}
+			// The aggregate lifecycle may still carry Ready from a subsystem this
+			// one replaced. When the namespace domain is registered, also require
+			// this generation's own workload tracker to have settled.
+			return subsystem.NamespaceNotifier == nil || subsystem.NamespaceNotifier.WorkloadsReady()
+		}
+		if !primeColdServingSnapshots(a.refreshCtx, subsystem.SnapshotService, clusterID, namespaceBaselineReady) {
+			return
+		}
+		// A rebuild may have replaced this subsystem while its sources settled.
+		// Never transfer readiness across subsystem generations.
+		if a.getRefreshSubsystem(clusterID) != subsystem {
+			a.reconcileGovernor()
+			return
+		}
+		subsystem.MarkColdServingReady()
+		a.reconcileGovernor()
+	}()
+}
+
+// primeColdServingSnapshots waits for the server-owned namespace lifecycle to
+// prove its retained baseline, then builds cluster-overview. Waiting on lifecycle
+// state performs no snapshot or Kubernetes API calls. Cache bypass forces the
+// overview through its current source gates; its cluster-prefixed empty scope
+// matches Global requests exactly.
+func primeColdServingSnapshots(
+	ctx context.Context,
+	service refresh.SnapshotService,
+	clusterID string,
+	namespaceBaselineReady func() bool,
+) bool {
+	if ctx == nil || service == nil || clusterID == "" || namespaceBaselineReady == nil {
+		return false
+	}
+	scope := refresh.JoinClusterScope(clusterID, "")
+	for {
+		if namespaceBaselineReady() {
+			if _, err := buildColdPreparationSnapshot(ctx, service, "cluster-overview", scope); err == nil {
+				return true
+			}
+		}
+		timer := time.NewTimer(coldPreparationRetryInterval)
+		select {
+		case <-ctx.Done():
+			timer.Stop()
+			return false
+		case <-timer.C:
+		}
+	}
+}
+
+func buildColdPreparationSnapshot(
+	ctx context.Context,
+	service refresh.SnapshotService,
+	domainName string,
+	scope string,
+) (*refresh.Snapshot, error) {
+	attemptCtx, cancel := context.WithTimeout(ctx, config.RefreshInformerSyncTimeout+5*time.Second)
+	defer cancel()
+	return service.Build(refresh.WithCacheBypass(attemptCtx), domainName, scope)
 }
 
 // coolClusterToMmapServing transitions a cluster to the Cold-tier SERVING state: it stops the
@@ -340,8 +433,9 @@ func (a *App) coolClusterToMmapServing(clusterID string) {
 }
 
 // seedGovernorFromOpenClusters initializes the MRU/visible/applied state from the
-// currently open clusters and settles them to the policy's tiers. Called once the
-// initial subsystems have been built+started. The first open cluster is treated
+// currently open clusters and starts settling them to the policy's tiers. Called
+// once the initial subsystems have been built and their manager starts launched.
+// A Cold assignment remains live while its retained baseline settles. The first open cluster is treated
 // as visible if none has been set yet, so a fresh start lands one Foreground.
 func (a *App) seedGovernorFromOpenClusters() {
 	if a == nil {
@@ -360,8 +454,8 @@ func (a *App) seedGovernorFromOpenClusters() {
 	a.governorMu.Unlock()
 
 	// Leave last-applied tier updates to the serialized reconcile path. The initial
-	// build already started every subsystem, so its ensureRunning calls are idempotent;
-	// Cold assignments still perform the required cooling transition.
+	// build already launched every subsystem, so its ensureRunning calls are idempotent;
+	// Cold assignments prepare their retained baselines before cooling.
 	a.reconcileGovernor()
 }
 

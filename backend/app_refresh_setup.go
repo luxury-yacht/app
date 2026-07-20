@@ -70,10 +70,11 @@ func (a *App) setupRefreshSubsystem() error {
 		return err
 	}
 
-	// The subsystems above are all started Foreground. Settle them to the
-	// governor's tiers (visible Foreground, warm set Background with metrics
-	// paused, the rest Cold) and start the memory-pressure loop, which stops
-	// when the refresh context is cancelled.
+	// The subsystems above all have live manager starts in flight. Begin settling
+	// them to the governor's tiers (visible Foreground, warm set Background, the
+	// rest Cold). A Cold assignment keeps its producers live until the server has
+	// built the retained namespace/overview baseline. The memory-pressure loop
+	// stops when the refresh context is cancelled.
 	a.seedGovernorFromOpenClusters()
 	go a.startGovernorPressureLoop(ctx)
 
