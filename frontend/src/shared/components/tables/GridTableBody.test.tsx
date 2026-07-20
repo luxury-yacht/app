@@ -251,8 +251,8 @@ describe('GridTableBody', () => {
       container.querySelectorAll<HTMLButtonElement>('.gridtable-empty-filter-hint__link')
     );
     expect(actions.map((action) => action.textContent)).toEqual([
-      'Clear Filters',
-      'Manage Ignored Findings',
+      'Clear filters',
+      'Manage ignored findings',
     ]);
 
     await act(async () => {
