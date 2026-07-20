@@ -29,7 +29,7 @@ type aggregateManualJob struct {
 }
 
 // aggregateManualChildJob binds a child job to the queue that owns its status.
-// A succeeded child remains there; an unfinished child moves to a replacement
+// A terminal child remains there; an unfinished child moves to a replacement
 // queue when its cluster subsystem is rebuilt.
 type aggregateManualChildJob struct {
 	jobID string
@@ -288,8 +288,12 @@ func (q *aggregateManualQueue) moveUnfinishedJobs(queues map[string]refresh.Manu
 			if replacement == nil || child.queue == replacement {
 				continue
 			}
-			if status, ok := child.queue.Status(child.jobID); ok && status != nil && status.State == refresh.JobStateSucceeded {
-				continue
+			if status, ok := child.queue.Status(child.jobID); ok && status != nil {
+				switch status.State {
+				case refresh.JobStateQueued, refresh.JobStateRunning:
+				default:
+					continue
+				}
 			}
 			_, scopeValue := refresh.SplitClusterScopeList(aggregateJob.job.Scope)
 			migrations = append(migrations, aggregateManualJobMigration{

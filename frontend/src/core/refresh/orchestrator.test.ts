@@ -61,6 +61,10 @@ type RefreshOrchestratorInternals = {
   lastNotifiedErrors: Map<string, unknown>;
   contextVersion: number;
   metricsDemandClusterKey: string;
+  metricsDemandRequestKey: string | null;
+  metricsDemandRetryKey: string | null;
+  metricsDemandRetryTimer: ReturnType<typeof setTimeout> | null;
+  metricsDemandRetryDelayMs: number;
   context: RefreshContext;
   getRuntimeForScope: (domain: RefreshDomain, scope: string) => TestClusterRefreshRuntime;
   notifyRefreshError: (domain: RefreshDomain, scope: string | undefined, message: string) => void;
@@ -214,6 +218,13 @@ describe('refreshOrchestrator', () => {
     orchestratorInternals.lastNotifiedErrors?.clear?.();
     orchestratorInternals.contextVersion = 0;
     orchestratorInternals.metricsDemandClusterKey = '';
+    orchestratorInternals.metricsDemandRequestKey = null;
+    orchestratorInternals.metricsDemandRetryKey = null;
+    if (orchestratorInternals.metricsDemandRetryTimer !== null) {
+      clearTimeout(orchestratorInternals.metricsDemandRetryTimer);
+    }
+    orchestratorInternals.metricsDemandRetryTimer = null;
+    orchestratorInternals.metricsDemandRetryDelayMs = 1_000;
     orchestratorInternals.context = {
       currentView: 'namespace',
       objectPanel: { isOpen: false },
@@ -1483,7 +1494,7 @@ describe('refreshOrchestrator', () => {
     expect(getRefreshState().pendingRequests).toBe(0);
   });
 
-  it('updates metrics demand when metrics domains toggle', () => {
+  it('updates metrics demand when metrics domains toggle', async () => {
     refreshOrchestrator.registerDomain({
       domain: 'cluster-overview',
       refresherName: SYSTEM_REFRESHERS.clusterOverview,
@@ -1494,13 +1505,15 @@ describe('refreshOrchestrator', () => {
     const scope = buildClusterScope('cluster-a', '');
     refreshOrchestrator.setScopedDomainEnabled('cluster-overview', scope, true);
     expect(clientMocks.setMetricsActiveMock).toHaveBeenCalledWith(['cluster-a']);
+    await Promise.resolve();
 
     refreshOrchestrator.setScopedDomainEnabled('cluster-overview', scope, false);
+    await Promise.resolve();
     expect(clientMocks.setMetricsActiveMock).toHaveBeenLastCalledWith([]);
     expect(clientMocks.setMetricsActiveMock).toHaveBeenCalledTimes(2);
   });
 
-  it('routes metrics demand to the clusters that own active metric-bearing scopes', () => {
+  it('routes metrics demand to the clusters that own active metric-bearing scopes', async () => {
     refreshOrchestrator.registerDomain({
       domain: 'cluster-overview',
       refresherName: SYSTEM_REFRESHERS.clusterOverview,
@@ -1510,14 +1523,19 @@ describe('refreshOrchestrator', () => {
     const scopeA = buildClusterScope('cluster-a', '');
     const scopeB = buildClusterScope('cluster-b', '');
     refreshOrchestrator.setScopedDomainEnabled('cluster-overview', scopeA, true);
+    await Promise.resolve();
     refreshOrchestrator.setScopedDomainEnabled('cluster-overview', scopeB, true);
+    await Promise.resolve();
     expect(clientMocks.setMetricsActiveMock).toHaveBeenLastCalledWith(['cluster-a', 'cluster-b']);
 
     refreshOrchestrator.setScopedDomainEnabled('cluster-overview', scopeA, false);
+    await Promise.resolve();
     expect(clientMocks.setMetricsActiveMock).toHaveBeenLastCalledWith(['cluster-b']);
 
     refreshOrchestrator.setScopedDomainEnabled('cluster-overview', scopeA, true);
+    await Promise.resolve();
     refreshOrchestrator.updateContext({ allConnectedClusterIds: ['cluster-b'] });
+    await Promise.resolve();
     expect(clientMocks.setMetricsActiveMock).toHaveBeenLastCalledWith(['cluster-b']);
   });
 
@@ -1535,7 +1553,7 @@ describe('refreshOrchestrator', () => {
     expect(clientMocks.setMetricsActiveMock).not.toHaveBeenCalled();
   });
 
-  it('treats a visible namespace-metrics lease as metrics demand', () => {
+  it('treats a visible namespace-metrics lease as metrics demand', async () => {
     refreshOrchestrator.registerDomain({
       domain: 'namespace-metrics',
       refresherName: SYSTEM_REFRESHERS.namespaceMetrics,
@@ -1544,9 +1562,35 @@ describe('refreshOrchestrator', () => {
 
     refreshOrchestrator.setScopedDomainEnabled('namespace-metrics', 'cluster-a|', true);
     expect(clientMocks.setMetricsActiveMock).toHaveBeenLastCalledWith(['cluster-a']);
+    await Promise.resolve();
 
     refreshOrchestrator.setScopedDomainEnabled('namespace-metrics', 'cluster-a|', false);
+    await Promise.resolve();
     expect(clientMocks.setMetricsActiveMock).toHaveBeenLastCalledWith([]);
+  });
+
+  it('retries unchanged metrics demand after a transient request failure', async () => {
+    vi.useFakeTimers();
+    try {
+      clientMocks.setMetricsActiveMock
+        .mockRejectedValueOnce(new Error('refresh API unavailable'))
+        .mockResolvedValue(undefined);
+      refreshOrchestrator.registerDomain({
+        domain: 'namespace-metrics',
+        refresherName: SYSTEM_REFRESHERS.namespaceMetrics,
+        category: 'system',
+      });
+
+      refreshOrchestrator.setScopedDomainEnabled('namespace-metrics', 'cluster-a|', true);
+      await Promise.resolve();
+      expect(clientMocks.setMetricsActiveMock).toHaveBeenCalledTimes(1);
+
+      await vi.runOnlyPendingTimersAsync();
+      expect(clientMocks.setMetricsActiveMock).toHaveBeenCalledTimes(2);
+      expect(clientMocks.setMetricsActiveMock).toHaveBeenLastCalledWith(['cluster-a']);
+    } finally {
+      vi.useRealTimers();
+    }
   });
 
   it('keeps single-scope system domains isolated by cluster runtime', () => {

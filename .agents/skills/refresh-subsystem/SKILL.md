@@ -128,14 +128,15 @@ checklist when touching anything they name.
 7. **Informer shutdown** — cancellation stops informers; `Shutdown()` only
    clears references. Cancel first or leak.
 8. **Metric doorbell chain** — poller collection observer
-   (`system/manager.go`) → `BroadcastMetricsRefresh` → metric-clock domains
-   (projection descriptors + explicit `namespace-metrics` and
-   `cluster-overview` fan-out) → contract
-   `metric` source clock → `signalVersions` advance → refetch. Severing any
-   link silently freezes live usage between object events. The staleness
-   banner deliberately rides OUTSIDE this chain (client-side timer at
-   `collectedAt + staleAfterSeconds`) because the poller rings no doorbell on
-   failure. See `docs/architecture/resource-metrics.md`.
+   (`system/manager.go`) → successful samples use `BroadcastMetricsRefresh` for
+   every metric-clock domain; failed attempts use the targeted
+   `BroadcastNamespaceMetricsRefresh` so namespace utilization leaves its
+   loading/previous-health state without refetching sample-bearing domains →
+   contract `metric` source clock → `signalVersions` advance → refetch.
+   Severing any link silently freezes live usage between object events.
+   Staleness for retained samples still rides OUTSIDE this chain (client-side
+   timer at `collectedAt + staleAfterSeconds`). See
+   `docs/architecture/resource-metrics.md`.
 9. **Doorbell-snapshot domains** (`namespaces` object clock,
    `namespace-metrics` metric clock, `object-events` event clock,
    `cluster-overview` metric clock — poll-augmented):

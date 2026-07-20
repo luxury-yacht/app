@@ -44,6 +44,10 @@ they are not the ongoing live source except for the ReplicaSet exception.
   for that transition.
 - No successful sample plus no failure means “Collecting metrics…”. Go builders
   omit zero `collectedAt`; consumers treat non-positive values as absent.
+- A failed collection rings a targeted `namespace-metrics` doorbell so the
+  namespace UI leaves “Collecting metrics…” and displays the current failure
+  state immediately. Other metric-bearing payloads retain their last sample and
+  use the local stale-boundary timer.
 - The app header is the persistent metrics-availability indicator. Table cells
   still receive freshness/error metadata; Cluster Overview may show contextual
   metrics status.

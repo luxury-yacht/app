@@ -3,8 +3,8 @@
  *
  * Time-aware metrics banner: recomputes getMetricsBannerInfo when the payload
  * changes AND once at the payload's stale boundary. The boundary re-render is
- * what makes staleness visible without a refetch — the poller rings no
- * doorbell on failure, so on a quiet cluster a dead metrics-server would
+ * what makes staleness visible without a refetch — sample-bearing domains ring
+ * no doorbell on failure, so on a quiet cluster a dead metrics-server would
  * otherwise leave the last payload's stale:false on screen forever. One
  * setTimeout per mounted consumer; no polling (live-age contract).
  */

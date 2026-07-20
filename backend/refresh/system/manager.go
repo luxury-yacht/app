@@ -538,13 +538,14 @@ func wireClusterAttentionDoorbell(
 func metricsSignalObserver(resourceManager *resourcestream.Manager) func(metrics.Metadata) {
 	return func(metadata metrics.Metadata) {
 		revision := metrics.Revision(metadata)
-		if revision == "" {
+		if revision == "" || resourceManager == nil {
 			return
 		}
-		if resourceManager == nil || metadata.CollectedAt.IsZero() || metadata.ConsecutiveFailures > 0 || metadata.LastError != "" {
+		if metadata.CollectedAt.IsZero() || metadata.ConsecutiveFailures > 0 || metadata.LastError != "" {
+			resourceManager.BroadcastNamespaceMetricsRefresh(revision)
 			return
 		}
-		resourceManager.BroadcastMetricsRefresh(strconv.FormatInt(metadata.CollectedAt.UnixNano(), 10))
+		resourceManager.BroadcastMetricsRefresh(revision)
 	}
 }
 

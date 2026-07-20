@@ -281,6 +281,14 @@ describe('refresh domain contract', () => {
     );
   });
 
+  it('records serve-time metric joins as snapshot-cache bypasses', () => {
+    for (const domain of ['pods', 'nodes', 'namespace-workloads', 'namespace-metrics'] as const) {
+      expect(refreshDomainContract.domainInventory[domain].cachePolicy).toBe(
+        'snapshot-cache-bypass'
+      );
+    }
+  });
+
   it('covers frontend descriptors, orchestrator registrations, streams, and diagnostics', () => {
     const contract = refreshDomainContract;
     expect(contract.version).toBe(2);

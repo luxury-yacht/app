@@ -84,9 +84,11 @@ The authored domain contract declares which clocks can change a payload:
 
 - The backend poller owns metric cadence and runs only for clusters with an
   active metric-bearing consumer.
-- A successful sample advances the `metric` clock and rings subscribed metric
-  doorbells. Failures update freshness/error state without inventing an object
-  change.
+- A successful sample advances the `metric` clock and rings every subscribed
+  metric doorbell. A failed attempt advances only `namespace-metrics`, whose
+  payload owns the namespace utilization lifecycle/error state; it does not ring
+  sample-bearing pod, workload, node, or overview doorbells and never invents an
+  object change.
 - Pod, workload, and node queries join the latest sample onto served row copies.
 - Namespace utilization is deliberately separate: `namespaces` owns namespace
   objects and object-derived rollups; `namespace-metrics` owns only utilization
@@ -95,6 +97,9 @@ The authored domain contract declares which clocks can change a payload:
 - The active cluster leases `namespace-metrics`; inactive cluster tabs do not.
   Global Namespaces leases it for each cluster whose namespace rows are
   currently displayed, and releases those leases on exit.
+- Frontend metrics-demand changes are sent in order. A transient demand-request
+  failure retries with bounded backoff while the desired cluster set remains
+  unchanged; a newer desired set is reconciled after the in-flight request.
 - Client timers may change presentation from fresh to stale, but may not fetch
   data merely to advance staleness or relative age text.
 
@@ -108,6 +113,9 @@ The authored domain contract declares which clocks can change a payload:
   error state clears that scope's dedupe so a later failure can notify again.
 - Loading gates may block invalid early reads, but must still allow the request
   that advances the cluster to ready.
+- When a cluster subsystem is replaced, queued or running manual work moves to
+  its replacement queue. Succeeded, failed, and cancelled jobs remain terminal
+  and are never re-enqueued.
 - Closing/removing a cluster tears down its leases, streams, jobs, and retained
   state. Switching tabs does not.
 

@@ -156,6 +156,34 @@ func TestAggregateManualQueueStatusSurvivesQueueReplacement(t *testing.T) {
 	require.Equal(t, "user", newQueue.reason)
 }
 
+func TestAggregateManualQueueDoesNotMoveTerminalJobsToReplacementQueue(t *testing.T) {
+	for _, state := range []refresh.JobState{refresh.JobStateFailed, refresh.JobStateCancelled} {
+		t.Run(string(state), func(t *testing.T) {
+			oldQueue := newStubManualQueue()
+			aggregate := newAggregateManualQueue([]string{"cluster-a"}, map[string]*system.Subsystem{
+				"cluster-a": {ManualQueue: oldQueue},
+			})
+
+			job, err := aggregate.Enqueue(context.Background(), "namespaces", "cluster-a|", "user")
+			require.NoError(t, err)
+			for _, child := range oldQueue.jobs {
+				child.State = state
+				oldQueue.Update(child)
+			}
+
+			newQueue := newStubManualQueue()
+			aggregate.UpdateConfig([]string{"cluster-a"}, map[string]*system.Subsystem{
+				"cluster-a": {ManualQueue: newQueue},
+			})
+
+			require.Empty(t, newQueue.scopes)
+			status, ok := aggregate.Status(job.ID)
+			require.True(t, ok)
+			require.Equal(t, state, status.State)
+		})
+	}
+}
+
 func TestAggregateManualQueueMovesUnfinishedJobToReplacementQueue(t *testing.T) {
 	oldQueue := newStubManualQueue()
 	aggregate := newAggregateManualQueue([]string{"restricted-cluster-admin"}, map[string]*system.Subsystem{

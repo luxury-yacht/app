@@ -137,8 +137,8 @@ type Poller struct {
 	allowedNamespaces []string
 
 	// observerMu guards collectionObserver. The observer is notified after every
-	// SUCCESSFUL collection (the metric doorbell rides it); failures do not
-	// advance the metric revision, so they deliberately do not notify.
+	// completed collection attempt: successes drive every metric-bearing domain,
+	// while failures drive only consumers whose payload exposes poller health.
 	observerMu         sync.Mutex
 	collectionObserver func(Metadata)
 }

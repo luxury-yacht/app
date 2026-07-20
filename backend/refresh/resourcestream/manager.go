@@ -1041,6 +1041,18 @@ func (m *Manager) BroadcastMetricsRefresh(version string) {
 		domainNamespaceMetrics, m.subscribedScopes(domainNamespaceMetrics), SourceMetric, version)
 }
 
+// BroadcastNamespaceMetricsRefresh advances only the metric-only namespace
+// utilization payload. Failed collection attempts change its user-visible
+// lifecycle/error state without producing a fresh sample for other metric
+// consumers.
+func (m *Manager) BroadcastNamespaceMetricsRefresh(version string) {
+	if m == nil {
+		return
+	}
+	m.broadcastDoorbellRefresh(
+		domainNamespaceMetrics, m.subscribedScopes(domainNamespaceMetrics), SourceMetric, version)
+}
+
 // BroadcastNamespacesRefresh fans a SourceObject doorbell to the namespaces
 // domain's subscribers. The namespace-list notifier calls this when a namespace
 // object changes, when workload presence flips, or when the workload tracker

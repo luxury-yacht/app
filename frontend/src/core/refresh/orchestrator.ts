@@ -69,6 +69,8 @@ type DomainFetchOptions = {
 // Set autoStart: true on individual domain registrations when needed.
 const DEFAULT_AUTO_START = false;
 const noopStreamingCleanup = () => undefined;
+const METRICS_DEMAND_RETRY_INITIAL_MS = 1_000;
+const METRICS_DEMAND_RETRY_MAX_MS = 30_000;
 
 const logInfo = (message: string, cluster?: AppLogsClusterMeta): void => {
   logAppLogsInfo(message, APP_LOG_SOURCES.RefreshOrchestrator, cluster);
@@ -91,6 +93,10 @@ class RefreshOrchestrator {
 
   private requestCounter = 0;
   private metricsDemandClusterKey = '';
+  private metricsDemandRequestKey: string | null = null;
+  private metricsDemandRetryKey: string | null = null;
+  private metricsDemandRetryTimer: ReturnType<typeof setTimeout> | null = null;
+  private metricsDemandRetryDelayMs = METRICS_DEMAND_RETRY_INITIAL_MS;
 
   private suspendedDomains = new Map<RefreshDomain, boolean>();
   private contextVersion = 0;
@@ -1390,13 +1396,60 @@ class RefreshOrchestrator {
     const clusterIds = this.metricsDemandClusterIds();
     const clusterKey = clusterIds.join('\0');
     if (clusterKey === this.metricsDemandClusterKey) {
+      this.clearMetricsDemandRetry();
       return;
     }
-    this.metricsDemandClusterKey = clusterKey;
-    void setMetricsActive(clusterIds).catch((error) => {
-      const message = error instanceof Error ? error.message : String(error);
-      logWarning(`[refresh] metrics demand update failed: ${message}`);
-    });
+    if (this.metricsDemandRequestKey !== null) {
+      return;
+    }
+    if (this.metricsDemandRetryTimer !== null) {
+      if (this.metricsDemandRetryKey === clusterKey) {
+        return;
+      }
+      this.clearMetricsDemandRetry();
+    }
+
+    this.metricsDemandRequestKey = clusterKey;
+    void setMetricsActive(clusterIds).then(
+      () => {
+        this.metricsDemandRequestKey = null;
+        this.metricsDemandClusterKey = clusterKey;
+        this.metricsDemandRetryDelayMs = METRICS_DEMAND_RETRY_INITIAL_MS;
+        this.updateMetricsDemand();
+      },
+      (error) => {
+        this.metricsDemandRequestKey = null;
+        const message = error instanceof Error ? error.message : String(error);
+        logWarning(`[refresh] metrics demand update failed: ${message}`);
+
+        const currentKey = this.metricsDemandClusterIds().join('\0');
+        if (currentKey !== clusterKey) {
+          this.metricsDemandRetryDelayMs = METRICS_DEMAND_RETRY_INITIAL_MS;
+          this.updateMetricsDemand();
+          return;
+        }
+
+        const delay = this.metricsDemandRetryDelayMs;
+        this.metricsDemandRetryDelayMs = Math.min(
+          this.metricsDemandRetryDelayMs * 2,
+          METRICS_DEMAND_RETRY_MAX_MS
+        );
+        this.metricsDemandRetryKey = clusterKey;
+        this.metricsDemandRetryTimer = setTimeout(() => {
+          this.metricsDemandRetryTimer = null;
+          this.metricsDemandRetryKey = null;
+          this.updateMetricsDemand();
+        }, delay);
+      }
+    );
+  }
+
+  private clearMetricsDemandRetry(): void {
+    if (this.metricsDemandRetryTimer !== null) {
+      clearTimeout(this.metricsDemandRetryTimer);
+      this.metricsDemandRetryTimer = null;
+    }
+    this.metricsDemandRetryKey = null;
   }
 
   private isScopedDomainEnabledInternal(domain: RefreshDomain, scope: string): boolean {

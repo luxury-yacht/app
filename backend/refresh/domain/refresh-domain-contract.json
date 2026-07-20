@@ -30,7 +30,7 @@
       "singleCluster": true,
       "payloadOwner": "backend/refresh/snapshot.NamespaceMetricsBuilder",
       "refreshPayloadType": "NamespaceMetricsSnapshotPayload",
-      "cachePolicy": "snapshot-cache",
+      "cachePolicy": "snapshot-cache-bypass",
       "streamSemantics": ["snapshot-replace", "change-signal"],
       "coverageContract": "snapshot-table-payload",
       "coverageStatus": "enforced"
@@ -115,7 +115,7 @@
       "singleCluster": true,
       "payloadOwner": "backend/refresh/snapshot.NodeBuilder",
       "refreshPayloadType": "ClusterNodeSnapshotPayload",
-      "cachePolicy": "snapshot-cache",
+      "cachePolicy": "snapshot-cache-bypass",
       "streamSemantics": ["snapshot-replace", "change-signal", "complete-resync"],
       "coverageContract": "query-refetch-on-signal",
       "coverageStatus": "enforced"
@@ -234,7 +234,7 @@
       "singleCluster": true,
       "payloadOwner": "backend/refresh/snapshot.NamespaceWorkloadsBuilder",
       "refreshPayloadType": "NamespaceWorkloadSnapshotPayload",
-      "cachePolicy": "snapshot-cache",
+      "cachePolicy": "snapshot-cache-bypass",
       "streamSemantics": ["snapshot-replace", "change-signal", "complete-resync"],
       "coverageContract": "query-refetch-on-signal",
       "coverageStatus": "enforced"
@@ -404,7 +404,7 @@
       "singleCluster": true,
       "payloadOwner": "backend/refresh/snapshot.PodBuilder",
       "refreshPayloadType": "PodSnapshotPayload",
-      "cachePolicy": "snapshot-cache",
+      "cachePolicy": "snapshot-cache-bypass",
       "streamSemantics": ["snapshot-replace", "change-signal", "complete-resync"],
       "coverageContract": "query-refetch-on-signal",
       "coverageStatus": "enforced"

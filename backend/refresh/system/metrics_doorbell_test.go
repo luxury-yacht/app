@@ -11,11 +11,10 @@ import (
 	"github.com/stretchr/testify/require"
 )
 
-// The metrics collection observer must fan a SourceMetric doorbell (versioned by
-// the collection revision, the same CollectedAt-nanos value the snapshot builders
-// stamp as SourceVersions["metric"]) to the metric-clock domains' subscribers —
-// this is what lets tables refetch on the poller's schedule with no client-side
-// polling. A zero CollectedAt (no sample yet) must not broadcast.
+// The metrics collection observer fans a successful SourceMetric revision to
+// every metric-clock domain. A failed attempt targets namespace-metrics because
+// that payload exposes poller health, without advertising a fresh sample to the
+// other domains. A pristine zero revision does not broadcast.
 func TestMetricsSignalObserverBroadcastsMetricDoorbells(t *testing.T) {
 	manager := resourcestream.NewManager(
 		nil,
@@ -71,10 +70,19 @@ func TestMetricsSignalObserverBroadcastsMetricDoorbells(t *testing.T) {
 	default:
 	}
 
-	observer(metrics.Metadata{FailureCount: 1, LastError: "metrics request failed"})
+	observer(metrics.Metadata{FailureCount: 1, ConsecutiveFailures: 1, LastError: "metrics request failed"})
 	select {
 	case update := <-podsSub.Updates:
 		t.Fatalf("failed collection must not broadcast a sample doorbell, got %+v", update)
 	default:
 	}
+
+	// Failure metadata is user-visible in the namespace-metrics payload. Its
+	// targeted doorbell must advance even though the shared sample doorbell stays
+	// silent, or a healthy stream leaves the UI in its previous lifecycle state.
+	namespaceMetricsFailure := requireSystemDoorbellUpdate(t, namespaceMetricsSub)
+	require.Equal(t, "namespace-metrics", namespaceMetricsFailure.Domain)
+	require.Equal(t, "", namespaceMetricsFailure.Scope)
+	require.Equal(t, resourcestream.SourceMetric, namespaceMetricsFailure.Source)
+	require.Equal(t, "failure:1", namespaceMetricsFailure.Version)
 }

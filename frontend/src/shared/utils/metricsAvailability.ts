@@ -14,8 +14,8 @@ export interface MetricsAvailability {
   // reason that must never be treated as a transient pre-first-poll error.
   disabled?: boolean;
   // Staleness threshold (seconds) shipped by the serve-time-join payloads so
-  // the banner can flip client-side: the poller rings no doorbell on failure,
-  // so nothing refetches to refresh a server-computed stale flag. Absent on
+  // the banner can flip client-side. Sample-bearing domains ring no doorbell on
+  // failure, so nothing refetches their server-computed stale flag. Absent on
   // poll-refreshed payloads (cluster-overview), which keep server-stale-only.
   staleAfterSeconds?: number;
   successCount?: number;
