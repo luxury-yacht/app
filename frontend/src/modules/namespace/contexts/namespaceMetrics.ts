@@ -16,7 +16,7 @@ export const joinNamespaceMetrics = (
     return namespaces.slice();
   }
   const metricsByIdentity = new Map(
-    (metrics ?? []).map((metric) => [identityKey(metric.ref), metric] as const)
+    metrics.map((metric) => [identityKey(metric.ref), metric] as const)
   );
 
   return namespaces.map((namespace) => {
