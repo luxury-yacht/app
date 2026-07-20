@@ -15,6 +15,7 @@ const mocks = vi.hoisted(() => ({
   openWithObject: vi.fn(),
   requestRefreshDomain: vi.fn(() => Promise.resolve()),
   setRefreshDomainEnabled: vi.fn(),
+  requestGridTableFilters: vi.fn(),
   selectedKubeconfigs: [
     '/kube/config:alpha',
     '/kube/config:beta',
@@ -25,6 +26,10 @@ const mocks = vi.hoisted(() => ({
 vi.mock('@/core/data-access', () => ({
   requestRefreshDomain: mocks.requestRefreshDomain,
   setRefreshDomainEnabled: mocks.setRefreshDomainEnabled,
+}));
+
+vi.mock('@shared/components/tables/hooks/useGridTableExternalFilters', () => ({
+  requestGridTableFilters: mocks.requestGridTableFilters,
 }));
 
 const namespace = (clusterId: string, clusterName: string, name: string) => ({
@@ -46,8 +51,8 @@ const namespace = (clusterId: string, clusterName: string, name: string) => ({
   resourceVersion: '12',
   creationTimestamp: 1_700_000_000,
   hasWorkloads: true,
-  unhealthyWorkloads: 0,
-  warningEvents: 0,
+  unhealthyWorkloads: 2,
+  warningEvents: 3,
   warningEventsState: 'available',
   cpuUsageMilli: 100,
   cpuRequestsMilli: 250,
@@ -212,6 +217,8 @@ vi.mock('@modules/resource-grid/ResourceInventoryTable', () => ({
     const namespaceColumn = columns.find(({ key }) => key === 'name');
     const clusterColumn = columns.find(({ key }) => key === 'cluster');
     const kindColumn = columns.find(({ key }) => key === 'kind');
+    const unhealthyColumn = columns.find(({ key }) => key === 'unhealthyWorkloads');
+    const warningsColumn = columns.find(({ key }) => key === 'warningEvents');
     return (
       <div data-testid="global-namespace-table">
         {source.rows.map((row) => (
@@ -227,6 +234,12 @@ vi.mock('@modules/resource-grid/ResourceInventoryTable', () => ({
             </span>
             <span data-testid={`cluster-link-${String(row.clusterId)}-${String(row.name)}`}>
               {clusterColumn?.render(row)}
+            </span>
+            <span data-testid={`unhealthy-link-${String(row.clusterId)}-${String(row.name)}`}>
+              {unhealthyColumn?.render(row)}
+            </span>
+            <span data-testid={`warnings-link-${String(row.clusterId)}-${String(row.name)}`}>
+              {warningsColumn?.render(row)}
             </span>
           </div>
         ))}
@@ -490,6 +503,49 @@ describe('GlobalViewNamespaces', () => {
     );
     expect(mocks.activateClusterWorkspace.mock.invocationCallOrder[0]).toBeLessThan(
       mocks.setActiveKubeconfig.mock.invocationCallOrder[0]
+    );
+
+    await unmount();
+  });
+
+  it.each([
+    [
+      'unhealthy',
+      'unhealthy-link-cluster-b-payments',
+      ['Pod', 'Deployment', 'StatefulSet', 'DaemonSet', 'Job', 'CronJob'],
+    ],
+    ['warnings', 'warnings-link-cluster-b-payments', ['Event']],
+  ])('opens %s findings for the namespace in the target cluster', async (_label, testId, kinds) => {
+    const { container, unmount } = await renderView();
+
+    await act(async () => {
+      container.querySelector<HTMLButtonElement>(`[data-testid="${testId}"] button`)?.click();
+    });
+
+    expect(mocks.requestGridTableFilters).toHaveBeenCalledWith({
+      clusterId: 'cluster-b',
+      destinationViewId: 'cluster-attention',
+      filters: {
+        search: '',
+        kinds: { mode: 'some', values: kinds },
+        namespaces: { mode: 'some', values: ['payments'] },
+        clusters: { mode: 'all' },
+        caseSensitive: false,
+        includeMetadata: false,
+      },
+    });
+    expect(mocks.setClusterNavigationTarget).toHaveBeenCalledWith('cluster-b', {
+      viewType: 'cluster',
+      activeClusterView: 'attention',
+    });
+    expect(mocks.setSidebarSelectionForCluster).toHaveBeenCalledWith('cluster-b', {
+      type: 'cluster',
+      value: 'cluster',
+    });
+    expect(mocks.activateClusterWorkspace).toHaveBeenCalledWith('cluster-b');
+    expect(mocks.setActiveKubeconfig).toHaveBeenCalledWith('/kube/config:beta');
+    expect(mocks.requestGridTableFilters.mock.invocationCallOrder[0]).toBeLessThan(
+      mocks.setClusterNavigationTarget.mock.invocationCallOrder[0]
     );
 
     await unmount();

@@ -249,6 +249,31 @@ describe('ClusterViewAttention', () => {
     expect(getManageIgnoredFindingsAction()).not.toHaveProperty('active');
   });
 
+  it('offers ignored-findings management from the filtered-empty state', async () => {
+    await act(async () => {
+      root.render(<ClusterViewAttention />);
+      await Promise.resolve();
+    });
+
+    const filteredEmptyState = tablePropsRef.current?.filteredEmptyState as
+      | {
+          description: string;
+          clearFiltersLabel: string;
+          secondaryAction: { label: string; onClick: () => void };
+        }
+      | undefined;
+    expect(filteredEmptyState).toEqual(
+      expect.objectContaining({
+        description: 'Items could be hidden due to filters or ignored findings',
+        clearFiltersLabel: 'Clear filters',
+        secondaryAction: expect.objectContaining({ label: 'Manage ignored findings' }),
+      })
+    );
+
+    act(() => filteredEmptyState?.secondaryAction.onClick());
+    expect(document.body.textContent).toContain('Ignored findings');
+  });
+
   it('opens the complete object reference from the Name link', async () => {
     await act(async () => {
       root.render(<ClusterViewAttention />);

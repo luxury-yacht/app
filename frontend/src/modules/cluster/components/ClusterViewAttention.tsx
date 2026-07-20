@@ -206,6 +206,18 @@ export default function ClusterViewAttention() {
     []
   );
 
+  const filteredEmptyState = useMemo(
+    () => ({
+      description: 'Items could be hidden due to filters or ignored findings',
+      clearFiltersLabel: 'Clear filters',
+      secondaryAction: {
+        label: 'Manage ignored findings',
+        onClick: () => setIgnoredModalOpen(true),
+      },
+    }),
+    []
+  );
+
   const { gridTableProps, favModal, source, queryPayload, persistence } =
     useQueryBackedClusterResourceGridTable<ClusterAttentionSnapshot, ClusterAttentionFinding>({
       queryTableMode: 'Query Backed Static',
@@ -247,6 +259,7 @@ export default function ClusterViewAttention() {
         columns={columns}
         diagnosticsLabel="Cluster Attention"
         emptyMessage="No cluster objects need attention"
+        filteredEmptyState={filteredEmptyState}
         enableContextMenu
         getCustomContextMenuItems={getCustomContextMenuItems}
       />

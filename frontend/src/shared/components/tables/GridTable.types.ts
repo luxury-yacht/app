@@ -168,6 +168,15 @@ export interface GridTableLocalPaginationConfig {
   onPageSizeChange: (value: number) => void;
 }
 
+export interface GridTableFilteredEmptyState {
+  description: string;
+  clearFiltersLabel?: string;
+  secondaryAction?: {
+    label: string;
+    onClick: () => void;
+  };
+}
+
 export interface GridTableProps<T> {
   data: T[];
   columns: GridColumnDefinition<T>[];
@@ -211,6 +220,8 @@ export interface GridTableProps<T> {
   nonHideableColumns?: string[];
   enableColumnVisibilityMenu?: boolean;
   emptyMessage?: string;
+  /** Optional view-specific copy and action shown only when active filters produce no rows. */
+  filteredEmptyState?: GridTableFilteredEmptyState;
   /** Rendered in the table's pagination footer (e.g. cursor pagination controls). */
   paginationControls?: React.ReactNode;
   /** Client-side pagination applied after local table filters and sorting. */
