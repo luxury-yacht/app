@@ -74,6 +74,11 @@ The authored domain contract declares which clocks can change a payload:
   advancing one of the domain's declared signal clocks; consumers then perform
   one `stream-signal` reconciliation. A reset must never be accepted as only an
   acknowledgement while retained data remains visible.
+- Replacing one cluster's backend stream manager invalidates subscriptions bound
+  to the previous manager. After routing the replacement, affected subscriptions
+  re-establish against the current manager over the existing aggregate
+  connection; subscriptions for other clusters remain connected. The new tail
+  follows the same replay-or-reset rule before retained data is trusted.
 
 ## Metrics
 
@@ -98,6 +103,9 @@ The authored domain contract declares which clocks can change a payload:
 - Retained data remains visible during refresh and transient failure. Attach the
   refresh/error state to it instead of replacing it with an empty payload.
 - A typed permission denial is a settled domain state, not a retry loop.
+- Error notifications are deduplicated by full refresh scope. Re-selecting a
+  retained failing scope does not repeat the same notification; leaving the
+  error state clears that scope's dedupe so a later failure can notify again.
 - Loading gates may block invalid early reads, but must still allow the request
   that advances the cluster to ready.
 - Closing/removing a cluster tears down its leases, streams, jobs, and retained
@@ -126,8 +134,11 @@ For a freshness change, test the contract at the producer/consumer seam:
 4. the declared source signal refetches the affected payload once;
 5. a reconnect that cannot replay invalidates retained data and refetches it
    once, while a successful replay does not add a snapshot request;
-6. a metric-only change leaves object clocks and object snapshots unchanged;
-7. permission, stream-down fallback, teardown, and multi-cluster isolation still
+6. replacing one cluster's stream manager re-establishes only that cluster's
+   subscriptions and reconciles any continuity gap;
+7. retained errors notify once per scope and can notify again after recovery;
+8. a metric-only change leaves object clocks and object snapshots unchanged;
+9. permission, stream-down fallback, teardown, and multi-cluster isolation still
    converge.
 
 Finish non-documentation changes with `mage qc:prerelease`.

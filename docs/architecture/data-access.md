@@ -37,6 +37,10 @@ Request reasons for cluster/resource reads are:
   skip-while-stream-healthy gate (a doorbell refetch issued as `background`
   is silently swallowed)
 
+Context-wide manual refresh accepts only `user`. Navigation updates orchestrator
+context and lets the scheduler issue foreground reconciliation; it never creates
+a ManualQueue job.
+
 The owning timing, retention, and background-work rules are in
 [data-freshness.md](data-freshness.md).
 

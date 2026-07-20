@@ -93,12 +93,20 @@ resume token. A reset that cannot prove continuity advances a declared signal
 clock and performs one immediate non-manual reconciliation before that retained
 snapshot is trusted. Snapshotless streams are exempt.
 
+When a governor re-warm or recovery replaces a cluster's stream manager, the
+aggregate router points at the replacement first, then sends `COMPLETE` for only
+that cluster's existing subscriptions. The client re-subscribes through the
+current adapter and the normal ACK/replay/reset handshake re-establishes trust;
+the aggregate WebSocket and other clusters' subscriptions remain connected.
+
 The regression harnesses are
 `frontend/src/core/refresh/orchestrator.streamingFlap.test.ts` for lease flaps
 and `frontend/src/core/refresh/streaming/resourceStreamManager.test.ts` for
-resume/reset gaps. First-paint latency near a fallback interval, or retained
-data surviving a non-replayable reset without a clock change, indicates this
-contract regressed.
+resume/reset gaps, plus
+`backend/refresh_aggregate_resourcestream_test.go` for manager replacement.
+First-paint latency near a fallback interval, retained data surviving a
+non-replayable reset without a clock change, or a replacement manager with zero
+subscribers indicates this contract regressed.
 
 ## Change checklist
 

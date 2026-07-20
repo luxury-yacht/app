@@ -123,7 +123,10 @@ the completed `v2` rewrite plan.
   per-cluster chokepoint as first builds, but serving is continuous (cooled mmap stores
   serve until the aggregate re-routes; fresh stores warm-paint from spill) —
   `transitionClusterToLoading` guards the chokepoint so an already-READY cluster is
-  never demoted to loading on a tab switch.
+  never demoted to loading on a tab switch. Aggregate stream routing then ends
+  only that cluster's old-manager subscriptions so they re-establish against the
+  replacement without reconnecting other clusters; continuity follows
+  [the freshness contract](data-freshness.md#signals-and-source-clocks).
 - **Cluster-Ready is server-driven.** The loading→ready transition rides a namespaces
   snapshot build after the workload stores settle; the backend self-builds it on each
   pre-Ready namespaces doorbell (`runNamespacesReadinessSelfBuild` via the
