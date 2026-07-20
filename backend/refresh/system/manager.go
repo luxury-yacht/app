@@ -14,6 +14,7 @@ import (
 	"net/http"
 	"strconv"
 	"strings"
+	"sync"
 	"sync/atomic"
 	"time"
 
@@ -117,30 +118,102 @@ type Subsystem struct {
 	// the governor re-warm path detects this and rebuilds a fresh, live subsystem.
 	Cooled bool
 
-	// coldPreparation is the server-owned gate in front of Cooled. A subsystem may
-	// stop its live producers only after the retained namespace and cluster-overview
-	// snapshots have been built from settled sources. State transitions are:
-	// 0 = not started, 1 = preparing, 2 = ready.
-	coldPreparation atomic.Uint32
+	// coldPreparation is the server-owned gate in front of Cooled. Its context is
+	// owned by this subsystem generation so replacement/teardown can stop both an
+	// in-flight build and its retry loop.
+	coldPreparationMu      sync.Mutex
+	coldPreparationState   coldPreparationState
+	coldPreparationStarted time.Time
+	coldPreparationCancel  context.CancelFunc
 }
 
+type coldPreparationState uint8
+
+const (
+	coldPreparationNotStarted coldPreparationState = iota
+	coldPreparationRunning
+	coldPreparationReady
+)
+
 // BeginColdPreparation elects one goroutine to prepare the retained snapshots
-// required before this subsystem may stop its live producers.
-func (s *Subsystem) BeginColdPreparation() bool {
-	return s != nil && s.coldPreparation.CompareAndSwap(0, 1)
+// required before this subsystem may stop its live producers. The returned
+// context is canceled when this subsystem generation stops.
+func (s *Subsystem) BeginColdPreparation(parent context.Context, startedAt time.Time) (context.Context, bool) {
+	if s == nil || parent == nil {
+		return nil, false
+	}
+	s.coldPreparationMu.Lock()
+	defer s.coldPreparationMu.Unlock()
+	if s.coldPreparationState != coldPreparationNotStarted {
+		return nil, false
+	}
+	ctx, cancel := context.WithCancel(parent)
+	s.coldPreparationState = coldPreparationRunning
+	s.coldPreparationStarted = startedAt
+	s.coldPreparationCancel = cancel
+	return ctx, true
 }
 
 // MarkColdServingReady records that the retained baseline has been built from
 // settled sources and this subsystem is eligible for the Cold serving tier.
 func (s *Subsystem) MarkColdServingReady() {
-	if s != nil {
-		s.coldPreparation.Store(2)
+	if s == nil {
+		return
+	}
+	s.coldPreparationMu.Lock()
+	if s.coldPreparationState == coldPreparationRunning {
+		s.coldPreparationState = coldPreparationReady
+	}
+	cancel := s.coldPreparationCancel
+	s.coldPreparationCancel = nil
+	s.coldPreparationMu.Unlock()
+	if cancel != nil {
+		cancel()
+	}
+}
+
+// CancelColdPreparation stops work owned by this subsystem generation.
+func (s *Subsystem) CancelColdPreparation() {
+	if s == nil {
+		return
+	}
+	s.coldPreparationMu.Lock()
+	cancel := s.coldPreparationCancel
+	s.coldPreparationCancel = nil
+	s.coldPreparationState = coldPreparationNotStarted
+	s.coldPreparationStarted = time.Time{}
+	s.coldPreparationMu.Unlock()
+	if cancel != nil {
+		cancel()
 	}
 }
 
 // ColdServingReady reports whether the server-owned retained baseline exists.
 func (s *Subsystem) ColdServingReady() bool {
-	return s != nil && s.coldPreparation.Load() == 2
+	if s == nil {
+		return false
+	}
+	s.coldPreparationMu.Lock()
+	defer s.coldPreparationMu.Unlock()
+	return s.coldPreparationState == coldPreparationReady
+}
+
+// ColdPreparationAge reports how long this generation has been preparing its
+// retained baseline. Ready and not-started generations are not pending.
+func (s *Subsystem) ColdPreparationAge(now time.Time) (time.Duration, bool) {
+	if s == nil {
+		return 0, false
+	}
+	s.coldPreparationMu.Lock()
+	defer s.coldPreparationMu.Unlock()
+	if s.coldPreparationState != coldPreparationRunning || s.coldPreparationStarted.IsZero() {
+		return 0, false
+	}
+	age := now.Sub(s.coldPreparationStarted)
+	if age < 0 {
+		age = 0
+	}
+	return age, true
 }
 
 // NewSubsystem prepares the refresh manager, HTTP handler, and supporting services.

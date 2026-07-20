@@ -73,6 +73,14 @@ stream reconciliation path rather than creating a ManualQueue job.
   replacement subsystem. Preparation does not poll namespace snapshots, because
   scoped namespace builds can perform API probes. This is automatic preparation,
   never a manual refresh.
+- Sustained memory pressure is the only exception to that Cold-serving entry
+  rule. If preparation remains unsettled for one bounded snapshot-attempt grace
+  period, each still-over-budget pressure sample re-drives the transition and the
+  backend may force a full teardown of an inactive cluster. It first stops feeds
+  and spills every store currently available, while frontend leases keep their
+  last successful rows. The backend then serves no data for that cluster until a
+  foreground re-warm rebuilds its subsystem and catalog. It must not freeze or
+  present an unsettled store as settled Cold truth.
 
 ## Signals and source clocks
 
@@ -195,5 +203,8 @@ For a freshness change, test the contract at the producer/consumer seam:
     retained snapshot, including when every open cluster is unavailable;
 12. tab activation replays the backend's unchanged authoritative lifecycle state
     to both frontend lifecycle consumer paths.
+13. Cold preparation belongs to one subsystem generation, stops on replacement,
+    and under sustained memory pressure re-drives until either a settled mmap
+    transition or the bounded full-teardown fallback completes.
 
 Finish non-documentation changes with `mage qc:prerelease`.

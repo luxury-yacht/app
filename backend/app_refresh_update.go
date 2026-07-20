@@ -130,7 +130,11 @@ func (a *App) stopRefreshSubsystems(subsystems map[string]*system.Subsystem) {
 }
 
 func (a *App) stopRefreshSubsystem(subsystem *system.Subsystem) {
-	if subsystem == nil || subsystem.Manager == nil {
+	if subsystem == nil {
+		return
+	}
+	subsystem.CancelColdPreparation()
+	if subsystem.Manager == nil {
 		return
 	}
 	subsystem.StopDoorbellNotifiers()

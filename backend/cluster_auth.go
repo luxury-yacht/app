@@ -112,6 +112,7 @@ func (a *App) stopClusterFeeds(clusterID string, subsystem *system.Subsystem) {
 	if a == nil || clusterID == "" || subsystem == nil {
 		return
 	}
+	subsystem.CancelColdPreparation()
 
 	// Stop permission revalidation for this cluster.
 	a.stopRefreshPermissionRevalidation(clusterID)

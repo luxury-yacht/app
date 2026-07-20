@@ -2,11 +2,16 @@ package backend
 
 import (
 	"context"
+	"errors"
+	"os"
+	"path/filepath"
 	"sort"
+	"strings"
 	"sync"
 	"testing"
 	"time"
 
+	"github.com/luxury-yacht/app/backend/objectcatalog"
 	"github.com/luxury-yacht/app/backend/refresh"
 	"github.com/luxury-yacht/app/backend/refresh/domain"
 	"github.com/luxury-yacht/app/backend/refresh/snapshot"
@@ -19,6 +24,28 @@ type coldPreparationSnapshotService struct {
 	mu             sync.Mutex
 	namespaceReady bool
 	calls          []string
+}
+
+type blockingColdPreparationSnapshotService struct {
+	started  chan struct{}
+	canceled chan struct{}
+	once     sync.Once
+}
+
+func (s *blockingColdPreparationSnapshotService) Build(ctx context.Context, _, _ string) (*refresh.Snapshot, error) {
+	s.once.Do(func() { close(s.started) })
+	<-ctx.Done()
+	close(s.canceled)
+	return nil, ctx.Err()
+}
+
+type failingColdPreparationSnapshotService struct {
+	calls chan struct{}
+}
+
+func (s *failingColdPreparationSnapshotService) Build(context.Context, string, string) (*refresh.Snapshot, error) {
+	s.calls <- struct{}{}
+	return nil, errors.New("sources have not settled")
 }
 
 // coldPreparationNamespaceSource models the current subsystem's namespace
@@ -408,6 +435,65 @@ func TestColdPreparationContinuesWhenNamespaceSourcesBecomeReady(t *testing.T) {
 	require.Contains(t, service.callsSnapshot(), "cluster-overview@cluster-a|")
 }
 
+func TestReplacingSubsystemCancelsInFlightColdPreparationBuild(t *testing.T) {
+	app := newTestAppWithDefaults(t)
+	ctx, cancel := context.WithCancel(context.Background())
+	t.Cleanup(cancel)
+	app.refreshCtx = ctx
+	app.clusterLifecycle = newClusterLifecycle(nil)
+	app.clusterLifecycle.SetState("cluster-a", ClusterStateReady)
+
+	service := &blockingColdPreparationSnapshotService{
+		started:  make(chan struct{}),
+		canceled: make(chan struct{}),
+	}
+	previous := &system.Subsystem{SnapshotService: service}
+	app.setRefreshSubsystem("cluster-a", previous)
+	app.realGovernorExecutor().teardown("cluster-a")
+
+	select {
+	case <-service.started:
+	case <-time.After(time.Second):
+		t.Fatal("cold preparation build did not start")
+	}
+	app.swapRefreshSubsystem("cluster-a", &system.Subsystem{})
+
+	select {
+	case <-service.canceled:
+	case <-time.After(time.Second):
+		t.Fatal("replacing the subsystem did not cancel its in-flight cold preparation build")
+	}
+}
+
+func TestColdPreparationRetryStopsWhenSubsystemIsNoLongerCurrent(t *testing.T) {
+	app := newTestAppWithDefaults(t)
+	ctx, cancel := context.WithCancel(context.Background())
+	t.Cleanup(cancel)
+	app.refreshCtx = ctx
+	app.clusterLifecycle = newClusterLifecycle(nil)
+	app.clusterLifecycle.SetState("cluster-a", ClusterStateReady)
+
+	service := &failingColdPreparationSnapshotService{calls: make(chan struct{}, 4)}
+	previous := &system.Subsystem{SnapshotService: service}
+	app.setRefreshSubsystem("cluster-a", previous)
+	app.realGovernorExecutor().teardown("cluster-a")
+
+	select {
+	case <-service.calls:
+	case <-time.After(time.Second):
+		t.Fatal("cold preparation build did not start")
+	}
+	// Direct replacement deliberately bypasses swap cancellation so this test
+	// independently pins the retry loop's current-generation check.
+	app.setRefreshSubsystem("cluster-a", &system.Subsystem{})
+
+	select {
+	case <-service.calls:
+		t.Fatal("obsolete subsystem issued another cold preparation build")
+	case <-time.After(2 * coldPreparationRetryInterval):
+	}
+}
+
 func TestReconcileGovernorAppliesColdAfterRetainedBaselineIsReady(t *testing.T) {
 	selections := []kubeconfigSelection{{Path: "/p/a", Context: "a"}}
 	app, ids := governorTestApp(t, selections, 0)
@@ -572,6 +658,101 @@ func TestReconcileGovernorMemoryPressureCoolsNonVisible(t *testing.T) {
 	require.Equal(t, want, tornDown, "under pressure every non-visible cluster is cooled")
 	require.NotContains(t, exec.ensureSeq, b)
 	require.NotContains(t, exec.ensureSeq, c)
+}
+
+func TestColdPreparationIsNotForcedWithoutMemoryPressure(t *testing.T) {
+	app := newTestAppWithDefaults(t)
+	ctx, cancel := context.WithCancel(context.Background())
+	t.Cleanup(cancel)
+	app.refreshCtx = ctx
+	app.clusterLifecycle = newClusterLifecycle(nil)
+	app.clusterLifecycle.SetState("cluster-a", ClusterStateLoading)
+	now := time.Now()
+	app.governorNow = func() time.Time { return now }
+
+	subsystem := &system.Subsystem{
+		Registry:        domain.New(),
+		SnapshotService: &coldPreparationSnapshotService{},
+	}
+	app.setRefreshSubsystem("cluster-a", subsystem)
+	require.False(t, app.realGovernorExecutor().teardown("cluster-a"))
+
+	now = now.Add(coldPreparationPressureGrace + time.Second)
+	require.False(t, app.realGovernorExecutor().teardown("cluster-a"))
+	require.Same(t, subsystem, app.getRefreshSubsystem("cluster-a"),
+		"elapsed preparation alone must not weaken the retained-baseline rule")
+}
+
+func TestSustainedMemoryPressureForcesFullTeardownAfterColdPreparationGrace(t *testing.T) {
+	selections := []kubeconfigSelection{{Path: "/p/a", Context: "a"}}
+	app, ids := governorTestApp(t, selections, 5)
+	clusterID := ids[0]
+	ctx, cancel := context.WithCancel(context.Background())
+	t.Cleanup(cancel)
+	app.refreshCtx = ctx
+	app.spillRoot = t.TempDir()
+	app.governorBudget = 1
+	app.governorMRU = []string{clusterID}
+	app.governorApplied[clusterID] = system.TierBackground
+	app.clusterLifecycle = newClusterLifecycle(nil)
+	app.clusterLifecycle.SetState(clusterID, ClusterStateLoading)
+	now := time.Now()
+	app.governorNow = func() time.Time { return now }
+
+	reg := domain.New()
+	reg.RegisterMaintainedStore("cluster-overview", &spillFake{rows: []string{"retained"}})
+	subsystem := &system.Subsystem{
+		Registry:        reg,
+		SnapshotService: &coldPreparationSnapshotService{},
+	}
+	app.setRefreshSubsystem(clusterID, subsystem)
+	done := make(chan struct{}, 1)
+	done <- struct{}{}
+	app.storeObjectCatalogEntry(clusterID, &objectCatalogEntry{
+		service: &objectcatalog.Service{},
+		cancel:  func() {},
+		done:    done,
+	})
+
+	app.handleGovernorPressureSample(2)
+	require.Same(t, subsystem, app.getRefreshSubsystem(clusterID),
+		"the first pressure sample starts preparation without discarding live data")
+
+	now = now.Add(coldPreparationPressureGrace - time.Second)
+	app.handleGovernorPressureSample(2)
+	require.Same(t, subsystem, app.getRefreshSubsystem(clusterID),
+		"sustained pressure must respect the bounded preparation grace")
+
+	now = now.Add(2 * time.Second)
+	app.handleGovernorPressureSample(2)
+	require.Nil(t, app.getRefreshSubsystem(clusterID),
+		"an unchanged pressure signal must re-drive and eventually force full teardown")
+	require.Nil(t, app.objectCatalogServiceForCluster(clusterID))
+
+	spillDir, err := app.clusterSpillDir(clusterID)
+	require.NoError(t, err)
+	_, err = os.Stat(filepath.Join(spillDir, "cluster-overview.spill"))
+	require.NoError(t, err, "forced teardown must preserve the normal spill path")
+
+	entries := app.logger.GetEntries()
+	forcedLogs := 0
+	for _, entry := range entries {
+		if entry.ClusterID == clusterID &&
+			strings.Contains(entry.Message, "forcing full teardown") &&
+			strings.Contains(entry.Message, "heap in use: 2 bytes") {
+			forcedLogs++
+		}
+	}
+	require.Equal(t, 1, forcedLogs,
+		"forced teardown must emit exactly one cluster-scoped diagnostic with heap use")
+	require.Condition(t, func() bool {
+		for _, entry := range entries {
+			if entry.ClusterID == clusterID && strings.Contains(entry.Message, "Tearing down subsystem") {
+				return true
+			}
+		}
+		return false
+	}, "forced pressure fallback must route through the normal full-teardown lifecycle")
 }
 
 func TestReconcileGovernorDropsClosedClusterTier(t *testing.T) {

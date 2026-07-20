@@ -57,6 +57,9 @@
   retained snapshot when fresh backend data arrives.
 - Preserved namespace change subscriptions when a cooled cluster re-warms, so
   namespace creation and deletion continue appearing without fallback polling.
+- Restored Browse and discovery data when a cooled cluster re-warms, and kept
+  inactive clusters recoverable when sustained memory pressure forces a full
+  teardown before their retained backend snapshot can settle.
 - Stopped automatic navigation from creating manual-refresh jobs and prevented
   retained namespace timeout errors from reappearing on every tab switch.
 - Updated namespace utilization immediately when metrics collection fails,

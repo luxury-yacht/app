@@ -27,30 +27,52 @@ func (a *App) initGovernor() {
 	a.governorMu.Lock()
 	defer a.governorMu.Unlock()
 	a.governorPolicy = system.GovernorPolicy{KeepWarm: config.GovernorKeepWarm}
+	a.governorPlanned = make(map[string]system.ResourceTier)
 	a.governorApplied = make(map[string]system.ResourceTier)
 	a.governorBudget = config.GovernorHeapBudgetBytes
+	a.governorNow = time.Now
 }
 
 // ensureGovernorStateLocked lazily initializes governor state for App instances
 // built without NewApp (e.g. test fixtures), so the governor never assigns to a
 // nil map. Callers must hold governorMu.
 func (a *App) ensureGovernorStateLocked() {
+	if a.governorPlanned == nil {
+		a.governorPlanned = make(map[string]system.ResourceTier)
+	}
 	if a.governorApplied == nil {
 		a.governorApplied = make(map[string]system.ResourceTier)
 	}
+	if a.governorNow == nil {
+		a.governorNow = time.Now
+	}
 }
 
-// governorKeepsClusterCold reports whether the latest serialized governor
-// assignment intentionally keeps clusterID without live producers. It reads the
-// assignment rather than Subsystem.Cooled: during cooling the assignment changes
-// before feeds stop, and during re-warm it changes before the fresh catalog starts.
+func (a *App) governorTime() time.Time {
+	if a == nil {
+		return time.Now()
+	}
+	a.governorMu.Lock()
+	now := a.governorNow
+	a.governorMu.Unlock()
+	if now == nil {
+		return time.Now()
+	}
+	return now()
+}
+
+// governorKeepsClusterCold reports whether the latest serialized governor plan
+// intentionally keeps clusterID without live producers. The plan is published
+// before lifecycle work starts: cooling closes the catalog gate before feeds stop,
+// while re-warming opens it before the fresh catalog starts. governorApplied is
+// deliberately separate because it records only completed lifecycle work.
 func (a *App) governorKeepsClusterCold(clusterID string) bool {
 	if a == nil || clusterID == "" {
 		return false
 	}
 	a.governorMu.Lock()
 	defer a.governorMu.Unlock()
-	tier, tracked := a.governorApplied[clusterID]
+	tier, tracked := a.governorPlanned[clusterID]
 	return tracked && tier == system.TierCold
 }
 
@@ -148,6 +170,14 @@ func (a *App) reconcileGovernorWith(exec governorExecutor) {
 	}
 	desired := a.governorPolicy.Assign(mru, a.governorVisible, a.governorPressure)
 	transitions := system.PlanGovernorTransitions(a.governorApplied, desired)
+	// Catalog start/stop runs inside the lifecycle executor. Publish the plan
+	// first so those nested operations see where the serialized transition is
+	// going, while governorApplied continues to describe the state actually
+	// reached (including deferred Cold preparation).
+	a.governorPlanned = make(map[string]system.ResourceTier, len(desired))
+	for id, tier := range desired {
+		a.governorPlanned[id] = tier
+	}
 	a.governorMu.Unlock()
 
 	for _, t := range transitions {
@@ -238,7 +268,16 @@ func (e *appGovernorExecutor) ensureRunning(clusterID string) bool {
 		a.rewarmCooledClusterSubsystem(clusterID)
 	}
 	subsystem = a.getRefreshSubsystem(clusterID)
-	return subsystem != nil && !subsystem.Cooled
+	if subsystem == nil || subsystem.Cooled {
+		return false
+	}
+	if err := a.ensureObjectCatalogForCluster(clusterID); err != nil {
+		if a.logger != nil {
+			a.logger.Warn(fmt.Sprintf("Governor could not complete live tier for cluster %s: %v", clusterID, err), logsources.Refresh, clusterID, a.clusterNameForID(clusterID))
+		}
+		return false
+	}
+	return true
 }
 
 // rewarmCooledClusterSubsystem replaces a cooled (mmap-serving) subsystem with a fresh, live
@@ -285,6 +324,24 @@ func (e *appGovernorExecutor) teardown(clusterID string) bool {
 	}
 	if !subsystem.ColdServingReady() {
 		a.startColdPreparation(clusterID, subsystem)
+		if pendingFor, heapInuse, force := a.shouldForceColdTeardown(subsystem); force {
+			if a.logger != nil {
+				a.logger.Warn(fmt.Sprintf(
+					"Governor cold preparation for cluster %s remained unsettled for %s under sustained memory pressure; forcing full teardown (heap in use: %d bytes)",
+					clusterID,
+					pendingFor.Round(time.Second),
+					heapInuse,
+				), logsources.Refresh, clusterID, a.clusterNameForID(clusterID))
+			}
+			// Use the normal full-teardown path so feeds stop, the generation-owned
+			// preparation is canceled, and every available store is spilled before
+			// heap is reclaimed. The catalog must stop with the live producers.
+			a.teardownClusterSubsystem(clusterID)
+			a.stopObjectCatalogForCluster(clusterID)
+			runtime.GC()
+			debug.FreeOSMemory()
+			return true
+		}
 		return false
 	}
 	a.coolClusterToMmapServing(clusterID)
@@ -292,7 +349,28 @@ func (e *appGovernorExecutor) teardown(clusterID string) bool {
 	return subsystem == nil || subsystem.Cooled
 }
 
-const coldPreparationRetryInterval = 250 * time.Millisecond
+const (
+	coldPreparationRetryInterval = 250 * time.Millisecond
+	// One complete cache-bypass overview attempt gets the same bound used by
+	// buildColdPreparationSnapshot. Only sustained memory pressure may trade the
+	// settled retained baseline for a full teardown after this grace expires.
+	coldPreparationPressureGrace = config.RefreshInformerSyncTimeout + 5*time.Second
+)
+
+func (a *App) shouldForceColdTeardown(subsystem *system.Subsystem) (time.Duration, uint64, bool) {
+	if a == nil || subsystem == nil {
+		return 0, 0, false
+	}
+	pendingFor, pending := subsystem.ColdPreparationAge(a.governorTime())
+	if !pending || pendingFor < coldPreparationPressureGrace {
+		return pendingFor, 0, false
+	}
+	a.governorMu.Lock()
+	underPressure := a.governorPressure
+	heapInuse := a.governorHeapInuse
+	a.governorMu.Unlock()
+	return pendingFor, heapInuse, underPressure
+}
 
 // startColdPreparation waits for and builds the retained snapshots needed by
 // surfaces that remain visible while a cluster is Cold. The work is server-owned
@@ -301,7 +379,8 @@ func (a *App) startColdPreparation(clusterID string, subsystem *system.Subsystem
 	if a == nil || clusterID == "" || subsystem == nil || subsystem.SnapshotService == nil || a.refreshCtx == nil || a.clusterLifecycle == nil {
 		return
 	}
-	if !subsystem.BeginColdPreparation() {
+	preparationCtx, started := subsystem.BeginColdPreparation(a.refreshCtx, a.governorTime())
+	if !started {
 		return
 	}
 	go func() {
@@ -314,7 +393,8 @@ func (a *App) startColdPreparation(clusterID string, subsystem *system.Subsystem
 			// this generation's own workload tracker to have settled.
 			return subsystem.NamespaceNotifier == nil || subsystem.NamespaceNotifier.WorkloadsReady()
 		}
-		if !primeColdServingSnapshots(a.refreshCtx, subsystem.SnapshotService, clusterID, namespaceBaselineReady) {
+		stillCurrent := func() bool { return a.getRefreshSubsystem(clusterID) == subsystem }
+		if !primeColdServingSnapshots(preparationCtx, subsystem.SnapshotService, clusterID, namespaceBaselineReady, stillCurrent) {
 			return
 		}
 		// A rebuild may have replaced this subsystem while its sources settled.
@@ -338,12 +418,16 @@ func primeColdServingSnapshots(
 	service refresh.SnapshotService,
 	clusterID string,
 	namespaceBaselineReady func() bool,
+	stillCurrent func() bool,
 ) bool {
-	if ctx == nil || service == nil || clusterID == "" || namespaceBaselineReady == nil {
+	if ctx == nil || service == nil || clusterID == "" || namespaceBaselineReady == nil || stillCurrent == nil {
 		return false
 	}
 	scope := refresh.JoinClusterScope(clusterID, "")
 	for {
+		if !stillCurrent() {
+			return false
+		}
 		if namespaceBaselineReady() {
 			if _, err := buildColdPreparationSnapshot(ctx, service, "cluster-overview", scope); err == nil {
 				return true
@@ -459,10 +543,28 @@ func (a *App) seedGovernorFromOpenClusters() {
 	a.reconcileGovernor()
 }
 
-// startGovernorPressureLoop periodically samples heap usage and flips the
-// memory-pressure signal, reconciling when it changes so non-visible clusters are
-// shed under pressure and re-warmed when it clears. It stops when ctx is
-// cancelled (bound to the refresh context, so no goroutine leak on shutdown).
+// handleGovernorPressureSample records the latest heap sample. Every sample that
+// remains over budget re-drives reconciliation so a Cold transition deferred for
+// retained-baseline preparation can reach its bounded pressure fallback.
+func (a *App) handleGovernorPressureSample(heapInuse uint64) {
+	if a == nil {
+		return
+	}
+	a.governorMu.Lock()
+	budget := a.governorBudget
+	underPressure := budget > 0 && heapInuse > budget
+	changed := underPressure != a.governorPressure
+	a.governorPressure = underPressure
+	a.governorHeapInuse = heapInuse
+	a.governorMu.Unlock()
+
+	if changed || underPressure {
+		a.reconcileGovernor()
+	}
+}
+
+// startGovernorPressureLoop periodically samples heap usage. It stops when ctx
+// is cancelled (bound to the refresh context, so no goroutine leak on shutdown).
 func (a *App) startGovernorPressureLoop(ctx context.Context) {
 	if a == nil || ctx == nil {
 		return
@@ -485,16 +587,7 @@ func (a *App) startGovernorPressureLoop(ctx context.Context) {
 		case <-ticker.C:
 			var stats runtime.MemStats
 			runtime.ReadMemStats(&stats)
-			underPressure := stats.HeapInuse > budget
-
-			a.governorMu.Lock()
-			changed := underPressure != a.governorPressure
-			a.governorPressure = underPressure
-			a.governorMu.Unlock()
-
-			if changed {
-				a.reconcileGovernor()
-			}
+			a.handleGovernorPressureSample(stats.HeapInuse)
 		}
 	}
 }

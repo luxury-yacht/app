@@ -152,6 +152,31 @@ func (a *App) startObjectCatalog() {
 	}
 }
 
+// ensureObjectCatalogForCluster makes the object catalog part of the live-tier
+// invariant. Rebuild normally starts it, but this also repairs a live subsystem
+// left catalog-less by an interrupted or previously mis-ordered transition.
+func (a *App) ensureObjectCatalogForCluster(clusterID string) error {
+	if a == nil || clusterID == "" {
+		return fmt.Errorf("cluster identifier missing")
+	}
+	if a.objectCatalogServiceForCluster(clusterID) != nil {
+		return nil
+	}
+	for _, target := range a.catalogTargets() {
+		if target.meta.ID != clusterID {
+			continue
+		}
+		if err := a.startObjectCatalogForTarget(target); err != nil {
+			return err
+		}
+		if a.objectCatalogServiceForCluster(clusterID) == nil {
+			return fmt.Errorf("object catalog did not start")
+		}
+		return nil
+	}
+	return fmt.Errorf("cluster selection unavailable")
+}
+
 func (a *App) startObjectCatalogForTarget(target catalogTarget) error {
 	if target.meta.ID == "" {
 		return fmt.Errorf("cluster identifier missing")

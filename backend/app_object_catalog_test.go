@@ -38,6 +38,7 @@ func catalogLifecycleTestApp(t *testing.T, tier system.ResourceTier, cooled bool
 	const clusterID = "cluster-a:context-a"
 	app := newTestAppWithDefaults(t)
 	app.Ctx = context.Background()
+	app.governorPlanned = map[string]system.ResourceTier{clusterID: tier}
 	app.governorApplied = map[string]system.ResourceTier{clusterID: tier}
 
 	kubeClient := cgofake.NewClientset()
@@ -63,6 +64,12 @@ func catalogLifecycleTestApp(t *testing.T, tier system.ResourceTier, cooled bool
 			nil,
 		),
 	})
+	app.availableKubeconfigs = []KubeconfigInfo{{
+		Name:    "cluster-a",
+		Path:    "/p/a",
+		Context: "context-a",
+	}}
+	app.selectedKubeconfigs = []string{(kubeconfigSelection{Path: "/p/a", Context: "context-a"}).String()}
 	t.Cleanup(func() { app.stopObjectCatalogForCluster(clusterID) })
 	return app, catalogTarget{
 		selection: kubeconfigSelection{Path: "/p/a", Context: "context-a"},
@@ -86,6 +93,56 @@ func TestStartObjectCatalogForTargetStartsForForegroundSubsystem(t *testing.T) {
 
 	require.NoError(t, err)
 	require.NotNil(t, app.objectCatalogServiceForCluster(target.meta.ID), "a live cluster must start its catalog")
+}
+
+type catalogStartingGovernorExecutor struct {
+	app    *App
+	target catalogTarget
+}
+
+func (e *catalogStartingGovernorExecutor) ensureRunning(string) bool {
+	return e.app.startObjectCatalogForTarget(e.target) == nil &&
+		e.app.objectCatalogServiceForCluster(e.target.meta.ID) != nil
+}
+
+func (e *catalogStartingGovernorExecutor) teardown(string) bool {
+	_ = e.app.startObjectCatalogForTarget(e.target)
+	return e.app.objectCatalogServiceForCluster(e.target.meta.ID) == nil
+}
+
+func TestReconcileGovernorPublishesForegroundPlanBeforeStartingCatalog(t *testing.T) {
+	app, target := catalogLifecycleTestApp(t, system.TierCold, false)
+	app.governorVisible = target.meta.ID
+	app.governorMRU = []string{target.meta.ID}
+
+	app.reconcileGovernorWith(&catalogStartingGovernorExecutor{app: app, target: target})
+
+	require.NotNil(t, app.objectCatalogServiceForCluster(target.meta.ID),
+		"the catalog start inside the re-warm executor must observe the planned live tier")
+	require.Equal(t, system.TierForeground, app.governorApplied[target.meta.ID])
+}
+
+func TestReconcileGovernorPublishesColdPlanBeforeTeardownStarts(t *testing.T) {
+	app, target := catalogLifecycleTestApp(t, system.TierBackground, false)
+	app.governorPolicy = system.GovernorPolicy{KeepWarm: 0}
+	app.governorMRU = []string{target.meta.ID}
+
+	app.reconcileGovernorWith(&catalogStartingGovernorExecutor{app: app, target: target})
+
+	require.Nil(t, app.objectCatalogServiceForCluster(target.meta.ID),
+		"catalog work started during teardown must observe the planned Cold tier")
+	require.Equal(t, system.TierCold, app.governorApplied[target.meta.ID])
+}
+
+func TestGovernorEnsureRunningStartsMissingCatalogForLiveCluster(t *testing.T) {
+	app, target := catalogLifecycleTestApp(t, system.TierForeground, false)
+	require.Nil(t, app.objectCatalogServiceForCluster(target.meta.ID))
+
+	reachedLiveTier := app.realGovernorExecutor().ensureRunning(target.meta.ID)
+
+	require.True(t, reachedLiveTier)
+	require.NotNil(t, app.objectCatalogServiceForCluster(target.meta.ID),
+		"a live tier is incomplete until the cluster object catalog is running")
 }
 
 func TestStopObjectCatalogCancelsAndResets(t *testing.T) {

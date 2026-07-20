@@ -6,6 +6,7 @@ import (
 	"net/http"
 	"sync"
 	"sync/atomic"
+	"time"
 
 	"github.com/luxury-yacht/app/backend/capabilities"
 	"github.com/luxury-yacht/app/backend/refresh"
@@ -68,9 +69,12 @@ type App struct {
 	governorPolicy      system.GovernorPolicy
 	governorMRU         []string                       // open cluster IDs, most-recently-visible first
 	governorVisible     string                         // the cluster the user is currently viewing
+	governorPlanned     map[string]system.ResourceTier // latest tier plan published before lifecycle work starts
 	governorApplied     map[string]system.ResourceTier // last-applied tier per cluster
 	governorPressure    bool                           // memory-pressure signal (HeapInuse over budget)
+	governorHeapInuse   uint64                         // latest sampled HeapInuse, for pressure diagnostics
 	governorBudget      uint64                         // HeapInuse byte budget; 0 disables pressure demotion
+	governorNow         func() time.Time               // clock for bounded pressure fallback; time.Now in production
 	spillRoot           string                         // override for the maintained-store spill root; empty = user cache dir (tests set a temp dir)
 	spillFormat         string                         // override for the spill format version; empty = app Version (tests set a fixed value)
 

@@ -51,6 +51,7 @@ func (a *App) swapRefreshSubsystem(clusterID string, next *system.Subsystem) {
 	if previous == nil || previous == next {
 		return
 	}
+	previous.CancelColdPreparation()
 	// stopRefreshSubsystem no-ops without a manager; silence the doorbell
 	// notifiers explicitly so a partially-built previous subsystem cannot keep
 	// them.

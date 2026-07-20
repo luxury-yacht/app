@@ -186,12 +186,16 @@ checklist when touching anything they name.
        may record newer visible-cluster intent while another call is cooling,
        but executor actions cannot overlap. Otherwise `ensureRunning` can observe
        the interval after feeds stop and before `Cooled` is published, accept it
-       as live, and leave every refresh domain without producers.
+       as live, and leave every refresh domain without producers. Publish the desired
+       tier to the planned map before executor work, but update the applied map only
+       after the executor reaches that tier; the two maps encode different contracts.
    13. **Cold clusters do not start object catalogs**:
-       `startObjectCatalogForTarget` gates on the serialized governor tier before
+       `startObjectCatalogForTarget` gates on the serialized governor **planned** tier before
        discovery or capability work. A Cold subsystem's ingest and informer feeds
        are stopped, so starting its catalog creates API traffic and an endless
-       all-ingest-kinds-unsynced retry loop.
+       all-ingest-kinds-unsynced retry loop. Re-warm publishes a live plan before
+       rebuilding, and `ensureRunning` must not report the live tier reached until the
+       catalog exists; reading the last-applied tier reverses both ordering guarantees.
    14. **Foreground activation replays lifecycle truth**: after serialized governor
        reconciliation, `SetVisibleCluster` emits the cluster's current lifecycle
        state even if it is unchanged. The Wails relay must reach both React state and
@@ -210,7 +214,13 @@ checklist when touching anything they name.
        subsystem generation's `NamespaceNotifier.WorkloadsReady()` as proof of the
        namespace baseline. The generation-local check is required because lifecycle
        Ready may be retained across re-warm. Do not poll namespace snapshots from Cold
-       preparation (scoped builds may issue per-namespace API probes).
+       preparation (scoped builds may issue per-namespace API probes). The preparation
+       context belongs to the subsystem generation: replacement/teardown cancels it, and
+       the retry loop checks that its subsystem is still current before every attempt.
+       The sole exception is sustained memory pressure after the bounded preparation
+       grace: re-drive reconciliation on every over-budget sample, then use the normal
+       full teardown so available stores spill and heap is reclaimed. Do not mmap or
+       serve the unsettled baseline; backend data stays unavailable until re-warm.
 10. **Stream health = connected + server-confirmed synchronized**, not
     recently-delivered (`computeSubscriptionHealth`;
     `markSubscriptionSynchronized` only after the mux confirms the subscribe).
