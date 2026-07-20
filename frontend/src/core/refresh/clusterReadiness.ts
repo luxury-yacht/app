@@ -28,6 +28,7 @@ class ClusterReadinessTracker {
   private states = new Map<string, ClusterLifecycleState>();
   private foregroundActivations = new Map<string, number>();
   private listeners = new Set<(clusterId: string) => void>();
+  private foregroundActivationListeners = new Set<(clusterId: string) => void>();
 
   constructor() {
     eventBus.on('cluster:lifecycle', ({ clusterId, state }) => {
@@ -62,10 +63,13 @@ class ClusterReadinessTracker {
     if (!normalized) {
       return;
     }
-    this.foregroundActivations.set(
-      normalized,
-      (this.foregroundActivations.get(normalized) ?? 0) + 1
-    );
+    const pending = this.foregroundActivations.get(normalized) ?? 0;
+    this.foregroundActivations.set(normalized, pending + 1);
+    if (pending === 0) {
+      this.foregroundActivationListeners.forEach((listener) => {
+        listener(normalized);
+      });
+    }
   }
 
   /** Release one foreground activation hold and wake retained refresh demand when serviceable. */
@@ -92,6 +96,14 @@ class ClusterReadinessTracker {
     this.listeners.add(listener);
     return () => {
       this.listeners.delete(listener);
+    };
+  }
+
+  /** Fires when the first foreground activation hold begins for a cluster. */
+  onForegroundActivationStarted(listener: (clusterId: string) => void): () => void {
+    this.foregroundActivationListeners.add(listener);
+    return () => {
+      this.foregroundActivationListeners.delete(listener);
     };
   }
 

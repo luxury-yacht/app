@@ -61,6 +61,13 @@ type DomainFetchOptions = {
   streamSignal?: boolean;
 };
 
+type PendingClusterReadinessRequest = {
+  domain: RefreshDomain;
+  scope: string;
+  isManual: boolean;
+  streamSignal: boolean;
+};
+
 // Refreshers are disabled at registration by default. Most domains rely on
 // view hooks (e.g. ClusterResourcesContext, useBrowseCatalog) to enable
 // scopes on demand rather than polling from app startup. Changing this to
@@ -87,9 +94,9 @@ class RefreshOrchestrator {
   private coordinatorRuntime = new ClusterRefreshRuntime('__coordinator__');
   private clusterRuntimes = new Map<string, ClusterRefreshRuntime>();
   // Scoped fetches held because the scope's cluster backend is still
-  // initializing; keyed by clusterId, values are "<domain> <scope>" pairs
-  // re-dispatched on the lifecycle's became-serviceable edge.
-  private pendingClusterReadiness = new Map<string, Set<string>>();
+  // initializing; keyed by clusterId and then by domain + scope. Repeated
+  // demand coalesces without losing manual or stream-signal intent.
+  private pendingClusterReadiness = new Map<string, Map<string, PendingClusterReadinessRequest>>();
 
   private requestCounter = 0;
   private metricsDemandClusterKey = '';
@@ -128,6 +135,9 @@ class RefreshOrchestrator {
     clusterReadiness.onBecameServiceable((clusterId) =>
       this.handleClusterBecameServiceable(clusterId)
     );
+    clusterReadiness.onForegroundActivationStarted((clusterId) =>
+      this.handleForegroundActivationStarted(clusterId)
+    );
     // Emit a single log so operators can confirm streaming config at runtime.
     logInfo('[refresh] resource streaming enabled (mode=active, domains=all)');
   }
@@ -140,48 +150,79 @@ class RefreshOrchestrator {
   }
 
   /** Hold a fetch for re-dispatch when the scope's cluster(s) become serviceable. */
-  private recordPendingClusterReadiness(domain: RefreshDomain, scope: string): void {
+  private recordPendingClusterReadiness(
+    domain: RefreshDomain,
+    scope: string,
+    options: Pick<DomainFetchOptions, 'isManual' | 'streamSignal'> = { isManual: false }
+  ): void {
     for (const clusterId of parseClusterScopeList(scope).clusterIds) {
       let pending = this.pendingClusterReadiness.get(clusterId);
       if (!pending) {
-        pending = new Set<string>();
+        pending = new Map<string, PendingClusterReadinessRequest>();
         this.pendingClusterReadiness.set(clusterId, pending);
       }
-      pending.add(`${domain}\u0000${scope}`);
+      const key = `${domain}\u0000${scope}`;
+      const existing = pending.get(key);
+      pending.set(key, {
+        domain,
+        scope,
+        isManual: Boolean(existing?.isManual || options.isManual),
+        streamSignal: Boolean(existing?.streamSignal || options.streamSignal),
+      });
     }
+  }
+
+  private handleForegroundActivationStarted(clusterId: string): void {
+    const runtime = this.clusterRuntimes.get(clusterId);
+    if (!runtime) {
+      return;
+    }
+    this.stopRuntimeStreaming(runtime, false);
+    runtime.forEachInFlight((details, key) => {
+      if (details.scope && this.isScopedDomainEnabledInternal(details.domain, details.scope)) {
+        this.recordPendingClusterReadiness(details.domain, details.scope, {
+          isManual: details.isManual,
+          streamSignal: Boolean(details.streamSignal || details.rerunStreamSignal),
+        });
+      }
+      this.teardownInFlight(runtime, key, details);
+    });
   }
 
   private handleClusterBecameServiceable(clusterId: string): void {
     const pending = this.pendingClusterReadiness.get(clusterId);
     this.pendingClusterReadiness.delete(clusterId);
-    if (!pending) {
-      return;
+    if (pending) {
+      for (const request of pending.values()) {
+        const { domain, scope } = request;
+        if (!this.configs.has(domain)) {
+          continue;
+        }
+        // The lease may have been released (view left, cluster pruned) while
+        // the cluster was warming up — held work dies with its demand.
+        if (!this.isScopedDomainEnabledInternal(domain, scope)) {
+          continue;
+        }
+        if (!this.isScopeClusterServiceable(scope)) {
+          // A multi-cluster scope with another cluster still warming.
+          this.recordPendingClusterReadiness(domain, scope, request);
+          continue;
+        }
+        void this.fetchScopedDomain(domain, scope, {
+          isManual: request.isManual,
+          streamSignal: request.streamSignal,
+        }).catch((error) => {
+          logWarning(
+            `[refresh] deferred ${domain} fetch after cluster ${clusterId} became serviceable failed: ${
+              error instanceof Error ? error.message : String(error)
+            }`
+          );
+        });
+      }
     }
-    for (const key of pending) {
-      const separator = key.indexOf('\u0000');
-      const domain = key.slice(0, separator) as RefreshDomain;
-      const scope = key.slice(separator + 1);
-      if (!this.configs.has(domain)) {
-        continue;
-      }
-      // The lease may have been released (view left, cluster pruned) while
-      // the cluster was warming up — held work dies with its demand.
-      if (!this.isScopedDomainEnabledInternal(domain, scope)) {
-        continue;
-      }
-      if (!this.isScopeClusterServiceable(scope)) {
-        // A multi-cluster scope with another cluster still warming.
-        this.recordPendingClusterReadiness(domain, scope);
-        continue;
-      }
-      void this.fetchScopedDomain(domain, scope, { isManual: false }).catch((error) => {
-        logWarning(
-          `[refresh] deferred ${domain} fetch after cluster ${clusterId} became serviceable failed: ${
-            error instanceof Error ? error.message : String(error)
-          }`
-        );
-      });
-    }
+    // Snapshotless streams have no queued fetch to wake them. Re-evaluate all
+    // retained streaming leases whenever the activation hold is released.
+    this.handleStreamingScopeChanges();
   }
 
   private notifyRefreshError(
@@ -729,6 +770,9 @@ class RefreshOrchestrator {
     scope: string,
     streaming: StreamingRegistration
   ): Promise<void> {
+    if (!this.isScopeClusterServiceable(scope)) {
+      return Promise.resolve();
+    }
     if (!this.isScopedDomainEnabledInternal(domain, scope)) {
       return Promise.resolve();
     }
@@ -986,6 +1030,11 @@ class RefreshOrchestrator {
     // cluster-events, polling disabled — are cleaned up too. forEachScopedDomain only sees
     // enabled leases, so it would leave those orphaned for a closed cluster.
     this.resetScopedStatesForRemovedClusters(connected);
+    Array.from(this.pendingClusterReadiness.keys()).forEach((clusterId) => {
+      if (!connected.has(clusterId)) {
+        this.pendingClusterReadiness.delete(clusterId);
+      }
+    });
 
     Array.from(this.clusterRuntimes.entries()).forEach(([clusterId, runtime]) => {
       if (connected.has(clusterId)) {
@@ -1089,7 +1138,10 @@ class RefreshOrchestrator {
     // re-dispatch on the lifecycle's became-serviceable edge — warm-up is
     // loading, not failure.
     if (!this.isScopeClusterServiceable(normalizedScope)) {
-      this.recordPendingClusterReadiness(domain, normalizedScope);
+      this.recordPendingClusterReadiness(domain, normalizedScope, {
+        isManual: Boolean(options.isManual),
+        streamSignal: Boolean(options.streamSignal),
+      });
       return;
     }
 
@@ -1148,6 +1200,13 @@ class RefreshOrchestrator {
 
     if (!normalizedScope || normalizedScope.length === 0) {
       throw new Error(`Scoped domain "${domain}" requires a valid scope`);
+    }
+
+    if (!this.isScopeClusterServiceable(normalizedScope)) {
+      if (!options.allowDisabledRetainedScope) {
+        this.recordPendingClusterReadiness(domain, normalizedScope, options);
+      }
+      return;
     }
 
     if (
@@ -1221,6 +1280,7 @@ class RefreshOrchestrator {
     runtime.setInFlight({
       controller,
       isManual: options.isManual,
+      streamSignal: options.streamSignal,
       requestId,
       cleanup,
       contextVersion,

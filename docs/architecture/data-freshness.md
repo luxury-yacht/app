@@ -15,7 +15,9 @@ payload shape; they link here instead of restating freshness behavior.
    a cooled backend re-establishes that cluster's producers; snapshot and stream
    dispatch wait on that activation boundary instead of surfacing transient
    service-unavailable errors. When reconciliation completes, its snapshot
-   replaces the retained data.
+   replaces the retained data. This activation boundary applies to every refresh
+   domain and every dispatch path, including scheduled work, stream-triggered
+   snapshots, and stream-only domains.
 3. **Keep background work passive.** An open inactive cluster retains snapshots
    and object-change subscriptions. It does not continuously fetch snapshots,
    start metrics collection, or produce manual-refresh errors merely because
@@ -110,6 +112,12 @@ The authored domain contract declares which clocks can change a payload:
 
 - Retained data remains visible during refresh and transient failure. Attach the
   refresh/error state to it instead of replacing it with an empty payload.
+- Foreground activation is a per-cluster dispatch boundary. Beginning activation
+  stops that cluster's streams and aborts its in-flight snapshots before the
+  backend replaces or rewarms their producers. Visible leased work is retained
+  and replayed after activation with its original `user` or `stream-signal`
+  intent; passive background work is dropped. Releasing the boundary also
+  restarts retained stream-only leases, which have no snapshot request to queue.
 - A typed permission denial is a settled domain state, not a retry loop.
 - Error notifications are deduplicated by full refresh scope. Re-selecting a
   retained failing scope does not repeat the same notification; leaving the
@@ -151,5 +159,9 @@ For a freshness change, test the contract at the producer/consumer seam:
 8. a metric-only change leaves object clocks and object snapshots unchanged;
 9. permission, stream-down fallback, teardown, and multi-cluster isolation still
    converge.
+10. the activation boundary holds every registered snapshot and stream-only
+    domain, aborts in-flight work for only the activating cluster, preserves
+    visible request intent, and never converts passive background work into
+    queued demand.
 
 Finish non-documentation changes with `mage qc:prerelease`.

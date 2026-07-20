@@ -93,6 +93,25 @@ describe('clusterReadiness', () => {
     expect(listener).toHaveBeenCalledWith('cluster-a');
   });
 
+  it('fires one foreground-activation edge for a reference-counted hold', () => {
+    const listener = vi.fn();
+    const off = clusterReadiness.onForegroundActivationStarted(listener);
+    lifecycle('cluster-a', 'ready');
+
+    clusterReadiness.beginForegroundActivation('cluster-a');
+    clusterReadiness.beginForegroundActivation('cluster-a');
+
+    expect(listener).toHaveBeenCalledTimes(1);
+    expect(listener).toHaveBeenCalledWith('cluster-a');
+
+    clusterReadiness.endForegroundActivation('cluster-a');
+    clusterReadiness.endForegroundActivation('cluster-a');
+    clusterReadiness.beginForegroundActivation('cluster-a');
+
+    expect(listener).toHaveBeenCalledTimes(2);
+    off();
+  });
+
   it('unsubscribes listeners', () => {
     const listener = vi.fn();
     const off = clusterReadiness.onBecameServiceable(listener);
