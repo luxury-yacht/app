@@ -36,21 +36,6 @@ func (s *Service) RoleBinding(namespace, name string) (*RoleBindingDetails, erro
 	return s.buildRoleBindingDetails(rb), nil
 }
 
-// RoleBindings returns detailed views for all role bindings in a namespace.
-func (s *Service) RoleBindings(namespace string) ([]*RoleBindingDetails, error) {
-	roleBindings, err := s.deps.KubernetesClient.RbacV1().RoleBindings(namespace).List(s.deps.Context, metav1.ListOptions{})
-	if err != nil {
-		s.deps.Logger.Error(fmt.Sprintf("Failed to list role bindings in namespace %s: %v", namespace, err), "RBAC")
-		return nil, fmt.Errorf("failed to list role bindings: %v", err)
-	}
-
-	results := make([]*RoleBindingDetails, 0, len(roleBindings.Items))
-	for i := range roleBindings.Items {
-		results = append(results, s.buildRoleBindingDetails(&roleBindings.Items[i]))
-	}
-	return results, nil
-}
-
 func (s *Service) buildRoleBindingDetails(rb *rbacv1.RoleBinding) *RoleBindingDetails {
 	facts := BuildFacts(s.deps.ClusterID, rb)
 	return &RoleBindingDetails{

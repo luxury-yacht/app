@@ -26,7 +26,3 @@ type Service struct {
 func NewService(deps Dependencies) *Service {
 	return &Service{deps: deps}
 }
-
-func (s *Service) ResourceResolver() common.ResourceResolver {
-	return s.deps.Common.ResourceResolver
-}

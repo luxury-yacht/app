@@ -33,18 +33,6 @@ func (s *Service) GRPCRoute(namespace, name string) (*types.RouteDetails, error)
 		}, s.buildDetails)
 }
 
-// GRPCRoutes lists GRPCRoute detail payloads.
-func (s *Service) GRPCRoutes(namespace string) ([]*types.RouteDetails, error) {
-	return gatewayapi.ListResources(s.deps, "GRPCRoute", "grpc routes",
-		func() ([]gatewayv1.GRPCRoute, error) {
-			list, err := s.deps.GatewayClient.GatewayV1().GRPCRoutes(namespace).List(s.deps.Context, metav1.ListOptions{})
-			if err != nil {
-				return nil, err
-			}
-			return list.Items, nil
-		}, s.buildDetails)
-}
-
 func (s *Service) buildDetails(item *gatewayv1.GRPCRoute) *types.RouteDetails {
 	facts := BuildFacts(s.deps.ClusterID, item).RouteCommonFacts
 	detail := types.RouteDetailsFromFacts("GRPCRoute", item.ObjectMeta, facts)

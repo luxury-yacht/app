@@ -392,14 +392,6 @@ func (s *Service) fetchNodeLogPathWithOptions(nodeName, sourcePath, sinceTime st
 	return nodeLogFetchRawFunc(ctx, restClient, nodeLogProxyPathWithOptions(nodeName, sourcePath, sinceTime, tailLines))
 }
 
-func nodeLogProxyPath(nodeName, sourcePath string) string {
-	return nodeLogProxyPathWithOptions(nodeName, sourcePath, "", 0)
-}
-
-func nodeLogProxyPathWithSinceTime(nodeName, sourcePath, sinceTime string) string {
-	return nodeLogProxyPathWithOptions(nodeName, sourcePath, sinceTime, 0)
-}
-
 func nodeLogProxyPathWithOptions(nodeName, sourcePath, sinceTime string, tailLines int) string {
 	base := fmt.Sprintf("/api/v1/nodes/%s/proxy/logs/", url.PathEscape(strings.TrimSpace(nodeName)))
 	query := url.Values{}

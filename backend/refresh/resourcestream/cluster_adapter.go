@@ -17,15 +17,6 @@ type ClusterAdapter struct {
 	resolve func(clusterID string) *Manager
 }
 
-// NewClusterAdapter builds a cluster-aware resource stream adapter over a
-// fixed manager map (tests, single-shot wiring). Live topologies should use
-// NewResolvingClusterAdapter.
-func NewClusterAdapter(managers map[string]*Manager) *ClusterAdapter {
-	return NewResolvingClusterAdapter(func(clusterID string) *Manager {
-		return managers[clusterID]
-	})
-}
-
 // NewResolvingClusterAdapter builds an adapter that resolves the cluster's
 // manager at call time, so topology changes reach already-bound sessions.
 func NewResolvingClusterAdapter(resolve func(clusterID string) *Manager) *ClusterAdapter {

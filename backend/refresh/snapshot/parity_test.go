@@ -55,7 +55,7 @@ import (
 
 // TestSnapshotStreamRowParity is the keystone parity harness for the
 // snapshot/stream row contract in docs/architecture/refresh-system.md. For
-// every domain returned by resourcestream.SupportedDomains() it:
+// every row-projecting domain in the shared refresh-domain contract it:
 //
 //  1. Builds a snapshot through the canonical Builder for that domain
 //     (the same code that produces the initial snapshot the frontend
@@ -78,8 +78,6 @@ func TestSnapshotStreamRowParity(t *testing.T) {
 
 	cases := []parityCase{
 		// Drift-prone canaries first — these are the domains that motivated the plan.
-		parityWorkloadsCase(meta, true),
-		parityWorkloadsCase(meta, false),
 		parityServiceCase(meta, true),
 		parityServiceCase(meta, false),
 		parityNamespaceCustomCollisionCase(meta),
@@ -88,8 +86,6 @@ func TestSnapshotStreamRowParity(t *testing.T) {
 		// Metric-bearing rows: present and absent fixtures.
 		parityPodsCase(meta, true),
 		parityPodsCase(meta, false),
-		parityNodesCase(meta, true),
-		parityNodesCase(meta, false),
 
 		// Pure-object namespace domains.
 		parityNamespaceConfigCase(meta),
@@ -112,20 +108,19 @@ func TestSnapshotStreamRowParity(t *testing.T) {
 }
 
 // TestSnapshotStreamRowParityCoversAllSupportedDomains locks the parity
-// harness to the resource-stream domain registry. Any domain returned by
-// resourcestream.SupportedDomains() must either have a parity case here
+// harness to the resource-stream domain registry. Any resource-stream domain
+// in the shared refresh-domain contract must either have a parity case here
 // (see covered) or an explicit excluded entry documenting why.
 //
-// The Helm domain is the one excluded case: the stream contract is a
-// scope-level COMPLETE that triggers snapshot resync, not per-row
-// projection. The plan explicitly chose that contract for Helm because
-// release identity churn affects many rows at once via decoded release
-// name semantics (Phase 5 of the projection-contract plan). The harness
-// instead asserts that contract elsewhere — see TestHelmStreamIsScopeLevelComplete.
+// Helm is excluded because its stream contract is a scope-level COMPLETE that
+// triggers snapshot resync, not per-row projection (Phase 5 of the
+// projection-contract plan; asserted in TestHelmStreamIsScopeLevelComplete).
+// The workloads and nodes domains are excluded because their streams carry
+// row-less Ref signals: the query-backed snapshot builder is the only row
+// producer, so there is no second projection to compare.
 func TestSnapshotStreamRowParityCoversAllSupportedDomains(t *testing.T) {
 	covered := map[string]struct{}{
 		"pods":                  {},
-		"namespace-workloads":   {},
 		"namespace-config":      {},
 		"namespace-network":     {},
 		"namespace-rbac":        {},
@@ -138,10 +133,11 @@ func TestSnapshotStreamRowParityCoversAllSupportedDomains(t *testing.T) {
 		"cluster-config":        {},
 		"cluster-crds":          {},
 		"cluster-custom":        {},
-		"nodes":                 {},
 	}
 	excluded := map[string]string{
-		"namespace-helm": "scope-level COMPLETE contract, not per-row projection (Phase 5 plan decision)",
+		"namespace-helm":      "scope-level COMPLETE contract, not per-row projection (Phase 5 plan decision)",
+		"namespace-workloads": "row-less Ref signal; rows are served only by the query-backed snapshot builder, so there is no per-event stream projection to compare",
+		"nodes":               "row-less Ref signal; rows are served only by the query-backed snapshot builder, so there is no per-event stream projection to compare",
 	}
 
 	supported := resourceStreamContractDomains(t)
@@ -294,92 +290,6 @@ func parityPodsCase(meta ClusterMeta, withMetrics bool) parityCase {
 }
 
 // ---------- Workloads ----------
-
-func parityWorkloadsCase(meta ClusterMeta, withHPA bool) parityCase {
-	name := "workloads/without_hpa"
-	if withHPA {
-		name = "workloads/with_hpa"
-	}
-	return parityCase{
-		name: name,
-		run: func(t *testing.T) {
-			deployment := &appsv1.Deployment{
-				ObjectMeta: metav1.ObjectMeta{Name: "web", Namespace: "default"},
-				Spec: appsv1.DeploymentSpec{
-					Replicas: ptrInt32(3),
-					Template: corev1.PodTemplateSpec{Spec: corev1.PodSpec{
-						Containers: []corev1.Container{{Name: "app", Ports: []corev1.ContainerPort{{ContainerPort: 8080}}}},
-					}},
-				},
-				Status: appsv1.DeploymentStatus{ReadyReplicas: 2, Replicas: 3},
-			}
-			statefulSet := &appsv1.StatefulSet{
-				ObjectMeta: metav1.ObjectMeta{Name: "cache", Namespace: "default"},
-				Spec: appsv1.StatefulSetSpec{
-					Replicas: ptrInt32(2),
-					Template: corev1.PodTemplateSpec{Spec: corev1.PodSpec{
-						Containers: []corev1.Container{{Name: "redis"}},
-					}},
-				},
-			}
-			pod := &corev1.Pod{
-				ObjectMeta: metav1.ObjectMeta{
-					Name: "web-abc-1", Namespace: "default",
-					OwnerReferences: []metav1.OwnerReference{{Kind: "ReplicaSet", Name: "web-abc", Controller: ptrBool(true)}},
-				},
-				Spec:   corev1.PodSpec{Containers: []corev1.Container{{Name: "app"}}},
-				Status: corev1.PodStatus{Phase: corev1.PodRunning, ContainerStatuses: []corev1.ContainerStatus{{Name: "app", Ready: true}}},
-			}
-
-			var hpas []*autoscalingv1.HorizontalPodAutoscaler
-			if withHPA {
-				hpas = []*autoscalingv1.HorizontalPodAutoscaler{{
-					ObjectMeta: metav1.ObjectMeta{Name: "web-hpa", Namespace: "default"},
-					Spec: autoscalingv1.HorizontalPodAutoscalerSpec{
-						MaxReplicas:    5,
-						ScaleTargetRef: autoscalingv1.CrossVersionObjectReference{APIVersion: "apps/v1", Kind: "Deployment", Name: "web"},
-					},
-				}}
-			}
-
-			builder := &NamespaceWorkloadsBuilder{
-				workloadIngest:      newFakeWorkloadIngestSource(meta, deployment, statefulSet),
-				includeDeployments:  true,
-				includeStatefulSets: true,
-				includeDaemonSets:   true,
-				includeJobs:         true,
-				includeCronJobs:     true,
-				podIngest:           newFakePodWorkloadsIngestSource(meta, nil, pod),
-				includePods:         true,
-				hpaLister:           testsupport.NewHorizontalPodAutoscalerLister(t, hpas...),
-			}
-			seedWorkloadsFromBuilderSource(builder, meta)
-			snap, err := builder.Build(WithClusterMeta(context.Background(), meta), "namespace:default")
-			require.NoError(t, err)
-			payload := snap.Payload.(NamespaceWorkloadsSnapshot)
-
-			deploymentRow, err := BuildWorkloadSummary(meta, deployment, []*corev1.Pod{pod}, nil, hpas...)
-			require.NoError(t, err)
-			statefulRow, err := BuildWorkloadSummary(meta, statefulSet, []*corev1.Pod{pod}, nil, hpas...)
-			require.NoError(t, err)
-			expected := []WorkloadSummary{deploymentRow, statefulRow}
-
-			requireRowParity(t, toAnySlice(payload.Rows), toAnySlice(expected), func(r any) string {
-				row := r.(WorkloadSummary)
-				return row.Kind + "/" + row.Namespace + "/" + row.Name
-			})
-
-			if withHPA {
-				for _, row := range payload.Rows {
-					if row.Kind == "Deployment" && row.Name == "web" {
-						require.NotNil(t, row.HPAManaged, "snapshot deployment row should have HPA coverage")
-						require.True(t, *row.HPAManaged, "snapshot deployment row should be marked HPA-managed")
-					}
-				}
-			}
-		},
-	}
-}
 
 // ---------- Namespace network: Service with EndpointSlices ----------
 
@@ -893,58 +803,6 @@ func parityClusterCRDCase(meta ClusterMeta) parityCase {
 			expected := []ClusterCRDEntry{apiextensions.BuildStreamSummary(meta, crd)}
 			requireRowParity(t, toAnySlice(payload.Rows), toAnySlice(expected), func(r any) string {
 				row := r.(ClusterCRDEntry)
-				return row.Name
-			})
-		},
-	}
-}
-
-// ---------- Nodes ----------
-
-func parityNodesCase(meta ClusterMeta, withMetrics bool) parityCase {
-	name := "nodes/without_metrics"
-	if withMetrics {
-		name = "nodes/with_metrics"
-	}
-	return parityCase{
-		name: name,
-		run: func(t *testing.T) {
-			node := &corev1.Node{
-				ObjectMeta: metav1.ObjectMeta{Name: "node-1"},
-				Status: corev1.NodeStatus{
-					Conditions: []corev1.NodeCondition{{Type: corev1.NodeReady, Status: corev1.ConditionTrue}},
-					Capacity: corev1.ResourceList{
-						corev1.ResourceCPU:    resource.MustParse("4"),
-						corev1.ResourceMemory: resource.MustParse("8Gi"),
-						corev1.ResourcePods:   resource.MustParse("110"),
-					},
-					Allocatable: corev1.ResourceList{
-						corev1.ResourceCPU:    resource.MustParse("4"),
-						corev1.ResourceMemory: resource.MustParse("8Gi"),
-						corev1.ResourcePods:   resource.MustParse("110"),
-					},
-				},
-			}
-			pod := &corev1.Pod{
-				ObjectMeta: metav1.ObjectMeta{Name: "p1", Namespace: "default"},
-				Spec:       corev1.PodSpec{NodeName: "node-1", Containers: []corev1.Container{{Name: "c"}}},
-				Status:     corev1.PodStatus{Phase: corev1.PodRunning},
-			}
-
-			builder := newNodeBuilderForTest(
-				meta,
-				newFakePodAggregateSource(nil, pod).withNodes(meta, node.ResourceVersion, node),
-				node,
-			)
-			snap, err := builder.Build(WithClusterMeta(context.Background(), meta), "")
-			require.NoError(t, err)
-			payload := snap.Payload.(NodeSnapshot)
-
-			expectedRow, err := BuildNodeSummary(meta, node, []*corev1.Pod{pod}, map[string]metrics.NodeUsage{}, map[string]metrics.PodUsage{})
-			require.NoError(t, err)
-			expected := []NodeSummary{expectedRow}
-			requireRowParity(t, toAnySlice(payload.Rows), toAnySlice(expected), func(r any) string {
-				row := r.(NodeSummary)
 				return row.Name
 			})
 		},

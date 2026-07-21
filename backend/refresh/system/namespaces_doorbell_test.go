@@ -23,7 +23,6 @@ func TestNamespaceNotifierInvalidatesCacheThenBroadcastsDoorbell(t *testing.T) {
 		nil,
 		nil,
 		nil,
-		nil,
 		snapshot.ClusterMeta{ClusterID: "c1", ClusterName: "cluster"},
 		nil,
 		nil,
@@ -48,7 +47,7 @@ func TestNamespaceNotifierInvalidatesCacheThenBroadcastsDoorbell(t *testing.T) {
 			}, nil
 		},
 	}))
-	service := snapshot.NewService(reg, nil, snapshot.ClusterMeta{ClusterID: "c1"})
+	service := snapshot.NewServiceWithPermissions(reg, nil, snapshot.ClusterMeta{ClusterID: "c1"}, nil)
 	manager.SetSnapshotDomainInvalidator(service.InvalidateDomainCache)
 	_, err = service.Build(context.Background(), "namespaces", "c1|")
 	require.NoError(t, err)
@@ -89,7 +88,6 @@ func TestNamespacesDoorbellInvokesObserverAfterBroadcast(t *testing.T) {
 		nil,
 		nil,
 		nil,
-		nil,
 		snapshot.ClusterMeta{ClusterID: "c1", ClusterName: "cluster"},
 		nil,
 		nil,
@@ -112,7 +110,7 @@ func TestNamespacesDoorbellInvokesObserverAfterBroadcast(t *testing.T) {
 			}, nil
 		},
 	}))
-	service := snapshot.NewService(reg, nil, snapshot.ClusterMeta{ClusterID: "c1"})
+	service := snapshot.NewServiceWithPermissions(reg, nil, snapshot.ClusterMeta{ClusterID: "c1"}, nil)
 	manager.SetSnapshotDomainInvalidator(service.InvalidateDomainCache)
 
 	notifier := snapshot.NewNamespaceChangeNotifier(nil, snapshot.NewNamespaceWorkloadTracker(nil))

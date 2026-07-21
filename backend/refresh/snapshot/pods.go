@@ -30,7 +30,6 @@ import (
 	"github.com/luxury-yacht/app/backend/refresh/ingest"
 	"github.com/luxury-yacht/app/backend/refresh/metrics"
 	"github.com/luxury-yacht/app/backend/refresh/querypage"
-	"github.com/luxury-yacht/app/backend/resources/common"
 )
 
 // PodBuilder constructs pod snapshots scoped by node or workload.
@@ -57,16 +56,6 @@ type PodBuilder struct {
 	// while the object version + metric tick are unchanged (plan P6). Per-cluster
 	// (owned by this builder), dropped with it on teardown.
 	perBuild *perBuildStoreCache[PodSummary]
-}
-
-// newPodBuilder wires a PodBuilder with the projection memo cache enabled.
-func newPodBuilder(podLister corelisters.PodLister, podIndexer cache.Indexer, rsLister appslisters.ReplicaSetLister) *PodBuilder {
-	return &PodBuilder{
-		podLister:  podLister,
-		podIndexer: podIndexer,
-		rsLister:   rsLister,
-		projCache:  newPodProjectionCache(),
-	}
 }
 
 func (b *PodBuilder) projectPod(meta ClusterMeta, pod *corev1.Pod, rsMap map[string]string) PodSummary {
@@ -976,13 +965,6 @@ func convertPodIndexerItems(items []interface{}) []*corev1.Pod {
 		}
 	}
 	return result
-}
-
-func hasForwardablePodPorts(pod *corev1.Pod) bool {
-	if pod == nil {
-		return false
-	}
-	return common.HasForwardableContainerPorts(pod.Spec.Containers)
 }
 
 func parsePodResourceVersion(pod *corev1.Pod) uint64 {

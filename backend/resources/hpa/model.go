@@ -46,13 +46,6 @@ func BuildFacts(clusterID string, h *autoscalingv2.HorizontalPodAutoscaler) Fact
 	}
 }
 
-// BuildV1ResourceModel builds the v1 HorizontalPodAutoscaler resource model.
-func BuildV1ResourceModel(clusterID string, h *autoscalingv1.HorizontalPodAutoscaler) resourcemodel.ResourceModel {
-	facts := BuildV1Facts(clusterID, h)
-	status := statusPresentation(h.ObjectMeta, facts)
-	return resourcemodel.NetworkResourceModel(clusterID, "autoscaling", "v1", "HorizontalPodAutoscaler", "horizontalpodautoscalers", resourcemodel.ResourceScopeNamespaced, h.ObjectMeta, status, resourcemodel.ResourceFacts{})
-}
-
 // BuildV1Facts extracts the HPA facts from a v1 object. The v1 API only carries the
 // legacy single CPU-utilization target; it is projected into the same metric facts.
 func BuildV1Facts(clusterID string, h *autoscalingv1.HorizontalPodAutoscaler) Facts {

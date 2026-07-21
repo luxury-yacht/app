@@ -403,7 +403,7 @@ func TestResourceStreamDomainsAreRegisteredRefreshDomains(t *testing.T) {
 		registered[registration.name] = struct{}{}
 	}
 
-	for _, domainName := range resourcestream.SupportedDomains() {
+	for _, domainName := range domainpermissions.StreamDomains() {
 		require.Contains(t, registered, domainName)
 	}
 }
@@ -463,7 +463,7 @@ func TestStreamOnlyDomainsHaveEndpointWiring(t *testing.T) {
 
 func TestResourceStreamDomainsMatchAuthoredContract(t *testing.T) {
 	contractDomains := contractResourceStreamDomains(t)
-	require.ElementsMatch(t, contractDomains, resourcestream.SupportedDomains())
+	require.ElementsMatch(t, contractDomains, domainpermissions.StreamDomains())
 }
 
 func TestResourceStreamIdentityContractIsAuthored(t *testing.T) {

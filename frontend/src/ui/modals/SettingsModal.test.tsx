@@ -49,7 +49,6 @@ vi.mock('@ui/settings/sections/AdvancedSection', () => ({
 vi.mock('@wailsjs/go/backend/App', () => ({
   GetAppSettings: vi.fn().mockResolvedValue({ useShortResourceNames: false }),
   GetAppearanceModeInfo: vi.fn().mockResolvedValue({ currentMode: 'dark', userMode: 'dark' }),
-  SetUseShortResourceNames: vi.fn().mockResolvedValue(undefined),
   GetAppInfo: vi.fn().mockResolvedValue({ version: '4.2.1' }),
 }));
 

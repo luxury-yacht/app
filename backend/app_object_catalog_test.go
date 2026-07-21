@@ -209,7 +209,6 @@ func TestCatalogDoorbellBridgeBroadcastsCatalogSource(t *testing.T) {
 		nil,
 		nil,
 		nil,
-		nil,
 		snapshot.ClusterMeta{ClusterID: "cluster-a", ClusterName: "Cluster A"},
 		nil,
 		nil,

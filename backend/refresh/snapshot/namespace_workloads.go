@@ -847,33 +847,6 @@ func (b *NamespaceWorkloadsBuilder) buildCronJobSummary(
 	}
 }
 
-func buildStandalonePodSummary(clusterID string, pod *corev1.Pod, usage map[string]metrics.PodUsage) WorkloadSummary {
-	resources := aggregateWorkloadPodResources([]streamrows.PodAggregate{projectPodAggregate(pod, PodOwnerSources{})}, usage)
-	ready := podReadyStatus(pod)
-	model := podres.BuildResourceModel(clusterID, pod)
-
-	return WorkloadSummary{
-		Kind:                 podres.Identity.Kind,
-		Name:                 pod.Name,
-		Namespace:            pod.Namespace,
-		Ready:                ready,
-		Status:               model.Status.Label,
-		StatusState:          model.Status.State,
-		StatusPresentation:   model.Status.Presentation,
-		StatusReason:         model.Status.Reason,
-		Restarts:             resources.Restarts,
-		Age:                  formatAge(pod.CreationTimestamp.Time),
-		AgeTimestamp:         creationTimestampMillis(pod),
-		CPUUsage:             formatWorkloadCPUMilli(resources.CPUUsageMilli),
-		CPURequest:           formatWorkloadCPUMilli(resources.CPURequestMilli),
-		CPULimit:             formatWorkloadCPUMilli(resources.CPULimitMilli),
-		MemUsage:             formatWorkloadMemory(resources.MemoryUsageBytes),
-		MemRequest:           formatWorkloadMemory(resources.MemoryRequestBytes),
-		MemLimit:             formatWorkloadMemory(resources.MemoryLimitBytes),
-		PortForwardAvailable: hasForwardablePodPorts(pod),
-	}
-}
-
 // buildStandalonePodSummaryFromRows builds the standalone-pod WorkloadSummary from the
 // pod's projected ingest rows instead of the typed pod, byte-identically to
 // buildStandalonePodSummary (proven in namespace_workloads_standalone_ingest_test.go):
@@ -981,14 +954,6 @@ func deploymentNameFromReplicaSet(name string) string {
 		return ""
 	}
 	return name[:idx]
-}
-
-func podReadyStatus(pod *corev1.Pod) string {
-	if pod == nil {
-		return "0/0"
-	}
-	agg := projectPodAggregate(pod, PodOwnerSources{})
-	return fmt.Sprintf("%d/%d", agg.ReadyContainers, agg.TotalContainers)
 }
 
 func workloadPodReadyStatus(pods []streamrows.PodAggregate, fallbackReady, fallbackTotal int32) string {

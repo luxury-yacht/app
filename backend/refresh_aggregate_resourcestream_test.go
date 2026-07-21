@@ -47,7 +47,6 @@ func TestAggregateResourceStreamSessionsSeeClustersAddedAfterConnect(t *testing.
 		nil,
 		nil,
 		nil,
-		nil,
 		snapshot.ClusterMeta{ClusterID: "cluster-late", ClusterName: "late"},
 		nil,
 		nil,
@@ -65,7 +64,7 @@ func TestAggregateResourceStreamSessionsSeeClustersAddedAfterConnect(t *testing.
 func TestAggregateResourceStreamExistingSubscriptionFollowsManagerReplacement(t *testing.T) {
 	const clusterID = "cluster-rewarmed"
 	clusterMeta := snapshot.ClusterMeta{ClusterID: clusterID, ClusterName: "rewarmed"}
-	oldManager := resourcestream.NewManager(nil, nil, nil, nil, clusterMeta, nil, nil)
+	oldManager := resourcestream.NewManager(nil, nil, nil, clusterMeta, nil, nil)
 	handler, err := newAggregateResourceStreamHandler(map[string]*system.Subsystem{
 		clusterID: {ResourceStream: oldManager, ClusterMeta: clusterMeta},
 	}, nil, nil)
@@ -87,7 +86,7 @@ func TestAggregateResourceStreamExistingSubscriptionFollowsManagerReplacement(t 
 	require.Equal(t, resourcestream.MessageTypeAck, readResourceStreamMessage(t, conn).Type)
 	require.Equal(t, resourcestream.MessageTypeReset, readResourceStreamMessage(t, conn).Type)
 
-	newManager := resourcestream.NewManager(nil, nil, nil, nil, clusterMeta, nil, nil)
+	newManager := resourcestream.NewManager(nil, nil, nil, clusterMeta, nil, nil)
 	require.NoError(t, handler.Update(map[string]*system.Subsystem{
 		clusterID: {ResourceStream: newManager, ClusterMeta: clusterMeta},
 	}))

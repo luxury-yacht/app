@@ -70,11 +70,6 @@ type BuildRequest struct {
 	Cluster ClusterMeta
 }
 
-// NewService returns a Service for the provided registry.
-func NewService(reg *domain.Registry, recorder *telemetry.Recorder, meta ClusterMeta) *Service {
-	return newService(reg, recorder, meta, nil, domainpermissions.RuntimeAccess{})
-}
-
 // NewServiceWithPermissions returns a Service that validates runtime permissions per snapshot request.
 func NewServiceWithPermissions(
 	reg *domain.Registry,

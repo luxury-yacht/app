@@ -4,10 +4,8 @@
 package snapshot
 
 import (
-	"context"
 	"encoding/json"
 	"testing"
-	"time"
 
 	appsv1 "k8s.io/api/apps/v1"
 	autoscalingv1 "k8s.io/api/autoscaling/v1"
@@ -15,7 +13,6 @@ import (
 	discoveryv1 "k8s.io/api/discovery/v1"
 	networkingv1 "k8s.io/api/networking/v1"
 	apiextensionsv1 "k8s.io/apiextensions-apiserver/pkg/apis/apiextensions/v1"
-	"k8s.io/apimachinery/pkg/api/resource"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/apis/meta/v1/unstructured"
 	v1 "k8s.io/client-go/listers/apps/v1"
@@ -42,7 +39,6 @@ import (
 	"github.com/luxury-yacht/app/backend/resources/referencegrant"
 	secretpkg "github.com/luxury-yacht/app/backend/resources/secret"
 	servicepkg "github.com/luxury-yacht/app/backend/resources/service"
-	"github.com/luxury-yacht/app/backend/testsupport"
 )
 
 func TestBuildPodSummaryResolvesDeploymentOwner(t *testing.T) {
@@ -86,178 +82,6 @@ func TestBuildPodSummaryResolvesDeploymentOwner(t *testing.T) {
 	require.Equal(t, "Deployment", summary.OwnerKind)
 	require.Equal(t, "web", summary.OwnerName)
 	require.True(t, summary.PortForwardAvailable)
-}
-
-func TestBuildWorkloadSummaryDeployment(t *testing.T) {
-	deployment := &appsv1.Deployment{
-		ObjectMeta: metav1.ObjectMeta{
-			Name:      "web",
-			Namespace: "default",
-		},
-		Spec: appsv1.DeploymentSpec{
-			Replicas: ptrInt32(3),
-			Template: corev1.PodTemplateSpec{
-				Spec: corev1.PodSpec{
-					Containers: []corev1.Container{{
-						Name:  "app",
-						Image: "example/app:1.0.0",
-						Ports: []corev1.ContainerPort{{ContainerPort: 8080}},
-					}},
-				},
-			},
-		},
-		Status: appsv1.DeploymentStatus{
-			ReadyReplicas: 2,
-		},
-	}
-
-	pod := &corev1.Pod{
-		ObjectMeta: metav1.ObjectMeta{
-			Name:      "web-abc",
-			Namespace: "default",
-			OwnerReferences: []metav1.OwnerReference{{
-				Kind:       "ReplicaSet",
-				Name:       "web-abc",
-				Controller: ptrBool(true),
-			}},
-		},
-		Spec: corev1.PodSpec{
-			Containers: []corev1.Container{{Name: "app"}},
-		},
-		Status: corev1.PodStatus{
-			Phase: corev1.PodRunning,
-			ContainerStatuses: []corev1.ContainerStatus{{
-				Name:  "app",
-				Ready: true,
-			}},
-		},
-	}
-
-	summary, err := BuildWorkloadSummary(ClusterMeta{ClusterID: "c1", ClusterName: "cluster"}, deployment, []*corev1.Pod{pod}, nil)
-	require.NoError(t, err)
-	require.Equal(t, "Deployment", summary.Kind)
-	require.Equal(t, "web", summary.Name)
-	require.Equal(t, "default", summary.Namespace)
-	require.Equal(t, "c1", summary.ClusterID)
-	require.Equal(t, "1/1", summary.Ready)
-	require.Equal(t, "Updating", summary.Status)
-	require.Equal(t, "2/3", summary.StatusState)
-	require.Equal(t, "warning", summary.StatusPresentation)
-	require.True(t, summary.PortForwardAvailable)
-	require.NotNil(t, summary.DesiredReplicas)
-	require.Equal(t, int32(3), *summary.DesiredReplicas)
-}
-
-func TestBuildWorkloadSummaryMatchesSnapshotHPAContext(t *testing.T) {
-	replicas := int32(3)
-	deployment := &appsv1.Deployment{
-		ObjectMeta: metav1.ObjectMeta{
-			Name:      "web",
-			Namespace: "default",
-		},
-		Spec: appsv1.DeploymentSpec{
-			Replicas: &replicas,
-			Template: corev1.PodTemplateSpec{
-				Spec: corev1.PodSpec{Containers: []corev1.Container{{Name: "app"}}},
-			},
-		},
-	}
-	hpa := &autoscalingv1.HorizontalPodAutoscaler{
-		ObjectMeta: metav1.ObjectMeta{Name: "web-hpa", Namespace: "default"},
-		Spec: autoscalingv1.HorizontalPodAutoscalerSpec{
-			MaxReplicas: 5,
-			ScaleTargetRef: autoscalingv1.CrossVersionObjectReference{
-				APIVersion: "apps/v1",
-				Kind:       "Deployment",
-				Name:       "web",
-			},
-		},
-	}
-	builder := &NamespaceWorkloadsBuilder{
-		workloadIngest:      newFakeWorkloadIngestSource(ClusterMeta{}, deployment),
-		includeDeployments:  true,
-		includeStatefulSets: true,
-		includeDaemonSets:   true,
-		includeJobs:         true,
-		includeCronJobs:     true,
-		hpaLister:           testsupport.NewHorizontalPodAutoscalerLister(t, hpa),
-	}
-	seedWorkloadsFromBuilderSource(builder, ClusterMeta{})
-
-	snap, err := builder.Build(context.Background(), "namespace:default")
-	require.NoError(t, err)
-	payload := snap.Payload.(NamespaceWorkloadsSnapshot)
-	require.Len(t, payload.Rows, 1)
-
-	streamRow, err := BuildWorkloadSummary(ClusterMeta{}, deployment, nil, nil, hpa)
-	require.NoError(t, err)
-	require.Equal(t, payload.Rows[0], streamRow)
-	require.NotNil(t, streamRow.HPAManaged)
-	require.True(t, *streamRow.HPAManaged)
-}
-
-func TestBuildWorkloadSummaryDeploymentReadyUsesOwnedPods(t *testing.T) {
-	deployment := &appsv1.Deployment{
-		ObjectMeta: metav1.ObjectMeta{
-			Name:      "web",
-			Namespace: "default",
-		},
-		Spec: appsv1.DeploymentSpec{
-			Replicas: ptrInt32(3),
-		},
-		Status: appsv1.DeploymentStatus{
-			ReadyReplicas: 3,
-			Replicas:      3,
-		},
-	}
-
-	oldPod := &corev1.Pod{
-		ObjectMeta: metav1.ObjectMeta{
-			Name:      "web-old-1",
-			Namespace: "default",
-			OwnerReferences: []metav1.OwnerReference{{
-				Kind:       "ReplicaSet",
-				Name:       "web-old",
-				Controller: ptrBool(true),
-			}},
-		},
-		Spec: corev1.PodSpec{
-			Containers: []corev1.Container{{Name: "app"}},
-		},
-		Status: corev1.PodStatus{
-			Phase: corev1.PodRunning,
-			ContainerStatuses: []corev1.ContainerStatus{{
-				Name:  "app",
-				Ready: true,
-			}},
-		},
-	}
-	newPod := &corev1.Pod{
-		ObjectMeta: metav1.ObjectMeta{
-			Name:      "web-new-1",
-			Namespace: "default",
-			OwnerReferences: []metav1.OwnerReference{{
-				Kind:       "ReplicaSet",
-				Name:       "web-new",
-				Controller: ptrBool(true),
-			}},
-		},
-		Spec: corev1.PodSpec{
-			Containers: []corev1.Container{{Name: "app"}},
-		},
-		Status: corev1.PodStatus{
-			Phase: corev1.PodPending,
-			ContainerStatuses: []corev1.ContainerStatus{{
-				Name:  "app",
-				Ready: false,
-			}},
-		},
-	}
-
-	summary, err := BuildWorkloadSummary(ClusterMeta{ClusterID: "c1", ClusterName: "cluster"}, deployment, []*corev1.Pod{oldPod, newPod}, nil)
-	require.NoError(t, err)
-	require.Equal(t, "1/2", summary.Ready)
-	require.Equal(t, "3/3", summary.StatusState)
 }
 
 func TestBuildPodSummaryMarksNoForwardablePorts(t *testing.T) {
@@ -466,43 +290,6 @@ func TestBuildGatewayAPISummariesUseSharedGatewayFacts(t *testing.T) {
 	classSummary := gatewayclass.BuildStreamSummary(meta, gatewayClass)
 	require.Equal(t, "GatewayClass", classSummary.Kind)
 	require.Equal(t, "example.com/controller", classSummary.Details)
-}
-
-func TestBuildNodeSummary(t *testing.T) {
-	node := &corev1.Node{
-		ObjectMeta: metav1.ObjectMeta{
-			Name:              "node-1",
-			CreationTimestamp: metav1.NewTime(time.UnixMilli(1_700_000_000_000)),
-		},
-		Spec: corev1.NodeSpec{
-			Unschedulable: true,
-		},
-		Status: corev1.NodeStatus{
-			Conditions: []corev1.NodeCondition{{
-				Type:   corev1.NodeReady,
-				Status: corev1.ConditionTrue,
-			}},
-			Capacity: corev1.ResourceList{
-				corev1.ResourceCPU:    resource.MustParse("4"),
-				corev1.ResourceMemory: resource.MustParse("8Gi"),
-				corev1.ResourcePods:   resource.MustParse("110"),
-			},
-			Allocatable: corev1.ResourceList{
-				corev1.ResourceCPU:    resource.MustParse("4"),
-				corev1.ResourceMemory: resource.MustParse("8Gi"),
-				corev1.ResourcePods:   resource.MustParse("110"),
-			},
-		},
-	}
-
-	summary, err := BuildNodeSummary(ClusterMeta{ClusterID: "c1", ClusterName: "cluster"}, node, nil, nil, nil)
-	require.NoError(t, err)
-	require.Equal(t, "node-1", summary.Name)
-	require.Equal(t, "c1", summary.ClusterID)
-	require.Equal(t, "Ready (Cordoned)", summary.Status)
-	require.Equal(t, "True", summary.StatusState)
-	require.Equal(t, "cordoned", summary.StatusPresentation)
-	require.Equal(t, int64(1_700_000_000_000), summary.AgeTimestamp)
 }
 
 func ptrBool(value bool) *bool {

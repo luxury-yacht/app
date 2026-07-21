@@ -22,7 +22,7 @@ func (f *fakeAttentionDoorbell) SetBroadcast(broadcast func(string)) {
 
 func TestClusterAttentionDoorbellInvalidatesCacheBeforeBroadcast(t *testing.T) {
 	manager := resourcestream.NewManager(
-		nil, nil, nil, nil,
+		nil, nil, nil,
 		snapshot.ClusterMeta{ClusterID: "c1", ClusterName: "cluster"},
 		nil, nil,
 	)
@@ -40,7 +40,7 @@ func TestClusterAttentionDoorbellInvalidatesCacheBeforeBroadcast(t *testing.T) {
 			return &refresh.Snapshot{Domain: "cluster-attention", Scope: scope, Payload: builds}, nil
 		},
 	}))
-	service := snapshot.NewService(registry, nil, snapshot.ClusterMeta{ClusterID: "c1"})
+	service := snapshot.NewServiceWithPermissions(registry, nil, snapshot.ClusterMeta{ClusterID: "c1"}, nil)
 	manager.SetSnapshotDomainInvalidator(service.InvalidateDomainCache)
 	_, err = service.Build(context.Background(), "cluster-attention", "c1|")
 	require.NoError(t, err)

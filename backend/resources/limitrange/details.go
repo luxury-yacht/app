@@ -43,27 +43,6 @@ func (s *Service) LimitRange(namespace, name string) (*LimitRangeDetails, error)
 	return s.buildLimitRangeDetails(lr), nil
 }
 
-// LimitRanges returns all limit ranges in a namespace.
-func (s *Service) LimitRanges(namespace string) ([]*LimitRangeDetails, error) {
-	client := s.deps.KubernetesClient
-	if client == nil {
-		return nil, fmt.Errorf("kubernetes client not initialized")
-	}
-
-	limitRanges, err := client.CoreV1().LimitRanges(namespace).List(s.deps.Context, metav1.ListOptions{})
-	if err != nil {
-		s.logError(fmt.Sprintf("Failed to list limit ranges in namespace %s: %v", namespace, err))
-		return nil, fmt.Errorf("failed to list limit ranges: %v", err)
-	}
-
-	result := make([]*LimitRangeDetails, 0, len(limitRanges.Items))
-	for i := range limitRanges.Items {
-		result = append(result, s.buildLimitRangeDetails(&limitRanges.Items[i]))
-	}
-
-	return result, nil
-}
-
 func (s *Service) buildLimitRangeDetails(lr *corev1.LimitRange) *LimitRangeDetails {
 	model := BuildResourceModel(s.deps.ClusterID, lr)
 	facts := BuildFacts(lr)

@@ -87,14 +87,3 @@ func TestServiceConfigMapDetailsIncludesUsage(t *testing.T) {
 	require.Equal(t, "web-0", detail.UsedBy[0].Name)
 	require.Contains(t, detail.BinaryData, "secret")
 }
-
-func TestServiceConfigMapsListsAll(t *testing.T) {
-	cmA := &corev1.ConfigMap{ObjectMeta: metav1.ObjectMeta{Name: "a", Namespace: "default"}}
-	cmB := &corev1.ConfigMap{ObjectMeta: metav1.ObjectMeta{Name: "b", Namespace: "default"}}
-	client := fake.NewClientset(cmA, cmB)
-	service := newService(t, client)
-
-	configMaps, err := service.ConfigMaps("default")
-	require.NoError(t, err)
-	require.Len(t, configMaps, 2)
-}

@@ -40,7 +40,7 @@ func coolServeFixture(t *testing.T, hpas []*autoscalingv1.HorizontalPodAutoscale
 
 	// The Service starts with a NOT-synced hub (a live cluster's gate); cooling installs an
 	// always-synced cooled hub so a cooled Build still serves.
-	svc := NewService(reg, telemetry.NewRecorder(), meta).WithInformerHub(&fakeInformerHub{synced: true})
+	svc := NewServiceWithPermissions(reg, telemetry.NewRecorder(), meta, nil).WithInformerHub(&fakeInformerHub{synced: true})
 	return reg, svc
 }
 

@@ -49,7 +49,6 @@ func registerStreamHandlers(mux *http.ServeMux, deps streamDeps) (*eventstream.M
 
 	resourceManager := resourcestream.NewManager(
 		deps.informerFactory,
-		deps.metricsProvider,
 		logger,
 		deps.telemetry,
 		deps.clusterMeta,

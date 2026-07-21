@@ -16,7 +16,6 @@ import (
 
 	"github.com/stretchr/testify/require"
 	appsv1 "k8s.io/api/apps/v1"
-	batchv1 "k8s.io/api/batch/v1"
 	corev1 "k8s.io/api/core/v1"
 	"k8s.io/apimachinery/pkg/api/resource"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
@@ -31,119 +30,6 @@ import (
 	"github.com/luxury-yacht/app/backend/internal/applog"
 	"github.com/luxury-yacht/app/backend/resources/common"
 )
-
-func TestGetPodReturnsDetailedInfo(t *testing.T) {
-	now := time.Now()
-	controller := true
-
-	pod := &corev1.Pod{
-		ObjectMeta: metav1.ObjectMeta{
-			Name:              "demo-pod",
-			Namespace:         "team-a",
-			Labels:            map[string]string{"app": "demo"},
-			Annotations:       map[string]string{"note": "test"},
-			CreationTimestamp: metav1.NewTime(now.Add(-2 * time.Hour)),
-			OwnerReferences: []metav1.OwnerReference{{
-				Kind:       "ReplicaSet",
-				Name:       "demo-rs",
-				Controller: &controller,
-			}},
-		},
-		Spec: corev1.PodSpec{
-			NodeName:                     "node-1",
-			ServiceAccountName:           "builder",
-			RuntimeClassName:             strPtr("gvisor"),
-			SchedulerName:                "default-scheduler",
-			AutomountServiceAccountToken: ptrBool(true),
-			Containers: []corev1.Container{{
-				Name:  "app",
-				Image: "demo:1.0",
-				Resources: corev1.ResourceRequirements{
-					Requests: corev1.ResourceList{
-						corev1.ResourceCPU:    resource.MustParse("250m"),
-						corev1.ResourceMemory: resource.MustParse("128Mi"),
-					},
-					Limits: corev1.ResourceList{
-						corev1.ResourceCPU:    resource.MustParse("500m"),
-						corev1.ResourceMemory: resource.MustParse("256Mi"),
-					},
-				},
-			}},
-		},
-		Status: corev1.PodStatus{
-			Phase:  corev1.PodRunning,
-			PodIP:  "10.0.0.10",
-			HostIP: "10.0.0.2",
-			ContainerStatuses: []corev1.ContainerStatus{{
-				Name:         "app",
-				Ready:        true,
-				RestartCount: 1,
-				State: corev1.ContainerState{
-					Running: &corev1.ContainerStateRunning{
-						StartedAt: metav1.NewTime(now.Add(-time.Hour)),
-					},
-				},
-			}},
-		},
-	}
-
-	replicaSet := &appsv1.ReplicaSet{
-		ObjectMeta: metav1.ObjectMeta{
-			Name:      "demo-rs",
-			Namespace: "team-a",
-			OwnerReferences: []metav1.OwnerReference{{
-				Kind:       "Deployment",
-				Name:       "demo-deploy",
-				Controller: &controller,
-			}},
-		},
-	}
-
-	node := &corev1.Node{
-		ObjectMeta: metav1.ObjectMeta{Name: "node-1"},
-		Status: corev1.NodeStatus{
-			Addresses: []corev1.NodeAddress{{
-				Type:    corev1.NodeInternalIP,
-				Address: "192.168.10.15",
-			}},
-		},
-	}
-
-	client := fake.NewClientset(pod, replicaSet, node)
-
-	deps := common.Dependencies{
-		Context:          context.Background(),
-		Logger:           applog.Noop,
-		KubernetesClient: client,
-		ClusterID:        "cluster-a",
-	}
-
-	details, err := GetPod(deps, "team-a", "demo-pod", true)
-	if err != nil {
-		t.Fatalf("GetPod returned error: %v", err)
-	}
-	if details.OwnerKind != "Deployment" || details.OwnerName != "demo-deploy" {
-		t.Fatalf("expected pod owner to resolve to Deployment/demo-deploy, got %s/%s", details.OwnerKind, details.OwnerName)
-	}
-	if details.OwnerAPIVersion != "apps/v1" {
-		t.Fatalf("expected OwnerAPIVersion=apps/v1 from ReplicaSet→Deployment collapse, got %q", details.OwnerAPIVersion)
-	}
-	if details.NodeIP != "192.168.10.15" {
-		t.Fatalf("expected node IP to be populated, got %q", details.NodeIP)
-	}
-	require.Equal(t, "Running", details.Status)
-	require.Equal(t, "Running", details.StatusState)
-	require.Equal(t, "ready", details.StatusPresentation)
-	if len(details.Containers) != 1 {
-		t.Fatalf("expected container details to be captured, got %#v", details.Containers)
-	}
-	if details.Containers[0].State != "running" {
-		t.Fatalf("expected container state running, got %q", details.Containers[0].State)
-	}
-	if details.RuntimeClass != "gvisor" {
-		t.Fatalf("expected runtime class to be gvisor, got %q", details.RuntimeClass)
-	}
-}
 
 func TestGetPodRequiresTargetIdentity(t *testing.T) {
 	service := NewService(common.Dependencies{
@@ -341,47 +227,6 @@ func TestBuildReplicaSetToDeploymentMapExported(t *testing.T) {
 	require.Equal(t, "demo-deploy", mapping["demo-rs"])
 }
 
-func TestBuildMultiNamespaceRSMapAggregates(t *testing.T) {
-	controller := true
-	rsA := &appsv1.ReplicaSet{
-		ObjectMeta: metav1.ObjectMeta{
-			Name:      "demo-a",
-			Namespace: "team-a",
-			OwnerReferences: []metav1.OwnerReference{{
-				Kind:       "Deployment",
-				Name:       "deploy-a",
-				Controller: &controller,
-			}},
-		},
-	}
-	rsB := &appsv1.ReplicaSet{
-		ObjectMeta: metav1.ObjectMeta{
-			Name:      "demo-b",
-			Namespace: "team-b",
-			OwnerReferences: []metav1.OwnerReference{{
-				Kind:       "Deployment",
-				Name:       "deploy-b",
-				Controller: &controller,
-			}},
-		},
-	}
-
-	client := fake.NewClientset(rsA, rsB)
-	service := NewService(common.Dependencies{
-		Context:          context.Background(),
-		KubernetesClient: client,
-	})
-
-	pods := []corev1.Pod{
-		{ObjectMeta: metav1.ObjectMeta{Name: "pod-a", Namespace: "team-a"}},
-		{ObjectMeta: metav1.ObjectMeta{Name: "pod-b", Namespace: "team-b"}},
-	}
-
-	mapping := service.buildMultiNamespaceRSMap(pods)
-	require.Equal(t, "deploy-a", mapping["demo-a"])
-	require.Equal(t, "deploy-b", mapping["demo-b"])
-}
-
 func TestGetPodOwnerWithMap(t *testing.T) {
 	controller := true
 	pod := corev1.Pod{ObjectMeta: metav1.ObjectMeta{
@@ -421,26 +266,6 @@ func TestGetPodOwnerWithMap(t *testing.T) {
 	require.Equal(t, "argoproj.io/v1alpha1", apiVersion, "CRD-as-Pod-owner must thread owner.APIVersion through")
 }
 
-func TestFetchPodsWithFilter(t *testing.T) {
-	pods := []runtime.Object{
-		&corev1.Pod{ObjectMeta: metav1.ObjectMeta{Name: "a", Namespace: "team-a"}},
-		&corev1.Pod{ObjectMeta: metav1.ObjectMeta{Name: "b", Namespace: "team-b"}},
-	}
-	client := fake.NewClientset(pods...)
-	service := NewService(common.Dependencies{
-		Context:          context.Background(),
-		KubernetesClient: client,
-	})
-
-	teamPods, err := service.fetchPodsWithFilter("team-a", metav1.ListOptions{})
-	require.NoError(t, err)
-	require.Len(t, teamPods, 1)
-
-	allPods, err := service.fetchPodsWithFilter("", metav1.ListOptions{})
-	require.NoError(t, err)
-	require.Len(t, allPods, 2)
-}
-
 func TestGetNodeIP(t *testing.T) {
 	node := &corev1.Node{
 		ObjectMeta: metav1.ObjectMeta{Name: "node-1"},
@@ -463,91 +288,6 @@ func TestGetNodeIPReturnsEmptyOnError(t *testing.T) {
 	})
 
 	require.Equal(t, "", service.getNodeIP("node-does-not-exist"))
-}
-
-func TestNodeIPExported(t *testing.T) {
-	node := &corev1.Node{
-		ObjectMeta: metav1.ObjectMeta{Name: "node-2"},
-		Status:     corev1.NodeStatus{Addresses: []corev1.NodeAddress{{Type: corev1.NodeInternalIP, Address: "10.0.0.2"}}},
-	}
-	client := fake.NewClientset(node)
-	service := NewService(common.Dependencies{
-		Context:          context.Background(),
-		KubernetesClient: client,
-	})
-
-	require.Equal(t, "10.0.0.2", service.NodeIP("node-2"))
-}
-
-func TestGetMultiNamespacePodMetrics(t *testing.T) {
-	service := NewService(common.Dependencies{
-		Context: context.Background(),
-	})
-
-	metrics := service.getMultiNamespacePodMetrics([]corev1.Pod{{ObjectMeta: metav1.ObjectMeta{Name: "pod-a", Namespace: "team-a"}}})
-	require.NotNil(t, metrics)
-}
-
-func TestPodsBySelectorPropagatesListError(t *testing.T) {
-	client := fake.NewClientset()
-	client.PrependReactor("list", "pods", func(action cgotesting.Action) (bool, runtime.Object, error) {
-		return true, nil, fmt.Errorf("selector failure")
-	})
-
-	service := NewService(common.Dependencies{
-		Context:          context.Background(),
-		KubernetesClient: client,
-	})
-
-	_, err := service.podsBySelector("team-a", "app=demo")
-	require.Error(t, err)
-	require.Contains(t, err.Error(), "selector failure")
-}
-
-func TestPodsForCronJobReturnsEmptyWhenListingPodsFails(t *testing.T) {
-	owner := metav1.OwnerReference{Kind: "CronJob", Name: "nightly", UID: types.UID("cron-uid"), Controller: ptrBool(true)}
-	job := &batchv1.Job{
-		ObjectMeta: metav1.ObjectMeta{
-			Name:            "nightly-1",
-			Namespace:       "team-a",
-			OwnerReferences: []metav1.OwnerReference{owner},
-		},
-	}
-
-	client := fake.NewClientset(job)
-
-	var listCalls int
-	client.PrependReactor("list", "pods", func(action cgotesting.Action) (bool, runtime.Object, error) {
-		listCalls++
-		return true, nil, fmt.Errorf("pods unavailable")
-	})
-
-	service := NewService(common.Dependencies{
-		Context:          context.Background(),
-		Logger:           applog.Noop,
-		KubernetesClient: client,
-	})
-
-	pods, err := service.podsForCronJob("team-a", "nightly")
-	require.NoError(t, err)
-	require.Empty(t, pods)
-	require.Equal(t, 1, listCalls)
-}
-
-func TestFetchPodsWithFilterPropagatesError(t *testing.T) {
-	client := fake.NewClientset()
-	client.PrependReactor("list", "pods", func(action cgotesting.Action) (bool, runtime.Object, error) {
-		return true, nil, errors.New("boom")
-	})
-
-	service := NewService(common.Dependencies{
-		Context:          context.Background(),
-		KubernetesClient: client,
-	})
-
-	_, err := service.fetchPodsWithFilter("team-a", metav1.ListOptions{})
-	require.Error(t, err)
-	require.Contains(t, err.Error(), "failed to list pods")
 }
 
 func TestGetPodMetricsFallbackWhenClientMissing(t *testing.T) {
@@ -638,170 +378,6 @@ func TestGetPodMetricsListErrorReturnsEmpty(t *testing.T) {
 
 	values := service.getPodMetrics("team-a")
 	require.Empty(t, values)
-}
-
-func TestSummarizePodUsesMetricsAndOwnership(t *testing.T) {
-	now := metav1.NewTime(time.Now().Add(-30 * time.Minute))
-	pod := corev1.Pod{
-		ObjectMeta: metav1.ObjectMeta{
-			Name:              "demo",
-			Namespace:         "team-a",
-			CreationTimestamp: now,
-			OwnerReferences: []metav1.OwnerReference{{
-				UID:        types.UID("rs-uid"),
-				Name:       "demo-rs",
-				Kind:       "ReplicaSet",
-				Controller: ptrBool(true),
-			}},
-		},
-		Spec: corev1.PodSpec{
-			NodeName: "node-1",
-			Containers: []corev1.Container{{
-				Name:  "app",
-				Image: "demo:1.0",
-				Resources: corev1.ResourceRequirements{
-					Requests: corev1.ResourceList{
-						corev1.ResourceCPU:    resource.MustParse("200m"),
-						corev1.ResourceMemory: resource.MustParse("128Mi"),
-					},
-					Limits: corev1.ResourceList{
-						corev1.ResourceCPU:    resource.MustParse("400m"),
-						corev1.ResourceMemory: resource.MustParse("256Mi"),
-					},
-				},
-			}},
-		},
-		Status: corev1.PodStatus{
-			Phase: corev1.PodRunning,
-			ContainerStatuses: []corev1.ContainerStatus{{
-				Name:  "app",
-				Ready: true,
-			}},
-		},
-	}
-
-	rsToDeployment := map[string]string{"demo-rs": "demo-deploy"}
-	cpuUsage := resource.MustParse("150m")
-	memUsage := resource.MustParse("64Mi")
-	metrics := map[string]*metricsv1beta1.PodMetrics{
-		"demo": {
-			ObjectMeta: metav1.ObjectMeta{Name: "demo"},
-			Containers: []metricsv1beta1.ContainerMetrics{{
-				Name: "app",
-				Usage: corev1.ResourceList{
-					corev1.ResourceCPU:    cpuUsage,
-					corev1.ResourceMemory: memUsage,
-				},
-			}},
-		},
-	}
-
-	ownerKind, ownerName, ownerAPIVersion := ResolveOwner(pod, rsToDeployment)
-	summary := SummarizePod("cluster-a", pod, metrics, ownerKind, ownerName, ownerAPIVersion)
-	require.Equal(t, "Deployment", summary.OwnerKind)
-	require.Equal(t, "demo-deploy", summary.OwnerName)
-	require.Equal(t, "apps/v1", summary.OwnerAPIVersion)
-	require.Equal(t, "150m", summary.CPUUsage)
-	require.Equal(t, "64Mi", summary.MemUsage)
-	require.Equal(t, "1/1", summary.Ready)
-	require.Equal(t, "Running", summary.Status)
-	require.Equal(t, "Running", summary.StatusState)
-	require.Equal(t, "ready", summary.StatusPresentation)
-}
-
-func TestGetPodStatusCoversEdgeCases(t *testing.T) {
-	cases := []struct {
-		name     string
-		pod      corev1.Pod
-		expected string
-	}{
-		{
-			name: "evicted pod",
-			pod: corev1.Pod{
-				Status: corev1.PodStatus{Phase: corev1.PodFailed, Reason: "Evicted"},
-			},
-			expected: "Evicted",
-		},
-		{
-			name: "init container waiting",
-			pod: corev1.Pod{
-				Status: corev1.PodStatus{
-					InitContainerStatuses: []corev1.ContainerStatus{{
-						State: corev1.ContainerState{
-							Waiting: &corev1.ContainerStateWaiting{Reason: "CrashLoopBackOff"},
-						},
-					}},
-				},
-			},
-			expected: "Init:CrashLoopBackOff",
-		},
-		{
-			name: "init container terminated",
-			pod: corev1.Pod{
-				Status: corev1.PodStatus{
-					InitContainerStatuses: []corev1.ContainerStatus{{
-						State: corev1.ContainerState{
-							Terminated: &corev1.ContainerStateTerminated{ExitCode: 1, Reason: "Error"},
-						},
-					}},
-				},
-			},
-			expected: "Init:Error",
-		},
-		{
-			name: "waiting container",
-			pod: corev1.Pod{
-				Status: corev1.PodStatus{
-					ContainerStatuses: []corev1.ContainerStatus{{
-						State: corev1.ContainerState{
-							Waiting: &corev1.ContainerStateWaiting{Reason: "ImagePullBackOff"},
-						},
-					}},
-				},
-			},
-			expected: "ImagePullBackOff",
-		},
-		{
-			name: "terminated container",
-			pod: corev1.Pod{
-				Status: corev1.PodStatus{
-					ContainerStatuses: []corev1.ContainerStatus{{
-						State: corev1.ContainerState{
-							Terminated: &corev1.ContainerStateTerminated{Reason: "Completed"},
-						},
-					}},
-				},
-			},
-			expected: "Completed",
-		},
-		{
-			name: "terminating pod",
-			pod: corev1.Pod{
-				ObjectMeta: metav1.ObjectMeta{
-					DeletionTimestamp: &metav1.Time{Time: time.Now()},
-				},
-			},
-			expected: "Terminating",
-		},
-		{
-			name: "phase fallback",
-			pod: corev1.Pod{
-				Status: corev1.PodStatus{Phase: corev1.PodPending},
-			},
-			expected: "Pending",
-		},
-		{
-			name:     "unknown",
-			pod:      corev1.Pod{},
-			expected: "Unknown",
-		},
-	}
-
-	for _, tc := range cases {
-		t.Run(tc.name, func(t *testing.T) {
-			require.Equal(t, tc.expected, getPodStatus(tc.pod))
-		})
-	}
 }
 
 func TestBuildContainerDetailsFormatsPortsAndVolumes(t *testing.T) {
@@ -945,3 +521,185 @@ func buildPodMetrics(namespace, name string) *metricsv1beta1.PodMetrics {
 
 func strPtr(s string) *string { return &s }
 func ptrBool(b bool) *bool    { return &b }
+
+func TestGetPodReturnsDetailedInfo(t *testing.T) {
+	now := time.Now()
+	controller := true
+
+	pod := &corev1.Pod{
+		ObjectMeta: metav1.ObjectMeta{
+			Name:              "demo-pod",
+			Namespace:         "team-a",
+			Labels:            map[string]string{"app": "demo"},
+			Annotations:       map[string]string{"note": "test"},
+			CreationTimestamp: metav1.NewTime(now.Add(-2 * time.Hour)),
+			OwnerReferences: []metav1.OwnerReference{{
+				Kind:       "ReplicaSet",
+				Name:       "demo-rs",
+				Controller: &controller,
+			}},
+		},
+		Spec: corev1.PodSpec{
+			NodeName:                     "node-1",
+			ServiceAccountName:           "builder",
+			RuntimeClassName:             strPtr("gvisor"),
+			SchedulerName:                "default-scheduler",
+			AutomountServiceAccountToken: ptrBool(true),
+			Containers: []corev1.Container{{
+				Name:  "app",
+				Image: "demo:1.0",
+				Resources: corev1.ResourceRequirements{
+					Requests: corev1.ResourceList{
+						corev1.ResourceCPU:    resource.MustParse("250m"),
+						corev1.ResourceMemory: resource.MustParse("128Mi"),
+					},
+					Limits: corev1.ResourceList{
+						corev1.ResourceCPU:    resource.MustParse("500m"),
+						corev1.ResourceMemory: resource.MustParse("256Mi"),
+					},
+				},
+			}},
+		},
+		Status: corev1.PodStatus{
+			Phase:  corev1.PodRunning,
+			PodIP:  "10.0.0.10",
+			HostIP: "10.0.0.2",
+			ContainerStatuses: []corev1.ContainerStatus{{
+				Name:         "app",
+				Ready:        true,
+				RestartCount: 1,
+				State: corev1.ContainerState{
+					Running: &corev1.ContainerStateRunning{
+						StartedAt: metav1.NewTime(now.Add(-time.Hour)),
+					},
+				},
+			}},
+		},
+	}
+
+	replicaSet := &appsv1.ReplicaSet{
+		ObjectMeta: metav1.ObjectMeta{
+			Name:      "demo-rs",
+			Namespace: "team-a",
+			OwnerReferences: []metav1.OwnerReference{{
+				Kind:       "Deployment",
+				Name:       "demo-deploy",
+				Controller: &controller,
+			}},
+		},
+	}
+
+	node := &corev1.Node{
+		ObjectMeta: metav1.ObjectMeta{Name: "node-1"},
+		Status: corev1.NodeStatus{
+			Addresses: []corev1.NodeAddress{{
+				Type:    corev1.NodeInternalIP,
+				Address: "192.168.10.15",
+			}},
+		},
+	}
+
+	client := fake.NewClientset(pod, replicaSet, node)
+
+	deps := common.Dependencies{
+		Context:          context.Background(),
+		Logger:           applog.Noop,
+		KubernetesClient: client,
+		ClusterID:        "cluster-a",
+	}
+
+	details, err := GetPod(deps, "team-a", "demo-pod", true)
+	if err != nil {
+		t.Fatalf("GetPod returned error: %v", err)
+	}
+	if details.OwnerKind != "Deployment" || details.OwnerName != "demo-deploy" {
+		t.Fatalf("expected pod owner to resolve to Deployment/demo-deploy, got %s/%s", details.OwnerKind, details.OwnerName)
+	}
+	if details.OwnerAPIVersion != "apps/v1" {
+		t.Fatalf("expected OwnerAPIVersion=apps/v1 from ReplicaSet→Deployment collapse, got %q", details.OwnerAPIVersion)
+	}
+	if details.NodeIP != "192.168.10.15" {
+		t.Fatalf("expected node IP to be populated, got %q", details.NodeIP)
+	}
+	require.Equal(t, "Running", details.Status)
+	require.Equal(t, "Running", details.StatusState)
+	require.Equal(t, "ready", details.StatusPresentation)
+	if len(details.Containers) != 1 {
+		t.Fatalf("expected container details to be captured, got %#v", details.Containers)
+	}
+	if details.Containers[0].State != "running" {
+		t.Fatalf("expected container state running, got %q", details.Containers[0].State)
+	}
+	if details.RuntimeClass != "gvisor" {
+		t.Fatalf("expected runtime class to be gvisor, got %q", details.RuntimeClass)
+	}
+}
+
+func TestSummarizePodUsesMetricsAndOwnership(t *testing.T) {
+	now := metav1.NewTime(time.Now().Add(-30 * time.Minute))
+	pod := corev1.Pod{
+		ObjectMeta: metav1.ObjectMeta{
+			Name:              "demo",
+			Namespace:         "team-a",
+			CreationTimestamp: now,
+			OwnerReferences: []metav1.OwnerReference{{
+				UID:        types.UID("rs-uid"),
+				Name:       "demo-rs",
+				Kind:       "ReplicaSet",
+				Controller: ptrBool(true),
+			}},
+		},
+		Spec: corev1.PodSpec{
+			NodeName: "node-1",
+			Containers: []corev1.Container{{
+				Name:  "app",
+				Image: "demo:1.0",
+				Resources: corev1.ResourceRequirements{
+					Requests: corev1.ResourceList{
+						corev1.ResourceCPU:    resource.MustParse("200m"),
+						corev1.ResourceMemory: resource.MustParse("128Mi"),
+					},
+					Limits: corev1.ResourceList{
+						corev1.ResourceCPU:    resource.MustParse("400m"),
+						corev1.ResourceMemory: resource.MustParse("256Mi"),
+					},
+				},
+			}},
+		},
+		Status: corev1.PodStatus{
+			Phase: corev1.PodRunning,
+			ContainerStatuses: []corev1.ContainerStatus{{
+				Name:  "app",
+				Ready: true,
+			}},
+		},
+	}
+
+	rsToDeployment := map[string]string{"demo-rs": "demo-deploy"}
+	cpuUsage := resource.MustParse("150m")
+	memUsage := resource.MustParse("64Mi")
+	metrics := map[string]*metricsv1beta1.PodMetrics{
+		"demo": {
+			ObjectMeta: metav1.ObjectMeta{Name: "demo"},
+			Containers: []metricsv1beta1.ContainerMetrics{{
+				Name: "app",
+				Usage: corev1.ResourceList{
+					corev1.ResourceCPU:    cpuUsage,
+					corev1.ResourceMemory: memUsage,
+				},
+			}},
+		},
+	}
+
+	ownerKind, ownerName, ownerAPIVersion := ResolveOwner(pod, rsToDeployment)
+	summary := SummarizePod("cluster-a", pod, metrics, ownerKind, ownerName, ownerAPIVersion)
+	require.Equal(t, "Deployment", summary.OwnerKind)
+	require.Equal(t, "demo-deploy", summary.OwnerName)
+	require.Equal(t, "apps/v1", summary.OwnerAPIVersion)
+	require.Equal(t, "150m", summary.CPUUsage)
+	require.Equal(t, "64Mi", summary.MemUsage)
+	require.Equal(t, "1/1", summary.Ready)
+	require.Equal(t, "Running", summary.Status)
+	require.Equal(t, "Running", summary.StatusState)
+	require.Equal(t, "ready", summary.StatusPresentation)
+}

@@ -44,27 +44,6 @@ func (s *Service) ConfigMap(namespace, name string) (*ConfigMapDetails, error) {
 	return s.processConfigMapDetails(cm, relationships), nil
 }
 
-// ConfigMaps returns detailed views for all configmaps in the namespace.
-func (s *Service) ConfigMaps(namespace string) ([]*ConfigMapDetails, error) {
-	configMaps, err := s.deps.KubernetesClient.CoreV1().ConfigMaps(namespace).List(s.deps.Context, metav1.ListOptions{})
-	if err != nil {
-		s.deps.Logger.Error(fmt.Sprintf("Failed to list configmaps in namespace %s: %v", namespace, err), logsources.ResourceLoader)
-		return nil, fmt.Errorf("failed to list configmaps: %v", err)
-	}
-
-	relationships := resourcemodel.NewResourceRelationshipIndex(
-		s.deps.ClusterID,
-		resourcemodel.ResourceRelationshipIndexOptions{Pods: s.listNamespacePods(namespace)},
-	)
-
-	var detailsList []*ConfigMapDetails
-	for i := range configMaps.Items {
-		detailsList = append(detailsList, s.processConfigMapDetails(&configMaps.Items[i], relationships))
-	}
-
-	return detailsList, nil
-}
-
 func (s *Service) processConfigMapDetails(cm *corev1.ConfigMap, relationships *resourcemodel.ResourceRelationshipIndex) *ConfigMapDetails {
 	facts := BuildFacts(cm, relationships, resourcemodel.ResourceModelBuildOptions{Materialization: resourcemodel.MaterializeSummaryFacts | resourcemodel.MaterializeReverseLinks})
 	details := &ConfigMapDetails{

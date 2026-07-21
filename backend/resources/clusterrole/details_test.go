@@ -44,7 +44,7 @@ func requireRef(t *testing.T, refs []restypes.ObjectRef, index int, kind, namesp
 	require.Equal(t, name, ref.Name)
 }
 
-func TestManagerClusterRolesIncludeBindings(t *testing.T) {
+func TestClusterRoleDetailsIncludeBindings(t *testing.T) {
 	cr := &rbacv1.ClusterRole{
 		ObjectMeta: metav1.ObjectMeta{Name: "cluster-reader"},
 		Rules: []rbacv1.PolicyRule{{
@@ -71,17 +71,9 @@ func TestManagerClusterRolesIncludeBindings(t *testing.T) {
 	requireRef(t, details.ClusterRoleBindings, 0, "ClusterRoleBinding", "", "crb-1")
 	require.Len(t, details.RoleBindings, 1)
 	requireRef(t, details.RoleBindings, 0, "RoleBinding", "team-a", "rb-1")
-
-	all, err := manager.ClusterRoles()
-	require.NoError(t, err)
-	require.Len(t, all, 1)
-	require.Len(t, all[0].ClusterRoleBindings, 1)
-	requireRef(t, all[0].ClusterRoleBindings, 0, "ClusterRoleBinding", "", "crb-1")
-	require.Len(t, all[0].RoleBindings, 1)
-	requireRef(t, all[0].RoleBindings, 0, "RoleBinding", "team-a", "rb-1")
 }
 
-func TestManagerClusterRolesAggregatesBindingsAndSelectors(t *testing.T) {
+func TestClusterRoleDetailsAggregatesBindingsAndSelectors(t *testing.T) {
 	now := metav1.NewTime(time.Now().Add(-2 * time.Hour))
 	clusterRole := &rbacv1.ClusterRole{
 		ObjectMeta: metav1.ObjectMeta{Name: "aggregator", CreationTimestamp: now, Labels: map[string]string{"app": "demo"}},
@@ -103,11 +95,9 @@ func TestManagerClusterRolesAggregatesBindingsAndSelectors(t *testing.T) {
 	}
 
 	manager := newService(fake.NewClientset(clusterRole, crb))
-	roles, err := manager.ClusterRoles()
+	details, err := manager.ClusterRole("aggregator")
 	require.NoError(t, err)
-	require.Len(t, roles, 1)
 
-	details := roles[0]
 	require.Equal(t, "aggregator", details.Name)
 	require.NotNil(t, details.AggregationRule)
 	require.Len(t, details.AggregationRule.ClusterRoleSelectors, 1)
@@ -117,20 +107,7 @@ func TestManagerClusterRolesAggregatesBindingsAndSelectors(t *testing.T) {
 	require.True(t, strings.Contains(details.Details, "aggregated"))
 }
 
-func TestClusterRolesWarnOnBindingListFailure(t *testing.T) {
-	role := &rbacv1.ClusterRole{ObjectMeta: metav1.ObjectMeta{Name: "reader"}}
-	client := fake.NewClientset(role)
-	client.PrependReactor("list", "clusterrolebindings", func(cgotesting.Action) (bool, runtime.Object, error) {
-		return true, nil, errors.New("crb-fail")
-	})
-
-	manager := newService(client)
-	roles, err := manager.ClusterRoles()
-	require.NoError(t, err)
-	require.Len(t, roles, 1)
-}
-
-func TestManagerClusterRolesToleratesBindingListFailure(t *testing.T) {
+func TestClusterRoleDetailsTolerateBindingListFailure(t *testing.T) {
 	clusterRole := &rbacv1.ClusterRole{ObjectMeta: metav1.ObjectMeta{Name: "reader"}}
 	client := fake.NewClientset(clusterRole)
 	client.PrependReactor("list", "clusterrolebindings", func(action cgotesting.Action) (bool, runtime.Object, error) {
@@ -138,8 +115,7 @@ func TestManagerClusterRolesToleratesBindingListFailure(t *testing.T) {
 	})
 
 	manager := newService(client)
-	roles, err := manager.ClusterRoles()
+	details, err := manager.ClusterRole("reader")
 	require.NoError(t, err)
-	require.Len(t, roles, 1)
-	require.Empty(t, roles[0].ClusterRoleBindings)
+	require.Empty(t, details.ClusterRoleBindings)
 }

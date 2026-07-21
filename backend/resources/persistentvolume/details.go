@@ -41,26 +41,6 @@ func (s *Service) PersistentVolume(name string) (*PersistentVolumeDetails, error
 	return s.processPersistentVolumeDetails(pv), nil
 }
 
-// PersistentVolumes returns detailed views for all persistent volumes.
-func (s *Service) PersistentVolumes() ([]*PersistentVolumeDetails, error) {
-	if s.deps.KubernetesClient == nil {
-		return nil, fmt.Errorf("kubernetes client not initialized")
-	}
-
-	pvs, err := s.deps.KubernetesClient.CoreV1().PersistentVolumes().List(s.deps.Context, metav1.ListOptions{})
-	if err != nil {
-		s.deps.Logger.Error(fmt.Sprintf("Failed to list persistent volumes: %v", err), logsources.ResourceLoader)
-		return nil, fmt.Errorf("failed to list persistent volumes: %v", err)
-	}
-
-	var detailsList []*PersistentVolumeDetails
-	for i := range pvs.Items {
-		detailsList = append(detailsList, s.processPersistentVolumeDetails(&pvs.Items[i]))
-	}
-
-	return detailsList, nil
-}
-
 func (s *Service) processPersistentVolumeDetails(pv *corev1.PersistentVolume) *PersistentVolumeDetails {
 	model := BuildResourceModel(s.deps.ClusterID, pv)
 	details := &PersistentVolumeDetails{

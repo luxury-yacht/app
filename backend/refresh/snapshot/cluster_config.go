@@ -67,19 +67,6 @@ func clusterConfigQueryCapabilities() ResourceQueryCapabilities {
 // alias keeps the snapshot-side name and wire JSON unchanged.
 type ClusterConfigEntry = streamrows.ClusterConfigEntry
 
-// RegisterClusterConfigDomain registers the domain with the registry.
-// Only listers for permitted resources are wired; denied resources are left nil
-// so the builder skips them gracefully.
-func RegisterClusterConfigDomain(
-	reg *domain.Registry,
-	factory informers.SharedInformerFactory,
-	allowed domainpermissions.AllowedResources,
-	clusterMeta ClusterMeta,
-	ingestManager *ingest.IngestManager,
-) error {
-	return RegisterClusterConfigDomainWithGatewayAPI(reg, factory, nil, allowed, clusterMeta, ingestManager)
-}
-
 // RegisterClusterConfigDomainWithGatewayAPI registers the cluster-config domain.
 //
 // This domain is MIXED: StorageClass, IngressClass, and the admission webhook kinds

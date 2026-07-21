@@ -45,27 +45,6 @@ func (s *Service) PodDisruptionBudget(namespace, name string) (*PodDisruptionBud
 	return s.buildPodDisruptionBudgetDetails(pdb), nil
 }
 
-// PodDisruptionBudgets returns detailed descriptions for all PDBs in the namespace.
-func (s *Service) PodDisruptionBudgets(namespace string) ([]*PodDisruptionBudgetDetails, error) {
-	client := s.deps.KubernetesClient
-	if client == nil {
-		return nil, fmt.Errorf("kubernetes client not initialized")
-	}
-
-	pdbs, err := client.PolicyV1().PodDisruptionBudgets(namespace).List(s.deps.Context, metav1.ListOptions{})
-	if err != nil {
-		s.logError(fmt.Sprintf("Failed to list pod disruption budgets in namespace %s: %v", namespace, err))
-		return nil, fmt.Errorf("failed to list pod disruption budgets: %v", err)
-	}
-
-	result := make([]*PodDisruptionBudgetDetails, 0, len(pdbs.Items))
-	for i := range pdbs.Items {
-		result = append(result, s.buildPodDisruptionBudgetDetails(&pdbs.Items[i]))
-	}
-
-	return result, nil
-}
-
 func (s *Service) buildPodDisruptionBudgetDetails(pdb *policyv1.PodDisruptionBudget) *PodDisruptionBudgetDetails {
 	facts := BuildFacts(s.deps.ClusterID, pdb)
 	details := &PodDisruptionBudgetDetails{

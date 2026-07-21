@@ -57,7 +57,7 @@ func TestBuildResourceModelFactsStatusAndScaleTarget(t *testing.T) {
 	require.Equal(t, "ScalingActive", facts.Conditions[0].Type)
 }
 
-func TestBuildV1ResourceModelKeepsTargetAPIVersion(t *testing.T) {
+func TestBuildV1FactsKeepsTargetAPIVersion(t *testing.T) {
 	min := int32(1)
 	h := &autoscalingv1.HorizontalPodAutoscaler{
 		ObjectMeta: metav1.ObjectMeta{Name: "rollout-hpa", Namespace: "default"},
@@ -68,11 +68,6 @@ func TestBuildV1ResourceModelKeepsTargetAPIVersion(t *testing.T) {
 		},
 		Status: autoscalingv1.HorizontalPodAutoscalerStatus{CurrentReplicas: 2, DesiredReplicas: 2},
 	}
-
-	model := BuildV1ResourceModel("cluster-a", h)
-	require.Equal(t, "v1", model.Ref.Version)
-	require.Equal(t, "2", model.Status.State)
-	require.Equal(t, "2 replicas", model.Status.Label)
 
 	facts := BuildV1Facts("cluster-a", h)
 	require.Equal(t, "argoproj.io", facts.ScaleTarget.Ref.Group)

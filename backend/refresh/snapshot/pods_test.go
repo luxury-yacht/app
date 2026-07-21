@@ -7,6 +7,10 @@ import (
 	"testing"
 	"time"
 
+	appslisters "k8s.io/client-go/listers/apps/v1"
+	corelisters "k8s.io/client-go/listers/core/v1"
+	"k8s.io/client-go/tools/cache"
+
 	"github.com/stretchr/testify/require"
 	appsv1 "k8s.io/api/apps/v1"
 	corev1 "k8s.io/api/core/v1"
@@ -20,6 +24,17 @@ import (
 	podres "github.com/luxury-yacht/app/backend/resources/pods"
 	"github.com/luxury-yacht/app/backend/testsupport"
 )
+
+// newPodBuilder wires a PodBuilder with the projection memo cache enabled —
+// the shape the pods domain registration builds in production.
+func newPodBuilder(podLister corelisters.PodLister, podIndexer cache.Indexer, rsLister appslisters.ReplicaSetLister) *PodBuilder {
+	return &PodBuilder{
+		podLister:  podLister,
+		podIndexer: podIndexer,
+		rsLister:   rsLister,
+		projCache:  newPodProjectionCache(),
+	}
+}
 
 type fakePodMetricsProvider struct {
 	usage    map[string]metrics.PodUsage

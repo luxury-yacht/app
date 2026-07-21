@@ -58,18 +58,6 @@ func TestBuildClusterRoleBindingDetails(t *testing.T) {
 	require.Contains(t, details.Details, "Role: admin")
 }
 
-func TestClusterRoleBindingsListError(t *testing.T) {
-	client := fake.NewClientset()
-	client.PrependReactor("list", "clusterrolebindings", func(cgotesting.Action) (bool, runtime.Object, error) {
-		return true, nil, errors.New("crb-list")
-	})
-
-	manager := newService(client)
-	if _, err := manager.ClusterRoleBindings(); err == nil {
-		t.Fatalf("expected clusterrolebindings list error")
-	}
-}
-
 func TestClusterRoleBindingGetError(t *testing.T) {
 	client := fake.NewClientset()
 	client.PrependReactor("get", "clusterrolebindings", func(cgotesting.Action) (bool, runtime.Object, error) {

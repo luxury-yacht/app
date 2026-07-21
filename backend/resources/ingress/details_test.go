@@ -8,16 +8,13 @@ package ingress_test
 
 import (
 	"context"
-	"fmt"
 	"testing"
 	"time"
 
 	"github.com/stretchr/testify/require"
 	networkingv1 "k8s.io/api/networking/v1"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
-	"k8s.io/apimachinery/pkg/runtime"
 	"k8s.io/client-go/kubernetes/fake"
-	k8stesting "k8s.io/client-go/testing"
 
 	"github.com/luxury-yacht/app/backend/internal/applog"
 	"github.com/luxury-yacht/app/backend/resources/ingress"
@@ -80,17 +77,4 @@ func TestServiceIngressDetails(t *testing.T) {
 	require.Equal(t, 1, len(detail.Rules))
 	require.Contains(t, detail.Details, "Host: app.example.com")
 	require.Contains(t, detail.LoadBalancerStatus, "lb.example.com")
-}
-
-func TestServiceIngressesErrorWhenListFails(t *testing.T) {
-	client := fake.NewClientset()
-	client.PrependReactor("list", "ingresses", func(action k8stesting.Action) (bool, runtime.Object, error) {
-		return true, nil, fmt.Errorf("api down")
-	})
-
-	service := newService(t, client)
-
-	_, err := service.Ingresses("default")
-	require.Error(t, err)
-	require.Contains(t, err.Error(), "failed to list ingresses")
 }

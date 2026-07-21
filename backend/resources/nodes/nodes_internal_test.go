@@ -8,7 +8,6 @@
 package nodes
 
 import (
-	"fmt"
 	"testing"
 	"time"
 
@@ -70,57 +69,6 @@ func TestEnsureMetricsClientInitializesClient(t *testing.T) {
 
 	require.True(t, setterCalled, "metrics setter should fire when rest config is available")
 	require.NotNil(t, service.deps.MetricsClient)
-}
-
-func TestListNodeMetricsHandlesAPIErrors(t *testing.T) {
-	client := metricsfake.NewSimpleClientset()
-	service := NewService(testsupport.NewResourceDependencies(testsupport.WithDepsMetricsClient(client)))
-
-	client.Fake.PrependReactor("*", "*", func(action cgotesting.Action) (bool, runtime.Object, error) {
-		return true, nil, fmt.Errorf("list failed")
-	})
-
-	require.Nil(t, service.listNodeMetrics())
-}
-
-func TestListNodeMetricsReturnsValues(t *testing.T) {
-	metrics := &metricsv1beta1.NodeMetrics{
-		TypeMeta:   metav1.TypeMeta{Kind: "NodeMetrics", APIVersion: "metrics.k8s.io/v1beta1"},
-		ObjectMeta: metav1.ObjectMeta{Name: "node-1"},
-		Usage: map[corev1.ResourceName]resource.Quantity{
-			corev1.ResourceCPU:    resource.MustParse("100m"),
-			corev1.ResourceMemory: resource.MustParse("256Mi"),
-		},
-	}
-
-	client := metricsfake.NewSimpleClientset(metrics)
-	client.Fake.PrependReactor("*", "*", func(cgotesting.Action) (bool, runtime.Object, error) {
-		return true, &metricsv1beta1.NodeMetricsList{Items: []metricsv1beta1.NodeMetrics{*metrics}}, nil
-	})
-	service := NewService(testsupport.NewResourceDependencies(testsupport.WithDepsMetricsClient(client)))
-
-	result := service.listNodeMetrics()
-	require.Contains(t, result, "node-1")
-	cpu := result["node-1"][corev1.ResourceCPU]
-	mem := result["node-1"][corev1.ResourceMemory]
-	require.Equal(t, "100m", cpu.String())
-	require.Equal(t, "256Mi", mem.String())
-}
-
-func TestListAllPodsByNodeGroupsPods(t *testing.T) {
-	podOne := testsupport.PodFixture("default", "pod-1")
-	podOne.Spec.NodeName = "node-1"
-	podTwo := testsupport.PodFixture("default", "pod-2")
-	podTwo.Spec.NodeName = "node-1"
-	ignored := testsupport.PodFixture("default", "pod-ignored")
-	ignored.Spec.NodeName = ""
-
-	client := cgofake.NewClientset(podOne, podTwo, ignored)
-	service := NewService(testsupport.NewResourceDependencies(testsupport.WithDepsKubeClient(client)))
-
-	result := service.listAllPodsByNode()
-	require.Len(t, result, 1)
-	require.Len(t, result["node-1"], 2)
 }
 
 func TestGetNodeMetricsReturnsUsage(t *testing.T) {

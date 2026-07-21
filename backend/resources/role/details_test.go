@@ -81,18 +81,6 @@ func TestManagerRoleSkipsBindingsOnListFailure(t *testing.T) {
 	require.True(t, strings.Contains(details.Details, "Rules"))
 }
 
-func TestRolesListError(t *testing.T) {
-	client := fake.NewClientset()
-	client.PrependReactor("list", "roles", func(cgotesting.Action) (bool, runtime.Object, error) {
-		return true, nil, errors.New("boom-roles")
-	})
-
-	manager := newService(client)
-	if _, err := manager.Roles("ns"); err == nil {
-		t.Fatalf("expected roles list error")
-	}
-}
-
 func TestRoleWarnsWhenBindingsListFails(t *testing.T) {
 	r := &rbacv1.Role{
 		ObjectMeta: metav1.ObjectMeta{Name: "reader", Namespace: "ns"},

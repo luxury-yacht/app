@@ -30,27 +30,6 @@ func (s *Service) MutatingWebhookConfiguration(name string) (*MutatingWebhookCon
 	return s.buildMutatingWebhookConfigurationDetails(config), nil
 }
 
-// MutatingWebhookConfigurations lists all mutating webhook configurations.
-func (s *Service) MutatingWebhookConfigurations() ([]*MutatingWebhookConfigurationDetails, error) {
-	client := s.deps.KubernetesClient
-	if client == nil {
-		return nil, fmt.Errorf("kubernetes client not initialized")
-	}
-
-	configs, err := client.AdmissionregistrationV1().MutatingWebhookConfigurations().List(s.deps.Context, metav1.ListOptions{})
-	if err != nil {
-		s.logError(fmt.Sprintf("Failed to list mutating webhook configurations: %v", err))
-		return nil, fmt.Errorf("failed to list mutating webhook configurations: %v", err)
-	}
-
-	result := make([]*MutatingWebhookConfigurationDetails, 0, len(configs.Items))
-	for i := range configs.Items {
-		result = append(result, s.buildMutatingWebhookConfigurationDetails(&configs.Items[i]))
-	}
-
-	return result, nil
-}
-
 func (s *Service) buildMutatingWebhookConfigurationDetails(config *admissionregistrationv1.MutatingWebhookConfiguration) *MutatingWebhookConfigurationDetails {
 	model := BuildMutatingResourceModel(s.deps.ClusterID, config)
 	facts := BuildMutatingFacts(s.deps.ClusterID, config)
