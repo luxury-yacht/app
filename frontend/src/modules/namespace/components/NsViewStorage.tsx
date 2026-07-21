@@ -12,25 +12,13 @@ import {
 import * as cf from '@shared/components/tables/columnFactories';
 import { backendStatusTextClass } from '@shared/utils/backendStatusPresentation';
 import React from 'react';
-import type { NamespaceStorageSnapshotPayload } from '@/core/refresh/types';
+import type {
+  NamespaceStorageSnapshotPayload,
+  NamespaceStorageSummary,
+} from '@/core/refresh/types';
 import { getDisplayKind } from '@/utils/kindAliasMap';
 
-// Data interface for PersistentVolumeClaim rows.
-export interface StorageData {
-  kind: string;
-  kindAlias?: string;
-  name: string;
-  namespace: string;
-  clusterId: string;
-  clusterName?: string;
-  status: string;
-  statusState?: string;
-  statusPresentation?: string;
-  statusReason?: string;
-  capacity: string;
-  storageClass?: string;
-  age?: string;
-}
+export type StorageData = NamespaceStorageSummary & { kindAlias?: string };
 
 interface StorageViewProps {
   namespace: string;
@@ -49,13 +37,6 @@ const storageSpec: AggregatedResourceGridViewSpec<StorageData> = {
   tableClassName: 'ns-storage-table',
   defaultSort: { key: 'name', direction: 'asc' },
   namespaceLinkTab: 'storage',
-  getIdentity: (resource) => ({
-    kind: resource.kind || resource.kindAlias,
-    name: resource.name,
-    namespace: resource.namespace,
-    clusterId: resource.clusterId,
-    clusterName: resource.clusterName ?? undefined,
-  }),
   buildColumns: ({ identity, openObject, navigateObject, useShortResourceNames }) => {
     const storageClassReference = (resource: StorageData) =>
       resource.storageClass

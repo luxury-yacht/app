@@ -127,64 +127,27 @@ const NsViewPods: React.FC<PodsViewProps> = React.memo(
       return eventBus.on('gridtable:focus-request', expandForPodFocus);
     }, [collapsed, onPodsCollapsedChange, queryClusterId]);
 
-    // Include cluster metadata so object details stay scoped to the active tab.
+    const podReference = useCallback(
+      (pod: PodSnapshotEntry) =>
+        buildRequiredObjectReference(
+          { ...pod.ref, clusterName: pod.clusterName },
+          { fallbackClusterId: selectedClusterId }
+        ),
+      [selectedClusterId]
+    );
     const handlePodOpen = useCallback(
-      (pod: PodSnapshotEntry) => {
-        openWithObject(
-          buildRequiredObjectReference(
-            {
-              kind: 'Pod',
-              name: pod.name,
-              namespace: pod.namespace,
-              clusterId: pod.clusterId,
-              clusterName: pod.clusterName ?? undefined,
-            },
-            { fallbackClusterId: selectedClusterId }
-          )
-        );
-      },
-      [openWithObject, selectedClusterId]
+      (pod: PodSnapshotEntry) => openWithObject(podReference(pod)),
+      [openWithObject, podReference]
+    );
+    const handlePodNavigate = useCallback(
+      (pod: PodSnapshotEntry) => navigateToView(podReference(pod)),
+      [navigateToView, podReference]
     );
 
     const objectActions = useObjectActionController({
       context: 'gridtable',
-      onOpen: (object) => {
-        openWithObject(
-          buildRequiredObjectReference(
-            {
-              kind: object.kind,
-              name: object.name,
-              namespace: object.namespace,
-              clusterId: object.clusterId,
-              clusterName: object.clusterName,
-              group: object.group,
-              version: object.version,
-              resource: object.resource,
-              uid: object.uid,
-            },
-            { fallbackClusterId: selectedClusterId }
-          )
-        );
-      },
-      onOpenObjectMap: (object) => {
-        openWithObject(
-          buildRequiredObjectReference(
-            {
-              kind: object.kind,
-              name: object.name,
-              namespace: object.namespace,
-              clusterId: object.clusterId,
-              clusterName: object.clusterName,
-              group: object.group,
-              version: object.version,
-              resource: object.resource,
-              uid: object.uid,
-            },
-            { fallbackClusterId: selectedClusterId }
-          ),
-          { initialTab: 'map' }
-        );
-      },
+      onOpen: openWithObject,
+      onOpenObjectMap: (object) => openWithObject(object, { initialTab: 'map' }),
     });
 
     const handleOwnerOpen = useCallback(
@@ -230,15 +193,7 @@ const NsViewPods: React.FC<PodsViewProps> = React.memo(
 
     const keyExtractor = useCallback(
       (pod: PodSnapshotEntry) =>
-        buildRequiredCanonicalObjectRowKey(
-          {
-            kind: 'Pod',
-            name: pod.name,
-            namespace: pod.namespace,
-            clusterId: pod.clusterId,
-          },
-          { fallbackClusterId: selectedClusterId }
-        ),
+        buildRequiredCanonicalObjectRowKey(pod.ref, { fallbackClusterId: selectedClusterId }),
       [selectedClusterId]
     );
 
@@ -257,36 +212,12 @@ const NsViewPods: React.FC<PodsViewProps> = React.memo(
         cf.createKindColumn<PodSnapshotEntry>({
           getKind: () => 'Pod',
           onClick: handlePodOpen,
-          onAltClick: (pod) =>
-            navigateToView(
-              buildRequiredObjectReference(
-                {
-                  kind: 'Pod',
-                  name: pod.name,
-                  namespace: pod.namespace,
-                  clusterId: pod.clusterId,
-                  clusterName: pod.clusterName ?? undefined,
-                },
-                { fallbackClusterId: selectedClusterId }
-              )
-            ),
+          onAltClick: handlePodNavigate,
           sortable: false,
         }),
         cf.createTextColumn<PodSnapshotEntry>('name', 'Name', {
           onClick: handlePodOpen,
-          onAltClick: (pod) =>
-            navigateToView(
-              buildRequiredObjectReference(
-                {
-                  kind: 'Pod',
-                  name: pod.name,
-                  namespace: pod.namespace,
-                  clusterId: pod.clusterId,
-                  clusterName: pod.clusterName ?? undefined,
-                },
-                { fallbackClusterId: selectedClusterId }
-              )
-            ),
+          onAltClick: handlePodNavigate,
           getTitle: (pod) => pod.name,
           getClassName: () => 'object-panel-link',
         }),
@@ -437,6 +368,7 @@ const NsViewPods: React.FC<PodsViewProps> = React.memo(
     }, [
       handleNodeOpen,
       handleOwnerOpen,
+      handlePodNavigate,
       handlePodOpen,
       namespaceColumnLink,
       navigateToView,
@@ -600,13 +532,7 @@ const NsViewPods: React.FC<PodsViewProps> = React.memo(
       (pod: PodSnapshotEntry): ContextMenuItem[] => {
         return objectActions.getMenuItems(
           buildRequiredObjectReference(
-            {
-              kind: 'Pod',
-              name: pod.name,
-              namespace: pod.namespace,
-              clusterId: pod.clusterId,
-              clusterName: pod.clusterName,
-            },
+            { ...pod.ref, clusterName: pod.clusterName },
             { fallbackClusterId: selectedClusterId },
             {
               portForwardAvailable: pod.portForwardAvailable,

@@ -22,4 +22,5 @@ var Descriptor = kindspec.Descriptor{
 	Collector:       &ObjectMapNode,
 	Binding:         &DetailBinding,
 	Graph:           kindspec.ObjectMapGraph{DirectionalTraversal: true},
+	Actions:         kindspec.ObjectActions{Cordon: true, Drain: true},
 }

@@ -27,6 +27,7 @@ import (
 	"github.com/stretchr/testify/require"
 
 	"github.com/luxury-yacht/app/backend/refresh/metrics"
+	"github.com/luxury-yacht/app/backend/resourcemodel"
 	"github.com/luxury-yacht/app/backend/resources/admission"
 	"github.com/luxury-yacht/app/backend/resources/apiextensions"
 	"github.com/luxury-yacht/app/backend/resources/clusterrole"
@@ -186,10 +187,35 @@ type parityCase struct {
 func requireRowParity(t *testing.T, snapshotRows, expectedRows []any, sortKey func(any) string) {
 	t.Helper()
 	require.Equal(t, len(expectedRows), len(snapshotRows), "row count mismatch: snapshot=%d expected=%d", len(snapshotRows), len(expectedRows))
+	for _, row := range snapshotRows {
+		requireCanonicalRowRef(t, row)
+	}
 
 	snapJSON := marshalSorted(t, snapshotRows, sortKey)
 	expectedJSON := marshalSorted(t, expectedRows, sortKey)
 	require.Equal(t, string(expectedJSON), string(snapJSON), "snapshot/stream row drift detected — a field is populated on one path but not the other")
+}
+
+func requireCanonicalRowRef(t *testing.T, row any) {
+	t.Helper()
+	data, err := json.Marshal(row)
+	require.NoError(t, err)
+	var envelope struct {
+		ClusterID string                    `json:"clusterId"`
+		Kind      string                    `json:"kind"`
+		Name      string                    `json:"name"`
+		Namespace string                    `json:"namespace"`
+		Ref       resourcemodel.ResourceRef `json:"ref"`
+	}
+	require.NoError(t, json.Unmarshal(data, &envelope))
+	require.NoError(t, resourcemodel.ValidateResourceRef(envelope.Ref))
+	require.NotEmpty(t, envelope.Ref.Resource)
+	require.Equal(t, envelope.ClusterID, envelope.Ref.ClusterID)
+	if envelope.Kind != "" {
+		require.Equal(t, envelope.Kind, envelope.Ref.Kind)
+	}
+	require.Equal(t, envelope.Name, envelope.Ref.Name)
+	require.Equal(t, envelope.Namespace, envelope.Ref.Namespace)
 }
 
 func marshalSorted(t *testing.T, rows []any, sortKey func(any) string) []byte {
@@ -611,8 +637,8 @@ func parityNamespaceCustomCollisionCase(meta ClusterMeta) parityCase {
 			crB.SetName("primary")
 			crB.SetNamespace("data")
 
-			rowA := customresource.BuildNamespaceStreamSummary(meta, crA, "rds.services.k8s.aws", "v1alpha1", "DBInstance", "dbinstances.rds.services.k8s.aws", "data")
-			rowB := customresource.BuildNamespaceStreamSummary(meta, crB, "databases.example.com", "v1", "DBInstance", "dbinstances.databases.example.com", "data")
+			rowA := customresource.BuildNamespaceStreamSummary(meta, crA, "rds.services.k8s.aws", "v1alpha1", "dbinstances", "DBInstance", "dbinstances.rds.services.k8s.aws", "data")
+			rowB := customresource.BuildNamespaceStreamSummary(meta, crB, "databases.example.com", "v1", "dbinstances", "DBInstance", "dbinstances.databases.example.com", "data")
 
 			require.NotEqual(t, rowA.Group, rowB.Group, "collision regression: rows with same kind/name but different GVKs must remain distinguishable")
 			require.NotEqual(t, rowA.CRDName, rowB.CRDName, "CRDName must differ for distinct CRDs")
@@ -621,7 +647,7 @@ func parityNamespaceCustomCollisionCase(meta ClusterMeta) parityCase {
 
 			// Per-row parity: re-invoking the projector with the same inputs
 			// returns byte-identical rows.
-			rowARepeat := customresource.BuildNamespaceStreamSummary(meta, crA, "rds.services.k8s.aws", "v1alpha1", "DBInstance", "dbinstances.rds.services.k8s.aws", "data")
+			rowARepeat := customresource.BuildNamespaceStreamSummary(meta, crA, "rds.services.k8s.aws", "v1alpha1", "dbinstances", "DBInstance", "dbinstances.rds.services.k8s.aws", "data")
 			requireRowParity(t, []any{rowA}, []any{rowARepeat}, func(r any) string {
 				row := r.(NamespaceCustomSummary)
 				return row.Group + "/" + row.Version + "/" + row.Kind + "/" + row.Namespace + "/" + row.Name
@@ -646,13 +672,13 @@ func parityClusterCustomCollisionCase(meta ClusterMeta) parityCase {
 			crB.SetKind("DBCluster")
 			crB.SetName("primary")
 
-			rowA := customresource.BuildClusterStreamSummary(meta, crA, "rds.services.k8s.aws", "v1alpha1", "DBCluster", "dbclusters.rds.services.k8s.aws")
-			rowB := customresource.BuildClusterStreamSummary(meta, crB, "databases.example.com", "v1", "DBCluster", "dbclusters.databases.example.com")
+			rowA := customresource.BuildClusterStreamSummary(meta, crA, "rds.services.k8s.aws", "v1alpha1", "dbclusters", "DBCluster", "dbclusters.rds.services.k8s.aws")
+			rowB := customresource.BuildClusterStreamSummary(meta, crB, "databases.example.com", "v1", "dbclusters", "DBCluster", "dbclusters.databases.example.com")
 
 			require.NotEqual(t, rowA.Group, rowB.Group)
 			require.NotEqual(t, rowA.CRDName, rowB.CRDName)
 
-			rowARepeat := customresource.BuildClusterStreamSummary(meta, crA, "rds.services.k8s.aws", "v1alpha1", "DBCluster", "dbclusters.rds.services.k8s.aws")
+			rowARepeat := customresource.BuildClusterStreamSummary(meta, crA, "rds.services.k8s.aws", "v1alpha1", "dbclusters", "DBCluster", "dbclusters.rds.services.k8s.aws")
 			requireRowParity(t, []any{rowA}, []any{rowARepeat}, func(r any) string {
 				row := r.(ClusterCustomSummary)
 				return row.Group + "/" + row.Version + "/" + row.Kind + "/" + row.Name

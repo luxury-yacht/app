@@ -222,6 +222,7 @@ export interface ClusterAttentionSnapshot {
 export interface ClusterCRDEntry {
   clusterId: string;
   clusterName: string;
+  ref: ResourceRef;
   kind: string;
   name: string;
   group: string;
@@ -263,6 +264,7 @@ export interface ClusterCRDSnapshotPayload {
 export interface ClusterConfigEntry {
   clusterId: string;
   clusterName: string;
+  ref: ResourceRef;
   kind: string;
   name: string;
   details: string;
@@ -300,6 +302,7 @@ export interface ClusterConfigSnapshotPayload {
 export interface ClusterCustomEntry {
   clusterId: string;
   clusterName: string;
+  ref: ResourceRef;
   kind: string;
   name: string;
   group: string;
@@ -326,6 +329,7 @@ export interface ClusterCustomSnapshotPayload {
 export interface ClusterEventEntry {
   clusterId: string;
   clusterName: string;
+  ref: ResourceRef;
   kind: string;
   name: string;
   uid: string;
@@ -373,6 +377,7 @@ export interface ClusterEventsSnapshotPayload {
 export interface ClusterNodeSnapshotEntry {
   clusterId: string;
   clusterName: string;
+  ref: ResourceRef;
   name: string;
   status: string;
   statusState?: string;
@@ -500,6 +505,7 @@ export interface ClusterOverviewSnapshotPayload {
 export interface ClusterRBACEntry {
   clusterId: string;
   clusterName: string;
+  ref: ResourceRef;
   kind: string;
   name: string;
   details: string;
@@ -537,6 +543,7 @@ export interface ClusterRBACSnapshotPayload {
 export interface ClusterStorageEntry {
   clusterId: string;
   clusterName: string;
+  ref: ResourceRef;
   kind: string;
   name: string;
   storageClass?: string;
@@ -606,6 +613,27 @@ export interface ContainerLogsWireEntry {
   isEphemeral?: boolean;
 }
 
+export interface CustomResourceSummary {
+  clusterId: string;
+  clusterName: string;
+  ref: ResourceRef;
+  kind: string;
+  name: string;
+  namespace?: string;
+  group: string;
+  version: string;
+  crdName?: string;
+  status?: string;
+  statusState?: string;
+  statusPresentation?: string;
+  ready?: boolean;
+  observedGeneration?: number;
+  conditions?: Array<ConditionFacts>;
+  age: string;
+  labels?: Record<string, string>;
+  annotations?: Record<string, string>;
+}
+
 export interface DisplayRef {
   clusterId: string;
   group?: string;
@@ -661,6 +689,7 @@ export interface NamespaceAutoscalingSnapshotPayload {
 export interface NamespaceAutoscalingSummary {
   clusterId: string;
   clusterName: string;
+  ref: ResourceRef;
   kind: string;
   name: string;
   namespace: string;
@@ -702,6 +731,7 @@ export interface NamespaceConfigSnapshotPayload {
 export interface NamespaceConfigSummary {
   clusterId: string;
   clusterName: string;
+  ref: ResourceRef;
   kind: string;
   typeAlias?: string;
   name: string;
@@ -721,6 +751,7 @@ export interface NamespaceCustomSnapshotPayload {
 export interface NamespaceCustomSummary {
   clusterId: string;
   clusterName: string;
+  ref: ResourceRef;
   kind: string;
   name: string;
   group: string;
@@ -741,6 +772,7 @@ export interface NamespaceCustomSummary {
 export interface NamespaceEventSummary {
   clusterId: string;
   clusterName: string;
+  ref: ResourceRef;
   kind: string;
   name: string;
   uid: string;
@@ -814,6 +846,7 @@ export interface NamespaceHelmSnapshotPayload {
 export interface NamespaceHelmSummary {
   clusterId: string;
   clusterName: string;
+  ref: ResourceRef;
   name: string;
   namespace: string;
   chart: string;
@@ -872,6 +905,7 @@ export interface NamespaceNetworkSnapshotPayload {
 export interface NamespaceNetworkSummary {
   clusterId: string;
   clusterName: string;
+  ref: ResourceRef;
   kind: string;
   name: string;
   namespace: string;
@@ -883,6 +917,7 @@ export interface NamespaceNetworkSummary {
 export interface NamespaceQuotaSummary {
   clusterId: string;
   clusterName: string;
+  ref: ResourceRef;
   kind: string;
   name: string;
   namespace: string;
@@ -949,6 +984,7 @@ export interface NamespaceRBACSnapshotPayload {
 export interface NamespaceRBACSummary {
   clusterId: string;
   clusterName: string;
+  ref: ResourceRef;
   kind: string;
   name: string;
   namespace: string;
@@ -992,6 +1028,7 @@ export interface NamespaceStorageSnapshotPayload {
 export interface NamespaceStorageSummary {
   clusterId: string;
   clusterName: string;
+  ref: ResourceRef;
   kind: string;
   name: string;
   namespace: string;
@@ -1063,6 +1100,7 @@ export interface NamespaceWorkloadSnapshotPayload {
 export interface NamespaceWorkloadSummary {
   clusterId: string;
   clusterName: string;
+  ref: ResourceRef;
   kind: string;
   name: string;
   namespace: string;
@@ -1266,6 +1304,7 @@ export interface PodMetricsInfo {
 export interface PodSnapshotEntry {
   clusterId: string;
   clusterName: string;
+  ref: ResourceRef;
   name: string;
   namespace: string;
   node: string;

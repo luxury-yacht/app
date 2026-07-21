@@ -12,8 +12,11 @@ import { KubernetesProvider } from './KubernetesProvider';
 
 const wailsMocks = vi.hoisted(() => ({
   GetKubeconfigs: vi.fn().mockResolvedValue([]),
-  GetSelectedKubeconfigs: vi.fn().mockResolvedValue([]),
-  SetSelectedKubeconfigs: vi.fn().mockResolvedValue(undefined),
+  GetClusterWorkspaceState: vi.fn().mockResolvedValue({
+    selectedKubeconfigs: [],
+    visibleClusterId: '',
+    clusters: {},
+  }),
   SetSidebarVisible: vi.fn(),
   GetCatalogDiagnostics: vi.fn().mockResolvedValue({ enabled: false }),
   GetAppearanceModeInfo: vi.fn().mockResolvedValue({ userMode: 'system' }),
@@ -21,8 +24,7 @@ const wailsMocks = vi.hoisted(() => ({
 
 vi.mock('@wailsjs/go/backend/App', () => ({
   GetKubeconfigs: (...args: unknown[]) => wailsMocks.GetKubeconfigs(...args),
-  GetSelectedKubeconfigs: (...args: unknown[]) => wailsMocks.GetSelectedKubeconfigs(...args),
-  SetSelectedKubeconfigs: (...args: unknown[]) => wailsMocks.SetSelectedKubeconfigs(...args),
+  GetClusterWorkspaceState: (...args: unknown[]) => wailsMocks.GetClusterWorkspaceState(...args),
   SetSidebarVisible: (...args: unknown[]) => wailsMocks.SetSidebarVisible(...args),
   GetCatalogDiagnostics: (...args: unknown[]) => wailsMocks.GetCatalogDiagnostics(...args),
   GetAppearanceModeInfo: (...args: unknown[]) => wailsMocks.GetAppearanceModeInfo(...args),

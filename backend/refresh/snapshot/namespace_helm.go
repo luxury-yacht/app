@@ -52,19 +52,20 @@ type NamespaceHelmSnapshot struct {
 // NamespaceHelmSummary captures the fields required by the Helm table.
 type NamespaceHelmSummary struct {
 	ClusterMeta
-	Name               string `json:"name"`
-	Namespace          string `json:"namespace"`
-	Chart              string `json:"chart"`
-	AppVersion         string `json:"appVersion"`
-	Status             string `json:"status"`
-	StatusState        string `json:"statusState,omitempty"`
-	StatusPresentation string `json:"statusPresentation,omitempty"`
-	StatusReason       string `json:"statusReason,omitempty"`
-	Revision           int    `json:"revision"`
-	Updated            string `json:"updated"`
-	Description        string `json:"description,omitempty"`
-	Age                string `json:"age"`
-	AgeTimestamp       int64  `json:"ageTimestamp,omitempty"`
+	Ref                resourcemodel.ResourceRef `json:"ref"`
+	Name               string                    `json:"name"`
+	Namespace          string                    `json:"namespace"`
+	Chart              string                    `json:"chart"`
+	AppVersion         string                    `json:"appVersion"`
+	Status             string                    `json:"status"`
+	StatusState        string                    `json:"statusState,omitempty"`
+	StatusPresentation string                    `json:"statusPresentation,omitempty"`
+	StatusReason       string                    `json:"statusReason,omitempty"`
+	Revision           int                       `json:"revision"`
+	Updated            string                    `json:"updated"`
+	Description        string                    `json:"description,omitempty"`
+	Age                string                    `json:"age"`
+	AgeTimestamp       int64                     `json:"ageTimestamp,omitempty"`
 }
 
 func namespaceHelmQueryCapabilities() ResourceQueryCapabilities {
@@ -456,6 +457,7 @@ func mapHelmReleases(
 		}
 		summaries = append(summaries, NamespaceHelmSummary{
 			ClusterMeta:        meta,
+			Ref:                model.Ref,
 			Name:               release.Name,
 			Namespace:          ns,
 			Chart:              chartName,

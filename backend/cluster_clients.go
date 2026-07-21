@@ -243,6 +243,7 @@ func (a *App) syncClusterClientPoolWithBuilder(
 
 	for _, id := range removedClusterIDs {
 		a.ensureKubernetesAPIMetricsRegistry().remove(id)
+		a.removeClusterWorkspaceRuntimeState(id)
 		if a.clusterLifecycle != nil {
 			a.clusterLifecycle.Remove(id)
 		}

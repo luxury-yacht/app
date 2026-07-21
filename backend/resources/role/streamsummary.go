@@ -20,5 +20,5 @@ func BuildStreamSummary(meta streamrows.ClusterMeta, r *rbacv1.Role) streamrows.
 		return streamrows.RBACSummary{ClusterMeta: meta, Kind: "Role"}
 	}
 	details := DescribeSummary(BuildFacts(r, nil, resourcemodel.ResourceModelBuildOptions{}))
-	return streamrows.NewRBACSummary(meta, r, "Role", details)
+	return streamrows.NewRBACSummary(meta, Identity, r, details)
 }

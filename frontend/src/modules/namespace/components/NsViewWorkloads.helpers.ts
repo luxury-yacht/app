@@ -5,7 +5,10 @@
  * Handles rendering and interactions for the namespace feature.
  */
 
+import type { ResourceRef } from '@/core/refresh/types';
+
 export interface WorkloadData {
+  ref: ResourceRef;
   kind: string;
   kindAlias?: string;
   name: string;

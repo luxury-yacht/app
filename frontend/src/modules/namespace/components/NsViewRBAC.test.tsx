@@ -12,6 +12,7 @@ import { withStableListKeys } from '@shared/utils/stableListKeys';
 import { act } from 'react';
 import * as ReactDOM from 'react-dom/client';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
+import { makeResourceRef } from '@/test-utils/makeResourceRef';
 
 vi.mock('@modules/namespace/components/useNamespaceColumnLink', () => ({
   useNamespaceColumnLink: () => ({
@@ -177,15 +178,30 @@ describe('NsViewRBAC', () => {
     container.remove();
   });
 
-  const baseRBAC = (overrides: Partial<RBACData> = {}): RBACData => ({
-    kind: 'Role',
-    name: 'view',
-    namespace: 'team-a',
-    clusterId: 'alpha:ctx',
-    rulesCount: 3,
-    age: '5h',
-    ...overrides,
-  });
+  const baseRBAC = (overrides: Partial<RBACData> = {}): RBACData => {
+    const row = {
+      kind: 'Role',
+      name: 'view',
+      namespace: 'team-a',
+      clusterId: 'alpha:ctx',
+      clusterName: 'alpha',
+      details: '3 rules',
+      age: '5h',
+      ...overrides,
+    };
+    return {
+      ...row,
+      ref:
+        overrides.ref ??
+        makeResourceRef({
+          group: row.kind === 'ServiceAccount' ? '' : 'rbac.authorization.k8s.io',
+          kind: row.kind,
+          resource: row.kind === 'ServiceAccount' ? 'serviceaccounts' : 'roles',
+          namespace: row.namespace,
+          name: row.name,
+        }),
+    };
+  };
 
   const renderRBACView = async (options: { stats?: unknown; namespace?: string } = {}) => {
     await act(async () => {

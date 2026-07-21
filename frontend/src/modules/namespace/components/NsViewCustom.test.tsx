@@ -170,6 +170,15 @@ vi.mock('@/core/capabilities', () => ({
 }));
 
 const baseResource: CustomResourceData = {
+  ref: {
+    clusterId: 'alpha:ctx',
+    group: 'batch',
+    version: 'v1',
+    kind: 'CronJob',
+    resource: 'cronjobs',
+    namespace: 'ops',
+    name: 'nightly-cleanup',
+  },
   kind: 'CronJob',
   name: 'nightly-cleanup',
   namespace: 'ops',
@@ -243,6 +252,16 @@ const catalogItemFromResource = (
 });
 
 const catalogItemToCustomResourceData = (item: CatalogItem): CustomResourceData => ({
+  ref: {
+    clusterId: item.clusterId,
+    group: item.group,
+    version: item.version,
+    kind: item.kind,
+    resource: item.resource,
+    namespace: item.namespace ?? '',
+    name: item.name,
+    uid: item.uid,
+  },
   kind: item.kind,
   kindAlias: item.kind,
   name: item.name,
@@ -549,6 +568,15 @@ describe('NsViewCustom', () => {
   // silently drop these fields again in a future refactor.
   it('forwards group and version into openWithObject for colliding CRDs', async () => {
     const dbInstance: CustomResourceData = {
+      ref: {
+        clusterId: 'alpha:ctx',
+        group: 'documentdb.services.k8s.aws',
+        version: 'v1alpha1',
+        kind: 'DBInstance',
+        resource: 'dbinstances',
+        namespace: 'team-a',
+        name: 'db-dc-test-1-v4',
+      },
       kind: 'DBInstance',
       name: 'db-dc-test-1-v4',
       namespace: 'team-a',
@@ -645,6 +673,15 @@ describe('NsViewCustom', () => {
     runObjectActionMock.mockResolvedValue(undefined);
 
     const dbInstance: CustomResourceData = {
+      ref: {
+        clusterId: 'alpha:ctx',
+        group: 'documentdb.services.k8s.aws',
+        version: 'v1alpha1',
+        kind: 'DBInstance',
+        resource: 'dbinstances',
+        namespace: 'team-a',
+        name: 'db-dc-test-1-v4',
+      },
       kind: 'DBInstance',
       name: 'db-dc-test-1-v4',
       namespace: 'team-a',
@@ -700,8 +737,7 @@ describe('NsViewCustom', () => {
   it('throws instead of falling back when group/version are missing', async () => {
     const missingGVK: CustomResourceData = {
       ...baseResource,
-      group: undefined,
-      version: undefined,
+      ref: { ...baseResource.ref, group: '', version: '' },
     };
 
     await renderComponent({ showNamespaceColumn: true });
@@ -790,6 +826,15 @@ describe('NsViewCustom', () => {
 
     const generatedKey = gridProps.keyExtractor(
       {
+        ref: {
+          clusterId: 'alpha:ctx',
+          group: 'batch',
+          version: 'v1',
+          kind: 'CronJob',
+          resource: 'cronjobs',
+          namespace: 'tools',
+          name: 'svc',
+        },
         kind: 'CronJob',
         name: 'svc',
         namespace: 'tools',

@@ -13,6 +13,7 @@ import { act } from 'react';
 import * as ReactDOM from 'react-dom/client';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import type { SortConfig, UseTableSortOptions } from '@/hooks/useTableSort';
+import { makeResourceRef } from '@/test-utils/makeResourceRef';
 import { requireReactElement } from '@/test-utils/requireReactElement';
 import { requireValue } from '@/test-utils/requireValue';
 
@@ -255,6 +256,13 @@ describe('NsViewEvents', () => {
   });
 
   const baseEvent = (overrides: Partial<EventData> = {}): EventData => ({
+    ref: makeResourceRef({
+      kind: 'Event',
+      resource: 'events',
+      namespace: 'team-a',
+      name: 'api.123',
+      uid: 'event-uid',
+    }),
     kind: 'Event',
     name: 'api.123',
     uid: 'event-uid',

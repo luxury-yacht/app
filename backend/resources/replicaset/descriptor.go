@@ -15,4 +15,5 @@ var Descriptor = kindspec.Descriptor{
 	Binding:         &DetailBinding,
 	Graph:           kindspec.ObjectMapGraph{ScalableWorkload: true},
 	Workload:        &kindspec.WorkloadOperations{Scale: workloadScale, CurrentReplicas: workloadCurrentReplicas},
+	Actions:         kindspec.ObjectActions{Aliases: []string{"replicaset"}},
 }

@@ -652,6 +652,7 @@ func (b *NamespaceWorkloadsBuilder) buildDeploymentSummary(
 	model := deployment.BuildResourceModel(clusterID, deploy)
 
 	return WorkloadSummary{
+		Ref:                  model.Ref,
 		Kind:                 deployment.Identity.Kind,
 		Name:                 deploy.Name,
 		Namespace:            deploy.Namespace,
@@ -698,6 +699,7 @@ func (b *NamespaceWorkloadsBuilder) buildStatefulSetSummary(
 	model := statefulset.BuildResourceModel(clusterID, stateful)
 
 	return WorkloadSummary{
+		Ref:                  model.Ref,
 		Kind:                 statefulset.Identity.Kind,
 		Name:                 stateful.Name,
 		Namespace:            stateful.Namespace,
@@ -742,6 +744,7 @@ func (b *NamespaceWorkloadsBuilder) buildDaemonSetSummary(
 	model := daemonset.BuildResourceModel(clusterID, daemon)
 
 	return WorkloadSummary{
+		Ref:                  model.Ref,
 		Kind:                 daemonset.Identity.Kind,
 		Name:                 daemon.Name,
 		Namespace:            daemon.Namespace,
@@ -786,6 +789,7 @@ func (b *NamespaceWorkloadsBuilder) buildJobSummary(
 	model := jobres.BuildResourceModel(clusterID, job)
 
 	return WorkloadSummary{
+		Ref:                  model.Ref,
 		Kind:                 jobres.Identity.Kind,
 		Name:                 job.Name,
 		Namespace:            job.Namespace,
@@ -826,6 +830,7 @@ func (b *NamespaceWorkloadsBuilder) buildCronJobSummary(
 	model := cronjob.BuildResourceModel(clusterID, cron)
 
 	return WorkloadSummary{
+		Ref:                  model.Ref,
 		Kind:                 cronjob.Identity.Kind,
 		Name:                 cron.Name,
 		Namespace:            cron.Namespace,
@@ -865,6 +870,7 @@ func (b *NamespaceWorkloadsBuilder) buildCronJobSummary(
 func buildStandalonePodSummaryFromRows(podSummary streamrows.PodSummary, agg streamrows.PodAggregate, usage map[string]metrics.PodUsage) WorkloadSummary {
 	sample := usage[fmt.Sprintf("%s/%s", agg.Namespace, agg.Name)]
 	return WorkloadSummary{
+		Ref:                  podSummary.Ref,
 		Kind:                 podres.Identity.Kind,
 		Name:                 podSummary.Name,
 		Namespace:            podSummary.Namespace,

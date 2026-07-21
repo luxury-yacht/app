@@ -9,6 +9,7 @@ import { getTextContent } from '@shared/components/tables/GridTable.utils';
 import React, { act } from 'react';
 import * as ReactDOM from 'react-dom/client';
 import { describe, expect, it, vi } from 'vitest';
+import { makeResourceRef } from '@/test-utils/makeResourceRef';
 import { requireReactElement } from '@/test-utils/requireReactElement';
 import { requireValue } from '@/test-utils/requireValue';
 
@@ -57,6 +58,14 @@ const renderHook = <T,>(hook: () => T) => {
 
 describe('useWorkloadTableColumns', () => {
   const workload: WorkloadData = {
+    ref: makeResourceRef({
+      clusterId: 'cluster-a',
+      group: 'apps',
+      kind: 'Deployment',
+      resource: 'deployments',
+      namespace: 'team-a',
+      name: 'api',
+    }),
     clusterId: 'cluster-a',
     kind: 'Deployment',
     name: 'api',

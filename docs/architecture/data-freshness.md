@@ -149,11 +149,12 @@ The authored domain contract declares which clocks can change a payload:
   error state clears that scope's dedupe so a later failure can notify again.
 - Loading gates may block invalid early reads, but must still allow the request
   that advances the cluster to ready.
-- After foreground governor reconciliation, the backend replays that cluster's
-  current authoritative lifecycle state even when no transition occurred. The
-  frontend relay applies it to both React lifecycle consumers and refresh
-  readiness consumers so a missed earlier event cannot leave the tab behind the
-  serving gate.
+- After foreground governor reconciliation, the backend returns the current
+  authoritative cluster-workspace snapshot even when no lifecycle transition
+  occurred. The frontend workspace store applies lifecycle to React selectors
+  and the refresh-readiness boundary, so a missed earlier event cannot leave the
+  tab behind the serving gate. Runtime lifecycle events that arrive before
+  hydration take precedence over that older snapshot.
 - Startup settings restore, saved-selection restore, and client initialization
   use the same serialized selection-mutation boundary as runtime selection
   changes. Each completed cluster client is published independently; one slow

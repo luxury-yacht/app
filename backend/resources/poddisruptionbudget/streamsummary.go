@@ -19,7 +19,7 @@ func BuildStreamSummary(meta streamrows.ClusterMeta, pdb *policyv1.PodDisruption
 		return streamrows.QuotaSummary{ClusterMeta: meta, Kind: "PodDisruptionBudget"}
 	}
 	facts := BuildFacts(meta.ClusterID, pdb)
-	summary := streamrows.NewQuotaSummary(meta, pdb, "PodDisruptionBudget", DescribeSummary(facts))
+	summary := streamrows.NewQuotaSummary(meta, Identity, pdb, DescribeSummary(facts))
 	summary.Status = &streamrows.QuotaStatus{
 		DisruptionsAllowed: facts.AllowedDisruptions,
 		CurrentHealthy:     facts.CurrentHealthy,

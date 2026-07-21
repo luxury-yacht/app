@@ -47,6 +47,8 @@ import {capabilities} from '../models';
 
 export function AddFavorite(arg1:backend.Favorite):Promise<backend.Favorite>;
 
+export function ApplyClusterWorkspace(arg1:backend.ClusterWorkspaceCommand):Promise<backend.ClusterWorkspaceResult>;
+
 export function ApplyObjectYaml(arg1:string,arg2:backend.ObjectYAMLMutationRequest):Promise<backend.ObjectYAMLMutationResponse>;
 
 export function ApplyTheme(arg1:string):Promise<void>;
@@ -124,6 +126,8 @@ export function GetClusterRoleBinding(arg1:string,arg2:string):Promise<clusterro
 export function GetClusterShellSessionCount(arg1:string):Promise<number>;
 
 export function GetClusterTabOrder():Promise<Array<string>>;
+
+export function GetClusterWorkspaceState():Promise<backend.ClusterWorkspaceState>;
 
 export function GetConfigMap(arg1:string,arg2:string,arg3:string):Promise<configmap.ConfigMapDetails>;
 

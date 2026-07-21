@@ -10,28 +10,10 @@ import {
 } from '@modules/resource-grid/AggregatedResourceGridView';
 import * as cf from '@shared/components/tables/columnFactories';
 import React from 'react';
-import type { ClusterCRDSnapshotPayload } from '@/core/refresh/types';
+import type { ClusterCRDEntry, ClusterCRDSnapshotPayload } from '@/core/refresh/types';
 import { getDisplayKind } from '@/utils/kindAliasMap';
 
-// Define the data structure for Custom Resource Definitions
-interface CRDsData {
-  kind: string;
-  kindAlias?: string;
-  name: string;
-  clusterId: string;
-  clusterName?: string;
-  group: string;
-  scope: string;
-  /**
-   * Storage version name (the version etcd persists). Rendered in the
-   * Version column. Threaded from the backend's
-   * ClusterCRDEntry.storageVersion.
-   */
-  storageVersion?: string;
-  /** Count of additional served versions beyond the storage version. */
-  extraServedVersionCount?: number;
-  age?: string;
-}
+type CRDsData = ClusterCRDEntry & { kindAlias?: string };
 
 /**
  * Format the CRD's version cell. Single-version CRDs show just the
@@ -61,12 +43,6 @@ const crdsSpec: AggregatedResourceGridViewSpec<CRDsData> = {
   spinnerMessage: 'Loading CRDs...',
   tableClassName: 'gridtable-crds',
   filterOptions: () => ({ isNamespaceScoped: false }),
-  getIdentity: (crd) => ({
-    kind: 'CustomResourceDefinition',
-    name: crd.name,
-    clusterId: crd.clusterId,
-    clusterName: crd.clusterName ?? undefined,
-  }),
   buildColumns: ({ identity, useShortResourceNames }) => [
     cf.createKindColumn<CRDsData>({
       key: 'kind',

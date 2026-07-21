@@ -36,7 +36,7 @@ import { useNavigateToView } from '@shared/hooks/useNavigateToView';
 import { useObjectActionController } from '@shared/hooks/useObjectActionController';
 import { buildRequiredObjectReference } from '@shared/utils/objectIdentity';
 import { useCallback, useMemo } from 'react';
-import type { RefreshDomain } from '@/core/refresh/types';
+import type { RefreshDomain, ResourceRef } from '@/core/refresh/types';
 import { useShortNames } from '@/hooks/useShortNames';
 import type { NamespaceViewType } from '@/types/navigation/views';
 import type { KubernetesObjectReference } from '@/types/view-state';
@@ -44,6 +44,7 @@ import { resolveEmptyStateMessage } from '@/utils/emptyState';
 
 /** The row fields the shared skeleton itself reads. */
 export interface AggregatedRowBase {
+  ref: ResourceRef;
   name: string;
   namespace?: string;
   clusterId?: string;
@@ -93,11 +94,11 @@ export interface AggregatedResourceGridViewSpec<D extends AggregatedRowBase> {
   filterOptions?: (ctx: { allNamespaces: boolean }) => { isNamespaceScoped: boolean };
   /** Diagnostics mode override for ResourceInventoryTable. */
   diagnosticsMode?: 'live';
-  /** Maps a row to its object identity (kind fallbacks live here). */
-  getIdentity: (row: D) => ResourceGridObjectIdentityInput;
   /** Builds the full column list (lead kind/name, middle, age). */
   buildColumns: (helpers: AggregatedColumnHelpers<D>) => GridColumnDefinition<D>[];
 }
+
+const getAggregatedRowRef = <D extends AggregatedRowBase>(row: D): ResourceRef => row.ref;
 
 /**
  * useAggregatedGridCore wires the scope-independent machinery: row identity,
@@ -114,7 +115,7 @@ function useAggregatedGridCore<D extends AggregatedRowBase>(
 
   const identity = useResourceGridObjectIdentity<D>({
     fallbackClusterId: selectedClusterId,
-    getObject: spec.getIdentity,
+    getObject: getAggregatedRowRef,
     openWithObject,
     navigateToView,
   });

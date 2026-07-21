@@ -11,18 +11,10 @@ import {
 } from '@modules/resource-grid/AggregatedResourceGridView';
 import * as cf from '@shared/components/tables/columnFactories';
 import React from 'react';
-import type { ClusterConfigSnapshotPayload } from '@/core/refresh/types';
+import type { ClusterConfigEntry, ClusterConfigSnapshotPayload } from '@/core/refresh/types';
 import { getDisplayKind } from '@/utils/kindAliasMap';
 
-// Define the data structure for configuration resources
-interface ConfigData {
-  kind: string;
-  kindAlias?: string;
-  name: string;
-  clusterId: string;
-  clusterName?: string;
-  age?: string;
-}
+type ConfigData = ClusterConfigEntry & { kindAlias?: string };
 
 // Define props for ConfigViewGrid component
 interface ConfigViewProps {
@@ -37,12 +29,6 @@ const configSpec: AggregatedResourceGridViewSpec<ConfigData> = {
   spinnerMessage: 'Loading configuration resources...',
   tableClassName: 'gridtable-config',
   showKindDropdown: true,
-  getIdentity: (resource) => ({
-    kind: resource.kind,
-    name: resource.name,
-    clusterId: resource.clusterId ?? undefined,
-    clusterName: resource.clusterName ?? undefined,
-  }),
   buildColumns: ({ identity, useShortResourceNames }) => [
     cf.createKindColumn<ConfigData>({
       key: 'kind',

@@ -15,6 +15,7 @@ import * as ReactDOM from 'react-dom/client';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import type { ClusterNodeRow } from '@/core/refresh/types';
 import type { SortConfig, UseTableSortOptions } from '@/hooks/useTableSort';
+import { makeResourceRef } from '@/test-utils/makeResourceRef';
 import { requireReactElement } from '@/test-utils/requireReactElement';
 import { requireValue } from '@/test-utils/requireValue';
 
@@ -213,6 +214,7 @@ vi.mock('@/hooks/useShortNames', () => ({
 }));
 
 const baseNode: ClusterNodeRow = {
+  ref: makeResourceRef({ kind: 'Node', resource: 'nodes', name: 'node-1' }),
   name: 'node-1',
   status: 'Ready',
   roles: 'worker',

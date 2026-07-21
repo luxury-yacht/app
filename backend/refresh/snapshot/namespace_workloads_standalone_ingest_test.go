@@ -97,6 +97,7 @@ func TestBuildStandalonePodSummaryFromRows(t *testing.T) {
 			// normalize them so the remaining fields compare exactly.
 			tc.want.Age = got.Age
 			tc.want.AgeTimestamp = got.AgeTimestamp
+			tc.want.Ref = podSummary.Ref
 			if got != tc.want {
 				t.Fatalf("standalone WorkloadSummary mismatch:\n got=%#v\nwant=%#v", got, tc.want)
 			}

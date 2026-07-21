@@ -50,6 +50,7 @@ func projectNamespaceEventSummary(meta ClusterMeta, event *corev1.Event) (EventS
 	timestamp := eventres.EventTimestamp(event).Time
 	return EventSummary{
 		ClusterMeta:      meta,
+		Ref:              eventres.BuildResourceModel(meta.ClusterID, event).Ref,
 		Kind:             event.InvolvedObject.Kind,
 		Name:             event.Name,
 		UID:              string(event.UID),
@@ -105,6 +106,7 @@ func namespaceEventsQuerypageSchema() querypage.Schema[EventSummary] {
 // EventSummary captures the essential event fields for display.
 type EventSummary struct {
 	ClusterMeta
+	Ref              resourcemodel.ResourceRef   `json:"ref"`
 	Kind             string                      `json:"kind"`
 	Name             string                      `json:"name"`
 	UID              string                      `json:"uid"`

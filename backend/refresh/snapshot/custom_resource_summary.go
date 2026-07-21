@@ -8,6 +8,7 @@ import "github.com/luxury-yacht/app/backend/resourcemodel"
 // production Custom tabs to subscribe to full CRD fanout domains.
 type CustomResourceSummary struct {
 	ClusterMeta
+	Ref                resourcemodel.ResourceRef      `json:"ref"`
 	Kind               string                         `json:"kind"`
 	Name               string                         `json:"name"`
 	Namespace          string                         `json:"namespace,omitempty"`
@@ -28,6 +29,7 @@ type CustomResourceSummary struct {
 func CustomResourceSummaryFromNamespace(row NamespaceCustomSummary) CustomResourceSummary {
 	return CustomResourceSummary{
 		ClusterMeta:        row.ClusterMeta,
+		Ref:                row.Ref,
 		Kind:               row.Kind,
 		Name:               row.Name,
 		Namespace:          row.Namespace,
@@ -49,6 +51,7 @@ func CustomResourceSummaryFromNamespace(row NamespaceCustomSummary) CustomResour
 func CustomResourceSummaryFromCluster(row ClusterCustomSummary) CustomResourceSummary {
 	return CustomResourceSummary{
 		ClusterMeta:        row.ClusterMeta,
+		Ref:                row.Ref,
 		Kind:               row.Kind,
 		Name:               row.Name,
 		Group:              row.Group,

@@ -11,41 +11,10 @@ import {
 } from '@modules/resource-grid/AggregatedResourceGridView';
 import * as cf from '@shared/components/tables/columnFactories';
 import React from 'react';
-import type { NamespaceRBACSnapshotPayload } from '@/core/refresh/types';
+import type { NamespaceRBACSnapshotPayload, NamespaceRBACSummary } from '@/core/refresh/types';
 import { getDisplayKind } from '@/utils/kindAliasMap';
 
-// Data interface for RBAC resources
-export interface RBACData {
-  kind: string;
-  kindAlias?: string;
-  name: string;
-  namespace: string;
-  clusterId: string;
-  clusterName?: string;
-  // Role-specific fields
-  rulesCount?: number;
-  rules?: Array<{
-    verbs?: string[];
-    resources?: string[];
-    apiGroups?: string[];
-  }>;
-  // RoleBinding-specific fields
-  roleRef?: {
-    kind?: string;
-    name: string;
-  };
-  subjects?: Array<{
-    kind: string;
-    name: string;
-    namespace?: string;
-  }>;
-  // ServiceAccount-specific fields
-  secrets?: Array<{ name: string }>;
-  automountServiceAccountToken?: boolean;
-  roleBindings?: unknown[];
-  labels?: Record<string, string>;
-  age?: string;
-}
+export type RBACData = NamespaceRBACSummary & { kindAlias?: string };
 
 interface RBACViewProps {
   namespace: string;
@@ -65,13 +34,6 @@ const rbacSpec: AggregatedResourceGridViewSpec<RBACData> = {
   defaultSort: { key: 'name', direction: 'asc' },
   showKindDropdown: true,
   namespaceLinkTab: 'rbac',
-  getIdentity: (resource) => ({
-    kind: resource.kind || resource.kindAlias,
-    name: resource.name,
-    namespace: resource.namespace,
-    clusterId: resource.clusterId,
-    clusterName: resource.clusterName ?? undefined,
-  }),
   buildColumns: ({ identity, useShortResourceNames }) => [
     cf.createKindColumn<RBACData>({
       key: 'kind',

@@ -40,6 +40,7 @@ func buildNodeOwnSummary(meta ClusterMeta, node *corev1.Node) streamrows.NodeSum
 	}
 	summary := streamrows.NodeSummary{
 		ClusterMeta:        meta,
+		Ref:                model.Ref,
 		Name:               node.Name,
 		Status:             model.Status.Label,
 		StatusState:        model.Status.State,

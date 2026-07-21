@@ -83,13 +83,7 @@ export const WorkloadsTable: React.FC<WorkloadsTableProps> = React.memo(
       (workload: WorkloadData) => {
         openWithObject(
           buildRequiredObjectReference(
-            {
-              kind: workload.kind,
-              name: workload.name,
-              namespace: workload.namespace,
-              clusterId: workload.clusterId,
-              clusterName: workload.clusterName ?? undefined,
-            },
+            { ...workload.ref, clusterName: workload.clusterName },
             { fallbackClusterId: queryClusterId }
           )
         );
@@ -101,13 +95,7 @@ export const WorkloadsTable: React.FC<WorkloadsTableProps> = React.memo(
       (workload: WorkloadData) => {
         navigateToView(
           buildRequiredObjectReference(
-            {
-              kind: workload.kind,
-              name: workload.name,
-              namespace: workload.namespace,
-              clusterId: workload.clusterId,
-              clusterName: workload.clusterName ?? undefined,
-            },
+            { ...workload.ref, clusterName: workload.clusterName },
             { fallbackClusterId: queryClusterId }
           )
         );
@@ -117,56 +105,13 @@ export const WorkloadsTable: React.FC<WorkloadsTableProps> = React.memo(
 
     const objectActions = useObjectActionController({
       context: 'gridtable',
-      onOpen: (object) => {
-        openWithObject(
-          buildRequiredObjectReference(
-            {
-              kind: object.kind,
-              name: object.name,
-              namespace: object.namespace,
-              clusterId: object.clusterId,
-              clusterName: object.clusterName,
-              group: object.group,
-              version: object.version,
-              resource: object.resource,
-              uid: object.uid,
-            },
-            { fallbackClusterId: queryClusterId }
-          )
-        );
-      },
-      onOpenObjectMap: (object) => {
-        openWithObject(
-          buildRequiredObjectReference(
-            {
-              kind: object.kind,
-              name: object.name,
-              namespace: object.namespace,
-              clusterId: object.clusterId,
-              clusterName: object.clusterName,
-              group: object.group,
-              version: object.version,
-              resource: object.resource,
-              uid: object.uid,
-            },
-            { fallbackClusterId: queryClusterId }
-          ),
-          { initialTab: 'map' }
-        );
-      },
+      onOpen: openWithObject,
+      onOpenObjectMap: (object) => openWithObject(object, { initialTab: 'map' }),
     });
 
     const keyExtractor = useCallback(
       (row: WorkloadData) =>
-        buildRequiredCanonicalObjectRowKey(
-          {
-            kind: row.kind,
-            name: row.name,
-            namespace: row.namespace,
-            clusterId: row.clusterId,
-          },
-          { fallbackClusterId: queryClusterId }
-        ),
+        buildRequiredCanonicalObjectRowKey(row.ref, { fallbackClusterId: queryClusterId }),
       [queryClusterId]
     );
 
@@ -344,13 +289,7 @@ const ScopedWorkloadsView: React.FC<ScopedWorkloadsViewProps> = ({
   const handleWorkloadSelect = useCallback(
     (workload: WorkloadData) => {
       const ref = buildRequiredObjectReference(
-        {
-          clusterId: workload.clusterId,
-          clusterName: workload.clusterName,
-          kind: workload.kind,
-          namespace: workload.namespace,
-          name: workload.name,
-        },
+        { ...workload.ref, clusterName: workload.clusterName },
         { fallbackClusterId: selectedClusterId }
       );
       setSelectedWorkload(ref);

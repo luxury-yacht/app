@@ -54,6 +54,7 @@ func buildPodRow(meta streamrows.ClusterMeta, pod *corev1.Pod, cpuUsageMilli, me
 	cpuReq, cpuLim, memReq, memLim := computeResourceTotals(pod)
 	return streamrows.PodSummary{
 		ClusterMeta:           meta,
+		Ref:                   model.Ref,
 		Name:                  pod.Name,
 		Namespace:             pod.Namespace,
 		Node:                  pod.Spec.NodeName,

@@ -3,10 +3,29 @@ package pods
 import (
 	"testing"
 
+	"github.com/luxury-yacht/app/backend/kind/streamrows"
 	"github.com/stretchr/testify/require"
 	corev1 "k8s.io/api/core/v1"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 )
+
+func TestBuildStreamSummaryCarriesCanonicalResourceRef(t *testing.T) {
+	pod := &corev1.Pod{ObjectMeta: metav1.ObjectMeta{
+		Name:      "api-0",
+		Namespace: "team-a",
+		UID:       "pod-uid",
+	}}
+
+	row := BuildStreamSummaryFromRSMap(
+		streamrows.ClusterMeta{ClusterID: "cluster-a", ClusterName: "alpha"},
+		pod,
+		0,
+		0,
+		nil,
+	)
+
+	require.Equal(t, BuildResourceModel("cluster-a", pod).Ref, row.Ref)
+}
 
 // TestResolvePodOwnerThreadsCRDOwnerAPIVersion guards that the controlling
 // owner's apiVersion is threaded through (CRD owners), that the

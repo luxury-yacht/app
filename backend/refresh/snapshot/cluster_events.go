@@ -70,6 +70,7 @@ func projectClusterEventEntry(meta ClusterMeta, evt *corev1.Event) (ClusterEvent
 	}
 	return ClusterEventEntry{
 		ClusterMeta:      meta,
+		Ref:              eventres.BuildResourceModel(meta.ClusterID, evt).Ref,
 		Kind:             "Event",
 		Name:             evt.Name,
 		UID:              string(evt.UID),
@@ -126,6 +127,7 @@ func clusterEventsQuerypageSchema() querypage.Schema[ClusterEventEntry] {
 // ClusterEventEntry mirrors the fields consumed by the frontend grid.
 type ClusterEventEntry struct {
 	ClusterMeta
+	Ref              resourcemodel.ResourceRef   `json:"ref"`
 	Kind             string                      `json:"kind"`
 	Name             string                      `json:"name"`
 	UID              string                      `json:"uid"`

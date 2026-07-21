@@ -17,4 +17,5 @@ var Descriptor = kindspec.Descriptor{
 	Graph:           kindspec.ObjectMapGraph{ScalableWorkload: true},
 	Workload:        &kindspec.WorkloadOperations{Restart: workloadRestart, Scale: workloadScale, CurrentReplicas: workloadCurrentReplicas, RevisionHistory: revisionHistory, ApplyPodTemplate: applyPodTemplate},
 	PortForward:     &kindspec.PortForwardTarget{ResolvePod: ForwardPodName, Reconnect: true},
+	Actions:         kindspec.ObjectActions{Aliases: []string{"statefulset"}},
 }

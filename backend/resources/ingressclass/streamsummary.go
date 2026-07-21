@@ -18,5 +18,5 @@ func BuildStreamSummary(meta streamrows.ClusterMeta, ic *networkingv1.IngressCla
 		return streamrows.ClusterConfigEntry{ClusterMeta: meta, Kind: "IngressClass"}
 	}
 	facts := BuildFacts(ic)
-	return streamrows.NewClusterConfigEntry(meta, ic, "IngressClass", facts.Controller, facts.DefaultClass)
+	return streamrows.NewClusterConfigEntry(meta, Identity, ic, facts.Controller, facts.DefaultClass)
 }

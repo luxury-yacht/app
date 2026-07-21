@@ -1,9 +1,10 @@
 /**
  * frontend/src/modules/port-forward/targetCapabilities.ts
  *
- * Shared frontend capability table for Kubernetes resources that can be used
- * as port-forward targets.
+ * Port-forward view of the backend-generated object-action kind catalog.
  */
+
+import { lookupObjectActionKindCapability } from '@shared/actions/objectActionCapabilities';
 
 export interface PortForwardTargetCapability {
   kind: string;
@@ -19,48 +20,20 @@ export interface PortForwardTargetIdentity {
   version: string;
 }
 
-const PORT_FORWARD_TARGET_CAPABILITIES: Record<string, PortForwardTargetCapability> = {
-  Pod: {
-    kind: 'Pod',
-    group: '',
-    version: 'v1',
-    reconnect: false,
-    usesServicePortSpec: false,
-  },
-  Service: {
-    kind: 'Service',
-    group: '',
-    version: 'v1',
-    reconnect: true,
-    usesServicePortSpec: true,
-  },
-  Deployment: {
-    kind: 'Deployment',
-    group: 'apps',
-    version: 'v1',
-    reconnect: true,
-    usesServicePortSpec: false,
-  },
-  StatefulSet: {
-    kind: 'StatefulSet',
-    group: 'apps',
-    version: 'v1',
-    reconnect: true,
-    usesServicePortSpec: false,
-  },
-  DaemonSet: {
-    kind: 'DaemonSet',
-    group: 'apps',
-    version: 'v1',
-    reconnect: true,
-    usesServicePortSpec: false,
-  },
-};
-
 export function lookupPortForwardTargetCapability(
   kind: string
 ): PortForwardTargetCapability | null {
-  return PORT_FORWARD_TARGET_CAPABILITIES[kind] ?? null;
+  const capability = lookupObjectActionKindCapability(kind);
+  if (!capability?.portForward) {
+    return null;
+  }
+  return {
+    kind: capability.kind,
+    group: capability.group,
+    version: capability.version,
+    reconnect: capability.reconnect ?? false,
+    usesServicePortSpec: capability.usesServicePortSpec ?? false,
+  };
 }
 
 export function isPortForwardTargetGVKSupported(target: PortForwardTargetIdentity): boolean {

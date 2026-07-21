@@ -13,6 +13,7 @@ import { act } from 'react';
 import * as ReactDOM from 'react-dom/client';
 import { renderToStaticMarkup } from 'react-dom/server';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
+import { makeResourceRef } from '@/test-utils/makeResourceRef';
 import { requireReactElement } from '@/test-utils/requireReactElement';
 import { requireValue } from '@/test-utils/requireValue';
 
@@ -272,16 +273,37 @@ describe('NsViewNetwork', () => {
     container.remove();
   });
 
-  const baseNetwork = (overrides: Partial<NetworkData> = {}): NetworkData => ({
-    kind: 'Ingress',
-    kindAlias: 'Ingress',
-    name: 'web-gateway',
-    namespace: 'team-a',
-    clusterId: 'alpha:ctx',
-    details: 'Hosts: web.example.com',
-    age: '3h',
-    ...overrides,
-  });
+  const baseNetwork = (overrides: Partial<NetworkData> = {}): NetworkData => {
+    const row = {
+      kind: 'Ingress',
+      kindAlias: 'Ingress',
+      name: 'web-gateway',
+      namespace: 'team-a',
+      clusterId: 'alpha:ctx',
+      clusterName: 'alpha',
+      details: 'Hosts: web.example.com',
+      age: '3h',
+      ...overrides,
+    };
+    const identity =
+      row.kind === 'Service'
+        ? { group: '', resource: 'services' }
+        : row.kind === 'EndpointSlice'
+          ? { group: 'discovery.k8s.io', resource: 'endpointslices' }
+          : { group: 'networking.k8s.io', resource: 'ingresses' };
+    return {
+      ...row,
+      ref:
+        overrides.ref ??
+        makeResourceRef({
+          group: identity.group,
+          kind: row.kind,
+          resource: identity.resource,
+          namespace: row.namespace,
+          name: row.name,
+        }),
+    };
+  };
 
   const renderNetworkView = async (
     overrides: Partial<React.ComponentProps<typeof NsViewNetwork>> = {}

@@ -12,26 +12,10 @@ import {
 import * as cf from '@shared/components/tables/columnFactories';
 import { backendStatusTextClass } from '@shared/utils/backendStatusPresentation';
 import React from 'react';
-import type { ClusterStorageSnapshotPayload } from '@/core/refresh/types';
+import type { ClusterStorageEntry, ClusterStorageSnapshotPayload } from '@/core/refresh/types';
 import { getDisplayKind } from '@/utils/kindAliasMap';
 
-// Define the data structure for Persistent Volumes
-interface StorageData {
-  kind: string;
-  kindAlias?: string;
-  name: string;
-  clusterId: string;
-  clusterName?: string;
-  capacity: string;
-  accessModes: string;
-  status: string;
-  statusState?: string;
-  statusPresentation?: string;
-  statusReason?: string;
-  claim: string;
-  storageClass?: string;
-  age?: string;
-}
+type StorageData = ClusterStorageEntry & { kindAlias?: string };
 
 // Define props for StorageViewGrid component
 interface StorageViewProps {
@@ -56,12 +40,6 @@ const storageSpec: AggregatedResourceGridViewSpec<StorageData> = {
   emptyMessage: () => 'No cluster-scoped storage objects found',
   spinnerMessage: 'Loading storage resources...',
   tableClassName: 'gridtable-pvs',
-  getIdentity: (pv) => ({
-    kind: 'PersistentVolume',
-    name: pv.name,
-    clusterId: pv.clusterId ?? undefined,
-    clusterName: pv.clusterName ?? undefined,
-  }),
   buildColumns: ({ identity, openObject, navigateObject, useShortResourceNames }) => {
     const claimReference = (pv: StorageData) => {
       const target = getClaimTarget(pv);

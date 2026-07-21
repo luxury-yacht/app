@@ -166,6 +166,11 @@ type App struct {
 	transportStatesMu sync.RWMutex
 	transportStates   map[string]*transportFailureState
 
+	// clusterWorkspaceMu guards replayable health and namespace-scope state.
+	clusterWorkspaceMu    sync.RWMutex
+	clusterHealth         map[string]ClusterHealthState
+	clusterScopeRevisions map[string]uint64
+
 	listenLoopback func() (net.Listener, error)
 
 	kubeconfigWatcher *kubeconfigWatcher
@@ -191,6 +196,8 @@ func NewApp() *App {
 		portForwardSessions:      make(map[string]*portForwardSessionInternal),
 		runtimeOperations:        newRuntimeOperationRegistry(),
 		eventEmitter:             func(context.Context, string, ...interface{}) {},
+		clusterHealth:            make(map[string]ClusterHealthState),
+		clusterScopeRevisions:    make(map[string]uint64),
 	}
 	app.kubeClientInitializer = func() error {
 		return app.initKubernetesClient()

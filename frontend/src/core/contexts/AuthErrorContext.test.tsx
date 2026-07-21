@@ -30,6 +30,11 @@ import {
 vi.mock('@wailsjs/go/backend/App', () => ({
   RetryClusterAuth: vi.fn(),
   GetAllClusterAuthStates: vi.fn().mockResolvedValue(null),
+  GetClusterWorkspaceState: vi.fn().mockResolvedValue({
+    selectedKubeconfigs: [],
+    visibleClusterId: '',
+    clusters: {},
+  }),
 }));
 
 // Mock the eventBus so auth events don't propagate
@@ -82,18 +87,18 @@ describe('AuthErrorContext', () => {
   it('calls per-listener disposers on unmount instead of EventsOff', async () => {
     await renderProvider();
 
-    // Verify 4 event listeners were registered
+    // One workspace subscription owns all cluster-state event listeners.
     expect(runtimeHarness.listenerCount('cluster:auth:failed')).toBe(1);
     expect(runtimeHarness.listenerCount('cluster:auth:recovering')).toBe(1);
     expect(runtimeHarness.listenerCount('cluster:auth:recovered')).toBe(1);
     expect(runtimeHarness.listenerCount('cluster:auth:progress')).toBe(1);
 
-    // Unmount — should call all 4 disposers
+    // Unmount disposes the workspace subscription.
     act(() => {
       root.unmount();
     });
 
-    expect(runtimeHarness.disposerCalls).toHaveLength(4);
+    expect(runtimeHarness.disposerCalls).toHaveLength(8);
     expect(runtimeHarness.disposerCalls).toContain('cluster:auth:failed');
     expect(runtimeHarness.disposerCalls).toContain('cluster:auth:recovering');
     expect(runtimeHarness.disposerCalls).toContain('cluster:auth:recovered');

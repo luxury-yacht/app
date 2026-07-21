@@ -22,12 +22,14 @@ const {
   getSelectedKubeconfigsMock,
   setSelectedKubeconfigsMock,
   setVisibleClusterMock,
+  workspaceState,
   mocks,
 } = vi.hoisted(() => ({
   getKubeconfigsMock: vi.fn(),
   getSelectedKubeconfigsMock: vi.fn(),
   setSelectedKubeconfigsMock: vi.fn(),
   setVisibleClusterMock: vi.fn(),
+  workspaceState: { selections: [] as string[], visibleClusterId: '' },
   mocks: {
     refreshOrchestrator: {
       updateContext: vi.fn(),
@@ -38,9 +40,36 @@ const {
 
 vi.mock('@wailsjs/go/backend/App', () => ({
   GetKubeconfigs: () => getKubeconfigsMock(),
-  GetSelectedKubeconfigs: () => getSelectedKubeconfigsMock(),
-  SetSelectedKubeconfigs: (configs: string[]) => setSelectedKubeconfigsMock(configs),
-  SetVisibleCluster: (clusterId: string) => setVisibleClusterMock(clusterId),
+  GetClusterWorkspaceState: async () => {
+    workspaceState.selections = [...((await getSelectedKubeconfigsMock()) || [])];
+    return {
+      selectedKubeconfigs: workspaceState.selections,
+      visibleClusterId: workspaceState.visibleClusterId,
+      clusters: {},
+    };
+  },
+  ApplyClusterWorkspace: async (command: {
+    selectedKubeconfigs: string[];
+    updateSelectedKubeconfigs: boolean;
+    visibleClusterId: string;
+  }) => {
+    if (command.updateSelectedKubeconfigs) {
+      await setSelectedKubeconfigsMock(command.selectedKubeconfigs);
+      workspaceState.selections = [...command.selectedKubeconfigs];
+    }
+    if (command.visibleClusterId) {
+      await setVisibleClusterMock(command.visibleClusterId);
+      workspaceState.visibleClusterId = command.visibleClusterId;
+    }
+    return {
+      state: {
+        selectedKubeconfigs: workspaceState.selections,
+        visibleClusterId: workspaceState.visibleClusterId,
+        clusters: {},
+      },
+      error: '',
+    };
+  },
 }));
 
 vi.mock('@/core/refresh', () => ({
@@ -106,6 +135,8 @@ describe('KubeconfigContext', () => {
     setSelectedKubeconfigsMock.mockResolvedValue(undefined);
     setVisibleClusterMock.mockReset();
     setVisibleClusterMock.mockResolvedValue(undefined);
+    workspaceState.selections = [];
+    workspaceState.visibleClusterId = '';
     mocks.backgroundRefreshState.enabled = true;
     clusterReadiness.resetForTests();
     resetClusterTabOrderCacheForTesting();

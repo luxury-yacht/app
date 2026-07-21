@@ -12,8 +12,21 @@ import { act } from 'react';
 import * as ReactDOM from 'react-dom/client';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import type { UseTableSortOptions } from '@/hooks/useTableSort';
+import { makeResourceRef } from '@/test-utils/makeResourceRef';
 import { requireReactElement } from '@/test-utils/requireReactElement';
 import { requireValue } from '@/test-utils/requireValue';
+
+const makeWorkloadRef = (kind: string, name: string, namespace: string, clusterId: string) => {
+  const batch = kind === 'CronJob' || kind === 'Job';
+  return makeResourceRef({
+    clusterId,
+    group: batch ? 'batch' : 'apps',
+    kind,
+    resource: `${kind.toLowerCase()}s`,
+    namespace,
+    name,
+  });
+};
 
 type CapturedGridTableProps = GridTableProps<WorkloadData> & {
   getCustomContextMenuItems: NonNullable<GridTableProps<WorkloadData>['getCustomContextMenuItems']>;
@@ -311,6 +324,7 @@ describe('NsViewWorkloads', () => {
 
   it('selects a workload row by populating the Pods table filters without opening the object', async () => {
     const workload: WorkloadData = {
+      ref: makeWorkloadRef('Deployment', 'api', 'team-a', 'path:context'),
       kind: 'Deployment',
       name: 'api',
       namespace: 'team-a',
@@ -416,6 +430,7 @@ describe('NsViewWorkloads', () => {
 
   it('clears a workload-owned Pods filter when the namespace scope changes', async () => {
     const workload: WorkloadData = {
+      ref: makeWorkloadRef('Deployment', 'api', 'team-a', 'path:context'),
       kind: 'Deployment',
       name: 'api',
       namespace: 'team-a',
@@ -850,6 +865,7 @@ describe('NsViewWorkloads', () => {
 
   it('passes rowIdentity into useTableSort for workload reuse', async () => {
     const workload: WorkloadData = {
+      ref: makeWorkloadRef('Deployment', 'api', 'team-a', 'alpha:ctx'),
       kind: 'Deployment',
       name: 'api',
       namespace: 'team-a',
@@ -872,6 +888,7 @@ describe('NsViewWorkloads', () => {
 
   it('passes numeric Ready, CPU, and memory sort values into useTableSort', async () => {
     const workload: WorkloadData = {
+      ref: makeWorkloadRef('Deployment', 'api', 'team-a', 'alpha:ctx'),
       kind: 'Deployment',
       name: 'api',
       namespace: 'team-a',
@@ -908,6 +925,7 @@ describe('NsViewWorkloads', () => {
 
   it('routes workload clicks through the object panel with cluster metadata', async () => {
     const workload = {
+      ref: makeWorkloadRef('Deployment', 'api', 'team-a', 'alpha:ctx'),
       kind: 'Deployment',
       name: 'api',
       namespace: 'team-a',
@@ -1017,6 +1035,7 @@ describe('NsViewWorkloads', () => {
 
   describe('CronJob context menu', () => {
     const cronjob = {
+      ref: makeWorkloadRef('CronJob', 'backup', 'default', 'test:ctx'),
       kind: 'CronJob',
       name: 'backup',
       namespace: 'default',
@@ -1079,6 +1098,7 @@ describe('NsViewWorkloads', () => {
 
     it('does not include CronJob actions for Deployments', async () => {
       const deployment = {
+        ref: makeWorkloadRef('Deployment', 'api', 'default', 'test:ctx'),
         kind: 'Deployment',
         name: 'api',
         namespace: 'default',

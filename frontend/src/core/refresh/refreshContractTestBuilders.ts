@@ -11,8 +11,42 @@ import type {
   PodSnapshotEntry,
   PodSnapshotPayload,
   ResourceQueryCapabilities,
+  ResourceRef,
   TelemetrySummary,
 } from './types';
+
+const builtInRef = (
+  kind: string,
+  resource: string,
+  name: string,
+  namespace = '',
+  group = '',
+  clusterId = 'cluster-a'
+): ResourceRef => ({
+  clusterId,
+  group,
+  version: 'v1',
+  kind,
+  resource,
+  namespace,
+  name,
+  uid: '',
+});
+
+const workloadRef = (
+  kind: string,
+  name: string,
+  namespace: string,
+  clusterId?: string
+): ResourceRef => {
+  const identity =
+    kind === 'Job' || kind === 'CronJob'
+      ? { group: 'batch', resource: `${kind.toLowerCase()}s` }
+      : kind === 'Pod'
+        ? { group: '', resource: 'pods' }
+        : { group: 'apps', resource: `${kind.toLowerCase()}s` };
+  return builtInRef(kind, identity.resource, name, namespace, identity.group, clusterId);
+};
 
 const capabilities = (): ResourceQueryCapabilities => ({
   sortableFields: [],
@@ -132,6 +166,16 @@ export const makePodSnapshotEntry = (
   clusterName: 'Cluster A',
   namespace: 'default',
   name: 'pod-a',
+  ref:
+    overrides.ref ??
+    builtInRef(
+      'Pod',
+      'pods',
+      overrides.name ?? 'pod-a',
+      overrides.namespace ?? 'default',
+      '',
+      overrides.clusterId
+    ),
   node: 'node-a',
   status: 'Running',
   ready: '1/1',
@@ -155,6 +199,9 @@ export const makeClusterNodeSnapshotEntry = (
   clusterId: 'cluster-a',
   clusterName: 'Cluster A',
   name: 'node-a',
+  ref:
+    overrides.ref ??
+    builtInRef('Node', 'nodes', overrides.name ?? 'node-a', '', '', overrides.clusterId),
   status: 'Ready',
   roles: 'worker',
   age: '1d',
@@ -188,6 +235,14 @@ export const makeNamespaceWorkloadSummary = (
   kind: 'Deployment',
   name: 'api',
   namespace: 'default',
+  ref:
+    overrides.ref ??
+    workloadRef(
+      overrides.kind ?? 'Deployment',
+      overrides.name ?? 'api',
+      overrides.namespace ?? 'default',
+      overrides.clusterId
+    ),
   ready: '1/1',
   status: 'Ready',
   restarts: 0,

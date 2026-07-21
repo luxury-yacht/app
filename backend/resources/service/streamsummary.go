@@ -19,5 +19,5 @@ func BuildStreamSummary(meta streamrows.ClusterMeta, svc *corev1.Service, slices
 	if svc == nil {
 		return streamrows.NetworkSummary{ClusterMeta: meta, Kind: "Service"}
 	}
-	return streamrows.NewNetworkSummary(meta, svc, "Service", DescribeSummary(BuildFacts(svc, slices)))
+	return streamrows.NewNetworkSummary(meta, Identity, svc, DescribeSummary(BuildFacts(svc, slices)))
 }

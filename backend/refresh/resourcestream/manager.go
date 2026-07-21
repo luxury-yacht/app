@@ -609,12 +609,12 @@ func (m *Manager) handleCustomResource(obj interface{}, updateType MessageType, 
 		// for both the cluster-scoped and namespace-scoped paths.
 		crdName := info.gvr.Resource + "." + info.gvr.Group
 		if domain == domainClusterCustom {
-			row = customresource.BuildClusterStreamSummary(m.clusterMeta, resource, info.gvr.Group, info.gvr.Version, info.kind, crdName)
+			row = customresource.BuildClusterStreamSummary(m.clusterMeta, resource, info.gvr.Group, info.gvr.Version, info.gvr.Resource, info.kind, crdName)
 		} else {
 			// The streaming path has no parent scope concept — fall back
 			// to the resource's own namespace (which is almost always
 			// set for anything that reaches an informer).
-			row = customresource.BuildNamespaceStreamSummary(m.clusterMeta, resource, info.gvr.Group, info.gvr.Version, info.kind, crdName, resource.GetNamespace())
+			row = customresource.BuildNamespaceStreamSummary(m.clusterMeta, resource, info.gvr.Group, info.gvr.Version, info.gvr.Resource, info.kind, crdName, resource.GetNamespace())
 		}
 	}
 	update := m.newObjectRowUpdate(updateType, domain, resource, ref, row)

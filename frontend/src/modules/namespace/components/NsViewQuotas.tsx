@@ -11,34 +11,10 @@ import {
 } from '@modules/resource-grid/AggregatedResourceGridView';
 import * as cf from '@shared/components/tables/columnFactories';
 import React from 'react';
-import type { NamespaceQuotasSnapshotPayload } from '@/core/refresh/types';
+import type { NamespaceQuotaSummary, NamespaceQuotasSnapshotPayload } from '@/core/refresh/types';
 import { getDisplayKind } from '@/utils/kindAliasMap';
 
-// Data interface for quota resources (ResourceQuotas, LimitRanges, PodDisruptionBudgets)
-export interface QuotaData {
-  kind: string;
-  kindAlias?: string;
-  name: string;
-  namespace: string;
-  clusterId: string;
-  clusterName?: string;
-  details?: string;
-  hard?: Record<string, string | number>;
-  used?: Record<string, string | number>;
-  limits?: unknown;
-  // PDB values can be absolute numbers or percentage strings.
-  minAvailable?: string | number;
-  maxUnavailable?: string | number;
-  currentHealthy?: number;
-  desiredHealthy?: number;
-  status?: {
-    disruptionsAllowed?: number;
-    currentHealthy?: number;
-    desiredHealthy?: number;
-  };
-  scopes?: string[];
-  age?: string;
-}
+export type QuotaData = NamespaceQuotaSummary & { kindAlias?: string };
 
 interface QuotasViewProps {
   namespace: string;
@@ -58,13 +34,6 @@ const quotasSpec: AggregatedResourceGridViewSpec<QuotaData> = {
   defaultSort: { key: 'name', direction: 'asc' },
   showKindDropdown: true,
   namespaceLinkTab: 'quotas',
-  getIdentity: (resource) => ({
-    kind: resource.kind || resource.kindAlias,
-    name: resource.name,
-    namespace: resource.namespace,
-    clusterId: resource.clusterId,
-    clusterName: resource.clusterName ?? undefined,
-  }),
   // Keep the quotas table focused on core identity fields.
   buildColumns: ({ identity, useShortResourceNames }) => [
     cf.createKindColumn<QuotaData>({

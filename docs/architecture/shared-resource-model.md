@@ -56,6 +56,19 @@ when discovery, typed code, or the catalog supplies it.
 Synthetic app resources still need stable identity. Helm releases use
 `helm.sh/v3`, `HelmRelease`.
 
+Every concrete snapshot or stream row carries that identity in a backend-owned
+`ref`. Flat row fields such as `kind`, `name`, `namespace`, and `clusterId` are
+display, filtering, and compatibility projections; frontend table keys,
+navigation, panels, permissions, and actions consume `ref` instead of rebuilding
+identity from those fields. Shared row constructors use
+`streamrows.NewResourceRef`, while resource-specific snapshot projectors copy
+the `BuildResourceModel(...).Ref` produced by the owning kind package.
+
+An Event row has two distinct identities: `ref` identifies the Event resource,
+while `involvedObject` links to the resource the Event describes. Never replace
+one with the other. A Helm row uses its synthetic Helm release `ref` under the
+same rule.
+
 ### Frontend Reference Types
 
 Frontend object references form a ladder; carry the narrowest type the boundary
@@ -152,8 +165,10 @@ When changing resource semantics:
 3. Put durable resource semantics in typed facts.
 4. Keep raw, large, sensitive, or workflow-specific data out of shared facts.
 5. Project status and links across all affected surfaces.
-6. Remove duplicate status/link derivation from migrated frontend/backend paths.
-7. Add parity tests for DTO projections and relationship navigation.
+6. Put the canonical `ref` on every concrete row and consume it at frontend
+   identity boundaries; do not add another row-local GVK mapper.
+7. Remove duplicate status/link derivation from migrated frontend/backend paths.
+8. Add parity tests for DTO projections and relationship navigation.
 
 ## Validation
 

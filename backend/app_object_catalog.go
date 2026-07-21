@@ -18,6 +18,7 @@ import (
 	"github.com/luxury-yacht/app/backend/refresh/resourcestream"
 	"github.com/luxury-yacht/app/backend/refresh/snapshot"
 	"github.com/luxury-yacht/app/backend/refresh/telemetry"
+	"github.com/luxury-yacht/app/backend/resourcemodel"
 	"github.com/luxury-yacht/app/backend/resources/customresource"
 	apiextinformers "k8s.io/apiextensions-apiserver/pkg/client/informers/externalversions"
 	apierrors "k8s.io/apimachinery/pkg/api/errors"
@@ -756,6 +757,7 @@ func hydrateCatalogCustomRow(
 			obj,
 			row.Group,
 			row.Version,
+			row.Resource,
 			row.Kind,
 			crdName,
 			row.Namespace,
@@ -766,6 +768,7 @@ func hydrateCatalogCustomRow(
 		obj,
 		row.Group,
 		row.Version,
+		row.Resource,
 		row.Kind,
 		crdName,
 	)), true
@@ -778,6 +781,7 @@ func failedCatalogCustomHydrationSummary(meta snapshot.ClusterMeta, row snapshot
 	}
 	return snapshot.CustomResourceSummary{
 		ClusterMeta:        meta,
+		Ref:                resourcemodel.NewResourceRef(meta.ClusterID, row.Group, row.Version, row.Kind, row.Resource, row.Namespace, row.Name, ""),
 		Kind:               row.Kind,
 		Name:               row.Name,
 		Namespace:          row.Namespace,

@@ -91,6 +91,33 @@ describe('eventGridModel', () => {
     ).toBe('cluster-a|/v1/Event/prod/api.123');
   });
 
+  it('uses the canonical Event ref instead of rebuilding identity from display fields', () => {
+    const event = {
+      ref: {
+        clusterId: 'cluster-a',
+        group: '',
+        version: 'v1',
+        kind: 'Event',
+        resource: 'events',
+        namespace: 'events-ns',
+        name: 'canonical-event',
+        uid: 'event-uid',
+      },
+      clusterId: 'wrong-cluster',
+      namespace: 'wrong-namespace',
+      name: 'wrong-name',
+    };
+
+    expect(clusterEventRowIdentity(event)).toBe('cluster-a|/v1/Event/events-ns/canonical-event');
+    expect(namespaceEventRowIdentity(event, 'default')).toBe(
+      'cluster-a|/v1/Event/events-ns/canonical-event'
+    );
+    expect(eventGridObjectReference(event)).toEqual(expect.objectContaining(event.ref));
+    expect(eventGridActionReference(event, undefined, { action: 'open' })).toEqual(
+      expect.objectContaining({ ...event.ref, action: 'open' })
+    );
+  });
+
   it('carries cluster identity and fallback GVK into related-object inputs', () => {
     expect(
       eventGridRelatedObjectInput(

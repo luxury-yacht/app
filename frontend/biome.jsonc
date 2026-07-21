@@ -21,11 +21,15 @@
       "!!package-lock.json"
     ]
   },
-  // The generated refresh contract is rendered by Go and deliberately excluded from every Biome
-  // writer. All maintained frontend files share one deterministic formatting contract.
+  // Go-rendered contracts are deliberately excluded from every Biome writer. All maintained
+  // frontend files share one deterministic formatting contract.
   "formatter": {
     "enabled": true,
-    "includes": ["**", "!src/core/refresh/types.generated.ts"],
+    "includes": [
+      "**",
+      "!src/core/refresh/types.generated.ts",
+      "!src/shared/actions/objectActions.generated.ts"
+    ],
     "indentStyle": "space",
     "indentWidth": 2,
     "lineEnding": "lf",
@@ -35,7 +39,11 @@
   // generated-file boundary as the formatter.
   "assist": {
     "enabled": true,
-    "includes": ["**", "!src/core/refresh/types.generated.ts"],
+    "includes": [
+      "**",
+      "!src/core/refresh/types.generated.ts",
+      "!src/shared/actions/objectActions.generated.ts"
+    ],
     "actions": {
       "preset": "recommended"
     }
@@ -44,7 +52,11 @@
   // explicitly, including additional rules beyond that preset.
   "linter": {
     "enabled": true,
-    "includes": ["**", "!src/core/refresh/types.generated.ts"],
+    "includes": [
+      "**",
+      "!src/core/refresh/types.generated.ts",
+      "!src/shared/actions/objectActions.generated.ts"
+    ],
     "rules": {
       "preset": "recommended",
       // Interactive UI must expose equivalent semantics to pointer, keyboard, and assistive

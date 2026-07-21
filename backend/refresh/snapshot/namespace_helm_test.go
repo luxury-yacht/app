@@ -20,6 +20,7 @@ import (
 	releasetime "helm.sh/helm/v3/pkg/time"
 
 	"github.com/luxury-yacht/app/backend/internal/config"
+	"github.com/luxury-yacht/app/backend/resourcemodel"
 	"github.com/luxury-yacht/app/backend/testsupport"
 )
 
@@ -137,6 +138,18 @@ func TestNamespaceHelmBuilder(t *testing.T) {
 	require.Equal(t, "Deployed successfully", entry.Description)
 	require.NotEmpty(t, entry.Age)
 	require.NotEmpty(t, entry.Updated)
+}
+
+func TestMapHelmReleasesCarriesCanonicalRef(t *testing.T) {
+	releases := []*release.Release{
+		newHelmRelease("app", "default", 2, release.StatusDeployed, time.Now()),
+	}
+	rows, _ := mapHelmReleases(releases, "default", ClusterMeta{ClusterID: "cluster-a"})
+	require.Len(t, rows, 1)
+	require.Equal(t, resourcemodel.ResourceRef{
+		ClusterID: "cluster-a", Group: "helm.sh", Version: "v3", Kind: "HelmRelease",
+		Resource: "releases", Namespace: "default", Name: "app",
+	}, rows[0].Ref)
 }
 
 func TestNamespaceHelmBuilderAllNamespaces(t *testing.T) {

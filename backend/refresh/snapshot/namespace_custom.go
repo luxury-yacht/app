@@ -229,6 +229,7 @@ func (b *NamespaceCustomBuilder) Build(ctx context.Context, scope string) (*refr
 					item,
 					gvr.Group,
 					gvr.Version,
+					gvr.Resource,
 					crdCopy.Spec.Names.Kind,
 					crdCopy.Name,
 					parsedScope.Namespace,

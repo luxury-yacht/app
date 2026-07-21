@@ -11,20 +11,13 @@ import {
 } from '@modules/resource-grid/AggregatedResourceGridView';
 import * as cf from '@shared/components/tables/columnFactories';
 import React from 'react';
-import type { NamespaceNetworkSnapshotPayload } from '@/core/refresh/types';
+import type {
+  NamespaceNetworkSnapshotPayload,
+  NamespaceNetworkSummary,
+} from '@/core/refresh/types';
 import { getDisplayKind } from '@/utils/kindAliasMap';
 
-// Data interface for network resources
-export interface NetworkData {
-  kind: string;
-  kindAlias?: string;
-  name: string;
-  namespace: string;
-  clusterId: string;
-  clusterName?: string;
-  details: string; // Pre-formatted details from backend
-  age?: string;
-}
+export type NetworkData = NamespaceNetworkSummary & { kindAlias?: string };
 
 interface NetworkViewProps {
   namespace: string;
@@ -44,13 +37,6 @@ const networkSpec: AggregatedResourceGridViewSpec<NetworkData> = {
   defaultSort: { key: 'name', direction: 'asc' },
   showKindDropdown: true,
   namespaceLinkTab: 'network',
-  getIdentity: (resource) => ({
-    kind: resource.kind || resource.kindAlias,
-    name: resource.name,
-    namespace: resource.namespace,
-    clusterId: resource.clusterId,
-    clusterName: resource.clusterName ?? undefined,
-  }),
   buildColumns: ({ identity, useShortResourceNames }) => [
     cf.createKindColumn<NetworkData>({
       key: 'kind',

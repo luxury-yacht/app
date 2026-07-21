@@ -18,5 +18,5 @@ func BuildStreamSummary(meta streamrows.ClusterMeta, sc *storagev1.StorageClass)
 		return streamrows.ClusterConfigEntry{ClusterMeta: meta, Kind: "StorageClass"}
 	}
 	facts := BuildFacts(sc)
-	return streamrows.NewClusterConfigEntry(meta, sc, "StorageClass", facts.Provisioner, facts.DefaultClass)
+	return streamrows.NewClusterConfigEntry(meta, Identity, sc, facts.Provisioner, facts.DefaultClass)
 }

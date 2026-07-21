@@ -18,8 +18,10 @@ func BuildStreamSummary(meta streamrows.ClusterMeta, slice *discoveryv1.Endpoint
 		return streamrows.NetworkSummary{ClusterMeta: meta, Kind: "EndpointSlice"}
 	}
 	facts := BuildFacts(meta.ClusterID, slice)
+	model := BuildResourceModel(meta.ClusterID, slice)
 	return streamrows.NetworkSummary{
 		ClusterMeta:  meta,
+		Ref:          model.Ref,
 		Kind:         "EndpointSlice",
 		Name:         slice.Name,
 		Namespace:    slice.Namespace,

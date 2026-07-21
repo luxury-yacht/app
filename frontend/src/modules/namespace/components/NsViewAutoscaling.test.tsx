@@ -12,6 +12,7 @@ import type { GridTableProps } from '@shared/components/tables/GridTable';
 import { act } from 'react';
 import * as ReactDOM from 'react-dom/client';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
+import { makeResourceRef } from '@/test-utils/makeResourceRef';
 import { requireValue } from '@/test-utils/requireValue';
 
 vi.mock('@modules/namespace/components/useNamespaceColumnLink', () => ({
@@ -149,7 +150,18 @@ describe('NsViewAutoscaling', () => {
     name: 'web',
     namespace: 'team-a',
     clusterId: 'alpha:ctx',
+    clusterName: 'alpha',
+    ref: makeResourceRef({
+      group: 'autoscaling',
+      kind: 'HorizontalPodAutoscaler',
+      resource: 'horizontalpodautoscalers',
+      namespace: 'team-a',
+      name: 'web',
+    }),
     target: 'Deployment/web',
+    min: 1,
+    max: 5,
+    current: 2,
     minReplicas: 1,
     maxReplicas: 5,
     currentReplicas: 2,
@@ -187,7 +199,7 @@ describe('NsViewAutoscaling', () => {
         namespace: 'team-a',
         clusterId: 'alpha:ctx',
         group: 'autoscaling',
-        version: 'v2',
+        version: 'v1',
       }),
       { initialTab: 'map' }
     );

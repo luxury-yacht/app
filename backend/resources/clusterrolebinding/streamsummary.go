@@ -19,5 +19,5 @@ func BuildStreamSummary(meta streamrows.ClusterMeta, binding *rbacv1.ClusterRole
 		return streamrows.ClusterRBACEntry{ClusterMeta: meta, Kind: "ClusterRoleBinding"}
 	}
 	details := DescribeSummary(BuildFacts(meta.ClusterID, binding))
-	return streamrows.NewClusterRBACEntry(meta, binding, "ClusterRoleBinding", details, "CRB")
+	return streamrows.NewClusterRBACEntry(meta, Identity, binding, details, "CRB")
 }

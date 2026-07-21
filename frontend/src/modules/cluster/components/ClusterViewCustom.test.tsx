@@ -170,6 +170,15 @@ vi.mock('@/core/capabilities', () => ({
 };
 
 const baseCustom = {
+  ref: {
+    clusterId: 'alpha:ctx',
+    group: 'example.com',
+    version: 'v1',
+    kind: 'Widget',
+    resource: 'widgets',
+    namespace: '',
+    name: 'gizmo',
+  },
   kind: 'Widget',
   name: 'gizmo',
   namespace: '',
@@ -519,6 +528,15 @@ describe('ClusterViewCustom', () => {
   // group would open against the wrong GVR.
   it('forwards group and version into openWithObject for colliding CRDs', async () => {
     const clusterScopedCR = {
+      ref: {
+        clusterId: 'alpha:ctx',
+        group: 'postgresql.cnpg.io',
+        version: 'v1',
+        kind: 'DBCluster',
+        resource: 'dbclusters',
+        namespace: '',
+        name: 'shared-pg',
+      },
       kind: 'DBCluster',
       name: 'shared-pg',
       namespace: '',
@@ -570,6 +588,15 @@ describe('ClusterViewCustom', () => {
     runObjectActionMock.mockResolvedValue(undefined);
 
     const clusterScopedCR = {
+      ref: {
+        clusterId: 'alpha:ctx',
+        group: 'postgresql.cnpg.io',
+        version: 'v1',
+        kind: 'DBCluster',
+        resource: 'dbclusters',
+        namespace: '',
+        name: 'shared-pg',
+      },
       kind: 'DBCluster',
       name: 'shared-pg',
       namespace: '',

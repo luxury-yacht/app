@@ -8,6 +8,15 @@ import {
 } from './customCatalogRowAdapter';
 
 const row = (group: string): CatalogBackedCustomResourceRow => ({
+  ref: {
+    clusterId: 'cluster-a',
+    group,
+    version: 'v1alpha1',
+    kind: 'DBInstance',
+    resource: 'dbinstances',
+    namespace: 'data',
+    name: 'primary',
+  },
   clusterId: 'cluster-a',
   clusterName: 'Cluster A',
   kind: 'DBInstance',
@@ -86,6 +95,15 @@ describe('customCatalogRowAdapter', () => {
 
   it('normalizes hydrated rows from group/version fields without api-prefixed aliases', () => {
     const normalized = normalizeHydratedCustomRow({
+      ref: {
+        clusterId: 'cluster-a',
+        group: 'rds.services.k8s.aws',
+        version: 'v1alpha1',
+        kind: 'DBInstance',
+        resource: 'dbinstances',
+        namespace: 'data',
+        name: 'primary',
+      },
       kind: 'DBInstance',
       name: 'primary',
       namespace: 'data',
@@ -105,13 +123,17 @@ describe('customCatalogRowAdapter', () => {
     'rejects hydrated rows missing required identity field %s',
     (field) => {
       const hydrated: Record<string, unknown> = {
-        clusterId: 'cluster-a',
-        group: 'rds.services.k8s.aws',
-        version: 'v1alpha1',
-        kind: 'DBInstance',
-        name: 'primary',
+        ref: {
+          clusterId: 'cluster-a',
+          group: 'rds.services.k8s.aws',
+          version: 'v1alpha1',
+          kind: 'DBInstance',
+          resource: 'dbinstances',
+          namespace: 'data',
+          name: 'primary',
+        },
       };
-      delete hydrated[field];
+      delete (hydrated.ref as Record<string, unknown>)[field];
 
       expect(() => normalizeHydratedCustomRow(hydrated)).toThrow(
         `Hydrated catalog row is missing string field "${field}".`

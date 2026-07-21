@@ -8,7 +8,7 @@
  * namespace column, and the query hook) stays per view.
  */
 
-import type { ResourceLink } from '@core/refresh/types';
+import type { ResourceLink, ResourceRef } from '@core/refresh/types';
 import { useKubeconfig } from '@modules/kubernetes/config/KubeconfigContext';
 import { useObjectPanel } from '@modules/object-panel/hooks/useObjectPanel';
 import type { ContextMenuItem } from '@shared/components/ContextMenu';
@@ -33,6 +33,7 @@ import { getDisplayKind } from '@/utils/kindAliasMap';
 
 /** The event row shape both scope views select from their snapshots. */
 export interface EventGridRow {
+  ref: ResourceRef;
   kind: string;
   kindAlias?: string;
   name: string;
@@ -239,13 +240,15 @@ export function useEventsGridActions({
     useDefaultHandlers: false,
     onOpen: (object) => openWithObject(object),
     onViewInvolvedObject: (object) => {
-      const event = rows.find(
-        (candidate) =>
-          candidate.clusterId === object.clusterId &&
-          candidate.namespace === object.namespace &&
-          candidate.name === object.name &&
+      const event = rows.find((candidate) => {
+        const ref = eventGridObjectReference(candidate, selectedClusterId);
+        return (
+          ref.clusterId === object.clusterId &&
+          ref.namespace === object.namespace &&
+          ref.name === object.name &&
           candidate.object === object.involvedObject
-      );
+        );
+      });
       if (event) {
         void openInvolvedObject(event);
       }

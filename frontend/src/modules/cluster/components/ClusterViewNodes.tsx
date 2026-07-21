@@ -110,22 +110,21 @@ const NodesViewGrid: React.FC<NodesViewProps> = React.memo(({ error }) => {
 
   const nodeMaintenance = useNodeMaintenanceActions({ watchClusterIds });
 
-  // Keep node selections pinned to their source cluster for object details.
+  const nodeReference = useCallback(
+    (node: ClusterNodeRow) =>
+      buildRequiredObjectReference(
+        { ...node.ref, clusterName: node.clusterName },
+        { fallbackClusterId: selectedClusterId }
+      ),
+    [selectedClusterId]
+  );
   const handleNodeClick = useCallback(
-    (node: ClusterNodeRow) => {
-      openWithObject(
-        buildRequiredObjectReference(
-          {
-            kind: 'Node',
-            name: node.name,
-            clusterId: node.clusterId,
-            clusterName: node.clusterName ?? undefined,
-          },
-          { fallbackClusterId: selectedClusterId }
-        )
-      );
-    },
-    [openWithObject, selectedClusterId]
+    (node: ClusterNodeRow) => openWithObject(nodeReference(node)),
+    [nodeReference, openWithObject]
+  );
+  const handleNodeAltClick = useCallback(
+    (node: ClusterNodeRow) => navigateToView(nodeReference(node)),
+    [navigateToView, nodeReference]
   );
 
   const tableColumns = useMemo<GridColumnDefinition<ClusterNodeRow>[]>(() => {
@@ -157,35 +156,13 @@ const NodesViewGrid: React.FC<NodesViewProps> = React.memo(({ error }) => {
         getKind: () => 'Node',
         getDisplayText: () => getDisplayKind('Node', useShortResourceNames),
         onClick: (row) => handleNodeClick(row),
-        onAltClick: (row) =>
-          navigateToView(
-            buildRequiredObjectReference(
-              {
-                kind: 'Node',
-                name: row.name,
-                clusterId: row.clusterId,
-                clusterName: row.clusterName,
-              },
-              { fallbackClusterId: selectedClusterId }
-            )
-          ),
+        onAltClick: handleNodeAltClick,
         isInteractive: () => true,
         sortValue: () => 'node',
       }),
       cf.createTextColumn<ClusterNodeRow>('name', 'Name', (row) => row.name || '', {
         onClick: (row) => handleNodeClick(row),
-        onAltClick: (row) =>
-          navigateToView(
-            buildRequiredObjectReference(
-              {
-                kind: 'Node',
-                name: row.name,
-                clusterId: row.clusterId,
-                clusterName: row.clusterName,
-              },
-              { fallbackClusterId: selectedClusterId }
-            )
-          ),
+        onAltClick: handleNodeAltClick,
         // Use the shared link styling for object panel navigation.
         getClassName: () => 'object-panel-link',
         isInteractive: () => true,
@@ -319,12 +296,11 @@ const NodesViewGrid: React.FC<NodesViewProps> = React.memo(({ error }) => {
     return columns;
   }, [
     handleNodeClick,
+    handleNodeAltClick,
     metricsInfo?.stale,
     metricsInfo?.lastError,
     metricsInfo?.collectedAt,
-    navigateToView,
     nodeMaintenance,
-    selectedClusterId,
     useShortResourceNames,
   ]);
 
@@ -332,14 +308,7 @@ const NodesViewGrid: React.FC<NodesViewProps> = React.memo(({ error }) => {
 
   const keyExtractor = useCallback(
     (row: ClusterNodeRow) =>
-      buildRequiredCanonicalObjectRowKey(
-        {
-          kind: 'Node',
-          name: row.name,
-          clusterId: row.clusterId,
-        },
-        { fallbackClusterId: selectedClusterId }
-      ),
+      buildRequiredCanonicalObjectRowKey(row.ref, { fallbackClusterId: selectedClusterId }),
     [selectedClusterId]
   );
 
@@ -419,18 +388,10 @@ const NodesViewGrid: React.FC<NodesViewProps> = React.memo(({ error }) => {
   // Get context menu items
   const getRowContextMenuItems = useCallback(
     (row: ClusterNodeRow, _columnKey: string): ContextMenuItem[] => {
-      const reference = buildRequiredObjectReference(
-        {
-          kind: 'Node',
-          name: row.name,
-          clusterId: row.clusterId,
-          clusterName: row.clusterName,
-        },
-        { fallbackClusterId: selectedClusterId }
-      );
+      const reference = nodeReference(row);
       return objectActions.getMenuItems({ ...reference, unschedulable: row.unschedulable });
     },
-    [objectActions, selectedClusterId]
+    [nodeReference, objectActions]
   );
 
   return (

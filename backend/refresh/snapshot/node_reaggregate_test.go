@@ -10,6 +10,7 @@ import (
 
 	"github.com/luxury-yacht/app/backend/kind/streamrows"
 	"github.com/luxury-yacht/app/backend/refresh/metrics"
+	nodepkg "github.com/luxury-yacht/app/backend/resources/nodes"
 	corev1 "k8s.io/api/core/v1"
 	"k8s.io/apimachinery/pkg/api/resource"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
@@ -101,6 +102,15 @@ func TestReaggregateNodeSummaryMatchesFullBuild(t *testing.T) {
 	if !reflect.DeepEqual(got, want) {
 		t.Fatalf("reaggregated node row mismatch:\n got=%#v\nwant=%#v", got, want)
 	}
+}
+
+func TestBuildNodeOwnSummaryCarriesCanonicalResourceRef(t *testing.T) {
+	meta := ClusterMeta{ClusterID: "c-1", ClusterName: "prod"}
+	node := &corev1.Node{ObjectMeta: metav1.ObjectMeta{Name: "node-1", UID: "node-uid"}}
+
+	row := buildNodeOwnSummary(meta, node)
+
+	require.Equal(t, nodepkg.BuildResourceModel(meta.ClusterID, node).Ref, row.Ref)
 }
 
 // TestReaggregateNodeSummaryMissingNodeMetricRendersNoData proves a node with no

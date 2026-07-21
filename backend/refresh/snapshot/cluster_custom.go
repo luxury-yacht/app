@@ -195,6 +195,7 @@ func (b *ClusterCustomBuilder) Build(ctx context.Context, scope string) (*refres
 					item,
 					gvr.Group,
 					gvr.Version,
+					gvr.Resource,
 					crdCopy.Spec.Names.Kind,
 					crdCopy.Name,
 				))

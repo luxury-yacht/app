@@ -12,6 +12,7 @@ import { withStableListKeys } from '@shared/utils/stableListKeys';
 import { act } from 'react';
 import * as ReactDOM from 'react-dom/client';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
+import { makeResourceRef } from '@/test-utils/makeResourceRef';
 
 vi.mock('@modules/namespace/components/useNamespaceColumnLink', () => ({
   useNamespaceColumnLink: () => ({
@@ -194,15 +195,14 @@ describe('NsViewQuotas', () => {
     name: 'rq-default',
     namespace: 'team-a',
     clusterId: 'alpha:ctx',
-    hard: {
-      'requests.cpu': '2',
-      'requests.memory': '2147483648',
-      pods: '10',
-    },
-    used: {
-      'requests.cpu': '1',
-      'requests.memory': '1073741824',
-    },
+    clusterName: 'alpha',
+    ref: makeResourceRef({
+      kind: 'ResourceQuota',
+      resource: 'resourcequotas',
+      namespace: 'team-a',
+      name: 'rq-default',
+    }),
+    details: '3 resources',
     age: '1h',
     ...overrides,
   });

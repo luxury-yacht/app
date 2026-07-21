@@ -16,6 +16,7 @@ import * as ReactDOM from 'react-dom/client';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { eventBus } from '@/core/events';
 import type { PodMetricsInfo, PodSnapshotEntry } from '@/core/refresh/types';
+import { makeResourceRef } from '@/test-utils/makeResourceRef';
 import { requireReactElement } from '@/test-utils/requireReactElement';
 import { requireValue } from '@/test-utils/requireValue';
 
@@ -308,28 +309,42 @@ vi.mock('@utils/errorHandler', () => ({
 
 import NsViewPods from '@modules/namespace/components/NsViewPods';
 
-const createPod = (override: Partial<PodSnapshotEntry> = {}): PodSnapshotEntry => ({
-  name: 'pod-default',
-  namespace: 'team-a',
-  clusterId: 'alpha:ctx',
-  clusterName: 'alpha',
-  node: 'node-a',
-  status: 'Running',
-  statusPresentation: 'ready',
-  ready: '1/1',
-  restarts: 0,
-  age: '1h',
-  ownerKind: 'Deployment',
-  ownerName: 'owner',
-  portForwardAvailable: true,
-  cpuUsage: '0m',
-  cpuRequest: '0m',
-  cpuLimit: '0m',
-  memUsage: '0Mi',
-  memRequest: '0Mi',
-  memLimit: '0Mi',
-  ...override,
-});
+const createPod = (override: Partial<PodSnapshotEntry> = {}): PodSnapshotEntry => {
+  const pod = {
+    name: 'pod-default',
+    namespace: 'team-a',
+    clusterId: 'alpha:ctx',
+    clusterName: 'alpha',
+    node: 'node-a',
+    status: 'Running',
+    statusPresentation: 'ready',
+    ready: '1/1',
+    restarts: 0,
+    age: '1h',
+    ownerKind: 'Deployment',
+    ownerName: 'owner',
+    portForwardAvailable: true,
+    cpuUsage: '0m',
+    cpuRequest: '0m',
+    cpuLimit: '0m',
+    memUsage: '0Mi',
+    memRequest: '0Mi',
+    memLimit: '0Mi',
+    ...override,
+  };
+  return {
+    ...pod,
+    ref:
+      override.ref ??
+      makeResourceRef({
+        clusterId: pod.clusterId,
+        kind: 'Pod',
+        resource: 'pods',
+        namespace: pod.namespace,
+        name: pod.name,
+      }),
+  };
+};
 
 describe('NsViewPods', () => {
   let container: HTMLDivElement;

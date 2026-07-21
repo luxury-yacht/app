@@ -21,6 +21,7 @@ func BuildStreamSummary(meta streamrows.ClusterMeta, sec *corev1.Secret) streamr
 	facts := BuildFacts(sec, nil)
 	return streamrows.ConfigSummary{
 		ClusterMeta:  meta,
+		Ref:          streamrows.NewResourceRef(meta, Identity, sec),
 		Kind:         "Secret",
 		TypeAlias:    streamSummaryTypeAlias(sec),
 		Name:         sec.GetName(),

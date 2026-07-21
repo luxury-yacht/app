@@ -19,47 +19,18 @@ import type {
 } from '@/core/refresh/types';
 import { getDisplayKind } from '@/utils/kindAliasMap';
 
-// Data interface for autoscaling resources
-export interface AutoscalingData {
-  kind: string;
+export type AutoscalingData = NamespaceAutoscalingSummary & {
   kindAlias?: string;
-  name: string;
-  namespace: string;
-  // Multi-cluster metadata used for per-tab actions and stable row keys.
-  clusterId: string;
-  clusterName?: string;
-  // HorizontalPodAutoscaler-specific fields
   scaleTargetRef?: {
     kind: string;
     name: string;
-    /**
-     * Wire-form apiVersion of the scale target. Threaded from the
-     * backend via NamespaceAutoscalingSummary.targetApiVersion so the
-     * panel can open CRD scale targets correctly.
-     */
     apiVersion?: string;
   };
-  target?: string;
-  min?: number;
-  max?: number;
-  current?: number;
-  targetCPUUtilizationPercentage?: number;
-  metrics?: Array<{
-    type: string;
-    target: string;
-  }>;
   minReplicas?: number;
   maxReplicas?: number;
   currentReplicas?: number;
-  // VerticalPodAutoscaler-specific fields
-  updatePolicy?: {
-    updateMode?: string;
-  };
   status?: string;
-  age?: string;
-  ageTimestamp?: number;
-  [key: string]: unknown; // Allow additional fields
-}
+};
 
 interface AutoscalingViewProps {
   namespace: string;
@@ -86,32 +57,15 @@ const autoscalingSpec: AggregatedResourceGridViewSpec<AutoscalingData> = {
       (item: NamespaceAutoscalingSummary) => {
         const scaleTargetRef = parseAutoscalingTarget(item.target, item.targetApiVersion);
         return {
-          kind: item.kind,
+          ...item,
           kindAlias: item.kind,
-          name: item.name,
-          namespace: item.namespace,
-          clusterId: item.clusterId,
-          clusterName: item.clusterName,
           scaleTargetRef,
-          target: item.target,
-          min: item.min,
-          max: item.max,
-          current: item.current,
           minReplicas: item.min,
           maxReplicas: item.max,
           currentReplicas: item.current,
-          age: item.age,
-          ageTimestamp: item.ageTimestamp,
         };
       }
     ),
-  getIdentity: (resource) => ({
-    kind: resource.kind || resource.kindAlias,
-    name: resource.name,
-    namespace: resource.namespace,
-    clusterId: resource.clusterId,
-    clusterName: resource.clusterName ?? undefined,
-  }),
   buildColumns: ({
     identity,
     openReference,

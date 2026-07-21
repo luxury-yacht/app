@@ -6,7 +6,7 @@
  * panel Event surfaces.
  */
 
-import type { ResourceLink } from '@core/refresh/types';
+import type { ResourceLink, ResourceRef } from '@core/refresh/types';
 import { buildClusterScopedKey } from '@shared/components/tables/GridTable.utils';
 import {
   canResolveEventObjectReference,
@@ -20,6 +20,7 @@ import {
 } from '@shared/utils/objectIdentity';
 
 export interface EventGridRowIdentity {
+  ref?: ResourceRef;
   kind?: string;
   name?: string;
   uid?: string | null;
@@ -126,30 +127,16 @@ export const clusterEventRowIdentity = (
   event: EventGridRowIdentity,
   fallbackClusterId?: string | null
 ): string =>
-  buildRequiredCanonicalObjectRowKey(
-    {
-      kind: 'Event',
-      name: event.name,
-      namespace: event.namespace,
-      clusterId: event.clusterId,
-    },
-    { fallbackClusterId }
-  );
+  buildRequiredCanonicalObjectRowKey(eventGridObjectIdentity(event), { fallbackClusterId });
 
 export const namespaceEventRowIdentity = (
   event: EventGridRowIdentity,
   defaultNamespace: string,
   fallbackClusterId?: string | null
 ): string =>
-  buildRequiredCanonicalObjectRowKey(
-    {
-      kind: 'Event',
-      name: event.name,
-      namespace: eventGridObjectNamespace(event, defaultNamespace),
-      clusterId: event.clusterId,
-    },
-    { fallbackClusterId }
-  );
+  buildRequiredCanonicalObjectRowKey(eventGridObjectIdentity(event, defaultNamespace), {
+    fallbackClusterId,
+  });
 
 export const objectPanelEventGridRow = (
   event: ObjectPanelEventGridRow,
@@ -167,17 +154,20 @@ export const objectPanelEventGridRow = (
   clusterName: event.clusterName ?? undefined,
 });
 
-const eventGridObjectIdentity = (event: EventGridRowIdentity) => ({
-  group: '',
-  version: 'v1',
-  kind: 'Event',
-  resource: 'events',
-  name: event.name,
-  uid: event.uid ?? undefined,
-  namespace: event.namespace ?? undefined,
-  clusterId: event.clusterId ?? undefined,
-  clusterName: event.clusterName ?? undefined,
-});
+const eventGridObjectIdentity = (event: EventGridRowIdentity, defaultNamespace?: string | null) =>
+  event.ref
+    ? { ...event.ref, clusterName: event.clusterName ?? undefined }
+    : {
+        group: '',
+        version: 'v1',
+        kind: 'Event',
+        resource: 'events',
+        name: event.name,
+        uid: event.uid ?? undefined,
+        namespace: eventGridObjectNamespace(event, defaultNamespace),
+        clusterId: event.clusterId ?? undefined,
+        clusterName: event.clusterName ?? undefined,
+      };
 
 export const eventGridActionReference = <TExtras extends object>(
   event: EventGridRowIdentity,

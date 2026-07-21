@@ -11,18 +11,10 @@ import {
 } from '@modules/resource-grid/AggregatedResourceGridView';
 import * as cf from '@shared/components/tables/columnFactories';
 import React from 'react';
-import type { ClusterRBACSnapshotPayload } from '@/core/refresh/types';
+import type { ClusterRBACEntry, ClusterRBACSnapshotPayload } from '@/core/refresh/types';
 import { getDisplayKind } from '@/utils/kindAliasMap';
 
-// Define the data structure for RBAC resources
-interface RBACData {
-  kind: string;
-  kindAlias?: string;
-  name: string;
-  clusterId: string;
-  clusterName?: string;
-  age?: string;
-}
+type RBACData = ClusterRBACEntry & { kindAlias?: string };
 
 // Define props for RBACViewGrid component
 interface RBACViewProps {
@@ -37,12 +29,6 @@ const rbacSpec: AggregatedResourceGridViewSpec<RBACData> = {
   spinnerMessage: 'Loading RBAC resources...',
   tableClassName: 'gridtable-rbac',
   showKindDropdown: true,
-  getIdentity: (resource) => ({
-    kind: resource.kind,
-    name: resource.name,
-    clusterId: resource.clusterId ?? undefined,
-    clusterName: resource.clusterName ?? undefined,
-  }),
   buildColumns: ({ identity, useShortResourceNames }) => [
     cf.createKindColumn<RBACData>({
       key: 'kind',

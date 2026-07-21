@@ -15,6 +15,9 @@ shape, failure behavior, and diagnostics differ.
   align with domain registration, stream requirements, and diagnostics.
 - UI action permissions use frontend capability descriptors plus backend
   `QueryPermissions`; do not add ad hoc per-component permission calls.
+- Object-action IDs, labels, backend action names, payload requirements,
+  permission templates, and kind eligibility are backend-authored. Change the
+  catalog/descriptor source and regenerate; do not add a frontend action matrix.
 - Cluster-scoped resources must not be authorized from namespace-only SSRR data
   when that can produce false positives.
 - Multi-resource refresh domains should degrade to partial data when useful,
@@ -54,6 +57,13 @@ shape, failure behavior, and diagnostics differ.
   `frontend/src/core/capabilities`.
 - Visible object action wiring lives in
   `frontend/src/shared/actions/objectActionPolicy.ts`.
+- The source catalog lives in `backend/objectaction`, with per-kind eligibility
+  contributed by `backend/kind/kindspec.Descriptor`. `go generate ./backend`
+  writes `frontend/src/shared/actions/objectActions.generated.ts`; frontend
+  contract, policy, and port-forward helpers project that generated data.
+- `RunObjectAction` remains the execution chokepoint and backend mutation
+  permission checks remain authoritative. The generated manifest coordinates
+  presentation and request shape; it does not replace any evaluator.
 - Exact GVK/GVR resolution should go through the object catalog resolver.
 - Permission cache and diagnostics must remain cluster-scoped.
 - Refresh scopes denied by the backend (typed 403,
@@ -69,7 +79,13 @@ shape, failure behavior, and diagnostics differ.
 - UI permission endpoint: `backend/app_permissions.go`
 - Capability query types and rule matching: `backend/capabilities`
 - Frontend permission store/specs/hooks: `frontend/src/core/capabilities`
-- Action matrix: `frontend/src/shared/actions/objectActionPolicy.ts`
+- Object-action catalog: `backend/objectaction`
+- Per-kind action eligibility: `backend/kind/kindspec`, aggregated through
+  `backend/kind/kindregistry`
+- Generated frontend action contract:
+  `frontend/src/shared/actions/objectActions.generated.ts`
+- Frontend action policy projection:
+  `frontend/src/shared/actions/objectActionPolicy.ts`
 
 ## Change Checklist
 

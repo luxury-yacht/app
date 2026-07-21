@@ -11,20 +11,10 @@ import {
 } from '@modules/resource-grid/AggregatedResourceGridView';
 import * as cf from '@shared/components/tables/columnFactories';
 import React from 'react';
-import type { NamespaceConfigSnapshotPayload } from '@/core/refresh/types';
+import type { NamespaceConfigSnapshotPayload, NamespaceConfigSummary } from '@/core/refresh/types';
 import { getDisplayKind } from '@/utils/kindAliasMap';
 
-// Data interface for configuration resources (ConfigMaps, Secrets)
-export interface ConfigData {
-  kind: string;
-  kindAlias?: string;
-  name: string;
-  namespace: string;
-  clusterId: string;
-  clusterName?: string;
-  data: number; // Count of data items from backend
-  age?: string;
-}
+export type ConfigData = NamespaceConfigSummary & { kindAlias?: string };
 
 interface ConfigViewProps {
   namespace: string;
@@ -44,13 +34,6 @@ const configSpec: AggregatedResourceGridViewSpec<ConfigData> = {
   defaultSort: { key: 'name', direction: 'asc' },
   showKindDropdown: true,
   namespaceLinkTab: 'config',
-  getIdentity: (resource) => ({
-    kind: resource.kind || resource.kindAlias,
-    name: resource.name,
-    namespace: resource.namespace,
-    clusterId: resource.clusterId,
-    clusterName: resource.clusterName ?? undefined,
-  }),
   buildColumns: ({ identity, useShortResourceNames }) => [
     cf.createKindColumn<ConfigData>({
       key: 'kind',

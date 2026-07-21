@@ -6,6 +6,10 @@ export function AddFavorite(arg1) {
   return window['go']['backend']['App']['AddFavorite'](arg1);
 }
 
+export function ApplyClusterWorkspace(arg1) {
+  return window['go']['backend']['App']['ApplyClusterWorkspace'](arg1);
+}
+
 export function ApplyObjectYaml(arg1, arg2) {
   return window['go']['backend']['App']['ApplyObjectYaml'](arg1, arg2);
 }
@@ -160,6 +164,10 @@ export function GetClusterShellSessionCount(arg1) {
 
 export function GetClusterTabOrder() {
   return window['go']['backend']['App']['GetClusterTabOrder']();
+}
+
+export function GetClusterWorkspaceState() {
+  return window['go']['backend']['App']['GetClusterWorkspaceState']();
 }
 
 export function GetConfigMap(arg1, arg2, arg3) {

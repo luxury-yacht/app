@@ -6,6 +6,7 @@
  */
 
 import { describe, expect, it } from 'vitest';
+import { makeResourceRef } from '@/test-utils/makeResourceRef';
 import {
   buildWorkloadActionReference,
   normalizeWorkloadHPAManaged,
@@ -16,6 +17,14 @@ describe('workloadActionReference', () => {
     expect(
       buildWorkloadActionReference(
         {
+          ref: makeResourceRef({
+            clusterId: 'cluster-a',
+            group: 'apps',
+            kind: 'Deployment',
+            resource: 'deployments',
+            namespace: 'default',
+            name: 'api',
+          }),
           kind: 'Deployment',
           name: 'api',
           namespace: 'default',

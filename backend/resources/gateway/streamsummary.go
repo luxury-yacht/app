@@ -20,7 +20,7 @@ func BuildStreamSummary(meta streamrows.ClusterMeta, gateway *gatewayv1.Gateway)
 	if gateway == nil {
 		return streamrows.NetworkSummary{ClusterMeta: meta, Kind: "Gateway"}
 	}
-	return streamrows.NewNetworkSummary(meta, gateway, "Gateway", describeFacts(BuildFacts(meta.ClusterID, gateway)))
+	return streamrows.NewNetworkSummary(meta, Identity, gateway, describeFacts(BuildFacts(meta.ClusterID, gateway)))
 }
 
 func describeFacts(facts Facts) string {

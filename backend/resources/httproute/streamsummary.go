@@ -18,5 +18,5 @@ func BuildStreamSummary(meta streamrows.ClusterMeta, route *gatewayv1.HTTPRoute)
 	if route == nil {
 		return streamrows.NetworkSummary{ClusterMeta: meta, Kind: "HTTPRoute"}
 	}
-	return streamrows.NewNetworkSummary(meta, route, "HTTPRoute", resourcemodel.DescribeRouteFacts(BuildFacts(meta.ClusterID, route).RouteCommonFacts))
+	return streamrows.NewNetworkSummary(meta, Identity, route, resourcemodel.DescribeRouteFacts(BuildFacts(meta.ClusterID, route).RouteCommonFacts))
 }

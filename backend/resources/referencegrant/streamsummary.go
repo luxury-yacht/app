@@ -21,5 +21,5 @@ func BuildStreamSummary(meta streamrows.ClusterMeta, grant *gatewayv1.ReferenceG
 	}
 	facts := BuildFacts(meta.ClusterID, grant)
 	details := fmt.Sprintf("%d from, %d to", len(facts.From), len(facts.To))
-	return streamrows.NewNetworkSummary(meta, grant, "ReferenceGrant", details)
+	return streamrows.NewNetworkSummary(meta, Identity, grant, details)
 }

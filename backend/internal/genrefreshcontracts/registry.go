@@ -100,6 +100,7 @@ var contractTypes = []typeSpec{
 	{name: "CatalogActionFacts", typeOf: typeOf[objectcatalog.ActionFacts]()},
 	{name: "CatalogNamespaceGroup", typeOf: typeOf[snapshot.CatalogNamespaceGroup]()},
 	{name: "CatalogSnapshotPayload", typeOf: typeOf[snapshot.CatalogSnapshot]()},
+	{name: "CustomResourceSummary", typeOf: typeOf[snapshot.CustomResourceSummary]()},
 	{name: "ResourceQueryRequest", typeOf: typeOf[snapshot.ResourceQueryRequest]()},
 	{name: "ResourceQueryPredicate", typeOf: typeOf[snapshot.ResourceQueryPredicate]()},
 	{name: "ResourceQueryAnchor", typeOf: typeOf[snapshot.ResourceQueryAnchor]()},

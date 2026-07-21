@@ -20,5 +20,5 @@ func BuildStreamSummary(meta streamrows.ClusterMeta, policy *gatewayv1.BackendTL
 		return streamrows.NetworkSummary{ClusterMeta: meta, Kind: "BackendTLSPolicy"}
 	}
 	facts := BuildFacts(meta.ClusterID, policy)
-	return streamrows.NewNetworkSummary(meta, policy, "BackendTLSPolicy", fmt.Sprintf("%d target(s)", len(facts.TargetRefs)))
+	return streamrows.NewNetworkSummary(meta, Identity, policy, fmt.Sprintf("%d target(s)", len(facts.TargetRefs)))
 }

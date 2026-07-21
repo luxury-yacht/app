@@ -20,7 +20,7 @@ func BuildValidatingStreamSummary(meta streamrows.ClusterMeta, webhook *admissio
 		return streamrows.ClusterConfigEntry{ClusterMeta: meta, Kind: "ValidatingWebhookConfiguration"}
 	}
 	count := len(BuildValidatingFacts(meta.ClusterID, webhook).Webhooks)
-	return streamrows.NewClusterConfigEntry(meta, webhook, "ValidatingWebhookConfiguration", WebhookCountDetails(count), false)
+	return streamrows.NewClusterConfigEntry(meta, ValidatingIdentity, webhook, WebhookCountDetails(count), false)
 }
 
 // BuildMutatingStreamSummary builds the cluster-config row for one
@@ -30,5 +30,5 @@ func BuildMutatingStreamSummary(meta streamrows.ClusterMeta, webhook *admissionr
 		return streamrows.ClusterConfigEntry{ClusterMeta: meta, Kind: "MutatingWebhookConfiguration"}
 	}
 	count := len(BuildMutatingFacts(meta.ClusterID, webhook).Webhooks)
-	return streamrows.NewClusterConfigEntry(meta, webhook, "MutatingWebhookConfiguration", WebhookCountDetails(count), false)
+	return streamrows.NewClusterConfigEntry(meta, MutatingIdentity, webhook, WebhookCountDetails(count), false)
 }

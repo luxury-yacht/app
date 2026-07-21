@@ -9,9 +9,29 @@ import (
 	corev1 "k8s.io/api/core/v1"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 
+	eventres "github.com/luxury-yacht/app/backend/resources/events"
 	"github.com/luxury-yacht/app/backend/testsupport"
 	types "k8s.io/apimachinery/pkg/types"
 )
+
+func TestProjectClusterEventEntryCarriesCanonicalEventRef(t *testing.T) {
+	event := &corev1.Event{
+		ObjectMeta: metav1.ObjectMeta{
+			Name:      "event-a",
+			Namespace: "kube-system",
+			UID:       types.UID("event-uid"),
+		},
+		InvolvedObject: corev1.ObjectReference{
+			APIVersion: "v1",
+			Kind:       "Node",
+			Name:       "node-a",
+		},
+	}
+
+	row, ok := projectClusterEventEntry(ClusterMeta{ClusterID: "cluster-a"}, event)
+	require.True(t, ok)
+	require.Equal(t, eventres.BuildResourceModel("cluster-a", event).Ref, row.Ref)
+}
 
 func TestClusterEventsBuilder(t *testing.T) {
 	now := time.Now()

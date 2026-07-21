@@ -12,6 +12,7 @@ import * as ReactDOM from 'react-dom/client';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import type { ClusterEventsSnapshotPayload } from '@/core/refresh/types';
 import type { SortConfig, UseTableSortOptions } from '@/hooks/useTableSort';
+import { makeResourceRef } from '@/test-utils/makeResourceRef';
 import { requireReactElement } from '@/test-utils/requireReactElement';
 import { requireValue } from '@/test-utils/requireValue';
 
@@ -140,6 +141,14 @@ vi.mock('@/hooks/useShortNames', () => ({
 }));
 
 const baseEvent: EventRow = {
+  ref: makeResourceRef({
+    clusterId: 'test-cluster',
+    kind: 'Event',
+    resource: 'events',
+    namespace: 'team-a',
+    name: 'test',
+    uid: 'event-uid',
+  }),
   clusterName: 'alpha',
   kind: 'Event',
   name: 'test',

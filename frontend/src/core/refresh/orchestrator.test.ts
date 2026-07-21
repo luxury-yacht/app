@@ -2927,6 +2927,16 @@ describe('refreshOrchestrator', () => {
         clusterId: 'cluster-a',
         rows: [
           {
+            ref: {
+              clusterId: 'cluster-a',
+              group: '',
+              version: 'v1',
+              kind: 'Event',
+              resource: 'events',
+              namespace: 'default',
+              name: 'existing',
+              uid: 'existing-uid',
+            },
             kind: 'Event',
             clusterId: 'cluster-a',
             clusterName: 'Cluster A',
@@ -3486,12 +3496,22 @@ describe('refreshOrchestrator', () => {
         clusterId: 'test-cluster',
         rows: [
           {
-            kind: 'ConfigMap',
+            kind: 'StorageClass',
             name: 'settings',
             details: 'cluster defaults',
             age: '5m',
             clusterId: 'test-cluster',
             clusterName: 'Test Cluster',
+            ref: {
+              clusterId: 'test-cluster',
+              group: 'storage.k8s.io',
+              version: 'v1',
+              kind: 'StorageClass',
+              resource: 'storageclasses',
+              namespace: '',
+              name: 'settings',
+              uid: '',
+            },
           },
         ],
       }),

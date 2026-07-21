@@ -109,6 +109,15 @@ vi.mock('@/core/capabilities', () => ({
 }));
 
 const baseRBAC = {
+  ref: {
+    clusterId: 'cluster-a',
+    group: 'rbac.authorization.k8s.io',
+    version: 'v1',
+    kind: 'ClusterRole',
+    resource: 'clusterroles',
+    namespace: '',
+    name: 'admin',
+  },
   kind: 'ClusterRole',
   name: 'admin',
   clusterId: 'cluster-a',
@@ -167,7 +176,17 @@ describe('ClusterViewRBAC', () => {
     ['ClusterRole', 'admin'],
     ['ClusterRoleBinding', 'admin-binding'],
   ])('opens the Map for %s rows', async (kind, name) => {
-    const row = { ...baseRBAC, kind, name };
+    const row = {
+      ...baseRBAC,
+      ref: {
+        ...baseRBAC.ref,
+        kind,
+        resource: kind === 'ClusterRole' ? 'clusterroles' : 'clusterrolebindings',
+        name,
+      },
+      kind,
+      name,
+    };
 
     await act(async () => {
       root.render(<ClusterViewRBAC />);
