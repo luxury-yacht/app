@@ -210,6 +210,9 @@ func TestHPAStreamRowRefReachesTypedDetailFetcher(t *testing.T) {
 		ObjectMeta: metav1.ObjectMeta{Name: "api", Namespace: "default"},
 	})
 
+	if row.Ref.Group != "autoscaling" || row.Ref.Version != "v2" || row.Ref.Kind != "HorizontalPodAutoscaler" {
+		t.Fatalf("HPA row navigation ref = %s/%s %s, want autoscaling/v2 HorizontalPodAutoscaler", row.Ref.Group, row.Ref.Version, row.Ref.Kind)
+	}
 	gvk := schema.GroupVersionKind{Group: row.Ref.Group, Version: row.Ref.Version, Kind: row.Ref.Kind}
 	if _, ok := lookupObjectDetailFetcher(gvk); !ok {
 		t.Fatalf("HPA stream row ref %s does not reach the typed detail fetcher", gvk)

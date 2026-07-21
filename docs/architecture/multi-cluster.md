@@ -69,6 +69,13 @@ before visible-cluster activation and returns the resulting authoritative
 snapshot. Selection UI must use that response instead of chaining separate
 selection, auth, lifecycle, and visible-cluster reads.
 
+The backend snapshot is revision-consistent: every owning state writer advances
+the workspace revision while holding its own lock, and the aggregate retries if
+that revision changes during capture. Public reads wait for the serialized
+selection boundary; `ApplyClusterWorkspace` captures an applied command's
+snapshot before releasing that boundary. Do not add a workspace-visible state
+writer without advancing the revision in the same locked commit.
+
 The React-free `clusterWorkspaceStore` subscribes to runtime events before its
 initial hydration. Live fields win only over hydration responses that were
 already in flight when the event arrived; later authoritative snapshots can
@@ -78,6 +85,11 @@ foreground activation/serviceability boundary and exposes immutable snapshots;
 readiness are selector/facade layers, not additional state owners. Existing
 internal event-bus emissions are downstream wake-up notifications for refresh
 consumers and must not become a second state cache.
+
+The `no-direct-cluster-workspace` Biome plugin enforces this ownership boundary:
+only `frontend/src/core/cluster-workspace` may call the combined workspace RPC
+or subscribe directly to lifecycle, auth, health, and namespace-scope Wails
+events.
 
 ## Global Clusters View
 

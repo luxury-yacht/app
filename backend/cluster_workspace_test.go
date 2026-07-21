@@ -1,6 +1,7 @@
 package backend
 
 import (
+	"sync/atomic"
 	"testing"
 	"time"
 
@@ -8,6 +9,86 @@ import (
 	"github.com/luxury-yacht/app/backend/refresh/system"
 	"github.com/stretchr/testify/require"
 )
+
+func TestReadConsistentClusterWorkspaceStateRetriesChangedCapture(t *testing.T) {
+	var revision atomic.Uint64
+	attempts := 0
+
+	state := readConsistentClusterWorkspaceState(revision.Load, func() ClusterWorkspaceState {
+		attempts++
+		if attempts == 1 {
+			revision.Add(1)
+			return ClusterWorkspaceState{VisibleClusterID: "stale"}
+		}
+		return ClusterWorkspaceState{VisibleClusterID: "current"}
+	})
+
+	require.Equal(t, "current", state.VisibleClusterID)
+	require.Equal(t, 2, attempts)
+}
+
+func TestClusterWorkspaceSnapshotSourcesAdvanceRevision(t *testing.T) {
+	app := NewApp()
+	assertAdvance := func(mutate func()) {
+		t.Helper()
+		before := app.clusterWorkspaceRevision.Load()
+		mutate()
+		require.Greater(t, app.clusterWorkspaceRevision.Load(), before)
+	}
+
+	assertAdvance(func() {
+		app.kubeconfigsMu.Lock()
+		app.setSelectedKubeconfigsLocked([]string{"/tmp/config:prod"})
+		app.kubeconfigsMu.Unlock()
+	})
+	assertAdvance(func() {
+		app.governorMu.Lock()
+		app.setGovernorVisibleLocked("cluster-a")
+		app.governorMu.Unlock()
+	})
+	assertAdvance(func() {
+		app.clusterClientsMu.Lock()
+		app.setClusterClientLocked("cluster-a", &clusterClients{meta: ClusterMeta{ID: "cluster-a"}})
+		app.clusterClientsMu.Unlock()
+	})
+	assertAdvance(func() {
+		app.setClusterHealth("cluster-a", ClusterHealthHealthy)
+	})
+	assertAdvance(func() {
+		app.incrementClusterScopeRevision("cluster-a")
+	})
+	assertAdvance(func() {
+		lifecycle := newClusterLifecycle(nil)
+		lifecycle.setSnapshotChangeObserver(app.markClusterWorkspaceChanged)
+		lifecycle.SetState("cluster-a", ClusterStateReady)
+	})
+}
+
+func TestGetClusterWorkspaceStateWaitsForSelectionMutation(t *testing.T) {
+	app := NewApp()
+	app.selectionMutationMu.Lock()
+	started := make(chan struct{})
+	result := make(chan ClusterWorkspaceState, 1)
+	go func() {
+		close(started)
+		result <- app.GetClusterWorkspaceState()
+	}()
+	<-started
+
+	select {
+	case <-result:
+		app.selectionMutationMu.Unlock()
+		t.Fatal("workspace snapshot escaped an active selection mutation")
+	case <-time.After(20 * time.Millisecond):
+	}
+
+	app.selectionMutationMu.Unlock()
+	select {
+	case <-result:
+	case <-time.After(time.Second):
+		t.Fatal("workspace snapshot did not resume after the selection mutation")
+	}
+}
 
 func TestClusterWorkspaceStateCombinesClusterFacts(t *testing.T) {
 	app := NewApp()

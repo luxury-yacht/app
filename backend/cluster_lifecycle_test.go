@@ -58,6 +58,20 @@ func TestClusterLifecycleFullTransitionSequence(t *testing.T) {
 	require.Equal(t, emittedEvent{"cluster-a", "ready", "loading"}, events[3])
 }
 
+func TestClusterLifecycleMarksSnapshotChangeBeforeEmitting(t *testing.T) {
+	marked := false
+	cl := newClusterLifecycle(func(_ string, _ ClusterLifecycleState, _ ClusterLifecycleState) {
+		require.True(t, marked)
+	})
+	cl.setSnapshotChangeObserver(func() {
+		marked = true
+	})
+
+	cl.SetState("cluster-a", ClusterStateLoading)
+
+	require.True(t, marked)
+}
+
 func TestClusterLifecycleRejectsLateClientPhaseAfterSubsystemStarted(t *testing.T) {
 	emitter, getEvents := collectingEmitter()
 	cl := newClusterLifecycleWithSlowThreshold(emitter, time.Minute)

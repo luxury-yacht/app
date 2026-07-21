@@ -52,6 +52,18 @@ describe('Biome architectural boundary plugins', () => {
   it.each([
     ['no-direct-fetch', 'fetch("/api/resources");', 'direct fetch calls'],
     ['no-direct-permission-read', 'runtime.QueryPermissions([]);', 'dataAccess'],
+    ['no-direct-cluster-workspace', 'runtime.GetClusterWorkspaceState();', 'clusterWorkspaceStore'],
+    ['no-direct-cluster-workspace', 'GetClusterWorkspaceState();', 'clusterWorkspaceStore'],
+    [
+      'no-direct-cluster-workspace',
+      'runtime.EventsOn("cluster:lifecycle", handler);',
+      'clusterWorkspaceStore',
+    ],
+    [
+      'no-direct-cluster-workspace',
+      'EventsOn("cluster:lifecycle", handler);',
+      'clusterWorkspaceStore',
+    ],
     [
       'no-direct-refresh-orchestrator',
       'orchestrator.fetchScopedDomain("cluster", {});',
@@ -82,6 +94,10 @@ describe('Biome architectural boundary plugins', () => {
   it.each([
     ['fetch("/api/resources");', 'direct fetch calls'],
     ['runtime.QueryPermissions([]);', 'dataAccess'],
+    ['runtime.GetClusterWorkspaceState();', 'clusterWorkspaceStore'],
+    ['GetClusterWorkspaceState();', 'clusterWorkspaceStore'],
+    ['runtime.EventsOn("cluster:auth:failed", handler);', 'clusterWorkspaceStore'],
+    ['EventsOn("cluster:auth:failed", handler);', 'clusterWorkspaceStore'],
     ['orchestrator.fetchScopedDomain("cluster", {});', 'fetchScopedDomain'],
     ['orchestrator.triggerManualRefreshForContext({});', 'triggerManualRefreshForContext'],
   ])('rejects forbidden calls through the real project config', (source, diagnostic) => {

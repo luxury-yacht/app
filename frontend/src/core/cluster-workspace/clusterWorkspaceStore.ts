@@ -349,9 +349,13 @@ export class ClusterWorkspaceStore {
     this.pendingHydrationFields.clear();
     const runtime = this.options.runtime();
     const on = (event: string, handler: (...args: unknown[]) => void) => {
-      const dispose = runtime?.EventsOn?.(event, handler);
-      if (typeof dispose === 'function') {
-        this.disposers.push(dispose);
+      try {
+        const dispose = runtime?.EventsOn?.(event, handler);
+        if (typeof dispose === 'function') {
+          this.disposers.push(dispose);
+        }
+      } catch (error) {
+        this.reportIsolationError(`Failed to subscribe to ${event}`, error);
       }
     };
 
@@ -371,9 +375,13 @@ export class ClusterWorkspaceStore {
 
   private stop(): void {
     this.generation++;
-    this.disposers.forEach((dispose) => {
-      dispose();
-    });
+    for (const dispose of this.disposers) {
+      try {
+        dispose();
+      } catch (error) {
+        this.reportIsolationError('Failed to dispose a workspace event subscription', error);
+      }
+    }
     this.disposers = [];
     this.pendingHydrationFields.clear();
     this.foregroundActivations.clear();
@@ -427,9 +435,11 @@ export class ClusterWorkspaceStore {
       current.lifecycle === lifecycle ? current : { ...current, lifecycle }
     );
     if (!wasServiceable && this.isServiceable(clusterId)) {
-      this.serviceableListeners.forEach((listener) => {
-        listener(clusterId);
-      });
+      this.notifyListeners(
+        this.serviceableListeners,
+        (listener) => listener(clusterId),
+        'A serviceability listener failed'
+      );
     }
   }
 
@@ -509,9 +519,25 @@ export class ClusterWorkspaceStore {
 
   private publish(next: ClusterWorkspaceSnapshot): void {
     this.snapshot = next;
-    this.listeners.forEach((listener) => {
-      listener();
-    });
+    this.notifyListeners(this.listeners, (listener) => listener(), 'A snapshot listener failed');
+  }
+
+  private notifyListeners<T>(
+    listeners: ReadonlySet<T>,
+    notify: (listener: T) => void,
+    failureMessage: string
+  ): void {
+    for (const listener of listeners) {
+      try {
+        notify(listener);
+      } catch (error) {
+        this.reportIsolationError(failureMessage, error);
+      }
+    }
+  }
+
+  private reportIsolationError(message: string, error: unknown): void {
+    console.error(`[ClusterWorkspaceStore] ${message}:`, error);
   }
 
   isServiceable(clusterId: string | null | undefined): boolean {
@@ -533,9 +559,11 @@ export class ClusterWorkspaceStore {
     const pending = this.foregroundActivations.get(normalized) ?? 0;
     this.foregroundActivations.set(normalized, pending + 1);
     if (pending === 0) {
-      this.activationListeners.forEach((listener) => {
-        listener(normalized);
-      });
+      this.notifyListeners(
+        this.activationListeners,
+        (listener) => listener(normalized),
+        'A foreground activation listener failed'
+      );
     }
   }
 
@@ -548,9 +576,11 @@ export class ClusterWorkspaceStore {
     if (pending <= 1) {
       this.foregroundActivations.delete(normalized);
       if (pending === 1 && this.isServiceable(normalized)) {
-        this.serviceableListeners.forEach((listener) => {
-          listener(normalized);
-        });
+        this.notifyListeners(
+          this.serviceableListeners,
+          (listener) => listener(normalized),
+          'A serviceability listener failed'
+        );
       }
     } else {
       this.foregroundActivations.set(normalized, pending - 1);

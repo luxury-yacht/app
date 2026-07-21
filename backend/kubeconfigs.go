@@ -355,6 +355,13 @@ func (a *App) GetSelectedKubeconfigs() []string {
 	return []string{}
 }
 
+// setSelectedKubeconfigsLocked updates the selection snapshot. The caller must
+// hold kubeconfigsMu so the value and workspace revision commit together.
+func (a *App) setSelectedKubeconfigsLocked(selections []string) {
+	a.selectedKubeconfigs = append([]string(nil), selections...)
+	a.markClusterWorkspaceChanged()
+}
+
 // SetKubeconfig switches to a different kubeconfig file and context
 // The parameter should be in the format "path:context"
 func (a *App) SetKubeconfig(selection string) error {
@@ -518,7 +525,7 @@ func (a *App) buildSelectionChangeIntent(selections []string, generation uint64)
 // commitSelectionChangeIntent applies validated selection state in-memory and to settings.
 func (a *App) commitSelectionChangeIntent(intent selectionChangeIntent) {
 	a.kubeconfigsMu.Lock()
-	a.selectedKubeconfigs = append([]string(nil), intent.normalizedSelectionText...)
+	a.setSelectedKubeconfigsLocked(intent.normalizedSelectionText)
 	a.kubeconfigsMu.Unlock()
 
 	a.settingsMu.Lock()
@@ -602,7 +609,7 @@ func (a *App) executeSelectionChangeWork(
 func (a *App) clearKubeconfigSelection() error {
 	a.logger.Info("Clearing kubeconfig selection", logsources.KubeconfigManager)
 	a.kubeconfigsMu.Lock()
-	a.selectedKubeconfigs = nil
+	a.setSelectedKubeconfigsLocked(nil)
 	a.kubeconfigsMu.Unlock()
 	var authManagers []interface{ Shutdown() }
 	clusterIDs := make(map[string]struct{})
@@ -613,7 +620,7 @@ func (a *App) clearKubeconfigSelection() error {
 			authManagers = append(authManagers, clients.authManager)
 		}
 	}
-	a.clusterClients = make(map[string]*clusterClients)
+	a.clearClusterClientsLocked()
 	a.clusterClientsMu.Unlock()
 	for _, mgr := range authManagers {
 		mgr.Shutdown()
@@ -1003,17 +1010,16 @@ func (a *App) applySelectionPrune(
 	}
 
 	a.kubeconfigsMu.Lock()
-	a.selectedKubeconfigs = append([]string(nil), remainingSelections...)
+	a.setSelectedKubeconfigsLocked(remainingSelections)
 	a.kubeconfigsMu.Unlock()
 
 	var authManagers []interface{ Shutdown() }
 	a.clusterClientsMu.Lock()
 	for _, id := range removedClusterIDs {
-		if clients, ok := a.clusterClients[id]; ok {
+		if clients, ok := a.removeClusterClientLocked(id); ok {
 			if clients != nil && clients.authManager != nil {
 				authManagers = append(authManagers, clients.authManager)
 			}
-			delete(a.clusterClients, id)
 		}
 	}
 	a.clusterClientsMu.Unlock()

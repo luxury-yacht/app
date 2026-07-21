@@ -167,9 +167,10 @@ type App struct {
 	transportStates   map[string]*transportFailureState
 
 	// clusterWorkspaceMu guards replayable health and namespace-scope state.
-	clusterWorkspaceMu    sync.RWMutex
-	clusterHealth         map[string]ClusterHealthState
-	clusterScopeRevisions map[string]uint64
+	clusterWorkspaceMu       sync.RWMutex
+	clusterWorkspaceRevision atomic.Uint64
+	clusterHealth            map[string]ClusterHealthState
+	clusterScopeRevisions    map[string]uint64
 
 	listenLoopback func() (net.Listener, error)
 

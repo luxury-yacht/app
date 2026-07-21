@@ -1056,6 +1056,11 @@ func TestManagerAutoscalingUpdateBroadcasts(t *testing.T) {
 		require.Equal(t, domainNamespaceAutoscaling, update.Domain)
 		require.Equal(t, "namespace:default", update.Scope)
 		requireUpdateObjectMetadata(t, update, "3", "hpa-uid", "hpa-1", "default", "HorizontalPodAutoscaler")
+		// Signals identify the informer source. HPA rows deliberately use the
+		// primary v2 identity for navigation and typed details instead.
+		require.Equal(t, "autoscaling", update.Ref.Group)
+		require.Equal(t, "v1", update.Ref.Version)
+		require.Equal(t, "horizontalpodautoscalers", update.Ref.Resource)
 	default:
 		t.Fatal("expected autoscaling update to be delivered")
 	}

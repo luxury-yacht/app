@@ -17,6 +17,20 @@ func TestNewManagerStartsValid(t *testing.T) {
 	require.Equal(t, StateValid, state)
 }
 
+func TestManagerMarksWorkspaceSnapshotChanges(t *testing.T) {
+	changes := 0
+	m := New(Config{
+		MaxAttempts: 0,
+		OnSnapshotChange: func() {
+			changes++
+		},
+	})
+
+	m.ReportFailure("token expired")
+
+	require.Equal(t, 1, changes)
+}
+
 func TestIsValidReturnsTrueWhenValid(t *testing.T) {
 	m := New(Config{})
 	defer m.Shutdown()

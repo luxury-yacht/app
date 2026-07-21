@@ -202,6 +202,15 @@
       "includes": ["**/src/**/*.{ts,tsx}", "!**/src/core/data-access/readers.ts"]
     },
     {
+      // One store owns the combined workspace RPC and cluster-state subscriptions.
+      "path": "./biome-plugins/no-direct-cluster-workspace.grit",
+      "includes": [
+        "**/src/**/*.{ts,tsx}",
+        "!**/src/**/*.test.*",
+        "!**/src/core/cluster-workspace/**"
+      ]
+    },
+    {
       // Feature code must not couple directly to low-level refresh orchestration commands.
       "path": "./biome-plugins/no-direct-refresh-orchestrator.grit",
       "includes": ["**/src/**/*.{ts,tsx}", "!**/src/core/refresh/**", "!**/src/core/data-access/**"]

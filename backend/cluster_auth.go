@@ -240,7 +240,7 @@ func (a *App) rebuildClusterSubsystem(clusterID string) {
 
 	// Update the cluster clients map
 	a.clusterClientsMu.Lock()
-	a.clusterClients[clusterID] = newClients
+	a.setClusterClientLocked(clusterID, newClients)
 	a.clusterClientsMu.Unlock()
 
 	// If the preflight reported an auth failure, stop here: the auth manager's

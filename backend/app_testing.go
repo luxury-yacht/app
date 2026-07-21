@@ -38,19 +38,20 @@ func InitializeForTesting(a *App, ctx context.Context, client kubernetes.Interfa
 			Path:    selection.Path,
 			Context: selection.Context,
 		}}
-		a.selectedKubeconfigs = []string{selection.String()}
-		if a.clusterClients == nil {
-			a.clusterClients = make(map[string]*clusterClients)
-		}
+		a.kubeconfigsMu.Lock()
+		a.setSelectedKubeconfigsLocked([]string{selection.String()})
+		a.kubeconfigsMu.Unlock()
 		// Create cluster clients with only the provided client.
 		// Additional clients (apiextensions, dynamic, metrics, restConfig) can be set
 		// using SetRestConfigForTest, SetMetricsClientForTest, etc. after this call.
-		a.clusterClients[meta.ID] = &clusterClients{
+		a.clusterClientsMu.Lock()
+		a.setClusterClientLocked(meta.ID, &clusterClients{
 			meta:              meta,
 			kubeconfigPath:    selection.Path,
 			kubeconfigContext: selection.Context,
 			client:            client,
-		}
+		})
+		a.clusterClientsMu.Unlock()
 
 		if err := a.setupRefreshSubsystem(); err != nil {
 			a.logger.Warn(fmt.Sprintf("Failed to initialize refresh subsystem in tests: %v", err), logsources.Refresh)

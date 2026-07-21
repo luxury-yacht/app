@@ -1,4 +1,4 @@
-import { describe, expect, it, vi } from 'vitest';
+import { afterEach, describe, expect, it, vi } from 'vitest';
 import { createWailsRuntimeHarness } from '@/test-utils/wailsRuntimeHarness';
 import { ClusterWorkspaceStore, type ClusterWorkspaceWireState } from './clusterWorkspaceStore';
 
@@ -8,7 +8,131 @@ const emptyState = (): ClusterWorkspaceWireState => ({
   clusters: {},
 });
 
+afterEach(() => {
+  vi.restoreAllMocks();
+});
+
 describe('ClusterWorkspaceStore', () => {
+  it('continues notifying subscribers after one subscriber throws', () => {
+    vi.spyOn(console, 'error').mockImplementation(() => undefined);
+    const store = new ClusterWorkspaceStore({
+      read: async () => emptyState(),
+      runtime: () => undefined,
+    });
+    store.subscribe(() => {
+      throw new Error('broken subscriber');
+    });
+    const laterSubscriber = vi.fn();
+    store.subscribe(laterSubscriber);
+
+    expect(() => store.applyWireState(emptyState())).not.toThrow();
+    expect(laterSubscriber).toHaveBeenCalledOnce();
+  });
+
+  it('continues registering workspace events when one runtime subscription throws', async () => {
+    vi.spyOn(console, 'error').mockImplementation(() => undefined);
+    const registered: string[] = [];
+    const runtime: WailsRuntime = {
+      EventsOn: (eventName) => {
+        registered.push(eventName);
+        if (eventName === 'cluster:lifecycle') {
+          throw new Error('lifecycle subscription failed');
+        }
+        return () => undefined;
+      },
+    };
+    const store = new ClusterWorkspaceStore({
+      read: async () => emptyState(),
+      runtime: () => runtime,
+    });
+
+    let release: (() => void) | undefined;
+    expect(() => {
+      release = store.acquire();
+    }).not.toThrow();
+    await store.hydrate();
+
+    expect(registered).toContain('cluster:auth:failed');
+    release?.();
+  });
+
+  it('runs every runtime disposer when one disposer throws', async () => {
+    vi.spyOn(console, 'error').mockImplementation(() => undefined);
+    const disposed: string[] = [];
+    const runtime: WailsRuntime = {
+      EventsOn: (eventName) => () => {
+        if (eventName === 'cluster:lifecycle') {
+          throw new Error('lifecycle disposer failed');
+        }
+        disposed.push(eventName);
+      },
+    };
+    const store = new ClusterWorkspaceStore({
+      read: async () => emptyState(),
+      runtime: () => runtime,
+    });
+    const release = store.acquire();
+    await store.hydrate();
+
+    expect(release).not.toThrow();
+    expect(disposed).toContain('cluster:auth:failed');
+    expect(store.getSnapshot().visibleClusterId).toBe('');
+    expect(store.getSnapshot().clusters.size).toBe(0);
+  });
+
+  it('keeps subscriptions and state until the last owner releases', async () => {
+    const runtime = createWailsRuntimeHarness();
+    const store = new ClusterWorkspaceStore({
+      read: async () => ({
+        ...emptyState(),
+        visibleClusterId: 'cluster-a',
+      }),
+      runtime: () => runtime.runtime,
+    });
+    const releaseFirst = store.acquire();
+    const releaseSecond = store.acquire();
+    await store.hydrate();
+
+    releaseFirst();
+    expect(runtime.listenerCount('cluster:lifecycle')).toBe(1);
+    expect(store.getSnapshot().visibleClusterId).toBe('cluster-a');
+
+    releaseSecond();
+    expect(runtime.listenerCount('cluster:lifecycle')).toBe(0);
+    expect(store.getSnapshot().visibleClusterId).toBe('');
+  });
+
+  it('retains live state after hydration failure and heals on retry', async () => {
+    vi.spyOn(console, 'error').mockImplementation(() => undefined);
+    const runtime = createWailsRuntimeHarness();
+    const read = vi
+      .fn<() => Promise<ClusterWorkspaceWireState>>()
+      .mockRejectedValueOnce(new Error('workspace unavailable'))
+      .mockResolvedValueOnce({
+        ...emptyState(),
+        clusters: {
+          'cluster-a': {
+            clusterId: 'cluster-a',
+            clusterName: 'Alpha',
+            lifecycle: 'ready',
+            auth: { state: 'valid' },
+            health: 'healthy',
+            scopeRevision: 1,
+          },
+        },
+      });
+    const store = new ClusterWorkspaceStore({ read, runtime: () => runtime.runtime });
+    const release = store.acquire();
+
+    await expect(store.hydrate()).rejects.toThrow('workspace unavailable');
+    runtime.emit('cluster:lifecycle', { clusterId: 'cluster-a', state: 'loading' });
+    expect(store.getCluster('cluster-a')?.lifecycle).toBe('loading');
+
+    await store.refresh();
+    expect(store.getCluster('cluster-a')?.lifecycle).toBe('ready');
+    release();
+  });
+
   it('subscribes before hydration and keeps a newer lifecycle event', async () => {
     let resolveHydration: (state: ClusterWorkspaceWireState) => void = () => undefined;
     const read = vi.fn(
