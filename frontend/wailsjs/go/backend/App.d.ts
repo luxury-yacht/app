@@ -301,42 +301,59 @@ export function SetAccentColor(arg1:string,arg2:string):Promise<void>;
 
 export function SetAppLogsPanelVisible(arg1:boolean):Promise<void>;
 
+export function SetAppearanceMode(arg1:string):Promise<void>;
 
+export function SetAutoRefreshEnabled(arg1:boolean):Promise<void>;
 
+export function SetBackgroundRefreshEnabled(arg1:boolean):Promise<void>;
 
 export function SetClusterAllowedNamespaces(arg1:string,arg2:Array<string>):Promise<Array<string>>;
 
 export function SetClusterTabOrder(arg1:Array<string>):Promise<void>;
 
+export function SetDefaultObjectPanelPosition(arg1:string):Promise<void>;
 
+export function SetDimInactiveNamespaces(arg1:boolean):Promise<void>;
 
+export function SetExclusiveNamespaces(arg1:boolean):Promise<void>;
 
 export function SetFavoriteOrder(arg1:Array<string>):Promise<void>;
 
 export function SetGridTablePersistence(arg1:string,arg2:json.RawMessage):Promise<void>;
 
+export function SetGridTablePersistenceMode(arg1:string):Promise<void>;
 
 export function SetKubeconfig(arg1:string):Promise<void>;
 
 export function SetKubeconfigSearchPaths(arg1:Array<string>):Promise<void>;
 
+export function SetKubernetesClientBurst(arg1:number):Promise<void>;
 
+export function SetKubernetesClientQPS(arg1:number):Promise<void>;
 
 export function SetLinkColor(arg1:string,arg2:string):Promise<void>;
 
+export function SetObjPanelLogsAPITimestampFormat(arg1:string):Promise<void>;
 
+export function SetObjPanelLogsAPITimestampUseLocalTimeZone(arg1:boolean):Promise<void>;
 
+export function SetObjPanelLogsBufferMaxSize(arg1:number):Promise<void>;
 
+export function SetObjPanelLogsTargetGlobalLimit(arg1:number):Promise<void>;
 
+export function SetObjPanelLogsTargetPerScopeLimit(arg1:number):Promise<void>;
 
+export function SetObjectPanelLayout(arg1:number,arg2:number,arg3:number,arg4:number,arg5:number,arg6:number):Promise<void>;
 
 export function SetPaletteTint(arg1:string,arg2:number,arg3:number,arg4:number):Promise<void>;
 
+export function SetPermissionSSRRFetchConcurrency(arg1:number):Promise<void>;
 
 export function SetSelectedKubeconfigs(arg1:Array<string>):Promise<void>;
 
 export function SetSidebarVisible(arg1:boolean):Promise<void>;
 
+export function SetUseShortResourceNames(arg1:boolean):Promise<void>;
 
 export function SetVisibleCluster(arg1:string):Promise<void>;
 

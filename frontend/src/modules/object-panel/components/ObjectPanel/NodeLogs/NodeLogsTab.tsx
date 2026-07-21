@@ -22,11 +22,12 @@ import {
   useRef,
   useState,
 } from 'react';
-import { containsAnsi, parseAnsiTextSegments, stripAnsi } from '../Logs/ansi';
+import { containsAnsi, stripAnsi } from '../Logs/ansi';
 import { buildCsv } from '../Logs/logExport';
 import { buildLogSearchRegex } from '../Logs/logSearch';
 import { getLogViewerScrollTop, setLogViewerScrollTop } from '../Logs/logViewerPrefsCache';
 import type { ParsedLogEntry } from '../Logs/logViewerReducer';
+import { buildParsedLogDataColumns } from '../Logs/parsedLogColumns';
 import {
   deriveParsedLogFieldKeys,
   formatParsedValue,
@@ -38,6 +39,7 @@ import { fetchNodeLogs, type NodeLogFetchResponse, type NodeLogSource } from './
 import '../Logs/LogViewer.css';
 import './NodeLogsTab.css';
 import { useKeyboardSurface } from '@ui/shortcuts';
+import { useLogMessageRenderer } from '../Logs/hooks/useLogMessageRenderer';
 import { useLogScrollRestoration } from '../Logs/hooks/useLogScrollRestoration';
 import { useTerminalTheme } from '../Logs/hooks/useTerminalTheme';
 import ParsedLogTable from '../Logs/ParsedLogTable';
@@ -47,10 +49,6 @@ import { getSelectedTextWithinRoot, selectAllTextWithinRoot } from '../Logs/text
 const NODE_LOG_TAIL_BYTES = 256 * 1024;
 const NODE_LOG_AUTO_REFRESH_MS = 5000;
 const NODE_LOG_APPEND_OVERLAP_MS = 5000;
-const PARSED_COLUMN_MIN_WIDTH = 50;
-const PARSED_TIMESTAMP_MIN_WIDTH = 80;
-const PARSED_COLUMN_AUTOSIZE_MAX_WIDTH = 520;
-const PARSED_TIMESTAMP_AUTOSIZE_MAX_WIDTH = 280;
 
 type CopyFeedback = 'idle' | 'copied' | 'error';
 
@@ -463,54 +461,7 @@ const NodeLogsTab = ({
     if (derivedFieldKeys.length === 0) {
       return [] as GridColumnDefinition<ParsedLogEntry>[];
     }
-
-    const columns: GridColumnDefinition<ParsedLogEntry>[] = [];
-    const timestampCandidates = ['timestamp', 'time', 'ts'];
-    const levelCandidates = ['level', 'severity', 'log_level'];
-
-    const jsonTimestampKey = derivedFieldKeys.find((key) => timestampCandidates.includes(key));
-    if (jsonTimestampKey) {
-      columns.push({
-        key: jsonTimestampKey,
-        header: jsonTimestampKey,
-        sortable: false,
-        minWidth: PARSED_TIMESTAMP_MIN_WIDTH,
-        autoSizeMaxWidth: PARSED_TIMESTAMP_AUTOSIZE_MAX_WIDTH,
-        render: (item: ParsedLogEntry) => formatParsedValue(item.data[jsonTimestampKey]),
-      });
-    }
-
-    const jsonLevelKey = derivedFieldKeys.find((key) => levelCandidates.includes(key));
-    if (jsonLevelKey) {
-      columns.push({
-        key: jsonLevelKey,
-        header: jsonLevelKey,
-        sortable: false,
-        minWidth: PARSED_COLUMN_MIN_WIDTH,
-        autoSizeMaxWidth: PARSED_COLUMN_AUTOSIZE_MAX_WIDTH,
-        render: (item: ParsedLogEntry) => formatParsedValue(item.data[jsonLevelKey]),
-      });
-    }
-
-    const addedKeys = new Set(columns.map((column) => column.key));
-    derivedFieldKeys.forEach((key) => {
-      if (addedKeys.has(key)) {
-        return;
-      }
-
-      columns.push({
-        key,
-        header: key,
-        sortable: false,
-        minWidth: PARSED_COLUMN_MIN_WIDTH,
-        autoSizeMaxWidth: PARSED_COLUMN_AUTOSIZE_MAX_WIDTH,
-        render: (item: ParsedLogEntry) => (
-          <div className="parsed-log-cell">{formatParsedValue(item.data[key])}</div>
-        ),
-      });
-    });
-
-    return columns;
+    return buildParsedLogDataColumns(derivedFieldKeys);
   }, [derivedFieldKeys]);
 
   const displayLines = useMemo(
@@ -649,77 +600,12 @@ const NodeLogsTab = ({
     },
   });
 
-  const renderHighlightedMessage = useCallback(
-    (text: string, keyPrefix: string) => {
-      if (!text) {
-        return '\u00A0';
-      }
-      if (!highlightRegex) {
-        return text;
-      }
-
-      const matches = Array.from(text.matchAll(highlightRegex));
-      if (matches.length === 0) {
-        return text;
-      }
-
-      const nodes: React.ReactNode[] = [];
-      let lastIndex = 0;
-
-      matches.forEach((match, index) => {
-        const matchIndex = match.index ?? -1;
-        const value = match[0] ?? '';
-        if (matchIndex < 0 || value.length === 0) {
-          return;
-        }
-        if (matchIndex > lastIndex) {
-          nodes.push(text.slice(lastIndex, matchIndex));
-        }
-        nodes.push(
-          <mark key={`${keyPrefix}-${matchIndex}-${index}`} className="log-viewer-highlight">
-            {value}
-          </mark>
-        );
-        lastIndex = matchIndex + value.length;
-      });
-
-      if (nodes.length === 0) {
-        return text;
-      }
-      if (lastIndex < text.length) {
-        nodes.push(text.slice(lastIndex));
-      }
-      return nodes;
-    },
-    [highlightRegex]
-  );
-
-  const renderMessageContent = useCallback(
-    (text: string, keyPrefix: string) => {
-      const normalizedText = showAnsiColors ? text : stripAnsi(text);
-      if (!showAnsiColors || !containsAnsi(text)) {
-        return renderHighlightedMessage(normalizedText, keyPrefix);
-      }
-
-      const segments = parseAnsiTextSegments(text, terminalTheme);
-      if (segments.length === 0) {
-        return renderHighlightedMessage(stripAnsi(text), keyPrefix);
-      }
-
-      return segments.map((segment, index) => {
-        const contentNode = renderHighlightedMessage(segment.text, `${keyPrefix}-${index}`);
-        if (Object.keys(segment.style).length === 0) {
-          return <span key={`${keyPrefix}-plain-${index}`}>{contentNode}</span>;
-        }
-        return (
-          <span key={`${keyPrefix}-ansi-${index}`} style={segment.style}>
-            {contentNode}
-          </span>
-        );
-      });
-    },
-    [renderHighlightedMessage, showAnsiColors, terminalTheme]
-  );
+  const renderMessageContent = useLogMessageRenderer({
+    highlightRegex,
+    showAnsiColors,
+    terminalTheme,
+    plainSegmentWrapper: 'span',
+  });
 
   if (availability.pending) {
     return (

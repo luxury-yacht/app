@@ -514,12 +514,36 @@ export function SetAppLogsPanelVisible(arg1) {
   return window['go']['backend']['App']['SetAppLogsPanelVisible'](arg1);
 }
 
+export function SetAppearanceMode(arg1) {
+  return window['go']['backend']['App']['SetAppearanceMode'](arg1);
+}
+
+export function SetAutoRefreshEnabled(arg1) {
+  return window['go']['backend']['App']['SetAutoRefreshEnabled'](arg1);
+}
+
+export function SetBackgroundRefreshEnabled(arg1) {
+  return window['go']['backend']['App']['SetBackgroundRefreshEnabled'](arg1);
+}
+
 export function SetClusterAllowedNamespaces(arg1, arg2) {
   return window['go']['backend']['App']['SetClusterAllowedNamespaces'](arg1, arg2);
 }
 
 export function SetClusterTabOrder(arg1) {
   return window['go']['backend']['App']['SetClusterTabOrder'](arg1);
+}
+
+export function SetDefaultObjectPanelPosition(arg1) {
+  return window['go']['backend']['App']['SetDefaultObjectPanelPosition'](arg1);
+}
+
+export function SetDimInactiveNamespaces(arg1) {
+  return window['go']['backend']['App']['SetDimInactiveNamespaces'](arg1);
+}
+
+export function SetExclusiveNamespaces(arg1) {
+  return window['go']['backend']['App']['SetExclusiveNamespaces'](arg1);
 }
 
 export function SetFavoriteOrder(arg1) {
@@ -530,6 +554,10 @@ export function SetGridTablePersistence(arg1, arg2) {
   return window['go']['backend']['App']['SetGridTablePersistence'](arg1, arg2);
 }
 
+export function SetGridTablePersistenceMode(arg1) {
+  return window['go']['backend']['App']['SetGridTablePersistenceMode'](arg1);
+}
+
 export function SetKubeconfig(arg1) {
   return window['go']['backend']['App']['SetKubeconfig'](arg1);
 }
@@ -538,12 +566,48 @@ export function SetKubeconfigSearchPaths(arg1) {
   return window['go']['backend']['App']['SetKubeconfigSearchPaths'](arg1);
 }
 
+export function SetKubernetesClientBurst(arg1) {
+  return window['go']['backend']['App']['SetKubernetesClientBurst'](arg1);
+}
+
+export function SetKubernetesClientQPS(arg1) {
+  return window['go']['backend']['App']['SetKubernetesClientQPS'](arg1);
+}
+
 export function SetLinkColor(arg1, arg2) {
   return window['go']['backend']['App']['SetLinkColor'](arg1, arg2);
 }
 
+export function SetObjPanelLogsAPITimestampFormat(arg1) {
+  return window['go']['backend']['App']['SetObjPanelLogsAPITimestampFormat'](arg1);
+}
+
+export function SetObjPanelLogsAPITimestampUseLocalTimeZone(arg1) {
+  return window['go']['backend']['App']['SetObjPanelLogsAPITimestampUseLocalTimeZone'](arg1);
+}
+
+export function SetObjPanelLogsBufferMaxSize(arg1) {
+  return window['go']['backend']['App']['SetObjPanelLogsBufferMaxSize'](arg1);
+}
+
+export function SetObjPanelLogsTargetGlobalLimit(arg1) {
+  return window['go']['backend']['App']['SetObjPanelLogsTargetGlobalLimit'](arg1);
+}
+
+export function SetObjPanelLogsTargetPerScopeLimit(arg1) {
+  return window['go']['backend']['App']['SetObjPanelLogsTargetPerScopeLimit'](arg1);
+}
+
+export function SetObjectPanelLayout(arg1, arg2, arg3, arg4, arg5, arg6) {
+  return window['go']['backend']['App']['SetObjectPanelLayout'](arg1, arg2, arg3, arg4, arg5, arg6);
+}
+
 export function SetPaletteTint(arg1, arg2, arg3, arg4) {
   return window['go']['backend']['App']['SetPaletteTint'](arg1, arg2, arg3, arg4);
+}
+
+export function SetPermissionSSRRFetchConcurrency(arg1) {
+  return window['go']['backend']['App']['SetPermissionSSRRFetchConcurrency'](arg1);
 }
 
 export function SetSelectedKubeconfigs(arg1) {
@@ -552,6 +616,10 @@ export function SetSelectedKubeconfigs(arg1) {
 
 export function SetSidebarVisible(arg1) {
   return window['go']['backend']['App']['SetSidebarVisible'](arg1);
+}
+
+export function SetUseShortResourceNames(arg1) {
+  return window['go']['backend']['App']['SetUseShortResourceNames'](arg1);
 }
 
 export function SetVisibleCluster(arg1) {
