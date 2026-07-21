@@ -22,7 +22,7 @@ import (
 func BuildResourceModel(clusterID string, ingressClass *networkingv1.IngressClass) resourcemodel.ResourceModel {
 	facts := BuildFacts(ingressClass)
 	status := statusPresentation(ingressClass, facts)
-	return resourcemodel.NetworkResourceModel(clusterID, "networking.k8s.io", "v1", "IngressClass", "ingressclasses", resourcemodel.ResourceScopeCluster, ingressClass.ObjectMeta, status, resourcemodel.ResourceFacts{})
+	return resourcemodel.KubernetesResourceModel(clusterID, "networking.k8s.io", "v1", "IngressClass", "ingressclasses", resourcemodel.ResourceScopeCluster, ingressClass.ObjectMeta, status, resourcemodel.ResourceFacts{})
 }
 
 // BuildFacts extracts the IngressClass facts from the raw object.
@@ -42,14 +42,14 @@ func statusPresentation(ingressClass *networkingv1.IngressClass, facts Facts) re
 		{Type: resourcemodel.StatusSignalResourceState, Name: "spec.controller", Status: facts.Controller},
 		ingressClassDefaultSignal(facts),
 	}
-	lifecycle := resourcemodel.NetworkLifecycle(ingressClass.ObjectMeta)
-	if status, ok := resourcemodel.DeletingNetworkStatus(ingressClass.ObjectMeta, state, signals, lifecycle); ok {
+	lifecycle := resourcemodel.ObjectLifecycle(ingressClass.ObjectMeta)
+	if status, ok := resourcemodel.DeletingObjectStatus(ingressClass.ObjectMeta, state, signals, lifecycle); ok {
 		return status
 	}
 	if facts.DefaultClass {
-		return resourcemodel.NetworkSourceStatus("Default", state, facts.DefaultClassAnnotation, "ready", signals, lifecycle)
+		return resourcemodel.ObjectSourceStatus("Default", state, facts.DefaultClassAnnotation, "", "ready", signals, lifecycle)
 	}
-	return resourcemodel.NetworkSourceStatus("Available", state, "", "ready", signals, lifecycle)
+	return resourcemodel.ObjectSourceStatus("Available", state, "", "", "ready", signals, lifecycle)
 }
 
 func ingressClassDefaultSignal(facts Facts) resourcemodel.ResourceStatusSignal {

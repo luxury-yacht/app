@@ -17,7 +17,7 @@ func GatewayAPIResourceModel(
 	status ResourceStatusPresentation,
 	facts ResourceFacts,
 ) ResourceModel {
-	return NetworkResourceModel(clusterID, gatewayAPIGroup, "v1", kind, resource, scope, meta, status, facts)
+	return KubernetesResourceModel(clusterID, gatewayAPIGroup, "v1", kind, resource, scope, meta, status, facts)
 }
 
 func GatewayConditionFacts(conditions []metav1.Condition) []ConditionFacts {
@@ -54,8 +54,8 @@ func GatewayConditionsSummary(conditions []ConditionFacts) ConditionsSummaryFact
 
 func GatewayStatusFromConditions(meta metav1.ObjectMeta, fallbackState, fallbackLabel string, conditions []ConditionFacts) ResourceStatusPresentation {
 	signals := gatewayConditionSignals(conditions)
-	lifecycle := NetworkLifecycle(meta)
-	if status, ok := DeletingNetworkStatus(meta, fallbackState, signals, lifecycle); ok {
+	lifecycle := ObjectLifecycle(meta)
+	if status, ok := DeletingObjectStatus(meta, fallbackState, signals, lifecycle); ok {
 		return status
 	}
 
@@ -66,7 +66,7 @@ func GatewayStatusFromConditions(meta metav1.ObjectMeta, fallbackState, fallback
 			if condition.Reason != "" {
 				label = fmt.Sprintf("%s: %s", condition.Type, condition.Reason)
 			}
-			return NetworkSourceStatus(label, condition.Status, condition.Reason, "warning", signals, lifecycle)
+			return ObjectSourceStatus(label, condition.Status, condition.Reason, "", "warning", signals, lifecycle)
 		}
 	}
 	for _, conditionType := range priority {
@@ -75,15 +75,15 @@ func GatewayStatusFromConditions(meta metav1.ObjectMeta, fallbackState, fallback
 			if condition.Reason != "" {
 				label = fmt.Sprintf("%s: %s", condition.Type, condition.Reason)
 			}
-			return NetworkSourceStatus(label, condition.Status, condition.Reason, "unknown", signals, lifecycle)
+			return ObjectSourceStatus(label, condition.Status, condition.Reason, "", "unknown", signals, lifecycle)
 		}
 	}
 	for _, conditionType := range priority {
 		if condition, ok := findConditionFacts(conditions, conditionType); ok && condition.Status == string(metav1.ConditionTrue) {
-			return NetworkSourceStatus(condition.Type, condition.Status, condition.Reason, "ready", signals, lifecycle)
+			return ObjectSourceStatus(condition.Type, condition.Status, condition.Reason, "", "ready", signals, lifecycle)
 		}
 	}
-	return NetworkSourceStatus(fallbackLabel, fallbackState, "", "unknown", signals, lifecycle)
+	return ObjectSourceStatus(fallbackLabel, fallbackState, "", "", "unknown", signals, lifecycle)
 }
 
 func gatewayConditionSignals(conditions []ConditionFacts) []ResourceStatusSignal {

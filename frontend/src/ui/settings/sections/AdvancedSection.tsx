@@ -19,8 +19,8 @@ import { clearTintedPalette } from '@utils/paletteTint';
 import { useEffect, useId, useState } from 'react';
 import { useAutoRefresh, useBackgroundRefresh } from '@/core/refresh';
 import {
+  type AppPreferenceKey,
   commitIntegerPreferenceInput,
-  getIntegerPreferenceMetadata,
   getKubernetesClientBurst,
   getKubernetesClientQPS,
   getPermissionSSRRFetchConcurrency,
@@ -29,6 +29,7 @@ import {
   setKubernetesClientQPS,
   setPermissionSSRRFetchConcurrency,
 } from '@/core/settings/appPreferences';
+import { PreferenceNumberInput, SettingRow } from './SettingsControls';
 
 function AdvancedSection() {
   const elementIdPrefix = useId();
@@ -47,11 +48,6 @@ function AdvancedSection() {
   );
   const [isClearStateConfirmOpen, setIsClearStateConfirmOpen] = useState(false);
   const [isResetViewsConfirmOpen, setIsResetViewsConfirmOpen] = useState(false);
-  const kubernetesClientQPSMetadata = getIntegerPreferenceMetadata('kubernetesClientQPS');
-  const kubernetesClientBurstMetadata = getIntegerPreferenceMetadata('kubernetesClientBurst');
-  const permissionSSRRFetchConcurrencyMetadata = getIntegerPreferenceMetadata(
-    'permissionSSRRFetchConcurrency'
-  );
 
   useEffect(() => {
     let cancelled = false;
@@ -81,41 +77,31 @@ function AdvancedSection() {
     setGridTablePersistenceMode(mode);
   };
 
-  const commitKubernetesClientQPS = (raw: string) => {
-    const normalized = commitIntegerPreferenceInput(
-      'kubernetesClientQPS',
-      raw,
-      setKubernetesClientQPS,
-      {
+  // Commit a raw input string: normalize + persist, then reflect the applied value.
+  const commitPreferenceInput =
+    (key: AppPreferenceKey, persist: (value: number) => void, setInput: (value: string) => void) =>
+    (raw: string) => {
+      const normalized = commitIntegerPreferenceInput(key, raw, persist, {
         defaultOnNonPositive: true,
-      }
-    );
-    setKubernetesClientQPSInput(String(normalized));
-  };
+      });
+      setInput(String(normalized));
+    };
 
-  const commitKubernetesClientBurst = (raw: string) => {
-    const normalized = commitIntegerPreferenceInput(
-      'kubernetesClientBurst',
-      raw,
-      setKubernetesClientBurst,
-      {
-        defaultOnNonPositive: true,
-      }
-    );
-    setKubernetesClientBurstInput(String(normalized));
-  };
-
-  const commitPermissionSSRRFetchConcurrency = (raw: string) => {
-    const normalized = commitIntegerPreferenceInput(
-      'permissionSSRRFetchConcurrency',
-      raw,
-      setPermissionSSRRFetchConcurrency,
-      {
-        defaultOnNonPositive: true,
-      }
-    );
-    setPermissionSSRRFetchConcurrencyInput(String(normalized));
-  };
+  const commitKubernetesClientQPS = commitPreferenceInput(
+    'kubernetesClientQPS',
+    setKubernetesClientQPS,
+    setKubernetesClientQPSInput
+  );
+  const commitKubernetesClientBurst = commitPreferenceInput(
+    'kubernetesClientBurst',
+    setKubernetesClientBurst,
+    setKubernetesClientBurstInput
+  );
+  const commitPermissionSSRRFetchConcurrency = commitPreferenceInput(
+    'permissionSSRRFetchConcurrency',
+    setPermissionSSRRFetchConcurrency,
+    setPermissionSSRRFetchConcurrencyInput
+  );
 
   const handleResetViews = async () => {
     setIsResetViewsConfirmOpen(false);
@@ -165,194 +151,129 @@ function AdvancedSection() {
       <div className="settings-subgroup-label">Refresh</div>
       <hr className="settings-subgroup-divider" />
 
-      <div className="settings-row">
-        <div className="settings-row-label">
-          <div className="settings-row-label-title">Auto-refresh</div>
-          <div className="settings-row-label-help">
-            Automatically refresh data at regular intervals. If disabled, you will have to manually
-            refresh for updated data.
-          </div>
-        </div>
-        <div className="settings-row-control">
-          <ToggleSwitch
-            id={`${elementIdPrefix}-refresh-enabled`}
-            checked={refreshEnabled}
-            onChange={handleRefreshToggle}
-            ariaLabel="Auto-refresh"
-          />
-        </div>
-      </div>
+      <SettingRow
+        title="Auto-refresh"
+        help="Automatically refresh data at regular intervals. If disabled, you will have to manually refresh for updated data."
+      >
+        <ToggleSwitch
+          id={`${elementIdPrefix}-refresh-enabled`}
+          checked={refreshEnabled}
+          onChange={handleRefreshToggle}
+          ariaLabel="Auto-refresh"
+        />
+      </SettingRow>
 
-      <div className="settings-row">
-        <div className="settings-row-label">
-          <div className="settings-row-label-title">Refresh background clusters</div>
-          <div className="settings-row-label-help">
-            When enabled, open cluster tabs that are not active will be refreshed in the background.
-          </div>
-        </div>
-        <div className="settings-row-control">
-          <ToggleSwitch
-            id={`${elementIdPrefix}-refresh-background`}
-            checked={backgroundRefreshEnabled}
-            onChange={setBackgroundRefresh}
-            ariaLabel="Background clusters refresh"
-          />
-        </div>
-      </div>
+      <SettingRow
+        title="Refresh background clusters"
+        help="When enabled, open cluster tabs that are not active will be refreshed in the background."
+      >
+        <ToggleSwitch
+          id={`${elementIdPrefix}-refresh-background`}
+          checked={backgroundRefreshEnabled}
+          onChange={setBackgroundRefresh}
+          ariaLabel="Background clusters refresh"
+        />
+      </SettingRow>
 
       <div className="settings-subgroup-label">Kubernetes API</div>
       <hr className="settings-subgroup-divider" />
 
-      <div className="settings-row">
-        <div className="settings-row-label">
-          <div className="settings-row-label-title">Client QPS</div>
-          <div className="settings-row-label-help">
-            Sustained per-second rate for K8s API requests. This value is per-cluster.
-          </div>
+      <SettingRow
+        title="Client QPS"
+        help="Sustained per-second rate for K8s API requests. This value is per-cluster."
+      >
+        <div className="setting-item setting-item-inline">
+          <PreferenceNumberInput
+            id={`${elementIdPrefix}-settings-kubernetes-client-qps`}
+            prefKey="kubernetesClientQPS"
+            step={10}
+            value={kubernetesClientQPSInput}
+            onChange={setKubernetesClientQPSInput}
+            onCommit={commitKubernetesClientQPS}
+          />{' '}
+          queries per second
         </div>
-        <div className="settings-row-control">
-          <div className="setting-item setting-item-inline">
-            <input
-              type="number"
-              id={`${elementIdPrefix}-settings-kubernetes-client-qps`}
-              min={kubernetesClientQPSMetadata.min}
-              max={kubernetesClientQPSMetadata.max}
-              step={10}
-              value={kubernetesClientQPSInput}
-              onChange={(e) => setKubernetesClientQPSInput(e.target.value)}
-              onBlur={(e) => commitKubernetesClientQPS(e.target.value)}
-              onKeyDown={(e) => {
-                if (e.key === 'Enter') {
-                  e.preventDefault();
-                  e.currentTarget.blur();
-                }
-              }}
-            />{' '}
-            queries per second
-          </div>
-        </div>
-      </div>
+      </SettingRow>
 
-      <div className="settings-row">
-        <div className="settings-row-label">
-          <div className="settings-row-label-title">Client burst allowance</div>
-          <div className="settings-row-label-help">
-            Short-term burst allowance for K8s API requests. This value is per-cluster.
-          </div>
+      <SettingRow
+        title="Client burst allowance"
+        help="Short-term burst allowance for K8s API requests. This value is per-cluster."
+      >
+        <div className="setting-item setting-item-inline">
+          <PreferenceNumberInput
+            id={`${elementIdPrefix}-settings-kubernetes-client-burst`}
+            prefKey="kubernetesClientBurst"
+            step={10}
+            value={kubernetesClientBurstInput}
+            onChange={setKubernetesClientBurstInput}
+            onCommit={commitKubernetesClientBurst}
+          />{' '}
+          queries per second
         </div>
-        <div className="settings-row-control">
-          <div className="setting-item setting-item-inline">
-            <input
-              type="number"
-              id={`${elementIdPrefix}-settings-kubernetes-client-burst`}
-              min={kubernetesClientBurstMetadata.min}
-              max={kubernetesClientBurstMetadata.max}
-              step={10}
-              value={kubernetesClientBurstInput}
-              onChange={(e) => setKubernetesClientBurstInput(e.target.value)}
-              onBlur={(e) => commitKubernetesClientBurst(e.target.value)}
-              onKeyDown={(e) => {
-                if (e.key === 'Enter') {
-                  e.preventDefault();
-                  e.currentTarget.blur();
-                }
-              }}
-            />{' '}
-            queries per second
-          </div>
-        </div>
-      </div>
+      </SettingRow>
 
-      <div className="settings-row">
-        <div className="settings-row-label">
-          <div className="settings-row-label-title">SSRR concurrency</div>
-          <div className="settings-row-label-help">
+      <SettingRow
+        title="SSRR concurrency"
+        help={
+          <>
             Concurrent <code>SelfSubjectRulesReview</code> requests during permission checks.
-          </div>
+          </>
+        }
+      >
+        <div className="setting-item setting-item-inline">
+          <PreferenceNumberInput
+            id={`${elementIdPrefix}-settings-permission-ssrr-concurrency`}
+            prefKey="permissionSSRRFetchConcurrency"
+            step={1}
+            value={permissionSSRRFetchConcurrencyInput}
+            onChange={setPermissionSSRRFetchConcurrencyInput}
+            onCommit={commitPermissionSSRRFetchConcurrency}
+          />{' '}
+          concurrent requests
         </div>
-        <div className="settings-row-control">
-          <div className="setting-item setting-item-inline">
-            <input
-              type="number"
-              id={`${elementIdPrefix}-settings-permission-ssrr-concurrency`}
-              min={permissionSSRRFetchConcurrencyMetadata.min}
-              max={permissionSSRRFetchConcurrencyMetadata.max}
-              step={1}
-              value={permissionSSRRFetchConcurrencyInput}
-              onChange={(e) => setPermissionSSRRFetchConcurrencyInput(e.target.value)}
-              onBlur={(e) => commitPermissionSSRRFetchConcurrency(e.target.value)}
-              onKeyDown={(e) => {
-                if (e.key === 'Enter') {
-                  e.preventDefault();
-                  e.currentTarget.blur();
-                }
-              }}
-            />{' '}
-            concurrent requests
-          </div>
-        </div>
-      </div>
+      </SettingRow>
 
       <div className="settings-subgroup-label">Persistence</div>
       <hr className="settings-subgroup-divider" />
 
-      <div className="settings-row">
-        <div className="settings-row-label">
-          <div className="settings-row-label-title">Per-namespace views</div>
-          <div className="settings-row-label-help">
-            Save separate column, sorting, and filter settings for each namespace instead of sharing
-            a single view across all namespaces.
-          </div>
-        </div>
-        <div className="settings-row-control">
-          <ToggleSwitch
-            id={`${elementIdPrefix}-persist-namespaced`}
-            checked={persistenceMode === 'namespaced'}
-            onChange={handlePersistenceModeToggle}
-            ariaLabel="Per-namespace views"
-          />
-        </div>
-      </div>
+      <SettingRow
+        title="Per-namespace views"
+        help="Save separate column, sorting, and filter settings for each namespace instead of sharing a single view across all namespaces."
+      >
+        <ToggleSwitch
+          id={`${elementIdPrefix}-persist-namespaced`}
+          checked={persistenceMode === 'namespaced'}
+          onChange={handlePersistenceModeToggle}
+          ariaLabel="Per-namespace views"
+        />
+      </SettingRow>
 
-      <div className="settings-row">
-        <div className="settings-row-label">
-          <div className="settings-row-label-title">Reset Views</div>
-          <div className="settings-row-label-help">
-            Clears column/sort/filter settings in all views.
-          </div>
+      <SettingRow title="Reset Views" help="Clears column/sort/filter settings in all views.">
+        <div className="setting-item setting-actions">
+          <button
+            type="button"
+            className="button generic"
+            onClick={() => setIsResetViewsConfirmOpen(true)}
+          >
+            Reset Views
+          </button>
         </div>
-        <div className="settings-row-control">
-          <div className="setting-item setting-actions">
-            <button
-              type="button"
-              className="button generic"
-              onClick={() => setIsResetViewsConfirmOpen(true)}
-            >
-              Reset Views
-            </button>
-          </div>
-        </div>
-      </div>
+      </SettingRow>
 
-      <div className="settings-row">
-        <div className="settings-row-label">
-          <div className="settings-row-label-title">Factory Reset</div>
-          <div className="settings-row-label-help">
-            Deletes all preferences and saved state, then restarts the app.
-          </div>
+      <SettingRow
+        title="Factory Reset"
+        help="Deletes all preferences and saved state, then restarts the app."
+      >
+        <div className="setting-item setting-actions">
+          <button
+            type="button"
+            className="button generic"
+            onClick={() => setIsClearStateConfirmOpen(true)}
+          >
+            Factory Reset
+          </button>
         </div>
-        <div className="settings-row-control">
-          <div className="setting-item setting-actions">
-            <button
-              type="button"
-              className="button generic"
-              onClick={() => setIsClearStateConfirmOpen(true)}
-            >
-              Factory Reset
-            </button>
-          </div>
-        </div>
-      </div>
+      </SettingRow>
 
       <ConfirmationModal
         isOpen={isResetViewsConfirmOpen}

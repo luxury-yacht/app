@@ -24,7 +24,7 @@ import (
 func BuildResourceModel(clusterID string, svc *corev1.Service, slices []*discoveryv1.EndpointSlice) resourcemodel.ResourceModel {
 	facts := BuildFacts(svc, slices)
 	status := statusPresentation(svc, facts)
-	return resourcemodel.NetworkResourceModel(clusterID, "", "v1", "Service", "services", resourcemodel.ResourceScopeNamespaced, svc.ObjectMeta, status, resourcemodel.ResourceFacts{})
+	return resourcemodel.KubernetesResourceModel(clusterID, "", "v1", "Service", "services", resourcemodel.ResourceScopeNamespaced, svc.ObjectMeta, status, resourcemodel.ResourceFacts{})
 }
 
 // BuildFacts extracts the Service facts from the raw object and its EndpointSlices.
@@ -74,27 +74,27 @@ func statusPresentation(svc *corev1.Service, facts Facts) resourcemodel.Resource
 		{Type: resourcemodel.StatusSignalResourceState, Name: "readyEndpoints", Status: strconv.Itoa(facts.ReadyEndpointCount)},
 		{Type: resourcemodel.StatusSignalResourceState, Name: "notReadyEndpoints", Status: strconv.Itoa(facts.NotReadyEndpointCount)},
 	}
-	lifecycle := resourcemodel.NetworkLifecycle(svc.ObjectMeta)
-	if status, ok := resourcemodel.DeletingNetworkStatus(svc.ObjectMeta, state, signals, lifecycle); ok {
+	lifecycle := resourcemodel.ObjectLifecycle(svc.ObjectMeta)
+	if status, ok := resourcemodel.DeletingObjectStatus(svc.ObjectMeta, state, signals, lifecycle); ok {
 		return status
 	}
 
 	if svc.Spec.Type == corev1.ServiceTypeLoadBalancer {
 		if len(facts.LoadBalancerAddresses) > 0 {
-			return resourcemodel.NetworkSourceStatus("LoadBalancer active", state, "", "ready", signals, lifecycle)
+			return resourcemodel.ObjectSourceStatus("LoadBalancer active", state, "", "", "ready", signals, lifecycle)
 		}
-		return resourcemodel.NetworkSourceStatus("LoadBalancer pending", state, "", "warning", signals, lifecycle)
+		return resourcemodel.ObjectSourceStatus("LoadBalancer pending", state, "", "", "warning", signals, lifecycle)
 	}
 	if svc.Spec.Type == corev1.ServiceTypeExternalName {
-		return resourcemodel.NetworkSourceStatus("ExternalName", state, "", "ready", signals, lifecycle)
+		return resourcemodel.ObjectSourceStatus("ExternalName", state, "", "", "ready", signals, lifecycle)
 	}
 	if facts.ReadyEndpointCount > 0 {
-		return resourcemodel.NetworkSourceStatus(fmt.Sprintf("%s, %s", state, resourcemodel.CountLabel(facts.ReadyEndpointCount, "endpoint", "endpoints")), state, "", "ready", signals, lifecycle)
+		return resourcemodel.ObjectSourceStatus(fmt.Sprintf("%s, %s", state, resourcemodel.CountLabel(facts.ReadyEndpointCount, "endpoint", "endpoints")), state, "", "", "ready", signals, lifecycle)
 	}
 	if facts.TotalEndpointCount > 0 {
-		return resourcemodel.NetworkSourceStatus(fmt.Sprintf("%s, no ready endpoints", state), state, "", "warning", signals, lifecycle)
+		return resourcemodel.ObjectSourceStatus(fmt.Sprintf("%s, no ready endpoints", state), state, "", "", "warning", signals, lifecycle)
 	}
-	return resourcemodel.NetworkSourceStatus(state, state, "", "ready", signals, lifecycle)
+	return resourcemodel.ObjectSourceStatus(state, state, "", "", "ready", signals, lifecycle)
 }
 
 // ReadyEndpointCount returns the number of ready endpoint addresses across the Service's

@@ -23,7 +23,7 @@ const apiGroup = "apiextensions.k8s.io"
 func BuildResourceModel(clusterID string, crd *apiextensionsv1.CustomResourceDefinition) resourcemodel.ResourceModel {
 	facts := BuildFacts(crd)
 	status := statusPresentation(crd, facts)
-	return resourcemodel.NetworkResourceModel(clusterID, apiGroup, "v1", "CustomResourceDefinition", "customresourcedefinitions", resourcemodel.ResourceScopeCluster, crd.ObjectMeta, status, resourcemodel.ResourceFacts{})
+	return resourcemodel.KubernetesResourceModel(clusterID, apiGroup, "v1", "CustomResourceDefinition", "customresourcedefinitions", resourcemodel.ResourceScopeCluster, crd.ObjectMeta, status, resourcemodel.ResourceFacts{})
 }
 
 // BuildFacts extracts the CustomResourceDefinition facts from the raw object.
@@ -63,11 +63,11 @@ func statusPresentation(crd *apiextensionsv1.CustomResourceDefinition, facts Fac
 		})
 	}
 
-	lifecycle := resourcemodel.NetworkLifecycle(crd.ObjectMeta)
-	if status, ok := resourcemodel.DeletingNetworkStatus(crd.ObjectMeta, facts.StorageVersion, signals, lifecycle); ok {
+	lifecycle := resourcemodel.ObjectLifecycle(crd.ObjectMeta)
+	if status, ok := resourcemodel.DeletingObjectStatus(crd.ObjectMeta, facts.StorageVersion, signals, lifecycle); ok {
 		return status
 	}
-	return resourcemodel.NetworkSourceStatus(CustomResourceDefinitionVersionDetails(facts), facts.StorageVersion, "", "ready", signals, lifecycle)
+	return resourcemodel.ObjectSourceStatus(CustomResourceDefinitionVersionDetails(facts), facts.StorageVersion, "", "", "ready", signals, lifecycle)
 }
 
 // CustomResourceDefinitionVersionDetails renders the one-line "Versions: ..." label

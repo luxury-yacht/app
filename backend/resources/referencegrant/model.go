@@ -41,11 +41,11 @@ func buildStatusPresentation(grant *gatewayv1.ReferenceGrant, facts Facts) resou
 		{Type: resourcemodel.StatusSignalResourceState, Name: "spec.from", Status: resourcemodel.GatewayCountState(len(facts.From))},
 		{Type: resourcemodel.StatusSignalResourceState, Name: "spec.to", Status: state},
 	}
-	lifecycle := resourcemodel.NetworkLifecycle(grant.ObjectMeta)
-	if status, ok := resourcemodel.DeletingNetworkStatus(grant.ObjectMeta, state, signals, lifecycle); ok {
+	lifecycle := resourcemodel.ObjectLifecycle(grant.ObjectMeta)
+	if status, ok := resourcemodel.DeletingObjectStatus(grant.ObjectMeta, state, signals, lifecycle); ok {
 		return status
 	}
-	return resourcemodel.NetworkSourceStatus(referenceGrantLabel(facts), state, "", "ready", signals, lifecycle)
+	return resourcemodel.ObjectSourceStatus(referenceGrantLabel(facts), state, "", "", "ready", signals, lifecycle)
 }
 
 func referenceGrantLabel(facts Facts) string {

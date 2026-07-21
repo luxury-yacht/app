@@ -23,7 +23,8 @@ import {
 } from '@shared/components/icons/DockableIcons';
 import { useDockablePanelContext } from '@ui/dockable';
 import { getContentBounds } from '@ui/dockable/dockablePanelLayout';
-import { type FC, useId, useMemo, useState } from 'react';
+import React, { type FC, useId, useMemo, useState } from 'react';
+import { SettingRow } from './SettingsControls';
 
 const objectPanelPositionOptions = [
   { value: 'right', label: 'Right', icon: DockRightIcon },
@@ -34,6 +35,79 @@ const objectPanelPositionOptions = [
   label: string;
   icon: FC<{ width?: number; height?: number; fill?: string }>;
 }>;
+
+type LayoutField = keyof ObjectPanelLayoutDefaults;
+
+const fieldPreferenceKeys: Record<LayoutField, AppPreferenceKey> = {
+  dockedRightWidth: 'objectPanelDockedRightWidth',
+  dockedBottomHeight: 'objectPanelDockedBottomHeight',
+  floatingWidth: 'objectPanelFloatingWidth',
+  floatingHeight: 'objectPanelFloatingHeight',
+  floatingX: 'objectPanelFloatingX',
+  floatingY: 'objectPanelFloatingY',
+};
+
+// The three layout rows, each a pair of bounded pixel inputs.
+const layoutRows: Array<{
+  title: string;
+  help: string;
+  fields: Array<{ field: LayoutField; label: string; aria: string; idSuffix: string }>;
+}> = [
+  {
+    title: 'Docked size',
+    help: 'Default dimensions of docked panels.',
+    fields: [
+      {
+        field: 'dockedRightWidth',
+        label: 'Right',
+        aria: 'Docked right width',
+        idSuffix: 'panel-docked-right-width',
+      },
+      {
+        field: 'dockedBottomHeight',
+        label: 'Bottom',
+        aria: 'Docked bottom height',
+        idSuffix: 'panel-docked-bottom-height',
+      },
+    ],
+  },
+  {
+    title: 'Floating size',
+    help: 'Default dimensions of floating panels.',
+    fields: [
+      {
+        field: 'floatingWidth',
+        label: 'Width',
+        aria: 'Floating width',
+        idSuffix: 'panel-floating-width',
+      },
+      {
+        field: 'floatingHeight',
+        label: 'Height',
+        aria: 'Floating height',
+        idSuffix: 'panel-floating-height',
+      },
+    ],
+  },
+  {
+    title: 'Floating position',
+    help: 'Default position of floating panels.',
+    fields: [
+      {
+        field: 'floatingY',
+        label: 'Top',
+        aria: 'Floating top position',
+        idSuffix: 'panel-floating-y',
+      },
+      {
+        field: 'floatingX',
+        label: 'Left',
+        aria: 'Floating left position',
+        idSuffix: 'panel-floating-x',
+      },
+    ],
+  },
+];
 
 function ObjectPanelSection() {
   const elementIdPrefix = useId();
@@ -47,9 +121,7 @@ function ObjectPanelSection() {
 
   // Track raw input strings so users can freely backspace/clear without
   // values snapping back to 0 on every keystroke.
-  const [panelLayoutInputs, setPanelLayoutInputs] = useState<
-    Record<keyof ObjectPanelLayoutDefaults, string>
-  >(() => {
+  const [panelLayoutInputs, setPanelLayoutInputs] = useState<Record<LayoutField, string>>(() => {
     const defaults = getObjectPanelLayoutDefaults();
     return {
       dockedRightWidth: String(defaults.dockedRightWidth),
@@ -61,27 +133,12 @@ function ObjectPanelSection() {
     };
   });
 
-  const fieldPreferenceKeys: Record<keyof ObjectPanelLayoutDefaults, AppPreferenceKey> = {
-    dockedRightWidth: 'objectPanelDockedRightWidth',
-    dockedBottomHeight: 'objectPanelDockedBottomHeight',
-    floatingWidth: 'objectPanelFloatingWidth',
-    floatingHeight: 'objectPanelFloatingHeight',
-    floatingX: 'objectPanelFloatingX',
-    floatingY: 'objectPanelFloatingY',
-  };
-  const fieldMetadata = Object.fromEntries(
-    Object.entries(fieldPreferenceKeys).map(([field, key]) => [
-      field,
-      getIntegerPreferenceMetadata(key),
-    ])
-  ) as Record<keyof ObjectPanelLayoutDefaults, ReturnType<typeof getIntegerPreferenceMetadata>>;
-
   const handleObjectPanelPositionChange = (position: ObjectPanelPosition) => {
     setObjectPanelPositionState(position);
     setDefaultObjectPanelPosition(position);
   };
 
-  const handlePanelLayoutInput = (field: keyof ObjectPanelLayoutDefaults, raw: string) => {
+  const handlePanelLayoutInput = (field: LayoutField, raw: string) => {
     setPanelLayoutInputs((prev) => ({ ...prev, [field]: raw }));
     const parsed = parseInt(raw, 10);
     if (!Number.isNaN(parsed)) {
@@ -95,7 +152,7 @@ function ObjectPanelSection() {
     }
   };
 
-  const handlePanelLayoutBlur = (field: keyof ObjectPanelLayoutDefaults) => {
+  const handlePanelLayoutBlur = (field: LayoutField) => {
     setPanelLayoutInputs((prev) => ({ ...prev, [field]: String(panelLayout[field]) }));
   };
 
@@ -103,7 +160,7 @@ function ObjectPanelSection() {
   const panelLayoutWarning = useMemo(() => {
     const content = getContentBounds();
     const issues: string[] = [];
-    const fields = new Set<keyof ObjectPanelLayoutDefaults>();
+    const fields = new Set<LayoutField>();
     if (panelLayout.dockedRightWidth > content.width) {
       issues.push('docked width exceeds content area');
       fields.add('dockedRightWidth');
@@ -133,6 +190,30 @@ function ObjectPanelSection() {
     return issues.length > 0 ? { issues, fields } : null;
   }, [panelLayout]);
 
+  const renderLayoutInput = (
+    { field, label, aria, idSuffix }: (typeof layoutRows)[number]['fields'][number],
+    isFirst: boolean
+  ) => {
+    const metadata = getIntegerPreferenceMetadata(fieldPreferenceKeys[field]);
+    return (
+      <React.Fragment key={field}>
+        <span className="opd-field-label">{label}</span>
+        <input
+          id={`${elementIdPrefix}-${idSuffix}`}
+          type="number"
+          min={metadata.min}
+          max={metadata.max}
+          className={panelLayoutWarning?.fields.has(field) ? 'opd-input-warn' : ''}
+          value={panelLayoutInputs[field]}
+          onChange={(e) => handlePanelLayoutInput(field, e.target.value)}
+          onBlur={() => handlePanelLayoutBlur(field)}
+          aria-label={aria}
+        />
+        {isFirst ? <span className="opd-unit-gap">px</span> : <span>px</span>}
+      </React.Fragment>
+    );
+  };
+
   return (
     <div className="settings-panel">
       <h2 className="settings-panel-title">Object Panel</h2>
@@ -140,153 +221,34 @@ function ObjectPanelSection() {
       <div className="settings-subgroup-label">Defaults</div>
       <hr className="settings-subgroup-divider" />
 
-      <div className="settings-row">
-        <div className="settings-row-label">
-          <div className="settings-row-label-title">Position</div>
-          <div className="settings-row-label-help">
-            Where the object detail panel opens by default.
-          </div>
-        </div>
-        <div className="settings-row-control">
-          <fieldset className="settings-choice-buttons" aria-label="Default Object Panel position">
-            {objectPanelPositionOptions.map((option) => {
-              const Icon = option.icon;
-              const isSelected = objectPanelPosition === option.value;
-              return (
-                <button
-                  key={option.value}
-                  type="button"
-                  className={`settings-choice-button${isSelected ? ' settings-choice-button--active' : ''}`}
-                  aria-pressed={isSelected}
-                  onClick={() => handleObjectPanelPositionChange(option.value)}
-                >
-                  <Icon width={18} height={18} />
-                  <span>{option.label}</span>
-                </button>
-              );
-            })}
-          </fieldset>
-        </div>
-      </div>
+      <SettingRow title="Position" help="Where the object detail panel opens by default.">
+        <fieldset className="settings-choice-buttons" aria-label="Default Object Panel position">
+          {objectPanelPositionOptions.map((option) => {
+            const Icon = option.icon;
+            const isSelected = objectPanelPosition === option.value;
+            return (
+              <button
+                key={option.value}
+                type="button"
+                className={`settings-choice-button${isSelected ? ' settings-choice-button--active' : ''}`}
+                aria-pressed={isSelected}
+                onClick={() => handleObjectPanelPositionChange(option.value)}
+              >
+                <Icon width={18} height={18} />
+                <span>{option.label}</span>
+              </button>
+            );
+          })}
+        </fieldset>
+      </SettingRow>
 
-      <div className="settings-row">
-        <div className="settings-row-label">
-          <div className="settings-row-label-title">Docked size</div>
-          <div className="settings-row-label-help">Default dimensions of docked panels.</div>
-        </div>
-        <div className="settings-row-control">
+      {layoutRows.map((row) => (
+        <SettingRow key={row.title} title={row.title} help={row.help}>
           <div className="settings-items object-panel-defaults">
             <div className="setting-item setting-item-inline">
-              <span className="opd-field-label">Right</span>
-              <input
-                id={`${elementIdPrefix}-panel-docked-right-width`}
-                type="number"
-                min={fieldMetadata.dockedRightWidth.min}
-                max={fieldMetadata.dockedRightWidth.max}
-                className={
-                  panelLayoutWarning?.fields.has('dockedRightWidth') ? 'opd-input-warn' : ''
-                }
-                value={panelLayoutInputs.dockedRightWidth}
-                onChange={(e) => handlePanelLayoutInput('dockedRightWidth', e.target.value)}
-                onBlur={() => handlePanelLayoutBlur('dockedRightWidth')}
-                aria-label="Docked right width"
-              />
-              <span className="opd-unit-gap">px</span>
-              <span className="opd-field-label">Bottom</span>
-              <input
-                id={`${elementIdPrefix}-panel-docked-bottom-height`}
-                type="number"
-                min={fieldMetadata.dockedBottomHeight.min}
-                max={fieldMetadata.dockedBottomHeight.max}
-                className={
-                  panelLayoutWarning?.fields.has('dockedBottomHeight') ? 'opd-input-warn' : ''
-                }
-                value={panelLayoutInputs.dockedBottomHeight}
-                onChange={(e) => handlePanelLayoutInput('dockedBottomHeight', e.target.value)}
-                onBlur={() => handlePanelLayoutBlur('dockedBottomHeight')}
-                aria-label="Docked bottom height"
-              />
-              <span>px</span>
+              {row.fields.map((field, index) => renderLayoutInput(field, index === 0))}
             </div>
-          </div>
-        </div>
-      </div>
-
-      <div className="settings-row">
-        <div className="settings-row-label">
-          <div className="settings-row-label-title">Floating size</div>
-          <div className="settings-row-label-help">Default dimensions of floating panels.</div>
-        </div>
-        <div className="settings-row-control">
-          <div className="settings-items object-panel-defaults">
-            <div className="setting-item setting-item-inline">
-              <span className="opd-field-label">Width</span>
-              <input
-                id={`${elementIdPrefix}-panel-floating-width`}
-                type="number"
-                min={fieldMetadata.floatingWidth.min}
-                max={fieldMetadata.floatingWidth.max}
-                className={panelLayoutWarning?.fields.has('floatingWidth') ? 'opd-input-warn' : ''}
-                value={panelLayoutInputs.floatingWidth}
-                onChange={(e) => handlePanelLayoutInput('floatingWidth', e.target.value)}
-                onBlur={() => handlePanelLayoutBlur('floatingWidth')}
-                aria-label="Floating width"
-              />
-              <span className="opd-unit-gap">px</span>
-              <span className="opd-field-label">Height</span>
-              <input
-                id={`${elementIdPrefix}-panel-floating-height`}
-                type="number"
-                min={fieldMetadata.floatingHeight.min}
-                max={fieldMetadata.floatingHeight.max}
-                className={panelLayoutWarning?.fields.has('floatingHeight') ? 'opd-input-warn' : ''}
-                value={panelLayoutInputs.floatingHeight}
-                onChange={(e) => handlePanelLayoutInput('floatingHeight', e.target.value)}
-                onBlur={() => handlePanelLayoutBlur('floatingHeight')}
-                aria-label="Floating height"
-              />
-              <span>px</span>
-            </div>
-          </div>
-        </div>
-      </div>
-
-      <div className="settings-row">
-        <div className="settings-row-label">
-          <div className="settings-row-label-title">Floating position</div>
-          <div className="settings-row-label-help">Default position of floating panels.</div>
-        </div>
-        <div className="settings-row-control">
-          <div className="settings-items object-panel-defaults">
-            <div className="setting-item setting-item-inline">
-              <span className="opd-field-label">Top</span>
-              <input
-                id={`${elementIdPrefix}-panel-floating-y`}
-                type="number"
-                min={fieldMetadata.floatingY.min}
-                max={fieldMetadata.floatingY.max}
-                className={panelLayoutWarning?.fields.has('floatingY') ? 'opd-input-warn' : ''}
-                value={panelLayoutInputs.floatingY}
-                onChange={(e) => handlePanelLayoutInput('floatingY', e.target.value)}
-                onBlur={() => handlePanelLayoutBlur('floatingY')}
-                aria-label="Floating top position"
-              />
-              <span className="opd-unit-gap">px</span>
-              <span className="opd-field-label">Left</span>
-              <input
-                id={`${elementIdPrefix}-panel-floating-x`}
-                type="number"
-                min={fieldMetadata.floatingX.min}
-                max={fieldMetadata.floatingX.max}
-                className={panelLayoutWarning?.fields.has('floatingX') ? 'opd-input-warn' : ''}
-                value={panelLayoutInputs.floatingX}
-                onChange={(e) => handlePanelLayoutInput('floatingX', e.target.value)}
-                onBlur={() => handlePanelLayoutBlur('floatingX')}
-                aria-label="Floating left position"
-              />
-              <span>px</span>
-            </div>
-            {panelLayoutWarning && (
+            {row.title === 'Floating position' && panelLayoutWarning && (
               <div className="setting-item opd-warning">
                 <p>One or more values will be adjusted to fit at render time:</p>
                 <ul>
@@ -297,8 +259,8 @@ function ObjectPanelSection() {
               </div>
             )}
           </div>
-        </div>
-      </div>
+        </SettingRow>
+      ))}
     </div>
   );
 }

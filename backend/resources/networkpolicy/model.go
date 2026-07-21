@@ -23,7 +23,7 @@ import (
 func BuildResourceModel(clusterID string, policy *networkingv1.NetworkPolicy) resourcemodel.ResourceModel {
 	facts := BuildFacts(policy)
 	status := statusPresentation(policy, facts)
-	return resourcemodel.NetworkResourceModel(clusterID, "networking.k8s.io", "v1", "NetworkPolicy", "networkpolicies", resourcemodel.ResourceScopeNamespaced, policy.ObjectMeta, status, resourcemodel.ResourceFacts{})
+	return resourcemodel.KubernetesResourceModel(clusterID, "networking.k8s.io", "v1", "NetworkPolicy", "networkpolicies", resourcemodel.ResourceScopeNamespaced, policy.ObjectMeta, status, resourcemodel.ResourceFacts{})
 }
 
 // BuildFacts extracts the NetworkPolicy facts from the raw object.
@@ -52,11 +52,11 @@ func statusPresentation(policy *networkingv1.NetworkPolicy, facts Facts) resourc
 		{Type: resourcemodel.StatusSignalResourceState, Name: "spec.ingress", Status: strconv.Itoa(len(facts.IngressRules))},
 		{Type: resourcemodel.StatusSignalResourceState, Name: "spec.egress", Status: strconv.Itoa(len(facts.EgressRules))},
 	}
-	lifecycle := resourcemodel.NetworkLifecycle(policy.ObjectMeta)
-	if status, ok := resourcemodel.DeletingNetworkStatus(policy.ObjectMeta, state, signals, lifecycle); ok {
+	lifecycle := resourcemodel.ObjectLifecycle(policy.ObjectMeta)
+	if status, ok := resourcemodel.DeletingObjectStatus(policy.ObjectMeta, state, signals, lifecycle); ok {
 		return status
 	}
-	return resourcemodel.NetworkSourceStatus(policyLabel(facts), state, "", "ready", signals, lifecycle)
+	return resourcemodel.ObjectSourceStatus(policyLabel(facts), state, "", "", "ready", signals, lifecycle)
 }
 
 func policyLabel(facts Facts) string {

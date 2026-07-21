@@ -46,11 +46,11 @@ func statusPresentation(limitRange *corev1.LimitRange, facts Facts) resourcemode
 		Name:   "spec.limits.count",
 		Status: state,
 	}}
-	lifecycle := resourcemodel.NetworkLifecycle(limitRange.ObjectMeta)
-	if status, ok := resourcemodel.DeletingNetworkStatus(limitRange.ObjectMeta, state, signals, lifecycle); ok {
+	lifecycle := resourcemodel.ObjectLifecycle(limitRange.ObjectMeta)
+	if status, ok := resourcemodel.DeletingObjectStatus(limitRange.ObjectMeta, state, signals, lifecycle); ok {
 		return status
 	}
-	return resourcemodel.NetworkSourceStatus(summary(facts), state, "", "ready", signals, lifecycle)
+	return resourcemodel.ObjectSourceStatus(summary(facts), state, "", "", "ready", signals, lifecycle)
 }
 
 func summary(facts Facts) string {

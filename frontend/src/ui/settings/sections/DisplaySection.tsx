@@ -21,6 +21,7 @@ import {
   setUseShortResourceNames as persistUseShortResourceNames,
 } from '@/core/settings/appPreferences';
 import ToggleSwitch from '@/shared/components/ToggleSwitch';
+import { SettingRow, useOptimisticPreferenceToggle } from './SettingsControls';
 
 // The same list every pagination footer renders — one source for both.
 const PAGE_SIZE_DROPDOWN_OPTIONS = TABLE_PAGE_SIZE_OPTIONS.map((value) => ({
@@ -62,36 +63,26 @@ function DisplaySection() {
     persistDefaultTablePageSize(size);
   };
 
-  const handleShortNamesToggle = async (useShort: boolean) => {
-    setUseShortResourceNames(useShort);
-    try {
-      await persistUseShortResourceNames(useShort);
-    } catch (error) {
-      errorHandler.handle(error, { action: 'setUseShortResourceNames', useShort });
-      // Revert on failure.
-      setUseShortResourceNames(!useShort);
-    }
-  };
+  const handleShortNamesToggle = useOptimisticPreferenceToggle({
+    action: 'setUseShortResourceNames',
+    valueKey: 'useShort',
+    persist: persistUseShortResourceNames,
+    setState: setUseShortResourceNames,
+  });
 
-  const handleDimInactiveNamespacesToggle = async (enabled: boolean) => {
-    setDimInactiveNamespaces(enabled);
-    try {
-      await persistDimInactiveNamespaces(enabled);
-    } catch (error) {
-      errorHandler.handle(error, { action: 'setDimInactiveNamespaces', enabled });
-      setDimInactiveNamespaces(!enabled);
-    }
-  };
+  const handleDimInactiveNamespacesToggle = useOptimisticPreferenceToggle({
+    action: 'setDimInactiveNamespaces',
+    valueKey: 'enabled',
+    persist: persistDimInactiveNamespaces,
+    setState: setDimInactiveNamespaces,
+  });
 
-  const handleExclusiveNamespacesToggle = async (enabled: boolean) => {
-    setExclusiveNamespaces(enabled);
-    try {
-      await persistExclusiveNamespaces(enabled);
-    } catch (error) {
-      errorHandler.handle(error, { action: 'setExclusiveNamespaces', enabled });
-      setExclusiveNamespaces(!enabled);
-    }
-  };
+  const handleExclusiveNamespacesToggle = useOptimisticPreferenceToggle({
+    action: 'setExclusiveNamespaces',
+    valueKey: 'enabled',
+    persist: persistExclusiveNamespaces,
+    setState: setExclusiveNamespaces,
+  });
 
   return (
     <div className="settings-panel">
@@ -100,83 +91,61 @@ function DisplaySection() {
       <div className="settings-subgroup-label">Tables</div>
       <hr className="settings-subgroup-divider" />
 
-      <div className="settings-row">
-        <div className="settings-row-label">
-          <div className="settings-row-label-title">Default page size</div>
-          <div className="settings-row-label-help">
-            Default page size for tables. Changing the page size on a specific table will override
-            this value for that table only.
-          </div>
-        </div>
-        <div className="settings-row-control">
-          <Dropdown
-            options={PAGE_SIZE_DROPDOWN_OPTIONS}
-            value={String(defaultTablePageSize)}
-            onChange={handleDefaultTablePageSizeChange}
-            ariaLabel="Default page size"
-            size="compact"
-            className="settings-page-size-dropdown"
-          />
-        </div>
-      </div>
+      <SettingRow
+        title="Default page size"
+        help="Default page size for tables. Changing the page size on a specific table will override this value for that table only."
+      >
+        <Dropdown
+          options={PAGE_SIZE_DROPDOWN_OPTIONS}
+          value={String(defaultTablePageSize)}
+          onChange={handleDefaultTablePageSizeChange}
+          ariaLabel="Default page size"
+          size="compact"
+          className="settings-page-size-dropdown"
+        />
+      </SettingRow>
 
       <div className="settings-subgroup-label">Resources</div>
       <hr className="settings-subgroup-divider" />
 
-      <div className="settings-row">
-        <div className="settings-row-label">
-          <div className="settings-row-label-title">Short resource names</div>
-          <div className="settings-row-label-help">
-            Display short resource names (e.g., "sts" instead of "StatefulSets").
-          </div>
-        </div>
-        <div className="settings-row-control">
-          <ToggleSwitch
-            id={`${elementIdPrefix}-short-resource-names`}
-            checked={useShortResourceNames}
-            onChange={handleShortNamesToggle}
-            ariaLabel="Short resource names"
-          />
-        </div>
-      </div>
+      <SettingRow
+        title="Short resource names"
+        help='Display short resource names (e.g., "sts" instead of "StatefulSets").'
+      >
+        <ToggleSwitch
+          id={`${elementIdPrefix}-short-resource-names`}
+          checked={useShortResourceNames}
+          onChange={handleShortNamesToggle}
+          ariaLabel="Short resource names"
+        />
+      </SettingRow>
 
       <div className="settings-subgroup-label">Sidebar</div>
       <hr className="settings-subgroup-divider" />
 
-      <div className="settings-row">
-        <div className="settings-row-label">
-          <div className="settings-row-label-title">Dim inactive namespaces</div>
-          <div className="settings-row-label-help">
-            Dim namespaces in the Sidebar that have no Workloads.
-          </div>
-        </div>
-        <div className="settings-row-control">
-          <ToggleSwitch
-            id={`${elementIdPrefix}-dim-inactive-namespaces`}
-            checked={dimInactiveNamespaces}
-            onChange={handleDimInactiveNamespacesToggle}
-            ariaLabel="Dim inactive namespaces"
-          />
-        </div>
-      </div>
+      <SettingRow
+        title="Dim inactive namespaces"
+        help="Dim namespaces in the Sidebar that have no Workloads."
+      >
+        <ToggleSwitch
+          id={`${elementIdPrefix}-dim-inactive-namespaces`}
+          checked={dimInactiveNamespaces}
+          onChange={handleDimInactiveNamespacesToggle}
+          ariaLabel="Dim inactive namespaces"
+        />
+      </SettingRow>
 
-      <div className="settings-row">
-        <div className="settings-row-label">
-          <div className="settings-row-label-title">Exclusive namespaces</div>
-          <div className="settings-row-label-help">
-            When enabled, only one namespace at a time can be expanded in the Sidebar. Expanding a
-            different namespace will collapse the currently expanded one.
-          </div>
-        </div>
-        <div className="settings-row-control">
-          <ToggleSwitch
-            id={`${elementIdPrefix}-exclusive-namespaces`}
-            checked={exclusiveNamespaces}
-            onChange={handleExclusiveNamespacesToggle}
-            ariaLabel="Exclusive namespaces"
-          />
-        </div>
-      </div>
+      <SettingRow
+        title="Exclusive namespaces"
+        help="When enabled, only one namespace at a time can be expanded in the Sidebar. Expanding a different namespace will collapse the currently expanded one."
+      >
+        <ToggleSwitch
+          id={`${elementIdPrefix}-exclusive-namespaces`}
+          checked={exclusiveNamespaces}
+          onChange={handleExclusiveNamespacesToggle}
+          ariaLabel="Exclusive namespaces"
+        />
+      </SettingRow>
     </div>
   );
 }

@@ -19,7 +19,7 @@ import (
 // and callers needing facts use BuildFacts.
 func BuildResourceModel(clusterID string, cronJob *batchv1.CronJob) resourcemodel.ResourceModel {
 	status := BuildStatusPresentation(cronJob)
-	return resourcemodel.WorkloadResourceModel(clusterID, "batch", "v1", "CronJob", "cronjobs", cronJob.ObjectMeta, status, resourcemodel.ResourceFacts{})
+	return resourcemodel.KubernetesResourceModel(clusterID, "batch", "v1", "CronJob", "cronjobs", resourcemodel.ResourceScopeNamespaced, cronJob.ObjectMeta, status, resourcemodel.ResourceFacts{})
 }
 
 // BuildFacts extracts the CronJob facts from the raw object.
@@ -53,15 +53,15 @@ func BuildStatusPresentation(cronJob *batchv1.CronJob) resourcemodel.ResourceSta
 		{Type: resourcemodel.StatusSignalResourceState, Name: "spec.suspend", Status: strconv.FormatBool(facts.Suspended)},
 		{Type: resourcemodel.StatusSignalResourceState, Name: "status.active", Status: strconv.FormatInt(int64(facts.ActiveJobs), 10)},
 	}
-	lifecycle := resourcemodel.WorkloadLifecycle(cronJob.ObjectMeta)
-	if status, ok := resourcemodel.DeletingWorkloadStatus(cronJob.ObjectMeta, strconv.FormatInt(int64(facts.ActiveJobs), 10), signals, lifecycle); ok {
+	lifecycle := resourcemodel.ObjectLifecycle(cronJob.ObjectMeta)
+	if status, ok := resourcemodel.DeletingObjectStatus(cronJob.ObjectMeta, strconv.FormatInt(int64(facts.ActiveJobs), 10), signals, lifecycle); ok {
 		return status
 	}
 	if facts.Suspended {
-		return resourcemodel.WorkloadSourceStatus("Suspended", "true", "Suspended", "", "warning", signals, lifecycle)
+		return resourcemodel.ObjectSourceStatus("Suspended", "true", "Suspended", "", "warning", signals, lifecycle)
 	}
 	if facts.ActiveJobs > 0 {
-		return resourcemodel.WorkloadSourceStatus("Active", strconv.FormatInt(int64(facts.ActiveJobs), 10), "", "", "ready", signals, lifecycle)
+		return resourcemodel.ObjectSourceStatus("Active", strconv.FormatInt(int64(facts.ActiveJobs), 10), "", "", "ready", signals, lifecycle)
 	}
-	return resourcemodel.WorkloadSourceStatus("Idle", "0", "", "", "inactive", signals, lifecycle)
+	return resourcemodel.ObjectSourceStatus("Idle", "0", "", "", "inactive", signals, lifecycle)
 }

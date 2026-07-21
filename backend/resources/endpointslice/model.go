@@ -22,7 +22,7 @@ import (
 func BuildResourceModel(clusterID string, slice *discoveryv1.EndpointSlice) resourcemodel.ResourceModel {
 	facts := BuildFacts(clusterID, slice)
 	status := statusPresentation(slice, facts)
-	return resourcemodel.NetworkResourceModel(clusterID, "discovery.k8s.io", "v1", "EndpointSlice", "endpointslices", resourcemodel.ResourceScopeNamespaced, slice.ObjectMeta, status, resourcemodel.ResourceFacts{})
+	return resourcemodel.KubernetesResourceModel(clusterID, "discovery.k8s.io", "v1", "EndpointSlice", "endpointslices", resourcemodel.ResourceScopeNamespaced, slice.ObjectMeta, status, resourcemodel.ResourceFacts{})
 }
 
 // BuildFacts extracts the EndpointSlice facts from the raw object.
@@ -54,17 +54,17 @@ func statusPresentation(slice *discoveryv1.EndpointSlice, facts Facts) resourcem
 		{Type: resourcemodel.StatusSignalResourceState, Name: "readyAddresses", Status: state},
 		{Type: resourcemodel.StatusSignalResourceState, Name: "notReadyAddresses", Status: strconv.Itoa(notReady)},
 	}
-	lifecycle := resourcemodel.NetworkLifecycle(slice.ObjectMeta)
-	if status, ok := resourcemodel.DeletingNetworkStatus(slice.ObjectMeta, state, signals, lifecycle); ok {
+	lifecycle := resourcemodel.ObjectLifecycle(slice.ObjectMeta)
+	if status, ok := resourcemodel.DeletingObjectStatus(slice.ObjectMeta, state, signals, lifecycle); ok {
 		return status
 	}
 	if notReady > 0 && ready == 0 {
-		return resourcemodel.NetworkSourceStatus("No ready addresses", state, "", "warning", signals, lifecycle)
+		return resourcemodel.ObjectSourceStatus("No ready addresses", state, "", "", "warning", signals, lifecycle)
 	}
 	if notReady > 0 {
-		return resourcemodel.NetworkSourceStatus(resourcemodel.CountLabel(ready, "ready address", "ready addresses"), state, "", "warning", signals, lifecycle)
+		return resourcemodel.ObjectSourceStatus(resourcemodel.CountLabel(ready, "ready address", "ready addresses"), state, "", "", "warning", signals, lifecycle)
 	}
-	return resourcemodel.NetworkSourceStatus(resourcemodel.CountLabel(ready, "ready address", "ready addresses"), state, "", "ready", signals, lifecycle)
+	return resourcemodel.ObjectSourceStatus(resourcemodel.CountLabel(ready, "ready address", "ready addresses"), state, "", "", "ready", signals, lifecycle)
 }
 
 func addressFacts(clusterID, fallbackNamespace string, endpoint discoveryv1.Endpoint) []EndpointAddressFacts {

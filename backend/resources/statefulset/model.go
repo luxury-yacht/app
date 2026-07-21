@@ -24,7 +24,7 @@ import (
 // carries only the identity + status; callers needing facts use BuildFacts.
 func BuildResourceModel(clusterID string, statefulSet *appsv1.StatefulSet) resourcemodel.ResourceModel {
 	status := BuildStatusPresentation(statefulSet)
-	return resourcemodel.WorkloadResourceModel(clusterID, "apps", "v1", "StatefulSet", "statefulsets", statefulSet.ObjectMeta, status, resourcemodel.ResourceFacts{})
+	return resourcemodel.KubernetesResourceModel(clusterID, "apps", "v1", "StatefulSet", "statefulsets", resourcemodel.ResourceScopeNamespaced, statefulSet.ObjectMeta, status, resourcemodel.ResourceFacts{})
 }
 
 // BuildFacts extracts the StatefulSet facts from the raw object.
@@ -95,8 +95,8 @@ func BuildStatusPresentation(statefulSet *appsv1.StatefulSet) resourcemodel.Reso
 	facts := BuildFacts(statefulSet)
 	signals := resourcemodel.WorkloadReplicaSignals(facts.WorkloadCommonFacts)
 	signals = append(signals, statusSignals(statefulSet)...)
-	lifecycle := resourcemodel.WorkloadLifecycle(statefulSet.ObjectMeta)
-	if status, ok := resourcemodel.DeletingWorkloadStatus(statefulSet.ObjectMeta, resourcemodel.ReplicaState(facts.WorkloadCommonFacts), signals, lifecycle); ok {
+	lifecycle := resourcemodel.ObjectLifecycle(statefulSet.ObjectMeta)
+	if status, ok := resourcemodel.DeletingObjectStatus(statefulSet.ObjectMeta, resourcemodel.ReplicaState(facts.WorkloadCommonFacts), signals, lifecycle); ok {
 		return status
 	}
 	return resourcemodel.ReplicaStatusPresentation(facts.WorkloadCommonFacts, signals, lifecycle)

@@ -3,79 +3,9 @@ package resourcemodel
 import (
 	"fmt"
 	"sort"
-	"time"
 
 	corev1 "k8s.io/api/core/v1"
-	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 )
-
-func ConfigResourceModel(
-	clusterID, kind, resource string,
-	meta metav1.ObjectMeta,
-	status ResourceStatusPresentation,
-	facts ResourceFacts,
-) ResourceModel {
-	return ResourceModel{
-		Ref: ResourceRef{
-			ClusterID: clusterID,
-			Group:     "",
-			Version:   "v1",
-			Kind:      kind,
-			Resource:  resource,
-			Namespace: meta.Namespace,
-			Name:      meta.Name,
-			UID:       string(meta.UID),
-		},
-		Source: ResourceSourceKubernetes,
-		Scope:  ResourceScopeNamespaced,
-		Metadata: ResourceMetadata{
-			Labels:            CopyStringMap(meta.Labels),
-			Annotations:       CopyStringMap(meta.Annotations),
-			CreationTimestamp: meta.CreationTimestamp,
-			ResourceVersion:   meta.ResourceVersion,
-			Finalizers:        append([]string(nil), meta.Finalizers...),
-		},
-		Status: status,
-		Facts:  facts,
-	}
-}
-
-func DeletingConfigStatus(meta metav1.ObjectMeta, state string, signals []ResourceStatusSignal, lifecycle ResourceLifecycle) (ResourceStatusPresentation, bool) {
-	if meta.DeletionTimestamp == nil {
-		return ResourceStatusPresentation{}, false
-	}
-	deletionTimestamp := meta.DeletionTimestamp.Time.Format(time.RFC3339)
-	return ResourceStatusPresentation{
-		Label:        "Terminating",
-		State:        state,
-		Presentation: "terminating",
-		Reason:       "DeletionTimestamp",
-		Signals: append(signals, ResourceStatusSignal{
-			Type:   StatusSignalDeletion,
-			Name:   "metadata.deletionTimestamp",
-			Status: deletionTimestamp,
-		}),
-		Lifecycle: lifecycle,
-	}, true
-}
-
-func ConfigSourceStatus(label, state, reason, presentation string, signals []ResourceStatusSignal, lifecycle ResourceLifecycle) ResourceStatusPresentation {
-	return ResourceStatusPresentation{
-		Label:        label,
-		State:        state,
-		Presentation: presentation,
-		Reason:       reason,
-		Signals:      signals,
-		Lifecycle:    lifecycle,
-	}
-}
-
-func ConfigLifecycle(meta metav1.ObjectMeta) ResourceLifecycle {
-	return ResourceLifecycle{
-		Deleting:         meta.DeletionTimestamp != nil,
-		FinalizerBlocked: meta.DeletionTimestamp != nil && len(meta.Finalizers) > 0,
-	}
-}
 
 func ItemCountLabel(count int) string {
 	if count == 1 {

@@ -65,15 +65,15 @@ func statusPresentation(pdb *policyv1.PodDisruptionBudget, facts Facts) resource
 			Message: condition.Message,
 		})
 	}
-	lifecycle := resourcemodel.NetworkLifecycle(pdb.ObjectMeta)
-	if status, ok := resourcemodel.DeletingNetworkStatus(pdb.ObjectMeta, state, signals, lifecycle); ok {
+	lifecycle := resourcemodel.ObjectLifecycle(pdb.ObjectMeta)
+	if status, ok := resourcemodel.DeletingObjectStatus(pdb.ObjectMeta, state, signals, lifecycle); ok {
 		return status
 	}
 	presentation := "ready"
 	if facts.CurrentHealthy < facts.DesiredHealthy || facts.AllowedDisruptions == 0 {
 		presentation = "warning"
 	}
-	return resourcemodel.NetworkSourceStatus(summary(facts), state, "", presentation, signals, lifecycle)
+	return resourcemodel.ObjectSourceStatus(summary(facts), state, "", "", presentation, signals, lifecycle)
 }
 
 // summary is the short status-label string ("MinAvailable: x, Disruptions Allowed: y").

@@ -23,7 +23,7 @@ import (
 func BuildResourceModel(clusterID string, event *corev1.Event) resourcemodel.ResourceModel {
 	facts := BuildFacts(clusterID, event)
 	status := statusPresentation(event, facts)
-	return resourcemodel.NetworkResourceModel(clusterID, "", "v1", "Event", "events", resourcemodel.ResourceScopeNamespaced, event.ObjectMeta, status, resourcemodel.ResourceFacts{})
+	return resourcemodel.KubernetesResourceModel(clusterID, "", "v1", "Event", "events", resourcemodel.ResourceScopeNamespaced, event.ObjectMeta, status, resourcemodel.ResourceFacts{})
 }
 
 // BuildFacts extracts the Event facts from the raw object.
@@ -78,12 +78,12 @@ func statusPresentation(event *corev1.Event, facts Facts) resourcemodel.Resource
 	}}
 	lifecycle := resourcemodel.ResourceLifecycle{}
 	if event != nil {
-		lifecycle = resourcemodel.NetworkLifecycle(event.ObjectMeta)
-		if status, ok := resourcemodel.DeletingNetworkStatus(event.ObjectMeta, state, signals, lifecycle); ok {
+		lifecycle = resourcemodel.ObjectLifecycle(event.ObjectMeta)
+		if status, ok := resourcemodel.DeletingObjectStatus(event.ObjectMeta, state, signals, lifecycle); ok {
 			return status
 		}
 	}
-	return resourcemodel.NetworkSourceStatus(state, state, facts.Reason, eventPresentation(state), signals, lifecycle)
+	return resourcemodel.ObjectSourceStatus(state, state, facts.Reason, "", eventPresentation(state), signals, lifecycle)
 }
 
 // EventTimestamp returns the most-recent timestamp for an event (last seen, falling
