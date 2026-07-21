@@ -1553,11 +1553,24 @@ func TestObjectMapScopedGatewayCollectionFiltersInformerCache(t *testing.T) {
 	builder := newObjectMapTestBuilder(t, client)
 	builder.gatewayShared = startObjectMapGatewayFactory(t, gatewayClient)
 	builder.allowedNamespaces = []string{"default", "team-b"}
-	before := len(gatewayClient.Actions())
+	// Count only list actions: the informers' initial lists have completed by
+	// WaitForCacheSync, but their WATCH registrations land asynchronously and
+	// can arrive inside the Build window — irrelevant to the contract under
+	// test, which is that Build itself must not LIST Gateway API resources.
+	countGatewayListActions := func() int {
+		count := 0
+		for _, action := range gatewayClient.Actions() {
+			if action.GetVerb() == "list" {
+				count++
+			}
+		}
+		return count
+	}
+	before := countGatewayListActions()
 	ctx := WithClusterMeta(context.Background(), ClusterMeta{ClusterID: "cluster-a", ClusterName: "Cluster A"})
 	snap, err := builder.Build(ctx, "default:gateway.networking.k8s.io/v1:Gateway:edge?maxDepth=5&maxNodes=100")
 	require.NoError(t, err)
-	require.Len(t, gatewayClient.Actions(), before, "object-map builds must not list Gateway API resources")
+	require.Equal(t, before, countGatewayListActions(), "object-map builds must not list Gateway API resources")
 	payload := snap.Payload.(ObjectMapSnapshotPayload)
 	assertNode(t, payload, "Gateway", "edge")
 	assertMissingNode(t, payload, "Gateway", "outside")

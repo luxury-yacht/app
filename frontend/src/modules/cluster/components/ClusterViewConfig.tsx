@@ -5,24 +5,13 @@
  * Ingress Classes, and Admission Control resources.
  */
 
-import { useKubeconfig } from '@modules/kubernetes/config/KubeconfigContext';
-import { useObjectPanel } from '@modules/object-panel/hooks/useObjectPanel';
-import ResourceInventoryTable from '@modules/resource-grid/ResourceInventoryTable';
-import { selectPayloadRows } from '@modules/resource-grid/typedResourceQueryScope';
-import { useQueryBackedClusterResourceGridTable } from '@modules/resource-grid/useQueryBackedResourceGridTable';
-import type { ContextMenuItem } from '@shared/components/ContextMenu';
-import * as cf from '@shared/components/tables/columnFactories';
-import type { GridColumnDefinition } from '@shared/components/tables/GridTable';
-import { useNavigateToView } from '@shared/hooks/useNavigateToView';
-import { useObjectActionController } from '@shared/hooks/useObjectActionController';
 import {
-  buildRequiredCanonicalObjectRowKey,
-  buildRequiredObjectReference,
-} from '@shared/utils/objectIdentity';
-import React, { useCallback, useMemo } from 'react';
+  type AggregatedResourceGridViewSpec,
+  ClusterAggregatedResourceGridView,
+} from '@modules/resource-grid/AggregatedResourceGridView';
+import * as cf from '@shared/components/tables/columnFactories';
+import React from 'react';
 import type { ClusterConfigSnapshotPayload } from '@/core/refresh/types';
-import { useShortNames } from '@/hooks/useShortNames';
-import { resolveEmptyStateMessage } from '@/utils/emptyState';
 import { getDisplayKind } from '@/utils/kindAliasMap';
 
 // Define the data structure for configuration resources
@@ -40,165 +29,49 @@ interface ConfigViewProps {
   error?: string | null;
 }
 
+const configSpec: AggregatedResourceGridViewSpec<ConfigData> = {
+  domain: 'cluster-config',
+  viewId: 'cluster-config',
+  labels: { cluster: 'Cluster Configuration' },
+  emptyMessage: () => 'No cluster-scoped config objects found',
+  spinnerMessage: 'Loading configuration resources...',
+  tableClassName: 'gridtable-config',
+  showKindDropdown: true,
+  getIdentity: (resource) => ({
+    kind: resource.kind,
+    name: resource.name,
+    clusterId: resource.clusterId ?? undefined,
+    clusterName: resource.clusterName ?? undefined,
+  }),
+  buildColumns: ({ identity, useShortResourceNames }) => [
+    cf.createKindColumn<ConfigData>({
+      key: 'kind',
+      getKind: (resource) => resource.kind,
+      getAlias: (resource) => resource.kindAlias,
+      getDisplayText: (resource) => getDisplayKind(resource.kind, useShortResourceNames),
+      onClick: identity.open,
+      onAltClick: identity.navigate,
+    }),
+    cf.createTextColumn<ConfigData>('name', 'Name', (resource) => resource.name, {
+      sortable: true,
+      onClick: identity.open,
+      onAltClick: identity.navigate,
+      getClassName: () => 'object-panel-link',
+    }),
+    cf.createAgeColumn(),
+  ],
+};
+
 /**
  * GridTable component for cluster configuration resources
  * Displays Storage Classes, Ingress Classes, and Admission Control resources
  */
-const ConfigViewGrid: React.FC<ConfigViewProps> = React.memo(({ error }) => {
-  const { openWithObject } = useObjectPanel();
-  const { navigateToView } = useNavigateToView();
-  const { selectedClusterId } = useKubeconfig();
-  const useShortResourceNames = useShortNames();
-
-  const handleResourceClick = useCallback(
-    (resource: ConfigData) => {
-      openWithObject(
-        buildRequiredObjectReference(
-          {
-            kind: resource.kind,
-            name: resource.name,
-            clusterId: resource.clusterId ?? undefined,
-            clusterName: resource.clusterName ?? undefined,
-          },
-          { fallbackClusterId: selectedClusterId }
-        )
-      );
-    },
-    [openWithObject, selectedClusterId]
-  );
-
-  const keyExtractor = useCallback(
-    (resource: ConfigData) =>
-      buildRequiredCanonicalObjectRowKey(
-        {
-          kind: resource.kind,
-          name: resource.name,
-          clusterId: resource.clusterId,
-        },
-        { fallbackClusterId: selectedClusterId }
-      ),
-    [selectedClusterId]
-  );
-
-  // Define columns for config resources
-  const columns: GridColumnDefinition<ConfigData>[] = useMemo(() => {
-    const baseColumns: GridColumnDefinition<ConfigData>[] = [
-      cf.createKindColumn<ConfigData>({
-        key: 'kind',
-        getKind: (resource) => resource.kind,
-        getAlias: (resource) => resource.kindAlias,
-        getDisplayText: (resource) => getDisplayKind(resource.kind, useShortResourceNames),
-        onClick: handleResourceClick,
-        onAltClick: (resource) =>
-          navigateToView(
-            buildRequiredObjectReference(
-              {
-                kind: resource.kind,
-                name: resource.name,
-                clusterId: resource.clusterId,
-                clusterName: resource.clusterName,
-              },
-              { fallbackClusterId: selectedClusterId }
-            )
-          ),
-      }),
-      cf.createTextColumn<ConfigData>('name', 'Name', (resource) => resource.name, {
-        sortable: true,
-        onClick: handleResourceClick,
-        onAltClick: (resource) =>
-          navigateToView(
-            buildRequiredObjectReference(
-              {
-                kind: resource.kind,
-                name: resource.name,
-                clusterId: resource.clusterId,
-                clusterName: resource.clusterName,
-              },
-              { fallbackClusterId: selectedClusterId }
-            )
-          ),
-        getClassName: () => 'object-panel-link',
-      }),
-      cf.createAgeColumn(),
-    ];
-
-    const sizing: cf.ColumnSizingMap = {
-      kind: { autoWidth: true },
-      name: { autoWidth: true },
-      age: { autoWidth: true },
-    };
-    cf.applyColumnSizing(baseColumns, sizing);
-
-    return baseColumns;
-  }, [handleResourceClick, navigateToView, selectedClusterId, useShortResourceNames]);
-
-  const { gridTableProps, favModal, source } = useQueryBackedClusterResourceGridTable<
-    ClusterConfigSnapshotPayload,
-    ConfigData
-  >({
-    queryTableMode: 'Query Backed Static',
-    clusterId: selectedClusterId,
-    domain: 'cluster-config',
-    label: 'Cluster Configuration',
-    selectRows: selectPayloadRows,
-    viewId: 'cluster-config',
-    columns,
-    keyExtractor,
-    showKindDropdown: true,
-    diagnosticsLabel: 'Cluster Configuration',
-  });
-
-  const objectActions = useObjectActionController({
-    context: 'gridtable',
-    onOpen: (object) => openWithObject(object),
-    onOpenObjectMap: (object) => openWithObject(object, { initialTab: 'map' }),
-  });
-
-  // Get context menu items
-  const getContextMenuItems = useCallback(
-    (resource: ConfigData): ContextMenuItem[] => {
-      return objectActions.getMenuItems(
-        buildRequiredObjectReference(
-          {
-            kind: resource.kind,
-            name: resource.name,
-            clusterId: resource.clusterId,
-            clusterName: resource.clusterName,
-          },
-          { fallbackClusterId: selectedClusterId }
-        )
-      );
-    },
-    [objectActions, selectedClusterId]
-  );
-
-  // Resolve empty state message
-  const emptyMessage = useMemo(
-    () => resolveEmptyStateMessage(error, 'No cluster-scoped config objects found'),
-    [error]
-  );
-
-  return (
-    <>
-      <ResourceInventoryTable
-        source={source}
-        gridTableProps={gridTableProps}
-        spinnerMessage="Loading configuration resources..."
-        favModal={favModal}
-        columns={columns}
-        diagnosticsLabel="Cluster Configuration"
-        onRowClick={handleResourceClick}
-        tableClassName="gridtable-config"
-        enableContextMenu={true}
-        getCustomContextMenuItems={getContextMenuItems}
-        useShortNames={useShortResourceNames}
-        emptyMessage={emptyMessage}
-      />
-
-      {objectActions.modals}
-    </>
-  );
-});
+const ConfigViewGrid: React.FC<ConfigViewProps> = React.memo(({ error }) => (
+  <ClusterAggregatedResourceGridView<ClusterConfigSnapshotPayload, ConfigData>
+    spec={configSpec}
+    error={error}
+  />
+));
 
 ConfigViewGrid.displayName = 'ClusterViewConfig';
 

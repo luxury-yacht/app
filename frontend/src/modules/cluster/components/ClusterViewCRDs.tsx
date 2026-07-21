@@ -1,28 +1,16 @@
 /**
  * frontend/src/modules/cluster/components/ClusterViewCRDs.tsx
  *
- * UI component for ClusterViewCRDs.
- * Handles rendering and interactions for the cluster feature.
+ * GridTable view for cluster Custom Resource Definitions.
  */
 
-import { useKubeconfig } from '@modules/kubernetes/config/KubeconfigContext';
-import { useObjectPanel } from '@modules/object-panel/hooks/useObjectPanel';
-import ResourceInventoryTable from '@modules/resource-grid/ResourceInventoryTable';
-import { selectPayloadRows } from '@modules/resource-grid/typedResourceQueryScope';
-import { useQueryBackedClusterResourceGridTable } from '@modules/resource-grid/useQueryBackedResourceGridTable';
-import type { ContextMenuItem } from '@shared/components/ContextMenu';
-import * as cf from '@shared/components/tables/columnFactories';
-import type { GridColumnDefinition } from '@shared/components/tables/GridTable';
-import { useNavigateToView } from '@shared/hooks/useNavigateToView';
-import { useObjectActionController } from '@shared/hooks/useObjectActionController';
 import {
-  buildRequiredCanonicalObjectRowKey,
-  buildRequiredObjectReference,
-} from '@shared/utils/objectIdentity';
-import React, { useCallback, useMemo } from 'react';
+  type AggregatedResourceGridViewSpec,
+  ClusterAggregatedResourceGridView,
+} from '@modules/resource-grid/AggregatedResourceGridView';
+import * as cf from '@shared/components/tables/columnFactories';
+import React from 'react';
 import type { ClusterCRDSnapshotPayload } from '@/core/refresh/types';
-import { useShortNames } from '@/hooks/useShortNames';
-import { resolveEmptyStateMessage } from '@/utils/emptyState';
 import { getDisplayKind } from '@/utils/kindAliasMap';
 
 // Define the data structure for Custom Resource Definitions
@@ -65,179 +53,65 @@ interface CRDsViewProps {
   error?: string | null;
 }
 
+const crdsSpec: AggregatedResourceGridViewSpec<CRDsData> = {
+  domain: 'cluster-crds',
+  viewId: 'cluster-crds',
+  labels: { cluster: 'Cluster CRDs' },
+  emptyMessage: () => 'No CRDs found',
+  spinnerMessage: 'Loading CRDs...',
+  tableClassName: 'gridtable-crds',
+  filterOptions: () => ({ isNamespaceScoped: false }),
+  getIdentity: (crd) => ({
+    kind: 'CustomResourceDefinition',
+    name: crd.name,
+    clusterId: crd.clusterId,
+    clusterName: crd.clusterName ?? undefined,
+  }),
+  buildColumns: ({ identity, useShortResourceNames }) => [
+    cf.createKindColumn<CRDsData>({
+      key: 'kind',
+      getKind: (crd) => crd.kind || 'CustomResourceDefinition',
+      getDisplayText: (crd) =>
+        getDisplayKind(crd.kind || 'CustomResourceDefinition', useShortResourceNames),
+      onClick: identity.open,
+      onAltClick: identity.navigate,
+    }),
+    cf.createTextColumn<CRDsData>('name', 'Name', (crd) => crd.name, {
+      sortable: true,
+      onClick: identity.open,
+      onAltClick: identity.navigate,
+      getTitle: (crd) => `Open ${crd.name}`,
+      getClassName: () => 'object-panel-link',
+    }),
+    cf.createTextColumn('group', 'Group', (crd) => crd.group || '-'),
+    (() => {
+      // Version column renders storage version with `(+N)` suffix for
+      // multi-version CRDs. Sort uses bare storageVersion so that
+      // sibling CRDs with the same storage version cluster together
+      // regardless of whether they have additional served versions.
+      //
+      const versionColumn = cf.createTextColumn<CRDsData>(
+        'version',
+        'Version',
+        formatCRDVersionCell
+      );
+      versionColumn.sortValue = (crd) => crd.storageVersion ?? '';
+      return versionColumn;
+    })(),
+    cf.createTextColumn('scope', 'Scope', (crd) => crd.scope || '-'),
+    cf.createAgeColumn(),
+  ],
+};
+
 /**
  * GridTable component for cluster Custom Resource Definitions
  */
-const CRDsViewGrid: React.FC<CRDsViewProps> = React.memo(({ error }) => {
-  const { openWithObject } = useObjectPanel();
-  const { navigateToView } = useNavigateToView();
-  const { selectedClusterId } = useKubeconfig();
-  const useShortResourceNames = useShortNames();
-
-  const handleResourceClick = useCallback(
-    (crd: CRDsData) => {
-      openWithObject(
-        buildRequiredObjectReference(
-          {
-            kind: 'CustomResourceDefinition',
-            name: crd.name,
-            clusterId: crd.clusterId,
-            clusterName: crd.clusterName ?? undefined,
-          },
-          { fallbackClusterId: selectedClusterId }
-        )
-      );
-    },
-    [openWithObject, selectedClusterId]
-  );
-
-  const keyExtractor = useCallback(
-    (crd: CRDsData) =>
-      buildRequiredCanonicalObjectRowKey(
-        {
-          kind: 'CustomResourceDefinition',
-          name: crd.name,
-          clusterId: crd.clusterId,
-        },
-        { fallbackClusterId: selectedClusterId }
-      ),
-    [selectedClusterId]
-  );
-
-  // Define columns for CRDs
-  const columns: GridColumnDefinition<CRDsData>[] = useMemo(() => {
-    const baseColumns: GridColumnDefinition<CRDsData>[] = [
-      cf.createKindColumn<CRDsData>({
-        key: 'kind',
-        getKind: (crd) => crd.kind || 'CustomResourceDefinition',
-        getDisplayText: (crd) =>
-          getDisplayKind(crd.kind || 'CustomResourceDefinition', useShortResourceNames),
-        onClick: handleResourceClick,
-        onAltClick: (crd) =>
-          navigateToView(
-            buildRequiredObjectReference(
-              {
-                kind: 'CustomResourceDefinition',
-                name: crd.name,
-                clusterId: crd.clusterId,
-                clusterName: crd.clusterName,
-              },
-              { fallbackClusterId: selectedClusterId }
-            )
-          ),
-      }),
-      cf.createTextColumn<CRDsData>('name', 'Name', (crd) => crd.name, {
-        sortable: true,
-        onClick: handleResourceClick,
-        onAltClick: (crd) =>
-          navigateToView(
-            buildRequiredObjectReference(
-              {
-                kind: 'CustomResourceDefinition',
-                name: crd.name,
-                clusterId: crd.clusterId,
-                clusterName: crd.clusterName,
-              },
-              { fallbackClusterId: selectedClusterId }
-            )
-          ),
-        getTitle: (crd) => `Open ${crd.name}`,
-        getClassName: () => 'object-panel-link',
-      }),
-      cf.createTextColumn('group', 'Group', (crd) => crd.group || '-'),
-      (() => {
-        // Version column renders storage version with `(+N)` suffix for
-        // multi-version CRDs. Sort uses bare storageVersion so that
-        // sibling CRDs with the same storage version cluster together
-        // regardless of whether they have additional served versions.
-        //
-        const versionColumn = cf.createTextColumn<CRDsData>(
-          'version',
-          'Version',
-          formatCRDVersionCell
-        );
-        versionColumn.sortValue = (crd) => crd.storageVersion ?? '';
-        return versionColumn;
-      })(),
-      cf.createTextColumn('scope', 'Scope', (crd) => crd.scope || '-'),
-      cf.createAgeColumn(),
-    ];
-
-    const sizing: cf.ColumnSizingMap = {
-      kind: { autoWidth: true },
-      name: { autoWidth: true },
-      group: { autoWidth: true },
-      version: { autoWidth: true },
-      scope: { autoWidth: true },
-      age: { autoWidth: true },
-    };
-    cf.applyColumnSizing(baseColumns, sizing);
-
-    return baseColumns;
-  }, [handleResourceClick, navigateToView, selectedClusterId, useShortResourceNames]);
-
-  const { gridTableProps, favModal, source } = useQueryBackedClusterResourceGridTable<
-    ClusterCRDSnapshotPayload,
-    CRDsData
-  >({
-    queryTableMode: 'Query Backed Static',
-    clusterId: selectedClusterId,
-    domain: 'cluster-crds',
-    label: 'Cluster CRDs',
-    selectRows: selectPayloadRows,
-    viewId: 'cluster-crds',
-    columns,
-    keyExtractor,
-    filterOptions: { isNamespaceScoped: false },
-  });
-
-  const objectActions = useObjectActionController({
-    context: 'gridtable',
-    onOpen: (object) => openWithObject(object),
-  });
-
-  // Get context menu items
-  const getContextMenuItems = useCallback(
-    (crd: CRDsData): ContextMenuItem[] => {
-      return objectActions.getMenuItems(
-        buildRequiredObjectReference(
-          {
-            kind: 'CustomResourceDefinition',
-            name: crd.name,
-            clusterId: crd.clusterId,
-            clusterName: crd.clusterName,
-          },
-          { fallbackClusterId: selectedClusterId }
-        )
-      );
-    },
-    [objectActions, selectedClusterId]
-  );
-
-  // Resolve empty state message
-  const emptyMessage = useMemo(() => resolveEmptyStateMessage(error, 'No CRDs found'), [error]);
-
-  return (
-    <>
-      <ResourceInventoryTable
-        source={source}
-        gridTableProps={gridTableProps}
-        spinnerMessage="Loading CRDs..."
-        favModal={favModal}
-        columns={columns}
-        diagnosticsLabel="Cluster CRDs"
-        onRowClick={handleResourceClick}
-        tableClassName="gridtable-crds"
-        enableContextMenu={true}
-        getCustomContextMenuItems={getContextMenuItems}
-        useShortNames={useShortResourceNames}
-        emptyMessage={emptyMessage}
-      />
-
-      {objectActions.modals}
-    </>
-  );
-});
+const CRDsViewGrid: React.FC<CRDsViewProps> = React.memo(({ error }) => (
+  <ClusterAggregatedResourceGridView<ClusterCRDSnapshotPayload, CRDsData>
+    spec={crdsSpec}
+    error={error}
+  />
+));
 
 CRDsViewGrid.displayName = 'ClusterCRDsView';
 

@@ -4,14 +4,12 @@ import (
 	"context"
 	"fmt"
 	"sort"
-	"strings"
 
 	informers "k8s.io/client-go/informers"
 	"k8s.io/client-go/tools/cache"
 	gatewayinformers "sigs.k8s.io/gateway-api/pkg/client/informers/externalversions"
 
 	"github.com/luxury-yacht/app/backend/internal/config"
-	"github.com/luxury-yacht/app/backend/kind/kindregistry"
 	"github.com/luxury-yacht/app/backend/kind/streamrows"
 	"github.com/luxury-yacht/app/backend/kind/streamspec"
 	"github.com/luxury-yacht/app/backend/refresh"
@@ -27,8 +25,8 @@ import (
 
 const clusterConfigDomainName = "cluster-config"
 
-// ClusterConfigBuilder aggregates configuration resources for the cluster tab by
-// listing each registered kind (shared- or Gateway-API-factory) from its indexer.
+// ClusterConfigBuilder aggregates configuration resources for the cluster tab via
+// the shared typed-table domain skeleton (typed_table_domain.go).
 type ClusterConfigBuilder struct {
 	collectIndexer func(streamspec.Descriptor) cache.Indexer
 	// maintained, when set, is an informer-fed store the builder serves rows from
@@ -67,6 +65,28 @@ func clusterConfigQueryCapabilities() ResourceQueryCapabilities {
 // alias keeps the snapshot-side name and wire JSON unchanged.
 type ClusterConfigEntry = streamrows.ClusterConfigEntry
 
+func clusterConfigDomainSpec() typedTableDomainSpec[ClusterConfigEntry] {
+	return typedTableDomainSpec[ClusterConfigEntry]{
+		domain:       clusterConfigDomainName,
+		entryLimit:   config.SnapshotClusterConfigEntryLimit,
+		description:  "cluster configuration resources",
+		adapter:      clusterConfigTableQueryAdapter(),
+		schema:       clusterConfigQuerypageSchema(),
+		capabilities: clusterConfigQueryCapabilities(),
+		kindOf:       func(entry ClusterConfigEntry) string { return entry.Kind },
+		sortRows:     sortClusterConfigEntries,
+	}
+}
+
+func sortClusterConfigEntries(entries []ClusterConfigEntry) {
+	sort.Slice(entries, func(i, j int) bool {
+		if entries[i].Kind == entries[j].Kind {
+			return entries[i].Name < entries[j].Name
+		}
+		return entries[i].Kind < entries[j].Kind
+	})
+}
+
 // RegisterClusterConfigDomainWithGatewayAPI registers the cluster-config domain.
 //
 // This domain is MIXED: StorageClass, IngressClass, and the admission webhook kinds
@@ -86,16 +106,8 @@ func RegisterClusterConfigDomainWithGatewayAPI(
 		return fmt.Errorf("shared informer factory is nil")
 	}
 	collectIndexer := factoryIndexers(factory, gatewayFactory, allowed, clusterConfigDomainName, ingestManager)
-
-	// Maintain a per-cluster store fed by each available config kind's source: the
-	// ingest Sink for the cut kinds (StorageClass/IngressClass/webhooks), the
-	// Gateway-API informer handler for the uncut GatewayClass.
-	maintained := newTypedMaintainedStore(clusterMeta, clusterConfigQuerypageSchema(), clusterConfigTableQueryAdapter())
-	// Register the store so the governor can spill it on Cold and re-paint + reconcile it on
-	// re-warm (domain.Registry.{Spill,Restore,Reconcile}MaintainedStores).
-	reg.RegisterMaintainedStore(clusterConfigDomainName, maintained)
-	feedMaintainedFromIngest(maintained, clusterConfigDomainName, ingestManager)
-	if err := registerMaintainedHandlers(maintained, clusterConfigDomainName, collectIndexer, factory, gatewayFactory); err != nil {
+	maintained, err := newRegisteredTypedTableStore(reg, clusterConfigDomainSpec(), clusterMeta, collectIndexer, factory, gatewayFactory, ingestManager)
+	if err != nil {
 		return err
 	}
 
@@ -109,106 +121,10 @@ func RegisterClusterConfigDomainWithGatewayAPI(
 	})
 }
 
-// clusterConfigSources computes per-descriptor availability for THIS request (indexer
-// present AND runtimeResourceAllowed), returning the snapshot sources and a
-// Kind→available map — the same gating collectDescriptorTableRows applies, so the
-// maintained-store path and the list path agree on which kinds are visible.
-func (b *ClusterConfigBuilder) clusterConfigSources(ctx context.Context) ([]typedTableResourceSource, map[string]bool) {
-	descriptors := kindregistry.StreamDescriptorsForDomain(clusterConfigDomainName)
-	sources := make([]typedTableResourceSource, 0, len(descriptors))
-	available := make(map[string]bool, len(descriptors))
-	for _, d := range descriptors {
-		ok := b.collectIndexer(d) != nil && runtimeResourceAllowed(ctx, clusterConfigDomainName, d.Group, d.Resource)
-		sources = append(sources, typedTableResourceSource{
-			Kind:      d.Kind,
-			Group:     d.Group,
-			Resource:  d.Resource,
-			Available: ok,
-		})
-		available[d.Kind] = ok
-	}
-	return sources, available
-}
-
 // Build produces the cluster configuration snapshot.
 func (b *ClusterConfigBuilder) Build(ctx context.Context, scope string) (*refresh.Snapshot, error) {
-	meta := ClusterMetaFromContext(ctx)
-	clusterID, trimmed := refresh.SplitClusterScope(scope)
-	_, query, err := parseTypedTableQueryScope(clusterID, strings.TrimSpace(trimmed), clusterConfigDomainName, "")
-	if err != nil {
-		return nil, err
-	}
-
-	sortClusterConfigEntries := func(entries []ClusterConfigEntry) {
-		sort.Slice(entries, func(i, j int) bool {
-			if entries[i].Kind == entries[j].Kind {
-				return entries[i].Name < entries[j].Name
-			}
-			return entries[i].Kind < entries[j].Kind
+	return buildTypedTableSnapshot(ctx, scope, clusterConfigDomainSpec(), b.collectIndexer, b.maintained,
+		func(meta ClusterMeta, envelope ResourceQueryEnvelope, rows []ClusterConfigEntry) any {
+			return ClusterConfigSnapshot{ClusterMeta: meta, ResourceQueryEnvelope: envelope, Rows: rows}
 		})
-	}
-
-	var resolved typedSnapshotPage[ClusterConfigEntry]
-	var version uint64
-	if b.maintained != nil {
-		// Serve the query straight from the informer-fed store, querying it in place
-		// (O(log N + page)) rather than snapshotting + rebuilding a per-Build store. The
-		// domain is cluster-scoped, so the store is queried for all rows ("").
-		sources, available := b.clusterConfigSources(ctx)
-		resolved = resolveMaintainedDirect(
-			b.maintained.store,
-			query,
-			available,
-			"",
-			clusterConfigTableQueryAdapter(),
-			clusterConfigQuerypageSchema(),
-			capabilitiesWithAvailableKinds(clusterConfigQueryCapabilities(), sources),
-			config.SnapshotClusterConfigEntryLimit,
-			"cluster configuration resources",
-			func(entry ClusterConfigEntry) string { return entry.Kind },
-			func() []ClusterConfigEntry {
-				rows := b.maintained.rows("", available)
-				sortClusterConfigEntries(rows)
-				return rows
-			},
-			typedTableQueryResourceIssues(ctx, clusterConfigDomainName, query, sources),
-		)
-		version = b.maintained.snapshotVersion()
-	} else {
-		entries, sources, v, listErr := collectDescriptorTableRows[ClusterConfigEntry](ctx, clusterConfigDomainName, b.collectIndexer, meta, "")
-		if listErr != nil {
-			return nil, listErr
-		}
-		version = v
-		sortClusterConfigEntries(entries)
-		resolved = resolveTypedSnapshotPageViaStore(
-			clusterConfigDomainName,
-			entries,
-			query,
-			clusterConfigTableQueryAdapter(),
-			clusterConfigQuerypageSchema(),
-			capabilitiesWithAvailableKinds(clusterConfigQueryCapabilities(), sources),
-			config.SnapshotClusterConfigEntryLimit,
-			"cluster configuration resources",
-			func(entry ClusterConfigEntry) string { return entry.Kind },
-			typedTableQueryResourceIssues(ctx, clusterConfigDomainName, query, sources),
-		)
-	}
-	// The window snapshot is the canonical unscoped refresh payload; only the
-	// query page publishes the request scope.
-	snapshotScope := ""
-	if query.Enabled {
-		snapshotScope = refresh.JoinClusterScope(clusterID, strings.TrimSpace(trimmed))
-	}
-	return &refresh.Snapshot{
-		Domain:  clusterConfigDomainName,
-		Scope:   snapshotScope,
-		Version: version,
-		Payload: ClusterConfigSnapshot{
-			ClusterMeta:           meta,
-			ResourceQueryEnvelope: resolved.Envelope,
-			Rows:                  resolved.Rows,
-		},
-		Stats: resolved.Stats,
-	}, nil
 }
