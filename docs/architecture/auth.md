@@ -72,8 +72,9 @@ State transitions are driven only by probe results: `ReportFailure` moves
 valid → recovering; the loop settles recovering → invalid and recovers any
 non-valid state → valid. `TriggerRetry` restarts the loop (immediate probe)
 without touching the state. There is no attempt counter in the public surface —
-progress events and the auth state RPCs carry `secondsUntilRetry` (live in both
-recovering and invalid) and the sticky `errorClass` verdict.
+progress events and the combined cluster-workspace snapshot carry
+`secondsUntilRetry` (live in both recovering and invalid) and the sticky
+`errorClass` verdict.
 
 The frontend shows the blocking auth overlay only for confirmed auth verdicts
 (settled `invalid`, or a probe rejected by the cluster) with a single message

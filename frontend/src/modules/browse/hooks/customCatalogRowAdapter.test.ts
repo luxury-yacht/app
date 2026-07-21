@@ -119,6 +119,37 @@ describe('customCatalogRowAdapter', () => {
     expect(normalized).not.toHaveProperty('apiVersion');
   });
 
+  it('normalizes a wire-shaped cluster-scoped row without optional ref fields', () => {
+    const normalized = normalizeHydratedCustomRow({
+      ref: {
+        clusterId: 'cluster-a',
+        group: 'postgres.example.com',
+        version: 'v1',
+        kind: 'Database',
+        resource: 'databases',
+        name: 'shared-pg',
+      },
+      status: 'Ready',
+      labels: { tier: 'shared' },
+    });
+
+    expect(normalized).toMatchObject({
+      namespace: '',
+      status: 'Ready',
+      labels: { tier: 'shared' },
+      ref: {
+        clusterId: 'cluster-a',
+        group: 'postgres.example.com',
+        version: 'v1',
+        kind: 'Database',
+        resource: 'databases',
+        namespace: '',
+        name: 'shared-pg',
+      },
+    });
+    expect(normalized.ref.uid).toBe('');
+  });
+
   it.each(['clusterId', 'group', 'version', 'kind', 'name'])(
     'rejects hydrated rows missing required identity field %s',
     (field) => {

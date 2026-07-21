@@ -402,22 +402,26 @@ type selectionChangeIntent struct {
 // Both code paths must perform the same initialization steps to ensure consistent behavior.
 func (a *App) SetSelectedKubeconfigs(selections []string) error {
 	return a.runSelectionMutation("set-selected-kubeconfigs", func(mutation *selectionMutation) error {
-		intentStart := time.Now()
-		intent, err := a.buildSelectionChangeIntent(selections, mutation.generation)
-		mutation.phases.intent = time.Since(intentStart)
-		if err != nil {
-			return err
-		}
-
-		if intent.clearSelection {
-			return a.clearKubeconfigSelection()
-		}
-
-		commitStart := time.Now()
-		a.commitSelectionChangeIntent(intent)
-		mutation.phases.commit = time.Since(commitStart)
-		return a.executeSelectionChangeWork(mutation.ctx, intent, &mutation.phases)
+		return a.setSelectedKubeconfigs(mutation, selections)
 	})
+}
+
+func (a *App) setSelectedKubeconfigs(mutation *selectionMutation, selections []string) error {
+	intentStart := time.Now()
+	intent, err := a.buildSelectionChangeIntent(selections, mutation.generation)
+	mutation.phases.intent = time.Since(intentStart)
+	if err != nil {
+		return err
+	}
+
+	if intent.clearSelection {
+		return a.clearKubeconfigSelection()
+	}
+
+	commitStart := time.Now()
+	a.commitSelectionChangeIntent(intent)
+	mutation.phases.commit = time.Since(commitStart)
+	return a.executeSelectionChangeWork(mutation.ctx, intent, &mutation.phases)
 }
 
 // CloseCluster atomically tears down runtime operations for a selected cluster

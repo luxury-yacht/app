@@ -94,14 +94,6 @@ export function FindCatalogObjectMatch(arg1, arg2, arg3, arg4, arg5, arg6) {
   return window['go']['backend']['App']['FindCatalogObjectMatch'](arg1, arg2, arg3, arg4, arg5, arg6);
 }
 
-export function GetAllClusterAuthStates() {
-  return window['go']['backend']['App']['GetAllClusterAuthStates']();
-}
-
-export function GetAllClusterLifecycleStates() {
-  return window['go']['backend']['App']['GetAllClusterLifecycleStates']();
-}
-
 export function GetAppInfo() {
   return window['go']['backend']['App']['GetAppInfo']();
 }

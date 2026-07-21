@@ -387,12 +387,11 @@ func TestIsolation_MultiClusterAuthStateRetrieval(t *testing.T) {
 	stateNonExistent, _ := app.GetClusterAuthState("non-existent")
 	require.Equal(t, "unknown", stateNonExistent)
 
-	// Test GetAllClusterAuthStates
-	allStates := app.GetAllClusterAuthStates()
+	allStates := app.GetClusterWorkspaceState().Clusters
 	require.Len(t, allStates, 3)
-	require.Equal(t, "valid", allStates["cluster-valid"]["state"])
-	require.Equal(t, "invalid", allStates["cluster-invalid"]["state"])
-	require.Equal(t, "unknown", allStates["cluster-no-auth"]["state"])
+	require.Equal(t, "valid", allStates["cluster-valid"].Auth.State)
+	require.Equal(t, "invalid", allStates["cluster-invalid"].Auth.State)
+	require.Equal(t, "unknown", allStates["cluster-no-auth"].Auth.State)
 }
 
 // TestIsolation_RetryAuthPerCluster verifies that RetryClusterAuth only

@@ -202,19 +202,18 @@ func TestClusterLifecycleConcurrentAccess(t *testing.T) {
 	require.Len(t, states, clusterCount)
 }
 
-func TestClusterLifecycleGetAllStatesViaApp(t *testing.T) {
+func TestClusterWorkspaceStateIncludesLifecycle(t *testing.T) {
 	app := newTestAppWithDefaults(t)
 
-	// nil lifecycle returns nil.
-	require.Nil(t, app.GetAllClusterLifecycleStates())
+	require.Empty(t, app.GetClusterWorkspaceState().Clusters)
 
 	emitter, _ := collectingEmitter()
 	app.clusterLifecycle = newClusterLifecycleWithSlowThreshold(emitter, time.Minute)
 	app.clusterLifecycle.SetState("cluster-a", ClusterStateReady)
 
-	states := app.GetAllClusterLifecycleStates()
+	states := app.GetClusterWorkspaceState().Clusters
 	require.Len(t, states, 1)
-	require.Equal(t, ClusterStateReady, states["cluster-a"])
+	require.Equal(t, ClusterStateReady, states["cluster-a"].Lifecycle)
 }
 
 func TestClusterLifecycleDefaultConstructor(t *testing.T) {

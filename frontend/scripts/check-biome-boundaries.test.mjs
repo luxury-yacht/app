@@ -51,7 +51,6 @@ const lintWithProjectConfig = (source, baseDirectory = path.join(process.cwd(), 
 describe('Biome architectural boundary plugins', () => {
   it.each([
     ['no-direct-fetch', 'fetch("/api/resources");', 'direct fetch calls'],
-    ['no-direct-lifecycle-read', 'runtime.GetAllClusterLifecycleStates();', 'appStateAccess'],
     ['no-direct-permission-read', 'runtime.QueryPermissions([]);', 'dataAccess'],
     [
       'no-direct-refresh-orchestrator',
@@ -72,7 +71,6 @@ describe('Biome architectural boundary plugins', () => {
 
   it.each([
     ['no-direct-fetch', 'dataAccess.readResources();'],
-    ['no-direct-lifecycle-read', 'appStateAccess.readClusterLifecycleStates();'],
     ['no-direct-permission-read', 'dataAccess.readPermissions();'],
     ['no-direct-refresh-orchestrator', 'dataAccess.refreshContext();'],
   ])('accepts boundary calls outside %s', (pluginName, source) => {
@@ -83,7 +81,6 @@ describe('Biome architectural boundary plugins', () => {
 
   it.each([
     ['fetch("/api/resources");', 'direct fetch calls'],
-    ['runtime.GetAllClusterLifecycleStates();', 'appStateAccess'],
     ['runtime.QueryPermissions([]);', 'dataAccess'],
     ['orchestrator.fetchScopedDomain("cluster", {});', 'fetchScopedDomain'],
     ['orchestrator.triggerManualRefreshForContext({});', 'triggerManualRefreshForContext'],

@@ -70,7 +70,9 @@ snapshot. Selection UI must use that response instead of chaining separate
 selection, auth, lifecycle, and visible-cluster reads.
 
 The React-free `clusterWorkspaceStore` subscribes to runtime events before its
-initial hydration. Live fields win over an older hydration response. It owns the
+initial hydration. Live fields win only over hydration responses that were
+already in flight when the event arrived; later authoritative snapshots can
+heal missed state. It owns the
 foreground activation/serviceability boundary and exposes immutable snapshots;
 `AuthErrorContext`, `ClusterLifecycleContext`, health hooks, and refresh
 readiness are selector/facade layers, not additional state owners. Existing

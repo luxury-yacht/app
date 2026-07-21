@@ -26,7 +26,12 @@ const requiredString = (record: Record<string, unknown>, field: string): string 
   }
   return value;
 };
-type RequiredResourceRef = ResourceRef & { resource: string; namespace: string; name: string };
+type RequiredResourceRef = ResourceRef & {
+  resource: string;
+  namespace: string;
+  name: string;
+  uid: string;
+};
 
 const requiredResourceRef = (value: unknown): RequiredResourceRef => {
   const record = asRecord(value);
@@ -36,9 +41,9 @@ const requiredResourceRef = (value: unknown): RequiredResourceRef => {
     version: requiredString(record, 'version'),
     kind: requiredString(record, 'kind'),
     resource: requiredString(record, 'resource'),
-    namespace: requiredString(record, 'namespace'),
+    namespace: optionalString(record.namespace) ?? '',
     name: requiredString(record, 'name'),
-    uid: optionalString(record.uid),
+    uid: optionalString(record.uid) ?? '',
   };
 };
 const optionalNumber = (value: unknown): number | undefined =>

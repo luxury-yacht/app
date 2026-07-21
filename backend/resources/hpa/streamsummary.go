@@ -24,8 +24,9 @@ func BuildStreamSummary(meta streamrows.ClusterMeta, hpa *autoscalingv1.Horizont
 	}
 	facts := BuildV1Facts(meta.ClusterID, hpa)
 	return streamrows.AutoscalingSummary{
-		ClusterMeta:      meta,
-		Ref:              streamrows.NewResourceRef(meta, IdentityV1, hpa),
+		ClusterMeta: meta,
+		// The stream reads v1 objects, while navigation/details use the primary v2 API.
+		Ref:              streamrows.NewResourceRef(meta, Identity, hpa),
 		Kind:             "HorizontalPodAutoscaler",
 		Name:             hpa.Name,
 		Namespace:        hpa.Namespace,

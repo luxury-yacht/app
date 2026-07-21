@@ -91,10 +91,6 @@ export function FindCatalogObjectByUID(arg1:string,arg2:string):Promise<objectca
 
 export function FindCatalogObjectMatch(arg1:string,arg2:string,arg3:string,arg4:string,arg5:string,arg6:string):Promise<objectcatalog.Summary>;
 
-export function GetAllClusterAuthStates():Promise<Record<string, Record<string, any>>>;
-
-export function GetAllClusterLifecycleStates():Promise<Record<string, backend.ClusterLifecycleState>>;
-
 export function GetAppInfo():Promise<backend.AppInfo>;
 
 export function GetAppLogs():Promise<Array<backend.LogEntry>>;

@@ -183,13 +183,23 @@ func (a *App) GetClusterWorkspaceState() ClusterWorkspaceState {
 // ApplyClusterWorkspace serializes selection mutation before foreground
 // activation and returns the resulting authoritative workspace snapshot.
 func (a *App) ApplyClusterWorkspace(command ClusterWorkspaceCommand) ClusterWorkspaceResult {
-	if command.UpdateSelectedKubeconfigs {
-		if err := a.SetSelectedKubeconfigs(command.SelectedKubeconfigs); err != nil {
-			return ClusterWorkspaceResult{State: a.GetClusterWorkspaceState(), Error: err.Error()}
+	err := a.runSelectionMutation("apply-cluster-workspace", func(mutation *selectionMutation) error {
+		if command.UpdateSelectedKubeconfigs {
+			if err := a.setSelectedKubeconfigs(mutation, command.SelectedKubeconfigs); err != nil {
+				return err
+			}
 		}
+		if err := mutation.ctx.Err(); err != nil {
+			return err
+		}
+		if clusterID := strings.TrimSpace(command.VisibleClusterID); clusterID != "" {
+			a.SetVisibleCluster(clusterID)
+		}
+		return nil
+	})
+	result := ClusterWorkspaceResult{State: a.GetClusterWorkspaceState()}
+	if err != nil {
+		result.Error = err.Error()
 	}
-	if clusterID := strings.TrimSpace(command.VisibleClusterID); clusterID != "" {
-		a.SetVisibleCluster(clusterID)
-	}
-	return ClusterWorkspaceResult{State: a.GetClusterWorkspaceState()}
+	return result
 }

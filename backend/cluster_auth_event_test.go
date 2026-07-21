@@ -301,10 +301,7 @@ func TestHandleClusterAuthRecoveryProgress_CarriesExecCommand(t *testing.T) {
 	require.Equal(t, 5, progressEvents[0]["secondsUntilRetry"])
 }
 
-// TestGetAllClusterAuthStates_IncludesExecCommand verifies the initial-state RPC
-// surfaces the stored exec command so a freshly mounted frontend can restore the
-// kubeconfig-centered overlay copy.
-func TestGetAllClusterAuthStates_IncludesExecCommand(t *testing.T) {
+func TestClusterWorkspaceStateIncludesExecCommand(t *testing.T) {
 	app := newTestAppWithDefaults(t)
 
 	mgr := authstate.New(authstate.Config{MaxAttempts: 0})
@@ -321,16 +318,13 @@ func TestGetAllClusterAuthStates_IncludesExecCommand(t *testing.T) {
 	}
 	app.clusterClientsMu.Unlock()
 
-	states := app.GetAllClusterAuthStates()
-	require.Equal(t, "invalid", states["cluster-x"]["state"])
-	require.Equal(t, "aws", states["cluster-x"]["execCommand"])
-	require.Equal(t, "missing-helper", states["cluster-x"]["kind"])
+	state := app.GetClusterWorkspaceState().Clusters["cluster-x"].Auth
+	require.Equal(t, "invalid", state.State)
+	require.Equal(t, "aws", state.ExecCommand)
+	require.Equal(t, "missing-helper", state.DiagnosticKind)
 }
 
-// TestGetAllClusterAuthStates_IncludesErrorClass verifies the state RPC
-// surfaces the recovery verdict for recovering clusters so a freshly mounted
-// frontend can restore the correct presentation.
-func TestGetAllClusterAuthStates_IncludesErrorClass(t *testing.T) {
+func TestClusterWorkspaceStateIncludesErrorClass(t *testing.T) {
 	app := newTestAppWithDefaults(t)
 	ctx, cancel := context.WithCancel(context.Background())
 	defer cancel()
@@ -373,12 +367,11 @@ func TestGetAllClusterAuthStates_IncludesErrorClass(t *testing.T) {
 	<-probeStarted
 
 	require.Eventually(t, func() bool {
-		states := app.GetAllClusterAuthStates()
-		state, ok := states["cluster-s"]
+		state, ok := app.GetClusterWorkspaceState().Clusters["cluster-s"]
 		if !ok {
 			return false
 		}
-		return state["state"] == "recovering" && state["errorClass"] == "connectivity"
+		return state.Auth.State == "recovering" && state.Auth.ErrorClass == "connectivity"
 	}, time.Second, 10*time.Millisecond,
-		"auth state RPC must expose the recovery verdict")
+		"workspace state must expose the recovery verdict")
 }

@@ -36,7 +36,7 @@ describe('ClusterLifecycleContext', () => {
   let restoreRuntime: () => void;
   let restoreGo: () => void;
 
-  // Mock for the Go backend RPC
+  // Mock data for the combined workspace RPC.
   let mockGetAllStates: ReturnType<typeof vi.fn<() => Promise<Record<string, string> | null>>>;
 
   const Harness = () => {
@@ -52,11 +52,10 @@ describe('ClusterLifecycleContext', () => {
     runtimeHarness = createWailsRuntimeHarness();
     restoreRuntime = installWindowProperty('runtime', runtimeHarness.runtime);
 
-    // Mock the combined workspace snapshot RPC from the legacy lifecycle fixture.
+    // Mock the combined workspace snapshot RPC from a compact lifecycle fixture.
     restoreGo = installWindowProperty('go', {
       backend: {
         App: {
-          GetAllClusterLifecycleStates: mockGetAllStates,
           GetClusterWorkspaceState: async () => {
             const lifecycle = (await mockGetAllStates()) as Record<string, string> | null;
             const clusters = Object.fromEntries(
@@ -134,7 +133,7 @@ describe('ClusterLifecycleContext', () => {
     expect(stateRef.current?.isClusterReady('cluster-b')).toBe(false);
   });
 
-  it('hydrates from GetAllClusterLifecycleStates on mount', async () => {
+  it('hydrates from GetClusterWorkspaceState on mount', async () => {
     mockGetAllStates.mockResolvedValue({
       'cluster-a': 'connecting',
       'cluster-b': 'ready',

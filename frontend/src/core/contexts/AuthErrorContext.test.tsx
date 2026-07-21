@@ -29,7 +29,6 @@ import {
 // Mock @wailsjs/go/backend/App — provider calls these on mount
 vi.mock('@wailsjs/go/backend/App', () => ({
   RetryClusterAuth: vi.fn(),
-  GetAllClusterAuthStates: vi.fn().mockResolvedValue(null),
   GetClusterWorkspaceState: vi.fn().mockResolvedValue({
     selectedKubeconfigs: [],
     visibleClusterId: '',

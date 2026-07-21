@@ -153,6 +153,7 @@ describe('NsViewAutoscaling', () => {
     clusterName: 'alpha',
     ref: makeResourceRef({
       group: 'autoscaling',
+      version: 'v2',
       kind: 'HorizontalPodAutoscaler',
       resource: 'horizontalpodautoscalers',
       namespace: 'team-a',
@@ -199,7 +200,7 @@ describe('NsViewAutoscaling', () => {
         namespace: 'team-a',
         clusterId: 'alpha:ctx',
         group: 'autoscaling',
-        version: 'v1',
+        version: 'v2',
       }),
       { initialTab: 'map' }
     );

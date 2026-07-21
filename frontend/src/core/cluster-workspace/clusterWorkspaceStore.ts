@@ -207,10 +207,11 @@ export class ClusterWorkspaceStore {
   private readonly serviceableListeners = new Set<(clusterId: string) => void>();
   private readonly activationListeners = new Set<(clusterId: string) => void>();
   private readonly foregroundActivations = new Map<string, number>();
-  private readonly liveFields = new Set<string>();
+  private readonly pendingHydrationFields = new Set<Set<string>>();
   private disposers: Array<() => void> = [];
   private references = 0;
   private generation = 0;
+  private authoritativeGeneration = 0;
   private hydrationPromise: Promise<ClusterWorkspaceWireState> | null = null;
 
   constructor(options: ClusterWorkspaceStoreOptions) {
@@ -255,7 +256,9 @@ export class ClusterWorkspaceStore {
   }
 
   applyWireState(wire: ClusterWorkspaceWireState): void {
-    this.mergeWireState(wire, false);
+    this.authoritativeGeneration++;
+    this.pendingHydrationFields.clear();
+    this.mergeWireState(wire);
   }
 
   hydrate(): Promise<ClusterWorkspaceWireState> {
@@ -271,16 +274,27 @@ export class ClusterWorkspaceStore {
 
   private readAndMerge(): Promise<ClusterWorkspaceWireState> {
     const generation = this.generation;
+    const authoritativeGeneration = this.authoritativeGeneration;
+    const liveFields = new Set<string>();
+    this.pendingHydrationFields.add(liveFields);
     const pending = this.options.read().then((wire) => {
-      if (this.references > 0 && generation === this.generation && wire) {
-        this.mergeWireState(wire, true);
+      if (
+        this.references > 0 &&
+        generation === this.generation &&
+        authoritativeGeneration === this.authoritativeGeneration &&
+        wire
+      ) {
+        this.mergeWireState(wire, liveFields);
       }
       return wire;
     });
     this.hydrationPromise = pending;
     void pending.then(
-      () => undefined,
       () => {
+        this.pendingHydrationFields.delete(liveFields);
+      },
+      () => {
+        this.pendingHydrationFields.delete(liveFields);
         if (this.hydrationPromise === pending) {
           this.hydrationPromise = null;
         }
@@ -289,11 +303,11 @@ export class ClusterWorkspaceStore {
     return pending;
   }
 
-  private mergeWireState(wire: ClusterWorkspaceWireState, hydration: boolean): void {
+  private mergeWireState(wire: ClusterWorkspaceWireState, liveFields?: ReadonlySet<string>): void {
     const nextClusters = new Map<string, ClusterWorkspaceClusterState>();
-    if (hydration) {
+    if (liveFields) {
       for (const [clusterId, cluster] of this.snapshot.clusters) {
-        if ([...this.liveFields].some((key) => key.startsWith(`${clusterId}\0`))) {
+        if ([...liveFields].some((key) => key.startsWith(`${clusterId}\0`))) {
           nextClusters.set(clusterId, cluster);
         }
       }
@@ -301,8 +315,7 @@ export class ClusterWorkspaceStore {
     for (const [clusterId, raw] of Object.entries(wire.clusters ?? {})) {
       const previous = nextClusters.get(clusterId) ?? this.snapshot.clusters.get(clusterId);
       const parsedLifecycle = parseClusterLifecycleState(raw.lifecycle);
-      const isLiveField = (field: string) =>
-        hydration && this.liveFields.has(fieldKey(clusterId, field));
+      const isLiveField = (field: string) => liveFields?.has(fieldKey(clusterId, field)) ?? false;
       const cluster: ClusterWorkspaceClusterState = {
         clusterId,
         clusterName: raw.clusterName || previous?.clusterName || clusterId,
@@ -320,7 +333,7 @@ export class ClusterWorkspaceStore {
           : (raw.scopeRevision ?? 0),
       };
       nextClusters.set(clusterId, cluster);
-      if (hydration && parsedLifecycle && !isLiveField('lifecycle')) {
+      if (liveFields && parsedLifecycle && !isLiveField('lifecycle')) {
         eventBus.emit('cluster:lifecycle', { clusterId, state: parsedLifecycle });
       }
     }
@@ -333,7 +346,7 @@ export class ClusterWorkspaceStore {
 
   private start(): void {
     this.generation++;
-    this.liveFields.clear();
+    this.pendingHydrationFields.clear();
     const runtime = this.options.runtime();
     const on = (event: string, handler: (...args: unknown[]) => void) => {
       const dispose = runtime?.EventsOn?.(event, handler);
@@ -362,7 +375,7 @@ export class ClusterWorkspaceStore {
       dispose();
     });
     this.disposers = [];
-    this.liveFields.clear();
+    this.pendingHydrationFields.clear();
     this.foregroundActivations.clear();
     this.hydrationPromise = null;
     this.snapshot = emptySnapshot();
@@ -373,7 +386,10 @@ export class ClusterWorkspaceStore {
     field: string,
     update: (current: ClusterWorkspaceClusterState) => ClusterWorkspaceClusterState
   ): void {
-    this.liveFields.add(fieldKey(clusterId, field));
+    const key = fieldKey(clusterId, field);
+    this.pendingHydrationFields.forEach((liveFields) => {
+      liveFields.add(key);
+    });
     const current =
       this.snapshot.clusters.get(clusterId) ??
       ({
@@ -552,7 +568,8 @@ export class ClusterWorkspaceStore {
   }
 
   resetForTests(): void {
-    this.liveFields.clear();
+    this.authoritativeGeneration++;
+    this.pendingHydrationFields.clear();
     this.foregroundActivations.clear();
     this.snapshot = emptySnapshot();
   }

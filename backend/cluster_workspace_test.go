@@ -2,6 +2,7 @@ package backend
 
 import (
 	"testing"
+	"time"
 
 	"github.com/luxury-yacht/app/backend/internal/authstate"
 	"github.com/luxury-yacht/app/backend/refresh/system"
@@ -45,4 +46,58 @@ func TestApplyClusterWorkspaceReturnsAuthoritativeActivationState(t *testing.T) 
 	require.Empty(t, result.Error)
 	require.Equal(t, "cluster-a", result.State.VisibleClusterID)
 	require.Equal(t, ClusterStateReady, result.State.Clusters["cluster-a"].Lifecycle)
+}
+
+func TestApplyClusterWorkspaceSupersedesOlderQueuedActivation(t *testing.T) {
+	app := NewApp()
+	app.governorApplied["cluster-a"] = system.TierForeground
+	app.governorPlanned["cluster-a"] = system.TierForeground
+	app.governorApplied["cluster-b"] = system.TierForeground
+	app.governorPlanned["cluster-b"] = system.TierForeground
+
+	app.selectionMutationMu.Lock()
+	olderResult := make(chan ClusterWorkspaceResult, 1)
+	go func() {
+		olderResult <- app.ApplyClusterWorkspace(ClusterWorkspaceCommand{VisibleClusterID: "cluster-a"})
+	}()
+
+	require.Eventually(t, func() bool {
+		app.selectionMutationDrainMu.Lock()
+		defer app.selectionMutationDrainMu.Unlock()
+		return app.selectionMutationPending == 1
+	}, time.Second, time.Millisecond)
+	newerResult := make(chan ClusterWorkspaceResult, 1)
+	go func() {
+		newerResult <- app.ApplyClusterWorkspace(ClusterWorkspaceCommand{VisibleClusterID: "cluster-b"})
+	}()
+	require.Eventually(t, func() bool {
+		app.selectionMutationDrainMu.Lock()
+		defer app.selectionMutationDrainMu.Unlock()
+		return app.selectionMutationPending == 2
+	}, time.Second, time.Millisecond)
+
+	select {
+	case <-olderResult:
+		app.selectionMutationMu.Unlock()
+		t.Fatal("older workspace command completed outside the selection mutation boundary")
+	case <-newerResult:
+		app.selectionMutationMu.Unlock()
+		t.Fatal("newer workspace command completed outside the selection mutation boundary")
+	default:
+	}
+
+	app.selectionMutationMu.Unlock()
+	requireWorkspaceResult(t, olderResult)
+	requireWorkspaceResult(t, newerResult)
+	require.Equal(t, "cluster-b", app.GetClusterWorkspaceState().VisibleClusterID)
+}
+
+func requireWorkspaceResult(t *testing.T, result <-chan ClusterWorkspaceResult) {
+	t.Helper()
+	select {
+	case got := <-result:
+		require.Empty(t, got.Error)
+	case <-time.After(time.Second):
+		t.Fatal("workspace command did not complete after releasing the selection mutation boundary")
+	}
 }

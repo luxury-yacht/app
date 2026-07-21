@@ -14,6 +14,7 @@ import (
 	"k8s.io/client-go/tools/cache"
 
 	"github.com/luxury-yacht/app/backend/internal/config"
+	"github.com/luxury-yacht/app/backend/kind/streamrows"
 	"github.com/luxury-yacht/app/backend/refresh"
 	"github.com/luxury-yacht/app/backend/refresh/domain"
 	"github.com/luxury-yacht/app/backend/refresh/querypage"
@@ -50,7 +51,7 @@ func projectNamespaceEventSummary(meta ClusterMeta, event *corev1.Event) (EventS
 	timestamp := eventres.EventTimestamp(event).Time
 	return EventSummary{
 		ClusterMeta:      meta,
-		Ref:              eventres.BuildResourceModel(meta.ClusterID, event).Ref,
+		Ref:              streamrows.NewResourceRef(meta, eventres.Identity, event),
 		Kind:             event.InvolvedObject.Kind,
 		Name:             event.Name,
 		UID:              string(event.UID),

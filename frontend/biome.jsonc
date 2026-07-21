@@ -190,16 +190,11 @@
     "experimentalFullSupportEnabled": true
   },
   "plugins": [
-    // These plugins keep feature code behind the shared data-access and lifecycle boundaries.
+    // These plugins keep feature code behind the shared data-access boundaries.
     {
       // Network reads belong to refresh or data-access infrastructure.
       "path": "./biome-plugins/no-direct-fetch.grit",
       "includes": ["**/src/**/*.{ts,tsx}", "!**/src/core/refresh/**", "!**/src/core/data-access/**"]
-    },
-    {
-      // Cluster lifecycle state must be read through appStateAccess.
-      "path": "./biome-plugins/no-direct-lifecycle-read.grit",
-      "includes": ["**/src/**/*.{ts,tsx}", "!**/src/core/app-state-access/readers.ts"]
     },
     {
       // Permission queries must be routed through the shared data-access reader.

@@ -42,6 +42,137 @@ describe('ClusterWorkspaceStore', () => {
     release();
   });
 
+  it('lets a later refresh heal a lifecycle field changed before that refresh began', async () => {
+    const runtime = createWailsRuntimeHarness();
+    const read = vi
+      .fn<() => Promise<ClusterWorkspaceWireState>>()
+      .mockResolvedValueOnce({
+        ...emptyState(),
+        clusters: {
+          'cluster-a': {
+            clusterId: 'cluster-a',
+            clusterName: 'Alpha',
+            lifecycle: 'connecting',
+            auth: { state: 'unknown' },
+            health: 'unknown',
+            scopeRevision: 0,
+          },
+        },
+      })
+      .mockResolvedValueOnce({
+        ...emptyState(),
+        clusters: {
+          'cluster-a': {
+            clusterId: 'cluster-a',
+            clusterName: 'Alpha',
+            lifecycle: 'ready',
+            auth: { state: 'valid' },
+            health: 'healthy',
+            scopeRevision: 2,
+          },
+        },
+      });
+    const store = new ClusterWorkspaceStore({ read, runtime: () => runtime.runtime });
+
+    const release = store.acquire();
+    await store.hydrate();
+    runtime.emit('cluster:lifecycle', { clusterId: 'cluster-a', state: 'loading' });
+    runtime.emit('cluster:auth:failed', { clusterId: 'cluster-a', reason: 'stale token' });
+    runtime.emit('cluster:health:degraded', { clusterId: 'cluster-a' });
+    runtime.emit('cluster:scope:changed', { clusterId: 'cluster-a' });
+    await store.refresh();
+
+    expect(store.getCluster('cluster-a')).toMatchObject({
+      lifecycle: 'ready',
+      auth: { hasError: false },
+      health: 'healthy',
+      scopeRevision: 2,
+    });
+    release();
+  });
+
+  it('does not carry live markers across authoritative removal and re-addition', async () => {
+    const runtime = createWailsRuntimeHarness();
+    const read = vi
+      .fn<() => Promise<ClusterWorkspaceWireState>>()
+      .mockResolvedValueOnce({
+        ...emptyState(),
+        clusters: {
+          'cluster-a': {
+            clusterId: 'cluster-a',
+            clusterName: 'Alpha',
+            lifecycle: 'connecting',
+            auth: { state: 'unknown' },
+            health: 'unknown',
+            scopeRevision: 0,
+          },
+        },
+      })
+      .mockResolvedValueOnce({
+        ...emptyState(),
+        clusters: {
+          'cluster-a': {
+            clusterId: 'cluster-a',
+            clusterName: 'Alpha',
+            lifecycle: 'ready',
+            auth: { state: 'valid' },
+            health: 'healthy',
+            scopeRevision: 1,
+          },
+        },
+      });
+    const store = new ClusterWorkspaceStore({ read, runtime: () => runtime.runtime });
+
+    const release = store.acquire();
+    await store.hydrate();
+    runtime.emit('cluster:lifecycle', { clusterId: 'cluster-a', state: 'loading' });
+    runtime.emit('cluster:auth:failed', { clusterId: 'cluster-a', reason: 'stale token' });
+    runtime.emit('cluster:health:degraded', { clusterId: 'cluster-a' });
+    runtime.emit('cluster:scope:changed', { clusterId: 'cluster-a' });
+    store.applyWireState(emptyState());
+    await store.refresh();
+
+    expect(store.getCluster('cluster-a')).toMatchObject({
+      lifecycle: 'ready',
+      auth: { hasError: false },
+      health: 'healthy',
+      scopeRevision: 1,
+    });
+    release();
+  });
+
+  it('ignores a hydration response started before an authoritative snapshot', async () => {
+    let resolveHydration: (state: ClusterWorkspaceWireState) => void = () => undefined;
+    const read = vi.fn(
+      () =>
+        new Promise<ClusterWorkspaceWireState>((resolve) => {
+          resolveHydration = resolve;
+        })
+    );
+    const store = new ClusterWorkspaceStore({ read, runtime: () => undefined });
+
+    const release = store.acquire();
+    const hydration = store.hydrate();
+    store.applyWireState(emptyState());
+    resolveHydration({
+      ...emptyState(),
+      clusters: {
+        'removed-cluster': {
+          clusterId: 'removed-cluster',
+          clusterName: 'Removed',
+          lifecycle: 'ready',
+          auth: { state: 'valid' },
+          health: 'healthy',
+          scopeRevision: 1,
+        },
+      },
+    });
+    await hydration;
+
+    expect(store.getCluster('removed-cluster')).toBeUndefined();
+    release();
+  });
+
   it('tracks auth, health, and scope changes independently per cluster', async () => {
     const runtime = createWailsRuntimeHarness();
     const store = new ClusterWorkspaceStore({

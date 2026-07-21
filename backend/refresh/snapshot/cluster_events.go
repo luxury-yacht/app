@@ -15,6 +15,7 @@ import (
 	"k8s.io/client-go/tools/cache"
 
 	"github.com/luxury-yacht/app/backend/internal/config"
+	"github.com/luxury-yacht/app/backend/kind/streamrows"
 	"github.com/luxury-yacht/app/backend/refresh"
 	"github.com/luxury-yacht/app/backend/refresh/domain"
 	"github.com/luxury-yacht/app/backend/refresh/querypage"
@@ -70,7 +71,7 @@ func projectClusterEventEntry(meta ClusterMeta, evt *corev1.Event) (ClusterEvent
 	}
 	return ClusterEventEntry{
 		ClusterMeta:      meta,
-		Ref:              eventres.BuildResourceModel(meta.ClusterID, evt).Ref,
+		Ref:              streamrows.NewResourceRef(meta, eventres.Identity, evt),
 		Kind:             "Event",
 		Name:             evt.Name,
 		UID:              string(evt.UID),

@@ -179,12 +179,3 @@ func (cl *clusterLifecycle) Remove(clusterId string) {
 	}
 	delete(cl.entries, clusterId)
 }
-
-// GetAllClusterLifecycleStates is the RPC method exposed to Wails for the frontend
-// to retrieve the current lifecycle state of every tracked cluster.
-func (a *App) GetAllClusterLifecycleStates() map[string]ClusterLifecycleState {
-	if a.clusterLifecycle == nil {
-		return nil
-	}
-	return a.clusterLifecycle.GetAllStates()
-}
