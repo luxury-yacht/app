@@ -216,23 +216,6 @@ func (s *Subsystem) ColdPreparationAge(now time.Time) (time.Duration, bool) {
 	return age, true
 }
 
-// NewSubsystem prepares the refresh manager, HTTP handler, and supporting services.
-func NewSubsystem(cfg Config) (*refresh.Manager, http.Handler, *telemetry.Recorder, []PermissionIssue, map[string]bool, *informer.Factory, error) {
-	subsystem, err := NewSubsystemWithServices(cfg)
-	if err != nil {
-		recorder := telemetry.NewRecorder()
-		recorder.SetClusterMeta(cfg.ClusterID, cfg.ClusterName)
-		return nil, nil, recorder, nil, nil, nil, err
-	}
-	return subsystem.Manager,
-		subsystem.Handler,
-		subsystem.Telemetry,
-		subsystem.PermissionIssues,
-		nil,
-		subsystem.InformerFactory,
-		nil
-}
-
 // scopedResourcePredicate reports which resources' permission checks fan out
 // over a configured namespace scope (docs/plans/namespace-scope.md): exactly
 // the namespaced, ingest-owned kinds, because only their data path runs

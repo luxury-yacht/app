@@ -392,10 +392,6 @@ func (a *App) CloseShellSession(sessionID string) error {
 	return a.shellSessionLifecycle().closeByUser(sessionID)
 }
 
-func (a *App) closeShellSessionForRuntime(sessionID, reason string) error {
-	return a.shellSessionLifecycle().closeForRuntime(sessionID, reason)
-}
-
 // ListShellSessions returns all active shell exec sessions.
 func (a *App) ListShellSessions() []ShellSessionInfo {
 	return a.shellSessionLifecycle().list()

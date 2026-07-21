@@ -134,11 +134,6 @@ func StreamDomains() []string {
 	return result
 }
 
-// Policies returns the shared permission contract for refresh domains.
-func Policies() []Policy {
-	return copyPolicies(buildPolicies())
-}
-
 // RuntimePoliciesByDomain returns the runtime permission policies keyed by domain.
 func RuntimePoliciesByDomain() map[string]Policy {
 	result := make(map[string]Policy)
@@ -159,30 +154,6 @@ func StreamRequirementsByDomain() map[string][]permissions.ResourceRequirement {
 			continue
 		}
 		result[policy.Domain] = append([]permissions.ResourceRequirement(nil), policy.Stream...)
-	}
-	return result
-}
-
-// RuntimeResourcesByDomain returns the runtime resource composition keyed by domain.
-func RuntimeResourcesByDomain() map[string][]Resource {
-	result := make(map[string][]Resource)
-	for _, composition := range Compositions() {
-		if len(composition.Runtime) == 0 {
-			continue
-		}
-		result[composition.Domain] = copyResources(composition.Runtime)
-	}
-	return result
-}
-
-// StreamResourcesByDomain returns the resource stream composition keyed by domain.
-func StreamResourcesByDomain() map[string][]Resource {
-	result := make(map[string][]Resource)
-	for _, composition := range Compositions() {
-		if len(composition.Stream) == 0 {
-			continue
-		}
-		result[composition.Domain] = copyResources(composition.Stream)
 	}
 	return result
 }
@@ -229,14 +200,6 @@ func buildPolicies() []Policy {
 		})
 	}
 	return result
-}
-
-func copyPolicies(src []Policy) []Policy {
-	out := make([]Policy, 0, len(src))
-	for _, policy := range src {
-		out = append(out, copyPolicy(policy))
-	}
-	return out
 }
 
 func copyPolicy(policy Policy) Policy {

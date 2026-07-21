@@ -10,8 +10,11 @@ import (
 
 	"github.com/luxury-yacht/app/backend/internal/applog"
 	"github.com/luxury-yacht/app/backend/kind/streamrows"
+	"github.com/luxury-yacht/app/backend/refresh"
+	"github.com/luxury-yacht/app/backend/refresh/informer"
 	"github.com/luxury-yacht/app/backend/refresh/ingest"
 	"github.com/luxury-yacht/app/backend/refresh/snapshot"
+	"github.com/luxury-yacht/app/backend/refresh/telemetry"
 	"github.com/luxury-yacht/app/backend/testsupport"
 	"github.com/stretchr/testify/require"
 	apiextensionsfake "k8s.io/apiextensions-apiserver/pkg/client/clientset/clientset/fake"
@@ -135,3 +138,22 @@ func (h fakeInformerHub) HasSynced(context.Context) bool { return h.synced }
 func (h fakeInformerHub) ResourcesSettled([]string) bool { return h.synced }
 
 func (fakeInformerHub) Shutdown() error { return nil }
+
+// NewSubsystem is the tuple-unpacking convenience over NewSubsystemWithServices,
+// kept in test scope: production uses NewSubsystemWithServices directly.
+// NewSubsystem prepares the refresh manager, HTTP handler, and supporting services.
+func NewSubsystem(cfg Config) (*refresh.Manager, http.Handler, *telemetry.Recorder, []PermissionIssue, map[string]bool, *informer.Factory, error) {
+	subsystem, err := NewSubsystemWithServices(cfg)
+	if err != nil {
+		recorder := telemetry.NewRecorder()
+		recorder.SetClusterMeta(cfg.ClusterID, cfg.ClusterName)
+		return nil, nil, recorder, nil, nil, nil, err
+	}
+	return subsystem.Manager,
+		subsystem.Handler,
+		subsystem.Telemetry,
+		subsystem.PermissionIssues,
+		nil,
+		subsystem.InformerFactory,
+		nil
+}

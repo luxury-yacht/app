@@ -26,28 +26,6 @@ import (
 	"k8s.io/client-go/transport/spdy"
 )
 
-// startPortForward initiates a new port forwarding session to a Kubernetes pod.
-// For workloads (Deployment, StatefulSet, DaemonSet) and Services, the session
-// will automatically reconnect if the underlying pod is replaced.
-func (a *App) startPortForward(clusterID string, req PortForwardRequest) (string, error) {
-	resp, err := a.RunObjectAction(ObjectActionRequest{
-		Action: ObjectActionStartPortForward,
-		Target: objectActionTarget(
-			clusterID,
-			req.TargetGroup,
-			req.TargetVersion,
-			req.TargetKind,
-			req.Namespace,
-			req.TargetName,
-		),
-		PortForward: &ObjectActionPortForwardOptions{
-			ContainerPort: req.ContainerPort,
-			LocalPort:     req.LocalPort,
-		},
-	})
-	return resp.SessionID, err
-}
-
 func (a *App) startPortForwardAction(targetRef ObjectActionTargetRef, options ObjectActionPortForwardOptions) (string, error) {
 	req := PortForwardRequest{
 		Namespace:     targetRef.Namespace,
@@ -146,10 +124,6 @@ func (a *App) startPortForwardAction(targetRef ObjectActionTargetRef, options Ob
 // StopPortForward terminates a specific port forwarding session.
 func (a *App) StopPortForward(sessionID string) error {
 	return a.portForwardLifecycle().stopByUser(sessionID)
-}
-
-func (a *App) stopPortForwardForRuntime(sessionID, reason string) error {
-	return a.portForwardLifecycle().stopForRuntime(sessionID, reason)
 }
 
 // StopClusterPortForwards terminates all port forwards for a specific cluster.

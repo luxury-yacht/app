@@ -130,44 +130,6 @@ func (a *App) handlePermissionIssues(issues []system.PermissionIssue) {
 	}
 }
 
-// initAuthRecoveryState initializes the per-cluster auth recovery scheduling map.
-// Safe to call multiple times.
-func (a *App) initAuthRecoveryState() {
-	a.clusterAuthRecoveryMu.Lock()
-	defer a.clusterAuthRecoveryMu.Unlock()
-	if a.clusterAuthRecoveryScheduled == nil {
-		a.clusterAuthRecoveryScheduled = make(map[string]bool)
-	}
-}
-
-// scheduleClusterAuthRecovery marks a cluster as having auth recovery scheduled.
-// Returns true if newly scheduled, false if already scheduled.
-// This allows per-cluster auth recovery scheduling without affecting other clusters.
-func (a *App) scheduleClusterAuthRecovery(clusterID string) bool {
-	a.clusterAuthRecoveryMu.Lock()
-	defer a.clusterAuthRecoveryMu.Unlock()
-
-	// Lazy initialization if not already done
-	if a.clusterAuthRecoveryScheduled == nil {
-		a.clusterAuthRecoveryScheduled = make(map[string]bool)
-	}
-
-	if a.clusterAuthRecoveryScheduled[clusterID] {
-		return false // Already scheduled
-	}
-
-	a.clusterAuthRecoveryScheduled[clusterID] = true
-	return true
-}
-
-// clearClusterAuthRecoveryScheduled clears the auth recovery scheduled flag for a cluster.
-// Called when auth recovery completes (successfully or not) for that cluster.
-func (a *App) clearClusterAuthRecoveryScheduled(clusterID string) {
-	a.clusterAuthRecoveryMu.Lock()
-	defer a.clusterAuthRecoveryMu.Unlock()
-	delete(a.clusterAuthRecoveryScheduled, clusterID)
-}
-
 // transportFailureState tracks transport failures for a single cluster.
 // This allows isolated recovery per-cluster without affecting other clusters.
 type transportFailureState struct {
@@ -176,16 +138,6 @@ type transportFailureState struct {
 	windowStart       time.Time
 	rebuildInProgress bool
 	lastRebuild       time.Time
-}
-
-// initTransportStates initializes the per-cluster transport state map.
-// Safe to call multiple times.
-func (a *App) initTransportStates() {
-	a.transportStatesMu.Lock()
-	defer a.transportStatesMu.Unlock()
-	if a.transportStates == nil {
-		a.transportStates = make(map[string]*transportFailureState)
-	}
 }
 
 // getTransportState returns the transport failure state for a given cluster,

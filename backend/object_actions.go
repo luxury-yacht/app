@@ -92,10 +92,6 @@ func objectActionTarget(clusterID, group, version, kind, namespace, name string)
 	return resourcemodel.NewResourceRef(clusterID, group, version, kind, "", namespace, name, "")
 }
 
-func objectActionTargetFromGVK(clusterID string, gvk schema.GroupVersionKind, namespace, name string) ObjectActionTargetRef {
-	return objectActionTarget(clusterID, gvk.Group, gvk.Version, gvk.Kind, namespace, name)
-}
-
 func objectActionTargetGVK(t ObjectActionTargetRef) schema.GroupVersionKind {
 	return schema.GroupVersionKind{
 		Group:   strings.TrimSpace(t.Group),

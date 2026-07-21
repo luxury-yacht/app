@@ -108,33 +108,6 @@ func (a *App) GetRevisionHistory(clusterID, namespace, group, version, workloadK
 	return entries, nil
 }
 
-// rollbackWorkload rolls a workload back to a specific historical revision by replacing
-// its pod template spec with the one stored in that revision.
-//
-// The target revision is located by calling GetRevisionHistory. If no entry matches
-// toRevision, an error is returned. Supports Deployment, StatefulSet, and DaemonSet.
-//
-// Multi-cluster safety: all Kubernetes requests are scoped to the cluster identified
-// by clusterID, preventing cross-cluster data leakage or modification.
-func (a *App) rollbackWorkload(clusterID, namespace, group, version, workloadKind, name string, toRevision int64) error {
-	if err := requireNamespacedObject(namespace, name); err != nil {
-		return err
-	}
-	_, err := a.RunObjectAction(ObjectActionRequest{
-		Action: ObjectActionRollback,
-		Target: objectActionTarget(
-			clusterID,
-			group,
-			version,
-			workloadKind,
-			namespace,
-			name,
-		),
-		Revision: &toRevision,
-	})
-	return err
-}
-
 func (a *App) rollbackWorkloadAction(target ObjectActionTargetRef, toRevision int64) error {
 	return a.rollbackWorkloadInternal(target.ClusterID, target.Namespace, target.Group, target.Version, target.Kind, target.Name, toRevision)
 }

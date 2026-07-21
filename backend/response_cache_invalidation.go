@@ -200,17 +200,6 @@ func (a *App) addResponseCacheInvalidationHandler(
 	informer.AddEventHandler(handler)
 }
 
-// invalidateResponseCacheForObject clears cached detail/YAML/helm data for the given resource.
-func (a *App) invalidateResponseCacheForObject(selectionKey string, identity resourcekind.Identity, obj interface{}) {
-	a.invalidateResponseCacheForObjectEvent(
-		selectionKey,
-		identity,
-		obj,
-		responseCacheInvalidationUpdate,
-		responseCacheInvalidationGuard{},
-	)
-}
-
 // invalidateResponseCacheForObjectEvent clears cached detail/YAML/helm data for the given event.
 func (a *App) invalidateResponseCacheForObjectEvent(
 	selectionKey string,

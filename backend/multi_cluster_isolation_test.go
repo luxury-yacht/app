@@ -227,7 +227,6 @@ func TestIsolation_RecoveryOnlyAffectsOneCluster(t *testing.T) {
 // failure tracking is isolated per cluster.
 func TestIsolation_TransportFailureOnlyAffectsOneCluster(t *testing.T) {
 	app := &App{}
-	app.initTransportStates()
 
 	// Record transport failures for cluster A (up to threshold)
 	app.recordClusterTransportFailure("cluster-a", "test failure 1", nil)
@@ -261,40 +260,6 @@ func TestIsolation_TransportFailureOnlyAffectsOneCluster(t *testing.T) {
 	countA = stateA.failureCount
 	stateA.mu.Unlock()
 	require.Equal(t, 2, countA, "cluster A should still have 2 failures")
-}
-
-// TestIsolation_AuthRecoveryScheduledPerCluster verifies that auth recovery
-// scheduling is tracked per cluster.
-func TestIsolation_AuthRecoveryScheduledPerCluster(t *testing.T) {
-	app := &App{}
-	app.initAuthRecoveryState()
-
-	// Schedule auth recovery for cluster A
-	scheduledA := app.scheduleClusterAuthRecovery("cluster-a")
-	require.True(t, scheduledA, "scheduling recovery for cluster A should succeed")
-
-	// Verify cluster A cannot be scheduled again (already scheduled)
-	scheduledAAgain := app.scheduleClusterAuthRecovery("cluster-a")
-	require.False(t, scheduledAAgain, "cluster A should already be scheduled")
-
-	// Verify cluster B can still be scheduled independently
-	scheduledB := app.scheduleClusterAuthRecovery("cluster-b")
-	require.True(t, scheduledB, "cluster B should be independently schedulable")
-
-	// Verify cluster C can also be scheduled
-	scheduledC := app.scheduleClusterAuthRecovery("cluster-c")
-	require.True(t, scheduledC, "cluster C should be independently schedulable")
-
-	// Clear cluster A's scheduled state
-	app.clearClusterAuthRecoveryScheduled("cluster-a")
-
-	// Verify cluster A can now be scheduled again
-	scheduledAAfterClear := app.scheduleClusterAuthRecovery("cluster-a")
-	require.True(t, scheduledAAfterClear, "cluster A should be schedulable after clear")
-
-	// Verify cluster B is still scheduled (unaffected by cluster A operations)
-	scheduledBAgain := app.scheduleClusterAuthRecovery("cluster-b")
-	require.False(t, scheduledBAgain, "cluster B should still be scheduled")
 }
 
 // TestIsolation_DrainStoreByCluster verifies that drain jobs are isolated

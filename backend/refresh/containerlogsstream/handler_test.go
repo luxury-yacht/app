@@ -274,21 +274,6 @@ func TestMatchNoneStreamDoesNotReportHeartbeatTimeout(t *testing.T) {
 	require.True(t, shouldRecordHeartbeatTimeout(false, now.Add(-time.Hour), now))
 }
 
-func TestMatchContainerFilter(t *testing.T) {
-	if !matchContainerFilter("nginx", "nginx", false, false) {
-		t.Fatal("expected direct match for regular container")
-	}
-	if matchContainerFilter("init-setup", "init-setup", false, false) == false {
-		t.Fatalf("expected filter to match identical name")
-	}
-	if !matchContainerFilter("init-setup", "init-setup (init)", true, false) {
-		t.Fatal("expected init suffix match")
-	}
-	if matchContainerFilter("nginx", "sidecar", false, false) {
-		t.Fatal("unexpected match for different container")
-	}
-}
-
 func TestServeHTTPRequiresFlusher(t *testing.T) {
 	client := fake.NewClientset()
 	handler, err := NewHandler(client, applog.Noop, telemetry.NewRecorder())

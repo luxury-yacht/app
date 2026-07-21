@@ -16,7 +16,7 @@ import (
 	"io"
 	"strings"
 
-	"github.com/evanphx/json-patch/v5"
+	jsonpatch "github.com/evanphx/json-patch/v5"
 	"github.com/luxury-yacht/app/backend/internal/config"
 	"github.com/luxury-yacht/app/backend/objectyaml"
 	"github.com/luxury-yacht/app/backend/resources/common"
@@ -550,14 +550,6 @@ func formatStatusCause(cause metav1.StatusCause) string {
 		builder.WriteString(fmt.Sprintf(" (%s)", cause.Type))
 	}
 	return builder.String()
-}
-
-func (a *App) getGVRForGVK(ctx context.Context, clusterID string, gvk schema.GroupVersionKind) (schema.GroupVersionResource, bool, error) {
-	deps, selectionKey, err := a.resolveClusterDependencies(clusterID)
-	if err != nil {
-		return schema.GroupVersionResource{}, false, err
-	}
-	return getGVRForGVKWithDependencies(ctx, deps, selectionKey, gvk)
 }
 
 // getGVRForGVKWithDependencies preserves the historical YAML mutation helper

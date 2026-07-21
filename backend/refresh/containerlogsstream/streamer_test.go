@@ -23,64 +23,6 @@ import (
 	"github.com/stretchr/testify/require"
 )
 
-func TestBuildTargetsFromPod(t *testing.T) {
-	pod := &corev1.Pod{
-		ObjectMeta: metav1.ObjectMeta{Namespace: "default", Name: "pod-1"},
-		Spec: corev1.PodSpec{
-			InitContainers: []corev1.Container{{Name: "init"}},
-			Containers:     []corev1.Container{{Name: "app"}, {Name: "sidecar"}},
-			EphemeralContainers: []corev1.EphemeralContainer{
-				{EphemeralContainerCommon: corev1.EphemeralContainerCommon{Name: "debug-abc"}},
-			},
-		},
-	}
-
-	targets := buildTargetsFromPod(pod, containerlogs.DefaultContainerSelection(""))
-	if len(targets) != 4 {
-		t.Fatalf("expected 4 targets, got %d", len(targets))
-	}
-
-	if !targets[0].isInit || targets[0].container != "init" {
-		t.Fatalf("expected init container first target, got %+v", targets[0])
-	}
-	if targets[3].container != "debug-abc" || targets[3].isInit {
-		t.Fatalf("expected ephemeral container target last, got %+v", targets[3])
-	}
-
-	filtered := buildTargetsFromPod(pod, containerlogs.DefaultContainerSelection("app"))
-	if len(filtered) != 1 || filtered[0].container != "app" {
-		t.Fatalf("expected filtered target for 'app', got %+v", filtered)
-	}
-
-	filteredInit := buildTargetsFromPod(pod, containerlogs.DefaultContainerSelection("init (init)"))
-	if len(filteredInit) != 1 || !filteredInit[0].isInit {
-		t.Fatalf("expected init filter to match init container, got %+v", filteredInit)
-	}
-
-	filteredDebug := buildTargetsFromPod(
-		pod,
-		containerlogs.DefaultContainerSelection("debug-abc (debug)"),
-	)
-	if len(filteredDebug) != 1 || filteredDebug[0].container != "debug-abc" || filteredDebug[0].isInit {
-		t.Fatalf("expected debug filter to match ephemeral container, got %+v", filteredDebug)
-	}
-}
-
-func TestMatchContainerFilterVariants(t *testing.T) {
-	if !matchContainerFilter("app", "", false, false) {
-		t.Fatal("empty filter should match")
-	}
-	if !matchContainerFilter("init", "init (init)", true, false) {
-		t.Fatal("init suffix should match init container")
-	}
-	if !matchContainerFilter("debug-abc", "debug-abc (debug)", false, true) {
-		t.Fatal("debug suffix should match ephemeral container")
-	}
-	if matchContainerFilter("sidecar", "main", false, false) {
-		t.Fatal("unexpected match")
-	}
-}
-
 func TestSelectRuntimeTargetsKeepsPerScopeCapWhenPodsGrow(t *testing.T) {
 	pods := []*corev1.Pod{
 		testLogPod("default", "web-1", corev1.PodRunning, true, "app"),

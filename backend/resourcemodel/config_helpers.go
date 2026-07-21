@@ -66,6 +66,22 @@ func SortResourceLinksByObjectName(links []ResourceLink) {
 	})
 }
 
+type resourceLinkKey struct {
+	namespace string
+	name      string
+	kind      string
+}
+
+func resourceLinkSortKey(link ResourceLink) resourceLinkKey {
+	if link.Ref != nil {
+		return resourceLinkKey{namespace: link.Ref.Namespace, name: link.Ref.Name, kind: link.Ref.Kind}
+	}
+	if link.Display != nil {
+		return resourceLinkKey{namespace: link.Display.Namespace, name: link.Display.Name, kind: link.Display.Kind}
+	}
+	return resourceLinkKey{}
+}
+
 func ResourceLinkNames(links []ResourceLink) []string {
 	if len(links) == 0 {
 		return nil
@@ -85,20 +101,4 @@ func ResourceLinkNames(links []ResourceLink) []string {
 	}
 	sort.Strings(names)
 	return names
-}
-
-type resourceLinkKey struct {
-	namespace string
-	name      string
-	kind      string
-}
-
-func resourceLinkSortKey(link ResourceLink) resourceLinkKey {
-	if link.Ref != nil {
-		return resourceLinkKey{namespace: link.Ref.Namespace, name: link.Ref.Name, kind: link.Ref.Kind}
-	}
-	if link.Display != nil {
-		return resourceLinkKey{namespace: link.Display.Namespace, name: link.Display.Name, kind: link.Display.Kind}
-	}
-	return resourceLinkKey{}
 }

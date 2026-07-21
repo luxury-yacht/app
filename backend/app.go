@@ -155,8 +155,6 @@ type App struct {
 	// Per-cluster auth recovery scheduling.
 	// Tracks auth recovery scheduling per-cluster, allowing isolated
 	// recovery scheduling without affecting other clusters.
-	clusterAuthRecoveryMu        sync.Mutex
-	clusterAuthRecoveryScheduled map[string]bool
 
 	// ssrrCaches holds per-cluster SSRR rule caches for QueryPermissions.
 	ssrrCachesMu sync.Mutex

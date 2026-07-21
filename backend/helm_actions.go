@@ -16,23 +16,6 @@ import (
 	"github.com/luxury-yacht/app/backend/resources/helm"
 )
 
-func (a *App) deleteHelmRelease(clusterID, namespace, name string) error {
-	if err := requireNamespacedObject(namespace, name); err != nil {
-		return err
-	}
-	_, err := a.RunObjectAction(ObjectActionRequest{
-		Action: ObjectActionDelete,
-		Target: objectActionTarget(
-			clusterID,
-			"helm.sh",
-			"v3",
-			"HelmRelease",
-			namespace,
-			name,
-		),
-	})
-	return err
-}
 func (a *App) deleteHelmReleaseAction(target ObjectActionTargetRef) error {
 	if target.Group != "helm.sh" || target.Version != "v3" || !strings.EqualFold(target.Kind, "HelmRelease") {
 		return errUnsupportedActionTarget(ObjectActionDelete, target, "helm.sh/v3", "HelmRelease")
