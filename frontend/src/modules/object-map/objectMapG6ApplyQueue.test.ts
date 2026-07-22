@@ -7,7 +7,11 @@
 import type { Graph, GraphData } from '@antv/g6';
 import { describe, expect, it, vi } from 'vitest';
 import { requireValue } from '@/test-utils/requireValue';
-import { applyGraphData, createObjectMapG6ApplyQueue } from './objectMapG6ApplyQueue';
+import {
+  applyGraphData,
+  applySelectionState,
+  createObjectMapG6ApplyQueue,
+} from './objectMapG6ApplyQueue';
 import type { ObjectMapLayout } from './objectMapLayout';
 import type { ObjectMapSelectionState } from './objectMapRendererTypes';
 
@@ -49,6 +53,7 @@ const graph = () =>
     draw: vi.fn(() => Promise.resolve()),
     getViewportByCanvas: vi.fn(([x, y]: [number, number]) => [x * 2 + 10, y * 2 + 5]),
     translateBy: vi.fn(() => Promise.resolve()),
+    setElementState: vi.fn(() => Promise.resolve()),
   }) as unknown as Graph;
 
 const flushPromises = async () => {
@@ -227,6 +232,68 @@ describe('createObjectMapG6ApplyQueue', () => {
 
     expect(applyGraphDataFn).not.toHaveBeenCalled();
     expect(g.setData).not.toHaveBeenCalled();
+  });
+});
+
+describe('applySelectionState', () => {
+  const hoverLayout: ObjectMapLayout = {
+    nodes: layout(['service', 'pod', 'other']).nodes,
+    edges: [
+      {
+        id: 'edge',
+        sourceId: 'service',
+        targetId: 'pod',
+        type: 'endpoint',
+        label: 'has endpoints',
+        d: 'M0 0 L1 1',
+        midX: 0,
+        midY: 0,
+        sameColumn: false,
+      },
+    ],
+    bounds: { minX: 0, minY: 0, maxX: 340, maxY: 58 },
+  };
+
+  it('does not re-apply hover highlight to a hovered edge dimmed by the selection', async () => {
+    const g = graph();
+
+    await applySelectionState(
+      g,
+      hoverLayout,
+      { activeId: 'other', connectedIds: new Set(), connectedEdgeIds: new Set() },
+      'edge'
+    );
+
+    expect(g.setElementState).toHaveBeenCalledWith(
+      {
+        service: ['seed', 'dimmed'],
+        pod: ['dimmed'],
+        other: ['selected'],
+        edge: ['dimmed'],
+      },
+      false
+    );
+  });
+
+  it('keeps hover highlight on a hovered edge connected to the selection', async () => {
+    const g = graph();
+
+    await applySelectionState(
+      g,
+      hoverLayout,
+      { activeId: 'service', connectedIds: new Set(['pod']), connectedEdgeIds: new Set(['edge']) },
+      'edge'
+    );
+
+    expect(g.setElementState).toHaveBeenCalledWith(
+      {
+        service: ['seed', 'selected', 'edgeHovered'],
+        pod: ['connected', 'edgeHovered'],
+        other: ['dimmed'],
+        edge: ['highlighted', 'hovered'],
+      },
+      false
+    );
   });
 });
 

@@ -9,6 +9,7 @@ import type { EdgeData, Graph, GraphData, NodeData } from '@antv/g6';
 import { objectMapG6EdgeState, objectMapG6NodeState } from './objectMapG6Data';
 import type { ObjectMapLayout } from './objectMapLayout';
 import type { ObjectMapSelectionState } from './objectMapRendererTypes';
+import { isObjectMapEdgeDimmedBySelection } from './objectMapSelection';
 
 const findEdge = (layout: ObjectMapLayout, id: string) =>
   layout.edges.find((edge) => edge.id === id) ?? null;
@@ -233,14 +234,21 @@ export const applySelectionState = async (
   }
   const states: Record<string, string[]> = {};
   const hoveredEdge = hoveredEdgeId ? findEdge(layout, hoveredEdgeId) : null;
-  const hoveredNodeIds = new Set(hoveredEdge ? [hoveredEdge.sourceId, hoveredEdge.targetId] : []);
+  // A hovered edge the new selection dims loses its hover highlight; hover
+  // visuals and tooltips are reserved for paths related to the selection.
+  const showHover =
+    hoveredEdge !== null && !isObjectMapEdgeDimmedBySelection(selectionState, hoveredEdge.id);
+  const hoveredNodeIds = new Set(
+    showHover && hoveredEdge ? [hoveredEdge.sourceId, hoveredEdge.targetId] : []
+  );
   layout.nodes.forEach((node) => {
     const nodeStates = objectMapG6NodeState(node, selectionState);
     states[node.id] = hoveredNodeIds.has(node.id) ? [...nodeStates, 'edgeHovered'] : nodeStates;
   });
   layout.edges.forEach((edge) => {
     const edgeStates = objectMapG6EdgeState(edge, selectionState);
-    states[edge.id] = edge.id === hoveredEdgeId ? [...edgeStates, 'hovered'] : edgeStates;
+    states[edge.id] =
+      edge.id === hoveredEdgeId && showHover ? [...edgeStates, 'hovered'] : edgeStates;
   });
   if (graph.destroyed) {
     return;

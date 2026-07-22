@@ -1,10 +1,7 @@
 ### Changed
 
 - Approx. 2,700 lines of dead code removed, and 4,800 lines of duplicate code consolidated.
-
-### Removed
-
-- Object Map: the refresh button was removed from the toolbar; refresh is still available from the map's right-click menu.
+- Object Map: while an object is selected, hovering a path unrelated to the selection no longer shows the relationship tooltip or the hover highlight.
 
 ### Fixed
 
