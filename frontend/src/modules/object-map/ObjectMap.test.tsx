@@ -1535,15 +1535,14 @@ describe('ObjectMap', () => {
     cleanup();
   });
 
-  it('marks the refresh control as busy while a refresh is running', async () => {
+  it('does not render a refresh button in the toolbar', async () => {
     const onRefresh = vi.fn();
     const { container, cleanup } = await renderObjectMap({ onRefresh, isRefreshing: true });
-    const refreshButton = container.querySelector<HTMLButtonElement>('[aria-label="Refreshing"]');
+    const toolbar = container.querySelector<HTMLElement>('.object-map__toolbar');
 
-    expect(refreshButton).toBeTruthy();
-    expect(refreshButton?.disabled).toBe(true);
-    expect(refreshButton?.getAttribute('aria-busy')).toBe('true');
-    expect(refreshButton?.classList.contains('object-map__toolbar-button--refreshing')).toBe(true);
+    expect(toolbar).toBeTruthy();
+    expect(toolbar?.querySelector('[aria-label="Refresh"]')).toBeNull();
+    expect(toolbar?.querySelector('[aria-label="Refreshing"]')).toBeNull();
 
     cleanup();
   });

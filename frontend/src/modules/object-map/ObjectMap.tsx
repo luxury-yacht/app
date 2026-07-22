@@ -599,21 +599,6 @@ const ObjectMap: React.FC<ObjectMapProps> = ({
         <ResetFiltersIcon width={18} height={18} />
       </button>
       <span className="object-map__toolbar-separator" aria-hidden="true" />
-      {!!onRefresh && (
-        <button
-          type="button"
-          className={`object-map__toolbar-button ${
-            isRefreshing ? 'object-map__toolbar-button--refreshing' : ''
-          }`}
-          onClick={onRefresh}
-          title={refreshLabel}
-          aria-label={refreshLabel}
-          aria-busy={isRefreshing}
-          disabled={isRefreshing}
-        >
-          <RefreshIcon width={18} height={18} />
-        </button>
-      )}
       <button
         type="button"
         className={`object-map__toolbar-button ${
