@@ -1,0 +1,13 @@
+{
+  "$schema": "https://biomejs.dev/schemas/2.5.5/schema.json",
+  "formatter": {
+    "enabled": true,
+    "includes": [
+      "wails.json"
+    ],
+    "indentStyle": "space",
+    "indentWidth": 2,
+    "lineEnding": "lf",
+    "lineWidth": 100
+  }
+}
