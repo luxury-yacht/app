@@ -9,6 +9,11 @@
 
 import type { DomainStatus } from '@core/refresh/store';
 
-/** No renderable payload yet, or the first load is still in flight. */
+/**
+ * True while a fetch is (or may be) in flight, including background updates
+ * of an already-rendered map. Callers must combine this with a
+ * payload-presence check (`isMapSnapshotLoading(status) && !payload`) to show
+ * a loading state only before the first payload arrives.
+ */
 export const isMapSnapshotLoading = (status: DomainStatus): boolean =>
   status === 'idle' || status === 'loading' || status === 'initialising' || status === 'updating';
