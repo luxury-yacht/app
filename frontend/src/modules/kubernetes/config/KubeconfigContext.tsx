@@ -150,8 +150,15 @@ export const KubeconfigProvider: React.FC<KubeconfigProviderProps> = ({ children
     return { id: `${filename}:${context}`, name: context };
   }, []);
 
-  // Selection-set mutations stay on the last backend-confirmed open set. A
-  // switch among those already-open tabs commits immediately below.
+  // Public selection follows the active tab immediately so cluster-scoped UI
+  // cannot keep rendering the previous cluster while activation is pending.
+  const selectedClusterMeta = useMemo(
+    () => resolveClusterMeta(selectedKubeconfig, kubeconfigs),
+    [resolveClusterMeta, selectedKubeconfig, kubeconfigs]
+  );
+
+  // Refresh selection stays on the last backend-confirmed open set. A switch
+  // among those already-open tabs commits immediately below.
   const committedSelectedClusterMeta = useMemo(
     () => resolveClusterMeta(committedSelectedKubeconfig, kubeconfigs),
     [resolveClusterMeta, committedSelectedKubeconfig, kubeconfigs]
@@ -617,12 +624,11 @@ export const KubeconfigProvider: React.FC<KubeconfigProviderProps> = ({ children
       kubeconfigs,
       selectedKubeconfigs,
       selectedKubeconfig,
-      // Existing tabs publish their active identity immediately. The available
-      // cluster IDs still come from the backend-confirmed open set so pending
-      // add/close mutations cannot leak uncommitted identities to data consumers.
-      selectedClusterId: committedSelectedClusterMeta.id,
-      selectedClusterName: committedSelectedClusterMeta.name,
-      selectedClusterIds: committedSelectedClusterIds,
+      // Cluster-scoped UI follows the selected tab immediately; refresh context
+      // remains backend-confirmed through committedSelectedClusterMeta above.
+      selectedClusterId: selectedClusterMeta.id,
+      selectedClusterName: selectedClusterMeta.name,
+      selectedClusterIds,
       kubeconfigsLoading,
       setSelectedKubeconfigs,
       openKubeconfig,
@@ -635,9 +641,9 @@ export const KubeconfigProvider: React.FC<KubeconfigProviderProps> = ({ children
       kubeconfigs,
       selectedKubeconfigs,
       selectedKubeconfig,
-      committedSelectedClusterMeta.id,
-      committedSelectedClusterMeta.name,
-      committedSelectedClusterIds,
+      selectedClusterMeta.id,
+      selectedClusterMeta.name,
+      selectedClusterIds,
       kubeconfigsLoading,
       setSelectedKubeconfigs,
       openKubeconfig,
