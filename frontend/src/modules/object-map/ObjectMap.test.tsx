@@ -537,15 +537,11 @@ const renderObjectMap = async ({
   onOpenPanel,
   onNavigateView,
   onOpenObjectMap,
-  onRefresh,
-  isRefreshing = false,
 }: {
   testPayload?: ObjectMapSnapshotPayload;
   onOpenPanel?: (ref: ObjectMapReference) => void;
   onNavigateView?: (ref: ObjectMapReference) => void;
   onOpenObjectMap?: (ref: ObjectMapReference) => void;
-  onRefresh?: () => void;
-  isRefreshing?: boolean;
 } = {}) => {
   const container = document.createElement('div');
   document.body.appendChild(container);
@@ -558,8 +554,6 @@ const renderObjectMap = async ({
         onOpenPanel={onOpenPanel}
         onNavigateView={onNavigateView}
         onOpenObjectMap={onOpenObjectMap}
-        onRefresh={onRefresh}
-        isRefreshing={isRefreshing}
       />
     );
     await Promise.resolve();
@@ -1460,8 +1454,7 @@ describe('ObjectMap', () => {
   });
 
   it('opens a canvas context menu with map controls', async () => {
-    const onRefresh = vi.fn();
-    const { container, cleanup } = await renderObjectMap({ onRefresh });
+    const { container, cleanup } = await renderObjectMap();
     const controls = container.querySelector<HTMLButtonElement>(
       '[data-testid="mock-register-viewport-controls"]'
     );
@@ -1488,16 +1481,13 @@ describe('ObjectMap', () => {
     expect(menu?.textContent).toContain('Auto-fit off');
     expect(menu?.textContent).toContain('Focus on');
     expect(menu?.textContent).toContain('Reset layout');
-    expect(menu?.textContent).toContain('Refresh');
+    expect(menu?.textContent).not.toContain('Refresh');
     expect(menu?.textContent).toContain('Hide legend');
-    expect(container.querySelectorAll('[data-testid="mock-context-menu-icon"]')).toHaveLength(9);
+    expect(container.querySelectorAll('[data-testid="mock-context-menu-icon"]')).toHaveLength(8);
 
     const autoFitItem = Array.from(
       requireValue(menu, 'expected test value in ObjectMap.test.tsx').querySelectorAll('button')
     ).find((button) => button.textContent === 'Auto-fit off');
-    const refreshItem = Array.from(
-      requireValue(menu, 'expected test value in ObjectMap.test.tsx').querySelectorAll('button')
-    ).find((button) => button.textContent === 'Refresh');
     const legendItem = Array.from(
       requireValue(menu, 'expected test value in ObjectMap.test.tsx').querySelectorAll('button')
     ).find((button) => button.textContent === 'Hide legend');
@@ -1521,12 +1511,6 @@ describe('ObjectMap', () => {
     );
 
     await act(async () => {
-      requireValue(refreshItem, 'expected test value in ObjectMap.test.tsx').click();
-      await Promise.resolve();
-    });
-    expect(onRefresh).toHaveBeenCalledTimes(1);
-
-    await act(async () => {
       requireValue(legendItem, 'expected test value in ObjectMap.test.tsx').click();
       await Promise.resolve();
     });
@@ -1536,8 +1520,7 @@ describe('ObjectMap', () => {
   });
 
   it('does not render a refresh button in the toolbar', async () => {
-    const onRefresh = vi.fn();
-    const { container, cleanup } = await renderObjectMap({ onRefresh, isRefreshing: true });
+    const { container, cleanup } = await renderObjectMap();
     const toolbar = container.querySelector<HTMLElement>('.object-map__toolbar');
 
     expect(toolbar).toBeTruthy();

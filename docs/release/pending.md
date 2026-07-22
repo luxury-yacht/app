@@ -1,7 +1,7 @@
 ### Changed
 
 - Approx. 2,700 lines of dead code removed, and 4,800 lines of duplicate code consolidated.
-- Object Map: while an object is selected, hovering a path unrelated to the selection no longer shows the relationship tooltip or the hover highlight.
+- Background objects and paths in the Object Map are now quiet (no popups or highlight) to reduce visual distraction from the highlighted objects.
 
 ### Fixed
 
