@@ -21,9 +21,9 @@ export interface PortForwardTargetIdentity {
 }
 
 export function lookupPortForwardTargetCapability(
-  kind: string
+  target: PortForwardTargetIdentity
 ): PortForwardTargetCapability | null {
-  const capability = lookupObjectActionKindCapability(kind);
+  const capability = lookupObjectActionKindCapability(target);
   if (!capability?.portForward) {
     return null;
   }
@@ -37,8 +37,5 @@ export function lookupPortForwardTargetCapability(
 }
 
 export function isPortForwardTargetGVKSupported(target: PortForwardTargetIdentity): boolean {
-  const capability = lookupPortForwardTargetCapability(target.kind);
-  return Boolean(
-    capability && capability.group === target.group && capability.version === target.version
-  );
+  return Boolean(lookupPortForwardTargetCapability(target));
 }

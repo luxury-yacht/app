@@ -117,9 +117,8 @@ class RefreshOrchestrator {
   };
   private errorNotifier = new RefreshErrorNotifier();
 
-  // Tracks clusters with auth failures so refresh is paused while auth is invalid.
+  // Tracks clusters with auth failures so duplicate events do not repeat teardown.
   private authFailedClusters = new Set<string>();
-  private authPaused = false;
 
   constructor() {
     eventBus.on('view:reset', this.handleResetViews);
@@ -149,7 +148,7 @@ class RefreshOrchestrator {
   /** Every requested cluster's backend subsystem can serve (or is unknown). */
   private isScopeClusterServiceable(scope: string): boolean {
     return parseClusterScopeList(scope).clusterIds.every((clusterId) =>
-      clusterReadiness.isServiceable(clusterId)
+      Boolean(!this.authFailedClusters.has(clusterId) && clusterReadiness.isServiceable(clusterId))
     );
   }
 
@@ -1043,10 +1042,6 @@ class RefreshOrchestrator {
     this.forEachRuntime((runtime) => runtime.clearBlockedStreaming());
   }
 
-  private clearAllAsyncStreamingBookkeeping(): void {
-    this.forEachRuntime((runtime) => runtime.clearAsyncStreamingBookkeeping());
-  }
-
   private clearAllStreamHealth(): void {
     this.forEachRuntime((runtime) => runtime.clearAllStreamHealth());
   }
@@ -1672,43 +1667,43 @@ class RefreshOrchestrator {
   };
 
   private handleClusterAuthFailed = (payload: { clusterId: string }) => {
-    this.authFailedClusters.add(payload.clusterId);
-    if (this.authPaused) {
+    const clusterId = payload.clusterId.trim();
+    if (!clusterId || this.authFailedClusters.has(clusterId)) {
       return;
     }
-    // Pause all refresh activity — the refresh subsystem is unavailable while auth is invalid.
-    this.authPaused = true;
-    logInfo('[refresh] pausing — cluster auth failed', { clusterId: payload.clusterId });
-    this.incrementContextVersion();
-    invalidateRefreshBaseURL();
-    this.stopAllStreaming(false);
-    this.abortAllInFlight();
+    this.authFailedClusters.add(clusterId);
+    logInfo('[refresh] pausing cluster — auth failed', { clusterId });
+
+    const runtime = this.clusterRuntimes.get(clusterId);
+    if (!runtime) {
+      return;
+    }
+    this.stopRuntimeStreaming(runtime, false);
+    runtime.forEachInFlight((details, key) => {
+      this.teardownInFlight(runtime, key, details);
+    });
     // Clear async streaming bookkeeping so stale entries from in-progress
     // connections don't block restart when auth recovers.
-    this.clearAllAsyncStreamingBookkeeping();
+    runtime.clearAsyncStreamingBookkeeping();
   };
 
   private handleClusterAuthRecovered = (payload: { clusterId: string }) => {
-    this.authFailedClusters.delete(payload.clusterId);
-    if (!this.authPaused) {
+    const clusterId = payload.clusterId.trim();
+    if (!clusterId || !this.authFailedClusters.delete(clusterId)) {
       return;
     }
-    // Only unpause when all tracked auth failures have been resolved.
-    if (this.authFailedClusters.size > 0) {
-      return;
+
+    logInfo('[refresh] resuming cluster — auth recovered', { clusterId });
+    const runtime = this.clusterRuntimes.get(clusterId);
+    if (runtime) {
+      runtime.clearBlockedStreaming();
+      runtime.clearAllStreamHealth();
+      runtime.forEachScopedDomain((domain, scope) => {
+        this.errorNotifier.clear(domain, scope);
+      });
     }
-    this.authPaused = false;
-    logInfo('[refresh] resuming — cluster auth recovered', { clusterId: payload.clusterId });
-    this.incrementContextVersion();
-    invalidateRefreshBaseURL();
-    // Suppress transient errors while the backend refresh subsystem reinitialises.
-    this.errorNotifier.suppressNetworkErrors(6000);
-    this.clearAllBlockedStreaming();
-    this.clearAllStreamHealth();
-    this.errorNotifier.clearAll();
-    // Restart streaming for all enabled scopes. The ensureRefreshBaseURL retry
-    // loop (30 attempts with backoff) naturally waits for the backend refresh
-    // subsystem to reinitialise after auth recovery.
+    // Re-evaluate enabled scopes. The affected cluster remains behind its
+    // lifecycle serviceability gate until the backend rebuild is ready.
     this.handleStreamingScopeChanges();
   };
 
@@ -1749,8 +1744,7 @@ class RefreshOrchestrator {
   };
 
   private handleKubeconfigChanging = () => {
-    // A kubeconfig change supersedes any auth-paused state.
-    this.authPaused = false;
+    // A kubeconfig change supersedes tracked auth-failure state.
     this.authFailedClusters.clear();
     this.incrementContextVersion();
     invalidateRefreshBaseURL();

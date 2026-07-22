@@ -6,8 +6,6 @@
  */
 
 import type { ResourceLink } from '@core/refresh/types';
-import { isPortForwardTargetGVKSupported } from '@modules/port-forward/targetCapabilities';
-import { resolveBuiltinGroupVersion } from '@shared/constants/builtinGroupVersions';
 import {
   lookupObjectActionKindCapability,
   normalizeObjectActionKind,
@@ -116,33 +114,29 @@ export const SCALABLE_KINDS: readonly string[] = objectActionKindsWith('scale');
 const permissionAllows = (status: PermissionStatus | null | undefined): boolean =>
   Boolean(status?.allowed && !status.pending);
 
+const lookupObjectCapability = (object: Pick<ObjectActionData, 'group' | 'version' | 'kind'>) => {
+  if (object.group === null || object.group === undefined || !object.version?.trim()) {
+    return null;
+  }
+  return lookupObjectActionKindCapability({
+    group: object.group,
+    version: object.version,
+    kind: object.kind,
+  });
+};
+
 const resolvePortForwardAvailability = (
   object: ObjectActionData,
-  handlers: ObjectActionHandlerAvailability
+  handlers: ObjectActionHandlerAvailability,
+  capability: ReturnType<typeof lookupObjectCapability>
 ): PortForwardAvailability => {
-  const normalizedKind = normalizeKind(object.kind);
-  const capability = lookupObjectActionKindCapability(normalizedKind);
   const actionId = OBJECT_ACTION_IDS.portForward;
 
   if (!capability?.portForward || !handlers.portForward) {
     return { show: false, enabled: false, actionId };
   }
 
-  const builtin = resolveBuiltinGroupVersion(object.kind);
-  const group = object.group ?? builtin.group ?? '';
-  const version = object.version ?? builtin.version ?? '';
-
   if (!object.clusterId || !object.namespace) {
-    return { show: true, enabled: false, actionId };
-  }
-
-  if (
-    !isPortForwardTargetGVKSupported({
-      kind: normalizedKind,
-      group,
-      version,
-    })
-  ) {
     return { show: true, enabled: false, actionId };
   }
 
@@ -179,10 +173,10 @@ export const resolveObjectActionPolicy = ({
   permissions: ObjectActionPermissionStatuses;
   actionLoading?: boolean;
 }): ObjectActionPolicy => {
-  const normalizedKind = normalizeKind(object.kind);
-  const capability = lookupObjectActionKindCapability(normalizedKind);
+  const capability = lookupObjectCapability(object);
+  const normalizedKind = capability?.kind ?? normalizeKind(object.kind);
   const isCronJob = Boolean(capability?.trigger || capability?.suspend);
-  const portForward = resolvePortForwardAvailability(object, handlers);
+  const portForward = resolvePortForwardAvailability(object, handlers, capability);
 
   const anyPending = Boolean(
     permissions.restart?.pending ||

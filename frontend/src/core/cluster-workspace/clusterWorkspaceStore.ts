@@ -212,6 +212,8 @@ export class ClusterWorkspaceStore {
   private references = 0;
   private generation = 0;
   private authoritativeGeneration = 0;
+  private nextReadSequence = 0;
+  private appliedReadSequence = 0;
   private hydrationPromise: Promise<ClusterWorkspaceWireState> | null = null;
 
   constructor(options: ClusterWorkspaceStoreOptions) {
@@ -275,6 +277,7 @@ export class ClusterWorkspaceStore {
   private readAndMerge(): Promise<ClusterWorkspaceWireState> {
     const generation = this.generation;
     const authoritativeGeneration = this.authoritativeGeneration;
+    const readSequence = ++this.nextReadSequence;
     const liveFields = new Set<string>();
     this.pendingHydrationFields.add(liveFields);
     const pending = this.options.read().then((wire) => {
@@ -282,8 +285,10 @@ export class ClusterWorkspaceStore {
         this.references > 0 &&
         generation === this.generation &&
         authoritativeGeneration === this.authoritativeGeneration &&
+        readSequence >= this.appliedReadSequence &&
         wire
       ) {
+        this.appliedReadSequence = readSequence;
         this.mergeWireState(wire, liveFields);
       }
       return wire;

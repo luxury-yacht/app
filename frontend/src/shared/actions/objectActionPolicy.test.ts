@@ -18,6 +18,8 @@ const denied = { allowed: false, pending: false };
 
 const deployment = (overrides: Partial<ObjectActionData> = {}): ObjectActionData => ({
   kind: 'Deployment',
+  group: 'apps',
+  version: 'v1',
   name: 'api',
   namespace: 'apps',
   clusterId: 'cluster-a',
@@ -80,7 +82,14 @@ describe('resolveObjectActionPolicy', () => {
 
   it('uses exact supported target GVKs for port-forward availability', () => {
     const supportedTargets: ObjectActionData[] = [
-      { kind: 'Pod', name: 'api', namespace: 'apps', clusterId: 'cluster-a' },
+      {
+        kind: 'Pod',
+        group: '',
+        version: 'v1',
+        name: 'api',
+        namespace: 'apps',
+        clusterId: 'cluster-a',
+      },
       {
         kind: 'Service',
         group: '',
@@ -112,7 +121,7 @@ describe('resolveObjectActionPolicy', () => {
       handlers: { portForward: true },
       permissions: { portForward: allowed },
     });
-    expect(staleDeployment.portForward.show).toBe(true);
+    expect(staleDeployment.portForward.show).toBe(false);
     expect(staleDeployment.portForwardEnabled).toBe(false);
 
     const replicaSet = resolveObjectActionPolicy({
@@ -125,10 +134,29 @@ describe('resolveObjectActionPolicy', () => {
     expect(replicaSet.portForwardEnabled).toBe(false);
   });
 
+  it('does not grant built-in workload actions to a different GVK with the same kind', () => {
+    const policy = resolveObjectActionPolicy({
+      object: deployment({ group: 'example.com', version: 'v1' }),
+      context: 'gridtable',
+      handlers: { restart: true, rollback: true, scale: true },
+      permissions: { restart: allowed, rollback: allowed, scale: allowed },
+    });
+
+    expect(objectActionPolicyIds(policy)).not.toContain(OBJECT_ACTION_IDS.restart);
+    expect(objectActionPolicyIds(policy)).not.toContain(OBJECT_ACTION_IDS.rollback);
+    expect(objectActionPolicyIds(policy)).not.toContain(OBJECT_ACTION_IDS.scale);
+  });
+
   it('uses node facts and permissions to choose cordon versus uncordon', () => {
     expect(
       resolveObjectActionPolicy({
-        object: { kind: 'Node', name: 'worker-1', clusterId: 'cluster-a' },
+        object: {
+          kind: 'Node',
+          group: '',
+          version: 'v1',
+          name: 'worker-1',
+          clusterId: 'cluster-a',
+        },
         context: 'gridtable',
         handlers: { cordon: true },
         permissions: { cordon: allowed },
@@ -137,7 +165,14 @@ describe('resolveObjectActionPolicy', () => {
 
     expect(
       resolveObjectActionPolicy({
-        object: { kind: 'Node', name: 'worker-1', clusterId: 'cluster-a', unschedulable: true },
+        object: {
+          kind: 'Node',
+          group: '',
+          version: 'v1',
+          name: 'worker-1',
+          clusterId: 'cluster-a',
+          unschedulable: true,
+        },
         context: 'gridtable',
         handlers: { cordon: true },
         permissions: { cordon: allowed },
@@ -149,6 +184,8 @@ describe('resolveObjectActionPolicy', () => {
     const policy = resolveObjectActionPolicy({
       object: {
         kind: 'CronJob',
+        group: 'batch',
+        version: 'v1',
         name: 'backup',
         namespace: 'default',
         clusterId: 'cluster-a',

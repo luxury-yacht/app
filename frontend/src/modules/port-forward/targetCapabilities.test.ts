@@ -12,29 +12,39 @@ import {
 
 describe('port-forward target capabilities', () => {
   it('describes the supported target GVKs', () => {
-    expect(lookupPortForwardTargetCapability('Pod')).toMatchObject({
+    expect(
+      lookupPortForwardTargetCapability({ kind: 'Pod', group: '', version: 'v1' })
+    ).toMatchObject({
       group: '',
       version: 'v1',
       reconnect: false,
       usesServicePortSpec: false,
     });
-    expect(lookupPortForwardTargetCapability('Service')).toMatchObject({
+    expect(
+      lookupPortForwardTargetCapability({ kind: 'Service', group: '', version: 'v1' })
+    ).toMatchObject({
       group: '',
       version: 'v1',
       reconnect: true,
       usesServicePortSpec: true,
     });
-    expect(lookupPortForwardTargetCapability('Deployment')).toMatchObject({
+    expect(
+      lookupPortForwardTargetCapability({ kind: 'Deployment', group: 'apps', version: 'v1' })
+    ).toMatchObject({
       group: 'apps',
       version: 'v1',
       reconnect: true,
     });
-    expect(lookupPortForwardTargetCapability('StatefulSet')).toMatchObject({
+    expect(
+      lookupPortForwardTargetCapability({ kind: 'StatefulSet', group: 'apps', version: 'v1' })
+    ).toMatchObject({
       group: 'apps',
       version: 'v1',
       reconnect: true,
     });
-    expect(lookupPortForwardTargetCapability('DaemonSet')).toMatchObject({
+    expect(
+      lookupPortForwardTargetCapability({ kind: 'DaemonSet', group: 'apps', version: 'v1' })
+    ).toMatchObject({
       group: 'apps',
       version: 'v1',
       reconnect: true,

@@ -215,6 +215,49 @@ describe('ClusterWorkspaceStore', () => {
     release();
   });
 
+  it('does not let an earlier refresh overwrite a later refresh that resolved first', async () => {
+    let readCount = 0;
+    let resolveEarlier: (state: ClusterWorkspaceWireState) => void = () => undefined;
+    let resolveLater: (state: ClusterWorkspaceWireState) => void = () => undefined;
+    const read = vi.fn(() => {
+      readCount++;
+      if (readCount === 1) {
+        return Promise.resolve(emptyState());
+      }
+      return new Promise<ClusterWorkspaceWireState>((resolve) => {
+        if (readCount === 2) {
+          resolveEarlier = resolve;
+        } else {
+          resolveLater = resolve;
+        }
+      });
+    });
+    const store = new ClusterWorkspaceStore({ read, runtime: () => undefined });
+    const release = store.acquire();
+    await store.hydrate();
+
+    const earlier = store.refresh();
+    const later = store.refresh();
+    resolveLater({
+      ...emptyState(),
+      selectedKubeconfigs: ['later'],
+      visibleClusterId: 'cluster-later',
+    });
+    await later;
+    resolveEarlier({
+      ...emptyState(),
+      selectedKubeconfigs: ['earlier'],
+      visibleClusterId: 'cluster-earlier',
+    });
+    await earlier;
+
+    expect(store.getSnapshot()).toMatchObject({
+      selectedKubeconfigs: ['later'],
+      visibleClusterId: 'cluster-later',
+    });
+    release();
+  });
+
   it('does not carry live markers across authoritative removal and re-addition', async () => {
     const runtime = createWailsRuntimeHarness();
     const read = vi

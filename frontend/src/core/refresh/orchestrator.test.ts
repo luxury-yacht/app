@@ -3337,13 +3337,65 @@ describe('refreshOrchestrator', () => {
     resourceStreamMocks.start.mockClear();
     orchestratorInternals.handleClusterAuthFailed({ clusterId: 'cluster-b' });
     orchestratorInternals.handleClusterAuthRecovered({ clusterId: 'cluster-a' });
-    expect(resourceStreamMocks.start).not.toHaveBeenCalled();
-
-    orchestratorInternals.handleClusterAuthRecovered({ clusterId: 'cluster-b' });
     await Promise.resolve();
     await Promise.resolve();
     expect(resourceStreamMocks.start).toHaveBeenCalledWith(scopeA);
+    expect(resourceStreamMocks.start).not.toHaveBeenCalledWith(scopeB);
+
+    resourceStreamMocks.start.mockClear();
+    orchestratorInternals.handleClusterAuthRecovered({ clusterId: 'cluster-b' });
+    await Promise.resolve();
+    await Promise.resolve();
     expect(resourceStreamMocks.start).toHaveBeenCalledWith(scopeB);
+  });
+
+  it('keeps a healthy cluster refreshing when another cluster authentication fails', async () => {
+    registerStreamingClusterConfigDomain();
+    refreshOrchestrator.updateContext({
+      currentView: 'cluster',
+      activeClusterView: 'config',
+      selectedClusterId: 'cluster-a',
+      selectedClusterIds: ['cluster-a'],
+      allConnectedClusterIds: ['cluster-a', 'cluster-b'],
+    });
+
+    const scopeA = buildClusterScope('cluster-a', '');
+    const scopeB = buildClusterScope('cluster-b', '');
+    setRuntimeScopeEnabled('cluster-config', scopeA, true);
+    setRuntimeScopeEnabled('cluster-config', scopeB, true);
+    markResourceStreamActive('cluster-config', scopeA);
+    markResourceStreamActive('cluster-config', scopeB);
+
+    const runtimeA = orchestratorInternals.getRuntimeForScope('cluster-config', scopeA);
+    const runtimeB = orchestratorInternals.getRuntimeForScope('cluster-config', scopeB);
+    const controllerA = new AbortController();
+    const controllerB = new AbortController();
+    runtimeA.inFlight.set(makeTestInFlightKey('cluster-config', scopeA), {
+      controller: controllerA,
+      isManual: false,
+      requestId: 1,
+      contextVersion: 0,
+      domain: 'cluster-config',
+      scope: scopeA,
+    });
+    runtimeB.inFlight.set(makeTestInFlightKey('cluster-config', scopeB), {
+      controller: controllerB,
+      isManual: false,
+      requestId: 2,
+      contextVersion: 0,
+      domain: 'cluster-config',
+      scope: scopeB,
+    });
+
+    eventBus.emit('cluster:auth:failed', { clusterId: 'cluster-a' });
+
+    expect(controllerA.signal.aborted).toBe(true);
+    expect(controllerB.signal.aborted).toBe(false);
+    expect(resourceStreamMocks.stop).toHaveBeenCalledWith(scopeA, { reset: false });
+    expect(resourceStreamMocks.stop).not.toHaveBeenCalledWith(scopeB, expect.anything());
+    expect(runtimeB.streamingCleanup.has(makeTestInFlightKey('cluster-config', scopeB))).toBe(true);
+
+    eventBus.emit('cluster:auth:recovered', { clusterId: 'cluster-a' });
   });
 
   it('keeps stream-health polling fallback isolated to the owning cluster scope', async () => {

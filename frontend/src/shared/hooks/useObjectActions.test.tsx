@@ -28,6 +28,8 @@ describe('buildObjectActionItems', () => {
     const items = buildObjectActionItems({
       object: {
         kind: 'Deployment',
+        group: 'apps',
+        version: 'v1',
         name: 'api',
         namespace: 'apps',
         clusterId: 'cluster-a',
@@ -47,6 +49,8 @@ describe('buildObjectActionItems', () => {
     const items = buildObjectActionItems({
       object: {
         kind: 'Deployment',
+        group: 'apps',
+        version: 'v1',
         name: 'api',
         namespace: 'apps',
         clusterId: 'cluster-a',
@@ -73,6 +77,8 @@ describe('buildObjectActionItems', () => {
     const items = buildObjectActionItems({
       object: {
         kind: 'Deployment',
+        group: 'apps',
+        version: 'v1',
         name: 'api',
         namespace: 'apps',
         clusterId: 'cluster-a',
@@ -104,6 +110,8 @@ describe('buildObjectActionItems', () => {
     const items = buildObjectActionItems({
       object: {
         kind: 'Deployment',
+        group: 'apps',
+        version: 'v1',
         name: 'api',
         namespace: 'apps',
         clusterId: 'cluster-a',
@@ -124,6 +132,8 @@ describe('buildObjectActionItems', () => {
     const items = buildObjectActionItems({
       object: {
         kind: 'Deployment',
+        group: 'apps',
+        version: 'v1',
         name: 'api',
         namespace: 'apps',
         clusterId: 'cluster-a',
@@ -167,11 +177,11 @@ describe('buildObjectActionItems', () => {
     const items = buildObjectActionItems({
       object: {
         kind: 'Deployment',
+        group: 'apps',
+        version: 'v1',
         name: 'api',
         namespace: 'apps',
         clusterId: 'cluster-a',
-        group: 'apps',
-        version: 'v1',
       },
       context: 'object-panel',
       handlers: {
@@ -188,12 +198,12 @@ describe('buildObjectActionItems', () => {
     const items = buildObjectActionItems({
       object: {
         kind: 'Deployment',
+        group: 'apps',
+        version: 'v1',
         name: 'api',
         namespace: 'apps',
         clusterId: 'cluster-a',
         clusterName: 'Cluster A',
-        group: 'apps',
-        version: 'v1',
         resource: 'deployments',
         uid: 'deploy-uid',
       },
@@ -239,6 +249,8 @@ describe('buildObjectActionItems', () => {
     const items = buildObjectActionItems({
       object: {
         kind: 'Deployment',
+        group: 'apps',
+        version: 'v1',
         name: 'api',
         namespace: 'apps',
         clusterId: 'cluster-a',
@@ -289,6 +301,8 @@ describe('buildObjectActionItems', () => {
     const items = buildObjectActionItems({
       object: {
         kind: 'Deployment',
+        group: 'apps',
+        version: 'v1',
         name: 'api',
         namespace: 'apps',
         clusterId: 'cluster-a',
@@ -311,6 +325,8 @@ describe('buildObjectActionItems', () => {
     const items = buildObjectActionItems({
       object: {
         kind: 'Deployment',
+        group: 'apps',
+        version: 'v1',
         name: 'api',
         namespace: 'apps',
         clusterId: 'cluster-a',
@@ -336,6 +352,8 @@ describe('buildObjectActionItems', () => {
     const items = buildObjectActionItems({
       object: {
         kind: 'Deployment',
+        group: 'apps',
+        version: 'v1',
         name: 'api',
         namespace: 'apps',
         clusterId: 'cluster-a',
@@ -369,6 +387,8 @@ describe('buildObjectActionItems', () => {
     const items = buildObjectActionItems({
       object: {
         kind: 'Deployment',
+        group: 'apps',
+        version: 'v1',
         name: 'api',
         namespace: 'apps',
         clusterId: 'cluster-a',
@@ -398,6 +418,8 @@ describe('buildObjectActionItems', () => {
     const items = buildObjectActionItems({
       object: {
         kind: 'Deployment',
+        group: 'apps',
+        version: 'v1',
         name: 'api',
         namespace: 'apps',
         clusterId: 'cluster-a',
@@ -422,6 +444,8 @@ describe('buildObjectActionItems', () => {
     const items = buildObjectActionItems({
       object: {
         kind: 'Deployment',
+        group: 'apps',
+        version: 'v1',
         name: 'api',
         namespace: 'apps',
         clusterId: 'cluster-a',
@@ -471,6 +495,8 @@ describe('buildObjectActionItems', () => {
     const items = buildObjectActionItems({
       object: {
         kind: 'Pod',
+        group: '',
+        version: 'v1',
         name: 'api-123',
         namespace: 'apps',
       },
@@ -493,7 +519,7 @@ describe('buildObjectActionItems', () => {
     });
   });
 
-  it('adds a disabled port-forward action when the target GVK is unsupported', () => {
+  it('omits port-forward when the target GVK is unsupported', () => {
     const items = buildObjectActionItems({
       object: {
         kind: 'Deployment',
@@ -515,16 +541,15 @@ describe('buildObjectActionItems', () => {
     const portForwardItem = items.find(
       (item) => 'label' in item && item.label?.includes('Port Forward')
     );
-    expect(portForwardItem).toMatchObject({
-      label: 'Port Forward',
-      disabled: true,
-    });
+    expect(portForwardItem).toBeUndefined();
   });
 
   it('adds a disabled port-forward action when the target exposes no forwardable ports', () => {
     const items = buildObjectActionItems({
       object: {
         kind: 'Pod',
+        group: '',
+        version: 'v1',
         name: 'api-123',
         namespace: 'apps',
         clusterId: 'cluster-a',
@@ -552,6 +577,8 @@ describe('buildObjectActionItems', () => {
     const items = buildObjectActionItems({
       object: {
         kind: 'Node',
+        group: '',
+        version: 'v1',
         name: 'worker-1',
         clusterId: 'cluster-a',
       },
@@ -571,6 +598,8 @@ describe('buildObjectActionItems', () => {
     const base = {
       object: {
         kind: 'Node',
+        group: '',
+        version: 'v1',
         name: 'worker-1',
         clusterId: 'cluster-a',
       },
@@ -609,6 +638,8 @@ describe('buildObjectActionItems', () => {
     const base = {
       object: {
         kind: 'CronJob',
+        group: 'batch',
+        version: 'v1',
         name: 'backup',
         namespace: 'default',
         clusterId: 'cluster-a',
@@ -648,6 +679,8 @@ describe('buildObjectActionItems', () => {
     const base = {
       object: {
         kind: 'CronJob',
+        group: 'batch',
+        version: 'v1',
         name: 'backup',
         namespace: 'default',
         clusterId: 'cluster-a',
