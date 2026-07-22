@@ -837,8 +837,8 @@ func (b *NamespaceWorkloadsBuilder) buildCronJobSummary(
 }
 
 // buildStandalonePodSummaryFromRows builds the standalone-pod WorkloadSummary from the
-// pod's projected ingest rows instead of the typed pod, byte-identically to
-// buildStandalonePodSummary (proven in namespace_workloads_standalone_ingest_test.go):
+// pod's projected ingest rows. namespace_workloads_standalone_ingest_test.go pins
+// the projection against the retained golden contract:
 //
 //   - status (label/state/presentation/reason), name, namespace, ready, restarts, age,
 //     ageTimestamp, and port-forward availability are read from the PodSummary (the

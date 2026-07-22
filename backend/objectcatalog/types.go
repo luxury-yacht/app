@@ -122,7 +122,6 @@ type Dependencies struct {
 	PermissionChecker            permissions.ListWatchChecker           // optional; if nil, assumes all permissions granted
 	IngestSource                 IngestSource                           // optional; supplies catalog rows for ingest-owned kinds
 	ClusterID                    string                                 // stable identifier for the source cluster
-	ClusterName                  string                                 // display name for the source cluster
 	// WaitForCaches blocks until the informer caches the collect reads from are
 	// synced. sync() calls it between the RBAC preflight and the collect fan-out, so
 	// discovery + preflight (pure API calls) overlap the factory's initial sync

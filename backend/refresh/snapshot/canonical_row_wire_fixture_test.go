@@ -133,7 +133,7 @@ func canonicalRowWireFixtures(t *testing.T) canonicalRowWireFixtureDocument {
 	require.NotNil(t, attentionRow)
 
 	catalogObject := &corev1.ConfigMap{ObjectMeta: canonicalFixtureObjectMeta("catalog-wire", namespace, created)}
-	catalogRow, ok := objectcatalog.SummaryProjector(meta.ClusterID, meta.ClusterName, configmapres.Identity)(catalogObject).(objectcatalog.Summary)
+	catalogRow, ok := objectcatalog.SummaryProjector(meta.ClusterID, configmapres.Identity)(catalogObject).(objectcatalog.Summary)
 	require.True(t, ok)
 
 	storageClass := &storagev1.StorageClass{ObjectMeta: canonicalFixtureObjectMeta("storage-wire", "", created), Provisioner: "example.io/wire"}

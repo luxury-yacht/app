@@ -627,6 +627,7 @@ func (a *App) clearKubeconfigSelection() error {
 	}
 	for clusterID := range clusterIDs {
 		a.cleanupClusterRuntimeOperations(clusterID, "cluster disconnected")
+		a.removeClusterWorkspaceState(clusterID)
 	}
 	a.teardownRefreshSubsystem()
 
@@ -1028,6 +1029,7 @@ func (a *App) applySelectionPrune(
 	}
 	for _, id := range removedClusterIDs {
 		a.cleanupClusterRuntimeOperations(id, "cluster disconnected")
+		a.removeClusterWorkspaceState(id)
 	}
 
 	a.settingsMu.Lock()

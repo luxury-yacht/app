@@ -62,8 +62,7 @@ func TestBuildResourceModelStatus(t *testing.T) {
 	}
 }
 
-// TestBuildResourceModelTerminatingStatus covers the shared DeletingStorageStatus
-// path through PV (moved here from resourcemodel's storage terminating test).
+// TestBuildResourceModelTerminatingStatus covers deletion status precedence for PVs.
 func TestBuildResourceModelTerminatingStatus(t *testing.T) {
 	now := metav1.Now()
 	pv := persistentVolumeWithPhase(corev1.VolumeReleased)

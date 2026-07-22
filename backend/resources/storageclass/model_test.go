@@ -66,8 +66,7 @@ func TestBuildResourceModelStatus(t *testing.T) {
 	}
 }
 
-// TestBuildResourceModelTerminatingStatus covers the shared DeletingStorageStatus
-// path through StorageClass (moved here from resourcemodel's storage test).
+// TestBuildResourceModelTerminatingStatus covers deletion status precedence for StorageClasses.
 func TestBuildResourceModelTerminatingStatus(t *testing.T) {
 	now := metav1.Now()
 	sc := &storagev1.StorageClass{

@@ -52,7 +52,7 @@ var (
 func NewPodIngestProjector(meta ClusterMeta, sources PodOwnerSources) ingest.ProjectFunc {
 	// ClusterMeta is a type alias of streamrows.ClusterMeta, so meta is the stream meta.
 	streamMeta := meta
-	catalogProject := objectcatalog.SummaryProjector(meta.ClusterID, meta.ClusterName, podres.Identity)
+	catalogProject := objectcatalog.SummaryProjector(meta.ClusterID, podres.Identity)
 	nodeProject := objectmapnode.NewNodeProjector(
 		podres.ObjectMapNode.Status,
 		podres.ObjectMapNode.ActionFacts,

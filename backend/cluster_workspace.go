@@ -100,6 +100,13 @@ func (a *App) removeClusterWorkspaceRuntimeState(clusterID string) {
 	a.clusterWorkspaceMu.Unlock()
 }
 
+func (a *App) removeClusterWorkspaceState(clusterID string) {
+	a.removeClusterWorkspaceRuntimeState(clusterID)
+	if a != nil && a.clusterLifecycle != nil {
+		a.clusterLifecycle.Remove(clusterID)
+	}
+}
+
 func (a *App) clusterWorkspaceRuntimeState() (map[string]ClusterHealthState, map[string]uint64) {
 	a.clusterWorkspaceMu.RLock()
 	defer a.clusterWorkspaceMu.RUnlock()

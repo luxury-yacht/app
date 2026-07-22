@@ -182,15 +182,18 @@ const Overview: React.FC<OverviewProps> = (props) => {
   // objectData (the source of truth) so CRD permission lookups in
   // the shared action controller key off the same GVK as the spec-emit side;
   // without them the Delete action silently disappears for CRDs.
-  const actionObject: ObjectActionData | null = useMemo(
-    () => ({
-      kind: props.kind,
-      name: props.name,
-      namespace: props.namespace,
-      clusterId,
-      clusterName,
-      group: objectGroup || undefined,
-      version: objectVersion || undefined,
+  const actionObject: ObjectActionData | null = useMemo(() => {
+    if (!objectData) {
+      return null;
+    }
+    return {
+      kind: objectData.kind,
+      name: objectData.name,
+      namespace: objectData.namespace,
+      clusterId: objectData.clusterId,
+      clusterName: objectData.clusterName,
+      group: objectData.group,
+      version: objectData.version,
       status:
         props.suspend === true
           ? 'Suspended'
@@ -202,24 +205,17 @@ const Overview: React.FC<OverviewProps> = (props) => {
       hpaManaged,
       unschedulable: typeof props.unschedulable === 'boolean' ? props.unschedulable : undefined,
       portForwardAvailable: props.portForwardAvailable,
-    }),
-    [
-      props.kind,
-      props.name,
-      props.namespace,
-      props.portForwardAvailable,
-      props.ready,
-      props.suspend,
-      props.status,
-      props.unschedulable,
-      clusterId,
-      clusterName,
-      objectGroup,
-      objectVersion,
-      currentScaleReplicas,
-      hpaManaged,
-    ]
-  );
+    };
+  }, [
+    props.portForwardAvailable,
+    props.ready,
+    props.suspend,
+    props.status,
+    props.unschedulable,
+    objectData,
+    currentScaleReplicas,
+    hpaManaged,
+  ]);
 
   return (
     <div className="object-panel-section">

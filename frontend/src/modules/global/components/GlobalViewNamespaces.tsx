@@ -139,11 +139,7 @@ const GlobalViewNamespaces: React.FC = () => {
               | undefined
           )?.namespaces
         )
-          .filter(
-            (namespace) =>
-              namespace.ref.clusterId === target.clusterId &&
-              namespace.ref.clusterId === target.clusterId
-          )
+          .filter((namespace) => namespace.ref.clusterId === target.clusterId)
           .map((namespace) => {
             const metrics = namespaceMetricStatesByScope[buildClusterScope(target.clusterId, '')]
               ?.data as NamespaceMetricsSnapshotPayload | null | undefined;

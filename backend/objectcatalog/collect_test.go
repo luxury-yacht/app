@@ -202,14 +202,14 @@ func TestCollectViaIngestServesCutKindSummaries(t *testing.T) {
 	obj := &metav1.PartialObjectMetadata{
 		ObjectMeta: metav1.ObjectMeta{Namespace: "team-a", Name: "compute", ResourceVersion: "7"},
 	}
-	want := summaryFromObject("c1", "cluster-one", desc, obj)
-	other := summaryFromObject("c1", "cluster-one", desc,
+	want := summaryFromObject("c1", desc, obj)
+	other := summaryFromObject("c1", desc,
 		&metav1.PartialObjectMetadata{ObjectMeta: metav1.ObjectMeta{Namespace: "team-b", Name: "other", ResourceVersion: "8"}})
 
 	source := &fakeCatalogIngestSource{
 		rows: map[schema.GroupVersionResource][]interface{}{cutGVR: {want, other}},
 	}
-	svc := NewService(Dependencies{IngestSource: source, ClusterID: "c1", ClusterName: "cluster-one"}, nil)
+	svc := NewService(Dependencies{IngestSource: source, ClusterID: "c1"}, nil)
 
 	// Namespace-scoped request to team-a returns only the team-a summary, byte-identical.
 	summaries, handled, err := svc.collectViaIngest(0, desc, []string{"team-a"}, nil)

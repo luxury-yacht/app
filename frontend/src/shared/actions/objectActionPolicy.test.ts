@@ -5,7 +5,7 @@
  * availability rules remain centralized and testable.
  */
 
-import { describe, expect, it } from 'vitest';
+import { describe, expect, expectTypeOf, it } from 'vitest';
 import { OBJECT_ACTION_IDS } from './objectActionContract';
 import {
   type ObjectActionData,
@@ -28,6 +28,14 @@ const deployment = (overrides: Partial<ObjectActionData> = {}): ObjectActionData
 });
 
 describe('resolveObjectActionPolicy', () => {
+  it('requires cluster and GVK identity in action data', () => {
+    expectTypeOf<Pick<ObjectActionData, 'clusterId' | 'group' | 'version'>>().toEqualTypeOf<{
+      clusterId: string;
+      group: string;
+      version: string;
+    }>();
+  });
+
   it('selects normal scale only when HPA ownership is known false', () => {
     const policy = resolveObjectActionPolicy({
       object: deployment(),

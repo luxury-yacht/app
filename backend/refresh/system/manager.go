@@ -266,7 +266,7 @@ func NewSubsystemWithServices(cfg Config) (*Subsystem, error) {
 	// at runtime (objectcatalog maybePromote → RegisterDynamicCatalogReflector). Set before
 	// Start; nil leaves the on-demand path disabled and the catalog keeps listing CRs.
 	ingestManager.SetDynamicClient(cfg.DynamicClient)
-	registerIngestProjectors(ingestManager, cfg.ClusterID, cfg.ClusterName)
+	registerIngestProjectors(ingestManager, cfg.ClusterID)
 	// Pods has no Stream descriptor (its table is the bespoke PodSummary), so the
 	// generic ingest loop above does not build it. Wire the pod reflector explicitly
 	// with its four-half projector, resolving the ReplicaSet->Deployment owner from

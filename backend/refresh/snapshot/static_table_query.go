@@ -357,7 +357,7 @@ func namespacedEventTableQueryAdapter() typedTableQueryAdapter[EventSummary] {
 	return typedTableQueryAdapter[EventSummary]{
 		Key:       func(row EventSummary) string { return namespacedTableKey("Event", row.Ref.Namespace, row.Ref.Name) },
 		AnchorKey: func(_, namespace, name string) string { return namespacedTableKey("Event", namespace, name) },
-		Namespace: func(row EventSummary) string { return row.Ref.Namespace },
+		Namespace: func(row EventSummary) string { return row.ObjectNamespace },
 		Kind:      func(row EventSummary) string { return row.Kind },
 		Facets: eventQueryFacets(
 			func(row EventSummary) string { return row.Type },
@@ -365,7 +365,7 @@ func namespacedEventTableQueryAdapter() typedTableQueryAdapter[EventSummary] {
 			func(row EventSummary) string { return row.Source },
 		),
 		SearchText: func(row EventSummary) []string {
-			return []string{row.Kind, row.Ref.Name, row.Ref.Namespace, row.Type, row.Source, row.Reason, row.Object, row.Message}
+			return []string{row.Kind, row.Ref.Name, row.Ref.Namespace, row.ObjectNamespace, row.Type, row.Source, row.Reason, row.Object, row.Message}
 		},
 		Predicate: func(EventSummary, string, string) bool { return true },
 		SortValue: func(row EventSummary, field string) string {
@@ -373,7 +373,7 @@ func namespacedEventTableQueryAdapter() typedTableQueryAdapter[EventSummary] {
 			case "kind":
 				return row.Kind
 			case "namespace":
-				return row.Ref.Namespace
+				return row.ObjectNamespace
 			case "type":
 				return row.Type
 			case "source":

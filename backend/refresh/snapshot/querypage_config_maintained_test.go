@@ -156,7 +156,7 @@ func TestConfigMaintainedStoreBulkReplaceScopesSourceKind(t *testing.T) {
 
 	cmSink, ok := store.bundleSinkFor(cmDesc).(ingest.BundleReplaceSink)
 	require.True(t, ok, "source-scoped maintained sink must support bulk bundle replace")
-	projectCatalog := objectcatalog.SummaryProjector(meta.ClusterID, meta.ClusterName, configmap.Identity)
+	projectCatalog := objectcatalog.SummaryProjector(meta.ClusterID, configmap.Identity)
 	cmSink.ReplaceBundles([]ingest.Bundle{{
 		Table:   cmDesc.StreamRow(meta, cmObj("default", "cm-a", "10", map[string]string{"k": "v"})),
 		Catalog: projectCatalog(cmObj("default", "cm-a", "10", map[string]string{"k": "v"})),

@@ -188,8 +188,7 @@ func measureCatalogIndexResidency(objectsPerCluster, clusterCount int) uint64 {
 	services := make([]*Service, 0, clusterCount)
 	for clusterIdx := 0; clusterIdx < clusterCount; clusterIdx++ {
 		svc := NewService(Dependencies{
-			ClusterID:   fmt.Sprintf("cluster-%d", clusterIdx),
-			ClusterName: fmt.Sprintf("Cluster %d", clusterIdx),
+			ClusterID: fmt.Sprintf("cluster-%d", clusterIdx),
 		}, nil)
 		items := make(map[string]Summary, objectsPerCluster)
 		desc := resourceDescriptor{
@@ -241,8 +240,7 @@ func benchmarkCatalogService(objects int) *Service {
 
 func benchmarkCatalogServiceWithShape(objects int, shape benchmarkCatalogShape) *Service {
 	svc := NewService(Dependencies{
-		ClusterID:   "cluster-benchmark",
-		ClusterName: "Benchmark",
+		ClusterID: "cluster-benchmark",
 	}, nil)
 	items := make(map[string]Summary, objects)
 	descriptorsByKey := make(map[string]resourceDescriptor)

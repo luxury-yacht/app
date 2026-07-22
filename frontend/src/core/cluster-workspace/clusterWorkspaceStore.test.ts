@@ -1,4 +1,5 @@
 import { afterEach, describe, expect, it, vi } from 'vitest';
+import { eventBus } from '@/core/events';
 import { createWailsRuntimeHarness } from '@/test-utils/wailsRuntimeHarness';
 import { ClusterWorkspaceStore, type ClusterWorkspaceWireState } from './clusterWorkspaceStore';
 
@@ -13,6 +14,45 @@ afterEach(() => {
 });
 
 describe('ClusterWorkspaceStore', () => {
+  it('emits lifecycle only when an authoritative read changes the state', async () => {
+    const workspaceState = (lifecycle: 'ready' | 'loading'): ClusterWorkspaceWireState => ({
+      ...emptyState(),
+      clusters: {
+        'cluster-a': {
+          clusterId: 'cluster-a',
+          clusterName: 'Alpha',
+          lifecycle,
+          auth: { state: 'valid' },
+          health: 'healthy',
+          scopeRevision: 1,
+        },
+      },
+    });
+    const read = vi
+      .fn<() => Promise<ClusterWorkspaceWireState>>()
+      .mockResolvedValueOnce(workspaceState('ready'))
+      .mockResolvedValueOnce(workspaceState('ready'))
+      .mockResolvedValueOnce(workspaceState('loading'));
+    const lifecycleEvents: string[] = [];
+    const unsubscribe = eventBus.on('cluster:lifecycle', ({ state }) =>
+      lifecycleEvents.push(state)
+    );
+    const store = new ClusterWorkspaceStore({ read, runtime: () => undefined });
+    const release = store.acquire();
+
+    await store.hydrate();
+    expect(lifecycleEvents).toEqual(['ready']);
+
+    await store.refresh();
+    expect(lifecycleEvents).toEqual(['ready']);
+
+    await store.refresh();
+    expect(lifecycleEvents).toEqual(['ready', 'loading']);
+
+    release();
+    unsubscribe();
+  });
+
   it('continues notifying subscribers after one subscriber throws', () => {
     vi.spyOn(console, 'error').mockImplementation(() => undefined);
     const store = new ClusterWorkspaceStore({

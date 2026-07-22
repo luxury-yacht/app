@@ -9,7 +9,6 @@ import {
   buildRequiredCanonicalObjectRowKey,
   buildRequiredObjectReference,
   buildRequiredRelatedObjectReference,
-  buildSyntheticObjectReference,
   type ClusterObjectReference,
   type ResolvedObjectReference,
 } from './objectIdentity';
@@ -215,31 +214,6 @@ describe('objectIdentity', () => {
         version: 'v1alpha1',
       })
     );
-  });
-
-  it('builds Helm synthetic references with canonical identity', () => {
-    expect(
-      buildSyntheticObjectReference(
-        {
-          kind: 'HelmRelease',
-          name: 'demo',
-          namespace: 'default',
-          clusterId: 'alpha:ctx',
-        },
-        { status: 'deployed' }
-      )
-    ).toEqual({
-      group: 'helm.sh',
-      version: 'v3',
-      kind: 'HelmRelease',
-      resource: undefined,
-      name: 'demo',
-      uid: undefined,
-      namespace: 'default',
-      clusterId: 'alpha:ctx',
-      clusterName: undefined,
-      status: 'deployed',
-    });
   });
 });
 

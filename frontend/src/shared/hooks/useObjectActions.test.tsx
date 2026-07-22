@@ -275,6 +275,8 @@ describe('buildObjectActionItems', () => {
     const items = buildObjectActionItems({
       object: {
         kind: 'ConfigMap',
+        group: '',
+        version: 'v1',
         name: 'app-config',
         namespace: 'apps',
         clusterId: 'cluster-a',
@@ -471,6 +473,8 @@ describe('buildObjectActionItems', () => {
     const items = buildObjectActionItems({
       object: {
         kind: 'Secret',
+        group: '',
+        version: 'v1',
         name: 'app-secret',
         namespace: 'apps',
         clusterId: 'cluster-a',
@@ -489,34 +493,6 @@ describe('buildObjectActionItems', () => {
       objectActionLabel(OBJECT_ACTION_IDS.viewDetails),
       objectActionLabel(OBJECT_ACTION_IDS.diff),
     ]);
-  });
-
-  it('adds a disabled port-forward action when the target is missing cluster scope', () => {
-    const items = buildObjectActionItems({
-      object: {
-        kind: 'Pod',
-        group: '',
-        version: 'v1',
-        name: 'api-123',
-        namespace: 'apps',
-      },
-      context: 'gridtable',
-      handlers: {
-        onOpen: () => undefined,
-        onPortForward: () => undefined,
-      },
-      permissions: {
-        portForward: { allowed: true, pending: false },
-      },
-    });
-
-    const portForwardItem = items.find(
-      (item) => 'label' in item && item.label?.includes('Port Forward')
-    );
-    expect(portForwardItem).toMatchObject({
-      label: 'Port Forward',
-      disabled: true,
-    });
   });
 
   it('omits port-forward when the target GVK is unsupported', () => {

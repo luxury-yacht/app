@@ -240,6 +240,10 @@ func TestClusterStorageBuilder(t *testing.T) {
 	require.NotEmpty(t, entry.Age)
 }
 
+func TestClusterStorageDomainPreservesListErrorPrefix(t *testing.T) {
+	require.Equal(t, "cluster storage: failed to list persistent volumes", clusterStorageDomainSpec().listErrorPrefix)
+}
+
 func TestClusterStorageBuilderCapsLargeSnapshots(t *testing.T) {
 	pvs := make([]*corev1.PersistentVolume, 0, config.SnapshotClusterStorageEntryLimit+1)
 	for i := 0; i < config.SnapshotClusterStorageEntryLimit+1; i++ {

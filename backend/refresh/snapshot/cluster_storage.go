@@ -64,14 +64,15 @@ type ClusterStorageEntry = streamrows.ClusterStorageEntry
 
 func clusterStorageDomainSpec() typedTableDomainSpec[ClusterStorageEntry] {
 	return typedTableDomainSpec[ClusterStorageEntry]{
-		domain:       clusterStorageDomainName,
-		entryLimit:   config.SnapshotClusterStorageEntryLimit,
-		description:  "persistent volumes",
-		adapter:      clusterStorageTableQueryAdapter(),
-		schema:       clusterStorageQuerypageSchema(),
-		capabilities: clusterStorageQueryCapabilities(),
-		kindOf:       func(entry ClusterStorageEntry) string { return entry.Ref.Kind },
-		sortRows:     sortClusterStorageEntries,
+		domain:          clusterStorageDomainName,
+		entryLimit:      config.SnapshotClusterStorageEntryLimit,
+		description:     "persistent volumes",
+		listErrorPrefix: "cluster storage: failed to list persistent volumes",
+		adapter:         clusterStorageTableQueryAdapter(),
+		schema:          clusterStorageQuerypageSchema(),
+		capabilities:    clusterStorageQueryCapabilities(),
+		kindOf:          func(entry ClusterStorageEntry) string { return entry.Ref.Kind },
+		sortRows:        sortClusterStorageEntries,
 	}
 }
 

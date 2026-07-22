@@ -41,7 +41,6 @@ func newTestWatchService() *Service {
 		health:            healthStatus{State: HealthStateUnknown},
 		doneCh:            make(chan struct{}),
 		clusterID:         "test-cluster",
-		clusterName:       "test",
 	}
 }
 

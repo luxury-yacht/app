@@ -6,7 +6,6 @@
  * ResourceLink-aware navigation, and wires both into shared object actions.
  */
 
-import './ClusterViewEvents.css';
 import type { ClusterEventsSnapshotPayload } from '@core/refresh/types';
 import ResourceInventoryTable from '@modules/resource-grid/ResourceInventoryTable';
 import { selectPayloadRows } from '@modules/resource-grid/typedResourceQueryScope';

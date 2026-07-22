@@ -224,9 +224,8 @@ func (a *App) startObjectCatalogForTarget(target catalogTarget) error {
 				RateLimiterFactory: func(float64) capabilities.RateLimiter { return nil },
 			})
 		},
-		Now:         time.Now,
-		ClusterID:   target.meta.ID,
-		ClusterName: target.meta.Name,
+		Now:       time.Now,
+		ClusterID: target.meta.ID,
 		// The cluster's namespace scope (docs/plans/namespace-scope.md):
 		// namespaced collection fans out per configured namespace.
 		AllowedNamespaces: a.allowedNamespacesForCluster(target.meta.ID),

@@ -39,10 +39,8 @@ type NamespaceEventsBuilder struct {
 // projectNamespaceEventSummary projects a Kubernetes Event into an EventSummary, or reports
 // ok=false to skip it. Namespace events involve namespaced objects, so an event whose
 // involved object has no namespace is skipped — the same gate the list path applies. Shared
-// by the list path and the maintained-store handler so both project byte-identically. The
-// row's Namespace is the involved-object namespace (what the table filters by); the
-// Kubernetes event recorder always creates an event in its involved object's namespace, so
-// involved-object namespace == event metadata namespace for real events.
+// by the list path and the maintained-store handler so both paths use ObjectNamespace for
+// namespace filtering while Ref continues to identify the Event resource itself.
 func projectNamespaceEventSummary(meta ClusterMeta, event *corev1.Event) (EventSummary, bool) {
 	if event == nil || strings.TrimSpace(event.InvolvedObject.Namespace) == "" {
 		return EventSummary{}, false
@@ -178,8 +176,8 @@ func (b *NamespaceEventsBuilder) Build(ctx context.Context, scope string) (*refr
 	var version uint64
 	if b.maintained != nil {
 		// Serve from the informer-fed store (rows projected + empty-involved-namespace
-		// filtered at intake) instead of listing + re-projecting. The store filters by the
-		// involved-object namespace, the same field the list path's namespace filter uses.
+		// filtered at intake) instead of listing + re-projecting. The adapter filters by
+		// ObjectNamespace without changing the Event resource identity in Ref.
 		ns := ""
 		if !parsedScope.AllNamespaces {
 			ns = parsedScope.Namespace
@@ -188,11 +186,7 @@ func (b *NamespaceEventsBuilder) Build(ctx context.Context, scope string) (*refr
 		version = b.maintained.snapshotVersion()
 	} else {
 		var events []*corev1.Event
-		if parsedScope.AllNamespaces {
-			events, err = b.eventLister.List(labels.Everything())
-		} else {
-			events, err = b.eventLister.Events(parsedScope.Namespace).List(labels.Everything())
-		}
+		events, err = b.eventLister.List(labels.Everything())
 		if err != nil {
 			return nil, err
 		}
@@ -202,9 +196,7 @@ func (b *NamespaceEventsBuilder) Build(ctx context.Context, scope string) (*refr
 			if !keep {
 				continue
 			}
-			// For a specific namespace the involved-object namespace must match the
-			// request (mirrors the prior filtered step); all-namespaces keeps every row.
-			if !parsedScope.AllNamespaces && summary.Ref.Namespace != parsedScope.Namespace {
+			if !parsedScope.AllNamespaces && summary.ObjectNamespace != parsedScope.Namespace {
 				continue
 			}
 			summaries = append(summaries, summary)

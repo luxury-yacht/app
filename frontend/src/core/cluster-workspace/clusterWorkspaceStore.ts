@@ -338,7 +338,12 @@ export class ClusterWorkspaceStore {
           : (raw.scopeRevision ?? 0),
       };
       nextClusters.set(clusterId, cluster);
-      if (liveFields && parsedLifecycle && !isLiveField('lifecycle')) {
+      if (
+        liveFields &&
+        parsedLifecycle &&
+        !isLiveField('lifecycle') &&
+        previous?.lifecycle !== parsedLifecycle
+      ) {
         eventBus.emit('cluster:lifecycle', { clusterId, state: parsedLifecycle });
       }
     }

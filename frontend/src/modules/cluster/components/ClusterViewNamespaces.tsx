@@ -24,11 +24,7 @@ const ClusterViewNamespaces: React.FC = () => {
       return [];
     }
     return namespaceSummaries
-      .filter(
-        (namespace) =>
-          namespace.ref.clusterId === selectedClusterId &&
-          namespace.ref.clusterId === selectedClusterId
-      )
+      .filter((namespace) => namespace.ref.clusterId === selectedClusterId)
       .map((namespace) => projectNamespaceSummary(namespace, namespaceMetricsState));
   }, [namespaceMetricsState, namespaceSummaries, selectedClusterId]);
 

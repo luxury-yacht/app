@@ -105,7 +105,7 @@ func TestNewWorkloadIngestProjectorBundleMatchesLivePaths(t *testing.T) {
 		}
 
 		// Catalog half.
-		catalogProject := objectcatalog.SummaryProjector(meta.ClusterID, meta.ClusterName, tc.collector.Identity)
+		catalogProject := objectcatalog.SummaryProjector(meta.ClusterID, tc.collector.Identity)
 		wantCatalog, ok := catalogProject(tc.obj).(objectcatalog.Summary)
 		if !ok {
 			t.Fatalf("catalogProject returned %T", catalogProject(tc.obj))

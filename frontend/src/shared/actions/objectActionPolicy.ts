@@ -21,15 +21,15 @@ export interface ObjectActionData {
   kind: string;
   name: string;
   namespace?: string;
-  clusterId?: string;
+  clusterId: string;
   clusterName?: string;
   // API group/version for the object's kind. Required to look up CRD
   // permissions correctly: getPermissionKey only auto-resolves built-in
   // GVK from a static table, so CRD callers must thread these through
   // or the lookup key won't match the spec-emit key from
   // queryKindPermissions and the Delete action silently disappears.
-  group?: string;
-  version?: string;
+  group: string;
+  version: string;
   resource?: string;
   uid?: string;
   requiresExplicitVersion?: boolean;
@@ -115,9 +115,6 @@ const permissionAllows = (status: PermissionStatus | null | undefined): boolean 
   Boolean(status?.allowed && !status.pending);
 
 const lookupObjectCapability = (object: Pick<ObjectActionData, 'group' | 'version' | 'kind'>) => {
-  if (object.group === null || object.group === undefined || !object.version?.trim()) {
-    return null;
-  }
   return lookupObjectActionKindCapability({
     group: object.group,
     version: object.version,
@@ -136,7 +133,7 @@ const resolvePortForwardAvailability = (
     return { show: false, enabled: false, actionId };
   }
 
-  if (!object.clusterId || !object.namespace) {
+  if (!object.clusterId.trim() || !object.namespace) {
     return { show: true, enabled: false, actionId };
   }
 

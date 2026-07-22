@@ -115,6 +115,49 @@ func TestClusterWorkspaceStateCombinesClusterFacts(t *testing.T) {
 	require.Equal(t, uint64(1), state.Clusters["cluster-a"].ScopeRevision)
 }
 
+func TestClearKubeconfigSelectionRemovesClusterWorkspaceState(t *testing.T) {
+	app := NewApp()
+	app.clusterLifecycle = newClusterLifecycle(nil)
+	app.clusterLifecycle.SetState("cluster-a", ClusterStateReady)
+	app.setClusterHealth("cluster-a", ClusterHealthDegraded)
+	app.incrementClusterScopeRevision("cluster-a")
+	app.clusterClients["cluster-a"] = &clusterClients{meta: ClusterMeta{ID: "cluster-a", Name: "Production"}}
+
+	require.NoError(t, app.clearKubeconfigSelection())
+
+	state := app.GetClusterWorkspaceState()
+	require.NotContains(t, state.Clusters, "cluster-a")
+	require.Empty(t, app.clusterLifecycle.GetAllStates())
+
+	app.clusterClients["cluster-a"] = &clusterClients{meta: ClusterMeta{ID: "cluster-a", Name: "Production"}}
+	app.clusterLifecycle.SetState("cluster-a", ClusterStateConnected)
+	readded := app.GetClusterWorkspaceState().Clusters["cluster-a"]
+	require.Equal(t, ClusterHealthUnknown, readded.Health)
+	require.Zero(t, readded.ScopeRevision)
+}
+
+func TestApplySelectionPruneRemovesClusterWorkspaceState(t *testing.T) {
+	app := NewApp()
+	app.clusterLifecycle = newClusterLifecycle(nil)
+	app.clusterLifecycle.SetState("cluster-a", ClusterStateReady)
+	app.setClusterHealth("cluster-a", ClusterHealthHealthy)
+	app.incrementClusterScopeRevision("cluster-a")
+	app.clusterClients["cluster-a"] = &clusterClients{meta: ClusterMeta{ID: "cluster-a", Name: "Production"}}
+	app.clusterLifecycle.SetState("cluster-b", ClusterStateReady)
+	app.setClusterHealth("cluster-b", ClusterHealthDegraded)
+	app.incrementClusterScopeRevision("cluster-b")
+	app.clusterClients["cluster-b"] = &clusterClients{meta: ClusterMeta{ID: "cluster-b", Name: "Staging"}}
+
+	app.applySelectionPrune(nil, nil, []string{"cluster-a"}, "test")
+
+	state := app.GetClusterWorkspaceState()
+	require.NotContains(t, state.Clusters, "cluster-a")
+	require.Equal(t, ClusterStateReady, state.Clusters["cluster-b"].Lifecycle)
+	require.Equal(t, ClusterHealthDegraded, state.Clusters["cluster-b"].Health)
+	require.Equal(t, uint64(1), state.Clusters["cluster-b"].ScopeRevision)
+	require.Equal(t, map[string]ClusterLifecycleState{"cluster-b": ClusterStateReady}, app.clusterLifecycle.GetAllStates())
+}
+
 func TestApplyClusterWorkspaceReturnsAuthoritativeActivationState(t *testing.T) {
 	app := NewApp()
 	app.clusterClients["cluster-a"] = &clusterClients{meta: ClusterMeta{ID: "cluster-a", Name: "Production"}}

@@ -111,7 +111,7 @@ func TestBuildSummaryForNamespaceCanonicalIdentity(t *testing.T) {
 			CreationTimestamp: metav1.NewTime(time.Unix(1700000000, 0)),
 		},
 	}
-	svc := &Service{clusterID: "cluster-a", clusterName: "prod"}
+	svc := &Service{clusterID: "cluster-a"}
 
 	summary := svc.buildSummary(desc, namespace)
 	if summary.Ref.ClusterID != "cluster-a" {

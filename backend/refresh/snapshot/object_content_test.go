@@ -32,6 +32,7 @@ type stubHelmContentProvider struct {
 	valuesRevision    int
 	valuesNamespace   string
 	valuesName        string
+	resolver          common.ResourceResolver
 }
 
 type stubResourceResolver map[schema.GroupVersionKind]common.ResolvedResource
@@ -51,6 +52,10 @@ func (s *stubHelmContentProvider) FetchHelmValues(_ context.Context, namespace, 
 	s.valuesNamespace = namespace
 	s.valuesName = name
 	return s.values, s.valuesRevision, nil
+}
+
+func (s *stubHelmContentProvider) ResourceResolver(context.Context) common.ResourceResolver {
+	return s.resolver
 }
 
 func TestObjectYAMLBuilderUsesFullObjectScopeAndClusterMeta(t *testing.T) {
@@ -96,7 +101,8 @@ metadata:
 			Group: "", Version: "v1", Kind: "Service", Resource: "services", Namespaced: true,
 		},
 	}
-	builder := &ObjectHelmManifestBuilder{provider: provider, resolver: resolver}
+	provider.resolver = resolver
+	builder := &ObjectHelmManifestBuilder{provider: provider}
 	ctx := WithClusterMeta(context.Background(), ClusterMeta{ClusterID: "cluster-a", ClusterName: "Cluster A"})
 
 	snapshot, err := builder.Build(ctx, "cluster-a|apps:checkout")
@@ -121,6 +127,29 @@ metadata:
 	require.Equal(t, "api", payload.Resources[0].Ref.Name)
 	require.NotNil(t, payload.Resources[1].Ref)
 	require.Equal(t, "explicit", payload.Resources[1].Ref.Namespace)
+}
+
+func TestObjectHelmManifestBuilderUsesContextScopedProviderResolver(t *testing.T) {
+	provider := &stubHelmContentProvider{
+		manifest: "apiVersion: databases.example.com/v1\nkind: Database\nmetadata:\n  name: orders\n",
+		resolver: stubResourceResolver{
+			{Group: "databases.example.com", Version: "v1", Kind: "Database"}: {
+				Group: "databases.example.com", Version: "v1", Kind: "Database", Resource: "databases", Namespaced: true,
+			},
+		},
+	}
+	builder := &ObjectHelmManifestBuilder{provider: provider}
+	ctx := WithClusterMeta(context.Background(), ClusterMeta{ClusterID: "cluster-a"})
+
+	snapshot, err := builder.Build(ctx, "cluster-a|apps:checkout")
+	require.NoError(t, err)
+
+	resources := snapshot.Payload.(ObjectHelmManifestSnapshotPayload).Resources
+	require.Len(t, resources, 1)
+	require.NotNil(t, resources[0].Ref)
+	require.Equal(t, "cluster-a", resources[0].Ref.ClusterID)
+	require.Equal(t, "databases", resources[0].Ref.Resource)
+	require.Equal(t, "apps", resources[0].Ref.Namespace)
 }
 
 func TestObjectHelmValuesBuilderUsesReleaseScopeAndCountsValues(t *testing.T) {

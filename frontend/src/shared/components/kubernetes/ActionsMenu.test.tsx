@@ -145,6 +145,8 @@ const makeObject = (kind: string, overrides?: Partial<ObjectActionData>): Object
   namespace: 'default',
   clusterId: 'cluster-1',
   ...overrides,
+  group: overrides?.group ?? '',
+  version: overrides?.version ?? 'v1',
 });
 
 const makeDeployment = (overrides?: Partial<ObjectActionData>): ObjectActionData =>
@@ -508,7 +510,7 @@ describe('ActionsMenu', () => {
   it('renders port forward as disabled when the target is unavailable', async () => {
     await renderMenu({
       object: makePod({
-        clusterId: undefined,
+        clusterId: '',
       }),
     });
 

@@ -371,7 +371,7 @@ func (s *Service) stopDynamicReflectors() {
 }
 
 func (s *Service) buildSummary(desc resourceDescriptor, item metav1.Object) Summary {
-	return summaryFromObject(s.clusterID, s.clusterName, desc, item)
+	return summaryFromObject(s.clusterID, desc, item)
 }
 
 // summaryFromObject is the catalog's pure object → Summary projection: it depends
@@ -380,7 +380,7 @@ func (s *Service) buildSummary(desc resourceDescriptor, item metav1.Object) Summ
 // live collect path and the ingest Catalog-half projector (SummaryProjector), which
 // runs before any Service exists. Keeping it one function guarantees the ingest
 // path's Summaries are byte-identical to the shared-informer collect path's.
-func summaryFromObject(clusterID, _ string, desc resourceDescriptor, item metav1.Object) Summary {
+func summaryFromObject(clusterID string, desc resourceDescriptor, item metav1.Object) Summary {
 	creationTimestamp := ""
 	if ts := item.GetCreationTimestamp(); !ts.IsZero() {
 		creationTimestamp = ts.UTC().Format(time.RFC3339)

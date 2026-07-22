@@ -239,7 +239,7 @@ func TestKeyFromCatalogMatchesAdapterKeyForEveryMaintainedKind(t *testing.T) {
 
 	for _, tc := range cases {
 		t.Run(tc.name, func(t *testing.T) {
-			catalogProject := objectcatalog.SummaryProjector(meta.ClusterID, meta.ClusterName, tc.identity)
+			catalogProject := objectcatalog.SummaryProjector(meta.ClusterID, tc.identity)
 			summary, ok := catalogProject(tc.obj).(objectcatalog.Summary)
 			require.Truef(t, ok, "%s catalog projector returned %T", tc.name, catalogProject(tc.obj))
 
@@ -269,7 +269,7 @@ func descriptorFor(t *testing.T, domain, resource string) streamspec.Descriptor 
 func scClusterConfigProjection(t *testing.T, meta ClusterMeta) ingest.ProjectFunc {
 	t.Helper()
 	desc := descriptorFor(t, clusterConfigDomainName, "storageclasses")
-	catalog := objectcatalog.SummaryProjector(meta.ClusterID, meta.ClusterName, storageclass.Identity)
+	catalog := objectcatalog.SummaryProjector(meta.ClusterID, storageclass.Identity)
 	return func(obj interface{}) (interface{}, error) {
 		m, ok := obj.(metav1.Object)
 		if !ok {

@@ -36,12 +36,12 @@ var _ IngestSource = (*ingest.IngestManager)(nil)
 // projects each ingested object into the catalog Summary the live collect path would
 // build, using the same summaryFromObject projection. It is registered with the
 // ingest manager before Start so every object — including the initial relist —
-// carries the catalog half. clusterID/clusterName stamp the summary's cluster
-// identity exactly as the Service's buildSummary does.
-func SummaryProjector(clusterID, clusterName string, identity resourcekind.Identity) func(metav1.Object) interface{} {
+// carries the catalog half. clusterID stamps the summary's cluster identity
+// exactly as the Service's buildSummary does.
+func SummaryProjector(clusterID string, identity resourcekind.Identity) func(metav1.Object) interface{} {
 	desc := builtinDescriptor(identity.Group, identity.Version, identity.Kind, identity.Resource, identity.Namespaced)
 	return func(obj metav1.Object) interface{} {
-		return summaryFromObject(clusterID, clusterName, desc, obj)
+		return summaryFromObject(clusterID, desc, obj)
 	}
 }
 

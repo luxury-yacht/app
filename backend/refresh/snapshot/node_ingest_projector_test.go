@@ -93,7 +93,7 @@ func TestNewNodeIngestProjectorBundleMatchesLivePaths(t *testing.T) {
 		t.Fatalf("Aggregate half mismatch:\n got=%#v\nwant=%#v", gotAgg, wantAgg)
 	}
 
-	catalogProject := objectcatalog.SummaryProjector(meta.ClusterID, meta.ClusterName, nodepkg.Identity)
+	catalogProject := objectcatalog.SummaryProjector(meta.ClusterID, nodepkg.Identity)
 	wantCatalog, ok := catalogProject(node).(objectcatalog.Summary)
 	if !ok {
 		t.Fatalf("catalogProject returned %T, want objectcatalog.Summary", catalogProject(node))

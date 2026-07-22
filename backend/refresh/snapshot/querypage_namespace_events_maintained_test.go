@@ -12,20 +12,47 @@ import (
 	"k8s.io/client-go/tools/cache"
 )
 
-// nsEventObj builds an event about a namespaced object. The Kubernetes event recorder
-// creates the event in the involved object's namespace, so metadata.namespace ==
-// involvedObject.namespace — the invariant the maintained store relies on.
+// nsEventObj builds the common case where Event and involved-object namespaces match.
 func nsEventObj(name, ns, kind, reason string, rv string, secs int64) *corev1.Event {
+	return nsEventObjWithNamespaces(name, ns, ns, kind, reason, rv, secs)
+}
+
+func nsEventObjWithNamespaces(name, eventNamespace, objectNamespace, kind, reason string, rv string, secs int64) *corev1.Event {
 	return &corev1.Event{
-		ObjectMeta: metav1.ObjectMeta{Name: name, Namespace: ns, ResourceVersion: rv},
+		ObjectMeta: metav1.ObjectMeta{Name: name, Namespace: eventNamespace, ResourceVersion: rv},
 		InvolvedObject: corev1.ObjectReference{
-			Kind: kind, Namespace: ns, Name: "obj-" + name, APIVersion: "v1",
+			Kind: kind, Namespace: objectNamespace, Name: "obj-" + name, APIVersion: "v1",
 		},
 		Reason:        reason,
 		Message:       "msg-" + reason,
 		Type:          "Normal",
 		Source:        corev1.EventSource{Component: "kubelet"},
 		LastTimestamp: metav1.NewTime(time.Unix(1_700_000_000+secs, 0)),
+	}
+}
+
+func TestNamespaceEventsBuilderFiltersByInvolvedObjectNamespace(t *testing.T) {
+	meta := ClusterMeta{}
+	event := nsEventObjWithNamespaces("mismatch.1", "events-ns", "object-ns", "Pod", "Started", "3", 5)
+	indexer := cache.NewIndexer(cache.MetaNamespaceKeyFunc, cache.Indexers{})
+	require.NoError(t, indexer.Add(event))
+	maintained := newTypedMaintainedStore(meta, namespaceEventsQuerypageSchema(), namespacedEventTableQueryAdapter())
+	summary, ok := projectNamespaceEventSummary(meta, event)
+	require.True(t, ok)
+	maintained.upsertRow(summary, event)
+
+	builders := map[string]*NamespaceEventsBuilder{
+		"list":       {eventLister: corelisters.NewEventLister(indexer)},
+		"maintained": {maintained: maintained},
+	}
+	for name, builder := range builders {
+		objectSnapshot, err := builder.Build(context.Background(), "namespace:object-ns")
+		require.NoError(t, err, name)
+		require.Len(t, objectSnapshot.Payload.(NamespaceEventsSnapshot).Rows, 1, name)
+
+		eventSnapshot, err := builder.Build(context.Background(), "namespace:events-ns")
+		require.NoError(t, err, name)
+		require.Empty(t, eventSnapshot.Payload.(NamespaceEventsSnapshot).Rows, name)
 	}
 }
 

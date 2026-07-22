@@ -59,9 +59,8 @@ type Service struct {
 	deps Dependencies
 	opts Options
 
-	// cluster metadata is attached to summaries for stable keying.
-	clusterID   string
-	clusterName string
+	// cluster identity is attached to summaries for stable keying.
+	clusterID string
 
 	mu sync.RWMutex
 	catalogIndex
@@ -188,7 +187,6 @@ func NewService(deps Dependencies, opts *Options) *Service {
 		deps:              deps,
 		opts:              serviceOpts,
 		clusterID:         deps.ClusterID,
-		clusterName:       deps.ClusterName,
 		catalogIndex:      newCatalogIndex(),
 		identity:          newResourceIdentityResolver(deps.Common, deps.Logger),
 		dynamicIngested:   make(map[schema.GroupVersionResource]struct{}),

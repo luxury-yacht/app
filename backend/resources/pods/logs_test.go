@@ -19,6 +19,7 @@ import (
 	"github.com/luxury-yacht/app/backend/internal/containerlogs"
 	"github.com/stretchr/testify/require"
 	appsv1 "k8s.io/api/apps/v1"
+	batchv1 "k8s.io/api/batch/v1"
 	corev1 "k8s.io/api/core/v1"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/runtime"
@@ -208,6 +209,80 @@ func TestContainerLogsScopeContainersWorkloadReturnsUniqueDisplayNames(t *testin
 	containers, err := service.ContainerLogsScopeContainers("cluster-a|default:apps/v1:deployment:web")
 	require.NoError(t, err)
 	require.Equal(t, []string{"app", "init-a (init)", "other", "sidecar"}, containers)
+}
+
+func TestResolveTargetPodObjectsSupportsWorkloadKinds(t *testing.T) {
+	rs := &appsv1.ReplicaSet{
+		ObjectMeta: metav1.ObjectMeta{Name: "rs", Namespace: "default"},
+		Spec:       appsv1.ReplicaSetSpec{Selector: &metav1.LabelSelector{MatchLabels: map[string]string{"app": "rs"}}},
+	}
+	ds := &appsv1.DaemonSet{
+		ObjectMeta: metav1.ObjectMeta{Name: "ds", Namespace: "default"},
+		Spec:       appsv1.DaemonSetSpec{Selector: &metav1.LabelSelector{MatchLabels: map[string]string{"app": "ds"}}},
+	}
+	sts := &appsv1.StatefulSet{
+		ObjectMeta: metav1.ObjectMeta{Name: "sts", Namespace: "default"},
+		Spec:       appsv1.StatefulSetSpec{Selector: &metav1.LabelSelector{MatchLabels: map[string]string{"app": "sts"}}},
+	}
+	objects := []runtime.Object{
+		rs,
+		ds,
+		sts,
+		&batchv1.Job{ObjectMeta: metav1.ObjectMeta{Name: "job", Namespace: "default"}},
+		&corev1.Pod{ObjectMeta: metav1.ObjectMeta{Name: "rs-pod", Namespace: "default", Labels: map[string]string{"app": "rs"}}},
+		&corev1.Pod{ObjectMeta: metav1.ObjectMeta{Name: "ds-pod", Namespace: "default", Labels: map[string]string{"app": "ds"}}},
+		&corev1.Pod{ObjectMeta: metav1.ObjectMeta{Name: "sts-0", Namespace: "default", Labels: map[string]string{"app": "sts"}}},
+		&corev1.Pod{ObjectMeta: metav1.ObjectMeta{Name: "job-pod", Namespace: "default", Labels: map[string]string{"job-name": "job"}}},
+	}
+	service := NewService(common.Dependencies{Context: context.Background(), KubernetesClient: fake.NewClientset(objects...)})
+
+	for _, tc := range []struct {
+		group, kind, name, want string
+	}{
+		{group: "apps", kind: "replicaset", name: "rs", want: "rs-pod"},
+		{group: "apps", kind: "daemonset", name: "ds", want: "ds-pod"},
+		{group: "apps", kind: "statefulset", name: "sts", want: "sts-0"},
+		{group: "batch", kind: "job", name: "job", want: "job-pod"},
+	} {
+		t.Run(tc.kind, func(t *testing.T) {
+			pods, err := service.resolveTargetPodObjects(
+				types.ContainerLogsFetchRequest{Scope: workloadLogScope("default", tc.group, "v1", tc.kind, tc.name)},
+				containerlogs.PodNameFilter{},
+				containerlogs.ScopeSelection{},
+			)
+			require.NoError(t, err)
+			require.Len(t, pods, 1)
+			require.Equal(t, tc.want, pods[0].Name)
+		})
+	}
+}
+
+func TestResolveTargetPodObjectsSupportsCronJobAndContinuesAfterPodListError(t *testing.T) {
+	controller := true
+	owner := metav1.OwnerReference{Kind: "CronJob", Name: "nightly", Controller: &controller}
+	client := fake.NewClientset(
+		&batchv1.Job{ObjectMeta: metav1.ObjectMeta{Name: "nightly-1", Namespace: "default", OwnerReferences: []metav1.OwnerReference{owner}}},
+		&batchv1.Job{ObjectMeta: metav1.ObjectMeta{Name: "nightly-2", Namespace: "default", OwnerReferences: []metav1.OwnerReference{owner}}},
+		&corev1.Pod{ObjectMeta: metav1.ObjectMeta{Name: "nightly-pod", Namespace: "default", Labels: map[string]string{"job-name": "nightly-2"}}},
+	)
+	listCalls := 0
+	client.PrependReactor("list", "pods", func(k8stesting.Action) (bool, runtime.Object, error) {
+		listCalls++
+		if listCalls == 1 {
+			return true, nil, errors.New("pods unavailable")
+		}
+		return false, nil, nil
+	})
+	service := NewService(common.Dependencies{Context: context.Background(), Logger: applog.Noop, KubernetesClient: client})
+
+	pods, err := service.resolveTargetPodObjects(
+		types.ContainerLogsFetchRequest{Scope: workloadLogScope("default", "batch", "v1", "cronjob", "nightly")},
+		containerlogs.PodNameFilter{},
+		containerlogs.ScopeSelection{},
+	)
+	require.NoError(t, err)
+	require.Len(t, pods, 1)
+	require.Equal(t, "nightly-pod", pods[0].Name)
 }
 
 func TestFetchContainerLogsScopedPodUsesScopeNamespace(t *testing.T) {
