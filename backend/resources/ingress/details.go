@@ -36,23 +36,6 @@ func (s *Service) Ingress(namespace, name string) (*IngressDetails, error) {
 	return s.buildIngressDetails(ingress), nil
 }
 
-// Ingresses returns detailed views for all ingresses in a namespace.
-func (s *Service) Ingresses(namespace string) ([]*IngressDetails, error) {
-	ingresses, err := s.deps.KubernetesClient.NetworkingV1().Ingresses(namespace).List(s.deps.Context, metav1.ListOptions{})
-	if err != nil {
-		s.deps.Logger.Error(fmt.Sprintf("Failed to list ingresses in namespace %s: %v", namespace, err), logsources.ResourceLoader)
-		return nil, fmt.Errorf("failed to list ingresses: %v", err)
-	}
-
-	var results []*IngressDetails
-	for i := range ingresses.Items {
-		ing := ingresses.Items[i]
-		results = append(results, s.buildIngressDetails(&ing))
-	}
-
-	return results, nil
-}
-
 func (s *Service) buildIngressDetails(ingress *networkingv1.Ingress) *IngressDetails {
 	facts := BuildFacts(s.deps.ClusterID, ingress)
 	details := &IngressDetails{

@@ -17,7 +17,6 @@ import (
 
 	"github.com/luxury-yacht/app/backend/internal/applog"
 	"github.com/luxury-yacht/app/backend/internal/config"
-	"github.com/luxury-yacht/app/backend/internal/parallel"
 	"github.com/luxury-yacht/app/backend/nodemaintenance"
 	"github.com/luxury-yacht/app/backend/resources/common"
 	podres "github.com/luxury-yacht/app/backend/resources/pods"
@@ -67,46 +66,6 @@ func (s *Service) Node(name string) (*NodeDetails, error) {
 	return s.buildNodeDetails(node, pods, nodeMetrics), nil
 }
 
-// Nodes returns detailed information about all nodes in the cluster.
-func (s *Service) Nodes() ([]*NodeDetails, error) {
-	if err := s.ensureClient("Nodes"); err != nil {
-		return nil, err
-	}
-
-	client := s.deps.KubernetesClient
-	nodeList, err := client.CoreV1().Nodes().List(s.deps.Context, metav1.ListOptions{})
-	if err != nil {
-		s.logError(fmt.Sprintf("Failed to list nodes: %v", err))
-		return nil, fmt.Errorf("failed to list nodes: %v", err)
-	}
-
-	var (
-		podsByNode  map[string][]corev1.Pod
-		nodeMetrics map[string]corev1.ResourceList
-	)
-
-	if err := parallel.RunLimited(s.deps.Context, 0,
-		func(context.Context) error {
-			podsByNode = s.listAllPodsByNode()
-			return nil
-		},
-		func(context.Context) error {
-			nodeMetrics = s.listNodeMetrics()
-			return nil
-		},
-	); err != nil {
-		return nil, err
-	}
-
-	details := make([]*NodeDetails, 0, len(nodeList.Items))
-	for i := range nodeList.Items {
-		node := &nodeList.Items[i]
-		details = append(details, s.buildNodeDetails(node, podsByNode[node.Name], nodeMetrics[node.Name]))
-	}
-
-	return details, nil
-}
-
 // Cordon marks a node as unschedulable.
 func (s *Service) Cordon(nodeName string) error {
 	return s.setUnschedulable(nodeName, true)
@@ -153,11 +112,6 @@ func (s *Service) Drain(nodeName string, options restypes.DrainNodeOptions) (err
 	}
 
 	return s.runDrainJob(job, nodeName, options)
-}
-
-// StartDrain starts a drain job in the background and returns immediately.
-func (s *Service) StartDrain(nodeName string, options restypes.DrainNodeOptions) (*nodemaintenance.DrainJob, error) {
-	return s.StartDrainWithCompletion(nodeName, options, nil)
 }
 
 // StartDrainWithCompletion starts a drain job and invokes onComplete after the job exits.
@@ -562,32 +516,6 @@ func (s *Service) listPodsForNode(name string) []corev1.Pod {
 	return podList.Items
 }
 
-func (s *Service) listAllPodsByNode() map[string][]corev1.Pod {
-	client := s.deps.KubernetesClient
-	result := make(map[string][]corev1.Pod)
-	if client == nil {
-		return result
-	}
-
-	ctx, cancel := context.WithTimeout(s.deps.Context, config.NamespaceOperationTimeout)
-	defer cancel()
-
-	podList, err := client.CoreV1().Pods("").List(ctx, metav1.ListOptions{})
-	if err != nil {
-		s.logInfo(fmt.Sprintf("Failed to list cluster pods: %v", err))
-		return result
-	}
-
-	for _, pod := range podList.Items {
-		if pod.Spec.NodeName == "" {
-			continue
-		}
-		result[pod.Spec.NodeName] = append(result[pod.Spec.NodeName], pod)
-	}
-
-	return result
-}
-
 func (s *Service) getNodeMetrics(name string) corev1.ResourceList {
 	s.ensureMetricsClient()
 	if s.deps.MetricsClient == nil {
@@ -600,26 +528,6 @@ func (s *Service) getNodeMetrics(name string) corev1.ResourceList {
 		return nil
 	}
 	return metric.Usage
-}
-
-func (s *Service) listNodeMetrics() map[string]corev1.ResourceList {
-	s.ensureMetricsClient()
-	if s.deps.MetricsClient == nil {
-		return nil
-	}
-
-	metricsList, err := s.deps.MetricsClient.MetricsV1beta1().NodeMetricses().List(s.deps.Context, metav1.ListOptions{})
-	if err != nil {
-		s.logInfo(fmt.Sprintf("Failed to list node metrics: %v", err))
-		return nil
-	}
-
-	result := make(map[string]corev1.ResourceList)
-	for i := range metricsList.Items {
-		metric := &metricsList.Items[i]
-		result[metric.Name] = metric.Usage
-	}
-	return result
 }
 
 func (s *Service) ensureMetricsClient() {

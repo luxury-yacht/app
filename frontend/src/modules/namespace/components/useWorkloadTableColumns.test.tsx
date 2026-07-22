@@ -9,6 +9,7 @@ import { getTextContent } from '@shared/components/tables/GridTable.utils';
 import React, { act } from 'react';
 import * as ReactDOM from 'react-dom/client';
 import { describe, expect, it, vi } from 'vitest';
+import { makeResourceRef } from '@/test-utils/makeResourceRef';
 import { requireReactElement } from '@/test-utils/requireReactElement';
 import { requireValue } from '@/test-utils/requireValue';
 
@@ -57,10 +58,21 @@ const renderHook = <T,>(hook: () => T) => {
 
 describe('useWorkloadTableColumns', () => {
   const workload: WorkloadData = {
-    clusterId: 'cluster-a',
-    kind: 'Deployment',
-    name: 'api',
-    namespace: 'team-a',
+    ref: {
+      ...makeResourceRef({
+        clusterId: 'cluster-a',
+        group: 'apps',
+        kind: 'Deployment',
+        resource: 'deployments',
+        namespace: 'team-a',
+        name: 'api',
+      }),
+      clusterId: 'cluster-a',
+      kind: 'Deployment',
+      name: 'api',
+      namespace: 'team-a',
+    },
+
     status: 'Running',
     statusState: '1/1',
     statusPresentation: 'ready',
@@ -69,6 +81,7 @@ describe('useWorkloadTableColumns', () => {
     cpuUsage: '10m',
     memUsage: '20Mi',
     age: '5m',
+    portForwardAvailable: false,
   };
 
   it('returns columns with interactive kind and name handlers', () => {

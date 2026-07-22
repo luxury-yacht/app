@@ -9,6 +9,7 @@ import (
 	"k8s.io/apimachinery/pkg/types"
 
 	"github.com/luxury-yacht/app/backend/kind/streamrows"
+	"github.com/luxury-yacht/app/backend/resourcemodel"
 )
 
 func TestPodProjectionReusesObjectRowForSameResourceVersion(t *testing.T) {
@@ -17,9 +18,7 @@ func TestPodProjectionReusesObjectRowForSameResourceVersion(t *testing.T) {
 		projCache: newPodProjectionCache(),
 		buildSummary: func(_ ClusterMeta, pod *corev1.Pod, cpuMilli, memBytes int64, _ map[string]string) PodSummary {
 			buildCount++
-			return PodSummary{
-				Name:     pod.Name,
-				CPUUsage: streamrows.FormatCPUMilli(cpuMilli),
+			return PodSummary{Ref: resourcemodel.ResourceRef{Name: pod.Name}, CPUUsage: streamrows.FormatCPUMilli(cpuMilli),
 				MemUsage: streamrows.FormatMemoryBytes(memBytes),
 			}
 		},

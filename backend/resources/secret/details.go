@@ -43,26 +43,6 @@ func (s *Service) Secret(namespace, name string) (*SecretDetails, error) {
 	return s.processSecretDetails(sec, relationships), nil
 }
 
-// Secrets returns detailed views for all secrets in the namespace.
-func (s *Service) Secrets(namespace string) ([]*SecretDetails, error) {
-	secrets, err := s.deps.KubernetesClient.CoreV1().Secrets(namespace).List(s.deps.Context, metav1.ListOptions{})
-	if err != nil {
-		return nil, fmt.Errorf("failed to list secrets: %v", err)
-	}
-
-	relationships := resourcemodel.NewResourceRelationshipIndex(
-		s.deps.ClusterID,
-		resourcemodel.ResourceRelationshipIndexOptions{Pods: s.listNamespacePods(namespace)},
-	)
-
-	var detailsList []*SecretDetails
-	for i := range secrets.Items {
-		detailsList = append(detailsList, s.processSecretDetails(&secrets.Items[i], relationships))
-	}
-
-	return detailsList, nil
-}
-
 func (s *Service) processSecretDetails(sec *corev1.Secret, relationships *resourcemodel.ResourceRelationshipIndex) *SecretDetails {
 	facts := BuildFacts(sec, relationships, resourcemodel.ResourceModelBuildOptions{Materialization: resourcemodel.MaterializeSummaryFacts | resourcemodel.MaterializeReverseLinks})
 	details := &SecretDetails{

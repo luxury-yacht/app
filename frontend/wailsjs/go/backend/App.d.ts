@@ -47,6 +47,8 @@ import {capabilities} from '../models';
 
 export function AddFavorite(arg1:backend.Favorite):Promise<backend.Favorite>;
 
+export function ApplyClusterWorkspace(arg1:backend.ClusterWorkspaceCommand):Promise<backend.ClusterWorkspaceResult>;
+
 export function ApplyObjectYaml(arg1:string,arg2:backend.ObjectYAMLMutationRequest):Promise<backend.ObjectYAMLMutationResponse>;
 
 export function ApplyTheme(arg1:string):Promise<void>;
@@ -89,10 +91,6 @@ export function FindCatalogObjectByUID(arg1:string,arg2:string):Promise<objectca
 
 export function FindCatalogObjectMatch(arg1:string,arg2:string,arg3:string,arg4:string,arg5:string,arg6:string):Promise<objectcatalog.Summary>;
 
-export function GetAllClusterAuthStates():Promise<Record<string, Record<string, any>>>;
-
-export function GetAllClusterLifecycleStates():Promise<Record<string, backend.ClusterLifecycleState>>;
-
 export function GetAppInfo():Promise<backend.AppInfo>;
 
 export function GetAppLogs():Promise<Array<backend.LogEntry>>;
@@ -124,6 +122,8 @@ export function GetClusterRoleBinding(arg1:string,arg2:string):Promise<clusterro
 export function GetClusterShellSessionCount(arg1:string):Promise<number>;
 
 export function GetClusterTabOrder():Promise<Array<string>>;
+
+export function GetClusterWorkspaceState():Promise<backend.ClusterWorkspaceState>;
 
 export function GetConfigMap(arg1:string,arg2:string,arg3:string):Promise<configmap.ConfigMapDetails>;
 

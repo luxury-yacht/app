@@ -12,6 +12,7 @@ import * as ReactDOM from 'react-dom/client';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import type { ClusterEventsSnapshotPayload } from '@/core/refresh/types';
 import type { SortConfig, UseTableSortOptions } from '@/hooks/useTableSort';
+import { makeResourceRef } from '@/test-utils/makeResourceRef';
 import { requireReactElement } from '@/test-utils/requireReactElement';
 import { requireValue } from '@/test-utils/requireValue';
 
@@ -102,7 +103,11 @@ vi.mock('@wailsjs/go/backend/App', () => ({
 }));
 
 vi.mock('@modules/kubernetes/config/KubeconfigContext', () => ({
-  useKubeconfig: () => ({ selectedKubeconfig: 'path:context', selectedClusterId: 'cluster-a' }),
+  useKubeconfig: () => ({
+    selectedKubeconfig: 'path:context',
+    selectedClusterId: 'cluster-a',
+    selectedClusterName: 'alpha',
+  }),
 }));
 
 vi.mock('@shared/components/ResourceLoadingBoundary', () => ({
@@ -140,12 +145,24 @@ vi.mock('@/hooks/useShortNames', () => ({
 }));
 
 const baseEvent: EventRow = {
-  clusterName: 'alpha',
-  kind: 'Event',
-  name: 'test',
-  uid: 'event-uid',
+  ref: {
+    ...makeResourceRef({
+      clusterId: 'test-cluster',
+      kind: 'Event',
+      resource: 'events',
+      namespace: 'team-a',
+      name: 'test',
+      uid: 'event-uid',
+    }),
+    kind: 'Event',
+    name: 'test',
+    uid: 'event-uid',
+    namespace: 'team-a',
+    clusterId: 'test-cluster',
+  },
+
   resourceVersion: '1',
-  namespace: 'team-a',
+
   objectNamespace: 'team-a',
   objectUid: 'pod-uid',
   type: 'Warning',
@@ -156,7 +173,6 @@ const baseEvent: EventRow = {
   message: 'Something happened',
   age: '1m',
   ageTimestamp: 123,
-  clusterId: 'test-cluster',
 };
 
 describe('ClusterViewEvents', () => {
@@ -398,15 +414,16 @@ describe('ClusterViewEvents', () => {
 
   it('resolves CRD involved objects by UID when the stream omits apiVersion', async () => {
     findCatalogObjectByUIDMock.mockResolvedValue({
-      kind: 'Database',
-      name: 'primary',
-      namespace: 'team-a',
-      clusterId: 'test-cluster',
-      clusterName: 'alpha',
-      group: 'db.example.io',
-      version: 'v1',
-      resource: 'databases',
-      uid: 'database-uid',
+      ref: {
+        kind: 'Database',
+        name: 'primary',
+        namespace: 'team-a',
+        clusterId: 'test-cluster',
+        group: 'db.example.io',
+        version: 'v1',
+        resource: 'databases',
+        uid: 'database-uid',
+      },
     });
     const event = {
       ...baseEvent,

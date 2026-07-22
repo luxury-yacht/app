@@ -68,7 +68,7 @@ func TestNewPodIngestProjectorBundleMatchesLivePaths(t *testing.T) {
 	project := NewPodIngestProjector(meta, PodOwnerSources{ReplicaSets: rsLister})
 
 	streamMeta := meta // ClusterMeta is a type alias of streamrows.ClusterMeta
-	catalogProject := objectcatalog.SummaryProjector(meta.ClusterID, meta.ClusterName, podres.Identity)
+	catalogProject := objectcatalog.SummaryProjector(meta.ClusterID, podres.Identity)
 	nodeProject := objectmapnode.NewNodeProjector(podres.ObjectMapNode.Status, podres.ObjectMapNode.ActionFacts, podres.ObjectMapEdges)
 
 	for _, pod := range pods {

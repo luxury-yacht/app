@@ -36,23 +36,6 @@ func (s *Service) IngressClass(name string) (*IngressClassDetails, error) {
 	return s.buildIngressClassDetails(ic, nil), nil
 }
 
-// IngressClasses returns detailed views for all ingress classes.
-func (s *Service) IngressClasses() ([]*IngressClassDetails, error) {
-	classes, err := s.deps.KubernetesClient.NetworkingV1().IngressClasses().List(s.deps.Context, metav1.ListOptions{})
-	if err != nil {
-		s.deps.Logger.Error(fmt.Sprintf("Failed to list ingress classes: %v", err), logsources.ResourceLoader)
-		return nil, fmt.Errorf("failed to list ingress classes: %v", err)
-	}
-
-	var results []*IngressClassDetails
-	for i := range classes.Items {
-		ic := classes.Items[i]
-		results = append(results, s.buildIngressClassDetails(&ic, nil))
-	}
-
-	return results, nil
-}
-
 func (s *Service) buildIngressClassDetails(ic *networkingv1.IngressClass, ingresses []networkingv1.Ingress) *IngressClassDetails {
 	facts := BuildFacts(ic)
 	details := &IngressClassDetails{

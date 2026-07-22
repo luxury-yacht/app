@@ -327,11 +327,13 @@ export function useBrowseCatalog({
     domain: enabled ? 'catalog' : null,
     scope: catalogScope,
     enabled,
+    demand: 'query',
   });
   const { state: metadataDomain, refresh: refreshMetadataScope } = useRefreshDomainHandle({
     domain: enabled && !metadataUsesActiveScope ? 'catalog' : null,
     scope: metadataUsesActiveScope ? null : metadataScope,
     enabled,
+    demand: 'query',
   });
   useCatalogDiagnostics(domain, diagnosticLabel);
 
@@ -581,7 +583,10 @@ export function useBrowseCatalog({
   // — so this only moves when the catalog doorbell rings. (Keying on the
   // folded sourceVersion turned every content-changing fetch response into
   // another "signal": an echo refetch per doorbell.)
-  const catalogLiveVersion = domain.signalVersions?.catalog ?? '';
+  const liveDataVersion = domain.signalVersions?.catalog ?? '';
+  const catalogAcknowledgedVersion = domain.streamAcknowledgedVersion;
+  const catalogQueryReconcileVersion = domain.queryReconcileVersion;
+  const catalogLiveIdentity = `${liveDataVersion}|ack:${catalogAcknowledgedVersion ?? ''}|query-reconcile:${catalogQueryReconcileVersion ?? ''}`;
   // has-observed flag, not an empty-string sentinel: before the first doorbell
   // the value IS empty, and a falsiness check would swallow the first ring.
   const lastCatalogLiveVersionRef = useRef<{ observed: boolean; value: string }>({
@@ -590,12 +595,14 @@ export function useBrowseCatalog({
   });
   useEffect(() => {
     const previous = lastCatalogLiveVersionRef.current;
-    lastCatalogLiveVersionRef.current = { observed: true, value: catalogLiveVersion };
+    lastCatalogLiveVersionRef.current = { observed: true, value: catalogLiveIdentity };
     if (
       !enabled ||
-      !catalogLiveVersion ||
+      (!liveDataVersion &&
+        catalogAcknowledgedVersion === undefined &&
+        catalogQueryReconcileVersion === undefined) ||
       !previous.observed ||
-      previous.value === catalogLiveVersion ||
+      previous.value === catalogLiveIdentity ||
       !hasLoadedOnceRef.current
     ) {
       return;
@@ -615,7 +622,10 @@ export function useBrowseCatalog({
       void refreshMetadataScope('stream-signal');
     }
   }, [
-    catalogLiveVersion,
+    catalogAcknowledgedVersion,
+    catalogQueryReconcileVersion,
+    catalogLiveIdentity,
+    liveDataVersion,
     enabled,
     metadataUsesActiveScope,
     refreshCatalogScope,

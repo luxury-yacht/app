@@ -15,16 +15,6 @@ import (
 	"github.com/luxury-yacht/app/backend/resources/nodes"
 )
 
-func (a *App) cordonNode(clusterID, nodeName string) error {
-	if err := requireObjectName(nodeName); err != nil {
-		return err
-	}
-	_, err := a.RunObjectAction(ObjectActionRequest{
-		Action: ObjectActionCordon,
-		Target: objectActionTarget(clusterID, nodes.Identity.Group, nodes.Identity.Version, nodes.Identity.Kind, "", nodeName),
-	})
-	return err
-}
 func (a *App) cordonNodeAction(target ObjectActionTargetRef) error {
 	if err := requireNodeActionTarget(ObjectActionCordon, target); err != nil {
 		return err
@@ -42,16 +32,6 @@ func (a *App) cordonNodeAction(target ObjectActionTargetRef) error {
 	a.clearNodeCaches(selectionKey, target.Name)
 	return nil
 }
-func (a *App) uncordonNode(clusterID, nodeName string) error {
-	if err := requireObjectName(nodeName); err != nil {
-		return err
-	}
-	_, err := a.RunObjectAction(ObjectActionRequest{
-		Action: ObjectActionUncordon,
-		Target: objectActionTarget(clusterID, nodes.Identity.Group, nodes.Identity.Version, nodes.Identity.Kind, "", nodeName),
-	})
-	return err
-}
 func (a *App) uncordonNodeAction(target ObjectActionTargetRef) error {
 	if err := requireNodeActionTarget(ObjectActionUncordon, target); err != nil {
 		return err
@@ -68,17 +48,6 @@ func (a *App) uncordonNodeAction(target ObjectActionTargetRef) error {
 	}
 	a.clearNodeCaches(selectionKey, target.Name)
 	return nil
-}
-func (a *App) drainNode(clusterID, nodeName string, options DrainNodeOptions) error {
-	if err := requireObjectName(nodeName); err != nil {
-		return err
-	}
-	_, err := a.RunObjectAction(ObjectActionRequest{
-		Action:       ObjectActionDrain,
-		Target:       objectActionTarget(clusterID, nodes.Identity.Group, nodes.Identity.Version, nodes.Identity.Kind, "", nodeName),
-		DrainOptions: &options,
-	})
-	return err
 }
 func (a *App) drainNodeAction(target ObjectActionTargetRef, options DrainNodeOptions) error {
 	if err := requireNodeActionTarget(ObjectActionDrain, target); err != nil {
@@ -152,26 +121,6 @@ func (a *App) CancelDrainNodeJob(clusterID, jobID string) error {
 		return err
 	}
 	return store.CancelDrainForCluster(trimmedJobID, deps.ClusterID)
-}
-func (a *App) deleteNode(clusterID, nodeName string) error {
-	if err := requireObjectName(nodeName); err != nil {
-		return err
-	}
-	_, err := a.RunObjectAction(ObjectActionRequest{
-		Action: ObjectActionDelete,
-		Target: objectActionTarget(clusterID, nodes.Identity.Group, nodes.Identity.Version, nodes.Identity.Kind, "", nodeName),
-	})
-	return err
-}
-func (a *App) forceDeleteNode(clusterID, nodeName string) error {
-	if err := requireObjectName(nodeName); err != nil {
-		return err
-	}
-	_, err := a.RunObjectAction(ObjectActionRequest{
-		Action: ObjectActionForceDelete,
-		Target: objectActionTarget(clusterID, nodes.Identity.Group, nodes.Identity.Version, nodes.Identity.Kind, "", nodeName),
-	})
-	return err
 }
 func (a *App) deleteNodeAction(target ObjectActionTargetRef, force bool) error {
 	if err := requireNodeActionTarget(ObjectActionDelete, target); err != nil {

@@ -15,14 +15,12 @@ import (
 // BuildStreamSummary builds the namespace-network row for one EndpointSlice.
 func BuildStreamSummary(meta streamrows.ClusterMeta, slice *discoveryv1.EndpointSlice) streamrows.NetworkSummary {
 	if slice == nil {
-		return streamrows.NetworkSummary{ClusterMeta: meta, Kind: "EndpointSlice"}
+		return streamrows.NetworkSummary{}
 	}
 	facts := BuildFacts(meta.ClusterID, slice)
+	model := BuildResourceModel(meta.ClusterID, slice)
 	return streamrows.NetworkSummary{
-		ClusterMeta:  meta,
-		Kind:         "EndpointSlice",
-		Name:         slice.Name,
-		Namespace:    slice.Namespace,
+		Ref:          model.Ref,
 		Details:      DescribeSummary(facts),
 		Age:          streamrows.FormatAge(slice.CreationTimestamp.Time),
 		AgeTimestamp: streamrows.CreationMillis(slice),

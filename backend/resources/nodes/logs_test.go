@@ -14,6 +14,16 @@ import (
 	"k8s.io/client-go/rest"
 )
 
+// nodeLogProxyPath / nodeLogProxyPathWithSinceTime build the expected proxy
+// paths for assertions; production builds paths via nodeLogProxyPathWithOptions.
+func nodeLogProxyPath(nodeName, sourcePath string) string {
+	return nodeLogProxyPathWithOptions(nodeName, sourcePath, "", 0)
+}
+
+func nodeLogProxyPathWithSinceTime(nodeName, sourcePath, sinceTime string) string {
+	return nodeLogProxyPathWithOptions(nodeName, sourcePath, sinceTime, 0)
+}
+
 func stubNodeFetchLogs(t *testing.T, responses map[string][]byte) {
 	originalFetch := nodeLogFetchRawFunc
 	originalProbe := nodeLogFetchProbeFunc

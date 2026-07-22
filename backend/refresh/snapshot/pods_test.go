@@ -7,6 +7,10 @@ import (
 	"testing"
 	"time"
 
+	appslisters "k8s.io/client-go/listers/apps/v1"
+	corelisters "k8s.io/client-go/listers/core/v1"
+	"k8s.io/client-go/tools/cache"
+
 	"github.com/stretchr/testify/require"
 	appsv1 "k8s.io/api/apps/v1"
 	corev1 "k8s.io/api/core/v1"
@@ -17,9 +21,21 @@ import (
 	"github.com/luxury-yacht/app/backend/internal/config"
 	"github.com/luxury-yacht/app/backend/kind/streamrows"
 	"github.com/luxury-yacht/app/backend/refresh/metrics"
+	"github.com/luxury-yacht/app/backend/resourcemodel"
 	podres "github.com/luxury-yacht/app/backend/resources/pods"
 	"github.com/luxury-yacht/app/backend/testsupport"
 )
+
+// newPodBuilder wires a PodBuilder with the projection memo cache enabled —
+// the shape the pods domain registration builds in production.
+func newPodBuilder(podLister corelisters.PodLister, podIndexer cache.Indexer, rsLister appslisters.ReplicaSetLister) *PodBuilder {
+	return &PodBuilder{
+		podLister:  podLister,
+		podIndexer: podIndexer,
+		rsLister:   rsLister,
+		projCache:  newPodProjectionCache(),
+	}
+}
 
 type fakePodMetricsProvider struct {
 	usage    map[string]metrics.PodUsage
@@ -55,11 +71,7 @@ func (f fakePodMetricsProvider) Sample() metrics.Sample {
 // unknown" is distinguishable from a real zero (Risk #9 / §3.6).
 func TestOverlayPodMetricsMissingSampleRendersNoData(t *testing.T) {
 	created := time.Date(2026, 6, 25, 9, 0, 0, 0, time.UTC)
-	rows := []PodSummary{{
-		Name:         "lonely",
-		Namespace:    "default",
-		AgeTimestamp: created.UnixMilli(),
-	}}
+	rows := []PodSummary{{Ref: resourcemodel.ResourceRef{Namespace: "default", Name: "lonely"}, AgeTimestamp: created.UnixMilli()}}
 	overlayPodMetrics(rows, map[string]metrics.PodUsage{}) // no sample for this pod
 
 	require.Equal(t, streamrows.MetricsNoData, rows[0].CPUUsage)
@@ -70,11 +82,7 @@ func TestOverlayPodMetricsMissingSampleRendersNoData(t *testing.T) {
 // after the object's creation) overlays the formatted numbers.
 func TestOverlayPodMetricsPresentSampleRendersNumbers(t *testing.T) {
 	created := time.Date(2026, 6, 25, 9, 0, 0, 0, time.UTC)
-	rows := []PodSummary{{
-		Name:         "api",
-		Namespace:    "default",
-		AgeTimestamp: created.UnixMilli(),
-	}}
+	rows := []PodSummary{{Ref: resourcemodel.ResourceRef{Namespace: "default", Name: "api"}, AgeTimestamp: created.UnixMilli()}}
 	overlayPodMetrics(rows, map[string]metrics.PodUsage{
 		"default/api": {CPUUsageMilli: 125, MemoryUsageBytes: 256 * 1024 * 1024, Timestamp: created.Add(30 * time.Second)},
 	})
@@ -100,11 +108,7 @@ func TestOverlayPodMetricsDropsStaleSampleFromPriorIncarnation(t *testing.T) {
 	}
 	// The pod is recreated under the same name with a LATER creationTimestamp.
 	newCreated := oldCreated.Add(time.Hour)
-	rows := []PodSummary{{
-		Name:         "churned",
-		Namespace:    "default",
-		AgeTimestamp: newCreated.UnixMilli(),
-	}}
+	rows := []PodSummary{{Ref: resourcemodel.ResourceRef{Namespace: "default", Name: "churned"}, AgeTimestamp: newCreated.UnixMilli()}}
 
 	overlayPodMetrics(rows, map[string]metrics.PodUsage{"default/churned": staleSample})
 
@@ -213,7 +217,7 @@ func TestPodBuilderNodeScope(t *testing.T) {
 	require.Len(t, payload.Rows, 2)
 
 	first := payload.Rows[0]
-	require.Equal(t, "pod-a", first.Name)
+	require.Equal(t, "pod-a", first.Ref.Name)
 	require.Equal(t, "Deployment", first.OwnerKind)
 	require.Equal(t, "deploy-a", first.OwnerName)
 	require.Equal(t, "apps/v1", first.OwnerAPIVersion, "ReplicaSet→Deployment collapse must produce apps/v1")
@@ -271,7 +275,7 @@ func TestPodBuilderWorkloadScope(t *testing.T) {
 	payload, ok := snapshot.Payload.(PodSnapshot)
 	require.True(t, ok)
 	require.Len(t, payload.Rows, 1)
-	require.Equal(t, "pod-workload", payload.Rows[0].Name)
+	require.Equal(t, "pod-workload", payload.Rows[0].Ref.Name)
 	require.Equal(t, "Deployment", payload.Rows[0].OwnerKind)
 	require.Equal(t, "orders", payload.Rows[0].OwnerName)
 	require.Equal(t, "apps/v1", payload.Rows[0].OwnerAPIVersion)
@@ -365,11 +369,11 @@ func TestPodBuilderNamespaceScope(t *testing.T) {
 	payload, ok := snapshot.Payload.(PodSnapshot)
 	require.True(t, ok)
 	require.Len(t, payload.Rows, 2)
-	require.Equal(t, "team-a", payload.Rows[0].Namespace)
-	require.Equal(t, "team-a-pod-1", payload.Rows[0].Name)
+	require.Equal(t, "team-a", payload.Rows[0].Ref.Namespace)
+	require.Equal(t, "team-a-pod-1", payload.Rows[0].Ref.Name)
 	require.Equal(t, streamrows.MetricsNoData, payload.Rows[0].CPUUsage)
 	require.Equal(t, streamrows.MetricsNoData, payload.Rows[0].MemUsage)
-	require.Equal(t, "team-a-pod-2", payload.Rows[1].Name)
+	require.Equal(t, "team-a-pod-2", payload.Rows[1].Ref.Name)
 }
 
 func TestPodBuilderSurfacesMetricMetadata(t *testing.T) {
@@ -604,7 +608,7 @@ func TestPodBuilderAllNamespacesScope(t *testing.T) {
 	payload, ok := snapshot.Payload.(PodSnapshot)
 	require.True(t, ok)
 	require.Len(t, payload.Rows, 2)
-	require.Equal(t, []string{"team-a", "team-b"}, []string{payload.Rows[0].Namespace, payload.Rows[1].Namespace})
+	require.Equal(t, []string{"team-a", "team-b"}, []string{payload.Rows[0].Ref.Namespace, payload.Rows[1].Ref.Namespace})
 }
 
 // TestPodBuilderWindowScopeOrdersRowsByNamespaceThenName pins the WINDOW branch's
@@ -634,7 +638,7 @@ func TestPodBuilderWindowScopeOrdersRowsByNamespaceThenName(t *testing.T) {
 	require.Len(t, payload.Rows, 5)
 	got := make([]string, 0, len(payload.Rows))
 	for _, row := range payload.Rows {
-		got = append(got, row.Namespace+"/"+row.Name)
+		got = append(got, row.Ref.Namespace+"/"+row.Ref.Name)
 	}
 	require.Equal(t, []string{
 		"team-a/alpha", "team-a/mike", "team-a/zulu",
@@ -692,14 +696,14 @@ func TestPodBuilderAllNamespacesQuerySortsFiltersAndPagesByMetrics(t *testing.T)
 	require.Equal(t, []string{"team-b"}, payload.Namespaces)
 	require.Equal(t, []string{"Pod"}, payload.Kinds)
 	require.Len(t, payload.Rows, 1)
-	require.Equal(t, "bravo", payload.Rows[0].Name)
+	require.Equal(t, "bravo", payload.Rows[0].Ref.Name)
 	require.NotEmpty(t, payload.Continue)
 
 	next, err := builder.Build(context.Background(), "cluster-a|namespace:all?namespaces=team-b&sort=cpu&sortDirection=desc&limit=1&continue="+payload.Continue)
 	require.NoError(t, err)
 	nextPayload := next.Payload.(PodSnapshot)
 	require.Len(t, nextPayload.Rows, 1)
-	require.Equal(t, "charlie", nextPayload.Rows[0].Name)
+	require.Equal(t, "charlie", nextPayload.Rows[0].Ref.Name)
 	require.Empty(t, nextPayload.Continue)
 }
 
@@ -740,7 +744,7 @@ func TestPodBuilderAllNamespacesMetricCursorContinuesAcrossMetricsRefresh(t *tes
 	require.NoError(t, err)
 	firstPayload := first.Payload.(PodSnapshot)
 	require.Len(t, firstPayload.Rows, 1)
-	require.Equal(t, "bravo", firstPayload.Rows[0].Name)
+	require.Equal(t, "bravo", firstPayload.Rows[0].Ref.Name)
 	require.NotEmpty(t, firstPayload.Continue)
 
 	builder.metrics = fakePodMetricsProvider{
@@ -756,7 +760,7 @@ func TestPodBuilderAllNamespacesMetricCursorContinuesAcrossMetricsRefresh(t *tes
 	nextPayload := next.Payload.(PodSnapshot)
 	require.False(t, nextPayload.CursorInvalid)
 	require.Len(t, nextPayload.Rows, 1)
-	require.Equal(t, "charlie", nextPayload.Rows[0].Name)
+	require.Equal(t, "charlie", nextPayload.Rows[0].Ref.Name)
 	require.Empty(t, nextPayload.Continue)
 }
 

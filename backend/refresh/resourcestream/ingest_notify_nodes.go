@@ -51,13 +51,13 @@ func (m *Manager) lookupNodeRef(name string) (resourcemodel.ResourceRef, string,
 			continue
 		}
 		catalog, ok := bundle.Catalog.(objectcatalog.Summary)
-		if !ok || catalog.Name != name {
+		if !ok || catalog.Ref.Name != name {
 			continue
 		}
 		ref := resourcemodel.NewResourceRef(
 			m.clusterMeta.ClusterID,
 			nodespkg.Identity.Group, nodespkg.Identity.Version, nodespkg.Identity.Kind, nodespkg.Identity.Resource,
-			"", catalog.Name, catalog.UID,
+			"", catalog.Ref.Name, catalog.Ref.UID,
 		)
 		return ref, catalog.ResourceVersion, true
 	}
@@ -105,7 +105,7 @@ func (s nodeNotifyCatalogSink) broadcast(row interface{}, updateType MessageType
 	ref := resourcemodel.NewResourceRef(
 		s.manager.clusterMeta.ClusterID,
 		nodespkg.Identity.Group, nodespkg.Identity.Version, nodespkg.Identity.Kind, nodespkg.Identity.Resource,
-		"", summary.Name, summary.UID,
+		"", summary.Ref.Name, summary.Ref.UID,
 	)
 	update := Update{
 		Type:            updateType,

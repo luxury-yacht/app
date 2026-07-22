@@ -81,6 +81,7 @@ func Render() ([]byte, error) {
 			return nil, err
 		}
 	}
+	out.WriteString("export interface CanonicalResourceRef extends ResourceRef {\n  resource: string;\n  name: string;\n}\n\n")
 	if err := r.renderSnapshotInterface(&out); err != nil {
 		return nil, err
 	}
@@ -607,6 +608,9 @@ func (r *renderer) renderFields(typeOf reflect.Type, inheritedOptional bool) ([]
 		typeScript, err := r.typeScriptFieldType(field.Type, optional)
 		if err != nil {
 			return nil, fmt.Errorf("%s.%s: %w", typeOf, field.Name, err)
+		}
+		if name == "ref" && isCanonicalObjectRowType(typeOf) {
+			typeScript = "CanonicalResourceRef"
 		}
 		fields = append(fields, renderedField{
 			name:       name,

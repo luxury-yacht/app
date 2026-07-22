@@ -145,10 +145,6 @@ func discoverFromClient(ctx context.Context, discoveryClient discovery.Discovery
 	return extractResourceDescriptors(resourceLists), nil
 }
 
-func (s *Service) extractDescriptors(resourceLists []*metav1.APIResourceList) []resourceDescriptor {
-	return extractResourceDescriptors(resourceLists)
-}
-
 func extractResourceDescriptors(resourceLists []*metav1.APIResourceList) []resourceDescriptor {
 	exported := ExtractDescriptors(resourceLists)
 	result := make([]resourceDescriptor, 0, len(exported))

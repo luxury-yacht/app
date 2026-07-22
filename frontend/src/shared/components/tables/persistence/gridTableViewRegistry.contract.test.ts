@@ -100,8 +100,10 @@ function walkSourceFiles(dir: string): string[] {
  */
 function extractViewIds(sourceRoot: string): { viewId: string; file: string }[] {
   const files = walkSourceFiles(sourceRoot);
+  // AggregatedResourceGridView is the shared skeleton the aggregated grid
+  // views delegate to; a view rendering it declares its viewId in its spec.
   const hookPattern =
-    /useGridTablePersistence|useNamespaceGridTablePersistence|useClusterResourceGridTable|useNamespaceResourceGridTable|useQueryBackedNamespaceResourceGridTable|useQueryBackedClusterResourceGridTable|useObjectPanelResourceGridTable/;
+    /useGridTablePersistence|useNamespaceGridTablePersistence|useClusterResourceGridTable|useNamespaceResourceGridTable|useQueryBackedNamespaceResourceGridTable|useQueryBackedClusterResourceGridTable|useObjectPanelResourceGridTable|AggregatedResourceGridView/;
   const staticViewIdPattern = /viewId:\s*['"]([^'"]+)['"]/g;
   const dynamicViewIdPattern = /viewId:\s*([a-zA-Z_$][a-zA-Z0-9_$]*)/g;
 

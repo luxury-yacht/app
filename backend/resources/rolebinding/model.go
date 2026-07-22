@@ -13,14 +13,6 @@ import (
 	rbacv1 "k8s.io/api/rbac/v1"
 )
 
-// BuildResourceModel builds the RoleBinding resource model. Facts are owned by
-// this package (rolebinding.Facts); callers needing facts use BuildFacts.
-func BuildResourceModel(clusterID string, binding *rbacv1.RoleBinding) resourcemodel.ResourceModel {
-	facts := BuildFacts(clusterID, binding)
-	status := resourcemodel.RBACBindingStatus(binding.ObjectMeta, binding.RoleRef.Name, len(facts.Subjects))
-	return resourcemodel.RBACResourceModel(clusterID, "RoleBinding", "rolebindings", resourcemodel.ResourceScopeNamespaced, binding.ObjectMeta, status, resourcemodel.ResourceFacts{})
-}
-
 // BuildFacts extracts the RoleBinding facts from the raw object.
 func BuildFacts(clusterID string, binding *rbacv1.RoleBinding) Facts {
 	return Facts{

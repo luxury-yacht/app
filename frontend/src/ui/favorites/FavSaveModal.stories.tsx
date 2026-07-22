@@ -80,8 +80,12 @@ const installMockKubeconfigs = () => {
         isCurrentContext: false,
       },
     ]);
-  overrides.GetSelectedKubeconfigs = () =>
-    Promise.resolve(['/Users/john/.kube/config:prod-cluster']);
+  overrides.GetClusterWorkspaceState = () =>
+    Promise.resolve({
+      selectedKubeconfigs: ['/Users/john/.kube/config:prod-cluster'],
+      visibleClusterId: 'config:prod-cluster',
+      clusters: {},
+    });
   window.__storybookGoOverrides = overrides;
 };
 

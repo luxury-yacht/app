@@ -6,6 +6,7 @@
  */
 
 import { describe, expect, it } from 'vitest';
+import { makeResourceRef } from '@/test-utils/makeResourceRef';
 import {
   buildWorkloadActionReference,
   normalizeWorkloadHPAManaged,
@@ -16,18 +17,31 @@ describe('workloadActionReference', () => {
     expect(
       buildWorkloadActionReference(
         {
-          kind: 'Deployment',
-          name: 'api',
-          namespace: 'default',
-          clusterId: 'cluster-a',
-          clusterName: 'alpha',
+          ref: {
+            ...makeResourceRef({
+              clusterId: 'cluster-a',
+              group: 'apps',
+              kind: 'Deployment',
+              resource: 'deployments',
+              namespace: 'default',
+              name: 'api',
+            }),
+            kind: 'Deployment',
+            name: 'api',
+            namespace: 'default',
+            clusterId: 'cluster-a',
+          },
+
           status: 'Running',
           ready: '2/3',
+          restarts: 0,
+          age: '5m',
           portForwardAvailable: true,
           hpaManaged: false,
           desiredReplicas: 3,
         },
-        'fallback'
+        'fallback',
+        'alpha'
       )
     ).toEqual(
       expect.objectContaining({

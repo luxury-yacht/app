@@ -34,18 +34,6 @@ func (s *Service) ListenerSet(namespace, name string) (*ListenerSetDetails, erro
 		}, s.buildDetails)
 }
 
-// ListenerSets lists ListenerSet detail payloads.
-func (s *Service) ListenerSets(namespace string) ([]*ListenerSetDetails, error) {
-	return gatewayapi.ListResources(s.deps, "ListenerSet", "listener sets",
-		func() ([]gatewayv1.ListenerSet, error) {
-			list, err := s.deps.GatewayClient.GatewayV1().ListenerSets(namespace).List(s.deps.Context, metav1.ListOptions{})
-			if err != nil {
-				return nil, err
-			}
-			return list.Items, nil
-		}, s.buildDetails)
-}
-
 func (s *Service) buildDetails(item *gatewayv1.ListenerSet) *ListenerSetDetails {
 	facts := BuildFacts(s.deps.ClusterID, item)
 	return &ListenerSetDetails{

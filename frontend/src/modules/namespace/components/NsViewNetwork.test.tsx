@@ -13,6 +13,8 @@ import { act } from 'react';
 import * as ReactDOM from 'react-dom/client';
 import { renderToStaticMarkup } from 'react-dom/server';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
+import type { CanonicalRowTestOverrides } from '@/core/refresh/types';
+import { makeResourceRef } from '@/test-utils/makeResourceRef';
 import { requireReactElement } from '@/test-utils/requireReactElement';
 import { requireValue } from '@/test-utils/requireValue';
 
@@ -103,7 +105,7 @@ vi.mock('@shared/components/tables/GridTable', async () => {
             {withStableListKeys(props.data, (row) => JSON.stringify(row)).map(
               ({ key, value: row }) => (
                 <tr key={key}>
-                  <td>{row.name}</td>
+                  <td>{row.ref.name}</td>
                 </tr>
               )
             )}
@@ -272,16 +274,32 @@ describe('NsViewNetwork', () => {
     container.remove();
   });
 
-  const baseNetwork = (overrides: Partial<NetworkData> = {}): NetworkData => ({
-    kind: 'Ingress',
-    kindAlias: 'Ingress',
-    name: 'web-gateway',
-    namespace: 'team-a',
-    clusterId: 'alpha:ctx',
-    details: 'Hosts: web.example.com',
-    age: '3h',
-    ...overrides,
-  });
+  const baseNetwork = (overrides: CanonicalRowTestOverrides<NetworkData> = {}): NetworkData => {
+    const { ref, ...row } = overrides;
+    const kind = ref?.kind ?? 'Ingress';
+    const identity =
+      kind === 'Service'
+        ? { group: '', resource: 'services' }
+        : kind === 'EndpointSlice'
+          ? { group: 'discovery.k8s.io', resource: 'endpointslices' }
+          : { group: 'networking.k8s.io', resource: 'ingresses' };
+    return {
+      ref: {
+        ...makeResourceRef({
+          group: identity.group,
+          kind,
+          resource: identity.resource,
+          namespace: 'team-a',
+          name: 'web-gateway',
+        }),
+        ...ref,
+      },
+      kindAlias: 'Ingress',
+      details: 'Hosts: web.example.com',
+      age: '3h',
+      ...row,
+    };
+  };
 
   const renderNetworkView = async (
     overrides: Partial<React.ComponentProps<typeof NsViewNetwork>> = {}
@@ -347,9 +365,9 @@ describe('NsViewNetwork', () => {
     ['EndpointSlice', 'discovery.k8s.io', 'v1'],
   ])('opens the Map from %s context menu', async (kind, group, version) => {
     const entry = baseNetwork({
-      kind,
+      ref: { kind, name: `${kind.toLowerCase()}-object` },
+
       kindAlias: kind,
-      name: `${kind.toLowerCase()}-object`,
     });
     const props = await renderNetworkView();
 

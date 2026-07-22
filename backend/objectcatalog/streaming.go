@@ -50,12 +50,12 @@ func (a *streamingAggregator) emit(_ int, items []Summary) {
 	copy(chunk.items, chunkCopy)
 	a.chunks = append(a.chunks, chunk)
 	for _, summary := range chunkCopy {
-		if summary.Kind != "" {
+		if summary.Ref.Kind != "" {
 			// Track whether the kind is namespaced (Scope == ScopeNamespace)
-			a.kindSet[summary.Kind] = summary.Scope == ScopeNamespace
+			a.kindSet[summary.Ref.Kind] = summary.Scope == ScopeNamespace
 		}
-		if summary.Namespace != "" {
-			a.namespaceSet[summary.Namespace] = struct{}{}
+		if summary.Ref.Namespace != "" {
+			a.namespaceSet[summary.Ref.Namespace] = struct{}{}
 		}
 	}
 	kindSnapshot := cloneKindSet(a.kindSet)

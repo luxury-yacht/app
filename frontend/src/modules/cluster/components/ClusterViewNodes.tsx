@@ -99,7 +99,7 @@ const parseNodePodsUsed = (pods?: string | number | null): number => {
 const NodesViewGrid: React.FC<NodesViewProps> = React.memo(({ error }) => {
   const { openWithObject } = useObjectPanel();
   const { navigateToView } = useNavigateToView();
-  const { selectedClusterId } = useKubeconfig();
+  const { selectedClusterId, selectedClusterName } = useKubeconfig();
   const useShortResourceNames = useShortNames();
   const [metricsInfo, setMetricsInfo] = useState<NodeMetricsInfo | null>(null);
 
@@ -110,22 +110,21 @@ const NodesViewGrid: React.FC<NodesViewProps> = React.memo(({ error }) => {
 
   const nodeMaintenance = useNodeMaintenanceActions({ watchClusterIds });
 
-  // Keep node selections pinned to their source cluster for object details.
+  const nodeReference = useCallback(
+    (node: ClusterNodeRow) =>
+      buildRequiredObjectReference(
+        { ...node.ref, clusterName: selectedClusterName },
+        { fallbackClusterId: selectedClusterId }
+      ),
+    [selectedClusterId, selectedClusterName]
+  );
   const handleNodeClick = useCallback(
-    (node: ClusterNodeRow) => {
-      openWithObject(
-        buildRequiredObjectReference(
-          {
-            kind: 'Node',
-            name: node.name,
-            clusterId: node.clusterId,
-            clusterName: node.clusterName ?? undefined,
-          },
-          { fallbackClusterId: selectedClusterId }
-        )
-      );
-    },
-    [openWithObject, selectedClusterId]
+    (node: ClusterNodeRow) => openWithObject(nodeReference(node)),
+    [nodeReference, openWithObject]
+  );
+  const handleNodeAltClick = useCallback(
+    (node: ClusterNodeRow) => navigateToView(nodeReference(node)),
+    [navigateToView, nodeReference]
   );
 
   const tableColumns = useMemo<GridColumnDefinition<ClusterNodeRow>[]>(() => {
@@ -157,35 +156,13 @@ const NodesViewGrid: React.FC<NodesViewProps> = React.memo(({ error }) => {
         getKind: () => 'Node',
         getDisplayText: () => getDisplayKind('Node', useShortResourceNames),
         onClick: (row) => handleNodeClick(row),
-        onAltClick: (row) =>
-          navigateToView(
-            buildRequiredObjectReference(
-              {
-                kind: 'Node',
-                name: row.name,
-                clusterId: row.clusterId,
-                clusterName: row.clusterName,
-              },
-              { fallbackClusterId: selectedClusterId }
-            )
-          ),
+        onAltClick: handleNodeAltClick,
         isInteractive: () => true,
         sortValue: () => 'node',
       }),
-      cf.createTextColumn<ClusterNodeRow>('name', 'Name', (row) => row.name || '', {
+      cf.createTextColumn<ClusterNodeRow>('name', 'Name', (row) => row.ref.name || '', {
         onClick: (row) => handleNodeClick(row),
-        onAltClick: (row) =>
-          navigateToView(
-            buildRequiredObjectReference(
-              {
-                kind: 'Node',
-                name: row.name,
-                clusterId: row.clusterId,
-                clusterName: row.clusterName,
-              },
-              { fallbackClusterId: selectedClusterId }
-            )
-          ),
+        onAltClick: handleNodeAltClick,
         // Use the shared link styling for object panel navigation.
         getClassName: () => 'object-panel-link',
         isInteractive: () => true,
@@ -206,7 +183,7 @@ const NodesViewGrid: React.FC<NodesViewProps> = React.memo(({ error }) => {
         sortValue: (row: ClusterNodeRow) => resolveNodeStatus(row).text.toLowerCase(),
         render: (row: ClusterNodeRow) => {
           const status = resolveNodeStatus(row);
-          const activeDrain = nodeMaintenance.activeDrainFor(row.clusterId, row.name);
+          const activeDrain = nodeMaintenance.activeDrainFor(row.ref.clusterId, row.ref.name);
           return (
             <span className="cluster-nodes-status-cell">
               <span className={status.className}>{status.text}</span>
@@ -217,9 +194,9 @@ const NodesViewGrid: React.FC<NodesViewProps> = React.memo(({ error }) => {
                   onClick={(event) => {
                     event.stopPropagation();
                     nodeMaintenance.openDrainFor({
-                      clusterId: row.clusterId,
-                      clusterName: row.clusterName ?? undefined,
-                      name: row.name,
+                      clusterId: row.ref.clusterId,
+                      clusterName: selectedClusterName || undefined,
+                      name: row.ref.name,
                       unschedulable: row.unschedulable,
                     });
                   }}
@@ -268,7 +245,7 @@ const NodesViewGrid: React.FC<NodesViewProps> = React.memo(({ error }) => {
         getMetricsError: () => metricsInfo?.lastError ?? undefined,
         getMetricsLastUpdated: () => metricsLastUpdatedDate ?? undefined,
         getVariant: () => 'compact',
-        getAnimationKey: (row) => `node:${row.name}:cpu`,
+        getAnimationKey: (row) => `node:${row.ref.name}:cpu`,
         sortable: true,
         sortValue: (row) => parseCpuToMillicores(row.cpuUsage),
       }),
@@ -288,7 +265,7 @@ const NodesViewGrid: React.FC<NodesViewProps> = React.memo(({ error }) => {
         getMetricsError: () => metricsInfo?.lastError ?? undefined,
         getMetricsLastUpdated: () => metricsLastUpdatedDate ?? undefined,
         getVariant: () => 'compact',
-        getAnimationKey: (row) => `node:${row.name}:memory`,
+        getAnimationKey: (row) => `node:${row.ref.name}:memory`,
         sortable: true,
         sortValue: (row) => parseMemToMB(row.memoryUsage),
       }),
@@ -319,12 +296,12 @@ const NodesViewGrid: React.FC<NodesViewProps> = React.memo(({ error }) => {
     return columns;
   }, [
     handleNodeClick,
+    handleNodeAltClick,
     metricsInfo?.stale,
     metricsInfo?.lastError,
     metricsInfo?.collectedAt,
-    navigateToView,
     nodeMaintenance,
-    selectedClusterId,
+    selectedClusterName,
     useShortResourceNames,
   ]);
 
@@ -332,14 +309,7 @@ const NodesViewGrid: React.FC<NodesViewProps> = React.memo(({ error }) => {
 
   const keyExtractor = useCallback(
     (row: ClusterNodeRow) =>
-      buildRequiredCanonicalObjectRowKey(
-        {
-          kind: 'Node',
-          name: row.name,
-          clusterId: row.clusterId,
-        },
-        { fallbackClusterId: selectedClusterId }
-      ),
+      buildRequiredCanonicalObjectRowKey(row.ref, { fallbackClusterId: selectedClusterId }),
     [selectedClusterId]
   );
 
@@ -362,7 +332,7 @@ const NodesViewGrid: React.FC<NodesViewProps> = React.memo(({ error }) => {
     // and toggling metadata also matches labels/annotations. For this query-backed view
     // the match runs server-side (the toggle sets `includeMetadata` in the query scope).
     metadataSearch: {
-      getDefaultValues: (row) => [row.name, row.kind],
+      getDefaultValues: (row) => [row.ref.name, row.ref.kind],
       getMetadataMaps: (row) => [row.labels, row.annotations],
     },
     diagnosticsLabel: 'Cluster Nodes',
@@ -419,18 +389,10 @@ const NodesViewGrid: React.FC<NodesViewProps> = React.memo(({ error }) => {
   // Get context menu items
   const getRowContextMenuItems = useCallback(
     (row: ClusterNodeRow, _columnKey: string): ContextMenuItem[] => {
-      const reference = buildRequiredObjectReference(
-        {
-          kind: 'Node',
-          name: row.name,
-          clusterId: row.clusterId,
-          clusterName: row.clusterName,
-        },
-        { fallbackClusterId: selectedClusterId }
-      );
+      const reference = nodeReference(row);
       return objectActions.getMenuItems({ ...reference, unschedulable: row.unschedulable });
     },
-    [objectActions, selectedClusterId]
+    [nodeReference, objectActions]
   );
 
   return (

@@ -2,6 +2,7 @@ package snapshot
 
 import (
 	"fmt"
+	"github.com/luxury-yacht/app/backend/resourcemodel"
 	"reflect"
 	"slices"
 	"testing"
@@ -19,10 +20,11 @@ func makeEventSummaryRows(n int) []EventSummary {
 	reasons := []string{"Started", "Killing", "FailedScheduling", "BackOff"}
 	rows := make([]EventSummary, n)
 	for i := 0; i < n; i++ {
-		rows[i] = EventSummary{
-			Kind:         kinds[i%len(kinds)],
-			Name:         fmt.Sprintf("evt-%03d", i), // unique -> unique row key
-			Namespace:    namespaces[i%len(namespaces)],
+		rows[i] = EventSummary{Ref: resourcemodel.ResourceRef{Namespace:
+
+		// unique -> unique row key
+		namespaces[i%len(namespaces)], Name: fmt.Sprintf("evt-%03d", i)}, Kind: kinds[i%len(kinds)],
+
 			Type:         types[i%len(types)],
 			Source:       sources[i%len(sources)],
 			Reason:       reasons[i%len(reasons)],
@@ -44,11 +46,9 @@ func makeClusterEventRows(n int) []ClusterEventEntry {
 	reasons := []string{"RegisteredNode", "NodeNotReady", "Rebooted", "Starting"}
 	rows := make([]ClusterEventEntry, n)
 	for i := 0; i < n; i++ {
-		rows[i] = ClusterEventEntry{
-			Kind:         "Event",
-			Name:         fmt.Sprintf("cevt-%03d", i), // unique -> unique row key
-			Namespace:    namespaces[i%len(namespaces)],
-			Type:         types[i%len(types)],
+		rows[i] = ClusterEventEntry{Ref: resourcemodel.ResourceRef{Kind: "Event", Namespace:
+		// unique -> unique row key
+		namespaces[i%len(namespaces)], Name: fmt.Sprintf("cevt-%03d", i)}, Type: types[i%len(types)],
 			Source:       sources[i%len(sources)],
 			Reason:       reasons[i%len(reasons)],
 			Object:       fmt.Sprintf("Node/node-%d", i%6),
@@ -62,8 +62,8 @@ func makeClusterEventRows(n int) []ClusterEventEntry {
 
 func TestClusterEventQueryIdentityIncludesEventNamespace(t *testing.T) {
 	adapter := clusterEventTableQueryAdapter()
-	first := ClusterEventEntry{Kind: "Event", Namespace: "default", Name: "node-ready.123"}
-	second := ClusterEventEntry{Kind: "Event", Namespace: "kube-system", Name: "node-ready.123"}
+	first := ClusterEventEntry{Ref: resourcemodel.ResourceRef{Kind: "Event", Namespace: "default", Name: "node-ready.123"}}
+	second := ClusterEventEntry{Ref: resourcemodel.ResourceRef{Kind: "Event", Namespace: "kube-system", Name: "node-ready.123"}}
 
 	if adapter.Key(first) == adapter.Key(second) {
 		t.Fatalf("cluster Event row keys collapse namespaces: %q", adapter.Key(first))
@@ -71,15 +71,15 @@ func TestClusterEventQueryIdentityIncludesEventNamespace(t *testing.T) {
 	if got := adapter.Namespace(first); got != "default" {
 		t.Fatalf("cluster Event adapter namespace = %q, want default", got)
 	}
-	if got := adapter.AnchorKey("Event", first.Namespace, first.Name); got != adapter.Key(first) {
+	if got := adapter.AnchorKey("Event", first.Ref.Namespace, first.Ref.Name); got != adapter.Key(first) {
 		t.Fatalf("cluster Event anchor key = %q, want row key %q", got, adapter.Key(first))
 	}
 }
 
 func TestNamespaceEventsQueryFacetsFilterAndKeepStructuralScopeOptions(t *testing.T) {
 	items := []EventSummary{
-		{Name: "normal", Namespace: "team-a", Kind: "Pod", Type: "Normal", Reason: "Started", Source: "kubelet"},
-		{Name: "warning", Namespace: "team-a", Kind: "Pod", Type: "Warning", Reason: "BackOff", Source: "node-controller"},
+		{Ref: resourcemodel.ResourceRef{Namespace: "team-a", Name: "normal"}, Kind: "Pod", Type: "Normal", Reason: "Started", Source: "kubelet"},
+		{Ref: resourcemodel.ResourceRef{Namespace: "team-a", Name: "warning"}, Kind: "Pod", Type: "Warning", Reason: "BackOff", Source: "node-controller"},
 	}
 	page := applyTypedTableQueryViaStore(
 		items,
@@ -95,7 +95,7 @@ func TestNamespaceEventsQueryFacetsFilterAndKeepStructuralScopeOptions(t *testin
 		namespaceEventsQuerypageSchema(),
 	)
 
-	if got := len(page.Rows); got != 1 || page.Rows[0].Name != "warning" {
+	if got := len(page.Rows); got != 1 || page.Rows[0].Ref.Name != "warning" {
 		t.Fatalf("type facet rows = %+v, want only warning", page.Rows)
 	}
 	if got := testFacetOptionValues(page.FacetValues, "types"); !slices.Equal(got, []string{"Normal", "Warning"}) {
@@ -111,8 +111,8 @@ func TestNamespaceEventsQueryFacetsFilterAndKeepStructuralScopeOptions(t *testin
 
 func TestClusterEventsQueryFacetsFilterAndKeepStructuralScopeOptions(t *testing.T) {
 	items := []ClusterEventEntry{
-		{Name: "normal", Kind: "Event", Type: "Normal", Reason: "RegisteredNode", Source: "node-controller"},
-		{Name: "warning", Kind: "Event", Type: "Warning", Reason: "NodeNotReady", Source: "kubelet"},
+		{Ref: resourcemodel.ResourceRef{Kind: "Event", Name: "normal"}, Type: "Normal", Reason: "RegisteredNode", Source: "node-controller"},
+		{Ref: resourcemodel.ResourceRef{Kind: "Event", Name: "warning"}, Type: "Warning", Reason: "NodeNotReady", Source: "kubelet"},
 	}
 	page := applyTypedTableQueryViaStore(
 		items,
@@ -128,7 +128,7 @@ func TestClusterEventsQueryFacetsFilterAndKeepStructuralScopeOptions(t *testing.
 		clusterEventsQuerypageSchema(),
 	)
 
-	if got := len(page.Rows); got != 1 || page.Rows[0].Name != "warning" {
+	if got := len(page.Rows); got != 1 || page.Rows[0].Ref.Name != "warning" {
 		t.Fatalf("reason facet rows = %+v, want only warning", page.Rows)
 	}
 	if got := testFacetOptionValues(page.FacetValues, "types"); !slices.Equal(got, []string{"Normal", "Warning"}) {

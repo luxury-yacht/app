@@ -9,11 +9,11 @@ import (
 )
 
 func TestProjectionDescriptorsStayAlignedWithSupportedDomains(t *testing.T) {
-	descriptors := ProjectionDescriptors()
-	require.ElementsMatch(t, SupportedDomains(), descriptorDomains(descriptors))
+	descriptors := projectionDescriptors
+	require.ElementsMatch(t, domainpermissions.StreamDomains(), descriptorDomains(descriptors))
 
 	permissionRequirements := domainpermissions.StreamRequirementsByDomain()
-	for _, domain := range SupportedDomains() {
+	for _, domain := range domainpermissions.StreamDomains() {
 		descriptor := descriptors[domain]
 		require.NotEmptyf(t, descriptor.ScopeKind, "domain %s must declare scope kind", domain)
 		require.NotEmptyf(t, descriptor.SelectorShape, "domain %s must declare selector shape", domain)

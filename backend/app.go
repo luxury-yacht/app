@@ -155,8 +155,6 @@ type App struct {
 	// Per-cluster auth recovery scheduling.
 	// Tracks auth recovery scheduling per-cluster, allowing isolated
 	// recovery scheduling without affecting other clusters.
-	clusterAuthRecoveryMu        sync.Mutex
-	clusterAuthRecoveryScheduled map[string]bool
 
 	// ssrrCaches holds per-cluster SSRR rule caches for QueryPermissions.
 	ssrrCachesMu sync.Mutex
@@ -167,6 +165,12 @@ type App struct {
 	// recovery without affecting other clusters.
 	transportStatesMu sync.RWMutex
 	transportStates   map[string]*transportFailureState
+
+	// clusterWorkspaceMu guards replayable health and namespace-scope state.
+	clusterWorkspaceMu       sync.RWMutex
+	clusterWorkspaceRevision atomic.Uint64
+	clusterHealth            map[string]ClusterHealthState
+	clusterScopeRevisions    map[string]uint64
 
 	listenLoopback func() (net.Listener, error)
 
@@ -193,6 +197,8 @@ func NewApp() *App {
 		portForwardSessions:      make(map[string]*portForwardSessionInternal),
 		runtimeOperations:        newRuntimeOperationRegistry(),
 		eventEmitter:             func(context.Context, string, ...interface{}) {},
+		clusterHealth:            make(map[string]ClusterHealthState),
+		clusterScopeRevisions:    make(map[string]uint64),
 	}
 	app.kubeClientInitializer = func() error {
 		return app.initKubernetesClient()

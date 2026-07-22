@@ -53,11 +53,11 @@ func statusPresentation(quota *corev1.ResourceQuota, facts Facts) resourcemodel.
 		{Type: resourcemodel.StatusSignalResourceState, Name: "status.hard.count", Status: state},
 		{Type: resourcemodel.StatusSignalResourceState, Name: "status.used.count", Status: strconv.Itoa(len(facts.Used))},
 	}
-	lifecycle := resourcemodel.NetworkLifecycle(quota.ObjectMeta)
-	if status, ok := resourcemodel.DeletingNetworkStatus(quota.ObjectMeta, state, signals, lifecycle); ok {
+	lifecycle := resourcemodel.ObjectLifecycle(quota.ObjectMeta)
+	if status, ok := resourcemodel.DeletingObjectStatus(quota.ObjectMeta, state, signals, lifecycle); ok {
 		return status
 	}
-	return resourcemodel.NetworkSourceStatus(summary(facts), state, "", "ready", signals, lifecycle)
+	return resourcemodel.ObjectSourceStatus(summary(facts), state, "", "", "ready", signals, lifecycle)
 }
 
 func summary(facts Facts) string {

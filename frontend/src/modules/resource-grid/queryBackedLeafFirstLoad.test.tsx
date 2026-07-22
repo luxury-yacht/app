@@ -249,12 +249,84 @@ import NsViewRBAC from '@modules/namespace/components/NsViewRBAC';
 import NsViewStorage from '@modules/namespace/components/NsViewStorage';
 import { WorkloadsTable } from '@modules/namespace/components/NsViewWorkloads';
 
+const fixtureIdentity = (kind: string) => {
+  switch (kind) {
+    case 'HorizontalPodAutoscaler':
+      return { group: 'autoscaling', version: 'v2', resource: 'horizontalpodautoscalers' };
+    case 'Ingress':
+      return { group: 'networking.k8s.io', version: 'v1', resource: 'ingresses' };
+    case 'StorageClass':
+      return { group: 'storage.k8s.io', version: 'v1', resource: 'storageclasses' };
+    case 'Role':
+      return { group: 'rbac.authorization.k8s.io', version: 'v1', resource: 'roles' };
+    case 'ClusterRole':
+      return { group: 'rbac.authorization.k8s.io', version: 'v1', resource: 'clusterroles' };
+    case 'CustomResourceDefinition':
+      return {
+        group: 'apiextensions.k8s.io',
+        version: 'v1',
+        resource: 'customresourcedefinitions',
+      };
+    case 'Deployment':
+      return { group: 'apps', version: 'v1', resource: 'deployments' };
+    case 'HelmRelease':
+      return { group: 'helm.sh', version: 'v3', resource: 'releases' };
+    case 'ConfigMap':
+      return { group: '', version: 'v1', resource: 'configmaps' };
+    case 'PersistentVolumeClaim':
+      return { group: '', version: 'v1', resource: 'persistentvolumeclaims' };
+    case 'PersistentVolume':
+      return { group: '', version: 'v1', resource: 'persistentvolumes' };
+    case 'ResourceQuota':
+      return { group: '', version: 'v1', resource: 'resourcequotas' };
+    case 'Event':
+      return { group: '', version: 'v1', resource: 'events' };
+    case 'Pod':
+      return { group: '', version: 'v1', resource: 'pods' };
+    case 'Node':
+      return { group: '', version: 'v1', resource: 'nodes' };
+    default:
+      throw new Error(`Missing canonical identity for query fixture kind ${kind}`);
+  }
+};
+
+const withCanonicalFixtureRef = (value: unknown): unknown => {
+  if (!value || typeof value !== 'object' || Array.isArray(value)) {
+    return value;
+  }
+  const row = value as Record<string, unknown>;
+  if (row.ref) {
+    return row;
+  }
+  const kind = typeof row.kind === 'string' ? row.kind : 'HelmRelease';
+  const identity = fixtureIdentity(kind);
+  return {
+    ...row,
+    ref: {
+      clusterId: String(row.clusterId ?? 'cluster-a'),
+      ...identity,
+      kind,
+      namespace: String(row.namespace ?? ''),
+      name: String(row.name ?? ''),
+      uid: '',
+    },
+  };
+};
+
+const canonicalFixturePayload = (data: Record<string, unknown>): Record<string, unknown> =>
+  Object.fromEntries(
+    Object.entries(data).map(([key, value]) => [
+      key,
+      Array.isArray(value) ? value.map(withCanonicalFixtureRef) : value,
+    ])
+  );
+
 const typedQueryPayload = (data: Record<string, unknown>) => ({
   status: 'executed',
   data: {
     status: 'ready',
     data: {
-      ...data,
+      ...canonicalFixturePayload(data),
       total: 1,
       totalIsExact: true,
       kinds: ['QueryKind'],
@@ -396,7 +468,8 @@ describe('query-backed leaf first load', () => {
     }
     const props = await render(element, payload);
 
-    if (props.data.length !== 1 || props.data[0]?.name !== expectedName) {
+    const firstRef = props.data[0]?.ref as { name?: string } | undefined;
+    if (props.data.length !== 1 || firstRef?.name !== expectedName) {
       throw new Error(`Expected first query result to contain only ${expectedName}`);
     }
     const requestedExpectedScope = requestRefreshDomainStateMock.mock.calls.some(

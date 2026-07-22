@@ -34,18 +34,6 @@ func (s *Service) ReferenceGrant(namespace, name string) (*ReferenceGrantDetails
 		}, s.buildDetails)
 }
 
-// ReferenceGrants lists ReferenceGrant detail payloads.
-func (s *Service) ReferenceGrants(namespace string) ([]*ReferenceGrantDetails, error) {
-	return gatewayapi.ListResources(s.deps, "ReferenceGrant", "reference grants",
-		func() ([]gatewayv1.ReferenceGrant, error) {
-			list, err := s.deps.GatewayClient.GatewayV1().ReferenceGrants(namespace).List(s.deps.Context, metav1.ListOptions{})
-			if err != nil {
-				return nil, err
-			}
-			return list.Items, nil
-		}, s.buildDetails)
-}
-
 func (s *Service) buildDetails(item *gatewayv1.ReferenceGrant) *ReferenceGrantDetails {
 	facts := BuildFacts(s.deps.ClusterID, item)
 	detail := &ReferenceGrantDetails{

@@ -39,8 +39,7 @@ func buildNodeOwnSummary(meta ClusterMeta, node *corev1.Node) streamrows.NodeSum
 		ageTimestamp = node.CreationTimestamp.Time.UnixMilli()
 	}
 	summary := streamrows.NodeSummary{
-		ClusterMeta:        meta,
-		Name:               node.Name,
+		Ref:                model.Ref,
 		Status:             model.Status.Label,
 		StatusState:        model.Status.State,
 		StatusPresentation: model.Status.Presentation,
@@ -51,7 +50,6 @@ func buildNodeOwnSummary(meta ClusterMeta, node *corev1.Node) streamrows.NodeSum
 		Version:            node.Status.NodeInfo.KubeletVersion,
 		Labels:             copyStringMap(node.Labels),
 		Annotations:        copyStringMap(node.Annotations),
-		Kind:               "node",
 		Unschedulable:      nodeFacts.Unschedulable,
 	}
 
@@ -138,7 +136,7 @@ func reaggregateNodeSummary(
 
 	// A node with no sample, or a sample that predates the node's creation (a recreated
 	// same-name node), renders the no-data marker rather than stale or zero numbers.
-	usage, ok := nodeMetrics[own.Name]
+	usage, ok := nodeMetrics[own.Ref.Name]
 	summary.CPUUsage = formatNodeMetricCPU(usage, ok, own.AgeTimestamp)
 	summary.MemoryUsage = formatNodeMetricMemory(usage, ok, own.AgeTimestamp)
 

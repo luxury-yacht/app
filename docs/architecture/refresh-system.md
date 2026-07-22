@@ -49,6 +49,16 @@ carry a complete `ResourceRef`: `clusterId`, `group`, `version`, `kind`,
 payloads. `frontend/src/core/refresh/types.generated.ts` is generated; register
 Go DTOs and run `go generate ./backend` instead of editing it.
 
+Scoped frontend leases have two demand modes:
+
+- `query` retains liveness metadata and the consumer's current query page, but
+  does not reconcile or retain the domain's bounded snapshot payload;
+- `snapshot` retains the bounded snapshot payload used by non-table consumers.
+
+Both modes share one source subscription, readiness, permission, stream health,
+source clocks, and polling fallback. Their reference counts are independent;
+releasing one mode cannot stop the other mode's work.
+
 ## Behavior classes
 
 - Snapshot domains replace one scoped payload.
@@ -87,7 +97,13 @@ kind metadata. See [large-data.md](large-data.md) and
 A view lease can flap enable/disable/re-enable during mount. An obsolete
 cancellation must restart if the scope is enabled again, cleanup must have one
 owner, and a newly healthy stream with no retained data must perform one
-immediate non-manual reconciliation fetch. A reconnect may keep retained data
+immediate non-manual reconciliation fetch when snapshot demand exists. A
+query-only source instead starts its subscription before the initial page read;
+the stream `ACK` or initial `RESET` advances an acknowledgement identity that
+forces an acknowledged page reconciliation. If the stream is unhealthy, the
+fallback scheduler advances a query-reconciliation identity so the consumer
+reissues its current page; it never materializes an unused base snapshot. A
+reconnect may keep retained data
 without another fetch only after the server successfully replays from its
 resume token. A reset that cannot prove continuity advances a declared signal
 clock and performs one immediate non-manual reconciliation before that retained

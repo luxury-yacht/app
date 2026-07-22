@@ -95,7 +95,7 @@ func (a *App) restoreKubeconfigSelection() {
 	}
 
 	a.kubeconfigsMu.Lock()
-	a.selectedKubeconfigs = append([]string(nil), normalized...)
+	a.setSelectedKubeconfigsLocked(normalized)
 	a.kubeconfigsMu.Unlock()
 
 	if len(normalized) > 0 {

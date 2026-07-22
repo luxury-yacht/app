@@ -146,8 +146,8 @@ func (idx *catalogIndex) namespaces() []string {
 	}
 	namespaceSet := make(map[string]struct{})
 	for _, summary := range idx.items {
-		if summary.Namespace != "" {
-			namespaceSet[summary.Namespace] = struct{}{}
+		if summary.Ref.Namespace != "" {
+			namespaceSet[summary.Ref.Namespace] = struct{}{}
 		}
 	}
 	return snapshotSortedKeys(namespaceSet)
@@ -277,11 +277,11 @@ func (idx *catalogIndex) rebuildCacheFromItems(items map[string]Summary, descrip
 		summaries := make([]Summary, 0, len(items))
 		for _, summary := range items {
 			summaries = append(summaries, summary)
-			if summary.Kind != "" {
-				kindSet[summary.Kind] = summary.Scope == ScopeNamespace
+			if summary.Ref.Kind != "" {
+				kindSet[summary.Ref.Kind] = summary.Scope == ScopeNamespace
 			}
-			if summary.Namespace != "" {
-				namespaceSet[summary.Namespace] = struct{}{}
+			if summary.Ref.Namespace != "" {
+				namespaceSet[summary.Ref.Namespace] = struct{}{}
 			}
 		}
 		chunks = append(chunks, &summaryChunk{items: summaries})
@@ -304,8 +304,8 @@ func (idx *catalogIndex) rebuildLookupIndexes() {
 	uid := make(map[string]string, len(idx.items))
 	for key, item := range idx.items {
 		exact[catalogIdentityForSummary(item)] = key
-		if item.UID != "" {
-			uid[item.UID] = key
+		if item.Ref.UID != "" {
+			uid[item.Ref.UID] = key
 		}
 	}
 	idx.exact = exact
@@ -320,18 +320,18 @@ func (idx *catalogIndex) indexItem(key string, item Summary) {
 		idx.uid = make(map[string]string)
 	}
 	idx.exact[catalogIdentityForSummary(item)] = key
-	if item.UID != "" {
-		idx.uid[item.UID] = key
+	if item.Ref.UID != "" {
+		idx.uid[item.Ref.UID] = key
 	}
 }
 
 func catalogIdentityForSummary(item Summary) catalogObjectIdentity {
 	return catalogObjectIdentity{
-		namespace: normalizeLookupNamespace(item.Namespace),
-		group:     strings.TrimSpace(item.Group),
-		version:   strings.TrimSpace(item.Version),
-		kind:      strings.TrimSpace(item.Kind),
-		name:      strings.TrimSpace(item.Name),
+		namespace: normalizeLookupNamespace(item.Ref.Namespace),
+		group:     strings.TrimSpace(item.Ref.Group),
+		version:   strings.TrimSpace(item.Ref.Version),
+		kind:      strings.TrimSpace(item.Ref.Kind),
+		name:      strings.TrimSpace(item.Ref.Name),
 	}
 }
 

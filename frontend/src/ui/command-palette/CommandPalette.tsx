@@ -146,9 +146,11 @@ export function buildCatalogDisplayEntries(
 
   const scored: ScoredCatalogEntry[] = items
     .map((item) => {
-      const kindLabel = getDisplayKind(item.kind, useShortResourceNames);
-      const kindCanonical = item.kind.toLowerCase();
-      const displayName = item.namespace ? `${item.namespace}/${item.name}` : item.name;
+      const kindLabel = getDisplayKind(item.ref.kind, useShortResourceNames);
+      const kindCanonical = item.ref.kind.toLowerCase();
+      const displayName = item.ref.namespace
+        ? `${item.ref.namespace}/${item.ref.name}`
+        : item.ref.name;
 
       let score = 0;
 
@@ -160,9 +162,9 @@ export function buildCatalogDisplayEntries(
         }
       }
 
-      const searchableNamespace = item.namespace?.toLowerCase() ?? '';
-      const searchableName = item.name.toLowerCase();
-      const searchableCombined = `${item.namespace ?? ''}/${item.name}`.toLowerCase();
+      const searchableNamespace = item.ref.namespace?.toLowerCase() ?? '';
+      const searchableName = item.ref.name.toLowerCase();
+      const searchableCombined = `${item.ref.namespace ?? ''}/${item.ref.name}`.toLowerCase();
 
       for (const token of otherTokens) {
         if (!token) {
@@ -195,7 +197,7 @@ export function buildCatalogDisplayEntries(
       return {
         item,
         kindLabel,
-        kindClass: normalizeKindClass(item.kind),
+        kindClass: normalizeKindClass(item.ref.kind),
         displayName,
         score,
       };
@@ -540,7 +542,7 @@ export const CommandPalette = memo(function CommandPaletteComponent({
       const catalogItem = item.item;
       close();
       setTimeout(() => {
-        openWithObject(buildRequiredObjectReference(catalogItem));
+        openWithObject(buildRequiredObjectReference(catalogItem.ref));
       }, 100);
     },
     [close, enterSelectMode, openWithObject]
@@ -1071,7 +1073,7 @@ export const CommandPalette = memo(function CommandPaletteComponent({
                     return (
                       <button
                         type="button"
-                        key={entry.item.uid}
+                        key={entry.item.ref.uid}
                         ref={(el) => {
                           itemRefs.current[currentIndex] = el;
                         }}

@@ -73,6 +73,11 @@ vi.mock('@modules/namespace/contexts/NamespaceContext', () => ({
   }),
 }));
 
+vi.mock('@/core/cluster-workspace/useClusterWorkspace', () => ({
+  useClusterNameResolver: () => (clusterId: string) =>
+    ({ 'cluster-a': 'alpha', 'cluster-b': 'beta' })[clusterId] ?? clusterId,
+}));
+
 vi.mock('@core/contexts/ViewStateContext', () => ({
   useViewState: () => ({ onNamespaceSelect: mocks.onNamespaceSelect }),
 }));
@@ -234,11 +239,14 @@ describe('ClusterViewNamespaces', () => {
 
     const rows = (tableProps.source as { rows: Array<Record<string, unknown>> }).rows;
     expect(rows[0]).toMatchObject({
-      clusterId: 'cluster-a',
-      group: '',
-      version: 'v1',
-      kind: 'Namespace',
-      name: 'payments',
+      ref: {
+        clusterId: 'cluster-a',
+        group: '',
+        version: 'v1',
+        kind: 'Namespace',
+        resource: 'namespaces',
+        name: 'payments',
+      },
       ageTimestamp: 1_700_000_000_000,
     });
     const keyExtractor = (

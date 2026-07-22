@@ -2,6 +2,8 @@
  * frontend/src/modules/object-panel/components/ObjectPanel/Details/Overview/index.test.tsx
  */
 
+import type { ClusterObjectReference } from '@shared/utils/objectIdentity';
+import { buildRequiredObjectReference } from '@shared/utils/objectIdentity';
 import type React from 'react';
 import { act } from 'react';
 import * as ReactDOM from 'react-dom/client';
@@ -34,10 +36,14 @@ vi.mock('@shared/components/kubernetes/ActionsMenu', () => ({
   ActionsMenu: (props: unknown) => actionsMenuMock(props),
 }));
 
+const objectPanelState = vi.hoisted(() => ({
+  objectData: null as ClusterObjectReference | null,
+}));
+
 // Mock useObjectPanel to avoid needing ObjectPanelStateProvider
 vi.mock('@modules/object-panel/hooks/useObjectPanel', () => ({
   useObjectPanel: () => ({
-    objectData: { clusterId: 'test-cluster', clusterName: 'Test Cluster' },
+    objectData: objectPanelState.objectData,
     isOpen: true,
     setOpen: vi.fn(),
     openWithObject: vi.fn(),
@@ -51,6 +57,13 @@ describe('Overview component', () => {
   let root: ReactDOM.Root;
 
   const renderComponent = async (props: React.ComponentProps<typeof Overview>) => {
+    objectPanelState.objectData = buildRequiredObjectReference({
+      kind: props.kind,
+      name: props.name,
+      namespace: props.namespace,
+      clusterId: 'test-cluster',
+      clusterName: 'Test Cluster',
+    });
     await act(async () => {
       root.render(<Overview {...props} />);
       await Promise.resolve();

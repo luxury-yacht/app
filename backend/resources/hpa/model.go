@@ -27,7 +27,7 @@ import (
 func BuildResourceModel(clusterID string, h *autoscalingv2.HorizontalPodAutoscaler) resourcemodel.ResourceModel {
 	facts := BuildFacts(clusterID, h)
 	status := statusPresentation(h.ObjectMeta, facts)
-	return resourcemodel.NetworkResourceModel(clusterID, "autoscaling", "v2", "HorizontalPodAutoscaler", "horizontalpodautoscalers", resourcemodel.ResourceScopeNamespaced, h.ObjectMeta, status, resourcemodel.ResourceFacts{})
+	return resourcemodel.KubernetesResourceModel(clusterID, "autoscaling", "v2", "HorizontalPodAutoscaler", "horizontalpodautoscalers", resourcemodel.ResourceScopeNamespaced, h.ObjectMeta, status, resourcemodel.ResourceFacts{})
 }
 
 // BuildFacts extracts the HPA facts from a v2 object.
@@ -44,13 +44,6 @@ func BuildFacts(clusterID string, h *autoscalingv2.HorizontalPodAutoscaler) Fact
 		Conditions:      conditionFacts(h.Status.Conditions),
 		LastScaleTime:   h.Status.LastScaleTime,
 	}
-}
-
-// BuildV1ResourceModel builds the v1 HorizontalPodAutoscaler resource model.
-func BuildV1ResourceModel(clusterID string, h *autoscalingv1.HorizontalPodAutoscaler) resourcemodel.ResourceModel {
-	facts := BuildV1Facts(clusterID, h)
-	status := statusPresentation(h.ObjectMeta, facts)
-	return resourcemodel.NetworkResourceModel(clusterID, "autoscaling", "v1", "HorizontalPodAutoscaler", "horizontalpodautoscalers", resourcemodel.ResourceScopeNamespaced, h.ObjectMeta, status, resourcemodel.ResourceFacts{})
 }
 
 // BuildV1Facts extracts the HPA facts from a v1 object. The v1 API only carries the
@@ -110,9 +103,9 @@ func statusPresentation(meta metav1.ObjectMeta, facts Facts) resourcemodel.Resou
 			Message: condition.Message,
 		})
 	}
-	lifecycle := resourcemodel.NetworkLifecycle(meta)
+	lifecycle := resourcemodel.ObjectLifecycle(meta)
 	state := strconv.Itoa(int(facts.CurrentReplicas))
-	if status, ok := resourcemodel.DeletingNetworkStatus(meta, state, signals, lifecycle); ok {
+	if status, ok := resourcemodel.DeletingObjectStatus(meta, state, signals, lifecycle); ok {
 		return status
 	}
 	for _, condition := range facts.Conditions {
@@ -125,14 +118,14 @@ func statusPresentation(meta metav1.ObjectMeta, facts Facts) resourcemodel.Resou
 			if condition.Reason != "" {
 				label = fmt.Sprintf("%s: %s", condition.Type, condition.Reason)
 			}
-			return resourcemodel.NetworkSourceStatus(label, condition.Status, condition.Reason, "warning", signals, lifecycle)
+			return resourcemodel.ObjectSourceStatus(label, condition.Status, condition.Reason, "", "warning", signals, lifecycle)
 		}
 	}
 	if facts.DesiredReplicas != facts.CurrentReplicas {
 		state = fmt.Sprintf("%d/%d", facts.CurrentReplicas, facts.DesiredReplicas)
-		return resourcemodel.NetworkSourceStatus(fmt.Sprintf("%d/%d replicas", facts.CurrentReplicas, facts.DesiredReplicas), state, "", "warning", signals, lifecycle)
+		return resourcemodel.ObjectSourceStatus(fmt.Sprintf("%d/%d replicas", facts.CurrentReplicas, facts.DesiredReplicas), state, "", "", "warning", signals, lifecycle)
 	}
-	return resourcemodel.NetworkSourceStatus(fmt.Sprintf("%d replicas", facts.CurrentReplicas), state, "", "ready", signals, lifecycle)
+	return resourcemodel.ObjectSourceStatus(fmt.Sprintf("%d replicas", facts.CurrentReplicas), state, "", "", "ready", signals, lifecycle)
 }
 
 func metricFacts(metrics []autoscalingv2.MetricSpec) []MetricFacts {

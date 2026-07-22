@@ -21,7 +21,7 @@ import (
 // status, and callers needing facts use BuildFacts.
 func BuildResourceModel(clusterID string, deployment *appsv1.Deployment) resourcemodel.ResourceModel {
 	status := BuildStatusPresentation(deployment)
-	return resourcemodel.WorkloadResourceModel(clusterID, "apps", "v1", "Deployment", "deployments", deployment.ObjectMeta, status, resourcemodel.ResourceFacts{})
+	return resourcemodel.KubernetesResourceModel(clusterID, "apps", "v1", "Deployment", "deployments", resourcemodel.ResourceScopeNamespaced, deployment.ObjectMeta, status, resourcemodel.ResourceFacts{})
 }
 
 // BuildFacts extracts the Deployment facts from the raw object.
@@ -110,9 +110,9 @@ func BuildStatusPresentation(deployment *appsv1.Deployment) resourcemodel.Resour
 	facts := BuildFacts(deployment)
 	signals := resourcemodel.WorkloadReplicaSignals(facts.WorkloadCommonFacts)
 	signals = append(signals, statusSignals(deployment)...)
-	lifecycle := resourcemodel.WorkloadLifecycle(deployment.ObjectMeta)
+	lifecycle := resourcemodel.ObjectLifecycle(deployment.ObjectMeta)
 
-	if status, ok := resourcemodel.DeletingWorkloadStatus(deployment.ObjectMeta, resourcemodel.ReplicaState(facts.WorkloadCommonFacts), signals, lifecycle); ok {
+	if status, ok := resourcemodel.DeletingObjectStatus(deployment.ObjectMeta, resourcemodel.ReplicaState(facts.WorkloadCommonFacts), signals, lifecycle); ok {
 		return status
 	}
 	if failed := findCondition(deployment, appsv1.DeploymentReplicaFailure); failed != nil && failed.Status == corev1.ConditionTrue {
@@ -122,7 +122,7 @@ func BuildStatusPresentation(deployment *appsv1.Deployment) resourcemodel.Resour
 		return resourcemodel.WorkloadConditionStatus("Progressing", string(progressing.Status), progressing.Reason, progressing.Message, "Progress deadline", "error", signals, lifecycle)
 	}
 	if deployment.Spec.Paused {
-		return resourcemodel.WorkloadSourceStatus("Paused", "true", "SpecPaused", "", "warning", signals, lifecycle)
+		return resourcemodel.ObjectSourceStatus("Paused", "true", "SpecPaused", "", "warning", signals, lifecycle)
 	}
 	return resourcemodel.ReplicaStatusPresentation(facts.WorkloadCommonFacts, signals, lifecycle)
 }

@@ -36,23 +36,6 @@ func (s *Service) NetworkPolicy(namespace, name string) (*NetworkPolicyDetails, 
 	return s.buildNetworkPolicyDetails(np), nil
 }
 
-// NetworkPolicies returns detailed views for all network policies in the namespace.
-func (s *Service) NetworkPolicies(namespace string) ([]*NetworkPolicyDetails, error) {
-	policies, err := s.deps.KubernetesClient.NetworkingV1().NetworkPolicies(namespace).List(s.deps.Context, metav1.ListOptions{})
-	if err != nil {
-		s.deps.Logger.Error(fmt.Sprintf("Failed to list network policies in namespace %s: %v", namespace, err), logsources.ResourceLoader)
-		return nil, fmt.Errorf("failed to list network policies: %v", err)
-	}
-
-	var results []*NetworkPolicyDetails
-	for i := range policies.Items {
-		np := policies.Items[i]
-		results = append(results, s.buildNetworkPolicyDetails(&np))
-	}
-
-	return results, nil
-}
-
 func (s *Service) buildNetworkPolicyDetails(np *networkingv1.NetworkPolicy) *NetworkPolicyDetails {
 	facts := BuildFacts(np)
 	details := &NetworkPolicyDetails{

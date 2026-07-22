@@ -38,7 +38,7 @@ interface TestNamespaceDomain {
     metricsState?: 'available' | 'loading' | 'unavailable';
     namespaces: Array<{
       name: string;
-      ref?: {
+      ref: {
         clusterId: string;
         group: string;
         version: string;
@@ -301,6 +301,7 @@ describe('NamespaceProvider selection behaviour', () => {
         namespaces: [
           {
             name: 'alpha',
+            ref: namespaceObjectRef('cluster-a', 'alpha'),
             phase: 'Active',
             resourceVersion: '1',
             creationTimestamp: Math.floor(Date.now() / 1000),
@@ -309,6 +310,7 @@ describe('NamespaceProvider selection behaviour', () => {
           },
           {
             name: 'beta',
+            ref: namespaceObjectRef('cluster-b', 'beta'),
             phase: 'Active',
             resourceVersion: '2',
             creationTimestamp: Math.floor(Date.now() / 1000),
@@ -1181,6 +1183,7 @@ function createNamespaceDomainWithCluster(
     data: {
       namespaces: names.map((name, index) => ({
         name,
+        ref: namespaceObjectRef(clusterId, name),
         phase: 'Active',
         resourceVersion: String(index + 1),
         creationTimestamp: Math.floor(Date.now() / 1000),
@@ -1205,6 +1208,7 @@ function createNamespaceDomainMulti(
   const namespaces = clusters.flatMap((cluster) =>
     cluster.names.map((name, index) => ({
       name,
+      ref: namespaceObjectRef(cluster.clusterId, name),
       phase: 'Active',
       resourceVersion: `${cluster.clusterId}-${index + 1}`,
       creationTimestamp: Math.floor(Date.now() / 1000),
@@ -1219,5 +1223,16 @@ function createNamespaceDomainMulti(
       namespaces,
     },
     error: null,
+  };
+}
+
+function namespaceObjectRef(clusterId: string, name: string) {
+  return {
+    clusterId,
+    group: '',
+    version: 'v1',
+    kind: 'Namespace',
+    resource: 'namespaces',
+    name,
   };
 }

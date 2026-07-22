@@ -16,7 +16,7 @@ import type { GridTableProps } from '@shared/components/tables/GridTable';
 import { act } from 'react';
 import * as ReactDOM from 'react-dom/client';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
-import type { CatalogItem } from '@/core/refresh/types';
+import type { CanonicalRowTestOverrides, CatalogItem } from '@/core/refresh/types';
 import { requireReactElement } from '@/test-utils/requireReactElement';
 import { requireValue } from '@/test-utils/requireValue';
 
@@ -85,7 +85,11 @@ vi.mock('@shared/hooks/useNavigateToView', () => ({
 }));
 
 vi.mock('@modules/kubernetes/config/KubeconfigContext', () => ({
-  useKubeconfig: () => ({ selectedKubeconfig: 'path:context', selectedClusterId: 'cluster-a' }),
+  useKubeconfig: () => ({
+    selectedKubeconfig: 'path:context',
+    selectedClusterId: 'cluster-a',
+    selectedClusterName: 'alpha',
+  }),
 }));
 
 vi.mock('@shared/components/ResourceLoadingBoundary', () => ({
@@ -170,6 +174,15 @@ vi.mock('@/core/capabilities', () => ({
 };
 
 const baseCustom = {
+  ref: {
+    clusterId: 'alpha:ctx',
+    group: 'example.com',
+    version: 'v1',
+    kind: 'Widget',
+    resource: 'widgets',
+    namespace: '',
+    name: 'gizmo',
+  },
   kind: 'Widget',
   name: 'gizmo',
   namespace: '',
@@ -223,36 +236,30 @@ const browseCatalogResult = (items: CatalogItem[] = []) => ({
 });
 
 const catalogItemFromCustom = (
-  resource: {
-    kind: string;
-    name: string;
-    group?: string;
-    version?: string;
-    age?: string;
-    clusterId: string;
-    clusterName?: string;
-    status?: string;
-  },
-  overrides: Partial<CatalogItem> = {}
+  resource: CatalogBackedCustomResourceRow,
+  overrides: CanonicalRowTestOverrides<CatalogItem> = {}
 ): CatalogItem => {
+  const { ref, ...row } = overrides;
   const creationTimestamp =
     resource.age === '1d'
       ? new Date(Date.now() - 24 * 60 * 60 * 1000).toISOString()
       : (resource.age ?? '');
   return {
-    kind: resource.kind,
-    group: resource.group ?? '',
-    version: resource.version ?? '',
-    resource: 'widgets',
-    name: resource.name,
-    uid: `${resource.name}-uid`,
+    ref: {
+      clusterId: resource.ref.clusterId,
+      group: resource.ref.group,
+      version: resource.ref.version,
+      kind: resource.ref.kind,
+      resource: 'widgets',
+      name: resource.ref.name,
+      uid: `${resource.ref.name}-uid`,
+      ...ref,
+    },
     resourceVersion: '1',
     creationTimestamp,
     scope: 'Cluster',
-    clusterId: resource.clusterId,
-    clusterName: resource.clusterName ?? '',
     actionFacts: resource.status ? { status: resource.status } : undefined,
-    ...overrides,
+    ...row,
   };
 };
 
@@ -389,11 +396,13 @@ describe('ClusterViewCustom', () => {
     expect(props).toBeTruthy();
     expect(props.data).toEqual([
       expect.objectContaining({
-        kind: 'Widget',
-        name: 'gizmo',
-        clusterId: 'alpha:ctx',
-        group: 'example.com',
-        version: 'v1',
+        ref: expect.objectContaining({
+          kind: 'Widget',
+          name: 'gizmo',
+          clusterId: 'alpha:ctx',
+          group: 'example.com',
+          version: 'v1',
+        }),
         crdName: 'widgets.example.com',
         ageTimestamp: expect.any(Number),
       }),
@@ -419,9 +428,7 @@ describe('ClusterViewCustom', () => {
   it('uses the catalog query current page on first render', async () => {
     const queryItem = catalogItemFromCustom({
       ...baseCustom,
-      name: 'query-widget',
-      clusterId: 'cluster-a',
-      clusterName: 'Cluster A',
+      ref: { ...baseCustom.ref, name: 'query-widget', clusterId: 'cluster-a' },
     });
     useBrowseCatalogMock.mockReturnValue(browseCatalogResult([queryItem]));
 
@@ -433,16 +440,18 @@ describe('ClusterViewCustom', () => {
     expect(useHydratedCustomCatalogRowsMock).toHaveBeenCalledWith('cluster-a', [queryItem]);
     expect(gridTablePropsRef.current?.data).toEqual([
       expect.objectContaining({
-        kind: 'Widget',
-        name: 'query-widget',
-        clusterId: 'cluster-a',
-        group: 'example.com',
-        version: 'v1',
+        ref: expect.objectContaining({
+          kind: 'Widget',
+          name: 'query-widget',
+          clusterId: 'cluster-a',
+          group: 'example.com',
+          version: 'v1',
+        }),
         crdName: 'widgets.example.com',
       }),
     ]);
     expect(gridTablePropsRef.current?.data).not.toEqual([
-      expect.objectContaining({ name: 'stale-local-widget' }),
+      expect.objectContaining({ ref: expect.objectContaining({ name: 'stale-local-widget' }) }),
     ]);
   });
 
@@ -519,6 +528,15 @@ describe('ClusterViewCustom', () => {
   // group would open against the wrong GVR.
   it('forwards group and version into openWithObject for colliding CRDs', async () => {
     const clusterScopedCR = {
+      ref: {
+        clusterId: 'alpha:ctx',
+        group: 'postgresql.cnpg.io',
+        version: 'v1',
+        kind: 'DBCluster',
+        resource: 'dbclusters',
+        namespace: '',
+        name: 'shared-pg',
+      },
       kind: 'DBCluster',
       name: 'shared-pg',
       namespace: '',
@@ -570,6 +588,15 @@ describe('ClusterViewCustom', () => {
     runObjectActionMock.mockResolvedValue(undefined);
 
     const clusterScopedCR = {
+      ref: {
+        clusterId: 'alpha:ctx',
+        group: 'postgresql.cnpg.io',
+        version: 'v1',
+        kind: 'DBCluster',
+        resource: 'dbclusters',
+        namespace: '',
+        name: 'shared-pg',
+      },
       kind: 'DBCluster',
       name: 'shared-pg',
       namespace: '',
@@ -630,10 +657,13 @@ describe('ClusterViewCustom', () => {
 
     const resourceWithCRD = {
       ...baseCustom,
-      kind: 'DBCluster',
-      name: 'shared-pg',
-      group: 'postgresql.cnpg.io',
-      version: 'v1',
+      ref: {
+        ...baseCustom.ref,
+        kind: 'DBCluster',
+        name: 'shared-pg',
+        group: 'postgresql.cnpg.io',
+        version: 'v1',
+      },
       crdName: 'dbclusters.postgresql.cnpg.io',
     };
 

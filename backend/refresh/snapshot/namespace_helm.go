@@ -51,20 +51,18 @@ type NamespaceHelmSnapshot struct {
 
 // NamespaceHelmSummary captures the fields required by the Helm table.
 type NamespaceHelmSummary struct {
-	ClusterMeta
-	Name               string `json:"name"`
-	Namespace          string `json:"namespace"`
-	Chart              string `json:"chart"`
-	AppVersion         string `json:"appVersion"`
-	Status             string `json:"status"`
-	StatusState        string `json:"statusState,omitempty"`
-	StatusPresentation string `json:"statusPresentation,omitempty"`
-	StatusReason       string `json:"statusReason,omitempty"`
-	Revision           int    `json:"revision"`
-	Updated            string `json:"updated"`
-	Description        string `json:"description,omitempty"`
-	Age                string `json:"age"`
-	AgeTimestamp       int64  `json:"ageTimestamp,omitempty"`
+	Ref                resourcemodel.ResourceRef `json:"ref"`
+	Chart              string                    `json:"chart"`
+	AppVersion         string                    `json:"appVersion"`
+	Status             string                    `json:"status"`
+	StatusState        string                    `json:"statusState,omitempty"`
+	StatusPresentation string                    `json:"statusPresentation,omitempty"`
+	StatusReason       string                    `json:"statusReason,omitempty"`
+	Revision           int                       `json:"revision"`
+	Updated            string                    `json:"updated"`
+	Description        string                    `json:"description,omitempty"`
+	Age                string                    `json:"age"`
+	AgeTimestamp       int64                     `json:"ageTimestamp,omitempty"`
 }
 
 func namespaceHelmQueryCapabilities() ResourceQueryCapabilities {
@@ -164,7 +162,7 @@ func RegisterNamespaceHelmDomain(
 func (b *NamespaceHelmBuilder) reaggregateRelease(namespace, name string, source *corev1.Secret) {
 	rls := b.latestReleaseFor(namespace, name)
 	if rls == nil {
-		b.maintained.deleteRow(NamespaceHelmSummary{Namespace: namespace, Name: name})
+		b.maintained.deleteRow(NamespaceHelmSummary{Ref: resourcemodel.ResourceRef{Namespace: namespace, Name: name}})
 		return
 	}
 	summaries, _ := mapHelmReleases([]*release.Release{rls}, "", b.meta)
@@ -242,10 +240,10 @@ func (b *NamespaceHelmBuilder) Build(ctx context.Context, scope string) (*refres
 	// The lister + latest-revision map yield no particular order; builds must
 	// be deterministic for stable snapshot checksums.
 	sort.Slice(summaries, func(i, j int) bool {
-		if summaries[i].Namespace == summaries[j].Namespace {
-			return summaries[i].Name < summaries[j].Name
+		if summaries[i].Ref.Namespace == summaries[j].Ref.Namespace {
+			return summaries[i].Ref.Name < summaries[j].Ref.Name
 		}
-		return summaries[i].Namespace < summaries[j].Namespace
+		return summaries[i].Ref.Namespace < summaries[j].Ref.Namespace
 	})
 
 	snapshotScope := refresh.JoinClusterScope(clusterID, strings.TrimSpace(trimmed))
@@ -455,9 +453,7 @@ func mapHelmReleases(
 			ageTimestamp = model.Metadata.CreationTimestamp.UnixMilli()
 		}
 		summaries = append(summaries, NamespaceHelmSummary{
-			ClusterMeta:        meta,
-			Name:               release.Name,
-			Namespace:          ns,
+			Ref:                model.Ref,
 			Chart:              chartName,
 			AppVersion:         appVersion,
 			Status:             status,

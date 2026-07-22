@@ -20,14 +20,12 @@ import (
 // BuildStreamSummary builds the namespace-autoscaling row for one HPA.
 func BuildStreamSummary(meta streamrows.ClusterMeta, hpa *autoscalingv1.HorizontalPodAutoscaler) streamrows.AutoscalingSummary {
 	if hpa == nil {
-		return streamrows.AutoscalingSummary{ClusterMeta: meta, Kind: "HorizontalPodAutoscaler"}
+		return streamrows.AutoscalingSummary{Ref: streamrows.NewResourceRef(meta, Identity, nil)}
 	}
 	facts := BuildV1Facts(meta.ClusterID, hpa)
 	return streamrows.AutoscalingSummary{
-		ClusterMeta:      meta,
-		Kind:             "HorizontalPodAutoscaler",
-		Name:             hpa.Name,
-		Namespace:        hpa.Namespace,
+		// The stream reads v1 objects, while navigation/details use the primary v2 API.
+		Ref:              streamrows.NewResourceRef(meta, Identity, hpa),
 		Target:           streamTargetLabel(facts.ScaleTarget),
 		TargetAPIVersion: streamTargetAPIVersion(facts.ScaleTarget),
 		Min:              streamMinReplicas(facts),

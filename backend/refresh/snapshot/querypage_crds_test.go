@@ -2,6 +2,7 @@ package snapshot
 
 import (
 	"fmt"
+	"github.com/luxury-yacht/app/backend/resourcemodel"
 	"slices"
 	"testing"
 )
@@ -12,9 +13,7 @@ func makeCRDRows(n int) []ClusterCRDEntry {
 	versions := []string{"v1", "v1beta1", "v2"}
 	rows := make([]ClusterCRDEntry, n)
 	for i := 0; i < n; i++ {
-		rows[i] = ClusterCRDEntry{
-			Kind:           "CustomResourceDefinition",
-			Name:           fmt.Sprintf("widget-%03d.example.com", i), // unique -> unique row key
+		rows[i] = ClusterCRDEntry{Ref: resourcemodel.ResourceRef{Kind: "CustomResourceDefinition", Name: fmt.Sprintf("widget-%03d.example.com", i)}, // unique -> unique row key
 			Group:          groups[i%len(groups)],
 			Scope:          scopes[i%len(scopes)],
 			Details:        fmt.Sprintf("d-%d", i%4), // ties

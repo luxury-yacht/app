@@ -8,12 +8,12 @@ import (
 	"time"
 
 	"github.com/luxury-yacht/app/backend/refresh"
+	"github.com/luxury-yacht/app/backend/resourcemodel"
 	"github.com/stretchr/testify/require"
 )
 
 func TestAttentionQueryAdapterUsesFindingLabelsForSearchAndSort(t *testing.T) {
-	row := AttentionFinding{
-		Kind: "Pod", Name: "checkout-0", Namespace: "payments", Status: "CrashLoopBackOff",
+	row := AttentionFinding{Ref: resourcemodel.ResourceRef{Kind: "Pod", Namespace: "payments", Name: "checkout-0"}, Status: "CrashLoopBackOff",
 		Causes: []AttentionCause{
 			{Type: "error-presentation", Label: "Error status", Message: "CrashLoopBackOff"},
 			{Type: "restarts", Label: "Restarts", Message: "4 restarts"},
@@ -48,7 +48,7 @@ func TestClusterAttentionBuilderServesQueryBackedPages(t *testing.T) {
 	require.NoError(t, err)
 	payload := snapshot.Payload.(ClusterAttentionSnapshot)
 	require.Len(t, payload.Rows, 1)
-	require.Equal(t, "alpha", payload.Rows[0].Name)
+	require.Equal(t, "alpha", payload.Rows[0].Ref.Name)
 	require.Equal(t, 2, payload.Total)
 	require.NotEmpty(t, payload.Continue)
 	require.Equal(t, meta.ClusterID, payload.Rows[0].Ref.ClusterID)
@@ -59,21 +59,18 @@ func TestClusterAttentionBuilderFiltersRowsByAnyFindingCause(t *testing.T) {
 	index := newClusterAttentionIndex(meta, time.Now)
 	t.Cleanup(index.Stop)
 	for _, row := range []AttentionFinding{
-		{
-			Ref: attentionTestRef("Pod", "payments", "crash"), Kind: "Pod", Name: "crash", Namespace: "payments",
+		{Ref: attentionTestRef("Pod", "payments", "crash"),
 			Severity: AttentionSeverityError, Status: "CrashLoopBackOff",
 			Causes: []AttentionCause{
 				{Type: "error-presentation", Label: "Error status", Message: "CrashLoopBackOff", Severity: AttentionSeverityError},
 				{Type: "restarts", Label: "Restarts", Message: "4 restarts", Severity: AttentionSeverityWarning},
 			},
 		},
-		{
-			Ref: attentionTestRef("Pod", "payments", "failed"), Kind: "Pod", Name: "failed", Namespace: "payments",
+		{Ref: attentionTestRef("Pod", "payments", "failed"),
 			Severity: AttentionSeverityError, Status: "Failed",
 			Causes: []AttentionCause{{Type: "error-presentation", Label: "Error status", Message: "Failed", Severity: AttentionSeverityError}},
 		},
 	} {
-		row.ClusterMeta = meta
 		index.maintained.store.Upsert(row)
 	}
 
@@ -84,7 +81,7 @@ func TestClusterAttentionBuilderFiltersRowsByAnyFindingCause(t *testing.T) {
 	require.NoError(t, err)
 	payload := result.Payload.(ClusterAttentionSnapshot)
 	require.Len(t, payload.Rows, 1)
-	require.Equal(t, "crash", payload.Rows[0].Name)
+	require.Equal(t, "crash", payload.Rows[0].Ref.Name)
 	require.Equal(t, []ResourceQueryFacetOption{
 		{Value: "error-presentation", Label: "Error status"},
 		{Value: "restarts", Label: "Restarts"},
@@ -109,7 +106,7 @@ func TestClusterAttentionBuilderReturnsTransientNotReadyPodForOverviewFilters(t 
 	require.NoError(t, err)
 	payload := result.Payload.(ClusterAttentionSnapshot)
 	require.Len(t, payload.Rows, 1)
-	require.Equal(t, "checkout-0", payload.Rows[0].Name)
+	require.Equal(t, "checkout-0", payload.Rows[0].Ref.Name)
 	require.Equal(t, AttentionSeverityInfo, payload.Rows[0].Severity)
 	require.Equal(t, AttentionSeverityCounts{Info: 1}, payload.SeverityCounts)
 }
@@ -128,14 +125,10 @@ func TestClusterAttentionBuilderSortsSeverityByOperationalPriority(t *testing.T)
 		{name: "error", severity: AttentionSeverityError},
 	} {
 		ref := attentionTestRef("Deployment", "payments", test.name)
-		index.maintained.store.Upsert(AttentionFinding{
-			ClusterMeta: meta,
-			Ref:         ref,
-			Kind:        ref.Kind,
-			Name:        ref.Name,
-			Namespace:   ref.Namespace,
-			Severity:    test.severity,
-			Status:      test.name,
+		index.maintained.store.Upsert(AttentionFinding{Ref: ref,
+
+			Severity: test.severity,
+			Status:   test.name,
 			Causes: []AttentionCause{{
 				Type: test.name, Label: test.name, Message: test.name, Severity: test.severity,
 			}},
@@ -166,14 +159,10 @@ func TestClusterAttentionBuilderPublishesFullSeverityCounts(t *testing.T) {
 		{name: "error", severity: AttentionSeverityError},
 	} {
 		ref := attentionTestRef("Deployment", "payments", test.name)
-		index.maintained.store.Upsert(AttentionFinding{
-			ClusterMeta: meta,
-			Ref:         ref,
-			Kind:        ref.Kind,
-			Name:        ref.Name,
-			Namespace:   ref.Namespace,
-			Severity:    test.severity,
-			Status:      test.name,
+		index.maintained.store.Upsert(AttentionFinding{Ref: ref,
+
+			Severity: test.severity,
+			Status:   test.name,
 			Causes: []AttentionCause{{
 				Type: test.name, Label: test.name, Message: test.name, Severity: test.severity,
 			}},

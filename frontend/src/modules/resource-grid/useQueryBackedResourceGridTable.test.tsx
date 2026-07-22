@@ -13,6 +13,7 @@ import type {
 } from './resourceGridTableTypes';
 import type { TypedQueryPayload } from './typedResourceQueryScope';
 import {
+  isLiveDomainInitialLoadPending,
   useQueryBackedClusterResourceGridTable,
   useQueryBackedNamespaceResourceGridTable,
 } from './useQueryBackedResourceGridTable';
@@ -62,6 +63,8 @@ const {
       sourceVersions?: Record<string, string>;
       signalVersions?: Record<string, string>;
       streamRevision?: number;
+      streamAcknowledgedVersion?: number;
+      queryReconcileVersion?: number;
       checksum?: string;
       lastUpdated?: number;
     },
@@ -560,6 +563,86 @@ describe('useQueryBackedResourceGridTable live invalidation', () => {
     const calls = useTypedResourceQueryMock.mock.calls;
     const lastCall = calls[calls.length - 1]?.[0];
     expect(lastCall.liveDataVersion).toBe(identityAtMount);
+  });
+
+  it('changes the refetch identity when the live subscription is acknowledged', () => {
+    expect(
+      isLiveDomainInitialLoadPending({
+        status: 'initialising',
+        data: null,
+        streamAcknowledgedVersion: 1,
+      })
+    ).toBe(false);
+
+    const Probe: React.FC = () => {
+      useQueryBackedClusterResourceGridTable<TestPayload, TestRow>({
+        clusterId: 'cluster-a',
+        domain: 'nodes',
+        label: 'Cluster Nodes',
+        selectRows,
+        viewId: 'cluster-nodes',
+        columns,
+        keyExtractor: (item) => item.name,
+      });
+      return null;
+    };
+
+    act(() => {
+      root.render(<Probe />);
+    });
+    const beforeAck = useTypedResourceQueryMock.mock.lastCall?.[0].liveDataVersion;
+
+    liveDomainStateRef.current = {
+      ...liveDomainStateRef.current,
+      streamAcknowledgedVersion: 1,
+    };
+    act(() => {
+      root.render(<Probe />);
+    });
+
+    expect(useTypedResourceQueryMock.mock.lastCall?.[0].liveDataVersion).not.toBe(beforeAck);
+    expect(useTypedResourceQueryMock.mock.lastCall?.[0].liveDataVersion).toContain('stream-ack:1');
+  });
+
+  it('allows the current page query when fallback reconciliation replaces a missing stream acknowledgement', () => {
+    expect(
+      isLiveDomainInitialLoadPending({
+        status: 'initialising',
+        data: null,
+        queryReconcileVersion: 1,
+      } as never)
+    ).toBe(false);
+
+    const Probe: React.FC = () => {
+      useQueryBackedClusterResourceGridTable<TestPayload, TestRow>({
+        clusterId: 'cluster-a',
+        domain: 'nodes',
+        label: 'Cluster Nodes',
+        selectRows,
+        viewId: 'cluster-nodes',
+        columns,
+        keyExtractor: (item) => item.name,
+      });
+      return null;
+    };
+
+    act(() => {
+      root.render(<Probe />);
+    });
+    const beforeReconcile = useTypedResourceQueryMock.mock.lastCall?.[0].liveDataVersion;
+
+    liveDomainStateRef.current = {
+      ...liveDomainStateRef.current,
+      queryReconcileVersion: 1,
+    };
+    act(() => {
+      root.render(<Probe />);
+    });
+
+    expect(useTypedResourceQueryMock.mock.lastCall?.[0].liveDataVersion).not.toBe(beforeReconcile);
+    expect(useTypedResourceQueryMock.mock.lastCall?.[0].liveDataVersion).toContain(
+      'query-reconcile:1'
+    );
   });
 
   it('seeds cluster query state from the configured default sort before persistence publishes', () => {

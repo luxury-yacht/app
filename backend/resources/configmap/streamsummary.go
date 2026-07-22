@@ -17,15 +17,12 @@ import (
 // BuildStreamSummary builds the namespace-config row for one ConfigMap.
 func BuildStreamSummary(meta streamrows.ClusterMeta, cm *corev1.ConfigMap) streamrows.ConfigSummary {
 	if cm == nil {
-		return streamrows.ConfigSummary{ClusterMeta: meta, Kind: "ConfigMap", TypeAlias: "CM"}
+		return streamrows.ConfigSummary{}
 	}
 	facts := BuildFacts(cm, nil)
 	return streamrows.ConfigSummary{
-		ClusterMeta:  meta,
-		Kind:         "ConfigMap",
+		Ref:          streamrows.NewResourceRef(meta, Identity, cm),
 		TypeAlias:    "CM",
-		Name:         cm.GetName(),
-		Namespace:    cm.GetNamespace(),
 		Data:         facts.DataCount,
 		Age:          streamrows.FormatAge(cm.GetCreationTimestamp().Time),
 		AgeTimestamp: streamrows.CreationMillis(cm),

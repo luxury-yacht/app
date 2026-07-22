@@ -66,11 +66,13 @@ func (a *App) runHeartbeatIteration() {
 
 		switch status {
 		case healthOK:
+			a.setClusterHealth(clusterID, ClusterHealthHealthy)
 			a.emitEvent("cluster:health:healthy", eventData)
 
 			a.logger.Debug("Heartbeat healthy for cluster "+cc.meta.Name, logsources.Heartbeat, clusterID, cc.meta.Name)
 
 		case healthAuthFailure:
+			a.setClusterHealth(clusterID, ClusterHealthDegraded)
 			eventData["reason"] = "auth"
 			a.emitEvent("cluster:health:degraded", eventData)
 
@@ -82,6 +84,7 @@ func (a *App) runHeartbeatIteration() {
 			}
 
 		case healthConnectivityFailure:
+			a.setClusterHealth(clusterID, ClusterHealthDegraded)
 			eventData["reason"] = "connectivity"
 			a.emitEvent("cluster:health:degraded", eventData)
 

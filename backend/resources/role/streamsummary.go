@@ -17,8 +17,8 @@ import (
 // BuildStreamSummary builds the namespace-rbac row for one Role.
 func BuildStreamSummary(meta streamrows.ClusterMeta, r *rbacv1.Role) streamrows.RBACSummary {
 	if r == nil {
-		return streamrows.RBACSummary{ClusterMeta: meta, Kind: "Role"}
+		return streamrows.RBACSummary{}
 	}
 	details := DescribeSummary(BuildFacts(r, nil, resourcemodel.ResourceModelBuildOptions{}))
-	return streamrows.NewRBACSummary(meta, r, "Role", details)
+	return streamrows.NewRBACSummary(meta, Identity, r, details)
 }

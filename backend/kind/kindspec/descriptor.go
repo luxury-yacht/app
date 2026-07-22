@@ -67,6 +67,17 @@ type ObjectMapGraph struct {
 	StopsReverseExpansion bool
 }
 
+// ObjectActions declares non-workload mutation families whose handlers are
+// implemented for a kind. Workload and port-forward capabilities are derived
+// from their typed facets instead of repeated here.
+type ObjectActions struct {
+	Trigger bool
+	Suspend bool
+	Cordon  bool
+	Drain   bool
+	Aliases []string
+}
+
 // CatalogSource names how the object catalog lists a kind's objects.
 type CatalogSource int
 
@@ -141,6 +152,9 @@ type Descriptor struct {
 	// Workload is the kind's mutating workload actions (restart/scale); nil for
 	// non-workload kinds.
 	Workload *WorkloadOperations
+
+	// Actions declares the remaining object-action families supported by this kind.
+	Actions ObjectActions
 
 	// PortForward describes this kind as a port-forward target (how to resolve it to
 	// a backing pod, plus reconnect / service-port-spec behaviour); nil for kinds

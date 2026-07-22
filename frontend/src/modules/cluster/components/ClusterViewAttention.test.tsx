@@ -108,8 +108,6 @@ vi.mock('@modules/resource-grid/ResourceInventoryTable', () => ({
 }));
 
 const finding: ClusterAttentionFinding = {
-  clusterId: 'cluster-a',
-  clusterName: 'Cluster A',
   ref: {
     clusterId: 'cluster-a',
     group: 'apps',
@@ -120,8 +118,7 @@ const finding: ClusterAttentionFinding = {
     name: 'checkout',
     uid: 'uid-checkout',
   },
-  kind: 'Deployment',
-  name: 'checkout',
+
   namespace: 'payments',
   severity: 'warning',
   status: '1/2 ready',
@@ -384,7 +381,7 @@ describe('ClusterViewAttention', () => {
       .find((column) => column.key === 'reason')
       ?.render({
         ...finding,
-        kind: 'Event',
+        ref: { ...finding.ref, kind: 'Event' },
         severity: 'warning',
         status: 'Warning',
         causes: [

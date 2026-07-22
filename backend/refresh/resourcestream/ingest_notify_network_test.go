@@ -8,6 +8,7 @@ import (
 	"github.com/luxury-yacht/app/backend/internal/applog"
 	"github.com/luxury-yacht/app/backend/objectcatalog"
 	"github.com/luxury-yacht/app/backend/refresh/snapshot"
+	"github.com/luxury-yacht/app/backend/resourcemodel"
 	endpointslicepkg "github.com/luxury-yacht/app/backend/resources/endpointslice"
 	servicepkg "github.com/luxury-yacht/app/backend/resources/service"
 )
@@ -29,16 +30,7 @@ func TestNetworkNotifyCatalogSinkBroadcastsServiceSignal(t *testing.T) {
 	require.NoError(t, err)
 
 	sink := networkNotifyCatalogSink{manager: manager, identity: servicepkg.Identity}
-	summary := objectcatalog.Summary{
-		Kind:            servicepkg.Identity.Kind,
-		Group:           servicepkg.Identity.Group,
-		Version:         servicepkg.Identity.Version,
-		Resource:        servicepkg.Identity.Resource,
-		Namespace:       "default",
-		Name:            "svc-1",
-		UID:             "svc-uid",
-		ResourceVersion: "3",
-	}
+	summary := objectcatalog.Summary{Ref: resourcemodel.ResourceRef{Group: servicepkg.Identity.Group, Version: servicepkg.Identity.Version, Kind: servicepkg.Identity.Kind, Resource: servicepkg.Identity.Resource, Namespace: "default", Name: "svc-1", UID: "svc-uid"}, ResourceVersion: "3"}
 	sink.Upsert(summary)
 
 	add := requireNextUpdate(t, sub)
@@ -70,16 +62,7 @@ func TestNetworkNotifyCatalogSinkBroadcastsEndpointSliceSignal(t *testing.T) {
 	require.NoError(t, err)
 
 	sink := networkNotifyCatalogSink{manager: manager, identity: endpointslicepkg.Identity}
-	sink.Upsert(objectcatalog.Summary{
-		Kind:            endpointslicepkg.Identity.Kind,
-		Group:           endpointslicepkg.Identity.Group,
-		Version:         endpointslicepkg.Identity.Version,
-		Resource:        endpointslicepkg.Identity.Resource,
-		Namespace:       "default",
-		Name:            "slice-1",
-		UID:             "slice-uid",
-		ResourceVersion: "5",
-	})
+	sink.Upsert(objectcatalog.Summary{Ref: resourcemodel.ResourceRef{Group: endpointslicepkg.Identity.Group, Version: endpointslicepkg.Identity.Version, Kind: endpointslicepkg.Identity.Kind, Resource: endpointslicepkg.Identity.Resource, Namespace: "default", Name: "slice-1", UID: "slice-uid"}, ResourceVersion: "5"})
 
 	update := requireNextUpdate(t, sub)
 	require.Equal(t, MessageTypeModified, update.Type)

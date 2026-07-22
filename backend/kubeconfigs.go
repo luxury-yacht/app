@@ -355,6 +355,13 @@ func (a *App) GetSelectedKubeconfigs() []string {
 	return []string{}
 }
 
+// setSelectedKubeconfigsLocked updates the selection snapshot. The caller must
+// hold kubeconfigsMu so the value and workspace revision commit together.
+func (a *App) setSelectedKubeconfigsLocked(selections []string) {
+	a.selectedKubeconfigs = append([]string(nil), selections...)
+	a.markClusterWorkspaceChanged()
+}
+
 // SetKubeconfig switches to a different kubeconfig file and context
 // The parameter should be in the format "path:context"
 func (a *App) SetKubeconfig(selection string) error {
@@ -402,22 +409,26 @@ type selectionChangeIntent struct {
 // Both code paths must perform the same initialization steps to ensure consistent behavior.
 func (a *App) SetSelectedKubeconfigs(selections []string) error {
 	return a.runSelectionMutation("set-selected-kubeconfigs", func(mutation *selectionMutation) error {
-		intentStart := time.Now()
-		intent, err := a.buildSelectionChangeIntent(selections, mutation.generation)
-		mutation.phases.intent = time.Since(intentStart)
-		if err != nil {
-			return err
-		}
-
-		if intent.clearSelection {
-			return a.clearKubeconfigSelection()
-		}
-
-		commitStart := time.Now()
-		a.commitSelectionChangeIntent(intent)
-		mutation.phases.commit = time.Since(commitStart)
-		return a.executeSelectionChangeWork(mutation.ctx, intent, &mutation.phases)
+		return a.setSelectedKubeconfigs(mutation, selections)
 	})
+}
+
+func (a *App) setSelectedKubeconfigs(mutation *selectionMutation, selections []string) error {
+	intentStart := time.Now()
+	intent, err := a.buildSelectionChangeIntent(selections, mutation.generation)
+	mutation.phases.intent = time.Since(intentStart)
+	if err != nil {
+		return err
+	}
+
+	if intent.clearSelection {
+		return a.clearKubeconfigSelection()
+	}
+
+	commitStart := time.Now()
+	a.commitSelectionChangeIntent(intent)
+	mutation.phases.commit = time.Since(commitStart)
+	return a.executeSelectionChangeWork(mutation.ctx, intent, &mutation.phases)
 }
 
 // CloseCluster atomically tears down runtime operations for a selected cluster
@@ -514,7 +525,7 @@ func (a *App) buildSelectionChangeIntent(selections []string, generation uint64)
 // commitSelectionChangeIntent applies validated selection state in-memory and to settings.
 func (a *App) commitSelectionChangeIntent(intent selectionChangeIntent) {
 	a.kubeconfigsMu.Lock()
-	a.selectedKubeconfigs = append([]string(nil), intent.normalizedSelectionText...)
+	a.setSelectedKubeconfigsLocked(intent.normalizedSelectionText)
 	a.kubeconfigsMu.Unlock()
 
 	a.settingsMu.Lock()
@@ -598,7 +609,7 @@ func (a *App) executeSelectionChangeWork(
 func (a *App) clearKubeconfigSelection() error {
 	a.logger.Info("Clearing kubeconfig selection", logsources.KubeconfigManager)
 	a.kubeconfigsMu.Lock()
-	a.selectedKubeconfigs = nil
+	a.setSelectedKubeconfigsLocked(nil)
 	a.kubeconfigsMu.Unlock()
 	var authManagers []interface{ Shutdown() }
 	clusterIDs := make(map[string]struct{})
@@ -609,13 +620,14 @@ func (a *App) clearKubeconfigSelection() error {
 			authManagers = append(authManagers, clients.authManager)
 		}
 	}
-	a.clusterClients = make(map[string]*clusterClients)
+	a.clearClusterClientsLocked()
 	a.clusterClientsMu.Unlock()
 	for _, mgr := range authManagers {
 		mgr.Shutdown()
 	}
 	for clusterID := range clusterIDs {
 		a.cleanupClusterRuntimeOperations(clusterID, "cluster disconnected")
+		a.removeClusterWorkspaceState(clusterID)
 	}
 	a.teardownRefreshSubsystem()
 
@@ -999,17 +1011,16 @@ func (a *App) applySelectionPrune(
 	}
 
 	a.kubeconfigsMu.Lock()
-	a.selectedKubeconfigs = append([]string(nil), remainingSelections...)
+	a.setSelectedKubeconfigsLocked(remainingSelections)
 	a.kubeconfigsMu.Unlock()
 
 	var authManagers []interface{ Shutdown() }
 	a.clusterClientsMu.Lock()
 	for _, id := range removedClusterIDs {
-		if clients, ok := a.clusterClients[id]; ok {
+		if clients, ok := a.removeClusterClientLocked(id); ok {
 			if clients != nil && clients.authManager != nil {
 				authManagers = append(authManagers, clients.authManager)
 			}
-			delete(a.clusterClients, id)
 		}
 	}
 	a.clusterClientsMu.Unlock()
@@ -1018,6 +1029,7 @@ func (a *App) applySelectionPrune(
 	}
 	for _, id := range removedClusterIDs {
 		a.cleanupClusterRuntimeOperations(id, "cluster disconnected")
+		a.removeClusterWorkspaceState(id)
 	}
 
 	a.settingsMu.Lock()

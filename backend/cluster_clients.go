@@ -59,6 +59,38 @@ type clusterClientBuilder func(
 	ClusterMeta,
 ) (*clusterClients, error)
 
+// setClusterClientLocked commits one client-map entry and its workspace
+// revision together. The caller must hold clusterClientsMu.
+func (a *App) setClusterClientLocked(clusterID string, clients *clusterClients) {
+	if a.clusterClients == nil {
+		a.clusterClients = make(map[string]*clusterClients)
+	}
+	a.clusterClients[clusterID] = clients
+	a.markClusterWorkspaceChanged()
+}
+
+// removeClusterClientLocked removes one client-map entry. The caller must hold
+// clusterClientsMu.
+func (a *App) removeClusterClientLocked(clusterID string) (*clusterClients, bool) {
+	clients, ok := a.clusterClients[clusterID]
+	if !ok {
+		return nil, false
+	}
+	delete(a.clusterClients, clusterID)
+	a.markClusterWorkspaceChanged()
+	return clients, true
+}
+
+// clearClusterClientsLocked removes every client-map entry. The caller must
+// hold clusterClientsMu.
+func (a *App) clearClusterClientsLocked() {
+	if len(a.clusterClients) == 0 {
+		return
+	}
+	a.clusterClients = make(map[string]*clusterClients)
+	a.markClusterWorkspaceChanged()
+}
+
 func (a *App) clusterClientsForID(clusterID string) *clusterClients {
 	if a == nil || clusterID == "" {
 		return nil
@@ -134,9 +166,6 @@ func (a *App) syncClusterClientPoolWithBuilder(
 	var toCreate []kubeconfigSelection
 
 	a.clusterClientsMu.Lock()
-	if a.clusterClients == nil {
-		a.clusterClients = make(map[string]*clusterClients)
-	}
 	for id, selection := range desired {
 		if _, exists := a.clusterClients[id]; !exists {
 			toCreate = append(toCreate, selection)
@@ -195,7 +224,7 @@ func (a *App) syncClusterClientPoolWithBuilder(
 				installed := false
 				a.clusterClientsMu.Lock()
 				if a.clusterClients[task.meta.ID] == nil && a.clusterClientsForSelectionLocked(task.selection) == nil {
-					a.clusterClients[task.meta.ID] = clients
+					a.setClusterClientLocked(task.meta.ID, clients)
 					installed = true
 				}
 				a.clusterClientsMu.Unlock()
@@ -228,7 +257,7 @@ func (a *App) syncClusterClientPoolWithBuilder(
 		if clients != nil && clients.authManager != nil {
 			removedAuthManagers = append(removedAuthManagers, clients.authManager)
 		}
-		delete(a.clusterClients, id)
+		a.removeClusterClientLocked(id)
 	}
 	a.clusterClientsMu.Unlock()
 
@@ -243,9 +272,7 @@ func (a *App) syncClusterClientPoolWithBuilder(
 
 	for _, id := range removedClusterIDs {
 		a.ensureKubernetesAPIMetricsRegistry().remove(id)
-		if a.clusterLifecycle != nil {
-			a.clusterLifecycle.Remove(id)
-		}
+		a.removeClusterWorkspaceState(id)
 	}
 
 	return nil
@@ -489,6 +516,7 @@ func (a *App) createClusterAuthManager(meta ClusterMeta) *authstate.Manager {
 		OnRecoveryProgress: func(progress authstate.RecoveryProgress) {
 			a.handleClusterAuthRecoveryProgress(meta.ID, progress)
 		},
+		OnSnapshotChange: a.markClusterWorkspaceChanged,
 		// RecoveryTest is set later once we have the clientset
 	})
 }

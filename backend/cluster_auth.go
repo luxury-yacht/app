@@ -240,7 +240,7 @@ func (a *App) rebuildClusterSubsystem(clusterID string) {
 
 	// Update the cluster clients map
 	a.clusterClientsMu.Lock()
-	a.clusterClients[clusterID] = newClients
+	a.setClusterClientLocked(clusterID, newClients)
 	a.clusterClientsMu.Unlock()
 
 	// If the preflight reported an auth failure, stop here: the auth manager's
@@ -355,39 +355,6 @@ func (a *App) GetClusterAuthState(clusterID string) (string, string) {
 
 	state, reason := clients.authManager.State()
 	return state.String(), reason
-}
-
-// GetAllClusterAuthStates returns the auth state for all clusters.
-func (a *App) GetAllClusterAuthStates() map[string]map[string]any {
-	if a == nil {
-		return nil
-	}
-
-	a.clusterClientsMu.Lock()
-	defer a.clusterClientsMu.Unlock()
-
-	states := make(map[string]map[string]any)
-	for id, clients := range a.clusterClients {
-		if clients == nil || clients.authManager == nil {
-			states[id] = map[string]any{"state": "unknown", "reason": ""}
-			continue
-		}
-		state, _ := clients.authManager.State()
-		diag := clients.authManager.FailureDiagnostic()
-		info := clients.authManager.RecoveryInfo()
-		states[id] = map[string]any{
-			"state":             state.String(),
-			"reason":            diag.Reason,
-			"clusterName":       clients.meta.Name,
-			"secondsUntilRetry": info.SecondsUntilRetry,
-			"errorClass":        string(info.ErrorClass),
-			"class":             diag.Class,
-			"kind":              diag.Kind,
-			"summary":           diag.Summary,
-			"execCommand":       diag.ExecCommand,
-		}
-	}
-	return states
 }
 
 // handleClusterAuthRecoveryProgress handles recovery progress updates for a specific cluster.

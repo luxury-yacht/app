@@ -5,159 +5,83 @@
  * Handles rendering and interactions for the cluster feature.
  */
 
-import { useKubeconfig } from '@modules/kubernetes/config/KubeconfigContext';
-import { useObjectPanel } from '@modules/object-panel/hooks/useObjectPanel';
-import ResourceInventoryTable from '@modules/resource-grid/ResourceInventoryTable';
-import { selectPayloadRows } from '@modules/resource-grid/typedResourceQueryScope';
-import { useQueryBackedClusterResourceGridTable } from '@modules/resource-grid/useQueryBackedResourceGridTable';
-import type { ContextMenuItem } from '@shared/components/ContextMenu';
-import * as cf from '@shared/components/tables/columnFactories';
-import type { GridColumnDefinition } from '@shared/components/tables/GridTable';
-import { useNavigateToView } from '@shared/hooks/useNavigateToView';
-import { useObjectActionController } from '@shared/hooks/useObjectActionController';
-import { backendStatusTextClass } from '@shared/utils/backendStatusPresentation';
 import {
-  buildRequiredCanonicalObjectRowKey,
-  buildRequiredObjectReference,
-} from '@shared/utils/objectIdentity';
-import React, { useCallback, useMemo } from 'react';
-import type { ClusterStorageSnapshotPayload } from '@/core/refresh/types';
-import { useShortNames } from '@/hooks/useShortNames';
-import { resolveEmptyStateMessage } from '@/utils/emptyState';
+  type AggregatedResourceGridViewSpec,
+  ClusterAggregatedResourceGridView,
+} from '@modules/resource-grid/AggregatedResourceGridView';
+import * as cf from '@shared/components/tables/columnFactories';
+import { backendStatusTextClass } from '@shared/utils/backendStatusPresentation';
+import React from 'react';
+import type { ClusterStorageEntry, ClusterStorageSnapshotPayload } from '@/core/refresh/types';
 import { getDisplayKind } from '@/utils/kindAliasMap';
 
-// Define the data structure for Persistent Volumes
-interface StorageData {
-  kind: string;
-  kindAlias?: string;
-  name: string;
-  clusterId: string;
-  clusterName?: string;
-  capacity: string;
-  accessModes: string;
-  status: string;
-  statusState?: string;
-  statusPresentation?: string;
-  statusReason?: string;
-  claim: string;
-  storageClass?: string;
-  age?: string;
-}
+type StorageData = ClusterStorageEntry & { kindAlias?: string };
 
 // Define props for StorageViewGrid component
 interface StorageViewProps {
   error?: string | null;
 }
 
-/**
- * GridTable component for cluster storage resources
- * Displays Persistent Volumes
- */
-const StorageViewGrid: React.FC<StorageViewProps> = React.memo(({ error }) => {
-  const { openWithObject } = useObjectPanel();
-  const { navigateToView } = useNavigateToView();
-  const { selectedClusterId } = useKubeconfig();
-  const useShortResourceNames = useShortNames();
+const getClaimTarget = (pv: StorageData) => {
+  if (!pv.claim) {
+    return null;
+  }
+  const [namespace, name] = pv.claim.split('/');
+  if (!namespace || !name) {
+    return null;
+  }
+  return { namespace, name };
+};
 
-  const handleResourceClick = useCallback(
-    (pv: StorageData) => {
-      openWithObject(
-        buildRequiredObjectReference(
-          {
-            kind: 'PersistentVolume',
-            name: pv.name,
-            clusterId: pv.clusterId ?? undefined,
-            clusterName: pv.clusterName ?? undefined,
-          },
-          { fallbackClusterId: selectedClusterId }
-        )
-      );
-    },
-    [openWithObject, selectedClusterId]
-  );
-
-  const getClaimTarget = useCallback((pv: StorageData) => {
-    if (!pv.claim) {
-      return null;
-    }
-    const [namespace, name] = pv.claim.split('/');
-    if (!namespace || !name) {
-      return null;
-    }
-    return { namespace, name };
-  }, []);
-
-  const handleClaimClick = useCallback(
-    (pv: StorageData) => {
+const storageSpec: AggregatedResourceGridViewSpec<StorageData> = {
+  domain: 'cluster-storage',
+  viewId: 'cluster-storage',
+  labels: { cluster: 'Cluster Storage' },
+  emptyMessage: () => 'No cluster-scoped storage objects found',
+  spinnerMessage: 'Loading storage resources...',
+  tableClassName: 'gridtable-pvs',
+  buildColumns: ({
+    identity,
+    openObject,
+    navigateObject,
+    fallbackClusterName,
+    useShortResourceNames,
+  }) => {
+    const claimReference = (pv: StorageData) => {
       const target = getClaimTarget(pv);
       if (!target) {
-        return;
+        return null;
       }
-      openWithObject(
-        buildRequiredObjectReference(
-          {
-            kind: 'PersistentVolumeClaim',
-            namespace: target.namespace,
-            name: target.name,
-            clusterId: pv.clusterId ?? undefined,
-            clusterName: pv.clusterName ?? undefined,
-          },
-          { fallbackClusterId: selectedClusterId }
-        )
-      );
-    },
-    [getClaimTarget, openWithObject, selectedClusterId]
-  );
+      return {
+        kind: 'PersistentVolumeClaim',
+        namespace: target.namespace,
+        name: target.name,
+        clusterId: pv.ref.clusterId ?? undefined,
+        clusterName: fallbackClusterName ?? undefined,
+      };
+    };
+    const storageClassReference = (pv: StorageData) =>
+      pv.storageClass
+        ? {
+            kind: 'StorageClass',
+            name: pv.storageClass,
+            clusterId: pv.ref.clusterId ?? undefined,
+            clusterName: fallbackClusterName ?? undefined,
+          }
+        : null;
 
-  const keyExtractor = useCallback(
-    (pv: StorageData) =>
-      buildRequiredCanonicalObjectRowKey(
-        {
-          kind: 'PersistentVolume',
-          name: pv.name,
-          clusterId: pv.clusterId,
-        },
-        { fallbackClusterId: selectedClusterId }
-      ),
-    [selectedClusterId]
-  );
-
-  // Define columns for PVs
-  const columns: GridColumnDefinition<StorageData>[] = useMemo(() => {
-    const baseColumns: GridColumnDefinition<StorageData>[] = [
+    return [
       cf.createKindColumn<StorageData>({
         key: 'kind',
-        getKind: (pv) => pv.kind || 'PersistentVolume',
+        getKind: (pv) => pv.ref.kind || 'PersistentVolume',
         getDisplayText: (pv) =>
-          getDisplayKind(pv.kind || 'PersistentVolume', useShortResourceNames),
-        onClick: handleResourceClick,
-        onAltClick: (pv) =>
-          navigateToView(
-            buildRequiredObjectReference(
-              {
-                kind: pv.kind || 'PersistentVolume',
-                name: pv.name,
-                clusterId: pv.clusterId,
-                clusterName: pv.clusterName,
-              },
-              { fallbackClusterId: selectedClusterId }
-            )
-          ),
+          getDisplayKind(pv.ref.kind || 'PersistentVolume', useShortResourceNames),
+        onClick: identity.open,
+        onAltClick: identity.navigate,
       }),
-      cf.createTextColumn<StorageData>('name', 'Name', {
-        onClick: handleResourceClick,
-        onAltClick: (pv) =>
-          navigateToView(
-            buildRequiredObjectReference(
-              {
-                kind: pv.kind || 'PersistentVolume',
-                name: pv.name,
-                clusterId: pv.clusterId,
-                clusterName: pv.clusterName,
-              },
-              { fallbackClusterId: selectedClusterId }
-            )
-          ),
+      cf.createTextColumn<StorageData>('name', 'Name', (pv) => pv.ref.name, {
+        onClick: identity.open,
+        onAltClick: identity.navigate,
         getClassName: () => 'object-panel-link',
       }),
       cf.createTextColumn('capacity', 'Capacity', (pv) => pv.capacity || '-'),
@@ -171,36 +95,16 @@ const StorageViewGrid: React.FC<StorageViewProps> = React.memo(({ error }) => {
         (pv) => pv.storageClass || 'default',
         {
           onClick: (pv) => {
-            if (!pv.storageClass) {
-              return;
+            const reference = storageClassReference(pv);
+            if (reference) {
+              openObject(reference);
             }
-            openWithObject(
-              buildRequiredObjectReference(
-                {
-                  kind: 'StorageClass',
-                  name: pv.storageClass,
-                  clusterId: pv.clusterId ?? undefined,
-                  clusterName: pv.clusterName ?? undefined,
-                },
-                { fallbackClusterId: selectedClusterId }
-              )
-            );
           },
           onAltClick: (pv) => {
-            if (!pv.storageClass) {
-              return;
+            const reference = storageClassReference(pv);
+            if (reference) {
+              navigateObject(reference);
             }
-            navigateToView(
-              buildRequiredObjectReference(
-                {
-                  kind: 'StorageClass',
-                  name: pv.storageClass,
-                  clusterId: pv.clusterId,
-                  clusterName: pv.clusterName,
-                },
-                { fallbackClusterId: selectedClusterId }
-              )
-            );
           },
           isInteractive: (pv) => Boolean(pv.storageClass),
           getClassName: (pv) =>
@@ -208,119 +112,36 @@ const StorageViewGrid: React.FC<StorageViewProps> = React.memo(({ error }) => {
         }
       ),
       cf.createTextColumn<StorageData>('claim', 'Claim', (pv) => pv.claim || '-', {
-        onClick: handleClaimClick,
-        onAltClick: (pv) => {
-          const target = getClaimTarget(pv);
-          if (!target) {
-            return;
+        onClick: (pv) => {
+          const reference = claimReference(pv);
+          if (reference) {
+            openObject(reference);
           }
-          navigateToView(
-            buildRequiredObjectReference(
-              {
-                kind: 'PersistentVolumeClaim',
-                namespace: target.namespace,
-                name: target.name,
-                clusterId: pv.clusterId,
-                clusterName: pv.clusterName,
-              },
-              { fallbackClusterId: selectedClusterId }
-            )
-          );
+        },
+        onAltClick: (pv) => {
+          const reference = claimReference(pv);
+          if (reference) {
+            navigateObject(reference);
+          }
         },
         isInteractive: (pv) => Boolean(getClaimTarget(pv)),
         getClassName: (pv) => (getClaimTarget(pv) ? 'object-panel-link' : undefined),
       }),
       cf.createAgeColumn(),
     ];
+  },
+};
 
-    const sizing: cf.ColumnSizingMap = {
-      kind: { autoWidth: true },
-      name: { autoWidth: true },
-      capacity: { autoWidth: true },
-      accessModes: { autoWidth: true },
-      status: { autoWidth: true },
-      storageClass: { autoWidth: true },
-      claim: { autoWidth: true },
-      age: { autoWidth: true },
-    };
-    cf.applyColumnSizing(baseColumns, sizing);
-
-    return baseColumns;
-  }, [
-    getClaimTarget,
-    handleClaimClick,
-    handleResourceClick,
-    navigateToView,
-    openWithObject,
-    selectedClusterId,
-    useShortResourceNames,
-  ]);
-
-  const { gridTableProps, favModal, source } = useQueryBackedClusterResourceGridTable<
-    ClusterStorageSnapshotPayload,
-    StorageData
-  >({
-    queryTableMode: 'Query Backed Static',
-    clusterId: selectedClusterId,
-    domain: 'cluster-storage',
-    label: 'Cluster Storage',
-    selectRows: selectPayloadRows,
-    viewId: 'cluster-storage',
-    columns,
-    keyExtractor,
-    diagnosticsLabel: 'Cluster Storage',
-  });
-
-  const objectActions = useObjectActionController({
-    context: 'gridtable',
-    onOpen: (object) => openWithObject(object),
-    onOpenObjectMap: (object) => openWithObject(object, { initialTab: 'map' }),
-  });
-
-  // Get context menu items
-  const getContextMenuItems = useCallback(
-    (pv: StorageData): ContextMenuItem[] => {
-      return objectActions.getMenuItems(
-        buildRequiredObjectReference(
-          {
-            kind: 'PersistentVolume',
-            name: pv.name,
-            clusterId: pv.clusterId,
-            clusterName: pv.clusterName,
-          },
-          { fallbackClusterId: selectedClusterId }
-        )
-      );
-    },
-    [objectActions, selectedClusterId]
-  );
-
-  const emptyMessage = useMemo(
-    () => resolveEmptyStateMessage(error, 'No cluster-scoped storage objects found'),
-    [error]
-  );
-
-  return (
-    <>
-      <ResourceInventoryTable
-        source={source}
-        gridTableProps={gridTableProps}
-        spinnerMessage="Loading storage resources..."
-        favModal={favModal}
-        columns={columns}
-        diagnosticsLabel="Cluster Storage"
-        onRowClick={handleResourceClick}
-        tableClassName="gridtable-pvs"
-        enableContextMenu={true}
-        getCustomContextMenuItems={getContextMenuItems}
-        useShortNames={useShortResourceNames}
-        emptyMessage={emptyMessage}
-      />
-
-      {objectActions.modals}
-    </>
-  );
-});
+/**
+ * GridTable component for cluster storage resources
+ * Displays Persistent Volumes
+ */
+const StorageViewGrid: React.FC<StorageViewProps> = React.memo(({ error }) => (
+  <ClusterAggregatedResourceGridView<ClusterStorageSnapshotPayload, StorageData>
+    spec={storageSpec}
+    error={error}
+  />
+));
 
 StorageViewGrid.displayName = 'ClsPVsTableGrid';
 

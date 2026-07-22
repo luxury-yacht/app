@@ -48,7 +48,7 @@ func BuildResourceModel(
 		}
 	}
 	kind := resourceKind(resource, kindFallback)
-	return resourcemodel.NetworkResourceModel(clusterID, gvr.Group, gvr.Version, kind, gvr.Resource, scope, meta, status, resourcemodel.ResourceFacts{})
+	return resourcemodel.KubernetesResourceModel(clusterID, gvr.Group, gvr.Version, kind, gvr.Resource, scope, meta, status, resourcemodel.ResourceFacts{})
 }
 
 // BuildFacts extracts the CustomResource facts from the unstructured object. RawStatus
@@ -107,13 +107,13 @@ func statusPresentation(resource *unstructured.Unstructured, facts Facts) resour
 	if resource != nil {
 		meta = objectMetaFromUnstructured(resource)
 	}
-	lifecycle := resourcemodel.NetworkLifecycle(meta)
+	lifecycle := resourcemodel.ObjectLifecycle(meta)
 	if resource != nil {
-		if status, ok := resourcemodel.DeletingNetworkStatus(meta, state, signals, lifecycle); ok {
+		if status, ok := resourcemodel.DeletingObjectStatus(meta, state, signals, lifecycle); ok {
 			return status
 		}
 	}
-	return resourcemodel.NetworkSourceStatus(label, state, "", presentation, signals, lifecycle)
+	return resourcemodel.ObjectSourceStatus(label, state, "", "", presentation, signals, lifecycle)
 }
 
 func primaryStatus(facts Facts) (state, label, presentation string) {

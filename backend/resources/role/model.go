@@ -14,15 +14,6 @@ import (
 	rbacv1 "k8s.io/api/rbac/v1"
 )
 
-// BuildResourceModel builds the Role resource model. Facts are owned by this
-// package (role.Facts); callers needing facts use BuildFacts.
-func BuildResourceModel(clusterID string, r *rbacv1.Role, relationships *resourcemodel.ResourceRelationshipIndex, options ...resourcemodel.ResourceModelBuildOptions) resourcemodel.ResourceModel {
-	buildOptions := resourcemodel.BuildOptions(options...)
-	facts := BuildFacts(r, relationships, buildOptions)
-	status := resourcemodel.RBACRuleCountStatus(r.ObjectMeta, len(facts.Rules), false)
-	return resourcemodel.RBACResourceModel(clusterID, "Role", "roles", resourcemodel.ResourceScopeNamespaced, r.ObjectMeta, status, resourcemodel.ResourceFacts{})
-}
-
 // BuildFacts extracts the Role facts. Reverse links materialize only when the
 // MaterializeReverseLinks flag is set and a relationship index is supplied.
 func BuildFacts(r *rbacv1.Role, relationships *resourcemodel.ResourceRelationshipIndex, options resourcemodel.ResourceModelBuildOptions) Facts {

@@ -27,9 +27,9 @@ export const selectPodMetrics = (
 ): ResourceMetricsData | null => {
   const row = (payload?.rows ?? []).find(
     (candidate) =>
-      sameText(candidate.clusterId, ref.clusterId) &&
-      sameText(candidate.namespace, ref.namespace) &&
-      sameText(candidate.name, ref.name)
+      sameText(candidate.ref.clusterId, ref.clusterId) &&
+      sameText(candidate.ref.namespace, ref.namespace) &&
+      sameText(candidate.ref.name, ref.name)
   );
   if (!row) {
     return null;
@@ -44,10 +44,10 @@ export const selectWorkloadMetrics = (
 ): ResourceMetricsData | null => {
   const row = (payload?.rows ?? []).find(
     (candidate) =>
-      sameText(candidate.clusterId, ref.clusterId) &&
-      sameText(candidate.namespace, ref.namespace) &&
-      sameKind(candidate.kind, ref.kind) &&
-      sameText(candidate.name, ref.name)
+      sameText(candidate.ref.clusterId, ref.clusterId) &&
+      sameText(candidate.ref.namespace, ref.namespace) &&
+      sameKind(candidate.ref.kind, ref.kind) &&
+      sameText(candidate.ref.name, ref.name)
   );
   if (!row) {
     return null;
@@ -62,7 +62,7 @@ export const selectNodeMetrics = (
 ): ResourceMetricsData | null => {
   const row = (payload?.rows ?? []).find(
     (candidate) =>
-      sameText(candidate.clusterId, ref.clusterId) && sameText(candidate.name, ref.name)
+      sameText(candidate.ref.clusterId, ref.clusterId) && sameText(candidate.ref.name, ref.name)
   );
   if (!row) {
     return null;

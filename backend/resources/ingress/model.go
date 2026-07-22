@@ -23,7 +23,7 @@ import (
 func BuildResourceModel(clusterID string, ingress *networkingv1.Ingress) resourcemodel.ResourceModel {
 	facts := BuildFacts(clusterID, ingress)
 	status := statusPresentation(ingress, facts)
-	return resourcemodel.NetworkResourceModel(clusterID, "networking.k8s.io", "v1", "Ingress", "ingresses", resourcemodel.ResourceScopeNamespaced, ingress.ObjectMeta, status, resourcemodel.ResourceFacts{})
+	return resourcemodel.KubernetesResourceModel(clusterID, "networking.k8s.io", "v1", "Ingress", "ingresses", resourcemodel.ResourceScopeNamespaced, ingress.ObjectMeta, status, resourcemodel.ResourceFacts{})
 }
 
 // BuildFacts extracts the Ingress facts from the raw object.
@@ -84,17 +84,17 @@ func statusPresentation(ingress *networkingv1.Ingress, facts Facts) resourcemode
 		{Type: resourcemodel.StatusSignalResourceState, Name: "status.loadBalancer.ingress", Status: state},
 		{Type: resourcemodel.StatusSignalResourceState, Name: "spec.rules", Status: strconv.Itoa(len(facts.Rules))},
 	}
-	lifecycle := resourcemodel.NetworkLifecycle(ingress.ObjectMeta)
-	if status, ok := resourcemodel.DeletingNetworkStatus(ingress.ObjectMeta, state, signals, lifecycle); ok {
+	lifecycle := resourcemodel.ObjectLifecycle(ingress.ObjectMeta)
+	if status, ok := resourcemodel.DeletingObjectStatus(ingress.ObjectMeta, state, signals, lifecycle); ok {
 		return status
 	}
 	if len(facts.Addresses) > 0 {
-		return resourcemodel.NetworkSourceStatus("Address assigned", state, "", "ready", signals, lifecycle)
+		return resourcemodel.ObjectSourceStatus("Address assigned", state, "", "", "ready", signals, lifecycle)
 	}
 	if len(facts.Rules) == 0 && facts.DefaultBackend == nil {
-		return resourcemodel.NetworkSourceStatus("No rules", state, "", "unknown", signals, lifecycle)
+		return resourcemodel.ObjectSourceStatus("No rules", state, "", "", "unknown", signals, lifecycle)
 	}
-	return resourcemodel.NetworkSourceStatus("Address pending", state, "", "warning", signals, lifecycle)
+	return resourcemodel.ObjectSourceStatus("Address pending", state, "", "", "warning", signals, lifecycle)
 }
 
 func backendFacts(clusterID, namespace string, backend networkingv1.IngressBackend) BackendFacts {

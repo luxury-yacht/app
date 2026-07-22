@@ -5,6 +5,7 @@ import (
 	"errors"
 	"testing"
 
+	"github.com/luxury-yacht/app/backend/resourcemodel"
 	"github.com/luxury-yacht/app/backend/resources/common"
 	apiextensionsv1 "k8s.io/apiextensions-apiserver/pkg/apis/apiextensions/v1"
 	apiextensionsfake "k8s.io/apiextensions-apiserver/pkg/client/clientset/clientset/fake"
@@ -38,27 +39,8 @@ func TestFindExactMatchReturnsCanonicalItem(t *testing.T) {
 
 	svc.mu.Lock()
 	svc.items = map[string]Summary{
-		catalogKey(namespacedDesc, "apps", "demo"): {
-			ClusterID: "cluster-a",
-			Kind:      "Deployment",
-			Group:     "apps",
-			Version:   "v1",
-			Resource:  "deployments",
-			Namespace: "apps",
-			Name:      "demo",
-			UID:       "deploy-uid",
-			Scope:     ScopeNamespace,
-		},
-		catalogKey(clusterDesc, "", "widgets.example.com"): {
-			ClusterID: "cluster-a",
-			Kind:      "CustomResourceDefinition",
-			Group:     "apiextensions.k8s.io",
-			Version:   "v1",
-			Resource:  "customresourcedefinitions",
-			Name:      "widgets.example.com",
-			UID:       "crd-uid",
-			Scope:     ScopeCluster,
-		},
+		catalogKey(namespacedDesc, "apps", "demo"):         {Ref: resourcemodel.ResourceRef{ClusterID: "cluster-a", Group: "apps", Version: "v1", Kind: "Deployment", Resource: "deployments", Namespace: "apps", Name: "demo", UID: "deploy-uid"}, Scope: ScopeNamespace},
+		catalogKey(clusterDesc, "", "widgets.example.com"): {Ref: resourcemodel.ResourceRef{ClusterID: "cluster-a", Group: "apiextensions.k8s.io", Version: "v1", Kind: "CustomResourceDefinition", Resource: "customresourcedefinitions", Name: "widgets.example.com", UID: "crd-uid"}, Scope: ScopeCluster},
 	}
 	svc.mu.Unlock()
 
@@ -66,16 +48,16 @@ func TestFindExactMatchReturnsCanonicalItem(t *testing.T) {
 	if !ok {
 		t.Fatal("expected namespaced item match")
 	}
-	if match.UID != "deploy-uid" {
-		t.Fatalf("expected deployment uid, got %q", match.UID)
+	if match.Ref.UID != "deploy-uid" {
+		t.Fatalf("expected deployment uid, got %q", match.Ref.UID)
 	}
 
 	clusterMatch, ok := svc.FindExactMatch("__cluster__", "apiextensions.k8s.io", "v1", "CustomResourceDefinition", "widgets.example.com")
 	if !ok {
 		t.Fatal("expected cluster-scoped item match")
 	}
-	if clusterMatch.UID != "crd-uid" {
-		t.Fatalf("expected crd uid, got %q", clusterMatch.UID)
+	if clusterMatch.Ref.UID != "crd-uid" {
+		t.Fatalf("expected crd uid, got %q", clusterMatch.Ref.UID)
 	}
 }
 
@@ -94,16 +76,7 @@ func TestFindExactMatchRejectsPartialMatches(t *testing.T) {
 
 	svc.mu.Lock()
 	svc.items = map[string]Summary{
-		catalogKey(desc, "apps", "alpha"): {
-			Kind:      "Deployment",
-			Group:     "apps",
-			Version:   "v1",
-			Resource:  "deployments",
-			Namespace: "apps",
-			Name:      "alpha",
-			UID:       "alpha-uid",
-			Scope:     ScopeNamespace,
-		},
+		catalogKey(desc, "apps", "alpha"): {Ref: resourcemodel.ResourceRef{Group: "apps", Version: "v1", Kind: "Deployment", Resource: "deployments", Namespace: "apps", Name: "alpha", UID: "alpha-uid"}, Scope: ScopeNamespace},
 	}
 	svc.mu.Unlock()
 

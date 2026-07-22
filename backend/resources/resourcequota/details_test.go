@@ -8,7 +8,6 @@ package resourcequota_test
 
 import (
 	"context"
-	"fmt"
 	"testing"
 	"time"
 
@@ -16,9 +15,7 @@ import (
 	corev1 "k8s.io/api/core/v1"
 	"k8s.io/apimachinery/pkg/api/resource"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
-	"k8s.io/apimachinery/pkg/runtime"
 	"k8s.io/client-go/kubernetes/fake"
-	cgotesting "k8s.io/client-go/testing"
 
 	"github.com/luxury-yacht/app/backend/internal/applog"
 	"github.com/luxury-yacht/app/backend/resources/resourcequota"
@@ -39,16 +36,6 @@ func newService(t testing.TB, client *fake.Clientset) *resourcequota.Service {
 func TestResourceQuotaRequiresClient(t *testing.T) {
 	svc := resourcequota.NewService(testsupport.NewResourceDependencies())
 	_, err := svc.ResourceQuota("default", "rq")
-	require.Error(t, err)
-}
-
-func TestResourceQuotasListFailure(t *testing.T) {
-	client := fake.NewClientset()
-	client.PrependReactor("list", "resourcequotas", func(_ cgotesting.Action) (bool, runtime.Object, error) {
-		return true, nil, fmt.Errorf("rq-list-fail")
-	})
-	svc := newService(t, client)
-	_, err := svc.ResourceQuotas("ns1")
 	require.Error(t, err)
 }
 

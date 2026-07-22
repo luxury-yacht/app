@@ -34,18 +34,6 @@ func (s *Service) Gateway(namespace, name string) (*GatewayDetails, error) {
 		}, s.buildDetails)
 }
 
-// Gateways lists Gateway detail payloads.
-func (s *Service) Gateways(namespace string) ([]*GatewayDetails, error) {
-	return gatewayapi.ListResources(s.deps, "Gateway", "gateways",
-		func() ([]gatewayv1.Gateway, error) {
-			list, err := s.deps.GatewayClient.GatewayV1().Gateways(namespace).List(s.deps.Context, metav1.ListOptions{})
-			if err != nil {
-				return nil, err
-			}
-			return list.Items, nil
-		}, s.buildDetails)
-}
-
 func (s *Service) buildDetails(item *gatewayv1.Gateway) *GatewayDetails {
 	facts := BuildFacts(s.deps.ClusterID, item)
 	detail := &GatewayDetails{

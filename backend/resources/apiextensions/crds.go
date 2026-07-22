@@ -33,27 +33,6 @@ func (s *Service) CustomResourceDefinition(name string) (*CustomResourceDefiniti
 	return s.buildCRDDetails(crd), nil
 }
 
-// CustomResourceDefinitions returns detailed views for all CRDs.
-func (s *Service) CustomResourceDefinitions() ([]*CustomResourceDefinitionDetails, error) {
-	if err := s.ensureAPIExtensions("CustomResourceDefinition"); err != nil {
-		return nil, err
-	}
-
-	client := s.deps.APIExtensionsClient
-	crds, err := client.ApiextensionsV1().CustomResourceDefinitions().List(s.deps.Context, metav1.ListOptions{})
-	if err != nil {
-		s.logError(fmt.Sprintf("Failed to list CRDs: %v", err))
-		return nil, fmt.Errorf("failed to list CRDs: %v", err)
-	}
-
-	result := make([]*CustomResourceDefinitionDetails, 0, len(crds.Items))
-	for i := range crds.Items {
-		result = append(result, s.buildCRDDetails(&crds.Items[i]))
-	}
-
-	return result, nil
-}
-
 func (s *Service) buildCRDDetails(crd *apiextensionsv1.CustomResourceDefinition) *CustomResourceDefinitionDetails {
 	model := BuildResourceModel(s.deps.ClusterID, crd)
 	facts := BuildFacts(crd)

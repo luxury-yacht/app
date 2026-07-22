@@ -27,7 +27,7 @@ func BuildResourceModel(clusterID string, namespace *corev1.Namespace, hasWorklo
 	if namespace != nil {
 		meta = namespace.ObjectMeta
 	}
-	return resourcemodel.NetworkResourceModel(clusterID, "", "v1", "Namespace", "namespaces", resourcemodel.ResourceScopeCluster, meta, status, resourcemodel.ResourceFacts{})
+	return resourcemodel.KubernetesResourceModel(clusterID, "", "v1", "Namespace", "namespaces", resourcemodel.ResourceScopeCluster, meta, status, resourcemodel.ResourceFacts{})
 }
 
 // BuildFacts extracts the Namespace facts. Quota/limit links materialize only when
@@ -73,9 +73,9 @@ func statusPresentation(namespace *corev1.Namespace, facts Facts) resourcemodel.
 	if namespace != nil {
 		meta = namespace.ObjectMeta
 	}
-	lifecycle := resourcemodel.NetworkLifecycle(meta)
+	lifecycle := resourcemodel.ObjectLifecycle(meta)
 	if namespace != nil {
-		if status, ok := resourcemodel.DeletingNetworkStatus(meta, state, signals, lifecycle); ok {
+		if status, ok := resourcemodel.DeletingObjectStatus(meta, state, signals, lifecycle); ok {
 			return status
 		}
 	}
@@ -87,7 +87,7 @@ func statusPresentation(namespace *corev1.Namespace, facts Facts) resourcemodel.
 	} else if !strings.EqualFold(state, "Unknown") {
 		presentation = "warning"
 	}
-	return resourcemodel.NetworkSourceStatus(state, state, "status.phase", presentation, signals, lifecycle)
+	return resourcemodel.ObjectSourceStatus(state, state, "status.phase", "", presentation, signals, lifecycle)
 }
 
 func workloadState(hasWorkloads, workloadsKnown bool) string {

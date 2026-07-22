@@ -33,18 +33,6 @@ func TestBuildRoleResourceModelFactsStatusAndReverseBindings(t *testing.T) {
 	}}
 
 	relationships := resourcemodel.NewResourceRelationshipIndex("cluster-a", resourcemodel.ResourceRelationshipIndexOptions{RoleBindings: bindings})
-	model := BuildResourceModel(
-		"cluster-a",
-		r,
-		relationships,
-		resourcemodel.ResourceModelBuildOptions{Materialization: resourcemodel.MaterializeSummaryFacts | resourcemodel.MaterializeReverseLinks},
-	)
-	require.Equal(t, rbacAPIGroup, model.Ref.Group)
-	require.Equal(t, "Role", model.Ref.Kind)
-	require.Equal(t, "roles", model.Ref.Resource)
-	require.Equal(t, resourcemodel.ResourceScopeNamespaced, model.Scope)
-	require.Equal(t, "1", model.Status.State)
-	require.Equal(t, "Rules: 1", model.Status.Label)
 
 	facts := BuildFacts(r, relationships, resourcemodel.ResourceModelBuildOptions{Materialization: resourcemodel.MaterializeReverseLinks})
 	require.Equal(t, []string{"pods"}, facts.Rules[0].Resources)

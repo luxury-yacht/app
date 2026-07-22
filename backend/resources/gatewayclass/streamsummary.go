@@ -15,8 +15,8 @@ import (
 // BuildStreamSummary builds the cluster-config row for one GatewayClass.
 func BuildStreamSummary(meta streamrows.ClusterMeta, gc *gatewayv1.GatewayClass) streamrows.ClusterConfigEntry {
 	if gc == nil {
-		return streamrows.ClusterConfigEntry{ClusterMeta: meta, Kind: "GatewayClass"}
+		return streamrows.ClusterConfigEntry{}
 	}
 	details := BuildFacts(meta.ClusterID, gc).ControllerName
-	return streamrows.NewClusterConfigEntry(meta, gc, "GatewayClass", details, false)
+	return streamrows.NewClusterConfigEntry(meta, Identity, gc, details, false)
 }

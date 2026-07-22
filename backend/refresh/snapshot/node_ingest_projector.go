@@ -99,7 +99,7 @@ func projectNodeOverviewFact(node *corev1.Node) nodeOverviewFact {
 // carries the node's OWN fields only (no pods, no metrics) — the serve-time re-join is
 // unchanged — exactly as the maintained-store handler projected before the cutover.
 func NewNodeIngestProjector(meta ClusterMeta) ingest.ProjectFunc {
-	catalogProject := objectcatalog.SummaryProjector(meta.ClusterID, meta.ClusterName, nodepkg.Identity)
+	catalogProject := objectcatalog.SummaryProjector(meta.ClusterID, nodepkg.Identity)
 	// Nodes contributes a graph node (status + cordoned action facts) but no relationship
 	// edges (its descriptor sets no ObjectMapEdges), so the object-map projector is built
 	// with a nil edge builder — the resolver derives node↔pod traversal at resolve time.

@@ -90,16 +90,3 @@ func TestServiceStorageClassDetailsHandlesPVListFailure(t *testing.T) {
 	require.NotNil(t, detail)
 	require.Empty(t, detail.PersistentVolumes)
 }
-
-func TestServiceStorageClassesErrorWhenListFails(t *testing.T) {
-	client := fake.NewClientset()
-	client.PrependReactor("list", "storageclasses", func(action k8stesting.Action) (bool, runtime.Object, error) {
-		return true, nil, fmt.Errorf("api down")
-	})
-
-	service := newService(t, client)
-
-	_, err := service.StorageClasses()
-	require.Error(t, err)
-	require.Contains(t, err.Error(), "failed to list storage classes")
-}

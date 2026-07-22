@@ -330,6 +330,14 @@ func (p *objectDetailProvider) FetchHelmManifest(ctx context.Context, namespace,
 	return manifest, revision, nil
 }
 
+func (p *objectDetailProvider) ResourceResolver(ctx context.Context) common.ResourceResolver {
+	resolved := p.resolveDetailContext(ctx)
+	if !resolved.scoped {
+		return nil
+	}
+	return resolved.deps.ResourceResolver
+}
+
 // FetchHelmValues retrieves the values for a Helm release.
 func (p *objectDetailProvider) FetchHelmValues(ctx context.Context, namespace, name string) (map[string]interface{}, int, error) {
 	resolved := p.resolveDetailContext(ctx)

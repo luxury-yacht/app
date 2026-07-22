@@ -123,7 +123,7 @@ export const resolveCatalogObjectByUID = async (
     read: () => readCatalogObjectByUID(normalizedClusterId, normalizedUID),
   });
   const match = result.status === 'executed' ? result.data : null;
-  return match ? buildRequiredObjectReference(match) : undefined;
+  return match ? buildRequiredObjectReference(match.ref) : undefined;
 };
 
 export const resolveCatalogObjectMatch = async (
@@ -139,5 +139,5 @@ export const resolveCatalogObjectMatch = async (
     read: () => readCatalogObjectMatchForRef({ ...ref, name: ref.name ?? '' }),
   });
   const match = result.status === 'executed' ? result.data : null;
-  return match ? buildRequiredObjectReference(match) : undefined;
+  return match ? buildRequiredObjectReference(match.ref) : undefined;
 };

@@ -58,6 +58,20 @@ func TestClusterLifecycleFullTransitionSequence(t *testing.T) {
 	require.Equal(t, emittedEvent{"cluster-a", "ready", "loading"}, events[3])
 }
 
+func TestClusterLifecycleMarksSnapshotChangeBeforeEmitting(t *testing.T) {
+	marked := false
+	cl := newClusterLifecycle(func(_ string, _ ClusterLifecycleState, _ ClusterLifecycleState) {
+		require.True(t, marked)
+	})
+	cl.setSnapshotChangeObserver(func() {
+		marked = true
+	})
+
+	cl.SetState("cluster-a", ClusterStateLoading)
+
+	require.True(t, marked)
+}
+
 func TestClusterLifecycleRejectsLateClientPhaseAfterSubsystemStarted(t *testing.T) {
 	emitter, getEvents := collectingEmitter()
 	cl := newClusterLifecycleWithSlowThreshold(emitter, time.Minute)
@@ -202,19 +216,18 @@ func TestClusterLifecycleConcurrentAccess(t *testing.T) {
 	require.Len(t, states, clusterCount)
 }
 
-func TestClusterLifecycleGetAllStatesViaApp(t *testing.T) {
+func TestClusterWorkspaceStateIncludesLifecycle(t *testing.T) {
 	app := newTestAppWithDefaults(t)
 
-	// nil lifecycle returns nil.
-	require.Nil(t, app.GetAllClusterLifecycleStates())
+	require.Empty(t, app.GetClusterWorkspaceState().Clusters)
 
 	emitter, _ := collectingEmitter()
 	app.clusterLifecycle = newClusterLifecycleWithSlowThreshold(emitter, time.Minute)
 	app.clusterLifecycle.SetState("cluster-a", ClusterStateReady)
 
-	states := app.GetAllClusterLifecycleStates()
+	states := app.GetClusterWorkspaceState().Clusters
 	require.Len(t, states, 1)
-	require.Equal(t, ClusterStateReady, states["cluster-a"])
+	require.Equal(t, ClusterStateReady, states["cluster-a"].Lifecycle)
 }
 
 func TestClusterLifecycleDefaultConstructor(t *testing.T) {

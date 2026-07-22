@@ -831,21 +831,6 @@ func podPointers(items []corev1.Pod) []*corev1.Pod {
 	return result
 }
 
-func buildTargetsFromPod(pod *corev1.Pod, options containerlogs.ContainerSelectionOptions) []containerTarget {
-	var targets []containerTarget
-	for _, containerRef := range containerlogs.EnumerateContainersWithOptions(pod, options) {
-		targets = append(targets, containerTarget{
-			namespace:   pod.Namespace,
-			pod:         pod.Name,
-			container:   containerRef.Name,
-			isInit:      containerRef.IsInit,
-			isEphemeral: containerRef.IsEphemeral,
-			state:       &containerState{},
-		})
-	}
-	return targets
-}
-
 func selectRuntimeTargets(
 	pods []*corev1.Pod,
 	options containerlogs.ContainerSelectionOptions,
@@ -907,14 +892,6 @@ func stringSlicesEqual(left, right []string) bool {
 		}
 	}
 	return true
-}
-
-func matchContainerFilter(name, filter string, isInit, isEphemeral bool) bool {
-	return containerlogs.MatchContainerFilter(containerlogs.ContainerRef{
-		Name:        name,
-		IsInit:      isInit,
-		IsEphemeral: isEphemeral,
-	}, filter)
 }
 
 func (s *Streamer) fetchContainerTail(ctx context.Context, target containerTarget, tailLines int, lineFilter containerlogs.LineFilter) ([]Entry, error) {

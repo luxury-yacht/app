@@ -8,20 +8,21 @@
 import { buildRequiredObjectReference } from '@shared/utils/objectIdentity';
 import type { WorkloadData } from './NsViewWorkloads.helpers';
 
-export const normalizeWorkloadHPAManaged = (value: WorkloadData['hpaManaged']) =>
+export const normalizeWorkloadHPAManaged = (value: WorkloadData['hpaManaged'] | null) =>
   value === true ? true : value === false ? false : null;
 
 export const buildWorkloadActionReference = (
   row: WorkloadData,
-  fallbackClusterId?: string | null
+  fallbackClusterId?: string | null,
+  clusterName?: string | null
 ) =>
   buildRequiredObjectReference(
     {
-      kind: row.kind,
-      name: row.name,
-      namespace: row.namespace,
-      clusterId: row.clusterId,
-      clusterName: row.clusterName,
+      kind: row.ref.kind,
+      name: row.ref.name,
+      namespace: row.ref.namespace,
+      clusterId: row.ref.clusterId,
+      clusterName: clusterName || undefined,
     },
     { fallbackClusterId },
     {

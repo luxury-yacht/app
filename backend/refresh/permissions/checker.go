@@ -124,13 +124,6 @@ func permissionReviewRetryPolicy() k8sretry.Policy {
 	}
 }
 
-// NewCheckerWithStaleGrace constructs a checker with a custom stale grace period.
-func NewCheckerWithStaleGrace(client kubernetes.Interface, clusterID string, ttl time.Duration, staleGrace time.Duration) *Checker {
-	c := NewChecker(client, clusterID, ttl)
-	c.staleGrace = staleGrace
-	return c
-}
-
 // NewCheckerWithReview constructs a checker with a custom review function.
 func NewCheckerWithReview(clusterID string, ttl time.Duration, review AccessReviewFunc) *Checker {
 	if ttl <= 0 {

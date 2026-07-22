@@ -62,7 +62,7 @@ func mutatingWebhookObj(name, rv string, hooks int) *admissionv1.MutatingWebhook
 
 func findClusterConfigRow(rows []ClusterConfigEntry, kind, name string) *ClusterConfigEntry {
 	for i := range rows {
-		if rows[i].Kind == kind && rows[i].Name == name {
+		if rows[i].Ref.Kind == kind && rows[i].Ref.Name == name {
 			return &rows[i]
 		}
 	}

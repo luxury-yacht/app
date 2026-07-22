@@ -33,18 +33,6 @@ func (s *Service) TLSRoute(namespace, name string) (*types.RouteDetails, error) 
 		}, s.buildDetails)
 }
 
-// TLSRoutes lists TLSRoute detail payloads.
-func (s *Service) TLSRoutes(namespace string) ([]*types.RouteDetails, error) {
-	return gatewayapi.ListResources(s.deps, "TLSRoute", "tls routes",
-		func() ([]gatewayv1.TLSRoute, error) {
-			list, err := s.deps.GatewayClient.GatewayV1().TLSRoutes(namespace).List(s.deps.Context, metav1.ListOptions{})
-			if err != nil {
-				return nil, err
-			}
-			return list.Items, nil
-		}, s.buildDetails)
-}
-
 func (s *Service) buildDetails(item *gatewayv1.TLSRoute) *types.RouteDetails {
 	facts := BuildFacts(s.deps.ClusterID, item).RouteCommonFacts
 	detail := types.RouteDetailsFromFacts("TLSRoute", item.ObjectMeta, facts)

@@ -17,7 +17,7 @@ import (
 // BuildStreamSummary builds the namespace-network row for one Service.
 func BuildStreamSummary(meta streamrows.ClusterMeta, svc *corev1.Service, slices []*discoveryv1.EndpointSlice) streamrows.NetworkSummary {
 	if svc == nil {
-		return streamrows.NetworkSummary{ClusterMeta: meta, Kind: "Service"}
+		return streamrows.NetworkSummary{}
 	}
-	return streamrows.NewNetworkSummary(meta, svc, "Service", DescribeSummary(BuildFacts(svc, slices)))
+	return streamrows.NewNetworkSummary(meta, Identity, svc, DescribeSummary(BuildFacts(svc, slices)))
 }

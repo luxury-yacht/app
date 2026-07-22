@@ -9,9 +9,29 @@ import (
 	corev1 "k8s.io/api/core/v1"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 
+	eventres "github.com/luxury-yacht/app/backend/resources/events"
 	"github.com/luxury-yacht/app/backend/testsupport"
 	types "k8s.io/apimachinery/pkg/types"
 )
+
+func TestProjectClusterEventEntryCarriesCanonicalEventRef(t *testing.T) {
+	event := &corev1.Event{
+		ObjectMeta: metav1.ObjectMeta{
+			Name:      "event-a",
+			Namespace: "kube-system",
+			UID:       types.UID("event-uid"),
+		},
+		InvolvedObject: corev1.ObjectReference{
+			APIVersion: "v1",
+			Kind:       "Node",
+			Name:       "node-a",
+		},
+	}
+
+	row, ok := projectClusterEventEntry(ClusterMeta{ClusterID: "cluster-a"}, event)
+	require.True(t, ok)
+	require.Equal(t, eventres.BuildResourceModel("cluster-a", event).Ref, row.Ref)
+}
 
 func TestClusterEventsBuilder(t *testing.T) {
 	now := time.Now()
@@ -94,21 +114,21 @@ func TestClusterEventsBuilder(t *testing.T) {
 	// Events should be sorted newest first
 	first := payload.Rows[0]
 	second := payload.Rows[1]
-	require.Equal(t, "event-new", first.Name)
+	require.Equal(t, "event-new", first.Ref.Name)
 	require.Equal(t, "Normal", first.Type)
 	require.Equal(t, "scheduler", first.Source)
 	require.Equal(t, "node-uid-new", first.ObjectUID)
 	require.Equal(t, "v1", first.ObjectAPIVersion)
 	require.Equal(t, clusterEventNew.LastTimestamp.UnixMilli(), first.AgeTimestamp)
-	require.Equal(t, "kube-system", first.Namespace)
+	require.Equal(t, "kube-system", first.Ref.Namespace)
 
-	require.Equal(t, "event-old", second.Name)
+	require.Equal(t, "event-old", second.Ref.Name)
 	require.Equal(t, "Warning", second.Type)
 	require.Contains(t, second.Source, "kubelet")
 	require.Equal(t, "PersistentVolume/pv-old", second.Object)
 	require.Equal(t, "FailedMount", second.Message) // falls back to reason when message empty
 	require.Equal(t, clusterEventOld.LastTimestamp.UnixMilli(), second.AgeTimestamp)
-	require.Equal(t, "kube-system", second.Namespace)
+	require.Equal(t, "kube-system", second.Ref.Namespace)
 }
 
 func TestClusterEventsBuilderUsesDeterministicTieBreakers(t *testing.T) {
@@ -156,8 +176,8 @@ func TestClusterEventsBuilderUsesDeterministicTieBreakers(t *testing.T) {
 	payload, ok := snapshot.Payload.(ClusterEventsSnapshot)
 	require.True(t, ok)
 	require.Len(t, payload.Rows, 2)
-	require.Equal(t, "event-high-rv", payload.Rows[0].Name)
-	require.Equal(t, "event-low-rv", payload.Rows[1].Name)
+	require.Equal(t, "event-high-rv", payload.Rows[0].Ref.Name)
+	require.Equal(t, "event-low-rv", payload.Rows[1].Ref.Name)
 }
 
 // An unsynced events informer lists empty with no error (client-go semantics),

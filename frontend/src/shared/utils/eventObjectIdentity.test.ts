@@ -195,15 +195,16 @@ describe('resolveEventObjectReference', () => {
 
   it('falls back to catalog lookup by UID when direct GVK resolution is unavailable', async () => {
     findCatalogObjectByUIDMock.mockResolvedValue({
-      kind: 'Database',
-      name: 'primary',
-      namespace: 'databases',
-      clusterId: 'cluster-a',
-      clusterName: 'alpha',
-      group: 'db.example.io',
-      version: 'v1',
-      resource: 'databases',
-      uid: 'db-uid',
+      ref: {
+        kind: 'Database',
+        name: 'primary',
+        namespace: 'databases',
+        clusterId: 'cluster-a',
+        group: 'db.example.io',
+        version: 'v1',
+        resource: 'databases',
+        uid: 'db-uid',
+      },
     });
 
     await expect(

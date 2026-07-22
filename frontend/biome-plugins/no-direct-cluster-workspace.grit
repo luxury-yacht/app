@@ -1,0 +1,70 @@
+engine biome(1.0)
+language js(typescript, jsx)
+
+// Keep the combined workspace RPC and its Wails state events behind the one
+// clusterWorkspaceStore owner. Feature code consumes selectors/facades instead
+// of creating another cluster-keyed cache or subscription plane.
+or {
+  `$receiver.GetClusterWorkspaceState($...)` as $call where {
+    register_diagnostic(
+      span = $call,
+      message = "Read cluster workspace state through clusterWorkspaceStore.",
+      severity = "error"
+    )
+  },
+  `GetClusterWorkspaceState($...)` as $call where {
+    register_diagnostic(
+      span = $call,
+      message = "Read cluster workspace state through clusterWorkspaceStore.",
+      severity = "error"
+    )
+  },
+  `$receiver.EventsOn("cluster:lifecycle", $...)` as $call where {
+    register_diagnostic(span = $call, message = "Subscribe to cluster workspace state through clusterWorkspaceStore.", severity = "error")
+  },
+  `$receiver.EventsOn("cluster:auth:failed", $...)` as $call where {
+    register_diagnostic(span = $call, message = "Subscribe to cluster workspace state through clusterWorkspaceStore.", severity = "error")
+  },
+  `$receiver.EventsOn("cluster:auth:recovering", $...)` as $call where {
+    register_diagnostic(span = $call, message = "Subscribe to cluster workspace state through clusterWorkspaceStore.", severity = "error")
+  },
+  `$receiver.EventsOn("cluster:auth:recovered", $...)` as $call where {
+    register_diagnostic(span = $call, message = "Subscribe to cluster workspace state through clusterWorkspaceStore.", severity = "error")
+  },
+  `$receiver.EventsOn("cluster:auth:progress", $...)` as $call where {
+    register_diagnostic(span = $call, message = "Subscribe to cluster workspace state through clusterWorkspaceStore.", severity = "error")
+  },
+  `$receiver.EventsOn("cluster:health:healthy", $...)` as $call where {
+    register_diagnostic(span = $call, message = "Subscribe to cluster workspace state through clusterWorkspaceStore.", severity = "error")
+  },
+  `$receiver.EventsOn("cluster:health:degraded", $...)` as $call where {
+    register_diagnostic(span = $call, message = "Subscribe to cluster workspace state through clusterWorkspaceStore.", severity = "error")
+  },
+  `$receiver.EventsOn("cluster:scope:changed", $...)` as $call where {
+    register_diagnostic(span = $call, message = "Subscribe to cluster workspace state through clusterWorkspaceStore.", severity = "error")
+  },
+  `EventsOn("cluster:lifecycle", $...)` as $call where {
+    register_diagnostic(span = $call, message = "Subscribe to cluster workspace state through clusterWorkspaceStore.", severity = "error")
+  },
+  `EventsOn("cluster:auth:failed", $...)` as $call where {
+    register_diagnostic(span = $call, message = "Subscribe to cluster workspace state through clusterWorkspaceStore.", severity = "error")
+  },
+  `EventsOn("cluster:auth:recovering", $...)` as $call where {
+    register_diagnostic(span = $call, message = "Subscribe to cluster workspace state through clusterWorkspaceStore.", severity = "error")
+  },
+  `EventsOn("cluster:auth:recovered", $...)` as $call where {
+    register_diagnostic(span = $call, message = "Subscribe to cluster workspace state through clusterWorkspaceStore.", severity = "error")
+  },
+  `EventsOn("cluster:auth:progress", $...)` as $call where {
+    register_diagnostic(span = $call, message = "Subscribe to cluster workspace state through clusterWorkspaceStore.", severity = "error")
+  },
+  `EventsOn("cluster:health:healthy", $...)` as $call where {
+    register_diagnostic(span = $call, message = "Subscribe to cluster workspace state through clusterWorkspaceStore.", severity = "error")
+  },
+  `EventsOn("cluster:health:degraded", $...)` as $call where {
+    register_diagnostic(span = $call, message = "Subscribe to cluster workspace state through clusterWorkspaceStore.", severity = "error")
+  },
+  `EventsOn("cluster:scope:changed", $...)` as $call where {
+    register_diagnostic(span = $call, message = "Subscribe to cluster workspace state through clusterWorkspaceStore.", severity = "error")
+  }
+}

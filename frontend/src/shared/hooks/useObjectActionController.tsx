@@ -95,21 +95,13 @@ const extractDesiredReplicas = (object: ObjectActionData): number => {
   return Number.isFinite(candidate) ? clampReplicas(candidate) : 0;
 };
 
-const requireClusterId = (object: ObjectActionData, action: string): string => {
-  const clusterId = object.clusterId?.trim();
-  if (!clusterId) {
-    throw new Error(`Cannot ${action} ${object.kind}/${object.name}: clusterId is missing`);
-  }
-  return clusterId;
-};
-
 const portForwardTargetFor = (object: ObjectActionData): PortForwardTarget => ({
   kind: object.kind,
-  group: object.group ?? '',
-  version: object.version ?? 'v1',
+  group: object.group,
+  version: object.version,
   name: object.name,
   namespace: object.namespace ?? '',
-  clusterId: requireClusterId(object, 'open port-forward for'),
+  clusterId: object.clusterId,
   clusterName: object.clusterName ?? '',
   ports: [],
 });
@@ -177,9 +169,9 @@ export const useObjectActionController = ({
       }
       const actionObject = object as ObjectActionReference;
       const namespace = object.namespace ?? null;
-      const clusterId = object.clusterId ?? null;
-      const group = object.group ?? null;
-      const version = object.version ?? null;
+      const clusterId = object.clusterId;
+      const group = object.group;
+      const version = object.version;
       const normalizedKind = normalizeKind(object.kind);
       const actionPermissionSource = {
         clusterId,

@@ -15,6 +15,7 @@ import (
 	"k8s.io/client-go/tools/cache"
 
 	"github.com/luxury-yacht/app/backend/internal/config"
+	"github.com/luxury-yacht/app/backend/kind/streamrows"
 	"github.com/luxury-yacht/app/backend/refresh"
 	"github.com/luxury-yacht/app/backend/refresh/domain"
 	"github.com/luxury-yacht/app/backend/refresh/querypage"
@@ -69,12 +70,8 @@ func projectClusterEventEntry(meta ClusterMeta, evt *corev1.Event) (ClusterEvent
 		source = "-"
 	}
 	return ClusterEventEntry{
-		ClusterMeta:      meta,
-		Kind:             "Event",
-		Name:             evt.Name,
-		UID:              string(evt.UID),
+		Ref:              streamrows.NewResourceRef(meta, eventres.Identity, evt),
 		ResourceVersion:  evt.ResourceVersion,
-		Namespace:        evt.Namespace,
 		ObjectNamespace:  evt.InvolvedObject.Namespace,
 		ObjectUID:        string(evt.InvolvedObject.UID),
 		ObjectAPIVersion: evt.InvolvedObject.APIVersion,
@@ -125,12 +122,8 @@ func clusterEventsQuerypageSchema() querypage.Schema[ClusterEventEntry] {
 
 // ClusterEventEntry mirrors the fields consumed by the frontend grid.
 type ClusterEventEntry struct {
-	ClusterMeta
-	Kind             string                      `json:"kind"`
-	Name             string                      `json:"name"`
-	UID              string                      `json:"uid"`
+	Ref              resourcemodel.ResourceRef   `json:"ref"`
 	ResourceVersion  string                      `json:"resourceVersion"`
-	Namespace        string                      `json:"namespace"`
 	ObjectNamespace  string                      `json:"objectNamespace"`
 	ObjectUID        string                      `json:"objectUid"`
 	ObjectAPIVersion string                      `json:"objectApiVersion"`
@@ -231,7 +224,7 @@ func (b *ClusterEventsBuilder) Build(ctx context.Context, scope string) (*refres
 		if entries[i].AgeTimestamp != entries[j].AgeTimestamp {
 			return entries[i].AgeTimestamp > entries[j].AgeTimestamp
 		}
-		return entries[i].Name < entries[j].Name
+		return entries[i].Ref.Name < entries[j].Ref.Name
 	})
 
 	resolved := resolveTypedSnapshotPageViaStore(
@@ -243,7 +236,7 @@ func (b *ClusterEventsBuilder) Build(ctx context.Context, scope string) (*refres
 		clusterEventsQueryCapabilities(),
 		config.SnapshotClusterEventsLimit,
 		"events",
-		func(e ClusterEventEntry) string { return e.Kind },
+		func(e ClusterEventEntry) string { return e.Ref.Kind },
 		nil,
 	)
 	// The query branch echoes the raw request scope; the window branch leaves the

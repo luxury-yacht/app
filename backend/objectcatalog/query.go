@@ -148,9 +148,9 @@ func matchesCatalogQuery(
 	namespaceMatcher namespaceMatcher,
 	searchMatcher searchMatcher,
 ) bool {
-	return kindMatcher(item.Kind, item.Group, item.Version, item.Resource) &&
-		namespaceMatcher(item.Namespace, item.Scope) &&
-		searchMatcher(item.Name, item.Namespace, item.Kind)
+	return kindMatcher(item.Ref.Kind, item.Ref.Group, item.Ref.Version, item.Ref.Resource) &&
+		namespaceMatcher(item.Ref.Namespace, item.Scope) &&
+		searchMatcher(item.Ref.Name, item.Ref.Namespace, item.Ref.Kind)
 }
 
 func newKindMatcher(filters []string) kindMatcher {
@@ -240,7 +240,7 @@ func newCustomOnlyMatcher(enabled bool) customOnlyMatcher {
 		return func(Summary) bool { return true }
 	}
 	return func(item Summary) bool {
-		_, builtin := catalogQueryBuiltinKeys[identityKey(item.Group, item.Version, item.Kind)]
+		_, builtin := catalogQueryBuiltinKeys[identityKey(item.Ref.Group, item.Ref.Version, item.Ref.Kind)]
 		return !builtin
 	}
 }

@@ -7,46 +7,29 @@
 
 import type { ResourceLink } from '@core/refresh/types';
 import {
-  isPortForwardTargetGVKSupported,
-  lookupPortForwardTargetCapability,
-} from '@modules/port-forward/targetCapabilities';
-import { resolveBuiltinGroupVersion } from '@shared/constants/builtinGroupVersions';
+  lookupObjectActionKindCapability,
+  normalizeObjectActionKind,
+  objectActionKindsWith,
+} from './objectActionCapabilities';
 import { OBJECT_ACTION_IDS, type ObjectActionId } from './objectActionContract';
 
-const WORKLOAD_KIND_MAP: Record<string, string> = {
-  Deployment: 'Deployment',
-  deployment: 'Deployment',
-  StatefulSet: 'StatefulSet',
-  statefulset: 'StatefulSet',
-  DaemonSet: 'DaemonSet',
-  daemonset: 'DaemonSet',
-  ReplicaSet: 'ReplicaSet',
-  replicaset: 'ReplicaSet',
-  Pod: 'Pod',
-  pod: 'Pod',
-  Job: 'Job',
-  job: 'Job',
-  CronJob: 'CronJob',
-  cronjob: 'CronJob',
-};
-
 export function normalizeKind(kind: string): string {
-  return WORKLOAD_KIND_MAP[kind] || kind;
+  return normalizeObjectActionKind(kind);
 }
 
 export interface ObjectActionData {
   kind: string;
   name: string;
   namespace?: string;
-  clusterId?: string;
+  clusterId: string;
   clusterName?: string;
   // API group/version for the object's kind. Required to look up CRD
   // permissions correctly: getPermissionKey only auto-resolves built-in
   // GVK from a static table, so CRD callers must thread these through
   // or the lookup key won't match the spec-emit key from
   // queryKindPermissions and the Delete action silently disappears.
-  group?: string;
-  version?: string;
+  group: string;
+  version: string;
   resource?: string;
   uid?: string;
   requiresExplicitVersion?: boolean;
@@ -126,41 +109,31 @@ export interface ObjectActionPolicy {
   deleteEnabled: boolean;
 }
 
-const RESTARTABLE_KINDS: readonly string[] = ['Deployment', 'StatefulSet', 'DaemonSet'];
-const ROLLBACKABLE_KINDS: readonly string[] = ['Deployment', 'StatefulSet', 'DaemonSet'];
-export const SCALABLE_KINDS: readonly string[] = ['Deployment', 'StatefulSet', 'ReplicaSet'];
-const CORDONABLE_KINDS: readonly string[] = ['Node'];
-const DRAINABLE_KINDS: readonly string[] = ['Node'];
+export const SCALABLE_KINDS: readonly string[] = objectActionKindsWith('scale');
 
 const permissionAllows = (status: PermissionStatus | null | undefined): boolean =>
   Boolean(status?.allowed && !status.pending);
 
+const lookupObjectCapability = (object: Pick<ObjectActionData, 'group' | 'version' | 'kind'>) => {
+  return lookupObjectActionKindCapability({
+    group: object.group,
+    version: object.version,
+    kind: object.kind,
+  });
+};
+
 const resolvePortForwardAvailability = (
   object: ObjectActionData,
-  handlers: ObjectActionHandlerAvailability
+  handlers: ObjectActionHandlerAvailability,
+  capability: ReturnType<typeof lookupObjectCapability>
 ): PortForwardAvailability => {
-  const normalizedKind = normalizeKind(object.kind);
   const actionId = OBJECT_ACTION_IDS.portForward;
 
-  if (!lookupPortForwardTargetCapability(normalizedKind) || !handlers.portForward) {
+  if (!capability?.portForward || !handlers.portForward) {
     return { show: false, enabled: false, actionId };
   }
 
-  const builtin = resolveBuiltinGroupVersion(object.kind);
-  const group = object.group ?? builtin.group ?? '';
-  const version = object.version ?? builtin.version ?? '';
-
-  if (!object.clusterId || !object.namespace) {
-    return { show: true, enabled: false, actionId };
-  }
-
-  if (
-    !isPortForwardTargetGVKSupported({
-      kind: normalizedKind,
-      group,
-      version,
-    })
-  ) {
+  if (!object.clusterId.trim() || !object.namespace) {
     return { show: true, enabled: false, actionId };
   }
 
@@ -184,8 +157,6 @@ const extractDesiredReplicas = (object: ObjectActionData): number | null => {
   return Number.isFinite(candidate) ? Math.max(0, candidate) : null;
 };
 
-const includesKind = (kinds: readonly string[], kind: string): boolean => kinds.includes(kind);
-
 export const resolveObjectActionPolicy = ({
   object,
   context,
@@ -199,9 +170,10 @@ export const resolveObjectActionPolicy = ({
   permissions: ObjectActionPermissionStatuses;
   actionLoading?: boolean;
 }): ObjectActionPolicy => {
-  const normalizedKind = normalizeKind(object.kind);
-  const isCronJob = normalizedKind === 'CronJob';
-  const portForward = resolvePortForwardAvailability(object, handlers);
+  const capability = lookupObjectCapability(object);
+  const normalizedKind = capability?.kind ?? normalizeKind(object.kind);
+  const isCronJob = Boolean(capability?.trigger || capability?.suspend);
+  const portForward = resolvePortForwardAvailability(object, handlers, capability);
 
   const anyPending = Boolean(
     permissions.restart?.pending ||
@@ -227,17 +199,16 @@ export const resolveObjectActionPolicy = ({
       : null;
 
   const restartEnabled =
-    includesKind(RESTARTABLE_KINDS, normalizedKind) &&
+    Boolean(capability?.restart) &&
     Boolean(handlers.restart) &&
     permissionAllows(permissions.restart);
 
   const rollbackEnabled =
-    includesKind(ROLLBACKABLE_KINDS, normalizedKind) &&
+    Boolean(capability?.rollback) &&
     Boolean(handlers.rollback) &&
     permissionAllows(permissions.rollback);
 
-  const scaleAllowed =
-    includesKind(SCALABLE_KINDS, normalizedKind) && permissionAllows(permissions.scale);
+  const scaleAllowed = Boolean(capability?.scale) && permissionAllows(permissions.scale);
   const desiredReplicas = extractDesiredReplicas(object);
   const scaleActionId: ObjectActionPolicy['scaleActionId'] =
     scaleAllowed && object.hpaManaged === true
@@ -254,18 +225,14 @@ export const resolveObjectActionPolicy = ({
   );
 
   const cordonActionId =
-    includesKind(CORDONABLE_KINDS, normalizedKind) &&
-    handlers.cordon &&
-    permissionAllows(permissions.cordon)
+    capability?.cordon && handlers.cordon && permissionAllows(permissions.cordon)
       ? object.unschedulable
         ? OBJECT_ACTION_IDS.uncordon
         : OBJECT_ACTION_IDS.cordon
       : null;
 
   const drainEnabled =
-    includesKind(DRAINABLE_KINDS, normalizedKind) &&
-    Boolean(handlers.drain) &&
-    permissionAllows(permissions.drain);
+    Boolean(capability?.drain) && Boolean(handlers.drain) && permissionAllows(permissions.drain);
 
   const portForwardEnabled =
     portForward.show && portForward.enabled && permissionAllows(permissions.portForward);
@@ -275,12 +242,12 @@ export const resolveObjectActionPolicy = ({
   const hasActionSection =
     anyPending ||
     isCronJob ||
-    (includesKind(RESTARTABLE_KINDS, normalizedKind) && Boolean(handlers.restart)) ||
-    (includesKind(ROLLBACKABLE_KINDS, normalizedKind) && Boolean(handlers.rollback)) ||
-    (includesKind(SCALABLE_KINDS, normalizedKind) &&
+    (Boolean(capability?.restart) && Boolean(handlers.restart)) ||
+    (Boolean(capability?.rollback) && Boolean(handlers.rollback)) ||
+    (Boolean(capability?.scale) &&
       (object.hpaManaged === true || (object.hpaManaged === false && Boolean(handlers.scale)))) ||
-    (includesKind(CORDONABLE_KINDS, normalizedKind) && Boolean(handlers.cordon)) ||
-    (includesKind(DRAINABLE_KINDS, normalizedKind) && Boolean(handlers.drain)) ||
+    (Boolean(capability?.cordon) && Boolean(handlers.cordon)) ||
+    (Boolean(capability?.drain) && Boolean(handlers.drain)) ||
     portForward.show ||
     (context !== 'gridtable' && Boolean(handlers.delete));
 

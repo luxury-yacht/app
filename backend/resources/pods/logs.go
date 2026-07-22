@@ -216,25 +216,6 @@ func (s *Service) resolveLogTarget(req types.ContainerLogsFetchRequest) (resolve
 	return target, nil
 }
 
-func (s *Service) resolveTargetPods(req types.ContainerLogsFetchRequest) ([]string, error) {
-	podNameFilter, err := containerlogs.NewPodNameFilter(strings.TrimSpace(req.PodInclude), strings.TrimSpace(req.PodExclude))
-	if err != nil {
-		return nil, fmt.Errorf("invalid pod filter: %w", err)
-	}
-	selection := containerlogs.ParseScopeSelection(req.SelectedFilters)
-	pods, err := s.resolveTargetPodObjects(req, podNameFilter, selection)
-	if err != nil {
-		return nil, err
-	}
-	names := make([]string, 0, len(pods))
-	for _, pod := range pods {
-		if pod != nil {
-			names = append(names, pod.Name)
-		}
-	}
-	return names, nil
-}
-
 func (s *Service) resolveTargetPodObjects(
 	req types.ContainerLogsFetchRequest,
 	podNameFilter containerlogs.PodNameFilter,
@@ -326,20 +307,6 @@ func (s *Service) workloadPodObjects(namespace, workloadName, workloadKind strin
 	}
 }
 
-func (s *Service) podsBySelector(namespace, selector string) ([]string, error) {
-	pods, err := s.podObjectsBySelector(namespace, selector)
-	if err != nil {
-		return nil, err
-	}
-	result := make([]string, 0, len(pods))
-	for _, pod := range pods {
-		if pod != nil {
-			result = append(result, pod.Name)
-		}
-	}
-	return result, nil
-}
-
 func (s *Service) podObjectsBySelector(namespace, selector string) ([]*corev1.Pod, error) {
 	pods, err := s.deps.KubernetesClient.CoreV1().Pods(namespace).List(s.ctx(), metav1.ListOptions{LabelSelector: selector})
 	if err != nil {
@@ -351,20 +318,6 @@ func (s *Service) podObjectsBySelector(namespace, selector string) ([]*corev1.Po
 		result = append(result, &pod)
 	}
 	return result, nil
-}
-
-func (s *Service) podsForCronJob(namespace, cronJobName string) ([]string, error) {
-	pods, err := s.podObjectsForCronJob(namespace, cronJobName)
-	if err != nil {
-		return nil, err
-	}
-	names := make([]string, 0, len(pods))
-	for _, pod := range pods {
-		if pod != nil {
-			names = append(names, pod.Name)
-		}
-	}
-	return names, nil
 }
 
 func (s *Service) podObjectsForCronJob(namespace, cronJobName string) ([]*corev1.Pod, error) {
@@ -387,31 +340,6 @@ func (s *Service) podObjectsForCronJob(namespace, cronJobName string) ([]*corev1
 		}
 	}
 	return podObjects, nil
-}
-
-func (s *Service) fetchContainerLogsForPod(namespace, podName, container string, tailLines int, previous bool, sinceSeconds int64, lineFilter containerlogs.LineFilter) ([]types.ContainerLogsEntry, error) {
-	pod, err := s.deps.KubernetesClient.CoreV1().Pods(namespace).Get(s.ctx(), podName, metav1.GetOptions{})
-	if err != nil {
-		return nil, fmt.Errorf("failed to get pod: %w", err)
-	}
-
-	var entries []types.ContainerLogsEntry
-	var containerErrors []error
-	for _, containerRef := range containerlogs.EnumerateContainers(pod, container) {
-		containerEntries, err := s.fetchContainerLogs(namespace, podName, containerRef.Name, containerRef.IsInit, containerRef.IsEphemeral, tailLines, previous, sinceSeconds, lineFilter)
-		if err != nil {
-			s.logWarn(fmt.Sprintf("Failed to fetch logs for container %s/%s: %v", podName, containerRef.Name, err))
-			containerErrors = append(containerErrors, fmt.Errorf("container %s: %w", containerRef.Name, err))
-			continue
-		}
-		entries = append(entries, containerEntries...)
-	}
-
-	if len(entries) == 0 && len(containerErrors) > 0 {
-		return nil, fmt.Errorf("failed to fetch any container logs for pod %s: %s", podName, summarizeLogFetchErrors("all containers failed", containerErrors))
-	}
-
-	return entries, nil
 }
 
 func (s *Service) fetchContainerLogs(namespace, podName, containerName string, isInit bool, isEphemeral bool, tailLines int, previous bool, sinceSeconds int64, lineFilter containerlogs.LineFilter) ([]types.ContainerLogsEntry, error) {

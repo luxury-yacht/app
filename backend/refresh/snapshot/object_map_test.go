@@ -8,6 +8,7 @@ import (
 
 	"github.com/luxury-yacht/app/backend/kind/objectmapnode"
 	"github.com/luxury-yacht/app/backend/objectcatalog"
+	"github.com/luxury-yacht/app/backend/resourcemodel"
 
 	"github.com/stretchr/testify/require"
 	appsv1 "k8s.io/api/apps/v1"
@@ -124,16 +125,7 @@ func objectMapCatalogService(t *testing.T, shared informers.SharedInformerFactor
 			scope = objectcatalog.ScopeNamespace
 		}
 		for _, obj := range fakeIngestCollectorItems(t, collector, shared, collector.Identity.GVR()) {
-			summaries = append(summaries, objectcatalog.Summary{
-				Kind:      collector.Identity.Kind,
-				Group:     collector.Identity.Group,
-				Version:   collector.Identity.Version,
-				Resource:  collector.Identity.Resource,
-				Namespace: obj.GetNamespace(),
-				Name:      obj.GetName(),
-				UID:       string(obj.GetUID()),
-				Scope:     scope,
-			})
+			summaries = append(summaries, objectcatalog.Summary{Ref: resourcemodel.ResourceRef{Group: collector.Identity.Group, Version: collector.Identity.Version, Kind: collector.Identity.Kind, Resource: collector.Identity.Resource, Namespace: obj.GetNamespace(), Name: obj.GetName(), UID: string(obj.GetUID())}, Scope: scope})
 		}
 	}
 	return seedCatalogService(t, summaries)
@@ -1553,11 +1545,24 @@ func TestObjectMapScopedGatewayCollectionFiltersInformerCache(t *testing.T) {
 	builder := newObjectMapTestBuilder(t, client)
 	builder.gatewayShared = startObjectMapGatewayFactory(t, gatewayClient)
 	builder.allowedNamespaces = []string{"default", "team-b"}
-	before := len(gatewayClient.Actions())
+	// Count only list actions: the informers' initial lists have completed by
+	// WaitForCacheSync, but their WATCH registrations land asynchronously and
+	// can arrive inside the Build window — irrelevant to the contract under
+	// test, which is that Build itself must not LIST Gateway API resources.
+	countGatewayListActions := func() int {
+		count := 0
+		for _, action := range gatewayClient.Actions() {
+			if action.GetVerb() == "list" {
+				count++
+			}
+		}
+		return count
+	}
+	before := countGatewayListActions()
 	ctx := WithClusterMeta(context.Background(), ClusterMeta{ClusterID: "cluster-a", ClusterName: "Cluster A"})
 	snap, err := builder.Build(ctx, "default:gateway.networking.k8s.io/v1:Gateway:edge?maxDepth=5&maxNodes=100")
 	require.NoError(t, err)
-	require.Len(t, gatewayClient.Actions(), before, "object-map builds must not list Gateway API resources")
+	require.Equal(t, before, countGatewayListActions(), "object-map builds must not list Gateway API resources")
 	payload := snap.Payload.(ObjectMapSnapshotPayload)
 	assertNode(t, payload, "Gateway", "edge")
 	assertMissingNode(t, payload, "Gateway", "outside")

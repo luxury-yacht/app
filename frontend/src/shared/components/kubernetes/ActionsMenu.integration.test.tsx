@@ -94,6 +94,7 @@ describe('ActionsMenu + real permission store', () => {
       namespace: 'team-a',
       clusterId: 'cluster-1',
       clusterName: 'ctx-1',
+      group: '',
       version: 'v1',
       status: 'Running',
       ready: '1/1',

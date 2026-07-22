@@ -36,6 +36,16 @@ export interface DomainSnapshotState<TPayload> {
   // Retained for stream diagnostics/backward-compatible tests only. Query-backed
   // table identity no longer reads it; sourceVersion is the live-data token.
   streamRevision?: number;
+  // Increments once when a live subscription becomes trusted on a connection
+  // (ACK, initial RESET, or delivery). Query-backed tables include this in
+  // their lifecycle identity so the post-ack page closes the subscribe/query
+  // race without retaining the bounded base-scope snapshot.
+  streamAcknowledgedVersion?: number;
+  // Increments when the refresh scheduler needs a query-only consumer to
+  // re-read its current page. This keeps fallback polling and manual global
+  // refreshes from materializing a bounded base-scope snapshot that no
+  // mounted consumer retains.
+  queryReconcileVersion?: number;
   lastUpdated?: number;
   lastManualRefresh?: number;
   lastAutoRefresh?: number;

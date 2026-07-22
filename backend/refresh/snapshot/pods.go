@@ -30,7 +30,6 @@ import (
 	"github.com/luxury-yacht/app/backend/refresh/ingest"
 	"github.com/luxury-yacht/app/backend/refresh/metrics"
 	"github.com/luxury-yacht/app/backend/refresh/querypage"
-	"github.com/luxury-yacht/app/backend/resources/common"
 )
 
 // PodBuilder constructs pod snapshots scoped by node or workload.
@@ -57,16 +56,6 @@ type PodBuilder struct {
 	// while the object version + metric tick are unchanged (plan P6). Per-cluster
 	// (owned by this builder), dropped with it on teardown.
 	perBuild *perBuildStoreCache[PodSummary]
-}
-
-// newPodBuilder wires a PodBuilder with the projection memo cache enabled.
-func newPodBuilder(podLister corelisters.PodLister, podIndexer cache.Indexer, rsLister appslisters.ReplicaSetLister) *PodBuilder {
-	return &PodBuilder{
-		podLister:  podLister,
-		podIndexer: podIndexer,
-		rsLister:   rsLister,
-		projCache:  newPodProjectionCache(),
-	}
 }
 
 func (b *PodBuilder) projectPod(meta ClusterMeta, pod *corev1.Pod, rsMap map[string]string) PodSummary {
@@ -228,13 +217,13 @@ func podOwnerQueryFacet() typedTableQueryFacet[PodSummary] {
 // that Pod instead of every ownerless Pod in the namespace.
 func podOwnerFacetValues(pod PodSummary) []string {
 	if strings.EqualFold(strings.TrimSpace(pod.OwnerKind), "none") || strings.TrimSpace(pod.OwnerName) == "" {
-		return []string{encodePodOwnerFacetValue("pod", podres.Identity.Kind, pod.Name, pod.ClusterID, podres.Identity.Group, podres.Identity.Version, pod.Namespace)}
+		return []string{encodePodOwnerFacetValue("pod", podres.Identity.Kind, pod.Ref.Name, pod.Ref.ClusterID, podres.Identity.Group, podres.Identity.Version, pod.Ref.Namespace)}
 	}
 	gv, err := schema.ParseGroupVersion(strings.TrimSpace(pod.OwnerAPIVersion))
 	if err != nil || strings.TrimSpace(pod.OwnerKind) == "" {
 		return nil
 	}
-	values := []string{encodePodOwnerFacetValue("owner", pod.OwnerKind, pod.OwnerName, pod.ClusterID, gv.Group, gv.Version, pod.Namespace)}
+	values := []string{encodePodOwnerFacetValue("owner", pod.OwnerKind, pod.OwnerName, pod.Ref.ClusterID, gv.Group, gv.Version, pod.Ref.Namespace)}
 	if pod.DirectOwnerKind == "" || pod.DirectOwnerName == "" {
 		return values
 	}
@@ -242,7 +231,7 @@ func podOwnerFacetValues(pod PodSummary) []string {
 	if err != nil {
 		return values
 	}
-	direct := encodePodOwnerFacetValue("owner", pod.DirectOwnerKind, pod.DirectOwnerName, pod.ClusterID, directGV.Group, directGV.Version, pod.Namespace)
+	direct := encodePodOwnerFacetValue("owner", pod.DirectOwnerKind, pod.DirectOwnerName, pod.Ref.ClusterID, directGV.Group, directGV.Version, pod.Ref.Namespace)
 	if direct != values[0] {
 		values = append(values, direct)
 	}
@@ -381,10 +370,10 @@ func (b *PodBuilder) Build(ctx context.Context, scope string) (*refresh.Snapshot
 	// refetch (pinned by TestPodBuilderWindowScopeOrdersRowsByNamespaceThenName).
 	if !query.Enabled {
 		sort.Slice(summaries, func(i, j int) bool {
-			if summaries[i].Namespace == summaries[j].Namespace {
-				return summaries[i].Name < summaries[j].Name
+			if summaries[i].Ref.Namespace == summaries[j].Ref.Namespace {
+				return summaries[i].Ref.Name < summaries[j].Ref.Name
 			}
-			return summaries[i].Namespace < summaries[j].Namespace
+			return summaries[i].Ref.Namespace < summaries[j].Ref.Namespace
 		})
 	}
 
@@ -509,7 +498,7 @@ func filterPodRowsByScope(rows []PodSummary, scope string) ([]PodSummary, error)
 			return nil, err
 		}
 		return filterPodRows(rows, func(row PodSummary) bool {
-			return row.Namespace == parsed.namespace && row.Name == parsed.name
+			return row.Ref.Namespace == parsed.namespace && row.Ref.Name == parsed.name
 		}), nil
 	case namespaceScopeKey:
 		namespace := strings.TrimSpace(value)
@@ -519,7 +508,7 @@ func filterPodRowsByScope(rows []PodSummary, scope string) ([]PodSummary, error)
 		if namespace == "all" || namespace == "*" {
 			return append([]PodSummary(nil), rows...), nil
 		}
-		return filterPodRows(rows, func(row PodSummary) bool { return row.Namespace == namespace }), nil
+		return filterPodRows(rows, func(row PodSummary) bool { return row.Ref.Namespace == namespace }), nil
 	default:
 		return nil, fmt.Errorf("unsupported pods scope: %s", scope)
 	}
@@ -543,7 +532,7 @@ func filterPodRows(rows []PodSummary, keep func(PodSummary) bool) []PodSummary {
 // Deployment-scoped window names). Matching only the collapsed owner left every
 // ReplicaSet-scoped window empty: the collapse erases the RS identity.
 func podRowMatchesWorkload(row PodSummary, scope workloadScope) bool {
-	if row.Namespace != scope.namespace {
+	if row.Ref.Namespace != scope.namespace {
 		return false
 	}
 	return ownerTripleMatchesScope(row.DirectOwnerAPIVersion, row.DirectOwnerKind, row.DirectOwnerName, scope) ||
@@ -606,7 +595,7 @@ func formatPodMetricMemory(usage metrics.PodUsage, ok bool, creationMillis int64
 // numbers), renders the no-data marker rather than stale or zero numbers.
 func overlayPodMetrics(rows []PodSummary, podUsage map[string]metrics.PodUsage) {
 	for i := range rows {
-		usage, ok := podUsage[rows[i].Namespace+"/"+rows[i].Name]
+		usage, ok := podUsage[rows[i].Ref.Namespace+"/"+rows[i].Ref.Name]
 		rows[i].CPUUsage = formatPodMetricCPU(usage, ok, rows[i].AgeTimestamp)
 		rows[i].MemUsage = formatPodMetricMemory(usage, ok, rows[i].AgeTimestamp)
 	}
@@ -635,18 +624,18 @@ func podStoreServableNamespace(baseScope string) (string, bool) {
 func podTableQueryAdapter() typedTableQueryAdapter[PodSummary] {
 	return typedTableQueryAdapter[PodSummary]{
 		Key: func(pod PodSummary) string {
-			return fmt.Sprintf("%s/%s", strings.ToLower(pod.Namespace), strings.ToLower(pod.Name))
+			return fmt.Sprintf("%s/%s", strings.ToLower(pod.Ref.Namespace), strings.ToLower(pod.Ref.Name))
 		},
 		AnchorKey: func(_, namespace, name string) string {
 			return fmt.Sprintf("%s/%s", strings.ToLower(namespace), strings.ToLower(name))
 		},
-		Namespace: func(pod PodSummary) string { return pod.Namespace },
+		Namespace: func(pod PodSummary) string { return pod.Ref.Namespace },
 		Kind:      func(PodSummary) string { return podres.Identity.Kind },
 		Facets:    podQueryFacets(),
 		SearchText: func(pod PodSummary) []string {
 			return []string{
-				pod.Name,
-				pod.Namespace,
+				pod.Ref.Name,
+				pod.Ref.Namespace,
 				pod.Status,
 				pod.Ready,
 				pod.OwnerKind,
@@ -676,7 +665,7 @@ func podTableQueryAdapter() typedTableQueryAdapter[PodSummary] {
 		SortValue: func(pod PodSummary, field string) string {
 			switch strings.ToLower(field) {
 			case "namespace":
-				return pod.Namespace
+				return pod.Ref.Namespace
 			case "status":
 				return pod.Status
 			case "ready":
@@ -694,7 +683,7 @@ func podTableQueryAdapter() typedTableQueryAdapter[PodSummary] {
 			case "age":
 				return pod.Age
 			default:
-				return pod.Name
+				return pod.Ref.Name
 			}
 		},
 		NumericSort: func(pod PodSummary, field string) (float64, bool) {
@@ -976,13 +965,6 @@ func convertPodIndexerItems(items []interface{}) []*corev1.Pod {
 		}
 	}
 	return result
-}
-
-func hasForwardablePodPorts(pod *corev1.Pod) bool {
-	if pod == nil {
-		return false
-	}
-	return common.HasForwardableContainerPorts(pod.Spec.Containers)
 }
 
 func parsePodResourceVersion(pod *corev1.Pod) uint64 {

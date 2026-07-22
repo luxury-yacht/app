@@ -87,7 +87,7 @@ func TestServiceSetInformerHubSwapsSyncGate(t *testing.T) {
 	}))
 
 	pending := &fakeInformerHub{} // synced == false: the sync gate stays closed
-	service := NewService(reg, telemetry.NewRecorder(), testClusterMeta()).WithInformerHub(pending)
+	service := NewServiceWithPermissions(reg, telemetry.NewRecorder(), testClusterMeta(), nil).WithInformerHub(pending)
 	service.informerSyncTimeout = time.Second
 
 	done := make(chan error, 1)
@@ -137,7 +137,7 @@ func TestServiceBuildRecordsInformerSyncWait(t *testing.T) {
 
 	recorder := telemetry.NewRecorder()
 	hub := &fakeInformerHub{} // synced == false: the sync gate stays closed
-	service := NewService(reg, recorder, testClusterMeta()).WithInformerHub(hub)
+	service := NewServiceWithPermissions(reg, recorder, testClusterMeta(), nil).WithInformerHub(hub)
 	service.informerSyncTimeout = 2 * time.Second
 
 	done := make(chan error, 1)
@@ -182,7 +182,7 @@ func TestServiceDoesNotCacheNotReadyNamespaceSnapshots(t *testing.T) {
 			}, nil
 		},
 	}))
-	service := NewService(reg, nil, testClusterMeta())
+	service := NewServiceWithPermissions(reg, nil, testClusterMeta(), nil)
 
 	for i := 0; i < 2; i++ {
 		_, err := service.Build(context.Background(), "namespaces", "cluster-a|")
@@ -217,7 +217,7 @@ func TestServiceBuildEmitsSequenceAndChecksum(t *testing.T) {
 	}
 
 	rec := telemetry.NewRecorder()
-	service := NewService(reg, rec, testClusterMeta())
+	service := NewServiceWithPermissions(reg, rec, testClusterMeta(), nil)
 
 	snap, err := service.Build(context.Background(), "demo", "scope-a")
 	if err != nil {
@@ -259,8 +259,8 @@ func TestServiceSourceVersionIncludesEpoch(t *testing.T) {
 		},
 	}))
 
-	serviceA := NewService(reg, nil, testClusterMeta())
-	serviceB := NewService(reg, nil, testClusterMeta())
+	serviceA := NewServiceWithPermissions(reg, nil, testClusterMeta(), nil)
+	serviceB := NewServiceWithPermissions(reg, nil, testClusterMeta(), nil)
 	serviceA.epoch = "epoch-a"
 	serviceB.epoch = "epoch-b"
 
@@ -293,7 +293,7 @@ func TestServiceVersionlessPayloadChangeAdvancesSourceVersion(t *testing.T) {
 		},
 	}))
 
-	service := NewService(reg, nil, testClusterMeta())
+	service := NewServiceWithPermissions(reg, nil, testClusterMeta(), nil)
 	service.cacheTTL = 0
 
 	first, err := service.Build(context.Background(), "object-map", "cluster-a|namespace:default")
@@ -335,7 +335,7 @@ func TestServiceDoesNotCacheMetricSourceDomains(t *testing.T) {
 				},
 			}))
 
-			service := NewService(reg, nil, testClusterMeta())
+			service := NewServiceWithPermissions(reg, nil, testClusterMeta(), nil)
 			first, err := service.Build(context.Background(), domainName, "namespace:default")
 			require.NoError(t, err)
 			second, err := service.Build(context.Background(), domainName, "namespace:default")
@@ -365,7 +365,7 @@ func TestServiceBuildWaitsForInformerSyncBeforeBuilding(t *testing.T) {
 	}
 
 	hub := &fakeInformerHub{}
-	service := NewService(reg, nil, testClusterMeta()).WithInformerHub(hub)
+	service := NewServiceWithPermissions(reg, nil, testClusterMeta(), nil).WithInformerHub(hub)
 	done := make(chan error, 1)
 	go func() {
 		_, err := service.Build(context.Background(), "nodes", "")
@@ -407,7 +407,7 @@ func TestServiceBuildFailsWhenInformerSyncTimesOut(t *testing.T) {
 
 	rec := telemetry.NewRecorder()
 	hub := &fakeInformerHub{}
-	service := NewService(reg, rec, testClusterMeta()).WithInformerHub(hub)
+	service := NewServiceWithPermissions(reg, rec, testClusterMeta(), nil).WithInformerHub(hub)
 	service.informerSyncTimeout = 50 * time.Millisecond
 
 	done := make(chan error, 1)
@@ -463,7 +463,7 @@ func TestServiceBuildGatesOnDeclaredDomainResources(t *testing.T) {
 	hub.setPending("core/pods", true)
 	// Factory-wide flag stays false the whole test: mapped domains must not
 	// consult it.
-	service := NewService(reg, nil, testClusterMeta()).
+	service := NewServiceWithPermissions(reg, nil, testClusterMeta(), nil).
 		WithInformerHub(hub).
 		WithDomainReadiness(map[string][]string{
 			"nodes":   {"core/nodes"},
@@ -500,7 +500,7 @@ func TestServiceBuildUnmappedDomainKeepsFactoryWideGate(t *testing.T) {
 	registerEchoDomain(t, reg, "object-yaml")
 
 	hub := &fakeInformerHub{}
-	service := NewService(reg, nil, testClusterMeta()).
+	service := NewServiceWithPermissions(reg, nil, testClusterMeta(), nil).
 		WithInformerHub(hub).
 		WithDomainReadiness(map[string][]string{"nodes": {"core/nodes"}})
 	service.informerSyncTimeout = 50 * time.Millisecond
@@ -528,7 +528,7 @@ func TestServiceBuildRequiresClusterIdentity(t *testing.T) {
 		t.Fatalf("register failed: %v", err)
 	}
 
-	service := NewService(reg, nil, ClusterMeta{})
+	service := NewServiceWithPermissions(reg, nil, ClusterMeta{}, nil)
 	if _, err := service.Build(context.Background(), "demo", "scope-a"); err == nil {
 		t.Fatalf("expected missing cluster identity error")
 	}
@@ -546,7 +546,7 @@ func TestServiceBuildRecordsFailure(t *testing.T) {
 	}
 
 	rec := telemetry.NewRecorder()
-	service := NewService(reg, rec, testClusterMeta())
+	service := NewServiceWithPermissions(reg, rec, testClusterMeta(), nil)
 
 	if _, err := service.Build(context.Background(), "demo-fail", "scope-b"); err == nil {
 		t.Fatalf("expected build error")
@@ -579,7 +579,7 @@ func TestServiceBuildCachesAndBypasses(t *testing.T) {
 		t.Fatalf("register failed: %v", err)
 	}
 
-	service := NewService(reg, nil, testClusterMeta())
+	service := NewServiceWithPermissions(reg, nil, testClusterMeta(), nil)
 
 	snap1, err := service.Build(context.Background(), "demo-cache", "scope-a")
 	if err != nil {
@@ -635,7 +635,7 @@ func TestServiceInvalidateDomainCacheForcesRebuild(t *testing.T) {
 	register("demo-doorbell")
 	register("demo-other")
 
-	service := NewService(reg, nil, testClusterMeta())
+	service := NewServiceWithPermissions(reg, nil, testClusterMeta(), nil)
 
 	for _, name := range []string{"demo-doorbell", "demo-other"} {
 		if _, err := service.Build(context.Background(), name, "scope-a"); err != nil {
@@ -685,7 +685,7 @@ func TestServiceBuildDoesNotCacheObjectMaintenance(t *testing.T) {
 		t.Fatalf("register failed: %v", err)
 	}
 
-	service := NewService(reg, nil, testClusterMeta())
+	service := NewServiceWithPermissions(reg, nil, testClusterMeta(), nil)
 	snap1, err := service.Build(context.Background(), "object-maintenance", "cluster-a|node:worker-1")
 	if err != nil {
 		t.Fatalf("Build returned error: %v", err)
@@ -716,7 +716,7 @@ func TestServiceBuildDoesNotCacheObjectDetails(t *testing.T) {
 			}, nil
 		},
 	}))
-	service := NewService(reg, nil, testClusterMeta())
+	service := NewServiceWithPermissions(reg, nil, testClusterMeta(), nil)
 
 	_, err := service.Build(context.Background(), "object-details", "cluster-a|default:/v1:Pod:pod-a")
 	require.NoError(t, err)
@@ -756,7 +756,7 @@ func TestServiceBuildDoesNotSingleflightObjectMaintenance(t *testing.T) {
 		t.Fatalf("register failed: %v", err)
 	}
 
-	service := NewService(reg, nil, testClusterMeta())
+	service := NewServiceWithPermissions(reg, nil, testClusterMeta(), nil)
 	ctx := context.Background()
 
 	done := make(chan struct{})
@@ -811,7 +811,7 @@ func TestServiceBuildBypassUsesSeparateSingleflightKey(t *testing.T) {
 		t.Fatalf("register failed: %v", err)
 	}
 
-	service := NewService(reg, nil, testClusterMeta())
+	service := NewServiceWithPermissions(reg, nil, testClusterMeta(), nil)
 	ctx := context.Background()
 
 	done := make(chan struct{})
@@ -867,7 +867,7 @@ func TestServiceBuildSkipsCacheForPartialSnapshots(t *testing.T) {
 			t.Fatalf("register failed: %v", err)
 		}
 
-		service := NewService(reg, nil, testClusterMeta())
+		service := NewServiceWithPermissions(reg, nil, testClusterMeta(), nil)
 		if _, err := service.Build(context.Background(), "demo-partial-"+testCase.name, "scope-a"); err != nil {
 			t.Fatalf("Build returned error: %v", err)
 		}

@@ -17,6 +17,7 @@ import (
 	"k8s.io/client-go/tools/cache"
 
 	"github.com/luxury-yacht/app/backend/internal/config"
+	"github.com/luxury-yacht/app/backend/kind/streamrows"
 	"github.com/luxury-yacht/app/backend/refresh"
 	"github.com/luxury-yacht/app/backend/refresh/domain"
 	"github.com/luxury-yacht/app/backend/resourcemodel"
@@ -36,10 +37,7 @@ type ObjectEventsBuilder struct {
 
 // ObjectEventSummary captures the fields the frontend needs for object events.
 type ObjectEventSummary struct {
-	ClusterMeta
-	Kind                     string                      `json:"kind"`
-	Name                     string                      `json:"name"`
-	UID                      string                      `json:"uid"`
+	Ref                      resourcemodel.ResourceRef   `json:"ref"`
 	ResourceVersion          string                      `json:"resourceVersion"`
 	EventType                string                      `json:"eventType"`
 	Reason                   string                      `json:"reason"`
@@ -54,7 +52,6 @@ type ObjectEventSummary struct {
 	InvolvedObjectUID        string                      `json:"involvedObjectUid"`
 	InvolvedObjectAPIVersion string                      `json:"involvedObjectApiVersion"`
 	InvolvedObject           *resourcemodel.ResourceLink `json:"involvedObject,omitempty"`
-	Namespace                string                      `json:"namespace"`
 }
 
 // ObjectEventsSnapshotPayload contains the events list for the object.
@@ -360,10 +357,7 @@ func convertObjectEvent(meta ClusterMeta, evt corev1.Event) ObjectEventSummary {
 	}
 
 	return ObjectEventSummary{
-		ClusterMeta:              meta,
-		Kind:                     "event",
-		Name:                     evt.Name,
-		UID:                      string(evt.UID),
+		Ref:                      streamrows.NewResourceRef(meta, eventres.Identity, &evt),
 		ResourceVersion:          evt.ResourceVersion,
 		EventType:                facts.EventType,
 		Reason:                   facts.Reason,
@@ -378,7 +372,6 @@ func convertObjectEvent(meta ClusterMeta, evt corev1.Event) ObjectEventSummary {
 		InvolvedObjectUID:        string(evt.InvolvedObject.UID),
 		InvolvedObjectAPIVersion: evt.InvolvedObject.APIVersion,
 		InvolvedObject:           facts.InvolvedObject,
-		Namespace:                evt.Namespace,
 	}
 }
 

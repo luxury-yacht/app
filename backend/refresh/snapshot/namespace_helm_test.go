@@ -20,6 +20,7 @@ import (
 	releasetime "helm.sh/helm/v3/pkg/time"
 
 	"github.com/luxury-yacht/app/backend/internal/config"
+	"github.com/luxury-yacht/app/backend/resourcemodel"
 	"github.com/luxury-yacht/app/backend/testsupport"
 )
 
@@ -126,7 +127,7 @@ func TestNamespaceHelmBuilder(t *testing.T) {
 	require.Len(t, payload.Rows, 1)
 
 	entry := payload.Rows[0]
-	require.Equal(t, "app", entry.Name)
+	require.Equal(t, "app", entry.Ref.Name)
 	require.Equal(t, "nginx-1.2.3", entry.Chart)
 	require.Equal(t, "2.0.0", entry.AppVersion)
 	require.Equal(t, "deployed", entry.Status)
@@ -137,6 +138,18 @@ func TestNamespaceHelmBuilder(t *testing.T) {
 	require.Equal(t, "Deployed successfully", entry.Description)
 	require.NotEmpty(t, entry.Age)
 	require.NotEmpty(t, entry.Updated)
+}
+
+func TestMapHelmReleasesCarriesCanonicalRef(t *testing.T) {
+	releases := []*release.Release{
+		newHelmRelease("app", "default", 2, release.StatusDeployed, time.Now()),
+	}
+	rows, _ := mapHelmReleases(releases, "default", ClusterMeta{ClusterID: "cluster-a"})
+	require.Len(t, rows, 1)
+	require.Equal(t, resourcemodel.ResourceRef{
+		ClusterID: "cluster-a", Group: "helm.sh", Version: "v3", Kind: "HelmRelease",
+		Resource: "releases", Namespace: "default", Name: "app",
+	}, rows[0].Ref)
 }
 
 func TestNamespaceHelmBuilderAllNamespaces(t *testing.T) {
@@ -159,10 +172,10 @@ func TestNamespaceHelmBuilderAllNamespaces(t *testing.T) {
 	require.Len(t, payload.Rows, 2)
 
 	// Sorted namespace-then-name.
-	require.Equal(t, "app-default", payload.Rows[0].Name)
-	require.Equal(t, "default", payload.Rows[0].Namespace)
-	require.Equal(t, "app-staging", payload.Rows[1].Name)
-	require.Equal(t, "staging", payload.Rows[1].Namespace)
+	require.Equal(t, "app-default", payload.Rows[0].Ref.Name)
+	require.Equal(t, "default", payload.Rows[0].Ref.Namespace)
+	require.Equal(t, "app-staging", payload.Rows[1].Ref.Name)
+	require.Equal(t, "staging", payload.Rows[1].Ref.Namespace)
 	require.Equal(t, "pending-upgrade", payload.Rows[1].Status)
 }
 
@@ -204,7 +217,7 @@ func TestNamespaceHelmBuilderQueryPage(t *testing.T) {
 	payload, ok := snapshot.Payload.(NamespaceHelmSnapshot)
 	require.True(t, ok)
 	require.Len(t, payload.Rows, 1)
-	require.Equal(t, "alpha", payload.Rows[0].Name)
+	require.Equal(t, "alpha", payload.Rows[0].Ref.Name)
 }
 
 func TestNamespaceHelmBuilderSkipsCorruptLatestRecord(t *testing.T) {
@@ -221,7 +234,7 @@ func TestNamespaceHelmBuilderSkipsCorruptLatestRecord(t *testing.T) {
 	payload, ok := snapshot.Payload.(NamespaceHelmSnapshot)
 	require.True(t, ok)
 	require.Len(t, payload.Rows, 1)
-	require.Equal(t, "healthy", payload.Rows[0].Name)
+	require.Equal(t, "healthy", payload.Rows[0].Ref.Name)
 }
 
 // See TestClusterEventsBuilderWaitsForCacheSync: an unsynced secrets informer

@@ -200,17 +200,6 @@ func (a *App) addResponseCacheInvalidationHandler(
 	informer.AddEventHandler(handler)
 }
 
-// invalidateResponseCacheForObject clears cached detail/YAML/helm data for the given resource.
-func (a *App) invalidateResponseCacheForObject(selectionKey string, identity resourcekind.Identity, obj interface{}) {
-	a.invalidateResponseCacheForObjectEvent(
-		selectionKey,
-		identity,
-		obj,
-		responseCacheInvalidationUpdate,
-		responseCacheInvalidationGuard{},
-	)
-}
-
 // invalidateResponseCacheForObjectEvent clears cached detail/YAML/helm data for the given event.
 func (a *App) invalidateResponseCacheForObjectEvent(
 	selectionKey string,
@@ -276,16 +265,7 @@ func (s ingestResponseCacheSink) invalidate(row interface{}) {
 	if !ok {
 		return
 	}
-	s.app.invalidateResponseCacheForResource(s.selectionKey, resourcemodel.NewResourceRef(
-		summary.ClusterID,
-		summary.Group,
-		summary.Version,
-		summary.Kind,
-		summary.Resource,
-		summary.Namespace,
-		summary.Name,
-		summary.UID,
-	))
+	s.app.invalidateResponseCacheForResource(s.selectionKey, summary.Ref)
 }
 
 // invalidateResponseCacheForResource clears cached detail/YAML entries for a resource key.

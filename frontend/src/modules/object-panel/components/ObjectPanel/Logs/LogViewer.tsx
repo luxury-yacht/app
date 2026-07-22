@@ -66,9 +66,10 @@ import {
   formatObjPanelLogsApiTimestamp,
 } from '@/utils/objPanelLogsApiTimestampFormat';
 import { INACTIVE_SCOPE } from '../constants';
-import { containsAnsi, parseAnsiTextSegments, stripAnsi } from './ansi';
+import { containsAnsi } from './ansi';
 import { setContainerLogsStreamScopeParams } from './containerLogsStreamScopeParamsCache';
 import { useAnchoredLogEntries } from './hooks/useAnchoredLogEntries';
+import { useLogMessageRenderer } from './hooks/useLogMessageRenderer';
 import { isLogScrollAtBottom, useLogScrollRestoration } from './hooks/useLogScrollRestoration';
 import { useTerminalTheme } from './hooks/useTerminalTheme';
 import { buildCsv } from './logExport';
@@ -98,6 +99,11 @@ import {
   type ParsedLogEntry,
 } from './logViewerReducer';
 import ParsedLogTable from './ParsedLogTable';
+import {
+  buildParsedLogDataColumns,
+  PARSED_TIMESTAMP_AUTOSIZE_MAX_WIDTH,
+  PARSED_TIMESTAMP_MIN_WIDTH,
+} from './parsedLogColumns';
 import {
   deriveParsedLogFieldKeys,
   formatParsedValue,
@@ -131,11 +137,7 @@ interface LogViewerProps {
 }
 
 const CONTAINER_LOGS_DOMAIN = 'container-logs' as const;
-const PARSED_COLUMN_MIN_WIDTH = 50;
-const PARSED_TIMESTAMP_MIN_WIDTH = 80;
 const PARSED_POD_COLUMN_MIN_WIDTH = 80;
-const PARSED_COLUMN_AUTOSIZE_MAX_WIDTH = 520;
-const PARSED_TIMESTAMP_AUTOSIZE_MAX_WIDTH = 280;
 const PARSED_METADATA_AUTOSIZE_MAX_WIDTH = 320;
 const RAW_LOG_VIRTUALIZATION_THRESHOLD = 120;
 const RAW_LOG_VIRTUALIZATION_OVERSCAN = 10;
@@ -1429,77 +1431,12 @@ const LogViewerInner: React.FC<LogViewerProps> = ({
     dispatch({ type: 'SET_PARSED_LOGS', payload: parsedCandidates });
   }, [filteredEntries.length, isParsedView, parsedCandidates]);
 
-  const renderHighlightedMessage = useCallback(
-    (text: string, keyPrefix: string) => {
-      if (!text) {
-        return '\u00A0';
-      }
-      if (!highlightRegex) {
-        return text;
-      }
-
-      const matches = Array.from(text.matchAll(highlightRegex));
-      if (matches.length === 0) {
-        return text;
-      }
-
-      const nodes: React.ReactNode[] = [];
-      let lastIndex = 0;
-
-      matches.forEach((match, index) => {
-        const matchIndex = match.index ?? -1;
-        const value = match[0] ?? '';
-        if (matchIndex < 0 || value.length === 0) {
-          return;
-        }
-        if (matchIndex > lastIndex) {
-          nodes.push(text.slice(lastIndex, matchIndex));
-        }
-        nodes.push(
-          <mark key={`${keyPrefix}-${matchIndex}-${index}`} className="log-viewer-highlight">
-            {value}
-          </mark>
-        );
-        lastIndex = matchIndex + value.length;
-      });
-
-      if (nodes.length === 0) {
-        return text;
-      }
-      if (lastIndex < text.length) {
-        nodes.push(text.slice(lastIndex));
-      }
-      return nodes;
-    },
-    [highlightRegex]
-  );
-
-  const renderMessageContent = useCallback(
-    (text: string, keyPrefix: string) => {
-      const normalizedText = showAnsiColors ? text : stripAnsi(text);
-      if (!showAnsiColors || !containsAnsi(text)) {
-        return renderHighlightedMessage(normalizedText, keyPrefix);
-      }
-
-      const segments = parseAnsiTextSegments(text, terminalTheme);
-      if (segments.length === 0) {
-        return renderHighlightedMessage(stripAnsi(text), keyPrefix);
-      }
-
-      return segments.map((segment, index) => {
-        const content = renderHighlightedMessage(segment.text, `${keyPrefix}-${index}`);
-        if (Object.keys(segment.style).length === 0) {
-          return <React.Fragment key={`${keyPrefix}-plain-${index}`}>{content}</React.Fragment>;
-        }
-        return (
-          <span key={`${keyPrefix}-ansi-${index}`} style={segment.style}>
-            {content}
-          </span>
-        );
-      });
-    },
-    [renderHighlightedMessage, showAnsiColors, terminalTheme]
-  );
+  const renderMessageContent = useLogMessageRenderer({
+    highlightRegex,
+    showAnsiColors,
+    terminalTheme,
+    plainSegmentWrapper: 'fragment',
+  });
 
   const renderRawLogRow = useCallback(
     (row: RenderedLogRow) => {
@@ -1841,50 +1778,11 @@ const LogViewerInner: React.FC<LogViewerProps> = ({
       },
     });
 
-    // Promote well-known timestamp and level fields to appear first
-    const timestampCandidates = ['timestamp', 'time', 'ts'];
-    const jsonTimestampKey = derivedFieldKeys.find((key) => timestampCandidates.includes(key));
-    if (jsonTimestampKey) {
-      columns.push({
-        key: jsonTimestampKey,
-        header: jsonTimestampKey,
-        sortable: false,
-        minWidth: PARSED_TIMESTAMP_MIN_WIDTH,
-        autoSizeMaxWidth: PARSED_TIMESTAMP_AUTOSIZE_MAX_WIDTH,
-        render: (item: ParsedLogEntry) => formatParsedValue(item.data[jsonTimestampKey]),
-      });
-    }
-
-    const levelCandidates = ['level', 'severity', 'log_level'];
-    const jsonLevelKey = derivedFieldKeys.find((key) => levelCandidates.includes(key));
-    if (jsonLevelKey) {
-      columns.push({
-        key: jsonLevelKey,
-        header: jsonLevelKey,
-        sortable: false,
-        minWidth: PARSED_COLUMN_MIN_WIDTH,
-        autoSizeMaxWidth: PARSED_COLUMN_AUTOSIZE_MAX_WIDTH,
-        render: (item: ParsedLogEntry) => formatParsedValue(item.data[jsonLevelKey]),
-      });
-    }
-
-    // Add remaining user-data columns
-    const addedKeys = new Set(columns.map((col) => col.key));
-    derivedFieldKeys.forEach((key) => {
-      if (addedKeys.has(key)) {
-        return;
-      }
-      columns.push({
-        key,
-        header: key,
-        sortable: false,
-        minWidth: PARSED_COLUMN_MIN_WIDTH,
-        autoSizeMaxWidth: PARSED_COLUMN_AUTOSIZE_MAX_WIDTH,
-        render: (item: ParsedLogEntry) => (
-          <div className="parsed-log-cell">{formatParsedValue(item.data[key])}</div>
-        ),
-      });
-    });
+    // Promote well-known timestamp and level fields to appear first, then add
+    // the remaining user-data columns (shared with the node-logs tab).
+    columns.push(
+      ...buildParsedLogDataColumns(derivedFieldKeys, new Set(columns.map((col) => col.key)))
+    );
 
     return columns;
   }, [

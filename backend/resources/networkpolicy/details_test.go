@@ -120,59 +120,6 @@ func TestNetworkPolicyDetailsWithEgressAndIPBlock(t *testing.T) {
 	require.Contains(t, detail.Details, "0 ingress, 1 egress rules")
 }
 
-func TestNetworkPoliciesAggregatesMultipleResults(t *testing.T) {
-	older := metav1.NewTime(time.Now().Add(-2 * time.Hour))
-	allowAll := &networkingv1.NetworkPolicy{
-		ObjectMeta: metav1.ObjectMeta{
-			Name:              "allow-all",
-			Namespace:         "default",
-			CreationTimestamp: older,
-		},
-		Spec: networkingv1.NetworkPolicySpec{
-			PodSelector: metav1.LabelSelector{},
-			PolicyTypes: []networkingv1.PolicyType{networkingv1.PolicyTypeIngress},
-		},
-	}
-	restrict := &networkingv1.NetworkPolicy{
-		ObjectMeta: metav1.ObjectMeta{
-			Name:      "restrict-db",
-			Namespace: "default",
-		},
-		Spec: networkingv1.NetworkPolicySpec{
-			PodSelector: metav1.LabelSelector{MatchLabels: map[string]string{"tier": "db"}},
-			PolicyTypes: []networkingv1.PolicyType{networkingv1.PolicyTypeEgress},
-			Egress: []networkingv1.NetworkPolicyEgressRule{{
-				To: []networkingv1.NetworkPolicyPeer{{
-					NamespaceSelector: &metav1.LabelSelector{MatchLabels: map[string]string{"env": "prod"}},
-				}},
-			}},
-		},
-	}
-
-	client := fake.NewClientset(allowAll, restrict)
-	service := newService(t, client)
-
-	allPolicies, err := service.NetworkPolicies("default")
-	require.NoError(t, err)
-	require.Len(t, allPolicies, 2)
-	require.Equal(t, "NetworkPolicy", allPolicies[0].Kind)
-	require.Contains(t, allPolicies[0].Details, "All pods")
-	require.Contains(t, allPolicies[1].Details, "1 egress rules")
-}
-
-func TestNetworkPoliciesErrorWhenListFails(t *testing.T) {
-	client := fake.NewClientset()
-	client.PrependReactor("list", "networkpolicies", func(action k8stesting.Action) (bool, runtime.Object, error) {
-		return true, nil, fmt.Errorf("api down")
-	})
-
-	service := newService(t, client)
-
-	_, err := service.NetworkPolicies("default")
-	require.Error(t, err)
-	require.Contains(t, err.Error(), "failed to list network policies")
-}
-
 func TestNetworkPolicyErrorWhenGetFails(t *testing.T) {
 	client := fake.NewClientset()
 	client.PrependReactor("get", "networkpolicies", func(action k8stesting.Action) (bool, runtime.Object, error) {

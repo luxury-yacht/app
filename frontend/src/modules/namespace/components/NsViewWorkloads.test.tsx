@@ -12,8 +12,37 @@ import { act } from 'react';
 import * as ReactDOM from 'react-dom/client';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import type { UseTableSortOptions } from '@/hooks/useTableSort';
+import { makeResourceRef } from '@/test-utils/makeResourceRef';
 import { requireReactElement } from '@/test-utils/requireReactElement';
 import { requireValue } from '@/test-utils/requireValue';
+
+const makeWorkloadRef = (kind: string, name: string, namespace: string, clusterId: string) => {
+  const batch = kind === 'CronJob' || kind === 'Job';
+  return makeResourceRef({
+    clusterId,
+    group: batch ? 'batch' : 'apps',
+    kind,
+    resource: `${kind.toLowerCase()}s`,
+    namespace,
+    name,
+  });
+};
+
+const makeWorkload = (
+  kind: string,
+  name: string,
+  namespace: string,
+  clusterId: string,
+  overrides: Partial<Omit<WorkloadData, 'ref'>> = {}
+): WorkloadData => ({
+  ref: makeWorkloadRef(kind, name, namespace, clusterId),
+  status: 'Running',
+  ready: '1/1',
+  restarts: 0,
+  age: '5m',
+  portForwardAvailable: false,
+  ...overrides,
+});
 
 type CapturedGridTableProps = GridTableProps<WorkloadData> & {
   getCustomContextMenuItems: NonNullable<GridTableProps<WorkloadData>['getCustomContextMenuItems']>;
@@ -124,6 +153,7 @@ vi.mock('@modules/kubernetes/config/KubeconfigContext', () => ({
   useKubeconfig: () => ({
     selectedKubeconfig: 'path:context',
     selectedClusterId: 'path:context',
+    selectedClusterName: 'alpha',
     selectedClusterIds: ['path:context', 'other:context'],
   }),
 }));
@@ -310,14 +340,7 @@ describe('NsViewWorkloads', () => {
   });
 
   it('selects a workload row by populating the Pods table filters without opening the object', async () => {
-    const workload: WorkloadData = {
-      kind: 'Deployment',
-      name: 'api',
-      namespace: 'team-a',
-      status: 'Running',
-      clusterId: 'path:context',
-      clusterName: 'ctx',
-    };
+    const workload = makeWorkload('Deployment', 'api', 'team-a', 'path:context');
     requestRefreshDomainStateMock.mockResolvedValue({
       status: 'executed',
       data: {
@@ -415,14 +438,7 @@ describe('NsViewWorkloads', () => {
   });
 
   it('clears a workload-owned Pods filter when the namespace scope changes', async () => {
-    const workload: WorkloadData = {
-      kind: 'Deployment',
-      name: 'api',
-      namespace: 'team-a',
-      status: 'Running',
-      clusterId: 'path:context',
-      clusterName: 'ctx',
-    };
+    const workload = makeWorkload('Deployment', 'api', 'team-a', 'path:context');
     requestRefreshDomainStateMock.mockResolvedValue({
       status: 'executed',
       data: {
@@ -465,17 +481,7 @@ describe('NsViewWorkloads', () => {
   });
 
   it('issues a namespace-scoped typed query for a single namespace and renders the query rows', async () => {
-    const workload = {
-      kind: 'Deployment',
-      name: 'api',
-      namespace: 'team-a',
-      status: 'Running',
-      ready: '1/1',
-      restarts: 0,
-      age: '5m',
-      clusterId: 'alpha:ctx',
-      clusterName: 'alpha',
-    };
+    const workload = makeWorkload('Deployment', 'api', 'team-a', 'alpha:ctx');
 
     // Single-namespace workload tables are query-backed now (not local-complete): the table
     // renders the typed query rows scoped to the namespace, not the local `data` prop. Feed the
@@ -849,13 +855,7 @@ describe('NsViewWorkloads', () => {
   });
 
   it('passes rowIdentity into useTableSort for workload reuse', async () => {
-    const workload: WorkloadData = {
-      kind: 'Deployment',
-      name: 'api',
-      namespace: 'team-a',
-      clusterId: 'alpha:ctx',
-      status: 'Running',
-    };
+    const workload = makeWorkload('Deployment', 'api', 'team-a', 'alpha:ctx');
 
     await act(async () => {
       root.render(<NsViewWorkloads namespace="team-a" metrics={null} />);
@@ -871,18 +871,12 @@ describe('NsViewWorkloads', () => {
   });
 
   it('passes numeric Ready, CPU, and memory sort values into useTableSort', async () => {
-    const workload: WorkloadData = {
-      kind: 'Deployment',
-      name: 'api',
-      namespace: 'team-a',
-      status: 'Running',
+    const workload = makeWorkload('Deployment', 'api', 'team-a', 'alpha:ctx', {
       ready: '1/1',
       restarts: 0,
       cpuUsage: '10m',
       memUsage: '20Mi',
-      clusterId: 'alpha:ctx',
-      clusterName: 'alpha',
-    };
+    });
 
     await act(async () => {
       root.render(<NsViewWorkloads namespace="team-a" metrics={null} />);
@@ -907,19 +901,10 @@ describe('NsViewWorkloads', () => {
   });
 
   it('routes workload clicks through the object panel with cluster metadata', async () => {
-    const workload = {
-      kind: 'Deployment',
-      name: 'api',
-      namespace: 'team-a',
-      status: 'Running',
-      ready: '1/1',
-      restarts: 0,
+    const workload = makeWorkload('Deployment', 'api', 'team-a', 'alpha:ctx', {
       cpuUsage: '10m',
       memUsage: '20Mi',
-      age: '5m',
-      clusterId: 'alpha:ctx',
-      clusterName: 'alpha',
-    };
+    });
 
     // Query-backed single-namespace table: feed the typed query the row so it renders in the table.
     requestRefreshDomainStateMock.mockResolvedValue({
@@ -969,18 +954,9 @@ describe('NsViewWorkloads', () => {
   });
 
   it('disables port forward in the context menu when the workload exposes no forwardable ports', async () => {
-    const workload = {
-      kind: 'Deployment',
-      name: 'api',
-      namespace: 'default',
-      status: 'Running',
-      ready: '1/1',
-      restarts: 0,
-      age: '5m',
+    const workload = makeWorkload('Deployment', 'api', 'default', 'test:ctx', {
       portForwardAvailable: false,
-      clusterId: 'test:ctx',
-      clusterName: 'test',
-    };
+    });
 
     // Query-backed single-namespace table: feed the typed query the row so it renders in the table.
     requestRefreshDomainStateMock.mockResolvedValue({
@@ -1016,17 +992,10 @@ describe('NsViewWorkloads', () => {
   });
 
   describe('CronJob context menu', () => {
-    const cronjob = {
-      kind: 'CronJob',
-      name: 'backup',
-      namespace: 'default',
+    const cronjob = makeWorkload('CronJob', 'backup', 'default', 'test:ctx', {
       status: 'Idle',
       ready: '0',
-      restarts: 0,
-      age: '5m',
-      clusterId: 'test:ctx',
-      clusterName: 'test',
-    };
+    });
 
     it('includes Trigger Now and Suspend items for CronJob', async () => {
       await act(async () => {
@@ -1078,17 +1047,7 @@ describe('NsViewWorkloads', () => {
     });
 
     it('does not include CronJob actions for Deployments', async () => {
-      const deployment = {
-        kind: 'Deployment',
-        name: 'api',
-        namespace: 'default',
-        status: 'Running',
-        ready: '1/1',
-        restarts: 0,
-        age: '5m',
-        clusterId: 'test:ctx',
-        clusterName: 'test',
-      };
+      const deployment = makeWorkload('Deployment', 'api', 'default', 'test:ctx');
 
       await act(async () => {
         root.render(<NsViewWorkloads namespace="default" metrics={null} />);
@@ -1107,9 +1066,9 @@ describe('NsViewWorkloads', () => {
 
     it('does not include Scale for CronJobs, Jobs, or DaemonSets', async () => {
       const workloads = [
-        { kind: 'CronJob', name: 'backup', namespace: 'default', status: 'Idle' },
-        { kind: 'Job', name: 'migrate', namespace: 'default', status: 'Running' },
-        { kind: 'DaemonSet', name: 'agent', namespace: 'default', status: 'Running' },
+        makeWorkload('CronJob', 'backup', 'default', 'test:ctx', { status: 'Idle' }),
+        makeWorkload('Job', 'migrate', 'default', 'test:ctx'),
+        makeWorkload('DaemonSet', 'agent', 'default', 'test:ctx'),
       ];
 
       await act(async () => {
@@ -1120,7 +1079,7 @@ describe('NsViewWorkloads', () => {
       const props = gridTablePropsRef.current;
 
       for (const workload of workloads) {
-        const menuItems = props.getCustomContextMenuItems(workload as WorkloadData, 'name');
+        const menuItems = props.getCustomContextMenuItems(workload, 'name');
         const scaleItem = menuItems.find((item) => item.label === 'Scale');
         expect(scaleItem).toBeUndefined();
       }
@@ -1128,20 +1087,8 @@ describe('NsViewWorkloads', () => {
 
     it('includes Scale for Deployments and StatefulSets', async () => {
       const workloads = [
-        {
-          kind: 'Deployment',
-          name: 'api',
-          namespace: 'default',
-          status: 'Running',
-          hpaManaged: false,
-        },
-        {
-          kind: 'StatefulSet',
-          name: 'db',
-          namespace: 'default',
-          status: 'Running',
-          hpaManaged: false,
-        },
+        makeWorkload('Deployment', 'api', 'default', 'test:ctx', { hpaManaged: false }),
+        makeWorkload('StatefulSet', 'db', 'default', 'test:ctx', { hpaManaged: false }),
       ];
 
       await act(async () => {
@@ -1152,7 +1099,7 @@ describe('NsViewWorkloads', () => {
       const props = gridTablePropsRef.current;
 
       for (const workload of workloads) {
-        const menuItems = props.getCustomContextMenuItems(workload as WorkloadData, 'name');
+        const menuItems = props.getCustomContextMenuItems(workload, 'name');
         const scaleItem = menuItems.find((item) => item.label === 'Scale');
         expect(scaleItem).toBeDefined();
       }

@@ -34,18 +34,6 @@ func (s *Service) BackendTLSPolicy(namespace, name string) (*BackendTLSPolicyDet
 		}, s.buildDetails)
 }
 
-// BackendTLSPolicies lists BackendTLSPolicy detail payloads.
-func (s *Service) BackendTLSPolicies(namespace string) ([]*BackendTLSPolicyDetails, error) {
-	return gatewayapi.ListResources(s.deps, "BackendTLSPolicy", "backend tls policies",
-		func() ([]gatewayv1.BackendTLSPolicy, error) {
-			list, err := s.deps.GatewayClient.GatewayV1().BackendTLSPolicies(namespace).List(s.deps.Context, metav1.ListOptions{})
-			if err != nil {
-				return nil, err
-			}
-			return list.Items, nil
-		}, s.buildDetails)
-}
-
 func (s *Service) buildDetails(item *gatewayv1.BackendTLSPolicy) *BackendTLSPolicyDetails {
 	facts := BuildFacts(s.deps.ClusterID, item)
 	detail := &BackendTLSPolicyDetails{

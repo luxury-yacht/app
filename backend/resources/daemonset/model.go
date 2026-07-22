@@ -19,7 +19,7 @@ import (
 // status, and callers needing facts use BuildFacts.
 func BuildResourceModel(clusterID string, daemonSet *appsv1.DaemonSet) resourcemodel.ResourceModel {
 	status := BuildStatusPresentation(daemonSet)
-	return resourcemodel.WorkloadResourceModel(clusterID, "apps", "v1", "DaemonSet", "daemonsets", daemonSet.ObjectMeta, status, resourcemodel.ResourceFacts{})
+	return resourcemodel.KubernetesResourceModel(clusterID, "apps", "v1", "DaemonSet", "daemonsets", resourcemodel.ResourceScopeNamespaced, daemonSet.ObjectMeta, status, resourcemodel.ResourceFacts{})
 }
 
 // BuildFacts extracts the DaemonSet facts from the raw object.
@@ -81,14 +81,14 @@ func BuildStatusPresentation(daemonSet *appsv1.DaemonSet) resourcemodel.Resource
 	facts := BuildFacts(daemonSet)
 	signals := resourcemodel.WorkloadReplicaSignals(facts.WorkloadCommonFacts)
 	signals = append(signals, statusSignals(daemonSet)...)
-	lifecycle := resourcemodel.WorkloadLifecycle(daemonSet.ObjectMeta)
-	if status, ok := resourcemodel.DeletingWorkloadStatus(daemonSet.ObjectMeta, resourcemodel.ReplicaState(facts.WorkloadCommonFacts), signals, lifecycle); ok {
+	lifecycle := resourcemodel.ObjectLifecycle(daemonSet.ObjectMeta)
+	if status, ok := resourcemodel.DeletingObjectStatus(daemonSet.ObjectMeta, resourcemodel.ReplicaState(facts.WorkloadCommonFacts), signals, lifecycle); ok {
 		return status
 	}
 	// DaemonSets derive their desired count from eligible nodes; they are not
 	// scaled through a replica count like Deployments and StatefulSets.
 	if facts.DesiredReplicas == 0 {
-		return resourcemodel.WorkloadSourceStatus("No eligible nodes", resourcemodel.ReplicaState(facts.WorkloadCommonFacts), "NoEligibleNodes", "", "warning", signals, lifecycle)
+		return resourcemodel.ObjectSourceStatus("No eligible nodes", resourcemodel.ReplicaState(facts.WorkloadCommonFacts), "NoEligibleNodes", "", "warning", signals, lifecycle)
 	}
 	return resourcemodel.ReplicaStatusPresentation(facts.WorkloadCommonFacts, signals, lifecycle)
 }

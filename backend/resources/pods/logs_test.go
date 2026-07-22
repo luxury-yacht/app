@@ -12,7 +12,6 @@ import (
 	"errors"
 	"fmt"
 	"io"
-	"sort"
 	"strings"
 	"testing"
 
@@ -123,100 +122,6 @@ func TestPodContainersPropagatesError(t *testing.T) {
 	require.Contains(t, err.Error(), "failed to get pod")
 }
 
-func TestPodsBySelectorPropagatesError(t *testing.T) {
-	client := fake.NewClientset()
-	client.PrependReactor("list", "pods", func(action k8stesting.Action) (bool, runtime.Object, error) {
-		return true, nil, fmt.Errorf("selector failure")
-	})
-
-	service := NewService(common.Dependencies{
-		Context:          context.Background(),
-		KubernetesClient: client,
-	})
-
-	_, err := service.podsBySelector("default", "app=demo")
-	require.Error(t, err)
-	require.Contains(t, err.Error(), "selector failure")
-}
-
-func TestPodsBySelectorReturnsMatches(t *testing.T) {
-	podA := &corev1.Pod{ObjectMeta: metav1.ObjectMeta{Name: "pod-a", Namespace: "default", Labels: map[string]string{"app": "demo"}}}
-	podB := &corev1.Pod{ObjectMeta: metav1.ObjectMeta{Name: "pod-b", Namespace: "default", Labels: map[string]string{"app": "other"}}}
-	client := fake.NewClientset(podA, podB)
-
-	service := NewService(common.Dependencies{
-		Context:          context.Background(),
-		KubernetesClient: client,
-	})
-
-	pods, err := service.podsBySelector("default", "app=demo")
-	require.NoError(t, err)
-	require.Equal(t, []string{"pod-a"}, pods)
-}
-
-func TestPodsForCronJobAggregatesPods(t *testing.T) {
-	owner := metav1.OwnerReference{Kind: "CronJob", Name: "nightly", Controller: ptrBool(true)}
-	jobOne := &batchv1.Job{
-		ObjectMeta: metav1.ObjectMeta{Name: "nightly-1", Namespace: "default", OwnerReferences: []metav1.OwnerReference{owner}},
-	}
-	jobTwo := &batchv1.Job{
-		ObjectMeta: metav1.ObjectMeta{Name: "nightly-2", Namespace: "default", OwnerReferences: []metav1.OwnerReference{owner}},
-	}
-
-	podA := &corev1.Pod{ObjectMeta: metav1.ObjectMeta{Name: "pod-a", Namespace: "default", Labels: map[string]string{"job-name": "nightly-1"}}}
-	podB := &corev1.Pod{ObjectMeta: metav1.ObjectMeta{Name: "pod-b", Namespace: "default", Labels: map[string]string{"job-name": "nightly-2"}}}
-
-	client := fake.NewClientset(jobOne, jobTwo, podA, podB)
-	service := NewService(common.Dependencies{
-		Context:          context.Background(),
-		KubernetesClient: client,
-	})
-
-	pods, err := service.podsForCronJob("default", "nightly")
-	require.NoError(t, err)
-	require.ElementsMatch(t, []string{"pod-a", "pod-b"}, pods)
-}
-
-func TestPodsForCronJobContinuesOnPodListError(t *testing.T) {
-	owner := metav1.OwnerReference{Kind: "CronJob", Name: "nightly", Controller: ptrBool(true)}
-	jobOne := &batchv1.Job{ObjectMeta: metav1.ObjectMeta{Name: "nightly-1", Namespace: "default", OwnerReferences: []metav1.OwnerReference{owner}}}
-	jobTwo := &batchv1.Job{ObjectMeta: metav1.ObjectMeta{Name: "nightly-2", Namespace: "default", OwnerReferences: []metav1.OwnerReference{owner}}}
-	podB := &corev1.Pod{ObjectMeta: metav1.ObjectMeta{Name: "pod-b", Namespace: "default", Labels: map[string]string{"job-name": "nightly-2"}}}
-
-	client := fake.NewClientset(jobOne, jobTwo, podB)
-	var calls int
-	client.PrependReactor("list", "pods", func(action k8stesting.Action) (bool, runtime.Object, error) {
-		calls++
-		if calls == 1 {
-			return true, nil, fmt.Errorf("pods unavailable")
-		}
-		return false, nil, nil
-	})
-
-	service := NewService(common.Dependencies{
-		Context:          context.Background(),
-		Logger:           applog.Noop,
-		KubernetesClient: client,
-	})
-
-	pods, err := service.podsForCronJob("default", "nightly")
-	require.NoError(t, err)
-	require.Equal(t, []string{"pod-b"}, pods)
-}
-
-func TestFetchContainerLogsForPodPropagatesGetError(t *testing.T) {
-	client := fake.NewClientset()
-	service := NewService(common.Dependencies{
-		Context:          context.Background(),
-		Logger:           applog.Noop,
-		KubernetesClient: client,
-	})
-
-	_, err := service.fetchContainerLogsForPod("default", "pod", "", 10, false, 0, containerlogs.LineFilter{})
-	require.Error(t, err)
-	require.Contains(t, err.Error(), "failed to get pod")
-}
-
 func TestPodContainersSuccess(t *testing.T) {
 	pod := &corev1.Pod{
 		ObjectMeta: metav1.ObjectMeta{Name: "demo", Namespace: "default"},
@@ -306,125 +211,78 @@ func TestContainerLogsScopeContainersWorkloadReturnsUniqueDisplayNames(t *testin
 	require.Equal(t, []string{"app", "init-a (init)", "other", "sidecar"}, containers)
 }
 
-func TestResolveTargetPodsDeployment(t *testing.T) {
-	deployment := &appsv1.Deployment{
-		ObjectMeta: metav1.ObjectMeta{Name: "web", Namespace: "default"},
-		Spec: appsv1.DeploymentSpec{
-			Selector: &metav1.LabelSelector{MatchLabels: map[string]string{"app": "web"}},
-		},
+func TestResolveTargetPodObjectsSupportsWorkloadKinds(t *testing.T) {
+	rs := &appsv1.ReplicaSet{
+		ObjectMeta: metav1.ObjectMeta{Name: "rs", Namespace: "default"},
+		Spec:       appsv1.ReplicaSetSpec{Selector: &metav1.LabelSelector{MatchLabels: map[string]string{"app": "rs"}}},
 	}
-	pod := &corev1.Pod{ObjectMeta: metav1.ObjectMeta{Name: "web-pod", Namespace: "default", Labels: map[string]string{"app": "web"}}}
-	client := fake.NewClientset(deployment, pod)
+	ds := &appsv1.DaemonSet{
+		ObjectMeta: metav1.ObjectMeta{Name: "ds", Namespace: "default"},
+		Spec:       appsv1.DaemonSetSpec{Selector: &metav1.LabelSelector{MatchLabels: map[string]string{"app": "ds"}}},
+	}
+	sts := &appsv1.StatefulSet{
+		ObjectMeta: metav1.ObjectMeta{Name: "sts", Namespace: "default"},
+		Spec:       appsv1.StatefulSetSpec{Selector: &metav1.LabelSelector{MatchLabels: map[string]string{"app": "sts"}}},
+	}
+	objects := []runtime.Object{
+		rs,
+		ds,
+		sts,
+		&batchv1.Job{ObjectMeta: metav1.ObjectMeta{Name: "job", Namespace: "default"}},
+		&corev1.Pod{ObjectMeta: metav1.ObjectMeta{Name: "rs-pod", Namespace: "default", Labels: map[string]string{"app": "rs"}}},
+		&corev1.Pod{ObjectMeta: metav1.ObjectMeta{Name: "ds-pod", Namespace: "default", Labels: map[string]string{"app": "ds"}}},
+		&corev1.Pod{ObjectMeta: metav1.ObjectMeta{Name: "sts-0", Namespace: "default", Labels: map[string]string{"app": "sts"}}},
+		&corev1.Pod{ObjectMeta: metav1.ObjectMeta{Name: "job-pod", Namespace: "default", Labels: map[string]string{"job-name": "job"}}},
+	}
+	service := NewService(common.Dependencies{Context: context.Background(), KubernetesClient: fake.NewClientset(objects...)})
 
-	service := NewService(common.Dependencies{
-		Context:          context.Background(),
-		KubernetesClient: client,
-	})
-
-	pods, err := service.resolveTargetPods(types.ContainerLogsFetchRequest{
-		Scope: workloadLogScope("default", "apps", "v1", "deployment", "web"),
-	})
-	require.NoError(t, err)
-	require.Equal(t, []string{"web-pod"}, pods)
+	for _, tc := range []struct {
+		group, kind, name, want string
+	}{
+		{group: "apps", kind: "replicaset", name: "rs", want: "rs-pod"},
+		{group: "apps", kind: "daemonset", name: "ds", want: "ds-pod"},
+		{group: "apps", kind: "statefulset", name: "sts", want: "sts-0"},
+		{group: "batch", kind: "job", name: "job", want: "job-pod"},
+	} {
+		t.Run(tc.kind, func(t *testing.T) {
+			pods, err := service.resolveTargetPodObjects(
+				types.ContainerLogsFetchRequest{Scope: workloadLogScope("default", tc.group, "v1", tc.kind, tc.name)},
+				containerlogs.PodNameFilter{},
+				containerlogs.ScopeSelection{},
+			)
+			require.NoError(t, err)
+			require.Len(t, pods, 1)
+			require.Equal(t, tc.want, pods[0].Name)
+		})
+	}
 }
 
-func TestResolveTargetPodsAppliesPodFilter(t *testing.T) {
-	deployment := &appsv1.Deployment{
-		ObjectMeta: metav1.ObjectMeta{Name: "web", Namespace: "default"},
-		Spec: appsv1.DeploymentSpec{
-			Selector: &metav1.LabelSelector{MatchLabels: map[string]string{"app": "web"}},
-		},
-	}
-	podOne := &corev1.Pod{
-		ObjectMeta: metav1.ObjectMeta{Name: "web-1", Namespace: "default", Labels: map[string]string{"app": "web"}},
-	}
-	podTwo := &corev1.Pod{
-		ObjectMeta: metav1.ObjectMeta{Name: "web-2", Namespace: "default", Labels: map[string]string{"app": "web"}},
-	}
-	client := fake.NewClientset(deployment, podOne, podTwo)
-	service := NewService(common.Dependencies{
-		Context:          context.Background(),
-		KubernetesClient: client,
+func TestResolveTargetPodObjectsSupportsCronJobAndContinuesAfterPodListError(t *testing.T) {
+	controller := true
+	owner := metav1.OwnerReference{Kind: "CronJob", Name: "nightly", Controller: &controller}
+	client := fake.NewClientset(
+		&batchv1.Job{ObjectMeta: metav1.ObjectMeta{Name: "nightly-1", Namespace: "default", OwnerReferences: []metav1.OwnerReference{owner}}},
+		&batchv1.Job{ObjectMeta: metav1.ObjectMeta{Name: "nightly-2", Namespace: "default", OwnerReferences: []metav1.OwnerReference{owner}}},
+		&corev1.Pod{ObjectMeta: metav1.ObjectMeta{Name: "nightly-pod", Namespace: "default", Labels: map[string]string{"job-name": "nightly-2"}}},
+	)
+	listCalls := 0
+	client.PrependReactor("list", "pods", func(k8stesting.Action) (bool, runtime.Object, error) {
+		listCalls++
+		if listCalls == 1 {
+			return true, nil, errors.New("pods unavailable")
+		}
+		return false, nil, nil
 	})
+	service := NewService(common.Dependencies{Context: context.Background(), Logger: applog.Noop, KubernetesClient: client})
 
-	pods, err := service.resolveTargetPods(types.ContainerLogsFetchRequest{
-		Scope:     workloadLogScope("default", "apps", "v1", "deployment", "web"),
-		PodFilter: "web-2",
-	})
+	pods, err := service.resolveTargetPodObjects(
+		types.ContainerLogsFetchRequest{Scope: workloadLogScope("default", "batch", "v1", "cronjob", "nightly")},
+		containerlogs.PodNameFilter{},
+		containerlogs.ScopeSelection{},
+	)
 	require.NoError(t, err)
-	require.Equal(t, []string{"web-2"}, pods)
-}
-
-func TestResolveTargetPodsAppliesPodNameRegexFilters(t *testing.T) {
-	deployment := &appsv1.Deployment{
-		ObjectMeta: metav1.ObjectMeta{Name: "web", Namespace: "default"},
-		Spec: appsv1.DeploymentSpec{
-			Selector: &metav1.LabelSelector{MatchLabels: map[string]string{"app": "web"}},
-		},
-	}
-	podOne := &corev1.Pod{
-		ObjectMeta: metav1.ObjectMeta{Name: "web-api-1", Namespace: "default", Labels: map[string]string{"app": "web"}},
-	}
-	podTwo := &corev1.Pod{
-		ObjectMeta: metav1.ObjectMeta{Name: "web-worker-1", Namespace: "default", Labels: map[string]string{"app": "web"}},
-	}
-	podThree := &corev1.Pod{
-		ObjectMeta: metav1.ObjectMeta{Name: "web-api-canary", Namespace: "default", Labels: map[string]string{"app": "web"}},
-	}
-	client := fake.NewClientset(deployment, podOne, podTwo, podThree)
-	service := NewService(common.Dependencies{
-		Context:          context.Background(),
-		KubernetesClient: client,
-	})
-
-	pods, err := service.resolveTargetPods(types.ContainerLogsFetchRequest{
-		Scope:      workloadLogScope("default", "apps", "v1", "deployment", "web"),
-		PodInclude: "api",
-		PodExclude: "canary$",
-	})
-	require.NoError(t, err)
-	require.Equal(t, []string{"web-api-1"}, pods)
-}
-
-func TestResolveTargetPodsCronJob(t *testing.T) {
-	owner := metav1.OwnerReference{Kind: "CronJob", Name: "nightly", Controller: ptrBool(true)}
-	job := &batchv1.Job{ObjectMeta: metav1.ObjectMeta{Name: "nightly-1", Namespace: "default", OwnerReferences: []metav1.OwnerReference{owner}}}
-	pod := &corev1.Pod{ObjectMeta: metav1.ObjectMeta{Name: "nightly-pod", Namespace: "default", Labels: map[string]string{"job-name": "nightly-1"}}}
-	client := fake.NewClientset(job, pod)
-
-	service := NewService(common.Dependencies{
-		Context:          context.Background(),
-		Logger:           applog.Noop,
-		KubernetesClient: client,
-	})
-
-	pods, err := service.resolveTargetPods(types.ContainerLogsFetchRequest{
-		Scope: workloadLogScope("default", "batch", "v1", "cronjob", "nightly"),
-	})
-	require.NoError(t, err)
-	require.Equal(t, []string{"nightly-pod"}, pods)
-}
-
-func TestResolveTargetPodsScopedGVKDeployment(t *testing.T) {
-	deployment := &appsv1.Deployment{
-		ObjectMeta: metav1.ObjectMeta{Name: "web", Namespace: "default"},
-		Spec: appsv1.DeploymentSpec{
-			Selector: &metav1.LabelSelector{MatchLabels: map[string]string{"app": "web"}},
-		},
-	}
-	pod := &corev1.Pod{ObjectMeta: metav1.ObjectMeta{Name: "web-pod", Namespace: "default", Labels: map[string]string{"app": "web"}}}
-	client := fake.NewClientset(deployment, pod)
-
-	service := NewService(common.Dependencies{
-		Context:          context.Background(),
-		KubernetesClient: client,
-	})
-
-	pods, err := service.resolveTargetPods(types.ContainerLogsFetchRequest{
-		Scope: "cluster-a|default:apps/v1:deployment:web",
-	})
-	require.NoError(t, err)
-	require.Equal(t, []string{"web-pod"}, pods)
+	require.Len(t, pods, 1)
+	require.Equal(t, "nightly-pod", pods[0].Name)
 }
 
 func TestFetchContainerLogsScopedPodUsesScopeNamespace(t *testing.T) {
@@ -486,33 +344,6 @@ func TestFetchContainerLogsAppliesIncludeExcludeFilters(t *testing.T) {
 	require.Empty(t, resp.Error)
 	require.Len(t, resp.Entries, 1)
 	require.Equal(t, "warn should-keep", resp.Entries[0].Line)
-}
-
-func TestFetchContainerLogsAggregatesWorkloadPods(t *testing.T) {
-	deployment := &appsv1.Deployment{
-		ObjectMeta: metav1.ObjectMeta{Name: "api", Namespace: "default"},
-		Spec:       appsv1.DeploymentSpec{Selector: &metav1.LabelSelector{MatchLabels: map[string]string{"app": "api"}}},
-	}
-	podA := &corev1.Pod{ObjectMeta: metav1.ObjectMeta{Name: "api-0", Namespace: "default", Labels: map[string]string{"app": "api"}}}
-	podB := &corev1.Pod{ObjectMeta: metav1.ObjectMeta{Name: "api-1", Namespace: "default", Labels: map[string]string{"app": "api"}}}
-
-	client := fake.NewClientset(deployment, podA, podB)
-
-	service := NewService(common.Dependencies{
-		Context:          context.Background(),
-		Logger:           applog.Noop,
-		KubernetesClient: client,
-	})
-
-	resp := service.FetchContainerLogs(types.ContainerLogsFetchRequest{
-		Scope: workloadLogScope("default", "apps", "v1", "deployment", "api"),
-	})
-	require.Empty(t, resp.Error)
-	sort.Slice(resp.Entries, func(i, j int) bool { return resp.Entries[i].Pod < resp.Entries[j].Pod })
-	require.Len(t, resp.Entries, 0)
-	require.NotPanics(t, func() {
-		service.resolveTargetPods(types.ContainerLogsFetchRequest{Scope: podLogScope("default", "api-0")})
-	})
 }
 
 func TestFetchContainerLogsParsesTimestamps(t *testing.T) {
@@ -658,67 +489,6 @@ func TestFetchContainerLogsAggregatesAndSortsEntries(t *testing.T) {
 	require.Equal(t, "other pod", resp.Entries[0].Line)
 }
 
-func TestResolveTargetPodsOtherWorkloads(t *testing.T) {
-	defer func(orig func(corev1client.PodInterface, context.Context, string, *corev1.PodLogOptions) (io.ReadCloser, error)) {
-		containerLogsStreamFunc = orig
-	}(containerLogsStreamFunc)
-
-	rs := &appsv1.ReplicaSet{
-		ObjectMeta: metav1.ObjectMeta{Name: "rs", Namespace: "default"},
-		Spec:       appsv1.ReplicaSetSpec{Selector: &metav1.LabelSelector{MatchLabels: map[string]string{"app": "rs"}}},
-	}
-	ds := &appsv1.DaemonSet{
-		ObjectMeta: metav1.ObjectMeta{Name: "ds", Namespace: "default"},
-		Spec:       appsv1.DaemonSetSpec{Selector: &metav1.LabelSelector{MatchLabels: map[string]string{"app": "ds"}}},
-	}
-	sts := &appsv1.StatefulSet{
-		ObjectMeta: metav1.ObjectMeta{Name: "sts", Namespace: "default"},
-		Spec:       appsv1.StatefulSetSpec{Selector: &metav1.LabelSelector{MatchLabels: map[string]string{"app": "sts"}}},
-	}
-	rsPod := &corev1.Pod{ObjectMeta: metav1.ObjectMeta{Name: "rs-pod", Namespace: "default", Labels: map[string]string{"app": "rs"}}}
-	dsPod := &corev1.Pod{ObjectMeta: metav1.ObjectMeta{Name: "ds-pod", Namespace: "default", Labels: map[string]string{"app": "ds"}}}
-	stsPod := &corev1.Pod{ObjectMeta: metav1.ObjectMeta{Name: "sts-0", Namespace: "default", Labels: map[string]string{"app": "sts"}}}
-	job := &batchv1.Job{
-		ObjectMeta: metav1.ObjectMeta{Name: "job", Namespace: "default", Labels: map[string]string{"job-name": "job"}},
-		Spec:       batchv1.JobSpec{Selector: &metav1.LabelSelector{MatchLabels: map[string]string{"job-name": "job"}}},
-	}
-	jobPod := &corev1.Pod{ObjectMeta: metav1.ObjectMeta{Name: "job-pod", Namespace: "default", Labels: map[string]string{"job-name": "job"}}}
-
-	client := fake.NewClientset(rs, ds, sts, rsPod, dsPod, stsPod, job, jobPod)
-	containerLogsStreamFunc = func(corev1client.PodInterface, context.Context, string, *corev1.PodLogOptions) (io.ReadCloser, error) {
-		return io.NopCloser(strings.NewReader("2024-01-01T00:00:00Z log")), nil
-	}
-	service := NewService(common.Dependencies{
-		Context:          context.Background(),
-		Logger:           applog.Noop,
-		KubernetesClient: client,
-	})
-
-	rsPods, err := service.resolveTargetPods(types.ContainerLogsFetchRequest{
-		Scope: workloadLogScope("default", "apps", "v1", "replicaset", "rs"),
-	})
-	require.NoError(t, err)
-	require.Equal(t, []string{"rs-pod"}, rsPods)
-
-	dsPods, err := service.resolveTargetPods(types.ContainerLogsFetchRequest{
-		Scope: workloadLogScope("default", "apps", "v1", "daemonset", "ds"),
-	})
-	require.NoError(t, err)
-	require.Equal(t, []string{"ds-pod"}, dsPods)
-
-	stsPods, err := service.resolveTargetPods(types.ContainerLogsFetchRequest{
-		Scope: workloadLogScope("default", "apps", "v1", "statefulset", "sts"),
-	})
-	require.NoError(t, err)
-	require.Equal(t, []string{"sts-0"}, stsPods)
-
-	jobPods, err := service.resolveTargetPods(types.ContainerLogsFetchRequest{
-		Scope: workloadLogScope("default", "batch", "v1", "job", "job"),
-	})
-	require.NoError(t, err)
-	require.Equal(t, []string{"job-pod"}, jobPods)
-}
-
 func TestFetchContainerLogsRequiresClient(t *testing.T) {
 	service := NewService(common.Dependencies{
 		Context: context.Background(),
@@ -776,113 +546,6 @@ func TestFetchContainerLogsHandlesOversizedLine(t *testing.T) {
 	require.NoError(t, err)
 	require.Len(t, entries, 1)
 	require.Equal(t, longLine, entries[0].Line)
-}
-
-func TestFetchContainerLogsForPodSpecificContainer(t *testing.T) {
-	defer func(orig func(corev1client.PodInterface, context.Context, string, *corev1.PodLogOptions) (io.ReadCloser, error)) {
-		containerLogsStreamFunc = orig
-	}(containerLogsStreamFunc)
-
-	pod := &corev1.Pod{
-		ObjectMeta: metav1.ObjectMeta{Name: "demo", Namespace: "default"},
-		Spec: corev1.PodSpec{
-			InitContainers: []corev1.Container{{Name: "init"}},
-			Containers:     []corev1.Container{{Name: "app"}},
-		},
-	}
-	client := fake.NewClientset(pod)
-	containerLogsStreamFunc = func(_ corev1client.PodInterface, _ context.Context, _ string, opts *corev1.PodLogOptions) (io.ReadCloser, error) {
-		require.Equal(t, "app", opts.Container)
-		return io.NopCloser(strings.NewReader("2024-01-01T00:00:00Z only app")), nil
-	}
-
-	service := NewService(common.Dependencies{
-		Context:          context.Background(),
-		Logger:           applog.Noop,
-		KubernetesClient: client,
-	})
-
-	entries, err := service.fetchContainerLogsForPod("default", "demo", "app", 100, false, 0, containerlogs.LineFilter{})
-	require.NoError(t, err)
-	require.Len(t, entries, 1)
-	require.Equal(t, "only app", entries[0].Line)
-	require.False(t, entries[0].IsInit)
-}
-
-func TestFetchContainerLogsForPodIncludesEphemeralInAllContainers(t *testing.T) {
-	defer func(orig func(corev1client.PodInterface, context.Context, string, *corev1.PodLogOptions) (io.ReadCloser, error)) {
-		containerLogsStreamFunc = orig
-	}(containerLogsStreamFunc)
-
-	pod := &corev1.Pod{
-		ObjectMeta: metav1.ObjectMeta{Name: "demo", Namespace: "default"},
-		Spec: corev1.PodSpec{
-			InitContainers: []corev1.Container{{Name: "init"}},
-			Containers:     []corev1.Container{{Name: "app"}},
-			EphemeralContainers: []corev1.EphemeralContainer{
-				{EphemeralContainerCommon: corev1.EphemeralContainerCommon{Name: "debug-abc"}},
-			},
-		},
-	}
-	client := fake.NewClientset(pod)
-	requestedContainers := make([]string, 0, 3)
-	containerLogsStreamFunc = func(_ corev1client.PodInterface, _ context.Context, _ string, opts *corev1.PodLogOptions) (io.ReadCloser, error) {
-		requestedContainers = append(requestedContainers, opts.Container)
-		return io.NopCloser(strings.NewReader(fmt.Sprintf("2024-01-01T00:00:00Z %s line", opts.Container))), nil
-	}
-
-	service := NewService(common.Dependencies{
-		Context:          context.Background(),
-		Logger:           applog.Noop,
-		KubernetesClient: client,
-	})
-
-	entries, err := service.fetchContainerLogsForPod("default", "demo", "all", 100, false, 0, containerlogs.LineFilter{})
-	require.NoError(t, err)
-	require.Len(t, entries, 3)
-	require.Equal(t, []string{"init", "app", "debug-abc"}, requestedContainers)
-	require.Equal(t, []string{"init", "app", "debug-abc"}, []string{entries[0].Container, entries[1].Container, entries[2].Container})
-	require.Equal(t, "debug-abc line", entries[2].Line)
-}
-
-func TestFetchContainerLogsForPodMatchesSharedContainerEnumeration(t *testing.T) {
-	defer func(orig func(corev1client.PodInterface, context.Context, string, *corev1.PodLogOptions) (io.ReadCloser, error)) {
-		containerLogsStreamFunc = orig
-	}(containerLogsStreamFunc)
-
-	pod := &corev1.Pod{
-		ObjectMeta: metav1.ObjectMeta{Name: "demo", Namespace: "default"},
-		Spec: corev1.PodSpec{
-			InitContainers: []corev1.Container{{Name: "init"}},
-			Containers:     []corev1.Container{{Name: "app"}},
-			EphemeralContainers: []corev1.EphemeralContainer{
-				{EphemeralContainerCommon: corev1.EphemeralContainerCommon{Name: "debug-abc"}},
-			},
-		},
-	}
-	client := fake.NewClientset(pod)
-	requestedContainers := make([]string, 0, 3)
-	containerLogsStreamFunc = func(_ corev1client.PodInterface, _ context.Context, _ string, opts *corev1.PodLogOptions) (io.ReadCloser, error) {
-		requestedContainers = append(requestedContainers, opts.Container)
-		return io.NopCloser(strings.NewReader(fmt.Sprintf("2024-01-01T00:00:00Z %s line", opts.Container))), nil
-	}
-
-	service := NewService(common.Dependencies{
-		Context:          context.Background(),
-		Logger:           applog.Noop,
-		KubernetesClient: client,
-	})
-
-	_, err := service.fetchContainerLogsForPod("default", "demo", "all", 100, false, 0, containerlogs.LineFilter{})
-	require.NoError(t, err)
-
-	sharedContainers := containerlogs.EnumerateContainers(pod, "all")
-	expectedNames := make([]string, 0, len(sharedContainers))
-	for _, containerRef := range sharedContainers {
-		expectedNames = append(expectedNames, containerRef.Name)
-	}
-
-	require.Equal(t, expectedNames, requestedContainers)
 }
 
 func TestFetchContainerLogsReturnsErrorWhenAllFetchesFail(t *testing.T) {
@@ -979,6 +642,30 @@ func TestFetchContainerLogsWarnsWhenTargetLimitExceeded(t *testing.T) {
 			containerlogs.DefaultPerScopeTargetLimit,
 		),
 	)
+}
+
+func TestFetchContainerLogsSortsWhenTimestampMissing(t *testing.T) {
+	defer func(orig func(corev1client.PodInterface, context.Context, string, *corev1.PodLogOptions) (io.ReadCloser, error)) {
+		containerLogsStreamFunc = orig
+	}(containerLogsStreamFunc)
+
+	pod := &corev1.Pod{
+		ObjectMeta: metav1.ObjectMeta{Name: "demo", Namespace: "default"},
+		Spec:       corev1.PodSpec{Containers: []corev1.Container{{Name: "app"}}},
+	}
+	client := fake.NewClientset(pod)
+	containerLogsStreamFunc = func(corev1client.PodInterface, context.Context, string, *corev1.PodLogOptions) (io.ReadCloser, error) {
+		return io.NopCloser(strings.NewReader("malformed line\n2024-01-01T00:00:01Z ok")), nil
+	}
+
+	service := NewService(common.Dependencies{
+		Context:          context.Background(),
+		KubernetesClient: client,
+	})
+
+	resp := service.FetchContainerLogs(types.ContainerLogsFetchRequest{Scope: podLogScope("default", "demo")})
+	require.Len(t, resp.Entries, 2)
+	require.Equal(t, []string{"2024-01-01T00:00:01Z", "malformed"}, []string{resp.Entries[0].Timestamp, resp.Entries[1].Timestamp})
 }
 
 func TestFetchContainerLogsUsesSharedCappedTargetSelection(t *testing.T) {
@@ -1116,28 +803,4 @@ func TestFetchContainerLogsAppliesSelectedFiltersBeforeTargetLimit(t *testing.T)
 	require.Len(t, resp.Entries, 1)
 	require.Equal(t, "web-3", resp.Entries[0].Pod)
 	require.Empty(t, resp.Warnings)
-}
-
-func TestFetchContainerLogsSortsWhenTimestampMissing(t *testing.T) {
-	defer func(orig func(corev1client.PodInterface, context.Context, string, *corev1.PodLogOptions) (io.ReadCloser, error)) {
-		containerLogsStreamFunc = orig
-	}(containerLogsStreamFunc)
-
-	pod := &corev1.Pod{
-		ObjectMeta: metav1.ObjectMeta{Name: "demo", Namespace: "default"},
-		Spec:       corev1.PodSpec{Containers: []corev1.Container{{Name: "app"}}},
-	}
-	client := fake.NewClientset(pod)
-	containerLogsStreamFunc = func(corev1client.PodInterface, context.Context, string, *corev1.PodLogOptions) (io.ReadCloser, error) {
-		return io.NopCloser(strings.NewReader("malformed line\n2024-01-01T00:00:01Z ok")), nil
-	}
-
-	service := NewService(common.Dependencies{
-		Context:          context.Background(),
-		KubernetesClient: client,
-	})
-
-	resp := service.FetchContainerLogs(types.ContainerLogsFetchRequest{Scope: podLogScope("default", "demo")})
-	require.Len(t, resp.Entries, 2)
-	require.Equal(t, []string{"2024-01-01T00:00:01Z", "malformed"}, []string{resp.Entries[0].Timestamp, resp.Entries[1].Timestamp})
 }

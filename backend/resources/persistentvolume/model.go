@@ -16,7 +16,7 @@ import (
 // by this package; the shared ResourceModel carries identity + status.
 func BuildResourceModel(clusterID string, pv *corev1.PersistentVolume) resourcemodel.ResourceModel {
 	status := BuildStatusPresentation(pv)
-	return resourcemodel.StorageResourceModel(clusterID, "", "v1", "PersistentVolume", "persistentvolumes", resourcemodel.ResourceScopeCluster, pv.ObjectMeta, status, resourcemodel.ResourceFacts{})
+	return resourcemodel.KubernetesResourceModel(clusterID, "", "v1", "PersistentVolume", "persistentvolumes", resourcemodel.ResourceScopeCluster, pv.ObjectMeta, status, resourcemodel.ResourceFacts{})
 }
 
 // BuildFacts extracts the PersistentVolume facts from the raw object.
@@ -44,27 +44,27 @@ func BuildStatusPresentation(pv *corev1.PersistentVolume) resourcemodel.Resource
 	facts := BuildFacts(pv)
 	state := persistentVolumeState(pv)
 	signals := persistentVolumeSignals(pv, facts)
-	lifecycle := resourcemodel.StorageLifecycle(pv.ObjectMeta)
-	if status, ok := resourcemodel.DeletingStorageStatus(pv.ObjectMeta, state, signals, lifecycle); ok {
+	lifecycle := resourcemodel.ObjectLifecycle(pv.ObjectMeta)
+	if status, ok := resourcemodel.DeletingObjectStatus(pv.ObjectMeta, state, signals, lifecycle); ok {
 		return status
 	}
 
 	switch pv.Status.Phase {
 	case corev1.VolumeBound:
-		return resourcemodel.StorageSourceStatus(string(pv.Status.Phase), state, "", "", "ready", signals, lifecycle)
+		return resourcemodel.ObjectSourceStatus(string(pv.Status.Phase), state, "", "", "ready", signals, lifecycle)
 	case corev1.VolumeAvailable:
-		return resourcemodel.StorageSourceStatus(string(pv.Status.Phase), state, "", "", "ready", signals, lifecycle)
+		return resourcemodel.ObjectSourceStatus(string(pv.Status.Phase), state, "", "", "ready", signals, lifecycle)
 	case corev1.VolumePending:
-		return resourcemodel.StorageSourceStatus(string(pv.Status.Phase), state, "", "", "warning", signals, lifecycle)
+		return resourcemodel.ObjectSourceStatus(string(pv.Status.Phase), state, "", "", "warning", signals, lifecycle)
 	case corev1.VolumeReleased:
-		return resourcemodel.StorageSourceStatus(string(pv.Status.Phase), state, "", "", "warning", signals, lifecycle)
+		return resourcemodel.ObjectSourceStatus(string(pv.Status.Phase), state, "", "", "warning", signals, lifecycle)
 	case corev1.VolumeFailed:
-		return resourcemodel.StorageSourceStatus(string(pv.Status.Phase), state, pv.Status.Reason, pv.Status.Message, "error", signals, lifecycle)
+		return resourcemodel.ObjectSourceStatus(string(pv.Status.Phase), state, pv.Status.Reason, pv.Status.Message, "error", signals, lifecycle)
 	default:
 		if pv.Status.Phase == "" {
-			return resourcemodel.StorageSourceStatus("Unknown", state, "", "", "unknown", signals, lifecycle)
+			return resourcemodel.ObjectSourceStatus("Unknown", state, "", "", "unknown", signals, lifecycle)
 		}
-		return resourcemodel.StorageSourceStatus(string(pv.Status.Phase), state, pv.Status.Reason, pv.Status.Message, "inactive", signals, lifecycle)
+		return resourcemodel.ObjectSourceStatus(string(pv.Status.Phase), state, pv.Status.Reason, pv.Status.Message, "inactive", signals, lifecycle)
 	}
 }
 

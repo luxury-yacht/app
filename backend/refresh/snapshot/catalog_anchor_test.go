@@ -6,6 +6,7 @@ import (
 
 	"github.com/luxury-yacht/app/backend/objectcatalog"
 	"github.com/luxury-yacht/app/backend/refresh/querypage"
+	"github.com/luxury-yacht/app/backend/resourcemodel"
 )
 
 // Browse anchor params ride the same scope-string channel as continue; the
@@ -46,7 +47,7 @@ func TestParseBrowseScopeRejectsInvalidAnchor(t *testing.T) {
 // mapped from the engine outcome with rank 0 kept explicit.
 func TestBuildCatalogSnapshotCarriesAnchor(t *testing.T) {
 	result := objectcatalog.QueryResult{
-		Items:         []objectcatalog.Summary{{Name: "web-1"}},
+		Items:         []objectcatalog.Summary{{Ref: resourcemodel.ResourceRef{Name: "web-1"}}},
 		TotalItems:    1,
 		TotalIsExact:  true,
 		AnchorOutcome: &querypage.AnchorOutcome{Found: true, Rank: 0},

@@ -9,7 +9,6 @@ import (
 	autoscalingv1 "k8s.io/api/autoscaling/v1"
 	batchv1 "k8s.io/api/batch/v1"
 	corev1 "k8s.io/api/core/v1"
-	discoveryv1 "k8s.io/api/discovery/v1"
 	rbacv1 "k8s.io/api/rbac/v1"
 	storagev1 "k8s.io/api/storage/v1"
 	apiextensionsv1 "k8s.io/apiextensions-apiserver/pkg/apis/apiextensions/v1"
@@ -19,7 +18,6 @@ import (
 	"k8s.io/apimachinery/pkg/runtime/schema"
 	dynamicfake "k8s.io/client-go/dynamic/fake"
 	appslisters "k8s.io/client-go/listers/apps/v1"
-	corelisters "k8s.io/client-go/listers/core/v1"
 	"k8s.io/client-go/tools/cache"
 
 	"github.com/stretchr/testify/require"
@@ -82,51 +80,6 @@ func resumeForTest(t *testing.T, manager *Manager, domain, scope string, since u
 		return nil, false
 	}
 	return manager.ResumeSelector(selector, since)
-}
-
-func TestManagerPodUpdateBroadcasts(t *testing.T) {
-	manager := &Manager{
-		clusterMeta: snapshot.ClusterMeta{ClusterID: "c1", ClusterName: "cluster"},
-		logger:      applog.Noop,
-		subscribers: make(map[string]map[string]map[uint64]*subscription),
-		buffers:     make(map[string]*updateBuffer),
-		sequences:   make(map[string]uint64),
-	}
-
-	sub, err := subscribeForTest(t, manager, domainPods, "namespace:default")
-	require.NoError(t, err)
-
-	pod := &corev1.Pod{
-		ObjectMeta: metav1.ObjectMeta{
-			Name:            "pod-1",
-			Namespace:       "default",
-			UID:             "pod-uid",
-			ResourceVersion: "12",
-		},
-		Spec: corev1.PodSpec{
-			NodeName: "node-a",
-		},
-		Status: corev1.PodStatus{
-			Phase: corev1.PodRunning,
-		},
-	}
-
-	manager.handlePod(pod, MessageTypeAdded)
-
-	select {
-	case update := <-sub.Updates:
-		require.Equal(t, MessageTypeAdded, update.Type)
-		require.Equal(t, domainPods, update.Domain)
-		require.Equal(t, "namespace:default", update.Scope)
-		require.Equal(t, SourceObject, update.Source)
-		require.Equal(t, SignalChanged, update.Signal)
-		require.Equal(t, "1", update.Version)
-		require.Equal(t, "pod-1", update.Ref.Name)
-		require.Equal(t, "default", update.Ref.Namespace)
-		// pods is query-backed: the live stream carries the change signal, not the row.
-	default:
-		t.Fatal("expected update to be delivered")
-	}
 }
 
 func TestManagerBroadcastsEventAndCatalogDoorbellSources(t *testing.T) {
@@ -430,7 +383,7 @@ func TestManagerChangeSignalInvalidatesSnapshotCacheBeforeDelivery(t *testing.T)
 			return &refresh.Snapshot{Domain: domainClusterRBAC}, nil
 		},
 	}))
-	service := snapshot.NewService(reg, nil, snapshot.ClusterMeta{ClusterID: "c1"})
+	service := snapshot.NewServiceWithPermissions(reg, nil, snapshot.ClusterMeta{ClusterID: "c1"}, nil)
 	_, err := service.Build(context.Background(), domainClusterRBAC, "c1|")
 	require.NoError(t, err)
 	_, err = service.Build(context.Background(), domainClusterRBAC, "c1|")
@@ -557,42 +510,6 @@ func TestManagerQuotasUpdateBroadcasts(t *testing.T) {
 		requireUpdateObjectMetadata(t, update, "7", "quota-uid", "quota-1", "default", "ResourceQuota")
 	default:
 		t.Fatal("expected quotas update to be delivered")
-	}
-}
-
-func TestManagerNetworkUpdateBroadcasts(t *testing.T) {
-	manager := &Manager{
-		clusterMeta: snapshot.ClusterMeta{ClusterID: "c1", ClusterName: "cluster"},
-		logger:      applog.Noop,
-		subscribers: make(map[string]map[string]map[uint64]*subscription),
-	}
-
-	sub, err := subscribeForTest(t, manager, domainNamespaceNetwork, "namespace:default")
-	require.NoError(t, err)
-
-	service := &corev1.Service{
-		ObjectMeta: metav1.ObjectMeta{
-			Name:            "svc-1",
-			Namespace:       "default",
-			UID:             "svc-uid",
-			ResourceVersion: "3",
-		},
-		Spec: corev1.ServiceSpec{
-			Type:      corev1.ServiceTypeClusterIP,
-			ClusterIP: "10.0.0.1",
-		},
-	}
-
-	manager.handleService(service, MessageTypeAdded)
-
-	select {
-	case update := <-sub.Updates:
-		require.Equal(t, MessageTypeAdded, update.Type)
-		require.Equal(t, domainNamespaceNetwork, update.Domain)
-		require.Equal(t, "namespace:default", update.Scope)
-		requireUpdateObjectMetadata(t, update, "3", "svc-uid", "svc-1", "default", "Service")
-	default:
-		t.Fatal("expected network update to be delivered")
 	}
 }
 
@@ -1139,40 +1056,14 @@ func TestManagerAutoscalingUpdateBroadcasts(t *testing.T) {
 		require.Equal(t, domainNamespaceAutoscaling, update.Domain)
 		require.Equal(t, "namespace:default", update.Scope)
 		requireUpdateObjectMetadata(t, update, "3", "hpa-uid", "hpa-1", "default", "HorizontalPodAutoscaler")
+		// Signals identify the informer source. HPA rows deliberately use the
+		// primary v2 identity for navigation and typed details instead.
+		require.Equal(t, "autoscaling", update.Ref.Group)
+		require.Equal(t, "v1", update.Ref.Version)
+		require.Equal(t, "horizontalpodautoscalers", update.Ref.Resource)
 	default:
 		t.Fatal("expected autoscaling update to be delivered")
 	}
-}
-
-func TestManagerWorkloadEventBroadcastsNotifyOnly(t *testing.T) {
-	replicas := int32(2)
-	deployment := &appsv1.Deployment{
-		ObjectMeta: metav1.ObjectMeta{
-			Name:            "web",
-			Namespace:       "default",
-			UID:             "deploy-uid",
-			ResourceVersion: "9",
-		},
-		Spec: appsv1.DeploymentSpec{Replicas: &replicas},
-	}
-	manager := &Manager{
-		clusterMeta:      snapshot.ClusterMeta{ClusterID: "c1", ClusterName: "cluster"},
-		logger:           applog.Noop,
-		deploymentLister: testsupport.NewDeploymentLister(t, deployment),
-		subscribers:      make(map[string]map[string]map[uint64]*subscription),
-	}
-	sub, err := subscribeForTest(t, manager, domainWorkloads, "namespace:default")
-	require.NoError(t, err)
-
-	manager.handleWorkload(deployment, MessageTypeModified)
-
-	update := requireNextUpdate(t, sub)
-	require.Equal(t, domainWorkloads, update.Domain)
-	require.Equal(t, "namespace:default", update.Scope)
-	require.Equal(t, "web", update.Ref.Name)
-	require.Equal(t, "Deployment", update.Ref.Kind)
-	// namespace-workloads is query-backed: the live stream carries the change
-	// signal, not the row. HPA context in the row is covered in the snapshot path.
 }
 
 func TestManagerHPADeleteRefreshesTargetWorkloadRow(t *testing.T) {
@@ -1249,108 +1140,6 @@ func TestManagerHPAUpdateRefreshesOldAndNewTargets(t *testing.T) {
 	require.True(t, names["web-old"])
 }
 
-func TestManagerPodMoveRefreshesOldAndNewNodeRows(t *testing.T) {
-	oldPod := &corev1.Pod{
-		ObjectMeta: metav1.ObjectMeta{Name: "pod-1", Namespace: "default", UID: "pod-uid", ResourceVersion: "1"},
-		Spec:       corev1.PodSpec{NodeName: "node-a"},
-		Status:     corev1.PodStatus{Phase: corev1.PodRunning},
-	}
-	newPod := oldPod.DeepCopy()
-	newPod.ResourceVersion = "2"
-	newPod.Spec.NodeName = "node-b"
-	nodeA := &corev1.Node{ObjectMeta: metav1.ObjectMeta{Name: "node-a", UID: "node-a-uid", ResourceVersion: "5"}}
-	nodeB := &corev1.Node{ObjectMeta: metav1.ObjectMeta{Name: "node-b", UID: "node-b-uid", ResourceVersion: "6"}}
-	manager := &Manager{
-		clusterMeta: snapshot.ClusterMeta{ClusterID: "c1", ClusterName: "cluster"},
-		logger:      applog.Noop,
-		nodeLister:  testsupport.NewNodeLister(t, nodeA, nodeB),
-		subscribers: make(map[string]map[string]map[uint64]*subscription),
-	}
-	sub, err := subscribeForTest(t, manager, domainNodes, "")
-	require.NoError(t, err)
-
-	manager.handlePodEvent(oldPod, newPod, MessageTypeModified)
-
-	seen := map[string]bool{}
-	for i := 0; i < 2; i++ {
-		update := requireNextUpdate(t, sub)
-		seen[update.Ref.Name] = true
-	}
-	require.True(t, seen["node-a"])
-	require.True(t, seen["node-b"])
-}
-
-func TestManagerPodMoveDeletesOldNodePodScope(t *testing.T) {
-	oldPod := &corev1.Pod{
-		ObjectMeta: metav1.ObjectMeta{Name: "pod-1", Namespace: "default", UID: "pod-uid", ResourceVersion: "1"},
-		Spec:       corev1.PodSpec{NodeName: "node-a"},
-		Status:     corev1.PodStatus{Phase: corev1.PodRunning},
-	}
-	newPod := oldPod.DeepCopy()
-	newPod.ResourceVersion = "2"
-	newPod.Spec.NodeName = "node-b"
-	manager := &Manager{
-		clusterMeta: snapshot.ClusterMeta{ClusterID: "c1", ClusterName: "cluster"},
-		logger:      applog.Noop,
-		subscribers: make(map[string]map[string]map[uint64]*subscription),
-	}
-	oldNodeSub, err := subscribeForTest(t, manager, domainPods, "node:node-a")
-	require.NoError(t, err)
-	newNodeSub, err := subscribeForTest(t, manager, domainPods, "node:node-b")
-	require.NoError(t, err)
-
-	manager.handlePodEvent(oldPod, newPod, MessageTypeModified)
-
-	oldNodeUpdate := requireNextUpdate(t, oldNodeSub)
-	require.Equal(t, MessageTypeDeleted, oldNodeUpdate.Type)
-	require.Equal(t, "pod-1", oldNodeUpdate.Ref.Name)
-
-	newNodeUpdate := requireNextUpdate(t, newNodeSub)
-	require.Equal(t, MessageTypeModified, newNodeUpdate.Type)
-	require.Equal(t, "pod-1", newNodeUpdate.Ref.Name)
-}
-
-func TestManagerEndpointSliceRetargetRefreshesOldAndNewServices(t *testing.T) {
-	oldSlice := &discoveryv1.EndpointSlice{
-		ObjectMeta: metav1.ObjectMeta{
-			Name:            "slice-1",
-			Namespace:       "default",
-			UID:             "slice-uid",
-			ResourceVersion: "1",
-			Labels:          map[string]string{discoveryv1.LabelServiceName: "old-svc"},
-		},
-	}
-	newSlice := oldSlice.DeepCopy()
-	newSlice.ResourceVersion = "2"
-	newSlice.Labels = map[string]string{discoveryv1.LabelServiceName: "new-svc"}
-	oldService := &corev1.Service{ObjectMeta: metav1.ObjectMeta{Name: "old-svc", Namespace: "default", UID: "old-svc-uid"}}
-	newService := &corev1.Service{ObjectMeta: metav1.ObjectMeta{Name: "new-svc", Namespace: "default", UID: "new-svc-uid"}}
-	manager := &Manager{
-		clusterMeta:   snapshot.ClusterMeta{ClusterID: "c1", ClusterName: "cluster"},
-		logger:        applog.Noop,
-		serviceLister: testsupport.NewServiceLister(t, oldService, newService),
-		sliceLister:   testsupport.NewEndpointSliceLister(t, newSlice),
-		subscribers:   make(map[string]map[string]map[uint64]*subscription),
-	}
-	sub, err := subscribeForTest(t, manager, domainNamespaceNetwork, "namespace:default")
-	require.NoError(t, err)
-
-	manager.handleEndpointSliceEvent(oldSlice, newSlice, MessageTypeModified)
-
-	seenServices := map[string]bool{}
-	for i := 0; i < 3; i++ {
-		update := requireNextUpdate(t, sub)
-		if update.Ref.Kind == "Service" {
-			seenServices[update.Ref.Name] = true
-		}
-	}
-	require.True(t, seenServices["old-svc"])
-	require.True(t, seenServices["new-svc"])
-}
-
-// podIngestStoreAdapter adapts a raw ProjectingStore to the manager's
-// podBundleSource seam, standing in for the production IngestManager (whose
-// methods delegate to the same store calls).
 type podIngestStoreAdapter struct {
 	store *ingest.ProjectingStore
 }
@@ -1666,22 +1455,12 @@ func TestManagerBackpressureTriggersReset(t *testing.T) {
 	}
 }
 
-func TestManagerWorkloadUpdateFromPod(t *testing.T) {
-	pod := &corev1.Pod{
-		ObjectMeta: metav1.ObjectMeta{
-			Name:            "pod-1",
-			Namespace:       "default",
-			UID:             "pod-uid",
-			ResourceVersion: "5",
-			OwnerReferences: []metav1.OwnerReference{{
-				Kind:       "ReplicaSet",
-				Name:       "web-12345",
-				Controller: ptrBool(true),
-			}},
-		},
-		Status: corev1.PodStatus{Phase: corev1.PodRunning},
-	}
+// The three tests below drive the live ingest-notify workload-signal path
+// (broadcastWorkloadFromPodSummary) with the PodSummary shapes the ingest
+// projection produces: a resolved controlling owner (ReplicaSet already
+// collapsed to its Deployment) or no owner for a standalone pod.
 
+func TestManagerWorkloadUpdateFromPod(t *testing.T) {
 	deployment := &appsv1.Deployment{
 		ObjectMeta: metav1.ObjectMeta{
 			Name:            "web",
@@ -1701,7 +1480,8 @@ func TestManagerWorkloadUpdateFromPod(t *testing.T) {
 	sub, err := subscribeForTest(t, manager, domainWorkloads, "namespace:default")
 	require.NoError(t, err)
 
-	manager.handlePod(pod, MessageTypeModified)
+	summary := snapshot.PodSummary{Ref: resourcemodel.ResourceRef{Namespace: "default", Name: "pod-1"}, OwnerKind: "Deployment", OwnerName: "web"}
+	manager.broadcastWorkloadFromPodSummary(summary, "5", MessageTypeModified)
 
 	select {
 	case update := <-sub.Updates:
@@ -1710,27 +1490,13 @@ func TestManagerWorkloadUpdateFromPod(t *testing.T) {
 		require.Equal(t, "namespace:default", update.Scope)
 		require.Equal(t, "web", update.Ref.Name)
 		require.Equal(t, "Deployment", update.Ref.Kind)
+		require.Equal(t, "5", update.ResourceVersion)
 	default:
 		t.Fatal("expected workload update to be delivered")
 	}
 }
 
 func TestManagerWorkloadUpdateFromCompletedOwnedPod(t *testing.T) {
-	pod := &corev1.Pod{
-		ObjectMeta: metav1.ObjectMeta{
-			Name:            "pod-1",
-			Namespace:       "default",
-			UID:             "pod-uid",
-			ResourceVersion: "6",
-			OwnerReferences: []metav1.OwnerReference{{
-				Kind:       "ReplicaSet",
-				Name:       "web-12345",
-				Controller: ptrBool(true),
-			}},
-		},
-		Status: corev1.PodStatus{Phase: corev1.PodSucceeded},
-	}
-
 	deployment := &appsv1.Deployment{
 		ObjectMeta: metav1.ObjectMeta{
 			Name:            "web",
@@ -1750,7 +1516,13 @@ func TestManagerWorkloadUpdateFromCompletedOwnedPod(t *testing.T) {
 	sub, err := subscribeForTest(t, manager, domainWorkloads, "namespace:default")
 	require.NoError(t, err)
 
-	manager.handlePod(pod, MessageTypeModified)
+	// A completed pod with a resolved owner still refreshes the owner's row
+	// (MODIFIED); only a standalone pod's own row is deleted on completion.
+	summary := snapshot.PodSummary{Ref: resourcemodel.ResourceRef{Namespace: "default", Name: "pod-1"}, OwnerKind: "Deployment",
+		OwnerName:   "web",
+		StatusState: string(corev1.PodSucceeded),
+	}
+	manager.broadcastWorkloadFromPodSummary(summary, "6", MessageTypeModified)
 
 	select {
 	case update := <-sub.Updates:
@@ -1765,16 +1537,6 @@ func TestManagerWorkloadUpdateFromCompletedOwnedPod(t *testing.T) {
 }
 
 func TestManagerDeletesStandaloneWorkloadRowWhenPodCompletes(t *testing.T) {
-	pod := &corev1.Pod{
-		ObjectMeta: metav1.ObjectMeta{
-			Name:            "pod-1",
-			Namespace:       "default",
-			UID:             "pod-uid",
-			ResourceVersion: "7",
-		},
-		Status: corev1.PodStatus{Phase: corev1.PodFailed},
-	}
-
 	manager := &Manager{
 		clusterMeta: snapshot.ClusterMeta{ClusterID: "c1", ClusterName: "cluster"},
 		logger:      applog.Noop,
@@ -1784,7 +1546,8 @@ func TestManagerDeletesStandaloneWorkloadRowWhenPodCompletes(t *testing.T) {
 	sub, err := subscribeForTest(t, manager, domainWorkloads, "namespace:default")
 	require.NoError(t, err)
 
-	manager.handlePod(pod, MessageTypeModified)
+	summary := snapshot.PodSummary{Ref: resourcemodel.ResourceRef{Namespace: "default", Name: "pod-1"}, StatusState: string(corev1.PodFailed)}
+	manager.broadcastWorkloadFromPodSummary(summary, "7", MessageTypeModified)
 
 	select {
 	case update := <-sub.Updates:
@@ -1796,59 +1559,6 @@ func TestManagerDeletesStandaloneWorkloadRowWhenPodCompletes(t *testing.T) {
 	default:
 		t.Fatal("expected completed standalone pod to delete workload row")
 	}
-}
-
-func TestManagerNodeUpdateFromPod(t *testing.T) {
-	manager := &Manager{
-		clusterMeta: snapshot.ClusterMeta{ClusterID: "c1", ClusterName: "cluster"},
-		logger:      applog.Noop,
-		nodeLister: nodeListerWith(&corev1.Node{
-			ObjectMeta: metav1.ObjectMeta{
-				Name:            "node-a",
-				UID:             "node-uid",
-				ResourceVersion: "7",
-			},
-		}),
-		subscribers: make(map[string]map[string]map[uint64]*subscription),
-	}
-
-	sub, err := subscribeForTest(t, manager, domainNodes, "")
-	require.NoError(t, err)
-
-	pod := &corev1.Pod{
-		ObjectMeta: metav1.ObjectMeta{
-			Name:            "pod-1",
-			Namespace:       "default",
-			UID:             "pod-uid",
-			ResourceVersion: "5",
-		},
-		Spec: corev1.PodSpec{
-			NodeName: "node-a",
-		},
-		Status: corev1.PodStatus{Phase: corev1.PodRunning},
-	}
-
-	// Ensure pod changes refresh node summaries via the pod-based handler.
-	manager.handlePod(pod, MessageTypeModified)
-
-	select {
-	case update := <-sub.Updates:
-		require.Equal(t, MessageTypeModified, update.Type)
-		require.Equal(t, domainNodes, update.Domain)
-		require.Equal(t, "node-a", update.Ref.Name)
-		require.Equal(t, "Node", update.Ref.Kind)
-		// nodes is query-backed: the change signal carries no row.
-	default:
-		t.Fatal("expected node update to be delivered")
-	}
-}
-
-func nodeListerWith(nodes ...*corev1.Node) corelisters.NodeLister {
-	indexer := cache.NewIndexer(cache.MetaNamespaceKeyFunc, cache.Indexers{})
-	for _, node := range nodes {
-		_ = indexer.Add(node)
-	}
-	return corelisters.NewNodeLister(indexer)
 }
 
 func deploymentListerWith(items ...*appsv1.Deployment) appslisters.DeploymentLister {

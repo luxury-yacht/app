@@ -76,6 +76,16 @@ func (a *App) governorKeepsClusterCold(clusterID string) bool {
 	return tracked && tier == system.TierCold
 }
 
+// setGovernorVisibleLocked commits foreground intent and its workspace
+// revision together. The caller must hold governorMu.
+func (a *App) setGovernorVisibleLocked(clusterID string) {
+	if a.governorVisible == clusterID {
+		return
+	}
+	a.governorVisible = clusterID
+	a.markClusterWorkspaceChanged()
+}
+
 // SetVisibleCluster records the cluster the user is currently viewing and
 // re-tiers the open clusters accordingly. It is Wails-bound so the frontend
 // calls it whenever the active cluster tab changes.
@@ -89,7 +99,7 @@ func (a *App) SetVisibleCluster(clusterID string) {
 	}
 	a.governorMu.Lock()
 	a.ensureGovernorStateLocked()
-	a.governorVisible = clusterID
+	a.setGovernorVisibleLocked(clusterID)
 	a.governorMRU = moveToFront(a.governorMRU, clusterID)
 	a.governorMu.Unlock()
 
@@ -532,7 +542,7 @@ func (a *App) seedGovernorFromOpenClusters() {
 	a.governorMRU = intersectOrdered(a.governorMRU, open)
 	if a.governorVisible == "" || !open[a.governorVisible] {
 		if len(a.governorMRU) > 0 {
-			a.governorVisible = a.governorMRU[0]
+			a.setGovernorVisibleLocked(a.governorMRU[0])
 		}
 	}
 	a.governorMu.Unlock()

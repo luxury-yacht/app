@@ -1,204 +1,63 @@
 /**
  * frontend/src/modules/cluster/components/ClusterViewRBAC.tsx
  *
- * UI component for ClusterViewRBAC.
- * Handles rendering and interactions for the cluster feature.
+ * GridTable view for cluster RBAC resources (ClusterRoles and
+ * ClusterRoleBindings) in a single aggregated table.
  */
 
-import { useKubeconfig } from '@modules/kubernetes/config/KubeconfigContext';
-import { useObjectPanel } from '@modules/object-panel/hooks/useObjectPanel';
-import ResourceInventoryTable from '@modules/resource-grid/ResourceInventoryTable';
-import { selectPayloadRows } from '@modules/resource-grid/typedResourceQueryScope';
-import { useQueryBackedClusterResourceGridTable } from '@modules/resource-grid/useQueryBackedResourceGridTable';
-import type { ContextMenuItem } from '@shared/components/ContextMenu';
-import * as cf from '@shared/components/tables/columnFactories';
-import type { GridColumnDefinition } from '@shared/components/tables/GridTable';
-import { useNavigateToView } from '@shared/hooks/useNavigateToView';
-import { useObjectActionController } from '@shared/hooks/useObjectActionController';
 import {
-  buildRequiredCanonicalObjectRowKey,
-  buildRequiredObjectReference,
-} from '@shared/utils/objectIdentity';
-import React, { useCallback, useMemo } from 'react';
-import type { ClusterRBACSnapshotPayload } from '@/core/refresh/types';
-import { useShortNames } from '@/hooks/useShortNames';
-import { resolveEmptyStateMessage } from '@/utils/emptyState';
+  type AggregatedResourceGridViewSpec,
+  ClusterAggregatedResourceGridView,
+} from '@modules/resource-grid/AggregatedResourceGridView';
+import * as cf from '@shared/components/tables/columnFactories';
+import React from 'react';
+import type { ClusterRBACEntry, ClusterRBACSnapshotPayload } from '@/core/refresh/types';
 import { getDisplayKind } from '@/utils/kindAliasMap';
 
-// Define the data structure for RBAC resources
-interface RBACData {
-  kind: string;
-  kindAlias?: string;
-  name: string;
-  clusterId: string;
-  clusterName?: string;
-  age?: string;
-}
+type RBACData = ClusterRBACEntry & { kindAlias?: string };
 
 // Define props for RBACViewGrid component
 interface RBACViewProps {
   error?: string | null;
 }
 
+const rbacSpec: AggregatedResourceGridViewSpec<RBACData> = {
+  domain: 'cluster-rbac',
+  viewId: 'cluster-rbac',
+  labels: { cluster: 'Cluster RBAC' },
+  emptyMessage: () => 'No cluster-scoped RBAC objects found',
+  spinnerMessage: 'Loading RBAC resources...',
+  tableClassName: 'gridtable-rbac',
+  showKindDropdown: true,
+  buildColumns: ({ identity, useShortResourceNames }) => [
+    cf.createKindColumn<RBACData>({
+      key: 'kind',
+      getKind: (resource) => resource.ref.kind,
+      getAlias: (resource) => resource.kindAlias,
+      getDisplayText: (resource) => getDisplayKind(resource.ref.kind, useShortResourceNames),
+      onClick: identity.open,
+      onAltClick: identity.navigate,
+    }),
+    cf.createTextColumn<RBACData>('name', 'Name', (resource) => resource.ref.name, {
+      sortable: true,
+      onClick: identity.open,
+      onAltClick: identity.navigate,
+      getClassName: () => 'object-panel-link',
+    }),
+    cf.createAgeColumn(),
+  ],
+};
+
 /**
  * GridTable component for cluster RBAC resources
  * Shows ClusterRoles and ClusterRoleBindings in a single aggregated table
  */
-const RBACViewGrid: React.FC<RBACViewProps> = React.memo(({ error }) => {
-  const { openWithObject } = useObjectPanel();
-  const { navigateToView } = useNavigateToView();
-  const { selectedClusterId } = useKubeconfig();
-  const useShortResourceNames = useShortNames();
-
-  const handleResourceClick = useCallback(
-    (resource: RBACData) => {
-      openWithObject(
-        buildRequiredObjectReference(
-          {
-            kind: resource.kind,
-            name: resource.name,
-            clusterId: resource.clusterId ?? undefined,
-            clusterName: resource.clusterName ?? undefined,
-          },
-          { fallbackClusterId: selectedClusterId }
-        )
-      );
-    },
-    [openWithObject, selectedClusterId]
-  );
-
-  const keyExtractor = useCallback(
-    (resource: RBACData) =>
-      buildRequiredCanonicalObjectRowKey(
-        {
-          kind: resource.kind,
-          name: resource.name,
-          clusterId: resource.clusterId,
-        },
-        { fallbackClusterId: selectedClusterId }
-      ),
-    [selectedClusterId]
-  );
-
-  // Define columns for RBAC resources
-  const columns: GridColumnDefinition<RBACData>[] = useMemo(() => {
-    const baseColumns: GridColumnDefinition<RBACData>[] = [
-      cf.createKindColumn<RBACData>({
-        key: 'kind',
-        getKind: (resource) => resource.kind,
-        getAlias: (resource) => resource.kindAlias,
-        getDisplayText: (resource) => getDisplayKind(resource.kind, useShortResourceNames),
-        onClick: handleResourceClick,
-        onAltClick: (resource) =>
-          navigateToView(
-            buildRequiredObjectReference(
-              {
-                kind: resource.kind,
-                name: resource.name,
-                clusterId: resource.clusterId,
-                clusterName: resource.clusterName,
-              },
-              { fallbackClusterId: selectedClusterId }
-            )
-          ),
-      }),
-      cf.createTextColumn<RBACData>('name', 'Name', (resource) => resource.name, {
-        sortable: true,
-        onClick: handleResourceClick,
-        onAltClick: (resource) =>
-          navigateToView(
-            buildRequiredObjectReference(
-              {
-                kind: resource.kind,
-                name: resource.name,
-                clusterId: resource.clusterId,
-                clusterName: resource.clusterName,
-              },
-              { fallbackClusterId: selectedClusterId }
-            )
-          ),
-        getClassName: () => 'object-panel-link',
-      }),
-      cf.createAgeColumn(),
-    ];
-
-    const sizing: cf.ColumnSizingMap = {
-      kind: { autoWidth: true },
-      name: { autoWidth: true },
-      age: { autoWidth: true },
-    };
-    cf.applyColumnSizing(baseColumns, sizing);
-
-    return baseColumns;
-  }, [handleResourceClick, navigateToView, selectedClusterId, useShortResourceNames]);
-
-  const { gridTableProps, favModal, source } = useQueryBackedClusterResourceGridTable<
-    ClusterRBACSnapshotPayload,
-    RBACData
-  >({
-    queryTableMode: 'Query Backed Static',
-    clusterId: selectedClusterId,
-    domain: 'cluster-rbac',
-    label: 'Cluster RBAC',
-    selectRows: selectPayloadRows,
-    viewId: 'cluster-rbac',
-    columns,
-    keyExtractor,
-    showKindDropdown: true,
-    diagnosticsLabel: 'Cluster RBAC',
-  });
-
-  const objectActions = useObjectActionController({
-    context: 'gridtable',
-    onOpen: (object) => openWithObject(object),
-    onOpenObjectMap: (object) => openWithObject(object, { initialTab: 'map' }),
-  });
-
-  // Get context menu items
-  const getContextMenuItems = useCallback(
-    (resource: RBACData): ContextMenuItem[] => {
-      return objectActions.getMenuItems(
-        buildRequiredObjectReference(
-          {
-            kind: resource.kind,
-            name: resource.name,
-            clusterId: resource.clusterId,
-            clusterName: resource.clusterName,
-          },
-          { fallbackClusterId: selectedClusterId }
-        )
-      );
-    },
-    [objectActions, selectedClusterId]
-  );
-
-  // Resolve empty state message
-  const emptyMessage = useMemo(
-    () => resolveEmptyStateMessage(error, 'No cluster-scoped RBAC objects found'),
-    [error]
-  );
-
-  return (
-    <>
-      <ResourceInventoryTable
-        source={source}
-        gridTableProps={gridTableProps}
-        spinnerMessage="Loading RBAC resources..."
-        favModal={favModal}
-        columns={columns}
-        diagnosticsLabel="Cluster RBAC"
-        onRowClick={handleResourceClick}
-        tableClassName="gridtable-rbac"
-        enableContextMenu={true}
-        getCustomContextMenuItems={getContextMenuItems}
-        useShortNames={useShortResourceNames}
-        emptyMessage={emptyMessage}
-      />
-
-      {objectActions.modals}
-    </>
-  );
-});
+const RBACViewGrid: React.FC<RBACViewProps> = React.memo(({ error }) => (
+  <ClusterAggregatedResourceGridView<ClusterRBACSnapshotPayload, RBACData>
+    spec={rbacSpec}
+    error={error}
+  />
+));
 
 RBACViewGrid.displayName = 'ClusterViewRBAC';
 

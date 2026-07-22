@@ -8,14 +8,15 @@ import {
 } from './customCatalogRowAdapter';
 
 const row = (group: string): CatalogBackedCustomResourceRow => ({
-  clusterId: 'cluster-a',
-  clusterName: 'Cluster A',
-  kind: 'DBInstance',
-  name: 'primary',
-  namespace: 'data',
-  group,
-  version: 'v1alpha1',
-  resource: 'dbinstances',
+  ref: {
+    clusterId: 'cluster-a',
+    group,
+    version: 'v1alpha1',
+    kind: 'DBInstance',
+    resource: 'dbinstances',
+    namespace: 'data',
+    name: 'primary',
+  },
 });
 
 describe('customCatalogRowAdapter', () => {
@@ -26,7 +27,11 @@ describe('customCatalogRowAdapter', () => {
   });
 
   it('builds object references from canonical custom-resource identity', () => {
-    expect(customCatalogObjectReference(row('rds.services.k8s.aws'))).toMatchObject({
+    expect(
+      customCatalogObjectReference(row('rds.services.k8s.aws'), undefined, {
+        fallbackClusterName: 'Cluster A',
+      })
+    ).toMatchObject({
       clusterId: 'cluster-a',
       clusterName: 'Cluster A',
       group: 'rds.services.k8s.aws',
@@ -41,14 +46,15 @@ describe('customCatalogRowAdapter', () => {
   it('preserves fallback catalog creation time for live Age rendering', () => {
     const creationTimestamp = new Date(Date.now() - 3 * 60 * 60 * 1000).toISOString();
     const fallback = catalogItemToFallbackCustomRow({
-      clusterId: 'cluster-a',
-      clusterName: 'Cluster A',
-      kind: 'DBInstance',
-      group: 'rds.services.k8s.aws',
-      version: 'v1alpha1',
-      resource: 'dbinstances',
-      name: 'primary',
-      uid: 'primary-uid',
+      ref: {
+        clusterId: 'cluster-a',
+        group: 'rds.services.k8s.aws',
+        version: 'v1alpha1',
+        kind: 'DBInstance',
+        resource: 'dbinstances',
+        name: 'primary',
+        uid: 'primary-uid',
+      },
       resourceVersion: '1',
       creationTimestamp,
       scope: 'Cluster',
@@ -65,27 +71,37 @@ describe('customCatalogRowAdapter', () => {
 
   it('uses group/version row fields without api-prefixed aliases', () => {
     const fallback = catalogItemToFallbackCustomRow({
-      clusterId: 'cluster-a',
-      clusterName: 'Cluster A',
-      kind: 'DBInstance',
-      group: 'rds.services.k8s.aws',
-      version: 'v1alpha1',
-      resource: 'dbinstances',
-      name: 'primary',
-      uid: 'primary-uid',
+      ref: {
+        clusterId: 'cluster-a',
+        group: 'rds.services.k8s.aws',
+        version: 'v1alpha1',
+        kind: 'DBInstance',
+        resource: 'dbinstances',
+        name: 'primary',
+        uid: 'primary-uid',
+      },
       resourceVersion: '1',
       creationTimestamp: '2026-06-28T00:00:00Z',
       scope: 'Cluster',
     });
 
-    expect(fallback.group).toBe('rds.services.k8s.aws');
-    expect(fallback.version).toBe('v1alpha1');
+    expect(fallback.ref.group).toBe('rds.services.k8s.aws');
+    expect(fallback.ref.version).toBe('v1alpha1');
     expect(fallback).not.toHaveProperty('apiGroup');
     expect(fallback).not.toHaveProperty('apiVersion');
   });
 
   it('normalizes hydrated rows from group/version fields without api-prefixed aliases', () => {
     const normalized = normalizeHydratedCustomRow({
+      ref: {
+        clusterId: 'cluster-a',
+        group: 'rds.services.k8s.aws',
+        version: 'v1alpha1',
+        kind: 'DBInstance',
+        resource: 'dbinstances',
+        namespace: 'data',
+        name: 'primary',
+      },
       kind: 'DBInstance',
       name: 'primary',
       namespace: 'data',
@@ -95,23 +111,57 @@ describe('customCatalogRowAdapter', () => {
       resource: 'dbinstances',
     });
 
-    expect(normalized.group).toBe('rds.services.k8s.aws');
-    expect(normalized.version).toBe('v1alpha1');
+    expect(normalized.ref.group).toBe('rds.services.k8s.aws');
+    expect(normalized.ref.version).toBe('v1alpha1');
     expect(normalized).not.toHaveProperty('apiGroup');
     expect(normalized).not.toHaveProperty('apiVersion');
+  });
+
+  it('normalizes a wire-shaped cluster-scoped row without optional ref fields', () => {
+    const normalized = normalizeHydratedCustomRow({
+      ref: {
+        clusterId: 'cluster-a',
+        group: 'postgres.example.com',
+        version: 'v1',
+        kind: 'Database',
+        resource: 'databases',
+        name: 'shared-pg',
+      },
+      status: 'Ready',
+      labels: { tier: 'shared' },
+    });
+
+    expect(normalized).toMatchObject({
+      status: 'Ready',
+      labels: { tier: 'shared' },
+      ref: {
+        clusterId: 'cluster-a',
+        group: 'postgres.example.com',
+        version: 'v1',
+        kind: 'Database',
+        resource: 'databases',
+        namespace: '',
+        name: 'shared-pg',
+      },
+    });
+    expect(normalized.ref.uid).toBe('');
   });
 
   it.each(['clusterId', 'group', 'version', 'kind', 'name'])(
     'rejects hydrated rows missing required identity field %s',
     (field) => {
       const hydrated: Record<string, unknown> = {
-        clusterId: 'cluster-a',
-        group: 'rds.services.k8s.aws',
-        version: 'v1alpha1',
-        kind: 'DBInstance',
-        name: 'primary',
+        ref: {
+          clusterId: 'cluster-a',
+          group: 'rds.services.k8s.aws',
+          version: 'v1alpha1',
+          kind: 'DBInstance',
+          resource: 'dbinstances',
+          namespace: 'data',
+          name: 'primary',
+        },
       };
-      delete hydrated[field];
+      delete (hydrated.ref as Record<string, unknown>)[field];
 
       expect(() => normalizeHydratedCustomRow(hydrated)).toThrow(
         `Hydrated catalog row is missing string field "${field}".`

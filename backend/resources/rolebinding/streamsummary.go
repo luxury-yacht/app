@@ -15,8 +15,8 @@ import (
 // BuildStreamSummary builds the namespace-rbac row for one RoleBinding.
 func BuildStreamSummary(meta streamrows.ClusterMeta, binding *rbacv1.RoleBinding) streamrows.RBACSummary {
 	if binding == nil {
-		return streamrows.RBACSummary{ClusterMeta: meta, Kind: "RoleBinding"}
+		return streamrows.RBACSummary{}
 	}
 	details := DescribeSummary(BuildFacts(meta.ClusterID, binding))
-	return streamrows.NewRBACSummary(meta, binding, "RoleBinding", details)
+	return streamrows.NewRBACSummary(meta, Identity, binding, details)
 }

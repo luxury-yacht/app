@@ -35,6 +35,13 @@ reference must retain its originating `clusterId`. Cluster-only resource views
 remain under `modules/cluster`; do not route Global views through the cluster
 resource manager.
 
+Cross-feature cluster runtime state lives in the React-free
+`core/cluster-workspace` store. Contexts and hooks may select or adapt that
+state, but must not mirror lifecycle, auth, health, scope revision, selection,
+or foreground serviceability in another map. The store owns Wails runtime
+subscriptions; feature code consumes its snapshot or a documented downstream
+wake-up event.
+
 ## Shared Transient Popups
 
 Shared dropdown menus render in a body-level portal so table, split-pane,

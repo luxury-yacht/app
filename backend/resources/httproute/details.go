@@ -33,18 +33,6 @@ func (s *Service) HTTPRoute(namespace, name string) (*types.RouteDetails, error)
 		}, s.buildDetails)
 }
 
-// HTTPRoutes lists HTTPRoute detail payloads.
-func (s *Service) HTTPRoutes(namespace string) ([]*types.RouteDetails, error) {
-	return gatewayapi.ListResources(s.deps, "HTTPRoute", "http routes",
-		func() ([]gatewayv1.HTTPRoute, error) {
-			list, err := s.deps.GatewayClient.GatewayV1().HTTPRoutes(namespace).List(s.deps.Context, metav1.ListOptions{})
-			if err != nil {
-				return nil, err
-			}
-			return list.Items, nil
-		}, s.buildDetails)
-}
-
 func (s *Service) buildDetails(item *gatewayv1.HTTPRoute) *types.RouteDetails {
 	facts := BuildFacts(s.deps.ClusterID, item).RouteCommonFacts
 	detail := types.RouteDetailsFromFacts("HTTPRoute", item.ObjectMeta, facts)

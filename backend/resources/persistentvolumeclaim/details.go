@@ -52,28 +52,6 @@ func (s *Service) PersistentVolumeClaim(namespace, name string) (*PersistentVolu
 	return s.processPersistentVolumeClaimDetails(pvc, pods), nil
 }
 
-// PersistentVolumeClaims returns detailed views for all PVCs in the namespace.
-func (s *Service) PersistentVolumeClaims(namespace string) ([]*PersistentVolumeClaimDetails, error) {
-	if s.deps.KubernetesClient == nil {
-		return nil, fmt.Errorf("kubernetes client not initialized")
-	}
-
-	pvcs, err := s.deps.KubernetesClient.CoreV1().PersistentVolumeClaims(namespace).List(s.deps.Context, metav1.ListOptions{})
-	if err != nil {
-		s.deps.Logger.Error(fmt.Sprintf("Failed to list PVCs in namespace %s: %v", namespace, err), logsources.ResourceLoader)
-		return nil, fmt.Errorf("failed to list PVCs: %v", err)
-	}
-
-	pods := s.listNamespacePods(namespace)
-
-	var detailsList []*PersistentVolumeClaimDetails
-	for i := range pvcs.Items {
-		detailsList = append(detailsList, s.processPersistentVolumeClaimDetails(&pvcs.Items[i], pods))
-	}
-
-	return detailsList, nil
-}
-
 func (s *Service) processPersistentVolumeClaimDetails(pvc *corev1.PersistentVolumeClaim, pods *corev1.PodList) *PersistentVolumeClaimDetails {
 	relationships := resourcemodel.NewResourceRelationshipIndex(
 		s.deps.ClusterID,

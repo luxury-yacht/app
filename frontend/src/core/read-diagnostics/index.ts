@@ -1,9 +1,4 @@
-export type {
-  BrokerAdapter,
-  BrokerKind,
-  BrokerReadDiagnosticsEntry,
-  BrokerRequestStatus,
-} from './store';
+export type { BrokerReadDiagnosticsEntry } from './store';
 export {
   beginBrokerRead,
   completeBrokerRead,

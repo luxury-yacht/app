@@ -49,7 +49,7 @@ func (m *Manager) registerNodeStreams(factory *informer.Factory, ingestManager *
 // the RS informer synced (healPodsForReplicaSet — the owned pod reflector starts before this
 // factory, so first-connect pods can land with an unresolved ReplicaSet owner). When no
 // ingest manager is wired (a unit test), the workload streams have no live signal; tests
-// drive handleWorkload / the HPA paths directly with a wired typed lister.
+// drive the HPA paths directly with a wired typed lister.
 func (m *Manager) registerWorkloadStreams(factory *informer.Factory, ingestManager *ingest.IngestManager) {
 	shared := factory.SharedInformerFactory()
 	if shared == nil {
@@ -57,7 +57,6 @@ func (m *Manager) registerWorkloadStreams(factory *informer.Factory, ingestManag
 	}
 	if m.canListWatch("apps", "replicasets") {
 		rsInformer := shared.Apps().V1().ReplicaSets()
-		m.rsLister = rsInformer.Lister()
 		m.addRelatedResourceEventHandler(rsInformer.Informer(), (*Manager).handleReplicaSetEvent)
 	}
 	m.registerWorkloadIngestNotify(ingestManager)

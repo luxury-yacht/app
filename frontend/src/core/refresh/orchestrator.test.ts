@@ -1534,29 +1534,31 @@ describe('refreshOrchestrator', () => {
 
   it('reuses cached catalog diff items when polling snapshots are unchanged', async () => {
     const cachedItem = {
-      clusterId: 'cluster-a',
-      clusterName: 'Cluster A',
-      kind: 'Deployment',
-      group: 'apps',
-      version: 'v1',
-      resource: 'deployments',
-      namespace: 'default',
-      name: 'web',
-      uid: 'uid-1',
+      ref: {
+        clusterId: 'cluster-a',
+        group: 'apps',
+        version: 'v1',
+        kind: 'Deployment',
+        resource: 'deployments',
+        namespace: 'default',
+        name: 'web',
+        uid: 'uid-1',
+      },
       resourceVersion: '10',
       creationTimestamp: '2024-01-01T00:00:00Z',
       scope: 'Namespace' as const,
     };
     const changedItem = {
-      clusterId: 'cluster-a',
-      clusterName: 'Cluster A',
-      kind: 'ConfigMap',
-      group: '',
-      version: 'v1',
-      resource: 'configmaps',
-      namespace: 'default',
-      name: 'settings',
-      uid: 'uid-2',
+      ref: {
+        clusterId: 'cluster-a',
+        group: '',
+        version: 'v1',
+        kind: 'ConfigMap',
+        resource: 'configmaps',
+        namespace: 'default',
+        name: 'settings',
+        uid: 'uid-2',
+      },
       resourceVersion: '5',
       creationTimestamp: '2024-01-01T00:00:00Z',
       scope: 'Namespace' as const,
@@ -2265,6 +2267,50 @@ describe('refreshOrchestrator', () => {
     expect(clientMocks.fetchSnapshotMock).not.toHaveBeenCalled();
   });
 
+  it('asks query-only consumers to reconcile without fetching a bounded base snapshot', async () => {
+    registerStreamingClusterConfigDomain();
+    const scope = buildClusterScope('cluster-a', '');
+    orchestratorInternals.context = {
+      currentView: 'cluster',
+      activeClusterView: 'config',
+      selectedClusterIds: ['cluster-a'],
+      objectPanel: { isOpen: false },
+    };
+    refreshOrchestrator.acquireScopedDomainLease('cluster-config', scope, { demand: 'query' });
+    await Promise.resolve();
+    await Promise.resolve();
+    clientMocks.fetchSnapshotMock.mockClear();
+    resourceStreamMocks.isHealthy.mockReturnValue(false);
+
+    await subscriber?.(false);
+
+    expect(clientMocks.fetchSnapshotMock).not.toHaveBeenCalled();
+    expect(getScopedDomainState('cluster-config', scope).queryReconcileVersion).toBe(1);
+    refreshOrchestrator.releaseScopedDomainLease('cluster-config', scope, { demand: 'query' });
+  });
+
+  it('leaves a query-only consumer alone while its stream is healthy', async () => {
+    registerStreamingClusterConfigDomain();
+    const scope = buildClusterScope('cluster-a', '');
+    orchestratorInternals.context = {
+      currentView: 'cluster',
+      activeClusterView: 'config',
+      selectedClusterIds: ['cluster-a'],
+      objectPanel: { isOpen: false },
+    };
+    refreshOrchestrator.acquireScopedDomainLease('cluster-config', scope, { demand: 'query' });
+    await Promise.resolve();
+    await Promise.resolve();
+    clientMocks.fetchSnapshotMock.mockClear();
+    resourceStreamMocks.isHealthy.mockReturnValue(true);
+
+    await subscriber?.(false);
+
+    expect(clientMocks.fetchSnapshotMock).not.toHaveBeenCalled();
+    expect(getScopedDomainState('cluster-config', scope).queryReconcileVersion).toBeUndefined();
+    refreshOrchestrator.releaseScopedDomainLease('cluster-config', scope, { demand: 'query' });
+  });
+
   it('uses resource stream refreshOnce for manual refreshes of resource-stream domains with an active stream', async () => {
     registerStreamingPodsDomain();
     const scope = buildClusterScope('cluster-a', 'namespace:team-a');
@@ -2927,13 +2973,19 @@ describe('refreshOrchestrator', () => {
         clusterId: 'cluster-a',
         rows: [
           {
-            kind: 'Event',
-            clusterId: 'cluster-a',
-            clusterName: 'Cluster A',
-            name: 'existing',
-            uid: 'existing-uid',
+            ref: {
+              clusterId: 'cluster-a',
+              group: '',
+              version: 'v1',
+              kind: 'Event',
+              resource: 'events',
+              namespace: 'default',
+              name: 'existing',
+              uid: 'existing-uid',
+            },
+
             resourceVersion: '1',
-            namespace: 'default',
+
             objectNamespace: 'default',
             objectUid: 'web-uid',
             objectApiVersion: 'v1',
@@ -3186,7 +3238,7 @@ describe('refreshOrchestrator', () => {
       'pods',
       expect.objectContaining({ scope })
     );
-    expect(getScopedDomainState('pods', scope).data?.rows?.[0]?.name).toBe('fresh-pod');
+    expect(getScopedDomainState('pods', scope).data?.rows?.[0]?.ref.name).toBe('fresh-pod');
   });
 
   it('removes runtime state for disconnected background clusters', () => {
@@ -3285,13 +3337,65 @@ describe('refreshOrchestrator', () => {
     resourceStreamMocks.start.mockClear();
     orchestratorInternals.handleClusterAuthFailed({ clusterId: 'cluster-b' });
     orchestratorInternals.handleClusterAuthRecovered({ clusterId: 'cluster-a' });
-    expect(resourceStreamMocks.start).not.toHaveBeenCalled();
-
-    orchestratorInternals.handleClusterAuthRecovered({ clusterId: 'cluster-b' });
     await Promise.resolve();
     await Promise.resolve();
     expect(resourceStreamMocks.start).toHaveBeenCalledWith(scopeA);
+    expect(resourceStreamMocks.start).not.toHaveBeenCalledWith(scopeB);
+
+    resourceStreamMocks.start.mockClear();
+    orchestratorInternals.handleClusterAuthRecovered({ clusterId: 'cluster-b' });
+    await Promise.resolve();
+    await Promise.resolve();
     expect(resourceStreamMocks.start).toHaveBeenCalledWith(scopeB);
+  });
+
+  it('keeps a healthy cluster refreshing when another cluster authentication fails', async () => {
+    registerStreamingClusterConfigDomain();
+    refreshOrchestrator.updateContext({
+      currentView: 'cluster',
+      activeClusterView: 'config',
+      selectedClusterId: 'cluster-a',
+      selectedClusterIds: ['cluster-a'],
+      allConnectedClusterIds: ['cluster-a', 'cluster-b'],
+    });
+
+    const scopeA = buildClusterScope('cluster-a', '');
+    const scopeB = buildClusterScope('cluster-b', '');
+    setRuntimeScopeEnabled('cluster-config', scopeA, true);
+    setRuntimeScopeEnabled('cluster-config', scopeB, true);
+    markResourceStreamActive('cluster-config', scopeA);
+    markResourceStreamActive('cluster-config', scopeB);
+
+    const runtimeA = orchestratorInternals.getRuntimeForScope('cluster-config', scopeA);
+    const runtimeB = orchestratorInternals.getRuntimeForScope('cluster-config', scopeB);
+    const controllerA = new AbortController();
+    const controllerB = new AbortController();
+    runtimeA.inFlight.set(makeTestInFlightKey('cluster-config', scopeA), {
+      controller: controllerA,
+      isManual: false,
+      requestId: 1,
+      contextVersion: 0,
+      domain: 'cluster-config',
+      scope: scopeA,
+    });
+    runtimeB.inFlight.set(makeTestInFlightKey('cluster-config', scopeB), {
+      controller: controllerB,
+      isManual: false,
+      requestId: 2,
+      contextVersion: 0,
+      domain: 'cluster-config',
+      scope: scopeB,
+    });
+
+    eventBus.emit('cluster:auth:failed', { clusterId: 'cluster-a' });
+
+    expect(controllerA.signal.aborted).toBe(true);
+    expect(controllerB.signal.aborted).toBe(false);
+    expect(resourceStreamMocks.stop).toHaveBeenCalledWith(scopeA, { reset: false });
+    expect(resourceStreamMocks.stop).not.toHaveBeenCalledWith(scopeB, expect.anything());
+    expect(runtimeB.streamingCleanup.has(makeTestInFlightKey('cluster-config', scopeB))).toBe(true);
+
+    eventBus.emit('cluster:auth:recovered', { clusterId: 'cluster-a' });
   });
 
   it('keeps stream-health polling fallback isolated to the owning cluster scope', async () => {
@@ -3486,12 +3590,18 @@ describe('refreshOrchestrator', () => {
         clusterId: 'test-cluster',
         rows: [
           {
-            kind: 'ConfigMap',
-            name: 'settings',
             details: 'cluster defaults',
             age: '5m',
-            clusterId: 'test-cluster',
-            clusterName: 'Test Cluster',
+            ref: {
+              clusterId: 'test-cluster',
+              group: 'storage.k8s.io',
+              version: 'v1',
+              kind: 'StorageClass',
+              resource: 'storageclasses',
+              namespace: '',
+              name: 'settings',
+              uid: '',
+            },
           },
         ],
       }),

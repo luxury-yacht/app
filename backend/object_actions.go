@@ -11,6 +11,7 @@ import (
 	"fmt"
 	"strings"
 
+	"github.com/luxury-yacht/app/backend/objectaction"
 	"github.com/luxury-yacht/app/backend/resources/nodes"
 	"github.com/luxury-yacht/app/backend/resources/pods"
 
@@ -19,42 +20,31 @@ import (
 )
 
 const (
-	ObjectActionDelete               = "delete"
-	ObjectActionForceDelete          = "forceDelete"
-	ObjectActionRestart              = "restart"
-	ObjectActionScale                = "scale"
-	ObjectActionTrigger              = "trigger"
-	ObjectActionSuspend              = "suspend"
-	ObjectActionCordon               = "cordon"
-	ObjectActionUncordon             = "uncordon"
-	ObjectActionDrain                = "drain"
-	ObjectActionStartDrain           = "startDrain"
-	ObjectActionStartPortForward     = "startPortForward"
-	ObjectActionCreateDebugContainer = "createDebugContainer"
-	ObjectActionRollback             = "rollback"
+	ObjectActionDelete               = objectaction.BackendDelete
+	ObjectActionForceDelete          = objectaction.BackendForceDelete
+	ObjectActionRestart              = objectaction.BackendRestart
+	ObjectActionScale                = objectaction.BackendScale
+	ObjectActionTrigger              = objectaction.BackendTrigger
+	ObjectActionSuspend              = objectaction.BackendSuspend
+	ObjectActionCordon               = objectaction.BackendCordon
+	ObjectActionUncordon             = objectaction.BackendUncordon
+	ObjectActionDrain                = objectaction.BackendDrain
+	ObjectActionStartDrain           = objectaction.BackendStartDrain
+	ObjectActionStartPortForward     = objectaction.BackendPortForward
+	ObjectActionCreateDebugContainer = objectaction.BackendDebugContainer
+	ObjectActionRollback             = objectaction.BackendRollback
 )
 
-// frontendObjectActions is the backend-owned list of action strings the
-// frontend may send to RunObjectAction. Legacy wrappers may use additional
-// backend-only actions, but frontend drift must fail parity tests.
-var frontendObjectActions = map[string]struct{}{
-	ObjectActionDelete:               {},
-	ObjectActionRestart:              {},
-	ObjectActionScale:                {},
-	ObjectActionTrigger:              {},
-	ObjectActionSuspend:              {},
-	ObjectActionCordon:               {},
-	ObjectActionUncordon:             {},
-	ObjectActionStartDrain:           {},
-	ObjectActionStartPortForward:     {},
-	ObjectActionCreateDebugContainer: {},
-	ObjectActionRollback:             {},
+func backendActionSet(definitions []objectaction.BackendActionDefinition) map[string]struct{} {
+	actions := make(map[string]struct{}, len(definitions))
+	for _, definition := range definitions {
+		actions[string(definition.Action)] = struct{}{}
+	}
+	return actions
 }
 
-var backendOnlyObjectActions = map[string]struct{}{
-	ObjectActionForceDelete: {},
-	ObjectActionDrain:       {},
-}
+var frontendObjectActions = backendActionSet(objectaction.FrontendBackendActions)
+var backendOnlyObjectActions = backendActionSet(objectaction.BackendOnlyActions)
 
 // ObjectActionTargetRef is the canonical object identity for state-changing
 // app actions. Core resources use group="" with version="v1".
@@ -90,10 +80,6 @@ type ObjectActionResponse struct {
 
 func objectActionTarget(clusterID, group, version, kind, namespace, name string) ObjectActionTargetRef {
 	return resourcemodel.NewResourceRef(clusterID, group, version, kind, "", namespace, name, "")
-}
-
-func objectActionTargetFromGVK(clusterID string, gvk schema.GroupVersionKind, namespace, name string) ObjectActionTargetRef {
-	return objectActionTarget(clusterID, gvk.Group, gvk.Version, gvk.Kind, namespace, name)
 }
 
 func objectActionTargetGVK(t ObjectActionTargetRef) schema.GroupVersionKind {

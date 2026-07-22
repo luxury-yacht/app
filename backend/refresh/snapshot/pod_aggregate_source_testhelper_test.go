@@ -7,6 +7,7 @@ import (
 	"github.com/luxury-yacht/app/backend/kind/streamrows"
 	"github.com/luxury-yacht/app/backend/objectcatalog"
 	"github.com/luxury-yacht/app/backend/refresh/ingest"
+	"github.com/luxury-yacht/app/backend/resourcemodel"
 	podres "github.com/luxury-yacht/app/backend/resources/pods"
 	corev1 "k8s.io/api/core/v1"
 	"k8s.io/apimachinery/pkg/runtime/schema"
@@ -191,7 +192,7 @@ func (s fakePodAggregateSource) withWorkloadCatalog(gvr schema.GroupVersionResou
 	}
 	rows := make([]interface{}, 0, count)
 	for i := 0; i < count; i++ {
-		rows = append(rows, objectcatalog.Summary{Namespace: namespace, Name: "wl-" + strconv.Itoa(i)})
+		rows = append(rows, objectcatalog.Summary{Ref: resourcemodel.ResourceRef{Namespace: namespace, Name: "wl-" + strconv.Itoa(i)}})
 	}
 	s.workloadCatalog[gvr] = rows
 	s.workloadSynced[gvr] = true

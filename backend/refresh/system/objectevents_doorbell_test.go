@@ -26,7 +26,6 @@ func TestObjectEventsNotifierInvalidatesCacheThenBroadcastsDoorbell(t *testing.T
 		nil,
 		nil,
 		nil,
-		nil,
 		snapshot.ClusterMeta{ClusterID: "c1", ClusterName: "cluster"},
 		nil,
 		nil,
@@ -56,7 +55,7 @@ func TestObjectEventsNotifierInvalidatesCacheThenBroadcastsDoorbell(t *testing.T
 			}, nil
 		},
 	}))
-	service := snapshot.NewService(reg, nil, snapshot.ClusterMeta{ClusterID: "c1"})
+	service := snapshot.NewServiceWithPermissions(reg, nil, snapshot.ClusterMeta{ClusterID: "c1"}, nil)
 	manager.SetSnapshotDomainInvalidator(service.InvalidateDomainCache)
 	_, err = service.Build(context.Background(), "object-events", "c1|team-a:/v1:Pod:web-1")
 	require.NoError(t, err)

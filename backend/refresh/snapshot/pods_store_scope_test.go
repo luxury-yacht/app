@@ -109,8 +109,8 @@ func TestPodBuilderStoreServedScopesMatchListPath(t *testing.T) {
 
 		storeRows := storeSnap.Payload.(PodSnapshot).Rows
 		require.Len(t, storeRows, 1)
-		require.Equal(t, "prod", storeRows[0].Namespace)
-		require.Equal(t, "orders-7d9c8b6f5-abcde", storeRows[0].Name)
+		require.Equal(t, "prod", storeRows[0].Ref.Namespace)
+		require.Equal(t, "orders-7d9c8b6f5-abcde", storeRows[0].Ref.Name)
 	})
 
 	t.Run("object scope is full-identity and namespace bounded", func(t *testing.T) {
@@ -120,8 +120,8 @@ func TestPodBuilderStoreServedScopesMatchListPath(t *testing.T) {
 
 		storeRows := storeSnap.Payload.(PodSnapshot).Rows
 		require.Len(t, storeRows, 1)
-		require.Equal(t, "prod", storeRows[0].Namespace)
-		require.Equal(t, "lonely", storeRows[0].Name)
+		require.Equal(t, "prod", storeRows[0].Ref.Namespace)
+		require.Equal(t, "lonely", storeRows[0].Ref.Name)
 
 		_, err = storeBuilder.Build(ctx, "object:prod::v1:Deployment:lonely")
 		require.ErrorContains(t, err, "unsupported object scope")

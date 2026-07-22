@@ -5,7 +5,9 @@
  * Subscribes to Wails runtime events for UI actions (menu items, etc.), connection status updates,
  * and per-cluster health events.
  */
-import { useCallback, useEffect, useMemo, useState } from 'react';
+import { useCallback, useEffect, useMemo } from 'react';
+import type { ClusterHealthStatus } from '@/core/cluster-workspace/clusterWorkspaceStore';
+import { useClusterWorkspaceSnapshot } from '@/core/cluster-workspace/useClusterWorkspace';
 import {
   type ConnectionStatusEvent,
   useConnectionStatusActions,
@@ -14,14 +16,7 @@ import {
 /**
  * Health status for a cluster.
  */
-export type ClusterHealthStatus = 'healthy' | 'degraded' | 'unknown';
-
-/**
- * Payload structure for cluster health events from the backend.
- */
-interface ClusterHealthEventPayload {
-  clusterId?: string;
-}
+export type { ClusterHealthStatus } from '@/core/cluster-workspace/clusterWorkspaceStore';
 
 /**
  * Return type for the useClusterHealthListener hook.
@@ -142,62 +137,16 @@ export function useConnectionStatusListener(): void {
 export function useClusterHealthListener(
   activeClusterId: string = ''
 ): UseClusterHealthListenerResult {
-  // Track health status per cluster.
-  const [clusterHealth, setClusterHealth] = useState<Map<string, ClusterHealthStatus>>(
-    () => new Map()
-  );
-
-  useEffect(() => {
-    const runtime = window.runtime;
-    if (!runtime?.EventsOn) {
-      return;
+  const workspace = useClusterWorkspaceSnapshot();
+  const clusterHealth = useMemo(() => {
+    const health = new Map<string, ClusterHealthStatus>();
+    for (const [clusterId, cluster] of workspace.clusters) {
+      if (cluster.health !== 'unknown') {
+        health.set(clusterId, cluster.health);
+      }
     }
-
-    // Handler for cluster:health:healthy events.
-    const handleHealthy = (...args: unknown[]) => {
-      const payload = args[0] as ClusterHealthEventPayload | undefined;
-      if (!payload?.clusterId) {
-        console.warn('[ClusterHealthListener] Received health:healthy without clusterId');
-        return;
-      }
-      const clusterId = payload.clusterId;
-
-      setClusterHealth((prev) => {
-        const next = new Map(prev);
-        next.set(clusterId, 'healthy');
-        return next;
-      });
-    };
-
-    // Handler for cluster:health:degraded events.
-    const handleDegraded = (...args: unknown[]) => {
-      const payload = args[0] as ClusterHealthEventPayload | undefined;
-      if (!payload?.clusterId) {
-        console.warn('[ClusterHealthListener] Received health:degraded without clusterId');
-        return;
-      }
-      const clusterId = payload.clusterId;
-
-      setClusterHealth((prev) => {
-        const next = new Map(prev);
-        next.set(clusterId, 'degraded');
-        return next;
-      });
-    };
-
-    // Subscribe to cluster health events.
-    const disposeHealthy = subscribeRuntimeEvent(runtime, 'cluster:health:healthy', handleHealthy);
-    const disposeDegraded = subscribeRuntimeEvent(
-      runtime,
-      'cluster:health:degraded',
-      handleDegraded
-    );
-
-    return () => {
-      disposeHealthy();
-      disposeDegraded();
-    };
-  }, []);
+    return health;
+  }, [workspace.clusters]);
 
   // Accessor to get health status for a specific cluster.
   const getClusterHealth = useCallback(

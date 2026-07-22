@@ -23,7 +23,7 @@ const apiGroup = "admissionregistration.k8s.io"
 func BuildMutatingResourceModel(clusterID string, config *admissionregistrationv1.MutatingWebhookConfiguration) resourcemodel.ResourceModel {
 	facts := BuildMutatingFacts(clusterID, config)
 	status := statusPresentation(config.ObjectMeta, len(facts.Webhooks))
-	return resourcemodel.NetworkResourceModel(clusterID, apiGroup, "v1", "MutatingWebhookConfiguration", "mutatingwebhookconfigurations", resourcemodel.ResourceScopeCluster, config.ObjectMeta, status, resourcemodel.ResourceFacts{})
+	return resourcemodel.KubernetesResourceModel(clusterID, apiGroup, "v1", "MutatingWebhookConfiguration", "mutatingwebhookconfigurations", resourcemodel.ResourceScopeCluster, config.ObjectMeta, status, resourcemodel.ResourceFacts{})
 }
 
 // BuildMutatingFacts extracts the MutatingWebhookConfiguration facts.
@@ -44,7 +44,7 @@ func BuildMutatingFacts(clusterID string, config *admissionregistrationv1.Mutati
 func BuildValidatingResourceModel(clusterID string, config *admissionregistrationv1.ValidatingWebhookConfiguration) resourcemodel.ResourceModel {
 	facts := BuildValidatingFacts(clusterID, config)
 	status := statusPresentation(config.ObjectMeta, len(facts.Webhooks))
-	return resourcemodel.NetworkResourceModel(clusterID, apiGroup, "v1", "ValidatingWebhookConfiguration", "validatingwebhookconfigurations", resourcemodel.ResourceScopeCluster, config.ObjectMeta, status, resourcemodel.ResourceFacts{})
+	return resourcemodel.KubernetesResourceModel(clusterID, apiGroup, "v1", "ValidatingWebhookConfiguration", "validatingwebhookconfigurations", resourcemodel.ResourceScopeCluster, config.ObjectMeta, status, resourcemodel.ResourceFacts{})
 }
 
 // BuildValidatingFacts extracts the ValidatingWebhookConfiguration facts.
@@ -67,11 +67,11 @@ func statusPresentation(meta metav1.ObjectMeta, count int) resourcemodel.Resourc
 		Name:   "webhooks",
 		Status: state,
 	}}
-	lifecycle := resourcemodel.NetworkLifecycle(meta)
-	if status, ok := resourcemodel.DeletingNetworkStatus(meta, state, signals, lifecycle); ok {
+	lifecycle := resourcemodel.ObjectLifecycle(meta)
+	if status, ok := resourcemodel.DeletingObjectStatus(meta, state, signals, lifecycle); ok {
 		return status
 	}
-	return resourcemodel.NetworkSourceStatus(WebhookCountDetails(count), state, "", "ready", signals, lifecycle)
+	return resourcemodel.ObjectSourceStatus(WebhookCountDetails(count), state, "", "", "ready", signals, lifecycle)
 }
 
 // WebhookCountDetails renders the "N webhook(s)" label used by both the status

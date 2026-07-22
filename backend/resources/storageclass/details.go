@@ -44,28 +44,6 @@ func (s *Service) StorageClass(name string) (*StorageClassDetails, error) {
 	return s.processStorageClassDetails(sc, pvs), nil
 }
 
-// StorageClasses returns detailed views for all storage classes.
-func (s *Service) StorageClasses() ([]*StorageClassDetails, error) {
-	if s.deps.KubernetesClient == nil {
-		return nil, fmt.Errorf("kubernetes client not initialized")
-	}
-
-	storageClasses, err := s.deps.KubernetesClient.StorageV1().StorageClasses().List(s.deps.Context, metav1.ListOptions{})
-	if err != nil {
-		s.deps.Logger.Error(fmt.Sprintf("Failed to list storage classes: %v", err), logsources.ResourceLoader)
-		return nil, fmt.Errorf("failed to list storage classes: %v", err)
-	}
-
-	pvs := s.listPersistentVolumes()
-
-	var detailsList []*StorageClassDetails
-	for i := range storageClasses.Items {
-		detailsList = append(detailsList, s.processStorageClassDetails(&storageClasses.Items[i], pvs))
-	}
-
-	return detailsList, nil
-}
-
 // listPersistentVolumes lists all PVs so the StorageClass detail can enumerate
 // the volumes using this class. The PersistentVolume kind owns its own detail in
 // resources/storage; this is the StorageClass detail's own dependency.

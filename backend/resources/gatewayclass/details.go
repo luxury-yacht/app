@@ -36,18 +36,6 @@ func (s *Service) GatewayClass(name string) (*GatewayClassDetails, error) {
 		}, s.buildDetails)
 }
 
-// GatewayClasses lists GatewayClass detail payloads.
-func (s *Service) GatewayClasses() ([]*GatewayClassDetails, error) {
-	return gatewayapi.ListResources(s.deps, "GatewayClass", "gateway classes",
-		func() ([]gatewayv1.GatewayClass, error) {
-			list, err := s.deps.GatewayClient.GatewayV1().GatewayClasses().List(s.deps.Context, metav1.ListOptions{})
-			if err != nil {
-				return nil, err
-			}
-			return list.Items, nil
-		}, s.buildDetails)
-}
-
 func (s *Service) buildDetails(item *gatewayv1.GatewayClass) *GatewayClassDetails {
 	facts := BuildFacts(s.deps.ClusterID, item)
 	detail := &GatewayClassDetails{

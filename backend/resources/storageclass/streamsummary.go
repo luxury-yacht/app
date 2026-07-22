@@ -15,8 +15,8 @@ import (
 // BuildStreamSummary builds the cluster-config row for one StorageClass.
 func BuildStreamSummary(meta streamrows.ClusterMeta, sc *storagev1.StorageClass) streamrows.ClusterConfigEntry {
 	if sc == nil {
-		return streamrows.ClusterConfigEntry{ClusterMeta: meta, Kind: "StorageClass"}
+		return streamrows.ClusterConfigEntry{}
 	}
 	facts := BuildFacts(sc)
-	return streamrows.NewClusterConfigEntry(meta, sc, "StorageClass", facts.Provisioner, facts.DefaultClass)
+	return streamrows.NewClusterConfigEntry(meta, Identity, sc, facts.Provisioner, facts.DefaultClass)
 }

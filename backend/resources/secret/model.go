@@ -20,7 +20,7 @@ import (
 // callers needing facts use BuildFacts.
 func BuildResourceModel(clusterID string, sec *corev1.Secret) resourcemodel.ResourceModel {
 	status := BuildStatusPresentation(sec)
-	return resourcemodel.ConfigResourceModel(clusterID, "Secret", "secrets", sec.ObjectMeta, status, resourcemodel.ResourceFacts{})
+	return resourcemodel.KubernetesResourceModel(clusterID, "", "v1", "Secret", "secrets", resourcemodel.ResourceScopeNamespaced, sec.ObjectMeta, status, resourcemodel.ResourceFacts{})
 }
 
 // BuildFacts extracts the Secret facts from the raw object.
@@ -49,11 +49,11 @@ func BuildStatusPresentation(sec *corev1.Secret) resourcemodel.ResourceStatusPre
 		{Type: resourcemodel.StatusSignalResourceState, Name: "type", Status: state},
 		{Type: resourcemodel.StatusSignalResourceState, Name: "data.count", Status: strconv.Itoa(dataCount)},
 	}
-	lifecycle := resourcemodel.ConfigLifecycle(sec.ObjectMeta)
-	if status, ok := resourcemodel.DeletingConfigStatus(sec.ObjectMeta, state, signals, lifecycle); ok {
+	lifecycle := resourcemodel.ObjectLifecycle(sec.ObjectMeta)
+	if status, ok := resourcemodel.DeletingObjectStatus(sec.ObjectMeta, state, signals, lifecycle); ok {
 		return status
 	}
-	return resourcemodel.ConfigSourceStatus(state+", "+resourcemodel.KeyCountLabel(dataCount), state, "", "ready", signals, lifecycle)
+	return resourcemodel.ObjectSourceStatus(state+", "+resourcemodel.KeyCountLabel(dataCount), state, "", "", "ready", signals, lifecycle)
 }
 
 func secretType(sec *corev1.Secret) string {

@@ -78,7 +78,7 @@ func TestClusterRBACBuilder(t *testing.T) {
 
 	entries := map[string]ClusterRBACEntry{}
 	for _, entry := range payload.Rows {
-		entries[entry.Kind+"-"+entry.Name] = entry
+		entries[entry.Ref.Kind+"-"+entry.Ref.Name] = entry
 		require.NotEmpty(t, entry.Age)
 	}
 

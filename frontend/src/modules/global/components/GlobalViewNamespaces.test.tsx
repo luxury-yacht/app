@@ -28,6 +28,11 @@ vi.mock('@/core/data-access', () => ({
   setRefreshDomainEnabled: mocks.setRefreshDomainEnabled,
 }));
 
+vi.mock('@/core/cluster-workspace/useClusterWorkspace', () => ({
+  useClusterNameResolver: () => (clusterId: string) =>
+    ({ 'cluster-a': 'alpha', 'cluster-b': 'beta', 'cluster-c': 'gamma' })[clusterId] ?? clusterId,
+}));
+
 vi.mock('@shared/components/tables/hooks/useGridTableExternalFilters', () => ({
   requestGridTableFilters: mocks.requestGridTableFilters,
 }));

@@ -98,13 +98,13 @@ export default function ClusterViewAttention() {
   const columns = useMemo<GridColumnDefinition<ClusterAttentionFinding>[]>(() => {
     const result: GridColumnDefinition<ClusterAttentionFinding>[] = [
       cf.createKindColumn<ClusterAttentionFinding>({
-        getKind: (row) => row.kind,
-        getDisplayText: (row) => getDisplayKind(row.kind, useShortResourceNames),
+        getKind: (row) => row.ref.kind,
+        getDisplayText: (row) => getDisplayKind(row.ref.kind, useShortResourceNames),
         onClick: openObject,
         onAltClick: navigateObject,
       }),
       cf.createTextColumn('namespace', 'Namespace', (row) => row.namespace || '-'),
-      cf.createTextColumn('name', 'Name', (row) => row.name, {
+      cf.createTextColumn('name', 'Name', (row) => row.ref.name, {
         onClick: openObject,
         onAltClick: navigateObject,
         getClassName: () => 'object-panel-link',

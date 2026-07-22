@@ -12,6 +12,7 @@ import { withStableListKeys } from '@shared/utils/stableListKeys';
 import { act } from 'react';
 import * as ReactDOM from 'react-dom/client';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
+import { makeResourceRef } from '@/test-utils/makeResourceRef';
 
 vi.mock('@modules/namespace/components/useNamespaceColumnLink', () => ({
   useNamespaceColumnLink: () => ({
@@ -88,7 +89,7 @@ vi.mock('@shared/components/tables/GridTable', async () => {
             {withStableListKeys(props.data, (row) => JSON.stringify(row)).map(
               ({ key, value: row }) => (
                 <tr key={key}>
-                  <td>{row.name}</td>
+                  <td>{row.ref.name}</td>
                 </tr>
               )
             )}
@@ -190,19 +191,19 @@ describe('NsViewQuotas', () => {
   });
 
   const baseQuota = (overrides: Partial<QuotaData> = {}): QuotaData => ({
-    kind: 'ResourceQuota',
-    name: 'rq-default',
-    namespace: 'team-a',
-    clusterId: 'alpha:ctx',
-    hard: {
-      'requests.cpu': '2',
-      'requests.memory': '2147483648',
-      pods: '10',
+    ref: {
+      ...makeResourceRef({
+        kind: 'ResourceQuota',
+        resource: 'resourcequotas',
+        namespace: 'team-a',
+        name: 'rq-default',
+      }),
+      kind: 'ResourceQuota',
+      name: 'rq-default',
+      namespace: 'team-a',
+      clusterId: 'alpha:ctx',
     },
-    used: {
-      'requests.cpu': '1',
-      'requests.memory': '1073741824',
-    },
+    details: '3 resources',
     age: '1h',
     ...overrides,
   });

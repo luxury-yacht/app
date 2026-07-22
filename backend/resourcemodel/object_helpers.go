@@ -6,7 +6,11 @@ import (
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 )
 
-func StorageResourceModel(
+// KubernetesResourceModel builds the canonical ResourceModel for a Kubernetes
+// object: full Ref identity, copied metadata, and the supplied status/facts.
+// Every kind package builds its model through this one constructor (directly or
+// via a group-baking adapter like RBACResourceModel).
+func KubernetesResourceModel(
 	clusterID, group, version, kind, resource string,
 	scope ResourceScope,
 	meta metav1.ObjectMeta,
@@ -38,7 +42,9 @@ func StorageResourceModel(
 	}
 }
 
-func DeletingStorageStatus(meta metav1.ObjectMeta, state string, signals []ResourceStatusSignal, lifecycle ResourceLifecycle) (ResourceStatusPresentation, bool) {
+// DeletingObjectStatus returns the shared Terminating presentation when the
+// object carries a deletion timestamp, appending the deletion signal.
+func DeletingObjectStatus(meta metav1.ObjectMeta, state string, signals []ResourceStatusSignal, lifecycle ResourceLifecycle) (ResourceStatusPresentation, bool) {
 	if meta.DeletionTimestamp == nil {
 		return ResourceStatusPresentation{}, false
 	}
@@ -57,7 +63,8 @@ func DeletingStorageStatus(meta metav1.ObjectMeta, state string, signals []Resou
 	}, true
 }
 
-func StorageSourceStatus(label, state, reason, message, presentation string, signals []ResourceStatusSignal, lifecycle ResourceLifecycle) ResourceStatusPresentation {
+// ObjectSourceStatus assembles a ResourceStatusPresentation from its parts.
+func ObjectSourceStatus(label, state, reason, message, presentation string, signals []ResourceStatusSignal, lifecycle ResourceLifecycle) ResourceStatusPresentation {
 	return ResourceStatusPresentation{
 		Label:        label,
 		State:        state,
@@ -69,7 +76,8 @@ func StorageSourceStatus(label, state, reason, message, presentation string, sig
 	}
 }
 
-func StorageLifecycle(meta metav1.ObjectMeta) ResourceLifecycle {
+// ObjectLifecycle derives the deletion lifecycle flags from object metadata.
+func ObjectLifecycle(meta metav1.ObjectMeta) ResourceLifecycle {
 	return ResourceLifecycle{
 		Deleting:         meta.DeletionTimestamp != nil,
 		FinalizerBlocked: meta.DeletionTimestamp != nil && len(meta.Finalizers) > 0,

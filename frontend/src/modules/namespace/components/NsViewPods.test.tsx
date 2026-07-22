@@ -15,7 +15,12 @@ import { act } from 'react';
 import * as ReactDOM from 'react-dom/client';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { eventBus } from '@/core/events';
-import type { PodMetricsInfo, PodSnapshotEntry } from '@/core/refresh/types';
+import type {
+  CanonicalRowTestOverrides,
+  PodMetricsInfo,
+  PodSnapshotEntry,
+} from '@/core/refresh/types';
+import { makeResourceRef } from '@/test-utils/makeResourceRef';
 import { requireReactElement } from '@/test-utils/requireReactElement';
 import { requireValue } from '@/test-utils/requireValue';
 
@@ -166,8 +171,8 @@ vi.mock('@shared/components/tables/GridTable', () => ({
         <table data-testid="grid-table">
           <tbody>
             {props.data.map((row) => (
-              <tr key={row.name}>
-                <td>{row.name}</td>
+              <tr key={row.ref.name}>
+                <td>{row.ref.name}</td>
               </tr>
             ))}
           </tbody>
@@ -299,6 +304,7 @@ vi.mock('@modules/kubernetes/config/KubeconfigContext', () => ({
   useKubeconfig: () => ({
     selectedKubeconfig: 'mock-path:mock-context',
     selectedClusterId: 'alpha:ctx',
+    selectedClusterName: 'alpha',
   }),
 }));
 
@@ -308,28 +314,39 @@ vi.mock('@utils/errorHandler', () => ({
 
 import NsViewPods from '@modules/namespace/components/NsViewPods';
 
-const createPod = (override: Partial<PodSnapshotEntry> = {}): PodSnapshotEntry => ({
-  name: 'pod-default',
-  namespace: 'team-a',
-  clusterId: 'alpha:ctx',
-  clusterName: 'alpha',
-  node: 'node-a',
-  status: 'Running',
-  statusPresentation: 'ready',
-  ready: '1/1',
-  restarts: 0,
-  age: '1h',
-  ownerKind: 'Deployment',
-  ownerName: 'owner',
-  portForwardAvailable: true,
-  cpuUsage: '0m',
-  cpuRequest: '0m',
-  cpuLimit: '0m',
-  memUsage: '0Mi',
-  memRequest: '0Mi',
-  memLimit: '0Mi',
-  ...override,
-});
+const createPod = (
+  override: CanonicalRowTestOverrides<PodSnapshotEntry> = {}
+): PodSnapshotEntry => {
+  const { ref, ...row } = override;
+  return {
+    ref: {
+      ...makeResourceRef({
+        clusterId: 'alpha:ctx',
+        kind: 'Pod',
+        resource: 'pods',
+        namespace: 'team-a',
+        name: 'pod-default',
+      }),
+      ...ref,
+    },
+    node: 'node-a',
+    status: 'Running',
+    statusPresentation: 'ready',
+    ready: '1/1',
+    restarts: 0,
+    age: '1h',
+    ownerKind: 'Deployment',
+    ownerName: 'owner',
+    portForwardAvailable: true,
+    cpuUsage: '0m',
+    cpuRequest: '0m',
+    cpuLimit: '0m',
+    memUsage: '0Mi',
+    memRequest: '0Mi',
+    memLimit: '0Mi',
+    ...row,
+  };
+};
 
 describe('NsViewPods', () => {
   let container: HTMLDivElement;
@@ -404,8 +421,8 @@ describe('NsViewPods', () => {
     // Include cluster metadata so GridTable key extraction stays cluster-scoped.
     const defaultPods: PodSnapshotEntry[] = [
       createPod({
-        name: 'api',
-        namespace: 'team-a',
+        ref: { name: 'api', namespace: 'team-a' },
+
         node: 'node-a',
         status: 'Running',
         ready: '2/2',
@@ -572,8 +589,8 @@ describe('NsViewPods', () => {
   });
 
   it('uses the typed query result for all-namespaces pods on first render', async () => {
-    const localPod = createPod({ name: 'local-provider-row', namespace: 'team-a' });
-    const queryPod = createPod({ name: 'query-row', namespace: 'team-b' });
+    const localPod = createPod({ ref: { name: 'local-provider-row', namespace: 'team-a' } });
+    const queryPod = createPod({ ref: { name: 'query-row', namespace: 'team-b' } });
     requestRefreshDomainStateMock.mockImplementation(() =>
       Promise.resolve({
         status: 'executed',
@@ -801,7 +818,8 @@ describe('NsViewPods', () => {
   it('uses backend statusPresentation for the pod status class', async () => {
     const pods = [
       createPod({
-        name: 'api',
+        ref: { name: 'api' },
+
         status: 'Running',
         statusState: 'Running',
         statusPresentation: 'warning',
@@ -821,7 +839,7 @@ describe('NsViewPods', () => {
   });
 
   it('renders zero pod restarts as no value without changing numeric sorting', async () => {
-    const pods = [createPod(), createPod({ name: 'restarted', restarts: 2 })];
+    const pods = [createPod(), createPod({ ref: { name: 'restarted' }, restarts: 2 })];
     await renderPods({ data: pods });
 
     const column = requireValue(
@@ -939,7 +957,7 @@ describe('NsViewPods', () => {
     gridTablePropsRef.current = null as unknown as CapturedGridTableProps;
     await renderPods({
       namespace: 'team-b',
-      data: [createPod({ name: 'other', namespace: 'team-b' })],
+      data: [createPod({ ref: { name: 'other', namespace: 'team-b' } })],
       metrics: null,
     });
 
@@ -998,7 +1016,7 @@ describe('NsViewPods', () => {
 
   it('disables port forward in the context menu when the pod exposes no forwardable ports', async () => {
     await renderPods({
-      data: [createPod({ name: 'no-ports', portForwardAvailable: false })],
+      data: [createPod({ ref: { name: 'no-ports' }, portForwardAvailable: false })],
     });
 
     const items = gridTablePropsRef.current.getCustomContextMenuItems(
@@ -1096,8 +1114,8 @@ describe('NsViewPods', () => {
   it('does not render a competing unhealthy-pods filter action', async () => {
     await renderPods({
       data: [
-        createPod({ name: 'healthy', statusPresentation: 'ready' }),
-        createPod({ name: 'failing', statusPresentation: 'error', restarts: 2 }),
+        createPod({ ref: { name: 'healthy' }, statusPresentation: 'ready' }),
+        createPod({ ref: { name: 'failing' }, statusPresentation: 'error', restarts: 2 }),
       ],
     });
 

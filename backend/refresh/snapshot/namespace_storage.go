@@ -4,13 +4,11 @@ import (
 	"context"
 	"fmt"
 	"sort"
-	"strings"
 
 	informers "k8s.io/client-go/informers"
 	"k8s.io/client-go/tools/cache"
 
 	"github.com/luxury-yacht/app/backend/internal/config"
-	"github.com/luxury-yacht/app/backend/kind/kindregistry"
 	"github.com/luxury-yacht/app/backend/kind/streamrows"
 	"github.com/luxury-yacht/app/backend/kind/streamspec"
 	"github.com/luxury-yacht/app/backend/refresh"
@@ -25,9 +23,8 @@ const (
 	errNamespaceStorageScopeRequired = "namespace scope is required"
 )
 
-// NamespaceStorageBuilder constructs PVC summaries for a namespace by listing the
-// kind's informer indexer and projecting it via the pvc package's stream-summary
-// builder; Build loops the stream descriptor registry via collectDescriptorTableRows.
+// NamespaceStorageBuilder constructs PVC summaries for a namespace via the shared
+// typed-table domain skeleton (typed_table_domain.go).
 type NamespaceStorageBuilder struct {
 	collectIndexer func(streamspec.Descriptor) cache.Indexer
 	// maintained, when set, is an informer-fed store the builder serves rows from
@@ -64,6 +61,30 @@ func namespaceStorageQueryCapabilities() ResourceQueryCapabilities {
 // snapshot-side name and wire JSON unchanged.
 type StorageSummary = streamrows.StorageSummary
 
+func namespaceStorageDomainSpec() typedTableDomainSpec[StorageSummary] {
+	return typedTableDomainSpec[StorageSummary]{
+		domain:           namespaceStorageDomainName,
+		scopeRequiredErr: errNamespaceStorageScopeRequired,
+		entryLimit:       config.SnapshotNamespaceStorageEntryLimit,
+		description:      "storage resources",
+		listErrorPrefix:  "namespace storage: failed to list pvcs",
+		adapter:          storageTableQueryAdapter(),
+		schema:           storageQuerypageSchema(),
+		capabilities:     namespaceStorageQueryCapabilities(),
+		kindOf:           func(resource StorageSummary) string { return resource.Ref.Kind },
+		sortRows:         sortStorageSummaries,
+	}
+}
+
+func sortStorageSummaries(resources []StorageSummary) {
+	sort.Slice(resources, func(i, j int) bool {
+		if resources[i].Ref.Namespace == resources[j].Ref.Namespace {
+			return resources[i].Ref.Name < resources[j].Ref.Name
+		}
+		return resources[i].Ref.Namespace < resources[j].Ref.Namespace
+	})
+}
+
 // RegisterNamespaceStorageDomain registers the storage domain.
 //
 // PersistentVolumeClaim is an owned-reflector ingest kind (IngestOwned): when
@@ -81,13 +102,8 @@ func RegisterNamespaceStorageDomain(
 		return fmt.Errorf("shared informer factory is nil")
 	}
 	collectIndexer := unconditionalSharedIndexers(factory, namespaceStorageDomainName, ingestManager)
-
-	// Maintain a per-cluster store fed by each available storage kind's source: the
-	// ingest Sink for cut kinds, the shared-informer handler for any uncut kind.
-	maintained := newTypedMaintainedStore(clusterMeta, storageQuerypageSchema(), storageTableQueryAdapter())
-	reg.RegisterMaintainedStore(namespaceStorageDomainName, maintained) // spill/restore/reconcile across Cold/re-warm
-	feedMaintainedFromIngest(maintained, namespaceStorageDomainName, ingestManager)
-	if err := registerMaintainedHandlers(maintained, namespaceStorageDomainName, collectIndexer, factory, nil); err != nil {
+	maintained, err := newRegisteredTypedTableStore(reg, namespaceStorageDomainSpec(), clusterMeta, collectIndexer, factory, nil, ingestManager)
+	if err != nil {
 		return err
 	}
 
@@ -101,103 +117,10 @@ func RegisterNamespaceStorageDomain(
 	})
 }
 
-// storageSources computes per-descriptor availability for THIS request (indexer
-// present AND runtimeResourceAllowed), returning the snapshot sources and a
-// Kind→available map — the same gating collectDescriptorTableRows applies, so the
-// maintained-store path and the list path agree on which kinds are visible.
-func (b *NamespaceStorageBuilder) storageSources(ctx context.Context) ([]typedTableResourceSource, map[string]bool) {
-	descriptors := kindregistry.StreamDescriptorsForDomain(namespaceStorageDomainName)
-	sources := make([]typedTableResourceSource, 0, len(descriptors))
-	available := make(map[string]bool, len(descriptors))
-	for _, d := range descriptors {
-		ok := b.collectIndexer(d) != nil && runtimeResourceAllowed(ctx, namespaceStorageDomainName, d.Group, d.Resource)
-		sources = append(sources, typedTableResourceSource{
-			Kind:      d.Kind,
-			Group:     d.Group,
-			Resource:  d.Resource,
-			Available: ok,
-		})
-		available[d.Kind] = ok
-	}
-	return sources, available
-}
-
 // Build assembles PVC summaries for the namespace.
 func (b *NamespaceStorageBuilder) Build(ctx context.Context, scope string) (*refresh.Snapshot, error) {
-	meta := ClusterMetaFromContext(ctx)
-	clusterID, trimmed := refresh.SplitClusterScope(scope)
-	baseScope, query, err := parseTypedTableQueryScope(clusterID, strings.TrimSpace(trimmed), namespaceStorageDomainName, "")
-	if err != nil {
-		return nil, err
-	}
-	parsedScope, err := parseNamespaceSnapshotScope(refresh.JoinClusterScope(clusterID, baseScope), errNamespaceStorageScopeRequired)
-	if err != nil {
-		return nil, err
-	}
-
-	sortStorageSummaries := func(resources []StorageSummary) {
-		sort.Slice(resources, func(i, j int) bool {
-			if resources[i].Namespace == resources[j].Namespace {
-				return resources[i].Name < resources[j].Name
-			}
-			return resources[i].Namespace < resources[j].Namespace
+	return buildTypedTableSnapshot(ctx, scope, namespaceStorageDomainSpec(), b.collectIndexer, b.maintained,
+		func(meta ClusterMeta, envelope ResourceQueryEnvelope, rows []StorageSummary) any {
+			return NamespaceStorageSnapshot{ClusterMeta: meta, ResourceQueryEnvelope: envelope, Rows: rows}
 		})
-	}
-
-	var resolved typedSnapshotPage[StorageSummary]
-	var version uint64
-	if b.maintained != nil {
-		// Serve the query straight from the informer-fed store, querying it in place
-		// (O(log N + page)) rather than snapshotting + rebuilding a per-Build store.
-		sources, available := b.storageSources(ctx)
-		resolved = resolveMaintainedDirect(
-			b.maintained.store,
-			query,
-			available,
-			parsedScope.Namespace,
-			storageTableQueryAdapter(),
-			storageQuerypageSchema(),
-			capabilitiesWithAvailableKinds(namespaceStorageQueryCapabilities(), sources),
-			config.SnapshotNamespaceStorageEntryLimit,
-			"storage resources",
-			func(resource StorageSummary) string { return resource.Kind },
-			func() []StorageSummary {
-				rows := b.maintained.rows(parsedScope.Namespace, available)
-				sortStorageSummaries(rows)
-				return rows
-			},
-			typedTableQueryResourceIssues(ctx, namespaceStorageDomainName, query, sources),
-		)
-		version = b.maintained.snapshotVersion()
-	} else {
-		resources, sources, v, err := collectDescriptorTableRows[StorageSummary](ctx, namespaceStorageDomainName, b.collectIndexer, meta, parsedScope.Namespace)
-		if err != nil {
-			return nil, fmt.Errorf("namespace storage: failed to list pvcs: %w", err)
-		}
-		version = v
-		sortStorageSummaries(resources)
-		resolved = resolveTypedSnapshotPageViaStore(
-			namespaceStorageDomainName,
-			resources,
-			query,
-			storageTableQueryAdapter(),
-			storageQuerypageSchema(),
-			capabilitiesWithAvailableKinds(namespaceStorageQueryCapabilities(), sources),
-			config.SnapshotNamespaceStorageEntryLimit,
-			"storage resources",
-			func(resource StorageSummary) string { return resource.Kind },
-			typedTableQueryResourceIssues(ctx, namespaceStorageDomainName, query, sources),
-		)
-	}
-	return &refresh.Snapshot{
-		Domain:  namespaceStorageDomainName,
-		Scope:   refresh.JoinClusterScope(clusterID, strings.TrimSpace(trimmed)),
-		Version: version,
-		Payload: NamespaceStorageSnapshot{
-			ClusterMeta:           meta,
-			ResourceQueryEnvelope: resolved.Envelope,
-			Rows:                  resolved.Rows,
-		},
-		Stats: resolved.Stats,
-	}, nil
 }

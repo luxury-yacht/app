@@ -19,20 +19,15 @@ import (
 
 	appsv1 "k8s.io/api/apps/v1"
 	autoscalingv1 "k8s.io/api/autoscaling/v1"
-	batchv1 "k8s.io/api/batch/v1"
 	corev1 "k8s.io/api/core/v1"
-	discoveryv1 "k8s.io/api/discovery/v1"
 	apiextensionsv1 "k8s.io/apiextensions-apiserver/pkg/apis/apiextensions/v1"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/apis/meta/v1/unstructured"
-	"k8s.io/apimachinery/pkg/labels"
 	"k8s.io/apimachinery/pkg/runtime/schema"
 	"k8s.io/client-go/dynamic"
 	dynamicinformer "k8s.io/client-go/dynamic/dynamicinformer"
 	appslisters "k8s.io/client-go/listers/apps/v1"
 	batchlisters "k8s.io/client-go/listers/batch/v1"
-	corelisters "k8s.io/client-go/listers/core/v1"
-	discoverylisters "k8s.io/client-go/listers/discovery/v1"
 	"k8s.io/client-go/tools/cache"
 
 	"github.com/luxury-yacht/app/backend/internal/applog"
@@ -41,7 +36,6 @@ import (
 	"github.com/luxury-yacht/app/backend/refresh/containerlogsstream"
 	"github.com/luxury-yacht/app/backend/refresh/informer"
 	"github.com/luxury-yacht/app/backend/refresh/ingest"
-	"github.com/luxury-yacht/app/backend/refresh/metrics"
 	"github.com/luxury-yacht/app/backend/refresh/permissions"
 	"github.com/luxury-yacht/app/backend/refresh/ringbuffer"
 	"github.com/luxury-yacht/app/backend/refresh/snapshot"
@@ -52,11 +46,9 @@ import (
 	"github.com/luxury-yacht/app/backend/resources/customresource"
 	daemonsetpkg "github.com/luxury-yacht/app/backend/resources/daemonset"
 	deploymentpkg "github.com/luxury-yacht/app/backend/resources/deployment"
-	"github.com/luxury-yacht/app/backend/resources/endpointslice"
 	hpapkg "github.com/luxury-yacht/app/backend/resources/hpa"
 	jobpkg "github.com/luxury-yacht/app/backend/resources/job"
 	podspkg "github.com/luxury-yacht/app/backend/resources/pods"
-	servicepkg "github.com/luxury-yacht/app/backend/resources/service"
 	statefulsetpkg "github.com/luxury-yacht/app/backend/resources/statefulset"
 )
 
@@ -185,26 +177,21 @@ func (c *customResourceInformer) stop() {
 // Manager fan-outs informer updates to websocket subscribers.
 type Manager struct {
 	clusterMeta snapshot.ClusterMeta
-	metrics     metrics.Provider
 	logger      containerlogsstream.Logger
 	telemetry   *telemetry.Recorder
 	permissions permissions.ListWatchChecker
 
 	dynamicClient dynamic.Interface
 
-	// The workload listers (deployment/stateful/daemon/job/cronJob) and nodeLister
-	// are wired only by unit tests that drive the typed handlePod*/handleWorkload/handleNode/
-	// HPA paths directly. Production reads pods, the workload kinds, AND nodes from the
-	// ingest store (all cut), so those typed informers are never instantiated; podIngest /
-	// workloadIngest / nodeIngest are the production sources (lookupWorkloadRef / lookupNodeRef
-	// prefer a wired lister for tests, else ingest).
+	// The workload listers (deployment/stateful/daemon/job/cronJob) are wired only
+	// by unit tests: lookupWorkloadRef prefers a wired lister (lookupWorkloadObject),
+	// else the ingest store. Production reads pods, the workload kinds, and nodes
+	// from the ingest store (all cut), so those typed informers are never
+	// instantiated; podIngest / workloadIngest / nodeIngest are the production
+	// sources.
 	podIngest        podBundleSource
 	workloadIngest   workloadBundleSource
 	nodeIngest       nodeBundleSource
-	nodeLister       corelisters.NodeLister
-	serviceLister    corelisters.ServiceLister
-	sliceLister      discoverylisters.EndpointSliceLister
-	rsLister         appslisters.ReplicaSetLister
 	deploymentLister appslisters.DeploymentLister
 	statefulLister   appslisters.StatefulSetLister
 	daemonLister     appslisters.DaemonSetLister
@@ -249,7 +236,6 @@ type Manager struct {
 // shared informer (see registerIngestNotifyStreams), so the factory never caches them.
 func NewManager(
 	factory *informer.Factory,
-	provider metrics.Provider,
 	logger containerlogsstream.Logger,
 	recorder *telemetry.Recorder,
 	meta snapshot.ClusterMeta,
@@ -262,7 +248,6 @@ func NewManager(
 	}
 	mgr := &Manager{
 		clusterMeta:       meta,
-		metrics:           provider,
 		logger:            logger,
 		telemetry:         recorder,
 		permissions:       factory,
@@ -624,12 +609,12 @@ func (m *Manager) handleCustomResource(obj interface{}, updateType MessageType, 
 		// for both the cluster-scoped and namespace-scoped paths.
 		crdName := info.gvr.Resource + "." + info.gvr.Group
 		if domain == domainClusterCustom {
-			row = customresource.BuildClusterStreamSummary(m.clusterMeta, resource, info.gvr.Group, info.gvr.Version, info.kind, crdName)
+			row = customresource.BuildClusterStreamSummary(m.clusterMeta, resource, info.gvr.Group, info.gvr.Version, info.gvr.Resource, info.kind, crdName)
 		} else {
 			// The streaming path has no parent scope concept — fall back
 			// to the resource's own namespace (which is almost always
 			// set for anything that reaches an informer).
-			row = customresource.BuildNamespaceStreamSummary(m.clusterMeta, resource, info.gvr.Group, info.gvr.Version, info.kind, crdName, resource.GetNamespace())
+			row = customresource.BuildNamespaceStreamSummary(m.clusterMeta, resource, info.gvr.Group, info.gvr.Version, info.gvr.Resource, info.kind, crdName, resource.GetNamespace())
 		}
 	}
 	update := m.newObjectRowUpdate(updateType, domain, resource, ref, row)
@@ -825,92 +810,6 @@ func (m *Manager) broadcastHelmRefresh(name, namespace, resourceVersion string, 
 	m.broadcast(domainNamespaceHelm, scopesForNamespace(namespace), update)
 }
 
-// Cluster RBAC updates target the cluster scope only.
-func (m *Manager) handleService(obj interface{}, updateType MessageType) {
-	service := serviceFromObject(obj)
-	if service == nil {
-		return
-	}
-
-	slices, err := m.listEndpointSlicesForService(service.Namespace, service.Name)
-	if err != nil {
-		m.logWarn(fmt.Sprintf("resource stream: list endpoint slices for service %s/%s failed: %v", service.Namespace, service.Name, err))
-		if m.telemetry != nil {
-			m.telemetry.RecordStreamError(telemetry.StreamResources, err)
-		}
-		return
-	}
-
-	ref := m.resourceRefForObject(service, servicepkg.Identity.Group, servicepkg.Identity.Version, servicepkg.Identity.Kind, servicepkg.Identity.Resource)
-	update := m.newObjectRowUpdate(updateType, domainNamespaceNetwork, service, ref, servicepkg.BuildStreamSummary(m.clusterMeta, service, slices))
-
-	m.broadcast(domainNamespaceNetwork, scopesForNamespace(service.Namespace), update)
-}
-
-func (m *Manager) handleEndpointSlice(obj interface{}, updateType MessageType) {
-	slice := endpointSliceFromObject(obj)
-	if slice == nil {
-		return
-	}
-	serviceName := endpointSliceServiceName(slice)
-
-	ref := m.resourceRefForObject(slice, endpointslice.Identity.Group, endpointslice.Identity.Version, endpointslice.Identity.Kind, endpointslice.Identity.Resource)
-	update := m.newObjectRowUpdate(updateType, domainNamespaceNetwork, slice, ref, endpointslice.BuildStreamSummary(m.clusterMeta, slice))
-	m.broadcast(domainNamespaceNetwork, scopesForNamespace(slice.Namespace), update)
-
-	m.broadcastServiceFromEndpointSlice(slice, serviceName)
-}
-
-func (m *Manager) handleEndpointSliceEvent(oldObj interface{}, newObj interface{}, updateType MessageType) {
-	switch updateType {
-	case MessageTypeAdded:
-		m.handleEndpointSlice(newObj, updateType)
-	case MessageTypeDeleted:
-		m.handleEndpointSlice(oldObj, updateType)
-	case MessageTypeModified:
-		m.handleEndpointSlice(newObj, updateType)
-		oldSlice := endpointSliceFromObject(oldObj)
-		newSlice := endpointSliceFromObject(newObj)
-		if oldSlice == nil || newSlice == nil {
-			return
-		}
-		oldService := endpointSliceServiceName(oldSlice)
-		if oldSlice.Namespace != newSlice.Namespace || oldService != endpointSliceServiceName(newSlice) {
-			m.broadcastServiceFromEndpointSlice(oldSlice, oldService)
-		}
-	}
-}
-
-func endpointSliceServiceName(slice *discoveryv1.EndpointSlice) string {
-	if slice == nil || slice.Labels == nil {
-		return ""
-	}
-	return strings.TrimSpace(slice.Labels[discoveryv1.LabelServiceName])
-}
-
-func (m *Manager) broadcastServiceFromEndpointSlice(slice *discoveryv1.EndpointSlice, serviceName string) {
-	if m.serviceLister == nil || serviceName == "" {
-		return
-	}
-	slices, err := m.listEndpointSlicesForService(slice.Namespace, serviceName)
-	if err != nil {
-		m.logWarn(fmt.Sprintf("resource stream: list endpoint slices for service %s/%s failed: %v", slice.Namespace, serviceName, err))
-		if m.telemetry != nil {
-			m.telemetry.RecordStreamError(telemetry.StreamResources, err)
-		}
-		return
-	}
-	service, err := m.serviceLister.Services(slice.Namespace).Get(serviceName)
-	if err != nil || service == nil {
-		return
-	}
-	serviceSummary := servicepkg.BuildStreamSummary(m.clusterMeta, service, slices)
-	ref := m.resourceRefForObject(service, servicepkg.Identity.Group, servicepkg.Identity.Version, servicepkg.Identity.Kind, servicepkg.Identity.Resource)
-	serviceUpdate := m.newObjectRowUpdate(MessageTypeModified, domainNamespaceNetwork, service, ref, serviceSummary)
-	serviceUpdate.ResourceVersion = slice.ResourceVersion
-	m.broadcast(domainNamespaceNetwork, scopesForNamespace(service.Namespace), serviceUpdate)
-}
-
 // Cluster configuration updates stream shared cluster resources.
 // Persistent volumes belong to the cluster storage domain.
 func (m *Manager) handleHPA(obj interface{}, updateType MessageType) {
@@ -986,13 +885,6 @@ func hpaWorkloadKey(hpa *autoscalingv1.HorizontalPodAutoscaler) string {
 		return ""
 	}
 	return snapshot.WorkloadOwnerKey(kind, namespace, name)
-}
-
-func (m *Manager) podMetricsSnapshot() map[string]metrics.PodUsage {
-	if m.metrics == nil {
-		return map[string]metrics.PodUsage{}
-	}
-	return m.metrics.LatestPodUsage()
 }
 
 func (m *Manager) BroadcastCatalogRefresh(version string) {
@@ -1299,19 +1191,6 @@ func (m *Manager) triggerResync(sub *subscription, update Update) bool {
 	}
 }
 
-func (m *Manager) listEndpointSlicesForService(namespace, service string) ([]*discoveryv1.EndpointSlice, error) {
-	if m.sliceLister == nil {
-		return []*discoveryv1.EndpointSlice{}, nil
-	}
-	selector := labels.SelectorFromSet(map[string]string{
-		discoveryv1.LabelServiceName: service,
-	})
-	if namespace == "" {
-		return m.sliceLister.List(selector)
-	}
-	return m.sliceLister.EndpointSlices(namespace).List(selector)
-}
-
 // lookupWorkloadObject resolves a workload object via a typed lister. Production wires no
 // workload listers (the kinds are cut to ingest), so this returns an error there and the
 // caller falls back to the ingest catalog half (see lookupWorkloadRef); only the unit tests
@@ -1348,25 +1227,6 @@ func (m *Manager) lookupWorkloadObject(kind, namespace, name string) (metav1.Obj
 	}
 }
 
-func workloadFromObject(obj interface{}) (metav1.Object, string) {
-	switch typed := obj.(type) {
-	case *appsv1.Deployment:
-		return typed, deploymentpkg.Identity.Kind
-	case *appsv1.StatefulSet:
-		return typed, statefulsetpkg.Identity.Kind
-	case *appsv1.DaemonSet:
-		return typed, daemonsetpkg.Identity.Kind
-	case *batchv1.Job:
-		return typed, jobpkg.Identity.Kind
-	case *batchv1.CronJob:
-		return typed, cronjobpkg.Identity.Kind
-	case cache.DeletedFinalStateUnknown:
-		return workloadFromObject(typed.Obj)
-	default:
-		return nil, ""
-	}
-}
-
 // The *FromObject decoders adapt the generic objectAs[T] (type assertion +
 // delete-tombstone unwrap) to the ergonomic nil-returning form their call sites
 // use — including dual-decode compares in the event/fanout handlers. The unwrap
@@ -1386,11 +1246,6 @@ func customResourceFromObject(obj interface{}) *unstructured.Unstructured {
 	return typed
 }
 
-func podFromObject(obj interface{}) *corev1.Pod {
-	typed, _ := objectAs[*corev1.Pod](obj)
-	return typed
-}
-
 func configMapFromObject(obj interface{}) *corev1.ConfigMap {
 	typed, _ := objectAs[*corev1.ConfigMap](obj)
 	return typed
@@ -1401,33 +1256,9 @@ func secretFromObject(obj interface{}) *corev1.Secret {
 	return typed
 }
 
-func serviceFromObject(obj interface{}) *corev1.Service {
-	typed, _ := objectAs[*corev1.Service](obj)
-	return typed
-}
-
-func endpointSliceFromObject(obj interface{}) *discoveryv1.EndpointSlice {
-	typed, _ := objectAs[*discoveryv1.EndpointSlice](obj)
-	return typed
-}
-
 func hpaFromObject(obj interface{}) *autoscalingv1.HorizontalPodAutoscaler {
 	typed, _ := objectAs[*autoscalingv1.HorizontalPodAutoscaler](obj)
 	return typed
-}
-
-func parseWorkloadOwnerKey(key string) (namespace, kind, name string, ok bool) {
-	parts := strings.Split(key, "/")
-	if len(parts) != 3 {
-		return "", "", "", false
-	}
-	namespace = strings.TrimSpace(parts[0])
-	kind = strings.TrimSpace(parts[1])
-	name = strings.TrimSpace(parts[2])
-	if namespace == "" || kind == "" || name == "" {
-		return "", "", "", false
-	}
-	return namespace, kind, name, true
 }
 
 func replicaSetDeploymentOwnerName(rs *appsv1.ReplicaSet) string {
@@ -1444,14 +1275,14 @@ func replicaSetDeploymentOwnerName(rs *appsv1.ReplicaSet) string {
 
 func scopesForPod(summary snapshot.PodSummary) []string {
 	scopes := make([]string, 0, 5)
-	if summary.Namespace != "" {
-		scopes = append(scopes, fmt.Sprintf("namespace:%s", summary.Namespace), "namespace:all")
+	if summary.Ref.Namespace != "" {
+		scopes = append(scopes, fmt.Sprintf("namespace:%s", summary.Ref.Namespace), "namespace:all")
 	}
 	if summary.Node != "" {
 		scopes = append(scopes, fmt.Sprintf("node:%s", summary.Node))
 	}
 	if summary.OwnerKind != "" && summary.OwnerKind != "None" && summary.OwnerName != "" && summary.OwnerName != "None" {
-		if scope := workloadScopeForOwner(summary.Namespace, summary.OwnerAPIVersion, summary.OwnerKind, summary.OwnerName); scope != "" {
+		if scope := workloadScopeForOwner(summary.Ref.Namespace, summary.OwnerAPIVersion, summary.OwnerKind, summary.OwnerName); scope != "" {
 			scopes = append(scopes, scope)
 		}
 	}
@@ -1460,7 +1291,7 @@ func scopesForPod(summary snapshot.PodSummary) []string {
 	// collapsed scope for non-collapsed pods — uniqueScopes in the broadcast
 	// path deduplicates.
 	if summary.DirectOwnerKind != "" && summary.DirectOwnerName != "" {
-		if scope := workloadScopeForOwner(summary.Namespace, summary.DirectOwnerAPIVersion, summary.DirectOwnerKind, summary.DirectOwnerName); scope != "" {
+		if scope := workloadScopeForOwner(summary.Ref.Namespace, summary.DirectOwnerAPIVersion, summary.DirectOwnerKind, summary.DirectOwnerName); scope != "" {
 			scopes = append(scopes, scope)
 		}
 	}
@@ -1476,20 +1307,6 @@ func workloadScopeForOwner(namespace, apiVersion, kind, name string) string {
 		return ""
 	}
 	return fmt.Sprintf("workload:%s:%s:%s:%s:%s", namespace, gv.Group, gv.Version, kind, name)
-}
-
-func stalePodScopes(oldSummary snapshot.PodSummary, newSummary snapshot.PodSummary) []string {
-	newScopes := make(map[string]struct{})
-	for _, scope := range scopesForPod(newSummary) {
-		newScopes[scope] = struct{}{}
-	}
-	stale := make([]string, 0)
-	for _, scope := range scopesForPod(oldSummary) {
-		if _, ok := newScopes[scope]; !ok {
-			stale = append(stale, scope)
-		}
-	}
-	return uniqueScopes(stale)
 }
 
 // Cluster-scoped domains always use the empty scope key.

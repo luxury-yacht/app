@@ -13,7 +13,7 @@ import type React from 'react';
 import { act } from 'react';
 import * as ReactDOM from 'react-dom/client';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
-import type { CatalogItem } from '@/core/refresh/types';
+import type { CanonicalRowTestOverrides, CatalogItem } from '@/core/refresh/types';
 import { requireReactElement } from '@/test-utils/requireReactElement';
 import { requireValue } from '@/test-utils/requireValue';
 
@@ -104,7 +104,11 @@ vi.mock('@shared/hooks/useNavigateToView', () => ({
 }));
 
 vi.mock('@modules/kubernetes/config/KubeconfigContext', () => ({
-  useKubeconfig: () => ({ selectedKubeconfig: 'path:context', selectedClusterId: 'cluster-a' }),
+  useKubeconfig: () => ({
+    selectedKubeconfig: 'path:context',
+    selectedClusterId: 'cluster-a',
+    selectedClusterName: 'alpha',
+  }),
 }));
 
 vi.mock('@/hooks/useTableSort', () => ({
@@ -170,13 +174,16 @@ vi.mock('@/core/capabilities', () => ({
 }));
 
 const baseResource: CustomResourceData = {
-  kind: 'CronJob',
-  name: 'nightly-cleanup',
-  namespace: 'ops',
-  clusterId: 'alpha:ctx',
-  clusterName: 'alpha',
-  group: 'batch',
-  version: 'v1',
+  ref: {
+    clusterId: 'alpha:ctx',
+    group: 'batch',
+    version: 'v1',
+    kind: 'CronJob',
+    resource: 'cronjobs',
+    namespace: 'ops',
+    name: 'nightly-cleanup',
+  },
+
   age: '10m',
   labels: { team: 'platform' },
   annotations: { owner: 'ops' },
@@ -224,35 +231,44 @@ const browseCatalogResult = (items: CatalogItem[] = []) => ({
 
 const catalogItemFromResource = (
   resource: CustomResourceData,
-  overrides: Partial<CatalogItem> = {}
-): CatalogItem => ({
-  kind: resource.kind || resource.kindAlias || 'CustomResource',
-  group: resource.group ?? '',
-  version: resource.version ?? '',
-  resource: 'cronjobs',
-  namespace: resource.namespace,
-  name: resource.name,
-  uid: `${resource.name}-uid`,
-  resourceVersion: '1',
-  creationTimestamp: resource.age ?? '',
-  scope: 'Namespace',
-  clusterId: resource.clusterId,
-  clusterName: resource.clusterName ?? '',
-  actionFacts: resource.status ? { status: resource.status } : undefined,
-  ...overrides,
-});
+  overrides: CanonicalRowTestOverrides<CatalogItem> = {}
+): CatalogItem => {
+  const { ref, ...row } = overrides;
+  return {
+    ref: {
+      clusterId: resource.ref.clusterId,
+      group: resource.ref.group,
+      version: resource.ref.version,
+      kind: resource.ref.kind || resource.kindAlias || 'CustomResource',
+      resource: 'cronjobs',
+      namespace: resource.ref.namespace,
+      name: resource.ref.name,
+      uid: `${resource.ref.name}-uid`,
+      ...ref,
+    },
+    resourceVersion: '1',
+    creationTimestamp: resource.age ?? '',
+    scope: 'Namespace',
+    actionFacts: resource.status ? { status: resource.status } : undefined,
+    ...row,
+  };
+};
 
 const catalogItemToCustomResourceData = (item: CatalogItem): CustomResourceData => ({
-  kind: item.kind,
-  kindAlias: item.kind,
-  name: item.name,
-  namespace: item.namespace ?? '',
-  clusterId: item.clusterId,
-  clusterName: item.clusterName,
-  group: item.group,
-  version: item.version,
-  resource: item.resource,
-  crdName: item.group ? `${item.resource}.${item.group}` : item.resource,
+  ref: {
+    clusterId: item.ref.clusterId,
+    group: item.ref.group,
+    version: item.ref.version,
+    kind: item.ref.kind,
+    resource: item.ref.resource,
+    namespace: item.ref.namespace ?? '',
+    name: item.ref.name,
+    uid: item.ref.uid,
+  },
+
+  kindAlias: item.ref.kind,
+
+  crdName: item.ref.group ? `${item.ref.resource}.${item.ref.group}` : item.ref.resource,
   status: item.actionFacts?.status,
   statusPresentation: item.actionFacts?.status,
   age: item.creationTimestamp,
@@ -329,12 +345,14 @@ describe('NsViewCustom', () => {
     const gridProps = gridTableMock.mock.calls[0][0];
     expect(gridProps.data).toEqual([
       expect.objectContaining({
-        kind: 'CronJob',
-        name: 'nightly-cleanup',
-        namespace: 'ops',
-        clusterId: 'alpha:ctx',
-        group: 'batch',
-        version: 'v1',
+        ref: expect.objectContaining({
+          kind: 'CronJob',
+          name: 'nightly-cleanup',
+          namespace: 'ops',
+          clusterId: 'alpha:ctx',
+          group: 'batch',
+          version: 'v1',
+        }),
         crdName: 'cronjobs.batch',
       }),
     ]);
@@ -361,10 +379,12 @@ describe('NsViewCustom', () => {
   it('uses the catalog query current page on first render for a single namespace', async () => {
     const queryResource: CustomResourceData = {
       ...baseResource,
-      name: 'query-custom',
-      namespace: 'team-a',
-      clusterId: 'cluster-a',
-      clusterName: 'Cluster A',
+      ref: {
+        ...baseResource.ref,
+        name: 'query-custom',
+        namespace: 'team-a',
+        clusterId: 'cluster-a',
+      },
     };
     const queryItem = catalogItemFromResource(queryResource);
     useBrowseCatalogMock.mockReturnValue(browseCatalogResult([queryItem]));
@@ -384,27 +404,31 @@ describe('NsViewCustom', () => {
     expect(useHydratedCustomCatalogRowsMock).toHaveBeenCalledWith('cluster-a', [queryItem]);
     expect(getLastGridProps()?.data).toEqual([
       expect.objectContaining({
-        kind: 'CronJob',
-        name: 'query-custom',
-        namespace: 'team-a',
-        clusterId: 'cluster-a',
-        group: 'batch',
-        version: 'v1',
+        ref: expect.objectContaining({
+          kind: 'CronJob',
+          name: 'query-custom',
+          namespace: 'team-a',
+          clusterId: 'cluster-a',
+          group: 'batch',
+          version: 'v1',
+        }),
         crdName: 'cronjobs.batch',
       }),
     ]);
     expect(getLastGridProps()?.data).not.toEqual([
-      expect.objectContaining({ name: 'stale-local-custom' }),
+      expect.objectContaining({ ref: expect.objectContaining({ name: 'stale-local-custom' }) }),
     ]);
   });
 
   it('uses the catalog query current page on first render for all namespaces', async () => {
     const queryResource: CustomResourceData = {
       ...baseResource,
-      name: 'query-all-custom',
-      namespace: 'team-b',
-      clusterId: 'cluster-a',
-      clusterName: 'Cluster A',
+      ref: {
+        ...baseResource.ref,
+        name: 'query-all-custom',
+        namespace: 'team-b',
+        clusterId: 'cluster-a',
+      },
     };
     const queryItem = catalogItemFromResource(queryResource);
     useBrowseCatalogMock.mockReturnValue(browseCatalogResult([queryItem]));
@@ -424,17 +448,19 @@ describe('NsViewCustom', () => {
     expect(useHydratedCustomCatalogRowsMock).toHaveBeenCalledWith('cluster-a', [queryItem]);
     expect(getLastGridProps()?.data).toEqual([
       expect.objectContaining({
-        kind: 'CronJob',
-        name: 'query-all-custom',
-        namespace: 'team-b',
-        clusterId: 'cluster-a',
-        group: 'batch',
-        version: 'v1',
+        ref: expect.objectContaining({
+          kind: 'CronJob',
+          name: 'query-all-custom',
+          namespace: 'team-b',
+          clusterId: 'cluster-a',
+          group: 'batch',
+          version: 'v1',
+        }),
         crdName: 'cronjobs.batch',
       }),
     ]);
     expect(getLastGridProps()?.data).not.toEqual([
-      expect.objectContaining({ name: 'stale-local-custom' }),
+      expect.objectContaining({ ref: expect.objectContaining({ name: 'stale-local-custom' }) }),
     ]);
   });
 
@@ -549,13 +575,16 @@ describe('NsViewCustom', () => {
   // silently drop these fields again in a future refactor.
   it('forwards group and version into openWithObject for colliding CRDs', async () => {
     const dbInstance: CustomResourceData = {
-      kind: 'DBInstance',
-      name: 'db-dc-test-1-v4',
-      namespace: 'team-a',
-      clusterId: 'alpha:ctx',
-      clusterName: 'alpha',
-      group: 'documentdb.services.k8s.aws',
-      version: 'v1alpha1',
+      ref: {
+        clusterId: 'alpha:ctx',
+        group: 'documentdb.services.k8s.aws',
+        version: 'v1alpha1',
+        kind: 'DBInstance',
+        resource: 'dbinstances',
+        namespace: 'team-a',
+        name: 'db-dc-test-1-v4',
+      },
+
       age: '2h',
       labels: {},
       annotations: {},
@@ -598,8 +627,7 @@ describe('NsViewCustom', () => {
     // kind-only-objects fix.
     const resourceWithGVK: CustomResourceData = {
       ...baseResource,
-      group: 'batch',
-      version: 'v1',
+      ref: { ...baseResource.ref, group: 'batch', version: 'v1' },
     };
 
     await renderComponent({
@@ -645,13 +673,16 @@ describe('NsViewCustom', () => {
     runObjectActionMock.mockResolvedValue(undefined);
 
     const dbInstance: CustomResourceData = {
-      kind: 'DBInstance',
-      name: 'db-dc-test-1-v4',
-      namespace: 'team-a',
-      clusterId: 'alpha:ctx',
-      clusterName: 'alpha',
-      group: 'documentdb.services.k8s.aws',
-      version: 'v1alpha1',
+      ref: {
+        clusterId: 'alpha:ctx',
+        group: 'documentdb.services.k8s.aws',
+        version: 'v1alpha1',
+        kind: 'DBInstance',
+        resource: 'dbinstances',
+        namespace: 'team-a',
+        name: 'db-dc-test-1-v4',
+      },
+
       age: '2h',
       labels: {},
       annotations: {},
@@ -700,8 +731,7 @@ describe('NsViewCustom', () => {
   it('throws instead of falling back when group/version are missing', async () => {
     const missingGVK: CustomResourceData = {
       ...baseResource,
-      group: undefined,
-      version: undefined,
+      ref: { ...baseResource.ref, group: '', version: '' },
     };
 
     await renderComponent({ showNamespaceColumn: true });
@@ -735,8 +765,7 @@ describe('NsViewCustom', () => {
 
     const resourceWithGVK: CustomResourceData = {
       ...baseResource,
-      group: 'batch',
-      version: 'v1',
+      ref: { ...baseResource.ref, group: 'batch', version: 'v1' },
     };
 
     await renderComponent({
@@ -790,6 +819,15 @@ describe('NsViewCustom', () => {
 
     const generatedKey = gridProps.keyExtractor(
       {
+        ref: {
+          clusterId: 'alpha:ctx',
+          group: 'batch',
+          version: 'v1',
+          kind: 'CronJob',
+          resource: 'cronjobs',
+          namespace: 'tools',
+          name: 'svc',
+        },
         kind: 'CronJob',
         name: 'svc',
         namespace: 'tools',
@@ -822,9 +860,12 @@ describe('NsViewCustom', () => {
     it('adds a CRD column that renders the row crdName', async () => {
       const resource: CustomResourceData = {
         ...baseResource,
-        group: 'rds.services.k8s.aws',
-        version: 'v1alpha1',
-        kind: 'DBInstance',
+        ref: {
+          ...baseResource.ref,
+          group: 'rds.services.k8s.aws',
+          version: 'v1alpha1',
+          kind: 'DBInstance',
+        },
         crdName: 'dbinstances.rds.services.k8s.aws',
       };
 
@@ -850,9 +891,12 @@ describe('NsViewCustom', () => {
     it('opens the CRD in the object panel when the CRD cell is clicked', async () => {
       const resource: CustomResourceData = {
         ...baseResource,
-        group: 'rds.services.k8s.aws',
-        version: 'v1alpha1',
-        kind: 'DBInstance',
+        ref: {
+          ...baseResource.ref,
+          group: 'rds.services.k8s.aws',
+          version: 'v1alpha1',
+          kind: 'DBInstance',
+        },
         crdName: 'dbinstances.rds.services.k8s.aws',
       };
 
@@ -938,9 +982,7 @@ describe('NsViewCustom', () => {
       // when the cell is non-interactive.
       const resource: CustomResourceData = {
         ...baseResource,
-        group: 'batch',
-        version: 'v1',
-        kind: 'CronJob',
+        ref: { ...baseResource.ref, group: 'batch', version: 'v1', kind: 'CronJob' },
         // crdName intentionally omitted
       };
 
@@ -958,9 +1000,12 @@ describe('NsViewCustom', () => {
     it('uses backend statusPresentation for custom-resource status styling', async () => {
       const resource: CustomResourceData = {
         ...baseResource,
-        group: 'rds.services.k8s.aws',
-        version: 'v1alpha1',
-        kind: 'DBInstance',
+        ref: {
+          ...baseResource.ref,
+          group: 'rds.services.k8s.aws',
+          version: 'v1alpha1',
+          kind: 'DBInstance',
+        },
         status: 'Not Ready',
         statusState: 'false',
         statusPresentation: 'warning',

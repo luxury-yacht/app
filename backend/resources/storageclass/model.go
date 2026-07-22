@@ -23,7 +23,7 @@ import (
 func BuildResourceModel(clusterID string, storageClass *storagev1.StorageClass) resourcemodel.ResourceModel {
 	facts := BuildFacts(storageClass)
 	status := statusPresentation(storageClass, facts)
-	return resourcemodel.StorageResourceModel(clusterID, "storage.k8s.io", "v1", "StorageClass", "storageclasses", resourcemodel.ResourceScopeCluster, storageClass.ObjectMeta, status, resourcemodel.ResourceFacts{})
+	return resourcemodel.KubernetesResourceModel(clusterID, "storage.k8s.io", "v1", "StorageClass", "storageclasses", resourcemodel.ResourceScopeCluster, storageClass.ObjectMeta, status, resourcemodel.ResourceFacts{})
 }
 
 // BuildFacts extracts the StorageClass facts from the raw object.
@@ -57,14 +57,14 @@ func statusPresentation(storageClass *storagev1.StorageClass, facts Facts) resou
 		storageClassDefaultSignal(facts),
 		{Type: resourcemodel.StatusSignalResourceState, Name: "provisioner", Status: facts.Provisioner},
 	}
-	lifecycle := resourcemodel.StorageLifecycle(storageClass.ObjectMeta)
-	if status, ok := resourcemodel.DeletingStorageStatus(storageClass.ObjectMeta, state, signals, lifecycle); ok {
+	lifecycle := resourcemodel.ObjectLifecycle(storageClass.ObjectMeta)
+	if status, ok := resourcemodel.DeletingObjectStatus(storageClass.ObjectMeta, state, signals, lifecycle); ok {
 		return status
 	}
 	if facts.DefaultClass {
-		return resourcemodel.StorageSourceStatus("Default", state, facts.DefaultClassAnnotation, "", "ready", signals, lifecycle)
+		return resourcemodel.ObjectSourceStatus("Default", state, facts.DefaultClassAnnotation, "", "ready", signals, lifecycle)
 	}
-	return resourcemodel.StorageSourceStatus("Available", state, "", "", "ready", signals, lifecycle)
+	return resourcemodel.ObjectSourceStatus("Available", state, "", "", "ready", signals, lifecycle)
 }
 
 func storageClassDefaultAnnotation(annotations map[string]string) (string, string) {

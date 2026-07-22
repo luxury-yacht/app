@@ -14,11 +14,13 @@ import { useQueryBackedNamespaceResourceGridTable } from '@modules/resource-grid
 import type { ContextMenuItem } from '@shared/components/ContextMenu';
 import * as cf from '@shared/components/tables/columnFactories';
 import type { GridColumnDefinition } from '@shared/components/tables/GridTable';
-import { buildClusterScopedKey } from '@shared/components/tables/GridTable.utils';
 import { useNavigateToView } from '@shared/hooks/useNavigateToView';
 import { useObjectActionController } from '@shared/hooks/useObjectActionController';
 import { backendStatusTextClass } from '@shared/utils/backendStatusPresentation';
-import { buildSyntheticObjectReference } from '@shared/utils/objectIdentity';
+import {
+  buildRequiredCanonicalObjectRowKey,
+  buildRequiredObjectReference,
+} from '@shared/utils/objectIdentity';
 import React, { useCallback, useMemo } from 'react';
 import type { NamespaceHelmSnapshotPayload, NamespaceHelmSummary } from '@/core/refresh/types';
 import { useShortNames } from '@/hooks/useShortNames';
@@ -26,13 +28,9 @@ import { resolveEmptyStateMessage } from '@/utils/emptyState';
 import { getDisplayKind } from '@/utils/kindAliasMap';
 
 // Data interface for Helm releases
-export interface HelmData {
+export interface HelmData extends Omit<NamespaceHelmSummary, 'chart'> {
   kind?: string;
   kindAlias?: string;
-  name: string;
-  namespace: string;
-  clusterId: string;
-  clusterName?: string;
   chart?:
     | {
         name?: string;
@@ -40,24 +38,14 @@ export interface HelmData {
       }
     | string;
   chartVersion?: string;
-  appVersion?: string;
   app_version?: string;
-  status?: string;
-  statusState?: string;
-  statusPresentation?: string;
-  statusReason?: string;
   info?: {
     status?: string;
     revision?: number;
     last_deployed?: string;
     description?: string;
   };
-  revision?: number;
-  updated?: string;
   lastDeployed?: string;
-  description?: string;
-  age?: string;
-  ageTimestamp?: number;
 }
 
 interface HelmViewProps {
@@ -72,10 +60,18 @@ const HelmViewGrid: React.FC<HelmViewProps> = React.memo(
   ({ namespace, showNamespaceColumn = false }) => {
     const { openWithObject } = useObjectPanel();
     const { navigateToView } = useNavigateToView();
-    const { selectedClusterId } = useKubeconfig();
+    const { selectedClusterId, selectedClusterName } = useKubeconfig();
     const queryClusterId = selectedClusterId;
     const useShortResourceNames = useShortNames();
     const namespaceColumnLink = useNamespaceColumnLink<HelmData>('helm');
+    const helmReference = useCallback(
+      (resource: HelmData) =>
+        buildRequiredObjectReference(
+          { ...resource.ref, clusterName: selectedClusterName },
+          { fallbackClusterId: queryClusterId }
+        ),
+      [queryClusterId, selectedClusterName]
+    );
     const objectActions = useObjectActionController({
       context: 'gridtable',
       useDefaultHandlers: false,
@@ -83,26 +79,15 @@ const HelmViewGrid: React.FC<HelmViewProps> = React.memo(
     });
     const handleResourceClick = useCallback(
       (resource: HelmData) => {
-        openWithObject(
-          buildSyntheticObjectReference({
-            kind: 'HelmRelease',
-            name: resource.name,
-            namespace: resource.namespace,
-            clusterId: resource.clusterId ?? undefined,
-            clusterName: resource.clusterName ?? undefined,
-          })
-        );
+        openWithObject(helmReference(resource));
       },
-      [openWithObject]
+      [helmReference, openWithObject]
     );
 
     const keyExtractor = useCallback(
       (resource: HelmData) =>
-        buildClusterScopedKey(
-          resource,
-          [resource.namespace, 'helm-release', resource.name].filter(Boolean).join('/')
-        ),
-      []
+        buildRequiredCanonicalObjectRowKey(resource.ref, { fallbackClusterId: queryClusterId }),
+      [queryClusterId]
     );
 
     const columns: GridColumnDefinition<HelmData>[] = useMemo(() => {
@@ -112,38 +97,20 @@ const HelmViewGrid: React.FC<HelmViewProps> = React.memo(
           getKind: () => 'HelmRelease',
           getDisplayText: () => getDisplayKind('HelmRelease', useShortResourceNames),
           onClick: handleResourceClick,
-          onAltClick: (resource) =>
-            navigateToView(
-              buildSyntheticObjectReference({
-                kind: 'HelmRelease',
-                name: resource.name,
-                namespace: resource.namespace,
-                clusterId: resource.clusterId,
-                clusterName: resource.clusterName,
-              })
-            ),
+          onAltClick: (resource) => navigateToView(helmReference(resource)),
           isInteractive: () => true,
         }),
-        cf.createTextColumn<HelmData>('name', 'Name', {
+        cf.createTextColumn<HelmData>('name', 'Name', (resource) => resource.ref.name, {
           onClick: handleResourceClick,
-          onAltClick: (resource) =>
-            navigateToView(
-              buildSyntheticObjectReference({
-                kind: 'HelmRelease',
-                name: resource.name,
-                namespace: resource.namespace,
-                clusterId: resource.clusterId,
-                clusterName: resource.clusterName,
-              })
-            ),
+          onAltClick: (resource) => navigateToView(helmReference(resource)),
           getClassName: () => 'object-panel-link',
         }),
       ];
 
       if (showNamespaceColumn) {
         cf.upsertNamespaceColumn(baseColumns, {
-          accessor: (resource) => resource.namespace,
-          sortValue: (resource) => (resource.namespace || '').toLowerCase(),
+          accessor: (resource) => resource.ref.namespace,
+          sortValue: (resource) => (resource.ref.namespace || '').toLowerCase(),
           ...namespaceColumnLink,
         });
       }
@@ -278,6 +245,7 @@ const HelmViewGrid: React.FC<HelmViewProps> = React.memo(
       return baseColumns;
     }, [
       handleResourceClick,
+      helmReference,
       namespaceColumnLink,
       navigateToView,
       showNamespaceColumn,
@@ -290,19 +258,8 @@ const HelmViewGrid: React.FC<HelmViewProps> = React.memo(
     const selectRows = useCallback(
       (payload: NamespaceHelmSnapshotPayload) =>
         (payload.rows ?? []).map((release: NamespaceHelmSummary) => ({
+          ...release,
           kind: 'HelmRelease',
-          name: release.name,
-          namespace: release.namespace,
-          clusterId: release.clusterId,
-          clusterName: release.clusterName,
-          chart: release.chart,
-          appVersion: release.appVersion,
-          status: release.status,
-          revision: release.revision,
-          updated: release.updated,
-          description: release.description,
-          age: release.age,
-          ageTimestamp: release.ageTimestamp,
         })),
       []
     );
@@ -331,19 +288,14 @@ const HelmViewGrid: React.FC<HelmViewProps> = React.memo(
         const status = resource.status || resource.info?.status;
 
         return objectActions.getMenuItems(
-          buildSyntheticObjectReference(
-            {
-              kind: 'HelmRelease',
-              name: resource.name,
-              namespace: resource.namespace,
-              clusterId: resource.clusterId,
-              clusterName: resource.clusterName,
-            },
+          buildRequiredObjectReference(
+            { ...resource.ref, clusterName: selectedClusterName },
+            { fallbackClusterId: queryClusterId },
             { status }
           )
         );
       },
-      [objectActions]
+      [objectActions, queryClusterId, selectedClusterName]
     );
 
     const emptyMessage = useMemo(

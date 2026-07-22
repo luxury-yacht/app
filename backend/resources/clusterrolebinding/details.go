@@ -36,21 +36,6 @@ func (s *Service) ClusterRoleBinding(name string) (*ClusterRoleBindingDetails, e
 	return s.buildClusterRoleBindingDetails(crb), nil
 }
 
-// ClusterRoleBindings returns detailed views for all cluster role bindings.
-func (s *Service) ClusterRoleBindings() ([]*ClusterRoleBindingDetails, error) {
-	bindings, err := s.deps.KubernetesClient.RbacV1().ClusterRoleBindings().List(s.deps.Context, metav1.ListOptions{})
-	if err != nil {
-		s.deps.Logger.Error(fmt.Sprintf("Failed to list cluster role bindings: %v", err), "RBAC")
-		return nil, fmt.Errorf("failed to list cluster role bindings: %v", err)
-	}
-
-	results := make([]*ClusterRoleBindingDetails, 0, len(bindings.Items))
-	for i := range bindings.Items {
-		results = append(results, s.buildClusterRoleBindingDetails(&bindings.Items[i]))
-	}
-	return results, nil
-}
-
 func (s *Service) buildClusterRoleBindingDetails(crb *rbacv1.ClusterRoleBinding) *ClusterRoleBindingDetails {
 	facts := BuildFacts(s.deps.ClusterID, crb)
 	return &ClusterRoleBindingDetails{

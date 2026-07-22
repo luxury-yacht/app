@@ -18,6 +18,7 @@ import (
 	"github.com/luxury-yacht/app/backend/refresh/snapshot"
 	"github.com/luxury-yacht/app/backend/refresh/system"
 	"github.com/luxury-yacht/app/backend/refresh/telemetry"
+	"github.com/luxury-yacht/app/backend/resourcemodel"
 	"github.com/stretchr/testify/require"
 	apiextensionsfake "k8s.io/apiextensions-apiserver/pkg/client/clientset/clientset/fake"
 	apiextinformers "k8s.io/apiextensions-apiserver/pkg/client/informers/externalversions"
@@ -209,7 +210,6 @@ func TestCatalogDoorbellBridgeBroadcastsCatalogSource(t *testing.T) {
 		nil,
 		nil,
 		nil,
-		nil,
 		snapshot.ClusterMeta{ClusterID: "cluster-a", ClusterName: "Cluster A"},
 		nil,
 		nil,
@@ -378,35 +378,15 @@ func TestFindCatalogObjectMatchUsesExactCatalogIdentity(t *testing.T) {
 	app := NewApp()
 	svc := objectcatalog.NewService(objectcatalog.Dependencies{}, nil)
 	setCatalogServiceItems(t, svc, map[string]objectcatalog.Summary{
-		"apps/v1, Resource=deployments/apps/alpha": {
-			ClusterID: "cluster-b",
-			Kind:      "Deployment",
-			Group:     "apps",
-			Version:   "v1",
-			Resource:  "deployments",
-			Namespace: "apps",
-			Name:      "alpha",
-			UID:       "alpha-uid",
-			Scope:     objectcatalog.ScopeNamespace,
-		},
-		"apps/v1, Resource=deployments/apps/alpha-canary": {
-			ClusterID: "cluster-b",
-			Kind:      "Deployment",
-			Group:     "apps",
-			Version:   "v1",
-			Resource:  "deployments",
-			Namespace: "apps",
-			Name:      "alpha-canary",
-			UID:       "alpha-canary-uid",
-			Scope:     objectcatalog.ScopeNamespace,
-		},
+		"apps/v1, Resource=deployments/apps/alpha":        {Ref: resourcemodel.ResourceRef{ClusterID: "cluster-b", Group: "apps", Version: "v1", Kind: "Deployment", Resource: "deployments", Namespace: "apps", Name: "alpha", UID: "alpha-uid"}, Scope: objectcatalog.ScopeNamespace},
+		"apps/v1, Resource=deployments/apps/alpha-canary": {Ref: resourcemodel.ResourceRef{ClusterID: "cluster-b", Group: "apps", Version: "v1", Kind: "Deployment", Resource: "deployments", Namespace: "apps", Name: "alpha-canary", UID: "alpha-canary-uid"}, Scope: objectcatalog.ScopeNamespace},
 	})
 	app.storeObjectCatalogEntry("cluster-b", &objectCatalogEntry{service: svc})
 
 	match, err := app.FindCatalogObjectMatch("cluster-b", "apps", "apps", "v1", "Deployment", "alpha")
 	require.NoError(t, err)
 	require.NotNil(t, match)
-	require.Equal(t, "alpha-uid", match.UID)
+	require.Equal(t, "alpha-uid", match.Ref.UID)
 
 	noMatch, err := app.FindCatalogObjectMatch("cluster-b", "apps", "apps", "v1", "Deployment", "alp")
 	require.NoError(t, err)
@@ -417,25 +397,15 @@ func TestFindCatalogObjectByUIDUsesCatalogIdentity(t *testing.T) {
 	app := NewApp()
 	svc := objectcatalog.NewService(objectcatalog.Dependencies{}, nil)
 	setCatalogServiceItems(t, svc, map[string]objectcatalog.Summary{
-		"apps/v1, Resource=deployments/apps/alpha": {
-			ClusterID: "cluster-b",
-			Kind:      "Deployment",
-			Group:     "apps",
-			Version:   "v1",
-			Resource:  "deployments",
-			Namespace: "apps",
-			Name:      "alpha",
-			UID:       "alpha-uid",
-			Scope:     objectcatalog.ScopeNamespace,
-		},
+		"apps/v1, Resource=deployments/apps/alpha": {Ref: resourcemodel.ResourceRef{ClusterID: "cluster-b", Group: "apps", Version: "v1", Kind: "Deployment", Resource: "deployments", Namespace: "apps", Name: "alpha", UID: "alpha-uid"}, Scope: objectcatalog.ScopeNamespace},
 	})
 	app.storeObjectCatalogEntry("cluster-b", &objectCatalogEntry{service: svc})
 
 	match, err := app.FindCatalogObjectByUID("cluster-b", "alpha-uid")
 	require.NoError(t, err)
 	require.NotNil(t, match)
-	require.Equal(t, "Deployment", match.Kind)
-	require.Equal(t, "apps", match.Namespace)
+	require.Equal(t, "Deployment", match.Ref.Kind)
+	require.Equal(t, "apps", match.Ref.Namespace)
 
 	noMatch, err := app.FindCatalogObjectByUID("cluster-b", "missing-uid")
 	require.NoError(t, err)
@@ -492,12 +462,11 @@ func TestHydrateCatalogCustomRowsFetchesOnlyCurrentPageRows(t *testing.T) {
 
 	require.NoError(t, err)
 	require.Len(t, rows, 1)
-	require.Equal(t, clusterID, rows[0].ClusterID)
-	require.Equal(t, "Cluster B", rows[0].ClusterName)
-	require.Equal(t, "Widget", rows[0].Kind)
-	require.Equal(t, "apps", rows[0].Namespace)
-	require.Equal(t, "example.com", rows[0].Group)
-	require.Equal(t, "v1", rows[0].Version)
+	require.Equal(t, clusterID, rows[0].Ref.ClusterID)
+	require.Equal(t, "Widget", rows[0].Ref.Kind)
+	require.Equal(t, "apps", rows[0].Ref.Namespace)
+	require.Equal(t, "example.com", rows[0].Ref.Group)
+	require.Equal(t, "v1", rows[0].Ref.Version)
 	require.Equal(t, "widgets.example.com", rows[0].CRDName)
 	require.Equal(t, "Ready", rows[0].Status)
 	require.Equal(t, "ready", rows[0].StatusPresentation)
@@ -600,7 +569,7 @@ func TestHydrateCatalogCustomRowsKeepsPageOnRowFailure(t *testing.T) {
 
 	byName := make(map[string]snapshot.CustomResourceSummary, len(rows))
 	for _, row := range rows {
-		byName[row.Name] = row
+		byName[row.Ref.Name] = row
 	}
 	require.Equal(t, "Ready", byName["alpha"].Status)
 	require.Equal(t, "Hydration failed", byName["beta"].Status)

@@ -5,6 +5,7 @@ import (
 	"testing"
 
 	"github.com/luxury-yacht/app/backend/refresh/querypage"
+	"github.com/luxury-yacht/app/backend/resourcemodel"
 )
 
 // anchorFor builds a valid same-cluster anchor ref for typed serve tests.
@@ -21,9 +22,7 @@ func configItems(n int) []ConfigSummary {
 	items := make([]ConfigSummary, n)
 	for i := 0; i < n; i++ {
 		items[i] = ConfigSummary{
-			Kind:      "ConfigMap",
-			Name:      fmt.Sprintf("cfg-%03d", i),
-			Namespace: "default",
+			Ref: testCanonicalRowRef("ConfigMap", "default", fmt.Sprintf("cfg-%03d", i)),
 		}
 	}
 	return items
@@ -53,8 +52,8 @@ func TestPerBuildAnchorServesAlignedPage(t *testing.T) {
 	if page.PageStartRank == nil || *page.PageStartRank != 40 {
 		t.Fatalf("pageStartRank = %v, want 40", page.PageStartRank)
 	}
-	if len(page.Rows) != 20 || page.Rows[0].Name != "cfg-040" {
-		t.Fatalf("window = %d rows starting %q, want 20 from cfg-040", len(page.Rows), page.Rows[0].Name)
+	if len(page.Rows) != 20 || page.Rows[0].Ref.Name != "cfg-040" {
+		t.Fatalf("window = %d rows starting %q, want 20 from cfg-040", len(page.Rows), page.Rows[0].Ref.Name)
 	}
 	if page.Previous == "" || page.Continue == "" {
 		t.Fatalf("mid-list landing must mint both cursors (prev=%q cont=%q)", page.Previous, page.Continue)
@@ -68,8 +67,8 @@ func TestPerBuildAnchorServesAlignedPage(t *testing.T) {
 	backQuery.Request.Anchor = nil
 	backQuery.Request.Continue = page.Previous
 	back := applyTypedTableQueryViaStore(items, backQuery, configTableQueryAdapter(), configQuerypageSchema())
-	if len(back.Rows) != 20 || back.Rows[0].Name != "cfg-020" {
-		t.Fatalf("backward page = %d rows starting %q, want 20 from cfg-020", len(back.Rows), back.Rows[0].Name)
+	if len(back.Rows) != 20 || back.Rows[0].Ref.Name != "cfg-020" {
+		t.Fatalf("backward page = %d rows starting %q, want 20 from cfg-020", len(back.Rows), back.Rows[0].Ref.Name)
 	}
 	if back.Anchor != nil {
 		t.Fatal("cursor page must not carry an anchor result")
@@ -81,9 +80,9 @@ func TestPerBuildAnchorServesAlignedPage(t *testing.T) {
 // Both serve the first page of the filtered set.
 func TestPerBuildAnchorFilteredVsNotFound(t *testing.T) {
 	items := []ConfigSummary{
-		{Kind: "ConfigMap", Name: "app-a", Namespace: "default"},
-		{Kind: "Secret", Name: "app-b", Namespace: "default"},
-		{Kind: "ConfigMap", Name: "app-c", Namespace: "default"},
+		{Ref: testCanonicalRowRef("ConfigMap", "default", "app-a")},
+		{Ref: testCanonicalRowRef("Secret", "default", "app-b")},
+		{Ref: testCanonicalRowRef("ConfigMap", "default", "app-c")},
 	}
 	base := typedTableQuery{
 		Enabled: true,
@@ -98,8 +97,8 @@ func TestPerBuildAnchorFilteredVsNotFound(t *testing.T) {
 	if page.Anchor == nil || page.Anchor.Found || page.Anchor.Reason != "filtered" {
 		t.Fatalf("kind-filtered anchor result = %+v, want reason=filtered", page.Anchor)
 	}
-	if len(page.Rows) != 2 || page.Rows[0].Name != "app-a" {
-		t.Fatalf("filtered fallback page = %d rows starting %q, want the 2 ConfigMaps", len(page.Rows), page.Rows[0].Name)
+	if len(page.Rows) != 2 || page.Rows[0].Ref.Name != "app-a" {
+		t.Fatalf("filtered fallback page = %d rows starting %q, want the 2 ConfigMaps", len(page.Rows), page.Rows[0].Ref.Name)
 	}
 
 	base.Request.Anchor = anchorFor("ConfigMap", "default", "deleted-object")
@@ -135,8 +134,8 @@ func TestPerBuildPreviousOnEveryResponse(t *testing.T) {
 	back := query
 	back.Request.Continue = page2.Previous
 	prev := applyTypedTableQueryViaStore(items, back, configTableQueryAdapter(), configQuerypageSchema())
-	if len(prev.Rows) != 20 || prev.Rows[0].Name != "cfg-000" {
-		t.Fatalf("previous page = %d rows starting %q, want page 1", len(prev.Rows), prev.Rows[0].Name)
+	if len(prev.Rows) != 20 || prev.Rows[0].Ref.Name != "cfg-000" {
+		t.Fatalf("previous page = %d rows starting %q, want page 1", len(prev.Rows), prev.Rows[0].Ref.Name)
 	}
 }
 
@@ -163,7 +162,7 @@ func TestMaintainedDirectAnchorServesAlignedPage(t *testing.T) {
 	resolved := resolveMaintainedDirect(
 		maintained.store, query, available, "", autoscalingTableQueryAdapter(),
 		autoscalingQuerypageSchema(), ResourceQueryCapabilities{}, 100, "items",
-		func(r AutoscalingSummary) string { return r.Kind },
+		func(r AutoscalingSummary) string { return r.Ref.Kind },
 		func() []AutoscalingSummary { return nil },
 		nil,
 	)
@@ -175,8 +174,8 @@ func TestMaintainedDirectAnchorServesAlignedPage(t *testing.T) {
 	if env.PageStartRank == nil || *env.PageStartRank != 20 {
 		t.Fatalf("maintained pageStartRank = %v, want 20", env.PageStartRank)
 	}
-	if len(resolved.Rows) != 10 || resolved.Rows[0].Name != "hpa-020" {
-		t.Fatalf("maintained window = %d rows starting %q", len(resolved.Rows), resolved.Rows[0].Name)
+	if len(resolved.Rows) != 10 || resolved.Rows[0].Ref.Name != "hpa-020" {
+		t.Fatalf("maintained window = %d rows starting %q", len(resolved.Rows), resolved.Rows[0].Ref.Name)
 	}
 	if env.Previous == "" || env.Continue == "" {
 		t.Fatalf("maintained landing cursors: prev=%q cont=%q", env.Previous, env.Continue)
@@ -188,7 +187,7 @@ func TestMaintainedDirectAnchorServesAlignedPage(t *testing.T) {
 	resolved = resolveMaintainedDirect(
 		maintained.store, query, available, "", autoscalingTableQueryAdapter(),
 		autoscalingQuerypageSchema(), ResourceQueryCapabilities{}, 100, "items",
-		func(r AutoscalingSummary) string { return r.Kind },
+		func(r AutoscalingSummary) string { return r.Ref.Kind },
 		func() []AutoscalingSummary { return nil },
 		nil,
 	)
@@ -200,8 +199,8 @@ func TestMaintainedDirectAnchorServesAlignedPage(t *testing.T) {
 
 func TestMaintainedDirectAppliesProviderFacetsAndPublishesStructuralOptions(t *testing.T) {
 	store := querypage.NewStore(nodesQuerypageSchema())
-	store.Upsert(NodeSummary{Name: "ready", Status: "Ready"})
-	store.Upsert(NodeSummary{Name: "not-ready", Status: "NotReady"})
+	store.Upsert(NodeSummary{Ref: resourcemodel.ResourceRef{Name: "ready"}, Status: "Ready"})
+	store.Upsert(NodeSummary{Ref: resourcemodel.ResourceRef{Name: "not-ready"}, Status: "NotReady"})
 	query := typedTableQuery{
 		Enabled: true,
 		Request: ResourceQueryRequest{
@@ -240,10 +239,7 @@ func TestMaintainedDirectAppliesProviderFacetsAndPublishesStructuralOptions(t *t
 func TestPerBuildAnchorOnMetricSortRanksByOverlaidUsage(t *testing.T) {
 	items := make([]PodSummary, 10)
 	for i := range items {
-		items[i] = PodSummary{
-			Name:      fmt.Sprintf("pod-%d", i),
-			Namespace: "default",
-			// Overlaid usage: descending as names ascend, so cpu order is the
+		items[i] = PodSummary{Ref: resourcemodel.ResourceRef{Namespace: "default", Name: fmt.Sprintf("pod-%d", i)}, // Overlaid usage: descending as names ascend, so cpu order is the
 			// REVERSE of name order — an anchor rank must follow cpu, not name.
 			CPUUsage: fmt.Sprintf("%dm", (10-i)*100),
 		}
@@ -268,7 +264,7 @@ func TestPerBuildAnchorOnMetricSortRanksByOverlaidUsage(t *testing.T) {
 	if page.PageStartRank == nil || *page.PageStartRank != 3 {
 		t.Fatalf("metric-sort pageStartRank = %v, want 3", page.PageStartRank)
 	}
-	if page.Rows[1].Name != "pod-4" {
+	if page.Rows[1].Ref.Name != "pod-4" {
 		t.Fatalf("anchor not at window offset 1: %v", page.Rows)
 	}
 }
@@ -285,17 +281,17 @@ func TestAdapterAnchorKeyMatchesKey(t *testing.T) {
 		namespace string
 		name      string
 	}{
-		{"config", configTableQueryAdapter().AnchorKey, configTableQueryAdapter().Key(ConfigSummary{Kind: "ConfigMap", Namespace: "ns-a", Name: "obj"}), "ConfigMap", "ns-a", "obj"},
-		{"network", networkTableQueryAdapter().AnchorKey, networkTableQueryAdapter().Key(NetworkSummary{Kind: "Service", Namespace: "ns-a", Name: "obj"}), "Service", "ns-a", "obj"},
-		{"storage", storageTableQueryAdapter().AnchorKey, storageTableQueryAdapter().Key(StorageSummary{Kind: "PersistentVolumeClaim", Namespace: "ns-a", Name: "obj"}), "PersistentVolumeClaim", "ns-a", "obj"},
-		{"autoscaling", autoscalingTableQueryAdapter().AnchorKey, autoscalingTableQueryAdapter().Key(AutoscalingSummary{Kind: "HorizontalPodAutoscaler", Namespace: "ns-a", Name: "obj"}), "HorizontalPodAutoscaler", "ns-a", "obj"},
-		{"quotas", quotaTableQueryAdapter().AnchorKey, quotaTableQueryAdapter().Key(QuotaSummary{Kind: "ResourceQuota", Namespace: "ns-a", Name: "obj"}), "ResourceQuota", "ns-a", "obj"},
-		{"rbac", rbacTableQueryAdapter().AnchorKey, rbacTableQueryAdapter().Key(RBACSummary{Kind: "Role", Namespace: "ns-a", Name: "obj"}), "Role", "ns-a", "obj"},
-		{"helm", helmTableQueryAdapter().AnchorKey, helmTableQueryAdapter().Key(NamespaceHelmSummary{Namespace: "ns-a", Name: "obj"}), "HelmRelease", "ns-a", "obj"},
-		{"events", namespacedEventTableQueryAdapter().AnchorKey, namespacedEventTableQueryAdapter().Key(EventSummary{Kind: "Pod", Namespace: "ns-a", Name: "obj"}), "Event", "ns-a", "obj"},
-		{"cluster-events", clusterEventTableQueryAdapter().AnchorKey, clusterEventTableQueryAdapter().Key(ClusterEventEntry{Namespace: "ns-a", Name: "evt-1"}), "Event", "ns-a", "evt-1"},
-		{"pods", podTableQueryAdapter().AnchorKey, podTableQueryAdapter().Key(PodSummary{Namespace: "ns-a", Name: "obj"}), "Pod", "ns-a", "obj"},
-		{"workloads", workloadTableQueryAdapter().AnchorKey, workloadTableQueryAdapter().Key(WorkloadSummary{Kind: "Deployment", Namespace: "ns-a", Name: "obj"}), "Deployment", "ns-a", "obj"},
+		{"config", configTableQueryAdapter().AnchorKey, configTableQueryAdapter().Key(ConfigSummary{Ref: testCanonicalRowRef("ConfigMap", "ns-a", "obj")}), "ConfigMap", "ns-a", "obj"},
+		{"network", networkTableQueryAdapter().AnchorKey, networkTableQueryAdapter().Key(NetworkSummary{Ref: resourcemodel.ResourceRef{Kind: "Service", Namespace: "ns-a", Name: "obj"}}), "Service", "ns-a", "obj"},
+		{"storage", storageTableQueryAdapter().AnchorKey, storageTableQueryAdapter().Key(StorageSummary{Ref: resourcemodel.ResourceRef{Kind: "PersistentVolumeClaim", Namespace: "ns-a", Name: "obj"}}), "PersistentVolumeClaim", "ns-a", "obj"},
+		{"autoscaling", autoscalingTableQueryAdapter().AnchorKey, autoscalingTableQueryAdapter().Key(AutoscalingSummary{Ref: resourcemodel.ResourceRef{Kind: "HorizontalPodAutoscaler", Namespace: "ns-a", Name: "obj"}}), "HorizontalPodAutoscaler", "ns-a", "obj"},
+		{"quotas", quotaTableQueryAdapter().AnchorKey, quotaTableQueryAdapter().Key(QuotaSummary{Ref: resourcemodel.ResourceRef{Kind: "ResourceQuota", Namespace: "ns-a", Name: "obj"}}), "ResourceQuota", "ns-a", "obj"},
+		{"rbac", rbacTableQueryAdapter().AnchorKey, rbacTableQueryAdapter().Key(RBACSummary{Ref: resourcemodel.ResourceRef{Kind: "Role", Namespace: "ns-a", Name: "obj"}}), "Role", "ns-a", "obj"},
+		{"helm", helmTableQueryAdapter().AnchorKey, helmTableQueryAdapter().Key(NamespaceHelmSummary{Ref: resourcemodel.ResourceRef{Namespace: "ns-a", Name: "obj"}}), "HelmRelease", "ns-a", "obj"},
+		{"events", namespacedEventTableQueryAdapter().AnchorKey, namespacedEventTableQueryAdapter().Key(EventSummary{Ref: resourcemodel.ResourceRef{Namespace: "ns-a", Name: "obj"}, Kind: "Pod"}), "Event", "ns-a", "obj"},
+		{"cluster-events", clusterEventTableQueryAdapter().AnchorKey, clusterEventTableQueryAdapter().Key(ClusterEventEntry{Ref: resourcemodel.ResourceRef{Namespace: "ns-a", Name: "evt-1"}}), "Event", "ns-a", "evt-1"},
+		{"pods", podTableQueryAdapter().AnchorKey, podTableQueryAdapter().Key(PodSummary{Ref: resourcemodel.ResourceRef{Namespace: "ns-a", Name: "obj"}}), "Pod", "ns-a", "obj"},
+		{"workloads", workloadTableQueryAdapter().AnchorKey, workloadTableQueryAdapter().Key(WorkloadSummary{Ref: resourcemodel.ResourceRef{Kind: "Deployment", Namespace: "ns-a", Name: "obj"}}), "Deployment", "ns-a", "obj"},
 	}
 	for _, tc := range cases {
 		if tc.anchorKey == nil {
@@ -318,11 +314,11 @@ func TestClusterAdapterAnchorKeyMatchesKey(t *testing.T) {
 		kind      string
 		name      string
 	}{
-		{"nodes", nodeTableQueryAdapter().AnchorKey, nodeTableQueryAdapter().Key(NodeSummary{Name: "node-1"}), "Node", "node-1"},
-		{"cluster-config", clusterConfigTableQueryAdapter().AnchorKey, clusterConfigTableQueryAdapter().Key(ClusterConfigEntry{Kind: "StorageClass", Name: "gp3"}), "StorageClass", "gp3"},
-		{"cluster-storage", clusterStorageTableQueryAdapter().AnchorKey, clusterStorageTableQueryAdapter().Key(ClusterStorageEntry{Kind: "PersistentVolume", Name: "pv-1"}), "PersistentVolume", "pv-1"},
-		{"cluster-rbac", clusterRBACTableQueryAdapter().AnchorKey, clusterRBACTableQueryAdapter().Key(ClusterRBACEntry{Kind: "ClusterRole", Name: "admin"}), "ClusterRole", "admin"},
-		{"cluster-crds", clusterCRDTableQueryAdapter().AnchorKey, clusterCRDTableQueryAdapter().Key(ClusterCRDEntry{Name: "crd-1"}), "CustomResourceDefinition", "crd-1"},
+		{"nodes", nodeTableQueryAdapter().AnchorKey, nodeTableQueryAdapter().Key(NodeSummary{Ref: resourcemodel.ResourceRef{Name: "node-1"}}), "Node", "node-1"},
+		{"cluster-config", clusterConfigTableQueryAdapter().AnchorKey, clusterConfigTableQueryAdapter().Key(ClusterConfigEntry{Ref: testCanonicalRowRef("StorageClass", "", "gp3")}), "StorageClass", "gp3"},
+		{"cluster-storage", clusterStorageTableQueryAdapter().AnchorKey, clusterStorageTableQueryAdapter().Key(ClusterStorageEntry{Ref: resourcemodel.ResourceRef{Kind: "PersistentVolume", Name: "pv-1"}}), "PersistentVolume", "pv-1"},
+		{"cluster-rbac", clusterRBACTableQueryAdapter().AnchorKey, clusterRBACTableQueryAdapter().Key(ClusterRBACEntry{Ref: resourcemodel.ResourceRef{Kind: "ClusterRole", Name: "admin"}}), "ClusterRole", "admin"},
+		{"cluster-crds", clusterCRDTableQueryAdapter().AnchorKey, clusterCRDTableQueryAdapter().Key(ClusterCRDEntry{Ref: resourcemodel.ResourceRef{Name: "crd-1"}}), "CustomResourceDefinition", "crd-1"},
 	}
 	for _, tc := range cases {
 		if tc.anchorKey == nil {
@@ -353,8 +349,8 @@ func TestPerBuildStartRankServesOffsetPage(t *testing.T) {
 	if page.PageStartRank == nil || *page.PageStartRank != 40 {
 		t.Fatalf("pageStartRank = %v, want 40", page.PageStartRank)
 	}
-	if len(page.Rows) != 20 || page.Rows[0].Name != "cfg-040" {
-		t.Fatalf("offset window = %d rows starting %q", len(page.Rows), page.Rows[0].Name)
+	if len(page.Rows) != 20 || page.Rows[0].Ref.Name != "cfg-040" {
+		t.Fatalf("offset window = %d rows starting %q", len(page.Rows), page.Rows[0].Ref.Name)
 	}
 	if page.Previous == "" || page.Continue == "" || page.Self == "" {
 		t.Fatalf("offset landing cursors: prev=%q cont=%q self=%q", page.Previous, page.Continue, page.Self)
@@ -384,7 +380,7 @@ func TestMaintainedDirectStartRankServesOffsetPage(t *testing.T) {
 		maintained.store, query, map[string]bool{"HorizontalPodAutoscaler": true}, "",
 		autoscalingTableQueryAdapter(), autoscalingQuerypageSchema(),
 		ResourceQueryCapabilities{}, 100, "items",
-		func(r AutoscalingSummary) string { return r.Kind },
+		func(r AutoscalingSummary) string { return r.Ref.Kind },
 		func() []AutoscalingSummary { return nil },
 		nil,
 	)
@@ -392,8 +388,8 @@ func TestMaintainedDirectStartRankServesOffsetPage(t *testing.T) {
 	if env.PageStartRank == nil || *env.PageStartRank != 30 {
 		t.Fatalf("maintained pageStartRank = %v, want 30", env.PageStartRank)
 	}
-	if len(resolved.Rows) != 10 || resolved.Rows[0].Name != "hpa-030" {
-		t.Fatalf("maintained offset window = %d rows starting %q", len(resolved.Rows), resolved.Rows[0].Name)
+	if len(resolved.Rows) != 10 || resolved.Rows[0].Ref.Name != "hpa-030" {
+		t.Fatalf("maintained offset window = %d rows starting %q", len(resolved.Rows), resolved.Rows[0].Ref.Name)
 	}
 	if env.Self == "" {
 		t.Fatal("maintained offset landing minted no self cursor")

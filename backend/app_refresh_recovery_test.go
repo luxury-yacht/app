@@ -71,7 +71,6 @@ func TestHandlePermissionIssuesSkipsNilErrors(t *testing.T) {
 // isolated per cluster. Failures in one cluster should not affect another.
 func TestPerClusterTransportFailure(t *testing.T) {
 	app := &App{}
-	app.initTransportStates()
 
 	// Record failures for cluster A
 	app.recordClusterTransportFailure("cluster-a", "test failure", nil)
@@ -89,7 +88,6 @@ func TestPerClusterTransportFailure(t *testing.T) {
 // one cluster resets its failure count without affecting other clusters.
 func TestPerClusterTransportSuccessResets(t *testing.T) {
 	app := &App{}
-	app.initTransportStates()
 
 	// Record failures for both clusters
 	app.recordClusterTransportFailure("cluster-a", "failure", nil)
@@ -110,7 +108,6 @@ func TestPerClusterTransportSuccessResets(t *testing.T) {
 // lazily initializes state for new clusters.
 func TestPerClusterTransportStateInitialization(t *testing.T) {
 	app := &App{}
-	// Do NOT call initTransportStates - getTransportState should handle nil map
 
 	state := app.getTransportState("new-cluster")
 	require.NotNil(t, state)
@@ -122,7 +119,6 @@ func TestPerClusterTransportStateInitialization(t *testing.T) {
 // after the window duration expires.
 func TestPerClusterTransportWindowReset(t *testing.T) {
 	app := &App{}
-	app.initTransportStates()
 
 	// Record a failure
 	app.recordClusterTransportFailure("cluster-a", "failure", nil)
@@ -150,7 +146,6 @@ func TestPerClusterTransportWindowReset(t *testing.T) {
 // the failure threshold triggers a rebuild for that specific cluster.
 func TestPerClusterTransportRebuildTriggersAtThreshold(t *testing.T) {
 	app := &App{}
-	app.initTransportStates()
 
 	// Record 3 failures (threshold) for cluster A
 	app.recordClusterTransportFailure("cluster-a", "test", nil)
@@ -171,7 +166,6 @@ func TestPerClusterTransportRebuildTriggersAtThreshold(t *testing.T) {
 // prevents rapid successive rebuilds for the same cluster.
 func TestPerClusterTransportRebuildCooldown(t *testing.T) {
 	app := &App{}
-	app.initTransportStates()
 
 	stateA := app.getTransportState("cluster-a")
 	// Simulate a recent rebuild
@@ -192,54 +186,4 @@ func TestPerClusterTransportRebuildCooldown(t *testing.T) {
 	// Rebuild should NOT be triggered due to cooldown
 	require.False(t, inProgress, "rebuild should not trigger during cooldown")
 	require.Equal(t, 3, count, "failure count should still be tracked")
-}
-
-// TestPerClusterAuthRecoveryScheduling verifies that auth recovery scheduling
-// is tracked per-cluster, allowing independent scheduling without conflicts.
-func TestPerClusterAuthRecoveryScheduling(t *testing.T) {
-	app := &App{}
-	app.initAuthRecoveryState()
-
-	// Schedule recovery for cluster A
-	scheduled := app.scheduleClusterAuthRecovery("cluster-a")
-	require.True(t, scheduled, "first schedule for cluster-a should succeed")
-
-	// Try to schedule again - should return false (already scheduled)
-	scheduledAgain := app.scheduleClusterAuthRecovery("cluster-a")
-	require.False(t, scheduledAgain, "second schedule for cluster-a should fail")
-
-	// Cluster B should be schedulable independently
-	scheduledB := app.scheduleClusterAuthRecovery("cluster-b")
-	require.True(t, scheduledB, "cluster-b should be schedulable independently")
-
-	// Clear cluster A and verify it can be scheduled again
-	app.clearClusterAuthRecoveryScheduled("cluster-a")
-	scheduledAfterClear := app.scheduleClusterAuthRecovery("cluster-a")
-	require.True(t, scheduledAfterClear, "cluster-a should be schedulable after clear")
-
-	// Cluster B should still be scheduled (unaffected by cluster A operations)
-	scheduledBAgain := app.scheduleClusterAuthRecovery("cluster-b")
-	require.False(t, scheduledBAgain, "cluster-b should still be scheduled")
-}
-
-// TestPerClusterAuthRecoveryLazyInit verifies that scheduleClusterAuthRecovery
-// initializes the map lazily if it hasn't been initialized.
-func TestPerClusterAuthRecoveryLazyInit(t *testing.T) {
-	app := &App{}
-	// Do NOT call initAuthRecoveryState - scheduleClusterAuthRecovery should handle nil map
-
-	scheduled := app.scheduleClusterAuthRecovery("cluster-a")
-	require.True(t, scheduled, "should work even without explicit init")
-}
-
-// TestPerClusterAuthRecoveryClearNonExistent verifies that clearing a
-// non-existent cluster ID doesn't panic or cause issues.
-func TestPerClusterAuthRecoveryClearNonExistent(t *testing.T) {
-	app := &App{}
-	app.initAuthRecoveryState()
-
-	// Should not panic when clearing a cluster that was never scheduled
-	require.NotPanics(t, func() {
-		app.clearClusterAuthRecoveryScheduled("non-existent-cluster")
-	})
 }

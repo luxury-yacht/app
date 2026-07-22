@@ -130,6 +130,15 @@ vi.mock('@/core/capabilities', () => ({
 }));
 
 const baseConfig = {
+  ref: {
+    clusterId: 'cluster-a',
+    group: 'storage.k8s.io',
+    version: 'v1',
+    kind: 'StorageClass',
+    resource: 'storageclasses',
+    namespace: '',
+    name: 'standard',
+  },
   kind: 'StorageClass',
   name: 'standard',
   clusterId: 'cluster-a',
@@ -256,7 +265,18 @@ describe('ClusterViewConfig', () => {
   });
 
   it('opens an IngressClass directly to the map tab from the context menu', async () => {
-    const ingressClass = { ...baseConfig, kind: 'IngressClass', name: 'public' };
+    const ingressClass = {
+      ...baseConfig,
+      ref: {
+        ...baseConfig.ref,
+        group: 'networking.k8s.io',
+        kind: 'IngressClass',
+        resource: 'ingressclasses',
+        name: 'public',
+      },
+      kind: 'IngressClass',
+      name: 'public',
+    };
 
     await act(async () => {
       root.render(<ClusterViewConfig />);
@@ -295,7 +315,16 @@ describe('ClusterViewConfig', () => {
     const props = getGridTableProps();
     expect(props).toBeTruthy();
     const contextItems = getContextMenuItems(
-      { ...baseConfig, kind: 'ValidatingWebhookConfiguration' },
+      {
+        ...baseConfig,
+        ref: {
+          ...baseConfig.ref,
+          group: 'admissionregistration.k8s.io',
+          kind: 'ValidatingWebhookConfiguration',
+          resource: 'validatingwebhookconfigurations',
+        },
+        kind: 'ValidatingWebhookConfiguration',
+      },
       'kind'
     );
 

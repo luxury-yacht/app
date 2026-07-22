@@ -62,6 +62,25 @@ stream reconciliation path rather than creating a ManualQueue job.
   changes acquire/release only the changed clusters.
 - A lease expresses consumer demand. Do not use an open background workspace as
   demand for expensive producers that only feed visible data.
+- Scoped leases declare `query` or `snapshot` demand. Query demand owns the
+  live source, source clocks/readiness/permission state, and the consumer's
+  current bounded query page; it does not fetch or retain the domain's separate
+  snapshot payload. Snapshot demand owns that payload. The union starts one
+  live source, and snapshot reconciliation runs whenever snapshot demand joins
+  an already-live query scope.
+- Query demand starts the subscription before its initial page read. The
+  backend `ACK` or initial `RESET` then advances an acknowledgement identity,
+  causing one acknowledged reconciliation read; a response from an older query
+  identity cannot overwrite the newer page. This closes the send/registration
+  race without retaining a second row snapshot.
+- The scheduler never satisfies query-only fallback or global-manual demand by
+  fetching the domain's bounded base snapshot. While the stream is unhealthy,
+  or for a global manual refresh, it advances a query-reconciliation identity;
+  the mounted consumer then reissues its current page. A healthy stream leaves
+  that identity unchanged because its source clocks already drive page reads.
+- Releasing one demand mode preserves work and state owned by the other.
+  Releasing the final demand stops the shared live source under the existing
+  retention rules.
 - A governor Cold assignment is not applied until the backend has built a settled
   `namespaces` snapshot and a `cluster-overview` snapshot for that exact cluster
   scope. The namespace build runs through the aggregate lifecycle callback so
@@ -94,6 +113,9 @@ The authored domain contract declares which clocks can change a payload:
 - Stream messages do not carry table rows, query state, positions, or cursors.
 - A source must advance only the payload it owns. In particular, a metric tick
   must not advance an object clock or make an object snapshot appear changed.
+- A signal producer invalidates the affected snapshot/query cache before it
+  broadcasts the new source clock. Otherwise the signal-triggered current-page
+  read could consume the pre-change cached page and receive no later signal.
 - `namespaces` advances its `object` signal clock when a Namespace add, update,
   or delete can change the list. The producer invalidates the namespace
   snapshot cache before ringing that doorbell, and every leased namespace
@@ -149,11 +171,12 @@ The authored domain contract declares which clocks can change a payload:
   error state clears that scope's dedupe so a later failure can notify again.
 - Loading gates may block invalid early reads, but must still allow the request
   that advances the cluster to ready.
-- After foreground governor reconciliation, the backend replays that cluster's
-  current authoritative lifecycle state even when no transition occurred. The
-  frontend relay applies it to both React lifecycle consumers and refresh
-  readiness consumers so a missed earlier event cannot leave the tab behind the
-  serving gate.
+- After foreground governor reconciliation, the backend returns the current
+  authoritative cluster-workspace snapshot even when no lifecycle transition
+  occurred. The frontend workspace store applies lifecycle to React selectors
+  and the refresh-readiness boundary, so a missed earlier event cannot leave the
+  tab behind the serving gate. Runtime lifecycle events that arrive before
+  hydration take precedence over that older snapshot.
 - Startup settings restore, saved-selection restore, and client initialization
   use the same serialized selection-mutation boundary as runtime selection
   changes. Each completed cluster client is published independently; one slow

@@ -4,13 +4,11 @@ import (
 	"context"
 	"fmt"
 	"sort"
-	"strings"
 
 	informers "k8s.io/client-go/informers"
 	"k8s.io/client-go/tools/cache"
 
 	"github.com/luxury-yacht/app/backend/internal/config"
-	"github.com/luxury-yacht/app/backend/kind/kindregistry"
 	"github.com/luxury-yacht/app/backend/kind/streamrows"
 	"github.com/luxury-yacht/app/backend/kind/streamspec"
 	"github.com/luxury-yacht/app/backend/refresh"
@@ -22,9 +20,8 @@ import (
 
 const clusterStorageDomainName = "cluster-storage"
 
-// ClusterStorageBuilder constructs PersistentVolume summaries by listing the
-// kind's informer indexer and projecting it via the pv package's stream-summary
-// builder; Build loops the stream descriptor registry via collectDescriptorTableRows.
+// ClusterStorageBuilder constructs PersistentVolume summaries via the shared
+// typed-table domain skeleton (typed_table_domain.go).
 type ClusterStorageBuilder struct {
 	collectIndexer func(streamspec.Descriptor) cache.Indexer
 	// maintained, when set, is an informer-fed store the builder serves rows from
@@ -65,6 +62,26 @@ func clusterStorageQueryCapabilities() ResourceQueryCapabilities {
 // keeps the snapshot-side name and wire JSON unchanged.
 type ClusterStorageEntry = streamrows.ClusterStorageEntry
 
+func clusterStorageDomainSpec() typedTableDomainSpec[ClusterStorageEntry] {
+	return typedTableDomainSpec[ClusterStorageEntry]{
+		domain:          clusterStorageDomainName,
+		entryLimit:      config.SnapshotClusterStorageEntryLimit,
+		description:     "persistent volumes",
+		listErrorPrefix: "cluster storage: failed to list persistent volumes",
+		adapter:         clusterStorageTableQueryAdapter(),
+		schema:          clusterStorageQuerypageSchema(),
+		capabilities:    clusterStorageQueryCapabilities(),
+		kindOf:          func(entry ClusterStorageEntry) string { return entry.Ref.Kind },
+		sortRows:        sortClusterStorageEntries,
+	}
+}
+
+func sortClusterStorageEntries(entries []ClusterStorageEntry) {
+	sort.Slice(entries, func(i, j int) bool {
+		return entries[i].Ref.Name < entries[j].Ref.Name
+	})
+}
+
 // RegisterClusterStorageDomain registers the storage domain.
 //
 // PersistentVolume is an owned-reflector ingest kind (IngestOwned): when ingestManager
@@ -81,13 +98,8 @@ func RegisterClusterStorageDomain(
 		return fmt.Errorf("shared informer factory is nil")
 	}
 	collectIndexer := unconditionalSharedIndexers(factory, clusterStorageDomainName, ingestManager)
-
-	// Maintain a per-cluster store fed by each available storage kind's source: the
-	// ingest Sink for cut kinds, the shared-informer handler for any uncut kind.
-	maintained := newTypedMaintainedStore(clusterMeta, clusterStorageQuerypageSchema(), clusterStorageTableQueryAdapter())
-	reg.RegisterMaintainedStore(clusterStorageDomainName, maintained) // spill/restore/reconcile across Cold/re-warm
-	feedMaintainedFromIngest(maintained, clusterStorageDomainName, ingestManager)
-	if err := registerMaintainedHandlers(maintained, clusterStorageDomainName, collectIndexer, factory, nil); err != nil {
+	maintained, err := newRegisteredTypedTableStore(reg, clusterStorageDomainSpec(), clusterMeta, collectIndexer, factory, nil, ingestManager)
+	if err != nil {
 		return err
 	}
 
@@ -101,103 +113,10 @@ func RegisterClusterStorageDomain(
 	})
 }
 
-// clusterStorageSources computes per-descriptor availability for THIS request
-// (indexer present AND runtimeResourceAllowed), returning the snapshot sources and a
-// Kind→available map — the same gating collectDescriptorTableRows applies, so the
-// maintained-store path and the list path agree on which kinds are visible.
-func (b *ClusterStorageBuilder) clusterStorageSources(ctx context.Context) ([]typedTableResourceSource, map[string]bool) {
-	descriptors := kindregistry.StreamDescriptorsForDomain(clusterStorageDomainName)
-	sources := make([]typedTableResourceSource, 0, len(descriptors))
-	available := make(map[string]bool, len(descriptors))
-	for _, d := range descriptors {
-		ok := b.collectIndexer(d) != nil && runtimeResourceAllowed(ctx, clusterStorageDomainName, d.Group, d.Resource)
-		sources = append(sources, typedTableResourceSource{
-			Kind:      d.Kind,
-			Group:     d.Group,
-			Resource:  d.Resource,
-			Available: ok,
-		})
-		available[d.Kind] = ok
-	}
-	return sources, available
-}
-
 // Build creates a snapshot of persistent volumes.
 func (b *ClusterStorageBuilder) Build(ctx context.Context, scope string) (*refresh.Snapshot, error) {
-	meta := ClusterMetaFromContext(ctx)
-	clusterID, trimmed := refresh.SplitClusterScope(scope)
-	_, query, err := parseTypedTableQueryScope(clusterID, strings.TrimSpace(trimmed), clusterStorageDomainName, "")
-	if err != nil {
-		return nil, err
-	}
-
-	sortClusterStorageEntries := func(entries []ClusterStorageEntry) {
-		sort.Slice(entries, func(i, j int) bool {
-			return entries[i].Name < entries[j].Name
+	return buildTypedTableSnapshot(ctx, scope, clusterStorageDomainSpec(), b.collectIndexer, b.maintained,
+		func(meta ClusterMeta, envelope ResourceQueryEnvelope, rows []ClusterStorageEntry) any {
+			return ClusterStorageSnapshot{ClusterMeta: meta, ResourceQueryEnvelope: envelope, Rows: rows}
 		})
-	}
-
-	var resolved typedSnapshotPage[ClusterStorageEntry]
-	var version uint64
-	if b.maintained != nil {
-		// Serve the query straight from the informer-fed store, querying it in place
-		// (O(log N + page)) rather than snapshotting + rebuilding a per-Build store. The
-		// domain is cluster-scoped, so the store is queried for all rows ("").
-		sources, available := b.clusterStorageSources(ctx)
-		resolved = resolveMaintainedDirect(
-			b.maintained.store,
-			query,
-			available,
-			"",
-			clusterStorageTableQueryAdapter(),
-			clusterStorageQuerypageSchema(),
-			capabilitiesWithAvailableKinds(clusterStorageQueryCapabilities(), sources),
-			config.SnapshotClusterStorageEntryLimit,
-			"persistent volumes",
-			func(entry ClusterStorageEntry) string { return entry.Kind },
-			func() []ClusterStorageEntry {
-				rows := b.maintained.rows("", available)
-				sortClusterStorageEntries(rows)
-				return rows
-			},
-			typedTableQueryResourceIssues(ctx, clusterStorageDomainName, query, sources),
-		)
-		version = b.maintained.snapshotVersion()
-	} else {
-		entries, sources, v, listErr := collectDescriptorTableRows[ClusterStorageEntry](ctx, clusterStorageDomainName, b.collectIndexer, meta, "")
-		if listErr != nil {
-			return nil, fmt.Errorf("cluster storage: failed to list persistent volumes: %w", listErr)
-		}
-		version = v
-		sortClusterStorageEntries(entries)
-		resolved = resolveTypedSnapshotPageViaStore(
-			clusterStorageDomainName,
-			entries,
-			query,
-			clusterStorageTableQueryAdapter(),
-			clusterStorageQuerypageSchema(),
-			capabilitiesWithAvailableKinds(clusterStorageQueryCapabilities(), sources),
-			config.SnapshotClusterStorageEntryLimit,
-			"persistent volumes",
-			func(entry ClusterStorageEntry) string { return entry.Kind },
-			typedTableQueryResourceIssues(ctx, clusterStorageDomainName, query, sources),
-		)
-	}
-	// The window snapshot is the canonical unscoped refresh payload; only the
-	// query page publishes the request scope.
-	snapshotScope := ""
-	if query.Enabled {
-		snapshotScope = refresh.JoinClusterScope(clusterID, strings.TrimSpace(trimmed))
-	}
-	return &refresh.Snapshot{
-		Domain:  clusterStorageDomainName,
-		Scope:   snapshotScope,
-		Version: version,
-		Payload: ClusterStorageSnapshot{
-			ClusterMeta:           meta,
-			ResourceQueryEnvelope: resolved.Envelope,
-			Rows:                  resolved.Rows,
-		},
-		Stats: resolved.Stats,
-	}, nil
 }

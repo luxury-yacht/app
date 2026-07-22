@@ -52,6 +52,7 @@ const excludedDirectories = new Set(['node_modules', 'dist', 'wailsjs', 'coverag
 const excludedFiles = new Set([
   'package-lock.json',
   'src/core/refresh/types.generated.ts',
+  'src/shared/actions/objectActions.generated.ts',
   'scripts/check-biome-suppressions.mjs',
   'scripts/check-biome-suppressions.test.mjs',
 ]);

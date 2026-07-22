@@ -5,11 +5,15 @@ import type {
   GridTableFilterState,
 } from '@shared/components/tables/GridTable';
 import { DEFAULT_TABLE_PAGE_SIZE } from '@shared/components/tables/pageSizeOptions';
-
+import {
+  type ResourceRowSharingMode,
+  structuralShareResourceRows,
+} from '@shared/utils/structuralShareResourceRows';
 import { errorHandler } from '@utils/errorHandler';
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { requestRefreshDomainState } from '@/core/data-access';
 import type {
+  CanonicalResourceRef,
   RefreshDomain,
   ResourceQueryAnchor,
   ResourceQueryAnchorResult,
@@ -108,6 +112,38 @@ const SEARCH_DEBOUNCE_MS = 250;
 // instant a payload applies (or the query errors / is disabled).
 const WARMUP_RETRY_MS = 1000;
 
+const REF_ONLY_SHARING_DOMAINS = new Set<RefreshDomain>([
+  'cluster-events',
+  'namespace-events',
+  'nodes',
+  'object-events',
+  'pods',
+  'namespace-workloads',
+]);
+
+const queryRowSharingMode = (domain: RefreshDomain): ResourceRowSharingMode =>
+  REF_ONLY_SHARING_DOMAINS.has(domain) ? 'ref-only' : 'row-and-ref';
+
+interface CanonicalQueryRow {
+  ref: CanonicalResourceRef;
+}
+
+const isCanonicalQueryRow = (row: unknown): row is CanonicalQueryRow => {
+  if (!row || typeof row !== 'object') {
+    return false;
+  }
+  const ref = (row as { ref?: Partial<CanonicalResourceRef> }).ref;
+  return Boolean(
+    ref &&
+      typeof ref.clusterId === 'string' &&
+      typeof ref.group === 'string' &&
+      typeof ref.version === 'string' &&
+      typeof ref.kind === 'string' &&
+      typeof ref.resource === 'string' &&
+      typeof ref.name === 'string'
+  );
+};
+
 export function useTypedResourceQuery<TPayload extends TypedQueryPayload, TRow>({
   enabled,
   clusterId,
@@ -186,6 +222,7 @@ export function useTypedResourceQuery<TPayload extends TypedQueryPayload, TRow>(
   // inline selectRows would re-run the fetch every render.
   const selectRowsRef = useRef(selectRows);
   selectRowsRef.current = selectRows;
+  const sharedPageRef = useRef<{ identity: string; rows: TRow[] } | null>(null);
   const queryIdentity = useMemo(
     () =>
       typedResourceQueryLifecycleIdentity({
@@ -331,63 +368,82 @@ export function useTypedResourceQuery<TPayload extends TypedQueryPayload, TRow>(
   const pageLimitRef = useRef(pageLimit);
   pageLimitRef.current = pageLimit;
 
-  const applyPayload = useCallback((incomingPayload: TPayload) => {
-    const nextRows = selectRowsRef.current(incomingPayload);
-    setRows(nextRows);
-    setPayload(incomingPayload);
-    setContinueToken(incomingPayload.continue ?? null);
-    setPreviousToken(incomingPayload.previous || null);
-    const hasTotal = typeof incomingPayload.total === 'number';
-    // A missing total must never render as an exact 0 while rows are visible.
-    // Fall back to the visible row count and mark the total approximate so the
-    // UI shows "≈N" / no "Page N of M" rather than a false "0 of 0".
-    setTotalCount(hasTotal ? (incomingPayload.total as number) : nextRows.length);
-    setTotalIsExact(hasTotal ? incomingPayload.totalIsExact !== false : false);
-    setFilterOptions(filterOptionsFromTypedPayload(incomingPayload));
-    setDynamic(incomingPayload.dynamic ?? null);
-    if (typeof incomingPayload.pageStartRank === 'number') {
-      // Serve-time position honesty: the backend counted this page's exact
-      // start rank (anchored/offset landings); plain cursor pages keep the
-      // client arithmetic below (the O(rank) count per cursor serve failed
-      // the plan's benchmark gate — see large-data.md).
-      setPageIndex(Math.floor(incomingPayload.pageStartRank / pageLimitRef.current) + 1);
-      pendingNavigationRef.current = null;
-      if (!incomingPayload.anchor) {
-        // A numbered-jump landing: consume the one-shot intent and adopt the
-        // self cursor (same page-stability mechanics as anchored landings).
-        setStartRankIntent(null);
-        setRequestToken(incomingPayload.self || null);
+  const applyPayload = useCallback(
+    (incomingPayload: TPayload, pageIdentity: string) => {
+      const incomingRows = selectRowsRef.current(incomingPayload);
+      const previousPage = sharedPageRef.current;
+      const canShare =
+        previousPage?.identity === pageIdentity &&
+        previousPage.rows.every(isCanonicalQueryRow) &&
+        incomingRows.every(isCanonicalQueryRow);
+      const nextRows = canShare
+        ? (structuralShareResourceRows(
+            previousPage.rows as unknown as CanonicalQueryRow[],
+            incomingRows as unknown as CanonicalQueryRow[],
+            queryRowSharingMode(domain)
+          ) as TRow[])
+        : incomingRows;
+      if (nextRows !== incomingRows) {
+        incomingRows.splice(0, incomingRows.length, ...nextRows);
       }
-    } else {
-      const pendingNavigation = pendingNavigationRef.current;
-      if (pendingNavigation) {
-        if (pendingNavigation.direction === 'next') {
-          setPageIndex((current) => current + 1);
-        } else {
-          setPageIndex((current) => Math.max(1, current - 1));
-        }
+      sharedPageRef.current = { identity: pageIdentity, rows: nextRows };
+      setRows(nextRows);
+      setPayload(incomingPayload);
+      setContinueToken(incomingPayload.continue ?? null);
+      setPreviousToken(incomingPayload.previous || null);
+      const hasTotal = typeof incomingPayload.total === 'number';
+      // A missing total must never render as an exact 0 while rows are visible.
+      // Fall back to the visible row count and mark the total approximate so the
+      // UI shows "≈N" / no "Page N of M" rather than a false "0 of 0".
+      setTotalCount(hasTotal ? (incomingPayload.total as number) : nextRows.length);
+      setTotalIsExact(hasTotal ? incomingPayload.totalIsExact !== false : false);
+      setFilterOptions(filterOptionsFromTypedPayload(incomingPayload));
+      setDynamic(incomingPayload.dynamic ?? null);
+      if (typeof incomingPayload.pageStartRank === 'number') {
+        // Serve-time position honesty: the backend counted this page's exact
+        // start rank (anchored/offset landings); plain cursor pages keep the
+        // client arithmetic below (the O(rank) count per cursor serve failed
+        // the plan's benchmark gate — see large-data.md).
+        setPageIndex(Math.floor(incomingPayload.pageStartRank / pageLimitRef.current) + 1);
         pendingNavigationRef.current = null;
-      }
-    }
-    if (incomingPayload.anchor) {
-      setAnchorResult(incomingPayload.anchor);
-      // Disarm: the landing is done. The intent itself survives (soft resets
-      // re-anchor) unless the anchor was missing — a filtered/not-found jump
-      // must not keep re-firing on every sort change.
-      setAnchorArmed(false);
-      if (incomingPayload.anchor.found) {
-        // Adopt the landing's self cursor as the page identity so live
-        // refetches reproduce THIS page (page-stable, not object-stable).
-        // Costs one redundant quiet refetch of the same page right now — the
-        // per-Build cache and maintained stores make it cheap, and it keeps
-        // the fetch machinery free of special cases.
-        setRequestToken(incomingPayload.self || null);
+        if (!incomingPayload.anchor) {
+          // A numbered-jump landing: consume the one-shot intent and adopt the
+          // self cursor (same page-stability mechanics as anchored landings).
+          setStartRankIntent(null);
+          setRequestToken(incomingPayload.self || null);
+        }
       } else {
-        setAnchorIntent(null);
+        const pendingNavigation = pendingNavigationRef.current;
+        if (pendingNavigation) {
+          if (pendingNavigation.direction === 'next') {
+            setPageIndex((current) => current + 1);
+          } else {
+            setPageIndex((current) => Math.max(1, current - 1));
+          }
+          pendingNavigationRef.current = null;
+        }
       }
-    }
-    setLoaded(true);
-  }, []);
+      if (incomingPayload.anchor) {
+        setAnchorResult(incomingPayload.anchor);
+        // Disarm: the landing is done. The intent itself survives (soft resets
+        // re-anchor) unless the anchor was missing — a filtered/not-found jump
+        // must not keep re-firing on every sort change.
+        setAnchorArmed(false);
+        if (incomingPayload.anchor.found) {
+          // Adopt the landing's self cursor as the page identity so live
+          // refetches reproduce THIS page (page-stable, not object-stable).
+          // Costs one redundant quiet refetch of the same page right now — the
+          // per-Build cache and maintained stores make it cheap, and it keeps
+          // the fetch machinery free of special cases.
+          setRequestToken(incomingPayload.self || null);
+        } else {
+          setAnchorIntent(null);
+        }
+      }
+      setLoaded(true);
+    },
+    [domain]
+  );
 
   // A failed navigation fetch must restore the pre-navigation cursor. Leaving
   // the failed cursor in place latched the pagination: a retry set the SAME
@@ -486,7 +542,7 @@ export function useTypedResourceQuery<TPayload extends TypedQueryPayload, TRow>(
           }
           return;
         }
-        applyPayload(responsePayload);
+        applyPayload(responsePayload, scope);
       } catch (caught) {
         if (!cancelled && queryIdentityRef.current === identityAtRequest) {
           revertFailedNavigation();

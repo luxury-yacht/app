@@ -4,6 +4,7 @@ import (
 	"testing"
 	"time"
 
+	"github.com/luxury-yacht/app/backend/resourcemodel"
 	corev1 "k8s.io/api/core/v1"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/runtime/schema"
@@ -76,7 +77,7 @@ func TestBuildSummaryAndSort(t *testing.T) {
 	}
 	svc := &Service{}
 	summary := svc.buildSummary(desc, pod)
-	if summary.Name != "demo" || summary.Namespace != "ns" || summary.Kind != "Pod" {
+	if summary.Ref.Name != "demo" || summary.Ref.Namespace != "ns" || summary.Ref.Kind != "Pod" {
 		t.Fatalf("unexpected summary: %#v", summary)
 	}
 	if summary.LabelsDigest == "" {
@@ -84,11 +85,11 @@ func TestBuildSummaryAndSort(t *testing.T) {
 	}
 
 	items := []Summary{
-		{Kind: "B", Namespace: "ns2", Name: "b"},
-		{Kind: "A", Namespace: "ns1", Name: "a"},
+		{Ref: resourcemodel.ResourceRef{Kind: "B", Namespace: "ns2", Name: "b"}},
+		{Ref: resourcemodel.ResourceRef{Kind: "A", Namespace: "ns1", Name: "a"}},
 	}
 	sortSummaries(items)
-	if items[0].Kind != "A" || items[0].Namespace != "ns1" {
+	if items[0].Ref.Kind != "A" || items[0].Ref.Namespace != "ns1" {
 		t.Fatalf("expected sorted summaries, got %#v", items)
 	}
 }
@@ -110,16 +111,16 @@ func TestBuildSummaryForNamespaceCanonicalIdentity(t *testing.T) {
 			CreationTimestamp: metav1.NewTime(time.Unix(1700000000, 0)),
 		},
 	}
-	svc := &Service{clusterID: "cluster-a", clusterName: "prod"}
+	svc := &Service{clusterID: "cluster-a"}
 
 	summary := svc.buildSummary(desc, namespace)
-	if summary.ClusterID != "cluster-a" || summary.ClusterName != "prod" {
+	if summary.Ref.ClusterID != "cluster-a" {
 		t.Fatalf("unexpected cluster identity: %#v", summary)
 	}
-	if summary.Group != "" || summary.Version != "v1" || summary.Kind != "Namespace" || summary.Resource != "namespaces" {
+	if summary.Ref.Group != "" || summary.Ref.Version != "v1" || summary.Ref.Kind != "Namespace" || summary.Ref.Resource != "namespaces" {
 		t.Fatalf("unexpected namespace GVK/GVR identity: %#v", summary)
 	}
-	if summary.Namespace != "" || summary.Name != "alpha" || summary.UID != "namespace-alpha" {
+	if summary.Ref.Namespace != "" || summary.Ref.Name != "alpha" || summary.Ref.UID != "namespace-alpha" {
 		t.Fatalf("unexpected namespace object identity: %#v", summary)
 	}
 	if summary.ResourceVersion != "42" || summary.CreationTimestamp != "2023-11-14T22:13:20Z" {

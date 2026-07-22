@@ -68,7 +68,7 @@ func (e networkProjectionError) Error() string { return string(e) }
 // OWN-fields NetworkSummary (service.BuildStreamSummary with nil slices); the serve path
 // re-joins the endpoint count from the EndpointSlice store.
 func NewServiceIngestProjector(meta ClusterMeta) ingest.ProjectFunc {
-	catalogProject := objectcatalog.SummaryProjector(meta.ClusterID, meta.ClusterName, service.Identity)
+	catalogProject := objectcatalog.SummaryProjector(meta.ClusterID, service.Identity)
 	nodeProject := objectmapnode.NewNodeProjector(service.ObjectMapNode.Status, service.ObjectMapNode.ActionFacts, service.ObjectMapEdges)
 	return func(obj interface{}) (interface{}, error) {
 		svc, ok := obj.(*corev1.Service)
@@ -90,7 +90,7 @@ func NewServiceIngestProjector(meta ClusterMeta) ingest.ProjectFunc {
 // cross-kind join); the namespace-network serve path also reads this store to re-join the
 // endpoint count onto Service rows.
 func NewEndpointSliceIngestProjector(meta ClusterMeta) ingest.ProjectFunc {
-	catalogProject := objectcatalog.SummaryProjector(meta.ClusterID, meta.ClusterName, endpointslice.Identity)
+	catalogProject := objectcatalog.SummaryProjector(meta.ClusterID, endpointslice.Identity)
 	nodeProject := objectmapnode.NewNodeProjector(endpointslice.ObjectMapNode.Status, endpointslice.ObjectMapNode.ActionFacts, endpointslice.ObjectMapEdges)
 	return func(obj interface{}) (interface{}, error) {
 		slice, ok := obj.(*discoveryv1.EndpointSlice)

@@ -2,6 +2,7 @@ package snapshot
 
 import (
 	"fmt"
+	"github.com/luxury-yacht/app/backend/resourcemodel"
 	"slices"
 	"testing"
 )
@@ -13,10 +14,9 @@ func makeHelmRows(n int) []NamespaceHelmSummary {
 	statuses := []string{"deployed", "failed", "pending-install"}
 	rows := make([]NamespaceHelmSummary, n)
 	for i := 0; i < n; i++ {
-		rows[i] = NamespaceHelmSummary{
-			Name:         fmt.Sprintf("rel-%03d", i), // unique -> unique row key
-			Namespace:    namespaces[i%len(namespaces)],
-			Chart:        charts[i%len(charts)],
+		rows[i] = NamespaceHelmSummary{Ref: resourcemodel.ResourceRef{Namespace:
+		// unique -> unique row key
+		namespaces[i%len(namespaces)], Name: fmt.Sprintf("rel-%03d", i)}, Chart: charts[i%len(charts)],
 			AppVersion:   appVersions[i%len(appVersions)],
 			Status:       statuses[i%len(statuses)],
 			Revision:     i % 7, // ties, numeric sort engages

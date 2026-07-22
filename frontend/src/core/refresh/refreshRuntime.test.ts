@@ -206,6 +206,39 @@ describe('ClusterRefreshRuntime', () => {
     expect(runtime.getScopedLeaseCount('nodes', 'cluster-a|')).toBe(0);
   });
 
+  it('tracks query and snapshot demand independently within one scoped lease count', () => {
+    const runtime = new ClusterRefreshRuntime('cluster-a');
+    const scope = 'cluster-a|';
+
+    expect(runtime.acquireScopedLease('nodes', scope, 'query')).toEqual({
+      count: 1,
+      firstLease: true,
+    });
+    expect(runtime.getScopedLeaseCount('nodes', scope, 'query')).toBe(1);
+    expect(runtime.getScopedLeaseCount('nodes', scope, 'snapshot')).toBe(0);
+
+    expect(runtime.acquireScopedLease('nodes', scope, 'snapshot')).toEqual({
+      count: 2,
+      firstLease: false,
+    });
+    expect(runtime.getScopedLeaseCount('nodes', scope)).toBe(2);
+    expect(runtime.hasScopedDemand('nodes', scope, 'snapshot')).toBe(true);
+
+    expect(runtime.releaseScopedLease('nodes', scope, 'query')).toEqual({
+      count: 1,
+      lastLease: false,
+      hadLease: true,
+    });
+    expect(runtime.hasScopedDemand('nodes', scope, 'query')).toBe(false);
+    expect(runtime.hasScopedDemand('nodes', scope, 'snapshot')).toBe(true);
+
+    expect(runtime.releaseScopedLease('nodes', scope, 'snapshot')).toEqual({
+      count: 0,
+      lastLease: true,
+      hadLease: true,
+    });
+  });
+
   it('skips polling for covered pods scopes while the stream is healthy and snapshots when it is not', async () => {
     // Metric cadence for pods/nodes/namespace-workloads is push-driven (the
     // backend fans a metric doorbell over the resources stream), so a healthy

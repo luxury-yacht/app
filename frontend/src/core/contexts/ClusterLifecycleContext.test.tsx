@@ -36,8 +36,8 @@ describe('ClusterLifecycleContext', () => {
   let restoreRuntime: () => void;
   let restoreGo: () => void;
 
-  // Mock for the Go backend RPC
-  let mockGetAllStates: ReturnType<typeof vi.fn>;
+  // Mock data for the combined workspace RPC.
+  let mockGetAllStates: ReturnType<typeof vi.fn<() => Promise<Record<string, string> | null>>>;
 
   const Harness = () => {
     stateRef.current = useClusterLifecycle();
@@ -52,11 +52,27 @@ describe('ClusterLifecycleContext', () => {
     runtimeHarness = createWailsRuntimeHarness();
     restoreRuntime = installWindowProperty('runtime', runtimeHarness.runtime);
 
-    // Mock window.go.backend.App.GetAllClusterLifecycleStates
+    // Mock the combined workspace snapshot RPC from a compact lifecycle fixture.
     restoreGo = installWindowProperty('go', {
       backend: {
         App: {
-          GetAllClusterLifecycleStates: mockGetAllStates,
+          GetClusterWorkspaceState: async () => {
+            const lifecycle = (await mockGetAllStates()) as Record<string, string> | null;
+            const clusters = Object.fromEntries(
+              Object.entries(lifecycle ?? {}).map(([clusterId, state]) => [
+                clusterId,
+                {
+                  clusterId,
+                  clusterName: clusterId,
+                  lifecycle: state,
+                  auth: { state: 'unknown' },
+                  health: 'unknown',
+                  scopeRevision: 0,
+                },
+              ])
+            );
+            return { selectedKubeconfigs: [], visibleClusterId: '', clusters };
+          },
         },
       },
     });
@@ -117,7 +133,7 @@ describe('ClusterLifecycleContext', () => {
     expect(stateRef.current?.isClusterReady('cluster-b')).toBe(false);
   });
 
-  it('hydrates from GetAllClusterLifecycleStates on mount', async () => {
+  it('hydrates from GetClusterWorkspaceState on mount', async () => {
     mockGetAllStates.mockResolvedValue({
       'cluster-a': 'connecting',
       'cluster-b': 'ready',
@@ -164,7 +180,7 @@ describe('ClusterLifecycleContext', () => {
     });
 
     // Deliver a LIVE event before hydration resolves.
-    let resolveHydration: (value: unknown) => void = () => undefined;
+    let resolveHydration: (value: Record<string, string> | null) => void = () => undefined;
     mockGetAllStates.mockReturnValue(
       new Promise((resolve) => {
         resolveHydration = resolve;

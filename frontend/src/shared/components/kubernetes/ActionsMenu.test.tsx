@@ -145,7 +145,21 @@ const makeObject = (kind: string, overrides?: Partial<ObjectActionData>): Object
   namespace: 'default',
   clusterId: 'cluster-1',
   ...overrides,
+  group: overrides?.group ?? '',
+  version: overrides?.version ?? 'v1',
 });
+
+const makeDeployment = (overrides?: Partial<ObjectActionData>): ObjectActionData =>
+  makeObject('Deployment', { group: 'apps', version: 'v1', ...overrides });
+
+const makePod = (overrides?: Partial<ObjectActionData>): ObjectActionData =>
+  makeObject('Pod', { group: '', version: 'v1', ...overrides });
+
+const makeCronJob = (overrides?: Partial<ObjectActionData>): ObjectActionData =>
+  makeObject('CronJob', { group: 'batch', version: 'v1', ...overrides });
+
+const makeNode = (overrides?: Partial<ObjectActionData>): ObjectActionData =>
+  makeObject('Node', { group: '', version: 'v1', ...overrides });
 
 describe('ActionsMenu', () => {
   let container: HTMLDivElement;
@@ -180,7 +194,7 @@ describe('ActionsMenu', () => {
   });
 
   it('renders available actions as native menu buttons', async () => {
-    await renderMenu({ object: makeObject('Deployment', { group: 'apps', version: 'v1' }) });
+    await renderMenu({ object: makeDeployment() });
 
     openMenu(container);
 
@@ -192,7 +206,7 @@ describe('ActionsMenu', () => {
   });
 
   it('renders the open menu outside the panel scroll container', async () => {
-    await renderMenu({ object: makeObject('Node') });
+    await renderMenu({ object: makeNode() });
 
     openMenu(container);
 
@@ -244,7 +258,7 @@ describe('ActionsMenu', () => {
     const onAfterAction = vi.fn();
 
     await renderMenu({
-      object: makeObject('Deployment', { group: 'apps', version: 'v1' }),
+      object: makeDeployment(),
       onAfterAction,
     });
 
@@ -261,7 +275,7 @@ describe('ActionsMenu', () => {
   it('confirms delete through the controller, runs the backend delete, and signals close', async () => {
     const onAfterDelete = vi.fn();
 
-    await renderMenu({ object: makeObject('Deployment'), onAfterDelete });
+    await renderMenu({ object: makeDeployment(), onAfterDelete });
 
     openMenu(container);
     const deleteItem = document.body.querySelector<HTMLElement>('.context-menu-item.danger');
@@ -281,7 +295,7 @@ describe('ActionsMenu', () => {
     const onAfterAction = vi.fn();
 
     await renderMenu({
-      object: makeObject('Deployment', { group: 'apps', version: 'v1', hpaManaged: false }),
+      object: makeDeployment({ hpaManaged: false }),
       currentReplicas: 3,
       onAfterAction,
     });
@@ -328,7 +342,7 @@ describe('ActionsMenu', () => {
 
   it('opens the scale modal with the row desired replica count when no explicit count is passed', async () => {
     await renderMenu({
-      object: makeObject('Deployment', { ready: '2/6', hpaManaged: false }),
+      object: makeDeployment({ ready: '2/6', hpaManaged: false }),
     });
 
     openMenu(container);
@@ -340,7 +354,7 @@ describe('ActionsMenu', () => {
 
   it('confirms before scaling HPA-managed workloads to zero from the menu', async () => {
     await renderMenu({
-      object: makeObject('Deployment', { ready: '2/4', hpaManaged: true }),
+      object: makeDeployment({ ready: '2/4', hpaManaged: true }),
     });
 
     openMenu(container);
@@ -368,7 +382,7 @@ describe('ActionsMenu', () => {
 
   it('shows only Scale to 0 for HPA-managed workloads above zero', async () => {
     await renderMenu({
-      object: makeObject('Deployment', { ready: '2/4', hpaManaged: true }),
+      object: makeDeployment({ ready: '2/4', hpaManaged: true }),
     });
 
     openMenu(container);
@@ -380,7 +394,7 @@ describe('ActionsMenu', () => {
 
   it('confirms before scaling a regular workload to zero from the scale modal', async () => {
     await renderMenu({
-      object: makeObject('Deployment', { ready: '2/4', hpaManaged: false }),
+      object: makeDeployment({ ready: '2/4', hpaManaged: false }),
     });
 
     openMenu(container);
@@ -408,7 +422,7 @@ describe('ActionsMenu', () => {
 
   it('resumes HPA-managed workloads from zero from the menu', async () => {
     await renderMenu({
-      object: makeObject('Deployment', { ready: '0/0', hpaManaged: true }),
+      object: makeDeployment({ ready: '0/0', hpaManaged: true }),
     });
 
     openMenu(container);
@@ -430,7 +444,7 @@ describe('ActionsMenu', () => {
 
   it('uses currentReplicas when choosing the HPA-managed menu action', async () => {
     await renderMenu({
-      object: makeObject('Deployment', { hpaManaged: true }),
+      object: makeDeployment({ hpaManaged: true }),
       currentReplicas: 4,
     });
 
@@ -443,7 +457,7 @@ describe('ActionsMenu', () => {
 
   it('shows Resume from 0 when currentReplicas is zero', async () => {
     await renderMenu({
-      object: makeObject('Deployment', { ready: '0/4', hpaManaged: true }),
+      object: makeDeployment({ ready: '0/4', hpaManaged: true }),
       currentReplicas: 0,
     });
 
@@ -456,7 +470,7 @@ describe('ActionsMenu', () => {
 
   it('closes the menu when clicking outside', async () => {
     await renderMenu({
-      object: makeObject('Deployment'),
+      object: makeDeployment(),
     });
 
     openMenu(container);
@@ -471,7 +485,7 @@ describe('ActionsMenu', () => {
 
   it('does not show Scale while HPA ownership is unknown', async () => {
     await renderMenu({
-      object: makeObject('Deployment', { ready: '2/4' }),
+      object: makeDeployment({ ready: '2/4' }),
     });
 
     openMenu(container);
@@ -484,7 +498,7 @@ describe('ActionsMenu', () => {
 
   it('shows port forward action for Pod', async () => {
     await renderMenu({
-      object: makeObject('Pod'),
+      object: makePod(),
     });
 
     openMenu(container);
@@ -495,8 +509,8 @@ describe('ActionsMenu', () => {
 
   it('renders port forward as disabled when the target is unavailable', async () => {
     await renderMenu({
-      object: makeObject('Pod', {
-        clusterId: undefined,
+      object: makePod({
+        clusterId: '',
       }),
     });
 
@@ -510,7 +524,7 @@ describe('ActionsMenu', () => {
 
   it('renders port forward as disabled when the target has no forwardable ports', async () => {
     await renderMenu({
-      object: makeObject('Pod', {
+      object: makePod({
         portForwardAvailable: false,
       }),
     });
@@ -525,10 +539,7 @@ describe('ActionsMenu', () => {
 
   it('shows Diff in the actions menu and emits an object-diff request', async () => {
     await renderMenu({
-      object: makeObject('Deployment', {
-        group: 'apps',
-        version: 'v1',
-      }),
+      object: makeDeployment(),
     });
 
     let payload: unknown;
@@ -593,7 +604,7 @@ describe('ActionsMenu', () => {
   describe('CronJob actions', () => {
     it('shows trigger and suspend actions for CronJob', async () => {
       await renderMenu({
-        object: makeObject('CronJob'),
+        object: makeCronJob(),
       });
 
       openMenu(container);
@@ -608,7 +619,7 @@ describe('ActionsMenu', () => {
 
     it('shows Resume instead of Suspend when status is Suspended', async () => {
       await renderMenu({
-        object: makeObject('CronJob', { status: 'Suspended' }),
+        object: makeCronJob({ status: 'Suspended' }),
       });
 
       openMenu(container);
@@ -623,7 +634,7 @@ describe('ActionsMenu', () => {
 
     it('disables trigger when CronJob is suspended', async () => {
       await renderMenu({
-        object: makeObject('CronJob', { status: 'Suspended' }),
+        object: makeCronJob({ status: 'Suspended' }),
       });
 
       openMenu(container);
@@ -636,7 +647,7 @@ describe('ActionsMenu', () => {
       const onAfterAction = vi.fn();
 
       await renderMenu({
-        object: makeObject('CronJob', { group: 'batch', version: 'v1' }),
+        object: makeCronJob(),
         onAfterAction,
       });
 
@@ -658,7 +669,7 @@ describe('ActionsMenu', () => {
       const onAfterAction = vi.fn();
 
       await renderMenu({
-        object: makeObject('CronJob', { group: 'batch', version: 'v1' }),
+        object: makeCronJob(),
         onAfterAction,
       });
 

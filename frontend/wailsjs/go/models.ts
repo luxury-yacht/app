@@ -597,6 +597,155 @@ export namespace backend {
 	        this.bytes = source["bytes"];
 	    }
 	}
+	export class ClusterWorkspaceAuthState {
+	    state: string;
+	    reason: string;
+	    errorClass: string;
+	    secondsUntilRetry: number;
+	    class: string;
+	    kind: string;
+	    summary: string;
+	    execCommand: string;
+	
+	    static createFrom(source: any = {}) {
+	        return new ClusterWorkspaceAuthState(source);
+	    }
+	
+	    constructor(source: any = {}) {
+	        if ('string' === typeof source) source = JSON.parse(source);
+	        this.state = source["state"];
+	        this.reason = source["reason"];
+	        this.errorClass = source["errorClass"];
+	        this.secondsUntilRetry = source["secondsUntilRetry"];
+	        this.class = source["class"];
+	        this.kind = source["kind"];
+	        this.summary = source["summary"];
+	        this.execCommand = source["execCommand"];
+	    }
+	}
+	export class ClusterWorkspaceClusterState {
+	    clusterId: string;
+	    clusterName: string;
+	    lifecycle: string;
+	    auth: ClusterWorkspaceAuthState;
+	    health: string;
+	    scopeRevision: number;
+	
+	    static createFrom(source: any = {}) {
+	        return new ClusterWorkspaceClusterState(source);
+	    }
+	
+	    constructor(source: any = {}) {
+	        if ('string' === typeof source) source = JSON.parse(source);
+	        this.clusterId = source["clusterId"];
+	        this.clusterName = source["clusterName"];
+	        this.lifecycle = source["lifecycle"];
+	        this.auth = this.convertValues(source["auth"], ClusterWorkspaceAuthState);
+	        this.health = source["health"];
+	        this.scopeRevision = source["scopeRevision"];
+	    }
+	
+		convertValues(a: any, classs: any, asMap: boolean = false): any {
+		    if (!a) {
+		        return a;
+		    }
+		    if (a.slice && a.map) {
+		        return (a as any[]).map(elem => this.convertValues(elem, classs));
+		    } else if ("object" === typeof a) {
+		        if (asMap) {
+		            for (const key of Object.keys(a)) {
+		                a[key] = new classs(a[key]);
+		            }
+		            return a;
+		        }
+		        return new classs(a);
+		    }
+		    return a;
+		}
+	}
+	export class ClusterWorkspaceCommand {
+	    selectedKubeconfigs: string[];
+	    updateSelectedKubeconfigs: boolean;
+	    visibleClusterId: string;
+	
+	    static createFrom(source: any = {}) {
+	        return new ClusterWorkspaceCommand(source);
+	    }
+	
+	    constructor(source: any = {}) {
+	        if ('string' === typeof source) source = JSON.parse(source);
+	        this.selectedKubeconfigs = source["selectedKubeconfigs"];
+	        this.updateSelectedKubeconfigs = source["updateSelectedKubeconfigs"];
+	        this.visibleClusterId = source["visibleClusterId"];
+	    }
+	}
+	export class ClusterWorkspaceState {
+	    selectedKubeconfigs: string[];
+	    visibleClusterId: string;
+	    clusters: Record<string, ClusterWorkspaceClusterState>;
+	
+	    static createFrom(source: any = {}) {
+	        return new ClusterWorkspaceState(source);
+	    }
+	
+	    constructor(source: any = {}) {
+	        if ('string' === typeof source) source = JSON.parse(source);
+	        this.selectedKubeconfigs = source["selectedKubeconfigs"];
+	        this.visibleClusterId = source["visibleClusterId"];
+	        this.clusters = this.convertValues(source["clusters"], ClusterWorkspaceClusterState, true);
+	    }
+	
+		convertValues(a: any, classs: any, asMap: boolean = false): any {
+		    if (!a) {
+		        return a;
+		    }
+		    if (a.slice && a.map) {
+		        return (a as any[]).map(elem => this.convertValues(elem, classs));
+		    } else if ("object" === typeof a) {
+		        if (asMap) {
+		            for (const key of Object.keys(a)) {
+		                a[key] = new classs(a[key]);
+		            }
+		            return a;
+		        }
+		        return new classs(a);
+		    }
+		    return a;
+		}
+	}
+	export class ClusterWorkspaceResult {
+	    state: ClusterWorkspaceState;
+	    error?: string;
+	
+	    static createFrom(source: any = {}) {
+	        return new ClusterWorkspaceResult(source);
+	    }
+	
+	    constructor(source: any = {}) {
+	        if ('string' === typeof source) source = JSON.parse(source);
+	        this.state = this.convertValues(source["state"], ClusterWorkspaceState);
+	        this.error = source["error"];
+	    }
+	
+		convertValues(a: any, classs: any, asMap: boolean = false): any {
+		    if (!a) {
+		        return a;
+		    }
+		    if (a.slice && a.map) {
+		        return (a as any[]).map(elem => this.convertValues(elem, classs));
+		    } else if ("object" === typeof a) {
+		        if (asMap) {
+		            for (const key of Object.keys(a)) {
+		                a[key] = new classs(a[key]);
+		            }
+		            return a;
+		        }
+		        return new classs(a);
+		    }
+		    return a;
+		}
+	}
+	
 	export class ContainerPortInfo {
 	    port: number;
 	    name?: string;
@@ -3305,15 +3454,7 @@ export namespace objectcatalog {
 	    }
 	}
 	export class Summary {
-	    clusterId: string;
-	    clusterName: string;
-	    kind: string;
-	    group: string;
-	    version: string;
-	    resource: string;
-	    namespace?: string;
-	    name: string;
-	    uid: string;
+	    ref: resourcemodel.ResourceRef;
 	    resourceVersion: string;
 	    creationTimestamp: string;
 	    scope: string;
@@ -3326,15 +3467,7 @@ export namespace objectcatalog {
 	
 	    constructor(source: any = {}) {
 	        if ('string' === typeof source) source = JSON.parse(source);
-	        this.clusterId = source["clusterId"];
-	        this.clusterName = source["clusterName"];
-	        this.kind = source["kind"];
-	        this.group = source["group"];
-	        this.version = source["version"];
-	        this.resource = source["resource"];
-	        this.namespace = source["namespace"];
-	        this.name = source["name"];
-	        this.uid = source["uid"];
+	        this.ref = this.convertValues(source["ref"], resourcemodel.ResourceRef);
 	        this.resourceVersion = source["resourceVersion"];
 	        this.creationTimestamp = source["creationTimestamp"];
 	        this.scope = source["scope"];
@@ -4362,13 +4495,7 @@ export namespace snapshot {
 	}
 	
 	export class CustomResourceSummary {
-	    clusterId: string;
-	    clusterName: string;
-	    kind: string;
-	    name: string;
-	    namespace?: string;
-	    group: string;
-	    version: string;
+	    ref: resourcemodel.ResourceRef;
 	    crdName?: string;
 	    status?: string;
 	    statusState?: string;
@@ -4386,13 +4513,7 @@ export namespace snapshot {
 	
 	    constructor(source: any = {}) {
 	        if ('string' === typeof source) source = JSON.parse(source);
-	        this.clusterId = source["clusterId"];
-	        this.clusterName = source["clusterName"];
-	        this.kind = source["kind"];
-	        this.name = source["name"];
-	        this.namespace = source["namespace"];
-	        this.group = source["group"];
-	        this.version = source["version"];
+	        this.ref = this.convertValues(source["ref"], resourcemodel.ResourceRef);
 	        this.crdName = source["crdName"];
 	        this.status = source["status"];
 	        this.statusState = source["statusState"];

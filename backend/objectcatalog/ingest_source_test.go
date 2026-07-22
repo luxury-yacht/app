@@ -12,6 +12,7 @@ import (
 	"k8s.io/apimachinery/pkg/runtime/schema"
 
 	"github.com/luxury-yacht/app/backend/refresh/ingest"
+	"github.com/luxury-yacht/app/backend/resourcemodel"
 )
 
 // replayIngestSource mirrors ProjectingStore.AddCatalogSink: registering a sink
@@ -56,14 +57,7 @@ func TestRegisterIngestCatalogSinksRebuildsCacheOnce(t *testing.T) {
 			GVR:      gvr,
 		}
 		svc.catalogIndex.setResource(gvr.String(), desc)
-		rows[gvr] = []interface{}{Summary{
-			Kind:      desc.Kind,
-			Group:     desc.Group,
-			Version:   desc.Version,
-			Resource:  desc.Resource,
-			Namespace: "default",
-			Name:      "seed-" + desc.Resource,
-		}}
+		rows[gvr] = []interface{}{Summary{Ref: resourcemodel.ResourceRef{Group: desc.Group, Version: desc.Version, Kind: desc.Kind, Resource: desc.Resource, Namespace: "default", Name: "seed-" + desc.Resource}}}
 	}
 	svc.mu.Unlock()
 
@@ -82,7 +76,7 @@ func TestRegisterIngestCatalogSinksRebuildsCacheOnce(t *testing.T) {
 	for gvr := range catalogIngestOwnedGVRs {
 		found := false
 		for _, item := range svc.catalogIndex.items {
-			if item.Resource == gvr.Resource && item.Group == gvr.Group {
+			if item.Ref.Resource == gvr.Resource && item.Ref.Group == gvr.Group {
 				found = true
 				break
 			}

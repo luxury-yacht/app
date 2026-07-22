@@ -10,14 +10,12 @@ package endpointslice
 import (
 	"context"
 	"fmt"
-	"sort"
 
 	"github.com/luxury-yacht/app/backend/internal/config"
 	"github.com/luxury-yacht/app/backend/internal/logsources"
 	"github.com/luxury-yacht/app/backend/resources/common"
 	discoveryv1 "k8s.io/api/discovery/v1"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
-	"k8s.io/apimachinery/pkg/labels"
 )
 
 // Service provides detailed EndpointSlice views backed by shared dependencies.
@@ -51,47 +49,6 @@ func (s *Service) EndpointSlice(namespace, name string) (*EndpointSliceDetails, 
 		return nil, fmt.Errorf("failed to get endpoint slice: %v", err)
 	}
 	return s.buildEndpointSliceDetails(namespace, name, slice), nil
-}
-
-// EndpointSlices lists details for every EndpointSlice object in the namespace.
-func (s *Service) EndpointSlices(namespace string) ([]*EndpointSliceDetails, error) {
-	ctx, cancel := s.ctx()
-	defer cancel()
-	slices, err := s.listEndpointSlices(ctx, namespace, "")
-	if err != nil {
-		s.deps.Logger.Error(fmt.Sprintf("Failed to list endpoint slices in namespace %s: %v", namespace, err), logsources.ResourceLoader)
-		return nil, fmt.Errorf("failed to list endpoint slices: %v", err)
-	}
-
-	sort.SliceStable(slices, func(i, j int) bool {
-		return slices[i].Name < slices[j].Name
-	})
-
-	results := make([]*EndpointSliceDetails, 0, len(slices))
-	for _, slice := range slices {
-		if slice == nil {
-			continue
-		}
-		results = append(results, s.buildEndpointSliceDetails(namespace, slice.Name, slice))
-	}
-	return results, nil
-}
-
-func (s *Service) listEndpointSlices(ctx context.Context, namespace, service string) ([]*discoveryv1.EndpointSlice, error) {
-	opts := metav1.ListOptions{}
-	if service != "" {
-		opts.LabelSelector = labels.Set{discoveryv1.LabelServiceName: service}.AsSelector().String()
-	}
-	list, err := s.deps.KubernetesClient.DiscoveryV1().EndpointSlices(namespace).List(ctx, opts)
-	if err != nil {
-		return nil, err
-	}
-	result := make([]*discoveryv1.EndpointSlice, 0, len(list.Items))
-	for i := range list.Items {
-		slice := list.Items[i]
-		result = append(result, &slice)
-	}
-	return result, nil
 }
 
 func (s *Service) buildEndpointSliceDetails(namespace, name string, slice *discoveryv1.EndpointSlice) *EndpointSliceDetails {

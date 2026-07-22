@@ -16,8 +16,8 @@ import (
 // BuildStreamSummary builds the cluster-rbac row for one ClusterRoleBinding.
 func BuildStreamSummary(meta streamrows.ClusterMeta, binding *rbacv1.ClusterRoleBinding) streamrows.ClusterRBACEntry {
 	if binding == nil {
-		return streamrows.ClusterRBACEntry{ClusterMeta: meta, Kind: "ClusterRoleBinding"}
+		return streamrows.ClusterRBACEntry{}
 	}
 	details := DescribeSummary(BuildFacts(meta.ClusterID, binding))
-	return streamrows.NewClusterRBACEntry(meta, binding, "ClusterRoleBinding", details, "CRB")
+	return streamrows.NewClusterRBACEntry(meta, Identity, binding, details, "CRB")
 }

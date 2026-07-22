@@ -7,6 +7,7 @@ import (
 	"time"
 
 	appsv1 "k8s.io/api/apps/v1"
+	autoscalingv1 "k8s.io/api/autoscaling/v1"
 	autoscalingv2 "k8s.io/api/autoscaling/v2"
 	batchv1 "k8s.io/api/batch/v1"
 	corev1 "k8s.io/api/core/v1"
@@ -22,8 +23,10 @@ import (
 	fakediscovery "k8s.io/client-go/discovery/fake"
 	"k8s.io/client-go/kubernetes/fake"
 
+	"github.com/luxury-yacht/app/backend/kind/streamrows"
 	"github.com/luxury-yacht/app/backend/refresh/snapshot"
 	"github.com/luxury-yacht/app/backend/resourcecontract"
+	"github.com/luxury-yacht/app/backend/resources/hpa"
 )
 
 func TestObjectDetailProviderFetchesKnownKinds(t *testing.T) {
@@ -196,6 +199,23 @@ func TestObjectDetailFetcherGVKsContractDerived(t *testing.T) {
 	}
 	if _, ok := lookupObjectDetailFetcher(schema.GroupVersionKind{Group: "autoscaling", Version: "v1", Kind: "HorizontalPodAutoscaler"}); ok {
 		t.Fatal("expected autoscaling/v1 HorizontalPodAutoscaler to fall back to the generic detail path")
+	}
+}
+
+func TestHPAStreamRowRefReachesTypedDetailFetcher(t *testing.T) {
+	row := hpa.BuildStreamSummary(streamrows.ClusterMeta{
+		ClusterID:   "cluster-a",
+		ClusterName: "Alpha",
+	}, &autoscalingv1.HorizontalPodAutoscaler{
+		ObjectMeta: metav1.ObjectMeta{Name: "api", Namespace: "default"},
+	})
+
+	if row.Ref.Group != "autoscaling" || row.Ref.Version != "v2" || row.Ref.Kind != "HorizontalPodAutoscaler" {
+		t.Fatalf("HPA row navigation ref = %s/%s %s, want autoscaling/v2 HorizontalPodAutoscaler", row.Ref.Group, row.Ref.Version, row.Ref.Kind)
+	}
+	gvk := schema.GroupVersionKind{Group: row.Ref.Group, Version: row.Ref.Version, Kind: row.Ref.Kind}
+	if _, ok := lookupObjectDetailFetcher(gvk); !ok {
+		t.Fatalf("HPA stream row ref %s does not reach the typed detail fetcher", gvk)
 	}
 }
 

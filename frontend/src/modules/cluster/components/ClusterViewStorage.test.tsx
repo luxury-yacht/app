@@ -11,6 +11,7 @@ import type { GridTableProps } from '@shared/components/tables/GridTable';
 import { act } from 'react';
 import * as ReactDOM from 'react-dom/client';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
+import type { ClusterStorageEntry } from '@/core/refresh/types';
 import { requireReactElement } from '@/test-utils/requireReactElement';
 import { requireValue } from '@/test-utils/requireValue';
 
@@ -37,19 +38,7 @@ vi.mock('@ui/favorites/FavToggle', () => ({
   }),
 }));
 
-interface StorageRow {
-  kind: string;
-  name: string;
-  clusterId: string;
-  capacity: string;
-  accessModes: string;
-  status: string;
-  statusState: string;
-  statusPresentation: string;
-  claim: string;
-  storageClass: string;
-  age: string;
-}
+type StorageRow = ClusterStorageEntry;
 const gridTablePropsRef: { current: GridTableProps<StorageRow> | null } = { current: null };
 const openWithObjectMock = vi.hoisted(() => vi.fn());
 
@@ -116,9 +105,19 @@ vi.mock('@wailsjs/go/backend/App', () => ({
 }));
 
 const basePV = {
+  ref: {
+    clusterId: 'cluster-a',
+    group: '',
+    version: 'v1',
+    kind: 'PersistentVolume',
+    resource: 'persistentvolumes',
+    namespace: '',
+    name: 'pv-1',
+  },
   kind: 'PersistentVolume',
   name: 'pv-1',
   clusterId: 'cluster-a',
+  clusterName: 'Cluster A',
   capacity: '10Gi',
   accessModes: 'ReadWriteOnce',
   status: 'Bound',
@@ -180,9 +179,9 @@ describe('ClusterViewStorage', () => {
     });
 
     const props = getGridTableProps();
-    expect(props.keyExtractor({ ...basePV, clusterId: 'alpha:ctx' }, 0)).toBe(
-      'alpha:ctx|/v1/PersistentVolume//pv-1'
-    );
+    expect(
+      props.keyExtractor({ ...basePV, ref: { ...basePV.ref, clusterId: 'alpha:ctx' } }, 0)
+    ).toBe('alpha:ctx|/v1/PersistentVolume//pv-1');
   });
 
   it('leaves the kind options to the backend-published vocabulary (no frontend list)', async () => {

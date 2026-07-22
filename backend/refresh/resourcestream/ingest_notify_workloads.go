@@ -90,13 +90,13 @@ func (m *Manager) lookupWorkloadRef(kind, namespace, name string) (resourcemodel
 			continue
 		}
 		catalog, ok := bundle.Catalog.(objectcatalog.Summary)
-		if !ok || catalog.Namespace != namespace || catalog.Name != name {
+		if !ok || catalog.Ref.Namespace != namespace || catalog.Ref.Name != name {
 			continue
 		}
 		return resourcemodel.NewResourceRef(
 			m.clusterMeta.ClusterID,
 			identity.Group, identity.Version, identity.Kind, identity.Resource,
-			catalog.Namespace, catalog.Name, catalog.UID,
+			catalog.Ref.Namespace, catalog.Ref.Name, catalog.Ref.UID,
 		), true
 	}
 	return resourcemodel.ResourceRef{}, false
@@ -185,7 +185,7 @@ func (s workloadNotifyCatalogSink) broadcast(row interface{}, updateType Message
 	ref := resourcemodel.NewResourceRef(
 		s.manager.clusterMeta.ClusterID,
 		s.identity.Group, s.identity.Version, s.identity.Kind, s.identity.Resource,
-		summary.Namespace, summary.Name, summary.UID,
+		summary.Ref.Namespace, summary.Ref.Name, summary.Ref.UID,
 	)
-	s.manager.broadcastWorkloadNotificationRef(ref, summary.Namespace, summary.ResourceVersion, updateType)
+	s.manager.broadcastWorkloadNotificationRef(ref, summary.Ref.Namespace, summary.ResourceVersion, updateType)
 }

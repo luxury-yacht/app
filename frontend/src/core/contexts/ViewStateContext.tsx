@@ -44,8 +44,6 @@ import { ModalStateProvider, useModalState } from './ModalStateContext';
 // Import specialized contexts
 import { SidebarStateProvider, useSidebarState } from './SidebarStateContext';
 
-export type { KubernetesObjectReference } from '@/types/view-state';
-export type { SidebarSelectionType } from './SidebarStateContext';
 // Re-export types for backwards compatibility
 export type { ClusterViewType, NamespaceViewType, ViewType };
 

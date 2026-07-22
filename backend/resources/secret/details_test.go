@@ -83,14 +83,3 @@ func TestServiceSecretDetailsIncludesUsage(t *testing.T) {
 	require.Equal(t, "api-0", detail.UsedBy[0].Name)
 	require.Contains(t, detail.Details, "Opaque")
 }
-
-func TestServiceSecretsListsAll(t *testing.T) {
-	secA := &corev1.Secret{ObjectMeta: metav1.ObjectMeta{Name: "a", Namespace: "default"}}
-	secB := &corev1.Secret{ObjectMeta: metav1.ObjectMeta{Name: "b", Namespace: "default"}}
-	client := fake.NewClientset(secA, secB)
-	service := newService(t, client)
-
-	secrets, err := service.Secrets("default")
-	require.NoError(t, err)
-	require.Len(t, secrets, 2)
-}

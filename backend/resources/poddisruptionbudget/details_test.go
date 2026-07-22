@@ -8,17 +8,14 @@ package poddisruptionbudget
 
 import (
 	"context"
-	"fmt"
 	"testing"
 
 	"github.com/luxury-yacht/app/backend/resources/common"
 	"github.com/stretchr/testify/require"
 	policyv1 "k8s.io/api/policy/v1"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
-	"k8s.io/apimachinery/pkg/runtime"
 	"k8s.io/apimachinery/pkg/util/intstr"
 	"k8s.io/client-go/kubernetes/fake"
-	cgotesting "k8s.io/client-go/testing"
 )
 
 // errorCapturingLogger stores error messages for assertions in tests.
@@ -37,9 +34,6 @@ func (errorCapturingLogger) Warn(string, ...string)  {}
 func TestPodDisruptionBudgetRequiresClient(t *testing.T) {
 	svc := NewService(common.Dependencies{Context: context.Background()})
 	_, err := svc.PodDisruptionBudget("default", "demo")
-	require.Error(t, err)
-
-	_, err = svc.PodDisruptionBudgets("default")
 	require.Error(t, err)
 }
 
@@ -96,25 +90,4 @@ func TestPodDisruptionBudgetDetailsFormatting(t *testing.T) {
 	require.Contains(t, resp.Details, "MinAvailable: 1")
 	require.Contains(t, resp.Details, "MaxUnavailable: 50%")
 	require.Len(t, resp.Conditions, 1)
-
-	list, err := svc.PodDisruptionBudgets("default")
-	require.NoError(t, err)
-	require.Len(t, list, 1)
-}
-
-func TestPodDisruptionBudgetListErrorLogs(t *testing.T) {
-	client := fake.NewClientset()
-	client.PrependReactor("list", "poddisruptionbudgets", func(action cgotesting.Action) (handled bool, ret runtime.Object, err error) {
-		return true, nil, fmt.Errorf("boom")
-	})
-	logger := &errorCapturingLogger{}
-	svc := NewService(common.Dependencies{
-		Context:          context.Background(),
-		KubernetesClient: client,
-		Logger:           logger,
-	})
-
-	_, err := svc.PodDisruptionBudgets("default")
-	require.Error(t, err)
-	require.NotEmpty(t, logger.errors)
 }

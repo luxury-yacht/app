@@ -18,6 +18,7 @@ import (
 	"github.com/luxury-yacht/app/backend/refresh/resourcestream"
 	"github.com/luxury-yacht/app/backend/refresh/snapshot"
 	"github.com/luxury-yacht/app/backend/refresh/telemetry"
+	"github.com/luxury-yacht/app/backend/resourcemodel"
 	"github.com/luxury-yacht/app/backend/resources/customresource"
 	apiextinformers "k8s.io/apiextensions-apiserver/pkg/client/informers/externalversions"
 	apierrors "k8s.io/apimachinery/pkg/api/errors"
@@ -223,9 +224,8 @@ func (a *App) startObjectCatalogForTarget(target catalogTarget) error {
 				RateLimiterFactory: func(float64) capabilities.RateLimiter { return nil },
 			})
 		},
-		Now:         time.Now,
-		ClusterID:   target.meta.ID,
-		ClusterName: target.meta.Name,
+		Now:       time.Now,
+		ClusterID: target.meta.ID,
 		// The cluster's namespace scope (docs/plans/namespace-scope.md):
 		// namespaced collection fans out per configured namespace.
 		AllowedNamespaces: a.allowedNamespacesForCluster(target.meta.ID),
@@ -756,6 +756,7 @@ func hydrateCatalogCustomRow(
 			obj,
 			row.Group,
 			row.Version,
+			row.Resource,
 			row.Kind,
 			crdName,
 			row.Namespace,
@@ -766,6 +767,7 @@ func hydrateCatalogCustomRow(
 		obj,
 		row.Group,
 		row.Version,
+		row.Resource,
 		row.Kind,
 		crdName,
 	)), true
@@ -777,12 +779,7 @@ func failedCatalogCustomHydrationSummary(meta snapshot.ClusterMeta, row snapshot
 		crdName = row.Resource + "." + row.Group
 	}
 	return snapshot.CustomResourceSummary{
-		ClusterMeta:        meta,
-		Kind:               row.Kind,
-		Name:               row.Name,
-		Namespace:          row.Namespace,
-		Group:              row.Group,
-		Version:            row.Version,
+		Ref:                resourcemodel.NewResourceRef(meta.ClusterID, row.Group, row.Version, row.Kind, row.Resource, row.Namespace, row.Name, ""),
 		CRDName:            crdName,
 		Status:             "Hydration failed",
 		StatusState:        "warning",

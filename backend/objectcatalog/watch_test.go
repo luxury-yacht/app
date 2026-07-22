@@ -13,6 +13,7 @@ import (
 	"time"
 
 	"github.com/luxury-yacht/app/backend/internal/config"
+	"github.com/luxury-yacht/app/backend/resourcemodel"
 	corev1 "k8s.io/api/core/v1"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/runtime/schema"
@@ -40,7 +41,6 @@ func newTestWatchService() *Service {
 		health:            healthStatus{State: HealthStateUnknown},
 		doneCh:            make(chan struct{}),
 		clusterID:         "test-cluster",
-		clusterName:       "test",
 	}
 }
 
@@ -94,7 +94,7 @@ func TestFlushAddEvent(t *testing.T) {
 	if result.TotalItems != 1 {
 		t.Fatalf("expected 1 item, got %d", result.TotalItems)
 	}
-	if result.Items[0].Name != "my-deploy" || result.Items[0].Kind != "Deployment" {
+	if result.Items[0].Ref.Name != "my-deploy" || result.Items[0].Ref.Kind != "Deployment" {
 		t.Fatalf("unexpected item: %+v", result.Items[0])
 	}
 }
@@ -105,7 +105,7 @@ func TestFlushUpdateEvent(t *testing.T) {
 	registerDesc(svc, desc)
 
 	key := catalogKey(desc, "default", "my-deploy")
-	svc.items[key] = Summary{Name: "my-deploy", Namespace: "default", Kind: "Deployment", ResourceVersion: "1"}
+	svc.items[key] = Summary{Ref: resourcemodel.ResourceRef{Kind: "Deployment", Namespace: "default", Name: "my-deploy"}, ResourceVersion: "1"}
 	svc.lastSeen[key] = time.Now()
 	svc.rebuildCacheFromItems(cloneSummaryMap(svc.items), svc.Descriptors())
 
@@ -137,7 +137,7 @@ func TestFlushDeleteEvent(t *testing.T) {
 	registerDesc(svc, desc)
 
 	key := catalogKey(desc, "default", "my-deploy")
-	svc.items[key] = Summary{Name: "my-deploy", Namespace: "default", Kind: "Deployment"}
+	svc.items[key] = Summary{Ref: resourcemodel.ResourceRef{Kind: "Deployment", Namespace: "default", Name: "my-deploy"}}
 	svc.lastSeen[key] = time.Now()
 	svc.rebuildCacheFromItems(cloneSummaryMap(svc.items), svc.Descriptors())
 
@@ -435,7 +435,7 @@ func TestReactiveUpdateEndToEnd(t *testing.T) {
 
 	time.Sleep(500 * time.Millisecond)
 	result := svc.Query(QueryOptions{})
-	if result.TotalItems != 1 || result.Items[0].Name != "e2e-pod" {
+	if result.TotalItems != 1 || result.Items[0].Ref.Name != "e2e-pod" {
 		t.Fatalf("add failed: %+v", result)
 	}
 

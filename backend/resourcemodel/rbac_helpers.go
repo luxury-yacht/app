@@ -17,7 +17,7 @@ func RBACResourceModel(
 	status ResourceStatusPresentation,
 	facts ResourceFacts,
 ) ResourceModel {
-	return NetworkResourceModel(clusterID, rbacAPIGroup, "v1", kind, resource, scope, meta, status, facts)
+	return KubernetesResourceModel(clusterID, rbacAPIGroup, "v1", kind, resource, scope, meta, status, facts)
 }
 
 func ServiceAccountResourceModel(
@@ -26,7 +26,7 @@ func ServiceAccountResourceModel(
 	status ResourceStatusPresentation,
 	facts ResourceFacts,
 ) ResourceModel {
-	return NetworkResourceModel(clusterID, "", "v1", "ServiceAccount", "serviceaccounts", ResourceScopeNamespaced, meta, status, facts)
+	return KubernetesResourceModel(clusterID, "", "v1", "ServiceAccount", "serviceaccounts", ResourceScopeNamespaced, meta, status, facts)
 }
 
 func CopyPolicyRuleFacts(rules []rbacv1.PolicyRule) []PolicyRuleFacts {
@@ -57,11 +57,11 @@ func RBACRuleCountStatus(meta metav1.ObjectMeta, ruleCount int, aggregated bool)
 		Name:   "rules.count",
 		Status: state,
 	}}
-	lifecycle := NetworkLifecycle(meta)
-	if status, ok := DeletingNetworkStatus(meta, state, signals, lifecycle); ok {
+	lifecycle := ObjectLifecycle(meta)
+	if status, ok := DeletingObjectStatus(meta, state, signals, lifecycle); ok {
 		return status
 	}
-	return NetworkSourceStatus(label, state, "", "ready", signals, lifecycle)
+	return ObjectSourceStatus(label, state, "", "", "ready", signals, lifecycle)
 }
 
 func RBACBindingStatus(meta metav1.ObjectMeta, roleName string, subjectCount int) ResourceStatusPresentation {
@@ -74,11 +74,11 @@ func RBACBindingStatus(meta metav1.ObjectMeta, roleName string, subjectCount int
 		{Type: StatusSignalResourceState, Name: "roleRef.name", Status: roleName},
 		{Type: StatusSignalResourceState, Name: "subjects.count", Status: state},
 	}
-	lifecycle := NetworkLifecycle(meta)
-	if status, ok := DeletingNetworkStatus(meta, state, signals, lifecycle); ok {
+	lifecycle := ObjectLifecycle(meta)
+	if status, ok := DeletingObjectStatus(meta, state, signals, lifecycle); ok {
 		return status
 	}
-	return NetworkSourceStatus(label, state, "", "ready", signals, lifecycle)
+	return ObjectSourceStatus(label, state, "", "", "ready", signals, lifecycle)
 }
 
 func ServiceAccountStatus(meta metav1.ObjectMeta, secretCount int) ResourceStatusPresentation {
@@ -89,11 +89,11 @@ func ServiceAccountStatus(meta metav1.ObjectMeta, secretCount int) ResourceStatu
 		Name:   "secrets.count",
 		Status: state,
 	}}
-	lifecycle := NetworkLifecycle(meta)
-	if status, ok := DeletingNetworkStatus(meta, state, signals, lifecycle); ok {
+	lifecycle := ObjectLifecycle(meta)
+	if status, ok := DeletingObjectStatus(meta, state, signals, lifecycle); ok {
 		return status
 	}
-	return NetworkSourceStatus(label, state, "", "ready", signals, lifecycle)
+	return ObjectSourceStatus(label, state, "", "", "ready", signals, lifecycle)
 }
 
 func rbacRoleBindingLink(clusterID string, binding rbacv1.RoleBinding) ResourceLink {

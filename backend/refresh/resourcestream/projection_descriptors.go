@@ -51,13 +51,9 @@ type ResourceDescriptor struct {
 	Resource string
 }
 
-// SupportedDomains returns the refresh domains served by the resource
-// WebSocket stream. The domainpermissions composition table owns the resource
-// membership; stream registration and projections add behavior-specific wiring.
-func SupportedDomains() []string {
-	return domainpermissions.StreamDomains()
-}
-
+// ProjectionDescriptors returns a defensive copy of the authored projection
+// metadata. Its consumers are the cross-package contract guards that lock the
+// descriptors to refresh-domain-contract.json (see registrations_test.go).
 func ProjectionDescriptors() map[string]ProjectionDescriptor {
 	result := make(map[string]ProjectionDescriptor, len(projectionDescriptors))
 	for domain, descriptor := range projectionDescriptors {
@@ -81,9 +77,9 @@ var projectionDescriptors = map[string]ProjectionDescriptor{
 		// The metric clock joins live usage onto served rows at serve (snapshot
 		// query path); stream row pushes stay object-clocked.
 		SourceClocks:         []Source{SourceObject, SourceMetric},
-		Projection:           "pods.BuildStreamSummary",
-		AffectedRowResolver:  "pod event -> pod row, workload row, node row",
-		StaleScopeResolver:   "stalePodScopes",
+		Projection:           "pods.BuildStreamSummaryFromRSMap (ingest projection)",
+		AffectedRowResolver:  "ingest pod bundle sink -> pod row, workload row, node row",
+		StaleScopeResolver:   "ingest DeleteBundle rings the old bundle's scopes (scopesForPod)",
 		CompleteIsScopeLevel: true,
 	},
 	domainWorkloads: {
@@ -106,9 +102,9 @@ var projectionDescriptors = map[string]ProjectionDescriptor{
 			fromIdentity(hpapkg.IdentityV1),
 		},
 		SourceClocks:         []Source{SourceObject, SourceMetric},
-		Projection:           "snapshot.BuildWorkloadSummary / snapshot.BuildStandalonePodWorkloadSummary",
+		Projection:           "snapshot namespace-workloads builder (row-less stream signal)",
 		AffectedRowResolver:  "workload, pod, HPA, ReplicaSet event resolvers",
-		StaleScopeResolver:   "ReplicaSet and pod stale owner/scope resolvers",
+		StaleScopeResolver:   "ReplicaSet heal + ingest bundle delete fan-out",
 		CompleteIsScopeLevel: true,
 	},
 	domainNamespaceConfig: namespaceDescriptor(
@@ -127,8 +123,8 @@ var projectionDescriptors = map[string]ProjectionDescriptor{
 		RelatedResources:     []ResourceDescriptor{fromIdentity(endpointslicepkg.Identity)},
 		SourceClocks:         []Source{SourceObject},
 		Projection:           "service/ingress/networkpolicy/endpointslice/gatewayapi BuildStreamSummary",
-		AffectedRowResolver:  "network object and EndpointSlice->Service resolvers",
-		StaleScopeResolver:   "EndpointSlice old/new service resolver",
+		AffectedRowResolver:  "ingest network bundle sink",
+		StaleScopeResolver:   "ingest bundle delete fan-out",
 		CompleteIsScopeLevel: true,
 	},
 	domainNamespaceRBAC: namespaceDescriptor(
@@ -226,9 +222,9 @@ var projectionDescriptors = map[string]ProjectionDescriptor{
 		PrimaryResources:     []ResourceDescriptor{fromIdentity(nodespkg.Identity)},
 		RelatedResources:     []ResourceDescriptor{fromIdentity(podspkg.Identity)},
 		SourceClocks:         []Source{SourceObject, SourceMetric},
-		Projection:           "snapshot.BuildNodeSummary",
+		Projection:           "snapshot nodes builder (row-less stream signal)",
 		AffectedRowResolver:  "node and pod->node resolvers",
-		StaleScopeResolver:   "pod old/new node resolver",
+		StaleScopeResolver:   "ingest bundle delete fan-out",
 		CompleteIsScopeLevel: true,
 	},
 }

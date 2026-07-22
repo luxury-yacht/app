@@ -30,27 +30,6 @@ func (s *Service) ValidatingWebhookConfiguration(name string) (*ValidatingWebhoo
 	return s.buildValidatingWebhookConfigurationDetails(config), nil
 }
 
-// ValidatingWebhookConfigurations lists all validating webhook configurations.
-func (s *Service) ValidatingWebhookConfigurations() ([]*ValidatingWebhookConfigurationDetails, error) {
-	client := s.deps.KubernetesClient
-	if client == nil {
-		return nil, fmt.Errorf("kubernetes client not initialized")
-	}
-
-	configs, err := client.AdmissionregistrationV1().ValidatingWebhookConfigurations().List(s.deps.Context, metav1.ListOptions{})
-	if err != nil {
-		s.logError(fmt.Sprintf("Failed to list validating webhook configurations: %v", err))
-		return nil, fmt.Errorf("failed to list validating webhook configurations: %v", err)
-	}
-
-	result := make([]*ValidatingWebhookConfigurationDetails, 0, len(configs.Items))
-	for i := range configs.Items {
-		result = append(result, s.buildValidatingWebhookConfigurationDetails(&configs.Items[i]))
-	}
-
-	return result, nil
-}
-
 func (s *Service) buildValidatingWebhookConfigurationDetails(config *admissionregistrationv1.ValidatingWebhookConfiguration) *ValidatingWebhookConfigurationDetails {
 	model := BuildValidatingResourceModel(s.deps.ClusterID, config)
 	facts := BuildValidatingFacts(s.deps.ClusterID, config)

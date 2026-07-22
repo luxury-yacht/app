@@ -12,6 +12,7 @@ import type { GridTableProps } from '@shared/components/tables/GridTable';
 import React, { act } from 'react';
 import * as ReactDOM from 'react-dom/client';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
+import { makeResourceRef } from '@/test-utils/makeResourceRef';
 import { requireReactElement } from '@/test-utils/requireReactElement';
 import { requireValue } from '@/test-utils/requireValue';
 import type { ConfigData } from './NsViewConfig';
@@ -215,6 +216,13 @@ const sampleData = [
     name: 'app-config',
     namespace: 'default',
     clusterId: 'alpha:ctx',
+    clusterName: 'alpha',
+    ref: makeResourceRef({
+      kind: 'ConfigMap',
+      resource: 'configmaps',
+      namespace: 'default',
+      name: 'app-config',
+    }),
     data: 2,
     age: '1d',
   },
@@ -358,7 +366,10 @@ describe('NsViewConfig ConfigViewGrid', () => {
     ]);
     objectActionMock.RunObjectAction.mockResolvedValue(undefined);
     const { clusterId: _clusterId, ...resourceWithoutCluster } = sampleData[0];
-    const defensiveResource = resourceWithoutCluster as unknown as (typeof sampleData)[number];
+    const defensiveResource = {
+      ...resourceWithoutCluster,
+      ref: { ...resourceWithoutCluster.ref, clusterId: '' },
+    } as (typeof sampleData)[number];
 
     const module = await import('./NsViewConfig');
     const ConfigView = module.default;

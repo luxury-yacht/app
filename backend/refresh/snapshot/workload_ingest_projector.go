@@ -106,7 +106,7 @@ func (e workloadProjectionError) Error() string { return string(e) }
 // builder's ClusterMeta stamped from meta.
 func NewDeploymentIngestProjector(meta ClusterMeta) ingest.ProjectFunc {
 	builder := &NamespaceWorkloadsBuilder{}
-	catalogProject := objectcatalog.SummaryProjector(meta.ClusterID, meta.ClusterName, deployment.Identity)
+	catalogProject := objectcatalog.SummaryProjector(meta.ClusterID, deployment.Identity)
 	nodeProject := objectmapnode.NewNodeProjector(deployment.ObjectMapNode.Status, deployment.ObjectMapNode.ActionFacts, deployment.ObjectMapEdges)
 	return func(obj interface{}) (interface{}, error) {
 		deploy, ok := obj.(*appsv1.Deployment)
@@ -114,7 +114,6 @@ func NewDeploymentIngestProjector(meta ClusterMeta) ingest.ProjectFunc {
 			return nil, workloadProjectionError("ingest: deployment projector received a non-Deployment object")
 		}
 		summary := builder.buildDeploymentSummary(meta.ClusterID, deploy, nil, nil)
-		summary.ClusterMeta = meta
 		var metaObj metav1.Object = deploy
 		return ingest.Bundle{
 			Table:     summary,
@@ -127,7 +126,7 @@ func NewDeploymentIngestProjector(meta ClusterMeta) ingest.ProjectFunc {
 // NewStatefulSetIngestProjector mirrors NewDeploymentIngestProjector for StatefulSet.
 func NewStatefulSetIngestProjector(meta ClusterMeta) ingest.ProjectFunc {
 	builder := &NamespaceWorkloadsBuilder{}
-	catalogProject := objectcatalog.SummaryProjector(meta.ClusterID, meta.ClusterName, statefulset.Identity)
+	catalogProject := objectcatalog.SummaryProjector(meta.ClusterID, statefulset.Identity)
 	nodeProject := objectmapnode.NewNodeProjector(statefulset.ObjectMapNode.Status, statefulset.ObjectMapNode.ActionFacts, statefulset.ObjectMapEdges)
 	return func(obj interface{}) (interface{}, error) {
 		sts, ok := obj.(*appsv1.StatefulSet)
@@ -135,7 +134,6 @@ func NewStatefulSetIngestProjector(meta ClusterMeta) ingest.ProjectFunc {
 			return nil, workloadProjectionError("ingest: statefulset projector received a non-StatefulSet object")
 		}
 		summary := builder.buildStatefulSetSummary(meta.ClusterID, sts, nil, nil)
-		summary.ClusterMeta = meta
 		var metaObj metav1.Object = sts
 		return ingest.Bundle{
 			Table:     summary,
@@ -148,7 +146,7 @@ func NewStatefulSetIngestProjector(meta ClusterMeta) ingest.ProjectFunc {
 // NewDaemonSetIngestProjector mirrors NewDeploymentIngestProjector for DaemonSet.
 func NewDaemonSetIngestProjector(meta ClusterMeta) ingest.ProjectFunc {
 	builder := &NamespaceWorkloadsBuilder{}
-	catalogProject := objectcatalog.SummaryProjector(meta.ClusterID, meta.ClusterName, daemonset.Identity)
+	catalogProject := objectcatalog.SummaryProjector(meta.ClusterID, daemonset.Identity)
 	nodeProject := objectmapnode.NewNodeProjector(daemonset.ObjectMapNode.Status, daemonset.ObjectMapNode.ActionFacts, daemonset.ObjectMapEdges)
 	return func(obj interface{}) (interface{}, error) {
 		ds, ok := obj.(*appsv1.DaemonSet)
@@ -156,7 +154,6 @@ func NewDaemonSetIngestProjector(meta ClusterMeta) ingest.ProjectFunc {
 			return nil, workloadProjectionError("ingest: daemonset projector received a non-DaemonSet object")
 		}
 		summary := builder.buildDaemonSetSummary(meta.ClusterID, ds, nil, nil)
-		summary.ClusterMeta = meta
 		var metaObj metav1.Object = ds
 		return ingest.Bundle{
 			Table:     summary,
@@ -169,7 +166,7 @@ func NewDaemonSetIngestProjector(meta ClusterMeta) ingest.ProjectFunc {
 // NewJobIngestProjector mirrors NewDeploymentIngestProjector for Job.
 func NewJobIngestProjector(meta ClusterMeta) ingest.ProjectFunc {
 	builder := &NamespaceWorkloadsBuilder{}
-	catalogProject := objectcatalog.SummaryProjector(meta.ClusterID, meta.ClusterName, jobres.Identity)
+	catalogProject := objectcatalog.SummaryProjector(meta.ClusterID, jobres.Identity)
 	nodeProject := objectmapnode.NewNodeProjector(jobres.ObjectMapNode.Status, jobres.ObjectMapNode.ActionFacts, jobres.ObjectMapEdges)
 	return func(obj interface{}) (interface{}, error) {
 		job, ok := obj.(*batchv1.Job)
@@ -177,7 +174,6 @@ func NewJobIngestProjector(meta ClusterMeta) ingest.ProjectFunc {
 			return nil, workloadProjectionError("ingest: job projector received a non-Job object")
 		}
 		summary := builder.buildJobSummary(meta.ClusterID, job, nil, nil)
-		summary.ClusterMeta = meta
 		var metaObj metav1.Object = job
 		return ingest.Bundle{
 			Table:     summary,
@@ -191,7 +187,7 @@ func NewJobIngestProjector(meta ClusterMeta) ingest.ProjectFunc {
 // NewCronJobIngestProjector mirrors NewDeploymentIngestProjector for CronJob.
 func NewCronJobIngestProjector(meta ClusterMeta) ingest.ProjectFunc {
 	builder := &NamespaceWorkloadsBuilder{}
-	catalogProject := objectcatalog.SummaryProjector(meta.ClusterID, meta.ClusterName, cronjob.Identity)
+	catalogProject := objectcatalog.SummaryProjector(meta.ClusterID, cronjob.Identity)
 	nodeProject := objectmapnode.NewNodeProjector(cronjob.ObjectMapNode.Status, cronjob.ObjectMapNode.ActionFacts, cronjob.ObjectMapEdges)
 	return func(obj interface{}) (interface{}, error) {
 		cron, ok := obj.(*batchv1.CronJob)
@@ -199,7 +195,6 @@ func NewCronJobIngestProjector(meta ClusterMeta) ingest.ProjectFunc {
 			return nil, workloadProjectionError("ingest: cronjob projector received a non-CronJob object")
 		}
 		summary := builder.buildCronJobSummary(meta.ClusterID, cron, nil, nil)
-		summary.ClusterMeta = meta
 		var metaObj metav1.Object = cron
 		return ingest.Bundle{
 			Table:     summary,

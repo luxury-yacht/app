@@ -6,6 +6,7 @@ import (
 
 	"github.com/luxury-yacht/app/backend/kind/streamrows"
 	"github.com/luxury-yacht/app/backend/refresh/metrics"
+	"github.com/luxury-yacht/app/backend/resourcemodel"
 	"github.com/luxury-yacht/app/backend/resources/cronjob"
 	"github.com/luxury-yacht/app/backend/resources/daemonset"
 	"github.com/luxury-yacht/app/backend/resources/deployment"
@@ -115,10 +116,7 @@ func TestReaggregateWorkloadSummaryMatchesTypedBuilder(t *testing.T) {
 }
 
 func TestReaggregateWorkloadSummaryPreservesOutOfRangeReadyFallback(t *testing.T) {
-	own := WorkloadSummary{
-		Kind:  deployment.Identity.Kind,
-		Ready: "2147483648/2147483649",
-	}
+	own := WorkloadSummary{Ref: resourcemodel.ResourceRef{Kind: deployment.Identity.Kind}, Ready: "2147483648/2147483649"}
 
 	got := reaggregateWorkloadSummary(own, nil, nil)
 	if got.Ready != own.Ready {

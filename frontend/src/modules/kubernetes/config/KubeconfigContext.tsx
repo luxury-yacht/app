@@ -27,10 +27,10 @@ import {
   useRef,
   useState,
 } from 'react';
-import { readKubeconfigs, readSelectedKubeconfigs, requestAppState } from '@/core/app-state-access';
-import { SetSelectedKubeconfigs, SetVisibleCluster } from '@/core/backend-api';
+import { readKubeconfigs, requestAppState } from '@/core/app-state-access';
+import { ApplyClusterWorkspace } from '@/core/backend-api';
+import { clusterWorkspaceStore } from '@/core/cluster-workspace/clusterWorkspaceStore';
 import { eventBus } from '@/core/events';
-import { logAppLogsInfo } from '@/core/logging/appLogsClient';
 import { refreshOrchestrator, useBackgroundRefresh } from '@/core/refresh';
 import { clusterReadiness } from '@/core/refresh/clusterReadiness';
 
@@ -120,6 +120,8 @@ export const KubeconfigProvider: React.FC<KubeconfigProviderProps> = ({ children
   // Prevent refresh context churn until the backend confirms selection updates.
   const selectionPendingRef = useRef(false);
 
+  useEffect(() => clusterWorkspaceStore.acquire(), []);
+
   // Resolve cluster identity metadata from the current selection and config list.
   const resolveClusterMeta = useCallback((selection: string, configs: types.KubeconfigInfo[]) => {
     const trimmed = selection.trim();
@@ -148,8 +150,15 @@ export const KubeconfigProvider: React.FC<KubeconfigProviderProps> = ({ children
     return { id: `${filename}:${context}`, name: context };
   }, []);
 
-  // Selection-set mutations stay on the last backend-confirmed open set. A
-  // switch among those already-open tabs commits immediately below.
+  // Public selection follows the active tab immediately so cluster-scoped UI
+  // cannot keep rendering the previous cluster while activation is pending.
+  const selectedClusterMeta = useMemo(
+    () => resolveClusterMeta(selectedKubeconfig, kubeconfigs),
+    [resolveClusterMeta, selectedKubeconfig, kubeconfigs]
+  );
+
+  // Refresh selection stays on the last backend-confirmed open set. A switch
+  // among those already-open tabs commits immediately below.
   const committedSelectedClusterMeta = useMemo(
     () => resolveClusterMeta(committedSelectedKubeconfig, kubeconfigs),
     [resolveClusterMeta, committedSelectedKubeconfig, kubeconfigs]
@@ -244,46 +253,47 @@ export const KubeconfigProvider: React.FC<KubeconfigProviderProps> = ({ children
     updateRefreshContext(committedSelectedClusterMeta, committedSelectedClusterIds);
   }, [committedSelectedClusterIds, committedSelectedClusterMeta, updateRefreshContext]);
 
-  const loadKubeconfigs = useCallback(async () => {
-    setKubeconfigsLoading(true);
-    try {
-      // Load both the list of configs and the currently selected list.
-      const [configs, currentSelection] = await Promise.all([
-        requestAppState({
-          resource: 'kubeconfigs',
-          read: () => readKubeconfigs(),
-        }),
-        requestAppState({
-          resource: 'selected-kubeconfigs',
-          read: () => readSelectedKubeconfigs(),
-        }),
-      ]);
+  const loadKubeconfigs = useCallback(
+    async (refreshWorkspace = false) => {
+      setKubeconfigsLoading(true);
+      try {
+        // Load both the list of configs and the currently selected list.
+        const [configs, currentSelection] = await Promise.all([
+          requestAppState({
+            resource: 'kubeconfigs',
+            read: () => readKubeconfigs(),
+          }),
+          refreshWorkspace ? clusterWorkspaceStore.refresh() : clusterWorkspaceStore.hydrate(),
+        ]);
 
-      setKubeconfigs(configs || []);
-
-      // Set the selection from the backend
-      const normalizedSelection = normalizeSelections(currentSelection || []);
-      selectedKubeconfigsRef.current = normalizedSelection;
-      selectedKubeconfigRef.current = normalizedSelection[0] || '';
-      committedSelectionsRef.current = normalizedSelection;
-      committedActiveRef.current = normalizedSelection[0] || '';
-      setSelectedKubeconfigsState(normalizedSelection);
-      setSelectedKubeconfigState(normalizedSelection[0] || '');
-      setCommittedSelectedKubeconfigs(normalizedSelection);
-      setCommittedSelectedKubeconfig(normalizedSelection[0] || '');
-    } catch (error) {
-      errorHandler.handle(
-        error,
-        {
-          context: 'loadKubeconfigs',
-        },
-        'Failed to load kubeconfigs'
-      );
-      setKubeconfigs([]);
-    } finally {
-      setKubeconfigsLoading(false);
-    }
-  }, [normalizeSelections]);
+        setKubeconfigs(configs || []);
+        // Set the selection from the backend
+        const normalizedSelection = normalizeSelections(
+          currentSelection?.selectedKubeconfigs || []
+        );
+        selectedKubeconfigsRef.current = normalizedSelection;
+        selectedKubeconfigRef.current = normalizedSelection[0] || '';
+        committedSelectionsRef.current = normalizedSelection;
+        committedActiveRef.current = normalizedSelection[0] || '';
+        setSelectedKubeconfigsState(normalizedSelection);
+        setSelectedKubeconfigState(normalizedSelection[0] || '');
+        setCommittedSelectedKubeconfigs(normalizedSelection);
+        setCommittedSelectedKubeconfig(normalizedSelection[0] || '');
+      } catch (error) {
+        errorHandler.handle(
+          error,
+          {
+            context: 'loadKubeconfigs',
+          },
+          'Failed to load kubeconfigs'
+        );
+        setKubeconfigs([]);
+      } finally {
+        setKubeconfigsLoading(false);
+      }
+    },
+    [normalizeSelections]
+  );
 
   const resolveNextActiveSelection = useCallback(
     (
@@ -373,23 +383,30 @@ export const KubeconfigProvider: React.FC<KubeconfigProviderProps> = ({ children
           eventBus.emit('kubeconfig:changing', '');
         }
 
-        // Perform the actual kubeconfig switch.
-        await SetSelectedKubeconfigs(normalizedSelections);
+        // The backend serializes selection before foreground activation and
+        // returns the authoritative state for both operations.
+        const result = await ApplyClusterWorkspace({
+          selectedKubeconfigs: normalizedSelections,
+          updateSelectedKubeconfigs: true,
+          visibleClusterId: nextMeta.id,
+        });
 
         // A newer intent has already been issued; ignore stale completion.
         if (requestId !== latestSelectionRequestIdRef.current) {
           return;
         }
-
-        // SetSelectedKubeconfigs makes the cluster open; SetVisibleCluster then
-        // completes any governor re-warm before its identity reaches data consumers.
-        if (nextMeta.id) {
-          await SetVisibleCluster(nextMeta.id);
+        clusterWorkspaceStore.applyWireState(result.state);
+        if (result.error) {
+          throw new Error(result.error);
         }
-
-        if (requestId !== latestSelectionRequestIdRef.current) {
-          return;
-        }
+        const confirmedSelections = normalizeSelections(result.state.selectedKubeconfigs || []);
+        const confirmedActive = confirmedSelections.includes(nextActive)
+          ? nextActive
+          : confirmedSelections[0] || '';
+        selectedKubeconfigsRef.current = confirmedSelections;
+        selectedKubeconfigRef.current = confirmedActive;
+        setSelectedKubeconfigsState(confirmedSelections);
+        setSelectedKubeconfigState(confirmedActive);
 
         // Emit after backend updates to avoid refreshing with inactive clusters.
         if (shouldEmitSelectionChanged) {
@@ -398,10 +415,10 @@ export const KubeconfigProvider: React.FC<KubeconfigProviderProps> = ({ children
         selectionPendingRef.current = false;
         // Publish cluster-data identities only after the backend activates the
         // matching client pool and refresh subsystems.
-        committedSelectionsRef.current = normalizedSelections;
-        committedActiveRef.current = nextActive;
-        setCommittedSelectedKubeconfigs(normalizedSelections);
-        setCommittedSelectedKubeconfig(nextActive);
+        committedSelectionsRef.current = confirmedSelections;
+        committedActiveRef.current = confirmedActive;
+        setCommittedSelectedKubeconfigs(confirmedSelections);
+        setCommittedSelectedKubeconfig(confirmedActive);
 
         // 4. Perform a manual refresh (will be triggered by kubeconfig:changed event).
         if (shouldEmitChanged) {
@@ -413,24 +430,18 @@ export const KubeconfigProvider: React.FC<KubeconfigProviderProps> = ({ children
           return;
         }
         selectionPendingRef.current = false;
-        // Roll back to the last committed backend selection.
-        let rollbackSelections = committedSelectionsRef.current;
-        let rollbackActive = committedActiveRef.current;
-        try {
-          const confirmed = normalizeSelections(
-            (await requestAppState({
-              resource: 'selected-kubeconfigs',
-              read: () => readSelectedKubeconfigs(),
-            })) || []
-          );
-          rollbackSelections = confirmed;
-          rollbackActive =
-            rollbackActive && confirmed.includes(rollbackActive)
-              ? rollbackActive
-              : confirmed[0] || '';
-        } catch {
-          // Keep last committed in-memory snapshot when backend confirmation fails.
+        // Roll back to the last authoritative workspace snapshot.
+        let rollbackSelections = normalizeSelections([
+          ...clusterWorkspaceStore.getSnapshot().selectedKubeconfigs,
+        ]);
+        if (rollbackSelections.length === 0 && committedSelectionsRef.current.length > 0) {
+          rollbackSelections = committedSelectionsRef.current;
         }
+        let rollbackActive = committedActiveRef.current;
+        rollbackActive =
+          rollbackActive && rollbackSelections.includes(rollbackActive)
+            ? rollbackActive
+            : rollbackSelections[0] || '';
         committedSelectionsRef.current = rollbackSelections;
         committedActiveRef.current = rollbackActive;
         selectedKubeconfigsRef.current = rollbackSelections;
@@ -545,7 +556,17 @@ export const KubeconfigProvider: React.FC<KubeconfigProviderProps> = ({ children
           // producers for a cooled cluster; the retained snapshot remains
           // visible throughout this activation window.
           clusterReadiness.beginForegroundActivation(meta.id);
-          void SetVisibleCluster(meta.id)
+          void ApplyClusterWorkspace({
+            selectedKubeconfigs: [],
+            updateSelectedKubeconfigs: false,
+            visibleClusterId: meta.id,
+          })
+            .then((result) => {
+              clusterWorkspaceStore.applyWireState(result.state);
+              if (result.error) {
+                throw new Error(result.error);
+              }
+            })
             .catch(() => {
               // The retained snapshot remains usable if the Wails binding is
               // temporarily unavailable; once the hold releases, the refresh
@@ -568,7 +589,7 @@ export const KubeconfigProvider: React.FC<KubeconfigProviderProps> = ({ children
   // Listen for backend kubeconfig watcher refresh events.
   useEffect(() => {
     const cancel = EventsOn('kubeconfig:available-changed', () => {
-      void loadKubeconfigs();
+      void loadKubeconfigs(true);
     });
 
     return () => {
@@ -577,24 +598,6 @@ export const KubeconfigProvider: React.FC<KubeconfigProviderProps> = ({ children
       }
     };
   }, [loadKubeconfigs]);
-
-  // Bridge the backend's namespace-scope rebuild completion to the internal
-  // event bus (docs/plans/namespace-scope.md): the orchestrator restarts the
-  // cluster's streams and NamespaceContext refetches the namespaces list.
-  useEffect(() => {
-    const cancel = EventsOn('cluster:scope:changed', (payload?: { clusterId?: string }) => {
-      logAppLogsInfo(
-        `namespace-scope: cluster:scope:changed received for "${payload?.clusterId ?? ''}"`
-      );
-      eventBus.emit('cluster:scope-changed', { clusterId: payload?.clusterId ?? '' });
-    });
-
-    return () => {
-      if (typeof cancel === 'function') {
-        cancel();
-      }
-    };
-  }, []);
 
   // Run GridTable persistence GC when kubeconfigs change or selection changes
   useEffect(() => {
@@ -621,12 +624,11 @@ export const KubeconfigProvider: React.FC<KubeconfigProviderProps> = ({ children
       kubeconfigs,
       selectedKubeconfigs,
       selectedKubeconfig,
-      // Existing tabs publish their active identity immediately. The available
-      // cluster IDs still come from the backend-confirmed open set so pending
-      // add/close mutations cannot leak uncommitted identities to data consumers.
-      selectedClusterId: committedSelectedClusterMeta.id,
-      selectedClusterName: committedSelectedClusterMeta.name,
-      selectedClusterIds: committedSelectedClusterIds,
+      // Cluster-scoped UI follows the selected tab immediately; refresh context
+      // remains backend-confirmed through committedSelectedClusterMeta above.
+      selectedClusterId: selectedClusterMeta.id,
+      selectedClusterName: selectedClusterMeta.name,
+      selectedClusterIds,
       kubeconfigsLoading,
       setSelectedKubeconfigs,
       openKubeconfig,
@@ -639,9 +641,9 @@ export const KubeconfigProvider: React.FC<KubeconfigProviderProps> = ({ children
       kubeconfigs,
       selectedKubeconfigs,
       selectedKubeconfig,
-      committedSelectedClusterMeta.id,
-      committedSelectedClusterMeta.name,
-      committedSelectedClusterIds,
+      selectedClusterMeta.id,
+      selectedClusterMeta.name,
+      selectedClusterIds,
       kubeconfigsLoading,
       setSelectedKubeconfigs,
       openKubeconfig,

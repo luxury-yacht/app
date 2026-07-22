@@ -10,6 +10,7 @@ import (
 	"reflect"
 	"testing"
 
+	"github.com/luxury-yacht/app/backend/resourcemodel"
 	"github.com/luxury-yacht/app/backend/resources/common"
 	"k8s.io/apimachinery/pkg/runtime/schema"
 )
@@ -17,10 +18,10 @@ import (
 func TestServiceNamespacesUsesCachedOrDerivedValues(t *testing.T) {
 	svc := NewService(Dependencies{}, nil)
 	svc.items = map[string]Summary{
-		"one":   {Namespace: "default"},
-		"two":   {Namespace: "kube-system"},
-		"three": {Namespace: "default"},
-		"four":  {Namespace: ""},
+		"one":   {Ref: resourcemodel.ResourceRef{Namespace: "default"}},
+		"two":   {Ref: resourcemodel.ResourceRef{Namespace: "kube-system"}},
+		"three": {Ref: resourcemodel.ResourceRef{Namespace: "default"}},
+		"four":  {Ref: resourcemodel.ResourceRef{Namespace: ""}},
 	}
 
 	namespaces := svc.Namespaces()

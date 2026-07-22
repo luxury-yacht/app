@@ -7,6 +7,7 @@
 package objectcatalog
 
 import (
+	"github.com/luxury-yacht/app/backend/resourcemodel"
 	"testing"
 	"time"
 )
@@ -39,7 +40,7 @@ func TestStreamingAggregatorFinalizePublishesState(t *testing.T) {
 	svc := newTestServiceForStreaming()
 	agg := newStreamingAggregator(svc)
 
-	agg.emit(0, []Summary{{Name: "obj1", Kind: "Pod", Namespace: "default"}})
+	agg.emit(0, []Summary{{Ref: resourcemodel.ResourceRef{Kind: "Pod", Namespace: "default", Name: "obj1"}}})
 	if agg.start.IsZero() || agg.firstFlush.IsZero() {
 		t.Fatalf("expected aggregator to record timing on first emit")
 	}
@@ -78,11 +79,7 @@ func TestStreamingEmitsMaintainStoreIncrementally(t *testing.T) {
 	agg := newStreamingAggregator(svc)
 
 	emitPod := func(name string) {
-		agg.emit(0, []Summary{{
-			Kind: "Pod", Version: "v1", Resource: "pods",
-			Namespace: "default", Name: name, UID: "uid-" + name,
-			Scope: ScopeNamespace,
-		}})
+		agg.emit(0, []Summary{{Ref: resourcemodel.ResourceRef{Version: "v1", Kind: "Pod", Resource: "pods", Namespace: "default", Name: name, UID: "uid-" + name}, Scope: ScopeNamespace}})
 	}
 
 	emitPod("a")
@@ -109,7 +106,7 @@ func TestStreamingEmitsMaintainStoreIncrementally(t *testing.T) {
 
 func TestEmitSummariesRoutesToAggregator(t *testing.T) {
 	agg := newStreamingAggregator(newTestServiceForStreaming())
-	summaries := []Summary{{Name: "obj"}}
+	summaries := []Summary{{Ref: resourcemodel.ResourceRef{Name: "obj"}}}
 
 	result, handled, err := emitSummaries(0, agg, summaries, nil, true)
 	if err != nil || !handled {
@@ -153,7 +150,7 @@ func TestServiceStreamingSubscriptionReceivesUpdates(t *testing.T) {
 	}
 
 	agg := newStreamingAggregator(svc)
-	agg.emit(0, []Summary{{Kind: "Pod", Name: "p1"}})
+	agg.emit(0, []Summary{{Ref: resourcemodel.ResourceRef{Kind: "Pod", Name: "p1"}}})
 
 	select {
 	case update := <-updates:
@@ -181,15 +178,7 @@ func TestStreamingAggregatorEmitsOutOfOrderBatches(t *testing.T) {
 	agg := newStreamingAggregator(svc)
 
 	summaries := []Summary{
-		{
-			Kind:      "Namespace",
-			Group:     "",
-			Version:   "v1",
-			Resource:  "namespaces",
-			Name:      "default",
-			Scope:     ScopeCluster,
-			Namespace: "",
-		},
+		{Ref: resourcemodel.ResourceRef{Group: "", Version: "v1", Kind: "Namespace", Resource: "namespaces", Namespace: "", Name: "default"}, Scope: ScopeCluster},
 	}
 
 	agg.emit(5, summaries)
@@ -198,7 +187,7 @@ func TestStreamingAggregatorEmitsOutOfOrderBatches(t *testing.T) {
 	if len(result.Items) != 1 {
 		t.Fatalf("expected 1 item, got %d", len(result.Items))
 	}
-	if result.Items[0].Name != "default" || result.Items[0].Kind != "Namespace" {
+	if result.Items[0].Ref.Name != "default" || result.Items[0].Ref.Kind != "Namespace" {
 		t.Fatalf("unexpected item streamed: %+v", result.Items[0])
 	}
 }
@@ -209,8 +198,8 @@ func TestStreamingAggregatorFinalizeReplacesStaleObjects(t *testing.T) {
 
 	agg := newStreamingAggregator(svc)
 	agg.emit(0, []Summary{
-		{Kind: "Pod", Version: "v1", Resource: "pods", Namespace: "default", Name: "survivor", UID: "uid-survivor", Scope: ScopeNamespace},
-		{Kind: "Pod", Version: "v1", Resource: "pods", Namespace: "default", Name: "stale", UID: "uid-stale", Scope: ScopeNamespace},
+		{Ref: resourcemodel.ResourceRef{Version: "v1", Kind: "Pod", Resource: "pods", Namespace: "default", Name: "survivor", UID: "uid-survivor"}, Scope: ScopeNamespace},
+		{Ref: resourcemodel.ResourceRef{Version: "v1", Kind: "Pod", Resource: "pods", Namespace: "default", Name: "stale", UID: "uid-stale"}, Scope: ScopeNamespace},
 	})
 	agg.finalize(descriptors, true)
 
@@ -221,7 +210,7 @@ func TestStreamingAggregatorFinalizeReplacesStaleObjects(t *testing.T) {
 
 	agg = newStreamingAggregator(svc)
 	agg.emit(0, []Summary{
-		{Kind: "Pod", Version: "v1", Resource: "pods", Namespace: "default", Name: "survivor", UID: "uid-survivor", Scope: ScopeNamespace},
+		{Ref: resourcemodel.ResourceRef{Version: "v1", Kind: "Pod", Resource: "pods", Namespace: "default", Name: "survivor", UID: "uid-survivor"}, Scope: ScopeNamespace},
 	})
 	agg.finalize(descriptors, true)
 
@@ -229,7 +218,7 @@ func TestStreamingAggregatorFinalizeReplacesStaleObjects(t *testing.T) {
 	if result.TotalItems != 1 || len(result.Items) != 1 {
 		t.Fatalf("expected final total 1, got total=%d items=%#v", result.TotalItems, result.Items)
 	}
-	if result.Items[0].UID != "uid-survivor" {
+	if result.Items[0].Ref.UID != "uid-survivor" {
 		t.Fatalf("expected only survivor item, got %+v", result.Items[0])
 	}
 

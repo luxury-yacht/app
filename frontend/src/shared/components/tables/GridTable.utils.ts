@@ -59,15 +59,18 @@ export const defaultGetNamespace = (row: unknown): string | null => {
   if (!record) {
     return null;
   }
+  const ref = asRecord(record.ref);
   const item = asRecord(record.item);
   const value =
     typeof record.namespaceDisplay === 'string'
       ? record.namespaceDisplay
-      : typeof record.namespace === 'string'
-        ? record.namespace
-        : typeof item?.namespace === 'string'
-          ? item.namespace
-          : null;
+      : typeof ref?.namespace === 'string'
+        ? ref.namespace
+        : typeof record.namespace === 'string'
+          ? record.namespace
+          : typeof item?.namespace === 'string'
+            ? item.namespace
+            : null;
   if (isTableNoValueText(value)) {
     return '';
   }
@@ -78,6 +81,10 @@ const defaultGetClusterId = (row: unknown): string | null => {
   const record = asRecord(row);
   if (!record) {
     return null;
+  }
+  const ref = asRecord(record.ref);
+  if (typeof ref?.clusterId === 'string') {
+    return ref.clusterId;
   }
   if (typeof record.clusterId === 'string') {
     return record.clusterId;

@@ -16,7 +16,7 @@ import (
 // BuildStreamSummary builds the namespace-network row for one GRPCRoute.
 func BuildStreamSummary(meta streamrows.ClusterMeta, route *gatewayv1.GRPCRoute) streamrows.NetworkSummary {
 	if route == nil {
-		return streamrows.NetworkSummary{ClusterMeta: meta, Kind: "GRPCRoute"}
+		return streamrows.NetworkSummary{}
 	}
-	return streamrows.NewNetworkSummary(meta, route, "GRPCRoute", resourcemodel.DescribeRouteFacts(BuildFacts(meta.ClusterID, route).RouteCommonFacts))
+	return streamrows.NewNetworkSummary(meta, Identity, route, resourcemodel.DescribeRouteFacts(BuildFacts(meta.ClusterID, route).RouteCommonFacts))
 }

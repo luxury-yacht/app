@@ -22,7 +22,9 @@ must not poison other selected clusters.
 - Cluster client auth wiring: `backend/cluster_clients.go`
 - Auth events and recovery lifecycle: `backend/cluster_auth.go`, backend app
   lifecycle/refresh setup paths
-- Frontend cluster/auth context: `frontend/src/core/contexts/AuthErrorContext.tsx`
+- Frontend cluster/auth state: the cluster-workspace store in
+  `frontend/src/core/cluster-workspace`; `AuthErrorContext.tsx` is its React
+  selector facade
 - Refresh pause/recovery behavior: `frontend/src/core/refresh`
 
 ## State Model
@@ -35,6 +37,12 @@ Backend auth events are `cluster:auth:failed`, `cluster:auth:recovering`,
 `cluster:auth:recovered`, and `cluster:auth:progress`. Payloads must include
 `clusterId` and enough cluster metadata for the frontend to update only the
 affected cluster.
+
+The cluster-workspace store subscribes before reading the authoritative
+workspace snapshot. Per-field live-event markers prevent a late hydration
+response from overwriting newer auth state. New frontend consumers read auth
+through the store or the context facade; they must not install another set of
+Wails auth listeners or maintain another cluster-keyed auth map.
 
 Recovery must prove both sides of the gate:
 
@@ -64,8 +72,9 @@ State transitions are driven only by probe results: `ReportFailure` moves
 valid → recovering; the loop settles recovering → invalid and recovers any
 non-valid state → valid. `TriggerRetry` restarts the loop (immediate probe)
 without touching the state. There is no attempt counter in the public surface —
-progress events and the auth state RPCs carry `secondsUntilRetry` (live in both
-recovering and invalid) and the sticky `errorClass` verdict.
+progress events and the combined cluster-workspace snapshot carry
+`secondsUntilRetry` (live in both recovering and invalid) and the sticky
+`errorClass` verdict.
 
 The frontend shows the blocking auth overlay only for confirmed auth verdicts
 (settled `invalid`, or a probe rejected by the cluster) with a single message

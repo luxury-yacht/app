@@ -1,41 +1,19 @@
-import type { ResourceGridTableRow } from '@modules/resource-grid/resourceGridTableTypes';
 import {
   buildRequiredCanonicalObjectRowKey,
   buildRequiredObjectReference,
 } from '@shared/utils/objectIdentity';
-import type { CatalogItem } from '@/core/refresh/types';
+import type {
+  CanonicalResourceRef,
+  CatalogItem,
+  CustomResourceSummary,
+} from '@/core/refresh/types';
 
-export interface CatalogBackedCustomResourceRow extends ResourceGridTableRow {
-  kind: string;
+export type CatalogBackedCustomResourceRow = Omit<CustomResourceSummary, 'age'> & {
   kindAlias?: string;
-  name: string;
-  namespace: string;
-  clusterId: string;
-  clusterName?: string;
-  group?: string;
-  version?: string;
-  resource?: string;
-  crdName?: string;
-  status?: string;
-  statusState?: string;
-  statusPresentation?: string;
-  ready?: boolean;
-  observedGeneration?: number;
-  conditions?: Array<{
-    type: string;
-    status: string;
-    reason?: string;
-    message?: string;
-  }>;
   age?: string;
   ageTimestamp?: number;
   creationTimestamp?: string;
-  labels?: Record<string, string>;
-  annotations?: Record<string, string>;
-}
-
-const canonicalGroup = (row: CatalogBackedCustomResourceRow): string => row.group || '';
-const canonicalVersion = (row: CatalogBackedCustomResourceRow): string => row.version || '';
+};
 
 const asRecord = (value: unknown): Record<string, unknown> =>
   value !== null && typeof value === 'object' ? (value as Record<string, unknown>) : {};
@@ -47,6 +25,26 @@ const requiredString = (record: Record<string, unknown>, field: string): string 
     throw new Error(`Hydrated catalog row is missing string field "${field}".`);
   }
   return value;
+};
+type RequiredResourceRef = CanonicalResourceRef & {
+  resource: string;
+  namespace: string;
+  name: string;
+  uid: string;
+};
+
+const requiredResourceRef = (value: unknown): RequiredResourceRef => {
+  const record = asRecord(value);
+  return {
+    clusterId: requiredString(record, 'clusterId'),
+    group: requiredString(record, 'group'),
+    version: requiredString(record, 'version'),
+    kind: requiredString(record, 'kind'),
+    resource: requiredString(record, 'resource'),
+    namespace: optionalString(record.namespace) ?? '',
+    name: requiredString(record, 'name'),
+    uid: optionalString(record.uid) ?? '',
+  };
 };
 const optionalNumber = (value: unknown): number | undefined =>
   typeof value === 'number' ? value : undefined;
@@ -62,35 +60,18 @@ const optionalStringRecord = (value: unknown): Record<string, string> | undefine
 export const customCatalogRowKey = (
   row: CatalogBackedCustomResourceRow,
   fallbackClusterId?: string | null
-): string =>
-  buildRequiredCanonicalObjectRowKey(
-    {
-      kind: row.kind,
-      name: row.name,
-      namespace: row.namespace,
-      clusterId: row.clusterId,
-      group: canonicalGroup(row),
-      version: canonicalVersion(row),
-    },
-    { fallbackClusterId }
-  );
+): string => buildRequiredCanonicalObjectRowKey(row.ref, { fallbackClusterId });
 
 export const customCatalogObjectReference = (
   row: CatalogBackedCustomResourceRow,
   fallbackClusterId?: string | null,
-  options?: { requiresExplicitVersion?: boolean }
+  options?: { requiresExplicitVersion?: boolean; fallbackClusterName?: string }
 ) =>
   buildRequiredObjectReference(
     {
-      kind: row.kind,
+      ...row.ref,
       kindAlias: row.kindAlias,
-      name: row.name,
-      namespace: row.namespace,
-      clusterId: row.clusterId,
-      clusterName: row.clusterName,
-      group: canonicalGroup(row),
-      version: canonicalVersion(row),
-      resource: row.resource,
+      clusterName: options?.fallbackClusterName,
     },
     { fallbackClusterId },
     {
@@ -100,14 +81,14 @@ export const customCatalogObjectReference = (
       labels: row.labels,
       annotations: row.annotations,
       requiresExplicitVersion: options?.requiresExplicitVersion,
-      explicitVersionProvided: Boolean(canonicalVersion(row)),
+      explicitVersionProvided: Boolean(row.ref.version),
     }
   );
 
 export const customCatalogCRDReference = (
   row: CatalogBackedCustomResourceRow,
   fallbackClusterId?: string | null,
-  options?: { includeRowMetadata?: boolean }
+  options?: { includeRowMetadata?: boolean; fallbackClusterName?: string }
 ) => {
   if (!row.crdName) {
     return null;
@@ -116,8 +97,8 @@ export const customCatalogCRDReference = (
     {
       kind: 'CustomResourceDefinition',
       name: row.crdName,
-      clusterId: row.clusterId,
-      clusterName: row.clusterName,
+      clusterId: row.ref.clusterId,
+      clusterName: options?.fallbackClusterName,
     },
     { fallbackClusterId },
     options?.includeRowMetadata
@@ -126,7 +107,7 @@ export const customCatalogCRDReference = (
           labels: row.labels,
           annotations: row.annotations,
           requiresExplicitVersion: true,
-          explicitVersionProvided: Boolean(canonicalVersion(row)),
+          explicitVersionProvided: Boolean(row.ref.version),
         }
       : undefined
   );
@@ -138,16 +119,12 @@ export const catalogItemToFallbackCustomRow = (
   const created = item.creationTimestamp ? new Date(item.creationTimestamp) : undefined;
   const ageTimestamp = created && !Number.isNaN(created.getTime()) ? created.getTime() : undefined;
   return {
-    kind: item.kind,
-    kindAlias: item.kind,
-    name: item.name,
-    namespace: item.namespace ?? '',
-    clusterId: item.clusterId,
-    clusterName: item.clusterName,
-    group: item.group,
-    version: item.version,
-    resource: item.resource,
-    crdName: item.group ? `${item.resource}.${item.group}` : item.resource,
+    ref: {
+      ...item.ref,
+      namespace: item.ref.namespace ?? '',
+    },
+    kindAlias: item.ref.kind,
+    crdName: item.ref.group ? `${item.ref.resource}.${item.ref.group}` : item.ref.resource,
     status: item.actionFacts?.status,
     statusPresentation: item.actionFacts?.status,
     ageTimestamp,
@@ -157,19 +134,10 @@ export const catalogItemToFallbackCustomRow = (
 
 export const normalizeHydratedCustomRow = (row: unknown): CatalogBackedCustomResourceRow => {
   const record = asRecord(row);
-  const kind = requiredString(record, 'kind');
-  const group = requiredString(record, 'group');
-  const version = requiredString(record, 'version');
+  const ref = requiredResourceRef(record.ref);
   return {
-    kind,
-    kindAlias: optionalString(record.kindAlias) ?? kind,
-    name: requiredString(record, 'name'),
-    namespace: optionalString(record.namespace) ?? '',
-    clusterId: requiredString(record, 'clusterId'),
-    clusterName: optionalString(record.clusterName),
-    group,
-    version,
-    resource: optionalString(record.resource) ?? '',
+    ref,
+    kindAlias: optionalString(record.kindAlias) ?? ref.kind,
     crdName: optionalString(record.crdName),
     status: optionalString(record.status),
     statusState: optionalString(record.statusState),

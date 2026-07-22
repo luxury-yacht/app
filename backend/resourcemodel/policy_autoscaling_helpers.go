@@ -1,10 +1,11 @@
 package resourcemodel
 
 import (
+	"math"
+
 	corev1 "k8s.io/api/core/v1"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/util/intstr"
-	"math"
 )
 
 func PolicyResourceModel(
@@ -13,7 +14,7 @@ func PolicyResourceModel(
 	status ResourceStatusPresentation,
 	facts ResourceFacts,
 ) ResourceModel {
-	return NetworkResourceModel(clusterID, group, version, kind, resource, ResourceScopeNamespaced, meta, status, facts)
+	return KubernetesResourceModel(clusterID, group, version, kind, resource, ResourceScopeNamespaced, meta, status, facts)
 }
 
 func NewIntOrStringFacts(value intstr.IntOrString) IntOrStringFacts {

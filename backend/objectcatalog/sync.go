@@ -491,7 +491,7 @@ func (s *Service) sync(ctx context.Context) error {
 		desc := allowedSet[gvr]
 		removeDescriptorEntries(newItems, newLastSeen, gvr)
 		for _, summary := range summaries {
-			key := catalogKey(desc, summary.Namespace, summary.Name)
+			key := catalogKey(desc, summary.Ref.Namespace, summary.Ref.Name)
 			newItems[key] = summary
 			newLastSeen[key] = now
 		}

@@ -19,6 +19,9 @@ another cluster.
   per-cluster state instead of inventing aggregate refresh scopes.
 - Cluster add, close, replace, and clear actions must go through the unified
   kubeconfig selection transition.
+- Frontend lifecycle, auth, health, namespace-scope revision, selection, and
+  visible-cluster state are projections of one cluster-workspace state plane;
+  do not introduce another cluster-keyed cache in a React context or hook.
 - Cluster removal must clean refresh subsystems, catalog state, runtime
   operations, stream subscriptions, and cluster-scoped UI state.
 - Missing, ambiguous, or stale cluster identity is an error. Do not silently
@@ -44,13 +47,49 @@ validation errors. Frontend refresh code should not produce them.
 
 - Backend cluster clients and metadata: `backend/cluster_clients.go`,
   `backend/kubeconfig_selection.go`
+- Backend cluster-workspace snapshot and combined selection/visibility command:
+  `backend/cluster_workspace.go`
 - Cluster lifecycle and refresh subsystem setup: `backend/app_refresh_*.go`
 - Object catalog lifecycle: `backend/app_object_catalog.go`
-- Frontend cluster selection: `frontend/src/modules/kubernetes/config/KubeconfigContext.tsx`
+- Frontend cluster-workspace state and runtime-event reconciliation:
+  `frontend/src/core/cluster-workspace/clusterWorkspaceStore.ts`
+- Frontend selection/navigation UI:
+  `frontend/src/modules/kubernetes/config/KubeconfigContext.tsx`
 - Refresh scope helpers: `frontend/src/core/refresh/clusterScope.ts`
 - Cluster tab UI state: `frontend/src/ui/layout/ClusterTabs.tsx`
 - Global/per-cluster workspace navigation:
   `frontend/src/core/contexts/ViewStateContext.tsx`
+
+## Cluster Workspace State Plane
+
+`GetClusterWorkspaceState` returns selected kubeconfig contexts, foreground
+cluster intent, and cluster-indexed lifecycle, auth, health, and namespace-scope
+revision state. `ApplyClusterWorkspace` applies a requested selection mutation
+before visible-cluster activation and returns the resulting authoritative
+snapshot. Selection UI must use that response instead of chaining separate
+selection, auth, lifecycle, and visible-cluster reads.
+
+The backend snapshot is revision-consistent: every owning state writer advances
+the workspace revision while holding its own lock, and the aggregate retries if
+that revision changes during capture. Public reads wait for the serialized
+selection boundary; `ApplyClusterWorkspace` captures an applied command's
+snapshot before releasing that boundary. Do not add a workspace-visible state
+writer without advancing the revision in the same locked commit.
+
+The React-free `clusterWorkspaceStore` subscribes to runtime events before its
+initial hydration. Live fields win only over hydration responses that were
+already in flight when the event arrived; later authoritative snapshots can
+heal missed state. It owns the
+foreground activation/serviceability boundary and exposes immutable snapshots;
+`AuthErrorContext`, `ClusterLifecycleContext`, health hooks, and refresh
+readiness are selector/facade layers, not additional state owners. Existing
+internal event-bus emissions are downstream wake-up notifications for refresh
+consumers and must not become a second state cache.
+
+The `no-direct-cluster-workspace` Biome plugin enforces this ownership boundary:
+only `frontend/src/core/cluster-workspace` may call the combined workspace RPC
+or subscribe directly to lifecycle, auth, health, and namespace-scope Wails
+events.
 
 ## Global Clusters View
 

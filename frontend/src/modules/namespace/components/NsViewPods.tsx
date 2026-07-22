@@ -106,7 +106,7 @@ const NsViewPods: React.FC<PodsViewProps> = React.memo(
     const namespaceColumnLink = useNamespaceColumnLink<PodSnapshotEntry>('workloads');
     const clusterMetrics = useClusterMetricsAvailability();
     const fallbackMetrics = metrics ?? clusterMetrics ?? null;
-    const { selectedClusterId } = useKubeconfig();
+    const { selectedClusterId, selectedClusterName } = useKubeconfig();
     const { selectedNamespaceClusterId } = useNamespace();
     const queryClusterId = selectedNamespaceClusterId ?? selectedClusterId;
 
@@ -127,64 +127,27 @@ const NsViewPods: React.FC<PodsViewProps> = React.memo(
       return eventBus.on('gridtable:focus-request', expandForPodFocus);
     }, [collapsed, onPodsCollapsedChange, queryClusterId]);
 
-    // Include cluster metadata so object details stay scoped to the active tab.
+    const podReference = useCallback(
+      (pod: PodSnapshotEntry) =>
+        buildRequiredObjectReference(
+          { ...pod.ref, clusterName: selectedClusterName },
+          { fallbackClusterId: selectedClusterId }
+        ),
+      [selectedClusterId, selectedClusterName]
+    );
     const handlePodOpen = useCallback(
-      (pod: PodSnapshotEntry) => {
-        openWithObject(
-          buildRequiredObjectReference(
-            {
-              kind: 'Pod',
-              name: pod.name,
-              namespace: pod.namespace,
-              clusterId: pod.clusterId,
-              clusterName: pod.clusterName ?? undefined,
-            },
-            { fallbackClusterId: selectedClusterId }
-          )
-        );
-      },
-      [openWithObject, selectedClusterId]
+      (pod: PodSnapshotEntry) => openWithObject(podReference(pod)),
+      [openWithObject, podReference]
+    );
+    const handlePodNavigate = useCallback(
+      (pod: PodSnapshotEntry) => navigateToView(podReference(pod)),
+      [navigateToView, podReference]
     );
 
     const objectActions = useObjectActionController({
       context: 'gridtable',
-      onOpen: (object) => {
-        openWithObject(
-          buildRequiredObjectReference(
-            {
-              kind: object.kind,
-              name: object.name,
-              namespace: object.namespace,
-              clusterId: object.clusterId,
-              clusterName: object.clusterName,
-              group: object.group,
-              version: object.version,
-              resource: object.resource,
-              uid: object.uid,
-            },
-            { fallbackClusterId: selectedClusterId }
-          )
-        );
-      },
-      onOpenObjectMap: (object) => {
-        openWithObject(
-          buildRequiredObjectReference(
-            {
-              kind: object.kind,
-              name: object.name,
-              namespace: object.namespace,
-              clusterId: object.clusterId,
-              clusterName: object.clusterName,
-              group: object.group,
-              version: object.version,
-              resource: object.resource,
-              uid: object.uid,
-            },
-            { fallbackClusterId: selectedClusterId }
-          ),
-          { initialTab: 'map' }
-        );
-      },
+      onOpen: openWithObject,
+      onOpenObjectMap: (object) => openWithObject(object, { initialTab: 'map' }),
     });
 
     const handleOwnerOpen = useCallback(
@@ -197,15 +160,15 @@ const NsViewPods: React.FC<PodsViewProps> = React.memo(
             {
               kind: pod.ownerKind,
               name: pod.ownerName,
-              namespace: pod.namespace,
-              clusterId: pod.clusterId,
-              clusterName: pod.clusterName ?? undefined,
+              namespace: pod.ref.namespace,
+              clusterId: pod.ref.clusterId,
+              clusterName: selectedClusterName || undefined,
             },
             { fallbackClusterId: selectedClusterId }
           )
         );
       },
-      [openWithObject, selectedClusterId]
+      [openWithObject, selectedClusterId, selectedClusterName]
     );
 
     const handleNodeOpen = useCallback(
@@ -218,27 +181,19 @@ const NsViewPods: React.FC<PodsViewProps> = React.memo(
             {
               kind: 'Node',
               name: pod.node,
-              clusterId: pod.clusterId,
-              clusterName: pod.clusterName ?? undefined,
+              clusterId: pod.ref.clusterId,
+              clusterName: selectedClusterName || undefined,
             },
             { fallbackClusterId: selectedClusterId }
           )
         );
       },
-      [openWithObject, selectedClusterId]
+      [openWithObject, selectedClusterId, selectedClusterName]
     );
 
     const keyExtractor = useCallback(
       (pod: PodSnapshotEntry) =>
-        buildRequiredCanonicalObjectRowKey(
-          {
-            kind: 'Pod',
-            name: pod.name,
-            namespace: pod.namespace,
-            clusterId: pod.clusterId,
-          },
-          { fallbackClusterId: selectedClusterId }
-        ),
+        buildRequiredCanonicalObjectRowKey(pod.ref, { fallbackClusterId: selectedClusterId }),
       [selectedClusterId]
     );
 
@@ -257,37 +212,13 @@ const NsViewPods: React.FC<PodsViewProps> = React.memo(
         cf.createKindColumn<PodSnapshotEntry>({
           getKind: () => 'Pod',
           onClick: handlePodOpen,
-          onAltClick: (pod) =>
-            navigateToView(
-              buildRequiredObjectReference(
-                {
-                  kind: 'Pod',
-                  name: pod.name,
-                  namespace: pod.namespace,
-                  clusterId: pod.clusterId,
-                  clusterName: pod.clusterName ?? undefined,
-                },
-                { fallbackClusterId: selectedClusterId }
-              )
-            ),
+          onAltClick: handlePodNavigate,
           sortable: false,
         }),
-        cf.createTextColumn<PodSnapshotEntry>('name', 'Name', {
+        cf.createTextColumn<PodSnapshotEntry>('name', 'Name', (pod) => pod.ref.name, {
           onClick: handlePodOpen,
-          onAltClick: (pod) =>
-            navigateToView(
-              buildRequiredObjectReference(
-                {
-                  kind: 'Pod',
-                  name: pod.name,
-                  namespace: pod.namespace,
-                  clusterId: pod.clusterId,
-                  clusterName: pod.clusterName ?? undefined,
-                },
-                { fallbackClusterId: selectedClusterId }
-              )
-            ),
-          getTitle: (pod) => pod.name,
+          onAltClick: handlePodNavigate,
+          getTitle: (pod) => pod.ref.name,
           getClassName: () => 'object-panel-link',
         }),
         cf.createTextColumn<PodSnapshotEntry>('status', 'Status', (pod) => pod.status || '—', {
@@ -322,9 +253,9 @@ const NsViewPods: React.FC<PodsViewProps> = React.memo(
                     {
                       kind: pod.ownerKind,
                       name: pod.ownerName,
-                      namespace: pod.namespace,
-                      clusterId: pod.clusterId,
-                      clusterName: pod.clusterName ?? undefined,
+                      namespace: pod.ref.namespace,
+                      clusterId: pod.ref.clusterId,
+                      clusterName: selectedClusterName || undefined,
                     },
                     { fallbackClusterId: selectedClusterId }
                   )
@@ -347,8 +278,8 @@ const NsViewPods: React.FC<PodsViewProps> = React.memo(
                   {
                     kind: 'Node',
                     name: pod.node,
-                    clusterId: pod.clusterId,
-                    clusterName: pod.clusterName ?? undefined,
+                    clusterId: pod.ref.clusterId,
+                    clusterName: selectedClusterName || undefined,
                   },
                   { fallbackClusterId: selectedClusterId }
                 )
@@ -368,7 +299,7 @@ const NsViewPods: React.FC<PodsViewProps> = React.memo(
           getMetricsStale: () => metricsStateRef.current.stale,
           getMetricsError: () => metricsStateRef.current.lastError,
           getMetricsLastUpdated: () => metricsStateRef.current.lastUpdated,
-          getAnimationKey: (pod) => `pod:${pod.namespace}/${pod.name}:cpu`,
+          getAnimationKey: (pod) => `pod:${pod.ref.namespace}/${pod.ref.name}:cpu`,
           sortable: true,
           sortValue: (pod) => parseCpuToMillicores(pod.cpuUsage),
         }),
@@ -382,7 +313,7 @@ const NsViewPods: React.FC<PodsViewProps> = React.memo(
           getMetricsStale: () => metricsStateRef.current.stale,
           getMetricsError: () => metricsStateRef.current.lastError,
           getMetricsLastUpdated: () => metricsStateRef.current.lastUpdated,
-          getAnimationKey: (pod) => `pod:${pod.namespace}/${pod.name}:memory`,
+          getAnimationKey: (pod) => `pod:${pod.ref.namespace}/${pod.ref.name}:memory`,
           sortable: true,
           sortValue: (pod) => parseMemToMB(pod.memUsage),
         }),
@@ -399,7 +330,7 @@ const NsViewPods: React.FC<PodsViewProps> = React.memo(
       }
       const nameColumn = baseColumns.find((column) => column.key === 'name');
       if (nameColumn) {
-        nameColumn.sortValue = (pod: PodSnapshotEntry) => (pod.name || '').toLowerCase();
+        nameColumn.sortValue = (pod: PodSnapshotEntry) => (pod.ref.name || '').toLowerCase();
       }
       const ownerColumn = baseColumns.find((column) => column.key === 'owner');
       if (ownerColumn) {
@@ -427,8 +358,8 @@ const NsViewPods: React.FC<PodsViewProps> = React.memo(
 
       if (showNamespaceColumn) {
         cf.upsertNamespaceColumn(baseColumns, {
-          accessor: (pod) => pod.namespace || '—',
-          sortValue: (pod) => (pod.namespace || '').toLowerCase(),
+          accessor: (pod) => pod.ref.namespace || '—',
+          sortValue: (pod) => (pod.ref.namespace || '').toLowerCase(),
           ...namespaceColumnLink,
         });
       }
@@ -437,10 +368,12 @@ const NsViewPods: React.FC<PodsViewProps> = React.memo(
     }, [
       handleNodeOpen,
       handleOwnerOpen,
+      handlePodNavigate,
       handlePodOpen,
       namespaceColumnLink,
       navigateToView,
       selectedClusterId,
+      selectedClusterName,
       showNamespaceColumn,
     ]);
 
@@ -572,8 +505,8 @@ const NsViewPods: React.FC<PodsViewProps> = React.memo(
       const seen = new Set<string>();
       const targets: Array<{ namespace: string; clusterId: string }> = [];
       displayedPods.forEach((pod) => {
-        const podNamespace = pod.namespace?.trim();
-        const podClusterId = pod.clusterId?.trim() || queryClusterId?.trim();
+        const podNamespace = pod.ref.namespace?.trim();
+        const podClusterId = pod.ref.clusterId?.trim() || queryClusterId?.trim();
         if (!podNamespace || !podClusterId) {
           return;
         }
@@ -600,13 +533,7 @@ const NsViewPods: React.FC<PodsViewProps> = React.memo(
       (pod: PodSnapshotEntry): ContextMenuItem[] => {
         return objectActions.getMenuItems(
           buildRequiredObjectReference(
-            {
-              kind: 'Pod',
-              name: pod.name,
-              namespace: pod.namespace,
-              clusterId: pod.clusterId,
-              clusterName: pod.clusterName,
-            },
+            { ...pod.ref, clusterName: selectedClusterName },
             { fallbackClusterId: selectedClusterId },
             {
               portForwardAvailable: pod.portForwardAvailable,
@@ -614,7 +541,7 @@ const NsViewPods: React.FC<PodsViewProps> = React.memo(
           )
         );
       },
-      [objectActions, selectedClusterId]
+      [objectActions, selectedClusterId, selectedClusterName]
     );
 
     const emptyMessage = useMemo(

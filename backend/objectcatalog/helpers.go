@@ -179,13 +179,13 @@ func sortSummaries(items []Summary) {
 // same chain so an engine page lays rows out in this order.
 func compareCatalogIdentity(left, right Summary) int {
 	for _, pair := range [][2]string{
-		{left.Kind, right.Kind},
-		{left.Namespace, right.Namespace},
-		{left.Name, right.Name},
-		{left.Group, right.Group},
-		{left.Version, right.Version},
-		{left.Resource, right.Resource},
-		{left.UID, right.UID},
+		{left.Ref.Kind, right.Ref.Kind},
+		{left.Ref.Namespace, right.Ref.Namespace},
+		{left.Ref.Name, right.Ref.Name},
+		{left.Ref.Group, right.Ref.Group},
+		{left.Ref.Version, right.Ref.Version},
+		{left.Ref.Resource, right.Ref.Resource},
+		{left.Ref.UID, right.Ref.UID},
 	} {
 		if pair[0] < pair[1] {
 			return -1

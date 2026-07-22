@@ -44,25 +44,6 @@ func (s *Service) ServiceAccount(namespace, name string) (*ServiceAccountDetails
 	return s.buildServiceAccountDetails(sa, pods, roleBindings, clusterRoleBindings), nil
 }
 
-// ServiceAccounts returns detailed views for all service accounts in a namespace.
-func (s *Service) ServiceAccounts(namespace string) ([]*ServiceAccountDetails, error) {
-	serviceAccounts, err := s.deps.KubernetesClient.CoreV1().ServiceAccounts(namespace).List(s.deps.Context, metav1.ListOptions{})
-	if err != nil {
-		s.deps.Logger.Error(fmt.Sprintf("Failed to list service accounts in namespace %s: %v", namespace, err), "RBAC")
-		return nil, fmt.Errorf("failed to list service accounts: %v", err)
-	}
-
-	pods := s.listNamespacePods(namespace)
-	roleBindings := s.listRoleBindings(namespace)
-	clusterRoleBindings := s.listClusterRoleBindings()
-
-	results := make([]*ServiceAccountDetails, 0, len(serviceAccounts.Items))
-	for i := range serviceAccounts.Items {
-		results = append(results, s.buildServiceAccountDetails(&serviceAccounts.Items[i], pods, roleBindings, clusterRoleBindings))
-	}
-	return results, nil
-}
-
 func (s *Service) listNamespacePods(namespace string) *corev1.PodList {
 	pods, err := s.deps.KubernetesClient.CoreV1().Pods(namespace).List(s.deps.Context, metav1.ListOptions{})
 	if err != nil {

@@ -22,12 +22,14 @@ const {
   getSelectedKubeconfigsMock,
   setSelectedKubeconfigsMock,
   setVisibleClusterMock,
+  workspaceState,
   mocks,
 } = vi.hoisted(() => ({
   getKubeconfigsMock: vi.fn(),
   getSelectedKubeconfigsMock: vi.fn(),
   setSelectedKubeconfigsMock: vi.fn(),
   setVisibleClusterMock: vi.fn(),
+  workspaceState: { selections: [] as string[], visibleClusterId: '' },
   mocks: {
     refreshOrchestrator: {
       updateContext: vi.fn(),
@@ -38,9 +40,36 @@ const {
 
 vi.mock('@wailsjs/go/backend/App', () => ({
   GetKubeconfigs: () => getKubeconfigsMock(),
-  GetSelectedKubeconfigs: () => getSelectedKubeconfigsMock(),
-  SetSelectedKubeconfigs: (configs: string[]) => setSelectedKubeconfigsMock(configs),
-  SetVisibleCluster: (clusterId: string) => setVisibleClusterMock(clusterId),
+  GetClusterWorkspaceState: async () => {
+    workspaceState.selections = [...((await getSelectedKubeconfigsMock()) || [])];
+    return {
+      selectedKubeconfigs: workspaceState.selections,
+      visibleClusterId: workspaceState.visibleClusterId,
+      clusters: {},
+    };
+  },
+  ApplyClusterWorkspace: async (command: {
+    selectedKubeconfigs: string[];
+    updateSelectedKubeconfigs: boolean;
+    visibleClusterId: string;
+  }) => {
+    if (command.updateSelectedKubeconfigs) {
+      await setSelectedKubeconfigsMock(command.selectedKubeconfigs);
+      workspaceState.selections = [...command.selectedKubeconfigs];
+    }
+    if (command.visibleClusterId) {
+      await setVisibleClusterMock(command.visibleClusterId);
+      workspaceState.visibleClusterId = command.visibleClusterId;
+    }
+    return {
+      state: {
+        selectedKubeconfigs: workspaceState.selections,
+        visibleClusterId: workspaceState.visibleClusterId,
+        clusters: {},
+      },
+      error: '',
+    };
+  },
 }));
 
 vi.mock('@/core/refresh', () => ({
@@ -106,6 +135,8 @@ describe('KubeconfigContext', () => {
     setSelectedKubeconfigsMock.mockResolvedValue(undefined);
     setVisibleClusterMock.mockReset();
     setVisibleClusterMock.mockResolvedValue(undefined);
+    workspaceState.selections = [];
+    workspaceState.visibleClusterId = '';
     mocks.backgroundRefreshState.enabled = true;
     clusterReadiness.resetForTests();
     resetClusterTabOrderCacheForTesting();
@@ -535,7 +566,7 @@ describe('KubeconfigContext', () => {
     unmount();
   });
 
-  it('keeps cluster-data identity committed while exposing a pending active tab', async () => {
+  it('exposes the pending active tab identity while keeping refresh context committed', async () => {
     const kubeconfigs: types.KubeconfigInfo[] = [
       {
         name: 'alpha',
@@ -575,8 +606,8 @@ describe('KubeconfigContext', () => {
 
     expect(getContext().selectedKubeconfig).toBe('/kube/beta:prod');
     expect(getContext().selectedKubeconfigs).toEqual(['/kube/alpha:dev', '/kube/beta:prod']);
-    expect(getContext().selectedClusterId).toBe('alpha:dev');
-    expect(getContext().selectedClusterIds).toEqual(['alpha:dev']);
+    expect(getContext().selectedClusterId).toBe('beta:prod');
+    expect(getContext().selectedClusterIds).toEqual(['alpha:dev', 'beta:prod']);
     expect(mocks.refreshOrchestrator.updateContext).toHaveBeenLastCalledWith({
       selectedClusterId: 'alpha:dev',
       selectedClusterName: 'dev',

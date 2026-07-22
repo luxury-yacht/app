@@ -213,15 +213,6 @@ func (l portForwardLifecycle) countCluster(clusterID string) int {
 	return count
 }
 
-func (l portForwardLifecycle) get(sessionID string) *portForwardSessionInternal {
-	if l.app == nil {
-		return nil
-	}
-	l.app.portForwardSessionsMu.Lock()
-	defer l.app.portForwardSessionsMu.Unlock()
-	return l.app.portForwardSessions[sessionID]
-}
-
 func (l portForwardLifecycle) emitStatus(session *portForwardSessionInternal) {
 	if l.app == nil || session == nil {
 		return

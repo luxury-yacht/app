@@ -9,9 +9,30 @@ import (
 	corev1 "k8s.io/api/core/v1"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 
+	eventres "github.com/luxury-yacht/app/backend/resources/events"
 	"github.com/luxury-yacht/app/backend/testsupport"
 	types "k8s.io/apimachinery/pkg/types"
 )
+
+func TestProjectNamespaceEventSummaryCarriesCanonicalEventRef(t *testing.T) {
+	event := &corev1.Event{
+		ObjectMeta: metav1.ObjectMeta{
+			Name:      "event-a",
+			Namespace: "team-a",
+			UID:       types.UID("event-uid"),
+		},
+		InvolvedObject: corev1.ObjectReference{
+			APIVersion: "v1",
+			Kind:       "Pod",
+			Namespace:  "team-a",
+			Name:       "pod-a",
+		},
+	}
+
+	row, ok := projectNamespaceEventSummary(ClusterMeta{ClusterID: "cluster-a"}, event)
+	require.True(t, ok)
+	require.Equal(t, eventres.BuildResourceModel("cluster-a", event).Ref, row.Ref)
+}
 
 func TestNamespaceEventsBuilderUsesEventTimestamps(t *testing.T) {
 	now := time.Now()
@@ -71,15 +92,15 @@ func TestNamespaceEventsBuilderUsesEventTimestamps(t *testing.T) {
 	first := payload.Rows[0]
 	second := payload.Rows[1]
 
-	require.Equal(t, "event-new", first.Name)
+	require.Equal(t, "event-new", first.Ref.Name)
 	require.Equal(t, eventNew.LastTimestamp.UnixMilli(), first.AgeTimestamp)
 	require.Equal(t, "Pod/api-123", first.Object)
 	require.Equal(t, "pod-uid-new", first.ObjectUID)
 	require.Equal(t, "v1", first.ObjectAPIVersion)
 
-	require.Equal(t, "event-old", second.Name)
+	require.Equal(t, "event-old", second.Ref.Name)
 	require.Equal(t, eventOld.LastTimestamp.UnixMilli(), second.AgeTimestamp)
-	require.Equal(t, "team-a", second.Namespace)
+	require.Equal(t, "team-a", second.Ref.Namespace)
 }
 
 func TestNamespaceEventsBuilderUsesDeterministicTieBreakers(t *testing.T) {
@@ -129,6 +150,6 @@ func TestNamespaceEventsBuilderUsesDeterministicTieBreakers(t *testing.T) {
 	payload, ok := snapshot.Payload.(NamespaceEventsSnapshot)
 	require.True(t, ok)
 	require.Len(t, payload.Rows, 2)
-	require.Equal(t, "event-high-rv", payload.Rows[0].Name)
-	require.Equal(t, "event-low-rv", payload.Rows[1].Name)
+	require.Equal(t, "event-high-rv", payload.Rows[0].Ref.Name)
+	require.Equal(t, "event-low-rv", payload.Rows[1].Ref.Name)
 }

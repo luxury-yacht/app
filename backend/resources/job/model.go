@@ -21,7 +21,7 @@ import (
 // callers needing facts use BuildFacts.
 func BuildResourceModel(clusterID string, job *batchv1.Job) resourcemodel.ResourceModel {
 	status := BuildStatusPresentation(job)
-	return resourcemodel.WorkloadResourceModel(clusterID, "batch", "v1", "Job", "jobs", job.ObjectMeta, status, resourcemodel.ResourceFacts{})
+	return resourcemodel.KubernetesResourceModel(clusterID, "batch", "v1", "Job", "jobs", resourcemodel.ResourceScopeNamespaced, job.ObjectMeta, status, resourcemodel.ResourceFacts{})
 }
 
 // BuildFacts extracts the Job facts from the raw object.
@@ -78,8 +78,8 @@ func jobState(facts Facts) string {
 func BuildStatusPresentation(job *batchv1.Job) resourcemodel.ResourceStatusPresentation {
 	facts := BuildFacts(job)
 	signals := jobSignals(job, facts)
-	lifecycle := resourcemodel.WorkloadLifecycle(job.ObjectMeta)
-	if status, ok := resourcemodel.DeletingWorkloadStatus(job.ObjectMeta, jobState(facts), signals, lifecycle); ok {
+	lifecycle := resourcemodel.ObjectLifecycle(job.ObjectMeta)
+	if status, ok := resourcemodel.DeletingObjectStatus(job.ObjectMeta, jobState(facts), signals, lifecycle); ok {
 		return status
 	}
 	if failed := findCondition(job, batchv1.JobFailed); failed != nil && failed.Status == corev1.ConditionTrue {
@@ -89,18 +89,18 @@ func BuildStatusPresentation(job *batchv1.Job) resourcemodel.ResourceStatusPrese
 		return resourcemodel.WorkloadConditionStatus(string(batchv1.JobComplete), string(complete.Status), complete.Reason, complete.Message, "Completed", "ready", signals, lifecycle)
 	}
 	if facts.Succeeded >= facts.DesiredReplicas && facts.DesiredReplicas > 0 {
-		return resourcemodel.WorkloadSourceStatus("Completed", strconv.FormatInt(int64(facts.Succeeded), 10), "", "", "ready", signals, lifecycle)
+		return resourcemodel.ObjectSourceStatus("Completed", strconv.FormatInt(int64(facts.Succeeded), 10), "", "", "ready", signals, lifecycle)
 	}
 	if facts.Suspended {
-		return resourcemodel.WorkloadSourceStatus("Suspended", "true", "Suspended", "", "warning", signals, lifecycle)
+		return resourcemodel.ObjectSourceStatus("Suspended", "true", "Suspended", "", "warning", signals, lifecycle)
 	}
 	if facts.Active > 0 {
-		return resourcemodel.WorkloadSourceStatus("Running", strconv.FormatInt(int64(facts.Active), 10), "", "", "ready", signals, lifecycle)
+		return resourcemodel.ObjectSourceStatus("Running", strconv.FormatInt(int64(facts.Active), 10), "", "", "ready", signals, lifecycle)
 	}
 	if facts.Failed > 0 {
-		return resourcemodel.WorkloadSourceStatus("Failed", strconv.FormatInt(int64(facts.Failed), 10), "", "", "error", signals, lifecycle)
+		return resourcemodel.ObjectSourceStatus("Failed", strconv.FormatInt(int64(facts.Failed), 10), "", "", "error", signals, lifecycle)
 	}
-	return resourcemodel.WorkloadSourceStatus("Pending", strconv.FormatInt(int64(facts.Active), 10), "", "", "warning", signals, lifecycle)
+	return resourcemodel.ObjectSourceStatus("Pending", strconv.FormatInt(int64(facts.Active), 10), "", "", "warning", signals, lifecycle)
 }
 
 func jobSignals(job *batchv1.Job, facts Facts) []resourcemodel.ResourceStatusSignal {

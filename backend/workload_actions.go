@@ -62,26 +62,6 @@ func validateAppsV1WorkloadAction(action, group, version, kind string, supported
 	return normalizedKind, nil
 }
 
-// restartWorkload performs a rollout restart by patching the pod template metadata on the target workload.
-// Supported workload kinds: Deployment, StatefulSet, DaemonSet.
-func (a *App) restartWorkload(clusterID, namespace, group, version, workloadKind, name string) error {
-	if err := requireNamespacedObject(namespace, name); err != nil {
-		return err
-	}
-	_, err := a.RunObjectAction(ObjectActionRequest{
-		Action: ObjectActionRestart,
-		Target: objectActionTarget(
-			clusterID,
-			group,
-			version,
-			workloadKind,
-			namespace,
-			name,
-		),
-	})
-	return err
-}
-
 func (a *App) restartWorkloadAction(target ObjectActionTargetRef) error {
 	return a.restartWorkloadInternal(target.ClusterID, target.Namespace, target.Group, target.Version, target.Kind, target.Name)
 }
@@ -147,33 +127,6 @@ func (a *App) restartWorkloadInternal(clusterID, namespace, group, version, work
 	applog.Info(deps.Logger, fmt.Sprintf("Restarted %s %s/%s", workloadKind, namespace, name), "restartWorkload")
 	a.invalidateResponseCache(selectionKey, workloadKind, namespace, name)
 	return nil
-}
-
-// scaleWorkload updates the replica count on a scalable workload.
-// Supported workload kinds: Deployment, StatefulSet, ReplicaSet.
-func (a *App) scaleWorkload(clusterID, namespace, group, version, workloadKind, name string, replicas int) error {
-	if err := requireNamespacedObject(namespace, name); err != nil {
-		return err
-	}
-	if replicas < 0 {
-		return fmt.Errorf("replicas must be non-negative")
-	}
-	if replicas > maxScaleReplicas {
-		return fmt.Errorf("replicas must be less than or equal to %d", maxScaleReplicas)
-	}
-	_, err := a.RunObjectAction(ObjectActionRequest{
-		Action: ObjectActionScale,
-		Target: objectActionTarget(
-			clusterID,
-			group,
-			version,
-			workloadKind,
-			namespace,
-			name,
-		),
-		Replicas: &replicas,
-	})
-	return err
 }
 
 func (a *App) scaleWorkloadAction(target ObjectActionTargetRef, replicas int) error {
@@ -274,26 +227,6 @@ func currentWorkloadDesiredReplicas(ctx context.Context, deps common.Dependencie
 	return ops.CurrentReplicas(ctx, deps.KubernetesClient, namespace, name)
 }
 
-// triggerCronJob creates a Job immediately from a CronJob's jobTemplate spec.
-// Returns the name of the created Job on success.
-func (a *App) triggerCronJob(clusterID, namespace, name string) (string, error) {
-	if err := requireNamespacedObject(namespace, name); err != nil {
-		return "", err
-	}
-	resp, err := a.RunObjectAction(ObjectActionRequest{
-		Action: ObjectActionTrigger,
-		Target: objectActionTarget(
-			clusterID,
-			cronjob.Identity.Group,
-			cronjob.Identity.Version,
-			cronjob.Identity.Kind,
-			namespace,
-			name,
-		),
-	})
-	return resp.Name, err
-}
-
 func (a *App) triggerCronJobAction(target ObjectActionTargetRef) (string, error) {
 	if target.Group != cronjob.Identity.Group || target.Version != cronjob.Identity.Version || target.Kind != cronjob.Identity.Kind {
 		return "", errUnsupportedActionTarget(ObjectActionTrigger, target, cronjob.Identity.Group+"/"+cronjob.Identity.Version, cronjob.Identity.Kind)
@@ -338,27 +271,6 @@ func (a *App) triggerCronJobInternal(clusterID, namespace, name string) (string,
 	applog.Info(deps.Logger, fmt.Sprintf("Triggered CronJob %s/%s, created Job %s", namespace, name, jobName), "triggerCronJob")
 	a.invalidateResponseCache(selectionKey, cronjob.Identity.Kind, namespace, name)
 	return jobName, nil
-}
-
-// suspendCronJob sets the suspend field on a CronJob.
-// When suspended, the CronJob will not create new Jobs on schedule.
-func (a *App) suspendCronJob(clusterID, namespace, name string, suspend bool) error {
-	if err := requireNamespacedObject(namespace, name); err != nil {
-		return err
-	}
-	_, err := a.RunObjectAction(ObjectActionRequest{
-		Action: ObjectActionSuspend,
-		Target: objectActionTarget(
-			clusterID,
-			cronjob.Identity.Group,
-			cronjob.Identity.Version,
-			cronjob.Identity.Kind,
-			namespace,
-			name,
-		),
-		Suspend: &suspend,
-	})
-	return err
 }
 
 func (a *App) suspendCronJobAction(target ObjectActionTargetRef, suspend bool) error {

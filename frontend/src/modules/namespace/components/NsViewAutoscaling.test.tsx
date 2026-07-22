@@ -12,6 +12,7 @@ import type { GridTableProps } from '@shared/components/tables/GridTable';
 import { act } from 'react';
 import * as ReactDOM from 'react-dom/client';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
+import { makeResourceRef } from '@/test-utils/makeResourceRef';
 import { requireValue } from '@/test-utils/requireValue';
 
 vi.mock('@modules/namespace/components/useNamespaceColumnLink', () => ({
@@ -145,11 +146,24 @@ describe('NsViewAutoscaling', () => {
   });
 
   const baseHpa = (overrides: Partial<AutoscalingData> = {}): AutoscalingData => ({
-    kind: 'HorizontalPodAutoscaler',
-    name: 'web',
-    namespace: 'team-a',
-    clusterId: 'alpha:ctx',
+    ref: {
+      ...makeResourceRef({
+        group: 'autoscaling',
+        version: 'v2',
+        kind: 'HorizontalPodAutoscaler',
+        resource: 'horizontalpodautoscalers',
+        namespace: 'team-a',
+        name: 'web',
+      }),
+      kind: 'HorizontalPodAutoscaler',
+      name: 'web',
+      namespace: 'team-a',
+      clusterId: 'alpha:ctx',
+    },
     target: 'Deployment/web',
+    min: 1,
+    max: 5,
+    current: 2,
     minReplicas: 1,
     maxReplicas: 5,
     currentReplicas: 2,

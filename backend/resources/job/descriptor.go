@@ -14,4 +14,5 @@ var Descriptor = kindspec.Descriptor{
 	Collector:       &ObjectMapNode,
 	Edges:           ObjectMapEdges,
 	Binding:         &DetailBinding,
+	Actions:         kindspec.ObjectActions{Aliases: []string{"job"}},
 }

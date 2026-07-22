@@ -34,7 +34,7 @@ type HelmContentProvider interface {
 }
 
 type HelmResourceResolverProvider interface {
-	ResourceResolver() common.ResourceResolver
+	ResourceResolver(context.Context) common.ResourceResolver
 }
 
 // ObjectYAMLSnapshotPayload represents the YAML payload.
@@ -76,9 +76,6 @@ func RegisterObjectHelmManifestDomain(reg *domain.Registry, provider HelmContent
 		return fmt.Errorf("helm content provider is nil")
 	}
 	builder := &ObjectHelmManifestBuilder{provider: provider}
-	if resolverProvider, ok := provider.(HelmResourceResolverProvider); ok {
-		builder.resolver = resolverProvider.ResourceResolver()
-	}
 	return reg.Register(refresh.DomainConfig{
 		Name:          objectHelmManifestDomain,
 		BuildSnapshot: builder.Build,
@@ -128,7 +125,6 @@ func (b *ObjectYAMLBuilder) Build(ctx context.Context, scope string) (*refresh.S
 // ObjectHelmManifestBuilder builds manifest snapshots.
 type ObjectHelmManifestBuilder struct {
 	provider HelmContentProvider
-	resolver common.ResourceResolver
 }
 
 func (b *ObjectHelmManifestBuilder) Build(ctx context.Context, scope string) (*refresh.Snapshot, error) {
@@ -147,6 +143,10 @@ func (b *ObjectHelmManifestBuilder) Build(ctx context.Context, scope string) (*r
 	if revision > 0 {
 		version = uint64(revision)
 	}
+	var resolver common.ResourceResolver
+	if resolverProvider, ok := b.provider.(HelmResourceResolverProvider); ok {
+		resolver = resolverProvider.ResourceResolver(ctx)
+	}
 
 	return &refresh.Snapshot{
 		Domain:  objectHelmManifestDomain,
@@ -156,7 +156,7 @@ func (b *ObjectHelmManifestBuilder) Build(ctx context.Context, scope string) (*r
 			ClusterMeta: meta,
 			Manifest:    manifest,
 			Revision:    revision,
-			Resources:   extractHelmManifestResourceLinks(ctx, b.resolver, meta.ClusterID, manifest, namespace),
+			Resources:   extractHelmManifestResourceLinks(ctx, resolver, meta.ClusterID, manifest, namespace),
 		},
 		Stats: refresh.SnapshotStats{
 			ItemCount: 1,

@@ -11,7 +11,7 @@ import (
 
 const rbacAPIGroup = "rbac.authorization.k8s.io"
 
-func TestBuildRoleBindingResourceModelFactsAndSubjectLinks(t *testing.T) {
+func TestBuildRoleBindingFactsAndSubjectLinks(t *testing.T) {
 	binding := &rbacv1.RoleBinding{
 		ObjectMeta: metav1.ObjectMeta{Name: "readers", Namespace: "team-a", UID: types.UID("rb-uid")},
 		RoleRef:    rbacv1.RoleRef{APIGroup: rbacAPIGroup, Kind: "Role", Name: "reader"},
@@ -20,10 +20,6 @@ func TestBuildRoleBindingResourceModelFactsAndSubjectLinks(t *testing.T) {
 			{Kind: "User", APIGroup: rbacv1.GroupName, Name: "jane@example.com"},
 		},
 	}
-
-	model := BuildResourceModel("cluster-a", binding)
-	require.Equal(t, "RoleBinding", model.Ref.Kind)
-	require.Equal(t, "Role: reader, Subjects: 2", model.Status.Label)
 
 	facts := BuildFacts("cluster-a", binding)
 	require.Equal(t, "Role", facts.RoleRef.Ref.Kind)
@@ -39,7 +35,7 @@ func TestBuildRoleBindingResourceModelFactsAndSubjectLinks(t *testing.T) {
 	require.Equal(t, "jane@example.com", facts.Subjects[1].Link.Display.Name)
 }
 
-func TestBuildRoleBindingResourceModelKeepsUnknownRoleRefDisplayOnly(t *testing.T) {
+func TestBuildRoleBindingFactsKeepUnknownRoleRefDisplayOnly(t *testing.T) {
 	binding := &rbacv1.RoleBinding{
 		ObjectMeta: metav1.ObjectMeta{Name: "custom", Namespace: "team-a"},
 		RoleRef:    rbacv1.RoleRef{APIGroup: "example.com", Kind: "Role", Name: "reader"},

@@ -24,25 +24,3 @@ func GetResource[T any, D any](
 	}
 	return build(item), nil
 }
-
-// ListResources runs the shared ensure-kind → list → build flow for a
-// Gateway-API kind on behalf of a kind package's detail service.
-func ListResources[T any, D any](
-	deps common.Dependencies,
-	kind, noun string,
-	list func() ([]T, error),
-	build func(*T) *D,
-) ([]*D, error) {
-	if err := EnsureKindInstalled(deps, kind); err != nil {
-		return nil, err
-	}
-	items, err := list()
-	if err != nil {
-		return nil, fmt.Errorf("failed to list %s: %w", noun, err)
-	}
-	out := make([]*D, 0, len(items))
-	for i := range items {
-		out = append(out, build(&items[i]))
-	}
-	return out, nil
-}

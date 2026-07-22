@@ -15,7 +15,7 @@ import (
 // BuildResourceModel builds the PVC resource model (status only; facts via BuildFacts).
 func BuildResourceModel(clusterID string, pvc *corev1.PersistentVolumeClaim) resourcemodel.ResourceModel {
 	status := BuildStatusPresentation(pvc)
-	return resourcemodel.StorageResourceModel(clusterID, "", "v1", "PersistentVolumeClaim", "persistentvolumeclaims", resourcemodel.ResourceScopeNamespaced, pvc.ObjectMeta, status, resourcemodel.ResourceFacts{})
+	return resourcemodel.KubernetesResourceModel(clusterID, "", "v1", "PersistentVolumeClaim", "persistentvolumeclaims", resourcemodel.ResourceScopeNamespaced, pvc.ObjectMeta, status, resourcemodel.ResourceFacts{})
 }
 
 // BuildFacts extracts the PVC facts from the raw object, materializing reverse
@@ -46,23 +46,23 @@ func BuildStatusPresentation(pvc *corev1.PersistentVolumeClaim) resourcemodel.Re
 	facts := BuildFacts(pvc, nil, resourcemodel.ResourceModelBuildOptions{Materialization: resourcemodel.MaterializeSummaryFacts})
 	state := pvcState(pvc)
 	signals := pvcSignals(pvc, facts)
-	lifecycle := resourcemodel.StorageLifecycle(pvc.ObjectMeta)
-	if status, ok := resourcemodel.DeletingStorageStatus(pvc.ObjectMeta, state, signals, lifecycle); ok {
+	lifecycle := resourcemodel.ObjectLifecycle(pvc.ObjectMeta)
+	if status, ok := resourcemodel.DeletingObjectStatus(pvc.ObjectMeta, state, signals, lifecycle); ok {
 		return status
 	}
 
 	switch pvc.Status.Phase {
 	case corev1.ClaimBound:
-		return resourcemodel.StorageSourceStatus(string(pvc.Status.Phase), state, "", "", "ready", signals, lifecycle)
+		return resourcemodel.ObjectSourceStatus(string(pvc.Status.Phase), state, "", "", "ready", signals, lifecycle)
 	case corev1.ClaimPending:
-		return resourcemodel.StorageSourceStatus(string(pvc.Status.Phase), state, "", "", "warning", signals, lifecycle)
+		return resourcemodel.ObjectSourceStatus(string(pvc.Status.Phase), state, "", "", "warning", signals, lifecycle)
 	case corev1.ClaimLost:
-		return resourcemodel.StorageSourceStatus(string(pvc.Status.Phase), state, "", "", "error", signals, lifecycle)
+		return resourcemodel.ObjectSourceStatus(string(pvc.Status.Phase), state, "", "", "error", signals, lifecycle)
 	default:
 		if pvc.Status.Phase == "" {
-			return resourcemodel.StorageSourceStatus("Unknown", state, "", "", "unknown", signals, lifecycle)
+			return resourcemodel.ObjectSourceStatus("Unknown", state, "", "", "unknown", signals, lifecycle)
 		}
-		return resourcemodel.StorageSourceStatus(string(pvc.Status.Phase), state, "", "", "inactive", signals, lifecycle)
+		return resourcemodel.ObjectSourceStatus(string(pvc.Status.Phase), state, "", "", "inactive", signals, lifecycle)
 	}
 }
 

@@ -33,10 +33,20 @@ type clusterLifecycleEntry struct {
 // a timer is started; if the cluster is still Loading after the threshold, the state
 // automatically transitions to LoadingSlow.
 type clusterLifecycle struct {
-	mu            sync.Mutex
-	entries       map[string]*clusterLifecycleEntry
-	emitter       func(clusterId string, state, previousState ClusterLifecycleState)
-	slowThreshold time.Duration
+	mu                     sync.Mutex
+	entries                map[string]*clusterLifecycleEntry
+	emitter                func(clusterId string, state, previousState ClusterLifecycleState)
+	snapshotChangeObserver func()
+	slowThreshold          time.Duration
+}
+
+// setSnapshotChangeObserver installs the lightweight revision callback used by
+// the aggregate workspace snapshot. The callback runs while the lifecycle lock
+// is held, so it must not call back into clusterLifecycle.
+func (cl *clusterLifecycle) setSnapshotChangeObserver(observer func()) {
+	cl.mu.Lock()
+	cl.snapshotChangeObserver = observer
+	cl.mu.Unlock()
 }
 
 // newClusterLifecycle creates a lifecycle tracker with the default slow-loading threshold.
@@ -83,6 +93,9 @@ func (cl *clusterLifecycle) SetState(clusterId string, state ClusterLifecycleSta
 	}
 
 	entry.state = state
+	if cl.snapshotChangeObserver != nil {
+		cl.snapshotChangeObserver()
+	}
 
 	// When entering Loading, start a timer that will auto-transition to LoadingSlow
 	// if the cluster is still in Loading after the threshold.
@@ -96,6 +109,9 @@ func (cl *clusterLifecycle) SetState(clusterId string, state ClusterLifecycleSta
 			}
 			e.state = ClusterStateLoadingSlow
 			e.slowTimer = nil
+			if cl.snapshotChangeObserver != nil {
+				cl.snapshotChangeObserver()
+			}
 			cl.mu.Unlock()
 
 			if cl.emitter != nil {
@@ -178,13 +194,7 @@ func (cl *clusterLifecycle) Remove(clusterId string) {
 		entry.slowTimer = nil
 	}
 	delete(cl.entries, clusterId)
-}
-
-// GetAllClusterLifecycleStates is the RPC method exposed to Wails for the frontend
-// to retrieve the current lifecycle state of every tracked cluster.
-func (a *App) GetAllClusterLifecycleStates() map[string]ClusterLifecycleState {
-	if a.clusterLifecycle == nil {
-		return nil
+	if cl.snapshotChangeObserver != nil {
+		cl.snapshotChangeObserver()
 	}
-	return a.clusterLifecycle.GetAllStates()
 }

@@ -67,7 +67,7 @@ func namespacePodRowsFromIngest(source podWorkloadsIngestSource, namespace strin
 		}
 		aggregates = append(aggregates, agg)
 		if summary, ok := bundle.Table.(streamrows.PodSummary); ok {
-			summaries[summary.Namespace+"/"+summary.Name] = summary
+			summaries[summary.Ref.Namespace+"/"+summary.Ref.Name] = summary
 		}
 	}
 	return aggregates, summaries
@@ -83,10 +83,10 @@ func workloadOwnerPodRowsFromIngest(source podWorkloadsIngestSource, ownRows []W
 	}
 	owners := make(map[string]struct{}, len(ownRows))
 	for _, row := range ownRows {
-		if row.Kind == podres.Identity.Kind {
+		if row.Ref.Kind == podres.Identity.Kind {
 			continue
 		}
-		owners[workloadOwnerKey(row.Kind, row.Namespace, row.Name)] = struct{}{}
+		owners[workloadOwnerKey(row.Ref.Kind, row.Ref.Namespace, row.Ref.Name)] = struct{}{}
 	}
 	if len(owners) == 0 {
 		return nil, nil
@@ -120,7 +120,7 @@ func workloadOwnerPodRowsFromBundles(bundles []interface{}, owners map[string]st
 		}
 		aggregates = append(aggregates, agg)
 		if summary, ok := bundle.Table.(streamrows.PodSummary); ok {
-			summaries[summary.Namespace+"/"+summary.Name] = summary
+			summaries[summary.Ref.Namespace+"/"+summary.Ref.Name] = summary
 		}
 	}
 	return aggregates, summaries

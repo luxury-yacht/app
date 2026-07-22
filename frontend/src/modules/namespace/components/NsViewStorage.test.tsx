@@ -14,6 +14,7 @@ import { act } from 'react';
 import * as ReactDOM from 'react-dom/client';
 import { renderToStaticMarkup } from 'react-dom/server';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
+import { makeResourceRef } from '@/test-utils/makeResourceRef';
 import { requireReactElement } from '@/test-utils/requireReactElement';
 import { requireValue } from '@/test-utils/requireValue';
 
@@ -100,7 +101,7 @@ vi.mock('@shared/components/tables/GridTable', async () => {
             {withStableListKeys(props.data, (row) => JSON.stringify(row)).map(
               ({ key, value: row }) => (
                 <tr key={key}>
-                  <td>{row.name}</td>
+                  <td>{row.ref.name}</td>
                 </tr>
               )
             )}
@@ -205,10 +206,18 @@ describe('NsViewStorage', () => {
   });
 
   const baseStorage = (overrides: Partial<StorageData> = {}): StorageData => ({
-    kind: 'PersistentVolumeClaim',
-    name: 'pvc-data',
-    namespace: 'team-a',
-    clusterId: 'alpha:ctx',
+    ref: {
+      ...makeResourceRef({
+        kind: 'PersistentVolumeClaim',
+        resource: 'persistentvolumeclaims',
+        namespace: 'team-a',
+        name: 'pvc-data',
+      }),
+      kind: 'PersistentVolumeClaim',
+      name: 'pvc-data',
+      namespace: 'team-a',
+      clusterId: 'alpha:ctx',
+    },
     status: 'Bound',
     statusState: 'Bound',
     statusPresentation: 'ready',
@@ -363,8 +372,11 @@ describe('NsViewStorage', () => {
   });
 
   it('falls back to the selected cluster for defensive rows without clusterId', async () => {
-    const { clusterId: _clusterId, ...entryWithoutCluster } = baseStorage();
-    const entry = entryWithoutCluster as unknown as StorageData;
+    const entryWithoutCluster = baseStorage();
+    const entry = {
+      ...entryWithoutCluster,
+      ref: { ...entryWithoutCluster.ref, clusterId: '' },
+    } as StorageData;
     const props = await renderStorageView();
 
     expect(props.keyExtractor(entry, 0)).toBe(

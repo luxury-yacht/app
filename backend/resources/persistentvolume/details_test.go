@@ -9,7 +9,6 @@ package persistentvolume_test
 import (
 	"context"
 	"errors"
-	"fmt"
 	"testing"
 
 	"github.com/stretchr/testify/require"
@@ -117,27 +116,6 @@ func TestServicePersistentVolumeDetailsIncludesNodeAffinityAndConditions(t *test
 	require.Len(t, detail.Conditions, 2)
 	require.Equal(t, "CSI", detail.VolumeSource.Type)
 	require.Equal(t, "example.csi/driver", detail.VolumeSource.Details["driver"])
-}
-
-func TestServicePersistentVolumesErrorWhenListFails(t *testing.T) {
-	client := fake.NewClientset()
-	client.PrependReactor("list", "persistentvolumes", func(action cgotesting.Action) (bool, runtime.Object, error) {
-		return true, nil, fmt.Errorf("api down")
-	})
-
-	service := newService(t, client)
-
-	_, err := service.PersistentVolumes()
-	require.Error(t, err)
-	require.Contains(t, err.Error(), "failed to list persistent volumes")
-}
-
-func TestPersistentVolumesRequireClient(t *testing.T) {
-	service := persistentvolume.NewService(common.Dependencies{})
-
-	_, err := service.PersistentVolumes()
-	require.Error(t, err)
-	require.Contains(t, err.Error(), "kubernetes client not initialized")
 }
 
 func TestPersistentVolumeLogsErrorOnFailure(t *testing.T) {

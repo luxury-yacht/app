@@ -83,6 +83,11 @@ type Config struct {
 	// This allows the UI to show countdown timers and attempt counts.
 	OnRecoveryProgress func(progress RecoveryProgress)
 
+	// OnSnapshotChange marks a committed change to state exposed by State,
+	// FailureDiagnostic, or RecoveryInfo. It runs while the manager lock is held
+	// and therefore must not call back into Manager.
+	OnSnapshotChange func()
+
 	// RecoveryTest is a function that tests whether authentication is working.
 	// It should return nil if auth is valid, an error otherwise.
 	// If nil, recovery will always succeed immediately.
@@ -157,6 +162,7 @@ func New(cfg Config) *Manager {
 			SteadyRetryInterval:       cfg.SteadyRetryInterval,
 			OnStateChange:             cfg.OnStateChange,
 			OnRecoveryProgress:        cfg.OnRecoveryProgress,
+			OnSnapshotChange:          cfg.OnSnapshotChange,
 			RecoveryTest:              cfg.RecoveryTest,
 			ClassifyError:             cfg.ClassifyError,
 			ConnectivityRetryInterval: cfg.ConnectivityRetryInterval,
@@ -250,7 +256,10 @@ func (m *Manager) TriggerRetry() {
 	}
 
 	if m.config.MaxAttempts > 0 {
-		m.secondsUntilRetry = 0
+		if m.secondsUntilRetry != 0 {
+			m.secondsUntilRetry = 0
+			m.markSnapshotChangeLocked()
+		}
 		// startRecoveryLocked cancels any in-flight recovery first.
 		m.startRecoveryLocked()
 	}
@@ -281,8 +290,15 @@ func (m *Manager) setState(newState State, diag FailureDiagnostic) {
 	}
 	m.state = newState
 	m.failureDiagnostic = diag
+	m.markSnapshotChangeLocked()
 	if m.config.OnStateChange != nil {
 		m.config.OnStateChange(newState, diag)
+	}
+}
+
+func (m *Manager) markSnapshotChangeLocked() {
+	if m.config.OnSnapshotChange != nil {
+		m.config.OnSnapshotChange()
 	}
 }
 
@@ -364,7 +380,10 @@ func (m *Manager) runRecovery(ctx context.Context) {
 
 		class := m.classifyProbeError(err)
 		m.mu.Lock()
-		m.lastProbeClass = class
+		if m.lastProbeClass != class {
+			m.lastProbeClass = class
+			m.markSnapshotChangeLocked()
+		}
 		m.mu.Unlock()
 
 		if class == ErrorClassConnectivity {
@@ -432,7 +451,10 @@ func (m *Manager) steadyRetryDelay() time.Duration {
 // emitProgress updates tracked progress and calls the OnRecoveryProgress callback if set.
 func (m *Manager) emitProgress(secondsUntilRetry int) {
 	m.mu.Lock()
-	m.secondsUntilRetry = secondsUntilRetry
+	if m.secondsUntilRetry != secondsUntilRetry {
+		m.secondsUntilRetry = secondsUntilRetry
+		m.markSnapshotChangeLocked()
+	}
 	probeClass := m.lastProbeClass
 	m.mu.Unlock()
 

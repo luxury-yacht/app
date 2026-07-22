@@ -10,7 +10,7 @@ import { withStableListKeys } from '@shared/utils/stableListKeys';
 import { act, type ReactNode } from 'react';
 import * as ReactDOM from 'react-dom/client';
 import { afterEach, beforeAll, beforeEach, describe, expect, it, vi } from 'vitest';
-import type { ObjectEventSummary } from '@/core/refresh/types';
+import type { CanonicalRowTestOverrides, ObjectEventSummary } from '@/core/refresh/types';
 import { requireReactElement } from '@/test-utils/requireReactElement';
 import { requireValue } from '@/test-utils/requireValue';
 
@@ -144,19 +144,33 @@ vi.mock('@shared/components/tables/GridTable', () => ({
 
 vi.mock('./EventsTab.css', () => ({}));
 
+vi.mock('@/core/cluster-workspace/useClusterWorkspace', () => ({
+  useClusterNameResolver: () => (clusterId: string) =>
+    clusterId === 'event-cluster' ? 'Event Cluster' : 'Parent Cluster',
+}));
+
 const PARENT_CLUSTER_ID = 'parent-cluster';
 const PARENT_CLUSTER_NAME = 'Parent Cluster';
 const EVENT_CLUSTER_ID = 'event-cluster';
 const EVENT_CLUSTER_NAME = 'Event Cluster';
 
 /** Build a minimal ObjectEventSummary for testing. */
-function makeEvent(overrides: Partial<ObjectEventSummary> = {}): ObjectEventSummary {
+function makeEvent(
+  overrides: CanonicalRowTestOverrides<ObjectEventSummary> = {}
+): ObjectEventSummary {
+  const { ref, ...row } = overrides;
   return {
-    clusterId: PARENT_CLUSTER_ID,
-    clusterName: PARENT_CLUSTER_NAME,
-    kind: 'Event',
-    name: 'event-a',
-    uid: 'event-a-uid',
+    ref: {
+      clusterId: PARENT_CLUSTER_ID,
+      group: 'events.k8s.io',
+      version: 'v1',
+      kind: 'Event',
+      resource: 'events',
+      namespace: 'default',
+      name: 'event-a',
+      uid: 'event-a-uid',
+      ...ref,
+    },
     resourceVersion: '1',
     eventType: 'Normal',
     reason: 'Created',
@@ -170,8 +184,7 @@ function makeEvent(overrides: Partial<ObjectEventSummary> = {}): ObjectEventSumm
     involvedObjectNamespace: 'default',
     involvedObjectUid: 'related-pod-uid',
     involvedObjectApiVersion: 'v1',
-    namespace: 'default',
-    ...overrides,
+    ...row,
   };
 }
 
@@ -363,7 +376,7 @@ describe('EventsTab', () => {
   it('prefers per-event clusterId over parent panel cluster when opening related objects', async () => {
     // Event has its own cluster identity distinct from the parent panel.
     hoistedSnapshot.data = {
-      events: [makeEvent({ clusterId: EVENT_CLUSTER_ID, clusterName: EVENT_CLUSTER_NAME })],
+      events: [makeEvent({ ref: { clusterId: EVENT_CLUSTER_ID } })],
     };
     hoistedSnapshot.status = 'ready';
 
@@ -533,7 +546,7 @@ describe('EventsTab', () => {
   it('falls back to parent panel cluster when event has no cluster identity', async () => {
     // Event without cluster fields — should fall back to parent panel.
     hoistedSnapshot.data = {
-      events: [makeEvent({ clusterId: undefined, clusterName: undefined })],
+      events: [makeEvent({ ref: { clusterId: undefined } })],
     };
     hoistedSnapshot.status = 'ready';
 
@@ -571,11 +584,11 @@ describe('EventsTab', () => {
     hoistedSnapshot.data = {
       events: [
         makeEvent({
+          ref: { clusterId: EVENT_CLUSTER_ID },
           involvedObjectKind: 'DBInstance',
           involvedObjectName: 'orders-db',
           involvedObjectNamespace: 'team-a',
           involvedObjectApiVersion: 'documentdb.services.k8s.aws/v1alpha1',
-          clusterId: EVENT_CLUSTER_ID,
         }),
       ],
     };
@@ -705,26 +718,26 @@ describe('EventsTab', () => {
 
   it('resolves involved CRDs by UID when the event omits apiVersion', async () => {
     mockFindCatalogObjectByUID.mockResolvedValue({
-      kind: 'Database',
-      name: 'orders-db',
-      namespace: 'team-a',
-      clusterId: EVENT_CLUSTER_ID,
-      clusterName: EVENT_CLUSTER_NAME,
-      group: 'db.example.io',
-      version: 'v1',
-      resource: 'databases',
-      uid: 'orders-db-uid',
+      ref: {
+        kind: 'Database',
+        name: 'orders-db',
+        namespace: 'team-a',
+        clusterId: EVENT_CLUSTER_ID,
+        group: 'db.example.io',
+        version: 'v1',
+        resource: 'databases',
+        uid: 'orders-db-uid',
+      },
     });
     hoistedSnapshot.data = {
       events: [
         makeEvent({
+          ref: { clusterId: EVENT_CLUSTER_ID },
           involvedObjectKind: 'Database',
           involvedObjectName: 'orders-db',
           involvedObjectNamespace: 'team-a',
           involvedObjectUid: 'orders-db-uid',
           involvedObjectApiVersion: undefined,
-          clusterId: EVENT_CLUSTER_ID,
-          clusterName: EVENT_CLUSTER_NAME,
         }),
       ],
     };

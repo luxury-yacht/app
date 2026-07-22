@@ -234,7 +234,7 @@ func TestNamespaceConfigBuilderHonorsRuntimeAllowedResources(t *testing.T) {
 	payload, ok := snapshot.Payload.(NamespaceConfigSnapshot)
 	require.True(t, ok)
 	require.Len(t, payload.Rows, 1)
-	require.Equal(t, "Secret", payload.Rows[0].Kind)
+	require.Equal(t, "Secret", payload.Rows[0].Ref.Kind)
 	require.Equal(t, []string{"Secret"}, payload.Kinds)
 }
 
@@ -350,9 +350,9 @@ func TestNamespaceConfigBuilderAllNamespaces(t *testing.T) {
 
 	namespaces := make(map[string]struct{})
 	for _, entry := range payload.Rows {
-		require.NotEmpty(t, entry.Namespace)
+		require.NotEmpty(t, entry.Ref.Namespace)
 		require.NotEmpty(t, entry.Age)
-		namespaces[entry.Namespace] = struct{}{}
+		namespaces[entry.Ref.Namespace] = struct{}{}
 	}
 	require.Len(t, namespaces, 3)
 }
@@ -393,8 +393,8 @@ func TestNamespaceConfigBuilderStableOrdering(t *testing.T) {
 	require.True(t, ok)
 	require.Len(t, payload.Rows, 2)
 	require.Equal(t, []string{"ConfigMap", "Secret"}, []string{
-		payload.Rows[0].Kind,
-		payload.Rows[1].Kind,
+		payload.Rows[0].Ref.Kind,
+		payload.Rows[1].Ref.Kind,
 	})
 }
 
@@ -436,8 +436,8 @@ func TestNamespaceEventsBuilderUsesEventTimestampOrdering(t *testing.T) {
 	payload, ok := snapshot.Payload.(NamespaceEventsSnapshot)
 	require.True(t, ok)
 	require.Len(t, payload.Rows, 2)
-	require.Equal(t, "event-a", payload.Rows[0].Name)
-	require.Equal(t, "event-b", payload.Rows[1].Name)
+	require.Equal(t, "event-a", payload.Rows[0].Ref.Name)
+	require.Equal(t, "event-b", payload.Rows[1].Ref.Name)
 }
 
 func TestNamespaceNetworkBuilder(t *testing.T) {
@@ -533,7 +533,7 @@ func TestNamespaceNetworkBuilder(t *testing.T) {
 	require.Equal(t, []string{"EndpointSlice", "Ingress", "NetworkPolicy", "Service"}, payload.Kinds)
 	endpointSliceSummary, ok := findNetworkSummary(payload.Rows, "EndpointSlice", "api-abcde")
 	require.True(t, ok)
-	require.Equal(t, "default", endpointSliceSummary.Namespace)
+	require.Equal(t, "default", endpointSliceSummary.Ref.Namespace)
 	// The Service row's endpoint join is re-applied at serve from the EndpointSlice store:
 	// the single ready endpoint contributes "Addresses: 1" to the Service Details, exactly
 	// as the typed service.BuildStreamSummary(svc, slices) path produced.
@@ -643,8 +643,8 @@ func TestNamespaceNetworkBuilderAllNamespaces(t *testing.T) {
 
 	namespaces := make(map[string]struct{})
 	for _, entry := range payload.Rows {
-		require.NotEmpty(t, entry.Namespace)
-		namespaces[entry.Namespace] = struct{}{}
+		require.NotEmpty(t, entry.Ref.Namespace)
+		namespaces[entry.Ref.Namespace] = struct{}{}
 	}
 	require.Len(t, namespaces, 2)
 }
@@ -688,7 +688,7 @@ func TestNamespaceStorageBuilder(t *testing.T) {
 	require.Len(t, payload.Rows, 1)
 
 	entry := payload.Rows[0]
-	require.Equal(t, "PersistentVolumeClaim", entry.Kind)
+	require.Equal(t, "PersistentVolumeClaim", entry.Ref.Kind)
 	require.Equal(t, "2Gi", entry.Capacity)
 	require.Equal(t, string(corev1.ClaimBound), entry.Status)
 	require.Equal(t, string(corev1.ClaimBound), entry.StatusState)
@@ -733,8 +733,8 @@ func TestNamespaceStorageBuilderAllNamespaces(t *testing.T) {
 
 	namespaces := make(map[string]struct{})
 	for _, entry := range payload.Rows {
-		require.NotEmpty(t, entry.Namespace)
-		namespaces[entry.Namespace] = struct{}{}
+		require.NotEmpty(t, entry.Ref.Namespace)
+		namespaces[entry.Ref.Namespace] = struct{}{}
 	}
 	require.Len(t, namespaces, 2)
 }
@@ -802,7 +802,7 @@ func TestNamespaceQuotasBuilder(t *testing.T) {
 	}
 	var pdbSummary *QuotaSummary
 	for i := range payload.Rows {
-		if payload.Rows[i].Kind == "PodDisruptionBudget" {
+		if payload.Rows[i].Ref.Kind == "PodDisruptionBudget" {
 			pdbSummary = &payload.Rows[i]
 			break
 		}
@@ -875,8 +875,8 @@ func TestNamespaceQuotasBuilderAllNamespaces(t *testing.T) {
 
 	namespaces := make(map[string]struct{})
 	for _, entry := range payload.Rows {
-		require.NotEmpty(t, entry.Namespace)
-		namespaces[entry.Namespace] = struct{}{}
+		require.NotEmpty(t, entry.Ref.Namespace)
+		namespaces[entry.Ref.Namespace] = struct{}{}
 	}
 	require.Len(t, namespaces, 2)
 }
@@ -915,7 +915,7 @@ func TestNamespaceAutoscalingBuilder(t *testing.T) {
 	require.Equal(t, []string{"HorizontalPodAutoscaler"}, payload.Kinds)
 
 	entry := payload.Rows[0]
-	require.Equal(t, "HorizontalPodAutoscaler", entry.Kind)
+	require.Equal(t, "HorizontalPodAutoscaler", entry.Ref.Kind)
 	require.Equal(t, "Deployment/api", entry.Target)
 	require.Equal(t, int32(2), entry.Current)
 	require.NotEmpty(t, entry.Age)
@@ -974,9 +974,9 @@ func TestNamespaceAutoscalingBuilderAllNamespaces(t *testing.T) {
 
 	namespaces := make(map[string]struct{})
 	for _, entry := range payload.Rows {
-		require.NotEmpty(t, entry.Namespace)
+		require.NotEmpty(t, entry.Ref.Namespace)
 		require.NotEmpty(t, entry.Age)
-		namespaces[entry.Namespace] = struct{}{}
+		namespaces[entry.Ref.Namespace] = struct{}{}
 	}
 	require.Len(t, namespaces, 2)
 }
@@ -1037,12 +1037,12 @@ func TestNamespaceEventsBuilder(t *testing.T) {
 	require.Len(t, payload.Rows, 2)
 
 	first := payload.Rows[0]
-	require.Equal(t, "event-new", first.Name)
+	require.Equal(t, "event-new", first.Ref.Name)
 	require.Equal(t, "Pod/api-0", first.Object)
 	require.Equal(t, "scheduler", first.Source)
 
 	second := payload.Rows[1]
-	require.Equal(t, "event-old", second.Name)
+	require.Equal(t, "event-old", second.Ref.Name)
 	require.Contains(t, second.Source, "kubelet")
 	require.Equal(t, "Pod/api-0", second.Object)
 	require.Equal(t, "BackOff", second.Reason)
@@ -1107,8 +1107,8 @@ func TestNamespaceEventsBuilderAllNamespaces(t *testing.T) {
 
 	namespaces := map[string]struct{}{}
 	for _, evt := range payload.Rows {
-		require.NotEmpty(t, evt.Namespace)
-		namespaces[evt.Namespace] = struct{}{}
+		require.NotEmpty(t, evt.Ref.Namespace)
+		namespaces[evt.Ref.Namespace] = struct{}{}
 	}
 	require.Contains(t, namespaces, "default")
 	require.Contains(t, namespaces, "staging")
@@ -1168,7 +1168,7 @@ func TestNamespaceRBACBuilder(t *testing.T) {
 
 	resources := map[string]RBACSummary{}
 	for _, summary := range payload.Rows {
-		resources[summary.Kind] = summary
+		resources[summary.Ref.Kind] = summary
 	}
 
 	require.Contains(t, resources["Role"].Details, "Rules: 1")
@@ -1234,8 +1234,8 @@ func TestNamespaceRBACBuilderAllNamespaces(t *testing.T) {
 
 	namespaces := make(map[string]struct{})
 	for _, entry := range payload.Rows {
-		require.NotEmpty(t, entry.Namespace)
-		namespaces[entry.Namespace] = struct{}{}
+		require.NotEmpty(t, entry.Ref.Namespace)
+		namespaces[entry.Ref.Namespace] = struct{}{}
 	}
 	require.True(t, len(namespaces) >= 2)
 }
@@ -1342,7 +1342,7 @@ func TestNamespaceRBACBuilderStableOrdering(t *testing.T) {
 
 	var ordered []string
 	for _, entry := range payload.Rows {
-		ordered = append(ordered, fmt.Sprintf("%s:%s:%s", entry.Namespace, entry.Kind, entry.Name))
+		ordered = append(ordered, fmt.Sprintf("%s:%s:%s", entry.Ref.Namespace, entry.Ref.Kind, entry.Ref.Name))
 	}
 
 	require.Equal(t, []string{
@@ -1436,7 +1436,7 @@ func TestNamespaceWorkloadsBuilder(t *testing.T) {
 
 	summaries := map[string]WorkloadSummary{}
 	for _, summary := range payload.Rows {
-		summaries[summary.Kind+"-"+summary.Name] = summary
+		summaries[summary.Ref.Kind+"-"+summary.Ref.Name] = summary
 	}
 
 	deploySummary, ok := summaries["Deployment-web"]
@@ -1499,7 +1499,7 @@ func TestNamespaceWorkloadsBuilderWindowScopeOrdersRowsByKindThenName(t *testing
 	require.Len(t, payload.Rows, 3)
 	got := make([]string, 0, len(payload.Rows))
 	for _, row := range payload.Rows {
-		got = append(got, row.Kind+"/"+row.Name)
+		got = append(got, row.Ref.Kind+"/"+row.Ref.Name)
 	}
 	require.Equal(t, []string{"Deployment/api", "Deployment/web", "StatefulSet/db"}, got)
 }
@@ -1622,7 +1622,7 @@ func TestNamespaceWorkloadsBuilderAllNamespacesOverlayAggregatesPodMetrics(t *te
 	require.NoError(t, err)
 	payload := snapshot.Payload.(NamespaceWorkloadsSnapshot)
 	require.Len(t, payload.Rows, 1)
-	require.Equal(t, "api", payload.Rows[0].Name)
+	require.Equal(t, "api", payload.Rows[0].Ref.Name)
 	require.Equal(t, "250m", payload.Rows[0].CPUUsage)
 	require.Equal(t, "128Mi", payload.Rows[0].MemUsage)
 }
@@ -1869,9 +1869,9 @@ func TestNamespaceWorkloadsBuilderAllNamespaces(t *testing.T) {
 	namespaces := map[string]struct{}{}
 	summaries := map[string]WorkloadSummary{}
 	for _, summary := range payload.Rows {
-		require.NotEmpty(t, summary.Namespace)
-		namespaces[summary.Namespace] = struct{}{}
-		summaries[summary.Kind+"/"+summary.Namespace+"/"+summary.Name] = summary
+		require.NotEmpty(t, summary.Ref.Namespace)
+		namespaces[summary.Ref.Namespace] = struct{}{}
+		summaries[summary.Ref.Kind+"/"+summary.Ref.Namespace+"/"+summary.Ref.Name] = summary
 	}
 	require.Len(t, namespaces, 2)
 	webSummary, ok := summaries["Deployment/default/web"]
@@ -1995,14 +1995,14 @@ func TestNamespaceWorkloadsBuilderAllNamespacesQuerySortsFiltersAndPagesByMetric
 	require.Equal(t, []string{"Deployment"}, payload.Kinds)
 	require.Equal(t, []string{"team-b"}, payload.Namespaces)
 	require.Len(t, payload.Rows, 1)
-	require.Equal(t, "bravo", payload.Rows[0].Name)
+	require.Equal(t, "bravo", payload.Rows[0].Ref.Name)
 	require.NotEmpty(t, payload.Continue)
 
 	next, err := builder.Build(context.Background(), "cluster-a|namespace:all?namespaces=team-b&sort=memory&sortDirection=desc&limit=1&continue="+payload.Continue)
 	require.NoError(t, err)
 	nextPayload := next.Payload.(NamespaceWorkloadsSnapshot)
 	require.Len(t, nextPayload.Rows, 1)
-	require.Equal(t, "charlie", nextPayload.Rows[0].Name)
+	require.Equal(t, "charlie", nextPayload.Rows[0].Ref.Name)
 	require.Empty(t, nextPayload.Continue)
 }
 
@@ -2085,7 +2085,7 @@ func TestNamespaceWorkloadsBuilderMetricCursorContinuesAcrossMetricsRefresh(t *t
 	require.NoError(t, err)
 	firstPayload := first.Payload.(NamespaceWorkloadsSnapshot)
 	require.Len(t, firstPayload.Rows, 1)
-	require.Equal(t, "bravo", firstPayload.Rows[0].Name)
+	require.Equal(t, "bravo", firstPayload.Rows[0].Ref.Name)
 	require.NotEmpty(t, firstPayload.Continue)
 
 	provider.pods = map[string]metrics.PodUsage{
@@ -2099,7 +2099,7 @@ func TestNamespaceWorkloadsBuilderMetricCursorContinuesAcrossMetricsRefresh(t *t
 	nextPayload := next.Payload.(NamespaceWorkloadsSnapshot)
 	require.False(t, nextPayload.CursorInvalid)
 	require.Len(t, nextPayload.Rows, 1)
-	require.Equal(t, "charlie", nextPayload.Rows[0].Name)
+	require.Equal(t, "charlie", nextPayload.Rows[0].Ref.Name)
 	require.Empty(t, nextPayload.Continue)
 }
 
@@ -2155,7 +2155,7 @@ func TestNamespaceWorkloadsQueryMarksDeniedKindsPartial(t *testing.T) {
 	require.Equal(t, "Job", payload.Issues[0].Kind)
 	require.Contains(t, payload.Issues[0].Message, "partial")
 	require.Len(t, payload.Rows, 1)
-	require.Equal(t, "Deployment", payload.Rows[0].Kind)
+	require.Equal(t, "Deployment", payload.Rows[0].Ref.Kind)
 }
 
 // workloadObjects converts a typed workload slice to the []metav1.Object the
@@ -2180,7 +2180,7 @@ func mustQuantity(t testing.TB, value string) resource.Quantity {
 
 func findNetworkSummary(resources []NetworkSummary, kind, name string) (NetworkSummary, bool) {
 	for _, resource := range resources {
-		if resource.Kind == kind && resource.Name == name {
+		if resource.Ref.Kind == kind && resource.Ref.Name == name {
 			return resource, true
 		}
 	}

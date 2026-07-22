@@ -31,7 +31,7 @@ func clusterRoleBindingObj(name, rv string) *rbacv1.ClusterRoleBinding {
 
 func findClusterRBACRow(rows []ClusterRBACEntry, kind, name string) *ClusterRBACEntry {
 	for i := range rows {
-		if rows[i].Kind == kind && rows[i].Name == name {
+		if rows[i].Ref.Kind == kind && rows[i].Ref.Name == name {
 			return &rows[i]
 		}
 	}

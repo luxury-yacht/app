@@ -121,7 +121,7 @@ func TestClusterConfigBuilder(t *testing.T) {
 
 	resources := map[string]ClusterConfigEntry{}
 	for _, entry := range payload.Rows {
-		resources[entry.Kind+"-"+entry.Name] = entry
+		resources[entry.Ref.Kind+"-"+entry.Ref.Name] = entry
 		require.NotEmpty(t, entry.Age)
 	}
 
@@ -228,8 +228,8 @@ func TestClusterStorageBuilder(t *testing.T) {
 	require.Len(t, payload.Rows, 1)
 
 	entry := payload.Rows[0]
-	require.Equal(t, "PersistentVolume", entry.Kind)
-	require.Equal(t, pv.Name, entry.Name)
+	require.Equal(t, "PersistentVolume", entry.Ref.Kind)
+	require.Equal(t, pv.Name, entry.Ref.Name)
 	require.Equal(t, "fast", entry.StorageClass)
 	require.Equal(t, "10Gi", entry.Capacity)
 	require.Equal(t, string(corev1.ReadWriteMany), entry.AccessModes)
@@ -238,6 +238,10 @@ func TestClusterStorageBuilder(t *testing.T) {
 	require.Equal(t, "ready", entry.StatusPresentation)
 	require.Equal(t, "prod/db", entry.Claim)
 	require.NotEmpty(t, entry.Age)
+}
+
+func TestClusterStorageDomainPreservesListErrorPrefix(t *testing.T) {
+	require.Equal(t, "cluster storage: failed to list persistent volumes", clusterStorageDomainSpec().listErrorPrefix)
 }
 
 func TestClusterStorageBuilderCapsLargeSnapshots(t *testing.T) {
@@ -301,8 +305,8 @@ func TestClusterCRDBuilder(t *testing.T) {
 	require.Len(t, payload.Rows, 1)
 
 	entry := payload.Rows[0]
-	require.Equal(t, "CustomResourceDefinition", entry.Kind)
-	require.Equal(t, crd.Name, entry.Name)
+	require.Equal(t, "CustomResourceDefinition", entry.Ref.Kind)
+	require.Equal(t, crd.Name, entry.Ref.Name)
 	require.Equal(t, crd.Spec.Group, entry.Group)
 	require.Equal(t, string(crd.Spec.Scope), entry.Scope)
 	require.Contains(t, entry.Details, "v1*")

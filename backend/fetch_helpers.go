@@ -24,19 +24,6 @@ var fetchRetrySleep = time.Sleep
 // contextSleep allows tests to stub or override; defaults to a context-aware sleep.
 var contextSleep = timeutil.SleepWithContext
 
-// FetchResource executes the supplied fetch function, wrapping any error with
-// additional diagnostic information. It uses a short-lived response cache for
-// non-informer GETs to avoid repeated requests for the same resource.
-func FetchResource[T any](
-	a *App,
-	cacheKey string,
-	resourceKind string,
-	identifier string,
-	fetchFunc func() (T, error),
-) (T, error) {
-	return FetchResourceWithSelection(a, "", cacheKey, resourceKind, identifier, fetchFunc)
-}
-
 // FetchResourceWithSelection runs a fetch with a cache key scoped to the provided selection key.
 func FetchResourceWithSelection[T any](
 	a *App,
@@ -82,46 +69,6 @@ func FetchResourceWithSelection[T any](
 	if a != nil {
 		a.responseCacheStore(selectionKey, cacheKey, result)
 	}
-	return result, nil
-}
-
-// FetchResourceList executes a list fetch function for a given resource kind
-// and namespace. No caching is performed.
-func FetchResourceList[T any](
-	a *App,
-	clusterID string,
-	resourceKind string,
-	namespace string,
-	fetchFunc func() (T, error),
-) (T, error) {
-	var zero T
-	scope := "cluster"
-	if namespace != "" {
-		scope = fmt.Sprintf("namespace %s", namespace)
-	}
-
-	ctx := a.CtxOrBackground()
-	if _, hasDeadline := ctx.Deadline(); !hasDeadline {
-		var cancel context.CancelFunc
-		ctx, cancel = context.WithTimeout(ctx, config.ResourceFetchCallTimeout)
-		defer cancel()
-	}
-
-	result, err := executeWithRetry(ctx, a, clusterID, resourceKind, scope, fetchFunc)
-	if err != nil {
-		a.logger.Error(fmt.Sprintf("Failed to list %s in %s: %v", resourceKind, scope, err), logsources.ResourceLoader, clusterID, a.clusterNameForID(clusterID))
-		// Include clusterId in error payload so frontend can identify which cluster
-		// the error belongs to.
-		a.emitEvent("backend-error", map[string]any{
-			"clusterId":    clusterID,
-			"resourceKind": resourceKind,
-			"scope":        scope,
-			"message":      err.Error(),
-			"error":        fmt.Sprintf("%v", err),
-		})
-		return zero, errorcapture.Enhance(err)
-	}
-
 	return result, nil
 }
 

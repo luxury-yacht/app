@@ -147,9 +147,8 @@ func TestCatalogDynamicCRDViaIngestMatchesListPath(t *testing.T) {
 
 	// Pure-LIST reference: no promotion (threshold 0), so collectResource always lists.
 	listSvc := NewService(Dependencies{
-		Common:      common.Dependencies{Context: ctx, DynamicClient: widgetDynamicClient(w1, w2, w3)},
-		ClusterID:   "c1",
-		ClusterName: "cluster-one",
+		Common:    common.Dependencies{Context: ctx, DynamicClient: widgetDynamicClient(w1, w2, w3)},
+		ClusterID: "c1",
 	}, &Options{ResyncInterval: time.Minute, PageSize: 200, ListWorkers: 2, InformerPromotionThreshold: 0})
 	listSummaries, err := listSvc.collectResource(ctx, 0, desc, nil, nil)
 	require.NoError(t, err)
@@ -162,7 +161,6 @@ func TestCatalogDynamicCRDViaIngestMatchesListPath(t *testing.T) {
 		Common:       common.Dependencies{Context: ctx, DynamicClient: widgetDynamicClient(w1, w2, w3)},
 		IngestSource: fake,
 		ClusterID:    "c1",
-		ClusterName:  "cluster-one",
 	}, &Options{ResyncInterval: time.Minute, PageSize: 200, ListWorkers: 2, InformerPromotionThreshold: 2})
 
 	// First collect lists (the reflector is not yet registered) and crosses the threshold,
@@ -196,7 +194,6 @@ func TestCatalogDynamicCRDPromotesOnlyAboveThreshold(t *testing.T) {
 		Common:       common.Dependencies{Context: ctx, DynamicClient: widgetDynamicClient(w1)},
 		IngestSource: fake,
 		ClusterID:    "c1",
-		ClusterName:  "cluster-one",
 	}, &Options{ResyncInterval: time.Minute, PageSize: 200, ListWorkers: 2, InformerPromotionThreshold: 5})
 
 	summaries, err := svc.collectResource(ctx, 0, desc, nil, nil)

@@ -17,6 +17,7 @@ import (
 	"github.com/luxury-yacht/app/backend/kind/objectmapnode"
 	"github.com/luxury-yacht/app/backend/kind/streamrows"
 	"github.com/luxury-yacht/app/backend/objectcatalog"
+	"github.com/luxury-yacht/app/backend/resourcemodel"
 )
 
 // fakeNamespaceIngest is a minimal namespacePodIngestSource whose presence rows
@@ -51,7 +52,7 @@ func (f *fakeNamespaceIngest) CatalogRows(gvr schema.GroupVersionResource) []int
 	}
 	rows := make([]interface{}, 0, len(f.workloadNS))
 	for _, ns := range f.workloadNS {
-		rows = append(rows, objectcatalog.Summary{Kind: "Deployment", Namespace: ns, Name: "d"})
+		rows = append(rows, objectcatalog.Summary{Ref: resourcemodel.ResourceRef{Kind: "Deployment", Namespace: ns, Name: "d"}})
 	}
 	return rows
 }

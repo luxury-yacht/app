@@ -9,6 +9,7 @@ import (
 	"github.com/luxury-yacht/app/backend/kind/kindregistry"
 	"github.com/luxury-yacht/app/backend/objectcatalog"
 	"github.com/luxury-yacht/app/backend/refresh/snapshot"
+	"github.com/luxury-yacht/app/backend/resourcemodel"
 	"github.com/luxury-yacht/app/backend/resources/clusterrole"
 	"github.com/luxury-yacht/app/backend/resources/resourcequota"
 )
@@ -30,16 +31,7 @@ func TestIngestNotifySinkBroadcastsNamespacedSignal(t *testing.T) {
 	require.NoError(t, err)
 
 	sink := manager.ingestNotifySink(resourcequota.StreamDescriptor)
-	sink.Upsert(objectcatalog.Summary{
-		Kind:            "ResourceQuota",
-		Group:           resourcequota.StreamDescriptor.Group,
-		Version:         resourcequota.StreamDescriptor.Version,
-		Resource:        resourcequota.StreamDescriptor.Resource,
-		Namespace:       "default",
-		Name:            "quota-1",
-		UID:             "quota-uid",
-		ResourceVersion: "7",
-	})
+	sink.Upsert(objectcatalog.Summary{Ref: resourcemodel.ResourceRef{Group: resourcequota.StreamDescriptor.Group, Version: resourcequota.StreamDescriptor.Version, Kind: "ResourceQuota", Resource: resourcequota.StreamDescriptor.Resource, Namespace: "default", Name: "quota-1", UID: "quota-uid"}, ResourceVersion: "7"})
 
 	update := requireNextUpdate(t, sub)
 	require.Equal(t, MessageTypeModified, update.Type)
@@ -62,15 +54,7 @@ func TestIngestNotifySinkBroadcastsClusterSignalAndDelete(t *testing.T) {
 	require.NoError(t, err)
 
 	sink := manager.ingestNotifySink(clusterrole.StreamDescriptor)
-	summary := objectcatalog.Summary{
-		Kind:            "ClusterRole",
-		Group:           clusterrole.StreamDescriptor.Group,
-		Version:         clusterrole.StreamDescriptor.Version,
-		Resource:        clusterrole.StreamDescriptor.Resource,
-		Name:            "cluster-role-1",
-		UID:             "cr-uid",
-		ResourceVersion: "10",
-	}
+	summary := objectcatalog.Summary{Ref: resourcemodel.ResourceRef{Group: clusterrole.StreamDescriptor.Group, Version: clusterrole.StreamDescriptor.Version, Kind: "ClusterRole", Resource: clusterrole.StreamDescriptor.Resource, Name: "cluster-role-1", UID: "cr-uid"}, ResourceVersion: "10"}
 	sink.Upsert(summary)
 
 	add := requireNextUpdate(t, sub)

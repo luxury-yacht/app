@@ -10,6 +10,7 @@ import (
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 
 	"github.com/luxury-yacht/app/backend/objectcatalog"
+	"github.com/luxury-yacht/app/backend/resourcemodel"
 	"github.com/luxury-yacht/app/backend/testsupport"
 )
 
@@ -129,8 +130,8 @@ func assertCatalogContract(t *testing.T, label string, p CatalogSnapshot) {
 func TestCatalogBuilderEmitsTheContract(t *testing.T) {
 	ctx := WithClusterMeta(context.Background(), ClusterMeta{ClusterID: "cluster-a"})
 	summaries := []objectcatalog.Summary{
-		{Kind: "Pod", Version: "v1", Resource: "pods", Namespace: "default", Name: "pod-a", UID: "uid-a", Scope: objectcatalog.ScopeNamespace},
-		{Kind: "Deployment", Group: "apps", Version: "v1", Resource: "deployments", Namespace: "default", Name: "deploy-b", UID: "uid-b", Scope: objectcatalog.ScopeNamespace},
+		{Ref: resourcemodel.ResourceRef{Version: "v1", Kind: "Pod", Resource: "pods", Namespace: "default", Name: "pod-a", UID: "uid-a"}, Scope: objectcatalog.ScopeNamespace},
+		{Ref: resourcemodel.ResourceRef{Group: "apps", Version: "v1", Kind: "Deployment", Resource: "deployments", Namespace: "default", Name: "deploy-b", UID: "uid-b"}, Scope: objectcatalog.ScopeNamespace},
 	}
 
 	t.Run("browse", func(t *testing.T) {
@@ -168,9 +169,9 @@ func TestCatalogBuilderEmitsTheContract(t *testing.T) {
 func TestCatalogPaginationIsKeysetNotBatch(t *testing.T) {
 	ctx := WithClusterMeta(context.Background(), ClusterMeta{ClusterID: "cluster-a"})
 	summaries := []objectcatalog.Summary{
-		{Kind: "Pod", Version: "v1", Resource: "pods", Namespace: "default", Name: "pod-a", UID: "uid-a", Scope: objectcatalog.ScopeNamespace},
-		{Kind: "Pod", Version: "v1", Resource: "pods", Namespace: "default", Name: "pod-b", UID: "uid-b", Scope: objectcatalog.ScopeNamespace},
-		{Kind: "Pod", Version: "v1", Resource: "pods", Namespace: "default", Name: "pod-c", UID: "uid-c", Scope: objectcatalog.ScopeNamespace},
+		{Ref: resourcemodel.ResourceRef{Version: "v1", Kind: "Pod", Resource: "pods", Namespace: "default", Name: "pod-a", UID: "uid-a"}, Scope: objectcatalog.ScopeNamespace},
+		{Ref: resourcemodel.ResourceRef{Version: "v1", Kind: "Pod", Resource: "pods", Namespace: "default", Name: "pod-b", UID: "uid-b"}, Scope: objectcatalog.ScopeNamespace},
+		{Ref: resourcemodel.ResourceRef{Version: "v1", Kind: "Pod", Resource: "pods", Namespace: "default", Name: "pod-c", UID: "uid-c"}, Scope: objectcatalog.ScopeNamespace},
 	}
 	svc := seedCatalogService(t, summaries)
 	builder := &catalogBuilder{domain: catalogDomain, catalogService: func() *objectcatalog.Service { return svc }}

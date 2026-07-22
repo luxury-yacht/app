@@ -106,8 +106,7 @@ describe('resourceLinkIdentity', () => {
 
   it('resolves catalog objects by UID without guessing GVK from kind', async () => {
     findCatalogObjectByUIDMock.mockResolvedValue({
-      ...ref,
-      clusterName: 'alpha',
+      ref,
       resourceVersion: '10',
       creationTimestamp: '2024-01-01T00:00:00Z',
       scope: 'Namespace',
@@ -131,8 +130,7 @@ describe('resourceLinkIdentity', () => {
     expect(findCatalogObjectMatchMock).not.toHaveBeenCalled();
 
     findCatalogObjectMatchMock.mockResolvedValue({
-      ...ref,
-      clusterName: 'alpha',
+      ref,
       resourceVersion: '10',
       creationTimestamp: '2024-01-01T00:00:00Z',
       scope: 'Namespace',

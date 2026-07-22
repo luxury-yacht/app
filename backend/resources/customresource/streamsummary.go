@@ -18,27 +18,19 @@ import (
 
 // BuildNamespaceStreamSummary builds the namespace-custom row for one namespaced
 // custom resource. defaultNamespace is used when the object carries no namespace.
-func BuildNamespaceStreamSummary(meta streamrows.ClusterMeta, resource *unstructured.Unstructured, group, version, kindFallback, crdName, defaultNamespace string) streamrows.NamespaceCustomSummary {
+func BuildNamespaceStreamSummary(meta streamrows.ClusterMeta, resource *unstructured.Unstructured, group, version, resourceName, kindFallback, crdName, defaultNamespace string) streamrows.NamespaceCustomSummary {
 	if resource == nil {
 		return streamrows.NamespaceCustomSummary{
-			ClusterMeta: meta,
-			Kind:        kindFallback,
-			Group:       group,
-			Version:     version,
-			CRDName:     crdName,
+			Ref:     resourcemodel.NewResourceRef(meta.ClusterID, group, version, kindFallback, resourceName, "", "", ""),
+			CRDName: crdName,
 		}
 	}
-	gvr := schema.GroupVersionResource{Group: group, Version: version}
+	gvr := schema.GroupVersionResource{Group: group, Version: version, Resource: resourceName}
 	model := BuildResourceModel(meta.ClusterID, resource, gvr, kindFallback, crdName, resourcemodel.ResourceScopeNamespaced, defaultNamespace)
 	facts := BuildFacts(meta.ClusterID, resource, gvr, crdName, resourcemodel.ResourceModelBuildOptions{})
 	return streamrows.NamespaceCustomSummary{
-		ClusterMeta:        meta,
-		Kind:               model.Ref.Kind,
-		Name:               model.Ref.Name,
-		Group:              model.Ref.Group,
-		Version:            model.Ref.Version,
+		Ref:                model.Ref,
 		CRDName:            crdName,
-		Namespace:          model.Ref.Namespace,
 		Status:             model.Status.Label,
 		StatusState:        model.Status.State,
 		StatusPresentation: model.Status.Presentation,
@@ -53,25 +45,18 @@ func BuildNamespaceStreamSummary(meta streamrows.ClusterMeta, resource *unstruct
 
 // BuildClusterStreamSummary builds the cluster-custom row for one cluster-scoped
 // custom resource.
-func BuildClusterStreamSummary(meta streamrows.ClusterMeta, resource *unstructured.Unstructured, group, version, kindFallback, crdName string) streamrows.ClusterCustomSummary {
+func BuildClusterStreamSummary(meta streamrows.ClusterMeta, resource *unstructured.Unstructured, group, version, resourceName, kindFallback, crdName string) streamrows.ClusterCustomSummary {
 	if resource == nil {
 		return streamrows.ClusterCustomSummary{
-			ClusterMeta: meta,
-			Kind:        kindFallback,
-			Group:       group,
-			Version:     version,
-			CRDName:     crdName,
+			Ref:     resourcemodel.NewResourceRef(meta.ClusterID, group, version, kindFallback, resourceName, "", "", ""),
+			CRDName: crdName,
 		}
 	}
-	gvr := schema.GroupVersionResource{Group: group, Version: version}
+	gvr := schema.GroupVersionResource{Group: group, Version: version, Resource: resourceName}
 	model := BuildResourceModel(meta.ClusterID, resource, gvr, kindFallback, crdName, resourcemodel.ResourceScopeCluster, "")
 	facts := BuildFacts(meta.ClusterID, resource, gvr, crdName, resourcemodel.ResourceModelBuildOptions{})
 	return streamrows.ClusterCustomSummary{
-		ClusterMeta:        meta,
-		Kind:               model.Ref.Kind,
-		Name:               model.Ref.Name,
-		Group:              model.Ref.Group,
-		Version:            model.Ref.Version,
+		Ref:                model.Ref,
 		CRDName:            crdName,
 		Status:             model.Status.Label,
 		StatusState:        model.Status.State,

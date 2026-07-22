@@ -158,6 +158,7 @@ func (a *App) markScopeRebuildStarted(clusterID string) {
 func (a *App) performClusterScopeRebuild(clusterID string) {
 	a.teardownClusterSubsystem(clusterID)
 	a.rebuildClusterSubsystem(clusterID)
+	a.incrementClusterScopeRevision(clusterID)
 	a.emitEvent("cluster:scope:changed", map[string]any{"clusterId": clusterID})
 }
 

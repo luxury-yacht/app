@@ -2,6 +2,7 @@ package snapshot
 
 import (
 	"fmt"
+	"github.com/luxury-yacht/app/backend/resourcemodel"
 	"slices"
 	"testing"
 )
@@ -11,11 +12,9 @@ func makeNetworkRows(n int) []NetworkSummary {
 	namespaces := []string{"default", "kube-system", "app"}
 	rows := make([]NetworkSummary, n)
 	for i := 0; i < n; i++ {
-		rows[i] = NetworkSummary{
-			Kind:         kinds[i%len(kinds)],
-			Name:         fmt.Sprintf("net-%03d", i), // unique -> unique row key
-			Namespace:    namespaces[i%len(namespaces)],
-			Details:      fmt.Sprintf("d-%d", i%4), // many ties
+		rows[i] = NetworkSummary{Ref: resourcemodel.ResourceRef{Kind: kinds[i%len(kinds)], Namespace:
+		// unique -> unique row key
+		namespaces[i%len(namespaces)], Name: fmt.Sprintf("net-%03d", i)}, Details: fmt.Sprintf("d-%d", i%4), // many ties
 			Age:          fmt.Sprintf("%dm", i%5),
 			AgeTimestamp: int64(1_000_000 + (i%9)*1000), // ties, non-zero so NumericSort engages
 		}

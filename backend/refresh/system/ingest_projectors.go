@@ -29,7 +29,7 @@ import (
 // ingest-owned kind onto the manager (the Table half is the descriptor's StreamRow,
 // already built by the manager's projection). It must be called before the manager
 // starts so every intake — including the initial relist — carries all three halves.
-func registerIngestProjectors(mgr *ingest.IngestManager, clusterID, clusterName string) {
+func registerIngestProjectors(mgr *ingest.IngestManager, clusterID string) {
 	for _, d := range kindregistry.IngestOwnedDescriptors() {
 		// A bespoke-reflector kind (Stream == nil — only Pod) carries its OWN full
 		// ProjectFunc that builds all four bundle halves, so the generic Catalog/
@@ -39,7 +39,7 @@ func registerIngestProjectors(mgr *ingest.IngestManager, clusterID, clusterName 
 			continue
 		}
 		gvr := d.Identity.GVR()
-		mgr.RegisterCatalogProjector(gvr, objectcatalog.SummaryProjector(clusterID, clusterName, d.Identity))
+		mgr.RegisterCatalogProjector(gvr, objectcatalog.SummaryProjector(clusterID, d.Identity))
 		if projector := ingestObjectMapProjector(clusterID, d); projector != nil {
 			mgr.RegisterObjectMapProjector(gvr, projector)
 		}

@@ -16,14 +16,11 @@ import (
 // BuildStreamSummary builds the namespace-storage row for one PVC.
 func BuildStreamSummary(meta streamrows.ClusterMeta, pvc *corev1.PersistentVolumeClaim) streamrows.StorageSummary {
 	if pvc == nil {
-		return streamrows.StorageSummary{ClusterMeta: meta, Kind: "PersistentVolumeClaim"}
+		return streamrows.StorageSummary{}
 	}
 	model := BuildResourceModel(meta.ClusterID, pvc)
 	return streamrows.StorageSummary{
-		ClusterMeta:        meta,
-		Kind:               "PersistentVolumeClaim",
-		Name:               pvc.Name,
-		Namespace:          pvc.Namespace,
+		Ref:                model.Ref,
 		Capacity:           streamCapacity(pvc),
 		Status:             model.Status.Label,
 		StatusState:        model.Status.State,

@@ -16,4 +16,5 @@ var Descriptor = kindspec.Descriptor{
 	Binding:         &DetailBinding,
 	Workload:        &kindspec.WorkloadOperations{Restart: workloadRestart, RevisionHistory: revisionHistory, ApplyPodTemplate: applyPodTemplate},
 	PortForward:     &kindspec.PortForwardTarget{ResolvePod: ForwardPodName, Reconnect: true},
+	Actions:         kindspec.ObjectActions{Aliases: []string{"daemonset"}},
 }

@@ -16,8 +16,8 @@ import (
 // BuildStreamSummary builds the cluster-rbac row for one ClusterRole.
 func BuildStreamSummary(meta streamrows.ClusterMeta, role *rbacv1.ClusterRole) streamrows.ClusterRBACEntry {
 	if role == nil {
-		return streamrows.ClusterRBACEntry{ClusterMeta: meta, Kind: "ClusterRole"}
+		return streamrows.ClusterRBACEntry{}
 	}
 	details := DescribeSummary(BuildFacts(role, nil, resourcemodel.ResourceModelBuildOptions{}))
-	return streamrows.NewClusterRBACEntry(meta, role, "ClusterRole", details, "CR")
+	return streamrows.NewClusterRBACEntry(meta, Identity, role, details, "CR")
 }

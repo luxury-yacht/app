@@ -163,19 +163,7 @@ const BrowseView: React.FC<BrowseViewProps> = ({
   // Handler to open an object in the object panel
   const handleOpen = useCallback(
     (row: BrowseTableRow) => {
-      openWithObject(
-        buildRequiredObjectReference({
-          kind: row.item.kind,
-          name: row.item.name,
-          namespace: row.item.namespace ?? undefined,
-          group: row.item.group,
-          version: row.item.version,
-          resource: row.item.resource,
-          uid: row.item.uid,
-          clusterId: row.item.clusterId ?? undefined,
-          clusterName: row.item.clusterName ?? undefined,
-        })
-      );
+      openWithObject(buildRequiredObjectReference(row.ref));
     },
     [openWithObject]
   );
@@ -219,34 +207,20 @@ const BrowseView: React.FC<BrowseViewProps> = ({
   // Context menu items builder
   const getContextMenuItems = useCallback(
     (row: BrowseTableRow): ContextMenuItem[] => {
-      const actionFacts = row.item.actionFacts;
+      const actionFacts = row.actionFacts;
       return objectActions.getMenuItems(
-        buildRequiredObjectReference(
-          {
-            kind: row.item.kind,
-            name: row.item.name,
-            namespace: row.item.namespace,
-            clusterId: row.item.clusterId,
-            clusterName: row.item.clusterName,
-            group: row.item.group,
-            version: row.item.version,
-            resource: row.item.resource,
-            uid: row.item.uid,
-          },
-          undefined,
-          {
-            status: actionFacts?.status,
-            unschedulable: actionFacts?.unschedulable,
-            portForwardAvailable: actionFacts?.portForwardAvailable,
-            hpaManaged:
-              actionFacts?.hpaManaged === true
-                ? true
-                : actionFacts?.hpaManaged === false
-                  ? false
-                  : null,
-            desiredReplicas: actionFacts?.desiredReplicas,
-          }
-        )
+        buildRequiredObjectReference(row.ref, undefined, {
+          status: actionFacts?.status,
+          unschedulable: actionFacts?.unschedulable,
+          portForwardAvailable: actionFacts?.portForwardAvailable,
+          hpaManaged:
+            actionFacts?.hpaManaged === true
+              ? true
+              : actionFacts?.hpaManaged === false
+                ? false
+                : null,
+          desiredReplicas: actionFacts?.desiredReplicas,
+        })
       );
     },
     [objectActions]
@@ -261,15 +235,7 @@ const BrowseView: React.FC<BrowseViewProps> = ({
 
   // Key extractor for the table
   const keyExtractor = useCallback(
-    (row: BrowseTableRow) =>
-      buildRequiredCanonicalObjectRowKey({
-        kind: row.item.kind,
-        name: row.item.name,
-        namespace: row.item.namespace,
-        clusterId: row.item.clusterId,
-        group: row.item.group,
-        version: row.item.version,
-      }),
+    (row: BrowseTableRow) => buildRequiredCanonicalObjectRowKey(row.ref),
     []
   );
 

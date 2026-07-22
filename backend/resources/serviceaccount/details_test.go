@@ -82,18 +82,6 @@ func TestManagerServiceAccountAggregatesRelations(t *testing.T) {
 	require.True(t, strings.Contains(details.Details, "Used by 1 pod"))
 }
 
-func TestServiceAccountsListError(t *testing.T) {
-	client := fake.NewClientset()
-	client.PrependReactor("list", "serviceaccounts", func(cgotesting.Action) (bool, runtime.Object, error) {
-		return true, nil, errors.New("sa-list")
-	})
-
-	manager := newService(client)
-	if _, err := manager.ServiceAccounts("default"); err == nil {
-		t.Fatalf("expected serviceaccounts list error")
-	}
-}
-
 func TestServiceAccountGetError(t *testing.T) {
 	client := fake.NewClientset()
 	client.PrependReactor("get", "serviceaccounts", func(cgotesting.Action) (bool, runtime.Object, error) {

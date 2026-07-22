@@ -8,12 +8,9 @@
 package pods
 
 import (
-	"context"
 	"fmt"
-	"sync"
 
 	"github.com/luxury-yacht/app/backend/internal/logsources"
-	"github.com/luxury-yacht/app/backend/internal/parallel"
 	"github.com/luxury-yacht/app/backend/resources/common"
 	"github.com/luxury-yacht/app/backend/resources/types"
 	corev1 "k8s.io/api/core/v1"
@@ -67,70 +64,6 @@ func (s *Service) fetchSinglePodFull(namespace, name string) (*types.PodDetailIn
 	}
 
 	return details, nil
-}
-
-// Helper to get multi-namespace pod metrics
-// Optimized version that batches metrics fetching
-func (s *Service) getMultiNamespacePodMetrics(pods []corev1.Pod) map[string]*metricsv1beta1.PodMetrics {
-	metrics := make(map[string]*metricsv1beta1.PodMetrics)
-
-	// Ensure metrics client is available
-	client := s.deps.MetricsClient
-	if client == nil {
-		config := s.deps.RestConfig
-		if config != nil {
-			metricsClient, err := metricsclient.NewForConfig(config)
-			if err != nil {
-				s.deps.Logger.Debug(fmt.Sprintf("Metrics client not available: %v", err), logsources.ResourceLoader)
-				return metrics
-			}
-			s.deps.SetMetricsClient(metricsClient)
-			s.deps.MetricsClient = metricsClient
-			client = metricsClient
-		} else {
-			return metrics
-		}
-	}
-
-	// Get unique namespaces
-	namespaces := make(map[string]bool)
-	for _, pod := range pods {
-		namespaces[pod.Namespace] = true
-	}
-
-	nsList := make([]string, 0, len(namespaces))
-	for ns := range namespaces {
-		nsList = append(nsList, ns)
-	}
-
-	var mu sync.Mutex
-
-	_ = parallel.ForEach(s.deps.Context, nsList, 4, func(ctx context.Context, ns string) error {
-		podMetricsList, err := client.MetricsV1beta1().PodMetricses(ns).List(ctx, metav1.ListOptions{})
-		if err != nil {
-			s.deps.Logger.Debug(fmt.Sprintf("Failed to fetch pod metrics for namespace %s: %v", ns, err), logsources.ResourceLoader)
-			return nil
-		}
-
-		local := make(map[string]*metricsv1beta1.PodMetrics, len(podMetricsList.Items))
-		for i := range podMetricsList.Items {
-			pod := &podMetricsList.Items[i]
-			local[pod.Name] = pod
-		}
-
-		if len(local) == 0 {
-			return nil
-		}
-
-		mu.Lock()
-		for name, metric := range local {
-			metrics[name] = metric
-		}
-		mu.Unlock()
-		return nil
-	})
-
-	return metrics
 }
 
 // Helper functions for simplified pod handling
@@ -478,12 +411,6 @@ func formatPodFactsReady(facts Facts) string {
 	return fmt.Sprintf("%d/%d", facts.ReadyContainers, facts.TotalContainers)
 }
 
-// getPodStatus returns the pod status similar to kubectl's display logic
-// It checks container states to provide more specific status information
-func getPodStatus(pod corev1.Pod) string {
-	return statusPresentation(&pod).Label
-}
-
 // getPodRestartCount calculates the total restart count across all containers
 func getPodRestartCount(pod corev1.Pod) int32 {
 	facts := BuildFacts(&pod)
@@ -684,55 +611,6 @@ func buildContainerDetails(container corev1.Container, statuses []corev1.Contain
 	return detail
 }
 
-// fetchPodsWithFilter fetches pods with the given filters
-func (s *Service) fetchPodsWithFilter(namespace string, listOptions metav1.ListOptions) ([]corev1.Pod, error) {
-	if namespace != "" {
-		podList, err := s.deps.KubernetesClient.CoreV1().Pods(namespace).List(s.deps.Context, listOptions)
-		if err != nil {
-			return nil, fmt.Errorf("failed to list pods: %v", err)
-		}
-		return podList.Items, nil
-	}
-
-	// Fetch from all namespaces
-	podList, err := s.deps.KubernetesClient.CoreV1().Pods("").List(s.deps.Context, listOptions)
-	if err != nil {
-		return nil, fmt.Errorf("failed to list pods: %v", err)
-	}
-	return podList.Items, nil
-}
-
-// buildMultiNamespaceRSMap builds ReplicaSet to Deployment mapping for multiple namespaces
-// Optimized version that batches ReplicaSet fetching
-func (s *Service) buildMultiNamespaceRSMap(pods []corev1.Pod) map[string]string {
-	// Get unique namespaces
-	namespaces := make(map[string]bool)
-	for _, pod := range pods {
-		namespaces[pod.Namespace] = true
-	}
-
-	// Build combined map - use ReplicaSet name as key since it's unique per namespace
-	rsToDeployment := make(map[string]string)
-	for ns := range namespaces {
-		rsList, err := s.deps.KubernetesClient.AppsV1().ReplicaSets(ns).List(s.deps.Context, metav1.ListOptions{})
-		if err != nil {
-			s.deps.Logger.Debug(fmt.Sprintf("Failed to fetch ReplicaSets for namespace %s: %v", ns, err), logsources.ResourceLoader)
-			continue
-		}
-
-		for _, rs := range rsList.Items {
-			for _, owner := range rs.OwnerReferences {
-				if owner.Controller != nil && *owner.Controller && owner.Kind == "Deployment" {
-					rsToDeployment[rs.Name] = owner.Name
-					break
-				}
-			}
-		}
-	}
-
-	return rsToDeployment
-}
-
 // CalculatePodResources aggregates CPU and memory metrics for a pod.
 func CalculatePodResources(pod corev1.Pod) (*resource.Quantity, *resource.Quantity, *resource.Quantity, *resource.Quantity) {
 	return calculatePodResources(pod)
@@ -753,11 +631,6 @@ func PodRestartCount(pod corev1.Pod) int32 {
 	return getPodRestartCount(pod)
 }
 
-// PodStatus returns a human-friendly status string mirroring kubectl logic.
-func PodStatus(pod corev1.Pod) string {
-	return getPodStatus(pod)
-}
-
 // GetPodMetricsForPods exposes selective pod metrics fetching for other packages.
 func (s *Service) GetPodMetricsForPods(namespace string, pods []corev1.Pod) map[string]*metricsv1beta1.PodMetrics {
 	return s.getPodMetricsForPods(namespace, pods)
@@ -766,11 +639,6 @@ func (s *Service) GetPodMetricsForPods(namespace string, pods []corev1.Pod) map[
 // BuildReplicaSetToDeploymentMap exposes replica set ownership lookups.
 func (s *Service) BuildReplicaSetToDeploymentMap(namespace string) map[string]string {
 	return s.buildReplicaSetToDeploymentMap(namespace)
-}
-
-// NodeIP returns the internal node IP for a pod's node if available.
-func (s *Service) NodeIP(nodeName string) string {
-	return s.getNodeIP(nodeName)
 }
 
 // SummarizePod converts a pod object and optional metrics into a PodSimpleInfo for list views.

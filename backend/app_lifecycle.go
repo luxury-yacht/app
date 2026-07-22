@@ -38,7 +38,7 @@ const beforeCloseSelectionFlushTimeout = 2 * time.Second
 func (a *App) Startup(ctx context.Context) {
 	a.Ctx = ctx
 	a.eventEmitter = runtimeEventsEmit
-	a.clusterLifecycle = newClusterLifecycle(func(clusterId string, state, previousState ClusterLifecycleState) {
+	lifecycle := newClusterLifecycle(func(clusterId string, state, previousState ClusterLifecycleState) {
 		// The wire payload is stringly (Wails flattens defined string types);
 		// the frontend re-closes the union at its ingestion boundary. An empty
 		// previousState means "no previous state" (first transition).
@@ -48,6 +48,8 @@ func (a *App) Startup(ctx context.Context) {
 			"previousState": string(previousState),
 		})
 	})
+	lifecycle.setSnapshotChangeObserver(a.markClusterWorkspaceChanged)
+	a.clusterLifecycle = lifecycle
 	a.logger.Info("Application startup initiated", logsources.App)
 
 	// Arm the SIGUSR1 goroutine-dump diagnostic (unix only): `pkill -USR1 luxury-yacht`

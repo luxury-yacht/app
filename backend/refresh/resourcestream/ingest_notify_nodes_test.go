@@ -9,6 +9,7 @@ import (
 	"github.com/luxury-yacht/app/backend/objectcatalog"
 	"github.com/luxury-yacht/app/backend/refresh/ingest"
 	"github.com/luxury-yacht/app/backend/refresh/snapshot"
+	"github.com/luxury-yacht/app/backend/resourcemodel"
 	"k8s.io/apimachinery/pkg/runtime/schema"
 )
 
@@ -31,7 +32,7 @@ func (s fakeNodeBundleSource) Rows(gvr schema.GroupVersionResource) []interface{
 
 func nodeBundle(name, uid, resourceVersion string) ingest.Bundle {
 	return ingest.Bundle{
-		Catalog: objectcatalog.Summary{Name: name, UID: uid, ResourceVersion: resourceVersion},
+		Catalog: objectcatalog.Summary{Ref: resourcemodel.ResourceRef{Name: name, UID: uid}, ResourceVersion: resourceVersion},
 	}
 }
 
@@ -48,7 +49,7 @@ func TestNodeNotifyCatalogSinkBroadcastsChangeSignal(t *testing.T) {
 	require.NoError(t, err)
 
 	sink := nodeNotifyCatalogSink{manager: manager}
-	sink.Upsert(objectcatalog.Summary{Name: "node-a", UID: "node-uid", ResourceVersion: "9"})
+	sink.Upsert(objectcatalog.Summary{Ref: resourcemodel.ResourceRef{Name: "node-a", UID: "node-uid"}, ResourceVersion: "9"})
 
 	update := requireNextUpdate(t, sub)
 	require.Equal(t, MessageTypeModified, update.Type)
@@ -58,7 +59,7 @@ func TestNodeNotifyCatalogSinkBroadcastsChangeSignal(t *testing.T) {
 	require.Equal(t, "node-uid", update.Ref.UID)
 	require.Equal(t, "9", update.ResourceVersion)
 
-	sink.Delete(objectcatalog.Summary{Name: "node-a", UID: "node-uid", ResourceVersion: "10"})
+	sink.Delete(objectcatalog.Summary{Ref: resourcemodel.ResourceRef{Name: "node-a", UID: "node-uid"}, ResourceVersion: "10"})
 	del := requireNextUpdate(t, sub)
 	require.Equal(t, MessageTypeDeleted, del.Type)
 	require.Equal(t, "node-a", del.Ref.Name)

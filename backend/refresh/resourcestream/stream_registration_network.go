@@ -11,10 +11,6 @@ import (
 // instead of a shared-informer event handler — identical to the pod/workload path. The plain
 // object→row Ingress/NetworkPolicy (also cut) and the Gateway-API kinds are registered from the
 // descriptor registry (registerDescriptorStreams + the generic ingest notify); see those.
-//
-// The typed handleService / handleEndpointSlice* handlers + serviceLister/sliceLister remain
-// for the unit tests that drive them directly with wired typed listers; production wires no
-// network listers (the kinds are cut).
 func (m *Manager) registerNetworkStreams(factory *informer.Factory, ingestManager *ingest.IngestManager) {
 	if factory.SharedInformerFactory() == nil {
 		return

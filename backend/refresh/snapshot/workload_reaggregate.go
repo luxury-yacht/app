@@ -39,7 +39,7 @@ func reaggregateWorkloadSummary(own WorkloadSummary, pods []streamrows.PodAggreg
 	resources := aggregateWorkloadPodResources(pods, usage)
 
 	summary := own
-	if workloadUsesPodReadyStatus(own.Kind) {
+	if workloadUsesPodReadyStatus(own.Ref.Kind) {
 		summary.Ready = reaggregateWorkloadReady(own.Ready, pods)
 	}
 	summary.Restarts = resources.Restarts

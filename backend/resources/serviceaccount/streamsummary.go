@@ -17,8 +17,8 @@ import (
 // BuildStreamSummary builds the namespace-rbac row for one ServiceAccount.
 func BuildStreamSummary(meta streamrows.ClusterMeta, sa *corev1.ServiceAccount) streamrows.RBACSummary {
 	if sa == nil {
-		return streamrows.RBACSummary{ClusterMeta: meta, Kind: "ServiceAccount"}
+		return streamrows.RBACSummary{}
 	}
 	details := DescribeSummary(BuildFacts(meta.ClusterID, sa, nil, resourcemodel.ResourceModelBuildOptions{}))
-	return streamrows.NewRBACSummary(meta, sa, "ServiceAccount", details)
+	return streamrows.NewRBACSummary(meta, Identity, sa, details)
 }

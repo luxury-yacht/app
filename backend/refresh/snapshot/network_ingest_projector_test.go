@@ -56,7 +56,7 @@ func TestNewServiceIngestProjectorBundleMatchesLivePaths(t *testing.T) {
 	}
 
 	// Catalog half.
-	catalogProject := objectcatalog.SummaryProjector(meta.ClusterID, meta.ClusterName, service.Identity)
+	catalogProject := objectcatalog.SummaryProjector(meta.ClusterID, service.Identity)
 	wantCatalog := catalogProject(svc).(objectcatalog.Summary)
 	gotCatalog, ok := bundle.Catalog.(objectcatalog.Summary)
 	if !ok {
@@ -127,7 +127,7 @@ func TestNewEndpointSliceIngestProjectorBundleMatchesLivePaths(t *testing.T) {
 		t.Fatalf("expected ready count 1 for the single ready endpoint, got %d", wantFact.ReadyEndpointCount)
 	}
 
-	catalogProject := objectcatalog.SummaryProjector(meta.ClusterID, meta.ClusterName, endpointslice.Identity)
+	catalogProject := objectcatalog.SummaryProjector(meta.ClusterID, endpointslice.Identity)
 	wantCatalog := catalogProject(slice).(objectcatalog.Summary)
 	gotCatalog, ok := bundle.Catalog.(objectcatalog.Summary)
 	if !ok {

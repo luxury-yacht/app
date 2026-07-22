@@ -148,7 +148,7 @@ func (b *ClusterCRDBuilder) Build(ctx context.Context, scope string) (*refresh.S
 	}
 
 	sort.Slice(entries, func(i, j int) bool {
-		return entries[i].Name < entries[j].Name
+		return entries[i].Ref.Name < entries[j].Ref.Name
 	})
 
 	resolved := resolveTypedSnapshotPageViaStore(

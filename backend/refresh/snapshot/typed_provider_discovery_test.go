@@ -90,10 +90,15 @@ func discoverTypedResourceDomains(t *testing.T) []typedDomainSource {
 				}
 				// The engine-backed resolveTypedSnapshotPageViaStore wraps both
 				// canonical envelope constructors, so it satisfies the same guarantee.
+				// buildTypedTableSnapshot is the shared typed-table domain skeleton,
+				// which routes through those same resolvers — proven by
+				// TestTypedTableDomainSkeletonUsesCanonicalEnvelope, so the delegation
+				// marker cannot rot.
 				if bodyCallsFunc(node.Body, "typedQueryEnvelope") ||
 					bodyCallsFunc(node.Body, "typedWindowEnvelope") ||
 					bodyCallsFunc(node.Body, "resolveTypedSnapshotPageViaStore") ||
-					bodyCallsFunc(node.Body, "resolveMaintainedDirect") {
+					bodyCallsFunc(node.Body, "resolveMaintainedDirect") ||
+					bodyCallsFunc(node.Body, "buildTypedTableSnapshot") {
 					usesHelper = true
 				}
 			case *ast.TypeSpec:
@@ -197,6 +202,33 @@ func TestEveryTypedResourceDomainEmbedsTheNormalizedEnvelope(t *testing.T) {
 		if !d.usesEnvelopeHelper {
 			t.Errorf("%s (%s): builder must construct the envelope via typedQueryEnvelope/typedWindowEnvelope; hand-rolling risks an incompletely-wired envelope", d.file, d.capabilityFunc)
 		}
+	}
+}
+
+// TestTypedTableDomainSkeletonUsesCanonicalEnvelope backs the
+// buildTypedTableSnapshot delegation marker accepted above: the shared skeleton
+// must itself construct envelopes through the canonical resolvers on both its
+// maintained-store and list branches. If the skeleton ever stops doing so, the
+// delegating domains' guarantee would silently vanish — this pins it.
+func TestTypedTableDomainSkeletonUsesCanonicalEnvelope(t *testing.T) {
+	fset := token.NewFileSet()
+	file, err := parser.ParseFile(fset, "typed_table_domain.go", nil, 0)
+	if err != nil {
+		t.Fatalf("parse typed_table_domain.go: %v", err)
+	}
+	usesMaintained := false
+	usesStore := false
+	ast.Inspect(file, func(n ast.Node) bool {
+		fn, ok := n.(*ast.FuncDecl)
+		if !ok || fn.Name.Name != "buildTypedTableSnapshot" {
+			return true
+		}
+		usesMaintained = bodyCallsFunc(fn.Body, "resolveMaintainedDirect")
+		usesStore = bodyCallsFunc(fn.Body, "resolveTypedSnapshotPageViaStore")
+		return false
+	})
+	if !usesMaintained || !usesStore {
+		t.Fatalf("buildTypedTableSnapshot must construct envelopes via resolveMaintainedDirect (got %v) and resolveTypedSnapshotPageViaStore (got %v)", usesMaintained, usesStore)
 	}
 }
 

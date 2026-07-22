@@ -6,7 +6,7 @@
  * - Renders tabs and their corresponding content components
  * - Uses ErrorBoundary to handle errors in each view
  * - Implements a fallback UI for view rendering errors
- * - Each view component is imported and rendered based on the active tab
+ * - Each view is declared once in NS_VIEWS; adding a tab is one entry there.
  */
 
 import BrowseView from '@modules/browse/components/BrowseView';
@@ -35,6 +35,25 @@ const ViewErrorFallback = ({ viewName, reset }: { viewName: string; reset: () =>
   </div>
 );
 
+// One entry per namespace tab: the error-boundary display name and the view
+// component (every view takes the namespace as its only prop).
+const NS_VIEWS: Partial<
+  Record<NamespaceViewType, { name: string; Component: React.ComponentType<{ namespace: string }> }>
+> = {
+  browse: { name: 'Browse', Component: BrowseView },
+  map: { name: 'Map', Component: NsViewMap },
+  workloads: { name: 'Workloads', Component: NsViewWorkloads },
+  config: { name: 'Config', Component: NsViewConfig },
+  network: { name: 'Network', Component: NsViewNetwork },
+  rbac: { name: 'RBAC', Component: NsViewRBAC },
+  storage: { name: 'Storage', Component: NsViewStorage },
+  autoscaling: { name: 'Autoscaling', Component: NsViewAutoscaling },
+  quotas: { name: 'Quotas', Component: NsViewQuotas },
+  custom: { name: 'Custom Resources', Component: NsViewCustom },
+  helm: { name: 'Helm', Component: NsViewHelm },
+  events: { name: 'Events', Component: NsViewEvents },
+};
+
 interface NamespaceResourcesViewsProps {
   namespace: string;
   activeTab: NamespaceViewType;
@@ -52,134 +71,21 @@ const NamespaceResourcesViews: React.FC<NamespaceResourcesViewsProps> = ({
   activeTab,
   onTabChange: _onTabChange,
 }) => {
-  const renderTabContent = () => {
-    switch (activeTab) {
-      case 'browse':
-        return (
-          <ErrorBoundary
-            scope="namespace-browse"
-            resetKeys={[namespace]}
-            fallback={(_, reset) => <ViewErrorFallback viewName="Browse" reset={reset} />}
-          >
-            <BrowseView namespace={namespace} />
-          </ErrorBoundary>
-        );
-      case 'map':
-        return (
-          <ErrorBoundary
-            scope="namespace-map"
-            resetKeys={[namespace]}
-            fallback={(_, reset) => <ViewErrorFallback viewName="Map" reset={reset} />}
-          >
-            <NsViewMap namespace={namespace} />
-          </ErrorBoundary>
-        );
-      case 'workloads':
-        return (
-          <ErrorBoundary
-            scope="namespace-workloads"
-            resetKeys={[namespace]}
-            fallback={(_, reset) => <ViewErrorFallback viewName="Workloads" reset={reset} />}
-          >
-            <NsViewWorkloads namespace={namespace} />
-          </ErrorBoundary>
-        );
-      case 'config':
-        return (
-          <ErrorBoundary
-            scope="namespace-config"
-            resetKeys={[namespace]}
-            fallback={(_, reset) => <ViewErrorFallback viewName="Config" reset={reset} />}
-          >
-            <NsViewConfig namespace={namespace} />
-          </ErrorBoundary>
-        );
-      case 'network':
-        return (
-          <ErrorBoundary
-            scope="namespace-network"
-            resetKeys={[namespace]}
-            fallback={(_, reset) => <ViewErrorFallback viewName="Network" reset={reset} />}
-          >
-            <NsViewNetwork namespace={namespace} />
-          </ErrorBoundary>
-        );
-      case 'rbac':
-        return (
-          <ErrorBoundary
-            scope="namespace-rbac"
-            resetKeys={[namespace]}
-            fallback={(_, reset) => <ViewErrorFallback viewName="RBAC" reset={reset} />}
-          >
-            <NsViewRBAC namespace={namespace} />
-          </ErrorBoundary>
-        );
-      case 'storage':
-        return (
-          <ErrorBoundary
-            scope="namespace-storage"
-            resetKeys={[namespace]}
-            fallback={(_, reset) => <ViewErrorFallback viewName="Storage" reset={reset} />}
-          >
-            <NsViewStorage namespace={namespace} />
-          </ErrorBoundary>
-        );
-      case 'autoscaling':
-        return (
-          <ErrorBoundary
-            scope="namespace-autoscaling"
-            resetKeys={[namespace]}
-            fallback={(_, reset) => <ViewErrorFallback viewName="Autoscaling" reset={reset} />}
-          >
-            <NsViewAutoscaling namespace={namespace} />
-          </ErrorBoundary>
-        );
-      case 'quotas':
-        return (
-          <ErrorBoundary
-            scope="namespace-quotas"
-            resetKeys={[namespace]}
-            fallback={(_, reset) => <ViewErrorFallback viewName="Quotas" reset={reset} />}
-          >
-            <NsViewQuotas namespace={namespace} />
-          </ErrorBoundary>
-        );
-      case 'custom':
-        return (
-          <ErrorBoundary
-            scope="namespace-custom"
-            resetKeys={[namespace]}
-            fallback={(_, reset) => <ViewErrorFallback viewName="Custom Resources" reset={reset} />}
-          >
-            <NsViewCustom namespace={namespace} />
-          </ErrorBoundary>
-        );
-      case 'helm':
-        return (
-          <ErrorBoundary
-            scope="namespace-helm"
-            resetKeys={[namespace]}
-            fallback={(_, reset) => <ViewErrorFallback viewName="Helm" reset={reset} />}
-          >
-            <NsViewHelm namespace={namespace} />
-          </ErrorBoundary>
-        );
-      case 'events':
-        return (
-          <ErrorBoundary
-            scope="namespace-events"
-            resetKeys={[namespace]}
-            fallback={(_, reset) => <ViewErrorFallback viewName="Events" reset={reset} />}
-          >
-            <NsViewEvents namespace={namespace} />
-          </ErrorBoundary>
-        );
-      default:
-        return null;
-    }
-  };
+  const view = NS_VIEWS[activeTab];
 
-  return <div className="view-content">{renderTabContent()}</div>;
+  return (
+    <div className="view-content">
+      {view ? (
+        <ErrorBoundary
+          scope={`namespace-${activeTab}`}
+          resetKeys={[namespace]}
+          fallback={(_, reset) => <ViewErrorFallback viewName={view.name} reset={reset} />}
+        >
+          <view.Component namespace={namespace} />
+        </ErrorBoundary>
+      ) : null}
+    </div>
+  );
 };
 
 export default React.memo(NamespaceResourcesViews);

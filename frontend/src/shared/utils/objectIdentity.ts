@@ -1,4 +1,3 @@
-import type { ResourceRef } from '@core/refresh/types';
 import { buildClusterScopedKey } from '@shared/components/tables/GridTable.utils';
 import {
   parseApiVersion,
@@ -49,11 +48,6 @@ export interface ResolvedObjectReference extends KubernetesObjectReference {
  */
 export interface ClusterObjectReference extends ResolvedObjectReference {
   clusterId: string;
-}
-
-export interface ResolvedSyntheticObjectReference extends Omit<ResourceRef, 'name'> {
-  name: string;
-  clusterName?: string;
 }
 
 export interface RelatedObjectReferenceInput extends ObjectIdentityInput {
@@ -179,36 +173,6 @@ export const buildRequiredRelatedObjectReference = <TExtras extends object = Rec
     options,
     extras
   );
-};
-
-export const buildSyntheticObjectReference = <TExtras extends object = Record<never, never>>(
-  input: ObjectIdentityInput,
-  extras?: TExtras
-): ResolvedSyntheticObjectReference & TExtras => {
-  const kind = normalizeRequired(input.kind, 'kind');
-  const name = normalizeRequired(input.name, 'name');
-  const normalizedKind = kind.toLowerCase();
-  const syntheticGVK =
-    normalizedKind === 'helmrelease'
-      ? { group: 'helm.sh', version: 'v3', kind: 'HelmRelease' }
-      : {
-          group: normalizeRequired(input.group, 'group'),
-          version: normalizeRequired(input.version, 'version'),
-          kind,
-        };
-
-  return {
-    group: syntheticGVK.group,
-    version: syntheticGVK.version,
-    kind: syntheticGVK.kind,
-    resource: normalizeOptional(input.resource),
-    namespace: normalizeOptional(input.namespace),
-    name,
-    uid: normalizeOptional(input.uid),
-    clusterId: normalizeRequired(input.clusterId, 'clusterId'),
-    clusterName: normalizeOptional(input.clusterName),
-    ...extras,
-  } as ResolvedSyntheticObjectReference & TExtras;
 };
 
 const normalizeIdentityField = (value: string | null | undefined): string => value?.trim() ?? '';

@@ -183,9 +183,7 @@ type NamespaceSnapshot struct {
 
 // NamespaceSummary provides high level namespace metadata.
 type NamespaceSummary struct {
-	ClusterMeta
 	Ref                        resourcemodel.ResourceRef `json:"ref"`
-	Name                       string                    `json:"name"`
 	Phase                      string                    `json:"phase"`
 	Status                     string                    `json:"status,omitempty"`
 	StatusState                string                    `json:"statusState,omitempty"`
@@ -436,9 +434,7 @@ func (b *NamespaceBuilder) Build(ctx context.Context, scope string) (*refresh.Sn
 		model := namespacepkg.BuildResourceModel(meta.ClusterID, ns, hasWorkloads, workloadsKnown, nil, nil)
 		facts := namespacepkg.BuildFacts(meta.ClusterID, ns, hasWorkloads, workloadsKnown, nil, nil, resourcemodel.ResourceModelBuildOptions{})
 		items = append(items, NamespaceSummary{
-			ClusterMeta:                meta,
 			Ref:                        model.Ref,
-			Name:                       model.Ref.Name,
 			Phase:                      model.Status.State,
 			Status:                     model.Status.Label,
 			StatusState:                model.Status.State,
@@ -715,8 +711,8 @@ func namespaceWorkloadRollupsFromIngest(ingest namespacePodIngestSource) namespa
 		DeploymentGVR, StatefulSetGVR, DaemonSetGVR, JobGVR, CronJobGVR,
 	} {
 		for _, row := range ingest.CatalogRows(gvr) {
-			if summary, ok := row.(objectcatalog.Summary); ok && summary.Namespace != "" {
-				rollups.namespaces[summary.Namespace] = struct{}{}
+			if summary, ok := row.(objectcatalog.Summary); ok && summary.Ref.Namespace != "" {
+				rollups.namespaces[summary.Ref.Namespace] = struct{}{}
 			}
 		}
 		for _, row := range ingest.ObjectMapRows(gvr) {

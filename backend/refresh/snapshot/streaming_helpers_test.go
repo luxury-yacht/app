@@ -4,10 +4,8 @@
 package snapshot
 
 import (
-	"context"
 	"encoding/json"
 	"testing"
-	"time"
 
 	appsv1 "k8s.io/api/apps/v1"
 	autoscalingv1 "k8s.io/api/autoscaling/v1"
@@ -15,7 +13,6 @@ import (
 	discoveryv1 "k8s.io/api/discovery/v1"
 	networkingv1 "k8s.io/api/networking/v1"
 	apiextensionsv1 "k8s.io/apiextensions-apiserver/pkg/apis/apiextensions/v1"
-	"k8s.io/apimachinery/pkg/api/resource"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/apis/meta/v1/unstructured"
 	v1 "k8s.io/client-go/listers/apps/v1"
@@ -42,7 +39,6 @@ import (
 	"github.com/luxury-yacht/app/backend/resources/referencegrant"
 	secretpkg "github.com/luxury-yacht/app/backend/resources/secret"
 	servicepkg "github.com/luxury-yacht/app/backend/resources/service"
-	"github.com/luxury-yacht/app/backend/testsupport"
 )
 
 func TestBuildPodSummaryResolvesDeploymentOwner(t *testing.T) {
@@ -86,178 +82,6 @@ func TestBuildPodSummaryResolvesDeploymentOwner(t *testing.T) {
 	require.Equal(t, "Deployment", summary.OwnerKind)
 	require.Equal(t, "web", summary.OwnerName)
 	require.True(t, summary.PortForwardAvailable)
-}
-
-func TestBuildWorkloadSummaryDeployment(t *testing.T) {
-	deployment := &appsv1.Deployment{
-		ObjectMeta: metav1.ObjectMeta{
-			Name:      "web",
-			Namespace: "default",
-		},
-		Spec: appsv1.DeploymentSpec{
-			Replicas: ptrInt32(3),
-			Template: corev1.PodTemplateSpec{
-				Spec: corev1.PodSpec{
-					Containers: []corev1.Container{{
-						Name:  "app",
-						Image: "example/app:1.0.0",
-						Ports: []corev1.ContainerPort{{ContainerPort: 8080}},
-					}},
-				},
-			},
-		},
-		Status: appsv1.DeploymentStatus{
-			ReadyReplicas: 2,
-		},
-	}
-
-	pod := &corev1.Pod{
-		ObjectMeta: metav1.ObjectMeta{
-			Name:      "web-abc",
-			Namespace: "default",
-			OwnerReferences: []metav1.OwnerReference{{
-				Kind:       "ReplicaSet",
-				Name:       "web-abc",
-				Controller: ptrBool(true),
-			}},
-		},
-		Spec: corev1.PodSpec{
-			Containers: []corev1.Container{{Name: "app"}},
-		},
-		Status: corev1.PodStatus{
-			Phase: corev1.PodRunning,
-			ContainerStatuses: []corev1.ContainerStatus{{
-				Name:  "app",
-				Ready: true,
-			}},
-		},
-	}
-
-	summary, err := BuildWorkloadSummary(ClusterMeta{ClusterID: "c1", ClusterName: "cluster"}, deployment, []*corev1.Pod{pod}, nil)
-	require.NoError(t, err)
-	require.Equal(t, "Deployment", summary.Kind)
-	require.Equal(t, "web", summary.Name)
-	require.Equal(t, "default", summary.Namespace)
-	require.Equal(t, "c1", summary.ClusterID)
-	require.Equal(t, "1/1", summary.Ready)
-	require.Equal(t, "Updating", summary.Status)
-	require.Equal(t, "2/3", summary.StatusState)
-	require.Equal(t, "warning", summary.StatusPresentation)
-	require.True(t, summary.PortForwardAvailable)
-	require.NotNil(t, summary.DesiredReplicas)
-	require.Equal(t, int32(3), *summary.DesiredReplicas)
-}
-
-func TestBuildWorkloadSummaryMatchesSnapshotHPAContext(t *testing.T) {
-	replicas := int32(3)
-	deployment := &appsv1.Deployment{
-		ObjectMeta: metav1.ObjectMeta{
-			Name:      "web",
-			Namespace: "default",
-		},
-		Spec: appsv1.DeploymentSpec{
-			Replicas: &replicas,
-			Template: corev1.PodTemplateSpec{
-				Spec: corev1.PodSpec{Containers: []corev1.Container{{Name: "app"}}},
-			},
-		},
-	}
-	hpa := &autoscalingv1.HorizontalPodAutoscaler{
-		ObjectMeta: metav1.ObjectMeta{Name: "web-hpa", Namespace: "default"},
-		Spec: autoscalingv1.HorizontalPodAutoscalerSpec{
-			MaxReplicas: 5,
-			ScaleTargetRef: autoscalingv1.CrossVersionObjectReference{
-				APIVersion: "apps/v1",
-				Kind:       "Deployment",
-				Name:       "web",
-			},
-		},
-	}
-	builder := &NamespaceWorkloadsBuilder{
-		workloadIngest:      newFakeWorkloadIngestSource(ClusterMeta{}, deployment),
-		includeDeployments:  true,
-		includeStatefulSets: true,
-		includeDaemonSets:   true,
-		includeJobs:         true,
-		includeCronJobs:     true,
-		hpaLister:           testsupport.NewHorizontalPodAutoscalerLister(t, hpa),
-	}
-	seedWorkloadsFromBuilderSource(builder, ClusterMeta{})
-
-	snap, err := builder.Build(context.Background(), "namespace:default")
-	require.NoError(t, err)
-	payload := snap.Payload.(NamespaceWorkloadsSnapshot)
-	require.Len(t, payload.Rows, 1)
-
-	streamRow, err := BuildWorkloadSummary(ClusterMeta{}, deployment, nil, nil, hpa)
-	require.NoError(t, err)
-	require.Equal(t, payload.Rows[0], streamRow)
-	require.NotNil(t, streamRow.HPAManaged)
-	require.True(t, *streamRow.HPAManaged)
-}
-
-func TestBuildWorkloadSummaryDeploymentReadyUsesOwnedPods(t *testing.T) {
-	deployment := &appsv1.Deployment{
-		ObjectMeta: metav1.ObjectMeta{
-			Name:      "web",
-			Namespace: "default",
-		},
-		Spec: appsv1.DeploymentSpec{
-			Replicas: ptrInt32(3),
-		},
-		Status: appsv1.DeploymentStatus{
-			ReadyReplicas: 3,
-			Replicas:      3,
-		},
-	}
-
-	oldPod := &corev1.Pod{
-		ObjectMeta: metav1.ObjectMeta{
-			Name:      "web-old-1",
-			Namespace: "default",
-			OwnerReferences: []metav1.OwnerReference{{
-				Kind:       "ReplicaSet",
-				Name:       "web-old",
-				Controller: ptrBool(true),
-			}},
-		},
-		Spec: corev1.PodSpec{
-			Containers: []corev1.Container{{Name: "app"}},
-		},
-		Status: corev1.PodStatus{
-			Phase: corev1.PodRunning,
-			ContainerStatuses: []corev1.ContainerStatus{{
-				Name:  "app",
-				Ready: true,
-			}},
-		},
-	}
-	newPod := &corev1.Pod{
-		ObjectMeta: metav1.ObjectMeta{
-			Name:      "web-new-1",
-			Namespace: "default",
-			OwnerReferences: []metav1.OwnerReference{{
-				Kind:       "ReplicaSet",
-				Name:       "web-new",
-				Controller: ptrBool(true),
-			}},
-		},
-		Spec: corev1.PodSpec{
-			Containers: []corev1.Container{{Name: "app"}},
-		},
-		Status: corev1.PodStatus{
-			Phase: corev1.PodPending,
-			ContainerStatuses: []corev1.ContainerStatus{{
-				Name:  "app",
-				Ready: false,
-			}},
-		},
-	}
-
-	summary, err := BuildWorkloadSummary(ClusterMeta{ClusterID: "c1", ClusterName: "cluster"}, deployment, []*corev1.Pod{oldPod, newPod}, nil)
-	require.NoError(t, err)
-	require.Equal(t, "1/2", summary.Ready)
-	require.Equal(t, "3/3", summary.StatusState)
 }
 
 func TestBuildPodSummaryMarksNoForwardablePorts(t *testing.T) {
@@ -312,7 +136,7 @@ func TestBuildConfigSummariesUseSharedConfigFacts(t *testing.T) {
 		BinaryData: map[string][]byte{"cert.der": []byte("cert")},
 	}
 	configMapSummary := configmap.BuildStreamSummary(ClusterMeta{ClusterID: "c1", ClusterName: "cluster"}, configMap)
-	require.Equal(t, "ConfigMap", configMapSummary.Kind)
+	require.Equal(t, "ConfigMap", configMapSummary.Ref.Kind)
 	require.Equal(t, "CM", configMapSummary.TypeAlias)
 	require.Equal(t, 2, configMapSummary.Data)
 
@@ -323,7 +147,7 @@ func TestBuildConfigSummariesUseSharedConfigFacts(t *testing.T) {
 		StringData: map[string]string{"write-only": "not-returned-by-api"},
 	}
 	secretSummary := secretpkg.BuildStreamSummary(ClusterMeta{ClusterID: "c1", ClusterName: "cluster"}, secret)
-	require.Equal(t, "Secret", secretSummary.Kind)
+	require.Equal(t, "Secret", secretSummary.Ref.Kind)
 	require.Equal(t, "TLS", secretSummary.TypeAlias)
 	require.Equal(t, 1, secretSummary.Data)
 }
@@ -356,12 +180,12 @@ func TestBuildNetworkSummariesUseSharedNetworkFacts(t *testing.T) {
 	}
 
 	serviceSummary := servicepkg.BuildStreamSummary(meta, service, []*discoveryv1.EndpointSlice{slice})
-	require.Equal(t, "Service", serviceSummary.Kind)
-	require.Equal(t, "api", serviceSummary.Name)
+	require.Equal(t, "Service", serviceSummary.Ref.Kind)
+	require.Equal(t, "api", serviceSummary.Ref.Name)
 	require.Equal(t, "Type: ClusterIP, ClusterIP: 10.0.0.10, Ports: 443/TCP, Addresses: 1", serviceSummary.Details)
 
 	sliceSummary := endpointslice.BuildStreamSummary(meta, slice)
-	require.Equal(t, "EndpointSlice", sliceSummary.Kind)
+	require.Equal(t, "EndpointSlice", sliceSummary.Ref.Kind)
 	require.Equal(t, "Slices: 1, Ready addresses: 1", sliceSummary.Details)
 
 	ingress := &networkingv1.Ingress{
@@ -372,7 +196,7 @@ func TestBuildNetworkSummariesUseSharedNetworkFacts(t *testing.T) {
 		},
 	}
 	ingressSummary := ingresspkg.BuildStreamSummary(meta, ingress)
-	require.Equal(t, "Ingress", ingressSummary.Kind)
+	require.Equal(t, "Ingress", ingressSummary.Ref.Kind)
 	require.Equal(t, "Class: nginx, Hosts: web.example.com, Rules: 1", ingressSummary.Details)
 
 	policy := &networkingv1.NetworkPolicy{
@@ -382,7 +206,7 @@ func TestBuildNetworkSummariesUseSharedNetworkFacts(t *testing.T) {
 		},
 	}
 	policySummary := networkpolicy.BuildStreamSummary(meta, policy)
-	require.Equal(t, "NetworkPolicy", policySummary.Kind)
+	require.Equal(t, "NetworkPolicy", policySummary.Ref.Kind)
 	require.Equal(t, "Policy types: Ingress,Egress", policySummary.Details)
 }
 
@@ -396,8 +220,8 @@ func TestBuildClusterIngressClassSummaryUsesSharedNetworkFacts(t *testing.T) {
 	}
 
 	summary := ingressclass.BuildStreamSummary(ClusterMeta{ClusterID: "c1", ClusterName: "cluster"}, ingressClass)
-	require.Equal(t, "IngressClass", summary.Kind)
-	require.Equal(t, "nginx", summary.Name)
+	require.Equal(t, "IngressClass", summary.Ref.Kind)
+	require.Equal(t, "nginx", summary.Ref.Name)
 	require.Equal(t, "k8s.io/ingress-nginx", summary.Details)
 	require.True(t, summary.IsDefault)
 }
@@ -412,7 +236,7 @@ func TestBuildGatewayAPISummariesUseSharedGatewayFacts(t *testing.T) {
 		},
 	}
 	gatewaySummary := gatewaypkg.BuildStreamSummary(meta, gateway)
-	require.Equal(t, "Gateway", gatewaySummary.Kind)
+	require.Equal(t, "Gateway", gatewaySummary.Ref.Kind)
 	require.Equal(t, "Class: public, 1 listener(s)", gatewaySummary.Details)
 
 	route := &gatewayv1.HTTPRoute{
@@ -424,7 +248,7 @@ func TestBuildGatewayAPISummariesUseSharedGatewayFacts(t *testing.T) {
 		},
 	}
 	routeSummary := httproute.BuildStreamSummary(meta, route)
-	require.Equal(t, "HTTPRoute", routeSummary.Kind)
+	require.Equal(t, "HTTPRoute", routeSummary.Ref.Kind)
 	require.Equal(t, "1 rule(s), 1 parent(s), 1 hostname(s)", routeSummary.Details)
 
 	listenerSet := &gatewayv1.ListenerSet{
@@ -435,7 +259,7 @@ func TestBuildGatewayAPISummariesUseSharedGatewayFacts(t *testing.T) {
 		},
 	}
 	listenerSetSummary := listenerset.BuildStreamSummary(meta, listenerSet)
-	require.Equal(t, "ListenerSet", listenerSetSummary.Kind)
+	require.Equal(t, "ListenerSet", listenerSetSummary.Ref.Kind)
 	require.Equal(t, "Parent: edge, 1 listener(s)", listenerSetSummary.Details)
 
 	grant := &gatewayv1.ReferenceGrant{
@@ -446,7 +270,7 @@ func TestBuildGatewayAPISummariesUseSharedGatewayFacts(t *testing.T) {
 		},
 	}
 	grantSummary := referencegrant.BuildStreamSummary(meta, grant)
-	require.Equal(t, "ReferenceGrant", grantSummary.Kind)
+	require.Equal(t, "ReferenceGrant", grantSummary.Ref.Kind)
 	require.Equal(t, "1 from, 1 to", grantSummary.Details)
 
 	policy := &gatewayv1.BackendTLSPolicy{
@@ -456,7 +280,7 @@ func TestBuildGatewayAPISummariesUseSharedGatewayFacts(t *testing.T) {
 		}}},
 	}
 	policySummary := backendtlspolicy.BuildStreamSummary(meta, policy)
-	require.Equal(t, "BackendTLSPolicy", policySummary.Kind)
+	require.Equal(t, "BackendTLSPolicy", policySummary.Ref.Kind)
 	require.Equal(t, "1 target(s)", policySummary.Details)
 
 	gatewayClass := &gatewayv1.GatewayClass{
@@ -464,45 +288,8 @@ func TestBuildGatewayAPISummariesUseSharedGatewayFacts(t *testing.T) {
 		Spec:       gatewayv1.GatewayClassSpec{ControllerName: "example.com/controller"},
 	}
 	classSummary := gatewayclass.BuildStreamSummary(meta, gatewayClass)
-	require.Equal(t, "GatewayClass", classSummary.Kind)
+	require.Equal(t, "GatewayClass", classSummary.Ref.Kind)
 	require.Equal(t, "example.com/controller", classSummary.Details)
-}
-
-func TestBuildNodeSummary(t *testing.T) {
-	node := &corev1.Node{
-		ObjectMeta: metav1.ObjectMeta{
-			Name:              "node-1",
-			CreationTimestamp: metav1.NewTime(time.UnixMilli(1_700_000_000_000)),
-		},
-		Spec: corev1.NodeSpec{
-			Unschedulable: true,
-		},
-		Status: corev1.NodeStatus{
-			Conditions: []corev1.NodeCondition{{
-				Type:   corev1.NodeReady,
-				Status: corev1.ConditionTrue,
-			}},
-			Capacity: corev1.ResourceList{
-				corev1.ResourceCPU:    resource.MustParse("4"),
-				corev1.ResourceMemory: resource.MustParse("8Gi"),
-				corev1.ResourcePods:   resource.MustParse("110"),
-			},
-			Allocatable: corev1.ResourceList{
-				corev1.ResourceCPU:    resource.MustParse("4"),
-				corev1.ResourceMemory: resource.MustParse("8Gi"),
-				corev1.ResourcePods:   resource.MustParse("110"),
-			},
-		},
-	}
-
-	summary, err := BuildNodeSummary(ClusterMeta{ClusterID: "c1", ClusterName: "cluster"}, node, nil, nil, nil)
-	require.NoError(t, err)
-	require.Equal(t, "node-1", summary.Name)
-	require.Equal(t, "c1", summary.ClusterID)
-	require.Equal(t, "Ready (Cordoned)", summary.Status)
-	require.Equal(t, "True", summary.StatusState)
-	require.Equal(t, "cordoned", summary.StatusPresentation)
-	require.Equal(t, int64(1_700_000_000_000), summary.AgeTimestamp)
 }
 
 func ptrBool(value bool) *bool {
@@ -553,10 +340,9 @@ func TestBuildClusterCRDSummaryPopulatesAllFields(t *testing.T) {
 	meta := ClusterMeta{ClusterID: "c1", ClusterName: "cluster"}
 	row := apiextensions.BuildStreamSummary(meta, crd)
 
-	require.Equal(t, "c1", row.ClusterID)
-	require.Equal(t, "cluster", row.ClusterName)
-	require.Equal(t, "CustomResourceDefinition", row.Kind)
-	require.Equal(t, crd.Name, row.Name)
+	require.Equal(t, "c1", row.Ref.ClusterID)
+	require.Equal(t, "CustomResourceDefinition", row.Ref.Kind)
+	require.Equal(t, crd.Name, row.Ref.Name)
 	require.Equal(t, "rds.services.k8s.aws", row.Group)
 	require.Equal(t, "Namespaced", row.Scope)
 	require.Equal(t, "CRD", row.TypeAlias)
@@ -573,8 +359,8 @@ func TestBuildClusterCRDSummaryPopulatesAllFields(t *testing.T) {
 // warmup or delete events).
 func TestBuildClusterCRDSummaryNilCRDIsSafe(t *testing.T) {
 	row := apiextensions.BuildStreamSummary(ClusterMeta{ClusterID: "c1"}, nil)
-	require.Equal(t, "c1", row.ClusterID)
-	require.Equal(t, "CustomResourceDefinition", row.Kind)
+	require.Equal(t, "c1", row.Ref.ClusterID)
+	require.Equal(t, "CustomResourceDefinition", row.Ref.Kind)
 	require.Empty(t, row.StorageVersion)
 	require.Equal(t, 0, row.ExtraServedVersionCount)
 }
@@ -613,10 +399,10 @@ func TestBuildHPASummaryPopulatesTargetAPIVersion(t *testing.T) {
 
 	row := hpapkg.BuildStreamSummary(ClusterMeta{ClusterID: "c1", ClusterName: "cluster"}, hpa)
 
-	require.Equal(t, "c1", row.ClusterID)
-	require.Equal(t, "HorizontalPodAutoscaler", row.Kind)
-	require.Equal(t, "rollout-hpa", row.Name)
-	require.Equal(t, "prod", row.Namespace)
+	require.Equal(t, "c1", row.Ref.ClusterID)
+	require.Equal(t, "HorizontalPodAutoscaler", row.Ref.Kind)
+	require.Equal(t, "rollout-hpa", row.Ref.Name)
+	require.Equal(t, "prod", row.Ref.Namespace)
 	require.Equal(t, "Rollout/canary", row.Target)
 	// The field that the streaming path used to drop. Asserting it
 	// explicitly catches any future drift of the HPA row builder.
@@ -630,8 +416,8 @@ func TestBuildHPASummaryPopulatesTargetAPIVersion(t *testing.T) {
 // panic on a nil HPA.
 func TestBuildHPASummaryNilHPAIsSafe(t *testing.T) {
 	row := hpapkg.BuildStreamSummary(ClusterMeta{ClusterID: "c1"}, nil)
-	require.Equal(t, "c1", row.ClusterID)
-	require.Equal(t, "HorizontalPodAutoscaler", row.Kind)
+	require.Equal(t, "c1", row.Ref.ClusterID)
+	require.Equal(t, "HorizontalPodAutoscaler", row.Ref.Kind)
 	require.Empty(t, row.TargetAPIVersion)
 }
 
@@ -653,11 +439,12 @@ func TestBuildNamespaceCustomSummaryFallsBackToDefaultNamespace(t *testing.T) {
 		resourceWithNamespace,
 		"example.com",
 		"v1",
+		"foos",
 		"Foo",
 		"foos.example.com",
 		"fallback-ns",
 	)
-	require.Equal(t, "team-a", row.Namespace, "resource's own namespace wins over fallback")
+	require.Equal(t, "team-a", row.Ref.Namespace, "resource's own namespace wins over fallback")
 	require.Equal(t, "foos.example.com", row.CRDName, "CRDName threads through verbatim")
 
 	resourceWithoutNamespace := &unstructured.Unstructured{}
@@ -670,11 +457,12 @@ func TestBuildNamespaceCustomSummaryFallsBackToDefaultNamespace(t *testing.T) {
 		resourceWithoutNamespace,
 		"example.com",
 		"v1",
+		"foos",
 		"Foo",
 		"foos.example.com",
 		"fallback-ns",
 	)
-	require.Equal(t, "fallback-ns", row.Namespace, "empty namespace falls back to default")
+	require.Equal(t, "fallback-ns", row.Ref.Namespace, "empty namespace falls back to default")
 }
 
 // TestBuildNamespaceCustomSummaryNilResourceIsSafe ensures the streaming
@@ -685,14 +473,15 @@ func TestBuildNamespaceCustomSummaryNilResourceIsSafe(t *testing.T) {
 		nil,
 		"example.com",
 		"v1",
+		"foos",
 		"Foo",
 		"foos.example.com",
 		"fallback-ns",
 	)
-	require.Equal(t, "c1", row.ClusterID)
-	require.Equal(t, "Foo", row.Kind)
-	require.Equal(t, "example.com", row.Group)
-	require.Equal(t, "v1", row.Version)
+	require.Equal(t, "c1", row.Ref.ClusterID)
+	require.Equal(t, "Foo", row.Ref.Kind)
+	require.Equal(t, "example.com", row.Ref.Group)
+	require.Equal(t, "v1", row.Ref.Version)
 	require.Equal(t, "foos.example.com", row.CRDName)
 }
 
@@ -702,6 +491,7 @@ func TestBuildNamespaceCustomSummaryWireIdentityUsesGroupVersion(t *testing.T) {
 		nil,
 		"example.com",
 		"v1",
+		"foos",
 		"Foo",
 		"foos.example.com",
 		"fallback-ns",
@@ -711,8 +501,12 @@ func TestBuildNamespaceCustomSummaryWireIdentityUsesGroupVersion(t *testing.T) {
 
 	var fields map[string]any
 	require.NoError(t, json.Unmarshal(payload, &fields))
-	require.Equal(t, "example.com", fields["group"])
-	require.Equal(t, "v1", fields["version"])
+	ref, ok := fields["ref"].(map[string]any)
+	require.True(t, ok)
+	require.Equal(t, "example.com", ref["group"])
+	require.Equal(t, "v1", ref["version"])
+	require.NotContains(t, fields, "group")
+	require.NotContains(t, fields, "version")
 	require.NotContains(t, fields, "apiGroup")
 	require.NotContains(t, fields, "apiVersion")
 }
@@ -736,14 +530,15 @@ func TestBuildClusterCustomSummaryThreadsCRDName(t *testing.T) {
 		resource,
 		"rds.services.k8s.aws",
 		"v1alpha1",
+		"dbclusters",
 		"DBCluster",
 		"dbclusters.rds.services.k8s.aws",
 	)
-	require.Equal(t, "c1", row.ClusterID)
-	require.Equal(t, "DBCluster", row.Kind)
-	require.Equal(t, "primary", row.Name)
-	require.Equal(t, "rds.services.k8s.aws", row.Group)
-	require.Equal(t, "v1alpha1", row.Version)
+	require.Equal(t, "c1", row.Ref.ClusterID)
+	require.Equal(t, "DBCluster", row.Ref.Kind)
+	require.Equal(t, "primary", row.Ref.Name)
+	require.Equal(t, "rds.services.k8s.aws", row.Ref.Group)
+	require.Equal(t, "v1alpha1", row.Ref.Version)
 	require.Equal(t, "dbclusters.rds.services.k8s.aws", row.CRDName)
 	require.Equal(t, "Unknown", row.Status)
 	require.Equal(t, "unknown", row.StatusState)
@@ -758,13 +553,14 @@ func TestBuildClusterCustomSummaryNilResourceIsSafe(t *testing.T) {
 		nil,
 		"rds.services.k8s.aws",
 		"v1alpha1",
+		"dbclusters",
 		"DBCluster",
 		"dbclusters.rds.services.k8s.aws",
 	)
-	require.Equal(t, "c1", row.ClusterID)
-	require.Equal(t, "DBCluster", row.Kind)
-	require.Equal(t, "rds.services.k8s.aws", row.Group)
-	require.Equal(t, "v1alpha1", row.Version)
+	require.Equal(t, "c1", row.Ref.ClusterID)
+	require.Equal(t, "DBCluster", row.Ref.Kind)
+	require.Equal(t, "rds.services.k8s.aws", row.Ref.Group)
+	require.Equal(t, "v1alpha1", row.Ref.Version)
 	require.Equal(t, "dbclusters.rds.services.k8s.aws", row.CRDName)
 }
 
@@ -787,6 +583,7 @@ func TestBuildNamespaceCustomSummaryThreadsCRDName(t *testing.T) {
 		resource,
 		"rds.services.k8s.aws",
 		"v1alpha1",
+		"dbinstances",
 		"DBInstance",
 		"dbinstances.rds.services.k8s.aws",
 		"data",
