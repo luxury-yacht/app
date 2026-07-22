@@ -6,3 +6,4 @@
 ### Fixed
 
 - Dragging a selected object in the Object Map now properly moves the object instead of panning the rest of the map.
+- Objects in the Object Map no longer collapse into tiny dots when zoomed far out. Cards keep their shape and scale naturally at every zoom level.

@@ -408,13 +408,15 @@ describe('objectMapG6Data', () => {
     );
   });
 
-  it('maps zoom levels to card detail levels', () => {
+  it('maps zoom levels to card detail levels and never drops the card shape', () => {
     expect(objectMapG6CardDetailLevelForZoom(1)).toBe('full');
     expect(objectMapG6CardDetailLevelForZoom(0.75)).toBe('full');
     expect(objectMapG6CardDetailLevelForZoom(0.63)).toBe('compact');
     expect(objectMapG6CardDetailLevelForZoom(0.45)).toBe('compact');
     expect(objectMapG6CardDetailLevelForZoom(0.3)).toBe('minimal');
-    expect(objectMapG6CardDetailLevelForZoom(0.19)).toBe('dot');
+    expect(objectMapG6CardDetailLevelForZoom(0.19)).toBe('minimal');
+    expect(objectMapG6CardDetailLevelForZoom(0.05)).toBe('minimal');
+    expect(objectMapG6CardDetailLevelForZoom(0.01)).toBe('minimal');
   });
 
   it('passes the requested card detail level to G6 nodes', () => {
