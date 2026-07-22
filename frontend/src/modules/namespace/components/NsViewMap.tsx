@@ -10,10 +10,7 @@ import './NsViewMap.css';
 import { useKubeconfig } from '@modules/kubernetes/config/KubeconfigContext';
 import { ALL_NAMESPACES_SCOPE, isAllNamespaces } from '@modules/namespace/constants';
 import { useNamespace } from '@modules/namespace/contexts/NamespaceContext';
-import {
-  isMapSnapshotLoading,
-  isMapSnapshotRefreshing,
-} from '@modules/object-map/mapSnapshotStatus';
+import { isMapSnapshotLoading } from '@modules/object-map/mapSnapshotStatus';
 import ObjectMap from '@modules/object-map/ObjectMap';
 import { buildResolvedFromMapRef } from '@modules/object-map/objectMapNavigation';
 import {
@@ -61,27 +58,24 @@ const NsViewMap: React.FC<NsViewMapProps> = ({ namespace }) => {
     };
   }, [mapScope]);
 
-  const fetchMap = useCallback(
-    (reason: 'startup' | 'user' = 'startup') => {
-      if (!mapScope) {
-        return;
-      }
-      void requestRefreshDomain({
-        domain: 'object-map',
-        scope: mapScope,
-        reason,
-      }).catch((error) => {
-        errorHandler.handle(error instanceof Error ? error : new Error(String(error)), {
-          source: 'namespace-map-fetch',
-        });
+  const fetchMap = useCallback(() => {
+    if (!mapScope) {
+      return;
+    }
+    void requestRefreshDomain({
+      domain: 'object-map',
+      scope: mapScope,
+      reason: 'startup',
+    }).catch((error) => {
+      errorHandler.handle(error instanceof Error ? error : new Error(String(error)), {
+        source: 'namespace-map-fetch',
       });
-    },
-    [mapScope]
-  );
+    });
+  }, [mapScope]);
 
   useEffect(() => {
     if (mapScope) {
-      fetchMap('startup');
+      fetchMap();
     }
   }, [fetchMap, mapScope]);
 
@@ -117,7 +111,6 @@ const NsViewMap: React.FC<NsViewMapProps> = ({ namespace }) => {
 
   const payload = snapshot.data as ObjectMapSnapshotPayload | null;
   const loading = isMapSnapshotLoading(snapshot.status) && !payload;
-  const refreshing = isMapSnapshotRefreshing(snapshot.status) && snapshot.isManual === true;
 
   if (namespace === ALL_NAMESPACES_SCOPE) {
     return (
@@ -139,8 +132,6 @@ const NsViewMap: React.FC<NsViewMapProps> = ({ namespace }) => {
         {!!payload && (
           <ObjectMap
             payload={payload}
-            onRefresh={() => fetchMap('user')}
-            isRefreshing={refreshing}
             onOpenPanel={handleOpenPanel}
             onNavigateView={handleNavigateView}
             onOpenObjectMap={handleOpenObjectMap}

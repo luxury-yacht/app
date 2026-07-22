@@ -12,6 +12,7 @@ import {
   createObjectMapNodeGestureState,
   endObjectMapNodeGesture,
   OBJECT_MAP_NODE_DRAG_THRESHOLD_PX,
+  objectMapActiveDragNodeId,
   updateObjectMapNodeGesture,
 } from './objectMapNodeGesture';
 
@@ -126,5 +127,66 @@ describe('objectMapNodeGesture', () => {
       false
     );
     expect(consumeObjectMapSuppressedClick(state, 'deploy')).toBe(false);
+  });
+});
+
+describe('objectMapActiveDragNodeId', () => {
+  it('returns null when no gesture is active', () => {
+    expect(objectMapActiveDragNodeId(createObjectMapNodeGestureState())).toBeNull();
+  });
+
+  it('returns null while the pointer is down but below the drag threshold', () => {
+    const state = createObjectMapNodeGestureState();
+
+    beginObjectMapNodeGesture(state, {
+      pointerId: 1,
+      nodeId: 'deploy',
+      clientX: 10,
+      clientY: 10,
+    });
+    updateObjectMapNodeGesture(state, {
+      pointerId: 1,
+      clientX: 10 + OBJECT_MAP_NODE_DRAG_THRESHOLD_PX - 1,
+      clientY: 10,
+    });
+
+    expect(objectMapActiveDragNodeId(state)).toBeNull();
+  });
+
+  it('returns the dragged node id once the drag threshold is crossed', () => {
+    const state = createObjectMapNodeGestureState();
+
+    beginObjectMapNodeGesture(state, {
+      pointerId: 1,
+      nodeId: 'deploy',
+      clientX: 10,
+      clientY: 10,
+    });
+    updateObjectMapNodeGesture(state, {
+      pointerId: 1,
+      clientX: 10 + OBJECT_MAP_NODE_DRAG_THRESHOLD_PX,
+      clientY: 10,
+    });
+
+    expect(objectMapActiveDragNodeId(state)).toBe('deploy');
+  });
+
+  it('returns null after the gesture ends', () => {
+    const state = createObjectMapNodeGestureState();
+
+    beginObjectMapNodeGesture(state, {
+      pointerId: 1,
+      nodeId: 'deploy',
+      clientX: 10,
+      clientY: 10,
+    });
+    updateObjectMapNodeGesture(state, {
+      pointerId: 1,
+      clientX: 40,
+      clientY: 10,
+    });
+    endObjectMapNodeGesture(state, 1);
+
+    expect(objectMapActiveDragNodeId(state)).toBeNull();
   });
 });

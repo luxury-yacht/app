@@ -31,6 +31,7 @@ import { isObjectMapZoomWheelEvent, objectMapWheelZoomRatio } from './objectMapG
 import type { ObjectMapLayout, PositionedEdge } from './objectMapLayout';
 import type { ObjectMapNodeGestureState } from './objectMapNodeGesture';
 import type { ObjectMapHoverEdge, ObjectMapSelectionState } from './objectMapRendererTypes';
+import { isObjectMapEdgeDimmedBySelection } from './objectMapSelection';
 
 export interface ObjectMapG6EventHandlers extends ObjectMapG6NodeInteractionHandlers {
   onClearHoverEdge: () => void;
@@ -62,8 +63,11 @@ const setConnectionHoverState = (
   if (graph.destroyed) {
     return;
   }
+  // Edges dimmed by the active selection get no hover highlight (or tooltip);
+  // they stay background noise until the selection changes or clears.
+  const showHover = hovered && !isObjectMapEdgeDimmedBySelection(selectionState, edge.id);
   const states: Record<string, string[]> = {
-    [edge.id]: hovered
+    [edge.id]: showHover
       ? [...objectMapG6EdgeState(edge, selectionState), 'hovered']
       : objectMapG6EdgeState(edge, selectionState),
   };
@@ -73,7 +77,7 @@ const setConnectionHoverState = (
       return;
     }
     const nodeStates = objectMapG6NodeState(node, selectionState);
-    states[nodeId] = hovered ? [...nodeStates, 'edgeHovered'] : nodeStates;
+    states[nodeId] = showHover ? [...nodeStates, 'edgeHovered'] : nodeStates;
   });
   void graph.setElementState(states, false).catch((error: unknown) => {
     if (!graph.destroyed) {
@@ -200,13 +204,21 @@ export const bindObjectMapG6Events = (options: ObjectMapG6EventBindingOptions): 
       }
     }
     setConnectionHoverState(graph, layoutRef.current, selectionStateRef.current, edge, true);
-    emitConnectionHover(edge, event, options);
+    if (!isObjectMapEdgeDimmedBySelection(selectionStateRef.current, edge.id)) {
+      emitConnectionHover(edge, event, options);
+    }
   });
 
   graph.on(EdgeEvent.POINTER_MOVE, (rawEvent) => {
     const event = rawEvent as ObjectMapG6ElementPointerEvent;
     const edge = findObjectMapG6Edge(layoutRef.current, event.target.id);
     if (!edge || hoveredEdgeIdRef.current !== edge.id) {
+      return;
+    }
+    // Clearing (not just skipping) also removes a tooltip that was already
+    // visible when a selection activated mid-hover and made this edge dimmed.
+    if (isObjectMapEdgeDimmedBySelection(selectionStateRef.current, edge.id)) {
+      handlersRef.current.onClearHoverEdge();
       return;
     }
     emitConnectionHover(edge, event, options);

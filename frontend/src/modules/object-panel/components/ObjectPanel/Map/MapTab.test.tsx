@@ -60,9 +60,7 @@ vi.mock('@/utils/errorHandler', () => ({
 }));
 
 vi.mock('@modules/object-map/ObjectMap', () => ({
-  default: ({ isRefreshing }: { isRefreshing?: boolean }) => (
-    <div data-testid="object-map" data-refreshing={String(isRefreshing)} />
-  ),
+  default: () => <div data-testid="object-map" />,
 }));
 
 type SnapshotStatus = 'idle' | 'loading' | 'ready' | 'updating' | 'initialising' | 'error';
@@ -220,24 +218,7 @@ describe('MapTab', () => {
     await unmount();
   });
 
-  it('treats manual updating snapshots as an active refresh when cached map data exists', async () => {
-    snapshotState.current = {
-      status: 'updating',
-      data: mapPayload,
-      error: null,
-      isManual: true,
-    };
-
-    const { container, unmount } = await renderMapTab();
-
-    expect(
-      container.querySelector('[data-testid="object-map"]')?.getAttribute('data-refreshing')
-    ).toBe('true');
-
-    await unmount();
-  });
-
-  it('does not show map refresh activity for automatic background updates', async () => {
+  it('keeps rendering cached map data while a background update runs', async () => {
     snapshotState.current = {
       status: 'updating',
       data: mapPayload,
@@ -247,9 +228,8 @@ describe('MapTab', () => {
 
     const { container, unmount } = await renderMapTab();
 
-    expect(
-      container.querySelector('[data-testid="object-map"]')?.getAttribute('data-refreshing')
-    ).toBe('false');
+    expect(container.querySelector('[data-testid="object-map"]')).toBeTruthy();
+    expect(container.textContent).not.toContain('Loading object map');
 
     await unmount();
   });

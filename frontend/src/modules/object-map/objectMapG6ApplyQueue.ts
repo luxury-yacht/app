@@ -9,6 +9,7 @@ import type { EdgeData, Graph, GraphData, NodeData } from '@antv/g6';
 import { objectMapG6EdgeState, objectMapG6NodeState } from './objectMapG6Data';
 import type { ObjectMapLayout } from './objectMapLayout';
 import type { ObjectMapSelectionState } from './objectMapRendererTypes';
+import { isObjectMapEdgeDimmedBySelection } from './objectMapSelection';
 
 const findEdge = (layout: ObjectMapLayout, id: string) =>
   layout.edges.find((edge) => edge.id === id) ?? null;
@@ -159,22 +160,24 @@ export const applyGraphData = async (
   graph: Graph,
   previousData: GraphData,
   nextData: GraphData,
-  options: { preserveViewportNodeId?: string | null } = {}
+  options: { preserveViewportNodeId?: string | null; draggedNodeId?: string | null } = {}
 ): Promise<void> => {
   const previousNodes = graphNodes(previousData);
   const nextNodes = graphNodes(nextData);
   const previousEdges = graphEdges(previousData);
   const nextEdges = graphEdges(nextData);
-  const previousViewportPoint = nodeViewportPoint(
-    graph,
-    previousData,
-    options.preserveViewportNodeId
-  );
+  // A user drag moves the preserve node on purpose; panning the viewport to
+  // keep it fixed would cancel the drag and slide the rest of the map instead.
+  const preserveViewportNodeId =
+    options.preserveViewportNodeId === options.draggedNodeId
+      ? null
+      : options.preserveViewportNodeId;
+  const previousViewportPoint = nodeViewportPoint(graph, previousData, preserveViewportNodeId);
   const preserveViewportForNode = async () => {
     if (!previousViewportPoint) {
       return;
     }
-    const nextViewportPoint = nodeViewportPoint(graph, nextData, options.preserveViewportNodeId);
+    const nextViewportPoint = nodeViewportPoint(graph, nextData, preserveViewportNodeId);
     if (!nextViewportPoint) {
       return;
     }
@@ -231,14 +234,21 @@ export const applySelectionState = async (
   }
   const states: Record<string, string[]> = {};
   const hoveredEdge = hoveredEdgeId ? findEdge(layout, hoveredEdgeId) : null;
-  const hoveredNodeIds = new Set(hoveredEdge ? [hoveredEdge.sourceId, hoveredEdge.targetId] : []);
+  // A hovered edge the new selection dims loses its hover highlight; hover
+  // visuals and tooltips are reserved for paths related to the selection.
+  const showHover =
+    hoveredEdge !== null && !isObjectMapEdgeDimmedBySelection(selectionState, hoveredEdge.id);
+  const hoveredNodeIds = new Set(
+    showHover && hoveredEdge ? [hoveredEdge.sourceId, hoveredEdge.targetId] : []
+  );
   layout.nodes.forEach((node) => {
     const nodeStates = objectMapG6NodeState(node, selectionState);
     states[node.id] = hoveredNodeIds.has(node.id) ? [...nodeStates, 'edgeHovered'] : nodeStates;
   });
   layout.edges.forEach((edge) => {
     const edgeStates = objectMapG6EdgeState(edge, selectionState);
-    states[edge.id] = edge.id === hoveredEdgeId ? [...edgeStates, 'hovered'] : edgeStates;
+    states[edge.id] =
+      edge.id === hoveredEdgeId && showHover ? [...edgeStates, 'hovered'] : edgeStates;
   });
   if (graph.destroyed) {
     return;
@@ -274,6 +284,7 @@ export interface ObjectMapG6ApplyQueueOptions {
   getCurrentSelectionState: () => ObjectMapSelectionState;
   getHoveredEdgeId: () => string | null;
   getPreserveViewportNodeId: () => string | null;
+  getDraggedNodeId?: () => string | null;
   onGraphDataError?: (error: unknown) => void;
   onSelectionStateError?: (error: unknown) => void;
   onGraphDataTiming?: (timing: ObjectMapG6GraphDataTiming) => void;
@@ -301,6 +312,7 @@ export const createObjectMapG6ApplyQueue = ({
   getCurrentSelectionState,
   getHoveredEdgeId,
   getPreserveViewportNodeId,
+  getDraggedNodeId,
   onGraphDataError,
   onSelectionStateError,
   onGraphDataTiming,
@@ -318,7 +330,11 @@ export const createObjectMapG6ApplyQueue = ({
     applying: false,
     latest: null,
   };
-  const dataApply: ApplySlot<GraphData> = {
+  // The dragged node id is captured when the payload is scheduled, not when it
+  // is applied: applies settle asynchronously, so a drag can end before its
+  // final payload applies and an apply-time read would wrongly re-enable
+  // viewport preservation against that payload.
+  const dataApply: ApplySlot<{ data: GraphData; draggedNodeId: string | null }> = {
     version: 0,
     applying: false,
     latest: null,
@@ -386,13 +402,13 @@ export const createObjectMapG6ApplyQueue = ({
     void run();
   };
 
-  const scheduleGraphData = (nextData: GraphData) => {
+  const scheduleGraphDataRecord = (record: { data: GraphData; draggedNodeId: string | null }) => {
     const graph = getGraph();
     if (!graph || graph.destroyed) {
       return;
     }
     dataApply.version += 1;
-    dataApply.latest = nextData;
+    dataApply.latest = record;
     if (!graphReady) {
       return;
     }
@@ -410,24 +426,25 @@ export const createObjectMapG6ApplyQueue = ({
           const startedAt = objectMapApplyTimingNow();
           let mode: ObjectMapG6GraphDataTiming['mode'] = 'update';
           if (renderedData) {
-            await applyGraphDataFn(graph, renderedData, latest, {
+            await applyGraphDataFn(graph, renderedData, latest.data, {
               preserveViewportNodeId: getPreserveViewportNodeId(),
+              draggedNodeId: latest.draggedNodeId,
             });
           } else {
             mode = 'initial-render';
-            graph.setData(latest);
+            graph.setData(latest.data);
             await graph.render();
           }
           onGraphDataTiming?.({
             durationMs: objectMapApplyTimingNow() - startedAt,
             mode,
-            nodes: latest.nodes?.length ?? 0,
-            edges: latest.edges?.length ?? 0,
+            nodes: latest.data.nodes?.length ?? 0,
+            edges: latest.data.edges?.length ?? 0,
           });
           if (graph.destroyed) {
             return;
           }
-          renderedData = latest;
+          renderedData = latest.data;
           scheduleSelectionState(getCurrentLayout(), getCurrentSelectionState());
           if (dataApply.version === requestedVersion) {
             break;
@@ -440,11 +457,15 @@ export const createObjectMapG6ApplyQueue = ({
       } finally {
         dataApply.applying = false;
         if (dataApply.latest && graphReady && !graph.destroyed) {
-          scheduleGraphData(dataApply.latest);
+          scheduleGraphDataRecord(dataApply.latest);
         }
       }
     };
     void run();
+  };
+
+  const scheduleGraphData = (nextData: GraphData) => {
+    scheduleGraphDataRecord({ data: nextData, draggedNodeId: getDraggedNodeId?.() ?? null });
   };
 
   const setReady = (ready: boolean) => {
@@ -453,7 +474,7 @@ export const createObjectMapG6ApplyQueue = ({
       return;
     }
     if (dataApply.latest) {
-      scheduleGraphData(dataApply.latest);
+      scheduleGraphDataRecord(dataApply.latest);
       return;
     }
     if (selectionApply.latest) {

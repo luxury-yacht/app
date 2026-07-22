@@ -6,7 +6,10 @@
 
 import { describe, expect, it } from 'vitest';
 import type { PositionedEdge } from './objectMapLayout';
-import { computeObjectMapSelectionState } from './objectMapSelection';
+import {
+  computeObjectMapSelectionState,
+  isObjectMapEdgeDimmedBySelection,
+} from './objectMapSelection';
 
 const edge = (id: string, sourceId: string, targetId: string): PositionedEdge => ({
   id,
@@ -43,5 +46,23 @@ describe('computeObjectMapSelectionState', () => {
     expect(state.activeId).toBeNull();
     expect(state.connectedIds.size).toBe(0);
     expect(state.connectedEdgeIds.size).toBe(0);
+  });
+});
+
+describe('isObjectMapEdgeDimmedBySelection', () => {
+  const edges = [edge('edge-related', 'replicaset', 'pod'), edge('edge-unrelated', 'a', 'b')];
+
+  it('never dims when no node is selected', () => {
+    const state = computeObjectMapSelectionState(edges, null);
+
+    expect(isObjectMapEdgeDimmedBySelection(state, 'edge-related')).toBe(false);
+    expect(isObjectMapEdgeDimmedBySelection(state, 'edge-unrelated')).toBe(false);
+  });
+
+  it('dims only edges unrelated to the active selection', () => {
+    const state = computeObjectMapSelectionState(edges, 'replicaset');
+
+    expect(isObjectMapEdgeDimmedBySelection(state, 'edge-related')).toBe(false);
+    expect(isObjectMapEdgeDimmedBySelection(state, 'edge-unrelated')).toBe(true);
   });
 });

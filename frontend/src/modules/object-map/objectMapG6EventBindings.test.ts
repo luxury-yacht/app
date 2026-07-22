@@ -71,6 +71,23 @@ const layout: ObjectMapLayout = {
         name: 'web-abc',
       },
     },
+    {
+      id: 'other',
+      x: 220,
+      y: 120,
+      width: 120,
+      height: 58,
+      column: 1,
+      isSeed: false,
+      ref: {
+        clusterId: 'cluster-a',
+        group: '',
+        version: 'v1',
+        kind: 'ConfigMap',
+        namespace: 'default',
+        name: 'web-config',
+      },
+    },
   ],
   edges: [
     {
@@ -96,7 +113,7 @@ const selectionState: ObjectMapSelectionState = {
 
 const palette = { tooltipOffsetY: 6 } as ObjectMapG6Palette;
 
-const bind = () => {
+const bind = (selection: ObjectMapSelectionState = selectionState) => {
   const container = document.createElement('div');
   container.getBoundingClientRect = vi.fn(() => ({
     x: 10,
@@ -131,7 +148,7 @@ const bind = () => {
     nodeGestureState: createObjectMapNodeGestureState(),
     onUserViewportChangeRef: ref<(() => void) | undefined>(vi.fn()),
     paletteRef: ref<ObjectMapG6Palette | null>(palette),
-    selectionStateRef: ref(selectionState),
+    selectionStateRef: ref(selection),
     updateTooltipPosition: vi.fn(),
   });
   return { cleanup, graph, handlers };
@@ -170,6 +187,67 @@ describe('object map G6 event bindings', () => {
     graph.emit(EdgeEvent.POINTER_LEAVE, { target: { id: 'edge' } });
 
     expect(handlers.onClearHoverEdge).toHaveBeenCalledTimes(1);
+    cleanup();
+  });
+
+  it('suppresses the tooltip and hover highlight for edges unrelated to the active selection', () => {
+    const { cleanup, graph, handlers } = bind({
+      activeId: 'other',
+      connectedIds: new Set(),
+      connectedEdgeIds: new Set(),
+    });
+
+    graph.emit(EdgeEvent.POINTER_ENTER, {
+      target: { id: 'edge' },
+      clientX: 80,
+      clientY: 120,
+    });
+
+    expect(handlers.onHoverEdge).not.toHaveBeenCalled();
+    expect(graph.setElementState).toHaveBeenCalledWith(
+      {
+        edge: ['dimmed'],
+        service: ['seed', 'dimmed'],
+        pod: ['dimmed'],
+      },
+      false
+    );
+
+    graph.emit(EdgeEvent.POINTER_MOVE, {
+      target: { id: 'edge' },
+      clientX: 82,
+      clientY: 122,
+    });
+
+    expect(handlers.onHoverEdge).not.toHaveBeenCalled();
+    expect(handlers.onClearHoverEdge).toHaveBeenCalled();
+    cleanup();
+  });
+
+  it('keeps the tooltip and hover highlight for edges connected to the active selection', () => {
+    const { cleanup, graph, handlers } = bind({
+      activeId: 'service',
+      connectedIds: new Set(['pod']),
+      connectedEdgeIds: new Set(['edge']),
+    });
+
+    graph.emit(EdgeEvent.POINTER_ENTER, {
+      target: { id: 'edge' },
+      clientX: 80,
+      clientY: 120,
+    });
+
+    expect(handlers.onHoverEdge).toHaveBeenCalledWith(
+      expect.objectContaining({ label: 'has endpoints' })
+    );
+    expect(graph.setElementState).toHaveBeenCalledWith(
+      expect.objectContaining({
+        edge: expect.arrayContaining(['hovered']),
+        service: expect.arrayContaining(['edgeHovered']),
+        pod: expect.arrayContaining(['edgeHovered']),
+      }),
+      false
+    );
     cleanup();
   });
 

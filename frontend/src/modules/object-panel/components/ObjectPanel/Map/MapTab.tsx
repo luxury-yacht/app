@@ -2,8 +2,8 @@
  * frontend/src/modules/object-panel/components/ObjectPanel/Map/MapTab.tsx
  *
  * Wraps the self-contained <ObjectMap /> with the orchestrator plumbing
- * the panel system expects: fetch on tab activation, manual refresh,
- * cleanup with preserveState on tab unmount (full cleanup is handled by
+ * the panel system expects: fetch on tab activation, cleanup with
+ * preserveState on tab unmount (full cleanup is handled by
  * ObjectPanelContent when the whole panel closes — see evictPanelScopes
  * in ObjectPanelStateContext for the symmetric reset).
  *
@@ -13,10 +13,7 @@
 import type React from 'react';
 import { useCallback } from 'react';
 import './MapTab.css';
-import {
-  isMapSnapshotLoading,
-  isMapSnapshotRefreshing,
-} from '@modules/object-map/mapSnapshotStatus';
+import { isMapSnapshotLoading } from '@modules/object-map/mapSnapshotStatus';
 import ObjectMap from '@modules/object-map/ObjectMap';
 import { buildResolvedFromMapRef } from '@modules/object-map/objectMapNavigation';
 import { useObjectPanel } from '@modules/object-panel/hooks/useObjectPanel';
@@ -43,7 +40,7 @@ const MapTab: React.FC<MapTabProps> = ({ objectData, isActive, mapScope }) => {
       source: 'object-map-fetch',
     });
   }, []);
-  const { state: snapshot, refresh: refreshMap } = useRefreshDomainHandle({
+  const { state: snapshot } = useRefreshDomainHandle({
     domain: 'object-map',
     scope: mapScope,
     enabled: Boolean(isActive && objectData && mapScope),
@@ -52,25 +49,10 @@ const MapTab: React.FC<MapTabProps> = ({ objectData, isActive, mapScope }) => {
     onFetchError: handleFetchError,
   });
 
-  const fetchMap = useCallback(
-    (reason: 'startup' | 'user' = 'startup') => {
-      if (!mapScope) {
-        return;
-      }
-      void refreshMap(reason, mapScope).catch(handleFetchError);
-    },
-    [handleFetchError, mapScope, refreshMap]
-  );
-
   const payload = snapshot.data as ObjectMapSnapshotPayload | null;
   const loading =
     Boolean(isActive && objectData && mapScope && isMapSnapshotLoading(snapshot.status)) &&
     !payload;
-  const refreshing = isMapSnapshotRefreshing(snapshot.status) && snapshot.isManual === true;
-  const handleRefresh = useCallback(() => fetchMap('user'), [fetchMap]);
-  // ObjectMap renders the Refresh button; only expose it when we
-  // have a scope to fetch against.
-  const onRefresh = mapScope ? handleRefresh : undefined;
 
   const handleOpenPanel = useCallback(
     (ref: ObjectMapReference) => {
@@ -112,8 +94,6 @@ const MapTab: React.FC<MapTabProps> = ({ objectData, isActive, mapScope }) => {
         {!!payload && (
           <ObjectMap
             payload={payload}
-            onRefresh={onRefresh}
-            isRefreshing={refreshing}
             onOpenPanel={handleOpenPanel}
             onNavigateView={handleNavigateView}
             onOpenObjectMap={handleOpenObjectMap}

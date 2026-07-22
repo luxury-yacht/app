@@ -28,7 +28,7 @@ import {
   ZoomInIcon,
   ZoomOutIcon,
 } from '@shared/components/icons/ObjectMapIcons';
-import { CloseIcon, RefreshIcon, ResetFiltersIcon } from '@shared/components/icons/SharedIcons';
+import { CloseIcon, ResetFiltersIcon } from '@shared/components/icons/SharedIcons';
 import Tooltip from '@shared/components/Tooltip';
 
 import { useObjectActionController } from '@shared/hooks/useObjectActionController';
@@ -84,13 +84,6 @@ const objectMapReferenceKey = (ref: ObjectMapReference): string =>
 
 export interface ObjectMapProps {
   payload: ObjectMapSnapshotPayload;
-  // Optional refresh callback. When provided, a "Refresh" button
-  // appears in the toolbar; the host wires it to whatever fetch flow
-  // it owns. Without it, the button is omitted (so the component is
-  // still usable in non-fetching contexts like Storybook).
-  onRefresh?: () => void;
-  // Disables the refresh button while a fetch is in flight.
-  isRefreshing?: boolean;
   // Modifier-click handlers. Cmd-click (mac) / Ctrl-click (other) opens
   // details, Shift-click opens the map, and Alt-click navigates to the table.
   // Handlers are optional — when omitted the modifier click silently no-ops.
@@ -101,8 +94,6 @@ export interface ObjectMapProps {
 
 const ObjectMap: React.FC<ObjectMapProps> = ({
   payload: wirePayload,
-  onRefresh,
-  isRefreshing = false,
   onOpenPanel,
   onNavigateView,
   onOpenObjectMap,
@@ -257,7 +248,6 @@ const ObjectMap: React.FC<ObjectMapProps> = ({
     model.resetLayout();
     setFocusMode(false);
   }, [model]);
-  const refreshLabel = isRefreshing ? 'Refreshing' : 'Refresh';
 
   const viewportControlsReady = Boolean(g6ViewportControls);
   const visibleNodeIds = useMemo(
@@ -419,32 +409,13 @@ const ObjectMap: React.FC<ObjectMapProps> = ({
       },
       { divider: true },
     ];
-    if (onRefresh) {
-      items.push({
-        label: refreshLabel,
-        icon: <RefreshIcon />,
-        onClick: onRefresh,
-        disabled: isRefreshing,
-      });
-      items.push({ divider: true });
-    }
     items.push({
       label: showLegend ? 'Hide legend' : 'Show legend',
       icon: <LegendIcon />,
       onClick: () => setShowLegend((prev) => !prev),
     });
     return items;
-  }, [
-    focusMode,
-    g6ViewportControls,
-    isRefreshing,
-    model,
-    onRefresh,
-    refreshLabel,
-    resetMapLayout,
-    showLegend,
-    viewportControlsReady,
-  ]);
+  }, [focusMode, g6ViewportControls, model, resetMapLayout, showLegend, viewportControlsReady]);
   const contextMenuItems = useMemo(() => {
     if (!contextMenu) {
       return [];
@@ -599,21 +570,6 @@ const ObjectMap: React.FC<ObjectMapProps> = ({
         <ResetFiltersIcon width={18} height={18} />
       </button>
       <span className="object-map__toolbar-separator" aria-hidden="true" />
-      {!!onRefresh && (
-        <button
-          type="button"
-          className={`object-map__toolbar-button ${
-            isRefreshing ? 'object-map__toolbar-button--refreshing' : ''
-          }`}
-          onClick={onRefresh}
-          title={refreshLabel}
-          aria-label={refreshLabel}
-          aria-busy={isRefreshing}
-          disabled={isRefreshing}
-        >
-          <RefreshIcon width={18} height={18} />
-        </button>
-      )}
       <button
         type="button"
         className={`object-map__toolbar-button ${

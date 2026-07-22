@@ -18,6 +18,7 @@ import {
 } from './objectMapG6Constants';
 import type { ObjectMapLayout, PositionedEdge, PositionedNode } from './objectMapLayout';
 import type { ObjectMapNodeBadgeLookup, ObjectMapSelectionState } from './objectMapRendererTypes';
+import { isObjectMapEdgeDimmedBySelection } from './objectMapSelection';
 
 const NODE_NAMESPACE_MAX_CHARS = 28;
 const NODE_CARD_RADIUS = OBJECT_MAP_CARD_STYLE.borderRadius;
@@ -247,7 +248,7 @@ export const objectMapG6EdgeState = (
   if (selectionState.activeId === null) {
     return [];
   }
-  return [selectionState.connectedEdgeIds.has(edge.id) ? 'highlighted' : 'dimmed'];
+  return [isObjectMapEdgeDimmedBySelection(selectionState, edge.id) ? 'dimmed' : 'highlighted'];
 };
 
 export interface ObjectMapG6DataOptions {

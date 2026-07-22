@@ -551,29 +551,6 @@
   color: var(--color-accent);
 }
 
-.object-map__toolbar-button--refreshing:disabled {
-  background: var(--color-accent-bg);
-  color: var(--color-accent);
-  cursor: progress;
-  opacity: 1;
-}
-
-.object-map__toolbar-button--refreshing svg {
-  animation: object-map-refresh-spin 0.9s linear infinite;
-}
-
-@media (prefers-reduced-motion: reduce) {
-  .object-map__toolbar-button--refreshing svg {
-    animation: none;
-  }
-}
-
-@keyframes object-map-refresh-spin {
-  to {
-    transform: rotate(360deg);
-  }
-}
-
 /* --- Banners and warnings ------------------------------------------- */
 
 .object-map__banner {

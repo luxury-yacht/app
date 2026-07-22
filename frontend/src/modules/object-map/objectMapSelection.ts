@@ -13,6 +13,11 @@ const EMPTY_SELECTION: ObjectMapSelectionState = {
   connectedEdgeIds: new Set(),
 };
 
+export const isObjectMapEdgeDimmedBySelection = (
+  selectionState: ObjectMapSelectionState,
+  edgeId: string
+): boolean => selectionState.activeId !== null && !selectionState.connectedEdgeIds.has(edgeId);
+
 export const computeObjectMapSelectionState = (
   edges: PositionedEdge[],
   activeNodeId: string | null
