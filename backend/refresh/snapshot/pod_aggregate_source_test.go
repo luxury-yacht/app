@@ -5,6 +5,7 @@ import (
 
 	"github.com/luxury-yacht/app/backend/kind/streamrows"
 	"github.com/luxury-yacht/app/backend/refresh/ingest"
+	"github.com/luxury-yacht/app/backend/resourcemodel"
 	"github.com/stretchr/testify/require"
 	"k8s.io/apimachinery/pkg/runtime/schema"
 )
@@ -42,19 +43,19 @@ func TestWorkloadOwnerPodRowsFromIngestUsesOwnerIndex(t *testing.T) {
 	source := &trackingOwnerIndexedPodSource{
 		indexRows: []interface{}{
 			ingest.Bundle{
-				Table:     streamrows.PodSummary{Namespace: "team-b", Name: "api-1"},
+				Table:     streamrows.PodSummary{Ref: resourcemodel.ResourceRef{Namespace: "team-b", Name: "api-1"}},
 				Aggregate: streamrows.PodAggregate{Namespace: "team-b", Name: "api-1", OwnerKey: apiKey},
 			},
 			ingest.Bundle{
-				Table:     streamrows.PodSummary{Namespace: "team-a", Name: "web-1"},
+				Table:     streamrows.PodSummary{Ref: resourcemodel.ResourceRef{Namespace: "team-a", Name: "web-1"}},
 				Aggregate: streamrows.PodAggregate{Namespace: "team-a", Name: "web-1", OwnerKey: webKey},
 			},
 		},
 	}
 
 	aggregates, summaries := workloadOwnerPodRowsFromIngest(source, []WorkloadSummary{
-		{Kind: "Deployment", Namespace: "team-b", Name: "api"},
-		{Kind: "Deployment", Namespace: "team-a", Name: "web"},
+		{Ref: resourcemodel.ResourceRef{Kind: "Deployment", Namespace: "team-b", Name: "api"}},
+		{Ref: resourcemodel.ResourceRef{Kind: "Deployment", Namespace: "team-a", Name: "web"}},
 	})
 
 	require.False(t, source.rowsCalled, "all-namespaces owner pod reads should use the ingest owner-key index")
@@ -64,6 +65,6 @@ func TestWorkloadOwnerPodRowsFromIngestUsesOwnerIndex(t *testing.T) {
 		{Namespace: "team-b", Name: "api-1", OwnerKey: apiKey},
 		{Namespace: "team-a", Name: "web-1", OwnerKey: webKey},
 	}, aggregates)
-	require.Equal(t, streamrows.PodSummary{Namespace: "team-a", Name: "web-1"}, summaries["team-a/web-1"])
-	require.Equal(t, streamrows.PodSummary{Namespace: "team-b", Name: "api-1"}, summaries["team-b/api-1"])
+	require.Equal(t, streamrows.PodSummary{Ref: resourcemodel.ResourceRef{Namespace: "team-a", Name: "web-1"}}, summaries["team-a/web-1"])
+	require.Equal(t, streamrows.PodSummary{Ref: resourcemodel.ResourceRef{Namespace: "team-b", Name: "api-1"}}, summaries["team-b/api-1"])
 }

@@ -37,7 +37,7 @@ func enrichCatalogActionFacts(items map[string]Summary, allowed map[string]resou
 			continue
 		}
 		managed := false
-		if _, ok := managedTargets[actionTargetKey(item.Namespace, item.Group, item.Version, item.Kind, item.Name)]; ok {
+		if _, ok := managedTargets[actionTargetKey(item.Ref.Namespace, item.Ref.Group, item.Ref.Version, item.Ref.Kind, item.Ref.Name)]; ok {
 			managed = true
 		}
 		if item.ActionFacts == nil {
@@ -74,7 +74,7 @@ var catalogScalableWorkloadKinds = func() map[schema.GroupKind]bool {
 }()
 
 func isCatalogScalableWorkload(item Summary) bool {
-	return item.Version == "v1" && catalogScalableWorkloadKinds[schema.GroupKind{Group: item.Group, Kind: item.Kind}]
+	return item.Ref.Version == "v1" && catalogScalableWorkloadKinds[schema.GroupKind{Group: item.Ref.Group, Kind: item.Ref.Kind}]
 }
 
 func actionTargetKey(namespace, group, version, kind, name string) string {

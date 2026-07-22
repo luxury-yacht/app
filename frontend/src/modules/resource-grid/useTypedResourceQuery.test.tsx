@@ -3,6 +3,7 @@ import { DEFAULT_GRID_TABLE_FILTER_STATE } from '@shared/components/tables/gridT
 import React, { act } from 'react';
 import * as ReactDOM from 'react-dom/client';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
+import { makeResourceRef } from '@/test-utils/makeResourceRef';
 import { requireValue } from '@/test-utils/requireValue';
 import type { TypedQueryPayload } from './typedResourceQueryScope';
 import { type UseTypedResourceQueryResult, useTypedResourceQuery } from './useTypedResourceQuery';
@@ -105,6 +106,80 @@ describe('useTypedResourceQuery', () => {
 
     expect(result?.loaded).toBe(false);
     expect(result?.error).toBeNull();
+  });
+
+  it('reuses unchanged static rows and refs across live refetches', async () => {
+    interface CanonicalTestRow {
+      ref: ReturnType<typeof makeResourceRef>;
+      status: string;
+    }
+    interface CanonicalTestPayload extends TypedQueryPayload {
+      rows?: CanonicalTestRow[];
+    }
+    let canonicalResult: UseTypedResourceQueryResult<CanonicalTestRow> | undefined;
+    const makeRow = (status = 'Ready'): CanonicalTestRow => ({
+      ref: makeResourceRef({
+        clusterId: 'cluster-a',
+        kind: 'ConfigMap',
+        resource: 'configmaps',
+        namespace: 'default',
+        name: 'api',
+      }),
+      status,
+    });
+    const Probe: React.FC<{ liveDataVersion: string }> = ({ liveDataVersion }) => {
+      canonicalResult = useTypedResourceQuery<CanonicalTestPayload, CanonicalTestRow>({
+        enabled: true,
+        clusterId: 'cluster-a',
+        domain: 'namespace-config',
+        label: 'Config',
+        filters: DEFAULT_GRID_TABLE_FILTER_STATE,
+        sortConfig,
+        liveDataVersion,
+        selectRows: (payload) => payload.rows ?? [],
+      });
+      return null;
+    };
+
+    requestRefreshDomainStateMock
+      .mockResolvedValueOnce({
+        status: 'executed',
+        data: { status: 'ready', data: { rows: [makeRow()] } },
+      })
+      .mockResolvedValueOnce({
+        status: 'executed',
+        data: { status: 'ready', data: { rows: [makeRow()] } },
+      })
+      .mockResolvedValueOnce({
+        status: 'executed',
+        data: { status: 'ready', data: { rows: [makeRow('Updating')] } },
+      });
+
+    await act(async () => {
+      root.render(<Probe liveDataVersion="v1" />);
+      await Promise.resolve();
+      await Promise.resolve();
+    });
+    const firstRow = requireValue(canonicalResult?.rows[0], 'first static row');
+
+    await act(async () => {
+      root.render(<Probe liveDataVersion="v2" />);
+      await Promise.resolve();
+      await Promise.resolve();
+    });
+    const unchangedRow = requireValue(canonicalResult?.rows[0], 'unchanged static row');
+    expect(unchangedRow).toBe(firstRow);
+    expect(unchangedRow.ref).toBe(firstRow.ref);
+
+    await act(async () => {
+      root.render(<Probe liveDataVersion="v3" />);
+      await Promise.resolve();
+      await Promise.resolve();
+    });
+    const changedRow = requireValue(canonicalResult?.rows[0], 'changed static row');
+    expect(changedRow).not.toBe(firstRow);
+    expect(changedRow.ref).toBe(firstRow.ref);
+    expect(changedRow.status).toBe('Updating');
   });
 
   it('fetchAllRows pages through the full result set following the cursor', async () => {

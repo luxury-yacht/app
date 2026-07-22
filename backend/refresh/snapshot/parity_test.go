@@ -201,21 +201,11 @@ func requireCanonicalRowRef(t *testing.T, row any) {
 	data, err := json.Marshal(row)
 	require.NoError(t, err)
 	var envelope struct {
-		ClusterID string                    `json:"clusterId"`
-		Kind      string                    `json:"kind"`
-		Name      string                    `json:"name"`
-		Namespace string                    `json:"namespace"`
-		Ref       resourcemodel.ResourceRef `json:"ref"`
+		Ref resourcemodel.ResourceRef `json:"ref"`
 	}
 	require.NoError(t, json.Unmarshal(data, &envelope))
 	require.NoError(t, resourcemodel.ValidateResourceRef(envelope.Ref))
 	require.NotEmpty(t, envelope.Ref.Resource)
-	require.Equal(t, envelope.ClusterID, envelope.Ref.ClusterID)
-	if envelope.Kind != "" {
-		require.Equal(t, envelope.Kind, envelope.Ref.Kind)
-	}
-	require.Equal(t, envelope.Name, envelope.Ref.Name)
-	require.Equal(t, envelope.Namespace, envelope.Ref.Namespace)
 }
 
 func marshalSorted(t *testing.T, rows []any, sortKey func(any) string) []byte {
@@ -309,7 +299,7 @@ func parityPodsCase(meta ClusterMeta, withMetrics bool) parityCase {
 			}
 			requireRowParity(t, toAnySlice(payload.Rows), toAnySlice(expected), func(r any) string {
 				row := r.(PodSummary)
-				return row.Namespace + "/" + row.Name
+				return row.Ref.Namespace + "/" + row.Ref.Name
 			})
 		},
 	}
@@ -381,7 +371,7 @@ func parityServiceCase(meta ClusterMeta, withEndpoints bool) parityCase {
 
 			requireRowParity(t, toAnySlice(payload.Rows), toAnySlice(expected), func(r any) string {
 				row := r.(NetworkSummary)
-				return row.Kind + "/" + row.Namespace + "/" + row.Name
+				return row.Ref.Kind + "/" + row.Ref.Namespace + "/" + row.Ref.Name
 			})
 		},
 	}
@@ -437,7 +427,7 @@ func parityNamespaceNetworkObjectsCase(meta ClusterMeta) parityCase {
 			}
 			requireRowParity(t, toAnySlice(payload.Rows), toAnySlice(expected), func(r any) string {
 				row := r.(NetworkSummary)
-				return row.Kind + "/" + row.Namespace + "/" + row.Name
+				return row.Ref.Kind + "/" + row.Ref.Namespace + "/" + row.Ref.Name
 			})
 		},
 	}
@@ -475,7 +465,7 @@ func parityNamespaceConfigCase(meta ClusterMeta) parityCase {
 			}
 			requireRowParity(t, toAnySlice(payload.Rows), toAnySlice(expected), func(r any) string {
 				row := r.(ConfigSummary)
-				return row.Kind + "/" + row.Namespace + "/" + row.Name
+				return row.Ref.Kind + "/" + row.Ref.Namespace + "/" + row.Ref.Name
 			})
 		},
 	}
@@ -513,7 +503,7 @@ func parityNamespaceRBACCase(meta ClusterMeta) parityCase {
 			}
 			requireRowParity(t, toAnySlice(payload.Rows), toAnySlice(expected), func(r any) string {
 				row := r.(RBACSummary)
-				return row.Kind + "/" + row.Namespace + "/" + row.Name
+				return row.Ref.Kind + "/" + row.Ref.Namespace + "/" + row.Ref.Name
 			})
 		},
 	}
@@ -550,7 +540,7 @@ func parityNamespaceQuotasCase(meta ClusterMeta) parityCase {
 			}
 			requireRowParity(t, toAnySlice(payload.Rows), toAnySlice(expected), func(r any) string {
 				row := r.(QuotaSummary)
-				return row.Kind + "/" + row.Namespace + "/" + row.Name
+				return row.Ref.Kind + "/" + row.Ref.Namespace + "/" + row.Ref.Name
 			})
 		},
 	}
@@ -579,7 +569,7 @@ func parityNamespaceStorageCase(meta ClusterMeta) parityCase {
 			expected := []StorageSummary{persistentvolumeclaim.BuildStreamSummary(meta, pvc)}
 			requireRowParity(t, toAnySlice(payload.Rows), toAnySlice(expected), func(r any) string {
 				row := r.(StorageSummary)
-				return row.Kind + "/" + row.Namespace + "/" + row.Name
+				return row.Ref.Kind + "/" + row.Ref.Namespace + "/" + row.Ref.Name
 			})
 		},
 	}
@@ -611,7 +601,7 @@ func parityNamespaceAutoscalingCase(meta ClusterMeta) parityCase {
 			expected := []AutoscalingSummary{hpapkg.BuildStreamSummary(meta, hpa)}
 			requireRowParity(t, toAnySlice(payload.Rows), toAnySlice(expected), func(r any) string {
 				row := r.(AutoscalingSummary)
-				return row.Kind + "/" + row.Namespace + "/" + row.Name
+				return row.Ref.Kind + "/" + row.Ref.Namespace + "/" + row.Ref.Name
 			})
 		},
 	}
@@ -640,17 +630,17 @@ func parityNamespaceCustomCollisionCase(meta ClusterMeta) parityCase {
 			rowA := customresource.BuildNamespaceStreamSummary(meta, crA, "rds.services.k8s.aws", "v1alpha1", "dbinstances", "DBInstance", "dbinstances.rds.services.k8s.aws", "data")
 			rowB := customresource.BuildNamespaceStreamSummary(meta, crB, "databases.example.com", "v1", "dbinstances", "DBInstance", "dbinstances.databases.example.com", "data")
 
-			require.NotEqual(t, rowA.Group, rowB.Group, "collision regression: rows with same kind/name but different GVKs must remain distinguishable")
+			require.NotEqual(t, rowA.Ref.Group, rowB.Ref.Group, "collision regression: rows with same kind/name but different GVKs must remain distinguishable")
 			require.NotEqual(t, rowA.CRDName, rowB.CRDName, "CRDName must differ for distinct CRDs")
-			require.Equal(t, "primary", rowA.Name)
-			require.Equal(t, "primary", rowB.Name)
+			require.Equal(t, "primary", rowA.Ref.Name)
+			require.Equal(t, "primary", rowB.Ref.Name)
 
 			// Per-row parity: re-invoking the projector with the same inputs
 			// returns byte-identical rows.
 			rowARepeat := customresource.BuildNamespaceStreamSummary(meta, crA, "rds.services.k8s.aws", "v1alpha1", "dbinstances", "DBInstance", "dbinstances.rds.services.k8s.aws", "data")
 			requireRowParity(t, []any{rowA}, []any{rowARepeat}, func(r any) string {
 				row := r.(NamespaceCustomSummary)
-				return row.Group + "/" + row.Version + "/" + row.Kind + "/" + row.Namespace + "/" + row.Name
+				return row.Ref.Group + "/" + row.Ref.Version + "/" + row.Ref.Kind + "/" + row.Ref.Namespace + "/" + row.Ref.Name
 			})
 		},
 	}
@@ -675,13 +665,13 @@ func parityClusterCustomCollisionCase(meta ClusterMeta) parityCase {
 			rowA := customresource.BuildClusterStreamSummary(meta, crA, "rds.services.k8s.aws", "v1alpha1", "dbclusters", "DBCluster", "dbclusters.rds.services.k8s.aws")
 			rowB := customresource.BuildClusterStreamSummary(meta, crB, "databases.example.com", "v1", "dbclusters", "DBCluster", "dbclusters.databases.example.com")
 
-			require.NotEqual(t, rowA.Group, rowB.Group)
+			require.NotEqual(t, rowA.Ref.Group, rowB.Ref.Group)
 			require.NotEqual(t, rowA.CRDName, rowB.CRDName)
 
 			rowARepeat := customresource.BuildClusterStreamSummary(meta, crA, "rds.services.k8s.aws", "v1alpha1", "dbclusters", "DBCluster", "dbclusters.rds.services.k8s.aws")
 			requireRowParity(t, []any{rowA}, []any{rowARepeat}, func(r any) string {
 				row := r.(ClusterCustomSummary)
-				return row.Group + "/" + row.Version + "/" + row.Kind + "/" + row.Name
+				return row.Ref.Group + "/" + row.Ref.Version + "/" + row.Ref.Kind + "/" + row.Ref.Name
 			})
 		},
 	}
@@ -716,7 +706,7 @@ func parityClusterRBACCase(meta ClusterMeta) parityCase {
 			}
 			requireRowParity(t, toAnySlice(payload.Rows), toAnySlice(expected), func(r any) string {
 				row := r.(ClusterRBACEntry)
-				return row.Kind + "/" + row.Name
+				return row.Ref.Kind + "/" + row.Ref.Name
 			})
 		},
 	}
@@ -746,7 +736,7 @@ func parityClusterStorageCase(meta ClusterMeta) parityCase {
 			expected := []ClusterStorageEntry{persistentvolume.BuildStreamSummary(meta, pv)}
 			requireRowParity(t, toAnySlice(payload.Rows), toAnySlice(expected), func(r any) string {
 				row := r.(ClusterStorageEntry)
-				return row.Kind + "/" + row.Name
+				return row.Ref.Kind + "/" + row.Ref.Name
 			})
 		},
 	}
@@ -794,7 +784,7 @@ func parityClusterConfigCase(meta ClusterMeta) parityCase {
 			}
 			requireRowParity(t, toAnySlice(payload.Rows), toAnySlice(expected), func(r any) string {
 				row := r.(ClusterConfigEntry)
-				return row.Kind + "/" + row.Name
+				return row.Ref.Kind + "/" + row.Ref.Name
 			})
 		},
 	}
@@ -829,7 +819,7 @@ func parityClusterCRDCase(meta ClusterMeta) parityCase {
 			expected := []ClusterCRDEntry{apiextensions.BuildStreamSummary(meta, crd)}
 			requireRowParity(t, toAnySlice(payload.Rows), toAnySlice(expected), func(r any) string {
 				row := r.(ClusterCRDEntry)
-				return row.Name
+				return row.Ref.Name
 			})
 		},
 	}

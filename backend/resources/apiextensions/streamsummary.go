@@ -16,15 +16,12 @@ import (
 // BuildStreamSummary builds the cluster-crds row for one CustomResourceDefinition.
 func BuildStreamSummary(meta streamrows.ClusterMeta, crd *apiextensionsv1.CustomResourceDefinition) streamrows.ClusterCRDEntry {
 	if crd == nil {
-		return streamrows.ClusterCRDEntry{ClusterMeta: meta, Kind: "CustomResourceDefinition"}
+		return streamrows.ClusterCRDEntry{Ref: streamrows.NewResourceRef(meta, Identity, nil)}
 	}
 	facts := BuildFacts(crd)
 	model := BuildResourceModel(meta.ClusterID, crd)
 	return streamrows.ClusterCRDEntry{
-		ClusterMeta:             meta,
 		Ref:                     model.Ref,
-		Kind:                    "CustomResourceDefinition",
-		Name:                    crd.Name,
 		Group:                   facts.Group,
 		Scope:                   facts.Scope,
 		Details:                 CustomResourceDefinitionVersionDetails(facts),

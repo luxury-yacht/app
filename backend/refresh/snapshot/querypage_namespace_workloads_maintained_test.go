@@ -168,7 +168,7 @@ func TestNamespaceWorkloadsMaintainedOwnedPodNeverStandalone(t *testing.T) {
 	rowKeys := func(rows []WorkloadSummary) []string {
 		keys := make([]string, len(rows))
 		for i, r := range rows {
-			keys[i] = r.Kind + "/" + r.Namespace + "/" + r.Name
+			keys[i] = r.Ref.Kind + "/" + r.Ref.Namespace + "/" + r.Ref.Name
 		}
 		return keys
 	}
@@ -248,7 +248,7 @@ func workloadStoreKinds(store *typedMaintainedStore[WorkloadSummary]) []string {
 	rows := store.rows("", available)
 	kinds := make([]string, len(rows))
 	for i, r := range rows {
-		kinds[i] = r.Kind
+		kinds[i] = r.Ref.Kind
 	}
 	return kinds
 }

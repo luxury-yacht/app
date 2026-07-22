@@ -44,19 +44,26 @@ describe('NsViewWorkloads helpers', () => {
 
   it('builds and parses workload keys with namespace context', () => {
     const workload: WorkloadData = {
-      ref: makeResourceRef({
+      ref: {
+        ...makeResourceRef({
+          clusterId: 'cluster-a',
+          group: 'apps',
+          kind: 'Deployment',
+          resource: 'deployments',
+          namespace: 'team-a',
+          name: 'api',
+        }),
         clusterId: 'cluster-a',
-        group: 'apps',
         kind: 'Deployment',
-        resource: 'deployments',
-        namespace: 'team-a',
         name: 'api',
-      }),
-      clusterId: 'cluster-a',
-      kind: 'Deployment',
-      name: 'api',
-      namespace: 'team-a',
+        namespace: 'team-a',
+      },
+
       status: 'Running',
+      ready: '1/1',
+      restarts: 0,
+      age: '5m',
+      portForwardAvailable: false,
     };
 
     expect(buildWorkloadKey(workload)).toBe('team-a::Deployment/api');
@@ -77,24 +84,28 @@ describe('NsViewWorkloads helpers', () => {
   it('appends workload tokens for search filtering', () => {
     const tokens: string[] = [];
     appendWorkloadTokens(tokens, {
-      ref: makeResourceRef({
+      ref: {
+        ...makeResourceRef({
+          clusterId: 'cluster-a',
+          group: 'apps',
+          kind: 'Deployment',
+          resource: 'deployments',
+          namespace: 'team-a',
+          name: 'api',
+        }),
         clusterId: 'cluster-a',
-        group: 'apps',
         kind: 'Deployment',
-        resource: 'deployments',
-        namespace: 'team-a',
         name: 'api',
-      }),
-      clusterId: 'cluster-a',
-      kind: 'Deployment',
-      name: 'api',
-      namespace: 'team-a',
+        namespace: 'team-a',
+      },
+
       status: 'Running',
       ready: '1/1',
       restarts: 2,
       cpuUsage: '10m',
       memUsage: '20Mi',
       age: '5m',
+      portForwardAvailable: false,
     });
 
     expect(tokens).toContain('Deployment');

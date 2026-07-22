@@ -9,6 +9,7 @@ import (
 	"github.com/luxury-yacht/app/backend/refresh"
 	"github.com/luxury-yacht/app/backend/refresh/snapshot"
 	"github.com/luxury-yacht/app/backend/refresh/system"
+	"github.com/luxury-yacht/app/backend/resourcemodel"
 	"github.com/stretchr/testify/require"
 )
 
@@ -26,7 +27,7 @@ func TestAggregateSnapshotServiceBuildRequiresClusterScope(t *testing.T) {
 		Domain: "namespaces",
 		Payload: snapshot.NamespaceSnapshot{
 			Namespaces: []snapshot.NamespaceSummary{
-				{Name: "default"},
+				{Ref: resourcemodel.ResourceRef{Name: "default"}},
 			},
 		},
 	}
@@ -83,7 +84,7 @@ func TestAggregateSnapshotServiceNamespaceSnapshotTriggersLifecycleCallback(t *t
 	successSnapshot := &refresh.Snapshot{
 		Domain: "namespaces",
 		Payload: snapshot.NamespaceSnapshot{
-			Namespaces:     []snapshot.NamespaceSummary{{Name: "default"}},
+			Namespaces:     []snapshot.NamespaceSummary{{Ref: resourcemodel.ResourceRef{Name: "default"}}},
 			WorkloadsReady: true,
 		},
 	}
@@ -124,7 +125,7 @@ func TestAggregateSnapshotServiceNamespaceSnapshotSkipsCallbackUntilWorkloadsRea
 	notReady := &refresh.Snapshot{
 		Domain: "namespaces",
 		Payload: snapshot.NamespaceSnapshot{
-			Namespaces:     []snapshot.NamespaceSummary{{Name: "default"}},
+			Namespaces:     []snapshot.NamespaceSummary{{Ref: resourcemodel.ResourceRef{Name: "default"}}},
 			WorkloadsReady: false,
 		},
 	}
@@ -229,7 +230,7 @@ func TestNamespacesReadinessSelfBuildFlipsReady(t *testing.T) {
 				return &refresh.Snapshot{
 					Domain: "namespaces",
 					Payload: snapshot.NamespaceSnapshot{
-						Namespaces:     []snapshot.NamespaceSummary{{Name: "default"}},
+						Namespaces:     []snapshot.NamespaceSummary{{Ref: resourcemodel.ResourceRef{Name: "default"}}},
 						WorkloadsReady: true,
 					},
 				}, nil
@@ -281,7 +282,7 @@ func TestWireNamespacesReadinessObserverFlipsReadyForLateSubsystems(t *testing.T
 					return &refresh.Snapshot{
 						Domain: "namespaces",
 						Payload: snapshot.NamespaceSnapshot{
-							Namespaces:     []snapshot.NamespaceSummary{{Name: "default"}},
+							Namespaces:     []snapshot.NamespaceSummary{{Ref: resourcemodel.ResourceRef{Name: "default"}}},
 							WorkloadsReady: true,
 						},
 					}, nil
@@ -327,7 +328,7 @@ func TestNamespacesReadinessSweepHealsDroppedSettleRing(t *testing.T) {
 					return &refresh.Snapshot{
 						Domain: "namespaces",
 						Payload: snapshot.NamespaceSnapshot{
-							Namespaces:     []snapshot.NamespaceSummary{{Name: "default"}},
+							Namespaces:     []snapshot.NamespaceSummary{{Ref: resourcemodel.ResourceRef{Name: "default"}}},
 							WorkloadsReady: true,
 						},
 					}, nil
@@ -417,7 +418,7 @@ func TestAggregateSnapshotServiceLifecycleTransitionsReadyAfterInPlaceRebuild(t 
 	successSnapshot := &refresh.Snapshot{
 		Domain: "namespaces",
 		Payload: snapshot.NamespaceSnapshot{
-			Namespaces:     []snapshot.NamespaceSummary{{Name: "default"}},
+			Namespaces:     []snapshot.NamespaceSummary{{Ref: resourcemodel.ResourceRef{Name: "default"}}},
 			WorkloadsReady: true,
 		},
 	}
@@ -479,7 +480,7 @@ func TestAggregateSnapshotServiceLifecycleIntegration(t *testing.T) {
 	successSnapshot := &refresh.Snapshot{
 		Domain: "namespaces",
 		Payload: snapshot.NamespaceSnapshot{
-			Namespaces:     []snapshot.NamespaceSummary{{Name: "default"}},
+			Namespaces:     []snapshot.NamespaceSummary{{Ref: resourcemodel.ResourceRef{Name: "default"}}},
 			WorkloadsReady: true,
 		},
 	}
@@ -520,7 +521,7 @@ func TestAggregateSnapshotServiceLifecycleNoTransitionIfAlreadyReady(t *testing.
 	successSnapshot := &refresh.Snapshot{
 		Domain: "namespaces",
 		Payload: snapshot.NamespaceSnapshot{
-			Namespaces:     []snapshot.NamespaceSummary{{Name: "default"}},
+			Namespaces:     []snapshot.NamespaceSummary{{Ref: resourcemodel.ResourceRef{Name: "default"}}},
 			WorkloadsReady: true,
 		},
 	}

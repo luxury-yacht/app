@@ -15,14 +15,11 @@ import {
   buildRequiredObjectReference,
 } from '@shared/utils/objectIdentity';
 import React, { useCallback, useMemo } from 'react';
+import { useClusterNameResolver } from '@/core/cluster-workspace/useClusterWorkspace';
 import type { NamespaceSignalState } from '@/core/refresh/types';
 import { useDefaultTablePageSize } from '@/hooks/useDefaultTablePageSize';
 
 export interface NamespaceTableRow extends NamespaceSummaryWithMetrics {
-  group: string;
-  version: string;
-  kind: string;
-  namespace: string;
   ageTimestamp?: number;
   metricsState: NamespaceSignalState;
 }
@@ -52,12 +49,6 @@ export const projectNamespaceSummary = (
   metricsState: NamespaceSignalState
 ): NamespaceTableRow => ({
   ...namespace,
-  clusterId: namespace.ref.clusterId,
-  group: namespace.ref.group,
-  version: namespace.ref.version,
-  kind: namespace.ref.kind,
-  namespace: namespace.ref.namespace ?? '',
-  name: namespace.ref.name ?? namespace.name,
   ageTimestamp: namespace.creationTimestamp > 0 ? namespace.creationTimestamp * 1000 : undefined,
   metricsState,
 });
@@ -123,7 +114,7 @@ const createNamespaceResourceColumn = (
         ? resourceDisplay(row.cpuLimitsMilli ?? 0, row.memoryLimitsBytes ?? 0)
         : undefined,
     getVariant: () => 'compact',
-    getAnimationKey: (row) => `${buildRequiredCanonicalObjectRowKey(row)}:${type}`,
+    getAnimationKey: (row) => `${buildRequiredCanonicalObjectRowKey(row.ref)}:${type}`,
     sortable: true,
     sortValue: (row) => (row.metricsState === 'available' ? usageNumber(row) : undefined),
   });
@@ -161,6 +152,7 @@ const NamespaceSummaryTable: React.FC<NamespaceSummaryTableProps> = ({
   emptyMessage,
 }) => {
   const defaultPageSize = useDefaultTablePageSize();
+  const resolveClusterName = useClusterNameResolver();
   const { openWithObject } = useObjectPanel();
   const openNamespaceObject = useCallback(
     (row: NamespaceTableRow) => openWithObject(buildRequiredObjectReference(row.ref)),
@@ -169,12 +161,12 @@ const NamespaceSummaryTable: React.FC<NamespaceSummaryTableProps> = ({
   const columns = useMemo<GridColumnDefinition<NamespaceTableRow>[]>(() => {
     const result: GridColumnDefinition<NamespaceTableRow>[] = [
       cf.createKindColumn<NamespaceTableRow>({
-        getKind: (row) => row.kind,
+        getKind: (row) => row.ref.kind,
         onClick: openNamespaceObject,
         isInteractive: (row) => !row.scopeStatus,
         allowRowClick: false,
       }),
-      cf.createTextColumn<NamespaceTableRow>('name', 'Namespace', (row) => row.name, {
+      cf.createTextColumn<NamespaceTableRow>('name', 'Namespace', (row) => row.ref.name, {
         onClick: navigate,
         getClassName: () => 'object-panel-link',
         isInteractive: (row) => !row.scopeStatus,
@@ -182,10 +174,15 @@ const NamespaceSummaryTable: React.FC<NamespaceSummaryTableProps> = ({
     ];
     if (showClusterColumn) {
       result.push(
-        cf.createTextColumn('cluster', 'Cluster', (row) => row.clusterName || row.clusterId, {
-          onClick: navigateCluster,
-          getClassName: () => 'object-panel-link',
-        })
+        cf.createTextColumn(
+          'cluster',
+          'Cluster',
+          (row) => resolveClusterName(row.ref.clusterId) ?? row.ref.clusterId,
+          {
+            onClick: navigateCluster,
+            getClassName: () => 'object-panel-link',
+          }
+        )
       );
     }
     result.push(
@@ -268,10 +265,17 @@ const NamespaceSummaryTable: React.FC<NamespaceSummaryTableProps> = ({
       age: { autoWidth: true },
     });
     return result;
-  }, [navigate, navigateAttention, navigateCluster, openNamespaceObject, showClusterColumn]);
+  }, [
+    navigate,
+    navigateAttention,
+    navigateCluster,
+    openNamespaceObject,
+    resolveClusterName,
+    showClusterColumn,
+  ]);
 
   const keyExtractor = useCallback(
-    (row: NamespaceTableRow) => buildRequiredCanonicalObjectRowKey(row),
+    (row: NamespaceTableRow) => buildRequiredCanonicalObjectRowKey(row.ref),
     []
   );
   const resolvedViewId = showClusterColumn ? 'global-namespaces' : 'cluster-namespaces';
@@ -308,11 +312,11 @@ const NamespaceSummaryTable: React.FC<NamespaceSummaryTableProps> = ({
         }
       : undefined,
     filterAccessors: {
-      getCluster: (row) => row.clusterId,
+      getCluster: (row) => row.ref.clusterId,
       getSearchText: (row) => [
-        row.kind,
-        row.name,
-        ...(showClusterColumn ? [row.clusterName, row.clusterId] : []),
+        row.ref.kind,
+        row.ref.name,
+        ...(showClusterColumn ? [resolveClusterName(row.ref.clusterId) ?? row.ref.clusterId] : []),
         row.status ?? row.phase,
         workloadSearchText(row),
         warningEventText(row),

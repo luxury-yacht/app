@@ -42,7 +42,7 @@ func TestCollectFromNamespacedLister(t *testing.T) {
 		t.Fatalf("expected calls %v, got %v", expectedCalls, calls)
 	}
 
-	if len(summaries) != 2 || summaries[0].Name != "cm-a" || summaries[1].Name != "cm-b" {
+	if len(summaries) != 2 || summaries[0].Ref.Name != "cm-a" || summaries[1].Ref.Name != "cm-b" {
 		t.Fatalf("unexpected summaries: %+v", summaries)
 	}
 }
@@ -90,7 +90,7 @@ func TestSummariesFromObjects(t *testing.T) {
 	}
 
 	summary := summaries[0]
-	if summary.Name != "cm" || summary.Namespace != "ns" || summary.CreationTimestamp != creation.UTC().Format(time.RFC3339) || summary.LabelsDigest == "" {
+	if summary.Ref.Name != "cm" || summary.Ref.Namespace != "ns" || summary.CreationTimestamp != creation.UTC().Format(time.RFC3339) || summary.LabelsDigest == "" {
 		t.Fatalf("unexpected summary: %+v", summary)
 	}
 }

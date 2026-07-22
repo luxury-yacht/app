@@ -194,8 +194,10 @@ adding a new frontend source shape.
 
 Typed resource queries use `ResourceQueryRequest` and `ResourceQueryResult` in
 `backend/refresh/snapshot/resource_query_contract.go`, mirrored by frontend
-refresh types. The base resource contract carries full `clusterId` and GVK
-identity for every row, stable projected table fields, backend predicates,
+refresh types. Every canonical row carries one complete `ref`, including
+`clusterId`, GVK, plural resource, namespace when namespaced, and name; it does
+not retain flat copies of its own identity. The base resource contract carries
+stable projected table fields, backend predicates,
 facets, exactness flags, partial/degraded issues, and an object revision
 reference. Live CPU/memory usage is joined onto the base rows at serve — there
 are no separate metric-domain query contracts; the payload's `metrics` block
@@ -226,16 +228,16 @@ silent dup/skip when a new sort field or adapter is added.
 
 The typed builders expose two paths: a backend-query page when the scope carries
 a query string (`query.Enabled`) and a bounded local window otherwise. The
-window path is the canonical refresh snapshot — it backs object panels, counts
-elsewhere, and the live-data version that drives query refetch — so it is not
-redundant with the query path and must not be deleted as a "path consolidation."
-Single-namespace, all-namespaces, and cluster scopes all run both: the query page
-feeds the table (with backend keyset pagination) while the window snapshot feeds
-liveness and the other consumers above. Single-namespace resource tables are
-query-backed too — the frontend passes the selected namespace as the query
-`baseScope` (`namespace:<name>`) so the page is scoped to that namespace — so
-pagination and table semantics are uniform across every scope, not just
-all-namespaces and cluster.
+window path remains the canonical refresh snapshot for object panels, counts,
+and other snapshot consumers, so it is not redundant with the query path and
+must not be deleted as a "path consolidation." Demand ownership prevents the
+table itself from paying for both: a query-backed table holds `query` demand for
+its base live scope and current page, while a separate consumer holds `snapshot`
+demand only when it needs the window payload. Both demands share one live
+source and its readiness/permission/source clocks. Single-namespace resource
+tables are query-backed too — the frontend passes the selected namespace as the
+query `baseScope` (`namespace:<name>`) so pagination and table semantics are
+uniform across every scope, not just all-namespaces and cluster.
 Degraded and unavailable-source reasons are computed and surfaced on both paths;
 a window missing a permission-blocked source is reported inexact and
 issue-bearing, never as a complete table.
@@ -249,13 +251,19 @@ object-panel table becomes namespace or cluster scale.
 A query-backed table renders one-shot query pages, so its liveness comes from
 refetching — never from mutating displayed rows in place. The contract:
 
-- The typed query refetches exactly when the scoped live domain's **source
-  identity** changes: `liveDomainVersion = sourceVersion`
-  (`useQueryBackedResourceGridTable.ts`). `sourceVersion` comes from snapshot
-  responses and resource WebSocket doorbells; the HTTP snapshot endpoint uses the
-  same token for `ETag` / `304`. Refresh timestamps are deliberately excluded —
-  identical source identity must never trigger a refetch (the anti-churn
-  invariant).
+- The typed query refetches when a declared `signalVersions` source clock or
+  stream acknowledgement identity changes
+  (`useQueryBackedResourceGridTable.ts`). Payload applies and refresh timestamps
+  are deliberately excluded, so a query response cannot echo into another
+  query. Query demand subscribes before its initial read; `ACK`/initial `RESET`
+  triggers an acknowledged reconciliation, and the query lifecycle identity
+  rejects an older in-flight response.
+- Fallback scheduling for a query-only lease advances a query-reconciliation
+  identity instead of fetching the domain's bounded base snapshot. The
+  consumer uses that identity to reissue its current cursor page, preserving
+  both page position and the one-page retention bound. A healthy stream does
+  not advance the fallback identity because source clocks already invalidate
+  the page.
 - **Update latency**: for streamed domains, a cluster change is visible within
   one stream coalescing window (200ms flush in the stream managers) plus one
   query round-trip (an in-memory backend page build — tens of milliseconds at
@@ -275,6 +283,13 @@ refetching — never from mutating displayed rows in place. The contract:
   reported only before the first applied result for a scope, so filtering never
   dims the view, swaps in a spinner, or unmounts the filter input (which would
   steal focus while typing).
+- The typed-query ingestion boundary performs page-local structural sharing.
+  It reuses a complete `ref` when identity is unchanged and reuses a whole row
+  only when every own enumerable scalar, map, array, and nested value is equal.
+  The previous-page index is scoped to the full query/cursor identity and is
+  discarded after apply. Metric-bearing and event-churn families use ref-only
+  sharing where exhaustive whole-row comparison would add work while their
+  projected values normally change.
 
 ## High-Risk Typed Producer Trace
 

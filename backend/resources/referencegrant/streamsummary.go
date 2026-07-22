@@ -17,7 +17,7 @@ import (
 // BuildStreamSummary builds the namespace-network row for one ReferenceGrant.
 func BuildStreamSummary(meta streamrows.ClusterMeta, grant *gatewayv1.ReferenceGrant) streamrows.NetworkSummary {
 	if grant == nil {
-		return streamrows.NetworkSummary{ClusterMeta: meta, Kind: "ReferenceGrant"}
+		return streamrows.NetworkSummary{}
 	}
 	facts := BuildFacts(meta.ClusterID, grant)
 	details := fmt.Sprintf("%d from, %d to", len(facts.From), len(facts.To))

@@ -92,7 +92,7 @@ func (s ingestNotifySink) broadcastSignal(row interface{}, updateType MessageTyp
 	ref := resourcemodel.NewResourceRef(
 		s.manager.clusterMeta.ClusterID,
 		d.Group, d.Version, d.Kind, d.Resource,
-		summary.Namespace, summary.Name, summary.UID,
+		summary.Ref.Namespace, summary.Ref.Name, summary.Ref.UID,
 	)
 	update := Update{
 		Type:            updateType,
@@ -104,7 +104,7 @@ func (s ingestNotifySink) broadcastSignal(row interface{}, updateType MessageTyp
 	}
 	scopes := scopesForCluster()
 	if !d.ClusterScoped {
-		scopes = scopesForNamespace(summary.Namespace)
+		scopes = scopesForNamespace(summary.Ref.Namespace)
 	}
 	s.manager.broadcast(d.Domain, scopes, update)
 }

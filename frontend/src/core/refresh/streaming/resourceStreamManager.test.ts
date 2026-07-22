@@ -827,20 +827,19 @@ describe('ResourceStreamManager', () => {
     ).ensureSubscriptions('namespace-autoscaling', storeScope);
 
     const sharedRow = {
-      clusterId: 'cluster-a',
-      clusterName: 'cluster-a',
-      ref: resourceRef({
-        clusterId: 'cluster-a',
-        group: 'autoscaling',
-        version: 'v1',
-        kind: 'HorizontalPodAutoscaler',
+      ref: {
+        ...resourceRef({
+          clusterId: 'cluster-a',
+          group: 'autoscaling',
+          version: 'v1',
+          kind: 'HorizontalPodAutoscaler',
+          resource: 'horizontalpodautoscalers',
+          namespace: 'default',
+          name: 'hpa-a',
+        }),
         resource: 'horizontalpodautoscalers',
         namespace: 'default',
-        name: 'hpa-a',
-      }),
-      kind: 'HorizontalPodAutoscaler',
-      name: 'hpa-a',
-      namespace: 'default',
+      },
       target: 'Deployment/web',
       min: 1,
       max: 4,

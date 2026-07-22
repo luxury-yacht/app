@@ -6,31 +6,24 @@ import (
 	"github.com/stretchr/testify/require"
 
 	"github.com/luxury-yacht/app/backend/internal/applog"
-	"github.com/luxury-yacht/app/backend/kind/streamrows"
 	"github.com/luxury-yacht/app/backend/objectcatalog"
 	"github.com/luxury-yacht/app/backend/refresh/ingest"
 	"github.com/luxury-yacht/app/backend/refresh/snapshot"
+	"github.com/luxury-yacht/app/backend/resourcemodel"
 )
 
 // podBundleFor builds the four-half-ish ingest Bundle the pod reflector projects: the
 // Table half is the PodSummary (scopes), the Catalog half is the catalog Summary (UID/RV).
 func podBundleFor(namespace, name, node, uid, rv string, owner [3]string) ingest.Bundle {
 	return ingest.Bundle{
-		Table: snapshot.PodSummary{
-			ClusterMeta:     streamrows.ClusterMeta{ClusterID: "c1", ClusterName: "cluster"},
-			Namespace:       namespace,
-			Name:            name,
+		Table: snapshot.PodSummary{Ref: resourcemodel.ResourceRef{ClusterID: "c1", Namespace: namespace, Name: name},
+
 			Node:            node,
 			OwnerKind:       owner[0],
 			OwnerName:       owner[1],
 			OwnerAPIVersion: owner[2],
 		},
-		Catalog: objectcatalog.Summary{
-			Namespace:       namespace,
-			Name:            name,
-			UID:             uid,
-			ResourceVersion: rv,
-		},
+		Catalog: objectcatalog.Summary{Ref: resourcemodel.ResourceRef{Namespace: namespace, Name: name, UID: uid}, ResourceVersion: rv},
 	}
 }
 

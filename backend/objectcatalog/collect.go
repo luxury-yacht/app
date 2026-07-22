@@ -16,6 +16,7 @@ import (
 	"github.com/luxury-yacht/app/backend/internal/config"
 	"github.com/luxury-yacht/app/backend/internal/parallel"
 	"github.com/luxury-yacht/app/backend/internal/timeutil"
+	"github.com/luxury-yacht/app/backend/resourcemodel"
 	apierrors "k8s.io/apimachinery/pkg/api/errors"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	unstructuredv1 "k8s.io/apimachinery/pkg/apis/meta/v1/unstructured"
@@ -379,22 +380,14 @@ func (s *Service) buildSummary(desc resourceDescriptor, item metav1.Object) Summ
 // live collect path and the ingest Catalog-half projector (SummaryProjector), which
 // runs before any Service exists. Keeping it one function guarantees the ingest
 // path's Summaries are byte-identical to the shared-informer collect path's.
-func summaryFromObject(clusterID, clusterName string, desc resourceDescriptor, item metav1.Object) Summary {
+func summaryFromObject(clusterID, _ string, desc resourceDescriptor, item metav1.Object) Summary {
 	creationTimestamp := ""
 	if ts := item.GetCreationTimestamp(); !ts.IsZero() {
 		creationTimestamp = ts.UTC().Format(time.RFC3339)
 	}
 
 	summary := Summary{
-		ClusterID:         clusterID,
-		ClusterName:       clusterName,
-		Kind:              desc.Kind,
-		Group:             desc.Group,
-		Version:           desc.Version,
-		Resource:          desc.Resource,
-		Namespace:         item.GetNamespace(),
-		Name:              item.GetName(),
-		UID:               string(item.GetUID()),
+		Ref:               resourcemodel.NewResourceRef(clusterID, desc.Group, desc.Version, desc.Kind, desc.Resource, item.GetNamespace(), item.GetName(), string(item.GetUID())),
 		ResourceVersion:   item.GetResourceVersion(),
 		CreationTimestamp: creationTimestamp,
 		Scope:             desc.Scope,

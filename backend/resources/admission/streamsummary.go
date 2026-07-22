@@ -17,7 +17,7 @@ import (
 // ValidatingWebhookConfiguration.
 func BuildValidatingStreamSummary(meta streamrows.ClusterMeta, webhook *admissionregistrationv1.ValidatingWebhookConfiguration) streamrows.ClusterConfigEntry {
 	if webhook == nil {
-		return streamrows.ClusterConfigEntry{ClusterMeta: meta, Kind: "ValidatingWebhookConfiguration"}
+		return streamrows.ClusterConfigEntry{}
 	}
 	count := len(BuildValidatingFacts(meta.ClusterID, webhook).Webhooks)
 	return streamrows.NewClusterConfigEntry(meta, ValidatingIdentity, webhook, WebhookCountDetails(count), false)
@@ -27,7 +27,7 @@ func BuildValidatingStreamSummary(meta streamrows.ClusterMeta, webhook *admissio
 // MutatingWebhookConfiguration.
 func BuildMutatingStreamSummary(meta streamrows.ClusterMeta, webhook *admissionregistrationv1.MutatingWebhookConfiguration) streamrows.ClusterConfigEntry {
 	if webhook == nil {
-		return streamrows.ClusterConfigEntry{ClusterMeta: meta, Kind: "MutatingWebhookConfiguration"}
+		return streamrows.ClusterConfigEntry{}
 	}
 	count := len(BuildMutatingFacts(meta.ClusterID, webhook).Webhooks)
 	return streamrows.NewClusterConfigEntry(meta, MutatingIdentity, webhook, WebhookCountDetails(count), false)

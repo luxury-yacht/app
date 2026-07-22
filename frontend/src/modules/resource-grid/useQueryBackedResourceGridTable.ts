@@ -78,16 +78,35 @@ export const liveDomainVersion = (
     checksum?: string;
     etag?: string;
     streamRevision?: number;
+    streamAcknowledgedVersion?: number;
+    queryReconcileVersion?: number;
     lastUpdated?: number;
     lastAutoRefresh?: number;
     lastManualRefresh?: number;
   }
 ): string => {
   const clocks = doorbellSourceClocks(domain);
+  const queryReconcileIdentity =
+    state.queryReconcileVersion === undefined
+      ? ''
+      : `query-reconcile:${state.queryReconcileVersion}`;
   if (clocks.length === 0) {
-    return state.sourceVersion ?? state.etag ?? '';
+    return [state.sourceVersion ?? state.etag ?? '', queryReconcileIdentity]
+      .filter(Boolean)
+      .join(' ');
   }
-  return clocks.map((clock) => `${clock}:${state.signalVersions?.[clock] ?? ''}`).join(' ');
+  const clockIdentity = clocks
+    .map((clock) => `${clock}:${state.signalVersions?.[clock] ?? ''}`)
+    .join(' ');
+  return [
+    clockIdentity,
+    state.streamAcknowledgedVersion === undefined
+      ? ''
+      : `stream-ack:${state.streamAcknowledgedVersion}`,
+    queryReconcileIdentity,
+  ]
+    .filter(Boolean)
+    .join(' ');
 };
 
 // Derives the controller source state (data/loading/loaded/error) for a query-backed
@@ -135,9 +154,13 @@ export const isLiveDomainInitialLoadPending = (state: {
   status?: string;
   data?: unknown;
   permissionDenied?: boolean;
+  streamAcknowledgedVersion?: number;
+  queryReconcileVersion?: number;
 }): boolean =>
   !state.data &&
   !state.permissionDenied &&
+  state.streamAcknowledgedVersion === undefined &&
+  state.queryReconcileVersion === undefined &&
   (state.status === 'loading' || state.status === 'initialising');
 
 export interface QueryBackedNamespaceGridResult<T extends ResourceGridTableRow, TPayload = unknown>
@@ -252,6 +275,7 @@ function useTypedQueryLifecycle<
     scope: liveScope || null,
     enabled,
     preserveState: true,
+    demand: 'query',
     fetchOnEnable: false,
   });
   const liveDomain = useRefreshScopedDomain(domain, liveScope);

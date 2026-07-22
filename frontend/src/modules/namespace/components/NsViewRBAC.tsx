@@ -37,13 +37,13 @@ const rbacSpec: AggregatedResourceGridViewSpec<RBACData> = {
   buildColumns: ({ identity, useShortResourceNames }) => [
     cf.createKindColumn<RBACData>({
       key: 'kind',
-      getKind: (resource) => resource.kind,
+      getKind: (resource) => resource.ref.kind,
       getAlias: (resource) => resource.kindAlias,
-      getDisplayText: (resource) => getDisplayKind(resource.kind, useShortResourceNames),
+      getDisplayText: (resource) => getDisplayKind(resource.ref.kind, useShortResourceNames),
       onClick: identity.open,
       onAltClick: identity.navigate,
     }),
-    cf.createTextColumn<RBACData>('name', 'Name', {
+    cf.createTextColumn<RBACData>('name', 'Name', (resource) => resource.ref.name, {
       onClick: identity.open,
       onAltClick: identity.navigate,
       getClassName: () => 'object-panel-link',

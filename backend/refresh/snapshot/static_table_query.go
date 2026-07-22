@@ -63,26 +63,28 @@ func nodePodsUsedSortValue(pods string) (float64, bool) {
 
 func configTableQueryAdapter() typedTableQueryAdapter[ConfigSummary] {
 	return typedTableQueryAdapter[ConfigSummary]{
-		Key:       func(row ConfigSummary) string { return namespacedTableKey(row.Kind, row.Namespace, row.Name) },
+		Key: func(row ConfigSummary) string {
+			return namespacedTableKey(row.Ref.Kind, row.Ref.Namespace, row.Ref.Name)
+		},
 		AnchorKey: namespacedTableKey,
-		Namespace: func(row ConfigSummary) string { return row.Namespace },
-		Kind:      func(row ConfigSummary) string { return row.Kind },
+		Namespace: func(row ConfigSummary) string { return row.Ref.Namespace },
+		Kind:      func(row ConfigSummary) string { return row.Ref.Kind },
 		SearchText: func(row ConfigSummary) []string {
-			return []string{row.Kind, row.TypeAlias, row.Name, row.Namespace, strconv.Itoa(row.Data)}
+			return []string{row.Ref.Kind, row.TypeAlias, row.Ref.Name, row.Ref.Namespace, strconv.Itoa(row.Data)}
 		},
 		Predicate: func(ConfigSummary, string, string) bool { return true },
 		SortValue: func(row ConfigSummary, field string) string {
 			switch strings.ToLower(field) {
 			case "kind":
-				return row.Kind
+				return row.Ref.Kind
 			case "namespace":
-				return row.Namespace
+				return row.Ref.Namespace
 			case "data":
 				return strconv.Itoa(row.Data)
 			case "age":
 				return row.Age
 			default:
-				return row.Name
+				return row.Ref.Name
 			}
 		},
 		NumericSort: func(row ConfigSummary, field string) (float64, bool) {
@@ -99,26 +101,28 @@ func configTableQueryAdapter() typedTableQueryAdapter[ConfigSummary] {
 
 func networkTableQueryAdapter() typedTableQueryAdapter[NetworkSummary] {
 	return typedTableQueryAdapter[NetworkSummary]{
-		Key:       func(row NetworkSummary) string { return namespacedTableKey(row.Kind, row.Namespace, row.Name) },
+		Key: func(row NetworkSummary) string {
+			return namespacedTableKey(row.Ref.Kind, row.Ref.Namespace, row.Ref.Name)
+		},
 		AnchorKey: namespacedTableKey,
-		Namespace: func(row NetworkSummary) string { return row.Namespace },
-		Kind:      func(row NetworkSummary) string { return row.Kind },
+		Namespace: func(row NetworkSummary) string { return row.Ref.Namespace },
+		Kind:      func(row NetworkSummary) string { return row.Ref.Kind },
 		SearchText: func(row NetworkSummary) []string {
-			return []string{row.Kind, row.Name, row.Namespace, row.Details}
+			return []string{row.Ref.Kind, row.Ref.Name, row.Ref.Namespace, row.Details}
 		},
 		Predicate: func(NetworkSummary, string, string) bool { return true },
 		SortValue: func(row NetworkSummary, field string) string {
 			switch strings.ToLower(field) {
 			case "kind":
-				return row.Kind
+				return row.Ref.Kind
 			case "namespace":
-				return row.Namespace
+				return row.Ref.Namespace
 			case "details":
 				return row.Details
 			case "age":
 				return row.Age
 			default:
-				return row.Name
+				return row.Ref.Name
 			}
 		},
 		NumericSort: func(row NetworkSummary, field string) (float64, bool) {
@@ -132,20 +136,22 @@ func networkTableQueryAdapter() typedTableQueryAdapter[NetworkSummary] {
 
 func storageTableQueryAdapter() typedTableQueryAdapter[StorageSummary] {
 	return typedTableQueryAdapter[StorageSummary]{
-		Key:       func(row StorageSummary) string { return namespacedTableKey(row.Kind, row.Namespace, row.Name) },
+		Key: func(row StorageSummary) string {
+			return namespacedTableKey(row.Ref.Kind, row.Ref.Namespace, row.Ref.Name)
+		},
 		AnchorKey: namespacedTableKey,
-		Namespace: func(row StorageSummary) string { return row.Namespace },
-		Kind:      func(row StorageSummary) string { return row.Kind },
+		Namespace: func(row StorageSummary) string { return row.Ref.Namespace },
+		Kind:      func(row StorageSummary) string { return row.Ref.Kind },
 		SearchText: func(row StorageSummary) []string {
-			return []string{row.Kind, row.Name, row.Namespace, row.Capacity, row.Status, row.StorageClass}
+			return []string{row.Ref.Kind, row.Ref.Name, row.Ref.Namespace, row.Capacity, row.Status, row.StorageClass}
 		},
 		Predicate: func(StorageSummary, string, string) bool { return true },
 		SortValue: func(row StorageSummary, field string) string {
 			switch strings.ToLower(field) {
 			case "kind":
-				return row.Kind
+				return row.Ref.Kind
 			case "namespace":
-				return row.Namespace
+				return row.Ref.Namespace
 			case "capacity":
 				return row.Capacity
 			case "status":
@@ -155,7 +161,7 @@ func storageTableQueryAdapter() typedTableQueryAdapter[StorageSummary] {
 			case "age":
 				return row.Age
 			default:
-				return row.Name
+				return row.Ref.Name
 			}
 		},
 		NumericSort: func(row StorageSummary, field string) (float64, bool) {
@@ -169,20 +175,22 @@ func storageTableQueryAdapter() typedTableQueryAdapter[StorageSummary] {
 
 func autoscalingTableQueryAdapter() typedTableQueryAdapter[AutoscalingSummary] {
 	return typedTableQueryAdapter[AutoscalingSummary]{
-		Key:       func(row AutoscalingSummary) string { return namespacedTableKey(row.Kind, row.Namespace, row.Name) },
+		Key: func(row AutoscalingSummary) string {
+			return namespacedTableKey(row.Ref.Kind, row.Ref.Namespace, row.Ref.Name)
+		},
 		AnchorKey: namespacedTableKey,
-		Namespace: func(row AutoscalingSummary) string { return row.Namespace },
-		Kind:      func(row AutoscalingSummary) string { return row.Kind },
+		Namespace: func(row AutoscalingSummary) string { return row.Ref.Namespace },
+		Kind:      func(row AutoscalingSummary) string { return row.Ref.Kind },
 		SearchText: func(row AutoscalingSummary) []string {
-			return []string{row.Kind, row.Name, row.Namespace, row.Target, row.TargetAPIVersion}
+			return []string{row.Ref.Kind, row.Ref.Name, row.Ref.Namespace, row.Target, row.TargetAPIVersion}
 		},
 		Predicate: func(AutoscalingSummary, string, string) bool { return true },
 		SortValue: func(row AutoscalingSummary, field string) string {
 			switch strings.ToLower(field) {
 			case "kind":
-				return row.Kind
+				return row.Ref.Kind
 			case "namespace":
-				return row.Namespace
+				return row.Ref.Namespace
 			case "target", "scaletarget":
 				return row.Target
 			case "min", "minreplicas", "replicas":
@@ -194,7 +202,7 @@ func autoscalingTableQueryAdapter() typedTableQueryAdapter[AutoscalingSummary] {
 			case "age":
 				return row.Age
 			default:
-				return row.Name
+				return row.Ref.Name
 			}
 		},
 		NumericSort: func(row AutoscalingSummary, field string) (float64, bool) {
@@ -216,26 +224,28 @@ func autoscalingTableQueryAdapter() typedTableQueryAdapter[AutoscalingSummary] {
 
 func quotaTableQueryAdapter() typedTableQueryAdapter[QuotaSummary] {
 	return typedTableQueryAdapter[QuotaSummary]{
-		Key:       func(row QuotaSummary) string { return namespacedTableKey(row.Kind, row.Namespace, row.Name) },
+		Key: func(row QuotaSummary) string {
+			return namespacedTableKey(row.Ref.Kind, row.Ref.Namespace, row.Ref.Name)
+		},
 		AnchorKey: namespacedTableKey,
-		Namespace: func(row QuotaSummary) string { return row.Namespace },
-		Kind:      func(row QuotaSummary) string { return row.Kind },
+		Namespace: func(row QuotaSummary) string { return row.Ref.Namespace },
+		Kind:      func(row QuotaSummary) string { return row.Ref.Kind },
 		SearchText: func(row QuotaSummary) []string {
-			return []string{row.Kind, row.Name, row.Namespace, row.Details}
+			return []string{row.Ref.Kind, row.Ref.Name, row.Ref.Namespace, row.Details}
 		},
 		Predicate: func(QuotaSummary, string, string) bool { return true },
 		SortValue: func(row QuotaSummary, field string) string {
 			switch strings.ToLower(field) {
 			case "kind":
-				return row.Kind
+				return row.Ref.Kind
 			case "namespace":
-				return row.Namespace
+				return row.Ref.Namespace
 			case "details":
 				return row.Details
 			case "age":
 				return row.Age
 			default:
-				return row.Name
+				return row.Ref.Name
 			}
 		},
 		NumericSort: func(row QuotaSummary, field string) (float64, bool) {
@@ -249,26 +259,26 @@ func quotaTableQueryAdapter() typedTableQueryAdapter[QuotaSummary] {
 
 func rbacTableQueryAdapter() typedTableQueryAdapter[RBACSummary] {
 	return typedTableQueryAdapter[RBACSummary]{
-		Key:       func(row RBACSummary) string { return namespacedTableKey(row.Kind, row.Namespace, row.Name) },
+		Key:       func(row RBACSummary) string { return namespacedTableKey(row.Ref.Kind, row.Ref.Namespace, row.Ref.Name) },
 		AnchorKey: namespacedTableKey,
-		Namespace: func(row RBACSummary) string { return row.Namespace },
-		Kind:      func(row RBACSummary) string { return row.Kind },
+		Namespace: func(row RBACSummary) string { return row.Ref.Namespace },
+		Kind:      func(row RBACSummary) string { return row.Ref.Kind },
 		SearchText: func(row RBACSummary) []string {
-			return []string{row.Kind, row.Name, row.Namespace, row.Details}
+			return []string{row.Ref.Kind, row.Ref.Name, row.Ref.Namespace, row.Details}
 		},
 		Predicate: func(RBACSummary, string, string) bool { return true },
 		SortValue: func(row RBACSummary, field string) string {
 			switch strings.ToLower(field) {
 			case "kind":
-				return row.Kind
+				return row.Ref.Kind
 			case "namespace":
-				return row.Namespace
+				return row.Ref.Namespace
 			case "details":
 				return row.Details
 			case "age":
 				return row.Age
 			default:
-				return row.Name
+				return row.Ref.Name
 			}
 		},
 		NumericSort: func(row RBACSummary, field string) (float64, bool) {
@@ -283,13 +293,13 @@ func rbacTableQueryAdapter() typedTableQueryAdapter[RBACSummary] {
 func helmTableQueryAdapter() typedTableQueryAdapter[NamespaceHelmSummary] {
 	return typedTableQueryAdapter[NamespaceHelmSummary]{
 		Key: func(row NamespaceHelmSummary) string {
-			return namespacedTableKey("HelmRelease", row.Namespace, row.Name)
+			return namespacedTableKey("HelmRelease", row.Ref.Namespace, row.Ref.Name)
 		},
 		AnchorKey: func(_, namespace, name string) string { return namespacedTableKey("HelmRelease", namespace, name) },
-		Namespace: func(row NamespaceHelmSummary) string { return row.Namespace },
+		Namespace: func(row NamespaceHelmSummary) string { return row.Ref.Namespace },
 		Kind:      func(NamespaceHelmSummary) string { return "HelmRelease" },
 		SearchText: func(row NamespaceHelmSummary) []string {
-			return []string{row.Name, row.Namespace, row.Chart, row.AppVersion, row.Status, row.Description}
+			return []string{row.Ref.Name, row.Ref.Namespace, row.Chart, row.AppVersion, row.Status, row.Description}
 		},
 		Predicate: func(NamespaceHelmSummary, string, string) bool { return true },
 		SortValue: func(row NamespaceHelmSummary, field string) string {
@@ -297,7 +307,7 @@ func helmTableQueryAdapter() typedTableQueryAdapter[NamespaceHelmSummary] {
 			case "kind":
 				return "HelmRelease"
 			case "namespace":
-				return row.Namespace
+				return row.Ref.Namespace
 			case "chart":
 				return row.Chart
 			case "appversion":
@@ -311,7 +321,7 @@ func helmTableQueryAdapter() typedTableQueryAdapter[NamespaceHelmSummary] {
 			case "age":
 				return row.Age
 			default:
-				return row.Name
+				return row.Ref.Name
 			}
 		},
 		NumericSort: func(row NamespaceHelmSummary, field string) (float64, bool) {
@@ -345,9 +355,9 @@ func eventQueryFacets[T any](eventType, reason, source func(T) string) []typedTa
 
 func namespacedEventTableQueryAdapter() typedTableQueryAdapter[EventSummary] {
 	return typedTableQueryAdapter[EventSummary]{
-		Key:       func(row EventSummary) string { return namespacedTableKey("Event", row.Namespace, row.Name) },
+		Key:       func(row EventSummary) string { return namespacedTableKey("Event", row.Ref.Namespace, row.Ref.Name) },
 		AnchorKey: func(_, namespace, name string) string { return namespacedTableKey("Event", namespace, name) },
-		Namespace: func(row EventSummary) string { return row.Namespace },
+		Namespace: func(row EventSummary) string { return row.Ref.Namespace },
 		Kind:      func(row EventSummary) string { return row.Kind },
 		Facets: eventQueryFacets(
 			func(row EventSummary) string { return row.Type },
@@ -355,7 +365,7 @@ func namespacedEventTableQueryAdapter() typedTableQueryAdapter[EventSummary] {
 			func(row EventSummary) string { return row.Source },
 		),
 		SearchText: func(row EventSummary) []string {
-			return []string{row.Kind, row.Name, row.Namespace, row.Type, row.Source, row.Reason, row.Object, row.Message}
+			return []string{row.Kind, row.Ref.Name, row.Ref.Namespace, row.Type, row.Source, row.Reason, row.Object, row.Message}
 		},
 		Predicate: func(EventSummary, string, string) bool { return true },
 		SortValue: func(row EventSummary, field string) string {
@@ -363,7 +373,7 @@ func namespacedEventTableQueryAdapter() typedTableQueryAdapter[EventSummary] {
 			case "kind":
 				return row.Kind
 			case "namespace":
-				return row.Namespace
+				return row.Ref.Namespace
 			case "type":
 				return row.Type
 			case "source":
@@ -381,7 +391,7 @@ func namespacedEventTableQueryAdapter() typedTableQueryAdapter[EventSummary] {
 			case "age", "agetimestamp":
 				return strconv.FormatInt(row.AgeTimestamp, 10)
 			default:
-				return row.Name
+				return row.Ref.Name
 			}
 		},
 		NumericSort: func(row EventSummary, field string) (float64, bool) {
@@ -398,23 +408,25 @@ func namespacedEventTableQueryAdapter() typedTableQueryAdapter[EventSummary] {
 
 func clusterEventTableQueryAdapter() typedTableQueryAdapter[ClusterEventEntry] {
 	return typedTableQueryAdapter[ClusterEventEntry]{
-		Key:       func(row ClusterEventEntry) string { return namespacedTableKey("Event", row.Namespace, row.Name) },
+		Key: func(row ClusterEventEntry) string {
+			return namespacedTableKey("Event", row.Ref.Namespace, row.Ref.Name)
+		},
 		AnchorKey: func(_, namespace, name string) string { return namespacedTableKey("Event", namespace, name) },
-		Namespace: func(row ClusterEventEntry) string { return row.Namespace },
-		Kind:      func(row ClusterEventEntry) string { return row.Kind },
+		Namespace: func(row ClusterEventEntry) string { return row.Ref.Namespace },
+		Kind:      func(row ClusterEventEntry) string { return row.Ref.Kind },
 		Facets: eventQueryFacets(
 			func(row ClusterEventEntry) string { return row.Type },
 			func(row ClusterEventEntry) string { return row.Reason },
 			func(row ClusterEventEntry) string { return row.Source },
 		),
 		SearchText: func(row ClusterEventEntry) []string {
-			return []string{row.Kind, row.Name, row.Type, row.Source, row.Reason, row.Object, row.Message}
+			return []string{row.Ref.Kind, row.Ref.Name, row.Type, row.Source, row.Reason, row.Object, row.Message}
 		},
 		Predicate: func(ClusterEventEntry, string, string) bool { return true },
 		SortValue: func(row ClusterEventEntry, field string) string {
 			switch strings.ToLower(field) {
 			case "kind":
-				return row.Kind
+				return row.Ref.Kind
 			case "type":
 				return row.Type
 			case "source":
@@ -432,7 +444,7 @@ func clusterEventTableQueryAdapter() typedTableQueryAdapter[ClusterEventEntry] {
 			case "age", "agetimestamp":
 				return strconv.FormatInt(row.AgeTimestamp, 10)
 			default:
-				return row.Name
+				return row.Ref.Name
 			}
 		},
 		NumericSort: func(row ClusterEventEntry, field string) (float64, bool) {
@@ -463,13 +475,13 @@ func metadataSearchText(maps ...map[string]string) []string {
 
 func nodeTableQueryAdapter() typedTableQueryAdapter[NodeSummary] {
 	return typedTableQueryAdapter[NodeSummary]{
-		Key:       func(row NodeSummary) string { return clusterTableKey(nodespkg.Identity.Kind, row.Name) },
+		Key:       func(row NodeSummary) string { return clusterTableKey(nodespkg.Identity.Kind, row.Ref.Name) },
 		AnchorKey: func(_, _, name string) string { return clusterTableKey(nodespkg.Identity.Kind, name) },
 		Namespace: func(NodeSummary) string { return "" },
 		Kind:      func(NodeSummary) string { return nodespkg.Identity.Kind },
 		Facets:    nodeQueryFacets(),
 		SearchText: func(row NodeSummary) []string {
-			return []string{row.Name, row.Status, row.Roles, row.Version, row.InternalIP, row.ExternalIP}
+			return []string{row.Ref.Name, row.Status, row.Roles, row.Version, row.InternalIP, row.ExternalIP}
 		},
 		MetadataText: func(row NodeSummary) []string {
 			return metadataSearchText(row.Labels, row.Annotations)
@@ -496,7 +508,7 @@ func nodeTableQueryAdapter() typedTableQueryAdapter[NodeSummary] {
 			case "age", "agetimestamp":
 				return strconv.FormatInt(row.AgeTimestamp, 10)
 			default:
-				return row.Name
+				return row.Ref.Name
 			}
 		},
 		NumericSort: func(row NodeSummary, field string) (float64, bool) {
@@ -522,24 +534,24 @@ func nodeTableQueryAdapter() typedTableQueryAdapter[NodeSummary] {
 
 func clusterConfigTableQueryAdapter() typedTableQueryAdapter[ClusterConfigEntry] {
 	return typedTableQueryAdapter[ClusterConfigEntry]{
-		Key:       func(row ClusterConfigEntry) string { return clusterTableKey(row.Kind, row.Name) },
+		Key:       func(row ClusterConfigEntry) string { return clusterTableKey(row.Ref.Kind, row.Ref.Name) },
 		AnchorKey: func(kind, _, name string) string { return clusterTableKey(kind, name) },
 		Namespace: func(ClusterConfigEntry) string { return "" },
-		Kind:      func(row ClusterConfigEntry) string { return row.Kind },
+		Kind:      func(row ClusterConfigEntry) string { return row.Ref.Kind },
 		SearchText: func(row ClusterConfigEntry) []string {
-			return []string{row.Kind, row.Name, row.Details}
+			return []string{row.Ref.Kind, row.Ref.Name, row.Details}
 		},
 		Predicate: func(ClusterConfigEntry, string, string) bool { return true },
 		SortValue: func(row ClusterConfigEntry, field string) string {
 			switch strings.ToLower(field) {
 			case "kind":
-				return row.Kind
+				return row.Ref.Kind
 			case "details":
 				return row.Details
 			case "age":
 				return row.Age
 			default:
-				return row.Name
+				return row.Ref.Name
 			}
 		},
 		NumericSort: func(row ClusterConfigEntry, field string) (float64, bool) {
@@ -553,18 +565,18 @@ func clusterConfigTableQueryAdapter() typedTableQueryAdapter[ClusterConfigEntry]
 
 func clusterStorageTableQueryAdapter() typedTableQueryAdapter[ClusterStorageEntry] {
 	return typedTableQueryAdapter[ClusterStorageEntry]{
-		Key:       func(row ClusterStorageEntry) string { return clusterTableKey(row.Kind, row.Name) },
+		Key:       func(row ClusterStorageEntry) string { return clusterTableKey(row.Ref.Kind, row.Ref.Name) },
 		AnchorKey: func(kind, _, name string) string { return clusterTableKey(kind, name) },
 		Namespace: func(ClusterStorageEntry) string { return "" },
-		Kind:      func(row ClusterStorageEntry) string { return row.Kind },
+		Kind:      func(row ClusterStorageEntry) string { return row.Ref.Kind },
 		SearchText: func(row ClusterStorageEntry) []string {
-			return []string{row.Kind, row.Name, row.StorageClass, row.Capacity, row.AccessModes, row.Status, row.Claim}
+			return []string{row.Ref.Kind, row.Ref.Name, row.StorageClass, row.Capacity, row.AccessModes, row.Status, row.Claim}
 		},
 		Predicate: func(ClusterStorageEntry, string, string) bool { return true },
 		SortValue: func(row ClusterStorageEntry, field string) string {
 			switch strings.ToLower(field) {
 			case "kind":
-				return row.Kind
+				return row.Ref.Kind
 			case "storageclass":
 				return row.StorageClass
 			case "capacity":
@@ -578,7 +590,7 @@ func clusterStorageTableQueryAdapter() typedTableQueryAdapter[ClusterStorageEntr
 			case "age":
 				return row.Age
 			default:
-				return row.Name
+				return row.Ref.Name
 			}
 		},
 		NumericSort: func(row ClusterStorageEntry, field string) (float64, bool) {
@@ -592,24 +604,24 @@ func clusterStorageTableQueryAdapter() typedTableQueryAdapter[ClusterStorageEntr
 
 func clusterRBACTableQueryAdapter() typedTableQueryAdapter[ClusterRBACEntry] {
 	return typedTableQueryAdapter[ClusterRBACEntry]{
-		Key:       func(row ClusterRBACEntry) string { return clusterTableKey(row.Kind, row.Name) },
+		Key:       func(row ClusterRBACEntry) string { return clusterTableKey(row.Ref.Kind, row.Ref.Name) },
 		AnchorKey: func(kind, _, name string) string { return clusterTableKey(kind, name) },
 		Namespace: func(ClusterRBACEntry) string { return "" },
-		Kind:      func(row ClusterRBACEntry) string { return row.Kind },
+		Kind:      func(row ClusterRBACEntry) string { return row.Ref.Kind },
 		SearchText: func(row ClusterRBACEntry) []string {
-			return []string{row.Kind, row.TypeAlias, row.Name, row.Details}
+			return []string{row.Ref.Kind, row.TypeAlias, row.Ref.Name, row.Details}
 		},
 		Predicate: func(ClusterRBACEntry, string, string) bool { return true },
 		SortValue: func(row ClusterRBACEntry, field string) string {
 			switch strings.ToLower(field) {
 			case "kind":
-				return row.Kind
+				return row.Ref.Kind
 			case "details":
 				return row.Details
 			case "age":
 				return row.Age
 			default:
-				return row.Name
+				return row.Ref.Name
 			}
 		},
 		NumericSort: func(row ClusterRBACEntry, field string) (float64, bool) {
@@ -623,18 +635,18 @@ func clusterRBACTableQueryAdapter() typedTableQueryAdapter[ClusterRBACEntry] {
 
 func clusterCRDTableQueryAdapter() typedTableQueryAdapter[ClusterCRDEntry] {
 	return typedTableQueryAdapter[ClusterCRDEntry]{
-		Key:       func(row ClusterCRDEntry) string { return clusterTableKey("CustomResourceDefinition", row.Name) },
+		Key:       func(row ClusterCRDEntry) string { return clusterTableKey("CustomResourceDefinition", row.Ref.Name) },
 		AnchorKey: func(_, _, name string) string { return clusterTableKey("CustomResourceDefinition", name) },
 		Namespace: func(ClusterCRDEntry) string { return "" },
 		Kind:      func(ClusterCRDEntry) string { return "CustomResourceDefinition" },
 		SearchText: func(row ClusterCRDEntry) []string {
-			return []string{row.Kind, row.TypeAlias, row.Name, row.Group, row.Scope, row.Details, row.StorageVersion}
+			return []string{row.Ref.Kind, row.TypeAlias, row.Ref.Name, row.Group, row.Scope, row.Details, row.StorageVersion}
 		},
 		Predicate: func(ClusterCRDEntry, string, string) bool { return true },
 		SortValue: func(row ClusterCRDEntry, field string) string {
 			switch strings.ToLower(field) {
 			case "kind":
-				return row.Kind
+				return row.Ref.Kind
 			case "group":
 				return row.Group
 			case "scope":
@@ -646,7 +658,7 @@ func clusterCRDTableQueryAdapter() typedTableQueryAdapter[ClusterCRDEntry] {
 			case "age":
 				return row.Age
 			default:
-				return row.Name
+				return row.Ref.Name
 			}
 		},
 		NumericSort: func(row ClusterCRDEntry, field string) (float64, bool) {
@@ -674,8 +686,8 @@ func clusterTableKey(kind, name string) string {
 // TestKeyFromCatalogMatchesAdapterKeyForEveryMaintainedKind. A cluster-scoped object (no
 // namespace) keys without a namespace segment, exactly as clusterTableKey does.
 func keyFromCatalog(summary objectcatalog.Summary) string {
-	if summary.Namespace == "" {
-		return clusterTableKey(summary.Kind, summary.Name)
+	if summary.Ref.Namespace == "" {
+		return clusterTableKey(summary.Ref.Kind, summary.Ref.Name)
 	}
-	return namespacedTableKey(summary.Kind, summary.Namespace, summary.Name)
+	return namespacedTableKey(summary.Ref.Kind, summary.Ref.Namespace, summary.Ref.Name)
 }

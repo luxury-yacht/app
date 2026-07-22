@@ -16,7 +16,7 @@ import (
 // BuildStreamSummary builds the namespace-quotas row for one PodDisruptionBudget.
 func BuildStreamSummary(meta streamrows.ClusterMeta, pdb *policyv1.PodDisruptionBudget) streamrows.QuotaSummary {
 	if pdb == nil {
-		return streamrows.QuotaSummary{ClusterMeta: meta, Kind: "PodDisruptionBudget"}
+		return streamrows.QuotaSummary{}
 	}
 	facts := BuildFacts(meta.ClusterID, pdb)
 	summary := streamrows.NewQuotaSummary(meta, Identity, pdb, DescribeSummary(facts))

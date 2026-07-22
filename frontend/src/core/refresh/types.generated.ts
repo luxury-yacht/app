@@ -120,15 +120,7 @@ export interface CatalogActionFacts {
 }
 
 export interface CatalogItem {
-  clusterId: string;
-  clusterName: string;
-  kind: string;
-  group: string;
-  version: string;
-  resource: string;
-  namespace?: string;
-  name: string;
-  uid: string;
+  ref: CanonicalResourceRef;
   resourceVersion: string;
   creationTimestamp: string;
   scope: CatalogItemScope;
@@ -177,11 +169,7 @@ export interface CatalogSnapshotPayload {
 }
 
 export interface ClusterAttentionFinding {
-  clusterId: string;
-  clusterName: string;
-  ref: ResourceRef;
-  kind: string;
-  name: string;
+  ref: CanonicalResourceRef;
   namespace?: string;
   severity: AttentionSeverity;
   status: string;
@@ -220,11 +208,7 @@ export interface ClusterAttentionSnapshot {
 }
 
 export interface ClusterCRDEntry {
-  clusterId: string;
-  clusterName: string;
-  ref: ResourceRef;
-  kind: string;
-  name: string;
+  ref: CanonicalResourceRef;
   group: string;
   scope: string;
   details: string;
@@ -262,11 +246,7 @@ export interface ClusterCRDSnapshotPayload {
 }
 
 export interface ClusterConfigEntry {
-  clusterId: string;
-  clusterName: string;
-  ref: ResourceRef;
-  kind: string;
-  name: string;
+  ref: CanonicalResourceRef;
   details: string;
   isDefault?: boolean;
   age: string;
@@ -300,13 +280,7 @@ export interface ClusterConfigSnapshotPayload {
 }
 
 export interface ClusterCustomEntry {
-  clusterId: string;
-  clusterName: string;
-  ref: ResourceRef;
-  kind: string;
-  name: string;
-  group: string;
-  version: string;
+  ref: CanonicalResourceRef;
   crdName?: string;
   status?: string;
   statusState?: string;
@@ -327,14 +301,8 @@ export interface ClusterCustomSnapshotPayload {
 }
 
 export interface ClusterEventEntry {
-  clusterId: string;
-  clusterName: string;
-  ref: ResourceRef;
-  kind: string;
-  name: string;
-  uid: string;
+  ref: CanonicalResourceRef;
   resourceVersion: string;
-  namespace: string;
   objectNamespace: string;
   objectUid: string;
   objectApiVersion: string;
@@ -375,10 +343,7 @@ export interface ClusterEventsSnapshotPayload {
 }
 
 export interface ClusterNodeSnapshotEntry {
-  clusterId: string;
-  clusterName: string;
-  ref: ResourceRef;
-  name: string;
+  ref: CanonicalResourceRef;
   status: string;
   statusState?: string;
   statusPresentation?: string;
@@ -403,7 +368,6 @@ export interface ClusterNodeSnapshotEntry {
   podsCapacity: string;
   podsAllocatable: string;
   restarts: number;
-  kind: string;
   cpu: string;
   memory: string;
   unschedulable: boolean;
@@ -503,11 +467,7 @@ export interface ClusterOverviewSnapshotPayload {
 }
 
 export interface ClusterRBACEntry {
-  clusterId: string;
-  clusterName: string;
-  ref: ResourceRef;
-  kind: string;
-  name: string;
+  ref: CanonicalResourceRef;
   details: string;
   age: string;
   ageTimestamp?: number;
@@ -541,11 +501,7 @@ export interface ClusterRBACSnapshotPayload {
 }
 
 export interface ClusterStorageEntry {
-  clusterId: string;
-  clusterName: string;
-  ref: ResourceRef;
-  kind: string;
-  name: string;
+  ref: CanonicalResourceRef;
   storageClass?: string;
   capacity: string;
   accessModes: string;
@@ -614,14 +570,7 @@ export interface ContainerLogsWireEntry {
 }
 
 export interface CustomResourceSummary {
-  clusterId: string;
-  clusterName: string;
-  ref: ResourceRef;
-  kind: string;
-  name: string;
-  namespace?: string;
-  group: string;
-  version: string;
+  ref: CanonicalResourceRef;
   crdName?: string;
   status?: string;
   statusState?: string;
@@ -687,12 +636,7 @@ export interface NamespaceAutoscalingSnapshotPayload {
 }
 
 export interface NamespaceAutoscalingSummary {
-  clusterId: string;
-  clusterName: string;
-  ref: ResourceRef;
-  kind: string;
-  name: string;
-  namespace: string;
+  ref: CanonicalResourceRef;
   target: string;
   targetApiVersion?: string;
   min: number;
@@ -729,13 +673,8 @@ export interface NamespaceConfigSnapshotPayload {
 }
 
 export interface NamespaceConfigSummary {
-  clusterId: string;
-  clusterName: string;
-  ref: ResourceRef;
-  kind: string;
+  ref: CanonicalResourceRef;
   typeAlias?: string;
-  name: string;
-  namespace: string;
   data: number;
   age: string;
   ageTimestamp?: number;
@@ -749,15 +688,8 @@ export interface NamespaceCustomSnapshotPayload {
 }
 
 export interface NamespaceCustomSummary {
-  clusterId: string;
-  clusterName: string;
-  ref: ResourceRef;
-  kind: string;
-  name: string;
-  group: string;
-  version: string;
+  ref: CanonicalResourceRef;
   crdName?: string;
-  namespace: string;
   status?: string;
   statusState?: string;
   statusPresentation?: string;
@@ -770,14 +702,9 @@ export interface NamespaceCustomSummary {
 }
 
 export interface NamespaceEventSummary {
-  clusterId: string;
-  clusterName: string;
-  ref: ResourceRef;
+  ref: CanonicalResourceRef;
   kind: string;
-  name: string;
-  uid: string;
   resourceVersion: string;
-  namespace: string;
   objectNamespace: string;
   objectUid: string;
   objectApiVersion: string;
@@ -844,11 +771,7 @@ export interface NamespaceHelmSnapshotPayload {
 }
 
 export interface NamespaceHelmSummary {
-  clusterId: string;
-  clusterName: string;
-  ref: ResourceRef;
-  name: string;
-  namespace: string;
+  ref: CanonicalResourceRef;
   chart: string;
   appVersion: string;
   status: string;
@@ -863,7 +786,7 @@ export interface NamespaceHelmSummary {
 }
 
 export interface NamespaceMetric {
-  ref: ResourceRef;
+  ref: CanonicalResourceRef;
   cpuUsageMilli?: number;
   memoryUsageBytes?: number;
 }
@@ -903,24 +826,14 @@ export interface NamespaceNetworkSnapshotPayload {
 }
 
 export interface NamespaceNetworkSummary {
-  clusterId: string;
-  clusterName: string;
-  ref: ResourceRef;
-  kind: string;
-  name: string;
-  namespace: string;
+  ref: CanonicalResourceRef;
   details: string;
   age: string;
   ageTimestamp?: number;
 }
 
 export interface NamespaceQuotaSummary {
-  clusterId: string;
-  clusterName: string;
-  ref: ResourceRef;
-  kind: string;
-  name: string;
-  namespace: string;
+  ref: CanonicalResourceRef;
   details: string;
   age: string;
   ageTimestamp?: number;
@@ -982,12 +895,7 @@ export interface NamespaceRBACSnapshotPayload {
 }
 
 export interface NamespaceRBACSummary {
-  clusterId: string;
-  clusterName: string;
-  ref: ResourceRef;
-  kind: string;
-  name: string;
-  namespace: string;
+  ref: CanonicalResourceRef;
   details: string;
   age: string;
   ageTimestamp?: number;
@@ -1026,12 +934,7 @@ export interface NamespaceStorageSnapshotPayload {
 }
 
 export interface NamespaceStorageSummary {
-  clusterId: string;
-  clusterName: string;
-  ref: ResourceRef;
-  kind: string;
-  name: string;
-  namespace: string;
+  ref: CanonicalResourceRef;
   capacity: string;
   status: string;
   statusState?: string;
@@ -1043,10 +946,7 @@ export interface NamespaceStorageSummary {
 }
 
 export interface NamespaceSummary {
-  clusterId: string;
-  clusterName: string;
-  ref: ResourceRef;
-  name: string;
+  ref: CanonicalResourceRef;
   phase: string;
   status?: string;
   statusState?: string;
@@ -1098,12 +998,7 @@ export interface NamespaceWorkloadSnapshotPayload {
 }
 
 export interface NamespaceWorkloadSummary {
-  clusterId: string;
-  clusterName: string;
-  ref: ResourceRef;
-  kind: string;
-  name: string;
-  namespace: string;
+  ref: CanonicalResourceRef;
   ready: string;
   status: string;
   statusState?: string;
@@ -1185,11 +1080,7 @@ export interface ObjectDetailsSnapshotPayload {
 }
 
 export interface ObjectEventSummary {
-  clusterId: string;
-  clusterName: string;
-  kind: string;
-  name: string;
-  uid: string;
+  ref: CanonicalResourceRef;
   resourceVersion: string;
   eventType: string;
   reason: string;
@@ -1204,7 +1095,6 @@ export interface ObjectEventSummary {
   involvedObjectUid: string;
   involvedObjectApiVersion: string;
   involvedObject?: ResourceLink;
-  namespace: string;
 }
 
 export interface ObjectEventsSnapshotPayload {
@@ -1302,11 +1192,7 @@ export interface PodMetricsInfo {
 }
 
 export interface PodSnapshotEntry {
-  clusterId: string;
-  clusterName: string;
-  ref: ResourceRef;
-  name: string;
-  namespace: string;
+  ref: CanonicalResourceRef;
   node: string;
   status: string;
   statusState?: string;
@@ -1701,6 +1587,11 @@ export interface WorkloadResourceUsage {
 export interface WorkloadTypeResourceUsage {
   cpuUsage: string;
   memoryUsage: string;
+}
+
+export interface CanonicalResourceRef extends ResourceRef {
+  resource: string;
+  name: string;
 }
 
 export interface RefreshSnapshot<TPayload> {

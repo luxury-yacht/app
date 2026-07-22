@@ -58,7 +58,7 @@ const autoscalingSpec: AggregatedResourceGridViewSpec<AutoscalingData> = {
         const scaleTargetRef = parseAutoscalingTarget(item.target, item.targetApiVersion);
         return {
           ...item,
-          kindAlias: item.kind,
+          kindAlias: item.ref.kind,
           scaleTargetRef,
           minReplicas: item.min,
           maxReplicas: item.max,
@@ -71,6 +71,7 @@ const autoscalingSpec: AggregatedResourceGridViewSpec<AutoscalingData> = {
     openReference,
     navigateReference,
     fallbackClusterId,
+    fallbackClusterName,
     useShortResourceNames,
   }) => {
     const buildScaleTargetReference = (resource: AutoscalingData) => {
@@ -82,10 +83,10 @@ const autoscalingSpec: AggregatedResourceGridViewSpec<AutoscalingData> = {
           {
             kind: resource.scaleTargetRef.kind,
             name: resource.scaleTargetRef.name,
-            namespace: resource.namespace,
+            namespace: resource.ref.namespace,
             apiVersion: resource.scaleTargetRef.apiVersion,
-            clusterId: resource.clusterId,
-            clusterName: resource.clusterName ?? undefined,
+            clusterId: resource.ref.clusterId,
+            clusterName: fallbackClusterName || undefined,
           },
           { fallbackClusterId }
         );
@@ -97,17 +98,17 @@ const autoscalingSpec: AggregatedResourceGridViewSpec<AutoscalingData> = {
     return [
       cf.createKindColumn<AutoscalingData>({
         key: 'kind',
-        getKind: (resource) => resource.kind,
+        getKind: (resource) => resource.ref.kind,
         getAlias: (resource) => resource.kindAlias,
         getDisplayText: (resource) =>
           getDisplayKind(
-            resource.kind || resource.kindAlias || 'Autoscaler',
+            resource.ref.kind || resource.kindAlias || 'Autoscaler',
             useShortResourceNames
           ),
         onClick: identity.open,
         onAltClick: identity.navigate,
       }),
-      cf.createTextColumn<AutoscalingData>('name', 'Name', {
+      cf.createTextColumn<AutoscalingData>('name', 'Name', (resource) => resource.ref.name, {
         onClick: identity.open,
         onAltClick: identity.navigate,
         getClassName: () => 'object-panel-link',
@@ -149,7 +150,7 @@ const autoscalingSpec: AggregatedResourceGridViewSpec<AutoscalingData> = {
         'replicas',
         'Min/Max',
         (resource) => {
-          if (resource.kind === 'HorizontalPodAutoscaler') {
+          if (resource.ref.kind === 'HorizontalPodAutoscaler') {
             const minValue = resource.minReplicas ?? resource.min;
             const min = minValue !== undefined && minValue !== null ? minValue : 1;
             const maxValue = resource.maxReplicas ?? resource.max;
@@ -161,18 +162,18 @@ const autoscalingSpec: AggregatedResourceGridViewSpec<AutoscalingData> = {
           alignHeader: 'center',
           alignData: 'center',
           getClassName: (resource) =>
-            resource.kind === 'HorizontalPodAutoscaler' ? 'replica-range' : undefined,
+            resource.ref.kind === 'HorizontalPodAutoscaler' ? 'replica-range' : undefined,
         }
       ),
       cf.createTextColumn<AutoscalingData>(
         'current',
         'Current',
         (resource) => {
-          if (resource.kind === 'HorizontalPodAutoscaler') {
+          if (resource.ref.kind === 'HorizontalPodAutoscaler') {
             const current = resource.currentReplicas ?? resource.current;
             return `${current !== undefined && current !== null ? current : 0}`;
           }
-          if (resource.kind === 'VerticalPodAutoscaler') {
+          if (resource.ref.kind === 'VerticalPodAutoscaler') {
             return resource.status || 'Unknown';
           }
           return '-';
@@ -181,10 +182,10 @@ const autoscalingSpec: AggregatedResourceGridViewSpec<AutoscalingData> = {
           alignHeader: 'center',
           alignData: 'center',
           getClassName: (resource) => {
-            if (resource.kind === 'HorizontalPodAutoscaler') {
+            if (resource.ref.kind === 'HorizontalPodAutoscaler') {
               return 'current-replicas';
             }
-            if (resource.kind === 'VerticalPodAutoscaler') {
+            if (resource.ref.kind === 'VerticalPodAutoscaler') {
               const status = resource.status || 'Unknown';
               return `vpa-status ${status.toLowerCase()}`;
             }

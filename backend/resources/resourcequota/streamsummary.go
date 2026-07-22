@@ -16,7 +16,7 @@ import (
 // BuildStreamSummary builds the namespace-quotas row for one ResourceQuota.
 func BuildStreamSummary(meta streamrows.ClusterMeta, quota *corev1.ResourceQuota) streamrows.QuotaSummary {
 	if quota == nil {
-		return streamrows.QuotaSummary{ClusterMeta: meta, Kind: "ResourceQuota"}
+		return streamrows.QuotaSummary{}
 	}
 	return streamrows.NewQuotaSummary(meta, Identity, quota, DescribeSummary(BuildFacts(quota)))
 }

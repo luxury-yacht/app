@@ -40,7 +40,13 @@ const storageSpec: AggregatedResourceGridViewSpec<StorageData> = {
   emptyMessage: () => 'No cluster-scoped storage objects found',
   spinnerMessage: 'Loading storage resources...',
   tableClassName: 'gridtable-pvs',
-  buildColumns: ({ identity, openObject, navigateObject, useShortResourceNames }) => {
+  buildColumns: ({
+    identity,
+    openObject,
+    navigateObject,
+    fallbackClusterName,
+    useShortResourceNames,
+  }) => {
     const claimReference = (pv: StorageData) => {
       const target = getClaimTarget(pv);
       if (!target) {
@@ -50,8 +56,8 @@ const storageSpec: AggregatedResourceGridViewSpec<StorageData> = {
         kind: 'PersistentVolumeClaim',
         namespace: target.namespace,
         name: target.name,
-        clusterId: pv.clusterId ?? undefined,
-        clusterName: pv.clusterName ?? undefined,
+        clusterId: pv.ref.clusterId ?? undefined,
+        clusterName: fallbackClusterName ?? undefined,
       };
     };
     const storageClassReference = (pv: StorageData) =>
@@ -59,21 +65,21 @@ const storageSpec: AggregatedResourceGridViewSpec<StorageData> = {
         ? {
             kind: 'StorageClass',
             name: pv.storageClass,
-            clusterId: pv.clusterId ?? undefined,
-            clusterName: pv.clusterName ?? undefined,
+            clusterId: pv.ref.clusterId ?? undefined,
+            clusterName: fallbackClusterName ?? undefined,
           }
         : null;
 
     return [
       cf.createKindColumn<StorageData>({
         key: 'kind',
-        getKind: (pv) => pv.kind || 'PersistentVolume',
+        getKind: (pv) => pv.ref.kind || 'PersistentVolume',
         getDisplayText: (pv) =>
-          getDisplayKind(pv.kind || 'PersistentVolume', useShortResourceNames),
+          getDisplayKind(pv.ref.kind || 'PersistentVolume', useShortResourceNames),
         onClick: identity.open,
         onAltClick: identity.navigate,
       }),
-      cf.createTextColumn<StorageData>('name', 'Name', {
+      cf.createTextColumn<StorageData>('name', 'Name', (pv) => pv.ref.name, {
         onClick: identity.open,
         onAltClick: identity.navigate,
         getClassName: () => 'object-panel-link',

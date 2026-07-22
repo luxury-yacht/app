@@ -11,6 +11,7 @@ import {
   recordBlockedBrokerRead,
 } from '@/core/read-diagnostics';
 import { refreshOrchestrator } from '@/core/refresh';
+import type { RefreshDemand } from '@/core/refresh/refreshRuntime';
 import { getScopedDomainState } from '@/core/refresh/store';
 import type { RefreshDomain } from '@/core/refresh/types';
 import { getAutoRefreshEnabled } from '@/core/settings/appPreferences';
@@ -166,15 +167,21 @@ export const acquireRefreshDomainLease = ({
   domain,
   scope,
   preserveState = false,
+  demand = 'snapshot',
 }: {
   domain: RefreshDomain;
   scope: string;
   preserveState?: boolean;
+  demand?: RefreshDemand;
 }): void => {
   refreshOrchestrator.acquireScopedDomainLease(
     domain,
     scope,
-    preserveState ? { preserveState } : undefined
+    demand === 'snapshot'
+      ? preserveState
+        ? { preserveState }
+        : undefined
+      : { preserveState, demand }
   );
 };
 
@@ -182,15 +189,21 @@ export const releaseRefreshDomainLease = ({
   domain,
   scope,
   preserveState = false,
+  demand = 'snapshot',
 }: {
   domain: RefreshDomain;
   scope: string;
   preserveState?: boolean;
+  demand?: RefreshDemand;
 }): void => {
   refreshOrchestrator.releaseScopedDomainLease(
     domain,
     scope,
-    preserveState ? { preserveState } : undefined
+    demand === 'snapshot'
+      ? preserveState
+        ? { preserveState }
+        : undefined
+      : { preserveState, demand }
   );
 };
 

@@ -137,41 +137,28 @@ const makeState = (overrides: Partial<Record<string, unknown>> = {}) => ({
   ...overrides,
 });
 
+const catalogItemFixture = (name: string, uid: string, clusterId = 'cluster-a') => ({
+  ref: {
+    clusterId,
+    group: 'apps',
+    version: 'v1',
+    kind: 'Deployment',
+    resource: 'deployments',
+    namespace: 'apps',
+    name,
+    uid,
+  },
+  resourceVersion: '1',
+  creationTimestamp: '2026-01-01T00:00:00Z',
+  scope: 'Namespace' as const,
+});
+
 const catalogItems = [
-  {
-    uid: 'alpha-uid',
-    name: 'alpha',
-    namespace: 'apps',
-    kind: 'Deployment',
-    group: 'apps',
-    version: 'v1',
-    clusterId: 'cluster-a',
-    clusterName: 'Cluster A',
-  },
-  {
-    uid: 'delta-uid',
-    name: 'delta',
-    namespace: 'apps',
-    kind: 'Deployment',
-    group: 'apps',
-    version: 'v1',
-    clusterId: 'cluster-a',
-    clusterName: 'Cluster A',
-  },
+  catalogItemFixture('alpha', 'alpha-uid'),
+  catalogItemFixture('delta', 'delta-uid'),
 ];
 
-const clusterBCatalogItems = [
-  {
-    uid: 'gamma-uid',
-    name: 'gamma',
-    namespace: 'apps',
-    kind: 'Deployment',
-    group: 'apps',
-    version: 'v1',
-    clusterId: 'cluster-b',
-    clusterName: 'Cluster B',
-  },
-];
+const clusterBCatalogItems = [catalogItemFixture('gamma', 'gamma-uid', 'cluster-b')];
 
 const getRefreshState = (domain: string, scope: string) => {
   const isClusterB = scope.startsWith('cluster-b|');
@@ -212,18 +199,7 @@ const getRefreshState = (domain: string, scope: string) => {
     if (scope.includes('search=beta')) {
       return makeState({
         data: {
-          items: [
-            {
-              uid: 'beta-uid',
-              name: 'beta',
-              namespace: 'apps',
-              kind: 'Deployment',
-              group: 'apps',
-              version: 'v1',
-              clusterId: 'cluster-a',
-              clusterName: 'Cluster A',
-            },
-          ],
+          items: [catalogItemFixture('beta', 'beta-uid')],
           namespaces: ['apps'],
           kinds: [{ kind: 'Deployment' }],
         },
@@ -547,16 +523,9 @@ describe('ObjectDiffModal', () => {
   });
 
   it('matches against the other cluster even when the matched object is outside the current dropdown page', async () => {
-    appMocks.FindCatalogObjectMatch.mockResolvedValue({
-      uid: 'alpha-cluster-b-uid',
-      name: 'alpha',
-      namespace: 'apps',
-      kind: 'Deployment',
-      group: 'apps',
-      version: 'v1',
-      clusterId: 'cluster-b',
-      clusterName: 'Cluster B',
-    });
+    appMocks.FindCatalogObjectMatch.mockResolvedValue(
+      catalogItemFixture('alpha', 'alpha-cluster-b-uid', 'cluster-b')
+    );
 
     act(() => {
       root.render(
@@ -628,16 +597,7 @@ describe('ObjectDiffModal', () => {
   });
 
   it('pre-populates the left side from an initial diff request', async () => {
-    appMocks.FindCatalogObjectMatch.mockResolvedValue({
-      uid: 'alpha-uid',
-      name: 'alpha',
-      namespace: 'apps',
-      kind: 'Deployment',
-      group: 'apps',
-      version: 'v1',
-      clusterId: 'cluster-a',
-      clusterName: 'Cluster A',
-    });
+    appMocks.FindCatalogObjectMatch.mockResolvedValue(catalogItemFixture('alpha', 'alpha-uid'));
 
     await act(async () => {
       root.render(

@@ -38,13 +38,13 @@ const quotasSpec: AggregatedResourceGridViewSpec<QuotaData> = {
   buildColumns: ({ identity, useShortResourceNames }) => [
     cf.createKindColumn<QuotaData>({
       key: 'kind',
-      getKind: (resource) => resource.kind,
+      getKind: (resource) => resource.ref.kind,
       getAlias: (resource) => resource.kindAlias,
-      getDisplayText: (resource) => getDisplayKind(resource.kind, useShortResourceNames),
+      getDisplayText: (resource) => getDisplayKind(resource.ref.kind, useShortResourceNames),
       onClick: identity.open,
       onAltClick: identity.navigate,
     }),
-    cf.createTextColumn<QuotaData>('name', 'Name', {
+    cf.createTextColumn<QuotaData>('name', 'Name', (resource) => resource.ref.name, {
       onClick: identity.open,
       onAltClick: identity.navigate,
       getClassName: () => 'object-panel-link',

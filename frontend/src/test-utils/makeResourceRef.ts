@@ -1,8 +1,8 @@
-import type { ResourceRef } from '@/core/refresh/types';
+import type { CanonicalResourceRef, ResourceRef } from '@/core/refresh/types';
 
 export const makeResourceRef = (
-  ref: Pick<ResourceRef, 'kind' | 'resource' | 'name'> & Partial<ResourceRef>
-): ResourceRef => ({
+  ref: { kind: string; resource: string; name: string } & Partial<ResourceRef>
+): CanonicalResourceRef => ({
   clusterId: 'alpha:ctx',
   group: '',
   version: 'v1',

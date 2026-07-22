@@ -70,17 +70,17 @@ func clusterRBACDomainSpec() typedTableDomainSpec[ClusterRBACEntry] {
 		adapter:      clusterRBACTableQueryAdapter(),
 		schema:       clusterRBACQuerypageSchema(),
 		capabilities: clusterRBACQueryCapabilities(),
-		kindOf:       func(entry ClusterRBACEntry) string { return entry.Kind },
+		kindOf:       func(entry ClusterRBACEntry) string { return entry.Ref.Kind },
 		sortRows:     sortClusterRBACEntries,
 	}
 }
 
 func sortClusterRBACEntries(entries []ClusterRBACEntry) {
 	sort.Slice(entries, func(i, j int) bool {
-		if entries[i].Kind == entries[j].Kind {
-			return entries[i].Name < entries[j].Name
+		if entries[i].Ref.Kind == entries[j].Ref.Kind {
+			return entries[i].Ref.Name < entries[j].Ref.Name
 		}
-		return entries[i].Kind < entries[j].Kind
+		return entries[i].Ref.Kind < entries[j].Ref.Kind
 	})
 }
 

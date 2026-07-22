@@ -73,17 +73,17 @@ func clusterConfigDomainSpec() typedTableDomainSpec[ClusterConfigEntry] {
 		adapter:      clusterConfigTableQueryAdapter(),
 		schema:       clusterConfigQuerypageSchema(),
 		capabilities: clusterConfigQueryCapabilities(),
-		kindOf:       func(entry ClusterConfigEntry) string { return entry.Kind },
+		kindOf:       func(entry ClusterConfigEntry) string { return entry.Ref.Kind },
 		sortRows:     sortClusterConfigEntries,
 	}
 }
 
 func sortClusterConfigEntries(entries []ClusterConfigEntry) {
 	sort.Slice(entries, func(i, j int) bool {
-		if entries[i].Kind == entries[j].Kind {
-			return entries[i].Name < entries[j].Name
+		if entries[i].Ref.Kind == entries[j].Ref.Kind {
+			return entries[i].Ref.Name < entries[j].Ref.Name
 		}
-		return entries[i].Kind < entries[j].Kind
+		return entries[i].Ref.Kind < entries[j].Ref.Kind
 	})
 }
 

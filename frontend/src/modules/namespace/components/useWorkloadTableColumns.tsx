@@ -84,17 +84,17 @@ const useWorkloadTableColumns = ({
 
     columns.push(
       cf.createKindColumn<WorkloadData>({
-        getKind: (row) => row.kind,
-        getDisplayText: (row) => getDisplayKind(row.kind, useShortResourceNames),
+        getKind: (row) => row.ref.kind,
+        getDisplayText: (row) => getDisplayKind(row.ref.kind, useShortResourceNames),
         onClick: (row) => handleWorkloadClick(row),
         onAltClick,
         isInteractive: () => true,
-        sortValue: (row) => row.kind.toLowerCase(),
+        sortValue: (row) => row.ref.kind.toLowerCase(),
       })
     );
 
     columns.push(
-      cf.createTextColumn<WorkloadData>('name', 'Name', (row) => row.name, {
+      cf.createTextColumn<WorkloadData>('name', 'Name', (row) => row.ref.name, {
         onClick: (row) => handleWorkloadClick(row),
         onAltClick,
         // Match object panel link styling for clickable names.
@@ -105,7 +105,7 @@ const useWorkloadTableColumns = ({
 
     if (showNamespaceColumn) {
       cf.upsertNamespaceColumn(columns, {
-        accessor: (row) => row.namespace ?? '',
+        accessor: (row) => row.ref.namespace ?? '',
         ...namespaceColumnLink,
       });
     }
@@ -159,7 +159,7 @@ const useWorkloadTableColumns = ({
         getMetricsStale: () => metricsStale,
         getMetricsError: () => metricsError,
         getMetricsLastUpdated: () => metricsLastUpdated,
-        getAnimationKey: (row) => `workload:${row.namespace}/${row.name}:cpu`,
+        getAnimationKey: (row) => `workload:${row.ref.namespace}/${row.ref.name}:cpu`,
         getShowEmptyState: () => true,
         sortable: true,
         sortValue: (row) =>
@@ -181,7 +181,7 @@ const useWorkloadTableColumns = ({
         getMetricsStale: () => metricsStale,
         getMetricsError: () => metricsError,
         getMetricsLastUpdated: () => metricsLastUpdated,
-        getAnimationKey: (row) => `workload:${row.namespace}/${row.name}:memory`,
+        getAnimationKey: (row) => `workload:${row.ref.namespace}/${row.ref.name}:memory`,
         getShowEmptyState: () => true,
         sortable: true,
         sortValue: (row) =>

@@ -46,17 +46,17 @@ const crdsSpec: AggregatedResourceGridViewSpec<CRDsData> = {
   buildColumns: ({ identity, useShortResourceNames }) => [
     cf.createKindColumn<CRDsData>({
       key: 'kind',
-      getKind: (crd) => crd.kind || 'CustomResourceDefinition',
+      getKind: (crd) => crd.ref.kind || 'CustomResourceDefinition',
       getDisplayText: (crd) =>
-        getDisplayKind(crd.kind || 'CustomResourceDefinition', useShortResourceNames),
+        getDisplayKind(crd.ref.kind || 'CustomResourceDefinition', useShortResourceNames),
       onClick: identity.open,
       onAltClick: identity.navigate,
     }),
-    cf.createTextColumn<CRDsData>('name', 'Name', (crd) => crd.name, {
+    cf.createTextColumn<CRDsData>('name', 'Name', (crd) => crd.ref.name, {
       sortable: true,
       onClick: identity.open,
       onAltClick: identity.navigate,
-      getTitle: (crd) => `Open ${crd.name}`,
+      getTitle: (crd) => `Open ${crd.ref.name}`,
       getClassName: () => 'object-panel-link',
     }),
     cf.createTextColumn('group', 'Group', (crd) => crd.group || '-'),

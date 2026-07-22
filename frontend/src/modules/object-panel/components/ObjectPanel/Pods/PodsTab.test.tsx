@@ -12,7 +12,7 @@ import { getTextContent } from '@shared/components/tables/GridTable.utils';
 import React, { act } from 'react';
 import * as ReactDOM from 'react-dom/client';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
-import type { PodSnapshotEntry } from '@/core/refresh/types';
+import type { CanonicalRowTestOverrides, PodSnapshotEntry } from '@/core/refresh/types';
 import { requireReactElement } from '@/test-utils/requireReactElement';
 import { requireValue } from '@/test-utils/requireValue';
 
@@ -108,8 +108,8 @@ vi.mock('@shared/components/tables/GridTable', () => ({
       <table data-testid="grid-table">
         <tbody>
           {props.data.map((row) => (
-            <tr key={row.name}>
-              <td>{row.name}</td>
+            <tr key={row.ref.name}>
+              <td>{row.ref.name}</td>
             </tr>
           ))}
         </tbody>
@@ -212,12 +212,21 @@ const NODE_OBJECT_DATA = {
   name: 'worker-a',
 };
 
-const createPod = (override: Partial<PodSnapshotEntry> = {}): PodSnapshotEntry =>
-  ({
-    name: 'api',
-    namespace: 'team-a',
-    clusterId: PANEL_CLUSTER_ID,
-    clusterName: 'Panel Cluster A',
+const createPod = (
+  override: CanonicalRowTestOverrides<PodSnapshotEntry> = {}
+): PodSnapshotEntry => {
+  const { ref, ...row } = override;
+  return {
+    ref: {
+      clusterId: PANEL_CLUSTER_ID,
+      group: '',
+      version: 'v1',
+      kind: 'Pod',
+      resource: 'pods',
+      namespace: 'team-a',
+      name: 'api',
+      ...ref,
+    },
     ownerKind: 'Deployment',
     ownerName: 'api',
     node: 'node-a',
@@ -226,8 +235,16 @@ const createPod = (override: Partial<PodSnapshotEntry> = {}): PodSnapshotEntry =
     ready: '1/1',
     restarts: 0,
     age: '1m',
-    ...override,
-  }) as PodSnapshotEntry;
+    portForwardAvailable: false,
+    cpuRequest: '',
+    cpuLimit: '',
+    cpuUsage: '',
+    memRequest: '',
+    memLimit: '',
+    memUsage: '',
+    ...row,
+  };
+};
 
 const mockQueryRows = (rows: PodSnapshotEntry[]) => {
   requestRefreshDomainStateMock.mockResolvedValue({
@@ -304,7 +321,7 @@ describe('PodsTab (query-backed)', () => {
   };
 
   it('issues a workload-scoped pods query and renders the returned page when active', async () => {
-    mockQueryRows([createPod({ name: 'query-pod' })]);
+    mockQueryRows([createPod({ ref: { name: 'query-pod' } })]);
 
     await renderPods();
 
@@ -314,7 +331,7 @@ describe('PodsTab (query-backed)', () => {
         scope: expect.stringContaining('workload:default:apps:v1:Deployment:my-deploy'),
       })
     );
-    expect(getGridTableProps().data.map((pod: PodSnapshotEntry) => pod.name)).toEqual([
+    expect(getGridTableProps().data.map((pod: PodSnapshotEntry) => pod.ref.name)).toEqual([
       'query-pod',
     ]);
   });
@@ -375,7 +392,7 @@ describe('PodsTab (query-backed)', () => {
 
   it('issues a node-scoped pods query for Node panels', async () => {
     objectPanelRef.current = NODE_OBJECT_DATA;
-    mockQueryRows([createPod({ name: 'node-pod' })]);
+    mockQueryRows([createPod({ ref: { name: 'node-pod' } })]);
 
     await renderPods();
 
@@ -385,7 +402,9 @@ describe('PodsTab (query-backed)', () => {
         scope: expect.stringContaining('node:worker-a'),
       })
     );
-    expect(getGridTableProps().data.map((pod: PodSnapshotEntry) => pod.name)).toEqual(['node-pod']);
+    expect(getGridTableProps().data.map((pod: PodSnapshotEntry) => pod.ref.name)).toEqual([
+      'node-pod',
+    ]);
   });
 
   it('does not issue a pods query when the tab is inactive', async () => {
@@ -420,7 +439,7 @@ describe('PodsTab (query-backed)', () => {
   });
 
   it('uses canonical pod row keys scoped to the pod cluster', async () => {
-    const pod = createPod({ name: 'api', namespace: 'team-a' });
+    const pod = createPod({ ref: { name: 'api', namespace: 'team-a' } });
     mockQueryRows([pod]);
 
     await renderPods();
@@ -443,7 +462,7 @@ describe('PodsTab (query-backed)', () => {
   });
 
   it('renders zero pod restarts as no value without changing numeric sorting', async () => {
-    const pods = [createPod(), createPod({ name: 'restarted', restarts: 2 })];
+    const pods = [createPod(), createPod({ ref: { name: 'restarted' }, restarts: 2 })];
     mockQueryRows(pods);
     await renderPods();
 
@@ -455,7 +474,7 @@ describe('PodsTab (query-backed)', () => {
   });
 
   it('opens the Map from the pod context menu using the pod identity', async () => {
-    const pod = createPod({ name: 'api', namespace: 'team-a' });
+    const pod = createPod({ ref: { name: 'api', namespace: 'team-a' } });
     mockQueryRows([pod]);
 
     await renderPods();
@@ -484,7 +503,10 @@ describe('PodsTab (query-backed)', () => {
   });
 
   it('shows enabled Port Forward and Delete in the pod row context menu when permitted', async () => {
-    const pod = createPod({ name: 'api', namespace: 'team-a', portForwardAvailable: true });
+    const pod = createPod({
+      ref: { name: 'api', namespace: 'team-a' },
+      portForwardAvailable: true,
+    });
     mockQueryRows([pod]);
 
     await renderPods();
@@ -503,7 +525,10 @@ describe('PodsTab (query-backed)', () => {
   });
 
   it('shows Port Forward disabled when the pod has no forwardable ports', async () => {
-    const pod = createPod({ name: 'api', namespace: 'team-a', portForwardAvailable: false });
+    const pod = createPod({
+      ref: { name: 'api', namespace: 'team-a' },
+      portForwardAvailable: false,
+    });
     mockQueryRows([pod]);
 
     await renderPods();
@@ -519,7 +544,7 @@ describe('PodsTab (query-backed)', () => {
   });
 
   it('queries pod permissions for the namespaces of visible pods using the pod cluster', async () => {
-    const pod = createPod({ name: 'api', namespace: 'team-a' });
+    const pod = createPod({ ref: { name: 'api', namespace: 'team-a' } });
     mockQueryRows([pod]);
 
     await renderPods();

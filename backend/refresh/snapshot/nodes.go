@@ -339,7 +339,7 @@ func buildNodeSnapshotFromIngestUsage(
 	items := make([]NodeSummary, 0, len(ownRows))
 	podsByNode := podAggregatesByNode(podAggregates)
 	for _, own := range ownRows {
-		items = append(items, reaggregateNodeSummary(own, podsByNode[own.Name], podMetrics, nodeMetrics))
+		items = append(items, reaggregateNodeSummary(own, podsByNode[own.Ref.Name], podMetrics, nodeMetrics))
 	}
 	return finishNodeSnapshot(ctx, scope, items, storeVersion, metricsMetadata, opts...)
 }

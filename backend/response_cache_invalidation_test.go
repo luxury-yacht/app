@@ -292,20 +292,14 @@ func TestIngestResponseCacheSinkEvictsOnUpsertAndDelete(t *testing.T) {
 
 	upsertKey := objectDetailCacheKey("ResourceQuota", "default", "rq-a")
 	app.responseCacheStore(selectionKey, upsertKey, "detail")
-	sink.Upsert(objectcatalog.Summary{
-		ClusterID: "cluster-a", Version: "v1", Kind: "ResourceQuota", Resource: "resourcequotas",
-		Namespace: "default", Name: "rq-a",
-	})
+	sink.Upsert(objectcatalog.Summary{Ref: resourcemodel.ResourceRef{ClusterID: "cluster-a", Version: "v1", Kind: "ResourceQuota", Resource: "resourcequotas", Namespace: "default", Name: "rq-a"}})
 	if _, ok := app.responseCacheLookup(selectionKey, upsertKey); ok {
 		t.Fatalf("expected detail cache entry to be evicted on ingest Upsert")
 	}
 
 	deleteKey := objectDetailCacheKey("LimitRange", "default", "lr-b")
 	app.responseCacheStore(selectionKey, deleteKey, "detail")
-	sink.Delete(objectcatalog.Summary{
-		ClusterID: "cluster-a", Version: "v1", Kind: "LimitRange", Resource: "limitranges",
-		Namespace: "default", Name: "lr-b",
-	})
+	sink.Delete(objectcatalog.Summary{Ref: resourcemodel.ResourceRef{ClusterID: "cluster-a", Version: "v1", Kind: "LimitRange", Resource: "limitranges", Namespace: "default", Name: "lr-b"}})
 	if _, ok := app.responseCacheLookup(selectionKey, deleteKey); ok {
 		t.Fatalf("expected detail cache entry to be evicted on ingest Delete")
 	}

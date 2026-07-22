@@ -91,9 +91,8 @@ func TestNewWorkloadIngestProjectorBundleMatchesLivePaths(t *testing.T) {
 
 		// Table half: the workload-own WorkloadSummary, which with no pods/metrics/HPA
 		// equals the serve-side builder's output (the want value, built with nil pods/
-		// usage). The ClusterMeta is stamped by the projector.
+		// usage).
 		want := tc.wantOwn
-		want.ClusterMeta = meta
 		gotTable, ok := bundle.Table.(WorkloadSummary)
 		if !ok {
 			t.Fatalf("Table half is %T, want WorkloadSummary", bundle.Table)

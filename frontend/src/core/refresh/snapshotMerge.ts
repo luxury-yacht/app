@@ -117,7 +117,7 @@ const pollingListMergeDescriptors = {
     // payload.clusterId is required on ClusterMeta-derived payloads, so the
     // merge-key fallback does not need a blank-cluster guard.
     key: (entry: NamespaceRow, payload: NamespaceSnapshotPayload) =>
-      buildClusterNameRowKey(entry.clusterId ?? payload.clusterId, entry.name),
+      buildClusterNameRowKey(entry.ref.clusterId ?? payload.clusterId, entry.ref.name),
   },
   'object-maintenance': {
     previous: (scope?: string) =>
@@ -144,17 +144,17 @@ const pollingListMergeDescriptors = {
       items: rows,
     }),
     key: (entry: CatalogRow, payload: CatalogSnapshotPayload) => {
-      const clusterId = entry.clusterId ?? payload.clusterId;
-      if (entry.uid) {
-        return buildClusterNameRowKey(clusterId, entry.uid);
+      const clusterId = entry.ref.clusterId ?? payload.clusterId;
+      if (entry.ref.uid) {
+        return buildClusterNameRowKey(clusterId, entry.ref.uid);
       }
       return buildCatalogResourceRowKey(
         clusterId,
-        entry.group,
-        entry.version,
-        entry.resource,
-        entry.namespace ?? '',
-        entry.name
+        entry.ref.group,
+        entry.ref.version,
+        entry.ref.resource,
+        entry.ref.namespace ?? '',
+        entry.ref.name
       );
     },
   },

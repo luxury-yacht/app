@@ -11,7 +11,7 @@
  */
 
 import { useEffect, useRef } from 'react';
-
+import type { RefreshDemand } from '@/core/refresh/refreshRuntime';
 import type { RefreshDomain } from '@/core/refresh/types';
 import {
   acquireRefreshDomainLease,
@@ -25,6 +25,7 @@ interface ScopedRefreshDomainLifecycleOptions {
   scope: string | null | undefined;
   enabled: boolean;
   preserveState?: boolean;
+  demand?: RefreshDemand;
   fetchOnEnable?: DataRequestReason | false;
   fetchLabel?: string;
   onFetchError?: (error: unknown) => void;
@@ -37,6 +38,7 @@ export function useScopedRefreshDomainLifecycle({
   scope,
   enabled,
   preserveState = false,
+  demand = 'snapshot',
   fetchOnEnable = false,
   fetchLabel,
   onFetchError,
@@ -58,7 +60,7 @@ export function useScopedRefreshDomainLifecycle({
     // changes and on unmount, so acquire/release stay balanced per consumer.
     // The runtime enables on the first lease and disables only after the last
     // lease is released.
-    acquireRefreshDomainLease({ domain, scope, preserveState });
+    acquireRefreshDomainLease({ domain, scope, preserveState, demand });
 
     if (fetchOnEnable) {
       void requestRefreshDomain({
@@ -77,7 +79,7 @@ export function useScopedRefreshDomainLifecycle({
     }
 
     return () => {
-      releaseRefreshDomainLease({ domain, scope, preserveState });
+      releaseRefreshDomainLease({ domain, scope, preserveState, demand });
     };
-  }, [domain, enabled, fetchOnEnable, preserveState, scope]);
+  }, [demand, domain, enabled, fetchOnEnable, preserveState, scope]);
 }

@@ -283,15 +283,15 @@ func (b *NamespaceCustomBuilder) Build(ctx context.Context, scope string) (*refr
 
 func sortNamespaceCustomSummaries(resources []NamespaceCustomSummary) {
 	sort.SliceStable(resources, func(i, j int) bool {
-		if resources[i].Namespace != resources[j].Namespace {
-			return resources[i].Namespace < resources[j].Namespace
+		if resources[i].Ref.Namespace != resources[j].Ref.Namespace {
+			return resources[i].Ref.Namespace < resources[j].Ref.Namespace
 		}
-		if resources[i].Group != resources[j].Group {
-			return resources[i].Group < resources[j].Group
+		if resources[i].Ref.Group != resources[j].Ref.Group {
+			return resources[i].Ref.Group < resources[j].Ref.Group
 		}
-		if resources[i].Kind != resources[j].Kind {
-			return resources[i].Kind < resources[j].Kind
+		if resources[i].Ref.Kind != resources[j].Ref.Kind {
+			return resources[i].Ref.Kind < resources[j].Ref.Kind
 		}
-		return resources[i].Name < resources[j].Name
+		return resources[i].Ref.Name < resources[j].Ref.Name
 	})
 }

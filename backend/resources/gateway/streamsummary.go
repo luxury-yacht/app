@@ -18,7 +18,7 @@ import (
 // BuildStreamSummary builds the namespace-network row for one Gateway.
 func BuildStreamSummary(meta streamrows.ClusterMeta, gateway *gatewayv1.Gateway) streamrows.NetworkSummary {
 	if gateway == nil {
-		return streamrows.NetworkSummary{ClusterMeta: meta, Kind: "Gateway"}
+		return streamrows.NetworkSummary{}
 	}
 	return streamrows.NewNetworkSummary(meta, Identity, gateway, describeFacts(BuildFacts(meta.ClusterID, gateway)))
 }

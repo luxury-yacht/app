@@ -40,7 +40,7 @@ const NsEventsTable: React.FC<EventViewProps> = React.memo(
     const namespaceColumnLink = useNamespaceColumnLink<EventGridRow>('events', (event) =>
       event.objectNamespace && event.objectNamespace.length > 0
         ? event.objectNamespace
-        : event.namespace
+        : event.ref.namespace
     );
 
     const sortRowIdentity = useCallback(

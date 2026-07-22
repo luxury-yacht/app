@@ -76,9 +76,9 @@ func newCatalogQueryStoreSchema() querypage.Schema[Summary] {
 			// directions. The engine's UID tiebreak (== the identity chain,
 			// compareCatalogIdentity) supplies exactly that, so the encoded value is
 			// just the field value.
-			catalogEngineSortKind:      func(s Summary) string { return s.Kind },
-			catalogEngineSortNamespace: func(s Summary) string { return s.Namespace },
-			catalogEngineSortName:      func(s Summary) string { return s.Name },
+			catalogEngineSortKind:      func(s Summary) string { return s.Ref.Kind },
+			catalogEngineSortNamespace: func(s Summary) string { return s.Ref.Namespace },
+			catalogEngineSortName:      func(s Summary) string { return s.Ref.Name },
 			// Both "age" and "creationtimestamp" sort newest-first when ascending: the
 			// catalog flips BOTH age AND creationtimestamp, so "asc" means newest first.
 			// Encoding the creation
@@ -95,14 +95,14 @@ func newCatalogQueryStoreSchema() querypage.Schema[Summary] {
 			// Namespace facet uses the catalog's namespace index representation:
 			// "cluster" for cluster-scoped/empty-namespace rows, else the lowercased
 			// namespace — matching catalogQueryNamespaceIndexKey and the filter keys.
-			catalogEngineFacetNamespace: func(s Summary) string { return catalogQueryNamespaceIndexKey(s.Namespace, s.Scope) },
+			catalogEngineFacetNamespace: func(s Summary) string { return catalogQueryNamespaceIndexKey(s.Ref.Namespace, s.Scope) },
 			catalogEngineFacetScope:     func(s Summary) string { return strings.ToLower(string(s.Scope)) },
 			catalogEngineFacetResourceScope: func(s Summary) string {
 				return strings.ToLower(string(s.Scope))
 			},
-			catalogEngineFacetAPIGroup: func(s Summary) string { return catalogAPIGroupFacetValue(s.Group) },
+			catalogEngineFacetAPIGroup: func(s Summary) string { return catalogAPIGroupFacetValue(s.Ref.Group) },
 			catalogEngineFacetScopeNamespace: func(s Summary) string {
-				return catalogQueryNamespaceIndexKey(s.Namespace, s.Scope)
+				return catalogQueryNamespaceIndexKey(s.Ref.Namespace, s.Scope)
 			},
 			// custom = "true" for non-built-in (discovered/CRD) rows, "false" otherwise,
 			// reusing the catalog's builtin check (catalogQueryBuiltinKeys).
@@ -117,7 +117,7 @@ func newCatalogQueryStoreSchema() querypage.Schema[Summary] {
 		// Join with NUL so a single case-insensitive Contains can never match across a
 		// field boundary (no real needle contains NUL), matching the per-field matcher.
 		SearchText: func(s Summary) string {
-			return strings.Join([]string{s.Name, s.Namespace, s.Kind}, catalogEngineFieldSep)
+			return strings.Join([]string{s.Ref.Name, s.Ref.Namespace, s.Ref.Kind}, catalogEngineFieldSep)
 		},
 	}
 }
@@ -127,21 +127,21 @@ func newCatalogQueryStoreSchema() querypage.Schema[Summary] {
 // string. Its ascending lexical order equals compareCatalogIdentity.
 func catalogEngineUID(s Summary) string {
 	return strings.Join([]string{
-		s.Kind, s.Namespace, s.Name, s.Group, s.Version, s.Resource, s.UID,
+		s.Ref.Kind, s.Ref.Namespace, s.Ref.Name, s.Ref.Group, s.Ref.Version, s.Ref.Resource, s.Ref.UID,
 	}, catalogEngineFieldSep)
 }
 
 // catalogEngineKindIdentity is the canonical kind facet value: the same key
 // identityKey(group,version,kind) produces, flattened to a string.
 func catalogEngineKindIdentity(s Summary) string {
-	key := identityKey(s.Group, s.Version, s.Kind)
+	key := identityKey(s.Ref.Group, s.Ref.Version, s.Ref.Kind)
 	return key.group + catalogEngineFieldSep + key.version + catalogEngineFieldSep + key.kind
 }
 
 // catalogSummaryIsCustom reports whether a summary is a non-built-in (discovered/CRD)
 // kind, reusing the catalog's builtin identity set.
 func catalogSummaryIsCustom(s Summary) bool {
-	_, builtin := catalogQueryBuiltinKeys[identityKey(s.Group, s.Version, s.Kind)]
+	_, builtin := catalogQueryBuiltinKeys[identityKey(s.Ref.Group, s.Ref.Version, s.Ref.Kind)]
 	return !builtin
 }
 
@@ -292,7 +292,7 @@ func catalogEngineKindFilterIdentities(rows []Summary, kinds []string) []string 
 			continue
 		}
 		seen[identity] = struct{}{}
-		if matcher(row.Kind, row.Group, row.Version, row.Resource) {
+		if matcher(row.Ref.Kind, row.Ref.Group, row.Ref.Version, row.Ref.Resource) {
 			result = append(result, identity)
 		}
 	}
@@ -457,16 +457,16 @@ func (s *Service) queryViaEngineWithStore(
 // engine reports not-found.
 func findAnchorSummary(rows []Summary, anchor *QueryAnchor) (Summary, bool) {
 	for _, s := range rows {
-		if s.Namespace != anchor.Namespace || s.Name != anchor.Name {
+		if s.Ref.Namespace != anchor.Namespace || s.Ref.Name != anchor.Name {
 			continue
 		}
-		if s.Group != anchor.Group || s.Version != anchor.Version {
+		if s.Ref.Group != anchor.Group || s.Ref.Version != anchor.Version {
 			continue
 		}
-		if !strings.EqualFold(s.Kind, anchor.Kind) {
+		if !strings.EqualFold(s.Ref.Kind, anchor.Kind) {
 			continue
 		}
-		if anchor.UID != "" && s.UID != anchor.UID {
+		if anchor.UID != "" && s.Ref.UID != anchor.UID {
 			return Summary{}, false
 		}
 		return s, true
@@ -579,21 +579,21 @@ func catalogEngineFacets(rows []Summary, opts QueryOptions, cachedKinds []KindIn
 			if !customMatcher(item) {
 				continue
 			}
-			if item.Kind != "" {
-				allKinds[item.Kind] = item.Scope == ScopeNamespace
+			if item.Ref.Kind != "" {
+				allKinds[item.Ref.Kind] = item.Scope == ScopeNamespace
 			}
-			matchesDependentFilters := !hasNamespaceFilter || namespaceMatcher(item.Namespace, item.Scope)
+			matchesDependentFilters := !hasNamespaceFilter || namespaceMatcher(item.Ref.Namespace, item.Scope)
 			if matchesDependentFilters && len(groupFilters) > 0 {
-				_, matchesDependentFilters = groupFilters[catalogAPIGroupFacetValue(item.Group)]
+				_, matchesDependentFilters = groupFilters[catalogAPIGroupFacetValue(item.Ref.Group)]
 			}
 			if matchesDependentFilters && len(resourceScopeFilters) > 0 {
 				_, matchesDependentFilters = resourceScopeFilters[strings.ToLower(string(item.Scope))]
 			}
-			if matchesDependentFilters && item.Kind != "" {
-				dependentKinds[item.Kind] = item.Scope == ScopeNamespace
+			if matchesDependentFilters && item.Ref.Kind != "" {
+				dependentKinds[item.Ref.Kind] = item.Scope == ScopeNamespace
 			}
-			if matchesCatalogQuery(item, kindMatcher, namespaceMatcher, searchMatcher) && item.Namespace != "" {
-				matchNamespaces[item.Namespace] = struct{}{}
+			if matchesCatalogQuery(item, kindMatcher, namespaceMatcher, searchMatcher) && item.Ref.Namespace != "" {
+				matchNamespaces[item.Ref.Namespace] = struct{}{}
 			}
 		}
 	}
@@ -646,21 +646,21 @@ func catalogEngineSnapshotFacets(rows []Summary, opts QueryOptions, metadataExac
 			if !customMatcher(item) {
 				continue
 			}
-			if item.Kind != "" {
-				kindSet[item.Kind] = item.Scope == ScopeNamespace
+			if item.Ref.Kind != "" {
+				kindSet[item.Ref.Kind] = item.Scope == ScopeNamespace
 			}
-			if item.Namespace != "" {
-				namespaceSet[item.Namespace] = struct{}{}
+			if item.Ref.Namespace != "" {
+				namespaceSet[item.Ref.Namespace] = struct{}{}
 			}
-			matchesDependentFilters := !hasNamespaceFilter || namespaceMatcher(item.Namespace, item.Scope)
+			matchesDependentFilters := !hasNamespaceFilter || namespaceMatcher(item.Ref.Namespace, item.Scope)
 			if matchesDependentFilters && len(groupFilters) > 0 {
-				_, matchesDependentFilters = groupFilters[catalogAPIGroupFacetValue(item.Group)]
+				_, matchesDependentFilters = groupFilters[catalogAPIGroupFacetValue(item.Ref.Group)]
 			}
 			if matchesDependentFilters && len(resourceScopeFilters) > 0 {
 				_, matchesDependentFilters = resourceScopeFilters[strings.ToLower(string(item.Scope))]
 			}
-			if matchesDependentFilters && item.Kind != "" {
-				dependentKinds[item.Kind] = item.Scope == ScopeNamespace
+			if matchesDependentFilters && item.Ref.Kind != "" {
+				dependentKinds[item.Ref.Kind] = item.Scope == ScopeNamespace
 			}
 		}
 	}

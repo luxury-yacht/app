@@ -12,6 +12,7 @@
 package objectcatalog
 
 import (
+	"github.com/luxury-yacht/app/backend/resourcemodel"
 	"sort"
 	"testing"
 )
@@ -23,23 +24,23 @@ import (
 func equivalenceSummaries() []Summary {
 	return []Summary{
 		// Built-in namespaced kinds with ties.
-		{Kind: "Pod", Group: "", Version: "v1", Resource: "pods", Namespace: "default", Name: "alpha", UID: "uid-pod-1", CreationTimestamp: "2024-01-01T00:00:00Z", Scope: ScopeNamespace},
-		{Kind: "Pod", Group: "", Version: "v1", Resource: "pods", Namespace: "default", Name: "beta", UID: "uid-pod-2", CreationTimestamp: "2024-01-02T00:00:00Z", Scope: ScopeNamespace},
-		{Kind: "Pod", Group: "", Version: "v1", Resource: "pods", Namespace: "kube-system", Name: "alpha", UID: "uid-pod-3", CreationTimestamp: "2024-01-01T00:00:00Z", Scope: ScopeNamespace},
-		{Kind: "Pod", Group: "", Version: "v1", Resource: "pods", Namespace: "kube-system", Name: "gamma", UID: "uid-pod-4", CreationTimestamp: "2024-01-03T00:00:00Z", Scope: ScopeNamespace},
-		{Kind: "Service", Group: "", Version: "v1", Resource: "services", Namespace: "default", Name: "alpha", UID: "uid-svc-1", CreationTimestamp: "2024-01-02T00:00:00Z", Scope: ScopeNamespace},
-		{Kind: "Service", Group: "", Version: "v1", Resource: "services", Namespace: "app", Name: "frontend", UID: "uid-svc-2", CreationTimestamp: "2024-01-05T00:00:00Z", Scope: ScopeNamespace},
-		{Kind: "Deployment", Group: "apps", Version: "v1", Resource: "deployments", Namespace: "default", Name: "web", UID: "uid-dep-1", CreationTimestamp: "2024-01-04T00:00:00Z", Scope: ScopeNamespace},
-		{Kind: "Deployment", Group: "apps", Version: "v1", Resource: "deployments", Namespace: "app", Name: "web", UID: "uid-dep-2", CreationTimestamp: "2024-01-04T00:00:00Z", Scope: ScopeNamespace},
-		{Kind: "ConfigMap", Group: "", Version: "v1", Resource: "configmaps", Namespace: "app", Name: "settings", UID: "uid-cm-1", CreationTimestamp: "2024-01-06T00:00:00Z", Scope: ScopeNamespace},
+		{Ref: resourcemodel.ResourceRef{Group: "", Version: "v1", Kind: "Pod", Resource: "pods", Namespace: "default", Name: "alpha", UID: "uid-pod-1"}, CreationTimestamp: "2024-01-01T00:00:00Z", Scope: ScopeNamespace},
+		{Ref: resourcemodel.ResourceRef{Group: "", Version: "v1", Kind: "Pod", Resource: "pods", Namespace: "default", Name: "beta", UID: "uid-pod-2"}, CreationTimestamp: "2024-01-02T00:00:00Z", Scope: ScopeNamespace},
+		{Ref: resourcemodel.ResourceRef{Group: "", Version: "v1", Kind: "Pod", Resource: "pods", Namespace: "kube-system", Name: "alpha", UID: "uid-pod-3"}, CreationTimestamp: "2024-01-01T00:00:00Z", Scope: ScopeNamespace},
+		{Ref: resourcemodel.ResourceRef{Group: "", Version: "v1", Kind: "Pod", Resource: "pods", Namespace: "kube-system", Name: "gamma", UID: "uid-pod-4"}, CreationTimestamp: "2024-01-03T00:00:00Z", Scope: ScopeNamespace},
+		{Ref: resourcemodel.ResourceRef{Group: "", Version: "v1", Kind: "Service", Resource: "services", Namespace: "default", Name: "alpha", UID: "uid-svc-1"}, CreationTimestamp: "2024-01-02T00:00:00Z", Scope: ScopeNamespace},
+		{Ref: resourcemodel.ResourceRef{Group: "", Version: "v1", Kind: "Service", Resource: "services", Namespace: "app", Name: "frontend", UID: "uid-svc-2"}, CreationTimestamp: "2024-01-05T00:00:00Z", Scope: ScopeNamespace},
+		{Ref: resourcemodel.ResourceRef{Group: "apps", Version: "v1", Kind: "Deployment", Resource: "deployments", Namespace: "default", Name: "web", UID: "uid-dep-1"}, CreationTimestamp: "2024-01-04T00:00:00Z", Scope: ScopeNamespace},
+		{Ref: resourcemodel.ResourceRef{Group: "apps", Version: "v1", Kind: "Deployment", Resource: "deployments", Namespace: "app", Name: "web", UID: "uid-dep-2"}, CreationTimestamp: "2024-01-04T00:00:00Z", Scope: ScopeNamespace},
+		{Ref: resourcemodel.ResourceRef{Group: "", Version: "v1", Kind: "ConfigMap", Resource: "configmaps", Namespace: "app", Name: "settings", UID: "uid-cm-1"}, CreationTimestamp: "2024-01-06T00:00:00Z", Scope: ScopeNamespace},
 		// Built-in cluster-scoped kinds.
-		{Kind: "Node", Group: "", Version: "v1", Resource: "nodes", Name: "node-a", UID: "uid-node-1", CreationTimestamp: "2023-12-01T00:00:00Z", Scope: ScopeCluster},
-		{Kind: "Node", Group: "", Version: "v1", Resource: "nodes", Name: "node-b", UID: "uid-node-2", CreationTimestamp: "2023-12-02T00:00:00Z", Scope: ScopeCluster},
-		{Kind: "Namespace", Group: "", Version: "v1", Resource: "namespaces", Name: "default", UID: "uid-ns-1", CreationTimestamp: "2023-11-01T00:00:00Z", Scope: ScopeCluster},
+		{Ref: resourcemodel.ResourceRef{Group: "", Version: "v1", Kind: "Node", Resource: "nodes", Name: "node-a", UID: "uid-node-1"}, CreationTimestamp: "2023-12-01T00:00:00Z", Scope: ScopeCluster},
+		{Ref: resourcemodel.ResourceRef{Group: "", Version: "v1", Kind: "Node", Resource: "nodes", Name: "node-b", UID: "uid-node-2"}, CreationTimestamp: "2023-12-02T00:00:00Z", Scope: ScopeCluster},
+		{Ref: resourcemodel.ResourceRef{Group: "", Version: "v1", Kind: "Namespace", Resource: "namespaces", Name: "default", UID: "uid-ns-1"}, CreationTimestamp: "2023-11-01T00:00:00Z", Scope: ScopeCluster},
 		// Custom/CRD kinds (namespaced + cluster-scoped) — not in the builtin catalog.
-		{Kind: "Widget", Group: "example.com", Version: "v1", Resource: "widgets", Namespace: "default", Name: "alpha", UID: "uid-w-1", CreationTimestamp: "2024-02-01T00:00:00Z", Scope: ScopeNamespace},
-		{Kind: "Widget", Group: "example.com", Version: "v1", Resource: "widgets", Namespace: "app", Name: "alpha", UID: "uid-w-2", CreationTimestamp: "2024-02-01T00:00:00Z", Scope: ScopeNamespace},
-		{Kind: "ClusterWidget", Group: "example.com", Version: "v1", Resource: "clusterwidgets", Name: "global", UID: "uid-cw-1", CreationTimestamp: "2024-02-02T00:00:00Z", Scope: ScopeCluster},
+		{Ref: resourcemodel.ResourceRef{Group: "example.com", Version: "v1", Kind: "Widget", Resource: "widgets", Namespace: "default", Name: "alpha", UID: "uid-w-1"}, CreationTimestamp: "2024-02-01T00:00:00Z", Scope: ScopeNamespace},
+		{Ref: resourcemodel.ResourceRef{Group: "example.com", Version: "v1", Kind: "Widget", Resource: "widgets", Namespace: "app", Name: "alpha", UID: "uid-w-2"}, CreationTimestamp: "2024-02-01T00:00:00Z", Scope: ScopeNamespace},
+		{Ref: resourcemodel.ResourceRef{Group: "example.com", Version: "v1", Kind: "ClusterWidget", Resource: "clusterwidgets", Name: "global", UID: "uid-cw-1"}, CreationTimestamp: "2024-02-02T00:00:00Z", Scope: ScopeCluster},
 	}
 }
 
@@ -53,16 +54,16 @@ func newEquivalenceService(t *testing.T, items []Summary) *Service {
 	namespaceSet := make(map[string]struct{})
 	descriptorSet := make(map[string]Descriptor)
 	for _, item := range items {
-		if item.Kind != "" {
-			kindSet[item.Kind] = item.Scope == ScopeNamespace
+		if item.Ref.Kind != "" {
+			kindSet[item.Ref.Kind] = item.Scope == ScopeNamespace
 		}
-		if item.Namespace != "" {
-			namespaceSet[item.Namespace] = struct{}{}
+		if item.Ref.Namespace != "" {
+			namespaceSet[item.Ref.Namespace] = struct{}{}
 		}
-		key := item.Group + "/" + item.Version + "/" + item.Resource
+		key := item.Ref.Group + "/" + item.Ref.Version + "/" + item.Ref.Resource
 		descriptorSet[key] = Descriptor{
-			Group: item.Group, Version: item.Version, Resource: item.Resource,
-			Kind: item.Kind, Scope: item.Scope, Namespaced: item.Scope == ScopeNamespace,
+			Group: item.Ref.Group, Version: item.Ref.Version, Resource: item.Ref.Resource,
+			Kind: item.Ref.Kind, Scope: item.Scope, Namespaced: item.Scope == ScopeNamespace,
 		}
 	}
 	descriptors := make([]Descriptor, 0, len(descriptorSet))

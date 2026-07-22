@@ -74,7 +74,7 @@ export const WorkloadsTable: React.FC<WorkloadsTableProps> = React.memo(
     const { openWithObject } = useObjectPanel();
     const { navigateToView } = useNavigateToView();
     const useShortResourceNames = useShortNames();
-    const { selectedClusterId } = useKubeconfig();
+    const { selectedClusterId, selectedClusterName } = useKubeconfig();
     const queryClusterId = clusterId ?? selectedClusterId;
     const [tableMetricsInfo, setTableMetricsInfo] = useState<PodMetricsInfo | null>(null);
     const metricsInfo = tableMetricsInfo ?? metrics ?? null;
@@ -83,24 +83,24 @@ export const WorkloadsTable: React.FC<WorkloadsTableProps> = React.memo(
       (workload: WorkloadData) => {
         openWithObject(
           buildRequiredObjectReference(
-            { ...workload.ref, clusterName: workload.clusterName },
+            { ...workload.ref, clusterName: selectedClusterName },
             { fallbackClusterId: queryClusterId }
           )
         );
       },
-      [openWithObject, queryClusterId]
+      [openWithObject, queryClusterId, selectedClusterName]
     );
 
     const handleWorkloadAltClick = useCallback(
       (workload: WorkloadData) => {
         navigateToView(
           buildRequiredObjectReference(
-            { ...workload.ref, clusterName: workload.clusterName },
+            { ...workload.ref, clusterName: selectedClusterName },
             { fallbackClusterId: queryClusterId }
           )
         );
       },
-      [navigateToView, queryClusterId]
+      [navigateToView, queryClusterId, selectedClusterName]
     );
 
     const objectActions = useObjectActionController({
@@ -169,8 +169,8 @@ export const WorkloadsTable: React.FC<WorkloadsTableProps> = React.memo(
       rowIdentity: keyExtractor,
       showKindDropdown: true,
       filterAccessors: {
-        getKind: (row) => row.kind,
-        getNamespace: (row) => row.namespace ?? '',
+        getKind: (row) => row.ref.kind,
+        getNamespace: (row) => row.ref.namespace ?? '',
         getSearchText: (row) => getRowSearchValues(row),
       },
       showNamespaceFilters: showNamespaceFilter,
@@ -189,15 +189,17 @@ export const WorkloadsTable: React.FC<WorkloadsTableProps> = React.memo(
 
     const getContextMenuItems = useCallback(
       (row: WorkloadData): ContextMenuItem[] => {
-        return objectActions.getMenuItems(buildWorkloadActionReference(row, queryClusterId));
+        return objectActions.getMenuItems(
+          buildWorkloadActionReference(row, queryClusterId, selectedClusterName)
+        );
       },
-      [objectActions, queryClusterId]
+      [objectActions, queryClusterId, selectedClusterName]
     );
 
     const getRowClassName = useCallback(
       (row: WorkloadData) => {
         const classes: string[] = [];
-        if (row.kind === 'Pod') {
+        if (row.ref.kind === 'Pod') {
           classes.push('gridtable-row--pod');
         }
         if (selectedWorkloadKey && keyExtractor(row) === selectedWorkloadKey) {
@@ -261,6 +263,7 @@ const ScopedWorkloadsView: React.FC<ScopedWorkloadsViewProps> = ({
   metrics = null,
   selectedClusterId,
 }) => {
+  const { selectedClusterName } = useKubeconfig();
   const [selectedWorkload, setSelectedWorkload] = useState<ClusterObjectReference | null>(null);
   const [podFilterRequest, setPodFilterRequest] = useState<PodWorkloadFilterRequest>();
   const [podsCollapsed, setPodsCollapsed] = useState(false);
@@ -289,14 +292,14 @@ const ScopedWorkloadsView: React.FC<ScopedWorkloadsViewProps> = ({
   const handleWorkloadSelect = useCallback(
     (workload: WorkloadData) => {
       const ref = buildRequiredObjectReference(
-        { ...workload.ref, clusterName: workload.clusterName },
+        { ...workload.ref, clusterName: selectedClusterName },
         { fallbackClusterId: selectedClusterId }
       );
       setSelectedWorkload(ref);
       setPodFilterRequest({ type: 'set', workload: ref });
       setPodsCollapsed(false);
     },
-    [selectedClusterId]
+    [selectedClusterId, selectedClusterName]
   );
 
   const selectedWorkloadKey = useMemo(

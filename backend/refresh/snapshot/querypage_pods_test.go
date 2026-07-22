@@ -14,6 +14,7 @@ import (
 
 	"github.com/luxury-yacht/app/backend/kind/streamrows"
 	"github.com/luxury-yacht/app/backend/refresh/metrics"
+	"github.com/luxury-yacht/app/backend/resourcemodel"
 	podres "github.com/luxury-yacht/app/backend/resources/pods"
 	"github.com/luxury-yacht/app/backend/testsupport"
 )
@@ -45,10 +46,11 @@ func makePodRows(n int) []PodSummary {
 			ownerKind = "None"
 			ownerAPIVersion = ""
 		}
-		rows[i] = PodSummary{
-			ClusterMeta:        streamrows.ClusterMeta{ClusterID: "c"},
-			Name:               fmt.Sprintf("pod-%03d", i), // unique -> unique row key
-			Namespace:          namespaces[i%len(namespaces)],
+		rows[i] = PodSummary{Ref: resourcemodel.ResourceRef{ClusterID: "c", Namespace:
+
+		// unique -> unique row key
+		namespaces[i%len(namespaces)], Name: fmt.Sprintf("pod-%03d", i)},
+
 			Status:             statuses[i%len(statuses)],
 			StatusPresentation: presentations[i%len(presentations)],
 			Ready:              fmt.Sprintf("%d/%d", ready, total),
@@ -239,18 +241,14 @@ func TestPodsQueryViaStoreFiltersStatusesAndNodes(t *testing.T) {
 
 func TestPodsQueryViaStoreFiltersOwnersByFullIdentity(t *testing.T) {
 	items := []PodSummary{
-		{
-			ClusterMeta:     streamrows.ClusterMeta{ClusterID: "c"},
-			Name:            "deploy-pod",
-			Namespace:       "team-a",
+		{Ref: resourcemodel.ResourceRef{ClusterID: "c", Namespace: "team-a", Name: "deploy-pod"},
+
 			OwnerKind:       "Deployment",
 			OwnerName:       "api",
 			OwnerAPIVersion: "apps/v1",
 		},
-		{
-			ClusterMeta:           streamrows.ClusterMeta{ClusterID: "c"},
-			Name:                  "cron-pod",
-			Namespace:             "team-a",
+		{Ref: resourcemodel.ResourceRef{ClusterID: "c", Namespace: "team-a", Name: "cron-pod"},
+
 			OwnerKind:             "CronJob",
 			OwnerName:             "nightly",
 			OwnerAPIVersion:       "batch/v1",
@@ -258,12 +256,10 @@ func TestPodsQueryViaStoreFiltersOwnersByFullIdentity(t *testing.T) {
 			DirectOwnerName:       "nightly-29123456",
 			DirectOwnerAPIVersion: "batch/v1",
 		},
-		{
-			ClusterMeta: streamrows.ClusterMeta{ClusterID: "c"},
-			Name:        "standalone",
-			Namespace:   "team-a",
-			OwnerKind:   "None",
-			OwnerName:   "None",
+		{Ref: resourcemodel.ResourceRef{ClusterID: "c", Namespace: "team-a", Name: "standalone"},
+
+			OwnerKind: "None",
+			OwnerName: "None",
 		},
 	}
 	deploymentOwner := podOwnerFacetValueForTest(t, "owner", "Deployment", "api", "c", "apps", "v1", "team-a")
@@ -480,7 +476,7 @@ func TestPodBuilderMaintainedStoreServesNamespaceScopeWithFreshMetrics(t *testin
 func podSummariesByName(rows []PodSummary) map[string]PodSummary {
 	out := make(map[string]PodSummary, len(rows))
 	for _, row := range rows {
-		out[row.Name] = row
+		out[row.Ref.Name] = row
 	}
 	return out
 }

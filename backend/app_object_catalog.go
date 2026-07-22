@@ -780,13 +780,7 @@ func failedCatalogCustomHydrationSummary(meta snapshot.ClusterMeta, row snapshot
 		crdName = row.Resource + "." + row.Group
 	}
 	return snapshot.CustomResourceSummary{
-		ClusterMeta:        meta,
 		Ref:                resourcemodel.NewResourceRef(meta.ClusterID, row.Group, row.Version, row.Kind, row.Resource, row.Namespace, row.Name, ""),
-		Kind:               row.Kind,
-		Name:               row.Name,
-		Namespace:          row.Namespace,
-		Group:              row.Group,
-		Version:            row.Version,
 		CRDName:            crdName,
 		Status:             "Hydration failed",
 		StatusState:        "warning",

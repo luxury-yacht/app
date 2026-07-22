@@ -14,24 +14,25 @@ import (
 	"k8s.io/apimachinery/pkg/runtime/schema"
 
 	"github.com/luxury-yacht/app/backend/internal/applog"
+	"github.com/luxury-yacht/app/backend/resourcemodel"
 	"github.com/luxury-yacht/app/backend/testsupport"
 )
 
 func TestSortNamespaceCustomSummaries(t *testing.T) {
 	items := []NamespaceCustomSummary{
-		{Namespace: "staging", Group: "apps.example.com", Kind: "Widget", Name: "zeta"},
-		{Namespace: "default", Group: "alpha.example.com", Kind: "Gadget", Name: "beta"},
-		{Namespace: "default", Group: "alpha.example.com", Kind: "Gadget", Name: "alpha"},
-		{Namespace: "default", Group: "beta.example.com", Kind: "Gadget", Name: "a"},
+		{Ref: resourcemodel.ResourceRef{Group: "apps.example.com", Kind: "Widget", Namespace: "staging", Name: "zeta"}},
+		{Ref: resourcemodel.ResourceRef{Group: "alpha.example.com", Kind: "Gadget", Namespace: "default", Name: "beta"}},
+		{Ref: resourcemodel.ResourceRef{Group: "alpha.example.com", Kind: "Gadget", Namespace: "default", Name: "alpha"}},
+		{Ref: resourcemodel.ResourceRef{Group: "beta.example.com", Kind: "Gadget", Namespace: "default", Name: "a"}},
 	}
 
 	sortNamespaceCustomSummaries(items)
 
 	require.Equal(t, []NamespaceCustomSummary{
-		{Namespace: "default", Group: "alpha.example.com", Kind: "Gadget", Name: "alpha"},
-		{Namespace: "default", Group: "alpha.example.com", Kind: "Gadget", Name: "beta"},
-		{Namespace: "default", Group: "beta.example.com", Kind: "Gadget", Name: "a"},
-		{Namespace: "staging", Group: "apps.example.com", Kind: "Widget", Name: "zeta"},
+		{Ref: resourcemodel.ResourceRef{Group: "alpha.example.com", Kind: "Gadget", Namespace: "default", Name: "alpha"}},
+		{Ref: resourcemodel.ResourceRef{Group: "alpha.example.com", Kind: "Gadget", Namespace: "default", Name: "beta"}},
+		{Ref: resourcemodel.ResourceRef{Group: "beta.example.com", Kind: "Gadget", Namespace: "default", Name: "a"}},
+		{Ref: resourcemodel.ResourceRef{Group: "apps.example.com", Kind: "Widget", Namespace: "staging", Name: "zeta"}},
 	}, items)
 }
 
@@ -208,7 +209,7 @@ func TestNamespaceCustomBuilderAllNamespacesFansOutOverScope(t *testing.T) {
 
 	var names []string
 	for _, item := range payload.Resources {
-		names = append(names, item.Namespace+"/"+item.Name)
+		names = append(names, item.Ref.Namespace+"/"+item.Ref.Name)
 	}
 	require.Equal(t, []string{"team-a/wa"}, names,
 		"scope namespaces listed, out-of-scope namespaces excluded")

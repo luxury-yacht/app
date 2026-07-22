@@ -10,6 +10,7 @@ import (
 	"unsafe"
 
 	"github.com/luxury-yacht/app/backend/objectcatalog"
+	"github.com/luxury-yacht/app/backend/resourcemodel"
 )
 
 func TestParseBrowseScope(t *testing.T) {
@@ -90,26 +91,8 @@ func TestParseBrowseScopePreservesStructuralBoundary(t *testing.T) {
 
 func TestCatalogBuildUsesCatalogOnly(t *testing.T) {
 	summaries := []objectcatalog.Summary{
-		{
-			Kind:      "Pod",
-			Group:     "",
-			Version:   "v1",
-			Resource:  "pods",
-			Namespace: "default",
-			Name:      "pod-a",
-			UID:       "uid-a",
-			Scope:     objectcatalog.ScopeNamespace,
-		},
-		{
-			Kind:      "Deployment",
-			Group:     "apps",
-			Version:   "v1",
-			Resource:  "deployments",
-			Namespace: "default",
-			Name:      "deploy-b",
-			UID:       "uid-b",
-			Scope:     objectcatalog.ScopeNamespace,
-		},
+		{Ref: resourcemodel.ResourceRef{Group: "", Version: "v1", Kind: "Pod", Resource: "pods", Namespace: "default", Name: "pod-a", UID: "uid-a"}, Scope: objectcatalog.ScopeNamespace},
+		{Ref: resourcemodel.ResourceRef{Group: "apps", Version: "v1", Kind: "Deployment", Resource: "deployments", Namespace: "default", Name: "deploy-b", UID: "uid-b"}, Scope: objectcatalog.ScopeNamespace},
 	}
 	svc := seedCatalogService(t, summaries)
 
@@ -137,7 +120,7 @@ func TestCatalogBuildUsesCatalogOnly(t *testing.T) {
 	if payload.Continue == "" {
 		t.Fatalf("expected continue token for subsequent page")
 	}
-	if payload.Items[0].UID == "" {
+	if payload.Items[0].Ref.UID == "" {
 		t.Fatalf("expected UID to be preserved")
 	}
 	if payload.BatchIndex != 0 {
@@ -166,8 +149,8 @@ func TestCatalogBuildUsesCatalogOnly(t *testing.T) {
 
 func TestCatalogMatchNoneReturnsNoRowsAndRetainsFacets(t *testing.T) {
 	svc := seedCatalogService(t, []objectcatalog.Summary{
-		{Kind: "Pod", Version: "v1", Namespace: "default", Name: "pod-a", UID: "uid-a", Scope: objectcatalog.ScopeNamespace},
-		{Kind: "Deployment", Group: "apps", Version: "v1", Namespace: "platform", Name: "deploy-b", UID: "uid-b", Scope: objectcatalog.ScopeNamespace},
+		{Ref: resourcemodel.ResourceRef{Version: "v1", Kind: "Pod", Namespace: "default", Name: "pod-a", UID: "uid-a"}, Scope: objectcatalog.ScopeNamespace},
+		{Ref: resourcemodel.ResourceRef{Group: "apps", Version: "v1", Kind: "Deployment", Namespace: "platform", Name: "deploy-b", UID: "uid-b"}, Scope: objectcatalog.ScopeNamespace},
 	})
 
 	result := svc.Query(objectcatalog.QueryOptions{Limit: 50, MatchNone: true})
@@ -181,28 +164,13 @@ func TestCatalogMatchNoneReturnsNoRowsAndRetainsFacets(t *testing.T) {
 
 func TestCatalogBuildClusterScopedNamespaceSentinel(t *testing.T) {
 	summaries := []objectcatalog.Summary{
-		{
-			ClusterID:       "cluster-a",
-			ClusterName:     "Cluster A",
-			Kind:            "CustomResourceDefinition",
-			Group:           "apiextensions.k8s.io",
-			Version:         "v1",
-			Resource:        "customresourcedefinitions",
-			Name:            "widgets.example.com",
-			UID:             "uid-crd",
+		{Ref: resourcemodel.ResourceRef{ClusterID: "cluster-a", Group: "apiextensions.k8s.io", Version: "v1", Kind: "CustomResourceDefinition", Resource: "customresourcedefinitions", Name: "widgets.example.com", UID: "uid-crd"},
+
 			ResourceVersion: "1",
 			Scope:           objectcatalog.ScopeCluster,
 		},
-		{
-			ClusterID:       "cluster-a",
-			ClusterName:     "Cluster A",
-			Kind:            "Service",
-			Group:           "",
-			Version:         "v1",
-			Resource:        "services",
-			Namespace:       "default",
-			Name:            "web",
-			UID:             "uid-service",
+		{Ref: resourcemodel.ResourceRef{ClusterID: "cluster-a", Group: "", Version: "v1", Kind: "Service", Resource: "services", Namespace: "default", Name: "web", UID: "uid-service"},
+
 			ResourceVersion: "2",
 			Scope:           objectcatalog.ScopeNamespace,
 		},
@@ -235,12 +203,12 @@ func TestCatalogBuildClusterScopedNamespaceSentinel(t *testing.T) {
 	if item.Scope != objectcatalog.ScopeCluster {
 		t.Fatalf("expected cluster-scoped row, got %+v", item)
 	}
-	if item.Namespace != "" {
-		t.Fatalf("expected cluster-scoped row to have empty namespace, got %q", item.Namespace)
+	if item.Ref.Namespace != "" {
+		t.Fatalf("expected cluster-scoped row to have empty namespace, got %q", item.Ref.Namespace)
 	}
-	if item.Group != "apiextensions.k8s.io" || item.Version != "v1" ||
-		item.Kind != "CustomResourceDefinition" || item.Resource != "customresourcedefinitions" ||
-		item.Name != "widgets.example.com" || item.UID != "uid-crd" {
+	if item.Ref.Group != "apiextensions.k8s.io" || item.Ref.Version != "v1" ||
+		item.Ref.Kind != "CustomResourceDefinition" || item.Ref.Resource != "customresourcedefinitions" ||
+		item.Ref.Name != "widgets.example.com" || item.Ref.UID != "uid-crd" {
 		t.Fatalf("cluster-scoped identity was not preserved: %+v", item)
 	}
 	if !reflect.DeepEqual(payload.Kinds, []objectcatalog.KindInfo{
@@ -256,13 +224,7 @@ func TestCatalogBuildClusterScopedNamespaceSentinel(t *testing.T) {
 func TestCatalogSnapshotMetadataUsesKeysetSemantics(t *testing.T) {
 	payload, _ := buildCatalogSnapshot(
 		objectcatalog.QueryResult{
-			Items: []objectcatalog.Summary{{
-				Kind:      "Pod",
-				Version:   "v1",
-				Resource:  "pods",
-				Namespace: "default",
-				Name:      "pod-b",
-			}},
+			Items:         []objectcatalog.Summary{{Ref: resourcemodel.ResourceRef{Version: "v1", Kind: "Pod", Resource: "pods", Namespace: "default", Name: "pod-b"}}},
 			ContinueToken: "next-keyset",
 			PreviousToken: "previous-keyset",
 			TotalItems:    3,
@@ -289,13 +251,7 @@ func TestCatalogSnapshotMetadataUsesKeysetSemantics(t *testing.T) {
 func TestCatalogSnapshotIssuesDescribeApproximateAndDegradedResults(t *testing.T) {
 	payload, _ := buildCatalogSnapshot(
 		objectcatalog.QueryResult{
-			Items: []objectcatalog.Summary{{
-				Kind:      "Pod",
-				Version:   "v1",
-				Resource:  "pods",
-				Namespace: "default",
-				Name:      "pod-a",
-			}},
+			Items:         []objectcatalog.Summary{{Ref: resourcemodel.ResourceRef{Version: "v1", Kind: "Pod", Resource: "pods", Namespace: "default", Name: "pod-a"}}},
 			ContinueToken: "next-keyset",
 			PreviousToken: "previous-keyset",
 			TotalItems:    200000,
@@ -352,13 +308,7 @@ func TestCatalogSnapshotIssuesDescribeApproximateAndDegradedResults(t *testing.T
 func TestCatalogDegradedSyncKeepsKeysetPagination(t *testing.T) {
 	payload, _ := buildCatalogSnapshot(
 		objectcatalog.QueryResult{
-			Items: []objectcatalog.Summary{{
-				Kind:      "Pod",
-				Version:   "v1",
-				Resource:  "pods",
-				Namespace: "default",
-				Name:      "pod-a",
-			}},
+			Items:         []objectcatalog.Summary{{Ref: resourcemodel.ResourceRef{Version: "v1", Kind: "Pod", Resource: "pods", Namespace: "default", Name: "pod-a"}}},
 			ContinueToken: "next-keyset",
 			PreviousToken: "previous-keyset",
 			TotalItems:    5000,
@@ -425,38 +375,14 @@ func TestCatalogSnapshotIssuesReportDeniedResources(t *testing.T) {
 
 func TestCatalogBuildPreservesContinueWhenCachesReady(t *testing.T) {
 	summaries := []objectcatalog.Summary{
-		{
-			Kind:            "Deployment",
-			Group:           "apps",
-			Version:         "v1",
-			Resource:        "deployments",
-			Namespace:       "default",
-			Name:            "alpha",
-			UID:             "uid-alpha",
-			ResourceVersion: "1",
-			Scope:           objectcatalog.ScopeNamespace,
+		{Ref: resourcemodel.ResourceRef{Group: "apps", Version: "v1", Kind: "Deployment", Resource: "deployments", Namespace: "default", Name: "alpha", UID: "uid-alpha"}, ResourceVersion: "1",
+			Scope: objectcatalog.ScopeNamespace,
 		},
-		{
-			Kind:            "Deployment",
-			Group:           "apps",
-			Version:         "v1",
-			Resource:        "deployments",
-			Namespace:       "default",
-			Name:            "bravo",
-			UID:             "uid-bravo",
-			ResourceVersion: "2",
-			Scope:           objectcatalog.ScopeNamespace,
+		{Ref: resourcemodel.ResourceRef{Group: "apps", Version: "v1", Kind: "Deployment", Resource: "deployments", Namespace: "default", Name: "bravo", UID: "uid-bravo"}, ResourceVersion: "2",
+			Scope: objectcatalog.ScopeNamespace,
 		},
-		{
-			Kind:            "Pod",
-			Group:           "",
-			Version:         "v1",
-			Resource:        "pods",
-			Namespace:       "kube-system",
-			Name:            "charlie",
-			UID:             "uid-charlie",
-			ResourceVersion: "3",
-			Scope:           objectcatalog.ScopeNamespace,
+		{Ref: resourcemodel.ResourceRef{Group: "", Version: "v1", Kind: "Pod", Resource: "pods", Namespace: "kube-system", Name: "charlie", UID: "uid-charlie"}, ResourceVersion: "3",
+			Scope: objectcatalog.ScopeNamespace,
 		},
 	}
 
@@ -491,38 +417,14 @@ func TestCatalogBuildPreservesContinueWhenCachesReady(t *testing.T) {
 
 func TestCatalogSnapshotAndStreamUseSameCatalogQueryContract(t *testing.T) {
 	summaries := []objectcatalog.Summary{
-		{
-			Kind:            "Deployment",
-			Group:           "apps",
-			Version:         "v1",
-			Resource:        "deployments",
-			Namespace:       "default",
-			Name:            "alpha",
-			UID:             "uid-alpha",
-			ResourceVersion: "1",
-			Scope:           objectcatalog.ScopeNamespace,
+		{Ref: resourcemodel.ResourceRef{Group: "apps", Version: "v1", Kind: "Deployment", Resource: "deployments", Namespace: "default", Name: "alpha", UID: "uid-alpha"}, ResourceVersion: "1",
+			Scope: objectcatalog.ScopeNamespace,
 		},
-		{
-			Kind:            "Deployment",
-			Group:           "apps",
-			Version:         "v1",
-			Resource:        "deployments",
-			Namespace:       "default",
-			Name:            "bravo",
-			UID:             "uid-bravo",
-			ResourceVersion: "2",
-			Scope:           objectcatalog.ScopeNamespace,
+		{Ref: resourcemodel.ResourceRef{Group: "apps", Version: "v1", Kind: "Deployment", Resource: "deployments", Namespace: "default", Name: "bravo", UID: "uid-bravo"}, ResourceVersion: "2",
+			Scope: objectcatalog.ScopeNamespace,
 		},
-		{
-			Kind:            "Pod",
-			Group:           "",
-			Version:         "v1",
-			Resource:        "pods",
-			Namespace:       "kube-system",
-			Name:            "ignored",
-			UID:             "uid-ignored",
-			ResourceVersion: "3",
-			Scope:           objectcatalog.ScopeNamespace,
+		{Ref: resourcemodel.ResourceRef{Group: "", Version: "v1", Kind: "Pod", Resource: "pods", Namespace: "kube-system", Name: "ignored", UID: "uid-ignored"}, ResourceVersion: "3",
+			Scope: objectcatalog.ScopeNamespace,
 		},
 	}
 	svc := seedCatalogService(t, summaries)
@@ -555,7 +457,7 @@ func TestCatalogSnapshotAndStreamUseSameCatalogQueryContract(t *testing.T) {
 	if payload.Total != 2 || len(payload.Items) != 1 || payload.Continue == "" {
 		t.Fatalf("unexpected paginated payload: total=%d len=%d continue=%q", payload.Total, len(payload.Items), payload.Continue)
 	}
-	if item := payload.Items[0]; item.UID != "uid-alpha" || item.Group != "apps" || item.Version != "v1" || item.Resource != "deployments" {
+	if item := payload.Items[0]; item.Ref.UID != "uid-alpha" || item.Ref.Group != "apps" || item.Ref.Version != "v1" || item.Ref.Resource != "deployments" {
 		t.Fatalf("snapshot lost catalog identity fields: %+v", item)
 	}
 
@@ -563,27 +465,11 @@ func TestCatalogSnapshotAndStreamUseSameCatalogQueryContract(t *testing.T) {
 
 func TestCatalogRefreshAdapterBuildsSnapshotFromSharedAssembly(t *testing.T) {
 	summaries := []objectcatalog.Summary{
-		{
-			Kind:            "Deployment",
-			Group:           "apps",
-			Version:         "v1",
-			Resource:        "deployments",
-			Namespace:       "default",
-			Name:            "alpha",
-			UID:             "uid-alpha",
-			ResourceVersion: "1",
-			Scope:           objectcatalog.ScopeNamespace,
+		{Ref: resourcemodel.ResourceRef{Group: "apps", Version: "v1", Kind: "Deployment", Resource: "deployments", Namespace: "default", Name: "alpha", UID: "uid-alpha"}, ResourceVersion: "1",
+			Scope: objectcatalog.ScopeNamespace,
 		},
-		{
-			Kind:            "Deployment",
-			Group:           "apps",
-			Version:         "v1",
-			Resource:        "deployments",
-			Namespace:       "default",
-			Name:            "bravo",
-			UID:             "uid-bravo",
-			ResourceVersion: "2",
-			Scope:           objectcatalog.ScopeNamespace,
+		{Ref: resourcemodel.ResourceRef{Group: "apps", Version: "v1", Kind: "Deployment", Resource: "deployments", Namespace: "default", Name: "bravo", UID: "uid-bravo"}, ResourceVersion: "2",
+			Scope: objectcatalog.ScopeNamespace,
 		},
 	}
 	svc := seedCatalogService(t, summaries)
@@ -619,27 +505,11 @@ func TestCatalogRefreshAdapterBuildsSnapshotFromSharedAssembly(t *testing.T) {
 
 func TestCatalogDiffBuildUsesCatalogSnapshotQueryContract(t *testing.T) {
 	summaries := []objectcatalog.Summary{
-		{
-			Kind:            "Deployment",
-			Group:           "apps",
-			Version:         "v1",
-			Resource:        "deployments",
-			Namespace:       "default",
-			Name:            "alpha",
-			UID:             "uid-alpha",
-			ResourceVersion: "1",
-			Scope:           objectcatalog.ScopeNamespace,
+		{Ref: resourcemodel.ResourceRef{Group: "apps", Version: "v1", Kind: "Deployment", Resource: "deployments", Namespace: "default", Name: "alpha", UID: "uid-alpha"}, ResourceVersion: "1",
+			Scope: objectcatalog.ScopeNamespace,
 		},
-		{
-			Kind:            "Deployment",
-			Group:           "apps",
-			Version:         "v1",
-			Resource:        "deployments",
-			Namespace:       "default",
-			Name:            "beta",
-			UID:             "uid-beta",
-			ResourceVersion: "2",
-			Scope:           objectcatalog.ScopeNamespace,
+		{Ref: resourcemodel.ResourceRef{Group: "apps", Version: "v1", Kind: "Deployment", Resource: "deployments", Namespace: "default", Name: "beta", UID: "uid-beta"}, ResourceVersion: "2",
+			Scope: objectcatalog.ScopeNamespace,
 		},
 	}
 	svc := seedCatalogService(t, summaries)
@@ -672,7 +542,7 @@ func TestCatalogDiffBuildUsesCatalogSnapshotQueryContract(t *testing.T) {
 		t.Fatalf("expected one filtered diff item, got total=%d len=%d", payload.Total, len(payload.Items))
 	}
 	item := payload.Items[0]
-	if item.UID != "uid-beta" || item.Group != "apps" || item.Version != "v1" || item.Resource != "deployments" {
+	if item.Ref.UID != "uid-beta" || item.Ref.Group != "apps" || item.Ref.Version != "v1" || item.Ref.Resource != "deployments" {
 		t.Fatalf("catalog-diff lost catalog identity fields: %+v", item)
 	}
 }
@@ -690,16 +560,7 @@ func TestCatalogBuildErrorsWhenServiceUnavailable(t *testing.T) {
 
 func TestCatalogBuildAddsNamespaceGroups(t *testing.T) {
 	summaries := []objectcatalog.Summary{
-		{
-			Kind:      "Pod",
-			Group:     "",
-			Version:   "v1",
-			Resource:  "pods",
-			Namespace: "default",
-			Name:      "pod-a",
-			UID:       "uid-a",
-			Scope:     objectcatalog.ScopeNamespace,
-		},
+		{Ref: resourcemodel.ResourceRef{Group: "", Version: "v1", Kind: "Pod", Resource: "pods", Namespace: "default", Name: "pod-a", UID: "uid-a"}, Scope: objectcatalog.ScopeNamespace},
 	}
 	svc := seedCatalogService(t, summaries)
 
@@ -776,8 +637,8 @@ func markCatalogCachesReady(t *testing.T, svc *objectcatalog.Service, summaries 
 	}
 	kindMap := make(map[string]bool, len(summaries))
 	for _, summary := range summaries {
-		if summary.Kind != "" {
-			kindMap[summary.Kind] = summary.Scope == objectcatalog.ScopeNamespace
+		if summary.Ref.Kind != "" {
+			kindMap[summary.Ref.Kind] = summary.Scope == objectcatalog.ScopeNamespace
 		}
 	}
 	kindList := make([]objectcatalog.KindInfo, 0, len(kindMap))
@@ -797,8 +658,8 @@ func markCatalogCachesReady(t *testing.T, svc *objectcatalog.Service, summaries 
 	}
 	namespaceSet := make(map[string]struct{}, len(summaries))
 	for _, summary := range summaries {
-		if summary.Namespace != "" {
-			namespaceSet[summary.Namespace] = struct{}{}
+		if summary.Ref.Namespace != "" {
+			namespaceSet[summary.Ref.Namespace] = struct{}{}
 		}
 	}
 	namespaceList := make([]string, 0, len(namespaceSet))
@@ -819,10 +680,10 @@ func markCatalogCachesReady(t *testing.T, svc *objectcatalog.Service, summaries 
 	descriptorSlice := reflect.MakeSlice(descriptorsField.Type(), len(summaries), len(summaries))
 	for idx, summary := range summaries {
 		desc := objectcatalog.Descriptor{
-			Group:      summary.Group,
-			Version:    summary.Version,
-			Resource:   summary.Resource,
-			Kind:       summary.Kind,
+			Group:      summary.Ref.Group,
+			Version:    summary.Ref.Version,
+			Resource:   summary.Ref.Resource,
+			Kind:       summary.Ref.Kind,
 			Scope:      summary.Scope,
 			Namespaced: summary.Scope == objectcatalog.ScopeNamespace,
 		}

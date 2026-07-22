@@ -114,7 +114,6 @@ func NewDeploymentIngestProjector(meta ClusterMeta) ingest.ProjectFunc {
 			return nil, workloadProjectionError("ingest: deployment projector received a non-Deployment object")
 		}
 		summary := builder.buildDeploymentSummary(meta.ClusterID, deploy, nil, nil)
-		summary.ClusterMeta = meta
 		var metaObj metav1.Object = deploy
 		return ingest.Bundle{
 			Table:     summary,
@@ -135,7 +134,6 @@ func NewStatefulSetIngestProjector(meta ClusterMeta) ingest.ProjectFunc {
 			return nil, workloadProjectionError("ingest: statefulset projector received a non-StatefulSet object")
 		}
 		summary := builder.buildStatefulSetSummary(meta.ClusterID, sts, nil, nil)
-		summary.ClusterMeta = meta
 		var metaObj metav1.Object = sts
 		return ingest.Bundle{
 			Table:     summary,
@@ -156,7 +154,6 @@ func NewDaemonSetIngestProjector(meta ClusterMeta) ingest.ProjectFunc {
 			return nil, workloadProjectionError("ingest: daemonset projector received a non-DaemonSet object")
 		}
 		summary := builder.buildDaemonSetSummary(meta.ClusterID, ds, nil, nil)
-		summary.ClusterMeta = meta
 		var metaObj metav1.Object = ds
 		return ingest.Bundle{
 			Table:     summary,
@@ -177,7 +174,6 @@ func NewJobIngestProjector(meta ClusterMeta) ingest.ProjectFunc {
 			return nil, workloadProjectionError("ingest: job projector received a non-Job object")
 		}
 		summary := builder.buildJobSummary(meta.ClusterID, job, nil, nil)
-		summary.ClusterMeta = meta
 		var metaObj metav1.Object = job
 		return ingest.Bundle{
 			Table:     summary,
@@ -199,7 +195,6 @@ func NewCronJobIngestProjector(meta ClusterMeta) ingest.ProjectFunc {
 			return nil, workloadProjectionError("ingest: cronjob projector received a non-CronJob object")
 		}
 		summary := builder.buildCronJobSummary(meta.ClusterID, cron, nil, nil)
-		summary.ClusterMeta = meta
 		var metaObj metav1.Object = cron
 		return ingest.Bundle{
 			Table:     summary,

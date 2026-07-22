@@ -18,7 +18,7 @@ import (
 // BuildStreamSummary builds the namespace-network row for one ListenerSet.
 func BuildStreamSummary(meta streamrows.ClusterMeta, listenerSet *gatewayv1.ListenerSet) streamrows.NetworkSummary {
 	if listenerSet == nil {
-		return streamrows.NetworkSummary{ClusterMeta: meta, Kind: "ListenerSet"}
+		return streamrows.NetworkSummary{}
 	}
 	facts := BuildFacts(meta.ClusterID, listenerSet)
 	details := fmt.Sprintf("Parent: %s, %d listener(s)", resourcemodel.ResourceLinkName(facts.ParentRef), len(facts.Listeners))

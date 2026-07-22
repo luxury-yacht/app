@@ -1,33 +1,38 @@
 import { describe, expect, it } from 'vitest';
 
-import type { CatalogItem } from '@/core/refresh/types';
+import type { CanonicalRowTestOverrides, CatalogItem } from '@/core/refresh/types';
 import { normalizeCatalogScope, reconcileByUID } from './browseUtils';
 
-const makeItem = (overrides: Partial<CatalogItem>): CatalogItem => ({
-  clusterId: 'cluster-a',
-  clusterName: 'Cluster A',
-  kind: 'Pod',
-  group: '',
-  version: 'v1',
-  resource: 'pods',
-  namespace: 'team-a',
-  name: 'example',
-  uid: 'uid-1',
-  resourceVersion: '1',
-  creationTimestamp: '2026-01-01T00:00:00Z',
-  scope: 'Namespace',
-  ...overrides,
-});
+const makeItem = (overrides: CanonicalRowTestOverrides<CatalogItem>): CatalogItem => {
+  const { ref, ...row } = overrides;
+  return {
+    ref: {
+      clusterId: 'cluster-a',
+      group: '',
+      version: 'v1',
+      kind: 'Pod',
+      resource: 'pods',
+      namespace: 'team-a',
+      name: 'example',
+      uid: 'uid-1',
+      ...ref,
+    },
+    resourceVersion: '1',
+    creationTimestamp: '2026-01-01T00:00:00Z',
+    scope: 'Namespace',
+    ...row,
+  };
+};
 
 describe('reconcileByUID', () => {
   it('reuses existing item references when resource versions are unchanged', () => {
     const current = [
-      makeItem({ uid: 'uid-1', name: 'one' }),
-      makeItem({ uid: 'uid-2', name: 'two' }),
+      makeItem({ ref: { uid: 'uid-1', name: 'one' } }),
+      makeItem({ ref: { uid: 'uid-2', name: 'two' } }),
     ];
     const incoming = [
-      makeItem({ uid: 'uid-1', name: 'one' }),
-      makeItem({ uid: 'uid-2', name: 'two' }),
+      makeItem({ ref: { uid: 'uid-1', name: 'one' } }),
+      makeItem({ ref: { uid: 'uid-2', name: 'two' } }),
     ];
 
     const result = reconcileByUID(current, incoming);
@@ -37,8 +42,8 @@ describe('reconcileByUID', () => {
   });
 
   it('returns a new list when an item resource version changed', () => {
-    const current = [makeItem({ uid: 'uid-1', name: 'one', resourceVersion: '1' })];
-    const incoming = [makeItem({ uid: 'uid-1', name: 'one', resourceVersion: '2' })];
+    const current = [makeItem({ ref: { uid: 'uid-1', name: 'one' }, resourceVersion: '1' })];
+    const incoming = [makeItem({ ref: { uid: 'uid-1', name: 'one' }, resourceVersion: '2' })];
 
     const result = reconcileByUID(current, incoming);
 
@@ -47,9 +52,35 @@ describe('reconcileByUID', () => {
     expect(result.nextItems[0]).toEqual(incoming[0]);
   });
 
+  it('does not hide derived action-fact changes when the object resource version is unchanged', () => {
+    const current = [
+      makeItem({
+        ref: { uid: 'uid-1', name: 'one' },
+        resourceVersion: '1',
+        actionFacts: { hpaManaged: false },
+      }),
+    ];
+    const incoming = [
+      makeItem({
+        ref: { uid: 'uid-1', name: 'one' },
+        resourceVersion: '1',
+        actionFacts: { hpaManaged: true },
+      }),
+    ];
+
+    const result = reconcileByUID(current, incoming);
+
+    expect(result.changed).toBe(true);
+    expect(result.nextItems[0]).toBe(incoming[0]);
+    expect(result.nextItems[0].ref).toBe(current[0].ref);
+  });
+
   it('reflects deletions in full replacement snapshots', () => {
-    const current = [makeItem({ uid: 'uid-1' }), makeItem({ uid: 'uid-2', name: 'two' })];
-    const incoming = [makeItem({ uid: 'uid-1' })];
+    const current = [
+      makeItem({ ref: { uid: 'uid-1' } }),
+      makeItem({ ref: { uid: 'uid-2', name: 'two' } }),
+    ];
+    const incoming = [makeItem({ ref: { uid: 'uid-1' } })];
 
     const result = reconcileByUID(current, incoming);
 

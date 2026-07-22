@@ -36,6 +36,7 @@ import type { ResolvedObjectReference } from '@shared/utils/objectIdentity';
 import { formatAge } from '@utils/ageFormatter';
 import type React from 'react';
 import { useCallback, useEffect, useMemo, useRef } from 'react';
+import { useClusterNameResolver } from '@/core/cluster-workspace/useClusterWorkspace';
 import { type DataRequestReason, requestRefreshDomain } from '@/core/data-access';
 import { refreshManager } from '@/core/refresh';
 import { useAutoRefreshLoadingState } from '@/core/refresh/hooks/useAutoRefreshLoadingState';
@@ -93,6 +94,7 @@ const EventsTab: React.FC<EventsTabProps> = ({ objectData, isActive, eventsScope
   const { isPaused, isManualRefreshActive } = useAutoRefreshLoadingState();
   const { openWithObject } = useObjectPanel();
   const { navigateToView } = useNavigateToView();
+  const resolveClusterName = useClusterNameResolver();
   const openWithObjectRef = useRef(openWithObject);
   useEffect(() => {
     openWithObjectRef.current = openWithObject;
@@ -227,6 +229,11 @@ const EventsTab: React.FC<EventsTabProps> = ({ objectData, isActive, eventsScope
         const fallbackName = event.involvedObjectName || objectData?.name || 'Unknown';
         const objectNamespace =
           event.involvedObjectNamespace ?? objectData?.namespace ?? CLUSTER_SCOPE;
+        const eventClusterName =
+          resolveClusterName(event.ref.clusterId) ??
+          (event.ref.clusterId === objectData?.clusterId
+            ? (objectData.clusterName ?? undefined)
+            : undefined);
         const objectRef = buildEventObjectReference(
           buildEventObjectRefInput({
             objectKind: fallbackKind,
@@ -235,8 +242,8 @@ const EventsTab: React.FC<EventsTabProps> = ({ objectData, isActive, eventsScope
             objectUid: event.involvedObjectUid,
             objectApiVersion: event.involvedObjectApiVersion,
             involvedObject: event.involvedObject,
-            clusterId: event.clusterId,
-            clusterName: event.clusterName,
+            clusterId: event.ref.clusterId,
+            clusterName: eventClusterName,
           })
         );
         const parsedObject = splitEventObjectTarget(`${fallbackKind}/${fallbackName}`);
@@ -256,11 +263,20 @@ const EventsTab: React.FC<EventsTabProps> = ({ objectData, isActive, eventsScope
           objectApiVersion: event.involvedObjectApiVersion,
           involvedObject: event.involvedObject,
           objectRef,
-          clusterId: event.clusterId,
-          clusterName: event.clusterName,
+          clusterId: event.ref.clusterId,
+          clusterName: eventClusterName,
         };
       }),
-    [buildEventObjectRefInput, rawEvents, objectData?.kind, objectData?.name, objectData?.namespace]
+    [
+      buildEventObjectRefInput,
+      rawEvents,
+      objectData?.clusterId,
+      objectData?.clusterName,
+      objectData?.kind,
+      objectData?.name,
+      objectData?.namespace,
+      resolveClusterName,
+    ]
   );
 
   const eventsLoadingState = applyPassiveLoadingPolicy({

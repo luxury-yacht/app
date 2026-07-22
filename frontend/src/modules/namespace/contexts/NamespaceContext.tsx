@@ -69,9 +69,6 @@ export interface NamespaceListItem {
   resourceVersion: string;
   scopeStatus?: 'not-found' | 'no-access';
   isSynthetic?: boolean;
-  // Multi-cluster identity — required for stable row keys and scoped operations.
-  clusterId?: string;
-  clusterName?: string;
 }
 
 interface NamespaceContextType {
@@ -243,7 +240,7 @@ export const NamespaceProvider: React.FC<NamespaceProviderProps> = ({ children }
       return [];
     }
     const objectRows = (namespaceDomain.data.namespaces ?? []).filter(
-      (ns) => ns.clusterId === activeClusterId
+      (ns) => ns.ref.clusterId === activeClusterId
     );
     return joinNamespaceMetrics(objectRows, namespaceMetricsDomain.data?.namespaces);
   }, [activeClusterId, namespaceDomain.data, namespaceMetricsDomain.data?.namespaces]);
@@ -306,8 +303,8 @@ export const NamespaceProvider: React.FC<NamespaceProviderProps> = ({ children }
             : 'Unavailable';
 
       return {
-        name: ns.name,
-        scope: ns.name,
+        name: ns.ref.name,
+        scope: ns.ref.name,
         status: ns.status || ns.phase,
         details: `Status: ${ns.status || ns.phase} • ${workloadSummary} • Unhealthy workloads: ${unhealthyWorkloads} • Warning events: ${warningEventSummary} • Utilization: ${utilizationSummary} • Quota pressure: ${quotaSummary}`,
         age,
@@ -325,8 +322,6 @@ export const NamespaceProvider: React.FC<NamespaceProviderProps> = ({ children }
         quotaPressureState,
         resourceVersion: ns.resourceVersion,
         scopeStatus: ns.scopeStatus,
-        clusterId: ns.clusterId,
-        clusterName: ns.clusterName,
       } satisfies NamespaceListItem;
     });
 

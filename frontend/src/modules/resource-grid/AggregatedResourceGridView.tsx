@@ -36,7 +36,7 @@ import { useNavigateToView } from '@shared/hooks/useNavigateToView';
 import { useObjectActionController } from '@shared/hooks/useObjectActionController';
 import { buildRequiredObjectReference } from '@shared/utils/objectIdentity';
 import { useCallback, useMemo } from 'react';
-import type { RefreshDomain, ResourceRef } from '@/core/refresh/types';
+import type { CanonicalResourceRef, RefreshDomain } from '@/core/refresh/types';
 import { useShortNames } from '@/hooks/useShortNames';
 import type { NamespaceViewType } from '@/types/navigation/views';
 import type { KubernetesObjectReference } from '@/types/view-state';
@@ -44,11 +44,7 @@ import { resolveEmptyStateMessage } from '@/utils/emptyState';
 
 /** The row fields the shared skeleton itself reads. */
 export interface AggregatedRowBase {
-  ref: ResourceRef;
-  name: string;
-  namespace?: string;
-  clusterId?: string;
-  clusterName?: string;
+  ref: CanonicalResourceRef;
 }
 
 /** Helpers handed to a view's column builder. */
@@ -65,6 +61,8 @@ export interface AggregatedColumnHelpers<D> {
   navigateReference: (ref: KubernetesObjectReference) => void;
   /** The selected cluster id, for bespoke reference builders. */
   fallbackClusterId: string | null | undefined;
+  /** The selected cluster display name; identity itself remains in ref. */
+  fallbackClusterName: string | null | undefined;
   useShortResourceNames: boolean;
 }
 
@@ -98,7 +96,7 @@ export interface AggregatedResourceGridViewSpec<D extends AggregatedRowBase> {
   buildColumns: (helpers: AggregatedColumnHelpers<D>) => GridColumnDefinition<D>[];
 }
 
-const getAggregatedRowRef = <D extends AggregatedRowBase>(row: D): ResourceRef => row.ref;
+const getAggregatedRowRef = <D extends AggregatedRowBase>(row: D): CanonicalResourceRef => row.ref;
 
 /**
  * useAggregatedGridCore wires the scope-independent machinery: row identity,
@@ -110,12 +108,16 @@ function useAggregatedGridCore<D extends AggregatedRowBase>(
 ) {
   const { openWithObject } = useObjectPanel();
   const { navigateToView } = useNavigateToView();
-  const { selectedClusterId } = useKubeconfig();
+  const { selectedClusterId, selectedClusterName } = useKubeconfig();
   const useShortResourceNames = useShortNames();
+  const getObject = useCallback(
+    (row: D) => ({ ...getAggregatedRowRef(row), clusterName: selectedClusterName }),
+    [selectedClusterName]
+  );
 
   const identity = useResourceGridObjectIdentity<D>({
     fallbackClusterId: selectedClusterId,
-    getObject: getAggregatedRowRef,
+    getObject,
     openWithObject,
     navigateToView,
   });
@@ -149,6 +151,7 @@ function useAggregatedGridCore<D extends AggregatedRowBase>(
       openReference,
       navigateReference,
       fallbackClusterId: selectedClusterId,
+      fallbackClusterName: selectedClusterName,
       useShortResourceNames,
     });
     const sizing: cf.ColumnSizingMap = {};
@@ -165,6 +168,7 @@ function useAggregatedGridCore<D extends AggregatedRowBase>(
     openObject,
     openReference,
     selectedClusterId,
+    selectedClusterName,
     useShortResourceNames,
   ]);
 
@@ -271,8 +275,8 @@ export function NamespaceAggregatedResourceGridView<
     }
     const withNamespace = [...core.columns];
     cf.upsertNamespaceColumn(withNamespace, {
-      accessor: (row: D) => row.namespace ?? '',
-      sortValue: (row: D) => (row.namespace || '').toLowerCase(),
+      accessor: (row: D) => row.ref.namespace ?? '',
+      sortValue: (row: D) => (row.ref.namespace || '').toLowerCase(),
       ...namespaceColumnLink,
     });
     return withNamespace;

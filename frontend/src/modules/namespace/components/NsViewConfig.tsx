@@ -37,13 +37,13 @@ const configSpec: AggregatedResourceGridViewSpec<ConfigData> = {
   buildColumns: ({ identity, useShortResourceNames }) => [
     cf.createKindColumn<ConfigData>({
       key: 'kind',
-      getKind: (resource) => resource.kind,
+      getKind: (resource) => resource.ref.kind,
       getAlias: (resource) => resource.kindAlias,
-      getDisplayText: (resource) => getDisplayKind(resource.kind, useShortResourceNames),
+      getDisplayText: (resource) => getDisplayKind(resource.ref.kind, useShortResourceNames),
       onClick: identity.open,
       onAltClick: identity.navigate,
     }),
-    cf.createTextColumn<ConfigData>('name', 'Name', {
+    cf.createTextColumn<ConfigData>('name', 'Name', (resource) => resource.ref.name, {
       onClick: identity.open,
       onAltClick: identity.navigate,
       getClassName: () => 'object-panel-link',

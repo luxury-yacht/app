@@ -11,10 +11,17 @@ export * from './types.generated';
 
 import type {
   BackendDomainPayloadMap,
+  CanonicalResourceRef,
   ContainerLogsWireEntry,
   RefreshPermissionDeniedDetails,
   RefreshPermissionDeniedStatus,
 } from './types.generated';
+
+/** Test-fixture patch shape for canonical rows whose required ref is assembled by a builder. */
+export type CanonicalRowTestOverrides<T extends { ref: CanonicalResourceRef }> = Omit<
+  Partial<T>,
+  'ref'
+> & { ref?: Partial<CanonicalResourceRef> };
 
 // Error parsing also accepts Kubernetes Status-shaped details that do not
 // originate in the refresh server. Keep that permissive input boundary

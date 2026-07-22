@@ -12,6 +12,7 @@ import { withStableListKeys } from '@shared/utils/stableListKeys';
 import { act } from 'react';
 import * as ReactDOM from 'react-dom/client';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
+import type { CanonicalRowTestOverrides } from '@/core/refresh/types';
 import { makeResourceRef } from '@/test-utils/makeResourceRef';
 
 vi.mock('@modules/namespace/components/useNamespaceColumnLink', () => ({
@@ -78,7 +79,7 @@ vi.mock('@shared/components/tables/GridTable', async () => {
             {withStableListKeys(props.data, (row) => JSON.stringify(row)).map(
               ({ key, value: row }) => (
                 <tr key={key}>
-                  <td>{row.name}</td>
+                  <td>{row.ref.name}</td>
                 </tr>
               )
             )}
@@ -178,28 +179,23 @@ describe('NsViewRBAC', () => {
     container.remove();
   });
 
-  const baseRBAC = (overrides: Partial<RBACData> = {}): RBACData => {
-    const row = {
-      kind: 'Role',
-      name: 'view',
-      namespace: 'team-a',
-      clusterId: 'alpha:ctx',
-      clusterName: 'alpha',
+  const baseRBAC = (overrides: CanonicalRowTestOverrides<RBACData> = {}): RBACData => {
+    const { ref, ...row } = overrides;
+    const kind = ref?.kind ?? 'Role';
+    return {
+      ref: {
+        ...makeResourceRef({
+          group: kind === 'ServiceAccount' ? '' : 'rbac.authorization.k8s.io',
+          kind,
+          resource: kind === 'ServiceAccount' ? 'serviceaccounts' : 'roles',
+          namespace: 'team-a',
+          name: 'view',
+        }),
+        ...ref,
+      },
       details: '3 rules',
       age: '5h',
-      ...overrides,
-    };
-    return {
       ...row,
-      ref:
-        overrides.ref ??
-        makeResourceRef({
-          group: row.kind === 'ServiceAccount' ? '' : 'rbac.authorization.k8s.io',
-          kind: row.kind,
-          resource: row.kind === 'ServiceAccount' ? 'serviceaccounts' : 'roles',
-          namespace: row.namespace,
-          name: row.name,
-        }),
     };
   };
 
@@ -266,7 +262,7 @@ describe('NsViewRBAC', () => {
   });
 
   it('opens the Map for ServiceAccount rows', async () => {
-    const entry = baseRBAC({ kind: 'ServiceAccount', name: 'builder' });
+    const entry = baseRBAC({ ref: { kind: 'ServiceAccount', name: 'builder' } });
     const props = await renderRBACView();
     const objectMapItem = props
       .getCustomContextMenuItems(entry, 'name')

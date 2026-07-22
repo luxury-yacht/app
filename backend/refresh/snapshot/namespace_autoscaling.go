@@ -70,17 +70,17 @@ func namespaceAutoscalingDomainSpec() typedTableDomainSpec[AutoscalingSummary] {
 		adapter:          autoscalingTableQueryAdapter(),
 		schema:           autoscalingQuerypageSchema(),
 		capabilities:     namespaceAutoscalingQueryCapabilities(),
-		kindOf:           func(resource AutoscalingSummary) string { return resource.Kind },
+		kindOf:           func(resource AutoscalingSummary) string { return resource.Ref.Kind },
 		sortRows:         sortAutoscalingSummaries,
 	}
 }
 
 func sortAutoscalingSummaries(resources []AutoscalingSummary) {
 	sort.Slice(resources, func(i, j int) bool {
-		if resources[i].Namespace == resources[j].Namespace {
-			return resources[i].Name < resources[j].Name
+		if resources[i].Ref.Namespace == resources[j].Ref.Namespace {
+			return resources[i].Ref.Name < resources[j].Ref.Name
 		}
-		return resources[i].Namespace < resources[j].Namespace
+		return resources[i].Ref.Namespace < resources[j].Ref.Namespace
 	})
 }
 

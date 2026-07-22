@@ -180,10 +180,7 @@ describe('ClusterViewStorage', () => {
 
     const props = getGridTableProps();
     expect(
-      props.keyExtractor(
-        { ...basePV, clusterId: 'alpha:ctx', ref: { ...basePV.ref, clusterId: 'alpha:ctx' } },
-        0
-      )
+      props.keyExtractor({ ...basePV, ref: { ...basePV.ref, clusterId: 'alpha:ctx' } }, 0)
     ).toBe('alpha:ctx|/v1/PersistentVolume//pv-1');
   });
 

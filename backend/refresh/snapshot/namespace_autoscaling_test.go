@@ -84,7 +84,7 @@ func TestBuildSnapshotPopulatesTargetAPIVersion(t *testing.T) {
 	// Index by HPA name (sorted by namespace then name).
 	byName := make(map[string]AutoscalingSummary, len(payload.Rows))
 	for _, r := range payload.Rows {
-		byName[r.Name] = r
+		byName[r.Ref.Name] = r
 	}
 
 	if got := byName["ack-hpa"].TargetAPIVersion; got != "rds.services.k8s.aws/v1alpha1" {

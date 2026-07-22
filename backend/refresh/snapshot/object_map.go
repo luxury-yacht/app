@@ -365,7 +365,7 @@ func (idx *objectMapIndex) addCatalog(svc *objectcatalog.Service) {
 	}
 	for _, item := range svc.Snapshot() {
 		idx.addRecord(&objectMapRecord{
-			ref:               refFromCatalog(item),
+			ref:               refFromCatalog(idx.meta, item),
 			creationTimestamp: item.CreationTimestamp,
 		})
 	}
@@ -1306,17 +1306,17 @@ func isIngressClassRef(ref ObjectMapReference) bool {
 	return ref.Group == ingressclass.Identity.Group && ref.Version == ingressclass.Identity.Version && ref.Kind == ingressclass.Identity.Kind
 }
 
-func refFromCatalog(item objectcatalog.Summary) ObjectMapReference {
+func refFromCatalog(meta ClusterMeta, item objectcatalog.Summary) ObjectMapReference {
 	return ObjectMapReference{
-		ClusterID:   item.ClusterID,
-		ClusterName: item.ClusterName,
-		Group:       item.Group,
-		Version:     item.Version,
-		Kind:        item.Kind,
-		Resource:    item.Resource,
-		Namespace:   item.Namespace,
-		Name:        item.Name,
-		UID:         item.UID,
+		ClusterID:   item.Ref.ClusterID,
+		ClusterName: meta.ClusterName,
+		Group:       item.Ref.Group,
+		Version:     item.Ref.Version,
+		Kind:        item.Ref.Kind,
+		Resource:    item.Ref.Resource,
+		Namespace:   item.Ref.Namespace,
+		Name:        item.Ref.Name,
+		UID:         item.Ref.UID,
 	}
 }
 

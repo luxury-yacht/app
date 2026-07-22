@@ -114,21 +114,21 @@ func TestClusterEventsBuilder(t *testing.T) {
 	// Events should be sorted newest first
 	first := payload.Rows[0]
 	second := payload.Rows[1]
-	require.Equal(t, "event-new", first.Name)
+	require.Equal(t, "event-new", first.Ref.Name)
 	require.Equal(t, "Normal", first.Type)
 	require.Equal(t, "scheduler", first.Source)
 	require.Equal(t, "node-uid-new", first.ObjectUID)
 	require.Equal(t, "v1", first.ObjectAPIVersion)
 	require.Equal(t, clusterEventNew.LastTimestamp.UnixMilli(), first.AgeTimestamp)
-	require.Equal(t, "kube-system", first.Namespace)
+	require.Equal(t, "kube-system", first.Ref.Namespace)
 
-	require.Equal(t, "event-old", second.Name)
+	require.Equal(t, "event-old", second.Ref.Name)
 	require.Equal(t, "Warning", second.Type)
 	require.Contains(t, second.Source, "kubelet")
 	require.Equal(t, "PersistentVolume/pv-old", second.Object)
 	require.Equal(t, "FailedMount", second.Message) // falls back to reason when message empty
 	require.Equal(t, clusterEventOld.LastTimestamp.UnixMilli(), second.AgeTimestamp)
-	require.Equal(t, "kube-system", second.Namespace)
+	require.Equal(t, "kube-system", second.Ref.Namespace)
 }
 
 func TestClusterEventsBuilderUsesDeterministicTieBreakers(t *testing.T) {
@@ -176,8 +176,8 @@ func TestClusterEventsBuilderUsesDeterministicTieBreakers(t *testing.T) {
 	payload, ok := snapshot.Payload.(ClusterEventsSnapshot)
 	require.True(t, ok)
 	require.Len(t, payload.Rows, 2)
-	require.Equal(t, "event-high-rv", payload.Rows[0].Name)
-	require.Equal(t, "event-low-rv", payload.Rows[1].Name)
+	require.Equal(t, "event-high-rv", payload.Rows[0].Ref.Name)
+	require.Equal(t, "event-low-rv", payload.Rows[1].Ref.Name)
 }
 
 // An unsynced events informer lists empty with no error (client-go semantics),

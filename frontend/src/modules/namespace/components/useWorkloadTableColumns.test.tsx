@@ -58,18 +58,21 @@ const renderHook = <T,>(hook: () => T) => {
 
 describe('useWorkloadTableColumns', () => {
   const workload: WorkloadData = {
-    ref: makeResourceRef({
+    ref: {
+      ...makeResourceRef({
+        clusterId: 'cluster-a',
+        group: 'apps',
+        kind: 'Deployment',
+        resource: 'deployments',
+        namespace: 'team-a',
+        name: 'api',
+      }),
       clusterId: 'cluster-a',
-      group: 'apps',
       kind: 'Deployment',
-      resource: 'deployments',
-      namespace: 'team-a',
       name: 'api',
-    }),
-    clusterId: 'cluster-a',
-    kind: 'Deployment',
-    name: 'api',
-    namespace: 'team-a',
+      namespace: 'team-a',
+    },
+
     status: 'Running',
     statusState: '1/1',
     statusPresentation: 'ready',
@@ -78,6 +81,7 @@ describe('useWorkloadTableColumns', () => {
     cpuUsage: '10m',
     memUsage: '20Mi',
     age: '5m',
+    portForwardAvailable: false,
   };
 
   it('returns columns with interactive kind and name handlers', () => {

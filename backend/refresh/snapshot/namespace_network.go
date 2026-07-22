@@ -220,8 +220,8 @@ func (b *NamespaceNetworkBuilder) Build(ctx context.Context, scope string) (*ref
 	// reproducing the typed service.BuildStreamSummary(meta, svc, slices) row byte for byte.
 	// Every other kind's own-row is served as-is.
 	for _, own := range ownRows {
-		if own.Kind == service.Identity.Kind {
-			resources = append(resources, reaggregateServiceSummary(own, readyCounts[serviceSliceKey(own.Namespace, own.Name)]))
+		if own.Ref.Kind == service.Identity.Kind {
+			resources = append(resources, reaggregateServiceSummary(own, readyCounts[serviceSliceKey(own.Ref.Namespace, own.Ref.Name)]))
 			continue
 		}
 		resources = append(resources, own)
@@ -254,7 +254,7 @@ func (b *NamespaceNetworkBuilder) Build(ctx context.Context, scope string) (*ref
 		capabilitiesWithAvailableKinds(namespaceNetworkQueryCapabilities(), sources),
 		config.SnapshotNamespaceNetworkEntryLimit,
 		"network resources",
-		func(resource NetworkSummary) string { return resource.Kind },
+		func(resource NetworkSummary) string { return resource.Ref.Kind },
 		issues,
 	)
 	return &refresh.Snapshot{
@@ -303,13 +303,13 @@ func (b *NamespaceNetworkBuilder) servedKinds(
 
 func sortNetworkSummaries(resources []NetworkSummary) {
 	sort.SliceStable(resources, func(i, j int) bool {
-		if resources[i].Namespace != resources[j].Namespace {
-			return resources[i].Namespace < resources[j].Namespace
+		if resources[i].Ref.Namespace != resources[j].Ref.Namespace {
+			return resources[i].Ref.Namespace < resources[j].Ref.Namespace
 		}
-		if resources[i].Name != resources[j].Name {
-			return resources[i].Name < resources[j].Name
+		if resources[i].Ref.Name != resources[j].Ref.Name {
+			return resources[i].Ref.Name < resources[j].Ref.Name
 		}
-		return resources[i].Kind < resources[j].Kind
+		return resources[i].Ref.Kind < resources[j].Ref.Kind
 	})
 }
 

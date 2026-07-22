@@ -104,7 +104,7 @@ func (s *Service) collectViaIngest(index int, desc resourceDescriptor, namespace
 			continue
 		}
 		if allowed != nil {
-			if _, ok := allowed[summary.Namespace]; !ok {
+			if _, ok := allowed[summary.Ref.Namespace]; !ok {
 				continue
 			}
 		}
@@ -148,7 +148,7 @@ func (s *Service) applyIngestCatalogSummary(gvr schema.GroupVersionResource, sum
 	if !ok {
 		return
 	}
-	key := catalogKey(desc, summary.Namespace, summary.Name)
+	key := catalogKey(desc, summary.Ref.Namespace, summary.Ref.Name)
 
 	s.mu.Lock()
 	changed := false
@@ -207,7 +207,7 @@ func (s *Service) replaceIngestCatalogSummaries(gvr schema.GroupVersionResource,
 		changed = true
 	}
 	for _, summary := range rows {
-		key := catalogKey(desc, summary.Namespace, summary.Name)
+		key := catalogKey(desc, summary.Ref.Namespace, summary.Ref.Name)
 		s.catalogIndex.items[key] = summary
 		s.catalogIndex.lastSeen[key] = now
 		changed = true
@@ -232,10 +232,10 @@ func (s *Service) replaceIngestCatalogSummaries(gvr schema.GroupVersionResource,
 }
 
 func summaryMatchesDescriptor(summary Summary, desc resourceDescriptor) bool {
-	return summary.Group == desc.Group &&
-		summary.Version == desc.Version &&
-		summary.Resource == desc.Resource &&
-		summary.Kind == desc.Kind
+	return summary.Ref.Group == desc.Group &&
+		summary.Ref.Version == desc.Version &&
+		summary.Ref.Resource == desc.Resource &&
+		summary.Ref.Kind == desc.Kind
 }
 
 // resolveIngestDescriptor resolves a cut kind's GVR to its catalog descriptor from

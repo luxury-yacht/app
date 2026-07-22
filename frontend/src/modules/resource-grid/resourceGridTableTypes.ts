@@ -17,6 +17,7 @@ import type {
 } from '@shared/components/tables/GridTable';
 import type { GridTableFilterPersistenceOptions } from '@shared/components/tables/persistence/gridTablePersistence';
 import type React from 'react';
+import type { ResourceRef } from '@/core/refresh/types';
 import type { SortConfig, SortDirection } from '@/hooks/useTableSort';
 import type { ResourceGridObjectIdentityAdapter } from './useResourceGridObjectIdentity';
 
@@ -39,6 +40,7 @@ export interface GridTableBindingProps<T> {
 }
 
 export interface ResourceGridTableRow {
+  ref?: ResourceRef | null;
   kind?: string | null;
   kindAlias?: string | null;
   name?: string | null;

@@ -75,9 +75,9 @@ func TestClusterCustomBuilder(t *testing.T) {
 	require.NotZero(t, snapshot.Version, "cluster resources=%d", len(payload.Resources))
 
 	entry := payload.Resources[0]
-	require.Equal(t, "Widget", entry.Kind)
-	require.Equal(t, "cluster-widget", entry.Name)
-	require.Equal(t, "acme.test", entry.Group)
+	require.Equal(t, "Widget", entry.Ref.Kind)
+	require.Equal(t, "cluster-widget", entry.Ref.Name)
+	require.Equal(t, "acme.test", entry.Ref.Group)
 	require.NotEmpty(t, entry.Age)
 }
 
@@ -151,9 +151,9 @@ func TestClusterCustomBuilderMultipleCRDs(t *testing.T) {
 	require.NotZero(t, snapshot.Version, "cluster resources=%d", len(payload.Resources))
 
 	entry := payload.Resources[0]
-	require.Equal(t, "global-widget", entry.Name)
-	require.Equal(t, "acme.test", entry.Group)
-	require.NotEmpty(t, entry.Kind)
+	require.Equal(t, "global-widget", entry.Ref.Name)
+	require.Equal(t, "acme.test", entry.Ref.Group)
+	require.NotEmpty(t, entry.Ref.Kind)
 }
 
 func TestClusterCustomBuilderSkipsFirstClassGatewayCRDs(t *testing.T) {

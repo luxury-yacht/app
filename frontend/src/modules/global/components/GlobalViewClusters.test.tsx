@@ -266,11 +266,13 @@ describe('GlobalViewClusters', () => {
       domain: 'cluster-overview',
       scope: 'cluster-a|',
       preserveState: true,
+      demand: 'snapshot',
     });
     expect(mocks.acquireRefreshDomainLease).toHaveBeenCalledWith({
       domain: 'cluster-overview',
       scope: 'cluster-b|',
       preserveState: true,
+      demand: 'snapshot',
     });
     const initialPersistenceIdentity = getPersistenceParams().clusterIdentity;
     const initialCacheKey = (getTableProps().source as { cacheKey?: string }).cacheKey;
@@ -287,6 +289,7 @@ describe('GlobalViewClusters', () => {
       domain: 'cluster-overview',
       scope: 'cluster-b|',
       preserveState: true,
+      demand: 'snapshot',
     });
     expect(mocks.acquireRefreshDomainLease).not.toHaveBeenCalled();
     expect(mocks.requestRefreshDomain).not.toHaveBeenCalled();
@@ -305,6 +308,7 @@ describe('GlobalViewClusters', () => {
       domain: 'cluster-overview',
       scope: 'cluster-b|',
       preserveState: true,
+      demand: 'snapshot',
     });
     expect(mocks.releaseRefreshDomainLease).not.toHaveBeenCalled();
     expect(mocks.requestRefreshDomain).toHaveBeenCalledOnce();

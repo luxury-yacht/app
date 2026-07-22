@@ -48,7 +48,7 @@ type CatalogRowsResult = ReturnType<typeof useCatalogBackedCustomResourceRows>;
 export function useCustomResourceGridParts({ kindFallback }: { kindFallback?: string } = {}) {
   const { openWithObject } = useObjectPanel();
   const { navigateToView } = useNavigateToView();
-  const { selectedClusterId } = useKubeconfig();
+  const { selectedClusterId, selectedClusterName } = useKubeconfig();
   const useShortResourceNames = useShortNames();
 
   const handleResourceClick = useCallback(
@@ -59,9 +59,13 @@ export function useCustomResourceGridParts({ kindFallback }: { kindFallback?: st
       // CRDs from different operators). Without these, the object panel
       // falls back to first-match-wins discovery and opens the wrong
       // resource.
-      openWithObject(customCatalogObjectReference(resource, selectedClusterId));
+      openWithObject(
+        customCatalogObjectReference(resource, selectedClusterId, {
+          fallbackClusterName: selectedClusterName,
+        })
+      );
     },
-    [openWithObject, selectedClusterId]
+    [openWithObject, selectedClusterId, selectedClusterName]
   );
 
   // Click handler for the CRD column. Opens the owning
@@ -72,13 +76,14 @@ export function useCustomResourceGridParts({ kindFallback }: { kindFallback?: st
     (resource: CustomResourceGridRow) => {
       const ref = customCatalogCRDReference(resource, selectedClusterId, {
         includeRowMetadata: true,
+        fallbackClusterName: selectedClusterName,
       });
       if (!ref) {
         return;
       }
       openWithObject(ref);
     },
-    [openWithObject, selectedClusterId]
+    [openWithObject, selectedClusterId, selectedClusterName]
   );
 
   const keyExtractor = useCallback(
@@ -91,22 +96,34 @@ export function useCustomResourceGridParts({ kindFallback }: { kindFallback?: st
       cf.createKindColumn<CustomResourceGridRow>({
         key: 'kind',
         getKind: (resource) =>
-          kindFallback ? resource.kind || resource.kindAlias || kindFallback : resource.kind,
+          kindFallback
+            ? resource.ref.kind || resource.kindAlias || kindFallback
+            : resource.ref.kind,
         getAlias: (resource) => resource.kindAlias,
         getDisplayText: (resource) =>
           getDisplayKind(
-            kindFallback ? resource.kind || resource.kindAlias || kindFallback : resource.kind,
+            kindFallback
+              ? resource.ref.kind || resource.kindAlias || kindFallback
+              : resource.ref.kind,
             useShortResourceNames
           ),
         onClick: handleResourceClick,
         onAltClick: (resource) =>
-          navigateToView(customCatalogObjectReference(resource, selectedClusterId)),
+          navigateToView(
+            customCatalogObjectReference(resource, selectedClusterId, {
+              fallbackClusterName: selectedClusterName,
+            })
+          ),
       }),
-      cf.createTextColumn<CustomResourceGridRow>('name', 'Name', {
+      cf.createTextColumn<CustomResourceGridRow>('name', 'Name', (resource) => resource.ref.name, {
         sortable: true,
         onClick: handleResourceClick,
         onAltClick: (resource) =>
-          navigateToView(customCatalogObjectReference(resource, selectedClusterId)),
+          navigateToView(
+            customCatalogObjectReference(resource, selectedClusterId, {
+              fallbackClusterName: selectedClusterName,
+            })
+          ),
         getClassName: () => 'object-panel-link',
       }),
       // CRD column: each cell is a clickable link back to the CRD
@@ -131,7 +148,9 @@ export function useCustomResourceGridParts({ kindFallback }: { kindFallback?: st
               if (!resource.crdName) {
                 return;
               }
-              const ref = customCatalogCRDReference(resource, selectedClusterId);
+              const ref = customCatalogCRDReference(resource, selectedClusterId, {
+                fallbackClusterName: selectedClusterName,
+              });
               if (ref) {
                 navigateToView(ref);
               }
@@ -161,6 +180,7 @@ export function useCustomResourceGridParts({ kindFallback }: { kindFallback?: st
       kindFallback,
       navigateToView,
       selectedClusterId,
+      selectedClusterName,
       useShortResourceNames,
     ]
   );
@@ -176,10 +196,11 @@ export function useCustomResourceGridParts({ kindFallback }: { kindFallback?: st
       return objectActions.getMenuItems(
         customCatalogObjectReference(resource, selectedClusterId, {
           requiresExplicitVersion: true,
+          fallbackClusterName: selectedClusterName,
         })
       );
     },
-    [objectActions, selectedClusterId]
+    [objectActions, selectedClusterId, selectedClusterName]
   );
 
   return {

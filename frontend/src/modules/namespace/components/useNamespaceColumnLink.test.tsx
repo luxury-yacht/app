@@ -3,6 +3,7 @@ import type React from 'react';
 import { act } from 'react';
 import * as ReactDOM from 'react-dom/client';
 import { beforeEach, describe, expect, it, vi } from 'vitest';
+import { makeResourceRef } from '@/test-utils/makeResourceRef';
 
 const viewStateMock = vi.hoisted(() => ({
   setViewType: vi.fn(),
@@ -71,13 +72,18 @@ describe('useNamespaceColumnLink', () => {
 
   it('navigates to the requested namespace tab for the clicked namespace', () => {
     const hook = renderHook(() =>
-      useNamespaceColumnLink<{ namespace: string; clusterId: string }>('autoscaling')
+      useNamespaceColumnLink<{ ref: ReturnType<typeof makeResourceRef> }>('autoscaling')
     );
     const options = hook.get();
 
     options.onClick({
-      namespace: 'team-a',
-      clusterId: 'alpha:ctx',
+      ref: makeResourceRef({
+        clusterId: 'alpha:ctx',
+        kind: 'Pod',
+        resource: 'pods',
+        namespace: 'team-a',
+        name: 'api-1',
+      }),
     });
 
     expect(namespaceMock.setSelectedNamespace).toHaveBeenCalledWith('team-a', 'alpha:ctx');
@@ -93,19 +99,27 @@ describe('useNamespaceColumnLink', () => {
 
   it('supports a custom namespace accessor', () => {
     const hook = renderHook(() =>
-      useNamespaceColumnLink<{ namespace?: string; objectNamespace?: string }>(
-        'events',
-        (item) => item.objectNamespace ?? item.namespace
-      )
+      useNamespaceColumnLink<{
+        ref: ReturnType<typeof makeResourceRef>;
+        namespace?: string;
+        objectNamespace?: string;
+      }>('events', (item) => item.objectNamespace ?? item.namespace)
     );
     const options = hook.get();
 
     options.onClick({
+      ref: makeResourceRef({
+        clusterId: 'alpha:ctx',
+        kind: 'Event',
+        resource: 'events',
+        namespace: 'ignored',
+        name: 'event-1',
+      }),
       namespace: 'ignored',
       objectNamespace: 'team-b',
     });
 
-    expect(namespaceMock.setSelectedNamespace).toHaveBeenCalledWith('team-b', undefined);
+    expect(namespaceMock.setSelectedNamespace).toHaveBeenCalledWith('team-b', 'alpha:ctx');
     expect(viewStateMock.setActiveNamespaceTab).toHaveBeenCalledWith('events');
 
     hook.cleanup();

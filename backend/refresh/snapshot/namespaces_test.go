@@ -21,6 +21,7 @@ import (
 	"github.com/luxury-yacht/app/backend/kind/streamrows"
 	"github.com/luxury-yacht/app/backend/objectcatalog"
 	"github.com/luxury-yacht/app/backend/refresh/domain"
+	"github.com/luxury-yacht/app/backend/resourcemodel"
 	"github.com/luxury-yacht/app/backend/testsupport"
 	"github.com/stretchr/testify/require"
 )
@@ -45,16 +46,16 @@ func TestNamespaceBuilderSortsByName(t *testing.T) {
 		t.Fatalf("expected 2 namespaces, got %d", len(payload.Namespaces))
 	}
 
-	if payload.Namespaces[0].Name != "alpha" || payload.Namespaces[1].Name != "beta" {
-		t.Fatalf("expected namespaces sorted by name, got %v", []string{payload.Namespaces[0].Name, payload.Namespaces[1].Name})
+	if payload.Namespaces[0].Ref.Name != "alpha" || payload.Namespaces[1].Ref.Name != "beta" {
+		t.Fatalf("expected namespaces sorted by name, got %v", []string{payload.Namespaces[0].Ref.Name, payload.Namespaces[1].Ref.Name})
 	}
 
 	for _, ns := range payload.Namespaces {
 		if ns.WorkloadsUnknown {
-			t.Fatalf("expected workloads unknown to be false for namespace %s", ns.Name)
+			t.Fatalf("expected workloads unknown to be false for namespace %s", ns.Ref.Name)
 		}
 		if ns.StatusState == "" || ns.StatusPresentation == "" {
-			t.Fatalf("expected namespace status projection for %s, got state=%q presentation=%q", ns.Name, ns.StatusState, ns.StatusPresentation)
+			t.Fatalf("expected namespace status projection for %s, got state=%q presentation=%q", ns.Ref.Name, ns.StatusState, ns.StatusPresentation)
 		}
 	}
 }
@@ -136,7 +137,7 @@ func TestNamespaceBuilderKeepsMetricsOutOfTheObjectSnapshot(t *testing.T) {
 	require.NotContains(t, string(wirePayload), "metricsState")
 	require.NotContains(t, string(wirePayload), "cpuUsageMilli")
 	require.NotContains(t, string(wirePayload), "memoryUsageBytes")
-	require.Equal(t, "alpha", payload.Namespaces[0].Name)
+	require.Equal(t, "alpha", payload.Namespaces[0].Ref.Name)
 	require.Equal(t, 2, payload.Namespaces[0].QuotaCount)
 	require.Equal(t, 92, payload.Namespaces[0].QuotaHighestUsedPercentage)
 	require.Equal(t, NamespaceQuotaPressureWarning, payload.Namespaces[0].QuotaPressure)
@@ -260,9 +261,8 @@ func TestNamespaceBuilderScopePayloadIdentityAndCatalogProjectionContract(t *tes
 	require.Len(t, payload.Namespaces, 1)
 
 	summary := payload.Namespaces[0]
-	require.Equal(t, "cluster-a", summary.ClusterID)
-	require.Equal(t, "prod", summary.ClusterName)
-	require.Equal(t, "alpha", summary.Name)
+	require.Equal(t, "cluster-a", summary.Ref.ClusterID)
+	require.Equal(t, "alpha", summary.Ref.Name)
 	require.Equal(t, "Active", summary.Phase)
 	require.Equal(t, "42", summary.ResourceVersion)
 	require.Equal(t, created.Unix(), summary.CreationUnix)
@@ -367,7 +367,7 @@ func TestNamespaceBuilderWorkloadHealthChangesSourceVersion(t *testing.T) {
 			namespaces: testsupport.NewNamespaceLister(t, ns),
 			ingest: fakePodAggregateSource{
 				workloadCatalog: map[schema.GroupVersionResource][]interface{}{
-					DeploymentGVR: {objectcatalog.Summary{Namespace: "alpha", Name: "web"}},
+					DeploymentGVR: {objectcatalog.Summary{Ref: resourcemodel.ResourceRef{Namespace: "alpha", Name: "web"}}},
 				},
 				workloadObjects: map[schema.GroupVersionResource][]objectmapnode.Node{
 					DeploymentGVR: {{Namespace: "alpha", Name: "web", Status: &objectmap.Status{Presentation: presentation}}},
@@ -634,15 +634,15 @@ func TestNamespaceBuilderScopedSynthesizesConfiguredNames(t *testing.T) {
 	require.True(t, ok)
 	require.True(t, payload.WorkloadsReady, "scoped snapshot must satisfy the lifecycle Ready gate")
 	require.Len(t, payload.Namespaces, 2)
-	require.Equal(t, "dev", payload.Namespaces[0].Name)
-	require.Equal(t, "prod", payload.Namespaces[1].Name)
+	require.Equal(t, "dev", payload.Namespaces[0].Ref.Name)
+	require.Equal(t, "prod", payload.Namespaces[1].Ref.Name)
 
 	for _, ns := range payload.Namespaces {
 		require.False(t, ns.HasWorkloads)
 		require.True(t, ns.WorkloadsUnknown, "no tracked workload kind: presence must be unknown, not authoritatively empty")
 		require.Equal(t, "Namespace", ns.Ref.Kind)
 		require.Equal(t, "namespaces", ns.Ref.Resource)
-		require.Equal(t, ns.Name, ns.Ref.Name)
+		require.Equal(t, ns.Ref.Name, ns.Ref.Name)
 		require.Equal(t, "cluster-a", ns.Ref.ClusterID)
 	}
 }
@@ -666,7 +666,7 @@ func TestNamespaceBuilderScopedReportsPresenceOnceIngestTracksWorkloads(t *testi
 
 	byName := map[string]NamespaceSummary{}
 	for _, ns := range payload.Namespaces {
-		byName[ns.Name] = ns
+		byName[ns.Ref.Name] = ns
 	}
 	require.True(t, byName["prod"].HasWorkloads)
 	require.False(t, byName["prod"].WorkloadsUnknown)
@@ -681,7 +681,7 @@ func TestNamespaceBuilderScopedViewScopeFiltersToConfiguredNames(t *testing.T) {
 	require.NoError(t, err)
 	payload := snap.Payload.(NamespaceSnapshot)
 	require.Len(t, payload.Namespaces, 1)
-	require.Equal(t, "prod", payload.Namespaces[0].Name)
+	require.Equal(t, "prod", payload.Namespaces[0].Ref.Name)
 
 	snap, err = builder.Build(context.Background(), "cluster-a|not-configured")
 	require.NoError(t, err)
@@ -734,7 +734,7 @@ func TestNamespaceBuilderScopedProbesEnrichAndFlagRows(t *testing.T) {
 
 	byName := map[string]NamespaceSummary{}
 	for _, ns := range payload.Namespaces {
-		byName[ns.Name] = ns
+		byName[ns.Ref.Name] = ns
 	}
 
 	prod := byName["prod"]

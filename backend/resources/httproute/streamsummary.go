@@ -16,7 +16,7 @@ import (
 // BuildStreamSummary builds the namespace-network row for one HTTPRoute.
 func BuildStreamSummary(meta streamrows.ClusterMeta, route *gatewayv1.HTTPRoute) streamrows.NetworkSummary {
 	if route == nil {
-		return streamrows.NetworkSummary{ClusterMeta: meta, Kind: "HTTPRoute"}
+		return streamrows.NetworkSummary{}
 	}
 	return streamrows.NewNetworkSummary(meta, Identity, route, resourcemodel.DescribeRouteFacts(BuildFacts(meta.ClusterID, route).RouteCommonFacts))
 }

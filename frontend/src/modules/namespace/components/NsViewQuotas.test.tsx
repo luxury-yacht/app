@@ -89,7 +89,7 @@ vi.mock('@shared/components/tables/GridTable', async () => {
             {withStableListKeys(props.data, (row) => JSON.stringify(row)).map(
               ({ key, value: row }) => (
                 <tr key={key}>
-                  <td>{row.name}</td>
+                  <td>{row.ref.name}</td>
                 </tr>
               )
             )}
@@ -191,17 +191,18 @@ describe('NsViewQuotas', () => {
   });
 
   const baseQuota = (overrides: Partial<QuotaData> = {}): QuotaData => ({
-    kind: 'ResourceQuota',
-    name: 'rq-default',
-    namespace: 'team-a',
-    clusterId: 'alpha:ctx',
-    clusterName: 'alpha',
-    ref: makeResourceRef({
+    ref: {
+      ...makeResourceRef({
+        kind: 'ResourceQuota',
+        resource: 'resourcequotas',
+        namespace: 'team-a',
+        name: 'rq-default',
+      }),
       kind: 'ResourceQuota',
-      resource: 'resourcequotas',
-      namespace: 'team-a',
       name: 'rq-default',
-    }),
+      namespace: 'team-a',
+      clusterId: 'alpha:ctx',
+    },
     details: '3 resources',
     age: '1h',
     ...overrides,

@@ -10,6 +10,7 @@ import (
 
 	"github.com/luxury-yacht/app/backend/kind/streamrows"
 	"github.com/luxury-yacht/app/backend/refresh/metrics"
+	"github.com/luxury-yacht/app/backend/resourcemodel"
 	nodepkg "github.com/luxury-yacht/app/backend/resources/nodes"
 	corev1 "k8s.io/api/core/v1"
 	"k8s.io/apimachinery/pkg/api/resource"
@@ -117,7 +118,7 @@ func TestBuildNodeOwnSummaryCarriesCanonicalResourceRef(t *testing.T) {
 // metrics sample renders the no-data marker for CPU/mem usage, never "0m"/"0Mi"
 // (Risk #9 / §3.6).
 func TestReaggregateNodeSummaryMissingNodeMetricRendersNoData(t *testing.T) {
-	own := streamrows.NodeSummary{Name: "node-x", AgeTimestamp: time.Now().Add(-time.Hour).UnixMilli()}
+	own := streamrows.NodeSummary{Ref: resourcemodel.ResourceRef{Name: "node-x"}, AgeTimestamp: time.Now().Add(-time.Hour).UnixMilli()}
 	got := reaggregateNodeSummary(own, nil, map[string]metrics.PodUsage{}, map[string]metrics.NodeUsage{})
 
 	require.Equal(t, streamrows.MetricsNoData, got.CPUUsage)
@@ -129,7 +130,7 @@ func TestReaggregateNodeSummaryMissingNodeMetricRendersNoData(t *testing.T) {
 // rather than the prior incarnation's numbers.
 func TestReaggregateNodeSummaryDropsStaleNodeMetric(t *testing.T) {
 	created := time.Date(2026, 6, 25, 12, 0, 0, 0, time.UTC)
-	own := streamrows.NodeSummary{Name: "node-x", AgeTimestamp: created.UnixMilli()}
+	own := streamrows.NodeSummary{Ref: resourcemodel.ResourceRef{Name: "node-x"}, AgeTimestamp: created.UnixMilli()}
 	staleNodeMetrics := map[string]metrics.NodeUsage{
 		"node-x": {CPUUsageMilli: 700, MemoryUsageBytes: 8 << 30, Timestamp: created.Add(-time.Minute)},
 	}
@@ -143,7 +144,7 @@ func TestReaggregateNodeSummaryDropsStaleNodeMetric(t *testing.T) {
 // TestReaggregateNodeSummaryMissingPerPodMetricRendersNoData proves a per-pod entry
 // with no metrics sample renders the no-data marker rather than "0m"/"0Mi".
 func TestReaggregateNodeSummaryMissingPerPodMetricRendersNoData(t *testing.T) {
-	own := streamrows.NodeSummary{Name: "node-x", PodsCapacity: "110"}
+	own := streamrows.NodeSummary{Ref: resourcemodel.ResourceRef{Name: "node-x"}, PodsCapacity: "110"}
 	pods := []streamrows.PodAggregate{{Namespace: "ns", Name: "p1", NodeName: "node-x"}}
 	got := reaggregateNodeSummary(own, pods, map[string]metrics.PodUsage{}, map[string]metrics.NodeUsage{})
 

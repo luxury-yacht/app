@@ -30,8 +30,8 @@ import (
 
 var errClusterIDRequired = errors.New("snapshot clusterId is required")
 
-// ClusterMeta carries stable cluster identifiers for snapshot payloads. Every
-// streaming row embeds it.
+// ClusterMeta carries stable cluster identifiers while snapshot rows are built.
+// Canonical row identity is serialized only through ResourceRef.
 type ClusterMeta struct {
 	ClusterID   string `json:"clusterId"`
 	ClusterName string `json:"clusterName"`
@@ -124,12 +124,8 @@ type EndpointSliceServiceFact struct {
 
 // ConfigSummary describes a ConfigMap or Secret row (the namespace-config domain).
 type ConfigSummary struct {
-	ClusterMeta
 	Ref          resourcemodel.ResourceRef `json:"ref"`
-	Kind         string                    `json:"kind"`
 	TypeAlias    string                    `json:"typeAlias,omitempty"`
-	Name         string                    `json:"name"`
-	Namespace    string                    `json:"namespace"`
 	Data         int                       `json:"data"`
 	Age          string                    `json:"age"`
 	AgeTimestamp int64                     `json:"ageTimestamp,omitempty"`
@@ -137,11 +133,7 @@ type ConfigSummary struct {
 
 // RBACSummary describes a Role/RoleBinding/ServiceAccount row (namespace-rbac).
 type RBACSummary struct {
-	ClusterMeta
 	Ref          resourcemodel.ResourceRef `json:"ref"`
-	Kind         string                    `json:"kind"`
-	Name         string                    `json:"name"`
-	Namespace    string                    `json:"namespace"`
 	Details      string                    `json:"details"`
 	Age          string                    `json:"age"`
 	AgeTimestamp int64                     `json:"ageTimestamp,omitempty"`
@@ -152,11 +144,7 @@ type RBACSummary struct {
 // its own details string.
 func NewRBACSummary(meta ClusterMeta, identity resourcekind.Identity, obj metav1.Object, details string) RBACSummary {
 	return RBACSummary{
-		ClusterMeta:  meta,
 		Ref:          NewResourceRef(meta, identity, obj),
-		Kind:         identity.Kind,
-		Name:         obj.GetName(),
-		Namespace:    obj.GetNamespace(),
 		Details:      details,
 		Age:          FormatAge(obj.GetCreationTimestamp().Time),
 		AgeTimestamp: CreationMillis(obj),
@@ -167,11 +155,7 @@ func NewRBACSummary(meta ClusterMeta, identity resourcekind.Identity, obj metav1
 // TargetAPIVersion carries the scale target's apiVersion so the frontend can open
 // the target with a fully-qualified GVK (required for CRD HPA targets).
 type AutoscalingSummary struct {
-	ClusterMeta
 	Ref              resourcemodel.ResourceRef `json:"ref"`
-	Kind             string                    `json:"kind"`
-	Name             string                    `json:"name"`
-	Namespace        string                    `json:"namespace"`
 	Target           string                    `json:"target"`
 	TargetAPIVersion string                    `json:"targetApiVersion,omitempty"`
 	Min              int32                     `json:"min"`
@@ -183,11 +167,7 @@ type AutoscalingSummary struct {
 
 // StorageSummary captures PVC info for display (namespace-storage).
 type StorageSummary struct {
-	ClusterMeta
 	Ref                resourcemodel.ResourceRef `json:"ref"`
-	Kind               string                    `json:"kind"`
-	Name               string                    `json:"name"`
-	Namespace          string                    `json:"namespace"`
 	Capacity           string                    `json:"capacity"`
 	Status             string                    `json:"status"`
 	StatusState        string                    `json:"statusState,omitempty"`
@@ -201,11 +181,7 @@ type StorageSummary struct {
 // QuotaSummary captures ResourceQuota/LimitRange/PDB info (namespace-quotas).
 // The PDB-specific fields are unset for the other two kinds.
 type QuotaSummary struct {
-	ClusterMeta
 	Ref            resourcemodel.ResourceRef `json:"ref"`
-	Kind           string                    `json:"kind"`
-	Name           string                    `json:"name"`
-	Namespace      string                    `json:"namespace"`
 	Details        string                    `json:"details"`
 	Age            string                    `json:"age"`
 	AgeTimestamp   int64                     `json:"ageTimestamp,omitempty"`
@@ -231,11 +207,7 @@ type ResourceQuotaAggregate struct {
 // NewQuotaSummary fills the row skeleton shared by the namespace-quotas kinds.
 func NewQuotaSummary(meta ClusterMeta, identity resourcekind.Identity, obj metav1.Object, details string) QuotaSummary {
 	return QuotaSummary{
-		ClusterMeta:  meta,
 		Ref:          NewResourceRef(meta, identity, obj),
-		Kind:         identity.Kind,
-		Name:         obj.GetName(),
-		Namespace:    obj.GetNamespace(),
 		Details:      details,
 		Age:          FormatAge(obj.GetCreationTimestamp().Time),
 		AgeTimestamp: CreationMillis(obj),
@@ -244,10 +216,7 @@ func NewQuotaSummary(meta ClusterMeta, identity resourcekind.Identity, obj metav
 
 // ClusterRBACEntry represents a ClusterRole or ClusterRoleBinding (cluster-rbac).
 type ClusterRBACEntry struct {
-	ClusterMeta
 	Ref          resourcemodel.ResourceRef `json:"ref"`
-	Kind         string                    `json:"kind"`
-	Name         string                    `json:"name"`
 	Details      string                    `json:"details"`
 	Age          string                    `json:"age"`
 	AgeTimestamp int64                     `json:"ageTimestamp,omitempty"`
@@ -257,10 +226,7 @@ type ClusterRBACEntry struct {
 // NewClusterRBACEntry fills the row skeleton shared by the cluster-rbac kinds.
 func NewClusterRBACEntry(meta ClusterMeta, identity resourcekind.Identity, obj metav1.Object, details, typeAlias string) ClusterRBACEntry {
 	return ClusterRBACEntry{
-		ClusterMeta:  meta,
 		Ref:          NewResourceRef(meta, identity, obj),
-		Kind:         identity.Kind,
-		Name:         obj.GetName(),
 		Details:      details,
 		Age:          FormatAge(obj.GetCreationTimestamp().Time),
 		AgeTimestamp: CreationMillis(obj),
@@ -271,10 +237,7 @@ func NewClusterRBACEntry(meta ClusterMeta, identity resourcekind.Identity, obj m
 // ClusterConfigEntry represents a StorageClass/IngressClass/GatewayClass/webhook
 // configuration row (cluster-config).
 type ClusterConfigEntry struct {
-	ClusterMeta
 	Ref          resourcemodel.ResourceRef `json:"ref"`
-	Kind         string                    `json:"kind"`
-	Name         string                    `json:"name"`
 	Details      string                    `json:"details"`
 	IsDefault    bool                      `json:"isDefault,omitempty"`
 	Age          string                    `json:"age"`
@@ -284,10 +247,7 @@ type ClusterConfigEntry struct {
 // NewClusterConfigEntry fills the row skeleton shared by the cluster-config kinds.
 func NewClusterConfigEntry(meta ClusterMeta, identity resourcekind.Identity, obj metav1.Object, details string, isDefault bool) ClusterConfigEntry {
 	return ClusterConfigEntry{
-		ClusterMeta:  meta,
 		Ref:          NewResourceRef(meta, identity, obj),
-		Kind:         identity.Kind,
-		Name:         obj.GetName(),
 		Details:      details,
 		IsDefault:    isDefault,
 		Age:          FormatAge(obj.GetCreationTimestamp().Time),
@@ -297,10 +257,7 @@ func NewClusterConfigEntry(meta ClusterMeta, identity resourcekind.Identity, obj
 
 // ClusterStorageEntry represents a PersistentVolume row (cluster-storage).
 type ClusterStorageEntry struct {
-	ClusterMeta
 	Ref                resourcemodel.ResourceRef `json:"ref"`
-	Kind               string                    `json:"kind"`
-	Name               string                    `json:"name"`
 	StorageClass       string                    `json:"storageClass,omitempty"`
 	Capacity           string                    `json:"capacity"`
 	AccessModes        string                    `json:"accessModes"`
@@ -315,10 +272,7 @@ type ClusterStorageEntry struct {
 
 // ClusterCRDEntry represents a CustomResourceDefinition row (cluster-crds).
 type ClusterCRDEntry struct {
-	ClusterMeta
 	Ref                     resourcemodel.ResourceRef `json:"ref"`
-	Kind                    string                    `json:"kind"`
-	Name                    string                    `json:"name"`
 	Group                   string                    `json:"group"`
 	Scope                   string                    `json:"scope"`
 	Details                 string                    `json:"details"`
@@ -331,14 +285,8 @@ type ClusterCRDEntry struct {
 
 // NamespaceCustomSummary is a CRD-backed namespaced custom resource row.
 type NamespaceCustomSummary struct {
-	ClusterMeta
 	Ref                resourcemodel.ResourceRef      `json:"ref"`
-	Kind               string                         `json:"kind"`
-	Name               string                         `json:"name"`
-	Group              string                         `json:"group"`
-	Version            string                         `json:"version"`
 	CRDName            string                         `json:"crdName,omitempty"`
-	Namespace          string                         `json:"namespace"`
 	Status             string                         `json:"status,omitempty"`
 	StatusState        string                         `json:"statusState,omitempty"`
 	StatusPresentation string                         `json:"statusPresentation,omitempty"`
@@ -352,12 +300,7 @@ type NamespaceCustomSummary struct {
 
 // ClusterCustomSummary is a CRD-backed cluster-scoped custom resource row.
 type ClusterCustomSummary struct {
-	ClusterMeta
 	Ref                resourcemodel.ResourceRef      `json:"ref"`
-	Kind               string                         `json:"kind"`
-	Name               string                         `json:"name"`
-	Group              string                         `json:"group"`
-	Version            string                         `json:"version"`
 	CRDName            string                         `json:"crdName,omitempty"`
 	Status             string                         `json:"status,omitempty"`
 	StatusState        string                         `json:"statusState,omitempty"`
@@ -373,11 +316,7 @@ type ClusterCustomSummary struct {
 // NetworkSummary is a Service/Ingress/EndpointSlice/NetworkPolicy/Gateway-API row
 // (the namespace-network domain).
 type NetworkSummary struct {
-	ClusterMeta
 	Ref          resourcemodel.ResourceRef `json:"ref"`
-	Kind         string                    `json:"kind"`
-	Name         string                    `json:"name"`
-	Namespace    string                    `json:"namespace"`
 	Details      string                    `json:"details"`
 	Age          string                    `json:"age"`
 	AgeTimestamp int64                     `json:"ageTimestamp,omitempty"`
@@ -386,11 +325,7 @@ type NetworkSummary struct {
 // NewNetworkSummary fills the row skeleton shared by the namespace-network kinds.
 func NewNetworkSummary(meta ClusterMeta, identity resourcekind.Identity, obj metav1.Object, details string) NetworkSummary {
 	return NetworkSummary{
-		ClusterMeta:  meta,
 		Ref:          NewResourceRef(meta, identity, obj),
-		Kind:         identity.Kind,
-		Name:         obj.GetName(),
-		Namespace:    obj.GetNamespace(),
 		Details:      details,
 		Age:          FormatAge(obj.GetCreationTimestamp().Time),
 		AgeTimestamp: CreationMillis(obj),
@@ -399,10 +334,7 @@ func NewNetworkSummary(meta ClusterMeta, identity resourcekind.Identity, obj met
 
 // PodSummary is a pod row (the pods domain).
 type PodSummary struct {
-	ClusterMeta
 	Ref                  resourcemodel.ResourceRef `json:"ref"`
-	Name                 string                    `json:"name"`
-	Namespace            string                    `json:"namespace"`
 	Node                 string                    `json:"node"`
 	Status               string                    `json:"status"`
 	StatusState          string                    `json:"statusState,omitempty"`
@@ -437,11 +369,7 @@ type PodSummary struct {
 // WorkloadSummary is a Deployment/StatefulSet/DaemonSet/Job/CronJob/Pod row
 // (the namespace-workloads domain).
 type WorkloadSummary struct {
-	ClusterMeta
 	Ref                  resourcemodel.ResourceRef `json:"ref"`
-	Kind                 string                    `json:"kind"`
-	Name                 string                    `json:"name"`
-	Namespace            string                    `json:"namespace"`
 	Ready                string                    `json:"ready"`
 	Status               string                    `json:"status"`
 	StatusState          string                    `json:"statusState,omitempty"`
@@ -463,9 +391,7 @@ type WorkloadSummary struct {
 
 // NodeSummary is a node row (the nodes domain).
 type NodeSummary struct {
-	ClusterMeta
 	Ref                resourcemodel.ResourceRef `json:"ref"`
-	Name               string                    `json:"name"`
 	Status             string                    `json:"status"`
 	StatusState        string                    `json:"statusState,omitempty"`
 	StatusPresentation string                    `json:"statusPresentation,omitempty"`
@@ -490,7 +416,6 @@ type NodeSummary struct {
 	PodsCapacity       string                    `json:"podsCapacity"`
 	PodsAllocatable    string                    `json:"podsAllocatable"`
 	Restarts           int32                     `json:"restarts"`
-	Kind               string                    `json:"kind"`
 	CPU                string                    `json:"cpu"`
 	Memory             string                    `json:"memory"`
 	Unschedulable      bool                      `json:"unschedulable"`
@@ -503,19 +428,23 @@ type NodeSummary struct {
 // NewResourceRef builds a row's canonical identity from the owning kind's
 // descriptor and the object's metadata.
 func NewResourceRef(meta ClusterMeta, identity resourcekind.Identity, obj metav1.Object) resourcemodel.ResourceRef {
-	if obj == nil {
-		return resourcemodel.ResourceRef{}
-	}
-	return resourcemodel.NewResourceRef(
+	ref := resourcemodel.NewResourceRef(
 		meta.ClusterID,
 		identity.Group,
 		identity.Version,
 		identity.Kind,
 		identity.Resource,
-		obj.GetNamespace(),
-		obj.GetName(),
-		string(obj.GetUID()),
+		"",
+		"",
+		"",
 	)
+	if obj == nil {
+		return ref
+	}
+	ref.Namespace = obj.GetNamespace()
+	ref.Name = obj.GetName()
+	ref.UID = string(obj.GetUID())
+	return ref
 }
 
 // NodeTaint is a node taint shown in the node row.

@@ -265,16 +265,7 @@ func (s ingestResponseCacheSink) invalidate(row interface{}) {
 	if !ok {
 		return
 	}
-	s.app.invalidateResponseCacheForResource(s.selectionKey, resourcemodel.NewResourceRef(
-		summary.ClusterID,
-		summary.Group,
-		summary.Version,
-		summary.Kind,
-		summary.Resource,
-		summary.Namespace,
-		summary.Name,
-		summary.UID,
-	))
+	s.app.invalidateResponseCacheForResource(s.selectionKey, summary.Ref)
 }
 
 // invalidateResponseCacheForResource clears cached detail/YAML entries for a resource key.

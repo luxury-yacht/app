@@ -45,16 +45,15 @@ const (
 // AttentionFinding is one Kubernetes object that currently warrants operator
 // attention. Causes combines every active finding for that source object.
 type AttentionFinding struct {
-	ClusterMeta
-	Ref          resourcemodel.ResourceRef `json:"ref"`
-	Kind         string                    `json:"kind"`
-	Name         string                    `json:"name"`
-	Namespace    string                    `json:"namespace,omitempty"`
-	Severity     AttentionSeverity         `json:"severity"`
-	Status       string                    `json:"status"`
-	Causes       []AttentionCause          `json:"causes"`
-	Age          string                    `json:"age"`
-	AgeTimestamp int64                     `json:"ageTimestamp,omitempty"`
+	Ref resourcemodel.ResourceRef `json:"ref"`
+	// Namespace is the affected object's display namespace. For Event findings,
+	// Ref identifies the Event while Namespace belongs to its involved object.
+	Namespace    string            `json:"namespace,omitempty"`
+	Severity     AttentionSeverity `json:"severity"`
+	Status       string            `json:"status"`
+	Causes       []AttentionCause  `json:"causes"`
+	Age          string            `json:"age"`
+	AgeTimestamp int64             `json:"ageTimestamp,omitempty"`
 }
 
 // AttentionCause is one stable, independently suppressible reason an object
@@ -128,15 +127,15 @@ func (b *ClusterAttentionBuilder) Build(ctx context.Context, scope string) (*ref
 	severityCounts := countAttentionSeverities(rows)
 	availableKinds := make(map[string]bool)
 	for _, row := range rows {
-		availableKinds[row.Kind] = true
+		availableKinds[row.Ref.Kind] = true
 	}
 	windowRows := func() []AttentionFinding {
 		window := append([]AttentionFinding(nil), rows...)
 		sort.SliceStable(window, func(left, right int) bool {
-			if window[left].Name == window[right].Name {
+			if window[left].Ref.Name == window[right].Ref.Name {
 				return attentionRefKey(window[left].Ref) < attentionRefKey(window[right].Ref)
 			}
-			return strings.ToLower(window[left].Name) < strings.ToLower(window[right].Name)
+			return strings.ToLower(window[left].Ref.Name) < strings.ToLower(window[right].Ref.Name)
 		})
 		return window
 	}
@@ -150,7 +149,7 @@ func (b *ClusterAttentionBuilder) Build(ctx context.Context, scope string) (*ref
 		clusterAttentionQueryCapabilities(),
 		config.SnapshotClusterAttentionEntryLimit,
 		"findings",
-		func(row AttentionFinding) string { return row.Kind },
+		func(row AttentionFinding) string { return row.Ref.Kind },
 		windowRows,
 		typedTableQueryResourceIssues(ctx, clusterAttentionDomainName, query, b.sources),
 	)
@@ -559,7 +558,7 @@ func (i *clusterAttentionIndex) replaceSource(owner string, records []attentionS
 		}
 	}
 	for key, finding := range i.findings {
-		if _, ownedKind := i.ownerKinds[owner][finding.Kind]; !ownedKind {
+		if _, ownedKind := i.ownerKinds[owner][finding.Ref.Kind]; !ownedKind {
 			continue
 		}
 		if _, keep := want[key]; keep {
@@ -727,9 +726,6 @@ func (i *clusterAttentionIndex) applyFindingLocked(key string, finding *Attentio
 		return
 	}
 	row := *finding
-	row.ClusterMeta = i.meta
-	row.Kind = row.Ref.Kind
-	row.Name = row.Ref.Name
 	if existed && reflect.DeepEqual(previous, row) {
 		return
 	}
@@ -890,7 +886,7 @@ func attentionTableQueryAdapter() typedTableQueryAdapter[AttentionFinding] {
 	return typedTableQueryAdapter[AttentionFinding]{
 		Key:       func(row AttentionFinding) string { return attentionRefKey(row.Ref) },
 		Namespace: func(row AttentionFinding) string { return row.Namespace },
-		Kind:      func(row AttentionFinding) string { return row.Kind },
+		Kind:      func(row AttentionFinding) string { return row.Ref.Kind },
 		Facets: []typedTableQueryFacet[AttentionFinding]{
 			{
 				Descriptor: ResourceQueryFacetDescriptor{Key: "severities", Label: "Severity", Placeholder: "All severities", BulkActions: true},
@@ -904,8 +900,8 @@ func attentionTableQueryAdapter() typedTableQueryAdapter[AttentionFinding] {
 		},
 		SearchText: func(row AttentionFinding) []string {
 			return []string{
-				row.Kind,
-				row.Name,
+				row.Ref.Kind,
+				row.Ref.Name,
 				row.Namespace,
 				string(row.Severity),
 				row.Status,
@@ -917,7 +913,7 @@ func attentionTableQueryAdapter() typedTableQueryAdapter[AttentionFinding] {
 		SortValue: func(row AttentionFinding, field string) string {
 			switch strings.ToLower(field) {
 			case "kind":
-				return row.Kind
+				return row.Ref.Kind
 			case "namespace":
 				return row.Namespace
 			case "severity":
@@ -929,7 +925,7 @@ func attentionTableQueryAdapter() typedTableQueryAdapter[AttentionFinding] {
 			case "age", "agetimestamp":
 				return strconv.FormatInt(row.AgeTimestamp, 10)
 			default:
-				return row.Name
+				return row.Ref.Name
 			}
 		},
 		NumericSort: func(row AttentionFinding, field string) (float64, bool) {
@@ -1134,11 +1130,7 @@ func (s attentionBundleSink) ReplaceBundles(bundles []ingest.Bundle) {
 }
 
 func resourceRefFromCatalog(catalog objectcatalog.Summary) resourcemodel.ResourceRef {
-	return resourcemodel.ResourceRef{
-		ClusterID: catalog.ClusterID, Group: catalog.Group, Version: catalog.Version,
-		Kind: catalog.Kind, Resource: catalog.Resource, Namespace: catalog.Namespace,
-		Name: catalog.Name, UID: catalog.UID,
-	}
+	return catalog.Ref
 }
 
 func (i *clusterAttentionIndex) upsertEvent(meta ClusterMeta, obj interface{}) {
@@ -1189,16 +1181,7 @@ func attentionRecordFromBundle(source attentionSource, bundle ingest.Bundle) (at
 		return attentionSourceRecord{}, false
 	}
 	record := attentionSourceRecord{
-		Ref: resourcemodel.ResourceRef{
-			ClusterID: catalog.ClusterID,
-			Group:     catalog.Group,
-			Version:   catalog.Version,
-			Kind:      catalog.Kind,
-			Resource:  catalog.Resource,
-			Namespace: catalog.Namespace,
-			Name:      catalog.Name,
-			UID:       catalog.UID,
-		},
+		Ref:    catalog.Ref,
 		Source: source,
 	}
 	switch source {

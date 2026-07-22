@@ -141,7 +141,7 @@ const GlobalViewNamespaces: React.FC = () => {
         )
           .filter(
             (namespace) =>
-              namespace.clusterId === target.clusterId &&
+              namespace.ref.clusterId === target.clusterId &&
               namespace.ref.clusterId === target.clusterId
           )
           .map((namespace) => {
@@ -162,20 +162,20 @@ const GlobalViewNamespaces: React.FC = () => {
       if (row.scopeStatus) {
         return;
       }
-      const target = targetByClusterId.get(row.clusterId);
+      const target = targetByClusterId.get(row.ref.clusterId);
       if (!target) {
         return;
       }
-      setSelectedNamespace(row.name, row.clusterId);
-      setClusterNavigationTarget(row.clusterId, {
+      setSelectedNamespace(row.ref.name, row.ref.clusterId);
+      setClusterNavigationTarget(row.ref.clusterId, {
         viewType: 'namespace',
         activeNamespaceView: 'browse',
       });
-      setSidebarSelectionForCluster(row.clusterId, {
+      setSidebarSelectionForCluster(row.ref.clusterId, {
         type: 'namespace',
-        value: row.name,
+        value: row.ref.name,
       });
-      activateClusterWorkspace(row.clusterId);
+      activateClusterWorkspace(row.ref.clusterId);
       setActiveKubeconfig(target.selection);
     },
     [
@@ -189,19 +189,19 @@ const GlobalViewNamespaces: React.FC = () => {
   );
   const navigateCluster = useCallback(
     (row: NamespaceTableRow) => {
-      const target = targetByClusterId.get(row.clusterId);
+      const target = targetByClusterId.get(row.ref.clusterId);
       if (!target) {
         return;
       }
-      setClusterNavigationTarget(row.clusterId, {
+      setClusterNavigationTarget(row.ref.clusterId, {
         viewType: 'overview',
         activeClusterView: null,
       });
-      setSidebarSelectionForCluster(row.clusterId, {
+      setSidebarSelectionForCluster(row.ref.clusterId, {
         type: 'overview',
         value: 'overview',
       });
-      activateClusterWorkspace(row.clusterId);
+      activateClusterWorkspace(row.ref.clusterId);
       setActiveKubeconfig(target.selection);
     },
     [
@@ -217,28 +217,28 @@ const GlobalViewNamespaces: React.FC = () => {
       if (row.scopeStatus) {
         return;
       }
-      const target = targetByClusterId.get(row.clusterId);
+      const target = targetByClusterId.get(row.ref.clusterId);
       if (!target) {
         return;
       }
       requestGridTableFilters({
-        clusterId: row.clusterId,
+        clusterId: row.ref.clusterId,
         destinationViewId: 'cluster-attention',
         filters: {
           ...DEFAULT_GRID_TABLE_FILTER_STATE,
           kinds: { mode: 'some', values: [...attentionKindsBySignal[signal]] },
-          namespaces: { mode: 'some', values: [row.name] },
+          namespaces: { mode: 'some', values: [row.ref.name] },
         },
       });
-      setClusterNavigationTarget(row.clusterId, {
+      setClusterNavigationTarget(row.ref.clusterId, {
         viewType: 'cluster',
         activeClusterView: 'attention',
       });
-      setSidebarSelectionForCluster(row.clusterId, {
+      setSidebarSelectionForCluster(row.ref.clusterId, {
         type: 'cluster',
         value: 'cluster',
       });
-      activateClusterWorkspace(row.clusterId);
+      activateClusterWorkspace(row.ref.clusterId);
       setActiveKubeconfig(target.selection);
     },
     [

@@ -87,12 +87,12 @@ export const PodsTab: React.FC<PodsTabProps> = ({ isActive }) => {
   const getPodIdentity = useCallback(
     (pod: PodSnapshotEntry) => ({
       kind: 'Pod',
-      name: pod.name,
-      namespace: pod.namespace,
-      clusterId: pod.clusterId,
-      clusterName: pod.clusterName ?? undefined,
+      name: pod.ref.name,
+      namespace: pod.ref.namespace,
+      clusterId: pod.ref.clusterId,
+      clusterName: objectData?.clusterName,
     }),
-    []
+    [objectData?.clusterName]
   );
   const podIdentity = useResourceGridObjectIdentity({
     fallbackClusterId: objectData?.clusterId,
@@ -104,20 +104,20 @@ export const PodsTab: React.FC<PodsTabProps> = ({ isActive }) => {
   // Ensure pod navigation keeps the active cluster context for object detail scopes.
   const getPodClusterMeta = useCallback(
     (pod: PodSnapshotEntry) => ({
-      clusterId: pod.clusterId ?? undefined,
-      clusterName: pod.clusterName ?? undefined,
+      clusterId: pod.ref.clusterId ?? undefined,
+      clusterName: objectData?.clusterName,
     }),
-    []
+    [objectData?.clusterName]
   );
   const handlePodOpen = openPod;
   const handleNamespaceSelect = useCallback(
     (pod: PodSnapshotEntry) => {
-      if (!pod.namespace) {
+      if (!pod.ref.namespace) {
         return;
       }
       // Route namespace clicks to the sidebar selection instead of the object panel.
-      namespaceContext.setSelectedNamespace(pod.namespace, pod.clusterId);
-      viewState.onNamespaceSelect(pod.namespace);
+      namespaceContext.setSelectedNamespace(pod.ref.namespace, pod.ref.clusterId);
+      viewState.onNamespaceSelect(pod.ref.namespace);
       viewState.setActiveNamespaceTab('workloads');
     },
     [namespaceContext, viewState]
@@ -149,11 +149,11 @@ export const PodsTab: React.FC<PodsTabProps> = ({ isActive }) => {
         onAltClick: navigatePod,
         sortable: false,
       }),
-      createTextColumn<PodSnapshotEntry>('name', 'Name', {
+      createTextColumn<PodSnapshotEntry>('name', 'Name', (pod) => pod.ref.name, {
         onClick: handlePodOpen,
         onAltClick: navigatePod,
         getClassName: () => 'object-panel-link',
-        getTitle: (pod) => pod.name,
+        getTitle: (pod) => pod.ref.name,
       }),
       createTextColumn<PodSnapshotEntry>('status', 'Status', (pod) => pod.status || '—', {
         getClassName: (pod) => backendStatusTextClass(pod.statusPresentation),
@@ -179,7 +179,7 @@ export const PodsTab: React.FC<PodsTabProps> = ({ isActive }) => {
                 {
                   kind: pod.ownerKind,
                   name: pod.ownerName,
-                  namespace: pod.namespace,
+                  namespace: pod.ref.namespace,
                   ...getPodClusterMeta(pod),
                 },
                 { fallbackClusterId: objectData?.clusterId }
@@ -196,8 +196,8 @@ export const PodsTab: React.FC<PodsTabProps> = ({ isActive }) => {
                 {
                   kind: 'Node',
                   name: pod.node,
-                  clusterId: pod.clusterId,
-                  clusterName: pod.clusterName ?? undefined,
+                  clusterId: pod.ref.clusterId,
+                  clusterName: objectData?.clusterName,
                 },
                 { fallbackClusterId: objectData?.clusterId }
               )
@@ -209,9 +209,9 @@ export const PodsTab: React.FC<PodsTabProps> = ({ isActive }) => {
     ];
 
     upsertNamespaceColumn(base, {
-      accessor: (pod) => pod.namespace,
+      accessor: (pod) => pod.ref.namespace,
       onClick: handleNamespaceSelect,
-      isInteractive: (pod) => Boolean(pod.namespace),
+      isInteractive: (pod) => Boolean(pod.ref.namespace),
       getClassName: () => 'object-panel-link',
     });
 
@@ -227,7 +227,7 @@ export const PodsTab: React.FC<PodsTabProps> = ({ isActive }) => {
         getMetricsStale: () => Boolean(metricsRef.current?.stale),
         getMetricsError: () => metricsRef.current?.lastError || undefined,
         getMetricsLastUpdated: metricsLastUpdated,
-        getAnimationKey: (pod) => `pod:${pod.namespace}/${pod.name}:cpu`,
+        getAnimationKey: (pod) => `pod:${pod.ref.namespace}/${pod.ref.name}:cpu`,
         getShowEmptyState: () => true,
       }),
       createResourceBarColumn<PodSnapshotEntry>({
@@ -241,7 +241,7 @@ export const PodsTab: React.FC<PodsTabProps> = ({ isActive }) => {
         getMetricsStale: () => Boolean(metricsRef.current?.stale),
         getMetricsError: () => metricsRef.current?.lastError || undefined,
         getMetricsLastUpdated: metricsLastUpdated,
-        getAnimationKey: (pod) => `pod:${pod.namespace}/${pod.name}:memory`,
+        getAnimationKey: (pod) => `pod:${pod.ref.namespace}/${pod.ref.name}:memory`,
         getShowEmptyState: () => true,
       }),
       createAgeColumn<PodSnapshotEntry & { age?: string }>(
@@ -258,6 +258,7 @@ export const PodsTab: React.FC<PodsTabProps> = ({ isActive }) => {
     handlePodOpen,
     metricsLastUpdated,
     objectData?.clusterId,
+    objectData?.clusterName,
     objectLink,
     getPodClusterMeta,
     navigatePod,
@@ -298,8 +299,8 @@ export const PodsTab: React.FC<PodsTabProps> = ({ isActive }) => {
     const seen = new Set<string>();
     const targets: Array<{ namespace: string; clusterId: string }> = [];
     source.rows.forEach((pod) => {
-      const podNamespace = pod.namespace?.trim();
-      const podClusterId = pod.clusterId?.trim() || objectData?.clusterId?.trim();
+      const podNamespace = pod.ref.namespace?.trim();
+      const podClusterId = pod.ref.clusterId?.trim() || objectData?.clusterId?.trim();
       if (!podNamespace || !podClusterId) {
         return;
       }

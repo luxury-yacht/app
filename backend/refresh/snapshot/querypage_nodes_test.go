@@ -2,6 +2,7 @@ package snapshot
 
 import (
 	"fmt"
+	"github.com/luxury-yacht/app/backend/resourcemodel"
 	"slices"
 	"testing"
 )
@@ -12,10 +13,9 @@ func makeNodeRows(n int) []NodeSummary {
 	versions := []string{"v1.29.0", "v1.30.1", "v1.28.4"}
 	rows := make([]NodeSummary, n)
 	for i := 0; i < n; i++ {
-		rows[i] = NodeSummary{
-			Name:         fmt.Sprintf("node-%03d", i), // unique -> unique row key
-			Kind:         "node",
-			Status:       statuses[i%len(statuses)],
+		rows[i] = NodeSummary{Ref: resourcemodel.ResourceRef{Kind:
+		// unique -> unique row key
+		"node", Name: fmt.Sprintf("node-%03d", i)}, Status: statuses[i%len(statuses)],
 			Roles:        roles[i%len(roles)],
 			Version:      versions[i%len(versions)],
 			InternalIP:   fmt.Sprintf("10.0.%d.%d", i%4, i%7),

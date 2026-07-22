@@ -65,7 +65,7 @@ func namespaceConfigDomainSpec() typedTableDomainSpec[ConfigSummary] {
 		adapter:          configTableQueryAdapter(),
 		schema:           configQuerypageSchema(),
 		capabilities:     namespaceConfigQueryCapabilities(),
-		kindOf:           func(resource ConfigSummary) string { return resource.Kind },
+		kindOf:           func(resource ConfigSummary) string { return resource.Ref.Kind },
 		sortRows:         sortConfigSummaries,
 	}
 }
@@ -118,14 +118,14 @@ func (b *NamespaceConfigBuilder) Build(ctx context.Context, scope string) (*refr
 
 func sortConfigSummaries(resources []ConfigSummary) {
 	sort.SliceStable(resources, func(i, j int) bool {
-		if resources[i].Namespace != resources[j].Namespace {
-			return resources[i].Namespace < resources[j].Namespace
+		if resources[i].Ref.Namespace != resources[j].Ref.Namespace {
+			return resources[i].Ref.Namespace < resources[j].Ref.Namespace
 		}
-		if resources[i].Name != resources[j].Name {
-			return resources[i].Name < resources[j].Name
+		if resources[i].Ref.Name != resources[j].Ref.Name {
+			return resources[i].Ref.Name < resources[j].Ref.Name
 		}
-		if resources[i].Kind != resources[j].Kind {
-			return resources[i].Kind < resources[j].Kind
+		if resources[i].Ref.Kind != resources[j].Ref.Kind {
+			return resources[i].Ref.Kind < resources[j].Ref.Kind
 		}
 		return resources[i].TypeAlias < resources[j].TypeAlias
 	})

@@ -19,12 +19,23 @@ import {
   objectPanelEventGridRow,
 } from './eventGridModel';
 
+const eventRef = (overrides: Record<string, string> = {}) => ({
+  clusterId: 'cluster-a',
+  group: '',
+  version: 'v1',
+  kind: 'Event',
+  resource: 'events',
+  namespace: 'prod',
+  name: 'api.123',
+  uid: 'event-uid',
+  ...overrides,
+});
+
 describe('eventGridModel', () => {
   it('builds search text from the visible event fields', () => {
     expect(
       eventGridSearchText({
-        kind: 'Event',
-        namespace: 'prod',
+        ref: eventRef(),
         type: 'Warning',
         source: 'kubelet',
         reason: 'FailedMount',
@@ -33,6 +44,7 @@ describe('eventGridModel', () => {
       })
     ).toEqual([
       'Event',
+      'api.123',
       'prod',
       'Warning',
       'kubelet',
@@ -54,8 +66,7 @@ describe('eventGridModel', () => {
     expect(
       eventGridStableKey(
         {
-          clusterId: 'cluster-a',
-          namespace: 'prod',
+          ref: eventRef(),
           reason: 'FailedMount',
           source: 'kubelet',
           object: 'Pod/api',
@@ -70,9 +81,7 @@ describe('eventGridModel', () => {
     expect(
       clusterEventRowIdentity(
         {
-          name: 'api.123',
-          namespace: 'prod',
-          clusterId: 'cluster-a',
+          ref: eventRef(),
         },
         'unused'
       )
@@ -81,9 +90,8 @@ describe('eventGridModel', () => {
     expect(
       namespaceEventRowIdentity(
         {
-          name: 'api.123',
+          ref: eventRef(),
           objectNamespace: 'prod',
-          clusterId: 'cluster-a',
         },
         'default',
         'unused'
@@ -103,9 +111,6 @@ describe('eventGridModel', () => {
         name: 'canonical-event',
         uid: 'event-uid',
       },
-      clusterId: 'wrong-cluster',
-      namespace: 'wrong-namespace',
-      name: 'wrong-name',
     };
 
     expect(clusterEventRowIdentity(event)).toBe('cluster-a|/v1/Event/events-ns/canonical-event');
@@ -113,7 +118,7 @@ describe('eventGridModel', () => {
       'cluster-a|/v1/Event/events-ns/canonical-event'
     );
     expect(eventGridObjectReference(event)).toEqual(expect.objectContaining(event.ref));
-    expect(eventGridActionReference(event, undefined, { action: 'open' })).toEqual(
+    expect(eventGridActionReference(event, undefined, undefined, { action: 'open' })).toEqual(
       expect.objectContaining({ ...event.ref, action: 'open' })
     );
   });
@@ -189,13 +194,10 @@ describe('eventGridModel', () => {
     expect(
       eventGridActionReference(
         {
-          name: 'api.123',
-          uid: 'event-uid',
-          namespace: 'prod',
-          clusterId: 'cluster-a',
-          clusterName: 'alpha',
+          ref: eventRef(),
         },
         'unused',
+        'alpha',
         { involvedObject: 'Pod/api' }
       )
     ).toEqual(
@@ -218,13 +220,10 @@ describe('eventGridModel', () => {
     expect(
       eventGridObjectReference(
         {
-          name: 'api.123',
-          uid: 'event-uid',
-          namespace: 'prod',
-          clusterId: 'cluster-a',
-          clusterName: 'alpha',
+          ref: eventRef(),
         },
-        'unused'
+        'unused',
+        'alpha'
       )
     ).toEqual(
       expect.objectContaining({

@@ -8,7 +8,7 @@
  * namespace column, and the query hook) stays per view.
  */
 
-import type { ResourceLink, ResourceRef } from '@core/refresh/types';
+import type { CanonicalResourceRef, ResourceLink } from '@core/refresh/types';
 import { useKubeconfig } from '@modules/kubernetes/config/KubeconfigContext';
 import { useObjectPanel } from '@modules/object-panel/hooks/useObjectPanel';
 import type { ContextMenuItem } from '@shared/components/ContextMenu';
@@ -33,24 +33,20 @@ import { getDisplayKind } from '@/utils/kindAliasMap';
 
 /** The event row shape both scope views select from their snapshots. */
 export interface EventGridRow {
-  ref: ResourceRef;
-  kind: string;
+  ref: CanonicalResourceRef;
+  /** Involved-object kind, present on namespace Event rows. */
+  kind?: string;
   kindAlias?: string;
-  name: string;
-  uid: string;
   resourceVersion: string;
   type: string; // Event severity (Normal, Warning)
   source: string;
   reason: string;
   object: string;
   message: string;
-  clusterId: string;
-  clusterName?: string;
   objectNamespace?: string;
   objectUid?: string;
   objectApiVersion?: string;
   involvedObject?: ResourceLink;
-  namespace: string;
   age?: string;
   ageTimestamp?: number;
 }
@@ -63,7 +59,7 @@ export interface EventGridRow {
 export function useEventsGridParts({ defaultNamespace }: { defaultNamespace?: string } = {}) {
   const { openWithObject } = useObjectPanel();
   const { navigateToView } = useNavigateToView();
-  const { selectedClusterId } = useKubeconfig();
+  const { selectedClusterId, selectedClusterName } = useKubeconfig();
   const useShortResourceNames = useShortNames();
 
   const getSearchText = useCallback(
@@ -74,9 +70,9 @@ export function useEventsGridParts({ defaultNamespace }: { defaultNamespace?: st
   const resolveOptions = useMemo(
     () =>
       defaultNamespace === undefined
-        ? { selectedClusterId }
-        : { defaultNamespace, selectedClusterId },
-    [defaultNamespace, selectedClusterId]
+        ? { selectedClusterId, selectedClusterName }
+        : { defaultNamespace, selectedClusterId, selectedClusterName },
+    [defaultNamespace, selectedClusterId, selectedClusterName]
   );
 
   const canOpenInvolvedObject = useCallback(
@@ -106,16 +102,16 @@ export function useEventsGridParts({ defaultNamespace }: { defaultNamespace?: st
 
   const openEvent = useCallback(
     (event: EventGridRow) => {
-      openWithObject(eventGridObjectReference(event, selectedClusterId));
+      openWithObject(eventGridObjectReference(event, selectedClusterId, selectedClusterName));
     },
-    [openWithObject, selectedClusterId]
+    [openWithObject, selectedClusterId, selectedClusterName]
   );
 
   const navigateToEvent = useCallback(
     (event: EventGridRow) => {
-      navigateToView(eventGridObjectReference(event, selectedClusterId));
+      navigateToView(eventGridObjectReference(event, selectedClusterId, selectedClusterName));
     },
-    [navigateToView, selectedClusterId]
+    [navigateToView, selectedClusterId, selectedClusterName]
   );
 
   const keyExtractor = useCallback(
@@ -208,6 +204,7 @@ export function useEventsGridParts({ defaultNamespace }: { defaultNamespace?: st
 
   return {
     selectedClusterId,
+    selectedClusterName,
     useShortResourceNames,
     getSearchText,
     canOpenInvolvedObject,
@@ -233,7 +230,8 @@ export function useEventsGridActions({
   rows: EventGridRow[];
 }) {
   const { openWithObject } = useObjectPanel();
-  const { canOpenInvolvedObject, openInvolvedObject, selectedClusterId } = parts;
+  const { canOpenInvolvedObject, openInvolvedObject, selectedClusterId, selectedClusterName } =
+    parts;
 
   const objectActions = useObjectActionController({
     context: 'gridtable',
@@ -241,7 +239,7 @@ export function useEventsGridActions({
     onOpen: (object) => openWithObject(object),
     onViewInvolvedObject: (object) => {
       const event = rows.find((candidate) => {
-        const ref = eventGridObjectReference(candidate, selectedClusterId);
+        const ref = eventGridObjectReference(candidate, selectedClusterId, selectedClusterName);
         return (
           ref.clusterId === object.clusterId &&
           ref.namespace === object.namespace &&
@@ -267,10 +265,15 @@ export function useEventsGridActions({
           : {};
 
       return objectActions.getMenuItems(
-        eventGridActionReference(event, selectedClusterId, involvedObjectExtras)
+        eventGridActionReference(
+          event,
+          selectedClusterId,
+          selectedClusterName,
+          involvedObjectExtras
+        )
       );
     },
-    [canOpenInvolvedObject, objectActions, selectedClusterId]
+    [canOpenInvolvedObject, objectActions, selectedClusterId, selectedClusterName]
   );
 
   return { objectActions, getContextMenuItems };

@@ -8,6 +8,7 @@
 import { useCallback } from 'react';
 
 import { useRefreshScopedDomain } from '@/core/refresh';
+import type { RefreshDemand } from '@/core/refresh/refreshRuntime';
 import type { RefreshDomain } from '@/core/refresh/types';
 import {
   readRefreshDomainState,
@@ -23,6 +24,7 @@ interface UseRefreshDomainHandleOptions<K extends RefreshDomain> {
   scope: string | null | undefined;
   enabled: boolean;
   preserveState?: boolean;
+  demand?: RefreshDemand;
   fetchOnEnable?: DataRequestReason | false;
   onFetchError?: (error: unknown) => void;
 }
@@ -32,6 +34,7 @@ export function useRefreshDomainHandle<K extends RefreshDomain = RefreshDomain>(
   scope,
   enabled,
   preserveState = false,
+  demand = 'snapshot',
   fetchOnEnable = false,
   onFetchError,
 }: UseRefreshDomainHandleOptions<K>) {
@@ -44,6 +47,7 @@ export function useRefreshDomainHandle<K extends RefreshDomain = RefreshDomain>(
     scope,
     enabled,
     preserveState,
+    demand,
     fetchOnEnable,
     onFetchError,
   });

@@ -42,8 +42,8 @@ const CustomViewGrid: React.FC<CustomViewProps> = React.memo(
       }
       const withNamespace = [...parts.baseColumns];
       cf.upsertNamespaceColumn(withNamespace, {
-        accessor: (resource) => resource.namespace,
-        sortValue: (resource) => (resource.namespace || '').toLowerCase(),
+        accessor: (resource) => resource.ref.namespace,
+        sortValue: (resource) => (resource.ref.namespace || '').toLowerCase(),
         ...namespaceColumnLink,
       });
       return withNamespace;

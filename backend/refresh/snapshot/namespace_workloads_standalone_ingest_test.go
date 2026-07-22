@@ -4,6 +4,7 @@ import (
 	"testing"
 
 	"github.com/luxury-yacht/app/backend/refresh/metrics"
+	"github.com/luxury-yacht/app/backend/resourcemodel"
 	podres "github.com/luxury-yacht/app/backend/resources/pods"
 	corev1 "k8s.io/api/core/v1"
 	"k8s.io/apimachinery/pkg/api/resource"
@@ -51,9 +52,7 @@ func TestBuildStandalonePodSummaryFromRows(t *testing.T) {
 				},
 			},
 			usage: map[string]metrics.PodUsage{"prod/lonely-1": {CPUUsageMilli: 123, MemoryUsageBytes: 200 * 1024 * 1024}},
-			want: WorkloadSummary{
-				Kind: "Pod", Name: "lonely-1", Namespace: "prod",
-				Ready: "1/1", Status: "Running", StatusState: "Running", StatusPresentation: "ready",
+			want: WorkloadSummary{Ref: resourcemodel.ResourceRef{Kind: "Pod", Namespace: "prod", Name: "lonely-1"}, Ready: "1/1", Status: "Running", StatusState: "Running", StatusPresentation: "ready",
 				Restarts: 3,
 				CPUUsage: "123m", CPURequest: "250m", CPULimit: "500m",
 				MemUsage: "200Mi", MemRequest: "256Mi", MemLimit: "512Mi",
@@ -69,9 +68,7 @@ func TestBuildStandalonePodSummaryFromRows(t *testing.T) {
 				Status:     corev1.PodStatus{Phase: corev1.PodPending},
 			},
 			usage: nil,
-			want: WorkloadSummary{
-				Kind: "Pod", Name: "lonely-2", Namespace: "prod",
-				Ready: "0/1", Status: "Pending", StatusState: "Pending", StatusPresentation: "warning",
+			want: WorkloadSummary{Ref: resourcemodel.ResourceRef{Kind: "Pod", Namespace: "prod", Name: "lonely-2"}, Ready: "0/1", Status: "Pending", StatusState: "Pending", StatusPresentation: "warning",
 				CPUUsage: "-", CPURequest: "-", CPULimit: "-",
 				MemUsage: "-", MemRequest: "-", MemLimit: "-",
 			},

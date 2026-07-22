@@ -247,7 +247,7 @@ func TestObjectEventsBuilderPayloadCarriesEventIdentityAndFullInvolvedObjectRef(
 	}
 
 	event := payload.Events[0]
-	if event.Name != "api-scaled.17f" || event.UID != "event-uid-1" || event.ResourceVersion != "42" {
+	if event.Ref.Name != "api-scaled.17f" || event.Ref.UID != "event-uid-1" || event.ResourceVersion != "42" {
 		t.Fatalf("event identity was not preserved: %+v", event)
 	}
 	if event.InvolvedObjectName != "api" ||

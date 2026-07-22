@@ -17,14 +17,6 @@ const row = (group: string): CatalogBackedCustomResourceRow => ({
     namespace: 'data',
     name: 'primary',
   },
-  clusterId: 'cluster-a',
-  clusterName: 'Cluster A',
-  kind: 'DBInstance',
-  name: 'primary',
-  namespace: 'data',
-  group,
-  version: 'v1alpha1',
-  resource: 'dbinstances',
 });
 
 describe('customCatalogRowAdapter', () => {
@@ -35,7 +27,11 @@ describe('customCatalogRowAdapter', () => {
   });
 
   it('builds object references from canonical custom-resource identity', () => {
-    expect(customCatalogObjectReference(row('rds.services.k8s.aws'))).toMatchObject({
+    expect(
+      customCatalogObjectReference(row('rds.services.k8s.aws'), undefined, {
+        fallbackClusterName: 'Cluster A',
+      })
+    ).toMatchObject({
       clusterId: 'cluster-a',
       clusterName: 'Cluster A',
       group: 'rds.services.k8s.aws',
@@ -50,14 +46,15 @@ describe('customCatalogRowAdapter', () => {
   it('preserves fallback catalog creation time for live Age rendering', () => {
     const creationTimestamp = new Date(Date.now() - 3 * 60 * 60 * 1000).toISOString();
     const fallback = catalogItemToFallbackCustomRow({
-      clusterId: 'cluster-a',
-      clusterName: 'Cluster A',
-      kind: 'DBInstance',
-      group: 'rds.services.k8s.aws',
-      version: 'v1alpha1',
-      resource: 'dbinstances',
-      name: 'primary',
-      uid: 'primary-uid',
+      ref: {
+        clusterId: 'cluster-a',
+        group: 'rds.services.k8s.aws',
+        version: 'v1alpha1',
+        kind: 'DBInstance',
+        resource: 'dbinstances',
+        name: 'primary',
+        uid: 'primary-uid',
+      },
       resourceVersion: '1',
       creationTimestamp,
       scope: 'Cluster',
@@ -74,21 +71,22 @@ describe('customCatalogRowAdapter', () => {
 
   it('uses group/version row fields without api-prefixed aliases', () => {
     const fallback = catalogItemToFallbackCustomRow({
-      clusterId: 'cluster-a',
-      clusterName: 'Cluster A',
-      kind: 'DBInstance',
-      group: 'rds.services.k8s.aws',
-      version: 'v1alpha1',
-      resource: 'dbinstances',
-      name: 'primary',
-      uid: 'primary-uid',
+      ref: {
+        clusterId: 'cluster-a',
+        group: 'rds.services.k8s.aws',
+        version: 'v1alpha1',
+        kind: 'DBInstance',
+        resource: 'dbinstances',
+        name: 'primary',
+        uid: 'primary-uid',
+      },
       resourceVersion: '1',
       creationTimestamp: '2026-06-28T00:00:00Z',
       scope: 'Cluster',
     });
 
-    expect(fallback.group).toBe('rds.services.k8s.aws');
-    expect(fallback.version).toBe('v1alpha1');
+    expect(fallback.ref.group).toBe('rds.services.k8s.aws');
+    expect(fallback.ref.version).toBe('v1alpha1');
     expect(fallback).not.toHaveProperty('apiGroup');
     expect(fallback).not.toHaveProperty('apiVersion');
   });
@@ -113,8 +111,8 @@ describe('customCatalogRowAdapter', () => {
       resource: 'dbinstances',
     });
 
-    expect(normalized.group).toBe('rds.services.k8s.aws');
-    expect(normalized.version).toBe('v1alpha1');
+    expect(normalized.ref.group).toBe('rds.services.k8s.aws');
+    expect(normalized.ref.version).toBe('v1alpha1');
     expect(normalized).not.toHaveProperty('apiGroup');
     expect(normalized).not.toHaveProperty('apiVersion');
   });
@@ -134,7 +132,6 @@ describe('customCatalogRowAdapter', () => {
     });
 
     expect(normalized).toMatchObject({
-      namespace: '',
       status: 'Ready',
       labels: { tier: 'shared' },
       ref: {

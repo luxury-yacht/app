@@ -18,10 +18,8 @@ func makeConfigRows(n int) []ConfigSummary {
 	rows := make([]ConfigSummary, n)
 	for i := 0; i < n; i++ {
 		rows[i] = ConfigSummary{
-			Kind:         kinds[i%len(kinds)],
-			Name:         fmt.Sprintf("cfg-%03d", i), // unique -> unique row key
-			Namespace:    namespaces[i%len(namespaces)],
-			Data:         (i * 13) % 7, // many ties
+			Ref:          testCanonicalRowRef(kinds[i%len(kinds)], namespaces[i%len(namespaces)], fmt.Sprintf("cfg-%03d", i)), // unique name -> unique row key
+			Data:         (i * 13) % 7,                                                                                        // many ties
 			Age:          fmt.Sprintf("%dm", i%5),
 			AgeTimestamp: int64(1_000_000 + (i%9)*1000), // ties, non-zero so NumericSort engages
 		}
@@ -103,7 +101,7 @@ func TestConfigQuerypageFacetsMatchKinds(t *testing.T) {
 	}
 	want := map[string]int{}
 	for _, r := range rows {
-		want[strings.ToLower(r.Kind)]++
+		want[strings.ToLower(r.Ref.Kind)]++
 	}
 	for k, c := range want {
 		if page.Facets["kind"][k] != c {

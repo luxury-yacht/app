@@ -16,7 +16,11 @@ import { act } from 'react';
 import * as ReactDOM from 'react-dom/client';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { makeCatalogSnapshotPayload } from '@/core/refresh/refreshContractTestBuilders';
-import type { CatalogItem, CatalogSnapshotPayload } from '@/core/refresh/types';
+import type {
+  CanonicalRowTestOverrides,
+  CatalogItem,
+  CatalogSnapshotPayload,
+} from '@/core/refresh/types';
 import BrowseView from '@/modules/browse/components/BrowseView';
 import { requireValue } from '@/test-utils/requireValue';
 
@@ -253,21 +257,26 @@ vi.mock('@modules/namespace/hooks/useNamespaceGridTablePersistence', () => ({
   },
 }));
 
-const catalogItem = (overrides: Partial<CatalogItem>): CatalogItem => ({
-  clusterId: 'cluster-1',
-  clusterName: 'Cluster 1',
-  kind: 'Pod',
-  group: '',
-  version: 'v1',
-  resource: 'pods',
-  namespace: 'default',
-  name: 'pod-a',
-  uid: 'pod-a',
-  resourceVersion: '1',
-  creationTimestamp: '2026-01-01T00:00:00Z',
-  scope: 'Namespace',
-  ...overrides,
-});
+const catalogItem = (overrides: CanonicalRowTestOverrides<CatalogItem>): CatalogItem => {
+  const { ref, ...row } = overrides;
+  return {
+    ref: {
+      clusterId: 'cluster-1',
+      group: '',
+      version: 'v1',
+      kind: 'Pod',
+      resource: 'pods',
+      namespace: 'default',
+      name: 'pod-a',
+      uid: 'pod-a',
+      ...ref,
+    },
+    resourceVersion: '1',
+    creationTimestamp: '2026-01-01T00:00:00Z',
+    scope: 'Namespace',
+    ...row,
+  };
+};
 
 const sortableKeys = (): string[] =>
   (gridTablePropsRef.current?.columns ?? [])
@@ -295,7 +304,7 @@ const catalogPayload = (
     namespaces: Array.from(
       new Set(
         items
-          .map((item) => item.namespace)
+          .map((item) => item.ref.namespace)
           .filter((namespace): namespace is string => Boolean(namespace))
       )
     ),
@@ -352,11 +361,14 @@ describe('BrowseView', () => {
   describe('Cluster scope (namespace=undefined)', () => {
     it('renders the first cluster-scoped page directly from the catalog query payload', async () => {
       const node = catalogItem({
-        kind: 'Node',
-        resource: 'nodes',
-        namespace: undefined,
-        name: 'query-node',
-        uid: 'node-1',
+        ref: {
+          kind: 'Node',
+          resource: 'nodes',
+          namespace: undefined,
+          name: 'query-node',
+          uid: 'node-1',
+        },
+
         scope: 'Cluster',
       });
       refreshMocks.catalogDomain.status = 'ready';
@@ -376,9 +388,8 @@ describe('BrowseView', () => {
 
       expect(gridTablePropsRef.current?.data).toEqual([
         expect.objectContaining({
-          name: 'query-node',
           scope: 'Cluster',
-          item: expect.objectContaining({
+          ref: expect.objectContaining({
             clusterId: 'cluster-1',
             group: '',
             version: 'v1',
@@ -398,7 +409,7 @@ describe('BrowseView', () => {
       expect(refreshMocks.orchestrator.acquireScopedDomainLease).toHaveBeenCalledWith(
         'catalog',
         'cluster-1|limit=50&resourceScope=cluster&namespace=cluster',
-        undefined
+        { demand: 'query', preserveState: false }
       );
       expect(refreshMocks.orchestrator.fetchScopedDomain).toHaveBeenCalledWith(
         'catalog',
@@ -430,12 +441,15 @@ describe('BrowseView', () => {
 
     it('shows API identity and available status alongside object identity', async () => {
       const deployment = catalogItem({
-        kind: 'Deployment',
-        group: 'apps',
-        version: 'v1',
-        resource: 'deployments',
-        namespace: undefined,
-        name: 'api',
+        ref: {
+          kind: 'Deployment',
+          group: 'apps',
+          version: 'v1',
+          resource: 'deployments',
+          namespace: undefined,
+          name: 'api',
+        },
+
         scope: 'Cluster',
         actionFacts: { status: 'Available' },
       });
@@ -466,11 +480,14 @@ describe('BrowseView', () => {
       vi.useFakeTimers();
       vi.setSystemTime(new Date('2026-01-01T00:00:10Z'));
       const node = catalogItem({
-        kind: 'Node',
-        resource: 'nodes',
-        namespace: undefined,
-        name: 'query-node',
-        uid: 'node-1',
+        ref: {
+          kind: 'Node',
+          resource: 'nodes',
+          namespace: undefined,
+          name: 'query-node',
+          uid: 'node-1',
+        },
+
         scope: 'Cluster',
         creationTimestamp: '2026-01-01T00:00:00Z',
       });
@@ -567,11 +584,7 @@ describe('BrowseView', () => {
       refreshMocks.catalogDomain.scope =
         'cluster-1|limit=50&resourceScope=namespace&namespace=team-a&scopeNamespace=team-a';
       refreshMocks.catalogDomain.data = catalogPayload([
-        catalogItem({
-          namespace: 'team-a',
-          name: 'query-pod',
-          uid: 'pod-1',
-        }),
+        catalogItem({ ref: { namespace: 'team-a', name: 'query-pod', uid: 'pod-1' } }),
       ]);
 
       await act(async () => {
@@ -581,9 +594,8 @@ describe('BrowseView', () => {
 
       expect(gridTablePropsRef.current?.data).toEqual([
         expect.objectContaining({
-          name: 'query-pod',
           namespaceDisplay: 'team-a',
-          item: expect.objectContaining({
+          ref: expect.objectContaining({
             clusterId: 'cluster-1',
             group: '',
             version: 'v1',
@@ -626,7 +638,7 @@ describe('BrowseView', () => {
       expect(refreshMocks.orchestrator.acquireScopedDomainLease).toHaveBeenCalledWith(
         'catalog',
         'cluster-1|limit=50&resourceScope=namespace&namespace=kube-system&scopeNamespace=kube-system',
-        undefined
+        { demand: 'query', preserveState: false }
       );
     });
 
@@ -646,11 +658,7 @@ describe('BrowseView', () => {
       refreshMocks.catalogDomain.status = 'ready';
       refreshMocks.catalogDomain.scope = 'cluster-1|limit=50';
       refreshMocks.catalogDomain.data = catalogPayload([
-        catalogItem({
-          namespace: 'team-b',
-          name: 'query-all-pod',
-          uid: 'pod-all-1',
-        }),
+        catalogItem({ ref: { namespace: 'team-b', name: 'query-all-pod', uid: 'pod-all-1' } }),
       ]);
 
       await act(async () => {
@@ -660,9 +668,8 @@ describe('BrowseView', () => {
 
       expect(gridTablePropsRef.current?.data).toEqual([
         expect.objectContaining({
-          name: 'query-all-pod',
           namespaceDisplay: 'team-b',
-          item: expect.objectContaining({
+          ref: expect.objectContaining({
             clusterId: 'cluster-1',
             group: '',
             version: 'v1',
@@ -853,19 +860,18 @@ describe('BrowseView', () => {
         'cluster-1|limit=50&resourceScope=cluster&namespace=cluster';
       refreshMocks.catalogDomain.data = {
         items: [
-          {
-            uid: '1',
-            kind: 'Node',
-            name: 'node-a',
-            namespace: null,
+          catalogItem({
+            ref: {
+              uid: '1',
+              kind: 'Node',
+              resource: 'nodes',
+              name: 'node-a',
+              namespace: undefined,
+            },
             scope: 'Cluster',
-            resource: 'nodes',
-            group: '',
-            version: 'v1',
             resourceVersion: '1',
             creationTimestamp: new Date().toISOString(),
-            clusterId: 'cluster-1',
-          },
+          }),
         ],
         continue: '',
         batchSize: 25,
@@ -886,19 +892,18 @@ describe('BrowseView', () => {
         'cluster-1|limit=50&resourceScope=cluster&namespace=cluster';
       refreshMocks.catalogDomain.data = {
         items: [
-          {
-            uid: '1',
-            kind: 'Node',
-            name: 'node-a',
-            namespace: null,
+          catalogItem({
+            ref: {
+              uid: '1',
+              kind: 'Node',
+              resource: 'nodes',
+              name: 'node-a',
+              namespace: undefined,
+            },
             scope: 'Cluster',
-            resource: 'nodes',
-            group: '',
-            version: 'v1',
             resourceVersion: '1',
             creationTimestamp: new Date().toISOString(),
-            clusterId: 'cluster-1',
-          },
+          }),
         ],
         continue: '200',
         batchSize: 200,
@@ -989,34 +994,28 @@ describe('BrowseView', () => {
           status: 'ready',
           data: {
             items: [
-              {
-                uid: 'deploy-1',
-                kind: 'Deployment',
-                name: 'web',
-                namespace: 'default',
-                scope: 'Namespace',
-                resource: 'deployments',
-                group: 'apps',
-                version: 'v1',
-                resourceVersion: '1',
-                creationTimestamp: new Date().toISOString(),
-                clusterId: 'cluster-1',
+              catalogItem({
+                ref: {
+                  uid: 'deploy-1',
+                  kind: 'Deployment',
+                  name: 'web',
+                  namespace: 'default',
+                  resource: 'deployments',
+                  group: 'apps',
+                },
                 actionFacts: { hpaManaged: true, desiredReplicas: 3 },
-              },
-              {
-                uid: 'cron-1',
-                kind: 'CronJob',
-                name: 'nightly',
-                namespace: 'default',
-                scope: 'Namespace',
-                resource: 'cronjobs',
-                group: 'batch',
-                version: 'v1',
-                resourceVersion: '1',
-                creationTimestamp: new Date().toISOString(),
-                clusterId: 'cluster-1',
+              }),
+              catalogItem({
+                ref: {
+                  uid: 'cron-1',
+                  kind: 'CronJob',
+                  name: 'nightly',
+                  namespace: 'default',
+                  resource: 'cronjobs',
+                  group: 'batch',
+                },
                 actionFacts: { status: 'Suspended' },
-              },
+              }),
             ],
             kinds: [
               { kind: 'Deployment', namespaced: true },
@@ -1035,7 +1034,7 @@ describe('BrowseView', () => {
       });
 
       const rows = gridTablePropsRef.current?.data ?? [];
-      const byKind = new Map(rows.map((row) => [row.item.kind, row]));
+      const byKind = new Map(rows.map((row) => [row.ref.kind, row]));
 
       const deploymentMenu = gridTablePropsRef.current.getCustomContextMenuItems(
         requireValue(byKind.get('Deployment'), 'expected the Deployment browse row'),

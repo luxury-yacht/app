@@ -2,6 +2,7 @@ package snapshot
 
 import (
 	"fmt"
+	"github.com/luxury-yacht/app/backend/resourcemodel"
 	"slices"
 	"testing"
 )
@@ -22,11 +23,9 @@ func makeWorkloadRows(n int) []WorkloadSummary {
 		if i%3 == 0 {
 			total = ready + 1
 		}
-		rows[i] = WorkloadSummary{
-			Kind:               kinds[i%len(kinds)],
-			Name:               fmt.Sprintf("wl-%03d", i), // unique -> unique row key
-			Namespace:          namespaces[i%len(namespaces)],
-			Status:             statuses[i%len(statuses)],
+		rows[i] = WorkloadSummary{Ref: resourcemodel.ResourceRef{Kind: kinds[i%len(kinds)], Namespace:
+		// unique -> unique row key
+		namespaces[i%len(namespaces)], Name: fmt.Sprintf("wl-%03d", i)}, Status: statuses[i%len(statuses)],
 			Ready:              fmt.Sprintf("%d/%d", ready, total),
 			Restarts:           int32((i * 7) % 5), // many zeros and non-zeros
 			StatusPresentation: presentations[i%len(presentations)],
@@ -164,10 +163,10 @@ func TestWorkloadQueryFiltersStatusAndKeepsScopeFacets(t *testing.T) {
 
 func TestWorkloadStatusFacetsStayStableAcrossHealthPredicate(t *testing.T) {
 	items := []WorkloadSummary{
-		{Kind: "Deployment", Namespace: "team-a", Name: "healthy", Status: "Running", StatusPresentation: "healthy"},
-		{Kind: "Deployment", Namespace: "team-a", Name: "pending", Status: "Pending", StatusPresentation: "warning"},
-		{Kind: "StatefulSet", Namespace: "team-a", Name: "degraded", Status: "Degraded", StatusPresentation: "error"},
-		{Kind: "Pod", Namespace: "team-a", Name: "failing", Status: "Running", StatusPresentation: "error"},
+		{Ref: resourcemodel.ResourceRef{Kind: "Deployment", Namespace: "team-a", Name: "healthy"}, Status: "Running", StatusPresentation: "healthy"},
+		{Ref: resourcemodel.ResourceRef{Kind: "Deployment", Namespace: "team-a", Name: "pending"}, Status: "Pending", StatusPresentation: "warning"},
+		{Ref: resourcemodel.ResourceRef{Kind: "StatefulSet", Namespace: "team-a", Name: "degraded"}, Status: "Degraded", StatusPresentation: "error"},
+		{Ref: resourcemodel.ResourceRef{Kind: "Pod", Namespace: "team-a", Name: "failing"}, Status: "Running", StatusPresentation: "error"},
 	}
 	query := typedTableQuery{
 		Enabled: true,
@@ -181,7 +180,7 @@ func TestWorkloadStatusFacetsStayStableAcrossHealthPredicate(t *testing.T) {
 
 	page := applyTypedTableQueryViaStore(items, query, workloadTableQueryAdapter(), workloadsQuerypageSchema())
 
-	if page.Total != 1 || len(page.Rows) != 1 || page.Rows[0].Name != "pending" {
+	if page.Total != 1 || len(page.Rows) != 1 || page.Rows[0].Ref.Name != "pending" {
 		t.Fatalf("status + health query rows = %#v total=%d, want pending only", page.Rows, page.Total)
 	}
 	if got := testFacetOptionValues(page.FacetValues, "statuses"); !slices.Equal(got, []string{"Degraded", "Pending", "Running"}) {

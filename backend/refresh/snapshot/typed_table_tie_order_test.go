@@ -17,9 +17,9 @@ import (
 func TestTiedSortValuesOrderByHumanKey(t *testing.T) {
 	store := querypage.NewStore(configQuerypageSchema())
 	rows := []ConfigSummary{
-		{Kind: "Secret", Name: "app", Namespace: "alpha"},
-		{Kind: "ConfigMap", Name: "app", Namespace: "beta"},
-		{Kind: "ConfigMap", Name: "app", Namespace: "alpha"},
+		{Ref: testCanonicalRowRef("Secret", "alpha", "app")},
+		{Ref: testCanonicalRowRef("ConfigMap", "beta", "app")},
+		{Ref: testCanonicalRowRef("ConfigMap", "alpha", "app")},
 	}
 	for _, r := range rows {
 		store.Upsert(r)

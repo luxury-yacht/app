@@ -50,13 +50,9 @@ func projectNamespaceEventSummary(meta ClusterMeta, event *corev1.Event) (EventS
 	facts := eventres.BuildFacts(meta.ClusterID, event)
 	timestamp := eventres.EventTimestamp(event).Time
 	return EventSummary{
-		ClusterMeta:      meta,
 		Ref:              streamrows.NewResourceRef(meta, eventres.Identity, event),
 		Kind:             event.InvolvedObject.Kind,
-		Name:             event.Name,
-		UID:              string(event.UID),
 		ResourceVersion:  event.ResourceVersion,
-		Namespace:        event.InvolvedObject.Namespace,
 		ObjectNamespace:  event.InvolvedObject.Namespace,
 		ObjectUID:        string(event.InvolvedObject.UID),
 		ObjectAPIVersion: event.InvolvedObject.APIVersion,
@@ -106,13 +102,9 @@ func namespaceEventsQuerypageSchema() querypage.Schema[EventSummary] {
 
 // EventSummary captures the essential event fields for display.
 type EventSummary struct {
-	ClusterMeta
 	Ref              resourcemodel.ResourceRef   `json:"ref"`
 	Kind             string                      `json:"kind"`
-	Name             string                      `json:"name"`
-	UID              string                      `json:"uid"`
 	ResourceVersion  string                      `json:"resourceVersion"`
-	Namespace        string                      `json:"namespace"`
 	ObjectNamespace  string                      `json:"objectNamespace"`
 	ObjectUID        string                      `json:"objectUid"`
 	ObjectAPIVersion string                      `json:"objectApiVersion"`
@@ -212,7 +204,7 @@ func (b *NamespaceEventsBuilder) Build(ctx context.Context, scope string) (*refr
 			}
 			// For a specific namespace the involved-object namespace must match the
 			// request (mirrors the prior filtered step); all-namespaces keeps every row.
-			if !parsedScope.AllNamespaces && summary.Namespace != parsedScope.Namespace {
+			if !parsedScope.AllNamespaces && summary.Ref.Namespace != parsedScope.Namespace {
 				continue
 			}
 			summaries = append(summaries, summary)
@@ -229,7 +221,7 @@ func (b *NamespaceEventsBuilder) Build(ctx context.Context, scope string) (*refr
 		if summaries[i].AgeTimestamp != summaries[j].AgeTimestamp {
 			return summaries[i].AgeTimestamp > summaries[j].AgeTimestamp
 		}
-		return summaries[i].Name < summaries[j].Name
+		return summaries[i].Ref.Name < summaries[j].Ref.Name
 	})
 
 	resolved := resolveTypedSnapshotPageViaStore(

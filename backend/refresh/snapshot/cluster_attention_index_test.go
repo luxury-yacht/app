@@ -270,7 +270,7 @@ func TestClusterAttentionIndexRestoredRowsReconcilePerOwnerKind(t *testing.T) {
 	restored.ReplaceSource("pods", nil)
 	rows := restored.Snapshot()
 	require.Len(t, rows, 1)
-	require.Equal(t, "Node", rows[0].Kind)
+	require.Equal(t, "Node", rows[0].Ref.Kind)
 }
 
 func TestClusterAttentionReconcileDoesNotPruneEventIgnoresBeforeInformerSync(t *testing.T) {

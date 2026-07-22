@@ -7,6 +7,7 @@ import (
 	"github.com/luxury-yacht/app/backend/kind/objectmapnode"
 	"github.com/luxury-yacht/app/backend/objectcatalog"
 	"github.com/luxury-yacht/app/backend/refresh/ingest"
+	"github.com/luxury-yacht/app/backend/resourcemodel"
 	"github.com/luxury-yacht/app/backend/resources/daemonset"
 	"github.com/stretchr/testify/require"
 	appsv1 "k8s.io/api/apps/v1"
@@ -16,16 +17,12 @@ import (
 
 func TestAttentionRecordFromBundleUsesCatalogIdentityAndTypedSummary(t *testing.T) {
 	bundle := ingest.Bundle{
-		Table: PodSummary{
-			ClusterMeta: ClusterMeta{ClusterID: "cluster-a", ClusterName: "A"},
-			Name:        "checkout-0", Namespace: "payments", Status: "CrashLoopBackOff",
+		Table: PodSummary{Ref: resourcemodel.ResourceRef{ClusterID: "cluster-a", Namespace: "payments", Name: "checkout-0"},
+			Status:             "CrashLoopBackOff",
 			StatusPresentation: "error", StatusReason: "CrashLoopBackOff", Restarts: 4,
 			AgeTimestamp: 1234,
 		},
-		Catalog: objectcatalog.Summary{
-			ClusterID: "cluster-a", ClusterName: "A", Group: "", Version: "v1",
-			Resource: "pods", Kind: "Pod", Namespace: "payments", Name: "checkout-0", UID: "pod-uid",
-		},
+		Catalog: objectcatalog.Summary{Ref: resourcemodel.ResourceRef{ClusterID: "cluster-a", Group: "", Version: "v1", Kind: "Pod", Resource: "pods", Namespace: "payments", Name: "checkout-0", UID: "pod-uid"}},
 	}
 
 	record, ok := attentionRecordFromBundle(attentionSourcePod, bundle)
@@ -101,7 +98,7 @@ func TestAttentionRecordFromEventUsesEventIdentityNotInvolvedObjectIdentity(t *t
 	index.UpsertSource("events", record)
 	rows := index.Snapshot()
 	require.Len(t, rows, 1)
-	require.Equal(t, "payments", rows[0].Namespace)
+	require.Equal(t, "payments", rows[0].Ref.Namespace)
 }
 
 func TestAttentionFindingForClusterScopedEventHasNoDisplayNamespace(t *testing.T) {
@@ -126,5 +123,5 @@ func TestAttentionFindingForClusterScopedEventHasNoDisplayNamespace(t *testing.T
 	rows := index.Snapshot()
 	require.Len(t, rows, 1)
 	require.Equal(t, "default", rows[0].Ref.Namespace, "event identity must retain the Event object's namespace")
-	require.Empty(t, rows[0].Namespace)
+	require.Empty(t, rows[0].Namespace, "the cluster-scoped involved object has no display namespace")
 }

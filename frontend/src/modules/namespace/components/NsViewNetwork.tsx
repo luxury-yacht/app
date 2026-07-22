@@ -40,13 +40,13 @@ const networkSpec: AggregatedResourceGridViewSpec<NetworkData> = {
   buildColumns: ({ identity, useShortResourceNames }) => [
     cf.createKindColumn<NetworkData>({
       key: 'kind',
-      getKind: (resource) => resource.kind,
+      getKind: (resource) => resource.ref.kind,
       getAlias: (resource) => resource.kindAlias,
-      getDisplayText: (resource) => getDisplayKind(resource.kind, useShortResourceNames),
+      getDisplayText: (resource) => getDisplayKind(resource.ref.kind, useShortResourceNames),
       onClick: identity.open,
       onAltClick: identity.navigate,
     }),
-    cf.createTextColumn<NetworkData>('name', 'Name', {
+    cf.createTextColumn<NetworkData>('name', 'Name', (resource) => resource.ref.name, {
       onClick: identity.open,
       onAltClick: identity.navigate,
       getClassName: () => 'object-panel-link',

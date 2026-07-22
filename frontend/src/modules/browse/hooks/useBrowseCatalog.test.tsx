@@ -9,7 +9,11 @@ import React, { act } from 'react';
 import * as ReactDOM from 'react-dom/client';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { makeCatalogSnapshotPayload } from '@/core/refresh/refreshContractTestBuilders';
-import type { CatalogItem, CatalogSnapshotPayload } from '@/core/refresh/types';
+import type {
+  CanonicalRowTestOverrides,
+  CatalogItem,
+  CatalogSnapshotPayload,
+} from '@/core/refresh/types';
 import { requireValue } from '@/test-utils/requireValue';
 import { type UseBrowseCatalogResult, useBrowseCatalog } from './useBrowseCatalog';
 
@@ -21,6 +25,8 @@ const mocks = vi.hoisted(() => ({
   getScopedDomainState: vi.fn(),
   setScopedDomainState: vi.fn(),
   eventUnsubscribe: vi.fn(),
+  lifecycle: vi.fn(),
+  handleCalls: [] as Array<Record<string, unknown>>,
   refreshFns: new Map<string, (reason?: string) => Promise<unknown>>(),
 }));
 
@@ -35,8 +41,14 @@ vi.mock('@/core/data-access', () => ({
   requestRefreshDomain: (...args: unknown[]) => mocks.requestRefreshDomain(...args),
   requestRefreshDomainState: (...args: unknown[]) => mocks.requestRefreshDomainState(...args),
   readRefreshDomainState: (...args: unknown[]) => mocks.getScopedDomainState(...args),
-  useScopedRefreshDomainLifecycle: vi.fn(),
-  useRefreshDomainHandle: ({ domain, scope }: { domain: string | null; scope: string | null }) => {
+  useScopedRefreshDomainLifecycle: (params: unknown) => mocks.lifecycle(params),
+  useRefreshDomainHandle: (params: {
+    domain: string | null;
+    scope: string | null;
+    demand?: string;
+  }) => {
+    mocks.handleCalls.push(params);
+    const { domain, scope } = params;
     const key = `${domain ?? ''}:${scope ?? ''}`;
     let refresh = mocks.refreshFns.get(key);
     if (!refresh) {
@@ -82,21 +94,26 @@ vi.mock('@/hooks/useDefaultTablePageSize', () => ({
   useDefaultTablePageSize: () => defaultTablePageSizeMock(),
 }));
 
-const makeItem = (overrides: Partial<CatalogItem>): CatalogItem => ({
-  clusterId: 'cluster-1',
-  clusterName: 'Cluster 1',
-  kind: 'Pod',
-  group: '',
-  version: 'v1',
-  resource: 'pods',
-  namespace: 'default',
-  name: 'pod-a',
-  uid: 'pod-a',
-  resourceVersion: '1',
-  creationTimestamp: '2026-01-01T00:00:00Z',
-  scope: 'Namespace',
-  ...overrides,
-});
+const makeItem = (overrides: CanonicalRowTestOverrides<CatalogItem>): CatalogItem => {
+  const { ref, ...row } = overrides;
+  return {
+    ref: {
+      clusterId: 'cluster-1',
+      group: '',
+      version: 'v1',
+      kind: 'Pod',
+      resource: 'pods',
+      namespace: 'default',
+      name: 'pod-a',
+      uid: 'pod-a',
+      ...ref,
+    },
+    resourceVersion: '1',
+    creationTimestamp: '2026-01-01T00:00:00Z',
+    scope: 'Namespace',
+    ...row,
+  };
+};
 
 const makePayload = (overrides: Partial<CatalogSnapshotPayload>): CatalogSnapshotPayload =>
   makeCatalogSnapshotPayload({
@@ -165,7 +182,26 @@ describe('useBrowseCatalog', () => {
     result = null;
     vi.clearAllMocks();
     mocks.refreshFns.clear();
+    mocks.handleCalls.length = 0;
     defaultTablePageSizeMock.mockReturnValue(50);
+  });
+
+  it('uses the current catalog page scopes as the shared live-stream demand', async () => {
+    mocks.readRefreshScopedDomain.mockImplementation((_domain: string, scope: string) => ({
+      status: 'idle',
+      data: null,
+      scope,
+    }));
+
+    await act(async () => {
+      root.render(<Harness />);
+      await Promise.resolve();
+    });
+
+    expect(mocks.lifecycle).not.toHaveBeenCalled();
+    expect(mocks.handleCalls).toEqual(
+      expect.arrayContaining([expect.objectContaining({ domain: 'catalog', demand: 'query' })])
+    );
   });
 
   afterEach(() => {
@@ -211,7 +247,7 @@ describe('useBrowseCatalog', () => {
   it('holds the last filter options while a filter-change scope swap has no data yet', async () => {
     const baseScope =
       'cluster-1|limit=2&resourceScope=namespace&namespace=default&scopeNamespace=default';
-    const first = makeItem({ uid: 'pod-a', name: 'pod-a' });
+    const first = makeItem({ ref: { uid: 'pod-a', name: 'pod-a' } });
     const baseState = {
       status: 'ready',
       data: makePayload({ items: [first], total: 1, batchSize: 1 }),
@@ -243,7 +279,7 @@ describe('useBrowseCatalog', () => {
       'cluster-1|limit=2&resourceScope=namespace&namespace=default&scopeNamespace=default';
     const metadataScope =
       'cluster-1|limit=1&resourceScope=namespace&namespace=default&scopeNamespace=default';
-    const first = makeItem({ uid: 'pod-a', name: 'pod-a' });
+    const first = makeItem({ ref: { uid: 'pod-a', name: 'pod-a' } });
     const readyState = {
       status: 'ready',
       data: makePayload({ items: [first], total: 1, batchSize: 1 }),
@@ -271,7 +307,7 @@ describe('useBrowseCatalog', () => {
       await Promise.resolve();
     });
 
-    expect(result?.items.map((item) => item.name)).toEqual(['pod-a']);
+    expect(result?.items.map((item) => item.ref.name)).toEqual(['pod-a']);
     expect(result?.hasLoadedOnce).toBe(true);
     expect(result?.loading).toBe(false);
 
@@ -283,7 +319,7 @@ describe('useBrowseCatalog', () => {
       await Promise.resolve();
     });
 
-    expect(result?.items.map((item) => item.name)).toEqual(['pod-a']);
+    expect(result?.items.map((item) => item.ref.name)).toEqual(['pod-a']);
     expect(result?.loading).toBe(false);
   });
 
@@ -292,7 +328,7 @@ describe('useBrowseCatalog', () => {
       'cluster-1|limit=2&resourceScope=namespace&namespace=default&scopeNamespace=default';
     const metadataScope =
       'cluster-1|limit=1&resourceScope=namespace&namespace=default&scopeNamespace=default';
-    const first = makeItem({ uid: 'pod-a', name: 'pod-a' });
+    const first = makeItem({ ref: { uid: 'pod-a', name: 'pod-a' } });
     // Doorbells write signalVersions (never touched by payload applies) plus
     // the folded sourceVersion — bumpSourceVersionOnly's exact shape.
     let baseState = {
@@ -324,7 +360,7 @@ describe('useBrowseCatalog', () => {
       await Promise.resolve();
     });
 
-    expect(result?.items.map((item) => item.name)).toEqual(['pod-a']);
+    expect(result?.items.map((item) => item.ref.name)).toEqual(['pod-a']);
     mocks.requestRefreshDomain.mockClear();
 
     baseState = {
@@ -352,7 +388,7 @@ describe('useBrowseCatalog', () => {
       'cluster-1|limit=2&resourceScope=namespace&namespace=default&scopeNamespace=default';
     const metadataScope =
       'cluster-1|limit=1&resourceScope=namespace&namespace=default&scopeNamespace=default';
-    const first = makeItem({ uid: 'pod-a', name: 'pod-a' });
+    const first = makeItem({ ref: { uid: 'pod-a', name: 'pod-a' } });
     let baseState = {
       status: 'ready',
       data: makePayload({ items: [first], total: 1, batchSize: 1 }),
@@ -403,7 +439,7 @@ describe('useBrowseCatalog', () => {
       'cluster-1|limit=2&resourceScope=namespace&namespace=default&scopeNamespace=default';
     const metadataScope =
       'cluster-1|limit=1&resourceScope=namespace&namespace=default&scopeNamespace=default';
-    const first = makeItem({ uid: 'pod-a', name: 'pod-a' });
+    const first = makeItem({ ref: { uid: 'pod-a', name: 'pod-a' } });
     // Fresh mount: the scope has data (payload apply) but NO signalVersions —
     // doorbell values exist only after the first doorbell rings.
     let baseState = {
@@ -455,6 +491,52 @@ describe('useBrowseCatalog', () => {
     });
   });
 
+  it('refetches the current catalog query when fallback reconciliation advances', async () => {
+    const baseScope =
+      'cluster-1|limit=2&resourceScope=namespace&namespace=default&scopeNamespace=default';
+    const metadataScope =
+      'cluster-1|limit=1&resourceScope=namespace&namespace=default&scopeNamespace=default';
+    const first = makeItem({ ref: { uid: 'pod-a', name: 'pod-a' } });
+    let baseState = {
+      status: 'ready',
+      data: makePayload({ items: [first], total: 1, batchSize: 1 }),
+      scope: baseScope,
+      queryReconcileVersion: 0,
+    };
+    const metadataState = {
+      status: 'ready',
+      data: makePayload({ items: [], total: 1, batchSize: 0 }),
+      scope: metadataScope,
+    };
+    mocks.readRefreshScopedDomain.mockImplementation((_domain: string, scope: string) => {
+      if (scope === baseScope) {
+        return baseState;
+      }
+      if (scope === metadataScope) {
+        return metadataState;
+      }
+      return { status: 'idle', data: null, scope };
+    });
+
+    await act(async () => {
+      root.render(<Harness />);
+      await Promise.resolve();
+    });
+    mocks.requestRefreshDomain.mockClear();
+
+    baseState = { ...baseState, queryReconcileVersion: 1 };
+    await act(async () => {
+      root.render(<Harness />);
+      await Promise.resolve();
+    });
+
+    expect(mocks.requestRefreshDomain).toHaveBeenCalledWith({
+      domain: 'catalog',
+      scope: baseScope,
+      reason: 'stream-signal',
+    });
+  });
+
   it('replaces the current row window with the next cursor page', async () => {
     const baseScope =
       'cluster-1|limit=2&resourceScope=namespace&namespace=default&scopeNamespace=default';
@@ -462,8 +544,8 @@ describe('useBrowseCatalog', () => {
       'cluster-1|limit=1&resourceScope=namespace&namespace=default&scopeNamespace=default';
     const pageScope =
       'cluster-1|limit=2&resourceScope=namespace&namespace=default&scopeNamespace=default&continue=2';
-    const first = makeItem({ uid: 'pod-a', name: 'pod-a' });
-    const second = makeItem({ uid: 'pod-b', name: 'pod-b' });
+    const first = makeItem({ ref: { uid: 'pod-a', name: 'pod-a' } });
+    const second = makeItem({ ref: { uid: 'pod-b', name: 'pod-b' } });
     const baseState = {
       status: 'ready',
       data: makePayload({ items: [first], continue: '2', total: 2, batchSize: 1 }),
@@ -496,7 +578,7 @@ describe('useBrowseCatalog', () => {
       await Promise.resolve();
     });
 
-    expect(result?.items.map((item) => item.name)).toEqual(['pod-a']);
+    expect(result?.items.map((item) => item.ref.name)).toEqual(['pod-a']);
     expect(result?.continueToken).toBe('2');
     expect(result?.pageIndex).toBe(1);
 
@@ -518,14 +600,14 @@ describe('useBrowseCatalog', () => {
     expect(mocks.setScopedDomainEnabled).not.toHaveBeenCalledWith('catalog', pageScope, true);
     expect(mocks.setScopedDomainEnabled).not.toHaveBeenCalledWith('catalog', pageScope, false);
     expect(mocks.setScopedDomainState).not.toHaveBeenCalled();
-    expect(result?.items.map((item) => item.name)).toEqual(['pod-b']);
+    expect(result?.items.map((item) => item.ref.name)).toEqual(['pod-b']);
     expect(result?.continueToken).toBeNull();
     expect(result?.isRequestingMore).toBe(false);
     expect(result?.pageIndex).toBe(2);
   });
 
   it('fetchAllRows rejects when a page fails instead of returning a partial result', async () => {
-    const first = makeItem({ uid: 'pod-a', name: 'pod-a' });
+    const first = makeItem({ ref: { uid: 'pod-a', name: 'pod-a' } });
     mocks.readRefreshScopedDomain.mockReturnValue({
       status: 'ready',
       data: makePayload({ items: [first], total: 2, batchSize: 1 }),
@@ -553,7 +635,7 @@ describe('useBrowseCatalog', () => {
   });
 
   it('fetchAllRows pages at the backend max page size', async () => {
-    const first = makeItem({ uid: 'pod-a', name: 'pod-a' });
+    const first = makeItem({ ref: { uid: 'pod-a', name: 'pod-a' } });
     mocks.readRefreshScopedDomain.mockReturnValue({
       status: 'ready',
       data: makePayload({ items: [first], total: 1, batchSize: 1 }),
@@ -591,35 +673,35 @@ describe('useBrowseCatalog', () => {
     const metadataScope = 'cluster-1|limit=1&resourceScope=cluster&namespace=cluster';
     const pageScope = 'cluster-1|limit=2&resourceScope=cluster&namespace=cluster&continue=page-2';
     const first = makeItem({
-      kind: 'Node',
-      resource: 'nodes',
-      namespace: undefined,
-      uid: 'node-a',
-      name: 'node-a',
+      ref: { kind: 'Node', resource: 'nodes', namespace: undefined, uid: 'node-a', name: 'node-a' },
+
       scope: 'Cluster',
     });
     const refreshedFirst = makeItem({
-      kind: 'Node',
-      resource: 'nodes',
-      namespace: undefined,
-      uid: 'node-a',
-      name: 'node-a-refreshed',
+      ref: {
+        kind: 'Node',
+        resource: 'nodes',
+        namespace: undefined,
+        uid: 'node-a',
+        name: 'node-a-refreshed',
+      },
+
       scope: 'Cluster',
     });
     const second = makeItem({
-      kind: 'Node',
-      resource: 'nodes',
-      namespace: undefined,
-      uid: 'node-b',
-      name: 'node-b',
+      ref: { kind: 'Node', resource: 'nodes', namespace: undefined, uid: 'node-b', name: 'node-b' },
+
       scope: 'Cluster',
     });
     const refreshedSecond = makeItem({
-      kind: 'Node',
-      resource: 'nodes',
-      namespace: undefined,
-      uid: 'node-b',
-      name: 'node-b-refreshed',
+      ref: {
+        kind: 'Node',
+        resource: 'nodes',
+        namespace: undefined,
+        uid: 'node-b',
+        name: 'node-b-refreshed',
+      },
+
       scope: 'Cluster',
     });
     let basePayload = makePayload({
@@ -676,7 +758,7 @@ describe('useBrowseCatalog', () => {
       await Promise.resolve();
     });
 
-    expect(result?.items.map((item) => item.name)).toEqual(['node-a']);
+    expect(result?.items.map((item) => item.ref.name)).toEqual(['node-a']);
     expect(result?.continueToken).toBe('page-2');
     expect(result?.pageIndex).toBe(1);
 
@@ -689,7 +771,7 @@ describe('useBrowseCatalog', () => {
       await new Promise((resolve) => setTimeout(resolve, 0));
     });
 
-    expect(result?.items.map((item) => item.name)).toEqual(['node-b']);
+    expect(result?.items.map((item) => item.ref.name)).toEqual(['node-b']);
     expect(result?.previousToken).toBe('page-1');
     expect(result?.continueToken).toBe('page-3');
     expect(result?.pageIndex).toBe(2);
@@ -709,7 +791,7 @@ describe('useBrowseCatalog', () => {
       await Promise.resolve();
     });
 
-    expect(result?.items.map((item) => item.name)).toEqual(['node-b']);
+    expect(result?.items.map((item) => item.ref.name)).toEqual(['node-b']);
     expect(result?.previousToken).toBe('page-1');
     expect(result?.continueToken).toBe('page-3');
     expect(result?.pageIndex).toBe(2);
@@ -742,7 +824,7 @@ describe('useBrowseCatalog', () => {
       reason: 'user',
     });
     expect(mocks.requestRefreshDomain).not.toHaveBeenCalled();
-    expect(result?.items.map((item) => item.name)).toEqual(['node-b-refreshed']);
+    expect(result?.items.map((item) => item.ref.name)).toEqual(['node-b-refreshed']);
     expect(result?.previousToken).toBe('page-1');
     expect(result?.continueToken).toBe('page-3');
     expect(result?.pageIndex).toBe(2);
@@ -871,13 +953,10 @@ describe('useBrowseCatalog', () => {
       'cluster-1|limit=1&resourceScope=namespace&namespace=default&scopeNamespace=default';
     const clusterScope = 'cluster-1|limit=2&resourceScope=cluster&namespace=cluster';
     const clusterMetadataScope = 'cluster-1|limit=1&resourceScope=cluster&namespace=cluster';
-    const pod = makeItem({ uid: 'pod-a', name: 'pod-a' });
+    const pod = makeItem({ ref: { uid: 'pod-a', name: 'pod-a' } });
     const node = makeItem({
-      kind: 'Node',
-      resource: 'nodes',
-      namespace: undefined,
-      uid: 'node-a',
-      name: 'node-a',
+      ref: { kind: 'Node', resource: 'nodes', namespace: undefined, uid: 'node-a', name: 'node-a' },
+
       scope: 'Cluster',
     });
     let clusterReady = false;
@@ -927,7 +1006,7 @@ describe('useBrowseCatalog', () => {
       await Promise.resolve();
     });
 
-    expect(result?.items.map((item) => item.name)).toEqual(['pod-a']);
+    expect(result?.items.map((item) => item.ref.name)).toEqual(['pod-a']);
     expect(result?.hasLoadedOnce).toBe(true);
 
     await act(async () => {
@@ -945,7 +1024,7 @@ describe('useBrowseCatalog', () => {
       await Promise.resolve();
     });
 
-    expect(result?.items.map((item) => item.name)).toEqual(['node-a']);
+    expect(result?.items.map((item) => item.ref.name)).toEqual(['node-a']);
     expect(result?.hasLoadedOnce).toBe(true);
     expect(result?.loading).toBe(false);
   });
@@ -957,8 +1036,8 @@ describe('useBrowseCatalog', () => {
       'cluster-1|limit=1&resourceScope=namespace&namespace=default&scopeNamespace=default';
     const pageScope =
       'cluster-1|limit=2&resourceScope=namespace&namespace=default&scopeNamespace=default&continue=prev';
-    const first = makeItem({ uid: 'pod-a', name: 'pod-a' });
-    const second = makeItem({ uid: 'pod-b', name: 'pod-b' });
+    const first = makeItem({ ref: { uid: 'pod-a', name: 'pod-a' } });
+    const second = makeItem({ ref: { uid: 'pod-b', name: 'pod-b' } });
     const baseState = {
       status: 'ready',
       data: makePayload({
@@ -997,7 +1076,7 @@ describe('useBrowseCatalog', () => {
       await Promise.resolve();
     });
 
-    expect(result?.items.map((item) => item.name)).toEqual(['pod-b']);
+    expect(result?.items.map((item) => item.ref.name)).toEqual(['pod-b']);
     expect(result?.previousToken).toBe('prev');
 
     await act(async () => {
@@ -1014,7 +1093,7 @@ describe('useBrowseCatalog', () => {
       scope: pageScope,
       reason: 'user',
     });
-    expect(result?.items.map((item) => item.name)).toEqual(['pod-a']);
+    expect(result?.items.map((item) => item.ref.name)).toEqual(['pod-a']);
     expect(result?.previousToken).toBeNull();
     expect(result?.continueToken).toBe('next');
     expect(result?.pageIndex).toBe(1);
@@ -1027,7 +1106,7 @@ describe('useBrowseCatalog', () => {
       'cluster-1|limit=1&resourceScope=namespace&namespace=default&scopeNamespace=default';
     const pageScope =
       'cluster-1|limit=2&resourceScope=namespace&namespace=default&scopeNamespace=default&continue=bad-cursor';
-    const first = makeItem({ uid: 'pod-a', name: 'pod-a' });
+    const first = makeItem({ ref: { uid: 'pod-a', name: 'pod-a' } });
     const baseState = {
       status: 'ready',
       data: makePayload({ items: [first], continue: 'bad-cursor', total: 2, batchSize: 1 }),
@@ -1204,7 +1283,7 @@ describe('useBrowseCatalog', () => {
       'cluster-1|limit=2&resourceScope=namespace&namespace=default&scopeNamespace=default';
     const metadataScope =
       'cluster-1|limit=1&resourceScope=namespace&namespace=default&scopeNamespace=default';
-    const first = makeItem({ uid: 'pod-0', name: 'pod-0' });
+    const first = makeItem({ ref: { uid: 'pod-0', name: 'pod-0' } });
     const baseState = {
       status: 'ready',
       data: makePayload({ items: [first], continue: 'page-1', total: 21, batchSize: 1 }),
@@ -1234,7 +1313,7 @@ describe('useBrowseCatalog', () => {
         data: {
           status: 'ready',
           data: makePayload({
-            items: [makeItem({ uid: `pod-${pageNumber}`, name: `pod-${pageNumber}` })],
+            items: [makeItem({ ref: { uid: `pod-${pageNumber}`, name: `pod-${pageNumber}` } })],
             continue: nextToken,
             total: 21,
             batchSize: 1,
@@ -1258,7 +1337,7 @@ describe('useBrowseCatalog', () => {
         await Promise.resolve();
         await new Promise((resolve) => setTimeout(resolve, 0));
       });
-      expect(result?.items.map((item) => item.name)).toEqual([`pod-${page}`]);
+      expect(result?.items.map((item) => item.ref.name)).toEqual([`pod-${page}`]);
       expect(result?.items).toHaveLength(1);
       expect(result?.pageIndex).toBe(page + 1);
     }
@@ -1307,7 +1386,10 @@ describe('doorbell refetch quietness on a paged catalog', () => {
       'cluster-1|limit=2&resourceScope=namespace&namespace=default&scopeNamespace=default';
     const metadataScope =
       'cluster-1|limit=1&resourceScope=namespace&namespace=default&scopeNamespace=default';
-    const pageOne = [makeItem({ uid: 'a', name: 'a' }), makeItem({ uid: 'b', name: 'b' })];
+    const pageOne = [
+      makeItem({ ref: { uid: 'a', name: 'a' } }),
+      makeItem({ ref: { uid: 'b', name: 'b' } }),
+    ];
     let baseState = {
       status: 'ready',
       data: makePayload({
@@ -1338,7 +1420,10 @@ describe('doorbell refetch quietness on a paged catalog', () => {
     });
 
     const pageTwo = makePayload({
-      items: [makeItem({ uid: 'c', name: 'c' }), makeItem({ uid: 'd', name: 'd' })],
+      items: [
+        makeItem({ ref: { uid: 'c', name: 'c' } }),
+        makeItem({ ref: { uid: 'd', name: 'd' } }),
+      ],
       total: 4,
       batchSize: 2,
       previous: 'tok-1-prev',
@@ -1359,7 +1444,7 @@ describe('doorbell refetch quietness on a paged catalog', () => {
       root.render(<Harness />);
       await Promise.resolve();
     });
-    expect(result?.items.map((item) => item.name)).toEqual(['a', 'b']);
+    expect(result?.items.map((item) => item.ref.name)).toEqual(['a', 'b']);
 
     await act(async () => {
       result?.pagination.onRequestMore();
@@ -1372,7 +1457,7 @@ describe('doorbell refetch quietness on a paged catalog', () => {
       await Promise.resolve();
       await Promise.resolve();
     });
-    expect(result?.items.map((item) => item.name)).toEqual(['c', 'd']);
+    expect(result?.items.map((item) => item.ref.name)).toEqual(['c', 'd']);
     expect(result?.pagination.isRequestingMore).toBe(false);
 
     // Doorbell ring: hold the quiet current-page refetch in flight and assert
@@ -1405,6 +1490,6 @@ describe('doorbell refetch quietness on a paged catalog', () => {
       await Promise.resolve();
     });
     expect(result?.pagination.isRequestingMore).toBe(false);
-    expect(result?.items.map((item) => item.name)).toEqual(['c', 'd']);
+    expect(result?.items.map((item) => item.ref.name)).toEqual(['c', 'd']);
   });
 });

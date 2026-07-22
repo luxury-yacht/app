@@ -15,10 +15,8 @@ describe('joinNamespaceMetrics', () => {
   it('joins utilization only when the complete namespace identity matches', () => {
     const namespaces = [
       {
-        clusterId: 'cluster-a',
-        clusterName: 'alpha',
-        ref: ref('cluster-a', 'payments'),
-        name: 'payments',
+        ref: { ...ref('cluster-a', 'payments'), clusterId: 'cluster-a', name: 'payments' },
+
         phase: 'Active',
         resourceVersion: '1',
         creationTimestamp: 1,
@@ -34,8 +32,7 @@ describe('joinNamespaceMetrics', () => {
 
     expect(joinNamespaceMetrics(namespaces, metrics)).toEqual([
       expect.objectContaining({
-        clusterId: 'cluster-a',
-        name: 'payments',
+        ref: expect.objectContaining({ clusterId: 'cluster-a', name: 'payments' }),
         cpuUsageMilli: 125,
         memoryUsageBytes: 64,
       }),

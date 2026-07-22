@@ -327,7 +327,7 @@ func (b *NamespaceWorkloadsBuilder) buildSnapshot(
 		b.queryCapabilities(),
 		config.SnapshotNamespaceWorkloadsEntryLimit,
 		"workloads",
-		func(r WorkloadSummary) string { return r.Kind },
+		func(r WorkloadSummary) string { return r.Ref.Kind },
 		issues,
 		// Reuse the per-Build engine store across page turns/sort flips while the
 		// version watermark and metric tick (DynamicRevision, inside the cache
@@ -389,7 +389,6 @@ func assembleWorkloadRows(
 	)
 
 	appendSummary := func(summary WorkloadSummary, obj metav1.Object) {
-		summary.ClusterMeta = meta
 		// Mark as HPA-managed only when the HPA target carries the same full
 		// GVK. Kind/name-only matching can collide with custom resources.
 		if hpaKnown {
@@ -414,7 +413,7 @@ func assembleWorkloadRows(
 	// carries no per-object resourceVersion, so each is appended with a nil object — the
 	// workload store's RV is folded into the version watermark once below.
 	reaggregate := func(ownRow WorkloadSummary) WorkloadSummary {
-		key := workloadOwnerKey(ownRow.Kind, ownRow.Namespace, ownRow.Name)
+		key := workloadOwnerKey(ownRow.Ref.Kind, ownRow.Ref.Namespace, ownRow.Ref.Name)
 		return reaggregateWorkloadSummary(ownRow, podsByOwner[key], podUsage)
 	}
 	workloadEmitted := false
@@ -485,14 +484,14 @@ func (b *NamespaceWorkloadsBuilder) allowedWorkloadKinds(ctx context.Context) ma
 
 func sortWorkloadSummaries(items []WorkloadSummary) {
 	sort.SliceStable(items, func(i, j int) bool {
-		if items[i].Kind != items[j].Kind {
-			return items[i].Kind < items[j].Kind
+		if items[i].Ref.Kind != items[j].Ref.Kind {
+			return items[i].Ref.Kind < items[j].Ref.Kind
 		}
-		if items[i].Name != items[j].Name {
-			return items[i].Name < items[j].Name
+		if items[i].Ref.Name != items[j].Ref.Name {
+			return items[i].Ref.Name < items[j].Ref.Name
 		}
-		if items[i].Namespace != items[j].Namespace {
-			return items[i].Namespace < items[j].Namespace
+		if items[i].Ref.Namespace != items[j].Ref.Namespace {
+			return items[i].Ref.Namespace < items[j].Ref.Namespace
 		}
 		return items[i].Status < items[j].Status
 	})
@@ -539,17 +538,17 @@ func workloadsQuerypageSchema() querypage.Schema[WorkloadSummary] {
 func workloadTableQueryAdapter() typedTableQueryAdapter[WorkloadSummary] {
 	return typedTableQueryAdapter[WorkloadSummary]{
 		Key: func(row WorkloadSummary) string {
-			return fmt.Sprintf("%s/%s/%s", strings.ToLower(row.Kind), strings.ToLower(row.Namespace), strings.ToLower(row.Name))
+			return fmt.Sprintf("%s/%s/%s", strings.ToLower(row.Ref.Kind), strings.ToLower(row.Ref.Namespace), strings.ToLower(row.Ref.Name))
 		},
 		AnchorKey: namespacedTableKey,
-		Namespace: func(row WorkloadSummary) string { return row.Namespace },
-		Kind:      func(row WorkloadSummary) string { return row.Kind },
+		Namespace: func(row WorkloadSummary) string { return row.Ref.Namespace },
+		Kind:      func(row WorkloadSummary) string { return row.Ref.Kind },
 		Facets:    workloadQueryFacets(),
 		SearchText: func(row WorkloadSummary) []string {
 			return []string{
-				row.Kind,
-				row.Name,
-				row.Namespace,
+				row.Ref.Kind,
+				row.Ref.Name,
+				row.Ref.Namespace,
 				row.Status,
 				row.Ready,
 			}
@@ -575,9 +574,9 @@ func workloadTableQueryAdapter() typedTableQueryAdapter[WorkloadSummary] {
 		SortValue: func(row WorkloadSummary, field string) string {
 			switch strings.ToLower(field) {
 			case "kind":
-				return row.Kind
+				return row.Ref.Kind
 			case "namespace":
-				return row.Namespace
+				return row.Ref.Namespace
 			case "status":
 				return row.Status
 			case "ready":
@@ -591,7 +590,7 @@ func workloadTableQueryAdapter() typedTableQueryAdapter[WorkloadSummary] {
 			case "age":
 				return row.Age
 			default:
-				return row.Name
+				return row.Ref.Name
 			}
 		},
 		NumericSort: func(row WorkloadSummary, field string) (float64, bool) {
@@ -653,9 +652,6 @@ func (b *NamespaceWorkloadsBuilder) buildDeploymentSummary(
 
 	return WorkloadSummary{
 		Ref:                  model.Ref,
-		Kind:                 deployment.Identity.Kind,
-		Name:                 deploy.Name,
-		Namespace:            deploy.Namespace,
 		Ready:                readyStatus,
 		Status:               model.Status.Label,
 		StatusState:          model.Status.State,
@@ -700,9 +696,6 @@ func (b *NamespaceWorkloadsBuilder) buildStatefulSetSummary(
 
 	return WorkloadSummary{
 		Ref:                  model.Ref,
-		Kind:                 statefulset.Identity.Kind,
-		Name:                 stateful.Name,
-		Namespace:            stateful.Namespace,
 		Ready:                readyStatus,
 		Status:               model.Status.Label,
 		StatusState:          model.Status.State,
@@ -745,9 +738,6 @@ func (b *NamespaceWorkloadsBuilder) buildDaemonSetSummary(
 
 	return WorkloadSummary{
 		Ref:                  model.Ref,
-		Kind:                 daemonset.Identity.Kind,
-		Name:                 daemon.Name,
-		Namespace:            daemon.Namespace,
 		Ready:                readyStatus,
 		Status:               model.Status.Label,
 		StatusState:          model.Status.State,
@@ -790,9 +780,6 @@ func (b *NamespaceWorkloadsBuilder) buildJobSummary(
 
 	return WorkloadSummary{
 		Ref:                  model.Ref,
-		Kind:                 jobres.Identity.Kind,
-		Name:                 job.Name,
-		Namespace:            job.Namespace,
 		Ready:                fmt.Sprintf("%d/%d", completed, desired),
 		Status:               model.Status.Label,
 		StatusState:          model.Status.State,
@@ -831,9 +818,6 @@ func (b *NamespaceWorkloadsBuilder) buildCronJobSummary(
 
 	return WorkloadSummary{
 		Ref:                  model.Ref,
-		Kind:                 cronjob.Identity.Kind,
-		Name:                 cron.Name,
-		Namespace:            cron.Namespace,
 		Ready:                fmt.Sprintf("%d", active),
 		Status:               model.Status.Label,
 		StatusState:          model.Status.State,
@@ -871,9 +855,6 @@ func buildStandalonePodSummaryFromRows(podSummary streamrows.PodSummary, agg str
 	sample := usage[fmt.Sprintf("%s/%s", agg.Namespace, agg.Name)]
 	return WorkloadSummary{
 		Ref:                  podSummary.Ref,
-		Kind:                 podres.Identity.Kind,
-		Name:                 podSummary.Name,
-		Namespace:            podSummary.Namespace,
 		Ready:                podSummary.Ready,
 		Status:               podSummary.Status,
 		StatusState:          podSummary.StatusState,
@@ -1010,15 +991,15 @@ func buildHPATargetSet(hpas []*autoscalingv1.HorizontalPodAutoscaler) map[string
 }
 
 func workloadHPATargetKey(summary WorkloadSummary) string {
-	switch summary.Kind {
+	switch summary.Ref.Kind {
 	case deployment.Identity.Kind, statefulset.Identity.Kind, daemonset.Identity.Kind:
-		return hpaTargetKey("apps", "v1", summary.Kind, summary.Namespace, summary.Name)
+		return hpaTargetKey("apps", "v1", summary.Ref.Kind, summary.Ref.Namespace, summary.Ref.Name)
 	case jobres.Identity.Kind, cronjob.Identity.Kind:
-		return hpaTargetKey("batch", "v1", summary.Kind, summary.Namespace, summary.Name)
+		return hpaTargetKey("batch", "v1", summary.Ref.Kind, summary.Ref.Namespace, summary.Ref.Name)
 	case podres.Identity.Kind:
-		return hpaTargetKey("", "v1", summary.Kind, summary.Namespace, summary.Name)
+		return hpaTargetKey("", "v1", summary.Ref.Kind, summary.Ref.Namespace, summary.Ref.Name)
 	default:
-		return hpaTargetKey("", "", summary.Kind, summary.Namespace, summary.Name)
+		return hpaTargetKey("", "", summary.Ref.Kind, summary.Ref.Namespace, summary.Ref.Name)
 	}
 }
 

@@ -96,7 +96,7 @@ func (m *Manager) broadcastStandalonePodWorkloadRow(namespace, name, resourceVer
 	ref := resourcemodel.NewResourceRef(
 		m.clusterMeta.ClusterID,
 		podres.Identity.Group, podres.Identity.Version, podres.Identity.Kind, podres.Identity.Resource,
-		namespace, name, catalog.UID,
+		namespace, name, catalog.Ref.UID,
 	)
 	m.broadcastWorkloadNotificationRef(ref, namespace, resourceVersion, MessageTypeModified)
 }
@@ -131,8 +131,8 @@ func (m *Manager) broadcastWorkloadNotificationRef(ref resourcemodel.ResourceRef
 // query-backed workloads table refetches.
 func (m *Manager) broadcastWorkloadFromPodSummary(summary snapshot.PodSummary, resourceVersion string, updateType MessageType) {
 	if summary.OwnerKind != "" && summary.OwnerKind != "None" && summary.OwnerName != "" && summary.OwnerName != "None" {
-		if ref, ok := m.lookupWorkloadRef(summary.OwnerKind, summary.Namespace, summary.OwnerName); ok {
-			m.broadcastWorkloadNotificationRef(ref, summary.Namespace, resourceVersion, MessageTypeModified)
+		if ref, ok := m.lookupWorkloadRef(summary.OwnerKind, summary.Ref.Namespace, summary.OwnerName); ok {
+			m.broadcastWorkloadNotificationRef(ref, summary.Ref.Namespace, resourceVersion, MessageTypeModified)
 			return
 		}
 	}
@@ -149,9 +149,9 @@ func (m *Manager) broadcastStandalonePodWorkloadFromSummary(summary snapshot.Pod
 	ref := resourcemodel.NewResourceRef(
 		m.clusterMeta.ClusterID,
 		podres.Identity.Group, podres.Identity.Version, podres.Identity.Kind, podres.Identity.Resource,
-		summary.Namespace, summary.Name, "",
+		summary.Ref.Namespace, summary.Ref.Name, "",
 	)
-	m.broadcastWorkloadNotificationRef(ref, summary.Namespace, "", updateType)
+	m.broadcastWorkloadNotificationRef(ref, summary.Ref.Namespace, "", updateType)
 }
 
 // podSummaryTerminal reports whether a pod's projected status presentation marks it as a

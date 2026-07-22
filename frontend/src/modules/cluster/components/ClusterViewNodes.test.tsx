@@ -141,6 +141,7 @@ vi.mock('@modules/kubernetes/config/KubeconfigContext', () => ({
   useKubeconfig: () => ({
     selectedKubeconfig: 'path:context',
     selectedClusterId: 'path:context',
+    selectedClusterName: 'alpha',
     selectedClusterIds: ['path:context', 'other:context'],
   }),
 }));
@@ -214,8 +215,13 @@ vi.mock('@/hooks/useShortNames', () => ({
 }));
 
 const baseNode: ClusterNodeRow = {
-  ref: makeResourceRef({ kind: 'Node', resource: 'nodes', name: 'node-1' }),
-  name: 'node-1',
+  ref: {
+    ...makeResourceRef({ kind: 'Node', resource: 'nodes', name: 'node-1' }),
+    name: 'node-1',
+    kind: 'Node',
+    clusterId: 'alpha:ctx',
+  },
+
   status: 'Ready',
   roles: 'worker',
   version: 'v1.28.0',
@@ -237,12 +243,11 @@ const baseNode: ClusterNodeRow = {
   taints: [],
   labels: {},
   restarts: 0,
-  kind: 'Node',
+
   cpu: '1',
   memory: '2Gi',
   unschedulable: false,
-  clusterId: 'alpha:ctx',
-  clusterName: 'alpha',
+
   age: '2h',
   ageTimestamp: 1_700_000_000_000,
 };

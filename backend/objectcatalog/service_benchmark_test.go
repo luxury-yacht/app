@@ -6,6 +6,7 @@ import (
 	stdruntime "runtime"
 	"testing"
 
+	"github.com/luxury-yacht/app/backend/resourcemodel"
 	"github.com/luxury-yacht/app/backend/resources/common"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/apis/meta/v1/unstructured"
@@ -144,16 +145,8 @@ func BenchmarkCatalogQueryChurnDuringPagination(b *testing.B) {
 				b.StopTimer()
 				items := cloneSummaryMap(svc.items)
 				name := fmt.Sprintf("deploy-before-anchor-%06d", i)
-				items[catalogKey(desc, "team-0000", name)] = Summary{
-					ClusterID:         svc.clusterID,
-					ClusterName:       svc.clusterName,
-					Kind:              desc.Kind,
-					Group:             desc.Group,
-					Version:           desc.Version,
-					Resource:          desc.Resource,
-					Namespace:         "team-0000",
-					Name:              name,
-					UID:               fmt.Sprintf("uid-churn-%d", i),
+				items[catalogKey(desc, "team-0000", name)] = Summary{Ref: resourcemodel.ResourceRef{ClusterID: svc.clusterID, Group: desc.Group, Version: desc.Version, Kind: desc.Kind, Resource: desc.Resource, Namespace: "team-0000", Name: name, UID: fmt.Sprintf("uid-churn-%d", i)},
+
 					ResourceVersion:   fmt.Sprintf("rv-churn-%d", i),
 					CreationTimestamp: "2025-12-31T00:00:00Z",
 					Scope:             ScopeNamespace,
@@ -211,16 +204,8 @@ func measureCatalogIndexResidency(objectsPerCluster, clusterCount int) uint64 {
 		for i := 0; i < objectsPerCluster; i++ {
 			namespace := fmt.Sprintf("team-%04d", i%1000)
 			name := fmt.Sprintf("deploy-%06d", i)
-			items[catalogKey(desc, namespace, name)] = Summary{
-				ClusterID:         svc.clusterID,
-				ClusterName:       svc.clusterName,
-				Kind:              desc.Kind,
-				Group:             desc.Group,
-				Version:           desc.Version,
-				Resource:          desc.Resource,
-				Namespace:         namespace,
-				Name:              name,
-				UID:               fmt.Sprintf("uid-%d-%d", clusterIdx, i),
+			items[catalogKey(desc, namespace, name)] = Summary{Ref: resourcemodel.ResourceRef{ClusterID: svc.clusterID, Group: desc.Group, Version: desc.Version, Kind: desc.Kind, Resource: desc.Resource, Namespace: namespace, Name: name, UID: fmt.Sprintf("uid-%d-%d", clusterIdx, i)},
+
 				ResourceVersion:   fmt.Sprintf("%d", i),
 				CreationTimestamp: "2026-01-01T00:00:00Z",
 				Scope:             ScopeNamespace,
@@ -265,16 +250,8 @@ func benchmarkCatalogServiceWithShape(objects int, shape benchmarkCatalogShape) 
 		desc := benchmarkDescriptorForObject(i, shape)
 		namespace := benchmarkNamespaceForObject(i, objects, shape)
 		name := benchmarkNameForObject(i, shape)
-		items[catalogKey(desc, namespace, name)] = Summary{
-			ClusterID:         svc.clusterID,
-			ClusterName:       svc.clusterName,
-			Kind:              desc.Kind,
-			Group:             desc.Group,
-			Version:           desc.Version,
-			Resource:          desc.Resource,
-			Namespace:         namespace,
-			Name:              name,
-			UID:               fmt.Sprintf("uid-%d", i),
+		items[catalogKey(desc, namespace, name)] = Summary{Ref: resourcemodel.ResourceRef{ClusterID: svc.clusterID, Group: desc.Group, Version: desc.Version, Kind: desc.Kind, Resource: desc.Resource, Namespace: namespace, Name: name, UID: fmt.Sprintf("uid-%d", i)},
+
 			ResourceVersion:   fmt.Sprintf("%d", i),
 			CreationTimestamp: "2026-01-01T00:00:00Z",
 			Scope:             ScopeNamespace,

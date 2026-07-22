@@ -55,7 +55,7 @@ func (m *Manager) lookupPodBundle(namespace, name string) (snapshot.PodSummary, 
 			continue
 		}
 		summary, ok := bundle.Table.(snapshot.PodSummary)
-		if !ok || summary.Namespace != namespace || summary.Name != name {
+		if !ok || summary.Ref.Namespace != namespace || summary.Ref.Name != name {
 			continue
 		}
 		catalog, _ := bundle.Catalog.(objectcatalog.Summary)
@@ -101,7 +101,7 @@ func (s podNotifyBundleSink) broadcastBundle(bundle ingest.Bundle, updateType Me
 	ref := resourcemodel.NewResourceRef(
 		m.clusterMeta.ClusterID,
 		podres.Identity.Group, podres.Identity.Version, podres.Identity.Kind, podres.Identity.Resource,
-		summary.Namespace, summary.Name, catalog.UID,
+		summary.Ref.Namespace, summary.Ref.Name, catalog.Ref.UID,
 	)
 	update := Update{
 		Type:            updateType,

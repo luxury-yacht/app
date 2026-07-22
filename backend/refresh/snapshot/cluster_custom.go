@@ -227,10 +227,10 @@ func (b *ClusterCustomBuilder) Build(ctx context.Context, scope string) (*refres
 	}
 
 	sort.Slice(summaries, func(i, j int) bool {
-		if summaries[i].Kind == summaries[j].Kind {
-			return summaries[i].Name < summaries[j].Name
+		if summaries[i].Ref.Kind == summaries[j].Ref.Kind {
+			return summaries[i].Ref.Name < summaries[j].Ref.Name
 		}
-		return summaries[i].Kind < summaries[j].Kind
+		return summaries[i].Ref.Kind < summaries[j].Ref.Kind
 	})
 
 	payload := ClusterCustomSnapshot{ClusterMeta: meta, Resources: summaries, Kinds: kinds}

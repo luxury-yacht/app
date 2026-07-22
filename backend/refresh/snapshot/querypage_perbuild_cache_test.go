@@ -13,9 +13,7 @@ func perBuildCacheItems(n int) []ConfigSummary {
 			kind = "Secret"
 		}
 		items[i] = ConfigSummary{
-			Kind:      kind,
-			Name:      fmt.Sprintf("cfg-%03d", i),
-			Namespace: "default",
+			Ref: testCanonicalRowRef(kind, "default", fmt.Sprintf("cfg-%03d", i)),
 		}
 	}
 	return items
@@ -54,8 +52,8 @@ func TestPerBuildCacheReusesStoreAcrossPageTurnsAndSorts(t *testing.T) {
 	if cache.store != built {
 		t.Fatal("page turn rebuilt the store (cache miss)")
 	}
-	if len(page2.Rows) != 20 || page2.Rows[0].Name != "cfg-020" {
-		t.Fatalf("cached page 2 = %d rows starting %q", len(page2.Rows), page2.Rows[0].Name)
+	if len(page2.Rows) != 20 || page2.Rows[0].Ref.Name != "cfg-020" {
+		t.Fatalf("cached page 2 = %d rows starting %q", len(page2.Rows), page2.Rows[0].Ref.Name)
 	}
 	if page2.Total != page1.Total || page2.UnfilteredTotal != 95 {
 		t.Fatalf("cached totals: total=%d unfiltered=%d", page2.Total, page2.UnfilteredTotal)
@@ -67,8 +65,8 @@ func TestPerBuildCacheReusesStoreAcrossPageTurnsAndSorts(t *testing.T) {
 	if cache.store != built {
 		t.Fatal("sort change rebuilt the store; the key must exclude sort/direction")
 	}
-	if desc.Rows[0].Name != "cfg-094" {
-		t.Fatalf("desc first row = %q", desc.Rows[0].Name)
+	if desc.Rows[0].Ref.Name != "cfg-094" {
+		t.Fatalf("desc first row = %q", desc.Rows[0].Ref.Name)
 	}
 }
 
@@ -115,10 +113,10 @@ func TestPerBuildCacheInvalidates(t *testing.T) {
 
 func TestPerBuildCacheSeparatesOpaqueFacetSelections(t *testing.T) {
 	items := []ConfigSummary{
-		{Kind: "ConfigMap", Name: "first-a-b", Namespace: "default", TypeAlias: "a,b"},
-		{Kind: "ConfigMap", Name: "first-c", Namespace: "default", TypeAlias: "c"},
-		{Kind: "ConfigMap", Name: "second-a", Namespace: "default", TypeAlias: "a"},
-		{Kind: "ConfigMap", Name: "second-b-c", Namespace: "default", TypeAlias: "b,c"},
+		{Ref: testCanonicalRowRef("ConfigMap", "default", "first-a-b"), TypeAlias: "a,b"},
+		{Ref: testCanonicalRowRef("ConfigMap", "default", "first-c"), TypeAlias: "c"},
+		{Ref: testCanonicalRowRef("ConfigMap", "default", "second-a"), TypeAlias: "a"},
+		{Ref: testCanonicalRowRef("ConfigMap", "default", "second-b-c"), TypeAlias: "b,c"},
 	}
 	adapter := configTableQueryAdapter()
 	adapter.Facets = []typedTableQueryFacet[ConfigSummary]{
@@ -152,8 +150,8 @@ func TestPerBuildCacheSeparatesOpaqueFacetSelections(t *testing.T) {
 	if len(page.Rows) != 2 {
 		t.Fatalf("second opaque facet selection returned %d rows", len(page.Rows))
 	}
-	if page.Rows[0].Name != "second-a" || page.Rows[1].Name != "second-b-c" {
-		t.Fatalf("second opaque facet selection returned rows %q and %q", page.Rows[0].Name, page.Rows[1].Name)
+	if page.Rows[0].Ref.Name != "second-a" || page.Rows[1].Ref.Name != "second-b-c" {
+		t.Fatalf("second opaque facet selection returned rows %q and %q", page.Rows[0].Ref.Name, page.Rows[1].Ref.Name)
 	}
 }
 

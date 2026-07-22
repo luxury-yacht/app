@@ -60,17 +60,17 @@ const HelmViewGrid: React.FC<HelmViewProps> = React.memo(
   ({ namespace, showNamespaceColumn = false }) => {
     const { openWithObject } = useObjectPanel();
     const { navigateToView } = useNavigateToView();
-    const { selectedClusterId } = useKubeconfig();
+    const { selectedClusterId, selectedClusterName } = useKubeconfig();
     const queryClusterId = selectedClusterId;
     const useShortResourceNames = useShortNames();
     const namespaceColumnLink = useNamespaceColumnLink<HelmData>('helm');
     const helmReference = useCallback(
       (resource: HelmData) =>
         buildRequiredObjectReference(
-          { ...resource.ref, clusterName: resource.clusterName },
+          { ...resource.ref, clusterName: selectedClusterName },
           { fallbackClusterId: queryClusterId }
         ),
-      [queryClusterId]
+      [queryClusterId, selectedClusterName]
     );
     const objectActions = useObjectActionController({
       context: 'gridtable',
@@ -100,7 +100,7 @@ const HelmViewGrid: React.FC<HelmViewProps> = React.memo(
           onAltClick: (resource) => navigateToView(helmReference(resource)),
           isInteractive: () => true,
         }),
-        cf.createTextColumn<HelmData>('name', 'Name', {
+        cf.createTextColumn<HelmData>('name', 'Name', (resource) => resource.ref.name, {
           onClick: handleResourceClick,
           onAltClick: (resource) => navigateToView(helmReference(resource)),
           getClassName: () => 'object-panel-link',
@@ -109,8 +109,8 @@ const HelmViewGrid: React.FC<HelmViewProps> = React.memo(
 
       if (showNamespaceColumn) {
         cf.upsertNamespaceColumn(baseColumns, {
-          accessor: (resource) => resource.namespace,
-          sortValue: (resource) => (resource.namespace || '').toLowerCase(),
+          accessor: (resource) => resource.ref.namespace,
+          sortValue: (resource) => (resource.ref.namespace || '').toLowerCase(),
           ...namespaceColumnLink,
         });
       }
@@ -289,13 +289,13 @@ const HelmViewGrid: React.FC<HelmViewProps> = React.memo(
 
         return objectActions.getMenuItems(
           buildRequiredObjectReference(
-            { ...resource.ref, clusterName: resource.clusterName },
+            { ...resource.ref, clusterName: selectedClusterName },
             { fallbackClusterId: queryClusterId },
             { status }
           )
         );
       },
-      [objectActions, queryClusterId]
+      [objectActions, queryClusterId, selectedClusterName]
     );
 
     const emptyMessage = useMemo(

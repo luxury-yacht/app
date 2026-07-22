@@ -33,7 +33,7 @@ type JobControllerOwnerLookup func(namespace, jobName string) (apiVersion, kind,
 // pod's current usage.
 func BuildStreamSummary(meta streamrows.ClusterMeta, pod *corev1.Pod, cpuUsageMilli, memUsageBytes int64, rsLister appslisters.ReplicaSetLister, jobOwnerLookup JobControllerOwnerLookup) streamrows.PodSummary {
 	if pod == nil {
-		return streamrows.PodSummary{ClusterMeta: meta}
+		return streamrows.PodSummary{}
 	}
 	return buildPodRow(meta, pod, cpuUsageMilli, memUsageBytes, buildReplicaSetDeploymentMapForPod(pod, rsLister), jobOwnerLookup)
 }
@@ -42,7 +42,7 @@ func BuildStreamSummary(meta streamrows.ClusterMeta, pod *corev1.Pod, cpuUsageMi
 // Deployment owner map (the full-snapshot path shares one map across all pods).
 func BuildStreamSummaryFromRSMap(meta streamrows.ClusterMeta, pod *corev1.Pod, cpuUsageMilli, memUsageBytes int64, rsMap map[string]string) streamrows.PodSummary {
 	if pod == nil {
-		return streamrows.PodSummary{ClusterMeta: meta}
+		return streamrows.PodSummary{}
 	}
 	return buildPodRow(meta, pod, cpuUsageMilli, memUsageBytes, rsMap, nil)
 }
@@ -53,10 +53,7 @@ func buildPodRow(meta streamrows.ClusterMeta, pod *corev1.Pod, cpuUsageMilli, me
 	owner := resolvePodOwner(pod, rsMap, jobOwnerLookup)
 	cpuReq, cpuLim, memReq, memLim := computeResourceTotals(pod)
 	return streamrows.PodSummary{
-		ClusterMeta:           meta,
 		Ref:                   model.Ref,
-		Name:                  pod.Name,
-		Namespace:             pod.Namespace,
 		Node:                  pod.Spec.NodeName,
 		Status:                model.Status.Label,
 		StatusState:           model.Status.State,

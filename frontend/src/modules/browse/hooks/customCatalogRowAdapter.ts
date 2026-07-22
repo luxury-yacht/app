@@ -1,19 +1,19 @@
-import type { ResourceGridTableRow } from '@modules/resource-grid/resourceGridTableTypes';
 import {
   buildRequiredCanonicalObjectRowKey,
   buildRequiredObjectReference,
 } from '@shared/utils/objectIdentity';
-import type { CatalogItem, CustomResourceSummary, ResourceRef } from '@/core/refresh/types';
+import type {
+  CanonicalResourceRef,
+  CatalogItem,
+  CustomResourceSummary,
+} from '@/core/refresh/types';
 
-export type CatalogBackedCustomResourceRow = Omit<CustomResourceSummary, 'age' | 'clusterName'> &
-  ResourceGridTableRow & {
-    kindAlias?: string;
-    clusterName?: string;
-    resource?: string;
-    age?: string;
-    ageTimestamp?: number;
-    creationTimestamp?: string;
-  };
+export type CatalogBackedCustomResourceRow = Omit<CustomResourceSummary, 'age'> & {
+  kindAlias?: string;
+  age?: string;
+  ageTimestamp?: number;
+  creationTimestamp?: string;
+};
 
 const asRecord = (value: unknown): Record<string, unknown> =>
   value !== null && typeof value === 'object' ? (value as Record<string, unknown>) : {};
@@ -26,7 +26,7 @@ const requiredString = (record: Record<string, unknown>, field: string): string 
   }
   return value;
 };
-type RequiredResourceRef = ResourceRef & {
+type RequiredResourceRef = CanonicalResourceRef & {
   resource: string;
   namespace: string;
   name: string;
@@ -65,13 +65,13 @@ export const customCatalogRowKey = (
 export const customCatalogObjectReference = (
   row: CatalogBackedCustomResourceRow,
   fallbackClusterId?: string | null,
-  options?: { requiresExplicitVersion?: boolean }
+  options?: { requiresExplicitVersion?: boolean; fallbackClusterName?: string }
 ) =>
   buildRequiredObjectReference(
     {
       ...row.ref,
       kindAlias: row.kindAlias,
-      clusterName: row.clusterName,
+      clusterName: options?.fallbackClusterName,
     },
     { fallbackClusterId },
     {
@@ -88,7 +88,7 @@ export const customCatalogObjectReference = (
 export const customCatalogCRDReference = (
   row: CatalogBackedCustomResourceRow,
   fallbackClusterId?: string | null,
-  options?: { includeRowMetadata?: boolean }
+  options?: { includeRowMetadata?: boolean; fallbackClusterName?: string }
 ) => {
   if (!row.crdName) {
     return null;
@@ -97,8 +97,8 @@ export const customCatalogCRDReference = (
     {
       kind: 'CustomResourceDefinition',
       name: row.crdName,
-      clusterId: row.clusterId,
-      clusterName: row.clusterName,
+      clusterId: row.ref.clusterId,
+      clusterName: options?.fallbackClusterName,
     },
     { fallbackClusterId },
     options?.includeRowMetadata
@@ -120,25 +120,11 @@ export const catalogItemToFallbackCustomRow = (
   const ageTimestamp = created && !Number.isNaN(created.getTime()) ? created.getTime() : undefined;
   return {
     ref: {
-      clusterId: item.clusterId,
-      group: item.group,
-      version: item.version,
-      kind: item.kind,
-      resource: item.resource,
-      namespace: item.namespace ?? '',
-      name: item.name,
-      uid: item.uid,
+      ...item.ref,
+      namespace: item.ref.namespace ?? '',
     },
-    kind: item.kind,
-    kindAlias: item.kind,
-    name: item.name,
-    namespace: item.namespace ?? '',
-    clusterId: item.clusterId,
-    clusterName: item.clusterName,
-    group: item.group,
-    version: item.version,
-    resource: item.resource,
-    crdName: item.group ? `${item.resource}.${item.group}` : item.resource,
+    kindAlias: item.ref.kind,
+    crdName: item.ref.group ? `${item.ref.resource}.${item.ref.group}` : item.ref.resource,
     status: item.actionFacts?.status,
     statusPresentation: item.actionFacts?.status,
     ageTimestamp,
@@ -151,14 +137,7 @@ export const normalizeHydratedCustomRow = (row: unknown): CatalogBackedCustomRes
   const ref = requiredResourceRef(record.ref);
   return {
     ref,
-    kind: ref.kind,
     kindAlias: optionalString(record.kindAlias) ?? ref.kind,
-    name: ref.name,
-    namespace: ref.namespace,
-    clusterId: ref.clusterId,
-    clusterName: optionalString(record.clusterName),
-    group: ref.group,
-    version: ref.version,
     crdName: optionalString(record.crdName),
     status: optionalString(record.status),
     statusState: optionalString(record.statusState),

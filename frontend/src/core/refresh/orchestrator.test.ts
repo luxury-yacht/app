@@ -1534,29 +1534,31 @@ describe('refreshOrchestrator', () => {
 
   it('reuses cached catalog diff items when polling snapshots are unchanged', async () => {
     const cachedItem = {
-      clusterId: 'cluster-a',
-      clusterName: 'Cluster A',
-      kind: 'Deployment',
-      group: 'apps',
-      version: 'v1',
-      resource: 'deployments',
-      namespace: 'default',
-      name: 'web',
-      uid: 'uid-1',
+      ref: {
+        clusterId: 'cluster-a',
+        group: 'apps',
+        version: 'v1',
+        kind: 'Deployment',
+        resource: 'deployments',
+        namespace: 'default',
+        name: 'web',
+        uid: 'uid-1',
+      },
       resourceVersion: '10',
       creationTimestamp: '2024-01-01T00:00:00Z',
       scope: 'Namespace' as const,
     };
     const changedItem = {
-      clusterId: 'cluster-a',
-      clusterName: 'Cluster A',
-      kind: 'ConfigMap',
-      group: '',
-      version: 'v1',
-      resource: 'configmaps',
-      namespace: 'default',
-      name: 'settings',
-      uid: 'uid-2',
+      ref: {
+        clusterId: 'cluster-a',
+        group: '',
+        version: 'v1',
+        kind: 'ConfigMap',
+        resource: 'configmaps',
+        namespace: 'default',
+        name: 'settings',
+        uid: 'uid-2',
+      },
       resourceVersion: '5',
       creationTimestamp: '2024-01-01T00:00:00Z',
       scope: 'Namespace' as const,
@@ -2265,6 +2267,50 @@ describe('refreshOrchestrator', () => {
     expect(clientMocks.fetchSnapshotMock).not.toHaveBeenCalled();
   });
 
+  it('asks query-only consumers to reconcile without fetching a bounded base snapshot', async () => {
+    registerStreamingClusterConfigDomain();
+    const scope = buildClusterScope('cluster-a', '');
+    orchestratorInternals.context = {
+      currentView: 'cluster',
+      activeClusterView: 'config',
+      selectedClusterIds: ['cluster-a'],
+      objectPanel: { isOpen: false },
+    };
+    refreshOrchestrator.acquireScopedDomainLease('cluster-config', scope, { demand: 'query' });
+    await Promise.resolve();
+    await Promise.resolve();
+    clientMocks.fetchSnapshotMock.mockClear();
+    resourceStreamMocks.isHealthy.mockReturnValue(false);
+
+    await subscriber?.(false);
+
+    expect(clientMocks.fetchSnapshotMock).not.toHaveBeenCalled();
+    expect(getScopedDomainState('cluster-config', scope).queryReconcileVersion).toBe(1);
+    refreshOrchestrator.releaseScopedDomainLease('cluster-config', scope, { demand: 'query' });
+  });
+
+  it('leaves a query-only consumer alone while its stream is healthy', async () => {
+    registerStreamingClusterConfigDomain();
+    const scope = buildClusterScope('cluster-a', '');
+    orchestratorInternals.context = {
+      currentView: 'cluster',
+      activeClusterView: 'config',
+      selectedClusterIds: ['cluster-a'],
+      objectPanel: { isOpen: false },
+    };
+    refreshOrchestrator.acquireScopedDomainLease('cluster-config', scope, { demand: 'query' });
+    await Promise.resolve();
+    await Promise.resolve();
+    clientMocks.fetchSnapshotMock.mockClear();
+    resourceStreamMocks.isHealthy.mockReturnValue(true);
+
+    await subscriber?.(false);
+
+    expect(clientMocks.fetchSnapshotMock).not.toHaveBeenCalled();
+    expect(getScopedDomainState('cluster-config', scope).queryReconcileVersion).toBeUndefined();
+    refreshOrchestrator.releaseScopedDomainLease('cluster-config', scope, { demand: 'query' });
+  });
+
   it('uses resource stream refreshOnce for manual refreshes of resource-stream domains with an active stream', async () => {
     registerStreamingPodsDomain();
     const scope = buildClusterScope('cluster-a', 'namespace:team-a');
@@ -2937,13 +2983,9 @@ describe('refreshOrchestrator', () => {
               name: 'existing',
               uid: 'existing-uid',
             },
-            kind: 'Event',
-            clusterId: 'cluster-a',
-            clusterName: 'Cluster A',
-            name: 'existing',
-            uid: 'existing-uid',
+
             resourceVersion: '1',
-            namespace: 'default',
+
             objectNamespace: 'default',
             objectUid: 'web-uid',
             objectApiVersion: 'v1',
@@ -3196,7 +3238,7 @@ describe('refreshOrchestrator', () => {
       'pods',
       expect.objectContaining({ scope })
     );
-    expect(getScopedDomainState('pods', scope).data?.rows?.[0]?.name).toBe('fresh-pod');
+    expect(getScopedDomainState('pods', scope).data?.rows?.[0]?.ref.name).toBe('fresh-pod');
   });
 
   it('removes runtime state for disconnected background clusters', () => {
@@ -3496,12 +3538,8 @@ describe('refreshOrchestrator', () => {
         clusterId: 'test-cluster',
         rows: [
           {
-            kind: 'StorageClass',
-            name: 'settings',
             details: 'cluster defaults',
             age: '5m',
-            clusterId: 'test-cluster',
-            clusterName: 'Test Cluster',
             ref: {
               clusterId: 'test-cluster',
               group: 'storage.k8s.io',

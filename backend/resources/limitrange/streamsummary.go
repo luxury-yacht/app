@@ -15,7 +15,7 @@ import (
 // BuildStreamSummary builds the namespace-quotas row for one LimitRange.
 func BuildStreamSummary(meta streamrows.ClusterMeta, limit *corev1.LimitRange) streamrows.QuotaSummary {
 	if limit == nil {
-		return streamrows.QuotaSummary{ClusterMeta: meta, Kind: "LimitRange"}
+		return streamrows.QuotaSummary{}
 	}
 	return streamrows.NewQuotaSummary(meta, Identity, limit, DescribeSummary(BuildFacts(limit)))
 }

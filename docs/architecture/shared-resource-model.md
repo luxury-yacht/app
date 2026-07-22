@@ -50,19 +50,30 @@ namespace  # when namespaced
 name       # when concrete
 ```
 
-The Kubernetes plural `resource` is descriptor/RBAC metadata. Populate it only
-when discovery, typed code, or the catalog supplies it.
+The Kubernetes plural `resource` is descriptor/RBAC metadata on the general
+`ResourceRef` type. Populate it only when discovery, typed code, or the catalog
+supplies it. Canonical snapshot, stream, catalog, and typed-query table rows are
+a narrower contract: their `ref` requires both `resource` and `name` because
+their producers own a known GVR and a concrete object.
 
 Synthetic app resources still need stable identity. Helm releases use
 `helm.sh/v3`, `HelmRelease`.
 
 Every concrete snapshot or stream row carries that identity in a backend-owned
-`ref`. Flat row fields such as `kind`, `name`, `namespace`, and `clusterId` are
-display, filtering, and compatibility projections; frontend table keys,
-navigation, panels, permissions, and actions consume `ref` instead of rebuilding
-identity from those fields. Shared row constructors use
+`ref`. Canonical object rows do not duplicate their own `clusterId`, group,
+version, kind, namespace, or name as flat fields. Backend query adapters and
+frontend table keys, filters, columns, navigation, panels, permissions, and
+actions consume `ref`. A flat identity-like field is allowed only when it has a
+different semantic meaning, such as an Event's involved-object kind, a CRD's
+described API group, or a Node's kubelet version. Shared row constructors use
 `streamrows.NewResourceRef`, while resource-specific snapshot projectors copy
 the `BuildResourceModel(...).Ref` produced by the owning kind package.
+
+`ClusterMeta` remains construction context and once-per-scope payload metadata;
+canonical rows do not embed it. Cross-cluster displays resolve `clusterName`
+from the cluster workspace registry instead of retaining it on every row.
+Canonical row keys stay derived from the complete ref rather than becoming a
+second stored identity string.
 
 An Event row has two distinct identities: `ref` identifies the Event resource,
 while `involvedObject` links to the resource the Event describes. Never replace
@@ -165,8 +176,9 @@ When changing resource semantics:
 3. Put durable resource semantics in typed facts.
 4. Keep raw, large, sensitive, or workflow-specific data out of shared facts.
 5. Project status and links across all affected surfaces.
-6. Put the canonical `ref` on every concrete row and consume it at frontend
-   identity boundaries; do not add another row-local GVK mapper.
+6. Put the canonical `ref` on every concrete row, require `resource` on table
+   rows, and consume it at backend query and frontend identity boundaries; do
+   not add flat own-identity projections or another row-local GVK mapper.
 7. Remove duplicate status/link derivation from migrated frontend/backend paths.
 8. Add parity tests for DTO projections and relationship navigation.
 

@@ -15,7 +15,7 @@ import (
 // BuildStreamSummary builds the cluster-config row for one IngressClass.
 func BuildStreamSummary(meta streamrows.ClusterMeta, ic *networkingv1.IngressClass) streamrows.ClusterConfigEntry {
 	if ic == nil {
-		return streamrows.ClusterConfigEntry{ClusterMeta: meta, Kind: "IngressClass"}
+		return streamrows.ClusterConfigEntry{}
 	}
 	facts := BuildFacts(ic)
 	return streamrows.NewClusterConfigEntry(meta, Identity, ic, facts.Controller, facts.DefaultClass)

@@ -29,7 +29,7 @@ import { RefreshErrorNotifier } from './refreshErrorNotifier';
 import { type RefresherTiming, refresherConfig } from './refresherConfig';
 import type { RefresherName, StaticRefresherName } from './refresherTypes';
 import type { DomainRegistration, StreamingRegistration } from './refreshRegistration';
-import { ClusterRefreshRuntime, makeInFlightKey } from './refreshRuntime';
+import { ClusterRefreshRuntime, makeInFlightKey, type RefreshDemand } from './refreshRuntime';
 import { isResourceStreamDomain, isResourceStreamViewActive } from './resourceStreamViews';
 import {
   normalizeNamespaceScope as normalizeNamespaceScopeValue,
@@ -56,6 +56,9 @@ type DomainFetchOptions = {
   isManual: boolean;
   signal?: AbortSignal;
   allowDisabledRetainedScope?: boolean;
+  // Scheduler-owned reconciliation. Query-only leases turn this into a
+  // current-page invalidation instead of fetching an unused base snapshot.
+  queryReconcile?: boolean;
   // The fetch was triggered by a stream doorbell; it bypasses the
   // skip-while-stream-healthy gate (the signal IS the stream's refresh).
   streamSignal?: boolean;
@@ -66,6 +69,7 @@ type PendingClusterReadinessRequest = {
   scope: string;
   isManual: boolean;
   streamSignal: boolean;
+  queryReconcile: boolean;
 };
 
 // Refreshers are disabled at registration by default. Most domains rely on
@@ -153,7 +157,9 @@ class RefreshOrchestrator {
   private recordPendingClusterReadiness(
     domain: RefreshDomain,
     scope: string,
-    options: Pick<DomainFetchOptions, 'isManual' | 'streamSignal'> = { isManual: false }
+    options: Pick<DomainFetchOptions, 'isManual' | 'streamSignal' | 'queryReconcile'> = {
+      isManual: false,
+    }
   ): void {
     for (const clusterId of parseClusterScopeList(scope).clusterIds) {
       let pending = this.pendingClusterReadiness.get(clusterId);
@@ -168,6 +174,7 @@ class RefreshOrchestrator {
         scope,
         isManual: Boolean(existing?.isManual || options.isManual),
         streamSignal: Boolean(existing?.streamSignal || options.streamSignal),
+        queryReconcile: Boolean(existing?.queryReconcile || options.queryReconcile),
       });
     }
   }
@@ -211,6 +218,7 @@ class RefreshOrchestrator {
         void this.fetchScopedDomain(domain, scope, {
           isManual: request.isManual,
           streamSignal: request.streamSignal,
+          queryReconcile: request.queryReconcile,
         }).catch((error) => {
           logWarning(
             `[refresh] deferred ${domain} fetch after cluster ${clusterId} became serviceable failed: ${
@@ -269,7 +277,11 @@ class RefreshOrchestrator {
       const unsubscribe = refreshManager.subscribe(
         config.refresherName,
         async (isManual, signal) => {
-          await this.refreshEnabledScopes(config.domain, { isManual, signal });
+          await this.refreshEnabledScopes(config.domain, {
+            isManual,
+            signal,
+            queryReconcile: true,
+          });
         }
       );
 
@@ -514,16 +526,25 @@ class RefreshOrchestrator {
   acquireScopedDomainLease(
     domain: RefreshDomain,
     scope: string,
-    options?: { preserveState?: boolean }
+    options?: { preserveState?: boolean; demand?: RefreshDemand }
   ): void {
     const normalizedScope = this.normalizeDomainScope(domain, scope);
     if (!normalizedScope) {
       throw new Error(`Scoped domain "${domain}" requires a non-empty scope value`);
     }
     const runtime = this.getRuntimeForScope(domain, normalizedScope);
-    const { firstLease } = runtime.acquireScopedLease(domain, normalizedScope);
+    const demand = options?.demand ?? 'snapshot';
+    const hadSnapshotDemand = runtime.hasScopedDemand(domain, normalizedScope, 'snapshot');
+    const { firstLease } = runtime.acquireScopedLease(domain, normalizedScope, demand);
     if (firstLease) {
       this.setScopedDomainEnabled(domain, normalizedScope, true, options);
+      return;
+    }
+    if (demand === 'snapshot' && !hadSnapshotDemand) {
+      const streaming = this.getConfig(domain).streaming;
+      if (streaming) {
+        this.reconcileInitialStreamingSnapshot(domain, normalizedScope, streaming);
+      }
     }
   }
 
@@ -533,14 +554,18 @@ class RefreshOrchestrator {
   releaseScopedDomainLease(
     domain: RefreshDomain,
     scope: string,
-    options?: { preserveState?: boolean }
+    options?: { preserveState?: boolean; demand?: RefreshDemand }
   ): void {
     const normalizedScope = this.normalizeDomainScope(domain, scope);
     if (!normalizedScope) {
       return;
     }
     const runtime = this.getRuntimeForScope(domain, normalizedScope);
-    const { lastLease } = runtime.releaseScopedLease(domain, normalizedScope);
+    const { lastLease } = runtime.releaseScopedLease(
+      domain,
+      normalizedScope,
+      options?.demand ?? 'snapshot'
+    );
     if (lastLease) {
       this.setScopedDomainEnabled(domain, normalizedScope, false, options);
     }
@@ -847,7 +872,14 @@ class RefreshOrchestrator {
     scope: string,
     streaming: StreamingRegistration
   ): void {
-    if (streaming.snapshotless || getScopedDomainState(domain, scope).data) {
+    const runtime = this.getRuntimeForScope(domain, scope);
+    const leaseAllowsSnapshot =
+      !runtime.hasScopedLease(domain, scope) || runtime.hasScopedDemand(domain, scope, 'snapshot');
+    if (
+      !leaseAllowsSnapshot ||
+      streaming.snapshotless ||
+      getScopedDomainState(domain, scope).data
+    ) {
       return;
     }
     void this.performFetch(domain, scope, {
@@ -1121,7 +1153,12 @@ class RefreshOrchestrator {
   async fetchScopedDomain<K extends RefreshDomain>(
     domain: K,
     scope: string,
-    options: { signal?: AbortSignal; isManual?: boolean; streamSignal?: boolean } = {}
+    options: {
+      signal?: AbortSignal;
+      isManual?: boolean;
+      streamSignal?: boolean;
+      queryReconcile?: boolean;
+    } = {}
   ): Promise<void> {
     const config = this.getConfig(domain);
     const normalizedScope = this.normalizeDomainScope(domain, scope);
@@ -1141,13 +1178,37 @@ class RefreshOrchestrator {
       this.recordPendingClusterReadiness(domain, normalizedScope, {
         isManual: Boolean(options.isManual),
         streamSignal: Boolean(options.streamSignal),
+        queryReconcile: Boolean(options.queryReconcile),
       });
+      return;
+    }
+
+    const runtime = this.getRuntimeForScope(domain, normalizedScope);
+    const hasQueryOnlyDemand =
+      runtime.hasScopedDemand(domain, normalizedScope, 'query') &&
+      !runtime.hasScopedDemand(domain, normalizedScope, 'snapshot');
+    if (options.queryReconcile && hasQueryOnlyDemand) {
+      let streamingHealthy = false;
+      if (config.streaming) {
+        const shouldStream = this.shouldStreamScope(domain, normalizedScope);
+        if (shouldStream) {
+          this.startStreamingScope(domain, normalizedScope, config.streaming);
+          streamingHealthy = this.isStreamingHealthy(domain, normalizedScope);
+        }
+      }
+      if (!options.isManual && streamingHealthy) {
+        return;
+      }
+      setScopedDomainState(domain, normalizedScope, (previous) => ({
+        ...previous,
+        queryReconcileVersion: (previous.queryReconcileVersion ?? 0) + 1,
+        scope: normalizedScope,
+      }));
       return;
     }
 
     if (config.streaming) {
       const shouldStream = this.shouldStreamScope(domain, normalizedScope);
-      const runtime = this.getRuntimeForScope(domain, normalizedScope);
       if (shouldStream) {
         if (options.isManual) {
           // For resource-stream (WebSocket) domains, use refreshOnce when
@@ -1601,7 +1662,13 @@ class RefreshOrchestrator {
       return;
     }
     const domain = payload.domain;
-    this.getRuntimeForScope(domain, scope).setStreamHealth(domain, scope, payload);
+    const previous = this.getRuntimeForScope(domain, scope).setStreamHealth(domain, scope, payload);
+    if (payload.status === 'healthy' && previous?.status !== 'healthy') {
+      setScopedDomainState(domain, scope, (state) => ({
+        ...state,
+        streamAcknowledgedVersion: (state.streamAcknowledgedVersion ?? 0) + 1,
+      }));
+    }
   };
 
   private handleClusterAuthFailed = (payload: { clusterId: string }) => {

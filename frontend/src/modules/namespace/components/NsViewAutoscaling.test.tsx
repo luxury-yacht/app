@@ -146,19 +146,20 @@ describe('NsViewAutoscaling', () => {
   });
 
   const baseHpa = (overrides: Partial<AutoscalingData> = {}): AutoscalingData => ({
-    kind: 'HorizontalPodAutoscaler',
-    name: 'web',
-    namespace: 'team-a',
-    clusterId: 'alpha:ctx',
-    clusterName: 'alpha',
-    ref: makeResourceRef({
-      group: 'autoscaling',
-      version: 'v2',
+    ref: {
+      ...makeResourceRef({
+        group: 'autoscaling',
+        version: 'v2',
+        kind: 'HorizontalPodAutoscaler',
+        resource: 'horizontalpodautoscalers',
+        namespace: 'team-a',
+        name: 'web',
+      }),
       kind: 'HorizontalPodAutoscaler',
-      resource: 'horizontalpodautoscalers',
-      namespace: 'team-a',
       name: 'web',
-    }),
+      namespace: 'team-a',
+      clusterId: 'alpha:ctx',
+    },
     target: 'Deployment/web',
     min: 1,
     max: 5,

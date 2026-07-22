@@ -6,6 +6,7 @@ import (
 
 	"k8s.io/apimachinery/pkg/runtime/schema"
 
+	"github.com/luxury-yacht/app/backend/resourcemodel"
 	"github.com/luxury-yacht/app/backend/resources/common"
 )
 
@@ -28,11 +29,7 @@ func seedAnchorService(t *testing.T, n int) *Service {
 	svc.items = map[string]Summary{}
 	for i := 0; i < n; i++ {
 		name := fmt.Sprintf("pod-%03d", i)
-		svc.items[catalogKey(podDesc, "default", name)] = Summary{
-			ClusterID: "cluster-a", Kind: "Pod", Group: "", Version: "v1",
-			Resource: "pods", Namespace: "default", Name: name,
-			UID: fmt.Sprintf("uid-%03d", i), Scope: ScopeNamespace,
-		}
+		svc.items[catalogKey(podDesc, "default", name)] = Summary{Ref: resourcemodel.ResourceRef{ClusterID: "cluster-a", Group: "", Version: "v1", Kind: "Pod", Resource: "pods", Namespace: "default", Name: name, UID: fmt.Sprintf("uid-%03d", i)}, Scope: ScopeNamespace}
 	}
 	svc.resources = map[string]resourceDescriptor{podDesc.GVR.String(): podDesc}
 	svc.mu.Unlock()
@@ -59,8 +56,8 @@ func TestCatalogQueryAnchorServesAlignedPage(t *testing.T) {
 	if result.PageStartRank != 20 {
 		t.Fatalf("pageStartRank = %d, want 20", result.PageStartRank)
 	}
-	if len(result.Items) != 10 || result.Items[0].Name != "pod-020" {
-		t.Fatalf("window = %d items starting %q", len(result.Items), result.Items[0].Name)
+	if len(result.Items) != 10 || result.Items[0].Ref.Name != "pod-020" {
+		t.Fatalf("window = %d items starting %q", len(result.Items), result.Items[0].Ref.Name)
 	}
 	if result.PreviousToken == "" || result.ContinueToken == "" {
 		t.Fatalf("landing cursors: prev=%q cont=%q", result.PreviousToken, result.ContinueToken)
@@ -68,8 +65,8 @@ func TestCatalogQueryAnchorServesAlignedPage(t *testing.T) {
 
 	// The minted previous token pages back to the previous aligned page.
 	back := svc.Query(QueryOptions{Limit: 10, Continue: result.PreviousToken})
-	if len(back.Items) != 10 || back.Items[0].Name != "pod-010" {
-		t.Fatalf("backward page = %d items starting %q, want pod-010", len(back.Items), back.Items[0].Name)
+	if len(back.Items) != 10 || back.Items[0].Ref.Name != "pod-010" {
+		t.Fatalf("backward page = %d items starting %q, want pod-010", len(back.Items), back.Items[0].Ref.Name)
 	}
 	if back.AnchorOutcome != nil {
 		t.Fatal("cursor page must not carry an anchor outcome")
@@ -94,8 +91,8 @@ func TestCatalogQueryAnchorUIDMismatchIsNotFound(t *testing.T) {
 	if result.AnchorOutcome == nil || result.AnchorOutcome.Found || result.AnchorOutcome.Filtered {
 		t.Fatalf("uid-mismatch outcome = %+v, want not-found", result.AnchorOutcome)
 	}
-	if len(result.Items) != 5 || result.Items[0].Name != "pod-000" {
-		t.Fatalf("uid-mismatch fallback = %d items starting %q, want first page", len(result.Items), result.Items[0].Name)
+	if len(result.Items) != 5 || result.Items[0].Ref.Name != "pod-000" {
+		t.Fatalf("uid-mismatch fallback = %d items starting %q, want first page", len(result.Items), result.Items[0].Ref.Name)
 	}
 
 	// Same anchor WITHOUT a uid resolves fine (uid is optional).
@@ -139,7 +136,7 @@ func TestCatalogQueryAnchorFilteredBySearch(t *testing.T) {
 	if out == nil || out.Found || !out.Filtered {
 		t.Fatalf("search-excluded anchor outcome = %+v, want filtered", out)
 	}
-	if len(result.Items) != 1 || result.Items[0].Name != "pod-001" {
+	if len(result.Items) != 1 || result.Items[0].Ref.Name != "pod-001" {
 		t.Fatalf("filtered fallback = %+v, want the search's first page", result.Items)
 	}
 }
@@ -158,7 +155,7 @@ func TestCatalogQueryAnchorNotFound(t *testing.T) {
 	if out == nil || out.Found || out.Filtered {
 		t.Fatalf("unknown anchor outcome = %+v, want not-found", out)
 	}
-	if len(result.Items) != 5 || result.Items[0].Name != "pod-000" {
-		t.Fatalf("not-found fallback = %d items starting %q", len(result.Items), result.Items[0].Name)
+	if len(result.Items) != 5 || result.Items[0].Ref.Name != "pod-000" {
+		t.Fatalf("not-found fallback = %d items starting %q", len(result.Items), result.Items[0].Ref.Name)
 	}
 }

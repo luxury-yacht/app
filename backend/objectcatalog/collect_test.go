@@ -13,6 +13,7 @@ import (
 	"time"
 
 	"github.com/luxury-yacht/app/backend/refresh/ingest"
+	"github.com/luxury-yacht/app/backend/resourcemodel"
 	"github.com/luxury-yacht/app/backend/resources/common"
 	k8serrors "k8s.io/apimachinery/pkg/api/errors"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
@@ -86,14 +87,14 @@ func TestServiceSyncCollectsResources(t *testing.T) {
 	}
 
 	summary := summaries[0]
-	if summary.Kind != "Deployment" {
-		t.Errorf("unexpected kind: %s", summary.Kind)
+	if summary.Ref.Kind != "Deployment" {
+		t.Errorf("unexpected kind: %s", summary.Ref.Kind)
 	}
-	if summary.Namespace != "default" {
-		t.Errorf("unexpected namespace: %s", summary.Namespace)
+	if summary.Ref.Namespace != "default" {
+		t.Errorf("unexpected namespace: %s", summary.Ref.Namespace)
 	}
-	if summary.Name != "demo" {
-		t.Errorf("unexpected name: %s", summary.Name)
+	if summary.Ref.Name != "demo" {
+		t.Errorf("unexpected name: %s", summary.Ref.Name)
 	}
 	if summary.Scope != ScopeNamespace {
 		t.Errorf("unexpected scope: %s", summary.Scope)
@@ -145,11 +146,11 @@ func TestIngestCatalogSinkBulkReplaceScopesGVR(t *testing.T) {
 		cmGVR.String():  cmDesc,
 		secGVR.String(): secDesc,
 	}
-	sec := Summary{Kind: "Secret", Version: "v1", Resource: "secrets", Namespace: "default", Name: "sec-a", Scope: ScopeNamespace}
-	oldCM := Summary{Kind: "ConfigMap", Version: "v1", Resource: "configmaps", Namespace: "default", Name: "cm-old", Scope: ScopeNamespace}
+	sec := Summary{Ref: resourcemodel.ResourceRef{Version: "v1", Kind: "Secret", Resource: "secrets", Namespace: "default", Name: "sec-a"}, Scope: ScopeNamespace}
+	oldCM := Summary{Ref: resourcemodel.ResourceRef{Version: "v1", Kind: "ConfigMap", Resource: "configmaps", Namespace: "default", Name: "cm-old"}, Scope: ScopeNamespace}
 	svc.items = map[string]Summary{
-		catalogKey(secDesc, sec.Namespace, sec.Name):    sec,
-		catalogKey(cmDesc, oldCM.Namespace, oldCM.Name): oldCM,
+		catalogKey(secDesc, sec.Ref.Namespace, sec.Ref.Name):    sec,
+		catalogKey(cmDesc, oldCM.Ref.Namespace, oldCM.Ref.Name): oldCM,
 	}
 	svc.catalogIndex.rebuildCacheFromItems(cloneSummaryMap(svc.items), svc.Descriptors())
 
@@ -158,7 +159,7 @@ func TestIngestCatalogSinkBulkReplaceScopesGVR(t *testing.T) {
 	if !ok {
 		t.Fatal("ingest catalog sink must support bulk replace")
 	}
-	newCM := Summary{Kind: "ConfigMap", Version: "v1", Resource: "configmaps", Namespace: "default", Name: "cm-new", Scope: ScopeNamespace}
+	newCM := Summary{Ref: resourcemodel.ResourceRef{Version: "v1", Kind: "ConfigMap", Resource: "configmaps", Namespace: "default", Name: "cm-new"}, Scope: ScopeNamespace}
 	bulk.Replace([]interface{}{newCM})
 
 	if _, ok := svc.items[catalogKey(cmDesc, "default", "cm-old")]; ok {
@@ -357,8 +358,8 @@ func TestCollectResourceHandlesPagination(t *testing.T) {
 	if len(summaries) != 1 {
 		t.Fatalf("expected single item after pagination, got %d", len(summaries))
 	}
-	if summaries[0].Name != "demo" {
-		t.Fatalf("expected summary to contain paginated object, got %s", summaries[0].Name)
+	if summaries[0].Ref.Name != "demo" {
+		t.Fatalf("expected summary to contain paginated object, got %s", summaries[0].Ref.Name)
 	}
 }
 
@@ -416,7 +417,7 @@ func TestListResourceParallelNamespaces(t *testing.T) {
 	}
 	names := map[string]struct{}{}
 	for _, item := range items {
-		names[item.Name] = struct{}{}
+		names[item.Ref.Name] = struct{}{}
 	}
 	if _, ok := names["sample-a"]; !ok {
 		t.Fatalf("expected sample-a in results")
@@ -435,7 +436,7 @@ func TestBuildSummaryNamespaced(t *testing.T) {
 
 	svc := NewService(Dependencies{Common: common.Dependencies{}}, nil)
 	summary := svc.buildSummary(desc, obj)
-	if summary.Namespace != "default" {
+	if summary.Ref.Namespace != "default" {
 		t.Fatalf("expected namespace to be preserved")
 	}
 	if summary.LabelsDigest == "" {
@@ -490,38 +491,16 @@ func TestBuildSummaryIncludesActionFactsFromUnstructured(t *testing.T) {
 func TestEnrichCatalogActionFactsMarksHPAManagedWorkloads(t *testing.T) {
 	falseValue := false
 	items := map[string]Summary{
-		"hpa": {
-			Kind:      "HorizontalPodAutoscaler",
-			Group:     "autoscaling",
-			Version:   "v2",
-			Resource:  "horizontalpodautoscalers",
-			Namespace: "default",
-			Name:      "web",
-			ActionFacts: &ActionFacts{ScaleTarget: &ActionScaleTarget{
-				Group:     "apps",
-				Version:   "v1",
-				Kind:      "Deployment",
-				Namespace: "default",
-				Name:      "web",
-			}},
-		},
-		"managed": {
-			Kind:        "Deployment",
-			Group:       "apps",
-			Version:     "v1",
-			Resource:    "deployments",
-			Namespace:   "default",
-			Name:        "web",
-			ActionFacts: &ActionFacts{HPAManaged: &falseValue},
-		},
-		"unmanaged": {
-			Kind:      "Deployment",
+		"hpa": {Ref: resourcemodel.ResourceRef{Group: "autoscaling", Version: "v2", Kind: "HorizontalPodAutoscaler", Resource: "horizontalpodautoscalers", Namespace: "default", Name: "web"}, ActionFacts: &ActionFacts{ScaleTarget: &ActionScaleTarget{
 			Group:     "apps",
 			Version:   "v1",
-			Resource:  "deployments",
+			Kind:      "Deployment",
 			Namespace: "default",
-			Name:      "api",
+			Name:      "web",
+		}},
 		},
+		"managed":   {Ref: resourcemodel.ResourceRef{Group: "apps", Version: "v1", Kind: "Deployment", Resource: "deployments", Namespace: "default", Name: "web"}, ActionFacts: &ActionFacts{HPAManaged: &falseValue}},
+		"unmanaged": {Ref: resourcemodel.ResourceRef{Group: "apps", Version: "v1", Kind: "Deployment", Resource: "deployments", Namespace: "default", Name: "api"}},
 	}
 	allowed := map[string]resourceDescriptor{
 		"autoscaling/v2/horizontalpodautoscalers": {
@@ -557,8 +536,8 @@ func TestBuildSummaryClusterScope(t *testing.T) {
 	svc := NewService(Dependencies{Now: time.Now, Common: common.Dependencies{}}, nil)
 	summary := svc.buildSummary(desc, obj)
 
-	if summary.Namespace != "" {
-		t.Fatalf("expected cluster-scoped resource to have empty namespace, got %q", summary.Namespace)
+	if summary.Ref.Namespace != "" {
+		t.Fatalf("expected cluster-scoped resource to have empty namespace, got %q", summary.Ref.Namespace)
 	}
 	if summary.Scope != ScopeCluster {
 		t.Fatalf("expected cluster scope, got %s", summary.Scope)
@@ -607,7 +586,7 @@ func TestListResourceSkipsForbiddenNamespaceTargets(t *testing.T) {
 	if err != nil {
 		t.Fatalf("a forbidden namespace must be skipped, not fail the kind: %v", err)
 	}
-	if len(items) != 1 || items[0].Name != "sample-a" {
+	if len(items) != 1 || items[0].Ref.Name != "sample-a" {
 		t.Fatalf("expected only alpha's item, got %#v", items)
 	}
 }

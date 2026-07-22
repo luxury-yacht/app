@@ -20,6 +20,7 @@ import (
 
 	"github.com/luxury-yacht/app/backend/kind/streamrows"
 	"github.com/luxury-yacht/app/backend/refresh/metrics"
+	"github.com/luxury-yacht/app/backend/resourcemodel"
 	podres "github.com/luxury-yacht/app/backend/resources/pods"
 )
 
@@ -101,9 +102,9 @@ func TestNodeSnapshotPublishesMetricMetadata(t *testing.T) {
 // ("1 GB" sorts lexically below "128 MB").
 func TestNodeQuerySortsByLiveUsage(t *testing.T) {
 	items := []NodeSummary{
-		{Name: "alpha", CPUUsage: "1000m", MemoryUsage: "128 MB"},
-		{Name: "beta", CPUUsage: "650m", MemoryUsage: "1 GB"},
-		{Name: "gamma", CPUUsage: "125m", MemoryUsage: "512 MB"},
+		{Ref: resourcemodel.ResourceRef{Name: "alpha"}, CPUUsage: "1000m", MemoryUsage: "128 MB"},
+		{Ref: resourcemodel.ResourceRef{Name: "beta"}, CPUUsage: "650m", MemoryUsage: "1 GB"},
+		{Ref: resourcemodel.ResourceRef{Name: "gamma"}, CPUUsage: "125m", MemoryUsage: "512 MB"},
 	}
 
 	_, cpuQuery, err := parseTypedTableQueryScope("c1", "?sort=cpu&sortDirection=desc", "nodes", "rev-1")
@@ -128,7 +129,7 @@ func TestNodeQueryCapabilitiesPublishMetricSorts(t *testing.T) {
 func nodeSummaryNames(rows []NodeSummary) []string {
 	names := make([]string, len(rows))
 	for i, r := range rows {
-		names[i] = r.Name
+		names[i] = r.Ref.Name
 	}
 	return names
 }
@@ -219,9 +220,9 @@ func TestPodSnapshotRejectsStaleSampleForRecreatedPod(t *testing.T) {
 
 func TestPodQuerySortsByLiveUsage(t *testing.T) {
 	items := []PodSummary{
-		{Name: "alpha", Namespace: "default", CPUUsage: "1000m", MemUsage: "128 MB"},
-		{Name: "beta", Namespace: "default", CPUUsage: "650m", MemUsage: "1 GB"},
-		{Name: "gamma", Namespace: "default", CPUUsage: "125m", MemUsage: "512 MB"},
+		{Ref: resourcemodel.ResourceRef{Namespace: "default", Name: "alpha"}, CPUUsage: "1000m", MemUsage: "128 MB"},
+		{Ref: resourcemodel.ResourceRef{Namespace: "default", Name: "beta"}, CPUUsage: "650m", MemUsage: "1 GB"},
+		{Ref: resourcemodel.ResourceRef{Namespace: "default", Name: "gamma"}, CPUUsage: "125m", MemUsage: "512 MB"},
 	}
 
 	_, cpuQuery, err := parseTypedTableQueryScope("c1", "namespace:default?sort=cpu&sortDirection=desc", podDomainName, "rev-1")
@@ -246,7 +247,7 @@ func TestPodQueryCapabilitiesPublishMetricSorts(t *testing.T) {
 func podSummaryNames(rows []PodSummary) []string {
 	names := make([]string, len(rows))
 	for i, r := range rows {
-		names[i] = r.Name
+		names[i] = r.Ref.Name
 	}
 	return names
 }
@@ -300,7 +301,7 @@ func TestWorkloadSnapshotOverlaysLiveUsageAtServe(t *testing.T) {
 	require.NoError(t, err)
 	payload := first.Payload.(NamespaceWorkloadsSnapshot)
 	require.Len(t, payload.Rows, 1)
-	require.Equal(t, "web", payload.Rows[0].Name)
+	require.Equal(t, "web", payload.Rows[0].Ref.Name)
 	require.Equal(t, "250m", payload.Rows[0].CPUUsage)
 	require.Equal(t, strconv.FormatInt(now.UnixNano(), 10), first.SourceVersions["metric"])
 	require.False(t, payload.Metrics.Stale)
@@ -321,9 +322,9 @@ func TestWorkloadSnapshotOverlaysLiveUsageAtServe(t *testing.T) {
 
 func TestWorkloadQuerySortsByLiveUsage(t *testing.T) {
 	items := []WorkloadSummary{
-		{Kind: "Deployment", Name: "alpha", Namespace: "default", CPUUsage: "1000m", MemUsage: "128 MB"},
-		{Kind: "Deployment", Name: "beta", Namespace: "default", CPUUsage: "650m", MemUsage: "1 GB"},
-		{Kind: "Deployment", Name: "gamma", Namespace: "default", CPUUsage: "125m", MemUsage: "512 MB"},
+		{Ref: resourcemodel.ResourceRef{Kind: "Deployment", Namespace: "default", Name: "alpha"}, CPUUsage: "1000m", MemUsage: "128 MB"},
+		{Ref: resourcemodel.ResourceRef{Kind: "Deployment", Namespace: "default", Name: "beta"}, CPUUsage: "650m", MemUsage: "1 GB"},
+		{Ref: resourcemodel.ResourceRef{Kind: "Deployment", Namespace: "default", Name: "gamma"}, CPUUsage: "125m", MemUsage: "512 MB"},
 	}
 
 	_, cpuQuery, err := parseTypedTableQueryScope("c1", "namespace:default?sort=cpu&sortDirection=desc", namespaceWorkloadsDomainName, "rev-1")
@@ -349,7 +350,7 @@ func TestWorkloadQueryCapabilitiesPublishMetricSorts(t *testing.T) {
 func workloadSummaryNames(rows []WorkloadSummary) []string {
 	names := make([]string, len(rows))
 	for i, r := range rows {
-		names[i] = r.Name
+		names[i] = r.Ref.Name
 	}
 	return names
 }

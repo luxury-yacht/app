@@ -9,7 +9,7 @@ import { act } from 'react';
 import * as ReactDOM from 'react-dom/client';
 import { afterEach, beforeAll, beforeEach, describe, expect, it, vi } from 'vitest';
 import { eventBus } from '@/core/events';
-import type { CatalogItem } from '@/core/refresh/types';
+import type { CanonicalRowTestOverrides, CatalogItem } from '@/core/refresh/types';
 import { compareUtf16Strings } from '@/shared/utils/sort';
 import { requireValue } from '@/test-utils/requireValue';
 import { buildCatalogDisplayEntries, CommandPalette, parseQueryTokens } from './CommandPalette';
@@ -17,85 +17,109 @@ import type { Command } from './CommandPaletteCommands';
 
 const baseTimestamp = '2024-01-01T00:00:00Z';
 
-const createCatalogItem = (overrides: Partial<CatalogItem>): CatalogItem => ({
-  kind: 'Pod',
-  group: '',
-  version: 'v1',
-  resource: 'pods',
-  namespace: 'default',
-  name: 'example',
-  uid: 'uid-default',
-  resourceVersion: '1',
-  creationTimestamp: baseTimestamp,
-  scope: 'Namespace',
-  clusterId: 'alpha:ctx',
-  clusterName: 'alpha',
-  ...overrides,
-});
+const createCatalogItem = (overrides: CanonicalRowTestOverrides<CatalogItem>): CatalogItem => {
+  const { ref, ...row } = overrides;
+  return {
+    ref: {
+      clusterId: 'alpha:ctx',
+      group: '',
+      version: 'v1',
+      kind: 'Pod',
+      resource: 'pods',
+      namespace: 'default',
+      name: 'example',
+      uid: 'uid-default',
+      ...ref,
+    },
+    resourceVersion: '1',
+    creationTimestamp: baseTimestamp,
+    scope: 'Namespace',
+    ...row,
+  };
+};
 
 const sampleCatalog: CatalogItem[] = [
   createCatalogItem({
-    kind: 'Pod',
-    resource: 'pods',
-    namespace: 'kube-system',
-    name: 'aws-node-abc123',
-    uid: 'pod-kube-system',
+    ref: {
+      kind: 'Pod',
+      resource: 'pods',
+      namespace: 'kube-system',
+      name: 'aws-node-abc123',
+      uid: 'pod-kube-system',
+    },
   }),
   createCatalogItem({
-    kind: 'Pod',
-    resource: 'pods',
-    namespace: 'default',
-    name: 'frontend-123',
-    uid: 'pod-default',
+    ref: {
+      kind: 'Pod',
+      resource: 'pods',
+      namespace: 'default',
+      name: 'frontend-123',
+      uid: 'pod-default',
+    },
   }),
   createCatalogItem({
-    kind: 'Ingress',
-    group: 'networking.k8s.io',
-    resource: 'ingresses',
-    namespace: 'test-namespace',
-    name: 'test-gateway',
-    uid: 'ingress-test',
+    ref: {
+      kind: 'Ingress',
+      group: 'networking.k8s.io',
+      resource: 'ingresses',
+      namespace: 'test-namespace',
+      name: 'test-gateway',
+      uid: 'ingress-test',
+    },
   }),
   createCatalogItem({
-    kind: 'Ingress',
-    group: 'networking.k8s.io',
-    resource: 'ingresses',
-    namespace: 'kube-system',
-    name: 'metrics',
-    uid: 'ingress-metrics',
+    ref: {
+      kind: 'Ingress',
+      group: 'networking.k8s.io',
+      resource: 'ingresses',
+      namespace: 'kube-system',
+      name: 'metrics',
+      uid: 'ingress-metrics',
+    },
   }),
   createCatalogItem({
-    kind: 'ConfigMap',
-    resource: 'configmaps',
-    namespace: 'kube-system',
-    name: 'aws-config',
-    uid: 'cm-aws',
+    ref: {
+      kind: 'ConfigMap',
+      resource: 'configmaps',
+      namespace: 'kube-system',
+      name: 'aws-config',
+      uid: 'cm-aws',
+    },
   }),
   createCatalogItem({
-    kind: 'Deployment',
-    group: 'apps',
-    resource: 'deployments',
-    namespace: 'default',
-    name: 'frontend',
-    uid: 'deploy-frontend',
+    ref: {
+      kind: 'Deployment',
+      group: 'apps',
+      resource: 'deployments',
+      namespace: 'default',
+      name: 'frontend',
+      uid: 'deploy-frontend',
+    },
+
     scope: 'Namespace',
   }),
   createCatalogItem({
-    kind: 'Deployment',
-    group: 'apps',
-    resource: 'deployments',
-    namespace: 'test-namespace',
-    name: 'gateway',
-    uid: 'deploy-gateway',
+    ref: {
+      kind: 'Deployment',
+      group: 'apps',
+      resource: 'deployments',
+      namespace: 'test-namespace',
+      name: 'gateway',
+      uid: 'deploy-gateway',
+    },
+
     scope: 'Namespace',
   }),
   createCatalogItem({
-    kind: 'Deployment',
-    group: 'apps',
-    resource: 'deployments',
-    namespace: 'kube-system',
-    name: 'metrics-server',
-    uid: 'deploy-metrics',
+    ref: {
+      kind: 'Deployment',
+      group: 'apps',
+      resource: 'deployments',
+      namespace: 'kube-system',
+      name: 'metrics-server',
+      uid: 'deploy-metrics',
+    },
+
     scope: 'Namespace',
   }),
 ];
@@ -669,11 +693,13 @@ describe('CommandPalette component behaviour', () => {
 
   it('debounces catalog searches and renders truncated results', async () => {
     const catalogItem = createCatalogItem({
-      uid: 'catalog-pod',
-      namespace: 'metrics',
-      name: 'metrics-pod',
-      kind: 'Pod',
-      resource: 'pods',
+      ref: {
+        uid: 'catalog-pod',
+        namespace: 'metrics',
+        name: 'metrics-pod',
+        kind: 'Pod',
+        resource: 'pods',
+      },
     });
 
     fetchSnapshotMock.mockImplementation(

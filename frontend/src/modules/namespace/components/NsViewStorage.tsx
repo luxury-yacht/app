@@ -37,27 +37,33 @@ const storageSpec: AggregatedResourceGridViewSpec<StorageData> = {
   tableClassName: 'ns-storage-table',
   defaultSort: { key: 'name', direction: 'asc' },
   namespaceLinkTab: 'storage',
-  buildColumns: ({ identity, openObject, navigateObject, useShortResourceNames }) => {
+  buildColumns: ({
+    identity,
+    openObject,
+    navigateObject,
+    fallbackClusterName,
+    useShortResourceNames,
+  }) => {
     const storageClassReference = (resource: StorageData) =>
       resource.storageClass
         ? {
             kind: 'StorageClass',
             name: resource.storageClass,
-            clusterId: resource.clusterId,
-            clusterName: resource.clusterName ?? undefined,
+            clusterId: resource.ref.clusterId,
+            clusterName: fallbackClusterName ?? undefined,
           }
         : null;
 
     return [
       cf.createKindColumn<StorageData>({
         key: 'kind',
-        getKind: (resource) => resource.kind,
+        getKind: (resource) => resource.ref.kind,
         getAlias: (resource) => resource.kindAlias,
-        getDisplayText: (resource) => getDisplayKind(resource.kind, useShortResourceNames),
+        getDisplayText: (resource) => getDisplayKind(resource.ref.kind, useShortResourceNames),
         onClick: identity.open,
         onAltClick: identity.navigate,
       }),
-      cf.createTextColumn<StorageData>('name', 'Name', {
+      cf.createTextColumn<StorageData>('name', 'Name', (resource) => resource.ref.name, {
         onClick: identity.open,
         onAltClick: identity.navigate,
         getClassName: () => 'object-panel-link',

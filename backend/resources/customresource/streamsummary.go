@@ -21,25 +21,16 @@ import (
 func BuildNamespaceStreamSummary(meta streamrows.ClusterMeta, resource *unstructured.Unstructured, group, version, resourceName, kindFallback, crdName, defaultNamespace string) streamrows.NamespaceCustomSummary {
 	if resource == nil {
 		return streamrows.NamespaceCustomSummary{
-			ClusterMeta: meta,
-			Kind:        kindFallback,
-			Group:       group,
-			Version:     version,
-			CRDName:     crdName,
+			Ref:     resourcemodel.NewResourceRef(meta.ClusterID, group, version, kindFallback, resourceName, "", "", ""),
+			CRDName: crdName,
 		}
 	}
 	gvr := schema.GroupVersionResource{Group: group, Version: version, Resource: resourceName}
 	model := BuildResourceModel(meta.ClusterID, resource, gvr, kindFallback, crdName, resourcemodel.ResourceScopeNamespaced, defaultNamespace)
 	facts := BuildFacts(meta.ClusterID, resource, gvr, crdName, resourcemodel.ResourceModelBuildOptions{})
 	return streamrows.NamespaceCustomSummary{
-		ClusterMeta:        meta,
 		Ref:                model.Ref,
-		Kind:               model.Ref.Kind,
-		Name:               model.Ref.Name,
-		Group:              model.Ref.Group,
-		Version:            model.Ref.Version,
 		CRDName:            crdName,
-		Namespace:          model.Ref.Namespace,
 		Status:             model.Status.Label,
 		StatusState:        model.Status.State,
 		StatusPresentation: model.Status.Presentation,
@@ -57,23 +48,15 @@ func BuildNamespaceStreamSummary(meta streamrows.ClusterMeta, resource *unstruct
 func BuildClusterStreamSummary(meta streamrows.ClusterMeta, resource *unstructured.Unstructured, group, version, resourceName, kindFallback, crdName string) streamrows.ClusterCustomSummary {
 	if resource == nil {
 		return streamrows.ClusterCustomSummary{
-			ClusterMeta: meta,
-			Kind:        kindFallback,
-			Group:       group,
-			Version:     version,
-			CRDName:     crdName,
+			Ref:     resourcemodel.NewResourceRef(meta.ClusterID, group, version, kindFallback, resourceName, "", "", ""),
+			CRDName: crdName,
 		}
 	}
 	gvr := schema.GroupVersionResource{Group: group, Version: version, Resource: resourceName}
 	model := BuildResourceModel(meta.ClusterID, resource, gvr, kindFallback, crdName, resourcemodel.ResourceScopeCluster, "")
 	facts := BuildFacts(meta.ClusterID, resource, gvr, crdName, resourcemodel.ResourceModelBuildOptions{})
 	return streamrows.ClusterCustomSummary{
-		ClusterMeta:        meta,
 		Ref:                model.Ref,
-		Kind:               model.Ref.Kind,
-		Name:               model.Ref.Name,
-		Group:              model.Ref.Group,
-		Version:            model.Ref.Version,
 		CRDName:            crdName,
 		Status:             model.Status.Label,
 		StatusState:        model.Status.State,

@@ -1,6 +1,6 @@
 import { readHydratedCustomCatalogRows, requestData } from '@core/data-access';
 import { useEffect, useMemo, useState } from 'react';
-import type { CatalogItem } from '@/core/refresh/types';
+import type { CanonicalResourceRef, CatalogItem } from '@/core/refresh/types';
 import {
   type CatalogBackedCustomResourceRow,
   catalogItemToFallbackCustomRow,
@@ -25,25 +25,18 @@ const customRowKey = ({
   kind,
   namespace,
   name,
-}: {
-  clusterId?: string;
-  group?: string;
-  version?: string;
-  kind?: string;
-  namespace?: string;
-  name?: string;
-}): string =>
+}: CanonicalResourceRef): string =>
   [clusterId ?? '', group ?? '', version ?? '', kind ?? '', namespace ?? '', name ?? ''].join('|');
 
 const catalogItemToHydrationQueryRow = (item: CatalogItem): HydrationQueryRow => ({
-  clusterId: item.clusterId,
-  group: item.group,
-  version: item.version,
-  kind: item.kind,
-  resource: item.resource,
-  namespace: item.namespace,
-  name: item.name,
-  uid: item.uid,
+  clusterId: item.ref.clusterId,
+  group: item.ref.group,
+  version: item.ref.version,
+  kind: item.ref.kind,
+  resource: item.ref.resource,
+  namespace: item.ref.namespace,
+  name: item.ref.name,
+  uid: item.ref.uid,
 });
 
 // Merge backend-hydrated rows onto the fallback rows by identity, preserving the adapter's
@@ -55,16 +48,19 @@ const mergeHydratedRows = (
   const hydratedByKey = new Map<string, CatalogBackedCustomResourceRow>();
   for (const rawRow of hydratedRaw ?? []) {
     const hydrated = normalizeHydratedCustomRow(rawRow);
-    hydratedByKey.set(customRowKey(hydrated), hydrated);
+    hydratedByKey.set(customRowKey(hydrated.ref), hydrated);
   }
   return fallbackRows.map((row) => {
-    const hydrated = hydratedByKey.get(customRowKey(row));
+    const hydrated = hydratedByKey.get(customRowKey(row.ref));
     return {
       ...row,
       ...(hydrated ?? {}),
-      group: row.group,
-      version: row.version,
-      resource: row.resource,
+      ref: {
+        ...(hydrated?.ref ?? row.ref),
+        group: row.ref.group,
+        version: row.ref.version,
+        resource: row.ref.resource,
+      },
       age: hydrated?.age || row.age,
       ageTimestamp: hydrated?.ageTimestamp ?? row.ageTimestamp,
       creationTimestamp: hydrated?.creationTimestamp ?? row.creationTimestamp,

@@ -20,6 +20,10 @@ export type InFlightRequest = {
   rerunStreamSignal?: boolean;
 };
 
+export type RefreshDemand = 'query' | 'snapshot';
+
+type ScopedDemandCounts = Record<RefreshDemand, number>;
+
 type StreamingFetchMode = 'snapshot' | 'skip';
 
 type StreamingFetchDecisionInput = {
@@ -100,7 +104,7 @@ export class ClusterRefreshRuntime {
   // enabled. Leases let a newer consumer keep a scope alive across an old
   // consumer's unmount so a late cleanup cannot disable a scope a newer owner
   // still needs (the remount race behind transient false-empty tables).
-  private readonly scopedLeases = new Map<RefreshDomain, Map<string, number>>();
+  private readonly scopedLeases = new Map<RefreshDomain, Map<string, ScopedDemandCounts>>();
 
   constructor(clusterId: string) {
     this.clusterId = clusterId;
@@ -205,45 +209,62 @@ export class ClusterRefreshRuntime {
     return staleScopes;
   }
 
-  getScopedLeaseCount(domain: RefreshDomain, scope: string): number {
-    return this.scopedLeases.get(domain)?.get(scope) ?? 0;
+  getScopedLeaseCount(domain: RefreshDomain, scope: string, demand?: RefreshDemand): number {
+    const counts = this.scopedLeases.get(domain)?.get(scope);
+    if (!counts) {
+      return 0;
+    }
+    return demand ? counts[demand] : counts.query + counts.snapshot;
   }
 
   hasScopedLease(domain: RefreshDomain, scope: string): boolean {
     return this.getScopedLeaseCount(domain, scope) > 0;
   }
 
+  hasScopedDemand(domain: RefreshDomain, scope: string, demand: RefreshDemand): boolean {
+    return this.getScopedLeaseCount(domain, scope, demand) > 0;
+  }
+
   // Add one lease holder for (domain, scope). `firstLease` is true when this is
   // the only holder, signalling the caller to actually enable the scope.
-  acquireScopedLease(domain: RefreshDomain, scope: string): { count: number; firstLease: boolean } {
-    const leaseMap = this.scopedLeases.get(domain) ?? new Map<string, number>();
+  acquireScopedLease(
+    domain: RefreshDomain,
+    scope: string,
+    demand: RefreshDemand = 'snapshot'
+  ): { count: number; firstLease: boolean } {
+    const leaseMap = this.scopedLeases.get(domain) ?? new Map<string, ScopedDemandCounts>();
     this.scopedLeases.set(domain, leaseMap);
-    const next = (leaseMap.get(scope) ?? 0) + 1;
-    leaseMap.set(scope, next);
-    return { count: next, firstLease: next === 1 };
+    const counts = leaseMap.get(scope) ?? { query: 0, snapshot: 0 };
+    const previousTotal = counts.query + counts.snapshot;
+    const nextCounts = { ...counts, [demand]: counts[demand] + 1 };
+    leaseMap.set(scope, nextCounts);
+    const nextTotal = nextCounts.query + nextCounts.snapshot;
+    return { count: nextTotal, firstLease: previousTotal === 0 };
   }
 
   // Remove one lease holder for (domain, scope). `lastLease` is true when the
   // final holder released, signalling the caller to actually disable the scope.
   releaseScopedLease(
     domain: RefreshDomain,
-    scope: string
+    scope: string,
+    demand: RefreshDemand = 'snapshot'
   ): { count: number; lastLease: boolean; hadLease: boolean } {
     const leaseMap = this.scopedLeases.get(domain);
-    const current = leaseMap?.get(scope) ?? 0;
-    if (!leaseMap || current <= 0) {
+    const counts = leaseMap?.get(scope);
+    if (!leaseMap || !counts || counts[demand] <= 0) {
       return { count: 0, lastLease: false, hadLease: false };
     }
-    const next = current - 1;
-    if (next <= 0) {
+    const nextCounts = { ...counts, [demand]: counts[demand] - 1 };
+    const nextTotal = nextCounts.query + nextCounts.snapshot;
+    if (nextTotal === 0) {
       leaseMap.delete(scope);
       if (leaseMap.size === 0) {
         this.scopedLeases.delete(domain);
       }
       return { count: 0, lastLease: true, hadLease: true };
     }
-    leaseMap.set(scope, next);
-    return { count: next, lastLease: false, hadLease: true };
+    leaseMap.set(scope, nextCounts);
+    return { count: nextTotal, lastLease: false, hadLease: true };
   }
 
   forEachEnabledScope(domain: RefreshDomain, callback: (scope: string) => void): void {
@@ -410,8 +431,11 @@ export class ClusterRefreshRuntime {
     domain: RefreshDomain,
     scope: string,
     payload: AppEvents['refresh:resource-stream-health']
-  ): void {
-    this.streamHealth.set(makeInFlightKey(domain, scope), payload);
+  ): AppEvents['refresh:resource-stream-health'] | undefined {
+    const key = makeInFlightKey(domain, scope);
+    const previous = this.streamHealth.get(key);
+    this.streamHealth.set(key, payload);
+    return previous;
   }
 
   clearAllStreamHealth(): void {

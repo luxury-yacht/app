@@ -18,21 +18,18 @@ import { getDisplayKind } from '@/utils/kindAliasMap';
  * Includes all fields needed for both cluster and namespace scoped views.
  */
 export type BrowseTableRow = {
-  uid: string;
-  kind: string;
+  ref: CatalogItem['ref'];
+  resourceVersion: CatalogItem['resourceVersion'];
+  creationTimestamp: CatalogItem['creationTimestamp'];
+  scope: CatalogItem['scope'];
+  labelsDigest?: CatalogItem['labelsDigest'];
+  actionFacts?: CatalogItem['actionFacts'];
   kindDisplay: string;
-  namespace: string;
   namespaceDisplay: string;
-  name: string;
-  scope: string;
-  resource: string;
-  group: string;
-  version: string;
   apiDisplay: string;
   statusDisplay: string;
   age: string;
   ageTimestamp: number;
-  item: CatalogItem;
 };
 
 /**
@@ -47,24 +44,16 @@ export const toTableRows = (
 ): BrowseTableRow[] => {
   return items.map((item) => {
     const created = item.creationTimestamp ? new Date(item.creationTimestamp) : undefined;
-    const kindLabel = getDisplayKind(item.kind, useShortResourceNames);
-    const namespaceDisplay = item.namespace ?? '—';
+    const kindLabel = getDisplayKind(item.ref.kind, useShortResourceNames);
+    const namespaceDisplay = item.ref.namespace ?? '—';
     return {
-      uid: item.uid,
-      kind: kindLabel.toLowerCase(),
+      ...item,
       kindDisplay: kindLabel,
-      namespace: namespaceDisplay.toLowerCase(),
       namespaceDisplay,
-      name: item.name,
-      scope: item.scope,
-      resource: item.resource,
-      group: item.group,
-      version: item.version,
-      apiDisplay: `${item.group || 'core'}/${item.version}`,
+      apiDisplay: `${item.ref.group || 'core'}/${item.ref.version}`,
       statusDisplay: item.actionFacts?.status?.trim() || '—',
       age: '—',
       ageTimestamp: created ? created.getTime() : 0,
-      item,
     };
   });
 };
@@ -98,16 +87,16 @@ export function useBrowseColumns({
     const baseColumns: GridColumnDefinition<BrowseTableRow>[] = [
       cf.createKindColumn<BrowseTableRow>({
         key: 'kind',
-        getKind: (row) => row.item.kind,
+        getKind: (row) => row.ref.kind,
         getDisplayText: (row) => row.kindDisplay,
-        sortValue: (row) => row.kind,
+        sortValue: (row) => row.ref.kind.toLowerCase(),
         onClick: onRowClick,
-        onAltClick: (row) => navigateToView(buildRequiredObjectReference(row.item)),
+        onAltClick: (row) => navigateToView(buildRequiredObjectReference(row.ref)),
       }),
-      cf.createTextColumn<BrowseTableRow>('name', 'Name', (row) => row.name, {
+      cf.createTextColumn<BrowseTableRow>('name', 'Name', (row) => row.ref.name, {
         sortable: true,
         onClick: (row) => onRowClick(row),
-        onAltClick: (row) => navigateToView(buildRequiredObjectReference(row.item)),
+        onAltClick: (row) => navigateToView(buildRequiredObjectReference(row.ref)),
         getClassName: () => 'object-panel-link',
       }),
       cf.createTextColumn<BrowseTableRow>('api', 'API', (row) => row.apiDisplay, {
@@ -128,10 +117,10 @@ export function useBrowseColumns({
           {
             sortable: true,
             onClick: (row) =>
-              onNamespaceClick?.(row.item.namespace ?? null, row.item.clusterId ?? null),
-            isInteractive: (row) => Boolean(row.item.namespace),
+              onNamespaceClick?.(row.ref.namespace ?? null, row.ref.clusterId ?? null),
+            isInteractive: (row) => Boolean(row.ref.namespace),
             getTitle: (row) =>
-              row.item.namespace ? `View ${row.item.namespace} workloads` : undefined,
+              row.ref.namespace ? `View ${row.ref.namespace} workloads` : undefined,
             getClassName: () => 'object-panel-link',
           }
         )

@@ -30,6 +30,7 @@ package objectcatalog
 
 import (
 	"fmt"
+	"github.com/luxury-yacht/app/backend/resourcemodel"
 	"math/rand"
 	"sort"
 	"testing"
@@ -105,17 +106,8 @@ func generateOracleObjects(rng *rand.Rand, n int) []Summary {
 
 		created := oracleTimestamps[rng.Intn(len(oracleTimestamps))]
 
-		items = append(items, Summary{
-			ClusterID:         "cluster-a",
-			Kind:              gvk.kind,
-			Group:             gvk.group,
-			Version:           gvk.version,
-			Resource:          gvk.resource,
-			Namespace:         namespace,
-			Name:              name,
-			UID:               fmt.Sprintf("obj-%d", i),
-			CreationTimestamp: created,
-			Scope:             gvk.scope,
+		items = append(items, Summary{Ref: resourcemodel.ResourceRef{ClusterID: "cluster-a", Group: gvk.group, Version: gvk.version, Kind: gvk.kind, Resource: gvk.resource, Namespace: namespace, Name: name, UID: fmt.Sprintf("obj-%d", i)}, CreationTimestamp: created,
+			Scope: gvk.scope,
 		})
 	}
 	return items
@@ -126,11 +118,11 @@ func generateOracleObjects(rng *rand.Rand, n int) []Summary {
 func oracleEncodedSortValue(s Summary, sortKey string) string {
 	switch sortKey {
 	case catalogEngineSortKind:
-		return s.Kind
+		return s.Ref.Kind
 	case catalogEngineSortNamespace:
-		return s.Namespace
+		return s.Ref.Namespace
 	case catalogEngineSortName:
-		return s.Name
+		return s.Ref.Name
 	case catalogEngineSortAge, catalogEngineSortCreationTimestamp:
 		return catalogEngineInvertTimestamp(s.CreationTimestamp)
 	default:

@@ -16,16 +16,12 @@ import (
 // BuildStreamSummary builds the namespace-config row for one Secret.
 func BuildStreamSummary(meta streamrows.ClusterMeta, sec *corev1.Secret) streamrows.ConfigSummary {
 	if sec == nil {
-		return streamrows.ConfigSummary{ClusterMeta: meta, Kind: "Secret"}
+		return streamrows.ConfigSummary{}
 	}
 	facts := BuildFacts(sec, nil)
 	return streamrows.ConfigSummary{
-		ClusterMeta:  meta,
 		Ref:          streamrows.NewResourceRef(meta, Identity, sec),
-		Kind:         "Secret",
 		TypeAlias:    streamSummaryTypeAlias(sec),
-		Name:         sec.GetName(),
-		Namespace:    sec.GetNamespace(),
 		Data:         facts.DataCount,
 		Age:          streamrows.FormatAge(sec.GetCreationTimestamp().Time),
 		AgeTimestamp: streamrows.CreationMillis(sec),

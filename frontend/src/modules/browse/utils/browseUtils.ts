@@ -7,6 +7,7 @@
 
 import { buildClusterScope } from '@/core/refresh/clusterScope';
 import type { CatalogItem } from '@/core/refresh/types';
+import { structuralShareResourceRows } from '@/shared/utils/structuralShareResourceRows';
 
 /**
  * Parses a continue token from an unknown value.
@@ -40,8 +41,8 @@ export const splitClusterScope = (value: string): { prefix: string; scope: strin
 export const rebuildIndexByUID = (items: CatalogItem[]): Map<string, number> => {
   const next = new Map<string, number>();
   items.forEach((item, index) => {
-    if (item.uid) {
-      next.set(item.uid, index);
+    if (item.ref.uid) {
+      next.set(item.ref.uid, index);
     }
   });
   return next;
@@ -68,7 +69,7 @@ const dedupeByUID = (incoming: CatalogItem[]): DedupeResult => {
   const items: CatalogItem[] = [];
 
   for (const item of incoming) {
-    const uid = item.uid;
+    const uid = item.ref.uid;
     if (!uid) {
       items.push(item);
       continue;
@@ -109,25 +110,10 @@ export const reconcileByUID = (current: CatalogItem[], incoming: CatalogItem[]):
       : { nextItems: [], changed: true };
   }
 
-  const currentByUid = new Map<string, CatalogItem>();
-  current.forEach((item) => {
-    currentByUid.set(item.uid, item);
-  });
-
-  let changed = current.length !== dedupedIncoming.length;
-  const nextItems = dedupedIncoming.map((item, index) => {
-    const existing = currentByUid.get(item.uid);
-    const nextItem =
-      existing && existing.resourceVersion === item.resourceVersion ? existing : item;
-
-    if (!changed && !Object.is(current[index], nextItem)) {
-      changed = true;
-    }
-
-    return nextItem;
-  });
-
-  return changed ? { nextItems, changed: true } : { nextItems: current, changed: false };
+  const nextItems = structuralShareResourceRows(current, dedupedIncoming, 'row-and-ref');
+  return nextItems === current
+    ? { nextItems: current, changed: false }
+    : { nextItems, changed: true };
 };
 
 /**

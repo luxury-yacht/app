@@ -15,7 +15,7 @@ import (
 // BuildStreamSummary builds the namespace-network row for one Ingress.
 func BuildStreamSummary(meta streamrows.ClusterMeta, ing *networkingv1.Ingress) streamrows.NetworkSummary {
 	if ing == nil {
-		return streamrows.NetworkSummary{ClusterMeta: meta, Kind: "Ingress"}
+		return streamrows.NetworkSummary{}
 	}
 	return streamrows.NewNetworkSummary(meta, Identity, ing, DescribeSummary(BuildFacts(meta.ClusterID, ing)))
 }

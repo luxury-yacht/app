@@ -63,7 +63,7 @@ func HealPodBundleReplicaSetOwner(
 	if !ok {
 		return bundle, false
 	}
-	if table.Namespace != namespace ||
+	if table.Ref.Namespace != namespace ||
 		table.OwnerKind != replicasetpkg.Identity.Kind ||
 		table.OwnerName != rsName {
 		return bundle, false
@@ -91,7 +91,7 @@ func HealPodBundleJobOwner(bundle ingest.Bundle, owner JobControllerOwner) (inge
 		return bundle, false
 	}
 	table, ok := bundle.Table.(PodSummary)
-	if !ok || table.ClusterID != owner.Job.ClusterID || table.Namespace != owner.Job.Namespace ||
+	if !ok || table.Ref.ClusterID != owner.Job.ClusterID || table.Ref.Namespace != owner.Job.Namespace ||
 		table.DirectOwnerKind != owner.Job.Kind || table.DirectOwnerName != owner.Job.Name {
 		return bundle, false
 	}

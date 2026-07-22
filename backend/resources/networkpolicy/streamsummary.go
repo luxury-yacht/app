@@ -15,7 +15,7 @@ import (
 // BuildStreamSummary builds the namespace-network row for one NetworkPolicy.
 func BuildStreamSummary(meta streamrows.ClusterMeta, policy *networkingv1.NetworkPolicy) streamrows.NetworkSummary {
 	if policy == nil {
-		return streamrows.NetworkSummary{ClusterMeta: meta, Kind: "NetworkPolicy"}
+		return streamrows.NetworkSummary{}
 	}
 	return streamrows.NewNetworkSummary(meta, Identity, policy, DescribeSummary(BuildFacts(policy)))
 }

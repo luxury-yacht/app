@@ -17,6 +17,7 @@
  * that arrives cancelled while DISABLED still tears down, exactly once.
  */
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
+import { eventBus } from '@/core/events';
 
 const { fetchSnapshotMock } = vi.hoisted(() => ({
   fetchSnapshotMock: vi.fn(),
@@ -65,6 +66,7 @@ vi.mock('@/core/logging/appLogsClient', () => ({
 }));
 
 import { refreshOrchestrator } from './orchestrator';
+import { getScopedDomainState } from './store';
 
 const DOMAIN = 'namespace-storage' as const;
 const SCOPE = 'flap-cluster:flap-cluster|namespace:flap-ns';
@@ -177,6 +179,72 @@ describe('streaming start under the mount-time lease flap', () => {
     resolvers[0](() => undefined);
     await flush();
     expect(fetchSnapshotMock).not.toHaveBeenCalled();
+  });
+
+  it('starts one live source without fetching a bounded snapshot for query-only demand', async () => {
+    refreshOrchestrator.acquireScopedDomainLease(DOMAIN, SCOPE, { demand: 'query' });
+    await flush();
+    expect(startCalls).toEqual([SCOPE]);
+
+    resolvers[0](() => undefined);
+    await flush();
+
+    expect(fetchSnapshotMock).not.toHaveBeenCalled();
+    refreshOrchestrator.releaseScopedDomainLease(DOMAIN, SCOPE, { demand: 'query' });
+  });
+
+  it('fetches the bounded snapshot when snapshot demand joins a query-only live source', async () => {
+    refreshOrchestrator.acquireScopedDomainLease(DOMAIN, SCOPE, { demand: 'query' });
+    await flush();
+    resolvers[0](() => undefined);
+    await flush();
+    expect(fetchSnapshotMock).not.toHaveBeenCalled();
+
+    refreshOrchestrator.acquireScopedDomainLease(DOMAIN, SCOPE, { demand: 'snapshot' });
+    await flush();
+
+    expect(fetchSnapshotMock).toHaveBeenCalledWith(
+      DOMAIN,
+      expect.objectContaining({ scope: SCOPE })
+    );
+    refreshOrchestrator.releaseScopedDomainLease(DOMAIN, SCOPE, { demand: 'snapshot' });
+    refreshOrchestrator.releaseScopedDomainLease(DOMAIN, SCOPE, { demand: 'query' });
+  });
+
+  it('advances the acknowledged-stream version once per healthy transition', async () => {
+    refreshOrchestrator.acquireScopedDomainLease(DOMAIN, SCOPE, { demand: 'query' });
+    await flush();
+    resolvers[0](() => undefined);
+    await flush();
+
+    eventBus.emit('refresh:resource-stream-health', {
+      domain: DOMAIN,
+      scope: SCOPE,
+      status: 'degraded',
+      reason: 'awaiting updates',
+      connectionStatus: 'connected',
+    });
+    expect(getScopedDomainState(DOMAIN, SCOPE).streamAcknowledgedVersion).toBeUndefined();
+
+    eventBus.emit('refresh:resource-stream-health', {
+      domain: DOMAIN,
+      scope: SCOPE,
+      status: 'healthy',
+      reason: 'synchronized',
+      connectionStatus: 'connected',
+    });
+    expect(getScopedDomainState(DOMAIN, SCOPE).streamAcknowledgedVersion).toBe(1);
+
+    eventBus.emit('refresh:resource-stream-health', {
+      domain: DOMAIN,
+      scope: SCOPE,
+      status: 'healthy',
+      reason: 'delivering',
+      connectionStatus: 'connected',
+    });
+    expect(getScopedDomainState(DOMAIN, SCOPE).streamAcknowledgedVersion).toBe(1);
+
+    refreshOrchestrator.releaseScopedDomainLease(DOMAIN, SCOPE, { demand: 'query' });
   });
 
   it('tears a cancelled start down exactly once when the scope stays disabled', async () => {

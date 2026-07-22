@@ -70,14 +70,14 @@ func clusterStorageDomainSpec() typedTableDomainSpec[ClusterStorageEntry] {
 		adapter:      clusterStorageTableQueryAdapter(),
 		schema:       clusterStorageQuerypageSchema(),
 		capabilities: clusterStorageQueryCapabilities(),
-		kindOf:       func(entry ClusterStorageEntry) string { return entry.Kind },
+		kindOf:       func(entry ClusterStorageEntry) string { return entry.Ref.Kind },
 		sortRows:     sortClusterStorageEntries,
 	}
 }
 
 func sortClusterStorageEntries(entries []ClusterStorageEntry) {
 	sort.Slice(entries, func(i, j int) bool {
-		return entries[i].Name < entries[j].Name
+		return entries[i].Ref.Name < entries[j].Ref.Name
 	})
 }
 

@@ -231,7 +231,7 @@ func TestNodeBuilderBuild(t *testing.T) {
 
 	summary := payload.Rows[0]
 
-	require.Equal(t, "node-1", summary.Name)
+	require.Equal(t, "node-1", summary.Ref.Name)
 	require.Equal(t, "Ready (Cordoned)", summary.Status)
 	require.Equal(t, "True", summary.StatusState)
 	require.Equal(t, "cordoned", summary.StatusPresentation)
@@ -257,7 +257,7 @@ func TestNodeBuilderBuild(t *testing.T) {
 	require.Equal(t, "110", summary.PodsCapacity)
 	require.Equal(t, "100", summary.PodsAllocatable)
 	require.Equal(t, int32(3), summary.Restarts)
-	require.Equal(t, "node", summary.Kind)
+	require.Equal(t, "Node", summary.Ref.Kind)
 	require.Equal(t, "8", summary.CPU)
 	require.Equal(t, "32.0 GB", summary.Memory)
 	require.True(t, summary.Unschedulable)
@@ -318,7 +318,7 @@ func TestNodeListFallbackKeepsRowsWhenPodListForbidden(t *testing.T) {
 
 	payload := snapshot.Payload.(NodeSnapshot)
 	require.Len(t, payload.Rows, 1)
-	require.Equal(t, "node-1", payload.Rows[0].Name)
+	require.Equal(t, "node-1", payload.Rows[0].Ref.Name)
 	require.Equal(t, "650m", payload.Rows[0].CPUUsage)
 	require.Empty(t, payload.Rows[0].PodMetrics)
 	require.False(t, payload.Metrics.Stale)

@@ -3454,15 +3454,7 @@ export namespace objectcatalog {
 	    }
 	}
 	export class Summary {
-	    clusterId: string;
-	    clusterName: string;
-	    kind: string;
-	    group: string;
-	    version: string;
-	    resource: string;
-	    namespace?: string;
-	    name: string;
-	    uid: string;
+	    ref: resourcemodel.ResourceRef;
 	    resourceVersion: string;
 	    creationTimestamp: string;
 	    scope: string;
@@ -3475,15 +3467,7 @@ export namespace objectcatalog {
 	
 	    constructor(source: any = {}) {
 	        if ('string' === typeof source) source = JSON.parse(source);
-	        this.clusterId = source["clusterId"];
-	        this.clusterName = source["clusterName"];
-	        this.kind = source["kind"];
-	        this.group = source["group"];
-	        this.version = source["version"];
-	        this.resource = source["resource"];
-	        this.namespace = source["namespace"];
-	        this.name = source["name"];
-	        this.uid = source["uid"];
+	        this.ref = this.convertValues(source["ref"], resourcemodel.ResourceRef);
 	        this.resourceVersion = source["resourceVersion"];
 	        this.creationTimestamp = source["creationTimestamp"];
 	        this.scope = source["scope"];
@@ -4511,14 +4495,7 @@ export namespace snapshot {
 	}
 	
 	export class CustomResourceSummary {
-	    clusterId: string;
-	    clusterName: string;
 	    ref: resourcemodel.ResourceRef;
-	    kind: string;
-	    name: string;
-	    namespace?: string;
-	    group: string;
-	    version: string;
 	    crdName?: string;
 	    status?: string;
 	    statusState?: string;
@@ -4536,14 +4513,7 @@ export namespace snapshot {
 	
 	    constructor(source: any = {}) {
 	        if ('string' === typeof source) source = JSON.parse(source);
-	        this.clusterId = source["clusterId"];
-	        this.clusterName = source["clusterName"];
 	        this.ref = this.convertValues(source["ref"], resourcemodel.ResourceRef);
-	        this.kind = source["kind"];
-	        this.name = source["name"];
-	        this.namespace = source["namespace"];
-	        this.group = source["group"];
-	        this.version = source["version"];
 	        this.crdName = source["crdName"];
 	        this.status = source["status"];
 	        this.statusState = source["statusState"];

@@ -127,7 +127,7 @@ func TestNamespaceHelmBuilder(t *testing.T) {
 	require.Len(t, payload.Rows, 1)
 
 	entry := payload.Rows[0]
-	require.Equal(t, "app", entry.Name)
+	require.Equal(t, "app", entry.Ref.Name)
 	require.Equal(t, "nginx-1.2.3", entry.Chart)
 	require.Equal(t, "2.0.0", entry.AppVersion)
 	require.Equal(t, "deployed", entry.Status)
@@ -172,10 +172,10 @@ func TestNamespaceHelmBuilderAllNamespaces(t *testing.T) {
 	require.Len(t, payload.Rows, 2)
 
 	// Sorted namespace-then-name.
-	require.Equal(t, "app-default", payload.Rows[0].Name)
-	require.Equal(t, "default", payload.Rows[0].Namespace)
-	require.Equal(t, "app-staging", payload.Rows[1].Name)
-	require.Equal(t, "staging", payload.Rows[1].Namespace)
+	require.Equal(t, "app-default", payload.Rows[0].Ref.Name)
+	require.Equal(t, "default", payload.Rows[0].Ref.Namespace)
+	require.Equal(t, "app-staging", payload.Rows[1].Ref.Name)
+	require.Equal(t, "staging", payload.Rows[1].Ref.Namespace)
 	require.Equal(t, "pending-upgrade", payload.Rows[1].Status)
 }
 
@@ -217,7 +217,7 @@ func TestNamespaceHelmBuilderQueryPage(t *testing.T) {
 	payload, ok := snapshot.Payload.(NamespaceHelmSnapshot)
 	require.True(t, ok)
 	require.Len(t, payload.Rows, 1)
-	require.Equal(t, "alpha", payload.Rows[0].Name)
+	require.Equal(t, "alpha", payload.Rows[0].Ref.Name)
 }
 
 func TestNamespaceHelmBuilderSkipsCorruptLatestRecord(t *testing.T) {
@@ -234,7 +234,7 @@ func TestNamespaceHelmBuilderSkipsCorruptLatestRecord(t *testing.T) {
 	payload, ok := snapshot.Payload.(NamespaceHelmSnapshot)
 	require.True(t, ok)
 	require.Len(t, payload.Rows, 1)
-	require.Equal(t, "healthy", payload.Rows[0].Name)
+	require.Equal(t, "healthy", payload.Rows[0].Ref.Name)
 }
 
 // See TestClusterEventsBuilderWaitsForCacheSync: an unsynced secrets informer

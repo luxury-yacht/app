@@ -101,7 +101,7 @@ vi.mock('@shared/components/tables/GridTable', async () => {
             {withStableListKeys(props.data, (row) => JSON.stringify(row)).map(
               ({ key, value: row }) => (
                 <tr key={key}>
-                  <td>{row.name}</td>
+                  <td>{row.ref.name}</td>
                 </tr>
               )
             )}
@@ -206,17 +206,18 @@ describe('NsViewStorage', () => {
   });
 
   const baseStorage = (overrides: Partial<StorageData> = {}): StorageData => ({
-    kind: 'PersistentVolumeClaim',
-    name: 'pvc-data',
-    namespace: 'team-a',
-    clusterId: 'alpha:ctx',
-    clusterName: 'alpha',
-    ref: makeResourceRef({
+    ref: {
+      ...makeResourceRef({
+        kind: 'PersistentVolumeClaim',
+        resource: 'persistentvolumeclaims',
+        namespace: 'team-a',
+        name: 'pvc-data',
+      }),
       kind: 'PersistentVolumeClaim',
-      resource: 'persistentvolumeclaims',
-      namespace: 'team-a',
       name: 'pvc-data',
-    }),
+      namespace: 'team-a',
+      clusterId: 'alpha:ctx',
+    },
     status: 'Bound',
     statusState: 'Bound',
     statusPresentation: 'ready',
@@ -371,7 +372,7 @@ describe('NsViewStorage', () => {
   });
 
   it('falls back to the selected cluster for defensive rows without clusterId', async () => {
-    const { clusterId: _clusterId, ...entryWithoutCluster } = baseStorage();
+    const entryWithoutCluster = baseStorage();
     const entry = {
       ...entryWithoutCluster,
       ref: { ...entryWithoutCluster.ref, clusterId: '' },

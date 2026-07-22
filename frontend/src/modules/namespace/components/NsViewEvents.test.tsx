@@ -12,6 +12,7 @@ import { withStableListKeys } from '@shared/utils/stableListKeys';
 import { act } from 'react';
 import * as ReactDOM from 'react-dom/client';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
+import type { CanonicalRowTestOverrides } from '@/core/refresh/types';
 import type { SortConfig, UseTableSortOptions } from '@/hooks/useTableSort';
 import { makeResourceRef } from '@/test-utils/makeResourceRef';
 import { requireReactElement } from '@/test-utils/requireReactElement';
@@ -124,7 +125,11 @@ vi.mock('@shared/hooks/useNavigateToView', () => ({
 }));
 
 vi.mock('@modules/kubernetes/config/KubeconfigContext', () => ({
-  useKubeconfig: () => ({ selectedKubeconfig: 'path:context', selectedClusterId: 'cluster-a' }),
+  useKubeconfig: () => ({
+    selectedKubeconfig: 'path:context',
+    selectedClusterId: 'cluster-a',
+    selectedClusterName: 'alpha',
+  }),
 }));
 
 vi.mock('@wailsjs/go/backend/App', () => ({
@@ -255,31 +260,32 @@ describe('NsViewEvents', () => {
     container.remove();
   });
 
-  const baseEvent = (overrides: Partial<EventData> = {}): EventData => ({
-    ref: makeResourceRef({
+  const baseEvent = (overrides: CanonicalRowTestOverrides<EventData> = {}): EventData => {
+    const { ref, ...row } = overrides;
+    return {
+      ref: {
+        ...makeResourceRef({
+          kind: 'Event',
+          resource: 'events',
+          namespace: 'team-a',
+          name: 'api.123',
+          uid: 'event-uid',
+        }),
+        ...ref,
+      },
       kind: 'Event',
-      resource: 'events',
-      namespace: 'team-a',
-      name: 'api.123',
-      uid: 'event-uid',
-    }),
-    kind: 'Event',
-    name: 'api.123',
-    uid: 'event-uid',
-    resourceVersion: '1',
-    type: 'Warning',
-    source: 'kubelet',
-    reason: 'FailedScheduling',
-    object: 'Pod/api',
-    objectApiVersion: 'v1',
-    message: 'Insufficient CPU',
-    objectNamespace: 'team-a',
-    namespace: 'team-a',
-    clusterId: 'alpha:ctx',
-    clusterName: 'alpha',
-    ageTimestamp: 42,
-    ...overrides,
-  });
+      resourceVersion: '1',
+      type: 'Warning',
+      source: 'kubelet',
+      reason: 'FailedScheduling',
+      object: 'Pod/api',
+      objectApiVersion: 'v1',
+      message: 'Insufficient CPU',
+      objectNamespace: 'team-a',
+      ageTimestamp: 42,
+      ...row,
+    };
+  };
 
   const renderEventsView = async (
     showNamespaceColumnOrOptions:
@@ -532,15 +538,16 @@ describe('NsViewEvents', () => {
 
   it('resolves CRD involved objects by UID when the event omits apiVersion', async () => {
     findCatalogObjectByUIDMock.mockResolvedValue({
-      kind: 'Database',
-      name: 'primary',
-      namespace: 'team-a',
-      clusterId: 'alpha:ctx',
-      clusterName: 'alpha',
-      group: 'db.example.io',
-      version: 'v1',
-      resource: 'databases',
-      uid: 'database-uid',
+      ref: {
+        kind: 'Database',
+        name: 'primary',
+        namespace: 'team-a',
+        clusterId: 'alpha:ctx',
+        group: 'db.example.io',
+        version: 'v1',
+        resource: 'databases',
+        uid: 'database-uid',
+      },
     });
     const event = baseEvent({
       object: 'Database/primary',
@@ -634,7 +641,10 @@ describe('NsViewEvents', () => {
   });
 
   it('derives namespace from objectNamespace, event namespace, or component namespace', async () => {
-    const noNamespaceEvent = baseEvent({ objectNamespace: undefined, namespace: undefined });
+    const noNamespaceEvent = baseEvent({
+      ref: { namespace: undefined },
+      objectNamespace: undefined,
+    });
     // Query-backed: feed the query the row so the involved-object action can resolve it.
     requestRefreshDomainStateMock.mockResolvedValue({
       status: 'executed',
@@ -673,8 +683,9 @@ describe('NsViewEvents', () => {
 
   it('generates stable keys and omits namespace column when not requested', async () => {
     const event = baseEvent({
+      ref: { namespace: 'ns-one' },
       objectNamespace: '',
-      namespace: 'ns-one',
+
       age: '2m',
       ageTimestamp: undefined,
     });

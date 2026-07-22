@@ -29,7 +29,7 @@ func pvObj(name, rv, capacity, storageClass string) *corev1.PersistentVolume {
 
 func findClusterStorageRow(rows []ClusterStorageEntry, kind, name string) *ClusterStorageEntry {
 	for i := range rows {
-		if rows[i].Kind == kind && rows[i].Name == name {
+		if rows[i].Ref.Kind == kind && rows[i].Ref.Name == name {
 			return &rows[i]
 		}
 	}

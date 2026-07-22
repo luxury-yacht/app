@@ -1275,14 +1275,14 @@ func replicaSetDeploymentOwnerName(rs *appsv1.ReplicaSet) string {
 
 func scopesForPod(summary snapshot.PodSummary) []string {
 	scopes := make([]string, 0, 5)
-	if summary.Namespace != "" {
-		scopes = append(scopes, fmt.Sprintf("namespace:%s", summary.Namespace), "namespace:all")
+	if summary.Ref.Namespace != "" {
+		scopes = append(scopes, fmt.Sprintf("namespace:%s", summary.Ref.Namespace), "namespace:all")
 	}
 	if summary.Node != "" {
 		scopes = append(scopes, fmt.Sprintf("node:%s", summary.Node))
 	}
 	if summary.OwnerKind != "" && summary.OwnerKind != "None" && summary.OwnerName != "" && summary.OwnerName != "None" {
-		if scope := workloadScopeForOwner(summary.Namespace, summary.OwnerAPIVersion, summary.OwnerKind, summary.OwnerName); scope != "" {
+		if scope := workloadScopeForOwner(summary.Ref.Namespace, summary.OwnerAPIVersion, summary.OwnerKind, summary.OwnerName); scope != "" {
 			scopes = append(scopes, scope)
 		}
 	}
@@ -1291,7 +1291,7 @@ func scopesForPod(summary snapshot.PodSummary) []string {
 	// collapsed scope for non-collapsed pods — uniqueScopes in the broadcast
 	// path deduplicates.
 	if summary.DirectOwnerKind != "" && summary.DirectOwnerName != "" {
-		if scope := workloadScopeForOwner(summary.Namespace, summary.DirectOwnerAPIVersion, summary.DirectOwnerKind, summary.DirectOwnerName); scope != "" {
+		if scope := workloadScopeForOwner(summary.Ref.Namespace, summary.DirectOwnerAPIVersion, summary.DirectOwnerKind, summary.DirectOwnerName); scope != "" {
 			scopes = append(scopes, scope)
 		}
 	}

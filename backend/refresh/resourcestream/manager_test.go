@@ -1480,7 +1480,7 @@ func TestManagerWorkloadUpdateFromPod(t *testing.T) {
 	sub, err := subscribeForTest(t, manager, domainWorkloads, "namespace:default")
 	require.NoError(t, err)
 
-	summary := snapshot.PodSummary{Namespace: "default", Name: "pod-1", OwnerKind: "Deployment", OwnerName: "web"}
+	summary := snapshot.PodSummary{Ref: resourcemodel.ResourceRef{Namespace: "default", Name: "pod-1"}, OwnerKind: "Deployment", OwnerName: "web"}
 	manager.broadcastWorkloadFromPodSummary(summary, "5", MessageTypeModified)
 
 	select {
@@ -1518,10 +1518,7 @@ func TestManagerWorkloadUpdateFromCompletedOwnedPod(t *testing.T) {
 
 	// A completed pod with a resolved owner still refreshes the owner's row
 	// (MODIFIED); only a standalone pod's own row is deleted on completion.
-	summary := snapshot.PodSummary{
-		Namespace:   "default",
-		Name:        "pod-1",
-		OwnerKind:   "Deployment",
+	summary := snapshot.PodSummary{Ref: resourcemodel.ResourceRef{Namespace: "default", Name: "pod-1"}, OwnerKind: "Deployment",
 		OwnerName:   "web",
 		StatusState: string(corev1.PodSucceeded),
 	}
@@ -1549,11 +1546,7 @@ func TestManagerDeletesStandaloneWorkloadRowWhenPodCompletes(t *testing.T) {
 	sub, err := subscribeForTest(t, manager, domainWorkloads, "namespace:default")
 	require.NoError(t, err)
 
-	summary := snapshot.PodSummary{
-		Namespace:   "default",
-		Name:        "pod-1",
-		StatusState: string(corev1.PodFailed),
-	}
+	summary := snapshot.PodSummary{Ref: resourcemodel.ResourceRef{Namespace: "default", Name: "pod-1"}, StatusState: string(corev1.PodFailed)}
 	manager.broadcastWorkloadFromPodSummary(summary, "7", MessageTypeModified)
 
 	select {

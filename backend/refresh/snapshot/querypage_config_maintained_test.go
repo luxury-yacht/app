@@ -33,7 +33,7 @@ func secObj(ns, name, rv string, data map[string][]byte) *corev1.Secret {
 
 func findConfigRow(rows []ConfigSummary, kind, ns, name string) *ConfigSummary {
 	for i := range rows {
-		if rows[i].Kind == kind && rows[i].Namespace == ns && rows[i].Name == name {
+		if rows[i].Ref.Kind == kind && rows[i].Ref.Namespace == ns && rows[i].Ref.Name == name {
 			return &rows[i]
 		}
 	}

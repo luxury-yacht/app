@@ -5,32 +5,20 @@
  * Handles rendering and interactions for the namespace feature.
  */
 
-import type { ResourceRef } from '@/core/refresh/types';
+import type { NamespaceWorkloadSummary } from '@/core/refresh/types';
 
-export interface WorkloadData {
-  ref: ResourceRef;
-  kind: string;
+export interface WorkloadData
+  extends Omit<
+    NamespaceWorkloadSummary,
+    'cpuUsage' | 'cpuRequest' | 'cpuLimit' | 'memUsage' | 'memRequest' | 'memLimit'
+  > {
   kindAlias?: string;
-  name: string;
-  namespace: string;
-  clusterId: string;
-  clusterName?: string;
-  status: string;
-  statusState?: string;
-  statusPresentation?: string;
-  statusReason?: string;
-  ready?: string;
-  restarts?: number;
   cpuUsage?: number | string;
   cpuRequest?: number | string;
   cpuLimit?: number | string;
   memUsage?: number | string;
   memRequest?: number | string;
   memLimit?: number | string;
-  portForwardAvailable?: boolean;
-  hpaManaged?: boolean | null;
-  desiredReplicas?: number;
-  age?: string;
 }
 
 export const normalizeWorkloadKind = (rawKind: string) => {
@@ -69,8 +57,8 @@ export const extractDesiredReplicas = (ready?: string): number => {
 };
 
 export const buildWorkloadKey = (workload: WorkloadData) => {
-  const baseKey = `${workload.kind}/${workload.name}`;
-  const ns = workload.namespace || '';
+  const baseKey = `${workload.ref.kind}/${workload.ref.name}`;
+  const ns = workload.ref.namespace || '';
   return `${ns}::${baseKey}`;
 };
 
@@ -112,10 +100,10 @@ export const appendWorkloadTokens = (tokens: string[], workload?: WorkloadData |
   if (!workload) {
     return;
   }
-  appendToken(tokens, workload.kind);
+  appendToken(tokens, workload.ref.kind);
   appendToken(tokens, workload.kindAlias);
-  appendToken(tokens, workload.name);
-  appendToken(tokens, workload.namespace);
+  appendToken(tokens, workload.ref.name);
+  appendToken(tokens, workload.ref.namespace);
   appendToken(tokens, workload.status);
   appendToken(tokens, workload.ready);
   appendToken(tokens, workload.restarts);

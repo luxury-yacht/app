@@ -2,11 +2,11 @@ import { useNamespace } from '@modules/namespace/contexts/NamespaceContext';
 import { useMemo } from 'react';
 import { useSidebarState } from '@/core/contexts/SidebarStateContext';
 import { useViewState } from '@/core/contexts/ViewStateContext';
+import type { CanonicalResourceRef } from '@/core/refresh/types';
 import type { NamespaceViewType } from '@/types/navigation/views';
 
 interface NamespaceColumnRow {
-  namespace?: string | null;
-  clusterId?: string | null;
+  ref: Pick<CanonicalResourceRef, 'clusterId' | 'namespace'>;
 }
 
 export function useNamespaceColumnLink<T extends NamespaceColumnRow>(
@@ -20,22 +20,22 @@ export function useNamespaceColumnLink<T extends NamespaceColumnRow>(
   return useMemo(
     () => ({
       onClick: (item: T) => {
-        const namespace = (getNamespace ? getNamespace(item) : item.namespace)?.trim();
+        const namespace = (getNamespace ? getNamespace(item) : item.ref.namespace)?.trim();
         if (!namespace) {
           return;
         }
 
-        setSelectedNamespace(namespace, item.clusterId ?? undefined);
+        setSelectedNamespace(namespace, item.ref.clusterId);
         setViewType('namespace');
         setSidebarSelection({ type: 'namespace', value: namespace });
         setActiveNamespaceTab(tab);
       },
       getClassName: (item: T) =>
-        ((getNamespace ? getNamespace(item) : item.namespace) ?? '').trim()
+        ((getNamespace ? getNamespace(item) : item.ref.namespace) ?? '').trim()
           ? 'object-panel-link'
           : undefined,
       isInteractive: (item: T) =>
-        Boolean(((getNamespace ? getNamespace(item) : item.namespace) ?? '').trim()),
+        Boolean(((getNamespace ? getNamespace(item) : item.ref.namespace) ?? '').trim()),
     }),
     [
       getNamespace,

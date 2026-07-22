@@ -8,6 +8,7 @@ import (
 
 	"github.com/luxury-yacht/app/backend/kind/objectmapnode"
 	"github.com/luxury-yacht/app/backend/objectcatalog"
+	"github.com/luxury-yacht/app/backend/resourcemodel"
 
 	"github.com/stretchr/testify/require"
 	appsv1 "k8s.io/api/apps/v1"
@@ -124,16 +125,7 @@ func objectMapCatalogService(t *testing.T, shared informers.SharedInformerFactor
 			scope = objectcatalog.ScopeNamespace
 		}
 		for _, obj := range fakeIngestCollectorItems(t, collector, shared, collector.Identity.GVR()) {
-			summaries = append(summaries, objectcatalog.Summary{
-				Kind:      collector.Identity.Kind,
-				Group:     collector.Identity.Group,
-				Version:   collector.Identity.Version,
-				Resource:  collector.Identity.Resource,
-				Namespace: obj.GetNamespace(),
-				Name:      obj.GetName(),
-				UID:       string(obj.GetUID()),
-				Scope:     scope,
-			})
+			summaries = append(summaries, objectcatalog.Summary{Ref: resourcemodel.ResourceRef{Group: collector.Identity.Group, Version: collector.Identity.Version, Kind: collector.Identity.Kind, Resource: collector.Identity.Resource, Namespace: obj.GetNamespace(), Name: obj.GetName(), UID: string(obj.GetUID())}, Scope: scope})
 		}
 	}
 	return seedCatalogService(t, summaries)

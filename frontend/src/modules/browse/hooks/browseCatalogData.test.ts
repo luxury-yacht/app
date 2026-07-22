@@ -1,6 +1,10 @@
 import { describe, expect, it } from 'vitest';
 import { makeCatalogSnapshotPayload } from '@/core/refresh/refreshContractTestBuilders';
-import type { CatalogItem, CatalogSnapshotPayload } from '@/core/refresh/types';
+import type {
+  CanonicalRowTestOverrides,
+  CatalogItem,
+  CatalogSnapshotPayload,
+} from '@/core/refresh/types';
 import {
   acceptsCatalogSnapshotScope,
   applyCatalogBaseline,
@@ -11,21 +15,26 @@ import {
   emptyBrowseCatalogCollection,
 } from './browseCatalogData';
 
-const makeItem = (overrides: Partial<CatalogItem>): CatalogItem => ({
-  clusterId: 'cluster-1',
-  clusterName: 'Cluster 1',
-  kind: 'Pod',
-  group: '',
-  version: 'v1',
-  resource: 'pods',
-  namespace: 'default',
-  name: 'pod-a',
-  uid: 'pod-a',
-  resourceVersion: '1',
-  creationTimestamp: '2026-01-01T00:00:00Z',
-  scope: 'Namespace',
-  ...overrides,
-});
+const makeItem = (overrides: CanonicalRowTestOverrides<CatalogItem>): CatalogItem => {
+  const { ref, ...row } = overrides;
+  return {
+    ref: {
+      clusterId: 'cluster-1',
+      group: '',
+      version: 'v1',
+      kind: 'Pod',
+      resource: 'pods',
+      namespace: 'default',
+      name: 'pod-a',
+      uid: 'pod-a',
+      ...ref,
+    },
+    resourceVersion: '1',
+    creationTimestamp: '2026-01-01T00:00:00Z',
+    scope: 'Namespace',
+    ...row,
+  };
+};
 
 const makePayload = (overrides: Partial<CatalogSnapshotPayload>): CatalogSnapshotPayload =>
   makeCatalogSnapshotPayload({
@@ -161,8 +170,8 @@ describe('browseCatalogData', () => {
   });
 
   it('applies baseline snapshots as full replacements', () => {
-    const first = makeItem({ uid: 'pod-a', name: 'pod-a' });
-    const second = makeItem({ uid: 'pod-b', name: 'pod-b' });
+    const first = makeItem({ ref: { uid: 'pod-a', name: 'pod-a' } });
+    const second = makeItem({ ref: { uid: 'pod-b', name: 'pod-b' } });
     const existing = applyCatalogBaseline(
       emptyBrowseCatalogCollection(),
       makePayload({ items: [first, second], continue: '2', total: 2 })
@@ -173,14 +182,14 @@ describe('browseCatalogData', () => {
       makePayload({ items: [first], continue: '', total: 1 })
     );
 
-    expect(next.items.map((item) => item.name)).toEqual(['pod-a']);
+    expect(next.items.map((item) => item.ref.name)).toEqual(['pod-a']);
     expect(next.continueToken).toBeNull();
     expect(next.totalCount).toBe(1);
   });
 
   it('applies page snapshots as current-window replacement pagination', () => {
-    const first = makeItem({ uid: 'pod-a', name: 'pod-a' });
-    const second = makeItem({ uid: 'pod-b', name: 'pod-b' });
+    const first = makeItem({ ref: { uid: 'pod-a', name: 'pod-a' } });
+    const second = makeItem({ ref: { uid: 'pod-b', name: 'pod-b' } });
     const existing = applyCatalogBaseline(
       emptyBrowseCatalogCollection(),
       makePayload({ items: [first], continue: '2', total: 2 })
@@ -191,7 +200,7 @@ describe('browseCatalogData', () => {
       makePayload({ items: [second], continue: '', total: 2 })
     );
 
-    expect(next.items.map((item) => item.name)).toEqual(['pod-b']);
+    expect(next.items.map((item) => item.ref.name)).toEqual(['pod-b']);
     expect(next.continueToken).toBeNull();
     expect(next.totalCount).toBe(2);
   });

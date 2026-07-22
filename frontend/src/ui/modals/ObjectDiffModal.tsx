@@ -120,7 +120,11 @@ const buildNamespaceScope = (namespace?: string) => {
   return trimmed ? trimmed : CLUSTER_SCOPE;
 };
 
-const buildSelectionParts = (item: CatalogItem | null, shortNamesEnabled: boolean) => {
+const buildSelectionParts = (
+  item: CatalogItem | null,
+  shortNamesEnabled: boolean,
+  clusterName?: string
+) => {
   if (!item) {
     return {
       hasSelection: false,
@@ -130,14 +134,14 @@ const buildSelectionParts = (item: CatalogItem | null, shortNamesEnabled: boolea
       kindLabel: '',
     };
   }
-  const namespaceLabel = buildNamespaceLabel(item.namespace);
-  const clusterLabel = item.clusterName?.trim() || item.clusterId?.trim() || '';
-  const kindLabel = getDisplayKind(item.kind, shortNamesEnabled);
+  const namespaceLabel = buildNamespaceLabel(item.ref.namespace);
+  const clusterLabel = clusterName?.trim() || item.ref.clusterId.trim();
+  const kindLabel = getDisplayKind(item.ref.kind, shortNamesEnabled);
   return {
     hasSelection: true,
     clusterLabel,
     namespaceLabel,
-    objectName: item.name,
+    objectName: item.ref.name,
     kindLabel,
   };
 };
@@ -161,13 +165,16 @@ const toCatalogItem = (value: unknown): CatalogItem | null => {
     return null;
   }
   const item = value as Partial<CatalogItem>;
+  const ref = item.ref;
   if (
-    typeof item.clusterId !== 'string' ||
-    typeof item.kind !== 'string' ||
-    typeof item.group !== 'string' ||
-    typeof item.version !== 'string' ||
-    typeof item.name !== 'string' ||
-    typeof item.uid !== 'string'
+    !ref ||
+    typeof ref.clusterId !== 'string' ||
+    typeof ref.kind !== 'string' ||
+    typeof ref.group !== 'string' ||
+    typeof ref.version !== 'string' ||
+    typeof ref.resource !== 'string' ||
+    typeof ref.name !== 'string' ||
+    typeof ref.uid !== 'string'
   ) {
     return null;
   }
@@ -182,27 +189,34 @@ const buildCatalogItemFromSelectionSeed = (
   }
 
   return {
-    kind: selection.kind,
-    group: selection.group,
-    version: selection.version,
-    resource: selection.resource ?? '',
-    namespace: selection.namespace,
-    name: selection.name,
-    uid: selection.uid,
+    ref: {
+      clusterId: selection.clusterId,
+      group: selection.group,
+      version: selection.version,
+      kind: selection.kind,
+      resource: selection.resource ?? '',
+      namespace: selection.namespace,
+      name: selection.name,
+      uid: selection.uid,
+    },
     resourceVersion: '',
     creationTimestamp: '',
     scope: selection.namespace ? 'Namespace' : 'Cluster',
-    clusterId: selection.clusterId,
-    clusterName: selection.clusterName ?? '',
   };
 };
 
 const buildObjectOptions = (items: CatalogItem[]): DropdownOption[] =>
-  items.map((item) => ({
-    value: item.uid,
-    label: item.name,
-    metadata: item,
-  }));
+  items.flatMap((item) =>
+    item.ref.uid
+      ? [
+          {
+            value: item.ref.uid,
+            label: item.ref.name,
+            metadata: item,
+          },
+        ]
+      : []
+  );
 
 const mergeSelectedObject = (
   items: CatalogItem[],
@@ -211,7 +225,7 @@ const mergeSelectedObject = (
   if (!selection) {
     return items;
   }
-  if (items.some((item) => item.uid === selection.uid)) {
+  if (items.some((item) => item.ref.uid === selection.ref.uid)) {
     return items;
   }
   return [selection, ...items];
@@ -225,14 +239,13 @@ const sameCatalogItem = (left: CatalogItem | null, right: CatalogItem | null) =>
     return false;
   }
   return (
-    left.uid === right.uid &&
-    left.name === right.name &&
-    left.namespace === right.namespace &&
-    left.kind === right.kind &&
-    left.group === right.group &&
-    left.version === right.version &&
-    left.clusterId === right.clusterId &&
-    left.clusterName === right.clusterName
+    left.ref.uid === right.ref.uid &&
+    left.ref.name === right.ref.name &&
+    left.ref.namespace === right.ref.namespace &&
+    left.ref.kind === right.ref.kind &&
+    left.ref.group === right.ref.group &&
+    left.ref.version === right.ref.version &&
+    left.ref.clusterId === right.ref.clusterId
   );
 };
 
@@ -270,8 +283,8 @@ const resolveNamespaceList = (payload: CatalogSnapshotPayload | null): string[] 
   const items = payload?.items ?? [];
   const fromItems = new Set<string>();
   items.forEach((item) => {
-    if (item.namespace) {
-      fromItems.add(item.namespace);
+    if (item.ref.namespace) {
+      fromItems.add(item.ref.namespace);
     }
   });
   return Array.from(fromItems);
@@ -329,24 +342,24 @@ const useCatalogDiffSnapshot = (
 
 const useObjectYamlSnapshot = (selection: CatalogItem | null, enabled: boolean) => {
   const scope = useMemo(() => {
-    if (!enabled || !selection?.clusterId || !selection.kind || !selection.name) {
+    if (!enabled || !selection?.ref.clusterId || !selection.ref.kind || !selection.ref.name) {
       return null;
     }
 
     // Use the cluster-scope token when the object has no namespace.
-    const namespaceSegment = buildNamespaceScope(selection.namespace);
+    const namespaceSegment = buildNamespaceScope(selection.ref.namespace);
     // CatalogItem already carries group/version from the backend catalog,
     // so the diff modal can always emit the GVK scope form. The backend
     // object-yaml provider will resolve the GVR strictly and avoid the
     // first-match-wins ambiguity that affects bare-kind scopes.
     const rawScope = buildObjectScope({
       namespace: namespaceSegment,
-      group: selection.group,
-      version: selection.version,
-      kind: selection.kind.toLowerCase(),
-      name: selection.name,
+      group: selection.ref.group,
+      version: selection.ref.version,
+      kind: selection.ref.kind.toLowerCase(),
+      name: selection.ref.name,
     });
-    return buildClusterScope(selection.clusterId, rawScope);
+    return buildClusterScope(selection.ref.clusterId, rawScope);
   }, [enabled, selection]);
 
   const effectiveScope = scope ?? INACTIVE_SCOPE;
@@ -601,20 +614,20 @@ const ObjectDiffModal: React.FC<ObjectDiffModalProps> = ({
     return buildObjectOptions(rightVisibleItems);
   }, [rightObjectEnabled, rightVisibleItems]);
   const leftObjectMap = useMemo(
-    () => new Map(leftVisibleItems.map((item) => [item.uid, item])),
+    () => new Map(leftVisibleItems.map((item) => [item.ref.uid, item])),
     [leftVisibleItems]
   );
   const rightObjectMap = useMemo(
-    () => new Map(rightVisibleItems.map((item) => [item.uid, item])),
+    () => new Map(rightVisibleItems.map((item) => [item.ref.uid, item])),
     [rightVisibleItems]
   );
   const leftSelection = leftObjectUid
     ? (leftObjectMap.get(leftObjectUid) ??
-      (leftSelectedObject?.uid === leftObjectUid ? leftSelectedObject : null))
+      (leftSelectedObject?.ref.uid === leftObjectUid ? leftSelectedObject : null))
     : null;
   const rightSelection = rightObjectUid
     ? (rightObjectMap.get(rightObjectUid) ??
-      (rightSelectedObject?.uid === rightObjectUid ? rightSelectedObject : null))
+      (rightSelectedObject?.ref.uid === rightObjectUid ? rightSelectedObject : null))
     : null;
 
   const leftNamespaceLoading = leftBaseEnabled && isSnapshotLoading(leftBaseCatalog.state.status);
@@ -695,10 +708,10 @@ const ObjectDiffModal: React.FC<ObjectDiffModalProps> = ({
           showNoMatch('left');
           return;
         }
-        setLeftNamespace(normalizeMatchNamespace(match.namespace));
-        setLeftKind(match.kind);
+        setLeftNamespace(normalizeMatchNamespace(match.ref.namespace));
+        setLeftKind(match.ref.kind);
         setLeftSelectedObject(match);
-        setLeftObjectUid(match.uid);
+        setLeftObjectUid(match.ref.uid ?? '');
       } catch {
         if (leftInitialSelectionRequestRef.current === requestId) {
           showNoMatch('left');
@@ -990,7 +1003,7 @@ const ObjectDiffModal: React.FC<ObjectDiffModalProps> = ({
       return;
     }
     const targetClusterId = rightClusterId;
-    const sourceUid = leftSelection.uid;
+    const sourceUid = leftSelection.ref.uid;
     const requestId = rightMatchRequestRef.current + 1;
     rightMatchRequestRef.current = requestId;
     setRightMatching(true);
@@ -1000,7 +1013,8 @@ const ObjectDiffModal: React.FC<ObjectDiffModalProps> = ({
       const result = await requestData({
         resource: 'catalog-object-match',
         reason: 'user',
-        read: () => readCatalogObjectMatchForRef(leftSelection, { clusterId: targetClusterId }),
+        read: () =>
+          readCatalogObjectMatchForRef({ ...leftSelection.ref, clusterId: targetClusterId }),
       });
       const match = toCatalogItem(result.status === 'executed' ? result.data : null);
       if (
@@ -1015,11 +1029,11 @@ const ObjectDiffModal: React.FC<ObjectDiffModalProps> = ({
         return;
       }
 
-      setRightNamespace(normalizeMatchNamespace(match.namespace));
-      setRightKind(match.kind);
+      setRightNamespace(normalizeMatchNamespace(match.ref.namespace));
+      setRightKind(match.ref.kind);
       setRightObjectSearch('');
       setRightSelectedObject(match);
-      setRightObjectUid(match.uid);
+      setRightObjectUid(match.ref.uid ?? '');
     } catch {
       if (
         rightMatchRequestRef.current === requestId &&
@@ -1044,7 +1058,7 @@ const ObjectDiffModal: React.FC<ObjectDiffModalProps> = ({
       return;
     }
     const targetClusterId = leftClusterId;
-    const sourceUid = rightSelection.uid;
+    const sourceUid = rightSelection.ref.uid;
     const requestId = leftMatchRequestRef.current + 1;
     leftMatchRequestRef.current = requestId;
     setLeftMatching(true);
@@ -1054,7 +1068,8 @@ const ObjectDiffModal: React.FC<ObjectDiffModalProps> = ({
       const result = await requestData({
         resource: 'catalog-object-match',
         reason: 'user',
-        read: () => readCatalogObjectMatchForRef(rightSelection, { clusterId: targetClusterId }),
+        read: () =>
+          readCatalogObjectMatchForRef({ ...rightSelection.ref, clusterId: targetClusterId }),
       });
       const match = toCatalogItem(result.status === 'executed' ? result.data : null);
       if (
@@ -1069,11 +1084,11 @@ const ObjectDiffModal: React.FC<ObjectDiffModalProps> = ({
         return;
       }
 
-      setLeftNamespace(normalizeMatchNamespace(match.namespace));
-      setLeftKind(match.kind);
+      setLeftNamespace(normalizeMatchNamespace(match.ref.namespace));
+      setLeftKind(match.ref.kind);
       setLeftObjectSearch('');
       setLeftSelectedObject(match);
-      setLeftObjectUid(match.uid);
+      setLeftObjectUid(match.ref.uid ?? '');
     } catch {
       if (
         leftMatchRequestRef.current === requestId &&
@@ -1095,7 +1110,10 @@ const ObjectDiffModal: React.FC<ObjectDiffModalProps> = ({
 
   // Render a selection label with object name emphasized and metadata muted.
   const renderSelectionLabel = (selection: CatalogItem | null) => {
-    const parts = buildSelectionParts(selection, useShortNamesSetting);
+    const clusterLabel = selection
+      ? clusterOptions.find((option) => option.value === selection.ref.clusterId)?.label
+      : undefined;
+    const parts = buildSelectionParts(selection, useShortNamesSetting, clusterLabel);
     if (!parts.hasSelection) {
       return <span className="object-diff-column-meta">No object selected</span>;
     }

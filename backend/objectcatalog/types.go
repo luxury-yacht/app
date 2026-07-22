@@ -17,6 +17,7 @@ import (
 	"github.com/luxury-yacht/app/backend/refresh/ingest"
 	"github.com/luxury-yacht/app/backend/refresh/permissions"
 	"github.com/luxury-yacht/app/backend/refresh/querypage"
+	"github.com/luxury-yacht/app/backend/resourcemodel"
 	"github.com/luxury-yacht/app/backend/resources/common"
 	apiextinformers "k8s.io/apiextensions-apiserver/pkg/client/informers/externalversions"
 	"k8s.io/apimachinery/pkg/runtime/schema"
@@ -59,20 +60,12 @@ type HealthStatus struct {
 
 // Summary represents the lightweight metadata captured for each Kubernetes object.
 type Summary struct {
-	ClusterID         string       `json:"clusterId"`              // stable identifier for the source cluster
-	ClusterName       string       `json:"clusterName"`            // display name for the source cluster
-	Kind              string       `json:"kind"`                   // resource kind
-	Group             string       `json:"group"`                  // resource group
-	Version           string       `json:"version"`                // resource version
-	Resource          string       `json:"resource"`               // resource name
-	Namespace         string       `json:"namespace,omitempty"`    // resource namespace
-	Name              string       `json:"name"`                   // resource name
-	UID               string       `json:"uid"`                    // resource UID
-	ResourceVersion   string       `json:"resourceVersion"`        // resource version
-	CreationTimestamp string       `json:"creationTimestamp"`      // resource creation timestamp
-	Scope             Scope        `json:"scope"`                  // resource scope
-	LabelsDigest      string       `json:"labelsDigest,omitempty"` // optional digest of resource labels
-	ActionFacts       *ActionFacts `json:"actionFacts,omitempty"`  // optional facts needed to present object actions correctly
+	Ref               resourcemodel.ResourceRef `json:"ref"`
+	ResourceVersion   string                    `json:"resourceVersion"`        // resource version
+	CreationTimestamp string                    `json:"creationTimestamp"`      // resource creation timestamp
+	Scope             Scope                     `json:"scope"`                  // resource scope
+	LabelsDigest      string                    `json:"labelsDigest,omitempty"` // optional digest of resource labels
+	ActionFacts       *ActionFacts              `json:"actionFacts,omitempty"`  // optional facts needed to present object actions correctly
 }
 
 // ActionFacts carries lightweight, action-relevant state for catalog rows.
