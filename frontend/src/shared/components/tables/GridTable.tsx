@@ -22,19 +22,14 @@ import { useGridTableController } from '@shared/components/tables/hooks/useGridT
 export type {
   ColumnWidthInput,
   ColumnWidthState,
-  GridColumnAlignment,
   GridColumnAlignmentOptions,
   GridColumnDefinition,
   GridTableDiagnosticsMode,
-  GridTableFilterAccessors,
   GridTableFilterConfig,
-  GridTableFilteredEmptyState,
   GridTableFilterOptions,
   GridTableFilterState,
-  GridTableLocalPaginationConfig,
   GridTableProps,
   GridTableVirtualizationOptions,
-  InternalFilterOptions,
 } from '@shared/components/tables/GridTable.types';
 export { GRIDTABLE_VIRTUALIZATION_DEFAULT } from '@shared/components/tables/GridTable.types';
 

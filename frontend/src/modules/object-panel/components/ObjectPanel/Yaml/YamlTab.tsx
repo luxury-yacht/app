@@ -39,8 +39,6 @@ import {
   type YamlTransactionDiffResult,
 } from './yamlTransaction';
 
-export type { YamlTabProps } from './yamlTabTypes';
-
 const renderYamlDiffToggle = (
   diff: YamlTransactionDiffResult,
   keyPrefix: string,

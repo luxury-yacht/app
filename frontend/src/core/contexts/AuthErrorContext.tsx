@@ -2,7 +2,6 @@ import type React from 'react';
 import { createContext, useCallback, useContext, useMemo } from 'react';
 import { RetryClusterAuth } from '@/core/backend-api';
 import {
-  type AuthErrorClass,
   applyAuthFailedEvent,
   applyAuthProgressEvent,
   applyAuthRecoveringEvent,
@@ -12,7 +11,7 @@ import {
 } from '@/core/cluster-workspace/clusterWorkspaceStore';
 import { useClusterWorkspaceSnapshot } from '@/core/cluster-workspace/useClusterWorkspace';
 
-export type { AuthErrorClass, ClusterAuthState };
+export type { ClusterAuthState };
 export {
   applyAuthFailedEvent,
   applyAuthProgressEvent,

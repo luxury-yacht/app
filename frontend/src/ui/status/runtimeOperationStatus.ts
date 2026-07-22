@@ -26,9 +26,6 @@ import {
 export type {
   PortForwardSession,
   PortForwardStatus,
-  PortForwardStatusEvent,
-  RuntimeOperation,
-  RuntimeOperationStatusState,
   ShellSessionInfo,
 } from './runtimeOperationStatusAdapter';
 

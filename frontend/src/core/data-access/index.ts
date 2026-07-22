@@ -15,16 +15,9 @@ export {
 } from './dataAccess';
 export * from './readers';
 export type {
-  ContextRefreshRequest,
   DataAccessAdapter,
-  DataBlockedReason,
   DataReadRequest,
-  DataReadResult,
   DataRequestReason,
-  DataRequestResult,
-  RefreshDomainRequest,
-  RefreshDomainStateRequest,
-  RefreshDomainStateResult,
 } from './types';
 export { useRefreshDomainHandle } from './useRefreshDomainHandle';
 export { useScopedRefreshDomainLifecycle } from './useScopedRefreshDomainLifecycle';
