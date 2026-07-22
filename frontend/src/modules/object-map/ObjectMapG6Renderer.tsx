@@ -30,7 +30,7 @@ import type { ObjectMapG6EventHandlers } from './objectMapG6EventBindings';
 import { objectMapG6EdgeOptions, objectMapG6NodeOptions } from './objectMapG6RendererOptions';
 import { computeObjectMapTooltipLayout } from './objectMapG6Tooltip';
 import type { ObjectMapLayout } from './objectMapLayout';
-import { createObjectMapNodeGestureState } from './objectMapNodeGesture';
+import { createObjectMapNodeGestureState, objectMapActiveDragNodeId } from './objectMapNodeGesture';
 import type {
   ObjectMapCanvasContextMenuAction,
   ObjectMapContextMenuAction,
@@ -424,6 +424,7 @@ const ObjectMapG6Renderer: React.FC<ObjectMapG6RendererProps> = ({
       getCurrentSelectionState: () => selectionStateRef.current,
       getHoveredEdgeId: () => hoveredEdgeIdRef.current,
       getPreserveViewportNodeId: () => preserveViewportNodeIdRef.current,
+      getDraggedNodeId: () => objectMapActiveDragNodeId(nodeGestureRef.current),
       onGraphDataError: (error) => {
         console.error('[ObjectMapG6Renderer] Failed to apply graph data:', error);
       },

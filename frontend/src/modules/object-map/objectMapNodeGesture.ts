@@ -68,6 +68,11 @@ export const updateObjectMapNodeGesture = (
   return true;
 };
 
+export const objectMapActiveDragNodeId = (state: ObjectMapNodeGestureState): string | null => {
+  const drag = state.activeDrag;
+  return drag?.didDrag ? drag.nodeId : null;
+};
+
 export const endObjectMapNodeGesture = (
   state: ObjectMapNodeGestureState,
   pointerId: number
