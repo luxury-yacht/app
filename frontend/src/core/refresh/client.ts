@@ -207,6 +207,14 @@ export async function ensureRefreshBaseURL(): Promise<string> {
   return refreshReadyPromise;
 }
 
+export function parseRefreshSnapshotValue<TPayload>(
+  value: unknown,
+  domain: RefreshDomain
+): Snapshot<TPayload> {
+  assertRefreshSnapshotEnvelope<TPayload>(value, domain);
+  return value;
+}
+
 export async function fetchSnapshot<TPayload>(
   domain: RefreshDomain,
   options: FetchSnapshotOptions = {}
@@ -284,8 +292,7 @@ export async function fetchSnapshot<TPayload>(
     throw permissionDenied ? new SnapshotPermissionDeniedError(message) : new Error(message);
   }
 
-  const snapshot: unknown = await response.json();
-  assertRefreshSnapshotEnvelope<TPayload>(snapshot, domain);
+  const snapshot = parseRefreshSnapshotValue<TPayload>(await response.json(), domain);
   return {
     snapshot,
     etag: response.headers.get('ETag') ?? undefined,

@@ -1,6 +1,9 @@
 package genrefreshcontracts
 
 import (
+	"encoding/json"
+	"os"
+	"path/filepath"
 	"reflect"
 	"strings"
 	"testing"
@@ -8,6 +11,32 @@ import (
 	"github.com/luxury-yacht/app/backend/kind/streamrows"
 	"github.com/luxury-yacht/app/backend/resourcemodel"
 )
+
+func TestCanonicalObjectRowWireFixtureCoversInventory(t *testing.T) {
+	fixturePath := filepath.Join("..", "..", "..", "frontend", "src", "test-fixtures", "canonical-resource-row-wire.json")
+	data, err := os.ReadFile(fixturePath)
+	if err != nil {
+		t.Fatalf("read canonical row wire fixture: %v", err)
+	}
+	var fixture struct {
+		Entries []struct {
+			Family string `json:"family"`
+		} `json:"entries"`
+	}
+	if err := json.Unmarshal(data, &fixture); err != nil {
+		t.Fatalf("decode canonical row wire fixture: %v", err)
+	}
+
+	specs := canonicalObjectRowSpecs()
+	if len(fixture.Entries) != len(specs) {
+		t.Fatalf("wire fixture has %d families, want %d", len(fixture.Entries), len(specs))
+	}
+	for index, spec := range specs {
+		if got := fixture.Entries[index].Family; got != spec.name {
+			t.Errorf("wire fixture family %d = %q, want %q", index, got, spec.name)
+		}
+	}
+}
 
 func TestCanonicalObjectRowsCarryOnlyRefIdentity(t *testing.T) {
 	identityJSONFields := map[string]struct{}{

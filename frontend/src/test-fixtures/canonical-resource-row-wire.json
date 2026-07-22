@@ -1,0 +1,1142 @@
+{
+  "entries": [
+    {
+      "boundary": "refresh-snapshot",
+      "domain": "namespaces",
+      "family": "namespaces",
+      "rowPath": "payload.namespaces",
+      "snapshot": {
+        "checksum": "canonical-row-wire-fixture",
+        "domain": "namespaces",
+        "generatedAt": 1700000000000,
+        "payload": {
+          "clusterId": "cluster-wire",
+          "clusterName": "Wire Cluster",
+          "namespaces": [
+            {
+              "creationTimestamp": -62135596800,
+              "hasWorkloads": false,
+              "phase": "Unknown",
+              "quotaPressureState": "unavailable",
+              "ref": {
+                "clusterId": "cluster-wire",
+                "group": "",
+                "kind": "Namespace",
+                "name": "default",
+                "resource": "namespaces",
+                "version": "v1"
+              },
+              "resourceVersion": "",
+              "status": "Unknown",
+              "statusPresentation": "unknown",
+              "statusReason": "status.phase",
+              "statusState": "Unknown",
+              "warningEventsState": "unavailable",
+              "workloadsUnknown": true
+            }
+          ]
+        },
+        "scope": "cluster-wire|",
+        "sequence": 1,
+        "stats": { "buildDurationMs": 0, "itemCount": 1 },
+        "version": 1
+      }
+    },
+    {
+      "boundary": "refresh-snapshot",
+      "domain": "namespace-metrics",
+      "family": "namespace-metrics",
+      "rowPath": "payload.namespaces",
+      "snapshot": {
+        "checksum": "canonical-row-wire-fixture",
+        "domain": "namespace-metrics",
+        "generatedAt": 1700000000000,
+        "payload": {
+          "clusterId": "cluster-wire",
+          "clusterName": "Wire Cluster",
+          "metrics": { "failureCount": 0, "stale": false, "successCount": 0 },
+          "metricsState": "available",
+          "namespaces": [
+            {
+              "cpuUsageMilli": 25,
+              "memoryUsageBytes": 67108864,
+              "ref": {
+                "clusterId": "cluster-wire",
+                "group": "",
+                "kind": "Namespace",
+                "name": "default",
+                "resource": "namespaces",
+                "version": "v1"
+              }
+            }
+          ]
+        },
+        "scope": "cluster-wire|",
+        "sequence": 1,
+        "stats": { "buildDurationMs": 0, "itemCount": 1 },
+        "version": 1
+      }
+    },
+    {
+      "boundary": "refresh-snapshot",
+      "domain": "nodes",
+      "family": "nodes",
+      "rowPath": "payload.rows",
+      "snapshot": {
+        "checksum": "canonical-row-wire-fixture",
+        "domain": "nodes",
+        "generatedAt": 1700000000000,
+        "payload": {
+          "capabilities": {},
+          "clusterId": "cluster-wire",
+          "clusterName": "Wire Cluster",
+          "facetsExact": true,
+          "metrics": { "failureCount": 0, "stale": false, "successCount": 0 },
+          "provider": "",
+          "rows": [
+            {
+              "age": "\u003cage\u003e",
+              "ageTimestamp": 1699999000000,
+              "cpu": "0",
+              "cpuAllocatable": "0",
+              "cpuCapacity": "0",
+              "cpuLimits": "",
+              "cpuRequests": "",
+              "cpuUsage": "",
+              "labels": { "app": "wire-fixture" },
+              "memLimits": "",
+              "memRequests": "",
+              "memory": "0Mi",
+              "memoryAllocatable": "0Mi",
+              "memoryCapacity": "0Mi",
+              "memoryUsage": "",
+              "pods": "",
+              "podsAllocatable": "0",
+              "podsCapacity": "0",
+              "ref": {
+                "clusterId": "cluster-wire",
+                "group": "",
+                "kind": "Node",
+                "name": "node-wire",
+                "resource": "nodes",
+                "uid": "node-wire-uid",
+                "version": "v1"
+              },
+              "restarts": 0,
+              "roles": "worker",
+              "status": "Unknown",
+              "statusPresentation": "unknown",
+              "statusState": "Unknown",
+              "unschedulable": false,
+              "version": ""
+            }
+          ],
+          "table": "",
+          "total": 1,
+          "totalIsExact": true,
+          "unfilteredTotal": 1
+        },
+        "scope": "cluster-wire|",
+        "sequence": 1,
+        "stats": { "buildDurationMs": 0, "itemCount": 1 },
+        "version": 1
+      }
+    },
+    {
+      "boundary": "refresh-snapshot",
+      "domain": "cluster-attention",
+      "family": "cluster-attention",
+      "rowPath": "payload.rows",
+      "snapshot": {
+        "checksum": "canonical-row-wire-fixture",
+        "domain": "cluster-attention",
+        "generatedAt": 1700000000000,
+        "payload": {
+          "capabilities": {},
+          "clusterId": "cluster-wire",
+          "clusterName": "Wire Cluster",
+          "facetsExact": true,
+          "findingTypes": null,
+          "ignoreRules": {
+            "clusterFindingTypes": null,
+            "globalFindingTypes": null,
+            "objectFindings": null
+          },
+          "provider": "",
+          "rows": [
+            {
+              "age": "\u003cage\u003e",
+              "ageTimestamp": 1699999000000,
+              "causes": [
+                {
+                  "label": "Pod not ready",
+                  "message": "Pod is not ready",
+                  "severity": "warning",
+                  "type": "pod-not-ready"
+                }
+              ],
+              "namespace": "default",
+              "ref": {
+                "clusterId": "cluster-wire",
+                "group": "",
+                "kind": "Pod",
+                "name": "pod-attention",
+                "namespace": "default",
+                "resource": "pods",
+                "uid": "pod-attention-uid",
+                "version": "v1"
+              },
+              "severity": "warning",
+              "status": "Not Ready"
+            }
+          ],
+          "severityCounts": { "error": 0, "info": 0, "warning": 0 },
+          "table": "",
+          "total": 1,
+          "totalIsExact": true,
+          "unfilteredTotal": 1
+        },
+        "scope": "cluster-wire|",
+        "sequence": 1,
+        "stats": { "buildDurationMs": 0, "itemCount": 1 },
+        "version": 1
+      }
+    },
+    {
+      "boundary": "refresh-snapshot",
+      "domain": "catalog",
+      "family": "catalog",
+      "rowPath": "payload.items",
+      "snapshot": {
+        "checksum": "canonical-row-wire-fixture",
+        "domain": "catalog",
+        "generatedAt": 1700000000000,
+        "payload": {
+          "batchIndex": 0,
+          "batchSize": 0,
+          "capabilities": {},
+          "clusterId": "cluster-wire",
+          "clusterName": "Wire Cluster",
+          "facetsExact": false,
+          "hasNext": false,
+          "hasPrevious": false,
+          "isFinal": false,
+          "items": [
+            {
+              "creationTimestamp": "2023-11-14T21:56:40Z",
+              "labelsDigest": "3ef2cd4dd12920f4",
+              "ref": {
+                "clusterId": "cluster-wire",
+                "group": "",
+                "kind": "ConfigMap",
+                "name": "catalog-wire",
+                "namespace": "default",
+                "resource": "configmaps",
+                "uid": "catalog-wire-uid",
+                "version": "v1"
+              },
+              "resourceVersion": "7",
+              "scope": "Namespace"
+            }
+          ],
+          "provider": "",
+          "resourceCount": 0,
+          "total": 1,
+          "totalBatches": 0,
+          "totalIsExact": false,
+          "unfilteredTotal": 1
+        },
+        "scope": "cluster-wire|",
+        "sequence": 1,
+        "stats": { "buildDurationMs": 0, "itemCount": 1 },
+        "version": 1
+      }
+    },
+    {
+      "boundary": "refresh-snapshot",
+      "domain": "cluster-config",
+      "family": "cluster-config",
+      "rowPath": "payload.rows",
+      "snapshot": {
+        "checksum": "canonical-row-wire-fixture",
+        "domain": "cluster-config",
+        "generatedAt": 1700000000000,
+        "payload": {
+          "capabilities": {},
+          "clusterId": "cluster-wire",
+          "clusterName": "Wire Cluster",
+          "facetsExact": true,
+          "provider": "",
+          "rows": [
+            {
+              "age": "\u003cage\u003e",
+              "ageTimestamp": 1699999000000,
+              "details": "example.io/wire",
+              "ref": {
+                "clusterId": "cluster-wire",
+                "group": "storage.k8s.io",
+                "kind": "StorageClass",
+                "name": "storage-wire",
+                "resource": "storageclasses",
+                "uid": "storage-wire-uid",
+                "version": "v1"
+              }
+            }
+          ],
+          "table": "",
+          "total": 1,
+          "totalIsExact": true,
+          "unfilteredTotal": 1
+        },
+        "scope": "cluster-wire|",
+        "sequence": 1,
+        "stats": { "buildDurationMs": 0, "itemCount": 1 },
+        "version": 1
+      }
+    },
+    {
+      "boundary": "refresh-snapshot",
+      "domain": "cluster-crds",
+      "family": "cluster-crds",
+      "rowPath": "payload.rows",
+      "snapshot": {
+        "checksum": "canonical-row-wire-fixture",
+        "domain": "cluster-crds",
+        "generatedAt": 1700000000000,
+        "payload": {
+          "capabilities": {},
+          "clusterId": "cluster-wire",
+          "clusterName": "Wire Cluster",
+          "facetsExact": true,
+          "provider": "",
+          "rows": [
+            {
+              "age": "\u003cage\u003e",
+              "ageTimestamp": 1699999000000,
+              "details": "Versions: v1*",
+              "group": "example.io",
+              "ref": {
+                "clusterId": "cluster-wire",
+                "group": "apiextensions.k8s.io",
+                "kind": "CustomResourceDefinition",
+                "name": "widgets.example.io",
+                "resource": "customresourcedefinitions",
+                "uid": "widgets.example.io-uid",
+                "version": "v1"
+              },
+              "scope": "Namespaced",
+              "storageVersion": "v1",
+              "typeAlias": "CRD"
+            }
+          ],
+          "table": "",
+          "total": 1,
+          "totalIsExact": true,
+          "unfilteredTotal": 1
+        },
+        "scope": "cluster-wire|",
+        "sequence": 1,
+        "stats": { "buildDurationMs": 0, "itemCount": 1 },
+        "version": 1
+      }
+    },
+    {
+      "boundary": "refresh-snapshot",
+      "domain": "cluster-rbac",
+      "family": "cluster-rbac",
+      "rowPath": "payload.rows",
+      "snapshot": {
+        "checksum": "canonical-row-wire-fixture",
+        "domain": "cluster-rbac",
+        "generatedAt": 1700000000000,
+        "payload": {
+          "capabilities": {},
+          "clusterId": "cluster-wire",
+          "clusterName": "Wire Cluster",
+          "facetsExact": true,
+          "provider": "",
+          "rows": [
+            {
+              "age": "\u003cage\u003e",
+              "ageTimestamp": 1699999000000,
+              "details": "Rules: 0",
+              "ref": {
+                "clusterId": "cluster-wire",
+                "group": "rbac.authorization.k8s.io",
+                "kind": "ClusterRole",
+                "name": "reader-wire",
+                "resource": "clusterroles",
+                "uid": "reader-wire-uid",
+                "version": "v1"
+              },
+              "typeAlias": "CR"
+            }
+          ],
+          "table": "",
+          "total": 1,
+          "totalIsExact": true,
+          "unfilteredTotal": 1
+        },
+        "scope": "cluster-wire|",
+        "sequence": 1,
+        "stats": { "buildDurationMs": 0, "itemCount": 1 },
+        "version": 1
+      }
+    },
+    {
+      "boundary": "refresh-snapshot",
+      "domain": "cluster-storage",
+      "family": "cluster-storage",
+      "rowPath": "payload.rows",
+      "snapshot": {
+        "checksum": "canonical-row-wire-fixture",
+        "domain": "cluster-storage",
+        "generatedAt": 1700000000000,
+        "payload": {
+          "capabilities": {},
+          "clusterId": "cluster-wire",
+          "clusterName": "Wire Cluster",
+          "facetsExact": true,
+          "provider": "",
+          "rows": [
+            {
+              "accessModes": "-",
+              "age": "\u003cage\u003e",
+              "ageTimestamp": 1699999000000,
+              "capacity": "-",
+              "claim": "-",
+              "ref": {
+                "clusterId": "cluster-wire",
+                "group": "",
+                "kind": "PersistentVolume",
+                "name": "pv-wire",
+                "resource": "persistentvolumes",
+                "uid": "pv-wire-uid",
+                "version": "v1"
+              },
+              "status": "Unknown",
+              "statusPresentation": "unknown",
+              "statusState": "Unknown"
+            }
+          ],
+          "table": "",
+          "total": 1,
+          "totalIsExact": true,
+          "unfilteredTotal": 1
+        },
+        "scope": "cluster-wire|",
+        "sequence": 1,
+        "stats": { "buildDurationMs": 0, "itemCount": 1 },
+        "version": 1
+      }
+    },
+    {
+      "boundary": "refresh-snapshot",
+      "domain": "cluster-events",
+      "family": "cluster-events",
+      "rowPath": "payload.rows",
+      "snapshot": {
+        "checksum": "canonical-row-wire-fixture",
+        "domain": "cluster-events",
+        "generatedAt": 1700000000000,
+        "payload": {
+          "capabilities": {},
+          "clusterId": "cluster-wire",
+          "clusterName": "Wire Cluster",
+          "facetsExact": true,
+          "provider": "",
+          "rows": [
+            {
+              "age": "\u003cage\u003e",
+              "ageTimestamp": 1699999000000,
+              "involvedObject": {
+                "ref": {
+                  "clusterId": "cluster-wire",
+                  "group": "",
+                  "kind": "Node",
+                  "name": "node-wire",
+                  "uid": "node-wire-uid",
+                  "version": "v1"
+                }
+              },
+              "message": "Node reports pressure",
+              "object": "Node/node-wire",
+              "objectApiVersion": "v1",
+              "objectNamespace": "",
+              "objectUid": "node-wire-uid",
+              "reason": "NodePressure",
+              "ref": {
+                "clusterId": "cluster-wire",
+                "group": "",
+                "kind": "Event",
+                "name": "cluster-event-wire",
+                "namespace": "default",
+                "resource": "events",
+                "uid": "cluster-event-wire-uid",
+                "version": "v1"
+              },
+              "resourceVersion": "7",
+              "source": "-",
+              "type": "Warning"
+            }
+          ],
+          "table": "",
+          "total": 1,
+          "totalIsExact": true,
+          "unfilteredTotal": 1
+        },
+        "scope": "cluster-wire|",
+        "sequence": 1,
+        "stats": { "buildDurationMs": 0, "itemCount": 1 },
+        "version": 1
+      }
+    },
+    {
+      "boundary": "refresh-snapshot",
+      "domain": "namespace-config",
+      "family": "namespace-config",
+      "rowPath": "payload.rows",
+      "snapshot": {
+        "checksum": "canonical-row-wire-fixture",
+        "domain": "namespace-config",
+        "generatedAt": 1700000000000,
+        "payload": {
+          "capabilities": {},
+          "clusterId": "cluster-wire",
+          "clusterName": "Wire Cluster",
+          "facetsExact": true,
+          "provider": "",
+          "rows": [
+            {
+              "age": "\u003cage\u003e",
+              "ageTimestamp": 1699999000000,
+              "data": 1,
+              "ref": {
+                "clusterId": "cluster-wire",
+                "group": "",
+                "kind": "ConfigMap",
+                "name": "config-wire",
+                "namespace": "default",
+                "resource": "configmaps",
+                "uid": "config-wire-uid",
+                "version": "v1"
+              },
+              "typeAlias": "CM"
+            }
+          ],
+          "table": "",
+          "total": 1,
+          "totalIsExact": true,
+          "unfilteredTotal": 1
+        },
+        "scope": "cluster-wire|",
+        "sequence": 1,
+        "stats": { "buildDurationMs": 0, "itemCount": 1 },
+        "version": 1
+      }
+    },
+    {
+      "boundary": "refresh-snapshot",
+      "domain": "namespace-network",
+      "family": "namespace-network",
+      "rowPath": "payload.rows",
+      "snapshot": {
+        "checksum": "canonical-row-wire-fixture",
+        "domain": "namespace-network",
+        "generatedAt": 1700000000000,
+        "payload": {
+          "capabilities": {},
+          "clusterId": "cluster-wire",
+          "clusterName": "Wire Cluster",
+          "facetsExact": true,
+          "provider": "",
+          "rows": [
+            {
+              "age": "\u003cage\u003e",
+              "ageTimestamp": 1699999000000,
+              "details": "Policy types: Ingress",
+              "ref": {
+                "clusterId": "cluster-wire",
+                "group": "networking.k8s.io",
+                "kind": "NetworkPolicy",
+                "name": "network-wire",
+                "namespace": "default",
+                "resource": "networkpolicies",
+                "uid": "network-wire-uid",
+                "version": "v1"
+              }
+            }
+          ],
+          "table": "",
+          "total": 1,
+          "totalIsExact": true,
+          "unfilteredTotal": 1
+        },
+        "scope": "cluster-wire|",
+        "sequence": 1,
+        "stats": { "buildDurationMs": 0, "itemCount": 1 },
+        "version": 1
+      }
+    },
+    {
+      "boundary": "refresh-snapshot",
+      "domain": "namespace-rbac",
+      "family": "namespace-rbac",
+      "rowPath": "payload.rows",
+      "snapshot": {
+        "checksum": "canonical-row-wire-fixture",
+        "domain": "namespace-rbac",
+        "generatedAt": 1700000000000,
+        "payload": {
+          "capabilities": {},
+          "clusterId": "cluster-wire",
+          "clusterName": "Wire Cluster",
+          "facetsExact": true,
+          "provider": "",
+          "rows": [
+            {
+              "age": "\u003cage\u003e",
+              "ageTimestamp": 1699999000000,
+              "details": "Rules: 0",
+              "ref": {
+                "clusterId": "cluster-wire",
+                "group": "rbac.authorization.k8s.io",
+                "kind": "Role",
+                "name": "role-wire",
+                "namespace": "default",
+                "resource": "roles",
+                "uid": "role-wire-uid",
+                "version": "v1"
+              }
+            }
+          ],
+          "table": "",
+          "total": 1,
+          "totalIsExact": true,
+          "unfilteredTotal": 1
+        },
+        "scope": "cluster-wire|",
+        "sequence": 1,
+        "stats": { "buildDurationMs": 0, "itemCount": 1 },
+        "version": 1
+      }
+    },
+    {
+      "boundary": "refresh-snapshot",
+      "domain": "namespace-storage",
+      "family": "namespace-storage",
+      "rowPath": "payload.rows",
+      "snapshot": {
+        "checksum": "canonical-row-wire-fixture",
+        "domain": "namespace-storage",
+        "generatedAt": 1700000000000,
+        "payload": {
+          "capabilities": {},
+          "clusterId": "cluster-wire",
+          "clusterName": "Wire Cluster",
+          "facetsExact": true,
+          "provider": "",
+          "rows": [
+            {
+              "age": "\u003cage\u003e",
+              "ageTimestamp": 1699999000000,
+              "capacity": "-",
+              "ref": {
+                "clusterId": "cluster-wire",
+                "group": "",
+                "kind": "PersistentVolumeClaim",
+                "name": "pvc-wire",
+                "namespace": "default",
+                "resource": "persistentvolumeclaims",
+                "uid": "pvc-wire-uid",
+                "version": "v1"
+              },
+              "status": "Unknown",
+              "statusPresentation": "unknown",
+              "statusState": "Unknown",
+              "storageClass": "standard"
+            }
+          ],
+          "table": "",
+          "total": 1,
+          "totalIsExact": true,
+          "unfilteredTotal": 1
+        },
+        "scope": "cluster-wire|",
+        "sequence": 1,
+        "stats": { "buildDurationMs": 0, "itemCount": 1 },
+        "version": 1
+      }
+    },
+    {
+      "boundary": "refresh-snapshot",
+      "domain": "namespace-autoscaling",
+      "family": "namespace-autoscaling",
+      "rowPath": "payload.rows",
+      "snapshot": {
+        "checksum": "canonical-row-wire-fixture",
+        "domain": "namespace-autoscaling",
+        "generatedAt": 1700000000000,
+        "payload": {
+          "capabilities": {},
+          "clusterId": "cluster-wire",
+          "clusterName": "Wire Cluster",
+          "facetsExact": true,
+          "provider": "",
+          "rows": [
+            {
+              "age": "\u003cage\u003e",
+              "ageTimestamp": 1699999000000,
+              "current": 0,
+              "max": 3,
+              "min": 1,
+              "ref": {
+                "clusterId": "cluster-wire",
+                "group": "autoscaling",
+                "kind": "HorizontalPodAutoscaler",
+                "name": "hpa-wire",
+                "namespace": "default",
+                "resource": "horizontalpodautoscalers",
+                "uid": "hpa-wire-uid",
+                "version": "v2"
+              },
+              "target": "Deployment/deployment-wire",
+              "targetApiVersion": "apps/v1"
+            }
+          ],
+          "table": "",
+          "total": 1,
+          "totalIsExact": true,
+          "unfilteredTotal": 1
+        },
+        "scope": "cluster-wire|",
+        "sequence": 1,
+        "stats": { "buildDurationMs": 0, "itemCount": 1 },
+        "version": 1
+      }
+    },
+    {
+      "boundary": "refresh-snapshot",
+      "domain": "namespace-quotas",
+      "family": "namespace-quotas",
+      "rowPath": "payload.rows",
+      "snapshot": {
+        "checksum": "canonical-row-wire-fixture",
+        "domain": "namespace-quotas",
+        "generatedAt": 1700000000000,
+        "payload": {
+          "capabilities": {},
+          "clusterId": "cluster-wire",
+          "clusterName": "Wire Cluster",
+          "facetsExact": true,
+          "provider": "",
+          "rows": [
+            {
+              "age": "\u003cage\u003e",
+              "ageTimestamp": 1699999000000,
+              "details": "Hard: 0, Used: 0",
+              "ref": {
+                "clusterId": "cluster-wire",
+                "group": "",
+                "kind": "ResourceQuota",
+                "name": "quota-wire",
+                "namespace": "default",
+                "resource": "resourcequotas",
+                "uid": "quota-wire-uid",
+                "version": "v1"
+              }
+            }
+          ],
+          "table": "",
+          "total": 1,
+          "totalIsExact": true,
+          "unfilteredTotal": 1
+        },
+        "scope": "cluster-wire|",
+        "sequence": 1,
+        "stats": { "buildDurationMs": 0, "itemCount": 1 },
+        "version": 1
+      }
+    },
+    {
+      "boundary": "refresh-snapshot",
+      "domain": "namespace-events",
+      "family": "namespace-events",
+      "rowPath": "payload.rows",
+      "snapshot": {
+        "checksum": "canonical-row-wire-fixture",
+        "domain": "namespace-events",
+        "generatedAt": 1700000000000,
+        "payload": {
+          "capabilities": {},
+          "clusterId": "cluster-wire",
+          "clusterName": "Wire Cluster",
+          "facetsExact": true,
+          "provider": "",
+          "rows": [
+            {
+              "age": "\u003cage\u003e",
+              "ageTimestamp": 1699999000000,
+              "involvedObject": {
+                "ref": {
+                  "clusterId": "cluster-wire",
+                  "group": "",
+                  "kind": "Pod",
+                  "name": "pod-wire",
+                  "namespace": "default",
+                  "uid": "pod-wire-uid",
+                  "version": "v1"
+                }
+              },
+              "kind": "Pod",
+              "message": "Node reports pressure",
+              "object": "Pod/pod-wire",
+              "objectApiVersion": "v1",
+              "objectNamespace": "default",
+              "objectUid": "pod-wire-uid",
+              "reason": "NodePressure",
+              "ref": {
+                "clusterId": "cluster-wire",
+                "group": "",
+                "kind": "Event",
+                "name": "namespace-event-wire",
+                "namespace": "default",
+                "resource": "events",
+                "uid": "namespace-event-wire-uid",
+                "version": "v1"
+              },
+              "resourceVersion": "7",
+              "source": "",
+              "type": "Warning"
+            }
+          ],
+          "table": "",
+          "total": 1,
+          "totalIsExact": true,
+          "unfilteredTotal": 1
+        },
+        "scope": "cluster-wire|",
+        "sequence": 1,
+        "stats": { "buildDurationMs": 0, "itemCount": 1 },
+        "version": 1
+      }
+    },
+    {
+      "boundary": "refresh-snapshot",
+      "domain": "namespace-helm",
+      "family": "namespace-helm",
+      "rowPath": "payload.rows",
+      "snapshot": {
+        "checksum": "canonical-row-wire-fixture",
+        "domain": "namespace-helm",
+        "generatedAt": 1700000000000,
+        "payload": {
+          "capabilities": {},
+          "clusterId": "cluster-wire",
+          "clusterName": "Wire Cluster",
+          "facetsExact": true,
+          "provider": "",
+          "rows": [
+            {
+              "age": "\u003cage\u003e",
+              "ageTimestamp": 1699995400000,
+              "appVersion": "2.0.0",
+              "chart": "chart-wire-1.2.3",
+              "ref": {
+                "clusterId": "cluster-wire",
+                "group": "helm.sh",
+                "kind": "HelmRelease",
+                "name": "release-wire",
+                "namespace": "default",
+                "resource": "releases",
+                "version": "v3"
+              },
+              "revision": 2,
+              "status": "deployed",
+              "statusPresentation": "ready",
+              "statusReason": "info.status",
+              "statusState": "deployed",
+              "updated": "2023-11-14T21:56:40Z"
+            }
+          ],
+          "table": "",
+          "total": 1,
+          "totalIsExact": true,
+          "unfilteredTotal": 1
+        },
+        "scope": "cluster-wire|",
+        "sequence": 1,
+        "stats": { "buildDurationMs": 0, "itemCount": 1 },
+        "version": 1
+      }
+    },
+    {
+      "boundary": "refresh-snapshot",
+      "domain": "pods",
+      "family": "pods",
+      "rowPath": "payload.rows",
+      "snapshot": {
+        "checksum": "canonical-row-wire-fixture",
+        "domain": "pods",
+        "generatedAt": 1700000000000,
+        "payload": {
+          "capabilities": {},
+          "clusterId": "cluster-wire",
+          "clusterName": "Wire Cluster",
+          "facetsExact": true,
+          "healthCounts": null,
+          "metrics": { "failureCount": 0, "stale": false, "successCount": 0 },
+          "provider": "",
+          "rows": [
+            {
+              "age": "\u003cage\u003e",
+              "ageTimestamp": 1699999000000,
+              "cpuLimit": "0m",
+              "cpuRequest": "0m",
+              "cpuUsage": "25m",
+              "memLimit": "0Mi",
+              "memRequest": "0Mi",
+              "memUsage": "64 MB",
+              "node": "",
+              "ownerKind": "None",
+              "ownerName": "None",
+              "portForwardAvailable": false,
+              "ready": "0/1",
+              "ref": {
+                "clusterId": "cluster-wire",
+                "group": "",
+                "kind": "Pod",
+                "name": "pod-wire",
+                "namespace": "default",
+                "resource": "pods",
+                "uid": "pod-wire-uid",
+                "version": "v1"
+              },
+              "restarts": 0,
+              "status": "Running",
+              "statusPresentation": "warning",
+              "statusState": "Running"
+            }
+          ],
+          "table": "",
+          "total": 1,
+          "totalCount": 0,
+          "totalIsExact": true,
+          "unfilteredTotal": 1
+        },
+        "scope": "cluster-wire|",
+        "sequence": 1,
+        "stats": { "buildDurationMs": 0, "itemCount": 1 },
+        "version": 1
+      }
+    },
+    {
+      "boundary": "refresh-snapshot",
+      "domain": "namespace-workloads",
+      "family": "namespace-workloads",
+      "rowPath": "payload.rows",
+      "snapshot": {
+        "checksum": "canonical-row-wire-fixture",
+        "domain": "namespace-workloads",
+        "generatedAt": 1700000000000,
+        "payload": {
+          "capabilities": {},
+          "clusterId": "cluster-wire",
+          "clusterName": "Wire Cluster",
+          "facetsExact": true,
+          "metrics": { "failureCount": 0, "stale": false, "successCount": 0 },
+          "provider": "",
+          "rows": [
+            {
+              "age": "\u003cage\u003e",
+              "ageTimestamp": 1699999000000,
+              "cpuLimit": "-",
+              "cpuRequest": "-",
+              "cpuUsage": "-",
+              "desiredReplicas": 2,
+              "memLimit": "-",
+              "memRequest": "-",
+              "memUsage": "-",
+              "portForwardAvailable": false,
+              "ready": "1/2",
+              "ref": {
+                "clusterId": "cluster-wire",
+                "group": "apps",
+                "kind": "Deployment",
+                "name": "deployment-wire",
+                "namespace": "default",
+                "resource": "deployments",
+                "uid": "deployment-wire-uid",
+                "version": "v1"
+              },
+              "restarts": 0,
+              "status": "Updating",
+              "statusPresentation": "warning",
+              "statusState": "1/2"
+            }
+          ],
+          "table": "",
+          "total": 1,
+          "totalIsExact": true,
+          "unfilteredTotal": 1
+        },
+        "scope": "cluster-wire|",
+        "sequence": 1,
+        "stats": { "buildDurationMs": 0, "itemCount": 1 },
+        "version": 1
+      }
+    },
+    {
+      "boundary": "refresh-snapshot",
+      "domain": "namespace-custom",
+      "family": "namespace-custom-legacy",
+      "rowPath": "payload.resources",
+      "snapshot": {
+        "checksum": "canonical-row-wire-fixture",
+        "domain": "namespace-custom",
+        "generatedAt": 1700000000000,
+        "payload": {
+          "clusterId": "cluster-wire",
+          "clusterName": "Wire Cluster",
+          "resources": [
+            {
+              "age": "\u003cage\u003e",
+              "crdName": "widgets.example.io",
+              "ref": {
+                "clusterId": "cluster-wire",
+                "group": "example.io",
+                "kind": "Widget",
+                "name": "widget-wire",
+                "namespace": "default",
+                "resource": "widgets",
+                "uid": "widget-wire-uid",
+                "version": "v1"
+              },
+              "status": "Unknown",
+              "statusPresentation": "unknown",
+              "statusState": "unknown"
+            }
+          ]
+        },
+        "scope": "cluster-wire|",
+        "sequence": 1,
+        "stats": { "buildDurationMs": 0, "itemCount": 1 },
+        "version": 1
+      }
+    },
+    {
+      "boundary": "refresh-snapshot",
+      "domain": "cluster-custom",
+      "family": "cluster-custom-legacy",
+      "rowPath": "payload.resources",
+      "snapshot": {
+        "checksum": "canonical-row-wire-fixture",
+        "domain": "cluster-custom",
+        "generatedAt": 1700000000000,
+        "payload": {
+          "clusterId": "cluster-wire",
+          "clusterName": "Wire Cluster",
+          "resources": [
+            {
+              "age": "\u003cage\u003e",
+              "crdName": "clusterwidgets.example.io",
+              "ref": {
+                "clusterId": "cluster-wire",
+                "group": "example.io",
+                "kind": "ClusterWidget",
+                "name": "cluster-widget-wire",
+                "resource": "clusterwidgets",
+                "uid": "cluster-widget-wire-uid",
+                "version": "v1"
+              },
+              "status": "Unknown",
+              "statusPresentation": "unknown",
+              "statusState": "unknown"
+            }
+          ]
+        },
+        "scope": "cluster-wire|",
+        "sequence": 1,
+        "stats": { "buildDurationMs": 0, "itemCount": 1 },
+        "version": 1
+      }
+    },
+    {
+      "boundary": "custom-hydration",
+      "family": "custom-page-hydration",
+      "row": {
+        "age": "\u003cage\u003e",
+        "crdName": "clusterwidgets.example.io",
+        "ref": {
+          "clusterId": "cluster-wire",
+          "group": "example.io",
+          "kind": "ClusterWidget",
+          "name": "cluster-widget-wire",
+          "resource": "clusterwidgets",
+          "uid": "cluster-widget-wire-uid",
+          "version": "v1"
+        },
+        "status": "Unknown",
+        "statusPresentation": "unknown",
+        "statusState": "unknown"
+      }
+    },
+    {
+      "boundary": "refresh-snapshot",
+      "domain": "object-events",
+      "family": "object-events",
+      "rowPath": "payload.events",
+      "snapshot": {
+        "checksum": "canonical-row-wire-fixture",
+        "domain": "object-events",
+        "generatedAt": 1700000000000,
+        "payload": {
+          "clusterId": "cluster-wire",
+          "clusterName": "Wire Cluster",
+          "events": [
+            {
+              "count": 0,
+              "eventType": "Warning",
+              "firstTimestamp": "2023-11-14T21:56:40Z",
+              "involvedObject": {
+                "ref": {
+                  "clusterId": "cluster-wire",
+                  "group": "",
+                  "kind": "Pod",
+                  "name": "pod-wire",
+                  "namespace": "default",
+                  "uid": "pod-wire-uid",
+                  "version": "v1"
+                }
+              },
+              "involvedObjectApiVersion": "v1",
+              "involvedObjectKind": "Pod",
+              "involvedObjectName": "pod-wire",
+              "involvedObjectNamespace": "default",
+              "involvedObjectUid": "pod-wire-uid",
+              "lastTimestamp": "2023-11-14T21:56:40Z",
+              "message": "Node reports pressure",
+              "reason": "NodePressure",
+              "ref": {
+                "clusterId": "cluster-wire",
+                "group": "",
+                "kind": "Event",
+                "name": "namespace-event-wire",
+                "namespace": "default",
+                "resource": "events",
+                "uid": "namespace-event-wire-uid",
+                "version": "v1"
+              },
+              "resourceVersion": "7",
+              "source": "Unknown"
+            }
+          ]
+        },
+        "scope": "cluster-wire|",
+        "sequence": 1,
+        "stats": { "buildDurationMs": 0, "itemCount": 1 },
+        "version": 1
+      }
+    }
+  ]
+}

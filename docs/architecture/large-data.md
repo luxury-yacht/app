@@ -423,6 +423,62 @@ always a miss) 627.6 ms — identical to uncached, so the cache's win is
 quiet-domain-only by design (the key is the domain's refetch identity: source
 version watermark + metric revision + matched-set inputs).
 
+## Resource-Row Efficiency Measurements
+
+Measured 2026-07-21 on Apple M2 Max / arm64. The producer benchmark is
+`BenchmarkRepresentativeResourceRowWireEncode` in
+`backend/refresh/snapshot/resource_row_wire_benchmark_test.go`; each value below
+is a 1,000-row JSON array. The before shape is commit `eb5edf70`, immediately
+before the ref-only migration.
+
+| Family | Before | Ref-only | Reduction |
+| --- | ---: | ---: | ---: |
+| Config | 372,001 B | 244,001 B | 34.4% |
+| Events | 787,894 B | 656,894 B | 16.6% |
+| Pods | 598,001 B | 492,001 B | 17.7% |
+| Workloads | 605,001 B | 472,001 B | 22.0% |
+| Nodes | 703,001 B | 608,001 B | 13.5% |
+| Custom resources | 642,001 B | 462,001 B | 28.0% |
+
+The frontend benchmark
+`frontend/src/core/refresh/canonicalResourceRowWire.bench.ts` scales the
+producer-marshaled fixture to 1,000 rows. Its measured means were 0.492 ms for
+JSON parse plus envelope validation, 1.019 ms for parse/validation plus static
+whole-row sharing, and 1.433 ms for parse/validation plus dynamic ref-only
+sharing. The isolated sharing benchmark measured 0.579 ms for static whole-row
+comparison and 0.375 ms for dynamic ref-only comparison.
+
+A five-run, alternating-order V8 retained-heap comparison loaded 100,000 Config
+rows shaped exactly like `eb5edf70` and the ref-only row into the same rendered
+app process, forcing collection between phases. The old shape retained 29.21 MB
+p50 / 29.40 MB p95; ref-only retained 18.74 MB p50 / 18.98 MB p95, reductions of
+35.8% and 35.5%. The corresponding JSON strings were 36,466,671 B and
+23,527,781 B. This isolates row storage; it is not an estimate of total app
+heap.
+
+On a real two-cluster Browse surface, a 250-row input retained 40.08 MB total JS
+heap after forced collection, with 22 virtualized DOM rows. GridTable diagnostics
+recorded two applies, zero ref changes, and 7.47 ms average React render time.
+The static 11-row Config surface likewise recorded zero ref changes across two
+applies and 5.28 ms average render time. The metric-bearing 19-row Nodes surface
+recorded 16 ref changes across 18 applies and 23.84 ms average render time; this
+is why dynamic families use ref-only sharing.
+
+The native macOS Wails WebKit capture sent `Accept-Encoding: gzip, deflate` on
+all 170 observed loopback snapshot requests. The server returned no
+`Content-Encoding`; 100 requests carried `200` bodies, 64 were `204`, and 6
+were `304`. A representative 250-item Browse response was 99,981-99,982 B;
+ten loopback fetch/parse samples measured 8.2 ms p50 / 15.8 ms p95 total, of
+which JSON parsing was 0.2 ms p50 / 0.3 ms p95. A stable Config validator
+returned an empty `304` in 1.2 ms p50 / 3.9 ms p95.
+
+Best-speed gzip remains rejected. At 1,000 rows it reduced Events to 48,921 B,
+Pods to 16,333 B, and custom resources to 16,396 B, but increased encode time
+from roughly 0.68-0.86 ms to 1.42-2.02 ms and allocations from roughly
+0.50-0.68 MB to 1.77-2.39 MB. No response compression middleware or page
+dictionary is present; the measured ref-only payload meets the current target
+without their CPU, allocation, protocol, or version-skew costs.
+
 ## Change Checklist
 
 When touching high-volume data:

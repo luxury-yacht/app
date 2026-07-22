@@ -75,6 +75,17 @@ from the cluster workspace registry instead of retaining it on every row.
 Canonical row keys stay derived from the complete ref rather than becoming a
 second stored identity string.
 
+The canonical-row inventory is executable rather than a second handwritten
+frontend list. `backend/internal/genrefreshcontracts/canonical_rows.go` names
+the concrete Go row types; its reflection test rejects row-level `ClusterMeta`
+and duplicate own-identity fields. The committed
+`frontend/src/test-fixtures/canonical-resource-row-wire.json` fixture is built
+from those production row projectors. A Go test requires the fixture family set
+to match the inventory exactly, and a frontend test parses every refresh row
+through the same envelope validator used by `fetchSnapshot`. The custom catalog
+hydration row instead passes through its production RPC normalizer, including
+the cluster-scoped wire form where `namespace` is omitted.
+
 An Event row has two distinct identities: `ref` identifies the Event resource,
 while `involvedObject` links to the resource the Event describes. Never replace
 one with the other. A Helm row uses its synthetic Helm release `ref` under the
@@ -181,6 +192,9 @@ When changing resource semantics:
    not add flat own-identity projections or another row-local GVK mapper.
 7. Remove duplicate status/link derivation from migrated frontend/backend paths.
 8. Add parity tests for DTO projections and relationship navigation.
+9. Add a producer-marshaled wire fixture entry for every new canonical row
+   family; never hand-build an optional JSON field merely to satisfy a frontend
+   test.
 
 ## Validation
 
