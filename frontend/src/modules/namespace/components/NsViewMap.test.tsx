@@ -56,9 +56,7 @@ vi.mock('@shared/hooks/useNavigateToView', () => ({
 }));
 
 vi.mock('@modules/object-map/ObjectMap', () => ({
-  default: ({ isRefreshing }: { isRefreshing?: boolean }) => (
-    <div data-testid="object-map" data-refreshing={String(isRefreshing)} />
-  ),
+  default: () => <div data-testid="object-map" />,
 }));
 
 const snapshotState = {
