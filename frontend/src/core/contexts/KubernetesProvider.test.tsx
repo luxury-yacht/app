@@ -7,7 +7,7 @@
 
 import { act } from 'react';
 import * as ReactDOM from 'react-dom/client';
-import { afterEach, beforeEach, describe, it, vi } from 'vitest';
+import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { KubernetesProvider } from './KubernetesProvider';
 
 const wailsMocks = vi.hoisted(() => ({
@@ -68,7 +68,7 @@ describe('KubernetesProvider', () => {
     container.remove();
   });
 
-  it('renders without throwing when composing core providers', async () => {
+  it('renders its children when composing core providers', async () => {
     await act(async () => {
       root.render(
         <KubernetesProvider>
@@ -77,5 +77,10 @@ describe('KubernetesProvider', () => {
       );
       await flushAsync();
     });
+
+    // Reaching the child proves every provider in the composition mounted in a
+    // workable order: a consumer rendered above its provider throws during
+    // render, which leaves the subtree unmounted rather than merely logging.
+    expect(container.querySelector('[data-testid="child"]')).not.toBeNull();
   });
 });

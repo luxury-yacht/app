@@ -607,7 +607,7 @@ describe('Tabs', () => {
     expect(onClose).toHaveBeenCalledTimes(1);
   });
 
-  it('does not invoke onClose on Delete when the tab is not closeable', () => {
+  it('leaves Delete unhandled when the tab is not closeable', () => {
     act(() => {
       root.render(
         <Tabs
@@ -622,14 +622,20 @@ describe('Tabs', () => {
     const tab = container.querySelector<HTMLButtonElement>('[role="tab"]');
     tab?.focus();
 
-    // Should not throw or do anything.
+    // A tab is closeable only by carrying an onClose, and Tabs calls
+    // preventDefault solely on that branch. So an uncancelled event is the
+    // observable proof the key press was ignored — the event must be cancelable
+    // for that to mean anything.
+    const event = new KeyboardEvent('keydown', {
+      key: 'Delete',
+      bubbles: true,
+      cancelable: true,
+    });
     act(() => {
-      requireValue(tab, 'expected test value in Tabs.test.tsx').dispatchEvent(
-        new KeyboardEvent('keydown', { key: 'Delete', bubbles: true })
-      );
+      requireValue(tab, 'expected test value in Tabs.test.tsx').dispatchEvent(event);
     });
 
-    // No assertion needed beyond "doesn't throw" — no onClose to call.
+    expect(event.defaultPrevented).toBe(false);
   });
 
   it('spreads extraProps onto the tab button', () => {
