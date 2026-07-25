@@ -75,13 +75,21 @@ describe('ErrorContext', () => {
         stateRef.current?.dismissError('error-1');
       });
 
+      // Precondition: the dismiss really did leave a timer pending, so the
+      // assertion below is about cleanup and not about a timer never existing.
+      expect(vi.getTimerCount()).toBe(1);
+
       // Unmount before the 300ms animation timer fires
       act(() => {
         root.unmount();
       });
 
-      // Advance past the animation delay — should not throw or warn
-      // because the timer was cleared on unmount
+      // The unmount cleanup cleared it. Without that cleanup the timer would
+      // still be pending here and would later call setErrors on an unmounted
+      // root — which React silently ignores, so only the timer count can
+      // detect the regression.
+      expect(vi.getTimerCount()).toBe(0);
+
       act(() => {
         vi.advanceTimersByTime(500);
       });
@@ -101,12 +109,17 @@ describe('ErrorContext', () => {
         stateRef.current?.dismissAllErrors();
       });
 
+      // Precondition: exactly one pending animation timer for the batch.
+      expect(vi.getTimerCount()).toBe(1);
+
       // Unmount before the 300ms animation timer fires
       act(() => {
         root.unmount();
       });
 
-      // Advance past the animation delay — should not throw
+      // The unmount cleanup cleared it.
+      expect(vi.getTimerCount()).toBe(0);
+
       act(() => {
         vi.advanceTimersByTime(500);
       });

@@ -440,27 +440,31 @@ describe('query-backed leaf first load', () => {
     );
   };
 
-  const expectQueryFirstLoad = async ({
+  /**
+   * Renders a query-backed leaf with `scope`'s sort persisted, then reports what
+   * the view produced: the names it rendered and the scopes it requested for
+   * `domain`. Assertions stay in the tests so each states the contract it pins.
+   */
+  const renderQueryFirstLoad = async ({
     element,
     payload,
     domain,
-    expectedName,
-    expectedScope,
+    scope,
   }: {
     element: React.ReactElement;
     payload: Record<string, unknown>;
     domain: string;
-    expectedName: string;
-    expectedScope: string;
+    scope: string;
   }) => {
-    const expectedSort = expectedScope.match(/[?&]sort=([^&]+)&sortDirection=([^&]+)/);
-    if (expectedSort) {
-      const direction = decodeURIComponent(expectedSort[2]);
+    const sort = scope.match(/[?&]sort=([^&]+)&sortDirection=([^&]+)/);
+    if (sort) {
+      const direction = decodeURIComponent(sort[2]);
       if (direction !== 'asc' && direction !== 'desc') {
+        // Guards the test's own scope literal, not the behaviour under test.
         throw new Error(`Unexpected query sort direction: ${direction}`);
       }
       persistedSortRef.current = {
-        key: decodeURIComponent(expectedSort[1]),
+        key: decodeURIComponent(sort[1]),
         direction,
       };
     } else {
@@ -468,16 +472,12 @@ describe('query-backed leaf first load', () => {
     }
     const props = await render(element, payload);
 
-    const firstRef = props.data[0]?.ref as { name?: string } | undefined;
-    if (props.data.length !== 1 || firstRef?.name !== expectedName) {
-      throw new Error(`Expected first query result to contain only ${expectedName}`);
-    }
-    const requestedExpectedScope = requestRefreshDomainStateMock.mock.calls.some(
-      ([request]) => request.domain === domain && request.scope === expectedScope
-    );
-    if (!requestedExpectedScope) {
-      throw new Error(`Expected ${domain} query for scope ${expectedScope}`);
-    }
+    return {
+      rowNames: props.data.map((row) => (row.ref as { name?: string } | undefined)?.name),
+      requestedScopes: requestRefreshDomainStateMock.mock.calls
+        .filter(([request]) => request.domain === domain)
+        .map(([request]) => request.scope as string),
+    };
   };
 
   it.each([
@@ -628,13 +628,15 @@ describe('query-backed leaf first load', () => {
       Component: NsViewEvents,
     },
   ])('uses the typed query result on first load for $label', async (testCase) => {
-    await expectQueryFirstLoad({
+    const observed = await renderQueryFirstLoad({
       element: <testCase.Component namespace={ALL_NAMESPACES_SCOPE} showNamespaceColumn={true} />,
       payload: { [testCase.payloadField]: [testCase.query] },
       domain: testCase.domain,
-      expectedName: testCase.query.name,
-      expectedScope: testCase.expectedScope,
+      scope: testCase.expectedScope,
     });
+
+    expect(observed.rowNames).toEqual([testCase.query.name]);
+    expect(observed.requestedScopes).toContain(testCase.expectedScope);
   });
 
   it('settles a permission-denied domain without warm-up retries and shows the permission state', async () => {
@@ -684,7 +686,8 @@ describe('query-backed leaf first load', () => {
   });
 
   it('uses the typed query result on first load for namespace autoscaling', async () => {
-    await expectQueryFirstLoad({
+    const scope = 'cluster-a|namespace:all?limit=50&sort=name&sortDirection=asc';
+    const observed = await renderQueryFirstLoad({
       element: <NsViewAutoscaling namespace={ALL_NAMESPACES_SCOPE} showNamespaceColumn={true} />,
       payload: {
         rows: [
@@ -703,13 +706,16 @@ describe('query-backed leaf first load', () => {
         ],
       },
       domain: 'namespace-autoscaling',
-      expectedName: 'query-autoscaling',
-      expectedScope: 'cluster-a|namespace:all?limit=50&sort=name&sortDirection=asc',
+      scope,
     });
+
+    expect(observed.rowNames).toEqual(['query-autoscaling']);
+    expect(observed.requestedScopes).toContain(scope);
   });
 
   it('uses the typed query result on first load for namespace Helm', async () => {
-    await expectQueryFirstLoad({
+    const scope = 'cluster-a|namespace:all?limit=50&sort=name&sortDirection=asc';
+    const observed = await renderQueryFirstLoad({
       element: <NsViewHelm namespace={ALL_NAMESPACES_SCOPE} showNamespaceColumn={true} />,
       payload: {
         rows: [
@@ -725,33 +731,41 @@ describe('query-backed leaf first load', () => {
         ],
       },
       domain: 'namespace-helm',
-      expectedName: 'query-release',
-      expectedScope: 'cluster-a|namespace:all?limit=50&sort=name&sortDirection=asc',
+      scope,
     });
+
+    expect(observed.rowNames).toEqual(['query-release']);
+    expect(observed.requestedScopes).toContain(scope);
   });
 
   it('uses the typed query result on first load for namespace pods', async () => {
-    await expectQueryFirstLoad({
+    const scope = 'cluster-a|namespace:all?limit=50&sort=name&sortDirection=asc';
+    const observed = await renderQueryFirstLoad({
       element: <NsViewPods namespace={ALL_NAMESPACES_SCOPE} showNamespaceColumn={true} />,
       payload: {
         rows: [podRow('query-pod', '2h')],
       },
       domain: 'pods',
-      expectedName: 'query-pod',
-      expectedScope: 'cluster-a|namespace:all?limit=50&sort=name&sortDirection=asc',
+      scope,
     });
+
+    expect(observed.rowNames).toEqual(['query-pod']);
+    expect(observed.requestedScopes).toContain(scope);
   });
 
   it('uses the typed query result on first load for namespace workloads', async () => {
-    await expectQueryFirstLoad({
+    const scope = 'cluster-a|namespace:all?limit=50&sort=name&sortDirection=asc';
+    const observed = await renderQueryFirstLoad({
       element: <WorkloadsTable namespace={ALL_NAMESPACES_SCOPE} showNamespaceColumn={true} />,
       payload: {
         rows: [workloadRow('query-workload', '2h')],
       },
       domain: 'namespace-workloads',
-      expectedName: 'query-workload',
-      expectedScope: 'cluster-a|namespace:all?limit=50&sort=name&sortDirection=asc',
+      scope,
     });
+
+    expect(observed.rowNames).toEqual(['query-workload']);
+    expect(observed.requestedScopes).toContain(scope);
   });
 
   it.each([
@@ -902,17 +916,20 @@ describe('query-backed leaf first load', () => {
       Component: NsViewEvents,
     },
   ])('issues a namespace-scoped typed query on first load for $label', async (testCase) => {
-    await expectQueryFirstLoad({
+    const observed = await renderQueryFirstLoad({
       element: <testCase.Component namespace="team-a" showNamespaceColumn={false} />,
       payload: { [testCase.payloadField]: [testCase.query] },
       domain: testCase.domain,
-      expectedName: testCase.query.name,
-      expectedScope: testCase.expectedScope,
+      scope: testCase.expectedScope,
     });
+
+    expect(observed.rowNames).toEqual([testCase.query.name]);
+    expect(observed.requestedScopes).toContain(testCase.expectedScope);
   });
 
   it('issues a namespace-scoped typed query on first load for namespace autoscaling', async () => {
-    await expectQueryFirstLoad({
+    const scope = 'cluster-a|namespace:team-a?limit=50&sort=name&sortDirection=asc';
+    const observed = await renderQueryFirstLoad({
       element: <NsViewAutoscaling namespace="team-a" showNamespaceColumn={false} />,
       payload: {
         rows: [
@@ -931,13 +948,16 @@ describe('query-backed leaf first load', () => {
         ],
       },
       domain: 'namespace-autoscaling',
-      expectedName: 'query-autoscaling',
-      expectedScope: 'cluster-a|namespace:team-a?limit=50&sort=name&sortDirection=asc',
+      scope,
     });
+
+    expect(observed.rowNames).toEqual(['query-autoscaling']);
+    expect(observed.requestedScopes).toContain(scope);
   });
 
   it('issues a namespace-scoped typed query on first load for namespace Helm', async () => {
-    await expectQueryFirstLoad({
+    const scope = 'cluster-a|namespace:team-a?limit=50&sort=name&sortDirection=asc';
+    const observed = await renderQueryFirstLoad({
       element: <NsViewHelm namespace="team-a" showNamespaceColumn={false} />,
       payload: {
         rows: [
@@ -953,33 +973,41 @@ describe('query-backed leaf first load', () => {
         ],
       },
       domain: 'namespace-helm',
-      expectedName: 'query-release',
-      expectedScope: 'cluster-a|namespace:team-a?limit=50&sort=name&sortDirection=asc',
+      scope,
     });
+
+    expect(observed.rowNames).toEqual(['query-release']);
+    expect(observed.requestedScopes).toContain(scope);
   });
 
   it('issues a namespace-scoped typed query on first load for namespace pods', async () => {
-    await expectQueryFirstLoad({
+    const scope = 'cluster-a|namespace:team-a?limit=50&sort=name&sortDirection=asc';
+    const observed = await renderQueryFirstLoad({
       element: <NsViewPods namespace="team-a" showNamespaceColumn={false} />,
       payload: {
         rows: [podRow('query-pod', '2h')],
       },
       domain: 'pods',
-      expectedName: 'query-pod',
-      expectedScope: 'cluster-a|namespace:team-a?limit=50&sort=name&sortDirection=asc',
+      scope,
     });
+
+    expect(observed.rowNames).toEqual(['query-pod']);
+    expect(observed.requestedScopes).toContain(scope);
   });
 
   it('issues a namespace-scoped typed query on first load for namespace workloads', async () => {
-    await expectQueryFirstLoad({
+    const scope = 'cluster-a|namespace:team-a?limit=50&sort=name&sortDirection=asc';
+    const observed = await renderQueryFirstLoad({
       element: <WorkloadsTable namespace="team-a" showNamespaceColumn={false} />,
       payload: {
         rows: [workloadRow('query-workload', '2h')],
       },
       domain: 'namespace-workloads',
-      expectedName: 'query-workload',
-      expectedScope: 'cluster-a|namespace:team-a?limit=50&sort=name&sortDirection=asc',
+      scope,
     });
+
+    expect(observed.rowNames).toEqual(['query-workload']);
+    expect(observed.requestedScopes).toContain(scope);
   });
 
   it.each([
@@ -1060,17 +1088,20 @@ describe('query-backed leaf first load', () => {
       Component: ClusterViewCRDs,
     },
   ])('uses the typed query result on first load for $label', async (testCase) => {
-    await expectQueryFirstLoad({
+    const observed = await renderQueryFirstLoad({
       element: <testCase.Component />,
       payload: { [testCase.payloadField]: [testCase.query] },
       domain: testCase.domain,
-      expectedName: testCase.query.name,
-      expectedScope: testCase.expectedScope,
+      scope: testCase.expectedScope,
     });
+
+    expect(observed.rowNames).toEqual([testCase.query.name]);
+    expect(observed.requestedScopes).toContain(testCase.expectedScope);
   });
 
   it('uses the typed query result on first load for cluster events', async () => {
-    await expectQueryFirstLoad({
+    const scope = 'cluster-a|cluster?limit=50&sort=age&sortDirection=asc';
+    const observed = await renderQueryFirstLoad({
       element: <ClusterViewEvents />,
       payload: {
         rows: [
@@ -1090,21 +1121,26 @@ describe('query-backed leaf first load', () => {
         ],
       },
       domain: 'cluster-events',
-      expectedName: 'query-event',
-      expectedScope: 'cluster-a|cluster?limit=50&sort=age&sortDirection=asc',
+      scope,
     });
+
+    expect(observed.rowNames).toEqual(['query-event']);
+    expect(observed.requestedScopes).toContain(scope);
   });
 
   it('uses the typed query result on first load for cluster nodes', async () => {
-    await expectQueryFirstLoad({
+    const scope = 'cluster-a|?limit=50&sort=name&sortDirection=asc';
+    const observed = await renderQueryFirstLoad({
       element: <ClusterViewNodes />,
       payload: {
         rows: [nodeRow('query-node', '2h')],
       },
       domain: 'nodes',
-      expectedName: 'query-node',
-      expectedScope: 'cluster-a|?limit=50&sort=name&sortDirection=asc',
+      scope,
     });
+
+    expect(observed.rowNames).toEqual(['query-node']);
+    expect(observed.requestedScopes).toContain(scope);
   });
 
   const sortableKeys = (props: CapturedGridTableProps): string[] =>
