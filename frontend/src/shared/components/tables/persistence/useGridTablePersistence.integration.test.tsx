@@ -73,19 +73,27 @@ describe('useGridTablePersistence integration', () => {
     });
   };
 
-  const waitForHydratedState = async (): Promise<unknown> => {
-    let attempts = 0;
-    while (attempts < 10) {
+  // storageKey depends on computeClusterHash -> crypto.subtle.digest, a native
+  // async boundary. Draining microtasks does not let the event loop turn, so a
+  // digest still in flight stays unresolved however many times we poll;
+  // advanceTimersByTimeAsync yields to the macrotask queue between polls while
+  // fake timers stay installed. Exhausting the budget is a failure, not a
+  // fallback — returning an unhydrated state here surfaces later as a confusing
+  // assertion on whichever field the caller happens to read first.
+  const waitForHydratedState = async (): Promise<PersistenceState> => {
+    for (let attempt = 0; attempt < 50; attempt += 1) {
       await act(async () => {
-        await Promise.resolve();
+        await vi.advanceTimersByTimeAsync(0);
       });
-      const state = latestState;
-      if (state?.hydrated) {
-        return state;
+      if (latestState?.hydrated) {
+        return getLatestState();
       }
-      attempts += 1;
     }
-    return getLatestState();
+    throw new Error(
+      'Grid table persistence never hydrated: computeClusterHash -> storageKey -> hydrate ' +
+        `did not settle within 50 polls (storageKey=${String(latestState?.storageKey ?? null)}, ` +
+        `hydrated=${String(latestState?.hydrated ?? false)}).`
+    );
   };
 
   const snapshotStorage = (): Record<string, unknown> => getGridTablePersistenceSnapshot();

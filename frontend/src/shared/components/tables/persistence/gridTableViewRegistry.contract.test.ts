@@ -326,117 +326,95 @@ describe('gridTableViewRegistry contract', () => {
   });
 
   it('every viewId used in persistence hooks is registered', () => {
-    const missing = usages.filter((u) => !registered.has(u.viewId));
-    if (missing.length > 0) {
-      const details = missing
-        .map((m) => `  viewId "${m.viewId}" in ${path.relative(srcRoot, m.file)}`)
-        .join('\n');
-      throw new Error(
-        `Found viewIds used in persistence hooks but missing from gridTableViewRegistry:\n${details}\n\n` +
-          'Add them to the VIEW_IDS set in gridTableViewRegistry.ts.'
-      );
-    }
+    const missing = usages
+      .filter((u) => !registered.has(u.viewId))
+      .map((m) => `viewId "${m.viewId}" in ${path.relative(srcRoot, m.file)}`);
+
+    expect(missing, 'Add them to the VIEW_IDS set in gridTableViewRegistry.ts.').toEqual([]);
   });
 
   it('registry does not contain stale entries with no matching usage', () => {
     const usedIds = new Set(usages.map((u) => u.viewId));
     const stale = [...registered].filter((id) => !usedIds.has(id));
-    if (stale.length > 0) {
-      throw new Error(
-        'Registry contains viewIds with no matching usage in source files:\n' +
-          stale.map((id) => `  "${id}"`).join('\n') +
-          '\n\nRemove them from gridTableViewRegistry.ts or add their usage.'
-      );
-    }
+
+    expect(stale, 'Remove them from gridTableViewRegistry.ts or add their usage.').toEqual([]);
   });
 
   it('production resource-grid adapter calls declare tableMode', () => {
     const missing = findResourceGridCallsMissingTableMode(srcRoot);
-    if (missing.length > 0) {
-      throw new Error(
-        'Found resource-grid adapter calls without tableMode:\n' +
-          missing.map((file) => `  ${file}`).join('\n') +
-          '\n\nAdd an explicit Local Complete, Local Partial, Query Backed Static, or Query Backed Dynamic mode.'
-      );
-    }
+
+    expect(
+      missing,
+      'Add an explicit Local Complete, Local Partial, Query Backed Static, or Query Backed Dynamic mode.'
+    ).toEqual([]);
   });
 
   it('production resource-grid adapter tableMode values are recognized', () => {
     const invalid = findResourceGridCallsWithoutRecognizedTableMode(srcRoot);
-    if (invalid.length > 0) {
-      throw new Error(
-        'Found resource-grid adapter calls with unrecognized tableMode:\n' +
-          invalid.map((file) => `  ${file}`).join('\n') +
-          '\n\nUse Local Complete, Local Partial, Query Backed Static, or Query Backed Dynamic.'
-      );
-    }
+
+    expect(
+      invalid,
+      'Use Local Complete, Local Partial, Query Backed Static, or Query Backed Dynamic.'
+    ).toEqual([]);
   });
 
   it('direct production GridTable usage is explicitly allowed', () => {
     const unexpected = findProductionDirectGridTableUsages(srcRoot);
-    if (unexpected.length > 0) {
-      throw new Error(
-        'Found direct production GridTable usages without an explicit exception:\n' +
-          unexpected.map((file) => `  ${file}`).join('\n') +
-          '\n\nRoute resource tables through the resource-grid adapter with tableMode, or add a reviewed bounded/partial exception here.'
-      );
-    }
+
+    expect(
+      unexpected,
+      'Route resource tables through the resource-grid adapter with tableMode, or add a reviewed bounded/partial exception here.'
+    ).toEqual([]);
   });
 
   it('direct production useTableSort usage is explicitly allowed', () => {
     const unexpected = findProductionDirectUseTableSortUsages(srcRoot);
-    if (unexpected.length > 0) {
-      throw new Error(
-        'Found direct production useTableSort usages without an explicit exception:\n' +
-          unexpected.map((file) => `  ${file}`).join('\n') +
-          '\n\nRoute resource tables through the resource-grid adapter tableMode path, or add a reviewed bounded/partial exception here.'
-      );
-    }
+
+    expect(
+      unexpected,
+      'Route resource tables through the resource-grid adapter tableMode path, or add a reviewed bounded/partial exception here.'
+    ).toEqual([]);
   });
 
   it('direct table bypass exceptions carry an explicit table-mode classification', () => {
     const unclassified = findUnclassifiedDirectUsageExceptions();
-    if (unclassified.length > 0) {
-      throw new Error(
-        'Found direct GridTable/useTableSort exceptions without mode and reason:\n' +
-          unclassified.map((file) => `  ${file}`).join('\n') +
-          '\n\nEvery direct bypass must document whether it is an adapter shell, Local Complete, Local Partial, Query Backed Static, or Query Backed Dynamic.'
-      );
-    }
+
+    expect(
+      unclassified,
+      'Every direct bypass must document whether it is an adapter shell, Local Complete, Local Partial, Query Backed Static, or Query Backed Dynamic.'
+    ).toEqual([]);
   });
 
   it('direct table bypass exceptions are not stale (each file still uses what it is allowlisted for)', () => {
     const stale = findStaleDirectUsageExceptions(srcRoot);
-    if (stale.length > 0) {
-      throw new Error(
-        'Found allowlisted direct-usage exceptions whose file no longer uses GridTable/useTableSort:\n' +
-          stale.map((file) => `  ${file}`).join('\n') +
-          '\n\nRemove the stale exception so the allowlist stays exact — a stale entry silently ' +
-          'pre-authorizes a future direct bypass in that file without review.'
-      );
-    }
+
+    expect(
+      stale,
+      'Remove the stale exception so the allowlist stays exact — a stale entry silently ' +
+        'pre-authorizes a future direct bypass in that file without review.'
+    ).toEqual([]);
   });
 
   it('only the sanctioned adapters produce a resource-inventory source', () => {
     const producers = findResourceInventorySourceProducers(srcRoot);
     const sanctioned = new Set<string>(RESOURCE_INVENTORY_SOURCE_ADAPTERS);
     const unexpected = producers.filter((file) => !sanctioned.has(file));
-    if (unexpected.length > 0) {
-      throw new Error(
-        'Found resource-inventory source producers outside the sanctioned adapters:\n' +
-          unexpected.map((file) => `  ${file}`).join('\n') +
-          '\n\nResource inventory tables must source from boundedRowsSource or backendQuerySource. ' +
-          'A new source shape must be reviewed and added to RESOURCE_INVENTORY_SOURCE_ADAPTERS deliberately.'
-      );
-    }
+
+    expect(
+      unexpected,
+      'Resource inventory tables must source from boundedRowsSource or backendQuerySource. ' +
+        'A new source shape must be reviewed and added to RESOURCE_INVENTORY_SOURCE_ADAPTERS deliberately.'
+    ).toEqual([]);
+
     // The set must be exact in both directions — a sanctioned adapter that stops
     // producing a source is a stale allowlist entry.
-    for (const file of RESOURCE_INVENTORY_SOURCE_ADAPTERS) {
-      if (!producers.includes(file)) {
-        throw new Error(
-          `Sanctioned source adapter no longer produces a ResourceInventorySourceState: ${file}`
-        );
-      }
-    }
+    const noLongerProducing = RESOURCE_INVENTORY_SOURCE_ADAPTERS.filter(
+      (file) => !producers.includes(file)
+    );
+
+    expect(
+      noLongerProducing,
+      'Sanctioned source adapters must still produce a ResourceInventorySourceState.'
+    ).toEqual([]);
   });
 });
