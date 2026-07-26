@@ -341,7 +341,7 @@ const RollbackModal = ({
                   checked={diffOnly}
                   onChange={(e) => setDiffOnly(e.target.checked)}
                 />
-                Diff only
+                {'Diff only'}
               </label>
             </div>
             <div className="rollback-diff-content">

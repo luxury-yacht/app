@@ -128,14 +128,14 @@ export function createResourceBarColumn<T>(
 
     if (type === 'cpu') {
       if (value.endsWith('m')) {
-        const parsed = parseFloat(value.slice(0, -1));
+        const parsed = Number.parseFloat(value.slice(0, -1));
         return Number.isNaN(parsed) ? 0 : parsed;
       }
-      const parsed = parseFloat(value) * 1000;
+      const parsed = Number.parseFloat(value) * 1000;
       return Number.isNaN(parsed) ? 0 : parsed;
     }
 
-    const num = parseFloat(value);
+    const num = Number.parseFloat(value);
     if (Number.isNaN(num)) {
       return 0;
     }

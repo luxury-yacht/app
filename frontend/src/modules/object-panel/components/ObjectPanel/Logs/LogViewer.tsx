@@ -1462,7 +1462,7 @@ const LogViewerInner: React.FC<LogViewerProps> = ({
                 className="log-viewer-metadata log-viewer-metadata--bold"
                 style={{ '--pod-color': podColor } as React.CSSProperties}
               >
-                [
+                {'['}
                 <button
                   type="button"
                   className="log-viewer-metadata-button pod-color-text"
@@ -1473,7 +1473,7 @@ const LogViewerInner: React.FC<LogViewerProps> = ({
                 >
                   {pod}
                 </button>
-                /
+                {'/'}
                 <button
                   type="button"
                   className="log-viewer-metadata-button pod-color-text"
@@ -1493,7 +1493,7 @@ const LogViewerInner: React.FC<LogViewerProps> = ({
                 >
                   {container}
                 </button>
-                ]
+                {']'}
               </span>
               <span> {renderMessageContent(logLine, `workload-${row.key}`)}</span>
             </div>
@@ -1525,7 +1525,7 @@ const LogViewerInner: React.FC<LogViewerProps> = ({
               {!!timestampPrefix && <span className="log-viewer-metadata">{timestampPrefix}</span>}
               {!!showContainerMeta && (
                 <span className="log-viewer-metadata">
-                  [
+                  {'['}
                   <button
                     type="button"
                     className="log-viewer-metadata-button"
@@ -1544,7 +1544,7 @@ const LogViewerInner: React.FC<LogViewerProps> = ({
                   >
                     {containerLabel}
                   </button>
-                  ]
+                  {']'}
                 </span>
               )}
               <span> {renderMessageContent(remainder, `pod-${row.key}`)}</span>

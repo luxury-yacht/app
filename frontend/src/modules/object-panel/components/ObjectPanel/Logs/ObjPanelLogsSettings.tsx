@@ -266,7 +266,7 @@ function ObjPanelLogsSettings() {
                     }}
                     data-obj-panel-logs-settings-focusable="true"
                   />
-                  Use local time zone
+                  {'Use local time zone'}
                 </label>
                 <Tooltip content="Formats Kubernetes API timestamps using this machine's local timezone instead of UTC." />
               </div>

@@ -118,8 +118,8 @@ export const podDescriptor: OverviewDescriptor<PodDetailInfo> = {
           }
           const parts = d.ready.split('/');
           if (parts.length === 2) {
-            const readyCount = parseInt(parts[0], 10);
-            const totalCount = parseInt(parts[1], 10);
+            const readyCount = Number.parseInt(parts[0], 10);
+            const totalCount = Number.parseInt(parts[1], 10);
             if (
               !Number.isNaN(readyCount) &&
               !Number.isNaN(totalCount) &&

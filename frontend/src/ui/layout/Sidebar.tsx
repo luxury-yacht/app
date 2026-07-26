@@ -534,7 +534,7 @@ function Sidebar() {
               hidden={viewState.viewType === 'global'}
             >
               <h3>
-                Namespaces
+                {'Namespaces'}
                 <button
                   type="button"
                   className="sidebar-header-action"

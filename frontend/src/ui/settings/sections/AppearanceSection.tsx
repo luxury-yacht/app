@@ -640,7 +640,7 @@ function AppearanceSection() {
     if (!editingPaletteField) {
       return;
     }
-    const parsed = parseInt(paletteDraft, 10);
+    const parsed = Number.parseInt(paletteDraft, 10);
     if (Number.isNaN(parsed)) {
       setEditingPaletteField(null);
       return;

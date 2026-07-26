@@ -6,6 +6,7 @@ import {
   normalizeMultiSelectFilterSelection,
 } from '@shared/components/dropdowns/multiSelectFilterSelection';
 import type { GridTableFilterState } from '@shared/components/tables/GridTable.types';
+import { compareUtf16Strings } from '@/shared/utils/sort';
 
 export const DEFAULT_GRID_TABLE_FILTER_STATE: GridTableFilterState = {
   search: '',
@@ -23,7 +24,7 @@ export const normalizeGridTableQueryFacets = (
     return {};
   }
   const normalized: Record<string, MultiSelectFilterSelection> = {};
-  for (const rawKey of Object.keys(facets).sort()) {
+  for (const rawKey of Object.keys(facets).sort(compareUtf16Strings)) {
     const key = rawKey.trim();
     if (!key) {
       continue;

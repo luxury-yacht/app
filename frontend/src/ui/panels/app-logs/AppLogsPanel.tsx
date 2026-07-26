@@ -41,6 +41,7 @@ import { readAppLogs, readAppLogsSince } from '@/core/app-state-access';
 import { ClearAppLogs, SetAppLogsPanelVisible } from '@/core/backend-api';
 import { type AppLogsAddedEvent, subscribeAppLogsAdded } from '@/core/logging/appLogsClient';
 import './AppLogsPanel.css';
+import { compareUtf16Strings } from '@/shared/utils/sort';
 
 interface LogEntry {
   sequence?: number;
@@ -472,7 +473,7 @@ function AppLogsPanel({ isOpen, onClose }: AppLogsPanelProps) {
     () =>
       Array.from(
         new Set(logs.map((log) => log.source).filter((source): source is string => Boolean(source)))
-      ).sort(),
+      ).sort(compareUtf16Strings),
     [logs]
   );
 

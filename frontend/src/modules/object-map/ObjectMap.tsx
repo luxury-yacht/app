@@ -35,6 +35,7 @@ import { useObjectActionController } from '@shared/hooks/useObjectActionControll
 import type { ObjectActionData } from '@shared/hooks/useObjectActions';
 import { withStableListKeys } from '@shared/utils/stableListKeys';
 import { useShortNames } from '@/hooks/useShortNames';
+import { compareUtf16Strings } from '@/shared/utils/sort';
 import {
   createObjectMapDebugId,
   publishObjectMapDebugSnapshot,
@@ -280,7 +281,9 @@ const ObjectMap: React.FC<ObjectMapProps> = ({
       focusMode,
       autoFit: model.autoFit,
       selectedKinds,
-      enabledEdgeTypes: enabledEdgeTypes ? Array.from(enabledEdgeTypes).sort() : null,
+      enabledEdgeTypes: enabledEdgeTypes
+        ? Array.from(enabledEdgeTypes).sort(compareUtf16Strings)
+        : null,
       preserveViewportNodeId,
       payload: {
         nodes: payload.nodes.length,

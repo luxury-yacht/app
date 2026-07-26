@@ -78,7 +78,7 @@ const ScaleModal = ({
     // Strip non-digit characters so letters are silently ignored.
     const raw = e.target.value.replace(/[^0-9]/g, '');
     setInputText(raw);
-    const parsed = parseInt(raw, 10);
+    const parsed = Number.parseInt(raw, 10);
     if (!Number.isNaN(parsed)) {
       onValueChange(parsed);
     }
@@ -86,7 +86,7 @@ const ScaleModal = ({
 
   // Commit a valid number on blur; if empty, reset to 0.
   const handleBlur = () => {
-    const parsed = parseInt(inputText, 10);
+    const parsed = Number.parseInt(inputText, 10);
     if (Number.isNaN(parsed) || inputText.trim() === '') {
       onValueChange(0);
       setInputText('0');

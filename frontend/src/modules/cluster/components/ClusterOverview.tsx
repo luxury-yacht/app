@@ -1052,7 +1052,7 @@ const ClusterOverview: React.FC<ClusterOverviewProps> = ({ clusterContext }) => 
                 }`}
                 aria-hidden="true"
               />
-              Legend
+              {'Legend'}
             </button>
             {!!legendExpanded && (
               <div className="utilization-legend__items" data-testid="utilization-legend">

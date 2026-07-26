@@ -10,9 +10,9 @@ export const parseCpuToMillicores = (val: string | undefined): number => {
     return 0;
   }
   if (val.endsWith('m')) {
-    return parseFloat(val.slice(0, -1));
+    return Number.parseFloat(val.slice(0, -1));
   }
-  return parseFloat(val) * 1000; // Convert cores to millicores
+  return Number.parseFloat(val) * 1000; // Convert cores to millicores
 };
 
 /**
@@ -22,7 +22,7 @@ export const parseMemToMB = (val: string | undefined): number => {
   if (!val || val === '-' || val === 'not set') {
     return 0;
   }
-  const num = parseFloat(val);
+  const num = Number.parseFloat(val);
   if (Number.isNaN(num)) {
     return 0;
   }

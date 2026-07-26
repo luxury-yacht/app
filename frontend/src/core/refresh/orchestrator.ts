@@ -13,6 +13,7 @@ import {
   logAppLogsWarn,
 } from '@/core/logging/appLogsClient';
 import { getAutoRefreshEnabled } from '@/core/settings/appPreferences';
+import { compareUtf16Strings } from '@/shared/utils/sort';
 import {
   ensureRefreshBaseURL,
   fetchSnapshot,
@@ -156,9 +157,7 @@ class RefreshOrchestrator {
   private recordPendingClusterReadiness(
     domain: RefreshDomain,
     scope: string,
-    options: Pick<DomainFetchOptions, 'isManual' | 'streamSignal' | 'queryReconcile'> = {
-      isManual: false,
-    }
+    options?: Pick<DomainFetchOptions, 'isManual' | 'streamSignal' | 'queryReconcile'>
   ): void {
     for (const clusterId of parseClusterScopeList(scope).clusterIds) {
       let pending = this.pendingClusterReadiness.get(clusterId);
@@ -171,9 +170,9 @@ class RefreshOrchestrator {
       pending.set(key, {
         domain,
         scope,
-        isManual: Boolean(existing?.isManual || options.isManual),
-        streamSignal: Boolean(existing?.streamSignal || options.streamSignal),
-        queryReconcile: Boolean(existing?.queryReconcile || options.queryReconcile),
+        isManual: Boolean(existing?.isManual || options?.isManual),
+        streamSignal: Boolean(existing?.streamSignal || options?.streamSignal),
+        queryReconcile: Boolean(existing?.queryReconcile || options?.queryReconcile),
       });
     }
   }
@@ -1505,7 +1504,7 @@ class RefreshOrchestrator {
         demanded.push(clusterId);
       }
     });
-    return demanded.sort();
+    return demanded.sort(compareUtf16Strings);
   }
 
   private updateMetricsDemand(): void {

@@ -18,6 +18,7 @@ import { useGridTablePersistence } from '@shared/components/tables/persistence/u
 import { buildRequiredCanonicalObjectRowKey } from '@shared/utils/objectIdentity';
 import { useFavToggle } from '@ui/favorites/FavToggle';
 import { useCallback, useEffect, useMemo } from 'react';
+import { compareUtf16Strings } from '@/shared/utils/sort';
 import {
   normalizeQueryBackedNamespaceQueryFilters,
   queryBackedFacetFilterOptions,
@@ -302,7 +303,10 @@ function useResourceGridTableCommon<T extends ResourceGridTableRow>({
   const fallbackKinds = useKindFilterOptions(data);
   const availableKinds = kindOptions && kindOptions.length > 0 ? kindOptions : fallbackKinds;
   const fallbackNamespaces = useMemo(
-    () => [...new Set(data.map((row) => row.namespace?.trim() ?? '').filter(Boolean))].sort(),
+    () =>
+      [...new Set(data.map((row) => row.namespace?.trim() ?? '').filter(Boolean))].sort(
+        compareUtf16Strings
+      ),
     [data]
   );
   const availableFilterNamespaces = useNamespaceFilterOptions(namespace, fallbackNamespaces);

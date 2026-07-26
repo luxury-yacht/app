@@ -1,3 +1,4 @@
+import { compareUtf16Strings } from '@/shared/utils/sort';
 import { stripAnsi } from './ansi';
 import type { ParsedLogEntry } from './logViewerReducer';
 
@@ -38,7 +39,7 @@ export const deriveParsedLogFieldKeys = (entries: ParsedLogEntry[]): string[] =>
       seen.add(key);
     }
   }
-  return Array.from(seen).sort();
+  return Array.from(seen).sort(compareUtf16Strings);
 };
 
 export const formatRawOrPrettyJsonLine = (

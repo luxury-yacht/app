@@ -98,15 +98,15 @@ const ResourceBar: React.FC<ResourceBarProps> = ({
       if (type === 'cpu') {
         // Handle CPU (millicores or cores)
         if (value.endsWith('m')) {
-          const parsed = parseFloat(value.slice(0, -1));
+          const parsed = Number.parseFloat(value.slice(0, -1));
           return Number.isNaN(parsed) ? 0 : parsed;
         } else {
-          const parsed = parseFloat(value) * 1000; // Convert cores to millicores
+          const parsed = Number.parseFloat(value) * 1000; // Convert cores to millicores
           return Number.isNaN(parsed) ? 0 : parsed;
         }
       } else {
         // Handle Memory - match DetailsTabUtilization's parseMemToMB exactly
-        const num = parseFloat(value);
+        const num = Number.parseFloat(value);
         if (Number.isNaN(num)) {
           return 0;
         }

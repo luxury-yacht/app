@@ -39,6 +39,7 @@ import {
 import { resolveFavoriteRoute } from '@/core/navigation/favoriteRoute';
 import { getViewDescriptor } from '@/core/navigation/viewRegistry';
 import type { Favorite, FavoritePaneState } from '@/core/persistence/favorites';
+import { compareUtf16Strings } from '@/shared/utils/sort';
 import FavSaveModal from './FavSaveModal';
 
 /** Current view state that the FavToggle needs to snapshot when saving a favorite.
@@ -157,8 +158,16 @@ const favoritePaneMatches = (left: FavoritePaneState, right: FavoritePaneState):
   areGridTableFilterStatesEqual(left.filters, right.filters) &&
   left.tableState.sortColumn === right.tableState.sortColumn &&
   left.tableState.sortDirection === right.tableState.sortDirection &&
-  JSON.stringify(Object.entries(left.tableState.columnVisibility).sort()) ===
-    JSON.stringify(Object.entries(right.tableState.columnVisibility).sort());
+  JSON.stringify(
+    Object.entries(left.tableState.columnVisibility).sort(([leftKey], [rightKey]) =>
+      compareUtf16Strings(leftKey, rightKey)
+    )
+  ) ===
+    JSON.stringify(
+      Object.entries(right.tableState.columnVisibility).sort(([leftKey], [rightKey]) =>
+        compareUtf16Strings(leftKey, rightKey)
+      )
+    );
 
 const favoriteFilterOptionsSignature = (options: GridTableFilterOptions): string =>
   JSON.stringify({

@@ -211,8 +211,11 @@ export const buildDominantTimingMetric = (
     return null;
   }
 
-  const dominant = metrics.reduce((current, candidate) =>
-    candidate.stats.averageMs > current.stats.averageMs ? candidate : current
+  const [firstMetric, ...remainingMetrics] = metrics;
+  const dominant = remainingMetrics.reduce(
+    (current, candidate) =>
+      candidate.stats.averageMs > current.stats.averageMs ? candidate : current,
+    firstMetric
   );
 
   return {

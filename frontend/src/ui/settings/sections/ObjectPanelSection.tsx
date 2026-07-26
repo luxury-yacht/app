@@ -140,7 +140,7 @@ function ObjectPanelSection() {
 
   const handlePanelLayoutInput = (field: LayoutField, raw: string) => {
     setPanelLayoutInputs((prev) => ({ ...prev, [field]: raw }));
-    const parsed = parseInt(raw, 10);
+    const parsed = Number.parseInt(raw, 10);
     if (!Number.isNaN(parsed)) {
       const clamped = normalizeIntegerPreferenceValue(fieldPreferenceKeys[field], parsed, {
         defaultOnNonPositive: true,

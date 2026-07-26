@@ -41,7 +41,7 @@ class DetailsTabDataErrorBoundary extends Component<Props, State> {
           <div className="object-panel-section">
             <div className="object-panel-section-title">
               <span className="collapse-icon">▶</span>
-              Data
+              {'Data'}
               <span
                 style={{
                   color: 'var(--color-text-secondary)',

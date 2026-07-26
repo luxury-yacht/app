@@ -15,6 +15,7 @@ import {
   permissionFeatureLabel,
 } from '@/core/capabilities';
 import type { BrokerReadDiagnosticsEntry } from '@/core/read-diagnostics';
+import { compareUtf16Strings } from '@/shared/utils/sort';
 import type { KubernetesAPIClientDiagnostics, SelectionDiagnostics } from '../../client';
 import type { DomainSnapshotState } from '../../store';
 import type { ResourceStreamTelemetrySummary } from '../../streaming/resourceStreamManager';
@@ -237,7 +238,7 @@ export const buildDiagnosticsStreamRows = (
         byClusterLeaf.set(cluster, list);
       });
       if (byClusterLeaf.size > 1) {
-        [...byClusterLeaf.keys()].sort().forEach((cluster) => {
+        [...byClusterLeaf.keys()].sort(compareUtf16Strings).forEach((cluster) => {
           const clusterEntries = byClusterLeaf.get(cluster) ?? [];
           const leafLastEvent = formatLastUpdated(
             maxOf(clusterEntries.map((e) => e.lastEvent)) || undefined
@@ -271,7 +272,7 @@ export const buildDiagnosticsStreamRows = (
       byCluster.set(cluster, list);
     });
 
-    [...byCluster.keys()].sort().forEach((cluster) => {
+    [...byCluster.keys()].sort(compareUtf16Strings).forEach((cluster) => {
       rows.push({ kind: 'cluster', rowKey: `cluster::${streamName}::${cluster}`, cluster });
       const labelFor = (entry: TelemetryStreamStatus): string =>
         domainLabelById.get(entry.domain ?? '') ?? entry.domain ?? '';

@@ -206,8 +206,8 @@ export const acceptsCatalogSnapshotScope = (
   const incomingScopeParams = new URLSearchParams(
     splitClusterScope(scope ?? fallbackScope).scope.replace(/^\?/, '')
   );
-  const incomingNamespaces = incomingScopeParams.getAll('namespace').sort();
-  const expectedNamespaces = pinnedNamespaces.slice().sort();
+  const incomingNamespaces = incomingScopeParams.getAll('namespace').sort(compareUtf16Strings);
+  const expectedNamespaces = pinnedNamespaces.slice().sort(compareUtf16Strings);
   return (
     incomingNamespaces.length === expectedNamespaces.length &&
     incomingNamespaces.every((ns, index) => ns === expectedNamespaces[index])
@@ -281,11 +281,13 @@ export const deriveBrowseFilterOptions = ({
       : undefined;
 
   return {
-    kinds: filteredKinds.map((kind) => kind.kind).sort(),
-    namespaces: isNamespaceScoped ? [] : (payload?.namespaces ?? []).slice().sort(),
+    kinds: filteredKinds.map((kind) => kind.kind).sort(compareUtf16Strings),
+    namespaces: isNamespaceScoped
+      ? []
+      : (payload?.namespaces ?? []).slice().sort(compareUtf16Strings),
     apiGroups: (payload?.groups ?? [])
       .slice()
-      .sort()
+      .sort(compareUtf16Strings)
       .map((value) => ({ value, label: value === '(core)' ? 'core' : value })),
     isNamespaceScoped,
     partialDataLabel: [issueLabel, facetsLabel, totalLabel].filter(Boolean).join('\n') || undefined,

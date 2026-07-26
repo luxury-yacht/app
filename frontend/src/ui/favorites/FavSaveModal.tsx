@@ -41,6 +41,7 @@ import type {
 } from '@/core/persistence/favorites';
 import '@shared/components/KubeconfigSelector.css';
 import './FavSaveModal.css';
+import { compareUtf16Strings } from '@/shared/utils/sort';
 
 // ---------------------------------------------------------------------------
 // View list derived from the same registry as shell navigation.
@@ -228,7 +229,7 @@ const FavoritePaneFilters: React.FC<FavoritePaneFiltersProps> = ({
                 onChange({ ...state.filters, caseSensitive: event.target.checked })
               }
             />
-            Match case
+            {'Match case'}
           </label>
         </div>
         <div className="modal-form-field">
@@ -240,7 +241,7 @@ const FavoritePaneFilters: React.FC<FavoritePaneFiltersProps> = ({
                 onChange({ ...state.filters, includeMetadata: event.target.checked })
               }
             />
-            Include metadata
+            {'Include metadata'}
           </label>
         </div>
       </div>
@@ -323,8 +324,8 @@ const favoritePaneMapsEqual = (
   left: Record<string, FavoritePaneState>,
   right: Record<string, FavoritePaneState>
 ): boolean => {
-  const keys = Object.keys(left).sort();
-  if (JSON.stringify(keys) !== JSON.stringify(Object.keys(right).sort())) {
+  const keys = Object.keys(left).sort(compareUtf16Strings);
+  if (JSON.stringify(keys) !== JSON.stringify(Object.keys(right).sort(compareUtf16Strings))) {
     return false;
   }
   return keys.every((key) => {
@@ -336,8 +337,16 @@ const favoritePaneMapsEqual = (
       areGridTableFilterStatesEqual(leftPane.filters, rightPane.filters) &&
       leftPane.tableState.sortColumn === rightPane.tableState.sortColumn &&
       leftPane.tableState.sortDirection === rightPane.tableState.sortDirection &&
-      JSON.stringify(Object.entries(leftPane.tableState.columnVisibility).sort()) ===
-        JSON.stringify(Object.entries(rightPane.tableState.columnVisibility).sort())
+      JSON.stringify(
+        Object.entries(leftPane.tableState.columnVisibility).sort(([leftKey], [rightKey]) =>
+          compareUtf16Strings(leftKey, rightKey)
+        )
+      ) ===
+        JSON.stringify(
+          Object.entries(rightPane.tableState.columnVisibility).sort(([leftKey], [rightKey]) =>
+            compareUtf16Strings(leftKey, rightKey)
+          )
+        )
     );
   });
 };

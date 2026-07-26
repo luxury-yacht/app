@@ -560,7 +560,7 @@ export const commitIntegerPreferenceInput = (
   persist: (value: number) => void,
   options?: { defaultOnNonPositive?: boolean }
 ): number => {
-  const normalized = normalizeIntegerPreferenceValue(key, parseInt(raw, 10), options);
+  const normalized = normalizeIntegerPreferenceValue(key, Number.parseInt(raw, 10), options);
   persist(normalized);
   return normalized;
 };

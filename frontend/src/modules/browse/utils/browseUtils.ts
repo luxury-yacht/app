@@ -7,6 +7,7 @@
 
 import { buildClusterScope } from '@/core/refresh/clusterScope';
 import type { CatalogItem } from '@/core/refresh/types';
+import { compareUtf16Strings } from '@/shared/utils/sort';
 import { structuralShareResourceRows } from '@/shared/utils/structuralShareResourceRows';
 
 /**
@@ -185,7 +186,7 @@ export const buildCatalogScope = (params: BuildCatalogScopeParams): string => {
   params.kinds
     .map((kind) => kind.trim())
     .filter(Boolean)
-    .sort()
+    .sort(compareUtf16Strings)
     .forEach((kind) => {
       query.append('kind', kind);
     });
@@ -193,7 +194,7 @@ export const buildCatalogScope = (params: BuildCatalogScopeParams): string => {
   (params.apiGroups ?? [])
     .map((group) => group.trim())
     .filter(Boolean)
-    .sort()
+    .sort(compareUtf16Strings)
     .forEach((group) => {
       query.append('apiGroup', group);
     });
@@ -201,7 +202,7 @@ export const buildCatalogScope = (params: BuildCatalogScopeParams): string => {
   params.namespaces
     .map((namespace) => namespace.trim())
     .filter(Boolean)
-    .sort()
+    .sort(compareUtf16Strings)
     .forEach((namespace) => {
       // GridTable uses '' as the synthetic "cluster-scoped" namespace option.
       // The backend catalog already understands cluster scope when namespace is omitted.
@@ -211,7 +212,7 @@ export const buildCatalogScope = (params: BuildCatalogScopeParams): string => {
   (params.scopeNamespaces ?? [])
     .map((namespace) => namespace.trim())
     .filter(Boolean)
-    .sort()
+    .sort(compareUtf16Strings)
     .forEach((namespace) => {
       query.append('scopeNamespace', namespace);
     });

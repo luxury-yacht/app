@@ -49,7 +49,7 @@ export const extractDesiredReplicas = (ready?: string): number => {
   if (segments.length === 0) {
     return 0;
   }
-  const candidate = parseInt(segments[segments.length - 1]?.trim() ?? '', 10);
+  const candidate = Number.parseInt(segments[segments.length - 1]?.trim() ?? '', 10);
   if (Number.isNaN(candidate)) {
     return 0;
   }

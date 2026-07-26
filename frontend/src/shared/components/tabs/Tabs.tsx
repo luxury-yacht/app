@@ -169,8 +169,9 @@ export function Tabs({
       return;
     }
     const indicatorSize =
-      parseFloat(getComputedStyle(bar).getPropertyValue('--tab-strip-overflow-indicator-size')) ||
-      32;
+      Number.parseFloat(
+        getComputedStyle(bar).getPropertyValue('--tab-strip-overflow-indicator-size')
+      ) || 32;
 
     // If a smooth scroll is already in flight, compute the next target
     // from its destination instead of the intermediate scrollLeft. That

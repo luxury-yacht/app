@@ -193,7 +193,7 @@ const PortForwardModal = ({ target, onClose, onStarted }: PortForwardModalProps)
 
   // Handle manual container port input
   const handleContainerPortInput = useCallback((event: React.ChangeEvent<HTMLInputElement>) => {
-    const parsed = parseInt(event.target.value, 10);
+    const parsed = Number.parseInt(event.target.value, 10);
     const port = Number.isNaN(parsed) ? 0 : parsed;
     setContainerPort(port);
     if (port > 0) {
@@ -204,7 +204,7 @@ const PortForwardModal = ({ target, onClose, onStarted }: PortForwardModalProps)
 
   // Handle local port input
   const handleLocalPortInput = useCallback((event: React.ChangeEvent<HTMLInputElement>) => {
-    const parsed = parseInt(event.target.value, 10);
+    const parsed = Number.parseInt(event.target.value, 10);
     setLocalPort(Number.isNaN(parsed) ? 0 : parsed);
     setError(null);
   }, []);

@@ -30,8 +30,10 @@ export const isValidRegexPattern = (pattern: string): boolean => {
   }
 
   try {
-    RegExp(trimmed, 'i');
-    return true;
+    // The constructed value is the point: it throws on an invalid pattern.
+    // Returning it through Boolean keeps the instantiation used, which the
+    // lint rule against discarded `new` expressions requires.
+    return Boolean(new RegExp(trimmed, 'i'));
   } catch {
     return false;
   }
