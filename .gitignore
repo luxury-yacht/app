@@ -73,6 +73,7 @@ debug.log
 
 .claude/impact-analysis.md
 .claude/settings.local.json
+.agents/memory/
 
 # playwright
 .playwright-mcp/
