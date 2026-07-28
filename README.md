@@ -81,46 +81,34 @@ If your distro isn't on this (admittedly short) list, you'll have to search your
 
 ### Prerequisites
 
-- Go 1.26
-- Node 26
-- [Wails](https://wails.io/)
-- [Mage](https://magefile.org/)
-- [Staticcheck](https://staticcheck.dev/)
+- [Mise](https://mise.jdx.dev/)
+- The platform dependencies reported by `wails doctor`
 
-#### Wails
+#### Activate Mise
 
-Luxury Yacht is built with [Wails](https://wails.io/), a framework for building cross-platform apps in Go.
+Add the activation command for your shell to its startup file. This is a one-time setup that makes the tool versions from `mise.toml` available whenever you enter the repository.
 
-To install Wails:
+| Shell      | Startup file                 | Command.                                                     |
+| ---------- | ---------------------------- | ------------------------------------------------------------ |
+| Zsh        | `~/.zshrc`                   | `eval "$(mise activate zsh)"`                                |
+| Bash       | `~/.bashrc`                  | `eval "$(mise activate bash)"`                               |
+| Fish       | `~/.config/fish/config.fish` | `mise activate fish \| source`                               |
+| PowerShell | `$PROFILE`                   | `(&mise activate pwsh) \| Out-String \| Invoke-Expression`   |
 
-```bash
-go install github.com/wailsapp/wails/v2/cmd/wails@v2.13.0
+Open a new terminal after saving the startup file.
+
+If you don't want to change your shell configuration,  prefix each repository command with `mise exec --`, for example `mise exec -- mage dev`.
+
+#### Install the Toolchain
+
+From the repository root, install the pinned Go, Node, npm, Wails, Mage, Staticcheck, and Trivy versions from `mise.toml`, then check the platform dependencies required by Wails:
+
+```shell
+mise install
+wails doctor
 ```
 
-Once Wails is installed, run `wails doctor` to see what other dependencies you'll need to install.
-
-📝 _If `wails` is not found, make sure your go `bin` path (typically `$HOME/go/bin`) is in your `PATH`._
-
-#### Staticcheck
-
-Staticcheck is a static analysis linter for Go.
-
-To install Staticcheck:
-
-```bash
-go install honnef.co/go/tools/cmd/staticcheck@latest
-```
-
-#### Mage
-
-For scripting builds, testing, releases, etc., Luxury Yacht uses [Mage](https://magefile.org/) for cross-platform compatibilty. Makefiles and bash scripts are fine for Linux and macOS, but they don't work in Windows. The `magefile` is written in Go, so should work the same in any OS.
-
-To install Mage:
-
-```bash
-go install github.com/magefile/mage@latest
-```
-
+Luxury Yacht uses [Wails](https://wails.io/) for the desktop app and [Mage](https://magefile.org/) for cross-platform development commands.
 To see what `mage` targets are available, run `mage -l` in the repo root.
 
 ### Development Mode
@@ -137,7 +125,7 @@ Note that hot-reload of the Go backend will cause the app to restart, while chan
 
 [Storybook](https://storybook.js.org/) is available for developing and previewing UI components in isolation.
 
-> _NOTE_: you may need to run `nvm install` in the repo root to install the correct version of node from `.nvmrc`
+Run `mise install` first so Storybook uses the canonical Node and npm versions.
 
 ```bash
 mage storybook
@@ -161,7 +149,7 @@ mage install:unsigned
 
 ## Versions
 
-When updating versions in the app, these are the canonical sources. All scripts/workflows should get app and toolset versions from these sources and these sources only.
+The app version and development-tool versions have separate canonical sources. Scripts and workflows must read these sources rather than resolving versions dynamically.
 
 #### App Version
 
@@ -171,29 +159,17 @@ App version is derived from `info.productVersion` in [wails.json](wails.json)
 APP_VERSION=$(jq -r '.info.productVersion' wails.json)
 ```
 
-#### Go Version
+#### Toolchain Versions
 
-Go version is derived from go.mod
-
-```bash
-GO_VERSION=$(grep '^go ' go.mod | awk '{print $2}')
-```
-
-#### Wails Version
-
-Wails version is derived from go.mod
+All Mise-managed development-tool versions are canonical in the `[tools]` section of [mise.toml](mise.toml). The Windows-only NSIS version is canonical in that file's `[vars]` section, and CI consumes the config directly.
 
 ```bash
-WAILS_VERSION=$(grep 'github.com/wailsapp/wails/v2' go.mod | awk '{print $2}')
+mise config get tools.go
+mise config get tools.node
+mise config get tools.trivy
 ```
 
-#### Node Version
-
-Node version is derived from .nvmrc
-
-```bash
-NODE_VERSION=$(cat .nvmrc | tr -d 'v')
-```
+The Go directive and Mage/Wails requirements in `go.mod` and the Node/npm metadata in `frontend/package.json` are compatibility mirrors. `go test ./mage` checks that they match `mise.toml`.
 
 ## Publishing Releases
 

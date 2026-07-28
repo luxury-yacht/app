@@ -23,46 +23,26 @@ func ToolCommand(name string, args ...string) (*exec.Cmd, error) {
 	return exec.Command(resolved, args...), nil
 }
 
-// CheckNodeVersion reads .nvmrc and ensures the correct Node version is active.
-// Since nvm is a shell function (not a binary), we can't call "nvm use" from Go.
-// Instead, if the current node version doesn't match, we look for the correct
-// version in the nvm install directory and prepend its bin/ to PATH so all
-// subsequent npm/npx/node calls in this process use the right version.
+// CheckNodeVersion reads mise.toml and ensures the canonical Node version is active.
 func CheckNodeVersion() error {
-	data, err := os.ReadFile(".nvmrc")
+	versions, err := readToolVersions("mise.toml")
 	if err != nil {
-		return fmt.Errorf("failed to read .nvmrc: %w", err)
+		return err
 	}
-	expected := strings.TrimSpace(string(data))
-	expected = strings.TrimPrefix(expected, "v")
+	expected := versions.Node
 
-	// Check if the current node already matches. Neither a missing node nor a
-	// failed --version is fatal here: the nvm lookup below is the fallback.
-	if nodeCmd, lookErr := ToolCommand("node", "--version"); lookErr == nil {
-		if out, runErr := nodeCmd.Output(); runErr == nil {
-			actual := strings.TrimPrefix(strings.TrimSpace(string(out)), "v")
-			if actual == expected {
-				return nil
-			}
-		}
+	nodeCmd, err := ToolCommand("node", "--version")
+	if err != nil {
+		return fmt.Errorf("node v%s is not active: %v; activate Mise in your shell or prefix the command with 'mise exec --'", expected, err)
 	}
-
-	// Current node doesn't match (or isn't found). Try to find the right
-	// version in the nvm directory and prepend it to PATH.
-	nvmDir := os.Getenv("NVM_DIR")
-	if nvmDir == "" {
-		home, _ := os.UserHomeDir()
-		nvmDir = home + "/.nvm"
+	out, err := nodeCmd.Output()
+	if err != nil {
+		return fmt.Errorf("check active Node version: %w; activate Mise in your shell or prefix the command with 'mise exec --'", err)
 	}
-
-	nodeBinDir := fmt.Sprintf("%s/versions/node/v%s/bin", nvmDir, expected)
-	if _, err := os.Stat(nodeBinDir + "/node"); err != nil {
-		return fmt.Errorf("node v%s is not installed via nvm (looked in %s). Run 'nvm install %s'", expected, nodeBinDir, expected)
+	actual := strings.TrimPrefix(strings.TrimSpace(string(out)), "v")
+	if actual != expected {
+		return fmt.Errorf("node v%s is active, but mise.toml requires v%s; activate Mise in your shell or prefix the command with 'mise exec --'", actual, expected)
 	}
-
-	// Prepend the correct node bin directory to PATH for this process.
-	os.Setenv("PATH", nodeBinDir+string(os.PathListSeparator)+os.Getenv("PATH"))
-	fmt.Printf("Using node v%s from %s\n", expected, nodeBinDir)
 	return nil
 }
 

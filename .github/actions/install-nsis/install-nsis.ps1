@@ -8,20 +8,21 @@ script installs NSIS and applies the patch.
 
 Run from the repository root with PowerShell 7:
 
-  pwsh -ExecutionPolicy Bypass -File .github\actions\install-nsis\install-nsis.ps1 -NsisVersion 3.10
+  $nsisVersion = (mise config get vars.nsis_version).Trim()
+  pwsh -ExecutionPolicy Bypass -File .github\actions\install-nsis\install-nsis.ps1 -NsisVersion $nsisVersion
 
 Download only, without installing or expanding anything:
 
-  pwsh -ExecutionPolicy Bypass -File .github\actions\install-nsis\install-nsis.ps1 -NsisVersion 3.10 -DownloadOnly
+  pwsh -ExecutionPolicy Bypass -File .github\actions\install-nsis\install-nsis.ps1 -NsisVersion $nsisVersion -DownloadOnly
 
 Download into a folder that is safe to delete afterward:
 
-  pwsh -ExecutionPolicy Bypass -File .github\actions\install-nsis\install-nsis.ps1 -NsisVersion 3.10 -DownloadOnly -TempDir .\tmp\nsis
+  pwsh -ExecutionPolicy Bypass -File .github\actions\install-nsis\install-nsis.ps1 -NsisVersion $nsisVersion -DownloadOnly -TempDir .\tmp\nsis
 
 If pwsh is not installed or is not on PATH, use the built-in Windows PowerShell
 executable instead:
 
-  powershell -ExecutionPolicy Bypass -File .github\actions\install-nsis\install-nsis.ps1 -NsisVersion 3.10 -DownloadOnly
+  powershell -ExecutionPolicy Bypass -File .github\actions\install-nsis\install-nsis.ps1 -NsisVersion $nsisVersion -DownloadOnly
 
 .PARAMETER NsisVersion
 The NSIS version to download and install.
@@ -43,9 +44,9 @@ without installing or expanding anything.
 #>
 [CmdletBinding()]
 param(
-  [Parameter()]
+  [Parameter(Mandatory)]
   [ValidateNotNullOrEmpty()]
-  [string] $NsisVersion = "3.10",
+  [string] $NsisVersion,
 
   [Parameter()]
   [ValidateNotNullOrEmpty()]

@@ -1,23 +1,6 @@
 name: Setup toolchain
-description: Setup Go/Node and install Wails/Mage.
+description: Install the Mise-managed project toolchain.
 inputs:
-  go-version:
-    description: Go version to install.
-    required: true
-  node-version:
-    description: Node version to install when setup-node is true.
-    required: false
-  wails-version:
-    description: Wails CLI version to install.
-    required: true
-  mage-version:
-    description: Mage version to install (use "latest" to resolve at runtime).
-    required: false
-    default: latest
-  staticcheck-version:
-    description: Staticcheck version to install (use "latest" to resolve at runtime).
-    required: false
-    default: latest
   setup-node:
     description: Whether to install Node.
     required: false
@@ -37,97 +20,15 @@ inputs:
 runs:
   using: composite
   steps:
-    - name: Setup Go
-      uses: actions/setup-go@v6
+    - name: Setup Mise toolchain
+      uses: jdx/mise-action@v4
       with:
-        go-version: ${{ inputs.go-version }}
-
-    - name: Setup Node
-      if: ${{ inputs.setup-node == 'true' }}
-      uses: actions/setup-node@v6
-      with:
-        node-version: ${{ inputs.node-version }}
-
-    - name: Resolve Go bin path
-      id: gobin
-      shell: bash
-      run: |
-        # Use the first GOPATH entry for consistent GOBIN across platforms.
-        GOOS="$(go env GOOS)"
-        GOPATH_VALUE="$(go env GOPATH)"
-        if [ "$GOOS" = "windows" ]; then
-          if [[ "$GOPATH_VALUE" == *";"* ]]; then
-            GOPATH_VALUE="${GOPATH_VALUE%%;*}"
-          fi
-          # Normalize to an absolute path with a drive prefix for Go on Windows.
-          GOPATH_VALUE="${GOPATH_VALUE//\\//}"
-        else
-          if [[ "$GOPATH_VALUE" == *":"* ]]; then
-            GOPATH_VALUE="${GOPATH_VALUE%%:*}"
-          fi
-        fi
-        GOBIN="$GOPATH_VALUE/bin"
-        echo "gobin=$GOBIN" >> "$GITHUB_OUTPUT"
-        echo "GOBIN=$GOBIN" >> "$GITHUB_ENV"
-        echo "$GOBIN" >> "$GITHUB_PATH"
-
-    - name: Resolve mage version
-      id: mage_version
-      shell: bash
-      run: |
-        # Resolve @latest to a concrete version for cache keys.
-        if [ "${{ inputs.mage-version }}" = "latest" ]; then
-          RESOLVED="$(go list -m -f '{{.Version}}' github.com/magefile/mage@latest)"
-          echo "version=$RESOLVED" >> "$GITHUB_OUTPUT"
-        else
-          echo "version=${{ inputs.mage-version }}" >> "$GITHUB_OUTPUT"
-        fi
-
-    - name: Resolve staticcheck version
-      id: staticcheck_version
-      shell: bash
-      run: |
-        # Resolve @latest to a concrete version so the installed toolchain is
-        # recorded rather than whatever upstream published at build time.
-        if [ "${{ inputs.staticcheck-version }}" = "latest" ]; then
-          RESOLVED="$(go list -m -f '{{.Version}}' honnef.co/go/tools@latest)"
-          echo "version=$RESOLVED" >> "$GITHUB_OUTPUT"
-        else
-          echo "version=${{ inputs.staticcheck-version }}" >> "$GITHUB_OUTPUT"
-        fi
-
-    - name: Install Go tools
-      shell: bash
-      run: |
-        # Only install tools missing from GOBIN to keep setup idempotent.
-        need_wails="false"
-        if [ "${{ inputs.install-wails }}" = "true" ]; then
-          if [ ! -x "$GOBIN/wails" ] && [ ! -x "$GOBIN/wails.exe" ]; then
-            need_wails="true"
-          fi
-        fi
-
-        need_mage="false"
-        if [ "${{ inputs.install-mage }}" = "true" ]; then
-          if [ ! -x "$GOBIN/mage" ] && [ ! -x "$GOBIN/mage.exe" ]; then
-            need_mage="true"
-          fi
-        fi
-
-        need_staticcheck="false"
-        if [ ! -x "$GOBIN/staticcheck" ] && [ ! -x "$GOBIN/staticcheck.exe" ]; then
-          need_staticcheck="true"
-        fi
-
-        if [ "$need_wails" = "true" ]; then
-          go install github.com/wailsapp/wails/v2/cmd/wails@${{ inputs.wails-version }}
-        fi
-        if [ "$need_mage" = "true" ]; then
-          go install github.com/magefile/mage@${{ steps.mage_version.outputs.version }}
-        fi
-        if [ "$need_staticcheck" = "true" ]; then
-          go install honnef.co/go/tools/cmd/staticcheck@${{ steps.staticcheck_version.outputs.version }}
-        fi
+        install_args: >-
+          go
+          go:honnef.co/go/tools/cmd/staticcheck
+          ${{ inputs.setup-node == 'true' && 'node npm' || '' }}
+          ${{ inputs.install-wails == 'true' && 'go:github.com/wailsapp/wails/v2/cmd/wails' || '' }}
+          ${{ inputs.install-mage == 'true' && 'mage' || '' }}
 
     - name: Install Linux build dependencies
       if: ${{ inputs.install-linux-deps == 'true' && runner.os == 'Linux' }}

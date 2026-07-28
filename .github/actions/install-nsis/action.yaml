@@ -1,17 +1,16 @@
 name: Install NSIS
 description: Installs NSIS (Windows only)
 
-inputs:
-  nsis-version:
-    description: "The version of NSIS to install"
-    required: true
-
 runs:
   using: composite
   steps:
     - name: Install NSIS
       shell: pwsh
       run: |
+        $nsisVersion = (mise config get vars.nsis_version).Trim()
+        if (-not $nsisVersion) {
+          throw "vars.nsis_version is missing from mise.toml"
+        }
         & "$env:GITHUB_ACTION_PATH\install-nsis.ps1" `
-          -NsisVersion "${{ inputs.nsis-version }}" `
+          -NsisVersion $nsisVersion `
           -AddToGitHubPath
