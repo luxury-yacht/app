@@ -102,27 +102,7 @@ mise config get tools.trivy
 
 The Go directive and Mage/Wails requirements in `go.mod` and the Node/npm metadata in `frontend/package.json` are compatibility mirrors. `go test ./mage` checks that they match `mise.toml`.
 
-## Publishing Releases
+## Maintainer Documentation
 
-Run the prerelease checks. This should surface any problems that could cause the release to fail.
-
-```bash
-mage qc:prerelease
-```
-
-You should also run the benchmark tests if you're going to make changes to the backend code. Compare the numbers before and after your change to make sure you haven't introduced any major performance hits.
-
-```bash
-mage qc:benchmark
-```
-
-1. Update the version in [wails.json](wails.json)
-
-1. Commit and push the change.
-
-1. Create and push a tag. The `release` workflow will do the rest.
-
-```bash
-git tag $(jq -r '.info.productVersion' wails.json)
-git push origin main --tags
-```
+Project maintainers can find production configuration and publishing steps in
+[RELEASE.md](RELEASE.md).

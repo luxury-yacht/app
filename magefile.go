@@ -15,7 +15,15 @@ import (
 	"github.com/luxury-yacht/app/mage"
 )
 
-var cfg = mage.NewBuildConfig()
+var cfg = mustLoadBuildConfig()
+
+func mustLoadBuildConfig() mage.BuildConfig {
+	config, err := mage.NewBuildConfigFromDotEnv(".env")
+	if err != nil {
+		panic(err)
+	}
+	return config
+}
 
 const npmPrefixArg = "--prefix"
 

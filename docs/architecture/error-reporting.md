@@ -39,6 +39,10 @@ present. It generates hidden source maps, uploads them under
 put `SENTRY_AUTH_TOKEN` in a `VITE_` variable; Vite-prefixed values are bundled
 into the webview.
 
+Maintainer-only `.env`, CI secret, and publishing instructions live in
+[RELEASE.md](../../RELEASE.md). Contributor and fork workflows do not require
+production Sentry credentials.
+
 There is no `SENTRY_BACKEND_PROJECT` setting. The backend SDK selects its Sentry
 project from `SENTRY_BACKEND_DSN`; only the frontend source-map uploader needs a
 project slug.
