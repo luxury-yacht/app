@@ -19,6 +19,12 @@
   letter-spacing: -0.02em;
 }
 
+.settings-data-management-status {
+  margin-top: 0.25rem;
+  color: var(--color-success);
+  font-size: var(--font-size-small);
+}
+
 /* Subgroup label (e.g., "MODE", "THEME") rendered as small uppercase caption */
 .settings-subgroup-label {
   font-size: var(--font-size-small);

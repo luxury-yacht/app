@@ -83,6 +83,10 @@ export function DeleteTheme(arg1:string):Promise<void>;
 
 export function DiscoverNodeLogs(arg1:string,arg2:string):Promise<types.NodeLogDiscoveryResponse>;
 
+export function ExportFavorites():Promise<backend.DataManagementResult>;
+
+export function ExportSettings():Promise<backend.DataManagementResult>;
+
 export function FetchContainerLogs(arg1:string,arg2:types.ContainerLogsFetchRequest):Promise<types.ContainerLogsFetchResponse>;
 
 export function FetchNodeLogs(arg1:string,arg2:string,arg3:types.NodeLogFetchRequest):Promise<types.NodeLogFetchResponse>;
@@ -244,6 +248,10 @@ export function IgnoreClusterAttentionFindingType(arg1:string,arg2:string):Promi
 export function IgnoreClusterAttentionObjectFinding(arg1:string,arg2:resourcemodel.ResourceRef,arg3:string):Promise<snapshot.AttentionIgnoreRules>;
 
 export function IgnoreGlobalAttentionFindingType(arg1:string,arg2:string):Promise<snapshot.AttentionIgnoreRules>;
+
+export function ImportFavorites():Promise<backend.DataManagementResult>;
+
+export function ImportSettings():Promise<backend.DataManagementResult>;
 
 export function IsAppLogsPanelVisible():Promise<boolean>;
 

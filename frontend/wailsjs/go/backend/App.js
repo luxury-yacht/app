@@ -78,6 +78,14 @@ export function DiscoverNodeLogs(arg1, arg2) {
   return window['go']['backend']['App']['DiscoverNodeLogs'](arg1, arg2);
 }
 
+export function ExportFavorites() {
+  return window['go']['backend']['App']['ExportFavorites']();
+}
+
+export function ExportSettings() {
+  return window['go']['backend']['App']['ExportSettings']();
+}
+
 export function FetchContainerLogs(arg1, arg2) {
   return window['go']['backend']['App']['FetchContainerLogs'](arg1, arg2);
 }
@@ -400,6 +408,14 @@ export function IgnoreClusterAttentionObjectFinding(arg1, arg2, arg3) {
 
 export function IgnoreGlobalAttentionFindingType(arg1, arg2) {
   return window['go']['backend']['App']['IgnoreGlobalAttentionFindingType'](arg1, arg2);
+}
+
+export function ImportFavorites() {
+  return window['go']['backend']['App']['ImportFavorites']();
+}
+
+export function ImportSettings() {
+  return window['go']['backend']['App']['ImportSettings']();
 }
 
 export function IsAppLogsPanelVisible() {

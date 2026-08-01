@@ -179,6 +179,9 @@ export const hydrateFavorites = async (options?: { force?: boolean }): Promise<F
         read: () => runtimeApp.GetFavorites(),
       });
       cachedFavorites = Array.isArray(result) ? result.map(fromBackendFavorite) : [];
+      if (options?.force) {
+        emitChanged();
+      }
     } catch (error) {
       console.error('Failed to hydrate favorites:', error);
     } finally {

@@ -702,11 +702,25 @@ func (a *App) loadAppSettings() error {
 	if err != nil {
 		return err
 	}
+	a.appSettings = appSettingsFromFile(settings)
 
+	logSettings := resolveObjPanelLogSettings(settings.Preferences.ObjPanelLogs)
+	containerlogs.SetPerScopeTargetLimit(logSettings.targetPerScopeLimit)
+	// The accessor guards the lazy init (subsystem builds run concurrently); creating
+	// on demand here is correct — the limit then applies to the limiter every
+	// subsystem receives.
+	if limiter := a.sharedContainerLogsTargetLimiter(); limiter != nil {
+		limiter.SetLimit(logSettings.targetGlobalLimit)
+	}
+	return nil
+}
+
+func appSettingsFromFile(settings *settingsFile) *AppSettings {
+	settings = normalizeSettingsFile(settings)
 	logSettings := resolveObjPanelLogSettings(settings.Preferences.ObjPanelLogs)
 	kubernetesAPISettings := resolveKubernetesAPISettings(settings.Preferences.KubernetesAPI)
 
-	a.appSettings = &AppSettings{
+	return &AppSettings{
 		AppearanceMode:                           settings.Preferences.AppearanceMode,
 		SelectedKubeconfigs:                      append([]string(nil), settings.Kubeconfig.Selected...),
 		UseShortResourceNames:                    settings.Preferences.UseShortResourceNames,
@@ -744,14 +758,6 @@ func (a *App) loadAppSettings() error {
 		LinkColorDark:                            settings.Preferences.LinkColorDark,
 		Themes:                                   settings.Preferences.Themes,
 	}
-	containerlogs.SetPerScopeTargetLimit(logSettings.targetPerScopeLimit)
-	// The accessor guards the lazy init (subsystem builds run concurrently); creating
-	// on demand here is correct — the limit then applies to the limiter every
-	// subsystem receives.
-	if limiter := a.sharedContainerLogsTargetLimiter(); limiter != nil {
-		limiter.SetLimit(logSettings.targetGlobalLimit)
-	}
-	return nil
 }
 
 type resolvedObjPanelLogSettings struct {

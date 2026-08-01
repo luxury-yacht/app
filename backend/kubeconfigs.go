@@ -225,19 +225,22 @@ func (a *App) SetKubeconfigSearchPaths(paths []string) error {
 			return err
 		}
 
-		if err := a.discoverKubeconfigs(); err != nil {
-			a.logger.Warn(fmt.Sprintf("Failed to refresh kubeconfig discovery: %v", err), logsources.KubeconfigManager)
-		}
-		if a.kubeconfigWatcher != nil {
-			watchPaths := a.resolvedKubeconfigWatchPaths()
-			if updateErr := a.kubeconfigWatcher.updateWatchedPaths(watchPaths); updateErr != nil {
-				a.logger.Warn(fmt.Sprintf("Failed to update watched paths: %v", updateErr), logsources.KubeconfigWatcher)
-			}
-		}
-
-		a.pruneSelectionsAgainstDiscoveredKubeconfigs()
+		a.refreshKubeconfigDiscoveryAfterSearchPathChange()
 		return nil
 	})
+}
+
+func (a *App) refreshKubeconfigDiscoveryAfterSearchPathChange() {
+	if err := a.discoverKubeconfigs(); err != nil {
+		a.logger.Warn(fmt.Sprintf("Failed to refresh kubeconfig discovery: %v", err), logsources.KubeconfigManager)
+	}
+	if a.kubeconfigWatcher != nil {
+		watchPaths := a.resolvedKubeconfigWatchPaths()
+		if updateErr := a.kubeconfigWatcher.updateWatchedPaths(watchPaths); updateErr != nil {
+			a.logger.Warn(fmt.Sprintf("Failed to update watched paths: %v", updateErr), logsources.KubeconfigWatcher)
+		}
+	}
+	a.pruneSelectionsAgainstDiscoveredKubeconfigs()
 }
 
 // OpenKubeconfigSearchPathDialog opens a directory picker for kubeconfig search paths.

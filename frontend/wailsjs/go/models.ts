@@ -762,6 +762,22 @@ export namespace backend {
 	        this.protocol = source["protocol"];
 	    }
 	}
+	export class DataManagementResult {
+	    path: string;
+	    canceled: boolean;
+	    imported?: number;
+
+	    static createFrom(source: any = {}) {
+	        return new DataManagementResult(source);
+	    }
+
+	    constructor(source: any = {}) {
+	        if ('string' === typeof source) source = JSON.parse(source);
+	        this.path = source["path"];
+	        this.canceled = source["canceled"];
+	        this.imported = source["imported"];
+	    }
+	}
 	export class FavoriteTableState {
 	    sortColumn: string;
 	    sortDirection: string;
@@ -6237,4 +6253,3 @@ export namespace v1 {
 	}
 
 }
-

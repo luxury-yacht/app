@@ -154,6 +154,21 @@ describe('favorites persistence', () => {
     expect(result).toEqual(updated);
   });
 
+  it('hydrateFavorites with force notifies subscribers with imported favorites', async () => {
+    mockApp.GetFavorites.mockResolvedValueOnce([makeFavorite({ id: 'old' })]);
+    await hydrateFavorites();
+    const handler = vi.fn();
+    subscribeFavorites(handler);
+
+    const imported = [makeFavorite({ id: 'imported', name: 'Imported Favorite' })];
+    mockApp.GetFavorites.mockResolvedValueOnce(imported);
+
+    await hydrateFavorites({ force: true });
+
+    expect(handler).toHaveBeenCalledOnce();
+    expect(handler).toHaveBeenCalledWith(imported);
+  });
+
   it('hydrateFavorites deduplicates concurrent calls', async () => {
     mockApp.GetFavorites.mockResolvedValue([makeFavorite()]);
 
