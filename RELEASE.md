@@ -1,42 +1,31 @@
 # Release Operations
 
-This document is for project maintainers who have access to the production
-Sentry projects, signing credentials, and GitHub Actions secrets. Contributors
-and forks do not need these credentials; use [DEVELOPMENT.md](DEVELOPMENT.md)
-for the ordinary development workflow.
+This document is for maintainers with access to credentials required to create a release. Contributors and forks do not need these credentials. See [DEVELOPMENT.md](DEVELOPMENT.md) for the ordinary development workflow.
 
 ## Local Production Configuration
 
-Create the ignored repository-root `.env` file from the provided template:
+Create the an `.env` file from the provided template:
 
-```bash
-cp .env.example .env
-```
-
-Set all five values:
-
-```dotenv
+```sh
+cat > .env.sentry <<'EOF'
 SENTRY_FRONTEND_DSN=
 SENTRY_BACKEND_DSN=
 SENTRY_AUTH_TOKEN=
 SENTRY_ORG=
 SENTRY_FRONTEND_PROJECT=
+EOF
 ```
 
-The frontend and backend DSNs select the projects that receive runtime events.
-The auth token, organization slug, and frontend project slug are build-only
-credentials for frontend source-map upload. Do not commit `.env`; Mage loads it
-automatically, and variables already exported by the shell take precedence.
+Update the values. `.env` is git-ignored. Never commit this file.
 
-To exercise a production build and install it locally without signing:
+Sentry is disabled when running development builds via `mage dev`, even when `.env` exists. See [the error-reporting architecture](docs/architecture/error-reporting.md) for the reporting and data-collection boundaries.
+
+Installing a local production build will enable Sentry.
 
 ```bash
 mage install:unsigned
 ```
 
-Sentry remains disabled when running `mage dev`, even when `.env` exists. See
-[the error-reporting architecture](docs/architecture/error-reporting.md) for
-the reporting and data-collection boundaries.
 
 ## GitHub Actions Configuration
 
@@ -60,20 +49,17 @@ The signed macOS build additionally reads:
 | `APPLE_APP_PASSWORD` | App-specific Apple password |
 | `APPLE_TEAM_ID` | Apple developer team identifier |
 
-`RELEASES_REPO_TOKEN` authorizes publishing the generated artifacts to the
-GitHub release.
+`RELEASES_REPO_TOKEN` authorizes publishing the generated artifacts to the GitHub release.
 
 ## Publishing a Release
 
-Run the prerelease checks. This surfaces problems that could cause the release
-workflow to fail:
+Run the prerelease checks. This surfaces problems that could cause the release workflow to fail:
 
 ```bash
 mage qc:prerelease
 ```
 
-If the release includes backend changes, run the benchmarks and compare the
-results with the baseline from before the change:
+If the release includes backend changes, run the benchmarks and compare the results with the baseline from before the change:
 
 ```bash
 mage qc:benchmark
