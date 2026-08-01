@@ -169,10 +169,8 @@ func TestReporterFlushesAndClosesTransportAtShutdown(t *testing.T) {
 	require.True(t, transport.closed)
 }
 
-func TestConfigFromEnvironmentOverridesBuildDefaults(t *testing.T) {
-	t.Setenv("SENTRY_DSN", " https://runtime@example.com/2 ")
-	t.Setenv("SENTRY_RELEASE", " luxury-yacht@v2.0.0 ")
-	t.Setenv("SENTRY_ENVIRONMENT", " staging ")
+func TestConfigFromEnvironmentUsesOnlyStandardizedBackendDSN(t *testing.T) {
+	t.Setenv("SENTRY_BACKEND_DSN", " https://runtime@example.com/2 ")
 
 	config := ConfigFromEnvironment(
 		"https://build@example.com/1",
@@ -181,6 +179,6 @@ func TestConfigFromEnvironmentOverridesBuildDefaults(t *testing.T) {
 	)
 
 	require.Equal(t, "https://runtime@example.com/2", config.DSN)
-	require.Equal(t, "luxury-yacht@v2.0.0", config.Release)
-	require.Equal(t, "staging", config.Environment)
+	require.Equal(t, "luxury-yacht@v1.2.3", config.Release)
+	require.Equal(t, "production", config.Environment)
 }

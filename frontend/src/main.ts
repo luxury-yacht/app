@@ -14,11 +14,9 @@ import { createReactRootErrorHandlers, initializeErrorReporting } from '@/core/t
 import App from './App.tsx';
 
 const errorReportingEnabled = initializeErrorReporting({
-  enabled: import.meta.env.PROD,
-  dsn: import.meta.env.VITE_SENTRY_DSN,
-  environment:
-    import.meta.env.VITE_SENTRY_ENVIRONMENT ||
-    (import.meta.env.PROD ? 'production' : 'development'),
+  enabled: __SENTRY_ENABLED__,
+  dsn: __SENTRY_FRONTEND_DSN__,
+  environment: 'production',
   release: __SENTRY_RELEASE__,
 });
 

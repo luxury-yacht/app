@@ -58,7 +58,7 @@ func TestDefaultSentryReleaseUsesVersionedBuildIdentity(t *testing.T) {
 }
 
 func TestNewSentryReporterStaysDisabledWhenBuildDisablesReporting(t *testing.T) {
-	t.Setenv("SENTRY_DSN", "https://runtime@example.com/2")
+	t.Setenv("SENTRY_BACKEND_DSN", "https://runtime@example.com/2")
 
 	reporter, err := newSentryReporter(false, "https://embedded@example.com/1", "v1.2.3")
 

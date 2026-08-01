@@ -23,7 +23,7 @@ backend `source`/`clusterId` tags are still sent when reporting is enabled.
 
 ## Build Configuration
 
-Release builds read these GitHub Actions secrets:
+Release builds read exactly these GitHub Actions secrets:
 
 | Secret | Purpose |
 | --- | --- |
@@ -31,7 +31,7 @@ Release builds read these GitHub Actions secrets:
 | `SENTRY_BACKEND_DSN` | Embedded Go SDK DSN |
 | `SENTRY_AUTH_TOKEN` | Build-only source-map upload token |
 | `SENTRY_ORG` | Source-map destination organization slug |
-| `SENTRY_FRONTEND_PROJECT` | Source-map destination project slug |
+| `SENTRY_FRONTEND_PROJECT` | Source-map destination frontend project slug |
 
 The Vite plugin runs only when the auth token, organization, and project are all
 present. It generates hidden source maps, uploads them under
@@ -39,13 +39,18 @@ present. It generates hidden source maps, uploads them under
 put `SENTRY_AUTH_TOKEN` in a `VITE_` variable; Vite-prefixed values are bundled
 into the webview.
 
+There is no `SENTRY_BACKEND_PROJECT` setting. The backend SDK selects its Sentry
+project from `SENTRY_BACKEND_DSN`; only the frontend source-map uploader needs a
+project slug.
+
 `mage dev` does not initialize either Sentry SDK or the source-map upload plugin.
-The Wails `dev` build tag disables the backend reporter, while Vite's development
-mode disables the frontend reporter and produces no Sentry release identity.
+The Wails `dev` build tag disables the backend reporter, while Vite's `serve`
+command injects an empty frontend DSN and produces no Sentry release identity.
 Local DSNs and source-map credentials are therefore ignored and not needed.
 
-For a packaged backend, `SENTRY_DSN`, `SENTRY_RELEASE`, and
-`SENTRY_ENVIRONMENT` can override embedded defaults at launch.
+For a packaged backend, `SENTRY_BACKEND_DSN` can override the DSN embedded at
+build time. Release identity and the `production` environment are owned by the
+build and have no environment-variable overrides.
 
 The option names and lifecycle follow Sentry's current
 [React SDK](https://docs.sentry.io/platforms/javascript/guides/react/),

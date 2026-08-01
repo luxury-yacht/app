@@ -24,14 +24,18 @@ describe('Vite configuration', () => {
 
     const config = createViteConfig(
       {
+        NODE_ENV: 'production',
         SENTRY_AUTH_TOKEN: 'token',
+        SENTRY_FRONTEND_DSN: 'https://public@example.com/1',
         SENTRY_ORG: 'luxury-yacht',
-        SENTRY_PROJECT: 'desktop-frontend',
+        SENTRY_FRONTEND_PROJECT: 'desktop-frontend',
       },
       'serve'
     );
 
     expect(config.build?.sourcemap).toBe(false);
+    expect(config.define?.__SENTRY_ENABLED__).toBe(JSON.stringify(false));
+    expect(config.define?.__SENTRY_FRONTEND_DSN__).toBe(JSON.stringify(''));
     expect(config.define?.__SENTRY_RELEASE__).toBe(JSON.stringify(''));
     expect(sentryPluginMock).not.toHaveBeenCalled();
   });
@@ -46,8 +50,9 @@ describe('Vite configuration', () => {
     const enabled = createViteConfig(
       {
         SENTRY_AUTH_TOKEN: 'token',
+        SENTRY_FRONTEND_DSN: 'https://public@example.com/1',
         SENTRY_ORG: 'luxury-yacht',
-        SENTRY_PROJECT: 'desktop-frontend',
+        SENTRY_FRONTEND_PROJECT: 'desktop-frontend',
       },
       'build'
     );
@@ -61,6 +66,10 @@ describe('Vite configuration', () => {
       bundleSizeOptimizations: { excludeTracing: true },
       telemetry: false,
     });
+    expect(enabled.define?.__SENTRY_ENABLED__).toBe(JSON.stringify(true));
+    expect(enabled.define?.__SENTRY_FRONTEND_DSN__).toBe(
+      JSON.stringify('https://public@example.com/1')
+    );
     expect(enabled.define?.__SENTRY_RELEASE__).toBe(JSON.stringify('luxury-yacht@v1.11.2'));
   });
 });

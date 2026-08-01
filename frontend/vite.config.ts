@@ -32,8 +32,9 @@ export function createViteConfig(
 ): UserConfig {
   const productionBuild = command === 'build';
   const authToken = configuredValue(environment, 'SENTRY_AUTH_TOKEN');
+  const frontendDSN = configuredValue(environment, 'SENTRY_FRONTEND_DSN');
   const org = configuredValue(environment, 'SENTRY_ORG');
-  const project = configuredValue(environment, 'SENTRY_PROJECT');
+  const project = configuredValue(environment, 'SENTRY_FRONTEND_PROJECT');
   const uploadSentrySourceMaps = Boolean(productionBuild && authToken && org && project);
   const sentryPlugins = uploadSentrySourceMaps
     ? sentryVitePlugin({
@@ -50,6 +51,8 @@ export function createViteConfig(
   return {
     plugins: [react(), ...sentryPlugins],
     define: {
+      __SENTRY_ENABLED__: JSON.stringify(productionBuild),
+      __SENTRY_FRONTEND_DSN__: JSON.stringify(productionBuild ? frontendDSN : ''),
       __SENTRY_RELEASE__: JSON.stringify(productionBuild ? sentryRelease : ''),
     },
     server: {

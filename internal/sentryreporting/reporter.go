@@ -33,13 +33,13 @@ type Reporter interface {
 
 type disabledReporter struct{}
 
-// ConfigFromEnvironment applies Sentry's standard runtime environment variables
-// over values embedded by the application build.
+// ConfigFromEnvironment lets SENTRY_BACKEND_DSN override the DSN embedded by
+// the application build. Release identity and environment remain build-owned.
 func ConfigFromEnvironment(defaultDSN, defaultRelease, defaultEnvironment string) Config {
 	return Config{
-		DSN:         environmentValue("SENTRY_DSN", defaultDSN),
-		Release:     environmentValue("SENTRY_RELEASE", defaultRelease),
-		Environment: environmentValue("SENTRY_ENVIRONMENT", defaultEnvironment),
+		DSN:         environmentValue("SENTRY_BACKEND_DSN", defaultDSN),
+		Release:     strings.TrimSpace(defaultRelease),
+		Environment: strings.TrimSpace(defaultEnvironment),
 	}
 }
 
