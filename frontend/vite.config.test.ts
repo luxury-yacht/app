@@ -4,6 +4,8 @@
  * Protects development-server configuration required by lazy-loaded features.
  */
 
+import { readFileSync } from 'node:fs';
+import path from 'node:path';
 import { describe, expect, it, vi } from 'vitest';
 
 const sentryPluginMock = vi.hoisted(() => vi.fn(() => [{ name: 'sentry-vite-plugin' }]));
@@ -11,6 +13,17 @@ const sentryPluginMock = vi.hoisted(() => vi.fn(() => [{ name: 'sentry-vite-plug
 vi.mock('@sentry/vite-plugin', () => ({ sentryVitePlugin: sentryPluginMock }));
 
 import { createViteConfig } from './vite.config';
+
+interface WailsConfig {
+  info: {
+    productVersion: string;
+  };
+}
+
+const wailsConfig = JSON.parse(
+  readFileSync(path.resolve(import.meta.dirname, '../wails.json'), 'utf8')
+) as WailsConfig;
+const expectedSentryRelease = `luxury-yacht@${wailsConfig.info.productVersion}`;
 
 describe('Vite configuration', () => {
   it('pre-bundles the object-map renderer dependency', () => {
@@ -61,7 +74,7 @@ describe('Vite configuration', () => {
       authToken: 'token',
       org: 'luxury-yacht',
       project: 'desktop-frontend',
-      release: { name: 'luxury-yacht@v1.11.2' },
+      release: { name: expectedSentryRelease },
       sourcemaps: { filesToDeleteAfterUpload: './dist/**/*.map' },
       bundleSizeOptimizations: { excludeTracing: true },
       telemetry: false,
@@ -70,6 +83,6 @@ describe('Vite configuration', () => {
     expect(enabled.define?.__SENTRY_FRONTEND_DSN__).toBe(
       JSON.stringify('https://public@example.com/1')
     );
-    expect(enabled.define?.__SENTRY_RELEASE__).toBe(JSON.stringify('luxury-yacht@v1.11.2'));
+    expect(enabled.define?.__SENTRY_RELEASE__).toBe(JSON.stringify(expectedSentryRelease));
   });
 });
