@@ -100,6 +100,67 @@ func newSentryHub(config Config) (*sentry.Hub, error) {
 
 const anonymousBackendErrorMessage = "Backend error"
 
+func isSafeBackendSource(value string) bool {
+	switch value {
+	case "App", "Auth", "ContainerLogs", "ContainerLogsStream", "ErrorCapture",
+		"EventStream", "Frontend", "Heartbeat", "Helm", "KubernetesClient",
+		"KubeconfigManager", "KubeconfigWatcher", "ObjectCatalog", "PortForward",
+		"Process", "Refresh", "ResourceLoader", "ResourceStream", "Settings",
+		"ShellSession", "StdLog", "StreamMux", "UpdateCheck", "Wails":
+		return true
+	default:
+		return false
+	}
+}
+
+func anonymousBackendExceptionType(value string) string {
+	value = strings.TrimPrefix(strings.TrimSpace(value), "*")
+	if separator := strings.LastIndexByte(value, '.'); separator >= 0 {
+		value = value[separator+1:]
+	}
+	if value == "" || len(value) > 64 {
+		return "Error"
+	}
+	for index := 0; index < len(value); index++ {
+		character := value[index]
+		if (character >= 'a' && character <= 'z') || (character >= 'A' && character <= 'Z') || character == '_' {
+			continue
+		}
+		if index > 0 && character >= '0' && character <= '9' {
+			continue
+		}
+		return "Error"
+	}
+	return value
+}
+
+func sanitizeMechanism(mechanism *sentry.Mechanism) *sentry.Mechanism {
+	if mechanism == nil {
+		return nil
+	}
+	mechanismType := sentry.MechanismTypeGeneric
+	if mechanism.Type == sentry.MechanismTypeChained {
+		mechanismType = sentry.MechanismTypeChained
+	}
+	var handled *bool
+	if mechanism.Handled != nil {
+		value := *mechanism.Handled
+		handled = &value
+	}
+	var parentID *int
+	if mechanism.ParentID != nil {
+		value := *mechanism.ParentID
+		parentID = &value
+	}
+	return &sentry.Mechanism{
+		Type:             mechanismType,
+		Handled:          handled,
+		ParentID:         parentID,
+		ExceptionID:      mechanism.ExceptionID,
+		IsExceptionGroup: mechanism.IsExceptionGroup,
+	}
+}
+
 // sanitizeEvent reduces an event to diagnostic fields that originate in the
 // application build or stack layout. Runtime values such as error text,
 // cluster identity, request data, device context, and local paths are removed.
@@ -108,50 +169,58 @@ func sanitizeEvent(event *sentry.Event, _ *sentry.EventHint) *sentry.Event {
 		return nil
 	}
 
-	event.Message = anonymousBackendErrorMessage
-	event.Breadcrumbs = nil
-	event.Contexts = nil
-	event.Dist = ""
-	event.Fingerprint = nil
-	event.ServerName = ""
-	event.Tags = map[string]string{"app.surface": "backend"}
-	event.Transaction = ""
-	event.User = sentry.User{}
-	event.Logger = ""
-	event.Modules = nil
-	event.Request = nil
-	event.DebugMeta = nil
-	event.Attachments = nil
-	event.Type = ""
-	event.StartTime = time.Time{}
-	event.Spans = nil
-	event.TransactionInfo = nil
-	event.CheckIn = nil
-	event.MonitorConfig = nil
-	event.Threads = nil
-	event.Logs = nil
-	event.Metrics = nil
-
-	for index := range event.Exception {
-		exception := &event.Exception[index]
-		exception.Type = "Error"
-		exception.Value = anonymousBackendErrorMessage
-		exception.Module = ""
-		exception.ThreadID = 0
-		exception.Mechanism = nil
-		sanitizeStacktrace(exception.Stacktrace)
+	tags := map[string]string{"app.surface": "backend"}
+	if source := event.Tags["source"]; isSafeBackendSource(source) {
+		tags["source"] = source
+	}
+	exceptions := make([]sentry.Exception, len(event.Exception))
+	for index, exception := range event.Exception {
+		exceptions[index] = sentry.Exception{
+			Type:       anonymousBackendExceptionType(exception.Type),
+			Value:      anonymousBackendErrorMessage,
+			Stacktrace: sanitizedStacktrace(exception.Stacktrace),
+			Mechanism:  sanitizeMechanism(exception.Mechanism),
+		}
 	}
 
-	return event
+	return &sentry.Event{
+		Environment: event.Environment,
+		EventID:     event.EventID,
+		Level:       event.Level,
+		Message:     anonymousBackendErrorMessage,
+		Platform:    event.Platform,
+		Release:     event.Release,
+		Tags:        tags,
+		Timestamp:   event.Timestamp,
+		Exception:   exceptions,
+		Threads:     sanitizedThreads(event.Threads),
+	}
 }
 
-func sanitizeStacktrace(stacktrace *sentry.Stacktrace) {
-	if stacktrace == nil {
-		return
+func sanitizedThreads(threads []sentry.Thread) []sentry.Thread {
+	sanitized := make([]sentry.Thread, 0, len(threads))
+	for _, thread := range threads {
+		stacktrace := sanitizedStacktrace(thread.Stacktrace)
+		if stacktrace == nil || len(stacktrace.Frames) == 0 {
+			continue
+		}
+		sanitized = append(sanitized, sentry.Thread{
+			Stacktrace: stacktrace,
+			Crashed:    thread.Crashed,
+			Current:    thread.Current,
+		})
 	}
+	return sanitized
+}
+
+func sanitizedStacktrace(stacktrace *sentry.Stacktrace) *sentry.Stacktrace {
+	if stacktrace == nil {
+		return nil
+	}
+	frames := make([]sentry.Frame, len(stacktrace.Frames))
 	for index, frame := range stacktrace.Frames {
 		filename := path.Base(strings.ReplaceAll(frame.Filename, "\\", "/"))
-		stacktrace.Frames[index] = sentry.Frame{
+		frames[index] = sentry.Frame{
 			Function: frame.Function,
 			Module:   frame.Module,
 			Filename: filename,
@@ -160,6 +229,7 @@ func sanitizeStacktrace(stacktrace *sentry.Stacktrace) {
 			InApp:    frame.InApp,
 		}
 	}
+	return &sentry.Stacktrace{Frames: frames}
 }
 
 func disabledDataCollection() *sentry.DataCollection {

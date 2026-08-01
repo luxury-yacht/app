@@ -6,6 +6,9 @@ corresponding DSN is present. Users can disable both reporters with **Error
 Reporting** under **Settings → Advanced → Data Management**. The integration
 does not enable tracing, replay, metrics, or Sentry logs. Development builds
 disable both SDKs even when Sentry environment variables are present.
+The frontend also removes Sentry's default browser-session integration, so
+enabling error reporting does not emit Release Health sessions when no error
+occurs.
 
 ## Ownership
 
@@ -24,22 +27,33 @@ disable both SDKs even when Sentry environment variables are present.
 ## Anonymous Event Contract
 
 Both SDKs disable automatic user, cookie, request/response header, body, query
-parameter, database-query, generative-AI, and stack-variable collection. A
-final `beforeSend` sanitizer then reduces every event to an allowlist:
+parameter, database-query, generative-AI, and stack-variable collection where
+those options apply. A final `beforeSend` sanitizer constructs a new event from
+an allowlist, so fields added by SDK integrations or future SDK versions are
+excluded unless the application explicitly approves them:
 
-- the app release, production environment, severity, and SDK platform;
+- the random event ID, event timestamp, app release, production environment,
+  severity, and SDK platform;
 - generic `Frontend error` or `Backend error` text;
-- stack function/module names, bundle or source-file basename, line, column,
-  and in-app status;
-- frontend source-map debug IDs; and
-- static tags identifying the frontend or backend app surface.
+- allowlisted JavaScript built-in exception classes or a normalized
+  compile-time Go error type;
+- handled/synthetic flags and numeric exception-chain relationships, without
+  free-form mechanism descriptions or data;
+- frontend exception stacks with an anonymized bundle basename, line, column,
+  in-app status, and source-map debug ID; raw function/module strings are
+  excluded and source maps recover the build-owned source names;
+- backend exception/log call-site stacks with compile-time function/module
+  names, source-file basename, line, column, and in-app status; and
+- static tags identifying the frontend or backend app surface, plus an
+  allowlisted backend subsystem such as `Refresh` or `Auth`.
 
-The sanitizer removes original error messages and types, cluster IDs, source
-tags, Kubernetes data, users, request data, URLs, local paths, breadcrumbs,
-runtime contexts, variables, attachments, device/server names, and custom
-fingerprints. Tests serialize representative frontend and backend events and
-reject planted email addresses, IP addresses, cluster IDs, local paths, host
-names, and secrets.
+The sanitizer removes original error messages, arbitrary exception and
+mechanism strings, cluster IDs, Kubernetes data, users, request data, URLs,
+local paths, breadcrumbs, runtime contexts, variables, attachments, thread
+IDs/names, device/server names, full user agents, and custom fingerprints. Tests
+serialize representative frontend and backend events, assert their approved
+top-level field sets, and reject planted email addresses, IP addresses, cluster
+IDs, local paths, host names, and secrets.
 
 For both Sentry Cloud projects, maintainers must also enable **Prevent Storing
 of IP Addresses** in **Project Settings → Security & Privacy**. Sentry exposes

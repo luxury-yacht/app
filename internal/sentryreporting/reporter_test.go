@@ -2,6 +2,7 @@ package sentryreporting
 
 import (
 	"context"
+	"encoding/json"
 	"errors"
 	"sync"
 	"testing"
@@ -120,8 +121,12 @@ func TestReporterCapturesAnonymizedMessageWithoutClusterContext(t *testing.T) {
 	require.Equal(t, "production", event.Environment)
 	require.Equal(t, "luxury-yacht@v1.2.3", event.Release)
 	require.Equal(t, "backend", event.Tags["app.surface"])
-	require.NotContains(t, event.Tags, "source")
+	require.Equal(t, "Refresh", event.Tags["source"])
 	require.NotContains(t, event.Tags, "clusterId")
+	require.Len(t, event.Threads, 1)
+	require.True(t, event.Threads[0].Current)
+	require.NotNil(t, event.Threads[0].Stacktrace)
+	require.NotEmpty(t, event.Threads[0].Stacktrace.Frames)
 }
 
 func TestSanitizeEventRemovesIdentifyingDataAndKeepsDiagnosticStack(t *testing.T) {
@@ -151,6 +156,19 @@ func TestSanitizeEventRemovesIdentifyingDataAndKeepsDiagnosticStack(t *testing.T
 			Message: "opened customer-cluster",
 		}},
 		Modules: map[string]string{"private-module": "1.0.0"},
+		Threads: []sentry.Thread{{
+			ID:      "customer@example.com",
+			Name:    "customer-kubeconfig:production",
+			Current: true,
+			Stacktrace: &sentry.Stacktrace{Frames: []sentry.Frame{{
+				Function:    "github.com/luxury-yacht/app/backend.(*Logger).Error",
+				Module:      "github.com/luxury-yacht/app/backend",
+				Filename:    "/Users/alice/private/logger.go",
+				AbsPath:     "/Users/alice/private/logger.go",
+				Lineno:      149,
+				ContextLine: "logger.Error(\"secret-value\")",
+			}}},
+		}},
 		Exception: []sentry.Exception{{
 			Type:  "CustomerProductionError",
 			Value: "token=secret-value",
@@ -172,13 +190,14 @@ func TestSanitizeEventRemovesIdentifyingDataAndKeepsDiagnosticStack(t *testing.T
 
 	sanitized := sanitizeEvent(event, nil)
 
-	require.Same(t, event, sanitized)
+	require.NotSame(t, event, sanitized)
+	require.Equal(t, "refresh failed for customer@example.com", event.Message)
 	require.Equal(t, "Backend error", sanitized.Message)
 	require.Equal(t, "production", sanitized.Environment)
 	require.Equal(t, "luxury-yacht@v1.2.3", sanitized.Release)
 	require.Equal(t, sentry.LevelError, sanitized.Level)
 	require.Equal(t, "go", sanitized.Platform)
-	require.Equal(t, map[string]string{"app.surface": "backend"}, sanitized.Tags)
+	require.Equal(t, map[string]string{"app.surface": "backend", "source": "Refresh"}, sanitized.Tags)
 	require.Empty(t, sanitized.ServerName)
 	require.Empty(t, sanitized.Transaction)
 	require.Empty(t, sanitized.Logger)
@@ -187,8 +206,15 @@ func TestSanitizeEventRemovesIdentifyingDataAndKeepsDiagnosticStack(t *testing.T
 	require.Nil(t, sanitized.Request)
 	require.Nil(t, sanitized.Breadcrumbs)
 	require.Nil(t, sanitized.Modules)
+	require.Len(t, sanitized.Threads, 1)
+	require.Empty(t, sanitized.Threads[0].ID)
+	require.Empty(t, sanitized.Threads[0].Name)
+	require.True(t, sanitized.Threads[0].Current)
+	require.Equal(t, "logger.go", sanitized.Threads[0].Stacktrace.Frames[0].Filename)
+	require.Empty(t, sanitized.Threads[0].Stacktrace.Frames[0].AbsPath)
+	require.Empty(t, sanitized.Threads[0].Stacktrace.Frames[0].ContextLine)
 	require.Len(t, sanitized.Exception, 1)
-	require.Equal(t, "Error", sanitized.Exception[0].Type)
+	require.Equal(t, "CustomerProductionError", sanitized.Exception[0].Type)
 	require.Equal(t, "Backend error", sanitized.Exception[0].Value)
 
 	frame := sanitized.Exception[0].Stacktrace.Frames[0]
@@ -213,10 +239,96 @@ func TestSanitizeEventRemovesIdentifyingDataAndKeepsDiagnosticStack(t *testing.T
 		"private.example.com",
 		"/Users/alice",
 		"secret-value",
-		"CustomerProductionError",
 	} {
 		require.NotContains(t, string(payload), identifyingValue)
 	}
+}
+
+func TestSanitizeEventRetainsBoundedDiagnosticClassification(t *testing.T) {
+	handled := false
+	parentID := 1
+	event := &sentry.Event{
+		Tags: map[string]string{
+			"app.surface": "backend",
+			"source":      "Refresh",
+			"clusterId":   "customer-kubeconfig:production",
+		},
+		Exception: []sentry.Exception{{
+			Type:  "*apierrors.StatusError",
+			Value: "customer@example.com failed in production-cluster",
+			Mechanism: &sentry.Mechanism{
+				Type:        sentry.MechanismTypeChained,
+				Description: "customer@example.com",
+				Handled:     &handled,
+				ParentID:    &parentID,
+				ExceptionID: 2,
+				Data:        map[string]any{"clusterId": "customer-kubeconfig:production"},
+			},
+		}},
+	}
+
+	sanitized := sanitizeEvent(event, nil)
+
+	require.Equal(t, map[string]string{
+		"app.surface": "backend",
+		"source":      "Refresh",
+	}, sanitized.Tags)
+	require.Equal(t, "StatusError", sanitized.Exception[0].Type)
+	require.Equal(t, anonymousBackendErrorMessage, sanitized.Exception[0].Value)
+	require.Equal(t, &sentry.Mechanism{
+		Type:        sentry.MechanismTypeChained,
+		Handled:     &handled,
+		ParentID:    &parentID,
+		ExceptionID: 2,
+	}, sanitized.Exception[0].Mechanism)
+}
+
+func TestSanitizeEventSerializesOnlyApprovedTopLevelDiagnostics(t *testing.T) {
+	event := &sentry.Event{
+		EventID:     "0123456789abcdef0123456789abcdef",
+		Timestamp:   time.Unix(1_700_000_000, 0).UTC(),
+		Environment: "production",
+		Level:       sentry.LevelError,
+		Message:     "customer@example.com failed in production-cluster",
+		Platform:    "go",
+		Release:     "luxury-yacht@v1.2.3",
+		Sdk: sentry.SdkInfo{
+			Name:    "customer-kubeconfig:production",
+			Version: "secret-value",
+		},
+		Tags: map[string]string{
+			"source":    "Refresh",
+			"clusterId": "customer-kubeconfig:production",
+		},
+	}
+
+	sanitized := sanitizeEvent(event, nil)
+	require.NotSame(t, event, sanitized)
+
+	payload, err := sanitized.MarshalJSON()
+	require.NoError(t, err)
+	var fields map[string]any
+	require.NoError(t, json.Unmarshal(payload, &fields))
+	fieldNames := make([]string, 0, len(fields))
+	for name := range fields {
+		fieldNames = append(fieldNames, name)
+	}
+	require.ElementsMatch(t, []string{
+		"environment",
+		"event_id",
+		"level",
+		"message",
+		"platform",
+		"release",
+		"sdk",
+		"tags",
+		"timestamp",
+		"user",
+	}, fieldNames)
+	require.Empty(t, fields["sdk"])
+	require.Empty(t, fields["user"])
+	require.NotContains(t, string(payload), "customer")
+	require.NotContains(t, string(payload), "secret-value")
 }
 
 func TestReporterDisablesAutomaticSensitiveDataAndNonErrorTelemetry(t *testing.T) {
@@ -263,8 +375,8 @@ func TestReporterCapturesExceptions(t *testing.T) {
 	require.NotNil(t, event)
 	require.NotEmpty(t, event.Exception)
 	require.Equal(t, "Backend error", event.Exception[0].Value)
-	require.Equal(t, "Error", event.Exception[0].Type)
-	require.NotContains(t, event.Tags, "source")
+	require.Equal(t, "errorString", event.Exception[0].Type)
+	require.Equal(t, "Wails", event.Tags["source"])
 }
 
 func TestReporterCapturesRecoveredPanics(t *testing.T) {
@@ -281,7 +393,7 @@ func TestReporterCapturesRecoveredPanics(t *testing.T) {
 	require.NotNil(t, event)
 	require.Equal(t, "Backend error", event.Message)
 	require.Equal(t, sentry.LevelFatal, event.Level)
-	require.NotContains(t, event.Tags, "source")
+	require.Equal(t, "Process", event.Tags["source"])
 }
 
 func TestReporterFlushesAndClosesTransportAtShutdown(t *testing.T) {

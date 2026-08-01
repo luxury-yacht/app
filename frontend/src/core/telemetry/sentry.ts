@@ -12,6 +12,31 @@ export interface SentryRuntimeConfig {
 
 const ANONYMOUS_FRONTEND_ERROR_MESSAGE = 'Frontend error';
 
+const SAFE_FRONTEND_EXCEPTION_TYPES = new Set([
+  'AggregateError',
+  'DOMException',
+  'Error',
+  'EvalError',
+  'RangeError',
+  'ReferenceError',
+  'SyntaxError',
+  'TypeError',
+  'URIError',
+]);
+
+const SAFE_FRONTEND_MECHANISM_TYPES = new Set([
+  'auto.browser.browserapierrors.addEventListener',
+  'auto.browser.browserapierrors.requestAnimationFrame',
+  'auto.browser.browserapierrors.setInterval',
+  'auto.browser.browserapierrors.setTimeout',
+  'auto.browser.browserapierrors.xhr',
+  'auto.browser.global_handlers.onerror',
+  'auto.browser.global_handlers.onunhandledrejection',
+  'auto.function.react.error_handler',
+  'chained',
+  'generic',
+]);
+
 let configuredRuntime: SentryRuntimeConfig | null = null;
 let reportingInitialized = false;
 let unsubscribePreference: (() => void) | null = null;
@@ -26,53 +51,47 @@ const anonymousCodeFile = (value?: string): string | undefined => {
   return filename ? `app:///${filename}` : undefined;
 };
 
-const sanitizeStackFrame = (frame: StackFrame): StackFrame => ({
-  filename: anonymousCodeFile(frame.filename),
-  function: frame.function,
-  module: frame.module,
-  lineno: frame.lineno,
-  colno: frame.colno,
-  in_app: frame.in_app,
-  debug_id: frame.debug_id,
-});
+const sanitizeStackFrame = (frame: StackFrame): StackFrame => {
+  const codeFile = anonymousCodeFile(frame.abs_path ?? frame.filename);
+  return {
+    filename: codeFile,
+    abs_path: codeFile,
+    lineno: frame.lineno,
+    colno: frame.colno,
+    in_app: frame.in_app,
+    debug_id: frame.debug_id,
+  };
+};
+
+const anonymousExceptionType = (value?: string): string => {
+  if (value && SAFE_FRONTEND_EXCEPTION_TYPES.has(value)) {
+    return value;
+  }
+  return 'Error';
+};
 
 // Keep only build and stack-layout diagnostics. Error text and runtime context
 // can contain kubeconfig names, object names, paths, URLs, or other identifiers.
 export function sanitizeFrontendEvent(event: ErrorEvent, hint?: EventHint): ErrorEvent {
-  event.message = ANONYMOUS_FRONTEND_ERROR_MESSAGE;
-  event.logentry = undefined;
-  event.start_timestamp = undefined;
-  event.server_name = undefined;
-  event.dist = undefined;
-  event.request = undefined;
-  event.transaction = undefined;
-  event.modules = undefined;
-  event.fingerprint = undefined;
-  event.breadcrumbs = undefined;
-  event.contexts = undefined;
-  event.extra = undefined;
-  event.user = undefined;
-  event.type = undefined;
-  event.spans = undefined;
-  event.measurements = undefined;
-  event.sdkProcessingMetadata = undefined;
-  event.transaction_info = undefined;
-  event.threads = undefined;
-  event.tags = {
-    'app.surface': 'frontend',
-    runtime: 'wails-webview',
-  };
-
-  for (const exception of event.exception?.values ?? []) {
-    exception.type = 'Error';
-    exception.value = ANONYMOUS_FRONTEND_ERROR_MESSAGE;
-    exception.module = undefined;
-    exception.thread_id = undefined;
-    exception.mechanism = undefined;
-    if (exception.stacktrace?.frames) {
-      exception.stacktrace.frames = exception.stacktrace.frames.map(sanitizeStackFrame);
-    }
-  }
+  const exceptionValues = event.exception?.values?.map((exception) => {
+    const mechanism = exception.mechanism;
+    const frames = exception.stacktrace?.frames?.map(sanitizeStackFrame);
+    return {
+      type: anonymousExceptionType(exception.type),
+      value: ANONYMOUS_FRONTEND_ERROR_MESSAGE,
+      mechanism: mechanism
+        ? {
+            type: SAFE_FRONTEND_MECHANISM_TYPES.has(mechanism.type) ? mechanism.type : 'generic',
+            handled: mechanism.handled,
+            synthetic: mechanism.synthetic,
+            exception_id: mechanism.exception_id,
+            parent_id: mechanism.parent_id,
+            is_exception_group: mechanism.is_exception_group,
+          }
+        : undefined,
+      stacktrace: frames ? { frames } : undefined,
+    };
+  });
 
   const sourceMapImages = event.debug_meta?.images
     ?.filter((image) => image.type === 'sourcemap')
@@ -81,12 +100,27 @@ export function sanitizeFrontendEvent(event: ErrorEvent, hint?: EventHint): Erro
       code_file: anonymousCodeFile(image.code_file) ?? 'app:///bundle.js',
       debug_id: image.debug_id,
     }));
-  event.debug_meta = sourceMapImages?.length ? { images: sourceMapImages } : undefined;
 
   if (hint?.attachments) {
     hint.attachments = [];
   }
-  return event;
+
+  return {
+    type: undefined,
+    event_id: event.event_id,
+    timestamp: event.timestamp,
+    message: ANONYMOUS_FRONTEND_ERROR_MESSAGE,
+    level: event.level,
+    platform: event.platform,
+    release: event.release,
+    environment: event.environment,
+    tags: {
+      'app.surface': 'frontend',
+      runtime: 'wails-webview',
+    },
+    exception: exceptionValues?.length ? { values: exceptionValues } : undefined,
+    debug_meta: sourceMapImages?.length ? { images: sourceMapImages } : undefined,
+  };
 }
 
 export function initializeErrorReporting(config: SentryRuntimeConfig): boolean {
@@ -109,6 +143,8 @@ export function initializeErrorReporting(config: SentryRuntimeConfig): boolean {
     release: config.release?.trim() || undefined,
     attachStacktrace: true,
     beforeSend: sanitizeFrontendEvent,
+    integrations: (defaults) =>
+      defaults.filter((integration) => integration.name !== 'BrowserSession'),
     enableLogs: false,
     enableMetrics: false,
     sendClientReports: false,
