@@ -766,11 +766,11 @@ export namespace backend {
 	    path: string;
 	    canceled: boolean;
 	    imported?: number;
-
+	
 	    static createFrom(source: any = {}) {
 	        return new DataManagementResult(source);
 	    }
-
+	
 	    constructor(source: any = {}) {
 	        if ('string' === typeof source) source = JSON.parse(source);
 	        this.path = source["path"];
@@ -6253,3 +6253,4 @@ export namespace v1 {
 	}
 
 }
+

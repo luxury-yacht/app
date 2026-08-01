@@ -3,6 +3,7 @@ package mage
 import (
 	"encoding/json"
 	"fmt"
+	"io"
 	"os"
 	"path/filepath"
 )
@@ -12,6 +13,7 @@ type manifestInfo struct {
 	BuildTime  string `json:"buildTime"`
 	IsBeta     bool   `json:"isBeta"`
 	GitCommit  string `json:"gitCommit"`
+	SentryDSN  string `json:"sentryDsn,omitempty"`
 	Version    string `json:"version"`
 }
 
@@ -21,6 +23,7 @@ func generateBuildManifest(cfg BuildConfig) error {
 		BuildTime:  cfg.BuildTime,
 		IsBeta:     cfg.IsBeta,
 		GitCommit:  cfg.Commit,
+		SentryDSN:  cfg.SentryDSN,
 		Version:    cfg.Version,
 	}
 
@@ -39,7 +42,21 @@ func writeManifest(path string, info manifestInfo) error {
 	}
 
 	fmt.Println("\n✏️ Writing build manifest to", path)
-	fmt.Println(string(data))
+	if err := writeManifestSummary(os.Stdout, info); err != nil {
+		return err
+	}
 
 	return os.WriteFile(path, data, 0o644)
+}
+
+func writeManifestSummary(writer io.Writer, info manifestInfo) error {
+	if info.SentryDSN != "" {
+		info.SentryDSN = "<configured>"
+	}
+	data, err := json.MarshalIndent(info, "", "  ")
+	if err != nil {
+		return err
+	}
+	_, err = fmt.Fprintln(writer, string(data))
+	return err
 }

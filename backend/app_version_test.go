@@ -153,3 +153,17 @@ func TestCheckBetaExpirySkippedForNonBeta(t *testing.T) {
 		t.Fatalf("expected skip for non-beta builds, got %v", err)
 	}
 }
+
+func TestApplyEmbeddedBuildInfoConfiguresBackendSentryDSN(t *testing.T) {
+	original := SentryDSN
+	t.Cleanup(func() { SentryDSN = original })
+
+	applyEmbeddedBuildInfo(&embeddedBuildInfo{
+		Version:   "v1.2.3",
+		SentryDSN: "https://public@example.com/1",
+	})
+
+	if SentryDSN != "https://public@example.com/1" {
+		t.Fatalf("SentryDSN = %q, want embedded value", SentryDSN)
+	}
+}

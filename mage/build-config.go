@@ -2,7 +2,9 @@ package mage
 
 import (
 	"fmt"
+	"os"
 	"runtime"
+	"strings"
 	"time"
 )
 
@@ -25,6 +27,7 @@ type BuildConfig struct {
 	PackagePath    string   // Go module package path
 	ReleaseAssets  []string // List of release asset file paths
 	ReleaseRepo    string   // GitHub repository for releases
+	SentryDSN      string   // Backend Sentry DSN embedded in release builds
 	Version        string   // Version of the app build
 }
 
@@ -67,6 +70,7 @@ func NewBuildConfig() BuildConfig {
 		PackagePath:    "github.com/luxury-yacht/app",
 		ReleaseAssets:  []string{".deb", ".rpm", ".dmg", ".exe", ".zip"},
 		ReleaseRepo:    "luxury-yacht/app",
+		SentryDSN:      strings.TrimSpace(os.Getenv("SENTRY_BACKEND_DSN")),
 		Version:        version,
 	}
 

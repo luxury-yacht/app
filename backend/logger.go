@@ -3,6 +3,8 @@ package backend
 import (
 	"sync"
 	"time"
+
+	"github.com/luxury-yacht/app/internal/sentryreporting"
 )
 
 // LogLevel represents the severity level of a log entry
@@ -44,21 +46,27 @@ type LogEntry struct {
 
 // Logger manages application logs in memory
 type Logger struct {
-	mu           sync.RWMutex
-	entries      []LogEntry
-	maxSize      int
-	nextSequence uint64
-	eventEmitter func(string, ...interface{}) // Function to emit log events
+	mu            sync.RWMutex
+	entries       []LogEntry
+	maxSize       int
+	nextSequence  uint64
+	eventEmitter  func(string, ...interface{}) // Function to emit log events
+	errorReporter sentryreporting.Reporter
 }
 
 // NewLogger creates a new logger with specified maximum entries
-func NewLogger(maxSize int) *Logger {
+func NewLogger(maxSize int, reporters ...sentryreporting.Reporter) *Logger {
 	if maxSize <= 0 {
 		maxSize = 1000 // Default maximum size
 	}
+	var reporter sentryreporting.Reporter
+	if len(reporters) > 0 {
+		reporter = reporters[0]
+	}
 	return &Logger{
-		entries: make([]LogEntry, 0, maxSize),
-		maxSize: maxSize,
+		entries:       make([]LogEntry, 0, maxSize),
+		maxSize:       maxSize,
+		errorReporter: reporter,
 	}
 }
 
@@ -72,6 +80,7 @@ func (l *Logger) Log(level LogLevel, message string, source ...string) {
 
 	var emit func(string, ...interface{})
 	var emittedSequence uint64
+	var reporter sentryreporting.Reporter
 	l.mu.Lock()
 
 	l.nextSequence++
@@ -104,6 +113,7 @@ func (l *Logger) Log(level LogLevel, message string, source ...string) {
 	}
 
 	emit = l.eventEmitter
+	reporter = l.errorReporter
 	emittedSequence = entry.Sequence
 	l.mu.Unlock()
 
@@ -111,6 +121,12 @@ func (l *Logger) Log(level LogLevel, message string, source ...string) {
 	// or deadlock by synchronously reading the logger.
 	if emit != nil {
 		emit("app-logs:added", AppLogsAddedEvent{Sequence: emittedSequence})
+	}
+	if level == LogLevelError && reporter != nil {
+		reporter.CaptureMessage(entry.Message, sentryreporting.Context{
+			Source:    entry.Source,
+			ClusterID: entry.ClusterID,
+		})
 	}
 }
 

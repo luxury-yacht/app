@@ -39,6 +39,13 @@ jobs:
 
   build:
     needs: test
+    env:
+      SENTRY_AUTH_TOKEN: ${{ secrets.SENTRY_AUTH_TOKEN }}
+      SENTRY_BACKEND_DSN: ${{ secrets.SENTRY_BACKEND_DSN }}
+      SENTRY_ORG: ${{ secrets.SENTRY_ORG }}
+      SENTRY_PROJECT: ${{ secrets.SENTRY_FRONTEND_PROJECT }}
+      VITE_SENTRY_DSN: ${{ secrets.SENTRY_FRONTEND_DSN }}
+      VITE_SENTRY_ENVIRONMENT: production
     strategy:
       # Don't fail the whole build if one matrix job fails.
       fail-fast: false

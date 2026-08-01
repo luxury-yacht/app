@@ -5,8 +5,11 @@ import (
 	"embed"
 	"os"
 	goruntime "runtime"
+	"strings"
+	"time"
 
 	"github.com/luxury-yacht/app/backend"
+	"github.com/luxury-yacht/app/internal/sentryreporting"
 
 	"github.com/wailsapp/wails/v2"
 	"github.com/wailsapp/wails/v2/pkg/options"
@@ -19,13 +22,57 @@ import (
 //go:embed frontend/dist
 var assets embed.FS
 
+func reportPanic(reporter sentryreporting.Reporter) {
+	if recovered := recover(); recovered != nil {
+		reporter.CapturePanic(recovered, sentryreporting.Context{Source: "Process"})
+		panic(recovered)
+	}
+}
+
+func reportRunError(reporter sentryreporting.Reporter, err error) {
+	if err != nil {
+		reporter.CaptureException(err, sentryreporting.Context{Source: "Wails"})
+	}
+}
+
+func defaultSentryRelease(version string) string {
+	version = strings.TrimSpace(version)
+	if version == "" || version == "dev" {
+		return ""
+	}
+	return "luxury-yacht@" + version
+}
+
+func newSentryReporter(enabled bool, defaultDSN, version string) (sentryreporting.Reporter, error) {
+	if !enabled {
+		return sentryreporting.New(sentryreporting.Config{})
+	}
+	return sentryreporting.New(sentryreporting.ConfigFromEnvironment(
+		defaultDSN,
+		defaultSentryRelease(version),
+		"production",
+	))
+}
+
 // main function initializes and runs the Wails application
 func main() {
 	// Exit early when running as the exec helper wrapper.
 	backend.MaybeRunExecWrapper()
 
+	reporter, reporterErr := newSentryReporter(
+		sentryreporting.BuildEnabled(),
+		backend.SentryDSN,
+		backend.Version,
+	)
+	if reporterErr != nil {
+		println("Sentry error reporting disabled:", reporterErr.Error())
+		reporter, _ = sentryreporting.New(sentryreporting.Config{})
+	}
+	defer func() { reporter.Shutdown(2 * time.Second) }()
+	defer reportPanic(reporter)
+
 	// Create an instance of the app structure
-	app := backend.NewApp()
+	app := backend.NewApp(reporter)
 
 	// Store the initial menu
 	appMenu := backend.CreateMenu(app)
@@ -110,6 +157,7 @@ func main() {
 	})
 
 	if err != nil {
+		reportRunError(reporter, err)
 		println("Error:", err.Error())
 	}
 }

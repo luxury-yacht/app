@@ -29,6 +29,7 @@ completed phase plans, or test lists that can be discovered with `rg`.
 | How should frontend reads reach backend data? | [architecture/data-access.md](architecture/data-access.md) |
 | How do permission gates and action capabilities work? | [architecture/permissions.md](architecture/permissions.md) |
 | How are auth failures represented and recovered? | [architecture/auth.md](architecture/auth.md) |
+| How is Sentry error reporting configured and bounded? | [architecture/error-reporting.md](architecture/error-reporting.md) |
 | What are the large-data table rules? | [architecture/large-data.md](architecture/large-data.md) |
 | How do YAML edits save, merge, and check field ownership? | [architecture/yaml-editing.md](architecture/yaml-editing.md) |
 

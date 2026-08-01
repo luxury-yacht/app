@@ -23,6 +23,7 @@ var (
 	GitCommit   = "dev"
 	BetaExpiry  = ""
 	IsBetaBuild = "false"
+	SentryDSN   = ""
 )
 
 //go:embed buildinfo/*.json
@@ -34,16 +35,25 @@ type embeddedBuildInfo struct {
 	GitCommit  string `json:"gitCommit"`
 	IsBeta     bool   `json:"isBeta"`
 	BetaExpiry string `json:"betaExpiry"`
+	SentryDSN  string `json:"sentryDsn,omitempty"`
 }
 
 func init() {
 	if info := loadEmbeddedBuildInfo(); info != nil {
-		Version = info.Version
-		BuildTime = info.BuildTime
-		GitCommit = info.GitCommit
-		BetaExpiry = info.BetaExpiry
-		IsBetaBuild = strconv.FormatBool(info.IsBeta)
+		applyEmbeddedBuildInfo(info)
 	}
+}
+
+func applyEmbeddedBuildInfo(info *embeddedBuildInfo) {
+	if info == nil {
+		return
+	}
+	Version = info.Version
+	BuildTime = info.BuildTime
+	GitCommit = info.GitCommit
+	BetaExpiry = info.BetaExpiry
+	IsBetaBuild = strconv.FormatBool(info.IsBeta)
+	SentryDSN = info.SentryDSN
 }
 
 // AppInfo contains application version information
