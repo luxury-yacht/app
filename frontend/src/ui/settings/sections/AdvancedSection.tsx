@@ -17,34 +17,19 @@ import { errorHandler } from '@utils/errorHandler';
 import { clearLinkColor } from '@utils/linkColor';
 import { clearTintedPalette } from '@utils/paletteTint';
 import { useEffect, useId, useState } from 'react';
-import {
-  ExportFavorites,
-  ExportSettings,
-  ImportFavorites,
-  ImportSettings,
-} from '@/core/backend-api';
-import { hydrateFavorites } from '@/core/persistence/favorites';
 import { useAutoRefresh, useBackgroundRefresh } from '@/core/refresh';
 import {
   type AppPreferenceKey,
   commitIntegerPreferenceInput,
-  getErrorReportingEnabled,
   getKubernetesClientBurst,
   getKubernetesClientQPS,
   getPermissionSSRRFetchConcurrency,
   hydrateAppPreferences,
-  setErrorReportingEnabled,
   setKubernetesClientBurst,
   setKubernetesClientQPS,
   setPermissionSSRRFetchConcurrency,
 } from '@/core/settings/appPreferences';
 import { PreferenceNumberInput, SettingRow } from './SettingsControls';
-
-type DataManagementOperation =
-  | 'export-settings'
-  | 'import-settings'
-  | 'export-favorites'
-  | 'import-favorites';
 
 function AdvancedSection() {
   const elementIdPrefix = useId();
@@ -61,14 +46,8 @@ function AdvancedSection() {
   const [persistenceMode, setPersistenceMode] = useState<GridTablePersistenceMode>(() =>
     getGridTablePersistenceMode()
   );
-  const [errorReportingEnabled, setErrorReportingState] = useState(() =>
-    getErrorReportingEnabled()
-  );
   const [isClearStateConfirmOpen, setIsClearStateConfirmOpen] = useState(false);
   const [isResetViewsConfirmOpen, setIsResetViewsConfirmOpen] = useState(false);
-  const [dataManagementOperation, setDataManagementOperation] =
-    useState<DataManagementOperation | null>(null);
-  const [dataManagementStatus, setDataManagementStatus] = useState<string | null>(null);
 
   useEffect(() => {
     let cancelled = false;
@@ -80,7 +59,6 @@ function AdvancedSection() {
           setKubernetesClientBurstInput(String(prefs.kubernetesClientBurst));
           setPermissionSSRRFetchConcurrencyInput(String(prefs.permissionSSRRFetchConcurrency));
           setPersistenceMode(getGridTablePersistenceMode());
-          setErrorReportingState(prefs.errorReportingEnabled);
         }
       } catch (error) {
         errorHandler.handle(error, { action: 'loadAdvancedSettings' });
@@ -97,17 +75,6 @@ function AdvancedSection() {
     const mode: GridTablePersistenceMode = checked ? 'namespaced' : 'shared';
     setPersistenceMode(mode);
     setGridTablePersistenceMode(mode);
-  };
-
-  const handleErrorReportingToggle = async (enabled: boolean) => {
-    const previous = errorReportingEnabled;
-    setErrorReportingState(enabled);
-    try {
-      await setErrorReportingEnabled(enabled);
-    } catch (error) {
-      setErrorReportingState(previous);
-      errorHandler.handle(error, { action: 'updateErrorReporting' });
-    }
   };
 
   // Commit a raw input string: normalize + persist, then reflect the applied value.
@@ -139,73 +106,6 @@ function AdvancedSection() {
   const handleResetViews = async () => {
     setIsResetViewsConfirmOpen(false);
     await clearAllGridTableState();
-  };
-
-  const handleExportSettings = async () => {
-    setDataManagementStatus(null);
-    setDataManagementOperation('export-settings');
-    try {
-      const result = await ExportSettings();
-      if (!result.canceled) {
-        setDataManagementStatus('Settings exported.');
-      }
-    } catch (error) {
-      errorHandler.handle(error, { action: 'exportSettings' });
-    } finally {
-      setDataManagementOperation(null);
-    }
-  };
-
-  const handleExportFavorites = async () => {
-    setDataManagementStatus(null);
-    setDataManagementOperation('export-favorites');
-    try {
-      const result = await ExportFavorites();
-      if (!result.canceled) {
-        setDataManagementStatus('Favorites exported.');
-      }
-    } catch (error) {
-      errorHandler.handle(error, { action: 'exportFavorites' });
-    } finally {
-      setDataManagementOperation(null);
-    }
-  };
-
-  const handleImportSettings = async () => {
-    setDataManagementStatus(null);
-    setDataManagementOperation('import-settings');
-    try {
-      const result = await ImportSettings();
-      if (!result.canceled) {
-        const prefs = await hydrateAppPreferences({ force: true });
-        setKubernetesClientQPSInput(String(prefs.kubernetesClientQPS));
-        setKubernetesClientBurstInput(String(prefs.kubernetesClientBurst));
-        setPermissionSSRRFetchConcurrencyInput(String(prefs.permissionSSRRFetchConcurrency));
-        setPersistenceMode(prefs.gridTablePersistenceMode);
-        setErrorReportingState(prefs.errorReportingEnabled);
-        setDataManagementStatus('Settings imported.');
-      }
-    } catch (error) {
-      errorHandler.handle(error, { action: 'importSettings' });
-    } finally {
-      setDataManagementOperation(null);
-    }
-  };
-
-  const handleImportFavorites = async () => {
-    setDataManagementStatus(null);
-    setDataManagementOperation('import-favorites');
-    try {
-      const result = await ImportFavorites();
-      if (!result.canceled) {
-        await hydrateFavorites({ force: true });
-        setDataManagementStatus('Favorites imported.');
-      }
-    } catch (error) {
-      errorHandler.handle(error, { action: 'importFavorites' });
-    } finally {
-      setDataManagementOperation(null);
-    }
   };
 
   const handleClearAllState = async () => {
@@ -247,75 +147,6 @@ function AdvancedSection() {
       <div className="settings-advanced-warning">
         ⚠️ Modifying these settings could negatively impact app behavior or performance.
       </div>
-
-      <div className="settings-subgroup-label">Data Management</div>
-      <hr className="settings-subgroup-divider" />
-
-      <SettingRow
-        title="Settings"
-        help="Export or import preferences, themes, and kubeconfig search paths. Saved view state is not included."
-      >
-        <div className="setting-item setting-actions">
-          <button
-            type="button"
-            className="button generic"
-            disabled={dataManagementOperation !== null}
-            onClick={handleExportSettings}
-          >
-            Export Settings
-          </button>
-          <button
-            type="button"
-            className="button generic"
-            disabled={dataManagementOperation !== null}
-            onClick={handleImportSettings}
-          >
-            Import Settings
-          </button>
-        </div>
-      </SettingRow>
-
-      <SettingRow
-        title="Favorites"
-        help="Export your favorites or replace the current favorites library from an export file."
-      >
-        <div className="setting-item setting-actions">
-          <button
-            type="button"
-            className="button generic"
-            disabled={dataManagementOperation !== null}
-            onClick={handleExportFavorites}
-          >
-            Export Favorites
-          </button>
-          <button
-            type="button"
-            className="button generic"
-            disabled={dataManagementOperation !== null}
-            onClick={handleImportFavorites}
-          >
-            Import Favorites
-          </button>
-        </div>
-      </SettingRow>
-
-      <SettingRow
-        title="Error Reporting"
-        help="Sends helpful data when an error occurs that I use to improve the app. It is completely anonymous and cannot be used to identify you. Toggle it off if you do not wish to participate."
-      >
-        <ToggleSwitch
-          id={`${elementIdPrefix}-error-reporting`}
-          checked={errorReportingEnabled}
-          onChange={handleErrorReportingToggle}
-          ariaLabel="Error Reporting"
-        />
-      </SettingRow>
-
-      {dataManagementStatus ? (
-        <div className="settings-data-management-status" role="status" aria-live="polite">
-          {dataManagementStatus}
-        </div>
-      ) : null}
 
       <div className="settings-subgroup-label">Refresh</div>
       <hr className="settings-subgroup-divider" />

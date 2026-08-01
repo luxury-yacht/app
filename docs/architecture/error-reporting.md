@@ -3,7 +3,7 @@
 Luxury Yacht supports anonymous, errors-only reporting to Sentry from both the
 React webview and Go backend. Packaged builds enable it by default when the
 corresponding DSN is present. Users can disable both reporters with **Error
-Reporting** under **Settings → Advanced → Data Management**. The integration
+Reporting** under **Settings → Data Management**. The integration
 does not enable tracing, replay, metrics, or Sentry logs. Development builds
 disable both SDKs even when Sentry environment variables are present.
 The frontend also removes Sentry's default browser-session integration, so

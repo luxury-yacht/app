@@ -41,6 +41,11 @@ vi.mock('@ui/settings/sections/ObjectPanelSection', () => ({
   default: vi.fn(() => <div data-testid="section-object-panel" />),
 }));
 
+vi.mock('@ui/settings/sections/DataManagementSection', () => ({
+  __esModule: true,
+  default: vi.fn(() => <div data-testid="section-data-management" />),
+}));
+
 vi.mock('@ui/settings/sections/AdvancedSection', () => ({
   __esModule: true,
   default: vi.fn(() => <div data-testid="section-advanced" />),
@@ -198,6 +203,35 @@ describe('SettingsModal', () => {
 
     expect(document.querySelector('[data-testid="section-appearance"]')).toBeNull();
     expect(document.querySelector('[data-testid="section-kubeconfigs"]')).toBeTruthy();
+  });
+
+  it('places Data Management between Object Panel and Advanced in the sidebar', () => {
+    const labels = Array.from(document.querySelectorAll('.settings-modal-tab')).map((tab) =>
+      tab.textContent?.trim()
+    );
+
+    expect(labels).toEqual([
+      'Appearance',
+      'Kubeconfigs',
+      'Display',
+      'Object Panel',
+      'Data Management',
+      'Advanced',
+    ]);
+  });
+
+  it('opens the Data Management section from its sidebar category', async () => {
+    const dataManagementTab = Array.from(
+      document.querySelectorAll<HTMLButtonElement>('.settings-modal-tab')
+    ).find((tab) => tab.textContent?.includes('Data Management'));
+
+    await act(async () => {
+      requireValue(dataManagementTab, 'expected Data Management settings tab').click();
+      await Promise.resolve();
+    });
+
+    expect(document.querySelector('[data-testid="section-data-management"]')).toBeTruthy();
+    expect(localStorage.getItem('app-settings-last-tab')).toBe('data-management');
   });
 
   it('honors initialTab prop on open', async () => {

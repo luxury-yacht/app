@@ -6,7 +6,13 @@
  * a UI affordance and does not need to sync across devices.
  */
 
-export type SettingsTabId = 'appearance' | 'kubeconfigs' | 'display' | 'object-panel' | 'advanced';
+export type SettingsTabId =
+  | 'appearance'
+  | 'kubeconfigs'
+  | 'display'
+  | 'object-panel'
+  | 'data-management'
+  | 'advanced';
 
 const STORAGE_KEY = 'app-settings-last-tab';
 const VALID_TABS: readonly SettingsTabId[] = [
@@ -14,6 +20,7 @@ const VALID_TABS: readonly SettingsTabId[] = [
   'kubeconfigs',
   'display',
   'object-panel',
+  'data-management',
   'advanced',
 ];
 
