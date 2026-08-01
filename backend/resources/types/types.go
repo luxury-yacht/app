@@ -39,6 +39,7 @@ type AppSettings struct {
 	UseShortResourceNames                    bool     `json:"useShortResourceNames"`                    // Use short names like "po" for pods in badges/headers
 	DimInactiveNamespaces                    bool     `json:"dimInactiveNamespaces"`                    // Dim namespaces with no workloads in the sidebar
 	ExclusiveNamespaces                      bool     `json:"exclusiveNamespaces"`                      // Allow only one expanded namespace in the sidebar
+	ErrorReportingEnabled                    bool     `json:"errorReportingEnabled"`                    // Send anonymized production error reports
 	AutoRefreshEnabled                       bool     `json:"autoRefreshEnabled"`                       // Enable automatic refresh cycles
 	RefreshBackgroundClustersEnabled         bool     `json:"refreshBackgroundClustersEnabled"`         // Refresh inactive clusters in the background
 	MetricsRefreshIntervalMs                 int      `json:"metricsRefreshIntervalMs"`                 // Metrics refresh interval (ms)

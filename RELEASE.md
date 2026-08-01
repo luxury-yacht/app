@@ -4,10 +4,18 @@ This document is for maintainers with access to credentials required to create a
 
 ## Local Production Configuration
 
-Create the an `.env` file from the provided template:
+Before publishing a build, open **Project Settings → Security & Privacy** in
+both Sentry Cloud projects and enable **Prevent Storing of IP Addresses**. The
+application removes identifying values from event payloads before transport;
+this Sentry setting is also required so the service does not store the network
+address that delivered an event. Sentry exposes the same setting as
+`scrubIPAddresses`; its current behavior is documented in the
+[Sentry project API](https://docs.sentry.io/api/projects/retrieve-a-project/).
+
+Create a regular `.env` file in the repository root:
 
 ```sh
-cat > .env.sentry <<'EOF'
+cat > .env <<'EOF'
 SENTRY_FRONTEND_DSN=
 SENTRY_BACKEND_DSN=
 SENTRY_AUTH_TOKEN=
@@ -20,7 +28,9 @@ Update the values. `.env` is git-ignored. Never commit this file.
 
 Sentry is disabled when running development builds via `mage dev`, even when `.env` exists. See [the error-reporting architecture](docs/architecture/error-reporting.md) for the reporting and data-collection boundaries.
 
-Installing a local production build will enable Sentry.
+Installing a local production build enables error reporting only when the
+corresponding DSNs are present in `.env`. The persisted Error Reporting setting
+still controls whether the packaged app initializes either SDK.
 
 ```bash
 mage install:unsigned

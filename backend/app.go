@@ -30,6 +30,7 @@ type App struct {
 	windowSettings       *WindowSettings
 	appSettings          *AppSettings
 	logger               *Logger
+	errorReporter        sentryreporting.Reporter
 	// responseCache stores short-lived detail/YAML/helm GET responses.
 	responseCache           *responseCache
 	sidebarVisible          bool
@@ -183,8 +184,13 @@ type App struct {
 
 // NewApp constructs a backend App with sane defaults.
 func NewApp(reporters ...sentryreporting.Reporter) *App {
+	var reporter sentryreporting.Reporter
+	if len(reporters) > 0 {
+		reporter = reporters[0]
+	}
 	app := &App{
 		logger:                   NewLogger(1000, reporters...),
+		errorReporter:            reporter,
 		responseCache:            newDefaultResponseCache(),
 		sidebarVisible:           true,
 		appLogsPanelVisible:      false,

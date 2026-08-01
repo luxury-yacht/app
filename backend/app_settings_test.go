@@ -148,6 +148,103 @@ func TestAppGetAppSettingsReturnsDefaultWhenMissing(t *testing.T) {
 	require.Equal(t, settings, app.appSettings)
 }
 
+func TestErrorReportingPreferenceDefaultsEnabledInSettingsAndSchema(t *testing.T) {
+	setTestConfigEnv(t)
+	app := newTestAppWithDefaults(t)
+
+	settings, err := app.GetAppSettings()
+	require.NoError(t, err)
+	require.True(t, settings.ErrorReportingEnabled)
+
+	schema, err := app.GetAppSettingsSchema()
+	require.NoError(t, err)
+	byKey := make(map[string]AppPreferenceSchema, len(schema.Preferences))
+	for _, preference := range schema.Preferences {
+		byKey[preference.Key] = preference
+	}
+	require.Equal(t, "boolean", byKey[appPreferenceErrorReportingEnabled].Type)
+	require.Equal(t, true, byKey[appPreferenceErrorReportingEnabled].DefaultValue)
+	require.Equal(t, true, byKey[appPreferenceErrorReportingEnabled].CurrentValue)
+	require.True(t, byKey[appPreferenceErrorReportingEnabled].RuntimeSideEffect)
+}
+
+func TestErrorReportingPreferencePersistsBeforeApplyingRuntimeState(t *testing.T) {
+	setTestConfigEnv(t)
+	reporter := &recordingErrorReporter{}
+	app := NewApp(reporter)
+	configPath, err := app.getSettingsFilePath()
+	require.NoError(t, err)
+
+	reporter.setEnabledFn = func(enabled bool) {
+		require.False(t, enabled)
+		data, readErr := os.ReadFile(configPath)
+		require.NoError(t, readErr)
+		require.Contains(t, string(data), `"errorReportingEnabled":false`)
+	}
+
+	response, err := app.UpdateAppPreferences(UpdateAppPreferencesRequest{Changes: []AppPreferenceChange{{
+		Key:   appPreferenceErrorReportingEnabled,
+		Value: false,
+	}}})
+	require.NoError(t, err)
+	require.False(t, response.Settings.ErrorReportingEnabled)
+
+	reporter.mu.Lock()
+	defer reporter.mu.Unlock()
+	require.Equal(t, []bool{false}, reporter.enabledChanges)
+}
+
+func TestInitializeErrorReportingHonorsPersistedOptOut(t *testing.T) {
+	setTestConfigEnv(t)
+	reporter := &recordingErrorReporter{}
+	app := NewApp(reporter)
+	app.appSettings = getDefaultAppSettings()
+	app.appSettings.ErrorReportingEnabled = false
+	require.NoError(t, app.saveAppSettings())
+	app.appSettings = nil
+
+	require.NoError(t, InitializeErrorReporting(app))
+	require.False(t, reporter.Enabled())
+
+	reporter.mu.Lock()
+	defer reporter.mu.Unlock()
+	require.Equal(t, []bool{false}, reporter.enabledChanges)
+}
+
+func TestInitializeErrorReportingEnablesDefaultPreferenceAfterLoad(t *testing.T) {
+	setTestConfigEnv(t)
+	reporter := &recordingErrorReporter{}
+	app := NewApp(reporter)
+
+	require.NoError(t, InitializeErrorReporting(app))
+	require.True(t, reporter.Enabled())
+
+	reporter.mu.Lock()
+	defer reporter.mu.Unlock()
+	require.Equal(t, []bool{true}, reporter.enabledChanges)
+}
+
+func TestInitializeErrorReportingKeepsReporterDisabledWhenSettingsCannotLoad(t *testing.T) {
+	setTestConfigEnv(t)
+	reporter := &recordingErrorReporter{enabled: true}
+	app := NewApp(reporter)
+	configPath, err := app.getSettingsFilePath()
+	require.NoError(t, err)
+	require.NoError(t, os.WriteFile(configPath, []byte(`{"preferences":`), 0o644))
+
+	require.Error(t, InitializeErrorReporting(app))
+	require.False(t, reporter.Enabled())
+
+	reporter.mu.Lock()
+	defer reporter.mu.Unlock()
+	require.Equal(t, []bool{false}, reporter.enabledChanges)
+}
+
+func TestInitializeErrorReportingAllowsMissingAppOrReporter(t *testing.T) {
+	require.NoError(t, InitializeErrorReporting(nil))
+	require.NoError(t, InitializeErrorReporting(NewApp()))
+}
+
 func TestAppSaveAndLoadAppSettingsRoundTrip(t *testing.T) {
 	setTestConfigEnv(t)
 	app := newTestAppWithDefaults(t)

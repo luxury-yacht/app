@@ -47,7 +47,7 @@ func newSentryReporter(enabled bool, defaultDSN, version string) (sentryreportin
 	if !enabled {
 		return sentryreporting.New(sentryreporting.Config{})
 	}
-	return sentryreporting.New(sentryreporting.ConfigFromEnvironment(
+	return sentryreporting.NewDisabled(sentryreporting.ConfigFromEnvironment(
 		defaultDSN,
 		defaultSentryRelease(version),
 		"production",
@@ -73,6 +73,9 @@ func main() {
 
 	// Create an instance of the app structure
 	app := backend.NewApp(reporter)
+	if err := backend.InitializeErrorReporting(app); err != nil {
+		println("Sentry error reporting remains disabled:", err.Error())
+	}
 
 	// Store the initial menu
 	appMenu := backend.CreateMenu(app)

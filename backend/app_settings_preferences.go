@@ -168,6 +168,21 @@ func appPreferenceDescriptors() []preferenceDescriptor {
 		},
 	}
 
+	errorReporting := preferenceDescriptor{
+		key: appPreferenceErrorReportingEnabled, valueType: "boolean", defaultValue: true,
+		runtimeSideEffect: true, logText: "Error reporting enabled changed to", logsValue: true,
+		current: func(s *AppSettings) any { return s.ErrorReportingEnabled },
+		apply: func(settings *AppSettings, key string, raw any, effects *settingsSideEffects) error {
+			value, err := boolPreferenceValue(raw)
+			if err != nil {
+				return fmt.Errorf("%s: %w", key, err)
+			}
+			settings.ErrorReportingEnabled = value
+			effects.errorReporting = true
+			return nil
+		},
+	}
+
 	return []preferenceDescriptor{
 		enumPreference(appPreferenceAppearanceMode, "system", "appearance mode", []string{"light", "dark", "system"}, true,
 			"Appearance mode changed to", func(s *AppSettings) *string { return &s.AppearanceMode }),
@@ -177,6 +192,7 @@ func appPreferenceDescriptors() []preferenceDescriptor {
 			"Dim inactive namespaces changed to", func(s *AppSettings) *bool { return &s.DimInactiveNamespaces }),
 		boolPreference(appPreferenceExclusiveNamespaces, true, false,
 			"Exclusive namespaces changed to", func(s *AppSettings) *bool { return &s.ExclusiveNamespaces }),
+		errorReporting,
 		boolPreference(appPreferenceAutoRefreshEnabled, true, true,
 			"Auto refresh enabled changed to", func(s *AppSettings) *bool { return &s.AutoRefreshEnabled }),
 		boolPreference(appPreferenceRefreshBackgroundClustersEnabled, true, true,

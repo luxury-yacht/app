@@ -15,6 +15,7 @@ type mainRecordingReporter struct {
 }
 
 func (*mainRecordingReporter) Enabled() bool                                  { return true }
+func (*mainRecordingReporter) SetEnabled(bool) error                          { return nil }
 func (*mainRecordingReporter) CaptureMessage(string, sentryreporting.Context) {}
 func (*mainRecordingReporter) Shutdown(time.Duration) bool                    { return true }
 
@@ -61,6 +62,13 @@ func TestNewSentryReporterStaysDisabledWhenBuildDisablesReporting(t *testing.T) 
 	t.Setenv("SENTRY_BACKEND_DSN", "https://runtime@example.com/2")
 
 	reporter, err := newSentryReporter(false, "https://embedded@example.com/1", "v1.2.3")
+
+	require.NoError(t, err)
+	require.False(t, reporter.Enabled())
+}
+
+func TestNewSentryReporterStartsDisabledUntilPersistedPreferenceLoads(t *testing.T) {
+	reporter, err := newSentryReporter(true, "https://embedded@example.com/1", "v1.2.3")
 
 	require.NoError(t, err)
 	require.False(t, reporter.Enabled())

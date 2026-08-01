@@ -1,7 +1,7 @@
 ### Added
 
-- Added Settings and Favorites JSON export/import controls under Advanced Data Management.
-- Added optional Sentry error reporting for frontend and backend failures, including release source maps.
+- Added settings and favorites export/import controls under Settings -> Advanced -> Data Management.
+- Added fully anonymized error reporting via Sentry. You can opt out of this in Settings -> Advanced -> Data Management.
 
 ### Changed
 

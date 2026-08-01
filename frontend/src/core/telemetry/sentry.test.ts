@@ -1,18 +1,79 @@
 import { beforeEach, describe, expect, it, vi } from 'vitest';
+import { eventBus } from '@/core/events/eventBus';
 
 const sentryMocks = vi.hoisted(() => ({
+  close: vi.fn(),
   init: vi.fn(),
   reactErrorHandler: vi.fn(),
 }));
 
 vi.mock('@sentry/react', () => sentryMocks);
 
-import { createReactRootErrorHandlers, initializeErrorReporting } from './sentry';
+import {
+  configureErrorReporting,
+  configureErrorReportingFromPreferences,
+  createReactRootErrorHandlers,
+  initializeErrorReporting,
+  resetErrorReportingForTesting,
+  sanitizeFrontendEvent,
+} from './sentry';
 
 describe('Sentry error reporting', () => {
   beforeEach(() => {
+    resetErrorReportingForTesting();
     sentryMocks.init.mockReset();
     sentryMocks.reactErrorHandler.mockReset();
+    sentryMocks.close.mockReset();
+    sentryMocks.close.mockResolvedValue(true);
+  });
+
+  it('starts disabled after opt out and follows live preference changes', async () => {
+    const available = configureErrorReporting(
+      {
+        enabled: true,
+        dsn: 'https://public@example.com/1',
+        environment: 'production',
+        release: 'luxury-yacht@v1.2.3',
+      },
+      false
+    );
+
+    expect(available).toBe(true);
+    expect(sentryMocks.init).not.toHaveBeenCalled();
+
+    eventBus.emit('settings:error-reporting', true);
+    expect(sentryMocks.init).toHaveBeenCalledOnce();
+
+    eventBus.emit('settings:error-reporting', false);
+    await vi.waitFor(() => expect(sentryMocks.close).toHaveBeenCalledWith(0));
+
+    eventBus.emit('settings:error-reporting', true);
+    expect(sentryMocks.init).toHaveBeenCalledTimes(2);
+  });
+
+  it('does not initialize until the persisted preference has loaded', async () => {
+    let resolvePreference: ((value: { errorReportingEnabled: boolean }) => void) | undefined;
+    const preference = new Promise<{ errorReportingEnabled: boolean }>((resolve) => {
+      resolvePreference = resolve;
+    });
+
+    const configured = configureErrorReportingFromPreferences(
+      {
+        enabled: true,
+        dsn: 'https://public@example.com/1',
+        environment: 'production',
+        release: 'luxury-yacht@v1.2.3',
+      },
+      () => preference
+    );
+
+    expect(sentryMocks.init).not.toHaveBeenCalled();
+    resolvePreference?.({ errorReportingEnabled: true });
+
+    const result = await configured;
+    expect(result.available).toBe(true);
+    expect(result.preferences.errorReportingEnabled).toBe(true);
+    expect(sentryMocks.init).toHaveBeenCalledOnce();
   });
 
   it('stays disabled when no DSN is configured', () => {
@@ -54,6 +115,7 @@ describe('Sentry error reporting', () => {
       environment: 'production',
       release: 'luxury-yacht@v1.2.3',
       attachStacktrace: true,
+      beforeSend: sanitizeFrontendEvent,
       enableLogs: false,
       enableMetrics: false,
       sendClientReports: false,
@@ -92,5 +154,130 @@ describe('Sentry error reporting', () => {
       onRecoverableError: handler,
     });
     expect(sentryMocks.reactErrorHandler).toHaveBeenCalledOnce();
+  });
+
+  it('removes identifying data while retaining sanitized stack and release diagnostics', () => {
+    const hint = {
+      attachments: [{ filename: 'customer-kubeconfig', data: 'secret-value' }],
+    };
+    const event = {
+      type: undefined,
+      message: 'customer@example.com failed in production-cluster',
+      logentry: { message: 'token=secret-value', params: ['customer@example.com'] },
+      level: 'error' as const,
+      platform: 'javascript',
+      release: 'luxury-yacht@v1.2.3',
+      environment: 'production',
+      server_name: 'alice-workstation',
+      transaction: 'production-cluster',
+      tags: {
+        'app.surface': 'frontend',
+        runtime: 'wails-webview',
+        clusterId: 'customer-kubeconfig:production',
+      },
+      request: { url: 'file:///Users/alice/private/index.html?token=secret-value' },
+      user: { email: 'customer@example.com', ip_address: '192.0.2.10' },
+      contexts: { customer: { email: 'customer@example.com' } },
+      extra: { token: 'secret-value' },
+      breadcrumbs: [{ message: 'opened production-cluster' }],
+      modules: { 'private-module': '1.0.0' },
+      fingerprint: ['customer@example.com'],
+      exception: {
+        values: [
+          {
+            type: 'CustomerProductionError',
+            value: 'token=secret-value',
+            mechanism: { type: 'generic', data: { clusterId: 'production-cluster' } },
+            stacktrace: {
+              frames: [
+                {
+                  filename: 'file:///Users/alice/private/assets/index-abc123.js',
+                  abs_path: 'file:///Users/alice/private/assets/index-abc123.js',
+                  function: 'renderCluster',
+                  module: 'app',
+                  lineno: 42,
+                  colno: 7,
+                  context_line: 'const token = "secret-value";',
+                  pre_context: ['customer@example.com'],
+                  post_context: ['private.example.com'],
+                  vars: { token: 'secret-value' },
+                  in_app: true,
+                  debug_id: '11111111-2222-3333-4444-555555555555',
+                },
+              ],
+            },
+          },
+        ],
+      },
+      debug_meta: {
+        images: [
+          {
+            type: 'sourcemap' as const,
+            code_file: 'file:///Users/alice/private/assets/index-abc123.js',
+            debug_id: '11111111-2222-3333-4444-555555555555',
+          },
+        ],
+      },
+    };
+
+    const sanitized = sanitizeFrontendEvent(event, hint);
+
+    expect(sanitized).toBe(event);
+    expect(sanitized).toMatchObject({
+      message: 'Frontend error',
+      level: 'error',
+      platform: 'javascript',
+      release: 'luxury-yacht@v1.2.3',
+      environment: 'production',
+      tags: {
+        'app.surface': 'frontend',
+        runtime: 'wails-webview',
+      },
+      exception: {
+        values: [
+          {
+            type: 'Error',
+            value: 'Frontend error',
+            stacktrace: {
+              frames: [
+                {
+                  filename: 'app:///index-abc123.js',
+                  function: 'renderCluster',
+                  module: 'app',
+                  lineno: 42,
+                  colno: 7,
+                  in_app: true,
+                  debug_id: '11111111-2222-3333-4444-555555555555',
+                },
+              ],
+            },
+          },
+        ],
+      },
+      debug_meta: {
+        images: [
+          {
+            type: 'sourcemap',
+            code_file: 'app:///index-abc123.js',
+            debug_id: '11111111-2222-3333-4444-555555555555',
+          },
+        ],
+      },
+    });
+    expect(hint.attachments).toEqual([]);
+
+    const payload = JSON.stringify(sanitized);
+    for (const identifyingValue of [
+      'customer@example.com',
+      'customer-kubeconfig:production',
+      '192.0.2.10',
+      'private.example.com',
+      '/Users/alice',
+      'secret-value',
+      'CustomerProductionError',
+      'production-cluster',
+    ]) {
+      expect(payload).not.toContain(identifyingValue);
+    }
   });
 });

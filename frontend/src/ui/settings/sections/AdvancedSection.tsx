@@ -28,10 +28,12 @@ import { useAutoRefresh, useBackgroundRefresh } from '@/core/refresh';
 import {
   type AppPreferenceKey,
   commitIntegerPreferenceInput,
+  getErrorReportingEnabled,
   getKubernetesClientBurst,
   getKubernetesClientQPS,
   getPermissionSSRRFetchConcurrency,
   hydrateAppPreferences,
+  setErrorReportingEnabled,
   setKubernetesClientBurst,
   setKubernetesClientQPS,
   setPermissionSSRRFetchConcurrency,
@@ -59,6 +61,9 @@ function AdvancedSection() {
   const [persistenceMode, setPersistenceMode] = useState<GridTablePersistenceMode>(() =>
     getGridTablePersistenceMode()
   );
+  const [errorReportingEnabled, setErrorReportingState] = useState(() =>
+    getErrorReportingEnabled()
+  );
   const [isClearStateConfirmOpen, setIsClearStateConfirmOpen] = useState(false);
   const [isResetViewsConfirmOpen, setIsResetViewsConfirmOpen] = useState(false);
   const [dataManagementOperation, setDataManagementOperation] =
@@ -75,6 +80,7 @@ function AdvancedSection() {
           setKubernetesClientBurstInput(String(prefs.kubernetesClientBurst));
           setPermissionSSRRFetchConcurrencyInput(String(prefs.permissionSSRRFetchConcurrency));
           setPersistenceMode(getGridTablePersistenceMode());
+          setErrorReportingState(prefs.errorReportingEnabled);
         }
       } catch (error) {
         errorHandler.handle(error, { action: 'loadAdvancedSettings' });
@@ -91,6 +97,17 @@ function AdvancedSection() {
     const mode: GridTablePersistenceMode = checked ? 'namespaced' : 'shared';
     setPersistenceMode(mode);
     setGridTablePersistenceMode(mode);
+  };
+
+  const handleErrorReportingToggle = async (enabled: boolean) => {
+    const previous = errorReportingEnabled;
+    setErrorReportingState(enabled);
+    try {
+      await setErrorReportingEnabled(enabled);
+    } catch (error) {
+      setErrorReportingState(previous);
+      errorHandler.handle(error, { action: 'updateErrorReporting' });
+    }
   };
 
   // Commit a raw input string: normalize + persist, then reflect the applied value.
@@ -165,6 +182,7 @@ function AdvancedSection() {
         setKubernetesClientBurstInput(String(prefs.kubernetesClientBurst));
         setPermissionSSRRFetchConcurrencyInput(String(prefs.permissionSSRRFetchConcurrency));
         setPersistenceMode(prefs.gridTablePersistenceMode);
+        setErrorReportingState(prefs.errorReportingEnabled);
         setDataManagementStatus('Settings imported.');
       }
     } catch (error) {
@@ -281,11 +299,23 @@ function AdvancedSection() {
         </div>
       </SettingRow>
 
-      {dataManagementStatus && (
+      <SettingRow
+        title="Error Reporting"
+        help="Sends helpful data when an error occurs that I use to improve the app. It is completely anonymous and cannot be used to identify you. Toggle it off if you do not wish to participate."
+      >
+        <ToggleSwitch
+          id={`${elementIdPrefix}-error-reporting`}
+          checked={errorReportingEnabled}
+          onChange={handleErrorReportingToggle}
+          ariaLabel="Error Reporting"
+        />
+      </SettingRow>
+
+      {dataManagementStatus ? (
         <div className="settings-data-management-status" role="status" aria-live="polite">
           {dataManagementStatus}
         </div>
-      )}
+      ) : null}
 
       <div className="settings-subgroup-label">Refresh</div>
       <hr className="settings-subgroup-divider" />

@@ -126,6 +126,7 @@ export interface AppEvents {
   'settings:short-names': boolean;
   'settings:dim-inactive-namespaces': boolean;
   'settings:exclusive-namespaces': boolean;
+  'settings:error-reporting': boolean;
   'settings:appearance-mode': 'light' | 'dark' | 'system';
   'settings:kubernetes-client-qps': number;
   'settings:default-table-page-size': number;

@@ -15,11 +15,31 @@ type capturedReport struct {
 }
 
 type recordingErrorReporter struct {
-	mu       sync.Mutex
-	messages []capturedReport
+	mu             sync.Mutex
+	messages       []capturedReport
+	enabled        bool
+	enabledChanges []bool
+	setEnabledFn   func(bool)
 }
 
-func (*recordingErrorReporter) Enabled() bool                                   { return true }
+func (r *recordingErrorReporter) Enabled() bool {
+	r.mu.Lock()
+	defer r.mu.Unlock()
+	return r.enabled
+}
+
+func (r *recordingErrorReporter) SetEnabled(enabled bool) error {
+	r.mu.Lock()
+	r.enabled = enabled
+	r.enabledChanges = append(r.enabledChanges, enabled)
+	callback := r.setEnabledFn
+	r.mu.Unlock()
+	if callback != nil {
+		callback(enabled)
+	}
+	return nil
+}
+
 func (*recordingErrorReporter) CaptureException(error, sentryreporting.Context) {}
 func (*recordingErrorReporter) CapturePanic(any, sentryreporting.Context)       {}
 func (*recordingErrorReporter) Shutdown(time.Duration) bool                     { return true }

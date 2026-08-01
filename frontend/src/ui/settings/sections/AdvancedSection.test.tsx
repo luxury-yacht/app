@@ -13,6 +13,7 @@ const backendMocks = vi.hoisted(() => ({
 
 const preferenceMocks = vi.hoisted(() => ({
   hydrateAppPreferences: vi.fn(),
+  setErrorReportingEnabled: vi.fn(),
 }));
 
 const favoritesMocks = vi.hoisted(() => ({
@@ -41,11 +42,13 @@ vi.mock('@/core/settings/appPreferences', () => ({
     return value;
   },
   getIntegerPreferenceMetadata: () => ({ min: 1, max: 10000 }),
+  getErrorReportingEnabled: () => false,
   getKubernetesClientBurst: () => 200,
   getKubernetesClientQPS: () => 100,
   getPermissionSSRRFetchConcurrency: () => 8,
-  hydrateAppPreferences: (...args: unknown[]) =>
-    preferenceMocks.hydrateAppPreferences(...args),
+  hydrateAppPreferences: (...args: unknown[]) => preferenceMocks.hydrateAppPreferences(...args),
+  setErrorReportingEnabled: (...args: unknown[]) =>
+    preferenceMocks.setErrorReportingEnabled(...args),
   setKubernetesClientBurst: vi.fn(),
   setKubernetesClientQPS: vi.fn(),
   setPermissionSSRRFetchConcurrency: vi.fn(),
@@ -100,11 +103,14 @@ describe('AdvancedSection data management', () => {
 
   beforeEach(async () => {
     preferenceMocks.hydrateAppPreferences.mockReset();
+    preferenceMocks.setErrorReportingEnabled.mockReset();
+    preferenceMocks.setErrorReportingEnabled.mockResolvedValue(undefined);
     preferenceMocks.hydrateAppPreferences.mockResolvedValue({
       kubernetesClientQPS: 100,
       kubernetesClientBurst: 200,
       permissionSSRRFetchConcurrency: 8,
       gridTablePersistenceMode: 'shared',
+      errorReportingEnabled: false,
     });
     favoritesMocks.hydrateFavorites.mockReset();
     favoritesMocks.hydrateFavorites.mockResolvedValue([]);
@@ -138,6 +144,30 @@ describe('AdvancedSection data management', () => {
     expect(findButton(container, 'Import Settings')).toBeTruthy();
     expect(findButton(container, 'Export Favorites')).toBeTruthy();
     expect(findButton(container, 'Import Favorites')).toBeTruthy();
+  });
+
+  it('shows the exact Error Reporting explainer and persists the toggle', async () => {
+    const text = container.textContent ?? '';
+    expect(text).toContain('Error Reporting');
+    expect(text).toContain(
+      'Sends helpful data when an error occurs that I use to improve the app. It is completely anonymous and cannot be used to identify you. Toggle it off if you do not wish to participate.'
+    );
+    expect(text.indexOf('Data Management')).toBeLessThan(text.indexOf('Error Reporting'));
+    expect(text.indexOf('Error Reporting')).toBeLessThan(text.indexOf('Refresh'));
+
+    const toggle = requireValue(
+      container.querySelector<HTMLButtonElement>('[role="switch"][aria-label="Error Reporting"]'),
+      'expected Error Reporting toggle'
+    );
+    expect(toggle.getAttribute('aria-checked')).toBe('false');
+
+    await act(async () => {
+      toggle.click();
+      await Promise.resolve();
+    });
+
+    expect(preferenceMocks.setErrorReportingEnabled).toHaveBeenCalledWith(true);
+    expect(toggle.getAttribute('aria-checked')).toBe('true');
   });
 
   it('exports settings and reports success', async () => {

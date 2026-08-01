@@ -18,6 +18,7 @@ import {
   getDefaultObjectPanelPosition,
   getDefaultTablePageSize,
   getDimInactiveNamespaces,
+  getErrorReportingEnabled,
   getExclusiveNamespaces,
   getGridTablePersistenceMode,
   getIntegerPreferenceMetadata,
@@ -59,6 +60,7 @@ import {
   setBackgroundRefreshEnabled,
   setDefaultTablePageSize,
   setDimInactiveNamespaces,
+  setErrorReportingEnabled,
   setExclusiveNamespaces,
   setGridTablePersistenceMode,
   setKubernetesClientBurst,
@@ -125,6 +127,13 @@ const preferenceSchema = (overrides: Record<string, Partial<Record<string, unkno
       defaultValue: true,
       currentValue: true,
       runtimeSideEffect: false,
+    },
+    {
+      key: 'errorReportingEnabled',
+      type: 'boolean',
+      defaultValue: true,
+      currentValue: true,
+      runtimeSideEffect: true,
     },
     {
       key: 'autoRefreshEnabled',
@@ -684,6 +693,24 @@ describe('appPreferences', () => {
     expect(getAutoRefreshEnabled()).toBe(false);
     expect(getBackgroundRefreshEnabled()).toBe(false);
     expect(getGridTablePersistenceMode()).toBe('namespaced');
+  });
+
+  it('hydrates, persists, and emits the error reporting preference', async () => {
+    appMocks.GetAppSettings.mockResolvedValue({ errorReportingEnabled: false });
+    await hydrateAppPreferences({ force: true });
+    expect(getErrorReportingEnabled()).toBe(false);
+
+    const events: boolean[] = [];
+    const unsubscribe = eventBus.on('settings:error-reporting', (enabled) => events.push(enabled));
+
+    await setErrorReportingEnabled(true);
+
+    expect(appMocks.UpdateAppPreferences).toHaveBeenCalledWith({
+      changes: [{ key: 'errorReportingEnabled', value: true }],
+    });
+    expect(getErrorReportingEnabled()).toBe(true);
+    expect(events).toEqual([true]);
+    unsubscribe();
   });
 
   it('normalizes Object Panel layout updates from schema metadata', async () => {
