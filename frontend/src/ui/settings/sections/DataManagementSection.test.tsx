@@ -81,8 +81,20 @@ describe('DataManagementSection', () => {
     expect(container.textContent).toContain('Import Favorites');
     expect(container.textContent).toContain('Error Reporting');
     expect(container.textContent).toContain(
-      'Sends helpful data when an error occurs that I use to improve the app. It is completely anonymous and cannot be used to identify you. Toggle it off if you do not wish to participate.'
+      'Send anonymized data when an error occurs that is used to improve the app. Toggle it off if you do not wish to participate.'
     );
+  });
+
+  it('groups transfer controls under Export and Import and reporting under Telemetry', () => {
+    const subsectionLabels = Array.from(
+      container.querySelectorAll<HTMLElement>('.settings-subgroup-label')
+    ).map((label) => label.textContent);
+    const text = container.textContent ?? '';
+
+    expect(subsectionLabels).toEqual(['Export and Import', 'Data Privacy']);
+    expect(text.indexOf('Export and Import')).toBeLessThan(text.indexOf('Settings'));
+    expect(text.indexOf('Favorites')).toBeLessThan(text.indexOf('Data Privacy'));
+    expect(text.indexOf('Data Privacy')).toBeLessThan(text.indexOf('Error Reporting'));
   });
 
   it('persists the Error Reporting toggle', async () => {

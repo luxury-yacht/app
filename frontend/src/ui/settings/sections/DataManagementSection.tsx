@@ -124,10 +124,10 @@ function DataManagementSection() {
     <div className="settings-panel">
       <h2 className="settings-panel-title">Data Management</h2>
 
-      <SettingRow
-        title="Settings"
-        help="Export or import preferences, themes, and kubeconfig search paths. Saved view state is not included."
-      >
+      <div className="settings-subgroup-label">Export and Import</div>
+      <hr className="settings-subgroup-divider" />
+
+      <SettingRow title="Settings" help="Export or import the settings managed in this panel.">
         <div className="setting-item setting-actions">
           <button
             type="button"
@@ -148,10 +148,7 @@ function DataManagementSection() {
         </div>
       </SettingRow>
 
-      <SettingRow
-        title="Favorites"
-        help="Export your favorites or replace the current favorites library from an export file."
-      >
+      <SettingRow title="Favorites" help="Export or import your saved Favorites.">
         <div className="setting-item setting-actions">
           <button
             type="button"
@@ -172,9 +169,12 @@ function DataManagementSection() {
         </div>
       </SettingRow>
 
+      <div className="settings-subgroup-label">Data Privacy</div>
+      <hr className="settings-subgroup-divider" />
+
       <SettingRow
         title="Error Reporting"
-        help="Sends helpful data when an error occurs that I use to improve the app. It is completely anonymous and cannot be used to identify you. Toggle it off if you do not wish to participate."
+        help="Send anonymized data when an error occurs that is used to improve the app. Toggle it off if you do not wish to participate."
       >
         <ToggleSwitch
           id={`${elementIdPrefix}-error-reporting`}
