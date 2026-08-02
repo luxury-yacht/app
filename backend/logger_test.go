@@ -1,10 +1,12 @@
 package backend
 
 import (
+	"context"
 	"sync"
 	"testing"
 	"time"
 
+	"github.com/getsentry/sentry-go"
 	"github.com/luxury-yacht/app/internal/sentryreporting"
 	"github.com/stretchr/testify/require"
 )
@@ -20,6 +22,24 @@ type recordingErrorReporter struct {
 	enabled        bool
 	enabledChanges []bool
 	setEnabledFn   func(bool)
+}
+
+type loggerSentryTransport struct {
+	event *sentry.Event
+}
+
+func (*loggerSentryTransport) Configure(sentry.ClientOptions) {}
+
+func (t *loggerSentryTransport) SendEvent(event *sentry.Event) {
+	t.event = event
+}
+
+func (*loggerSentryTransport) Flush(time.Duration) bool              { return true }
+func (*loggerSentryTransport) FlushWithContext(context.Context) bool { return true }
+func (*loggerSentryTransport) Close()                                {}
+
+func captureLoggerFailureFromObjectCatalog(logger *Logger) {
+	logger.Error("object catalog failed for private-cluster", "ObjectCatalog", "private-cluster")
 }
 
 func (r *recordingErrorReporter) Enabled() bool {
@@ -44,7 +64,7 @@ func (*recordingErrorReporter) CaptureException(error, sentryreporting.Context) 
 func (*recordingErrorReporter) CapturePanic(any, sentryreporting.Context)       {}
 func (*recordingErrorReporter) Shutdown(time.Duration) bool                     { return true }
 
-func (r *recordingErrorReporter) CaptureMessage(message string, context sentryreporting.Context) {
+func (r *recordingErrorReporter) CaptureLogError(message string, context sentryreporting.Context) {
 	r.mu.Lock()
 	defer r.mu.Unlock()
 	r.messages = append(r.messages, capturedReport{message: message, context: context})
@@ -63,6 +83,23 @@ func TestLoggerReportsOnlyErrorsWithClusterIdentity(t *testing.T) {
 		message: "refresh failed",
 		context: sentryreporting.Context{Source: "Refresh", ClusterID: "cluster-a"},
 	}}, reporter.messages)
+}
+
+func TestLoggerSentryReportIncludesOriginalMessageAndCluster(t *testing.T) {
+	transport := &loggerSentryTransport{}
+	reporter, err := sentryreporting.New(sentryreporting.Config{
+		DSN:       "https://public@example.com/1",
+		Transport: transport,
+	})
+	require.NoError(t, err)
+	logger := NewLogger(10, reporter)
+
+	captureLoggerFailureFromObjectCatalog(logger)
+
+	require.NotNil(t, transport.event)
+	require.Equal(t, "object catalog failed for private-cluster", transport.event.Exception[0].Value)
+	require.Equal(t, "private-cluster", transport.event.Tags["clusterId"])
+	require.Empty(t, transport.event.Fingerprint)
 }
 
 func TestNewAppPassesErrorReporterToApplicationLogger(t *testing.T) {

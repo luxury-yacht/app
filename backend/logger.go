@@ -123,7 +123,7 @@ func (l *Logger) Log(level LogLevel, message string, source ...string) {
 		emit("app-logs:added", AppLogsAddedEvent{Sequence: emittedSequence})
 	}
 	if level == LogLevelError && reporter != nil {
-		reporter.CaptureMessage(entry.Message, sentryreporting.Context{
+		reporter.CaptureLogError(entry.Message, sentryreporting.Context{
 			Source:    entry.Source,
 			ClusterID: entry.ClusterID,
 		})

@@ -14,10 +14,10 @@ type mainRecordingReporter struct {
 	exceptions []error
 }
 
-func (*mainRecordingReporter) Enabled() bool                                  { return true }
-func (*mainRecordingReporter) SetEnabled(bool) error                          { return nil }
-func (*mainRecordingReporter) CaptureMessage(string, sentryreporting.Context) {}
-func (*mainRecordingReporter) Shutdown(time.Duration) bool                    { return true }
+func (*mainRecordingReporter) Enabled() bool                                   { return true }
+func (*mainRecordingReporter) SetEnabled(bool) error                           { return nil }
+func (*mainRecordingReporter) CaptureLogError(string, sentryreporting.Context) {}
+func (*mainRecordingReporter) Shutdown(time.Duration) bool                     { return true }
 
 func (r *mainRecordingReporter) CaptureException(err error, _ sentryreporting.Context) {
 	r.exceptions = append(r.exceptions, err)

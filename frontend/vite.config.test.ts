@@ -76,8 +76,6 @@ describe('Vite configuration', () => {
       project: 'desktop-frontend',
       release: { name: expectedSentryRelease },
       sourcemaps: { filesToDeleteAfterUpload: './dist/**/*.map' },
-      bundleSizeOptimizations: { excludeTracing: true },
-      telemetry: false,
     });
     expect(enabled.define?.__SENTRY_ENABLED__).toBe(JSON.stringify(true));
     expect(enabled.define?.__SENTRY_FRONTEND_DSN__).toBe(

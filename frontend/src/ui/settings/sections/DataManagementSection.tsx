@@ -169,12 +169,12 @@ function DataManagementSection() {
         </div>
       </SettingRow>
 
-      <div className="settings-subgroup-label">Data Privacy</div>
+      <div className="settings-subgroup-label">Telemetry</div>
       <hr className="settings-subgroup-divider" />
 
       <SettingRow
         title="Error Reporting"
-        help="Send anonymized data when an error occurs that is used to improve the app. Toggle it off if you do not wish to participate."
+        help="Sends errors, release health, and diagnostic data to Sentry that I use to improve the app. Reports may include cluster and resource names, request details, device information, user information, and IP addresses. Toggle it off if you do not wish to participate."
       >
         <ToggleSwitch
           id={`${elementIdPrefix}-error-reporting`}

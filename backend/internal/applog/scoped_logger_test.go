@@ -55,3 +55,23 @@ func TestClusterScopedPreservesExplicitClusterMetadata(t *testing.T) {
 
 	require.Equal(t, []string{"Refresh", "cluster-b", "Bravo"}, base.source)
 }
+
+func TestClusterScopedReturnsBaseWithoutClusterMetadata(t *testing.T) {
+	base := &recordingLogger{}
+
+	require.Same(t, base, ClusterScoped(base, " ", " "))
+	require.Nil(t, ClusterScoped(nil, "cluster-a", "Alpha"))
+}
+
+func TestClusterScopedForwardsDebugAndError(t *testing.T) {
+	base := &recordingLogger{}
+	logger := ClusterScoped(base, "cluster-a", "Alpha")
+
+	logger.Debug("trace")
+	require.Equal(t, "debug", base.method)
+	require.Equal(t, []string{"", "cluster-a", "Alpha"}, base.source)
+
+	logger.Error("boom", "Metrics", "cluster-b")
+	require.Equal(t, "error", base.method)
+	require.Equal(t, []string{"Metrics", "cluster-b", "Alpha"}, base.source)
+}

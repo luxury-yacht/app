@@ -308,6 +308,7 @@ func newMetricsServices(cfg Config, gate *permissionGate, recorder *telemetry.Re
 
 func newEnabledMetricsServices(cfg Config, recorder *telemetry.Recorder) (refresh.MetricsPoller, metrics.Provider) {
 	poller := metrics.NewPoller(cfg.MetricsClient, cfg.RestConfig, cfg.MetricsInterval, recorder)
+	poller.SetLogger(applog.ClusterScoped(cfg.Logger, cfg.ClusterID, cfg.ClusterName))
 	poller.SetAllowedNamespaces(cfg.AllowedNamespaces)
 	demandPoller := metrics.NewDemandPoller(poller, poller, cfg.MetricsInterval*3)
 	return demandPoller, demandPoller

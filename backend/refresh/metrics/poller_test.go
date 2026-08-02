@@ -3,6 +3,7 @@ package metrics
 import (
 	"context"
 	"errors"
+	"sync"
 	"testing"
 	"time"
 
@@ -10,12 +11,63 @@ import (
 	corev1 "k8s.io/api/core/v1"
 	"k8s.io/apimachinery/pkg/api/resource"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
+	"k8s.io/apimachinery/pkg/runtime"
+	k8stesting "k8s.io/client-go/testing"
 	"k8s.io/client-go/util/flowcontrol"
 	metricsv1beta1 "k8s.io/metrics/pkg/apis/metrics/v1beta1"
 	metricsclient "k8s.io/metrics/pkg/client/clientset/versioned"
+	metricsfake "k8s.io/metrics/pkg/client/clientset/versioned/fake"
 
 	"github.com/luxury-yacht/app/backend/refresh/telemetry"
 )
+
+type recordedMetricsLog struct {
+	level   string
+	message string
+	source  []string
+}
+
+type recordingMetricsLogger struct {
+	mu      sync.Mutex
+	entries []recordedMetricsLog
+	written chan struct{}
+}
+
+func newRecordingMetricsLogger() *recordingMetricsLogger {
+	return &recordingMetricsLogger{written: make(chan struct{}, 16)}
+}
+
+func (l *recordingMetricsLogger) append(level, message string, source ...string) {
+	l.mu.Lock()
+	l.entries = append(l.entries, recordedMetricsLog{level: level, message: message, source: append([]string(nil), source...)})
+	l.mu.Unlock()
+	select {
+	case l.written <- struct{}{}:
+	default:
+	}
+}
+
+func (l *recordingMetricsLogger) Debug(message string, source ...string) {
+	l.append("debug", message, source...)
+}
+
+func (l *recordingMetricsLogger) Info(message string, source ...string) {
+	l.append("info", message, source...)
+}
+
+func (l *recordingMetricsLogger) Warn(message string, source ...string) {
+	l.append("warn", message, source...)
+}
+
+func (l *recordingMetricsLogger) Error(message string, source ...string) {
+	l.append("error", message, source...)
+}
+
+func (l *recordingMetricsLogger) snapshot() []recordedMetricsLog {
+	l.mu.Lock()
+	defer l.mu.Unlock()
+	return append([]recordedMetricsLog(nil), l.entries...)
+}
 
 func TestPollerRefreshSuccess(t *testing.T) {
 	t.Helper()
@@ -56,10 +108,10 @@ func TestPollerRefreshSuccess(t *testing.T) {
 	poller.maxBackoff = time.Millisecond
 	poller.jitterFactor = 0
 
-	poller.nodeLister = func(context.Context, *metricsclient.Clientset) (*metricsv1beta1.NodeMetricsList, error) {
+	poller.nodeLister = func(context.Context, metricsclient.Interface) (*metricsv1beta1.NodeMetricsList, error) {
 		return nodeList, nil
 	}
-	poller.podLister = func(context.Context, *metricsclient.Clientset) (*metricsv1beta1.PodMetricsList, error) {
+	poller.podLister = func(context.Context, metricsclient.Interface) (*metricsv1beta1.PodMetricsList, error) {
 		return podList, nil
 	}
 
@@ -105,10 +157,10 @@ func TestPollerNotifiesObserverAfterSuccessfulCollection(t *testing.T) {
 	poller.maxRetry = 1
 	poller.maxBackoff = time.Millisecond
 	poller.jitterFactor = 0
-	poller.nodeLister = func(context.Context, *metricsclient.Clientset) (*metricsv1beta1.NodeMetricsList, error) {
+	poller.nodeLister = func(context.Context, metricsclient.Interface) (*metricsv1beta1.NodeMetricsList, error) {
 		return nodeList, nil
 	}
-	poller.podLister = func(context.Context, *metricsclient.Clientset) (*metricsv1beta1.PodMetricsList, error) {
+	poller.podLister = func(context.Context, metricsclient.Interface) (*metricsv1beta1.PodMetricsList, error) {
 		return podList, nil
 	}
 
@@ -123,12 +175,129 @@ func TestPollerNotifiesObserverAfterSuccessfulCollection(t *testing.T) {
 	require.Equal(t, uint64(1), notified[0].SuccessCount)
 
 	// A failing collection advances failure metadata and notifies.
-	poller.podLister = func(context.Context, *metricsclient.Clientset) (*metricsv1beta1.PodMetricsList, error) {
+	poller.podLister = func(context.Context, metricsclient.Interface) (*metricsv1beta1.PodMetricsList, error) {
 		return nil, errors.New("pods down")
 	}
 	require.Error(t, poller.refresh(ctx))
 	require.Len(t, notified, 2)
 	require.Equal(t, uint64(1), notified[1].FailureCount)
+}
+
+func TestPollerRefreshCancellationDoesNotRecordFailure(t *testing.T) {
+	ctx, cancel := context.WithCancel(context.Background())
+	poller := NewPoller(nil, nil, time.Second, telemetry.NewRecorder())
+	poller.client = &metricsclient.Clientset{}
+	poller.rateLimiter = flowcontrol.NewFakeAlwaysRateLimiter()
+	poller.nodeLister = func(context.Context, metricsclient.Interface) (*metricsv1beta1.NodeMetricsList, error) {
+		cancel()
+		return nil, context.Canceled
+	}
+
+	var notifications int
+	poller.SetCollectionObserver(func(Metadata) {
+		notifications++
+	})
+
+	err := poller.refresh(ctx)
+
+	require.ErrorIs(t, err, context.Canceled)
+	require.Equal(t, Metadata{}, poller.Metadata())
+	require.Zero(t, notifications)
+}
+
+func TestPollerStartReportsTerminalFailureOnce(t *testing.T) {
+	logger := newRecordingMetricsLogger()
+	poller := NewPoller(nil, nil, time.Hour, telemetry.NewRecorder())
+	poller.SetLogger(logger)
+	poller.client = &metricsclient.Clientset{}
+	poller.rateLimiter = flowcontrol.NewFakeAlwaysRateLimiter()
+	poller.maxRetry = 1
+	poller.nodeLister = func(context.Context, metricsclient.Interface) (*metricsv1beta1.NodeMetricsList, error) {
+		return nil, errors.New("metrics server unavailable")
+	}
+
+	ctx, cancel := context.WithCancel(context.Background())
+	stopped := make(chan error, 1)
+	go func() {
+		stopped <- poller.Start(ctx)
+	}()
+
+	deadline := time.After(time.Second)
+	for {
+		select {
+		case <-logger.written:
+			var loggedFailure bool
+			for _, entry := range logger.snapshot() {
+				loggedFailure = loggedFailure || entry.level == "error"
+			}
+			if loggedFailure {
+				goto failureLogged
+			}
+		case <-deadline:
+			t.Fatal("expected the terminal metrics failure to be logged")
+		}
+	}
+
+failureLogged:
+	cancel()
+	select {
+	case err := <-stopped:
+		require.ErrorIs(t, err, context.Canceled)
+	case <-time.After(time.Second):
+		t.Fatal("poller did not stop after cancellation")
+	}
+
+	var failures []recordedMetricsLog
+	for _, entry := range logger.snapshot() {
+		if entry.level == "error" {
+			failures = append(failures, entry)
+		}
+	}
+	require.Equal(t, []recordedMetricsLog{{
+		level:   "error",
+		message: "metrics poll failed (nodes.metrics.k8s.io): metrics server unavailable (failures=1)",
+		source:  []string{"Metrics"},
+	}}, failures)
+}
+
+func TestNodeMetricsRetryDoesNotLogCancellation(t *testing.T) {
+	logger := newRecordingMetricsLogger()
+	poller := NewPoller(nil, nil, time.Second, telemetry.NewRecorder())
+	poller.SetLogger(logger)
+	poller.maxRetry = 5
+	poller.maxBackoff = time.Millisecond
+	poller.jitterFactor = 0
+
+	ctx, cancel := context.WithCancel(context.Background())
+	client := metricsfake.NewSimpleClientset()
+	client.PrependReactor("list", "nodes", func(k8stesting.Action) (bool, runtime.Object, error) {
+		cancel()
+		return true, nil, errors.New("client rate limiter Wait returned an error: context canceled")
+	})
+
+	_, err := poller.listNodeMetricsWithRetry(ctx, client)
+
+	require.ErrorIs(t, err, context.Canceled)
+	require.Empty(t, logger.snapshot())
+}
+
+func TestPodMetricsRetryDoesNotLogCancellation(t *testing.T) {
+	logger := newRecordingMetricsLogger()
+	poller := NewPoller(nil, nil, time.Second, telemetry.NewRecorder())
+	poller.SetLogger(logger)
+	poller.maxRetry = 5
+
+	ctx, cancel := context.WithCancel(context.Background())
+	client := metricsfake.NewSimpleClientset()
+	client.PrependReactor("list", "pods", func(k8stesting.Action) (bool, runtime.Object, error) {
+		cancel()
+		return true, nil, errors.New("client rate limiter Wait returned an error: context canceled")
+	})
+
+	_, err := poller.listPodMetricsInNamespaceWithRetry(ctx, client, "default")
+
+	require.ErrorIs(t, err, context.Canceled)
+	require.Empty(t, logger.snapshot())
 }
 
 // The demand wrapper must pass the observer through to the inner poller so the
@@ -153,10 +322,10 @@ func TestPollerSetIntervalRetimesRunningLoop(t *testing.T) {
 	poller.maxRetry = 1
 	poller.maxBackoff = time.Millisecond
 	poller.jitterFactor = 0
-	poller.nodeLister = func(context.Context, *metricsclient.Clientset) (*metricsv1beta1.NodeMetricsList, error) {
+	poller.nodeLister = func(context.Context, metricsclient.Interface) (*metricsv1beta1.NodeMetricsList, error) {
 		return &metricsv1beta1.NodeMetricsList{}, nil
 	}
-	poller.podLister = func(context.Context, *metricsclient.Clientset) (*metricsv1beta1.PodMetricsList, error) {
+	poller.podLister = func(context.Context, metricsclient.Interface) (*metricsv1beta1.PodMetricsList, error) {
 		return &metricsv1beta1.PodMetricsList{}, nil
 	}
 
@@ -224,10 +393,10 @@ func TestPollerRefreshHandlesPodMetricsFailure(t *testing.T) {
 	poller.maxBackoff = time.Millisecond
 	poller.jitterFactor = 0
 
-	poller.nodeLister = func(context.Context, *metricsclient.Clientset) (*metricsv1beta1.NodeMetricsList, error) {
+	poller.nodeLister = func(context.Context, metricsclient.Interface) (*metricsv1beta1.NodeMetricsList, error) {
 		return nodeList, nil
 	}
-	poller.podLister = func(context.Context, *metricsclient.Clientset) (*metricsv1beta1.PodMetricsList, error) {
+	poller.podLister = func(context.Context, metricsclient.Interface) (*metricsv1beta1.PodMetricsList, error) {
 		return nil, errors.New("pods down")
 	}
 
@@ -264,10 +433,10 @@ func TestPollerRefreshHandlesUnavailableMetricsAPI(t *testing.T) {
 	poller.maxBackoff = time.Millisecond
 	poller.jitterFactor = 0
 
-	poller.nodeLister = func(context.Context, *metricsclient.Clientset) (*metricsv1beta1.NodeMetricsList, error) {
+	poller.nodeLister = func(context.Context, metricsclient.Interface) (*metricsv1beta1.NodeMetricsList, error) {
 		return nil, errMetricsAPIUnavailable
 	}
-	poller.podLister = func(context.Context, *metricsclient.Clientset) (*metricsv1beta1.PodMetricsList, error) {
+	poller.podLister = func(context.Context, metricsclient.Interface) (*metricsv1beta1.PodMetricsList, error) {
 		return &metricsv1beta1.PodMetricsList{}, nil
 	}
 
@@ -342,10 +511,10 @@ func TestPollerRefreshCapturesSampleTimestamps(t *testing.T) {
 	poller.rateLimiter = flowcontrol.NewFakeAlwaysRateLimiter()
 	poller.maxRetry = 1
 	poller.jitterFactor = 0
-	poller.nodeLister = func(context.Context, *metricsclient.Clientset) (*metricsv1beta1.NodeMetricsList, error) {
+	poller.nodeLister = func(context.Context, metricsclient.Interface) (*metricsv1beta1.NodeMetricsList, error) {
 		return nodeList, nil
 	}
-	poller.podLister = func(context.Context, *metricsclient.Clientset) (*metricsv1beta1.PodMetricsList, error) {
+	poller.podLister = func(context.Context, metricsclient.Interface) (*metricsv1beta1.PodMetricsList, error) {
 		return podList, nil
 	}
 
@@ -415,7 +584,7 @@ func TestScopedPollerListsPodMetricsPerNamespace(t *testing.T) {
 	poller.SetAllowedNamespaces([]string{"prod", "dev"})
 
 	var listed []string
-	poller.podNamespaceLister = func(_ context.Context, _ *metricsclient.Clientset, namespace string) (*metricsv1beta1.PodMetricsList, error) {
+	poller.podNamespaceLister = func(_ context.Context, _ metricsclient.Interface, namespace string) (*metricsv1beta1.PodMetricsList, error) {
 		listed = append(listed, namespace)
 		if namespace == "dev" {
 			return nil, errors.New("forbidden")
@@ -441,7 +610,7 @@ func TestUnscopedPollerKeepsClusterWidePodList(t *testing.T) {
 	poller := NewPoller(nil, nil, time.Hour, nil)
 
 	var namespaces []string
-	poller.podNamespaceLister = func(_ context.Context, _ *metricsclient.Clientset, namespace string) (*metricsv1beta1.PodMetricsList, error) {
+	poller.podNamespaceLister = func(_ context.Context, _ metricsclient.Interface, namespace string) (*metricsv1beta1.PodMetricsList, error) {
 		namespaces = append(namespaces, namespace)
 		return &metricsv1beta1.PodMetricsList{}, nil
 	}

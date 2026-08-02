@@ -13,6 +13,7 @@ const (
 	KubernetesClient    = "KubernetesClient"
 	KubeconfigManager   = "KubeconfigManager"
 	KubeconfigWatcher   = "KubeconfigWatcher"
+	Metrics             = "Metrics"
 	ObjectCatalog       = "ObjectCatalog"
 	PortForward         = "PortForward"
 	Refresh             = "Refresh"

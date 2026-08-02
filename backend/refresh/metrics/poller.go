@@ -4,7 +4,6 @@ import (
 	"context"
 	"errors"
 	"fmt"
-	"log"
 	"math/rand"
 	"sync"
 	"time"
@@ -17,7 +16,9 @@ import (
 	metricsv1beta1 "k8s.io/metrics/pkg/apis/metrics/v1beta1"
 	metricsclient "k8s.io/metrics/pkg/client/clientset/versioned"
 
+	"github.com/luxury-yacht/app/backend/internal/applog"
 	"github.com/luxury-yacht/app/backend/internal/config"
+	"github.com/luxury-yacht/app/backend/internal/logsources"
 	"github.com/luxury-yacht/app/backend/refresh/telemetry"
 )
 
@@ -60,6 +61,15 @@ var (
 	jitterRand               = rand.New(rand.NewSource(time.Now().UnixNano()))
 	jitterRandMu             sync.Mutex
 )
+
+type retryExhaustedError struct {
+	cause   error
+	attempt int
+	limit   int
+}
+
+func (e *retryExhaustedError) Error() string { return e.cause.Error() }
+func (e *retryExhaustedError) Unwrap() error { return e.cause }
 
 // Provider exposes read-only access to the latest metrics snapshot.
 type Provider interface {
@@ -107,10 +117,11 @@ type Poller struct {
 	maxRetry     int
 	jitterFactor float64
 	telemetry    *telemetry.Recorder
+	logger       applog.Logger
 
 	// clientMu protects client initialization to prevent race conditions
 	clientMu sync.Mutex
-	client   *metricsclient.Clientset
+	client   metricsclient.Interface
 
 	mu                 sync.RWMutex
 	nodeUsage          map[string]NodeUsage
@@ -125,11 +136,11 @@ type Poller struct {
 	// so SetInterval can retime a live loop.
 	ticker *time.Ticker
 
-	nodeLister func(context.Context, *metricsclient.Clientset) (*metricsv1beta1.NodeMetricsList, error)
-	podLister  func(context.Context, *metricsclient.Clientset) (*metricsv1beta1.PodMetricsList, error)
+	nodeLister func(context.Context, metricsclient.Interface) (*metricsv1beta1.NodeMetricsList, error)
+	podLister  func(context.Context, metricsclient.Interface) (*metricsv1beta1.PodMetricsList, error)
 	// podNamespaceLister lists one namespace's pod metrics ("" = cluster-wide);
 	// podLister fans it over the configured scope (injectable in tests).
-	podNamespaceLister func(context.Context, *metricsclient.Clientset, string) (*metricsv1beta1.PodMetricsList, error)
+	podNamespaceLister func(context.Context, metricsclient.Interface, string) (*metricsv1beta1.PodMetricsList, error)
 	// allowedNamespaces is the cluster's namespace scope
 	// (docs/plans/namespace-scope.md): non-empty makes the pod-metrics list
 	// run per configured namespace, with one failing namespace skipped
@@ -159,6 +170,23 @@ func (p *Poller) SetInterval(interval time.Duration) {
 	}
 }
 
+// SetLogger routes poller diagnostics through the application logger so
+// severity and cluster scope remain explicit at the reporting boundary.
+func (p *Poller) SetLogger(logger applog.Logger) {
+	if logger == nil {
+		logger = applog.Noop
+	}
+	p.mu.Lock()
+	p.logger = logger
+	p.mu.Unlock()
+}
+
+func (p *Poller) applicationLogger() applog.Logger {
+	p.mu.RLock()
+	defer p.mu.RUnlock()
+	return p.logger
+}
+
 // SetCollectionObserver registers a callback invoked with fresh Metadata after
 // each collection attempt. One observer; last write wins.
 func (p *Poller) SetCollectionObserver(observer func(Metadata)) {
@@ -180,7 +208,7 @@ func (p *Poller) notifyCollectionObserver() {
 }
 
 // NewPoller creates a Poller with optional pre-initialised metrics client.
-func NewPoller(client *metricsclient.Clientset, restConfig *rest.Config, interval time.Duration, recorder *telemetry.Recorder) *Poller {
+func NewPoller(client metricsclient.Interface, restConfig *rest.Config, interval time.Duration, recorder *telemetry.Recorder) *Poller {
 	if interval <= 0 {
 		interval = config.RefreshMetricsInterval
 	}
@@ -195,6 +223,7 @@ func NewPoller(client *metricsclient.Clientset, restConfig *rest.Config, interva
 		nodeUsage:    make(map[string]NodeUsage),
 		podUsage:     make(map[string]PodUsage),
 		telemetry:    recorder,
+		logger:       applog.Noop,
 	}
 	p.nodeLister = p.listNodeMetricsWithRetry
 	p.podNamespaceLister = p.listPodMetricsInNamespaceWithRetry
@@ -217,7 +246,7 @@ func (p *Poller) SetAllowedNamespaces(namespaces []string) {
 // unscoped path is the same loop with a single cluster-wide "" entry. It
 // fails only when EVERY namespace fails, so the poller's failure accounting
 // still fires when nothing at all is readable.
-func (p *Poller) listPodMetricsScoped(ctx context.Context, client *metricsclient.Clientset) (*metricsv1beta1.PodMetricsList, error) {
+func (p *Poller) listPodMetricsScoped(ctx context.Context, client metricsclient.Interface) (*metricsv1beta1.PodMetricsList, error) {
 	namespaces := []string{""}
 	if len(p.allowedNamespaces) > 0 {
 		namespaces = p.allowedNamespaces
@@ -307,28 +336,24 @@ func (p *Poller) Start(ctx context.Context) error {
 	p.recordActive(true)
 	defer p.recordActive(false)
 
-	log.Printf("[refresh:metrics] poller started, interval=%s", interval)
+	applog.Info(p.applicationLogger(), fmt.Sprintf("metrics poller started, interval=%s", interval), logsources.Metrics)
 
-	if err := p.refresh(ctx); err != nil {
-		log.Printf("[refresh:metrics] initial refresh failed: %v", err)
-	}
+	_ = p.refresh(ctx)
 
 	for {
 		select {
 		case <-ctx.Done():
-			log.Printf("[refresh:metrics] poller stopped: %v", ctx.Err())
+			applog.Info(p.applicationLogger(), fmt.Sprintf("metrics poller stopped: %v", ctx.Err()), logsources.Metrics)
 			return ctx.Err()
 		case <-ticker.C:
-			if err := p.refresh(ctx); err != nil {
-				log.Printf("[refresh:metrics] refresh failed: %v", err)
-			}
+			_ = p.refresh(ctx)
 		}
 	}
 }
 
 // Stop relies on context cancellation; provided for interface parity.
 func (p *Poller) Stop(ctx context.Context) error {
-	log.Printf("[refresh:metrics] stop requested")
+	applog.Info(p.applicationLogger(), "metrics poller stop requested", logsources.Metrics)
 	return nil
 }
 
@@ -347,6 +372,9 @@ func (p *Poller) refresh(ctx context.Context) error {
 
 	nodeResp, err := p.nodeLister(ctx, client)
 	if err != nil {
+		if errors.Is(err, context.Canceled) || errors.Is(ctx.Err(), context.Canceled) {
+			return context.Canceled
+		}
 		p.recordFailure(err, "nodes.metrics.k8s.io", time.Since(start))
 		return err
 	}
@@ -355,6 +383,9 @@ func (p *Poller) refresh(ctx context.Context) error {
 
 	podResp, err := p.podLister(ctx, client)
 	if err != nil {
+		if errors.Is(err, context.Canceled) || errors.Is(ctx.Err(), context.Canceled) {
+			return context.Canceled
+		}
 		p.mu.Lock()
 		p.nodeUsage = nodeUsage
 		p.mu.Unlock()
@@ -426,7 +457,7 @@ func addContainerUsage(usage *PodUsage, resources corev1.ResourceList) {
 	}
 }
 
-func (p *Poller) listNodeMetricsWithRetry(ctx context.Context, client *metricsclient.Clientset) (*metricsv1beta1.NodeMetricsList, error) {
+func (p *Poller) listNodeMetricsWithRetry(ctx context.Context, client metricsclient.Interface) (*metricsv1beta1.NodeMetricsList, error) {
 	var attempt int
 	backoff := config.MetricsInitialBackoff
 
@@ -439,6 +470,9 @@ func (p *Poller) listNodeMetricsWithRetry(ctx context.Context, client *metricscl
 		if err == nil {
 			return resp, nil
 		}
+		if errors.Is(err, context.Canceled) || errors.Is(ctx.Err(), context.Canceled) {
+			return nil, context.Canceled
+		}
 
 		if apierrors.IsNotFound(err) {
 			return nil, errMetricsAPIUnavailable
@@ -446,13 +480,13 @@ func (p *Poller) listNodeMetricsWithRetry(ctx context.Context, client *metricscl
 
 		attempt++
 		if attempt >= p.maxRetry {
-			return nil, err
+			return nil, &retryExhaustedError{cause: err, attempt: attempt, limit: p.maxRetry}
 		}
 
-		log.Printf("[refresh:metrics] list failed (attempt %d/%d): %v", attempt, p.maxRetry, err)
+		applog.Warn(p.applicationLogger(), fmt.Sprintf("node metrics list failed (attempt %d/%d): %v", attempt, p.maxRetry, err), logsources.Metrics)
 
 		sleep := jitterDuration(backoff, p.jitterFactor)
-		log.Printf("[refresh:metrics] retrying in %s", sleep)
+		applog.Info(p.applicationLogger(), fmt.Sprintf("retrying node metrics in %s", sleep), logsources.Metrics)
 
 		select {
 		case <-time.After(sleep):
@@ -467,7 +501,7 @@ func (p *Poller) listNodeMetricsWithRetry(ctx context.Context, client *metricscl
 	}
 }
 
-func (p *Poller) listPodMetricsInNamespaceWithRetry(ctx context.Context, client *metricsclient.Clientset, namespace string) (*metricsv1beta1.PodMetricsList, error) {
+func (p *Poller) listPodMetricsInNamespaceWithRetry(ctx context.Context, client metricsclient.Interface, namespace string) (*metricsv1beta1.PodMetricsList, error) {
 	var attempt int
 	backoff := config.MetricsInitialBackoff
 
@@ -480,6 +514,9 @@ func (p *Poller) listPodMetricsInNamespaceWithRetry(ctx context.Context, client 
 		if err == nil {
 			return resp, nil
 		}
+		if errors.Is(err, context.Canceled) || errors.Is(ctx.Err(), context.Canceled) {
+			return nil, context.Canceled
+		}
 
 		if apierrors.IsNotFound(err) {
 			return nil, errMetricsAPIUnavailable
@@ -487,13 +524,13 @@ func (p *Poller) listPodMetricsInNamespaceWithRetry(ctx context.Context, client 
 
 		attempt++
 		if attempt >= p.maxRetry {
-			return nil, err
+			return nil, &retryExhaustedError{cause: err, attempt: attempt, limit: p.maxRetry}
 		}
 
-		log.Printf("[refresh:metrics] pod list failed (attempt %d/%d): %v", attempt, p.maxRetry, err)
+		applog.Warn(p.applicationLogger(), fmt.Sprintf("pod metrics list failed (attempt %d/%d): %v", attempt, p.maxRetry, err), logsources.Metrics)
 
 		sleep := jitterDuration(backoff, p.jitterFactor)
-		log.Printf("[refresh:metrics] retrying pod metrics in %s", sleep)
+		applog.Info(p.applicationLogger(), fmt.Sprintf("retrying pod metrics in %s", sleep), logsources.Metrics)
 
 		select {
 		case <-time.After(sleep):
@@ -522,7 +559,11 @@ func (p *Poller) recordFailure(err error, api string, duration time.Duration) {
 	failureCount := p.failureCount
 	p.mu.Unlock()
 
-	log.Printf("[refresh:metrics] poll failed (%s): %v (failures=%d)", api, err, failureCount)
+	applog.Error(
+		p.applicationLogger(),
+		fmt.Sprintf("metrics poll failed (%s): %v (failures=%d)", api, err, failureCount),
+		logsources.Metrics,
+	)
 	p.recordMetricsTelemetry(duration, time.Time{}, err, consecutive, false)
 	p.notifyCollectionObserver()
 }
@@ -553,7 +594,7 @@ func jitterDuration(base time.Duration, factor float64) time.Duration {
 	return time.Duration(float64(base) * multiplier)
 }
 
-func (p *Poller) ensureClient() (*metricsclient.Clientset, error) {
+func (p *Poller) ensureClient() (metricsclient.Interface, error) {
 	p.clientMu.Lock()
 	defer p.clientMu.Unlock()
 

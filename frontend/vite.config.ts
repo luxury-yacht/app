@@ -43,8 +43,6 @@ export function createViteConfig(
         project,
         release: { name: sentryRelease },
         sourcemaps: { filesToDeleteAfterUpload: './dist/**/*.map' },
-        bundleSizeOptimizations: { excludeTracing: true },
-        telemetry: false,
       })
     : [];
 
