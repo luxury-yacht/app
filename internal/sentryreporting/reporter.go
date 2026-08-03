@@ -2,10 +2,12 @@ package sentryreporting
 
 import (
 	"errors"
+	"fmt"
 	"os"
 	"strconv"
 	"strings"
 	"sync"
+	"sync/atomic"
 	"time"
 
 	"github.com/getsentry/sentry-go"
@@ -26,16 +28,18 @@ type Context struct {
 	ClusterID   string
 	ClusterName string
 	Operation   string
+	OperationID string
 }
 
 // Breadcrumb records diagnostic activity that should precede a later error
 // event without creating an issue of its own.
 type Breadcrumb struct {
-	Category  string
-	Message   string
-	Level     string
-	Data      map[string]any
-	Timestamp time.Time
+	Category    string
+	Message     string
+	Level       string
+	Data        map[string]any
+	OperationID string
+	Timestamp   time.Time
 }
 
 // Reporter sends backend failures to an error-reporting service.
@@ -251,6 +255,7 @@ type sentryReporter struct {
 	config      Config
 	hub         *sentry.Hub
 	breadcrumbs []Breadcrumb
+	operationID atomic.Uint64
 }
 
 const maxReporterBreadcrumbs = 100
@@ -362,6 +367,14 @@ func (r *sentryReporter) AddBreadcrumb(breadcrumb Breadcrumb) {
 	if breadcrumb.Timestamp.IsZero() {
 		breadcrumb.Timestamp = time.Now()
 	}
+	if breadcrumb.OperationID != "" {
+		data := make(map[string]any, len(breadcrumb.Data)+1)
+		for key, value := range breadcrumb.Data {
+			data[key] = value
+		}
+		data["operationId"] = breadcrumb.OperationID
+		breadcrumb.Data = data
+	}
 	r.breadcrumbs = append(r.breadcrumbs, breadcrumb)
 	if len(r.breadcrumbs) > maxReporterBreadcrumbs {
 		start := len(r.breadcrumbs) - maxReporterBreadcrumbs
@@ -386,6 +399,9 @@ func (r *sentryReporter) Shutdown(timeout time.Duration) bool {
 }
 
 func (r *sentryReporter) withHub(context Context, capture func(*sentry.Hub)) {
+	if context.OperationID == "" {
+		context.OperationID = fmt.Sprintf("backend-report-%d", r.operationID.Add(1))
+	}
 	r.mu.RLock()
 	defer r.mu.RUnlock()
 	if r.hub == nil {
@@ -393,6 +409,13 @@ func (r *sentryReporter) withHub(context Context, capture func(*sentry.Hub)) {
 	}
 	hub := r.hub.Clone()
 	for _, breadcrumb := range r.breadcrumbs {
+		if context.OperationID != "" {
+			if breadcrumb.OperationID != context.OperationID {
+				continue
+			}
+		} else if breadcrumb.OperationID != "" {
+			continue
+		}
 		breadcrumbClusterID, _ := breadcrumb.Data["clusterId"].(string)
 		if breadcrumbClusterID != "" && breadcrumbClusterID != context.ClusterID {
 			continue
@@ -415,8 +438,18 @@ func (r *sentryReporter) withHub(context Context, capture func(*sentry.Hub)) {
 		if context.ClusterName != "" {
 			scope.SetTag("clusterName", context.ClusterName)
 		}
-		if context.Operation != "" {
-			scope.SetContext("error", sentry.Context{"operation": context.Operation})
+		if context.OperationID != "" {
+			scope.SetTag("operation.id", context.OperationID)
+		}
+		if context.Operation != "" || context.OperationID != "" {
+			errorContext := sentry.Context{}
+			if context.Operation != "" {
+				errorContext["operation"] = context.Operation
+			}
+			if context.OperationID != "" {
+				errorContext["operationId"] = context.OperationID
+			}
+			scope.SetContext("error", errorContext)
 		}
 	})
 	capture(hub)

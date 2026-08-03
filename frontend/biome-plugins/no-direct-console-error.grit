@@ -1,0 +1,13 @@
+engine biome(1.0)
+language js(typescript, jsx)
+
+// Operational failures must cross the shared reporting boundary. That keeps
+// the original exception available to Sentry instead of flattening it into a
+// console message that no centralized reporter can observe.
+`console.error($...)` as $call where {
+  register_diagnostic(
+    span = $call,
+    message = "Route operational failures through errorHandler instead of console.error.",
+    severity = "error"
+  )
+}

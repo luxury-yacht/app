@@ -60,7 +60,7 @@ func (t *AuthAwareTransport) RoundTrip(req *http.Request) (*http.Response, error
 		// before an HTTP request is even made, returning an error rather than
 		// an HTTP 401 response.
 		if d := credentialerrors.Classify(err, credentialerrors.Context{}); d.IsAuth() {
-			t.manager.ReportFailureDiagnostic(NewFailureDiagnostic(err.Error(), d))
+			t.manager.ReportFailureDiagnostic(NewFailureDiagnostic(err, d))
 			return nil, &AuthInvalidError{
 				Reason: err.Error(),
 				State:  StateInvalid,

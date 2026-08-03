@@ -6,6 +6,8 @@ import (
 	"fmt"
 	"sync"
 	"time"
+
+	"github.com/luxury-yacht/app/backend/internal/applog"
 )
 
 // InMemoryQueue is a simple manual refresh queue implementation.
@@ -30,12 +32,13 @@ func (q *InMemoryQueue) Enqueue(ctx context.Context, domain, scope, reason strin
 	}
 
 	job := &ManualRefreshJob{
-		ID:       generateJobID(),
-		Domain:   domain,
-		Scope:    scope,
-		Reason:   reason,
-		State:    JobStateQueued,
-		QueuedAt: time.Now().UnixMilli(),
+		ID:          generateJobID(),
+		Domain:      domain,
+		Scope:       scope,
+		Reason:      reason,
+		OperationID: applog.OperationIDFromContext(ctx),
+		State:       JobStateQueued,
+		QueuedAt:    time.Now().UnixMilli(),
 	}
 
 	q.mu.Lock()

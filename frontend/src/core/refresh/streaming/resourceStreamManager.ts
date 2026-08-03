@@ -14,6 +14,7 @@ import {
   logAppLogsDebug,
   logAppLogsInfo,
 } from '@/core/logging/appLogsClient';
+import { reportOperationalError } from '@/utils/errorHandler';
 import { stripClusterScope } from '../clusterScope';
 import { isPermissionDeniedStatus, resolvePermissionDeniedMessage } from '../permissionErrors';
 import { getScopedDomainState, setScopedDomainState } from '../store';
@@ -322,8 +323,12 @@ export class ResourceStreamManager {
     let parsed: ServerMessage | null = null;
     try {
       parsed = JSON.parse(raw) as ServerMessage;
-    } catch (_err) {
-      console.error('Invalid resource stream payload');
+    } catch (error) {
+      reportOperationalError(error, {
+        source: 'ResourceStreamManager',
+        action: 'parseResourceStreamPayload',
+        clusterId,
+      });
       return;
     }
     if (!parsed) {

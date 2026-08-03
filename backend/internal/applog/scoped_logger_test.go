@@ -1,6 +1,7 @@
 package applog
 
 import (
+	"context"
 	"errors"
 	"testing"
 
@@ -98,4 +99,72 @@ func TestClusterScopedPreservesPanicAndClusterMetadata(t *testing.T) {
 	require.Equal(t, "boom", base.recovered)
 	require.Equal(t, "stream container logs", base.message)
 	require.Equal(t, []string{"ContainerLogs", "cluster-a", "Alpha"}, base.source)
+}
+
+func TestOperationScopedComposesWithClusterScope(t *testing.T) {
+	base := &recordingStructuredLogger{}
+	logger := OperationScoped(ClusterScoped(base, "cluster-a", "Alpha"), "backend-op-7")
+	cause := errors.New("forbidden")
+
+	ReportError(logger, cause, "load pods", "Refresh")
+
+	require.ErrorIs(t, base.cause, cause)
+	require.Equal(t, []string{"Refresh", "cluster-a", "Alpha", "backend-op-7"}, base.source)
+}
+
+func TestClusterScopedFillsClusterMetadataWithoutDroppingOperation(t *testing.T) {
+	base := &recordingLogger{}
+	logger := ClusterScoped(OperationScoped(base, "backend-op-7"), "cluster-a", "Alpha")
+
+	logger.Info("ready", "Refresh")
+
+	require.Equal(t, []string{"Refresh", "cluster-a", "Alpha", "backend-op-7"}, base.source)
+}
+
+func TestOperationIDsAreUnique(t *testing.T) {
+	first := NextOperationID("wails")
+	second := NextOperationID("wails")
+
+	require.NotEqual(t, first, second)
+	require.Contains(t, first, "wails-")
+	require.Contains(t, second, "wails-")
+}
+
+func TestOperationContextRoundTrip(t *testing.T) {
+	ctx := ContextWithOperationID(context.Background(), " request-7 ")
+
+	require.Equal(t, "request-7", OperationIDFromContext(ctx))
+	require.Equal(t, "request-7", OperationIDFromContext(ContextWithOperationID(ctx, " ")))
+}
+
+func TestOperationScopedReturnsBaseWithoutOperationMetadata(t *testing.T) {
+	base := &recordingLogger{}
+
+	require.Same(t, base, OperationScoped(base, " "))
+	require.Nil(t, OperationScoped(nil, "request-7"))
+	require.Contains(t, NextOperationID(" "), "operation-")
+}
+
+func TestOperationScopedForwardsEveryLogShape(t *testing.T) {
+	base := &recordingStructuredLogger{}
+	logger := OperationScoped(base, "request-7")
+
+	logger.Debug("debug", "Refresh")
+	require.Equal(t, "debug", base.method)
+	require.Equal(t, []string{"Refresh", "", "", "request-7"}, base.source)
+
+	logger.Warn("warn", "Refresh")
+	require.Equal(t, "warn", base.method)
+	require.Equal(t, []string{"Refresh", "", "", "request-7"}, base.source)
+
+	logger.Error("error", "Refresh")
+	require.Equal(t, "error", base.method)
+	require.Equal(t, []string{"Refresh", "", "", "request-7"}, base.source)
+
+	ReportPanic(logger, "boom", "panic", "Refresh")
+	require.Equal(t, "boom", base.recovered)
+	require.Equal(t, []string{"Refresh", "", "", "request-7"}, base.source)
+
+	logger.Info("explicit", "Refresh", "cluster-a", "Alpha", "request-explicit")
+	require.Equal(t, []string{"Refresh", "cluster-a", "Alpha", "request-explicit"}, base.source)
 }

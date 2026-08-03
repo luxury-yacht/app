@@ -452,6 +452,8 @@ func TestStartupBetaExpiryShowsDialogAndQuits(t *testing.T) {
 	t.Setenv("HOME", t.TempDir())
 
 	app := newTestAppWithDefaults(t)
+	reporter := &recordingErrorReporter{}
+	app.logger = NewLogger(100, reporter)
 	ctx := context.Background()
 	app.Ctx = ctx
 
@@ -470,4 +472,9 @@ func TestStartupBetaExpiryShowsDialogAndQuits(t *testing.T) {
 
 	require.True(t, dialogCalled, "beta expiry dialog expected")
 	require.True(t, quitCalled, "app should quit when beta expired")
+	reporter.mu.Lock()
+	require.Len(t, reporter.exceptions, 1)
+	require.Contains(t, reporter.exceptions[0].err.Error(), "expired")
+	require.Equal(t, "Beta version expired", reporter.exceptions[0].context.Operation)
+	reporter.mu.Unlock()
 }

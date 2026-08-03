@@ -11,6 +11,7 @@ import (
 	"github.com/google/uuid"
 	apierrors "k8s.io/apimachinery/pkg/api/errors"
 
+	"github.com/luxury-yacht/app/backend/internal/applog"
 	"github.com/luxury-yacht/app/backend/refresh"
 	"github.com/luxury-yacht/app/backend/refresh/telemetry"
 )
@@ -81,7 +82,8 @@ func (s *Server) handleSnapshot(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	ctx, cancel := context.WithCancel(r.Context())
+	requestContext := applog.ContextWithOperationID(r.Context(), correlationID)
+	ctx, cancel := context.WithCancel(requestContext)
 	defer cancel()
 
 	snapshot, err := s.snapshots.Build(ctx, domainName, scope)
@@ -161,7 +163,8 @@ func (s *Server) handleManualRefresh(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	job, err := s.queue.Enqueue(r.Context(), domainName, body.Scope, body.Reason)
+	requestContext := applog.ContextWithOperationID(r.Context(), correlationID)
+	job, err := s.queue.Enqueue(requestContext, domainName, body.Scope, body.Reason)
 	if err != nil {
 		writeError(w, http.StatusBadRequest, err, correlationID)
 		return
@@ -315,7 +318,7 @@ func applyCORS(w http.ResponseWriter, r *http.Request, allowedMethods ...string)
 	if r.Method == http.MethodOptions {
 		allowMethods := strings.Join(append(allowedMethods, http.MethodOptions), ", ")
 		w.Header().Set("Access-Control-Allow-Methods", allowMethods)
-		w.Header().Set("Access-Control-Allow-Headers", "Content-Type, If-None-Match")
+		w.Header().Set("Access-Control-Allow-Headers", "Content-Type, If-None-Match, "+CorrelationIDHeader)
 		w.WriteHeader(http.StatusNoContent)
 		return false
 	}

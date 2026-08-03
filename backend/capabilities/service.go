@@ -207,9 +207,9 @@ func (s *Service) Evaluate(ctx context.Context, checks []ReviewAttributes) ([]Ch
 
 	// Safe to read unlocked: wg.Wait establishes happens-before over every worker.
 	if reviewFailures > 0 {
-		// Cause first: Sentry truncates long titles, and the identity list is the
-		// part that can grow without bound.
-		s.logError(fmt.Sprintf(
+		// Keep the cause near the front of the operation so Sentry's truncated
+		// summaries retain it, while preserving the original error separately.
+		s.logError(firstReviewErr, fmt.Sprintf(
 			"%d of %d capability checks failed: %v [%s]",
 			reviewFailures, len(checks),
 			firstReviewErr,
@@ -291,8 +291,8 @@ func describeCheckedResource(attrs *authorizationv1.ResourceAttributes) string {
 	return strings.Join(rendered, " ")
 }
 
-func (s *Service) logError(message string) {
-	applog.Error(s.deps.Common.Logger, message, "Capabilities")
+func (s *Service) logError(err error, message string) {
+	applog.ReportError(s.deps.Common.Logger, err, message, "Capabilities")
 }
 
 func (s *Service) logWarn(message string) {

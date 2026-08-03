@@ -97,6 +97,23 @@ describe('ErrorHandler', () => {
     expect(handler.getHistory()).toHaveLength(0);
   });
 
+  it('reports a console-replacement failure as handled operational work', () => {
+    const listener = vi.fn();
+    handler.subscribe(listener);
+    const error = new Error('Failed to persist table state');
+
+    handler.handleOperational(error, { action: 'persistTableState' });
+
+    expect(telemetryMocks.captureUserVisibleError).toHaveBeenCalledWith(
+      error,
+      expect.objectContaining({
+        surface: 'operational',
+        context: { action: 'persistTableState' },
+      })
+    );
+    expect(listener).not.toHaveBeenCalled();
+  });
+
   it('does not recapture render failures already owned by the React root handler', () => {
     const error = new Error('render failed');
 

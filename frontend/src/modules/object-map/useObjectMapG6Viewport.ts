@@ -9,6 +9,7 @@ import type { Graph, GraphData } from '@antv/g6';
 
 import type { MutableRefObject, RefObject } from 'react';
 import { useCallback, useEffect, useLayoutEffect, useRef } from 'react';
+import { reportOperationalError } from '@/utils/errorHandler';
 import type { ObjectMapG6Palette } from './objectMapG6Data';
 import { fitObjectMapG6GraphToView, resetObjectMapG6GraphZoom } from './objectMapG6Viewport';
 import type {
@@ -154,7 +155,10 @@ export const useObjectMapG6Viewport = ({
       .then(updateTooltipPosition)
       .catch((error: unknown) => {
         if (graphRef.current === graph && !graph.destroyed) {
-          console.error('[ObjectMapG6Renderer] Failed to fit graph to view:', error);
+          reportOperationalError(error, {
+            source: 'ObjectMapG6Renderer',
+            action: 'fitGraphToView',
+          });
         }
       });
   }, [graphReady, graphRef, paletteRef, updateTooltipPosition]);
@@ -250,7 +254,10 @@ export const useObjectMapG6Viewport = ({
           .then(updateTooltipPosition)
           .catch((error: unknown) => {
             if (graphRef.current === graph && !graph.destroyed) {
-              console.error('[ObjectMapG6Renderer] Failed to reset zoom:', error);
+              reportOperationalError(error, {
+                source: 'ObjectMapG6Renderer',
+                action: 'resetGraphZoom',
+              });
             }
           });
       },
@@ -264,7 +271,10 @@ export const useObjectMapG6Viewport = ({
         }
         void graph.focusElement(nodeId, false).catch((error: unknown) => {
           if (graphRef.current === graph && !graph.destroyed) {
-            console.error('[ObjectMapG6Renderer] Failed to focus node:', error);
+            reportOperationalError(error, {
+              source: 'ObjectMapG6Renderer',
+              action: 'focusGraphNode',
+            });
           }
         });
       },

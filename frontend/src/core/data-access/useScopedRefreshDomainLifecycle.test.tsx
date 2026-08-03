@@ -183,7 +183,11 @@ describe('useScopedRefreshDomainLifecycle', () => {
     expect(mocks.fetchScopedDomain).toHaveBeenCalledWith(
       'object-map',
       'cluster:test|namespace:team-a|deployment:api',
-      { isManual: false, streamSignal: false }
+      expect.objectContaining({
+        isManual: false,
+        streamSignal: false,
+        correlationId: expect.any(String),
+      })
     );
 
     hook.unmount();

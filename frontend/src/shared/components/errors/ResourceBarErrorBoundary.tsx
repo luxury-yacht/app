@@ -6,6 +6,7 @@
  */
 
 import { Component, type ErrorInfo, type ReactNode } from 'react';
+import { errorHandler } from '@/utils/errorHandler';
 
 interface Props {
   children: ReactNode;
@@ -27,7 +28,11 @@ class ResourceBarErrorBoundary extends Component<Props, State> {
   }
 
   componentDidCatch(error: Error, errorInfo: ErrorInfo) {
-    console.error('ResourceBar error:', error, errorInfo);
+    errorHandler.handleOperational(error, {
+      source: 'ErrorBoundary',
+      scope: 'ResourceBar',
+      componentStack: errorInfo.componentStack,
+    });
   }
 
   componentDidUpdate(prevProps: Props) {

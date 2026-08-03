@@ -24,6 +24,7 @@ import {
   normalizeGridTableQueryFacets,
 } from '@shared/components/tables/gridTableFilterState';
 import { requestAppState } from '@/core/app-state-access';
+import { reportOperationalError } from '@/utils/errorHandler';
 
 export interface GridTablePersistedState {
   version: 2;
@@ -237,7 +238,7 @@ const fetchGridTablePersistence = async (): Promise<GridTablePersistenceMap> => 
     }
     return normalizePersistenceMap(entries as Record<string, unknown>);
   } catch (error) {
-    console.error('Failed to fetch grid table persistence:', error);
+    reportOperationalError(error, { source: 'GridTablePersistence', action: 'fetchState' });
     return {};
   }
 };
@@ -303,7 +304,7 @@ export const savePersistedState = (
     return;
   }
   void runtimeApp.SetGridTablePersistence(key, state).catch((error: unknown) => {
-    console.error('Failed to persist grid table state:', error);
+    reportOperationalError(error, { source: 'GridTablePersistence', action: 'persistState' });
   });
 };
 
@@ -319,7 +320,7 @@ export const clearPersistedState = (key: string | null): void => {
     return;
   }
   void runtimeApp.DeleteGridTablePersistence(key).catch((error: unknown) => {
-    console.error('Failed to delete grid table state:', error);
+    reportOperationalError(error, { source: 'GridTablePersistence', action: 'deleteState' });
   });
 };
 
@@ -336,7 +337,7 @@ export const deletePersistedStates = (keys: string[]): void => {
     return;
   }
   void runtimeApp.DeleteGridTablePersistenceEntries(keys).catch((error: unknown) => {
-    console.error('Failed to delete grid table states:', error);
+    reportOperationalError(error, { source: 'GridTablePersistence', action: 'deleteStates' });
   });
 };
 
@@ -353,7 +354,7 @@ export const clearAllPersistedStates = async (): Promise<number> => {
     const cleared = await runtimeApp.ClearGridTablePersistence();
     return typeof cleared === 'number' ? cleared : removed;
   } catch (error) {
-    console.error('Failed to clear grid table persistence:', error);
+    reportOperationalError(error, { source: 'GridTablePersistence', action: 'clearState' });
     return removed;
   }
 };

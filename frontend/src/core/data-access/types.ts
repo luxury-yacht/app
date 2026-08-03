@@ -47,7 +47,7 @@ export interface DataReadRequest<T> {
   adapter?: DataAccessAdapter;
   label?: string;
   scope?: string;
-  read: () => Promise<T>;
+  read: (requestId?: string) => Promise<T>;
 }
 
 export interface DataReadResult<T> extends DataRequestResult {

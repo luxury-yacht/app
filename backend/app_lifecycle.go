@@ -13,6 +13,7 @@ import (
 	"strings"
 	"time"
 
+	"github.com/luxury-yacht/app/backend/internal/applog"
 	"github.com/luxury-yacht/app/backend/internal/errorcapture"
 	"github.com/luxury-yacht/app/backend/internal/logclassify"
 	"github.com/luxury-yacht/app/backend/internal/logsources"
@@ -118,7 +119,7 @@ func (a *App) configureStartupErrorCapture() {
 
 func (a *App) checkStartupBetaExpiry(ctx context.Context) bool {
 	if err := a.checkBetaExpiry(); err != nil {
-		a.logger.Error(err.Error(), logsources.App)
+		applog.ReportError(a.logger, err, "Beta version expired", logsources.App)
 		runtimeMessageDialog(ctx, runtime.MessageDialogOptions{
 			Type:    runtime.ErrorDialog,
 			Title:   "Beta Version Expired",

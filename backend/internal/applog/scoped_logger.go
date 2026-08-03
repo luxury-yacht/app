@@ -55,24 +55,15 @@ func (l clusterScopedLogger) Panic(recovered any, message string, source ...stri
 }
 
 func (l clusterScopedLogger) withCluster(source []string) []string {
-	if len(source) >= 3 {
-		return source
-	}
-	if len(source) >= 2 && strings.TrimSpace(source[1]) != "" {
-		if len(source) == 2 && l.clusterName != "" {
-			out := append([]string(nil), source...)
-			return append(out, l.clusterName)
-		}
-		return source
-	}
-
 	out := append([]string(nil), source...)
-	if len(out) == 0 {
+	for len(out) < 3 {
 		out = append(out, "")
 	}
-	if len(out) == 1 {
-		return append(out, l.clusterID, l.clusterName)
+	if strings.TrimSpace(out[1]) == "" {
+		out[1] = l.clusterID
 	}
-	out[1] = l.clusterID
-	return append(out, l.clusterName)
+	if strings.TrimSpace(out[2]) == "" {
+		out[2] = l.clusterName
+	}
+	return out
 }

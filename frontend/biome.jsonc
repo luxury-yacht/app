@@ -214,6 +214,16 @@
       // Feature code must not couple directly to low-level refresh orchestration commands.
       "path": "./biome-plugins/no-direct-refresh-orchestrator.grit",
       "includes": ["**/src/**/*.{ts,tsx}", "!**/src/core/refresh/**", "!**/src/core/data-access/**"]
+    },
+    {
+      // Caught operational failures cross one boundary so the original exception is reportable.
+      "path": "./biome-plugins/no-direct-console-error.grit",
+      "includes": [
+        "**/src/**/*.{ts,tsx}",
+        "!**/src/**/*.test.*",
+        "!**/src/utils/errorHandler.ts",
+        "!**/src/core/telemetry/sentry.ts"
+      ]
     }
   ],
   // Overrides are narrow architectural boundaries, not general escape hatches. Keep the reason for

@@ -73,7 +73,7 @@ export const requestData = async <T>({
   });
 
   try {
-    const data = await read();
+    const data = await read(token);
     completeBrokerRead({ token, status: 'success' });
     return {
       status: 'executed',
@@ -97,10 +97,11 @@ export const requestRefreshDomain = async ({
     adapter: 'refresh-domain',
     label: label ?? domain,
     scope,
-    read: async () => {
+    read: async (requestId) => {
       await refreshOrchestrator.fetchScopedDomain(domain, scope, {
         isManual: reason === 'user',
         streamSignal: reason === 'stream-signal',
+        ...(requestId ? { correlationId: requestId } : {}),
       });
     },
   });

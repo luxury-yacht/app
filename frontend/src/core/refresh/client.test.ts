@@ -119,6 +119,7 @@ describe('fetchSnapshot', () => {
       scope: 'team-a',
       ifNoneMatch: 'etag-old',
       signal: controller.signal,
+      correlationId: 'broker-read-9',
     });
 
     expect(fetchMock).toHaveBeenCalledTimes(1);
@@ -126,7 +127,10 @@ describe('fetchSnapshot', () => {
     expect(url).toBe('http://127.0.0.1:0/api/v2/snapshots/namespace-workloads?scope=team-a');
     expect(init).toEqual({
       signal: controller.signal,
-      headers: { 'If-None-Match': 'etag-old' },
+      headers: {
+        'If-None-Match': 'etag-old',
+        'X-Correlation-ID': 'broker-read-9',
+      },
     });
 
     expect(result).toEqual({

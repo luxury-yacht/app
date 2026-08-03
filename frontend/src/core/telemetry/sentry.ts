@@ -13,6 +13,7 @@ export interface SentryRuntimeConfig {
 export interface UserVisibleErrorCapture {
   category: string;
   severity: string;
+  surface?: 'operational' | 'user-visible';
   context?: Record<string, unknown>;
 }
 
@@ -38,6 +39,12 @@ interface CompletedBrokerRequestContext extends BrokerRequestContext {
   durationMs: number;
 }
 
+interface PendingBootstrapError {
+  error: unknown;
+  action: string;
+  operationId: string;
+}
+
 let configuredRuntime: SentryRuntimeConfig | null = null;
 let reportingInitialized = false;
 let unsubscribePreference: (() => void) | null = null;
@@ -46,6 +53,11 @@ let activeViewContext: ActiveViewContext | null = null;
 let activeNamespaceContext: string | undefined;
 let activeBrokerRequestIds = new Set<string>();
 let requestByError = new WeakMap<object, CompletedBrokerRequestContext>();
+let bootstrapPreferenceResolved = false;
+let bootstrapErrorSequence = 0;
+let pendingBootstrapErrors: PendingBootstrapError[] = [];
+
+const maxPendingBootstrapErrors = 10;
 
 const contextString = (
   context: Record<string, unknown> | undefined,
@@ -132,6 +144,7 @@ const recordContext = (value: unknown): Record<string, unknown> =>
 const beforeSend = (event: ErrorEvent): ErrorEvent => {
   const navigation = recordContext(event.contexts?.navigation);
   const request = recordContext(event.contexts?.request);
+  const operation = recordContext(event.contexts?.operation);
   const eventView = typeof navigation.view === 'string' ? navigation.view : undefined;
   const eventTab = typeof navigation.tab === 'string' ? navigation.tab : undefined;
   const eventClusterId =
@@ -147,6 +160,7 @@ const beforeSend = (event: ErrorEvent): ErrorEvent => {
         ? navigation.namespace
         : undefined;
   const eventRequestId = typeof request.id === 'string' ? request.id : undefined;
+  const eventOperationId = typeof operation.id === 'string' ? operation.id : undefined;
 
   const workspaceBreadcrumbs = event.breadcrumbs?.filter((breadcrumb) => {
     const data = breadcrumb.data ?? {};
@@ -193,7 +207,19 @@ const beforeSend = (event: ErrorEvent): ErrorEvent => {
     });
     if (latestUserActionIndex >= 0) {
       breadcrumbs = workspaceBreadcrumbs.slice(latestUserActionIndex);
+    } else {
+      breadcrumbs = workspaceBreadcrumbs.filter(
+        (breadcrumb) =>
+          breadcrumb.category === 'ui.error.presented' &&
+          breadcrumb.data?.operationId === eventOperationId
+      );
     }
+  } else if (event.tags?.['error.surface'] === 'operational' && workspaceBreadcrumbs) {
+    breadcrumbs = workspaceBreadcrumbs.filter(
+      (breadcrumb) =>
+        breadcrumb.category === 'ui.error.handled' &&
+        breadcrumb.data?.operationId === eventOperationId
+    );
   }
 
   return {
@@ -250,6 +276,48 @@ const applyErrorReportingPreference = (enabled: boolean): void => {
   void disableErrorReporting();
 };
 
+const sendBootstrapError = ({ error, action, operationId }: PendingBootstrapError): void => {
+  if (!reportingInitialized) {
+    return;
+  }
+  const exception = error instanceof Error ? error : new Error(String(error));
+  Sentry.withScope((scope) => {
+    scope.setLevel('error');
+    scope.setTag('error.surface', 'bootstrap');
+    scope.setContext('operation', { id: operationId, action });
+    Sentry.captureException(exception);
+  });
+};
+
+const flushBootstrapErrors = (): void => {
+  const errors = pendingBootstrapErrors;
+  pendingBootstrapErrors = [];
+  errors.forEach(sendBootstrapError);
+};
+
+// Bootstrap preference reads happen before the SDK may be initialized. Keep a
+// small in-memory queue only until persisted consent is known; opt-out drops it.
+export function captureBootstrapError(error: unknown, context: { action: string }): void {
+  console.error(`Bootstrap failure (${context.action}):`, error);
+  bootstrapErrorSequence += 1;
+  const pending = {
+    error,
+    action: context.action,
+    operationId: `bootstrap-error-${bootstrapErrorSequence}`,
+  };
+  if (reportingInitialized) {
+    sendBootstrapError(pending);
+    return;
+  }
+  if (bootstrapPreferenceResolved) {
+    return;
+  }
+  pendingBootstrapErrors.push(pending);
+  if (pendingBootstrapErrors.length > maxPendingBootstrapErrors) {
+    pendingBootstrapErrors = pendingBootstrapErrors.slice(-maxPendingBootstrapErrors);
+  }
+}
+
 // configureErrorReporting keeps the build configuration separate from the
 // persisted opt-in state. It returns whether reporting is available in this
 // build so React root handlers can remain installed across live preference
@@ -260,12 +328,23 @@ export function configureErrorReporting(
 ): boolean {
   unsubscribePreference?.();
   configuredRuntime = { ...config };
+  bootstrapPreferenceResolved = true;
   const available = Boolean(config.enabled && config.dsn?.trim());
   if (available && preferenceEnabled) {
     initializeErrorReporting(config);
+    flushBootstrapErrors();
   } else {
+    pendingBootstrapErrors = [];
     void disableErrorReporting();
   }
+  eventBus.setHandlerErrorReporter((error, event) => {
+    captureUserVisibleError(error, {
+      category: 'UNKNOWN',
+      severity: 'error',
+      surface: 'operational',
+      context: { source: 'EventBus', action: String(event) },
+    });
+  });
   unsubscribePreference = eventBus.on('settings:error-reporting', applyErrorReportingPreference);
   return available;
 }
@@ -293,6 +372,10 @@ export function resetErrorReportingForTesting(): void {
   activeNamespaceContext = undefined;
   activeBrokerRequestIds = new Set<string>();
   requestByError = new WeakMap<object, CompletedBrokerRequestContext>();
+  bootstrapPreferenceResolved = false;
+  bootstrapErrorSequence = 0;
+  pendingBootstrapErrors = [];
+  eventBus.setHandlerErrorReporter(null);
 }
 
 export function createReactRootErrorHandlers(enabled: boolean): RootOptions {
@@ -424,10 +507,11 @@ export function captureUserVisibleError(error: unknown, details: UserVisibleErro
   const operationClusterId = contextString(details.context, 'clusterId');
   const operationNamespace = contextString(details.context, 'namespace');
   const navigation = getActiveNavigationContext();
+  const surface = details.surface ?? 'user-visible';
 
   Sentry.withScope((scope) => {
     scope.setLevel(details.severity === 'critical' ? 'fatal' : 'error');
-    scope.setTag('error.surface', 'user-visible');
+    scope.setTag('error.surface', surface);
     scope.setTag('error.category', details.category);
     if (action) {
       scope.setTag('ui.action', action);
@@ -466,9 +550,9 @@ export function captureUserVisibleError(error: unknown, details: UserVisibleErro
     });
     scope.addBreadcrumb({
       type: 'error',
-      category: 'ui.error.presented',
+      category: surface === 'user-visible' ? 'ui.error.presented' : 'ui.error.handled',
       level: 'error',
-      message: `Presented ${details.category} error`,
+      message: `${surface === 'user-visible' ? 'Presented' : 'Handled'} ${details.category} error`,
       data: {
         operationId,
         ...(action ? { action } : {}),

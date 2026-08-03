@@ -3,6 +3,7 @@
  */
 
 import { Component, type ErrorInfo, type ReactNode } from 'react';
+import { errorHandler } from '@/utils/errorHandler';
 
 interface Props {
   children: ReactNode;
@@ -24,7 +25,11 @@ class DetailsTabDataErrorBoundary extends Component<Props, State> {
   }
 
   componentDidCatch(error: Error, errorInfo: ErrorInfo) {
-    console.error('DataSection error:', error, errorInfo);
+    errorHandler.handleOperational(error, {
+      source: 'ErrorBoundary',
+      scope: 'DetailsTabData',
+      componentStack: errorInfo.componentStack,
+    });
   }
 
   componentDidUpdate(prevProps: Props) {

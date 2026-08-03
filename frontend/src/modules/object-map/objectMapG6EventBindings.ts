@@ -7,6 +7,7 @@
 import type { Graph } from '@antv/g6';
 import { CanvasEvent, CommonEvent, EdgeEvent, GraphEvent, NodeEvent } from '@antv/g6';
 import type { MutableRefObject } from 'react';
+import { reportOperationalError } from '@/utils/errorHandler';
 import type { ObjectMapG6Palette } from './objectMapG6Data';
 import { objectMapG6EdgeState, objectMapG6NodeState } from './objectMapG6Data';
 import {
@@ -81,7 +82,10 @@ const setConnectionHoverState = (
   });
   void graph.setElementState(states, false).catch((error: unknown) => {
     if (!graph.destroyed) {
-      console.error('[ObjectMapG6Renderer] Failed to apply connection hover state:', error);
+      reportOperationalError(error, {
+        source: 'ObjectMapG6Renderer',
+        action: 'applyConnectionHoverState',
+      });
     }
   });
 };
@@ -262,7 +266,7 @@ export const bindObjectMapG6Events = (options: ObjectMapG6EventBindingOptions): 
     const origin: [number, number] = [event.clientX - rect.left, event.clientY - rect.top];
     void graph.zoomBy(objectMapWheelZoomRatio(event), false, origin).catch((error: unknown) => {
       if (!graph.destroyed) {
-        console.error('[ObjectMapG6Renderer] Failed to zoom graph:', error);
+        reportOperationalError(error, { source: 'ObjectMapG6Renderer', action: 'zoomGraph' });
       }
     });
   };

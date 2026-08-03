@@ -169,9 +169,9 @@ func TestLoggerAddsApplicationTrailAsBreadcrumbsBeforeStructuredError(t *testing
 	require.NoError(t, err)
 	logger := NewLogger(10, reporter)
 
-	logger.Info("refresh started", "Refresh", "cluster-a", "Production")
-	logger.Warn("retrying workload fetch", "ResourceLoader", "cluster-a", "Production")
-	logger.ErrorWithCause(errors.New("forbidden"), "Failed to get deployment default/web", "ResourceLoader", "cluster-a", "Production")
+	logger.Info("refresh started", "Refresh", "cluster-a", "Production", "backend-op-1")
+	logger.Warn("retrying workload fetch", "ResourceLoader", "cluster-a", "Production", "backend-op-1")
+	logger.ErrorWithCause(errors.New("forbidden"), "Failed to get deployment default/web", "ResourceLoader", "cluster-a", "Production", "backend-op-1")
 
 	require.NotNil(t, transport.event)
 	require.Len(t, transport.event.Breadcrumbs, 2)
@@ -181,6 +181,32 @@ func TestLoggerAddsApplicationTrailAsBreadcrumbsBeforeStructuredError(t *testing
 	require.Equal(t, "cluster-a", transport.event.Breadcrumbs[0].Data["clusterId"])
 	require.Equal(t, "Production", transport.event.Breadcrumbs[0].Data["clusterName"])
 	require.Equal(t, sentry.LevelWarning, transport.event.Breadcrumbs[1].Level)
+}
+
+func TestLoggerForwardsOperationIdentityToBreadcrumbsAndError(t *testing.T) {
+	transport := &loggerSentryTransport{}
+	reporter, err := sentryreporting.New(sentryreporting.Config{
+		DSN:       "https://public@example.com/1",
+		Transport: transport,
+	})
+	require.NoError(t, err)
+	logger := NewLogger(10, reporter)
+
+	logger.Info("refresh started", "Refresh", "cluster-a", "Production", "backend-op-3")
+	logger.ErrorWithCause(
+		errors.New("forbidden"),
+		"Failed to get deployment default/web",
+		"ResourceLoader",
+		"cluster-a",
+		"Production",
+		"backend-op-3",
+	)
+
+	require.NotNil(t, transport.event)
+	require.Len(t, transport.event.Breadcrumbs, 1)
+	require.Equal(t, "backend-op-3", transport.event.Breadcrumbs[0].Data["operationId"])
+	require.Equal(t, "backend-op-3", transport.event.Tags["operation.id"])
+	require.Equal(t, "backend-op-3", transport.event.Contexts["error"]["operationId"])
 }
 
 func TestFetchResourceReportsOriginalKubernetesError(t *testing.T) {

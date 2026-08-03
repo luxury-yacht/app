@@ -85,6 +85,15 @@ const appMocks = vi.hoisted(() => ({
   ValidateThemeClusterPattern: vi.fn(),
 }));
 
+const telemetryMocks = vi.hoisted(() => ({
+  captureBootstrapError: vi.fn(),
+  captureUserVisibleError: vi.fn(),
+  recordBrokerRequestCompleted: vi.fn(),
+  recordBrokerRequestStarted: vi.fn(),
+}));
+
+vi.mock('@/core/telemetry/sentry', () => telemetryMocks);
+
 const flushPromises = () => new Promise<void>((resolve) => setTimeout(resolve, 0));
 
 const preferenceSchema = (overrides: Record<string, Partial<Record<string, unknown>>> = {}) => {
@@ -409,6 +418,10 @@ describe('appPreferences', () => {
     appMocks.GetAppSettingsSchema.mockReset();
     appMocks.UpdateAppPreferences.mockReset();
     appMocks.ValidateThemeClusterPattern.mockReset();
+    telemetryMocks.captureBootstrapError.mockReset();
+    telemetryMocks.captureUserVisibleError.mockReset();
+    telemetryMocks.recordBrokerRequestCompleted.mockReset();
+    telemetryMocks.recordBrokerRequestStarted.mockReset();
     appMocks.GetAppSettingsSchema.mockResolvedValue(null);
     appMocks.UpdateAppPreferences.mockResolvedValue({ settings: {}, changedKeys: [] });
     restoreGo = installWindowProperty('go', {
@@ -512,6 +525,36 @@ describe('appPreferences', () => {
     expect(appMocks.GetAppSettings).not.toHaveBeenCalled();
     expect(getAppearanceModePreference()).toBe('dark');
     expect(getDefaultObjectPanelPosition()).toBe('bottom');
+  });
+
+  it('reports a schema hydration failure and uses the fallback preference', async () => {
+    const failure = new Error('schema unavailable');
+    appMocks.GetAppSettingsSchema.mockRejectedValue(failure);
+    appMocks.GetAppSettings.mockResolvedValue({ errorReportingEnabled: false });
+
+    await hydrateAppPreferences({ force: true });
+
+    expect(telemetryMocks.captureBootstrapError).toHaveBeenCalledWith(failure, {
+      action: 'loadAppSettingsSchema',
+    });
+    expect(getErrorReportingEnabled()).toBe(false);
+  });
+
+  it('fails error reporting closed when persisted settings cannot be read', async () => {
+    const schemaFailure = new Error('schema unavailable');
+    const settingsFailure = new Error('settings unavailable');
+    appMocks.GetAppSettingsSchema.mockRejectedValue(schemaFailure);
+    appMocks.GetAppSettings.mockRejectedValue(settingsFailure);
+
+    await hydrateAppPreferences({ force: true });
+
+    expect(telemetryMocks.captureBootstrapError).toHaveBeenNthCalledWith(1, schemaFailure, {
+      action: 'loadAppSettingsSchema',
+    });
+    expect(telemetryMocks.captureBootstrapError).toHaveBeenNthCalledWith(2, settingsFailure, {
+      action: 'loadAppSettings',
+    });
+    expect(getErrorReportingEnabled()).toBe(false);
   });
 
   it('exposes typed preference metadata from the backend schema', async () => {

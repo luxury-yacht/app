@@ -2,6 +2,7 @@ package backend
 
 import (
 	"context"
+	"errors"
 	"sync"
 	"testing"
 	"time"
@@ -16,6 +17,8 @@ import (
 // net for the code path that notifies the frontend of permanent auth failures.
 func TestHandleClusterAuthStateChange_InvalidEmitsAuthFailed(t *testing.T) {
 	app := newTestAppWithDefaults(t)
+	reporter := &recordingErrorReporter{}
+	app.logger = NewLogger(100, reporter)
 	ctx, cancel := context.WithCancel(context.Background())
 	defer cancel()
 	app.Ctx = ctx
@@ -54,6 +57,7 @@ func TestHandleClusterAuthStateChange_InvalidEmitsAuthFailed(t *testing.T) {
 	// Trigger the StateInvalid handler with a typed diagnostic (missing exec helper).
 	app.handleClusterAuthStateChange("test-cluster", authstate.StateInvalid, authstate.FailureDiagnostic{
 		Reason:      "token expired",
+		Cause:       errors.New("token expired"),
 		Kind:        "missing-helper",
 		Summary:     "The kubeconfig's credential helper could not be found.",
 		ExecCommand: "gke-gcloud-auth-plugin",
@@ -77,6 +81,11 @@ func TestHandleClusterAuthStateChange_InvalidEmitsAuthFailed(t *testing.T) {
 	require.Equal(t, "missing-helper", authFailedEvents[0]["kind"])
 	require.Equal(t, "gke-gcloud-auth-plugin", authFailedEvents[0]["execCommand"])
 	require.Equal(t, "The kubeconfig's credential helper could not be found.", authFailedEvents[0]["summary"])
+	reporter.mu.Lock()
+	require.Len(t, reporter.exceptions, 1)
+	require.EqualError(t, reporter.exceptions[0].err, "token expired")
+	require.Equal(t, "Cluster Test Cluster auth failed", reporter.exceptions[0].context.Operation)
+	reporter.mu.Unlock()
 }
 
 // TestHandleClusterAuthStateChange_RecoveringEmitsEvent verifies that

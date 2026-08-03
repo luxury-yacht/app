@@ -101,6 +101,7 @@ describe('dataAccess', () => {
     expect(hoisted.fetchScopedDomain).toHaveBeenCalledWith('namespaces', 'cluster:alpha', {
       isManual: true,
       streamSignal: false,
+      correlationId: 'broker-read-1',
     });
   });
 
@@ -119,6 +120,7 @@ describe('dataAccess', () => {
     expect(hoisted.fetchScopedDomain).toHaveBeenCalledWith('namespaces', 'cluster:alpha', {
       isManual: false,
       streamSignal: false,
+      correlationId: 'broker-read-1',
     });
   });
 
@@ -135,6 +137,7 @@ describe('dataAccess', () => {
     expect(hoisted.fetchScopedDomain).toHaveBeenCalledWith('cluster-overview', 'cluster:alpha', {
       isManual: false,
       streamSignal: false,
+      correlationId: 'broker-read-1',
     });
   });
 
@@ -168,6 +171,7 @@ describe('dataAccess', () => {
     expect(hoisted.fetchScopedDomain).toHaveBeenCalledWith('catalog', 'cluster:alpha|limit=2', {
       isManual: true,
       streamSignal: false,
+      correlationId: 'broker-read-1',
     });
     expect(hoisted.getScopedDomainState).toHaveBeenCalledWith('catalog', 'cluster:alpha|limit=2');
     expect(hoisted.setScopedDomainEnabled).toHaveBeenNthCalledWith(
@@ -203,6 +207,7 @@ describe('dataAccess', () => {
     });
 
     expect(read).toHaveBeenCalledTimes(1);
+    expect(read).toHaveBeenCalledWith('broker-read-1');
   });
 
   it('records diagnostics for blocked and executed cluster-data reads', async () => {

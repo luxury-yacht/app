@@ -13,6 +13,7 @@
 import { useEffect, useRef } from 'react';
 import type { RefreshDemand } from '@/core/refresh/refreshRuntime';
 import type { RefreshDomain } from '@/core/refresh/types';
+import { reportOperationalError } from '@/utils/errorHandler';
 import {
   acquireRefreshDomainLease,
   releaseRefreshDomainLease,
@@ -74,7 +75,12 @@ export function useScopedRefreshDomainLifecycle({
           handler(error);
           return;
         }
-        console.error(`Failed to fetch refresh domain ${domain} for scope ${scope}`, error);
+        reportOperationalError(error, {
+          source: 'ScopedRefreshDomainLifecycle',
+          action: 'fetchRefreshDomain',
+          domain,
+          scope,
+        });
       });
     }
 

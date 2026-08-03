@@ -166,6 +166,7 @@ export interface AppEvents {
 
 type EventCallback<T> = (payload: T) => void;
 type UnsubscribeFn = () => void;
+type EventHandlerErrorReporter = (error: unknown, event: keyof AppEvents) => void;
 
 interface Subscription {
   callback: EventCallback<unknown>;
@@ -174,6 +175,7 @@ interface Subscription {
 
 class EventBus {
   private listeners = new Map<keyof AppEvents, Set<Subscription>>();
+  private handlerErrorReporter: EventHandlerErrorReporter | null = null;
 
   emit<K extends keyof AppEvents>(
     event: K,
@@ -194,7 +196,7 @@ class EventBus {
           toRemove.push(sub);
         }
       } catch (err) {
-        console.error(`[EventBus] Error in handler for "${event}":`, err);
+        this.handlerErrorReporter?.(err, event);
       }
     });
 
@@ -256,6 +258,10 @@ class EventBus {
 
   clear(): void {
     this.listeners.clear();
+  }
+
+  setHandlerErrorReporter(reporter: EventHandlerErrorReporter | null): void {
+    this.handlerErrorReporter = reporter;
   }
 }
 

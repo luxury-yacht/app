@@ -9,6 +9,7 @@ import type { GraphData } from '@antv/g6';
 import { Graph } from '@antv/g6';
 import type { MutableRefObject, RefObject } from 'react';
 import { useEffect } from 'react';
+import { reportOperationalError } from '@/utils/errorHandler';
 import type { ObjectMapG6ApplyQueue } from './objectMapG6ApplyQueue';
 import { objectMapG6Behaviors } from './objectMapG6Behaviors';
 import { ensureObjectMapG6CardNodeRegistered } from './objectMapG6CardNode';
@@ -119,7 +120,10 @@ export const useObjectMapG6GraphLifecycle = ({
       } catch (error) {
         initialRenderSettled = true;
         if (!disposed && graphRef.current === graph && !graph.destroyed) {
-          console.error('[ObjectMapG6Renderer] Failed to render graph:', error);
+          reportOperationalError(error, {
+            source: 'ObjectMapG6Renderer',
+            action: 'renderGraph',
+          });
         }
       } finally {
         if (disposed) {

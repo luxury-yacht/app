@@ -20,12 +20,17 @@ type captureLogger struct {
 	debugs []string
 	warns  []string
 	errors []string
+	cause  error
 }
 
 func (l *captureLogger) Debug(message string, _ ...string) { l.debugs = append(l.debugs, message) }
 func (l *captureLogger) Info(string, ...string)            {}
 func (l *captureLogger) Warn(message string, _ ...string)  { l.warns = append(l.warns, message) }
 func (l *captureLogger) Error(message string, _ ...string) { l.errors = append(l.errors, message) }
+func (l *captureLogger) ErrorWithCause(err error, message string, _ ...string) {
+	l.cause = err
+	l.errors = append(l.errors, fmt.Sprintf("%s: %v", message, err))
+}
 
 type stubRateLimiter struct {
 	waits int
@@ -134,6 +139,9 @@ func TestEvaluateLogsOneSummaryWhenEveryReviewFails(t *testing.T) {
 	}
 	if !strings.Contains(summary, "http2: client connection lost") {
 		t.Fatalf("expected the summary to carry the underlying cause, got %q", summary)
+	}
+	if logger.cause == nil || logger.cause.Error() != "http2: client connection lost" {
+		t.Fatalf("expected the original review error, got %v", logger.cause)
 	}
 }
 
@@ -474,13 +482,13 @@ func TestLogHelpersRespectLogger(t *testing.T) {
 	})
 
 	svc.logWarn("warn")
-	svc.logError("error")
+	svc.logError(errors.New("cause"), "error")
 	svc.logDebug("debug")
 
 	if len(logger.warns) != 1 || logger.warns[0] != "warn" {
 		t.Fatalf("expected warn to be recorded, got %+v", logger.warns)
 	}
-	if len(logger.errors) != 1 || logger.errors[0] != "error" {
+	if len(logger.errors) != 1 || logger.errors[0] != "error: cause" {
 		t.Fatalf("expected error to be recorded, got %+v", logger.errors)
 	}
 	if len(logger.debugs) != 1 || logger.debugs[0] != "debug" {

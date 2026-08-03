@@ -11,6 +11,7 @@ import type React from 'react';
 import { createContext, type ReactNode, useCallback, useContext, useEffect, useState } from 'react';
 import { readZoomLevel, requestAppState } from '@/core/app-state-access';
 import { SetZoomLevel } from '@/core/backend-api';
+import { reportOperationalError } from '@/utils/errorHandler';
 
 // Zoom constraints
 const MIN_ZOOM = 50;
@@ -90,7 +91,7 @@ export const ZoomProvider: React.FC<ZoomProviderProps> = ({ children }) => {
   // Persist zoom level to backend
   const persistZoom = useCallback((level: number) => {
     SetZoomLevel(level).catch((err) => {
-      console.error('Failed to persist zoom level:', err);
+      reportOperationalError(err, { source: 'ZoomContext', action: 'persistZoomLevel' });
     });
   }, []);
 
@@ -106,7 +107,7 @@ export const ZoomProvider: React.FC<ZoomProviderProps> = ({ children }) => {
         applyZoom(validLevel);
       })
       .catch((err) => {
-        console.error('Failed to load zoom level:', err);
+        reportOperationalError(err, { source: 'ZoomContext', action: 'loadZoomLevel' });
         applyZoom(DEFAULT_ZOOM);
       });
   }, [applyZoom]);

@@ -316,13 +316,18 @@ class ErrorHandler {
     };
   }
 
-  private reportError(error: unknown, details: ErrorDetails): void {
+  private reportError(
+    error: unknown,
+    details: ErrorDetails,
+    surface: 'operational' | 'user-visible' = 'user-visible'
+  ): void {
     const reactRootAlreadyCaptured =
       details.context?.source === 'ErrorBoundary' || details.context?.action === 'componentError';
     if (!reactRootAlreadyCaptured) {
       captureUserVisibleError(error, {
         category: details.category,
         severity: details.severity,
+        surface,
         context: details.context,
       });
     }
@@ -385,6 +390,20 @@ class ErrorHandler {
   ): ErrorDetails {
     const errorDetails = this.buildErrorDetails(error, context, customMessage);
     this.reportError(error, errorDetails);
+    return errorDetails;
+  }
+
+  /**
+   * Reports a handled operational failure that is not itself rendered as an
+   * error surface. This replaces console-only catch paths.
+   */
+  public handleOperational(
+    error: unknown,
+    context?: Record<string, unknown>,
+    customMessage?: string
+  ): ErrorDetails {
+    const errorDetails = this.buildErrorDetails(error, context, customMessage);
+    this.reportError(error, errorDetails, 'operational');
     return errorDetails;
   }
 
@@ -556,6 +575,12 @@ class ScopedErrorHandler {
 
 // Create and export singleton instance
 export const errorHandler = new ErrorHandler();
+
+export const reportOperationalError = (
+  error: unknown,
+  context?: Record<string, unknown>,
+  customMessage?: string
+): ErrorDetails => errorHandler.handleOperational(error, context, customMessage);
 
 // Export convenience functions
 export const subscribeToErrors = errorHandler.subscribe.bind(errorHandler);

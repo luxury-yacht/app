@@ -931,7 +931,10 @@ describe('CommandPalette component behaviour', () => {
       await new Promise((resolve) => setTimeout(resolve, 250));
     });
 
-    expect(errorSpy).toHaveBeenCalledWith('Catalog search failed', expect.any(Error));
+    expect(errorSpy).toHaveBeenCalledWith(
+      'Original Error:',
+      expect.objectContaining({ message: 'network down' })
+    );
     expect(container.querySelector('.command-palette-loading')).toBeNull();
     expect(container.querySelector('.command-palette-note')).toBeNull();
 

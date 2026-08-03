@@ -458,10 +458,15 @@ describe('EventsTab', () => {
         'expected test value in EventsTab.test.tsx'
       )(true);
     });
-    expect(mockFetchScopedDomain).toHaveBeenCalledWith('object-events', expect.any(String), {
-      isManual: true,
-      streamSignal: false,
-    });
+    expect(mockFetchScopedDomain).toHaveBeenCalledWith(
+      'object-events',
+      expect.any(String),
+      expect.objectContaining({
+        isManual: true,
+        streamSignal: false,
+        correlationId: expect.any(String),
+      })
+    );
 
     // Scheduled refresh — orchestrator should see isManual: false.
     mockFetchScopedDomain.mockClear();
@@ -471,10 +476,15 @@ describe('EventsTab', () => {
         'expected test value in EventsTab.test.tsx'
       )(false);
     });
-    expect(mockFetchScopedDomain).toHaveBeenCalledWith('object-events', expect.any(String), {
-      isManual: false,
-      streamSignal: false,
-    });
+    expect(mockFetchScopedDomain).toHaveBeenCalledWith(
+      'object-events',
+      expect.any(String),
+      expect.objectContaining({
+        isManual: false,
+        streamSignal: false,
+        correlationId: expect.any(String),
+      })
+    );
   });
 
   it('enables the exact events scope and preserves state on cleanup', async () => {

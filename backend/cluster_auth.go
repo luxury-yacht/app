@@ -13,6 +13,7 @@ import (
 	"fmt"
 	"time"
 
+	"github.com/luxury-yacht/app/backend/internal/applog"
 	"github.com/luxury-yacht/app/backend/internal/authstate"
 	"github.com/luxury-yacht/app/backend/internal/config"
 	"github.com/luxury-yacht/app/backend/internal/errorcapture"
@@ -72,7 +73,12 @@ func (a *App) handleClusterAuthStateChange(clusterID string, state authstate.Sta
 		})
 
 	case authstate.StateInvalid:
-		a.logger.Error(fmt.Sprintf("Cluster %s: auth failed - %s", clusterName, diag.Reason), logsources.Auth, clusterID, clusterName)
+		operation := fmt.Sprintf("Cluster %s auth failed", clusterName)
+		if diag.Cause != nil {
+			applog.ReportError(a.logger, diag.Cause, operation, logsources.Auth, clusterID, clusterName)
+		} else {
+			a.logger.Error(fmt.Sprintf("Cluster %s: auth failed - %s", clusterName, diag.Reason), logsources.Auth, clusterID, clusterName)
+		}
 		// Capture the auth failure with cluster context for error enhancement
 		errorcapture.CaptureWithCluster(clusterID, fmt.Sprintf("auth failed: %s", diag.Reason))
 		// Emit per-cluster failure event for the frontend

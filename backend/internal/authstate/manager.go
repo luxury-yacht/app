@@ -11,7 +11,6 @@ import (
 
 // FailureDiagnostic carries the reason for an auth failure together with optional
 // typed fields a UI can use to explain it without echoing raw provider stderr.
-// All fields are strings so the struct stays comparable (setState dedupes by ==).
 type FailureDiagnostic struct {
 	// Reason is the raw/human reason. Kept for existing UI copy and logging.
 	Reason string
@@ -23,17 +22,25 @@ type FailureDiagnostic struct {
 	Summary string
 	// ExecCommand is the kubeconfig exec credential command, when known.
 	ExecCommand string
+	// Cause retains the original credential error for structured reporting. It
+	// is deliberately omitted from UI payloads and state equality.
+	Cause error
 }
 
 // NewFailureDiagnostic builds a FailureDiagnostic from a classified credential
-// error. reason is the raw error text; the typed fields come from the diagnostic.
-func NewFailureDiagnostic(reason string, d credentialerrors.Diagnostic) FailureDiagnostic {
+// error. The typed fields come from the diagnostic.
+func NewFailureDiagnostic(err error, d credentialerrors.Diagnostic) FailureDiagnostic {
+	reason := ""
+	if err != nil {
+		reason = err.Error()
+	}
 	return FailureDiagnostic{
 		Reason:      reason,
 		Class:       string(d.Class),
 		Kind:        string(d.Kind),
 		Summary:     d.Summary,
 		ExecCommand: d.ExecCommand,
+		Cause:       err,
 	}
 }
 
@@ -285,7 +292,7 @@ func (m *Manager) Shutdown() {
 // setState changes the current state and calls the OnStateChange callback.
 // Must be called with m.mu held.
 func (m *Manager) setState(newState State, diag FailureDiagnostic) {
-	if m.state == newState && m.failureDiagnostic == diag {
+	if m.state == newState && equalFailureDiagnostic(m.failureDiagnostic, diag) {
 		return
 	}
 	m.state = newState
@@ -294,6 +301,14 @@ func (m *Manager) setState(newState State, diag FailureDiagnostic) {
 	if m.config.OnStateChange != nil {
 		m.config.OnStateChange(newState, diag)
 	}
+}
+
+func equalFailureDiagnostic(left, right FailureDiagnostic) bool {
+	return left.Reason == right.Reason &&
+		left.Class == right.Class &&
+		left.Kind == right.Kind &&
+		left.Summary == right.Summary &&
+		left.ExecCommand == right.ExecCommand
 }
 
 func (m *Manager) markSnapshotChangeLocked() {

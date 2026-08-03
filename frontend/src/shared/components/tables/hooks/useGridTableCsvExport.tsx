@@ -4,6 +4,7 @@ import type { GridColumnDefinition } from '@shared/components/tables/GridTable.t
 import { buildGridTableCsv } from '@shared/components/tables/gridTableCsv';
 import type { ReactNode } from 'react';
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
+import { reportOperationalError } from '@/utils/errorHandler';
 
 const COPY_FEEDBACK_RESET_MS = 750;
 
@@ -73,7 +74,7 @@ export function useGridTableCsvExport<T>({
       await navigator.clipboard.writeText(csvText);
       setCopyFeedback('success');
     } catch (error) {
-      console.error('Failed to copy GridTable CSV', error);
+      reportOperationalError(error, { source: 'GridTable', action: 'copyCsv' });
       setCopyFeedback('error');
     } finally {
       setCopying(false);

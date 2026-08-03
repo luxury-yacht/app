@@ -3,6 +3,7 @@ import type { ClusterLifecycleState } from '@/core/contexts/clusterLifecycleStat
 import { parseClusterLifecycleState } from '@/core/contexts/clusterLifecycleState';
 import { eventBus } from '@/core/events';
 import { logAppLogsInfo } from '@/core/logging/appLogsClient';
+import { reportOperationalError } from '@/utils/errorHandler';
 
 export type ClusterHealthStatus = 'healthy' | 'degraded' | 'unknown';
 export type AuthErrorClass = 'auth' | 'connectivity' | '';
@@ -382,9 +383,12 @@ export class ClusterWorkspaceStore {
     on('cluster:health:degraded', (...args) => this.handleHealth(args[0], 'degraded'));
     on('cluster:scope:changed', (...args) => this.handleScopeChanged(args[0]));
 
-    void this.hydrate().catch((error) =>
-      console.error('[ClusterWorkspaceStore] Failed to hydrate:', error)
-    );
+    void this.hydrate().catch((error) => {
+      reportOperationalError(error, {
+        source: 'ClusterWorkspaceStore',
+        action: 'hydrateClusterWorkspace',
+      });
+    });
   }
 
   private stop(): void {
@@ -551,7 +555,7 @@ export class ClusterWorkspaceStore {
   }
 
   private reportIsolationError(message: string, error: unknown): void {
-    console.error(`[ClusterWorkspaceStore] ${message}:`, error);
+    reportOperationalError(error, { source: 'ClusterWorkspaceStore', action: message });
   }
 
   isServiceable(clusterId: string | null | undefined): boolean {

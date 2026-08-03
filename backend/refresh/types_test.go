@@ -7,6 +7,7 @@ import (
 	"testing"
 	"time"
 
+	"github.com/luxury-yacht/app/backend/internal/applog"
 	"github.com/luxury-yacht/app/backend/refresh"
 )
 
@@ -59,7 +60,7 @@ func (q *queueSpy) Next(ctx context.Context) (*refresh.ManualRefreshJob, error) 
 }
 
 func TestManagerProcessesManualRefreshJob(t *testing.T) {
-	reg := &mockRegistry{}
+	reg := &mockRegistry{operationIDs: make(chan string, 1)}
 	svc := &mockSnapshotService{}
 	queue := newQueueSpy()
 
@@ -68,7 +69,8 @@ func TestManagerProcessesManualRefreshJob(t *testing.T) {
 	ctx, cancel := context.WithCancel(context.Background())
 	defer cancel()
 
-	job, err := queue.Enqueue(context.Background(), "nodes", "default", "test")
+	enqueueContext := applog.ContextWithOperationID(context.Background(), "broker-read-manual")
+	job, err := queue.Enqueue(enqueueContext, "nodes", "default", "test")
 	if err != nil {
 		t.Fatalf("enqueue job: %v", err)
 	}
@@ -93,6 +95,14 @@ func TestManagerProcessesManualRefreshJob(t *testing.T) {
 				expectedVersion := svc.version.Load()
 				if stored.LatestVersion != expectedVersion {
 					t.Fatalf("expected latest version %d, got %d", expectedVersion, stored.LatestVersion)
+				}
+				select {
+				case operationID := <-reg.operationIDs:
+					if operationID != "broker-read-manual" {
+						t.Fatalf("expected manual job operation ID, got %q", operationID)
+					}
+				default:
+					t.Fatal("manual refresh did not receive an operation ID")
 				}
 				return
 			}
@@ -151,12 +161,17 @@ func TestInMemoryQueueReturnsJobCopies(t *testing.T) {
 	}
 }
 
-type mockRegistry struct{}
+type mockRegistry struct {
+	operationIDs chan string
+}
 
 func (m *mockRegistry) Register(refresh.DomainConfig) error     { return nil }
 func (m *mockRegistry) Get(string) (refresh.DomainConfig, bool) { return refresh.DomainConfig{}, false }
 func (m *mockRegistry) List() []refresh.DomainConfig            { return nil }
 func (m *mockRegistry) ManualRefresh(ctx context.Context, domain, scope string) (*refresh.ManualRefreshResult, error) {
+	if m.operationIDs != nil {
+		m.operationIDs <- applog.OperationIDFromContext(ctx)
+	}
 	return &refresh.ManualRefreshResult{}, nil
 }
 

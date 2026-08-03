@@ -943,8 +943,8 @@ describe('DockablePanel behaviour (real hook)', () => {
     await unmount();
   });
 
-  it('logs an error and renders nothing when panelId is missing', async () => {
-    const errorSpy = vi.spyOn(console, 'error').mockImplementation(() => undefined);
+  it('logs a warning and renders nothing when panelId is missing', async () => {
+    const warnSpy = vi.spyOn(console, 'warn').mockImplementation(() => undefined);
 
     const { unmount } = await renderPanel(
       <DockablePanel panelId={'' as unknown as string}>
@@ -953,10 +953,10 @@ describe('DockablePanel behaviour (real hook)', () => {
     );
 
     await flushEffects();
-    expect(errorSpy).toHaveBeenCalledWith('DockablePanel: panelId prop is required');
+    expect(warnSpy).toHaveBeenCalledWith('DockablePanel: panelId prop is required');
 
     await unmount();
-    errorSpy.mockRestore();
+    warnSpy.mockRestore();
   });
 
   it('allows panels docked on the same side to coexist as tabs', async () => {

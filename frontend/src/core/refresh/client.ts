@@ -36,6 +36,7 @@ interface FetchSnapshotOptions {
   signal?: AbortSignal;
   ifNoneMatch?: string;
   manual?: boolean;
+  correlationId?: string;
 }
 
 type ManualRefreshJob = {
@@ -97,7 +98,8 @@ const waitForManualRefresh = async (
   baseURL: string,
   domain: RefreshDomain,
   scope: string,
-  signal?: AbortSignal
+  signal?: AbortSignal,
+  correlationId?: string
 ): Promise<void> => {
   const controller = new AbortController();
   let timedOut = false;
@@ -117,7 +119,10 @@ const waitForManualRefresh = async (
     let job = await parseManualRefreshJob(
       await fetch(enqueueURL.toString(), {
         method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
+        headers: {
+          'Content-Type': 'application/json',
+          ...(correlationId ? { 'X-Correlation-ID': correlationId } : {}),
+        },
         body: JSON.stringify({ scope, reason: 'user' }),
         signal: controller.signal,
       })
@@ -126,7 +131,10 @@ const waitForManualRefresh = async (
     while (job.state === 'queued' || job.state === 'running') {
       const statusURL = new URL(`/api/v2/jobs/${job.jobId}`, baseURL);
       job = await parseManualRefreshJob(
-        await fetch(statusURL.toString(), { signal: controller.signal })
+        await fetch(statusURL.toString(), {
+          signal: controller.signal,
+          ...(correlationId ? { headers: { 'X-Correlation-ID': correlationId } } : {}),
+        })
       );
       if (job.state === 'queued' || job.state === 'running') {
         await abortableDelay(pollDelayMs, controller.signal);
@@ -227,7 +235,8 @@ export async function fetchSnapshot<TPayload>(
       await resolveRefreshBaseURL(),
       domain,
       options.scope,
-      options.signal
+      options.signal,
+      options.correlationId
     );
   }
   const buildRequest = async () => {
@@ -239,6 +248,9 @@ export async function fetchSnapshot<TPayload>(
     }
 
     const headers: Record<string, string> = {};
+    if (options.correlationId) {
+      headers['X-Correlation-ID'] = options.correlationId;
+    }
     if (options.ifNoneMatch && !options.manual) {
       headers['If-None-Match'] = options.ifNoneMatch;
     }

@@ -15,6 +15,7 @@ import type { GridTableFilterState } from '@shared/components/tables/GridTable.t
 import { backend } from '@wailsjs/go/models';
 import { requestAppState } from '@/core/app-state-access';
 import { eventBus } from '@/core/events';
+import { reportOperationalError } from '@/utils/errorHandler';
 
 // ---------- Types ----------
 
@@ -183,7 +184,7 @@ export const hydrateFavorites = async (options?: { force?: boolean }): Promise<F
         emitChanged();
       }
     } catch (error) {
-      console.error('Failed to hydrate favorites:', error);
+      reportOperationalError(error, { source: 'Favorites', action: 'hydrateFavorites' });
     } finally {
       hydrated = true;
     }

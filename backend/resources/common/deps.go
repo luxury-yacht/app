@@ -66,6 +66,7 @@ type Dependencies struct {
 // CloneWithContext returns a shallow copy using the supplied context.
 func (d Dependencies) CloneWithContext(ctx context.Context) Dependencies {
 	d.Context = ctx
+	d.Logger = applog.OperationScoped(d.Logger, applog.OperationIDFromContext(ctx))
 	return d
 }
 

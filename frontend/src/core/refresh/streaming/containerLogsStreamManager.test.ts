@@ -481,8 +481,6 @@ describe('ContainerLogsStreamManager', () => {
       }
     }
     installEventSource(MockEventSource);
-    const consoleError = vi.spyOn(console, 'error').mockImplementation(() => undefined);
-
     const { ContainerLogsStreamManager } = await import('./containerLogsStreamManager');
     const manager = new ContainerLogsStreamManager();
     await manager.startStream(SCOPE);
@@ -499,8 +497,11 @@ describe('ContainerLogsStreamManager', () => {
 
     const state = getScopedDomainState('container-logs', SCOPE);
     expect(state.data).toBeNull();
-    expect(consoleError).toHaveBeenCalledWith('Invalid container logs stream payload structure');
-    consoleError.mockRestore();
+    expect(errorHandlerMock.handle).toHaveBeenCalledWith(
+      expect.objectContaining({ message: 'Invalid container logs stream payload structure' }),
+      expect.objectContaining({ scope: SCOPE }),
+      'Invalid container logs stream payload'
+    );
   });
 
   test('rejects a manual refresh when its reset frame violates the log entry contract', async () => {
@@ -524,8 +525,6 @@ describe('ContainerLogsStreamManager', () => {
       }
     }
     installEventSource(MockEventSource);
-    const consoleError = vi.spyOn(console, 'error').mockImplementation(() => undefined);
-
     const { ContainerLogsStreamManager } = await import('./containerLogsStreamManager');
     const manager = new ContainerLogsStreamManager();
     const refreshPromise = manager.refreshOnce(SCOPE);
@@ -545,10 +544,10 @@ describe('ContainerLogsStreamManager', () => {
     await expect(refreshPromise).rejects.toThrow('Invalid container logs stream payload');
     expect(getScopedDomainState('container-logs', SCOPE).status).toBe('error');
     expect(errorHandlerMock.handle).toHaveBeenCalledWith(
-      expect.objectContaining({ message: 'Invalid container logs stream payload' }),
-      expect.objectContaining({ scope: SCOPE })
+      expect.objectContaining({ message: 'Invalid container logs stream payload structure' }),
+      expect.objectContaining({ scope: SCOPE }),
+      'Invalid container logs stream payload'
     );
-    consoleError.mockRestore();
   });
 
   test('startStream appends cluster-prefixed scope and cached selection filters to the stream URL', async () => {
@@ -666,7 +665,8 @@ describe('ContainerLogsStreamManager', () => {
     expect(state.status).toBe('error');
     expect(errorHandlerMock.handle).toHaveBeenCalledWith(
       expect.objectContaining({ message: 'Container logs stream connection lost' }),
-      expect.objectContaining({ scope: SCOPE })
+      expect.objectContaining({ scope: SCOPE }),
+      'Container logs stream connection lost'
     );
   });
 

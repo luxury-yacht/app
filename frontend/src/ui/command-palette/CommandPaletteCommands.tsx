@@ -56,6 +56,7 @@ import { useExclusiveNamespaces } from '@/hooks/useExclusiveNamespaces';
 import { useShortNames } from '@/hooks/useShortNames';
 import type { ClusterViewType, NamespaceViewType } from '@/types/navigation/views';
 import { changeAppearanceMode } from '@/utils/appearanceMode';
+import { reportOperationalError } from '@/utils/errorHandler';
 import { isMacPlatform } from '@/utils/platform';
 
 export interface Command {
@@ -276,7 +277,10 @@ export function useCommandPaletteCommands() {
           try {
             await changeAppearanceMode('system');
           } catch (error) {
-            console.error('Failed to set system mode:', error);
+            reportOperationalError(error, {
+              source: 'CommandPalette',
+              action: 'setSystemAppearanceMode',
+            });
           }
         },
         keywords: ['mode', 'system', 'auto', 'automatic', 'appearance', 'os'],
@@ -291,7 +295,10 @@ export function useCommandPaletteCommands() {
           try {
             await changeAppearanceMode('light');
           } catch (error) {
-            console.error('Failed to set light mode:', error);
+            reportOperationalError(error, {
+              source: 'CommandPalette',
+              action: 'setLightAppearanceMode',
+            });
           }
         },
         keywords: ['mode', 'light', 'bright', 'white', 'appearance'],
@@ -306,7 +313,10 @@ export function useCommandPaletteCommands() {
           try {
             await changeAppearanceMode('dark');
           } catch (error) {
-            console.error('Failed to set dark mode:', error);
+            reportOperationalError(error, {
+              source: 'CommandPalette',
+              action: 'setDarkAppearanceMode',
+            });
           }
         },
         keywords: ['mode', 'dark', 'night', 'black', 'appearance'],
@@ -328,7 +338,10 @@ export function useCommandPaletteCommands() {
           try {
             await setExclusiveNamespaces(newState);
           } catch (error) {
-            console.error('Failed to toggle exclusive namespaces:', error);
+            reportOperationalError(error, {
+              source: 'CommandPalette',
+              action: 'toggleExclusiveNamespaces',
+            });
           }
         },
         keywords: ['exclusive', 'namespaces', 'sidebar', 'expand', 'collapse', 'toggle'],
@@ -351,7 +364,10 @@ export function useCommandPaletteCommands() {
           try {
             await setDimInactiveNamespaces(newState);
           } catch (error) {
-            console.error('Failed to toggle dim inactive namespaces:', error);
+            reportOperationalError(error, {
+              source: 'CommandPalette',
+              action: 'toggleDimInactiveNamespaces',
+            });
           }
         },
         keywords: ['dim', 'inactive', 'namespaces', 'sidebar', 'workloads', 'toggle'],
@@ -400,7 +416,10 @@ export function useCommandPaletteCommands() {
           try {
             await setUseShortResourceNames(newState);
           } catch (error) {
-            console.error('Failed to toggle short names:', error);
+            reportOperationalError(error, {
+              source: 'CommandPalette',
+              action: 'toggleShortResourceNames',
+            });
           }
         },
         keywords: ['short', 'names', 'abbreviations', 'types', 'resources', 'toggle'],

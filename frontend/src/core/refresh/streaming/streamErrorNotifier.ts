@@ -9,13 +9,14 @@ export interface StreamErrorNotification {
   scope?: string;
   message: string;
   context?: StreamErrorContext;
+  error?: unknown;
 }
 
 export class StreamErrorNotifier {
   private lastNotifiedErrors = new Map<string, string>();
   private suppressErrorsUntil = 0;
 
-  notify({ source, domain, scope, message, context }: StreamErrorNotification): void {
+  notify({ source, domain, scope, message, context, error }: StreamErrorNotification): void {
     if (this.isSuppressed()) {
       return;
     }
@@ -24,12 +25,16 @@ export class StreamErrorNotifier {
       return;
     }
     this.lastNotifiedErrors.set(key, message);
-    errorHandler.handle(new Error(message), {
-      source,
-      domain,
-      scope: scope ?? 'global',
-      context,
-    });
+    errorHandler.handle(
+      error ?? new Error(message),
+      {
+        source,
+        domain,
+        scope: scope ?? 'global',
+        context,
+      },
+      message
+    );
   }
 
   clear(domain?: RefreshDomain | string, scope?: string): void {

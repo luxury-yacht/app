@@ -19,6 +19,7 @@ import React, {
   useState,
 } from 'react';
 import { createPortal } from 'react-dom';
+import { reportOperationalError } from '@/utils/errorHandler';
 import { DockablePanelControls } from './DockablePanelControls';
 import { DockablePanelHeader } from './DockablePanelHeader';
 import { useDockablePanelContext, useDockablePanelHost } from './DockablePanelProvider';
@@ -95,7 +96,7 @@ function assignRef<T>(ref: React.Ref<T> | undefined, value: T | null) {
   try {
     (ref as React.RefObject<T | null>).current = value;
   } catch (error) {
-    console.error('DockablePanel: failed to assign ref', error);
+    reportOperationalError(error, { source: 'DockablePanel', action: 'assignRef' });
   }
 }
 
@@ -1012,7 +1013,7 @@ const DockablePanelInner: React.FC<DockablePanelProps> = (props) => {
 
 const DockablePanel = memo<DockablePanelProps>((props) => {
   if (!props.panelId) {
-    console.error('DockablePanel: panelId prop is required');
+    console.warn('DockablePanel: panelId prop is required');
     return null;
   }
 

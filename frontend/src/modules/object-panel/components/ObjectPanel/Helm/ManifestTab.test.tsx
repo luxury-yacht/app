@@ -234,7 +234,11 @@ describe('ManifestTab', () => {
     expect(refreshMocks.fetchScopedDomain).toHaveBeenCalledWith(
       'object-helm-manifest',
       'ns:helmrelease:demo',
-      { isManual: false, streamSignal: false }
+      expect.objectContaining({
+        isManual: false,
+        streamSignal: false,
+        correlationId: expect.any(String),
+      })
     );
 
     await unmount();

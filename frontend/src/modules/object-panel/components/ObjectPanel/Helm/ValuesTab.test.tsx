@@ -458,7 +458,11 @@ describe('ValuesTab', () => {
     expect(refreshMocks.fetchScopedDomain).toHaveBeenCalledWith(
       'object-helm-values',
       'ns:helmrelease:chart',
-      { isManual: false, streamSignal: false }
+      expect.objectContaining({
+        isManual: false,
+        streamSignal: false,
+        correlationId: expect.any(String),
+      })
     );
 
     await unmount();

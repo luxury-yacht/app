@@ -524,7 +524,7 @@ func (a *App) clusterAuthFailedOnPreflight(
 	}
 
 	a.logger.Warn(fmt.Sprintf("Detected credential error for cluster %s, reporting auth failure", meta.Name), logsources.Auth, meta.ID, meta.Name)
-	manager.ReportFailureDiagnostic(authstate.NewFailureDiagnostic(err.Error(), diagnostic))
+	manager.ReportFailureDiagnostic(authstate.NewFailureDiagnostic(err, diagnostic))
 	return true
 }
 

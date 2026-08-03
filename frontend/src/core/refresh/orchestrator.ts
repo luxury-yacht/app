@@ -14,6 +14,7 @@ import {
 } from '@/core/logging/appLogsClient';
 import { getAutoRefreshEnabled } from '@/core/settings/appPreferences';
 import { compareUtf16Strings } from '@/shared/utils/sort';
+import { reportOperationalError } from '@/utils/errorHandler';
 import {
   ensureRefreshBaseURL,
   fetchSnapshot,
@@ -55,6 +56,7 @@ import type { DomainPayloadMap, RefreshDomain } from './types';
 
 type DomainFetchOptions = {
   isManual: boolean;
+  correlationId?: string;
   signal?: AbortSignal;
   allowDisabledRetainedScope?: boolean;
   // Scheduler-owned reconciliation. Query-only leases turn this into a
@@ -234,7 +236,8 @@ class RefreshOrchestrator {
   private notifyRefreshError(
     domain: RefreshDomain,
     scope: string | undefined,
-    message: string
+    message: string,
+    error?: unknown
   ): void {
     if (message.includes('no active clusters available')) {
       // The cluster's backend subsystem is still initializing (its lifecycle
@@ -251,6 +254,7 @@ class RefreshOrchestrator {
       scope,
       message,
       category: this.configs.get(domain)?.category,
+      ...(error !== undefined ? { error } : {}),
     });
   }
 
@@ -370,7 +374,6 @@ class RefreshOrchestrator {
       .catch((error) => {
         const message =
           error instanceof Error ? error.message : 'Failed to initialise refresh subsystem';
-        console.error(`Failed to initialise streaming for ${domain}`, error);
         setScopedDomainState(domain, normalizedScope, (previous) => ({
           ...previous,
           status: 'error',
@@ -378,7 +381,7 @@ class RefreshOrchestrator {
           scope: normalizedScope,
         }));
         const notificationScope = normalizedScope?.trim() || undefined;
-        this.notifyRefreshError(domain, notificationScope, message);
+        this.notifyRefreshError(domain, notificationScope, message, error);
       })
       .finally(() => {
         runtime.clearStreamingReady(domain, normalizedScope);
@@ -818,7 +821,12 @@ class RefreshOrchestrator {
             try {
               cleanup();
             } catch (error) {
-              console.error(`Failed to clean up streaming domain ${domain}::${scope}`, error);
+              reportOperationalError(error, {
+                source: 'RefreshOrchestrator',
+                action: 'cleanupStreamingDomain',
+                domain,
+                scope,
+              });
             }
           }
           if (enabledNow) {
@@ -850,7 +858,6 @@ class RefreshOrchestrator {
       .catch((error) => {
         runtime.failStreamingStart(domain, scope);
         const message = error instanceof Error ? error.message : String(error);
-        console.error(`Failed to start streaming domain ${domain}::${scope}`, error);
         // All domains are scoped — write error to scoped store.
         setScopedDomainState(domain, scope, (previous) => ({
           ...previous,
@@ -859,7 +866,7 @@ class RefreshOrchestrator {
           scope,
         }));
         const notificationScope = scope?.trim() || undefined;
-        this.notifyRefreshError(domain, notificationScope, message);
+        this.notifyRefreshError(domain, notificationScope, message, error);
       });
 
     return startPromise.then(() => undefined).catch(() => undefined);
@@ -916,7 +923,12 @@ class RefreshOrchestrator {
             try {
               streamingCleanup();
             } catch (error) {
-              console.error(`Failed to stop pending streaming domain ${domain}::${scope}`, error);
+              reportOperationalError(error, {
+                source: 'RefreshOrchestrator',
+                action: 'stopPendingStreamingDomain',
+                domain,
+                scope,
+              });
             }
           }
         })
@@ -931,7 +943,12 @@ class RefreshOrchestrator {
       try {
         cleanup();
       } catch (error) {
-        console.error(`Failed to stop streaming domain ${domain}::${scope}`, error);
+        reportOperationalError(error, {
+          source: 'RefreshOrchestrator',
+          action: 'stopStreamingDomain',
+          domain,
+          scope,
+        });
       }
       runtime.deleteStreamingCleanup(domain, scope);
     }
@@ -1152,6 +1169,7 @@ class RefreshOrchestrator {
       isManual?: boolean;
       streamSignal?: boolean;
       queryReconcile?: boolean;
+      correlationId?: string;
     } = {}
   ): Promise<void> {
     const config = this.getConfig(domain);
@@ -1238,6 +1256,7 @@ class RefreshOrchestrator {
       isManual: options.isManual ?? true,
       signal: options.signal,
       streamSignal: Boolean(options.streamSignal),
+      correlationId: options.correlationId,
     });
   }
 
@@ -1351,6 +1370,7 @@ class RefreshOrchestrator {
         signal: controller.signal,
         ifNoneMatch: previousState.sourceVersion ?? previousState.etag,
         manual: Boolean(options.isManual && !isResourceStreamDomain(domain)),
+        correlationId: options.correlationId,
       });
 
       if (controller.signal.aborted) {
@@ -1407,7 +1427,7 @@ class RefreshOrchestrator {
           permissionDenied: true,
           isManual: options.isManual,
         }));
-        this.notifyRefreshError(domain, normalizedScope, message);
+        this.notifyRefreshError(domain, normalizedScope, message, error);
         return;
       }
       if (this.errorNotifier.shouldSuppressNetworkError(message)) {
@@ -1426,7 +1446,7 @@ class RefreshOrchestrator {
         error: message,
         isManual: options.isManual,
       }));
-      this.notifyRefreshError(domain, normalizedScope, message);
+      this.notifyRefreshError(domain, normalizedScope, message, error);
     } finally {
       const tracked = runtime.getInFlight(domain, normalizedScope);
       if (tracked && tracked.requestId === requestId) {

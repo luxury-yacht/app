@@ -5,6 +5,7 @@ import (
 	"fmt"
 	"strings"
 
+	"github.com/luxury-yacht/app/backend/internal/applog"
 	"github.com/luxury-yacht/app/backend/objectcatalog"
 	"github.com/luxury-yacht/app/backend/resources/common"
 	"k8s.io/apimachinery/pkg/runtime/schema"
@@ -97,6 +98,7 @@ func (a *App) resolveClusterDependencies(clusterID string) (common.Dependencies,
 	if !ok {
 		return common.Dependencies{}, "", fmt.Errorf("cluster %s not active", trimmed)
 	}
+	deps.Logger = applog.OperationScoped(deps.Logger, applog.NextOperationID("wails"))
 
 	return deps, trimmed, nil
 }

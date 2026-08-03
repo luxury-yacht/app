@@ -22,6 +22,7 @@ import { fetchSnapshot } from '@/core/refresh/client';
 import { buildClusterScope } from '@/core/refresh/clusterScope';
 import type { CatalogItem, CatalogSnapshotPayload } from '@/core/refresh/types';
 import { useShortNames } from '@/hooks/useShortNames';
+import { reportOperationalError } from '@/utils/errorHandler';
 import { aliasToKindMap, canonicalKinds, getDisplayKind } from '@/utils/kindAliasMap';
 import { isMacPlatform } from '@/utils/platform';
 import type { Command } from './CommandPaletteCommands';
@@ -395,7 +396,7 @@ export const CommandPalette = memo(function CommandPaletteComponent({
           if (error?.name === 'AbortError') {
             return;
           }
-          console.error('Catalog search failed', error);
+          reportOperationalError(error, { source: 'CommandPalette', action: 'searchCatalog' });
           setCatalogResults([]);
           setCatalogStats(null);
         })

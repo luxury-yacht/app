@@ -11,6 +11,7 @@ import (
 	"testing"
 	"time"
 
+	"github.com/luxury-yacht/app/backend/internal/applog"
 	"github.com/luxury-yacht/app/backend/refresh"
 	"github.com/luxury-yacht/app/backend/refresh/api"
 	"github.com/luxury-yacht/app/backend/refresh/telemetry"
@@ -18,9 +19,11 @@ import (
 
 type fakeSnapshotService struct {
 	snapshot *refresh.Snapshot
+	context  context.Context
 }
 
 func (f *fakeSnapshotService) Build(ctx context.Context, domain, scope string) (*refresh.Snapshot, error) {
+	f.context = ctx
 	snap := *f.snapshot
 	snap.Domain = domain
 	snap.Scope = scope
@@ -36,10 +39,12 @@ func (f *errorSnapshotService) Build(ctx context.Context, domain, scope string) 
 }
 
 type fakeQueue struct {
-	job *refresh.ManualRefreshJob
+	job     *refresh.ManualRefreshJob
+	context context.Context
 }
 
 func (q *fakeQueue) Enqueue(ctx context.Context, domain, scope, reason string) (*refresh.ManualRefreshJob, error) {
+	q.context = ctx
 	job := &refresh.ManualRefreshJob{ID: "job-1", Domain: domain, Scope: scope, QueuedAt: 1, State: refresh.JobStateQueued}
 	q.job = job
 	return job, nil
@@ -111,6 +116,42 @@ func TestSnapshotEndpoint(t *testing.T) {
 	}
 	if snap.Domain != "nodes" {
 		t.Fatalf("unexpected domain %s", snap.Domain)
+	}
+}
+
+func TestSnapshotPreflightAllowsCorrelationHeader(t *testing.T) {
+	server := api.NewServer(snapshotService(), &fakeQueue{}, nil, nil)
+	mux := http.NewServeMux()
+	server.Register(mux)
+
+	req := httptest.NewRequest(http.MethodOptions, "/api/v2/snapshots/nodes", nil)
+	req.Header.Set("Origin", "wails://test")
+	req.Header.Set("Access-Control-Request-Headers", api.CorrelationIDHeader)
+	rr := httptest.NewRecorder()
+	mux.ServeHTTP(rr, req)
+
+	if rr.Code != http.StatusNoContent {
+		t.Fatalf("expected status 204 got %d", rr.Code)
+	}
+	allowedHeaders := rr.Header().Get("Access-Control-Allow-Headers")
+	if !strings.Contains(allowedHeaders, api.CorrelationIDHeader) {
+		t.Fatalf("expected correlation header in CORS allow-list, got %q", allowedHeaders)
+	}
+}
+
+func TestSnapshotEndpointPropagatesCorrelationIDAsOperation(t *testing.T) {
+	svc := &fakeSnapshotService{snapshot: &refresh.Snapshot{Version: 1}}
+	server := api.NewServer(svc, &fakeQueue{}, nil, nil)
+	mux := http.NewServeMux()
+	server.Register(mux)
+
+	req := httptest.NewRequest(http.MethodGet, "/api/v2/snapshots/nodes?scope=cluster-a|", nil)
+	req.Header.Set(api.CorrelationIDHeader, "broker-read-12")
+	rr := httptest.NewRecorder()
+	mux.ServeHTTP(rr, req)
+
+	if got := applog.OperationIDFromContext(svc.context); got != "broker-read-12" {
+		t.Fatalf("expected snapshot context operation id, got %q", got)
 	}
 }
 
@@ -248,6 +289,7 @@ func TestManualRefreshEndpoint(t *testing.T) {
 	req := httptest.NewRequest(http.MethodPost, "/api/v2/refresh/nodes", strings.NewReader(`{"scope":"cluster-a|default"}`))
 	req.Header.Set("Content-Type", "application/json")
 	req.Header.Set("Origin", "wails://test")
+	req.Header.Set(api.CorrelationIDHeader, "broker-read-manual")
 	rr := httptest.NewRecorder()
 	mux.ServeHTTP(rr, req)
 
@@ -261,6 +303,9 @@ func TestManualRefreshEndpoint(t *testing.T) {
 	}
 	if job.State != refresh.JobStateQueued {
 		t.Fatalf("expected job state queued, got %s", job.State)
+	}
+	if got := applog.OperationIDFromContext(queue.context); got != "broker-read-manual" {
+		t.Fatalf("expected manual queue context operation ID, got %q", got)
 	}
 }
 

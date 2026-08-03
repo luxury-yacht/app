@@ -10,6 +10,7 @@ import {
   isConfirmedAuthFailure,
 } from '@/core/cluster-workspace/clusterWorkspaceStore';
 import { useClusterWorkspaceSnapshot } from '@/core/cluster-workspace/useClusterWorkspace';
+import { reportOperationalError } from '@/utils/errorHandler';
 
 export type { ClusterAuthState };
 export {
@@ -50,7 +51,11 @@ export const AuthErrorProvider: React.FC<{ children: React.ReactNode }> = ({ chi
     try {
       await RetryClusterAuth(clusterId);
     } catch (error) {
-      console.error(`[AuthErrorContext] RetryClusterAuth failed for ${clusterId}:`, error);
+      reportOperationalError(error, {
+        source: 'AuthErrorContext',
+        action: 'retryClusterAuth',
+        clusterId,
+      });
     }
   }, []);
   const value = useMemo(

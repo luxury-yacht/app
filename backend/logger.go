@@ -44,6 +44,7 @@ type LogEntry struct {
 	Source      string `json:"source,omitempty"`
 	ClusterID   string `json:"clusterId,omitempty"`
 	ClusterName string `json:"clusterName,omitempty"`
+	OperationID string `json:"operationId,omitempty"`
 }
 
 // Logger manages application logs in memory
@@ -73,8 +74,8 @@ func NewLogger(maxSize int, reporters ...sentryreporting.Reporter) *Logger {
 }
 
 // Log adds a log entry with the specified level, message, and optional metadata.
-// The variadic fields are interpreted as source, cluster ID, and cluster name
-// in that order.
+// The variadic fields are interpreted as source, cluster ID, cluster name, and
+// operation ID in that order.
 func (l *Logger) Log(level LogLevel, message string, source ...string) {
 	l.log(level, message, nil, nil, "", source...)
 }
@@ -104,6 +105,9 @@ func (l *Logger) log(level LogLevel, message string, cause error, recovered any,
 	}
 	if len(source) > 2 {
 		entry.ClusterName = source[2]
+	}
+	if len(source) > 3 {
+		entry.OperationID = source[3]
 	}
 
 	// Add the entry
@@ -137,10 +141,11 @@ func (l *Logger) log(level LogLevel, message string, cause error, recovered any,
 			data["clusterName"] = entry.ClusterName
 		}
 		reporter.AddBreadcrumb(sentryreporting.Breadcrumb{
-			Category: entry.Source,
-			Message:  entry.Message,
-			Level:    breadcrumbLevel(level),
-			Data:     data,
+			Category:    entry.Source,
+			Message:     entry.Message,
+			Level:       breadcrumbLevel(level),
+			Data:        data,
+			OperationID: entry.OperationID,
 		})
 	}
 	// ErrorCapture republishes third-party stderr (klog from client-go and
@@ -151,6 +156,7 @@ func (l *Logger) log(level LogLevel, message string, cause error, recovered any,
 			Source:      entry.Source,
 			ClusterID:   entry.ClusterID,
 			ClusterName: entry.ClusterName,
+			OperationID: entry.OperationID,
 		}
 		if recovered != nil {
 			context.Operation = operation

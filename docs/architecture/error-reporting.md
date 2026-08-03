@@ -22,6 +22,12 @@ The integration uses Sentry's native event processing and default integrations:
   advisory warnings are not exceptions and stay local. Render failures already
   owned by the React 19 root handler are not captured a second time by legacy
   component boundaries.
+- `handleOperational` is the matching non-toast boundary for caught failures
+  that are handled without rendering an error surface. Production code cannot
+  call `console.error` directly: the `no-direct-console-error` Biome plugin
+  requires the original exception to cross one of these shared boundaries.
+  Event-bus subscriber exceptions use an installed reporter on the bus, so the
+  bus stays cycle-free while still crossing the same telemetry boundary.
 - The navigation owner publishes the active view, tab, cluster, and object-panel
   state, while the namespace owner publishes the selected namespace. These are
   attached to user-visible error events and to browser breadcrumbs. Data and
@@ -40,12 +46,18 @@ The integration uses Sentry's native event processing and default integrations:
   cluster from being presented as the failing operation's trail. Breadcrumb
   data never includes the raw error message, and arbitrary caller context is
   not copied into the Sentry event.
+- Background handled failures keep only their own `ui.error.handled`
+  breadcrumb, matched by operation id. They do not inherit the last unrelated
+  browser activity merely because it happened in the same workspace.
 - `frontend/src/main.ts` imports `App` dynamically, *after* that initialization.
   A static import would evaluate the whole application module graph first, so a
   module-level failure anywhere in the app would reach an uninstrumented page
   and never be reported. Keep the import dynamic; `src/main.test.ts` pins the
-  ordering. A failure inside preference hydration itself still precedes SDK
-  init and remains unreportable.
+  ordering. Preference-hydration failures are buffered in memory until the
+  persisted reporting choice is known. An enabled preference flushes the
+  original exceptions after SDK initialization; opt-out discards them. If the
+  persisted preference itself cannot be read, reporting fails closed and the
+  buffer is discarded rather than risking transmission after an opt-out.
 - `internal/sentryreporting` initializes `sentry-go`, forwards exceptions and
   panics, and owns the runtime enable/disable and shutdown lifecycle.
 - `backend/logger.go` keeps local log messages human-readable while forwarding
@@ -57,16 +69,24 @@ The integration uses Sentry's native event processing and default integrations:
   user-visible — Sentry titles issues `"<type>: <value>"` — so renaming it
   renames every future legacy-log issue.
 - Non-error backend log entries become Sentry breadcrumbs while reporting is
-  enabled. Global breadcrumbs and breadcrumbs matching an event's `clusterId`
-  are attached in original order; activity from other clusters is excluded.
-  The event scope includes source, `clusterId`, cluster name, and the failed
-  operation when available.
+  enabled. Wails resource operations receive a process-unique operation id;
+  refresh snapshot requests reuse `X-Correlation-ID`, including the frontend
+  broker's `broker-read-N` id. Queued manual-refresh jobs retain that identity
+  after the HTTP request finishes. Only breadcrumbs matching the event's exact
+  operation id and cluster are attached. Errors without an explicit operation
+  are assigned a `backend-report-N` id and receive no unscoped breadcrumbs, so
+  same-cluster background activity cannot become a false trail. The event scope
+  includes source, `clusterId`, cluster name, human operation, and operation id.
 - `backend/internal/applog.ReportError` and
   `resources/common.Dependencies.LogRequestFailure` preserve typed errors across
   package and cluster-scoped logger boundaries. Loggers that do not implement
   the optional structured interface retain the previous string-only behavior.
   Resource handlers touched by this reporting path wrap returned causes with
   `%w` so their callers can continue inspecting the chain.
+- Terminal metrics polls, beta-expiry startup failures, capability-review batch
+  failures, and classified authentication failures also use the structured
+  path. Authentication diagnostics retain the original cause internally while
+  exposing only their existing sanitized fields to the frontend.
 - `backend/app_settings.go` persists `errorReportingEnabled` and switches the
   backend reporter only after the setting write succeeds.
 - `frontend/vite.config.ts` owns release identity and frontend source-map upload.

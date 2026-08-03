@@ -3,6 +3,7 @@ package metrics
 import (
 	"context"
 	"errors"
+	"fmt"
 	"sync"
 	"testing"
 	"time"
@@ -31,6 +32,7 @@ type recordingMetricsLogger struct {
 	mu      sync.Mutex
 	entries []recordedMetricsLog
 	written chan struct{}
+	cause   error
 }
 
 func newRecordingMetricsLogger() *recordingMetricsLogger {
@@ -61,6 +63,13 @@ func (l *recordingMetricsLogger) Warn(message string, source ...string) {
 
 func (l *recordingMetricsLogger) Error(message string, source ...string) {
 	l.append("error", message, source...)
+}
+
+func (l *recordingMetricsLogger) ErrorWithCause(err error, message string, source ...string) {
+	l.mu.Lock()
+	l.cause = err
+	l.mu.Unlock()
+	l.append("error", fmt.Sprintf("%s: %v", message, err), source...)
 }
 
 func (l *recordingMetricsLogger) snapshot() []recordedMetricsLog {
@@ -255,9 +264,12 @@ failureLogged:
 	}
 	require.Equal(t, []recordedMetricsLog{{
 		level:   "error",
-		message: "metrics poll failed (nodes.metrics.k8s.io): metrics server unavailable (failures=1)",
+		message: "metrics poll failed (nodes.metrics.k8s.io) (failures=1): metrics server unavailable",
 		source:  []string{"Metrics"},
 	}}, failures)
+	logger.mu.Lock()
+	require.EqualError(t, logger.cause, "metrics server unavailable")
+	logger.mu.Unlock()
 }
 
 func TestNodeMetricsRetryDoesNotLogCancellation(t *testing.T) {

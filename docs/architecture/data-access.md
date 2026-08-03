@@ -41,6 +41,13 @@ Context-wide manual refresh accepts only `user`. Navigation updates orchestrator
 context and lets the scheduler issue foreground reconciliation; it never creates
 a ManualQueue job.
 
+Every executed `dataAccess` read receives a `broker-read-N` request id. Refresh
+domain reads forward that id as `X-Correlation-ID` on manual-refresh, job-status,
+and snapshot HTTP requests. The refresh API permits the header in CORS
+preflights. The backend reuses it as the operation identity for snapshot builds
+and carries it through queued manual-refresh execution, so frontend diagnostics,
+structured errors, and breadcrumbs refer to the same request instance.
+
 The owning timing, retention, and background-work rules are in
 [data-freshness.md](data-freshness.md).
 
@@ -84,7 +91,8 @@ When adding a read:
 
 1. Classify it as cluster/resource data or app-state/runtime data.
 2. Add a typed reader wrapper under the owning broker.
-3. Include diagnostics labels, adapter type, request reason, and scope.
+3. Include diagnostics labels, adapter type, request reason, and scope; let the
+   broker supply the request id rather than creating a second correlation id.
 4. Handle blocked `dataAccess` reads without treating them as errors.
 5. Preserve full cluster and object identity across the boundary.
 

@@ -23,14 +23,6 @@ export class ErrorBoundary extends Component<ErrorBoundaryProps, ErrorBoundarySt
   componentDidCatch(error: Error, errorInfo: ErrorInfo) {
     const { scope, onError, isolate } = this.props;
 
-    // Log to console in development
-    if (import.meta.env.DEV) {
-      console.group(`🔴 Error Boundary Caught [${scope || 'unknown'}]`);
-      console.error('Error:', error);
-      console.error('Component Stack:', errorInfo.componentStack);
-      console.groupEnd();
-    }
-
     // Send to global error handler
     if (!isolate) {
       errorHandler.handle(

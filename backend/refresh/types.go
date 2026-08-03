@@ -8,6 +8,7 @@ import (
 	"sync"
 	"time"
 
+	"github.com/luxury-yacht/app/backend/internal/applog"
 	"github.com/luxury-yacht/app/backend/internal/config"
 )
 
@@ -87,6 +88,7 @@ type ManualRefreshJob struct {
 	Domain        string   `json:"domain"`
 	Scope         string   `json:"scope,omitempty"`
 	Reason        string   `json:"reason,omitempty"`
+	OperationID   string   `json:"-"`
 	State         JobState `json:"state"`
 	QueuedAt      int64    `json:"queuedAt"`
 	StartedAt     int64    `json:"startedAt,omitempty"`
@@ -292,7 +294,8 @@ func (m *Manager) processManualJob(parent context.Context, job *ManualRefreshJob
 	job.Error = ""
 	m.manualQueue.Update(job)
 
-	ctx, cancel := context.WithTimeout(parent, config.RefreshRequestTimeout)
+	operationContext := applog.ContextWithOperationID(parent, job.OperationID)
+	ctx, cancel := context.WithTimeout(operationContext, config.RefreshRequestTimeout)
 	defer cancel()
 
 	result, manualErr := retryManualOperation(ctx, config.ManualJobMaxAttempts, config.ManualJobRetryDelay, func(callCtx context.Context) (*ManualRefreshResult, error) {

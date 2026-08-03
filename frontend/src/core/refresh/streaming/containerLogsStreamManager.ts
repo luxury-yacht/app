@@ -237,8 +237,8 @@ class ContainerLogsStreamConnection {
     try {
       const parsed: unknown = JSON.parse(event.data);
       if (!isValidContainerLogsStreamPayload(parsed)) {
-        console.error('Invalid container logs stream payload structure');
-        this.handleProtocolError('Invalid container logs stream payload');
+        const error = new Error('Invalid container logs stream payload structure');
+        this.handleProtocolError('Invalid container logs stream payload', error);
         return;
       }
       if (parsed.scope !== this.scope || parsed.domain !== DOMAIN_NAME) {
@@ -251,13 +251,12 @@ class ContainerLogsStreamConnection {
         this.stop(false);
       }
     } catch (error) {
-      console.error('Failed to parse container logs stream payload', error);
-      this.handleProtocolError('Failed to parse container logs stream payload');
+      this.handleProtocolError('Failed to parse container logs stream payload', error);
     }
   };
 
-  private handleProtocolError(message: string): void {
-    this.manager.handleStreamError(this.scope, message);
+  private handleProtocolError(message: string, error?: unknown): void {
+    this.manager.handleStreamError(this.scope, message, error);
     if (this.mode === 'manual') {
       this.reject?.(new Error(message));
       this.stop(false);
@@ -549,13 +548,13 @@ export class ContainerLogsStreamManager {
     }
   }
 
-  handleStreamError(scope: string, message: string): void {
+  handleStreamError(scope: string, message: string, error?: unknown): void {
     setScopedDomainState(DOMAIN_NAME, scope, (previous) => ({
       ...previous,
       status: 'error',
       error: message,
     }));
-    this.notifyStreamError(scope, message);
+    this.notifyStreamError(scope, message, error);
   }
 
   markIdle(scope: string): void {
@@ -599,12 +598,13 @@ export class ContainerLogsStreamManager {
     this.clearStreamError(scope);
   }
 
-  private notifyStreamError(scope: string, message: string): void {
+  private notifyStreamError(scope: string, message: string, error?: unknown): void {
     this.errorNotifier.notify({
       source: 'refresh-log-stream',
       domain: DOMAIN_NAME,
       scope: scope || 'global',
       message,
+      ...(error !== undefined ? { error } : {}),
     });
   }
 

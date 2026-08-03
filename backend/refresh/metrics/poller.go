@@ -550,9 +550,10 @@ func (p *Poller) recordFailure(err error, api string, duration time.Duration) {
 	failureCount := p.failureCount
 	p.mu.Unlock()
 
-	applog.Error(
+	applog.ReportError(
 		p.applicationLogger(),
-		fmt.Sprintf("metrics poll failed (%s): %v (failures=%d)", api, err, failureCount),
+		err,
+		fmt.Sprintf("metrics poll failed (%s) (failures=%d)", api, failureCount),
 		logsources.Metrics,
 	)
 	p.recordMetricsTelemetry(duration, time.Time{}, err, consecutive, false)

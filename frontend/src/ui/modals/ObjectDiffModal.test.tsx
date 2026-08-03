@@ -478,7 +478,13 @@ describe('ObjectDiffModal', () => {
     expect(catalogCalls.length).toBeGreaterThan(0);
     expect(yamlCalls.length).toBeGreaterThan(0);
     for (const call of [...catalogCalls, ...yamlCalls]) {
-      expect(call[2]).toEqual({ isManual: true, streamSignal: false });
+      expect(call[2]).toEqual(
+        expect.objectContaining({
+          isManual: true,
+          streamSignal: false,
+          correlationId: expect.any(String),
+        })
+      );
     }
   });
 

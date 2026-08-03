@@ -21,6 +21,7 @@ const scopeMocks = vi.hoisted(() => ({
 vi.mock('@sentry/react', () => sentryMocks);
 
 import {
+  captureBootstrapError,
   captureUserVisibleError,
   configureErrorReporting,
   configureErrorReportingFromPreferences,
@@ -100,6 +101,46 @@ describe('Sentry error reporting', () => {
     expect(result.available).toBe(true);
     expect(result.preferences.errorReportingEnabled).toBe(true);
     expect(sentryMocks.init).toHaveBeenCalledOnce();
+  });
+
+  it('reports preference hydration failures only after persisted consent is known', async () => {
+    const failure = new Error('settings schema unavailable');
+    captureBootstrapError(failure, { action: 'loadAppSettingsSchema' });
+
+    expect(sentryMocks.captureException).not.toHaveBeenCalled();
+    await configureErrorReportingFromPreferences(
+      {
+        enabled: true,
+        dsn: 'https://public@example.com/1',
+        environment: 'production',
+      },
+      async () => ({ errorReportingEnabled: true })
+    );
+
+    expect(scopeMocks.setTag).toHaveBeenCalledWith('error.surface', 'bootstrap');
+    expect(scopeMocks.setContext).toHaveBeenCalledWith('operation', {
+      id: 'bootstrap-error-1',
+      action: 'loadAppSettingsSchema',
+    });
+    expect(sentryMocks.captureException).toHaveBeenCalledWith(failure);
+  });
+
+  it('discards buffered bootstrap failures when persisted consent is disabled', async () => {
+    captureBootstrapError(new Error('settings schema unavailable'), {
+      action: 'loadAppSettingsSchema',
+    });
+
+    await configureErrorReportingFromPreferences(
+      {
+        enabled: true,
+        dsn: 'https://public@example.com/1',
+        environment: 'production',
+      },
+      async () => ({ errorReportingEnabled: false })
+    );
+
+    expect(sentryMocks.init).not.toHaveBeenCalled();
+    expect(sentryMocks.captureException).not.toHaveBeenCalled();
   });
 
   it('stays disabled when no DSN is configured', () => {
@@ -209,6 +250,32 @@ describe('Sentry error reporting', () => {
       expect.objectContaining({ secretValue: expect.anything() })
     );
     expect(sentryMocks.captureException).toHaveBeenCalledWith(error);
+  });
+
+  it('captures event-handler exceptions through the centralized operational boundary', () => {
+    configureErrorReporting(
+      {
+        enabled: true,
+        dsn: 'https://public@example.com/1',
+        environment: 'production',
+      },
+      true
+    );
+    const failure = new Error('subscriber failed');
+    const unsubscribe = eventBus.on('app:visibility-hidden', () => {
+      throw failure;
+    });
+
+    eventBus.emit('app:visibility-hidden');
+
+    expect(scopeMocks.setTag).toHaveBeenCalledWith('error.surface', 'operational');
+    expect(scopeMocks.setContext).toHaveBeenCalledWith('operation', {
+      id: 'ui-error-1',
+      action: 'app:visibility-hidden',
+      source: 'EventBus',
+    });
+    expect(sentryMocks.captureException).toHaveBeenCalledWith(failure);
+    unsubscribe();
   });
 
   it('attaches the active workspace snapshot and records navigation breadcrumbs', () => {
@@ -475,6 +542,39 @@ describe('Sentry error reporting', () => {
       'save button',
       'save started',
       'save failed',
+    ]);
+  });
+
+  it('keeps only the matching operation breadcrumb for background handled failures', () => {
+    initializeErrorReporting({
+      enabled: true,
+      dsn: 'https://public@example.com/1',
+      environment: 'production',
+    });
+    const options = sentryMocks.init.mock.calls[0]?.[0] as {
+      beforeSend: (event: Record<string, unknown>) => Record<string, unknown>;
+    };
+
+    const filtered = options.beforeSend({
+      tags: { 'error.surface': 'operational' },
+      contexts: { operation: { id: 'ui-error-8', action: 'persistTableState' } },
+      breadcrumbs: [
+        { category: 'console', message: 'unrelated cluster work' },
+        {
+          category: 'ui.error.handled',
+          message: 'other handled error',
+          data: { operationId: 'ui-error-7' },
+        },
+        {
+          category: 'ui.error.handled',
+          message: 'matching handled error',
+          data: { operationId: 'ui-error-8' },
+        },
+      ],
+    }) as { breadcrumbs: Array<{ message: string }> };
+
+    expect(filtered.breadcrumbs.map((breadcrumb) => breadcrumb.message)).toEqual([
+      'matching handled error',
     ]);
   });
 });

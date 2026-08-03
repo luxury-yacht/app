@@ -124,7 +124,8 @@ func TestReporterCapturesOriginalMessageAndContext(t *testing.T) {
 	require.Equal(t, "luxury-yacht@v1.2.3", event.Release)
 	require.Equal(t, "Refresh", event.Tags["source"])
 	require.Equal(t, "cluster-a", event.Tags["clusterId"])
-	require.Len(t, event.Tags, 2)
+	require.Contains(t, event.Tags["operation.id"], "backend-report-")
+	require.Len(t, event.Tags, 3)
 	require.Empty(t, event.Fingerprint)
 	require.Len(t, event.Exception, 1)
 	// Sentry renders an issue's title as "<type>: <value>", and sentry-go fills
@@ -319,6 +320,7 @@ func TestReporterCapturesExceptions(t *testing.T) {
 	require.Equal(t, "cluster-a", event.Tags["clusterId"])
 	require.Equal(t, "Production", event.Tags["clusterName"])
 	require.Equal(t, "start Wails application", event.Contexts["error"]["operation"])
+	require.Contains(t, event.Contexts["error"]["operationId"], "backend-report-")
 }
 
 func TestReporterAttachesBreadcrumbsToFollowingException(t *testing.T) {
@@ -330,15 +332,20 @@ func TestReporterAttachesBreadcrumbsToFollowingException(t *testing.T) {
 	require.NoError(t, err)
 
 	reporter.AddBreadcrumb(Breadcrumb{
-		Category: "Refresh",
-		Message:  "refresh started",
-		Level:    "info",
+		Category:    "Refresh",
+		Message:     "refresh started",
+		Level:       "info",
+		OperationID: "refresh-op-1",
 		Data: map[string]any{
 			"clusterId":   "cluster-a",
 			"clusterName": "Production",
 		},
 	})
-	reporter.CaptureException(errors.New("refresh failed"), Context{Source: "Refresh", ClusterID: "cluster-a"})
+	reporter.CaptureException(errors.New("refresh failed"), Context{
+		Source:      "Refresh",
+		ClusterID:   "cluster-a",
+		OperationID: "refresh-op-1",
+	})
 
 	event := transport.lastEvent()
 	require.NotNil(t, event)
@@ -358,26 +365,84 @@ func TestReporterKeepsBreadcrumbsIsolatedByCluster(t *testing.T) {
 	})
 	require.NoError(t, err)
 
-	reporter.AddBreadcrumb(Breadcrumb{Category: "App", Message: "global action", Level: "info"})
+	reporter.AddBreadcrumb(Breadcrumb{Category: "App", Message: "global action", Level: "info", OperationID: "cluster-a-op"})
 	reporter.AddBreadcrumb(Breadcrumb{
-		Category: "Refresh",
-		Message:  "cluster-a action",
-		Level:    "info",
-		Data:     map[string]any{"clusterId": "cluster-a"},
+		Category:    "Refresh",
+		Message:     "cluster-a action",
+		Level:       "info",
+		OperationID: "cluster-a-op",
+		Data:        map[string]any{"clusterId": "cluster-a"},
 	})
 	reporter.AddBreadcrumb(Breadcrumb{
-		Category: "Refresh",
-		Message:  "cluster-b action",
-		Level:    "info",
-		Data:     map[string]any{"clusterId": "cluster-b"},
+		Category:    "Refresh",
+		Message:     "cluster-b action",
+		Level:       "info",
+		OperationID: "cluster-a-op",
+		Data:        map[string]any{"clusterId": "cluster-b"},
 	})
-	reporter.CaptureException(errors.New("cluster-a failed"), Context{ClusterID: "cluster-a"})
+	reporter.CaptureException(errors.New("cluster-a failed"), Context{ClusterID: "cluster-a", OperationID: "cluster-a-op"})
 
 	event := transport.lastEvent()
 	require.NotNil(t, event)
 	require.Len(t, event.Breadcrumbs, 2)
 	require.Equal(t, "global action", event.Breadcrumbs[0].Message)
 	require.Equal(t, "cluster-a action", event.Breadcrumbs[1].Message)
+}
+
+func TestReporterAutoCorrelatesErrorsWithoutAttachingUnscopedBreadcrumbs(t *testing.T) {
+	transport := &recordingTransport{}
+	reporter, err := New(Config{
+		DSN:       "https://public@example.com/1",
+		Transport: transport,
+	})
+	require.NoError(t, err)
+
+	reporter.AddBreadcrumb(Breadcrumb{Category: "App", Message: "unrelated action", Level: "info"})
+	reporter.CaptureException(errors.New("background task failed"), Context{Source: "App"})
+
+	event := transport.lastEvent()
+	require.NotNil(t, event)
+	require.Empty(t, event.Breadcrumbs)
+	require.Contains(t, event.Tags["operation.id"], "backend-report-")
+}
+
+func TestReporterKeepsBreadcrumbsIsolatedByOperation(t *testing.T) {
+	transport := &recordingTransport{}
+	reporter, err := New(Config{
+		DSN:       "https://public@example.com/1",
+		Transport: transport,
+	})
+	require.NoError(t, err)
+
+	reporter.AddBreadcrumb(Breadcrumb{Category: "App", Message: "global action", Level: "info"})
+	reporter.AddBreadcrumb(Breadcrumb{
+		Category:    "Refresh",
+		Message:     "matching operation",
+		Level:       "info",
+		OperationID: "backend-op-2",
+		Data:        map[string]any{"clusterId": "cluster-a"},
+	})
+	reporter.AddBreadcrumb(Breadcrumb{
+		Category:    "Refresh",
+		Message:     "other operation",
+		Level:       "info",
+		OperationID: "backend-op-1",
+		Data:        map[string]any{"clusterId": "cluster-a"},
+	})
+	reporter.CaptureException(errors.New("cluster-a failed"), Context{
+		ClusterID:   "cluster-a",
+		Operation:   "load deployments",
+		OperationID: "backend-op-2",
+	})
+
+	event := transport.lastEvent()
+	require.NotNil(t, event)
+	require.Len(t, event.Breadcrumbs, 1)
+	require.Equal(t, "matching operation", event.Breadcrumbs[0].Message)
+	require.Equal(t, "backend-op-2", event.Breadcrumbs[0].Data["operationId"])
+	require.Equal(t, "backend-op-2", event.Tags["operation.id"])
+	require.Equal(t, "backend-op-2", event.Contexts["error"]["operationId"])
+	require.Equal(t, "load deployments", event.Contexts["error"]["operation"])
 }
 
 func TestReporterAddsKubernetesStatusTagsToWrappedException(t *testing.T) {

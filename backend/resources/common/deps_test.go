@@ -12,6 +12,8 @@ import (
 	"fmt"
 	"net/url"
 	"testing"
+
+	"github.com/luxury-yacht/app/backend/internal/applog"
 )
 
 type testContextKey string
@@ -121,5 +123,17 @@ func TestCloneWithContext(t *testing.T) {
 	}
 	if original.Context == newCtx {
 		t.Fatalf("expected original context to remain unchanged")
+	}
+}
+
+func TestCloneWithContextScopesLoggerToOperation(t *testing.T) {
+	logger := &recordingStructuredDepsLogger{}
+	ctx := applog.ContextWithOperationID(context.Background(), "snapshot-op-4")
+
+	clone := (Dependencies{Logger: logger}).CloneWithContext(ctx)
+	clone.LogRequestFailure(fmt.Errorf("forbidden"), "load pods", "Refresh")
+
+	if got := logger.source; len(got) != 4 || got[3] != "snapshot-op-4" {
+		t.Fatalf("expected operation metadata, got %#v", got)
 	}
 }

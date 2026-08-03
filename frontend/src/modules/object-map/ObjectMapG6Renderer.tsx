@@ -14,6 +14,7 @@ import { parseAgeTimestampMillis, useAgeClock } from '@shared/hooks/useAgeClock'
 import { resolveKindBadgeVisualStyle } from '@shared/utils/kindBadgeColors';
 import type React from 'react';
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
+import { reportOperationalError } from '@/utils/errorHandler';
 import { ObjectMapG6TooltipOverlay } from './ObjectMapG6TooltipOverlay';
 import {
   type ObjectMapRendererDebugSnapshot,
@@ -422,10 +423,16 @@ const ObjectMapG6Renderer: React.FC<ObjectMapG6RendererProps> = ({
       getPreserveViewportNodeId: () => preserveViewportNodeIdRef.current,
       getDraggedNodeId: () => objectMapActiveDragNodeId(nodeGestureRef.current),
       onGraphDataError: (error) => {
-        console.error('[ObjectMapG6Renderer] Failed to apply graph data:', error);
+        reportOperationalError(error, {
+          source: 'ObjectMapG6Renderer',
+          action: 'applyGraphData',
+        });
       },
       onSelectionStateError: (error) => {
-        console.error('[ObjectMapG6Renderer] Failed to apply selection state:', error);
+        reportOperationalError(error, {
+          source: 'ObjectMapG6Renderer',
+          action: 'applySelectionState',
+        });
       },
       onGraphDataTiming: (timing) => {
         rendererTimingsRef.current = {

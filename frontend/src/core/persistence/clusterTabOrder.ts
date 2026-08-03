@@ -6,6 +6,7 @@
 
 import { requestAppState } from '@/core/app-state-access';
 import { eventBus } from '@/core/events';
+import { reportOperationalError } from '@/utils/errorHandler';
 
 let cachedOrder: string[] = [];
 let hydrated = false;
@@ -71,7 +72,10 @@ export const hydrateClusterTabOrder = async (options?: { force?: boolean }): Pro
       });
       updateOrderCache(Array.isArray(order) ? order : []);
     } catch (error) {
-      console.error('Failed to hydrate cluster tab order:', error);
+      reportOperationalError(error, {
+        source: 'ClusterTabOrder',
+        action: 'hydrateClusterTabOrder',
+      });
     } finally {
       hydrated = true;
     }
@@ -131,7 +135,10 @@ export const setClusterTabOrder = (order: string[]): void => {
   updateOrderCache(order);
   hydrated = true;
   void persistClusterTabOrder(cachedOrder).catch((error) => {
-    console.error('Failed to persist cluster tab order:', error);
+    reportOperationalError(error, {
+      source: 'ClusterTabOrder',
+      action: 'persistClusterTabOrder',
+    });
   });
 };
 

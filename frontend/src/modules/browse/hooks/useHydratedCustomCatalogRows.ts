@@ -1,6 +1,7 @@
 import { readHydratedCustomCatalogRows, requestData } from '@core/data-access';
 import { useEffect, useMemo, useState } from 'react';
 import type { CanonicalResourceRef, CatalogItem } from '@/core/refresh/types';
+import { reportOperationalError } from '@/utils/errorHandler';
 import {
   type CatalogBackedCustomResourceRow,
   catalogItemToFallbackCustomRow,
@@ -95,7 +96,10 @@ export async function hydrateCustomCatalogRows(
     }
     return mergeHydratedRows(fallbackRows, result.data);
   } catch (error) {
-    console.error('Failed to hydrate custom catalog export rows', error);
+    reportOperationalError(error, {
+      source: 'CustomCatalogRows',
+      action: 'hydrateCatalogExportRows',
+    });
     return fallbackRows;
   }
 }
@@ -141,7 +145,10 @@ export function useHydratedCustomCatalogRows(
         setRows(mergeHydratedRows(fallbackRows, result.data));
       })
       .catch((error) => {
-        console.error('Failed to hydrate custom catalog rows', error);
+        reportOperationalError(error, {
+          source: 'CustomCatalogRows',
+          action: 'hydrateCatalogRows',
+        });
         if (!cancelled) {
           setRows(fallbackRows);
         }

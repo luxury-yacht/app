@@ -74,6 +74,7 @@ describe('Biome architectural boundary plugins', () => {
       'orchestrator.triggerManualRefreshForContext({});',
       'triggerManualRefreshForContext',
     ],
+    ['no-direct-console-error', 'console.error("load failed", error);', 'errorHandler'],
   ])('rejects forbidden calls enforced by %s', (pluginName, source, diagnostic) => {
     const result = lintWithPlugin(pluginName, source);
 
@@ -100,6 +101,7 @@ describe('Biome architectural boundary plugins', () => {
     ['EventsOn("cluster:auth:failed", handler);', 'clusterWorkspaceStore'],
     ['orchestrator.fetchScopedDomain("cluster", {});', 'fetchScopedDomain'],
     ['orchestrator.triggerManualRefreshForContext({});', 'triggerManualRefreshForContext'],
+    ['console.error("load failed", error);', 'errorHandler'],
   ])('rejects forbidden calls through the real project config', (source, diagnostic) => {
     const result = lintWithProjectConfig(source);
 
