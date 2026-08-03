@@ -16,11 +16,12 @@ import (
 )
 
 type recordingTransport struct {
-	mu      sync.Mutex
-	options sentry.ClientOptions
-	events  []*sentry.Event
-	flushed bool
-	closed  bool
+	mu        sync.Mutex
+	options   sentry.ClientOptions
+	events    []*sentry.Event
+	flushed   bool
+	failFlush bool
+	closed    bool
 }
 
 func (t *recordingTransport) Configure(options sentry.ClientOptions) {
@@ -39,7 +40,7 @@ func (t *recordingTransport) Flush(time.Duration) bool {
 	t.mu.Lock()
 	defer t.mu.Unlock()
 	t.flushed = true
-	return true
+	return !t.failFlush
 }
 
 func (t *recordingTransport) FlushWithContext(context.Context) bool {
@@ -526,6 +527,70 @@ func TestReporterFlushesAndClosesTransportAtShutdown(t *testing.T) {
 	defer transport.mu.Unlock()
 	require.True(t, transport.flushed)
 	require.True(t, transport.closed)
+}
+
+func TestReporterCapturesAndFlushesCountMetric(t *testing.T) {
+	transport := &recordingTransport{}
+	reporter, err := New(Config{
+		DSN:         "https://public@example.com/1",
+		Environment: "production",
+		Release:     "luxury-yacht@v1.2.3",
+		Transport:   transport,
+	})
+	require.NoError(t, err)
+
+	metricReporter, ok := reporter.(MetricReporter)
+	require.True(t, ok)
+	require.True(t, metricReporter.CaptureCountMetric(
+		"app.installation.registered",
+		1,
+		map[string]string{"os.name": "darwin", "os.arch": "arm64"},
+		time.Second,
+	))
+
+	event := transport.lastEvent()
+	require.NotNil(t, event)
+	require.Len(t, event.Metrics, 1)
+	metric := event.Metrics[0]
+	require.Equal(t, "app.installation.registered", metric.Name)
+	require.Equal(t, int64(1), metric.Value.AsInterface())
+	require.Equal(t, "darwin", metric.Attributes["os.name"].AsString())
+	require.Equal(t, "arm64", metric.Attributes["os.arch"].AsString())
+	require.NotContains(t, metric.Attributes, "anonymizedId")
+	require.Equal(t, "production", metric.Attributes["sentry.environment"].AsString())
+	require.Equal(t, "luxury-yacht@v1.2.3", metric.Attributes["sentry.release"].AsString())
+}
+
+func TestDisabledReporterDoesNotCaptureCountMetric(t *testing.T) {
+	reporter, err := New(Config{})
+	require.NoError(t, err)
+
+	metricReporter, ok := reporter.(MetricReporter)
+	require.True(t, ok)
+	require.False(t, metricReporter.CaptureCountMetric(
+		"app.installation.registered",
+		1,
+		nil,
+		time.Second,
+	))
+}
+
+func TestReporterReturnsFalseWhenCountMetricDoesNotFlush(t *testing.T) {
+	transport := &recordingTransport{failFlush: true}
+	reporter, err := New(Config{
+		DSN:       "https://public@example.com/1",
+		Transport: transport,
+	})
+	require.NoError(t, err)
+
+	metricReporter := reporter.(MetricReporter)
+	require.False(t, metricReporter.CaptureCountMetric(
+		"app.installation.registered",
+		1,
+		nil,
+		time.Second,
+	))
+	require.NotNil(t, transport.lastEvent())
 }
 
 func TestConfigFromEnvironmentUsesOnlyStandardizedBackendDSN(t *testing.T) {

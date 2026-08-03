@@ -34,6 +34,7 @@ type WindowSettings struct {
 
 // AppSettings represents the application settings
 type AppSettings struct {
+	AnonymizedID                             string   `json:"anonymizedId"`                             // Random local installation identifier used for consented telemetry
 	AppearanceMode                           string   `json:"appearanceMode"`                           // "light", "dark", or "system"
 	SelectedKubeconfigs                      []string `json:"selectedKubeconfigs"`                      // Multi-cluster selections in "path:context" form
 	UseShortResourceNames                    bool     `json:"useShortResourceNames"`                    // Use short names like "po" for pods in badges/headers
@@ -89,7 +90,8 @@ type AppPreferenceSchema struct {
 
 // AppSettingsSchema describes the persisted/runtime settings contract.
 type AppSettingsSchema struct {
-	Preferences []AppPreferenceSchema `json:"preferences"`
+	AnonymizedID string                `json:"anonymizedId"`
+	Preferences  []AppPreferenceSchema `json:"preferences"`
 }
 
 // AppPreferenceChange updates one persisted/runtime app preference.

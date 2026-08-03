@@ -3,6 +3,7 @@ import { eventBus } from '@/core/events/eventBus';
 
 const sentryMocks = vi.hoisted(() => ({
   addBreadcrumb: vi.fn(),
+  browserSessionIntegration: vi.fn(),
   captureException: vi.fn(),
   close: vi.fn(),
   getIsolationScope: vi.fn(),
@@ -39,6 +40,8 @@ describe('Sentry error reporting', () => {
   beforeEach(() => {
     resetErrorReportingForTesting();
     sentryMocks.init.mockReset();
+    sentryMocks.browserSessionIntegration.mockReset();
+    sentryMocks.browserSessionIntegration.mockReturnValue({ name: 'PageBrowserSession' });
     sentryMocks.reactErrorHandler.mockReset();
     sentryMocks.close.mockReset();
     sentryMocks.close.mockResolvedValue(true);
@@ -80,10 +83,14 @@ describe('Sentry error reporting', () => {
   });
 
   it('does not initialize until the persisted preference has loaded', async () => {
-    let resolvePreference: ((value: { errorReportingEnabled: boolean }) => void) | undefined;
-    const preference = new Promise<{ errorReportingEnabled: boolean }>((resolve) => {
-      resolvePreference = resolve;
-    });
+    let resolvePreference:
+      | ((value: { errorReportingEnabled: boolean; anonymizedId: string }) => void)
+      | undefined;
+    const preference = new Promise<{ errorReportingEnabled: boolean; anonymizedId: string }>(
+      (resolve) => {
+        resolvePreference = resolve;
+      }
+    );
 
     const configured = configureErrorReportingFromPreferences(
       {
@@ -96,7 +103,10 @@ describe('Sentry error reporting', () => {
     );
 
     expect(sentryMocks.init).not.toHaveBeenCalled();
-    resolvePreference?.({ errorReportingEnabled: true });
+    resolvePreference?.({
+      errorReportingEnabled: true,
+      anonymizedId: '123e4567-e89b-42d3-a456-426614174000',
+    });
 
     const result = await configured;
     expect(result.available).toBe(true);
@@ -115,7 +125,10 @@ describe('Sentry error reporting', () => {
         dsn: 'https://public@example.com/1',
         environment: 'production',
       },
-      async () => ({ errorReportingEnabled: true })
+      async () => ({
+        errorReportingEnabled: true,
+        anonymizedId: '123e4567-e89b-42d3-a456-426614174000',
+      })
     );
 
     expect(scopeMocks.setTag).toHaveBeenCalledWith('error.surface', 'bootstrap');
@@ -137,7 +150,10 @@ describe('Sentry error reporting', () => {
         dsn: 'https://public@example.com/1',
         environment: 'production',
       },
-      async () => ({ errorReportingEnabled: false })
+      async () => ({
+        errorReportingEnabled: false,
+        anonymizedId: '123e4567-e89b-42d3-a456-426614174000',
+      })
     );
 
     expect(sentryMocks.init).not.toHaveBeenCalled();
@@ -184,6 +200,66 @@ describe('Sentry error reporting', () => {
         environment: 'production',
         release: 'luxury-yacht@v1.2.3',
         dataCollection: {},
+      })
+    );
+  });
+
+  it('identifies release sessions by anonymizedId and creates one session per app load', () => {
+    expect(
+      initializeErrorReporting({
+        enabled: true,
+        dsn: 'https://public@example.com/1',
+        environment: 'production',
+        release: 'luxury-yacht@v1.2.3',
+        anonymizedId: ' 123e4567-e89b-42d3-a456-426614174000 ',
+      })
+    ).toBe(true);
+
+    const options = sentryMocks.init.mock.calls[0]?.[0];
+    expect(options).toEqual(
+      expect.objectContaining({
+        initialScope: {
+          user: { id: '123e4567-e89b-42d3-a456-426614174000' },
+        },
+      })
+    );
+    expect(sentryMocks.browserSessionIntegration).toHaveBeenCalledWith({ lifecycle: 'page' });
+    expect(
+      options.integrations([
+        { name: 'Breadcrumbs' },
+        { name: 'BrowserSession' },
+        { name: 'GlobalHandlers' },
+      ])
+    ).toEqual([
+      { name: 'Breadcrumbs' },
+      { name: 'GlobalHandlers' },
+      { name: 'PageBrowserSession' },
+    ]);
+  });
+
+  it('carries anonymizedId from preference hydration through live re-enablement', async () => {
+    await configureErrorReportingFromPreferences(
+      {
+        enabled: true,
+        dsn: 'https://public@example.com/1',
+        environment: 'production',
+      },
+      async () => ({
+        errorReportingEnabled: true,
+        anonymizedId: '123e4567-e89b-42d3-a456-426614174000',
+      })
+    );
+
+    eventBus.emit('settings:error-reporting', false);
+    await vi.waitFor(() => expect(sentryMocks.close).toHaveBeenCalledWith(0));
+    eventBus.emit('settings:error-reporting', true);
+
+    expect(sentryMocks.init).toHaveBeenCalledTimes(2);
+    expect(sentryMocks.init.mock.calls[1]?.[0]).toEqual(
+      expect.objectContaining({
+        initialScope: {
+          user: { id: '123e4567-e89b-42d3-a456-426614174000' },
+        },
       })
     );
   });

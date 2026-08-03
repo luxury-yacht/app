@@ -8,6 +8,7 @@ export interface SentryRuntimeConfig {
   dsn?: string;
   environment?: string;
   release?: string;
+  anonymizedId?: string;
 }
 
 export interface UserVisibleErrorCapture {
@@ -237,11 +238,19 @@ export function initializeErrorReporting(config: SentryRuntimeConfig): boolean {
     return true;
   }
 
+  const anonymizedId = normalizeOptionalString(config.anonymizedId);
+  const pageSessionIntegration = Sentry.browserSessionIntegration({ lifecycle: 'page' });
+
   Sentry.init({
     dsn,
     environment: config.environment?.trim() || undefined,
     release: config.release?.trim() || undefined,
     dataCollection: {},
+    initialScope: anonymizedId ? { user: { id: anonymizedId } } : undefined,
+    integrations: (defaultIntegrations) => [
+      ...defaultIntegrations.filter((integration) => integration.name !== 'BrowserSession'),
+      pageSessionIntegration,
+    ],
     beforeBreadcrumb,
     beforeSend,
   });
@@ -345,14 +354,15 @@ export function configureErrorReporting(
 }
 
 export async function configureErrorReportingFromPreferences<
-  TPreferences extends { errorReportingEnabled: boolean },
+  TPreferences extends { errorReportingEnabled: boolean; anonymizedId: string },
 >(
   config: SentryRuntimeConfig,
   loadPreferences: () => Promise<TPreferences>
 ): Promise<{ available: boolean; preferences: TPreferences }> {
   const preferences = await loadPreferences();
+  const runtimeConfig = { ...config, anonymizedId: preferences.anonymizedId };
   return {
-    available: configureErrorReporting(config, preferences.errorReportingEnabled),
+    available: configureErrorReporting(runtimeConfig, preferences.errorReportingEnabled),
     preferences,
   };
 }

@@ -502,6 +502,7 @@ describe('appPreferences', () => {
 
   it('hydrates preferences from backend schema when available', async () => {
     appMocks.GetAppSettingsSchema.mockResolvedValue({
+      anonymizedId: '123e4567-e89b-42d3-a456-426614174000',
       preferences: [
         { key: 'appearanceMode', type: 'enum', defaultValue: 'system', currentValue: 'dark' },
         { key: 'retiredPreference', type: 'integer', defaultValue: 1000, currentValue: 5000 },
@@ -520,11 +521,23 @@ describe('appPreferences', () => {
       ],
     });
 
-    await hydrateAppPreferences({ force: true });
+    const preferences = await hydrateAppPreferences({ force: true });
 
     expect(appMocks.GetAppSettings).not.toHaveBeenCalled();
+    expect(preferences.anonymizedId).toBe('123e4567-e89b-42d3-a456-426614174000');
     expect(getAppearanceModePreference()).toBe('dark');
     expect(getDefaultObjectPanelPosition()).toBe('bottom');
+  });
+
+  it('hydrates anonymizedId from legacy settings fallback', async () => {
+    appMocks.GetAppSettings.mockResolvedValue({
+      anonymizedId: '123e4567-e89b-42d3-a456-426614174000',
+      errorReportingEnabled: true,
+    });
+
+    const preferences = await hydrateAppPreferences({ force: true });
+
+    expect(preferences.anonymizedId).toBe('123e4567-e89b-42d3-a456-426614174000');
   });
 
   it('reports a schema hydration failure and uses the fallback preference', async () => {

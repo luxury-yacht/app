@@ -1,6 +1,7 @@
 package sentryreporting
 
 import (
+	"context"
 	"errors"
 	"fmt"
 	"os"
@@ -11,6 +12,7 @@ import (
 	"time"
 
 	"github.com/getsentry/sentry-go"
+	"github.com/getsentry/sentry-go/attribute"
 	apierrors "k8s.io/apimachinery/pkg/api/errors"
 )
 
@@ -53,7 +55,18 @@ type Reporter interface {
 	Shutdown(timeout time.Duration) bool
 }
 
+// MetricReporter is an optional capability implemented by reporters that can
+// synchronously flush an application metric. Keeping it separate from Reporter
+// lets error-only test doubles and alternate reporters remain small.
+type MetricReporter interface {
+	CaptureCountMetric(name string, count int64, attributes map[string]string, timeout time.Duration) bool
+}
+
 type disabledReporter struct{}
+
+func (disabledReporter) CaptureCountMetric(string, int64, map[string]string, time.Duration) bool {
+	return false
+}
 
 // ConfigFromEnvironment lets SENTRY_BACKEND_DSN override the DSN embedded by
 // the application build. Release identity and environment remain build-owned.
@@ -382,6 +395,28 @@ func (r *sentryReporter) AddBreadcrumb(breadcrumb Breadcrumb) {
 		copy(trimmed, r.breadcrumbs[start:])
 		r.breadcrumbs = trimmed
 	}
+}
+
+func (r *sentryReporter) CaptureCountMetric(
+	name string,
+	count int64,
+	attributes map[string]string,
+	timeout time.Duration,
+) bool {
+	r.mu.RLock()
+	defer r.mu.RUnlock()
+	if r.hub == nil {
+		return false
+	}
+
+	hub := r.hub.Clone()
+	ctx := sentry.SetHubOnContext(context.Background(), hub)
+	metricAttributes := make([]attribute.Builder, 0, len(attributes))
+	for key, value := range attributes {
+		metricAttributes = append(metricAttributes, attribute.String(key, value))
+	}
+	sentry.NewMeter(ctx).Count(name, count, sentry.WithAttributes(metricAttributes...))
+	return hub.Flush(timeout)
 }
 
 func (r *sentryReporter) Shutdown(timeout time.Duration) bool {

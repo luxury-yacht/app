@@ -144,7 +144,9 @@ func TestAppGetAppSettingsReturnsDefaultWhenMissing(t *testing.T) {
 
 	settings, err := app.GetAppSettings()
 	require.NoError(t, err)
-	require.Equal(t, getDefaultAppSettings(), settings)
+	expected := getDefaultAppSettings()
+	expected.AnonymizedID = settings.AnonymizedID
+	require.Equal(t, expected, settings)
 	require.Equal(t, settings, app.appSettings)
 }
 

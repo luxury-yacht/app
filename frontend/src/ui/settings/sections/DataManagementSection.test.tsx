@@ -81,7 +81,7 @@ describe('DataManagementSection', () => {
     expect(container.textContent).toContain('Import Favorites');
     expect(container.textContent).toContain('Error Reporting');
     expect(container.textContent).toContain(
-      'Sends errors, release health, and diagnostic data to Sentry that I use to improve the app. Reports may include cluster and resource names, request details, device information, user information, and IP addresses. Toggle it off if you do not wish to participate.'
+      'Sends anonymous installation and app-launch counts, errors, release health, and diagnostic data to Sentry that I use to improve the app. A random installation ID is stored on this device and sent as the Sentry user ID. Reports may also include cluster and resource names, request details, device information, and IP addresses. Toggle it off if you do not wish to participate.'
     );
   });
 

@@ -81,6 +81,10 @@ export interface AppPreferences {
   linkColorDark: string;
 }
 
+export interface HydratedAppPreferences extends AppPreferences {
+  anonymizedId: string;
+}
+
 export type AppPreferenceKey = keyof AppPreferences;
 
 export interface AppPreferenceMetadata<K extends AppPreferenceKey = AppPreferenceKey> {
@@ -136,6 +140,7 @@ export interface ColorPreferenceInput {
 }
 
 interface AppSettingsPayload {
+  anonymizedId?: string;
   appearanceMode?: string;
   useShortResourceNames?: boolean;
   dimInactiveNamespaces?: boolean;
@@ -449,6 +454,7 @@ const FALLBACK_PREFERENCE_METADATA: {
 };
 
 let preferenceCache: AppPreferences = { ...DEFAULT_PREFERENCES };
+let anonymizedIdCache = '';
 let hydrated = false;
 let preferenceSchemaByKey = new Map<AppPreferenceKey, AppPreferenceMetadata>();
 
@@ -929,24 +935,27 @@ const schemaPayloadFromPreferences = (
     return null;
   }
   const nextSchema = new Map<AppPreferenceKey, AppPreferenceMetadata>();
-  const payload = schema.preferences.reduce<AppSettingsPayload>((nextPayload, entry) => {
-    const metadata = schemaEntryToMetadata(entry);
-    if (!metadata) {
+  const payload = schema.preferences.reduce<AppSettingsPayload>(
+    (nextPayload, entry) => {
+      const metadata = schemaEntryToMetadata(entry);
+      if (!metadata) {
+        return nextPayload;
+      }
+      nextSchema.set(metadata.key, metadata);
+      (nextPayload as Record<string, unknown>)[metadata.key] = metadata.currentValue;
       return nextPayload;
-    }
-    nextSchema.set(metadata.key, metadata);
-    (nextPayload as Record<string, unknown>)[metadata.key] = metadata.currentValue;
-    return nextPayload;
-  }, {});
+    },
+    { anonymizedId: schema.anonymizedId }
+  );
   preferenceSchemaByKey = nextSchema;
   return payload;
 };
 
 export const hydrateAppPreferences = async (options?: {
   force?: boolean;
-}): Promise<AppPreferences> => {
+}): Promise<HydratedAppPreferences> => {
   if (hydrated && !options?.force) {
-    return { ...preferenceCache };
+    return { ...preferenceCache, anonymizedId: anonymizedIdCache };
   }
 
   const backendSchema = await fetchAppSettingsSchema();
@@ -1083,12 +1092,13 @@ export const hydrateAppPreferences = async (options?: {
     linkColorDark: normalizeColorPreferenceValue('linkColorDark', backendSettings?.linkColorDark),
   };
 
+  anonymizedIdCache = backendSettings?.anonymizedId?.trim() ?? '';
   hydrated = true;
   updatePreferenceCache(preferences);
   persistAppearanceModeToLocalStorage(preferences.appearanceMode);
   persistAppearanceBootstrapToLocalStorage();
 
-  return { ...preferenceCache };
+  return { ...preferenceCache, anonymizedId: anonymizedIdCache };
 };
 
 export const getAppearanceModePreference = (): AppearanceMode => {
@@ -1558,6 +1568,7 @@ export const matchThemeForCluster = async (contextName: string): Promise<types.T
 // Test helper to reset cached values between test runs.
 export const resetAppPreferencesCacheForTesting = (): void => {
   preferenceCache = { ...DEFAULT_PREFERENCES };
+  anonymizedIdCache = '';
   preferenceSchemaByKey = new Map();
   hydrated = false;
 };

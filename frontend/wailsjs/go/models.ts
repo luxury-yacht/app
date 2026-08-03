@@ -4975,6 +4975,7 @@ export namespace types {
 	    }
 	}
 	export class AppSettings {
+	    anonymizedId: string;
 	    appearanceMode: string;
 	    selectedKubeconfigs: string[];
 	    useShortResourceNames: boolean;
@@ -5019,6 +5020,7 @@ export namespace types {
 	
 	    constructor(source: any = {}) {
 	        if ('string' === typeof source) source = JSON.parse(source);
+	        this.anonymizedId = source["anonymizedId"];
 	        this.appearanceMode = source["appearanceMode"];
 	        this.selectedKubeconfigs = source["selectedKubeconfigs"];
 	        this.useShortResourceNames = source["useShortResourceNames"];
@@ -5077,6 +5079,7 @@ export namespace types {
 		}
 	}
 	export class AppSettingsSchema {
+	    anonymizedId: string;
 	    preferences: AppPreferenceSchema[];
 	
 	    static createFrom(source: any = {}) {
@@ -5085,6 +5088,7 @@ export namespace types {
 	
 	    constructor(source: any = {}) {
 	        if ('string' === typeof source) source = JSON.parse(source);
+	        this.anonymizedId = source["anonymizedId"];
 	        this.preferences = this.convertValues(source["preferences"], AppPreferenceSchema);
 	    }
 	

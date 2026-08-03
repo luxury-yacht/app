@@ -107,6 +107,8 @@ func TestExportSettingsExportsPreferencesAndSearchPathsOnly(t *testing.T) {
 	require.NotContains(t, document, "attention")
 	require.NotContains(t, document, "selectedKubeconfigs")
 	require.NotContains(t, document, "persistence")
+	require.NotContains(t, document, "telemetry")
+	require.NotContains(t, string(data), "anonymizedId")
 }
 
 func TestImportSettingsReplacesPortableSettingsAndPreservesSessionState(t *testing.T) {
@@ -174,6 +176,7 @@ func TestImportSettingsReplacesPortableSettingsAndPreservesSessionState(t *testi
 	require.Equal(t, current.UI, saved.UI)
 	require.Equal(t, current.Clusters, saved.Clusters)
 	require.Equal(t, current.Attention, saved.Attention)
+	require.Equal(t, current.Telemetry, saved.Telemetry)
 
 	inMemory, err := app.GetAppSettings()
 	require.NoError(t, err)
