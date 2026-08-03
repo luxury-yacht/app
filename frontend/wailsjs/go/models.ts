@@ -984,6 +984,7 @@ export namespace backend {
 	    source?: string;
 	    clusterId?: string;
 	    clusterName?: string;
+	    operationId?: string;
 	
 	    static createFrom(source: any = {}) {
 	        return new LogEntry(source);
@@ -998,6 +999,7 @@ export namespace backend {
 	        this.source = source["source"];
 	        this.clusterId = source["clusterId"];
 	        this.clusterName = source["clusterName"];
+	        this.operationId = source["operationId"];
 	    }
 	}
 	export class ObjectActionDebugContainerOptions {

@@ -18,6 +18,7 @@ import {
   OBJECT_MAP_MAX_NODES,
 } from '@modules/object-map/objectMapScope';
 import { useObjectPanel } from '@modules/object-panel/hooks/useObjectPanel';
+import { ErrorSurface } from '@shared/components/errors/ErrorSurface';
 import { useNavigateToView } from '@shared/hooks/useNavigateToView';
 import { requestRefreshDomain, setRefreshDomainEnabled } from '@/core/data-access';
 import { useRefreshScopedDomain } from '@/core/refresh';
@@ -125,7 +126,7 @@ const NsViewMap: React.FC<NsViewMapProps> = ({ namespace }) => {
       <div className="namespace-map__body">
         {snapshot.error && !payload && (
           <div className="namespace-map__message namespace-map__message--error">
-            {snapshot.error}
+            <ErrorSurface kind="reported" message={snapshot.error} />
           </div>
         )}
         {!!loading && <div className="namespace-map__message">Loading namespace map...</div>}

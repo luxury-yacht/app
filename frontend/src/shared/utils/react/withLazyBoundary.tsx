@@ -5,6 +5,7 @@
  * Handles rendering and interactions for the shared components.
  */
 
+import { ErrorSurface } from '@shared/components/errors/ErrorSurface';
 import LoadingSpinner from '@shared/components/LoadingSpinner';
 import { errorHandler } from '@utils/errorHandler';
 import React, { Component, type ComponentType, lazy, type ReactNode } from 'react';
@@ -32,7 +33,9 @@ class ErrorBoundary extends Component<
       return (
         <div className="error-boundary" data-testid="error-boundary">
           <h2>Something went wrong</h2>
-          <details style={{ whiteSpace: 'pre-wrap' }}>{this.state.error?.toString()}</details>
+          <details style={{ whiteSpace: 'pre-wrap' }}>
+            <ErrorSurface kind="reported" message={this.state.error?.toString()} />
+          </details>
         </div>
       );
     }

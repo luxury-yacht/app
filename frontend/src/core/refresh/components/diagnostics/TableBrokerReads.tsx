@@ -1,3 +1,4 @@
+import { ErrorSurface } from '@shared/components/errors/ErrorSurface';
 import { TableCellValue } from '@shared/components/tables/tableNoValue';
 import type React from 'react';
 import { useDeferredValue, useMemo, useState } from 'react';
@@ -160,7 +161,9 @@ export const BrokerReadsTable: React.FC<BrokerReadsTableProps> = ({ rows, summar
                     <TableCellValue>{row.lastUpdated}</TableCellValue>
                   </td>
                   <td className="diagnostics-error">
-                    <TableCellValue>{row.lastError}</TableCellValue>
+                    <TableCellValue>
+                      <ErrorSurface kind="status" message={row.lastError} />
+                    </TableCellValue>
                   </td>
                 </tr>
               ))}

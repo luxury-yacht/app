@@ -5,6 +5,7 @@
  * accent, link, saved themes).
  */
 
+import { ErrorSurface } from '@shared/components/errors/ErrorSurface';
 import {
   AppearanceModeIcon,
   DarkModeIcon,
@@ -1244,7 +1245,7 @@ function AppearanceSection() {
                               id={`${elementIdPrefix}-theme-pattern-error-active`}
                               className="theme-pattern-error"
                             >
-                              {themePatternError}
+                              <ErrorSurface kind="validation" message={themePatternError} />
                             </div>
                           )}
                         </div>
@@ -1358,7 +1359,7 @@ function AppearanceSection() {
                           id={`${elementIdPrefix}-theme-pattern-error-new`}
                           className="theme-pattern-error"
                         >
-                          {themePatternError}
+                          <ErrorSurface kind="validation" message={themePatternError} />
                         </div>
                       )}
                     </div>

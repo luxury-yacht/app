@@ -31,6 +31,7 @@ import type {
 } from '@shared/components/diff/objectDiffSelection';
 import Dropdown from '@shared/components/dropdowns/Dropdown/Dropdown';
 import type { DropdownOption } from '@shared/components/dropdowns/Dropdown/types';
+import { ErrorSurface } from '@shared/components/errors/ErrorSurface';
 import { DiffIcon } from '@shared/components/icons/SharedIcons';
 import ModalHeader from '@shared/components/modals/ModalHeader';
 import ModalSurface from '@shared/components/modals/ModalSurface';
@@ -1157,8 +1158,16 @@ const ObjectDiffModal: React.FC<ObjectDiffModalProps> = ({
     if (leftYamlError || rightYamlError) {
       return (
         <div className="object-diff-empty object-diff-error">
-          {!!leftYamlError && <div>Left YAML error: {leftYamlError}</div>}
-          {!!rightYamlError && <div>Right YAML error: {rightYamlError}</div>}
+          {!!leftYamlError && (
+            <div>
+              Left YAML error: <ErrorSurface kind="reported" message={leftYamlError} />
+            </div>
+          )}
+          {!!rightYamlError && (
+            <div>
+              Right YAML error: <ErrorSurface kind="reported" message={rightYamlError} />
+            </div>
+          )}
         </div>
       );
     }
@@ -1321,7 +1330,9 @@ const ObjectDiffModal: React.FC<ObjectDiffModalProps> = ({
               />
             </div>
             {!!leftCatalogError && (
-              <div className="object-diff-error-message">Catalog error: {leftCatalogError}</div>
+              <div className="object-diff-error-message">
+                Catalog error: <ErrorSurface kind="reported" message={leftCatalogError} />
+              </div>
             )}
           </div>
 
@@ -1432,7 +1443,9 @@ const ObjectDiffModal: React.FC<ObjectDiffModalProps> = ({
               />
             </div>
             {!!rightCatalogError && (
-              <div className="object-diff-error-message">Catalog error: {rightCatalogError}</div>
+              <div className="object-diff-error-message">
+                Catalog error: <ErrorSurface kind="reported" message={rightCatalogError} />
+              </div>
             )}
           </div>
         </div>

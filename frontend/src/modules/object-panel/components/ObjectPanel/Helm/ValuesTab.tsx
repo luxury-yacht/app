@@ -3,6 +3,7 @@
  */
 
 import ClusterDataPausedState from '@shared/components/ClusterDataPausedState';
+import { ErrorSurface } from '@shared/components/errors/ErrorSurface';
 import LoadingSpinner from '@shared/components/LoadingSpinner';
 import SegmentedButton from '@shared/components/SegmentedButton';
 import { YamlEditor } from '@shared/components/yaml';
@@ -257,7 +258,9 @@ const ValuesTab: React.FC<ValuesTabProps> = ({ scope, isActive = false }) => {
     return (
       <div className="object-panel-tab-content">
         <div className="yaml-display-error">
-          <div className="error-message">Error loading values: {valuesError}</div>
+          <div className="error-message">
+            Error loading values: <ErrorSurface kind="reported" message={valuesError} />
+          </div>
         </div>
       </div>
     );

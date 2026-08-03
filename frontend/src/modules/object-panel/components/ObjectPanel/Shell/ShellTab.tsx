@@ -21,6 +21,7 @@ import type { ContextMenuItem } from '@shared/components/ContextMenu';
 import ContextMenu from '@shared/components/ContextMenu';
 import type { DropdownOption } from '@shared/components/dropdowns/Dropdown';
 import { Dropdown } from '@shared/components/dropdowns/Dropdown';
+import { ErrorSurface } from '@shared/components/errors/ErrorSurface';
 import Tooltip from '@shared/components/Tooltip';
 
 import { useVirtualScrollbar } from '@shared/scrollbars/useVirtualScrollbar';
@@ -1228,7 +1229,10 @@ const ShellTab: React.FC<ShellTabProps> = ({
       )}
       {!!connectionErrorMessage && (
         <div className="shell-tab__connection-error" role="status" aria-live="polite">
-          Connection failed: <span>{connectionErrorMessage}</span>
+          Connection failed:{' '}
+          <span>
+            <ErrorSurface kind="reported" message={connectionErrorMessage} />
+          </span>
         </div>
       )}
 

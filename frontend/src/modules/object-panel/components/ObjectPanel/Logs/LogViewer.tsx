@@ -15,6 +15,7 @@ import {
   filterSelectionValues,
   isNarrowingFilterSelection,
 } from '@shared/components/dropdowns/multiSelectFilterSelection';
+import { ErrorSurface } from '@shared/components/errors/ErrorSurface';
 import IconBar, { type IconBarItem } from '@shared/components/IconBar/IconBar';
 import {
   AnsiColorIcon,
@@ -1937,7 +1938,9 @@ const LogViewerInner: React.FC<LogViewerProps> = ({
     return (
       <div className="object-panel-tab-content">
         <div className="logs-viewer-display-error">
-          <div className="error-message">Error: {displayError}</div>
+          <div className="error-message">
+            Error: <ErrorSurface kind="reported" message={displayError} />
+          </div>
         </div>
       </div>
     );

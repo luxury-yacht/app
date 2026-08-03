@@ -19,6 +19,7 @@ import {
   setObjPanelLogsTargetGlobalLimit,
   setObjPanelLogsTargetPerScopeLimit,
 } from '@core/settings/appPreferences';
+import { ErrorSurface } from '@shared/components/errors/ErrorSurface';
 import Tooltip from '@shared/components/Tooltip';
 import { BrowserOpenURL } from '@wailsjs/runtime/runtime';
 import { useId, useMemo, useState } from 'react';
@@ -326,7 +327,7 @@ function ObjPanelLogsSettings() {
                   className="modal-field-message modal-field-error obj-panel-logs-settings-timestamp-error"
                   role="alert"
                 >
-                  {objPanelLogsApiTimestampFormatError}
+                  <ErrorSurface kind="validation" message={objPanelLogsApiTimestampFormatError} />
                 </div>
               ) : null}
             </div>

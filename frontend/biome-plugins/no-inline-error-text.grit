@@ -1,0 +1,84 @@
+engine biome(1.0)
+language js(typescript, jsx)
+
+// Error-shaped values must be classified at the shared presentation boundary.
+// Operational errors retain the original exception there; validation and
+// diagnostic messages are explicitly marked as expected, non-reportable text.
+or {
+  `{$value}` as $render where {
+    $render <: within jsx_element(),
+    $render <: not within jsx_attribute(),
+    $value <: r"(?i)^(?:error|[a-z_$][a-z0-9_$]*error)$",
+    register_diagnostic(
+      span = $render,
+      message = "Render error text through ErrorSurface so operational failures cannot bypass reporting.",
+      severity = "error"
+    )
+  },
+  `{$value}` as $render where {
+    $render <: within jsx_element(),
+    $render <: not within jsx_attribute(),
+    $value <: member_expression(property=$property),
+    $property <: r"(?i).*error$",
+    register_diagnostic(
+      span = $render,
+      message = "Render error text through ErrorSurface so operational failures cannot bypass reporting.",
+      severity = "error"
+    )
+  },
+  `{$value}` as $render where {
+    $render <: within jsx_element(),
+    $render <: not within jsx_attribute(),
+    $value <: member_expression(object=$error_value),
+    $error_value <: r"(?i)^(?:error|[a-z_$][a-z0-9_$]*error)$",
+    register_diagnostic(
+      span = $render,
+      message = "Render error text through ErrorSurface so operational failures cannot bypass reporting.",
+      severity = "error"
+    )
+  },
+  `{String($error_value)}` as $render where {
+    $render <: within jsx_element(),
+    $render <: not within jsx_attribute(),
+    $error_value <: r"(?i)^(?:error|[a-z_$][a-z0-9_$]*error)$",
+    register_diagnostic(
+      span = $render,
+      message = "Render error text through ErrorSurface so operational failures cannot bypass reporting.",
+      severity = "error"
+    )
+  },
+  `{$value}` as $render where {
+    $render <: within jsx_element(),
+    $render <: not within jsx_attribute(),
+    $value <: call_expression(),
+    $value <: r"(?i)^(?:error|[a-z_$][a-z0-9_$]*error)\.[a-z_$][a-z0-9_$]*\([^)]*\)$",
+    register_diagnostic(
+      span = $render,
+      message = "Render error text through ErrorSurface so operational failures cannot bypass reporting.",
+      severity = "error"
+    )
+  },
+  jsx_attribute(name=$name, value=$class_name) as $attribute where {
+    $name <: `className`,
+    $class_name <: r"(?i).*error.*",
+    $class_name <: not contains conditional_expression(),
+    $attribute <: within (jsx_element() as $element),
+    $element <: contains `{$rendered_value}`,
+    $element <: not contains `<ErrorSurface $... />`,
+    register_diagnostic(
+      span = $attribute,
+      message = "Render dynamic error text through ErrorSurface so operational failures cannot bypass reporting.",
+      severity = "error"
+    )
+  },
+  `role="alert"` as $attribute where {
+    $attribute <: within (jsx_element() as $element),
+    $element <: contains `{$rendered_value}`,
+    $element <: not contains `<ErrorSurface $... />`,
+    register_diagnostic(
+      span = $attribute,
+      message = "Render dynamic alert text through ErrorSurface so operational failures cannot bypass reporting.",
+      severity = "error"
+    )
+  }
+}

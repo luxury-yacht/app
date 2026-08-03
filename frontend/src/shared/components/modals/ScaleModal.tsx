@@ -5,6 +5,7 @@
  * Used by both the workloads table context menu and the object panel actions menu.
  */
 
+import { ErrorSurface } from '@shared/components/errors/ErrorSurface';
 import { ScaleIcon } from '@shared/components/icons/SharedIcons';
 import { useEffect, useId, useRef, useState } from 'react';
 import ModalHeader from './ModalHeader';
@@ -144,7 +145,11 @@ const ScaleModal = ({
           </div>
         </div>
       </div>
-      {!!error && <div className="scale-modal-error">{error}</div>}
+      {!!error && (
+        <div className="scale-modal-error">
+          <ErrorSurface kind="reported" message={error} />
+        </div>
+      )}
       <div className="scale-modal-footer">
         <button type="button" className="button cancel" onClick={onCancel} disabled={loading}>
           Cancel

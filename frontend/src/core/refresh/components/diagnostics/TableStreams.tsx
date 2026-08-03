@@ -5,6 +5,7 @@
  * Renders stream telemetry details for the diagnostics panel.
  */
 
+import { ErrorSurface } from '@shared/components/errors/ErrorSurface';
 import {
   isTableNoValueText,
   TABLE_NO_VALUE_TEXT,
@@ -76,8 +77,12 @@ const LastErrorCell: React.FC<{ value: string; at?: number }> = ({ value, at }) 
   const age = at ? formatLastUpdated(at) : null;
   return (
     <td className="diagnostics-error-warning" title={age?.tooltip}>
-      {value}
-      {age ? <span className="diagnostics-error-age"> · {age.display}</span> : null}
+      <ErrorSurface kind="status" message={value} />
+      {age ? (
+        <span className="diagnostics-error-age">
+          <ErrorSurface kind="status" message={` · ${age.display}`} />
+        </span>
+      ) : null}
     </td>
   );
 };

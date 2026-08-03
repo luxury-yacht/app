@@ -1,4 +1,5 @@
 import { Dropdown, type DropdownOption } from '@shared/components/dropdowns/Dropdown';
+import { ErrorSurface } from '@shared/components/errors/ErrorSurface';
 import IconBar, { type IconBarItem } from '@shared/components/IconBar/IconBar';
 import {
   AnsiColorIcon,
@@ -648,7 +649,11 @@ const NodeLogsTab = ({
             <div className="logs-viewer-display-error">
               <div className="node-log-unavailable-message">
                 <div>Logs are not available on this node</div>
-                {availability.reason ? <div>Error: {availability.reason}</div> : null}
+                {availability.reason ? (
+                  <div>
+                    Error: <ErrorSurface kind="status" message={availability.reason} />
+                  </div>
+                ) : null}
               </div>
             </div>
           </div>
@@ -666,7 +671,11 @@ const NodeLogsTab = ({
 
   let renderedLogContent: React.ReactNode;
   if (error) {
-    renderedLogContent = <div className="logs-viewer-display-error">{error}</div>;
+    renderedLogContent = (
+      <div className="logs-viewer-display-error">
+        <ErrorSurface kind="reported" message={error} />
+      </div>
+    );
   } else if (!selectedSource) {
     renderedLogContent = (
       <div className="logs-viewer-display-loading">Select a log source to view logs.</div>

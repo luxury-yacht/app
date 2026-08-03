@@ -3,6 +3,7 @@
  */
 
 import ClusterDataPausedState from '@shared/components/ClusterDataPausedState';
+import { ErrorSurface } from '@shared/components/errors/ErrorSurface';
 import LoadingSpinner from '@shared/components/LoadingSpinner';
 import { YamlEditor } from '@shared/components/yaml';
 import type React from 'react';
@@ -63,7 +64,9 @@ const ManifestTab: React.FC<ManifestTabProps> = ({ scope, isActive = false }) =>
     return (
       <div className="object-panel-tab-content">
         <div className="yaml-display-error">
-          <div className="error-message">Error loading manifest: {manifestError}</div>
+          <div className="error-message">
+            Error loading manifest: <ErrorSurface kind="reported" message={manifestError} />
+          </div>
         </div>
       </div>
     );

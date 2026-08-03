@@ -7,6 +7,7 @@
 import type { ResourceRef } from '@core/refresh/types';
 import { resolveBuiltinGroupVersion } from '@shared/constants/builtinGroupVersions';
 import { RunObjectAction } from '@/core/backend-api';
+import { runUserAction } from '@/core/telemetry/sentry';
 import type { ObjectActionName } from './objectActionContract';
 import { OBJECT_ACTIONS } from './objectActionContract';
 
@@ -118,7 +119,10 @@ export const buildObjectActionTarget = (
 };
 
 const runObjectAction = async (request: ObjectActionRequest): Promise<ObjectActionResponse> => {
-  return (await RunObjectAction(request as never)) as ObjectActionResponse;
+  return runUserAction(
+    request.action,
+    async () => (await RunObjectAction(request as never)) as ObjectActionResponse
+  );
 };
 
 export const runObjectDelete = (target: ObjectActionTargetRef): Promise<ObjectActionResponse> =>

@@ -7,6 +7,7 @@
  * just-finished historical job.
  */
 
+import { ErrorSurface } from '@shared/components/errors/ErrorSurface';
 import { assertNever } from '@shared/utils/assertNever';
 import { useEffect, useMemo, useState } from 'react';
 import type { NodeMaintenanceDrainJob } from '@/core/refresh/types';
@@ -102,7 +103,7 @@ export function DrainProgressCard({
 
       {!!(progress.hasError && progress.errorMessage) && (
         <div className="drain-progress-error" role="alert">
-          {progress.errorMessage}
+          <ErrorSurface kind="status" message={progress.errorMessage} />
         </div>
       )}
 

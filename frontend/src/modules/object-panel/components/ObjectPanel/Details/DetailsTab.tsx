@@ -7,6 +7,7 @@ import DataSection from '@modules/object-panel/components/ObjectPanel/Details/De
 import RBACRules from '@modules/object-panel/components/ObjectPanel/Details/DetailsTabRBACRules';
 import Utilization from '@modules/object-panel/components/ObjectPanel/Details/DetailsTabUtilization';
 import Overview from '@modules/object-panel/components/ObjectPanel/Details/Overview';
+import { ErrorSurface } from '@shared/components/errors/ErrorSurface';
 import { WarningIcon } from '@shared/components/icons/SharedIcons';
 import type React from 'react';
 import './DetailsTab.css';
@@ -77,7 +78,9 @@ const DetailsTabContent: React.FC<DetailsTabProps> = ({
         )}
 
         {!!detailsError && (
-          <div className="error-message">Error loading details: {detailsError}</div>
+          <div className="error-message">
+            Error loading details: <ErrorSurface kind="reported" message={detailsError} />
+          </div>
         )}
 
         {!!objectData && (

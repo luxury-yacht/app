@@ -16,6 +16,7 @@ import PortForwardModal from './PortForwardModal';
 const runObjectActionMock = vi.hoisted(() => vi.fn());
 const getTargetPortsMock = vi.hoisted(() => vi.fn());
 const handleInlineMock = vi.hoisted(() => vi.fn());
+const runUserActionMock = vi.hoisted(() => vi.fn());
 
 vi.mock('@wailsjs/go/backend/App', () => ({
   RunObjectAction: (...args: unknown[]) => runObjectActionMock(...args),
@@ -27,6 +28,14 @@ vi.mock('@utils/errorHandler', () => ({
     handleInline: (...args: unknown[]) => handleInlineMock(...args),
   },
 }));
+
+vi.mock('@/core/telemetry/sentry', async (importOriginal) => {
+  const original = await importOriginal<typeof import('@/core/telemetry/sentry')>();
+  return {
+    ...original,
+    runUserAction: (...args: unknown[]) => runUserActionMock(...args),
+  };
+});
 
 describe('PortForwardModal', () => {
   let container: HTMLDivElement;
@@ -59,6 +68,7 @@ describe('PortForwardModal', () => {
     handleInlineMock.mockImplementation((error: unknown) => ({
       message: error instanceof Error ? error.message : String(error),
     }));
+    runUserActionMock.mockImplementation((_action: string, work: () => Promise<unknown>) => work());
   });
 
   afterEach(() => {
@@ -378,6 +388,7 @@ describe('PortForwardModal', () => {
       source: 'PortForwardModal',
       clusterId: 'cluster-1',
     });
+    expect(runUserActionMock).toHaveBeenCalledWith('startPortForward', expect.any(Function));
   });
 
   it('shows loading state while starting', async () => {

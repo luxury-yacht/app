@@ -22,6 +22,14 @@ The integration uses Sentry's native event processing and default integrations:
   advisory warnings are not exceptions and stay local. Render failures already
   owned by the React 19 root handler are not captured a second time by legacy
   component boundaries.
+- `frontend/src/shared/components/errors/ErrorSurface.tsx` is the rendering
+  boundary for dynamic inline error text. An operational surface receives the
+  original error and reports it when presented; validation, runtime-status,
+  and already-reported messages must declare that classification explicitly.
+  The `no-inline-error-text` Biome plugin rejects raw JSX rendering of
+  error-shaped values (including `.message`, `String(error)`, and
+  `error.toString()`), so a new component cannot silently reintroduce the
+  common string-only bypass.
 - `handleOperational` is the matching non-toast boundary for caught failures
   that are handled without rendering an error surface. Production code cannot
   call `console.error` directly: the `no-direct-console-error` Biome plugin
@@ -35,17 +43,21 @@ The integration uses Sentry's native event processing and default integrations:
   through completion; a displayed error caused by that request reuses the same
   identifier as its operation id. Other handled failures receive a unique
   `ui-error-N` operation id and retain the allowlisted user action, source,
-  cluster id, and namespace.
+  cluster id, and namespace. User-initiated async work that is not a broker
+  read runs through `runUserAction`; the wrapper gives each invocation a
+  `user-action-N` id and binds a rejected `Error` to that exact invocation.
 - While exactly one broker request is active, automatic browser breadcrumbs are
   labeled with its request id. Ambiguous automatic breadcrumbs during
   concurrent requests are excluded. Before a frontend event is sent,
   breadcrumbs from other
   request ids and breadcrumbs labeled with a different view, tab, cluster, or
   namespace are removed. A handled failure without a broker request keeps only
-  the latest user-action window. This keeps simultaneous activity in the same
-  cluster from being presented as the failing operation's trail. Breadcrumb
-  data never includes the raw error message, and arbitrary caller context is
-  not copied into the Sentry event.
+  breadcrumbs carrying its exact operation id. Wrapped user actions therefore
+  retain their own start/failure trail even when another action overlaps; an
+  unwrapped failure keeps only its own presentation breadcrumb instead of
+  guessing from the most recent click. Breadcrumb data never includes the raw
+  error message, and arbitrary caller context is not copied into the Sentry
+  event.
 - Background handled failures keep only their own `ui.error.handled`
   breadcrumb, matched by operation id. They do not inherit the last unrelated
   browser activity merely because it happened in the same workspace.

@@ -15,6 +15,7 @@ import type { Favorite, FavoriteFilters, FavoriteTableState } from '@/core/persi
 import { requireValue } from '@/test-utils/requireValue';
 
 const handleInlineMock = vi.hoisted(() => vi.fn());
+const runUserActionMock = vi.hoisted(() => vi.fn());
 
 interface ConfirmationModalMockProps {
   isOpen: boolean;
@@ -56,6 +57,14 @@ vi.mock('@utils/errorHandler', () => ({
     handleInline: (...args: unknown[]) => handleInlineMock(...args),
   },
 }));
+
+vi.mock('@/core/telemetry/sentry', async (importOriginal) => {
+  const original = await importOriginal<typeof import('@/core/telemetry/sentry')>();
+  return {
+    ...original,
+    runUserAction: (...args: unknown[]) => runUserActionMock(...args),
+  };
+});
 
 vi.mock('@modules/kubernetes/config/KubeconfigContext', () => ({
   useKubeconfig: () => ({
@@ -281,6 +290,7 @@ describe('FavSaveModal', () => {
     handleInlineMock.mockImplementation((error: unknown) => ({
       message: error instanceof Error ? error.message : String(error),
     }));
+    runUserActionMock.mockImplementation((_action: string, work: () => Promise<unknown>) => work());
   });
 
   afterEach(() => {
@@ -619,6 +629,7 @@ describe('FavSaveModal', () => {
       action: 'saveFavorite',
       source: 'FavSaveModal',
     });
+    expect(runUserActionMock).toHaveBeenCalledWith('saveFavorite', expect.any(Function));
   });
 
   it('saves Event provider facet selections in favorites', async () => {

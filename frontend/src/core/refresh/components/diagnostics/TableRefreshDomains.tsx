@@ -5,6 +5,7 @@
  * Handles rendering and interactions for the shared components.
  */
 
+import { ErrorSurface } from '@shared/components/errors/ErrorSurface';
 import { TABLE_NO_VALUE_TEXT, TableCellValue } from '@shared/components/tables/tableNoValue';
 import type React from 'react';
 import type { DiagnosticsRow, SummaryCardData } from './diagnosticsPanelTypes';
@@ -129,7 +130,9 @@ export const DiagnosticsTable: React.FC<DiagnosticsTableProps> = ({ rows }) => {
                   {row.stale ? 'Yes' : 'No'}
                 </td>
                 <td className="diagnostics-error">
-                  <TableCellValue>{row.error}</TableCellValue>
+                  <TableCellValue>
+                    <ErrorSurface kind="status" message={row.error} />
+                  </TableCellValue>
                 </td>
               </tr>
             ))

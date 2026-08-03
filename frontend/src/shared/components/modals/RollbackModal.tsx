@@ -17,6 +17,7 @@ import {
   mergeDiffLines,
 } from '@shared/components/diff/diffUtils';
 import { computeBudgetedLineDiff } from '@shared/components/diff/lineDiff';
+import { ErrorSurface } from '@shared/components/errors/ErrorSurface';
 import { RollbackIcon } from '@shared/components/icons/SharedIcons';
 import { errorHandler } from '@utils/errorHandler';
 import type { backend } from '@wailsjs/go/models';
@@ -291,7 +292,7 @@ const RollbackModal = ({
 
       {!loading && fetchError && (
         <div className="rollback-error" data-testid="rollback-error">
-          {fetchError}
+          <ErrorSurface kind="reported" message={fetchError} />
         </div>
       )}
 
@@ -379,7 +380,7 @@ const RollbackModal = ({
       <div className="rollback-modal-footer">
         {!!rollbackError && (
           <span className="rollback-modal-footer-error" title={rollbackError}>
-            {rollbackError}
+            <ErrorSurface kind="reported" message={rollbackError} />
           </span>
         )}
         <button

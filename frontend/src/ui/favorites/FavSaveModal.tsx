@@ -18,6 +18,7 @@ import {
   filterSelectionValues,
   type MultiSelectFilterSelection,
 } from '@shared/components/dropdowns/multiSelectFilterSelection';
+import { ErrorSurface } from '@shared/components/errors/ErrorSurface';
 import { FavoriteGenericIcon } from '@shared/components/icons/FavoriteIcons';
 import ConfirmationModal from '@shared/components/modals/ConfirmationModal';
 import ModalHeader from '@shared/components/modals/ModalHeader';
@@ -41,6 +42,7 @@ import type {
   FavoritePaneState,
   FavoriteTableState,
 } from '@/core/persistence/favorites';
+import { runUserAction } from '@/core/telemetry/sentry';
 import '@shared/components/KubeconfigSelector.css';
 import './FavSaveModal.css';
 import { compareUtf16Strings } from '@/shared/utils/sort';
@@ -645,7 +647,7 @@ const FavSaveModal: React.FC<FavSaveModalProps> = ({
     setSaving(true);
     setSaveError('');
     try {
-      await onSave(fav);
+      await runUserAction('saveFavorite', () => onSave(fav));
       setSaving(false);
       onClose();
     } catch (error) {
@@ -827,7 +829,7 @@ const FavSaveModal: React.FC<FavSaveModalProps> = ({
           )}
           {saveError ? (
             <div className="fav-save-error" role="alert">
-              {saveError}
+              <ErrorSurface kind="reported" message={saveError} />
             </div>
           ) : null}
           <div className="fav-save-footer-spacer" />

@@ -8,6 +8,7 @@
  * affordances are also the only "scope active" signal the design needs.
  */
 
+import { ErrorSurface } from '@shared/components/errors/ErrorSurface';
 import { PlusIcon } from '@shared/components/icons/SharedIcons';
 import { errorHandler } from '@utils/errorHandler';
 import { useCallback, useEffect, useRef, useState } from 'react';
@@ -203,7 +204,11 @@ export function NamespaceScopeAddRow({ state }: NamespaceScopeAddRowProps) {
           <span>Add namespace</span>
         </button>
       )}
-      {state.error ? <div className="namespace-scope-error">{state.error}</div> : null}
+      {state.error ? (
+        <div className="namespace-scope-error">
+          <ErrorSurface kind="status" message={state.error} />
+        </div>
+      ) : null}
       {state.scope.length > NAMESPACE_SCOPE_SOFT_WARNING_THRESHOLD ? (
         <div className="namespace-scope-warning">
           Large scopes open one watch per resource kind per namespace.

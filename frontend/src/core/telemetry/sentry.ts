@@ -45,14 +45,21 @@ interface PendingBootstrapError {
   operationId: string;
 }
 
+interface UserActionContext {
+  id: string;
+  action: string;
+}
+
 let configuredRuntime: SentryRuntimeConfig | null = null;
 let reportingInitialized = false;
 let unsubscribePreference: (() => void) | null = null;
 let operationSequence = 0;
+let userActionSequence = 0;
 let activeViewContext: ActiveViewContext | null = null;
 let activeNamespaceContext: string | undefined;
 let activeBrokerRequestIds = new Set<string>();
 let requestByError = new WeakMap<object, CompletedBrokerRequestContext>();
+let userActionByError = new WeakMap<object, UserActionContext>();
 let bootstrapPreferenceResolved = false;
 let bootstrapErrorSequence = 0;
 let pendingBootstrapErrors: PendingBootstrapError[] = [];
@@ -199,21 +206,9 @@ const beforeSend = (event: ErrorEvent): ErrorEvent => {
       return Array.isArray(requestIds) && requestIds.includes(eventRequestId);
     });
   } else if (event.tags?.['error.surface'] === 'user-visible' && workspaceBreadcrumbs) {
-    let latestUserActionIndex = -1;
-    workspaceBreadcrumbs.forEach((breadcrumb, index) => {
-      if (breadcrumb.category === 'ui.click' || breadcrumb.category === 'ui.input') {
-        latestUserActionIndex = index;
-      }
-    });
-    if (latestUserActionIndex >= 0) {
-      breadcrumbs = workspaceBreadcrumbs.slice(latestUserActionIndex);
-    } else {
-      breadcrumbs = workspaceBreadcrumbs.filter(
-        (breadcrumb) =>
-          breadcrumb.category === 'ui.error.presented' &&
-          breadcrumb.data?.operationId === eventOperationId
-      );
-    }
+    breadcrumbs = workspaceBreadcrumbs.filter(
+      (breadcrumb) => breadcrumb.data?.operationId === eventOperationId
+    );
   } else if (event.tags?.['error.surface'] === 'operational' && workspaceBreadcrumbs) {
     breadcrumbs = workspaceBreadcrumbs.filter(
       (breadcrumb) =>
@@ -368,10 +363,12 @@ export function resetErrorReportingForTesting(): void {
   configuredRuntime = null;
   reportingInitialized = false;
   operationSequence = 0;
+  userActionSequence = 0;
   activeViewContext = null;
   activeNamespaceContext = undefined;
   activeBrokerRequestIds = new Set<string>();
   requestByError = new WeakMap<object, CompletedBrokerRequestContext>();
+  userActionByError = new WeakMap<object, UserActionContext>();
   bootstrapPreferenceResolved = false;
   bootstrapErrorSequence = 0;
   pendingBootstrapErrors = [];
@@ -488,6 +485,54 @@ export function recordBrokerRequestCompleted(
   activeBrokerRequestIds.delete(request.id);
 }
 
+const recordUserActionBreadcrumb = (
+  userAction: UserActionContext,
+  status: 'started' | 'completed' | 'failed'
+): void => {
+  if (!reportingInitialized) {
+    return;
+  }
+  Sentry.addBreadcrumb({
+    type: 'user',
+    category: `ui.action.${status}`,
+    level: status === 'failed' ? 'error' : 'info',
+    message: `${status === 'started' ? 'Started' : status === 'failed' ? 'Failed' : 'Completed'} ${userAction.action}`,
+    data: {
+      operationId: userAction.id,
+      action: userAction.action,
+    },
+  });
+};
+
+/**
+ * Runs one user-initiated operation and binds a rejected Error to that exact
+ * action instance. Callers can report the rethrown error through errorHandler;
+ * captureUserVisibleError will recover the action id without using timing.
+ */
+export async function runUserAction<T>(action: string, work: () => T | Promise<T>): Promise<T> {
+  userActionSequence += 1;
+  const userAction = {
+    id: `user-action-${userActionSequence}`,
+    action: action.trim() || 'unknown',
+  };
+  recordUserActionBreadcrumb(userAction, 'started');
+  try {
+    const result = await work();
+    recordUserActionBreadcrumb(userAction, 'completed');
+    return result;
+  } catch (error) {
+    if (
+      error !== null &&
+      error !== undefined &&
+      (typeof error === 'object' || typeof error === 'function')
+    ) {
+      userActionByError.set(error, userAction);
+    }
+    recordUserActionBreadcrumb(userAction, 'failed');
+    throw error;
+  }
+}
+
 export function captureUserVisibleError(error: unknown, details: UserVisibleErrorCapture): void {
   if (!reportingInitialized) {
     return;
@@ -500,9 +545,15 @@ export function captureUserVisibleError(error: unknown, details: UserVisibleErro
     (typeof error === 'object' || typeof error === 'function')
       ? requestByError.get(error)
       : undefined;
+  const userAction =
+    error !== null &&
+    error !== undefined &&
+    (typeof error === 'object' || typeof error === 'function')
+      ? userActionByError.get(error)
+      : undefined;
   operationSequence += 1;
-  const operationId = request?.id ?? `ui-error-${operationSequence}`;
-  const action = contextString(details.context, 'action');
+  const operationId = request?.id ?? userAction?.id ?? `ui-error-${operationSequence}`;
+  const action = contextString(details.context, 'action') ?? userAction?.action;
   const source = contextString(details.context, 'source');
   const operationClusterId = contextString(details.context, 'clusterId');
   const operationNamespace = contextString(details.context, 'namespace');
@@ -515,6 +566,9 @@ export function captureUserVisibleError(error: unknown, details: UserVisibleErro
     scope.setTag('error.category', details.category);
     if (action) {
       scope.setTag('ui.action', action);
+    }
+    if (userAction) {
+      scope.setTag('ui.action.id', userAction.id);
     }
     if (navigation) {
       scope.setTag('ui.view', navigation.view);

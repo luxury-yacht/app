@@ -224,6 +224,17 @@
         "!**/src/utils/errorHandler.ts",
         "!**/src/core/telemetry/sentry.ts"
       ]
+    },
+    {
+      // Dynamic error text must be classified by the shared UI presentation boundary.
+      "path": "./biome-plugins/no-inline-error-text.grit",
+      "includes": [
+        "**/src/**/*.tsx",
+        "!**/src/**/*.test.*",
+        "!**/src/**/*.stories.*",
+        "!**/src/shared/components/errors/**",
+        "!**/src/ui/errors/**"
+      ]
     }
   ],
   // Overrides are narrow architectural boundaries, not general escape hatches. Keep the reason for

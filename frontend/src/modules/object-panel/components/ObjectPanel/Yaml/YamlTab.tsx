@@ -7,6 +7,7 @@
  */
 
 import ClusterDataPausedState from '@shared/components/ClusterDataPausedState';
+import { ErrorSurface } from '@shared/components/errors/ErrorSurface';
 import IconBar, { type IconBarItem } from '@shared/components/IconBar/IconBar';
 import { WrapTextIcon } from '@shared/components/icons/LogIcons';
 import { CloseIcon } from '@shared/components/icons/SharedIcons';
@@ -446,7 +447,9 @@ const YamlTab: React.FC<YamlTabProps> = ({
     return (
       <div className="object-panel-tab-content">
         <div className="yaml-display-error">
-          <div className="error-message">Error loading YAML: {yamlError}</div>
+          <div className="error-message">
+            Error loading YAML: <ErrorSurface kind="reported" message={yamlError} />
+          </div>
         </div>
       </div>
     );
@@ -502,14 +505,24 @@ const YamlTab: React.FC<YamlTabProps> = ({
                 )}
               </>
             )}
-            {!!lintError && <p>{lintError}</p>}
+            {!!lintError && (
+              <p>
+                <ErrorSurface kind="validation" message={lintError} />
+              </p>
+            )}
             {!!protectedEditMessage && <p>{protectedEditMessage}</p>}
-            {actionError && (!lintError || actionError !== lintError) && <p>{actionError}</p>}
+            {actionError && (!lintError || actionError !== lintError) && (
+              <p>
+                <ErrorSurface kind="reported" message={actionError} />
+              </p>
+            )}
             {actionDetails.length > 0 && (
               <ul className="yaml-error-details">
                 {withStableListKeys(actionDetails, (detail) => detail).map(
                   ({ key, value: detail }) => (
-                    <li key={key}>{detail}</li>
+                    <li key={key}>
+                      <ErrorSurface kind="reported" message={detail} />
+                    </li>
                   )
                 )}
               </ul>

@@ -11,6 +11,7 @@ import { boundedRowsSource } from '@modules/resource-grid/boundedRowsSource';
 import { buildLocalPartialDataLabel } from '@modules/resource-grid/tablePartialState';
 import { useResourceInventoryTable } from '@modules/resource-grid/useResourceInventoryTable';
 import ClusterDataPausedState from '@shared/components/ClusterDataPausedState';
+import { ErrorSurface } from '@shared/components/errors/ErrorSurface';
 import { formatLiveAgeText, LiveAgeText } from '@shared/components/LiveAgeText';
 import {
   applyColumnSizing,
@@ -538,7 +539,9 @@ const EventsTab: React.FC<EventsTabProps> = ({ objectData, isActive, eventsScope
     return (
       <div className="object-panel-tab-content">
         <div className="object-panel-placeholder error">
-          <p>Error loading events: {eventsRender.error}</p>
+          <p>
+            Error loading events: <ErrorSurface kind="reported" message={eventsRender.error} />
+          </p>
         </div>
       </div>
     );

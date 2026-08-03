@@ -7,6 +7,7 @@
  */
 
 import { buildObjectActionTarget, runStartPortForward } from '@shared/actions/objectActionClient';
+import { ErrorSurface } from '@shared/components/errors/ErrorSurface';
 import { PortForwardIcon } from '@shared/components/icons/SharedIcons';
 import ModalHeader from '@shared/components/modals/ModalHeader';
 import ModalSurface from '@shared/components/modals/ModalSurface';
@@ -383,7 +384,11 @@ const PortForwardModal = ({ target, onClose, onStarted }: PortForwardModalProps)
       </div>
 
       {/* Error Message */}
-      {!!error && <div className="port-forward-error">{error}</div>}
+      {!!error && (
+        <div className="port-forward-error">
+          <ErrorSurface kind="status" message={error} />
+        </div>
+      )}
 
       {/* Footer */}
       <div className="port-forward-footer">

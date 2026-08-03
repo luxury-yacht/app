@@ -30,6 +30,7 @@ import {
   recordBrokerRequestCompleted,
   recordBrokerRequestStarted,
   resetErrorReportingForTesting,
+  runUserAction,
   setActiveNamespaceContext,
   setActiveViewContext,
 } from './sentry';
@@ -516,7 +517,7 @@ describe('Sentry error reporting', () => {
     ]);
   });
 
-  it('keeps only the latest user-action window for a non-request failure', () => {
+  it('does not guess that the latest browser interaction caused a non-request failure', () => {
     initializeErrorReporting({
       enabled: true,
       dsn: 'https://public@example.com/1',
@@ -534,15 +535,54 @@ describe('Sentry error reporting', () => {
         { category: 'console', message: 'older work' },
         { category: 'ui.click', message: 'save button' },
         { category: 'console', message: 'save started' },
-        { category: 'ui.error.presented', message: 'save failed' },
+        {
+          category: 'ui.error.presented',
+          message: 'save failed',
+          data: { operationId: 'ui-error-7' },
+        },
       ],
     }) as { breadcrumbs: Array<{ message: string }> };
 
-    expect(filtered.breadcrumbs.map((breadcrumb) => breadcrumb.message)).toEqual([
-      'save button',
-      'save started',
-      'save failed',
-    ]);
+    expect(filtered.breadcrumbs.map((breadcrumb) => breadcrumb.message)).toEqual(['save failed']);
+  });
+
+  it('correlates an async failure to its exact user-action instance', async () => {
+    initializeErrorReporting({
+      enabled: true,
+      dsn: 'https://public@example.com/1',
+      environment: 'production',
+    });
+    const failure = new Error('save failed');
+    let rejectSave: ((error: Error) => void) | undefined;
+    const save = runUserAction(
+      'saveFavorite',
+      () =>
+        new Promise<void>((_resolve, reject) => {
+          rejectSave = reject;
+        })
+    ).catch((error: unknown) => {
+      captureUserVisibleError(error, {
+        category: 'UNKNOWN',
+        severity: 'error',
+        context: { action: 'saveFavorite' },
+      });
+    });
+
+    await runUserAction('openSettings', async () => undefined);
+    rejectSave?.(failure);
+    await save;
+
+    expect(scopeMocks.setContext).toHaveBeenLastCalledWith('operation', {
+      id: 'user-action-1',
+      action: 'saveFavorite',
+    });
+    expect(sentryMocks.captureException).toHaveBeenCalledWith(failure);
+    expect(sentryMocks.addBreadcrumb).toHaveBeenCalledWith(
+      expect.objectContaining({
+        category: 'ui.action.failed',
+        data: { operationId: 'user-action-1', action: 'saveFavorite' },
+      })
+    );
   });
 
   it('keeps only the matching operation breadcrumb for background handled failures', () => {

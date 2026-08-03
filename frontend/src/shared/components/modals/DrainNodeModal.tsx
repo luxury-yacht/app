@@ -9,6 +9,7 @@
 
 import { buildObjectActionTarget, runStartDrain } from '@shared/actions/objectActionClient';
 import { DrainProgressCard } from '@shared/components/drain/DrainProgressCard';
+import { ErrorSurface } from '@shared/components/errors/ErrorSurface';
 import { DrainIcon } from '@shared/components/icons/SharedIcons';
 import Tooltip from '@shared/components/Tooltip';
 import {
@@ -563,7 +564,11 @@ const DrainNodeModal = ({
           </div>
         )}
 
-        {!!drainError && <div className="drain-node-modal-error">{drainError}</div>}
+        {!!drainError && (
+          <div className="drain-node-modal-error">
+            <ErrorSurface kind="reported" message={drainError} />
+          </div>
+        )}
         {!activeDrainJob && startPermissionReason && (
           <div className="drain-node-modal-helper" data-test="drain-modal-permission-reason">
             {startPermissionReason}

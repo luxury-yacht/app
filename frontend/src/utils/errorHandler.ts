@@ -279,7 +279,7 @@ class ErrorHandler {
     }
   }
 
-  private buildErrorDetails(
+  public describe(
     error: unknown,
     context?: Record<string, unknown>,
     customMessage?: string
@@ -342,7 +342,7 @@ class ErrorHandler {
     context?: Record<string, unknown>,
     customMessage?: string
   ): ErrorDetails {
-    const errorDetails = this.buildErrorDetails(error, context, customMessage);
+    const errorDetails = this.describe(error, context, customMessage);
     this.reportError(error, errorDetails);
     const { category, message: errorString } = errorDetails;
 
@@ -388,7 +388,7 @@ class ErrorHandler {
     context?: Record<string, unknown>,
     customMessage?: string
   ): ErrorDetails {
-    const errorDetails = this.buildErrorDetails(error, context, customMessage);
+    const errorDetails = this.describe(error, context, customMessage);
     this.reportError(error, errorDetails);
     return errorDetails;
   }
@@ -402,7 +402,7 @@ class ErrorHandler {
     context?: Record<string, unknown>,
     customMessage?: string
   ): ErrorDetails {
-    const errorDetails = this.buildErrorDetails(error, context, customMessage);
+    const errorDetails = this.describe(error, context, customMessage);
     this.reportError(error, errorDetails, 'operational');
     return errorDetails;
   }

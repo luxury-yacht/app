@@ -22,12 +22,15 @@ import NsViewRBAC from '@modules/namespace/components/NsViewRBAC';
 import NsViewStorage from '@modules/namespace/components/NsViewStorage';
 import NsViewWorkloads from '@modules/namespace/components/NsViewWorkloads';
 import { ErrorBoundary } from '@shared/components/errors/ErrorBoundary';
+import { ErrorSurface } from '@shared/components/errors/ErrorSurface';
 import React from 'react';
 import type { NamespaceViewType } from '@/types/navigation/views';
 
 const ViewErrorFallback = ({ viewName, reset }: { viewName: string; reset: () => void }) => (
   <div className="namespace-view-error">
-    <h4>Failed to load {viewName}</h4>
+    <h4>
+      Failed to load <ErrorSurface kind="reported" message={viewName} />
+    </h4>
     <p>An error occurred while rendering this view.</p>
     <button type="button" className="button generic" onClick={reset}>
       Retry

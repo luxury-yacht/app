@@ -26,7 +26,7 @@ const lintWithPlugin = (pluginName, source) => {
       plugins: [{ path: `./${pluginName}.grit` }],
     })
   );
-  const sourcePath = path.join(directory, 'adversarial.ts');
+  const sourcePath = path.join(directory, 'adversarial.tsx');
   writeFileSync(sourcePath, source);
 
   return spawnSync(
@@ -75,7 +75,47 @@ describe('Biome architectural boundary plugins', () => {
       'triggerManualRefreshForContext',
     ],
     ['no-direct-console-error', 'console.error("load failed", error);', 'errorHandler'],
-  ])('rejects forbidden calls enforced by %s', (pluginName, source, diagnostic) => {
+    [
+      'no-inline-error-text',
+      'const loadError = "failed"; const View = () => <div>{loadError}</div>;',
+      'ErrorSurface',
+    ],
+    [
+      'no-inline-error-text',
+      'const error = new Error("failed"); const View = () => <div>{error}</div>;',
+      'ErrorSurface',
+    ],
+    [
+      'no-inline-error-text',
+      'const result = { error: "failed" }; const View = () => <div>{result.error}</div>;',
+      'ErrorSurface',
+    ],
+    [
+      'no-inline-error-text',
+      'const error = new Error("failed"); const View = () => <div>{error.message}</div>;',
+      'ErrorSurface',
+    ],
+    [
+      'no-inline-error-text',
+      'const error = new Error("failed"); const View = () => <div>{String(error)}</div>;',
+      'ErrorSurface',
+    ],
+    [
+      'no-inline-error-text',
+      'const error = new Error("failed"); const View = () => <div>{error.toString()}</div>;',
+      'ErrorSurface',
+    ],
+    [
+      'no-inline-error-text',
+      'const message = "failed"; const View = () => <div className="inline-error">{message}</div>;',
+      'ErrorSurface',
+    ],
+    [
+      'no-inline-error-text',
+      'const message = "failed"; const View = () => <div role="alert">{message}</div>;',
+      'ErrorSurface',
+    ],
+  ])('rejects forbidden calls enforced by %s: %s', (pluginName, source, diagnostic) => {
     const result = lintWithPlugin(pluginName, source);
 
     expect(result.status).not.toBe(0);
@@ -88,6 +128,15 @@ describe('Biome architectural boundary plugins', () => {
     ['no-direct-refresh-orchestrator', 'dataAccess.refreshContext();'],
   ])('accepts boundary calls outside %s', (pluginName, source) => {
     const result = lintWithPlugin(pluginName, source);
+
+    expect(result.status).toBe(0);
+  });
+
+  it('allows error text passed as data to the shared presentation boundary', () => {
+    const result = lintWithPlugin(
+      'no-inline-error-text',
+      'const validationError = "invalid"; const View = () => <ErrorSurface kind="validation" message={validationError} />;'
+    );
 
     expect(result.status).toBe(0);
   });

@@ -31,13 +31,16 @@ import type {
 } from '@modules/object-panel/components/ObjectPanel/types';
 import YamlTab from '@modules/object-panel/components/ObjectPanel/Yaml/YamlTab';
 import { ErrorBoundary } from '@shared/components/errors/ErrorBoundary';
+import { ErrorSurface } from '@shared/components/errors/ErrorSurface';
 import type { types } from '@wailsjs/go/models';
 import { useMemo } from 'react';
 
 const TabErrorFallback = ({ tabName, reset }: { tabName: string; reset: () => void }) => (
   <div className="object-panel-tab-content">
     <div className="object-panel-tab-error">
-      <h4>Failed to load {tabName}</h4>
+      <h4>
+        Failed to load <ErrorSurface kind="reported" message={tabName} />
+      </h4>
       <p>An error occurred while rendering this tab.</p>
       <button type="button" className="button generic" onClick={reset}>
         Retry

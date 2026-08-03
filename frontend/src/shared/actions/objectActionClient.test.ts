@@ -4,11 +4,42 @@
  * Verifies RunObjectAction target identity normalization.
  */
 
-import { describe, expect, it } from 'vitest';
+import { beforeEach, describe, expect, it, vi } from 'vitest';
 
-import { buildObjectActionTarget } from './objectActionClient';
+const runObjectActionMock = vi.hoisted(() => vi.fn());
+const runUserActionMock = vi.hoisted(() => vi.fn());
+
+vi.mock('@/core/backend-api', () => ({
+  RunObjectAction: (...args: unknown[]) => runObjectActionMock(...args),
+}));
+
+vi.mock('@/core/telemetry/sentry', () => ({
+  runUserAction: (...args: unknown[]) => runUserActionMock(...args),
+}));
+
+import {
+  buildObjectActionTarget,
+  runCreateDebugContainer,
+  runCronJobSuspend,
+  runCronJobTrigger,
+  runNodeCordon,
+  runNodeUncordon,
+  runObjectDelete,
+  runObjectRestart,
+  runObjectRollback,
+  runObjectScale,
+  runStartDrain,
+  runStartPortForward,
+} from './objectActionClient';
 
 describe('buildObjectActionTarget', () => {
+  beforeEach(() => {
+    runObjectActionMock.mockReset();
+    runObjectActionMock.mockResolvedValue({});
+    runUserActionMock.mockReset();
+    runUserActionMock.mockImplementation((_action: string, work: () => Promise<unknown>) => work());
+  });
+
   it('preserves full object identity for RunObjectAction targets', () => {
     expect(
       buildObjectActionTarget(
@@ -30,5 +61,89 @@ describe('buildObjectActionTarget', () => {
       namespace: 'team-a',
       name: 'api',
     });
+  });
+
+  it('gives every object mutation an exact user-action instance', async () => {
+    const target = {
+      clusterId: 'cluster-a',
+      group: 'apps',
+      version: 'v1',
+      kind: 'Deployment',
+      namespace: 'team-a',
+      name: 'api',
+    };
+
+    const actions = [
+      {
+        action: 'delete',
+        run: () => runObjectDelete(target),
+        request: { action: 'delete', target },
+      },
+      {
+        action: 'restart',
+        run: () => runObjectRestart(target),
+        request: { action: 'restart', target },
+      },
+      {
+        action: 'scale',
+        run: () => runObjectScale(target, 3),
+        request: { action: 'scale', target, replicas: 3 },
+      },
+      {
+        action: 'trigger',
+        run: () => runCronJobTrigger(target),
+        request: { action: 'trigger', target },
+      },
+      {
+        action: 'suspend',
+        run: () => runCronJobSuspend(target, true),
+        request: { action: 'suspend', target, suspend: true },
+      },
+      { action: 'cordon', run: () => runNodeCordon(target), request: { action: 'cordon', target } },
+      {
+        action: 'uncordon',
+        run: () => runNodeUncordon(target),
+        request: { action: 'uncordon', target },
+      },
+      {
+        action: 'startDrain',
+        run: () => runStartDrain(target, { force: true }),
+        request: { action: 'startDrain', target, drainOptions: { force: true } },
+      },
+      {
+        action: 'startPortForward',
+        run: () => runStartPortForward(target, { containerPort: 80, localPort: 8080 }),
+        request: {
+          action: 'startPortForward',
+          target,
+          portForward: { containerPort: 80, localPort: 8080 },
+        },
+      },
+      {
+        action: 'createDebugContainer',
+        run: () => runCreateDebugContainer(target, { image: 'busybox:latest' }),
+        request: {
+          action: 'createDebugContainer',
+          target,
+          debugContainer: { image: 'busybox:latest' },
+        },
+      },
+      {
+        action: 'rollback',
+        run: () => runObjectRollback(target, 4),
+        request: { action: 'rollback', target, revision: 4 },
+      },
+    ];
+
+    for (const action of actions) {
+      await action.run();
+    }
+
+    expect(runUserActionMock.mock.calls.map(([action]) => action)).toEqual(
+      actions.map(({ action }) => action)
+    );
+    expect(runObjectActionMock.mock.calls.map(([request]) => request)).toEqual(
+      actions.map(({ request }) => request)
+    );
   });
 });
