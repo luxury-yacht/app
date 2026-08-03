@@ -28,7 +28,7 @@ type PodDetailInfoContainer = types.PodDetailInfoContainer
 func (s *Service) fetchSinglePodFull(namespace, name string) (*types.PodDetailInfo, error) {
 	pod, err := s.deps.KubernetesClient.CoreV1().Pods(namespace).Get(s.deps.Context, name, metav1.GetOptions{})
 	if err != nil {
-		s.deps.Logger.Error(fmt.Sprintf("Failed to fetch pod %s/%s from Kubernetes API: %v", namespace, name, err), "Pod")
+		s.deps.LogRequestFailure(err, fmt.Sprintf("Failed to fetch pod %s/%s from Kubernetes API", namespace, name), "Pod")
 		return nil, fmt.Errorf("failed to fetch pod from API: %w", err)
 	}
 	s.deps.Logger.Debug(fmt.Sprintf("Fetched pod %s/%s from Kubernetes API", namespace, name), "Pod")

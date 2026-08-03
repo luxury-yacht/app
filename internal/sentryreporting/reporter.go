@@ -75,11 +75,18 @@ func NewDisabled(config Config) (Reporter, error) {
 
 func newSentryHub(config Config) (*sentry.Hub, error) {
 	client, err := sentry.NewClient(sentry.ClientOptions{
-		Dsn:            config.DSN,
-		Environment:    config.Environment,
-		Release:        config.Release,
+		Dsn:         config.DSN,
+		Environment: config.Environment,
+		Release:     config.Release,
+		// An empty DataCollection opts into the SDK's own defaults rather than
+		// disabling collection; see resolveDataCollection in sentry-go.
 		DataCollection: &sentry.DataCollection{},
-		Transport:      config.Transport,
+		BeforeSend:     trimReportingFrames,
+		// The buffered telemetry path makes Client.Close flush before it stops,
+		// which would transmit queued events on opt-out and block the caller
+		// for up to the scheduler timeout. Opting out must simply stop sending.
+		DisableTelemetryBuffer: true,
+		Transport:              config.Transport,
 	})
 	if err != nil {
 		return nil, err
@@ -88,12 +95,128 @@ func newSentryHub(config Config) (*sentry.Hub, error) {
 	return sentry.NewHub(client, sentry.NewScope()), nil
 }
 
-// backendMessageError keeps application log failures exception-shaped so
-// Sentry displays the original message and captures the call stack.
-type backendMessageError string
+// LoggedError keeps application log failures exception-shaped so Sentry
+// displays the original message and captures the call stack.
+//
+// The name is user-visible: Sentry titles an issue "<type>: <value>", so these
+// read as "sentryreporting.LoggedError: <message>", which also distinguishes
+// them from captured Go errors and recovered panics.
+type LoggedError string
 
-func (e backendMessageError) Error() string {
+func (e LoggedError) Error() string {
 	return string(e)
+}
+
+const (
+	reporterModule   = "github.com/luxury-yacht/app/internal/sentryreporting"
+	reporterFuncName = "(*sentryReporter)."
+	appLogModule     = "github.com/luxury-yacht/app/backend/internal/applog"
+	appModule        = "github.com/luxury-yacht/app/backend"
+	appLoggerFunc    = "(*Logger)."
+	// appModulePrefix identifies this module's own packages. sentry-go reports
+	// Frame.Module as the package import path; package main is the exception and
+	// arrives as the bare string "main".
+	appModulePrefix = "github.com/luxury-yacht/app"
+	mainModule      = "main"
+)
+
+// isApplicationFrame reports whether a frame is this module's own code.
+//
+// sentry-go marks everything outside GOROOT as in-app, which includes Wails,
+// client-go, and every other dependency under the module cache. Sentry groups
+// only on frames the SDK associates with the application, so leaving that
+// default in place ties the grouping key to dependency internals: upgrading a
+// dependency would re-group unrelated issues.
+func isApplicationFrame(frame sentry.Frame) bool {
+	return frame.Module == mainModule || strings.HasPrefix(frame.Module, appModulePrefix)
+}
+
+// logForwarders are functions whose only job is handing a message to the
+// application logger. They sit between the failing code and the reporter, so
+// leaving them in makes Sentry name the forwarder as an issue's culprit.
+//
+// A forwarder cannot be recognised structurally — a stack cannot say whether a
+// function did work before logging. So this is a maintained list, and its known
+// failure mode is that a NEW forwarder silently becomes the culprit for every
+// issue its callers report. `LogRequestFailure` was added after exactly that
+// happened live. Register new forwarders here; the guard test pins the shapes.
+var logForwarders = map[string]struct{}{
+	// The per-package "log an error for this package" convention. Only the
+	// error-level name is listed: the application logger forwards ERROR entries
+	// alone, so a warn-level wrapper can never appear in a captured stack.
+	"logError": {},
+	// resources/common, fronting every resource read.
+	"LogRequestFailure": {},
+}
+
+// isLogWrapperFrame reports whether a frame is a registered log forwarder.
+// sentry-go renders these receiver-qualified, e.g. "(*Service).logError" or
+// "Dependencies.LogRequestFailure", so the receiver is stripped before the
+// method name is compared.
+func isLogWrapperFrame(frame sentry.Frame) bool {
+	name := frame.Function
+	if separator := strings.LastIndexByte(name, '.'); separator >= 0 {
+		name = name[separator+1:]
+	}
+	_, forwarder := logForwarders[name]
+	return forwarder
+}
+
+// isReportingFrame reports whether a frame belongs to the machinery that
+// carries a failure to Sentry rather than to the code that failed. The
+// application logger forwards every ERROR entry through this reporter, so
+// these frames sit innermost on every log-forwarded event.
+//
+// Both package matches are narrowed to the forwarding methods themselves, so a
+// failure originating inside either package still reports its own call site.
+func isReportingFrame(frame sentry.Frame) bool {
+	// Applies in any package: services wrap the logger before calling it.
+	if isLogWrapperFrame(frame) {
+		return true
+	}
+	switch frame.Module {
+	case reporterModule:
+		return strings.HasPrefix(frame.Function, reporterFuncName)
+	case appLogModule:
+		return true
+	case appModule:
+		// Only the logger's own methods; the rest of the package is app code.
+		return strings.HasPrefix(frame.Function, appLoggerFunc)
+	default:
+		return false
+	}
+}
+
+// trimReportingFrames drops the reporting machinery from the innermost end of
+// each captured stack. Sentry derives an issue's culprit and grouping key from
+// the innermost frame, so leaving these in groups every backend ERROR under the
+// reporter instead of the failing call site. Nothing else about the event is
+// changed: message, type, tags, level, and fingerprint are left alone.
+func trimReportingFrames(event *sentry.Event, _ *sentry.EventHint) *sentry.Event {
+	if event == nil {
+		return nil
+	}
+	for index := range event.Exception {
+		stacktrace := event.Exception[index].Stacktrace
+		if stacktrace == nil {
+			continue
+		}
+		// Frames run oldest-first, so the machinery is at the tail.
+		end := len(stacktrace.Frames)
+		for end > 0 && isReportingFrame(stacktrace.Frames[end-1]) {
+			end--
+		}
+		// Never emit a stackless exception; an all-machinery stack is still
+		// better than none for locating the report.
+		if end > 0 {
+			stacktrace.Frames = stacktrace.Frames[:end]
+		}
+		// Indexed, not ranged by value: the flag has to land on the real frame.
+		for index := range stacktrace.Frames {
+			stacktrace.Frames[index].InApp = isApplicationFrame(stacktrace.Frames[index])
+		}
+	}
+	return event
 }
 
 func (disabledReporter) Enabled() bool {
@@ -147,7 +270,7 @@ func (r *sentryReporter) SetEnabled(enabled bool) error {
 
 func (r *sentryReporter) CaptureLogError(message string, context Context) {
 	r.withHub(context, func(hub *sentry.Hub) {
-		hub.CaptureException(backendMessageError(message))
+		hub.CaptureException(LoggedError(message))
 	})
 }
 

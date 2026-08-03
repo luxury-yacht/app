@@ -30,7 +30,7 @@ func NewService(deps common.Dependencies) *Service {
 func (s *Service) RoleBinding(namespace, name string) (*RoleBindingDetails, error) {
 	rb, err := s.deps.KubernetesClient.RbacV1().RoleBindings(namespace).Get(s.deps.Context, name, metav1.GetOptions{})
 	if err != nil {
-		s.deps.Logger.Error(fmt.Sprintf("Failed to get role binding %s/%s: %v", namespace, name, err), "RBAC")
+		s.deps.LogRequestFailure(err, fmt.Sprintf("Failed to get role binding %s/%s", namespace, name), "RBAC")
 		return nil, fmt.Errorf("failed to get role binding: %v", err)
 	}
 	return s.buildRoleBindingDetails(rb), nil

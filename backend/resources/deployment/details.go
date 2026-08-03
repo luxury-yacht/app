@@ -44,7 +44,7 @@ func (s *Service) Deployment(namespace, name string) (*DeploymentDetails, error)
 
 	deployment, err := client.AppsV1().Deployments(namespace).Get(s.deps.Context, name, metav1.GetOptions{})
 	if err != nil {
-		s.deps.Logger.Error(fmt.Sprintf("Failed to get deployment %s/%s: %v", namespace, name, err), logsources.ResourceLoader)
+		s.deps.LogRequestFailure(err, fmt.Sprintf("Failed to get deployment %s/%s", namespace, name), logsources.ResourceLoader)
 		return nil, fmt.Errorf("failed to get deployment: %v", err)
 	}
 

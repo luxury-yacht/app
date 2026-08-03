@@ -123,9 +123,148 @@ func TestReporterCapturesOriginalMessageAndContext(t *testing.T) {
 	require.Len(t, event.Tags, 2)
 	require.Empty(t, event.Fingerprint)
 	require.Len(t, event.Exception, 1)
+	// Sentry renders an issue's title as "<type>: <value>", and sentry-go fills
+	// the type from the Go type name, so this string is read by anyone triaging.
+	require.Equal(t, "sentryreporting.LoggedError", event.Exception[0].Type)
 	require.Equal(t, "refresh subsystem failed for cluster-a", event.Exception[0].Value)
 	require.NotNil(t, event.Exception[0].Stacktrace)
 	require.NotEmpty(t, event.Exception[0].Stacktrace.Frames)
+}
+
+// Sentry derives an issue's culprit and grouping key from the innermost frame.
+// The reporter's own frames sit on top of every captured stack, so leaving them
+// in makes each report group under the reporter instead of the failing code.
+func TestReporterTrimsItsOwnFramesFromReportedStacks(t *testing.T) {
+	transport := &recordingTransport{}
+	reporter, err := New(Config{
+		DSN:       "https://public@example.com/1",
+		Transport: transport,
+	})
+	require.NoError(t, err)
+
+	reporter.CaptureLogError("refresh subsystem failed", Context{Source: "Refresh"})
+
+	event := transport.lastEvent()
+	require.NotNil(t, event)
+	require.Len(t, event.Exception, 1)
+	stacktrace := event.Exception[0].Stacktrace
+	require.NotNil(t, stacktrace)
+	require.NotEmpty(t, stacktrace.Frames)
+
+	for _, frame := range stacktrace.Frames {
+		require.NotContains(t, frame.Function, "(*sentryReporter).")
+	}
+	innermost := stacktrace.Frames[len(stacktrace.Frames)-1]
+	require.Equal(t, "TestReporterTrimsItsOwnFramesFromReportedStacks", innermost.Function)
+}
+
+// Most backend packages wrap the application logger in a one-line logError
+// helper. That wrapper is the innermost application frame, so without trimming
+// it Sentry names the wrapper as the culprit instead of the failing code —
+// observed live as "backend/capabilities in (*Service).logError".
+type fakeLoggingService struct{ reporter Reporter }
+
+func (s *fakeLoggingService) logError(message string) {
+	s.reporter.CaptureLogError(message, Context{Source: "Fake"})
+}
+
+func captureThroughLogWrapper(service *fakeLoggingService) {
+	service.logError("41 of 68 capability checks failed")
+}
+
+func TestReporterTrimsPerPackageLogWrappers(t *testing.T) {
+	transport := &recordingTransport{}
+	reporter, err := New(Config{
+		DSN:       "https://public@example.com/1",
+		Transport: transport,
+	})
+	require.NoError(t, err)
+
+	captureThroughLogWrapper(&fakeLoggingService{reporter: reporter})
+
+	event := transport.lastEvent()
+	require.NotNil(t, event)
+	require.Len(t, event.Exception, 1)
+	stacktrace := event.Exception[0].Stacktrace
+	require.NotNil(t, stacktrace)
+	require.NotEmpty(t, stacktrace.Frames)
+
+	innermost := stacktrace.Frames[len(stacktrace.Frames)-1]
+	require.Equal(t, "captureThroughLogWrapper", innermost.Function)
+}
+
+// Sentry groups only on frames the SDK marks as belonging to the application,
+// and sentry-go marks everything outside GOROOT as in-app — including Wails and
+// client-go. That couples the grouping key to dependency internals, so a
+// dependency upgrade that moves a module or renames a function re-groups
+// unrelated issues. Only this module's own frames are application frames.
+func TestReporterMarksOnlyApplicationFramesInApp(t *testing.T) {
+	event := &sentry.Event{Exception: []sentry.Exception{{
+		Stacktrace: &sentry.Stacktrace{Frames: []sentry.Frame{
+			{Module: "github.com/wailsapp/wails/v2/internal/frontend/dispatcher", Function: "(*Dispatcher).ProcessMessage", InApp: true},
+			{Module: "k8s.io/client-go/rest", Function: "(*Request).Do", InApp: true},
+			{Module: "main", Function: "reportRunError", InApp: true},
+			{Module: "github.com/luxury-yacht/app/backend/capabilities", Function: "(*Service).Evaluate", InApp: true},
+		}},
+	}}}
+
+	trimmed := trimReportingFrames(event, nil)
+
+	frames := trimmed.Exception[0].Stacktrace.Frames
+	require.Len(t, frames, 4)
+	require.False(t, frames[0].InApp, "Wails frames are not application code")
+	require.False(t, frames[1].InApp, "client-go frames are not application code")
+	require.True(t, frames[2].InApp, "package main is application code")
+	require.True(t, frames[3].InApp, "the app's own packages are application code")
+}
+
+// Observed live as LUXURY-YACHT-BACKEND-M, culprited at
+// "resources/common in Dependencies.LogRequestFailure". Forwarders are not
+// detectable from a stack — each one has to be registered here, so this test
+// pins the real shapes rather than the matching rule.
+func TestReporterTrimsRegisteredLogForwarders(t *testing.T) {
+	realCallSite := sentry.Frame{
+		Module:   "github.com/luxury-yacht/app/backend/resources/deployment",
+		Function: "(*Service).Deployment",
+	}
+	forwarders := []sentry.Frame{
+		{Module: "github.com/luxury-yacht/app/backend/resources/common", Function: "Dependencies.LogRequestFailure"},
+		{Module: "github.com/luxury-yacht/app/backend/capabilities", Function: "(*Service).logError"},
+	}
+
+	for _, forwarder := range forwarders {
+		t.Run(forwarder.Function, func(t *testing.T) {
+			event := &sentry.Event{Exception: []sentry.Exception{{
+				Stacktrace: &sentry.Stacktrace{Frames: []sentry.Frame{realCallSite, forwarder}},
+			}}}
+
+			frames := trimReportingFrames(event, nil).Exception[0].Stacktrace.Frames
+
+			require.Len(t, frames, 1)
+			require.Equal(t, "(*Service).Deployment", frames[0].Function)
+		})
+	}
+}
+
+// The SDK only takes the buffered telemetry path when no custom Transport is
+// configured (sentry-go client.go: !DisableTelemetryBuffer && Transport == nil).
+// Every test here injects a Transport, so the buffered path is never exercised
+// by tests and only ever runs in packaged builds. That path makes Client.Close
+// flush (scheduler.Stop calls Flush first), which would invert opt-out and
+// block the settings goroutine. Pin the option instead of the side effect.
+func TestReporterDisablesTelemetryBufferSoOptOutDiscardsBufferedEvents(t *testing.T) {
+	transport := &recordingTransport{}
+	_, err := New(Config{
+		DSN:       "https://public@example.com/1",
+		Transport: transport,
+	})
+	require.NoError(t, err)
+
+	transport.mu.Lock()
+	options := transport.options
+	transport.mu.Unlock()
+
+	require.True(t, options.DisableTelemetryBuffer)
 }
 
 func TestReporterUsesSentryDataCollectionDefaults(t *testing.T) {
@@ -140,7 +279,6 @@ func TestReporterUsesSentryDataCollectionDefaults(t *testing.T) {
 	options := transport.options
 	transport.mu.Unlock()
 
-	require.Nil(t, options.BeforeSend)
 	require.NotNil(t, options.DataCollection)
 	require.True(t, options.DataCollection.UserInfo.Value)
 	require.Equal(t, sentry.CollectionDenyList, options.DataCollection.Cookies.Mode)

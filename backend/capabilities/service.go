@@ -99,6 +99,15 @@ func (s *Service) Evaluate(ctx context.Context, checks []ReviewAttributes) ([]Ch
 	metricsByNamespace := make(map[string]*namespaceMetrics)
 	var failureCount atomic.Int32
 
+	// One dropped connection fails every in-flight review, so the batch reports
+	// its reviews once instead of once per check. Per-check detail still reaches
+	// callers through each CheckResult.Error; the identities and distinct causes
+	// below are what make a PARTIAL failure diagnosable from the report alone.
+	reviewFailureMu := sync.Mutex{}
+	reviewFailures := 0
+	var firstReviewErr error
+	var failedIdentities []string
+
 	for i := 0; i < workerCount; i++ {
 		wg.Add(1)
 		go func() {
@@ -140,7 +149,15 @@ func (s *Service) Evaluate(ctx context.Context, checks []ReviewAttributes) ([]Ch
 				duration := nowFn().Sub(start)
 
 				if err != nil {
-					s.logError(fmt.Sprintf("Capability check %s failed: %v", job.check.ID, err))
+					reviewFailureMu.Lock()
+					reviewFailures++
+					if firstReviewErr == nil {
+						firstReviewErr = err
+					}
+					if len(failedIdentities) < maxReportedFailedChecks {
+						failedIdentities = append(failedIdentities, describeCheckedResource(attrs))
+					}
+					reviewFailureMu.Unlock()
 					result.Error = err.Error()
 				} else if response == nil {
 					result.Error = "permission review returned no response"
@@ -188,6 +205,18 @@ func (s *Service) Evaluate(ctx context.Context, checks []ReviewAttributes) ([]Ch
 	close(jobs)
 	wg.Wait()
 
+	// Safe to read unlocked: wg.Wait establishes happens-before over every worker.
+	if reviewFailures > 0 {
+		// Cause first: Sentry truncates long titles, and the identity list is the
+		// part that can grow without bound.
+		s.logError(fmt.Sprintf(
+			"%d of %d capability checks failed: %v [%s]",
+			reviewFailures, len(checks),
+			firstReviewErr,
+			strings.Join(failedIdentities, ", "),
+		))
+	}
+
 	if collectMetrics {
 		metricsMu.Lock()
 		snapshot := make(map[string]namespaceMetrics, len(metricsByNamespace))
@@ -225,6 +254,41 @@ func (s *Service) ensureClient() error {
 	}
 
 	return nil
+}
+
+// maxReportedFailedChecks bounds the identity list so a cluster-wide failure
+// cannot bloat the report payload. The total is reported separately.
+const maxReportedFailedChecks = 10
+
+// describeCheckedResource renders the GVK-complete identity of a permission
+// check, which is the actionable part of a partial failure.
+func describeCheckedResource(attrs *authorizationv1.ResourceAttributes) string {
+	if attrs == nil {
+		return "unknown"
+	}
+	group := attrs.Group
+	if group == "" {
+		group = attrs.Version
+	} else if attrs.Version != "" {
+		group += "/" + attrs.Version
+	}
+	name := attrs.Name
+	switch {
+	case attrs.Namespace != "" && name != "":
+		name = attrs.Namespace + "/" + name
+	case attrs.Namespace != "":
+		// Namespace-scoped check with no specific object; a trailing slash here
+		// reads as a missing name rather than an absent one.
+		name = attrs.Namespace
+	}
+	parts := []string{group, attrs.Resource, attrs.Verb, name}
+	rendered := make([]string, 0, len(parts))
+	for _, part := range parts {
+		if part != "" {
+			rendered = append(rendered, part)
+		}
+	}
+	return strings.Join(rendered, " ")
 }
 
 func (s *Service) logError(message string) {

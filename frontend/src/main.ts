@@ -14,7 +14,6 @@ import {
   configureErrorReportingFromPreferences,
   createReactRootErrorHandlers,
 } from '@/core/telemetry/sentry';
-import App from './App.tsx';
 
 const sentryRuntimeConfig = {
   enabled: __SENTRY_ENABLED__,
@@ -34,6 +33,12 @@ if (appElement) {
     );
     initializeScrollbarActivityTracking();
     initializeAutoRefresh();
+
+    // Imported here rather than at module scope so the application module graph
+    // is evaluated after the SDK is initialized. A module-level failure in that
+    // graph then rejects this bootstrap and is captured by Sentry's global
+    // unhandled-rejection handler instead of crashing an uninstrumented page.
+    const { default: App } = await import('./App.tsx');
 
     const root = ReactDOM.createRoot(
       appElement,

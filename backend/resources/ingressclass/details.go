@@ -30,7 +30,7 @@ func NewService(deps common.Dependencies) *Service {
 func (s *Service) IngressClass(name string) (*IngressClassDetails, error) {
 	ic, err := s.deps.KubernetesClient.NetworkingV1().IngressClasses().Get(s.deps.Context, name, metav1.GetOptions{})
 	if err != nil {
-		s.deps.Logger.Error(fmt.Sprintf("Failed to get ingress class %s: %v", name, err), logsources.ResourceLoader)
+		s.deps.LogRequestFailure(err, fmt.Sprintf("Failed to get ingress class %s", name), logsources.ResourceLoader)
 		return nil, fmt.Errorf("failed to get ingress class: %v", err)
 	}
 	return s.buildIngressClassDetails(ic, nil), nil

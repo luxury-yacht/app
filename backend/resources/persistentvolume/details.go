@@ -34,7 +34,7 @@ func (s *Service) PersistentVolume(name string) (*PersistentVolumeDetails, error
 
 	pv, err := s.deps.KubernetesClient.CoreV1().PersistentVolumes().Get(s.deps.Context, name, metav1.GetOptions{})
 	if err != nil {
-		s.deps.Logger.Error(fmt.Sprintf("Failed to get persistent volume %s: %v", name, err), logsources.ResourceLoader)
+		s.deps.LogRequestFailure(err, fmt.Sprintf("Failed to get persistent volume %s", name), logsources.ResourceLoader)
 		return nil, fmt.Errorf("failed to get persistent volume: %v", err)
 	}
 

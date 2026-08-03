@@ -7,6 +7,7 @@ import (
 	"time"
 
 	"github.com/getsentry/sentry-go"
+	"github.com/luxury-yacht/app/backend/internal/applog"
 	"github.com/luxury-yacht/app/internal/sentryreporting"
 	"github.com/stretchr/testify/require"
 )
@@ -40,6 +41,12 @@ func (*loggerSentryTransport) Close()                                {}
 
 func captureLoggerFailureFromObjectCatalog(logger *Logger) {
 	logger.Error("object catalog failed for private-cluster", "ObjectCatalog", "private-cluster")
+}
+
+// Mirrors how subsystems actually report: through a cluster-scoped applog
+// wrapper rather than the concrete logger.
+func captureScopedFailureFromCapabilities(logger applog.Logger) {
+	applog.Error(logger, "capability check failed", "Capabilities")
 }
 
 func (r *recordingErrorReporter) Enabled() bool {
@@ -100,6 +107,61 @@ func TestLoggerSentryReportIncludesOriginalMessageAndCluster(t *testing.T) {
 	require.Equal(t, "object catalog failed for private-cluster", transport.event.Exception[0].Value)
 	require.Equal(t, "private-cluster", transport.event.Tags["clusterId"])
 	require.Empty(t, transport.event.Fingerprint)
+}
+
+// Cross-layer guard: the application logger and the reporter both sit between
+// the failing code and Sentry. If either layer's frames survive into the
+// reported stack, Sentry attributes every backend ERROR to the logging
+// plumbing rather than to the code that failed.
+func TestLoggerSentryReportPointsAtTheCodeThatLogged(t *testing.T) {
+	transport := &loggerSentryTransport{}
+	reporter, err := sentryreporting.New(sentryreporting.Config{
+		DSN:       "https://public@example.com/1",
+		Transport: transport,
+	})
+	require.NoError(t, err)
+	logger := NewLogger(10, reporter)
+
+	captureLoggerFailureFromObjectCatalog(logger)
+
+	require.NotNil(t, transport.event)
+	require.Len(t, transport.event.Exception, 1)
+	stacktrace := transport.event.Exception[0].Stacktrace
+	require.NotNil(t, stacktrace)
+	require.NotEmpty(t, stacktrace.Frames)
+
+	for _, frame := range stacktrace.Frames {
+		require.NotEqual(t, "github.com/luxury-yacht/app/internal/sentryreporting", frame.Module)
+		require.NotEqual(t, "github.com/luxury-yacht/app/backend/internal/applog", frame.Module)
+		require.NotContains(t, frame.Function, "(*Logger).")
+	}
+	innermost := stacktrace.Frames[len(stacktrace.Frames)-1]
+	require.Equal(t, "captureLoggerFailureFromObjectCatalog", innermost.Function)
+}
+
+// The reported shape from a real subsystem adds the applog wrapper layers
+// between the failing code and the logger.
+func TestScopedLoggerSentryReportPointsAtTheCodeThatLogged(t *testing.T) {
+	transport := &loggerSentryTransport{}
+	reporter, err := sentryreporting.New(sentryreporting.Config{
+		DSN:       "https://public@example.com/1",
+		Transport: transport,
+	})
+	require.NoError(t, err)
+	logger := applog.ClusterScoped(NewLogger(10, reporter), "cluster-a", "Alpha")
+
+	captureScopedFailureFromCapabilities(logger)
+
+	require.NotNil(t, transport.event)
+	require.Len(t, transport.event.Exception, 1)
+	stacktrace := transport.event.Exception[0].Stacktrace
+	require.NotNil(t, stacktrace)
+	require.NotEmpty(t, stacktrace.Frames)
+
+	innermost := stacktrace.Frames[len(stacktrace.Frames)-1]
+	require.Equal(t, "captureScopedFailureFromCapabilities", innermost.Function)
+	require.Equal(t, "capability check failed", transport.event.Exception[0].Value)
+	require.Equal(t, "cluster-a", transport.event.Tags["clusterId"])
 }
 
 func TestNewAppPassesErrorReporterToApplicationLogger(t *testing.T) {

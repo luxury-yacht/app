@@ -9,7 +9,10 @@ package common
 
 import (
 	"context"
+	"errors"
+	"fmt"
 
+	"github.com/luxury-yacht/app/backend/internal/applog"
 	"k8s.io/apiextensions-apiserver/pkg/client/clientset/clientset"
 	"k8s.io/client-go/dynamic"
 	"k8s.io/client-go/kubernetes"
@@ -64,4 +67,20 @@ type Dependencies struct {
 func (d Dependencies) CloneWithContext(ctx context.Context) Dependencies {
 	d.Context = ctx
 	return d
+}
+
+// LogRequestFailure records a failed Kubernetes API call as "<what>: <err>".
+//
+// Cancellation is an expected lifecycle event — the panel closed, the user
+// navigated away, or the cluster disconnected — so it is logged for debugging
+// rather than raised as an application error. Only ERROR entries are forwarded
+// to error reporting, so this keeps routine cancellations out of Sentry while
+// every real failure still gets there.
+func (d Dependencies) LogRequestFailure(err error, what string, source ...string) {
+	message := fmt.Sprintf("%s: %v", what, err)
+	if errors.Is(err, context.Canceled) {
+		applog.Debug(d.Logger, message, source...)
+		return
+	}
+	applog.Error(d.Logger, message, source...)
 }

@@ -46,7 +46,7 @@ func (s *Service) CronJob(namespace, name string) (*CronJobDetails, error) {
 
 	cronJob, err := client.BatchV1().CronJobs(namespace).Get(s.deps.Context, name, metav1.GetOptions{})
 	if err != nil {
-		s.deps.Logger.Error(fmt.Sprintf("Failed to get CronJob %s/%s: %v", namespace, name, err), logsources.ResourceLoader)
+		s.deps.LogRequestFailure(err, fmt.Sprintf("Failed to get CronJob %s/%s", namespace, name), logsources.ResourceLoader)
 		return nil, fmt.Errorf("failed to get cronjob: %v", err)
 	}
 

@@ -62,15 +62,6 @@ var (
 	jitterRandMu             sync.Mutex
 )
 
-type retryExhaustedError struct {
-	cause   error
-	attempt int
-	limit   int
-}
-
-func (e *retryExhaustedError) Error() string { return e.cause.Error() }
-func (e *retryExhaustedError) Unwrap() error { return e.cause }
-
 // Provider exposes read-only access to the latest metrics snapshot.
 type Provider interface {
 	LatestNodeUsage() map[string]NodeUsage
@@ -480,7 +471,7 @@ func (p *Poller) listNodeMetricsWithRetry(ctx context.Context, client metricscli
 
 		attempt++
 		if attempt >= p.maxRetry {
-			return nil, &retryExhaustedError{cause: err, attempt: attempt, limit: p.maxRetry}
+			return nil, err
 		}
 
 		applog.Warn(p.applicationLogger(), fmt.Sprintf("node metrics list failed (attempt %d/%d): %v", attempt, p.maxRetry, err), logsources.Metrics)
@@ -524,7 +515,7 @@ func (p *Poller) listPodMetricsInNamespaceWithRetry(ctx context.Context, client 
 
 		attempt++
 		if attempt >= p.maxRetry {
-			return nil, &retryExhaustedError{cause: err, attempt: attempt, limit: p.maxRetry}
+			return nil, err
 		}
 
 		applog.Warn(p.applicationLogger(), fmt.Sprintf("pod metrics list failed (attempt %d/%d): %v", attempt, p.maxRetry, err), logsources.Metrics)
