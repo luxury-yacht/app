@@ -34,6 +34,7 @@ import {
 import { eventBus } from '@/core/events';
 import { shouldSyncClusterNavigationTarget } from '@/core/navigation/workspace';
 import { refreshOrchestrator } from '@/core/refresh';
+import { setActiveViewContext } from '@/core/telemetry/sentry';
 import type {
   ClusterViewType,
   GlobalViewType,
@@ -424,7 +425,8 @@ const NavigationStateProvider: React.FC<NavigationStateProviderProps> = ({ child
  * Sync context - synchronizes object panel state with RefreshManager
  */
 const RefreshSyncProvider: React.FC<{ children: React.ReactNode }> = ({ children }) => {
-  const { viewType, activeNamespaceTab, activeClusterTab } = useNavigationState();
+  const { selectedClusterId } = useKubeconfig();
+  const { viewType, activeNamespaceTab, activeClusterTab, activeGlobalTab } = useNavigationState();
   const { showObjectPanel } = useObjectPanelState();
 
   // Single writer for view/object-panel refresh context updates.
@@ -439,6 +441,30 @@ const RefreshSyncProvider: React.FC<{ children: React.ReactNode }> = ({ children
       },
     });
   }, [viewType, activeNamespaceTab, activeClusterTab, showObjectPanel]);
+
+  useEffect(() => {
+    let tab: string | undefined;
+    if (viewType === 'namespace') {
+      tab = activeNamespaceTab;
+    } else if (viewType === 'cluster') {
+      tab = activeClusterTab ?? undefined;
+    } else if (viewType === 'global') {
+      tab = activeGlobalTab;
+    }
+    setActiveViewContext({
+      view: viewType,
+      ...(tab ? { tab } : {}),
+      ...(viewType !== 'global' && selectedClusterId ? { clusterId: selectedClusterId } : {}),
+      objectPanelOpen: showObjectPanel,
+    });
+  }, [
+    viewType,
+    activeNamespaceTab,
+    activeClusterTab,
+    activeGlobalTab,
+    selectedClusterId,
+    showObjectPanel,
+  ]);
 
   return <>{children}</>;
 };

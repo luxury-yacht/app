@@ -46,6 +46,7 @@ import { buildClusterScope } from '@/core/refresh/clusterScope';
 import { useAutoRefreshLoadingState } from '@/core/refresh/hooks/useAutoRefreshLoadingState';
 import { useStreamSignalRefetch } from '@/core/refresh/hooks/useStreamSignalRefetch';
 import type { NamespaceSignalState } from '@/core/refresh/types';
+import { setActiveNamespaceContext } from '@/core/telemetry/sentry';
 import { joinNamespaceMetrics, type NamespaceSummaryWithMetrics } from './namespaceMetrics';
 
 export interface NamespaceListItem {
@@ -187,6 +188,11 @@ export const NamespaceProvider: React.FC<NamespaceProviderProps> = ({ children }
   const selectedNamespace = namespaceSelections[clusterKey];
   const selectedNamespaceClusterId =
     selectedNamespace && selectedClusterId ? selectedClusterId : undefined;
+
+  useEffect(() => {
+    setActiveNamespaceContext(selectedNamespace);
+  }, [selectedNamespace]);
+
   const lastErrorByScopeRef = useRef<Map<string, string>>(new Map());
   const namespaceScopesRef = useRef<string[]>([]);
   const lastEvaluatedNamespaceRef = useRef<string | null>(null);

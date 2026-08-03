@@ -15,10 +15,17 @@ import PortForwardModal from './PortForwardModal';
 // Mock the Wails backend
 const runObjectActionMock = vi.hoisted(() => vi.fn());
 const getTargetPortsMock = vi.hoisted(() => vi.fn());
+const handleInlineMock = vi.hoisted(() => vi.fn());
 
 vi.mock('@wailsjs/go/backend/App', () => ({
   RunObjectAction: (...args: unknown[]) => runObjectActionMock(...args),
   GetTargetPorts: (...args: unknown[]) => getTargetPortsMock(...args),
+}));
+
+vi.mock('@utils/errorHandler', () => ({
+  errorHandler: {
+    handleInline: (...args: unknown[]) => handleInlineMock(...args),
+  },
 }));
 
 describe('PortForwardModal', () => {
@@ -49,6 +56,9 @@ describe('PortForwardModal', () => {
     vi.clearAllMocks();
     runObjectActionMock.mockResolvedValue({ sessionId: 'session-123' });
     getTargetPortsMock.mockResolvedValue([]);
+    handleInlineMock.mockImplementation((error: unknown) => ({
+      message: error instanceof Error ? error.message : String(error),
+    }));
   });
 
   afterEach(() => {
@@ -348,7 +358,8 @@ describe('PortForwardModal', () => {
   });
 
   it('shows error message when port forward fails', async () => {
-    runObjectActionMock.mockRejectedValue(new Error('Port already in use'));
+    const error = new Error('Port already in use');
+    runObjectActionMock.mockRejectedValue(error);
 
     await renderModal();
 
@@ -362,6 +373,11 @@ describe('PortForwardModal', () => {
     const errorMessage = document.querySelector('.port-forward-error');
     expect(errorMessage).toBeTruthy();
     expect(errorMessage?.textContent).toBe('Port already in use');
+    expect(handleInlineMock).toHaveBeenCalledWith(error, {
+      action: 'startPortForward',
+      source: 'PortForwardModal',
+      clusterId: 'cluster-1',
+    });
   });
 
   it('shows loading state while starting', async () => {

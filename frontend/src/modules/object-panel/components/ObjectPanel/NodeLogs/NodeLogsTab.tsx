@@ -39,6 +39,7 @@ import { fetchNodeLogs, type NodeLogFetchResponse, type NodeLogSource } from './
 import '../Logs/LogViewer.css';
 import './NodeLogsTab.css';
 import { useKeyboardSurface } from '@ui/shortcuts';
+import { errorHandler } from '@utils/errorHandler';
 import { useLogMessageRenderer } from '../Logs/hooks/useLogMessageRenderer';
 import { useLogScrollRestoration } from '../Logs/hooks/useLogScrollRestoration';
 import { useTerminalTheme } from '../Logs/hooks/useTerminalTheme';
@@ -324,7 +325,12 @@ const NodeLogsTab = ({
           return;
         }
         if (response.error) {
-          setError(response.error);
+          const details = errorHandler.handleInline(new Error(response.error), {
+            action: 'loadNodeLogs',
+            source: 'NodeLogsTab',
+            clusterId,
+          });
+          setError(details.message);
           if (sourceChanged) {
             setContent('');
           }
@@ -346,7 +352,12 @@ const NodeLogsTab = ({
         if (cancelled) {
           return;
         }
-        setError(fetchError instanceof Error ? fetchError.message : 'Failed to fetch node logs');
+        const details = errorHandler.handleInline(fetchError, {
+          action: 'loadNodeLogs',
+          source: 'NodeLogsTab',
+          clusterId,
+        });
+        setError(details.message || 'Failed to fetch node logs');
         if (sourceChanged) {
           setContent('');
         }

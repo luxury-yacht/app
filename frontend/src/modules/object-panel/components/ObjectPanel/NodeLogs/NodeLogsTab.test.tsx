@@ -7,9 +7,16 @@ import { resetLogViewerPrefsCacheForTesting } from '../Logs/logViewerPrefsCache'
 import NodeLogsTab from './NodeLogsTab';
 
 const mockFetchNodeLogs = vi.fn();
+const handleInlineMock = vi.hoisted(() => vi.fn());
 
 vi.mock('./nodeLogsApi', () => ({
   fetchNodeLogs: (...args: unknown[]) => mockFetchNodeLogs(...args),
+}));
+
+vi.mock('@utils/errorHandler', () => ({
+  errorHandler: {
+    handleInline: (...args: unknown[]) => handleInlineMock(...args),
+  },
 }));
 
 vi.mock('@core/contexts/ZoomContext', () => ({
@@ -46,6 +53,10 @@ describe('NodeLogsTab', () => {
     document.body.appendChild(container);
     root = ReactDOM.createRoot(container);
     mockFetchNodeLogs.mockReset();
+    handleInlineMock.mockReset();
+    handleInlineMock.mockImplementation((error: unknown) => ({
+      message: error instanceof Error ? error.message : String(error),
+    }));
     resetLogViewerPrefsCacheForTesting();
     Object.defineProperty(globalThis.navigator, 'clipboard', {
       configurable: true,
@@ -489,6 +500,27 @@ describe('NodeLogsTab', () => {
     await selectSource('kubelet');
 
     expect(container.textContent).toContain('Showing only the most recent 256 KB');
+  });
+
+  it('reports a node-log failure displayed inline', async () => {
+    mockFetchNodeLogs.mockResolvedValue({
+      source: sources[0],
+      sourcePath: sources[0].path,
+      error: 'node log access denied',
+    });
+
+    await renderTab();
+    await selectSource('kubelet');
+
+    expect(container.textContent).toContain('node log access denied');
+    expect(handleInlineMock).toHaveBeenCalledWith(
+      expect.objectContaining({ message: 'node log access denied' }),
+      {
+        action: 'loadNodeLogs',
+        source: 'NodeLogsTab',
+        clusterId: 'alpha:ctx',
+      }
+    );
   });
 
   it('shows a pending availability message before sources are known', async () => {

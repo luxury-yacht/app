@@ -2,6 +2,7 @@ import { useSyncExternalStore } from 'react';
 
 import type { AppStateAdapter } from '@/core/app-state-access';
 import type { DataAccessAdapter, DataRequestReason } from '@/core/data-access';
+import { recordBrokerRequestCompleted, recordBrokerRequestStarted } from '@/core/telemetry/sentry';
 
 type Listener = () => void;
 
@@ -167,6 +168,7 @@ export const beginBrokerRead = (options: BeginBrokerReadOptions): string => {
     ...options,
     startedAt,
   });
+  recordBrokerRequestStarted({ id: token, ...options });
   notify();
   return token;
 };
@@ -202,6 +204,23 @@ export const completeBrokerRead = ({
     entry.lastBlockedReason = null;
     entry.lastError = normalizeError(error);
   }
+
+  recordBrokerRequestCompleted(
+    {
+      id: token,
+      broker: pending.broker,
+      resource: pending.resource,
+      adapter: pending.adapter,
+      reason: pending.reason,
+      label: pending.label,
+      scope: pending.scope,
+    },
+    {
+      status,
+      durationMs: entry.lastDurationMs,
+      error,
+    }
+  );
 
   notify();
 };

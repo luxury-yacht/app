@@ -21,6 +21,7 @@ const wailsMocks = vi.hoisted(() => ({
   ResizeShellSession: vi.fn(),
   CloseShellSession: vi.fn(),
 }));
+const handleInlineMock = vi.hoisted(() => vi.fn());
 
 const terminalMocks = vi.hoisted(() => {
   class TerminalInstance {
@@ -141,6 +142,12 @@ const eventRegistry = vi.hoisted(() => ({
 }));
 
 vi.mock('@wailsjs/go/backend/App', () => wailsMocks);
+
+vi.mock('@utils/errorHandler', () => ({
+  errorHandler: {
+    handleInline: (...args: unknown[]) => handleInlineMock(...args),
+  },
+}));
 
 vi.mock('@wailsjs/runtime/runtime', () => ({
   EventsOn: (name: string, handler: (payload: unknown) => void) => {
@@ -270,6 +277,9 @@ describe('ShellTab', () => {
     wailsMocks.SendShellInput.mockResolvedValue(undefined);
     wailsMocks.ResizeShellSession.mockResolvedValue(undefined);
     wailsMocks.CloseShellSession.mockResolvedValue(undefined);
+    handleInlineMock.mockImplementation((error: unknown) => ({
+      message: error instanceof Error ? error.message : String(error),
+    }));
   });
 
   afterEach(() => {
@@ -679,7 +689,8 @@ describe('ShellTab', () => {
   });
 
   it('shows error when debug container action fails', async () => {
-    wailsMocks.RunObjectAction.mockRejectedValue(new Error('ephemeral containers not supported'));
+    const error = new Error('ephemeral containers not supported');
+    wailsMocks.RunObjectAction.mockRejectedValue(error);
     await renderShellTab({ availableContainers: ['app'] });
     setDebugContainerEnabled(true);
     await flushAsync();
@@ -697,10 +708,16 @@ describe('ShellTab', () => {
     );
     expect(container.textContent).toContain('Connection failed');
     expect(container.textContent).toContain('ephemeral containers not supported');
+    expect(handleInlineMock).toHaveBeenCalledWith(error, {
+      action: 'createDebugContainer',
+      source: 'ShellTab',
+      clusterId: 'alpha:ctx',
+    });
   });
 
   it('shows shell connection failure reason when start fails', async () => {
-    wailsMocks.StartShellSession.mockRejectedValue(new Error('exec: "/bin/sh": file not found'));
+    const error = new Error('exec: "/bin/sh": file not found');
+    wailsMocks.StartShellSession.mockRejectedValue(error);
     await renderShellTab();
 
     clickConnectButton();
@@ -709,6 +726,11 @@ describe('ShellTab', () => {
 
     expect(container.textContent).toContain('Connection failed');
     expect(container.textContent).toContain('exec: "/bin/sh": file not found');
+    expect(handleInlineMock).toHaveBeenCalledWith(error, {
+      action: 'startShellSession',
+      source: 'ShellTab',
+      clusterId: 'alpha:ctx',
+    });
   });
 
   it('keeps the first connection error visible if a closed status follows', async () => {
@@ -732,6 +754,14 @@ describe('ShellTab', () => {
 
     expect(container.textContent).toContain('Connection failed');
     expect(container.textContent).toContain('exec: "/bin/sh": file not found');
+    expect(handleInlineMock).toHaveBeenCalledWith(
+      expect.objectContaining({ message: 'exec: "/bin/sh": file not found' }),
+      {
+        action: 'runShellSession',
+        source: 'ShellTab',
+        clusterId: 'alpha:ctx',
+      }
+    );
   });
 
   it('shows a connection error when session closes immediately without an explicit reason', async () => {

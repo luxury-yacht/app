@@ -14,6 +14,32 @@ The integration uses Sentry's native event processing and default integrations:
   persisted preference has loaded. React 19 root handlers and Sentry's default
   browser integrations capture frontend failures. The default browser-session
   integration also sends release-health sessions while reporting is enabled.
+- `frontend/src/utils/errorHandler.ts` is the presentation boundary for handled
+  operational failures. `handle` reports before publishing a global error
+  notification; `handleInline` reports without adding a duplicate toast for
+  modals and panels that render the error themselves. Both preserve the
+  original JavaScript `Error` for `captureException`. Validation messages and
+  advisory warnings are not exceptions and stay local. Render failures already
+  owned by the React 19 root handler are not captured a second time by legacy
+  component boundaries.
+- The navigation owner publishes the active view, tab, cluster, and object-panel
+  state, while the namespace owner publishes the selected namespace. These are
+  attached to user-visible error events and to browser breadcrumbs. Data and
+  app-state broker reads carry one `broker-read-N` identifier from request start
+  through completion; a displayed error caused by that request reuses the same
+  identifier as its operation id. Other handled failures receive a unique
+  `ui-error-N` operation id and retain the allowlisted user action, source,
+  cluster id, and namespace.
+- While exactly one broker request is active, automatic browser breadcrumbs are
+  labeled with its request id. Ambiguous automatic breadcrumbs during
+  concurrent requests are excluded. Before a frontend event is sent,
+  breadcrumbs from other
+  request ids and breadcrumbs labeled with a different view, tab, cluster, or
+  namespace are removed. A handled failure without a broker request keeps only
+  the latest user-action window. This keeps simultaneous activity in the same
+  cluster from being presented as the failing operation's trail. Breadcrumb
+  data never includes the raw error message, and arbitrary caller context is
+  not copied into the Sentry event.
 - `frontend/src/main.ts` imports `App` dynamically, *after* that initialization.
   A static import would evaluate the whole application module graph first, so a
   module-level failure anywhere in the app would reach an uninstrumented page

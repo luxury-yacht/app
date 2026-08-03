@@ -89,9 +89,16 @@ vi.mock('@/core/refresh/loadingPolicy', () => ({
 }));
 
 const defaultTablePageSizeMock = vi.hoisted(() => vi.fn(() => 50));
+const handleInlineMock = vi.hoisted(() => vi.fn());
 
 vi.mock('@/hooks/useDefaultTablePageSize', () => ({
   useDefaultTablePageSize: () => defaultTablePageSizeMock(),
+}));
+
+vi.mock('@utils/errorHandler', () => ({
+  errorHandler: {
+    handleInline: (...args: unknown[]) => handleInlineMock(...args),
+  },
 }));
 
 const makeItem = (overrides: CanonicalRowTestOverrides<CatalogItem>): CatalogItem => {
@@ -184,6 +191,10 @@ describe('useBrowseCatalog', () => {
     mocks.refreshFns.clear();
     mocks.handleCalls.length = 0;
     defaultTablePageSizeMock.mockReturnValue(50);
+    handleInlineMock.mockReset();
+    handleInlineMock.mockImplementation((error: unknown) => ({
+      message: error instanceof Error ? error.message : String(error),
+    }));
   });
 
   it('uses the current catalog page scopes as the shared live-stream demand', async () => {
@@ -604,6 +615,36 @@ describe('useBrowseCatalog', () => {
     expect(result?.continueToken).toBeNull();
     expect(result?.isRequestingMore).toBe(false);
     expect(result?.pageIndex).toBe(2);
+  });
+
+  it('reports a failed page navigation displayed by Browse', async () => {
+    const baseScope =
+      'cluster-1|limit=2&resourceScope=namespace&namespace=default&scopeNamespace=default';
+    const first = makeItem({ ref: { uid: 'pod-a', name: 'pod-a' } });
+    mocks.readRefreshScopedDomain.mockReturnValue({
+      status: 'ready',
+      data: makePayload({ items: [first], continue: '2', total: 2, batchSize: 1 }),
+      scope: baseScope,
+    });
+    const error = new Error('catalog page expired');
+    mocks.requestRefreshDomainState.mockRejectedValue(error);
+
+    await act(async () => {
+      root.render(<Harness />);
+      await Promise.resolve();
+    });
+    await act(async () => {
+      result?.handleLoadMore();
+      await Promise.resolve();
+      await new Promise((resolve) => setTimeout(resolve, 0));
+    });
+
+    expect(result?.error).toBe('catalog page expired');
+    expect(handleInlineMock).toHaveBeenCalledWith(error, {
+      action: 'loadBrowseCatalogPage',
+      source: 'useBrowseCatalog',
+      clusterId: 'cluster-1',
+    });
   });
 
   it('fetchAllRows rejects when a page fails instead of returning a partial result', async () => {

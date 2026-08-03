@@ -57,11 +57,18 @@ const fetchSelectionDiagnosticsMock = vi.hoisted(() =>
 const fetchKubernetesAPIClientDiagnosticsMock = vi.hoisted(() =>
   vi.fn<() => Promise<KubernetesAPIClientDiagnostics[]>>(async () => [])
 );
+const handleInlineMock = vi.hoisted(() => vi.fn());
 
 vi.mock('../client', () => ({
   fetchTelemetrySummary: fetchTelemetrySummaryMock,
   fetchSelectionDiagnostics: fetchSelectionDiagnosticsMock,
   fetchKubernetesAPIClientDiagnostics: fetchKubernetesAPIClientDiagnosticsMock,
+}));
+
+vi.mock('@utils/errorHandler', () => ({
+  errorHandler: {
+    handleInline: (...args: unknown[]) => handleInlineMock(...args),
+  },
 }));
 
 let capabilityDiagnosticsData: PermissionQueryDiagnostics[] = [];
@@ -331,6 +338,10 @@ beforeEach(() => {
   });
   fetchKubernetesAPIClientDiagnosticsMock.mockReset();
   fetchKubernetesAPIClientDiagnosticsMock.mockResolvedValue([]);
+  handleInlineMock.mockReset();
+  handleInlineMock.mockImplementation((error: unknown) => ({
+    message: error instanceof Error ? error.message : String(error),
+  }));
   Object.values(mockRefreshManager).forEach((value) => {
     if (typeof value === 'function') {
       value.mockClear?.();
@@ -1717,6 +1728,13 @@ describe('DiagnosticsPanel component', () => {
     );
     expect(eventsPrimary?.className).toContain('diagnostics-summary-warning');
     expect(eventsPrimary?.textContent?.trim()).toBe('Active: — • Delivered: — • Dropped: —');
+    expect(handleInlineMock).toHaveBeenCalledWith(
+      expect.objectContaining({ message: 'Telemetry offline' }),
+      {
+        action: 'loadTelemetryDiagnostics',
+        source: 'DiagnosticsPanel',
+      }
+    );
 
     await rendered.unmount();
   });

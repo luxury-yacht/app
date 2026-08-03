@@ -9,6 +9,12 @@ import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import type { ErrorHandlerOptions } from './errorHandler';
 import { ErrorCategory, ErrorSeverity, errorHandler } from './errorHandler';
 
+const telemetryMocks = vi.hoisted(() => ({
+  captureUserVisibleError: vi.fn(),
+}));
+
+vi.mock('@/core/telemetry/sentry', () => telemetryMocks);
+
 describe('ErrorHandler', () => {
   const ErrorHandlerClass = errorHandler.constructor as unknown as new (
     options?: ErrorHandlerOptions
@@ -21,6 +27,7 @@ describe('ErrorHandler', () => {
   };
 
   beforeEach(() => {
+    telemetryMocks.captureUserVisibleError.mockReset();
     handler = new ErrorHandlerClass({
       enableLogging: true,
       logToConsole: true,
@@ -52,6 +59,51 @@ describe('ErrorHandler', () => {
     );
 
     unsubscribe();
+  });
+
+  it('reports a caught user-visible error through the centralized telemetry boundary', () => {
+    const error = new Error('Failed to load pods');
+
+    handler.handle(error, { action: 'loadPods', clusterId: 'cluster-a' });
+
+    expect(telemetryMocks.captureUserVisibleError).toHaveBeenCalledWith(
+      error,
+      expect.objectContaining({
+        category: ErrorCategory.UNKNOWN,
+        severity: ErrorSeverity.ERROR,
+        context: { action: 'loadPods', clusterId: 'cluster-a' },
+      })
+    );
+  });
+
+  it('reports an inline failure without creating a duplicate toast', () => {
+    const listener = vi.fn();
+    handler.subscribe(listener);
+    const error = new Error('Failed to start port forward');
+
+    const details = handler.handleInline(error, {
+      action: 'startPortForward',
+      clusterId: 'cluster-a',
+    });
+
+    expect(details.message).toBe('Failed to start port forward');
+    expect(telemetryMocks.captureUserVisibleError).toHaveBeenCalledWith(
+      error,
+      expect.objectContaining({
+        context: { action: 'startPortForward', clusterId: 'cluster-a' },
+      })
+    );
+    expect(listener).not.toHaveBeenCalled();
+    expect(handler.getHistory()).toHaveLength(0);
+  });
+
+  it('does not recapture render failures already owned by the React root handler', () => {
+    const error = new Error('render failed');
+
+    handler.handle(error, { source: 'ErrorBoundary' });
+    handler.handle(error, { action: 'componentError' });
+
+    expect(telemetryMocks.captureUserVisibleError).not.toHaveBeenCalled();
   });
 
   it('parses STDERR payloads and enriches context', () => {

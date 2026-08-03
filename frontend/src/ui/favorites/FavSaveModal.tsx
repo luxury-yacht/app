@@ -26,6 +26,7 @@ import { useModalFocusTrap } from '@shared/components/modals/useModalFocusTrap';
 import Tooltip from '@shared/components/Tooltip';
 import type { GridTableFilterOptions } from '@shared/components/tables/GridTable.types';
 import { areGridTableFilterStatesEqual } from '@shared/components/tables/gridTableFilterState';
+import { errorHandler } from '@utils/errorHandler';
 import type React from 'react';
 import { useEffect, useId, useMemo, useRef, useState } from 'react';
 import { type FavoriteRouteScope, resolveFavoriteRoute } from '@/core/navigation/favoriteRoute';
@@ -648,7 +649,11 @@ const FavSaveModal: React.FC<FavSaveModalProps> = ({
       setSaving(false);
       onClose();
     } catch (error) {
-      setSaveError(error instanceof Error ? error.message : String(error));
+      const details = errorHandler.handleInline(error, {
+        action: 'saveFavorite',
+        source: 'FavSaveModal',
+      });
+      setSaveError(details.message);
       setSaving(false);
     }
   };

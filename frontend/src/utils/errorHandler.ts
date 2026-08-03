@@ -5,6 +5,8 @@
  * Provides shared helper functions for the frontend.
  */
 
+import { captureUserVisibleError } from '@/core/telemetry/sentry';
+
 export const ErrorCategory = {
   NETWORK: 'NETWORK',
   AUTHENTICATION: 'AUTHENTICATION',
@@ -277,10 +279,7 @@ class ErrorHandler {
     }
   }
 
-  /**
-   * Main error handling method
-   */
-  public handle(
+  private buildErrorDetails(
     error: unknown,
     context?: Record<string, unknown>,
     customMessage?: string
@@ -289,18 +288,13 @@ class ErrorHandler {
     const errorString = this.getErrorString(error);
     const category = this.categorizeError(error);
     const severity = this.getSeverity(category);
-
-    // Check if the error contains STDERR information
     let userMsg = customMessage || this.getUserMessage(category, errorString);
     let technicalMsg = errorString;
 
-    // Parse STDERR from the error message if present
     if (errorString.includes('STDERR:')) {
       const parts = errorString.split('STDERR:');
       userMsg = customMessage || this.getUserMessage(category, parts[0].trim());
       technicalMsg = parts[1]?.trim() || errorString;
-
-      // Add the original error to context for debugging
       errorContext = {
         ...errorContext,
         originalError: parts[0].trim(),
@@ -308,7 +302,7 @@ class ErrorHandler {
       };
     }
 
-    const errorDetails: ErrorDetails = {
+    return {
       message: errorString,
       category,
       severity,
@@ -320,9 +314,32 @@ class ErrorHandler {
       technicalMessage: technicalMsg,
       suggestions: this.getSuggestions(category),
     };
+  }
 
-    // Log the error
-    this.logError(errorDetails);
+  private reportError(error: unknown, details: ErrorDetails): void {
+    const reactRootAlreadyCaptured =
+      details.context?.source === 'ErrorBoundary' || details.context?.action === 'componentError';
+    if (!reactRootAlreadyCaptured) {
+      captureUserVisibleError(error, {
+        category: details.category,
+        severity: details.severity,
+        context: details.context,
+      });
+    }
+    this.logError(details);
+  }
+
+  /**
+   * Main error handling method
+   */
+  public handle(
+    error: unknown,
+    context?: Record<string, unknown>,
+    customMessage?: string
+  ): ErrorDetails {
+    const errorDetails = this.buildErrorDetails(error, context, customMessage);
+    this.reportError(error, errorDetails);
+    const { category, message: errorString } = errorDetails;
 
     // Suppress notifications for auth-related errors that are handled by the AuthFailureOverlay.
     // All AUTHENTICATION-category errors (token expired, SSO failures, 401s, etc.) are
@@ -354,6 +371,20 @@ class ErrorHandler {
       customHandler(errorDetails);
     }
 
+    return errorDetails;
+  }
+
+  /**
+   * Reports an operational failure rendered by an inline UI without also
+   * publishing it to the global toast listeners.
+   */
+  public handleInline(
+    error: unknown,
+    context?: Record<string, unknown>,
+    customMessage?: string
+  ): ErrorDetails {
+    const errorDetails = this.buildErrorDetails(error, context, customMessage);
+    this.reportError(error, errorDetails);
     return errorDetails;
   }
 

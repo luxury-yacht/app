@@ -14,6 +14,8 @@ import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import type { Favorite, FavoriteFilters, FavoriteTableState } from '@/core/persistence/favorites';
 import { requireValue } from '@/test-utils/requireValue';
 
+const handleInlineMock = vi.hoisted(() => vi.fn());
+
 interface ConfirmationModalMockProps {
   isOpen: boolean;
   onConfirm: () => void;
@@ -47,6 +49,12 @@ vi.mock('@ui/shortcuts', () => ({
 
 vi.mock('@shared/components/modals/useModalFocusTrap', () => ({
   useModalFocusTrap: vi.fn(),
+}));
+
+vi.mock('@utils/errorHandler', () => ({
+  errorHandler: {
+    handleInline: (...args: unknown[]) => handleInlineMock(...args),
+  },
 }));
 
 vi.mock('@modules/kubernetes/config/KubeconfigContext', () => ({
@@ -269,6 +277,10 @@ describe('FavSaveModal', () => {
     container = document.createElement('div');
     document.body.appendChild(container);
     root = ReactDOM.createRoot(container);
+    handleInlineMock.mockReset();
+    handleInlineMock.mockImplementation((error: unknown) => ({
+      message: error instanceof Error ? error.message : String(error),
+    }));
   });
 
   afterEach(() => {
@@ -588,7 +600,8 @@ describe('FavSaveModal', () => {
   });
 
   it('keeps the modal open and reports a rejected save', async () => {
-    const onSave = vi.fn().mockRejectedValue(new Error('Favorites use a newer schema'));
+    const error = new Error('Favorites use a newer schema');
+    const onSave = vi.fn().mockRejectedValue(error);
     const onClose = vi.fn();
     await renderComponent(makeProps({ onSave, onClose }));
 
@@ -602,6 +615,10 @@ describe('FavSaveModal', () => {
     expect(container.querySelector('[role="alert"]')?.textContent).toContain(
       'Favorites use a newer schema'
     );
+    expect(handleInlineMock).toHaveBeenCalledWith(error, {
+      action: 'saveFavorite',
+      source: 'FavSaveModal',
+    });
   });
 
   it('saves Event provider facet selections in favorites', async () => {

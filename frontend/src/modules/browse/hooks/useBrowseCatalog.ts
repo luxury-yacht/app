@@ -555,9 +555,13 @@ export function useBrowseCatalog({
             setHasLoadedOnce(true);
           }
         } catch (error) {
-          console.error('Failed to load additional catalog page', error);
           if (catalogScopeRef.current === baseScopeAtRequest) {
-            setPageError(error instanceof Error ? error.message : String(error));
+            const details = errorHandler.handleInline(error, {
+              action: 'loadBrowseCatalogPage',
+              source: 'useBrowseCatalog',
+              clusterId,
+            });
+            setPageError(details.message);
           }
         } finally {
           // A superseded request must not clear its successor's gates.

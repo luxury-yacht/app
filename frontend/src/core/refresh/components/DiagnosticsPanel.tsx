@@ -23,6 +23,7 @@ import { type TabDescriptor, Tabs } from '@shared/components/tabs';
 import { DockablePanel } from '@ui/dockable';
 import { useKeyboardSurface, useShortcut } from '@ui/shortcuts';
 import { KeyboardScopePriority } from '@ui/shortcuts/priorities';
+import { errorHandler } from '@utils/errorHandler';
 import { useCapabilityDiagnostics, useUserPermissions } from '@/core/capabilities';
 import { useViewState } from '@/core/contexts/ViewStateContext';
 import { useBrokerReadDiagnostics } from '@/core/read-diagnostics';
@@ -511,9 +512,11 @@ export const DiagnosticsPanel: React.FC<DiagnosticsPanelProps> = ({ onClose, isO
   const { selectedNamespace } = useNamespace();
   const { selectedClusterId, getClusterMeta } = useKubeconfig();
   const [diagnosticsClock, setDiagnosticsClock] = useState(() => Date.now());
+  const reportedDiagnosticsFailuresRef = useRef(new Set<string>());
 
   useEffect(() => {
     if (!isOpen) {
+      reportedDiagnosticsFailuresRef.current.clear();
       setTelemetrySummary(null);
       setTelemetryError(null);
       setSelectionDiagnostics(null);
@@ -524,6 +527,23 @@ export const DiagnosticsPanel: React.FC<DiagnosticsPanelProps> = ({ onClose, isO
     }
 
     let cancelled = false;
+
+    const presentDiagnosticsFailure = (
+      key: string,
+      reason: unknown,
+      action: string,
+      fallbackMessage: string
+    ): string => {
+      const error = reason instanceof Error ? reason : new Error(fallbackMessage);
+      if (!reportedDiagnosticsFailuresRef.current.has(key)) {
+        errorHandler.handleInline(error, {
+          action,
+          source: 'DiagnosticsPanel',
+        });
+        reportedDiagnosticsFailuresRef.current.add(key);
+      }
+      return error.message;
+    };
 
     const loadDiagnostics = async () => {
       const [telemetryResult, selectionResult, kubernetesAPIResult] = await Promise.allSettled([
@@ -537,36 +557,48 @@ export const DiagnosticsPanel: React.FC<DiagnosticsPanelProps> = ({ onClose, isO
       }
 
       if (telemetryResult.status === 'fulfilled') {
+        reportedDiagnosticsFailuresRef.current.delete('telemetry');
         setTelemetrySummary(telemetryResult.value);
         setTelemetryError(null);
       } else {
-        const message =
-          telemetryResult.reason instanceof Error
-            ? telemetryResult.reason.message
-            : 'Failed to load telemetry';
-        setTelemetryError(message);
+        setTelemetryError(
+          presentDiagnosticsFailure(
+            'telemetry',
+            telemetryResult.reason,
+            'loadTelemetryDiagnostics',
+            'Failed to load telemetry'
+          )
+        );
       }
 
       if (selectionResult.status === 'fulfilled') {
+        reportedDiagnosticsFailuresRef.current.delete('selection');
         setSelectionDiagnostics(selectionResult.value);
         setSelectionDiagnosticsError(null);
       } else {
-        const message =
-          selectionResult.reason instanceof Error
-            ? selectionResult.reason.message
-            : 'Failed to load selection diagnostics';
-        setSelectionDiagnosticsError(message);
+        setSelectionDiagnosticsError(
+          presentDiagnosticsFailure(
+            'selection',
+            selectionResult.reason,
+            'loadSelectionDiagnostics',
+            'Failed to load selection diagnostics'
+          )
+        );
       }
 
       if (kubernetesAPIResult.status === 'fulfilled') {
+        reportedDiagnosticsFailuresRef.current.delete('kubernetes-api');
         setKubernetesAPIDiagnostics(kubernetesAPIResult.value);
         setKubernetesAPIDiagnosticsError(null);
       } else {
-        const message =
-          kubernetesAPIResult.reason instanceof Error
-            ? kubernetesAPIResult.reason.message
-            : 'Failed to load Kubernetes API client diagnostics';
-        setKubernetesAPIDiagnosticsError(message);
+        setKubernetesAPIDiagnosticsError(
+          presentDiagnosticsFailure(
+            'kubernetes-api',
+            kubernetesAPIResult.reason,
+            'loadKubernetesAPIDiagnostics',
+            'Failed to load Kubernetes API client diagnostics'
+          )
+        );
       }
     };
 

@@ -16,10 +16,17 @@ const backendMocks = vi.hoisted(() => ({
   GetRevisionHistory: vi.fn(),
   RunObjectAction: vi.fn(),
 }));
+const handleInlineMock = vi.hoisted(() => vi.fn());
 
 vi.mock('@wailsjs/go/backend/App', () => ({
   GetRevisionHistory: backendMocks.GetRevisionHistory,
   RunObjectAction: backendMocks.RunObjectAction,
+}));
+
+vi.mock('@utils/errorHandler', () => ({
+  errorHandler: {
+    handleInline: (...args: unknown[]) => handleInlineMock(...args),
+  },
 }));
 
 /** Helper to build a RevisionEntry-like object. */
@@ -59,6 +66,10 @@ describe('RollbackModal', () => {
     root = ReactDOM.createRoot(container);
     backendMocks.GetRevisionHistory.mockReset();
     backendMocks.RunObjectAction.mockReset();
+    handleInlineMock.mockReset();
+    handleInlineMock.mockImplementation((error: unknown) => ({
+      message: error instanceof Error ? error.message : String(error),
+    }));
     defaultProps.onClose.mockReset();
   });
 
@@ -141,7 +152,8 @@ describe('RollbackModal', () => {
   });
 
   it('shows error when fetch fails', async () => {
-    backendMocks.GetRevisionHistory.mockRejectedValue(new Error('cluster unreachable'));
+    const error = new Error('cluster unreachable');
+    backendMocks.GetRevisionHistory.mockRejectedValue(error);
 
     await renderModal();
 
@@ -152,6 +164,11 @@ describe('RollbackModal', () => {
     const errorEl = document.querySelector('[data-testid="rollback-error"]');
     expect(errorEl).not.toBeNull();
     expect(errorEl?.textContent).toContain('cluster unreachable');
+    expect(handleInlineMock).toHaveBeenCalledWith(error, {
+      action: 'loadRevisionHistory',
+      source: 'RollbackModal',
+      clusterId: 'cluster-1',
+    });
   });
 
   it('shows empty message when only current revision exists', async () => {

@@ -9,6 +9,7 @@
  */
 
 import { PlusIcon } from '@shared/components/icons/SharedIcons';
+import { errorHandler } from '@utils/errorHandler';
 import { useCallback, useEffect, useRef, useState } from 'react';
 import {
   addNamespaceToScope,
@@ -69,7 +70,14 @@ export function useNamespaceScope(clusterId: string | undefined): NamespaceScope
       if (!clusterId) {
         // Never swallow an edit: without a cluster id the save cannot be
         // attributed, and a silent no-op looks like the bug it masks.
-        setError('No active cluster selected — cannot save the namespace scope.');
+        const details = errorHandler.handleInline(
+          new Error('No active cluster selected — cannot save the namespace scope.'),
+          {
+            action: 'saveNamespaceScope',
+            source: 'NamespaceScopeEditor',
+          }
+        );
+        setError(details.message);
         return;
       }
       setSaving(true);
@@ -77,7 +85,12 @@ export function useNamespaceScope(clusterId: string | undefined): NamespaceScope
       try {
         setScope(await saveNamespaceScope(clusterId, next));
       } catch (err) {
-        setError(err instanceof Error ? err.message : String(err));
+        const details = errorHandler.handleInline(err, {
+          action: 'saveNamespaceScope',
+          source: 'NamespaceScopeEditor',
+          clusterId,
+        });
+        setError(details.message);
       } finally {
         setSaving(false);
       }

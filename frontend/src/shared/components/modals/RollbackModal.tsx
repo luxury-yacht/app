@@ -18,6 +18,7 @@ import {
 } from '@shared/components/diff/diffUtils';
 import { computeBudgetedLineDiff } from '@shared/components/diff/lineDiff';
 import { RollbackIcon } from '@shared/components/icons/SharedIcons';
+import { errorHandler } from '@utils/errorHandler';
 import type { backend } from '@wailsjs/go/models';
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { readRevisionHistoryForRef, requestData } from '@/core/data-access';
@@ -132,7 +133,12 @@ const RollbackModal = ({
         }
       })
       .catch((err) => {
-        setFetchError(String(err));
+        const details = errorHandler.handleInline(err, {
+          action: 'loadRevisionHistory',
+          source: 'RollbackModal',
+          clusterId,
+        });
+        setFetchError(details.message);
       })
       .finally(() => {
         setLoading(false);
@@ -237,7 +243,12 @@ const RollbackModal = ({
         onClose();
       })
       .catch((err) => {
-        setRollbackError(String(err));
+        const details = errorHandler.handleInline(err, {
+          action: 'rollbackWorkload',
+          source: 'RollbackModal',
+          clusterId,
+        });
+        setRollbackError(details.message);
         setConfirmOpen(false);
       })
       .finally(() => {
