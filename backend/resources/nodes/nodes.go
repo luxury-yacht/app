@@ -57,8 +57,8 @@ func (s *Service) Node(name string) (*NodeDetails, error) {
 	client := s.deps.KubernetesClient
 	node, err := client.CoreV1().Nodes().Get(s.deps.Context, name, metav1.GetOptions{})
 	if err != nil {
-		s.logError(fmt.Sprintf("Failed to get node %s: %v", name, err))
-		return nil, fmt.Errorf("failed to get node: %v", err)
+		s.logError(err, fmt.Sprintf("Failed to get node %s", name))
+		return nil, fmt.Errorf("failed to get node: %w", err)
 	}
 
 	pods := s.listPodsForNode(name)
@@ -414,8 +414,8 @@ func (s *Service) Delete(nodeName string, force bool) error {
 	}
 
 	if err := s.deps.KubernetesClient.CoreV1().Nodes().Delete(s.deps.Context, nodeName, deleteOptions); err != nil {
-		s.logError(fmt.Sprintf("Failed to delete node %s: %v", nodeName, err))
-		return fmt.Errorf("failed to delete node: %v", err)
+		s.logError(err, fmt.Sprintf("Failed to delete node %s", nodeName))
+		return fmt.Errorf("failed to delete node: %w", err)
 	}
 
 	return nil
@@ -705,6 +705,6 @@ func (s *Service) logInfo(msg string) {
 	applog.Info(s.deps.Logger, msg, "NodeOperations")
 }
 
-func (s *Service) logError(msg string) {
-	applog.Error(s.deps.Logger, msg, "NodeOperations")
+func (s *Service) logError(err error, msg string) {
+	s.deps.LogRequestFailure(err, msg, "NodeOperations")
 }

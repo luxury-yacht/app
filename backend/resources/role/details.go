@@ -33,7 +33,7 @@ func (s *Service) Role(namespace, name string) (*RoleDetails, error) {
 	r, err := s.deps.KubernetesClient.RbacV1().Roles(namespace).Get(s.deps.Context, name, metav1.GetOptions{})
 	if err != nil {
 		s.deps.LogRequestFailure(err, fmt.Sprintf("Failed to get role %s/%s", namespace, name), "RBAC")
-		return nil, fmt.Errorf("failed to get role: %v", err)
+		return nil, fmt.Errorf("failed to get role: %w", err)
 	}
 	return s.buildRoleDetails(r, s.listRoleBindings(namespace)), nil
 }

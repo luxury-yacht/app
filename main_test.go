@@ -17,6 +17,7 @@ type mainRecordingReporter struct {
 func (*mainRecordingReporter) Enabled() bool                                   { return true }
 func (*mainRecordingReporter) SetEnabled(bool) error                           { return nil }
 func (*mainRecordingReporter) CaptureLogError(string, sentryreporting.Context) {}
+func (*mainRecordingReporter) AddBreadcrumb(sentryreporting.Breadcrumb)        {}
 func (*mainRecordingReporter) Shutdown(time.Duration) bool                     { return true }
 
 func (r *mainRecordingReporter) CaptureException(err error, _ sentryreporting.Context) {

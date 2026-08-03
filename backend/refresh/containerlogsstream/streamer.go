@@ -221,7 +221,7 @@ func (s *Streamer) run(
 			defer targetWG.Done()
 			defer func() {
 				if r := recover(); r != nil {
-					s.logger.Error(fmt.Sprintf("containerlogsstream: panic in followContainer for %s: %v", t.key(), r), logsources.ContainerLogsStream)
+					applog.ReportPanic(s.logger, r, "containerlogsstream: panic in followContainer", logsources.ContainerLogsStream)
 					if s.telemetry != nil {
 						s.telemetry.RecordStreamError(telemetry.StreamContainerLogs, fmt.Errorf("panic: %v", r))
 					}

@@ -34,7 +34,7 @@ func (s *Service) ConfigMap(namespace, name string) (*ConfigMapDetails, error) {
 	cm, err := s.deps.KubernetesClient.CoreV1().ConfigMaps(namespace).Get(s.deps.Context, name, metav1.GetOptions{})
 	if err != nil {
 		s.deps.LogRequestFailure(err, fmt.Sprintf("Failed to get configmap %s/%s", namespace, name), logsources.ResourceLoader)
-		return nil, fmt.Errorf("failed to get configmap: %v", err)
+		return nil, fmt.Errorf("failed to get configmap: %w", err)
 	}
 
 	relationships := resourcemodel.NewResourceRelationshipIndex(

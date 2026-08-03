@@ -75,15 +75,15 @@ func prepareContainerLogFetch(req *types.ContainerLogsFetchRequest) (containerLo
 	}
 	lineFilter, err := containerlogs.NewLineFilter(strings.TrimSpace(req.Include), strings.TrimSpace(req.Exclude))
 	if err != nil {
-		return containerLogFetchPlan{}, fmt.Errorf("invalid log filter: %v", err)
+		return containerLogFetchPlan{}, fmt.Errorf("invalid log filter: %w", err)
 	}
 	podNameFilter, err := containerlogs.NewPodNameFilter(strings.TrimSpace(req.PodInclude), strings.TrimSpace(req.PodExclude))
 	if err != nil {
-		return containerLogFetchPlan{}, fmt.Errorf("invalid pod filter: %v", err)
+		return containerLogFetchPlan{}, fmt.Errorf("invalid pod filter: %w", err)
 	}
 	containerState, err := containerlogs.ParseContainerStateFilter(req.ContainerState)
 	if err != nil {
-		return containerLogFetchPlan{}, fmt.Errorf("invalid container state filter: %v", err)
+		return containerLogFetchPlan{}, fmt.Errorf("invalid container state filter: %w", err)
 	}
 	return containerLogFetchPlan{
 		lineFilter: lineFilter, podNameFilter: podNameFilter,

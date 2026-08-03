@@ -9,7 +9,6 @@ package resourcequota
 import (
 	"fmt"
 
-	"github.com/luxury-yacht/app/backend/internal/applog"
 	"github.com/luxury-yacht/app/backend/internal/logsources"
 	"github.com/luxury-yacht/app/backend/resourcemodel"
 	"github.com/luxury-yacht/app/backend/resources/common"
@@ -36,8 +35,8 @@ func (s *Service) ResourceQuota(namespace, name string) (*ResourceQuotaDetails, 
 
 	rq, err := client.CoreV1().ResourceQuotas(namespace).Get(s.deps.Context, name, metav1.GetOptions{})
 	if err != nil {
-		s.logError(fmt.Sprintf("Failed to get resource quota %s/%s: %v", namespace, name, err))
-		return nil, fmt.Errorf("failed to get resource quota: %v", err)
+		s.logError(err, fmt.Sprintf("Failed to get resource quota %s/%s", namespace, name))
+		return nil, fmt.Errorf("failed to get resource quota: %w", err)
 	}
 
 	return s.buildResourceQuotaDetails(rq), nil
@@ -62,8 +61,8 @@ func (s *Service) buildResourceQuotaDetails(rq *corev1.ResourceQuota) *ResourceQ
 	return details
 }
 
-func (s *Service) logError(msg string) {
-	applog.Error(s.deps.Logger, msg, logsources.ResourceLoader)
+func (s *Service) logError(err error, msg string) {
+	s.deps.LogRequestFailure(err, msg, logsources.ResourceLoader)
 }
 
 func scopeSelectorFromFacts(facts *ScopeSelectorFacts) *ScopeSelector {

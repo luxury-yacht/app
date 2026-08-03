@@ -33,7 +33,7 @@ func (s *Service) Secret(namespace, name string) (*SecretDetails, error) {
 	sec, err := s.deps.KubernetesClient.CoreV1().Secrets(namespace).Get(s.deps.Context, name, metav1.GetOptions{})
 	if err != nil {
 		s.deps.LogRequestFailure(err, fmt.Sprintf("Failed to get secret %s/%s", namespace, name), logsources.ResourceLoader)
-		return nil, fmt.Errorf("failed to get secret: %v", err)
+		return nil, fmt.Errorf("failed to get secret: %w", err)
 	}
 
 	relationships := resourcemodel.NewResourceRelationshipIndex(

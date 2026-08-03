@@ -34,7 +34,7 @@ func (s *Service) ServiceAccount(namespace, name string) (*ServiceAccountDetails
 	sa, err := s.deps.KubernetesClient.CoreV1().ServiceAccounts(namespace).Get(s.deps.Context, name, metav1.GetOptions{})
 	if err != nil {
 		s.deps.LogRequestFailure(err, fmt.Sprintf("Failed to get service account %s/%s", namespace, name), "RBAC")
-		return nil, fmt.Errorf("failed to get service account: %v", err)
+		return nil, fmt.Errorf("failed to get service account: %w", err)
 	}
 
 	pods := s.listNamespacePods(namespace)

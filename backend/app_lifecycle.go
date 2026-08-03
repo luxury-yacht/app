@@ -158,7 +158,7 @@ func (a *App) restoreStartupWindow(ctx context.Context) {
 func (a *App) initializeStartupClusters() {
 	a.logger.Info("Discovering kubeconfig files...", logsources.App)
 	if err := a.discoverKubeconfigs(); err != nil {
-		a.logger.Error(fmt.Sprintf("Failed to discover kubeconfigs: %v", err), logsources.App)
+		a.logger.ErrorWithCause(err, "Failed to discover kubeconfigs", logsources.App)
 	} else {
 		a.logger.Info(fmt.Sprintf("Found %d kubeconfig file(s)", len(a.availableKubeconfigs)), logsources.App)
 	}
@@ -168,7 +168,7 @@ func (a *App) initializeStartupClusters() {
 	selectedCount, err := a.initializeSelectedClustersAtStartup()
 	if selectedCount > 0 {
 		if err != nil {
-			a.logger.Error(fmt.Sprintf("Failed to connect to cluster(s): %v", err), logsources.App)
+			a.logger.ErrorWithCause(err, "Failed to connect to cluster(s)", logsources.App)
 		} else {
 			a.logger.Info("Successfully connected to Kubernetes cluster(s)", logsources.App)
 		}

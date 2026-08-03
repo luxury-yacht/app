@@ -46,6 +46,14 @@ func (l clusterScopedLogger) Error(message string, source ...string) {
 	l.base.Error(message, l.withCluster(source)...)
 }
 
+func (l clusterScopedLogger) ErrorWithCause(err error, message string, source ...string) {
+	ReportError(l.base, err, message, l.withCluster(source)...)
+}
+
+func (l clusterScopedLogger) Panic(recovered any, message string, source ...string) {
+	ReportPanic(l.base, recovered, message, l.withCluster(source)...)
+}
+
 func (l clusterScopedLogger) withCluster(source []string) []string {
 	if len(source) >= 3 {
 		return source

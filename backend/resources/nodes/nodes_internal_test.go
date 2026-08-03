@@ -8,6 +8,7 @@
 package nodes
 
 import (
+	"errors"
 	"testing"
 	"time"
 
@@ -113,7 +114,7 @@ func TestLogHelpersUseLogger(t *testing.T) {
 	service := NewService(testsupport.NewResourceDependencies(testsupport.WithDepsLogger(logger)))
 
 	service.logInfo("info")
-	service.logError("error")
+	service.logError(errors.New("boom"), "error")
 
 	require.True(t, logger.infoCalled)
 	require.True(t, logger.errorCalled)

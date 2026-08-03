@@ -31,7 +31,7 @@ func (s *Service) NetworkPolicy(namespace, name string) (*NetworkPolicyDetails, 
 	np, err := s.deps.KubernetesClient.NetworkingV1().NetworkPolicies(namespace).Get(s.deps.Context, name, metav1.GetOptions{})
 	if err != nil {
 		s.deps.LogRequestFailure(err, fmt.Sprintf("Failed to get network policy %s/%s", namespace, name), logsources.ResourceLoader)
-		return nil, fmt.Errorf("failed to get network policy: %v", err)
+		return nil, fmt.Errorf("failed to get network policy: %w", err)
 	}
 	return s.buildNetworkPolicyDetails(np), nil
 }

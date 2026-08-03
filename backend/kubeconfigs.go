@@ -43,7 +43,7 @@ func (a *App) discoverKubeconfigsLocked() error {
 
 	searchPaths, err := a.loadKubeconfigSearchPaths()
 	if err != nil {
-		a.logger.Error(fmt.Sprintf("Failed to load kubeconfig search paths: %v", err), logsources.KubeconfigManager)
+		a.logger.ErrorWithCause(err, "Failed to load kubeconfig search paths", logsources.KubeconfigManager)
 		return err
 	}
 	if len(searchPaths) == 0 {

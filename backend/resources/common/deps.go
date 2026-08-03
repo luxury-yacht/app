@@ -77,10 +77,9 @@ func (d Dependencies) CloneWithContext(ctx context.Context) Dependencies {
 // to error reporting, so this keeps routine cancellations out of Sentry while
 // every real failure still gets there.
 func (d Dependencies) LogRequestFailure(err error, what string, source ...string) {
-	message := fmt.Sprintf("%s: %v", what, err)
 	if errors.Is(err, context.Canceled) {
-		applog.Debug(d.Logger, message, source...)
+		applog.Debug(d.Logger, fmt.Sprintf("%s: %v", what, err), source...)
 		return
 	}
-	applog.Error(d.Logger, message, source...)
+	applog.ReportError(d.Logger, err, what, source...)
 }

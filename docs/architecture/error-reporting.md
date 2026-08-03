@@ -22,20 +22,35 @@ The integration uses Sentry's native event processing and default integrations:
   init and remains unreportable.
 - `internal/sentryreporting` initializes `sentry-go`, forwards exceptions and
   panics, and owns the runtime enable/disable and shutdown lifecycle.
-- `backend/logger.go` forwards every backend `ERROR` log entry with its original
-  message. The event scope includes the log source and `clusterId` when present;
-  lower log levels remain in the local application log. These are captured as
-  `sentryreporting.LoggedError`, so an issue title reads
-  `sentryreporting.LoggedError: <message>` and is distinguishable at a glance
-  from a captured Go error or a recovered panic. The type name is user-visible —
-  Sentry titles issues `"<type>: <value>"` — so renaming it renames every
-  future issue.
+- `backend/logger.go` keeps local log messages human-readable while forwarding
+  structured failures separately. `ErrorWithCause` sends the original Go error
+  through `CaptureException`, and `Panic` sends the recovered value through
+  `CapturePanic`; both retain the operation text as event context. Legacy
+  string-only `ERROR` calls still become `sentryreporting.LoggedError`, so their
+  issue title reads `sentryreporting.LoggedError: <message>`. The type name is
+  user-visible — Sentry titles issues `"<type>: <value>"` — so renaming it
+  renames every future legacy-log issue.
+- Non-error backend log entries become Sentry breadcrumbs while reporting is
+  enabled. Global breadcrumbs and breadcrumbs matching an event's `clusterId`
+  are attached in original order; activity from other clusters is excluded.
+  The event scope includes source, `clusterId`, cluster name, and the failed
+  operation when available.
+- `backend/internal/applog.ReportError` and
+  `resources/common.Dependencies.LogRequestFailure` preserve typed errors across
+  package and cluster-scoped logger boundaries. Loggers that do not implement
+  the optional structured interface retain the previous string-only behavior.
+  Resource handlers touched by this reporting path wrap returned causes with
+  `%w` so their callers can continue inspecting the chain.
 - `backend/app_settings.go` persists `errorReportingEnabled` and switches the
   backend reporter only after the setting write succeeds.
 - `frontend/vite.config.ts` owns release identity and frontend source-map upload.
 
-Neither reporter uses an event allowlist, message replacement, custom
-fingerprint, or custom error classification. Sentry receives the original error
+Neither reporter uses an event allowlist, message replacement, or custom
+fingerprint. Backend exceptions that implement Kubernetes `APIStatus` add
+`k8s.reason` and `http.status_code` tags, including when that status error is
+wrapped. A `kubernetes` context also carries the status, reason, code, retry
+delay, and field-level causes when present; object names and request payloads
+are not copied into that context. Sentry otherwise receives the original error
 message, exception type, stack trace, breadcrumbs, SDK contexts, and other data
 gathered by its default integrations.
 
@@ -76,15 +91,16 @@ to errors or Sentry scope data.
 
 ## Cancellation Is Not a Failure
 
-Only `ERROR` entries reach the reporter, so the level a subsystem chooses is
-what decides whether something becomes a Sentry issue. Context cancellation is
-an expected lifecycle event — a panel closed, the user navigated away, a
-cluster disconnected, a poller shut down — and must not be logged at `ERROR`.
+Only structured failures and string-only `ERROR` entries become Sentry issues;
+lower levels are breadcrumbs. Context cancellation is an expected lifecycle
+event — a panel closed, the user navigated away, a cluster disconnected, a
+poller shut down — and must not be reported as a failure.
 
 - Resource services call `common.Dependencies.LogRequestFailure`, which logs a
-  cancelled Kubernetes call at `DEBUG` and everything else at `ERROR`. Prefer it
-  over `Logger.Error` for any failed API call so new resource kinds inherit the
-  rule.
+  cancelled Kubernetes call at `DEBUG` and reports every other original error
+  through the structured path. Prefer it over formatting an error into
+  `Logger.Error` so new resource kinds inherit cancellation handling and retain
+  typed Kubernetes status data.
 - The metrics poller treats demand-shutdown cancellation as an expected
   lifecycle event and logs intermediate retries as warnings. A terminal metrics
   failure is logged once at `ERROR`, so the backend reporter receives the full
@@ -92,6 +108,12 @@ cluster disconnected, a poller shut down — and must not be logged at `ERROR`.
 
 `context.DeadlineExceeded` is deliberately still an error: a request that ran
 out of time is a real problem, unlike one the app itself cancelled.
+
+Entries from `logsources.ErrorCapture` never reach the reporter at all.
+`backend/internal/errorcapture` scrapes third-party stderr — klog lines from
+client-go and friends — and republishes them at whatever severity they claim.
+Those are not this application failing, and their stack is the scraper rather
+than any failing code, so they stay in the local application log and stop there.
 
 ## Build Configuration
 

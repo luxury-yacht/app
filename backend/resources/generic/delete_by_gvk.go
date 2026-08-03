@@ -41,12 +41,12 @@ func (s *Service) DeleteByGVK(gvk schema.GroupVersionKind, namespace, name strin
 	}
 	resolved, ok, err := s.deps.ResourceResolver.ResolveResourceForGVK(s.context(), gvk)
 	if err != nil {
-		s.logError(fmt.Sprintf("Failed to resolve GVR for %s: %v", gvk.String(), err))
+		s.logError(err, fmt.Sprintf("Failed to resolve GVR for %s", gvk.String()))
 		return fmt.Errorf("failed to resolve %s: %w", gvk.String(), err)
 	}
 	if !ok {
 		err := fmt.Errorf("unable to resolve resource for %s", gvk.String())
-		s.logError(fmt.Sprintf("Failed to resolve GVR for %s: %v", gvk.String(), err))
+		s.logError(err, fmt.Sprintf("Failed to resolve GVR for %s", gvk.String()))
 		return fmt.Errorf("failed to resolve %s: %w", gvk.String(), err)
 	}
 	gvr := resolved.GVR()
@@ -54,7 +54,7 @@ func (s *Service) DeleteByGVK(gvk schema.GroupVersionKind, namespace, name strin
 
 	dynamicClient, err := s.dynamicClient()
 	if err != nil {
-		s.logError(fmt.Sprintf("Failed to create dynamic client: %v", err))
+		s.logError(err, "Failed to create dynamic client")
 		return fmt.Errorf("failed to create dynamic client: %w", err)
 	}
 
@@ -71,7 +71,7 @@ func (s *Service) DeleteByGVK(gvk schema.GroupVersionKind, namespace, name strin
 	}
 
 	if deleteErr != nil {
-		s.logError(fmt.Sprintf("Failed to delete %s %s/%s: %v", gvk.String(), namespace, name, deleteErr))
+		s.logError(deleteErr, fmt.Sprintf("Failed to delete %s %s/%s", gvk.String(), namespace, name))
 		return fmt.Errorf("failed to delete %s: %w", gvk.String(), deleteErr)
 	}
 

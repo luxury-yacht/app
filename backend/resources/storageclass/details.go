@@ -37,7 +37,7 @@ func (s *Service) StorageClass(name string) (*StorageClassDetails, error) {
 	sc, err := s.deps.KubernetesClient.StorageV1().StorageClasses().Get(s.deps.Context, name, metav1.GetOptions{})
 	if err != nil {
 		s.deps.LogRequestFailure(err, fmt.Sprintf("Failed to get storage class %s", name), logsources.ResourceLoader)
-		return nil, fmt.Errorf("failed to get storage class: %v", err)
+		return nil, fmt.Errorf("failed to get storage class: %w", err)
 	}
 
 	pvs := s.listPersistentVolumes()

@@ -187,7 +187,7 @@ func (a *App) checkBetaExpiry() error {
 	// Parse expiry date
 	expiryTime, err := time.Parse(time.RFC3339, BetaExpiry)
 	if err != nil {
-		return fmt.Errorf("invalid beta expiry date format: %v", err)
+		return fmt.Errorf("invalid beta expiry date format: %w", err)
 	}
 
 	// Check if expired

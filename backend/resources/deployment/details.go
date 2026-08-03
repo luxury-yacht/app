@@ -45,7 +45,7 @@ func (s *Service) Deployment(namespace, name string) (*DeploymentDetails, error)
 	deployment, err := client.AppsV1().Deployments(namespace).Get(s.deps.Context, name, metav1.GetOptions{})
 	if err != nil {
 		s.deps.LogRequestFailure(err, fmt.Sprintf("Failed to get deployment %s/%s", namespace, name), logsources.ResourceLoader)
-		return nil, fmt.Errorf("failed to get deployment: %v", err)
+		return nil, fmt.Errorf("failed to get deployment: %w", err)
 	}
 
 	// getDeploymentPods also fetches ReplicaSets for filtering; reuse them to avoid a second list call.

@@ -10,7 +10,6 @@ package apiextensions
 import (
 	"fmt"
 
-	"github.com/luxury-yacht/app/backend/internal/applog"
 	"github.com/luxury-yacht/app/backend/internal/logsources"
 	"github.com/luxury-yacht/app/backend/resourcemodel"
 	apiextensionsv1 "k8s.io/apiextensions-apiserver/pkg/apis/apiextensions/v1"
@@ -26,8 +25,8 @@ func (s *Service) CustomResourceDefinition(name string) (*CustomResourceDefiniti
 	client := s.deps.APIExtensionsClient
 	crd, err := client.ApiextensionsV1().CustomResourceDefinitions().Get(s.deps.Context, name, metav1.GetOptions{})
 	if err != nil {
-		s.logError(fmt.Sprintf("Failed to get CRD %s: %v", name, err))
-		return nil, fmt.Errorf("failed to get CRD: %v", err)
+		s.logError(err, fmt.Sprintf("Failed to get CRD %s", name))
+		return nil, fmt.Errorf("failed to get CRD: %w", err)
 	}
 
 	return s.buildCRDDetails(crd), nil
@@ -115,6 +114,6 @@ func (s *Service) ensureAPIExtensions(resource string) error {
 	return nil
 }
 
-func (s *Service) logError(msg string) {
-	applog.Error(s.deps.Logger, msg, logsources.ResourceLoader)
+func (s *Service) logError(err error, msg string) {
+	s.deps.LogRequestFailure(err, msg, logsources.ResourceLoader)
 }

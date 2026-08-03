@@ -55,7 +55,7 @@ func (a *App) initKubernetesClient() (err error) {
 
 	if a.refreshHTTPServer == nil || a.refreshAggregates.Load() == nil || a.refreshCtx == nil {
 		if err := a.setupRefreshSubsystem(); err != nil {
-			a.logger.Error(fmt.Sprintf("Failed to initialise refresh subsystem: %v", err), logsources.Refresh)
+			a.logger.ErrorWithCause(err, "Failed to initialise refresh subsystem", logsources.Refresh)
 			return fmt.Errorf("failed to initialise refresh subsystem: %w", err)
 		}
 	} else if err := a.updateRefreshSubsystemSelections(selections); err != nil {

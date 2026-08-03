@@ -57,7 +57,7 @@ func FetchResourceWithSelection[T any](
 
 	result, err := executeWithRetry(ctx, a, selectionKey, resourceKind, identifier, fetchFunc)
 	if err != nil {
-		a.logger.Error(fmt.Sprintf("Failed to fetch %s %s: %v", resourceKind, identifier, err), logsources.ResourceLoader, selectionKey, a.clusterNameForID(selectionKey))
+		a.logger.ErrorWithCause(err, fmt.Sprintf("Failed to fetch %s %s", resourceKind, identifier), logsources.ResourceLoader, selectionKey, a.clusterNameForID(selectionKey))
 		// Include clusterId in error payload so frontend can identify which cluster
 		// the error belongs to. selectionKey is the clusterID when set by callers
 		// like FetchNamespacedResource and FetchClusterResource.

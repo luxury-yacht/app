@@ -9,6 +9,7 @@ import (
 	"strings"
 	"time"
 
+	"github.com/luxury-yacht/app/backend/internal/applog"
 	"github.com/luxury-yacht/app/backend/internal/containerlogs"
 	"github.com/luxury-yacht/app/backend/internal/logsources"
 	apierrors "k8s.io/apimachinery/pkg/api/errors"
@@ -190,7 +191,7 @@ func (h *Handler) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 	go func() {
 		defer func() {
 			if r := recover(); r != nil {
-				h.streamer.logger.Error(fmt.Sprintf("containerlogsstream: panic in stream handler: %v", r), logsources.ContainerLogsStream)
+				applog.ReportPanic(h.streamer.logger, r, "containerlogsstream: panic in stream handler", logsources.ContainerLogsStream)
 				if h.telemetry != nil {
 					h.telemetry.RecordStreamErrorForDomain(streamName, target, fmt.Errorf("panic: %v", r))
 				}

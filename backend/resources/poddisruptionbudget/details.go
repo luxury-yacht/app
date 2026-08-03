@@ -10,7 +10,6 @@ package poddisruptionbudget
 import (
 	"fmt"
 
-	"github.com/luxury-yacht/app/backend/internal/applog"
 	"github.com/luxury-yacht/app/backend/internal/logsources"
 	"github.com/luxury-yacht/app/backend/resourcemodel"
 	"github.com/luxury-yacht/app/backend/resources/common"
@@ -38,8 +37,8 @@ func (s *Service) PodDisruptionBudget(namespace, name string) (*PodDisruptionBud
 
 	pdb, err := client.PolicyV1().PodDisruptionBudgets(namespace).Get(s.deps.Context, name, metav1.GetOptions{})
 	if err != nil {
-		s.logError(fmt.Sprintf("Failed to get pod disruption budget %s/%s: %v", namespace, name, err))
-		return nil, fmt.Errorf("failed to get pod disruption budget: %v", err)
+		s.logError(err, fmt.Sprintf("Failed to get pod disruption budget %s/%s", namespace, name))
+		return nil, fmt.Errorf("failed to get pod disruption budget: %w", err)
 	}
 
 	return s.buildPodDisruptionBudgetDetails(pdb), nil
@@ -68,8 +67,8 @@ func (s *Service) buildPodDisruptionBudgetDetails(pdb *policyv1.PodDisruptionBud
 	return details
 }
 
-func (s *Service) logError(msg string) {
-	applog.Error(s.deps.Logger, msg, logsources.ResourceLoader)
+func (s *Service) logError(err error, msg string) {
+	s.deps.LogRequestFailure(err, msg, logsources.ResourceLoader)
 }
 
 func pdbIntOrStringValue(facts *resourcemodel.IntOrStringFacts) *string {

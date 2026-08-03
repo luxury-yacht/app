@@ -1,12 +1,15 @@
 package sentryreporting
 
 import (
+	"errors"
 	"os"
+	"strconv"
 	"strings"
 	"sync"
 	"time"
 
 	"github.com/getsentry/sentry-go"
+	apierrors "k8s.io/apimachinery/pkg/api/errors"
 )
 
 // Config controls backend error reporting.
@@ -19,8 +22,20 @@ type Config struct {
 
 // Context adds application metadata to an error event.
 type Context struct {
-	Source    string
-	ClusterID string
+	Source      string
+	ClusterID   string
+	ClusterName string
+	Operation   string
+}
+
+// Breadcrumb records diagnostic activity that should precede a later error
+// event without creating an issue of its own.
+type Breadcrumb struct {
+	Category  string
+	Message   string
+	Level     string
+	Data      map[string]any
+	Timestamp time.Time
 }
 
 // Reporter sends backend failures to an error-reporting service.
@@ -30,6 +45,7 @@ type Reporter interface {
 	CaptureException(err error, context Context)
 	CaptureLogError(message string, context Context)
 	CapturePanic(recovered any, context Context)
+	AddBreadcrumb(breadcrumb Breadcrumb)
 	Shutdown(timeout time.Duration) bool
 }
 
@@ -227,13 +243,17 @@ func (disabledReporter) SetEnabled(bool) error           { return nil }
 func (disabledReporter) CaptureException(error, Context) {}
 func (disabledReporter) CaptureLogError(string, Context) {}
 func (disabledReporter) CapturePanic(any, Context)       {}
+func (disabledReporter) AddBreadcrumb(Breadcrumb)        {}
 func (disabledReporter) Shutdown(time.Duration) bool     { return true }
 
 type sentryReporter struct {
-	mu     sync.RWMutex
-	config Config
-	hub    *sentry.Hub
+	mu          sync.RWMutex
+	config      Config
+	hub         *sentry.Hub
+	breadcrumbs []Breadcrumb
 }
+
+const maxReporterBreadcrumbs = 100
 
 func (r *sentryReporter) Enabled() bool {
 	r.mu.RLock()
@@ -254,12 +274,14 @@ func (r *sentryReporter) SetEnabled(enabled bool) error {
 			return err
 		}
 		r.hub = hub
+		r.breadcrumbs = nil
 		r.mu.Unlock()
 		return nil
 	}
 
 	hub := r.hub
 	r.hub = nil
+	r.breadcrumbs = nil
 	r.mu.Unlock()
 	if hub != nil {
 		// Opting out closes the transport without flushing buffered events.
@@ -276,7 +298,52 @@ func (r *sentryReporter) CaptureLogError(message string, context Context) {
 
 func (r *sentryReporter) CaptureException(err error, context Context) {
 	r.withHub(context, func(hub *sentry.Hub) {
+		addKubernetesStatusTags(hub, err)
 		hub.CaptureException(err)
+	})
+}
+
+func addKubernetesStatusTags(hub *sentry.Hub, err error) {
+	if hub == nil || err == nil {
+		return
+	}
+	var statusErr apierrors.APIStatus
+	if !errors.As(err, &statusErr) {
+		return
+	}
+	status := statusErr.Status()
+	hub.ConfigureScope(func(scope *sentry.Scope) {
+		statusContext := sentry.Context{}
+		if status.Status != "" {
+			statusContext["status"] = status.Status
+		}
+		if status.Reason != "" {
+			scope.SetTag("k8s.reason", string(status.Reason))
+			statusContext["reason"] = string(status.Reason)
+		}
+		if status.Code != 0 {
+			scope.SetTag("http.status_code", strconv.FormatInt(int64(status.Code), 10))
+			statusContext["code"] = status.Code
+		}
+		if status.Details != nil {
+			if status.Details.RetryAfterSeconds != 0 {
+				statusContext["retryAfterSeconds"] = status.Details.RetryAfterSeconds
+			}
+			if len(status.Details.Causes) > 0 {
+				causes := make([]map[string]any, 0, len(status.Details.Causes))
+				for _, cause := range status.Details.Causes {
+					causes = append(causes, map[string]any{
+						"reason":  string(cause.Type),
+						"message": cause.Message,
+						"field":   cause.Field,
+					})
+				}
+				statusContext["causes"] = causes
+			}
+		}
+		if len(statusContext) > 0 {
+			scope.SetContext("kubernetes", statusContext)
+		}
 	})
 }
 
@@ -286,10 +353,29 @@ func (r *sentryReporter) CapturePanic(recovered any, context Context) {
 	})
 }
 
+func (r *sentryReporter) AddBreadcrumb(breadcrumb Breadcrumb) {
+	r.mu.Lock()
+	defer r.mu.Unlock()
+	if r.hub == nil {
+		return
+	}
+	if breadcrumb.Timestamp.IsZero() {
+		breadcrumb.Timestamp = time.Now()
+	}
+	r.breadcrumbs = append(r.breadcrumbs, breadcrumb)
+	if len(r.breadcrumbs) > maxReporterBreadcrumbs {
+		start := len(r.breadcrumbs) - maxReporterBreadcrumbs
+		trimmed := make([]Breadcrumb, maxReporterBreadcrumbs)
+		copy(trimmed, r.breadcrumbs[start:])
+		r.breadcrumbs = trimmed
+	}
+}
+
 func (r *sentryReporter) Shutdown(timeout time.Duration) bool {
 	r.mu.Lock()
 	hub := r.hub
 	r.hub = nil
+	r.breadcrumbs = nil
 	r.mu.Unlock()
 	if hub == nil {
 		return true
@@ -306,12 +392,31 @@ func (r *sentryReporter) withHub(context Context, capture func(*sentry.Hub)) {
 		return
 	}
 	hub := r.hub.Clone()
+	for _, breadcrumb := range r.breadcrumbs {
+		breadcrumbClusterID, _ := breadcrumb.Data["clusterId"].(string)
+		if breadcrumbClusterID != "" && breadcrumbClusterID != context.ClusterID {
+			continue
+		}
+		hub.AddBreadcrumb(&sentry.Breadcrumb{
+			Category:  breadcrumb.Category,
+			Message:   breadcrumb.Message,
+			Level:     sentry.Level(breadcrumb.Level),
+			Data:      breadcrumb.Data,
+			Timestamp: breadcrumb.Timestamp,
+		}, nil)
+	}
 	hub.ConfigureScope(func(scope *sentry.Scope) {
 		if context.Source != "" {
 			scope.SetTag("source", context.Source)
 		}
 		if context.ClusterID != "" {
 			scope.SetTag("clusterId", context.ClusterID)
+		}
+		if context.ClusterName != "" {
+			scope.SetTag("clusterName", context.ClusterName)
+		}
+		if context.Operation != "" {
+			scope.SetContext("error", sentry.Context{"operation": context.Operation})
 		}
 	})
 	capture(hub)

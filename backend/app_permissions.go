@@ -202,7 +202,7 @@ func (a *App) preparePermissionQuery(
 	gvr, isNamespaced, err := a.resolveGVRForPermissionQueryCached(ctx, query, resolutionCache)
 	duration := time.Since(startedAt)
 	if err != nil {
-		return preparedPermissionQuery{}, duration, fmt.Errorf("failed to resolve resource kind %q: %v", query.ResourceKind, err)
+		return preparedPermissionQuery{}, duration, fmt.Errorf("failed to resolve resource kind %q: %w", query.ResourceKind, err)
 	}
 	return preparedPermissionQuery{
 		resultIdx: resultIndex, query: query, gvr: gvr, isNamespaced: isNamespaced,

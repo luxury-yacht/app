@@ -22,6 +22,16 @@ type recordingDepsLogger struct {
 	source  []string
 }
 
+type recordingStructuredDepsLogger struct {
+	recordingDepsLogger
+	cause error
+}
+
+func (l *recordingStructuredDepsLogger) ErrorWithCause(err error, message string, source ...string) {
+	l.cause = err
+	l.record("error", message, source...)
+}
+
 func (l *recordingDepsLogger) record(level, message string, source ...string) {
 	l.level = level
 	l.message = message
@@ -77,6 +87,21 @@ func TestLogRequestFailureReportsRealErrors(t *testing.T) {
 	}
 	if len(logger.source) != 1 || logger.source[0] != "ResourceLoader" {
 		t.Fatalf("expected source to be forwarded, got %v", logger.source)
+	}
+}
+
+func TestLogRequestFailurePreservesOriginalErrorForStructuredLogger(t *testing.T) {
+	logger := &recordingStructuredDepsLogger{}
+	deps := Dependencies{Logger: logger}
+	cause := fmt.Errorf("forbidden")
+
+	deps.LogRequestFailure(cause, "Failed to get deployment default/web", "ResourceLoader")
+
+	if logger.cause != cause {
+		t.Fatalf("expected original cause to be forwarded, got %v", logger.cause)
+	}
+	if logger.message != "Failed to get deployment default/web" {
+		t.Fatalf("expected operation to remain separate, got %q", logger.message)
 	}
 }
 
