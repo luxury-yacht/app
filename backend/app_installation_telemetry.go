@@ -3,6 +3,7 @@ package backend
 import (
 	"crypto/rand"
 	"fmt"
+	"regexp"
 	"runtime"
 	"strings"
 	"time"
@@ -14,6 +15,10 @@ import (
 const (
 	installationRegisteredMetric   = "app.installation.registered"
 	installationMetricFlushTimeout = 2 * time.Second
+)
+
+var anonymizedIDPattern = regexp.MustCompile(
+	`(?i)^[0-9a-f]{8}-[0-9a-f]{4}-4[0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$`,
 )
 
 func generateAnonymizedID() (string, error) {
@@ -37,8 +42,8 @@ func ensureAnonymizedID(settings *settingsFile) (bool, error) {
 	if settings == nil {
 		return false, fmt.Errorf("no settings available for anonymized installation ID")
 	}
-	if anonymizedId := strings.TrimSpace(settings.Telemetry.AnonymizedID); anonymizedId != "" {
-		settings.Telemetry.AnonymizedID = anonymizedId
+	if anonymizedId := strings.TrimSpace(settings.Telemetry.AnonymizedID); anonymizedIDPattern.MatchString(anonymizedId) {
+		settings.Telemetry.AnonymizedID = strings.ToLower(anonymizedId)
 		return false, nil
 	}
 

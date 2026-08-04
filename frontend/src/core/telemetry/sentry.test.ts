@@ -114,7 +114,7 @@ describe('Sentry error reporting', () => {
     expect(sentryMocks.init).toHaveBeenCalledOnce();
   });
 
-  it('reports preference hydration failures only after persisted consent is known', async () => {
+  it('reports preference hydration failures only after the persisted preference is known', async () => {
     const failure = new Error('settings schema unavailable');
     captureBootstrapError(failure, { action: 'loadAppSettingsSchema' });
 
@@ -139,7 +139,7 @@ describe('Sentry error reporting', () => {
     expect(sentryMocks.captureException).toHaveBeenCalledWith(failure);
   });
 
-  it('discards buffered bootstrap failures when persisted consent is disabled', async () => {
+  it('discards buffered bootstrap failures when persisted reporting is disabled', async () => {
     captureBootstrapError(new Error('settings schema unavailable'), {
       action: 'loadAppSettingsSchema',
     });
@@ -184,7 +184,7 @@ describe('Sentry error reporting', () => {
     expect(sentryMocks.init).not.toHaveBeenCalled();
   });
 
-  it('initializes Sentry with native data collection', () => {
+  it('initializes Sentry with privacy-first data collection', () => {
     expect(
       initializeErrorReporting({
         enabled: true,
@@ -199,7 +199,18 @@ describe('Sentry error reporting', () => {
         dsn: 'https://public@example.com/1',
         environment: 'production',
         release: 'luxury-yacht@v1.2.3',
-        dataCollection: {},
+        dataCollection: {
+          userInfo: false,
+          cookies: false,
+          httpHeaders: { request: false, response: false },
+          httpBodies: [],
+          urlQueryParams: false,
+          graphQL: { document: false, variables: false },
+          genAI: { inputs: false, outputs: false },
+          databaseQueryData: false,
+          stackFrameVariables: false,
+          frameContextLines: 5,
+        },
       })
     );
   });
@@ -228,13 +239,110 @@ describe('Sentry error reporting', () => {
       options.integrations([
         { name: 'Breadcrumbs' },
         { name: 'BrowserSession' },
+        { name: 'CultureContext' },
         { name: 'GlobalHandlers' },
       ])
-    ).toEqual([
-      { name: 'Breadcrumbs' },
-      { name: 'GlobalHandlers' },
-      { name: 'PageBrowserSession' },
-    ]);
+    ).toEqual([{ name: 'GlobalHandlers' }, { name: 'PageBrowserSession' }]);
+  });
+
+  it('does not send a malformed installation identifier as Sentry user data', () => {
+    expect(
+      initializeErrorReporting({
+        enabled: true,
+        dsn: 'https://public@example.com/1',
+        environment: 'production',
+        anonymizedId: 'john@example.test',
+      })
+    ).toBe(true);
+
+    expect(sentryMocks.init.mock.calls[0]?.[0]).toEqual(
+      expect.objectContaining({ initialScope: undefined })
+    );
+  });
+
+  it('removes request, network identity, and free-form secrets before transport', () => {
+    initializeErrorReporting({
+      enabled: true,
+      dsn: 'https://public@example.com/1',
+      environment: 'production',
+      anonymizedId: '123e4567-e89b-42d3-a456-426614174000',
+    });
+    const options = sentryMocks.init.mock.calls[0]?.[0] as {
+      beforeSend: (event: Record<string, unknown>) => Record<string, unknown>;
+    };
+
+    const filtered = options.beforeSend({
+      message:
+        'GET https://internal.example.test/pods?token=top-secret from 10.20.30.40 or fd00::1234 via internal-api.local at /Users/john/.kube/config: Deployment.apps "private-workload-7" is invalid; deployment payments/private-workload-8 failed',
+      user: {
+        id: '123e4567-e89b-42d3-a456-426614174000',
+        email: 'john@example.test',
+        ip_address: '10.20.30.40',
+        username: 'john',
+      },
+      request: {
+        url: 'https://internal.example.test/pods?token=top-secret',
+        headers: { authorization: 'Bearer top-secret' },
+        data: '{"password":"top-secret"}',
+      },
+      server_name: 'johns-macbook',
+      exception: {
+        values: [
+          {
+            type: 'Error',
+            value: 'authorization=Bearer top-secret at /home/john/project/file.ts',
+            stacktrace: {
+              frames: [
+                {
+                  abs_path: '/Users/john/git/luxury-yacht/app/file.ts',
+                  vars: { token: 'top-secret' },
+                },
+              ],
+            },
+          },
+        ],
+      },
+      contexts: {
+        os: { name: 'macOS', version: '15.0' },
+        culture: { locale: 'en-US', timezone: 'America/Denver' },
+      },
+      breadcrumbs: [
+        {
+          category: 'ui.error.presented',
+          message: 'token=top-secret',
+          data: { authorization: 'Bearer top-secret', operationId: 'ui-error-1' },
+        },
+      ],
+    });
+
+    expect(filtered).toEqual(
+      expect.objectContaining({
+        user: { id: '123e4567-e89b-42d3-a456-426614174000' },
+        request: undefined,
+        server_name: undefined,
+        contexts: {
+          os: { name: 'macOS', version: '15.0' },
+        },
+      })
+    );
+    const payload = JSON.stringify(filtered);
+    for (const sensitive of [
+      'john@example.test',
+      '10.20.30.40',
+      'fd00::1234',
+      'top-secret',
+      'internal.example.test',
+      'internal-api.local',
+      'private-workload-7',
+      'payments/private-workload-8',
+      '/Users/john',
+      '/home/john',
+      'America/Denver',
+    ]) {
+      expect(payload).not.toContain(sensitive);
+    }
+    expect(payload).toContain('[url]');
+    expect(payload).toContain('[local-path]');
   });
 
   it('carries anonymizedId from preference hydration through live re-enablement', async () => {
@@ -316,7 +424,7 @@ describe('Sentry error reporting', () => {
     expect(scopeMocks.setTag).toHaveBeenCalledWith('error.surface', 'user-visible');
     expect(scopeMocks.setTag).toHaveBeenCalledWith('error.category', 'UNKNOWN');
     expect(scopeMocks.setTag).toHaveBeenCalledWith('ui.action', 'loadPods');
-    expect(scopeMocks.setTag).toHaveBeenCalledWith('clusterId', 'cluster-a');
+    expect(scopeMocks.setTag).toHaveBeenCalledWith('cluster.alias', 'cluster-1');
     expect(scopeMocks.setContext).toHaveBeenCalledWith('operation', {
       id: 'ui-error-1',
       action: 'loadPods',
@@ -376,11 +484,11 @@ describe('Sentry error reporting', () => {
 
     expect(scopeMocks.setTag).toHaveBeenCalledWith('ui.view', 'namespace');
     expect(scopeMocks.setTag).toHaveBeenCalledWith('ui.tab', 'workloads');
-    expect(scopeMocks.setTag).toHaveBeenCalledWith('clusterId', 'cluster-a');
+    expect(scopeMocks.setTag).toHaveBeenCalledWith('cluster.alias', 'cluster-1');
     expect(scopeMocks.setContext).toHaveBeenCalledWith('navigation', {
       view: 'namespace',
       tab: 'workloads',
-      clusterId: 'cluster-a',
+      'cluster.alias': 'cluster-1',
       objectPanelOpen: true,
     });
     expect(sentryMocks.addBreadcrumb).toHaveBeenCalledWith({
@@ -391,7 +499,7 @@ describe('Sentry error reporting', () => {
       data: {
         view: 'namespace',
         tab: 'workloads',
-        clusterId: 'cluster-a',
+        'cluster.alias': 'cluster-1',
         objectPanelOpen: true,
       },
     });
@@ -419,8 +527,8 @@ describe('Sentry error reporting', () => {
     expect(scopeMocks.setContext).toHaveBeenCalledWith('navigation', {
       view: 'namespace',
       tab: 'workloads',
-      clusterId: 'cluster-a',
-      namespace: 'payments',
+      'cluster.alias': 'cluster-1',
+      'namespace.alias': 'namespace-1',
       objectPanelOpen: false,
     });
   });
@@ -461,8 +569,6 @@ describe('Sentry error reporting', () => {
       resource: 'pods',
       adapter: 'refresh-domain',
       reason: 'user',
-      label: 'refresh pods',
-      scope: 'cluster-a',
       status: 'error',
       durationMs: 42,
     });
@@ -475,7 +581,13 @@ describe('Sentry error reporting', () => {
       category: 'request.broker',
       level: 'info',
       message: 'Started data-access request for pods',
-      data: request,
+      data: {
+        id: 'broker-read-7',
+        broker: 'data-access',
+        resource: 'pods',
+        adapter: 'refresh-domain',
+        reason: 'user',
+      },
     });
     expect(sentryMocks.addBreadcrumb).toHaveBeenCalledWith({
       type: 'default',
@@ -483,14 +595,18 @@ describe('Sentry error reporting', () => {
       level: 'error',
       message: 'Failed data-access request for pods',
       data: {
-        ...request,
+        id: 'broker-read-7',
+        broker: 'data-access',
+        resource: 'pods',
+        adapter: 'refresh-domain',
+        reason: 'user',
         status: 'error',
         durationMs: 42,
       },
     });
   });
 
-  it('labels automatic breadcrumbs with workspace context and removes unrelated activity', () => {
+  it('rejects automatic breadcrumbs and keeps only allowlisted correlated activity', () => {
     setActiveViewContext({
       view: 'namespace',
       tab: 'workloads',
@@ -508,17 +624,22 @@ describe('Sentry error reporting', () => {
     };
 
     expect(
+      options.beforeBreadcrumb({ category: 'ui.click', data: { target: 'button.save' } })
+    ).toBe(null);
+    expect(
       options.beforeBreadcrumb({
-        category: 'ui.click',
-        data: { target: 'button.save' },
+        category: 'request.broker',
+        message: 'Started data-access request for pods',
+        data: { id: 'broker-read-2', label: 'private label' },
       })
     ).toEqual({
-      category: 'ui.click',
+      category: 'request.broker',
+      message: 'Started data-access request for pods',
       data: {
-        target: 'button.save',
+        id: 'broker-read-2',
         'ui.view': 'namespace',
         'ui.tab': 'workloads',
-        clusterId: 'cluster-a',
+        'cluster.alias': 'cluster-1',
       },
     });
 
@@ -527,41 +648,49 @@ describe('Sentry error reporting', () => {
         navigation: {
           view: 'namespace',
           tab: 'workloads',
-          clusterId: 'cluster-a',
-          namespace: 'payments',
+          'cluster.alias': 'cluster-1',
+          'namespace.alias': 'namespace-1',
         },
         request: { id: 'broker-read-2' },
       },
       breadcrumbs: [
         {
+          category: 'ui.action.started',
           message: 'current click',
           data: {
             'ui.view': 'namespace',
             'ui.tab': 'workloads',
-            clusterId: 'cluster-a',
+            'cluster.alias': 'cluster-1',
             'request.ids': ['broker-read-2'],
           },
         },
         {
+          category: 'ui.action.started',
           message: 'same workspace, other request',
           data: {
             'ui.view': 'namespace',
             'ui.tab': 'workloads',
-            clusterId: 'cluster-a',
+            'cluster.alias': 'cluster-1',
             'request.ids': ['broker-read-9'],
           },
         },
         {
+          category: 'ui.action.started',
           message: 'different tab',
-          data: { 'ui.view': 'namespace', 'ui.tab': 'events', clusterId: 'cluster-a' },
+          data: {
+            'ui.view': 'namespace',
+            'ui.tab': 'events',
+            'cluster.alias': 'cluster-1',
+          },
         },
         {
+          category: 'ui.action.started',
           message: 'different namespace',
           data: {
             'ui.view': 'namespace',
             'ui.tab': 'workloads',
-            clusterId: 'cluster-a',
-            namespace: 'inventory',
+            'cluster.alias': 'cluster-1',
+            'namespace.alias': 'namespace-2',
           },
         },
         {
@@ -571,7 +700,7 @@ describe('Sentry error reporting', () => {
             id: 'broker-read-2',
             'ui.view': 'namespace',
             'ui.tab': 'workloads',
-            clusterId: 'cluster-a',
+            'cluster.alias': 'cluster-1',
           },
         },
         {
@@ -581,7 +710,7 @@ describe('Sentry error reporting', () => {
             id: 'broker-read-1',
             'ui.view': 'namespace',
             'ui.tab': 'workloads',
-            clusterId: 'cluster-a',
+            'cluster.alias': 'cluster-1',
           },
         },
       ],

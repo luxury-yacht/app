@@ -529,6 +529,17 @@ describe('appPreferences', () => {
     expect(getDefaultObjectPanelPosition()).toBe('bottom');
   });
 
+  it('defaults error reporting on when the backend schema omits the preference', async () => {
+    appMocks.GetAppSettingsSchema.mockResolvedValue({
+      anonymizedId: '123e4567-e89b-42d3-a456-426614174000',
+      preferences: [],
+    });
+
+    await hydrateAppPreferences({ force: true });
+
+    expect(getErrorReportingEnabled()).toBe(true);
+  });
+
   it('hydrates anonymizedId from legacy settings fallback', async () => {
     appMocks.GetAppSettings.mockResolvedValue({
       anonymizedId: '123e4567-e89b-42d3-a456-426614174000',

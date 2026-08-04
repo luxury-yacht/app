@@ -103,7 +103,7 @@ func TestControlledReporterStartsDisabledAndStopsWithoutFlushing(t *testing.T) {
 	require.False(t, transport.flushed)
 }
 
-func TestReporterCapturesOriginalMessageAndContext(t *testing.T) {
+func TestReporterCapturesDiagnosticMessageAndAliasedContext(t *testing.T) {
 	transport := &recordingTransport{}
 	reporter, err := New(Config{
 		DSN:         "https://public@example.com/1",
@@ -124,7 +124,8 @@ func TestReporterCapturesOriginalMessageAndContext(t *testing.T) {
 	require.Equal(t, "production", event.Environment)
 	require.Equal(t, "luxury-yacht@v1.2.3", event.Release)
 	require.Equal(t, "Refresh", event.Tags["source"])
-	require.Equal(t, "cluster-a", event.Tags["clusterId"])
+	require.Equal(t, "cluster-1", event.Tags["cluster.alias"])
+	require.NotContains(t, event.Tags, "clusterId")
 	require.Contains(t, event.Tags["operation.id"], "backend-report-")
 	require.Len(t, event.Tags, 3)
 	require.Empty(t, event.Fingerprint)
@@ -132,7 +133,7 @@ func TestReporterCapturesOriginalMessageAndContext(t *testing.T) {
 	// Sentry renders an issue's title as "<type>: <value>", and sentry-go fills
 	// the type from the Go type name, so this string is read by anyone triaging.
 	require.Equal(t, "sentryreporting.LoggedError", event.Exception[0].Type)
-	require.Equal(t, "refresh subsystem failed for cluster-a", event.Exception[0].Value)
+	require.Equal(t, "refresh subsystem failed for cluster-1", event.Exception[0].Value)
 	require.NotNil(t, event.Exception[0].Stacktrace)
 	require.NotEmpty(t, event.Exception[0].Stacktrace.Frames)
 }
@@ -273,7 +274,7 @@ func TestReporterDisablesTelemetryBufferSoOptOutDiscardsBufferedEvents(t *testin
 	require.True(t, options.DisableTelemetryBuffer)
 }
 
-func TestReporterUsesSentryDataCollectionDefaults(t *testing.T) {
+func TestReporterDisablesSensitiveSDKDataCollection(t *testing.T) {
 	transport := &recordingTransport{}
 	_, err := New(Config{
 		DSN:       "https://public@example.com/1",
@@ -286,16 +287,14 @@ func TestReporterUsesSentryDataCollectionDefaults(t *testing.T) {
 	transport.mu.Unlock()
 
 	require.NotNil(t, options.DataCollection)
-	require.True(t, options.DataCollection.UserInfo.Value)
-	require.Equal(t, sentry.CollectionDenyList, options.DataCollection.Cookies.Mode)
-	require.Equal(t, sentry.CollectionDenyList, options.DataCollection.HTTPHeaders.Request.Mode)
-	require.Equal(t, sentry.CollectionDenyList, options.DataCollection.HTTPHeaders.Response.Mode)
-	require.Equal(t, sentry.CollectionDenyList, options.DataCollection.QueryParams.Mode)
-	require.ElementsMatch(t, []sentry.BodyType{
-		sentry.BodyIncomingRequest,
-		sentry.BodyOutgoingRequest,
-		sentry.BodyIncomingResponse,
-	}, options.DataCollection.HTTPBodies)
+	require.False(t, options.DataCollection.UserInfo.Value)
+	require.Equal(t, sentry.CollectionOff, options.DataCollection.Cookies.Mode)
+	require.Equal(t, sentry.CollectionOff, options.DataCollection.HTTPHeaders.Request.Mode)
+	require.Equal(t, sentry.CollectionOff, options.DataCollection.HTTPHeaders.Response.Mode)
+	require.Equal(t, sentry.CollectionOff, options.DataCollection.QueryParams.Mode)
+	require.Empty(t, options.DataCollection.HTTPBodies)
+	require.Equal(t, "luxury-yacht-desktop", options.ServerName,
+		"metrics must not fall back to the machine hostname")
 }
 
 func TestReporterCapturesExceptions(t *testing.T) {
@@ -316,10 +315,11 @@ func TestReporterCapturesExceptions(t *testing.T) {
 	event := transport.lastEvent()
 	require.NotNil(t, event)
 	require.NotEmpty(t, event.Exception)
-	require.Equal(t, "wails failed for cluster-a", event.Exception[0].Value)
+	require.Equal(t, "wails failed for cluster-1", event.Exception[0].Value)
 	require.Equal(t, "Wails", event.Tags["source"])
-	require.Equal(t, "cluster-a", event.Tags["clusterId"])
-	require.Equal(t, "Production", event.Tags["clusterName"])
+	require.Equal(t, "cluster-1", event.Tags["cluster.alias"])
+	require.NotContains(t, event.Tags, "clusterId")
+	require.NotContains(t, event.Tags, "clusterName")
 	require.Equal(t, "start Wails application", event.Contexts["error"]["operation"])
 	require.Contains(t, event.Contexts["error"]["operationId"], "backend-report-")
 }
@@ -354,8 +354,9 @@ func TestReporterAttachesBreadcrumbsToFollowingException(t *testing.T) {
 	require.Equal(t, "Refresh", event.Breadcrumbs[0].Category)
 	require.Equal(t, "refresh started", event.Breadcrumbs[0].Message)
 	require.Equal(t, sentry.LevelInfo, event.Breadcrumbs[0].Level)
-	require.Equal(t, "cluster-a", event.Breadcrumbs[0].Data["clusterId"])
-	require.Equal(t, "Production", event.Breadcrumbs[0].Data["clusterName"])
+	require.Equal(t, "cluster-1", event.Breadcrumbs[0].Data["cluster.alias"])
+	require.NotContains(t, event.Breadcrumbs[0].Data, "clusterId")
+	require.NotContains(t, event.Breadcrumbs[0].Data, "clusterName")
 }
 
 func TestReporterKeepsBreadcrumbsIsolatedByCluster(t *testing.T) {
@@ -387,7 +388,7 @@ func TestReporterKeepsBreadcrumbsIsolatedByCluster(t *testing.T) {
 	require.NotNil(t, event)
 	require.Len(t, event.Breadcrumbs, 2)
 	require.Equal(t, "global action", event.Breadcrumbs[0].Message)
-	require.Equal(t, "cluster-a action", event.Breadcrumbs[1].Message)
+	require.Equal(t, "cluster-1 action", event.Breadcrumbs[1].Message)
 }
 
 func TestReporterAutoCorrelatesErrorsWithoutAttachingUnscopedBreadcrumbs(t *testing.T) {
@@ -478,7 +479,7 @@ func TestReporterAddsKubernetesFieldCausesToContext(t *testing.T) {
 	require.NoError(t, err)
 	statusErr := apierrors.NewInvalid(
 		schema.GroupKind{Group: "apps", Kind: "Deployment"},
-		"web",
+		"private-workload-7",
 		field.ErrorList{field.Invalid(field.NewPath("spec", "replicas"), -1, "must be non-negative")},
 	)
 
@@ -489,11 +490,14 @@ func TestReporterAddsKubernetesFieldCausesToContext(t *testing.T) {
 	kubernetesContext := event.Contexts["kubernetes"]
 	require.Equal(t, "Invalid", kubernetesContext["reason"])
 	require.Equal(t, int32(422), kubernetesContext["code"])
+	require.Equal(t, "apps", kubernetesContext["group"])
+	require.Equal(t, "Deployment", kubernetesContext["kind"])
 	causes, ok := kubernetesContext["causes"].([]map[string]any)
 	require.True(t, ok)
 	require.Len(t, causes, 1)
 	require.Equal(t, "spec.replicas", causes[0]["field"])
 	require.Contains(t, causes[0]["message"], "must be non-negative")
+	require.NotContains(t, event.Exception[0].Value, "private-workload-7")
 }
 
 func TestReporterCapturesRecoveredPanics(t *testing.T) {
@@ -559,6 +563,7 @@ func TestReporterCapturesAndFlushesCountMetric(t *testing.T) {
 	require.NotContains(t, metric.Attributes, "anonymizedId")
 	require.Equal(t, "production", metric.Attributes["sentry.environment"].AsString())
 	require.Equal(t, "luxury-yacht@v1.2.3", metric.Attributes["sentry.release"].AsString())
+	require.Equal(t, "luxury-yacht-desktop", metric.Attributes["sentry.server.address"].AsString())
 }
 
 func TestDisabledReporterDoesNotCaptureCountMetric(t *testing.T) {

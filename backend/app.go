@@ -123,7 +123,7 @@ type App struct {
 	// settingsMu guards appSettings access in runtime watcher/selection/settings flows.
 	settingsMu sync.Mutex
 	// installationTelemetryMu serializes the installation-registration metric and its durable
-	// acknowledgement so startup and a live opt-in cannot send it concurrently.
+	// acknowledgement so startup and a live preference change cannot send it concurrently.
 	installationTelemetryMu sync.Mutex
 	// attentionRulesMu serializes persisted Attention mutations with their live
 	// index updates so cluster-scoped and global rules cannot be applied out of

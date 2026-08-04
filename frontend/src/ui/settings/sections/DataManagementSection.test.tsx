@@ -81,7 +81,7 @@ describe('DataManagementSection', () => {
     expect(container.textContent).toContain('Import Favorites');
     expect(container.textContent).toContain('Error Reporting');
     expect(container.textContent).toContain(
-      'Sends anonymous installation and app-launch counts, errors, release health, and diagnostic data to Sentry that I use to improve the app. A random installation ID is stored on this device and sent as the Sentry user ID. Reports may also include cluster and resource names, request details, device information, and IP addresses. Toggle it off if you do not wish to participate.'
+      'Error reporting is enabled by default. It sends pseudonymous installation and app-launch counts, errors, release health, and privacy-filtered diagnostics to Sentry. A random installation ID links frontend reports from this device; Factory Reset replaces it. Reports keep app version, operating system, error types, stack traces, safe operation details, and Kubernetes reason/status/field data. Infrastructure names are replaced with short aliases or removed. URLs, IP addresses, account details, headers, cookies, request bodies, query strings, local paths, and automatic click/console/network breadcrumbs are excluded. Turning this off stops future reports but does not delete reports already stored.'
     );
   });
 

@@ -155,8 +155,9 @@ func TestLoggerSentryReportIncludesOriginalMessageAndCluster(t *testing.T) {
 	captureLoggerFailureFromObjectCatalog(logger)
 
 	require.NotNil(t, transport.event)
-	require.Equal(t, "object catalog failed for private-cluster", transport.event.Exception[0].Value)
-	require.Equal(t, "private-cluster", transport.event.Tags["clusterId"])
+	require.Equal(t, "object catalog failed for cluster-1", transport.event.Exception[0].Value)
+	require.Equal(t, "cluster-1", transport.event.Tags["cluster.alias"])
+	require.NotContains(t, transport.event.Tags, "clusterId")
 	require.Empty(t, transport.event.Fingerprint)
 }
 
@@ -178,9 +179,12 @@ func TestLoggerAddsApplicationTrailAsBreadcrumbsBeforeStructuredError(t *testing
 	require.Equal(t, "Refresh", transport.event.Breadcrumbs[0].Category)
 	require.Equal(t, "refresh started", transport.event.Breadcrumbs[0].Message)
 	require.Equal(t, sentry.LevelInfo, transport.event.Breadcrumbs[0].Level)
-	require.Equal(t, "cluster-a", transport.event.Breadcrumbs[0].Data["clusterId"])
-	require.Equal(t, "Production", transport.event.Breadcrumbs[0].Data["clusterName"])
+	require.Equal(t, "cluster-1", transport.event.Breadcrumbs[0].Data["cluster.alias"])
+	require.Equal(t, "backend-op-1", transport.event.Breadcrumbs[0].Data["operationId"])
+	require.NotContains(t, transport.event.Breadcrumbs[0].Data, "clusterId")
+	require.NotContains(t, transport.event.Breadcrumbs[0].Data, "clusterName")
 	require.Equal(t, sentry.LevelWarning, transport.event.Breadcrumbs[1].Level)
+	require.Equal(t, "Failed to get deployment [resource]", transport.event.Contexts["error"]["operation"])
 }
 
 func TestLoggerForwardsOperationIdentityToBreadcrumbsAndError(t *testing.T) {
@@ -314,7 +318,8 @@ func TestScopedLoggerSentryReportPointsAtTheCodeThatLogged(t *testing.T) {
 	innermost := stacktrace.Frames[len(stacktrace.Frames)-1]
 	require.Equal(t, "captureScopedFailureFromCapabilities", innermost.Function)
 	require.Equal(t, "capability check failed", transport.event.Exception[0].Value)
-	require.Equal(t, "cluster-a", transport.event.Tags["clusterId"])
+	require.Equal(t, "cluster-1", transport.event.Tags["cluster.alias"])
+	require.NotContains(t, transport.event.Tags, "clusterId")
 }
 
 // ErrorCapture republishes third-party stderr — klog lines from client-go and

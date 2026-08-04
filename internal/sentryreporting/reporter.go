@@ -111,10 +111,25 @@ func newSentryHub(config Config) (*sentry.Hub, error) {
 		Dsn:         config.DSN,
 		Environment: config.Environment,
 		Release:     config.Release,
-		// An empty DataCollection opts into the SDK's own defaults rather than
-		// disabling collection; see resolveDataCollection in sentry-go.
-		DataCollection: &sentry.DataCollection{},
-		BeforeSend:     trimReportingFrames,
+		// The SDK's defaults collect user information, headers, cookies, query
+		// parameters, and HTTP bodies. Luxury Yacht never needs those to
+		// diagnose a desktop application failure, so each category is explicitly
+		// disabled rather than relying on a denylist.
+		DataCollection: &sentry.DataCollection{
+			UserInfo:   sentry.Set(false),
+			Cookies:    &sentry.KeyValueCollectionBehavior{Mode: sentry.CollectionOff},
+			HTTPBodies: []sentry.BodyType{},
+			HTTPHeaders: &sentry.HeaderCollectionConfig{
+				Request:  &sentry.KeyValueCollectionBehavior{Mode: sentry.CollectionOff},
+				Response: &sentry.KeyValueCollectionBehavior{Mode: sentry.CollectionOff},
+			},
+			QueryParams: &sentry.KeyValueCollectionBehavior{Mode: sentry.CollectionOff},
+		},
+		// Sentry metrics add a server.address attribute and otherwise fall back
+		// to os.Hostname. A fixed product value prevents the local machine name
+		// from leaving the device while preserving the required SDK attribute.
+		ServerName: "luxury-yacht-desktop",
+		BeforeSend: prepareEventForSend,
 		// The buffered telemetry path makes Client.Close flush before it stops,
 		// which would transmit queued events on opt-out and block the caller
 		// for up to the scheduler timeout. Opting out must simply stop sending.
@@ -264,11 +279,13 @@ func (disabledReporter) AddBreadcrumb(Breadcrumb)        {}
 func (disabledReporter) Shutdown(time.Duration) bool     { return true }
 
 type sentryReporter struct {
-	mu          sync.RWMutex
-	config      Config
-	hub         *sentry.Hub
-	breadcrumbs []Breadcrumb
-	operationID atomic.Uint64
+	mu               sync.RWMutex
+	config           Config
+	hub              *sentry.Hub
+	breadcrumbs      []Breadcrumb
+	clusterAliases   map[string]string
+	nextClusterAlias uint64
+	operationID      atomic.Uint64
 }
 
 const maxReporterBreadcrumbs = 100
@@ -293,6 +310,8 @@ func (r *sentryReporter) SetEnabled(enabled bool) error {
 		}
 		r.hub = hub
 		r.breadcrumbs = nil
+		r.clusterAliases = nil
+		r.nextClusterAlias = 0
 		r.mu.Unlock()
 		return nil
 	}
@@ -300,6 +319,8 @@ func (r *sentryReporter) SetEnabled(enabled bool) error {
 	hub := r.hub
 	r.hub = nil
 	r.breadcrumbs = nil
+	r.clusterAliases = nil
+	r.nextClusterAlias = 0
 	r.mu.Unlock()
 	if hub != nil {
 		// Opting out closes the transport without flushing buffered events.
@@ -344,6 +365,12 @@ func addKubernetesStatusTags(hub *sentry.Hub, err error) {
 			statusContext["code"] = status.Code
 		}
 		if status.Details != nil {
+			if status.Details.Group != "" {
+				statusContext["group"] = status.Details.Group
+			}
+			if status.Details.Kind != "" {
+				statusContext["kind"] = status.Details.Kind
+			}
 			if status.Details.RetryAfterSeconds != 0 {
 				statusContext["retryAfterSeconds"] = status.Details.RetryAfterSeconds
 			}
@@ -424,6 +451,8 @@ func (r *sentryReporter) Shutdown(timeout time.Duration) bool {
 	hub := r.hub
 	r.hub = nil
 	r.breadcrumbs = nil
+	r.clusterAliases = nil
+	r.nextClusterAlias = 0
 	r.mu.Unlock()
 	if hub == nil {
 		return true
@@ -437,6 +466,7 @@ func (r *sentryReporter) withHub(context Context, capture func(*sentry.Hub)) {
 	if context.OperationID == "" {
 		context.OperationID = fmt.Sprintf("backend-report-%d", r.operationID.Add(1))
 	}
+	clusterAlias := r.aliasForCluster(context.ClusterID)
 	r.mu.RLock()
 	defer r.mu.RUnlock()
 	if r.hub == nil {
@@ -455,11 +485,21 @@ func (r *sentryReporter) withHub(context Context, capture func(*sentry.Hub)) {
 		if breadcrumbClusterID != "" && breadcrumbClusterID != context.ClusterID {
 			continue
 		}
+		// Breadcrumb data is closed-by-default. A future caller adding a field
+		// must deliberately extend this schema after a privacy review; arbitrary
+		// maps never become telemetry just because they were logged.
+		data := map[string]any{}
+		if breadcrumb.OperationID != "" {
+			data["operationId"] = breadcrumb.OperationID
+		}
+		if breadcrumbClusterID != "" && clusterAlias != "" {
+			data["cluster.alias"] = clusterAlias
+		}
 		hub.AddBreadcrumb(&sentry.Breadcrumb{
 			Category:  breadcrumb.Category,
 			Message:   breadcrumb.Message,
 			Level:     sentry.Level(breadcrumb.Level),
-			Data:      breadcrumb.Data,
+			Data:      data,
 			Timestamp: breadcrumb.Timestamp,
 		}, nil)
 	}
@@ -467,11 +507,15 @@ func (r *sentryReporter) withHub(context Context, capture func(*sentry.Hub)) {
 		if context.Source != "" {
 			scope.SetTag("source", context.Source)
 		}
-		if context.ClusterID != "" {
-			scope.SetTag("clusterId", context.ClusterID)
-		}
-		if context.ClusterName != "" {
-			scope.SetTag("clusterName", context.ClusterName)
+		if clusterAlias != "" {
+			scope.SetTag("cluster.alias", clusterAlias)
+			// These private tags exist only inside the SDK pipeline. The final
+			// privacy boundary uses them to replace raw identifiers embedded in
+			// error text, then removes them before transport.
+			scope.SetTag("_privacy.cluster_id", context.ClusterID)
+			if context.ClusterName != "" {
+				scope.SetTag("_privacy.cluster_name", context.ClusterName)
+			}
 		}
 		if context.OperationID != "" {
 			scope.SetTag("operation.id", context.OperationID)
@@ -488,4 +532,23 @@ func (r *sentryReporter) withHub(context Context, capture func(*sentry.Hub)) {
 		}
 	})
 	capture(hub)
+}
+
+func (r *sentryReporter) aliasForCluster(clusterID string) string {
+	clusterID = strings.TrimSpace(clusterID)
+	if clusterID == "" {
+		return ""
+	}
+	r.mu.Lock()
+	defer r.mu.Unlock()
+	if alias := r.clusterAliases[clusterID]; alias != "" {
+		return alias
+	}
+	if r.clusterAliases == nil {
+		r.clusterAliases = make(map[string]string)
+	}
+	r.nextClusterAlias++
+	alias := fmt.Sprintf("cluster-%d", r.nextClusterAlias)
+	r.clusterAliases[clusterID] = alias
+	return alias
 }

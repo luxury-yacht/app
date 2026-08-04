@@ -89,6 +89,20 @@ func TestCreatingReplacementAnonymizedIDResetsInstallationMetricAcknowledgement(
 	require.False(t, settings.Telemetry.InstallationMetricReported)
 }
 
+func TestMalformedAnonymizedIDIsReplacedInsteadOfReportedAsUserData(t *testing.T) {
+	settings := defaultSettingsFile()
+	settings.Telemetry.AnonymizedID = "john@example.test"
+	settings.Telemetry.InstallationMetricReported = true
+
+	created, err := ensureAnonymizedID(settings)
+
+	require.NoError(t, err)
+	require.True(t, created)
+	require.Regexp(t, anonymizedIDPattern, settings.Telemetry.AnonymizedID)
+	require.NotEqual(t, "john@example.test", settings.Telemetry.AnonymizedID)
+	require.False(t, settings.Telemetry.InstallationMetricReported)
+}
+
 func TestInitializeErrorReportingEmitsInstallationMetricOnce(t *testing.T) {
 	setTestConfigEnv(t)
 	reporter := newRecordingInstallationReporter(true)
@@ -115,7 +129,7 @@ func TestInitializeErrorReportingEmitsInstallationMetricOnce(t *testing.T) {
 	require.True(t, saved.Telemetry.InstallationMetricReported)
 }
 
-func TestInstallationMetricWaitsForConsent(t *testing.T) {
+func TestInstallationMetricStaysPendingWhileReportingIsDisabled(t *testing.T) {
 	setTestConfigEnv(t)
 	reporter := newRecordingInstallationReporter(true)
 	app := NewApp(reporter)

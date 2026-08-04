@@ -1,19 +1,21 @@
 # Error Reporting
 
 Luxury Yacht uses Sentry Cloud for frontend and backend error reporting in
-packaged builds. Reporting is available only when the corresponding DSN is
-configured, and users can turn both reporters off under **Settings → Data
-Management → Telemetry**. Development builds disable both SDKs even when Sentry
-environment variables are present.
+packaged builds. Reporting defaults **on**, but starts only after the persisted
+preference has loaded and the corresponding DSN is configured. Users can turn
+both reporters off under **Settings → Data Management → Telemetry**. Development
+builds disable both SDKs even when Sentry environment variables are present.
 
 ## Runtime Behavior
 
-The integration uses Sentry's native event processing and default integrations:
+The integration keeps Sentry's exception processing while replacing its broad
+data-collection defaults with an application-owned privacy boundary:
 
 - `frontend/src/core/telemetry/sentry.ts` initializes `@sentry/react` after the
-  persisted preference has loaded. React 19 root handlers and Sentry's default
-  browser integrations capture frontend failures. The default browser-session
-  integration also sends release-health sessions while reporting is enabled.
+  persisted preference has loaded. React 19 root handlers capture frontend failures.
+  A page-lifecycle browser-session integration sends release-health sessions
+  while reporting is enabled. The SDK's automatic DOM, console, fetch, XHR,
+  history, culture, and default session breadcrumbs/contexts are disabled.
 - `frontend/src/utils/errorHandler.ts` is the presentation boundary for handled
   operational failures. `handle` reports before publishing a global error
   notification; `handleInline` reports without adding a duplicate toast for
@@ -36,28 +38,30 @@ The integration uses Sentry's native event processing and default integrations:
   requires the original exception to cross one of these shared boundaries.
   Event-bus subscriber exceptions use an installed reporter on the bus, so the
   bus stays cycle-free while still crossing the same telemetry boundary.
-- The navigation owner publishes the active view, tab, cluster, and object-panel
-  state, while the namespace owner publishes the selected namespace. These are
-  attached to user-visible error events and to browser breadcrumbs. Data and
+- The navigation owner publishes the active view, tab, aliased cluster, and
+  object-panel state, while the namespace owner publishes an aliased selected
+  namespace. These are attached to user-visible error events and app-owned
+  breadcrumbs. Data and
   app-state broker reads carry one `broker-read-N` identifier from request start
   through completion; a displayed error caused by that request reuses the same
   identifier as its operation id. Other handled failures receive a unique
   `ui-error-N` operation id and retain the allowlisted user action, source,
-  cluster id, and namespace. User-initiated async work that is not a broker
+  cluster alias, and namespace alias. User-initiated async work that is not a broker
   read runs through `runUserAction`; the wrapper gives each invocation a
   `user-action-N` id and binds a rejected `Error` to that exact invocation.
-- While exactly one broker request is active, automatic browser breadcrumbs are
-  labeled with its request id. Ambiguous automatic breadcrumbs during
-  concurrent requests are excluded. Before a frontend event is sent,
-  breadcrumbs from other
-  request ids and breadcrumbs labeled with a different view, tab, cluster, or
-  namespace are removed. A handled failure without a broker request keeps only
+- Breadcrumbs are emitted by the navigation, broker-request, `runUserAction`,
+  error-presentation, and error-handler boundaries. Feature components do not
+  call Sentry directly. While exactly one broker request is active, those
+  app-owned breadcrumbs receive its request id. Before a frontend event is
+  sent, breadcrumbs from other request ids and breadcrumbs labeled with a
+  different view, tab, cluster alias, or namespace alias are removed. A handled
+  failure without a broker request keeps only
   breadcrumbs carrying its exact operation id. Wrapped user actions therefore
   retain their own start/failure trail even when another action overlaps; an
   unwrapped failure keeps only its own presentation breadcrumb instead of
-  guessing from the most recent click. Breadcrumb data never includes the raw
-  error message, and arbitrary caller context is not copied into the Sentry
-  event.
+  guessing from the most recent click. Every breadcrumb category has a closed
+  field allowlist; labels, request scopes, raw error messages, and arbitrary
+  caller context are not copied into the Sentry event.
 - Background handled failures keep only their own `ui.error.handled`
   breadcrumb, matched by operation id. They do not inherit the last unrelated
   browser activity merely because it happened in the same workspace.
@@ -85,10 +89,13 @@ The integration uses Sentry's native event processing and default integrations:
   refresh snapshot requests reuse `X-Correlation-ID`, including the frontend
   broker's `broker-read-N` id. Queued manual-refresh jobs retain that identity
   after the HTTP request finishes. Only breadcrumbs matching the event's exact
-  operation id and cluster are attached. Errors without an explicit operation
+  operation id and raw cluster are selected internally, then identifiers are
+  replaced before transport. Errors without an explicit operation
   are assigned a `backend-report-N` id and receive no unscoped breadcrumbs, so
-  same-cluster background activity cannot become a false trail. The event scope
-  includes source, `clusterId`, cluster name, human operation, and operation id.
+  same-cluster background activity cannot become a false trail. The transported
+  event scope includes source, `cluster.alias`, sanitized human operation, and
+  operation id. Backend breadcrumb data is limited to operation id and cluster
+  alias.
 - `backend/internal/applog.ReportError` and
   `resources/common.Dependencies.LogRequestFailure` preserve typed errors across
   package and cluster-scoped logger boundaries. Loggers that do not implement
@@ -103,22 +110,24 @@ The integration uses Sentry's native event processing and default integrations:
   backend reporter only after the setting write succeeds.
 - `frontend/vite.config.ts` owns release identity and frontend source-map upload.
 
-Neither reporter uses an event allowlist, message replacement, or custom
-fingerprint. Backend exceptions that implement Kubernetes `APIStatus` add
+Neither reporter uses a custom fingerprint. Backend exceptions that implement
+Kubernetes `APIStatus` add
 `k8s.reason` and `http.status_code` tags, including when that status error is
 wrapped. A `kubernetes` context also carries the status, reason, code, retry
-delay, and field-level causes when present; object names and request payloads
-are not copied into that context. Sentry otherwise receives the original error
-message, exception type, stack trace, breadcrumbs, SDK contexts, and other data
-gathered by its default integrations.
+delay, API group/kind, and field-level causes when present; object names and
+request payloads are not copied into that context. Exception types, useful
+stack frames, release/environment, OS/runtime context, safe operation identity,
+Kubernetes reason/status/field details, and the pseudonymous frontend
+installation ID remain available for diagnosis.
 
-The backend defines one `beforeSend` hook, and it only removes stack frames
-belonging to the reporting machinery itself — `sentryReporter`'s capture
+The backend defines one `beforeSend` privacy boundary. It removes user/request
+data and hostnames, clears captured runtime variables, sanitizes free-form text,
+replaces cluster identifiers, and removes stack frames belonging to the
+reporting machinery itself — `sentryReporter`'s capture
 methods, `applog`, the application `Logger`, and any package's one-line
 `logError` wrapper. Sentry derives an issue's culprit and grouping key from the
 innermost frame, so without the trim every backend `ERROR` groups under the
-reporter or under a logging helper instead of the code that failed. The hook
-changes nothing else about an event.
+reporter or under a logging helper instead of the code that failed.
 
 Log forwarders — functions whose only job is handing a message to the
 application logger — are a **maintained list** in `reporter.go` (`logForwarders`).
@@ -134,18 +143,34 @@ marks everything outside GOROOT as in-app — Wails, client-go, and every other
 dependency in the module cache. Left alone, that ties the grouping key to
 dependency internals, so upgrading a dependency would re-group unrelated issues.
 
-Both SDKs opt into their current `dataCollection` defaults with an empty
-configuration object. These defaults collect rich debugging context and use
-Sentry's built-in sensitive-key denylist; Luxury Yacht does not add another
-redaction layer. See Sentry's current
+Both SDKs explicitly disable automatic user info, headers, cookies, request and
+response bodies, URL query parameters, GraphQL variables/documents, generative
+AI input/output, database query data, and stack-frame variables. The frontend
+retains five source-context lines around stack frames; the final scrubber also
+sanitizes those lines. See Sentry's current
 [React data-collection options](https://docs.sentry.io/platforms/javascript/guides/react/configuration/options/#dataCollection)
 and [Go data-collection options](https://docs.sentry.io/platforms/go/configuration/options/#DataCollection).
 
-Reports are not anonymous. Depending on the failure and SDK context, data can
-include cluster IDs, cluster and Kubernetes object names, namespaces, URLs,
-request headers or bodies, query parameters, local paths, breadcrumbs, device
-and runtime details, user information, and IP addresses. Do not attach secrets
-to errors or Sentry scope data.
+Reports are pseudonymous, not anonymous. A random `anonymizedId` stored in the
+local settings file is the frontend Sentry user ID, allowing events and release
+sessions from one installation to be counted together without an account
+identity. Factory Reset removes that ID; the next launch creates a replacement.
+Turning reporting off stops future transmission but does not delete events
+already stored in Sentry.
+
+The final frontend and backend scrubbers remove requests, IP addresses,
+hostnames, usernames, email addresses, URLs, common credentials, local home
+paths, raw cluster/namespace identifiers, runtime variable values, and
+unreviewed breadcrumb fields. Infrastructure identifiers become process-local
+`cluster-N` and `namespace-N` aliases where correlation is useful. These
+defenses apply even if a future SDK version populates a field that automatic
+collection was configured not to gather.
+
+Only `frontend/src/core/telemetry/sentry.ts` and
+`internal/sentryreporting` may import Sentry SDKs. Biome and Go architecture
+tests enforce those boundaries. New UI work should use `errorHandler`,
+`ErrorSurface`, `runUserAction`, and the data-access request wrapper; those
+owners create reporting context and breadcrumbs automatically.
 
 ## Cancellation Is Not a Failure
 

@@ -40,6 +40,9 @@ interface CompletedBrokerRequestContext extends BrokerRequestContext {
   durationMs: number;
 }
 
+type PrivacyBrokerRequestContext = Omit<BrokerRequestContext, 'label' | 'scope'> &
+  Partial<Pick<CompletedBrokerRequestContext, 'status' | 'durationMs'>>;
+
 interface PendingBootstrapError {
   error: unknown;
   action: string;
@@ -64,8 +67,240 @@ let userActionByError = new WeakMap<object, UserActionContext>();
 let bootstrapPreferenceResolved = false;
 let bootstrapErrorSequence = 0;
 let pendingBootstrapErrors: PendingBootstrapError[] = [];
+let clusterAliasSequence = 0;
+let namespaceAliasSequence = 0;
+let clusterAliases = new Map<string, string>();
+let namespaceAliases = new Map<string, string>();
 
 const maxPendingBootstrapErrors = 10;
+
+const privacyDataCollection = {
+  userInfo: false,
+  cookies: false,
+  httpHeaders: { request: false, response: false },
+  httpBodies: [],
+  urlQueryParams: false,
+  graphQL: { document: false, variables: false },
+  genAI: { inputs: false, outputs: false },
+  databaseQueryData: false,
+  stackFrameVariables: false,
+  frameContextLines: 5,
+};
+
+const allowedBreadcrumbFields: Record<string, ReadonlySet<string>> = {
+  'navigation.workspace': new Set([
+    'view',
+    'tab',
+    'cluster.alias',
+    'namespace.alias',
+    'objectPanelOpen',
+  ]),
+  'navigation.namespace': new Set([
+    'view',
+    'tab',
+    'cluster.alias',
+    'namespace.alias',
+    'objectPanelOpen',
+  ]),
+  'request.broker': new Set([
+    'id',
+    'broker',
+    'resource',
+    'adapter',
+    'reason',
+    'status',
+    'durationMs',
+    'request.ids',
+    'ui.view',
+    'ui.tab',
+    'cluster.alias',
+    'namespace.alias',
+  ]),
+  'ui.action.started': new Set([
+    'operationId',
+    'action',
+    'request.ids',
+    'ui.view',
+    'ui.tab',
+    'cluster.alias',
+    'namespace.alias',
+  ]),
+  'ui.action.completed': new Set([
+    'operationId',
+    'action',
+    'request.ids',
+    'ui.view',
+    'ui.tab',
+    'cluster.alias',
+    'namespace.alias',
+  ]),
+  'ui.action.failed': new Set([
+    'operationId',
+    'action',
+    'request.ids',
+    'ui.view',
+    'ui.tab',
+    'cluster.alias',
+    'namespace.alias',
+  ]),
+  'ui.error.presented': new Set([
+    'operationId',
+    'action',
+    'requestId',
+    'request.ids',
+    'ui.view',
+    'ui.tab',
+    'cluster.alias',
+    'namespace.alias',
+  ]),
+  'ui.error.handled': new Set([
+    'operationId',
+    'action',
+    'requestId',
+    'request.ids',
+    'ui.view',
+    'ui.tab',
+    'cluster.alias',
+    'namespace.alias',
+  ]),
+};
+
+const privateTelemetryKeys = new Set([
+  'authorization',
+  'body',
+  'clusterid',
+  'clustername',
+  'cookie',
+  'cookies',
+  'credential',
+  'headers',
+  'hostname',
+  'namespace',
+  'password',
+  'query',
+  'querystring',
+  'requestbody',
+  'resourcename',
+  'secret',
+  'servername',
+  'token',
+  'username',
+  'vars',
+]);
+
+const normalizeTelemetryKey = (key: string): string => key.toLowerCase().replace(/[_\-.]/gu, '');
+
+const isPrivateTelemetryKey = (key: string): boolean =>
+  privateTelemetryKeys.has(normalizeTelemetryKey(key));
+
+const aliasForCluster = (clusterId?: string): string | undefined => {
+  const normalized = normalizeOptionalString(clusterId);
+  if (!normalized) {
+    return undefined;
+  }
+  const existing = clusterAliases.get(normalized);
+  if (existing) {
+    return existing;
+  }
+  clusterAliasSequence += 1;
+  const alias = `cluster-${clusterAliasSequence}`;
+  clusterAliases.set(normalized, alias);
+  return alias;
+};
+
+const aliasForNamespace = (namespace?: string): string | undefined => {
+  const normalized = normalizeOptionalString(namespace);
+  if (!normalized) {
+    return undefined;
+  }
+  const existing = namespaceAliases.get(normalized);
+  if (existing) {
+    return existing;
+  }
+  namespaceAliasSequence += 1;
+  const alias = `namespace-${namespaceAliasSequence}`;
+  namespaceAliases.set(normalized, alias);
+  return alias;
+};
+
+const replaceKnownIdentifiers = (value: string): string => {
+  const replacements = [...clusterAliases.entries(), ...namespaceAliases.entries()].sort(
+    ([left], [right]) => right.length - left.length
+  );
+  return replacements.reduce(
+    (sanitized, [privateValue, alias]) => sanitized.split(privateValue).join(alias),
+    value
+  );
+};
+
+const sanitizeTelemetryText = (rawValue: string): string => {
+  let value = replaceKnownIdentifiers(rawValue);
+  value = value.replace(/\b(?:https?|wss?):\/\/[^\s"'<>]+/giu, '[url]');
+  value = value.replace(/\b[A-Z0-9._%+-]+@[A-Z0-9.-]+\.[A-Z]{2,}\b/giu, '[email]');
+  value = value.replace(
+    /\b(?:25[0-5]|2[0-4][0-9]|1?[0-9]{1,2})(?:\.(?:25[0-5]|2[0-4][0-9]|1?[0-9]{1,2})){3}\b/gu,
+    '[ip]'
+  );
+  value = value.replace(/(?:\b[0-9a-f]{1,4}(?::[0-9a-f]{0,4}){2,7}\b|\b::1\b)/giu, '[ip]');
+  value = value.replace(
+    /\b(cluster|namespace|pod|deployment|statefulset|daemonset|service|secret|configmap|job|cronjob|node)s?(?:\.[a-z0-9.-]+)?\s+["'][^"']+["']/giu,
+    '$1 "[resource]"'
+  );
+  value = value.replace(
+    /\b(cluster|namespace|pod|deployment|statefulset|daemonset|service|secret|configmap|job|cronjob|node)s?(?:\.[a-z0-9.-]+)?\s+(?:[a-z0-9][a-z0-9._-]*\/)?[a-z0-9][a-z0-9._-]*\b/giu,
+    '$1 [resource]'
+  );
+  value = value.replace(
+    /\b(?:[a-z0-9](?:[a-z0-9-]{0,62})\.)+(?:com|net|org|io|dev|cloud|local|internal|test|cluster|lan)\b/giu,
+    '[host]'
+  );
+  value = value.replace(/(?:\/Users|\/home)\/[^\s"'<>]+/gu, '[local-path]');
+  value = value.replace(/[A-Z]:\\Users\\[^\s"'<>]+/giu, '[local-path]');
+  value = value.replace(
+    /\b(authorization|access[_-]?key|api[_-]?key|cookie|credential|password|passwd|secret|session|token)\b\s*(?::=|=|:)\s*(?:bearer\s+)?["']?[^\s"',;]+["']?/giu,
+    '$1=[redacted]'
+  );
+  value = value.replace(/\bbearer\s+[^\s"',;]+/giu, '[redacted]');
+  return value;
+};
+
+const sanitizeTelemetryValue = (value: unknown, key = ''): unknown => {
+  if (isPrivateTelemetryKey(key)) {
+    return key === 'vars' ? undefined : '[redacted]';
+  }
+  if (typeof value === 'string') {
+    return sanitizeTelemetryText(value);
+  }
+  if (Array.isArray(value)) {
+    return value.map((item) => sanitizeTelemetryValue(item));
+  }
+  if (!value || typeof value !== 'object') {
+    return value;
+  }
+  return Object.fromEntries(
+    Object.entries(value)
+      .map(([childKey, childValue]) => [childKey, sanitizeTelemetryValue(childValue, childKey)])
+      .filter(([, childValue]) => childValue !== undefined)
+  );
+};
+
+const allowlistedBreadcrumb = (breadcrumb: Breadcrumb): Breadcrumb | null => {
+  const category = breadcrumb.category;
+  const allowedFields = category ? allowedBreadcrumbFields[category] : undefined;
+  if (!allowedFields || !category) {
+    return null;
+  }
+  const data = Object.fromEntries(
+    Object.entries(breadcrumb.data ?? {})
+      .filter(([key]) => allowedFields.has(key))
+      .map(([key, value]) => [key, sanitizeTelemetryValue(value, key)])
+  );
+  return {
+    ...breadcrumb,
+    message: sanitizeTelemetryText(breadcrumb.message ?? ''),
+    data,
+  };
+};
 
 const contextString = (
   context: Record<string, unknown> | undefined,
@@ -84,6 +319,26 @@ const normalizeOptionalString = (value?: string): string | undefined => {
   return trimmed || undefined;
 };
 
+const normalizeAnonymizedId = (value?: string): string | undefined => {
+  const normalized = normalizeOptionalString(value)?.toLowerCase();
+  return normalized &&
+    /^[0-9a-f]{8}-[0-9a-f]{4}-4[0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/u.test(normalized)
+    ? normalized
+    : undefined;
+};
+
+const privacyBrokerRequestContext = (
+  request: BrokerRequestContext | CompletedBrokerRequestContext
+): PrivacyBrokerRequestContext => ({
+  id: request.id,
+  broker: request.broker,
+  resource: request.resource,
+  adapter: request.adapter,
+  ...(request.reason ? { reason: request.reason } : {}),
+  ...('status' in request ? { status: request.status } : {}),
+  ...('durationMs' in request ? { durationMs: request.durationMs } : {}),
+});
+
 const getActiveNavigationContext = (): (ActiveViewContext & { namespace?: string }) | null => {
   if (!activeViewContext) {
     return null;
@@ -96,40 +351,60 @@ const getActiveNavigationContext = (): (ActiveViewContext & { namespace?: string
   };
 };
 
-const applyActiveViewContext = (): void => {
+const getPrivacyNavigationContext = (): Record<string, unknown> | null => {
   const navigation = getActiveNavigationContext();
+  if (!navigation) {
+    return null;
+  }
+  return {
+    view: navigation.view,
+    ...(navigation.tab ? { tab: navigation.tab } : {}),
+    ...(aliasForCluster(navigation.clusterId)
+      ? { 'cluster.alias': aliasForCluster(navigation.clusterId) }
+      : {}),
+    ...(aliasForNamespace(navigation.namespace)
+      ? { 'namespace.alias': aliasForNamespace(navigation.namespace) }
+      : {}),
+    objectPanelOpen: navigation.objectPanelOpen,
+  };
+};
+
+const applyActiveViewContext = (): void => {
+  const navigation = getPrivacyNavigationContext();
   if (!reportingInitialized || !navigation) {
     return;
   }
   const scope = Sentry.getIsolationScope();
-  scope.setTag('ui.view', navigation.view);
+  scope.setTag('ui.view', String(navigation.view));
   if (navigation.tab) {
-    scope.setTag('ui.tab', navigation.tab);
+    scope.setTag('ui.tab', String(navigation.tab));
   } else {
     scope.setTag('ui.tab', undefined);
   }
-  if (navigation.clusterId) {
-    scope.setTag('clusterId', navigation.clusterId);
+  if (navigation['cluster.alias']) {
+    scope.setTag('cluster.alias', String(navigation['cluster.alias']));
   } else {
-    scope.setTag('clusterId', undefined);
+    scope.setTag('cluster.alias', undefined);
   }
-  if (navigation.namespace) {
-    scope.setTag('namespace', navigation.namespace);
+  if (navigation['namespace.alias']) {
+    scope.setTag('namespace.alias', String(navigation['namespace.alias']));
   } else {
-    scope.setTag('namespace', undefined);
+    scope.setTag('namespace.alias', undefined);
   }
   scope.setContext('navigation', { ...navigation });
 };
 
 const breadcrumbWorkspaceData = (): Record<string, unknown> => {
-  const navigation = getActiveNavigationContext();
+  const navigation = getPrivacyNavigationContext();
   return {
     ...(navigation
       ? {
           'ui.view': navigation.view,
           ...(navigation.tab ? { 'ui.tab': navigation.tab } : {}),
-          ...(navigation.clusterId ? { clusterId: navigation.clusterId } : {}),
-          ...(navigation.namespace ? { namespace: navigation.namespace } : {}),
+          ...(navigation['cluster.alias'] ? { 'cluster.alias': navigation['cluster.alias'] } : {}),
+          ...(navigation['namespace.alias']
+            ? { 'namespace.alias': navigation['namespace.alias'] }
+            : {}),
         }
       : {}),
     ...(activeBrokerRequestIds.size === 1
@@ -138,13 +413,14 @@ const breadcrumbWorkspaceData = (): Record<string, unknown> => {
   };
 };
 
-const beforeBreadcrumb = (breadcrumb: Breadcrumb): Breadcrumb => ({
-  ...breadcrumb,
-  data: {
-    ...breadcrumb.data,
-    ...breadcrumbWorkspaceData(),
-  },
-});
+const beforeBreadcrumb = (breadcrumb: Breadcrumb): Breadcrumb | null =>
+  allowlistedBreadcrumb({
+    ...breadcrumb,
+    data: {
+      ...breadcrumb.data,
+      ...breadcrumbWorkspaceData(),
+    },
+  });
 
 const recordContext = (value: unknown): Record<string, unknown> =>
   value && typeof value === 'object' ? (value as Record<string, unknown>) : {};
@@ -155,17 +431,17 @@ const beforeSend = (event: ErrorEvent): ErrorEvent => {
   const operation = recordContext(event.contexts?.operation);
   const eventView = typeof navigation.view === 'string' ? navigation.view : undefined;
   const eventTab = typeof navigation.tab === 'string' ? navigation.tab : undefined;
-  const eventClusterId =
-    typeof event.tags?.clusterId === 'string'
-      ? event.tags.clusterId
-      : typeof navigation.clusterId === 'string'
-        ? navigation.clusterId
+  const eventClusterAlias =
+    typeof event.tags?.['cluster.alias'] === 'string'
+      ? event.tags['cluster.alias']
+      : typeof navigation['cluster.alias'] === 'string'
+        ? navigation['cluster.alias']
         : undefined;
-  const eventNamespace =
-    typeof event.tags?.namespace === 'string'
-      ? event.tags.namespace
-      : typeof navigation.namespace === 'string'
-        ? navigation.namespace
+  const eventNamespaceAlias =
+    typeof event.tags?.['namespace.alias'] === 'string'
+      ? event.tags['namespace.alias']
+      : typeof navigation['namespace.alias'] === 'string'
+        ? navigation['namespace.alias']
         : undefined;
   const eventRequestId = typeof request.id === 'string' ? request.id : undefined;
   const eventOperationId = typeof operation.id === 'string' ? operation.id : undefined;
@@ -181,10 +457,14 @@ const beforeSend = (event: ErrorEvent): ErrorEvent => {
     if (eventTab && data['ui.tab'] && data['ui.tab'] !== eventTab) {
       return false;
     }
-    if (eventClusterId && data.clusterId && data.clusterId !== eventClusterId) {
+    if (eventClusterAlias && data['cluster.alias'] && data['cluster.alias'] !== eventClusterAlias) {
       return false;
     }
-    if (eventNamespace && data.namespace && data.namespace !== eventNamespace) {
+    if (
+      eventNamespaceAlias &&
+      data['namespace.alias'] &&
+      data['namespace.alias'] !== eventNamespaceAlias
+    ) {
       return false;
     }
     return true;
@@ -218,9 +498,29 @@ const beforeSend = (event: ErrorEvent): ErrorEvent => {
     );
   }
 
-  return {
+  const privacyBreadcrumbs = breadcrumbs
+    ?.map((breadcrumb) => allowlistedBreadcrumb(breadcrumb))
+    .filter((breadcrumb): breadcrumb is Breadcrumb => breadcrumb !== null);
+  const contexts = Object.fromEntries(
+    Object.entries(event.contexts ?? {})
+      .filter(([key]) => key !== 'culture')
+      .map(([key, value]) => [key, sanitizeTelemetryValue(value, key)])
+  );
+  const userId = normalizeAnonymizedId(
+    typeof event.user?.id === 'string' ? event.user.id : undefined
+  );
+  const sanitized = sanitizeTelemetryValue({
     ...event,
-    breadcrumbs,
+    breadcrumbs: privacyBreadcrumbs,
+    contexts: contexts as ErrorEvent['contexts'],
+  }) as ErrorEvent;
+
+  return {
+    ...sanitized,
+    user: userId ? { id: userId } : undefined,
+    request: undefined,
+    server_name: undefined,
+    contexts: contexts as ErrorEvent['contexts'],
   };
 };
 
@@ -238,17 +538,22 @@ export function initializeErrorReporting(config: SentryRuntimeConfig): boolean {
     return true;
   }
 
-  const anonymizedId = normalizeOptionalString(config.anonymizedId);
+  const anonymizedId = normalizeAnonymizedId(config.anonymizedId);
   const pageSessionIntegration = Sentry.browserSessionIntegration({ lifecycle: 'page' });
 
   Sentry.init({
     dsn,
     environment: config.environment?.trim() || undefined,
     release: config.release?.trim() || undefined,
-    dataCollection: {},
+    dataCollection: privacyDataCollection,
     initialScope: anonymizedId ? { user: { id: anonymizedId } } : undefined,
     integrations: (defaultIntegrations) => [
-      ...defaultIntegrations.filter((integration) => integration.name !== 'BrowserSession'),
+      ...defaultIntegrations.filter(
+        (integration) =>
+          integration.name !== 'Breadcrumbs' &&
+          integration.name !== 'BrowserSession' &&
+          integration.name !== 'CultureContext'
+      ),
       pageSessionIntegration,
     ],
     beforeBreadcrumb,
@@ -300,7 +605,7 @@ const flushBootstrapErrors = (): void => {
 };
 
 // Bootstrap preference reads happen before the SDK may be initialized. Keep a
-// small in-memory queue only until persisted consent is known; opt-out drops it.
+// small in-memory queue only until the persisted preference is known; opt-out drops it.
 export function captureBootstrapError(error: unknown, context: { action: string }): void {
   console.error(`Bootstrap failure (${context.action}):`, error);
   bootstrapErrorSequence += 1;
@@ -323,7 +628,7 @@ export function captureBootstrapError(error: unknown, context: { action: string 
 }
 
 // configureErrorReporting keeps the build configuration separate from the
-// persisted opt-in state. It returns whether reporting is available in this
+// persisted preference. It returns whether reporting is available in this
 // build so React root handlers can remain installed across live preference
 // changes without sending anything while the SDK is disabled.
 export function configureErrorReporting(
@@ -382,6 +687,10 @@ export function resetErrorReportingForTesting(): void {
   bootstrapPreferenceResolved = false;
   bootstrapErrorSequence = 0;
   pendingBootstrapErrors = [];
+  clusterAliasSequence = 0;
+  namespaceAliasSequence = 0;
+  clusterAliases = new Map<string, string>();
+  namespaceAliases = new Map<string, string>();
   eventBus.setHandlerErrorReporter(null);
 }
 
@@ -414,7 +723,11 @@ export function setActiveViewContext(context: ActiveViewContext): void {
   }
 
   applyActiveViewContext();
-  const navigation = getActiveNavigationContext() ?? next;
+  const navigation = getPrivacyNavigationContext() ?? {
+    view: next.view,
+    ...(next.tab ? { tab: next.tab } : {}),
+    objectPanelOpen: next.objectPanelOpen,
+  };
   Sentry.addBreadcrumb({
     type: 'navigation',
     category: 'navigation.workspace',
@@ -435,12 +748,13 @@ export function setActiveNamespaceContext(namespace?: string): void {
   }
 
   applyActiveViewContext();
-  const navigation = getActiveNavigationContext();
+  const navigation = getPrivacyNavigationContext();
+  const namespaceAlias = aliasForNamespace(next);
   Sentry.addBreadcrumb({
     type: 'navigation',
     category: 'navigation.namespace',
     level: 'info',
-    message: next ? `Selected namespace ${next}` : 'Cleared namespace selection',
+    message: namespaceAlias ? `Selected ${namespaceAlias}` : 'Cleared namespace selection',
     ...(navigation ? { data: navigation } : {}),
   });
 }
@@ -458,7 +772,7 @@ export function recordBrokerRequestStarted(request: BrokerRequestContext): void 
     category: 'request.broker',
     level: 'info',
     message: `Started ${request.broker} request for ${request.resource}`,
-    data: request,
+    data: privacyBrokerRequestContext(request),
   });
 }
 
@@ -489,7 +803,7 @@ export function recordBrokerRequestCompleted(
       category: 'request.broker',
       level: failed ? 'error' : 'info',
       message: `${failed ? 'Failed' : 'Completed'} ${request.broker} request for ${request.resource}`,
-      data: completed,
+      data: privacyBrokerRequestContext(completed),
     });
   }
   activeBrokerRequestIds.delete(request.id);
@@ -567,7 +881,7 @@ export function captureUserVisibleError(error: unknown, details: UserVisibleErro
   const source = contextString(details.context, 'source');
   const operationClusterId = contextString(details.context, 'clusterId');
   const operationNamespace = contextString(details.context, 'namespace');
-  const navigation = getActiveNavigationContext();
+  const navigation = getPrivacyNavigationContext();
   const surface = details.surface ?? 'user-visible';
 
   Sentry.withScope((scope) => {
@@ -581,23 +895,23 @@ export function captureUserVisibleError(error: unknown, details: UserVisibleErro
       scope.setTag('ui.action.id', userAction.id);
     }
     if (navigation) {
-      scope.setTag('ui.view', navigation.view);
+      scope.setTag('ui.view', String(navigation.view));
       if (navigation.tab) {
-        scope.setTag('ui.tab', navigation.tab);
+        scope.setTag('ui.tab', String(navigation.tab));
       }
-      if (navigation.clusterId) {
-        scope.setTag('clusterId', navigation.clusterId);
+      if (navigation['cluster.alias']) {
+        scope.setTag('cluster.alias', String(navigation['cluster.alias']));
       }
-      if (navigation.namespace) {
-        scope.setTag('namespace', navigation.namespace);
+      if (navigation['namespace.alias']) {
+        scope.setTag('namespace.alias', String(navigation['namespace.alias']));
       }
       scope.setContext('navigation', { ...navigation });
     }
     if (operationClusterId) {
-      scope.setTag('clusterId', operationClusterId);
+      scope.setTag('cluster.alias', aliasForCluster(operationClusterId) ?? 'cluster-unknown');
     }
     if (operationNamespace) {
-      scope.setTag('namespace', operationNamespace);
+      scope.setTag('namespace.alias', aliasForNamespace(operationNamespace) ?? 'namespace-unknown');
     }
     if (request) {
       scope.setTag('request.broker', request.broker);
@@ -605,7 +919,7 @@ export function captureUserVisibleError(error: unknown, details: UserVisibleErro
       if (request.reason) {
         scope.setTag('request.reason', request.reason);
       }
-      scope.setContext('request', { ...request });
+      scope.setContext('request', privacyBrokerRequestContext(request));
     }
     scope.setContext('operation', {
       id: operationId,

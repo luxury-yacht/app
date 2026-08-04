@@ -34,7 +34,7 @@ type WindowSettings struct {
 
 // AppSettings represents the application settings
 type AppSettings struct {
-	AnonymizedID                             string   `json:"anonymizedId"`                             // Random local installation identifier used for consented telemetry
+	AnonymizedID                             string   `json:"anonymizedId"`                             // Random local installation identifier used for pseudonymous telemetry
 	AppearanceMode                           string   `json:"appearanceMode"`                           // "light", "dark", or "system"
 	SelectedKubeconfigs                      []string `json:"selectedKubeconfigs"`                      // Multi-cluster selections in "path:context" form
 	UseShortResourceNames                    bool     `json:"useShortResourceNames"`                    // Use short names like "po" for pods in badges/headers

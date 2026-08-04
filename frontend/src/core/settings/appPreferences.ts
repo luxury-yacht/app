@@ -981,7 +981,7 @@ export const hydrateAppPreferences = async (options?: {
       backendSettings?.exclusiveNamespaces
     ),
     // If the persisted preference cannot be read, reporting must fail closed:
-    // sending the hydration error would otherwise risk overriding an opt-out.
+    // sending the hydration error would otherwise risk overriding a saved opt-out.
     errorReportingEnabled: settingsReadFailed
       ? false
       : normalizeBooleanPreferenceValue(

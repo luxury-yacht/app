@@ -158,7 +158,8 @@
             // Both the configured alias and relative-path variants must cross the maintained
             // backend API facade instead of binding application code to generated Wails modules.
             "paths": {
-              "@wailsjs/go/backend/App": "Import generated backend bindings only through @/core/backend-api."
+              "@wailsjs/go/backend/App": "Import generated backend bindings only through @/core/backend-api.",
+              "@sentry/react": "Import Sentry only through @/core/telemetry/sentry so consent, redaction, and breadcrumb policy cannot be bypassed."
             },
             "patterns": [
               {
@@ -254,6 +255,25 @@
     {
       // The backend API facade is the one boundary allowed to import generated Wails bindings.
       "includes": ["src/core/backend-api/**"],
+      "linter": {
+        "rules": {
+          "style": {
+            "noRestrictedImports": {
+              "level": "error",
+              "options": {
+                "paths": {
+                  "@sentry/react": "Import Sentry only through @/core/telemetry/sentry so consent, redaction, and breadcrumb policy cannot be bypassed."
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    {
+      // The telemetry module is the single Sentry SDK boundary. Every caller uses its typed,
+      // privacy-reviewed operations rather than constructing events or breadcrumbs directly.
+      "includes": ["src/core/telemetry/sentry.ts"],
       "linter": {
         "rules": {
           "style": {
