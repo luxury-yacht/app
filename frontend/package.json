@@ -17,8 +17,9 @@
     "format:check": "biome format .",
     "lint": "biome lint .",
     "lint:fix": "biome lint --write .",
-    "check": "biome check . && npm run check:biome-suppressions",
-    "check:fix": "biome check --write . && npm run check:biome-suppressions",
+    "check": "biome check . && npm run check:error-reporting-boundaries && npm run check:biome-suppressions",
+    "check:fix": "biome check --write . && npm run check:error-reporting-boundaries && npm run check:biome-suppressions",
+    "check:error-reporting-boundaries": "node scripts/check-error-reporting-boundaries.mjs",
     "check:biome-suppressions": "node scripts/check-biome-suppressions.mjs",
     "test": "vitest run",
     "knip": "knip",
@@ -44,6 +45,8 @@
     "yaml": "^2.9.0"
   },
   "devDependencies": {
+    "@babel/parser": "^7.29.7",
+    "@babel/traverse": "^7.29.7",
     "@biomejs/biome": "^2.5.6",
     "@sentry/vite-plugin": "^5.4.0",
     "@storybook/react": "^10.5.6",

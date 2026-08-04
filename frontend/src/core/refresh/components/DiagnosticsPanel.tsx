@@ -512,7 +512,7 @@ export const DiagnosticsPanel: React.FC<DiagnosticsPanelProps> = ({ onClose, isO
   const { selectedNamespace } = useNamespace();
   const { selectedClusterId, getClusterMeta } = useKubeconfig();
   const [diagnosticsClock, setDiagnosticsClock] = useState(() => Date.now());
-  const reportedDiagnosticsFailuresRef = useRef(new Set<string>());
+  const reportedDiagnosticsFailuresRef = useRef(new Map<string, string>());
 
   useEffect(() => {
     if (!isOpen) {
@@ -534,15 +534,17 @@ export const DiagnosticsPanel: React.FC<DiagnosticsPanelProps> = ({ onClose, isO
       action: string,
       fallbackMessage: string
     ): string => {
-      const error = reason instanceof Error ? reason : new Error(fallbackMessage);
-      if (!reportedDiagnosticsFailuresRef.current.has(key)) {
-        errorHandler.handleInline(error, {
-          action,
-          source: 'DiagnosticsPanel',
-        });
-        reportedDiagnosticsFailuresRef.current.add(key);
+      const previouslyReportedMessage = reportedDiagnosticsFailuresRef.current.get(key);
+      if (previouslyReportedMessage !== undefined) {
+        return previouslyReportedMessage;
       }
-      return error.message;
+      const error = reason instanceof Error ? reason : new Error(fallbackMessage);
+      const details = errorHandler.handleInline(error, {
+        action,
+        source: 'DiagnosticsPanel',
+      });
+      reportedDiagnosticsFailuresRef.current.set(key, details.message);
+      return details.message;
     };
 
     const loadDiagnostics = async () => {

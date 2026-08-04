@@ -38,8 +38,13 @@ data-collection defaults with an application-owned privacy boundary:
   error, while invalid namespace input crosses the validation surface locally.
   The `no-inline-error-text` Biome plugin rejects raw JSX rendering of
   error-shaped values (including `.message`, `String(error)`, and
-  `error.toString()`), so a new component cannot silently reintroduce the
-  common string-only bypass.
+  `error.toString()`). The mandatory `check:error-reporting-boundaries` pass
+  additionally follows caught, rejected, and constructed errors through
+  renamed and transitive aliases, formatter/helper calls, JSX props, and React
+  state or reducer dispatches. Only values returned by the shared reporting
+  boundary are treated as already reported. Renaming an operational error
+  string therefore cannot bypass `ErrorSurface` or discard the original
+  exception before it reaches reporting.
 - `handleOperational` is the matching non-toast boundary for caught failures
   that are handled without rendering an error surface. Production code cannot
   call `console.error` directly: the `no-direct-console-error` Biome plugin

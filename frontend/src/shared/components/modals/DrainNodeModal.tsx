@@ -87,6 +87,9 @@ type NodeMaintenanceSnapshotPayloadState = ReturnType<typeof useRefreshScopedDom
   data: NodeMaintenanceSnapshotPayload | null;
 };
 
+const toDrainOperationError = (value: unknown, fallback: string): Error =>
+  value instanceof Error ? value : new Error(typeof value === 'string' ? value : fallback);
+
 const DrainNodeModal = ({
   isOpen,
   clusterId,
@@ -296,21 +299,11 @@ const DrainNodeModal = ({
       );
       await refreshMaintenance();
     } catch (error) {
-      let message: string;
-
-      if (error instanceof Error) {
-        message = error.message;
-      } else if (typeof error === 'string') {
-        message = error;
-      } else {
-        message = 'Unknown error';
-      }
-
-      setDrainError(message);
-      errorHandler.handle(error instanceof Error ? error : new Error(message || 'Drain failed'), {
+      const details = errorHandler.handle(toDrainOperationError(error, 'Drain failed'), {
         source: 'drain-modal',
         context: { nodeName },
       });
+      setDrainError(details.message);
     } finally {
       setDrainPending(false);
     }
@@ -326,24 +319,11 @@ const DrainNodeModal = ({
       await CancelDrainNodeJob(clusterId, activeDrainJob.id);
       await refreshMaintenance();
     } catch (error) {
-      let message: string;
-
-      if (error instanceof Error) {
-        message = error.message;
-      } else if (typeof error === 'string') {
-        message = error;
-      } else {
-        message = 'Unknown error';
-      }
-
-      setDrainError(message);
-      errorHandler.handle(
-        error instanceof Error ? error : new Error(message || 'Cancel drain failed'),
-        {
-          source: 'drain-modal',
-          context: { action: 'cancel-drain', nodeName, jobId: activeDrainJob.id },
-        }
-      );
+      const details = errorHandler.handle(toDrainOperationError(error, 'Cancel drain failed'), {
+        source: 'drain-modal',
+        context: { action: 'cancel-drain', nodeName, jobId: activeDrainJob.id },
+      });
+      setDrainError(details.message);
     } finally {
       setCancelDrainPending(false);
     }
