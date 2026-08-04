@@ -4,6 +4,7 @@ import (
 	"path"
 	"regexp"
 	"sort"
+	"strconv"
 	"strings"
 
 	"github.com/getsentry/sentry-go"
@@ -36,6 +37,9 @@ var (
 	)
 	telemetryKubernetesPathPattern = regexp.MustCompile(
 		`(?i)\b(cluster|namespace|pod|deployment|statefulset|daemonset|service|secret|configmap|job|cronjob|node)s?(?:\.[a-z0-9.-]+)?\s+(?:[a-z0-9][a-z0-9._-]*/)?[a-z0-9][a-z0-9._-]*\b`,
+	)
+	telemetryCapabilityShapePattern = regexp.MustCompile(
+		`(?i)\b(?:[a-z0-9*](?:[a-z0-9*.-]*[a-z0-9*])?(?:/[a-z0-9*](?:[a-z0-9*.-]*[a-z0-9*])?)?\s+)?[a-z0-9*](?:[a-z0-9*.-]*[a-z0-9*])?(?:/[a-z0-9*](?:[a-z0-9*.-]*[a-z0-9*])?)?\s+[a-z0-9*](?:[a-z0-9*.-]*[a-z0-9*])?\s+(?:namespace|cluster)-scoped\b`,
 	)
 )
 
@@ -159,6 +163,44 @@ func sanitizeTelemetryText(value string) string {
 	value = telemetrySecretPattern.ReplaceAllString(value, "$1="+redactedValue)
 	value = telemetryBearerPattern.ReplaceAllString(value, redactedValue)
 	return value
+}
+
+func sanitizeCapabilityTelemetryText(value string) string {
+	shapes := telemetryCapabilityShapePattern.FindAllString(value, -1)
+	if len(shapes) == 0 {
+		return sanitizeTelemetryText(value)
+	}
+
+	protected := value
+	placeholders := make([]string, len(shapes))
+	for index, shape := range shapes {
+		placeholder := "\x1ecapability-shape-" + strconv.Itoa(index) + "\x1f"
+		placeholders[index] = placeholder
+		protected = strings.Replace(protected, shape, placeholder, 1)
+	}
+
+	protected = sanitizeTelemetryText(protected)
+	for index, placeholder := range placeholders {
+		protected = strings.ReplaceAll(protected, placeholder, shapes[index])
+	}
+	return protected
+}
+
+func sanitizeCapabilityErrorContext(values map[string]any) map[string]any {
+	if values == nil {
+		return nil
+	}
+	result := make(map[string]any, len(values))
+	for key, value := range values {
+		if key == "operation" {
+			if operation, ok := value.(string); ok {
+				result[key] = sanitizeCapabilityTelemetryText(operation)
+				continue
+			}
+		}
+		result[key] = sanitizeTelemetryValue(key, value)
+	}
+	return result
 }
 
 func sanitizeTelemetryValue(key string, value any) any {
@@ -296,6 +338,7 @@ func prepareEventForSend(event *sentry.Event, hint *sentry.EventHint) *sentry.Ev
 	}
 
 	replacements := telemetryReplacements(event)
+	isCapabilitiesEvent := event.Tags["source"] == "Capabilities"
 	event.User = sentry.User{}
 	event.Request = nil
 	event.ServerName = ""
@@ -316,7 +359,12 @@ func prepareEventForSend(event *sentry.Event, hint *sentry.EventHint) *sentry.Ev
 		if breadcrumb == nil {
 			continue
 		}
-		breadcrumb.Message = sanitizeTelemetryText(replaceTelemetryText(breadcrumb.Message, replacements))
+		message := replaceTelemetryText(breadcrumb.Message, replacements)
+		if breadcrumb.Category == "Capabilities" {
+			breadcrumb.Message = sanitizeCapabilityTelemetryText(message)
+		} else {
+			breadcrumb.Message = sanitizeTelemetryText(message)
+		}
 		breadcrumb.Data = sanitizeTelemetryMap(replaceTelemetryMap(breadcrumb.Data, replacements))
 	}
 	for key, value := range event.Tags {
@@ -327,7 +375,12 @@ func prepareEventForSend(event *sentry.Event, hint *sentry.EventHint) *sentry.Ev
 		event.Tags[key] = sanitizeTelemetryText(replaceTelemetryText(value, replacements))
 	}
 	for key, value := range event.Contexts {
-		event.Contexts[key] = sanitizeTelemetryMap(replaceTelemetryMap(value, replacements))
+		replaced := replaceTelemetryMap(value, replacements)
+		if isCapabilitiesEvent && key == "error" {
+			event.Contexts[key] = sanitizeCapabilityErrorContext(replaced)
+		} else {
+			event.Contexts[key] = sanitizeTelemetryMap(replaced)
+		}
 	}
 	return event
 }

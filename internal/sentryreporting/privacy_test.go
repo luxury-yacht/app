@@ -107,6 +107,51 @@ func TestPrepareEventForSendKeepsSafeRepositoryRelativeApplicationFramePaths(t *
 	require.Equal(t, "backend/capabilities/service.go", frame.AbsPath)
 }
 
+func TestPrepareEventForSendPreservesCapabilityShapesWhileScrubbingSurroundingText(t *testing.T) {
+	event := &sentry.Event{
+		Tags: map[string]string{"source": "Capabilities"},
+		Breadcrumbs: []*sentry.Breadcrumb{
+			{
+				Category: "Capabilities",
+				Message:  "Capability check gateway.networking.k8s.io/v1 tlsroutes list namespace-scoped slow: 8s",
+			},
+			{
+				Category: "Refresh",
+				Message:  "configmap customer-prod failed",
+			},
+		},
+		Contexts: map[string]sentry.Context{
+			"error": {
+				"operation": "5 capability checks failed while configmap customer-prod failed: Post \"https://api.private.test\": token=top-secret via node.private.internal " +
+					"[gateway.networking.k8s.io/v1 tlsroutes list namespace-scoped, batch/v1 cronjobs update namespace-scoped, " +
+					"v1 secrets get namespace-scoped, apps statefulsets/scale update namespace-scoped, configmaps get namespace-scoped]",
+			},
+		},
+	}
+
+	prepared := prepareEventForSend(event, nil)
+
+	require.NotNil(t, prepared)
+	require.Equal(t,
+		"Capability check gateway.networking.k8s.io/v1 tlsroutes list namespace-scoped slow: 8s",
+		prepared.Breadcrumbs[0].Message,
+	)
+	require.Equal(t, "configmap [resource] failed", prepared.Breadcrumbs[1].Message)
+	operation := prepared.Contexts["error"]["operation"]
+	require.Contains(t, operation, "gateway.networking.k8s.io/v1 tlsroutes list namespace-scoped")
+	require.Contains(t, operation, "batch/v1 cronjobs update namespace-scoped")
+	require.Contains(t, operation, "v1 secrets get namespace-scoped")
+	require.Contains(t, operation, "apps statefulsets/scale update namespace-scoped")
+	require.Contains(t, operation, "configmaps get namespace-scoped")
+	require.Contains(t, operation, "[url]")
+	require.Contains(t, operation, "[host]")
+	require.Contains(t, operation, "configmap [resource] failed")
+	require.NotContains(t, operation, "api.private.test")
+	require.NotContains(t, operation, "node.private.internal")
+	require.NotContains(t, operation, "customer-prod")
+	require.NotContains(t, operation, "top-secret")
+}
+
 func TestReporterAppliesPrivacyBoundaryBeforeTransport(t *testing.T) {
 	transport := &recordingTransport{}
 	reporter, err := New(Config{

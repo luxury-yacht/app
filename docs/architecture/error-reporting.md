@@ -115,7 +115,9 @@ data-collection defaults with an application-owned privacy boundary:
   batch summaries and slow-review breadcrumbs retain group/version, resource,
   verb, and namespaced-versus-cluster scope, but never the caller-supplied
   permission key, namespace, or object name. Batch timing breadcrumbs aggregate
-  by scope type rather than namespace value.
+  by scope type rather than namespace value. The final backend scrubber protects
+  only that producer-owned capability-shape grammar before applying generic
+  hostname and Kubernetes-object redaction to the surrounding failure text.
 - `backend/app_settings.go` persists `errorReportingEnabled` and switches the
   backend reporter only after the setting write succeeds.
 - `frontend/vite.config.ts` owns release identity and frontend source-map upload.
