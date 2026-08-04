@@ -174,7 +174,7 @@ function DataManagementSection() {
 
       <SettingRow
         title="Error Reporting"
-        help="Error reporting is enabled by default. It sends pseudonymous installation and app-launch counts, errors, release health, and privacy-filtered diagnostics to Sentry. A random installation ID links frontend reports from this device; Factory Reset replaces it. Reports keep app version, operating system, error types, stack traces, safe operation details, and Kubernetes reason/status/field data. Infrastructure names are replaced with short aliases or removed. URLs, IP addresses, account details, headers, cookies, request bodies, query strings, local paths, and automatic click/console/network breadcrumbs are excluded. Turning this off stops future reports but does not delete reports already stored."
+        help="Sends anonymized data used to improve the app. All user-specific data is obfuscated or removed. Disable this if you do not want to participate."
       >
         <ToggleSwitch
           id={`${elementIdPrefix}-error-reporting`}

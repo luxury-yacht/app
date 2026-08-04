@@ -154,9 +154,46 @@ and [Go data-collection options](https://docs.sentry.io/platforms/go/configurati
 Reports are pseudonymous, not anonymous. A random `anonymizedId` stored in the
 local settings file is the frontend Sentry user ID, allowing events and release
 sessions from one installation to be counted together without an account
-identity. Factory Reset removes that ID; the next launch creates a replacement.
-Turning reporting off stops future transmission but does not delete events
-already stored in Sentry.
+identity. Turning reporting off stops future transmission but does not delete
+events already stored in Sentry.
+
+## Telemetry Cadence
+
+Installation registration, Release Health sessions, and error events are
+separate Sentry signals. They must not be treated as interchangeable counts.
+
+| Signal | When it is sent | What it measures |
+| --- | --- | --- |
+| `app.installation.registered` | Only once, when a new `anonymizedId` is created and reporting is available. | Approximate installation count. |
+| Frontend Release Health session | Once per app launch. | Successful app load. It is not a periodic heartbeat and does not report time spent or actions taken in the app. |
+| Error event | Whenever a reportable exception crosses an owned reporting boundary while reporting is enabled. | A diagnostic failure event, independent of installation and session counts. |
+
+After Sentry confirms a successful `app.installation.registered` flush, the
+settings file records `installationMetricReported: true`. Ordinary subsequent
+launches therefore do not send the metric again. Factory Reset deletes both the
+old `anonymizedId` and that acknowledgement. The frontend reload creates a new
+ID and a new Release Health session, while the replacement installation
+registration is delivered when the Go backend next initializes reporting,
+normally on the next full app launch. The new ID is then counted as a new
+pseudonymous installation.
+
+Release Health sessions come from the React SDK's page-lifecycle browser
+session integration. They are associated with the pseudonymous user ID,
+release, and environment. The Go SDK sends backend error events and the custom
+installation metric, but it does not send Release Health sessions. Consequently,
+0% backend adoption means that the backend project has no session population;
+it does **not** mean that the backend or the release is unused. Use frontend
+**Users** for active pseudonymous installations, frontend **Sessions** for
+approximate app loads, and `app.installation.registered` for cumulative
+installation registrations.
+
+These sessions are Release Health data, not Session Replay. Captured exceptions
+can mark a session as errored and unhandled failures can mark it as crashed, but
+the page-lifecycle integration does not send a running duration or periodic
+updates. See Sentry's
+[Release Health documentation](https://docs.sentry.io/product/releases/health/)
+and the React SDK's
+[browser-session integration](https://docs.sentry.io/platforms/javascript/guides/react/configuration/integrations/browsersession/).
 
 The final frontend and backend scrubbers remove requests, IP addresses,
 hostnames, usernames, email addresses, URLs, common credentials, local home
