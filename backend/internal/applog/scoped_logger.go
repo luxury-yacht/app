@@ -3,7 +3,7 @@ package applog
 import (
 	"strings"
 
-	"github.com/luxury-yacht/app/internal/sentryreporting"
+	"github.com/luxury-yacht/app/internal/sentry"
 )
 
 // Logger is the shared application-log method shape used across backend packages.

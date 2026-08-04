@@ -91,8 +91,18 @@ data-collection defaults with an application-owned privacy boundary:
   original exceptions after SDK initialization; opt-out discards them. If the
   persisted preference itself cannot be read, reporting fails closed and the
   buffer is discarded rather than risking transmission after an opt-out.
-- `internal/sentryreporting` initializes `sentry-go`, forwards exceptions and
-  panics, and owns the runtime enable/disable and shutdown lifecycle.
+- `internal/sentry` initializes `sentry-go`, forwards exceptions and
+  panics, and owns the runtime enable/disable and shutdown lifecycle. It lives
+  under the module-root `internal` directory because reporting is process-wide
+  infrastructure shared by the root Wails composition process and packages
+  under `backend`. Go permits both callers to import a root-internal package
+  while preventing modules outside Luxury Yacht from importing it; placing the
+  package under `backend/internal` would prevent root `main.go` from using it
+  for startup, Wails-run, and process-panic reporting. The package declaration
+  intentionally remains `sentryreporting`: that name distinguishes the
+  application-owned consent/privacy boundary from the upstream Sentry SDK and
+  preserves existing exception type names such as
+  `sentryreporting.LoggedError` for stable issue grouping.
 - `backend/logger.go` keeps local log messages human-readable while forwarding
   structured failures separately. `ErrorWithCause` sends the original Go error
   through `CaptureException`, and `Panic` sends the recovered value through
@@ -276,7 +286,7 @@ omit raw permission keys, namespaces, and object names before the final
 scrubber runs.
 
 Only `frontend/src/core/telemetry/sentry.ts` and
-`internal/sentryreporting` may import Sentry SDKs. Biome and Go architecture
+`internal/sentry` may import Sentry SDKs. Biome and Go architecture
 tests enforce those boundaries. New UI work should use `errorHandler`,
 `ErrorSurface`, `runUserAction`, and the data-access request wrapper; those
 owners create reporting context and breadcrumbs automatically.

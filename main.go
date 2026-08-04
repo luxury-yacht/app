@@ -9,7 +9,7 @@ import (
 	"time"
 
 	"github.com/luxury-yacht/app/backend"
-	"github.com/luxury-yacht/app/internal/sentryreporting"
+	"github.com/luxury-yacht/app/internal/sentry"
 
 	"github.com/wailsapp/wails/v2"
 	"github.com/wailsapp/wails/v2/pkg/options"

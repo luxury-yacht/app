@@ -3,7 +3,7 @@ package applog
 import (
 	"fmt"
 
-	"github.com/luxury-yacht/app/internal/sentryreporting"
+	"github.com/luxury-yacht/app/internal/sentry"
 )
 
 // StructuredErrorLogger preserves an error value separately from the local

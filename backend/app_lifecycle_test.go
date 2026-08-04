@@ -14,7 +14,7 @@ import (
 	"github.com/luxury-yacht/app/backend/refresh"
 	"github.com/luxury-yacht/app/backend/refresh/system"
 	"github.com/luxury-yacht/app/backend/refresh/telemetry"
-	"github.com/luxury-yacht/app/internal/sentryreporting"
+	"github.com/luxury-yacht/app/internal/sentry"
 	"github.com/stretchr/testify/require"
 	wailsruntime "github.com/wailsapp/wails/v2/pkg/runtime"
 	apiextensionsclientset "k8s.io/apiextensions-apiserver/pkg/client/clientset/clientset"

@@ -157,7 +157,7 @@ func (e LoggedError) Error() string {
 }
 
 const (
-	reporterModule   = "github.com/luxury-yacht/app/internal/sentryreporting"
+	reporterModule   = "github.com/luxury-yacht/app/internal/sentry"
 	reporterFuncName = "(*sentryReporter)."
 	appLogModule     = "github.com/luxury-yacht/app/backend/internal/applog"
 	appModule        = "github.com/luxury-yacht/app/backend"

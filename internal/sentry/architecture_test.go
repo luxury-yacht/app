@@ -34,7 +34,7 @@ func TestProductionGoCodeImportsSentryOnlyThroughReporter(t *testing.T) {
 		if err != nil {
 			return err
 		}
-		if strings.HasPrefix(filepath.ToSlash(relative), "internal/sentryreporting/") {
+		if strings.HasPrefix(filepath.ToSlash(relative), "internal/sentry/") {
 			return nil
 		}
 		contents, err := os.ReadFile(path)
@@ -48,5 +48,5 @@ func TestProductionGoCodeImportsSentryOnlyThroughReporter(t *testing.T) {
 	})
 	require.NoError(t, err)
 	require.Empty(t, directImports,
-		"route Sentry through internal/sentryreporting so consent and privacy policy cannot be bypassed")
+		"route Sentry through internal/sentry so consent and privacy policy cannot be bypassed")
 }

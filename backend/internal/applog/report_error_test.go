@@ -4,7 +4,7 @@ import (
 	"errors"
 	"testing"
 
-	"github.com/luxury-yacht/app/internal/sentryreporting"
+	"github.com/luxury-yacht/app/internal/sentry"
 	"github.com/stretchr/testify/require"
 )
 

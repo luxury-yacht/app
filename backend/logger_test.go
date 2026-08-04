@@ -10,7 +10,7 @@ import (
 	"github.com/getsentry/sentry-go"
 	"github.com/luxury-yacht/app/backend/internal/applog"
 	"github.com/luxury-yacht/app/backend/internal/logsources"
-	"github.com/luxury-yacht/app/internal/sentryreporting"
+	"github.com/luxury-yacht/app/internal/sentry"
 	"github.com/stretchr/testify/require"
 	apierrors "k8s.io/apimachinery/pkg/api/errors"
 	"k8s.io/apimachinery/pkg/runtime/schema"
@@ -315,7 +315,7 @@ func TestLoggerSentryReportPointsAtTheCodeThatLogged(t *testing.T) {
 	require.NotEmpty(t, stacktrace.Frames)
 
 	for _, frame := range stacktrace.Frames {
-		require.NotEqual(t, "github.com/luxury-yacht/app/internal/sentryreporting", frame.Module)
+		require.NotEqual(t, "github.com/luxury-yacht/app/internal/sentry", frame.Module)
 		require.NotEqual(t, "github.com/luxury-yacht/app/backend/internal/applog", frame.Module)
 		require.NotContains(t, frame.Function, "(*Logger).")
 	}
