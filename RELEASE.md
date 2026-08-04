@@ -19,8 +19,8 @@ EOF
 Update the values. `.env` is git-ignored. Never commit this file.
 
 Sentry is disabled when running development builds via `mage dev`, even when
-`.env` exists. Packaged builds use the Sentry SDKs' native data collection and
-do not anonymize reports. See [the error-reporting architecture](docs/architecture/error-reporting.md)
+`.env` exists. Packaged builds use the Sentry SDKs' native data collection.
+See [the error-reporting architecture](docs/architecture/error-reporting.md)
 for the reporting and data-collection boundaries.
 
 Installing a local production build enables error reporting only when the
