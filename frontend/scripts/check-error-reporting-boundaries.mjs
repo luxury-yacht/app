@@ -1,17 +1,18 @@
-import { readdirSync, readFileSync, realpathSync } from 'node:fs';
+import { readdirSync, realpathSync } from 'node:fs';
 import path from 'node:path';
 import { fileURLToPath } from 'node:url';
-import { parse } from '@babel/parser';
-// biome-ignore lint/correctness/noUnresolvedImports: Node resolves this CommonJS package's main entry; Biome 2.5 does not.
-import traverseModule from '@babel/traverse';
+import * as ts from 'typescript/unstable/ast';
+import { API as TypeScriptAPI } from 'typescript/unstable/sync';
 
-const traverse = traverseModule.default ?? traverseModule;
 const ERROR_CONSTRUCTORS = new Set(['AggregateError', 'DOMException', 'Error']);
 const ERROR_HANDLER_MODULES = new Set(['@/utils/errorHandler', '@utils/errorHandler']);
 const ERROR_SURFACE = 'ErrorSurface';
 const ERROR_SURFACE_MODULE = '@shared/components/errors/ErrorSurface';
 const REPORTING_BOUNDARY_METHODS = new Set(['handle', 'handleInline', 'handleOperational']);
 const REACT_STATE_HOOKS = new Set(['useReducer', 'useState']);
+const virtualSources = new Map();
+let analysisSequence = 0;
+let typescriptAPI;
 
 const isErrorOwner = (fileName) => {
   const normalized = fileName.replaceAll('\\', '/');
@@ -30,94 +31,164 @@ const isProductionTsx = (fileName) => {
   );
 };
 
-const getMemberName = (memberPath) => {
-  const property = memberPath.get('property');
-  if (property.isIdentifier() && !memberPath.node.computed) {
-    return property.node.name;
-  }
-  if (property.isStringLiteral()) {
-    return property.node.value;
-  }
-  return null;
+const isFunctionLikeNode = (node) =>
+  ts.isArrowFunction(node) ||
+  ts.isConstructorDeclaration(node) ||
+  ts.isFunctionDeclaration(node) ||
+  ts.isFunctionExpression(node) ||
+  ts.isGetAccessorDeclaration(node) ||
+  ts.isMethodDeclaration(node) ||
+  ts.isSetAccessorDeclaration(node);
+
+const isJsxOpeningLikeElement = (node) =>
+  ts.isJsxOpeningElement(node) || ts.isJsxSelfClosingElement(node);
+
+const visitDescendants = (root, visitor) => {
+  const visit = (node) => {
+    visitor(node);
+    node.forEachChild(visit);
+  };
+  visit(root);
 };
 
-const getBinding = (identifierPath) =>
-  identifierPath.isIdentifier() ? identifierPath.scope.getBinding(identifierPath.node.name) : null;
-
-const bindingFromFunction = (functionPath) => {
-  if (functionPath.node.id && functionPath.get('id').isIdentifier()) {
-    const identifier = functionPath.get('id');
-    return identifier.scope.parent?.getBinding(identifier.node.name) ?? getBinding(identifier);
+const getMemberName = (node) => {
+  if (ts.isPropertyAccessExpression(node)) {
+    return node.name.text;
   }
-  const parent = functionPath.parentPath;
-  if (parent?.isVariableDeclarator() && parent.get('id').isIdentifier()) {
-    return getBinding(parent.get('id'));
-  }
-  if (parent?.isAssignmentExpression() && parent.get('left').isIdentifier()) {
-    return getBinding(parent.get('left'));
-  }
-  return null;
-};
-
-const functionFromBinding = (binding) => {
-  if (!binding) {
-    return null;
-  }
-  const bindingPath = binding.path;
-  if (bindingPath.isFunctionDeclaration() || bindingPath.isFunctionExpression()) {
-    return bindingPath;
-  }
-  if (bindingPath.parentPath?.isFunctionDeclaration()) {
-    return bindingPath.parentPath;
-  }
-  if (bindingPath.isVariableDeclarator()) {
-    const initializer = bindingPath.get('init');
-    if (initializer.isArrowFunctionExpression() || initializer.isFunctionExpression()) {
-      return initializer;
+  if (ts.isElementAccessExpression(node) && node.argumentExpression) {
+    const property = node.argumentExpression;
+    if (ts.isStringLiteralLikeNode(property)) {
+      return property.text;
     }
   }
   return null;
 };
 
-const typeContainsError = (node, seen = new Set()) => {
-  if (!node || typeof node !== 'object' || seen.has(node)) {
+const getMemberOwner = (node) => {
+  if (ts.isPropertyAccessExpression(node) || ts.isElementAccessExpression(node)) {
+    return node.expression;
+  }
+  return null;
+};
+
+const typeContainsError = (node) => {
+  if (!node) {
     return false;
   }
-  seen.add(node);
-  if (node.type === 'Identifier' && ERROR_CONSTRUCTORS.has(node.name)) {
-    return true;
-  }
-  for (const [key, value] of Object.entries(node)) {
-    if (key === 'loc' || key === 'start' || key === 'end') {
-      continue;
+  let found = false;
+  visitDescendants(node, (descendant) => {
+    if (ts.isIdentifier(descendant) && ERROR_CONSTRUCTORS.has(descendant.text)) {
+      found = true;
     }
-    if (Array.isArray(value)) {
-      if (value.some((item) => typeContainsError(item, seen))) {
-        return true;
-      }
-    } else if (typeContainsError(value, seen)) {
-      return true;
-    }
-  }
-  return false;
+  });
+  return found;
 };
 
-const parseTsx = (source, fileName) =>
-  parse(source, {
-    sourceFilename: fileName,
-    sourceType: 'module',
-    plugins: ['jsx', 'typescript'],
-  });
-
-export const findInlineErrorBoundaryViolations = (source, fileName = 'source.tsx') => {
-  if (isErrorOwner(fileName)) {
-    return [];
+const getTypeScriptAPI = () => {
+  if (!typescriptAPI) {
+    typescriptAPI = new TypeScriptAPI({
+      cwd: process.cwd(),
+      fs: {
+        fileExists: (candidate) => (virtualSources.has(path.resolve(candidate)) ? true : undefined),
+        readFile: (candidate) => virtualSources.get(path.resolve(candidate)),
+      },
+    });
   }
+  return typescriptAPI;
+};
 
-  const ast = parseTsx(source, fileName);
+process.once('exit', () => typescriptAPI?.close());
+
+const parseTsx = (source, fileName) => {
+  analysisSequence += 1;
+  const virtualFileName = path.resolve(
+    process.cwd(),
+    'src',
+    `__error_reporting_boundary_${process.pid}_${analysisSequence}.tsx`
+  );
+  virtualSources.set(virtualFileName, source);
+  const api = getTypeScriptAPI();
+  const snapshot = api.updateSnapshot({
+    fileChanges: { created: [virtualFileName] },
+    openFiles: [virtualFileName],
+  });
+  const project = snapshot.getDefaultProjectForFile(virtualFileName);
+  const sourceFile = project?.program.getSourceFile(virtualFileName);
+  if (!project || !sourceFile) {
+    snapshot.dispose();
+    virtualSources.delete(virtualFileName);
+    throw new Error(`Unable to parse ${fileName} with the TypeScript project`);
+  }
+  const diagnostics = project.program.getSyntacticDiagnostics(virtualFileName);
+  if (diagnostics.length > 0) {
+    snapshot.dispose();
+    virtualSources.delete(virtualFileName);
+    const message = String(diagnostics[0].messageText ?? 'unknown syntax error');
+    throw new Error(`Unable to parse ${fileName}: ${message}`);
+  }
+  return {
+    checker: project.checker,
+    dispose: () => {
+      snapshot.dispose();
+      api
+        .updateSnapshot({
+          closeFiles: [virtualFileName],
+          fileChanges: { deleted: [virtualFileName] },
+        })
+        .dispose();
+      virtualSources.delete(virtualFileName);
+    },
+    project,
+    sourceFile,
+  };
+};
+
+const importModuleForSymbol = (symbol, project) => {
+  for (const handle of symbol?.declarations ?? []) {
+    const declaration = handle.resolve(project);
+    if (!declaration) {
+      continue;
+    }
+    if (!ts.isImportSpecifier(declaration)) {
+      continue;
+    }
+    let parent = declaration.parent;
+    while (parent && !ts.isImportDeclaration(parent)) {
+      parent = parent.parent;
+    }
+    if (parent && ts.isStringLiteralLikeNode(parent.moduleSpecifier)) {
+      return parent.moduleSpecifier.text;
+    }
+  }
+  return null;
+};
+
+const unwrap = (rawNode) => {
+  let node = rawNode;
+  while (
+    node &&
+    (ts.isAsExpression(node) ||
+      ts.isNonNullExpression(node) ||
+      ts.isParenthesizedExpression(node) ||
+      ts.isSatisfiesExpression(node) ||
+      ts.isTypeAssertion(node))
+  ) {
+    node = node.expression;
+  }
+  return node;
+};
+
+const isAssignmentExpression = (node) =>
+  ts.isBinaryExpression(node) &&
+  node.operatorToken.kind >= ts.SyntaxKind.FirstAssignment &&
+  node.operatorToken.kind <= ts.SyntaxKind.LastAssignment;
+
+const analyzeInlineErrorBoundaryViolations = ({ checker, project, sourceFile }, fileName) => {
   const taintedBindings = new Set();
   const taintedFunctions = new Set();
   const stateBySetter = new Map();
+
+  const getBinding = (node) => (ts.isIdentifier(node) ? checker.getSymbolAtLocation(node) : null);
 
   const addBinding = (binding) => {
     if (!binding || taintedBindings.has(binding)) {
@@ -127,341 +198,368 @@ export const findInlineErrorBoundaryViolations = (source, fileName = 'source.tsx
     return true;
   };
 
-  const addBindingsFromPattern = (patternPath) => {
-    let changed = false;
-    if (patternPath.isIdentifier()) {
-      return addBinding(getBinding(patternPath));
+  const addBindingsFromPattern = (rawNode) => {
+    const node = unwrap(rawNode);
+    if (!node) {
+      return false;
     }
-    if (patternPath.isAssignmentPattern()) {
-      return addBindingsFromPattern(patternPath.get('left'));
+    if (ts.isIdentifier(node)) {
+      return addBinding(getBinding(node));
     }
-    if (patternPath.isRestElement()) {
-      return addBindingsFromPattern(patternPath.get('argument'));
+    if (ts.isBindingElement(node)) {
+      return addBindingsFromPattern(node.name);
     }
-    if (patternPath.isArrayPattern()) {
-      for (const element of patternPath.get('elements')) {
-        if (element.node && addBindingsFromPattern(element)) {
+    if (ts.isArrayBindingPattern(node) || ts.isArrayLiteralExpression(node)) {
+      let changed = false;
+      for (const element of node.elements) {
+        if (!ts.isOmittedExpression(element) && addBindingsFromPattern(element)) {
           changed = true;
         }
       }
       return changed;
     }
-    if (patternPath.isObjectPattern()) {
-      for (const property of patternPath.get('properties')) {
-        const target = property.isRestElement() ? property.get('argument') : property.get('value');
-        if (target?.node && addBindingsFromPattern(target)) {
+    if (ts.isObjectBindingPattern(node)) {
+      let changed = false;
+      for (const element of node.elements) {
+        if (addBindingsFromPattern(element.name)) {
           changed = true;
         }
       }
+      return changed;
     }
-    return changed;
-  };
-
-  const isReportingBoundaryCall = (callPath) => {
-    const callee = callPath.get('callee');
-    if (!(callee.isMemberExpression() || callee.isOptionalMemberExpression())) {
-      return false;
-    }
-    const owner = callee.get('object');
-    if (!owner.isIdentifier({ name: 'errorHandler' })) {
-      return false;
-    }
-    const binding = owner.scope.getBinding('errorHandler');
-    const importDeclaration = binding?.path.parentPath;
-    return (
-      binding?.path.isImportSpecifier() === true &&
-      importDeclaration?.isImportDeclaration() === true &&
-      ERROR_HANDLER_MODULES.has(importDeclaration.node.source.value) &&
-      REPORTING_BOUNDARY_METHODS.has(getMemberName(callee))
-    );
-  };
-
-  const unwrap = (expressionPath) => {
-    let current = expressionPath;
-    while (
-      current?.node &&
-      (current.isParenthesizedExpression() ||
-        current.isTSAsExpression() ||
-        current.isTSTypeAssertion() ||
-        current.isTSNonNullExpression() ||
-        current.isTSSatisfiesExpression())
-    ) {
-      current = current.get('expression');
-    }
-    return current;
-  };
-
-  const expressionIsTainted = (rawPath, seen = new Set()) => {
-    const expressionPath = unwrap(rawPath);
-    if (!expressionPath?.node || seen.has(expressionPath.node)) {
-      return false;
-    }
-    seen.add(expressionPath.node);
-
-    if (expressionPath.isIdentifier()) {
-      return taintedBindings.has(getBinding(expressionPath));
-    }
-    if (expressionPath.isNewExpression()) {
-      const callee = expressionPath.get('callee');
-      return (
-        (callee.isIdentifier() && ERROR_CONSTRUCTORS.has(callee.node.name)) ||
-        expressionPath.get('arguments').some((argument) => expressionIsTainted(argument, seen))
-      );
-    }
-    if (expressionPath.isMemberExpression() || expressionPath.isOptionalMemberExpression()) {
-      return expressionIsTainted(expressionPath.get('object'), seen);
-    }
-    if (expressionPath.isCallExpression() || expressionPath.isOptionalCallExpression()) {
-      const callee = expressionPath.get('callee');
-      if (isReportingBoundaryCall(expressionPath)) {
-        return false;
-      }
-      if (callee.isIdentifier()) {
-        if (taintedFunctions.has(getBinding(callee))) {
-          return true;
-        }
-        if (
-          callee.node.name === 'String' &&
-          expressionPath.get('arguments').some((argument) => expressionIsTainted(argument, seen))
-        ) {
-          return true;
+    if (ts.isObjectLiteralExpression(node)) {
+      let changed = false;
+      for (const property of node.properties) {
+        const target = ts.isPropertyAssignment(property)
+          ? property.initializer
+          : ts.isShorthandPropertyAssignment(property)
+            ? property.name
+            : ts.isSpreadAssignment(property)
+              ? property.expression
+              : null;
+        if (target && addBindingsFromPattern(target)) {
+          changed = true;
         }
       }
-      if (
-        (callee.isMemberExpression() || callee.isOptionalMemberExpression()) &&
-        expressionIsTainted(callee.get('object'), seen)
-      ) {
-        return true;
-      }
-      return expressionPath
-        .get('arguments')
-        .some((argument) => expressionIsTainted(argument, seen));
+      return changed;
     }
-    if (expressionPath.isConditionalExpression()) {
-      return (
-        expressionIsTainted(expressionPath.get('consequent'), seen) ||
-        expressionIsTainted(expressionPath.get('alternate'), seen)
-      );
-    }
-    if (expressionPath.isLogicalExpression() || expressionPath.isBinaryExpression()) {
-      return (
-        expressionIsTainted(expressionPath.get('left'), seen) ||
-        expressionIsTainted(expressionPath.get('right'), seen)
-      );
-    }
-    if (expressionPath.isTemplateLiteral()) {
-      return expressionPath
-        .get('expressions')
-        .some((interpolation) => expressionIsTainted(interpolation, seen));
-    }
-    if (expressionPath.isArrayExpression()) {
-      return expressionPath
-        .get('elements')
-        .some((element) => element.node && expressionIsTainted(element, seen));
-    }
-    if (expressionPath.isObjectExpression()) {
-      return expressionPath.get('properties').some((property) => {
-        if (property.isSpreadElement()) {
-          return expressionIsTainted(property.get('argument'), seen);
-        }
-        return property.isObjectProperty() && expressionIsTainted(property.get('value'), seen);
-      });
-    }
-    if (
-      expressionPath.isAwaitExpression() ||
-      expressionPath.isUnaryExpression() ||
-      expressionPath.isYieldExpression()
-    ) {
-      const argument = expressionPath.get('argument');
-      return argument?.node ? expressionIsTainted(argument, seen) : false;
-    }
-    if (expressionPath.isSequenceExpression()) {
-      return expressionPath.get('expressions').some((item) => expressionIsTainted(item, seen));
+    if (ts.isSpreadElement(node) || ts.isSpreadAssignment(node)) {
+      return addBindingsFromPattern(node.expression);
     }
     return false;
   };
 
-  traverse(ast, {
-    CatchClause(catchPath) {
-      const parameter = catchPath.get('param');
-      if (parameter?.node) {
-        addBindingsFromPattern(parameter);
+  const bindingFromFunction = (node) => {
+    if ((ts.isFunctionDeclaration(node) || ts.isFunctionExpression(node)) && node.name) {
+      return getBinding(node.name);
+    }
+    const parent = node.parent;
+    if (ts.isVariableDeclaration(parent) && ts.isIdentifier(parent.name)) {
+      return getBinding(parent.name);
+    }
+    if (parent && isAssignmentExpression(parent) && ts.isIdentifier(parent.left)) {
+      return getBinding(parent.left);
+    }
+    return null;
+  };
+
+  const functionFromBinding = (binding) => {
+    for (const handle of binding?.declarations ?? []) {
+      const declaration = handle.resolve(project);
+      if (!declaration) {
+        continue;
       }
-    },
-    Function(functionPath) {
-      for (const parameter of functionPath.get('params')) {
-        if (typeContainsError(parameter.node.typeAnnotation)) {
-          addBindingsFromPattern(parameter);
-        }
+      if (ts.isFunctionDeclaration(declaration) || ts.isFunctionExpression(declaration)) {
+        return declaration;
       }
-    },
-    CallExpression(callPath) {
-      const callee = callPath.get('callee');
       if (
-        callee.isMemberExpression() &&
-        (getMemberName(callee) === 'catch' || getMemberName(callee) === 'then')
+        ts.isVariableDeclaration(declaration) &&
+        declaration.initializer &&
+        (ts.isArrowFunction(declaration.initializer) ||
+          ts.isFunctionExpression(declaration.initializer))
       ) {
-        const handlerIndex = getMemberName(callee) === 'then' ? 1 : 0;
-        const rejectionHandler = callPath.get('arguments')[handlerIndex];
-        if (!rejectionHandler?.isFunction()) {
-          return;
+        return declaration.initializer;
+      }
+    }
+    return null;
+  };
+
+  const isReportingBoundaryCall = (node) => {
+    const callee = node.expression;
+    const owner = getMemberOwner(callee);
+    if (!owner || !ts.isIdentifier(owner) || owner.text !== 'errorHandler') {
+      return false;
+    }
+    return (
+      ERROR_HANDLER_MODULES.has(importModuleForSymbol(getBinding(owner), project)) &&
+      REPORTING_BOUNDARY_METHODS.has(getMemberName(callee))
+    );
+  };
+
+  const expressionIsTainted = (rawNode, seen = new Set()) => {
+    const node = unwrap(rawNode);
+    if (!node || seen.has(node)) {
+      return false;
+    }
+    seen.add(node);
+
+    if (ts.isIdentifier(node)) {
+      return taintedBindings.has(getBinding(node));
+    }
+    if (ts.isNewExpression(node)) {
+      return (
+        (ts.isIdentifier(node.expression) && ERROR_CONSTRUCTORS.has(node.expression.text)) ||
+        (node.arguments ?? []).some((argument) => expressionIsTainted(argument, seen))
+      );
+    }
+    if (ts.isPropertyAccessExpression(node) || ts.isElementAccessExpression(node)) {
+      return expressionIsTainted(node.expression, seen);
+    }
+    if (ts.isCallExpression(node)) {
+      if (isReportingBoundaryCall(node)) {
+        return false;
+      }
+      const callee = node.expression;
+      if (ts.isIdentifier(callee)) {
+        if (taintedFunctions.has(getBinding(callee))) {
+          return true;
         }
-        const firstParameter = rejectionHandler.get('params')[0];
-        if (firstParameter?.node) {
-          addBindingsFromPattern(firstParameter);
+        if (
+          callee.text === 'String' &&
+          node.arguments.some((argument) => expressionIsTainted(argument, seen))
+        ) {
+          return true;
         }
       }
-    },
-    VariableDeclarator(declarationPath) {
-      const initializer = declarationPath.get('init');
-      const identifier = declarationPath.get('id');
-      const callee = initializer.isCallExpression() ? initializer.get('callee') : null;
-      const hookName = callee?.isIdentifier()
-        ? callee.node.name
-        : callee?.isMemberExpression()
-          ? getMemberName(callee)
-          : null;
-      if (
-        identifier.isArrayPattern() &&
-        initializer.isCallExpression() &&
-        hookName !== null &&
-        REACT_STATE_HOOKS.has(hookName)
-      ) {
-        const [state, setter] = identifier.get('elements');
-        if (state?.isIdentifier() && setter?.isIdentifier()) {
-          const setterBinding = getBinding(setter);
+      const owner = getMemberOwner(callee);
+      if (owner && expressionIsTainted(owner, seen)) {
+        return true;
+      }
+      return node.arguments.some((argument) => expressionIsTainted(argument, seen));
+    }
+    if (ts.isConditionalExpression(node)) {
+      return expressionIsTainted(node.whenTrue, seen) || expressionIsTainted(node.whenFalse, seen);
+    }
+    if (ts.isBinaryExpression(node)) {
+      return expressionIsTainted(node.left, seen) || expressionIsTainted(node.right, seen);
+    }
+    if (ts.isTemplateExpression(node)) {
+      return node.templateSpans.some((span) => expressionIsTainted(span.expression, seen));
+    }
+    if (ts.isArrayLiteralExpression(node)) {
+      return node.elements.some((element) => expressionIsTainted(element, seen));
+    }
+    if (ts.isObjectLiteralExpression(node)) {
+      return node.properties.some((property) => {
+        if (ts.isSpreadAssignment(property)) {
+          return expressionIsTainted(property.expression, seen);
+        }
+        if (ts.isPropertyAssignment(property)) {
+          return expressionIsTainted(property.initializer, seen);
+        }
+        return ts.isShorthandPropertyAssignment(property)
+          ? expressionIsTainted(property.name, seen)
+          : false;
+      });
+    }
+    if (
+      ts.isAwaitExpression(node) ||
+      ts.isPrefixUnaryExpression(node) ||
+      ts.isPostfixUnaryExpression(node) ||
+      ts.isYieldExpression(node)
+    ) {
+      return node.expression ? expressionIsTainted(node.expression, seen) : false;
+    }
+    if (ts.isSpreadElement(node)) {
+      return expressionIsTainted(node.expression, seen);
+    }
+    return false;
+  };
+
+  visitDescendants(sourceFile, (node) => {
+    if (ts.isCatchClause(node) && node.variableDeclaration) {
+      addBindingsFromPattern(node.variableDeclaration.name);
+    }
+    if (isFunctionLikeNode(node)) {
+      for (const parameter of node.parameters) {
+        if (typeContainsError(parameter.type)) {
+          addBindingsFromPattern(parameter.name);
+        }
+      }
+    }
+    if (ts.isCallExpression(node)) {
+      const memberName = getMemberName(node.expression);
+      if (memberName === 'catch' || memberName === 'then') {
+        const handlerIndex = memberName === 'then' ? 1 : 0;
+        const rejectionHandler = node.arguments[handlerIndex];
+        if (rejectionHandler && isFunctionLikeNode(rejectionHandler)) {
+          const firstParameter = rejectionHandler.parameters[0];
+          if (firstParameter) {
+            addBindingsFromPattern(firstParameter.name);
+          }
+        }
+      }
+    }
+    if (
+      ts.isVariableDeclaration(node) &&
+      ts.isArrayBindingPattern(node.name) &&
+      node.initializer &&
+      ts.isCallExpression(node.initializer)
+    ) {
+      const callee = node.initializer.expression;
+      const hookName = ts.isIdentifier(callee) ? callee.text : getMemberName(callee);
+      if (hookName && REACT_STATE_HOOKS.has(hookName)) {
+        const [stateElement, setterElement] = node.name.elements;
+        const state =
+          stateElement && !ts.isOmittedExpression(stateElement) ? stateElement.name : null;
+        const setter =
+          setterElement && !ts.isOmittedExpression(setterElement) ? setterElement.name : null;
+        if (state && setter && ts.isIdentifier(state) && ts.isIdentifier(setter)) {
           const stateBinding = getBinding(state);
-          if (setterBinding && stateBinding) {
+          const setterBinding = getBinding(setter);
+          if (stateBinding && setterBinding) {
             stateBySetter.set(setterBinding, stateBinding);
           }
         }
       }
-    },
+    }
   });
+
+  const getFunctionParent = (node) => {
+    let parent = node.parent;
+    while (parent) {
+      if (isFunctionLikeNode(parent)) {
+        return parent;
+      }
+      parent = parent.parent;
+    }
+    return null;
+  };
 
   let changed = true;
   let iterations = 0;
   while (changed && iterations < 100) {
     changed = false;
     iterations += 1;
-    traverse(ast, {
-      ArrowFunctionExpression(functionPath) {
-        const body = functionPath.get('body');
-        const functionBinding = bindingFromFunction(functionPath);
-        if (
-          !body.isBlockStatement() &&
-          functionBinding &&
-          expressionIsTainted(body) &&
-          !taintedFunctions.has(functionBinding)
-        ) {
-          taintedFunctions.add(functionBinding);
+    visitDescendants(sourceFile, (node) => {
+      if (ts.isArrowFunction(node) && !ts.isBlock(node.body)) {
+        const binding = bindingFromFunction(node);
+        if (binding && expressionIsTainted(node.body) && !taintedFunctions.has(binding)) {
+          taintedFunctions.add(binding);
           changed = true;
         }
-      },
-      AssignmentExpression(assignmentPath) {
-        const left = assignmentPath.get('left');
-        const right = assignmentPath.get('right');
-        if (left.isIdentifier() && right.isIdentifier()) {
-          const stateBinding = stateBySetter.get(getBinding(right));
-          const aliasBinding = getBinding(left);
+      }
+
+      if (isAssignmentExpression(node)) {
+        if (ts.isIdentifier(node.left) && ts.isIdentifier(node.right)) {
+          const stateBinding = stateBySetter.get(getBinding(node.right));
+          const aliasBinding = getBinding(node.left);
           if (stateBinding && aliasBinding && !stateBySetter.has(aliasBinding)) {
             stateBySetter.set(aliasBinding, stateBinding);
             changed = true;
           }
         }
-        if (expressionIsTainted(right)) {
-          const target = left.isMemberExpression() ? left.get('object') : left;
+        if (expressionIsTainted(node.right)) {
+          const target =
+            ts.isPropertyAccessExpression(node.left) || ts.isElementAccessExpression(node.left)
+              ? node.left.expression
+              : node.left;
           if (addBindingsFromPattern(target)) {
             changed = true;
           }
         }
-      },
-      CallExpression(callPath) {
-        const callee = callPath.get('callee');
-        if (callee.isIdentifier()) {
-          const calleeBinding = getBinding(callee);
-          const stateBinding = stateBySetter.get(calleeBinding);
-          if (
-            stateBinding &&
-            callPath.get('arguments').some((argument) => expressionIsTainted(argument)) &&
-            addBinding(stateBinding)
-          ) {
-            changed = true;
-          }
+      }
 
-          const targetFunction = functionFromBinding(calleeBinding);
-          if (targetFunction) {
-            const parameters = targetFunction.get('params');
-            for (const [index, argument] of callPath.get('arguments').entries()) {
-              if (
-                parameters[index]?.node &&
-                expressionIsTainted(argument) &&
-                addBindingsFromPattern(parameters[index])
-              ) {
-                changed = true;
-              }
+      if (ts.isCallExpression(node) && ts.isIdentifier(node.expression)) {
+        const calleeBinding = getBinding(node.expression);
+        const stateBinding = stateBySetter.get(calleeBinding);
+        if (
+          stateBinding &&
+          node.arguments.some((argument) => expressionIsTainted(argument)) &&
+          addBinding(stateBinding)
+        ) {
+          changed = true;
+        }
+
+        const targetFunction = functionFromBinding(calleeBinding);
+        if (targetFunction) {
+          for (const [index, argument] of node.arguments.entries()) {
+            const parameter = targetFunction.parameters[index];
+            if (
+              parameter &&
+              expressionIsTainted(argument) &&
+              addBindingsFromPattern(parameter.name)
+            ) {
+              changed = true;
             }
           }
         }
-      },
-      ReturnStatement(returnPath) {
-        const argument = returnPath.get('argument');
-        const functionPath = returnPath.getFunctionParent();
-        const functionBinding = functionPath ? bindingFromFunction(functionPath) : null;
-        if (
-          argument?.node &&
-          functionBinding &&
-          expressionIsTainted(argument) &&
-          !taintedFunctions.has(functionBinding)
-        ) {
-          taintedFunctions.add(functionBinding);
+      }
+
+      if (ts.isReturnStatement(node) && node.expression) {
+        const functionNode = getFunctionParent(node);
+        const binding = functionNode ? bindingFromFunction(functionNode) : null;
+        if (binding && expressionIsTainted(node.expression) && !taintedFunctions.has(binding)) {
+          taintedFunctions.add(binding);
           changed = true;
         }
-      },
-      VariableDeclarator(declarationPath) {
-        const initializer = declarationPath.get('init');
-        const identifier = declarationPath.get('id');
-        if (initializer?.isIdentifier() && identifier.isIdentifier()) {
-          const stateBinding = stateBySetter.get(getBinding(initializer));
-          const aliasBinding = getBinding(identifier);
+      }
+
+      if (ts.isVariableDeclaration(node) && node.initializer) {
+        if (ts.isIdentifier(node.initializer) && ts.isIdentifier(node.name)) {
+          const stateBinding = stateBySetter.get(getBinding(node.initializer));
+          const aliasBinding = getBinding(node.name);
           if (stateBinding && aliasBinding && !stateBySetter.has(aliasBinding)) {
             stateBySetter.set(aliasBinding, stateBinding);
             changed = true;
           }
         }
-        if (
-          initializer?.node &&
-          expressionIsTainted(initializer) &&
-          addBindingsFromPattern(identifier)
-        ) {
+        if (expressionIsTainted(node.initializer) && addBindingsFromPattern(node.name)) {
           changed = true;
         }
-      },
+      }
     });
   }
   if (changed) {
     throw new Error(`Error-reporting boundary analysis did not converge for ${fileName}`);
   }
 
-  const isOperationalErrorSurface = (openingPath) => {
-    if (!openingPath?.isJSXOpeningElement()) {
+  const isCanonicalErrorSurface = (openingElement) => {
+    if (!isJsxOpeningLikeElement(openingElement)) {
+      return false;
+    }
+    const tag = openingElement.tagName;
+    return (
+      ts.isIdentifier(tag) &&
+      tag.text === ERROR_SURFACE &&
+      importModuleForSymbol(getBinding(tag), project) === ERROR_SURFACE_MODULE
+    );
+  };
+
+  const isOperationalErrorSurface = (openingElement) => {
+    if (!isJsxOpeningLikeElement(openingElement)) {
       return false;
     }
     let operational = false;
     let preservesOriginalError = false;
-    for (const attribute of openingPath.get('attributes')) {
-      if (!attribute.isJSXAttribute() || !attribute.get('name').isJSXIdentifier()) {
+    for (const property of openingElement.attributes.properties) {
+      if (!ts.isJsxAttribute(property) || !ts.isIdentifier(property.name)) {
         continue;
       }
-      const attributeName = attribute.get('name').node.name;
-      const value = attribute.get('value');
-      if (attributeName === 'kind' && value.isStringLiteral({ value: 'operational' })) {
+      if (
+        property.name.text === 'kind' &&
+        property.initializer &&
+        ts.isStringLiteral(property.initializer) &&
+        property.initializer.text === 'operational'
+      ) {
         operational = true;
       }
       if (
-        attributeName === 'error' &&
-        value.isJSXExpressionContainer() &&
-        expressionIsTainted(value.get('expression'))
+        property.name.text === 'error' &&
+        property.initializer &&
+        ts.isJsxExpression(property.initializer) &&
+        property.initializer.expression &&
+        expressionIsTainted(property.initializer.expression)
       ) {
         preservesOriginalError = true;
       }
@@ -469,100 +567,83 @@ export const findInlineErrorBoundaryViolations = (source, fileName = 'source.tsx
     return operational && preservesOriginalError;
   };
 
-  const isCanonicalErrorSurface = (openingPath) => {
-    if (!openingPath?.isJSXOpeningElement()) {
-      return false;
-    }
-    const tag = openingPath.get('name');
-    if (!tag.isJSXIdentifier({ name: ERROR_SURFACE })) {
-      return false;
-    }
-    const binding = openingPath.scope.getBinding(ERROR_SURFACE);
-    const importDeclaration = binding?.path.parentPath;
-    return (
-      binding?.path.isImportSpecifier() === true &&
-      importDeclaration?.isImportDeclaration() === true &&
-      importDeclaration.node.source.value === ERROR_SURFACE_MODULE
-    );
-  };
-
-  const containsOperationalErrorSurface = (rootPath) => {
-    if (!rootPath?.node) {
-      return false;
-    }
-    if (rootPath.isJSXElement()) {
-      const openingElement = rootPath.get('openingElement');
-      if (isCanonicalErrorSurface(openingElement) && isOperationalErrorSurface(openingElement)) {
-        return true;
-      }
-    }
+  const containsOperationalErrorSurface = (root) => {
     let found = false;
-    rootPath.traverse({
-      JSXOpeningElement(openingPath) {
-        if (isCanonicalErrorSurface(openingPath) && isOperationalErrorSurface(openingPath)) {
-          found = true;
-          openingPath.stop();
-        }
-      },
+    visitDescendants(root, (node) => {
+      if (
+        !found &&
+        isJsxOpeningLikeElement(node) &&
+        isCanonicalErrorSurface(node) &&
+        isOperationalErrorSurface(node)
+      ) {
+        found = true;
+      }
     });
     return found;
   };
 
-  const renderedBranchIsClassified = (rawPath) => {
-    const branchPath = unwrap(rawPath);
-    if (!branchPath?.node || !expressionIsTainted(branchPath)) {
+  const renderedBranchIsClassified = (rawNode) => {
+    const node = unwrap(rawNode);
+    if (!node || !expressionIsTainted(node)) {
       return true;
     }
-    if (branchPath.isJSXElement() || branchPath.isJSXFragment()) {
-      return containsOperationalErrorSurface(branchPath);
+    if (ts.isJsxElement(node) || ts.isJsxFragment(node) || ts.isJsxSelfClosingElement(node)) {
+      return containsOperationalErrorSurface(node);
     }
-    if (branchPath.isLogicalExpression() && branchPath.node.operator === '&&') {
-      return renderedBranchIsClassified(branchPath.get('right'));
+    if (
+      ts.isBinaryExpression(node) &&
+      node.operatorToken.kind === ts.SyntaxKind.AmpersandAmpersandToken
+    ) {
+      return renderedBranchIsClassified(node.right);
     }
-    if (branchPath.isConditionalExpression()) {
+    if (ts.isConditionalExpression(node)) {
       return (
-        renderedBranchIsClassified(branchPath.get('consequent')) &&
-        renderedBranchIsClassified(branchPath.get('alternate'))
+        renderedBranchIsClassified(node.whenTrue) && renderedBranchIsClassified(node.whenFalse)
       );
     }
     return false;
   };
 
   const violations = [];
-  traverse(ast, {
-    JSXExpressionContainer(containerPath) {
-      const expression = containerPath.get('expression');
-      if (!expression?.node || !expressionIsTainted(expression)) {
-        return;
-      }
+  visitDescendants(sourceFile, (node) => {
+    if (!ts.isJsxExpression(node) || !node.expression || !expressionIsTainted(node.expression)) {
+      return;
+    }
+    if (renderedBranchIsClassified(node.expression)) {
+      return;
+    }
+    const attribute = node.parent;
+    const openingElement = ts.isJsxAttribute(attribute) ? attribute.parent.parent : null;
+    if (
+      openingElement &&
+      isCanonicalErrorSurface(openingElement) &&
+      isOperationalErrorSurface(openingElement)
+    ) {
+      return;
+    }
 
-      if (renderedBranchIsClassified(expression)) {
-        return;
-      }
-
-      const attribute = containerPath.parentPath;
-      if (attribute?.isJSXAttribute()) {
-        const openingElement = attribute.parentPath;
-        if (
-          openingElement?.isJSXOpeningElement() &&
-          isCanonicalErrorSurface(openingElement) &&
-          isOperationalErrorSurface(openingElement)
-        ) {
-          return;
-        }
-      }
-
-      const location = containerPath.node.loc?.start ?? { line: 1, column: 0 };
-      violations.push({
-        column: location.column + 1,
-        fileName,
-        line: location.line,
-        message:
-          'Render error-derived text through ErrorSurface so the original exception crosses the reporting boundary.',
-      });
-    },
+    const location = sourceFile.getLineAndCharacterOfPosition(node.getStart(sourceFile));
+    violations.push({
+      column: location.character + 1,
+      fileName,
+      line: location.line + 1,
+      message:
+        'Render error-derived text through ErrorSurface so the original exception crosses the reporting boundary.',
+    });
   });
   return violations;
+};
+
+export const findInlineErrorBoundaryViolations = (source, fileName = 'source.tsx') => {
+  if (isErrorOwner(fileName)) {
+    return [];
+  }
+  const parsed = parseTsx(source, fileName);
+  try {
+    return analyzeInlineErrorBoundaryViolations(parsed, fileName);
+  } finally {
+    parsed.dispose();
+  }
 };
 
 const collectFiles = (directory) => {
@@ -578,10 +659,32 @@ const collectFiles = (directory) => {
   return files;
 };
 
-export const checkErrorReportingBoundaries = (sourceDirectory) =>
-  collectFiles(sourceDirectory).flatMap((fileName) =>
-    findInlineErrorBoundaryViolations(readFileSync(fileName, 'utf8'), fileName)
-  );
+export const checkErrorReportingBoundaries = (sourceDirectory) => {
+  const configFileName = path.resolve(process.cwd(), 'tsconfig.json');
+  const api = getTypeScriptAPI();
+  const snapshot = api.updateSnapshot({ openProjects: [configFileName] });
+  try {
+    const project = snapshot
+      .getProjects()
+      .find((candidate) => path.resolve(candidate.configFileName) === configFileName);
+    if (!project) {
+      throw new Error(`Unable to load the TypeScript project at ${configFileName}`);
+    }
+    return collectFiles(sourceDirectory).flatMap((fileName) => {
+      const sourceFile = project.program.getSourceFile(path.resolve(fileName));
+      if (!sourceFile) {
+        throw new Error(`Unable to load ${fileName} from the TypeScript project`);
+      }
+      return analyzeInlineErrorBoundaryViolations(
+        { checker: project.checker, project, sourceFile },
+        fileName
+      );
+    });
+  } finally {
+    snapshot.dispose();
+    api.updateSnapshot({ closeProjects: [configFileName] }).dispose();
+  }
+};
 
 const isMain =
   process.argv[1] && realpathSync(process.argv[1]) === realpathSync(fileURLToPath(import.meta.url));

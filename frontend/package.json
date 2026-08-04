@@ -32,7 +32,7 @@
     "@codemirror/language": "^6.12.4",
     "@codemirror/search": "^6.7.1",
     "@codemirror/state": "^6.7.1",
-    "@codemirror/view": "^6.43.7",
+    "@codemirror/view": "^6.43.8",
     "@lezer/highlight": "^1.2.3",
     "@sentry/react": "^10.69.0",
     "@uiw/react-codemirror": "^4.25.11",
@@ -45,9 +45,7 @@
     "yaml": "^2.9.0"
   },
   "devDependencies": {
-    "@babel/parser": "^7.29.7",
-    "@babel/traverse": "^7.29.7",
-    "@biomejs/biome": "^2.5.6",
+    "@biomejs/biome": "^2.5.7",
     "@sentry/vite-plugin": "^5.4.0",
     "@storybook/react": "^10.5.6",
     "@storybook/react-vite": "^10.5.6",

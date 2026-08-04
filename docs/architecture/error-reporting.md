@@ -41,10 +41,11 @@ data-collection defaults with an application-owned privacy boundary:
   `error.toString()`). The mandatory `check:error-reporting-boundaries` pass
   additionally follows caught, rejected, and constructed errors through
   renamed and transitive aliases, formatter/helper calls, JSX props, and React
-  state or reducer dispatches. Only values returned by the shared reporting
-  boundary are treated as already reported. Renaming an operational error
-  string therefore cannot bypass `ErrorSurface` or discard the original
-  exception before it reaches reporting.
+  state or reducer dispatches. It reuses the repository's pinned TypeScript
+  project and AST APIs rather than adding a second parser/traversal dependency.
+  Only values returned by the shared reporting boundary are treated as already
+  reported. Renaming an operational error string therefore cannot bypass
+  `ErrorSurface` or discard the original exception before it reaches reporting.
 - `handleOperational` is the matching non-toast boundary for caught failures
   that are handled without rendering an error surface. Production code cannot
   call `console.error` directly: the `no-direct-console-error` Biome plugin
