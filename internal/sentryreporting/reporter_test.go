@@ -2,6 +2,7 @@ package sentryreporting
 
 import (
 	"context"
+	"encoding/json"
 	"errors"
 	"fmt"
 	"sync"
@@ -504,16 +505,23 @@ func TestReporterAddsKubernetesFieldCausesToContext(t *testing.T) {
 		Transport: transport,
 	})
 	require.NoError(t, err)
+	const rejectedValue = "customer-tenant-7"
 	statusErr := apierrors.NewInvalid(
 		schema.GroupKind{Group: "apps", Kind: "Deployment"},
 		"private-workload-7",
-		field.ErrorList{field.Invalid(field.NewPath("spec", "replicas"), -1, "must be non-negative")},
+		field.ErrorList{
+			field.Invalid(field.NewPath("spec", "tenant"), rejectedValue, "must match the allowlist"),
+			field.Invalid(field.NewPath("metadata", "labels").Key(rejectedValue), rejectedValue, "must match the allowlist"),
+		},
 	)
 
 	reporter.CaptureException(statusErr, Context{Source: "ResourceLoader", ClusterID: "cluster-a"})
 
 	event := transport.lastEvent()
 	require.NotNil(t, event)
+	payload, marshalErr := json.Marshal(event)
+	require.NoError(t, marshalErr)
+	require.NotContains(t, string(payload), rejectedValue)
 	kubernetesContext := event.Contexts["kubernetes"]
 	require.Equal(t, "Invalid", kubernetesContext["reason"])
 	require.Equal(t, int32(422), kubernetesContext["code"])
@@ -521,10 +529,41 @@ func TestReporterAddsKubernetesFieldCausesToContext(t *testing.T) {
 	require.Equal(t, "Deployment", kubernetesContext["kind"])
 	causes, ok := kubernetesContext["causes"].([]map[string]any)
 	require.True(t, ok)
-	require.Len(t, causes, 1)
-	require.Equal(t, "spec.replicas", causes[0]["field"])
-	require.Contains(t, causes[0]["message"], "must be non-negative")
+	require.Len(t, causes, 2)
+	require.Equal(t, "spec.tenant", causes[0]["field"])
+	require.NotContains(t, causes[0], "message")
+	require.Equal(t, "[field]", causes[1]["field"])
+	require.NotContains(t, causes[1], "message")
 	require.NotContains(t, event.Exception[0].Value, "private-workload-7")
+}
+
+func TestReporterRedactsPrivateResourceNameFromNonAPIStatusErrors(t *testing.T) {
+	transport := &recordingTransport{}
+	reporter, err := New(Config{
+		DSN:       "https://public@example.com/1",
+		Transport: transport,
+	})
+	require.NoError(t, err)
+	const releaseName = "customer-payments"
+	operation := NewKubernetesRequestOperation(KubernetesRequest{
+		Action:   KubernetesActionDelete,
+		Group:    "helm.sh",
+		Version:  "v3",
+		Resource: "releases",
+		Scope:    KubernetesScopeNamespaced,
+	}).WithPrivateResourceNames(releaseName)
+
+	reporter.CaptureException(
+		errors.New("uninstall: release: not found: "+releaseName),
+		Context{Source: "Helm", Operation: operation},
+	)
+
+	event := transport.lastEvent()
+	require.NotNil(t, event)
+	payload, marshalErr := json.Marshal(event)
+	require.NoError(t, marshalErr)
+	require.NotContains(t, string(payload), releaseName)
+	require.Contains(t, event.Exception[0].Value, "[resource]")
 }
 
 func TestReporterCapturesRecoveredPanics(t *testing.T) {

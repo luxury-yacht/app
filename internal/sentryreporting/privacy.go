@@ -1,6 +1,7 @@
 package sentryreporting
 
 import (
+	"errors"
 	"path"
 	"regexp"
 	"sort"
@@ -8,6 +9,8 @@ import (
 	"strings"
 
 	"github.com/getsentry/sentry-go"
+	apierrors "k8s.io/apimachinery/pkg/api/errors"
+	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 )
 
 const redactedValue = "[redacted]"
@@ -40,6 +43,9 @@ var (
 	)
 	telemetryCapabilityShapePattern = regexp.MustCompile(
 		`(?i)\b(?:[a-z0-9*](?:[a-z0-9*.-]*[a-z0-9*])?(?:/[a-z0-9*](?:[a-z0-9*.-]*[a-z0-9*])?)?\s+)?[a-z0-9*](?:[a-z0-9*.-]*[a-z0-9*])?(?:/[a-z0-9*](?:[a-z0-9*.-]*[a-z0-9*])?)?\s+[a-z0-9*](?:[a-z0-9*.-]*[a-z0-9*])?\s+(?:namespace|cluster)-scoped\b`,
+	)
+	kubernetesFieldPathPattern = regexp.MustCompile(
+		`^[A-Za-z_][A-Za-z0-9_-]*(?:(?:\.[A-Za-z_][A-Za-z0-9_-]*)|(?:\[[0-9]+\]))*$`,
 	)
 )
 
@@ -79,7 +85,7 @@ type telemetryReplacement struct {
 	alias   string
 }
 
-func telemetryReplacements(event *sentry.Event) []telemetryReplacement {
+func telemetryReplacements(event *sentry.Event, hint *sentry.EventHint) []telemetryReplacement {
 	if event == nil {
 		return nil
 	}
@@ -94,14 +100,66 @@ func telemetryReplacements(event *sentry.Event) []telemetryReplacement {
 		}
 		delete(event.Tags, key)
 	}
-	if private := strings.TrimSpace(event.Tags["_privacy.resource_name"]); private != "" {
-		replacements = append(replacements, telemetryReplacement{private: private, alias: "[resource]"})
+	for key, value := range event.Tags {
+		if key != "_privacy.resource_name" && !strings.HasPrefix(key, "_privacy.resource_name.") {
+			continue
+		}
+		if private := strings.TrimSpace(value); private != "" {
+			replacements = append(replacements, telemetryReplacement{private: private, alias: "[resource]"})
+		}
+		delete(event.Tags, key)
 	}
-	delete(event.Tags, "_privacy.resource_name")
+	if hint != nil && hint.OriginalException != nil {
+		var statusErr apierrors.APIStatus
+		if errors.As(hint.OriginalException, &statusErr) {
+			status := statusErr.Status()
+			if message := strings.TrimSpace(status.Message); message != "" {
+				alias := "[kubernetes API details redacted]"
+				if status.Details != nil && status.Details.Name != "" {
+					alias = `Kubernetes resource "[resource]" request failed`
+				}
+				replacements = append(replacements, telemetryReplacement{
+					private: message,
+					alias:   alias,
+				})
+			}
+		}
+	}
 	sort.Slice(replacements, func(left, right int) bool {
 		return len(replacements[left].private) > len(replacements[right].private)
 	})
 	return replacements
+}
+
+func sanitizeKubernetesFieldPath(value string) string {
+	if value == "" {
+		return ""
+	}
+	if len(value) > 512 || !kubernetesFieldPathPattern.MatchString(value) {
+		return "[field]"
+	}
+	return value
+}
+
+func sanitizeKubernetesCauseReason(value metav1.CauseType) string {
+	switch value {
+	case metav1.CauseTypeFieldValueNotFound,
+		metav1.CauseTypeFieldValueRequired,
+		metav1.CauseTypeFieldValueDuplicate,
+		metav1.CauseTypeFieldValueInvalid,
+		metav1.CauseTypeFieldValueNotSupported,
+		metav1.CauseTypeForbidden,
+		metav1.CauseTypeTooLong,
+		metav1.CauseTypeTooMany,
+		metav1.CauseTypeInternal,
+		metav1.CauseTypeTypeInvalid,
+		metav1.CauseTypeUnexpectedServerResponse,
+		metav1.CauseTypeFieldManagerConflict,
+		metav1.CauseTypeResourceVersionTooLarge:
+		return string(value)
+	default:
+		return "Unknown"
+	}
 }
 
 func replaceTelemetryText(value string, replacements []telemetryReplacement) string {
@@ -219,11 +277,10 @@ func sanitizeTelemetryValue(key string, value any) any {
 	}
 	switch typed := value.(type) {
 	case string:
-		// Kubernetes field paths (for example spec.replicas) are structural
-		// schema data, not DNS hostnames. Preserve them so validation failures
-		// remain actionable while other free-form strings receive host scrubbing.
+		// Preserve only structurally valid Kubernetes schema paths. Map-key paths
+		// can contain user-provided values, so they are deliberately collapsed.
 		if key == "field" {
-			return typed
+			return sanitizeKubernetesFieldPath(typed)
 		}
 		return sanitizeTelemetryText(typed)
 	case map[string]any:
@@ -347,7 +404,7 @@ func prepareEventForSend(event *sentry.Event, hint *sentry.EventHint) *sentry.Ev
 		return nil
 	}
 
-	replacements := telemetryReplacements(event)
+	replacements := telemetryReplacements(event, hint)
 	isCapabilitiesEvent := event.Tags["source"] == "Capabilities"
 	event.User = sentry.User{}
 	event.Request = nil

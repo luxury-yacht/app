@@ -33,6 +33,30 @@ type blockingInstallationReporter struct {
 	finished chan struct{}
 }
 
+type coordinatedInstallationReporter struct {
+	*recordingErrorReporter
+	started  chan struct{}
+	release  chan struct{}
+	finished chan struct{}
+}
+
+func (r *coordinatedInstallationReporter) CaptureCountMetric(
+	ctx context.Context,
+	_ string,
+	_ int64,
+	_ map[string]string,
+) bool {
+	close(r.started)
+	select {
+	case <-r.release:
+		close(r.finished)
+		return true
+	case <-ctx.Done():
+		close(r.finished)
+		return false
+	}
+}
+
 func (r *blockingInstallationReporter) CaptureCountMetric(
 	ctx context.Context,
 	_ string,
@@ -268,6 +292,66 @@ func TestScheduledInstallationRegistrationDoesNotBlockAndStopsWithContext(t *tes
 	}
 }
 
+func TestClearAppStateWaitsForInstallationRegistrationBeforeDeletingSettings(t *testing.T) {
+	setTestConfigEnv(t)
+	reporter := &coordinatedInstallationReporter{
+		recordingErrorReporter: &recordingErrorReporter{},
+		started:                make(chan struct{}),
+		release:                make(chan struct{}),
+		finished:               make(chan struct{}),
+	}
+	app := NewApp(reporter)
+	require.NoError(t, InitializeErrorReporting(app))
+	settingsPath, err := app.getSettingsFilePath()
+	require.NoError(t, err)
+
+	registrationDone := make(chan struct{})
+	go func() {
+		app.reportInstallationMetricIfNeeded(context.Background())
+		close(registrationDone)
+	}()
+	select {
+	case <-reporter.started:
+	case <-time.After(time.Second):
+		t.Fatal("installation registration did not start")
+	}
+
+	clearDone := make(chan error, 1)
+	go func() {
+		clearDone <- app.ClearAppState()
+	}()
+	returnedBeforeRegistration := false
+	select {
+	case err := <-clearDone:
+		require.NoError(t, err)
+		returnedBeforeRegistration = true
+	case <-time.After(100 * time.Millisecond):
+	}
+
+	close(reporter.release)
+	select {
+	case <-reporter.finished:
+	case <-time.After(time.Second):
+		t.Fatal("installation registration did not finish")
+	}
+	select {
+	case <-registrationDone:
+	case <-time.After(time.Second):
+		t.Fatal("installation registration worker did not return")
+	}
+	if !returnedBeforeRegistration {
+		select {
+		case err := <-clearDone:
+			require.NoError(t, err)
+		case <-time.After(time.Second):
+			t.Fatal("clear app state did not finish")
+		}
+	}
+
+	require.False(t, returnedBeforeRegistration, "factory reset must join installation registration before deleting settings")
+	require.NoFileExists(t, settingsPath)
+}
+
 func TestInstallationTelemetryWarningIsLocalOnly(t *testing.T) {
 	app := newTestAppWithDefaults(t)
 	app.warnInstallationTelemetry("Could not save acknowledgement", errors.New("disk full"))
@@ -283,3 +367,4 @@ func TestInstallationTelemetryWarningIsLocalOnly(t *testing.T) {
 
 var _ sentryreporting.MetricReporter = (*recordingInstallationReporter)(nil)
 var _ sentryreporting.MetricReporter = (*blockingInstallationReporter)(nil)
+var _ sentryreporting.MetricReporter = (*coordinatedInstallationReporter)(nil)

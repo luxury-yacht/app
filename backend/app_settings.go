@@ -927,6 +927,11 @@ func (a *App) ClearAppState() error {
 		if err := a.clearKubeconfigSelection(); err != nil {
 			return err
 		}
+		// Registration holds this mutex through both the metric send and its
+		// acknowledgement write. Waiting here makes that worker finish before
+		// persisted settings are removed, so it cannot recreate a pre-reset ID.
+		a.installationTelemetryMu.Lock()
+		defer a.installationTelemetryMu.Unlock()
 		errs := a.clearPersistedAppState()
 		a.resetInMemoryAppState()
 		if len(errs) > 0 {

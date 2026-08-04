@@ -136,15 +136,20 @@ Neither reporter uses a custom fingerprint. Backend exceptions that implement
 Kubernetes `APIStatus` add
 `k8s.reason` and `http.status_code` tags, including when that status error is
 wrapped. A `kubernetes` context also carries the status, reason, code, retry
-delay, API group/kind, and field-level causes when present; object names and
-request payloads are not copied into that context. Exception types, useful
-stack frames, release/environment, OS/runtime context, safe operation identity,
-Kubernetes reason/status/field details, and the pseudonymous frontend
-installation ID remain available for diagnosis.
+delay, API group/kind, and field-level causes when present. Cause reasons use a
+closed Kubernetes allowlist, cause messages are omitted, and only schema-shaped
+field paths such as `spec.template.spec.containers[0].image` are retained. Paths
+containing map keys or other free-form values become `[field]`. The typed status
+message is replaced before transport because validation errors can echo rejected
+manifest values. Object names and request payloads are not copied into that
+context. Exception types, useful stack frames, release/environment, OS/runtime
+context, safe operation identity, Kubernetes reason/status/field details, and
+the pseudonymous frontend installation ID remain available for diagnosis.
 
 The backend defines one `beforeSend` privacy boundary. It removes user/request
 data and hostnames, clears captured runtime variables, sanitizes free-form text,
-replaces cluster identifiers and typed Kubernetes status object names,
+replaces cluster identifiers, typed Kubernetes status object names, and
+resource names supplied through the operation contract's redaction-only channel,
 normalizes this repository's application frame
 filenames to paths such as `backend/capabilities/service.go`, and removes stack
 frames belonging to the reporting machinery itself — `sentryReporter`'s capture
@@ -208,7 +213,9 @@ old `anonymizedId` and that acknowledgement. The frontend reload creates a new
 ID and a new Release Health session, while the replacement installation
 registration is scheduled from the Go backend's next startup callback,
 normally on the next full app launch. The new ID is then counted as a new
-pseudonymous installation.
+pseudonymous installation. Factory Reset waits for any in-flight registration,
+including its acknowledgement write, before deleting settings, so that worker
+cannot restore the previous ID after deletion.
 
 The registration flush has a two-second deadline, but it never runs on the
 pre-`wails.Run` initialization path and therefore cannot add that delay to app

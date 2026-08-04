@@ -124,6 +124,7 @@ type App struct {
 	settingsMu sync.Mutex
 	// installationTelemetryMu serializes the installation-registration metric and its durable
 	// acknowledgement so startup and a live preference change cannot send it concurrently.
+	// Factory Reset takes it before settingsMu and file deletion; keep that lock order.
 	installationTelemetryMu sync.Mutex
 	// attentionRulesMu serializes persisted Attention mutations with their live
 	// index updates so cluster-scoped and global rules cannot be applied out of

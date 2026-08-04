@@ -31,7 +31,28 @@ import (
 	"k8s.io/apimachinery/pkg/runtime/schema"
 
 	"github.com/luxury-yacht/app/backend/resources/common"
+	"github.com/luxury-yacht/app/internal/sentryreporting"
 )
+
+type recordingHelmLogger struct {
+	cause     error
+	operation sentryreporting.Operation
+}
+
+func (*recordingHelmLogger) Debug(string, ...string) {}
+func (*recordingHelmLogger) Info(string, ...string)  {}
+func (*recordingHelmLogger) Warn(string, ...string)  {}
+func (*recordingHelmLogger) Error(string, ...string) {}
+
+func (l *recordingHelmLogger) ErrorWithCauseAndOperation(
+	err error,
+	_ string,
+	operation sentryreporting.Operation,
+	_ ...string,
+) {
+	l.cause = err
+	l.operation = operation
+}
 
 type testResourceResolver map[schema.GroupVersionKind]common.ResolvedResource
 
@@ -533,9 +554,11 @@ func TestDeleteReleaseRemovesRelease(t *testing.T) {
 
 func TestDeleteReleaseMissingReturnsError(t *testing.T) {
 	store := storage.Init(driver.NewMemory())
+	logger := &recordingHelmLogger{}
 	service := NewService(Dependencies{
 		Common: common.Dependencies{
 			EnsureClient: func(string) error { return nil },
+			Logger:       logger,
 		},
 		ActionConfigFactory: func(*cli.EnvSettings, string) (*action.Configuration, error) {
 			return &action.Configuration{
@@ -549,6 +572,13 @@ func TestDeleteReleaseMissingReturnsError(t *testing.T) {
 	err := service.DeleteRelease("default", "missing")
 	require.Error(t, err)
 	require.Contains(t, err.Error(), "failed to delete Helm release")
+	require.Error(t, logger.cause)
+	require.Equal(t,
+		common.DynamicResourceRequestOperation(
+			"delete", "helm.sh", "v3", "releases", "", true,
+		).WithPrivateResourceNames("missing"),
+		logger.operation,
+	)
 }
 
 func TestReleaseManifestReturnsContent(t *testing.T) {

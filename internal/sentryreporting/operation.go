@@ -1,6 +1,9 @@
 package sentryreporting
 
-import "regexp"
+import (
+	"regexp"
+	"strings"
+)
 
 // KubernetesAction is deliberately closed at the telemetry boundary. It
 // describes the API operation without accepting a human-readable message.
@@ -54,15 +57,32 @@ const (
 // Operation is opaque outside this package so telemetry producers cannot add
 // unreviewed fields. Constructors below are the only way to create one.
 type Operation struct {
-	kind         operationKind
-	request      KubernetesRequest
-	checks       []KubernetesRequest
-	failureCount int
-	totalCount   int
+	kind                 operationKind
+	request              KubernetesRequest
+	checks               []KubernetesRequest
+	failureCount         int
+	totalCount           int
+	privateResourceNames []string
 }
 
 func NewKubernetesRequestOperation(request KubernetesRequest) Operation {
 	return Operation{kind: operationKindKubernetesRequest, request: request}
+}
+
+// WithPrivateResourceNames supplies identifiers solely for exact replacement
+// inside the SDK privacy boundary. The names never enter telemetryContext.
+func (o Operation) WithPrivateResourceNames(names ...string) Operation {
+	o.privateResourceNames = append([]string(nil), o.privateResourceNames...)
+	for _, name := range names {
+		if strings.TrimSpace(name) != "" {
+			o.privateResourceNames = append(o.privateResourceNames, name)
+		}
+	}
+	return o
+}
+
+func (o Operation) resourceNamesForRedaction() []string {
+	return append([]string(nil), o.privateResourceNames...)
 }
 
 // NewKubernetesCapabilityBatchOperation retains the failed permission shapes

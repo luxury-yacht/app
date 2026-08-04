@@ -383,11 +383,13 @@ func addKubernetesStatusTags(hub *sentry.Hub, err error) {
 			if len(status.Details.Causes) > 0 {
 				causes := make([]map[string]any, 0, len(status.Details.Causes))
 				for _, cause := range status.Details.Causes {
-					causes = append(causes, map[string]any{
-						"reason":  string(cause.Type),
-						"message": cause.Message,
-						"field":   cause.Field,
-					})
+					safeCause := map[string]any{
+						"reason": sanitizeKubernetesCauseReason(cause.Type),
+					}
+					if fieldPath := sanitizeKubernetesFieldPath(cause.Field); fieldPath != "" {
+						safeCause["field"] = fieldPath
+					}
+					causes = append(causes, safeCause)
 				}
 				statusContext["causes"] = causes
 			}
@@ -528,6 +530,9 @@ func (r *sentryReporter) withHub(context Context, capture func(*sentry.Hub)) {
 		}
 		if context.OperationID != "" {
 			scope.SetTag("operation.id", context.OperationID)
+		}
+		for index, name := range context.Operation.resourceNamesForRedaction() {
+			scope.SetTag(fmt.Sprintf("_privacy.resource_name.%d", index), name)
 		}
 		if !context.Operation.isZero() || context.OperationID != "" {
 			errorContext := sentry.Context{}
