@@ -1,6 +1,7 @@
 package backend
 
 import (
+	"context"
 	"crypto/rand"
 	"fmt"
 	"regexp"
@@ -56,7 +57,17 @@ func ensureAnonymizedID(settings *settingsFile) (bool, error) {
 	return true, nil
 }
 
-func (a *App) reportInstallationMetricIfNeeded() {
+func (a *App) scheduleInstallationMetricRegistration(ctx context.Context) {
+	if a == nil || ctx == nil {
+		return
+	}
+	go a.reportInstallationMetricIfNeeded(ctx)
+}
+
+func (a *App) reportInstallationMetricIfNeeded(ctx context.Context) {
+	if ctx == nil || ctx.Err() != nil {
+		return
+	}
 	metricReporter, ok := a.errorReporter.(sentryreporting.MetricReporter)
 	if !ok || !a.errorReporter.Enabled() {
 		return
@@ -89,7 +100,10 @@ func (a *App) reportInstallationMetricIfNeeded() {
 	anonymizedId := settings.Telemetry.AnonymizedID
 	a.settingsMu.Unlock()
 
+	metricCtx, cancel := context.WithTimeout(ctx, installationMetricFlushTimeout)
+	defer cancel()
 	flushed := metricReporter.CaptureCountMetric(
+		metricCtx,
 		installationRegisteredMetric,
 		1,
 		map[string]string{
@@ -97,7 +111,6 @@ func (a *App) reportInstallationMetricIfNeeded() {
 			"os.name":  runtime.GOOS,
 			"os.arch":  runtime.GOARCH,
 		},
-		installationMetricFlushTimeout,
 	)
 	if !flushed {
 		return

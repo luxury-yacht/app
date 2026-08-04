@@ -57,7 +57,7 @@ func (s *Service) Node(name string) (*NodeDetails, error) {
 	client := s.deps.KubernetesClient
 	node, err := client.CoreV1().Nodes().Get(s.deps.Context, name, metav1.GetOptions{})
 	if err != nil {
-		s.logError(err, fmt.Sprintf("Failed to get node %s", name))
+		s.logError(err, fmt.Sprintf("Failed to get node %s", name), "get")
 		return nil, fmt.Errorf("failed to get node: %w", err)
 	}
 
@@ -414,7 +414,7 @@ func (s *Service) Delete(nodeName string, force bool) error {
 	}
 
 	if err := s.deps.KubernetesClient.CoreV1().Nodes().Delete(s.deps.Context, nodeName, deleteOptions); err != nil {
-		s.logError(err, fmt.Sprintf("Failed to delete node %s", nodeName))
+		s.logError(err, fmt.Sprintf("Failed to delete node %s", nodeName), "delete")
 		return fmt.Errorf("failed to delete node: %w", err)
 	}
 
@@ -705,6 +705,6 @@ func (s *Service) logInfo(msg string) {
 	applog.Info(s.deps.Logger, msg, "NodeOperations")
 }
 
-func (s *Service) logError(err error, msg string) {
-	s.deps.LogRequestFailure(err, msg, "NodeOperations")
+func (s *Service) logError(err error, msg string, action string) {
+	s.deps.LogResourceRequestFailure(err, msg, action, Identity, "NodeOperations")
 }

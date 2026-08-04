@@ -58,6 +58,7 @@ func (a *App) Startup(ctx context.Context) {
 		a.logger.Warn(fmt.Sprintf("Kubeconfig directory watcher not available: %v", err), logsources.App)
 	}
 	a.startUpdateCheck()
+	a.scheduleInstallationMetricRegistration(ctx)
 }
 
 func (a *App) initializeClusterLifecycle() {

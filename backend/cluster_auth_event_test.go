@@ -8,6 +8,7 @@ import (
 	"time"
 
 	"github.com/luxury-yacht/app/backend/internal/authstate"
+	"github.com/luxury-yacht/app/internal/sentryreporting"
 	"github.com/stretchr/testify/require"
 )
 
@@ -84,7 +85,7 @@ func TestHandleClusterAuthStateChange_InvalidEmitsAuthFailed(t *testing.T) {
 	reporter.mu.Lock()
 	require.Len(t, reporter.exceptions, 1)
 	require.EqualError(t, reporter.exceptions[0].err, "token expired")
-	require.Equal(t, "Cluster Test Cluster auth failed", reporter.exceptions[0].context.Operation)
+	require.Equal(t, sentryreporting.Operation{}, reporter.exceptions[0].context.Operation)
 	reporter.mu.Unlock()
 }
 

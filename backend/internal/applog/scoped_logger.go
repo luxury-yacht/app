@@ -1,6 +1,10 @@
 package applog
 
-import "strings"
+import (
+	"strings"
+
+	"github.com/luxury-yacht/app/internal/sentryreporting"
+)
 
 // Logger is the shared application-log method shape used across backend packages.
 type Logger interface {
@@ -48,6 +52,15 @@ func (l clusterScopedLogger) Error(message string, source ...string) {
 
 func (l clusterScopedLogger) ErrorWithCause(err error, message string, source ...string) {
 	ReportError(l.base, err, message, l.withCluster(source)...)
+}
+
+func (l clusterScopedLogger) ErrorWithCauseAndOperation(
+	err error,
+	message string,
+	operation sentryreporting.Operation,
+	source ...string,
+) {
+	ReportErrorWithOperation(l.base, err, message, operation, l.withCluster(source)...)
 }
 
 func (l clusterScopedLogger) Panic(recovered any, message string, source ...string) {

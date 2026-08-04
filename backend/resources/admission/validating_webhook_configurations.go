@@ -23,7 +23,7 @@ func (s *Service) ValidatingWebhookConfiguration(name string) (*ValidatingWebhoo
 
 	config, err := client.AdmissionregistrationV1().ValidatingWebhookConfigurations().Get(s.deps.Context, name, metav1.GetOptions{})
 	if err != nil {
-		s.logError(err, fmt.Sprintf("Failed to get validating webhook configuration %s", name))
+		s.logError(err, fmt.Sprintf("Failed to get validating webhook configuration %s", name), ValidatingIdentity)
 		return nil, fmt.Errorf("failed to get validating webhook configuration: %w", err)
 	}
 

@@ -30,7 +30,7 @@ func NewService(deps common.Dependencies) *Service {
 func (s *Service) ClusterRoleBinding(name string) (*ClusterRoleBindingDetails, error) {
 	crb, err := s.deps.KubernetesClient.RbacV1().ClusterRoleBindings().Get(s.deps.Context, name, metav1.GetOptions{})
 	if err != nil {
-		s.deps.LogRequestFailure(err, fmt.Sprintf("Failed to get cluster role binding %s", name), "RBAC")
+		s.deps.LogResourceRequestFailure(err, fmt.Sprintf("Failed to get cluster role binding %s", name), "get", Identity, "RBAC")
 		return nil, fmt.Errorf("failed to get cluster role binding: %w", err)
 	}
 	return s.buildClusterRoleBindingDetails(crb), nil

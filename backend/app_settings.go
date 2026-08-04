@@ -977,7 +977,7 @@ func (a *App) GetAppSettings() (*AppSettings, error) {
 
 	if a.appSettings == nil {
 		if err := a.loadAppSettings(); err != nil {
-			return getDefaultAppSettings(), nil
+			return nil, err
 		}
 	}
 
@@ -1008,9 +1008,6 @@ func InitializeErrorReporting(a *App) error {
 	a.settingsMu.Unlock()
 	if err := a.errorReporter.SetEnabled(enabled); err != nil {
 		return err
-	}
-	if enabled {
-		a.reportInstallationMetricIfNeeded()
 	}
 	return nil
 }
@@ -1157,7 +1154,7 @@ func (a *App) applySettingsSideEffects(update *preparedPreferenceUpdate) {
 		if err := a.errorReporter.SetEnabled(settings.ErrorReportingEnabled); err != nil {
 			a.logger.Warn(fmt.Sprintf("Could not update error reporting: %v", err), logsources.Settings)
 		} else if settings.ErrorReportingEnabled {
-			a.reportInstallationMetricIfNeeded()
+			a.scheduleInstallationMetricRegistration(a.Ctx)
 		}
 	}
 	if update.effects.kubernetesClientRateLimits {

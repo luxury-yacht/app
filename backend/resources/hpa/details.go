@@ -67,7 +67,7 @@ func (s *Service) buildHorizontalPodAutoscalerDetails(h *autoscalingv2.Horizonta
 }
 
 func (s *Service) logError(err error, msg string) {
-	s.deps.LogRequestFailure(err, msg, logsources.ResourceLoader)
+	s.deps.LogResourceRequestFailure(err, msg, "get", Identity, logsources.ResourceLoader)
 }
 
 func scaleTargetReferenceFromFacts(link resourcemodel.ResourceLink) ScaleTargetReference {

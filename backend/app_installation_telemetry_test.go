@@ -1,6 +1,7 @@
 package backend
 
 import (
+	"context"
 	"errors"
 	"regexp"
 	"runtime"
@@ -13,10 +14,10 @@ import (
 )
 
 type recordedCountMetric struct {
-	name       string
-	count      int64
-	attributes map[string]string
-	timeout    time.Duration
+	name        string
+	count       int64
+	attributes  map[string]string
+	hasDeadline bool
 }
 
 type recordingInstallationReporter struct {
@@ -24,6 +25,24 @@ type recordingInstallationReporter struct {
 	metricMu      sync.Mutex
 	metrics       []recordedCountMetric
 	metricResults []bool
+}
+
+type blockingInstallationReporter struct {
+	*recordingErrorReporter
+	started  chan struct{}
+	finished chan struct{}
+}
+
+func (r *blockingInstallationReporter) CaptureCountMetric(
+	ctx context.Context,
+	_ string,
+	_ int64,
+	_ map[string]string,
+) bool {
+	close(r.started)
+	<-ctx.Done()
+	close(r.finished)
+	return false
 }
 
 func newRecordingInstallationReporter(results ...bool) *recordingInstallationReporter {
@@ -34,18 +53,19 @@ func newRecordingInstallationReporter(results ...bool) *recordingInstallationRep
 }
 
 func (r *recordingInstallationReporter) CaptureCountMetric(
+	ctx context.Context,
 	name string,
 	count int64,
 	attributes map[string]string,
-	timeout time.Duration,
 ) bool {
+	_, hasDeadline := ctx.Deadline()
 	r.metricMu.Lock()
 	defer r.metricMu.Unlock()
 	r.metrics = append(r.metrics, recordedCountMetric{
-		name:       name,
-		count:      count,
-		attributes: attributes,
-		timeout:    timeout,
+		name:        name,
+		count:       count,
+		attributes:  attributes,
+		hasDeadline: hasDeadline,
 	})
 	if len(r.metricResults) == 0 {
 		return true
@@ -103,13 +123,31 @@ func TestMalformedAnonymizedIDIsReplacedInsteadOfReportedAsUserData(t *testing.T
 	require.False(t, settings.Telemetry.InstallationMetricReported)
 }
 
-func TestInitializeErrorReportingEmitsInstallationMetricOnce(t *testing.T) {
+func TestInitializeErrorReportingDoesNotSynchronouslyEmitInstallationMetric(t *testing.T) {
 	setTestConfigEnv(t)
 	reporter := newRecordingInstallationReporter(true)
 	app := NewApp(reporter)
 
 	require.NoError(t, InitializeErrorReporting(app))
 	require.NoError(t, InitializeErrorReporting(app))
+
+	reporter.metricMu.Lock()
+	require.Empty(t, reporter.metrics)
+	reporter.metricMu.Unlock()
+
+	saved, err := app.loadSettingsFile()
+	require.NoError(t, err)
+	require.False(t, saved.Telemetry.InstallationMetricReported)
+}
+
+func TestPostStartupInstallationRegistrationEmitsMetricOnce(t *testing.T) {
+	setTestConfigEnv(t)
+	reporter := newRecordingInstallationReporter(true)
+	app := NewApp(reporter)
+	require.NoError(t, InitializeErrorReporting(app))
+
+	app.reportInstallationMetricIfNeeded(context.Background())
+	app.reportInstallationMetricIfNeeded(context.Background())
 
 	reporter.metricMu.Lock()
 	require.Equal(t, []recordedCountMetric{{
@@ -120,7 +158,7 @@ func TestInitializeErrorReportingEmitsInstallationMetricOnce(t *testing.T) {
 			"os.name":  runtime.GOOS,
 			"os.arch":  runtime.GOARCH,
 		},
-		timeout: installationMetricFlushTimeout,
+		hasDeadline: true,
 	}}, reporter.metrics)
 	reporter.metricMu.Unlock()
 
@@ -139,6 +177,7 @@ func TestInstallationMetricStaysPendingWhileReportingIsDisabled(t *testing.T) {
 	app.appSettings = nil
 
 	require.NoError(t, InitializeErrorReporting(app))
+	app.reportInstallationMetricIfNeeded(context.Background())
 
 	reporter.metricMu.Lock()
 	require.Empty(t, reporter.metrics)
@@ -154,11 +193,12 @@ func TestInstallationMetricRetriesAfterFlushFailure(t *testing.T) {
 	app := NewApp(reporter)
 
 	require.NoError(t, InitializeErrorReporting(app))
+	app.reportInstallationMetricIfNeeded(context.Background())
 	failed, err := app.loadSettingsFile()
 	require.NoError(t, err)
 	require.False(t, failed.Telemetry.InstallationMetricReported)
 
-	require.NoError(t, InitializeErrorReporting(app))
+	app.reportInstallationMetricIfNeeded(context.Background())
 	succeeded, err := app.loadSettingsFile()
 	require.NoError(t, err)
 	require.True(t, succeeded.Telemetry.InstallationMetricReported)
@@ -177,6 +217,7 @@ func TestEnablingErrorReportingEmitsPendingInstallationMetric(t *testing.T) {
 	require.NoError(t, app.saveAppSettings())
 	app.appSettings = nil
 	require.NoError(t, InitializeErrorReporting(app))
+	app.Ctx = context.Background()
 
 	_, err := app.UpdateAppPreferences(UpdateAppPreferencesRequest{Changes: []AppPreferenceChange{{
 		Key:   appPreferenceErrorReportingEnabled,
@@ -184,9 +225,47 @@ func TestEnablingErrorReportingEmitsPendingInstallationMetric(t *testing.T) {
 	}}})
 	require.NoError(t, err)
 
-	reporter.metricMu.Lock()
-	require.Len(t, reporter.metrics, 1)
-	reporter.metricMu.Unlock()
+	require.Eventually(t, func() bool {
+		reporter.metricMu.Lock()
+		defer reporter.metricMu.Unlock()
+		return len(reporter.metrics) == 1
+	}, time.Second, 10*time.Millisecond)
+}
+
+func TestScheduledInstallationRegistrationDoesNotBlockAndStopsWithContext(t *testing.T) {
+	setTestConfigEnv(t)
+	reporter := &blockingInstallationReporter{
+		recordingErrorReporter: &recordingErrorReporter{},
+		started:                make(chan struct{}),
+		finished:               make(chan struct{}),
+	}
+	app := NewApp(reporter)
+	require.NoError(t, InitializeErrorReporting(app))
+	ctx, cancel := context.WithCancel(context.Background())
+	returned := make(chan struct{})
+	go func() {
+		app.scheduleInstallationMetricRegistration(ctx)
+		close(returned)
+	}()
+
+	select {
+	case <-returned:
+	case <-time.After(250 * time.Millisecond):
+		cancel()
+		t.Fatal("scheduling installation registration blocked startup")
+	}
+	select {
+	case <-reporter.started:
+	case <-time.After(time.Second):
+		cancel()
+		t.Fatal("scheduled installation registration did not start")
+	}
+	cancel()
+	select {
+	case <-reporter.finished:
+	case <-time.After(time.Second):
+		t.Fatal("installation registration did not stop after cancellation")
+	}
 }
 
 func TestInstallationTelemetryWarningIsLocalOnly(t *testing.T) {
@@ -203,3 +282,4 @@ func TestInstallationTelemetryWarningIsLocalOnly(t *testing.T) {
 }
 
 var _ sentryreporting.MetricReporter = (*recordingInstallationReporter)(nil)
+var _ sentryreporting.MetricReporter = (*blockingInstallationReporter)(nil)

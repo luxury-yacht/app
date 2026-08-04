@@ -19,6 +19,7 @@ import (
 	"github.com/luxury-yacht/app/backend/internal/config"
 	"github.com/luxury-yacht/app/backend/internal/k8sretry"
 	"github.com/luxury-yacht/app/backend/resources/common"
+	"github.com/luxury-yacht/app/internal/sentryreporting"
 	authorizationv1 "k8s.io/api/authorization/v1"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 )
@@ -107,6 +108,7 @@ func (s *Service) Evaluate(ctx context.Context, checks []ReviewAttributes) ([]Ch
 	reviewFailures := 0
 	var firstReviewErr error
 	var failedIdentities []string
+	var failedChecks []sentryreporting.KubernetesRequest
 
 	for i := 0; i < workerCount; i++ {
 		wg.Add(1)
@@ -156,6 +158,7 @@ func (s *Service) Evaluate(ctx context.Context, checks []ReviewAttributes) ([]Ch
 					}
 					if len(failedIdentities) < maxReportedFailedChecks {
 						failedIdentities = append(failedIdentities, describeCapabilityShape(attrs))
+						failedChecks = append(failedChecks, capabilityRequest(attrs))
 					}
 					reviewFailureMu.Unlock()
 					result.Error = err.Error()
@@ -214,7 +217,7 @@ func (s *Service) Evaluate(ctx context.Context, checks []ReviewAttributes) ([]Ch
 			reviewFailures, len(checks),
 			firstReviewErr,
 			strings.Join(failedIdentities, ", "),
-		))
+		), sentryreporting.NewKubernetesCapabilityBatchOperation(reviewFailures, len(checks), failedChecks))
 	}
 
 	if collectMetrics {
@@ -290,7 +293,29 @@ func describeCapabilityShape(attrs *authorizationv1.ResourceAttributes) string {
 	return strings.Join(rendered, " ")
 }
 
-func (s *Service) logError(err error, message string) {
+func capabilityRequest(attrs *authorizationv1.ResourceAttributes) sentryreporting.KubernetesRequest {
+	if attrs == nil {
+		return sentryreporting.KubernetesRequest{}
+	}
+	scope := sentryreporting.KubernetesScopeCluster
+	if attrs.Namespace != "" {
+		scope = sentryreporting.KubernetesScopeNamespaced
+	}
+	return sentryreporting.KubernetesRequest{
+		Action:      sentryreporting.KubernetesAction(attrs.Verb),
+		Group:       attrs.Group,
+		Version:     attrs.Version,
+		Resource:    attrs.Resource,
+		Subresource: attrs.Subresource,
+		Scope:       scope,
+	}
+}
+
+func (s *Service) logError(err error, message string, operations ...sentryreporting.Operation) {
+	if len(operations) > 0 {
+		applog.ReportErrorWithOperation(s.deps.Common.Logger, err, message, operations[0], "Capabilities")
+		return
+	}
 	applog.ReportError(s.deps.Common.Logger, err, message, "Capabilities")
 }
 

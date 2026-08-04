@@ -71,7 +71,17 @@ func (s *Service) DeleteByGVK(gvk schema.GroupVersionKind, namespace, name strin
 	}
 
 	if deleteErr != nil {
-		s.logError(deleteErr, fmt.Sprintf("Failed to delete %s %s/%s", gvk.String(), namespace, name))
+		s.deps.LogDynamicResourceRequestFailure(
+			deleteErr,
+			fmt.Sprintf("Failed to delete %s %s/%s", gvk.String(), namespace, name),
+			"delete",
+			gvr.Group,
+			gvr.Version,
+			gvr.Resource,
+			"",
+			isNamespaced,
+			"GenericResource",
+		)
 		return fmt.Errorf("failed to delete %s: %w", gvk.String(), deleteErr)
 	}
 

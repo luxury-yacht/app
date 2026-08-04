@@ -87,13 +87,17 @@ func telemetryReplacements(event *sentry.Event) []telemetryReplacement {
 	if clusterAlias == "" {
 		clusterAlias = "[cluster]"
 	}
-	replacements := make([]telemetryReplacement, 0, 2)
+	replacements := make([]telemetryReplacement, 0, 3)
 	for _, key := range []string{"_privacy.cluster_id", "_privacy.cluster_name"} {
 		if private := strings.TrimSpace(event.Tags[key]); private != "" {
 			replacements = append(replacements, telemetryReplacement{private: private, alias: clusterAlias})
 		}
 		delete(event.Tags, key)
 	}
+	if private := strings.TrimSpace(event.Tags["_privacy.resource_name"]); private != "" {
+		replacements = append(replacements, telemetryReplacement{private: private, alias: "[resource]"})
+	}
+	delete(event.Tags, "_privacy.resource_name")
 	sort.Slice(replacements, func(left, right int) bool {
 		return len(replacements[left].private) > len(replacements[right].private)
 	})
@@ -186,17 +190,23 @@ func sanitizeCapabilityTelemetryText(value string) string {
 	return protected
 }
 
-func sanitizeCapabilityErrorContext(values map[string]any) map[string]any {
+func sanitizeErrorContext(values map[string]any, preserveLegacyCapabilityShapes bool) map[string]any {
 	if values == nil {
 		return nil
 	}
 	result := make(map[string]any, len(values))
 	for key, value := range values {
 		if key == "operation" {
-			if operation, ok := value.(string); ok {
+			if operation := sanitizeOperationTelemetryContext(value); operation != nil {
+				result[key] = operation
+				continue
+			}
+			if operation, ok := value.(string); ok && preserveLegacyCapabilityShapes {
 				result[key] = sanitizeCapabilityTelemetryText(operation)
 				continue
 			}
+			// Free-form operation strings are not part of the telemetry schema.
+			continue
 		}
 		result[key] = sanitizeTelemetryValue(key, value)
 	}
@@ -376,8 +386,8 @@ func prepareEventForSend(event *sentry.Event, hint *sentry.EventHint) *sentry.Ev
 	}
 	for key, value := range event.Contexts {
 		replaced := replaceTelemetryMap(value, replacements)
-		if isCapabilitiesEvent && key == "error" {
-			event.Contexts[key] = sanitizeCapabilityErrorContext(replaced)
+		if key == "error" {
+			event.Contexts[key] = sanitizeErrorContext(replaced, isCapabilitiesEvent)
 		} else {
 			event.Contexts[key] = sanitizeTelemetryMap(replaced)
 		}

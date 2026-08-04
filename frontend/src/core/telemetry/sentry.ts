@@ -264,22 +264,78 @@ const sanitizeTelemetryText = (rawValue: string): string => {
   return value;
 };
 
-const sanitizeTelemetryValue = (value: unknown, key = ''): unknown => {
+const canonicalBundleIdentity = (rawValue: string): string => {
+  const normalized = replaceKnownIdentifiers(rawValue).replace(/\\/gu, '/');
+  let pathname = normalized;
+  if (/^[a-z][a-z0-9+.-]*:\/\//iu.test(normalized)) {
+    try {
+      pathname = new URL(normalized).pathname;
+    } catch {
+      return '[bundle]';
+    }
+  } else {
+    pathname = pathname.split(/[?#]/u, 1)[0] ?? '';
+  }
+
+  const assetsMarker = '/assets/';
+  const assetsIndex = pathname.lastIndexOf(assetsMarker);
+  const pathnameSegments = pathname.split('/');
+  const relativePath =
+    assetsIndex >= 0
+      ? pathname.slice(assetsIndex + 1)
+      : (pathnameSegments[pathnameSegments.length - 1] ?? '');
+  const segments = relativePath.split('/').filter(Boolean);
+  if (
+    segments.length === 0 ||
+    segments.some(
+      (segment: string) =>
+        segment === '.' || segment === '..' || !/^[A-Za-z0-9][A-Za-z0-9._~-]{0,200}$/u.test(segment)
+    )
+  ) {
+    return '[bundle]';
+  }
+  return `app:///${segments.join('/')}`;
+};
+
+const isBundleIdentityField = (key: string, path: readonly string[]): boolean => {
+  if (key === 'code_file') {
+    return path[0] === 'debug_meta' && path.includes('images');
+  }
+  if (key !== 'filename' && key !== 'abs_path') {
+    return false;
+  }
+  return (
+    path.includes('frames') &&
+    (path[0] === 'exception' || path[0] === 'threads' || path[0] === 'stacktrace')
+  );
+};
+
+const sanitizeTelemetryValue = (
+  value: unknown,
+  key = '',
+  path: readonly string[] = key ? [key] : []
+): unknown => {
   if (isPrivateTelemetryKey(key)) {
     return key === 'vars' ? undefined : '[redacted]';
   }
   if (typeof value === 'string') {
+    if (isBundleIdentityField(key, path)) {
+      return canonicalBundleIdentity(value);
+    }
     return sanitizeTelemetryText(value);
   }
   if (Array.isArray(value)) {
-    return value.map((item) => sanitizeTelemetryValue(item));
+    return value.map((item) => sanitizeTelemetryValue(item, '', path));
   }
   if (!value || typeof value !== 'object') {
     return value;
   }
   return Object.fromEntries(
     Object.entries(value)
-      .map(([childKey, childValue]) => [childKey, sanitizeTelemetryValue(childValue, childKey)])
+      .map(([childKey, childValue]) => [
+        childKey,
+        sanitizeTelemetryValue(childValue, childKey, [...path, childKey]),
+      ])
       .filter(([, childValue]) => childValue !== undefined)
   );
 };

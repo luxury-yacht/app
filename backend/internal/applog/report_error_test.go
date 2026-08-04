@@ -4,6 +4,7 @@ import (
 	"errors"
 	"testing"
 
+	"github.com/luxury-yacht/app/internal/sentryreporting"
 	"github.com/stretchr/testify/require"
 )
 
@@ -11,6 +12,21 @@ type recordingStructuredLogger struct {
 	recordingLogger
 	cause     error
 	recovered any
+}
+
+type recordingOperationLogger struct {
+	recordingStructuredLogger
+	operation sentryreporting.Operation
+}
+
+func (l *recordingOperationLogger) ErrorWithCauseAndOperation(
+	err error,
+	message string,
+	operation sentryreporting.Operation,
+	source ...string,
+) {
+	l.operation = operation
+	l.ErrorWithCause(err, message, source...)
 }
 
 func (l *recordingStructuredLogger) ErrorWithCause(err error, message string, source ...string) {
@@ -50,6 +66,23 @@ func TestReportErrorWithNilLoggerIsNoop(t *testing.T) {
 	require.NotPanics(t, func() {
 		ReportError(nil, errors.New("forbidden"), "load pods", "Refresh")
 	})
+}
+
+func TestReportErrorWithOperationPreservesStructuredTelemetry(t *testing.T) {
+	logger := &recordingOperationLogger{}
+	cause := errors.New("forbidden")
+	operation := sentryreporting.NewKubernetesRequestOperation(sentryreporting.KubernetesRequest{
+		Action:   sentryreporting.KubernetesActionGet,
+		Version:  "v1",
+		Resource: "persistentvolumeclaims",
+		Scope:    sentryreporting.KubernetesScopeNamespaced,
+	})
+
+	ReportErrorWithOperation(logger, cause, "Failed to get PVC customer-prod/database", operation, "ResourceLoader")
+
+	require.Same(t, cause, logger.cause)
+	require.Equal(t, operation, logger.operation)
+	require.Equal(t, "Failed to get PVC customer-prod/database", logger.message)
 }
 
 func TestReportPanicPreservesRecoveredValueForStructuredLogger(t *testing.T) {

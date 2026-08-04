@@ -58,7 +58,7 @@ func (s *Service) buildLimitRangeDetails(lr *corev1.LimitRange) *LimitRangeDetai
 }
 
 func (s *Service) logError(err error, msg string) {
-	s.deps.LogRequestFailure(err, msg, logsources.ResourceLoader)
+	s.deps.LogResourceRequestFailure(err, msg, "get", Identity, logsources.ResourceLoader)
 }
 
 func limitRangeItemsFromFacts(facts []LimitRangeItemFacts) []LimitRangeItem {

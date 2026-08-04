@@ -5,6 +5,8 @@ import (
 	"fmt"
 	"strings"
 	"sync/atomic"
+
+	"github.com/luxury-yacht/app/internal/sentryreporting"
 )
 
 type operationContextKey struct{}
@@ -80,6 +82,15 @@ func (l operationScopedLogger) Error(message string, source ...string) {
 
 func (l operationScopedLogger) ErrorWithCause(err error, message string, source ...string) {
 	ReportError(l.base, err, message, l.withOperation(source)...)
+}
+
+func (l operationScopedLogger) ErrorWithCauseAndOperation(
+	err error,
+	message string,
+	operation sentryreporting.Operation,
+	source ...string,
+) {
+	ReportErrorWithOperation(l.base, err, message, operation, l.withOperation(source)...)
 }
 
 func (l operationScopedLogger) Panic(recovered any, message string, source ...string) {

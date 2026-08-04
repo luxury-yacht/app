@@ -62,7 +62,7 @@ func (s *Service) buildResourceQuotaDetails(rq *corev1.ResourceQuota) *ResourceQ
 }
 
 func (s *Service) logError(err error, msg string) {
-	s.deps.LogRequestFailure(err, msg, logsources.ResourceLoader)
+	s.deps.LogResourceRequestFailure(err, msg, "get", Identity, logsources.ResourceLoader)
 }
 
 func scopeSelectorFromFacts(facts *ScopeSelectorFacts) *ScopeSelector {

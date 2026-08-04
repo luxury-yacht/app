@@ -43,7 +43,10 @@ func (t *recordingTransport) Flush(time.Duration) bool {
 	return !t.failFlush
 }
 
-func (t *recordingTransport) FlushWithContext(context.Context) bool {
+func (t *recordingTransport) FlushWithContext(ctx context.Context) bool {
+	if ctx.Err() != nil {
+		return false
+	}
 	return t.Flush(0)
 }
 
@@ -309,7 +312,12 @@ func TestReporterCapturesExceptions(t *testing.T) {
 		Source:      "Wails",
 		ClusterID:   "cluster-a",
 		ClusterName: "Production",
-		Operation:   "start Wails application",
+		Operation: NewKubernetesRequestOperation(KubernetesRequest{
+			Action:   KubernetesActionList,
+			Version:  "v1",
+			Resource: "pods",
+			Scope:    KubernetesScopeNamespaced,
+		}),
 	})
 
 	event := transport.lastEvent()
@@ -320,7 +328,13 @@ func TestReporterCapturesExceptions(t *testing.T) {
 	require.Equal(t, "cluster-1", event.Tags["cluster.alias"])
 	require.NotContains(t, event.Tags, "clusterId")
 	require.NotContains(t, event.Tags, "clusterName")
-	require.Equal(t, "start Wails application", event.Contexts["error"]["operation"])
+	require.Equal(t, map[string]any{
+		"type":     "kubernetes.request",
+		"action":   "list",
+		"version":  "v1",
+		"resource": "pods",
+		"scope":    "namespaced",
+	}, event.Contexts["error"]["operation"])
 	require.Contains(t, event.Contexts["error"]["operationId"], "backend-report-")
 }
 
@@ -432,8 +446,14 @@ func TestReporterKeepsBreadcrumbsIsolatedByOperation(t *testing.T) {
 		Data:        map[string]any{"clusterId": "cluster-a"},
 	})
 	reporter.CaptureException(errors.New("cluster-a failed"), Context{
-		ClusterID:   "cluster-a",
-		Operation:   "load deployments",
+		ClusterID: "cluster-a",
+		Operation: NewKubernetesRequestOperation(KubernetesRequest{
+			Action:   KubernetesActionList,
+			Group:    "apps",
+			Version:  "v1",
+			Resource: "deployments",
+			Scope:    KubernetesScopeNamespaced,
+		}),
 		OperationID: "backend-op-2",
 	})
 
@@ -444,7 +464,14 @@ func TestReporterKeepsBreadcrumbsIsolatedByOperation(t *testing.T) {
 	require.Equal(t, "backend-op-2", event.Breadcrumbs[0].Data["operationId"])
 	require.Equal(t, "backend-op-2", event.Tags["operation.id"])
 	require.Equal(t, "backend-op-2", event.Contexts["error"]["operationId"])
-	require.Equal(t, "load deployments", event.Contexts["error"]["operation"])
+	require.Equal(t, map[string]any{
+		"type":     "kubernetes.request",
+		"action":   "list",
+		"group":    "apps",
+		"version":  "v1",
+		"resource": "deployments",
+		"scope":    "namespaced",
+	}, event.Contexts["error"]["operation"])
 }
 
 func TestReporterAddsKubernetesStatusTagsToWrappedException(t *testing.T) {
@@ -548,11 +575,13 @@ func TestReporterCapturesAndFlushesCountMetric(t *testing.T) {
 
 	metricReporter, ok := reporter.(MetricReporter)
 	require.True(t, ok)
+	ctx, cancel := context.WithTimeout(context.Background(), time.Second)
+	defer cancel()
 	require.True(t, metricReporter.CaptureCountMetric(
+		ctx,
 		"app.installation.registered",
 		1,
 		map[string]string{"os.name": "darwin", "os.arch": "arm64"},
-		time.Second,
 	))
 
 	event := transport.lastEvent()
@@ -576,10 +605,10 @@ func TestDisabledReporterDoesNotCaptureCountMetric(t *testing.T) {
 	metricReporter, ok := reporter.(MetricReporter)
 	require.True(t, ok)
 	require.False(t, metricReporter.CaptureCountMetric(
+		context.Background(),
 		"app.installation.registered",
 		1,
 		nil,
-		time.Second,
 	))
 }
 
@@ -592,13 +621,34 @@ func TestReporterReturnsFalseWhenCountMetricDoesNotFlush(t *testing.T) {
 	require.NoError(t, err)
 
 	metricReporter := reporter.(MetricReporter)
+	ctx, cancel := context.WithTimeout(context.Background(), time.Second)
+	defer cancel()
 	require.False(t, metricReporter.CaptureCountMetric(
+		ctx,
 		"app.installation.registered",
 		1,
 		nil,
-		time.Second,
 	))
 	require.NotNil(t, transport.lastEvent())
+}
+
+func TestReporterCountMetricHonorsCancelledContext(t *testing.T) {
+	transport := &recordingTransport{}
+	reporter, err := New(Config{
+		DSN:       "https://public@example.com/1",
+		Transport: transport,
+	})
+	require.NoError(t, err)
+	ctx, cancel := context.WithCancel(context.Background())
+	cancel()
+
+	metricReporter := reporter.(MetricReporter)
+	require.False(t, metricReporter.CaptureCountMetric(
+		ctx,
+		"app.installation.registered",
+		1,
+		nil,
+	))
 }
 
 func TestConfigFromEnvironmentUsesOnlyStandardizedBackendDSN(t *testing.T) {

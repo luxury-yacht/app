@@ -122,8 +122,15 @@ func TestLoggerReportsStructuredErrorWithoutFlatteningCause(t *testing.T) {
 	base := NewLogger(10, reporter)
 	logger := applog.ClusterScoped(base, "cluster-a", "Production")
 	cause := errors.New("forbidden")
+	operation := sentryreporting.NewKubernetesRequestOperation(sentryreporting.KubernetesRequest{
+		Action:   sentryreporting.KubernetesActionGet,
+		Group:    "apps",
+		Version:  "v1",
+		Resource: "deployments",
+		Scope:    sentryreporting.KubernetesScopeNamespaced,
+	})
 
-	applog.ReportError(logger, cause, "Failed to get deployment default/web", "ResourceLoader")
+	applog.ReportErrorWithOperation(logger, cause, "Failed to get deployment default/web", operation, "ResourceLoader")
 
 	reporter.mu.Lock()
 	require.Empty(t, reporter.messages)
@@ -133,7 +140,7 @@ func TestLoggerReportsStructuredErrorWithoutFlatteningCause(t *testing.T) {
 			Source:      "ResourceLoader",
 			ClusterID:   "cluster-a",
 			ClusterName: "Production",
-			Operation:   "Failed to get deployment default/web",
+			Operation:   operation,
 		},
 	}}, reporter.exceptions)
 	reporter.mu.Unlock()
@@ -172,7 +179,21 @@ func TestLoggerAddsApplicationTrailAsBreadcrumbsBeforeStructuredError(t *testing
 
 	logger.Info("refresh started", "Refresh", "cluster-a", "Production", "backend-op-1")
 	logger.Warn("retrying workload fetch", "ResourceLoader", "cluster-a", "Production", "backend-op-1")
-	logger.ErrorWithCause(errors.New("forbidden"), "Failed to get deployment default/web", "ResourceLoader", "cluster-a", "Production", "backend-op-1")
+	logger.ErrorWithCauseAndOperation(
+		errors.New("forbidden"),
+		"Failed to get deployment default/web",
+		sentryreporting.NewKubernetesRequestOperation(sentryreporting.KubernetesRequest{
+			Action:   sentryreporting.KubernetesActionGet,
+			Group:    "apps",
+			Version:  "v1",
+			Resource: "deployments",
+			Scope:    sentryreporting.KubernetesScopeNamespaced,
+		}),
+		"ResourceLoader",
+		"cluster-a",
+		"Production",
+		"backend-op-1",
+	)
 
 	require.NotNil(t, transport.event)
 	require.Len(t, transport.event.Breadcrumbs, 2)
@@ -184,7 +205,14 @@ func TestLoggerAddsApplicationTrailAsBreadcrumbsBeforeStructuredError(t *testing
 	require.NotContains(t, transport.event.Breadcrumbs[0].Data, "clusterId")
 	require.NotContains(t, transport.event.Breadcrumbs[0].Data, "clusterName")
 	require.Equal(t, sentry.LevelWarning, transport.event.Breadcrumbs[1].Level)
-	require.Equal(t, "Failed to get deployment [resource]", transport.event.Contexts["error"]["operation"])
+	require.Equal(t, map[string]any{
+		"type":     "kubernetes.request",
+		"action":   "get",
+		"group":    "apps",
+		"version":  "v1",
+		"resource": "deployments",
+		"scope":    "namespaced",
+	}, transport.event.Contexts["error"]["operation"])
 }
 
 func TestLoggerForwardsOperationIdentityToBreadcrumbsAndError(t *testing.T) {
@@ -236,7 +264,7 @@ func TestFetchResourceReportsOriginalKubernetesError(t *testing.T) {
 	require.Empty(t, reporter.messages)
 	require.Len(t, reporter.exceptions, 1)
 	require.Same(t, cause, reporter.exceptions[0].err)
-	require.Equal(t, "Failed to fetch Deployment default/web", reporter.exceptions[0].context.Operation)
+	require.Equal(t, sentryreporting.Operation{}, reporter.exceptions[0].context.Operation)
 	require.Equal(t, "cluster-a", reporter.exceptions[0].context.ClusterID)
 	reporter.mu.Unlock()
 }
@@ -256,7 +284,6 @@ func TestLoggerReportsRecoveredPanicWithoutFlattening(t *testing.T) {
 			Source:      "ContainerLogsStream",
 			ClusterID:   "cluster-a",
 			ClusterName: "Production",
-			Operation:   "containerlogsstream: panic in stream handler",
 		},
 	}}, reporter.panics)
 	reporter.mu.Unlock()

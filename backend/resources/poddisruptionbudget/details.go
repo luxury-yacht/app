@@ -68,7 +68,7 @@ func (s *Service) buildPodDisruptionBudgetDetails(pdb *policyv1.PodDisruptionBud
 }
 
 func (s *Service) logError(err error, msg string) {
-	s.deps.LogRequestFailure(err, msg, logsources.ResourceLoader)
+	s.deps.LogResourceRequestFailure(err, msg, "get", Identity, logsources.ResourceLoader)
 }
 
 func pdbIntOrStringValue(facts *resourcemodel.IntOrStringFacts) *string {

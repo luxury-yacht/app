@@ -7,6 +7,8 @@ import (
 
 	"github.com/getsentry/sentry-go"
 	"github.com/stretchr/testify/require"
+	apierrors "k8s.io/apimachinery/pkg/api/errors"
+	"k8s.io/apimachinery/pkg/runtime/schema"
 )
 
 func TestPrepareEventForSendRemovesPersonalAndRequestData(t *testing.T) {
@@ -181,6 +183,44 @@ func TestReporterAppliesPrivacyBoundaryBeforeTransport(t *testing.T) {
 	require.NotContains(t, string(payload), "Acme Production")
 	require.NotContains(t, string(payload), "top-secret")
 	require.Contains(t, string(payload), "cluster-1")
+}
+
+func TestReporterRedactsTypedCustomResourceNameAndKeepsStructuredOperation(t *testing.T) {
+	transport := &recordingTransport{}
+	reporter, err := New(Config{
+		DSN:       "https://public@example.com/1",
+		Transport: transport,
+	})
+	require.NoError(t, err)
+
+	statusErr := apierrors.NewForbidden(
+		schema.GroupResource{Group: "storage.example.com", Resource: "databasebackups"},
+		"customer-prod-backup-7",
+		errors.New("access denied"),
+	)
+	reporter.CaptureException(statusErr, Context{
+		Source: "ResourceLoader",
+		Operation: NewKubernetesRequestOperation(KubernetesRequest{
+			Action:   KubernetesActionGet,
+			Group:    "storage.example.com",
+			Version:  "v1alpha1",
+			Resource: "databasebackups",
+			Scope:    KubernetesScopeNamespaced,
+		}),
+	})
+
+	event := transport.lastEvent()
+	require.NotNil(t, event)
+	require.NotContains(t, event.Exception[0].Value, "customer-prod-backup-7")
+	require.Contains(t, event.Exception[0].Value, "[resource]")
+	require.Equal(t, map[string]any{
+		"type":     "kubernetes.request",
+		"action":   "get",
+		"group":    "storage.example.com",
+		"version":  "v1alpha1",
+		"resource": "databasebackups",
+		"scope":    "namespaced",
+	}, event.Contexts["error"]["operation"])
 }
 
 func TestReporterBreadcrumbsUseAnAllowlistedSchema(t *testing.T) {

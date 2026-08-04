@@ -23,7 +23,7 @@ func (s *Service) MutatingWebhookConfiguration(name string) (*MutatingWebhookCon
 
 	config, err := client.AdmissionregistrationV1().MutatingWebhookConfigurations().Get(s.deps.Context, name, metav1.GetOptions{})
 	if err != nil {
-		s.logError(err, fmt.Sprintf("Failed to get mutating webhook configuration %s", name))
+		s.logError(err, fmt.Sprintf("Failed to get mutating webhook configuration %s", name), MutatingIdentity)
 		return nil, fmt.Errorf("failed to get mutating webhook configuration: %w", err)
 	}
 

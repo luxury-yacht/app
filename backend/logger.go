@@ -77,10 +77,17 @@ func NewLogger(maxSize int, reporters ...sentryreporting.Reporter) *Logger {
 // The variadic fields are interpreted as source, cluster ID, cluster name, and
 // operation ID in that order.
 func (l *Logger) Log(level LogLevel, message string, source ...string) {
-	l.log(level, message, nil, nil, "", source...)
+	l.log(level, message, nil, nil, sentryreporting.Operation{}, source...)
 }
 
-func (l *Logger) log(level LogLevel, message string, cause error, recovered any, operation string, source ...string) {
+func (l *Logger) log(
+	level LogLevel,
+	message string,
+	cause error,
+	recovered any,
+	operation sentryreporting.Operation,
+	source ...string,
+) {
 	if l == nil {
 		return // Safely handle nil logger
 	}
@@ -208,7 +215,22 @@ func (l *Logger) ErrorWithCause(err error, message string, source ...string) {
 		l.Error(message, source...)
 		return
 	}
-	l.log(LogLevelError, fmt.Sprintf("%s: %v", message, err), err, nil, message, source...)
+	l.log(LogLevelError, fmt.Sprintf("%s: %v", message, err), err, nil, sentryreporting.Operation{}, source...)
+}
+
+// ErrorWithCauseAndOperation attaches only a structured, privacy-reviewed
+// telemetry operation. The local log retains the full human-readable message.
+func (l *Logger) ErrorWithCauseAndOperation(
+	err error,
+	message string,
+	operation sentryreporting.Operation,
+	source ...string,
+) {
+	if err == nil {
+		l.Error(message, source...)
+		return
+	}
+	l.log(LogLevelError, fmt.Sprintf("%s: %v", message, err), err, nil, operation, source...)
 }
 
 // Panic keeps a recovered value available to the reporter while retaining a
@@ -218,7 +240,7 @@ func (l *Logger) Panic(recovered any, message string, source ...string) {
 		l.Error(message, source...)
 		return
 	}
-	l.log(LogLevelError, fmt.Sprintf("%s: %v", message, recovered), nil, recovered, message, source...)
+	l.log(LogLevelError, fmt.Sprintf("%s: %v", message, recovered), nil, recovered, sentryreporting.Operation{}, source...)
 }
 
 // GetEntries returns a copy of all log entries

@@ -417,7 +417,17 @@ func (s *Service) logWarn(msg string) {
 }
 
 func (s *Service) logError(err error, msg string) {
-	s.deps.Common.LogRequestFailure(err, msg, logsources.Helm)
+	s.deps.Common.LogDynamicResourceRequestFailure(
+		err,
+		msg,
+		"delete",
+		"helm.sh",
+		"v3",
+		"releases",
+		"",
+		true,
+		logsources.Helm,
+	)
 }
 
 func (s *Service) logInfo(msg string) {

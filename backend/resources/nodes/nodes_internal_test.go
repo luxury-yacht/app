@@ -114,7 +114,7 @@ func TestLogHelpersUseLogger(t *testing.T) {
 	service := NewService(testsupport.NewResourceDependencies(testsupport.WithDepsLogger(logger)))
 
 	service.logInfo("info")
-	service.logError(errors.New("boom"), "error")
+	service.logError(errors.New("boom"), "error", "get")
 
 	require.True(t, logger.infoCalled)
 	require.True(t, logger.errorCalled)

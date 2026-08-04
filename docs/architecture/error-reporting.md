@@ -83,7 +83,9 @@ data-collection defaults with an application-owned privacy boundary:
 - `backend/logger.go` keeps local log messages human-readable while forwarding
   structured failures separately. `ErrorWithCause` sends the original Go error
   through `CaptureException`, and `Panic` sends the recovered value through
-  `CapturePanic`; both retain the operation text as event context. Stacktrace
+  `CapturePanic`. Human-readable operation text stays in the local log; Sentry
+  receives operation context only when the caller supplies the closed
+  structured schema. Stacktrace
   attachment is enabled so even a panic whose recovered value is only a string
   retains the call stack. Legacy
   string-only `ERROR` calls still become `sentryreporting.LoggedError`, so their
@@ -99,13 +101,17 @@ data-collection defaults with an application-owned privacy boundary:
   replaced before transport. Errors without an explicit operation
   are assigned a `backend-report-N` id and receive no unscoped breadcrumbs, so
   same-cluster background activity cannot become a false trail. The transported
-  event scope includes source, `cluster.alias`, sanitized human operation, and
-  operation id. Backend breadcrumb data is limited to operation id and cluster
-  alias.
+  event scope includes source, `cluster.alias`, structured operation fields,
+  and operation id. Backend breadcrumb data is limited to operation id and
+  cluster alias.
 - `backend/internal/applog.ReportError` and
   `resources/common.Dependencies.LogRequestFailure` preserve typed errors across
-  package and cluster-scoped logger boundaries. Loggers that do not implement
-  the optional structured interface retain the previous string-only behavior.
+  package and cluster-scoped logger boundaries. Kubernetes request operations
+  expose only action, API group/version, resource type, subresource, and scope;
+  the schema has no namespace, object-name, URL, message, or arbitrary-map
+  fields. Built-in identities and discovery-backed custom resources use the
+  same final allowlist. Loggers that do not implement the optional structured
+  interface retain the previous string-only local-log behavior.
   Resource handlers touched by this reporting path wrap returned causes with
   `%w` so their callers can continue inspecting the chain.
 - Terminal metrics polls, beta-expiry startup failures, capability-review batch
@@ -119,7 +125,11 @@ data-collection defaults with an application-owned privacy boundary:
   only that producer-owned capability-shape grammar before applying generic
   hostname and Kubernetes-object redaction to the surrounding failure text.
 - `backend/app_settings.go` persists `errorReportingEnabled` and switches the
-  backend reporter only after the setting write succeeds.
+  backend reporter only after the setting write succeeds. Missing settings use
+  the documented default-on preference, but malformed/unreadable settings are
+  returned as RPC errors rather than converted into defaults. Backend startup
+  and frontend preference hydration therefore both fail closed when a
+  persisted opt-out cannot be read.
 - `frontend/vite.config.ts` owns release identity and frontend source-map upload.
 
 Neither reporter uses a custom fingerprint. Backend exceptions that implement
@@ -134,7 +144,8 @@ installation ID remain available for diagnosis.
 
 The backend defines one `beforeSend` privacy boundary. It removes user/request
 data and hostnames, clears captured runtime variables, sanitizes free-form text,
-replaces cluster identifiers, normalizes this repository's application frame
+replaces cluster identifiers and typed Kubernetes status object names,
+normalizes this repository's application frame
 filenames to paths such as `backend/capabilities/service.go`, and removes stack
 frames belonging to the reporting machinery itself — `sentryReporter`'s capture
 methods, `applog`, the application `Logger`, and any package's one-line
@@ -143,6 +154,13 @@ innermost frame, so without the trim every backend `ERROR` groups under the
 reporter or under a logging helper instead of the code that failed.
 Absolute home-directory prefixes remain redacted; only the repository-relative
 application path is retained.
+
+The frontend applies the same closed-by-default treatment while preserving one
+source-map requirement: stack-frame `filename`/`abs_path` and
+`debug_meta.images[].code_file` are canonicalized to matching identities such
+as `app:///assets/index-a1b2c3.js`. Hosts, query strings, and local build paths
+are removed, but distinct bundle filenames remain distinct so uploaded hidden
+source maps can be selected unambiguously.
 
 Log forwarders — functions whose only job is handing a message to the
 application logger — are a **maintained list** in `reporter.go` (`logForwarders`).
@@ -179,7 +197,7 @@ separate Sentry signals. They must not be treated as interchangeable counts.
 
 | Signal | When it is sent | What it measures |
 | --- | --- | --- |
-| `app.installation.registered` | Once per `anonymizedId`, after Sentry confirms delivery. A failed delivery is retried on a later startup. | Approximate installation count. |
+| `app.installation.registered` | Once per `anonymizedId`, after Sentry confirms delivery. Registration runs as cancellable background work after the Wails startup callback begins; a failed delivery is retried on a later startup. | Approximate installation count. |
 | Frontend Release Health session | When the frontend page lifecycle starts: normally once per app launch, and again after a hard reload such as Factory Reset. | Successful frontend load. It is not a periodic heartbeat and does not report time spent or actions taken in the app. |
 | Error event | Whenever a reportable exception crosses an owned reporting boundary while reporting is enabled. | A diagnostic failure event, independent of installation and session counts. |
 
@@ -188,9 +206,15 @@ settings file records `installationMetricReported: true`. Ordinary subsequent
 launches therefore do not send the metric again. Factory Reset deletes both the
 old `anonymizedId` and that acknowledgement. The frontend reload creates a new
 ID and a new Release Health session, while the replacement installation
-registration is delivered when the Go backend next initializes reporting,
+registration is scheduled from the Go backend's next startup callback,
 normally on the next full app launch. The new ID is then counted as a new
 pseudonymous installation.
+
+The registration flush has a two-second deadline, but it never runs on the
+pre-`wails.Run` initialization path and therefore cannot add that delay to app
+launch. Shutdown cancellation stops an in-flight registration. Enabling error
+reporting at runtime schedules the same background path rather than blocking
+the settings RPC.
 
 Release Health sessions come from the React SDK's page-lifecycle browser
 session integration. They are associated with the pseudonymous user ID,
@@ -233,8 +257,10 @@ lower levels are breadcrumbs. Context cancellation is an expected lifecycle
 event — a panel closed, the user navigated away, a cluster disconnected, a
 poller shut down — and must not be reported as a failure.
 
-- Resource services call `common.Dependencies.LogRequestFailure`, which logs a
-  cancelled Kubernetes call at `DEBUG` and reports every other original error
+- Resource services call `LogResourceRequestFailure` or
+  `LogDynamicResourceRequestFailure`, which route through
+  `common.Dependencies.LogRequestFailure`, log a
+  cancelled Kubernetes call at `DEBUG` and report every other original error
   through the structured path. Prefer it over formatting an error into
   `Logger.Error` so new resource kinds inherit cancellation handling and retain
   typed Kubernetes status data.

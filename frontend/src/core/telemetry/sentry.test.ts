@@ -345,6 +345,81 @@ describe('Sentry error reporting', () => {
     expect(payload).toContain('[local-path]');
   });
 
+  it('keeps matching sanitized bundle identities for stack frames and source maps', () => {
+    initializeErrorReporting({
+      enabled: true,
+      dsn: 'https://public@example.com/1',
+      environment: 'production',
+    });
+    const options = sentryMocks.init.mock.calls[0]?.[0] as {
+      beforeSend: (event: Record<string, unknown>) => Record<string, unknown>;
+    };
+
+    const filtered = options.beforeSend({
+      exception: {
+        values: [
+          {
+            type: 'Error',
+            value: 'boom',
+            stacktrace: {
+              frames: [
+                {
+                  filename: 'http://wails.localhost/assets/index-a1b2c3.js?token=top-secret',
+                  abs_path: '/Users/john/git/luxury-yacht/app/frontend/dist/assets/index-a1b2c3.js',
+                },
+                {
+                  filename: 'http://wails.localhost/assets/vendor-d4e5f6.js',
+                  abs_path: 'http://wails.localhost/assets/vendor-d4e5f6.js',
+                },
+              ],
+            },
+          },
+        ],
+      },
+      debug_meta: {
+        images: [
+          {
+            type: 'sourcemap',
+            code_file: 'app:///assets/index-a1b2c3.js',
+          },
+          {
+            type: 'sourcemap',
+            code_file: 'http://wails.localhost/assets/vendor-d4e5f6.js',
+          },
+        ],
+      },
+    }) as {
+      exception: {
+        values: Array<{
+          stacktrace: { frames: Array<{ filename: string; abs_path: string }> };
+        }>;
+      };
+      debug_meta: { images: Array<{ code_file: string }> };
+    };
+
+    const frames = filtered.exception.values[0]?.stacktrace.frames ?? [];
+    expect(frames[0]).toEqual(
+      expect.objectContaining({
+        filename: 'app:///assets/index-a1b2c3.js',
+        abs_path: 'app:///assets/index-a1b2c3.js',
+      })
+    );
+    expect(frames[1]).toEqual(
+      expect.objectContaining({
+        filename: 'app:///assets/vendor-d4e5f6.js',
+        abs_path: 'app:///assets/vendor-d4e5f6.js',
+      })
+    );
+    expect(filtered.debug_meta.images.map((image) => image.code_file)).toEqual([
+      'app:///assets/index-a1b2c3.js',
+      'app:///assets/vendor-d4e5f6.js',
+    ]);
+    const payload = JSON.stringify(filtered);
+    expect(payload).not.toContain('wails.localhost');
+    expect(payload).not.toContain('/Users/john');
+    expect(payload).not.toContain('top-secret');
+  });
+
   it('carries anonymizedId from preference hydration through live re-enablement', async () => {
     await configureErrorReportingFromPreferences(
       {

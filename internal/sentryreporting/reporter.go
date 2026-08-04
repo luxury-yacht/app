@@ -29,7 +29,7 @@ type Context struct {
 	Source      string
 	ClusterID   string
 	ClusterName string
-	Operation   string
+	Operation   Operation
 	OperationID string
 }
 
@@ -59,12 +59,12 @@ type Reporter interface {
 // synchronously flush an application metric. Keeping it separate from Reporter
 // lets error-only test doubles and alternate reporters remain small.
 type MetricReporter interface {
-	CaptureCountMetric(name string, count int64, attributes map[string]string, timeout time.Duration) bool
+	CaptureCountMetric(ctx context.Context, name string, count int64, attributes map[string]string) bool
 }
 
 type disabledReporter struct{}
 
-func (disabledReporter) CaptureCountMetric(string, int64, map[string]string, time.Duration) bool {
+func (disabledReporter) CaptureCountMetric(context.Context, string, int64, map[string]string) bool {
 	return false
 }
 
@@ -366,6 +366,11 @@ func addKubernetesStatusTags(hub *sentry.Hub, err error) {
 			statusContext["code"] = status.Code
 		}
 		if status.Details != nil {
+			if status.Details.Name != "" {
+				// The object name is needed only inside the SDK privacy pipeline so
+				// the final event can replace it wherever client-go rendered it.
+				scope.SetTag("_privacy.resource_name", status.Details.Name)
+			}
 			if status.Details.Group != "" {
 				statusContext["group"] = status.Details.Group
 			}
@@ -426,25 +431,28 @@ func (r *sentryReporter) AddBreadcrumb(breadcrumb Breadcrumb) {
 }
 
 func (r *sentryReporter) CaptureCountMetric(
+	ctx context.Context,
 	name string,
 	count int64,
 	attributes map[string]string,
-	timeout time.Duration,
 ) bool {
 	r.mu.RLock()
-	defer r.mu.RUnlock()
 	if r.hub == nil {
+		r.mu.RUnlock()
 		return false
 	}
-
 	hub := r.hub.Clone()
-	ctx := sentry.SetHubOnContext(context.Background(), hub)
+	r.mu.RUnlock()
+	if ctx == nil {
+		ctx = context.Background()
+	}
+	ctx = sentry.SetHubOnContext(ctx, hub)
 	metricAttributes := make([]attribute.Builder, 0, len(attributes))
 	for key, value := range attributes {
 		metricAttributes = append(metricAttributes, attribute.String(key, value))
 	}
 	sentry.NewMeter(ctx).Count(name, count, sentry.WithAttributes(metricAttributes...))
-	return hub.Flush(timeout)
+	return hub.FlushWithContext(ctx)
 }
 
 func (r *sentryReporter) Shutdown(timeout time.Duration) bool {
@@ -521,10 +529,10 @@ func (r *sentryReporter) withHub(context Context, capture func(*sentry.Hub)) {
 		if context.OperationID != "" {
 			scope.SetTag("operation.id", context.OperationID)
 		}
-		if context.Operation != "" || context.OperationID != "" {
+		if !context.Operation.isZero() || context.OperationID != "" {
 			errorContext := sentry.Context{}
-			if context.Operation != "" {
-				errorContext["operation"] = context.Operation
+			if !context.Operation.isZero() {
+				errorContext["operation"] = context.Operation.telemetryContext()
 			}
 			if context.OperationID != "" {
 				errorContext["operationId"] = context.OperationID
