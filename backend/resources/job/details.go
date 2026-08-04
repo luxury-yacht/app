@@ -42,7 +42,7 @@ func (s *Service) Job(namespace, name string) (*JobDetails, error) {
 
 	job, err := client.BatchV1().Jobs(namespace).Get(s.deps.Context, name, metav1.GetOptions{})
 	if err != nil {
-		s.deps.LogResourceRequestFailure(err, fmt.Sprintf("Failed to get Job %s/%s", namespace, name), "get", Identity, logsources.ResourceLoader)
+		err = s.deps.LogResourceRequestFailure(err, fmt.Sprintf("Failed to get Job %s/%s", namespace, name), "get", Identity, logsources.ResourceLoader)
 		return nil, fmt.Errorf("failed to get job: %w", err)
 	}
 

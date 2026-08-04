@@ -42,7 +42,7 @@ func (s *Service) ReplicaSet(namespace, name string) (*ReplicaSetDetails, error)
 
 	replicaSet, err := client.AppsV1().ReplicaSets(namespace).Get(s.deps.Context, name, metav1.GetOptions{})
 	if err != nil {
-		s.deps.LogResourceRequestFailure(err, fmt.Sprintf("Failed to get ReplicaSet %s/%s", namespace, name), "get", Identity, logsources.ResourceLoader)
+		err = s.deps.LogResourceRequestFailure(err, fmt.Sprintf("Failed to get ReplicaSet %s/%s", namespace, name), "get", Identity, logsources.ResourceLoader)
 		return nil, fmt.Errorf("failed to get replicaset: %w", err)
 	}
 

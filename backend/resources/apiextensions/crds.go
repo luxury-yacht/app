@@ -25,7 +25,7 @@ func (s *Service) CustomResourceDefinition(name string) (*CustomResourceDefiniti
 	client := s.deps.APIExtensionsClient
 	crd, err := client.ApiextensionsV1().CustomResourceDefinitions().Get(s.deps.Context, name, metav1.GetOptions{})
 	if err != nil {
-		s.logError(err, fmt.Sprintf("Failed to get CRD %s", name))
+		err = s.logError(err, fmt.Sprintf("Failed to get CRD %s", name))
 		return nil, fmt.Errorf("failed to get CRD: %w", err)
 	}
 
@@ -114,6 +114,6 @@ func (s *Service) ensureAPIExtensions(resource string) error {
 	return nil
 }
 
-func (s *Service) logError(err error, msg string) {
-	s.deps.LogResourceRequestFailure(err, msg, "get", Identity, logsources.ResourceLoader)
+func (s *Service) logError(err error, msg string) error {
+	return s.deps.LogResourceRequestFailure(err, msg, "get", Identity, logsources.ResourceLoader)
 }

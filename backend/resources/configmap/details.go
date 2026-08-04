@@ -33,7 +33,7 @@ func NewService(deps common.Dependencies) *Service {
 func (s *Service) ConfigMap(namespace, name string) (*ConfigMapDetails, error) {
 	cm, err := s.deps.KubernetesClient.CoreV1().ConfigMaps(namespace).Get(s.deps.Context, name, metav1.GetOptions{})
 	if err != nil {
-		s.deps.LogResourceRequestFailure(err, fmt.Sprintf("Failed to get configmap %s/%s", namespace, name), "get", Identity, logsources.ResourceLoader)
+		err = s.deps.LogResourceRequestFailure(err, fmt.Sprintf("Failed to get configmap %s/%s", namespace, name), "get", Identity, logsources.ResourceLoader)
 		return nil, fmt.Errorf("failed to get configmap: %w", err)
 	}
 

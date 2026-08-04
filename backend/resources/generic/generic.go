@@ -45,6 +45,6 @@ func (s *Service) logInfo(msg string) {
 	applog.Info(s.deps.Logger, msg, "GenericResource")
 }
 
-func (s *Service) logError(err error, msg string) {
-	s.deps.LogOperationalFailure(err, msg, "GenericResource")
+func (s *Service) logError(err error, msg string) error {
+	return s.deps.LogOperationalFailure(err, msg, "GenericResource")
 }

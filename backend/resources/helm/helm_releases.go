@@ -168,7 +168,7 @@ func (s *Service) DeleteRelease(namespace, name string) error {
 
 	client := action.NewUninstall(actionConfig)
 	if _, err := client.Run(name); err != nil {
-		s.logDeleteError(err, fmt.Sprintf("Failed to delete Helm release %s/%s", namespace, name), name)
+		err = s.logDeleteError(err, fmt.Sprintf("Failed to delete Helm release %s/%s", namespace, name), name)
 		return fmt.Errorf("failed to delete Helm release: %w", err)
 	}
 
@@ -416,7 +416,7 @@ func (s *Service) logWarn(msg string) {
 	applog.Warn(s.deps.Common.Logger, msg, logsources.Helm)
 }
 
-func (s *Service) logDeleteError(err error, msg string, privateResourceNames ...string) {
+func (s *Service) logDeleteError(err error, msg string, privateResourceNames ...string) error {
 	operation := common.DynamicResourceRequestOperation(
 		"delete",
 		"helm.sh",
@@ -425,7 +425,7 @@ func (s *Service) logDeleteError(err error, msg string, privateResourceNames ...
 		"",
 		true,
 	).WithPrivateResourceNames(privateResourceNames...)
-	s.deps.Common.LogRequestFailure(
+	return s.deps.Common.LogRequestFailure(
 		err,
 		msg,
 		operation,

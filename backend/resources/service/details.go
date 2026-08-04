@@ -38,7 +38,7 @@ func NewService(deps common.Dependencies) *Service {
 func (s *Service) GetService(namespace, name string) (*ServiceDetails, error) {
 	svc, err := s.deps.KubernetesClient.CoreV1().Services(namespace).Get(s.deps.Context, name, metav1.GetOptions{})
 	if err != nil {
-		s.deps.LogResourceRequestFailure(err, fmt.Sprintf("Failed to get service %s/%s", namespace, name), "get", Identity, logsources.ResourceLoader)
+		err = s.deps.LogResourceRequestFailure(err, fmt.Sprintf("Failed to get service %s/%s", namespace, name), "get", Identity, logsources.ResourceLoader)
 		return nil, fmt.Errorf("failed to get service: %w", err)
 	}
 

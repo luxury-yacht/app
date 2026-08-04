@@ -41,7 +41,7 @@ func (s *Service) Namespace(name string) (*NamespaceDetails, error) {
 	client := s.deps.KubernetesClient
 	ns, err := client.CoreV1().Namespaces().Get(s.deps.Context, name, metav1.GetOptions{})
 	if err != nil {
-		s.deps.LogResourceRequestFailure(err, fmt.Sprintf("Failed to get namespace %s", name), "get", Identity, logsources.ResourceLoader)
+		err = s.deps.LogResourceRequestFailure(err, fmt.Sprintf("Failed to get namespace %s", name), "get", Identity, logsources.ResourceLoader)
 		return nil, fmt.Errorf("failed to get namespace: %w", err)
 	}
 
@@ -153,7 +153,7 @@ func namespaceWorkloadProbes(client kubernetes.Interface, ctx context.Context, n
 
 func (s *Service) logWorkloadProbeError(group, version, resource, namespace string, err error) {
 	if !apierrors.IsForbidden(err) {
-		s.deps.LogDynamicResourceRequestFailure(
+		_ = s.deps.LogDynamicResourceRequestFailure(
 			err,
 			fmt.Sprintf("Failed to list %s in namespace %s", resource, namespace),
 			"list",

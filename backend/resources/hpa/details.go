@@ -37,7 +37,7 @@ func (s *Service) HorizontalPodAutoscaler(namespace, name string) (*HorizontalPo
 
 	h, err := client.AutoscalingV2().HorizontalPodAutoscalers(namespace).Get(s.deps.Context, name, metav1.GetOptions{})
 	if err != nil {
-		s.logError(err, fmt.Sprintf("Failed to get HPA %s/%s", namespace, name))
+		err = s.logError(err, fmt.Sprintf("Failed to get HPA %s/%s", namespace, name))
 		return nil, fmt.Errorf("failed to get HPA: %w", err)
 	}
 
@@ -66,8 +66,8 @@ func (s *Service) buildHorizontalPodAutoscalerDetails(h *autoscalingv2.Horizonta
 	}
 }
 
-func (s *Service) logError(err error, msg string) {
-	s.deps.LogResourceRequestFailure(err, msg, "get", Identity, logsources.ResourceLoader)
+func (s *Service) logError(err error, msg string) error {
+	return s.deps.LogResourceRequestFailure(err, msg, "get", Identity, logsources.ResourceLoader)
 }
 
 func scaleTargetReferenceFromFacts(link resourcemodel.ResourceLink) ScaleTargetReference {

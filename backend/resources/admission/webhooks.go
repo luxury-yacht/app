@@ -105,8 +105,8 @@ func summarizeWebhookConfiguration(count int, selector *LabelSelectorFacts) stri
 	return summary + ", NS: " + strings.Join(pairs, ", ")
 }
 
-func (s *Service) logError(err error, msg string, identity resourcekind.Identity) {
-	s.deps.LogResourceRequestFailure(err, msg, "get", identity, logsources.ResourceLoader)
+func (s *Service) logError(err error, msg string, identity resourcekind.Identity) error {
+	return s.deps.LogResourceRequestFailure(err, msg, "get", identity, logsources.ResourceLoader)
 }
 
 func copyStringPtr(value *string) *string {

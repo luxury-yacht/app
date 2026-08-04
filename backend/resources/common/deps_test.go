@@ -10,10 +10,18 @@ package common
 import (
 	"context"
 	"fmt"
+	"go/ast"
+	"go/parser"
+	"go/token"
+	"io/fs"
 	"net/url"
+	"path/filepath"
+	"runtime"
+	"strings"
 	"testing"
 
 	"github.com/luxury-yacht/app/backend/internal/applog"
+	"github.com/luxury-yacht/app/backend/internal/errorcapture"
 	"github.com/luxury-yacht/app/backend/resourcekind"
 	"github.com/luxury-yacht/app/internal/sentry"
 	"github.com/stretchr/testify/require"
@@ -133,6 +141,79 @@ func TestLogRequestFailurePreservesOriginalErrorForStructuredLogger(t *testing.T
 	require.Equal(t, operation, logger.operation)
 }
 
+func TestLogRequestFailureMarksTheReturnedErrorAsTelemetryHandled(t *testing.T) {
+	logger := &recordingStructuredDepsLogger{}
+	deps := Dependencies{Logger: logger}
+	cause := fmt.Errorf("forbidden")
+
+	handled := deps.LogRequestFailure(cause, "Failed to get deployment default/web", testRequestOperation(), "ResourceLoader")
+
+	require.ErrorIs(t, handled, cause)
+	require.True(t, errorcapture.IsTelemetryHandled(handled))
+}
+
+func TestLogRequestFailureMarksCancellationAsTelemetryHandled(t *testing.T) {
+	logger := &recordingDepsLogger{}
+	deps := Dependencies{Logger: logger}
+
+	handled := deps.LogRequestFailure(context.Canceled, "Failed to get deployment default/web", testRequestOperation())
+
+	require.ErrorIs(t, handled, context.Canceled)
+	require.True(t, errorcapture.IsTelemetryHandled(handled))
+	require.Equal(t, "debug", logger.level)
+}
+
+// A reporting helper returns the same error with a telemetry-disposition
+// marker. Silently discarding that return value makes a broader boundary see
+// an ordinary error and capture it a second time.
+func TestResourceReportingResultsAreNeverSilentlyDiscarded(t *testing.T) {
+	_, thisFile, _, ok := runtime.Caller(0)
+	require.True(t, ok)
+	resourcesDir := filepath.Dir(filepath.Dir(thisFile))
+	reportingHelpers := map[string]struct{}{
+		"LogRequestFailure":                {},
+		"LogResourceRequestFailure":        {},
+		"LogDynamicResourceRequestFailure": {},
+		"LogOperationalFailure":            {},
+	}
+
+	err := filepath.WalkDir(resourcesDir, func(path string, entry fs.DirEntry, walkErr error) error {
+		if walkErr != nil {
+			return walkErr
+		}
+		if entry.IsDir() || !strings.HasSuffix(entry.Name(), ".go") || strings.HasSuffix(entry.Name(), "_test.go") {
+			return nil
+		}
+
+		fileset := token.NewFileSet()
+		file, parseErr := parser.ParseFile(fileset, path, nil, 0)
+		if parseErr != nil {
+			return parseErr
+		}
+		ast.Inspect(file, func(node ast.Node) bool {
+			statement, ok := node.(*ast.ExprStmt)
+			if !ok {
+				return true
+			}
+			call, ok := statement.X.(*ast.CallExpr)
+			if !ok {
+				return true
+			}
+			selector, ok := call.Fun.(*ast.SelectorExpr)
+			if !ok {
+				return true
+			}
+			if _, isReportingHelper := reportingHelpers[selector.Sel.Name]; isReportingHelper {
+				position := fileset.Position(statement.Pos())
+				t.Errorf("%s: reporting result must be returned, assigned, or explicitly discarded with _ =", position)
+			}
+			return true
+		})
+		return nil
+	})
+	require.NoError(t, err)
+}
+
 func TestResourceRequestHelpersBuildStructuredOperations(t *testing.T) {
 	logger := &recordingStructuredDepsLogger{}
 	deps := Dependencies{Logger: logger}
@@ -189,6 +270,17 @@ func TestOperationalFailurePreservesCauseWithoutInventingOperation(t *testing.T)
 
 	require.Same(t, cause, logger.cause)
 	require.Equal(t, sentryreporting.Operation{}, logger.operation)
+}
+
+func TestOperationalFailureMarksTheReturnedErrorAsTelemetryHandled(t *testing.T) {
+	logger := &recordingStructuredDepsLogger{}
+	deps := Dependencies{Logger: logger}
+	cause := fmt.Errorf("discovery unavailable")
+
+	handled := deps.LogOperationalFailure(cause, "Failed to resolve GVR", "GenericResource")
+
+	require.ErrorIs(t, handled, cause)
+	require.True(t, errorcapture.IsTelemetryHandled(handled))
 }
 
 func TestLogRequestFailureToleratesNilLogger(t *testing.T) {

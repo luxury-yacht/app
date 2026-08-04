@@ -138,6 +138,14 @@ data-collection defaults with an application-owned privacy boundary:
   interface retain the previous string-only local-log behavior.
   Resource handlers touched by this reporting path wrap returned causes with
   `%w` so their callers can continue inspecting the chain.
+- The resource reporting helpers return the original error chain with an
+  internal telemetry-disposition marker. A resource handler must propagate
+  that returned error when it reports locally. `FetchResourceWithSelection`
+  still captures unmarked errors as the universal fallback, but does not
+  capture a marked error a second time; it continues to emit the
+  `backend-error` event for the UI in both cases. The marker does not change the
+  rendered error or remove typed Kubernetes status information. A Go AST guard
+  rejects resource code that silently discards a reporting helper's result.
 - Unexpected metrics polls, beta-expiry startup failures, capability-review
   batch failures, and classified authentication failures also use the
   structured path. An absent Metrics API is expected cluster capability state:

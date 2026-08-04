@@ -32,7 +32,7 @@ func NewService(deps common.Dependencies) *Service {
 func (s *Service) Secret(namespace, name string) (*SecretDetails, error) {
 	sec, err := s.deps.KubernetesClient.CoreV1().Secrets(namespace).Get(s.deps.Context, name, metav1.GetOptions{})
 	if err != nil {
-		s.deps.LogResourceRequestFailure(err, fmt.Sprintf("Failed to get secret %s/%s", namespace, name), "get", Identity, logsources.ResourceLoader)
+		err = s.deps.LogResourceRequestFailure(err, fmt.Sprintf("Failed to get secret %s/%s", namespace, name), "get", Identity, logsources.ResourceLoader)
 		return nil, fmt.Errorf("failed to get secret: %w", err)
 	}
 

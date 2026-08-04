@@ -196,7 +196,10 @@ var logForwarders = map[string]struct{}{
 	"logError":       {},
 	"logDeleteError": {},
 	// resources/common, fronting every resource read.
-	"LogRequestFailure": {},
+	"LogRequestFailure":                {},
+	"LogResourceRequestFailure":        {},
+	"LogDynamicResourceRequestFailure": {},
+	"LogOperationalFailure":            {},
 }
 
 // isLogWrapperFrame reports whether a frame is a registered log forwarder.

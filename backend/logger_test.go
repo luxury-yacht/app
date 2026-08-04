@@ -9,6 +9,7 @@ import (
 
 	"github.com/getsentry/sentry-go"
 	"github.com/luxury-yacht/app/backend/internal/applog"
+	"github.com/luxury-yacht/app/backend/internal/errorcapture"
 	"github.com/luxury-yacht/app/backend/internal/logsources"
 	"github.com/luxury-yacht/app/internal/sentry"
 	"github.com/stretchr/testify/require"
@@ -266,6 +267,28 @@ func TestFetchResourceReportsOriginalKubernetesError(t *testing.T) {
 	require.Same(t, cause, reporter.exceptions[0].err)
 	require.Equal(t, sentryreporting.Operation{}, reporter.exceptions[0].context.Operation)
 	require.Equal(t, "cluster-a", reporter.exceptions[0].context.ClusterID)
+	reporter.mu.Unlock()
+}
+
+func TestFetchResourceDoesNotReportTelemetryHandledErrorAgain(t *testing.T) {
+	reporter := &recordingErrorReporter{}
+	app := NewApp(reporter)
+	cause := errors.New("already reported")
+
+	_, err := FetchResourceWithSelection(
+		app,
+		"cluster-a",
+		"deployment/default/web",
+		"Deployment",
+		"default/web",
+		func() (string, error) { return "", errorcapture.MarkTelemetryHandled(cause) },
+	)
+	require.Error(t, err)
+	require.ErrorIs(t, err, cause)
+
+	reporter.mu.Lock()
+	require.Empty(t, reporter.messages)
+	require.Empty(t, reporter.exceptions)
 	reporter.mu.Unlock()
 }
 

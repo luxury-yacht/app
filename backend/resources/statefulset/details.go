@@ -45,7 +45,7 @@ func (s *Service) StatefulSet(namespace, name string) (*StatefulSetDetails, erro
 
 	ss, err := client.AppsV1().StatefulSets(namespace).Get(s.deps.Context, name, metav1.GetOptions{})
 	if err != nil {
-		s.deps.LogResourceRequestFailure(err, fmt.Sprintf("Failed to get StatefulSet %s/%s", namespace, name), "get", Identity, logsources.ResourceLoader)
+		err = s.deps.LogResourceRequestFailure(err, fmt.Sprintf("Failed to get StatefulSet %s/%s", namespace, name), "get", Identity, logsources.ResourceLoader)
 		return nil, fmt.Errorf("failed to get statefulset: %w", err)
 	}
 

@@ -24,6 +24,7 @@ import (
 	storagev1 "k8s.io/api/storage/v1"
 	apiextensionsv1 "k8s.io/apiextensions-apiserver/pkg/apis/apiextensions/v1"
 	apiextensionsfake "k8s.io/apiextensions-apiserver/pkg/client/clientset/clientset/fake"
+	apierrors "k8s.io/apimachinery/pkg/api/errors"
 	"k8s.io/apimachinery/pkg/api/resource"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/util/intstr"
@@ -452,6 +453,35 @@ func TestConfigWrappersHappyPath(t *testing.T) {
 	}
 	if _, err := app.GetSecret(clusterID, "team-a", "creds"); err != nil {
 		t.Fatalf("expected secret wrapper to succeed: %v", err)
+	}
+}
+
+func TestGetConfigMapReportsKubernetesFailureOnce(t *testing.T) {
+	reporter := &recordingErrorReporter{}
+	app := NewApp(reporter)
+	app.Ctx = context.Background()
+	clusterID := "config:ctx"
+	app.clusterClients = map[string]*clusterClients{
+		clusterID: {
+			meta:              ClusterMeta{ID: clusterID, Name: "ctx"},
+			kubeconfigPath:    "/path",
+			kubeconfigContext: "ctx",
+			client:            cgofake.NewClientset(),
+		},
+	}
+
+	_, err := app.GetConfigMap(clusterID, "default", "missing")
+	if err == nil {
+		t.Fatal("expected missing configmap to fail")
+	}
+
+	reporter.mu.Lock()
+	defer reporter.mu.Unlock()
+	if len(reporter.exceptions) != 1 {
+		t.Fatalf("expected one Sentry exception, got %d", len(reporter.exceptions))
+	}
+	if _, ok := reporter.exceptions[0].err.(*apierrors.StatusError); !ok {
+		t.Fatalf("expected original Kubernetes StatusError, got %T", reporter.exceptions[0].err)
 	}
 }
 
