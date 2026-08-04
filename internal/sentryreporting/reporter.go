@@ -193,7 +193,8 @@ var logForwarders = map[string]struct{}{
 	// The per-package "log an error for this package" convention. Only the
 	// error-level name is listed: the application logger forwards ERROR entries
 	// alone, so a warn-level wrapper can never appear in a captured stack.
-	"logError": {},
+	"logError":       {},
+	"logDeleteError": {},
 	// resources/common, fronting every resource read.
 	"LogRequestFailure": {},
 }
@@ -485,11 +486,7 @@ func (r *sentryReporter) withHub(context Context, capture func(*sentry.Hub)) {
 	}
 	hub := r.hub.Clone()
 	for _, breadcrumb := range r.breadcrumbs {
-		if context.OperationID != "" {
-			if breadcrumb.OperationID != context.OperationID {
-				continue
-			}
-		} else if breadcrumb.OperationID != "" {
+		if breadcrumb.OperationID != context.OperationID {
 			continue
 		}
 		breadcrumbClusterID, _ := breadcrumb.Data["clusterId"].(string)

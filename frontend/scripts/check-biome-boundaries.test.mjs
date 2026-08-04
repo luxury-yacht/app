@@ -36,10 +36,14 @@ const lintWithPlugin = (pluginName, source) => {
   );
 };
 
-const lintWithProjectConfig = (source, baseDirectory = path.join(process.cwd(), 'src')) => {
+const lintWithProjectConfig = (
+  source,
+  baseDirectory = path.join(process.cwd(), 'src'),
+  fileName = 'adversarial.ts'
+) => {
   const directory = mkdtempSync(path.join(baseDirectory, '.biome-boundary-'));
   temporaryDirectories.push(directory);
-  const sourcePath = path.join(directory, 'adversarial.ts');
+  const sourcePath = path.join(directory, fileName);
   writeFileSync(sourcePath, source);
   return spawnSync(
     path.join(process.cwd(), 'node_modules', '.bin', 'biome'),
@@ -156,6 +160,17 @@ describe('Biome architectural boundary plugins', () => {
 
     expect(result.status).not.toBe(0);
     expect(`${result.stdout}\n${result.stderr}`).toContain(diagnostic);
+  });
+
+  it('rejects inline error text through the real project TSX configuration', () => {
+    const result = lintWithProjectConfig(
+      'const loadError = "failed"; const View = () => <div>{loadError}</div>;',
+      path.join(process.cwd(), 'src'),
+      'adversarial.tsx'
+    );
+
+    expect(result.status).not.toBe(0);
+    expect(`${result.stdout}\n${result.stderr}`).toContain('ErrorSurface');
   });
 
   it('rejects relative imports of the generated backend App binding', () => {

@@ -9,6 +9,7 @@ package namespaces
 
 import (
 	"context"
+	"errors"
 	"fmt"
 	"testing"
 	"time"
@@ -26,7 +27,28 @@ import (
 
 	"github.com/luxury-yacht/app/backend/internal/applog"
 	"github.com/luxury-yacht/app/backend/testsupport"
+	"github.com/luxury-yacht/app/internal/sentryreporting"
 )
+
+type recordingNamespaceLogger struct {
+	cause     error
+	operation sentryreporting.Operation
+}
+
+func (*recordingNamespaceLogger) Debug(string, ...string) {}
+func (*recordingNamespaceLogger) Info(string, ...string)  {}
+func (*recordingNamespaceLogger) Warn(string, ...string)  {}
+func (*recordingNamespaceLogger) Error(string, ...string) {}
+
+func (l *recordingNamespaceLogger) ErrorWithCauseAndOperation(
+	err error,
+	_ string,
+	operation sentryreporting.Operation,
+	_ ...string,
+) {
+	l.cause = err
+	l.operation = operation
+}
 
 func TestHasWorkloadsWithoutClient(t *testing.T) {
 	service := NewService(testsupport.NewResourceDependencies())
@@ -109,6 +131,50 @@ func TestServiceNamespaceMarksWorkloadsUnknownOnForbidden(t *testing.T) {
 	require.NoError(t, err)
 	require.True(t, detail.WorkloadsUnknown)
 	require.False(t, detail.HasWorkloads)
+}
+
+func TestHasWorkloadsReportsEachProbeWithItsActualAPIIdentity(t *testing.T) {
+	tests := []struct {
+		group    string
+		resource string
+	}{
+		{group: "apps", resource: "deployments"},
+		{group: "apps", resource: "statefulsets"},
+		{group: "apps", resource: "daemonsets"},
+		{group: "batch", resource: "jobs"},
+		{group: "batch", resource: "cronjobs"},
+		{group: "", resource: "pods"},
+	}
+
+	for _, test := range tests {
+		t.Run(test.resource, func(t *testing.T) {
+			cause := errors.New("probe failed")
+			client := fake.NewClientset()
+			client.PrependReactor("list", test.resource, func(cgotesting.Action) (bool, runtime.Object, error) {
+				return true, nil, cause
+			})
+			logger := &recordingNamespaceLogger{}
+			deps := testsupport.NewResourceDependencies(
+				testsupport.WithDepsContext(context.Background()),
+				testsupport.WithDepsKubeClient(client),
+				testsupport.WithDepsLogger(logger),
+			)
+			service := NewService(deps)
+
+			has, unknown := service.hasWorkloads("default")
+
+			require.False(t, has)
+			require.True(t, unknown)
+			require.ErrorIs(t, logger.cause, cause)
+			require.Equal(t, sentryreporting.NewKubernetesRequestOperation(sentryreporting.KubernetesRequest{
+				Action:   sentryreporting.KubernetesActionList,
+				Group:    test.group,
+				Version:  "v1",
+				Resource: test.resource,
+				Scope:    sentryreporting.KubernetesScopeNamespaced,
+			}), logger.operation)
+		})
+	}
 }
 
 func newNamespaceService(t testing.TB, client *fake.Clientset) *Service {

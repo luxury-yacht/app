@@ -3,6 +3,7 @@ package sentryreporting
 import (
 	"encoding/json"
 	"errors"
+	"strings"
 	"testing"
 
 	"github.com/getsentry/sentry-go"
@@ -107,6 +108,30 @@ func TestPrepareEventForSendKeepsSafeRepositoryRelativeApplicationFramePaths(t *
 	frame := prepared.Exception[0].Stacktrace.Frames[0]
 	require.Equal(t, "backend/capabilities/service.go", frame.Filename)
 	require.Equal(t, "backend/capabilities/service.go", frame.AbsPath)
+}
+
+func TestPrepareEventForSendPreservesOrdinaryKubernetesProseWhileRedactingNames(t *testing.T) {
+	event := &sentry.Event{Message: strings.Join([]string{
+		"service unavailable",
+		"node not ready",
+		"deployment does not have minimum availability",
+		"secret is missing key ca.crt",
+		"pod payments/api failed",
+		"service api-prod failed",
+		`deployment.apps "privateworkload" is invalid`,
+	}, "; ")}
+
+	prepared := prepareEventForSend(event, nil)
+
+	require.Equal(t, strings.Join([]string{
+		"service unavailable",
+		"node not ready",
+		"deployment does not have minimum availability",
+		"secret is missing key ca.crt",
+		"pod [resource] failed",
+		"service [resource] failed",
+		`deployment "[resource]" is invalid`,
+	}, "; "), prepared.Message)
 }
 
 func TestPrepareEventForSendPreservesCapabilityShapesWhileScrubbingSurroundingText(t *testing.T) {

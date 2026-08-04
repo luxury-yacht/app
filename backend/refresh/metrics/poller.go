@@ -123,6 +123,11 @@ type Poller struct {
 	lastError          string
 	successCount       uint64
 	failureCount       uint64
+	// Failure reporting is bounded per API for one uninterrupted failure run.
+	// A successful collection clears both sets so a later outage is actionable
+	// without turning a five-second poll loop into repeated Sentry events.
+	reportedFailureAPIs   map[string]struct{}
+	warnedUnavailableAPIs map[string]struct{}
 	// ticker is the running loop's ticker (nil when not running); held under mu
 	// so SetInterval can retime a live loop.
 	ticker *time.Ticker
@@ -204,17 +209,19 @@ func NewPoller(client metricsclient.Interface, restConfig *rest.Config, interval
 		interval = config.RefreshMetricsInterval
 	}
 	p := &Poller{
-		interval:     interval,
-		client:       client,
-		restConfig:   restConfig,
-		rateLimiter:  flowcontrol.NewTokenBucketRateLimiter(5, 10),
-		maxBackoff:   config.MetricsMaxBackoff,
-		maxRetry:     5,
-		jitterFactor: 0.2,
-		nodeUsage:    make(map[string]NodeUsage),
-		podUsage:     make(map[string]PodUsage),
-		telemetry:    recorder,
-		logger:       applog.Noop,
+		interval:              interval,
+		client:                client,
+		restConfig:            restConfig,
+		rateLimiter:           flowcontrol.NewTokenBucketRateLimiter(5, 10),
+		maxBackoff:            config.MetricsMaxBackoff,
+		maxRetry:              5,
+		jitterFactor:          0.2,
+		nodeUsage:             make(map[string]NodeUsage),
+		podUsage:              make(map[string]PodUsage),
+		reportedFailureAPIs:   make(map[string]struct{}),
+		warnedUnavailableAPIs: make(map[string]struct{}),
+		telemetry:             recorder,
+		logger:                applog.Noop,
 	}
 	p.nodeLister = p.listNodeMetricsWithRetry
 	p.podNamespaceLister = p.listPodMetricsInNamespaceWithRetry
@@ -396,6 +403,8 @@ func (p *Poller) refresh(ctx context.Context) error {
 	p.consecutiveFailure = 0
 	p.lastError = ""
 	p.successCount++
+	clear(p.reportedFailureAPIs)
+	clear(p.warnedUnavailableAPIs)
 	p.mu.Unlock()
 
 	// log.Printf("[refresh:metrics] poll succeeded: nodeMetrics=%d podMetrics=%d totalSuccess=%d", len(nodeUsage), len(podUsage), p.successCount)
@@ -540,22 +549,42 @@ func (p *Poller) recordFailure(err error, api string, duration time.Duration) {
 	p.mu.Lock()
 	p.consecutiveFailure++
 	p.failureCount++
-	if errors.Is(err, errMetricsAPIUnavailable) {
+	apiUnavailable := errors.Is(err, errMetricsAPIUnavailable)
+	shouldReport := false
+	shouldWarnUnavailable := false
+	if apiUnavailable {
 		p.lastError = fmt.Sprintf("metrics API unavailable (%s)", api)
 		p.lastCollected = time.Time{}
+		if _, warned := p.warnedUnavailableAPIs[api]; !warned {
+			p.warnedUnavailableAPIs[api] = struct{}{}
+			shouldWarnUnavailable = true
+		}
 	} else {
 		p.lastError = err.Error()
+		if _, reported := p.reportedFailureAPIs[api]; !reported {
+			p.reportedFailureAPIs[api] = struct{}{}
+			shouldReport = true
+		}
 	}
 	consecutive := p.consecutiveFailure
 	failureCount := p.failureCount
 	p.mu.Unlock()
 
-	applog.ReportError(
-		p.applicationLogger(),
-		err,
-		fmt.Sprintf("metrics poll failed (%s) (failures=%d)", api, failureCount),
-		logsources.Metrics,
-	)
+	if shouldWarnUnavailable {
+		applog.Warn(
+			p.applicationLogger(),
+			fmt.Sprintf("metrics API unavailable (%s); utilization data will remain unavailable", api),
+			logsources.Metrics,
+		)
+	}
+	if shouldReport {
+		applog.ReportError(
+			p.applicationLogger(),
+			err,
+			fmt.Sprintf("metrics poll failed (%s) (failures=%d)", api, failureCount),
+			logsources.Metrics,
+		)
+	}
 	p.recordMetricsTelemetry(duration, time.Time{}, err, consecutive, false)
 	p.notifyCollectionObserver()
 }

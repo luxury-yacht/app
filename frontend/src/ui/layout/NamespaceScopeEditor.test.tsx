@@ -7,6 +7,7 @@ const namespaceScopeMocks = vi.hoisted(() => ({
   saveNamespaceScope: vi.fn(),
 }));
 const handleInlineMock = vi.hoisted(() => vi.fn());
+const errorSurfaceMock = vi.hoisted(() => vi.fn());
 
 vi.mock('./namespaceScope', async (importOriginal) => ({
   ...(await importOriginal<typeof import('./namespaceScope')>()),
@@ -20,7 +21,17 @@ vi.mock('@utils/errorHandler', () => ({
   },
 }));
 
-import { useNamespaceScope } from './NamespaceScopeEditor';
+vi.mock('@shared/components/errors/ErrorSurface', () => ({
+  ErrorSurface: (props: { kind: string; message?: unknown; error?: unknown }) => {
+    errorSurfaceMock(props);
+    if (props.message !== undefined) {
+      return String(props.message);
+    }
+    return props.error instanceof Error ? props.error.message : String(props.error);
+  },
+}));
+
+import { NamespaceScopeAddRow, useNamespaceScope } from './NamespaceScopeEditor';
 
 const Probe = ({ clusterId }: { clusterId: string | undefined }) => {
   const state = useNamespaceScope(clusterId);
@@ -29,10 +40,16 @@ const Probe = ({ clusterId }: { clusterId: string | undefined }) => {
       <button type="button" onClick={() => state.addNamespace('production')}>
         save
       </button>
-      <span role="alert">{state.error}</span>
+      <button type="button" onClick={() => state.addNamespace('Bad!')}>
+        invalid
+      </button>
+      <NamespaceScopeAddRow state={state} />
     </>
   );
 };
+
+const lastErrorSurfaceProps = () =>
+  errorSurfaceMock.mock.calls[errorSurfaceMock.mock.calls.length - 1]?.[0];
 
 describe('useNamespaceScope telemetry', () => {
   let container: HTMLDivElement;
@@ -49,6 +66,7 @@ describe('useNamespaceScope telemetry', () => {
     handleInlineMock.mockImplementation((error: unknown) => ({
       message: error instanceof Error ? error.message : String(error),
     }));
+    errorSurfaceMock.mockReset();
   });
 
   afterEach(() => {
@@ -65,18 +83,25 @@ describe('useNamespaceScope telemetry', () => {
       await Promise.resolve();
     });
     await act(async () => {
-      container.querySelector('button')?.click();
+      Array.from(container.querySelectorAll('button'))
+        .find((button) => button.textContent === 'save')
+        ?.click();
       await Promise.resolve();
       await Promise.resolve();
     });
 
-    expect(container.querySelector('[role="alert"]')?.textContent).toBe(
+    expect(container.querySelector('.namespace-scope-error')?.textContent).toBe(
       'settings database is read-only'
     );
-    expect(handleInlineMock).toHaveBeenCalledWith(error, {
-      action: 'saveNamespaceScope',
-      source: 'NamespaceScopeEditor',
-      clusterId: 'cluster-a',
+    expect(handleInlineMock).not.toHaveBeenCalled();
+    expect(lastErrorSurfaceProps()).toEqual({
+      kind: 'operational',
+      error,
+      context: {
+        action: 'saveNamespaceScope',
+        source: 'NamespaceScopeEditor',
+        clusterId: 'cluster-a',
+      },
     });
   });
 
@@ -86,21 +111,46 @@ describe('useNamespaceScope telemetry', () => {
       await Promise.resolve();
     });
     await act(async () => {
-      container.querySelector('button')?.click();
+      Array.from(container.querySelectorAll('button'))
+        .find((button) => button.textContent === 'save')
+        ?.click();
       await Promise.resolve();
     });
 
-    expect(container.querySelector('[role="alert"]')?.textContent).toContain(
+    expect(container.querySelector('.namespace-scope-error')?.textContent).toContain(
       'No active cluster selected'
     );
-    expect(handleInlineMock).toHaveBeenCalledWith(
-      expect.objectContaining({
+    expect(handleInlineMock).not.toHaveBeenCalled();
+    expect(lastErrorSurfaceProps()).toEqual({
+      kind: 'operational',
+      error: expect.objectContaining({
         message: 'No active cluster selected — cannot save the namespace scope.',
       }),
-      {
+      context: {
         action: 'saveNamespaceScope',
         source: 'NamespaceScopeEditor',
-      }
+      },
+    });
+  });
+
+  it('keeps invalid namespace input as local validation', async () => {
+    await act(async () => {
+      root.render(<Probe clusterId="cluster-a" />);
+      await Promise.resolve();
+    });
+    await act(async () => {
+      Array.from(container.querySelectorAll('button'))
+        .find((button) => button.textContent === 'invalid')
+        ?.click();
+      await Promise.resolve();
+    });
+
+    expect(handleInlineMock).not.toHaveBeenCalled();
+    expect(lastErrorSurfaceProps()).toEqual(
+      expect.objectContaining({
+        kind: 'validation',
+        message: expect.stringContaining('Namespace'),
+      })
     );
   });
 });

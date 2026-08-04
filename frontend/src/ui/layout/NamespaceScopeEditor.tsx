@@ -10,7 +10,6 @@
 
 import { ErrorSurface } from '@shared/components/errors/ErrorSurface';
 import { PlusIcon } from '@shared/components/icons/SharedIcons';
-import { errorHandler } from '@utils/errorHandler';
 import { useCallback, useEffect, useRef, useState } from 'react';
 import {
   addNamespaceToScope,
@@ -26,17 +25,21 @@ export interface NamespaceScopeState {
   /** True once the initial load for the active cluster finished. */
   loaded: boolean;
   saving: boolean;
-  error: string | null;
+  error: NamespaceScopeError | null;
   addNamespace: (name: string) => boolean;
   removeNamespace: (name: string) => void;
   clearError: () => void;
 }
 
+type NamespaceScopeError =
+  | { kind: 'validation'; message: string }
+  | { kind: 'operational'; error: unknown; context: Record<string, unknown> };
+
 export function useNamespaceScope(clusterId: string | undefined): NamespaceScopeState {
   const [scope, setScope] = useState<string[]>([]);
   const [loaded, setLoaded] = useState(false);
   const [saving, setSaving] = useState(false);
-  const [error, setError] = useState<string | null>(null);
+  const [error, setError] = useState<NamespaceScopeError | null>(null);
 
   useEffect(() => {
     let cancelled = false;
@@ -71,14 +74,14 @@ export function useNamespaceScope(clusterId: string | undefined): NamespaceScope
       if (!clusterId) {
         // Never swallow an edit: without a cluster id the save cannot be
         // attributed, and a silent no-op looks like the bug it masks.
-        const details = errorHandler.handleInline(
-          new Error('No active cluster selected — cannot save the namespace scope.'),
-          {
+        setError({
+          kind: 'operational',
+          error: new Error('No active cluster selected — cannot save the namespace scope.'),
+          context: {
             action: 'saveNamespaceScope',
             source: 'NamespaceScopeEditor',
-          }
-        );
-        setError(details.message);
+          },
+        });
         return;
       }
       setSaving(true);
@@ -86,12 +89,15 @@ export function useNamespaceScope(clusterId: string | undefined): NamespaceScope
       try {
         setScope(await saveNamespaceScope(clusterId, next));
       } catch (err) {
-        const details = errorHandler.handleInline(err, {
-          action: 'saveNamespaceScope',
-          source: 'NamespaceScopeEditor',
-          clusterId,
+        setError({
+          kind: 'operational',
+          error: err,
+          context: {
+            action: 'saveNamespaceScope',
+            source: 'NamespaceScopeEditor',
+            clusterId,
+          },
         });
-        setError(details.message);
       } finally {
         setSaving(false);
       }
@@ -103,7 +109,7 @@ export function useNamespaceScope(clusterId: string | undefined): NamespaceScope
     (name: string): boolean => {
       const result = addNamespaceToScope(scope, name);
       if (result.error) {
-        setError(result.error);
+        setError({ kind: 'validation', message: result.error });
         return false;
       }
       void apply(result.next ?? scope);
@@ -206,7 +212,15 @@ export function NamespaceScopeAddRow({ state }: NamespaceScopeAddRowProps) {
       )}
       {state.error ? (
         <div className="namespace-scope-error">
-          <ErrorSurface kind="status" message={state.error} />
+          {state.error.kind === 'operational' ? (
+            <ErrorSurface
+              kind="operational"
+              error={state.error.error}
+              context={state.error.context}
+            />
+          ) : (
+            <ErrorSurface kind="validation" message={state.error.message} />
+          )}
         </div>
       ) : null}
       {state.scope.length > NAMESPACE_SCOPE_SOFT_WARNING_THRESHOLD ? (

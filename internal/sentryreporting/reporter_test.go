@@ -241,6 +241,7 @@ func TestReporterTrimsRegisteredLogForwarders(t *testing.T) {
 	forwarders := []sentry.Frame{
 		{Module: "github.com/luxury-yacht/app/backend/resources/common", Function: "Dependencies.LogRequestFailure"},
 		{Module: "github.com/luxury-yacht/app/backend/capabilities", Function: "(*Service).logError"},
+		{Module: "github.com/luxury-yacht/app/backend/resources/helm", Function: "(*Service).logDeleteError"},
 	}
 
 	for _, forwarder := range forwarders {

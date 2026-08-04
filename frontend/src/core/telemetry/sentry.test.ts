@@ -30,6 +30,7 @@ import {
   initializeErrorReporting,
   recordBrokerRequestCompleted,
   recordBrokerRequestStarted,
+  recordExpectedCondition,
   resetErrorReportingForTesting,
   runUserAction,
   setActiveNamespaceContext,
@@ -345,6 +346,41 @@ describe('Sentry error reporting', () => {
     expect(payload).toContain('[local-path]');
   });
 
+  it('preserves ordinary Kubernetes prose while redacting name-shaped identifiers', () => {
+    initializeErrorReporting({
+      enabled: true,
+      dsn: 'https://public@example.com/1',
+      environment: 'production',
+    });
+    const options = sentryMocks.init.mock.calls[0]?.[0] as {
+      beforeSend: (event: Record<string, unknown>) => Record<string, unknown>;
+    };
+
+    const filtered = options.beforeSend({
+      message: [
+        'service unavailable',
+        'node not ready',
+        'deployment does not have minimum availability',
+        'secret is missing key ca.crt',
+        'pod payments/api failed',
+        'service api-prod failed',
+        'deployment.apps "privateworkload" is invalid',
+      ].join('; '),
+    });
+
+    expect(filtered.message).toBe(
+      [
+        'service unavailable',
+        'node not ready',
+        'deployment does not have minimum availability',
+        'secret is missing key ca.crt',
+        'pod [resource] failed',
+        'service [resource] failed',
+        'deployment "[resource]" is invalid',
+      ].join('; ')
+    );
+  });
+
   it('keeps matching sanitized bundle identities for stack frames and source maps', () => {
     initializeErrorReporting({
       enabled: true,
@@ -510,6 +546,33 @@ describe('Sentry error reporting', () => {
       expect.objectContaining({ secretValue: expect.anything() })
     );
     expect(sentryMocks.captureException).toHaveBeenCalledWith(error);
+  });
+
+  it('records an expected UI condition as a correlated breadcrumb without an exception', () => {
+    initializeErrorReporting({
+      enabled: true,
+      dsn: 'https://public@example.com/1',
+      environment: 'production',
+    });
+
+    recordExpectedCondition(new Error('403 forbidden'), {
+      category: 'PERMISSION',
+      severity: 'error',
+      context: { action: 'loadPods', clusterId: 'cluster-a' },
+    });
+
+    expect(sentryMocks.addBreadcrumb).toHaveBeenCalledWith({
+      type: 'default',
+      category: 'ui.error.expected',
+      level: 'warning',
+      message: 'Expected PERMISSION condition',
+      data: {
+        operationId: 'ui-expected-1',
+        action: 'loadPods',
+        'cluster.alias': 'cluster-1',
+      },
+    });
+    expect(sentryMocks.captureException).not.toHaveBeenCalled();
   });
 
   it('captures event-handler exceptions through the centralized operational boundary', () => {

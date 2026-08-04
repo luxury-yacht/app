@@ -11,6 +11,9 @@ const readRepoFile = (relativePath: string): string =>
 const walkSourceFiles = (dir: string): string[] => {
   const files: string[] = [];
   for (const entry of readdirSync(dir)) {
+    if (entry.startsWith('.')) {
+      continue;
+    }
     const fullPath = path.join(dir, entry);
     const stat = statSync(fullPath);
     if (stat.isDirectory()) {

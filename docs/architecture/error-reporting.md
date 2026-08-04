@@ -18,16 +18,24 @@ data-collection defaults with an application-owned privacy boundary:
   history, culture, and default session breadcrumbs/contexts are disabled.
 - `frontend/src/utils/errorHandler.ts` is the presentation boundary for handled
   operational failures. `handle` reports before publishing a global error
-  notification; `handleInline` reports without adding a duplicate toast for
-  modals and panels that render the error themselves. Both preserve the
-  original JavaScript `Error` for `captureException`. Validation messages and
-  advisory warnings are not exceptions and stay local. Render failures already
-  owned by the React 19 root handler are not captured a second time by legacy
-  component boundaries.
+  notification except when it classifies authentication or permission failure
+  as an expected UI condition already owned by the auth overlay or permission
+  state. Those conditions add an allowlisted `ui.error.expected` warning
+  breadcrumb instead of creating an issue. `handleInline` and
+  `handleOperational` remain exception boundaries even for permission-shaped
+  text, so an unexpected internal failure does not disappear merely because
+  its message contains `permission` or `403`. Both preserve the original
+  JavaScript `Error` for `captureException`. Validation messages and advisory
+  warnings are not exceptions and stay local. Render failures already owned by
+  the React 19 root handler are not captured a second time by legacy component
+  boundaries.
 - `frontend/src/shared/components/errors/ErrorSurface.tsx` is the rendering
   boundary for dynamic inline error text. An operational surface receives the
   original error and reports it when presented; validation, runtime-status,
   and already-reported messages must declare that classification explicitly.
+  The namespace-scope editor is one production caller: persistence and missing-
+  cluster state failures cross the operational surface with their original
+  error, while invalid namespace input crosses the validation surface locally.
   The `no-inline-error-text` Biome plugin rejects raw JSX rendering of
   error-shaped values (including `.message`, `String(error)`, and
   `error.toString()`), so a new component cannot silently reintroduce the
@@ -54,7 +62,7 @@ data-collection defaults with an application-owned privacy boundary:
   read runs through `runUserAction`; the wrapper gives each invocation a
   `user-action-N` id and binds a rejected `Error` to that exact invocation.
 - Breadcrumbs are emitted by the navigation, broker-request, `runUserAction`,
-  error-presentation, and error-handler boundaries. Feature components do not
+  error-presentation, expected-condition, and error-handler boundaries. Feature components do not
   call Sentry directly. While exactly one broker request is active, those
   app-owned breadcrumbs receive its request id. Before a frontend event is
   sent, breadcrumbs from other request ids and breadcrumbs labeled with a
@@ -114,10 +122,15 @@ data-collection defaults with an application-owned privacy boundary:
   interface retain the previous string-only local-log behavior.
   Resource handlers touched by this reporting path wrap returned causes with
   `%w` so their callers can continue inspecting the chain.
-- Terminal metrics polls, beta-expiry startup failures, capability-review batch
-  failures, and classified authentication failures also use the structured
-  path. Authentication diagnostics retain the original cause internally while
-  exposing only their existing sanitized fields to the frontend. Capability
+- Unexpected metrics polls, beta-expiry startup failures, capability-review
+  batch failures, and classified authentication failures also use the
+  structured path. An absent Metrics API is expected cluster capability state:
+  it produces one warning breadcrumb per uninterrupted unavailable run and no
+  exception. Other repeated poll failures produce at most one exception per API
+  in an uninterrupted failure run; a successful full collection re-arms the
+  report so a later outage remains visible. Authentication diagnostics retain
+  the original cause internally while exposing only their existing sanitized
+  fields to the frontend. Capability
   batch summaries and slow-review breadcrumbs retain group/version, resource,
   verb, and namespaced-versus-cluster scope, but never the caller-supplied
   permission key, namespace, or object name. Batch timing breadcrumbs aggregate
@@ -149,14 +162,20 @@ the pseudonymous frontend installation ID remain available for diagnosis.
 The backend defines one `beforeSend` privacy boundary. It removes user/request
 data and hostnames, clears captured runtime variables, sanitizes free-form text,
 replaces cluster identifiers, typed Kubernetes status object names, and
-resource names supplied through the operation contract's redaction-only channel,
+resource names supplied through the operation contract's redaction-only channel.
+Generic Kubernetes prose redaction preserves quoted object names, unquoted
+`namespace/name` pairs, and unquoted name-shaped values containing a dot, dash,
+underscore, or digit. It deliberately does not treat every bare English word
+after `service`, `node`, or another kind noun as an identifier, because doing so
+destroys actionable messages such as `service unavailable`. The boundary also
 normalizes this repository's application frame
 filenames to paths such as `backend/capabilities/service.go`, and removes stack
 frames belonging to the reporting machinery itself — `sentryReporter`'s capture
-methods, `applog`, the application `Logger`, and any package's one-line
-`logError` wrapper. Sentry derives an issue's culprit and grouping key from the
-innermost frame, so without the trim every backend `ERROR` groups under the
-reporter or under a logging helper instead of the code that failed.
+methods, `applog`, the application `Logger`, and registered one-line forwarders
+such as `logError`, `logDeleteError`, and `LogRequestFailure`. Sentry derives an
+issue's culprit and grouping key from the innermost frame, so without the trim
+every backend `ERROR` groups under the reporter or under a logging helper
+instead of the code that failed.
 Absolute home-directory prefixes remain redacted; only the repository-relative
 application path is retained.
 
@@ -272,9 +291,10 @@ poller shut down — and must not be reported as a failure.
   `Logger.Error` so new resource kinds inherit cancellation handling and retain
   typed Kubernetes status data.
 - The metrics poller treats demand-shutdown cancellation as an expected
-  lifecycle event and logs intermediate retries as warnings. A terminal metrics
-  failure is logged once at `ERROR`, so the backend reporter receives the full
-  terminal message without paying for each retry.
+  lifecycle event and logs intermediate retries as warnings. Metrics API absence
+  is a warning rather than an exception. Other failures retain the original
+  cause and stack in one error report per API during a continuous failure run;
+  successful collection resets that latch.
 
 `context.DeadlineExceeded` is deliberately still an error: a request that ran
 out of time is a real problem, unlike one the app itself cancelled.
@@ -303,7 +323,11 @@ project are all present. It generates hidden source maps, uploads them under
 put `SENTRY_AUTH_TOKEN` in a `VITE_` variable; Vite-prefixed values are bundled
 into the webview.
 
-The plugin is configured with `telemetry: false`. That option defaults to
+The plugin is configured with `telemetry: false` and
+`bundleSizeOptimizations.excludeTracing: true`. The application does not
+initialize Sentry tracing, so the latter removes unused tracing code without
+changing exception capture, source maps, or Release Health sessions. The
+`telemetry` option defaults to
 `true`, which reports the plugin's own build errors and timings to Sentry's
 servers on every release build. It is about the build tool, not about
 application data, and is kept off deliberately — `vite.config.test.ts` pins it.

@@ -11,6 +11,7 @@ import { ErrorCategory, ErrorSeverity, errorHandler } from './errorHandler';
 
 const telemetryMocks = vi.hoisted(() => ({
   captureUserVisibleError: vi.fn(),
+  recordExpectedCondition: vi.fn(),
 }));
 
 vi.mock('@/core/telemetry/sentry', () => telemetryMocks);
@@ -28,6 +29,7 @@ describe('ErrorHandler', () => {
 
   beforeEach(() => {
     telemetryMocks.captureUserVisibleError.mockReset();
+    telemetryMocks.recordExpectedCondition.mockReset();
     handler = new ErrorHandlerClass({
       enableLogging: true,
       logToConsole: true,
@@ -147,6 +149,26 @@ describe('ErrorHandler', () => {
     expect(handler.getHistory()).toHaveLength(0);
     expect(listener).not.toHaveBeenCalled();
     expect(console.groupCollapsed).toHaveBeenCalled();
+    expect(telemetryMocks.captureUserVisibleError).not.toHaveBeenCalled();
+    expect(telemetryMocks.recordExpectedCondition).toHaveBeenCalledWith(
+      '403 forbidden access',
+      expect.objectContaining({ category: ErrorCategory.PERMISSION })
+    );
+  });
+
+  it('still captures permission-shaped failures at an operational boundary', () => {
+    const error = new Error('permission cache invariant failed');
+
+    handler.handleOperational(error, { action: 'rebuildPermissionCache' });
+
+    expect(telemetryMocks.captureUserVisibleError).toHaveBeenCalledWith(
+      error,
+      expect.objectContaining({
+        category: ErrorCategory.PERMISSION,
+        surface: 'operational',
+      })
+    );
+    expect(telemetryMocks.recordExpectedCondition).not.toHaveBeenCalled();
   });
 
   it('supports scoped handlers that merge context and custom message', () => {
@@ -186,6 +208,8 @@ describe('ErrorHandler', () => {
     // Auth errors should be suppressed — the AuthFailureOverlay handles them.
     expect(handler.getHistory()).toHaveLength(0);
     expect(listener).not.toHaveBeenCalled();
+    expect(telemetryMocks.captureUserVisibleError).not.toHaveBeenCalled();
+    expect(telemetryMocks.recordExpectedCondition).toHaveBeenCalledTimes(3);
   });
 
   it('updates options and disables console logging when requested', () => {

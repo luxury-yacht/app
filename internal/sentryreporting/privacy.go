@@ -39,7 +39,7 @@ var (
 		`(?i)\b(cluster|namespace|pod|deployment|statefulset|daemonset|service|secret|configmap|job|cronjob|node)s?(?:\.[a-z0-9.-]+)?\s+["'][^"']+["']`,
 	)
 	telemetryKubernetesPathPattern = regexp.MustCompile(
-		`(?i)\b(cluster|namespace|pod|deployment|statefulset|daemonset|service|secret|configmap|job|cronjob|node)s?(?:\.[a-z0-9.-]+)?\s+(?:[a-z0-9][a-z0-9._-]*/)?[a-z0-9][a-z0-9._-]*\b`,
+		`(?i)\b(cluster|namespace|pod|deployment|statefulset|daemonset|service|secret|configmap|job|cronjob|node)s?(?:\.[a-z0-9.-]+)?\s+(?:[a-z0-9][a-z0-9._-]*/[a-z0-9][a-z0-9._-]*|[0-9]|[a-z0-9][a-z0-9._-]*[0-9._-][a-z0-9._-]*)\b`,
 	)
 	telemetryCapabilityShapePattern = regexp.MustCompile(
 		`(?i)\b(?:[a-z0-9*](?:[a-z0-9*.-]*[a-z0-9*])?(?:/[a-z0-9*](?:[a-z0-9*.-]*[a-z0-9*])?)?\s+)?[a-z0-9*](?:[a-z0-9*.-]*[a-z0-9*])?(?:/[a-z0-9*](?:[a-z0-9*.-]*[a-z0-9*])?)?\s+[a-z0-9*](?:[a-z0-9*.-]*[a-z0-9*])?\s+(?:namespace|cluster)-scoped\b`,

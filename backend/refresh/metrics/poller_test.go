@@ -29,10 +29,11 @@ type recordedMetricsLog struct {
 }
 
 type recordingMetricsLogger struct {
-	mu      sync.Mutex
-	entries []recordedMetricsLog
-	written chan struct{}
-	cause   error
+	mu       sync.Mutex
+	entries  []recordedMetricsLog
+	written  chan struct{}
+	cause    error
+	captures int
 }
 
 func newRecordingMetricsLogger() *recordingMetricsLogger {
@@ -68,6 +69,7 @@ func (l *recordingMetricsLogger) Error(message string, source ...string) {
 func (l *recordingMetricsLogger) ErrorWithCause(err error, message string, source ...string) {
 	l.mu.Lock()
 	l.cause = err
+	l.captures++
 	l.mu.Unlock()
 	l.append("error", fmt.Sprintf("%s: %v", message, err), source...)
 }
@@ -76,6 +78,12 @@ func (l *recordingMetricsLogger) snapshot() []recordedMetricsLog {
 	l.mu.Lock()
 	defer l.mu.Unlock()
 	return append([]recordedMetricsLog(nil), l.entries...)
+}
+
+func (l *recordingMetricsLogger) captureCount() int {
+	l.mu.Lock()
+	defer l.mu.Unlock()
+	return l.captures
 }
 
 func TestPollerRefreshSuccess(t *testing.T) {
@@ -438,7 +446,9 @@ func TestPollerRefreshHandlesUnavailableMetricsAPI(t *testing.T) {
 	ctx := context.Background()
 
 	recorder := telemetry.NewRecorder()
+	logger := newRecordingMetricsLogger()
 	poller := NewPoller(nil, nil, time.Second, recorder)
+	poller.SetLogger(logger)
 	poller.client = &metricsclient.Clientset{}
 	poller.rateLimiter = flowcontrol.NewFakeAlwaysRateLimiter()
 	poller.maxRetry = 1
@@ -452,19 +462,59 @@ func TestPollerRefreshHandlesUnavailableMetricsAPI(t *testing.T) {
 		return &metricsv1beta1.PodMetricsList{}, nil
 	}
 
-	err := poller.refresh(ctx)
-	require.ErrorIs(t, err, errMetricsAPIUnavailable)
+	for range 3 {
+		err := poller.refresh(ctx)
+		require.ErrorIs(t, err, errMetricsAPIUnavailable)
+	}
 
 	meta := poller.Metadata()
 	require.Equal(t, uint64(0), meta.SuccessCount)
-	require.Equal(t, uint64(1), meta.FailureCount)
-	require.Equal(t, 1, meta.ConsecutiveFailures)
+	require.Equal(t, uint64(3), meta.FailureCount)
+	require.Equal(t, 3, meta.ConsecutiveFailures)
 	require.Contains(t, meta.LastError, "metrics API unavailable")
 	require.True(t, meta.CollectedAt.IsZero())
 
 	summary := recorder.SnapshotSummary()
-	require.Equal(t, uint64(1), summary.Metrics.FailureCount)
+	require.Equal(t, uint64(3), summary.Metrics.FailureCount)
 	require.Contains(t, summary.Metrics.LastError, "metrics API unavailable")
+	require.Zero(t, logger.captureCount())
+	var warnings []recordedMetricsLog
+	for _, entry := range logger.snapshot() {
+		if entry.level == "warn" {
+			warnings = append(warnings, entry)
+		}
+	}
+	require.Len(t, warnings, 1)
+}
+
+func TestPollerRefreshReportsUnexpectedFailureOnceUntilRecovery(t *testing.T) {
+	logger := newRecordingMetricsLogger()
+	poller := NewPoller(nil, nil, time.Second, telemetry.NewRecorder())
+	poller.SetLogger(logger)
+	poller.client = &metricsclient.Clientset{}
+	poller.rateLimiter = flowcontrol.NewFakeAlwaysRateLimiter()
+	poller.maxRetry = 1
+	failing := true
+	poller.nodeLister = func(context.Context, metricsclient.Interface) (*metricsv1beta1.NodeMetricsList, error) {
+		if failing {
+			return nil, errors.New("metrics server unavailable")
+		}
+		return &metricsv1beta1.NodeMetricsList{}, nil
+	}
+	poller.podLister = func(context.Context, metricsclient.Interface) (*metricsv1beta1.PodMetricsList, error) {
+		return &metricsv1beta1.PodMetricsList{}, nil
+	}
+
+	for range 3 {
+		require.EqualError(t, poller.refresh(context.Background()), "metrics server unavailable")
+	}
+	require.Equal(t, 1, logger.captureCount())
+
+	failing = false
+	require.NoError(t, poller.refresh(context.Background()))
+	failing = true
+	require.EqualError(t, poller.refresh(context.Background()), "metrics server unavailable")
+	require.Equal(t, 2, logger.captureCount())
 }
 
 func TestPollerRefreshRequiresConfig(t *testing.T) {

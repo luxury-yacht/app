@@ -5,7 +5,10 @@
  * Provides shared helper functions for the frontend.
  */
 
-import { captureUserVisibleError } from '@/core/telemetry/sentry';
+import {
+  captureUserVisibleError,
+  recordExpectedCondition as recordExpectedTelemetryCondition,
+} from '@/core/telemetry/sentry';
 
 export const ErrorCategory = {
   NETWORK: 'NETWORK',
@@ -334,6 +337,15 @@ class ErrorHandler {
     this.logError(details);
   }
 
+  private recordExpectedCondition(error: unknown, details: ErrorDetails): void {
+    recordExpectedTelemetryCondition(error, {
+      category: details.category,
+      severity: details.severity,
+      context: details.context,
+    });
+    this.logError(details);
+  }
+
   /**
    * Main error handling method
    */
@@ -343,7 +355,6 @@ class ErrorHandler {
     customMessage?: string
   ): ErrorDetails {
     const errorDetails = this.describe(error, context, customMessage);
-    this.reportError(error, errorDetails);
     const { category, message: errorString } = errorDetails;
 
     // Suppress notifications for auth-related errors that are handled by the AuthFailureOverlay.
@@ -362,7 +373,10 @@ class ErrorHandler {
       category === ErrorCategory.AUTHENTICATION ||
       isAuthOverlayError;
 
-    if (!suppressNotification) {
+    if (suppressNotification) {
+      this.recordExpectedCondition(error, errorDetails);
+    } else {
+      this.reportError(error, errorDetails);
       // Store in history
       this.addToHistory(errorDetails);
 

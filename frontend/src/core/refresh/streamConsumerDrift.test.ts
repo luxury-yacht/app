@@ -83,6 +83,9 @@ const collectSourceFiles = (root: string): Array<{ path: string; content: string
   const out: Array<{ path: string; content: string }> = [];
   const walk = (dir: string) => {
     for (const name of readdirSync(dir)) {
+      if (name.startsWith('.')) {
+        continue;
+      }
       const full = join(dir, name);
       const stats = statSync(full);
       if (stats.isDirectory()) {

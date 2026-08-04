@@ -104,7 +104,7 @@ func (s *Service) hasWorkloads(namespace string) (bool, bool) {
 	for _, probe := range probes {
 		hasAny, err := probe.hasAny()
 		if err != nil {
-			s.logWorkloadProbeError(probe.resource, namespace, err)
+			s.logWorkloadProbeError(probe.group, probe.version, probe.resource, namespace, err)
 			return false, true
 		}
 		if hasAny {
@@ -116,47 +116,49 @@ func (s *Service) hasWorkloads(namespace string) (bool, bool) {
 }
 
 type namespaceWorkloadProbe struct {
+	group    string
+	version  string
 	resource string
 	hasAny   func() (bool, error)
 }
 
 func namespaceWorkloadProbes(client kubernetes.Interface, ctx context.Context, namespace string, opts metav1.ListOptions) []namespaceWorkloadProbe {
 	return []namespaceWorkloadProbe{
-		{resource: "deployments", hasAny: func() (bool, error) {
+		{group: "apps", version: "v1", resource: "deployments", hasAny: func() (bool, error) {
 			list, err := client.AppsV1().Deployments(namespace).List(ctx, opts)
 			return list != nil && len(list.Items) > 0, err
 		}},
-		{resource: "statefulsets", hasAny: func() (bool, error) {
+		{group: "apps", version: "v1", resource: "statefulsets", hasAny: func() (bool, error) {
 			list, err := client.AppsV1().StatefulSets(namespace).List(ctx, opts)
 			return list != nil && len(list.Items) > 0, err
 		}},
-		{resource: "daemonsets", hasAny: func() (bool, error) {
+		{group: "apps", version: "v1", resource: "daemonsets", hasAny: func() (bool, error) {
 			list, err := client.AppsV1().DaemonSets(namespace).List(ctx, opts)
 			return list != nil && len(list.Items) > 0, err
 		}},
-		{resource: "jobs", hasAny: func() (bool, error) {
+		{group: "batch", version: "v1", resource: "jobs", hasAny: func() (bool, error) {
 			list, err := client.BatchV1().Jobs(namespace).List(ctx, opts)
 			return list != nil && len(list.Items) > 0, err
 		}},
-		{resource: "cronjobs", hasAny: func() (bool, error) {
+		{group: "batch", version: "v1", resource: "cronjobs", hasAny: func() (bool, error) {
 			list, err := client.BatchV1().CronJobs(namespace).List(ctx, opts)
 			return list != nil && len(list.Items) > 0, err
 		}},
-		{resource: "pods", hasAny: func() (bool, error) {
+		{group: "", version: "v1", resource: "pods", hasAny: func() (bool, error) {
 			list, err := client.CoreV1().Pods(namespace).List(ctx, opts)
 			return list != nil && len(list.Items) > 0, err
 		}},
 	}
 }
 
-func (s *Service) logWorkloadProbeError(resource, namespace string, err error) {
+func (s *Service) logWorkloadProbeError(group, version, resource, namespace string, err error) {
 	if !apierrors.IsForbidden(err) {
 		s.deps.LogDynamicResourceRequestFailure(
 			err,
 			fmt.Sprintf("Failed to list %s in namespace %s", resource, namespace),
 			"list",
-			"",
-			"v1",
+			group,
+			version,
 			resource,
 			"",
 			true,

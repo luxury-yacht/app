@@ -56,6 +56,7 @@ function* walkSourceFiles(root: string): Generator<string> {
       const full = path.join(current, entry.name);
       if (entry.isDirectory()) {
         if (
+          entry.name.startsWith('.') ||
           entry.name === 'node_modules' ||
           entry.name === 'wailsjs' ||
           entry.name === '__fixtures__' ||
