@@ -47,6 +47,10 @@ and snapshot HTTP requests. The refresh API permits the header in CORS
 preflights. The backend reuses it as the operation identity for snapshot builds
 and carries it through queued manual-refresh execution, so frontend diagnostics,
 structured errors, and breadcrumbs refer to the same request instance.
+Because the refresh orchestrator presents handled failures before the broker
+call completes, it must pass the live `broker-read-N` id into the shared error
+boundary. The telemetry owner resolves only ids that are still registered as
+active broker requests; it does not trust an arbitrary caller-supplied id.
 
 The owning timing, retention, and background-work rules are in
 [data-freshness.md](data-freshness.md).

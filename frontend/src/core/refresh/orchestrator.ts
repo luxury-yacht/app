@@ -237,7 +237,8 @@ class RefreshOrchestrator {
     domain: RefreshDomain,
     scope: string | undefined,
     message: string,
-    error?: unknown
+    error?: unknown,
+    operationId?: string
   ): void {
     if (message.includes('no active clusters available')) {
       // The cluster's backend subsystem is still initializing (its lifecycle
@@ -255,6 +256,7 @@ class RefreshOrchestrator {
       message,
       category: this.configs.get(domain)?.category,
       ...(error !== undefined ? { error } : {}),
+      ...(operationId ? { operationId } : {}),
     });
   }
 
@@ -1427,7 +1429,7 @@ class RefreshOrchestrator {
           permissionDenied: true,
           isManual: options.isManual,
         }));
-        this.notifyRefreshError(domain, normalizedScope, message, error);
+        this.notifyRefreshError(domain, normalizedScope, message, error, options.correlationId);
         return;
       }
       if (this.errorNotifier.shouldSuppressNetworkError(message)) {
@@ -1446,7 +1448,7 @@ class RefreshOrchestrator {
         error: message,
         isManual: options.isManual,
       }));
-      this.notifyRefreshError(domain, normalizedScope, message, error);
+      this.notifyRefreshError(domain, normalizedScope, message, error, options.correlationId);
     } finally {
       const tracked = runtime.getInFlight(domain, normalizedScope);
       if (tracked && tracked.requestId === requestId) {

@@ -9,13 +9,21 @@ type NotifyRefreshErrorOptions = {
   message: string;
   category?: DomainCategory;
   error?: unknown;
+  operationId?: string;
 };
 
 export class RefreshErrorNotifier {
   private lastNotifiedErrors = new Map<string, string>();
   private suppressNetworkErrorsUntil = 0;
 
-  notify({ domain, scope, message, category, error }: NotifyRefreshErrorOptions): void {
+  notify({
+    domain,
+    scope,
+    message,
+    category,
+    error,
+    operationId,
+  }: NotifyRefreshErrorOptions): void {
     if (this.shouldSuppressNetworkError(message)) {
       return;
     }
@@ -52,6 +60,7 @@ export class RefreshErrorNotifier {
         domain,
         scope: scope ?? 'global',
         category,
+        ...(operationId ? { operationId } : {}),
       },
       message
     );

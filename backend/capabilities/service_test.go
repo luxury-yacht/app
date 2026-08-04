@@ -6,6 +6,7 @@ import (
 	"fmt"
 	"strings"
 	"testing"
+	"time"
 
 	"github.com/luxury-yacht/app/backend/internal/applog"
 	"github.com/luxury-yacht/app/backend/resources/common"
@@ -96,6 +97,61 @@ func TestEvaluateAllowed(t *testing.T) {
 	}
 }
 
+func TestEvaluateSlowWarningOmitsCallerIDAndResourceNames(t *testing.T) {
+	client := fake.NewClientset()
+	client.Fake.PrependReactor("create", "selfsubjectaccessreviews", func(action cgotesting.Action) (bool, runtime.Object, error) {
+		review := action.(cgotesting.CreateAction).GetObject().(*authorizationv1.SelfSubjectAccessReview)
+		review.Status = authorizationv1.SubjectAccessReviewStatus{Allowed: true}
+		return true, review, nil
+	})
+
+	logger := &captureLogger{}
+	start := time.Date(2026, time.August, 3, 12, 0, 0, 0, time.UTC)
+	times := []time.Time{start, start.Add(2 * time.Second)}
+	timeIndex := 0
+	service := NewService(Dependencies{
+		Common: common.Dependencies{
+			Context:          context.Background(),
+			Logger:           logger,
+			KubernetesClient: client,
+		},
+		WorkerCount:          1,
+		SlowRequestThreshold: time.Second,
+		Now: func() time.Time {
+			current := times[timeIndex]
+			timeIndex++
+			return current
+		},
+	})
+	callerID := "cluster-1|apps/v1|deployment|list|customer-prod|"
+
+	_, err := service.Evaluate(context.Background(), []ReviewAttributes{{
+		ID: callerID,
+		Attributes: &authorizationv1.ResourceAttributes{
+			Group:     "apps",
+			Version:   "v1",
+			Resource:  "deployments",
+			Verb:      "list",
+			Namespace: "customer-prod",
+			Name:      "private-web",
+		},
+	}})
+
+	if err != nil {
+		t.Fatalf("Evaluate returned error: %v", err)
+	}
+	if len(logger.warns) != 1 {
+		t.Fatalf("expected one slow warning, got %v", logger.warns)
+	}
+	warning := logger.warns[0]
+	if strings.Contains(warning, callerID) || strings.Contains(warning, "customer-prod") || strings.Contains(warning, "private-web") {
+		t.Fatalf("slow warning leaked a caller id, namespace, or resource name: %q", warning)
+	}
+	if !strings.Contains(warning, "apps/v1 deployments list namespace-scoped") {
+		t.Fatalf("expected structural check details to remain actionable, got %q", warning)
+	}
+}
+
 // A dropped connection fails every in-flight review at once. Logging each one
 // turns a single fault into an ERROR per check, and every backend ERROR is
 // forwarded to error reporting.
@@ -145,10 +201,9 @@ func TestEvaluateLogsOneSummaryWhenEveryReviewFails(t *testing.T) {
 	}
 }
 
-// The count alone cannot say which checks broke, which is the whole answer when
-// only some of them do. The identities ride in the message because that is what
-// gets forwarded to error reporting verbatim.
-func TestEvaluateSummaryNamesTheFailedChecks(t *testing.T) {
+// The count alone cannot say which checks broke. Keep the structural resource
+// identity, but never put namespace or object names into telemetry-bound text.
+func TestEvaluateSummaryDescribesFailedChecksWithoutResourceNames(t *testing.T) {
 	client := fake.NewClientset()
 	client.Fake.PrependReactor("create", "selfsubjectaccessreviews", func(action cgotesting.Action) (bool, runtime.Object, error) {
 		review := action.(cgotesting.CreateAction).GetObject().(*authorizationv1.SelfSubjectAccessReview)
@@ -179,8 +234,11 @@ func TestEvaluateSummaryNamesTheFailedChecks(t *testing.T) {
 		t.Fatalf("expected exactly 1 error log, got %d: %v", len(logger.errors), logger.errors)
 	}
 	summary := logger.errors[0]
-	if !strings.Contains(summary, "v1 secrets update prod/tls") {
-		t.Fatalf("expected the failed check identity in the summary, got %q", summary)
+	if !strings.Contains(summary, "v1 secrets update namespace-scoped") {
+		t.Fatalf("expected structural failed-check details in the summary, got %q", summary)
+	}
+	if strings.Contains(summary, "prod") || strings.Contains(summary, "tls") {
+		t.Fatalf("expected namespace and object names to be omitted, got %q", summary)
 	}
 	if strings.Contains(summary, "pods") {
 		t.Fatalf("expected only failed checks to be named, got %q", summary)
@@ -201,7 +259,7 @@ func TestEvaluateSummaryPutsTheCauseBeforeTheIdentities(t *testing.T) {
 		Context: context.Background(), Logger: logger, KubernetesClient: client,
 	}})
 
-	// Namespace-scoped with no resource name — must not render a trailing slash.
+	// Namespace-scoped checks keep their scope type, never the namespace value.
 	checks := []ReviewAttributes{{ID: "list", Attributes: &authorizationv1.ResourceAttributes{
 		Verb: "list", Resource: "pods", Namespace: "fa-jj-test",
 	}}}
@@ -211,8 +269,11 @@ func TestEvaluateSummaryPutsTheCauseBeforeTheIdentities(t *testing.T) {
 	}
 
 	summary := logger.errors[0]
-	if strings.Contains(summary, "fa-jj-test/") {
-		t.Fatalf("expected no trailing slash when the check has no name, got %q", summary)
+	if strings.Contains(summary, "fa-jj-test") {
+		t.Fatalf("expected the namespace value to be omitted, got %q", summary)
+	}
+	if !strings.Contains(summary, "pods list namespace-scoped") {
+		t.Fatalf("expected the namespace scope type to remain, got %q", summary)
 	}
 	causeAt := strings.Index(summary, "connection lost")
 	listAt := strings.Index(summary, "pods list")
@@ -493,6 +554,15 @@ func TestLogHelpersRespectLogger(t *testing.T) {
 	}
 	if len(logger.debugs) != 1 || logger.debugs[0] != "debug" {
 		t.Fatalf("expected debug to be recorded, got %+v", logger.debugs)
+	}
+}
+
+func TestCapabilityScopeMetricKeyRetainsOnlyScopeType(t *testing.T) {
+	if got := capabilityScopeMetricKey("customer-prod"); got != "<namespace>" {
+		t.Fatalf("expected a namespace-scoped metric key, got %q", got)
+	}
+	if got := capabilityScopeMetricKey(""); got != "<cluster>" {
+		t.Fatalf("expected a cluster-scoped metric key, got %q", got)
 	}
 }
 

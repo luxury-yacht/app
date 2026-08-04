@@ -61,7 +61,7 @@ let operationSequence = 0;
 let userActionSequence = 0;
 let activeViewContext: ActiveViewContext | null = null;
 let activeNamespaceContext: string | undefined;
-let activeBrokerRequestIds = new Set<string>();
+let activeBrokerRequests = new Map<string, BrokerRequestContext>();
 let requestByError = new WeakMap<object, CompletedBrokerRequestContext>();
 let userActionByError = new WeakMap<object, UserActionContext>();
 let bootstrapPreferenceResolved = false;
@@ -407,8 +407,8 @@ const breadcrumbWorkspaceData = (): Record<string, unknown> => {
             : {}),
         }
       : {}),
-    ...(activeBrokerRequestIds.size === 1
-      ? { 'request.ids': Array.from(activeBrokerRequestIds) }
+    ...(activeBrokerRequests.size === 1
+      ? { 'request.ids': Array.from(activeBrokerRequests.keys()) }
       : {}),
   };
 };
@@ -681,7 +681,7 @@ export function resetErrorReportingForTesting(): void {
   userActionSequence = 0;
   activeViewContext = null;
   activeNamespaceContext = undefined;
-  activeBrokerRequestIds = new Set<string>();
+  activeBrokerRequests = new Map<string, BrokerRequestContext>();
   requestByError = new WeakMap<object, CompletedBrokerRequestContext>();
   userActionByError = new WeakMap<object, UserActionContext>();
   bootstrapPreferenceResolved = false;
@@ -763,7 +763,7 @@ export function recordBrokerRequestStarted(request: BrokerRequestContext): void 
   if (!reportingInitialized) {
     return;
   }
-  activeBrokerRequestIds.add(request.id);
+  activeBrokerRequests.set(request.id, request);
   if (request.reason !== 'user') {
     return;
   }
@@ -806,7 +806,7 @@ export function recordBrokerRequestCompleted(
       data: privacyBrokerRequestContext(completed),
     });
   }
-  activeBrokerRequestIds.delete(request.id);
+  activeBrokerRequests.delete(request.id);
 }
 
 const recordUserActionBreadcrumb = (
@@ -863,12 +863,16 @@ export function captureUserVisibleError(error: unknown, details: UserVisibleErro
   }
 
   const exception = error instanceof Error ? error : new Error(String(error));
-  const request =
+  const completedRequest =
     error !== null &&
     error !== undefined &&
     (typeof error === 'object' || typeof error === 'function')
       ? requestByError.get(error)
       : undefined;
+  const explicitOperationId = contextString(details.context, 'operationId');
+  const request =
+    completedRequest ??
+    (explicitOperationId ? activeBrokerRequests.get(explicitOperationId) : undefined);
   const userAction =
     error !== null &&
     error !== undefined &&

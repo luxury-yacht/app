@@ -90,6 +90,23 @@ func TestPrepareEventForSendRemovesPersonalAndRequestData(t *testing.T) {
 	require.Contains(t, string(payload), "[local-path]")
 }
 
+func TestPrepareEventForSendKeepsSafeRepositoryRelativeApplicationFramePaths(t *testing.T) {
+	event := &sentry.Event{Exception: []sentry.Exception{{
+		Stacktrace: &sentry.Stacktrace{Frames: []sentry.Frame{{
+			Module:   "github.com/luxury-yacht/app/backend/capabilities",
+			Filename: "/Users/alice/git/luxury-yacht/app/backend/capabilities/service.go",
+			AbsPath:  "/Users/alice/git/luxury-yacht/app/backend/capabilities/service.go",
+		}}},
+	}}}
+
+	prepared := prepareEventForSend(event, nil)
+
+	require.NotNil(t, prepared)
+	frame := prepared.Exception[0].Stacktrace.Frames[0]
+	require.Equal(t, "backend/capabilities/service.go", frame.Filename)
+	require.Equal(t, "backend/capabilities/service.go", frame.AbsPath)
+}
+
 func TestReporterAppliesPrivacyBoundaryBeforeTransport(t *testing.T) {
 	transport := &recordingTransport{}
 	reporter, err := New(Config{

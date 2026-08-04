@@ -515,6 +515,9 @@ func TestReporterCapturesRecoveredPanics(t *testing.T) {
 	require.Equal(t, "boom for cluster-a", event.Message)
 	require.Equal(t, sentry.LevelFatal, event.Level)
 	require.Equal(t, "Process", event.Tags["source"])
+	require.NotEmpty(t, event.Threads)
+	require.NotNil(t, event.Threads[0].Stacktrace)
+	require.NotEmpty(t, event.Threads[0].Stacktrace.Frames)
 }
 
 func TestReporterFlushesAndClosesTransportAtShutdown(t *testing.T) {

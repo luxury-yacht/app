@@ -1,6 +1,7 @@
 package sentryreporting
 
 import (
+	"path"
 	"regexp"
 	"sort"
 	"strings"
@@ -219,7 +220,13 @@ func sanitizeStacktrace(stacktrace *sentry.Stacktrace) {
 	}
 	for index := range stacktrace.Frames {
 		frame := &stacktrace.Frames[index]
-		frame.AbsPath = sanitizeTelemetryText(frame.AbsPath)
+		if relativePath := safeRepositoryFramePath(*frame); relativePath != "" {
+			frame.Filename = relativePath
+			frame.AbsPath = relativePath
+		} else {
+			frame.Filename = sanitizeTelemetryText(frame.Filename)
+			frame.AbsPath = sanitizeTelemetryText(frame.AbsPath)
+		}
 		frame.ContextLine = sanitizeTelemetryText(frame.ContextLine)
 		for contextIndex := range frame.PreContext {
 			frame.PreContext[contextIndex] = sanitizeTelemetryText(frame.PreContext[contextIndex])
@@ -231,6 +238,34 @@ func sanitizeStacktrace(stacktrace *sentry.Stacktrace) {
 		// too likely to contain credentials or user-entered data.
 		frame.Vars = nil
 	}
+}
+
+func safeRepositoryFramePath(frame sentry.Frame) string {
+	if !isApplicationFrame(frame) {
+		return ""
+	}
+
+	sourcePath := strings.ReplaceAll(frame.Filename, `\`, "/")
+	if sourcePath == "" {
+		sourcePath = strings.ReplaceAll(frame.AbsPath, `\`, "/")
+	}
+	filename := path.Base(sourcePath)
+	if filename == "." || filename == "/" || filename == "" {
+		return ""
+	}
+
+	if frame.Module == mainModule {
+		if marker := strings.LastIndex(sourcePath, "/app/"); marker >= 0 {
+			return strings.TrimPrefix(sourcePath[marker+len("/app/"):], "/")
+		}
+		return filename
+	}
+
+	packagePath := strings.Trim(strings.TrimPrefix(frame.Module, appModulePrefix), "/")
+	if packagePath == "" {
+		return filename
+	}
+	return path.Join(packagePath, filename)
 }
 
 func prepareStacktrace(stacktrace *sentry.Stacktrace, replacements []telemetryReplacement) {

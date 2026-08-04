@@ -81,7 +81,7 @@ describe('DataManagementSection', () => {
     expect(container.textContent).toContain('Import Favorites');
     expect(container.textContent).toContain('Error Reporting');
     expect(container.textContent).toContain(
-      'Sends anonymized data used to improve the app. All user-specific data is obfuscated or removed. Disable this if you do not want to participate.'
+      'Sends pseudonymous error diagnostics linked to this installation. Reports exclude request data and redact common credentials and infrastructure identifiers. Disable this to stop future reports.'
     );
   });
 

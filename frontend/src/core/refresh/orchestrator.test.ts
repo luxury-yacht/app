@@ -1646,6 +1646,33 @@ describe('refreshOrchestrator', () => {
     expect(getRefreshState().pendingRequests).toBe(0);
   });
 
+  it('carries a broker correlation id into refresh error reporting', async () => {
+    const scope = 'cluster-correlation';
+    const fetchError = new Error('correlated refresh failed');
+    clientMocks.fetchSnapshotMock.mockRejectedValue(fetchError);
+
+    refreshOrchestrator.registerDomain({
+      domain: 'cluster-config',
+      refresherName: 'cluster-config',
+      category: 'cluster',
+    });
+    refreshOrchestrator.setScopedDomainEnabled('cluster-config', scope, true);
+
+    await refreshOrchestrator.fetchScopedDomain('cluster-config', scope, {
+      isManual: true,
+      correlationId: 'broker-read-42',
+    });
+
+    expect(errorHandlerMock.handle).toHaveBeenCalledWith(
+      fetchError,
+      expect.objectContaining({
+        source: 'refresh-orchestrator',
+        operationId: 'broker-read-42',
+      }),
+      'correlated refresh failed'
+    );
+  });
+
   it('clears cached refresh errors gracefully even when no entry exists', () => {
     const orchestratorWithInternals = refreshOrchestrator as unknown as {
       notifyRefreshError: (domain: string, scope: string | undefined, message: string) => void;

@@ -606,6 +606,52 @@ describe('Sentry error reporting', () => {
     });
   });
 
+  it('correlates a refresh error reported before its broker request completes', () => {
+    initializeErrorReporting({
+      enabled: true,
+      dsn: 'https://public@example.com/1',
+      environment: 'production',
+    });
+    const request = {
+      id: 'broker-read-17',
+      broker: 'data-access',
+      resource: 'cluster-config',
+      adapter: 'refresh-domain',
+      reason: 'background',
+      scope: 'cluster-a',
+    };
+
+    recordBrokerRequestStarted(request);
+    captureUserVisibleError(new Error('refresh failed before broker completion'), {
+      category: 'NETWORK',
+      severity: 'error',
+      context: {
+        source: 'refresh-orchestrator',
+        operationId: request.id,
+      },
+    });
+
+    expect(scopeMocks.setContext).toHaveBeenCalledWith('request', {
+      id: 'broker-read-17',
+      broker: 'data-access',
+      resource: 'cluster-config',
+      adapter: 'refresh-domain',
+      reason: 'background',
+    });
+    expect(scopeMocks.setContext).toHaveBeenCalledWith('operation', {
+      id: 'broker-read-17',
+      source: 'refresh-orchestrator',
+    });
+    expect(scopeMocks.addBreadcrumb).toHaveBeenCalledWith(
+      expect.objectContaining({
+        data: expect.objectContaining({
+          operationId: 'broker-read-17',
+          requestId: 'broker-read-17',
+        }),
+      })
+    );
+  });
+
   it('rejects automatic breadcrumbs and keeps only allowlisted correlated activity', () => {
     setActiveViewContext({
       view: 'namespace',

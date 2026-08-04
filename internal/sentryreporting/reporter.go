@@ -108,9 +108,10 @@ func NewDisabled(config Config) (Reporter, error) {
 
 func newSentryHub(config Config) (*sentry.Hub, error) {
 	client, err := sentry.NewClient(sentry.ClientOptions{
-		Dsn:         config.DSN,
-		Environment: config.Environment,
-		Release:     config.Release,
+		Dsn:              config.DSN,
+		Environment:      config.Environment,
+		Release:          config.Release,
+		AttachStacktrace: true,
 		// The SDK's defaults collect user information, headers, cookies, query
 		// parameters, and HTTP bodies. Luxury Yacht never needs those to
 		// diagnose a desktop application failure, so each category is explicitly

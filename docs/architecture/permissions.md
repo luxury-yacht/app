@@ -66,6 +66,10 @@ shape, failure behavior, and diagnostics differ.
   presentation and request shape; it does not replace any evaluator.
 - Exact GVK/GVR resolution should go through the object catalog resolver.
 - Permission cache and diagnostics must remain cluster-scoped.
+- Telemetry-bound capability summaries and breadcrumbs may include structural
+  group/version, resource, verb, and scope type. They must not include the
+  caller-supplied permission key, raw namespace, or object name; timing metrics
+  aggregate by scope type.
 - Refresh scopes denied by the backend (typed 403,
   `SnapshotPermissionDeniedError`) are checked ONCE per session: the scoped
   state is stamped `permissionDenied` and background refetches stop; only

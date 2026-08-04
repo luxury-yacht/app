@@ -44,7 +44,11 @@ data-collection defaults with an application-owned privacy boundary:
   breadcrumbs. Data and
   app-state broker reads carry one `broker-read-N` identifier from request start
   through completion; a displayed error caused by that request reuses the same
-  identifier as its operation id. Other handled failures receive a unique
+  identifier as its operation id. Refresh failures are presented inside the
+  orchestrator before the broker call completes, so the orchestrator explicitly
+  carries that live request id into the error boundary; the frontend reporter
+  resolves it against the active broker record instead of assigning a separate
+  `ui-error-N` id. Other handled failures receive a unique
   `ui-error-N` operation id and retain the allowlisted user action, source,
   cluster alias, and namespace alias. User-initiated async work that is not a broker
   read runs through `runUserAction`; the wrapper gives each invocation a
@@ -79,7 +83,9 @@ data-collection defaults with an application-owned privacy boundary:
 - `backend/logger.go` keeps local log messages human-readable while forwarding
   structured failures separately. `ErrorWithCause` sends the original Go error
   through `CaptureException`, and `Panic` sends the recovered value through
-  `CapturePanic`; both retain the operation text as event context. Legacy
+  `CapturePanic`; both retain the operation text as event context. Stacktrace
+  attachment is enabled so even a panic whose recovered value is only a string
+  retains the call stack. Legacy
   string-only `ERROR` calls still become `sentryreporting.LoggedError`, so their
   issue title reads `sentryreporting.LoggedError: <message>`. The type name is
   user-visible — Sentry titles issues `"<type>: <value>"` — so renaming it
@@ -105,7 +111,11 @@ data-collection defaults with an application-owned privacy boundary:
 - Terminal metrics polls, beta-expiry startup failures, capability-review batch
   failures, and classified authentication failures also use the structured
   path. Authentication diagnostics retain the original cause internally while
-  exposing only their existing sanitized fields to the frontend.
+  exposing only their existing sanitized fields to the frontend. Capability
+  batch summaries and slow-review breadcrumbs retain group/version, resource,
+  verb, and namespaced-versus-cluster scope, but never the caller-supplied
+  permission key, namespace, or object name. Batch timing breadcrumbs aggregate
+  by scope type rather than namespace value.
 - `backend/app_settings.go` persists `errorReportingEnabled` and switches the
   backend reporter only after the setting write succeeds.
 - `frontend/vite.config.ts` owns release identity and frontend source-map upload.
@@ -122,12 +132,15 @@ installation ID remain available for diagnosis.
 
 The backend defines one `beforeSend` privacy boundary. It removes user/request
 data and hostnames, clears captured runtime variables, sanitizes free-form text,
-replaces cluster identifiers, and removes stack frames belonging to the
-reporting machinery itself — `sentryReporter`'s capture
+replaces cluster identifiers, normalizes this repository's application frame
+filenames to paths such as `backend/capabilities/service.go`, and removes stack
+frames belonging to the reporting machinery itself — `sentryReporter`'s capture
 methods, `applog`, the application `Logger`, and any package's one-line
 `logError` wrapper. Sentry derives an issue's culprit and grouping key from the
 innermost frame, so without the trim every backend `ERROR` groups under the
 reporter or under a logging helper instead of the code that failed.
+Absolute home-directory prefixes remain redacted; only the repository-relative
+application path is retained.
 
 Log forwarders — functions whose only job is handing a message to the
 application logger — are a **maintained list** in `reporter.go` (`logForwarders`).
@@ -164,8 +177,8 @@ separate Sentry signals. They must not be treated as interchangeable counts.
 
 | Signal | When it is sent | What it measures |
 | --- | --- | --- |
-| `app.installation.registered` | Only once, when a new `anonymizedId` is created and reporting is available. | Approximate installation count. |
-| Frontend Release Health session | Once per app launch. | Successful app load. It is not a periodic heartbeat and does not report time spent or actions taken in the app. |
+| `app.installation.registered` | Once per `anonymizedId`, after Sentry confirms delivery. A failed delivery is retried on a later startup. | Approximate installation count. |
+| Frontend Release Health session | When the frontend page lifecycle starts: normally once per app launch, and again after a hard reload such as Factory Reset. | Successful frontend load. It is not a periodic heartbeat and does not report time spent or actions taken in the app. |
 | Error event | Whenever a reportable exception crosses an owned reporting boundary while reporting is enabled. | A diagnostic failure event, independent of installation and session counts. |
 
 After Sentry confirms a successful `app.installation.registered` flush, the
@@ -201,7 +214,9 @@ paths, raw cluster/namespace identifiers, runtime variable values, and
 unreviewed breadcrumb fields. Infrastructure identifiers become process-local
 `cluster-N` and `namespace-N` aliases where correlation is useful. These
 defenses apply even if a future SDK version populates a field that automatic
-collection was configured not to gather.
+collection was configured not to gather. Capability breadcrumb producers also
+omit raw permission keys, namespaces, and object names before the final
+scrubber runs.
 
 Only `frontend/src/core/telemetry/sentry.ts` and
 `internal/sentryreporting` may import Sentry SDKs. Biome and Go architecture

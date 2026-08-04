@@ -45,7 +45,7 @@ type RateLimiter interface {
 	Stop()
 }
 
-type namespaceMetrics struct {
+type capabilityScopeMetrics struct {
 	Count         int
 	Allowed       int
 	Errors        int
@@ -96,13 +96,13 @@ func (s *Service) Evaluate(ctx context.Context, checks []ReviewAttributes) ([]Ch
 	var wg sync.WaitGroup
 	collectMetrics := s.deps.Common.Logger != nil
 	metricsMu := sync.Mutex{}
-	metricsByNamespace := make(map[string]*namespaceMetrics)
+	metricsByScope := make(map[string]*capabilityScopeMetrics)
 	var failureCount atomic.Int32
 
 	// One dropped connection fails every in-flight review, so the batch reports
 	// its reviews once instead of once per check. Per-check detail still reaches
-	// callers through each CheckResult.Error; the identities and distinct causes
-	// below are what make a PARTIAL failure diagnosable from the report alone.
+	// callers through each CheckResult.Error; the structural check shapes and
+	// distinct causes below make a PARTIAL failure diagnosable without names.
 	reviewFailureMu := sync.Mutex{}
 	reviewFailures := 0
 	var firstReviewErr error
@@ -155,7 +155,7 @@ func (s *Service) Evaluate(ctx context.Context, checks []ReviewAttributes) ([]Ch
 						firstReviewErr = err
 					}
 					if len(failedIdentities) < maxReportedFailedChecks {
-						failedIdentities = append(failedIdentities, describeCheckedResource(attrs))
+						failedIdentities = append(failedIdentities, describeCapabilityShape(attrs))
 					}
 					reviewFailureMu.Unlock()
 					result.Error = err.Error()
@@ -167,17 +167,17 @@ func (s *Service) Evaluate(ctx context.Context, checks []ReviewAttributes) ([]Ch
 					result.EvaluationError = response.Status.EvaluationError
 
 					if slowThreshold > 0 && duration > slowThreshold {
-						s.logWarn(fmt.Sprintf("Capability check %s slow: %s", job.check.ID, duration))
+						s.logWarn(fmt.Sprintf("Capability check %s slow: %s", describeCapabilityShape(attrs), duration))
 					}
 				}
 
 				if collectMetrics {
 					metricsMu.Lock()
-					nsKey := namespaceMetricKey(attrs.Namespace)
-					metric := metricsByNamespace[nsKey]
+					scopeKey := capabilityScopeMetricKey(attrs.Namespace)
+					metric := metricsByScope[scopeKey]
 					if metric == nil {
-						metric = &namespaceMetrics{}
-						metricsByNamespace[nsKey] = metric
+						metric = &capabilityScopeMetrics{}
+						metricsByScope[scopeKey] = metric
 					}
 					metric.Count++
 					if result.Allowed {
@@ -219,12 +219,12 @@ func (s *Service) Evaluate(ctx context.Context, checks []ReviewAttributes) ([]Ch
 
 	if collectMetrics {
 		metricsMu.Lock()
-		snapshot := make(map[string]namespaceMetrics, len(metricsByNamespace))
-		for ns, metric := range metricsByNamespace {
-			snapshot[ns] = *metric
+		snapshot := make(map[string]capabilityScopeMetrics, len(metricsByScope))
+		for scopeType, metric := range metricsByScope {
+			snapshot[scopeType] = *metric
 		}
 		metricsMu.Unlock()
-		s.logNamespaceMetrics(snapshot)
+		s.logScopeMetrics(snapshot)
 	}
 
 	if err := ctx.Err(); err != nil {
@@ -260,28 +260,27 @@ func (s *Service) ensureClient() error {
 // cannot bloat the report payload. The total is reported separately.
 const maxReportedFailedChecks = 10
 
-// describeCheckedResource renders the GVK-complete identity of a permission
-// check, which is the actionable part of a partial failure.
-func describeCheckedResource(attrs *authorizationv1.ResourceAttributes) string {
+// describeCapabilityShape keeps capability diagnostics useful without logging
+// caller-supplied IDs, namespaces, or object names into telemetry-bound text.
+func describeCapabilityShape(attrs *authorizationv1.ResourceAttributes) string {
 	if attrs == nil {
 		return "unknown"
 	}
-	group := attrs.Group
-	if group == "" {
-		group = attrs.Version
+	groupVersion := attrs.Group
+	if groupVersion == "" {
+		groupVersion = attrs.Version
 	} else if attrs.Version != "" {
-		group += "/" + attrs.Version
+		groupVersion += "/" + attrs.Version
 	}
-	name := attrs.Name
-	switch {
-	case attrs.Namespace != "" && name != "":
-		name = attrs.Namespace + "/" + name
-	case attrs.Namespace != "":
-		// Namespace-scoped check with no specific object; a trailing slash here
-		// reads as a missing name rather than an absent one.
-		name = attrs.Namespace
+	resource := attrs.Resource
+	if attrs.Subresource != "" {
+		resource += "/" + attrs.Subresource
 	}
-	parts := []string{group, attrs.Resource, attrs.Verb, name}
+	scope := "cluster-scoped"
+	if attrs.Namespace != "" {
+		scope = "namespace-scoped"
+	}
+	parts := []string{groupVersion, resource, attrs.Verb, scope}
 	rendered := make([]string, 0, len(parts))
 	for _, part := range parts {
 		if part != "" {
@@ -351,25 +350,25 @@ func (s *Service) now() time.Time {
 	return time.Now()
 }
 
-func namespaceMetricKey(namespace string) string {
+func capabilityScopeMetricKey(namespace string) string {
 	if strings.TrimSpace(namespace) == "" {
 		return "<cluster>"
 	}
-	return namespace
+	return "<namespace>"
 }
 
-func (s *Service) logNamespaceMetrics(metrics map[string]namespaceMetrics) {
+func (s *Service) logScopeMetrics(metrics map[string]capabilityScopeMetrics) {
 	if len(metrics) == 0 {
 		return
 	}
 
 	entries := make([]string, 0, len(metrics))
-	for namespace, data := range metrics {
+	for scopeType, data := range metrics {
 		avg := time.Duration(0)
 		if data.Count > 0 {
 			avg = data.TotalDuration / time.Duration(data.Count)
 		}
-		entry := fmt.Sprintf("namespace=%s count=%d allowed=%d errors=%d avg=%s", namespace, data.Count, data.Allowed, data.Errors, avg)
+		entry := fmt.Sprintf("scope=%s count=%d allowed=%d errors=%d avg=%s", scopeType, data.Count, data.Allowed, data.Errors, avg)
 		entries = append(entries, entry)
 	}
 

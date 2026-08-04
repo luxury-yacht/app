@@ -174,7 +174,7 @@ function DataManagementSection() {
 
       <SettingRow
         title="Error Reporting"
-        help="Sends anonymized data used to improve the app. All user-specific data is obfuscated or removed. Disable this if you do not want to participate."
+        help="Sends pseudonymous error diagnostics linked to this installation. Reports exclude request data and redact common credentials and infrastructure identifiers. Disable this to stop future reports."
       >
         <ToggleSwitch
           id={`${elementIdPrefix}-error-reporting`}
