@@ -27,7 +27,8 @@ them to the user, and fix the one they choose.
 
 ### Phase 1: Gather Context
 
-- Read `backend/AGENTS.md` and `frontend/AGENTS.md` for current conventions.
+- Use the injected backend instructions. Open frontend contracts only when a
+  candidate crosses into a frontend consumer.
 - If an `[area]` argument was given, scope file discovery to that package tree.
   Otherwise, sample broadly: pick 8-12 files across different packages, weighting
   toward files with recent git activity or high line counts.
@@ -129,7 +130,7 @@ After the list, ask: **"Which one should we fix? (pick a number, or say 'rescan'
    tradeoff and ask before editing rather than leaving a one-sided fix.
 5. Follow mandatory red/green/refactor TDD: write and run the failing test first,
    make the minimum production change that passes it, then refactor under green.
-6. Run `mise exec -- mage qc:prerelease` to verify the latest worktree.
+6. Follow the root final validation gate against the latest worktree.
 
 ## What NOT to Do
 

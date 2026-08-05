@@ -1,240 +1,90 @@
 ---
 name: app-review
-description: Use for large-scale structural Luxury Yacht app reviews that audit broad systems or cross-cutting concerns, identify major simplification, hardening, optimization, or refactoring opportunities, and optionally write temporary phased plans in docs/plans
+description: Audit broad Luxury Yacht systems or cross-cutting concerns for structural simplification, hardening, optimization, or refactoring; use for app-wide reviews and phased structural plans, not branch readiness or narrow bug scans
 ---
 
 # App Review
 
-Use this when the user asks for a broad structural review of the app,
-architecture, frontend, backend, or developer experience and wants large-scale
-simplification, optimization, hardening, or refactoring opportunities.
+Audit whole systems deeply enough to identify changes that remove a class of
+correctness, stability, consistency, performance, or development problems.
+Start read-only unless the user explicitly requests planning or implementation.
 
-This is not a branch merge-readiness review, not a narrow backend/frontend bug
-scan, and not a lightweight sampling exercise. The unit of work is a whole
-subsystem or cross-cutting concern. Do not preselect domains from this skill;
-derive them from the user's request, current repo evidence, and project risk.
+## Start
 
-## Goal
-
-Audit broad systems deeply enough to identify major changes that would make the
-app significantly more stable, simpler, faster, easier to develop on, or easier
-to operate. When the user asks for three areas, produce exactly three
-system-level improvement areas. Each area must be grounded in current repo
-evidence and include a concrete improvement direction.
-
-## Default Stance
-
-Start read-only unless the user explicitly asks for plans or implementation.
-Prefer structural issues that repeatedly create bugs, unclear ownership,
-duplicated contracts, fragile lifecycle behavior, inconsistent app-wide
-patterns, weak validation boundaries, or excessive development drag.
-
-Do not start by hunting for isolated findings. Start by choosing review domains
-and building inventories for them.
-
-## Already Settled (do not re-propose without new evidence)
-
-A 2026-06 large-scale structural-refactor validation pass investigated ten
-candidates and resolved all live ones; its temporary plan
-(`docs/plans/refactor-opportunities.md`) was deleted after completion. Before
-proposing any of the following as a "new" opportunity, you must cite concrete new
-evidence that overturns the recorded verdict.
-
-**Already consolidated (done — re-proposing is duplicate work):**
-
-- Frontend object-panel Overview rendering → one per-kind descriptor registry
-  driving a generic `<OverviewRenderer>` + runtime drift-check
-  (`docs/frontend/component-structure.md` → "Object-panel Overview rendering").
-- Object-panel actions → shared `useObjectActionController` (no panel-local
-  action reducer); see `.agents/skills/object-panel/SKILL.md`.
-- Cluster-view refresh scopes → owned by each query-backed table's own
-  base-scope lease (the context-held `clusterDomainScopes` manifest was
-  deleted with the ClusterResourcesContext data layer; contexts hold no
-  domain data).
-- LogViewer async/loading flags → discriminated `LogViewMode` union in
-  `frontend/src/modules/object-panel/components/ObjectPanel/Logs/logViewerReducer.ts`.
-- Resource-kind registry drives object-catalog, table rows, detail dispatch
-  (codegen), object-map, and stream summaries
-  (`docs/architecture/resource-kind-registry.md`; remaining items are sanctioned
-  exceptions).
-
-**Investigated and dismissed (do not re-validate without new evidence):**
-
-- Snapshot query consolidation — INVALID. One query engine
-  (`typed_table_query.go`); `static_table_query.go` is thin adapters with ~0%
-  logical overlap. Only micro-wins (shared numeric CPU/memory/age sort helpers;
-  the namespaced-vs-cluster event adapters are ~80% shared).
-- App concurrency model — non-issue. The App mutexes are independent with no real
-  nested locking (`TestRunSelectionMutationDoesNotHoldKubeconfigChangeLockAcrossCallback`).
-- Cluster lifecycle state machine — already centralized in `cluster_lifecycle.go`.
-  Residual only: fold a few inline `authManager.IsValid()` checks into reading
-  lifecycle state.
-- Context & cancellation hub — the multiple context hierarchies are intentional
-  and the `context.Background()` fallbacks mostly legitimate. Residual only:
-  cancel in-flight async recovery/catalog callbacks at shutdown.
-- Permission caching unification — SSAR (per-verb bool), SSRR (rules blob), and
-  the response-cache (transient GET dedupe) are genuinely different; merging
-  breaks the SSRR consumer. Residual (~2h): dedup the shared background-refresh
-  boilerplate only.
-- Table config schema — INVALID. The shared layer already exists
-  (`useGridTablePersistence` + `useGridTableBinding` + `useResourceGridTableCommon`);
-  the three public grid hooks are intentional thin wrappers.
-- Namespace-view scope unification — INVALID. `normalizeNamespaceScope` in
-  `NsResourcesContext.tsx` has 2 call sites (not ~11); there is no duplication
-  worth a refactor.
-
-**Deferred / trigger-gated (not current work):**
-
-- View-owned live-window fetch was a historical deferred candidate whose
-  temporary plan was removed. Re-inventory the current namespace and cluster
-  data paths and write a new plan before treating it as current work.
-- Large-data persistent SQLite catalog store — evidence-triggered; start only if
-  a 100k+-object cluster reports Browse/Custom degradation.
-
-## First Pass
-
-1. Read `AGENTS.md`, `.agents/README.md`, `.agents/context/code-map.md`, and
-   `.agents/context/app-areas.md`, plus the "Already Settled" list above.
-2. Check repository state with read-only git commands:
+1. Use `.agents/README.md` only if the requested domain is ambiguous.
+2. Inspect read-only repository state:
    - `git status --short`
    - `git branch --show-current`
    - `git diff --stat`
    - `git ls-files --others --exclude-standard`
-3. Identify review domains before judging findings. If the user named domains,
-   use those. Otherwise choose broad systems or concerns from
-   `.agents/context/app-areas.md`, `docs/README.md`, and current repo evidence.
-4. Use narrower skills only when a review domain needs deeper inspection:
-   `refresh-subsystem`, `cluster-auth-lifecycle`, `browse-tables`,
-   `object-panel`, `object-map`, `permissions-capabilities`,
-   `operations-workflows`, `app-shell`, or `shared-resource-model`.
+3. Name the review domains before judging candidates.
+4. Inventory each domain across producers, consumers, tests, docs, and relevant
+   runtime paths. Use the narrow workflow skill only when deeper rules are
+   needed.
+5. Before proposing structural opportunities, read the
+   [settled findings](references/settled-findings.md) and reject candidates already consolidated,
+   dismissed, or trigger-gated unless current evidence overturns that verdict.
 
-## Review Domain Inventory
+Do not reread injected `AGENTS.md` files. Open owning architecture docs only
+after the domain is chosen.
 
-For each review domain, build an inventory before proposing improvements. Use
-`rg`, `rg --files`, import searches, tests, docs, and representative call
-graphs. The inventory should be broad enough that the conclusion is about the
-system, not one file.
+## Review questions
 
-## Structural Questions
+For each domain, determine:
 
-Ask these for every review domain:
+- every representation and owner of the state or contract;
+- producer/consumer ordering and boundary validation;
+- parallel implementations, compatibility branches, or duplicated definitions;
+- failure modes involving identity, freshness, lifecycle, permissions, teardown,
+  or diagnostics;
+- whether tests prove the system contract or only local behavior; and
+- how many files, call sites, registrations, or user surfaces carry the pattern.
 
-- What are all the ways this system is represented?
-- Where is ownership split across backend, frontend, docs, tests, or skills?
-- Where does adding a feature require touching too many places?
-- Where are there parallel paths that should be one path?
-- Where are compatibility branches or flags preserving an old model?
-- Where can stale state, identity loss, lifecycle races, permission ambiguity,
-  or diagnostics gaps appear?
-- Which tests prove the app-wide contract, and which only preserve local
-  behavior?
+Prioritize correctness and data-safety risks, then cross-layer drift,
+simplification, app-wide pattern drift, and developer friction. Drop candidates
+supported only by one local example, naming/style preferences, or speculative
+rewrites.
 
-## What To Look For
+## Evidence required for each finding
 
-Prioritize findings in this order:
+Prove:
 
-1. **Correctness and stability risks**: race-prone lifecycle, stale cache/state,
-   missing cluster identity, weak teardown, error swallowing, partial failure
-   ambiguity, or fragile stream/snapshot recovery.
-2. **Cross-layer contract drift**: backend/frontend shape mismatches, duplicate
-   domain definitions, diagnostics gaps, stale docs, or tests that preserve old
-   behavior.
-3. **Simplification opportunities**: duplicated code paths, merge layers,
-   compatibility branches, overly broad abstractions, or flags that exist only
-   because ownership is unclear.
-4. **App-wide pattern drift**: multiple competing patterns for the same job,
-   repeated local implementations, inconsistent diagnostics, or subsystem rules
-   that are documented differently in different places.
-5. **Developer experience**: hard-to-test modules, large mixed-responsibility
-   files, unclear registration points, brittle manual update steps, or missing
-   local validation guidance.
+1. current behavior or structure with file references across the surface;
+2. breadth with counts or an explicit inventory;
+3. the concrete failure mode or recurring cost;
+4. what the proposed change removes, centralizes, or makes explicit; and
+5. the regression tests, diagnostics, docs, and skills affected.
 
-Do not present issues that are only naming, formatting, comments, or speculative
-rewrites without a concrete failure mode.
+## Output
 
-## Evidence Standard
+When the user requests three areas, return exactly three ranked system-level
+areas. For each, state the review domain, problem, impact, improvement direction,
+evidence, and likely validation. Rank the most important by user-facing safety,
+breadth, frequency of change, bug-class removal, and whether it unlocks other
+work.
 
-For each review domain and final improvement area, prove:
+Answer follow-up questions from gathered evidence and narrow architectural
+intent before implementation.
 
-- What the system currently does, with file references across the relevant
-  surface.
-- How broad the pattern is: approximate file counts, key directories, repeated
-  call sites, or registration points.
-- Why the current structure creates instability, performance cost,
-  inconsistency, or development drag.
-- What a correct fix would remove, centralize, harden, or make explicit.
-- What tests, diagnostics, docs, or skills would need to change.
+## Plans and implementation
 
-If the evidence is only local, keep investigating or drop the candidate.
+When the user requests a plan:
 
-## Review Output
+- write one temporary `docs/plans/<topic>.md` per independent area, or one plan
+  for tightly coupled areas;
+- include target model, non-goals, inventory, phased `[ ]` checklist, open
+  questions, and validation;
+- keep temporary plans out of durable indexes; and
+- move lasting contracts into owning docs/skills before removing a finished
+  plan.
 
-When the user asks for three areas, return exactly three system-level areas,
-ranked by importance:
+When implementation is authorized, work in dependency order, keep the plan
+current, and follow the root TDD and validation contracts. Documentation-only
+work must at least pass `git diff --check`.
 
-```markdown
-1. **Area name**
-   Review domain: ...
-   Problem: ...
-   Why it matters: ...
-   Improve by: ...
-   Evidence: `path/file.ext`, `path/other.ext`, plus inventory summary
-   Likely validation: ...
-```
+## Boundaries
 
-Phrase areas as app/system problems, not file/package problems. Specific files
-are evidence for the area, not the area itself.
-
-After the three areas, answer which one is most important using this rubric:
-
-- User-facing correctness or data safety impact.
-- Breadth of the pattern across the app.
-- How often the weak contract or pattern is touched by normal development.
-- Whether the fix removes a class of bugs instead of one instance.
-- Whether the current structure blocks other planned work.
-- Whether the fix simplifies future changes enough to justify the migration.
-
-If the user asks follow-up questions, answer from the evidence and narrow the
-plan before implementation. If product or architectural intent is ambiguous,
-ask concise questions one at a time when requested.
-
-## Writing Plans
-
-When the user asks to write plans:
-
-1. Create one temporary plan per major area in `docs/plans`, or one combined
-   plan if the areas are tightly coupled.
-2. Do not add temporary plans to the README or durable architecture indexes.
-3. Include:
-   - Overview and target model.
-   - Non-goals.
-   - Inventory of affected systems/files.
-   - Phased checklist with `[ ]` items.
-   - Open questions.
-   - Validation plan.
-4. Mark completed work with `[x]` or checked emoji only as phases land.
-5. Update the plan continuously during implementation with dated progress notes.
-
-## Implementation Handoff
-
-When the user chooses an area:
-
-1. Re-read the plan and the owning skill/docs.
-2. Resolve open questions before code changes.
-3. Implement phases in dependency order.
-4. Keep the plan current after each phase.
-5. For non-documentation work, finish with `mise exec -- mage qc:prerelease`, then inspect
-   `git status --short` because the gate may modify files.
-6. For documentation-only phases, at minimum run `git diff --check`.
-
-## What Not To Do
-
-- Do not use this skill for branch merge-readiness; use `branch-review`.
-- Do not report more or fewer than three major areas unless the user asks for a
-  different count.
-- Do not rely on lightweight sampling for a structural audit.
-- Do not present one-file issues as major app review findings unless they prove
-  an app-wide pattern.
-- Do not invent missing systems without checking docs and code first.
-- Do not write temporary plans into README files.
-- Do not start implementation during the initial review unless explicitly asked.
+- Use `branch-review` for merge readiness.
+- Do not use this workflow for a narrow bug or one-package improvement scan.
+- Do not delegate unless the user explicitly requests parallel agents.
+- Do not implement during an initial read-only review.

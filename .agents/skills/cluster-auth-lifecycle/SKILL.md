@@ -62,7 +62,6 @@ add/remove behavior.
       clusters locally or call generated backend selection/close commands from
       UI surfaces.
 - [ ] Tests cover at least one multi-cluster or auth-failure transition.
-- [ ] Non-doc changes pass `mise exec -- mage qc:prerelease`.
 
 ## Validation
 
@@ -74,4 +73,4 @@ mise exec -- npm run typecheck --prefix frontend
 mise exec -- npm run test --prefix frontend -- cluster kubeconfig auth refresh
 ```
 
-Then run `mise exec -- mage qc:prerelease` for non-documentation changes.
+Then follow the root final validation gate.

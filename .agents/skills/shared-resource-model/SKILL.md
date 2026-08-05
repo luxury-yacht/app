@@ -62,7 +62,6 @@ refresh rows, streams, object panel details, and object map nodes/edges.
 - [ ] Table rows, stream rows, object panel details, events, and object-map
       payloads stay consistent when they render the same resource family.
 - [ ] Tests cover model status/facts/links and every changed projection.
-- [ ] Non-doc changes pass `mise exec -- mage qc:prerelease`.
 
 ## Validation
 
@@ -74,4 +73,4 @@ mise exec -- npm run typecheck --prefix frontend
 mise exec -- npm run test --prefix frontend -- backendStatusPresentation resourceLinkIdentity object-map object-panel
 ```
 
-Then run `mise exec -- mage qc:prerelease` for non-documentation changes.
+Then follow the root final validation gate.

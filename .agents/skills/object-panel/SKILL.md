@@ -136,7 +136,6 @@ and the freshness block rides the query payload's `metrics`.
 - [ ] Age display uses `LiveAgeText` or shared age columns with timestamps
       rather than refetching details to update relative text.
 - [ ] Tests cover the changed tab, action, or identity flow.
-- [ ] Non-doc changes pass `mise exec -- mage qc:prerelease`.
 
 ## Validation
 
@@ -148,4 +147,4 @@ mise exec -- npm run typecheck --prefix frontend
 mise exec -- npm run test --prefix frontend -- object-panel
 ```
 
-Then run `mise exec -- mage qc:prerelease` for non-documentation changes.
+Then follow the root final validation gate.

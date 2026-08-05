@@ -26,12 +26,10 @@ What the user wants to know:
 
 Unless the user explicitly asks for fixes, begin in review mode.
 
-1. Read `AGENTS.md`, `backend/AGENTS.md`, and `frontend/AGENTS.md`.
-2. Read `.agents/README.md`, `docs/README.md`, and
-   `.agents/context/code-map.md`.
-3. Read `.agents/context/app-areas.md` when the branch is broad, ambiguous, or
-   crosses multiple user-facing workflows.
-4. Check repository state with read-only git commands:
+1. Do not reread injected `AGENTS.md` files. Use `.agents/README.md` only when
+   the diff spans an ambiguous workflow, and `docs/README.md` only when the
+   owning contract is unclear.
+2. Check repository state with read-only git commands:
    - `git status --short`
    - `git branch --show-current`
    - `git diff --stat origin/main...HEAD`
@@ -41,15 +39,15 @@ Unless the user explicitly asks for fixes, begin in review mode.
    - `git diff --cached --stat`
    - `git diff --cached --name-only`
    - `git ls-files --others --exclude-standard`
-5. If the user provides a different base or range, use that instead of
+3. If the user provides a different base or range, use that instead of
    `origin/main...HEAD`.
-6. If `origin/main...HEAD` cannot be resolved, inspect remotes/default branch
+4. If `origin/main...HEAD` cannot be resolved, inspect remotes/default branch
    state with read-only git commands and state the exact base assumption before
    reviewing.
-7. Review both committed branch changes and working-tree changes. Do not ignore
+5. Review both committed branch changes and working-tree changes. Do not ignore
    modified, staged, or untracked files just because `origin/main...HEAD` is
    empty.
-8. Read any changed docs/plans that claim completion. Treat them as hints, not
+6. Read any changed docs/plans that claim completion. Treat them as hints, not
    proof.
 
 ## Contract Audit

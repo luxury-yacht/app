@@ -65,7 +65,6 @@ gating, delete/scale/restart/trigger/suspend actions, or restricted-RBAC tests.
 - [ ] Restricted-RBAC behavior degrades visibly instead of silently hiding
       broken domains or actions.
 - [ ] Tests cover allowed, denied, and resolution-error cases.
-- [ ] Non-doc changes pass `mise exec -- mage qc:prerelease`.
 
 ## Validation
 
@@ -77,4 +76,4 @@ mise exec -- npm run typecheck --prefix frontend
 mise exec -- npm run test --prefix frontend -- capabilities ObjectPanel ActionsMenu diagnostics
 ```
 
-Then run `mise exec -- mage qc:prerelease` for non-documentation changes.
+Then follow the root final validation gate.

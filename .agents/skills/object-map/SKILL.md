@@ -111,7 +111,6 @@ For visual-only renderer work:
       does not change backend graph identity or layout inputs.
 - [ ] Legend/copy uses user-facing terms such as "Objects" and "Links".
 - [ ] Tests cover the changed graph or rendering behavior.
-- [ ] Non-doc changes pass `mise exec -- mage qc:prerelease`.
 
 ## Validation
 
@@ -125,6 +124,4 @@ mise exec -- npm run typecheck --prefix frontend
 
 Then run the final gate for non-documentation work:
 
-```sh
-mise exec -- mage qc:prerelease
-```
+Then follow the root final validation gate.

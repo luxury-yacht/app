@@ -1,6 +1,6 @@
 ---
 name: make-impossible-states-impossible
-description: Use when eliminating representable-but-invalid states in Luxury Yacht — converting boolean flag-soup to discriminated unions, making required identity fields non-optional, replacing stringly-typed states with literal/typed enums, and pushing scattered runtime guards into the type system or a single chokepoint. Triggers — "make impossible states impossible", flag soup (isLoading/isError/isEmpty), contradictory nullable fields, kind-only/name-only object refs, stringly-typed status, or the docs/todo.md item of the same name.
+description: Eliminate representable-but-invalid Luxury Yacht states with discriminated unions, required identity, typed status, validated constructors, or one boundary chokepoint; use for "make impossible states impossible", boolean flag soup, contradictory nullable fields, incomplete object refs, or stringly state
 ---
 
 # Make Impossible States Impossible
@@ -78,7 +78,7 @@ genuinely un-tightenable.
    - *Green:* change the type; let the compiler list the consumers to update.
    - *Refactor:* delete the now-unreachable runtime guards and any dead branch
      (bottom-up, same change).
-7. **Verify:** `mise exec -- mage qc:prerelease` before reporting complete.
+7. **Validate:** follow the root final validation gate.
 
 ## Audit greps
 

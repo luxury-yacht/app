@@ -83,7 +83,6 @@ Read:
 - [ ] Frontend state resets on cluster/namespace/object changes.
 - [ ] Logs preserve transport-specific behavior documented in the logs docs.
 - [ ] Tests cover lifecycle, permission-denied, and cleanup behavior.
-- [ ] Non-doc changes pass `mise exec -- mage qc:prerelease`.
 
 ## Validation
 
@@ -96,4 +95,4 @@ mise exec -- npm run typecheck --prefix frontend
 mise exec -- npm run test --prefix frontend -- Logs Shell port-forward drain orchestrator
 ```
 
-Then run `mise exec -- mage qc:prerelease` for non-documentation changes.
+Then follow the root final validation gate.
