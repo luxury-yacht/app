@@ -6,10 +6,11 @@
  */
 
 import type React from 'react';
-import { act } from 'react';
+import { act, useState } from 'react';
 import * as ReactDOM from 'react-dom/client';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import type { Favorite } from '@/core/persistence/favorites';
+import type { GridTableFilterState } from '@/shared/components/tables/GridTable.types';
 import { requireValue } from '@/test-utils/requireValue';
 import type { FavSaveModalProps } from './FavSaveModal';
 
@@ -271,6 +272,27 @@ const GroupedWrapper: React.FC = () => (
   </FavoritePaneGroup>
 );
 
+const MetadataFavoriteRestoreWrapper: React.FC = () => {
+  const [filters, setFilters] = useState<GridTableFilterState>({
+    search: 'current filter',
+    kinds: { mode: 'all' as const },
+    namespaces: { mode: 'all' as const },
+    clusters: { mode: 'all' as const },
+    caseSensitive: false,
+    includeMetadata: false,
+  });
+  useFavToggle({
+    filters,
+    sortColumn: null,
+    sortDirection: 'asc',
+    columnVisibility: {},
+    hydrated: true,
+    setFilters,
+  });
+
+  return <input aria-label="Rendered filter text" readOnly value={filters.search} />;
+};
+
 // ---------------------------------------------------------------------------
 // Tests
 // ---------------------------------------------------------------------------
@@ -297,7 +319,7 @@ describe('useFavToggle', () => {
   beforeEach(() => {
     mockFavorites = [];
     mockPendingFavorite = null;
-    mockSetPendingFavorite.mockClear();
+    mockSetPendingFavorite.mockReset();
     mockAddFavorite.mockClear();
     mockUpdateFavorite.mockClear();
     mockDeleteFavorite.mockClear();
@@ -506,6 +528,36 @@ describe('useFavToggle', () => {
 
     expect(container.querySelector('[data-testid="group-toggle-workloads"]')).toBeTruthy();
     expect(container.querySelector('[data-testid="group-toggle-pods"]')).toBeNull();
+  });
+
+  it('applies saved filter text atomically when metadata search is available', async () => {
+    mockPendingFavorite = makeFavorite({
+      panes: {
+        main: {
+          filters: {
+            search: 'saved filter',
+            kinds: { mode: 'all' },
+            namespaces: { mode: 'all' },
+            clusters: { mode: 'all' },
+            caseSensitive: false,
+            includeMetadata: true,
+          },
+          tableState: { sortColumn: '', sortDirection: 'asc', columnVisibility: {} },
+        },
+      },
+    });
+    mockSetPendingFavorite.mockImplementationOnce((favorite) => {
+      mockPendingFavorite = favorite;
+    });
+
+    await act(async () => {
+      root.render(<MetadataFavoriteRestoreWrapper />);
+      await Promise.resolve();
+    });
+
+    expect(
+      container.querySelector<HTMLInputElement>('[aria-label="Rendered filter text"]')?.value
+    ).toBe('saved filter');
   });
 
   it('restores both hydrated panes before consuming a grouped favorite', async () => {

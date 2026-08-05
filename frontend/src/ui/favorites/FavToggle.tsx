@@ -47,8 +47,6 @@ import FavSaveModal from './FavSaveModal';
 export interface FavToggleState {
   /** Current grid table filter state (search, kinds, namespaces, caseSensitive). */
   filters: GridTableFilterState;
-  /** Whether the include-metadata search toggle is active. */
-  includeMetadata?: boolean;
   /** Current sort column key, or null if unsorted. */
   sortColumn: string | null;
   /** Current sort direction. */
@@ -71,7 +69,6 @@ export interface FavToggleState {
   setFilters?: (filters: GridTableFilterState) => void;
   setSortConfig?: (config: { key: string; direction: 'asc' | 'desc' } | null) => void;
   setColumnVisibility?: (visibility: Record<string, boolean>) => void;
-  setIncludeMetadata?: (value: boolean) => void;
 }
 
 interface RegisteredFavoritePane {
@@ -144,7 +141,7 @@ const snapshotFavoritePane = (state: FavToggleState): FavoritePaneState => {
       clusters: normalizeExactMultiSelectFilterSelection(state.filters.clusters),
       queryFacets: Object.keys(queryFacets).length > 0 ? queryFacets : undefined,
       caseSensitive: state.filters.caseSensitive ?? false,
-      includeMetadata: state.includeMetadata ?? state.filters.includeMetadata ?? false,
+      includeMetadata: state.filters.includeMetadata ?? false,
     },
     tableState: {
       sortColumn: state.sortColumn ?? '',
@@ -386,7 +383,6 @@ export function useFavToggle(state: FavToggleState): {
           : null
       );
       pane.state.setColumnVisibility?.(savedPane.tableState.columnVisibility);
-      pane.state.setIncludeMetadata?.(savedPane.filters.includeMetadata);
     }
     setPendingFavorite(null);
   }, [
@@ -527,7 +523,7 @@ export function useFavToggle(state: FavToggleState): {
         namespace={viewType === 'namespace' ? (selectedNamespace ?? '') : ''}
         filters={currentPane.filters}
         tableState={currentPane.tableState}
-        includeMetadata={state.includeMetadata ?? false}
+        includeMetadata={state.filters.includeMetadata ?? false}
         availableKinds={state.availableKinds}
         availableFilterNamespaces={state.availableFilterNamespaces}
         panes={modalPanes}

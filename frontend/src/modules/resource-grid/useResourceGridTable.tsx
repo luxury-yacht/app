@@ -423,14 +423,12 @@ function useResourceGridTableCommon<T extends ResourceGridTableRow>({
   );
   const { item: favToggle, modal: favModal } = useFavToggle({
     filters: persistence.filters,
-    includeMetadata: useMetadata ? metadata.includeMetadata : undefined,
     sortColumn: sortConfig?.key ?? null,
     sortDirection: sortConfig?.direction ?? 'asc',
     columnVisibility: persistence.columnVisibility ?? {},
     setFilters: persistence.setFilters,
     setSortConfig: persistence.setSortConfig,
     setColumnVisibility: persistence.setColumnVisibility,
-    setIncludeMetadata: useMetadata ? metadata.setIncludeMetadata : undefined,
     hydrated: persistence.hydrated,
     availableKinds,
     availableFilterNamespaces: showNamespaceFilters ? availableFilterNamespaces : undefined,
