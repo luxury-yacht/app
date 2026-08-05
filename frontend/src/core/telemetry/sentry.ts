@@ -163,16 +163,6 @@ const allowedBreadcrumbFields: Record<string, ReadonlySet<string>> = {
     'cluster.alias',
     'namespace.alias',
   ]),
-  'ui.error.expected': new Set([
-    'operationId',
-    'action',
-    'requestId',
-    'request.ids',
-    'ui.view',
-    'ui.tab',
-    'cluster.alias',
-    'namespace.alias',
-  ]),
 };
 
 const privateTelemetryKeys = new Set([
@@ -921,52 +911,6 @@ export async function runUserAction<T>(action: string, work: () => T | Promise<T
     recordUserActionBreadcrumb(userAction, 'failed');
     throw error;
   }
-}
-
-export function recordExpectedCondition(error: unknown, details: UserVisibleErrorCapture): void {
-  if (!reportingInitialized) {
-    return;
-  }
-
-  const completedRequest =
-    error !== null &&
-    error !== undefined &&
-    (typeof error === 'object' || typeof error === 'function')
-      ? requestByError.get(error)
-      : undefined;
-  const explicitOperationId = contextString(details.context, 'operationId');
-  const request =
-    completedRequest ??
-    (explicitOperationId ? activeBrokerRequests.get(explicitOperationId) : undefined);
-  const userAction =
-    error !== null &&
-    error !== undefined &&
-    (typeof error === 'object' || typeof error === 'function')
-      ? userActionByError.get(error)
-      : undefined;
-  operationSequence += 1;
-  const operationId = request?.id ?? userAction?.id ?? `ui-expected-${operationSequence}`;
-  const action = contextString(details.context, 'action') ?? userAction?.action;
-  const operationClusterId = contextString(details.context, 'clusterId');
-  const operationNamespace = contextString(details.context, 'namespace');
-
-  Sentry.addBreadcrumb({
-    type: 'default',
-    category: 'ui.error.expected',
-    level: 'warning',
-    message: `Expected ${details.category} condition`,
-    data: {
-      operationId,
-      ...(action ? { action } : {}),
-      ...(request ? { requestId: request.id } : {}),
-      ...(operationClusterId
-        ? { 'cluster.alias': aliasForCluster(operationClusterId) ?? 'cluster-unknown' }
-        : {}),
-      ...(operationNamespace
-        ? { 'namespace.alias': aliasForNamespace(operationNamespace) ?? 'namespace-unknown' }
-        : {}),
-    },
-  });
 }
 
 export function captureUserVisibleError(error: unknown, details: UserVisibleErrorCapture): void {

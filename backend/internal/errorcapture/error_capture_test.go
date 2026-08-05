@@ -57,6 +57,33 @@ func TestCaptureIfInterestingStoresLastAndEmits(t *testing.T) {
 	}
 }
 
+func TestPermissionDeniedStderrStaysLocal(t *testing.T) {
+	const line = `E0805 reflector.go:200] "Failed to watch" err="applicationnetworkpolicies.networking.k8s.aws is forbidden: User cannot watch resource"`
+	c := &Capture{buffer: bytes.NewBufferString(line + "\n")}
+	global = c
+	defer func() {
+		global = nil
+		eventEmitter = nil
+		logSink = nil
+	}()
+
+	var emitted []string
+	var logs []string
+	SetEventEmitter(func(msg string) {
+		emitted = append(emitted, msg)
+	})
+	SetLogSink(func(level, message string) {
+		logs = append(logs, level+":"+message)
+	})
+	c.flushCapturedLines([]byte(line + "\n"))
+
+	require.Empty(t, emitted, "expected RBAC denial to remain a local log")
+	require.Equal(t, []string{"info:" + line}, logs, "expected RBAC denial to be informational")
+	require.Empty(t, c.last(), "expected RBAC denial not to become captured application context")
+	original := errors.New("refresh failed")
+	require.Same(t, original, Enhance(original), "expected RBAC denial not to enhance an application error")
+}
+
 func TestCaptureIfInterestingIgnoresTokenSubstrings(t *testing.T) {
 	c := &Capture{buffer: &bytes.Buffer{}}
 	global = c

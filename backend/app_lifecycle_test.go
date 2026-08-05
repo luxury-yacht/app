@@ -41,6 +41,13 @@ func TestSetupEnvironmentAddsHomeLocalBin(t *testing.T) {
 	require.Contains(t, pathVar, target)
 }
 
+func TestContainsAuthPatternDoesNotTreatPermissionDenialAsAuthentication(t *testing.T) {
+	require.True(t, containsAuthPattern("request unauthorized"))
+	require.False(t, containsAuthPattern("watch is forbidden"))
+	require.False(t, containsAuthPattern("permission denied"))
+	require.False(t, containsAuthPattern("access denied"))
+}
+
 func TestSetupRefreshSubsystemRequiresSelections(t *testing.T) {
 	app := newTestAppWithDefaults(t)
 	app.Ctx = context.Background()

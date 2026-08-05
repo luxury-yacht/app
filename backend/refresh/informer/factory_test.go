@@ -541,6 +541,30 @@ func newMinimalFactory(checker *permissions.Checker) *Factory {
 	}
 }
 
+func TestCanListWatchInNamespaceChecksTheExactInformerScope(t *testing.T) {
+	var checked []string
+	checker := permissions.NewCheckerWithReview("test", time.Minute, func(_ context.Context, group, resource, verb, namespace string) (bool, error) {
+		checked = append(checked, fmt.Sprintf("%s/%s/%s|%s", group, resource, verb, namespace))
+		return namespace == "allowed", nil
+	})
+	factory := newMinimalFactory(checker)
+
+	if !factory.CanListWatchInNamespace("example.com", "widgets", "allowed") {
+		t.Fatal("expected the allowed namespace to pass list/watch checks")
+	}
+	if factory.CanListWatchInNamespace("example.com", "widgets", "denied") {
+		t.Fatal("expected the denied namespace to fail list/watch checks")
+	}
+	expected := []string{
+		"example.com/widgets/list|allowed",
+		"example.com/widgets/watch|allowed",
+		"example.com/widgets/list|denied",
+	}
+	if fmt.Sprint(checked) != fmt.Sprint(expected) {
+		t.Fatalf("unexpected permission checks: got %v want %v", checked, expected)
+	}
+}
+
 // TestFactoryGateExemptInformerDoesNotBlockFactorySync pins the events exclusion: an
 // informer registered as factory-gate-exempt must not hold the FACTORY-WIDE sync gate
 // (HasSynced / Start) even while it has neither synced nor degraded — only

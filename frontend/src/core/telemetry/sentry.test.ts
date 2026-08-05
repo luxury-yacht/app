@@ -30,7 +30,6 @@ import {
   initializeErrorReporting,
   recordBrokerRequestCompleted,
   recordBrokerRequestStarted,
-  recordExpectedCondition,
   resetErrorReportingForTesting,
   runUserAction,
   setActiveNamespaceContext,
@@ -546,33 +545,6 @@ describe('Sentry error reporting', () => {
       expect.objectContaining({ secretValue: expect.anything() })
     );
     expect(sentryMocks.captureException).toHaveBeenCalledWith(error);
-  });
-
-  it('records an expected UI condition as a correlated breadcrumb without an exception', () => {
-    initializeErrorReporting({
-      enabled: true,
-      dsn: 'https://public@example.com/1',
-      environment: 'production',
-    });
-
-    recordExpectedCondition(new Error('403 forbidden'), {
-      category: 'PERMISSION',
-      severity: 'error',
-      context: { action: 'loadPods', clusterId: 'cluster-a' },
-    });
-
-    expect(sentryMocks.addBreadcrumb).toHaveBeenCalledWith({
-      type: 'default',
-      category: 'ui.error.expected',
-      level: 'warning',
-      message: 'Expected PERMISSION condition',
-      data: {
-        operationId: 'ui-expected-1',
-        action: 'loadPods',
-        'cluster.alias': 'cluster-1',
-      },
-    });
-    expect(sentryMocks.captureException).not.toHaveBeenCalled();
   });
 
   it('captures event-handler exceptions through the centralized operational boundary', () => {

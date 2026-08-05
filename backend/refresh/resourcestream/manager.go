@@ -11,6 +11,7 @@ package resourcestream
 import (
 	"errors"
 	"fmt"
+	"slices"
 	"strconv"
 	"strings"
 	"sync"
@@ -158,6 +159,8 @@ type customResourceInformer struct {
 	gvr    schema.GroupVersionResource
 	kind   string
 	domain string
+	// namespaces records the exact scopes whose list/watch checks passed.
+	namespaces []string
 	// informers are the CRD's dynamic informers: one cluster-wide (or one
 	// per configured scope namespace for a namespaced CRD under a namespace
 	// scope, docs/plans/namespace-scope.md). All share stopCh.
@@ -515,23 +518,6 @@ func (m *Manager) ensureCustomInformer(crd *apiextensionsv1.CustomResourceDefini
 	}
 	kind := crd.Spec.Names.Kind
 
-	m.customInformerMu.Lock()
-	// Once stopped, never resurrect an informer; the check-and-insert below must
-	// stay atomic with Stop()'s drain, so both gate on stopped under this lock.
-	if m.stopped {
-		m.customInformerMu.Unlock()
-		return
-	}
-	existing := m.customInformers[crd.Name]
-	if existing != nil && existing.gvr == gvr && existing.kind == kind && existing.domain == customDomain {
-		m.customInformerMu.Unlock()
-		return
-	}
-	if existing != nil {
-		existing.stop()
-		delete(m.customInformers, crd.Name)
-	}
-
 	// One dynamic informer per CRD streams custom resource updates. Under a
 	// namespace scope a namespaced CRD fans out one informer per configured
 	// namespace (the scoped identity typically cannot watch cluster-wide);
@@ -540,12 +526,43 @@ func (m *Manager) ensureCustomInformer(crd *apiextensionsv1.CustomResourceDefini
 	if customDomain == domainNamespaceCustom && len(m.allowedNamespaces) > 0 {
 		namespaces = append([]string(nil), m.allowedNamespaces...)
 	}
-	info := &customResourceInformer{
-		gvr:    gvr,
-		kind:   kind,
-		domain: customDomain,
-		stopCh: make(chan struct{}),
+	permittedNamespaces := make([]string, 0, len(namespaces))
+	for _, ns := range namespaces {
+		if m.canListWatchInNamespace(gvr.Group, gvr.Resource, ns) {
+			permittedNamespaces = append(permittedNamespaces, ns)
+		}
 	}
+	if len(permittedNamespaces) == 0 {
+		m.removeCustomInformer(crd.Name)
+		return
+	}
+	namespaces = permittedNamespaces
+
+	info := &customResourceInformer{
+		gvr:        gvr,
+		kind:       kind,
+		domain:     customDomain,
+		namespaces: append([]string(nil), namespaces...),
+		stopCh:     make(chan struct{}),
+	}
+
+	m.customInformerMu.Lock()
+	// Once stopped, never resurrect an informer; the check-and-insert below must
+	// stay atomic with Stop()'s drain, so both gate on stopped under this lock.
+	if m.stopped {
+		m.customInformerMu.Unlock()
+		return
+	}
+	existing := m.customInformers[crd.Name]
+	if existing != nil && existing.gvr == gvr && existing.kind == kind && existing.domain == customDomain && slices.Equal(existing.namespaces, namespaces) {
+		m.customInformerMu.Unlock()
+		return
+	}
+	if existing != nil {
+		existing.stop()
+		delete(m.customInformers, crd.Name)
+	}
+
 	for _, ns := range namespaces {
 		dynamicInformer := dynamicinformer.NewFilteredDynamicInformer(
 			m.dynamicClient,

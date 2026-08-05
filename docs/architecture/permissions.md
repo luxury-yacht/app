@@ -49,6 +49,9 @@ shape, failure behavior, and diagnostics differ.
 - Partial-data builders must guard nil or missing listers before use.
 - Resource-stream permissions must join with the corresponding snapshot runtime
   permission contract.
+- Discovery-backed custom-resource streams check list and watch at each exact
+  informer namespace. Denied namespaces start no informer while permitted
+  namespaces continue to provide partial change signals.
 
 ## UI Permission Rules
 

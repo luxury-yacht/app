@@ -11,7 +11,6 @@ import { ErrorCategory, ErrorSeverity, errorHandler } from './errorHandler';
 
 const telemetryMocks = vi.hoisted(() => ({
   captureUserVisibleError: vi.fn(),
-  recordExpectedCondition: vi.fn(),
 }));
 
 vi.mock('@/core/telemetry/sentry', () => telemetryMocks);
@@ -24,12 +23,12 @@ describe('ErrorHandler', () => {
   const originalConsole = {
     groupCollapsed: console.groupCollapsed,
     error: console.error,
+    info: console.info,
     groupEnd: console.groupEnd,
   };
 
   beforeEach(() => {
     telemetryMocks.captureUserVisibleError.mockReset();
-    telemetryMocks.recordExpectedCondition.mockReset();
     handler = new ErrorHandlerClass({
       enableLogging: true,
       logToConsole: true,
@@ -37,12 +36,14 @@ describe('ErrorHandler', () => {
     });
     console.groupCollapsed = vi.fn();
     console.error = vi.fn();
+    console.info = vi.fn();
     console.groupEnd = vi.fn();
   });
 
   afterEach(() => {
     console.groupCollapsed = originalConsole.groupCollapsed;
     console.error = originalConsole.error;
+    console.info = originalConsole.info;
     console.groupEnd = originalConsole.groupEnd;
   });
 
@@ -148,12 +149,23 @@ describe('ErrorHandler', () => {
     expect(details.category).toBe(ErrorCategory.PERMISSION);
     expect(handler.getHistory()).toHaveLength(0);
     expect(listener).not.toHaveBeenCalled();
-    expect(console.groupCollapsed).toHaveBeenCalled();
+    expect(console.info).toHaveBeenCalled();
     expect(telemetryMocks.captureUserVisibleError).not.toHaveBeenCalled();
-    expect(telemetryMocks.recordExpectedCondition).toHaveBeenCalledWith(
-      '403 forbidden access',
-      expect.objectContaining({ category: ErrorCategory.PERMISSION })
+  });
+
+  it('treats forbidden Kubernetes resources with network in their API group as permission conditions', () => {
+    const listener = vi.fn();
+    handler.subscribe(listener);
+    const error = new Error(
+      'failed to list networking.k8s.aws/v1alpha1, Resource=applicationnetworkpolicies: forbidden'
     );
+
+    const details = handler.handle(error, { source: 'backend-fetch' });
+
+    expect(details.category).toBe(ErrorCategory.PERMISSION);
+    expect(handler.getHistory()).toHaveLength(0);
+    expect(listener).not.toHaveBeenCalled();
+    expect(telemetryMocks.captureUserVisibleError).not.toHaveBeenCalled();
   });
 
   it('still captures permission-shaped failures at an operational boundary', () => {
@@ -168,7 +180,6 @@ describe('ErrorHandler', () => {
         surface: 'operational',
       })
     );
-    expect(telemetryMocks.recordExpectedCondition).not.toHaveBeenCalled();
   });
 
   it('supports scoped handlers that merge context and custom message', () => {
@@ -209,7 +220,6 @@ describe('ErrorHandler', () => {
     expect(handler.getHistory()).toHaveLength(0);
     expect(listener).not.toHaveBeenCalled();
     expect(telemetryMocks.captureUserVisibleError).not.toHaveBeenCalled();
-    expect(telemetryMocks.recordExpectedCondition).toHaveBeenCalledTimes(3);
   });
 
   it('updates options and disables console logging when requested', () => {

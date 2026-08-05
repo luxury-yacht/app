@@ -290,9 +290,6 @@ func containsAuthPattern(lower string) bool {
 		"expired",
 		"authentication",
 		"unauthorized",
-		"forbidden",
-		"permission denied",
-		"access denied",
 	}
 	for _, pattern := range authPatterns {
 		if strings.Contains(lower, pattern) {

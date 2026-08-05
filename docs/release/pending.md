@@ -7,3 +7,4 @@
 
 - `API` column is now sortable in Browse views.
 - Favorites was not restoring filter text data in some cases.
+- Permission-denied Kubernetes watches no longer appear as application errors or Sentry telemetry.

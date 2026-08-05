@@ -122,6 +122,20 @@ func (f *Factory) CanListWatch(group, resource string) bool {
 	return true
 }
 
+// CanListWatchInNamespace reports whether the current identity can both list
+// and watch the resource in the exact namespace used by an informer.
+func (f *Factory) CanListWatchInNamespace(group, resource, namespace string) bool {
+	if f == nil {
+		return false
+	}
+	listAllowed, listErr := f.checkResourceVerbInNamespace(group, resource, "list", namespace)
+	if listErr != nil || !listAllowed {
+		return false
+	}
+	watchAllowed, watchErr := f.checkResourceVerbInNamespace(group, resource, "watch", namespace)
+	return watchErr == nil && watchAllowed
+}
+
 // New returns a new informer Factory with the provided resync period.
 // The checker is used for all permission (SSAR) checks; it must not be nil.
 func New(client kubernetes.Interface, apiextClient apiextensionsclientset.Interface, resync time.Duration, checker *permissions.Checker) *Factory {
@@ -618,6 +632,20 @@ func (f *Factory) checkResourceVerb(group, resource, verb string) (bool, error) 
 
 	key := fmt.Sprintf("%s/%s/%s", group, resource, verb)
 	decision, err := f.runtimePermissions.Can(context.Background(), group, resource, verb)
+	return f.recordPermissionDecision(key, decision, err)
+}
+
+func (f *Factory) checkResourceVerbInNamespace(group, resource, verb, namespace string) (bool, error) {
+	if f.runtimePermissions == nil {
+		return false, fmt.Errorf("permission checker not configured")
+	}
+
+	key := fmt.Sprintf("%s/%s/%s", group, resource, verb)
+	decision, err := f.runtimePermissions.CanInNamespace(context.Background(), group, resource, verb, namespace)
+	return f.recordPermissionDecision(key, decision, err)
+}
+
+func (f *Factory) recordPermissionDecision(key string, decision permissions.Decision, err error) (bool, error) {
 	if err != nil {
 		return false, err
 	}

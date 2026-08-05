@@ -82,6 +82,18 @@ func resumeForTest(t *testing.T, manager *Manager, domain, scope string, since u
 	return manager.ResumeSelector(selector, since)
 }
 
+type scopedListWatchStub struct {
+	allowed map[string]bool
+}
+
+func (s *scopedListWatchStub) CanListWatch(group, resource string) bool {
+	return s.CanListWatchInNamespace(group, resource, "")
+}
+
+func (s *scopedListWatchStub) CanListWatchInNamespace(group, resource, namespace string) bool {
+	return s.allowed[group+"/"+resource+"|"+namespace]
+}
+
 func TestManagerBroadcastsEventAndCatalogDoorbellSources(t *testing.T) {
 	manager := &Manager{
 		clusterMeta: snapshot.ClusterMeta{ClusterID: "c1", ClusterName: "cluster"},
@@ -738,6 +750,67 @@ func TestManagerSkipsCustomInformerForFirstClassGatewayCRD(t *testing.T) {
 	default:
 		t.Fatal("expected stale custom informer to be stopped")
 	}
+}
+
+func TestManagerStartsCustomInformersOnlyInPermittedNamespaces(t *testing.T) {
+	manager := &Manager{
+		clusterMeta: snapshot.ClusterMeta{ClusterID: "c1", ClusterName: "cluster"},
+		logger:      applog.Noop,
+		permissions: &scopedListWatchStub{allowed: map[string]bool{
+			"example.com/widgets|allowed": true,
+		}},
+		dynamicClient:     dynamicfake.NewSimpleDynamicClient(runtime.NewScheme()),
+		allowedNamespaces: []string{"allowed", "denied"},
+		customInformers:   make(map[string]*customResourceInformer),
+		subscribers:       make(map[string]map[string]map[uint64]*subscription),
+	}
+	t.Cleanup(manager.Stop)
+	crd := customResourceDefinition("widgets.example.com", "example.com", "widgets", "Widget", apiextensionsv1.NamespaceScoped, "1")
+
+	manager.ensureCustomInformer(crd)
+
+	info := manager.customInformers[crd.Name]
+	require.NotNil(t, info)
+	require.Len(t, info.informers, 1, "denied namespaces must not get dynamic informers")
+}
+
+func TestManagerDoesNotStartCustomInformerWhenListWatchIsDenied(t *testing.T) {
+	manager := &Manager{
+		clusterMeta:       snapshot.ClusterMeta{ClusterID: "c1", ClusterName: "cluster"},
+		logger:            applog.Noop,
+		permissions:       &scopedListWatchStub{allowed: map[string]bool{}},
+		dynamicClient:     dynamicfake.NewSimpleDynamicClient(runtime.NewScheme()),
+		allowedNamespaces: []string{"denied"},
+		customInformers:   make(map[string]*customResourceInformer),
+		subscribers:       make(map[string]map[string]map[uint64]*subscription),
+	}
+	crd := customResourceDefinition("widgets.example.com", "example.com", "widgets", "Widget", apiextensionsv1.NamespaceScoped, "1")
+
+	manager.ensureCustomInformer(crd)
+
+	require.NotContains(t, manager.customInformers, crd.Name)
+}
+
+func TestManagerChecksClusterScopedCustomInformerAtClusterScope(t *testing.T) {
+	manager := &Manager{
+		clusterMeta: snapshot.ClusterMeta{ClusterID: "c1", ClusterName: "cluster"},
+		logger:      applog.Noop,
+		permissions: &scopedListWatchStub{allowed: map[string]bool{
+			"example.com/widgets|": true,
+		}},
+		dynamicClient:   dynamicfake.NewSimpleDynamicClient(runtime.NewScheme()),
+		customInformers: make(map[string]*customResourceInformer),
+		subscribers:     make(map[string]map[string]map[uint64]*subscription),
+	}
+	t.Cleanup(manager.Stop)
+	crd := customResourceDefinition("widgets.example.com", "example.com", "widgets", "Widget", apiextensionsv1.ClusterScoped, "1")
+
+	manager.ensureCustomInformer(crd)
+
+	info := manager.customInformers[crd.Name]
+	require.NotNil(t, info)
+	require.Equal(t, []string{""}, info.namespaces)
+	require.Len(t, info.informers, 1)
 }
 
 func TestManagerDoesNotRecreateCustomInformerAfterStop(t *testing.T) {
