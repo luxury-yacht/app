@@ -105,7 +105,6 @@ func generateOracleObjects(rng *rand.Rand, n int) []Summary {
 		name := fmt.Sprintf("%s-%s-%d", oracleNameStems[rng.Intn(len(oracleNameStems))], oracleNameStems[rng.Intn(len(oracleNameStems))], i)
 
 		created := oracleTimestamps[rng.Intn(len(oracleTimestamps))]
-
 		items = append(items, Summary{Ref: resourcemodel.ResourceRef{ClusterID: "cluster-a", Group: gvk.group, Version: gvk.version, Kind: gvk.kind, Resource: gvk.resource, Namespace: namespace, Name: name, UID: fmt.Sprintf("obj-%d", i)}, CreationTimestamp: created,
 			Scope: gvk.scope,
 		})
@@ -123,6 +122,8 @@ func oracleEncodedSortValue(s Summary, sortKey string) string {
 		return s.Ref.Namespace
 	case catalogEngineSortName:
 		return s.Ref.Name
+	case catalogEngineSortAPI:
+		return catalogEngineAPIDisplay(s)
 	case catalogEngineSortAge, catalogEngineSortCreationTimestamp:
 		return catalogEngineInvertTimestamp(s.CreationTimestamp)
 	default:
@@ -260,6 +261,7 @@ func TestCatalogQueryMatchesBruteForceOracle(t *testing.T) {
 		{"kind", "asc"}, {"kind", "desc"},
 		{"namespace", "asc"}, {"namespace", "desc"},
 		{"name", "asc"}, {"name", "desc"},
+		{"api", "asc"}, {"api", "desc"},
 		{"age", "asc"}, {"age", "desc"},
 		{"creationtimestamp", "asc"}, {"creationtimestamp", "desc"},
 	}

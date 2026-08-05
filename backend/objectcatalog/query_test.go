@@ -637,6 +637,27 @@ func TestQueryBackendSortsByRequestedFieldAndDirection(t *testing.T) {
 	}
 }
 
+func TestQueryBackendSortsByBrowseAPIColumn(t *testing.T) {
+	svc := newEquivalenceService(t, []Summary{
+		{Ref: resourcemodel.ResourceRef{Group: "", Version: "v1", Kind: "ConfigMap", Resource: "configmaps", Namespace: "default", Name: "core", UID: "uid-core"}, Scope: ScopeNamespace},
+		{Ref: resourcemodel.ResourceRef{Group: "apps", Version: "v1", Kind: "StatefulSet", Resource: "statefulsets", Namespace: "default", Name: "apps", UID: "uid-apps"}, Scope: ScopeNamespace},
+		{Ref: resourcemodel.ResourceRef{Group: "example.com", Version: "v1beta1", Kind: "Gadget", Resource: "gadgets", Namespace: "default", Name: "custom", UID: "uid-custom"}, Scope: ScopeNamespace},
+	})
+
+	result := svc.Query(QueryOptions{Limit: 3, SortField: "api", SortDirection: "asc"})
+	got := []string{result.Items[0].Ref.Name, result.Items[1].Ref.Name, result.Items[2].Ref.Name}
+	want := []string{"apps", "core", "custom"}
+	if !reflect.DeepEqual(got, want) {
+		t.Fatalf("API sort order = %v, want %v", got, want)
+	}
+}
+
+func TestCatalogQueryRejectsRemovedBrowseStatusSort(t *testing.T) {
+	if got := normalizeCatalogQuerySortField("status"); got != catalogQueryDefaultSort {
+		t.Fatalf("normalized Status sort field = %q, want default %q", got, catalogQueryDefaultSort)
+	}
+}
+
 func TestQueryCachedAndUncachedPathsUseSameOrdering(t *testing.T) {
 	svc := NewService(Dependencies{Common: common.Dependencies{}, ClusterID: "cluster-a"}, nil)
 	podDesc := resourceDescriptor{

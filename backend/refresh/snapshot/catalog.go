@@ -168,7 +168,7 @@ func (b *catalogBuilder) Build(ctx context.Context, scope string) (*refresh.Snap
 // describe only the query surface: sort/filter/search fields.
 func newCatalogCapabilities() ResourceQueryCapabilities {
 	return ResourceQueryCapabilities{
-		SortableFields:   []string{"name", "kind", "namespace", "age", "creationTimestamp"},
+		SortableFields:   []string{"name", "kind", "api", "namespace", "age", "creationTimestamp"},
 		FilterableFields: []string{"kinds", "namespaces", "apiGroups", "resourceScopes"},
 		SearchableFields: []string{"name", "kind", "namespace"},
 	}

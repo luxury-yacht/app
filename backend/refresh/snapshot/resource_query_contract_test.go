@@ -3,6 +3,7 @@ package snapshot
 import (
 	"encoding/json"
 	"net/url"
+	"slices"
 	"testing"
 )
 
@@ -198,6 +199,12 @@ func TestCatalogProviderPublishesQueryCapabilities(t *testing.T) {
 	caps := newCatalogCapabilities()
 	if len(caps.SortableFields) == 0 {
 		t.Error("catalog provider must publish sortable fields")
+	}
+	if !slices.Contains(caps.SortableFields, "api") {
+		t.Errorf("catalog provider sortable fields = %v, want API column", caps.SortableFields)
+	}
+	if slices.Contains(caps.SortableFields, "status") {
+		t.Errorf("catalog provider sortable fields = %v, do not want removed Status column", caps.SortableFields)
 	}
 	if len(caps.SearchableFields) == 0 {
 		t.Error("catalog provider must publish searchable fields")

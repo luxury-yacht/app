@@ -436,10 +436,10 @@ describe('BrowseView', () => {
         await Promise.resolve();
       });
 
-      expect(sortableKeys()).toEqual(['age', 'kind', 'name']);
+      expect(sortableKeys()).toEqual(['age', 'api', 'kind', 'name']);
     });
 
-    it('shows API identity and available status alongside object identity', async () => {
+    it('shows API identity without presenting action state as a Status column', async () => {
       const deployment = catalogItem({
         ref: {
           kind: 'Deployment',
@@ -464,16 +464,21 @@ describe('BrowseView', () => {
       });
 
       expect(gridTablePropsRef.current.data[0]).toEqual(
-        expect.objectContaining({ apiDisplay: 'apps/v1', statusDisplay: 'Available' })
+        expect.objectContaining({ apiDisplay: 'apps/v1', actionFacts: { status: 'Available' } })
       );
       expect(gridTablePropsRef.current.columns.map((column) => column.key)).toEqual([
         'kind',
         'name',
         'api',
-        'status',
         'age',
       ]);
-      expect(sortableKeys()).toEqual(['age', 'kind', 'name']);
+      expect(gridTablePropsRef.current.columns.find((column) => column.key === 'api')).toEqual(
+        expect.objectContaining({ sortable: true })
+      );
+      expect(
+        gridTablePropsRef.current.columns.find((column) => column.key === 'status')
+      ).toBeUndefined();
+      expect(sortableKeys()).toEqual(['age', 'api', 'kind', 'name']);
     });
 
     it('renders Age from creationTimestamp and updates without catalog row replacement', async () => {
@@ -619,6 +624,17 @@ describe('BrowseView', () => {
       expect(hasNamespaceColumn).toBe(false);
     });
 
+    it('omits the Status column for namespace scope', async () => {
+      await act(async () => {
+        root.render(<BrowseView namespace="default" />);
+        await Promise.resolve();
+      });
+
+      expect(gridTablePropsRef.current.columns.some((column) => column.key === 'status')).toBe(
+        false
+      );
+    });
+
     it('disables namespace filtering for namespace scope', async () => {
       await act(async () => {
         root.render(<BrowseView namespace="default" />);
@@ -710,6 +726,7 @@ describe('BrowseView', () => {
       const columns = gridTablePropsRef.current?.columns ?? [];
       const hasNamespaceColumn = columns.some((column) => column.key === 'namespace');
       expect(hasNamespaceColumn).toBe(true);
+      expect(columns.some((column) => column.key === 'status')).toBe(false);
     });
 
     it('publishes only catalog-backed sortable keys for all-namespaces scope', async () => {
@@ -718,7 +735,7 @@ describe('BrowseView', () => {
         await Promise.resolve();
       });
 
-      expect(sortableKeys()).toEqual(['age', 'kind', 'name', 'namespace']);
+      expect(sortableKeys()).toEqual(['age', 'api', 'kind', 'name', 'namespace']);
     });
 
     it('enables namespace filtering for all-namespaces scope', async () => {

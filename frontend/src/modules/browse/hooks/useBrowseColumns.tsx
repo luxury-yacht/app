@@ -27,7 +27,6 @@ export type BrowseTableRow = {
   kindDisplay: string;
   namespaceDisplay: string;
   apiDisplay: string;
-  statusDisplay: string;
   age: string;
   ageTimestamp: number;
 };
@@ -51,7 +50,6 @@ export const toTableRows = (
       kindDisplay: kindLabel,
       namespaceDisplay,
       apiDisplay: `${item.ref.group || 'core'}/${item.ref.version}`,
-      statusDisplay: item.actionFacts?.status?.trim() || '—',
       age: '—',
       ageTimestamp: created ? created.getTime() : 0,
     };
@@ -100,10 +98,7 @@ export function useBrowseColumns({
         getClassName: () => 'object-panel-link',
       }),
       cf.createTextColumn<BrowseTableRow>('api', 'API', (row) => row.apiDisplay, {
-        sortable: false,
-      }),
-      cf.createTextColumn<BrowseTableRow>('status', 'Status', (row) => row.statusDisplay, {
-        sortable: false,
+        sortable: true,
       }),
     ];
 
@@ -134,7 +129,6 @@ export function useBrowseColumns({
       kind: { width: 160, autoWidth: false },
       name: { width: 320, autoWidth: false },
       api: { width: 180, autoWidth: false },
-      status: { width: 140, autoWidth: false },
       ...(showNamespaceColumn ? { namespace: { width: 220, autoWidth: false } } : {}),
       age: { width: 120, autoWidth: false },
     };

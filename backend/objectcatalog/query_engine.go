@@ -27,6 +27,7 @@ const (
 	catalogEngineSortKind              = "kind"
 	catalogEngineSortNamespace         = "namespace"
 	catalogEngineSortName              = "name"
+	catalogEngineSortAPI               = "api"
 	catalogEngineSortAge               = "age"
 	catalogEngineSortCreationTimestamp = "creationtimestamp"
 )
@@ -79,6 +80,7 @@ func newCatalogQueryStoreSchema() querypage.Schema[Summary] {
 			catalogEngineSortKind:      func(s Summary) string { return s.Ref.Kind },
 			catalogEngineSortNamespace: func(s Summary) string { return s.Ref.Namespace },
 			catalogEngineSortName:      func(s Summary) string { return s.Ref.Name },
+			catalogEngineSortAPI:       catalogEngineAPIDisplay,
 			// Both "age" and "creationtimestamp" sort newest-first when ascending: the
 			// catalog flips BOTH age AND creationtimestamp, so "asc" means newest first.
 			// Encoding the creation
@@ -138,6 +140,14 @@ func catalogEngineKindIdentity(s Summary) string {
 	return key.group + catalogEngineFieldSep + key.version + catalogEngineFieldSep + key.kind
 }
 
+func catalogEngineAPIDisplay(s Summary) string {
+	group := s.Ref.Group
+	if group == "" {
+		group = "core"
+	}
+	return group + "/" + s.Ref.Version
+}
+
 // catalogSummaryIsCustom reports whether a summary is a non-built-in (discovered/CRD)
 // kind, reusing the catalog's builtin identity set.
 func catalogSummaryIsCustom(s Summary) bool {
@@ -185,7 +195,7 @@ func catalogEngineInvertTimestamp(ts string) string {
 // the default and unknown fields fall back to the identity composite.
 func catalogEngineSortKey(field string) string {
 	switch field {
-	case catalogEngineSortKind, catalogEngineSortNamespace, catalogEngineSortName, catalogEngineSortAge:
+	case catalogEngineSortKind, catalogEngineSortNamespace, catalogEngineSortName, catalogEngineSortAPI, catalogEngineSortAge:
 		return field
 	case "creationtimestamp", "creation-timestamp":
 		return catalogEngineSortCreationTimestamp

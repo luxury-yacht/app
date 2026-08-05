@@ -65,7 +65,7 @@ func normalizeCatalogQuerySortField(field string) string {
 	switch strings.ToLower(strings.TrimSpace(field)) {
 	case "", catalogQueryDefaultSort:
 		return catalogQueryDefaultSort
-	case "kind", "namespace", "name", "age", "creationtimestamp", "creation-timestamp":
+	case "kind", "namespace", "name", "api", "age", "creationtimestamp", "creation-timestamp":
 		return strings.ToLower(strings.TrimSpace(field))
 	default:
 		return catalogQueryDefaultSort

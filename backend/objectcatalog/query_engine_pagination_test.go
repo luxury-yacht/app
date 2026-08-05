@@ -122,6 +122,7 @@ func TestCatalogQueryPaginationComplete(t *testing.T) {
 		{"kind", "asc"}, {"kind", "desc"},
 		{"namespace", "asc"}, {"namespace", "desc"},
 		{"name", "asc"}, {"name", "desc"},
+		{"api", "asc"}, {"api", "desc"},
 		{"age", "asc"}, {"age", "desc"},
 		{"creationtimestamp", "asc"}, {"creationtimestamp", "desc"},
 	}
