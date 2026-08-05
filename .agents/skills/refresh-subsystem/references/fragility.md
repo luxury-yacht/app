@@ -51,28 +51,34 @@ overview, and any new doorbell-backed snapshot domain:
 3. Refetch identity uses `signalVersions`, not payload-rewritten source versions.
    Preserve a first-signal sentinel so an empty previous value cannot swallow
    the first ring.
-4. Colliding signals latch one trailing rerun; do not drop them or repeatedly
+4. Colliding signals latch one trailing `rerunStreamSignal` in
+   `frontend/src/core/refresh/orchestrator.ts`; do not drop them or repeatedly
    abort-and-replace.
 5. Namespace readiness is server-owned. Pre-ready doorbells invoke the
    subsystem readiness build from the per-cluster chokepoint; post-settle notify
    is one-shot, aggregate refresh is atomic, and permission-denied builds still
-   notify ready.
-6. Skip informer resync echoes.
+   notify ready. `sweepNamespacesReadiness` in `backend/app_refresh_setup.go`
+   repairs rings missed before aggregate wiring exists.
+6. Skip informer resync echoes through `namespaceUpdateIsEcho` in
+   `backend/refresh/snapshot/namespaces.go`.
 7. Derive stream health from descriptor metadata rather than hardcoded domain
-   lists.
+   lists; the frontend calculation lives at `computeSubscriptionHealth` in
+   `frontend/src/core/refresh/streaming/resourceStreamManager.ts`.
 8. Conditional producers set `pollingContinuesWhileStreaming`. When enabling a
    snapshot stream, audit enable calls for `preserveState: true` so remounts do
    not blank retained rows.
 
 ## Governor and retained-state lifecycle
 
-1. Re-warm through the construction chokepoint must not demote a ready cluster.
+1. Re-warm through the construction chokepoint must not demote a ready cluster;
+   `transitionClusterToLoading` in `backend/app_refresh_setup.go` owns that gate.
 2. Governor reconciliation publishes desired/planned tier before executor work,
    serializes executor actions, and publishes applied tier only after reaching
    it. Planned and applied maps encode different ordering contracts.
-3. Cold clusters do not start object catalogs. Catalog start gates on the
-   serialized planned tier; re-warm publishes a live plan before building and
-   does not report the tier reached until the catalog exists.
+3. Cold clusters do not start object catalogs. `startObjectCatalogForTarget` in
+   `backend/app_object_catalog.go` gates on the serialized planned tier; re-warm
+   publishes a live plan before building and does not report the tier reached
+   until the catalog exists.
 4. Foreground activation replays current lifecycle truth after serialized
    reconciliation even when state is unchanged. The Wails relay reaches React
    state and event-bus readiness consumers.
@@ -91,7 +97,9 @@ overview, and any new doorbell-backed snapshot domain:
 ## Stream synchronization and consumers
 
 Stream health means connected plus server-confirmed synchronized, not recent
-delivery. Mark synchronization only after the mux confirms subscribe. A
+delivery. `markSubscriptionSynchronized` in
+`frontend/src/core/refresh/streaming/resourceStreamManager.ts` runs only after
+the mux confirms subscribe; `computeSubscriptionHealth` derives the result. A
 token-less RESET confirms a retained tail only when it advances a declared
 signal clock; marking health on send can suppress polling for a rejected domain.
 

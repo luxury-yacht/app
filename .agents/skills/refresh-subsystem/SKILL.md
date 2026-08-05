@@ -1,6 +1,7 @@
 ---
 name: refresh-subsystem
 description: Modify Luxury Yacht refresh domains, snapshots, streams, doorbells, polling fallback, diagnostics, retained data, or refresh lifecycle while preserving cross-layer ordering and recovery contracts
+user-invocable: false
 ---
 
 # Refresh Subsystem

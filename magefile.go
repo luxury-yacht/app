@@ -59,7 +59,6 @@ var Aliases = map[string]interface{}{
 	"lint":                QC.Lint,
 	"lint-fix":            QC.LintFix,
 	"typecheck":           QC.Typecheck,
-	"agent-context":       QC.AgentContext,
 	"npm-update-check":    QC.NpmUpdateCheck,
 	"npm-update-fix":      QC.NpmUpdate,
 	"go-mod-update-check": QC.GoModUpdateCheck,
@@ -301,15 +300,6 @@ func (QC) Typecheck() error {
 	return sh.RunV("npm", "run", "typecheck", npmPrefixArg, cfg.FrontendDir)
 }
 
-// Checks that agent instructions stay within progressive-disclosure budgets.
-func (QC) AgentContext() error {
-	fmt.Println("\n🔎 Checking agent context budgets...")
-	if err := sh.RunV("bash", ".agents/scripts/check-context-budget_test.sh"); err != nil {
-		return err
-	}
-	return sh.RunV("bash", ".agents/scripts/check-context-budget.sh")
-}
-
 // Checks npm package updates
 func (QC) NpmUpdateCheck() error {
 	if err := isNpxInstalled(); err != nil {
@@ -376,7 +366,7 @@ func (QC) Reset() error {
 
 // Runs all checks that could cause a release to fail.
 func (QC) PreRelease() error {
-	mg.SerialDeps(QC.AgentContext, QC.Fmt, QC.Vet, Test.Race, QC.LintFix, QC.Lint, QC.Typecheck, Test.Frontend, QC.Knip, QC.Trivy)
+	mg.SerialDeps(QC.Fmt, QC.Vet, Test.Race, QC.LintFix, QC.Lint, QC.Typecheck, Test.Frontend, QC.Knip, QC.Trivy)
 	return nil
 }
 

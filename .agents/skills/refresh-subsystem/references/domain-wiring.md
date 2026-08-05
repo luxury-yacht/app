@@ -5,6 +5,14 @@ payload, permission gate, or streamed table registration.
 
 ## Backend registration
 
+Construction and lifecycle entry points:
+
+| Concern | Code landmarks |
+| --- | --- |
+| Per-cluster construction and readiness | `backend/app_refresh_setup.go`, `backend/refresh/system/manager.go` |
+| Selection changes and subsystem swaps | `backend/app_refresh_update.go`, `backend/app_refresh_subsystems.go` |
+| Teardown and auth recovery | `backend/app_refresh_recovery.go` |
+
 Add the domain to `domainRegistrations()` in
 `backend/refresh/system/registrations.go`; dependencies determine order.
 Registration styles are:
@@ -25,9 +33,17 @@ metadata. Register backend-owned DTOs/enums in
 `mise exec -- go generate ./backend`, and never hand-edit generated frontend
 types.
 
-Frontend reducer-only state stays in `frontend/src/core/refresh/types.ts`.
-Refresher names, domain registrations, manual mapping, diagnostics, and stream
-descriptors must remain synchronized through the shared contract tests.
+Cross-layer landmarks:
+
+| Concern | Code landmarks |
+| --- | --- |
+| Frontend reducer and refresher mapping | `frontend/src/core/refresh/types.ts`, `frontend/src/core/refresh/refresherTypes.ts` |
+| Domain and stream orchestration | `frontend/src/core/refresh/domainRegistrations.ts`, `frontend/src/core/refresh/streaming/resourceStreamDomains.ts`, `frontend/src/core/refresh/streaming/resourceStreamManager.ts` |
+| Canonical stream projection | `backend/refresh/resourcestream/projection_descriptors.go` |
+| Snapshot/stream parity | `backend/refresh/snapshot/parity_test.go` |
+
+These mappings, manual refresh behavior, diagnostics, and stream descriptors
+must remain synchronized through the shared contract tests.
 
 ## Streamed tables
 

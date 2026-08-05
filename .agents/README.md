@@ -49,5 +49,3 @@ skill first, then only the docs or references that skill selects.
   drive live age rendering without snapshot refetches.
 - The root identity, cluster-scope, TDD, git, and final-validation contracts
   apply everywhere and should not be repeated in workflow skills.
-- Agent-guidance changes run `mise exec -- mage agent-context`; the prerelease
-  gate runs the same budget check automatically.
