@@ -153,6 +153,27 @@ describe('ErrorHandler', () => {
     expect(telemetryMocks.captureUserVisibleError).not.toHaveBeenCalled();
   });
 
+  it.each([
+    ['Failed to fetch: dial tcp 10.0.0.1:8403: connection refused', ErrorCategory.NETWORK],
+    ['dial tcp 10.0.0.1:403: i/o timeout', ErrorCategory.TIMEOUT],
+    ['request took 403 ms: internal server error', ErrorCategory.SERVER_ERROR],
+    ['processed 403 records before too many requests', ErrorCategory.RATE_LIMIT],
+  ])('does not treat incidental 403 digits in %s as permission denial', (message, category) => {
+    const details = handler.handle(message);
+
+    expect(details.category).toBe(category);
+  });
+
+  it.each([
+    'request failed with HTTP 403',
+    'request failed with status code 403',
+    'server responded with a status of 403',
+  ])('treats structured 403 status in %s as permission denial', (message) => {
+    const details = handler.handle(message);
+
+    expect(details.category).toBe(ErrorCategory.PERMISSION);
+  });
+
   it('treats forbidden Kubernetes resources with network in their API group as permission conditions', () => {
     const listener = vi.fn();
     handler.subscribe(listener);

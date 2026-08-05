@@ -8,6 +8,7 @@ import (
 	"testing"
 	"time"
 
+	"github.com/stretchr/testify/require"
 	corev1 "k8s.io/api/core/v1"
 	apierrors "k8s.io/apimachinery/pkg/api/errors"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
@@ -536,7 +537,7 @@ func TestHelmStorageSourceSkipsDeniedKinds(t *testing.T) {
 func newMinimalFactory(checker *permissions.Checker) *Factory {
 	return &Factory{
 		kubeClient:         fake.NewClientset(),
-		permissionAllowed:  make(map[string]struct{}),
+		permissionAllowed:  make(map[PermissionGrant]struct{}),
 		runtimePermissions: checker,
 	}
 }
@@ -563,6 +564,65 @@ func TestCanListWatchInNamespaceChecksTheExactInformerScope(t *testing.T) {
 	if fmt.Sprint(checked) != fmt.Sprint(expected) {
 		t.Fatalf("unexpected permission checks: got %v want %v", checked, expected)
 	}
+}
+
+func TestPermissionAllowedSnapshotPreservesEvaluationScope(t *testing.T) {
+	allows := func(group, resource, namespace string) bool {
+		return (group == "apps" && resource == "deployments" && namespace == "team-b") ||
+			(group == "example.com" && resource == "widgets" && namespace == "team-a")
+	}
+	checker := permissions.NewCheckerWithReview("test", time.Minute, func(_ context.Context, group, resource, _, namespace string) (bool, error) {
+		return allows(group, resource, namespace), nil
+	})
+	checker.SetScope([]string{"team-b"}, func(group, resource string) bool {
+		return group == "apps" && resource == "deployments"
+	})
+	factory := newMinimalFactory(checker)
+	require.True(t, factory.CanListWatch("apps", "deployments"))
+	require.True(t, factory.CanListWatchInNamespace("example.com", "widgets", "team-a"))
+
+	var checked []string
+	revalidationChecker := permissions.NewCheckerWithReview("test", time.Minute, func(_ context.Context, group, resource, verb, namespace string) (bool, error) {
+		checked = append(checked, fmt.Sprintf("%s/%s/%s|%s", group, resource, verb, namespace))
+		return allows(group, resource, namespace), nil
+	})
+	revalidationChecker.SetScope([]string{"team-b"}, func(group, resource string) bool {
+		return group == "apps" && resource == "deployments"
+	})
+
+	grants := factory.PermissionAllowedSnapshot()
+	require.Len(t, grants, 4)
+	identities := make([]string, 0, len(grants))
+	for _, grant := range grants {
+		decision, err := grant.Revalidate(context.Background(), revalidationChecker)
+		require.NoError(t, err)
+		require.True(t, decision.Allowed)
+		group, resource, verb := grant.Identity()
+		identities = append(identities, fmt.Sprintf("%s/%s/%s", group, resource, verb))
+	}
+
+	require.ElementsMatch(t, []string{
+		"apps/deployments/list|team-b",
+		"apps/deployments/watch|team-b",
+		"example.com/widgets/list|team-a",
+		"example.com/widgets/watch|team-a",
+	}, checked)
+	require.ElementsMatch(t, []string{
+		"apps/deployments/list",
+		"apps/deployments/watch",
+		"example.com/widgets/list",
+		"example.com/widgets/watch",
+	}, identities)
+}
+
+func TestPermissionAllowedSnapshotIsEmptyBeforeAnyGrant(t *testing.T) {
+	var nilFactory *Factory
+	require.Nil(t, nilFactory.PermissionAllowedSnapshot())
+
+	checker := permissions.NewCheckerWithReview("test", time.Minute, func(context.Context, string, string, string, string) (bool, error) {
+		return true, nil
+	})
+	require.Nil(t, newMinimalFactory(checker).PermissionAllowedSnapshot())
 }
 
 // TestFactoryGateExemptInformerDoesNotBlockFactorySync pins the events exclusion: an

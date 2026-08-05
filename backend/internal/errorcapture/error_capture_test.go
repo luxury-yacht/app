@@ -84,6 +84,35 @@ func TestPermissionDeniedStderrStaysLocal(t *testing.T) {
 	require.Same(t, original, Enhance(original), "expected RBAC denial not to enhance an application error")
 }
 
+func TestExpectedConditionDoesNotMatchIncidental403Numbers(t *testing.T) {
+	lines := []string{
+		`E0805 10:15:30.123456 17 reflector.go:403] "Failed to watch" err="connection refused"`,
+		`E0805 10:15:30.123456 403 shared_informer.go:314] unable to sync caches`,
+		`E0805 10:15:30.123456 17 round_trippers.go:63] dial tcp 10.0.0.1:403: i/o timeout`,
+		`E0805 10:15:30.123456 17 transport.go:301] request took 403 ms`,
+	}
+
+	for _, line := range lines {
+		t.Run(line, func(t *testing.T) {
+			require.False(t, isExpectedCondition(strings.ToLower(line)))
+		})
+	}
+}
+
+func TestExpectedConditionMatchesStructured403Status(t *testing.T) {
+	lines := []string{
+		`request failed with HTTP 403`,
+		`request failed with status code 403`,
+		`server responded with a status of 403`,
+	}
+
+	for _, line := range lines {
+		t.Run(line, func(t *testing.T) {
+			require.True(t, isExpectedCondition(strings.ToLower(line)))
+		})
+	}
+}
+
 func TestCaptureIfInterestingIgnoresTokenSubstrings(t *testing.T) {
 	c := &Capture{buffer: &bytes.Buffer{}}
 	global = c

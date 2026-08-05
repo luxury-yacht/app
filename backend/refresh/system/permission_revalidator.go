@@ -2,7 +2,6 @@ package system
 
 import (
 	"context"
-	"strings"
 	"time"
 
 	"k8s.io/klog/v2"
@@ -43,21 +42,18 @@ func (s *Subsystem) runPermissionRevalidation(ctx context.Context, interval time
 
 // permissionRevoked returns true when a previously allowed permission is now denied.
 func (s *Subsystem) permissionRevoked(ctx context.Context) bool {
-	keys := s.InformerFactory.PermissionAllowedSnapshot()
-	if len(keys) == 0 {
+	grants := s.InformerFactory.PermissionAllowedSnapshot()
+	if len(grants) == 0 {
 		return false
 	}
 
-	for _, key := range keys {
-		group, resource, verb, ok := parsePermissionKey(key)
-		if !ok {
-			continue
-		}
-		decision, err := s.RuntimePerms.Can(ctx, group, resource, verb)
+	for _, grant := range grants {
+		decision, err := grant.Revalidate(ctx, s.RuntimePerms)
 		if err != nil {
 			continue
 		}
 		if !decision.Allowed {
+			group, resource, verb := grant.Identity()
 			klog.V(1).Infof("Permission revoked for %s/%s verb %s; stopping refresh subsystem", group, resource, verb)
 			return true
 		}
@@ -75,13 +71,4 @@ func (s *Subsystem) stopForPermissionRevocation() {
 	if err := s.Manager.Shutdown(ctx); err != nil {
 		klog.V(1).Infof("Permission revocation shutdown failed: %v", err)
 	}
-}
-
-// parsePermissionKey splits informer permission cache keys (group/resource/verb).
-func parsePermissionKey(key string) (string, string, string, bool) {
-	parts := strings.Split(key, "/")
-	if len(parts) != 3 {
-		return "", "", "", false
-	}
-	return parts[0], parts[1], parts[2], true
 }

@@ -53,8 +53,8 @@ type Factory struct {
 
 	pendingClusterInformers []clusterInformerRegistration
 
-	// permissionAllowed tracks permission keys that have been allowed at least once.
-	permissionAllowed map[string]struct{}
+	// permissionAllowed tracks exact permission scopes that have been allowed at least once.
+	permissionAllowed map[PermissionGrant]struct{}
 	permissionMu      sync.RWMutex
 
 	runtimePermissions *permissions.Checker
@@ -65,6 +65,36 @@ type Factory struct {
 	// objects; this dedicated source serves the three helm consumers that still need
 	// the typed object. nil before New finishes wiring it.
 	helmStorage *HelmStorageSource
+}
+
+type permissionGrantScope uint8
+
+const (
+	permissionGrantDefaultScope permissionGrantScope = iota
+	permissionGrantExactNamespace
+)
+
+// PermissionGrant preserves the permission evaluator and scope that originally
+// produced an allowed decision so revalidation can repeat the same check.
+type PermissionGrant struct {
+	group     string
+	resource  string
+	verb      string
+	namespace string
+	scope     permissionGrantScope
+}
+
+// Revalidate repeats the same permission evaluation that produced the grant.
+func (g PermissionGrant) Revalidate(ctx context.Context, checker *permissions.Checker) (permissions.Decision, error) {
+	if g.scope == permissionGrantExactNamespace {
+		return checker.CanInNamespace(ctx, g.group, g.resource, g.verb, g.namespace)
+	}
+	return checker.Can(ctx, g.group, g.resource, g.verb)
+}
+
+// Identity returns the resource and verb used by the grant for diagnostics.
+func (g PermissionGrant) Identity() (group, resource, verb string) {
+	return g.group, g.resource, g.verb
 }
 
 // informerSyncState tracks one informer's progress toward its initial sync.
@@ -152,7 +182,7 @@ func New(client kubernetes.Interface, apiextClient apiextensionsclientset.Interf
 		resync:             resync,
 		factory:            kubeFactory,
 		syncDeadline:       config.RefreshInformerSyncDeadline,
-		permissionAllowed:  make(map[string]struct{}),
+		permissionAllowed:  make(map[PermissionGrant]struct{}),
 		runtimePermissions: checker,
 	}
 	// nodes is an owned-reflector ingest kind (IngestOwned): the typed node informer is never
@@ -630,9 +660,9 @@ func (f *Factory) checkResourceVerb(group, resource, verb string) (bool, error) 
 		return false, fmt.Errorf("permission checker not configured")
 	}
 
-	key := fmt.Sprintf("%s/%s/%s", group, resource, verb)
+	grant := PermissionGrant{group: group, resource: resource, verb: verb, scope: permissionGrantDefaultScope}
 	decision, err := f.runtimePermissions.Can(context.Background(), group, resource, verb)
-	return f.recordPermissionDecision(key, decision, err)
+	return f.recordPermissionDecision(grant, decision, err)
 }
 
 func (f *Factory) checkResourceVerbInNamespace(group, resource, verb, namespace string) (bool, error) {
@@ -640,29 +670,35 @@ func (f *Factory) checkResourceVerbInNamespace(group, resource, verb, namespace 
 		return false, fmt.Errorf("permission checker not configured")
 	}
 
-	key := fmt.Sprintf("%s/%s/%s", group, resource, verb)
+	grant := PermissionGrant{
+		group:     group,
+		resource:  resource,
+		verb:      verb,
+		namespace: namespace,
+		scope:     permissionGrantExactNamespace,
+	}
 	decision, err := f.runtimePermissions.CanInNamespace(context.Background(), group, resource, verb, namespace)
-	return f.recordPermissionDecision(key, decision, err)
+	return f.recordPermissionDecision(grant, decision, err)
 }
 
-func (f *Factory) recordPermissionDecision(key string, decision permissions.Decision, err error) (bool, error) {
+func (f *Factory) recordPermissionDecision(grant PermissionGrant, decision permissions.Decision, err error) (bool, error) {
 	if err != nil {
 		return false, err
 	}
 	if decision.Allowed {
-		f.trackAllowedPermission(key)
+		f.trackAllowedPermission(grant)
 	}
 	return decision.Allowed, nil
 }
 
-// trackAllowedPermission records that a permission key has been granted at least once.
-func (f *Factory) trackAllowedPermission(key string) {
+// trackAllowedPermission records that an exact permission scope has been granted at least once.
+func (f *Factory) trackAllowedPermission(grant PermissionGrant) {
 	if f == nil {
 		return
 	}
 	f.permissionMu.Lock()
 	if f.permissionAllowed != nil {
-		f.permissionAllowed[key] = struct{}{}
+		f.permissionAllowed[grant] = struct{}{}
 	}
 	f.permissionMu.Unlock()
 }
@@ -689,8 +725,8 @@ func (f *Factory) PrimePermissions(ctx context.Context, requests []PermissionReq
 	return g.Wait()
 }
 
-// PermissionAllowedSnapshot returns keys that have been allowed at least once.
-func (f *Factory) PermissionAllowedSnapshot() []string {
+// PermissionAllowedSnapshot returns exact permission scopes that have been allowed at least once.
+func (f *Factory) PermissionAllowedSnapshot() []PermissionGrant {
 	if f == nil {
 		return nil
 	}
@@ -699,9 +735,9 @@ func (f *Factory) PermissionAllowedSnapshot() []string {
 	if len(f.permissionAllowed) == 0 {
 		return nil
 	}
-	keys := make([]string, 0, len(f.permissionAllowed))
-	for key := range f.permissionAllowed {
-		keys = append(keys, key)
+	grants := make([]PermissionGrant, 0, len(f.permissionAllowed))
+	for grant := range f.permissionAllowed {
+		grants = append(grants, grant)
 	}
-	return keys
+	return grants
 }

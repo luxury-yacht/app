@@ -39,10 +39,11 @@ var (
 	eventEmitter func(string)                       // function to emit events
 	logSink      func(level string, message string) // function to handle log messages
 	// Word-boundary matching avoids false positives from resource names like "podidentityassociations".
-	tokenPattern   = regexp.MustCompile(`\btokens?\b`)
-	ssoPattern     = regexp.MustCompile(`\bsso\b`)
-	expiredPattern = regexp.MustCompile(`\bexpired\b`)
-	authPatterns   = []*regexp.Regexp{
+	tokenPattern           = regexp.MustCompile(`\btokens?\b`)
+	ssoPattern             = regexp.MustCompile(`\bsso\b`)
+	expiredPattern         = regexp.MustCompile(`\bexpired\b`)
+	forbiddenStatusPattern = regexp.MustCompile(`\b(?:http(?:/\d(?:\.\d)?)?\s+403|status(?:\s+(?:code|of))?(?:\s*[:=]\s*|\s+)403)\b`)
+	authPatterns           = []*regexp.Regexp{
 		tokenPattern,
 		ssoPattern,
 		expiredPattern,
@@ -56,7 +57,7 @@ var (
 		regexp.MustCompile(`\bforbidden\b`),
 		regexp.MustCompile(`\bpermission\s+denied\b`),
 		regexp.MustCompile(`\baccess\s+denied\b`),
-		regexp.MustCompile(`\b403\b`),
+		forbiddenStatusPattern,
 	}
 	fallbackErrorPatterns = []*regexp.Regexp{
 		regexp.MustCompile(`\berrors?\b`),
