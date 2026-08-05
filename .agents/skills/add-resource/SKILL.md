@@ -21,10 +21,10 @@ Before editing code, decide which surfaces the resource needs:
 
 | Surface                            | Backend Entry Points                                                                | Frontend Entry Points                                        | Notes                                                                                        |
 | ---------------------------------- | ----------------------------------------------------------------------------------- | ------------------------------------------------------------ | -------------------------------------------------------------------------------------------- |
-| Discovery/catalog/browse           | `backend/objectcatalog`, `backend/refresh/snapshot/catalog.go`                      | `frontend/src/modules/browse`                                | The object catalog owns existence, GVK/GVR, scope, namespace listings, and cluster listings. |
+| Discovery/catalog/browse           | `backend/objectcatalog`, `backend/refresh/snapshot/catalog.go`                      | `frontend/src/modules/browse`                                | The object catalog owns existence, GVK/GVR, scope, Browse namespace metadata, and cluster listings. Namespace LIST rows belong to the `namespaces` refresh domain. |
 | Refresh table/list                 | `backend/refresh/snapshot/*.go`, `backend/refresh/system/registrations.go`          | `frontend/src/core/refresh/*`, GridTable consumers           | Canonical list/table data belongs in refresh snapshots.                                      |
 | Resource stream rows               | `backend/refresh/resourcestream`                                                    | `frontend/src/core/refresh/streaming`                        | Stream row shape must match snapshot row shape.                                              |
-| Rich object details/actions        | `backend/resources/<kind>/` (`details.go`, `actions.go`, `dto.go`), generated detail bindings (`go generate ./backend`) | Object-panel details/overview registry                       | Use for detail tabs, logs/debug helpers, and imperative operations.                          |
+| Rich object details/actions        | `backend/resources/<kind>/` (`details.go`, `actions.go`, `dto.go`), generated detail bindings (`mise exec -- go generate ./backend`) | Object-panel details/overview registry                       | Use for detail tabs, logs/debug helpers, and imperative operations.                          |
 | Per-kind identity/descriptor       | `backend/resources/<kind>/{identity,descriptor}.go`, one entry in `backend/kind/kindregistry`, identity row in `backend/resourcecontract` | n/a                                                          | Every subsystem loops the registry by facet; do not name the kind elsewhere.                 |
 | Shared identity/status/links/facts | `backend/resources/<kind>/{model,facts}.go` built on shared primitives in `backend/resourcemodel` | status/link rendering utilities                              | Backend owns primary status and relationship semantics.                                      |
 | YAML/edit/apply                    | object YAML/read/apply backend paths                                                | object-panel YAML tab                                        | Must carry clusterId and full GVK identity.                                                  |
@@ -164,7 +164,7 @@ field types stay in `backend/resources/types`; only the `<Kind>Details` struct
 itself lives in the kind package.
 
 If Go DTOs change, refresh or verify the Wails bindings in
-`frontend/wailsjs/go/models.ts`. `wails generate` may not work in every local
+`frontend/wailsjs/go/models.ts`. `mise exec -- wails generate` may not work in every local
 run, so validate bindings with frontend typecheck.
 
 ### 4. Detail Binding (Generated Dispatch) — CREATE + REGENERATE
@@ -190,39 +190,38 @@ var DetailBinding = appbinding.Spec{
 ```
 
 Reference it from the kind's `Descriptor` (`Binding: &DetailBinding`), then run
-`go generate ./backend` (see `backend/generate.go`) to regenerate the wrappers and
-the dispatch map. The generated `objectDetailFetcherGVKs` (derived from the binding
-plus `resourcecontract.BuiltinResources`) is the exact-GVK gate that keeps a custom
-resource with a colliding built-in kind from being served by the wrong typed
-fetcher — you no longer maintain it by hand.
+`mise exec -- go generate ./backend` (see `backend/generate.go`) to regenerate the wrappers and
+the `objectDetailFetchers` dispatch map. `objectDetailFetcherGVKs` is then derived
+from that generated map plus `resourcecontract.BuiltinResources`; this exact-GVK
+gate keeps a custom resource with a colliding built-in kind from being served by
+the wrong typed fetcher. Do not maintain either map by hand.
 
 Do not add per-kind raw-object fallbacks in
 `backend/refresh/snapshot/object_details.go`. That snapshot builder delegates
 rich detail resolution to the app-level `ObjectDetailProvider` and already
 falls back to a generic details payload for unsupported or custom kinds.
 
-### 5. Frontend TypeScript Types — MODIFY
+### 5. Frontend Detail Payload Contract — VERIFY or MODIFY
 
 **Files:**
 
 - `frontend/wailsjs/go/models.ts`
-- `frontend/src/modules/object-panel/components/ObjectPanel/Details/detailsTabTypes.ts`
-- `frontend/src/modules/object-panel/components/ObjectPanel/ObjectPanel.tsx`
-- `frontend/src/modules/object-panel/components/ObjectPanel/Details/DetailsTab.tsx`
-- `frontend/src/modules/object-panel/components/ObjectPanel/Details/useOverviewData.ts`
+- `frontend/src/modules/object-panel/components/ObjectPanel/Details/objectDetailModel.ts`
+- adjacent object-panel model/composition tests when the kind needs a derived
+  sibling section
 
-Add the new details type to `DetailsTabProps` and thread it through:
+The object-details refresh payload flows through one `detailPayload` value into
+`ObjectDetailModel.activeDetail`, and the Overview renderer consumes that raw
+active DTO. Do not add per-kind detail slots to `ObjectPanel.tsx` or
+`DetailsTabProps`, and do not prop-drill one field per kind through
+`DetailsTab.tsx`.
 
-```typescript
-<kind>Details: types.<Kind>Details | null;
-```
-
-- Add the corresponding `EMPTY_DETAILS` slot and `detailPayload` switch case in
-  `ObjectPanel.tsx`.
-- Destructure and pass the detail object through `DetailsTab.tsx`.
-- Add it to `UseOverviewDataParams` and map it into the overview shape in
-  `useOverviewData.ts`.
-- Add or update focused tests around the payload switch and overview mapping.
+- Refresh or verify the generated Wails model after changing the Go DTO.
+- Update `DETAIL_KIND_CONFIG` only when the kind needs an existing derived
+  sibling section such as Containers, ConfigMap/Secret data, RBAC rules,
+  port-forward availability, active pods, scaling, or CronJob suspension.
+- Add focused `objectDetailModel` or `DetailsTab` tests when a new derivation is
+  introduced. Overview-only fields belong in the descriptor described below.
 
 ### 6. Built-In Identity Contract (When Adding A Built-In Kind) — MODIFY
 
@@ -251,38 +250,37 @@ If this is a built-in Kubernetes kind with a first-class frontend view, add its
 canonical group/version to the built-in lookup. Do not add custom resources
 here; custom resources must carry group/version from catalog or API data.
 
-### 8. Frontend Overview Component — CREATE or REUSE
+### 8. Frontend Overview Descriptor — CREATE or MODIFY
 
-**Directory:** `frontend/src/modules/object-panel/components/ObjectPanel/Details/Overview/`
+**Directory:**
+`frontend/src/modules/object-panel/components/ObjectPanel/Details/Overview/descriptors/`
 
-If the resource is similar to an existing kind (e.g., another workload), extend the existing component with conditional rendering:
+Create or extend an `OverviewDescriptor<KindDetails>` following the neighboring
+descriptor for that resource family. The generic `OverviewRenderer` owns the
+frame and renders ordered `field`, `status`, and `widget` items from the raw
+Wails-generated DTO.
 
-```tsx
-const is<Kind> = normalizedKind.toLowerCase() === '<kind-lowercase>';
-
-{is<Kind> && (
-    <OverviewItem label="SomeField" value={someValue} />
-)}
-```
-
-If the resource is substantially different, create a new `<Kind>Overview.tsx` component following the same prop pattern as `WorkloadOverview.tsx`.
+- Use `field` entries for ordinary DTO values and `derivedFrom` when a custom
+  renderer reads additional DTO keys.
+- Use a `widget` only for irreducible UI and declare every consumed key.
+- List fields rendered by a derived sibling section or deliberately omitted in
+  `coveredElsewhere` so the drift check remains explicit.
+- Reuse shared descriptor render helpers. Do not create a bespoke per-kind
+  Overview component or put per-kind branching into `OverviewRenderer`.
 
 ### 9. Overview Registry — MODIFY
 
-**File:** `frontend/src/modules/object-panel/components/ObjectPanel/Details/Overview/registry.ts`
+**File:**
+`frontend/src/modules/object-panel/components/ObjectPanel/Details/Overview/descriptorRegistry.ts`
 
-Register the overview renderer for the new kind:
+Import the descriptor and add one `registration(['<kind-lowercase>'],
+<kind>Descriptor)` entry. `descriptorRegistry.ts` is the built-in dispatch source
+for both production rendering and the descriptor drift check.
 
-```typescript
-overviewRegistry.register({
-  kinds: ['<kind-lowercase>'],
-  component: <OverviewComponent>,
-  mapProps: (props) => ({ <kind>Details: props.<kind>Details || props }),
-});
-```
-
-Do not rely on registry `capabilities` as the source of truth for object-panel
-actions or tabs; current feature support is driven by `RESOURCE_CAPABILITIES`.
+`Overview/registry.ts` is the legacy fallback for custom or unregistered kinds;
+it does not register built-in Overview renderers. Add a focused Overview test
+that renders the descriptor through `OverviewRenderer`, and ensure
+`driftCheck.test.ts` accounts for every generated DTO field.
 
 ### 10. Object Panel Capabilities — MODIFY
 
@@ -326,7 +324,7 @@ contract together:
   stream tests when live row updates are needed
 - Backend-owned refresh DTO and domain payload mapping in
   `backend/internal/genrefreshcontracts/registry.go`; run
-  `go generate ./backend` and never hand-edit
+  `mise exec -- go generate ./backend` and never hand-edit
   `frontend/src/core/refresh/types.generated.ts`
 - Frontend resource stream descriptors in
   `frontend/src/core/refresh/streaming/resourceStreamDomains.ts` when live row
@@ -395,38 +393,38 @@ Before marking done:
 - [ ] `<Kind>Details` DTO defined in `backend/resources/<kind>/dto.go` with display-ready fields
 - [ ] Primary status comes from the kind's model and projects `statusPresentation`
 - [ ] Relationship links use `resourcemodel.ResourceLink` constructors and are validated
-- [ ] `appbinding.Spec` declared (`Binding` on the descriptor) and `go generate ./backend` re-run (generated detail dispatch + exact-GVK gate)
+- [ ] `appbinding.Spec` declared (`Binding` on the descriptor) and `mise exec -- go generate ./backend` re-run (generated detail dispatch + derived exact-GVK gate)
 - [ ] Wails bindings/type definitions reflect backend DTO changes
-- [ ] Frontend detail payload is wired through `ObjectPanel.tsx`, `DetailsTabProps`, `DetailsTab.tsx`, and `useOverviewData.ts`
+- [ ] Frontend consumes the single raw `activeDetail`; `DETAIL_KIND_CONFIG` is updated only for required derived sibling sections
 - [ ] For built-ins: identity added to `resourcecontract.BuiltinResources` and `builtin-resource-identities.json`
 - [ ] Frontend built-in GVK lookup updated if a built-in kind was promoted to
       first-class frontend support
-- [ ] Overview component renders resource-specific fields
-- [ ] Overview registry maps the kind to the component
+- [ ] Overview descriptor accounts for every generated DTO field and renders resource-specific fields through `OverviewRenderer`
+- [ ] Descriptor registry maps the kind to the descriptor and the drift check passes
 - [ ] `RESOURCE_CAPABILITIES` reflects supported object-panel actions/tabs
 - [ ] Refresh domains, stream rows, diagnostics, and GridTable consumers are wired if the resource appears in list/table surfaces
 - [ ] Object-map support is updated only if backend graph data and frontend support lists both need the kind
 - [ ] Tests cover the happy path and at least one error case
-- [ ] `mage qc:prerelease` passes
+- [ ] `mise exec -- mage qc:prerelease` passes
 
 ## Validation Recipe
 
 Use focused checks while iterating:
 
 ```sh
-go generate ./backend   # regenerate detail bindings after adding/changing a kind
-go test ./backend ./backend/resources/... ./backend/resourcemodel ./backend/kind/... ./backend/refresh/snapshot
-npm run typecheck --prefix frontend
-npm run test --prefix frontend -- <relevant spec or module>
+mise exec -- go generate ./backend   # regenerate detail bindings after adding/changing a kind
+mise exec -- go test ./backend ./backend/resources/... ./backend/resourcemodel ./backend/kind/... ./backend/refresh/snapshot
+mise exec -- npm run typecheck --prefix frontend
+mise exec -- npm run test --prefix frontend -- <relevant spec or module>
 ```
 
 Then run the final gate for non-documentation work:
 
 ```sh
-mage qc:prerelease
+mise exec -- mage qc:prerelease
 git diff --check
 git status --short
 ```
 
-Because `mage qc:prerelease` runs frontend lint-fix, inspect the worktree after
+Because `mise exec -- mage qc:prerelease` runs frontend lint-fix, inspect the worktree after
 it completes.

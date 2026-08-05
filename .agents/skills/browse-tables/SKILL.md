@@ -32,9 +32,11 @@ Read:
 - `backend/refresh/system/registrations.go`
 - `backend/refresh/resourcestream`
 
-The object catalog owns discovery, existence, namespace listings, cluster
-listings, and canonical identity. Typed refresh snapshots may add richer row
-data, but they must preserve catalog-shaped identity.
+The object catalog owns discovery, existence, namespace metadata used by Browse
+filters, cluster listings, and canonical identity. The `namespaces` refresh
+domain owns namespace LIST rows; do not infer those rows from catalog entries.
+Typed refresh snapshots may add richer row data, but they must preserve
+catalog-shaped identity.
 
 ## Frontend Entry Points
 
@@ -256,20 +258,20 @@ pagination, explicitly check:
 - [ ] Tests cover the changed refresh, catalog, table, or large-data behavior.
 - [ ] Broad table-mode changes include a contract/static test or other
       enforcement for new production table usages.
-- [ ] Non-doc changes pass `mage qc:prerelease`.
+- [ ] Non-doc changes pass `mise exec -- mage qc:prerelease`.
 
 ## Validation
 
 Use focused checks while iterating:
 
 ```sh
-go test ./backend/objectcatalog ./backend/refresh/snapshot ./backend/refresh/system
-npm run typecheck --prefix frontend
-npm run test --prefix frontend -- browse tables cluster namespace
+mise exec -- go test ./backend/objectcatalog ./backend/refresh/snapshot ./backend/refresh/system
+mise exec -- npm run typecheck --prefix frontend
+mise exec -- npm run test --prefix frontend -- browse tables cluster namespace
 ```
 
-For broad shared-table changes, also run `mage qc:knip`, then
-`mage qc:prerelease` for non-documentation changes.
+For broad shared-table changes, also run `mise exec -- mage qc:knip`, then
+`mise exec -- mage qc:prerelease` for non-documentation changes.
 
 For tier 2 or 3 table-mode work, validation must include a contract/static test
 or equivalent check that detects new production `GridTable` usage without mode

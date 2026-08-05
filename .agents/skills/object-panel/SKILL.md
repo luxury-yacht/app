@@ -42,10 +42,13 @@ GVK/object identity. Rich detail and imperative operations belong in
 `backend/resources`; list/table snapshot payloads belong in
 `backend/refresh/snapshot`.
 
-When adding a typed detail fetcher in `backend/object_detail_provider.go`, also
-add exact-GVK capability metadata in `objectDetailFetcherGVKs`. That map
-declares which concrete built-in GVK the typed fetcher can serve; it is not a
-resource identity source and must not be used as a catalog replacement.
+When adding a typed detail fetcher, declare the kind's `appbinding.Spec`, attach
+it to the per-kind descriptor, and run
+`mise exec -- go generate ./backend`. The generated `objectDetailFetchers` map
+provides dispatch, while `objectDetailFetcherGVKs` is derived from that map and
+`resourcecontract.BuiltinResources`; do not hand-edit either map. Add a
+`detailFetcherVersionPins` entry only when the built-in contract intentionally
+contains more than one version for the same kind.
 
 ## Frontend Entry Points
 
@@ -133,16 +136,16 @@ and the freshness block rides the query payload's `metrics`.
 - [ ] Age display uses `LiveAgeText` or shared age columns with timestamps
       rather than refetching details to update relative text.
 - [ ] Tests cover the changed tab, action, or identity flow.
-- [ ] Non-doc changes pass `mage qc:prerelease`.
+- [ ] Non-doc changes pass `mise exec -- mage qc:prerelease`.
 
 ## Validation
 
 Use focused checks while iterating:
 
 ```sh
-go test ./backend ./backend/resources/...
-npm run typecheck --prefix frontend
-npm run test --prefix frontend -- object-panel
+mise exec -- go test ./backend ./backend/resources/...
+mise exec -- npm run typecheck --prefix frontend
+mise exec -- npm run test --prefix frontend -- object-panel
 ```
 
-Then run `mage qc:prerelease` for non-documentation changes.
+Then run `mise exec -- mage qc:prerelease` for non-documentation changes.

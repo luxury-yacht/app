@@ -78,23 +78,24 @@ genuinely un-tightenable.
    - *Green:* change the type; let the compiler list the consumers to update.
    - *Refactor:* delete the now-unreachable runtime guards and any dead branch
      (bottom-up, same change).
-7. **Verify:** `mage qc:prerelease` before reporting complete.
+7. **Verify:** `mise exec -- mage qc:prerelease` before reporting complete.
 
 ## Audit greps
 
 ```bash
 # Flag soup: 2+ boolean state flags near each other
-grep -rnE "is(Loading|Error|Fetching|Empty|Ready|Connected|Pending|Stopping)\b\s*[:?]" \
-  frontend/src "--include=*.ts" "--include=*.tsx" | grep -vE "\.test\.|\.stories\."
+rg -n -g '*.ts' -g '*.tsx' \
+  "is(Loading|Error|Fetching|Empty|Ready|Connected|Pending|Stopping)\b\s*[:?]" \
+  frontend/src | rg -v "\.(test|stories)\."
 
 # Stringly-typed states that should be literal unions
-grep -rnE "(status|phase|state):\s*string\b" frontend/src "--include=*.ts" "--include=*.tsx"
+rg -n -g '*.ts' -g '*.tsx' "(status|phase|state):\s*string\b" frontend/src
 
 # Existing good unions to emulate
-grep -rnE "status:\s*['\"](loading|error|ready|idle|empty)['\"]" frontend/src
+rg -n "status:\s*['\"](loading|error|ready|idle|empty)['\"]" frontend/src
 
 # Backend string-typed states (candidates for validated constructors)
-grep -rnE "type\s+\w*(State|Status|Phase|Lifecycle)\s+string" backend "--include=*.go"
+rg -n -g '*.go' "type\s+\w*(State|Status|Phase|Lifecycle)\s+string" backend
 ```
 
 ## What NOT to do

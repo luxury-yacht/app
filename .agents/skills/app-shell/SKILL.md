@@ -92,16 +92,16 @@ Settings-specific contract:
       cluster/object identity behavior.
 - [ ] Visual changes reuse existing CSS/tokens and avoid inline styles.
 - [ ] Tests cover persistence, keyboard/focus, and changed UI state.
-- [ ] Non-doc changes pass `mage qc:prerelease`.
+- [ ] Non-doc changes pass `mise exec -- mage qc:prerelease`.
 
 ## Validation
 
 Use focused checks while iterating:
 
 ```sh
-npm run typecheck --prefix frontend
-npm run test --prefix frontend -- settings command-palette shortcuts modals dockable favorites
+mise exec -- npm run typecheck --prefix frontend
+mise exec -- npm run test --prefix frontend -- settings command-palette shortcuts modals dockable favorites
 ```
 
 Use browser or Storybook validation for visual behavior, then run
-`mage qc:prerelease` for non-documentation changes.
+`mise exec -- mage qc:prerelease` for non-documentation changes.

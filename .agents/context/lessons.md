@@ -10,9 +10,9 @@ sessions. Keep it short, durable, and tied to code contracts.
 - Start with `origin/main...HEAD` unless the user gives a different base.
 - For merge-readiness, report blockers first, then validation state, then a
   brief summary.
-- `mage qc:prerelease` is the final gate for non-documentation work. It runs
+- `mise exec -- mage qc:prerelease` is the final gate for non-documentation work. It runs
   frontend lint fix, so inspect the worktree afterward.
-- Consider `mage qc:knip` for broad frontend/shared-surface changes even when
+- Consider `mise exec -- mage qc:knip` for broad frontend/shared-surface changes even when
   another targeted frontend check passed.
 
 ## Identity And Resource Contracts
@@ -49,9 +49,11 @@ sessions. Keep it short, durable, and tied to code contracts.
   manual refresh, event stream, and resource stream requests should route to
   exactly one scoped cluster and reject multi-cluster selectors.
 - Frontend resource stream descriptors own row identity, sorting, drift keys,
-  row collections, and metric preservation. Backend resource stream supported
-  domains live in `backend/refresh/resourcestream/domains.go`; keep both aligned
-  with refresh domain registration.
+  row collections, and metric preservation. Backend support comes from each
+  kind's `Stream` descriptor facet, selected through
+  `kindregistry.StreamDescriptorsForDomain` and registered through
+  `backend/refresh/resourcestream/stream_descriptor_dispatch.go`; keep those
+  facets aligned with frontend stream descriptors and refresh-domain registration.
 - Keep resource stream connection lifecycle, subscription state, pure row
   merge math, and manager-owned resync/drift/store mutation in their dedicated
   modules. A descriptor table should not hide pods, endpoint slices, workloads,
@@ -114,6 +116,6 @@ sessions. Keep it short, durable, and tied to code contracts.
 
 ## Local Development
 
-- If the Wails development server is not running, start it with `mage dev`,
+- If the Wails development server is not running, start it with `mise exec -- mage dev`,
   wait for the command to report its active URL, and use that URL for rendered
   UI diagnosis.

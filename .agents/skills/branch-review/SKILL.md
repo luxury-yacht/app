@@ -65,7 +65,7 @@ For every meaningful change, inspect the owning contract:
 | Query-backed resource streams and resource WebSocket signals          | `docs/architecture/data-freshness.md`, `docs/architecture/data-layer.md`                                                                                     |
 | Identity, status, lifecycle, links, facts, object refs                | `docs/architecture/shared-resource-model.md`, `.agents/skills/shared-resource-model/SKILL.md`                                                               |
 | Resource kind vocabulary, generated dispatch, per-kind behavior       | `docs/architecture/resource-kind-registry.md`, `.agents/skills/add-resource/SKILL.md`                                                                       |
-| Browse/catalog/discovery/namespaces                                   | `docs/architecture/catalog.md`, `.agents/skills/browse-tables/SKILL.md`                                                                                     |
+| Browse/catalog/discovery/namespace metadata and LIST rows             | `docs/architecture/catalog.md`, `docs/architecture/refresh-system.md`, `.agents/skills/browse-tables/SKILL.md`                                              |
 | Frontend resource reads, app-state reads, stores                      | `docs/architecture/data-access.md`                                                                                                                          |
 | Permissions/capabilities/RBAC UI                                      | `docs/architecture/permissions.md`, `.agents/skills/permissions-capabilities/SKILL.md`                                                                      |
 | Tables, query-backed pages, large datasets                            | `docs/frontend/gridtable.md`, `docs/architecture/large-data.md`                                                                                             |
@@ -85,7 +85,8 @@ Look for these before considering the branch ready:
 - Object references crossing boundaries carry `clusterId`, `group`, `version`,
   `kind`, and concrete `namespace`/`name` when applicable.
 - Object catalog remains the source of truth for discovery, existence,
-  GVK/GVR identity, browse, namespace listings, and cluster listings.
+  GVK/GVR identity, Browse namespace metadata, and cluster listings;
+  namespace LIST rows remain owned by the `namespaces` refresh domain.
 - Backend status semantics are projected as `status`, `statusState`,
   `statusPresentation`, and optional `statusReason` where primary status is
   rendered.
@@ -118,27 +119,27 @@ Look for these before considering the branch ready:
 
 Run focused tests first when the branch has clear areas:
 
-- Backend shared/resource-model/refresh changes: focused `go test` packages.
-- Frontend changes: targeted Vitest specs and `npm run typecheck --prefix frontend`.
+- Backend shared/resource-model/refresh changes: focused `mise exec -- go test` packages.
+- Frontend changes: targeted Vitest specs and `mise exec -- npm run typecheck --prefix frontend`.
 - Runtime operations/logs/shell/port-forward/drain: focused backend workflow
   tests plus affected frontend lifecycle/orchestrator tests.
-- Broad frontend/shared changes: consider `mage qc:knip`.
+- Broad frontend/shared changes: consider `mise exec -- mage qc:knip`.
 
 Before a final "ready" verdict on non-documentation or non-comment-only work,
 run:
 
 ```sh
-mage qc:prerelease
+mise exec -- mage qc:prerelease
 git diff --check
 git status --short
 ```
 
-If `mage qc:prerelease` cannot run or fails, report the exact command and first
+If `mise exec -- mage qc:prerelease` cannot run or fails, report the exact command and first
 concrete failure. Do not call the branch ready.
 
-`mage qc:prerelease` includes `lint:fix`, so inspect changed files afterward.
+`mise exec -- mage qc:prerelease` includes `lint:fix`, so inspect changed files afterward.
 
-For documentation-only or comment-only branches, `mage qc:prerelease` may be
+For documentation-only or comment-only branches, `mise exec -- mage qc:prerelease` may be
 skipped, but still run `git diff --check` and `git status --short` before the
 verdict.
 

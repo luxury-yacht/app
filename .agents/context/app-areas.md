@@ -9,7 +9,7 @@ It keeps workflow-specific work in perspective with the rest of Luxury Yacht.
 | ---------------------------- | ---------------------------------------------------------------------------------------------------------- | ---------------------------------------------------------------------------------- |
 | Multi-cluster model          | Cluster identity, selected/background clusters, cluster-scoped cache/store keys, aggregate backend routing/muxing | `.agents/skills/cluster-auth-lifecycle/SKILL.md`, `docs/architecture/multi-cluster.md` |
 | Refresh system               | Snapshot domains, streams, manual refresh, diagnostics, telemetry, per-cluster refresh subsystems          | `docs/architecture/data-freshness.md`, `docs/architecture/refresh-system.md`, `.agents/skills/refresh-subsystem/SKILL.md` |
-| Object catalog               | Discovery, GVK/GVR identity, browse, existence checks, namespace and cluster listings                      | `docs/architecture/catalog.md`                                                     |
+| Object catalog               | Discovery, GVK/GVR identity, browse, existence checks, namespace metadata, and cluster listings; namespace LIST rows belong to the `namespaces` refresh domain | `docs/architecture/catalog.md`, `docs/architecture/refresh-system.md`              |
 | Shared resource model        | Canonical object refs, status, lifecycle, facts, owner/relationship links                                  | `.agents/skills/shared-resource-model/SKILL.md`, `docs/architecture/shared-resource-model.md` |
 | Frontend data access         | Resource reads, app state reads, broker paths, paused-read behavior                                        | `docs/architecture/data-access.md`                                                 |
 | Permissions and capabilities | RBAC checks, permission-denied diagnostics, action availability                                            | `.agents/skills/permissions-capabilities/SKILL.md`, `docs/architecture/permissions.md` |
@@ -43,5 +43,5 @@ It keeps workflow-specific work in perspective with the rest of Luxury Yacht.
 2. Read the owning docs before changing code.
 3. Use `.agents/context/code-map.md` for exact entrypoints.
 4. Choose a workflow-specific skill only when the task actually matches it.
-5. Validate at the closest level first, then run `mage qc:prerelease` for
+5. Validate at the closest level first, then run `mise exec -- mage qc:prerelease` for
    non-documentation work.

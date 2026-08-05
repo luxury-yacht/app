@@ -29,7 +29,7 @@ Applies to Go code under `backend/`.
     integration, or fact slots, follow `docs/architecture/shared-resource-model.md`.
   - The `App.Get<Kind>` detail bindings and the object-panel detail-fetcher
     dispatch map are generated from each kind's `appbinding.Spec`; run
-    `go generate ./backend` after adding or changing a kind, and never hand-edit
+    `mise exec -- go generate ./backend` after adding or changing a kind, and never hand-edit
     `resource_details_generated.go` / `object_detail_fetchers_generated.go`.
 - Manual refreshes and streaming domains belong to the backend refresh registry + ManualQueue; avoid bespoke refresh/streaming code.
 
@@ -52,7 +52,7 @@ Applies to Go code under `backend/`.
 	`backend/internal/genrefreshcontracts`; register new DTO and enum types there,
 	set each domain's `refreshPayloadType` in
 	`backend/refresh/domain/refresh-domain-contract.json`, then run
-	`go generate ./backend`.
+	`mise exec -- go generate ./backend`.
 - Permission-gated domains: use `RegisterPermissionDeniedDomain` in `backend/refresh/snapshot/permission.go` and surface `PermissionIssue` entries through the refresh system permission-gate paths.
 - Manual refresh entrypoint: `/api/v2/refresh/{domain}` in `backend/refresh/api/server.go`, backed by `ManualQueue` in `backend/refresh/types.go`.
 - Per-cluster stream endpoints are wired in `backend/refresh/system/streams.go`; aggregate stream routes are wired in `backend/app_refresh_setup.go`.
@@ -102,11 +102,15 @@ Applies to Go code under `backend/`.
 
 ## HTTP Server (Refresh API)
 
-- The loopback HTTP server (`backend/refresh/api/`) is consumed by a native Wails
-  webview, not a browser. Browser security patterns (CORS, CSP, cookie flags) are
-  irrelevant. The security boundary is loopback binding + the random port.
+- The loopback HTTP server (`backend/refresh/api/`) is a private Wails webview
+  transport, not a public browser API. CORS handling is still required for
+  webview requests, preflight, and readable error responses; preserve it on
+  snapshot, manual-refresh, telemetry, metrics, and stream paths, including
+  errors emitted before the owning handler runs. Treat loopback binding and the
+  runtime-discovered port as exposure constraints, not substitutes for cluster
+  scoping, RBAC, or request validation.
 
 ## Testing Guidelines
 
-- Practice red/green/refactor TDD (see root `AGENTS.md` Critical Rules): write the failing `_test.go` case first, run `go test` to watch it fail for the right reason, then write the minimum to make it pass, then refactor under green.
+- Practice red/green/refactor TDD (see root `AGENTS.md` Critical Rules): write the failing `_test.go` case first, run `mise exec -- go test` to watch it fail for the right reason, then write the minimum to make it pass, then refactor under green.
 - Backend tests stay adjacent to their targets with `_test.go` suffixes and `TestXxx` functions.

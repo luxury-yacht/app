@@ -85,8 +85,9 @@ evidence that overturns the recorded verdict.
 
 **Deferred / trigger-gated (not current work):**
 
-- View-owned live-window fetch — `docs/plans/deferred/view-owned-window-fetch.md`
-  (the highest-priority planned refresh-layer refactor).
+- View-owned live-window fetch was a historical deferred candidate whose
+  temporary plan was removed. Re-inventory the current namespace and cluster
+  data paths and write a new plan before treating it as current work.
 - Large-data persistent SQLite catalog store — evidence-triggered; start only if
   a 100k+-object cluster reports Browse/Custom degradation.
 
@@ -222,7 +223,7 @@ When the user chooses an area:
 2. Resolve open questions before code changes.
 3. Implement phases in dependency order.
 4. Keep the plan current after each phase.
-5. For non-documentation work, finish with `mage qc:prerelease`, then inspect
+5. For non-documentation work, finish with `mise exec -- mage qc:prerelease`, then inspect
    `git status --short` because the gate may modify files.
 6. For documentation-only phases, at minimum run `git diff --check`.
 

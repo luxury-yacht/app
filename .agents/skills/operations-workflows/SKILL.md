@@ -83,17 +83,17 @@ Read:
 - [ ] Frontend state resets on cluster/namespace/object changes.
 - [ ] Logs preserve transport-specific behavior documented in the logs docs.
 - [ ] Tests cover lifecycle, permission-denied, and cleanup behavior.
-- [ ] Non-doc changes pass `mage qc:prerelease`.
+- [ ] Non-doc changes pass `mise exec -- mage qc:prerelease`.
 
 ## Validation
 
 Use focused checks while iterating:
 
 ```sh
-go test ./backend ./backend/resources/pods ./backend/resources/nodes ./backend/nodemaintenance
-go test ./backend/refresh/snapshot
-npm run typecheck --prefix frontend
-npm run test --prefix frontend -- Logs Shell port-forward drain orchestrator
+mise exec -- go test ./backend ./backend/resources/pods ./backend/resources/nodes ./backend/nodemaintenance
+mise exec -- go test ./backend/refresh/snapshot
+mise exec -- npm run typecheck --prefix frontend
+mise exec -- npm run test --prefix frontend -- Logs Shell port-forward drain orchestrator
 ```
 
-Then run `mage qc:prerelease` for non-documentation changes.
+Then run `mise exec -- mage qc:prerelease` for non-documentation changes.

@@ -27,7 +27,7 @@ Applies to React/TypeScript code under `frontend/`.
 
 - Add backend-owned domain payload DTOs to
   `backend/internal/genrefreshcontracts/registry.go`, then run
-  `go generate ./backend`. Never hand-edit
+  `mise exec -- go generate ./backend`. Never hand-edit
 	`frontend/src/core/refresh/types.generated.ts` or format it with Biome; the
 	Go generator is its only writer. Set domain payload mappings through
 	`refreshPayloadType` in `backend/refresh/domain/refresh-domain-contract.json`.

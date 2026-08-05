@@ -59,4 +59,6 @@ export const Default: Story = {
 
 ## Verification
 
-After creating the story, run `npx tsc --noEmit` from the `frontend/` directory to confirm it compiles without errors.
+After creating the story, run
+`mise exec -- npm run typecheck --prefix frontend` to confirm it compiles without
+errors.

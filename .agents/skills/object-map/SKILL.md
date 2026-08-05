@@ -58,7 +58,8 @@ For Gateway API fake-client tests, explicit list reactors may be required. Use
 
 Start here for visible behavior:
 
-- `frontend/src/modules/object-panel/components/ObjectPanel/objectMapSupport.ts`
+- `frontend/src/modules/object-panel/objectPanelRef.ts` (`MAP_SUPPORTED_KINDS`,
+  `isObjectMapSupportedKind`, and `hasCompleteObjectMapReference`)
 - `frontend/src/modules/object-map/ObjectMap.tsx`
 - `frontend/src/modules/object-map/useObjectMapModel.ts`
 - `frontend/src/modules/object-map/objectMapLayout.ts`
@@ -110,20 +111,20 @@ For visual-only renderer work:
       does not change backend graph identity or layout inputs.
 - [ ] Legend/copy uses user-facing terms such as "Objects" and "Links".
 - [ ] Tests cover the changed graph or rendering behavior.
-- [ ] Non-doc changes pass `mage qc:prerelease`.
+- [ ] Non-doc changes pass `mise exec -- mage qc:prerelease`.
 
 ## Validation
 
 Use focused checks while iterating:
 
 ```sh
-go test ./backend/refresh/snapshot -run ObjectMap
-npm run test --prefix frontend -- object-map
-npm run typecheck --prefix frontend
+mise exec -- go test ./backend/refresh/snapshot -run ObjectMap
+mise exec -- npm run test --prefix frontend -- object-map
+mise exec -- npm run typecheck --prefix frontend
 ```
 
 Then run the final gate for non-documentation work:
 
 ```sh
-mage qc:prerelease
+mise exec -- mage qc:prerelease
 ```

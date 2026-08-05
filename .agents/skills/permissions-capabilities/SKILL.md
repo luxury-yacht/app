@@ -65,16 +65,16 @@ gating, delete/scale/restart/trigger/suspend actions, or restricted-RBAC tests.
 - [ ] Restricted-RBAC behavior degrades visibly instead of silently hiding
       broken domains or actions.
 - [ ] Tests cover allowed, denied, and resolution-error cases.
-- [ ] Non-doc changes pass `mage qc:prerelease`.
+- [ ] Non-doc changes pass `mise exec -- mage qc:prerelease`.
 
 ## Validation
 
 Use focused checks while iterating:
 
 ```sh
-go test ./backend/capabilities ./backend/refresh/snapshot ./backend/refresh/system ./backend
-npm run typecheck --prefix frontend
-npm run test --prefix frontend -- capabilities ObjectPanel ActionsMenu diagnostics
+mise exec -- go test ./backend/capabilities ./backend/refresh/snapshot ./backend/refresh/system ./backend
+mise exec -- npm run typecheck --prefix frontend
+mise exec -- npm run test --prefix frontend -- capabilities ObjectPanel ActionsMenu diagnostics
 ```
 
-Then run `mage qc:prerelease` for non-documentation changes.
+Then run `mise exec -- mage qc:prerelease` for non-documentation changes.
