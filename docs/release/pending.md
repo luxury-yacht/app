@@ -6,3 +6,4 @@
 ### Fixed
 
 - `API` column is now sortable in Browse views.
+- Favorites was not restoring filter text data in some cases.
