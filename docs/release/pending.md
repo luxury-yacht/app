@@ -4,4 +4,4 @@
 
 ### Fixed
 
-- Permission-denied Kubernetes watches no longer appear as application errors and are not reported.
+- When a Kubernetes watch is denied due to the user's permissions, this is the app behaving as designed and is no longer reported as an application error.
