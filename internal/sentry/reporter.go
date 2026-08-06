@@ -515,10 +515,102 @@ func (r *sentryReporter) Shutdown(timeout time.Duration) bool {
 	return flushed
 }
 
-func (r *sentryReporter) withHub(context Context, capture func(*sentry.Hub)) {
+func (r *sentryReporter) ensureOperationID(context Context) Context {
 	if context.OperationID == "" {
 		context.OperationID = fmt.Sprintf("backend-report-%d", r.operationID.Add(1))
 	}
+	return context
+}
+
+func reporterBreadcrumbForCapture(
+	breadcrumb Breadcrumb,
+	context Context,
+	clusterAlias string,
+) (*sentry.Breadcrumb, bool) {
+	if breadcrumb.OperationID != context.OperationID {
+		return nil, false
+	}
+	breadcrumbClusterID, _ := breadcrumb.Data["clusterId"].(string)
+	if breadcrumbClusterID != "" && breadcrumbClusterID != context.ClusterID {
+		return nil, false
+	}
+	return &sentry.Breadcrumb{
+		Category:  breadcrumb.Category,
+		Message:   breadcrumb.Message,
+		Level:     sentry.Level(breadcrumb.Level),
+		Data:      reporterBreadcrumbData(breadcrumb.OperationID, breadcrumbClusterID, clusterAlias),
+		Timestamp: breadcrumb.Timestamp,
+	}, true
+}
+
+// reporterBreadcrumbData is closed-by-default. A future caller adding a field
+// must deliberately extend this schema after a privacy review; arbitrary maps
+// never become telemetry just because they were logged.
+func reporterBreadcrumbData(operationID, breadcrumbClusterID, clusterAlias string) map[string]any {
+	data := map[string]any{}
+	if operationID != "" {
+		data["operationId"] = operationID
+	}
+	if breadcrumbClusterID != "" && clusterAlias != "" {
+		data["cluster.alias"] = clusterAlias
+	}
+	return data
+}
+
+func addReporterBreadcrumbs(
+	hub *sentry.Hub,
+	breadcrumbs []Breadcrumb,
+	context Context,
+	clusterAlias string,
+) {
+	for _, breadcrumb := range breadcrumbs {
+		prepared, include := reporterBreadcrumbForCapture(breadcrumb, context, clusterAlias)
+		if !include {
+			continue
+		}
+		hub.AddBreadcrumb(prepared, nil)
+	}
+}
+
+func setReporterScopeTags(scope *sentry.Scope, context Context, clusterAlias string) {
+	if context.Source != "" {
+		scope.SetTag("source", context.Source)
+	}
+	if clusterAlias != "" {
+		scope.SetTag("cluster.alias", clusterAlias)
+		// These private tags exist only inside the SDK pipeline. The final
+		// privacy boundary uses them to replace raw identifiers embedded in
+		// error text, then removes them before transport.
+		scope.SetTag("_privacy.cluster_id", context.ClusterID)
+		if context.ClusterName != "" {
+			scope.SetTag("_privacy.cluster_name", context.ClusterName)
+		}
+	}
+	if context.OperationID != "" {
+		scope.SetTag("operation.id", context.OperationID)
+	}
+	for index, name := range context.Operation.resourceNamesForRedaction() {
+		scope.SetTag(fmt.Sprintf("_privacy.resource_name.%d", index), name)
+	}
+}
+
+func setReporterErrorContext(scope *sentry.Scope, context Context) {
+	errorContext := sentry.Context{"operationId": context.OperationID}
+	if !context.Operation.isZero() {
+		errorContext["operation"] = context.Operation.telemetryContext()
+	}
+	scope.SetContext("error", errorContext)
+}
+
+func configureReporterScope(hub *sentry.Hub, context Context, clusterAlias string) {
+	hub.ConfigureScope(func(scope *sentry.Scope) {
+		setReporterScopeTags(scope, context, clusterAlias)
+		setReporterErrorContext(scope, context)
+	})
+}
+
+func (r *sentryReporter) withHub(context Context, capture func(*sentry.Hub)) {
+	context = r.ensureOperationID(context)
 	clusterAlias := r.aliasForCluster(context.ClusterID)
 	r.mu.RLock()
 	defer r.mu.RUnlock()
@@ -526,63 +618,8 @@ func (r *sentryReporter) withHub(context Context, capture func(*sentry.Hub)) {
 		return
 	}
 	hub := r.hub.Clone()
-	for _, breadcrumb := range r.breadcrumbs {
-		if breadcrumb.OperationID != context.OperationID {
-			continue
-		}
-		breadcrumbClusterID, _ := breadcrumb.Data["clusterId"].(string)
-		if breadcrumbClusterID != "" && breadcrumbClusterID != context.ClusterID {
-			continue
-		}
-		// Breadcrumb data is closed-by-default. A future caller adding a field
-		// must deliberately extend this schema after a privacy review; arbitrary
-		// maps never become telemetry just because they were logged.
-		data := map[string]any{}
-		if breadcrumb.OperationID != "" {
-			data["operationId"] = breadcrumb.OperationID
-		}
-		if breadcrumbClusterID != "" && clusterAlias != "" {
-			data["cluster.alias"] = clusterAlias
-		}
-		hub.AddBreadcrumb(&sentry.Breadcrumb{
-			Category:  breadcrumb.Category,
-			Message:   breadcrumb.Message,
-			Level:     sentry.Level(breadcrumb.Level),
-			Data:      data,
-			Timestamp: breadcrumb.Timestamp,
-		}, nil)
-	}
-	hub.ConfigureScope(func(scope *sentry.Scope) {
-		if context.Source != "" {
-			scope.SetTag("source", context.Source)
-		}
-		if clusterAlias != "" {
-			scope.SetTag("cluster.alias", clusterAlias)
-			// These private tags exist only inside the SDK pipeline. The final
-			// privacy boundary uses them to replace raw identifiers embedded in
-			// error text, then removes them before transport.
-			scope.SetTag("_privacy.cluster_id", context.ClusterID)
-			if context.ClusterName != "" {
-				scope.SetTag("_privacy.cluster_name", context.ClusterName)
-			}
-		}
-		if context.OperationID != "" {
-			scope.SetTag("operation.id", context.OperationID)
-		}
-		for index, name := range context.Operation.resourceNamesForRedaction() {
-			scope.SetTag(fmt.Sprintf("_privacy.resource_name.%d", index), name)
-		}
-		if !context.Operation.isZero() || context.OperationID != "" {
-			errorContext := sentry.Context{}
-			if !context.Operation.isZero() {
-				errorContext["operation"] = context.Operation.telemetryContext()
-			}
-			if context.OperationID != "" {
-				errorContext["operationId"] = context.OperationID
-			}
-			scope.SetContext("error", errorContext)
-		}
-	})
+	addReporterBreadcrumbs(hub, r.breadcrumbs, context, clusterAlias)
+	configureReporterScope(hub, context, clusterAlias)
 	capture(hub)
 }
 

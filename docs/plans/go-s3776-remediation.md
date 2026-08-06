@@ -173,13 +173,19 @@ Local progress through 2026-08-06 (Sonar confirmation pending):
 - [x] Reduced `addKubernetesStatusTags` to status-fact extraction followed by
       one Sentry scope application; status details and causes now have bounded
       sanitization stages.
+- [x] Characterized disabled capture, isolated hub cloning, lifecycle read-lock
+      protection during callbacks, and lock release with panic propagation.
+- [x] Reduced `(*sentryReporter).withHub` to the ordered capture lifecycle;
+      operation correlation, breadcrumb projection, scope tags, and structured
+      error context now have bounded stages.
 - [x] Focused package tests and `-race` pass. Package statement coverage is
-      88.6%; `telemetryReplacements`, `sanitizeOperationTelemetryContext`, and
-      `addKubernetesStatusTags` are 100.0%, and `prepareEventForSend` is 92.3%.
-- [x] The repository backend coverage task passes and records 88.6% statement
+      88.7%; `telemetryReplacements`, `sanitizeOperationTelemetryContext`,
+      `addKubernetesStatusTags`, and `(*sentryReporter).withHub` are 100.0%, and
+      `prepareEventForSend` is 92.3%.
+- [x] The repository backend coverage task passes and records 88.7% statement
       coverage for `internal/sentry`.
 - [x] The full `mage qc:prerelease` gate passes on the refactored source.
-- [ ] Confirm all four findings close in the next Sonar analysis without
+- [ ] Confirm all five findings close in the next Sonar analysis without
       creating or increasing another S3776 finding; keep the target boxes above
       open until that evidence exists.
 

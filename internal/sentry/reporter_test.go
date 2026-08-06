@@ -428,6 +428,61 @@ func TestReporterAutoCorrelatesErrorsWithoutAttachingUnscopedBreadcrumbs(t *test
 	require.Contains(t, event.Tags["operation.id"], "backend-report-")
 }
 
+func TestReporterWithHubSkipsCaptureWhenDisabled(t *testing.T) {
+	reporter := &sentryReporter{}
+	captured := false
+
+	reporter.withHub(Context{Source: "App"}, func(*sentry.Hub) {
+		captured = true
+	})
+
+	require.False(t, captured)
+}
+
+func TestReporterWithHubUsesIsolatedCloneAndProtectsCaptureLifecycle(t *testing.T) {
+	rootScope := sentry.NewScope()
+	rootScope.SetTag("root", "retained")
+	reporter := &sentryReporter{hub: sentry.NewHub(nil, rootScope)}
+	var capturedHub *sentry.Hub
+	lockAvailableDuringCapture := true
+
+	reporter.withHub(Context{Source: "Refresh", OperationID: "refresh-op-1"}, func(hub *sentry.Hub) {
+		capturedHub = hub
+		lockAvailableDuringCapture = reporter.mu.TryLock()
+		if lockAvailableDuringCapture {
+			reporter.mu.Unlock()
+		}
+		hub.ConfigureScope(func(scope *sentry.Scope) {
+			scope.SetTag("callback", "isolated")
+		})
+	})
+
+	require.NotNil(t, capturedHub)
+	require.NotSame(t, reporter.hub, capturedHub)
+	require.False(t, lockAvailableDuringCapture)
+	capturedEvent := capturedHub.Scope().ApplyToEvent(sentry.NewEvent(), nil, nil)
+	require.Equal(t, "retained", capturedEvent.Tags["root"])
+	require.Equal(t, "Refresh", capturedEvent.Tags["source"])
+	require.Equal(t, "refresh-op-1", capturedEvent.Tags["operation.id"])
+	require.Equal(t, "isolated", capturedEvent.Tags["callback"])
+
+	rootEvent := reporter.hub.Scope().ApplyToEvent(sentry.NewEvent(), nil, nil)
+	require.Equal(t, map[string]string{"root": "retained"}, rootEvent.Tags)
+}
+
+func TestReporterWithHubReleasesLifecycleLockAfterCapturePanic(t *testing.T) {
+	reporter := &sentryReporter{hub: sentry.NewHub(nil, sentry.NewScope())}
+
+	require.PanicsWithValue(t, "capture failed", func() {
+		reporter.withHub(Context{OperationID: "refresh-op-1"}, func(*sentry.Hub) {
+			panic("capture failed")
+		})
+	})
+
+	require.True(t, reporter.mu.TryLock())
+	reporter.mu.Unlock()
+}
+
 func TestReporterKeepsBreadcrumbsIsolatedByOperation(t *testing.T) {
 	transport := &recordingTransport{}
 	reporter, err := New(Config{
