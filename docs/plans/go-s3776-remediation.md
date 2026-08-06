@@ -280,6 +280,33 @@ permission checks, all-denied behavior, reuse versus replacement, no duplicate
 informers, and cleanup. Likely seam: pure desired-informer specification
 followed by one reconcile/apply stage. Preserve full GVR and cluster scope.
 
+Local progress through 2026-08-06 (Sonar confirmation pending):
+
+- [x] Traced CRD add/update/delete events through the per-cluster dynamic
+      client, exact namespace permission checks, namespace/cluster custom stream
+      selectors, and terminal manager teardown.
+- [x] Characterized restricted and all-namespace namespaced CRDs,
+      cluster-scoped CRDs, exact permission targets, partial permission success,
+      all-denied removal, incomplete and unknown CRD definitions, identical
+      informer reuse, changed-spec replacement, duplicate prevention, event
+      mapping, cleanup, and the stopped-manager gate.
+- [x] Reduced `(*Manager).ensureCustomInformer` to desired-plan construction,
+      exact permission filtering, and one apply call; replacement, map insertion,
+      and the terminal stopped check remain inside one `customInformerMu`
+      reconcile boundary before informer goroutines start.
+- [x] Focused package tests and `-race` pass; the handler and every extracted
+      plan/scope/permission/reconcile/construction/event/cleanup helper have
+      100.0% statement coverage.
+- [x] The repository backend coverage task passes and records 66.6% statement
+      coverage for `backend/refresh/resourcestream` and 76.9% for `backend`;
+      directly affected 1D coverage is 100.0%.
+- [x] `gocognit` v1.2.1 measures `(*Manager).ensureCustomInformer` at 2,
+      with the most complex extracted helper at 5.
+- [x] The full `mage qc:prerelease` gate passes on the refactored source.
+- [ ] Confirm the finding closes in the next Sonar analysis without creating
+      or increasing another S3776 finding; keep the target box above open until
+      that evidence exists.
+
 ---
 
 ## Phase 2: Deterministic transformations and projections

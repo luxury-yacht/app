@@ -169,6 +169,27 @@ type customResourceInformer struct {
 	stopOnce  sync.Once
 }
 
+type customInformerPlanAction uint8
+
+const (
+	customInformerPlanRetain customInformerPlanAction = iota
+	customInformerPlanRemove
+	customInformerPlanReconcile
+)
+
+type customInformerSpec struct {
+	gvr        schema.GroupVersionResource
+	kind       string
+	domain     string
+	namespaces []string
+}
+
+type customInformerPlan struct {
+	action  customInformerPlanAction
+	crdName string
+	spec    customInformerSpec
+}
+
 func (c *customResourceInformer) stop() {
 	if c == nil {
 		return
@@ -176,6 +197,15 @@ func (c *customResourceInformer) stop() {
 	c.stopOnce.Do(func() {
 		close(c.stopCh)
 	})
+}
+
+func (c *customResourceInformer) start() {
+	if c == nil {
+		return
+	}
+	for _, resourceInformer := range c.informers {
+		go resourceInformer.Run(c.stopCh)
+	}
 }
 
 // Manager fan-outs informer updates to websocket subscribers.
@@ -494,98 +524,152 @@ func (m *Manager) ensureCustomInformer(crd *apiextensionsv1.CustomResourceDefini
 	if m == nil || m.dynamicClient == nil || crd == nil {
 		return
 	}
-	customDomain := domainNamespaceCustom
-	namespace := metav1.NamespaceAll
-	switch crd.Spec.Scope {
-	case apiextensionsv1.NamespaceScoped:
-		customDomain = domainNamespaceCustom
-		namespace = metav1.NamespaceAll
-	case apiextensionsv1.ClusterScoped:
-		customDomain = domainClusterCustom
-		namespace = ""
-	default:
-		m.removeCustomInformer(crd.Name)
-		return
+	plan := desiredCustomInformerPlan(crd, m.allowedNamespaces)
+	plan = m.authorizeCustomInformerPlan(plan)
+	m.applyCustomInformerPlan(plan)
+}
+
+func desiredCustomInformerPlan(
+	crd *apiextensionsv1.CustomResourceDefinition,
+	allowedNamespaces []string,
+) customInformerPlan {
+	plan := customInformerPlan{action: customInformerPlanRetain, crdName: crd.Name}
+	domain, namespaces, ok := customInformerScopes(crd.Spec.Scope, allowedNamespaces)
+	if !ok {
+		plan.action = customInformerPlanRemove
+		return plan
 	}
 	version := preferredCustomCRDVersion(crd)
 	if version == "" || crd.Spec.Names.Plural == "" {
-		return
+		return plan
 	}
-	gvr := schema.GroupVersionResource{
-		Group:    crd.Spec.Group,
-		Version:  version,
-		Resource: crd.Spec.Names.Plural,
+	plan.action = customInformerPlanReconcile
+	plan.spec = customInformerSpec{
+		gvr: schema.GroupVersionResource{
+			Group:    crd.Spec.Group,
+			Version:  version,
+			Resource: crd.Spec.Names.Plural,
+		},
+		kind:       crd.Spec.Names.Kind,
+		domain:     domain,
+		namespaces: namespaces,
 	}
-	kind := crd.Spec.Names.Kind
+	return plan
+}
 
-	// One dynamic informer per CRD streams custom resource updates. Under a
-	// namespace scope a namespaced CRD fans out one informer per configured
-	// namespace (the scoped identity typically cannot watch cluster-wide);
-	// the unscoped path is the same loop with a single all-namespaces entry.
-	namespaces := []string{namespace}
-	if customDomain == domainNamespaceCustom && len(m.allowedNamespaces) > 0 {
-		namespaces = append([]string(nil), m.allowedNamespaces...)
+func customInformerScopes(
+	scope apiextensionsv1.ResourceScope,
+	allowedNamespaces []string,
+) (string, []string, bool) {
+	switch scope {
+	case apiextensionsv1.NamespaceScoped:
+		if len(allowedNamespaces) > 0 {
+			return domainNamespaceCustom, append([]string(nil), allowedNamespaces...), true
+		}
+		return domainNamespaceCustom, []string{metav1.NamespaceAll}, true
+	case apiextensionsv1.ClusterScoped:
+		return domainClusterCustom, []string{""}, true
+	default:
+		return "", nil, false
 	}
-	permittedNamespaces := make([]string, 0, len(namespaces))
-	for _, ns := range namespaces {
-		if m.canListWatchInNamespace(gvr.Group, gvr.Resource, ns) {
-			permittedNamespaces = append(permittedNamespaces, ns)
+}
+
+func (m *Manager) authorizeCustomInformerPlan(plan customInformerPlan) customInformerPlan {
+	if plan.action != customInformerPlanReconcile {
+		return plan
+	}
+	permitted := make([]string, 0, len(plan.spec.namespaces))
+	for _, namespace := range plan.spec.namespaces {
+		if m.canListWatchInNamespace(plan.spec.gvr.Group, plan.spec.gvr.Resource, namespace) {
+			permitted = append(permitted, namespace)
 		}
 	}
-	if len(permittedNamespaces) == 0 {
-		m.removeCustomInformer(crd.Name)
+	if len(permitted) == 0 {
+		plan.action = customInformerPlanRemove
+		plan.spec = customInformerSpec{}
+		return plan
+	}
+	plan.spec.namespaces = permitted
+	return plan
+}
+
+func (spec customInformerSpec) matches(info *customResourceInformer) bool {
+	return info != nil &&
+		info.gvr == spec.gvr &&
+		info.kind == spec.kind &&
+		info.domain == spec.domain &&
+		slices.Equal(info.namespaces, spec.namespaces)
+}
+
+func (m *Manager) applyCustomInformerPlan(plan customInformerPlan) {
+	if plan.action == customInformerPlanRetain {
 		return
 	}
-	namespaces = permittedNamespaces
+	m.customInformerMu.Lock()
+	info := m.reconcileCustomInformerLocked(plan)
+	m.customInformerMu.Unlock()
+	info.start()
+}
 
+func (m *Manager) reconcileCustomInformerLocked(plan customInformerPlan) *customResourceInformer {
+	// The stopped gate, replacement, and map insert share Stop's lock so an
+	// informer can never be published after terminal teardown.
+	if m.stopped {
+		return nil
+	}
+	if plan.action == customInformerPlanRemove {
+		m.removeCustomInformerLocked(plan.crdName)
+		return nil
+	}
+	existing := m.customInformers[plan.crdName]
+	if plan.spec.matches(existing) {
+		return nil
+	}
+	m.removeCustomInformerLocked(plan.crdName)
+	info := m.newCustomResourceInformer(plan.spec)
+	m.customInformers[plan.crdName] = info
+	return info
+}
+
+func (m *Manager) newCustomResourceInformer(spec customInformerSpec) *customResourceInformer {
 	info := &customResourceInformer{
-		gvr:        gvr,
-		kind:       kind,
-		domain:     customDomain,
-		namespaces: append([]string(nil), namespaces...),
+		gvr:        spec.gvr,
+		kind:       spec.kind,
+		domain:     spec.domain,
+		namespaces: append([]string(nil), spec.namespaces...),
 		stopCh:     make(chan struct{}),
 	}
-
-	m.customInformerMu.Lock()
-	// Once stopped, never resurrect an informer; the check-and-insert below must
-	// stay atomic with Stop()'s drain, so both gate on stopped under this lock.
-	if m.stopped {
-		m.customInformerMu.Unlock()
-		return
-	}
-	existing := m.customInformers[crd.Name]
-	if existing != nil && existing.gvr == gvr && existing.kind == kind && existing.domain == customDomain && slices.Equal(existing.namespaces, namespaces) {
-		m.customInformerMu.Unlock()
-		return
-	}
-	if existing != nil {
-		existing.stop()
-		delete(m.customInformers, crd.Name)
-	}
-
-	for _, ns := range namespaces {
+	for _, namespace := range spec.namespaces {
 		dynamicInformer := dynamicinformer.NewFilteredDynamicInformer(
 			m.dynamicClient,
-			gvr,
-			ns,
+			spec.gvr,
+			namespace,
 			0,
 			cache.Indexers{cache.NamespaceIndex: cache.MetaNamespaceIndexFunc},
 			nil,
 		)
-		informer := dynamicInformer.Informer()
-		informer.AddEventHandler(cache.ResourceEventHandlerFuncs{
-			AddFunc:    func(obj interface{}) { m.handleCustomResource(obj, MessageTypeAdded, info) },
-			UpdateFunc: func(_, newObj interface{}) { m.handleCustomResource(newObj, MessageTypeModified, info) },
-			DeleteFunc: func(obj interface{}) { m.handleCustomResource(obj, MessageTypeDeleted, info) },
-		})
-		info.informers = append(info.informers, informer)
+		resourceInformer := dynamicInformer.Informer()
+		resourceInformer.AddEventHandler(customResourceStreamEventHandler(m, info))
+		info.informers = append(info.informers, resourceInformer)
 	}
-	m.customInformers[crd.Name] = info
-	m.customInformerMu.Unlock()
+	return info
+}
 
-	for _, informer := range info.informers {
-		go informer.Run(info.stopCh)
+func customResourceStreamEventHandler(m *Manager, info *customResourceInformer) cache.ResourceEventHandlerFuncs {
+	return cache.ResourceEventHandlerFuncs{
+		AddFunc:    func(obj interface{}) { m.handleCustomResource(obj, MessageTypeAdded, info) },
+		UpdateFunc: func(_, newObj interface{}) { m.handleCustomResource(newObj, MessageTypeModified, info) },
+		DeleteFunc: func(obj interface{}) { m.handleCustomResource(obj, MessageTypeDeleted, info) },
 	}
+}
+
+func (m *Manager) removeCustomInformerLocked(crdName string) {
+	informer := m.customInformers[crdName]
+	if informer == nil {
+		return
+	}
+	informer.stop()
+	delete(m.customInformers, crdName)
 }
 
 func (m *Manager) removeCustomInformer(crdName string) {
@@ -594,10 +678,7 @@ func (m *Manager) removeCustomInformer(crdName string) {
 	}
 	m.customInformerMu.Lock()
 	defer m.customInformerMu.Unlock()
-	if informer, ok := m.customInformers[crdName]; ok {
-		informer.stop()
-		delete(m.customInformers, crdName)
-	}
+	m.removeCustomInformerLocked(crdName)
 }
 
 func (m *Manager) handleCustomResource(obj interface{}, updateType MessageType, info *customResourceInformer) {
