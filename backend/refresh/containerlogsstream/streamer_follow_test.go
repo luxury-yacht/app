@@ -240,6 +240,154 @@ func TestFollowContainerRetriesAfterStreamFailure(t *testing.T) {
 	}
 }
 
+func TestFollowContainerStopsOnNotFoundWithoutUserFacingError(t *testing.T) {
+	baseClient := fake.NewClientset()
+	delegateCore := baseClient.CoreV1()
+	podsOverride := newLogPodsWithResponses(delegateCore.Pods("default"), "default", []logResponse{{
+		status: http.StatusNotFound,
+		body:   `{"kind":"Status","apiVersion":"v1","status":"Failure","reason":"NotFound","code":404}`,
+	}})
+	client := &stubClient{
+		Clientset: baseClient,
+		core: &logCore{CoreV1Interface: delegateCore, overrides: map[string]*logPods{
+			"default": podsOverride,
+		}},
+	}
+	streamer := NewStreamer(client, applog.Noop, nil)
+	errCh := make(chan error, 1)
+	done := make(chan struct{})
+	go func() {
+		streamer.followContainer(
+			context.Background(),
+			containerTarget{namespace: "default", pod: "gone", container: "app"},
+			containerlogs.LineFilter{},
+			make(chan Entry, 1),
+			errCh,
+			make(chan int, 1),
+		)
+		close(done)
+	}()
+
+	select {
+	case <-done:
+	case <-time.After(time.Second):
+		t.Fatal("NotFound should stop the follower without reconnect backoff")
+	}
+	select {
+	case err := <-errCh:
+		t.Fatalf("NotFound should not emit a user-facing stream error: %v", err)
+	default:
+	}
+}
+
+func TestFollowContainerFiltersLinesAndAccountsForFullDropChannel(t *testing.T) {
+	baseClient := fake.NewClientset()
+	ensureTestPod(t, baseClient, "default", "busy-pod", corev1.PodRunning)
+	delegateCore := baseClient.CoreV1()
+	origin := time.Unix(0, 0)
+	podsOverride := newLogPods(delegateCore.Pods("default"), "default", []string{
+		buildContainerLogsStream(
+			origin,
+			[]time.Duration{time.Millisecond, 2 * time.Millisecond, 3 * time.Millisecond},
+			[]string{"info ignored", "error first", "error second"},
+		),
+	})
+	client := &stubClient{
+		Clientset: baseClient,
+		core: &logCore{CoreV1Interface: delegateCore, overrides: map[string]*logPods{
+			"default": podsOverride,
+		}},
+	}
+	recorder := telemetry.NewRecorder()
+	streamer := NewStreamer(client, applog.Noop, recorder)
+	filter, err := containerlogs.NewLineFilter("error", "")
+	require.NoError(t, err)
+	ctx, cancel := context.WithCancel(context.Background())
+	dropCh := make(chan int, 1)
+	done := make(chan struct{})
+	go func() {
+		streamer.followContainer(
+			ctx,
+			containerTarget{namespace: "default", pod: "busy-pod", container: "app"},
+			filter,
+			make(chan Entry),
+			make(chan error, 1),
+			dropCh,
+		)
+		close(done)
+	}()
+
+	require.Eventually(t, func() bool {
+		return len(dropCh) == 1
+	}, time.Second, 10*time.Millisecond)
+	require.Eventually(t, func() bool {
+		for _, status := range recorder.SnapshotSummary().Streams {
+			if status.Name == telemetry.StreamContainerLogs && status.DroppedMessages > 0 {
+				return true
+			}
+		}
+		return false
+	}, time.Second, 10*time.Millisecond, "overflowing the drop channel must still reach telemetry")
+	cancel()
+	select {
+	case <-done:
+	case <-time.After(time.Second):
+		t.Fatal("busy follower did not stop after cancellation")
+	}
+}
+
+func TestFollowContainerPreCancelledContextDoesNotOpenStream(t *testing.T) {
+	baseClient := fake.NewClientset()
+	delegateCore := baseClient.CoreV1()
+	podsOverride := newLogPods(delegateCore.Pods("default"), "default", nil)
+	client := &stubClient{
+		Clientset: baseClient,
+		core: &logCore{CoreV1Interface: delegateCore, overrides: map[string]*logPods{
+			"default": podsOverride,
+		}},
+	}
+	ctx, cancel := context.WithCancel(context.Background())
+	cancel()
+	NewStreamer(client, applog.Noop, nil).followContainer(
+		ctx,
+		containerTarget{namespace: "default", pod: "never-opened", container: "app"},
+		containerlogs.LineFilter{},
+		make(chan Entry),
+		make(chan error),
+		make(chan int),
+	)
+	require.Zero(t, podsOverride.containerRequestCount("app"))
+}
+
+func TestFollowContainerClosesCompletedStreamExactlyOnce(t *testing.T) {
+	baseClient := fake.NewClientset()
+	ensureTestPod(t, baseClient, "default", "completed-pod", corev1.PodSucceeded)
+	delegateCore := baseClient.CoreV1()
+	closeCalls := 0
+	podsOverride := newLogPodsWithResponses(delegateCore.Pods("default"), "default", []logResponse{{
+		status:  http.StatusOK,
+		body:    buildContainerLogsStream(time.Unix(0, 0), []time.Duration{time.Millisecond}, []string{"final"}),
+		onClose: func() { closeCalls++ },
+	}})
+	client := &stubClient{
+		Clientset: baseClient,
+		core: &logCore{CoreV1Interface: delegateCore, overrides: map[string]*logPods{
+			"default": podsOverride,
+		}},
+	}
+	entries := make(chan Entry, 1)
+	NewStreamer(client, applog.Noop, nil).followContainer(
+		context.Background(),
+		containerTarget{namespace: "default", pod: "completed-pod", container: "app"},
+		containerlogs.LineFilter{},
+		entries,
+		make(chan error, 1),
+		make(chan int, 1),
+	)
+	require.Equal(t, 1, closeCalls)
+	require.Equal(t, "final", (<-entries).Line)
+}
+
 func TestFollowContainerStopsAfterInitCompletes(t *testing.T) {
 	baseClient := fake.NewClientset()
 	ensureTestPod(t, baseClient, "default", "my-pod", corev1.PodRunning)
@@ -526,8 +674,9 @@ func (l *logCore) Pods(namespace string) corev1client.PodInterface {
 }
 
 type logResponse struct {
-	body   string
-	status int
+	body    string
+	status  int
+	onClose func()
 }
 
 type logPods struct {
@@ -537,6 +686,7 @@ type logPods struct {
 	mu         sync.Mutex
 	streams    []logResponse
 	sinceTimes []*metav1.Time
+	containers []string
 }
 
 func newLogPods(delegate corev1client.PodInterface, namespace string, streams []string) *logPods {
@@ -565,6 +715,9 @@ func (p *logPods) GetLogs(name string, opts *corev1.PodLogOptions) *restclient.R
 	} else {
 		p.sinceTimes = append(p.sinceTimes, nil)
 	}
+	if opts != nil {
+		p.containers = append(p.containers, opts.Container)
+	}
 
 	resp := logResponse{status: http.StatusOK}
 	if len(p.streams) > 0 {
@@ -585,7 +738,10 @@ func (p *logPods) GetLogs(name string, opts *corev1.PodLogOptions) *restclient.R
 		Client: fakerest.CreateHTTPClient(func(*http.Request) (*http.Response, error) {
 			return &http.Response{
 				StatusCode: status,
-				Body:       io.NopCloser(strings.NewReader(body)),
+				Body: &callbackReadCloser{
+					Reader:  strings.NewReader(body),
+					onClose: resp.onClose,
+				},
 			}, nil
 		}),
 	}
@@ -601,4 +757,28 @@ func (p *logPods) GetLogs(name string, opts *corev1.PodLogOptions) *restclient.R
 	}
 
 	return req
+}
+
+func (p *logPods) containerRequestCount(container string) int {
+	p.mu.Lock()
+	defer p.mu.Unlock()
+	count := 0
+	for _, requested := range p.containers {
+		if requested == container {
+			count++
+		}
+	}
+	return count
+}
+
+type callbackReadCloser struct {
+	io.Reader
+	onClose func()
+}
+
+func (c *callbackReadCloser) Close() error {
+	if c.onClose != nil {
+		c.onClose()
+	}
+	return nil
 }

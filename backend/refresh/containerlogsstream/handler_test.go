@@ -4,9 +4,12 @@ import (
 	"context"
 	"encoding/json"
 	"errors"
+	"fmt"
 	"net/http"
 	"net/http/httptest"
 	"net/url"
+	"slices"
+	"strconv"
 	"strings"
 	"sync"
 	"testing"
@@ -274,6 +277,82 @@ func TestMatchNoneStreamDoesNotReportHeartbeatTimeout(t *testing.T) {
 	require.True(t, shouldRecordHeartbeatTimeout(false, now.Add(-time.Hour), now))
 }
 
+func TestNewHandlerRequiresKubernetesClient(t *testing.T) {
+	handler, err := NewHandler(nil, applog.Noop, telemetry.NewRecorder())
+	require.Nil(t, handler)
+	require.EqualError(t, err, "containerlogsstream: kubernetes client is required")
+}
+
+func TestServeHTTPEarlyResponsesIncludeCORS(t *testing.T) {
+	handler, err := NewHandler(fake.NewClientset(), applog.Noop, telemetry.NewRecorder())
+	require.NoError(t, err)
+
+	tests := []struct {
+		name             string
+		method           string
+		target           string
+		response         http.ResponseWriter
+		expectedStatus   int
+		expectedBodyPart string
+	}{
+		{
+			name:           "preflight",
+			method:         http.MethodOptions,
+			target:         "/",
+			response:       httptest.NewRecorder(),
+			expectedStatus: http.StatusNoContent,
+		},
+		{
+			name:           "unsupported method",
+			method:         http.MethodPost,
+			target:         "/",
+			response:       httptest.NewRecorder(),
+			expectedStatus: http.StatusMethodNotAllowed,
+		},
+		{
+			name:             "response cannot flush",
+			method:           http.MethodGet,
+			target:           "/?scope=cluster-a|default:/v1:pod:web",
+			response:         &noFlushRecorder{header: make(http.Header)},
+			expectedStatus:   http.StatusInternalServerError,
+			expectedBodyPart: "streaming not supported",
+		},
+		{
+			name:             "invalid scope",
+			method:           http.MethodGet,
+			target:           "/?scope=default:/v1:pod:web",
+			response:         newFlushRecorder(),
+			expectedStatus:   http.StatusBadRequest,
+			expectedBodyPart: "cluster",
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			req := httptest.NewRequest(tt.method, tt.target, nil)
+			req.Header.Set("Origin", "https://desktop.invalid")
+			handler.ServeHTTP(tt.response, req)
+
+			require.Equal(t, "https://desktop.invalid", tt.response.Header().Get("Access-Control-Allow-Origin"))
+			require.Equal(t, "Origin", tt.response.Header().Get("Vary"))
+			switch response := tt.response.(type) {
+			case *httptest.ResponseRecorder:
+				require.Equal(t, tt.expectedStatus, response.Code)
+				if tt.method == http.MethodOptions {
+					require.Equal(t, "GET, OPTIONS", response.Header().Get("Access-Control-Allow-Methods"))
+					require.Equal(t, "Content-Type", response.Header().Get("Access-Control-Allow-Headers"))
+				}
+			case *noFlushRecorder:
+				require.Equal(t, tt.expectedStatus, response.status)
+				require.Contains(t, response.body.String(), tt.expectedBodyPart)
+			case *flushRecorder:
+				require.Equal(t, tt.expectedStatus, response.Status())
+				require.Contains(t, response.Body(), tt.expectedBodyPart)
+			}
+		})
+	}
+}
+
 func TestServeHTTPRequiresFlusher(t *testing.T) {
 	client := fake.NewClientset()
 	handler, err := NewHandler(client, applog.Noop, telemetry.NewRecorder())
@@ -418,9 +497,11 @@ func TestServeHTTPEmitsPermissionDeniedPayload(t *testing.T) {
 	require.NoError(t, err)
 
 	req := httptest.NewRequest(http.MethodGet, "/?scope=cluster-a|default:batch/v1:job:my-job", nil)
+	req.Header.Set("Origin", "https://desktop.invalid")
 	rec := newFlushRecorder()
 
 	handler.ServeHTTP(rec, req)
+	require.Equal(t, "https://desktop.invalid", rec.Header().Get("Access-Control-Allow-Origin"))
 
 	events := parseSSEEvents(rec.Body())
 	// Expect 2 events: connected event + error event
@@ -437,6 +518,406 @@ func TestServeHTTPEmitsPermissionDeniedPayload(t *testing.T) {
 	require.NotNil(t, errEvent.ErrorDetails)
 	require.Equal(t, "container-logs", errEvent.ErrorDetails.Details.Domain)
 	require.Equal(t, logPermissionResource, errEvent.ErrorDetails.Details.Resource)
+	require.Equal(t, connected.Sequence+1, errEvent.Sequence)
+}
+
+func TestServeHTTPLimiterDenialKeepsAllowedTargetAndWarns(t *testing.T) {
+	pod := &corev1.Pod{
+		ObjectMeta: metav1.ObjectMeta{Namespace: "default", Name: "limited-pod"},
+		Spec: corev1.PodSpec{Containers: []corev1.Container{
+			{Name: "app"},
+			{Name: "sidecar"},
+		}},
+	}
+	baseClient := fake.NewClientset(pod)
+	origin := time.Unix(0, 0)
+	logs := []string{buildContainerLogsStream(origin, []time.Duration{time.Millisecond}, []string{"allowed"})}
+	delegateCore := baseClient.CoreV1()
+	override := newLogPods(delegateCore.Pods("default"), "default", logs)
+	client := &stubClient{
+		Clientset: baseClient,
+		core: &logCore{CoreV1Interface: delegateCore, overrides: map[string]*logPods{
+			"default": override,
+		}},
+	}
+	handler, err := NewHandler(client, applog.Noop, telemetry.NewRecorder(), NewGlobalTargetLimiter(1))
+	require.NoError(t, err)
+
+	ctx, cancel := context.WithCancel(context.Background())
+	defer cancel()
+	req := httptest.NewRequest(http.MethodGet, "/?scope=cluster-a|default:/v1:pod:limited-pod", nil).WithContext(ctx)
+	rec := newFlushRecorder()
+	done := make(chan struct{})
+	go func() {
+		handler.ServeHTTP(rec, req)
+		close(done)
+	}()
+
+	var events []EventPayload
+	require.Eventually(t, func() bool {
+		events = parseSSEEvents(rec.Body())
+		return len(events) >= 2
+	}, time.Second, 10*time.Millisecond)
+	cancel()
+	select {
+	case <-done:
+	case <-time.After(time.Second):
+		t.Fatal("ServeHTTP did not release a limited session after cancellation")
+	}
+
+	initial := events[1]
+	require.Len(t, initial.Entries, 1)
+	require.Equal(t, "allowed", initial.Entries[0].Line)
+	require.NotNil(t, initial.Warnings)
+	require.Len(t, *initial.Warnings, 1)
+	require.Contains(t, (*initial.Warnings)[0], "global limit of 1")
+}
+
+func TestServeHTTPInitialTailKeepsPartialTargetResults(t *testing.T) {
+	pod := &corev1.Pod{
+		ObjectMeta: metav1.ObjectMeta{Namespace: "default", Name: "partial-pod"},
+		Spec: corev1.PodSpec{Containers: []corev1.Container{
+			{Name: "broken"},
+			{Name: "healthy"},
+		}},
+	}
+	baseClient := fake.NewClientset(pod)
+	origin := time.Unix(0, 0)
+	responses := []logResponse{
+		{body: "boom", status: http.StatusInternalServerError},
+		{body: buildContainerLogsStream(origin, []time.Duration{time.Millisecond}, []string{"healthy-line"}), status: http.StatusOK},
+	}
+	delegateCore := baseClient.CoreV1()
+	override := newLogPodsWithResponses(delegateCore.Pods("default"), "default", responses)
+	client := &stubClient{
+		Clientset: baseClient,
+		core: &logCore{CoreV1Interface: delegateCore, overrides: map[string]*logPods{
+			"default": override,
+		}},
+	}
+	handler, err := NewHandler(client, applog.Noop, telemetry.NewRecorder())
+	require.NoError(t, err)
+
+	ctx, cancel := context.WithCancel(context.Background())
+	defer cancel()
+	req := httptest.NewRequest(http.MethodGet, "/?scope=cluster-a|default:/v1:pod:partial-pod", nil).WithContext(ctx)
+	rec := newFlushRecorder()
+	done := make(chan struct{})
+	go func() {
+		handler.ServeHTTP(rec, req)
+		close(done)
+	}()
+
+	var events []EventPayload
+	require.Eventually(t, func() bool {
+		events = parseSSEEvents(rec.Body())
+		return len(events) >= 2
+	}, time.Second, 10*time.Millisecond)
+	cancel()
+	select {
+	case <-done:
+	case <-time.After(time.Second):
+		t.Fatal("ServeHTTP did not exit after partial-tail cancellation")
+	}
+
+	require.Len(t, events[1].Entries, 1)
+	require.Equal(t, "healthy-line", events[1].Entries[0].Line)
+	require.Empty(t, events[1].Error)
+	require.Equal(t, events[0].Sequence+1, events[1].Sequence)
+}
+
+func TestServeHTTPReportsNonPermissionInitialTailFailure(t *testing.T) {
+	client := fake.NewClientset()
+	client.PrependReactor("list", "pods", func(k8stesting.Action) (bool, runtime.Object, error) {
+		return true, nil, errors.New("pod inventory unavailable")
+	})
+	handler, err := NewHandler(client, applog.Noop, telemetry.NewRecorder())
+	require.NoError(t, err)
+	req := httptest.NewRequest(http.MethodGet, "/?scope=cluster-a|default:batch/v1:job:missing", nil)
+	rec := newFlushRecorder()
+
+	handler.ServeHTTP(rec, req)
+
+	events := parseSSEEvents(rec.Body())
+	require.Len(t, events, 1, "the connection event must precede an initial-tail HTTP failure")
+	require.Contains(t, rec.Body(), "pod inventory unavailable")
+}
+
+func TestServeHTTPHandlesWriteFailureDuringHandshake(t *testing.T) {
+	pod := &corev1.Pod{
+		ObjectMeta: metav1.ObjectMeta{Namespace: "default", Name: "write-pod"},
+		Spec:       corev1.PodSpec{Containers: []corev1.Container{{Name: "app"}}},
+	}
+	handler, err := NewHandler(fake.NewClientset(pod), applog.Noop, telemetry.NewRecorder())
+	require.NoError(t, err)
+
+	for _, failAt := range []int{1, 2} {
+		t.Run(strconv.Itoa(failAt), func(t *testing.T) {
+			rec := newFailingFlushRecorder(failAt)
+			req := httptest.NewRequest(http.MethodGet, "/?scope=cluster-a|default:/v1:pod:write-pod", nil)
+			handler.ServeHTTP(rec, req)
+			require.Equal(t, failAt, rec.WriteCount())
+		})
+	}
+}
+
+func TestServeHTTPEmitsPermissionDetailsForFollowFailure(t *testing.T) {
+	pod := &corev1.Pod{
+		ObjectMeta: metav1.ObjectMeta{Namespace: "default", Name: "forbidden-pod"},
+		Spec:       corev1.PodSpec{Containers: []corev1.Container{{Name: "app"}}},
+	}
+	baseClient := fake.NewClientset(pod)
+	origin := time.Unix(0, 0)
+	responses := []logResponse{
+		{body: buildContainerLogsStream(origin, []time.Duration{time.Millisecond}, []string{"initial"}), status: http.StatusOK},
+		{body: `{"kind":"Status","apiVersion":"v1","status":"Failure","message":"forbidden","reason":"Forbidden","code":403}`, status: http.StatusForbidden},
+	}
+	delegateCore := baseClient.CoreV1()
+	override := newLogPodsWithResponses(delegateCore.Pods("default"), "default", responses)
+	client := &stubClient{
+		Clientset: baseClient,
+		core: &logCore{CoreV1Interface: delegateCore, overrides: map[string]*logPods{
+			"default": override,
+		}},
+	}
+	handler, err := NewHandler(client, applog.Noop, telemetry.NewRecorder())
+	require.NoError(t, err)
+	ctx, cancel := context.WithTimeout(context.Background(), 2*time.Second)
+	defer cancel()
+	req := httptest.NewRequest(http.MethodGet, "/?scope=cluster-a|default:/v1:pod:forbidden-pod", nil).WithContext(ctx)
+	rec := newFlushRecorder()
+	done := make(chan struct{})
+	go func() {
+		handler.ServeHTTP(rec, req)
+		close(done)
+	}()
+
+	var permissionEvent *EventPayload
+	require.Eventually(t, func() bool {
+		for _, event := range parseSSEEvents(rec.Body()) {
+			if event.ErrorDetails != nil {
+				copy := event
+				permissionEvent = &copy
+				return true
+			}
+		}
+		return false
+	}, time.Second, 10*time.Millisecond)
+	require.Equal(t, containerLogsDomain, permissionEvent.ErrorDetails.Details.Domain)
+	require.Equal(t, logPermissionResource, permissionEvent.ErrorDetails.Details.Resource)
+	cancel()
+	select {
+	case <-done:
+	case <-time.After(time.Second):
+		t.Fatal("permission-failed follower did not stop after disconnect")
+	}
+}
+
+func TestServeHTTPStopsWhenErrorEventWriteFails(t *testing.T) {
+	pod := &corev1.Pod{
+		ObjectMeta: metav1.ObjectMeta{Namespace: "default", Name: "write-error-pod"},
+		Spec:       corev1.PodSpec{Containers: []corev1.Container{{Name: "app"}}},
+	}
+	baseClient := fake.NewClientset(pod)
+	responses := []logResponse{
+		{body: buildContainerLogsStream(time.Unix(0, 0), []time.Duration{time.Millisecond}, []string{"initial"}), status: http.StatusOK},
+		{body: "boom", status: http.StatusInternalServerError},
+	}
+	delegateCore := baseClient.CoreV1()
+	override := newLogPodsWithResponses(delegateCore.Pods("default"), "default", responses)
+	client := &stubClient{
+		Clientset: baseClient,
+		core: &logCore{CoreV1Interface: delegateCore, overrides: map[string]*logPods{
+			"default": override,
+		}},
+	}
+	handler, err := NewHandler(client, applog.Noop, telemetry.NewRecorder())
+	require.NoError(t, err)
+	ctx, cancel := context.WithCancel(context.Background())
+	defer cancel()
+	req := httptest.NewRequest(http.MethodGet, "/?scope=cluster-a|default:/v1:pod:write-error-pod", nil).WithContext(ctx)
+	rec := newFailingFlushRecorder(3)
+	done := make(chan struct{})
+	go func() {
+		handler.ServeHTTP(rec, req)
+		close(done)
+	}()
+
+	select {
+	case <-done:
+	case <-time.After(2 * time.Second):
+		t.Fatal("handler did not stop after the client rejected its error event")
+	}
+	require.Equal(t, 3, rec.WriteCount())
+}
+
+func TestServeHTTPStopsWhenBatchedEntryWriteFails(t *testing.T) {
+	pod := &corev1.Pod{
+		ObjectMeta: metav1.ObjectMeta{Namespace: "default", Name: "write-batch-pod"},
+		Spec:       corev1.PodSpec{Containers: []corev1.Container{{Name: "app"}}},
+	}
+	baseClient := fake.NewClientset(pod)
+	origin := time.Unix(0, 0)
+	responses := []string{
+		buildContainerLogsStream(origin, []time.Duration{time.Millisecond}, []string{"initial"}),
+		buildContainerLogsStream(origin, []time.Duration{2 * time.Millisecond}, []string{"update"}),
+	}
+	delegateCore := baseClient.CoreV1()
+	override := newLogPods(delegateCore.Pods("default"), "default", responses)
+	client := &stubClient{
+		Clientset: baseClient,
+		core: &logCore{CoreV1Interface: delegateCore, overrides: map[string]*logPods{
+			"default": override,
+		}},
+	}
+	handler, err := NewHandler(client, applog.Noop, telemetry.NewRecorder())
+	require.NoError(t, err)
+	ctx, cancel := context.WithCancel(context.Background())
+	defer cancel()
+	req := httptest.NewRequest(http.MethodGet, "/?scope=cluster-a|default:/v1:pod:write-batch-pod", nil).WithContext(ctx)
+	rec := newFailingFlushRecorder(3)
+	done := make(chan struct{})
+	go func() {
+		handler.ServeHTTP(rec, req)
+		close(done)
+	}()
+
+	select {
+	case <-done:
+	case <-time.After(2 * time.Second):
+		t.Fatal("handler did not stop after the client rejected its batched entries")
+	}
+	require.Equal(t, 3, rec.WriteCount())
+}
+
+func TestServeHTTPLimiterRebalanceEmitsWarningChangeAndClear(t *testing.T) {
+	pod := &corev1.Pod{
+		ObjectMeta: metav1.ObjectMeta{Namespace: "default", Name: "rebalanced-pod"},
+		Spec: corev1.PodSpec{Containers: []corev1.Container{
+			{Name: "app"},
+			{Name: "sidecar"},
+		}},
+	}
+	baseClient := fake.NewClientset(pod)
+	delegateCore := baseClient.CoreV1()
+	override := newLogPods(delegateCore.Pods("default"), "default", []string{"", ""})
+	client := &stubClient{
+		Clientset: baseClient,
+		core: &logCore{CoreV1Interface: delegateCore, overrides: map[string]*logPods{
+			"default": override,
+		}},
+	}
+	limiter := NewGlobalTargetLimiter(2)
+	handler, err := NewHandler(client, applog.Noop, telemetry.NewRecorder(), limiter)
+	require.NoError(t, err)
+	ctx, cancel := context.WithCancel(context.Background())
+	defer cancel()
+	req := httptest.NewRequest(http.MethodGet, "/?scope=cluster-a|default:/v1:pod:rebalanced-pod", nil).WithContext(ctx)
+	rec := newFlushRecorder()
+	done := make(chan struct{})
+	go func() {
+		handler.ServeHTTP(rec, req)
+		close(done)
+	}()
+	require.Eventually(t, func() bool {
+		return len(parseSSEEvents(rec.Body())) >= 2
+	}, time.Second, 10*time.Millisecond)
+
+	competitor := limiter.StartSession("cluster-a", "aaa-competing-scope")
+	competitor.UpdateDesired([]string{"one", "two"})
+	defer competitor.Release()
+
+	var warningSequence uint64
+	require.Eventually(t, func() bool {
+		for _, event := range parseSSEEvents(rec.Body()) {
+			if event.Warnings != nil && len(*event.Warnings) == 1 && strings.Contains((*event.Warnings)[0], "global limit of 2") {
+				warningSequence = event.Sequence
+				return true
+			}
+		}
+		return false
+	}, time.Second, 10*time.Millisecond, "limiter loss should emit an updated warning")
+
+	competitor.Release()
+	require.Eventually(t, func() bool {
+		for _, event := range parseSSEEvents(rec.Body()) {
+			if event.Sequence > warningSequence && event.Warnings != nil && len(*event.Warnings) == 0 {
+				return true
+			}
+		}
+		return false
+	}, time.Second, 10*time.Millisecond, "restored capacity should explicitly clear the warning")
+
+	cancel()
+	select {
+	case <-done:
+	case <-time.After(time.Second):
+		t.Fatal("rebalanced handler did not stop after cancellation")
+	}
+}
+
+func TestServeHTTPSlowConsumerReportsTransportDropsAfterBatchedEntries(t *testing.T) {
+	pod := &corev1.Pod{
+		ObjectMeta: metav1.ObjectMeta{Namespace: "default", Name: "busy-pod"},
+		Spec:       corev1.PodSpec{Containers: []corev1.Container{{Name: "app"}}},
+	}
+	baseClient := fake.NewClientset(pod)
+	origin := time.Unix(0, 0)
+	offsets := make([]time.Duration, 1200)
+	lines := make([]string, 1200)
+	for i := range lines {
+		offsets[i] = time.Duration(i+2) * time.Millisecond
+		lines[i] = fmt.Sprintf("line-%04d", i)
+	}
+	responses := []string{
+		buildContainerLogsStream(origin, []time.Duration{time.Millisecond}, []string{"initial"}),
+		buildContainerLogsStream(origin, offsets, lines),
+	}
+	delegateCore := baseClient.CoreV1()
+	override := newLogPods(delegateCore.Pods("default"), "default", responses)
+	client := &stubClient{
+		Clientset: baseClient,
+		core: &logCore{CoreV1Interface: delegateCore, overrides: map[string]*logPods{
+			"default": override,
+		}},
+	}
+	handler, err := NewHandler(client, applog.Noop, telemetry.NewRecorder())
+	require.NoError(t, err)
+	ctx, cancel := context.WithCancel(context.Background())
+	defer cancel()
+	req := httptest.NewRequest(http.MethodGet, "/?scope=cluster-a|default:/v1:pod:busy-pod", nil).WithContext(ctx)
+	rec := &slowFlushRecorder{flushRecorder: newFlushRecorder(), delay: 10 * time.Millisecond}
+	done := make(chan struct{})
+	go func() {
+		handler.ServeHTTP(rec, req)
+		close(done)
+	}()
+
+	var events []EventPayload
+	require.Eventually(t, func() bool {
+		events = parseSSEEvents(rec.Body())
+		for _, event := range events {
+			if event.Warnings != nil && slices.Contains(*event.Warnings, transportDropWarning) {
+				return true
+			}
+		}
+		return false
+	}, 3*time.Second, 20*time.Millisecond, "slow writer should surface transport loss")
+
+	var sawFullBatch bool
+	for _, event := range events {
+		if len(event.Entries) == config.ContainerLogsStreamBatchMaxSize {
+			sawFullBatch = true
+			break
+		}
+	}
+	require.True(t, sawFullBatch, "entries must be emitted before the drop warning")
+	cancel()
+	select {
+	case <-done:
+	case <-time.After(time.Second):
+		t.Fatal("slow-consumer handler did not stop after cancellation")
+	}
 }
 
 func TestServeHTTPStreamsUpdates(t *testing.T) {
@@ -511,6 +992,9 @@ func TestServeHTTPStreamsUpdates(t *testing.T) {
 	require.False(t, update.Reset)
 	require.Len(t, update.Entries, 1)
 	require.Equal(t, "update", update.Entries[0].Line)
+	require.Equal(t, uint64(1), connected.Sequence)
+	require.Equal(t, connected.Sequence+1, initial.Sequence)
+	require.Equal(t, initial.Sequence+1, update.Sequence)
 }
 
 func TestServeHTTPEmitsErrorEvent(t *testing.T) {
@@ -586,6 +1070,7 @@ func TestServeHTTPEmitsErrorEvent(t *testing.T) {
 	require.NotNil(t, errorEvent, "error event should be present")
 	require.Contains(t, errorEvent.Error, "containerlogsstream: follow failed")
 	require.Empty(t, errorEvent.Entries)
+	require.Greater(t, errorEvent.Sequence, events[1].Sequence)
 }
 
 func TestComposeStreamWarningsDistinguishesTransportDrops(t *testing.T) {
@@ -657,6 +1142,50 @@ type flushRecorder struct {
 	body   strings.Builder
 	status int
 	mu     sync.Mutex
+}
+
+type slowFlushRecorder struct {
+	*flushRecorder
+	delay time.Duration
+}
+
+func (s *slowFlushRecorder) Write(b []byte) (int, error) {
+	time.Sleep(s.delay)
+	return s.flushRecorder.Write(b)
+}
+
+type failingFlushRecorder struct {
+	header http.Header
+	body   strings.Builder
+	mu     sync.Mutex
+	writes int
+	failAt int
+}
+
+func newFailingFlushRecorder(failAt int) *failingFlushRecorder {
+	return &failingFlushRecorder{header: make(http.Header), failAt: failAt}
+}
+
+func (f *failingFlushRecorder) Header() http.Header { return f.header }
+
+func (f *failingFlushRecorder) Write(b []byte) (int, error) {
+	f.mu.Lock()
+	defer f.mu.Unlock()
+	f.writes++
+	if f.writes == f.failAt {
+		return 0, errors.New("client disconnected")
+	}
+	return f.body.Write(b)
+}
+
+func (f *failingFlushRecorder) WriteHeader(int) {}
+
+func (f *failingFlushRecorder) Flush() {}
+
+func (f *failingFlushRecorder) WriteCount() int {
+	f.mu.Lock()
+	defer f.mu.Unlock()
+	return f.writes
 }
 
 func newFlushRecorder() *flushRecorder {

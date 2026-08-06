@@ -414,28 +414,71 @@ Measured function coverage on the baseline revision includes:
 - `objectcatalog.Service.sync`: 79.1%;
 - `capabilities.Service.Evaluate`: 92.9%.
 
-- [ ] Add handler tests for parse/validation failures, CORS on every early
+- [x] Add handler tests for parse/validation failures, CORS on every early
       response, permission denial, limiter denial, client disconnect,
       heartbeat timeout, partial target errors, warning changes, and final
       event ordering.
-- [ ] Add streamer tests for cancellation before and after startup, watch
+- [x] Add streamer tests for cancellation before and after startup, watch
       restart, backoff interruption, channel closure, slow consumers, dropped
       entries, container restart, partial target loss, and cleanup exactly
       once.
-- [ ] Add custom snapshot tests for empty/denied/partial discovery, namespace
+- [x] Add custom snapshot tests for empty/denied/partial discovery, namespace
       fan-out, duplicate identities, stale catalog metadata, and cluster
       isolation.
-- [ ] Add descriptor-batch tests for cancellation, worker failure, partial
+- [x] Add descriptor-batch tests for cancellation, worker failure, partial
       results, stable index association, and permission-client recovery.
-- [ ] Add cluster-client/kubeconfig tests for concurrent selection changes,
+- [x] Add cluster-client/kubeconfig tests for concurrent selection changes,
       stale generations, selected/background clusters, and teardown/rebuild
       ordering.
-- [ ] Run each affected package with `-race` and record directly affected
+- [x] Run each affected package with `-race` and record directly affected
       coverage. Do not begin its production refactor below 80% without explicit
       maintainer guidance.
 
 This phase is test-only unless a test exposes a real defect; any defect becomes
 a separate red/green change.
+
+Local progress through 2026-08-06:
+
+- [x] Handler contracts cover every early CORS response, malformed scope and
+      unsupported transport handling, initial and follow permission failures,
+      limiter denial/rebalance and warning clearing, partial target tails,
+      disconnect flushes, slow-consumer drops, deterministic write failures,
+      heartbeat-timeout classification, and monotonic connected/snapshot/data/
+      error event sequences.
+- [x] Streamer contracts cover pre-start and active cancellation, closed-watch
+      restart, interruptible reconnect backoff, closed and irrelevant watch
+      events, limiter notification, container loss and restart, pre-cancelled
+      followers, transient and terminal failures, filtering, slow consumers,
+      both drop-accounting paths, and exactly-once stream close.
+- [x] Custom snapshot contracts cover missing dependencies, empty discovery,
+      forbidden resources, partial results with stale CRD metadata, scoped
+      namespace fan-out, first-class exclusions, colliding Kind/name identities
+      across API groups, complete resource identity, and per-cluster metadata.
+- [x] Descriptor-batch contracts cover empty/nil services, cancellation,
+      namespace fan-out, definitive-answer precedence, stable input indexes,
+      partial worker failures, joined descriptor errors, and permission-client
+      recovery. Empty object-catalog discovery is also characterized as a
+      healthy empty publication.
+- [x] Existing selection/lifecycle contracts cover rapid concurrent selection
+      churn, stale-generation preemption, selected/background-cluster isolation,
+      cluster-scoped cleanup, cold-plan publication before teardown, and stopping
+      the previous subsystem before a replacement is installed. The focused
+      lifecycle race suite passes.
+- [x] Directly affected function coverage, in baseline order, is 83.3%, 82.2%,
+      87.7%, 81.4%, 91.4%, 95.4%, 83.7%, and 92.9%. Every target is above the
+      80% production-refactor gate.
+- [x] Full `-race` package runs pass for container-log streaming, snapshots,
+      object catalog, and capabilities; focused backend lifecycle race runs
+      pass. Phase 3 changed tests and this plan only; no production defect was
+      exposed.
+- [x] The repository backend coverage task passes and records 77.0% statement
+      coverage for `backend`; the eight directly affected functions are all
+      above the Phase 3 80% gate.
+- [x] The full `mage qc:prerelease` gate passes on the latest Phase 3 code and
+      test worktree.
+- [x] `gocognit` v1.2.1 reports no newly added Phase 3 test function above the
+      configured complexity limit of 15; its only changed-file findings are
+      three pre-existing tests.
 
 ---
 
