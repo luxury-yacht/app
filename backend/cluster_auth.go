@@ -32,61 +32,127 @@ func (a *App) handleClusterAuthStateChange(clusterID string, state authstate.Sta
 		return
 	}
 
-	// Get cluster name for better logging/events
-	clusterName := clusterID
-	if clients := a.clusterClientsForID(clusterID); clients != nil {
-		clusterName = clients.meta.Name
+	command, ok := newClusterAuthStateCommand(clusterID, a.clusterAuthDisplayName(clusterID), state, diag)
+	if !ok {
+		return
 	}
 
+	a.reportClusterAuthState(command)
+	a.emitEvent(command.eventName, command.eventPayload)
+	a.applyClusterAuthLifecycle(command)
+	a.dispatchClusterAuthMutation(command)
+}
+
+type clusterAuthMutation string
+
+const (
+	clusterAuthMutationNone     clusterAuthMutation = ""
+	clusterAuthMutationRebuild  clusterAuthMutation = "rebuild"
+	clusterAuthMutationTeardown clusterAuthMutation = "teardown"
+)
+
+type clusterAuthStateCommand struct {
+	clusterID    string
+	clusterName  string
+	state        authstate.State
+	diagnostic   authstate.FailureDiagnostic
+	eventName    string
+	eventPayload map[string]any
+	mutation     clusterAuthMutation
+}
+
+func (a *App) clusterAuthDisplayName(clusterID string) string {
+	clients := a.clusterClientsForID(clusterID)
+	if clients == nil {
+		return clusterID
+	}
+	return clients.meta.Name
+}
+
+func newClusterAuthStateCommand(
+	clusterID string,
+	clusterName string,
+	state authstate.State,
+	diag authstate.FailureDiagnostic,
+) (clusterAuthStateCommand, bool) {
+	command := clusterAuthStateCommand{
+		clusterID:   clusterID,
+		clusterName: clusterName,
+		state:       state,
+		diagnostic:  diag,
+	}
 	switch state {
 	case authstate.StateValid:
-		a.logger.Info(fmt.Sprintf("Cluster %s: auth recovered", clusterName), logsources.Auth, clusterID, clusterName)
-		// Emit per-cluster recovery event for the frontend
-		a.emitEvent("cluster:auth:recovered", map[string]any{
-			"clusterId":   clusterID,
-			"clusterName": clusterName,
-		})
-		// Rebuild only this cluster's subsystem through the coordinated mutation path.
-		a.runSelectionMutationAsync(fmt.Sprintf("cluster-auth-rebuild:%s", clusterID), func(_ *selectionMutation) error {
-			return a.runClusterOperation(context.Background(), clusterID, func(opCtx context.Context) error {
-				if err := opCtx.Err(); err != nil {
-					return err
-				}
-				a.rebuildClusterSubsystem(clusterID)
-				return opCtx.Err()
-			})
-		})
-
+		command.eventName = "cluster:auth:recovered"
+		command.eventPayload = map[string]any{"clusterId": clusterID, "clusterName": clusterName}
+		command.mutation = clusterAuthMutationRebuild
 	case authstate.StateRecovering:
-		a.logger.Warn(fmt.Sprintf("Cluster %s: auth recovering - %s", clusterName, diag.Reason), logsources.Auth, clusterID, clusterName)
-		// Emit per-cluster recovering event for the frontend
-		a.emitEvent("cluster:auth:recovering", authEventPayload(clusterID, clusterName, diag))
-		// Teardown only this cluster's subsystem through the coordinated mutation path.
-		a.runSelectionMutationAsync(fmt.Sprintf("cluster-auth-teardown:%s", clusterID), func(_ *selectionMutation) error {
-			return a.runClusterOperation(context.Background(), clusterID, func(opCtx context.Context) error {
-				if err := opCtx.Err(); err != nil {
-					return err
-				}
-				a.teardownClusterSubsystem(clusterID)
-				return opCtx.Err()
-			})
-		})
-
+		command.eventName = "cluster:auth:recovering"
+		command.eventPayload = authEventPayload(clusterID, clusterName, diag)
+		command.mutation = clusterAuthMutationTeardown
 	case authstate.StateInvalid:
-		operation := fmt.Sprintf("Cluster %s auth failed", clusterName)
-		if diag.Cause != nil {
-			applog.ReportError(a.logger, diag.Cause, operation, logsources.Auth, clusterID, clusterName)
-		} else {
-			a.logger.Error(fmt.Sprintf("Cluster %s: auth failed - %s", clusterName, diag.Reason), logsources.Auth, clusterID, clusterName)
-		}
-		// Capture the auth failure with cluster context for error enhancement
-		errorcapture.CaptureWithCluster(clusterID, fmt.Sprintf("auth failed: %s", diag.Reason))
-		// Emit per-cluster failure event for the frontend
-		a.emitEvent("cluster:auth:failed", authEventPayload(clusterID, clusterName, diag))
-		if a.clusterLifecycle != nil {
-			a.clusterLifecycle.SetState(clusterID, ClusterStateAuthFailed)
-		}
+		command.eventName = "cluster:auth:failed"
+		command.eventPayload = authEventPayload(clusterID, clusterName, diag)
+		command.mutation = clusterAuthMutationNone
+	default:
+		return clusterAuthStateCommand{}, false
 	}
+	return command, true
+}
+
+func (a *App) reportClusterAuthState(command clusterAuthStateCommand) {
+	switch command.state {
+	case authstate.StateValid:
+		a.logger.Info(fmt.Sprintf("Cluster %s: auth recovered", command.clusterName), logsources.Auth, command.clusterID, command.clusterName)
+	case authstate.StateRecovering:
+		a.logger.Warn(fmt.Sprintf("Cluster %s: auth recovering - %s", command.clusterName, command.diagnostic.Reason), logsources.Auth, command.clusterID, command.clusterName)
+	case authstate.StateInvalid:
+		a.reportInvalidClusterAuthState(command)
+	}
+}
+
+func (a *App) reportInvalidClusterAuthState(command clusterAuthStateCommand) {
+	operation := fmt.Sprintf("Cluster %s auth failed", command.clusterName)
+	if command.diagnostic.Cause != nil {
+		applog.ReportError(a.logger, command.diagnostic.Cause, operation, logsources.Auth, command.clusterID, command.clusterName)
+	} else {
+		a.logger.Error(fmt.Sprintf("Cluster %s: auth failed - %s", command.clusterName, command.diagnostic.Reason), logsources.Auth, command.clusterID, command.clusterName)
+	}
+	errorcapture.CaptureWithCluster(command.clusterID, fmt.Sprintf("auth failed: %s", command.diagnostic.Reason))
+}
+
+func (a *App) applyClusterAuthLifecycle(command clusterAuthStateCommand) {
+	if command.state != authstate.StateInvalid || a.clusterLifecycle == nil {
+		return
+	}
+	a.clusterLifecycle.SetState(command.clusterID, ClusterStateAuthFailed)
+}
+
+func (a *App) dispatchClusterAuthMutation(command clusterAuthStateCommand) {
+	if command.mutation == clusterAuthMutationNone {
+		return
+	}
+	reason := fmt.Sprintf("cluster-auth-%s:%s", command.mutation, command.clusterID)
+	a.runSelectionMutationAsync(reason, func(_ *selectionMutation) error {
+		return a.runClusterOperation(context.Background(), command.clusterID, func(opCtx context.Context) error {
+			return a.executeClusterAuthMutation(opCtx, command)
+		})
+	})
+}
+
+func (a *App) executeClusterAuthMutation(ctx context.Context, command clusterAuthStateCommand) error {
+	if err := ctx.Err(); err != nil {
+		return err
+	}
+	switch command.mutation {
+	case clusterAuthMutationRebuild:
+		a.rebuildClusterSubsystem(command.clusterID)
+	case clusterAuthMutationTeardown:
+		a.teardownClusterSubsystem(command.clusterID)
+	default:
+		return fmt.Errorf("unsupported cluster auth mutation %q", command.mutation)
+	}
+	return ctx.Err()
 }
 
 // authEventPayload builds an auth event payload carrying the per-cluster identity

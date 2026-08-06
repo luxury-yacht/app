@@ -243,6 +243,33 @@ rule that heavy rebuild/teardown work does not run under the auth-manager
 mutex. Likely seam: state-specific command construction with one asynchronous
 dispatch boundary. Keep `docs/architecture/auth.md` authoritative.
 
+Local progress through 2026-08-06 (Sonar confirmation pending):
+
+- [x] Traced the per-cluster auth-manager callback, lifecycle state, Wails
+      auth-event consumers, and refresh pause/resume consumers; every affected
+      event and mutation remains keyed by the callback's `clusterId`.
+- [x] Characterized valid, recovering, invalid-with-cause, and
+      invalid-without-cause transitions; full diagnostic payload identity;
+      foreground/background isolation; unknown states; and lifecycle state.
+- [x] Proved through the real auth-manager callback that a recovering
+      transition returns while the coordinated selection boundary is blocked,
+      keeping teardown/rebuild work outside the manager-held mutex.
+- [x] Reduced `(*App).handleClusterAuthStateChange` to command construction and
+      four ordered applications: reporting, event emission, lifecycle state,
+      and one asynchronous mutation dispatch boundary.
+- [x] Focused tests and `-race` pass; the handler and all seven extracted
+      command/reporting/lifecycle/dispatch helpers have 100.0% statement
+      coverage.
+- [x] The repository backend coverage task passes and records 76.9% statement
+      coverage for `backend`; the directly affected 1C coverage is 100.0%.
+- [x] `gocognit` v1.2.1 measures
+      `(*App).handleClusterAuthStateChange` at 3, with the most complex
+      extracted helper at 2.
+- [x] The full `mage qc:prerelease` gate passes on the refactored source.
+- [ ] Confirm the finding closes in the next Sonar analysis without creating
+      or increasing another S3776 finding; keep the target box above open until
+      that evidence exists.
+
 ### 1D. Custom resource informer eligibility
 
 - [ ] 17 — `(*Manager).ensureCustomInformer`,
