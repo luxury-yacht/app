@@ -89,46 +89,62 @@ func telemetryReplacements(event *sentry.Event, hint *sentry.EventHint) []teleme
 	if event == nil {
 		return nil
 	}
-	clusterAlias := event.Tags["cluster.alias"]
+
+	replacements := takePrivateTelemetryTagReplacements(event.Tags)
+	if replacement, ok := kubernetesStatusTelemetryReplacement(hint); ok {
+		replacements = append(replacements, replacement)
+	}
+	sort.Slice(replacements, func(left, right int) bool {
+		return len(replacements[left].private) > len(replacements[right].private)
+	})
+	return replacements
+}
+
+func takePrivateTelemetryTagReplacements(tags map[string]string) []telemetryReplacement {
+	clusterAlias := tags["cluster.alias"]
 	if clusterAlias == "" {
 		clusterAlias = "[cluster]"
 	}
+
 	replacements := make([]telemetryReplacement, 0, 3)
 	for _, key := range []string{"_privacy.cluster_id", "_privacy.cluster_name"} {
-		if private := strings.TrimSpace(event.Tags[key]); private != "" {
+		if private := strings.TrimSpace(tags[key]); private != "" {
 			replacements = append(replacements, telemetryReplacement{private: private, alias: clusterAlias})
 		}
-		delete(event.Tags, key)
+		delete(tags, key)
 	}
-	for key, value := range event.Tags {
+	for key, value := range tags {
 		if key != "_privacy.resource_name" && !strings.HasPrefix(key, "_privacy.resource_name.") {
 			continue
 		}
 		if private := strings.TrimSpace(value); private != "" {
 			replacements = append(replacements, telemetryReplacement{private: private, alias: "[resource]"})
 		}
-		delete(event.Tags, key)
+		delete(tags, key)
 	}
-	if hint != nil && hint.OriginalException != nil {
-		var statusErr apierrors.APIStatus
-		if errors.As(hint.OriginalException, &statusErr) {
-			status := statusErr.Status()
-			if message := strings.TrimSpace(status.Message); message != "" {
-				alias := "[kubernetes API details redacted]"
-				if status.Details != nil && status.Details.Name != "" {
-					alias = `Kubernetes resource "[resource]" request failed`
-				}
-				replacements = append(replacements, telemetryReplacement{
-					private: message,
-					alias:   alias,
-				})
-			}
-		}
-	}
-	sort.Slice(replacements, func(left, right int) bool {
-		return len(replacements[left].private) > len(replacements[right].private)
-	})
 	return replacements
+}
+
+func kubernetesStatusTelemetryReplacement(hint *sentry.EventHint) (telemetryReplacement, bool) {
+	if hint == nil || hint.OriginalException == nil {
+		return telemetryReplacement{}, false
+	}
+
+	var statusErr apierrors.APIStatus
+	if !errors.As(hint.OriginalException, &statusErr) {
+		return telemetryReplacement{}, false
+	}
+	status := statusErr.Status()
+	message := strings.TrimSpace(status.Message)
+	if message == "" {
+		return telemetryReplacement{}, false
+	}
+
+	alias := "[kubernetes API details redacted]"
+	if status.Details != nil && status.Details.Name != "" {
+		alias = `Kubernetes resource "[resource]" request failed`
+	}
+	return telemetryReplacement{private: message, alias: alias}, true
 }
 
 func sanitizeKubernetesFieldPath(value string) string {
@@ -395,33 +411,39 @@ func prepareStacktrace(stacktrace *sentry.Stacktrace, replacements []telemetryRe
 	sanitizeStacktrace(stacktrace)
 }
 
-// prepareEventForSend is the final privacy boundary for backend events. SDK
-// collection is disabled independently, and this pass protects explicitly set
-// or future SDK-populated fields before the transport receives the event.
-func prepareEventForSend(event *sentry.Event, hint *sentry.EventHint) *sentry.Event {
-	event = trimReportingFrames(event, hint)
-	if event == nil {
-		return nil
-	}
+func sanitizeReplacedTelemetryText(value string, replacements []telemetryReplacement) string {
+	return sanitizeTelemetryText(replaceTelemetryText(value, replacements))
+}
 
-	replacements := telemetryReplacements(event, hint)
-	isCapabilitiesEvent := event.Tags["source"] == "Capabilities"
+func clearPrivateEventFields(event *sentry.Event) {
 	event.User = sentry.User{}
 	event.Request = nil
 	event.ServerName = ""
-	event.Message = sanitizeTelemetryText(replaceTelemetryText(event.Message, replacements))
-	event.Logger = sanitizeTelemetryText(replaceTelemetryText(event.Logger, replacements))
-	event.Transaction = sanitizeTelemetryText(replaceTelemetryText(event.Transaction, replacements))
+}
+
+func prepareEventTextFields(event *sentry.Event, replacements []telemetryReplacement) {
+	event.Message = sanitizeReplacedTelemetryText(event.Message, replacements)
+	event.Logger = sanitizeReplacedTelemetryText(event.Logger, replacements)
+	event.Transaction = sanitizeReplacedTelemetryText(event.Transaction, replacements)
+}
+
+func prepareEventExceptions(event *sentry.Event, replacements []telemetryReplacement) {
 	for index := range event.Exception {
 		exception := &event.Exception[index]
-		exception.Value = sanitizeTelemetryText(replaceTelemetryText(exception.Value, replacements))
+		exception.Value = sanitizeReplacedTelemetryText(exception.Value, replacements)
 		prepareStacktrace(exception.Stacktrace, replacements)
 	}
+}
+
+func prepareEventThreads(event *sentry.Event, replacements []telemetryReplacement) {
 	for index := range event.Threads {
 		thread := &event.Threads[index]
-		thread.Name = sanitizeTelemetryText(replaceTelemetryText(thread.Name, replacements))
+		thread.Name = sanitizeReplacedTelemetryText(thread.Name, replacements)
 		prepareStacktrace(thread.Stacktrace, replacements)
 	}
+}
+
+func prepareEventBreadcrumbs(event *sentry.Event, replacements []telemetryReplacement) {
 	for _, breadcrumb := range event.Breadcrumbs {
 		if breadcrumb == nil {
 			continue
@@ -434,13 +456,23 @@ func prepareEventForSend(event *sentry.Event, hint *sentry.EventHint) *sentry.Ev
 		}
 		breadcrumb.Data = sanitizeTelemetryMap(replaceTelemetryMap(breadcrumb.Data, replacements))
 	}
+}
+
+func prepareEventTags(event *sentry.Event, replacements []telemetryReplacement) {
 	for key, value := range event.Tags {
 		if isPrivateTelemetryKey(key) {
 			delete(event.Tags, key)
 			continue
 		}
-		event.Tags[key] = sanitizeTelemetryText(replaceTelemetryText(value, replacements))
+		event.Tags[key] = sanitizeReplacedTelemetryText(value, replacements)
 	}
+}
+
+func prepareEventContexts(
+	event *sentry.Event,
+	replacements []telemetryReplacement,
+	isCapabilitiesEvent bool,
+) {
 	for key, value := range event.Contexts {
 		replaced := replaceTelemetryMap(value, replacements)
 		if key == "error" {
@@ -449,5 +481,25 @@ func prepareEventForSend(event *sentry.Event, hint *sentry.EventHint) *sentry.Ev
 			event.Contexts[key] = sanitizeTelemetryMap(replaced)
 		}
 	}
+}
+
+// prepareEventForSend is the final privacy boundary for backend events. SDK
+// collection is disabled independently, and this pass protects explicitly set
+// or future SDK-populated fields before the transport receives the event.
+func prepareEventForSend(event *sentry.Event, hint *sentry.EventHint) *sentry.Event {
+	event = trimReportingFrames(event, hint)
+	if event == nil {
+		return nil
+	}
+
+	replacements := telemetryReplacements(event, hint)
+	isCapabilitiesEvent := event.Tags["source"] == "Capabilities"
+	clearPrivateEventFields(event)
+	prepareEventTextFields(event, replacements)
+	prepareEventExceptions(event, replacements)
+	prepareEventThreads(event, replacements)
+	prepareEventBreadcrumbs(event, replacements)
+	prepareEventTags(event, replacements)
+	prepareEventContexts(event, replacements, isCapabilitiesEvent)
 	return event
 }

@@ -179,6 +179,88 @@ func TestPrepareEventForSendPreservesCapabilityShapesWhileScrubbingSurroundingTe
 	require.NotContains(t, operation, "top-secret")
 }
 
+func TestTelemetryReplacementsExtractsPrivateTagsAndTypedStatus(t *testing.T) {
+	statusErr := apierrors.NewForbidden(
+		schema.GroupResource{Group: "apps", Resource: "deployments"},
+		"payments-api-pod-0",
+		errors.New("access denied"),
+	)
+	event := &sentry.Event{Tags: map[string]string{
+		"cluster.alias":                     "cluster-7",
+		"safe":                              "retained",
+		"_privacy.cluster_id":               "prod-us",
+		"_privacy.cluster_name":             "production-us-west-1",
+		"_privacy.resource_name":            "payments-api-pod-0",
+		"_privacy.resource_name.controller": "payments-api",
+	}}
+
+	replacements := telemetryReplacements(event, &sentry.EventHint{OriginalException: statusErr})
+
+	require.Equal(t, []telemetryReplacement{
+		{
+			private: statusErr.ErrStatus.Message,
+			alias:   `Kubernetes resource "[resource]" request failed`,
+		},
+		{private: "production-us-west-1", alias: "cluster-7"},
+		{private: "payments-api-pod-0", alias: "[resource]"},
+		{private: "payments-api", alias: "[resource]"},
+		{private: "prod-us", alias: "cluster-7"},
+	}, replacements)
+	require.Equal(t, map[string]string{
+		"cluster.alias": "cluster-7",
+		"safe":          "retained",
+	}, event.Tags)
+
+	require.Nil(t, telemetryReplacements(nil, nil))
+	fallbackEvent := &sentry.Event{Tags: map[string]string{"_privacy.cluster_id": "private-cluster"}}
+	require.Equal(t,
+		[]telemetryReplacement{{private: "private-cluster", alias: "[cluster]"}},
+		telemetryReplacements(fallbackEvent, nil),
+	)
+}
+
+func TestPrepareEventForSendAppliesPrivateReplacementsAcrossEventSurfaces(t *testing.T) {
+	event := &sentry.Event{
+		Message:     "payments-api on prod-us",
+		Logger:      "payments-api logger on prod-us",
+		Transaction: "payments-api transaction on prod-us",
+		Tags: map[string]string{
+			"cluster.alias":          "cluster-7",
+			"detail":                 "payments-api on prod-us",
+			"_privacy.cluster_id":    "prod-us",
+			"_privacy.resource_name": "payments-api",
+		},
+		Exception: []sentry.Exception{{Value: "payments-api failed on prod-us"}},
+		Threads:   []sentry.Thread{{Name: "payments-api worker on prod-us"}},
+		Breadcrumbs: []*sentry.Breadcrumb{
+			nil,
+			{
+				Message: "payments-api breadcrumb on prod-us",
+				Data:    map[string]any{"detail": "payments-api data on prod-us"},
+			},
+		},
+		Contexts: map[string]sentry.Context{
+			"runtime": {"detail": "payments-api context on prod-us"},
+		},
+	}
+
+	prepared := prepareEventForSend(event, nil)
+
+	require.Equal(t, "[resource] on cluster-7", prepared.Message)
+	require.Equal(t, "[resource] logger on cluster-7", prepared.Logger)
+	require.Equal(t, "[resource] transaction on cluster-7", prepared.Transaction)
+	require.Equal(t, "[resource] failed on cluster-7", prepared.Exception[0].Value)
+	require.Equal(t, "[resource] worker on cluster-7", prepared.Threads[0].Name)
+	require.Nil(t, prepared.Breadcrumbs[0])
+	require.Equal(t, "[resource] breadcrumb on cluster-7", prepared.Breadcrumbs[1].Message)
+	require.Equal(t, "[resource] data on cluster-7", prepared.Breadcrumbs[1].Data["detail"])
+	require.Equal(t, "[resource] context on cluster-7", prepared.Contexts["runtime"]["detail"])
+	require.Equal(t, map[string]string{
+		"cluster.alias": "cluster-7",
+		"detail":        "[resource] on cluster-7",
+	}, prepared.Tags)
+}
+
 func TestReporterAppliesPrivacyBoundaryBeforeTransport(t *testing.T) {
 	transport := &recordingTransport{}
 	reporter, err := New(Config{
