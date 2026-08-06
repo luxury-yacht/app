@@ -18,6 +18,7 @@ import (
 	"github.com/luxury-yacht/app/backend/internal/applog"
 	"github.com/luxury-yacht/app/backend/internal/config"
 	"github.com/luxury-yacht/app/backend/nodemaintenance"
+	"github.com/luxury-yacht/app/backend/resourcemodel"
 	"github.com/luxury-yacht/app/backend/resources/common"
 	podres "github.com/luxury-yacht/app/backend/resources/pods"
 	restypes "github.com/luxury-yacht/app/backend/resources/types"
@@ -427,51 +428,79 @@ func nodePodFieldSelector(nodeName string) string {
 }
 
 func (s *Service) buildNodeDetails(node *corev1.Node, pods []corev1.Pod, nodeMetrics corev1.ResourceList) *NodeDetails {
-	var cpuRequests, cpuLimits, memRequests, memLimits int64
-	var podsList []restypes.PodSimpleInfo
-	var nodeRestarts int32
 	model := BuildResourceModel(s.deps.ClusterID, node)
 	nodeFacts := BuildFacts(node)
-
+	podProjection := nodePodProjection{}
 	for _, pod := range pods {
-		podModel := podres.BuildResourceModel(s.deps.ClusterID, &pod)
-		podFacts := podres.BuildFacts(&pod)
-		podRestarts := podFacts.RestartCount
-		nodeRestarts += podRestarts
-
-		podsList = append(podsList, restypes.PodSimpleInfo{
-			Kind:             "Pod",
-			Name:             pod.Name,
-			Namespace:        pod.Namespace,
-			StatusProjection: restypes.NewStatusProjection(podModel.Status),
-			Ready:            fmt.Sprintf("%d/%d", podFacts.ReadyContainers, podFacts.TotalContainers),
-			Restarts:         podRestarts,
-			Age:              common.FormatAge(pod.CreationTimestamp.Time),
-		})
-
-		if pod.Status.Phase == corev1.PodRunning || pod.Status.Phase == corev1.PodPending {
-			for _, container := range pod.Spec.Containers {
-				if req := container.Resources.Requests; req != nil {
-					if cpu, ok := req[corev1.ResourceCPU]; ok {
-						cpuRequests += cpu.MilliValue()
-					}
-					if mem, ok := req[corev1.ResourceMemory]; ok {
-						memRequests += mem.Value()
-					}
-				}
-				if lim := container.Resources.Limits; lim != nil {
-					if cpu, ok := lim[corev1.ResourceCPU]; ok {
-						cpuLimits += cpu.MilliValue()
-					}
-					if mem, ok := lim[corev1.ResourceMemory]; ok {
-						memLimits += mem.Value()
-					}
-				}
-			}
-		}
+		podProjection.add(s.deps.ClusterID, pod)
 	}
+	details := newNodeDetails(node, model, nodeFacts, podProjection)
+	details.Conditions = projectNodeConditions(node.Status.Conditions)
+	details.Taints = projectNodeTaints(node.Spec.Taints)
+	details.Roles = deriveNodeRoles(node.Labels)
+	setNodeAddresses(details, node.Status.Addresses)
+	setNodeCapacity(details, node.Status.Capacity, node.Status.Allocatable)
+	setNodeRequests(details, podProjection.cpuRequests, podProjection.cpuLimits, podProjection.memRequests, podProjection.memLimits)
+	setNodeUsage(details, nodeMetrics)
+	details.Kind = "node"
+	setLegacySummaries(details)
+	return details
+}
 
-	details := &NodeDetails{
+type nodePodProjection struct {
+	podsList    []restypes.PodSimpleInfo
+	restarts    int32
+	cpuRequests int64
+	cpuLimits   int64
+	memRequests int64
+	memLimits   int64
+}
+
+func (projection *nodePodProjection) add(clusterID string, pod corev1.Pod) {
+	podModel := podres.BuildResourceModel(clusterID, &pod)
+	podFacts := podres.BuildFacts(&pod)
+	projection.restarts += podFacts.RestartCount
+	projection.podsList = append(projection.podsList, restypes.PodSimpleInfo{
+		Kind:             "Pod",
+		Name:             pod.Name,
+		Namespace:        pod.Namespace,
+		StatusProjection: restypes.NewStatusProjection(podModel.Status),
+		Ready:            fmt.Sprintf("%d/%d", podFacts.ReadyContainers, podFacts.TotalContainers),
+		Restarts:         podFacts.RestartCount,
+		Age:              common.FormatAge(pod.CreationTimestamp.Time),
+	})
+	if podConsumesNodeResources(pod.Status.Phase) {
+		projection.addContainers(pod.Spec.Containers)
+	}
+}
+
+func podConsumesNodeResources(phase corev1.PodPhase) bool {
+	switch phase {
+	case corev1.PodRunning, corev1.PodPending:
+		return true
+	default:
+		return false
+	}
+}
+
+func (projection *nodePodProjection) addContainers(containers []corev1.Container) {
+	for _, container := range containers {
+		addCPUAndMemory(container.Resources.Requests, &projection.cpuRequests, &projection.memRequests)
+		addCPUAndMemory(container.Resources.Limits, &projection.cpuLimits, &projection.memLimits)
+	}
+}
+
+func addCPUAndMemory(resources corev1.ResourceList, cpuTotal, memoryTotal *int64) {
+	if cpu, ok := resources[corev1.ResourceCPU]; ok {
+		*cpuTotal += cpu.MilliValue()
+	}
+	if memory, ok := resources[corev1.ResourceMemory]; ok {
+		*memoryTotal += memory.Value()
+	}
+}
+
+func newNodeDetails(node *corev1.Node, model resourcemodel.ResourceModel, nodeFacts Facts, pods nodePodProjection) *NodeDetails {
+	return &NodeDetails{
 		Name:             node.Name,
 		StatusProjection: restypes.NewStatusProjection(model.Status),
 		Unschedulable:    nodeFacts.Unschedulable,
@@ -483,37 +512,35 @@ func (s *Service) buildNodeDetails(node *corev1.Node, pods []corev1.Pod, nodeMet
 		KubeletVersion:   node.Status.NodeInfo.KubeletVersion,
 		Labels:           node.Labels,
 		Annotations:      node.Annotations,
-		PodsList:         podsList,
-		PodsCount:        len(podsList),
-		Restarts:         nodeRestarts,
+		PodsList:         pods.podsList,
+		PodsCount:        len(pods.podsList),
+		Restarts:         pods.restarts,
 	}
+}
 
-	for _, condition := range node.Status.Conditions {
-		details.Conditions = append(details.Conditions, NodeCondition{
+func projectNodeConditions(conditions []corev1.NodeCondition) []NodeCondition {
+	var projected []NodeCondition
+	for _, condition := range conditions {
+		projected = append(projected, NodeCondition{
 			Kind:    string(condition.Type),
 			Status:  string(condition.Status),
 			Reason:  condition.Reason,
 			Message: condition.Message,
 		})
 	}
+	return projected
+}
 
-	for _, taint := range node.Spec.Taints {
-		details.Taints = append(details.Taints, NodeTaint{
+func projectNodeTaints(taints []corev1.Taint) []NodeTaint {
+	var projected []NodeTaint
+	for _, taint := range taints {
+		projected = append(projected, NodeTaint{
 			Key:    taint.Key,
 			Value:  taint.Value,
 			Effect: string(taint.Effect),
 		})
 	}
-
-	details.Roles = deriveNodeRoles(node.Labels)
-	setNodeAddresses(details, node.Status.Addresses)
-	setNodeCapacity(details, node.Status.Capacity, node.Status.Allocatable)
-	setNodeRequests(details, cpuRequests, cpuLimits, memRequests, memLimits)
-	setNodeUsage(details, nodeMetrics)
-	details.Kind = "node"
-	setLegacySummaries(details)
-
-	return details
+	return projected
 }
 
 func (s *Service) listPodsForNode(name string) []corev1.Pod {

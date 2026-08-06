@@ -326,51 +326,74 @@ func normalizeSettingsFile(settings *settingsFile) *settingsFile {
 	if settings == nil {
 		return defaultSettingsFile()
 	}
+	normalizeSettingsMetadata(settings)
+	normalizeCorePreferences(&settings.Preferences)
+	normalizeRefreshPreferences(&settings.Preferences)
+	normalizeKubernetesAPIPreferences(&settings.Preferences)
+	normalizeObjPanelLogsPreferences(&settings.Preferences)
+	normalizeLayoutPreferences(&settings.Preferences)
+	migrateLegacyPalettePreferences(&settings.Preferences)
+	normalizeKubeconfigSettings(&settings.Kubeconfig)
+	settings.Preferences.Themes = normalizeThemes(
+		settings.Preferences.Themes,
+		defaultThemeFromPreferences(settings.Preferences),
+	)
+
+	return settings
+}
+
+func normalizeSettingsMetadata(settings *settingsFile) {
 	if settings.SchemaVersion == 0 {
 		settings.SchemaVersion = settingsSchemaVersion
 	}
-	if settings.Preferences.AppearanceMode == "" {
-		settings.Preferences.AppearanceMode = "system"
+}
+
+func normalizeCorePreferences(preferences *settingsPreferences) {
+	if preferences.AppearanceMode == "" {
+		preferences.AppearanceMode = "system"
 	}
-	if settings.Preferences.DimInactiveNamespaces == nil {
-		settings.Preferences.DimInactiveNamespaces = boolPtr(true)
+	if preferences.DimInactiveNamespaces == nil {
+		preferences.DimInactiveNamespaces = boolPtr(true)
 	}
-	if settings.Preferences.ExclusiveNamespaces == nil {
-		settings.Preferences.ExclusiveNamespaces = boolPtr(true)
+	if preferences.ExclusiveNamespaces == nil {
+		preferences.ExclusiveNamespaces = boolPtr(true)
 	}
-	if settings.Preferences.ErrorReportingEnabled == nil {
-		settings.Preferences.ErrorReportingEnabled = boolPtr(true)
+	if preferences.ErrorReportingEnabled == nil {
+		preferences.ErrorReportingEnabled = boolPtr(true)
 	}
-	if settings.Preferences.Refresh == nil {
-		settings.Preferences.Refresh = &settingsRefresh{Auto: true, Background: true, MetricsIntervalMs: defaultMetricsIntervalMs()}
+}
+
+func normalizeRefreshPreferences(preferences *settingsPreferences) {
+	if preferences.Refresh == nil {
+		preferences.Refresh = &settingsRefresh{Auto: true, Background: true, MetricsIntervalMs: defaultMetricsIntervalMs()}
 	}
-	if settings.Preferences.Refresh.MetricsIntervalMs <= 0 {
-		settings.Preferences.Refresh.MetricsIntervalMs = defaultMetricsIntervalMs()
+	if preferences.Refresh.MetricsIntervalMs <= 0 {
+		preferences.Refresh.MetricsIntervalMs = defaultMetricsIntervalMs()
 	}
-	if settings.Preferences.KubernetesAPI == nil {
-		settings.Preferences.KubernetesAPI = &settingsKubernetesAPI{
+}
+
+func normalizeKubernetesAPIPreferences(preferences *settingsPreferences) {
+	if preferences.KubernetesAPI == nil {
+		preferences.KubernetesAPI = &settingsKubernetesAPI{
 			ClientQPS:                      defaultKubernetesClientQPS,
 			ClientBurst:                    defaultKubernetesClientBurst,
 			PermissionSSRRFetchConcurrency: defaultPermissionSSRRFetchConcurrency,
 		}
 	}
-	if settings.Preferences.KubernetesAPI.ClientQPS <= 0 {
-		settings.Preferences.KubernetesAPI.ClientQPS = defaultKubernetesClientQPS
-	} else {
-		settings.Preferences.KubernetesAPI.ClientQPS = clampKubernetesClientQPS(settings.Preferences.KubernetesAPI.ClientQPS)
-	}
-	if settings.Preferences.KubernetesAPI.ClientBurst <= 0 {
-		settings.Preferences.KubernetesAPI.ClientBurst = defaultKubernetesClientBurst
-	} else {
-		settings.Preferences.KubernetesAPI.ClientBurst = clampKubernetesClientBurst(settings.Preferences.KubernetesAPI.ClientBurst)
-	}
-	if settings.Preferences.KubernetesAPI.PermissionSSRRFetchConcurrency <= 0 {
-		settings.Preferences.KubernetesAPI.PermissionSSRRFetchConcurrency = defaultPermissionSSRRFetchConcurrency
-	} else {
-		settings.Preferences.KubernetesAPI.PermissionSSRRFetchConcurrency = clampPermissionSSRRFetchConcurrency(settings.Preferences.KubernetesAPI.PermissionSSRRFetchConcurrency)
-	}
-	if settings.Preferences.ObjPanelLogs == nil {
-		settings.Preferences.ObjPanelLogs = &settingsObjPanelLogs{
+	api := preferences.KubernetesAPI
+	api.ClientQPS = defaultOrClampInt(api.ClientQPS, defaultKubernetesClientQPS, minKubernetesClientQPS, maxKubernetesClientQPS)
+	api.ClientBurst = defaultOrClampInt(api.ClientBurst, defaultKubernetesClientBurst, minKubernetesClientBurst, maxKubernetesClientBurst)
+	api.PermissionSSRRFetchConcurrency = defaultOrClampInt(
+		api.PermissionSSRRFetchConcurrency,
+		defaultPermissionSSRRFetchConcurrency,
+		minPermissionSSRRFetchConcurrency,
+		maxPermissionSSRRFetchConcurrency,
+	)
+}
+
+func normalizeObjPanelLogsPreferences(preferences *settingsPreferences) {
+	if preferences.ObjPanelLogs == nil {
+		preferences.ObjPanelLogs = &settingsObjPanelLogs{
 			BufferMaxSize:       defaultObjPanelLogsBufferMaxSize,
 			TargetPerScopeLimit: defaultObjPanelLogsTargetPerScopeLimit,
 			TargetGlobalLimit:   defaultObjPanelLogsTargetGlobalLimit,
@@ -378,67 +401,41 @@ func normalizeSettingsFile(settings *settingsFile) *settingsFile {
 		}
 	}
 	// A zero value means "use the default", not "truncate every buffer to 0".
-	if settings.Preferences.ObjPanelLogs.BufferMaxSize <= 0 {
-		settings.Preferences.ObjPanelLogs.BufferMaxSize = defaultObjPanelLogsBufferMaxSize
-	} else {
-		settings.Preferences.ObjPanelLogs.BufferMaxSize = clampObjPanelLogsBufferMaxSize(settings.Preferences.ObjPanelLogs.BufferMaxSize)
+	logs := preferences.ObjPanelLogs
+	logs.BufferMaxSize = defaultOrClampInt(logs.BufferMaxSize, defaultObjPanelLogsBufferMaxSize, minObjPanelLogsBufferMaxSize, maxObjPanelLogsBufferMaxSize)
+	logs.TargetPerScopeLimit = defaultOrClampInt(logs.TargetPerScopeLimit, defaultObjPanelLogsTargetPerScopeLimit, minObjPanelLogsTargetPerScopeLimit, maxObjPanelLogsTargetPerScopeLimit)
+	logs.TargetGlobalLimit = defaultOrClampInt(logs.TargetGlobalLimit, defaultObjPanelLogsTargetGlobalLimit, minObjPanelLogsTargetGlobalLimit, maxObjPanelLogsTargetGlobalLimit)
+	if logs.APITimestampFormat == "" {
+		logs.APITimestampFormat = defaultObjPanelLogsAPITimestampFormat
 	}
-	if settings.Preferences.ObjPanelLogs.TargetPerScopeLimit <= 0 {
-		settings.Preferences.ObjPanelLogs.TargetPerScopeLimit = defaultObjPanelLogsTargetPerScopeLimit
-	} else {
-		settings.Preferences.ObjPanelLogs.TargetPerScopeLimit = clampObjPanelLogsTargetPerScopeLimit(settings.Preferences.ObjPanelLogs.TargetPerScopeLimit)
+}
+
+func normalizeLayoutPreferences(preferences *settingsPreferences) {
+	if preferences.GridTablePersistenceMode == "" {
+		preferences.GridTablePersistenceMode = "shared"
 	}
-	if settings.Preferences.ObjPanelLogs.TargetGlobalLimit <= 0 {
-		settings.Preferences.ObjPanelLogs.TargetGlobalLimit = defaultObjPanelLogsTargetGlobalLimit
-	} else {
-		settings.Preferences.ObjPanelLogs.TargetGlobalLimit = clampObjPanelLogsTargetGlobalLimit(settings.Preferences.ObjPanelLogs.TargetGlobalLimit)
+	if preferences.DefaultObjectPanelPosition == "" {
+		preferences.DefaultObjectPanelPosition = defaultObjectPanelPosition
 	}
-	if settings.Preferences.ObjPanelLogs.APITimestampFormat == "" {
-		settings.Preferences.ObjPanelLogs.APITimestampFormat = defaultObjPanelLogsAPITimestampFormat
+	preferences.DefaultTablePageSize = defaultOrClampInt(preferences.DefaultTablePageSize, defaultTablePageSize, minTablePageSize, maxTablePageSize)
+	preferences.ObjectPanelDockedRightWidth = defaultOrClampInt(preferences.ObjectPanelDockedRightWidth, defaultObjectPanelDockedRightWidth, minObjectPanelDockedRightWidth, maxObjectPanelLayoutValue)
+	preferences.ObjectPanelDockedBottomHeight = defaultOrClampInt(preferences.ObjectPanelDockedBottomHeight, defaultObjectPanelDockedBottomHeight, minObjectPanelDockedBottomHeight, maxObjectPanelLayoutValue)
+	preferences.ObjectPanelFloatingWidth = defaultOrClampInt(preferences.ObjectPanelFloatingWidth, defaultObjectPanelFloatingWidth, minObjectPanelFloatingWidth, maxObjectPanelLayoutValue)
+	preferences.ObjectPanelFloatingHeight = defaultOrClampInt(preferences.ObjectPanelFloatingHeight, defaultObjectPanelFloatingHeight, minObjectPanelFloatingHeight, maxObjectPanelLayoutValue)
+	preferences.ObjectPanelFloatingX = defaultOrClampInt(preferences.ObjectPanelFloatingX, defaultObjectPanelFloatingX, minObjectPanelFloatingX, maxObjectPanelLayoutValue)
+	preferences.ObjectPanelFloatingY = defaultOrClampInt(preferences.ObjectPanelFloatingY, defaultObjectPanelFloatingY, minObjectPanelFloatingY, maxObjectPanelLayoutValue)
+}
+
+func defaultOrClampInt(value, defaultValue, minValue, maxValue int) int {
+	if value <= 0 {
+		return defaultValue
 	}
-	if settings.Preferences.GridTablePersistenceMode == "" {
-		settings.Preferences.GridTablePersistenceMode = "shared"
-	}
-	if settings.Preferences.DefaultObjectPanelPosition == "" {
-		settings.Preferences.DefaultObjectPanelPosition = defaultObjectPanelPosition
-	}
-	if settings.Preferences.DefaultTablePageSize <= 0 {
-		settings.Preferences.DefaultTablePageSize = defaultTablePageSize
-	} else {
-		settings.Preferences.DefaultTablePageSize = clampInt(settings.Preferences.DefaultTablePageSize, minTablePageSize, maxTablePageSize)
-	}
-	if settings.Preferences.ObjectPanelDockedRightWidth <= 0 {
-		settings.Preferences.ObjectPanelDockedRightWidth = defaultObjectPanelDockedRightWidth
-	} else {
-		settings.Preferences.ObjectPanelDockedRightWidth = clampInt(settings.Preferences.ObjectPanelDockedRightWidth, minObjectPanelDockedRightWidth, maxObjectPanelLayoutValue)
-	}
-	if settings.Preferences.ObjectPanelDockedBottomHeight <= 0 {
-		settings.Preferences.ObjectPanelDockedBottomHeight = defaultObjectPanelDockedBottomHeight
-	} else {
-		settings.Preferences.ObjectPanelDockedBottomHeight = clampInt(settings.Preferences.ObjectPanelDockedBottomHeight, minObjectPanelDockedBottomHeight, maxObjectPanelLayoutValue)
-	}
-	if settings.Preferences.ObjectPanelFloatingWidth <= 0 {
-		settings.Preferences.ObjectPanelFloatingWidth = defaultObjectPanelFloatingWidth
-	} else {
-		settings.Preferences.ObjectPanelFloatingWidth = clampInt(settings.Preferences.ObjectPanelFloatingWidth, minObjectPanelFloatingWidth, maxObjectPanelLayoutValue)
-	}
-	if settings.Preferences.ObjectPanelFloatingHeight <= 0 {
-		settings.Preferences.ObjectPanelFloatingHeight = defaultObjectPanelFloatingHeight
-	} else {
-		settings.Preferences.ObjectPanelFloatingHeight = clampInt(settings.Preferences.ObjectPanelFloatingHeight, minObjectPanelFloatingHeight, maxObjectPanelLayoutValue)
-	}
-	if settings.Preferences.ObjectPanelFloatingX <= 0 {
-		settings.Preferences.ObjectPanelFloatingX = defaultObjectPanelFloatingX
-	} else {
-		settings.Preferences.ObjectPanelFloatingX = clampInt(settings.Preferences.ObjectPanelFloatingX, minObjectPanelFloatingX, maxObjectPanelLayoutValue)
-	}
-	if settings.Preferences.ObjectPanelFloatingY <= 0 {
-		settings.Preferences.ObjectPanelFloatingY = defaultObjectPanelFloatingY
-	} else {
-		settings.Preferences.ObjectPanelFloatingY = clampInt(settings.Preferences.ObjectPanelFloatingY, minObjectPanelFloatingY, maxObjectPanelLayoutValue)
-	}
+	return clampInt(value, minValue, maxValue)
+}
+
+func migrateLegacyPalettePreferences(preferences *settingsPreferences) {
 	// Migrate old single-value palette fields to per-mode fields.
-	prefs := &settings.Preferences
+	prefs := preferences
 	if (prefs.PaletteHue != 0 || prefs.PaletteSaturation != 0 || prefs.PaletteBrightness != 0) &&
 		prefs.PaletteHueLight == 0 && prefs.PaletteSaturationLight == 0 && prefs.PaletteBrightnessLight == 0 &&
 		prefs.PaletteHueDark == 0 && prefs.PaletteSaturationDark == 0 && prefs.PaletteBrightnessDark == 0 {
@@ -452,15 +449,12 @@ func normalizeSettingsFile(settings *settingsFile) *settingsFile {
 		prefs.PaletteSaturation = 0
 		prefs.PaletteBrightness = 0
 	}
-	if settings.Kubeconfig.SearchPaths == nil {
-		settings.Kubeconfig.SearchPaths = defaultKubeconfigSearchPaths()
-	}
-	settings.Preferences.Themes = normalizeThemes(
-		settings.Preferences.Themes,
-		defaultThemeFromPreferences(settings.Preferences),
-	)
+}
 
-	return settings
+func normalizeKubeconfigSettings(kubeconfig *settingsKubeconfig) {
+	if kubeconfig.SearchPaths == nil {
+		kubeconfig.SearchPaths = defaultKubeconfigSearchPaths()
+	}
 }
 
 func defaultTheme() Theme {

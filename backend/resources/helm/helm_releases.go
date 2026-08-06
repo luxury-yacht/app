@@ -208,113 +208,121 @@ func (s *Service) initActionConfig(settings *cli.EnvSettings, namespace string) 
 }
 
 func (s *Service) extractResourcesFromManifest(manifest, defaultNamespace string) []HelmResource {
-	var resources []HelmResource
-	resourceMap := make(map[string]bool)
-
-	trimmed := strings.TrimPrefix(strings.TrimSpace(manifest), "---")
-	docs := strings.Split(trimmed, "\n---")
-
-	for _, doc := range docs {
-		doc = strings.TrimSpace(doc)
-		if doc == "" || doc == "---" {
-			continue
+	resources := newManifestResourceAccumulator(s, defaultNamespace)
+	for _, document := range splitManifestDocuments(manifest) {
+		if object, ok := parseManifestDocument(document); ok {
+			resources.addObject(object)
 		}
-
-		var obj map[string]interface{}
-		if err := yaml.Unmarshal([]byte(doc), &obj); err != nil || obj == nil {
-			continue
-		}
-
-		kind, ok := obj["kind"].(string)
-		if !ok || kind == "" {
-			continue
-		}
-		// apiVersion is the wire-form "group/version" (or just "version"
-		// for core resources). Captured here so the frontend can open
-		// Helm-managed CRDs in the object panel with a fully-qualified
-		// GVK. Optional in YAML in theory, but every real Kubernetes
-		// manifest carries it.
-		apiVersion, _ := obj["apiVersion"].(string)
-
-		if strings.HasSuffix(kind, "List") {
-			items, ok := obj["items"].([]interface{})
-			if !ok {
-				continue
-			}
-			// Items in a List inherit the List's apiVersion only if they
-			// don't carry their own. Real lists from kubectl always set
-			// items[*].apiVersion, but check both for safety.
-			for _, item := range items {
-				itemMap, ok := toStringMap(item)
-				if !ok {
-					continue
-				}
-				itemKind, ok := itemMap["kind"].(string)
-				if !ok || itemKind == "" {
-					continue
-				}
-				itemAPIVersion, _ := itemMap["apiVersion"].(string)
-				if itemAPIVersion == "" {
-					itemAPIVersion = apiVersion
-				}
-				name, namespace, namespaceExplicit := extractNameNamespace(itemMap, defaultNamespace)
-				if name == "" {
-					continue
-				}
-				identity := resourcemodel.ResolveHelmManifestResourceIdentityWithResolver(
-					s.deps.Common.Context,
-					s.deps.Common.ResourceResolver,
-					itemAPIVersion,
-					itemKind,
-					namespace,
-					name,
-					namespaceExplicit,
-				)
-				key := fmt.Sprintf("%s/%s/%s/%s", itemAPIVersion, itemKind, namespace, name)
-				if resourceMap[key] {
-					continue
-				}
-				resourceMap[key] = true
-				resources = append(resources, HelmResource{
-					Kind:       itemKind,
-					APIVersion: itemAPIVersion,
-					Name:       name,
-					Namespace:  identity.Namespace,
-					Scope:      string(identity.Scope),
-				})
-			}
-			continue
-		}
-
-		name, namespace, namespaceExplicit := extractNameNamespace(obj, defaultNamespace)
-		if name == "" {
-			continue
-		}
-		identity := resourcemodel.ResolveHelmManifestResourceIdentityWithResolver(
-			s.deps.Common.Context,
-			s.deps.Common.ResourceResolver,
-			apiVersion,
-			kind,
-			namespace,
-			name,
-			namespaceExplicit,
-		)
-
-		key := fmt.Sprintf("%s/%s/%s/%s", apiVersion, kind, namespace, name)
-		if resourceMap[key] {
-			continue
-		}
-		resourceMap[key] = true
-		resources = append(resources, HelmResource{
-			Kind:       kind,
-			APIVersion: apiVersion,
-			Name:       name,
-			Namespace:  identity.Namespace,
-			Scope:      string(identity.Scope),
-		})
 	}
+	return resources.items
+}
 
-	return resources
+type manifestResourceKey struct {
+	apiVersion string
+	kind       string
+	namespace  string
+	name       string
+}
+
+type manifestResourceAccumulator struct {
+	service          *Service
+	defaultNamespace string
+	seen             map[manifestResourceKey]struct{}
+	items            []HelmResource
+}
+
+func newManifestResourceAccumulator(service *Service, defaultNamespace string) *manifestResourceAccumulator {
+	return &manifestResourceAccumulator{
+		service:          service,
+		defaultNamespace: defaultNamespace,
+		seen:             make(map[manifestResourceKey]struct{}),
+	}
+}
+
+func splitManifestDocuments(manifest string) []string {
+	trimmed := strings.TrimPrefix(strings.TrimSpace(manifest), "---")
+	return strings.Split(trimmed, "\n---")
+}
+
+func parseManifestDocument(document string) (map[string]interface{}, bool) {
+	document = strings.TrimSpace(document)
+	if document == "" || document == "---" {
+		return nil, false
+	}
+	var object map[string]interface{}
+	if err := yaml.Unmarshal([]byte(document), &object); err != nil {
+		return nil, false
+	}
+	return object, object != nil
+}
+
+func (resources *manifestResourceAccumulator) addObject(object map[string]interface{}) {
+	kind, _ := object["kind"].(string)
+	if kind == "" {
+		return
+	}
+	// apiVersion is the wire-form "group/version" (or just "version" for core
+	// resources), allowing Helm-managed CRDs to retain their complete GVK.
+	apiVersion, _ := object["apiVersion"].(string)
+	if strings.HasSuffix(kind, "List") {
+		resources.addListItems(object, apiVersion)
+		return
+	}
+	resources.addResource(object, apiVersion, kind)
+}
+
+func (resources *manifestResourceAccumulator) addListItems(object map[string]interface{}, inheritedAPIVersion string) {
+	items, ok := object["items"].([]interface{})
+	if !ok {
+		return
+	}
+	for _, item := range items {
+		resources.addListItem(item, inheritedAPIVersion)
+	}
+}
+
+func (resources *manifestResourceAccumulator) addListItem(item interface{}, inheritedAPIVersion string) {
+	object, ok := toStringMap(item)
+	if !ok {
+		return
+	}
+	kind, _ := object["kind"].(string)
+	if kind == "" {
+		return
+	}
+	apiVersion, _ := object["apiVersion"].(string)
+	if apiVersion == "" {
+		apiVersion = inheritedAPIVersion
+	}
+	resources.addResource(object, apiVersion, kind)
+}
+
+func (resources *manifestResourceAccumulator) addResource(object map[string]interface{}, apiVersion, kind string) {
+	name, namespace, namespaceExplicit := extractNameNamespace(object, resources.defaultNamespace)
+	if name == "" {
+		return
+	}
+	key := manifestResourceKey{apiVersion: apiVersion, kind: kind, namespace: namespace, name: name}
+	if _, exists := resources.seen[key]; exists {
+		return
+	}
+	resources.seen[key] = struct{}{}
+	identity := resourcemodel.ResolveHelmManifestResourceIdentityWithResolver(
+		resources.service.deps.Common.Context,
+		resources.service.deps.Common.ResourceResolver,
+		apiVersion,
+		kind,
+		namespace,
+		name,
+		namespaceExplicit,
+	)
+	resources.items = append(resources.items, HelmResource{
+		Kind:       kind,
+		APIVersion: apiVersion,
+		Name:       name,
+		Namespace:  identity.Namespace,
+		Scope:      string(identity.Scope),
+	})
 }
 
 func extractNameNamespace(obj map[string]interface{}, defaultNamespace string) (string, string, bool) {

@@ -819,6 +819,124 @@ func TestLoadSettingsFileNormalizesDefaults(t *testing.T) {
 	require.Equal(t, defaultKubeconfigSearchPaths(), settings.Kubeconfig.SearchPaths)
 }
 
+func TestNormalizeSettingsFileIsIdempotentAndPreservesExplicitValues(t *testing.T) {
+	falseValue := false
+	settings := &settingsFile{
+		Preferences: settingsPreferences{
+			AppearanceMode:        "dark",
+			DimInactiveNamespaces: &falseValue,
+			ExclusiveNamespaces:   &falseValue,
+			ErrorReportingEnabled: &falseValue,
+			Refresh: &settingsRefresh{
+				MetricsIntervalMs: 1234,
+			},
+			KubernetesAPI: &settingsKubernetesAPI{
+				ClientQPS:                      maxKubernetesClientQPS + 1,
+				ClientBurst:                    maxKubernetesClientBurst + 1,
+				PermissionSSRRFetchConcurrency: maxPermissionSSRRFetchConcurrency + 1,
+			},
+			ObjPanelLogs: &settingsObjPanelLogs{
+				BufferMaxSize:       maxObjPanelLogsBufferMaxSize + 1,
+				TargetPerScopeLimit: maxObjPanelLogsTargetPerScopeLimit + 1,
+				TargetGlobalLimit:   maxObjPanelLogsTargetGlobalLimit + 1,
+				APITimestampFormat:  "HH:mm:ss",
+			},
+			GridTablePersistenceMode:      "per-cluster",
+			DefaultTablePageSize:          maxTablePageSize + 1,
+			DefaultObjectPanelPosition:    "bottom",
+			ObjectPanelDockedRightWidth:   maxObjectPanelLayoutValue + 1,
+			ObjectPanelDockedBottomHeight: maxObjectPanelLayoutValue + 1,
+			ObjectPanelFloatingWidth:      maxObjectPanelLayoutValue + 1,
+			ObjectPanelFloatingHeight:     maxObjectPanelLayoutValue + 1,
+			ObjectPanelFloatingX:          maxObjectPanelLayoutValue + 1,
+			ObjectPanelFloatingY:          maxObjectPanelLayoutValue + 1,
+			PaletteHue:                    175,
+			PaletteSaturation:             65,
+			PaletteBrightness:             -10,
+			Themes: []Theme{
+				{ID: "custom", Name: "Custom"},
+				{ID: defaultThemeID, Name: "Legacy default", ClusterPattern: "ignored"},
+				{ID: defaultThemeID, Name: "Duplicate default"},
+			},
+		},
+	}
+
+	got := normalizeSettingsFile(settings)
+	require.Same(t, settings, got)
+	require.False(t, *got.Preferences.DimInactiveNamespaces)
+	require.False(t, *got.Preferences.ExclusiveNamespaces)
+	require.False(t, *got.Preferences.ErrorReportingEnabled)
+	require.Equal(t, maxKubernetesClientQPS, got.Preferences.KubernetesAPI.ClientQPS)
+	require.Equal(t, maxKubernetesClientBurst, got.Preferences.KubernetesAPI.ClientBurst)
+	require.Equal(t, maxPermissionSSRRFetchConcurrency, got.Preferences.KubernetesAPI.PermissionSSRRFetchConcurrency)
+	require.Equal(t, maxObjPanelLogsBufferMaxSize, got.Preferences.ObjPanelLogs.BufferMaxSize)
+	require.Equal(t, maxObjPanelLogsTargetPerScopeLimit, got.Preferences.ObjPanelLogs.TargetPerScopeLimit)
+	require.Equal(t, maxObjPanelLogsTargetGlobalLimit, got.Preferences.ObjPanelLogs.TargetGlobalLimit)
+	require.Equal(t, maxTablePageSize, got.Preferences.DefaultTablePageSize)
+	require.Equal(t, maxObjectPanelLayoutValue, got.Preferences.ObjectPanelDockedRightWidth)
+	require.Equal(t, maxObjectPanelLayoutValue, got.Preferences.ObjectPanelFloatingY)
+	require.Equal(t, 175, got.Preferences.PaletteHueLight)
+	require.Equal(t, 175, got.Preferences.PaletteHueDark)
+	require.Zero(t, got.Preferences.PaletteHue)
+	require.Equal(t, defaultKubeconfigSearchPaths(), got.Kubeconfig.SearchPaths)
+	require.Equal(t, []string{"custom", defaultThemeID}, []string{got.Preferences.Themes[0].ID, got.Preferences.Themes[1].ID})
+	require.Equal(t, defaultThemeName, got.Preferences.Themes[1].Name)
+	require.Empty(t, got.Preferences.Themes[1].ClusterPattern)
+
+	once, err := json.Marshal(got)
+	require.NoError(t, err)
+	require.Same(t, got, normalizeSettingsFile(got))
+	twice, err := json.Marshal(got)
+	require.NoError(t, err)
+	require.JSONEq(t, string(once), string(twice))
+}
+
+func TestNormalizeSettingsFileCompletesZeroValueDefaults(t *testing.T) {
+	settings := normalizeSettingsFile(&settingsFile{})
+
+	require.Equal(t, settingsSchemaVersion, settings.SchemaVersion)
+	require.Equal(t, "system", settings.Preferences.AppearanceMode)
+	require.True(t, *settings.Preferences.DimInactiveNamespaces)
+	require.True(t, *settings.Preferences.ExclusiveNamespaces)
+	require.True(t, *settings.Preferences.ErrorReportingEnabled)
+	require.Equal(t, &settingsRefresh{Auto: true, Background: true, MetricsIntervalMs: defaultMetricsIntervalMs()}, settings.Preferences.Refresh)
+	require.Equal(t, &settingsKubernetesAPI{
+		ClientQPS:                      defaultKubernetesClientQPS,
+		ClientBurst:                    defaultKubernetesClientBurst,
+		PermissionSSRRFetchConcurrency: defaultPermissionSSRRFetchConcurrency,
+	}, settings.Preferences.KubernetesAPI)
+	require.Equal(t, &settingsObjPanelLogs{
+		BufferMaxSize:       defaultObjPanelLogsBufferMaxSize,
+		TargetPerScopeLimit: defaultObjPanelLogsTargetPerScopeLimit,
+		TargetGlobalLimit:   defaultObjPanelLogsTargetGlobalLimit,
+		APITimestampFormat:  defaultObjPanelLogsAPITimestampFormat,
+	}, settings.Preferences.ObjPanelLogs)
+	require.Equal(t, defaultTablePageSize, settings.Preferences.DefaultTablePageSize)
+	require.Equal(t, []Theme{defaultTheme()}, settings.Preferences.Themes)
+	require.Equal(t, defaultKubeconfigSearchPaths(), settings.Kubeconfig.SearchPaths)
+}
+
+func TestNormalizeSettingsFileCompletesPartiallyPresentNestedDefaults(t *testing.T) {
+	settings := normalizeSettingsFile(&settingsFile{Preferences: settingsPreferences{
+		Refresh:      &settingsRefresh{},
+		ObjPanelLogs: &settingsObjPanelLogs{},
+	}})
+
+	require.Equal(t, defaultMetricsIntervalMs(), settings.Preferences.Refresh.MetricsIntervalMs)
+	require.Equal(t, defaultObjPanelLogsAPITimestampFormat, settings.Preferences.ObjPanelLogs.APITimestampFormat)
+}
+
+func TestNormalizeSettingsFileNilUsesCompleteDefaults(t *testing.T) {
+	settings := normalizeSettingsFile(nil)
+
+	require.NotNil(t, settings)
+	require.Equal(t, settingsSchemaVersion, settings.SchemaVersion)
+	require.NotNil(t, settings.Preferences.Refresh)
+	require.NotNil(t, settings.Preferences.KubernetesAPI)
+	require.NotNil(t, settings.Preferences.ObjPanelLogs)
+	require.Equal(t, []Theme{defaultTheme()}, settings.Preferences.Themes)
+}
+
 func TestAppGetAppSettingsSchemaIncludesBackendOwnedDefaults(t *testing.T) {
 	setTestConfigEnv(t)
 	app := newTestAppWithDefaults(t)

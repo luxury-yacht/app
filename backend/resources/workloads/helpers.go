@@ -181,70 +181,80 @@ func BuildPodSummaries(clusterID, ownerKind, ownerName, ownerAPIVersion string, 
 func DescribeContainers(containers []corev1.Container) []restypes.PodDetailInfoContainer {
 	result := make([]restypes.PodDetailInfoContainer, 0, len(containers))
 	for _, container := range containers {
-		detail := restypes.PodDetailInfoContainer{
-			Name:            container.Name,
-			Image:           container.Image,
-			ImagePullPolicy: string(container.ImagePullPolicy),
-			Command:         container.Command,
-			Args:            container.Args,
-		}
-
-		if container.Resources.Requests != nil {
-			if cpu, ok := container.Resources.Requests[corev1.ResourceCPU]; ok {
-				detail.CPURequest = common.FormatCPU(&cpu)
-			}
-			if mem, ok := container.Resources.Requests[corev1.ResourceMemory]; ok {
-				detail.MemRequest = common.FormatMemory(&mem)
-			}
-		}
-		if container.Resources.Limits != nil {
-			if cpu, ok := container.Resources.Limits[corev1.ResourceCPU]; ok {
-				detail.CPULimit = common.FormatCPU(&cpu)
-			}
-			if mem, ok := container.Resources.Limits[corev1.ResourceMemory]; ok {
-				detail.MemLimit = common.FormatMemory(&mem)
-			}
-		}
-
-		if len(container.Ports) > 0 {
-			detail.Ports = make([]string, 0, len(container.Ports))
-			for _, port := range container.Ports {
-				portStr := fmt.Sprintf("%d", port.ContainerPort)
-				if port.Name != "" {
-					portStr = fmt.Sprintf("%s (%s)", portStr, port.Name)
-				}
-				if port.Protocol != corev1.ProtocolTCP && port.Protocol != "" {
-					portStr += fmt.Sprintf("/%s", port.Protocol)
-				}
-				detail.Ports = append(detail.Ports, portStr)
-			}
-		}
-
-		if len(container.VolumeMounts) > 0 {
-			detail.VolumeMounts = make([]string, 0, len(container.VolumeMounts))
-			for _, mount := range container.VolumeMounts {
-				mountStr := fmt.Sprintf("%s -> %s", mount.Name, mount.MountPath)
-				if mount.ReadOnly {
-					mountStr += " (ro)"
-				}
-				detail.VolumeMounts = append(detail.VolumeMounts, mountStr)
-			}
-		}
-
-		if len(container.Env) > 0 {
-			detail.Environment = make(map[string]string)
-			for _, env := range container.Env {
-				if env.Value != "" {
-					detail.Environment[env.Name] = env.Value
-				} else if env.ValueFrom != nil {
-					detail.Environment[env.Name] = "<from source>"
-				}
-			}
-		}
-
-		result = append(result, detail)
+		result = append(result, describeContainer(container))
 	}
+	return result
+}
 
+func describeContainer(container corev1.Container) restypes.PodDetailInfoContainer {
+	detail := restypes.PodDetailInfoContainer{
+		Name:            container.Name,
+		Image:           container.Image,
+		ImagePullPolicy: string(container.ImagePullPolicy),
+		Command:         container.Command,
+		Args:            container.Args,
+	}
+	applyWorkloadContainerResources(&detail, container.Resources)
+	detail.Ports = formatWorkloadContainerPorts(container.Ports)
+	detail.VolumeMounts = formatWorkloadContainerVolumeMounts(container.VolumeMounts)
+	detail.Environment = formatWorkloadContainerEnvironment(container.Env)
+	return detail
+}
+
+func applyWorkloadContainerResources(detail *restypes.PodDetailInfoContainer, requirements corev1.ResourceRequirements) {
+	if cpu, ok := requirements.Requests[corev1.ResourceCPU]; ok {
+		detail.CPURequest = common.FormatCPU(&cpu)
+	}
+	if cpu, ok := requirements.Limits[corev1.ResourceCPU]; ok {
+		detail.CPULimit = common.FormatCPU(&cpu)
+	}
+	if memory, ok := requirements.Requests[corev1.ResourceMemory]; ok {
+		detail.MemRequest = common.FormatMemory(&memory)
+	}
+	if memory, ok := requirements.Limits[corev1.ResourceMemory]; ok {
+		detail.MemLimit = common.FormatMemory(&memory)
+	}
+}
+
+func formatWorkloadContainerPorts(ports []corev1.ContainerPort) []string {
+	var result []string
+	for _, port := range ports {
+		formatted := fmt.Sprintf("%d", port.ContainerPort)
+		if port.Name != "" {
+			formatted = fmt.Sprintf("%s (%s)", formatted, port.Name)
+		}
+		if port.Protocol != corev1.ProtocolTCP && port.Protocol != "" {
+			formatted += fmt.Sprintf("/%s", port.Protocol)
+		}
+		result = append(result, formatted)
+	}
+	return result
+}
+
+func formatWorkloadContainerVolumeMounts(mounts []corev1.VolumeMount) []string {
+	var result []string
+	for _, mount := range mounts {
+		formatted := fmt.Sprintf("%s -> %s", mount.Name, mount.MountPath)
+		if mount.ReadOnly {
+			formatted += " (ro)"
+		}
+		result = append(result, formatted)
+	}
+	return result
+}
+
+func formatWorkloadContainerEnvironment(variables []corev1.EnvVar) map[string]string {
+	if len(variables) == 0 {
+		return nil
+	}
+	result := make(map[string]string)
+	for _, variable := range variables {
+		if variable.Value != "" {
+			result[variable.Name] = variable.Value
+		} else if variable.ValueFrom != nil {
+			result[variable.Name] = "<from source>"
+		}
+	}
 	return result
 }
 

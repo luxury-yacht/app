@@ -344,6 +344,57 @@ Refactoring direction: introduce small typed accumulators and per-concern pure
 functions; avoid parallel resource-kind switch tables. Shared Kubernetes
 semantics still belong in `backend/resourcemodel`, not duplicated helpers.
 
+Local progress through 2026-08-06 (Sonar confirmation pending):
+
+- [x] Characterized pod resource aggregation across regular, init, and
+      restartable init/sidecar containers; missing quantities; requests versus
+      limits; missing/running/waiting/terminated statuses; restart data; and
+      stable container ports, mounts, and environment projections.
+- [x] Reduced `calculatePodResources` to a typed per-dimension accumulator and
+      reduced `buildContainerDetails` and `DescribeContainers` to ordered
+      per-concern projections while preserving nil slices, ordering, defaults,
+      and each projection's existing environment and mount semantics.
+- [x] Characterized settings normalization for complete and partially present
+      defaults, explicit false values, bounds, legacy palette migration, theme
+      ordering/deduplication, pointer identity, and repeated-call idempotence.
+- [x] Reduced `normalizeSettingsFile` to ordered metadata, core preference,
+      refresh, Kubernetes API, log, layout, palette, kubeconfig, and theme
+      normalization stages.
+- [x] Characterized exact retry decisions and reason precedence for nil,
+      cancellation, deadlines, network and URL failures, EOF, transient text,
+      Kubernetes timeouts, rate limits, 5xx responses, authorization failures,
+      not-found responses, and permanent errors.
+- [x] Reduced `isRetryableFetchError` to ordered transport-text and Kubernetes
+      classifiers without changing retry precedence.
+- [x] Characterized Helm multi-document parsing, invalid documents, List item
+      API-version inheritance, hooks, namespace fallback, stable deduplication,
+      cluster scope, colliding CRD GVKs, and full cluster/GVK/name link identity.
+- [x] Reduced `(*Service).extractResourcesFromManifest` to a typed,
+      order-preserving manifest accumulator backed by the shared resource-model
+      identity resolver.
+- [x] Characterized Node detail projection for every pod phase, missing and
+      partial CPU/memory quantities, capacity/allocatable/usage values,
+      conditions, taints, addresses, restart totals, ordering, and empty pods.
+- [x] Characterized PersistentVolume defaults, access-mode ordering and unknown
+      values, claim state, affinity and condition ordering, and every supported
+      volume-source projection plus the unknown fallback.
+- [x] Reduced `(*Service).buildNodeDetails` to a typed pod/resource projection
+      and reduced `(*Service).processPersistentVolumeDetails` to per-concern
+      pure projections with one volume-source dispatch boundary.
+- [x] Focused tests and `-race` pass for `backend`, pods, workloads, Helm,
+      Nodes, and PersistentVolumes. All eight target functions and their newly
+      introduced projection/classification helpers have 100.0% directly
+      affected statement coverage.
+- [x] The repository backend coverage task passes and records 77.0% statement
+      coverage for `backend`; the directly affected Phase 2 coverage is 100.0%.
+- [x] `gocognit` v1.2.1 measures the eight targets, in inventory order, at 2,
+      0, 1, 1, 3, 1, 7, and 0 respectively. No newly introduced helper exceeds
+      the configured limit of 15.
+- [x] The full `mage qc:prerelease` gate passes on the latest Phase 2 worktree.
+- [ ] Confirm all eight findings close in the next Sonar analysis without
+      creating or increasing another S3776 finding; keep the target boxes above
+      open until that evidence exists.
+
 ---
 
 ## Phase 3: Harden tests for high-risk orchestration

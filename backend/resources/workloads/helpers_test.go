@@ -10,6 +10,7 @@ package workloads
 import (
 	"testing"
 
+	"github.com/stretchr/testify/require"
 	corev1 "k8s.io/api/core/v1"
 	"k8s.io/apimachinery/pkg/api/resource"
 
@@ -80,4 +81,21 @@ func TestDescribeContainers(t *testing.T) {
 	if len(got.Command) != 1 || got.Command[0] != "run" || len(got.Args) != 1 || got.Args[0] != "--flag" {
 		t.Fatalf("unexpected command/args: %v %v", got.Command, got.Args)
 	}
+}
+
+func TestDescribeContainersPreservesOrderAndEmptyDefaults(t *testing.T) {
+	empty := DescribeContainers(nil)
+	require.NotNil(t, empty)
+	require.Empty(t, empty)
+
+	containers := []corev1.Container{
+		{Name: "first", Env: []corev1.EnvVar{{Name: "EMPTY"}}},
+		{Name: "second", Ports: []corev1.ContainerPort{{ContainerPort: 8443, Protocol: corev1.ProtocolSCTP}}},
+	}
+	details := DescribeContainers(containers)
+
+	require.Equal(t, []string{"first", "second"}, []string{details[0].Name, details[1].Name})
+	require.Empty(t, details[0].Environment)
+	require.Empty(t, details[0].CPURequest)
+	require.Equal(t, []string{"8443/SCTP"}, details[1].Ports)
 }

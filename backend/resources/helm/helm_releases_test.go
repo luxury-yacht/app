@@ -260,6 +260,55 @@ metadata:
 	}, resources)
 }
 
+func TestExtractResourcesFromManifestPreservesHooksDefaultsAndLinkIdentity(t *testing.T) {
+	manifest := `
+---
+this: [is invalid
+---
+apiVersion: v1
+kind: List
+items:
+  - scalar-item
+  - kind: ConfigMap
+    metadata:
+      name: pre-install-config
+      annotations:
+        helm.sh/hook: pre-install
+  - apiVersion: apps/v1
+    kind: Deployment
+    metadata:
+      name: application
+  - apiVersion: v1
+    metadata:
+      name: missing-kind
+---
+apiVersion: v1
+kind: List
+items: not-a-list
+`
+
+	service := &Service{deps: Dependencies{Common: common.Dependencies{
+		ClusterID:        "cluster-a",
+		Context:          context.Background(),
+		ResourceResolver: helmTestResourceResolver,
+	}}}
+	require.Equal(t, []HelmResource{
+		{Kind: "ConfigMap", APIVersion: "v1", Name: "pre-install-config", Namespace: "release-ns", Scope: "namespaced"},
+		{Kind: "Deployment", APIVersion: "apps/v1", Name: "application", Namespace: "release-ns", Scope: "namespaced"},
+	}, service.extractResourcesFromManifest(manifest, "release-ns"))
+
+	links := service.extractResourceLinksFromManifest(manifest, "release-ns")
+	require.Len(t, links, 2)
+	require.NotNil(t, links[0].Ref)
+	require.Equal(t, "cluster-a", links[0].Ref.ClusterID)
+	require.Equal(t, "", links[0].Ref.Group)
+	require.Equal(t, "v1", links[0].Ref.Version)
+	require.Equal(t, "ConfigMap", links[0].Ref.Kind)
+	require.Equal(t, "configmaps", links[0].Ref.Resource)
+	require.Equal(t, "release-ns", links[0].Ref.Namespace)
+	require.Equal(t, "pre-install-config", links[0].Ref.Name)
+}
+
 func TestExtractNameNamespaceSupportsInterfaceMap(t *testing.T) {
 	obj := map[string]interface{}{
 		"metadata": map[interface{}]interface{}{

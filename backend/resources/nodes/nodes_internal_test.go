@@ -99,6 +99,130 @@ func TestGetNodeMetricsReturnsUsage(t *testing.T) {
 	require.Equal(t, "512Mi", mem.String())
 }
 
+func TestBuildNodeDetailsAggregatesOnlyActivePodResources(t *testing.T) {
+	node := &corev1.Node{
+		ObjectMeta: metav1.ObjectMeta{Name: "node-a"},
+		Status: corev1.NodeStatus{
+			Capacity: corev1.ResourceList{
+				corev1.ResourceCPU:              resource.MustParse("8"),
+				corev1.ResourceMemory:           resource.MustParse("16Gi"),
+				corev1.ResourcePods:             resource.MustParse("110"),
+				corev1.ResourceEphemeralStorage: resource.MustParse("100Gi"),
+			},
+			Allocatable: corev1.ResourceList{
+				corev1.ResourceCPU:    resource.MustParse("7500m"),
+				corev1.ResourceMemory: resource.MustParse("15Gi"),
+				corev1.ResourcePods:   resource.MustParse("100"),
+			},
+		},
+	}
+
+	tests := []struct {
+		name            string
+		phase           corev1.PodPhase
+		wantCPURequests string
+		wantCPULimits   string
+		wantMemRequests string
+		wantMemLimits   string
+	}{
+		{name: "running", phase: corev1.PodRunning, wantCPURequests: "350m", wantCPULimits: "600m", wantMemRequests: "1.5 GB", wantMemLimits: "3.0 GB"},
+		{name: "pending", phase: corev1.PodPending, wantCPURequests: "350m", wantCPULimits: "600m", wantMemRequests: "1.5 GB", wantMemLimits: "3.0 GB"},
+		{name: "succeeded", phase: corev1.PodSucceeded, wantCPURequests: "0m", wantCPULimits: "0m", wantMemRequests: "0Mi", wantMemLimits: "0Mi"},
+		{name: "failed", phase: corev1.PodFailed, wantCPURequests: "0m", wantCPULimits: "0m", wantMemRequests: "0Mi", wantMemLimits: "0Mi"},
+		{name: "unknown", phase: corev1.PodUnknown, wantCPURequests: "0m", wantCPULimits: "0m", wantMemRequests: "0Mi", wantMemLimits: "0Mi"},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			pod := corev1.Pod{
+				ObjectMeta: metav1.ObjectMeta{Name: tt.name, Namespace: "workloads"},
+				Spec: corev1.PodSpec{Containers: []corev1.Container{
+					{Resources: corev1.ResourceRequirements{
+						Requests: corev1.ResourceList{corev1.ResourceCPU: resource.MustParse("100m")},
+						Limits:   corev1.ResourceList{corev1.ResourceMemory: resource.MustParse("2Gi")},
+					}},
+					{Resources: corev1.ResourceRequirements{
+						Requests: corev1.ResourceList{corev1.ResourceCPU: resource.MustParse("250m"), corev1.ResourceMemory: resource.MustParse("1536Mi")},
+						Limits:   corev1.ResourceList{corev1.ResourceCPU: resource.MustParse("600m"), corev1.ResourceMemory: resource.MustParse("1Gi")},
+					}},
+					{},
+				}},
+				Status: corev1.PodStatus{
+					Phase:             tt.phase,
+					ContainerStatuses: []corev1.ContainerStatus{{RestartCount: 3}},
+				},
+			}
+			deps := testsupport.NewResourceDependencies()
+			deps.ClusterID = "cluster-a"
+			details := NewService(deps).buildNodeDetails(node, []corev1.Pod{pod}, nil)
+
+			require.Equal(t, tt.wantCPURequests, details.CPURequests)
+			require.Equal(t, tt.wantCPULimits, details.CPULimits)
+			require.Equal(t, tt.wantMemRequests, details.MemRequests)
+			require.Equal(t, tt.wantMemLimits, details.MemLimits)
+			require.Equal(t, int32(3), details.Restarts)
+			require.Len(t, details.PodsList, 1)
+			require.Equal(t, tt.name, details.PodsList[0].Name)
+		})
+	}
+}
+
+func TestBuildNodeDetailsPreservesProjectionOrderingAndDefaults(t *testing.T) {
+	node := &corev1.Node{
+		ObjectMeta: metav1.ObjectMeta{
+			Name:        "node-a",
+			Labels:      map[string]string{"node-role.kubernetes.io/control-plane": "", "node-role.kubernetes.io/gpu": ""},
+			Annotations: map[string]string{"example": "value"},
+		},
+		Spec: corev1.NodeSpec{Taints: []corev1.Taint{
+			{Key: "dedicated", Value: "gpu", Effect: corev1.TaintEffectNoSchedule},
+			{Key: "maintenance", Effect: corev1.TaintEffectNoExecute},
+		}},
+		Status: corev1.NodeStatus{
+			NodeInfo: corev1.NodeSystemInfo{
+				Architecture:            "arm64",
+				OperatingSystem:         "linux",
+				OSImage:                 "Flatcar",
+				KernelVersion:           "6.6",
+				ContainerRuntimeVersion: "containerd://2",
+				KubeletVersion:          "v1.31.0",
+			},
+			Conditions: []corev1.NodeCondition{
+				{Type: corev1.NodeMemoryPressure, Status: corev1.ConditionFalse, Reason: "EnoughMemory", Message: "ok"},
+				{Type: corev1.NodeReady, Status: corev1.ConditionTrue, Reason: "KubeletReady"},
+			},
+			Addresses: []corev1.NodeAddress{
+				{Type: corev1.NodeInternalIP, Address: "10.0.0.1"},
+				{Type: corev1.NodeExternalIP, Address: "203.0.113.2"},
+				{Type: corev1.NodeHostName, Address: "node-a.local"},
+			},
+		},
+	}
+	usage := corev1.ResourceList{
+		corev1.ResourceCPU:    resource.MustParse("333m"),
+		corev1.ResourceMemory: resource.MustParse("768Mi"),
+	}
+	details := NewService(testsupport.NewResourceDependencies()).buildNodeDetails(node, nil, usage)
+
+	require.Equal(t, "node", details.Kind)
+	require.Equal(t, "control-plane,gpu", details.Roles)
+	require.Equal(t, "10.0.0.1", details.InternalIP)
+	require.Equal(t, "203.0.113.2", details.ExternalIP)
+	require.Equal(t, "node-a.local", details.Hostname)
+	require.Equal(t, "333m", details.CPUUsage)
+	require.Equal(t, "768 MB", details.MemoryUsage)
+	require.Equal(t, "0/", details.Pods)
+	require.Nil(t, details.PodsList)
+	require.Equal(t, []NodeCondition{
+		{Kind: "MemoryPressure", Status: "False", Reason: "EnoughMemory", Message: "ok"},
+		{Kind: "Ready", Status: "True", Reason: "KubeletReady"},
+	}, details.Conditions)
+	require.Equal(t, []NodeTaint{
+		{Key: "dedicated", Value: "gpu", Effect: "NoSchedule"},
+		{Key: "maintenance", Effect: "NoExecute"},
+	}, details.Taints)
+}
+
 type recordingLogger struct {
 	infoCalled  bool
 	errorCalled bool

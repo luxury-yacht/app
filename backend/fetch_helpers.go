@@ -24,6 +24,28 @@ const (
 	connectionResetReason   = "connection reset"
 )
 
+type retryTextReason struct {
+	token  string
+	reason string
+}
+
+var (
+	urlRetryTextReasons = []retryTextReason{
+		{token: connectionRefusedReason, reason: connectionRefusedReason},
+		{token: connectionResetReason, reason: connectionResetReason},
+		{token: "no such host", reason: "dns lookup failure"},
+		{token: "tls", reason: "tls handshake"},
+	}
+	genericRetryTextReasons = []retryTextReason{
+		{token: connectionRefusedReason, reason: connectionRefusedReason},
+		{token: connectionResetReason, reason: connectionResetReason},
+		{token: "no such host", reason: "no such host"},
+		{token: "server misbehaving", reason: "server misbehaving"},
+		{token: "i/o timeout", reason: "i/o timeout"},
+		{token: "tls handshake", reason: "tls handshake"},
+	}
+)
+
 var fetchRetrySleep = time.Sleep
 
 // contextSleep allows tests to stub or override; defaults to a context-aware sleep.
@@ -220,58 +242,64 @@ func isRetryableFetchError(err error) (bool, string) {
 	if errors.Is(err, context.DeadlineExceeded) {
 		return true, "request timeout"
 	}
-
-	var netErr net.Error
-	if errors.As(err, &netErr) {
-		if netErr.Timeout() {
-			return true, "network timeout"
-		}
+	if isNetworkTimeout(err) {
+		return true, "network timeout"
 	}
-
-	var urlErr *url.Error
-	if errors.As(err, &urlErr) && urlErr != nil {
-		if urlErr.Timeout() {
-			return true, "network timeout"
-		}
-		if urlErr.Err != nil {
-			lowered := strings.ToLower(urlErr.Err.Error())
-			if strings.Contains(lowered, connectionRefusedReason) {
-				return true, connectionRefusedReason
-			}
-			if strings.Contains(lowered, connectionResetReason) {
-				return true, connectionResetReason
-			}
-			if strings.Contains(lowered, "no such host") {
-				return true, "dns lookup failure"
-			}
-			if strings.Contains(lowered, "tls") {
-				return true, "tls handshake"
-			}
-		}
+	if reason := retryableURLReason(err); reason != "" {
+		return true, reason
 	}
-
 	if errors.Is(err, io.EOF) {
 		return true, "unexpected eof"
 	}
+	if reason := matchingRetryTextReason(err.Error(), genericRetryTextReasons); reason != "" {
+		return true, reason
+	}
+	if reason := kubernetesRetryReason(err); reason != "" {
+		return true, reason
+	}
+	return false, ""
+}
 
-	lowered := strings.ToLower(err.Error())
-	for _, token := range []string{connectionRefusedReason, connectionResetReason, "no such host", "server misbehaving", "i/o timeout", "tls handshake"} {
-		if strings.Contains(lowered, token) {
-			return true, token
+func isNetworkTimeout(err error) bool {
+	var netErr net.Error
+	return errors.As(err, &netErr) && netErr.Timeout()
+}
+
+func retryableURLReason(err error) string {
+	var urlErr *url.Error
+	if !errors.As(err, &urlErr) || urlErr == nil {
+		return ""
+	}
+	if urlErr.Timeout() {
+		return "network timeout"
+	}
+	if urlErr.Err == nil {
+		return ""
+	}
+	return matchingRetryTextReason(urlErr.Err.Error(), urlRetryTextReasons)
+}
+
+func matchingRetryTextReason(message string, reasons []retryTextReason) string {
+	lowered := strings.ToLower(message)
+	for _, candidate := range reasons {
+		if strings.Contains(lowered, candidate.token) {
+			return candidate.reason
 		}
 	}
+	return ""
+}
 
+func kubernetesRetryReason(err error) string {
 	if apierrors.IsTimeout(err) || apierrors.IsServerTimeout(err) {
-		return true, "kubernetes timeout"
+		return "kubernetes timeout"
 	}
 	if apierrors.IsTooManyRequests(err) {
-		return true, "rate limited"
+		return "rate limited"
 	}
 	if statusErr, ok := err.(*apierrors.StatusError); ok && statusErr != nil {
 		if code := statusErr.ErrStatus.Code; code >= 500 && code < 600 {
-			return true, fmt.Sprintf("apiserver %d", code)
+			return fmt.Sprintf("apiserver %d", code)
 		}
 	}
-
-	return false, ""
+	return ""
 }
