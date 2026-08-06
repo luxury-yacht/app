@@ -6,13 +6,46 @@ import (
 	"errors"
 	"os"
 	"path/filepath"
+	"sync"
 	"testing"
 	"time"
 
 	"github.com/luxury-yacht/app/backend/internal/containerlogs"
+	"github.com/luxury-yacht/app/backend/refresh"
+	"github.com/luxury-yacht/app/backend/refresh/system"
 	"github.com/stretchr/testify/require"
 	"k8s.io/client-go/rest"
 )
+
+type settingsMetricsPoller struct {
+	mu        sync.Mutex
+	intervals []time.Duration
+}
+
+func (*settingsMetricsPoller) Start(context.Context) error { return nil }
+func (*settingsMetricsPoller) Stop(context.Context) error  { return nil }
+
+func (p *settingsMetricsPoller) SetInterval(interval time.Duration) {
+	p.mu.Lock()
+	defer p.mu.Unlock()
+	p.intervals = append(p.intervals, interval)
+}
+
+func (p *settingsMetricsPoller) recordedIntervals() []time.Duration {
+	p.mu.Lock()
+	defer p.mu.Unlock()
+	return append([]time.Duration(nil), p.intervals...)
+}
+
+type failingSettingsReporter struct {
+	*recordingInstallationReporter
+	err error
+}
+
+func (r *failingSettingsReporter) SetEnabled(enabled bool) error {
+	_ = r.recordingErrorReporter.SetEnabled(enabled)
+	return r.err
+}
 
 func newTestAppWithDefaults(t *testing.T) *App {
 	t.Helper()
@@ -920,6 +953,133 @@ func TestAppUpdateAppPreferencesDoesNotApplySideEffectsWhenPersistenceFails(t *t
 	require.Contains(t, err.Error(), "forced write failure")
 	require.Equal(t, 144, app.appSettings.ObjPanelLogsTargetPerScopeLimit)
 	require.Equal(t, 144, containerlogs.GetPerScopeTargetLimit())
+}
+
+func TestApplySettingsSideEffectsAllowsMissingReporter(t *testing.T) {
+	app := newTestAppWithDefaults(t)
+	settings := getDefaultAppSettings()
+	settings.ErrorReportingEnabled = true
+
+	require.NotPanics(t, func() {
+		app.applySettingsSideEffects(&preparedPreferenceUpdate{
+			settings: settings,
+			effects:  settingsSideEffects{errorReporting: true},
+		})
+	})
+}
+
+func TestApplyContainerLogsGlobalLimitSideEffectAllowsMissingLimiter(t *testing.T) {
+	var app *App
+	require.NotPanics(t, func() {
+		app.applyContainerLogsGlobalLimitSideEffect(true, 2)
+	})
+}
+
+func TestApplySettingsSideEffectsDoesNotScheduleRegistrationAfterReporterFailure(t *testing.T) {
+	setTestConfigEnv(t)
+	reporter := &failingSettingsReporter{
+		recordingInstallationReporter: newRecordingInstallationReporter(true),
+		err:                           errors.New("forced reporter failure"),
+	}
+	app := NewApp(reporter)
+	app.Ctx = context.Background()
+	settings := getDefaultAppSettings()
+	settings.ErrorReportingEnabled = true
+
+	app.applySettingsSideEffects(&preparedPreferenceUpdate{
+		settings: settings,
+		effects:  settingsSideEffects{errorReporting: true},
+	})
+
+	require.Never(t, func() bool {
+		reporter.metricMu.Lock()
+		defer reporter.metricMu.Unlock()
+		return len(reporter.metrics) > 0
+	}, 100*time.Millisecond, 10*time.Millisecond)
+	entries := app.logger.GetEntries()
+	require.NotEmpty(t, entries)
+	require.Contains(t, entries[len(entries)-1].Message, "Could not update error reporting: forced reporter failure")
+}
+
+func TestApplySettingsSideEffectsRetimesEveryConnectedCluster(t *testing.T) {
+	app := newTestAppWithDefaults(t)
+	first := &settingsMetricsPoller{}
+	second := &settingsMetricsPoller{}
+	app.refreshSubsystems = map[string]*system.Subsystem{
+		"cluster-a": {Manager: refresh.NewManager(nil, nil, nil, first, nil)},
+		"cluster-b": {Manager: refresh.NewManager(nil, nil, nil, second, nil)},
+		"cluster-c": nil,
+		"cluster-d": {},
+	}
+	settings := getDefaultAppSettings()
+	settings.MetricsRefreshIntervalMs = 4321
+
+	app.applySettingsSideEffects(&preparedPreferenceUpdate{
+		settings: settings,
+		effects:  settingsSideEffects{metricsInterval: true},
+	})
+
+	want := []time.Duration{4321 * time.Millisecond}
+	require.Equal(t, want, first.recordedIntervals())
+	require.Equal(t, want, second.recordedIntervals())
+}
+
+func TestApplySettingsSideEffectsAppliesCombinedEffects(t *testing.T) {
+	setTestConfigEnv(t)
+	previousPerScopeLimit := containerlogs.GetPerScopeTargetLimit()
+	t.Cleanup(func() { containerlogs.SetPerScopeTargetLimit(previousPerScopeLimit) })
+
+	reporter := &recordingErrorReporter{}
+	app := newTestAppWithDefaults(t)
+	app.errorReporter = reporter
+	app.kubeAPIMetrics = newKubernetesAPIMetricsRegistry()
+	rateLimiter := newMutableKubernetesRateLimiter(defaultKubernetesClientQPS, defaultKubernetesClientBurst)
+	app.clusterClients = map[string]*clusterClients{
+		"cluster-a": {
+			meta:        ClusterMeta{ID: "cluster-a", Name: "Cluster A"},
+			rateLimiter: rateLimiter,
+			restConfig:  &rest.Config{QPS: float32(defaultKubernetesClientQPS), Burst: defaultKubernetesClientBurst},
+		},
+	}
+	metricsPoller := &settingsMetricsPoller{}
+	app.refreshSubsystems = map[string]*system.Subsystem{
+		"cluster-a": {Manager: refresh.NewManager(nil, nil, nil, metricsPoller, nil)},
+	}
+	require.Nil(t, app.containerLogsTargetLimiter)
+
+	settings := getDefaultAppSettings()
+	settings.ErrorReportingEnabled = false
+	settings.KubernetesClientQPS = 111
+	settings.KubernetesClientBurst = 333
+	settings.ObjPanelLogsTargetPerScopeLimit = 77
+	settings.ObjPanelLogsTargetGlobalLimit = 2
+	settings.MetricsRefreshIntervalMs = 6789
+	app.applySettingsSideEffects(&preparedPreferenceUpdate{
+		settings: settings,
+		effects: settingsSideEffects{
+			errorReporting:             true,
+			kubernetesClientRateLimits: true,
+			containerLogsPerScopeLimit: true,
+			containerLogsGlobalLimit:   true,
+			metricsInterval:            true,
+		},
+	})
+
+	reporter.mu.Lock()
+	require.Equal(t, []bool{false}, reporter.enabledChanges)
+	reporter.mu.Unlock()
+	qps, burst := rateLimiter.Limits()
+	require.Equal(t, 111, qps)
+	require.Equal(t, 333, burst)
+	require.Equal(t, 77, containerlogs.GetPerScopeTargetLimit())
+	require.Equal(t, []time.Duration{6789 * time.Millisecond}, metricsPoller.recordedIntervals())
+
+	require.NotNil(t, app.containerLogsTargetLimiter)
+	session := app.containerLogsTargetLimiter.StartSession("cluster-a", "scope-a")
+	defer session.Release()
+	allowed, skipped := session.UpdateDesired([]string{"a", "b", "c"})
+	require.Len(t, allowed, 2)
+	require.Equal(t, 1, skipped)
 }
 
 func TestLoadSettingsFileMigratesOldAppearanceModePreference(t *testing.T) {

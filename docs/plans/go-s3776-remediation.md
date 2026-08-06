@@ -212,6 +212,26 @@ scheduling, limiter absence, and per-cluster metrics retiming. Likely seam:
 one stage per side-effect family, driven by the already prepared effect set;
 do not create new preference-specific mutation paths.
 
+Local progress through 2026-08-06 (Sonar confirmation pending):
+
+- [x] Characterized missing and failing reporters, enabled/disabled transitions,
+      registration scheduling, all five combined effect flags, lazy global
+      limiter creation, persistence-before-dispatch, and live metrics retiming
+      across valid, nil, and partially constructed cluster subsystems.
+- [x] Reduced `(*App).applySettingsSideEffects` to one ordered dispatch call per
+      effect family; reporter, rate-limit, per-scope/global log-limit, and
+      metrics-retiming policy now live in bounded stages.
+- [x] Focused tests and `-race` pass; the dispatcher and all six extracted
+      stages have 100.0% statement coverage.
+- [x] The repository backend coverage task passes and records 76.8% statement
+      coverage for `backend`.
+- [x] `gocognit` v1.2.1 measures `(*App).applySettingsSideEffects` at 0, with
+      the most complex extracted stage at 4.
+- [x] The full `mage qc:prerelease` gate passes on the refactored source.
+- [ ] Confirm the finding closes in the next Sonar analysis without creating
+      or increasing another S3776 finding; keep the target box above open until
+      that evidence exists.
+
 ### 1C. Cluster auth event handling
 
 - [ ] 17 — `(*App).handleClusterAuthStateChange`,

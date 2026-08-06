@@ -12,6 +12,7 @@ import (
 	"github.com/luxury-yacht/app/backend/internal/containerlogs"
 	"github.com/luxury-yacht/app/backend/internal/logsources"
 	"github.com/luxury-yacht/app/backend/refresh/snapshot"
+	"github.com/luxury-yacht/app/backend/refresh/system"
 	"github.com/wailsapp/wails/v2/pkg/runtime"
 )
 
@@ -1154,35 +1155,77 @@ func (a *App) prepareAppPreferenceUpdate(request UpdateAppPreferencesRequest) (*
 }
 
 func (a *App) applySettingsSideEffects(update *preparedPreferenceUpdate) {
-	settings := update.settings
-	if update.effects.errorReporting && a.errorReporter != nil {
-		if err := a.errorReporter.SetEnabled(settings.ErrorReportingEnabled); err != nil {
-			a.logger.Warn(fmt.Sprintf("Could not update error reporting: %v", err), logsources.Settings)
-		} else if settings.ErrorReportingEnabled {
-			a.scheduleInstallationMetricRegistration(a.Ctx)
-		}
+	settings, effects := update.settings, update.effects
+	a.applyErrorReportingSideEffect(effects.errorReporting, settings.ErrorReportingEnabled)
+	a.applyKubernetesClientRateLimitsSideEffect(
+		effects.kubernetesClientRateLimits,
+		settings.KubernetesClientQPS,
+		settings.KubernetesClientBurst,
+	)
+	applyContainerLogsPerScopeLimitSideEffect(
+		effects.containerLogsPerScopeLimit,
+		settings.ObjPanelLogsTargetPerScopeLimit,
+	)
+	a.applyContainerLogsGlobalLimitSideEffect(
+		effects.containerLogsGlobalLimit,
+		settings.ObjPanelLogsTargetGlobalLimit,
+	)
+	a.applyMetricsIntervalSideEffect(effects.metricsInterval, settings.MetricsRefreshIntervalMs)
+}
+
+func (a *App) applyErrorReportingSideEffect(apply bool, enabled bool) {
+	if !apply || a.errorReporter == nil {
+		return
 	}
-	if update.effects.kubernetesClientRateLimits {
-		a.applyKubernetesClientRateLimits(settings.KubernetesClientQPS, settings.KubernetesClientBurst)
+	if err := a.errorReporter.SetEnabled(enabled); err != nil {
+		a.logger.Warn(fmt.Sprintf("Could not update error reporting: %v", err), logsources.Settings)
+		return
 	}
-	if update.effects.containerLogsPerScopeLimit {
-		containerlogs.SetPerScopeTargetLimit(settings.ObjPanelLogsTargetPerScopeLimit)
+	if enabled {
+		a.scheduleInstallationMetricRegistration(a.Ctx)
 	}
-	if update.effects.containerLogsGlobalLimit {
-		if limiter := a.sharedContainerLogsTargetLimiter(); limiter != nil {
-			limiter.SetLimit(settings.ObjPanelLogsTargetGlobalLimit)
-		}
+}
+
+func (a *App) applyKubernetesClientRateLimitsSideEffect(apply bool, qps int, burst int) {
+	if !apply {
+		return
 	}
-	if update.effects.metricsInterval {
-		// The metric cadence is server-owned (the doorbell rides collections):
-		// retime every connected cluster's running poller live. Clusters that
-		// connect later read the same setting at subsystem build.
-		interval := time.Duration(settings.MetricsRefreshIntervalMs) * time.Millisecond
-		for _, subsystem := range a.snapshotRefreshSubsystems() {
-			if subsystem != nil && subsystem.Manager != nil {
-				subsystem.Manager.SetMetricsInterval(interval)
-			}
-		}
+	a.applyKubernetesClientRateLimits(qps, burst)
+}
+
+func applyContainerLogsPerScopeLimitSideEffect(apply bool, limit int) {
+	if !apply {
+		return
+	}
+	containerlogs.SetPerScopeTargetLimit(limit)
+}
+
+func (a *App) applyContainerLogsGlobalLimitSideEffect(apply bool, limit int) {
+	if !apply {
+		return
+	}
+	if limiter := a.sharedContainerLogsTargetLimiter(); limiter != nil {
+		limiter.SetLimit(limit)
+	}
+}
+
+func setSubsystemMetricsInterval(subsystem *system.Subsystem, interval time.Duration) {
+	if subsystem == nil {
+		return
+	}
+	subsystem.Manager.SetMetricsInterval(interval)
+}
+
+func (a *App) applyMetricsIntervalSideEffect(apply bool, intervalMs int) {
+	if !apply {
+		return
+	}
+	// The metric cadence is server-owned (the doorbell rides collections):
+	// retime every connected cluster's running poller live. Clusters that
+	// connect later read the same setting at subsystem build.
+	interval := time.Duration(intervalMs) * time.Millisecond
+	for _, subsystem := range a.snapshotRefreshSubsystems() {
+		setSubsystemMetricsInterval(subsystem, interval)
 	}
 }
 
