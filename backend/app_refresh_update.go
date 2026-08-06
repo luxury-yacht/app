@@ -11,115 +11,187 @@ import (
 
 // updateRefreshSubsystemSelections updates active refresh subsystems without restarting the HTTP server.
 func (a *App) updateRefreshSubsystemSelections(selections []kubeconfigSelection) error {
-	if a == nil {
-		return fmt.Errorf("app is nil")
+	if err := a.validateRefreshSelectionUpdate(); err != nil {
+		return err
 	}
 	if len(selections) == 0 {
 		return nil
 	}
-	if a.refreshHTTPServer == nil || a.refreshAggregates.Load() == nil || a.refreshCtx == nil {
+	if a.refreshSelectionUpdateNeedsSetup() {
 		return a.setupRefreshSubsystem()
 	}
+	plan, err := a.planRefreshSelectionUpdate(selections)
+	if err != nil {
+		return err
+	}
+	update, err := a.buildRefreshSelectionUpdate(plan, selections)
+	if err != nil {
+		return err
+	}
+	return a.applyRefreshSelectionUpdate(plan, update)
+}
 
-	clusterOrder := make([]string, 0, len(selections))
-	desired := make(map[string]kubeconfigSelection, len(selections))
-	metaByID := make(map[string]ClusterMeta, len(selections))
+func (a *App) validateRefreshSelectionUpdate() error {
+	if a == nil {
+		return fmt.Errorf("app is nil")
+	}
+	return nil
+}
+
+func (a *App) refreshSelectionUpdateNeedsSetup() bool {
+	return a.refreshHTTPServer == nil || a.refreshAggregates.Load() == nil || a.refreshCtx == nil
+}
+
+type refreshSelectionPlan struct {
+	clusterOrder []string
+	desired      map[string]kubeconfigSelection
+	metaByID     map[string]ClusterMeta
+}
+
+func (a *App) planRefreshSelectionUpdate(selections []kubeconfigSelection) (refreshSelectionPlan, error) {
+	plan := refreshSelectionPlan{
+		clusterOrder: make([]string, 0, len(selections)),
+		desired:      make(map[string]kubeconfigSelection, len(selections)),
+		metaByID:     make(map[string]ClusterMeta, len(selections)),
+	}
 	for _, selection := range selections {
 		meta := a.clusterMetaForSelection(selection)
 		if meta.ID == "" {
-			return fmt.Errorf("cluster identifier missing for selection %s", selection.String())
+			return refreshSelectionPlan{}, fmt.Errorf("cluster identifier missing for selection %s", selection.String())
 		}
-		// Prefer the canonical meta from clusterClients to avoid ID
-		// inconsistencies when a kubeconfig has multiple contexts.
-		if clients := a.clusterClientsForID(meta.ID); clients != nil {
-			meta = clients.meta
-		} else if clients := a.clusterClientsForSelection(selection); clients != nil {
-			meta = clients.meta
-		}
-		if _, exists := desired[meta.ID]; exists {
+		meta = a.canonicalClusterMeta(selection, meta)
+		if _, exists := plan.desired[meta.ID]; exists {
 			continue
 		}
-		desired[meta.ID] = selection
-		metaByID[meta.ID] = meta
-		clusterOrder = append(clusterOrder, meta.ID)
+		plan.desired[meta.ID] = selection
+		plan.metaByID[meta.ID] = meta
+		plan.clusterOrder = append(plan.clusterOrder, meta.ID)
 	}
+	return plan, nil
+}
 
-	nextSubsystems := make(map[string]*system.Subsystem, len(desired))
-	newSubsystems := make(map[string]*system.Subsystem)
+func (a *App) canonicalClusterMeta(selection kubeconfigSelection, meta ClusterMeta) ClusterMeta {
+	if clients := a.clusterClientsForID(meta.ID); clients != nil {
+		return clients.meta
+	}
+	if clients := a.clusterClientsForSelection(selection); clients != nil {
+		return clients.meta
+	}
+	return meta
+}
 
-	for id, selection := range desired {
+type refreshSelectionUpdate struct {
+	next map[string]*system.Subsystem
+	new  map[string]*system.Subsystem
+}
+
+func (a *App) buildRefreshSelectionUpdate(
+	plan refreshSelectionPlan,
+	selections []kubeconfigSelection,
+) (refreshSelectionUpdate, error) {
+	update := refreshSelectionUpdate{
+		next: make(map[string]*system.Subsystem, len(plan.desired)),
+		new:  make(map[string]*system.Subsystem),
+	}
+	for id, selection := range plan.desired {
 		if existing := a.getRefreshSubsystem(id); existing != nil {
-			nextSubsystems[id] = existing
+			update.next[id] = existing
 			continue
 		}
-		clients := a.clusterClientsForID(id)
-		if clients == nil {
-			// Cluster clients don't exist yet - need to sync the pool first.
-			// This can happen if SetSelectedKubeconfigs was called with a new cluster.
-			if err := a.syncClusterClientPool(selections); err != nil {
-				return err
-			}
-			clients = a.clusterClientsForID(id)
-			if clients == nil {
-				return fmt.Errorf("cluster clients unavailable for %s", id)
-			}
+		if err := a.buildNewRefreshSubsystem(&update, plan, selections, id, selection); err != nil {
+			a.stopRefreshSubsystems(update.new)
+			return refreshSelectionUpdate{}, err
 		}
-
-		// Skip subsystem creation if auth is not valid for this cluster.
-		// This mirrors the logic in buildRefreshSubsystems to ensure auth-failed
-		// clusters don't block the addition of new healthy clusters.
-		if clients.authFailedOnInit {
-			a.logger.Warn(fmt.Sprintf("Skipping subsystem for cluster %s: auth failed during initialization", metaByID[id].Name), logsources.Refresh, id, metaByID[id].Name)
-			// Cluster is in clusterOrder but has no subsystem - this is expected for auth-failed clusters.
-			continue
-		}
-		if clients.authManager != nil && !clients.authManager.IsValid() {
-			if a.logger != nil {
-				state, _ := clients.authManager.State()
-				a.logger.Warn(fmt.Sprintf("Skipping subsystem for cluster %s: auth not valid (state=%s)", metaByID[id].Name, state.String()), logsources.Refresh, id, metaByID[id].Name)
-			}
-			// Cluster is in clusterOrder but has no subsystem - this is expected for auth-failed clusters.
-			continue
-		}
-
-		subsystem, err := a.buildRefreshSubsystemForSelection(selection, clients, metaByID[id])
-		if err != nil {
-			a.stopRefreshSubsystems(newSubsystems)
-			return err
-		}
-		nextSubsystems[id] = subsystem
-		newSubsystems[id] = subsystem
 	}
+	return update, nil
+}
 
-	a.startRefreshSubsystems(a.refreshCtx, newSubsystems)
-
-	if err := a.refreshAggregates.Load().Update(clusterOrder, nextSubsystems); err != nil {
-		a.stopRefreshSubsystems(newSubsystems)
+func (a *App) buildNewRefreshSubsystem(
+	update *refreshSelectionUpdate,
+	plan refreshSelectionPlan,
+	selections []kubeconfigSelection,
+	id string,
+	selection kubeconfigSelection,
+) error {
+	clients, err := a.ensureClusterClients(id, selections)
+	if err != nil {
 		return err
 	}
+	if !a.canBuildRefreshSubsystem(id, plan.metaByID[id], clients) {
+		return nil
+	}
+	subsystem, err := a.buildRefreshSubsystemForSelection(selection, clients, plan.metaByID[id])
+	if err != nil {
+		return err
+	}
+	update.next[id] = subsystem
+	update.new[id] = subsystem
+	return nil
+}
 
-	previousSubsystems := a.replaceRefreshSubsystems(nextSubsystems)
+func (a *App) ensureClusterClients(id string, selections []kubeconfigSelection) (*clusterClients, error) {
+	clients := a.clusterClientsForID(id)
+	if clients != nil {
+		return clients, nil
+	}
+	if err := a.syncClusterClientPool(selections); err != nil {
+		return nil, err
+	}
+	clients = a.clusterClientsForID(id)
+	if clients == nil {
+		return nil, fmt.Errorf("cluster clients unavailable for %s", id)
+	}
+	return clients, nil
+}
 
-	for id := range newSubsystems {
-		target := catalogTarget{
-			selection: desired[id],
-			meta:      metaByID[id],
-		}
+func (a *App) canBuildRefreshSubsystem(id string, meta ClusterMeta, clients *clusterClients) bool {
+	if clients.authFailedOnInit {
+		a.logger.Warn(fmt.Sprintf("Skipping subsystem for cluster %s: auth failed during initialization", meta.Name), logsources.Refresh, id, meta.Name)
+		return false
+	}
+	if clients.authManager == nil || clients.authManager.IsValid() {
+		return true
+	}
+	if a.logger != nil {
+		state, _ := clients.authManager.State()
+		a.logger.Warn(fmt.Sprintf("Skipping subsystem for cluster %s: auth not valid (state=%s)", meta.Name, state.String()), logsources.Refresh, id, meta.Name)
+	}
+	return false
+}
+
+func (a *App) applyRefreshSelectionUpdate(plan refreshSelectionPlan, update refreshSelectionUpdate) error {
+	a.startRefreshSubsystems(a.refreshCtx, update.new)
+	if err := a.refreshAggregates.Load().Update(plan.clusterOrder, update.next); err != nil {
+		a.stopRefreshSubsystems(update.new)
+		return err
+	}
+	previous := a.replaceRefreshSubsystems(update.next)
+	a.startNewObjectCatalogs(plan, update.new)
+	a.stopRemovedRefreshSubsystems(previous, update.next)
+	return nil
+}
+
+func (a *App) startNewObjectCatalogs(plan refreshSelectionPlan, subsystems map[string]*system.Subsystem) {
+	for id := range subsystems {
+		target := catalogTarget{selection: plan.desired[id], meta: plan.metaByID[id]}
 		if err := a.startObjectCatalogForTarget(target); err != nil {
-			a.logger.Warn(fmt.Sprintf("Object catalog skipped for %s: %v", id, err), logsources.ObjectCatalog, id, metaByID[id].Name)
+			a.logger.Warn(fmt.Sprintf("Object catalog skipped for %s: %v", id, err), logsources.ObjectCatalog, id, plan.metaByID[id].Name)
 		}
 	}
+}
 
-	for id, subsystem := range previousSubsystems {
-		if _, ok := nextSubsystems[id]; ok {
+func (a *App) stopRemovedRefreshSubsystems(
+	previous map[string]*system.Subsystem,
+	next map[string]*system.Subsystem,
+) {
+	for id, subsystem := range previous {
+		if _, kept := next[id]; kept {
 			continue
 		}
 		a.stopRefreshPermissionRevalidation(id)
 		a.stopRefreshSubsystem(subsystem)
 		a.stopObjectCatalogForCluster(id)
 	}
-
-	return nil
 }
 
 func (a *App) stopRefreshSubsystems(subsystems map[string]*system.Subsystem) {

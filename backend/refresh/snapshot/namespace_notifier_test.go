@@ -390,6 +390,46 @@ func TestNamespaceNotifierStopSilencesBroadcasts(t *testing.T) {
 	requireNoMoreBroadcasts(t, recorder, 0)
 }
 
+func TestNamespaceNotifierStopWaitsForActiveBroadcastAndRejectsLateEvents(t *testing.T) {
+	ingest := &fakeNamespaceIngest{}
+	ingest.set(true)
+	notifier := newNotifierForTest(ingest, nil)
+
+	started := make(chan struct{})
+	release := make(chan struct{})
+	notifier.SetBroadcast(func(_, _ string) {
+		close(started)
+		<-release
+	})
+	notifier.NamespaceChanged()
+	select {
+	case <-started:
+	case <-time.After(2 * time.Second):
+		t.Fatal("broadcast did not start")
+	}
+
+	stopped := make(chan struct{})
+	go func() {
+		notifier.Stop()
+		close(stopped)
+	}()
+	select {
+	case <-stopped:
+		close(release)
+		t.Fatal("Stop returned while a broadcast callback was still active")
+	case <-time.After(50 * time.Millisecond):
+	}
+	close(release)
+	select {
+	case <-stopped:
+	case <-time.After(2 * time.Second):
+		t.Fatal("Stop did not return after the active callback completed")
+	}
+
+	notifier.NamespaceChanged()
+	time.Sleep(2 * notifier.debounce)
+}
+
 // Informer resyncs re-deliver every object with an UNCHANGED ResourceVersion;
 // treating them as real updates broadcast a doorbell every resync period
 // (observed live: a metronome of doorbells every 15s per cluster).

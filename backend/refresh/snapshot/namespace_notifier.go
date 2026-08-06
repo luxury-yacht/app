@@ -76,18 +76,22 @@ type NamespaceChangeNotifier struct {
 	lastPresenceAt      time.Time
 	counter             uint64
 	stopped             bool
+	activeFlushes       int
+	flushDone           *sync.Cond
 }
 
 // NewNamespaceChangeNotifier builds a notifier over the same ingest source and
 // tracker the namespaces builder reads, so the presence signature can never
 // drift from what Build serves.
 func NewNamespaceChangeNotifier(ingest namespacePodIngestSource, tracker *NamespaceWorkloadTracker) *NamespaceChangeNotifier {
-	return &NamespaceChangeNotifier{
+	notifier := &NamespaceChangeNotifier{
 		ingest:              ingest,
 		tracker:             tracker,
 		debounce:            namespaceNotifierDebounce,
 		notReadyMinInterval: namespaceNotifierNotReadySettleInterval,
 	}
+	notifier.flushDone = sync.NewCond(&notifier.mu)
+	return notifier
 }
 
 // WorkloadsReady reports whether this notifier's workload tracker has settled.
@@ -170,6 +174,9 @@ func (n *NamespaceChangeNotifier) Stop() {
 	n.stopped = true
 	timer := n.timer
 	n.timer = nil
+	for n.activeFlushes > 0 {
+		n.flushDone.Wait()
+	}
 	n.mu.Unlock()
 	if timer != nil {
 		timer.Stop()
@@ -186,127 +193,179 @@ func (n *NamespaceChangeNotifier) arm() {
 }
 
 func (n *NamespaceChangeNotifier) flush() {
+	state, ok := n.beginFlush()
+	if !ok {
+		return
+	}
+	defer n.finishFlush()
+
+	reasons := namespaceFlushReasons(state.namespaceDirty)
+	workloadReasons, ready := n.workloadFlushReasons(state.workloadDirty, state.namespaceDirty)
+	reasons = append(reasons, workloadReasons...)
+	eventReasons, eventReady := n.eventFlushReasons(state.eventDirty)
+	reasons = append(reasons, eventReasons...)
+	quotaReasons, quotaReady := n.quotaFlushReasons(state.quotaDirty)
+	reasons = append(reasons, quotaReasons...)
+	n.broadcastFlushReasons(state.broadcast, reasons)
+
+	if !ready || (n.eventsExpected && !eventReady) || !quotaReady {
+		n.arm()
+	}
+}
+
+type namespaceFlushState struct {
+	broadcast      func(version, reason string)
+	namespaceDirty bool
+	workloadDirty  bool
+	eventDirty     bool
+	quotaDirty     bool
+}
+
+func (n *NamespaceChangeNotifier) beginFlush() (namespaceFlushState, bool) {
 	n.mu.Lock()
+	defer n.mu.Unlock()
 	n.timer = nil
 	if n.stopped {
-		n.mu.Unlock()
-		return
+		return namespaceFlushState{}, false
 	}
-	broadcast := n.broadcast
-	if broadcast == nil {
+	if n.broadcast == nil {
 		// Not wired yet: keep the dirty flags; SetBroadcast re-arms.
-		n.mu.Unlock()
-		return
+		return namespaceFlushState{}, false
 	}
-	namespaceDirty := n.namespaceDirty
-	workloadDirty := n.workloadDirty
-	eventDirty := n.eventDirty
-	quotaDirty := n.quotaDirty
+	state := namespaceFlushState{
+		broadcast:      n.broadcast,
+		namespaceDirty: n.namespaceDirty,
+		workloadDirty:  n.workloadDirty,
+		eventDirty:     n.eventDirty,
+		quotaDirty:     n.quotaDirty,
+	}
 	n.namespaceDirty = false
 	n.workloadDirty = false
 	n.eventDirty = false
 	n.quotaDirty = false
-	n.mu.Unlock()
+	n.activeFlushes++
+	return state, true
+}
 
-	// Compute outside the lock: the signature reads the ingest stores.
+func (n *NamespaceChangeNotifier) finishFlush() {
+	n.mu.Lock()
+	n.activeFlushes--
+	if n.activeFlushes == 0 {
+		n.flushDone.Broadcast()
+	}
+	n.mu.Unlock()
+}
+
+func namespaceFlushReasons(namespaceDirty bool) []string {
+	if namespaceDirty {
+		return []string{"namespace object changed"}
+	}
+	return nil
+}
+
+func (n *NamespaceChangeNotifier) workloadFlushReasons(workloadDirty, namespaceDirty bool) ([]string, bool) {
 	ready := n.tracker.Synced()
 	n.mu.Lock()
-	// Recompute on workload events, and on the rearm tick whenever the last
-	// signature predates readiness — the ready flip alone changes the
-	// signature's ready bit and must broadcast.
 	needSignature := workloadDirty || !n.signatureKnown || !n.lastSignatureReady
 	n.mu.Unlock()
-	var reasons []string
-	if namespaceDirty {
-		reasons = append(reasons, "namespace object changed")
+	if !needSignature {
+		return nil, ready
 	}
-	if needSignature {
-		signature := workloadRollupSignature(namespaceWorkloadRollupsFromIngest(n.ingest), ready)
-		n.mu.Lock()
-		if !n.signatureKnown || signature != n.lastSignature {
-			hadSignature := n.signatureKnown
-			// Presence-only churn while SETTLING is floored to the legacy poll
-			// cadence: leave the signature un-consumed so the rearm tick
-			// re-evaluates it once the floor elapses — the change is deferred,
-			// never lost (and the ready flip fires regardless, via the ready
-			// bit changing the signature after lastSignatureReady=false).
-			throttled := hadSignature && !ready && !namespaceDirty &&
-				time.Since(n.lastPresenceAt) < n.notReadyMinInterval
-			if !throttled {
-				n.signatureKnown = true
-				n.lastSignature = signature
-				n.lastPresenceAt = time.Now()
-				switch {
-				case !hadSignature:
-					reasons = append(reasons, "workload-presence baseline established")
-				case !ready:
-					reasons = append(reasons, "workload rollup changed while stores are still settling")
-				default:
-					reasons = append(reasons, "workload rollup changed (presence, health, reservations, or store readiness changed)")
-				}
-			}
-		}
-		n.lastSignatureReady = ready
-		n.mu.Unlock()
+	signature := workloadRollupSignature(namespaceWorkloadRollupsFromIngest(n.ingest), ready)
+	n.mu.Lock()
+	defer n.mu.Unlock()
+	n.lastSignatureReady = ready
+	if n.signatureKnown && signature == n.lastSignature {
+		return nil, ready
 	}
+	hadSignature := n.signatureKnown
+	if n.workloadSignatureThrottled(hadSignature, ready, namespaceDirty) {
+		return nil, ready
+	}
+	n.signatureKnown = true
+	n.lastSignature = signature
+	n.lastPresenceAt = time.Now()
+	return []string{workloadFlushReason(hadSignature, ready)}, ready
+}
 
+func (n *NamespaceChangeNotifier) workloadSignatureThrottled(hadSignature, ready, namespaceDirty bool) bool {
+	return hadSignature && !ready && !namespaceDirty && time.Since(n.lastPresenceAt) < n.notReadyMinInterval
+}
+
+func workloadFlushReason(hadSignature, ready bool) string {
+	if !hadSignature {
+		return "workload-presence baseline established"
+	}
+	if !ready {
+		return "workload rollup changed while stores are still settling"
+	}
+	return "workload rollup changed (presence, health, reservations, or store readiness changed)"
+}
+
+func (n *NamespaceChangeNotifier) eventFlushReasons(eventDirty bool) ([]string, bool) {
 	eventReady := !n.eventsExpected || (n.eventsSynced != nil && n.eventsSynced())
 	n.mu.Lock()
 	needEventSignature := eventDirty || !n.eventSignatureKnown || (n.eventsExpected && !n.lastEventReady)
 	n.mu.Unlock()
-	if needEventSignature {
-		counts, state := namespaceWarningEventRollups(n.eventLister, n.eventsExpected, n.eventsSynced)
-		signature := warningEventRollupSignature(counts, state)
-		n.mu.Lock()
-		if !n.eventSignatureKnown || signature != n.lastEventSignature {
-			hadSignature := n.eventSignatureKnown
-			n.eventSignatureKnown = true
-			n.lastEventSignature = signature
-			if !hadSignature {
-				reasons = append(reasons, "warning-event baseline established")
-			} else {
-				reasons = append(reasons, "warning event count changed")
-			}
-		}
-		n.lastEventReady = eventReady
-		n.mu.Unlock()
+	if !needEventSignature {
+		return nil, eventReady
 	}
+	counts, state := namespaceWarningEventRollups(n.eventLister, n.eventsExpected, n.eventsSynced)
+	signature := warningEventRollupSignature(counts, state)
+	n.mu.Lock()
+	defer n.mu.Unlock()
+	n.lastEventReady = eventReady
+	if n.eventSignatureKnown && signature == n.lastEventSignature {
+		return nil, eventReady
+	}
+	hadSignature := n.eventSignatureKnown
+	n.eventSignatureKnown = true
+	n.lastEventSignature = signature
+	if !hadSignature {
+		return []string{"warning-event baseline established"}, eventReady
+	}
+	return []string{"warning event count changed"}, eventReady
+}
 
+func (n *NamespaceChangeNotifier) quotaFlushReasons(quotaDirty bool) ([]string, bool) {
 	n.mu.Lock()
 	needQuotaSignature := quotaDirty || !n.quotaSignatureKnown || !n.lastQuotaReady
 	quotaReady := n.lastQuotaReady
 	n.mu.Unlock()
-	if needQuotaSignature {
-		quotaRollups, quotaState := namespaceQuotaRollupsFromIngest(n.ingest)
-		quotaReady = quotaState != NamespaceSignalLoading
-		signature := namespaceQuotaRollupSignature(quotaRollups, quotaState)
-		n.mu.Lock()
-		if !n.quotaSignatureKnown || signature != n.lastQuotaSignature {
-			hadSignature := n.quotaSignatureKnown
-			n.quotaSignatureKnown = true
-			n.lastQuotaSignature = signature
-			if !hadSignature {
-				reasons = append(reasons, "quota-pressure baseline established")
-			} else {
-				reasons = append(reasons, "quota pressure changed")
-			}
-		}
-		n.lastQuotaReady = quotaReady
-		n.mu.Unlock()
+	if !needQuotaSignature {
+		return nil, quotaReady
 	}
+	quotaRollups, quotaState := namespaceQuotaRollupsFromIngest(n.ingest)
+	quotaReady = quotaState != NamespaceSignalLoading
+	signature := namespaceQuotaRollupSignature(quotaRollups, quotaState)
+	n.mu.Lock()
+	defer n.mu.Unlock()
+	n.lastQuotaReady = quotaReady
+	if n.quotaSignatureKnown && signature == n.lastQuotaSignature {
+		return nil, quotaReady
+	}
+	hadSignature := n.quotaSignatureKnown
+	n.quotaSignatureKnown = true
+	n.lastQuotaSignature = signature
+	if !hadSignature {
+		return []string{"quota-pressure baseline established"}, quotaReady
+	}
+	return []string{"quota pressure changed"}, quotaReady
+}
 
+func (n *NamespaceChangeNotifier) broadcastFlushReasons(
+	broadcast func(version, reason string),
+	reasons []string,
+) {
 	if len(reasons) > 0 {
 		n.mu.Lock()
+		if n.stopped {
+			n.mu.Unlock()
+			return
+		}
 		n.counter++
 		version := fmt.Sprintf("ns-%d", n.counter)
 		n.mu.Unlock()
 		broadcast(version, strings.Join(reasons, "; "))
-	}
-
-	// The cluster-Ready gate needs a build after the tracker settles, and the UI
-	// needs an empty Events cache to transition from loading to an authoritative
-	// zero. Keep a bounded self-rearm alive until both expected sources settle.
-	if !ready || (n.eventsExpected && !eventReady) || !quotaReady {
-		n.arm()
 	}
 }

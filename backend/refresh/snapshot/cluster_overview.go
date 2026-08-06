@@ -288,228 +288,233 @@ func RegisterClusterOverviewDomainList(reg *domain.Registry, client kubernetes.I
 }
 
 func (b *ClusterOverviewListBuilder) Build(ctx context.Context, scope string) (*refresh.Snapshot, error) {
-	var (
-		nodes            []*corev1.Node
-		pods             []*corev1.Pod
-		namespaces       []*corev1.Namespace
-		replicaSets      []*appsv1.ReplicaSet
-		recentEvents     = make([]RecentEvent, 0)
-		deploymentCount  int
-		statefulSetCount int
-		daemonSetCount   int
-		cronJobCount     int
-		nodesForbidden   bool
-		podsForbidden    bool
-		namespacesDenied bool
-		mu               sync.Mutex
-	)
-
-	tasks := []func(context.Context) error{
-		func(ctx context.Context) error {
-			resp, err := b.client.CoreV1().Nodes().List(ctx, metav1.ListOptions{})
-			switch {
-			case err == nil:
-				mu.Lock()
-				nodes = parallel.CopyToPointers(resp.Items)
-				mu.Unlock()
-				return nil
-			case apierrors.IsForbidden(err):
-				// Issue #244: a namespaces- or pods-only identity still gets a
-				// partial overview; the denied source is marked in the payload.
-				klog.V(2).Info("cluster-overview fallback: node list forbidden; proceeding without node summary")
-				mu.Lock()
-				nodesForbidden = true
-				mu.Unlock()
-				return nil
-			default:
-				return err
-			}
-		},
-		func(ctx context.Context) error {
-			resp, err := b.client.CoreV1().Pods("").List(ctx, metav1.ListOptions{})
-			switch {
-			case err == nil:
-				mu.Lock()
-				pods = parallel.CopyToPointers(resp.Items)
-				mu.Unlock()
-				return nil
-			case apierrors.IsForbidden(err):
-				klog.V(2).Info("cluster-overview fallback: pod list forbidden; proceeding without pod metrics")
-				mu.Lock()
-				podsForbidden = true
-				mu.Unlock()
-				return nil
-			default:
-				return err
-			}
-		},
-		func(ctx context.Context) error {
-			resp, err := b.client.CoreV1().Namespaces().List(ctx, metav1.ListOptions{})
-			switch {
-			case err == nil:
-				mu.Lock()
-				namespaces = parallel.CopyToPointers(resp.Items)
-				mu.Unlock()
-				return nil
-			case apierrors.IsForbidden(err):
-				klog.V(2).Info("cluster-overview fallback: namespace list forbidden; proceeding with empty namespace set")
-				mu.Lock()
-				namespacesDenied = true
-				mu.Unlock()
-				return nil
-			default:
-				return err
-			}
-		},
-		func(ctx context.Context) error {
-			resp, err := b.client.AppsV1().Deployments("").List(ctx, metav1.ListOptions{})
-			switch {
-			case err == nil:
-				mu.Lock()
-				deploymentCount = len(resp.Items)
-				mu.Unlock()
-				return nil
-			case apierrors.IsForbidden(err):
-				klog.V(2).Info("cluster-overview fallback: deployment list forbidden; proceeding without deployment count")
-				return nil
-			default:
-				return err
-			}
-		},
-		func(ctx context.Context) error {
-			resp, err := b.client.AppsV1().ReplicaSets("").List(ctx, metav1.ListOptions{})
-			switch {
-			case err == nil:
-				mu.Lock()
-				replicaSets = parallel.CopyToPointers(resp.Items)
-				mu.Unlock()
-				return nil
-			case apierrors.IsForbidden(err):
-				klog.V(2).Info("cluster-overview fallback: replicaset list forbidden; deployment usage may be incomplete")
-				return nil
-			default:
-				return err
-			}
-		},
-		func(ctx context.Context) error {
-			resp, err := b.client.AppsV1().StatefulSets("").List(ctx, metav1.ListOptions{})
-			switch {
-			case err == nil:
-				mu.Lock()
-				statefulSetCount = len(resp.Items)
-				mu.Unlock()
-				return nil
-			case apierrors.IsForbidden(err):
-				klog.V(2).Info("cluster-overview fallback: statefulset list forbidden; proceeding without statefulset count")
-				return nil
-			default:
-				return err
-			}
-		},
-		func(ctx context.Context) error {
-			resp, err := b.client.AppsV1().DaemonSets("").List(ctx, metav1.ListOptions{})
-			switch {
-			case err == nil:
-				mu.Lock()
-				daemonSetCount = len(resp.Items)
-				mu.Unlock()
-				return nil
-			case apierrors.IsForbidden(err):
-				klog.V(2).Info("cluster-overview fallback: daemonset list forbidden; proceeding without daemonset count")
-				return nil
-			default:
-				return err
-			}
-		},
-		func(ctx context.Context) error {
-			resp, err := b.client.BatchV1().CronJobs("").List(ctx, metav1.ListOptions{})
-			switch {
-			case err == nil:
-				mu.Lock()
-				cronJobCount = len(resp.Items)
-				mu.Unlock()
-				return nil
-			case apierrors.IsForbidden(err):
-				klog.V(2).Info("cluster-overview fallback: cronjob list forbidden; proceeding without cronjob count")
-				return nil
-			default:
-				return err
-			}
-		},
-		func(ctx context.Context) error {
-			resp, err := b.client.CoreV1().Events("").List(ctx, metav1.ListOptions{})
-			switch {
-			case err == nil:
-				events := parallel.CopyToPointers(resp.Items)
-				mu.Lock()
-				recentEvents = buildRecentEvents(events, ClusterMetaFromContext(ctx))
-				mu.Unlock()
-				return nil
-			case apierrors.IsForbidden(err):
-				klog.V(2).Info("cluster-overview fallback: event list forbidden; proceeding without recent warning events")
-				return nil
-			default:
-				return err
-			}
-		},
-	}
-
-	if err := parallel.RunLimited(ctx, 4, tasks...); err != nil {
+	data := newClusterOverviewListData()
+	if err := parallel.RunLimited(ctx, 4, b.listTasks(data)...); err != nil {
 		return nil, err
 	}
-	if podsForbidden {
-		pods = nil
-	}
-	if namespacesDenied {
-		namespaces = nil
-	}
-
-	versionFn := b.versionFn
-	if versionFn == nil {
-		versionFn = func(context.Context) string { return defaultClusterVersion("") }
-	}
-
-	// The list fallback projects its typed pods to the same PodAggregate rows the
-	// informer path reads from ingest. WorkloadKind (the metrics-bucketing kind) is
-	// resolved through an RS lister built from the RS list the fallback already
-	// fetched, so the bucketing matches the prior buildClusterOverviewReplicaSetDeploymentMap
-	// resolution. The per-pod RV is the version watermark contribution.
-	rsLister := replicaSetListerFromSlice(replicaSets)
-	podAggregates := make([]streamrows.PodAggregate, 0, len(pods))
-	var podVersion uint64
-	for _, pod := range pods {
-		if pod == nil {
-			continue
-		}
-		podAggregates = append(podAggregates, projectPodAggregate(pod, PodOwnerSources{ReplicaSets: rsLister}))
-		if v := resourceVersionOrTimestamp(pod); v > podVersion {
-			podVersion = v
-		}
-	}
-
-	// The list fallback projects its typed nodes to the same nodeOverviewFact the informer
-	// path reads from ingest, so the overview's per-node counting stays byte-equivalent.
-	nodeFacts := make([]nodeOverviewFact, 0, len(nodes))
-	for _, node := range nodes {
-		if node == nil {
-			continue
-		}
-		nodeFacts = append(nodeFacts, projectNodeOverviewFact(node))
-	}
-
-	snapshot, err := buildClusterOverviewSnapshot(ctx, scope, nodeFacts, podAggregates, podVersion, namespaces, b.metrics, versionFn, b.serverHost)
+	data.normalizeForbiddenSources()
+	podAggregates, podVersion := projectClusterOverviewPods(data.pods, data.replicaSets)
+	nodeFacts := projectClusterOverviewNodes(data.nodes)
+	snapshot, err := buildClusterOverviewSnapshot(
+		ctx, scope, nodeFacts, podAggregates, podVersion, data.namespaces,
+		b.metrics, clusterOverviewVersionFunc(b.versionFn), b.serverHost,
+	)
 	if err != nil {
 		return nil, err
 	}
 	applyClusterOverviewExtras(snapshot, clusterOverviewExtras{
-		totalDeployments:     deploymentCount,
-		totalStatefulSets:    statefulSetCount,
-		totalDaemonSets:      daemonSetCount,
-		totalCronJobs:        cronJobCount,
-		recentEvents:         recentEvents,
-		unavailableResources: clusterOverviewUnavailable(!nodesForbidden, !podsForbidden, !namespacesDenied),
+		totalDeployments:     data.deploymentCount,
+		totalStatefulSets:    data.statefulSetCount,
+		totalDaemonSets:      data.daemonSetCount,
+		totalCronJobs:        data.cronJobCount,
+		recentEvents:         data.recentEvents,
+		unavailableResources: clusterOverviewUnavailable(!data.nodesForbidden, !data.podsForbidden, !data.namespacesDenied),
 	})
 	return snapshot, nil
+}
+
+type clusterOverviewListData struct {
+	mu               sync.Mutex
+	nodes            []*corev1.Node
+	pods             []*corev1.Pod
+	namespaces       []*corev1.Namespace
+	replicaSets      []*appsv1.ReplicaSet
+	recentEvents     []RecentEvent
+	deploymentCount  int
+	statefulSetCount int
+	daemonSetCount   int
+	cronJobCount     int
+	nodesForbidden   bool
+	podsForbidden    bool
+	namespacesDenied bool
+}
+
+func newClusterOverviewListData() *clusterOverviewListData {
+	return &clusterOverviewListData{recentEvents: make([]RecentEvent, 0)}
+}
+
+func (b *ClusterOverviewListBuilder) listTasks(data *clusterOverviewListData) []func(context.Context) error {
+	return []func(context.Context) error{
+		func(ctx context.Context) error { return data.listNodes(ctx, b.client) },
+		func(ctx context.Context) error { return data.listPods(ctx, b.client) },
+		func(ctx context.Context) error { return data.listNamespaces(ctx, b.client) },
+		func(ctx context.Context) error { return data.listDeployments(ctx, b.client) },
+		func(ctx context.Context) error { return data.listReplicaSets(ctx, b.client) },
+		func(ctx context.Context) error { return data.listStatefulSets(ctx, b.client) },
+		func(ctx context.Context) error { return data.listDaemonSets(ctx, b.client) },
+		func(ctx context.Context) error { return data.listCronJobs(ctx, b.client) },
+		func(ctx context.Context) error { return data.listEvents(ctx, b.client) },
+	}
+}
+
+func (d *clusterOverviewListData) listNodes(ctx context.Context, client kubernetes.Interface) error {
+	resp, err := client.CoreV1().Nodes().List(ctx, metav1.ListOptions{})
+	if apierrors.IsForbidden(err) {
+		klog.V(2).Info("cluster-overview fallback: node list forbidden; proceeding without node summary")
+		d.withLock(func() { d.nodesForbidden = true })
+		return nil
+	}
+	if err != nil {
+		return err
+	}
+	d.withLock(func() { d.nodes = parallel.CopyToPointers(resp.Items) })
+	return nil
+}
+
+func (d *clusterOverviewListData) listPods(ctx context.Context, client kubernetes.Interface) error {
+	resp, err := client.CoreV1().Pods("").List(ctx, metav1.ListOptions{})
+	if apierrors.IsForbidden(err) {
+		klog.V(2).Info("cluster-overview fallback: pod list forbidden; proceeding without pod metrics")
+		d.withLock(func() { d.podsForbidden = true })
+		return nil
+	}
+	if err != nil {
+		return err
+	}
+	d.withLock(func() { d.pods = parallel.CopyToPointers(resp.Items) })
+	return nil
+}
+
+func (d *clusterOverviewListData) listNamespaces(ctx context.Context, client kubernetes.Interface) error {
+	resp, err := client.CoreV1().Namespaces().List(ctx, metav1.ListOptions{})
+	if apierrors.IsForbidden(err) {
+		klog.V(2).Info("cluster-overview fallback: namespace list forbidden; proceeding with empty namespace set")
+		d.withLock(func() { d.namespacesDenied = true })
+		return nil
+	}
+	if err != nil {
+		return err
+	}
+	d.withLock(func() { d.namespaces = parallel.CopyToPointers(resp.Items) })
+	return nil
+}
+
+func (d *clusterOverviewListData) listDeployments(ctx context.Context, client kubernetes.Interface) error {
+	resp, err := client.AppsV1().Deployments("").List(ctx, metav1.ListOptions{})
+	if apierrors.IsForbidden(err) {
+		klog.V(2).Info("cluster-overview fallback: deployment list forbidden; proceeding without deployment count")
+		return nil
+	}
+	if err != nil {
+		return err
+	}
+	d.withLock(func() { d.deploymentCount = len(resp.Items) })
+	return nil
+}
+
+func (d *clusterOverviewListData) listReplicaSets(ctx context.Context, client kubernetes.Interface) error {
+	resp, err := client.AppsV1().ReplicaSets("").List(ctx, metav1.ListOptions{})
+	if apierrors.IsForbidden(err) {
+		klog.V(2).Info("cluster-overview fallback: replicaset list forbidden; deployment usage may be incomplete")
+		return nil
+	}
+	if err != nil {
+		return err
+	}
+	d.withLock(func() { d.replicaSets = parallel.CopyToPointers(resp.Items) })
+	return nil
+}
+
+func (d *clusterOverviewListData) listStatefulSets(ctx context.Context, client kubernetes.Interface) error {
+	resp, err := client.AppsV1().StatefulSets("").List(ctx, metav1.ListOptions{})
+	if apierrors.IsForbidden(err) {
+		klog.V(2).Info("cluster-overview fallback: statefulset list forbidden; proceeding without statefulset count")
+		return nil
+	}
+	if err != nil {
+		return err
+	}
+	d.withLock(func() { d.statefulSetCount = len(resp.Items) })
+	return nil
+}
+
+func (d *clusterOverviewListData) listDaemonSets(ctx context.Context, client kubernetes.Interface) error {
+	resp, err := client.AppsV1().DaemonSets("").List(ctx, metav1.ListOptions{})
+	if apierrors.IsForbidden(err) {
+		klog.V(2).Info("cluster-overview fallback: daemonset list forbidden; proceeding without daemonset count")
+		return nil
+	}
+	if err != nil {
+		return err
+	}
+	d.withLock(func() { d.daemonSetCount = len(resp.Items) })
+	return nil
+}
+
+func (d *clusterOverviewListData) listCronJobs(ctx context.Context, client kubernetes.Interface) error {
+	resp, err := client.BatchV1().CronJobs("").List(ctx, metav1.ListOptions{})
+	if apierrors.IsForbidden(err) {
+		klog.V(2).Info("cluster-overview fallback: cronjob list forbidden; proceeding without cronjob count")
+		return nil
+	}
+	if err != nil {
+		return err
+	}
+	d.withLock(func() { d.cronJobCount = len(resp.Items) })
+	return nil
+}
+
+func (d *clusterOverviewListData) listEvents(ctx context.Context, client kubernetes.Interface) error {
+	resp, err := client.CoreV1().Events("").List(ctx, metav1.ListOptions{})
+	if apierrors.IsForbidden(err) {
+		klog.V(2).Info("cluster-overview fallback: event list forbidden; proceeding without recent warning events")
+		return nil
+	}
+	if err != nil {
+		return err
+	}
+	events := buildRecentEvents(parallel.CopyToPointers(resp.Items), ClusterMetaFromContext(ctx))
+	d.withLock(func() { d.recentEvents = events })
+	return nil
+}
+
+func (d *clusterOverviewListData) withLock(update func()) {
+	d.mu.Lock()
+	update()
+	d.mu.Unlock()
+}
+
+func (d *clusterOverviewListData) normalizeForbiddenSources() {
+	if d.podsForbidden {
+		d.pods = nil
+	}
+	if d.namespacesDenied {
+		d.namespaces = nil
+	}
+}
+
+func clusterOverviewVersionFunc(versionFn func(context.Context) string) func(context.Context) string {
+	if versionFn != nil {
+		return versionFn
+	}
+	return func(context.Context) string { return defaultClusterVersion("") }
+}
+
+func projectClusterOverviewPods(
+	pods []*corev1.Pod,
+	replicaSets []*appsv1.ReplicaSet,
+) ([]streamrows.PodAggregate, uint64) {
+	rsLister := replicaSetListerFromSlice(replicaSets)
+	aggregates := make([]streamrows.PodAggregate, 0, len(pods))
+	var version uint64
+	for _, pod := range pods {
+		if pod == nil {
+			continue
+		}
+		aggregates = append(aggregates, projectPodAggregate(pod, PodOwnerSources{ReplicaSets: rsLister}))
+		version = maxSnapshotVersion(version, pod)
+	}
+	return aggregates, version
+}
+
+func projectClusterOverviewNodes(nodes []*corev1.Node) []nodeOverviewFact {
+	facts := make([]nodeOverviewFact, 0, len(nodes))
+	for _, node := range nodes {
+		if node != nil {
+			facts = append(facts, projectNodeOverviewFact(node))
+		}
+	}
+	return facts
 }
 
 // clusterOverviewUnavailable returns the canonical group/resource keys of the
@@ -545,191 +550,197 @@ func buildClusterOverviewSnapshot(
 	versionFn func(context.Context) string,
 	serverHost string,
 ) (*refresh.Snapshot, error) {
-	meta := ClusterMetaFromContext(ctx)
-	overview := ClusterOverviewPayload{}
-	var version uint64
-
-	var cpuAllocatableMilli int64
-	var cpuRequestsMilli int64
-	var cpuLimitsMilli int64
-	var cpuUsageMilli int64
-
-	var memAllocatableBytes int64
-	var memRequestsBytes int64
-	var memLimitsBytes int64
-	var memUsageBytes int64
-	podUsage := map[string]metrics.PodUsage{}
-
-	nonFargateNodes := 0
-	virtualKubeletNodes := 0
-
+	accumulator := clusterOverviewAccumulator{}
 	for _, node := range nodes {
-		overview.TotalNodes++
-		if node.Version > version {
-			version = node.Version
-		}
-
-		cpuAllocatableMilli += node.AllocatableCPUMilli
-		memAllocatableBytes += node.AllocatableMemoryBytes
-
-		// Node health — Ready condition and cordoned state are tracked for all
-		// nodes regardless of compute type (Fargate, virtual-kubelet, etc.).
-		if node.Ready {
-			overview.ReadyNodes++
-		} else {
-			overview.NotReadyNodes++
-		}
-		if node.Unschedulable {
-			overview.CordonedNodes++
-		}
-
-		// EKS Fargate nodes carry the eks.amazonaws.com/compute-type label.
-		if node.IsFargate {
-			overview.FargateNodes++
-			continue
-		}
-		// AKS Virtual Nodes (backed by Azure Container Instances) carry
-		// the type=virtual-kubelet label, set by the virtual-kubelet binary.
-		if node.IsVirtualKubelet {
-			virtualKubeletNodes++
-			continue
-		}
-		nonFargateNodes++
+		accumulator.addNode(node)
 	}
-
-	metricsSnapshot := ClusterOverviewMetrics{Stale: true}
-	if provider != nil {
-		usage := provider.LatestPodUsage()
-		for _, entry := range usage {
-			cpuUsageMilli += entry.CPUUsageMilli
-			memUsageBytes += entry.MemoryUsageBytes
-		}
-		podUsage = usage
-		meta := provider.Metadata()
-		lastError := meta.LastError
-
-		// Grace period: avoid surfacing a metrics error before any successful poll
-		// has completed. A disabled poller is exempt — its LastError is a permanent
-		// reason (forbidden / metrics-server absent), not a transient pre-first-poll
-		// error, so clearing it would strand the UI on "Collecting metrics…".
-		if !meta.Disabled && meta.SuccessCount == 0 && meta.CollectedAt.IsZero() && meta.ConsecutiveFailures < 5 {
-			lastError = ""
-		}
-
-		stale := false
-		if !meta.CollectedAt.IsZero() && time.Since(meta.CollectedAt) > config.MetricsStaleWindow {
-			stale = true
-		}
-
-		metricsSnapshot = ClusterOverviewMetrics{
-			Stale:               stale,
-			LastError:           lastError,
-			ConsecutiveFailures: meta.ConsecutiveFailures,
-			SuccessCount:        meta.SuccessCount,
-			FailureCount:        meta.FailureCount,
-			Disabled:            meta.Disabled,
-		}
-		// Zero time must serve as 0/omitted — Unix() of Go's zero time is
-		// -62135596800, which reads as a PRESENT timestamp downstream and
-		// suppressed the frontend's "Collecting metrics…" indication.
-		if !meta.CollectedAt.IsZero() {
-			metricsSnapshot.CollectedAt = meta.CollectedAt.Unix()
-		}
-	}
-	overview.WorkloadResourceUsage = buildWorkloadResourceUsage(podAggregates, podUsage)
-
-	// Pods are projected: the per-pod RV is gone with the typed object, so the pod
-	// contribution to the version watermark is the pod store's latest list/watch RV
-	// (the informer path) or the max typed-pod RV (the list fallback), folded once.
-	if podVersion > version {
-		version = podVersion
-	}
-
+	metricsResult := buildClusterOverviewMetrics(provider)
+	accumulator.cpuUsageMilli = metricsResult.cpuUsageMilli
+	accumulator.memUsageBytes = metricsResult.memUsageBytes
+	accumulator.overview.WorkloadResourceUsage = buildWorkloadResourceUsage(podAggregates, metricsResult.podUsage)
+	accumulator.version = maxClusterOverviewVersion(accumulator.version, podVersion)
 	for _, agg := range podAggregates {
-		overview.TotalPods++
-
-		switch agg.Phase {
-		case string(corev1.PodRunning):
-			overview.RunningPods++
-		case string(corev1.PodSucceeded):
-			overview.SucceededPods++
-		case string(corev1.PodPending):
-			overview.PendingPods++
-		case string(corev1.PodFailed):
-			overview.FailedPods++
-		}
-
-		overview.TotalContainers += agg.ContainerCount
-		overview.TotalInitContainers += agg.InitContainerCount
-
-		countPodStatusPresentation(&overview, agg.StatusPresentation)
-		if podCountsAsNotReadySignal(agg.Phase, agg.ReadyContainers, agg.TotalContainers) {
-			overview.NotReadyPods++
-		}
-
-		// Overview totals add regular + init container resources together.
-		cpuRequestsMilli += agg.CPURequestMilli + agg.InitCPURequestMilli
-		cpuLimitsMilli += agg.CPULimitMilli + agg.InitCPULimitMilli
-		memRequestsBytes += agg.MemRequestBytes + agg.InitMemRequestBytes
-		memLimitsBytes += agg.MemLimitBytes + agg.InitMemLimitBytes
-
-		// hasRestarts previously checked container + init + EPHEMERAL restart
-		// statuses; RestartCountFacts sums exactly those three, so >0 is equivalent.
-		if agg.RestartCountFacts > 0 {
-			overview.RestartedPods++
-		}
+		accumulator.addPod(agg)
 	}
-
 	for _, ns := range namespaces {
-		if ns == nil {
-			continue
-		}
-		overview.TotalNamespaces++
-		if v := resourceVersionOrTimestamp(ns); v > version {
-			version = v
-		}
+		accumulator.addNamespace(ns)
 	}
-
-	overview.CPUUsage = formatCPUValue(cpuUsageMilli)
-	overview.CPURequests = formatCPUValue(cpuRequestsMilli)
-	overview.CPULimits = formatCPUValue(cpuLimitsMilli)
-	overview.CPUAllocatable = formatCPUValue(cpuAllocatableMilli)
-
-	overview.MemoryUsage = formatMemoryValue(memUsageBytes)
-	overview.MemoryRequests = formatMemoryValue(memRequestsBytes)
-	overview.MemoryLimits = formatMemoryValue(memLimitsBytes)
-	overview.MemoryAllocatable = formatMemoryValue(memAllocatableBytes)
-
-	if versionFn != nil {
-		overview.ClusterVersion = versionFn(ctx)
-	}
-	overview.ClusterVersion = defaultClusterVersion(overview.ClusterVersion)
-
-	clusterType := detectClusterType(overview.ClusterVersion, serverHost)
-	overview.ClusterType = clusterType
-	switch clusterType {
-	case "EKS":
-		overview.EC2Nodes = nonFargateNodes
-	case "AKS":
-		overview.VirtualNodes = virtualKubeletNodes
-		overview.VMNodes = nonFargateNodes
-	default:
-		overview.RegularNodes = nonFargateNodes
-	}
-
+	accumulator.finalize(ctx, versionFn, serverHost)
 	return &refresh.Snapshot{
 		Domain:  clusterOverviewDomainName,
 		Scope:   scope,
-		Version: version,
+		Version: accumulator.version,
 		Payload: ClusterOverviewSnapshot{
-			ClusterMeta: meta,
-			Overview:    overview,
-			Metrics:     metricsSnapshot,
+			ClusterMeta: ClusterMetaFromContext(ctx),
+			Overview:    accumulator.overview,
+			Metrics:     metricsResult.snapshot,
 		},
 		Stats: refresh.SnapshotStats{
-			ItemCount: overview.TotalNodes,
+			ItemCount: accumulator.overview.TotalNodes,
 		},
 	}, nil
+}
+
+type clusterOverviewAccumulator struct {
+	overview            ClusterOverviewPayload
+	version             uint64
+	cpuAllocatableMilli int64
+	cpuRequestsMilli    int64
+	cpuLimitsMilli      int64
+	cpuUsageMilli       int64
+	memAllocatableBytes int64
+	memRequestsBytes    int64
+	memLimitsBytes      int64
+	memUsageBytes       int64
+	nonFargateNodes     int
+	virtualKubeletNodes int
+}
+
+func (a *clusterOverviewAccumulator) addNode(node nodeOverviewFact) {
+	a.overview.TotalNodes++
+	a.version = maxClusterOverviewVersion(a.version, node.Version)
+	a.cpuAllocatableMilli += node.AllocatableCPUMilli
+	a.memAllocatableBytes += node.AllocatableMemoryBytes
+	if node.Ready {
+		a.overview.ReadyNodes++
+	} else {
+		a.overview.NotReadyNodes++
+	}
+	if node.Unschedulable {
+		a.overview.CordonedNodes++
+	}
+	if node.IsFargate {
+		a.overview.FargateNodes++
+		return
+	}
+	if node.IsVirtualKubelet {
+		a.virtualKubeletNodes++
+		return
+	}
+	a.nonFargateNodes++
+}
+
+func (a *clusterOverviewAccumulator) addPod(aggregate streamrows.PodAggregate) {
+	a.overview.TotalPods++
+	a.addPodPhase(aggregate.Phase)
+	a.overview.TotalContainers += aggregate.ContainerCount
+	a.overview.TotalInitContainers += aggregate.InitContainerCount
+	countPodStatusPresentation(&a.overview, aggregate.StatusPresentation)
+	if podCountsAsNotReadySignal(aggregate.Phase, aggregate.ReadyContainers, aggregate.TotalContainers) {
+		a.overview.NotReadyPods++
+	}
+	a.cpuRequestsMilli += aggregate.CPURequestMilli + aggregate.InitCPURequestMilli
+	a.cpuLimitsMilli += aggregate.CPULimitMilli + aggregate.InitCPULimitMilli
+	a.memRequestsBytes += aggregate.MemRequestBytes + aggregate.InitMemRequestBytes
+	a.memLimitsBytes += aggregate.MemLimitBytes + aggregate.InitMemLimitBytes
+	if aggregate.RestartCountFacts > 0 {
+		a.overview.RestartedPods++
+	}
+}
+
+func (a *clusterOverviewAccumulator) addPodPhase(phase string) {
+	switch phase {
+	case string(corev1.PodRunning):
+		a.overview.RunningPods++
+	case string(corev1.PodSucceeded):
+		a.overview.SucceededPods++
+	case string(corev1.PodPending):
+		a.overview.PendingPods++
+	case string(corev1.PodFailed):
+		a.overview.FailedPods++
+	}
+}
+
+func (a *clusterOverviewAccumulator) addNamespace(namespace *corev1.Namespace) {
+	if namespace == nil {
+		return
+	}
+	a.overview.TotalNamespaces++
+	a.version = maxSnapshotVersion(a.version, namespace)
+}
+
+func maxClusterOverviewVersion(current, candidate uint64) uint64 {
+	if candidate > current {
+		return candidate
+	}
+	return current
+}
+
+func (a *clusterOverviewAccumulator) finalize(
+	ctx context.Context,
+	versionFn func(context.Context) string,
+	serverHost string,
+) {
+	a.overview.CPUUsage = formatCPUValue(a.cpuUsageMilli)
+	a.overview.CPURequests = formatCPUValue(a.cpuRequestsMilli)
+	a.overview.CPULimits = formatCPUValue(a.cpuLimitsMilli)
+	a.overview.CPUAllocatable = formatCPUValue(a.cpuAllocatableMilli)
+	a.overview.MemoryUsage = formatMemoryValue(a.memUsageBytes)
+	a.overview.MemoryRequests = formatMemoryValue(a.memRequestsBytes)
+	a.overview.MemoryLimits = formatMemoryValue(a.memLimitsBytes)
+	a.overview.MemoryAllocatable = formatMemoryValue(a.memAllocatableBytes)
+	if versionFn != nil {
+		a.overview.ClusterVersion = versionFn(ctx)
+	}
+	a.overview.ClusterVersion = defaultClusterVersion(a.overview.ClusterVersion)
+	a.applyClusterType(detectClusterType(a.overview.ClusterVersion, serverHost))
+}
+
+func (a *clusterOverviewAccumulator) applyClusterType(clusterType string) {
+	a.overview.ClusterType = clusterType
+	switch clusterType {
+	case "EKS":
+		a.overview.EC2Nodes = a.nonFargateNodes
+	case "AKS":
+		a.overview.VirtualNodes = a.virtualKubeletNodes
+		a.overview.VMNodes = a.nonFargateNodes
+	default:
+		a.overview.RegularNodes = a.nonFargateNodes
+	}
+}
+
+type clusterOverviewMetricsResult struct {
+	snapshot      ClusterOverviewMetrics
+	podUsage      map[string]metrics.PodUsage
+	cpuUsageMilli int64
+	memUsageBytes int64
+}
+
+func buildClusterOverviewMetrics(provider metrics.Provider) clusterOverviewMetricsResult {
+	result := clusterOverviewMetricsResult{
+		snapshot: ClusterOverviewMetrics{Stale: true},
+		podUsage: map[string]metrics.PodUsage{},
+	}
+	if provider == nil {
+		return result
+	}
+	result.podUsage = provider.LatestPodUsage()
+	for _, usage := range result.podUsage {
+		result.cpuUsageMilli += usage.CPUUsageMilli
+		result.memUsageBytes += usage.MemoryUsageBytes
+	}
+	meta := provider.Metadata()
+	result.snapshot = clusterOverviewMetricsSnapshot(meta)
+	return result
+}
+
+func clusterOverviewMetricsSnapshot(meta metrics.Metadata) ClusterOverviewMetrics {
+	lastError := meta.LastError
+	if !meta.Disabled && meta.SuccessCount == 0 && meta.CollectedAt.IsZero() && meta.ConsecutiveFailures < 5 {
+		lastError = ""
+	}
+	snapshot := ClusterOverviewMetrics{
+		Stale:               !meta.CollectedAt.IsZero() && time.Since(meta.CollectedAt) > config.MetricsStaleWindow,
+		LastError:           lastError,
+		ConsecutiveFailures: meta.ConsecutiveFailures,
+		SuccessCount:        meta.SuccessCount,
+		FailureCount:        meta.FailureCount,
+		Disabled:            meta.Disabled,
+	}
+	if !meta.CollectedAt.IsZero() {
+		snapshot.CollectedAt = meta.CollectedAt.Unix()
+	}
+	return snapshot
 }
 
 func (b *ClusterOverviewBuilder) waitForInformerSync(ctx context.Context) error {

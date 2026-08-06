@@ -632,6 +632,55 @@ ordered execution; desired selection diff separated from apply/rollback. Keep
 `docs/architecture/data-freshness.md`, `refresh-system.md`, `permissions.md`,
 `multi-cluster.md`, and `docs/workflows/object-map.md` authoritative.
 
+Local progress through 2026-08-06 (Sonar confirmation pending):
+
+- [x] Traced custom-resource discovery, snapshot readiness and cache ordering,
+      namespace doorbells, ordered registration gates, object-map traversal,
+      attention-source replacement, selection churn, and teardown through the
+      owning refresh, object-map, and multi-cluster contracts.
+- [x] Split both custom-resource builders into discovery, bounded per-CRD
+      collection, synchronized aggregation, deterministic sorting, and final
+      snapshot stages while preserving partial-result and warning behavior.
+- [x] Split namespace graph construction into sorted seed collection,
+      cluster-scoped endpoint expansion, and edge projection. Directional
+      traversal now owns direction filtering, reverse policy, node admission,
+      depth updates, and queueing through explicit traversal state.
+- [x] Split namespace notification into locked flush capture, workload/event/
+      quota signature evaluation, broadcast, and rearm stages. A failing test
+      proved `Stop` could return while a callback was active; the notifier now
+      waits for active flushes and rejects late events, so no callback runs
+      after `Stop` returns.
+- [x] Split registration into skip/require, runtime permission, registration-
+      kind validation, and ordered dispatch stages. Split selection updates
+      into desired-plan, build/rollback, aggregate publication, catalog start,
+      and removed-subsystem teardown without dropping auth-failed clusters
+      from aggregate order.
+- [x] Split overview list acquisition from typed pod/node projection and
+      overview accumulation; split attention replacement into locked upsert,
+      removal, ignore pruning, and post-lock callbacks; split snapshot requests
+      into permission/readiness preflight, cache/singleflight planning, build,
+      finalization, telemetry, and cache publication.
+- [x] `RegisterNamespaceDomain` already measured at the configured limit, so
+      its production code was left unchanged. Scoped/unscoped registration,
+      workload/quota sinks, and namespace/event add-update-delete handlers are
+      now characterized directly.
+- [x] Direct target coverage in inventory order is 85.7%, 88.9%, 100.0%,
+      100.0%, 85.7%, 84.6%, 100.0%, 100.0%, 82.4%, 81.8%, 100.0%, and
+      88.2%. The repository backend coverage task passes with 81.6% for
+      `backend/refresh/snapshot`, 75.5% for `backend/refresh/system`, and 77.1%
+      for `backend`.
+- [x] Full latest-worktree `-race` runs pass for `backend/refresh/snapshot`,
+      `backend/refresh/system`, and `backend`. The full `mage qc:prerelease`
+      gate passes; frontend validation covers 459 files and 3,956 tests, and
+      Trivy reports zero dependency vulnerabilities.
+- [x] `gocognit` v1.2.1 measures the twelve targets, in inventory order, at 4,
+      5, 1, 4, 4, 5, 5, 3, 4, 2, 3, and 15. No function in the affected
+      production files exceeds 15, and the most complex newly introduced
+      helper is 8.
+- [ ] Confirm all twelve findings close in the next Sonar analysis without
+      creating or increasing another S3776 finding; keep the target boxes above
+      open until that evidence exists.
+
 ---
 
 ## Phase 6: Streaming, retry, object actions, and cluster lifecycle

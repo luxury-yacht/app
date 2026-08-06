@@ -80,61 +80,80 @@ func runDomainRegistrations(ctx context.Context, gate *permissionGate, checker *
 	if ctx == nil {
 		ctx = context.Background()
 	}
-	access := domainpermissions.NewRuntimeAccess()
+	runner := domainRegistrationRunner{
+		ctx:     ctx,
+		gate:    gate,
+		checker: checker,
+		access:  domainpermissions.NewRuntimeAccess(),
+	}
 	for _, registration := range registrations {
-		if registration.skipIf != nil && registration.skipIf() {
-			continue
-		}
-		if registration.require != nil {
-			if err := registration.require(); err != nil {
-				return err
-			}
-		}
-
-		if checker != nil && !registration.skipRuntimePolicy {
-			decision, err := access.Check(ctx, registration.name, checker)
-			if err == nil && !decision.Allowed {
-				if regErr := snapshot.RegisterPermissionDeniedDomain(gate.registry, registration.name, decision.DeniedReason); regErr != nil {
-					return regErr
-				}
-				continue
-			}
-		}
-
-		hasList := registration.list != nil
-		hasListWatch := registration.listWatch != nil
-		hasDirect := registration.direct != nil
-		kindCount := 0
-		if hasList {
-			kindCount++
-		}
-		if hasListWatch {
-			kindCount++
-		}
-		if hasDirect {
-			kindCount++
-		}
-		if kindCount != 1 {
-			return fmt.Errorf("domain registration %q must provide exactly one registration kind", registration.name)
-		}
-
-		if hasList {
-			if err := gate.registerListDomain(*registration.list); err != nil {
-				return err
-			}
-			continue
-		}
-		if hasListWatch {
-			if err := gate.registerListWatchDomain(*registration.listWatch); err != nil {
-				return err
-			}
-			continue
-		}
-		if err := registration.direct(); err != nil {
+		if err := runner.run(registration); err != nil {
 			return err
 		}
 	}
 	return nil
+}
+
+type domainRegistrationRunner struct {
+	ctx     context.Context
+	gate    *permissionGate
+	checker *permissions.Checker
+	access  domainpermissions.RuntimeAccess
+}
+
+func (r domainRegistrationRunner) run(registration domainRegistration) error {
+	if registration.skipIf != nil && registration.skipIf() {
+		return nil
+	}
+	if registration.require != nil {
+		if err := registration.require(); err != nil {
+			return err
+		}
+	}
+	denied, err := r.registerPermissionDenied(registration)
+	if err != nil || denied {
+		return err
+	}
+	return r.register(registration)
+}
+
+func (r domainRegistrationRunner) registerPermissionDenied(registration domainRegistration) (bool, error) {
+	if r.checker == nil || registration.skipRuntimePolicy {
+		return false, nil
+	}
+	decision, err := r.access.Check(r.ctx, registration.name, r.checker)
+	if err != nil || decision.Allowed {
+		return false, nil
+	}
+	err = snapshot.RegisterPermissionDeniedDomain(r.gate.registry, registration.name, decision.DeniedReason)
+	return true, err
+}
+
+func (r domainRegistrationRunner) register(registration domainRegistration) error {
+	if registrationKindCount(registration) != 1 {
+		return fmt.Errorf("domain registration %q must provide exactly one registration kind", registration.name)
+	}
+	if registration.list != nil {
+		return r.gate.registerListDomain(*registration.list)
+	}
+	if registration.listWatch != nil {
+		return r.gate.registerListWatchDomain(*registration.listWatch)
+	}
+	return registration.direct()
+}
+
+func registrationKindCount(registration domainRegistration) int {
+	count := 0
+	if registration.list != nil {
+		count++
+	}
+	if registration.listWatch != nil {
+		count++
+	}
+	if registration.direct != nil {
+		count++
+	}
+	return count
 }
 
 // preflightRequests collects permission requests used to prime permission caches.

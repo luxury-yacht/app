@@ -104,180 +104,178 @@ func (b *NamespaceCustomBuilder) Build(ctx context.Context, scope string) (*refr
 	if err != nil {
 		return nil, err
 	}
-
-	namespacedCRDs := make([]*apiextensionsv1.CustomResourceDefinition, 0, len(crds))
-	for i := range crds {
-		crd := crds[i]
-		if crd != nil && crd.Spec.Scope == "Namespaced" && !IsFirstClassCustomResourceDefinition(crd) {
-			namespacedCRDs = append(namespacedCRDs, crd)
-		}
-	}
-
+	namespacedCRDs := customResourceDefinitionsForScope(crds, apiextensionsv1.NamespaceScoped)
 	if len(namespacedCRDs) == 0 {
 		applog.Info(b.logger, "namespace-custom: no namespaced CRDs discovered", logsources.Refresh)
-		return &refresh.Snapshot{
-			Domain:  namespaceCustomDomainName,
-			Scope:   parsedScope.CanonicalScope,
-			Version: 0,
-			Payload: NamespaceCustomSnapshot{
-				ClusterMeta: meta,
-				Resources:   []NamespaceCustomSummary{},
-				Kinds:       []string{},
-			},
-			Stats: refresh.SnapshotStats{ItemCount: 0},
-		}, nil
+		return emptyNamespaceCustomSnapshot(meta, parsedScope.CanonicalScope), nil
 	}
 
-	kinds := make([]string, 0, len(namespacedCRDs))
-	for _, crd := range namespacedCRDs {
-		if crd == nil {
-			continue
-		}
-		kinds = append(kinds, crd.Spec.Names.Kind)
-	}
-	kinds = snapshotSortedUniqueStrings(kinds)
-
-	summaries := make([]NamespaceCustomSummary, 0)
-	var version uint64
-	var firstErr error
-	var warnings []string
-	var mu sync.Mutex
-
-	tasks := make([]func(context.Context) error, 0, len(namespacedCRDs))
-
-	for _, crd := range namespacedCRDs {
-		crdCopy := crd
-		if crdCopy == nil {
-			continue
-		}
-
-		tasks = append(tasks, func(ctx context.Context) error {
-			select {
-			case <-ctx.Done():
-				return ctx.Err()
-			default:
-			}
-
-			crdVersion := preferredCRDVersion(crdCopy)
-			if crdVersion == "" {
-				return nil
-			}
-
-			gvr := schema.GroupVersionResource{
-				Group:    crdCopy.Spec.Group,
-				Version:  crdVersion,
-				Resource: crdCopy.Spec.Names.Plural,
-			}
-
-			// The all-namespaces view under a scope fans out over the
-			// configured namespaces; the unscoped path is the same loop with
-			// a single all-namespaces target.
-			listTargets := []string{parsedScope.Namespace}
-			if parsedScope.AllNamespaces {
-				listTargets = []string{metav1.NamespaceAll}
-				if len(b.scope) > 0 {
-					listTargets = b.scope
-				}
-			}
-			var listed []unstructured.Unstructured
-			var listErr error
-			for _, listNamespace := range listTargets {
-				resourceList, err := b.dynamic.Resource(gvr).Namespace(listNamespace).List(ctx, metav1.ListOptions{})
-				if err != nil {
-					// Per-target skip: one forbidden/absent namespace must not
-					// blank the others.
-					if shouldSkipError(err) {
-						continue
-					}
-					listErr = err
-					break
-				}
-				if resourceList != nil {
-					listed = append(listed, resourceList.Items...)
-				}
-			}
-			resourceList := &unstructured.UnstructuredList{Items: listed}
-			if err := listErr; err != nil {
-				applog.Warn(b.logger, fmt.Sprintf("namespace-custom: list %s failed: %v", gvr.String(), err), logsources.Refresh)
-				mu.Lock()
-				warning := fmt.Sprintf("Failed to list %s: %v", gvr.String(), err)
-				warnings = append(warnings, warning)
-				if firstErr == nil {
-					firstErr = fmt.Errorf("list %s: %w", gvr.String(), err)
-				}
-				mu.Unlock()
-				return nil
-			}
-
-			if resourceList == nil || len(resourceList.Items) == 0 {
-				return nil
-			}
-
-			items := make([]NamespaceCustomSummary, 0, len(resourceList.Items))
-			var snapshotVersion uint64
-			for i := range resourceList.Items {
-				item := &resourceList.Items[i]
-				// Delegate to the shared row builder so the full-snapshot
-				// path and the streaming/incremental update path emit
-				// identical row shapes. See BuildNamespaceCustomSummary in
-				// streaming_helpers.go. `namespace` is the scope fallback
-				// for items that don't carry their own. `crdCopy.Name` is
-				// the canonical CRD name (`<plural>.<group>`) used to
-				// open the owning CRD from the row.
-				items = append(items, customresource.BuildNamespaceStreamSummary(
-					meta,
-					item,
-					gvr.Group,
-					gvr.Version,
-					gvr.Resource,
-					crdCopy.Spec.Names.Kind,
-					crdCopy.Name,
-					parsedScope.Namespace,
-				))
-				if v := resourceVersionOrTimestamp(item); v > snapshotVersion {
-					snapshotVersion = v
-				}
-			}
-
-			mu.Lock()
-			summaries = append(summaries, items...)
-			if snapshotVersion > version {
-				version = snapshotVersion
-			}
-			mu.Unlock()
-
-			return nil
-		})
-	}
-
+	result := &namespaceCustomBuildResult{}
+	tasks := b.buildTasks(meta, parsedScope, namespacedCRDs, result)
 	if err := parallel.RunLimited(ctx, config.SnapshotNamespaceCustomWorkerLimit, tasks...); err != nil {
 		return nil, err
 	}
+	return result.snapshot(meta, parsedScope.CanonicalScope, namespacedCRDs)
+}
 
-	if len(summaries) == 0 && firstErr != nil {
-		return nil, firstErr
+func emptyNamespaceCustomSnapshot(meta ClusterMeta, scope string) *refresh.Snapshot {
+	return &refresh.Snapshot{
+		Domain: namespaceCustomDomainName,
+		Scope:  scope,
+		Payload: NamespaceCustomSnapshot{
+			ClusterMeta: meta,
+			Resources:   []NamespaceCustomSummary{},
+			Kinds:       []string{},
+		},
+		Stats: refresh.SnapshotStats{},
 	}
+}
 
-	sortNamespaceCustomSummaries(summaries)
-
-	payload := NamespaceCustomSnapshot{ClusterMeta: meta, Resources: summaries, Kinds: kinds}
-	if payload.Resources == nil {
-		payload.Resources = []NamespaceCustomSummary{}
+func (b *NamespaceCustomBuilder) buildTasks(
+	meta ClusterMeta,
+	scope NamespaceSnapshotScope,
+	crds []*apiextensionsv1.CustomResourceDefinition,
+	result *namespaceCustomBuildResult,
+) []func(context.Context) error {
+	tasks := make([]func(context.Context) error, 0, len(crds))
+	for _, crd := range crds {
+		crdCopy := crd
+		tasks = append(tasks, func(ctx context.Context) error {
+			return b.collectCRD(ctx, meta, scope, crdCopy, result)
+		})
 	}
+	return tasks
+}
 
-	stats := refresh.SnapshotStats{
-		ItemCount: len(payload.Resources),
+func (b *NamespaceCustomBuilder) collectCRD(
+	ctx context.Context,
+	meta ClusterMeta,
+	scope NamespaceSnapshotScope,
+	crd *apiextensionsv1.CustomResourceDefinition,
+	result *namespaceCustomBuildResult,
+) error {
+	if err := ctx.Err(); err != nil {
+		return err
 	}
-	if len(warnings) > 0 {
-		stats.Warnings = append(stats.Warnings, warnings...)
+	gvr, ok := customResourceGVR(crd)
+	if !ok {
+		return nil
 	}
+	items, err := b.listCRD(ctx, gvr, namespaceCustomListTargets(scope, b.scope))
+	if err != nil {
+		b.recordListError(gvr.String(), err, result)
+		return nil
+	}
+	summaries, version := buildNamespaceCustomSummaries(meta, scope.Namespace, crd, gvr, items)
+	result.recordSummaries(summaries, version)
+	return nil
+}
 
+func namespaceCustomListTargets(scope NamespaceSnapshotScope, allowed []string) []string {
+	if !scope.AllNamespaces {
+		return []string{scope.Namespace}
+	}
+	if len(allowed) > 0 {
+		return allowed
+	}
+	return []string{metav1.NamespaceAll}
+}
+
+func (b *NamespaceCustomBuilder) listCRD(
+	ctx context.Context,
+	gvr schema.GroupVersionResource,
+	namespaces []string,
+) ([]unstructured.Unstructured, error) {
+	var items []unstructured.Unstructured
+	for _, namespace := range namespaces {
+		resourceList, err := b.dynamic.Resource(gvr).Namespace(namespace).List(ctx, metav1.ListOptions{})
+		if err != nil && shouldSkipError(err) {
+			continue
+		}
+		if err != nil {
+			return nil, err
+		}
+		if resourceList != nil {
+			items = append(items, resourceList.Items...)
+		}
+	}
+	return items, nil
+}
+
+func (b *NamespaceCustomBuilder) recordListError(resource string, err error, result *namespaceCustomBuildResult) {
+	applog.Warn(b.logger, fmt.Sprintf("namespace-custom: list %s failed: %v", resource, err), logsources.Refresh)
+	result.recordListError(resource, err)
+}
+
+func buildNamespaceCustomSummaries(
+	meta ClusterMeta,
+	namespace string,
+	crd *apiextensionsv1.CustomResourceDefinition,
+	gvr schema.GroupVersionResource,
+	items []unstructured.Unstructured,
+) ([]NamespaceCustomSummary, uint64) {
+	summaries := make([]NamespaceCustomSummary, 0, len(items))
+	var version uint64
+	for i := range items {
+		item := &items[i]
+		summaries = append(summaries, customresource.BuildNamespaceStreamSummary(
+			meta, item, gvr.Group, gvr.Version, gvr.Resource, crd.Spec.Names.Kind, crd.Name, namespace,
+		))
+		version = maxSnapshotVersion(version, item)
+	}
+	return summaries, version
+}
+
+type namespaceCustomBuildResult struct {
+	mu        sync.Mutex
+	summaries []NamespaceCustomSummary
+	version   uint64
+	warnings  []string
+	firstErr  error
+}
+
+func (r *namespaceCustomBuildResult) recordListError(resource string, err error) {
+	r.mu.Lock()
+	defer r.mu.Unlock()
+	r.warnings = append(r.warnings, fmt.Sprintf("Failed to list %s: %v", resource, err))
+	if r.firstErr == nil {
+		r.firstErr = fmt.Errorf("list %s: %w", resource, err)
+	}
+}
+
+func (r *namespaceCustomBuildResult) recordSummaries(summaries []NamespaceCustomSummary, version uint64) {
+	r.mu.Lock()
+	defer r.mu.Unlock()
+	r.summaries = append(r.summaries, summaries...)
+	if version > r.version {
+		r.version = version
+	}
+}
+
+func (r *namespaceCustomBuildResult) snapshot(
+	meta ClusterMeta,
+	scope string,
+	crds []*apiextensionsv1.CustomResourceDefinition,
+) (*refresh.Snapshot, error) {
+	r.mu.Lock()
+	defer r.mu.Unlock()
+	if len(r.summaries) == 0 && r.firstErr != nil {
+		return nil, r.firstErr
+	}
+	sortNamespaceCustomSummaries(r.summaries)
+	resources := r.summaries
+	if resources == nil {
+		resources = []NamespaceCustomSummary{}
+	}
 	return &refresh.Snapshot{
 		Domain:  namespaceCustomDomainName,
-		Scope:   parsedScope.CanonicalScope,
-		Version: version,
-		Payload: payload,
-		Stats:   stats,
+		Scope:   scope,
+		Version: r.version,
+		Payload: NamespaceCustomSnapshot{ClusterMeta: meta, Resources: resources, Kinds: customResourceKinds(crds)},
+		Stats: refresh.SnapshotStats{
+			ItemCount: len(resources),
+			Warnings:  append([]string(nil), r.warnings...),
+		},
 	}, nil
 }
 

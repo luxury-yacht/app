@@ -532,61 +532,109 @@ func (i *clusterAttentionIndex) replaceSource(owner string, records []attentionS
 		i.mu.Unlock()
 		return
 	}
-	want := make(map[string]struct{}, len(records))
-	presentIgnoredKeys := make(map[string]struct{}, len(records))
-	pruned := make([]resourcemodel.ResourceRef, 0)
-	now := i.now()
+	replacement := newAttentionSourceReplacement(records, i.now())
+	i.upsertReplacementRecords(owner, records, replacement)
+	i.removeMissingReplacementSources(owner, replacement)
+	i.removeMissingReplacementFindings(owner, replacement)
+	if pruneMissingIgnores {
+		i.pruneMissingReplacementIgnores(owner, replacement)
+	}
+	i.owners[owner] = replacement.want
+	i.armTimerLocked()
+	pruner := i.ignoredObjectPruner
+	i.mu.Unlock()
+	pruneAttentionRefs(pruner, replacement.pruned)
+}
+
+type attentionSourceReplacement struct {
+	want               map[string]struct{}
+	presentIgnoredKeys map[string]struct{}
+	pruned             []resourcemodel.ResourceRef
+	now                time.Time
+}
+
+func newAttentionSourceReplacement(records []attentionSourceRecord, now time.Time) *attentionSourceReplacement {
+	return &attentionSourceReplacement{
+		want:               make(map[string]struct{}, len(records)),
+		presentIgnoredKeys: make(map[string]struct{}, len(records)),
+		pruned:             make([]resourcemodel.ResourceRef, 0),
+		now:                now,
+	}
+}
+
+func (i *clusterAttentionIndex) upsertReplacementRecords(
+	owner string,
+	records []attentionSourceRecord,
+	replacement *attentionSourceReplacement,
+) {
 	for _, record := range records {
 		if !completeAttentionRef(record.Ref) {
 			continue
 		}
 		key := attentionRefKey(record.Ref)
-		want[key] = struct{}{}
-		presentIgnoredKeys[attentionIgnoredObjectKey(record.Ref)] = struct{}{}
-		if replaced := i.upsertSourceLocked(owner, record, now); replaced != nil {
-			pruned = append(pruned, *replaced)
+		replacement.want[key] = struct{}{}
+		replacement.presentIgnoredKeys[attentionIgnoredObjectKey(record.Ref)] = struct{}{}
+		if replaced := i.upsertSourceLocked(owner, record, replacement.now); replaced != nil {
+			replacement.pruned = append(replacement.pruned, *replaced)
 		}
 	}
+}
+
+func (i *clusterAttentionIndex) removeMissingReplacementSources(
+	owner string,
+	replacement *attentionSourceReplacement,
+) {
 	for key := range i.owners[owner] {
-		if _, keep := want[key]; keep {
+		if _, keep := replacement.want[key]; keep {
 			continue
 		}
 		state := i.sources[key]
 		i.deleteSourceLocked(owner, key)
 		if i.pruneIgnoredObjectLocked(state.record.Ref) {
-			pruned = append(pruned, state.record.Ref)
+			replacement.pruned = append(replacement.pruned, state.record.Ref)
 		}
 	}
+}
+
+func (i *clusterAttentionIndex) removeMissingReplacementFindings(
+	owner string,
+	replacement *attentionSourceReplacement,
+) {
 	for key, finding := range i.findings {
 		if _, ownedKind := i.ownerKinds[owner][finding.Ref.Kind]; !ownedKind {
 			continue
 		}
-		if _, keep := want[key]; keep {
+		if _, keep := replacement.want[key]; keep {
 			continue
 		}
 		i.applyFindingLocked(key, nil)
 	}
-	if pruneMissingIgnores {
-		for _, ignored := range append([]AttentionObjectFindingIgnore(nil), i.ignoreRules.ObjectFindings...) {
-			if _, ownedKind := i.ownerKinds[owner][ignored.Ref.Kind]; !ownedKind {
-				continue
-			}
-			if _, exists := presentIgnoredKeys[attentionIgnoredObjectKey(ignored.Ref)]; exists {
-				continue
-			}
-			if i.pruneIgnoredObjectLocked(ignored.Ref) {
-				pruned = append(pruned, ignored.Ref)
-			}
+}
+
+func (i *clusterAttentionIndex) pruneMissingReplacementIgnores(
+	owner string,
+	replacement *attentionSourceReplacement,
+) {
+	ignores := append([]AttentionObjectFindingIgnore(nil), i.ignoreRules.ObjectFindings...)
+	for _, ignored := range ignores {
+		if _, ownedKind := i.ownerKinds[owner][ignored.Ref.Kind]; !ownedKind {
+			continue
+		}
+		if _, exists := replacement.presentIgnoredKeys[attentionIgnoredObjectKey(ignored.Ref)]; exists {
+			continue
+		}
+		if i.pruneIgnoredObjectLocked(ignored.Ref) {
+			replacement.pruned = append(replacement.pruned, ignored.Ref)
 		}
 	}
-	i.owners[owner] = want
-	i.armTimerLocked()
-	pruner := i.ignoredObjectPruner
-	i.mu.Unlock()
-	if pruner != nil {
-		for _, ref := range dedupeAttentionRefs(pruned) {
-			pruner(ref)
-		}
+}
+
+func pruneAttentionRefs(pruner func(resourcemodel.ResourceRef), refs []resourcemodel.ResourceRef) {
+	if pruner == nil {
+		return
+	}
+	for _, ref := range dedupeAttentionRefs(refs) {
+		pruner(ref)
 	}
 }
 

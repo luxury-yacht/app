@@ -16,6 +16,14 @@ import (
 	cgofake "k8s.io/client-go/kubernetes/fake"
 )
 
+func TestUpdateRefreshSubsystemSelectionsValidatesReceiverAndAllowsEmptySelection(t *testing.T) {
+	var nilApp *App
+	require.EqualError(t, nilApp.updateRefreshSubsystemSelections(nil), "app is nil")
+
+	app := &App{}
+	require.NoError(t, app.updateRefreshSubsystemSelections(nil))
+}
+
 func TestSetSelectedKubeconfigsKeepsRefreshServerOnSelectionChange(t *testing.T) {
 	setTestConfigEnv(t)
 	app := newTestAppWithDefaults(t)
