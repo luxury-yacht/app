@@ -167,14 +167,19 @@ Local progress through 2026-08-06 (Sonar confirmation pending):
 - [x] Reduced `sanitizeOperationTelemetryContext` to a type dispatcher backed
       by bounded request decoding, count validation, check extraction, and batch
       reconstruction stages.
+- [x] Characterized nil/non-status inputs, wrapped status errors, name-only
+      details, all optional status facts, invalid cause reasons and fields, and
+      the privacy-only resource-name tag.
+- [x] Reduced `addKubernetesStatusTags` to status-fact extraction followed by
+      one Sentry scope application; status details and causes now have bounded
+      sanitization stages.
 - [x] Focused package tests and `-race` pass. Package statement coverage is
-      87.6%; `telemetryReplacements` and
-      `sanitizeOperationTelemetryContext` are 100.0%, and
-      `prepareEventForSend` is 92.3%.
-- [x] The repository backend coverage task passes and records 87.6% statement
+      88.6%; `telemetryReplacements`, `sanitizeOperationTelemetryContext`, and
+      `addKubernetesStatusTags` are 100.0%, and `prepareEventForSend` is 92.3%.
+- [x] The repository backend coverage task passes and records 88.6% statement
       coverage for `internal/sentry`.
 - [x] The full `mage qc:prerelease` gate passes on the refactored source.
-- [ ] Confirm all three findings close in the next Sonar analysis without
+- [ ] Confirm all four findings close in the next Sonar analysis without
       creating or increasing another S3776 finding; keep the target boxes above
       open until that evidence exists.
 

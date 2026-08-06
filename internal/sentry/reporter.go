@@ -14,6 +14,7 @@ import (
 	"github.com/getsentry/sentry-go"
 	"github.com/getsentry/sentry-go/attribute"
 	apierrors "k8s.io/apimachinery/pkg/api/errors"
+	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 )
 
 // Config controls backend error reporting.
@@ -347,61 +348,98 @@ func (r *sentryReporter) CaptureException(err error, context Context) {
 	})
 }
 
-func addKubernetesStatusTags(hub *sentry.Hub, err error) {
-	if hub == nil || err == nil {
-		return
-	}
+type kubernetesStatusTelemetry struct {
+	reason       string
+	statusCode   int32
+	resourceName string
+	context      sentry.Context
+}
+
+func kubernetesStatusTelemetryForError(err error) (kubernetesStatusTelemetry, bool) {
 	var statusErr apierrors.APIStatus
 	if !errors.As(err, &statusErr) {
+		return kubernetesStatusTelemetry{}, false
+	}
+	return newKubernetesStatusTelemetry(statusErr.Status()), true
+}
+
+func newKubernetesStatusTelemetry(status metav1.Status) kubernetesStatusTelemetry {
+	telemetry := kubernetesStatusTelemetry{
+		reason:     string(status.Reason),
+		statusCode: status.Code,
+		context:    sentry.Context{},
+	}
+	if status.Status != "" {
+		telemetry.context["status"] = status.Status
+	}
+	if status.Reason != "" {
+		telemetry.context["reason"] = string(status.Reason)
+	}
+	if status.Code != 0 {
+		telemetry.context["code"] = status.Code
+	}
+	if status.Details != nil {
+		telemetry.resourceName = addKubernetesStatusDetailsTelemetry(telemetry.context, status.Details)
+	}
+	return telemetry
+}
+
+func addKubernetesStatusDetailsTelemetry(context sentry.Context, details *metav1.StatusDetails) string {
+	if details.Group != "" {
+		context["group"] = details.Group
+	}
+	if details.Kind != "" {
+		context["kind"] = details.Kind
+	}
+	if details.RetryAfterSeconds != 0 {
+		context["retryAfterSeconds"] = details.RetryAfterSeconds
+	}
+	if len(details.Causes) > 0 {
+		context["causes"] = kubernetesStatusCauseTelemetry(details.Causes)
+	}
+	return details.Name
+}
+
+func kubernetesStatusCauseTelemetry(causes []metav1.StatusCause) []map[string]any {
+	result := make([]map[string]any, 0, len(causes))
+	for _, cause := range causes {
+		safeCause := map[string]any{
+			"reason": sanitizeKubernetesCauseReason(cause.Type),
+		}
+		if fieldPath := sanitizeKubernetesFieldPath(cause.Field); fieldPath != "" {
+			safeCause["field"] = fieldPath
+		}
+		result = append(result, safeCause)
+	}
+	return result
+}
+
+func (telemetry kubernetesStatusTelemetry) apply(scope *sentry.Scope) {
+	if telemetry.reason != "" {
+		scope.SetTag("k8s.reason", telemetry.reason)
+	}
+	if telemetry.statusCode != 0 {
+		scope.SetTag("http.status_code", strconv.FormatInt(int64(telemetry.statusCode), 10))
+	}
+	if telemetry.resourceName != "" {
+		// The object name is needed only inside the SDK privacy pipeline so
+		// the final event can replace it wherever client-go rendered it.
+		scope.SetTag("_privacy.resource_name", telemetry.resourceName)
+	}
+	if len(telemetry.context) > 0 {
+		scope.SetContext("kubernetes", telemetry.context)
+	}
+}
+
+func addKubernetesStatusTags(hub *sentry.Hub, err error) {
+	if hub == nil {
 		return
 	}
-	status := statusErr.Status()
-	hub.ConfigureScope(func(scope *sentry.Scope) {
-		statusContext := sentry.Context{}
-		if status.Status != "" {
-			statusContext["status"] = status.Status
-		}
-		if status.Reason != "" {
-			scope.SetTag("k8s.reason", string(status.Reason))
-			statusContext["reason"] = string(status.Reason)
-		}
-		if status.Code != 0 {
-			scope.SetTag("http.status_code", strconv.FormatInt(int64(status.Code), 10))
-			statusContext["code"] = status.Code
-		}
-		if status.Details != nil {
-			if status.Details.Name != "" {
-				// The object name is needed only inside the SDK privacy pipeline so
-				// the final event can replace it wherever client-go rendered it.
-				scope.SetTag("_privacy.resource_name", status.Details.Name)
-			}
-			if status.Details.Group != "" {
-				statusContext["group"] = status.Details.Group
-			}
-			if status.Details.Kind != "" {
-				statusContext["kind"] = status.Details.Kind
-			}
-			if status.Details.RetryAfterSeconds != 0 {
-				statusContext["retryAfterSeconds"] = status.Details.RetryAfterSeconds
-			}
-			if len(status.Details.Causes) > 0 {
-				causes := make([]map[string]any, 0, len(status.Details.Causes))
-				for _, cause := range status.Details.Causes {
-					safeCause := map[string]any{
-						"reason": sanitizeKubernetesCauseReason(cause.Type),
-					}
-					if fieldPath := sanitizeKubernetesFieldPath(cause.Field); fieldPath != "" {
-						safeCause["field"] = fieldPath
-					}
-					causes = append(causes, safeCause)
-				}
-				statusContext["causes"] = causes
-			}
-		}
-		if len(statusContext) > 0 {
-			scope.SetContext("kubernetes", statusContext)
-		}
-	})
+	telemetry, ok := kubernetesStatusTelemetryForError(err)
+	if !ok {
+		return
+	}
+	hub.ConfigureScope(telemetry.apply)
 }
 
 func (r *sentryReporter) CapturePanic(recovered any, context Context) {
