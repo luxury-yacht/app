@@ -110,3 +110,93 @@ func TestOperationPrivacyBoundaryRejectsUnknownTypesAndFields(t *testing.T) {
 		"scope":    "namespaced",
 	}, sanitized)
 }
+
+func TestOperationPrivacyBoundarySanitizesCapabilityBatchMapChecks(t *testing.T) {
+	rawChecks := []map[string]any{
+		{
+			"action":    "list",
+			"group":     "gateway.networking.k8s.io",
+			"version":   "v1",
+			"resource":  "httproutes",
+			"scope":     "namespaced",
+			"namespace": "customer-prod",
+		},
+		{
+			"action":   "delete customer-prod/database",
+			"resource": "pods/customer-prod/database",
+			"scope":    "namespace customer-prod",
+			"name":     "database",
+		},
+	}
+	serialized := map[string]any{
+		"type":          "kubernetes.capability_batch",
+		"failure_count": 2,
+		"total_count":   7,
+		"failed_checks": rawChecks,
+		"caller_id":     "customer-prod",
+	}
+
+	sanitized := sanitizeOperationTelemetryContext(serialized)
+
+	require.Equal(t, map[string]any{
+		"type":          "kubernetes.capability_batch",
+		"failure_count": 2,
+		"total_count":   7,
+		"failed_checks": []map[string]any{
+			{
+				"action":   "list",
+				"group":    "gateway.networking.k8s.io",
+				"version":  "v1",
+				"resource": "httproutes",
+				"scope":    "namespaced",
+			},
+			{},
+		},
+	}, sanitized)
+	require.Equal(t, "customer-prod", serialized["caller_id"])
+	require.Equal(t, "customer-prod", rawChecks[0]["namespace"])
+	require.Equal(t, "database", rawChecks[1]["name"])
+}
+
+func TestOperationPrivacyBoundarySanitizesCapabilityBatchAnyChecks(t *testing.T) {
+	sanitized := sanitizeOperationTelemetryContext(map[string]any{
+		"type":          "kubernetes.capability_batch",
+		"failure_count": float64(2),
+		"total_count":   0,
+		"failed_checks": []any{
+			"customer-prod",
+			map[string]any{
+				"action":      "update",
+				"group":       "apps",
+				"version":     "v1",
+				"resource":    "statefulsets",
+				"subresource": "scale",
+				"scope":       "namespaced",
+			},
+		},
+	})
+
+	require.Equal(t, map[string]any{
+		"type": "kubernetes.capability_batch",
+		"failed_checks": []map[string]any{
+			{
+				"action":      "update",
+				"group":       "apps",
+				"version":     "v1",
+				"resource":    "statefulsets",
+				"subresource": "scale",
+				"scope":       "namespaced",
+			},
+		},
+	}, sanitized)
+
+	require.Equal(t,
+		map[string]any{"type": "kubernetes.capability_batch"},
+		sanitizeOperationTelemetryContext(map[string]any{
+			"type":          "kubernetes.capability_batch",
+			"failure_count": -1,
+			"total_count":   "7",
+			"failed_checks": "customer-prod",
+		}),
+	)
+}

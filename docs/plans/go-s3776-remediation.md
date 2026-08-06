@@ -149,7 +149,7 @@ replacement discovery from application, separate logger field assembly from
 dispatch, and make hub acquisition/capture lifecycle explicit. Keep the
 durable contract aligned with `docs/architecture/error-reporting.md`.
 
-Local progress, 2026-08-05 (Sonar confirmation pending):
+Local progress through 2026-08-06 (Sonar confirmation pending):
 
 - [x] Characterized private cluster/resource tag extraction, typed Kubernetes
       status replacement, nil inputs, fallback aliases, private-tag removal,
@@ -161,13 +161,22 @@ Local progress, 2026-08-05 (Sonar confirmation pending):
 - [x] Reduced `prepareEventForSend` to the ordered privacy pipeline used as the
       reporter's `BeforeSend` hook; event-surface mutation now lives in bounded
       policy helpers.
+- [x] Characterized capability-batch sanitization for both supported serialized
+      slice shapes, invalid counts and entries, field allowlisting, and
+      source-map non-mutation.
+- [x] Reduced `sanitizeOperationTelemetryContext` to a type dispatcher backed
+      by bounded request decoding, count validation, check extraction, and batch
+      reconstruction stages.
 - [x] Focused package tests and `-race` pass. Package statement coverage is
-      84.1%; `telemetryReplacements` is 100.0% and `prepareEventForSend` is
-      92.3%.
+      87.6%; `telemetryReplacements` and
+      `sanitizeOperationTelemetryContext` are 100.0%, and
+      `prepareEventForSend` is 92.3%.
+- [x] The repository backend coverage task passes and records 87.6% statement
+      coverage for `internal/sentry`.
 - [x] The full `mage qc:prerelease` gate passes on the refactored source.
-- [ ] Confirm both findings close in the next Sonar analysis without creating
-      or increasing another S3776 finding; keep the target boxes above open
-      until that evidence exists.
+- [ ] Confirm all three findings close in the next Sonar analysis without
+      creating or increasing another S3776 finding; keep the target boxes above
+      open until that evidence exists.
 
 ### 1B. Settings side effects
 

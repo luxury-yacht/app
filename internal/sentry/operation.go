@@ -186,6 +186,63 @@ func operationTelemetryString(values map[string]any, key string) string {
 	return value
 }
 
+func kubernetesRequestFromTelemetryContext(values map[string]any) KubernetesRequest {
+	return KubernetesRequest{
+		Action:      KubernetesAction(operationTelemetryString(values, "action")),
+		Group:       operationTelemetryString(values, "group"),
+		Version:     operationTelemetryString(values, "version"),
+		Resource:    operationTelemetryString(values, "resource"),
+		Subresource: operationTelemetryString(values, "subresource"),
+		Scope:       KubernetesScope(operationTelemetryString(values, "scope")),
+	}
+}
+
+func sanitizeKubernetesRequestTelemetryContext(values map[string]any) map[string]any {
+	return NewKubernetesRequestOperation(kubernetesRequestFromTelemetryContext(values)).telemetryContext()
+}
+
+func positiveOperationTelemetryInt(values map[string]any, key string) (int, bool) {
+	value, ok := values[key].(int)
+	return value, ok && value > 0
+}
+
+func operationTelemetryCheckMaps(value any) []map[string]any {
+	switch checks := value.(type) {
+	case []map[string]any:
+		return checks
+	case []any:
+		result := make([]map[string]any, 0, len(checks))
+		for _, check := range checks {
+			if typed, ok := check.(map[string]any); ok {
+				result = append(result, typed)
+			}
+		}
+		return result
+	default:
+		return nil
+	}
+}
+
+func sanitizeCapabilityBatchTelemetryContext(values map[string]any) map[string]any {
+	result := map[string]any{"type": "kubernetes.capability_batch"}
+	if failureCount, ok := positiveOperationTelemetryInt(values, "failure_count"); ok {
+		result["failure_count"] = failureCount
+	}
+	if totalCount, ok := positiveOperationTelemetryInt(values, "total_count"); ok {
+		result["total_count"] = totalCount
+	}
+
+	rawChecks := operationTelemetryCheckMaps(values["failed_checks"])
+	checks := make([]map[string]any, 0, len(rawChecks))
+	for _, rawCheck := range rawChecks {
+		checks = append(checks, kubernetesRequestTelemetryContext(kubernetesRequestFromTelemetryContext(rawCheck)))
+	}
+	if len(checks) > 0 {
+		result["failed_checks"] = checks
+	}
+	return result
+}
+
 // sanitizeOperationTelemetryContext revalidates the serialized map at the
 // final privacy boundary. This keeps API group names useful for custom
 // resources without exempting arbitrary strings that happen to use the same
@@ -197,48 +254,9 @@ func sanitizeOperationTelemetryContext(value any) map[string]any {
 	}
 	switch operationTelemetryString(values, "type") {
 	case "kubernetes.request":
-		return NewKubernetesRequestOperation(KubernetesRequest{
-			Action:      KubernetesAction(operationTelemetryString(values, "action")),
-			Group:       operationTelemetryString(values, "group"),
-			Version:     operationTelemetryString(values, "version"),
-			Resource:    operationTelemetryString(values, "resource"),
-			Subresource: operationTelemetryString(values, "subresource"),
-			Scope:       KubernetesScope(operationTelemetryString(values, "scope")),
-		}).telemetryContext()
+		return sanitizeKubernetesRequestTelemetryContext(values)
 	case "kubernetes.capability_batch":
-		result := map[string]any{"type": "kubernetes.capability_batch"}
-		if failureCount, ok := values["failure_count"].(int); ok && failureCount > 0 {
-			result["failure_count"] = failureCount
-		}
-		if totalCount, ok := values["total_count"].(int); ok && totalCount > 0 {
-			result["total_count"] = totalCount
-		}
-		var rawChecks []map[string]any
-		switch checks := values["failed_checks"].(type) {
-		case []map[string]any:
-			rawChecks = checks
-		case []any:
-			for _, check := range checks {
-				if typed, ok := check.(map[string]any); ok {
-					rawChecks = append(rawChecks, typed)
-				}
-			}
-		}
-		checks := make([]map[string]any, 0, len(rawChecks))
-		for _, rawCheck := range rawChecks {
-			checks = append(checks, kubernetesRequestTelemetryContext(KubernetesRequest{
-				Action:      KubernetesAction(operationTelemetryString(rawCheck, "action")),
-				Group:       operationTelemetryString(rawCheck, "group"),
-				Version:     operationTelemetryString(rawCheck, "version"),
-				Resource:    operationTelemetryString(rawCheck, "resource"),
-				Subresource: operationTelemetryString(rawCheck, "subresource"),
-				Scope:       KubernetesScope(operationTelemetryString(rawCheck, "scope")),
-			}))
-		}
-		if len(checks) > 0 {
-			result["failed_checks"] = checks
-		}
-		return result
+		return sanitizeCapabilityBatchTelemetryContext(values)
 	default:
 		return nil
 	}
