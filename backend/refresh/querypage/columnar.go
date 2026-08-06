@@ -190,64 +190,53 @@ func (c *rowCodec[R]) growTo(n int, dicts *codecDicts) {
 	}
 }
 
-func (fc *fieldCodec) grow(n int, dicts *codecDicts) {
+func (fc *fieldCodec) grow(n int, _ *codecDicts) {
 	switch fc.kind {
 	case fieldString:
-		if fc.promoted {
-			for len(fc.plainStr) < n {
-				fc.plainStr = append(fc.plainStr, "")
-			}
-		} else {
-			for len(fc.strCol) < n {
-				fc.strCol = append(fc.strCol, 0)
-			}
-		}
+		fc.growString(n)
 	case fieldInt:
-		for len(fc.intCol) < n {
-			fc.intCol = append(fc.intCol, 0)
-		}
+		fc.intCol = growColumn(fc.intCol, n)
 	case fieldUint:
-		for len(fc.uintCol) < n {
-			fc.uintCol = append(fc.uintCol, 0)
-		}
+		fc.uintCol = growColumn(fc.uintCol, n)
 	case fieldFloat:
-		for len(fc.floatCol) < n {
-			fc.floatCol = append(fc.floatCol, 0)
-		}
+		fc.floatCol = growColumn(fc.floatCol, n)
 	case fieldBool:
-		for len(fc.boolCol) < n {
-			fc.boolCol = append(fc.boolCol, false)
-		}
+		fc.boolCol = growColumn(fc.boolCol, n)
 	case fieldPtrScalar:
-		for len(fc.present) < n {
-			fc.present = append(fc.present, false)
-		}
-		switch fc.elemKind {
-		case fieldString:
-			for len(fc.strCol) < n {
-				fc.strCol = append(fc.strCol, 0)
-			}
-		case fieldInt:
-			for len(fc.intCol) < n {
-				fc.intCol = append(fc.intCol, 0)
-			}
-		case fieldUint:
-			for len(fc.uintCol) < n {
-				fc.uintCol = append(fc.uintCol, 0)
-			}
-		case fieldFloat:
-			for len(fc.floatCol) < n {
-				fc.floatCol = append(fc.floatCol, 0)
-			}
-		case fieldBool:
-			for len(fc.boolCol) < n {
-				fc.boolCol = append(fc.boolCol, false)
-			}
-		}
+		fc.present = growColumn(fc.present, n)
+		fc.growPointerValue(n)
 	case fieldFallback:
-		for len(fc.fallback) < n {
-			fc.fallback = append(fc.fallback, reflect.Value{})
-		}
+		fc.fallback = growColumn(fc.fallback, n)
+	}
+}
+
+func growColumn[T any](column []T, n int) []T {
+	if missing := n - len(column); missing > 0 {
+		column = append(column, make([]T, missing)...)
+	}
+	return column
+}
+
+func (fc *fieldCodec) growString(n int) {
+	if fc.promoted {
+		fc.plainStr = growColumn(fc.plainStr, n)
+		return
+	}
+	fc.strCol = growColumn(fc.strCol, n)
+}
+
+func (fc *fieldCodec) growPointerValue(n int) {
+	switch fc.elemKind {
+	case fieldString:
+		fc.strCol = growColumn(fc.strCol, n)
+	case fieldInt:
+		fc.intCol = growColumn(fc.intCol, n)
+	case fieldUint:
+		fc.uintCol = growColumn(fc.uintCol, n)
+	case fieldFloat:
+		fc.floatCol = growColumn(fc.floatCol, n)
+	case fieldBool:
+		fc.boolCol = growColumn(fc.boolCol, n)
 	}
 }
 

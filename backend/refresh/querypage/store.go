@@ -418,61 +418,58 @@ func (s *Store[R]) scopeMatchesBase(rowID uint32, mv matchValues, base map[strin
 		if len(allowed) == 0 {
 			continue
 		}
-		_, isSingleFacet := s.schema.Facets[fname]
-		_, isMultiFacet := s.schema.MultiFacets[fname]
-		if !isSingleFacet && !isMultiFacet {
-			return false
-		}
-		matched := false
-		if isSingleFacet {
-			value := mv.facets[fname]
-			if normalized, ok := mv.normalizedFacets[fname]; ok {
-				value = normalized
-			}
-			for _, candidate := range allowed {
-				if value == candidate {
-					matched = true
-					break
-				}
-			}
-		} else {
-			values := mv.multiFacets[fname]
-			if normalized, ok := mv.normalizedMultiFacets[fname]; ok {
-				values = normalized
-			}
-			for _, value := range values {
-				for _, candidate := range allowed {
-					if value == candidate {
-						matched = true
-						break
-					}
-				}
-				if matched {
-					break
-				}
-			}
-		}
-		if !matched {
+		if !s.facetMatches(mv, fname, allowed) {
 			return false
 		}
 	}
-	if searchLower != "" {
-		if s.schema.SearchText == nil {
-			return false
+	return s.searchMatches(rowID, mv.searchText, searchLower, candidates, narrow)
+}
+
+func (s *Store[R]) facetMatches(mv matchValues, name string, allowed []string) bool {
+	if _, ok := s.schema.Facets[name]; ok {
+		value := mv.facets[name]
+		if normalized, exists := mv.normalizedFacets[name]; exists {
+			value = normalized
 		}
-		// Trigram narrowing: a rowID absent from the candidate superset cannot contain the
-		// term, so skip its Contains call. When narrow is false (no index / <3-char term)
-		// every row falls through to the linear Contains verify, exactly as before.
-		if narrow {
-			if _, ok := candidates[rowID]; !ok {
-				return false
-			}
+		return containsFacetValue(allowed, value)
+	}
+	if _, ok := s.schema.MultiFacets[name]; !ok {
+		return false
+	}
+	values := mv.multiFacets[name]
+	if normalized, exists := mv.normalizedMultiFacets[name]; exists {
+		values = normalized
+	}
+	for _, value := range values {
+		if containsFacetValue(allowed, value) {
+			return true
 		}
-		if !strings.Contains(mv.searchText, searchLower) {
+	}
+	return false
+}
+
+func containsFacetValue(allowed []string, value string) bool {
+	for _, candidate := range allowed {
+		if value == candidate {
+			return true
+		}
+	}
+	return false
+}
+
+func (s *Store[R]) searchMatches(rowID uint32, text, searchLower string, candidates map[uint32]struct{}, narrow bool) bool {
+	if searchLower == "" {
+		return true
+	}
+	if s.schema.SearchText == nil {
+		return false
+	}
+	if narrow {
+		if _, ok := candidates[rowID]; !ok {
 			return false
 		}
 	}
-	return true
+	return strings.Contains(text, searchLower)
 }
 
 // Scope returns, over the rows matching `base` filters + `search`, the per-facet
@@ -523,105 +520,124 @@ func (s *Store[R]) Query(q Query) (Page[R], error) {
 	if !ok {
 		return Page[R]{}, fmt.Errorf("querypage: unknown sort %q", q.Sort)
 	}
-	limit := q.Limit
-	if limit <= 0 {
-		limit = 100
-	}
-
-	// Cursor handling never errors a serve: a token that fails to decode or pins a
-	// different query shape restarts from the first page with CursorInvalid set, so
-	// a stale client degrades to page 1 instead of a failed request.
-	cursorInvalid := false
-	cur, err := Decode(q.Cursor)
-	if err != nil || cur.Validate(q.ClusterID, q.Signature, q.Sort, q.Direction, limit) != nil {
-		cur = Cursor{}
-		cursorInvalid = true
-	}
-
-	hasPivot := !cur.IsFirstPage()
-	backward := hasPivot && cur.Backward
-	pivot := indexEntry{val: cur.Position, uid: cur.UID}
-
+	limit := queryLimit(q.Limit)
+	cursor := resolveQueryCursor(q, limit)
 	matchesUID, filters, searchLower, candidates, narrow := s.matcherFor(q)
+	entries, overflow := walkQueryEntries(si.forDirection(q.Direction), &cursor, limit, matchesUID)
+	rows := s.rowsForEntries(entries)
+	next, prev := s.queryPageCursors(q, limit, entries, cursor, overflow)
+	facets, total := s.facetsAndTotal(q, filters, searchLower, candidates, narrow)
+	return Page[R]{Rows: rows, NextCursor: next, PrevCursor: prev, Facets: facets, Total: total, CursorInvalid: cursor.invalid, PageStartRank: -1}, nil
+}
 
-	// Collect up to limit+1 matching entries from the pivot, in walk order, so the
-	// limit+1th tells us whether a further page exists on the walked side.
+type queryCursorState struct {
+	hasPivot bool
+	backward bool
+	pivot    indexEntry
+	invalid  bool
+}
+
+func queryLimit(requested int) int {
+	if requested <= 0 {
+		return 100
+	}
+	return requested
+}
+
+func resolveQueryCursor(q Query, limit int) queryCursorState {
+	cur, err := Decode(q.Cursor)
+	invalid := err != nil
+	if !invalid {
+		invalid = cur.Validate(q.ClusterID, q.Signature, q.Sort, q.Direction, limit) != nil
+	}
+	if invalid {
+		cur = Cursor{}
+	}
+	hasPivot := !cur.IsFirstPage()
+	return queryCursorState{
+		hasPivot: hasPivot,
+		backward: hasPivot && cur.Backward,
+		pivot:    indexEntry{val: cur.Position, uid: cur.UID},
+		invalid:  invalid,
+	}
+}
+
+func walkQueryEntries(
+	index *btree.BTreeG[indexEntry],
+	cursor *queryCursorState,
+	limit int,
+	matchesUID func(string) bool,
+) ([]indexEntry, bool) {
 	entries := make([]indexEntry, 0, limit+1)
-	collect := func(e indexEntry) bool {
-		if hasPivot && e.val == pivot.val && e.uid == pivot.uid {
-			return true // the boundary row itself already appeared on the adjacent page
-		}
-		if !matchesUID(e.uid) {
+	collect := func(entry indexEntry) bool {
+		if cursor.hasPivot && entry == cursor.pivot {
 			return true
 		}
-		entries = append(entries, e)
+		if matchesUID(entry.uid) {
+			entries = append(entries, entry)
+		}
 		return len(entries) <= limit
 	}
-
-	// One index per direction, both ordered so a forward (Ascend) walk reproduces the
-	// live total order. A prev-page request walks the SAME index downward
-	// (DescendLessOrEqual), collecting the rows immediately before the pivot.
-	index := si.forDirection(q.Direction)
-	switch {
-	case backward:
-		index.DescendLessOrEqual(pivot, collect)
-	case hasPivot:
-		index.AscendGreaterOrEqual(pivot, collect)
-	default:
+	if cursor.backward {
+		index.DescendLessOrEqual(cursor.pivot, collect)
+	} else if cursor.hasPivot {
+		index.AscendGreaterOrEqual(cursor.pivot, collect)
+	} else {
 		index.Ascend(collect)
 	}
-
-	// overflow == a further page exists on the side we walked.
 	overflow := len(entries) > limit
 	if overflow {
 		entries = entries[:limit]
 	}
-	// A valid backward cursor that collected nothing means every predecessor was
-	// deleted since the token was minted — an un-navigable dead end, not a page.
-	// Flag it so the client restarts at page 1. (Owned here, not per-caller, so
-	// typed and catalog executors cannot diverge on the rule.)
-	if backward && len(entries) == 0 {
-		cursorInvalid = true
+	if cursor.backward && len(entries) == 0 {
+		cursor.invalid = true
 	}
-	if backward {
-		// The downward walk produced reverse order; flip to forward (display) order.
-		for i, j := 0, len(entries)-1; i < j; i, j = i+1, j-1 {
-			entries[i], entries[j] = entries[j], entries[i]
-		}
+	if cursor.backward {
+		reverseIndexEntries(entries)
 	}
+	return entries, overflow
+}
 
-	// Reconstruct full rows ONLY for the page actually returned (not for every scanned
-	// or filtered row), via the codec.
+func reverseIndexEntries(entries []indexEntry) {
+	for i, j := 0, len(entries)-1; i < j; i, j = i+1, j-1 {
+		entries[i], entries[j] = entries[j], entries[i]
+	}
+}
+
+func (s *Store[R]) rowsForEntries(entries []indexEntry) []R {
 	rows := make([]R, len(entries))
-	for i, e := range entries {
-		rows[i], _ = s.rows.get(e.uid)
+	for i, entry := range entries {
+		rows[i], _ = s.rows.get(entry.uid)
 	}
+	return rows
+}
 
-	// Boundary cursors. NextCursor pins the last row (forward), PrevCursor pins the
-	// first row (backward). Existence on the WALKED side comes from `overflow`; on the
-	// side we came FROM, a page always exists (we navigated here from it): a forward
-	// page reached via a non-first cursor has a prev; a backward page always has a next.
-	next, prev := "", ""
-	if len(entries) > 0 {
-		first, last := entries[0], entries[len(entries)-1]
-		if backward {
-			if overflow {
-				prev = s.pinCursor(q, limit, first, true)
-			}
-			next = s.pinCursor(q, limit, last, false)
-		} else {
-			if overflow {
-				next = s.pinCursor(q, limit, last, false)
-			}
-			if hasPivot {
-				prev = s.pinCursor(q, limit, first, true)
-			}
+func (s *Store[R]) queryPageCursors(
+	q Query,
+	limit int,
+	entries []indexEntry,
+	cursor queryCursorState,
+	overflow bool,
+) (string, string) {
+	if len(entries) == 0 {
+		return "", ""
+	}
+	first, last := entries[0], entries[len(entries)-1]
+	if cursor.backward {
+		prev := ""
+		if overflow {
+			prev = s.pinCursor(q, limit, first, true)
 		}
+		return s.pinCursor(q, limit, last, false), prev
 	}
-
-	facets, total := s.facetsAndTotal(q, filters, searchLower, candidates, narrow)
-
-	return Page[R]{Rows: rows, NextCursor: next, PrevCursor: prev, Facets: facets, Total: total, CursorInvalid: cursorInvalid, PageStartRank: -1}, nil
+	next, prev := "", ""
+	if overflow {
+		next = s.pinCursor(q, limit, last, false)
+	}
+	if cursor.hasPivot {
+		prev = s.pinCursor(q, limit, first, true)
+	}
+	return next, prev
 }
 
 // matcherFor returns the per-UID match predicate for one query plus the lowered

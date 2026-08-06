@@ -53,6 +53,32 @@ type capabilityScopeMetrics struct {
 	TotalDuration time.Duration
 }
 
+type capabilityEvaluationJob struct {
+	index int
+	check ReviewAttributes
+}
+
+type capabilityEvaluationBatch struct {
+	service        *Service
+	ctx            context.Context
+	checks         []ReviewAttributes
+	results        []CheckResult
+	limiter        RateLimiter
+	slowThreshold  time.Duration
+	now            func() time.Time
+	collectMetrics bool
+
+	metricsMu      sync.Mutex
+	metricsByScope map[string]*capabilityScopeMetrics
+	failureCount   atomic.Int32
+
+	reviewFailureMu  sync.Mutex
+	reviewFailures   int
+	firstReviewErr   error
+	failedIdentities []string
+	failedChecks     []sentryreporting.KubernetesRequest
+}
+
 // ReviewAttributes couples a caller-supplied identifier with the corresponding
 // authorisation attributes that will be submitted to the cluster.
 type ReviewAttributes struct {
@@ -84,159 +110,174 @@ func (s *Service) Evaluate(ctx context.Context, checks []ReviewAttributes) ([]Ch
 		defer limiter.Stop()
 	}
 
-	workerCount := s.resolveWorkerCount(len(checks))
-	slowThreshold := s.resolveSlowThreshold()
-	nowFn := s.now
-
-	type evalJob struct {
-		index int
-		check ReviewAttributes
-	}
-
-	jobs := make(chan evalJob)
-	var wg sync.WaitGroup
-	collectMetrics := s.deps.Common.Logger != nil
-	metricsMu := sync.Mutex{}
-	metricsByScope := make(map[string]*capabilityScopeMetrics)
-	var failureCount atomic.Int32
-
-	// One dropped connection fails every in-flight review, so the batch reports
-	// its reviews once instead of once per check. Per-check detail still reaches
-	// callers through each CheckResult.Error; the structural check shapes and
-	// distinct causes below make a PARTIAL failure diagnosable without names.
-	reviewFailureMu := sync.Mutex{}
-	reviewFailures := 0
-	var firstReviewErr error
-	var failedIdentities []string
-	var failedChecks []sentryreporting.KubernetesRequest
-
-	for i := 0; i < workerCount; i++ {
-		wg.Add(1)
-		go func() {
-			defer wg.Done()
-
-			for job := range jobs {
-				result := CheckResult{ID: job.check.ID}
-				attrs := job.check.Attributes
-
-				if attrs == nil {
-					result.Error = "resource attributes missing"
-					results[job.index] = result
-					continue
-				}
-
-				if limiter != nil {
-					if err := limiter.Wait(ctx); err != nil {
-						result.Error = err.Error()
-						results[job.index] = result
-						continue
-					}
-				}
-
-				review := &authorizationv1.SelfSubjectAccessReview{
-					Spec: authorizationv1.SelfSubjectAccessReviewSpec{
-						ResourceAttributes: attrs,
-					},
-				}
-
-				start := nowFn()
-				var response *authorizationv1.SelfSubjectAccessReview
-				err := k8sretry.Do(ctx, capabilityReviewRetryPolicy(), func(callCtx context.Context) error {
-					var err error
-					response, err = s.deps.Common.KubernetesClient.AuthorizationV1().
-						SelfSubjectAccessReviews().
-						Create(callCtx, review, metav1.CreateOptions{})
-					return err
-				})
-				duration := nowFn().Sub(start)
-
-				if err != nil {
-					reviewFailureMu.Lock()
-					reviewFailures++
-					if firstReviewErr == nil {
-						firstReviewErr = err
-					}
-					if len(failedIdentities) < maxReportedFailedChecks {
-						failedIdentities = append(failedIdentities, describeCapabilityShape(attrs))
-						failedChecks = append(failedChecks, capabilityRequest(attrs))
-					}
-					reviewFailureMu.Unlock()
-					result.Error = err.Error()
-				} else if response == nil {
-					result.Error = "permission review returned no response"
-				} else {
-					result.Allowed = response.Status.Allowed
-					result.DeniedReason = response.Status.Reason
-					result.EvaluationError = response.Status.EvaluationError
-
-					if slowThreshold > 0 && duration > slowThreshold {
-						s.logWarn(fmt.Sprintf("Capability check %s slow: %s", describeCapabilityShape(attrs), duration))
-					}
-				}
-
-				if collectMetrics {
-					metricsMu.Lock()
-					scopeKey := capabilityScopeMetricKey(attrs.Namespace)
-					metric := metricsByScope[scopeKey]
-					if metric == nil {
-						metric = &capabilityScopeMetrics{}
-						metricsByScope[scopeKey] = metric
-					}
-					metric.Count++
-					if result.Allowed {
-						metric.Allowed++
-					}
-					if result.Error != "" || result.EvaluationError != "" {
-						metric.Errors++
-					}
-					metric.TotalDuration += duration
-					metricsMu.Unlock()
-				}
-
-				if result.Error != "" || result.EvaluationError != "" {
-					failureCount.Add(1)
-				}
-
-				results[job.index] = result
-			}
-		}()
-	}
-
-	for idx, check := range checks {
-		jobs <- evalJob{index: idx, check: check}
-	}
-	close(jobs)
-	wg.Wait()
-
-	// Safe to read unlocked: wg.Wait establishes happens-before over every worker.
-	if reviewFailures > 0 {
-		// Keep the cause near the front of the operation so Sentry's truncated
-		// summaries retain it, while preserving the original error separately.
-		s.logError(firstReviewErr, fmt.Sprintf(
-			"%d of %d capability checks failed: %v [%s]",
-			reviewFailures, len(checks),
-			firstReviewErr,
-			strings.Join(failedIdentities, ", "),
-		), sentryreporting.NewKubernetesCapabilityBatchOperation(reviewFailures, len(checks), failedChecks))
-	}
-
-	if collectMetrics {
-		metricsMu.Lock()
-		snapshot := make(map[string]capabilityScopeMetrics, len(metricsByScope))
-		for scopeType, metric := range metricsByScope {
-			snapshot[scopeType] = *metric
-		}
-		metricsMu.Unlock()
-		s.logScopeMetrics(snapshot)
-	}
+	batch := newCapabilityEvaluationBatch(s, ctx, checks, results, limiter)
+	batch.run(s.resolveWorkerCount(len(checks)))
+	batch.reportReviewFailures()
+	batch.reportMetrics()
 
 	if err := ctx.Err(); err != nil {
 		return results, err
 	}
-	if int(failureCount.Load()) == len(checks) && len(checks) > 0 {
+	if int(batch.failureCount.Load()) == len(checks) {
 		return results, fmt.Errorf("all capability checks failed")
 	}
 	return results, nil
+}
+
+func newCapabilityEvaluationBatch(
+	service *Service,
+	ctx context.Context,
+	checks []ReviewAttributes,
+	results []CheckResult,
+	limiter RateLimiter,
+) *capabilityEvaluationBatch {
+	return &capabilityEvaluationBatch{
+		service: service, ctx: ctx, checks: checks, results: results, limiter: limiter,
+		slowThreshold: service.resolveSlowThreshold(), now: service.now,
+		collectMetrics: service.deps.Common.Logger != nil,
+		metricsByScope: make(map[string]*capabilityScopeMetrics),
+	}
+}
+
+func (b *capabilityEvaluationBatch) run(workerCount int) {
+	jobs := make(chan capabilityEvaluationJob)
+	var wg sync.WaitGroup
+	for range workerCount {
+		wg.Add(1)
+		go func() {
+			defer wg.Done()
+			for job := range jobs {
+				b.evaluate(job)
+			}
+		}()
+	}
+	for index, check := range b.checks {
+		jobs <- capabilityEvaluationJob{index: index, check: check}
+	}
+	close(jobs)
+	wg.Wait()
+}
+
+func (b *capabilityEvaluationBatch) evaluate(job capabilityEvaluationJob) {
+	result := CheckResult{ID: job.check.ID}
+	attrs := job.check.Attributes
+	if attrs == nil {
+		result.Error = "resource attributes missing"
+		b.results[job.index] = result
+		return
+	}
+	if b.limiter != nil {
+		if err := b.limiter.Wait(b.ctx); err != nil {
+			result.Error = err.Error()
+			b.results[job.index] = result
+			return
+		}
+	}
+
+	response, duration, err := b.requestReview(attrs)
+	result = b.reviewResult(result, attrs, response, duration, err)
+	b.recordMetrics(attrs.Namespace, result, duration)
+	if result.Error != "" || result.EvaluationError != "" {
+		b.failureCount.Add(1)
+	}
+	b.results[job.index] = result
+}
+
+func (b *capabilityEvaluationBatch) requestReview(attrs *authorizationv1.ResourceAttributes) (*authorizationv1.SelfSubjectAccessReview, time.Duration, error) {
+	review := &authorizationv1.SelfSubjectAccessReview{
+		Spec: authorizationv1.SelfSubjectAccessReviewSpec{ResourceAttributes: attrs},
+	}
+	start := b.now()
+	var response *authorizationv1.SelfSubjectAccessReview
+	err := k8sretry.Do(b.ctx, capabilityReviewRetryPolicy(), func(callCtx context.Context) error {
+		var err error
+		response, err = b.service.deps.Common.KubernetesClient.AuthorizationV1().
+			SelfSubjectAccessReviews().Create(callCtx, review, metav1.CreateOptions{})
+		return err
+	})
+	return response, b.now().Sub(start), err
+}
+
+func (b *capabilityEvaluationBatch) reviewResult(
+	result CheckResult,
+	attrs *authorizationv1.ResourceAttributes,
+	response *authorizationv1.SelfSubjectAccessReview,
+	duration time.Duration,
+	err error,
+) CheckResult {
+	if err != nil {
+		b.recordReviewFailure(attrs, err)
+		result.Error = err.Error()
+		return result
+	}
+	if response == nil {
+		result.Error = "permission review returned no response"
+		return result
+	}
+	result.Allowed = response.Status.Allowed
+	result.DeniedReason = response.Status.Reason
+	result.EvaluationError = response.Status.EvaluationError
+	if b.slowThreshold > 0 && duration > b.slowThreshold {
+		b.service.logWarn(fmt.Sprintf("Capability check %s slow: %s", describeCapabilityShape(attrs), duration))
+	}
+	return result
+}
+
+func (b *capabilityEvaluationBatch) recordReviewFailure(attrs *authorizationv1.ResourceAttributes, err error) {
+	b.reviewFailureMu.Lock()
+	defer b.reviewFailureMu.Unlock()
+	b.reviewFailures++
+	if b.firstReviewErr == nil {
+		b.firstReviewErr = err
+	}
+	if len(b.failedIdentities) < maxReportedFailedChecks {
+		b.failedIdentities = append(b.failedIdentities, describeCapabilityShape(attrs))
+		b.failedChecks = append(b.failedChecks, capabilityRequest(attrs))
+	}
+}
+
+func (b *capabilityEvaluationBatch) recordMetrics(namespace string, result CheckResult, duration time.Duration) {
+	if !b.collectMetrics {
+		return
+	}
+	b.metricsMu.Lock()
+	defer b.metricsMu.Unlock()
+	scopeKey := capabilityScopeMetricKey(namespace)
+	metric := b.metricsByScope[scopeKey]
+	if metric == nil {
+		metric = &capabilityScopeMetrics{}
+		b.metricsByScope[scopeKey] = metric
+	}
+	metric.Count++
+	if result.Allowed {
+		metric.Allowed++
+	}
+	if result.Error != "" || result.EvaluationError != "" {
+		metric.Errors++
+	}
+	metric.TotalDuration += duration
+}
+
+func (b *capabilityEvaluationBatch) reportReviewFailures() {
+	if b.reviewFailures == 0 {
+		return
+	}
+	b.service.logError(b.firstReviewErr, fmt.Sprintf(
+		"%d of %d capability checks failed: %v [%s]",
+		b.reviewFailures, len(b.checks), b.firstReviewErr,
+		strings.Join(b.failedIdentities, ", "),
+	), sentryreporting.NewKubernetesCapabilityBatchOperation(b.reviewFailures, len(b.checks), b.failedChecks))
+}
+
+func (b *capabilityEvaluationBatch) reportMetrics() {
+	if !b.collectMetrics {
+		return
+	}
+	snapshot := make(map[string]capabilityScopeMetrics, len(b.metricsByScope))
+	for scopeType, metric := range b.metricsByScope {
+		snapshot[scopeType] = *metric
+	}
+	b.service.logScopeMetrics(snapshot)
 }
 
 func capabilityReviewRetryPolicy() k8sretry.Policy {

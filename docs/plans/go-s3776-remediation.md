@@ -524,6 +524,57 @@ query plan separated from row matching and page materialization; typed grow
 operations per column encoding. Do not introduce a second query engine or
 identity resolver.
 
+Local progress through 2026-08-06 (Sonar confirmation pending):
+
+- [x] Traced catalog discovery, capability preflight, cache readiness,
+      collection, streaming publication, maintained-query execution, kind-only
+      compatibility discovery, and aggregate diagnostics through their owning
+      architecture contracts. The object catalog remains the only discovery
+      and identity owner; no second resolver or query engine was introduced.
+- [x] Characterized descriptor index association, partial capability answers,
+      maintained facet intersections, kind/singular/plural discovery matching,
+      partial discovery results, CRD storage-version fallback, codec arena
+      growth, pointer null state, and diagnostics merge precedence.
+- [x] Added a failing cancellation-during-collection test that proved `sync`
+      returned success after a canceled list. The red/green fix now returns the
+      cancellation, records failed health/telemetry, publishes readiness false,
+      and prevents newly scheduled collectors from beginning work after their
+      context is canceled.
+- [x] Reduced catalog sync to explicit discover, prepare, cache-wait, collect,
+      reconcile, publish, and completion stages. Batch RBAC planning and result
+      summarization retain positional descriptor indexes and definitive
+      per-namespace answers still outrank sibling errors.
+- [x] Reduced capability evaluation to batch orchestration around one review,
+      failure aggregation, scope metrics, and final reporting while preserving
+      caller-supplied result order, rate limiting, retries, and partial results.
+- [x] Separated query facet matching, search matching, cursor normalization,
+      index walking, row materialization, cursor construction, maintained facet
+      collection, and typed codec-column growth. Existing empty, filtered,
+      malformed-cursor, forward/backward, anchor, total, facet, promotion, and
+      map-oracle tests remain green.
+- [x] Separated kind-only discovery into preferred/fallback resource-list
+      selection, top-level resource matching, and CRD fallback without changing
+      its documented first-match compatibility behavior. Direct coverage for
+      `DiscoverGVRByKind` increased from 0.0% to 100.0%.
+- [x] Separated diagnostics telemetry projection, domain aggregation, single
+      catalog health selection, and missing-field merge. Multi-catalog state
+      still refuses to imply a preferred cluster, and all values come from one
+      `SnapshotSummary` generation.
+- [x] Direct target coverage in inventory order is 100.0%, 82.4%, 100.0%,
+      83.3%, 100.0%, 81.8%, 100.0%, 84.6%, and 100.0%. Every extracted Phase 4
+      seam is at least 80% covered; the broad `backend` package remains 77.1%.
+- [x] Full `-race` runs pass for object catalog, capabilities, querypage, common
+      discovery, and focused diagnostics. The repository backend coverage task
+      and the full `mage qc:prerelease` gate pass on the formatted worktree;
+      frontend validation covers 459 files and 3,956 tests, and Trivy reports
+      zero dependency vulnerabilities.
+- [x] `gocognit` v1.2.1 measures the nine targets, in inventory order, at 3, 5,
+      6, 5, 3, 2, 1, 6, and 1. The most complex newly introduced production
+      helper is 12, below the configured limit of 15; no new test exceeds 15.
+- [ ] Confirm all nine findings close in the next Sonar analysis without
+      creating or increasing another S3776 finding; keep the target boxes above
+      open until that evidence exists.
+
 ---
 
 ## Phase 5: Refresh snapshots, registration, and graph construction

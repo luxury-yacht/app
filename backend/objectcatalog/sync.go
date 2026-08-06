@@ -109,61 +109,112 @@ func (s *Service) evaluateDescriptorsBatch(ctx context.Context, svc *capabilitie
 		return allowed, nil, nil
 	}
 
-	// One check per (descriptor × preflight namespace): a namespaced kind
-	// under a scope is allowed when ANY configured namespace allows it; a
-	// per-namespace error is ignored when another namespace gave a definitive
-	// answer, so one broken namespace never blanks the kind.
-	checks := make([]capabilities.ReviewAttributes, 0, len(descriptors))
-	indexes := make([]int, 0, len(descriptors))
-	for idx, desc := range descriptors {
-		for _, namespace := range s.preflightNamespaces(desc) {
-			checks = append(checks, capabilities.ReviewAttributes{
-				ID: desc.GVR.String() + "|" + namespace,
-				Attributes: &authorizationv1.ResourceAttributes{
-					Group:     desc.Group,
-					Version:   desc.Version,
-					Resource:  desc.Resource,
-					Verb:      "list",
-					Namespace: namespace,
-				},
-			})
-			indexes = append(indexes, idx)
-		}
-	}
-
-	results, err := svc.Evaluate(ctx, checks)
+	plan := s.descriptorEvaluationPlan(descriptors)
+	results, err := svc.Evaluate(ctx, plan.checks)
 	if err != nil {
 		return nil, nil, err
 	}
 
+	allowed, errorsByIndex := summarizeBatchEvaluation(results, plan.indexes, len(descriptors))
+	s.logDescriptorEvaluation(descriptors, plan.indexes, allowed, errorsByIndex)
+
+	if len(errorsByIndex) == 0 {
+		return allowed, errorsByIndex, nil
+	}
+	return allowed, nil, joinDescriptorEvaluationErrors(descriptors, errorsByIndex)
+}
+
+type descriptorEvaluationBatchPlan struct {
+	checks  []capabilities.ReviewAttributes
+	indexes []int
+}
+
+// descriptorEvaluationPlan creates one check per descriptor and preflight namespace.
+// The indexes preserve the association between the capability service's positional
+// results and the descriptors that supplied them.
+func (s *Service) descriptorEvaluationPlan(descriptors []resourceDescriptor) descriptorEvaluationBatchPlan {
+	plan := descriptorEvaluationBatchPlan{
+		checks:  make([]capabilities.ReviewAttributes, 0, len(descriptors)),
+		indexes: make([]int, 0, len(descriptors)),
+	}
+	for idx, desc := range descriptors {
+		for _, check := range descriptorPreflightReviews(desc, s.preflightNamespaces(desc)) {
+			plan.checks = append(plan.checks, check)
+			plan.indexes = append(plan.indexes, idx)
+		}
+	}
+	return plan
+}
+
+func summarizeBatchEvaluation(
+	results []capabilities.CheckResult,
+	indexes []int,
+	descriptorCount int,
+) (map[int]bool, map[int]error) {
+	allowed := make(map[int]bool, descriptorCount)
 	errorsByIndex := make(map[int]error)
-	answered := make(map[int]bool, len(descriptors))
-	for i, res := range results {
+	answered := make(map[int]bool, descriptorCount)
+	for i, result := range results {
 		if i >= len(indexes) {
 			break
 		}
-		idx := indexes[i]
-		switch {
-		case res.Error != "":
-			if _, ok := errorsByIndex[idx]; !ok {
-				errorsByIndex[idx] = errors.New(res.Error)
-			}
-		case res.EvaluationError != "":
-			if _, ok := errorsByIndex[idx]; !ok {
-				errorsByIndex[idx] = errors.New(res.EvaluationError)
-			}
-		default:
-			answered[idx] = true
-			if res.Allowed {
-				allowed[idx] = true
-			}
-		}
+		recordBatchEvaluationResult(indexes[i], result, allowed, answered, errorsByIndex)
 	}
-	// A definitive per-namespace answer outranks a sibling namespace's error.
 	for idx := range answered {
 		delete(errorsByIndex, idx)
 	}
+	return allowed, errorsByIndex
+}
 
+func recordBatchEvaluationResult(
+	idx int,
+	result capabilities.CheckResult,
+	allowed map[int]bool,
+	answered map[int]bool,
+	errorsByIndex map[int]error,
+) {
+	message := result.Error
+	if message == "" {
+		message = result.EvaluationError
+	}
+	if message != "" {
+		if _, exists := errorsByIndex[idx]; !exists {
+			errorsByIndex[idx] = errors.New(message)
+		}
+		return
+	}
+	answered[idx] = true
+	if result.Allowed {
+		allowed[idx] = true
+	}
+}
+
+func (s *Service) logDescriptorEvaluation(
+	descriptors []resourceDescriptor,
+	indexes []int,
+	allowed map[int]bool,
+	errorsByIndex map[int]error,
+) {
+	if s.deps.Logger == nil {
+		return
+	}
+	allowedCount, deniedCount := countDescriptorEvaluationResults(indexes, allowed, errorsByIndex)
+	deniedExamples := descriptorDeniedExamples(descriptors, indexes, allowed, errorsByIndex, 5)
+	msg := fmt.Sprintf(
+		"catalog RBAC preflight: allowed=%d denied=%d errors=%d total=%d",
+		allowedCount, deniedCount, len(errorsByIndex), len(descriptors),
+	)
+	if len(deniedExamples) > 0 {
+		msg += " deniedSample=" + strings.Join(deniedExamples, ",")
+	}
+	if len(errorsByIndex) > 0 {
+		s.logWarn(msg)
+		return
+	}
+	s.logDebug(msg)
+}
+
+func countDescriptorEvaluationResults(indexes []int, allowed map[int]bool, errorsByIndex map[int]error) (int, int) {
 	allowedCount := 0
 	deniedCount := 0
 	for _, idx := range indexes {
@@ -176,44 +227,35 @@ func (s *Service) evaluateDescriptorsBatch(ctx context.Context, svc *capabilitie
 			deniedCount++
 		}
 	}
-	if s.deps.Logger != nil {
-		var deniedExamples []string
-		if deniedCount > 0 {
-			for _, idx := range indexes {
-				if len(deniedExamples) >= 5 {
-					break
-				}
-				if _, hasErr := errorsByIndex[idx]; hasErr {
-					continue
-				}
-				if allowed[idx] {
-					continue
-				}
-				if idx < len(descriptors) {
-					deniedExamples = append(deniedExamples, descriptors[idx].GVR.String())
-				}
-			}
-		}
-		msg := fmt.Sprintf("catalog RBAC preflight: allowed=%d denied=%d errors=%d total=%d", allowedCount, deniedCount, len(errorsByIndex), len(descriptors))
-		if len(deniedExamples) > 0 {
-			msg = msg + " deniedSample=" + strings.Join(deniedExamples, ",")
-		}
-		if len(errorsByIndex) > 0 {
-			s.logWarn(msg)
-		} else {
-			s.logDebug(msg)
-		}
-	}
+	return allowedCount, deniedCount
+}
 
-	if len(errorsByIndex) == 0 {
-		return allowed, errorsByIndex, nil
+func descriptorDeniedExamples(
+	descriptors []resourceDescriptor,
+	indexes []int,
+	allowed map[int]bool,
+	errorsByIndex map[int]error,
+	limit int,
+) []string {
+	examples := make([]string, 0, limit)
+	for _, idx := range indexes {
+		if len(examples) >= limit {
+			break
+		}
+		if _, hasErr := errorsByIndex[idx]; hasErr || allowed[idx] || idx >= len(descriptors) {
+			continue
+		}
+		examples = append(examples, descriptors[idx].GVR.String())
 	}
+	return examples
+}
+
+func joinDescriptorEvaluationErrors(descriptors []resourceDescriptor, errorsByIndex map[int]error) error {
 	errs := make([]error, 0, len(errorsByIndex))
 	for idx, errVal := range errorsByIndex {
-		desc := descriptors[idx]
-		errs = append(errs, fmt.Errorf("%s: %w", desc.GVR.String(), errVal))
+		errs = append(errs, fmt.Errorf("%s: %w", descriptors[idx].GVR.String(), errVal))
 	}
-	return allowed, nil, errors.Join(errs...)
+	return errors.Join(errs...)
 }
 
 func (s *Service) ensureDependencies() error {
@@ -318,263 +360,339 @@ func (s *Service) runLoop(ctx context.Context) error {
 	}
 }
 
+type catalogSync struct {
+	service           *Service
+	start             time.Time
+	prevResourceCount int
+	prevItemCount     int
+	newItems          map[string]Summary
+	newLastSeen       map[string]time.Time
+	previousItems     map[string]Summary
+	previousLastSeen  map[string]time.Time
+	descriptors       []resourceDescriptor
+	aggregator        *streamingAggregator
+	capabilityService *capabilities.Service
+	resultsMu         sync.Mutex
+	succeeded         map[string][]Summary
+	failed            map[string]error
+	allowedIndices    map[int]resourceDescriptor
+	allowedSet        map[string]resourceDescriptor
+	batchEvaluated    bool
+}
+
 func (s *Service) sync(ctx context.Context) error {
 	s.syncMu.Lock()
 	defer s.syncMu.Unlock()
-
 	start := s.now()
 	s.syncInProgress.Store(true)
 	defer s.syncInProgress.Store(false)
-
-	// A fresh sync re-attempts every list, so denials from the previous pass
-	// are stale; a permission grant clears the warning here.
 	s.resetDeniedResources()
 
+	run := newCatalogSync(s, start)
+	empty, err := run.discover(ctx)
+	if err != nil {
+		return run.failBeforeCollection(err)
+	}
+	if empty {
+		run.publishEmpty()
+		return nil
+	}
+	run.prepare(ctx)
+	if err := run.waitForCaches(ctx); err != nil {
+		return run.failBeforeCollection(err)
+	}
+	runErr := parallel.RunLimited(ctx, s.opts.ListWorkers, run.collectionTasks()...)
+	return run.finish(runErr)
+}
+
+func newCatalogSync(s *Service, start time.Time) *catalogSync {
 	currentItems, currentLastSeen, prevResourceCount := s.captureCurrentState()
 	newItems := cloneSummaryMap(currentItems)
-	newLastSeen := cloneTimeMap(currentLastSeen)
-	previousItems := currentItems
-	previousLastSeen := currentLastSeen
-	prevItemCount := len(newItems)
+	return &catalogSync{
+		service: s, start: start, prevResourceCount: prevResourceCount,
+		prevItemCount: len(newItems), newItems: newItems,
+		newLastSeen: cloneTimeMap(currentLastSeen), previousItems: currentItems,
+		previousLastSeen: currentLastSeen,
+	}
+}
 
-	descriptors, err := s.discoverResources(ctx)
+func (run *catalogSync) discover(ctx context.Context) (bool, error) {
+	descriptors, err := run.service.discoverResources(ctx)
 	if err != nil {
-		elapsed := s.now().Sub(start)
-		s.updateHealth(false, true, err, 0)
-		s.recordTelemetry(prevItemCount, prevResourceCount, elapsed, err)
+		return false, err
+	}
+	run.descriptors = descriptors
+	if run.service.identity != nil {
+		run.service.identity.replaceDiscovered(descriptors)
+	}
+	run.service.logInfo(fmt.Sprintf("catalog discovered %d descriptor(s)", len(descriptors)))
+	return len(descriptors) == 0, nil
+}
+
+func (run *catalogSync) publishEmpty() {
+	s := run.service
+	s.mu.Lock()
+	s.catalogIndex.reset()
+	s.mu.Unlock()
+	s.logDebug("no resources discovered; catalog cleared")
+	elapsed := s.now().Sub(run.start)
+	s.updateHealth(true, false, nil, 0)
+	s.recordTelemetry(0, 0, elapsed, nil)
+}
+
+func (run *catalogSync) prepare(ctx context.Context) {
+	sortResourceDescriptors(run.descriptors)
+	s := run.service
+	run.aggregator = newStreamingAggregator(s)
+	s.broadcastStreaming(false)
+	if factory := s.deps.CapabilityFactory; factory != nil {
+		run.capabilityService = factory()
+	}
+	run.succeeded = make(map[string][]Summary, len(run.descriptors))
+	run.failed = make(map[string]error)
+	run.allowedIndices = make(map[int]resourceDescriptor)
+	run.allowedSet = make(map[string]resourceDescriptor)
+	run.preparePublishedState()
+	run.evaluateCapabilities(ctx)
+}
+
+func sortResourceDescriptors(descriptors []resourceDescriptor) {
+	sort.SliceStable(descriptors, func(i, j int) bool {
+		left, right := descriptors[i], descriptors[j]
+		if comparison := descriptorStreamingPriority(left) - descriptorStreamingPriority(right); comparison != 0 {
+			return comparison < 0
+		}
+		if left.Kind != right.Kind {
+			return left.Kind < right.Kind
+		}
+		if left.Group != right.Group {
+			return left.Group < right.Group
+		}
+		if left.Version != right.Version {
+			return left.Version < right.Version
+		}
+		return left.Resource < right.Resource
+	})
+}
+
+func (run *catalogSync) preparePublishedState() {
+	s := run.service
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	s.items = run.newItems
+	s.lastSeen = run.newLastSeen
+	s.catalogIndex.replaceResources(nil)
+	// Collectors incrementally rebuild this sync's query view after this reset.
+	s.catalogIndex.resetQueryStore()
+}
+
+func (run *catalogSync) evaluateCapabilities(ctx context.Context) {
+	if run.capabilityService == nil {
+		return
+	}
+	allowed, batchErrors, err := run.service.evaluateDescriptorsBatch(ctx, run.capabilityService, run.descriptors)
+	if err != nil || len(batchErrors) != 0 {
+		return
+	}
+	run.batchEvaluated = true
+	for idx, desc := range run.descriptors {
+		if allowed[idx] {
+			run.allow(idx, desc)
+		}
+	}
+}
+
+func (run *catalogSync) waitForCaches(ctx context.Context) error {
+	wait := run.service.deps.WaitForCaches
+	if wait == nil {
+		return nil
+	}
+	if err := wait(ctx); err != nil {
+		return fmt.Errorf("waiting for informer caches: %w", err)
+	}
+	return nil
+}
+
+func (run *catalogSync) failBeforeCollection(err error) error {
+	elapsed := run.service.now().Sub(run.start)
+	run.service.updateHealth(false, true, err, 0)
+	run.service.recordTelemetry(run.prevItemCount, run.prevResourceCount, elapsed, err)
+	return err
+}
+
+func (run *catalogSync) collectionTasks() []func(context.Context) error {
+	tasks := make([]func(context.Context) error, 0, len(run.descriptors))
+	for index, desc := range run.descriptors {
+		index, desc := index, desc
+		tasks = append(tasks, func(ctx context.Context) error {
+			return run.collectDescriptor(ctx, index, desc)
+		})
+	}
+	return tasks
+}
+
+func (run *catalogSync) collectDescriptor(ctx context.Context, index int, desc resourceDescriptor) error {
+	if err := ctx.Err(); err != nil {
 		return err
 	}
-	if s.identity != nil {
-		s.identity.replaceDiscovered(descriptors)
-	}
-	s.logInfo(fmt.Sprintf("catalog discovered %d descriptor(s)", len(descriptors)))
-	if len(descriptors) == 0 {
-		s.mu.Lock()
-		s.catalogIndex.reset()
-		s.mu.Unlock()
-		s.logDebug("no resources discovered; catalog cleared")
-		elapsed := s.now().Sub(start)
-		s.updateHealth(true, false, nil, 0)
-		s.recordTelemetry(0, 0, elapsed, nil)
+	if !run.batchEvaluated {
+		allowed, err := run.service.evaluateDescriptor(ctx, run.capabilityService, desc)
+		if err != nil {
+			run.recordFailure(desc, err)
+			return err
+		}
+		if !allowed {
+			return nil
+		}
+		run.allow(index, desc)
+	} else if !run.isAllowed(desc) {
 		return nil
 	}
 
-	sort.SliceStable(descriptors, func(i, j int) bool {
-		pi := descriptorStreamingPriority(descriptors[i])
-		pj := descriptorStreamingPriority(descriptors[j])
-		if pi != pj {
-			return pi < pj
+	summaries, err := run.service.collectResource(
+		ctx, index, desc, run.service.scopeNamespaces(), run.aggregator,
+	)
+	if err != nil {
+		if !errors.Is(err, context.Canceled) && !errors.Is(err, context.DeadlineExceeded) {
+			run.recordFailure(desc, err)
 		}
-		if descriptors[i].Kind != descriptors[j].Kind {
-			return descriptors[i].Kind < descriptors[j].Kind
-		}
-		if descriptors[i].Group != descriptors[j].Group {
-			return descriptors[i].Group < descriptors[j].Group
-		}
-		if descriptors[i].Version != descriptors[j].Version {
-			return descriptors[i].Version < descriptors[j].Version
-		}
-		return descriptors[i].Resource < descriptors[j].Resource
-	})
-
-	agg := newStreamingAggregator(s)
-	s.broadcastStreaming(false)
-
-	var capService *capabilities.Service
-	if factory := s.deps.CapabilityFactory; factory != nil {
-		capService = factory()
+		return err
 	}
+	run.logCollected(desc, len(summaries))
+	run.resultsMu.Lock()
+	run.succeeded[desc.GVR.String()] = summaries
+	run.resultsMu.Unlock()
+	return nil
+}
 
-	s.mu.Lock()
-	s.items = newItems
-	s.lastSeen = newLastSeen
-	s.catalogIndex.replaceResources(nil)
-	// Reset the maintained query store before any collector emits, so this sync's incremental
-	// chunk upserts (streamingAggregator.emit) build the streaming view from scratch — the
-	// "this sync only" semantics the previous per-emit wholesale rebuild gave, without its
-	// O(N²) cost. This runs before parallel.RunLimited launches, so it cannot race the emits.
-	// Until the first emit the empty store serves via queryViaEngine's items-map fallback.
-	s.catalogIndex.resetQueryStore()
-	s.mu.Unlock()
+func (run *catalogSync) allow(index int, desc resourceDescriptor) {
+	run.resultsMu.Lock()
+	defer run.resultsMu.Unlock()
+	run.allowedIndices[index] = desc
+	run.allowedSet[desc.GVR.String()] = desc
+}
 
-	var resultsMu sync.Mutex
-	succeeded := make(map[string][]Summary, len(descriptors))
-	failed := make(map[string]error)
-	allowedIndices := make(map[int]resourceDescriptor)
-	allowedSet := make(map[string]resourceDescriptor)
+func (run *catalogSync) isAllowed(desc resourceDescriptor) bool {
+	run.resultsMu.Lock()
+	defer run.resultsMu.Unlock()
+	_, ok := run.allowedSet[desc.GVR.String()]
+	return ok
+}
 
-	// Attempt batch RBAC evaluation to cut API churn; fall back to per-descriptor if batch fails.
-	var batchEvaluated bool
-	if capService != nil {
-		if batchAllowed, batchErrors, batchErr := s.evaluateDescriptorsBatch(ctx, capService, descriptors); batchErr == nil && len(batchErrors) == 0 {
-			batchEvaluated = true
-			for idx, desc := range descriptors {
-				if batchAllowed[idx] {
-					allowedIndices[idx] = desc
-					allowedSet[desc.GVR.String()] = desc
-				}
-			}
-		}
+func (run *catalogSync) recordFailure(desc resourceDescriptor, err error) {
+	run.resultsMu.Lock()
+	defer run.resultsMu.Unlock()
+	run.failed[desc.GVR.String()] = err
+}
+
+func (run *catalogSync) logCollected(desc resourceDescriptor, count int) {
+	if count == 0 {
+		run.service.logDebug(fmt.Sprintf("catalog collected 0 objects for %s", desc.GVR.String()))
+		return
 	}
+	run.service.logDebug(fmt.Sprintf("catalog collected %d object(s) for %s", count, desc.GVR.String()))
+}
 
-	// Discovery and the batch RBAC preflight above are pure API calls; only the
-	// collect below reads informer caches. Waiting HERE — not before the service
-	// starts — lets those seconds overlap the factory's initial sync instead of
-	// running after it. A wait failure aborts the sync (retaining prior data, like
-	// any other sync failure): collecting from unsynced listers would publish an
-	// incomplete catalog as authoritative. On resyncs the factory is already synced
-	// and the wait returns immediately.
-	if wait := s.deps.WaitForCaches; wait != nil {
-		if err := wait(ctx); err != nil {
-			err = fmt.Errorf("waiting for informer caches: %w", err)
-			elapsed := s.now().Sub(start)
-			s.updateHealth(false, true, err, 0)
-			s.recordTelemetry(prevItemCount, prevResourceCount, elapsed, err)
-			return err
-		}
-	}
+func (run *catalogSync) finish(runErr error) error {
+	descriptorCache := run.applyCollectionResults()
+	collectErr := run.collectionError(runErr)
+	run.restoreFailedDescriptors()
+	enrichCatalogActionFacts(run.newItems, run.allowedSet, run.failed)
+	run.publish(descriptorCache, collectErr)
+	run.recordCompletion(collectErr)
+	return collectErr
+}
 
-	tasks := make([]func(context.Context) error, 0, len(descriptors))
-	for index, desc := range descriptors {
-		index := index
-		desc := desc
-		tasks = append(tasks, func(taskCtx context.Context) error {
-			if !batchEvaluated {
-				allowed, evalErr := s.evaluateDescriptor(taskCtx, capService, desc)
-				if evalErr != nil {
-					resultsMu.Lock()
-					failed[desc.GVR.String()] = evalErr
-					resultsMu.Unlock()
-					return evalErr
-				}
-				if !allowed {
-					return nil
-				}
-
-				resultsMu.Lock()
-				allowedIndices[index] = desc
-				allowedSet[desc.GVR.String()] = desc
-				resultsMu.Unlock()
-			} else if _, ok := allowedSet[desc.GVR.String()]; !ok {
-				return nil
-			}
-
-			summaries, err := s.collectResource(taskCtx, index, desc, s.scopeNamespaces(), agg)
-			if err != nil {
-				if errors.Is(err, context.Canceled) || errors.Is(err, context.DeadlineExceeded) {
-					return err
-				}
-				resultsMu.Lock()
-				failed[desc.GVR.String()] = err
-				resultsMu.Unlock()
-				return err
-			}
-			if len(summaries) == 0 {
-				s.logDebug(fmt.Sprintf("catalog collected 0 objects for %s", desc.GVR.String()))
-			} else {
-				s.logDebug(fmt.Sprintf("catalog collected %d object(s) for %s", len(summaries), desc.GVR.String()))
-			}
-			resultsMu.Lock()
-			succeeded[desc.GVR.String()] = summaries
-			resultsMu.Unlock()
-			return nil
-		})
-	}
-
-	runErr := parallel.RunLimited(ctx, s.opts.ListWorkers, tasks...)
-
-	allowedDescriptors := make([]resourceDescriptor, 0, len(allowedIndices))
-	for idx := 0; idx < len(descriptors); idx++ {
-		if desc, ok := allowedIndices[idx]; ok {
-			allowedDescriptors = append(allowedDescriptors, desc)
-		}
-	}
-	descriptorCache := toDescriptorSlice(allowedDescriptors)
-	s.logInfo(fmt.Sprintf("catalog RBAC allowed %d/%d descriptor(s)", len(allowedDescriptors), len(descriptors)))
-
-	removeDisallowedEntries(newItems, newLastSeen, allowedSet)
-
+func (run *catalogSync) applyCollectionResults() []Descriptor {
+	allowedDescriptors := run.orderedAllowedDescriptors()
+	s := run.service
+	s.logInfo(fmt.Sprintf("catalog RBAC allowed %d/%d descriptor(s)", len(allowedDescriptors), len(run.descriptors)))
+	removeDisallowedEntries(run.newItems, run.newLastSeen, run.allowedSet)
 	now := s.now()
-	for gvr, summaries := range succeeded {
-		desc := allowedSet[gvr]
-		removeDescriptorEntries(newItems, newLastSeen, gvr)
+	for gvr, summaries := range run.succeeded {
+		desc := run.allowedSet[gvr]
+		removeDescriptorEntries(run.newItems, run.newLastSeen, gvr)
 		for _, summary := range summaries {
 			key := catalogKey(desc, summary.Ref.Namespace, summary.Ref.Name)
-			newItems[key] = summary
-			newLastSeen[key] = now
+			run.newItems[key] = summary
+			run.newLastSeen[key] = now
 		}
 	}
-
 	s.mu.Lock()
-	for gvr, desc := range allowedSet {
+	for gvr, desc := range run.allowedSet {
 		s.catalogIndex.setResource(gvr, desc)
 	}
 	s.mu.Unlock()
+	return toDescriptorSlice(allowedDescriptors)
+}
 
-	failedCount := len(failed)
-	var collectErr error
-	if failedCount > 0 {
-		failedKeys := make([]string, 0, failedCount)
-		joined := make([]error, 0, failedCount)
-		for gvr, failure := range failed {
-			failedKeys = append(failedKeys, gvr)
-			if failure != nil {
-				joined = append(joined, fmt.Errorf("%s: %w", gvr, failure))
-			}
-		}
-		sort.Strings(failedKeys)
-		collectErr = &PartialSyncError{
-			FailedDescriptors: failedKeys,
-			Err:               errors.Join(joined...),
-		}
-		s.logWarn(fmt.Sprintf("catalog collection incomplete; retained previous data for %d descriptor(s)", failedCount))
-	} else if runErr != nil && !errors.Is(runErr, context.Canceled) && !errors.Is(runErr, context.DeadlineExceeded) {
-		collectErr = runErr
-		s.logWarn(fmt.Sprintf("catalog collection failed: %v", runErr))
-	}
-
-	if failedCount > 0 {
-		for gvr := range failed {
-			restoreDescriptorEntries(newItems, newLastSeen, previousItems, previousLastSeen, gvr)
-		}
-		for key, summary := range previousItems {
-			if _, exists := newItems[key]; !exists {
-				newItems[key] = summary
-				if ts, ok := previousLastSeen[key]; ok {
-					newLastSeen[key] = ts
-				}
-			}
+func (run *catalogSync) orderedAllowedDescriptors() []resourceDescriptor {
+	allowed := make([]resourceDescriptor, 0, len(run.allowedIndices))
+	for idx := range run.descriptors {
+		if desc, ok := run.allowedIndices[idx]; ok {
+			allowed = append(allowed, desc)
 		}
 	}
+	return allowed
+}
 
-	enrichCatalogActionFacts(newItems, allowedSet, failed)
+func (run *catalogSync) collectionError(runErr error) error {
+	if len(run.failed) == 0 {
+		if runErr != nil {
+			run.service.logWarn(fmt.Sprintf("catalog collection failed: %v", runErr))
+		}
+		return runErr
+	}
+	failedKeys := make([]string, 0, len(run.failed))
+	joined := make([]error, 0, len(run.failed))
+	for gvr, failure := range run.failed {
+		failedKeys = append(failedKeys, gvr)
+		if failure != nil {
+			joined = append(joined, fmt.Errorf("%s: %w", gvr, failure))
+		}
+	}
+	sort.Strings(failedKeys)
+	run.service.logWarn(fmt.Sprintf("catalog collection incomplete; retained previous data for %d descriptor(s)", len(run.failed)))
+	return &PartialSyncError{FailedDescriptors: failedKeys, Err: errors.Join(joined...)}
+}
 
+func (run *catalogSync) restoreFailedDescriptors() {
+	if len(run.failed) == 0 {
+		return
+	}
+	for gvr := range run.failed {
+		restoreDescriptorEntries(run.newItems, run.newLastSeen, run.previousItems, run.previousLastSeen, gvr)
+	}
+	for key, summary := range run.previousItems {
+		if _, exists := run.newItems[key]; exists {
+			continue
+		}
+		run.newItems[key] = summary
+		if timestamp, ok := run.previousLastSeen[key]; ok {
+			run.newLastSeen[key] = timestamp
+		}
+	}
+}
+
+func (run *catalogSync) publish(descriptors []Descriptor, collectErr error) {
+	run.aggregator.finalize(descriptors, collectErr == nil)
+	run.service.rebuildCacheFromItems(run.newItems, descriptors)
+	run.service.pruneMissing(run.newLastSeen)
+}
+
+func (run *catalogSync) recordCompletion(collectErr error) {
+	s := run.service
+	elapsed := s.now().Sub(run.start)
+	latency := run.aggregator.firstFlushLatency()
+	s.setFirstBatchLatency(latency)
 	if collectErr == nil {
-		agg.finalize(descriptorCache, true)
-		s.rebuildCacheFromItems(newItems, descriptorCache)
-		s.pruneMissing(newLastSeen)
-	} else {
-		agg.finalize(descriptorCache, false)
-		s.rebuildCacheFromItems(newItems, descriptorCache)
-		s.pruneMissing(newLastSeen)
-	}
-
-	elapsed := s.now().Sub(start)
-	firstBatchLatency := agg.firstFlushLatency()
-	s.setFirstBatchLatency(firstBatchLatency)
-	if collectErr == nil {
-		if firstBatchLatency > 0 {
-			s.logDebug(fmt.Sprintf("catalog streaming first batch latency: %s", firstBatchLatency))
+		if latency > 0 {
+			s.logDebug(fmt.Sprintf("catalog streaming first batch latency: %s", latency))
 		}
-		s.logInfo(fmt.Sprintf("catalog sync completed: %d objects, %d resources, took %s", len(newItems), len(allowedSet), elapsed))
+		s.logInfo(fmt.Sprintf("catalog sync completed: %d objects, %d resources, took %s", len(run.newItems), len(run.allowedSet), elapsed))
 		s.updateHealth(true, false, nil, 0)
 	} else {
-		s.updateHealth(false, failedCount > 0, collectErr, failedCount)
+		s.updateHealth(false, len(run.failed) > 0, collectErr, len(run.failed))
 	}
-	s.recordTelemetry(len(newItems), len(allowedSet), elapsed, collectErr)
-
-	if collectErr != nil {
-		return collectErr
-	}
-	return nil
+	s.recordTelemetry(len(run.newItems), len(run.allowedSet), elapsed, collectErr)
 }

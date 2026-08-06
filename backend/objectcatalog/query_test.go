@@ -102,6 +102,25 @@ func TestQueryFiltersAndPublishesAPIGroupAndResourceScopeFacets(t *testing.T) {
 	}
 }
 
+func TestCatalogEngineFacetsApplyDependentFiltersToMaintainedRows(t *testing.T) {
+	rows := []Summary{
+		{Ref: resourcemodel.ResourceRef{Group: "apps", Kind: "Deployment", Namespace: "default"}, Scope: ScopeNamespace},
+		{Ref: resourcemodel.ResourceRef{Group: "", Kind: "Pod", Namespace: "default"}, Scope: ScopeNamespace},
+		{Ref: resourcemodel.ResourceRef{Group: "apps", Kind: "StatefulSet", Namespace: "team-a"}, Scope: ScopeNamespace},
+		{Ref: resourcemodel.ResourceRef{Group: "apps", Kind: "Node"}, Scope: ScopeCluster},
+	}
+
+	kinds, namespaces := catalogEngineFacets(rows, QueryOptions{
+		Namespaces: []string{"default"}, Groups: []string{"apps"}, ResourceScopes: []Scope{ScopeNamespace},
+	}, nil, nil, true)
+	if !reflect.DeepEqual(kinds, []KindInfo{{Kind: "Deployment", Namespaced: true}}) {
+		t.Fatalf("unexpected dependent kinds: %#v", kinds)
+	}
+	if !reflect.DeepEqual(namespaces, []string{"default"}) {
+		t.Fatalf("unexpected matched namespaces: %#v", namespaces)
+	}
+}
+
 func TestServiceQueryStreamsWithoutFullCache(t *testing.T) {
 	svc := NewService(Dependencies{}, nil)
 

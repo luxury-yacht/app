@@ -47,80 +47,107 @@ func DiscoverGVRByKind(ctx context.Context, deps Dependencies, resourceKind stri
 	if deps.KubernetesClient == nil {
 		return schema.GroupVersionResource{}, false, fmt.Errorf("kubernetes client not initialized")
 	}
-	if ctx == nil {
-		ctx = deps.Context
-		if ctx == nil {
-			ctx = context.Background()
-		}
-	}
+	ctx = kindDiscoveryContext(ctx, deps.Context)
 	walkCtx, cancel := context.WithTimeout(ctx, config.KindOnlyDiscoveryTimeout)
 	defer cancel()
 
-	discoveryClient := deps.KubernetesClient.Discovery()
+	if result, found := findDiscoveredKind(kindDiscoveryResourceLists(deps), resourceKind); found {
+		return result.gvr, result.namespaced, nil
+	}
+	if result, found := findCRDKind(walkCtx, deps, resourceKind); found {
+		return result.gvr, result.namespaced, nil
+	}
+	return schema.GroupVersionResource{}, false, fmt.Errorf("resource type %s not found", resourceKind)
+}
 
-	apiResourceLists, err := discoveryClient.ServerPreferredResources()
+type discoveredKind struct {
+	gvr        schema.GroupVersionResource
+	namespaced bool
+}
+
+func kindDiscoveryContext(ctx, fallback context.Context) context.Context {
+	if ctx != nil {
+		return ctx
+	}
+	if fallback != nil {
+		return fallback
+	}
+	return context.Background()
+}
+
+func kindDiscoveryResourceLists(deps Dependencies) []*metav1.APIResourceList {
+	discoveryClient := deps.KubernetesClient.Discovery()
+	lists, err := discoveryClient.ServerPreferredResources()
 	if err != nil {
-		// Partial discovery failures are common with aggregated APIs;
-		// continue with whatever lists we did get.
+		// Aggregated APIs commonly fail partially; their successful lists remain usable.
 		applog.Debug(deps.Logger, fmt.Sprintf("ServerPreferredResources returned error: %v", err), "DiscoverGVRByKind")
 	}
-	if len(apiResourceLists) == 0 {
-		// Some fake discovery clients (client-go test fakes) leave
-		// ServerPreferredResources unimplemented. Fall back to
-		// ServerGroupsAndResources, which the same fakes do honor.
-		if _, lists, altErr := discoveryClient.ServerGroupsAndResources(); altErr == nil && len(lists) > 0 {
-			apiResourceLists = lists
-		}
+	if len(lists) > 0 {
+		return lists
 	}
+	_, fallback, fallbackErr := discoveryClient.ServerGroupsAndResources()
+	if fallbackErr == nil && len(fallback) > 0 {
+		return fallback
+	}
+	return lists
+}
 
-	for _, apiResourceList := range apiResourceLists {
-		gv, parseErr := schema.ParseGroupVersion(apiResourceList.GroupVersion)
-		if parseErr != nil {
+func findDiscoveredKind(lists []*metav1.APIResourceList, resourceKind string) (discoveredKind, bool) {
+	for _, list := range lists {
+		gv, err := schema.ParseGroupVersion(list.GroupVersion)
+		if err != nil {
 			continue
 		}
-		for _, apiResource := range apiResourceList.APIResources {
-			// Skip subresources like pods/log, pods/exec.
-			if strings.Contains(apiResource.Name, "/") {
-				continue
-			}
-			if strings.EqualFold(apiResource.Kind, resourceKind) ||
-				strings.EqualFold(apiResource.SingularName, resourceKind) ||
-				strings.EqualFold(apiResource.Name, resourceKind) {
-				return schema.GroupVersionResource{
-					Group:    gv.Group,
-					Version:  gv.Version,
-					Resource: apiResource.Name,
-				}, apiResource.Namespaced, nil
+		for _, resource := range list.APIResources {
+			if resourceMatchesKind(resource, resourceKind) {
+				return discoveredKind{
+					gvr:        schema.GroupVersionResource{Group: gv.Group, Version: gv.Version, Resource: resource.Name},
+					namespaced: resource.Namespaced,
+				}, true
 			}
 		}
 	}
+	return discoveredKind{}, false
+}
 
-	if deps.APIExtensionsClient != nil {
-		crds, listErr := deps.APIExtensionsClient.ApiextensionsV1().CustomResourceDefinitions().List(walkCtx, metav1.ListOptions{})
-		if listErr == nil {
-			for _, crd := range crds.Items {
-				if !strings.EqualFold(crd.Spec.Names.Kind, resourceKind) {
-					continue
-				}
-				isNamespaced := crd.Spec.Scope == apiextensionsv1.NamespaceScoped
-				var version string
-				for _, v := range crd.Spec.Versions {
-					if v.Served && v.Storage {
-						version = v.Name
-						break
-					}
-				}
-				if version == "" && len(crd.Spec.Versions) > 0 {
-					version = crd.Spec.Versions[0].Name
-				}
-				return schema.GroupVersionResource{
-					Group:    crd.Spec.Group,
-					Version:  version,
-					Resource: crd.Spec.Names.Plural,
-				}, isNamespaced, nil
-			}
+func resourceMatchesKind(resource metav1.APIResource, resourceKind string) bool {
+	if strings.Contains(resource.Name, "/") {
+		return false
+	}
+	return strings.EqualFold(resource.Kind, resourceKind) ||
+		strings.EqualFold(resource.SingularName, resourceKind) ||
+		strings.EqualFold(resource.Name, resourceKind)
+}
+
+func findCRDKind(ctx context.Context, deps Dependencies, resourceKind string) (discoveredKind, bool) {
+	if deps.APIExtensionsClient == nil {
+		return discoveredKind{}, false
+	}
+	crds, err := deps.APIExtensionsClient.ApiextensionsV1().CustomResourceDefinitions().List(ctx, metav1.ListOptions{})
+	if err != nil {
+		return discoveredKind{}, false
+	}
+	for _, crd := range crds.Items {
+		if strings.EqualFold(crd.Spec.Names.Kind, resourceKind) {
+			return discoveredKind{
+				gvr: schema.GroupVersionResource{
+					Group: crd.Spec.Group, Version: preferredCRDVersion(crd), Resource: crd.Spec.Names.Plural,
+				},
+				namespaced: crd.Spec.Scope == apiextensionsv1.NamespaceScoped,
+			}, true
 		}
 	}
+	return discoveredKind{}, false
+}
 
-	return schema.GroupVersionResource{}, false, fmt.Errorf("resource type %s not found", resourceKind)
+func preferredCRDVersion(crd apiextensionsv1.CustomResourceDefinition) string {
+	for _, version := range crd.Spec.Versions {
+		if version.Served && version.Storage {
+			return version.Name
+		}
+	}
+	if len(crd.Spec.Versions) > 0 {
+		return crd.Spec.Versions[0].Name
+	}
+	return ""
 }

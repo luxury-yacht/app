@@ -45,6 +45,9 @@ type rtWide struct {
 	Schedule  bool
 	Replicas  *int32
 	Toggle    *bool
+	Alias     *string
+	Capacity  *uint32
+	Threshold *float64
 	Scale     *rtScale
 	Labels    map[string]string
 	Taints    []rtTaint
@@ -59,8 +62,11 @@ type rtPlain struct {
 	C bool
 }
 
-func i32(v int32) *int32 { return &v }
-func bp(v bool) *bool    { return &v }
+func i32(v int32) *int32      { return &v }
+func bp(v bool) *bool         { return &v }
+func sp(v string) *string     { return &v }
+func u32p(v uint32) *uint32   { return &v }
+func f64p(v float64) *float64 { return &v }
 func randStr(r *rand.Rand) string {
 	pool := []string{"", "default", "kube-system", "a", "longish-value-here", "x"}
 	return pool[r.Intn(len(pool))]
@@ -142,6 +148,43 @@ func TestRowCodecRoundTrip(t *testing.T) {
 			status:    randStr(r),
 			cpu:       int64(r.Intn(1000)),
 		})
+	}
+}
+
+func TestRowCodecGrowthPreservesExistingValuesAndPointerPresence(t *testing.T) {
+	store := newColumnStore[rtWide](newRowCodec[rtWide]())
+	wants := map[string]rtWide{
+		"first": {
+			Kind: "Deployment", Name: "first", Count: -4, Restarts: 2, Age: 91,
+			Ratio: 1.25, Schedule: true, Replicas: i32(0), Toggle: bp(false),
+			Alias: sp("alpha"), Capacity: u32p(19), Threshold: f64p(2.5),
+			Unsigned: 3, BigUnders: 11,
+		},
+		"nil-pointers": {
+			Kind: "Pod", Name: "second", Count: 8, Ratio: -0.5,
+			Replicas: nil, Toggle: nil, Alias: nil, Capacity: nil, Threshold: nil,
+			Unsigned: 9, BigUnders: 15,
+		},
+		"last": {
+			Kind: "StatefulSet", Name: "third", Count: 12, Restarts: 5, Age: 101,
+			Ratio: 9.75, Replicas: i32(7), Toggle: bp(true), Alias: sp("omega"),
+			Capacity: u32p(23), Threshold: f64p(7.5), Unsigned: 13, BigUnders: 17,
+		},
+	}
+	for _, uid := range []string{"first", "nil-pointers", "last"} {
+		store.put(uid, wants[uid])
+		for checkedUID, want := range wants {
+			got, ok := store.get(checkedUID)
+			if checkedUID == "last" && uid != "last" {
+				continue
+			}
+			if checkedUID == "nil-pointers" && uid == "first" {
+				continue
+			}
+			if !ok || !reflect.DeepEqual(got, want) {
+				t.Fatalf("growth changed %q after inserting %q: got=%#v ok=%v want=%#v", checkedUID, uid, got, ok, want)
+			}
+		}
 	}
 }
 

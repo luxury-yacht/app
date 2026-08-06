@@ -278,6 +278,35 @@ func TestGetCatalogDiagnosticsCombinesTelemetryAndServiceState(t *testing.T) {
 	}
 }
 
+func TestMergeCatalogHealthFillsOnlyMissingTelemetry(t *testing.T) {
+	health := &CatalogHealth{
+		Status: "degraded", ConsecutiveFailures: 3, LastSyncMs: 20, LastSuccessMs: 10,
+		LastError: "partial collection", Stale: true, FailedResources: 2,
+	}
+	diag := &CatalogDiagnostics{Status: "disabled"}
+	mergeCatalogHealth(diag, health)
+	require.Same(t, health, diag.Health)
+	require.Equal(t, "degraded", diag.Status)
+	require.Equal(t, 3, diag.ConsecutiveFailures)
+	require.Equal(t, int64(20), diag.LastSyncMs)
+	require.Equal(t, int64(10), diag.LastSuccessMs)
+	require.Equal(t, "partial collection", diag.LastError)
+	require.True(t, diag.Stale)
+	require.Equal(t, 2, diag.FailedResources)
+
+	diag = &CatalogDiagnostics{
+		Status: "success", ConsecutiveFailures: 1, LastSyncMs: 40, LastSuccessMs: 30,
+		LastError: "telemetry error", Stale: true, FailedResources: 4,
+	}
+	mergeCatalogHealth(diag, health)
+	require.Equal(t, "success", diag.Status)
+	require.Equal(t, 1, diag.ConsecutiveFailures)
+	require.Equal(t, int64(40), diag.LastSyncMs)
+	require.Equal(t, int64(30), diag.LastSuccessMs)
+	require.Equal(t, "telemetry error", diag.LastError)
+	require.Equal(t, 4, diag.FailedResources)
+}
+
 func TestSnapshotObjectCatalogEntriesSortsByClusterID(t *testing.T) {
 	app := NewApp()
 	entryA := &objectCatalogEntry{meta: ClusterMeta{ID: "cluster-a"}}

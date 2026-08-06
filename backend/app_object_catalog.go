@@ -472,11 +472,8 @@ func waitForAPIExtensionsFactorySync(ctx context.Context, factory apiextinformer
 
 // GetCatalogDiagnostics returns the latest catalog telemetry snapshot for diagnostics tools.
 func (a *App) GetCatalogDiagnostics() (*CatalogDiagnostics, error) {
-	diag := &CatalogDiagnostics{}
 	entries := a.snapshotObjectCatalogEntries()
-	if len(entries) > 0 {
-		diag.Enabled = true
-	}
+	diag := &CatalogDiagnostics{Enabled: len(entries) > 0}
 	if a.telemetryRecorder == nil {
 		return diag, nil
 	}
@@ -485,82 +482,92 @@ func (a *App) GetCatalogDiagnostics() (*CatalogDiagnostics, error) {
 	if summary.Catalog == nil {
 		return diag, nil
 	}
-
-	diag.Enabled = diag.Enabled || summary.Catalog.Enabled
-	diag.ItemCount = summary.Catalog.ItemCount
-	diag.ResourceCount = summary.Catalog.ResourceCount
-	diag.LastSyncMs = summary.Catalog.LastSyncMs
-	diag.LastUpdated = summary.Catalog.LastUpdated
-	diag.LastError = summary.Catalog.LastError
-	diag.LastSuccessMs = summary.Catalog.LastSuccess
-	diag.Status = summary.Catalog.Status
-	diag.ConsecutiveFailures = summary.Catalog.ConsecutiveFailures
-	diag.Stale = summary.Catalog.Stale
-	diag.FailedResources = summary.Catalog.FailedResourceCount
-
-	if len(summary.Snapshots) > 0 {
-		diag.Domains = make([]CatalogDomainDiagnostics, 0, len(summary.Snapshots))
-		for _, snap := range summary.Snapshots {
-			domainDiag := CatalogDomainDiagnostics{
-				Domain:            snap.Domain,
-				Scope:             snap.Scope,
-				LastStatus:        snap.LastStatus,
-				LastError:         snap.LastError,
-				LastWarning:       snap.LastWarning,
-				LastDurationMs:    snap.LastDurationMs,
-				AverageDurationMs: snap.AverageDurationMs,
-				SuccessCount:      snap.SuccessCount,
-				FailureCount:      snap.FailureCount,
-				TotalItems:        snap.TotalItems,
-				Truncated:         snap.Truncated,
-				FallbackCount:     snap.FallbackCount,
-				HydrationCount:    snap.HydrationCount,
-			}
-			diag.Domains = append(diag.Domains, domainDiag)
-			diag.FallbackCount += snap.FallbackCount
-			diag.HydrationCount += snap.HydrationCount
-		}
-	}
-
-	// Only attach per-service health when a single catalog is active to avoid implying a preferred cluster.
-	if len(entries) == 1 && entries[0] != nil && entries[0].service != nil {
-		svc := entries[0].service
-		health := svc.Health()
-		if health.Status != objectcatalog.HealthStateUnknown {
-			diag.Health = &CatalogHealth{
-				Status:              string(health.Status),
-				ConsecutiveFailures: health.ConsecutiveFailures,
-				LastSyncMs:          health.LastSync.UnixMilli(),
-				LastSuccessMs:       health.LastSuccess.UnixMilli(),
-				LastError:           health.LastError,
-				Stale:               health.Stale,
-				FailedResources:     health.FailedResources,
-			}
-			if diag.Status == "" || diag.Status == "disabled" {
-				diag.Status = diag.Health.Status
-			}
-			if diag.ConsecutiveFailures == 0 && health.ConsecutiveFailures > 0 {
-				diag.ConsecutiveFailures = health.ConsecutiveFailures
-			}
-			if !diag.Stale && health.Stale {
-				diag.Stale = true
-			}
-			if diag.FailedResources == 0 && health.FailedResources > 0 {
-				diag.FailedResources = health.FailedResources
-			}
-			if diag.LastSuccessMs == 0 && !health.LastSuccess.IsZero() {
-				diag.LastSuccessMs = health.LastSuccess.UnixMilli()
-			}
-			if diag.LastSyncMs == 0 && !health.LastSync.IsZero() {
-				diag.LastSyncMs = health.LastSync.UnixMilli()
-			}
-			if diag.LastError == "" && health.LastError != "" {
-				diag.LastError = health.LastError
-			}
-		}
-	}
-
+	applyCatalogTelemetry(diag, summary.Catalog)
+	applyCatalogDomainTelemetry(diag, summary.Snapshots)
+	mergeCatalogHealth(diag, singleCatalogHealth(entries))
 	return diag, nil
+}
+
+func applyCatalogTelemetry(diag *CatalogDiagnostics, status *telemetry.CatalogStatus) {
+	diag.Enabled = diag.Enabled || status.Enabled
+	diag.ItemCount = status.ItemCount
+	diag.ResourceCount = status.ResourceCount
+	diag.LastSyncMs = status.LastSyncMs
+	diag.LastUpdated = status.LastUpdated
+	diag.LastError = status.LastError
+	diag.LastSuccessMs = status.LastSuccess
+	diag.Status = status.Status
+	diag.ConsecutiveFailures = status.ConsecutiveFailures
+	diag.Stale = status.Stale
+	diag.FailedResources = status.FailedResourceCount
+}
+
+func applyCatalogDomainTelemetry(diag *CatalogDiagnostics, snapshots []telemetry.SnapshotStatus) {
+	if len(snapshots) == 0 {
+		return
+	}
+	diag.Domains = make([]CatalogDomainDiagnostics, 0, len(snapshots))
+	for _, snapshot := range snapshots {
+		diag.Domains = append(diag.Domains, catalogDomainDiagnostics(snapshot))
+		diag.FallbackCount += snapshot.FallbackCount
+		diag.HydrationCount += snapshot.HydrationCount
+	}
+}
+
+func catalogDomainDiagnostics(snapshot telemetry.SnapshotStatus) CatalogDomainDiagnostics {
+	return CatalogDomainDiagnostics{
+		Domain: snapshot.Domain, Scope: snapshot.Scope, LastStatus: snapshot.LastStatus,
+		LastError: snapshot.LastError, LastWarning: snapshot.LastWarning,
+		LastDurationMs: snapshot.LastDurationMs, AverageDurationMs: snapshot.AverageDurationMs,
+		SuccessCount: snapshot.SuccessCount, FailureCount: snapshot.FailureCount,
+		TotalItems: snapshot.TotalItems, Truncated: snapshot.Truncated,
+		FallbackCount: snapshot.FallbackCount, HydrationCount: snapshot.HydrationCount,
+	}
+}
+
+// singleCatalogHealth deliberately refuses to choose a cluster when diagnostics
+// aggregate multiple active catalog entries.
+func singleCatalogHealth(entries []*objectCatalogEntry) *CatalogHealth {
+	if len(entries) != 1 || entries[0] == nil || entries[0].service == nil {
+		return nil
+	}
+	health := entries[0].service.Health()
+	if health.Status == objectcatalog.HealthStateUnknown {
+		return nil
+	}
+	return &CatalogHealth{
+		Status: string(health.Status), ConsecutiveFailures: health.ConsecutiveFailures,
+		LastSyncMs: health.LastSync.UnixMilli(), LastSuccessMs: health.LastSuccess.UnixMilli(),
+		LastError: health.LastError, Stale: health.Stale, FailedResources: health.FailedResources,
+	}
+}
+
+func mergeCatalogHealth(diag *CatalogDiagnostics, health *CatalogHealth) {
+	if health == nil {
+		return
+	}
+	diag.Health = health
+	if diag.Status == "" || diag.Status == "disabled" {
+		diag.Status = health.Status
+	}
+	if diag.ConsecutiveFailures == 0 && health.ConsecutiveFailures > 0 {
+		diag.ConsecutiveFailures = health.ConsecutiveFailures
+	}
+	if !diag.Stale && health.Stale {
+		diag.Stale = true
+	}
+	if diag.FailedResources == 0 && health.FailedResources > 0 {
+		diag.FailedResources = health.FailedResources
+	}
+	if diag.LastSuccessMs == 0 && health.LastSuccessMs > 0 {
+		diag.LastSuccessMs = health.LastSuccessMs
+	}
+	if diag.LastSyncMs == 0 && health.LastSyncMs > 0 {
+		diag.LastSyncMs = health.LastSyncMs
+	}
+	if diag.LastError == "" && health.LastError != "" {
+		diag.LastError = health.LastError
+	}
 }
 
 // FindCatalogObjectMatch resolves a single catalog object in the requested

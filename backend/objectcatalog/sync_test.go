@@ -16,6 +16,7 @@ import (
 	"github.com/luxury-yacht/app/backend/capabilities"
 	"github.com/luxury-yacht/app/backend/internal/applog"
 	"github.com/luxury-yacht/app/backend/refresh/ingest"
+	"github.com/luxury-yacht/app/backend/resourcemodel"
 	"github.com/luxury-yacht/app/backend/resources/common"
 	"github.com/stretchr/testify/require"
 	authorizationv1 "k8s.io/api/authorization/v1"
@@ -129,6 +130,48 @@ func TestSyncEmptyDiscoveryPublishesAnEmptyHealthyCatalog(t *testing.T) {
 	require.Zero(t, entry.itemCount)
 	require.Zero(t, entry.resourceCount)
 	require.NoError(t, entry.err)
+}
+
+func TestSyncCancellationDoesNotPublishSuccess(t *testing.T) {
+	widgetGVR := schema.GroupVersionResource{Group: "example.com", Version: "v1", Resource: "widgets"}
+	widgetGVK := schema.GroupVersionKind{Group: "example.com", Version: "v1", Kind: "Widget"}
+	scheme := runtime.NewScheme()
+	scheme.AddKnownTypeWithName(widgetGVK, &unstructured.Unstructured{})
+	scheme.AddKnownTypeWithName(widgetGVK.GroupVersion().WithKind("WidgetList"), &unstructured.UnstructuredList{})
+	dynamicClient := dynamicfake.NewSimpleDynamicClientWithCustomListKinds(
+		scheme,
+		map[schema.GroupVersionResource]string{widgetGVR: "WidgetList"},
+	)
+	client := kubernetesfake.NewClientset()
+	baseDiscovery := client.Discovery().(*fakediscovery.FakeDiscovery)
+	clientWithDiscovery := &discoveryOverrideClient{
+		Clientset: client,
+		discovery: &preferredDiscovery{FakeDiscovery: baseDiscovery, resources: []*metav1.APIResourceList{{
+			GroupVersion: "example.com/v1",
+			APIResources: []metav1.APIResource{{
+				Name: "widgets", Kind: "Widget", Namespaced: true, Verbs: metav1.Verbs{"list"},
+			}},
+		}}},
+	}
+	recorder := &recordingTelemetry{}
+	ctx, cancel := context.WithCancel(context.Background())
+	dynamicClient.PrependReactor("list", "widgets", func(k8stesting.Action) (bool, runtime.Object, error) {
+		cancel()
+		return true, nil, context.Canceled
+	})
+	svc := NewService(Dependencies{
+		Common: common.Dependencies{
+			KubernetesClient: clientWithDiscovery,
+			DynamicClient:    dynamicClient,
+		},
+		Logger:    applog.Noop,
+		Telemetry: recorder,
+	}, nil)
+
+	err := svc.sync(ctx)
+	require.ErrorIs(t, err, context.Canceled)
+	require.ErrorIs(t, recorder.last().err, context.Canceled)
+	require.NotEqual(t, HealthStateOK, svc.Health().Status)
 }
 
 func TestEvaluateDescriptorNilService(t *testing.T) {
@@ -404,6 +447,100 @@ func TestEvaluateDescriptorsBatchCancellationAndPermissionClientRecovery(t *test
 		require.True(t, allowed[0])
 		require.Equal(t, 2, ensureCalls)
 	})
+}
+
+func TestCatalogSyncCapabilityAndBatchDeniedSeams(t *testing.T) {
+	client := kubernetesfake.NewClientset()
+	client.PrependReactor("create", "selfsubjectaccessreviews", func(action k8stesting.Action) (bool, runtime.Object, error) {
+		review := action.(k8stesting.CreateAction).GetObject().(*authorizationv1.SelfSubjectAccessReview)
+		result := review.DeepCopy()
+		result.Status.Allowed = true
+		return true, result, nil
+	})
+	desc := resourceDescriptor{
+		Group: "apps", Version: "v1", Kind: "Deployment", Resource: "deployments",
+		GVR: schema.GroupVersionResource{Group: "apps", Version: "v1", Resource: "deployments"},
+	}
+	svc := NewService(Dependencies{Logger: applog.Noop}, nil)
+	run := &catalogSync{
+		service: svc, descriptors: []resourceDescriptor{desc},
+		capabilityService: capabilities.NewService(capabilities.Dependencies{
+			Common: common.Dependencies{KubernetesClient: client},
+		}),
+		allowedIndices: make(map[int]resourceDescriptor), allowedSet: make(map[string]resourceDescriptor),
+		failed: make(map[string]error), succeeded: make(map[string][]Summary),
+	}
+	run.evaluateCapabilities(context.Background())
+	require.True(t, run.batchEvaluated)
+	require.True(t, run.isAllowed(desc))
+
+	run.batchEvaluated = false
+	run.capabilityService = capabilities.NewService(capabilities.Dependencies{})
+	run.evaluateCapabilities(context.Background())
+	require.False(t, run.batchEvaluated)
+
+	run.batchEvaluated = true
+	run.allowedSet = make(map[string]resourceDescriptor)
+	require.NoError(t, run.collectDescriptor(context.Background(), 0, desc))
+	require.Empty(t, run.succeeded)
+}
+
+func TestSortResourceDescriptorsUsesEveryStableTieBreaker(t *testing.T) {
+	tests := []struct {
+		name  string
+		input []resourceDescriptor
+		want  string
+	}{
+		{"priority", []resourceDescriptor{{Resource: "widgets"}, {Resource: "pods"}}, "pods"},
+		{"kind", []resourceDescriptor{{Resource: "widgets", Kind: "Zulu"}, {Resource: "widgets", Kind: "Alpha"}}, "Alpha"},
+		{"group", []resourceDescriptor{{Resource: "widgets", Kind: "Widget", Group: "z.io"}, {Resource: "widgets", Kind: "Widget", Group: "a.io"}}, "a.io"},
+		{"version", []resourceDescriptor{{Resource: "widgets", Kind: "Widget", Group: "a.io", Version: "v2"}, {Resource: "widgets", Kind: "Widget", Group: "a.io", Version: "v1"}}, "v1"},
+		{"resource", []resourceDescriptor{{Resource: "zz", Kind: "Widget", Group: "a.io", Version: "v1"}, {Resource: "aa", Kind: "Widget", Group: "a.io", Version: "v1"}}, "aa"},
+	}
+	for _, test := range tests {
+		t.Run(test.name, func(t *testing.T) {
+			sortResourceDescriptors(test.input)
+			first := test.input[0]
+			got := first.Resource
+			switch test.name {
+			case "kind":
+				got = first.Kind
+			case "group":
+				got = first.Group
+			case "version":
+				got = first.Version
+			}
+			require.Equal(t, test.want, got)
+		})
+	}
+}
+
+func TestCatalogSyncRestoreFailedDescriptorsPreservesPriorTimestamps(t *testing.T) {
+	failedDesc := resourceDescriptor{GVR: schema.GroupVersionResource{Group: "apps", Version: "v1", Resource: "deployments"}}
+	otherDesc := resourceDescriptor{GVR: schema.GroupVersionResource{Version: "v1", Resource: "nodes"}}
+	failedKey := catalogKey(failedDesc, "default", "api")
+	otherKey := catalogKey(otherDesc, "", "node-a")
+	untimedKey := catalogKey(otherDesc, "", "node-b")
+	timestamp := time.Date(2026, 8, 6, 12, 0, 0, 0, time.UTC)
+	run := &catalogSync{
+		failed:      map[string]error{failedDesc.GVR.String(): errors.New("list failed")},
+		newItems:    map[string]Summary{otherKey: {Ref: resourcemodel.ResourceRef{Name: "current"}}},
+		newLastSeen: map[string]time.Time{},
+		previousItems: map[string]Summary{
+			failedKey:  {Ref: resourcemodel.ResourceRef{Name: "api"}},
+			otherKey:   {Ref: resourcemodel.ResourceRef{Name: "previous"}},
+			untimedKey: {Ref: resourcemodel.ResourceRef{Name: "node-b"}},
+		},
+		previousLastSeen: map[string]time.Time{failedKey: timestamp, otherKey: timestamp},
+	}
+
+	run.restoreFailedDescriptors()
+	require.Equal(t, "api", run.newItems[failedKey].Ref.Name)
+	require.Equal(t, timestamp, run.newLastSeen[failedKey])
+	require.Equal(t, "current", run.newItems[otherKey].Ref.Name)
+	require.Equal(t, "node-b", run.newItems[untimedKey].Ref.Name)
+	_, hasUntimedTimestamp := run.newLastSeen[untimedKey]
+	require.False(t, hasUntimedTimestamp)
 }
 
 func TestSyncRetainsDataOnPartialFailure(t *testing.T) {
