@@ -14,6 +14,7 @@ import (
 
 	"github.com/luxury-yacht/app/backend/objectcatalog"
 	"github.com/luxury-yacht/app/backend/refresh"
+	"github.com/luxury-yacht/app/backend/refresh/domain"
 	"github.com/luxury-yacht/app/backend/refresh/domainpermissions"
 	"github.com/luxury-yacht/app/backend/refresh/informer"
 	"github.com/luxury-yacht/app/backend/refresh/permissions"
@@ -103,6 +104,25 @@ func TestDomainRegistrationOrder(t *testing.T) {
 	}
 
 	require.Equal(t, expected, actual)
+}
+
+func TestDomainRegistrationRunnerRegistersPermissionDenial(t *testing.T) {
+	registry := domain.New()
+	runner := domainRegistrationRunner{
+		gate: &permissionGate{registry: registry},
+		checker: permissions.NewCheckerWithReview(
+			"cluster-a",
+			0,
+			func(context.Context, string, string, string, string) (bool, error) { return false, nil },
+		),
+		access: domainpermissions.NewRuntimeAccess(),
+	}
+
+	denied, err := runner.registerPermissionDenied(context.Background(), domainRegistration{name: "pods"})
+
+	require.NoError(t, err)
+	require.True(t, denied)
+	require.True(t, registry.IsPermissionDenied("pods"))
 }
 
 func TestDomainRegistrationsMatchAuthoredContract(t *testing.T) {

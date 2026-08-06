@@ -60,7 +60,6 @@ type capabilityEvaluationJob struct {
 
 type capabilityEvaluationBatch struct {
 	service        *Service
-	ctx            context.Context
 	checks         []ReviewAttributes
 	results        []CheckResult
 	limiter        RateLimiter
@@ -110,8 +109,8 @@ func (s *Service) Evaluate(ctx context.Context, checks []ReviewAttributes) ([]Ch
 		defer limiter.Stop()
 	}
 
-	batch := newCapabilityEvaluationBatch(s, ctx, checks, results, limiter)
-	batch.run(s.resolveWorkerCount(len(checks)))
+	batch := newCapabilityEvaluationBatch(s, checks, results, limiter)
+	batch.run(ctx, s.resolveWorkerCount(len(checks)))
 	batch.reportReviewFailures()
 	batch.reportMetrics()
 
@@ -126,20 +125,19 @@ func (s *Service) Evaluate(ctx context.Context, checks []ReviewAttributes) ([]Ch
 
 func newCapabilityEvaluationBatch(
 	service *Service,
-	ctx context.Context,
 	checks []ReviewAttributes,
 	results []CheckResult,
 	limiter RateLimiter,
 ) *capabilityEvaluationBatch {
 	return &capabilityEvaluationBatch{
-		service: service, ctx: ctx, checks: checks, results: results, limiter: limiter,
+		service: service, checks: checks, results: results, limiter: limiter,
 		slowThreshold: service.resolveSlowThreshold(), now: service.now,
 		collectMetrics: service.deps.Common.Logger != nil,
 		metricsByScope: make(map[string]*capabilityScopeMetrics),
 	}
 }
 
-func (b *capabilityEvaluationBatch) run(workerCount int) {
+func (b *capabilityEvaluationBatch) run(ctx context.Context, workerCount int) {
 	jobs := make(chan capabilityEvaluationJob)
 	var wg sync.WaitGroup
 	for range workerCount {
@@ -147,7 +145,7 @@ func (b *capabilityEvaluationBatch) run(workerCount int) {
 		go func() {
 			defer wg.Done()
 			for job := range jobs {
-				b.evaluate(job)
+				b.evaluate(ctx, job)
 			}
 		}()
 	}
@@ -158,7 +156,7 @@ func (b *capabilityEvaluationBatch) run(workerCount int) {
 	wg.Wait()
 }
 
-func (b *capabilityEvaluationBatch) evaluate(job capabilityEvaluationJob) {
+func (b *capabilityEvaluationBatch) evaluate(ctx context.Context, job capabilityEvaluationJob) {
 	result := CheckResult{ID: job.check.ID}
 	attrs := job.check.Attributes
 	if attrs == nil {
@@ -167,14 +165,14 @@ func (b *capabilityEvaluationBatch) evaluate(job capabilityEvaluationJob) {
 		return
 	}
 	if b.limiter != nil {
-		if err := b.limiter.Wait(b.ctx); err != nil {
+		if err := b.limiter.Wait(ctx); err != nil {
 			result.Error = err.Error()
 			b.results[job.index] = result
 			return
 		}
 	}
 
-	response, duration, err := b.requestReview(attrs)
+	response, duration, err := b.requestReview(ctx, attrs)
 	result = b.reviewResult(result, attrs, response, duration, err)
 	b.recordMetrics(attrs.Namespace, result, duration)
 	if result.Error != "" || result.EvaluationError != "" {
@@ -183,13 +181,13 @@ func (b *capabilityEvaluationBatch) evaluate(job capabilityEvaluationJob) {
 	b.results[job.index] = result
 }
 
-func (b *capabilityEvaluationBatch) requestReview(attrs *authorizationv1.ResourceAttributes) (*authorizationv1.SelfSubjectAccessReview, time.Duration, error) {
+func (b *capabilityEvaluationBatch) requestReview(ctx context.Context, attrs *authorizationv1.ResourceAttributes) (*authorizationv1.SelfSubjectAccessReview, time.Duration, error) {
 	review := &authorizationv1.SelfSubjectAccessReview{
 		Spec: authorizationv1.SelfSubjectAccessReviewSpec{ResourceAttributes: attrs},
 	}
 	start := b.now()
 	var response *authorizationv1.SelfSubjectAccessReview
-	err := k8sretry.Do(b.ctx, capabilityReviewRetryPolicy(), func(callCtx context.Context) error {
+	err := k8sretry.Do(ctx, capabilityReviewRetryPolicy(), func(callCtx context.Context) error {
 		var err error
 		response, err = b.service.deps.Common.KubernetesClient.AuthorizationV1().
 			SelfSubjectAccessReviews().Create(callCtx, review, metav1.CreateOptions{})

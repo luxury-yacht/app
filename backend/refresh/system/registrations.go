@@ -81,13 +81,12 @@ func runDomainRegistrations(ctx context.Context, gate *permissionGate, checker *
 		ctx = context.Background()
 	}
 	runner := domainRegistrationRunner{
-		ctx:     ctx,
 		gate:    gate,
 		checker: checker,
 		access:  domainpermissions.NewRuntimeAccess(),
 	}
 	for _, registration := range registrations {
-		if err := runner.run(registration); err != nil {
+		if err := runner.run(ctx, registration); err != nil {
 			return err
 		}
 	}
@@ -95,13 +94,12 @@ func runDomainRegistrations(ctx context.Context, gate *permissionGate, checker *
 }
 
 type domainRegistrationRunner struct {
-	ctx     context.Context
 	gate    *permissionGate
 	checker *permissions.Checker
 	access  domainpermissions.RuntimeAccess
 }
 
-func (r domainRegistrationRunner) run(registration domainRegistration) error {
+func (r domainRegistrationRunner) run(ctx context.Context, registration domainRegistration) error {
 	if registration.skipIf != nil && registration.skipIf() {
 		return nil
 	}
@@ -110,18 +108,18 @@ func (r domainRegistrationRunner) run(registration domainRegistration) error {
 			return err
 		}
 	}
-	denied, err := r.registerPermissionDenied(registration)
+	denied, err := r.registerPermissionDenied(ctx, registration)
 	if err != nil || denied {
 		return err
 	}
 	return r.register(registration)
 }
 
-func (r domainRegistrationRunner) registerPermissionDenied(registration domainRegistration) (bool, error) {
+func (r domainRegistrationRunner) registerPermissionDenied(ctx context.Context, registration domainRegistration) (bool, error) {
 	if r.checker == nil || registration.skipRuntimePolicy {
 		return false, nil
 	}
-	decision, err := r.access.Check(r.ctx, registration.name, r.checker)
+	decision, err := r.access.Check(ctx, registration.name, r.checker)
 	if err != nil || decision.Allowed {
 		return false, nil
 	}

@@ -161,7 +161,7 @@ func (s *Service) Build(ctx context.Context, domainName, scope string) (*refresh
 }
 
 func (s *Service) BuildRequest(req BuildRequest) (*refresh.Snapshot, error) {
-	plan, err := s.prepareBuildRequest(req)
+	ctx, plan, err := s.prepareBuildRequest(req)
 	if err != nil {
 		return nil, err
 	}
@@ -169,7 +169,7 @@ func (s *Service) BuildRequest(req BuildRequest) (*refresh.Snapshot, error) {
 		return cached, nil
 	}
 	value, err, _ := s.group.Do(plan.groupKey, func() (interface{}, error) {
-		return s.buildRequestSnapshot(plan)
+		return s.buildRequestSnapshot(ctx, plan)
 	})
 	if err != nil {
 		return nil, err
@@ -178,7 +178,6 @@ func (s *Service) BuildRequest(req BuildRequest) (*refresh.Snapshot, error) {
 }
 
 type snapshotBuildRequestPlan struct {
-	ctx                 context.Context
 	domain              string
 	scope               string
 	cacheKey            string
@@ -188,27 +187,26 @@ type snapshotBuildRequestPlan struct {
 	syncWait            time.Duration
 }
 
-func (s *Service) prepareBuildRequest(req BuildRequest) (snapshotBuildRequestPlan, error) {
+func (s *Service) prepareBuildRequest(req BuildRequest) (context.Context, snapshotBuildRequestPlan, error) {
 	if err := req.Cluster.Validate(); err != nil {
-		return snapshotBuildRequestPlan{}, err
+		return nil, snapshotBuildRequestPlan{}, err
 	}
 	ctx := WithClusterMeta(req.Context, req.Cluster)
 	ctx, permissionCacheKey, err := s.ensurePermissions(ctx, req.Domain, req.Scope)
 	if err != nil {
-		return snapshotBuildRequestPlan{}, err
+		return nil, snapshotBuildRequestPlan{}, err
 	}
 	syncWait, err := s.waitForInformerSync(ctx, req.Domain)
 	if err != nil {
 		s.recordInformerSyncFailure(req.Domain, req.Scope, syncWait, err)
-		return snapshotBuildRequestPlan{}, err
+		return nil, snapshotBuildRequestPlan{}, err
 	}
 	cacheKey := s.cacheKey(req.Domain, req.Scope)
 	if permissionCacheKey != "" {
 		cacheKey += ":permissions:" + permissionCacheKey
 	}
 	bypassSnapshotCache := s.shouldBypassSnapshotCache(req.Domain)
-	return snapshotBuildRequestPlan{
-		ctx:                 ctx,
+	return ctx, snapshotBuildRequestPlan{
 		domain:              req.Domain,
 		scope:               req.Scope,
 		cacheKey:            cacheKey,
@@ -242,12 +240,12 @@ func (s *Service) loadBuildRequestCache(plan snapshotBuildRequestPlan) *refresh.
 	return s.loadCache(plan.cacheKey)
 }
 
-func (s *Service) buildRequestSnapshot(plan snapshotBuildRequestPlan) (*refresh.Snapshot, error) {
+func (s *Service) buildRequestSnapshot(ctx context.Context, plan snapshotBuildRequestPlan) (*refresh.Snapshot, error) {
 	if cached := s.loadBuildRequestCache(plan); cached != nil {
 		return cached, nil
 	}
 	start := time.Now()
-	snapshot, err := s.registry.Build(plan.ctx, plan.domain, plan.scope)
+	snapshot, err := s.registry.Build(ctx, plan.domain, plan.scope)
 	duration := time.Since(start)
 	if err != nil {
 		s.recordBuildFailure(plan, duration, err)

@@ -72,12 +72,24 @@ func TestDiscoverGVRByKindFallsBackToGroupsAndResources(t *testing.T) {
 		GroupVersion: "apps/v1",
 		APIResources: []metav1.APIResource{{Name: "deployments", SingularName: "deployment", Kind: "Deployment", Namespaced: true}},
 	}}, nil)
+	deps.Context = context.Background()
 
 	var nilContext context.Context
 	gvr, namespaced, err := DiscoverGVRByKind(nilContext, deps, "deployments")
 	require.NoError(t, err)
 	require.Equal(t, schema.GroupVersionResource{Group: "apps", Version: "v1", Resource: "deployments"}, gvr)
 	require.True(t, namespaced)
+}
+
+func TestDiscoverGVRByKindRejectsMissingContext(t *testing.T) {
+	deps := dependenciesWithKindDiscovery([]*metav1.APIResourceList{{
+		GroupVersion: "v1",
+		APIResources: []metav1.APIResource{{Name: "pods", Kind: "Pod", Namespaced: true}},
+	}}, nil, nil)
+
+	var nilContext context.Context
+	_, _, err := DiscoverGVRByKind(nilContext, deps, "Pod")
+	require.ErrorContains(t, err, "discovery context not initialized")
 }
 
 func TestDiscoverGVRByKindFallsBackToCRDStorageVersion(t *testing.T) {
@@ -115,8 +127,11 @@ func TestDiscoverGVRByKindFailureContracts(t *testing.T) {
 func TestKindDiscoveryHelpersCoverContextAndCRDVersionFallbacks(t *testing.T) {
 	fallback := context.WithValue(context.Background(), discoverContextKey("source"), "fallback")
 	var nilContext context.Context
-	require.Same(t, fallback, kindDiscoveryContext(nilContext, fallback))
-	require.NotNil(t, kindDiscoveryContext(nilContext, nilContext))
+	resolved, err := kindDiscoveryContext(nilContext, fallback)
+	require.NoError(t, err)
+	require.Same(t, fallback, resolved)
+	_, err = kindDiscoveryContext(nilContext, nilContext)
+	require.ErrorContains(t, err, "discovery context not initialized")
 
 	crd := apiextensionsv1.CustomResourceDefinition{Spec: apiextensionsv1.CustomResourceDefinitionSpec{
 		Versions: []apiextensionsv1.CustomResourceDefinitionVersion{{Name: "v1alpha1", Served: true}},

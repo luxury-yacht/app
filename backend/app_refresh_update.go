@@ -181,8 +181,7 @@ func (a *App) startNewObjectCatalogs(plan refreshSelectionPlan, subsystems map[s
 }
 
 func (a *App) stopRemovedRefreshSubsystems(
-	previous map[string]*system.Subsystem,
-	next map[string]*system.Subsystem,
+	previous, next map[string]*system.Subsystem,
 ) {
 	for id, subsystem := range previous {
 		if _, kept := next[id]; kept {

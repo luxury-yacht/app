@@ -499,6 +499,47 @@ func TestConsumeWatchReportsClosedChannelAndIgnoresUnrelatedEvents(t *testing.T)
 	require.Zero(t, stopped)
 }
 
+func TestContainerLogRunWatchCallbacksUpdateInventory(t *testing.T) {
+	streamer := NewStreamer(fake.NewClientset(), nil, nil)
+	warningsCh := make(chan []string, 1)
+	run := newContainerLogRun(streamer, containerLogRunConfig{
+		opts:            Options{Kind: "deployment", Namespace: "default"},
+		states:          map[string]*containerState{},
+		initialWarnings: []string{"stale warning"},
+		warningsCh:      warningsCh,
+	})
+	limiterNotify := make(chan struct{}, 1)
+	run.limiterNotify = limiterNotify
+	pod := &corev1.Pod{ObjectMeta: metav1.ObjectMeta{Namespace: "default", Name: "pod-1"}}
+	fw := &fakeWatch{ch: make(chan watch.Event, 2)}
+	resultCh := make(chan error, 1)
+	go func() {
+		resultCh <- run.consumePodWatch(context.Background(), fw, map[string]bool{})
+	}()
+	limiterNotify <- struct{}{}
+	require.Empty(t, <-warningsCh)
+	fw.ch <- watch.Event{Type: watch.Added, Object: pod}
+	fw.ch <- watch.Event{Type: watch.Deleted, Object: pod}
+	close(fw.ch)
+
+	err := <-resultCh
+	require.EqualError(t, err, "watch channel closed")
+	require.Empty(t, run.currentPods)
+}
+
+func TestContainerLogRunRefreshesPodInventory(t *testing.T) {
+	pod := &corev1.Pod{ObjectMeta: metav1.ObjectMeta{Namespace: "default", Name: "pod-1"}}
+	streamer := NewStreamer(fake.NewClientset(pod), nil, nil)
+	run := newContainerLogRun(streamer, containerLogRunConfig{
+		opts:   Options{Kind: "pod", Namespace: "default", Name: "pod-1"},
+		states: map[string]*containerState{},
+	})
+
+	run.refreshPodInventory(context.Background())
+
+	require.Contains(t, run.currentPods, "pod-1")
+}
+
 func TestStreamerRunCancellationBeforeAndAfterStartup(t *testing.T) {
 	streamer := NewStreamer(fake.NewClientset(), nil, nil)
 

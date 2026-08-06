@@ -47,7 +47,11 @@ func DiscoverGVRByKind(ctx context.Context, deps Dependencies, resourceKind stri
 	if deps.KubernetesClient == nil {
 		return schema.GroupVersionResource{}, false, fmt.Errorf("kubernetes client not initialized")
 	}
-	ctx = kindDiscoveryContext(ctx, deps.Context)
+	var err error
+	ctx, err = kindDiscoveryContext(ctx, deps.Context)
+	if err != nil {
+		return schema.GroupVersionResource{}, false, err
+	}
 	walkCtx, cancel := context.WithTimeout(ctx, config.KindOnlyDiscoveryTimeout)
 	defer cancel()
 
@@ -65,14 +69,14 @@ type discoveredKind struct {
 	namespaced bool
 }
 
-func kindDiscoveryContext(ctx, fallback context.Context) context.Context {
+func kindDiscoveryContext(ctx, fallback context.Context) (context.Context, error) {
 	if ctx != nil {
-		return ctx
+		return ctx, nil
 	}
 	if fallback != nil {
-		return fallback
+		return fallback, nil
 	}
-	return context.Background()
+	return nil, fmt.Errorf("discovery context not initialized")
 }
 
 func kindDiscoveryResourceLists(deps Dependencies) []*metav1.APIResourceList {

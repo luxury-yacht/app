@@ -1167,7 +1167,7 @@ func (a *App) applySettingsSideEffects(update *preparedPreferenceUpdate) {
 	a.applyMetricsIntervalSideEffect(effects.metricsInterval, settings.MetricsRefreshIntervalMs)
 }
 
-func (a *App) applyErrorReportingSideEffect(apply bool, enabled bool) {
+func (a *App) applyErrorReportingSideEffect(apply, enabled bool) {
 	if !apply || a.errorReporter == nil {
 		return
 	}

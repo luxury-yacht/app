@@ -22,6 +22,8 @@ import (
 const (
 	connectionRefusedReason = "connection refused"
 	connectionResetReason   = "connection reset"
+	noSuchHostReason        = "no such host"
+	tlsHandshakeReason      = "tls handshake"
 )
 
 type retryTextReason struct {
@@ -33,16 +35,16 @@ var (
 	urlRetryTextReasons = []retryTextReason{
 		{token: connectionRefusedReason, reason: connectionRefusedReason},
 		{token: connectionResetReason, reason: connectionResetReason},
-		{token: "no such host", reason: "dns lookup failure"},
-		{token: "tls", reason: "tls handshake"},
+		{token: noSuchHostReason, reason: "dns lookup failure"},
+		{token: "tls", reason: tlsHandshakeReason},
 	}
 	genericRetryTextReasons = []retryTextReason{
 		{token: connectionRefusedReason, reason: connectionRefusedReason},
 		{token: connectionResetReason, reason: connectionResetReason},
-		{token: "no such host", reason: "no such host"},
+		{token: noSuchHostReason, reason: noSuchHostReason},
 		{token: "server misbehaving", reason: "server misbehaving"},
 		{token: "i/o timeout", reason: "i/o timeout"},
-		{token: "tls handshake", reason: "tls handshake"},
+		{token: tlsHandshakeReason, reason: tlsHandshakeReason},
 	}
 )
 
@@ -169,13 +171,12 @@ func executeWithRetry[T any](ctx context.Context, a *App, clusterID, resourceKin
 		target = "cluster scope"
 	}
 	operation := fetchRetryOperation[T]{
-		ctx: ctx, app: a, clusterID: clusterID, resourceKind: resourceKind, target: target, fetch: fetchFunc,
+		app: a, clusterID: clusterID, resourceKind: resourceKind, target: target, fetch: fetchFunc,
 	}
-	return operation.run()
+	return operation.run(ctx)
 }
 
 type fetchRetryOperation[T any] struct {
-	ctx          context.Context
 	app          *App
 	clusterID    string
 	resourceKind string
@@ -183,10 +184,10 @@ type fetchRetryOperation[T any] struct {
 	fetch        func() (T, error)
 }
 
-func (o fetchRetryOperation[T]) run() (T, error) {
+func (o fetchRetryOperation[T]) run(ctx context.Context) (T, error) {
 	var zero T
 	for attempt := 0; attempt < config.ResourceFetchMaxAttempts; attempt++ {
-		if err := o.ctx.Err(); err != nil {
+		if err := ctx.Err(); err != nil {
 			return zero, err
 		}
 		result, err := o.fetch()
@@ -196,7 +197,7 @@ func (o fetchRetryOperation[T]) run() (T, error) {
 		}
 		retryable, reason := isRetryableFetchError(err)
 		if retryable && attempt < config.ResourceFetchMaxAttempts-1 {
-			if err := o.waitForRetry(attempt, reason, err); err != nil {
+			if err := o.waitForRetry(ctx, attempt, reason, err); err != nil {
 				return zero, err
 			}
 			continue
@@ -219,14 +220,14 @@ func (o fetchRetryOperation[T]) recordSuccess(attempt int) {
 	}
 }
 
-func (o fetchRetryOperation[T]) waitForRetry(attempt int, reason string, fetchErr error) error {
+func (o fetchRetryOperation[T]) waitForRetry(ctx context.Context, attempt int, reason string, fetchErr error) error {
 	backoff := resourceFetchRetryBackoff(attempt)
 	if o.app == nil {
 		fetchRetrySleep(backoff)
 		return nil
 	}
 	o.logRetry(attempt, reason, fetchErr)
-	return contextSleep(o.ctx, backoff)
+	return contextSleep(ctx, backoff)
 }
 
 func resourceFetchRetryBackoff(attempt int) time.Duration {

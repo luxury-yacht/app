@@ -786,6 +786,27 @@ Local progress through 2026-08-06 (Sonar confirmation pending):
       creating or increasing another S3776 finding; keep the target boxes above
       open until that evidence exists.
 
+PR #282 cross-rule regression correction (Sonar confirmation pending):
+
+- [x] Audited every open/confirmed PR issue through SonarCloud's public issues
+      API, not only `go:S3776`: 11 new-code findings were present (`godre:S8242`
+      x5, `godre:S8209` x2, `go:S1192` x2, `go:S107` x1, and `godre:S8239` x1).
+- [x] Removed request contexts from the five extracted state structs and
+      threaded each context through execution methods instead. Replaced the
+      ten-argument container-log constructor with one typed configuration
+      value and grouped the two flagged same-type parameter lists.
+- [x] Centralized the duplicated retry-classification literals and removed the
+      discovery fallback that detached work onto `context.Background()` when
+      neither the caller nor dependency bundle supplied a context. A regression
+      test now requires that invalid boundary state to fail explicitly.
+- [x] Added focused coverage for container-log watch callbacks, inventory
+      refresh, pod removal, and refresh-domain permission outcomes. Every
+      directly affected function measures at least 80% statement coverage.
+- [x] The affected packages pass focused tests and `-race`; `gocognit` v1.2.1
+      reports no function over 15 in the eight affected production files.
+- [ ] After the correction is pushed, require the public PR issues API to
+      return zero open/confirmed issues before calling Phase 6 complete.
+
 ---
 
 ## Validation by wave
@@ -800,6 +821,9 @@ For each completed wave:
       artifact for the latest worktree.
 - [ ] `mise exec -- mage qc:prerelease` passes on the latest worktree.
 - [ ] `git diff --check` passes.
+- [ ] The PR Sonar analysis shows the expected S3776 reduction and the public
+      issues API returns zero open/confirmed new-code findings across all
+      rules; do not mark a wave complete from an S3776-only check.
 - [ ] Main-branch Sonar analysis shows the expected issue-count reduction and
       no new/increased S3776 finding.
 - [ ] Relevant loading, denial, empty, partial, populated, recovery, and
@@ -817,6 +841,8 @@ For each completed wave:
 - Every affected package retains or improves its measured coverage.
 - The prevention controls remain active and the baseline contains no
   grandfathered offender.
+- Every remediation PR is audited across all Sonar rules before completion;
+  an S3776-only local pass is necessary but not sufficient.
 - Durable behavior discovered during the work is documented outside this
   temporary plan, after which this file can be deleted.
 
