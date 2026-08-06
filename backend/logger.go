@@ -80,6 +80,133 @@ func (l *Logger) Log(level LogLevel, message string, source ...string) {
 	l.log(level, message, nil, nil, sentryreporting.Operation{}, source...)
 }
 
+type logDispatch struct {
+	entry    LogEntry
+	emit     func(string, ...interface{})
+	reporter sentryreporting.Reporter
+}
+
+func logSourceValue(source []string, index int) string {
+	if index >= len(source) {
+		return ""
+	}
+	return source[index]
+}
+
+func newLogEntry(sequence uint64, level LogLevel, message string, source []string) LogEntry {
+	return LogEntry{
+		Sequence:    sequence,
+		Timestamp:   time.Now().Format(time.RFC3339Nano),
+		Level:       level.String(),
+		Message:     message,
+		Source:      logSourceValue(source, 0),
+		ClusterID:   logSourceValue(source, 1),
+		ClusterName: logSourceValue(source, 2),
+		OperationID: logSourceValue(source, 3),
+	}
+}
+
+func appendBoundedLogEntry(entries []LogEntry, maxSize int, entry LogEntry) []LogEntry {
+	entries = append(entries, entry)
+	if len(entries) <= maxSize {
+		return entries
+	}
+	// Re-slice into a fresh buffer so capacity can't grow unbounded.
+	start := len(entries) - maxSize
+	trimmed := make([]LogEntry, maxSize)
+	copy(trimmed, entries[start:])
+	return trimmed
+}
+
+func (l *Logger) recordLogEntry(level LogLevel, message string, source []string) logDispatch {
+	l.mu.Lock()
+	defer l.mu.Unlock()
+
+	l.nextSequence++
+	entry := newLogEntry(l.nextSequence, level, message, source)
+	l.entries = appendBoundedLogEntry(l.entries, l.maxSize, entry)
+	return logDispatch{
+		entry:    entry,
+		emit:     l.eventEmitter,
+		reporter: l.errorReporter,
+	}
+}
+
+func (dispatch logDispatch) emitAddedEvent() {
+	if dispatch.emit != nil {
+		dispatch.emit("app-logs:added", AppLogsAddedEvent{Sequence: dispatch.entry.Sequence})
+	}
+}
+
+func logBreadcrumbData(entry LogEntry) map[string]any {
+	data := map[string]any{}
+	if entry.ClusterID != "" {
+		data["clusterId"] = entry.ClusterID
+	}
+	if entry.ClusterName != "" {
+		data["clusterName"] = entry.ClusterName
+	}
+	return data
+}
+
+func addLogBreadcrumb(reporter sentryreporting.Reporter, entry LogEntry, level LogLevel) {
+	reporter.AddBreadcrumb(sentryreporting.Breadcrumb{
+		Category:    entry.Source,
+		Message:     entry.Message,
+		Level:       breadcrumbLevel(level),
+		Data:        logBreadcrumbData(entry),
+		OperationID: entry.OperationID,
+	})
+}
+
+func logReportingContext(entry LogEntry) sentryreporting.Context {
+	return sentryreporting.Context{
+		Source:      entry.Source,
+		ClusterID:   entry.ClusterID,
+		ClusterName: entry.ClusterName,
+		OperationID: entry.OperationID,
+	}
+}
+
+// Keep capture routing on Logger methods so the reporting privacy boundary
+// recognizes these frames as plumbing and preserves the original call site for
+// Sentry grouping.
+func (l *Logger) captureError(
+	dispatch logDispatch,
+	cause error,
+	recovered any,
+	operation sentryreporting.Operation,
+) {
+	context := logReportingContext(dispatch.entry)
+	switch {
+	case recovered != nil:
+		context.Operation = operation
+		dispatch.reporter.CapturePanic(recovered, context)
+	case cause != nil:
+		context.Operation = operation
+		dispatch.reporter.CaptureException(cause, context)
+	default:
+		dispatch.reporter.CaptureLogError(dispatch.entry.Message, context)
+	}
+}
+
+func (l *Logger) report(
+	dispatch logDispatch,
+	level LogLevel,
+	cause error,
+	recovered any,
+	operation sentryreporting.Operation,
+) {
+	if dispatch.reporter == nil || dispatch.entry.Source == logsources.ErrorCapture {
+		return
+	}
+	if level == LogLevelError {
+		l.captureError(dispatch, cause, recovered, operation)
+		return
+	}
+	addLogBreadcrumb(dispatch.reporter, dispatch.entry, level)
+}
+
 func (l *Logger) log(
 	level LogLevel,
 	message string,
@@ -92,89 +219,14 @@ func (l *Logger) log(
 		return // Safely handle nil logger
 	}
 
-	var emit func(string, ...interface{})
-	var emittedSequence uint64
-	var reporter sentryreporting.Reporter
-	l.mu.Lock()
-
-	l.nextSequence++
-	entry := LogEntry{
-		Sequence:  l.nextSequence,
-		Timestamp: time.Now().Format(time.RFC3339Nano),
-		Level:     level.String(),
-		Message:   message,
-	}
-	if len(source) > 0 {
-		entry.Source = source[0]
-	}
-	if len(source) > 1 {
-		entry.ClusterID = source[1]
-	}
-	if len(source) > 2 {
-		entry.ClusterName = source[2]
-	}
-	if len(source) > 3 {
-		entry.OperationID = source[3]
-	}
-
-	// Add the entry
-	l.entries = append(l.entries, entry)
-
-	// Trim if we exceed max size
-	if len(l.entries) > l.maxSize {
-		// Re-slice into a fresh buffer so capacity can't grow unbounded
-		start := len(l.entries) - l.maxSize
-		newEntries := make([]LogEntry, l.maxSize)
-		copy(newEntries, l.entries[start:])
-		l.entries = newEntries
-	}
-
-	emit = l.eventEmitter
-	reporter = l.errorReporter
-	emittedSequence = entry.Sequence
-	l.mu.Unlock()
-
+	dispatch := l.recordLogEntry(level, message, source)
 	// Emit outside the logger lock so event handlers cannot block log writes
 	// or deadlock by synchronously reading the logger.
-	if emit != nil {
-		emit("app-logs:added", AppLogsAddedEvent{Sequence: emittedSequence})
-	}
-	if level != LogLevelError && reporter != nil && entry.Source != logsources.ErrorCapture {
-		data := map[string]any{}
-		if entry.ClusterID != "" {
-			data["clusterId"] = entry.ClusterID
-		}
-		if entry.ClusterName != "" {
-			data["clusterName"] = entry.ClusterName
-		}
-		reporter.AddBreadcrumb(sentryreporting.Breadcrumb{
-			Category:    entry.Source,
-			Message:     entry.Message,
-			Level:       breadcrumbLevel(level),
-			Data:        data,
-			OperationID: entry.OperationID,
-		})
-	}
+	dispatch.emitAddedEvent()
 	// ErrorCapture republishes third-party stderr (klog from client-go and
 	// friends). Those lines are not this application failing and their stack is
 	// the scraper, so they stay in the local log but never reach the reporter.
-	if level == LogLevelError && reporter != nil && entry.Source != logsources.ErrorCapture {
-		context := sentryreporting.Context{
-			Source:      entry.Source,
-			ClusterID:   entry.ClusterID,
-			ClusterName: entry.ClusterName,
-			OperationID: entry.OperationID,
-		}
-		if recovered != nil {
-			context.Operation = operation
-			reporter.CapturePanic(recovered, context)
-		} else if cause != nil {
-			context.Operation = operation
-			reporter.CaptureException(cause, context)
-		} else {
-			reporter.CaptureLogError(entry.Message, context)
-		}
-	}
+	l.report(dispatch, level, cause, recovered, operation)
 }
 
 func breadcrumbLevel(level LogLevel) string {

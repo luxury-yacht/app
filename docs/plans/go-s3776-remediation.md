@@ -178,14 +178,27 @@ Local progress through 2026-08-06 (Sonar confirmation pending):
 - [x] Reduced `(*sentryReporter).withHub` to the ordered capture lifecycle;
       operation correlation, breadcrumb projection, scope tags, and structured
       error context now have bounded stages.
-- [x] Focused package tests and `-race` pass. Package statement coverage is
-      88.7%; `telemetryReplacements`, `sanitizeOperationTelemetryContext`,
-      `addKubernetesStatusTags`, and `(*sentryReporter).withHub` are 100.0%, and
-      `prepareEventForSend` is 92.3%.
+- [x] Characterized nil loggers, bounded source metadata, debug/warn/unknown
+      level parity, error-capture suppression, structured cause and panic
+      routing, operation identity, buffer trimming, event emission, and Sentry
+      frame grouping.
+- [x] Reduced `(*Logger).log` to entry recording followed by unlocked event and
+      reporter dispatch; entry construction, bounded storage, breadcrumb data,
+      and error routing now have bounded stages.
+- [x] Focused package tests and `-race` pass. `telemetryReplacements`,
+      `sanitizeOperationTelemetryContext`, `addKubernetesStatusTags`,
+      `(*sentryReporter).withHub`, `(*Logger).log`, and every new logger helper
+      are 100.0%; `prepareEventForSend` is 92.3%.
 - [x] The repository backend coverage task passes and records 88.7% statement
-      coverage for `internal/sentry`.
+      coverage for `internal/sentry` and 76.7% for `backend`; directly affected
+      logger coverage is 100.0%.
+- [x] `gocognit` v1.2.1 measures the six refactored functions at 2, 1, 2, 2,
+      1, and 1 respectively on the current worktree; no function in the four
+      affected source files exceeds the configured limit of 15.
 - [x] The full `mage qc:prerelease` gate passes on the refactored source.
-- [ ] Confirm all five findings close in the next Sonar analysis without
+- [x] SonarCloud's 2026-08-06 analysis of PR #282 at `003321e4` reports zero
+      S3776 issues and zero code smells for the five refactors currently pushed.
+- [ ] Confirm all six findings close in the next Sonar analysis without
       creating or increasing another S3776 finding; keep the target boxes above
       open until that evidence exists.
 

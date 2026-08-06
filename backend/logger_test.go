@@ -37,6 +37,7 @@ type recordingErrorReporter struct {
 	messages       []capturedReport
 	exceptions     []capturedException
 	panics         []capturedPanic
+	breadcrumbs    []sentryreporting.Breadcrumb
 	enabled        bool
 	enabledChanges []bool
 	setEnabledFn   func(bool)
@@ -94,8 +95,12 @@ func (r *recordingErrorReporter) CapturePanic(recovered any, context sentryrepor
 	defer r.mu.Unlock()
 	r.panics = append(r.panics, capturedPanic{recovered: recovered, context: context})
 }
-func (*recordingErrorReporter) AddBreadcrumb(sentryreporting.Breadcrumb) {}
-func (*recordingErrorReporter) Shutdown(time.Duration) bool              { return true }
+func (r *recordingErrorReporter) AddBreadcrumb(breadcrumb sentryreporting.Breadcrumb) {
+	r.mu.Lock()
+	defer r.mu.Unlock()
+	r.breadcrumbs = append(r.breadcrumbs, breadcrumb)
+}
+func (*recordingErrorReporter) Shutdown(time.Duration) bool { return true }
 
 func (r *recordingErrorReporter) CaptureLogError(message string, context sentryreporting.Context) {
 	r.mu.Lock()
@@ -116,6 +121,59 @@ func TestLoggerReportsOnlyErrorsWithClusterIdentity(t *testing.T) {
 		message: "refresh failed",
 		context: sentryreporting.Context{Source: "Refresh", ClusterID: "cluster-a", ClusterName: "Production"},
 	}}, reporter.messages)
+}
+
+func TestLoggerRoutesNonErrorsWithBoundedMetadataAndLevelParity(t *testing.T) {
+	reporter := &recordingErrorReporter{}
+	logger := NewLogger(10, reporter)
+
+	logger.Debug("debug message", "DebugSource", "cluster-a", "Production", "debug-op", "ignored")
+	logger.Warn("warning message", "WarnSource")
+	logger.log(LogLevel(99), "unknown-level message", nil, nil, sentryreporting.Operation{})
+
+	reporter.mu.Lock()
+	require.Equal(t, []sentryreporting.Breadcrumb{
+		{
+			Category:    "DebugSource",
+			Message:     "debug message",
+			Level:       "debug",
+			Data:        map[string]any{"clusterId": "cluster-a", "clusterName": "Production"},
+			OperationID: "debug-op",
+		},
+		{
+			Category: "WarnSource",
+			Message:  "warning message",
+			Level:    "warning",
+			Data:     map[string]any{},
+		},
+		{
+			Message: "unknown-level message",
+			Level:   "info",
+			Data:    map[string]any{},
+		},
+	}, reporter.breadcrumbs)
+	reporter.mu.Unlock()
+
+	entries := logger.GetEntries()
+	require.Len(t, entries, 3)
+	require.Equal(t, LogEntry{
+		Sequence:    1,
+		Timestamp:   entries[0].Timestamp,
+		Level:       "DEBUG",
+		Message:     "debug message",
+		Source:      "DebugSource",
+		ClusterID:   "cluster-a",
+		ClusterName: "Production",
+		OperationID: "debug-op",
+	}, entries[0])
+	require.Equal(t, "UNKNOWN", entries[2].Level)
+}
+
+func TestNilLoggerIgnoresLog(t *testing.T) {
+	var logger *Logger
+	require.NotPanics(t, func() {
+		logger.Log(LogLevelError, "ignored")
+	})
 }
 
 func TestLoggerReportsStructuredErrorWithoutFlatteningCause(t *testing.T) {
