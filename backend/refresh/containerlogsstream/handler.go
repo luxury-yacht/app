@@ -1,6 +1,7 @@
 package containerlogsstream
 
 import (
+	"context"
 	"encoding/json"
 	"errors"
 	"fmt"
@@ -12,6 +13,7 @@ import (
 	"github.com/luxury-yacht/app/backend/internal/applog"
 	"github.com/luxury-yacht/app/backend/internal/containerlogs"
 	"github.com/luxury-yacht/app/backend/internal/logsources"
+	corev1 "k8s.io/api/core/v1"
 	apierrors "k8s.io/apimachinery/pkg/api/errors"
 	"k8s.io/client-go/kubernetes"
 
@@ -65,321 +67,460 @@ func NewHandler(client kubernetes.Interface, logger Logger, recorder *telemetry.
 
 // ServeHTTP implements http.Handler for the container logs streaming endpoint.
 func (h *Handler) ServeHTTP(w http.ResponseWriter, r *http.Request) {
-	if ok := applyCORS(w, r); !ok {
+	request, ok := h.prepareRequest(w, r)
+	if !ok {
 		return
 	}
+	request.serve()
+}
 
+type containerLogsHTTPRequest struct {
+	handler  *Handler
+	writer   http.ResponseWriter
+	flusher  http.Flusher
+	request  *http.Request
+	options  Options
+	stream   string
+	target   string
+	sequence uint64
+}
+
+func (h *Handler) prepareRequest(w http.ResponseWriter, r *http.Request) (*containerLogsHTTPRequest, bool) {
+	if !applyCORS(w, r) {
+		return nil, false
+	}
 	if r.Method != http.MethodGet {
 		w.WriteHeader(http.StatusMethodNotAllowed)
-		return
+		return nil, false
 	}
-
-	f, ok := w.(http.Flusher)
+	flusher, ok := w.(http.Flusher)
 	if !ok {
 		h.streamer.logger.Warn("containerlogsstream: response does not implement http.Flusher", logsources.ContainerLogsStream)
 		http.Error(w, "streaming not supported", http.StatusInternalServerError)
-		return
+		return nil, false
 	}
-
-	opts, err := parseOptions(r)
+	options, err := parseOptions(r)
 	if err != nil {
 		http.Error(w, err.Error(), http.StatusBadRequest)
+		return nil, false
+	}
+	return &containerLogsHTTPRequest{
+		handler: h, writer: w, flusher: flusher, request: r, options: options,
+		stream: telemetry.StreamContainerLogs, target: logTargetLabel(options), sequence: 1,
+	}, true
+}
+
+func (s *containerLogsHTTPRequest) serve() {
+	s.recordConnect()
+	defer s.recordDisconnect()
+	s.writeHeaders()
+	if s.writeConnected() != nil {
 		return
 	}
-	streamName := telemetry.StreamContainerLogs
-	// Attribute delivery/errors to the log target so diagnostics show one
-	// container-logs row per open viewer; sessions/connect stay stream-level
-	// (one SSE socket per viewer, counted at the stream).
-	target := logTargetLabel(opts)
-	if h.telemetry != nil {
-		h.telemetry.RecordStreamConnect(streamName)
-		defer h.telemetry.RecordStreamDisconnect(streamName)
-	}
-
-	w.Header().Set("Content-Type", "text/event-stream")
-	w.Header().Set("Cache-Control", "no-cache")
-	w.Header().Set("Connection", "keep-alive")
-	w.Header().Set("X-Accel-Buffering", "no") // Disable nginx buffering
-	f.Flush()                                 // Send headers immediately
-
-	sequence := uint64(1)
-
-	// Send an immediate "connected" event so the frontend knows the stream is active
-	// This prevents the UI from staying in loading state when there are no initial logs
-	connectedPayload := EventPayload{
-		Domain:      containerLogsDomain,
-		Scope:       opts.ScopeString,
-		Sequence:    sequence,
-		GeneratedAt: time.Now().UnixMilli(),
-		Reset:       true,
-		Entries:     []Entry{},
-	}
-	sequence++
-	if writeEvent(w, f, connectedPayload) != nil {
-		return
-	}
-
-	ctx := r.Context()
-	if deadline, ok := ctx.Deadline(); ok {
-		h.streamer.logger.Debug(fmt.Sprintf("containerlogsstream: client deadline %s", deadline.Format(time.RFC3339)), logsources.ContainerLogsStream)
-	}
-
-	var limiterSession *TargetSession
-	if h.limiter != nil {
-		limiterSession = h.limiter.StartSession(opts.ClusterID, opts.ScopeString)
+	s.logDeadline()
+	limiterSession := s.startLimiterSession()
+	if limiterSession != nil {
 		defer limiterSession.Release()
 	}
+	initial, ok := s.loadInitial(limiterSession)
+	if !ok || s.writeInitial(initial) != nil {
+		return
+	}
+	s.forward(initial, limiterSession)
+}
 
-	initial, states, pods, selector, warnings, skippedTargets, skipReason, err := h.streamer.tail(ctx, opts, limiterSession)
+func (s *containerLogsHTTPRequest) recordConnect() {
+	if s.handler.telemetry != nil {
+		s.handler.telemetry.RecordStreamConnect(s.stream)
+	}
+}
+
+func (s *containerLogsHTTPRequest) recordDisconnect() {
+	if s.handler.telemetry != nil {
+		s.handler.telemetry.RecordStreamDisconnect(s.stream)
+	}
+}
+
+func (s *containerLogsHTTPRequest) writeHeaders() {
+	s.writer.Header().Set("Content-Type", "text/event-stream")
+	s.writer.Header().Set("Cache-Control", "no-cache")
+	s.writer.Header().Set("Connection", "keep-alive")
+	s.writer.Header().Set("X-Accel-Buffering", "no")
+	s.flusher.Flush()
+}
+
+func (s *containerLogsHTTPRequest) writeConnected() error {
+	return s.writePayload(EventPayload{Reset: true, Entries: []Entry{}})
+}
+
+func (s *containerLogsHTTPRequest) writePayload(payload EventPayload) error {
+	payload.Domain = containerLogsDomain
+	payload.Scope = s.options.ScopeString
+	payload.Sequence = s.sequence
+	payload.GeneratedAt = time.Now().UnixMilli()
+	s.sequence++
+	return writeEvent(s.writer, s.flusher, payload)
+}
+
+func (s *containerLogsHTTPRequest) logDeadline() {
+	if deadline, ok := s.request.Context().Deadline(); ok {
+		s.handler.streamer.logger.Debug(fmt.Sprintf("containerlogsstream: client deadline %s", deadline.Format(time.RFC3339)), logsources.ContainerLogsStream)
+	}
+}
+
+func (s *containerLogsHTTPRequest) startLimiterSession() *TargetSession {
+	if s.handler.limiter == nil {
+		return nil
+	}
+	return s.handler.limiter.StartSession(s.options.ClusterID, s.options.ScopeString)
+}
+
+type containerLogsInitial struct {
+	entries        []Entry
+	states         map[string]*containerState
+	pods           []*corev1.Pod
+	selector       string
+	warnings       []string
+	skippedTargets int
+	skipReason     string
+}
+
+func (s *containerLogsHTTPRequest) loadInitial(limiterSession *TargetSession) (containerLogsInitial, bool) {
+	entries, states, pods, selector, warnings, skipped, reason, err := s.handler.streamer.tail(
+		s.request.Context(), s.options, limiterSession,
+	)
 	if err != nil {
-		if h.telemetry != nil {
-			h.telemetry.RecordStreamErrorForDomain(streamName, target, err)
-		}
-		h.streamer.logger.Warn(fmt.Sprintf("containerlogsstream: initial tail failed: %v", err), logsources.ContainerLogsStream)
-		if status := permissionDeniedStatus(err); status != nil {
-			payload := EventPayload{
-				Domain:       containerLogsDomain,
-				Scope:        opts.ScopeString,
-				Sequence:     sequence,
-				GeneratedAt:  time.Now().UnixMilli(),
-				Error:        err.Error(),
-				ErrorDetails: status,
-			}
-			_ = writeEvent(w, f, payload)
-			return
-		}
-		http.Error(w, err.Error(), http.StatusInternalServerError)
+		s.handleInitialError(err)
+		return containerLogsInitial{}, false
+	}
+	if s.handler.telemetry != nil && skipped > 0 {
+		s.handler.telemetry.RecordStreamSkippedTargets(s.stream, skipped, reason)
+	}
+	return containerLogsInitial{
+		entries: entries, states: states, pods: pods, selector: selector,
+		warnings: warnings, skippedTargets: skipped, skipReason: reason,
+	}, true
+}
+
+func (s *containerLogsHTTPRequest) handleInitialError(err error) {
+	s.recordError(err)
+	s.handler.streamer.logger.Warn(fmt.Sprintf("containerlogsstream: initial tail failed: %v", err), logsources.ContainerLogsStream)
+	status := permissionDeniedStatus(err)
+	if status != nil {
+		_ = s.writePayload(EventPayload{Error: err.Error(), ErrorDetails: status})
 		return
 	}
-	if h.telemetry != nil && skippedTargets > 0 {
-		h.telemetry.RecordStreamSkippedTargets(streamName, skippedTargets, skipReason)
-	}
+	http.Error(s.writer, err.Error(), http.StatusInternalServerError)
+}
 
-	// Always send the initial event so frontend knows initial fetch is complete
-	// (even if there are no logs). This allows the frontend to distinguish between
-	// "still loading" and "no logs available".
-	event := EventPayload{
-		Domain:      containerLogsDomain,
-		Scope:       opts.ScopeString,
-		Sequence:    sequence,
-		GeneratedAt: time.Now().UnixMilli(),
-		// The initial snapshot must replace any preserved client buffer.
-		// The frontend intentionally keeps the previous buffer across
-		// tab switches/reconnect handshakes, so sending the first real
-		// snapshot with Reset=false causes the entire initial batch to be
-		// appended on remount.
-		Reset:    true,
-		Entries:  initial,
-		Warnings: warningPayload(warnings, false),
+func (s *containerLogsHTTPRequest) writeInitial(initial containerLogsInitial) error {
+	event := EventPayload{Reset: true, Entries: initial.entries, Warnings: warningPayload(initial.warnings, false)}
+	if err := s.writePayload(event); err != nil {
+		s.recordError(err)
+		return err
 	}
-	sequence++
-	if err := writeEvent(w, f, event); err != nil {
-		if h.telemetry != nil {
-			h.telemetry.RecordStreamErrorForDomain(streamName, target, err)
-		}
-		return
+	if s.handler.telemetry != nil && len(initial.entries) > 0 {
+		s.handler.telemetry.RecordStreamDeliveryForDomain(s.stream, s.target, len(initial.entries), 0)
 	}
-	if h.telemetry != nil && len(initial) > 0 {
-		h.telemetry.RecordStreamDeliveryForDomain(streamName, target, len(event.Entries), 0)
+	return nil
+}
+
+func (s *containerLogsHTTPRequest) recordError(err error) {
+	if s.handler.telemetry != nil {
+		s.handler.telemetry.RecordStreamErrorForDomain(s.stream, s.target, err)
 	}
+}
 
-	entriesCh := make(chan Entry, 256)
-	dropCh := make(chan int, 1024)
-	errCh := make(chan error, 1)
-	warningsCh := make(chan []string, 8)
+type containerLogsStreamChannels struct {
+	entries  chan Entry
+	drops    chan int
+	errors   chan error
+	warnings chan []string
+}
 
-	go func() {
-		defer func() {
-			if r := recover(); r != nil {
-				applog.ReportPanic(h.streamer.logger, r, "containerlogsstream: panic in stream handler", logsources.ContainerLogsStream)
-				if h.telemetry != nil {
-					h.telemetry.RecordStreamErrorForDomain(streamName, target, fmt.Errorf("panic: %v", r))
-				}
-			}
-			close(entriesCh)
-			close(dropCh)
-			close(warningsCh)
-		}()
-		h.streamer.run(ctx, opts, pods, selector, states, limiterSession, warnings, entriesCh, warningsCh, errCh, dropCh)
-	}()
+func newContainerLogsStreamChannels() containerLogsStreamChannels {
+	return containerLogsStreamChannels{
+		entries: make(chan Entry, 256), drops: make(chan int, 1024),
+		errors: make(chan error, 1), warnings: make(chan []string, 8),
+	}
+}
 
+func (s *containerLogsHTTPRequest) forward(initial containerLogsInitial, limiterSession *TargetSession) {
+	channels := newContainerLogsStreamChannels()
+	s.startRunner(initial, limiterSession, channels)
 	keepAlive := time.NewTicker(config.ContainerLogsStreamKeepAliveInterval)
 	defer keepAlive.Stop()
 	heartbeat := time.NewTicker(config.StreamHeartbeatInterval)
 	defer heartbeat.Stop()
-	lastDelivery := time.Now()
-
-	var (
-		batch                 []Entry
-		batchTimer            *time.Timer
-		pendingDropped        int
-		selectionWarnings     = append([]string(nil), warnings...)
-		emittedWarnings       = append([]string(nil), warnings...)
-		transportDropObserved bool
-	)
-
-	emitWarningUpdate := func() bool {
-		nextWarnings := composeStreamWarnings(selectionWarnings, transportDropObserved)
-		if stringSlicesEqual(emittedWarnings, nextWarnings) {
-			return false
+	delivery := newContainerLogsDelivery(s, initial.warnings)
+	defer delivery.stopBatchTimer()
+	for {
+		event := delivery.await(s.request.Context(), channels, keepAlive.C, heartbeat.C)
+		if delivery.handle(event) {
+			return
 		}
-		payload := EventPayload{
-			Domain:      containerLogsDomain,
-			Scope:       opts.ScopeString,
-			Sequence:    sequence,
-			GeneratedAt: time.Now().UnixMilli(),
-			Warnings:    warningPayload(nextWarnings, true),
+	}
+}
+
+func (s *containerLogsHTTPRequest) startRunner(
+	initial containerLogsInitial,
+	limiterSession *TargetSession,
+	channels containerLogsStreamChannels,
+) {
+	go func() {
+		defer s.finishRunner(channels)
+		s.handler.streamer.run(
+			s.request.Context(), s.options, initial.pods, initial.selector, initial.states,
+			limiterSession, initial.warnings, channels.entries, channels.warnings, channels.errors, channels.drops,
+		)
+	}()
+}
+
+func (s *containerLogsHTTPRequest) finishRunner(channels containerLogsStreamChannels) {
+	if recovered := recover(); recovered != nil {
+		applog.ReportPanic(s.handler.streamer.logger, recovered, "containerlogsstream: panic in stream handler", logsources.ContainerLogsStream)
+		s.recordError(fmt.Errorf("panic: %v", recovered))
+	}
+	close(channels.entries)
+	close(channels.drops)
+	close(channels.warnings)
+}
+
+type containerLogsDeliveryEventKind uint8
+
+const (
+	containerLogsDeliveryCancelled containerLogsDeliveryEventKind = iota
+	containerLogsDeliveryError
+	containerLogsDeliveryWarnings
+	containerLogsDeliveryWarningsClosed
+	containerLogsDeliveryEntry
+	containerLogsDeliveryEntriesClosed
+	containerLogsDeliveryKeepAlive
+	containerLogsDeliveryHeartbeat
+	containerLogsDeliveryBatch
+	containerLogsDeliveryDrop
+	containerLogsDeliveryDropClosed
+)
+
+type containerLogsDeliveryEvent struct {
+	kind     containerLogsDeliveryEventKind
+	err      error
+	warnings []string
+	entry    Entry
+	drop     int
+}
+
+type containerLogsDelivery struct {
+	request               *containerLogsHTTPRequest
+	batch                 []Entry
+	batchTimer            *time.Timer
+	pendingDropped        int
+	selectionWarnings     []string
+	emittedWarnings       []string
+	transportDropObserved bool
+	lastDelivery          time.Time
+}
+
+func newContainerLogsDelivery(request *containerLogsHTTPRequest, warnings []string) *containerLogsDelivery {
+	return &containerLogsDelivery{
+		request: request, selectionWarnings: append([]string(nil), warnings...),
+		emittedWarnings: append([]string(nil), warnings...), lastDelivery: time.Now(),
+	}
+}
+
+func (d *containerLogsDelivery) await(
+	ctx context.Context,
+	channels containerLogsStreamChannels,
+	keepAlive <-chan time.Time,
+	heartbeat <-chan time.Time,
+) containerLogsDeliveryEvent {
+	select {
+	case <-ctx.Done():
+		return containerLogsDeliveryEvent{kind: containerLogsDeliveryCancelled}
+	case err := <-channels.errors:
+		return containerLogsDeliveryEvent{kind: containerLogsDeliveryError, err: err}
+	case warnings, ok := <-channels.warnings:
+		if !ok {
+			return containerLogsDeliveryEvent{kind: containerLogsDeliveryWarningsClosed}
 		}
-		sequence++
-		if writeEvent(w, f, payload) != nil {
-			if h.telemetry != nil {
-				h.telemetry.RecordStreamErrorForDomain(streamName, target, fmt.Errorf("containerlogsstream: failed to write warning update"))
-			}
+		return containerLogsDeliveryEvent{kind: containerLogsDeliveryWarnings, warnings: warnings}
+	case entry, ok := <-channels.entries:
+		if !ok {
+			return containerLogsDeliveryEvent{kind: containerLogsDeliveryEntriesClosed}
+		}
+		return containerLogsDeliveryEvent{kind: containerLogsDeliveryEntry, entry: entry}
+	case <-keepAlive:
+		return containerLogsDeliveryEvent{kind: containerLogsDeliveryKeepAlive}
+	case <-heartbeat:
+		return containerLogsDeliveryEvent{kind: containerLogsDeliveryHeartbeat}
+	case <-d.batchChannel():
+		return containerLogsDeliveryEvent{kind: containerLogsDeliveryBatch}
+	case drop, ok := <-channels.drops:
+		if !ok {
+			return containerLogsDeliveryEvent{kind: containerLogsDeliveryDropClosed}
+		}
+		return containerLogsDeliveryEvent{kind: containerLogsDeliveryDrop, drop: drop}
+	}
+}
+
+func (d *containerLogsDelivery) batchChannel() <-chan time.Time {
+	if d.batchTimer == nil {
+		return nil
+	}
+	return d.batchTimer.C
+}
+
+func (d *containerLogsDelivery) handle(event containerLogsDeliveryEvent) bool {
+	switch event.kind {
+	case containerLogsDeliveryCancelled:
+		d.flushBatch()
+		return true
+	case containerLogsDeliveryError:
+		return d.handleError(event.err)
+	case containerLogsDeliveryWarnings:
+		return d.handleWarnings(event.warnings)
+	case containerLogsDeliveryEntry:
+		return d.handleEntry(event.entry)
+	case containerLogsDeliveryEntriesClosed:
+		return d.handleEntriesClosed()
+	case containerLogsDeliveryKeepAlive:
+		return d.handleKeepAlive()
+	case containerLogsDeliveryHeartbeat:
+		d.handleHeartbeat()
+		return false
+	case containerLogsDeliveryBatch:
+		d.batchTimer = nil
+		return d.flushBatch()
+	case containerLogsDeliveryDrop:
+		return d.handleDrop(event.drop)
+	default:
+		return false
+	}
+}
+
+func (d *containerLogsDelivery) handleError(err error) bool {
+	if err == nil {
+		return false
+	}
+	payload := EventPayload{Error: err.Error(), ErrorDetails: permissionDeniedStatus(err)}
+	if d.request.writePayload(payload) != nil {
+		d.request.recordError(err)
+		return true
+	}
+	d.request.recordError(err)
+	return false
+}
+
+func (d *containerLogsDelivery) handleWarnings(warnings []string) bool {
+	d.selectionWarnings = append(d.selectionWarnings[:0], warnings...)
+	return d.emitWarningUpdate()
+}
+
+func (d *containerLogsDelivery) handleEntriesClosed() bool {
+	d.flushBatch()
+	if d.request.handler.telemetry != nil && d.pendingDropped > 0 {
+		d.request.handler.telemetry.RecordStreamDeliveryForDomain(d.request.stream, d.request.target, 0, d.pendingDropped)
+	}
+	return true
+}
+
+func (d *containerLogsDelivery) handleEntry(entry Entry) bool {
+	d.lastDelivery = time.Now()
+	if d.batch == nil {
+		d.batch = make([]Entry, 0, config.ContainerLogsStreamBatchMaxSize)
+	}
+	d.batch = append(d.batch, entry)
+	if len(d.batch) >= config.ContainerLogsStreamBatchMaxSize {
+		stop := d.flushBatch()
+		d.stopBatchTimer()
+		return stop
+	}
+	if d.batchTimer == nil {
+		d.batchTimer = time.NewTimer(config.ContainerLogsStreamBatchWindow)
+	}
+	return false
+}
+
+func (d *containerLogsDelivery) handleKeepAlive() bool {
+	if _, err := d.request.writer.Write([]byte(": keep-alive\n\n")); err != nil {
+		d.request.recordError(err)
+		return true
+	}
+	d.request.flusher.Flush()
+	return false
+}
+
+func (d *containerLogsDelivery) handleHeartbeat() {
+	if !shouldRecordHeartbeatTimeout(d.request.options.MatchNone, d.lastDelivery, time.Now()) {
+		return
+	}
+	d.request.recordError(fmt.Errorf("containerlogsstream heartbeat timeout"))
+	d.lastDelivery = time.Now()
+}
+
+func (d *containerLogsDelivery) handleDrop(drop int) bool {
+	d.pendingDropped += drop
+	if d.pendingDropped > 0 && !d.transportDropObserved && len(d.batch) == 0 {
+		d.transportDropObserved = true
+		if d.emitWarningUpdate() {
 			return true
 		}
-		emittedWarnings = append(emittedWarnings[:0], nextWarnings...)
+	}
+	if d.request.handler.telemetry != nil && len(d.batch) == 0 {
+		d.request.handler.telemetry.RecordStreamDeliveryForDomain(
+			d.request.stream, d.request.target, 0, d.pendingDropped,
+		)
+		d.pendingDropped = 0
+	}
+	return false
+}
+
+func (d *containerLogsDelivery) emitWarningUpdate() bool {
+	nextWarnings := composeStreamWarnings(d.selectionWarnings, d.transportDropObserved)
+	if stringSlicesEqual(d.emittedWarnings, nextWarnings) {
 		return false
 	}
+	if d.request.writePayload(EventPayload{Warnings: warningPayload(nextWarnings, true)}) != nil {
+		d.request.recordError(fmt.Errorf("containerlogsstream: failed to write warning update"))
+		return true
+	}
+	d.emittedWarnings = append(d.emittedWarnings[:0], nextWarnings...)
+	return false
+}
 
-	flushBatch := func() bool {
-		delivered := len(batch)
-		if delivered == 0 && pendingDropped == 0 {
-			return false
-		}
-		if delivered > 0 {
-			event := EventPayload{
-				Domain:      containerLogsDomain,
-				Scope:       opts.ScopeString,
-				Sequence:    sequence,
-				GeneratedAt: time.Now().UnixMilli(),
-				Entries:     batch,
-			}
-			sequence++
-			batch = nil
-			if err := writeEvent(w, f, event); err != nil {
-				if h.telemetry != nil {
-					h.telemetry.RecordStreamErrorForDomain(streamName, target, err)
-				}
-				return true
-			}
-		}
-		if h.telemetry != nil {
-			h.telemetry.RecordStreamDeliveryForDomain(streamName, target, delivered, pendingDropped)
-		}
-		if pendingDropped > 0 && !transportDropObserved {
-			transportDropObserved = true
-			if emitWarningUpdate() {
-				return true
-			}
-		}
-		pendingDropped = 0
-		lastDelivery = time.Now()
+func (d *containerLogsDelivery) flushBatch() bool {
+	delivered := len(d.batch)
+	if delivered == 0 && d.pendingDropped == 0 {
 		return false
 	}
+	if delivered > 0 {
+		entries := d.batch
+		d.batch = nil
+		if err := d.request.writePayload(EventPayload{Entries: entries}); err != nil {
+			d.request.recordError(err)
+			return true
+		}
+	}
+	if d.request.handler.telemetry != nil {
+		d.request.handler.telemetry.RecordStreamDeliveryForDomain(
+			d.request.stream, d.request.target, delivered, d.pendingDropped,
+		)
+	}
+	if d.pendingDropped > 0 && !d.transportDropObserved {
+		d.transportDropObserved = true
+		if d.emitWarningUpdate() {
+			return true
+		}
+	}
+	d.pendingDropped = 0
+	d.lastDelivery = time.Now()
+	return false
+}
 
-	for {
-		var batchChan <-chan time.Time
-		if batchTimer != nil {
-			batchChan = batchTimer.C
-		}
-		select {
-		case <-ctx.Done():
-			flushBatch()
-			return
-		case err := <-errCh:
-			if err == nil {
-				continue
-			}
-			errPayload := EventPayload{
-				Domain:      containerLogsDomain,
-				Scope:       opts.ScopeString,
-				Sequence:    sequence,
-				GeneratedAt: time.Now().UnixMilli(),
-				Error:       err.Error(),
-			}
-			if status := permissionDeniedStatus(err); status != nil {
-				errPayload.ErrorDetails = status
-			}
-			sequence++
-			if writeEvent(w, f, errPayload) != nil {
-				if h.telemetry != nil {
-					h.telemetry.RecordStreamErrorForDomain(streamName, target, err)
-				}
-				return
-			}
-			if h.telemetry != nil {
-				h.telemetry.RecordStreamErrorForDomain(streamName, target, err)
-			}
-		case warnings, ok := <-warningsCh:
-			if !ok {
-				continue
-			}
-			selectionWarnings = append(selectionWarnings[:0], warnings...)
-			if emitWarningUpdate() {
-				return
-			}
-		case entry, ok := <-entriesCh:
-			if !ok {
-				flushBatch()
-				if h.telemetry != nil && pendingDropped > 0 {
-					h.telemetry.RecordStreamDeliveryForDomain(streamName, target, 0, pendingDropped)
-				}
-				return
-			}
-			lastDelivery = time.Now()
-			if batch == nil {
-				batch = make([]Entry, 0, config.ContainerLogsStreamBatchMaxSize)
-			}
-			batch = append(batch, entry)
-			if len(batch) >= config.ContainerLogsStreamBatchMaxSize {
-				if flushBatch() {
-					return
-				}
-				if batchTimer != nil {
-					batchTimer.Stop()
-					batchTimer = nil
-				}
-				continue
-			}
-			if batchTimer == nil {
-				batchTimer = time.NewTimer(config.ContainerLogsStreamBatchWindow)
-			}
-		case <-keepAlive.C:
-			if _, err := w.Write([]byte(": keep-alive\n\n")); err != nil {
-				if h.telemetry != nil {
-					h.telemetry.RecordStreamErrorForDomain(streamName, target, err)
-				}
-				return
-			}
-			f.Flush()
-		case <-heartbeat.C:
-			if shouldRecordHeartbeatTimeout(opts.MatchNone, lastDelivery, time.Now()) {
-				if h.telemetry != nil {
-					h.telemetry.RecordStreamErrorForDomain(streamName, target, fmt.Errorf("containerlogsstream heartbeat timeout"))
-				}
-				lastDelivery = time.Now()
-			}
-		case <-batchChan:
-			batchTimer = nil
-			if flushBatch() {
-				return
-			}
-		case drop, ok := <-dropCh:
-			if !ok {
-				continue
-			}
-			pendingDropped += drop
-			if pendingDropped > 0 && !transportDropObserved && len(batch) == 0 {
-				transportDropObserved = true
-				if emitWarningUpdate() {
-					return
-				}
-			}
-			if h.telemetry != nil && len(batch) == 0 {
-				h.telemetry.RecordStreamDeliveryForDomain(streamName, target, 0, pendingDropped)
-				pendingDropped = 0
-			}
-		}
+func (d *containerLogsDelivery) stopBatchTimer() {
+	if d.batchTimer != nil {
+		d.batchTimer.Stop()
+		d.batchTimer = nil
 	}
 }
 

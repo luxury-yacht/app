@@ -265,138 +265,167 @@ func (a *App) rebuildClusterSubsystem(clusterID string) {
 	if a == nil || clusterID == "" {
 		return
 	}
-
 	a.logger.Info(fmt.Sprintf("Rebuilding subsystem for cluster %s", clusterID), logsources.Auth, clusterID, clusterID)
+	rebuild, ok := a.prepareClusterSubsystemRebuild(clusterID)
+	if !ok {
+		return
+	}
+	rebuild.run()
+}
 
-	// Get the old cluster clients to preserve the auth manager
+func (r clusterSubsystemRebuild) run() {
+	newClients, ok := r.rebuildClients()
+	if !ok {
+		return
+	}
+	subsystem, ok := r.buildSubsystem(newClients)
+	if !ok {
+		return
+	}
+	r.startManager(subsystem)
+	r.app.swapRefreshSubsystem(r.clusterID, subsystem)
+	subsystems, clusterOrder := refreshSubsystemTopology(r.app.snapshotRefreshSubsystems())
+	if !r.updateRefreshRouting(subsystems, clusterOrder) {
+		return
+	}
+	r.startObjectCatalog(newClients)
+	r.app.logger.Info(fmt.Sprintf("Successfully rebuilt subsystem for cluster %s", r.clusterID), logsources.Auth, r.clusterID, r.clusterName)
+}
+
+type clusterSubsystemRebuild struct {
+	app         *App
+	clusterID   string
+	clusterName string
+	selection   kubeconfigSelection
+	oldClients  *clusterClients
+}
+
+func (a *App) prepareClusterSubsystemRebuild(clusterID string) (clusterSubsystemRebuild, bool) {
 	oldClients := a.clusterClientsForID(clusterID)
 	if oldClients == nil {
 		a.logger.Warn(fmt.Sprintf("Cannot rebuild subsystem for cluster %s: clients not found", clusterID), logsources.Auth, clusterID, clusterID)
-		return
+		return clusterSubsystemRebuild{}, false
 	}
-	clusterName := oldClients.meta.Name
-
-	// Find the selection for this cluster
 	selections, err := a.selectedKubeconfigSelections()
 	if err != nil {
-		a.logger.Warn(fmt.Sprintf("Cannot rebuild subsystem for cluster %s: %v", clusterID, err), logsources.Auth, clusterID, clusterName)
-		return
+		a.logger.Warn(fmt.Sprintf("Cannot rebuild subsystem for cluster %s: %v", clusterID, err), logsources.Auth, clusterID, oldClients.meta.Name)
+		return clusterSubsystemRebuild{}, false
 	}
+	selection, found := a.findClusterKubeconfigSelection(clusterID, selections)
+	if !found {
+		a.logger.Warn(fmt.Sprintf("Cannot rebuild subsystem for cluster %s: selection not found", clusterID), logsources.Auth, clusterID, oldClients.meta.Name)
+		return clusterSubsystemRebuild{}, false
+	}
+	return clusterSubsystemRebuild{
+		app: a, clusterID: clusterID, clusterName: oldClients.meta.Name,
+		selection: selection, oldClients: oldClients,
+	}, true
+}
 
-	var selection kubeconfigSelection
-	for _, sel := range selections {
-		meta := a.clusterMetaForSelection(sel)
-		if meta.ID == clusterID {
-			selection = sel
-			break
+func (a *App) findClusterKubeconfigSelection(clusterID string, selections []kubeconfigSelection) (kubeconfigSelection, bool) {
+	for _, selection := range selections {
+		if a.clusterMetaForSelection(selection).ID == clusterID {
+			return selection, true
 		}
 	}
+	return kubeconfigSelection{}, false
+}
 
-	if selection.Path == "" {
-		a.logger.Warn(fmt.Sprintf("Cannot rebuild subsystem for cluster %s: selection not found", clusterID), logsources.Auth, clusterID, clusterName)
-		return
-	}
-
-	// Rebuild the cluster clients with fresh credentials from kubeconfig.
-	// This picks up refreshed SSO tokens that weren't available when the
-	// original clients were created. The existing auth manager is reused so
-	// the rebuilt transports keep reporting to the manager the app tracks —
-	// wiring them to a fresh manager and swapping afterwards would leave the
-	// transports pointing at a discarded manager that can never recover.
-	newClients, err := a.buildClusterClientsWithManager(context.Background(), selection, oldClients.meta, oldClients.authManager)
+func (r clusterSubsystemRebuild) rebuildClients() (*clusterClients, bool) {
+	clients, err := r.app.buildClusterClientsWithManager(
+		context.Background(), r.selection, r.oldClients.meta, r.oldClients.authManager,
+	)
 	if err != nil {
-		a.logger.ErrorWithCause(err, fmt.Sprintf("Failed to rebuild clients for cluster %s", clusterID), logsources.Auth, clusterID, clusterName)
-		errorcapture.CaptureWithCluster(clusterID, fmt.Sprintf("client rebuild failed: %v", err))
-		return
+		r.reportBuildError("clients", "client rebuild failed", err)
+		return nil, false
 	}
-
-	// Update the cluster clients map
-	a.clusterClientsMu.Lock()
-	a.setClusterClientLocked(clusterID, newClients)
-	a.clusterClientsMu.Unlock()
-
-	// If the preflight reported an auth failure, stop here: the auth manager's
-	// recovery cycle owns the next rebuild attempt once credentials are valid.
-	if newClients.authFailedOnInit || (newClients.authManager != nil && !newClients.authManager.IsValid()) {
-		a.logger.Warn(fmt.Sprintf("Skipping subsystem rebuild for cluster %s: auth not valid after client rebuild", clusterID), logsources.Auth, clusterID, clusterName)
-		return
+	r.app.clusterClientsMu.Lock()
+	r.app.setClusterClientLocked(r.clusterID, clients)
+	r.app.clusterClientsMu.Unlock()
+	if clusterClientsAuthInvalid(clients) {
+		r.app.logger.Warn(fmt.Sprintf("Skipping subsystem rebuild for cluster %s: auth not valid after client rebuild", r.clusterID), logsources.Auth, r.clusterID, r.clusterName)
+		return nil, false
 	}
+	return clients, true
+}
 
-	// Build the subsystem with the new clients
-	subsystem, err := a.buildRefreshSubsystemForSelection(selection, newClients, newClients.meta)
+func clusterClientsAuthInvalid(clients *clusterClients) bool {
+	return clients.authFailedOnInit || (clients.authManager != nil && !clients.authManager.IsValid())
+}
+
+func (r clusterSubsystemRebuild) buildSubsystem(clients *clusterClients) (*system.Subsystem, bool) {
+	subsystem, err := r.app.buildRefreshSubsystemForSelection(r.selection, clients, clients.meta)
 	if err != nil {
-		a.logger.ErrorWithCause(err, fmt.Sprintf("Failed to rebuild subsystem for cluster %s", clusterID), logsources.Auth, clusterID, clusterName)
-		errorcapture.CaptureWithCluster(clusterID, fmt.Sprintf("subsystem rebuild failed: %v", err))
+		r.reportBuildError("subsystem", "subsystem rebuild failed", err)
+		return nil, false
+	}
+	return subsystem, true
+}
+
+func (r clusterSubsystemRebuild) reportBuildError(component, capturePrefix string, err error) {
+	r.app.logger.ErrorWithCause(
+		err, fmt.Sprintf("Failed to rebuild %s for cluster %s", component, r.clusterID),
+		logsources.Auth, r.clusterID, r.clusterName,
+	)
+	errorcapture.CaptureWithCluster(r.clusterID, fmt.Sprintf("%s: %v", capturePrefix, err))
+}
+
+func (r clusterSubsystemRebuild) startManager(subsystem *system.Subsystem) {
+	if r.app.refreshCtx == nil || subsystem.Manager == nil {
 		return
 	}
+	go r.runManager(subsystem)
+}
 
-	// (The maintained stores were already warm-painted from disk inside
-	// buildRefreshSubsystemForSelection, before the manager starts — shared by every build path.)
-
-	// Start the subsystem
-	if a.refreshCtx != nil && subsystem.Manager != nil {
-		registry := subsystem.Registry
-		go func() {
-			if err := subsystem.Manager.Start(a.refreshCtx); err != nil {
-				a.logger.Warn(fmt.Sprintf("Refresh manager for cluster %s stopped: %v", clusterID, err), logsources.Auth, clusterID, clusterName)
-				return
-			}
-			// Manager.Start blocks until the informer hub has synced (factory + ingest), so
-			// the live caches are now populated: reconcile away any row warm-painted from a
-			// stale spill whose object was deleted while the cluster was Cold. Ingest-fed
-			// stores already reconciled via their reflector's initial Replace; this covers
-			// the shared-informer-fed kinds (HPA, Gateway-API, CRDs, events, …).
-			if registry != nil {
-				registry.ReconcileMaintainedStores()
-			}
-		}()
+func (r clusterSubsystemRebuild) runManager(subsystem *system.Subsystem) {
+	if err := subsystem.Manager.Start(r.app.refreshCtx); err != nil {
+		r.app.logger.Warn(fmt.Sprintf("Refresh manager for cluster %s stopped: %v", r.clusterID, err), logsources.Auth, r.clusterID, r.clusterName)
+		return
 	}
+	if subsystem.Registry != nil {
+		subsystem.Registry.ReconcileMaintainedStores()
+	}
+}
 
-	// Store the subsystem, stopping the previous one — overwriting the entry
-	// would leak its informers/reflectors/notifier on stale transports.
-	a.swapRefreshSubsystem(clusterID, subsystem)
-
-	// Build cluster order from current subsystems
-	subsystems := a.snapshotRefreshSubsystems()
+func refreshSubsystemTopology(subsystems map[string]*system.Subsystem) (map[string]*system.Subsystem, []string) {
 	clusterOrder := make([]string, 0, len(subsystems))
-	for id := range subsystems {
-		clusterOrder = append(clusterOrder, id)
+	for clusterID := range subsystems {
+		clusterOrder = append(clusterOrder, clusterID)
 	}
+	return subsystems, clusterOrder
+}
 
-	// If the HTTP server hasn't been started yet (e.g. all clusters had auth
-	// failures during initial startup), bootstrap the full HTTP infrastructure
-	// now that we have at least one working subsystem.
-	if a.refreshHTTPServer == nil || a.refreshAggregates.Load() == nil {
-		mux, aggregates, muxErr := a.buildRefreshMux(subsystems, clusterOrder)
-		if muxErr != nil {
-			a.logger.ErrorWithCause(muxErr, fmt.Sprintf("Failed to build refresh mux after cluster %s recovery", clusterID), logsources.Auth, clusterID, clusterName)
-			return
-		}
-		a.refreshAggregates.Store(aggregates)
-		// Heal any readiness settle-ring dropped while aggregates were nil.
-		a.sweepNamespacesReadiness(subsystems)
-		if srvErr := a.startRefreshHTTPServer(mux, subsystems); srvErr != nil {
-			a.logger.ErrorWithCause(srvErr, fmt.Sprintf("Failed to start refresh HTTP server after cluster %s recovery", clusterID), logsources.Auth, clusterID, clusterName)
-			return
-		}
-		a.logger.Info(fmt.Sprintf("Started refresh HTTP server after cluster %s recovery", clusterID), logsources.Auth, clusterID, clusterName)
-	} else {
-		// Update the aggregate handlers so they know about the new subsystem.
-		if err := a.refreshAggregates.Load().Update(clusterOrder, subsystems); err != nil {
-			a.logger.ErrorWithCause(err, fmt.Sprintf("Failed to update aggregates for cluster %s", clusterID), logsources.Auth, clusterID, clusterName)
-		}
+func (r clusterSubsystemRebuild) updateRefreshRouting(subsystems map[string]*system.Subsystem, clusterOrder []string) bool {
+	if r.app.refreshHTTPServer == nil || r.app.refreshAggregates.Load() == nil {
+		return r.bootstrapRefreshRouting(subsystems, clusterOrder)
 	}
+	if err := r.app.refreshAggregates.Load().Update(clusterOrder, subsystems); err != nil {
+		r.app.logger.ErrorWithCause(err, fmt.Sprintf("Failed to update aggregates for cluster %s", r.clusterID), logsources.Auth, r.clusterID, r.clusterName)
+	}
+	return true
+}
 
-	// Start the object catalog for this cluster
-	target := catalogTarget{
-		selection: selection,
-		meta:      newClients.meta,
+func (r clusterSubsystemRebuild) bootstrapRefreshRouting(subsystems map[string]*system.Subsystem, clusterOrder []string) bool {
+	mux, aggregates, err := r.app.buildRefreshMux(subsystems, clusterOrder)
+	if err != nil {
+		r.app.logger.ErrorWithCause(err, fmt.Sprintf("Failed to build refresh mux after cluster %s recovery", r.clusterID), logsources.Auth, r.clusterID, r.clusterName)
+		return false
 	}
-	if err := a.startObjectCatalogForTarget(target); err != nil {
-		a.logger.Warn(fmt.Sprintf("Object catalog skipped for %s: %v", clusterID, err), logsources.Auth, clusterID, clusterName)
+	r.app.refreshAggregates.Store(aggregates)
+	r.app.sweepNamespacesReadiness(subsystems)
+	if err := r.app.startRefreshHTTPServer(mux, subsystems); err != nil {
+		r.app.logger.ErrorWithCause(err, fmt.Sprintf("Failed to start refresh HTTP server after cluster %s recovery", r.clusterID), logsources.Auth, r.clusterID, r.clusterName)
+		return false
 	}
+	r.app.logger.Info(fmt.Sprintf("Started refresh HTTP server after cluster %s recovery", r.clusterID), logsources.Auth, r.clusterID, r.clusterName)
+	return true
+}
 
-	a.logger.Info(fmt.Sprintf("Successfully rebuilt subsystem for cluster %s", clusterID), logsources.Auth, clusterID, clusterName)
+func (r clusterSubsystemRebuild) startObjectCatalog(clients *clusterClients) {
+	target := catalogTarget{selection: r.selection, meta: clients.meta}
+	if err := r.app.startObjectCatalogForTarget(target); err != nil {
+		r.app.logger.Warn(fmt.Sprintf("Object catalog skipped for %s: %v", r.clusterID, err), logsources.Auth, r.clusterID, r.clusterName)
+	}
 }
 
 // RetryClusterAuth triggers a manual authentication recovery attempt for a specific cluster.

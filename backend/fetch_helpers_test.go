@@ -231,6 +231,66 @@ func TestFetchResourceExhaustsRetriesAndEmits(t *testing.T) {
 	require.Equal(t, "default/foo", emitted["identifier"])
 }
 
+func TestExecuteWithRetryValidatesInputs(t *testing.T) {
+	_, err := executeWithRetry[string](context.Background(), nil, "", "Widget", "", nil)
+	require.ErrorContains(t, err, "fetch function not provided")
+
+	value, err := executeWithRetry[string](context.Background(), nil, "", "Widget", "", func() (string, error) {
+		return "ok", nil
+	})
+	require.NoError(t, err)
+	require.Equal(t, "ok", value)
+}
+
+func TestExecuteWithRetryWithoutAppUsesConfiguredSleep(t *testing.T) {
+	originalSleep := fetchRetrySleep
+	var delays []time.Duration
+	fetchRetrySleep = func(delay time.Duration) { delays = append(delays, delay) }
+	t.Cleanup(func() { fetchRetrySleep = originalSleep })
+
+	attempts := 0
+	value, err := executeWithRetry(context.Background(), nil, "cluster-a", "Widget", "demo", func() (string, error) {
+		attempts++
+		if attempts == 1 {
+			return "", io.EOF
+		}
+		return "ok", nil
+	})
+
+	require.NoError(t, err)
+	require.Equal(t, "ok", value)
+	require.Equal(t, []time.Duration{config.ResourceFetchRetryBaseDelay}, delays)
+}
+
+func TestExecuteWithRetryReturnsContextSleepFailure(t *testing.T) {
+	app := newTestAppWithDefaults(t)
+	sleepErr := errors.New("sleep interrupted")
+	originalSleep := contextSleep
+	contextSleep = func(context.Context, time.Duration) error { return sleepErr }
+	t.Cleanup(func() { contextSleep = originalSleep })
+
+	_, err := executeWithRetry(context.Background(), app, "cluster-a", "Widget", "demo", func() (string, error) {
+		return "", io.EOF
+	})
+	require.ErrorIs(t, err, sleepErr)
+}
+
+func TestExecuteWithRetryDoesNotRetryPermanentErrorWithoutApp(t *testing.T) {
+	attempts := 0
+	permanent := errors.New("validation failed")
+	_, err := executeWithRetry(context.Background(), nil, "cluster-a", "Widget", "demo", func() (string, error) {
+		attempts++
+		return "", permanent
+	})
+
+	require.ErrorIs(t, err, permanent)
+	require.Equal(t, 1, attempts)
+}
+
+func TestResourceFetchRetryBackoffCapsAtConfiguredMaximum(t *testing.T) {
+	require.Equal(t, config.ResourceFetchRetryMaxDelay, resourceFetchRetryBackoff(30))
+}
+
 // Tests for ensureClientInitialized and ensureAPIExtensionsClientInitialized have been removed.
 // These helper functions were deleted as part of removing global client fields.
 // Client initialization checks are now done via ensureDependenciesInitialized which

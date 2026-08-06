@@ -72,93 +72,110 @@ func (s *Streamer) tail(ctx context.Context, opts Options, limiterSession *Targe
 	if err != nil {
 		return nil, nil, nil, "", nil, 0, "", fmt.Errorf("containerlogsstream: tail %s/%s: %w", opts.Namespace, opts.Name, err)
 	}
+	selection := selectInitialLogTargets(pods, opts, limiterSession)
+	entries, states := s.collectInitialLogEntries(ctx, selection.targets, opts)
+	sortInitialLogEntries(entries)
+	return entries, states, pods, selector, selection.warnings, selection.skipped, selection.skipReason, nil
+}
 
-	var entries []Entry
-	state := make(map[string]*containerState)
-	selectedTargets, totalTargets := selectRuntimeTargets(
-		pods,
-		containerlogs.ContainerSelectionOptions{
-			Filter:           opts.Container,
-			IncludeInit:      opts.IncludeInit,
-			IncludeEphemeral: opts.IncludeEphemeral,
-			StateFilter:      opts.ContainerState,
-			Selection:        opts.Selection,
-		},
-		containerlogs.GetPerScopeTargetLimit(),
-	)
-	warnings := containerlogs.BuildTargetLimitWarnings(len(selectedTargets), totalTargets)
-	skippedTargets := totalTargets - len(selectedTargets)
-	skipReason := ""
-	if skippedTargets > 0 {
-		skipReason = "per-scope target cap"
+type initialLogTargetSelection struct {
+	targets    []containerTarget
+	warnings   []string
+	skipped    int
+	skipReason string
+}
+
+func selectInitialLogTargets(pods []*corev1.Pod, opts Options, limiterSession *TargetSession) initialLogTargetSelection {
+	targets, total := selectRuntimeTargets(pods, containerSelectionOptions(opts), containerlogs.GetPerScopeTargetLimit())
+	selection := initialLogTargetSelection{
+		targets: targets, warnings: containerlogs.BuildTargetLimitWarnings(len(targets), total),
+		skipped: total - len(targets),
+	}
+	if selection.skipped > 0 {
+		selection.skipReason = "per-scope target cap"
 	}
 	if limiterSession != nil {
-		allowedKeys, globalSkipped := limiterSession.UpdateDesired(targetKeys(selectedTargets))
-		selectedTargets = filterTargetsByKeys(selectedTargets, allowedKeys)
-		globalLimit := config.ContainerLogsStreamGlobalTargetLimit
-		if limiterSession != nil && limiterSession.limiter != nil {
-			globalLimit = limiterSession.limiter.total
-		}
-		warnings = append(warnings, buildGlobalTargetLimitWarnings(len(selectedTargets), len(selectedTargets)+globalSkipped, globalLimit)...)
-		if globalSkipped > 0 {
-			skippedTargets += globalSkipped
-			skipReason = "global target cap"
-		}
+		applyGlobalTargetLimit(&selection, limiterSession)
 	}
+	return selection
+}
 
-	for _, selected := range selectedTargets {
-		target := selected
-		if _, ok := state[target.key()]; !ok {
-			state[target.key()] = &containerState{}
-		}
-		podEntries, err := s.fetchContainerTail(ctx, target, opts.TailLines, opts.LineFilter)
+func containerSelectionOptions(opts Options) containerlogs.ContainerSelectionOptions {
+	return containerlogs.ContainerSelectionOptions{
+		Filter: opts.Container, IncludeInit: opts.IncludeInit, IncludeEphemeral: opts.IncludeEphemeral,
+		StateFilter: opts.ContainerState, Selection: opts.Selection,
+	}
+}
+
+func applyGlobalTargetLimit(selection *initialLogTargetSelection, session *TargetSession) {
+	before := len(selection.targets)
+	allowedKeys, globalSkipped := session.UpdateDesired(targetKeys(selection.targets))
+	selection.targets = filterTargetsByKeys(selection.targets, allowedKeys)
+	selection.warnings = append(selection.warnings, buildGlobalTargetLimitWarnings(
+		len(selection.targets), before, targetSessionGlobalLimit(session),
+	)...)
+	if globalSkipped > 0 {
+		selection.skipped += globalSkipped
+		selection.skipReason = "global target cap"
+	}
+}
+
+func targetSessionGlobalLimit(session *TargetSession) int {
+	if session != nil && session.limiter != nil {
+		return session.limiter.total
+	}
+	return config.ContainerLogsStreamGlobalTargetLimit
+}
+
+func (s *Streamer) collectInitialLogEntries(
+	ctx context.Context,
+	targets []containerTarget,
+	opts Options,
+) ([]Entry, map[string]*containerState) {
+	var entries []Entry
+	states := make(map[string]*containerState)
+	for _, target := range targets {
+		states[target.key()] = &containerState{}
+		fetched, err := s.fetchContainerTail(ctx, target, opts.TailLines, opts.LineFilter)
 		if err != nil {
 			s.logger.Warn(fmt.Sprintf("containerlogsstream: tail failed for %s/%s/%s: %v", target.namespace, target.pod, target.container, err), logsources.ContainerLogsStream)
 			continue
 		}
-		for _, e := range podEntries {
-			entries = append(entries, e)
-			if e.Timestamp == "" {
-				continue
-			}
-			ts, err := time.Parse(time.RFC3339Nano, e.Timestamp)
-			if err != nil {
-				continue
-			}
-			key := target.key()
-			current := state[key]
-			if current == nil {
-				current = &containerState{linesAtTimestamp: make(map[string]struct{})}
-				state[key] = current
-			}
-			if ts.After(current.lastTimestamp) {
-				// New timestamp - reset the set of lines
-				current.lastTimestamp = ts
-				current.linesAtTimestamp = map[string]struct{}{e.Line: {}}
-			} else if ts.Equal(current.lastTimestamp) {
-				// Same timestamp - add line to the set
-				current.linesAtTimestamp[e.Line] = struct{}{}
-			}
-			// Lines before lastTimestamp are ignored (already processed)
+		entries = append(entries, fetched...)
+		updateInitialContainerState(states[target.key()], fetched)
+	}
+	return entries, states
+}
+
+func updateInitialContainerState(state *containerState, entries []Entry) {
+	for _, entry := range entries {
+		timestamp, err := time.Parse(time.RFC3339Nano, entry.Timestamp)
+		if entry.Timestamp == "" || err != nil {
+			continue
+		}
+		if timestamp.After(state.lastTimestamp) {
+			state.lastTimestamp = timestamp
+			state.linesAtTimestamp = map[string]struct{}{entry.Line: {}}
+			continue
+		}
+		if timestamp.Equal(state.lastTimestamp) {
+			state.linesAtTimestamp[entry.Line] = struct{}{}
 		}
 	}
+}
 
+func sortInitialLogEntries(entries []Entry) {
 	sort.Slice(entries, func(i, j int) bool {
 		ti, errI := time.Parse(time.RFC3339Nano, entries[i].Timestamp)
 		tj, errJ := time.Parse(time.RFC3339Nano, entries[j].Timestamp)
-		switch {
-		case errI != nil && errJ != nil:
-			return i < j
-		case errI != nil:
-			return false
-		case errJ != nil:
-			return true
-		default:
-			return ti.Before(tj)
+		if errI != nil {
+			return errJ != nil && i < j
 		}
+		if errJ != nil {
+			return true
+		}
+		return ti.Before(tj)
 	})
-
-	return entries, state, pods, selector, warnings, skippedTargets, skipReason, nil
 }
 
 func (s *Streamer) run(
@@ -178,239 +195,295 @@ func (s *Streamer) run(
 		<-ctx.Done()
 		return
 	}
-	var (
-		mu              sync.Mutex
-		targetWG        sync.WaitGroup
-		currentPods     = make(map[string]*corev1.Pod)
-		targetCancels   = make(map[string]context.CancelFunc)
-		currentWarnings = append([]string(nil), initialWarnings...)
+	run := newContainerLogRun(
+		s, ctx, opts, states, limiterSession, initialWarnings,
+		entriesCh, warningsCh, errCh, dropCh,
 	)
-	var limiterNotify <-chan struct{}
+	defer run.shutdown()
+	run.replacePodInventory(initialPods)
+	if strings.EqualFold(opts.Kind, "pod") {
+		run.waitForPodSession()
+		return
+	}
+	run.watchPods(selector)
+}
+
+type containerLogRun struct {
+	streamer       *Streamer
+	ctx            context.Context
+	opts           Options
+	states         map[string]*containerState
+	limiterSession *TargetSession
+	limiterNotify  <-chan struct{}
+	entriesCh      chan<- Entry
+	warningsCh     chan<- []string
+	errCh          chan<- error
+	dropCh         chan<- int
+
+	mu              sync.Mutex
+	targetWG        sync.WaitGroup
+	currentPods     map[string]*corev1.Pod
+	targetCancels   map[string]context.CancelFunc
+	currentWarnings []string
+}
+
+func newContainerLogRun(
+	streamer *Streamer,
+	ctx context.Context,
+	opts Options,
+	states map[string]*containerState,
+	limiterSession *TargetSession,
+	initialWarnings []string,
+	entriesCh chan<- Entry,
+	warningsCh chan<- []string,
+	errCh chan<- error,
+	dropCh chan<- int,
+) *containerLogRun {
+	run := &containerLogRun{
+		streamer: streamer, ctx: ctx, opts: opts, states: states, limiterSession: limiterSession,
+		entriesCh: entriesCh, warningsCh: warningsCh, errCh: errCh, dropCh: dropCh,
+		currentPods: make(map[string]*corev1.Pod), targetCancels: make(map[string]context.CancelFunc),
+		currentWarnings: append([]string(nil), initialWarnings...),
+	}
 	if limiterSession != nil {
-		limiterNotify = limiterSession.Notify()
+		run.limiterNotify = limiterSession.Notify()
 	}
+	return run
+}
 
-	// Ensure all followContainer goroutines exit before run returns so callers can safely close channels.
+func (r *containerLogRun) shutdown() {
+	r.cancelTargets()
+	r.targetWG.Wait()
+}
+
+func (r *containerLogRun) cancelTargets() {
+	r.mu.Lock()
+	cancels := make([]context.CancelFunc, 0, len(r.targetCancels))
+	for _, cancel := range r.targetCancels {
+		cancels = append(cancels, cancel)
+	}
+	r.mu.Unlock()
+	for _, cancel := range cancels {
+		cancel()
+	}
+}
+
+func (r *containerLogRun) startTarget(target containerTarget) {
+	key := target.key()
+	r.mu.Lock()
+	if _, exists := r.targetCancels[key]; exists {
+		r.mu.Unlock()
+		return
+	}
+	targetCtx, cancel := context.WithCancel(r.ctx)
+	r.targetCancels[key] = cancel
+	target.state = r.containerState(key)
+	r.targetWG.Add(1)
+	r.mu.Unlock()
+	go r.followTarget(targetCtx, target)
+}
+
+func (r *containerLogRun) containerState(key string) *containerState {
+	state := r.states[key]
+	if state == nil {
+		state = &containerState{}
+		r.states[key] = state
+	}
+	return state
+}
+
+func (r *containerLogRun) followTarget(ctx context.Context, target containerTarget) {
+	defer r.targetWG.Done()
 	defer func() {
-		mu.Lock()
-		for _, cancel := range targetCancels {
-			cancel()
+		if recovered := recover(); recovered != nil {
+			r.reportTargetPanic(recovered)
 		}
-		mu.Unlock()
-		targetWG.Wait()
 	}()
+	r.streamer.followContainer(ctx, target, r.opts.LineFilter, r.entriesCh, r.errCh, r.dropCh)
+}
 
-	startTarget := func(target containerTarget) {
-		key := target.key()
-		mu.Lock()
-		if _, exists := targetCancels[key]; exists {
-			mu.Unlock()
-			return
-		}
-		targetCtx, cancel := context.WithCancel(ctx)
-		targetCancels[key] = cancel
-		mu.Unlock()
-
-		target.state = states[key]
-		if target.state == nil {
-			target.state = &containerState{}
-			states[key] = target.state
-		}
-		targetWG.Add(1)
-		go func(t containerTarget) {
-			defer targetWG.Done()
-			defer func() {
-				if r := recover(); r != nil {
-					applog.ReportPanic(s.logger, r, "containerlogsstream: panic in followContainer", logsources.ContainerLogsStream)
-					if s.telemetry != nil {
-						s.telemetry.RecordStreamError(telemetry.StreamContainerLogs, fmt.Errorf("panic: %v", r))
-					}
-				}
-			}()
-			s.followContainer(targetCtx, t, opts.LineFilter, entriesCh, errCh, dropCh)
-		}(target)
+func (r *containerLogRun) reportTargetPanic(recovered any) {
+	applog.ReportPanic(r.streamer.logger, recovered, "containerlogsstream: panic in followContainer", logsources.ContainerLogsStream)
+	if r.streamer.telemetry != nil {
+		r.streamer.telemetry.RecordStreamError(telemetry.StreamContainerLogs, fmt.Errorf("panic: %v", recovered))
 	}
+}
 
-	stopTarget := func(key string) {
-		mu.Lock()
-		if cancel, ok := targetCancels[key]; ok {
-			cancel()
-			delete(targetCancels, key)
-		}
-		mu.Unlock()
+func (r *containerLogRun) stopTarget(key string) {
+	r.mu.Lock()
+	cancel, exists := r.targetCancels[key]
+	if exists {
+		delete(r.targetCancels, key)
 	}
+	r.mu.Unlock()
+	if exists {
+		cancel()
+	}
+}
 
-	reconcileTargets := func() {
-		mu.Lock()
-		pods := make([]*corev1.Pod, 0, len(currentPods))
-		for _, pod := range currentPods {
-			pods = append(pods, pod)
-		}
-		selectedTargets, _ := selectRuntimeTargets(pods, containerlogs.ContainerSelectionOptions{
-			Filter:           opts.Container,
-			IncludeInit:      opts.IncludeInit,
-			IncludeEphemeral: opts.IncludeEphemeral,
-			StateFilter:      opts.ContainerState,
-			Selection:        opts.Selection,
-		}, containerlogs.GetPerScopeTargetLimit())
-		perScopeCount := len(selectedTargets)
-		totalTargets := countTargets(pods, containerlogs.ContainerSelectionOptions{
-			Filter:           opts.Container,
-			IncludeInit:      opts.IncludeInit,
-			IncludeEphemeral: opts.IncludeEphemeral,
-			StateFilter:      opts.ContainerState,
-			Selection:        opts.Selection,
-		})
-		warnings := containerlogs.BuildTargetLimitWarnings(perScopeCount, totalTargets)
-		if limiterSession != nil {
-			allowedKeys, globalSkipped := limiterSession.UpdateDesired(targetKeys(selectedTargets))
-			selectedTargets = filterTargetsByKeys(selectedTargets, allowedKeys)
-			globalLimit := config.ContainerLogsStreamGlobalTargetLimit
-			if limiterSession != nil && limiterSession.limiter != nil {
-				globalLimit = limiterSession.limiter.total
-			}
-			warnings = append(warnings, buildGlobalTargetLimitWarnings(len(selectedTargets), perScopeCount, globalLimit)...)
-			_ = globalSkipped
-		}
-		desiredTargets := make(map[string]containerTarget, len(selectedTargets))
-		activeKeys := make([]string, 0, len(targetCancels))
-		activeKeySet := make(map[string]struct{}, len(targetCancels))
-		for key := range targetCancels {
-			activeKeys = append(activeKeys, key)
-			activeKeySet[key] = struct{}{}
-		}
-		mu.Unlock()
+func (r *containerLogRun) reconcileTargets() {
+	pods, activeKeys := r.snapshotInventory()
+	selectedTargets, warnings := selectActiveLogTargets(pods, r.opts, r.limiterSession)
+	desiredTargets := indexLogTargets(selectedTargets)
+	emitWarningsIfChanged(r.warningsCh, &r.currentWarnings, warnings)
+	r.stopUndesiredTargets(activeKeys, desiredTargets)
+	r.startDesiredTargets(activeKeys, desiredTargets)
+}
 
-		for _, target := range selectedTargets {
-			desiredTargets[target.key()] = target
-		}
-		emitWarningsIfChanged(warningsCh, &currentWarnings, warnings)
+func (r *containerLogRun) snapshotInventory() ([]*corev1.Pod, map[string]struct{}) {
+	r.mu.Lock()
+	defer r.mu.Unlock()
+	pods := make([]*corev1.Pod, 0, len(r.currentPods))
+	for _, pod := range r.currentPods {
+		pods = append(pods, pod)
+	}
+	activeKeys := make(map[string]struct{}, len(r.targetCancels))
+	for key := range r.targetCancels {
+		activeKeys[key] = struct{}{}
+	}
+	return pods, activeKeys
+}
 
-		for _, key := range activeKeys {
-			if _, ok := desiredTargets[key]; !ok {
-				stopTarget(key)
-			}
-		}
-		for key, target := range desiredTargets {
-			if _, ok := activeKeySet[key]; ok {
-				continue
-			}
-			startTarget(target)
+func selectActiveLogTargets(pods []*corev1.Pod, opts Options, limiterSession *TargetSession) ([]containerTarget, []string) {
+	selectionOpts := containerSelectionOptions(opts)
+	selectedTargets, totalTargets := selectRuntimeTargets(pods, selectionOpts, containerlogs.GetPerScopeTargetLimit())
+	perScopeCount := len(selectedTargets)
+	warnings := containerlogs.BuildTargetLimitWarnings(perScopeCount, totalTargets)
+	if limiterSession == nil {
+		return selectedTargets, warnings
+	}
+	allowedKeys, _ := limiterSession.UpdateDesired(targetKeys(selectedTargets))
+	selectedTargets = filterTargetsByKeys(selectedTargets, allowedKeys)
+	warnings = append(warnings, buildGlobalTargetLimitWarnings(
+		len(selectedTargets), perScopeCount, targetSessionGlobalLimit(limiterSession),
+	)...)
+	return selectedTargets, warnings
+}
+
+func indexLogTargets(targets []containerTarget) map[string]containerTarget {
+	indexed := make(map[string]containerTarget, len(targets))
+	for _, target := range targets {
+		indexed[target.key()] = target
+	}
+	return indexed
+}
+
+func (r *containerLogRun) stopUndesiredTargets(activeKeys map[string]struct{}, desiredTargets map[string]containerTarget) {
+	for key := range activeKeys {
+		if _, desired := desiredTargets[key]; !desired {
+			r.stopTarget(key)
 		}
 	}
+}
 
-	replacePodInventory := func(pods []*corev1.Pod) {
-		mu.Lock()
-		nextPods := make(map[string]*corev1.Pod, len(pods))
-		for _, pod := range pods {
-			if pod == nil {
-				continue
-			}
+func (r *containerLogRun) startDesiredTargets(activeKeys map[string]struct{}, desiredTargets map[string]containerTarget) {
+	for key, target := range desiredTargets {
+		if _, active := activeKeys[key]; !active {
+			r.startTarget(target)
+		}
+	}
+}
+
+func (r *containerLogRun) replacePodInventory(pods []*corev1.Pod) {
+	nextPods := make(map[string]*corev1.Pod, len(pods))
+	for _, pod := range pods {
+		if pod != nil {
 			nextPods[pod.Name] = pod
 		}
-		currentPods = nextPods
-		mu.Unlock()
-		reconcileTargets()
 	}
+	r.mu.Lock()
+	r.currentPods = nextPods
+	r.mu.Unlock()
+	r.reconcileTargets()
+}
 
-	updatePod := func(pod *corev1.Pod) {
-		if pod == nil {
-			return
-		}
-		mu.Lock()
-		currentPods[pod.Name] = pod
-		mu.Unlock()
-		reconcileTargets()
+func (r *containerLogRun) updatePod(pod *corev1.Pod) {
+	if pod == nil {
+		return
 	}
+	r.mu.Lock()
+	r.currentPods[pod.Name] = pod
+	r.mu.Unlock()
+	r.reconcileTargets()
+}
 
-	removePod := func(name string) {
-		mu.Lock()
-		delete(currentPods, name)
-		mu.Unlock()
-		reconcileTargets()
-	}
+func (r *containerLogRun) removePod(name string) {
+	r.mu.Lock()
+	delete(r.currentPods, name)
+	r.mu.Unlock()
+	r.reconcileTargets()
+}
 
-	replacePodInventory(initialPods)
-
-	if strings.ToLower(opts.Kind) == "pod" {
-		for {
-			select {
-			case <-ctx.Done():
-				mu.Lock()
-				for _, cancel := range targetCancels {
-					cancel()
-				}
-				mu.Unlock()
-				return
-			case <-limiterNotify:
-				reconcileTargets()
-			}
-		}
-	}
-
-	cronCache := make(map[string]bool)
-	backoff := config.ContainerLogsStreamBackoffInitial
-
+func (r *containerLogRun) waitForPodSession() {
 	for {
 		select {
-		case <-ctx.Done():
-			mu.Lock()
-			for _, cancel := range targetCancels {
-				cancel()
-			}
-			mu.Unlock()
+		case <-r.ctx.Done():
 			return
-		default:
+		case <-r.limiterNotify:
+			r.reconcileTargets()
 		}
+	}
+}
 
-		watcher, err := s.client.CoreV1().Pods(opts.Namespace).Watch(ctx, metav1.ListOptions{
-			LabelSelector: selector,
-		})
+func (r *containerLogRun) watchPods(selector string) {
+	cronCache := make(map[string]bool)
+	backoff := config.ContainerLogsStreamBackoffInitial
+	for r.ctx.Err() == nil {
+		watcher, err := r.openPodWatch(selector)
 		if err != nil {
-			if ctx.Err() != nil {
-				return
-			}
-			s.logger.Warn(fmt.Sprintf("containerlogsstream: failed to start pod watch: %v", err), logsources.ContainerLogsStream)
-			select {
-			case errCh <- err:
-			default:
-			}
-			if !s.waitForReconnect(ctx, backoff) {
+			if !r.handleWatchStartError(err, backoff) {
 				return
 			}
 			backoff = nextBackoff(backoff)
 			continue
 		}
-
-		err = s.consumeWatch(ctx, watcher, opts, cronCache, limiterNotify, reconcileTargets, updatePod, removePod)
+		err = r.consumePodWatch(watcher, cronCache)
 		watcher.Stop()
-		if err == nil || ctx.Err() != nil {
-			mu.Lock()
-			for _, cancel := range targetCancels {
-				cancel()
-			}
-			mu.Unlock()
-			return
-		}
-
-		s.logger.Warn(fmt.Sprintf("containerlogsstream: pod watch ended (will retry): %v", err), logsources.ContainerLogsStream)
-		if s.telemetry != nil {
-			s.telemetry.RecordStreamError(telemetry.StreamContainerLogs, err)
-		}
-		if !s.waitForReconnect(ctx, backoff) {
-			mu.Lock()
-			for _, cancel := range targetCancels {
-				cancel()
-			}
-			mu.Unlock()
+		if !r.handleWatchEnd(err, backoff) {
 			return
 		}
 		backoff = nextBackoff(backoff)
+		r.refreshPodInventory()
+	}
+}
 
-		// Refresh pod list to ensure any missed pods are started.
-		if pods, _, listErr := s.listPods(ctx, opts); listErr == nil {
-			replacePodInventory(pods)
-		}
+func (r *containerLogRun) openPodWatch(selector string) (watch.Interface, error) {
+	return r.streamer.client.CoreV1().Pods(r.opts.Namespace).Watch(r.ctx, metav1.ListOptions{LabelSelector: selector})
+}
+
+func (r *containerLogRun) handleWatchStartError(err error, backoff time.Duration) bool {
+	if r.ctx.Err() != nil {
+		return false
+	}
+	r.streamer.logger.Warn(fmt.Sprintf("containerlogsstream: failed to start pod watch: %v", err), logsources.ContainerLogsStream)
+	select {
+	case r.errCh <- err:
+	default:
+	}
+	return r.streamer.waitForReconnect(r.ctx, backoff)
+}
+
+func (r *containerLogRun) consumePodWatch(watcher watch.Interface, cronCache map[string]bool) error {
+	return r.streamer.consumeWatch(
+		r.ctx, watcher, r.opts, cronCache, r.limiterNotify, r.reconcileTargets, r.updatePod, r.removePod,
+	)
+}
+
+func (r *containerLogRun) handleWatchEnd(err error, backoff time.Duration) bool {
+	if err == nil || r.ctx.Err() != nil {
+		return false
+	}
+	r.streamer.logger.Warn(fmt.Sprintf("containerlogsstream: pod watch ended (will retry): %v", err), logsources.ContainerLogsStream)
+	if r.streamer.telemetry != nil {
+		r.streamer.telemetry.RecordStreamError(telemetry.StreamContainerLogs, err)
+	}
+	return r.streamer.waitForReconnect(r.ctx, backoff)
+}
+
+func (r *containerLogRun) refreshPodInventory() {
+	pods, _, err := r.streamer.listPods(r.ctx, r.opts)
+	if err == nil {
+		r.replacePodInventory(pods)
 	}
 }
 
@@ -527,160 +600,220 @@ func (s *Streamer) matchesPodWatch(ctx context.Context, opts Options, pod *corev
 }
 
 func (s *Streamer) followContainer(ctx context.Context, target containerTarget, lineFilter containerlogs.LineFilter, entriesCh chan<- Entry, errCh chan<- error, dropCh chan<- int) {
-	backoff := config.ContainerLogsStreamBackoffInitial
 	if target.state == nil {
 		target.state = &containerState{}
 	}
-	for {
-		select {
-		case <-ctx.Done():
-			return
-		default:
-		}
+	session := containerFollowSession{
+		streamer: s, target: target, lineFilter: lineFilter,
+		entriesCh: entriesCh, errCh: errCh, dropCh: dropCh,
+		backoff: config.ContainerLogsStreamBackoffInitial,
+	}
+	session.run(ctx)
+}
 
-		options := &corev1.PodLogOptions{
-			Container:  target.container,
-			Follow:     true,
-			Timestamps: true,
-		}
-		if !target.state.lastTimestamp.IsZero() {
-			t := metav1.NewTime(target.state.lastTimestamp)
-			options.SinceTime = &t
-		}
+type containerFollowSession struct {
+	streamer   *Streamer
+	target     containerTarget
+	lineFilter containerlogs.LineFilter
+	entriesCh  chan<- Entry
+	errCh      chan<- error
+	dropCh     chan<- int
+	backoff    time.Duration
+}
 
-		req := s.client.CoreV1().Pods(target.namespace).GetLogs(target.pod, options)
-		stream, err := req.Stream(ctx)
+func (s *containerFollowSession) run(ctx context.Context) {
+	for ctx.Err() == nil {
+		stream, err := s.open(ctx)
 		if err != nil {
-			if !errors.Is(err, context.Canceled) {
-				// Check if this is a transient error that shouldn't be shown to users
-				errStr := err.Error()
-				isTransient := apierrors.IsNotFound(err) ||
-					strings.Contains(errStr, "waiting to start") ||
-					strings.Contains(errStr, "container not found") ||
-					(strings.Contains(errStr, "previous terminated container") && strings.Contains(errStr, "not found")) ||
-					strings.Contains(errStr, "is not valid for pod") ||
-					strings.Contains(errStr, "ContainerCreating") ||
-					strings.Contains(errStr, "PodInitializing")
-
-				if !isTransient {
-					msg := fmt.Sprintf("containerlogsstream: follow failed for %s/%s/%s: %v", target.namespace, target.pod, target.container, err)
-					s.logger.Warn(msg, logsources.ContainerLogsStream)
-					streamErr := fmt.Errorf("containerlogsstream: follow failed for %s/%s/%s: %w", target.namespace, target.pod, target.container, err)
-					select {
-					case errCh <- streamErr:
-					default:
-					}
-				}
-
-				// For NotFound errors, stop streaming this container - pod is gone
-				if apierrors.IsNotFound(err) {
-					return
-				}
-
-				select {
-				case <-time.After(backoff):
-				case <-ctx.Done():
-					return
-				}
-			}
-			if !s.shouldContinueStreaming(ctx, target) {
+			if !s.handleOpenFailure(ctx, err) {
 				return
 			}
 			continue
 		}
-
-		scanner := linescanner.New(stream)
-		for scanner.Scan() {
-			select {
-			case <-ctx.Done():
-				_ = stream.Close()
-				return
-			default:
-			}
-			line := scanner.Text()
-			timestamp, content := splitTimestamp(line)
-			if !lineFilter.Matches(content) {
-				continue
-			}
-			entry := Entry{
-				Timestamp:   timestamp,
-				Pod:         target.pod,
-				Container:   target.container,
-				Line:        content,
-				IsInit:      target.isInit,
-				IsEphemeral: target.isEphemeral,
-			}
-
-			if timestamp != "" {
-				ts, err := time.Parse(time.RFC3339Nano, timestamp)
-				if err == nil {
-					// Skip lines that we've already seen (deduplication on reconnect)
-					if !target.state.lastTimestamp.IsZero() {
-						if ts.Before(target.state.lastTimestamp) {
-							// Older than what we've seen - skip
-							continue
-						}
-						if ts.Equal(target.state.lastTimestamp) {
-							// Same timestamp - check if we've already seen this line
-							if _, seen := target.state.linesAtTimestamp[entry.Line]; seen {
-								continue
-							}
-						}
-					}
-
-					// Update state for deduplication
-					if ts.After(target.state.lastTimestamp) {
-						// New timestamp - reset the set
-						target.state.lastTimestamp = ts
-						target.state.linesAtTimestamp = map[string]struct{}{entry.Line: {}}
-					} else if ts.Equal(target.state.lastTimestamp) {
-						// Same timestamp - add to set
-						if target.state.linesAtTimestamp == nil {
-							target.state.linesAtTimestamp = make(map[string]struct{})
-						}
-						target.state.linesAtTimestamp[entry.Line] = struct{}{}
-					}
-				}
-			}
-
-			select {
-			case entriesCh <- entry:
-			case <-ctx.Done():
-				_ = stream.Close()
-				return
-			default:
-				if dropCh != nil {
-					select {
-					case dropCh <- 1:
-					default:
-						if s.telemetry != nil {
-							s.telemetry.RecordStreamDelivery(telemetry.StreamContainerLogs, 0, 1)
-						}
-					}
-				} else if s.telemetry != nil {
-					s.telemetry.RecordStreamDelivery(telemetry.StreamContainerLogs, 0, 1)
-				}
-				continue
-			}
-		}
-
-		err = stream.Close()
-		if scannerErr := scanner.Err(); scannerErr != nil && !errors.Is(scannerErr, context.Canceled) && !errors.Is(scannerErr, io.EOF) {
-			s.logger.Debug(fmt.Sprintf("containerlogsstream: scanner error for %s/%s/%s: %v", target.namespace, target.pod, target.container, scannerErr), logsources.ContainerLogsStream)
-		}
-		if err != nil && !errors.Is(err, context.Canceled) && !errors.Is(err, io.EOF) {
-			s.logger.Debug(fmt.Sprintf("containerlogsstream: stream closed with error for %s/%s/%s: %v", target.namespace, target.pod, target.container, err), logsources.ContainerLogsStream)
-		}
-
-		if !s.shouldContinueStreaming(ctx, target) {
+		if !s.consume(ctx, stream) {
 			return
 		}
+	}
+}
 
-		select {
-		case <-time.After(backoff):
-		case <-ctx.Done():
-			return
+func (s *containerFollowSession) open(ctx context.Context) (io.ReadCloser, error) {
+	request := s.streamer.client.CoreV1().Pods(s.target.namespace).GetLogs(s.target.pod, s.logOptions())
+	return request.Stream(ctx)
+}
+
+func (s *containerFollowSession) logOptions() *corev1.PodLogOptions {
+	options := &corev1.PodLogOptions{Container: s.target.container, Follow: true, Timestamps: true}
+	if !s.target.state.lastTimestamp.IsZero() {
+		since := metav1.NewTime(s.target.state.lastTimestamp)
+		options.SinceTime = &since
+	}
+	return options
+}
+
+func (s *containerFollowSession) handleOpenFailure(ctx context.Context, err error) bool {
+	if errors.Is(err, context.Canceled) {
+		return s.shouldContinue(ctx)
+	}
+	if !isTransientContainerLogError(err) {
+		s.reportOpenFailure(err)
+	}
+	if apierrors.IsNotFound(err) {
+		return false
+	}
+	return s.waitForRetry(ctx) && s.shouldContinue(ctx)
+}
+
+func isTransientContainerLogError(err error) bool {
+	errText := err.Error()
+	return apierrors.IsNotFound(err) ||
+		strings.Contains(errText, "waiting to start") ||
+		strings.Contains(errText, "container not found") ||
+		strings.Contains(errText, "is not valid for pod") ||
+		strings.Contains(errText, "ContainerCreating") ||
+		strings.Contains(errText, "PodInitializing") ||
+		(strings.Contains(errText, "previous terminated container") && strings.Contains(errText, "not found"))
+}
+
+func (s *containerFollowSession) reportOpenFailure(err error) {
+	message := fmt.Sprintf(
+		"containerlogsstream: follow failed for %s/%s/%s: %v",
+		s.target.namespace, s.target.pod, s.target.container, err,
+	)
+	s.streamer.logger.Warn(message, logsources.ContainerLogsStream)
+	streamErr := fmt.Errorf(
+		"containerlogsstream: follow failed for %s/%s/%s: %w",
+		s.target.namespace, s.target.pod, s.target.container, err,
+	)
+	select {
+	case s.errCh <- streamErr:
+	default:
+	}
+}
+
+func (s *containerFollowSession) consume(ctx context.Context, stream io.ReadCloser) bool {
+	scanner := linescanner.New(stream)
+	for scanner.Scan() {
+		if ctx.Err() != nil || !s.processLine(ctx, stream, scanner.Text()) {
+			_ = stream.Close()
+			return false
 		}
+	}
+	closeErr := stream.Close()
+	s.logStreamEnd(scanner.Err(), closeErr)
+	return s.shouldContinue(ctx) && s.waitForRetry(ctx)
+}
+
+func (s *containerFollowSession) processLine(ctx context.Context, stream io.Closer, line string) bool {
+	timestamp, content := splitTimestamp(line)
+	if !s.lineFilter.Matches(content) {
+		return true
+	}
+	entry := s.logEntry(timestamp, content)
+	if !s.acceptTimestamp(timestamp, content) {
+		return true
+	}
+	return s.deliver(ctx, stream, entry)
+}
+
+func (s *containerFollowSession) logEntry(timestamp, content string) Entry {
+	return Entry{
+		Timestamp: timestamp, Pod: s.target.pod, Container: s.target.container, Line: content,
+		IsInit: s.target.isInit, IsEphemeral: s.target.isEphemeral,
+	}
+}
+
+func (s *containerFollowSession) acceptTimestamp(timestamp, line string) bool {
+	if timestamp == "" {
+		return true
+	}
+	parsed, err := time.Parse(time.RFC3339Nano, timestamp)
+	if err != nil {
+		return true
+	}
+	if parsed.Before(s.target.state.lastTimestamp) {
+		return false
+	}
+	if parsed.Equal(s.target.state.lastTimestamp) {
+		return s.acceptLineAtCurrentTimestamp(line)
+	}
+	s.target.state.lastTimestamp = parsed
+	s.target.state.linesAtTimestamp = map[string]struct{}{line: {}}
+	return true
+}
+
+func (s *containerFollowSession) acceptLineAtCurrentTimestamp(line string) bool {
+	if _, seen := s.target.state.linesAtTimestamp[line]; seen {
+		return false
+	}
+	if s.target.state.linesAtTimestamp == nil {
+		s.target.state.linesAtTimestamp = make(map[string]struct{})
+	}
+	s.target.state.linesAtTimestamp[line] = struct{}{}
+	return true
+}
+
+func (s *containerFollowSession) deliver(ctx context.Context, stream io.Closer, entry Entry) bool {
+	select {
+	case s.entriesCh <- entry:
+		return true
+	case <-ctx.Done():
+		_ = stream.Close()
+		return false
+	default:
+		s.recordDrop()
+		return true
+	}
+}
+
+func (s *containerFollowSession) recordDrop() {
+	if s.dropCh == nil {
+		s.recordDropTelemetry()
+		return
+	}
+	select {
+	case s.dropCh <- 1:
+	default:
+		s.recordDropTelemetry()
+	}
+}
+
+func (s *containerFollowSession) recordDropTelemetry() {
+	if s.streamer.telemetry != nil {
+		s.streamer.telemetry.RecordStreamDelivery(telemetry.StreamContainerLogs, 0, 1)
+	}
+}
+
+func (s *containerFollowSession) logStreamEnd(scannerErr, closeErr error) {
+	if isReportableStreamEndError(scannerErr) {
+		s.streamer.logger.Debug(fmt.Sprintf(
+			"containerlogsstream: scanner error for %s/%s/%s: %v",
+			s.target.namespace, s.target.pod, s.target.container, scannerErr,
+		), logsources.ContainerLogsStream)
+	}
+	if isReportableStreamEndError(closeErr) {
+		s.streamer.logger.Debug(fmt.Sprintf(
+			"containerlogsstream: stream closed with error for %s/%s/%s: %v",
+			s.target.namespace, s.target.pod, s.target.container, closeErr,
+		), logsources.ContainerLogsStream)
+	}
+}
+
+func isReportableStreamEndError(err error) bool {
+	return err != nil && !errors.Is(err, context.Canceled) && !errors.Is(err, io.EOF)
+}
+
+func (s *containerFollowSession) shouldContinue(ctx context.Context) bool {
+	return s.streamer.shouldContinueStreaming(ctx, s.target)
+}
+
+func (s *containerFollowSession) waitForRetry(ctx context.Context) bool {
+	timer := time.NewTimer(s.backoff)
+	defer timer.Stop()
+	select {
+	case <-ctx.Done():
+		return false
+	case <-timer.C:
+		return true
 	}
 }
 
@@ -904,17 +1037,6 @@ func filterTargetsByKeys(targets []containerTarget, allowedKeys map[string]struc
 		}
 	}
 	return filtered
-}
-
-func countTargets(pods []*corev1.Pod, options containerlogs.ContainerSelectionOptions) int {
-	total := 0
-	for _, pod := range pods {
-		if pod == nil {
-			continue
-		}
-		total += len(containerlogs.EnumerateContainersWithOptions(pod, options))
-	}
-	return total
 }
 
 func stringSlicesEqual(left, right []string) bool {

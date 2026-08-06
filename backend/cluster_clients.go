@@ -146,146 +146,178 @@ func (a *App) syncClusterClientPoolWithBuilder(
 	selections []kubeconfigSelection,
 	build clusterClientBuilder,
 ) error {
+	ctx, err := validateClusterClientSync(a, ctx, build)
+	if err != nil {
+		return err
+	}
+	desired := a.desiredClusterClientSelections(selections)
+	tasks := a.clusterClientCreateTasks(desired)
+	if err := a.createClusterClients(ctx, tasks, build); err != nil {
+		return err
+	}
+	a.cleanupRemovedClusterClients(a.removeUndesiredClusterClients(desired))
+	return nil
+}
+
+type clusterClientCreateTask struct {
+	selection kubeconfigSelection
+	meta      ClusterMeta
+}
+
+type removedClusterClient struct {
+	clusterID   string
+	authManager interface{ Shutdown() }
+}
+
+func validateClusterClientSync(a *App, ctx context.Context, build clusterClientBuilder) (context.Context, error) {
 	if a == nil {
-		return fmt.Errorf("app is nil")
+		return nil, fmt.Errorf("app is nil")
 	}
 	if build == nil {
-		return fmt.Errorf("cluster client builder is nil")
+		return nil, fmt.Errorf("cluster client builder is nil")
 	}
 	if ctx == nil {
 		ctx = context.Background()
 	}
+	return ctx, nil
+}
 
+func (a *App) desiredClusterClientSelections(selections []kubeconfigSelection) map[string]kubeconfigSelection {
 	desired := make(map[string]kubeconfigSelection, len(selections))
-	for _, sel := range selections {
-		// Check if an existing client matches this selection by path+context.
-		// This avoids re-creating clients when clusterMetaForSelection returns
-		// a different ID than what was used at build time (can happen when a
-		// kubeconfig file has multiple contexts).
-		if existing := a.clusterClientsForSelection(sel); existing != nil {
-			desired[existing.meta.ID] = sel
+	for _, selection := range selections {
+		if existing := a.clusterClientsForSelection(selection); existing != nil {
+			desired[existing.meta.ID] = selection
 			continue
 		}
-		meta := a.clusterMetaForSelection(sel)
-		if meta.ID == "" {
-			continue
+		meta := a.clusterMetaForSelection(selection)
+		if meta.ID != "" {
+			desired[meta.ID] = selection
 		}
-		desired[meta.ID] = sel
 	}
+	return desired
+}
 
-	var toCreate []kubeconfigSelection
-
+func (a *App) clusterClientCreateTasks(desired map[string]kubeconfigSelection) []clusterClientCreateTask {
 	a.clusterClientsMu.Lock()
+	missing := make([]kubeconfigSelection, 0, len(desired))
 	for id, selection := range desired {
 		if _, exists := a.clusterClients[id]; !exists {
-			toCreate = append(toCreate, selection)
+			missing = append(missing, selection)
 		}
 	}
 	a.clusterClientsMu.Unlock()
 
-	if len(toCreate) > 0 {
-		// Pre-build metadata so worker goroutines do not repeatedly derive IDs.
-		type createTask struct {
-			selection kubeconfigSelection
-			meta      ClusterMeta
-		}
-		tasks := make([]createTask, 0, len(toCreate))
-		for _, sel := range toCreate {
-			meta := a.clusterMetaForSelection(sel)
-			if meta.ID == "" {
-				continue
-			}
-			tasks = append(tasks, createTask{selection: sel, meta: meta})
-		}
-
-		for _, task := range tasks {
-			if a.clusterLifecycle != nil {
-				a.clusterLifecycle.SetState(task.meta.ID, ClusterStateConnecting)
-			}
-		}
-
-		limit := clusterClientBuildConcurrencyLimit(len(tasks))
-		err := parallel.ForEach(ctx, tasks, limit, func(taskCtx context.Context, task createTask) error {
-			return a.runClusterOperation(taskCtx, task.meta.ID, func(opCtx context.Context) error {
-				if err := opCtx.Err(); err != nil {
-					return err
-				}
-
-				// Another selection sync may have installed this client while this task
-				// waited for its per-cluster operation slot.
-				if a.clusterClientsForID(task.meta.ID) != nil || a.clusterClientsForSelection(task.selection) != nil {
-					return nil
-				}
-
-				clients, buildErr := build(opCtx, task.selection, task.meta)
-				if buildErr != nil {
-					return buildErr
-				}
-				if clients == nil {
-					return fmt.Errorf("cluster client builder returned nil clients for %s", task.meta.ID)
-				}
-				if err := opCtx.Err(); err != nil {
-					if clients.authManager != nil {
-						clients.authManager.Shutdown()
-					}
-					return err
-				}
-
-				installed := false
-				a.clusterClientsMu.Lock()
-				if a.clusterClients[task.meta.ID] == nil && a.clusterClientsForSelectionLocked(task.selection) == nil {
-					a.setClusterClientLocked(task.meta.ID, clients)
-					installed = true
-				}
-				a.clusterClientsMu.Unlock()
-
-				if !installed {
-					if clients.authManager != nil {
-						clients.authManager.Shutdown()
-					}
-					return nil
-				}
-				if a.clusterLifecycle != nil {
-					a.clusterLifecycle.SetState(task.meta.ID, ClusterStateConnected)
-				}
-				return nil
-			})
-		})
-		if err != nil {
-			return err
+	tasks := make([]clusterClientCreateTask, 0, len(missing))
+	for _, selection := range missing {
+		meta := a.clusterMetaForSelection(selection)
+		if meta.ID != "" {
+			tasks = append(tasks, clusterClientCreateTask{selection: selection, meta: meta})
 		}
 	}
+	return tasks
+}
 
-	var removedClusterIDs []string
-	var removedAuthManagers []interface{ Shutdown() }
+func (a *App) createClusterClients(ctx context.Context, tasks []clusterClientCreateTask, build clusterClientBuilder) error {
+	a.markClusterClientTasksConnecting(tasks)
+	limit := clusterClientBuildConcurrencyLimit(len(tasks))
+	return parallel.ForEach(ctx, tasks, limit, func(taskCtx context.Context, task clusterClientCreateTask) error {
+		return a.runClusterOperation(taskCtx, task.meta.ID, func(opCtx context.Context) error {
+			return a.buildAndInstallClusterClient(opCtx, task, build)
+		})
+	})
+}
+
+func (a *App) markClusterClientTasksConnecting(tasks []clusterClientCreateTask) {
+	if a.clusterLifecycle == nil {
+		return
+	}
+	for _, task := range tasks {
+		a.clusterLifecycle.SetState(task.meta.ID, ClusterStateConnecting)
+	}
+}
+
+func (a *App) buildAndInstallClusterClient(ctx context.Context, task clusterClientCreateTask, build clusterClientBuilder) error {
+	if err := ctx.Err(); err != nil {
+		return err
+	}
+	if a.clusterClientAlreadyInstalled(task) {
+		return nil
+	}
+	clients, err := build(ctx, task.selection, task.meta)
+	if err != nil {
+		return err
+	}
+	if clients == nil {
+		return fmt.Errorf("cluster client builder returned nil clients for %s", task.meta.ID)
+	}
+	if err := ctx.Err(); err != nil {
+		shutdownClusterClientAuthManager(clients)
+		return err
+	}
+	if !a.installClusterClient(task, clients) {
+		shutdownClusterClientAuthManager(clients)
+		return nil
+	}
+	if a.clusterLifecycle != nil {
+		a.clusterLifecycle.SetState(task.meta.ID, ClusterStateConnected)
+	}
+	return nil
+}
+
+func (a *App) clusterClientAlreadyInstalled(task clusterClientCreateTask) bool {
+	return a.clusterClientsForID(task.meta.ID) != nil || a.clusterClientsForSelection(task.selection) != nil
+}
+
+func shutdownClusterClientAuthManager(clients *clusterClients) {
+	if clients != nil && clients.authManager != nil {
+		clients.authManager.Shutdown()
+	}
+}
+
+func (a *App) installClusterClient(task clusterClientCreateTask, clients *clusterClients) bool {
 	a.clusterClientsMu.Lock()
+	defer a.clusterClientsMu.Unlock()
+	if a.clusterClients[task.meta.ID] != nil || a.clusterClientsForSelectionLocked(task.selection) != nil {
+		return false
+	}
+	a.setClusterClientLocked(task.meta.ID, clients)
+	return true
+}
+
+func (a *App) removeUndesiredClusterClients(desired map[string]kubeconfigSelection) []removedClusterClient {
+	a.clusterClientsMu.Lock()
+	defer a.clusterClientsMu.Unlock()
+	var removed []removedClusterClient
 	for id, clients := range a.clusterClients {
-		if _, ok := desired[id]; ok {
+		if _, keep := desired[id]; keep {
 			continue
 		}
-		removedClusterIDs = append(removedClusterIDs, id)
-		if clients != nil && clients.authManager != nil {
-			removedAuthManagers = append(removedAuthManagers, clients.authManager)
-		}
+		removed = append(removed, removedClusterClient{clusterID: id, authManager: clusterClientAuthManager(clients)})
 		a.removeClusterClientLocked(id)
 	}
-	a.clusterClientsMu.Unlock()
+	return removed
+}
 
-	for _, mgr := range removedAuthManagers {
-		mgr.Shutdown()
+func clusterClientAuthManager(clients *clusterClients) interface{ Shutdown() } {
+	if clients == nil || clients.authManager == nil {
+		return nil
 	}
-	// Ensure cluster-scoped runtime operations are torn down whenever selection
-	// churn drops a cluster from the active client pool.
-	for _, clusterID := range removedClusterIDs {
-		a.cleanupClusterRuntimeOperations(clusterID, "cluster disconnected")
-	}
+	return clients.authManager
+}
 
-	for _, id := range removedClusterIDs {
-		a.ensureKubernetesAPIMetricsRegistry().remove(id)
-		a.removeClusterWorkspaceState(id)
+func (a *App) cleanupRemovedClusterClients(removed []removedClusterClient) {
+	for _, item := range removed {
+		if item.authManager != nil {
+			item.authManager.Shutdown()
+		}
 	}
-
-	return nil
+	for _, item := range removed {
+		a.cleanupClusterRuntimeOperations(item.clusterID, "cluster disconnected")
+	}
+	for _, item := range removed {
+		a.ensureKubernetesAPIMetricsRegistry().remove(item.clusterID)
+		a.removeClusterWorkspaceState(item.clusterID)
+	}
 }
 
 // clusterClientBuildConcurrencyLimit derives a bounded parallelism level for

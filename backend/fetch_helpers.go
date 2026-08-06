@@ -168,71 +168,108 @@ func executeWithRetry[T any](ctx context.Context, a *App, clusterID, resourceKin
 	if target == "" {
 		target = "cluster scope"
 	}
+	operation := fetchRetryOperation[T]{
+		ctx: ctx, app: a, clusterID: clusterID, resourceKind: resourceKind, target: target, fetch: fetchFunc,
+	}
+	return operation.run()
+}
 
+type fetchRetryOperation[T any] struct {
+	ctx          context.Context
+	app          *App
+	clusterID    string
+	resourceKind string
+	target       string
+	fetch        func() (T, error)
+}
+
+func (o fetchRetryOperation[T]) run() (T, error) {
+	var zero T
 	for attempt := 0; attempt < config.ResourceFetchMaxAttempts; attempt++ {
-		if err := ctx.Err(); err != nil {
+		if err := o.ctx.Err(); err != nil {
 			return zero, err
 		}
-
-		result, err := fetchFunc()
+		result, err := o.fetch()
 		if err == nil {
-			if a != nil {
-				// Record per-cluster transport success if clusterID is provided
-				if clusterID != "" {
-					a.recordClusterTransportSuccess(clusterID)
-				}
-				if attempt > 0 && a.telemetryRecorder != nil {
-					a.telemetryRecorder.RecordRetrySuccess()
-				}
-			}
+			o.recordSuccess(attempt)
 			return result, nil
 		}
-
 		retryable, reason := isRetryableFetchError(err)
-		isLastAttempt := attempt == config.ResourceFetchMaxAttempts-1
-
-		if retryable && !isLastAttempt {
-			backoff := config.ResourceFetchRetryBaseDelay << attempt
-			if backoff > config.ResourceFetchRetryMaxDelay {
-				backoff = config.ResourceFetchRetryMaxDelay
-			}
-			if a != nil {
-				a.logger.Warn(fmt.Sprintf("Retrying %s %s due to %s (attempt %d/%d)", resourceKind, target, reason, attempt+1, config.ResourceFetchMaxAttempts-1), logsources.ResourceLoader, clusterID, a.clusterNameForID(clusterID))
-				if a.telemetryRecorder != nil {
-					a.telemetryRecorder.RecordRetryAttempt(err)
-				}
-			}
-			if a == nil {
-				fetchRetrySleep(backoff)
-				continue
-			}
-			if err := contextSleep(ctx, backoff); err != nil {
+		if retryable && attempt < config.ResourceFetchMaxAttempts-1 {
+			if err := o.waitForRetry(attempt, reason, err); err != nil {
 				return zero, err
 			}
 			continue
 		}
-
-		if retryable {
-			if a != nil {
-				if a.telemetryRecorder != nil {
-					a.telemetryRecorder.RecordRetryExhausted(err)
-				}
-				// Record per-cluster transport failure if clusterID is provided
-				if clusterID != "" {
-					a.recordClusterTransportFailure(clusterID, reason, err)
-				}
-			}
-		} else if a != nil {
-			// Record per-cluster transport success if clusterID is provided
-			if clusterID != "" {
-				a.recordClusterTransportSuccess(clusterID)
-			}
-		}
-
+		o.recordTerminalError(retryable, reason, err)
 		return zero, err
 	}
+	return zero, fmt.Errorf("exceeded retry attempts for %s %s", o.resourceKind, o.target)
+}
 
-	return zero, fmt.Errorf("exceeded retry attempts for %s %s", resourceKind, target)
+func (o fetchRetryOperation[T]) recordSuccess(attempt int) {
+	if o.app == nil {
+		return
+	}
+	if o.clusterID != "" {
+		o.app.recordClusterTransportSuccess(o.clusterID)
+	}
+	if attempt > 0 && o.app.telemetryRecorder != nil {
+		o.app.telemetryRecorder.RecordRetrySuccess()
+	}
+}
+
+func (o fetchRetryOperation[T]) waitForRetry(attempt int, reason string, fetchErr error) error {
+	backoff := resourceFetchRetryBackoff(attempt)
+	if o.app == nil {
+		fetchRetrySleep(backoff)
+		return nil
+	}
+	o.logRetry(attempt, reason, fetchErr)
+	return contextSleep(o.ctx, backoff)
+}
+
+func resourceFetchRetryBackoff(attempt int) time.Duration {
+	backoff := config.ResourceFetchRetryBaseDelay << attempt
+	if backoff > config.ResourceFetchRetryMaxDelay {
+		return config.ResourceFetchRetryMaxDelay
+	}
+	return backoff
+}
+
+func (o fetchRetryOperation[T]) logRetry(attempt int, reason string, fetchErr error) {
+	o.app.logger.Warn(
+		fmt.Sprintf(
+			"Retrying %s %s due to %s (attempt %d/%d)",
+			o.resourceKind, o.target, reason, attempt+1, config.ResourceFetchMaxAttempts-1,
+		),
+		logsources.ResourceLoader, o.clusterID, o.app.clusterNameForID(o.clusterID),
+	)
+	if o.app.telemetryRecorder != nil {
+		o.app.telemetryRecorder.RecordRetryAttempt(fetchErr)
+	}
+}
+
+func (o fetchRetryOperation[T]) recordTerminalError(retryable bool, reason string, fetchErr error) {
+	if o.app == nil {
+		return
+	}
+	if !retryable {
+		o.recordNonRetryableTransportSuccess()
+		return
+	}
+	if o.app.telemetryRecorder != nil {
+		o.app.telemetryRecorder.RecordRetryExhausted(fetchErr)
+	}
+	if o.clusterID != "" {
+		o.app.recordClusterTransportFailure(o.clusterID, reason, fetchErr)
+	}
+}
+
+func (o fetchRetryOperation[T]) recordNonRetryableTransportSuccess() {
+	if o.clusterID != "" {
+		o.app.recordClusterTransportSuccess(o.clusterID)
+	}
 }
 
 func isRetryableFetchError(err error) (bool, string) {

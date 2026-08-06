@@ -796,146 +796,187 @@ func (a *App) handleKubeconfigChangeLocked(changedPaths []string, generation uin
 		fmt.Sprintf("Kubeconfig file change detected (%d file(s)), refreshing... (generation=%d)", len(changedPaths), generation),
 		"KubeconfigWatcher",
 	)
-
-	changedSet := make(map[string]struct{}, len(changedPaths))
-	for _, p := range changedPaths {
-		changedSet[kubeconfigPathKey(filepath.Clean(p))] = struct{}{}
-	}
-
-	var affectedClusterIDs []string
-	a.clusterClientsMu.Lock()
-	for id, clients := range a.clusterClients {
-		if clients == nil {
-			continue
-		}
-		clientPathKey := kubeconfigPathKey(filepath.Clean(clients.kubeconfigPath))
-		if _, changed := changedSet[clientPathKey]; changed {
-			affectedClusterIDs = append(affectedClusterIDs, id)
-		}
-	}
-	a.clusterClientsMu.Unlock()
-
+	affectedClusterIDs := a.affectedKubeconfigClusters(changedKubeconfigPathSet(changedPaths))
 	if err := a.discoverKubeconfigs(); err != nil {
 		a.logger.Warn(fmt.Sprintf("Failed to re-discover kubeconfigs; skipping reconnect/deselect until next event: %v", err), logsources.KubeconfigWatcher)
 		return
 	}
+	a.logKubeconfigDiscoveryComplete()
+	if len(affectedClusterIDs) > 0 {
+		toRebuild, toDeselect := a.classifyChangedKubeconfigClusters(affectedClusterIDs)
+		if len(toDeselect) > 0 {
+			a.deselectClusters(toDeselect)
+		}
+		a.reconnectChangedKubeconfigClusters(toRebuild)
+	}
+	a.emitEvent("kubeconfig:available-changed")
+}
 
+type kubeconfigSelectionKey struct {
+	path    string
+	context string
+}
+
+type kubeconfigFileInspection struct {
+	missing  bool
+	loadErr  error
+	contexts map[string]struct{}
+}
+
+type kubeconfigFileInspector struct {
+	cache map[string]kubeconfigFileInspection
+}
+
+type changedKubeconfigAction uint8
+
+const (
+	changedKubeconfigKeep changedKubeconfigAction = iota
+	changedKubeconfigRebuild
+	changedKubeconfigDeselect
+)
+
+func changedKubeconfigPathSet(paths []string) map[string]struct{} {
+	changed := make(map[string]struct{}, len(paths))
+	for _, path := range paths {
+		changed[kubeconfigPathKey(filepath.Clean(path))] = struct{}{}
+	}
+	return changed
+}
+
+func (a *App) affectedKubeconfigClusters(changedPaths map[string]struct{}) []string {
+	a.clusterClientsMu.Lock()
+	defer a.clusterClientsMu.Unlock()
+	var affected []string
+	for id, clients := range a.clusterClients {
+		if clients == nil {
+			continue
+		}
+		pathKey := kubeconfigPathKey(filepath.Clean(clients.kubeconfigPath))
+		if _, changed := changedPaths[pathKey]; changed {
+			affected = append(affected, id)
+		}
+	}
+	return affected
+}
+
+func (a *App) logKubeconfigDiscoveryComplete() {
 	a.kubeconfigsMu.RLock()
 	count := len(a.availableKubeconfigs)
 	a.kubeconfigsMu.RUnlock()
 	a.logger.Info(fmt.Sprintf("Re-discovery complete, found %d kubeconfig(s)", count), logsources.KubeconfigWatcher)
+}
 
-	if len(affectedClusterIDs) > 0 {
-		a.logger.Info(fmt.Sprintf("Processing %d affected cluster(s)", len(affectedClusterIDs)), logsources.KubeconfigWatcher)
+func (a *App) discoverableKubeconfigSelections() map[kubeconfigSelectionKey]struct{} {
+	a.kubeconfigsMu.RLock()
+	defer a.kubeconfigsMu.RUnlock()
+	discoverable := make(map[kubeconfigSelectionKey]struct{}, len(a.availableKubeconfigs))
+	for _, kubeconfig := range a.availableKubeconfigs {
+		discoverable[newKubeconfigSelectionKey(kubeconfig.Path, kubeconfig.Context)] = struct{}{}
+	}
+	return discoverable
+}
 
-		type pathContextKey struct {
-			path    string
-			context string
-		}
+func newKubeconfigSelectionKey(path, contextName string) kubeconfigSelectionKey {
+	return kubeconfigSelectionKey{path: kubeconfigPathKey(filepath.Clean(path)), context: contextName}
+}
 
-		a.kubeconfigsMu.RLock()
-		discoverable := make(map[pathContextKey]struct{}, len(a.availableKubeconfigs))
-		for _, kc := range a.availableKubeconfigs {
-			discoverable[pathContextKey{
-				path:    kubeconfigPathKey(filepath.Clean(kc.Path)),
-				context: kc.Context,
-			}] = struct{}{}
-		}
-		a.kubeconfigsMu.RUnlock()
-
-		type fileInspection struct {
-			missing  bool
-			loadErr  error
-			contexts map[string]struct{}
-		}
-		fileInspections := make(map[string]fileInspection)
-		inspectFile := func(path string) fileInspection {
-			clean := filepath.Clean(path)
-			cacheKey := kubeconfigPathKey(clean)
-			if cached, ok := fileInspections[cacheKey]; ok {
-				return cached
-			}
-			info, err := os.Stat(clean)
-			if err != nil {
-				if os.IsNotExist(err) {
-					res := fileInspection{missing: true}
-					fileInspections[cacheKey] = res
-					return res
-				}
-				res := fileInspection{loadErr: err}
-				fileInspections[cacheKey] = res
-				return res
-			}
-			if info.IsDir() {
-				res := fileInspection{loadErr: fmt.Errorf("path is a directory")}
-				fileInspections[cacheKey] = res
-				return res
-			}
-			cfg, err := clientcmd.LoadFromFile(clean)
-			if err != nil {
-				res := fileInspection{loadErr: err}
-				fileInspections[cacheKey] = res
-				return res
-			}
-			ctxs := make(map[string]struct{}, len(cfg.Contexts))
-			for ctxName := range cfg.Contexts {
-				ctxs[ctxName] = struct{}{}
-			}
-			res := fileInspection{contexts: ctxs}
-			fileInspections[cacheKey] = res
-			return res
-		}
-
-		var toRebuild []string
-		var toDeselect []string
-		for _, clusterID := range affectedClusterIDs {
-			clients := a.clusterClientsForID(clusterID)
-			if clients == nil {
-				continue
-			}
-			key := pathContextKey{
-				path:    kubeconfigPathKey(filepath.Clean(clients.kubeconfigPath)),
-				context: clients.kubeconfigContext,
-			}
-			if _, ok := discoverable[key]; ok {
-				toRebuild = append(toRebuild, clusterID)
-				continue
-			}
-
-			inspection := inspectFile(clients.kubeconfigPath)
-			switch {
-			case inspection.missing:
-				a.logger.Info(fmt.Sprintf("Kubeconfig file deleted/renamed for cluster %s, deselecting", clients.meta.Name), logsources.KubeconfigWatcher)
-				toDeselect = append(toDeselect, clusterID)
-			case inspection.loadErr != nil:
-				a.logger.Warn(fmt.Sprintf("Kubeconfig file for cluster %s changed but is temporarily unreadable (%v); keeping selection until next event", clients.meta.Name, inspection.loadErr), logsources.KubeconfigWatcher)
-			default:
-				if _, exists := inspection.contexts[clients.kubeconfigContext]; exists {
-					a.logger.Info(fmt.Sprintf("Kubeconfig context still present on disk for cluster %s; reconnecting", clients.meta.Name), logsources.KubeconfigWatcher)
-					toRebuild = append(toRebuild, clusterID)
-				} else {
-					a.logger.Info(fmt.Sprintf("Kubeconfig context removed/renamed for cluster %s, deselecting", clients.meta.Name), logsources.KubeconfigWatcher)
-					toDeselect = append(toDeselect, clusterID)
-				}
-			}
-		}
-
-		if len(toDeselect) > 0 {
-			a.deselectClusters(toDeselect)
-		}
-
-		for _, clusterID := range toRebuild {
-			clients := a.clusterClientsForID(clusterID)
-			if clients == nil {
-				continue
-			}
-			a.logger.Info(fmt.Sprintf("Reconnecting cluster %s after kubeconfig change", clients.meta.Name), logsources.KubeconfigWatcher)
-			a.teardownClusterSubsystem(clusterID)
-			a.rebuildClusterSubsystem(clusterID)
+func (a *App) classifyChangedKubeconfigClusters(clusterIDs []string) ([]string, []string) {
+	a.logger.Info(fmt.Sprintf("Processing %d affected cluster(s)", len(clusterIDs)), logsources.KubeconfigWatcher)
+	discoverable := a.discoverableKubeconfigSelections()
+	inspector := kubeconfigFileInspector{cache: make(map[string]kubeconfigFileInspection)}
+	var rebuild, deselect []string
+	for _, clusterID := range clusterIDs {
+		action := a.classifyChangedKubeconfigCluster(clusterID, discoverable, &inspector)
+		switch action {
+		case changedKubeconfigRebuild:
+			rebuild = append(rebuild, clusterID)
+		case changedKubeconfigDeselect:
+			deselect = append(deselect, clusterID)
 		}
 	}
+	return rebuild, deselect
+}
 
-	a.emitEvent("kubeconfig:available-changed")
+func (a *App) classifyChangedKubeconfigCluster(
+	clusterID string,
+	discoverable map[kubeconfigSelectionKey]struct{},
+	inspector *kubeconfigFileInspector,
+) changedKubeconfigAction {
+	clients := a.clusterClientsForID(clusterID)
+	if clients == nil {
+		return changedKubeconfigKeep
+	}
+	if _, ok := discoverable[newKubeconfigSelectionKey(clients.kubeconfigPath, clients.kubeconfigContext)]; ok {
+		return changedKubeconfigRebuild
+	}
+	return a.classifyInspectedKubeconfig(clients, inspector.inspect(clients.kubeconfigPath))
+}
+
+func (a *App) classifyInspectedKubeconfig(clients *clusterClients, inspection kubeconfigFileInspection) changedKubeconfigAction {
+	switch {
+	case inspection.missing:
+		a.logger.Info(fmt.Sprintf("Kubeconfig file deleted/renamed for cluster %s, deselecting", clients.meta.Name), logsources.KubeconfigWatcher)
+		return changedKubeconfigDeselect
+	case inspection.loadErr != nil:
+		a.logger.Warn(fmt.Sprintf("Kubeconfig file for cluster %s changed but is temporarily unreadable (%v); keeping selection until next event", clients.meta.Name, inspection.loadErr), logsources.KubeconfigWatcher)
+		return changedKubeconfigKeep
+	case kubeconfigContextExists(inspection, clients.kubeconfigContext):
+		a.logger.Info(fmt.Sprintf("Kubeconfig context still present on disk for cluster %s; reconnecting", clients.meta.Name), logsources.KubeconfigWatcher)
+		return changedKubeconfigRebuild
+	default:
+		a.logger.Info(fmt.Sprintf("Kubeconfig context removed/renamed for cluster %s, deselecting", clients.meta.Name), logsources.KubeconfigWatcher)
+		return changedKubeconfigDeselect
+	}
+}
+
+func kubeconfigContextExists(inspection kubeconfigFileInspection, contextName string) bool {
+	_, exists := inspection.contexts[contextName]
+	return exists
+}
+
+func (i *kubeconfigFileInspector) inspect(path string) kubeconfigFileInspection {
+	cleanPath := filepath.Clean(path)
+	cacheKey := kubeconfigPathKey(cleanPath)
+	if cached, ok := i.cache[cacheKey]; ok {
+		return cached
+	}
+	inspection := inspectKubeconfigFile(cleanPath)
+	i.cache[cacheKey] = inspection
+	return inspection
+}
+
+func inspectKubeconfigFile(path string) kubeconfigFileInspection {
+	info, err := os.Stat(path)
+	if os.IsNotExist(err) {
+		return kubeconfigFileInspection{missing: true}
+	}
+	if err != nil {
+		return kubeconfigFileInspection{loadErr: err}
+	}
+	if info.IsDir() {
+		return kubeconfigFileInspection{loadErr: fmt.Errorf("path is a directory")}
+	}
+	config, err := clientcmd.LoadFromFile(path)
+	if err != nil {
+		return kubeconfigFileInspection{loadErr: err}
+	}
+	contexts := make(map[string]struct{}, len(config.Contexts))
+	for contextName := range config.Contexts {
+		contexts[contextName] = struct{}{}
+	}
+	return kubeconfigFileInspection{contexts: contexts}
+}
+
+func (a *App) reconnectChangedKubeconfigClusters(clusterIDs []string) {
+	for _, clusterID := range clusterIDs {
+		clients := a.clusterClientsForID(clusterID)
+		if clients == nil {
+			continue
+		}
+		a.logger.Info(fmt.Sprintf("Reconnecting cluster %s after kubeconfig change", clients.meta.Name), logsources.KubeconfigWatcher)
+		a.teardownClusterSubsystem(clusterID)
+		a.rebuildClusterSubsystem(clusterID)
+	}
 }
 
 // deselectClusters removes the specified cluster IDs from the active selection.

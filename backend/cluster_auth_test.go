@@ -13,6 +13,7 @@ import (
 	"testing"
 
 	"github.com/luxury-yacht/app/backend/internal/authstate"
+	"github.com/luxury-yacht/app/backend/refresh/system"
 	"github.com/stretchr/testify/require"
 )
 
@@ -72,4 +73,57 @@ func TestRebuildClusterSubsystemPreservesAuthManagerWiring(t *testing.T) {
 	state, _ := originalMgr.State()
 	require.Equal(t, authstate.StateInvalid, state,
 		"auth failures seen by rebuilt transports must transition the tracked manager")
+}
+
+func TestRebuildClusterSubsystemGuardsMissingInputs(t *testing.T) {
+	var nilApp *App
+	nilApp.rebuildClusterSubsystem("cluster-a")
+
+	app := newTestAppWithDefaults(t)
+	app.rebuildClusterSubsystem("")
+	app.rebuildClusterSubsystem("missing")
+
+	app.clusterClients = make(map[string]*clusterClients)
+	app.clusterClients["cluster-a"] = &clusterClients{meta: ClusterMeta{ID: "cluster-a", Name: "Cluster A"}}
+	app.rebuildClusterSubsystem("cluster-a")
+}
+
+func TestClusterSubsystemRebuildHelperPaths(t *testing.T) {
+	app := newTestAppWithDefaults(t)
+	rebuild := clusterSubsystemRebuild{
+		app: app, clusterID: "cluster-a", clusterName: "Cluster A",
+		selection:  kubeconfigSelection{Path: "/missing/config", Context: "ctx"},
+		oldClients: &clusterClients{meta: ClusterMeta{ID: "cluster-a", Name: "Cluster A"}},
+	}
+
+	clients, ok := rebuild.rebuildClients()
+	require.False(t, ok)
+	require.Nil(t, clients)
+
+	rebuild.startManager(&system.Subsystem{})
+	app.refreshCtx = context.Background()
+	rebuild.startManager(&system.Subsystem{})
+
+	subsystems, order := refreshSubsystemTopology(map[string]*system.Subsystem{
+		"cluster-b": {},
+		"cluster-a": {},
+	})
+	require.Len(t, subsystems, 2)
+	require.ElementsMatch(t, []string{"cluster-a", "cluster-b"}, order)
+
+	app.refreshHTTPServer = &http.Server{}
+	app.refreshAggregates.Store(&refreshAggregateHandlers{})
+	require.True(t, rebuild.updateRefreshRouting(subsystems, order))
+
+	rebuild.startObjectCatalog(&clusterClients{meta: rebuild.oldClients.meta})
+}
+
+func TestClusterClientsAuthInvalid(t *testing.T) {
+	require.False(t, clusterClientsAuthInvalid(&clusterClients{}))
+	require.True(t, clusterClientsAuthInvalid(&clusterClients{authFailedOnInit: true}))
+
+	manager := authstate.New(authstate.Config{MaxAttempts: 0})
+	t.Cleanup(manager.Shutdown)
+	manager.ReportFailure("expired")
+	require.True(t, clusterClientsAuthInvalid(&clusterClients{authManager: manager}))
 }

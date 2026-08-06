@@ -131,80 +131,134 @@ func (l *GlobalTargetLimiter) allocateLocked() map[*TargetSession]int {
 	if l.total <= 0 || len(l.sessions) == 0 {
 		return allocations
 	}
+	demand := collectTargetDemand(l.sessions)
+	if len(demand.clusterIDs) == 0 {
+		return allocations
+	}
+	clusterBudgets := allocateClusterTargetBudgets(demand.clusterIDs, demand.clusterDemand, l.total)
+	allocateSessionTargetBudgets(allocations, demand.clusterIDs, demand.clusterSessions, clusterBudgets)
+	return allocations
+}
 
-	clusterSessions := make(map[string][]*TargetSession)
-	clusterDemand := make(map[string]int)
-	clusterIDs := make([]string, 0, len(l.sessions))
+type targetDemand struct {
+	clusterSessions map[string][]*TargetSession
+	clusterDemand   map[string]int
+	clusterIDs      []string
+}
+
+func collectTargetDemand(sessions map[*TargetSession]struct{}) targetDemand {
+	demand := targetDemand{
+		clusterSessions: make(map[string][]*TargetSession),
+		clusterDemand:   make(map[string]int),
+		clusterIDs:      make([]string, 0, len(sessions)),
+	}
 	seenClusters := make(map[string]struct{})
-	for session := range l.sessions {
+	for session := range sessions {
 		if len(session.desiredKeys) == 0 {
 			continue
 		}
-		clusterID := session.clusterID
-		if clusterID == "" {
-			clusterID = "__default__"
-		}
+		clusterID := targetSessionClusterID(session)
 		if _, ok := seenClusters[clusterID]; !ok {
 			seenClusters[clusterID] = struct{}{}
-			clusterIDs = append(clusterIDs, clusterID)
+			demand.clusterIDs = append(demand.clusterIDs, clusterID)
 		}
-		clusterSessions[clusterID] = append(clusterSessions[clusterID], session)
-		clusterDemand[clusterID] += len(session.desiredKeys)
+		demand.clusterSessions[clusterID] = append(demand.clusterSessions[clusterID], session)
+		demand.clusterDemand[clusterID] += len(session.desiredKeys)
 	}
-	if len(clusterIDs) == 0 {
-		return allocations
-	}
+	sort.Strings(demand.clusterIDs)
+	return demand
+}
 
-	sort.Strings(clusterIDs)
-	clusterBudget := make(map[string]int, len(clusterIDs))
-	remaining := l.total
+func targetSessionClusterID(session *TargetSession) string {
+	if session.clusterID == "" {
+		return "__default__"
+	}
+	return session.clusterID
+}
+
+func allocateClusterTargetBudgets(clusterIDs []string, demand map[string]int, total int) map[string]int {
+	budgets := make(map[string]int, len(clusterIDs))
+	remaining := total
 	for remaining > 0 {
-		progressed := false
-		for _, clusterID := range clusterIDs {
-			if clusterBudget[clusterID] >= clusterDemand[clusterID] {
-				continue
-			}
-			clusterBudget[clusterID]++
-			remaining--
-			progressed = true
-			if remaining == 0 {
-				break
-			}
-		}
+		progressed := allocateClusterTargetBudgetRound(clusterIDs, demand, budgets, &remaining)
 		if !progressed {
 			break
 		}
 	}
+	return budgets
+}
 
+func allocateClusterTargetBudgetRound(
+	clusterIDs []string,
+	demand map[string]int,
+	budgets map[string]int,
+	remaining *int,
+) bool {
+	progressed := false
 	for _, clusterID := range clusterIDs {
-		sessions := clusterSessions[clusterID]
-		sort.Slice(sessions, func(i, j int) bool {
-			if sessions[i].scope != sessions[j].scope {
-				return sessions[i].scope < sessions[j].scope
-			}
-			return sessions[i].id < sessions[j].id
-		})
-		remainingCluster := clusterBudget[clusterID]
-		for remainingCluster > 0 {
-			progressed := false
-			for _, session := range sessions {
-				if allocations[session] >= len(session.desiredKeys) {
-					continue
-				}
-				allocations[session]++
-				remainingCluster--
-				progressed = true
-				if remainingCluster == 0 {
-					break
-				}
-			}
-			if !progressed {
-				break
-			}
+		if budgets[clusterID] >= demand[clusterID] {
+			continue
+		}
+		budgets[clusterID]++
+		*remaining--
+		progressed = true
+		if *remaining == 0 {
+			break
 		}
 	}
+	return progressed
+}
 
-	return allocations
+func allocateSessionTargetBudgets(
+	allocations map[*TargetSession]int,
+	clusterIDs []string,
+	clusterSessions map[string][]*TargetSession,
+	clusterBudgets map[string]int,
+) {
+	for _, clusterID := range clusterIDs {
+		sessions := sortedTargetSessions(clusterSessions[clusterID])
+		allocateClusterSessions(allocations, sessions, clusterBudgets[clusterID])
+	}
+}
+
+func sortedTargetSessions(sessions []*TargetSession) []*TargetSession {
+	sort.Slice(sessions, func(i, j int) bool {
+		if sessions[i].scope != sessions[j].scope {
+			return sessions[i].scope < sessions[j].scope
+		}
+		return sessions[i].id < sessions[j].id
+	})
+	return sessions
+}
+
+func allocateClusterSessions(allocations map[*TargetSession]int, sessions []*TargetSession, budget int) {
+	remaining := budget
+	for remaining > 0 {
+		progressed := allocateSessionTargetBudgetRound(allocations, sessions, &remaining)
+		if !progressed {
+			return
+		}
+	}
+}
+
+func allocateSessionTargetBudgetRound(
+	allocations map[*TargetSession]int,
+	sessions []*TargetSession,
+	remaining *int,
+) bool {
+	progressed := false
+	for _, session := range sessions {
+		if allocations[session] >= len(session.desiredKeys) {
+			continue
+		}
+		allocations[session]++
+		*remaining--
+		progressed = true
+		if *remaining == 0 {
+			break
+		}
+	}
+	return progressed
 }
 
 func keysToSet(keys []string) map[string]struct{} {

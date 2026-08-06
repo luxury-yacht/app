@@ -209,6 +209,59 @@ func TestApp_HandleKubeconfigChange_TransientInvalidWriteDoesNotDeselect(t *test
 	assert.True(t, stillPresent)
 }
 
+func TestInspectKubeconfigFileClassifiesDiskState(t *testing.T) {
+	baseDir := t.TempDir()
+	missing := inspectKubeconfigFile(filepath.Join(baseDir, "missing"))
+	require.True(t, missing.missing)
+
+	directory := inspectKubeconfigFile(baseDir)
+	require.ErrorContains(t, directory.loadErr, "path is a directory")
+
+	invalidPath := filepath.Join(baseDir, "invalid")
+	require.NoError(t, os.WriteFile(invalidPath, []byte("not: valid: ["), 0o600))
+	require.Error(t, inspectKubeconfigFile(invalidPath).loadErr)
+
+	validPath := filepath.Join(baseDir, "valid")
+	writeMultiContextKubeconfig(t, validPath, []string{"ctx-a", "ctx-b"})
+	valid := inspectKubeconfigFile(validPath)
+	require.NoError(t, valid.loadErr)
+	require.Contains(t, valid.contexts, "ctx-a")
+	require.Contains(t, valid.contexts, "ctx-b")
+
+	inspector := kubeconfigFileInspector{cache: make(map[string]kubeconfigFileInspection)}
+	first := inspector.inspect(validPath)
+	require.NoError(t, os.WriteFile(validPath, []byte("invalid: ["), 0o600))
+	second := inspector.inspect(validPath)
+	require.Equal(t, first.contexts, second.contexts, "one watcher event must inspect each file once")
+}
+
+func TestClassifyChangedKubeconfigClusterCoversEveryDisposition(t *testing.T) {
+	app := newTestAppWithDefaults(t)
+	clients := &clusterClients{
+		meta:           ClusterMeta{ID: "cluster-a", Name: "Cluster A"},
+		kubeconfigPath: "/tmp/config", kubeconfigContext: "ctx-a",
+	}
+	app.clusterClients = map[string]*clusterClients{"cluster-a": clients}
+	inspector := &kubeconfigFileInspector{cache: map[string]kubeconfigFileInspection{
+		kubeconfigPathKey(filepath.Clean(clients.kubeconfigPath)): {loadErr: os.ErrPermission},
+	}}
+
+	require.Equal(t, changedKubeconfigKeep, app.classifyChangedKubeconfigCluster("missing", nil, inspector))
+	require.Equal(t, changedKubeconfigRebuild, app.classifyChangedKubeconfigCluster(
+		"cluster-a",
+		map[kubeconfigSelectionKey]struct{}{newKubeconfigSelectionKey(clients.kubeconfigPath, clients.kubeconfigContext): {}},
+		inspector,
+	))
+	require.Equal(t, changedKubeconfigKeep, app.classifyChangedKubeconfigCluster("cluster-a", nil, inspector))
+	require.Equal(t, changedKubeconfigDeselect, app.classifyInspectedKubeconfig(clients, kubeconfigFileInspection{missing: true}))
+	require.Equal(t, changedKubeconfigRebuild, app.classifyInspectedKubeconfig(clients, kubeconfigFileInspection{
+		contexts: map[string]struct{}{"ctx-a": {}},
+	}))
+	require.Equal(t, changedKubeconfigDeselect, app.classifyInspectedKubeconfig(clients, kubeconfigFileInspection{
+		contexts: map[string]struct{}{"ctx-b": {}},
+	}))
+}
+
 func TestDeselectClusters_AbortsOnReconciliationFailure(t *testing.T) {
 	setTestConfigEnv(t)
 	app := newTestAppWithDefaults(t)

@@ -744,6 +744,48 @@ rollback. Preserve selected/background cluster behavior, do not publish a
 partially built subsystem, and do not run callbacks while selection/auth locks
 are held. Keep `docs/architecture/auth.md` and `multi-cluster.md` authoritative.
 
+Local progress through 2026-08-06 (Sonar confirmation pending):
+
+- [x] Traced container-log request authorization, limiter allocation, initial
+      tail, watch reconciliation, per-target follow, reconnect, drop telemetry,
+      cancellation, and channel ownership against the logs and operation-
+      lifecycle contracts.
+- [x] Reduced the container-log HTTP handler to typed request, initial-load,
+      stream-runner, and delivery stages; split global allocation into demand,
+      cluster-budget, and session-budget stages while preserving locked state
+      application and notification ordering.
+- [x] Split initial log target selection and collection from ordering; split
+      runtime streaming into explicit pod inventory, target reconciliation,
+      watch/reconnect, and per-container follow sessions. The outer runner still
+      cancels and joins every follower before shared channels may close.
+- [x] Split fetch retry attempt execution from backoff, telemetry, and terminal
+      transport accounting. Replaced the object-action branch tree with a
+      validated full-identity invocation and one bounded handler per supported
+      action; permanent authorization and validation errors remain non-retryable.
+- [x] Split cluster-client synchronization into desired selection, bounded
+      build/install, stale removal, auth-manager shutdown, runtime cleanup, and
+      workspace cleanup stages. Split kubeconfig watcher classification from
+      reconnect/deselect application, and auth rebuild preparation from client,
+      subsystem, routing, and catalog stages while preserving the tracked auth
+      manager across rebuilt transports.
+- [x] Direct target coverage in inventory order is 100.0%, 81.8%, 100.0%,
+      100.0%, 100.0%, 88.9%, 90.0%, 100.0%, 100.0%, and 100.0%.
+      The repository backend coverage task records 85.3% for
+      `backend/refresh/containerlogsstream` and 78.0% for `backend`, up from
+      the Phase 6 baselines of 83.4% and 77.1%.
+- [x] Focused package tests and latest-worktree `-race` runs pass for
+      `backend/refresh/containerlogsstream` and `backend`. The repository
+      backend coverage task and `git diff --check` pass.
+- [x] `gocognit` v1.2.1 measures the ten targets, in inventory order, at 1, 4,
+      1, 2, 1, 3, 3, 2, 4, and 3. No function in the eight affected production
+      files exceeds 15.
+- [x] The full latest-worktree `mage qc:prerelease` gate passes; frontend
+      validation covers 459 files and 3,956 tests, and Trivy reports zero
+      dependency vulnerabilities.
+- [ ] Confirm all ten findings close in the next Sonar analysis without
+      creating or increasing another S3776 finding; keep the target boxes above
+      open until that evidence exists.
+
 ---
 
 ## Validation by wave

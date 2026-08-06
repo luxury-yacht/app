@@ -46,6 +46,31 @@ func backendActionSet(definitions []objectaction.BackendActionDefinition) map[st
 var frontendObjectActions = backendActionSet(objectaction.FrontendBackendActions)
 var backendOnlyObjectActions = backendActionSet(objectaction.BackendOnlyActions)
 
+type objectActionInvocation struct {
+	app     *App
+	action  string
+	target  ObjectActionTargetRef
+	request ObjectActionRequest
+}
+
+type objectActionHandler func(objectActionInvocation) (ObjectActionResponse, error)
+
+var objectActionHandlers = map[string]objectActionHandler{
+	ObjectActionDelete:               runDeleteObjectAction,
+	ObjectActionForceDelete:          runForceDeleteObjectAction,
+	ObjectActionRestart:              runRestartObjectAction,
+	ObjectActionScale:                runScaleObjectAction,
+	ObjectActionTrigger:              runTriggerObjectAction,
+	ObjectActionSuspend:              runSuspendObjectAction,
+	ObjectActionCordon:               runCordonObjectAction,
+	ObjectActionUncordon:             runUncordonObjectAction,
+	ObjectActionDrain:                runDrainObjectAction,
+	ObjectActionStartDrain:           runStartDrainObjectAction,
+	ObjectActionStartPortForward:     runStartPortForwardObjectAction,
+	ObjectActionCreateDebugContainer: runCreateDebugContainerObjectAction,
+	ObjectActionRollback:             runRollbackObjectAction,
+}
+
 // ObjectActionTargetRef is the canonical object identity for state-changing
 // app actions. Core resources use group="" with version="v1".
 type ObjectActionTargetRef = resourcemodel.ResourceRef
@@ -159,88 +184,113 @@ func (a *App) RunObjectAction(req ObjectActionRequest) (ObjectActionResponse, er
 	if err != nil {
 		return ObjectActionResponse{}, err
 	}
-
-	switch action {
-	case ObjectActionDelete:
-		return ObjectActionResponse{}, a.deleteObjectAction(target, false)
-	case ObjectActionForceDelete:
-		return ObjectActionResponse{}, a.deleteObjectAction(target, true)
-	case ObjectActionRestart:
-		if err := requireActionNamespacedTarget(target, action); err != nil {
-			return ObjectActionResponse{}, err
-		}
-		return ObjectActionResponse{}, a.restartWorkloadAction(target)
-	case ObjectActionScale:
-		replicas, err := requireObjectActionOption(req.Replicas, "replicas", action)
-		if err != nil {
-			return ObjectActionResponse{}, err
-		}
-		if err := requireActionNamespacedTarget(target, action); err != nil {
-			return ObjectActionResponse{}, err
-		}
-		return ObjectActionResponse{}, a.scaleWorkloadAction(target, replicas)
-	case ObjectActionTrigger:
-		if err := requireActionNamespacedTarget(target, action); err != nil {
-			return ObjectActionResponse{}, err
-		}
-		name, err := a.triggerCronJobAction(target)
-		return ObjectActionResponse{Name: name}, err
-	case ObjectActionSuspend:
-		suspend, err := requireObjectActionOption(req.Suspend, "suspend", action)
-		if err != nil {
-			return ObjectActionResponse{}, err
-		}
-		if err := requireActionNamespacedTarget(target, action); err != nil {
-			return ObjectActionResponse{}, err
-		}
-		return ObjectActionResponse{}, a.suspendCronJobAction(target, suspend)
-	case ObjectActionCordon:
-		return ObjectActionResponse{}, a.cordonNodeAction(target)
-	case ObjectActionUncordon:
-		return ObjectActionResponse{}, a.uncordonNodeAction(target)
-	case ObjectActionDrain:
-		options := DrainNodeOptions{}
-		if req.DrainOptions != nil {
-			options = *req.DrainOptions
-		}
-		return ObjectActionResponse{}, a.drainNodeAction(target, options)
-	case ObjectActionStartDrain:
-		options := DrainNodeOptions{}
-		if req.DrainOptions != nil {
-			options = *req.DrainOptions
-		}
-		jobID, err := a.startDrainNodeAction(target, options)
-		return ObjectActionResponse{JobID: jobID}, err
-	case ObjectActionStartPortForward:
-		options, err := requireObjectActionOption(req.PortForward, "portForward", action)
-		if err != nil {
-			return ObjectActionResponse{}, err
-		}
-		if err := requireActionNamespacedTarget(target, action); err != nil {
-			return ObjectActionResponse{}, err
-		}
-		sessionID, err := a.startPortForwardAction(target, options)
-		return ObjectActionResponse{SessionID: sessionID}, err
-	case ObjectActionCreateDebugContainer:
-		options, err := requireObjectActionOption(req.DebugContainer, "debugContainer", action)
-		if err != nil {
-			return ObjectActionResponse{}, err
-		}
-		if err := requireActionNamespacedTarget(target, action); err != nil {
-			return ObjectActionResponse{}, err
-		}
-		response, err := a.createDebugContainerAction(target, options)
-		return ObjectActionResponse{DebugContainer: response}, err
-	case ObjectActionRollback:
-		revision, err := requireObjectActionOption(req.Revision, "revision", action)
-		if err != nil {
-			return ObjectActionResponse{}, err
-		}
-		if err := requireActionNamespacedTarget(target, action); err != nil {
-			return ObjectActionResponse{}, err
-		}
-		return ObjectActionResponse{}, a.rollbackWorkloadAction(target, revision)
-	default:
+	handler, ok := objectActionHandlers[action]
+	if !ok {
 		return ObjectActionResponse{}, fmt.Errorf("object action %q has no backend handler", action)
 	}
+	return handler(objectActionInvocation{app: a, action: action, target: target, request: req})
+}
+
+func runDeleteObjectAction(invocation objectActionInvocation) (ObjectActionResponse, error) {
+	return ObjectActionResponse{}, invocation.app.deleteObjectAction(invocation.target, false)
+}
+
+func runForceDeleteObjectAction(invocation objectActionInvocation) (ObjectActionResponse, error) {
+	return ObjectActionResponse{}, invocation.app.deleteObjectAction(invocation.target, true)
+}
+
+func runRestartObjectAction(invocation objectActionInvocation) (ObjectActionResponse, error) {
+	if err := requireActionNamespacedTarget(invocation.target, invocation.action); err != nil {
+		return ObjectActionResponse{}, err
+	}
+	return ObjectActionResponse{}, invocation.app.restartWorkloadAction(invocation.target)
+}
+
+func runScaleObjectAction(invocation objectActionInvocation) (ObjectActionResponse, error) {
+	replicas, err := requireObjectActionOption(invocation.request.Replicas, "replicas", invocation.action)
+	if err != nil {
+		return ObjectActionResponse{}, err
+	}
+	if err := requireActionNamespacedTarget(invocation.target, invocation.action); err != nil {
+		return ObjectActionResponse{}, err
+	}
+	return ObjectActionResponse{}, invocation.app.scaleWorkloadAction(invocation.target, replicas)
+}
+
+func runTriggerObjectAction(invocation objectActionInvocation) (ObjectActionResponse, error) {
+	if err := requireActionNamespacedTarget(invocation.target, invocation.action); err != nil {
+		return ObjectActionResponse{}, err
+	}
+	name, err := invocation.app.triggerCronJobAction(invocation.target)
+	return ObjectActionResponse{Name: name}, err
+}
+
+func runSuspendObjectAction(invocation objectActionInvocation) (ObjectActionResponse, error) {
+	suspend, err := requireObjectActionOption(invocation.request.Suspend, "suspend", invocation.action)
+	if err != nil {
+		return ObjectActionResponse{}, err
+	}
+	if err := requireActionNamespacedTarget(invocation.target, invocation.action); err != nil {
+		return ObjectActionResponse{}, err
+	}
+	return ObjectActionResponse{}, invocation.app.suspendCronJobAction(invocation.target, suspend)
+}
+
+func runCordonObjectAction(invocation objectActionInvocation) (ObjectActionResponse, error) {
+	return ObjectActionResponse{}, invocation.app.cordonNodeAction(invocation.target)
+}
+
+func runUncordonObjectAction(invocation objectActionInvocation) (ObjectActionResponse, error) {
+	return ObjectActionResponse{}, invocation.app.uncordonNodeAction(invocation.target)
+}
+
+func runDrainObjectAction(invocation objectActionInvocation) (ObjectActionResponse, error) {
+	return ObjectActionResponse{}, invocation.app.drainNodeAction(invocation.target, objectActionDrainOptions(invocation.request))
+}
+
+func runStartDrainObjectAction(invocation objectActionInvocation) (ObjectActionResponse, error) {
+	jobID, err := invocation.app.startDrainNodeAction(invocation.target, objectActionDrainOptions(invocation.request))
+	return ObjectActionResponse{JobID: jobID}, err
+}
+
+func objectActionDrainOptions(request ObjectActionRequest) DrainNodeOptions {
+	if request.DrainOptions == nil {
+		return DrainNodeOptions{}
+	}
+	return *request.DrainOptions
+}
+
+func runStartPortForwardObjectAction(invocation objectActionInvocation) (ObjectActionResponse, error) {
+	options, err := requireObjectActionOption(invocation.request.PortForward, "portForward", invocation.action)
+	if err != nil {
+		return ObjectActionResponse{}, err
+	}
+	if err := requireActionNamespacedTarget(invocation.target, invocation.action); err != nil {
+		return ObjectActionResponse{}, err
+	}
+	sessionID, err := invocation.app.startPortForwardAction(invocation.target, options)
+	return ObjectActionResponse{SessionID: sessionID}, err
+}
+
+func runCreateDebugContainerObjectAction(invocation objectActionInvocation) (ObjectActionResponse, error) {
+	options, err := requireObjectActionOption(invocation.request.DebugContainer, "debugContainer", invocation.action)
+	if err != nil {
+		return ObjectActionResponse{}, err
+	}
+	if err := requireActionNamespacedTarget(invocation.target, invocation.action); err != nil {
+		return ObjectActionResponse{}, err
+	}
+	response, err := invocation.app.createDebugContainerAction(invocation.target, options)
+	return ObjectActionResponse{DebugContainer: response}, err
+}
+
+func runRollbackObjectAction(invocation objectActionInvocation) (ObjectActionResponse, error) {
+	revision, err := requireObjectActionOption(invocation.request.Revision, "revision", invocation.action)
+	if err != nil {
+		return ObjectActionResponse{}, err
+	}
+	if err := requireActionNamespacedTarget(invocation.target, invocation.action); err != nil {
+		return ObjectActionResponse{}, err
+	}
+	return ObjectActionResponse{}, invocation.app.rollbackWorkloadAction(invocation.target, revision)
 }
