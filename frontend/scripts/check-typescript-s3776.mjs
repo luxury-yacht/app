@@ -46,7 +46,7 @@ export const normalizeS3776Issue = (issue, projectKey) => {
   };
 };
 
-export const validateBaseline = (baseline) => {
+const validateBaselineMetadata = (baseline) => {
   const errors = [];
   if (baseline?.schemaVersion !== 1) {
     errors.push('S3776 baseline schemaVersion must be 1.');
@@ -63,6 +63,37 @@ export const validateBaseline = (baseline) => {
   if (!baseline?.analysis?.branch || !baseline?.analysis?.revision || !baseline?.analysis?.date) {
     errors.push('S3776 baseline analysis must include branch, revision, and date.');
   }
+  return errors;
+};
+
+const validateBaselineIssue = (issue, seenKeys) => {
+  const errors = [];
+  if (!issue?.key) {
+    errors.push('S3776 baseline issue key is required.');
+  } else if (seenKeys.has(issue.key)) {
+    errors.push(`S3776 baseline has duplicate issue key ${issue.key}.`);
+  } else {
+    seenKeys.add(issue.key);
+  }
+  if (typeof issue?.path !== 'string' || !issue.path.startsWith('frontend/src/')) {
+    errors.push(`S3776 baseline issue ${issue?.key ?? '<missing>'} must reference frontend/src/.`);
+  }
+  if (!Number.isInteger(issue?.line) || issue.line < 1) {
+    errors.push(`S3776 baseline issue ${issue?.key ?? '<missing>'} line must be positive.`);
+  }
+  if (typeof issue?.symbol !== 'string' || issue.symbol.trim().length === 0) {
+    errors.push(`S3776 baseline issue ${issue?.key ?? '<missing>'} symbol is required.`);
+  }
+  if (!Number.isInteger(issue?.score) || issue.score <= EXPECTED_THRESHOLD) {
+    errors.push(
+      `S3776 baseline issue ${issue?.key ?? '<missing>'} score must be greater than ${EXPECTED_THRESHOLD}.`
+    );
+  }
+  return errors;
+};
+
+export const validateBaseline = (baseline) => {
+  const errors = validateBaselineMetadata(baseline);
   if (!Array.isArray(baseline?.issues)) {
     errors.push('S3776 baseline issues must be an array.');
     return errors;
@@ -70,29 +101,7 @@ export const validateBaseline = (baseline) => {
 
   const seenKeys = new Set();
   for (const issue of baseline.issues) {
-    if (!issue?.key) {
-      errors.push('S3776 baseline issue key is required.');
-    } else if (seenKeys.has(issue.key)) {
-      errors.push(`S3776 baseline has duplicate issue key ${issue.key}.`);
-    } else {
-      seenKeys.add(issue.key);
-    }
-    if (typeof issue?.path !== 'string' || !issue.path.startsWith('frontend/src/')) {
-      errors.push(
-        `S3776 baseline issue ${issue?.key ?? '<missing>'} must reference frontend/src/.`
-      );
-    }
-    if (!Number.isInteger(issue?.line) || issue.line < 1) {
-      errors.push(`S3776 baseline issue ${issue?.key ?? '<missing>'} line must be positive.`);
-    }
-    if (typeof issue?.symbol !== 'string' || issue.symbol.trim().length === 0) {
-      errors.push(`S3776 baseline issue ${issue?.key ?? '<missing>'} symbol is required.`);
-    }
-    if (!Number.isInteger(issue?.score) || issue.score <= EXPECTED_THRESHOLD) {
-      errors.push(
-        `S3776 baseline issue ${issue?.key ?? '<missing>'} score must be greater than ${EXPECTED_THRESHOLD}.`
-      );
-    }
+    errors.push(...validateBaselineIssue(issue, seenKeys));
   }
   return errors;
 };

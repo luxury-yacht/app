@@ -9,7 +9,14 @@ import { act, useEffect, useEffectEvent } from 'react';
 import * as ReactDOM from 'react-dom/client';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 
-import { applySelectAll, deriveCopyText, KeyboardProvider, useKeyboardContext } from './context';
+import {
+  applySelectAll,
+  cutContentEditableSelection,
+  deriveCopyText,
+  KeyboardProvider,
+  pasteIntoContentEditable,
+  useKeyboardContext,
+} from './context';
 
 const runtimeMocks = vi.hoisted(() => ({
   eventsOn: vi.fn(),
@@ -217,6 +224,52 @@ describe('KeyboardProvider', () => {
       } else {
         Reflect.deleteProperty(document, 'execCommand');
       }
+    });
+
+    it('cuts a contenteditable selection through the Selection API', () => {
+      const writeText = vi.fn(() => Promise.resolve());
+      Object.assign(navigator, { clipboard: { writeText } });
+      const deleteFromDocument = vi.fn();
+      const selectedNode = document.createTextNode('selected text');
+      const selection = {
+        isCollapsed: false,
+        toString: () => 'selected text',
+        anchorNode: selectedNode,
+        deleteFromDocument,
+      } as unknown as Selection;
+
+      expect(cutContentEditableSelection(selection)).toBe(true);
+      expect(writeText).toHaveBeenCalledWith('selected text');
+      expect(deleteFromDocument).toHaveBeenCalledTimes(1);
+    });
+
+    it('pastes text at a contenteditable range and leaves the caret after it', () => {
+      const insertNode = vi.fn();
+      const setStartAfter = vi.fn();
+      const collapse = vi.fn();
+      const range = {
+        deleteContents: vi.fn(),
+        insertNode,
+        setStartAfter,
+        collapse,
+      } as unknown as Range;
+      const removeAllRanges = vi.fn();
+      const addRange = vi.fn();
+      const selection = {
+        rangeCount: 1,
+        getRangeAt: vi.fn(() => range),
+        removeAllRanges,
+        addRange,
+      } as unknown as Selection;
+
+      expect(pasteIntoContentEditable('pasted text', selection)).toBe(true);
+      const insertedNode = insertNode.mock.calls[0]?.[0] as Text;
+      expect(insertedNode.data).toBe('pasted text');
+      expect(range.deleteContents).toHaveBeenCalledTimes(1);
+      expect(setStartAfter).toHaveBeenCalledWith(insertedNode);
+      expect(collapse).toHaveBeenCalledWith(true);
+      expect(removeAllRanges).toHaveBeenCalledTimes(1);
+      expect(addRange).toHaveBeenCalledWith(range);
     });
   });
 });

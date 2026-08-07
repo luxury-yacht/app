@@ -778,8 +778,10 @@ const appendResourceStreamTelemetryTooltip = (
   streamTelemetry: TelemetryStreamStatus,
   resourceStreamStats: ResourceStreamStats
 ) => {
-  parts.push(`Stream delivered: ${streamTelemetry.totalMessages}`);
-  parts.push(`Stream dropped: ${streamTelemetry.droppedMessages}`);
+  parts.push(
+    `Stream delivered: ${streamTelemetry.totalMessages}`,
+    `Stream dropped: ${streamTelemetry.droppedMessages}`
+  );
   if (streamTelemetry.lastError) {
     parts.push(`Stream error: ${streamTelemetry.lastError}`);
   }
@@ -798,8 +800,7 @@ const appendResourceStreamTelemetryTooltip = (
 };
 
 const appendStreamHealthTelemetryTooltip = (parts: string[], streamHealth: StreamHealthSummary) => {
-  parts.push(`Stream health: ${streamHealth.status}`);
-  parts.push(`Stream reason: ${streamHealth.reason}`);
+  parts.push(`Stream health: ${streamHealth.status}`, `Stream reason: ${streamHealth.reason}`);
   if (streamHealth.lastDeliveryAt) {
     parts.push(`Stream last delivery: ${formatLastUpdated(streamHealth.lastDeliveryAt).tooltip}`);
   }

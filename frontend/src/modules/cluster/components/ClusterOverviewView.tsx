@@ -162,7 +162,7 @@ const WorkloadUsageBreakdown = ({
   showSkeleton: boolean;
 }) => (
   <div className="resource-group workload-usage-breakdown">
-    <div className="stacked-bar stacked-bar--workload-usage" role="presentation" aria-hidden="true">
+    <div className="stacked-bar stacked-bar--workload-usage" aria-hidden="true">
       {!showSkeleton &&
         items.map((item) => {
           const width = total > 0 ? (item.value / total) * 100 : 0;
@@ -269,7 +269,7 @@ const UtilizationLegend = ({ expanded, onToggle }: { expanded: boolean; onToggle
       <span
         className={`utilization-legend__chevron${expanded ? ' utilization-legend__chevron--open' : ''}`}
         aria-hidden="true"
-      />
+      />{' '}
       Legend
     </button>
     {expanded ? (
@@ -391,7 +391,7 @@ const StackedBar = ({
   total: number;
   hidden: boolean;
 }) => (
-  <div className="stacked-bar" role="presentation" aria-hidden="true">
+  <div className="stacked-bar" aria-hidden="true">
     {!hidden &&
       items.map((item) => {
         const width = total > 0 ? (item.value / total) * 100 : 0;
@@ -747,6 +747,7 @@ const RecentEventRow = ({
   onOpen: () => void;
 }) => {
   const rowClass = `recent-events__row${clickable ? ' recent-events__row--clickable' : ''}`;
+  const objectNamespaceSuffix = event.objectNamespace ? ` · ${event.objectNamespace}` : '';
   const content = (
     <>
       <LiveAgeText timestamp={event.timestamp} className="recent-events__age" />
@@ -762,7 +763,7 @@ const RecentEventRow = ({
           type="button"
           className={rowClass}
           onClick={onOpen}
-          title={`${event.objectKind}/${event.objectName}${event.objectNamespace ? ` · ${event.objectNamespace}` : ''}`}
+          title={`${event.objectKind}/${event.objectName}${objectNamespaceSuffix}`}
         >
           {content}
         </button>

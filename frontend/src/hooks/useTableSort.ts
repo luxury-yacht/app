@@ -146,8 +146,7 @@ const tryReuseSortCache = <T>(
 ): SortCacheEntry<T> | null => {
   if (
     !rowIdentity ||
-    !previousCache ||
-    previousCache.key !== sortConfig.key ||
+    previousCache?.key !== sortConfig.key ||
     previousCache.direction !== sortConfig.direction ||
     previousCache.order.length !== decorated.length
   ) {
@@ -322,9 +321,8 @@ export function useTableSort<T>(
       sortDurationRef.current = getNow() - startedAt;
       return reusedCache.sortedRows;
     }
-    const sortedEntries = decorated.sort(
-      createSortComparator(effectiveSort.direction, stringCollator)
-    );
+    decorated.sort(createSortComparator(effectiveSort.direction, stringCollator));
+    const sortedEntries = decorated;
     const sorted = sortedEntries.map(({ item }) => item);
     sortCacheRef.current = createSortCache(sortedEntries, sorted, effectiveSort, rowIdentity);
     sortDurationRef.current = getNow() - startedAt;

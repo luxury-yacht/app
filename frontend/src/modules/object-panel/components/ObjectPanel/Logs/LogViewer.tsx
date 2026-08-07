@@ -73,7 +73,7 @@ import {
   formatObjPanelLogsApiTimestamp,
 } from '@/utils/objPanelLogsApiTimestampFormat';
 import { INACTIVE_SCOPE } from '../constants';
-import type { LogDisplayMode } from '../types';
+import type { LogDisplayMode, LogTimestampMode } from '../types';
 import { containsAnsi } from './ansi';
 import { setContainerLogsStreamScopeParams } from './containerLogsStreamScopeParamsCache';
 import { useAnchoredLogEntries } from './hooks/useAnchoredLogEntries';
@@ -196,7 +196,7 @@ const formatLocalizedTimestamp = (timestamp: string, useLocalTimeZone: boolean):
 
 const formatTimestampForMode = (
   timestamp: string,
-  mode: 'hidden' | 'default' | 'short' | 'localized',
+  mode: LogTimestampMode,
   apiTimestampFormat: string,
   useLocalTimeZone: boolean
 ): string => {
@@ -800,7 +800,7 @@ const renderWorkloadRawLogRow = ({
   if (!row.line.includes('[') || !row.line.includes('/')) {
     return null;
   }
-  const match = row.line.match(WORKLOAD_RAW_LOG_PREFIX_PATTERN);
+  const match = WORKLOAD_RAW_LOG_PREFIX_PATTERN.exec(row.line);
   if (!match) {
     return null;
   }

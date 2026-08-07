@@ -208,20 +208,18 @@ const resolvePanelGroupView = (
   };
 };
 
-const resolvePanelMinimums = (position: DockPosition, constraints: PanelSizeConstraints) => ({
-  width:
-    position === 'right'
-      ? constraints.right.minWidth
-      : position === 'floating'
-        ? constraints.floating.minWidth
-        : 0,
-  height:
-    position === 'bottom'
-      ? constraints.bottom.minHeight
-      : position === 'floating'
-        ? constraints.floating.minHeight
-        : 0,
-});
+const resolvePanelMinimums = (position: DockPosition, constraints: PanelSizeConstraints) => {
+  if (position === 'right') {
+    return { width: constraints.right.minWidth, height: 0 };
+  }
+  if (position === 'bottom') {
+    return { width: 0, height: constraints.bottom.minHeight };
+  }
+  return {
+    width: constraints.floating.minWidth,
+    height: constraints.floating.minHeight,
+  };
+};
 
 const resolveDockFocusTarget = (
   position: DockPosition,

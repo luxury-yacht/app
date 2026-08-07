@@ -7,6 +7,7 @@
 
 import { useKubeconfig } from '@modules/kubernetes/config/KubeconfigContext';
 import { useObjectPanel } from '@modules/object-panel/hooks/useObjectPanel';
+import { ListboxOptionButton } from '@shared/components/aria/ListboxOptionButton';
 import { ErrorBoundary } from '@shared/components/errors/ErrorBoundary';
 import { getKindColorClass } from '@shared/utils/kindBadgeColors';
 import { buildRequiredObjectReference } from '@shared/utils/objectIdentity';
@@ -283,16 +284,13 @@ const CommandResultRow = ({
 }: CommandResultRowProps) => {
   const isSelected = currentIndex === selectedIndex;
   return (
-    <button
-      type="button"
+    <ListboxOptionButton
       ref={(element) => {
         itemRefs.current[currentIndex] = element;
       }}
       className={`command-palette-item ${isSelected ? 'selected' : ''}`}
       id={`command-palette-option-${currentIndex}`}
-      role="option"
-      aria-selected={isSelected}
-      tabIndex={-1}
+      selected={isSelected}
       onClick={() => executePaletteItem({ type: 'command', command })}
       onMouseEnter={() => {
         if (mouseSelectionArmedRef.current) {
@@ -305,7 +303,7 @@ const CommandResultRow = ({
         <div className="command-palette-item-label">{command.renderLabel ?? command.label}</div>
       </div>
       <CommandShortcut shortcut={command.shortcut} />
-    </button>
+    </ListboxOptionButton>
   );
 };
 
@@ -353,16 +351,13 @@ const CatalogResultRow = ({
 }: CatalogResultRowProps) => {
   const isSelected = currentIndex === selectedIndex;
   return (
-    <button
-      type="button"
+    <ListboxOptionButton
       ref={(element) => {
         itemRefs.current[currentIndex] = element;
       }}
       className={`command-palette-item ${isSelected ? 'selected' : ''}`}
       id={`command-palette-option-${currentIndex}`}
-      role="option"
-      aria-selected={isSelected}
-      tabIndex={-1}
+      selected={isSelected}
       onClick={() => executePaletteItem({ type: 'catalog', item: entry.item })}
       onMouseEnter={() => {
         if (mouseSelectionArmedRef.current) {
@@ -376,7 +371,7 @@ const CatalogResultRow = ({
           <span className="command-palette-item-name">{entry.displayName}</span>
         </div>
       </div>
-    </button>
+    </ListboxOptionButton>
   );
 };
 

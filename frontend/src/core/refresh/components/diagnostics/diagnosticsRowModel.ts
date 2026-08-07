@@ -1106,9 +1106,11 @@ const buildContainerLogsPrimary = (
 ): string => {
   const parts = [`Scopes: ${stats.totalScopes}`, `Active Scopes: ${stats.activeScopes}`];
   if (telemetry) {
-    parts.push(`Sessions: ${telemetry.activeSessions}`);
-    parts.push(`Delivered: ${telemetry.totalMessages}`);
-    parts.push(`Dropped: ${telemetry.droppedMessages}`);
+    parts.push(
+      `Sessions: ${telemetry.activeSessions}`,
+      `Delivered: ${telemetry.totalMessages}`,
+      `Dropped: ${telemetry.droppedMessages}`
+    );
     if (telemetry.skippedTargets > 0) {
       parts.push(`Skipped Targets: ${telemetry.skippedTargets}`);
     }
@@ -1124,8 +1126,7 @@ const buildContainerLogsSecondary = (
 ): string => {
   const parts = [`Updated: ${updatedDisplay}`];
   if (hasTelemetry) {
-    parts.push(`Last Connect: ${lastConnectDisplay}`);
-    parts.push(`Last Stream: ${lastEventDisplay}`);
+    parts.push(`Last Connect: ${lastConnectDisplay}`, `Last Stream: ${lastEventDisplay}`);
   }
   return parts.join(' • ');
 };

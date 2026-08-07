@@ -645,7 +645,13 @@ const ThemeRowFields = (props: ThemeRowSharedProps) => {
   );
 };
 
-interface ThemeRowActionsProps extends ThemeRowSharedProps {
+interface ThemeRowActionsProps {
+  theme: types.Theme;
+  isDefault: boolean;
+  activeThemeId: string | null;
+  themeDraft: ThemeDraft;
+  onSave: () => void;
+  onCancel: () => void;
   currentMatches: boolean;
   onEdit: (theme: types.Theme) => void;
   onDelete: (themeId: string) => void;
@@ -735,9 +741,38 @@ const ThemeRow = (props: ThemeRowProps) => (
       props.isDefault
     )}
   >
-    <ThemeDragHandle {...props} />
-    <ThemeRowFields {...props} />
-    <ThemeRowActions {...props} />
+    <ThemeDragHandle
+      theme={props.theme}
+      isDefault={props.isDefault}
+      draggingThemeId={props.draggingThemeId}
+      setDraggingThemeId={props.setDraggingThemeId}
+      setDropTargetThemeId={props.setDropTargetThemeId}
+      onDrop={props.onDrop}
+      onKeyboardReorder={props.onKeyboardReorder}
+    />
+    <ThemeRowFields
+      elementIdPrefix={props.elementIdPrefix}
+      theme={props.theme}
+      isDefault={props.isDefault}
+      activeThemeId={props.activeThemeId}
+      themeDraft={props.themeDraft}
+      themePatternError={props.themePatternError}
+      setThemeDraft={props.setThemeDraft}
+      setThemePatternError={props.setThemePatternError}
+      onSave={props.onSave}
+      onCancel={props.onCancel}
+    />
+    <ThemeRowActions
+      theme={props.theme}
+      isDefault={props.isDefault}
+      activeThemeId={props.activeThemeId}
+      themeDraft={props.themeDraft}
+      onSave={props.onSave}
+      onCancel={props.onCancel}
+      currentMatches={props.currentMatches}
+      onEdit={props.onEdit}
+      onDelete={props.onDelete}
+    />
   </div>
 );
 

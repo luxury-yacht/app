@@ -184,13 +184,44 @@ const cutTextEntrySelection = (element: TextEntryElement): boolean => {
   return true;
 };
 
-const cutContentEditableSelection = (): boolean => {
-  const text = deriveCopyText(window.getSelection());
+const resolveContentEditableRoot = (selection: Selection): HTMLElement | null => {
+  const anchorElement =
+    selection.anchorNode instanceof HTMLElement
+      ? selection.anchorNode
+      : selection.anchorNode?.parentElement;
+  return (
+    anchorElement?.closest<HTMLElement>('[contenteditable]:not([contenteditable="false"])') ?? null
+  );
+};
+
+type ContentEditableInputType = 'deleteByCut' | 'insertText';
+
+const dispatchContentEditableInput = (
+  root: HTMLElement | null,
+  inputType: ContentEditableInputType,
+  data: string | null
+) => {
+  root?.dispatchEvent(
+    new InputEvent('input', {
+      bubbles: true,
+      inputType,
+      data,
+    })
+  );
+};
+
+export const cutContentEditableSelection = (
+  selection: Selection | null = window.getSelection()
+): boolean => {
+  const text = deriveCopyText(selection);
   if (!text) {
     return false;
   }
+  const root = selection ? resolveContentEditableRoot(selection) : null;
   void navigator.clipboard.writeText(text);
-  return typeof document.execCommand === 'function' ? document.execCommand('delete') : false;
+  selection?.deleteFromDocument();
+  dispatchContentEditableInput(root, 'deleteByCut', null);
+  return true;
 };
 
 const pasteIntoTextEntry = (element: TextEntryElement, text: string): boolean => {
@@ -204,10 +235,25 @@ const pasteIntoTextEntry = (element: TextEntryElement, text: string): boolean =>
   return true;
 };
 
-const pasteIntoContentEditable = (text: string): boolean =>
-  typeof document.execCommand === 'function'
-    ? document.execCommand('insertText', false, text)
-    : false;
+export const pasteIntoContentEditable = (
+  text: string,
+  selection: Selection | null = window.getSelection()
+): boolean => {
+  if (!selection || selection.rangeCount === 0) {
+    return false;
+  }
+  const root = resolveContentEditableRoot(selection);
+  const range = selection.getRangeAt(0);
+  range.deleteContents();
+  const insertedNode = document.createTextNode(text);
+  range.insertNode(insertedNode);
+  range.setStartAfter(insertedNode);
+  range.collapse(true);
+  selection.removeAllRanges();
+  selection.addRange(range);
+  dispatchContentEditableInput(root, 'insertText', text);
+  return true;
+};
 
 const isHandledSurfaceResult = (result: KeyboardSurfaceKeyResult) =>
   result === true || result === 'handled-no-prevent';

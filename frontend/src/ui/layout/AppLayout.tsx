@@ -514,11 +514,11 @@ const getSurfaceDescription = (element: HTMLElement) => {
 };
 
 const getFocusArea = (element: HTMLElement) => {
-  const direct = element.getAttribute('data-focus-area');
+  const direct = element.dataset.focusArea;
   if (direct) {
     return direct;
   }
-  return element.closest<HTMLElement>('[data-focus-area]')?.getAttribute('data-focus-area') ?? null;
+  return element.closest<HTMLElement>('[data-focus-area]')?.dataset.focusArea ?? null;
 };
 
 const getFocusSummary = (

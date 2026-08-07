@@ -55,11 +55,7 @@ interface DockablePanelContextValue {
   registerPanel: (registration: PanelRegistration) => void;
   unregisterPanel: (panelId: string) => void;
   // Keep tab-group membership aligned with an open panel's current dock position.
-  syncPanelGroup: (
-    panelId: string,
-    position: DockPosition,
-    preferredGroupKey?: GroupKey | 'floating'
-  ) => void;
+  syncPanelGroup: (panelId: string, position: DockPosition, preferredGroupKey?: GroupKey) => void;
   // Remove tab-group membership for closed/unmounted panels.
   removePanelFromGroups: (panelId: string) => void;
 
@@ -67,15 +63,11 @@ interface DockablePanelContextValue {
   switchTab: (groupKey: GroupKey, panelId: string) => void;
   closeTab: (panelId: string, activationPreference?: AdjacentTabActivationPreference) => void;
   reorderTabInGroup: (groupKey: GroupKey, panelId: string, newIndex: number) => void;
-  movePanelBetweenGroups: (
-    panelId: string,
-    targetGroupKey: GroupKey | 'floating',
-    insertIndex?: number
-  ) => void;
+  movePanelBetweenGroups: (panelId: string, targetGroupKey: GroupKey, insertIndex?: number) => void;
   // Move a panel and bring the target container/frontmost panel into focus.
   movePanelBetweenGroupsAndFocus: (
     panelId: string,
-    targetGroupKey: GroupKey | 'floating',
+    targetGroupKey: GroupKey,
     insertIndex?: number,
     focusTargetPanelId?: string
   ) => void;
@@ -116,7 +108,7 @@ interface DockablePanelContextValue {
   lastFocusedGroupKey: GroupKey | null;
   setLastFocusedGroupKey: (key: GroupKey) => void;
   // Resolve the concrete group key new panels should target.
-  getPreferredOpenGroupKey: (fallbackPosition?: DockPosition) => GroupKey | 'floating';
+  getPreferredOpenGroupKey: (fallbackPosition?: DockPosition) => GroupKey;
   getLastFocusedPosition: () => DockPosition;
 
   // Focus a panel by ID -- activates its tab and brings the panel to front.
@@ -174,7 +166,7 @@ const resolveFocusedFloatingGroup = (
   tabGroups: TabGroupState,
   currentGroup: GroupKey | null,
   focusedGroup: GroupKey | null
-): GroupKey | 'floating' => {
+): GroupKey => {
   if (isFloatingGroupKey(currentGroup)) {
     return currentGroup;
   }
@@ -189,9 +181,9 @@ const resolvePanelTargetGroup = (
   tabGroups: TabGroupState,
   currentGroup: GroupKey | null,
   position: DockPosition,
-  preferredGroup: GroupKey | 'floating' | undefined,
+  preferredGroup: GroupKey | undefined,
   focusedGroup: GroupKey | null
-): GroupKey | 'floating' => {
+): GroupKey => {
   if (currentGroup === null && preferredGroup !== undefined) {
     return preferredGroup;
   }
@@ -201,10 +193,7 @@ const resolvePanelTargetGroup = (
   return position;
 };
 
-const panelAlreadyInTargetGroup = (
-  currentGroup: GroupKey | null,
-  targetGroup: GroupKey | 'floating'
-) =>
+const panelAlreadyInTargetGroup = (currentGroup: GroupKey | null, targetGroup: GroupKey) =>
   targetGroup === 'floating'
     ? isFloatingGroupKey(currentGroup)
     : currentGroup !== null && currentGroup === targetGroup;
@@ -212,7 +201,7 @@ const panelAlreadyInTargetGroup = (
 const addPanelToResolvedGroup = (
   tabGroups: TabGroupState,
   panelId: string,
-  targetGroup: GroupKey | 'floating',
+  targetGroup: GroupKey,
   fallbackPosition: DockPosition
 ): TabGroupState => {
   if (targetGroup === 'right' || targetGroup === 'bottom' || targetGroup === 'floating') {
@@ -231,7 +220,7 @@ const syncPanelGroupState = (
   tabGroups: TabGroupState,
   panelId: string,
   position: DockPosition,
-  preferredGroup: GroupKey | 'floating' | undefined,
+  preferredGroup: GroupKey | undefined,
   focusedGroup: GroupKey | null
 ): TabGroupState => {
   const currentGroup = getGroupForPanel(tabGroups, panelId);
@@ -422,7 +411,7 @@ export const DockablePanelProvider: React.FC<DockablePanelProviderProps> = ({ ch
 
   // Resolve the best target group key for opening a new panel.
   const getPreferredOpenGroupKey = useCallback(
-    (fallbackPosition: DockPosition = 'right'): GroupKey | 'floating' => {
+    (fallbackPosition: DockPosition = 'right'): GroupKey => {
       // If we have a valid last-focused group with tabs, use it.
       const focusedGroupKey = lastFocusedGroupKeyRef.current;
       if (focusedGroupKey) {
@@ -442,7 +431,7 @@ export const DockablePanelProvider: React.FC<DockablePanelProviderProps> = ({ ch
    *  default to right-docked placement. */
   const getLastFocusedPosition = useCallback((): DockPosition => {
     // Helper: map a group key to a DockPosition.
-    const keyToPosition = (key: GroupKey | 'floating'): DockPosition => {
+    const keyToPosition = (key: GroupKey): DockPosition => {
       if (key === 'right') {
         return 'right';
       }
@@ -521,7 +510,7 @@ export const DockablePanelProvider: React.FC<DockablePanelProviderProps> = ({ ch
   // syncPanelGroup -- align one panel with its declared dock position.
   // -----------------------------------------------------------------------
   const syncPanelGroup = useCallback(
-    (panelId: string, position: DockPosition, preferredGroupKey?: GroupKey | 'floating') => {
+    (panelId: string, position: DockPosition, preferredGroupKey?: GroupKey) => {
       activeStore.setTabGroups((prev) =>
         syncPanelGroupState(
           prev,
@@ -617,7 +606,7 @@ export const DockablePanelProvider: React.FC<DockablePanelProviderProps> = ({ ch
   // movePanelBetweenGroups -- move a panel to a different group.
   // -----------------------------------------------------------------------
   const movePanelBetweenGroups = useCallback(
-    (panelId: string, targetGroupKey: GroupKey | 'floating', insertIndex?: number) => {
+    (panelId: string, targetGroupKey: GroupKey, insertIndex?: number) => {
       activeStore.setTabGroups((prev) =>
         movePanelToGroup(prev, panelId, targetGroupKey, insertIndex)
       );
@@ -646,7 +635,7 @@ export const DockablePanelProvider: React.FC<DockablePanelProviderProps> = ({ ch
   const movePanelBetweenGroupsAndFocus = useCallback(
     (
       panelId: string,
-      targetGroupKey: GroupKey | 'floating',
+      targetGroupKey: GroupKey,
       insertIndex?: number,
       focusTargetPanelId?: string
     ) => {

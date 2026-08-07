@@ -57,6 +57,7 @@ reported separately and remains pending until the branch is pushed and analyzed.
 | Phase 5: app shell and interactions | **26/26** | Pending branch analysis |
 | Phase 6: refresh and diagnostics | **16/16** | Pending branch analysis |
 | **TypeScript findings** | **91/91 locally remediated** | Pending branch analysis |
+| PR 283 cross-rule recovery | **51/51 locations corrected locally** | Pending pushed analysis |
 
 Sonar classifies colocated tests separately through
 `.sonarcloud.properties`; no test file appears in this inventory. Generated
@@ -775,6 +776,40 @@ enable/disable/re-enable flaps, cancellation and teardown, manager replacement,
 multi-cluster isolation, metrics/object-clock separation, truncated/partial
 diagnostics, and empty/error/recovery row presentation.
 
+## PR 283 cross-rule regression recovery
+
+The first all-rule analysis of PR 283 at revision
+`45dd72ed4ab6a1bc08eed117e48c067fbc918a4c` reported 51 open/confirmed new-code
+issues: one bug and 50 code smells. The quality gate's C reliability rating came
+from `typescript:S7727` in `useLogFiltering`; the same analysis also reported a
+critical `javascript:S3776` regression in the Sonar checker itself. This result
+demonstrates why an S3776-only local pass cannot close a remediation batch.
+
+- [x] Inventory all 51 findings through the public PR issues API and group them
+  by rule, severity, impact, and owning source file.
+- [x] Correct the four rating/critical findings: the S7727 callback bug, two
+  S6772 spacing findings, and the checker's new S3776 finding.
+- [x] Correct the 29 mechanical/type findings across refresh diagnostics, logs,
+  dropdowns, dockable panels, focus diagnostics, table sorting/persistence,
+  query walking, and cluster event presentation.
+- [x] Correct the 18 JSX/prop/deprecated-API findings. Contenteditable cut and
+  paste now use Selection/Range operations covered by focused tests; rich
+  listbox option semantics are centralized in a typed shared primitive without
+  a Sonar suppression or source exclusion.
+- [x] Focused Vitest passes 110 tests for the rating/critical batch, 467 tests
+  for the mechanical/type batch, 536 tests for the shell/object-map/settings
+  batch, 127 tests for Dropdown/Command Palette, and 11 tests for the
+  contenteditable API change. Frontend type-check and the complete checked-in
+  frontend check pass.
+- [x] Full frontend coverage passes 4,145 tests across 467 files with 81.61%
+  statement, 72.30% branch, 81.88% function, and 81.99% line coverage.
+- [x] `mise exec -- mage qc:prerelease` passes Go formatting, vet,
+  staticcheck, race tests, frontend check/type-check, all 4,145 frontend tests,
+  Knip, and Trivy with zero reported dependency vulnerabilities.
+- [ ] Push the recovery revision, wait for Automatic Analysis, and require
+  `npm run sonar:audit --prefix frontend -- --pull-request 283` to report zero
+  open/confirmed new-code findings before marking the recovery complete.
+
 ## PR and batch boundaries
 
 - One review unit owns one runtime contract and normally two to six findings.
@@ -805,8 +840,8 @@ diagnostics, and empty/error/recovery row presentation.
   retained finding, and zero open/confirmed new-code findings across all rules.
 
 Latest aggregate coverage evidence: `mise exec -- mage test:frontendCoverage`
-passes 4,143 tests across 467 files with 81.58% statement coverage, 72.27%
-branch coverage, 81.83% function coverage, and 81.96% line coverage.
+passes 4,145 tests across 467 files with 81.61% statement coverage, 72.30%
+branch coverage, 81.88% function coverage, and 81.99% line coverage.
 - [ ] The main-branch analysis confirms the reduction before the baseline and
   plan are updated.
 - [ ] Rendered changes exercise relevant loading, error, denial, empty,

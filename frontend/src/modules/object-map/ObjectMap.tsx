@@ -395,7 +395,7 @@ const ObjectMapLegend: React.FC<ObjectMapLegendProps> = ({
       </div>
     )}
     <div className="object-map__legend-separator" aria-hidden="true" />
-    <div className="object-map__legend-counts" role="status" aria-label="Visible map totals">
+    <output className="object-map__legend-counts" aria-label="Visible map totals">
       <span className="object-map__legend-count">
         <span className="object-map__legend-count-value">{nodeCount}</span>
         <span className="object-map__legend-count-label">Objects</span>
@@ -404,7 +404,7 @@ const ObjectMapLegend: React.FC<ObjectMapLegendProps> = ({
         <span className="object-map__legend-count-value">{edgeCount}</span>
         <span className="object-map__legend-count-label">Links</span>
       </span>
-    </div>
+    </output>
   </section>
 );
 

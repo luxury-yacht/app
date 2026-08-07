@@ -49,9 +49,9 @@ interface CursorWalkState<TItem> {
 
 const observeSourceClock = <TItem>(
   state: CursorWalkState<TItem>,
-  sourceVersion: string | null | undefined
+  sourceVersion: string | null = null
 ): 'continue' | 'restart' => {
-  const clock = sourceVersion ?? null;
+  const clock = sourceVersion;
   if (clock === null) {
     return 'continue';
   }

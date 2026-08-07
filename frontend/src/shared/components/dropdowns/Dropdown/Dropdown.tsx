@@ -10,15 +10,15 @@ import { createPortal } from 'react-dom';
 import { useAriaAnnouncements } from './hooks/useAriaAnnouncements';
 import { useDropdownState } from './hooks/useDropdownState';
 import { useKeyboardNavigation } from './hooks/useKeyboardNavigation';
-import type { DropdownProps } from './types';
+import type { DropdownOption, DropdownProps } from './types';
 import '@styles/components/dropdowns.css';
+import { ListboxOptionButton } from '@shared/components/aria/ListboxOptionButton';
 import {
   DropdownArrowIcon,
   DropdownSelectAllIcon,
   DropdownSelectNoneIcon,
 } from '@shared/components/icons/DropdownIcons';
 import { useKeyboardSurface } from '@ui/shortcuts';
-import type { DropdownOption } from './types';
 
 type DropdownMenuStyle = React.CSSProperties & {
   '--dropdown-menu-anchor-width': string;
@@ -449,7 +449,7 @@ interface DropdownOptionContentProps<TMetadata> {
   option: DropdownOption<TMetadata>;
   optionIsSelected: boolean;
   multiple: boolean;
-  renderOption?: DropdownProps<TMetadata>['renderOption'];
+  renderOption: DropdownProps<TMetadata>['renderOption'];
 }
 
 const DropdownOptionContent = <TMetadata,>({
@@ -478,7 +478,7 @@ interface DropdownOptionRowProps<TMetadata> {
   multiple: boolean;
   highlightedIndex: number;
   optionIsSelected: boolean;
-  renderOption?: DropdownProps<TMetadata>['renderOption'];
+  renderOption: DropdownProps<TMetadata>['renderOption'];
   selectOption: (value: string) => void;
   setHighlightedIndex: (index: number) => void;
 }
@@ -500,7 +500,7 @@ const DropdownOptionRow = <TMetadata,>({
   }
   if (isGroupHeader) {
     return (
-      <div className="dropdown-group-header" role="presentation">
+      <div className="dropdown-group-header">
         {renderOption ? renderOption(option, false) : option.label}
       </div>
     );
@@ -517,8 +517,7 @@ const DropdownOptionRow = <TMetadata,>({
   };
 
   return (
-    <button
-      type="button"
+    <ListboxOptionButton
       id={`${controlId}-option-${index}`}
       className={[
         'dropdown-option',
@@ -530,11 +529,9 @@ const DropdownOptionRow = <TMetadata,>({
         .join(' ')}
       onClick={() => selectOption(option.value)}
       onMouseEnter={handleMouseEnter}
-      role="option"
-      aria-selected={optionAriaSelected}
+      selected={optionAriaSelected}
       aria-disabled={option.disabled}
       disabled={option.disabled}
-      tabIndex={-1}
     >
       <DropdownOptionContent
         option={option}
@@ -542,7 +539,7 @@ const DropdownOptionRow = <TMetadata,>({
         multiple={multiple}
         renderOption={renderOption}
       />
-    </button>
+    </ListboxOptionButton>
   );
 };
 
@@ -551,7 +548,7 @@ interface DropdownOptionListProps<TMetadata> {
   controlId: string;
   multiple: boolean;
   highlightedIndex: number;
-  renderOption?: DropdownProps<TMetadata>['renderOption'];
+  renderOption: DropdownProps<TMetadata>['renderOption'];
   isSelected: (value: string) => boolean;
   selectOption: (value: string) => void;
   setHighlightedIndex: (index: number) => void;
@@ -607,7 +604,7 @@ interface DropdownMenuPortalProps<TMetadata> {
   options: DropdownOption<TMetadata>[];
   controlId: string;
   highlightedIndex: number;
-  renderOption?: DropdownProps<TMetadata>['renderOption'];
+  renderOption: DropdownProps<TMetadata>['renderOption'];
   isSelected: (value: string) => boolean;
   selectOption: (value: string) => void;
   setHighlightedIndex: (index: number) => void;

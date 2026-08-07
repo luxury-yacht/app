@@ -350,7 +350,7 @@ const resolveFetchRowsOptions = (
 ): ResolvedFetchRowsOptions => ({
   filters: options.filters ?? defaults.filters,
   sortConfig: options.sortConfig === undefined ? defaults.sortConfig : options.sortConfig,
-  predicates: options.predicates === undefined ? defaults.predicates : options.predicates,
+  predicates: options.predicates ?? defaults.predicates,
   baseScope: options.baseScope ?? defaults.baseScope,
   label: options.label ?? defaults.label,
   pageLimit: options.pageLimit ?? EXPORT_PAGE_LIMIT,

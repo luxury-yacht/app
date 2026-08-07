@@ -85,7 +85,7 @@ const orderLogEntries = (entries: ContainerLogsEntry[]): ContainerLogsEntry[] =>
     return entries;
   }
   return entries
-    .map(timestampLogEntry)
+    .map((entry, index) => timestampLogEntry(entry, index))
     .sort(compareTimestampedLogEntries)
     .map(({ entry }) => entry);
 };

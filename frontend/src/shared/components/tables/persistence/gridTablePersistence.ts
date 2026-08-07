@@ -517,7 +517,7 @@ const prunePageSize = (
 interface PersistedStateParts {
   columnVisibility?: Record<string, boolean>;
   columnWidths?: Record<string, ColumnWidthState>;
-  sort?: GridTablePersistedState['sort'];
+  sort?: NonNullable<GridTablePersistedState['sort']>;
   filters?: GridTableFilterState;
   pageSize?: number;
 }

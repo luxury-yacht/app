@@ -549,7 +549,9 @@ interface NamespaceSidebarSectionProps {
   onNamespaceViewSelect: (scope: string, view: NamespaceViewType, clusterId?: string) => void;
 }
 
-const NamespaceSidebarContent = (props: NamespaceSidebarSectionProps) => {
+type NamespaceSidebarContentProps = Omit<NamespaceSidebarSectionProps, 'hidden' | 'shortcut'>;
+
+const NamespaceSidebarContent = (props: NamespaceSidebarContentProps) => {
   if (props.permissionDenied) {
     return (
       <>
@@ -597,7 +599,7 @@ const NamespaceSidebarContent = (props: NamespaceSidebarSectionProps) => {
 const NamespaceSidebarSection = (props: NamespaceSidebarSectionProps) => (
   <div className="sidebar-section namespaces-section" hidden={props.hidden}>
     <h3>
-      Namespaces
+      Namespaces{' '}
       <button
         type="button"
         className="sidebar-header-action"
