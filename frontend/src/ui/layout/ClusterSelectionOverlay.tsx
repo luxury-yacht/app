@@ -27,7 +27,7 @@ export const ClusterSelectionOverlay = ({
   );
   const kubeconfigDiscoveryMessage =
     discoveryState === 'search_paths_missing'
-      ? 'None of the configured search paths exist.'
+      ? 'None of the kubeconfig search paths exist.'
       : discoveryState === 'no_kubeconfigs'
         ? 'No kubeconfig files were found in the configured search paths.'
         : null;
@@ -37,6 +37,7 @@ export const ClusterSelectionOverlay = ({
         <div>
           <strong>⚠️ {kubeconfigDiscoveryMessage}</strong>
         </div>
+        <div className="no-active-clusters-settings-hint">One of these paths must contain a valid kubeconfig file:</div>
         <ul className="no-active-clusters-paths">
           {searchPaths.map((path) => (
             <li key={path}>
