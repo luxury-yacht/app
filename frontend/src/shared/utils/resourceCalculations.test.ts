@@ -74,4 +74,11 @@ describe('shared resource calculations', () => {
     expect(formatResourceValue('-', 0, 'cpu')).toBe('-');
     expect(formatResourceValue('not set', 0, 'cpu')).toBe('-');
   });
+
+  it.each(['0', '0Ki', '0Mi'])('preserves an explicit zero memory value %s', (value) => {
+    const parsedValue = parseResourceValue(value, 'memory');
+
+    expect(parsedValue).toBe(0);
+    expect(formatResourceValue(value, parsedValue, 'memory')).toBe('0');
+  });
 });

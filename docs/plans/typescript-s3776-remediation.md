@@ -57,7 +57,7 @@ reported separately and remains pending until the branch is pushed and analyzed.
 | Phase 5: app shell and interactions | **26/26** | Pending branch analysis |
 | Phase 6: refresh and diagnostics | **16/16** | Pending branch analysis |
 | **TypeScript findings** | **91/91 locally remediated** | Pending branch analysis |
-| PR 283 cross-rule recovery | **51/51 locations corrected locally** | Pending pushed analysis |
+| PR 283 cross-rule recovery | **51/51 locations corrected** | Verified: 0 new issues at `e256225b` |
 
 Sonar classifies colocated tests separately through
 `.sonarcloud.properties`; no test file appears in this inventory. Generated
@@ -806,9 +806,36 @@ demonstrates why an S3776-only local pass cannot close a remediation batch.
 - [x] `mise exec -- mage qc:prerelease` passes Go formatting, vet,
   staticcheck, race tests, frontend check/type-check, all 4,145 frontend tests,
   Knip, and Trivy with zero reported dependency vulnerabilities.
-- [ ] Push the recovery revision, wait for Automatic Analysis, and require
-  `npm run sonar:audit --prefix frontend -- --pull-request 283` to report zero
-  open/confirmed new-code findings before marking the recovery complete.
+- [x] PR 283 revision `e256225bbdf82e5438af91ce8688909a6add8e73`
+  passes the Sonar quality gate with A reliability/security/maintainability,
+  and the public issues API reports zero open/confirmed new-code findings.
+
+### Copilot review follow-up
+
+- [x] Audit all three visible Copilot threads plus the suppressed zero-value
+  suggestion in Copilot's review summary.
+- [x] Correct the ResourceBar warning grammar from “Requests exceeds” to
+  “Requests exceed.”
+- [x] Preserve explicit zero memory quantities through the shared formatter and
+  GridTable export path. The red test proved `0`, `0Ki`, and `0Mi` were
+  previously collapsed to `-`; focused utility, column-factory, and ResourceBar
+  suites now pass 49 tests.
+- [x] Retain the four type-only hook imports in the two Cluster Overview helper
+  files. They are used exclusively in `typeof` type queries, and frontend
+  type-check passes; changing them to value imports would add unnecessary
+  runtime dependencies.
+- [x] Frontend all-rule checks, type-check, and focused cognitive-complexity
+  lint pass. Full frontend coverage passes 4,149 tests across 467 files with
+  81.61% statement, 72.30% branch, 81.88% function, and 81.99% line coverage.
+  Directly affected statement coverage is 100% for
+  `resourceCalculations.ts`, 97.05% for `ResourceBar.tsx`, and 87.71% for
+  `columnFactories.tsx`.
+  `mise exec -- mage qc:prerelease` passes Go formatting, vet, staticcheck,
+  race tests, frontend checks/type-check/all 4,149 tests, Knip, and Trivy with
+  zero reported dependency vulnerabilities; post-gate `git diff --check`
+  passes.
+- [ ] Push the follow-up and require the PR all-rule Sonar audit to remain at
+  zero before resolving the Copilot threads.
 
 ## PR and batch boundaries
 

@@ -34,6 +34,9 @@ const EMPTY_RESOURCE_VALUES = new Set(['-', 'undefined', 'null', 'not set']);
 
 const isEmptyResourceValue = (value: string): boolean => !value || EMPTY_RESOURCE_VALUES.has(value);
 
+const isNumericResourceValue = (value: string): boolean =>
+  Number.isFinite(Number.parseFloat(value));
+
 // Parse CPU values to millicores.
 const parseCpuValue = (value: string): number => {
   const parsed = Number.parseFloat(value);
@@ -105,13 +108,13 @@ export const formatResourceValue = (
   parsedValue: number,
   type: ResourceType
 ): string => {
-  if (value === undefined || isEmptyResourceValue(value)) {
+  if (value === undefined || isEmptyResourceValue(value) || !isNumericResourceValue(value)) {
     return '-';
   }
   if (type === 'cpu') {
     return `${Math.round(parsedValue)}m`;
   }
-  return parsedValue === 0 ? '-' : formatMemoryValue(parsedValue);
+  return formatMemoryValue(parsedValue);
 };
 
 const calculateResourceScale = ({

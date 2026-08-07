@@ -161,7 +161,7 @@ const ResourceBarTooltipConstraints = ({ model }: { model: ResourceBarModel }) =
 
       {model.hasConfigIssue ? (
         <div className="rb-tooltip-row warning">
-          <span>⚠️ Requests exceeds Limits</span>
+          <span>⚠️ Requests exceed Limits</span>
         </div>
       ) : null}
     </>
