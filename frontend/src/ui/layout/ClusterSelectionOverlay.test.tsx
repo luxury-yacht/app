@@ -20,7 +20,10 @@ it('explains when no configured kubeconfig search paths exist', () => {
     );
   });
 
-  expect(container.textContent).toContain('None of the configured search paths exist.');
+  const overlay = container.querySelector('.no-active-clusters-overlay');
+  expect(overlay?.getAttribute('role')).toBeNull();
+  expect(overlay?.getAttribute('aria-live')).toBe('polite');
+  expect(overlay?.getAttribute('aria-atomic')).toBe('true');
   expect(container.querySelector('strong')?.textContent).toBe(
     '⚠️ None of the kubeconfig search paths exist.'
   );
