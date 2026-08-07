@@ -37,6 +37,100 @@ interface BuildGridTableFilterOptionsParams<T> {
   defaultGetNamespace: (row: T) => string | null;
 }
 
+const addDropdownOption = (
+  map: Map<string, DropdownOption>,
+  raw: string | null | undefined,
+  normalize: (value: string) => string
+): void => {
+  if (typeof raw !== 'string') {
+    return;
+  }
+  const value = normalize(raw.trim());
+  const key = value.toLowerCase();
+  if (value && !map.has(key)) {
+    map.set(key, { value, label: value });
+  }
+};
+
+const collectStringOptions = <T>(
+  provided: string[] | undefined,
+  data: T[],
+  getValue: (row: T) => string | null | undefined,
+  normalize: (value: string) => string,
+  queryBacked: boolean
+): DropdownOption[] => {
+  const map = new Map<string, DropdownOption>();
+  if (provided?.length) {
+    provided.forEach((value) => {
+      addDropdownOption(map, value, normalize);
+    });
+  } else if (!queryBacked) {
+    data.forEach((row) => {
+      addDropdownOption(map, getValue(row), normalize);
+    });
+  }
+  return Array.from(map.values()).sort((first, second) => first.label.localeCompare(second.label));
+};
+
+const collectClusterOptions = <T>(
+  provided: DropdownOption[] | undefined,
+  data: T[],
+  getCluster: ((row: T) => string | null | undefined) | undefined,
+  queryBacked: boolean
+): DropdownOption[] => {
+  if (queryBacked) {
+    return [];
+  }
+  const map = new Map<string, DropdownOption>();
+  if (provided?.length) {
+    for (const option of provided) {
+      const value = option.value.trim();
+      if (value && !map.has(value)) {
+        map.set(value, { ...option, value, label: option.label.trim() || value });
+      }
+    }
+  } else {
+    data.forEach((row) => {
+      addDropdownOption(map, getCluster?.(row), (value) => value);
+    });
+  }
+  return Array.from(map.values()).sort((first, second) => first.label.localeCompare(second.label));
+};
+
+const buildNamespaceOptions = (
+  namespaces: DropdownOption[],
+  includeClusterScoped: boolean
+): DropdownOption[] => {
+  if (!includeClusterScoped) {
+    return namespaces;
+  }
+  const clusterScoped = { value: '', label: 'cluster-scoped' } satisfies DropdownOption;
+  if (namespaces.length === 0) {
+    return [clusterScoped];
+  }
+  return [
+    clusterScoped,
+    { value: '__namespace-separator__', label: '', group: 'header' },
+    ...namespaces,
+  ];
+};
+
+const buildBaseFilterOptions = (options: GridTableFilterOptions | undefined) => ({
+  searchBehavior: options?.searchBehavior ?? ('local' as const),
+  searchPlaceholder: options?.searchPlaceholder,
+  namespaceDropdownSearchable: options?.namespaceDropdownSearchable ?? false,
+  namespaceDropdownBulkActions: options?.namespaceDropdownBulkActions ?? false,
+  clusterDropdownSearchable: options?.clusterDropdownSearchable ?? false,
+  clusterDropdownBulkActions: options?.clusterDropdownBulkActions ?? false,
+  beforeNamespaceActions: options?.beforeNamespaceActions,
+  queryFacets: options?.searchBehavior === 'query' ? (options.queryFacets ?? []) : [],
+  preActions: options?.preActions,
+  postActions: options?.postActions,
+  customActions: options?.customActions,
+  totalIsExact: options?.totalIsExact ?? true,
+  partialDataLabel: options?.partialDataLabel,
+});
+
 export function buildGridTableFilterOptions<T>({
   filteringEnabled,
   options,
@@ -45,21 +139,7 @@ export function buildGridTableFilterOptions<T>({
   defaultGetKind,
   defaultGetNamespace,
 }: BuildGridTableFilterOptionsParams<T>): InternalFilterOptions {
-  const baseOptions = {
-    searchBehavior: options?.searchBehavior ?? 'local',
-    searchPlaceholder: options?.searchPlaceholder,
-    namespaceDropdownSearchable: options?.namespaceDropdownSearchable ?? false,
-    namespaceDropdownBulkActions: options?.namespaceDropdownBulkActions ?? false,
-    clusterDropdownSearchable: options?.clusterDropdownSearchable ?? false,
-    clusterDropdownBulkActions: options?.clusterDropdownBulkActions ?? false,
-    beforeNamespaceActions: options?.beforeNamespaceActions,
-    queryFacets: options?.searchBehavior === 'query' ? (options.queryFacets ?? []) : [],
-    preActions: options?.preActions,
-    postActions: options?.postActions,
-    customActions: options?.customActions,
-    totalIsExact: options?.totalIsExact ?? true,
-    partialDataLabel: options?.partialDataLabel,
-  };
+  const baseOptions = buildBaseFilterOptions(options);
 
   if (!filteringEnabled) {
     return {
@@ -71,97 +151,35 @@ export function buildGridTableFilterOptions<T>({
     };
   }
 
-  const includeClusterScoped = options?.includeClusterScopedSyntheticNamespace ?? false;
   const queryBacked = baseOptions.searchBehavior === 'query';
-  const clusterScopedOption = includeClusterScoped
-    ? ({ value: '', label: 'cluster-scoped' } satisfies DropdownOption)
-    : null;
-
-  const addOption = (
-    map: Map<string, DropdownOption>,
-    raw: string | null | undefined,
-    normalize: (value: string) => string
-  ) => {
-    if (typeof raw !== 'string') {
-      return;
-    }
-    const value = normalize(raw.trim());
-    if (!value) {
-      return;
-    }
-    const key = value.toLowerCase();
-    if (!map.has(key)) {
-      map.set(key, { value, label: value });
-    }
-  };
-
-  const collectOptions = (
-    provided: string[] | undefined,
-    getValue: (row: T) => string | null | undefined,
-    normalize: (value: string) => string
-  ) => {
-    const map = new Map<string, DropdownOption>();
-    if (provided?.length) {
-      provided.forEach((value) => {
-        addOption(map, value, normalize);
-      });
-    } else if (!queryBacked) {
-      for (const row of data) {
-        addOption(map, getValue(row), normalize);
-      }
-    }
-    return Array.from(map.values()).sort((a, b) => a.label.localeCompare(b.label));
-  };
-
-  const kinds = collectOptions(
+  const kinds = collectStringOptions(
     options?.kinds,
+    data,
     (row) => accessors.getKind?.(row) ?? defaultGetKind(row),
-    (value) => value
+    (value) => value,
+    queryBacked
   );
-  const namespaces = collectOptions(
+  const namespaces = collectStringOptions(
     options?.namespaces,
+    data,
     (row) => accessors.getNamespace?.(row) ?? defaultGetNamespace(row),
-    (value) => (isTableNoValueText(value) ? '' : value)
+    (value) => (isTableNoValueText(value) ? '' : value),
+    queryBacked
   );
-  const clusterMap = new Map<string, DropdownOption>();
-  if (!queryBacked && options?.clusters?.length) {
-    for (const option of options.clusters) {
-      const value = option.value.trim();
-      if (!value) {
-        continue;
-      }
-      const key = value;
-      if (!clusterMap.has(key)) {
-        clusterMap.set(key, { ...option, value, label: option.label.trim() || value });
-      }
-    }
-  } else if (!queryBacked) {
-    for (const row of data) {
-      addOption(clusterMap, accessors.getCluster?.(row), (value) => value);
-    }
-  }
-  const clusters = Array.from(clusterMap.values()).sort((a, b) => a.label.localeCompare(b.label));
-  const namespaceSeparator =
-    clusterScopedOption && namespaces.length > 0
-      ? ({
-          value: '__namespace-separator__',
-          label: '',
-          group: 'header',
-        } satisfies DropdownOption)
-      : null;
-  const namespaceOptions: DropdownOption[] = [];
-  if (clusterScopedOption) {
-    namespaceOptions.push(clusterScopedOption);
-  }
-  if (namespaceSeparator) {
-    namespaceOptions.push(namespaceSeparator);
-  }
-  namespaceOptions.push(...namespaces);
+  const clusters = collectClusterOptions(
+    options?.clusters,
+    data,
+    accessors.getCluster,
+    queryBacked
+  );
 
   return {
     ...baseOptions,
     kinds,
-    namespaces: namespaceOptions,
+    namespaces: buildNamespaceOptions(
+      namespaces,
+      options?.includeClusterScopedSyntheticNamespace ?? false
+    ),
     clusters,
   };
 }
@@ -176,6 +194,98 @@ interface ApplyGridTableFiltersParams<T> {
   defaultGetNamespace: (row: T) => string | null;
   defaultGetSearchText: (row: T) => string[];
 }
+
+interface LocalFilterMatcher<T> {
+  activeFilters: GridTableFilterState;
+  accessors: GridTableFilterAccessors<T>;
+  defaultGetKind: (row: T) => string | null;
+  defaultGetNamespace: (row: T) => string | null;
+  defaultGetSearchText: (row: T) => string[];
+  searchNeedle: string;
+  kindSet: Set<string>;
+  namespaceSet: Set<string>;
+  clusterSet: Set<string>;
+  filterKinds: boolean;
+  filterNamespaces: boolean;
+  filterClusters: boolean;
+}
+
+const normalizeFilterValue = (value: unknown): string =>
+  typeof value === 'string' ? value.trim() : '';
+
+const matchesSelection = (
+  shouldFilter: boolean,
+  value: string,
+  selected: Set<string>,
+  normalize: (value: string) => string,
+  requireValue = true
+): boolean => !shouldFilter || Boolean((!requireValue || value) && selected.has(normalize(value)));
+
+const normalizeSearchValues = (values: unknown): unknown[] => {
+  if (Array.isArray(values)) {
+    return values.slice();
+  }
+  return typeof values === 'string' ? [values] : [];
+};
+
+const matchesRowSearch = <T>(
+  row: T,
+  kind: string,
+  namespace: string,
+  matcher: LocalFilterMatcher<T>
+): boolean => {
+  if (!matcher.searchNeedle) {
+    return true;
+  }
+  const rawValues = matcher.accessors.getSearchText?.(row) ?? matcher.defaultGetSearchText(row);
+  const searchValues = normalizeSearchValues(rawValues);
+  if (kind) {
+    searchValues.push(kind);
+  }
+  if (namespace) {
+    searchValues.push(namespace);
+  }
+  return searchValues.some((candidate) => {
+    if (typeof candidate !== 'string') {
+      return false;
+    }
+    const comparable = matcher.activeFilters.caseSensitive ? candidate : candidate.toLowerCase();
+    return comparable.includes(matcher.searchNeedle);
+  });
+};
+
+const createLocalRowPredicate =
+  <T>(matcher: LocalFilterMatcher<T>) =>
+  (row: T): boolean => {
+    const cluster = normalizeFilterValue(matcher.accessors.getCluster?.(row));
+    if (!matchesSelection(matcher.filterClusters, cluster, matcher.clusterSet, (value) => value)) {
+      return false;
+    }
+    const kind = normalizeFilterValue(
+      matcher.accessors.getKind?.(row) ?? matcher.defaultGetKind(row)
+    );
+    if (
+      !matchesSelection(matcher.filterKinds, kind, matcher.kindSet, (value) => value.toLowerCase())
+    ) {
+      return false;
+    }
+    const namespaceCandidate = normalizeFilterValue(
+      matcher.accessors.getNamespace?.(row) ?? matcher.defaultGetNamespace(row)
+    );
+    const namespace = isTableNoValueText(namespaceCandidate) ? '' : namespaceCandidate;
+    if (
+      !matchesSelection(
+        matcher.filterNamespaces,
+        namespace,
+        matcher.namespaceSet,
+        (value) => value.toLowerCase(),
+        false
+      )
+    ) {
+      return false;
+    }
+    return matchesRowSearch(row, kind, namespace, matcher);
+  };
 
 export function applyGridTableFilters<T>({
   filteringEnabled,
@@ -206,7 +316,6 @@ export function applyGridTableFilters<T>({
   const searchNeedle = activeFilters.caseSensitive
     ? activeFilters.search.trim()
     : activeFilters.search.trim().toLowerCase();
-  const shouldFilterSearch = searchNeedle.length > 0;
   const kindSet = new Set(
     activeFilters.kinds.mode === 'some'
       ? activeFilters.kinds.values.map((value) => value.toLowerCase())
@@ -220,60 +329,20 @@ export function applyGridTableFilters<T>({
   const clusterSet = new Set(
     activeFilters.clusters.mode === 'some' ? activeFilters.clusters.values : []
   );
-  const shouldFilterKinds = activeFilters.kinds.mode === 'some';
-  const shouldFilterNamespaces = activeFilters.namespaces.mode === 'some';
-  const shouldFilterClusters = activeFilters.clusters.mode === 'some';
-
-  return data.filter((row) => {
-    const clusterValueRaw = accessors.getCluster?.(row);
-    const clusterValue = typeof clusterValueRaw === 'string' ? clusterValueRaw.trim() : '';
-    if (shouldFilterClusters && (!clusterValue || !clusterSet.has(clusterValue))) {
-      return false;
-    }
-
-    const kindValueRaw = accessors.getKind?.(row) ?? defaultGetKind(row);
-    const kindValue = typeof kindValueRaw === 'string' ? kindValueRaw.trim() : '';
-    if (shouldFilterKinds && (!kindValue || !kindSet.has(kindValue.toLowerCase()))) {
-      return false;
-    }
-
-    const namespaceValueRaw = accessors.getNamespace?.(row) ?? defaultGetNamespace(row);
-    const namespaceCandidate =
-      typeof namespaceValueRaw === 'string' ? namespaceValueRaw.trim() : '';
-    const normalizedNamespace = isTableNoValueText(namespaceCandidate) ? '' : namespaceCandidate;
-
-    if (shouldFilterNamespaces && !namespaceSet.has(normalizedNamespace.toLowerCase())) {
-      return false;
-    }
-
-    if (!shouldFilterSearch) {
-      return true;
-    }
-
-    const searchValuesRaw = accessors.getSearchText?.(row) ?? defaultGetSearchText(row);
-    let searchValues: unknown[];
-
-    if (Array.isArray(searchValuesRaw)) {
-      searchValues = searchValuesRaw.slice();
-    } else if (typeof searchValuesRaw === 'string') {
-      searchValues = [searchValuesRaw];
-    } else {
-      searchValues = [];
-    }
-
-    if (kindValue) {
-      searchValues.push(kindValue);
-    }
-    if (normalizedNamespace) {
-      searchValues.push(normalizedNamespace);
-    }
-
-    return searchValues.some(
-      (candidate) =>
-        typeof candidate === 'string' &&
-        (activeFilters.caseSensitive
-          ? candidate.includes(searchNeedle)
-          : candidate.toLowerCase().includes(searchNeedle))
-    );
-  });
+  return data.filter(
+    createLocalRowPredicate({
+      activeFilters,
+      accessors,
+      defaultGetKind,
+      defaultGetNamespace,
+      defaultGetSearchText,
+      searchNeedle,
+      kindSet,
+      namespaceSet,
+      clusterSet,
+      filterKinds: activeFilters.kinds.mode === 'some',
+      filterNamespaces: activeFilters.namespaces.mode === 'some',
+      filterClusters: activeFilters.clusters.mode === 'some',
+    })
+  );
 }

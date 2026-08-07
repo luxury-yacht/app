@@ -33,6 +33,197 @@ interface UseLogFilteringResult {
   canParseContainerLogs: boolean;
 }
 
+type TimestampedLogEntry = {
+  entry: ContainerLogsEntry;
+  index: number;
+  timestamp: string;
+  timestampMs: number | null;
+};
+
+type SelectedLogSources = {
+  pods: Set<string>;
+  initContainers: Set<string>;
+  containers: Set<string>;
+  debugContainers: Set<string>;
+};
+
+const timestampLogEntry = (entry: ContainerLogsEntry, index: number): TimestampedLogEntry => {
+  const timestamp = entry.timestamp?.trim() ?? '';
+  const parsedTimestamp = timestamp ? Date.parse(timestamp) : Number.NaN;
+  return {
+    entry,
+    index,
+    timestamp,
+    timestampMs: Number.isNaN(parsedTimestamp) ? null : parsedTimestamp,
+  };
+};
+
+const compareTimestampedLogEntries = (
+  left: TimestampedLogEntry,
+  right: TimestampedLogEntry
+): number => {
+  if (left.timestampMs === null) {
+    return right.timestampMs === null ? left.index - right.index : 1;
+  }
+  if (right.timestampMs === null) {
+    return -1;
+  }
+  if (left.timestampMs !== right.timestampMs) {
+    return left.timestampMs - right.timestampMs;
+  }
+  if (left.timestamp < right.timestamp) {
+    return -1;
+  }
+  if (left.timestamp > right.timestamp) {
+    return 1;
+  }
+  return left.index - right.index;
+};
+
+const orderLogEntries = (entries: ContainerLogsEntry[]): ContainerLogsEntry[] => {
+  if (entries.length <= 1) {
+    return entries;
+  }
+  return entries
+    .map(timestampLogEntry)
+    .sort(compareTimestampedLogEntries)
+    .map(({ entry }) => entry);
+};
+
+const valuesForPrefix = (values: string[], prefix: string): Set<string> =>
+  new Set(
+    values
+      .filter((value) => value.startsWith(prefix))
+      .map((value) => value.substring(prefix.length))
+  );
+
+const classifySelectedLogSources = (values: string[]): SelectedLogSources => ({
+  pods: valuesForPrefix(values, 'pod:'),
+  initContainers: valuesForPrefix(values, 'init:'),
+  containers: valuesForPrefix(values, 'container:'),
+  debugContainers: valuesForPrefix(values, 'debug:'),
+});
+
+const matchesSelectedContainer = (
+  entry: ContainerLogsEntry,
+  selected: SelectedLogSources
+): boolean => {
+  if (entry.isInit) {
+    return selected.initContainers.has(entry.container);
+  }
+  if (entry.isEphemeral) {
+    return selected.debugContainers.has(entry.container);
+  }
+  return selected.containers.has(entry.container);
+};
+
+const filterBySelectedLogSources = (
+  entries: ContainerLogsEntry[],
+  selectedValues: string[],
+  isWorkload: boolean
+): ContainerLogsEntry[] => {
+  if (selectedValues.length === 0) {
+    return entries;
+  }
+  const selected = classifySelectedLogSources(selectedValues);
+  const podFiltered =
+    isWorkload && selected.pods.size > 0
+      ? entries.filter((entry) => selected.pods.has(entry.pod))
+      : entries;
+  const hasContainerSelection =
+    selected.initContainers.size > 0 ||
+    selected.containers.size > 0 ||
+    selected.debugContainers.size > 0;
+  return hasContainerSelection
+    ? podFiltered.filter((entry) => matchesSelectedContainer(entry, selected))
+    : podFiltered;
+};
+
+const matchesLogText = (
+  regex: RegExp | null,
+  sourceText: string,
+  normalizedText: string,
+  searchText: string
+): boolean => (regex ? regex.test(sourceText) : normalizedText.includes(searchText));
+
+const logEntryMatchesSearch = (
+  entry: ContainerLogsEntry,
+  searchText: string,
+  regex: RegExp | null,
+  caseSensitive: boolean
+): boolean => {
+  const lineText = stripAnsi(entry.line);
+  const podText = entry.pod ?? '';
+  const containerText = entry.container ?? '';
+  const normalize = (value: string): string => (caseSensitive ? value : value.toLowerCase());
+  const lineMatches = matchesLogText(regex, lineText, normalize(lineText), searchText);
+  const podMatches = matchesLogText(regex, podText, normalize(podText), searchText);
+  const containerMatches = matchesLogText(
+    regex,
+    containerText,
+    normalize(containerText),
+    searchText
+  );
+  return lineMatches || podMatches || containerMatches;
+};
+
+const filterByLogText = (
+  entries: ContainerLogsEntry[],
+  textFilter: string,
+  inverseMatches: boolean,
+  caseSensitiveMatches: boolean,
+  regexMatches: boolean
+): ContainerLogsEntry[] => {
+  if (!textFilter.trim()) {
+    return entries;
+  }
+  const searchText = caseSensitiveMatches ? textFilter : textFilter.toLowerCase();
+  const regex = regexMatches
+    ? buildLogSearchRegex(textFilter, { regexMode: true, caseSensitive: caseSensitiveMatches })
+    : null;
+  if (regexMatches && !regex) {
+    return [];
+  }
+  return entries.filter((entry) => {
+    const matches = logEntryMatchesSearch(entry, searchText, regex, caseSensitiveMatches);
+    return inverseMatches ? !matches : matches;
+  });
+};
+
+const filterLogEntries = ({
+  entries,
+  isWorkload,
+  selectedFilters,
+  textFilter,
+  inverseMatches,
+  caseSensitiveMatches,
+  regexMatches,
+}: {
+  entries: ContainerLogsEntry[];
+  isWorkload: boolean;
+  selectedFilters: MultiSelectFilterSelection;
+  textFilter: string;
+  inverseMatches: boolean;
+  caseSensitiveMatches: boolean;
+  regexMatches: boolean;
+}): ContainerLogsEntry[] => {
+  if (entries.length === 0 || logFilterSelectionMatchesNone(selectedFilters)) {
+    return [];
+  }
+  const sourceFiltered = filterBySelectedLogSources(
+    entries,
+    filterSelectionValues(selectedFilters),
+    isWorkload
+  );
+  return filterByLogText(
+    sourceFiltered,
+    textFilter,
+    inverseMatches,
+    caseSensitiveMatches,
+    regexMatches
+  );
+};
+
 /**
  * Handles filtering and JSON parsing of log entries.
  * Pure transformation logic extracted from LogViewer.
@@ -46,147 +237,33 @@ export function useLogFiltering({
   caseSensitiveMatches,
   regexMatches,
 }: UseLogFilteringParams): UseLogFilteringResult {
-  const orderedEntries = useMemo(() => {
-    if (logEntries.length <= 1) {
-      return logEntries;
-    }
-
+  const orderedEntries = useMemo(
     // Keep log lines in deterministic chronological order across pods/containers.
-    const withIndex = logEntries.map((entry, index) => {
-      const timestamp = entry.timestamp?.trim() ?? '';
-      const parsedTimestamp = timestamp ? Date.parse(timestamp) : Number.NaN;
-      return {
-        entry,
-        index,
-        timestamp,
-        timestampMs: Number.isNaN(parsedTimestamp) ? null : parsedTimestamp,
-      };
-    });
+    () => orderLogEntries(logEntries),
+    [logEntries]
+  );
 
-    withIndex.sort((a, b) => {
-      const aHasTimestamp = a.timestampMs !== null;
-      const bHasTimestamp = b.timestampMs !== null;
-
-      if (aHasTimestamp && bHasTimestamp) {
-        // Both are non-null since aHasTimestamp/bHasTimestamp confirmed it
-        const aMs = a.timestampMs as number;
-        const bMs = b.timestampMs as number;
-        if (aMs !== bMs) {
-          return aMs - bMs;
-        }
-        if (a.timestamp < b.timestamp) {
-          return -1;
-        }
-        if (a.timestamp > b.timestamp) {
-          return 1;
-        }
-        return a.index - b.index;
-      }
-
-      if (aHasTimestamp !== bHasTimestamp) {
-        return aHasTimestamp ? -1 : 1;
-      }
-
-      return a.index - b.index;
-    });
-
-    return withIndex.map((item) => item.entry);
-  }, [logEntries]);
-
-  const filteredEntries = useMemo(() => {
-    if (!orderedEntries.length) {
-      return [] as ContainerLogsEntry[];
-    }
-
-    let entries = orderedEntries;
-
-    if (logFilterSelectionMatchesNone(selectedFilters)) {
-      return [] as ContainerLogsEntry[];
-    }
-
-    const selectedFilterValues = filterSelectionValues(selectedFilters);
-
-    // Filter by selected pods/containers.
-    if (selectedFilterValues.length > 0) {
-      const selectedPods = new Set(
-        selectedFilterValues
-          .filter((filterValue) => filterValue.startsWith('pod:'))
-          .map((filterValue) => filterValue.substring(4))
-      );
-      const selectedInitContainers = new Set(
-        selectedFilterValues
-          .filter((filterValue) => filterValue.startsWith('init:'))
-          .map((filterValue) => filterValue.substring(5))
-      );
-      const selectedContainers = new Set(
-        selectedFilterValues
-          .filter((filterValue) => filterValue.startsWith('container:'))
-          .map((filterValue) => filterValue.substring(10))
-      );
-      const selectedDebugContainers = new Set(
-        selectedFilterValues
-          .filter((filterValue) => filterValue.startsWith('debug:'))
-          .map((filterValue) => filterValue.substring(6))
-      );
-
-      if (isWorkload && selectedPods.size > 0) {
-        entries = entries.filter((entry) => selectedPods.has(entry.pod));
-      }
-      if (
-        selectedInitContainers.size > 0 ||
-        selectedContainers.size > 0 ||
-        selectedDebugContainers.size > 0
-      ) {
-        entries = entries.filter((entry) => {
-          if (entry.isInit) {
-            return selectedInitContainers.has(entry.container);
-          } else if (entry.isEphemeral) {
-            return selectedDebugContainers.has(entry.container);
-          } else {
-            return selectedContainers.has(entry.container);
-          }
-        });
-      }
-    }
-
-    // Filter by text search
-    if (textFilter.trim()) {
-      const searchText = caseSensitiveMatches ? textFilter : textFilter.toLowerCase();
-      const regex = regexMatches
-        ? buildLogSearchRegex(textFilter, { regexMode: true, caseSensitive: caseSensitiveMatches })
-        : null;
-      if (regexMatches && !regex) {
-        return [] as ContainerLogsEntry[];
-      }
-      entries = entries.filter((entry) => {
-        const lineText = stripAnsi(entry.line);
-        const podText = entry.pod ?? '';
-        const containerText = entry.container ?? '';
-        const normalizedLineText = caseSensitiveMatches ? lineText : lineText.toLowerCase();
-        const normalizedPodText = caseSensitiveMatches ? podText : podText.toLowerCase();
-        const normalizedContainerText = caseSensitiveMatches
-          ? containerText
-          : containerText.toLowerCase();
-        const lineMatches = regex ? regex.test(lineText) : normalizedLineText.includes(searchText);
-        const podMatches = regex ? regex.test(podText) : normalizedPodText.includes(searchText);
-        const containerMatches = regex
-          ? regex.test(containerText)
-          : normalizedContainerText.includes(searchText);
-        const matches = lineMatches || podMatches || containerMatches;
-        return inverseMatches ? !matches : matches;
-      });
-    }
-
-    return entries;
-  }, [
-    caseSensitiveMatches,
-    inverseMatches,
-    isWorkload,
-    orderedEntries,
-    regexMatches,
-    selectedFilters,
-    textFilter,
-  ]);
+  const filteredEntries = useMemo(
+    () =>
+      filterLogEntries({
+        entries: orderedEntries,
+        isWorkload,
+        selectedFilters,
+        textFilter,
+        inverseMatches,
+        caseSensitiveMatches,
+        regexMatches,
+      }),
+    [
+      caseSensitiveMatches,
+      inverseMatches,
+      isWorkload,
+      orderedEntries,
+      regexMatches,
+      selectedFilters,
+      textFilter,
+    ]
+  );
 
   const parsedCandidates = useMemo(() => {
     if (!filteredEntries.length) {

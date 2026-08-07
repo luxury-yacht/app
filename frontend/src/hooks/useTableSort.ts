@@ -45,6 +45,201 @@ interface SortCacheEntry<T> {
   sortedRows: T[];
 }
 
+interface DecoratedSortRow<T> {
+  item: T;
+  index: number;
+  key: string | undefined;
+  value: unknown;
+}
+
+interface CurrentSortRow<T> {
+  item: T;
+  value: unknown;
+}
+
+const NEXT_SORT_DIRECTION: Record<'asc' | 'desc' | 'none', SortDirection> = {
+  asc: 'desc',
+  desc: null,
+  none: 'asc',
+};
+
+const getNextSortConfig = (
+  previous: SortConfig,
+  key: string,
+  targetDirection: SortDirection | undefined,
+  defaultDirection: SortDirection
+): SortConfig => {
+  if (targetDirection !== undefined) {
+    return { key, direction: targetDirection };
+  }
+  if (previous.key !== key) {
+    return { key, direction: defaultDirection };
+  }
+  return { key, direction: NEXT_SORT_DIRECTION[previous.direction ?? 'none'] };
+};
+
+const normalizeSortValue = (sortKey: string, value: unknown): unknown =>
+  sortKey.toLowerCase() === 'age' && typeof value === 'string'
+    ? parseCompactAgeToSeconds(value)
+    : value;
+
+const decorateSortRows = <T>(
+  data: T[],
+  sortKey: string,
+  extractor: ((item: T) => unknown) | undefined,
+  rowIdentity: ((item: T, index: number) => string) | undefined
+): DecoratedSortRow<T>[] =>
+  data.map((item, index) => {
+    const rawValue = extractor ? extractor(item) : (item as Record<string, unknown>)[sortKey];
+    return {
+      item,
+      index,
+      key: rowIdentity?.(item, index),
+      value: normalizeSortValue(sortKey, rawValue),
+    };
+  });
+
+const collectReusableRowsByKey = <T>(
+  decorated: DecoratedSortRow<T>[],
+  previousValues: Map<string, unknown>
+): Map<string, CurrentSortRow<T>> | null => {
+  const currentByKey = new Map<string, CurrentSortRow<T>>();
+  for (const entry of decorated) {
+    if (!entry.key || currentByKey.has(entry.key)) {
+      return null;
+    }
+    if (!areSortValuesEqual(previousValues.get(entry.key), entry.value)) {
+      return null;
+    }
+    currentByKey.set(entry.key, { item: entry.item, value: entry.value });
+  }
+  return currentByKey;
+};
+
+const restoreCachedOrder = <T>(
+  previousCache: SortCacheEntry<T>,
+  currentByKey: Map<string, CurrentSortRow<T>>
+): { rows: T[]; valuesByKey: Map<string, unknown> } | null => {
+  const rows: T[] = [];
+  const valuesByKey = new Map<string, unknown>();
+  for (const key of previousCache.order) {
+    const current = currentByKey.get(key);
+    if (!current) {
+      return null;
+    }
+    rows.push(current.item);
+    valuesByKey.set(key, current.value);
+  }
+  return { rows, valuesByKey };
+};
+
+const preserveSortedRowsReference = <T>(rows: T[], previousRows: T[]): T[] =>
+  rows.length === previousRows.length && rows.every((item, index) => item === previousRows[index])
+    ? previousRows
+    : rows;
+
+const tryReuseSortCache = <T>(
+  previousCache: SortCacheEntry<T> | null,
+  decorated: DecoratedSortRow<T>[],
+  sortConfig: SortConfig,
+  rowIdentity: ((item: T, index: number) => string) | undefined
+): SortCacheEntry<T> | null => {
+  if (
+    !rowIdentity ||
+    !previousCache ||
+    previousCache.key !== sortConfig.key ||
+    previousCache.direction !== sortConfig.direction ||
+    previousCache.order.length !== decorated.length
+  ) {
+    return null;
+  }
+  const currentByKey = collectReusableRowsByKey(decorated, previousCache.valuesByKey);
+  const restored = currentByKey ? restoreCachedOrder(previousCache, currentByKey) : null;
+  if (!restored) {
+    return null;
+  }
+  return {
+    ...previousCache,
+    valuesByKey: restored.valuesByKey,
+    sortedRows: preserveSortedRowsReference(restored.rows, previousCache.sortedRows),
+  };
+};
+
+const compareNullishValues = <T>(
+  first: DecoratedSortRow<T>,
+  second: DecoratedSortRow<T>
+): number | null => {
+  const firstMissing = first.value === null || first.value === undefined;
+  const secondMissing = second.value === null || second.value === undefined;
+  if (firstMissing && secondMissing) {
+    return first.index - second.index;
+  }
+  if (firstMissing) {
+    return 1;
+  }
+  if (secondMissing) {
+    return -1;
+  }
+  return null;
+};
+
+const comparePresentValues = (first: unknown, second: unknown, collator: Intl.Collator): number => {
+  if (typeof first === 'number' && typeof second === 'number') {
+    return first - second;
+  }
+  if (typeof first === 'string' && typeof second === 'string') {
+    return collator.compare(first, second);
+  }
+  return collator.compare(String(first), String(second));
+};
+
+const createSortComparator = <T>(
+  direction: SortDirection,
+  collator: Intl.Collator
+): ((first: DecoratedSortRow<T>, second: DecoratedSortRow<T>) => number) => {
+  const directionMultiplier = direction === 'asc' ? 1 : -1;
+  return (first, second) => {
+    const missingComparison = compareNullishValues(first, second);
+    if (missingComparison !== null) {
+      return missingComparison;
+    }
+    const comparison = comparePresentValues(first.value, second.value, collator);
+    return comparison !== 0 ? directionMultiplier * comparison : first.index - second.index;
+  };
+};
+
+const createSortCache = <T>(
+  sortedEntries: DecoratedSortRow<T>[],
+  sortedRows: T[],
+  sortConfig: SortConfig,
+  rowIdentity: ((item: T, index: number) => string) | undefined
+): SortCacheEntry<T> | null => {
+  if (!rowIdentity) {
+    return null;
+  }
+  const order: string[] = [];
+  const valuesByKey = new Map<string, unknown>();
+  for (const entry of sortedEntries) {
+    if (!entry.key || valuesByKey.has(entry.key)) {
+      return null;
+    }
+    order.push(entry.key);
+    valuesByKey.set(entry.key, entry.value);
+  }
+  return { key: sortConfig.key, direction: sortConfig.direction, order, valuesByKey, sortedRows };
+};
+
+const getPassthroughDuration = <T>(
+  data: T[],
+  disableLocalSort: boolean,
+  sortConfig: SortConfig
+): number | null | undefined => {
+  if (disableLocalSort || !sortConfig.key || !sortConfig.direction) {
+    return null;
+  }
+  return data.length <= 1 ? 0 : undefined;
+};
+
 export function useTableSort<T>(
   data: T[],
   defaultSortKey?: string,
@@ -72,33 +267,20 @@ export function useTableSort<T>(
   // to that state (used by context-menu "Sort Desc" / "Clear Sort"). When
   // omitted the direction cycles: asc → desc → null → asc.
   const handleSort = (key: string, targetDirection?: SortDirection) => {
-    const computeNext = (prev: SortConfig): SortConfig => {
-      if (targetDirection !== undefined) {
-        return { key, direction: targetDirection };
-      }
-      if (prev.key === key) {
-        let nextDirection: SortDirection;
-
-        if (prev.direction === 'asc') {
-          nextDirection = 'desc';
-        } else if (prev.direction === 'desc') {
-          nextDirection = null;
-        } else {
-          nextDirection = 'asc';
-        }
-
-        return { key, direction: nextDirection };
-      }
-      return { key, direction: defaultDirection };
-    };
-
     if (isControlled) {
-      const next = computeNext(controlledSort ?? sortConfig);
+      const next = getNextSortConfig(
+        controlledSort ?? sortConfig,
+        key,
+        targetDirection,
+        defaultDirection
+      );
       onChange?.(next);
       return;
     }
 
-    setSortConfig((prevConfig) => computeNext(prevConfig));
+    setSortConfig((previous) =>
+      getNextSortConfig(previous, key, targetDirection, defaultDirection)
+    );
   };
 
   // Build a lookup from column key → sortValue extractor. When a column
@@ -118,191 +300,34 @@ export function useTableSort<T>(
 
   const sortedData = useMemo(() => {
     const startedAt = getNow();
-
-    // Handle null or undefined data
     if (!data) {
       return [];
     }
-
-    if (disableLocalSort) {
-      sortDurationRef.current = null;
+    const passthroughDuration = getPassthroughDuration(data, disableLocalSort, effectiveSort);
+    if (passthroughDuration !== undefined) {
+      sortDurationRef.current = passthroughDuration;
       sortCacheRef.current = null;
       return data;
     }
-
-    if (!effectiveSort.key || !effectiveSort.direction) {
-      sortDurationRef.current = null;
-      sortCacheRef.current = null;
-      return data;
-    }
-
-    if (data.length <= 1) {
-      sortDurationRef.current = 0;
-      sortCacheRef.current = null;
-      return data;
-    }
-
     const extractor = sortValueExtractors?.[effectiveSort.key];
-    const directionMultiplier = effectiveSort.direction === 'asc' ? 1 : -1;
-    const keyByItem = new Map<T, string>();
-    const decorated = data.map((item, index) => {
-      const rawValue = extractor
-        ? extractor(item)
-        : (item as Record<string, unknown>)[effectiveSort.key];
-      const normalizedValue =
-        effectiveSort.key.toLowerCase() === 'age' && typeof rawValue === 'string'
-          ? parseCompactAgeToSeconds(rawValue)
-          : rawValue;
-      const key = rowIdentity?.(item, index);
-      if (key) {
-        keyByItem.set(item, key);
-      }
-      return {
-        item,
-        index,
-        key,
-        value: normalizedValue,
-      };
-    });
-
-    const previousCache = sortCacheRef.current;
-    if (
-      rowIdentity &&
-      previousCache &&
-      previousCache.key === effectiveSort.key &&
-      previousCache.direction === effectiveSort.direction &&
-      previousCache.order.length === decorated.length
-    ) {
-      const currentByKey = new Map<string, { item: T; value: unknown }>();
-      let canReusePreviousOrder = true;
-
-      for (const entry of decorated) {
-        if (!entry.key || currentByKey.has(entry.key)) {
-          canReusePreviousOrder = false;
-          break;
-        }
-        currentByKey.set(entry.key, { item: entry.item, value: entry.value });
-        if (!areSortValuesEqual(previousCache.valuesByKey.get(entry.key), entry.value)) {
-          canReusePreviousOrder = false;
-        }
-      }
-
-      if (canReusePreviousOrder) {
-        const orderedRows: T[] = [];
-        const nextValuesByKey = new Map<string, unknown>();
-
-        for (const key of previousCache.order) {
-          const current = currentByKey.get(key);
-          if (!current) {
-            canReusePreviousOrder = false;
-            break;
-          }
-          orderedRows.push(current.item);
-          nextValuesByKey.set(key, current.value);
-        }
-
-        if (canReusePreviousOrder) {
-          const reusedRows =
-            orderedRows.length === previousCache.sortedRows.length &&
-            orderedRows.every((item, index) => item === previousCache.sortedRows[index])
-              ? previousCache.sortedRows
-              : orderedRows;
-
-          sortCacheRef.current = {
-            key: effectiveSort.key,
-            direction: effectiveSort.direction,
-            order: previousCache.order,
-            valuesByKey: nextValuesByKey,
-            sortedRows: reusedRows,
-          };
-          sortDurationRef.current = getNow() - startedAt;
-          return reusedRows;
-        }
-      }
+    const decorated = decorateSortRows(data, effectiveSort.key, extractor, rowIdentity);
+    const reusedCache = tryReuseSortCache(
+      sortCacheRef.current,
+      decorated,
+      effectiveSort,
+      rowIdentity
+    );
+    if (reusedCache) {
+      sortCacheRef.current = reusedCache;
+      sortDurationRef.current = getNow() - startedAt;
+      return reusedCache.sortedRows;
     }
-
-    const sorted = decorated
-      .sort((a, b) => {
-        const aValue = a.value;
-        const bValue = b.value;
-
-        // Handle null/undefined values
-        if (
-          (aValue === null || aValue === undefined) &&
-          (bValue === null || bValue === undefined)
-        ) {
-          return a.index - b.index;
-        }
-        if (aValue === null || aValue === undefined) {
-          return 1;
-        }
-        if (bValue === null || bValue === undefined) {
-          return -1;
-        }
-
-        // Special handling for timestamp columns (if they exist)
-        if (
-          effectiveSort.key === 'timestamp' &&
-          typeof aValue === 'number' &&
-          typeof bValue === 'number'
-        ) {
-          const comparison = aValue - bValue;
-          return comparison !== 0 ? directionMultiplier * comparison : a.index - b.index;
-        }
-
-        // Compare values
-        let comparison = 0;
-        if (typeof aValue === 'string' && typeof bValue === 'string') {
-          comparison = stringCollator.compare(aValue, bValue);
-        } else if (typeof aValue === 'number' && typeof bValue === 'number') {
-          comparison = aValue - bValue;
-        } else {
-          comparison = stringCollator.compare(String(aValue), String(bValue));
-        }
-
-        return comparison !== 0 ? directionMultiplier * comparison : a.index - b.index;
-      })
-      .map(({ item }) => item);
-
-    if (rowIdentity) {
-      const order: string[] = [];
-      const valuesByKey = new Map<string, unknown>();
-      let cacheable = true;
-
-      for (const entry of decorated) {
-        if (!entry.key || valuesByKey.has(entry.key)) {
-          cacheable = false;
-          break;
-        }
-        valuesByKey.set(entry.key, entry.value);
-      }
-
-      if (cacheable) {
-        for (const row of sorted) {
-          const key = keyByItem.get(row);
-          if (!key || !valuesByKey.has(key)) {
-            cacheable = false;
-            break;
-          }
-          order.push(key);
-        }
-      }
-
-      sortCacheRef.current = cacheable
-        ? {
-            key: effectiveSort.key,
-            direction: effectiveSort.direction,
-            order,
-            valuesByKey,
-            sortedRows: sorted,
-          }
-        : null;
-    } else {
-      sortCacheRef.current = null;
-    }
-
+    const sortedEntries = decorated.sort(
+      createSortComparator(effectiveSort.direction, stringCollator)
+    );
+    const sorted = sortedEntries.map(({ item }) => item);
+    sortCacheRef.current = createSortCache(sortedEntries, sorted, effectiveSort, rowIdentity);
     sortDurationRef.current = getNow() - startedAt;
-
     return sorted;
   }, [data, disableLocalSort, effectiveSort, rowIdentity, sortValueExtractors, stringCollator]);
 

@@ -93,6 +93,30 @@ export interface OverviewDescriptor<T> {
   masksValues?: boolean;
 }
 
+const addCoverageKeys = (keys: Set<string>, additions: readonly string[] | undefined): void => {
+  additions?.forEach((key) => {
+    keys.add(key);
+  });
+};
+
+const addItemCoverageKeys = <T>(keys: Set<string>, item: OverviewItemSpec<T>): void => {
+  const itemKind = (item as { kind?: string }).kind;
+  if (itemKind === 'status') {
+    addCoverageKeys(keys, STATUS_FIELDS);
+    return;
+  }
+  if (itemKind === 'widget') {
+    addCoverageKeys(keys, (item as OverviewWidget<T>).consumes);
+    return;
+  }
+
+  const field = item as OverviewField<T>;
+  if (field.field) {
+    keys.add(field.field);
+  }
+  addCoverageKeys(keys, field.derivedFrom);
+};
+
 /**
  * Every DTO key the descriptor accounts for: frame ∪ schema field keys (+ each field's
  * `derivedFrom`) ∪ status-item fields ∪ widget `consumes` ∪ `selector` (when shown) ∪
@@ -103,28 +127,9 @@ export function coverageKeys<T>(descriptor: OverviewDescriptor<T>): Set<string> 
   if (descriptor.schema.showSelector) {
     keys.add('selector');
   }
-  for (const item of descriptor.schema.items) {
-    const itemKind = (item as { kind?: string }).kind;
-    if (itemKind === 'status') {
-      for (const k of STATUS_FIELDS) {
-        keys.add(k);
-      }
-    } else if (itemKind === 'widget') {
-      for (const k of (item as OverviewWidget<T>).consumes ?? []) {
-        keys.add(k);
-      }
-    } else {
-      const field = item as OverviewField<T>;
-      if (field.field) {
-        keys.add(field.field);
-      }
-      for (const k of field.derivedFrom ?? []) {
-        keys.add(k);
-      }
-    }
-  }
-  for (const k of descriptor.coveredElsewhere ?? []) {
-    keys.add(k);
-  }
+  descriptor.schema.items.forEach((item) => {
+    addItemCoverageKeys(keys, item);
+  });
+  addCoverageKeys(keys, descriptor.coveredElsewhere);
   return keys;
 }

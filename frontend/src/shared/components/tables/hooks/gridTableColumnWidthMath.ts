@@ -157,6 +157,77 @@ const growFlexColumnsToFill = <T>({
   return next;
 };
 
+const distributeEmptyFlexWidths = <T>(
+  updated: Record<string, number>,
+  flexColumns: GridColumnDefinition<T>[],
+  targetFlexWidth: number,
+  bounds: WidthBounds<T>
+): Record<string, number> => {
+  const widthPerColumn = Math.floor(targetFlexWidth / flexColumns.length);
+  const remainder = targetFlexWidth - widthPerColumn * flexColumns.length;
+  flexColumns.forEach((column, index) => {
+    updated[column.key] = clampColumnWidth(
+      column,
+      widthPerColumn + (index === 0 ? remainder : 0),
+      bounds
+    );
+  });
+  return updated;
+};
+
+const scaleFlexWidths = <T>(
+  updated: Record<string, number>,
+  flexColumns: GridColumnDefinition<T>[],
+  scale: number,
+  bounds: WidthBounds<T>
+): void => {
+  for (const column of flexColumns) {
+    const previousWidth = updated[column.key] ?? 0;
+    updated[column.key] = clampColumnWidth(column, Math.round(previousWidth * scale), bounds);
+  }
+};
+
+interface DeltaAdjustment {
+  width: number;
+  remainingDelta: number;
+}
+
+const adjustWidthForDelta = <T>(
+  column: GridColumnDefinition<T>,
+  current: number,
+  delta: number,
+  bounds: WidthBounds<T>
+): DeltaAdjustment => {
+  const minimum = bounds.getColumnMinWidth(column);
+  const maximum = bounds.getColumnMaxWidth(column);
+  if (delta > 0 && current < maximum) {
+    const increase = Math.min(delta, maximum - current);
+    return { width: current + increase, remainingDelta: delta - increase };
+  }
+  if (delta < 0 && current > minimum) {
+    const decrease = Math.min(Math.abs(delta), current - minimum);
+    return { width: current - decrease, remainingDelta: delta + decrease };
+  }
+  return { width: current, remainingDelta: delta };
+};
+
+const applyFlexWidthDelta = <T>(
+  updated: Record<string, number>,
+  flexColumns: GridColumnDefinition<T>[],
+  initialDelta: number,
+  bounds: WidthBounds<T>
+): void => {
+  let delta = initialDelta;
+  for (const column of [...flexColumns].reverse()) {
+    const adjustment = adjustWidthForDelta(column, updated[column.key] ?? 0, delta, bounds);
+    updated[column.key] = adjustment.width;
+    delta = adjustment.remainingDelta;
+    if (delta === 0) {
+      break;
+    }
+  }
+};
+
 const distributeFlexWidths = <T>({
   resolvedWidths,
   flexColumns,
@@ -181,70 +252,19 @@ const distributeFlexWidths = <T>({
   // always true, so every return below hands back the rebuilt `updated` map.
   const updated: Record<string, number> = { ...resolvedWidths };
   const currentFlexTotal = flexColumns.reduce((sum, column) => sum + (updated[column.key] ?? 0), 0);
-
+  const bounds = { getColumnMinWidth, getColumnMaxWidth };
   if (currentFlexTotal <= 0) {
-    const widthPer = Math.floor(targetFlexWidth / flexColumns.length);
-    const remainder = targetFlexWidth - widthPer * flexColumns.length;
-
-    flexColumns.forEach((column, index) => {
-      const width = clampColumnWidth(column, widthPer + (index === 0 ? remainder : 0), {
-        getColumnMinWidth,
-        getColumnMaxWidth,
-      });
-      if (updated[column.key] !== width) {
-        updated[column.key] = width;
-      }
-    });
-
-    return updated;
+    return distributeEmptyFlexWidths(updated, flexColumns, targetFlexWidth, bounds);
   }
-
-  const scale = targetFlexWidth / currentFlexTotal;
-  flexColumns.forEach((column) => {
-    const previousWidth = updated[column.key] ?? 0;
-    const width = clampColumnWidth(column, Math.round(previousWidth * scale), {
-      getColumnMinWidth,
-      getColumnMaxWidth,
-    });
-    if (width !== previousWidth) {
-      updated[column.key] = width;
-    }
-  });
-
+  scaleFlexWidths(updated, flexColumns, targetFlexWidth / currentFlexTotal, bounds);
   const adjustedFlexTotal = flexColumns.reduce(
     (sum, column) => sum + (updated[column.key] ?? 0),
     0
   );
-  let delta = Math.round(targetFlexWidth - adjustedFlexTotal);
-
+  const delta = Math.round(targetFlexWidth - adjustedFlexTotal);
   if (delta !== 0) {
-    const adjustables = [...flexColumns].reverse();
-    for (const column of adjustables) {
-      const key = column.key;
-      const min = getColumnMinWidth(column);
-      const max = getColumnMaxWidth(column);
-      const current = updated[key] ?? 0;
-
-      if (delta > 0 && current < max) {
-        const increase = Math.min(delta, max - current);
-        if (increase > 0) {
-          updated[key] = current + increase;
-          delta -= increase;
-        }
-      } else if (delta < 0 && current > min) {
-        const decrease = Math.min(Math.abs(delta), current - min);
-        if (decrease > 0) {
-          updated[key] = current - decrease;
-          delta += decrease;
-        }
-      }
-
-      if (delta === 0) {
-        break;
-      }
-    }
+    applyFlexWidthDelta(updated, flexColumns, delta, bounds);
   }
-
   return updated;
 };
 

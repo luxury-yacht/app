@@ -10,6 +10,7 @@ import {
   structuralShareResourceRows,
 } from '@shared/utils/structuralShareResourceRows';
 import { errorHandler } from '@utils/errorHandler';
+import type { SetStateAction } from 'react';
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { requestRefreshDomainState } from '@/core/data-access';
 import type {
@@ -128,6 +129,11 @@ interface CanonicalQueryRow {
   ref: CanonicalResourceRef;
 }
 
+interface PendingNavigation {
+  direction: 'next' | 'previous';
+  revertToken: string | null;
+}
+
 const isCanonicalQueryRow = (row: unknown): row is CanonicalQueryRow => {
   if (!row || typeof row !== 'object') {
     return false;
@@ -141,6 +147,222 @@ const isCanonicalQueryRow = (row: unknown): row is CanonicalQueryRow => {
       typeof ref.kind === 'string' &&
       typeof ref.resource === 'string' &&
       typeof ref.name === 'string'
+  );
+};
+
+const resolveAppliedRows = <TRow>(
+  incomingRows: TRow[],
+  previousPage: { identity: string; rows: TRow[] } | null,
+  pageIdentity: string,
+  domain: RefreshDomain
+): TRow[] => {
+  const canShare =
+    previousPage?.identity === pageIdentity &&
+    previousPage.rows.every(isCanonicalQueryRow) &&
+    incomingRows.every(isCanonicalQueryRow);
+  if (!canShare) {
+    return incomingRows;
+  }
+  const sharedRows = structuralShareResourceRows(
+    previousPage.rows as unknown as CanonicalQueryRow[],
+    incomingRows as unknown as CanonicalQueryRow[],
+    queryRowSharingMode(domain)
+  ) as TRow[];
+  if (sharedRows !== incomingRows) {
+    incomingRows.splice(0, incomingRows.length, ...sharedRows);
+  }
+  return sharedRows;
+};
+
+interface PayloadNavigationPlan {
+  pageIndex: number | null;
+  pageDelta: number;
+  clearPendingNavigation: boolean;
+  consumeStartRank: boolean;
+  adoptSelfCursor: boolean;
+}
+
+const buildPayloadNavigationPlan = (
+  payload: TypedQueryPayload,
+  pendingNavigation: PendingNavigation | null,
+  pageLimit: number
+): PayloadNavigationPlan => {
+  if (typeof payload.pageStartRank === 'number') {
+    return {
+      pageIndex: Math.floor(payload.pageStartRank / pageLimit) + 1,
+      pageDelta: 0,
+      clearPendingNavigation: true,
+      consumeStartRank: !payload.anchor,
+      adoptSelfCursor: !payload.anchor,
+    };
+  }
+  if (!pendingNavigation) {
+    return {
+      pageIndex: null,
+      pageDelta: 0,
+      clearPendingNavigation: false,
+      consumeStartRank: false,
+      adoptSelfCursor: false,
+    };
+  }
+  return {
+    pageIndex: null,
+    pageDelta: pendingNavigation.direction === 'next' ? 1 : -1,
+    clearPendingNavigation: true,
+    consumeStartRank: false,
+    adoptSelfCursor: false,
+  };
+};
+
+interface TypedQueryRequestCallbacks<TPayload> {
+  isActive: () => boolean;
+  isCurrent: () => boolean;
+  onWarmup: () => void;
+  onPermissionDenied: (message: string) => void;
+  onCursorInvalid: () => void;
+  onPayload: (payload: TPayload) => void;
+  onError: (error: unknown) => void;
+  onSettled: () => void;
+}
+
+interface TypedQueryRequestOptions<TPayload> {
+  domain: RefreshDomain;
+  scope: string;
+  label: string;
+  callbacks: TypedQueryRequestCallbacks<TPayload>;
+}
+
+type TypedQueryRequestResult = Awaited<ReturnType<typeof requestRefreshDomainState>>;
+
+const dispatchTypedQueryResult = <TPayload extends TypedQueryPayload>(
+  result: TypedQueryRequestResult,
+  callbacks: TypedQueryRequestCallbacks<TPayload>
+): void => {
+  if (result.status !== 'executed') {
+    callbacks.onWarmup();
+    return;
+  }
+  const payload = result.data?.data as TPayload | null | undefined;
+  if (!payload) {
+    if (result.data?.permissionDenied) {
+      callbacks.onPermissionDenied(result.data.error ?? 'Insufficient permissions');
+    } else {
+      callbacks.onWarmup();
+    }
+    return;
+  }
+  if (payload.cursorInvalid) {
+    callbacks.onCursorInvalid();
+    return;
+  }
+  callbacks.onPayload(payload);
+};
+
+const executeTypedQueryRequest = async <TPayload extends TypedQueryPayload>({
+  domain,
+  scope,
+  label,
+  callbacks,
+}: TypedQueryRequestOptions<TPayload>): Promise<void> => {
+  try {
+    const result = await requestRefreshDomainState({
+      domain,
+      scope,
+      reason: 'user',
+      label,
+      cleanup: true,
+      preserveState: false,
+    });
+    if (!callbacks.isCurrent()) {
+      return;
+    }
+    dispatchTypedQueryResult(result, callbacks);
+  } catch (error) {
+    if (callbacks.isCurrent()) {
+      callbacks.onError(error);
+    }
+  } finally {
+    if (callbacks.isActive()) {
+      callbacks.onSettled();
+    }
+  }
+};
+
+interface NavigationActions {
+  setPageIndex: (value: SetStateAction<number>) => void;
+  clearPendingNavigation: () => void;
+  consumeStartRank: () => void;
+  adoptSelfCursor: () => void;
+}
+
+const applyPayloadNavigation = (plan: PayloadNavigationPlan, actions: NavigationActions): void => {
+  if (plan.pageIndex !== null) {
+    actions.setPageIndex(plan.pageIndex);
+  } else if (plan.pageDelta !== 0) {
+    actions.setPageIndex((current) => Math.max(1, current + plan.pageDelta));
+  }
+  if (plan.clearPendingNavigation) {
+    actions.clearPendingNavigation();
+  }
+  if (plan.consumeStartRank) {
+    actions.consumeStartRank();
+  }
+  if (plan.adoptSelfCursor) {
+    actions.adoptSelfCursor();
+  }
+};
+
+interface AnchorLandingActions {
+  setAnchorResult: (result: ResourceQueryAnchorResult) => void;
+  disarmAnchor: () => void;
+  adoptSelfCursor: () => void;
+  clearAnchorIntent: () => void;
+}
+
+const applyAnchorLanding = (
+  anchor: ResourceQueryAnchorResult | undefined,
+  actions: AnchorLandingActions
+): void => {
+  if (!anchor) {
+    return;
+  }
+  actions.setAnchorResult(anchor);
+  actions.disarmAnchor();
+  if (anchor.found) {
+    actions.adoptSelfCursor();
+  } else {
+    actions.clearAnchorIntent();
+  }
+};
+
+interface ResolvedFetchRowsOptions {
+  filters: GridTableFilterState;
+  sortConfig: SortConfig | null;
+  pageLimit: number;
+  predicates: Record<string, string | null | undefined> | undefined;
+  baseScope: string | undefined;
+  label: string;
+}
+
+const resolveFetchRowsOptions = (
+  options: FetchTypedResourceRowsOptions,
+  defaults: ResolvedFetchRowsOptions
+): ResolvedFetchRowsOptions => ({
+  filters: options.filters ?? defaults.filters,
+  sortConfig: options.sortConfig === undefined ? defaults.sortConfig : options.sortConfig,
+  predicates: options.predicates === undefined ? defaults.predicates : options.predicates,
+  baseScope: options.baseScope ?? defaults.baseScope,
+  label: options.label ?? defaults.label,
+  pageLimit: options.pageLimit ?? EXPORT_PAGE_LIMIT,
+});
+
+const warnForChangedExportRows = (changed: boolean, domain: RefreshDomain): void => {
+  if (!changed) {
+    return;
+  }
+  errorHandler.warn(
+    'Some rows changed while the export was being gathered, so the result reflects a mix of before and after states.',
+    { title: 'Export', context: { source: 'resource-export', domain } }
   );
 };
 
@@ -212,11 +434,7 @@ export function useTypedResourceQuery<TPayload extends TypedQueryPayload, TRow>(
   // identity input (filters, sort, liveDataVersion) has changed.
   const [warmupAttempt, setWarmupAttempt] = useState(0);
   const warmupTimerRef = useRef<number | null>(null);
-  const pendingNavigationRef = useRef<{
-    direction: 'next' | 'previous';
-    /** The requestToken at click time — restored when the navigation fetch fails. */
-    revertToken: string | null;
-  } | null>(null);
+  const pendingNavigationRef = useRef<PendingNavigation | null>(null);
   // Hold selectRows in a ref so applyPayload (and therefore the fetch effect)
   // stays stable even if a caller passes an unmemoized selector. Without this an
   // inline selectRows would re-run the fetch every render.
@@ -371,21 +589,12 @@ export function useTypedResourceQuery<TPayload extends TypedQueryPayload, TRow>(
   const applyPayload = useCallback(
     (incomingPayload: TPayload, pageIdentity: string) => {
       const incomingRows = selectRowsRef.current(incomingPayload);
-      const previousPage = sharedPageRef.current;
-      const canShare =
-        previousPage?.identity === pageIdentity &&
-        previousPage.rows.every(isCanonicalQueryRow) &&
-        incomingRows.every(isCanonicalQueryRow);
-      const nextRows = canShare
-        ? (structuralShareResourceRows(
-            previousPage.rows as unknown as CanonicalQueryRow[],
-            incomingRows as unknown as CanonicalQueryRow[],
-            queryRowSharingMode(domain)
-          ) as TRow[])
-        : incomingRows;
-      if (nextRows !== incomingRows) {
-        incomingRows.splice(0, incomingRows.length, ...nextRows);
-      }
+      const nextRows = resolveAppliedRows(
+        incomingRows,
+        sharedPageRef.current,
+        pageIdentity,
+        domain
+      );
       sharedPageRef.current = { identity: pageIdentity, rows: nextRows };
       setRows(nextRows);
       setPayload(incomingPayload);
@@ -399,47 +608,25 @@ export function useTypedResourceQuery<TPayload extends TypedQueryPayload, TRow>(
       setTotalIsExact(hasTotal ? incomingPayload.totalIsExact !== false : false);
       setFilterOptions(filterOptionsFromTypedPayload(incomingPayload));
       setDynamic(incomingPayload.dynamic ?? null);
-      if (typeof incomingPayload.pageStartRank === 'number') {
-        // Serve-time position honesty: the backend counted this page's exact
-        // start rank (anchored/offset landings); plain cursor pages keep the
-        // client arithmetic below (the O(rank) count per cursor serve failed
-        // the plan's benchmark gate — see large-data.md).
-        setPageIndex(Math.floor(incomingPayload.pageStartRank / pageLimitRef.current) + 1);
-        pendingNavigationRef.current = null;
-        if (!incomingPayload.anchor) {
-          // A numbered-jump landing: consume the one-shot intent and adopt the
-          // self cursor (same page-stability mechanics as anchored landings).
-          setStartRankIntent(null);
-          setRequestToken(incomingPayload.self || null);
-        }
-      } else {
-        const pendingNavigation = pendingNavigationRef.current;
-        if (pendingNavigation) {
-          if (pendingNavigation.direction === 'next') {
-            setPageIndex((current) => current + 1);
-          } else {
-            setPageIndex((current) => Math.max(1, current - 1));
-          }
+      const navigation = buildPayloadNavigationPlan(
+        incomingPayload,
+        pendingNavigationRef.current,
+        pageLimitRef.current
+      );
+      applyPayloadNavigation(navigation, {
+        setPageIndex,
+        clearPendingNavigation: () => {
           pendingNavigationRef.current = null;
-        }
-      }
-      if (incomingPayload.anchor) {
-        setAnchorResult(incomingPayload.anchor);
-        // Disarm: the landing is done. The intent itself survives (soft resets
-        // re-anchor) unless the anchor was missing — a filtered/not-found jump
-        // must not keep re-firing on every sort change.
-        setAnchorArmed(false);
-        if (incomingPayload.anchor.found) {
-          // Adopt the landing's self cursor as the page identity so live
-          // refetches reproduce THIS page (page-stable, not object-stable).
-          // Costs one redundant quiet refetch of the same page right now — the
-          // per-Build cache and maintained stores make it cheap, and it keeps
-          // the fetch machinery free of special cases.
-          setRequestToken(incomingPayload.self || null);
-        } else {
-          setAnchorIntent(null);
-        }
-      }
+        },
+        consumeStartRank: () => setStartRankIntent(null),
+        adoptSelfCursor: () => setRequestToken(incomingPayload.self || null),
+      });
+      applyAnchorLanding(incomingPayload.anchor, {
+        setAnchorResult,
+        disarmAnchor: () => setAnchorArmed(false),
+        adoptSelfCursor: () => setRequestToken(incomingPayload.self || null),
+        clearAnchorIntent: () => setAnchorIntent(null),
+      });
       setLoaded(true);
     },
     [domain]
@@ -484,78 +671,48 @@ export function useTypedResourceQuery<TPayload extends TypedQueryPayload, TRow>(
     setLoading(true);
     setError(null);
 
-    void (async () => {
-      try {
-        const result = await requestRefreshDomainState({
-          domain,
-          scope,
-          reason: 'user',
-          label,
-          cleanup: true,
-          preserveState: false,
-        });
-        if (cancelled || queryIdentityRef.current !== identityAtRequest) {
-          return;
-        }
-        if (result.status !== 'executed') {
-          // A blocked refresh (cluster still connecting, auto-refresh paused) is a
-          // warm-up condition, not a failure: stay not-loaded so the table keeps its
-          // loading (or paused) presentation. Schedule a self-healing retry (the
-          // next live-data identity change also retries, but never comes for an
-          // empty domain). Persistent causes surface through the refresh error
-          // toasts — never as a fabricated table error.
+    void executeTypedQueryRequest<TPayload>({
+      domain,
+      scope,
+      label,
+      callbacks: {
+        isActive: () => !cancelled,
+        isCurrent: () => !cancelled && queryIdentityRef.current === identityAtRequest,
+        onWarmup: () => {
           revertFailedNavigation();
           scheduleWarmupRetry();
-          return;
-        }
-        const responsePayload = result.data?.data as TPayload | null | undefined;
-        if (!responsePayload) {
-          if (result.data?.permissionDenied) {
-            // The backend refused this domain with a typed 403 — a SETTLED
-            // answer, not a warm-up: retrying cannot succeed until RBAC or
-            // the namespace scope changes (which rebuilds the subsystem and
-            // resets this state). Settle so the table renders the permission
-            // state instead of an endless first-load spinner.
-            revertFailedNavigation();
-            setError(result.data.error ?? 'Insufficient permissions');
-            setLoaded(true);
-            return;
-          }
-          // Executed but the scoped state carries no payload yet (backend caches
-          // still syncing) — same warm-up treatment as a blocked request.
+        },
+        onPermissionDenied: (message) => {
           revertFailedNavigation();
-          scheduleWarmupRetry();
-          return;
-        }
-        if (responsePayload.cursorInvalid) {
+          setError(message);
+          setLoaded(true);
+        },
+        onCursorInvalid: () => {
           setRequestToken(null);
           setContinueToken(null);
           setPreviousToken(null);
           setStartRankIntent(null);
           pendingNavigationRef.current = null;
           if (anchorIntentRef.current) {
-            // The page identity died under a held jump intent — retry the
-            // anchor, not page 1: the object's page is still the user's goal.
             setAnchorArmed(true);
           } else {
             setPageIndex(1);
           }
-          return;
-        }
-        applyPayload(responsePayload, scope);
-      } catch (caught) {
-        if (!cancelled && queryIdentityRef.current === identityAtRequest) {
+        },
+        onPayload: (responsePayload) => {
+          applyPayload(responsePayload, scope);
+        },
+        onError: (caught) => {
           revertFailedNavigation();
           setError(caught instanceof Error ? caught.message : String(caught));
           setLoaded(true);
-        }
-      } finally {
-        if (!cancelled) {
+        },
+        onSettled: () => {
           setLoading(false);
           setIsRequestingMore(false);
-        }
-      }
-    })();
+        },
+      },
+    });
 
     return () => {
       cancelled = true;
@@ -638,22 +795,24 @@ export function useTypedResourceQuery<TPayload extends TypedQueryPayload, TRow>(
       if (!enabled || !clusterId) {
         return [];
       }
-      const exportFilters = options.filters ?? effectiveFilters;
-      const exportSortConfig = options.sortConfig === undefined ? sortConfig : options.sortConfig;
-      const exportPredicates = options.predicates === undefined ? predicates : options.predicates;
-      const exportBaseScope = options.baseScope ?? baseScope;
-      const exportLabel = options.label ?? label;
-      const exportPageLimit = options.pageLimit ?? EXPORT_PAGE_LIMIT;
+      const resolvedOptions = resolveFetchRowsOptions(options, {
+        filters: effectiveFilters,
+        sortConfig,
+        predicates,
+        baseScope,
+        label,
+        pageLimit: EXPORT_PAGE_LIMIT,
+      });
       // Each page uses the export max page size; the shared walk owns the loop,
       // page guard, failure semantics (failed/empty pages REJECT), and the
       // cross-page consistency guard.
-      const walk = await walkQueryCursorPages<TRow>(exportLabel, async (cursor, page) => {
+      const walk = await walkQueryCursorPages<TRow>(resolvedOptions.label, async (cursor, page) => {
         const exportScope = buildTypedResourceQueryScope(clusterId, {
-          baseScope: exportBaseScope,
-          filters: exportFilters,
-          sortConfig: exportSortConfig,
-          pageLimit: exportPageLimit,
-          predicates: exportPredicates,
+          baseScope: resolvedOptions.baseScope,
+          filters: resolvedOptions.filters,
+          sortConfig: resolvedOptions.sortConfig,
+          pageLimit: resolvedOptions.pageLimit,
+          predicates: resolvedOptions.predicates,
           continueToken: cursor,
         });
         if (!exportScope) {
@@ -663,16 +822,20 @@ export function useTypedResourceQuery<TPayload extends TypedQueryPayload, TRow>(
           domain,
           scope: exportScope,
           reason: 'user',
-          label: exportLabel,
+          label: resolvedOptions.label,
           cleanup: true,
           preserveState: false,
         });
         if (result.status !== 'executed') {
-          throw new Error(`${exportLabel} export failed: page ${page + 1} request was blocked`);
+          throw new Error(
+            `${resolvedOptions.label} export failed: page ${page + 1} request was blocked`
+          );
         }
         const exportPayload = result.data?.data as TPayload | null | undefined;
         if (!exportPayload) {
-          throw new Error(`${exportLabel} export failed: page ${page + 1} returned no data`);
+          throw new Error(
+            `${resolvedOptions.label} export failed: page ${page + 1} returned no data`
+          );
         }
         // The RAW per-source clock, never the scope-folded token (which embeds
         // the scope string and so differs on every export page by construction).
@@ -685,16 +848,7 @@ export function useTypedResourceQuery<TPayload extends TypedQueryPayload, TRow>(
           sourceVersion,
         };
       });
-      if (walk.dataChangedDuringWalk) {
-        // Loud, not fatal: deliver the export but say what happened — the rows
-        // reflect a mix of before/after states (near-certain on churning
-        // domains, where a hard failure would make export unusable). A WARNING
-        // advisory (amber, auto-dismissing), not an error.
-        errorHandler.warn(
-          'Some rows changed while the export was being gathered, so the result reflects a mix of before and after states.',
-          { title: 'Export', context: { source: 'resource-export', domain } }
-        );
-      }
+      warnForChangedExportRows(walk.dataChangedDuringWalk, domain);
       return walk.items;
     },
     [baseScope, clusterId, domain, enabled, effectiveFilters, label, predicates, sortConfig]

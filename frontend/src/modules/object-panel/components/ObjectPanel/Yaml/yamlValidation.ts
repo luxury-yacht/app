@@ -120,122 +120,145 @@ export const parseObjectIdentity = (yamlContent: string): ObjectIdentity | null 
   };
 };
 
+const validationFailure = (message: string): ValidationFailure => ({ isValid: false, message });
+
+type ParsedDocumentResult = { isValid: true; document: YAML.Document.Parsed } | ValidationFailure;
+
+const parseSingleYamlDocument = (draft: string): ParsedDocumentResult => {
+  if (!ensureNonEmptyString(draft)) {
+    return validationFailure('YAML content is required.');
+  }
+  const documents = YAML.parseAllDocuments(draft);
+  if (documents.length === 0) {
+    return validationFailure('YAML content cannot be empty.');
+  }
+  if (documents.length > 1) {
+    return validationFailure('Multiple YAML documents detected. Please edit one object at a time.');
+  }
+  const document = documents[0];
+  if (document.errors.length > 0) {
+    return validationFailure(reportDocError(document));
+  }
+  return { isValid: true, document };
+};
+
+const yamlObjectRecord = (document: YAML.Document.Parsed): Record<string, unknown> | null => {
+  const parsed = document.toJSON();
+  return parsed && typeof parsed === 'object' && !Array.isArray(parsed)
+    ? (parsed as Record<string, unknown>)
+    : null;
+};
+
+const yamlMetadata = (record: Record<string, unknown>): Record<string, unknown> => {
+  const metadata = record.metadata;
+  return metadata && typeof metadata === 'object' && !Array.isArray(metadata)
+    ? (metadata as Record<string, unknown>)
+    : {};
+};
+
+type ValidatedDraftIdentity = {
+  apiVersion: string;
+  kind: string;
+  name: string;
+  namespace: string | null;
+  uid: string | null;
+  resourceVersion: string | null;
+};
+
+type DraftIdentityResult = { isValid: true; identity: ValidatedDraftIdentity } | ValidationFailure;
+
+const extractDraftIdentity = (record: Record<string, unknown>): DraftIdentityResult => {
+  const metadata = yamlMetadata(record);
+  const apiVersion = record.apiVersion;
+  const kind = record.kind;
+  const name = metadata.name;
+  if (!ensureNonEmptyString(apiVersion)) {
+    return validationFailure('Missing apiVersion.');
+  }
+  if (!ensureNonEmptyString(kind)) {
+    return validationFailure('Missing kind.');
+  }
+  if (!ensureNonEmptyString(name)) {
+    return validationFailure('Missing metadata.name.');
+  }
+  if (kind === 'List') {
+    return validationFailure(
+      'Kubernetes List objects are not editable here. Select a specific resource instead.'
+    );
+  }
+  return {
+    isValid: true,
+    identity: {
+      apiVersion,
+      kind,
+      name,
+      namespace: normalizeNamespace(metadata.namespace),
+      uid: normalizeUID(metadata.uid),
+      resourceVersion: normalizeResourceVersion(metadata.resourceVersion),
+    },
+  };
+};
+
+const validateExpectedIdentity = (
+  actual: ValidatedDraftIdentity,
+  expected: ObjectIdentity
+): ValidationFailure | null => {
+  if (expected.apiVersion !== actual.apiVersion) {
+    return validationFailure(
+      `apiVersion mismatch. Expected ${expected.apiVersion}, found ${actual.apiVersion}.`
+    );
+  }
+  if (expected.kind !== actual.kind) {
+    return validationFailure(`kind mismatch. Expected ${expected.kind}, found ${actual.kind}.`);
+  }
+  if (expected.name !== actual.name) {
+    return validationFailure(
+      `metadata.name mismatch. Expected ${expected.name}, found ${actual.name}.`
+    );
+  }
+  if ((expected.namespace ?? null) !== actual.namespace) {
+    const expectedLabel = expected.namespace ?? '<cluster-scoped>';
+    const actualLabel = actual.namespace ?? '<cluster-scoped>';
+    return validationFailure(
+      `metadata.namespace mismatch. Expected ${expectedLabel}, found ${actualLabel}.`
+    );
+  }
+  if (expected.uid && actual.uid && expected.uid !== actual.uid) {
+    return validationFailure(
+      `metadata.uid mismatch. Expected ${expected.uid}, found ${actual.uid}.`
+    );
+  }
+  return null;
+};
+
 export const validateYamlDraft = (
   draft: string,
   expectedIdentity: ObjectIdentity | null,
   _baselineResourceVersion: string | null
 ): ValidationResult => {
-  if (!ensureNonEmptyString(draft)) {
-    return {
-      isValid: false,
-      message: 'YAML content is required.',
-    };
+  const parsedDocument = parseSingleYamlDocument(draft);
+  if (!parsedDocument.isValid) {
+    return parsedDocument;
   }
-
-  const docs = YAML.parseAllDocuments(draft);
-  if (docs.length === 0) {
-    return {
-      isValid: false,
-      message: 'YAML content cannot be empty.',
-    };
+  const record = yamlObjectRecord(parsedDocument.document);
+  if (!record) {
+    return validationFailure('YAML must evaluate to a Kubernetes object (mapping).');
   }
-
-  if (docs.length > 1) {
-    return {
-      isValid: false,
-      message: 'Multiple YAML documents detected. Please edit one object at a time.',
-    };
+  const draftIdentity = extractDraftIdentity(record);
+  if (!draftIdentity.isValid) {
+    return draftIdentity;
   }
-
-  const [doc] = docs;
-  if (doc.errors.length > 0) {
-    return {
-      isValid: false,
-      message: reportDocError(doc),
-    };
-  }
-
-  const parsed = doc.toJSON();
-  if (!parsed || typeof parsed !== 'object' || Array.isArray(parsed)) {
-    return {
-      isValid: false,
-      message: 'YAML must evaluate to a Kubernetes object (mapping).',
-    };
-  }
-
-  const record = parsed as Record<string, unknown>;
-  const apiVersion = record.apiVersion;
-  const kind = record.kind;
-  const metadataRaw = record.metadata;
-  const metadata =
-    (metadataRaw && typeof metadataRaw === 'object' && !Array.isArray(metadataRaw)
-      ? (metadataRaw as Record<string, unknown>)
-      : undefined) ?? {};
-  const name = metadata.name;
-  const namespace = normalizeNamespace(metadata.namespace);
-  const uid = normalizeUID(metadata.uid);
-  const resourceVersion = normalizeResourceVersion(metadata.resourceVersion);
-
-  if (!ensureNonEmptyString(apiVersion)) {
-    return { isValid: false, message: 'Missing apiVersion.' };
-  }
-  if (!ensureNonEmptyString(kind)) {
-    return { isValid: false, message: 'Missing kind.' };
-  }
-  if (!ensureNonEmptyString(name)) {
-    return { isValid: false, message: 'Missing metadata.name.' };
-  }
-
-  if (kind === 'List') {
-    return {
-      isValid: false,
-      message: 'Kubernetes List objects are not editable here. Select a specific resource instead.',
-    };
-  }
-
-  if (expectedIdentity) {
-    if (expectedIdentity.apiVersion !== apiVersion) {
-      return {
-        isValid: false,
-        message: `apiVersion mismatch. Expected ${expectedIdentity.apiVersion}, found ${apiVersion}.`,
-      };
-    }
-    if (expectedIdentity.kind !== kind) {
-      return {
-        isValid: false,
-        message: `kind mismatch. Expected ${expectedIdentity.kind}, found ${kind}.`,
-      };
-    }
-    if (expectedIdentity.name !== name) {
-      return {
-        isValid: false,
-        message: `metadata.name mismatch. Expected ${expectedIdentity.name}, found ${name}.`,
-      };
-    }
-
-    const expectedNamespace = expectedIdentity.namespace ?? null;
-    const actualNamespace = namespace ?? null;
-    if (expectedNamespace !== actualNamespace) {
-      const expectedLabel = expectedNamespace ?? '<cluster-scoped>';
-      const actualLabel = actualNamespace ?? '<cluster-scoped>';
-      return {
-        isValid: false,
-        message: `metadata.namespace mismatch. Expected ${expectedLabel}, found ${actualLabel}.`,
-      };
-    }
-
-    if (expectedIdentity.uid && uid && expectedIdentity.uid !== uid) {
-      return {
-        isValid: false,
-        message: `metadata.uid mismatch. Expected ${expectedIdentity.uid}, found ${uid}.`,
-      };
-    }
+  const identityMismatch = expectedIdentity
+    ? validateExpectedIdentity(draftIdentity.identity, expectedIdentity)
+    : null;
+  if (identityMismatch) {
+    return identityMismatch;
   }
 
   return {
     isValid: true,
-    normalizedYAML: doc.toString({ lineWidth: 0 }),
+    normalizedYAML: parsedDocument.document.toString({ lineWidth: 0 }),
     parsedObject: record,
-    resourceVersion,
+    resourceVersion: draftIdentity.identity.resourceVersion,
   };
 };

@@ -133,6 +133,89 @@ export const typedResourceQueryLifecycleIdentity = ({
     query: typedResourceQueryIdentity({ filters, sortConfig, predicates }),
   });
 
+const appendFilterParams = (params: URLSearchParams, filters: GridTableFilterState): void => {
+  const search = filters.search.trim();
+  if (search) {
+    params.set('search', search);
+  }
+  if (filters.includeMetadata) {
+    params.set('includeMetadata', 'true');
+  }
+  if (hasExplicitNoneResourceQueryFilter(filters)) {
+    params.set('matchNone', 'true');
+  }
+};
+
+const appendSelectionParam = (params: URLSearchParams, key: string, selection: unknown): void => {
+  const values = stableTypedQuerySelection(selection);
+  if (values.length > 0) {
+    params.set(key, values.join(','));
+  }
+};
+
+const appendFacetParams = (
+  params: URLSearchParams,
+  facets: Record<string, MultiSelectFilterSelection> | undefined
+): void => {
+  for (const [key, values] of Object.entries(stableTypedQueryFacets(facets))) {
+    for (const value of values) {
+      params.append(`facet.${key}`, value);
+    }
+  }
+};
+
+const appendSortParams = (params: URLSearchParams, sortConfig: SortConfig | null): void => {
+  if (!sortConfig?.key || !sortConfig.direction) {
+    return;
+  }
+  params.set('sort', sortConfig.key);
+  params.set('sortDirection', sortConfig.direction);
+};
+
+const appendPredicateParams = (
+  params: URLSearchParams,
+  predicates: TypedResourceQueryDescriptor['predicates']
+): void => {
+  for (const [key, value] of Object.entries(predicates ?? {})) {
+    if (value) {
+      params.set(`predicate.${key}`, value);
+    }
+  }
+};
+
+const appendAnchorParams = (params: URLSearchParams, anchor: ResourceQueryAnchor): void => {
+  params.set('anchor.clusterId', anchor.clusterId);
+  if (anchor.group) {
+    params.set('anchor.group', anchor.group);
+  }
+  params.set('anchor.version', anchor.version);
+  params.set('anchor.kind', anchor.kind);
+  if (anchor.namespace) {
+    params.set('anchor.namespace', anchor.namespace);
+  }
+  params.set('anchor.name', anchor.name);
+  if (anchor.uid) {
+    params.set('anchor.uid', anchor.uid);
+  }
+};
+
+const appendPageAddress = (
+  params: URLSearchParams,
+  descriptor: TypedResourceQueryDescriptor
+): void => {
+  if (descriptor.anchor) {
+    appendAnchorParams(params, descriptor.anchor);
+    return;
+  }
+  if (typeof descriptor.startRank === 'number' && descriptor.startRank >= 0) {
+    params.set('startRank', String(descriptor.startRank));
+    return;
+  }
+  if (descriptor.continueToken) {
+    params.set('continue', descriptor.continueToken);
+  }
+};
+
 export function buildTypedResourceQueryScope(
   clusterId: string | null | undefined,
   descriptor: TypedResourceQueryDescriptor
@@ -142,63 +225,15 @@ export function buildTypedResourceQueryScope(
   }
   const params = new URLSearchParams();
   params.set('limit', String(descriptor.pageLimit));
-  if (descriptor.filters.search.trim()) {
-    params.set('search', descriptor.filters.search.trim());
-  }
-  // Tell the backend to also match labels/annotations. The server only applies this
-  // while searching; sending it without a search is a harmless no-op.
-  if (descriptor.filters.includeMetadata) {
-    params.set('includeMetadata', 'true');
-  }
-  if (hasExplicitNoneResourceQueryFilter(descriptor.filters)) {
-    params.set('matchNone', 'true');
-  }
-  const namespaces = stableTypedQuerySelection(descriptor.filters.namespaces);
-  if (namespaces.length > 0) {
-    params.set('namespaces', namespaces.join(','));
-  }
-  const kinds = stableTypedQuerySelection(descriptor.filters.kinds);
-  if (kinds.length > 0) {
-    params.set('kinds', kinds.join(','));
-  }
-  for (const [key, values] of Object.entries(
-    stableTypedQueryFacets(descriptor.filters.queryFacets)
-  )) {
-    for (const value of values) {
-      params.append(`facet.${key}`, value);
-    }
-  }
-  if (descriptor.sortConfig?.key && descriptor.sortConfig.direction) {
-    params.set('sort', descriptor.sortConfig.key);
-    params.set('sortDirection', descriptor.sortConfig.direction);
-  }
-  for (const [key, value] of Object.entries(descriptor.predicates ?? {})) {
-    if (value) {
-      params.set(`predicate.${key}`, value);
-    }
-  }
-  if (descriptor.anchor) {
-    // The three page addresses (anchor, startRank, continue) are mutually
-    // exclusive on the wire; the most intentful one present wins.
-    const anchor = descriptor.anchor;
-    params.set('anchor.clusterId', anchor.clusterId);
-    if (anchor.group) {
-      params.set('anchor.group', anchor.group);
-    }
-    params.set('anchor.version', anchor.version);
-    params.set('anchor.kind', anchor.kind);
-    if (anchor.namespace) {
-      params.set('anchor.namespace', anchor.namespace);
-    }
-    params.set('anchor.name', anchor.name);
-    if (anchor.uid) {
-      params.set('anchor.uid', anchor.uid);
-    }
-  } else if (typeof descriptor.startRank === 'number' && descriptor.startRank >= 0) {
-    params.set('startRank', String(descriptor.startRank));
-  } else if (descriptor.continueToken) {
-    params.set('continue', descriptor.continueToken);
-  }
+  appendFilterParams(params, descriptor.filters);
+  appendSelectionParam(params, 'namespaces', descriptor.filters.namespaces);
+  appendSelectionParam(params, 'kinds', descriptor.filters.kinds);
+  appendFacetParams(params, descriptor.filters.queryFacets);
+  appendSortParams(params, descriptor.sortConfig);
+  appendPredicateParams(params, descriptor.predicates);
+  // Anchor, start rank, and continue token are mutually exclusive on the wire;
+  // the most intentful address present wins.
+  appendPageAddress(params, descriptor);
   const baseScope = descriptor.baseScope ?? 'namespace:all';
   return buildClusterScope(clusterId, `${baseScope}?${params.toString()}`);
 }

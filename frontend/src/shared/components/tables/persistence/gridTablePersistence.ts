@@ -430,6 +430,130 @@ const isAllowedPageSize = (value: number, options?: readonly number[]): boolean 
   return !options || options.length === 0 || options.includes(value);
 };
 
+const buildColumnMap = <T>(
+  columns: GridColumnDefinition<T>[]
+): Map<string, GridColumnDefinition<T>> =>
+  new Map(columns.map((column) => [column.key, column] as const));
+
+const pruneColumnVisibility = <T>(
+  visibility: Record<string, boolean> | null | undefined,
+  columnMap: Map<string, GridColumnDefinition<T>>
+): Record<string, boolean> | undefined => {
+  if (!visibility) {
+    return undefined;
+  }
+  const pruned: Record<string, boolean> = {};
+  for (const [key, value] of Object.entries(visibility)) {
+    if (!LOCKED_COLUMNS.has(key) && columnMap.has(key) && typeof value === 'boolean') {
+      pruned[key] = value;
+    }
+  }
+  return Object.keys(pruned).length > 0 ? pruned : undefined;
+};
+
+const isValidColumnWidthState = (value: ColumnWidthState | undefined): value is ColumnWidthState =>
+  Boolean(value && typeof value.width === 'number' && Number.isFinite(value.width));
+
+const pruneColumnWidths = <T>(
+  widths: Record<string, ColumnWidthState> | null | undefined,
+  columnMap: Map<string, GridColumnDefinition<T>>
+): Record<string, ColumnWidthState> | undefined => {
+  if (!widths) {
+    return undefined;
+  }
+  const pruned: Record<string, ColumnWidthState> = {};
+  for (const [key, value] of Object.entries(widths)) {
+    if (columnMap.has(key) && isValidColumnWidthState(value)) {
+      pruned[key] = value;
+    }
+  }
+  return Object.keys(pruned).length > 0 ? pruned : undefined;
+};
+
+const pruneSort = <T>(
+  sort: GridTablePersistedState['sort'] | null | undefined,
+  columnMap: Map<string, GridColumnDefinition<T>>
+): GridTablePersistedState['sort'] | undefined => {
+  if (!sort?.key || !isSortableColumn(columnMap.get(sort.key))) {
+    return undefined;
+  }
+  return { key: sort.key, direction: sort.direction ?? null };
+};
+
+const pruneFilters = (
+  filters: GridTableFilterState | null | undefined,
+  filterOptions: GridTableFilterPersistenceOptions | undefined
+): GridTableFilterState | undefined => {
+  if (!filters) {
+    return undefined;
+  }
+  const normalized = normalizeGridTableFilterState(filters);
+  const queryFacets = pruneQueryFacets(
+    normalizeGridTableQueryFacets(normalized.queryFacets),
+    filterOptions?.queryFacets
+  );
+  const pruned: GridTableFilterState = {
+    search: normalized.search,
+    kinds: pruneFilterSelection(normalized.kinds, filterOptions?.kinds),
+    namespaces: filterOptions?.isNamespaceScoped
+      ? ALL_MULTISELECT_FILTER
+      : pruneFilterSelection(normalized.namespaces, filterOptions?.namespaces),
+    clusters: pruneFilterSelection(normalized.clusters, filterOptions?.clusters, true),
+    ...(Object.keys(queryFacets).length > 0 ? { queryFacets } : {}),
+    caseSensitive: normalized.caseSensitive,
+    includeMetadata: normalized.includeMetadata,
+  };
+  return hasNonDefaultGridTableFilters(pruned) ? pruned : undefined;
+};
+
+const prunePageSize = (
+  pageSize: number | null | undefined,
+  pageSizeOptions: readonly number[] | undefined
+): number | undefined =>
+  typeof pageSize === 'number' && isAllowedPageSize(pageSize, pageSizeOptions)
+    ? pageSize
+    : undefined;
+
+interface PersistedStateParts {
+  columnVisibility?: Record<string, boolean>;
+  columnWidths?: Record<string, ColumnWidthState>;
+  sort?: GridTablePersistedState['sort'];
+  filters?: GridTableFilterState;
+  pageSize?: number;
+}
+
+const hasPersistedStateParts = (parts: PersistedStateParts): boolean =>
+  Boolean(
+    parts.columnVisibility ||
+      parts.columnWidths ||
+      parts.sort ||
+      parts.filters ||
+      parts.pageSize !== undefined
+  );
+
+const assemblePersistedState = (parts: PersistedStateParts): GridTablePersistedState | null => {
+  if (!hasPersistedStateParts(parts)) {
+    return null;
+  }
+  const state: GridTablePersistedState = { version: STORAGE_VERSION };
+  if (parts.columnVisibility) {
+    state.columnVisibility = parts.columnVisibility;
+  }
+  if (parts.columnWidths) {
+    state.columnWidths = parts.columnWidths;
+  }
+  if (parts.sort) {
+    state.sort = parts.sort;
+  }
+  if (parts.filters) {
+    state.filters = parts.filters;
+  }
+  if (parts.pageSize !== undefined) {
+    state.pageSize = parts.pageSize;
+  }
+  return state;
+};
+
 export const prunePersistedState = <T>(
   persisted: GridTablePersistedInput | null | undefined,
   context: GridTablePruneContext<T>
@@ -438,198 +562,25 @@ export const prunePersistedState = <T>(
   if (!migrated) {
     return null;
   }
-
-  const pruned: GridTablePersistedState = { version: STORAGE_VERSION };
-  const columnMap = new Map<string, GridColumnDefinition<T>>();
-  context.columns.forEach((column) => {
-    columnMap.set(column.key, column);
+  const columnMap = buildColumnMap(context.columns);
+  return assemblePersistedState({
+    columnVisibility: pruneColumnVisibility(migrated.columnVisibility, columnMap),
+    columnWidths: pruneColumnWidths(migrated.columnWidths, columnMap),
+    sort: pruneSort(migrated.sort, columnMap),
+    filters: pruneFilters(migrated.filters, context.filterOptions),
+    pageSize: prunePageSize(migrated.pageSize, context.pageSizeOptions),
   });
-
-  if (migrated.columnVisibility) {
-    const visibility: Record<string, boolean> = {};
-    Object.entries(migrated.columnVisibility).forEach(([key, value]) => {
-      if (LOCKED_COLUMNS.has(key)) {
-        return;
-      }
-      if (columnMap.has(key) && typeof value === 'boolean') {
-        visibility[key] = value;
-      }
-    });
-    if (Object.keys(visibility).length > 0) {
-      pruned.columnVisibility = visibility;
-    }
-  }
-
-  if (migrated.columnWidths) {
-    const widths: Record<string, ColumnWidthState> = {};
-    Object.entries(migrated.columnWidths).forEach(([key, value]) => {
-      if (!columnMap.has(key)) {
-        return;
-      }
-      if (value && typeof value.width === 'number' && Number.isFinite(value.width)) {
-        widths[key] = value;
-      }
-    });
-    if (Object.keys(widths).length > 0) {
-      pruned.columnWidths = widths;
-    }
-  }
-
-  if (migrated.sort?.key) {
-    const column = columnMap.get(migrated.sort.key);
-    if (isSortableColumn(column)) {
-      pruned.sort = {
-        key: migrated.sort.key,
-        direction: migrated.sort.direction ?? null,
-      };
-    }
-  }
-
-  if (migrated.filters) {
-    const isNamespaceScoped = context.filterOptions?.isNamespaceScoped ?? false;
-    const normalized = normalizeGridTableFilterState(migrated.filters);
-
-    const kinds = pruneFilterSelection(normalized.kinds, context.filterOptions?.kinds);
-    const namespaces = isNamespaceScoped
-      ? ALL_MULTISELECT_FILTER
-      : pruneFilterSelection(normalized.namespaces, context.filterOptions?.namespaces);
-    const clusters = pruneFilterSelection(
-      normalized.clusters,
-      context.filterOptions?.clusters,
-      true
-    );
-    const queryFacets = pruneQueryFacets(
-      normalizeGridTableQueryFacets(normalized.queryFacets),
-      context.filterOptions?.queryFacets
-    );
-
-    const filters: GridTableFilterState = {
-      search: normalized.search,
-      kinds,
-      namespaces,
-      clusters,
-      ...(Object.keys(queryFacets).length > 0 ? { queryFacets } : {}),
-      caseSensitive: normalized.caseSensitive,
-      includeMetadata: normalized.includeMetadata,
-    };
-
-    if (hasNonDefaultGridTableFilters(filters)) {
-      pruned.filters = filters;
-    }
-  }
-
-  if (
-    typeof migrated.pageSize === 'number' &&
-    isAllowedPageSize(migrated.pageSize, context.pageSizeOptions)
-  ) {
-    pruned.pageSize = migrated.pageSize;
-  }
-
-  if (
-    !pruned.columnVisibility &&
-    !pruned.columnWidths &&
-    !pruned.sort &&
-    !pruned.filters &&
-    (pruned.pageSize === null || pruned.pageSize === undefined)
-  ) {
-    return null;
-  }
-
-  return pruned;
 };
 
 export const buildPersistedStateForSave = <T>(
   context: GridTableSaveContext<T>
 ): GridTablePersistedState | null => {
-  const state: GridTablePersistedState = { version: STORAGE_VERSION };
-  const columnKeys = new Set(context.columns.map((column) => column.key));
-
-  if (context.columnVisibility) {
-    const visibility: Record<string, boolean> = {};
-    Object.entries(context.columnVisibility).forEach(([key, value]) => {
-      if (LOCKED_COLUMNS.has(key)) {
-        return;
-      }
-      if (columnKeys.has(key) && typeof value === 'boolean') {
-        visibility[key] = value;
-      }
-    });
-    if (Object.keys(visibility).length > 0) {
-      state.columnVisibility = visibility;
-    }
-  }
-
-  if (context.columnWidths) {
-    const widths: Record<string, ColumnWidthState> = {};
-    Object.entries(context.columnWidths).forEach(([key, value]) => {
-      if (!columnKeys.has(key)) {
-        return;
-      }
-      if (value && typeof value.width === 'number' && Number.isFinite(value.width)) {
-        widths[key] = value;
-      }
-    });
-    if (Object.keys(widths).length > 0) {
-      state.columnWidths = widths;
-    }
-  }
-
-  if (context.sort?.key && columnKeys.has(context.sort.key)) {
-    const sortable = context.columns.find(
-      (column) => column.key === context.sort?.key && isSortableColumn(column)
-    );
-    if (sortable) {
-      state.sort = {
-        key: context.sort.key,
-        direction: context.sort.direction ?? null,
-      };
-    }
-  }
-
-  if (context.filters) {
-    const isNamespaceScoped = context.filterOptions?.isNamespaceScoped ?? false;
-    const normalized = normalizeGridTableFilterState(context.filters);
-    const queryFacets = pruneQueryFacets(
-      normalizeGridTableQueryFacets(normalized.queryFacets),
-      context.filterOptions?.queryFacets
-    );
-    const clusters = pruneFilterSelection(
-      normalized.clusters,
-      context.filterOptions?.clusters,
-      true
-    );
-    const filters: GridTableFilterState = {
-      search: normalized.search,
-      kinds: pruneFilterSelection(normalized.kinds, context.filterOptions?.kinds),
-      namespaces: isNamespaceScoped
-        ? ALL_MULTISELECT_FILTER
-        : pruneFilterSelection(normalized.namespaces, context.filterOptions?.namespaces),
-      clusters,
-      ...(Object.keys(queryFacets).length > 0 ? { queryFacets } : {}),
-      caseSensitive: normalized.caseSensitive,
-      includeMetadata: normalized.includeMetadata,
-    };
-    if (hasNonDefaultGridTableFilters(filters)) {
-      state.filters = filters;
-    }
-  }
-
-  if (
-    typeof context.pageSize === 'number' &&
-    isAllowedPageSize(context.pageSize, context.pageSizeOptions)
-  ) {
-    state.pageSize = context.pageSize;
-  }
-
-  if (
-    !state.columnVisibility &&
-    !state.columnWidths &&
-    !state.sort &&
-    !state.filters &&
-    (state.pageSize === null || state.pageSize === undefined)
-  ) {
-    return null;
-  }
-
-  return state;
+  const columnMap = buildColumnMap(context.columns);
+  return assemblePersistedState({
+    columnVisibility: pruneColumnVisibility(context.columnVisibility, columnMap),
+    columnWidths: pruneColumnWidths(context.columnWidths, columnMap),
+    sort: pruneSort(context.sort, columnMap),
+    filters: pruneFilters(context.filters, context.filterOptions),
+    pageSize: prunePageSize(context.pageSize, context.pageSizeOptions),
+  });
 };

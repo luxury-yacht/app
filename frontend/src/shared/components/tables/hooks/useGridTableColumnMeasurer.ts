@@ -31,6 +31,12 @@ interface KindBadgeSample {
   interactive: boolean;
 }
 
+interface CellMeasurer {
+  node: HTMLDivElement;
+}
+
+const MEASUREMENT_SAMPLE_LIMIT = 400;
+
 const detachNode = (node: HTMLElement | null) => {
   if (!node) {
     return;
@@ -40,6 +46,183 @@ const detachNode = (node: HTMLElement | null) => {
     return;
   }
   node.remove();
+};
+
+const getFallbackWidth = <T>(
+  column: GridColumnDefinition<T>,
+  parseWidthInputToNumber: (input: ColumnWidthInput | undefined) => number | null,
+  defaultColumnWidth: number
+): number =>
+  parseWidthInputToNumber(column.width) ??
+  parseWidthInputToNumber(column.minWidth) ??
+  defaultColumnWidth;
+
+const measureHeaderWidth = <T>(column: GridColumnDefinition<T>): number => {
+  const measurer = document.createElement('div');
+  measurer.className = 'grid-cell-header';
+  measurer.style.position = 'absolute';
+  measurer.style.visibility = 'hidden';
+  measurer.style.left = '-9999px';
+  measurer.style.whiteSpace = 'nowrap';
+  measurer.style.width = 'auto';
+  measurer.textContent = column.header;
+  document.body.appendChild(measurer);
+  try {
+    const width = measurer.scrollWidth;
+    return width > 0 && isSortableColumn(column) ? width + 20 : width;
+  } finally {
+    detachNode(measurer);
+  }
+};
+
+const buildKindBadgeSample = (
+  contentNode: React.ReactNode,
+  getTextContent: (node: React.ReactNode) => string
+): KindBadgeSample => {
+  const displayText = getTextContent(contentNode).trim();
+  if (!React.isValidElement(contentNode)) {
+    return { canonicalKind: displayText, displayText, interactive: false };
+  }
+  const props = contentNode.props as Record<string, unknown>;
+  const explicit = props?.['data-kind-value'];
+  const canonicalKind =
+    typeof explicit === 'string' && explicit.trim().length > 0 ? explicit.trim() : displayText;
+  const interactive =
+    props?.['data-kind-interactive'] === 'true' ||
+    typeof props?.onClick === 'function' ||
+    typeof props?.onKeyDown === 'function' ||
+    props?.role === 'button';
+  return { canonicalKind, displayText, interactive };
+};
+
+const getKindBadgeSampleKey = (sample: KindBadgeSample): string =>
+  `${sample.canonicalKind}::${sample.displayText}::${sample.interactive ? '1' : '0'}`;
+
+const applyKindBadgeSample = (
+  measurer: KindBadgeMeasurer,
+  sample: KindBadgeSample,
+  normalizeKindClass: (value: string) => string
+): void => {
+  const classes = ['kind-badge', normalizeKindClass(sample.canonicalKind)];
+  if (sample.interactive) {
+    classes.push('clickable');
+  }
+  measurer.badge.className = classes.join(' ');
+  measurer.badge.textContent = sample.displayText;
+};
+
+const measureKindBadges = <T>(
+  column: GridColumnDefinition<T>,
+  tableData: T[],
+  measurer: KindBadgeMeasurer,
+  getTextContent: (node: React.ReactNode) => string,
+  normalizeKindClass: (value: string) => string
+): number => {
+  const seenBadges = new Set<string>();
+  let maxWidth = 0;
+  for (const item of tableData) {
+    const sample = buildKindBadgeSample(column.render(item), getTextContent);
+    const sampleKey = getKindBadgeSampleKey(sample);
+    if (seenBadges.has(sampleKey)) {
+      continue;
+    }
+    seenBadges.add(sampleKey);
+    applyKindBadgeSample(measurer, sample, normalizeKindClass);
+    maxWidth = Math.max(maxWidth, measurer.container.getBoundingClientRect().width);
+    if (seenBadges.size >= MEASUREMENT_SAMPLE_LIMIT) {
+      break;
+    }
+  }
+  return maxWidth;
+};
+
+const createCellMeasurer = (): CellMeasurer => {
+  const node = document.createElement('div');
+  node.className = 'grid-cell';
+  node.style.position = 'absolute';
+  node.style.visibility = 'hidden';
+  node.style.left = '-9999px';
+  node.style.whiteSpace = 'nowrap';
+  node.style.width = 'auto';
+  document.body.appendChild(node);
+  return { node };
+};
+
+const selectMeasurementSamples = <T>(tableData: T[]): T[] => {
+  if (tableData.length <= MEASUREMENT_SAMPLE_LIMIT) {
+    return tableData;
+  }
+  const step = Math.max(1, Math.ceil(tableData.length / MEASUREMENT_SAMPLE_LIMIT));
+  const samples = tableData.filter((_item, index) => index % step === 0);
+  const last = tableData[tableData.length - 1];
+  if (samples[samples.length - 1] !== last) {
+    samples.push(last);
+  }
+  return samples;
+};
+
+const setCellMeasurerContent = (measurer: CellMeasurer, content: React.ReactNode): void => {
+  if (React.isValidElement(content)) {
+    measurer.node.innerHTML = renderToStaticMarkup(content);
+    return;
+  }
+  measurer.node.textContent = String(content ?? '');
+};
+
+const measureCells = <T>(
+  column: GridColumnDefinition<T>,
+  tableData: T[],
+  measurer: CellMeasurer
+): number => {
+  let maxWidth = 0;
+  for (const item of selectMeasurementSamples(tableData)) {
+    setCellMeasurerContent(measurer, column.render(item));
+    maxWidth = Math.max(maxWidth, measurer.node.getBoundingClientRect().width);
+  }
+  return maxWidth;
+};
+
+const measureColumnContent = <T>(
+  column: GridColumnDefinition<T>,
+  tableData: T[],
+  kindMeasurer: KindBadgeMeasurer | null,
+  cellMeasurer: CellMeasurer | null,
+  getTextContent: (node: React.ReactNode) => string,
+  normalizeKindClass: (value: string) => string
+): number => {
+  if (kindMeasurer) {
+    return measureKindBadges(column, tableData, kindMeasurer, getTextContent, normalizeKindClass);
+  }
+  return measureCells(column, tableData, cellMeasurer as CellMeasurer);
+};
+
+const cleanupMeasurers = (
+  kindMeasurer: KindBadgeMeasurer | null,
+  cellMeasurer: CellMeasurer | null
+): void => {
+  if (cellMeasurer) {
+    detachNode(cellMeasurer.node);
+  }
+  if (kindMeasurer) {
+    kindMeasurer.badge.textContent = '';
+  }
+};
+
+const clampMeasuredWidth = <T>(
+  measuredWidth: number,
+  column: GridColumnDefinition<T>,
+  defaultColumnWidth: number,
+  getColumnMinWidth: (column: GridColumnDefinition<T>) => number,
+  getColumnMaxWidth: (column: GridColumnDefinition<T>) => number,
+  parseWidthInputToNumber: (input: ColumnWidthInput | undefined) => number | null
+): number => {
+  const contentWidth = Math.ceil(measuredWidth > 0 ? measuredWidth : defaultColumnWidth);
+  const minimumWidth = Math.max(contentWidth, getColumnMinWidth(column));
+  const configuredMaximum = getColumnMaxWidth(column);
+  const autoSizeMaximum = parseWidthInputToNumber(column.autoSizeMaxWidth);
+  const maximumWidth =
+    autoSizeMaximum === null ? configuredMaximum : Math.min(configuredMaximum, autoSizeMaximum);
+  return Number.isFinite(maximumWidth) ? Math.min(minimumWidth, maximumWidth) : minimumWidth;
 };
 
 export interface ColumnMeasurerOptions<T> {
@@ -113,169 +296,32 @@ export function useGridTableColumnMeasurer<T>({
   const measureColumnWidth = useCallback(
     (column: GridColumnDefinition<T>): number => {
       if (typeof document === 'undefined') {
-        return (
-          parseWidthInputToNumber(column.width) ??
-          parseWidthInputToNumber(column.minWidth) ??
-          defaultColumnWidth
+        return getFallbackWidth(column, parseWidthInputToNumber, defaultColumnWidth);
+      }
+      const kindMeasurer = isKindColumnKey(column.key) ? ensureKindBadgeMeasurer() : null;
+      const cellMeasurer = kindMeasurer ? null : createCellMeasurer();
+      let measuredWidth = measureHeaderWidth(column);
+      try {
+        const cellsWidth = measureColumnContent(
+          column,
+          tableData,
+          kindMeasurer,
+          cellMeasurer,
+          getTextContent,
+          normalizeKindClass
         );
-      }
-
-      let maxWidth = 0;
-
-      const headerMeasurer = document.createElement('div');
-      headerMeasurer.className = 'grid-cell-header';
-      headerMeasurer.style.position = 'absolute';
-      headerMeasurer.style.visibility = 'hidden';
-      headerMeasurer.style.left = '-9999px';
-      headerMeasurer.style.whiteSpace = 'nowrap';
-      headerMeasurer.style.width = 'auto';
-      headerMeasurer.textContent = column.header;
-      document.body.appendChild(headerMeasurer);
-      try {
-        let headerWidth = headerMeasurer.scrollWidth;
-        if (headerWidth > 0 && isSortableColumn(column)) {
-          headerWidth += 20;
-        }
-        maxWidth = Math.max(maxWidth, headerWidth);
+        measuredWidth = Math.max(measuredWidth, cellsWidth);
       } finally {
-        detachNode(headerMeasurer);
+        cleanupMeasurers(kindMeasurer, cellMeasurer);
       }
-
-      const isKindColumn = isKindColumnKey(column.key);
-      const kindMeasurer = isKindColumn ? ensureKindBadgeMeasurer() : null;
-      const measureLimit = 400;
-      const buildKindBadgeSample = (contentNode: React.ReactNode): KindBadgeSample => {
-        const displayText = getTextContent(contentNode).trim();
-        let canonicalKind = displayText;
-        let interactive = false;
-
-        if (React.isValidElement(contentNode)) {
-          const props = contentNode.props as Record<string, unknown>;
-          const explicit = props?.['data-kind-value'];
-          if (typeof explicit === 'string' && explicit.trim().length > 0) {
-            canonicalKind = explicit.trim();
-          }
-          interactive =
-            props?.['data-kind-interactive'] === 'true' ||
-            typeof props?.onClick === 'function' ||
-            typeof props?.onKeyDown === 'function' ||
-            props?.role === 'button';
-        }
-
-        return {
-          canonicalKind,
-          displayText,
-          interactive,
-        };
-      };
-
-      // Create an off-screen measurer node for DOM-based width checks.
-      // Use static markup for React elements instead of mounting a nested
-      // React root during another component's layout work. That avoids
-      // commit-time DOM ownership issues when measurement happens while
-      // the main tree is reconciling.
-      const cellMeasurer =
-        !isKindColumn || !kindMeasurer
-          ? (() => {
-              const node = document.createElement('div');
-              node.className = 'grid-cell';
-              node.style.position = 'absolute';
-              node.style.visibility = 'hidden';
-              node.style.left = '-9999px';
-              node.style.whiteSpace = 'nowrap';
-              node.style.width = 'auto';
-              document.body.appendChild(node);
-              return { node };
-            })()
-          : null;
-
-      const sampleItems: T[] = [];
-      if (!isKindColumn || !kindMeasurer) {
-        if (tableData.length <= measureLimit) {
-          sampleItems.push(...tableData);
-        } else {
-          const step = Math.max(1, Math.ceil(tableData.length / measureLimit));
-          for (let index = 0; index < tableData.length; index += step) {
-            sampleItems.push(tableData[index]);
-          }
-          const last = tableData[tableData.length - 1];
-          if (sampleItems[sampleItems.length - 1] !== last) {
-            sampleItems.push(last);
-          }
-        }
-      }
-
-      // Wrap measurement loop in try/finally so cellMeasurer and kindMeasurer
-      // are cleaned up even if column.render() or renderToString() throws.
-      try {
-        if (kindMeasurer) {
-          const seenBadges = new Set<string>();
-          let measuredKinds = 0;
-
-          for (const item of tableData) {
-            const contentNode = column.render(item);
-            const badge = buildKindBadgeSample(contentNode);
-            const sampleKey = `${badge.canonicalKind}::${badge.displayText}::${badge.interactive ? '1' : '0'}`;
-            if (seenBadges.has(sampleKey)) {
-              continue;
-            }
-            seenBadges.add(sampleKey);
-            measuredKinds += 1;
-
-            const badgeClasses = ['kind-badge', normalizeKindClass(badge.canonicalKind)];
-            if (badge.interactive) {
-              badgeClasses.push('clickable');
-            }
-            kindMeasurer.badge.className = badgeClasses.join(' ');
-            kindMeasurer.badge.textContent = badge.displayText;
-
-            const badgeWidth = kindMeasurer.container.getBoundingClientRect().width;
-            maxWidth = Math.max(maxWidth, badgeWidth);
-
-            if (measuredKinds >= measureLimit) {
-              break;
-            }
-          }
-        } else {
-          sampleItems.forEach((item) => {
-            const contentNode = column.render(item);
-
-            if (!cellMeasurer) {
-              return;
-            }
-
-            if (React.isValidElement(contentNode)) {
-              cellMeasurer.node.innerHTML = renderToStaticMarkup(contentNode);
-            } else {
-              cellMeasurer.node.textContent = String(contentNode ?? '');
-            }
-
-            const width = cellMeasurer.node.getBoundingClientRect().width;
-            maxWidth = Math.max(maxWidth, width);
-          });
-        }
-      } finally {
-        if (cellMeasurer) {
-          detachNode(cellMeasurer.node);
-        }
-        if (kindMeasurer) {
-          kindMeasurer.badge.textContent = '';
-        }
-      }
-
-      let measured = Math.ceil(maxWidth > 0 ? maxWidth : defaultColumnWidth);
-      measured = Math.max(measured, getColumnMinWidth(column));
-      const configuredMaxAllowed = getColumnMaxWidth(column);
-      const autoSizeMaxWidth = parseWidthInputToNumber(column.autoSizeMaxWidth);
-      const maxAllowed =
-        autoSizeMaxWidth !== null && autoSizeMaxWidth !== undefined
-          ? Math.min(configuredMaxAllowed, autoSizeMaxWidth)
-          : configuredMaxAllowed;
-      if (Number.isFinite(maxAllowed)) {
-        measured = Math.min(measured, maxAllowed);
-      }
-
-      return measured;
+      return clampMeasuredWidth(
+        measuredWidth,
+        column,
+        defaultColumnWidth,
+        getColumnMinWidth,
+        getColumnMaxWidth,
+        parseWidthInputToNumber
+      );
     },
     [
       tableData,

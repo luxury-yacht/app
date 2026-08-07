@@ -20,10 +20,15 @@ import React, { useCallback, useEffect, useRef } from 'react';
 // Max entries per column's primitive cache before eviction
 const PRIMITIVE_CACHE_MAX_SIZE = 500;
 
+interface CachedCellValue {
+  content: React.ReactNode;
+  text: string;
+}
+
 interface CachedCell<T> {
   render: GridColumnDefinition<T>['render'];
-  objectCache?: WeakMap<object, { content: React.ReactNode; text: string }>;
-  primitiveCache?: Map<unknown, { content: React.ReactNode; text: string }>;
+  objectCache?: WeakMap<object, CachedCellValue>;
+  primitiveCache?: Map<unknown, CachedCellValue>;
 }
 
 export interface CellCacheOptions<T> {
@@ -35,6 +40,141 @@ export interface CellCacheOptions<T> {
   // to prevent unbounded growth from old values
   data?: T[];
 }
+
+const isObjectCacheKey = (item: unknown): item is object =>
+  typeof item === 'object' && item !== null;
+
+const getColumnCache = <T,>(
+  cache: Map<string, CachedCell<T>>,
+  column: GridColumnDefinition<T>
+): CachedCell<T> => {
+  const existing = cache.get(column.key);
+  if (existing?.render === column.render) {
+    return existing;
+  }
+  const entry = { render: column.render };
+  cache.set(column.key, entry);
+  return entry;
+};
+
+const readCachedCell = <T,>(entry: CachedCell<T>, item: T): CachedCellValue | undefined => {
+  if (isObjectCacheKey(item)) {
+    return entry.objectCache?.get(item);
+  }
+  return entry.primitiveCache?.get(item);
+};
+
+const evictOldestPrimitive = (cache: Map<unknown, CachedCellValue>): void => {
+  if (cache.size < PRIMITIVE_CACHE_MAX_SIZE) {
+    return;
+  }
+  const oldestKey = cache.keys().next().value;
+  if (oldestKey !== undefined) {
+    cache.delete(oldestKey);
+  }
+};
+
+const storeCachedCell = <T,>(
+  entry: CachedCell<T>,
+  item: T,
+  result: CachedCellValue
+): CachedCellValue => {
+  if (isObjectCacheKey(item)) {
+    entry.objectCache ??= new WeakMap();
+    entry.objectCache.set(item, result);
+    return result;
+  }
+  entry.primitiveCache ??= new Map();
+  evictOldestPrimitive(entry.primitiveCache);
+  entry.primitiveCache.set(item, result);
+  return result;
+};
+
+interface KindElementMetadata {
+  canonicalKind: string | undefined;
+  interactive: boolean;
+}
+
+const getKindElementMetadata = (content: React.ReactNode): KindElementMetadata => {
+  if (!React.isValidElement<Record<string, unknown>>(content)) {
+    return { canonicalKind: undefined, interactive: false };
+  }
+  const props = content.props;
+  const explicitKindValue = props?.['data-kind-value'];
+  const canonicalKind =
+    typeof explicitKindValue === 'string' && explicitKindValue.trim().length > 0
+      ? explicitKindValue
+      : undefined;
+  const interactive =
+    props?.['data-kind-interactive'] === 'true' ||
+    typeof props?.onClick === 'function' ||
+    typeof props?.onKeyDown === 'function' ||
+    props?.role === 'button';
+  return { canonicalKind, interactive };
+};
+
+const appendClassToken = (tokens: string[], token: string | undefined): void => {
+  if (token && !tokens.includes(token)) {
+    tokens.push(token);
+  }
+};
+
+const buildKindClassName = (
+  existingClassName: unknown,
+  normalizedClass: string,
+  interactive: boolean
+): string => {
+  const tokens = typeof existingClassName === 'string' ? existingClassName.split(/\s+/) : [];
+  const classTokens = tokens.map((token) => token.trim()).filter(Boolean);
+  appendClassToken(classTokens, 'kind-badge');
+  appendClassToken(classTokens, normalizedClass);
+  appendClassToken(classTokens, interactive ? 'clickable' : undefined);
+  return classTokens.join(' ');
+};
+
+const renderKindContent = (
+  rawContent: React.ReactNode,
+  rawText: string,
+  normalizeKindClass: (value: string) => string
+): React.ReactNode => {
+  const metadata = getKindElementMetadata(rawContent);
+  const trimmedDisplay = rawText.trim();
+  const normalizedClass = normalizeKindClass(metadata.canonicalKind ?? trimmedDisplay);
+  if (React.isValidElement<Record<string, unknown>>(rawContent)) {
+    return React.cloneElement(rawContent, {
+      className: buildKindClassName(
+        rawContent.props.className,
+        normalizedClass,
+        metadata.interactive
+      ),
+    });
+  }
+  if (trimmedDisplay.length === 0) {
+    return rawContent;
+  }
+  return (
+    <span className={buildKindClassName(undefined, normalizedClass, metadata.interactive)}>
+      {rawContent}
+    </span>
+  );
+};
+
+const renderCellValue = <T,>(
+  column: GridColumnDefinition<T>,
+  item: T,
+  isKindColumnKey: (key: string) => boolean,
+  getTextContent: (node: React.ReactNode) => string,
+  normalizeKindClass: (value: string) => string
+): CachedCellValue => {
+  const rawContent = column.render(item);
+  const rawText = getTextContent(rawContent);
+  const noValue = isTableNoValueText(rawText);
+  let content: React.ReactNode = noValue ? renderTableNoValue() : rawContent;
+  if (isKindColumnKey(column.key)) {
+    content = renderKindContent(rawContent, rawText, normalizeKindClass);
+  }
+  return { content, text: noValue ? TABLE_NO_VALUE_TEXT : rawText };
+};
 
 export function useGridTableCellCache<T>({
   renderedColumns,
@@ -70,121 +210,16 @@ export function useGridTableCellCache<T>({
 
   const getCachedCellContent = useCallback(
     (column: GridColumnDefinition<T>, item: T) => {
-      let entry = columnRenderCacheRef.current.get(column.key);
-      if (!entry || entry.render !== column.render) {
-        entry = { render: column.render };
-        columnRenderCacheRef.current.set(column.key, entry);
+      const entry = getColumnCache(columnRenderCacheRef.current, column);
+      const cached = readCachedCell(entry, item);
+      if (cached) {
+        return cached;
       }
-      const cacheEntry = entry;
-
-      const storeResult = (result: { content: React.ReactNode; text: string }) => {
-        if (typeof item === 'object' && item !== null) {
-          if (!cacheEntry.objectCache) {
-            cacheEntry.objectCache = new WeakMap();
-          }
-          cacheEntry.objectCache.set(item as object, result);
-        } else {
-          if (!cacheEntry.primitiveCache) {
-            cacheEntry.primitiveCache = new Map();
-          }
-          const primitiveCache = cacheEntry.primitiveCache;
-          // Evict oldest entries if cache exceeds size limit
-          if (primitiveCache.size >= PRIMITIVE_CACHE_MAX_SIZE) {
-            // Map iterates in insertion order, so first key is oldest
-            const firstKey = primitiveCache.keys().next().value;
-            if (firstKey !== undefined) {
-              primitiveCache.delete(firstKey);
-            }
-          }
-          primitiveCache.set(item, result);
-        }
-        return result;
-      };
-
-      if (typeof item === 'object' && item !== null) {
-        if (!entry.objectCache) {
-          entry.objectCache = new WeakMap();
-        } else {
-          const cached = entry.objectCache.get(item as object);
-          if (cached) {
-            return cached;
-          }
-        }
-      } else if (entry.primitiveCache) {
-        const cached = entry.primitiveCache.get(item as unknown);
-        if (cached) {
-          return cached;
-        }
-      }
-
-      const rawContent = entry.render(item);
-      const rawText = getTextContent(rawContent);
-
-      let content: React.ReactNode = rawContent;
-      let text = rawText;
-
-      if (isTableNoValueText(rawText)) {
-        content = renderTableNoValue();
-        text = TABLE_NO_VALUE_TEXT;
-      }
-
-      if (isKindColumnKey(column.key)) {
-        let canonicalKind: string | undefined;
-        let isInteractiveElement = false;
-
-        if (React.isValidElement<Record<string, unknown>>(rawContent)) {
-          const props = rawContent.props;
-          const explicitKindValue = props?.['data-kind-value'];
-          if (typeof explicitKindValue === 'string' && explicitKindValue.trim().length > 0) {
-            canonicalKind = explicitKindValue;
-          }
-          isInteractiveElement =
-            props?.['data-kind-interactive'] === 'true' ||
-            typeof props?.onClick === 'function' ||
-            typeof props?.onKeyDown === 'function' ||
-            props?.role === 'button';
-        }
-
-        const trimmedDisplay = rawText.trim();
-        const normalizedClass = normalizeKindClass(
-          canonicalKind && canonicalKind.length > 0 ? canonicalKind : trimmedDisplay
-        );
-
-        if (React.isValidElement<Record<string, unknown>>(rawContent)) {
-          const props = rawContent.props;
-          const existingClassName = typeof props.className === 'string' ? props.className : '';
-          const classTokens = existingClassName
-            .split(/\s+/)
-            .map((token) => token.trim())
-            .filter(Boolean);
-
-          if (!classTokens.includes('kind-badge')) {
-            classTokens.push('kind-badge');
-          }
-          if (normalizedClass && !classTokens.includes(normalizedClass)) {
-            classTokens.push(normalizedClass);
-          }
-          if (isInteractiveElement && !classTokens.includes('clickable')) {
-            classTokens.push('clickable');
-          }
-
-          content = React.cloneElement(rawContent, {
-            className: classTokens.join(' '),
-          });
-        } else if (trimmedDisplay.length > 0) {
-          const badgeClasses = ['kind-badge'];
-          if (normalizedClass) {
-            badgeClasses.push(normalizedClass);
-          }
-          if (isInteractiveElement) {
-            badgeClasses.push('clickable');
-          }
-
-          content = <span className={badgeClasses.join(' ')}>{rawContent}</span>;
-        }
-      }
-
-      return storeResult({ content, text });
+      return storeCachedCell(
+        entry,
+        item,
+        renderCellValue(column, item, isKindColumnKey, getTextContent, normalizeKindClass)
+      );
     },
     [getTextContent, isKindColumnKey, normalizeKindClass]
   );

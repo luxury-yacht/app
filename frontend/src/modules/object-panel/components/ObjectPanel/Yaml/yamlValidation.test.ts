@@ -25,6 +25,46 @@ spec:
 `;
 
 describe('validateYamlDraft', () => {
+  it('rejects empty and non-object YAML', () => {
+    expect(validateYamlDraft('   ', baseIdentity, '42')).toEqual({
+      isValid: false,
+      message: 'YAML content is required.',
+    });
+    expect(validateYamlDraft('- one\n- two\n', baseIdentity, '42')).toEqual({
+      isValid: false,
+      message: 'YAML must evaluate to a Kubernetes object (mapping).',
+    });
+  });
+
+  it('reports malformed YAML with its parse location', () => {
+    const result = validateYamlDraft('apiVersion: [broken', baseIdentity, '42');
+    expect(result.isValid).toBe(false);
+    if (!result.isValid) {
+      expect(result.message).toMatch(/Invalid YAML at line/i);
+    }
+  });
+
+  it.each([
+    ['apiVersion', baseYaml.replace('apiVersion: apps/v1\n', ''), /Missing apiVersion/i],
+    ['kind', baseYaml.replace('kind: Deployment\n', ''), /Missing kind/i],
+    ['name', baseYaml.replace('  name: demo\n', ''), /Missing metadata.name/i],
+  ])('rejects a draft missing %s', (_field, yaml, message) => {
+    const result = validateYamlDraft(yaml, baseIdentity, '42');
+    expect(result.isValid).toBe(false);
+    if (!result.isValid) {
+      expect(result.message).toMatch(message);
+    }
+  });
+
+  it('rejects Kubernetes List objects', () => {
+    const yaml = baseYaml.replace('kind: Deployment', 'kind: List');
+    const result = validateYamlDraft(yaml, null, '42');
+    expect(result.isValid).toBe(false);
+    if (!result.isValid) {
+      expect(result.message).toMatch(/List objects are not editable/i);
+    }
+  });
+
   it('accepts valid YAML matching identity', () => {
     const result = validateYamlDraft(baseYaml, baseIdentity, '42');
     expect(result.isValid).toBe(true);
@@ -47,6 +87,28 @@ describe('validateYamlDraft', () => {
     expect(result.isValid).toBe(false);
     if (!result.isValid) {
       expect(result.message).toMatch(/kind mismatch/i);
+    }
+  });
+
+  it('rejects apiVersion and name drift', () => {
+    const apiVersionResult = validateYamlDraft(
+      baseYaml.replace('apps/v1', 'apps/v2'),
+      baseIdentity,
+      '42'
+    );
+    expect(apiVersionResult.isValid).toBe(false);
+    if (!apiVersionResult.isValid) {
+      expect(apiVersionResult.message).toMatch(/apiVersion mismatch/i);
+    }
+
+    const nameResult = validateYamlDraft(
+      baseYaml.replace('name: demo', 'name: renamed'),
+      baseIdentity,
+      '42'
+    );
+    expect(nameResult.isValid).toBe(false);
+    if (!nameResult.isValid) {
+      expect(nameResult.message).toMatch(/metadata.name mismatch/i);
     }
   });
 
@@ -108,5 +170,11 @@ describe('parseObjectIdentity', () => {
 
   it('returns null for invalid YAML', () => {
     expect(parseObjectIdentity('not: [valid')).toBeNull();
+  });
+
+  it('returns null for empty, scalar, and incomplete YAML', () => {
+    expect(parseObjectIdentity('')).toBeNull();
+    expect(parseObjectIdentity('- one\n- two\n')).toBeNull();
+    expect(parseObjectIdentity('apiVersion: v1\nmetadata:\n  name: demo\n')).toBeNull();
   });
 });

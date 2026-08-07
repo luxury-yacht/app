@@ -39,6 +39,49 @@ export interface CursorWalkResult<TItem> {
   dataChangedDuringWalk: boolean;
 }
 
+interface CursorWalkState<TItem> {
+  collected: TItem[];
+  cursor: string | null;
+  clock: string | null;
+  restarted: boolean;
+  drifted: boolean;
+}
+
+const observeSourceClock = <TItem>(
+  state: CursorWalkState<TItem>,
+  sourceVersion: string | null | undefined
+): 'continue' | 'restart' => {
+  const clock = sourceVersion ?? null;
+  if (clock === null) {
+    return 'continue';
+  }
+  if (state.clock === null) {
+    state.clock = clock;
+    return 'continue';
+  }
+  if (clock === state.clock) {
+    return 'continue';
+  }
+  if (!state.restarted) {
+    state.restarted = true;
+    state.collected = [];
+    state.cursor = null;
+    state.clock = null;
+    return 'restart';
+  }
+  state.drifted = true;
+  state.clock = clock;
+  return 'continue';
+};
+
+const createCursorWalkState = <TItem>(): CursorWalkState<TItem> => ({
+  collected: [],
+  cursor: null,
+  clock: null,
+  restarted: false,
+  drifted: false,
+});
+
 /**
  * Page through a backend query's full result set following its cursor.
  * `fetchPage` returns the page's items + continue token (+ optional source
@@ -49,45 +92,25 @@ export async function walkQueryCursorPages<TItem>(
   label: string,
   fetchPage: (cursor: string | null, page: number) => Promise<CursorWalkPage<TItem> | null>
 ): Promise<CursorWalkResult<TItem>> {
-  let collected: TItem[] = [];
-  let cursor: string | null = null;
-  let walkClock: string | null = null;
-  let restarted = false;
-  let drifted = false;
+  const state = createCursorWalkState<TItem>();
   for (let page = 0; page < MAX_CURSOR_WALK_PAGES; page += 1) {
-    const result = await fetchPage(cursor, page);
+    const result = await fetchPage(state.cursor, page);
     if (result === null) {
       break;
     }
-    const clock = result.sourceVersion ?? null;
-    if (clock !== null) {
-      if (walkClock === null) {
-        walkClock = clock;
-      } else if (clock !== walkClock) {
-        if (!restarted) {
-          // First drift: restart the whole walk once from page 1.
-          restarted = true;
-          collected = [];
-          cursor = null;
-          walkClock = null;
-          continue;
-        }
-        // Second drift: deliver anyway, flagged. Track the moving clock so one
-        // sustained change does not re-flag every subsequent page comparison.
-        drifted = true;
-        walkClock = clock;
-      }
+    if (observeSourceClock(state, result.sourceVersion) === 'restart') {
+      continue;
     }
-    collected.push(...result.items);
+    state.collected.push(...result.items);
     if (!result.continueToken) {
-      return { items: collected, dataChangedDuringWalk: drifted };
+      return { items: state.collected, dataChangedDuringWalk: state.drifted };
     }
-    cursor = result.continueToken;
+    state.cursor = result.continueToken;
   }
-  if (cursor !== null) {
+  if (state.cursor !== null) {
     throw new Error(
       `${label} export failed: cursor did not advance after ${MAX_CURSOR_WALK_PAGES} pages`
     );
   }
-  return { items: collected, dataChangedDuringWalk: drifted };
+  return { items: state.collected, dataChangedDuringWalk: state.drifted };
 }

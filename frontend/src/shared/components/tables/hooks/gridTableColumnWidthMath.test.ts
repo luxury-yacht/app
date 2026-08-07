@@ -128,6 +128,26 @@ describe('gridTableColumnWidthMath', () => {
     ).toEqual({ kind: 120, name: 200, misc: 200 });
   });
 
+  it('absorbs flex rounding deltas without exceeding the requested container width', () => {
+    const columns = [column('name'), column('misc'), column('age')];
+    const reconcile = (containerWidth: number) =>
+      reconcileColumnWidthsToContainer({
+        baseWidths: { name: 100, misc: 100 },
+        renderedColumns: columns,
+        naturalWidths: { age: 100 },
+        containerWidth,
+        allowHorizontalOverflow: false,
+        enableColumnResizing: true,
+        externalColumnWidths: null,
+        manuallyResizedColumnKeys: new Set(),
+        isFixedColumnKey,
+        ...bounds,
+      });
+
+    expect(reconcile(301)).toEqual({ name: 100, misc: 100, age: 101 });
+    expect(reconcile(302)).toEqual({ name: 101, misc: 101, age: 100 });
+  });
+
   it('builds the initial measured width plan for fixed, auto, external, and fallback columns', () => {
     const columns = [
       column('kind'),
@@ -167,5 +187,33 @@ describe('gridTableColumnWidthMath', () => {
     expect(plan.widths.manual).toBeGreaterThan(0);
     expect(plan.widths.fallback).toBeGreaterThan(0);
     expect(plan.naturalWidths).toEqual(plan.widths);
+  });
+
+  it('preserves natural measured widths in overflow mode', () => {
+    const columns = [
+      column('kind'),
+      column('name', { autoWidth: true }),
+      column('manual'),
+      column('fallback', { width: '110px' }),
+    ];
+    const measureColumnWidth = vi.fn(() => 130);
+
+    const plan = buildInitialMeasuredColumnWidthPlan({
+      renderedColumns: columns,
+      columnWidths: { manual: 170 },
+      measuredFixedWidths: { kind: 90 },
+      measuredAutoWidths: { name: 180 },
+      externalColumnWidths: null,
+      manuallyResizedColumnKeys: new Set(['manual']),
+      containerWidth: 300,
+      allowHorizontalOverflow: true,
+      isFixedColumnKey,
+      measureColumnWidth,
+      ...bounds,
+    });
+
+    expect(plan.widths).toEqual({ kind: 90, name: 180, manual: 170, fallback: 110 });
+    expect(plan.naturalWidths).toEqual(plan.widths);
+    expect(measureColumnWidth).not.toHaveBeenCalled();
   });
 });

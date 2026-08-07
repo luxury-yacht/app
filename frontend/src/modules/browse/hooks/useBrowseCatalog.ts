@@ -13,6 +13,7 @@ import {
 } from '@shared/components/tables/pageSizeOptions';
 import { useStableSelectedValue } from '@shared/hooks/useStableSelectedValue';
 import { errorHandler } from '@utils/errorHandler';
+import type { MutableRefObject } from 'react';
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import {
   type DataRequestReason,
@@ -62,6 +63,122 @@ const normalizeInitialPageLimit = (value: number, fallback: TablePageSize): numb
 
 const isRenderableCatalogPayload = (payload: CatalogSnapshotPayload): boolean =>
   payload.isFinal !== false || (payload.items?.length ?? 0) > 0;
+
+type BrowsePageDirection = 'next' | 'previous' | 'current' | 'jump';
+
+interface BrowsePageLanding {
+  pageIndex: number;
+  currentPageToken: string | null;
+}
+
+const resolveBrowsePageLanding = (
+  payload: CatalogSnapshotPayload,
+  direction: BrowsePageDirection,
+  pageLimit: number,
+  currentPageIndex: number,
+  requestToken: string | null
+): BrowsePageLanding => {
+  if (direction === 'jump') {
+    const pageIndex =
+      typeof payload.pageStartRank === 'number'
+        ? Math.floor(payload.pageStartRank / pageLimit) + 1
+        : 1;
+    return { pageIndex, currentPageToken: payload.self || null };
+  }
+  if (direction === 'next') {
+    return { pageIndex: currentPageIndex + 1, currentPageToken: requestToken };
+  }
+  if (direction === 'previous') {
+    const pageIndex = Math.max(1, currentPageIndex - 1);
+    return { pageIndex, currentPageToken: pageIndex > 1 ? requestToken : null };
+  }
+  return {
+    pageIndex: currentPageIndex,
+    currentPageToken: currentPageIndex > 1 ? requestToken : null,
+  };
+};
+
+type CatalogPageRequestResult = Awaited<ReturnType<typeof requestRefreshDomainState>>;
+
+const getCatalogPagePayload = (result: CatalogPageRequestResult): CatalogSnapshotPayload | null => {
+  if (result.status !== 'executed' || !result.data) {
+    return null;
+  }
+  if (result.data.status !== 'ready' && result.data.status !== 'updating') {
+    return null;
+  }
+  return (result.data.data as CatalogSnapshotPayload | null) ?? null;
+};
+
+interface CatalogPageRequestCallbacks {
+  isCurrent: () => boolean;
+  isSameScope: () => boolean;
+  onPayload: (payload: CatalogSnapshotPayload) => void;
+  onError: (error: unknown) => void;
+  onSettled: () => void;
+}
+
+const executeCatalogPageRequest = async (
+  scope: string,
+  reason: DataRequestReason,
+  callbacks: CatalogPageRequestCallbacks
+): Promise<void> => {
+  try {
+    const result = await requestRefreshDomainState({ domain: 'catalog', scope, reason });
+    if (!callbacks.isCurrent()) {
+      return;
+    }
+    const payload = getCatalogPagePayload(result);
+    if (payload) {
+      callbacks.onPayload(payload);
+    }
+  } catch (error) {
+    if (callbacks.isSameScope()) {
+      callbacks.onError(error);
+    }
+  } finally {
+    callbacks.onSettled();
+  }
+};
+
+const shouldBlockPageRequest = (
+  quiet: boolean,
+  anyRequestInFlight: boolean,
+  userRequestInFlight: boolean
+): boolean => (quiet ? anyRequestInFlight : userRequestInFlight);
+
+const isApplicableCatalogSnapshot = (
+  data: unknown,
+  status: string,
+  scope: string | undefined,
+  catalogScope: string,
+  pinnedNamespaces: string[]
+): data is CatalogSnapshotPayload =>
+  Boolean(
+    data &&
+      (status === 'ready' || status === 'updating') &&
+      acceptsCatalogSnapshotScope(scope, catalogScope, pinnedNamespaces)
+  );
+
+const markCatalogLoaded = (
+  payload: CatalogSnapshotPayload,
+  hasLoadedOnceRef: MutableRefObject<boolean>,
+  setHasLoadedOnce: (loaded: boolean) => void
+): void => {
+  if (!hasLoadedOnceRef.current && isRenderableCatalogPayload(payload)) {
+    hasLoadedOnceRef.current = true;
+    setHasLoadedOnce(true);
+  }
+};
+
+const selectFilterOptionsPayload = (
+  metadataUsesActiveScope: boolean,
+  activeData: unknown,
+  metadataData: unknown
+): CatalogSnapshotPayload | null => {
+  const payload = metadataUsesActiveScope ? activeData : (metadataData ?? activeData);
+  return (payload as CatalogSnapshotPayload | null) ?? null;
+};
 
 /**
  * Options for the useBrowseCatalog hook.
@@ -383,21 +500,19 @@ export function useBrowseCatalog({
 
   // Apply incoming snapshots to local pagination state
   useEffect(() => {
-    if (!domain.data) {
-      return;
-    }
-    // Skip transient states where data isn't meaningful yet.
-    // Allow both 'ready' and 'updating' — the catalog stream delivers complete
-    // snapshots in both states, and gating on 'ready' alone causes the view to
-    // miss real-time updates delivered via SSE while status is 'updating'.
-    if (domain.status !== 'ready' && domain.status !== 'updating') {
-      return;
-    }
-    if (!acceptsCatalogSnapshotScope(domain.scope, catalogScope, pinnedNamespaces)) {
+    if (
+      !isApplicableCatalogSnapshot(
+        domain.data,
+        domain.status,
+        domain.scope,
+        catalogScope,
+        pinnedNamespaces
+      )
+    ) {
       return;
     }
 
-    const payload = domain.data as CatalogSnapshotPayload;
+    const payload = domain.data;
     const currentLength = collectionRef.current.items.length;
     const next = applyCatalogBaseline(collectionRef.current, payload);
     if (currentPageTokenRef.current) {
@@ -405,10 +520,7 @@ export function useBrowseCatalog({
       setUnfilteredTotal(next.unfilteredTotal);
       setTotalIsExact(next.totalIsExact);
       setIsRequestingMore(false);
-      if (!hasLoadedOnceRef.current && isRenderableCatalogPayload(payload)) {
-        hasLoadedOnceRef.current = true;
-        setHasLoadedOnce(true);
-      }
+      markCatalogLoaded(payload, hasLoadedOnceRef, setHasLoadedOnce);
       return;
     }
 
@@ -424,10 +536,7 @@ export function useBrowseCatalog({
     setTotalIsExact(next.totalIsExact);
     setIsRequestingMore(false);
 
-    if (!hasLoadedOnceRef.current && isRenderableCatalogPayload(payload)) {
-      hasLoadedOnceRef.current = true;
-      setHasLoadedOnce(true);
-    }
+    markCatalogLoaded(payload, hasLoadedOnceRef, setHasLoadedOnce);
   }, [domain.data, domain.scope, domain.status, catalogScope, pinnedNamespaces]);
 
   // Cursor-page handler. Fetches a cursor page using a paginated scope and
@@ -457,7 +566,13 @@ export function useBrowseCatalog({
       // wait only on other USER requests and SUPERSEDE an in-flight quiet
       // refetch via the sequence guard below.
       const quiet = reason === 'stream-signal';
-      if (quiet ? pageRequestInFlightRef.current : userPageRequestInFlightRef.current) {
+      if (
+        shouldBlockPageRequest(
+          quiet,
+          pageRequestInFlightRef.current,
+          userPageRequestInFlightRef.current
+        )
+      ) {
         return;
       }
       const seq = ++pageRequestSeqRef.current;
@@ -481,29 +596,11 @@ export function useBrowseCatalog({
         address.startRank
       );
       const baseScopeAtRequest = catalogScopeRef.current;
-      void (async () => {
-        try {
-          const result = await requestRefreshDomainState({
-            domain: 'catalog',
-            scope: normalizedScope,
-            reason,
-          });
-          if (
-            pageRequestSeqRef.current !== seq ||
-            result.status !== 'executed' ||
-            catalogScopeRef.current !== baseScopeAtRequest
-          ) {
-            return;
-          }
-
-          const pageResult = result.data;
-          if (!pageResult) {
-            return;
-          }
-          const payload = pageResult.data as CatalogSnapshotPayload | null;
-          if (!payload || (pageResult.status !== 'ready' && pageResult.status !== 'updating')) {
-            return;
-          }
+      void executeCatalogPageRequest(normalizedScope, reason, {
+        isCurrent: () =>
+          pageRequestSeqRef.current === seq && catalogScopeRef.current === baseScopeAtRequest,
+        isSameScope: () => catalogScopeRef.current === baseScopeAtRequest,
+        onPayload: (payload) => {
           if (payload.cursorInvalid) {
             collectionRef.current = emptyBrowseCatalogCollection();
             setItems([]);
@@ -515,7 +612,6 @@ export function useBrowseCatalog({
             void refreshCatalogScope('user');
             return;
           }
-
           const next = applyCatalogPage(collectionRef.current, payload);
           collectionRef.current = { items: next.items, indexByUid: next.indexByUid };
           setPageError(null);
@@ -525,45 +621,27 @@ export function useBrowseCatalog({
           setTotalCount(next.totalCount);
           setUnfilteredTotal(next.unfilteredTotal);
           setTotalIsExact(next.totalIsExact);
-          let nextPageIndex: number;
-          if (direction === 'jump') {
-            // Serve-time position honesty: the landing carries its exact rank,
-            // and the self cursor becomes the current page's token so live
-            // refetches reproduce THIS page.
-            nextPageIndex =
-              typeof payload.pageStartRank === 'number'
-                ? Math.floor(payload.pageStartRank / pageLimit) + 1
-                : 1;
-            currentPageTokenRef.current = payload.self || null;
-          } else {
-            switch (direction) {
-              case 'next':
-                nextPageIndex = pageIndexRef.current + 1;
-                break;
-              case 'previous':
-                nextPageIndex = Math.max(1, pageIndexRef.current - 1);
-                break;
-              default:
-                nextPageIndex = pageIndexRef.current;
-            }
-            currentPageTokenRef.current = nextPageIndex > 1 ? token : null;
-          }
-          pageIndexRef.current = nextPageIndex;
-          setPageIndex(nextPageIndex);
-          if (!hasLoadedOnceRef.current) {
-            hasLoadedOnceRef.current = true;
-            setHasLoadedOnce(true);
-          }
-        } catch (error) {
-          if (catalogScopeRef.current === baseScopeAtRequest) {
-            const details = errorHandler.handleInline(error, {
-              action: 'loadBrowseCatalogPage',
-              source: 'useBrowseCatalog',
-              clusterId,
-            });
-            setPageError(details.message);
-          }
-        } finally {
+          const landing = resolveBrowsePageLanding(
+            payload,
+            direction,
+            pageLimit,
+            pageIndexRef.current,
+            token
+          );
+          currentPageTokenRef.current = landing.currentPageToken;
+          pageIndexRef.current = landing.pageIndex;
+          setPageIndex(landing.pageIndex);
+          markCatalogLoaded(payload, hasLoadedOnceRef, setHasLoadedOnce);
+        },
+        onError: (error) => {
+          const details = errorHandler.handleInline(error, {
+            action: 'loadBrowseCatalogPage',
+            source: 'useBrowseCatalog',
+            clusterId,
+          });
+          setPageError(details.message);
+        },
+        onSettled: () => {
           // A superseded request must not clear its successor's gates.
           if (pageRequestSeqRef.current === seq) {
             pageRequestInFlightRef.current = false;
@@ -572,8 +650,8 @@ export function useBrowseCatalog({
               setIsRequestingMore(false);
             }
           }
-        }
-      })();
+        },
+      });
     },
     [
       pageLimit,
@@ -686,9 +764,11 @@ export function useBrowseCatalog({
   // them mid-interaction). A real payload always wins, including a genuinely
   // empty one; the ref clears on structural scope changes (see the reset
   // effect) so cluster/namespace switches never leak stale options.
-  const filterOptionsPayload = (
-    metadataUsesActiveScope ? domain.data : (metadataDomain.data ?? domain.data)
-  ) as CatalogSnapshotPayload | null;
+  const filterOptionsPayload = selectFilterOptionsPayload(
+    metadataUsesActiveScope,
+    domain.data,
+    metadataDomain.data
+  );
   const filterOptionsResolved = Boolean(filterOptionsPayload);
   const filterOptions = useMemo<BrowseFilterOptions>(() => {
     if (!filterOptionsPayload && lastFilterOptionsRef.current) {

@@ -24,6 +24,84 @@ export interface UseGridTableContextMenuItemsParams<T> {
   sortConfig?: { key: string; direction: 'asc' | 'desc' | null } | null;
 }
 
+type CustomContextMenuItems<T> = (item: T, columnKey: string) => ContextMenuItem[];
+type GridTableSortHandler = (columnKey: string, targetDirection?: 'asc' | 'desc' | null) => void;
+type GridTableSortConfig = UseGridTableContextMenuItemsParams<never>['sortConfig'];
+
+const findNavigationSectionEnd = (items: ContextMenuItem[]): number => {
+  const diffIndex = items.findIndex(
+    (item) => item.actionId === OBJECT_ACTION_IDS.diff || ('label' in item && item.label === 'Diff')
+  );
+  if (diffIndex !== -1) {
+    return diffIndex;
+  }
+  return items.findIndex(
+    (item) =>
+      item.actionId === OBJECT_ACTION_IDS.viewDetails || ('label' in item && item.label === 'Open')
+  );
+};
+
+const isDivider = (item: ContextMenuItem | undefined): boolean =>
+  Boolean(item && 'divider' in item && item.divider);
+
+const insertNavigationDivider = (items: ContextMenuItem[]): void => {
+  const sectionEnd = findNavigationSectionEnd(items);
+  const nextIndex = sectionEnd + 1;
+  if (sectionEnd !== -1 && items.length > nextIndex && !isDivider(items[nextIndex])) {
+    items.splice(nextIndex, 0, { divider: true });
+  }
+};
+
+function getCellItems<T>(
+  source: ContextMenuSource,
+  item: T | null,
+  columnKey: string,
+  getCustomContextMenuItems: CustomContextMenuItems<T> | undefined
+): ContextMenuItem[] {
+  if (source !== 'cell' || !getCustomContextMenuItems || !item) {
+    return [];
+  }
+  const items = getCustomContextMenuItems(item, columnKey);
+  insertNavigationDivider(items);
+  return items;
+}
+
+const appendSortDivider = (items: ContextMenuItem[]): void => {
+  if (items.length > 0 && !isDivider(items[items.length - 1])) {
+    items.push({ divider: true });
+  }
+};
+
+function buildSortItems(
+  columnHeader: string,
+  columnKey: string,
+  onSort: GridTableSortHandler,
+  sortConfig: GridTableSortConfig
+): ContextMenuItem[] {
+  const isCurrentlySorted = sortConfig?.key === columnKey;
+  const currentDirection = isCurrentlySorted ? (sortConfig?.direction ?? null) : null;
+  return [
+    {
+      label: `Sort ${columnHeader} Asc`,
+      icon: <SortAscIcon />,
+      onClick: () => onSort(columnKey, 'asc'),
+      disabled: currentDirection === 'asc',
+    },
+    {
+      label: `Sort ${columnHeader} Desc`,
+      icon: <SortDescIcon />,
+      onClick: () => onSort(columnKey, 'desc'),
+      disabled: currentDirection === 'desc',
+    },
+    {
+      label: 'Clear Sort',
+      icon: '×',
+      onClick: () => onSort(columnKey, null),
+      disabled: !isCurrentlySorted,
+    },
+  ];
+}
+
 export function useGridTableContextMenuItems<T>({
   columns,
   getCustomContextMenuItems,
@@ -35,75 +113,14 @@ export function useGridTableContextMenuItems<T>({
       if (source === 'empty') {
         return [];
       }
-
-      const items: ContextMenuItem[] = [];
-
-      if (source === 'cell' && getCustomContextMenuItems && item) {
-        const customItems = getCustomContextMenuItems(item, columnKey);
-        if (customItems.length > 0) {
-          // Keep the top ungated navigation block together. Prefer a divider
-          // below "Diff" when present; otherwise fall back to placing it
-          // below "Open".
-          const sectionBreakIndex = (() => {
-            const diffIndex = customItems.findIndex(
-              (ci) =>
-                ci.actionId === OBJECT_ACTION_IDS.diff || ('label' in ci && ci.label === 'Diff')
-            );
-            if (diffIndex !== -1) {
-              return diffIndex;
-            }
-            return customItems.findIndex(
-              (ci) =>
-                ci.actionId === OBJECT_ACTION_IDS.viewDetails ||
-                ('label' in ci && ci.label === 'Open')
-            );
-          })();
-          if (sectionBreakIndex !== -1 && customItems.length > sectionBreakIndex + 1) {
-            const nextItem = customItems[sectionBreakIndex + 1];
-            if (!('divider' in nextItem && nextItem.divider)) {
-              customItems.splice(sectionBreakIndex + 1, 0, { divider: true });
-            }
-          }
-          items.push(...customItems);
-        }
-      }
-
+      const items = getCellItems(source, item, columnKey, getCustomContextMenuItems);
       const column = columns.find((col) => col.key === columnKey);
-
-      if (column && isSortableColumn(column) && onSort) {
-        const lastItem = items[items.length - 1];
-        if (items.length > 0 && !('divider' in lastItem && lastItem.divider)) {
-          items.push({ divider: true });
-        }
-
-        const isCurrentlySorted = sortConfig?.key === columnKey;
-        const currentDirection = isCurrentlySorted ? (sortConfig?.direction ?? null) : null;
-
-        // Pass the target direction directly instead of cycling through the
-        // state machine with multiple onSort calls. This avoids stale-closure
-        // bugs and setTimeout leaks (see gridtable.md issues 2 and 9).
-        items.push(
-          {
-            label: `Sort ${column.header} Asc`,
-            icon: <SortAscIcon />,
-            onClick: () => onSort(columnKey, 'asc'),
-            disabled: currentDirection === 'asc',
-          },
-          {
-            label: `Sort ${column.header} Desc`,
-            icon: <SortDescIcon />,
-            onClick: () => onSort(columnKey, 'desc'),
-            disabled: currentDirection === 'desc',
-          },
-          {
-            label: 'Clear Sort',
-            icon: '×',
-            onClick: () => onSort(columnKey, null),
-            disabled: !isCurrentlySorted,
-          }
-        );
+      if (!column || !isSortableColumn(column) || !onSort) {
+        return items;
       }
-
+      appendSortDivider(items);
+      // Direct target directions avoid stale state cycling and timer cleanup.
+      items.push(...buildSortItems(column.header, columnKey, onSort, sortConfig));
       return items;
     },
     [columns, getCustomContextMenuItems, onSort, sortConfig]

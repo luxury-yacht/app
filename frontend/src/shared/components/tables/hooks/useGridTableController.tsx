@@ -41,11 +41,118 @@ import {
   recordGridTablePerformanceSnapshot,
   recordGridTableScrollFrameSample,
 } from '@shared/components/tables/performance/gridTablePerformanceStore';
-import type { ReactElement, ReactNode, RefObject } from 'react';
+import type { MutableRefObject, ReactElement, ReactNode, RefObject } from 'react';
 import { useCallback, useEffect, useMemo, useRef } from 'react';
 
 // Stable default to avoid re-creating lock lists on every render.
 const DEFAULT_NON_HIDEABLE_COLUMNS: string[] = [];
+
+type GridTableProfilerOptions = NonNullable<Parameters<typeof useGridTableProfiler>[0]>;
+
+const getProfilerOptions = (diagnosticsLabel: string | undefined): GridTableProfilerOptions => {
+  const sampleLabel = diagnosticsLabel ? `${diagnosticsLabel} scroll` : 'GridTable scroll';
+  if (!diagnosticsLabel) {
+    return { sampleLabel, sampleWindowMs: 2000, minSampleCount: 10 };
+  }
+  return {
+    sampleLabel,
+    sampleWindowMs: 2000,
+    minSampleCount: 10,
+    onFrameSample: (sample) => {
+      recordGridTableScrollFrameSample(diagnosticsLabel, sample);
+    },
+    onRenderSample: (phase, actualDuration) => {
+      recordGridTablePerformanceSample(diagnosticsLabel, 'render', actualDuration, {
+        renderPhase: phase,
+      });
+    },
+  };
+};
+
+interface LocalPaginationResult<T> {
+  data: T[];
+  controls: ReactNode;
+  onPrevious?: () => void;
+  onNext?: () => void;
+  canPagePrevious: boolean;
+  canPageNext: boolean;
+}
+
+interface PaginationFallbacks {
+  controls: ReactNode;
+  onPrevious?: () => void;
+  onNext?: () => void;
+  canPagePrevious: boolean;
+  canPageNext: boolean;
+}
+
+interface ResolvedPagination<T> extends PaginationFallbacks {
+  data: T[];
+}
+
+function resolvePagination<T>(
+  localEnabled: boolean,
+  localPage: LocalPaginationResult<T>,
+  fallbacks: PaginationFallbacks
+): ResolvedPagination<T> {
+  return localEnabled
+    ? {
+        data: localPage.data,
+        controls: localPage.controls,
+        onPrevious: localPage.onPrevious,
+        onNext: localPage.onNext,
+        canPagePrevious: localPage.canPagePrevious,
+        canPageNext: localPage.canPageNext,
+      }
+    : { data: localPage.data, ...fallbacks };
+}
+
+interface LoadingOverlayState {
+  show: boolean;
+  message: string;
+}
+
+const resolveLoadingOverlay = (
+  loading: boolean,
+  displayedRowCount: number,
+  loadingOverlay: { show: boolean; message?: string } | undefined
+): LoadingOverlayState => ({
+  show: loadingOverlay?.show ?? (loading && displayedRowCount > 0),
+  message: loadingOverlay?.message ?? 'Refreshing...',
+});
+
+interface ClusterKeyCheckOptions<T> {
+  data: T[];
+  keyExtractor: (item: T, index: number) => string;
+  keyExtractorRef: MutableRefObject<(item: T, index: number) => string>;
+  clusterKeyCheckRef: MutableRefObject<boolean>;
+  warnDevOnce: (message: string) => void;
+}
+
+function checkClusterScopedKey<T>({
+  data,
+  keyExtractor,
+  keyExtractorRef,
+  clusterKeyCheckRef,
+  warnDevOnce,
+}: ClusterKeyCheckOptions<T>): void {
+  if (keyExtractorRef.current !== keyExtractor) {
+    keyExtractorRef.current = keyExtractor;
+    clusterKeyCheckRef.current = false;
+  }
+  if (!import.meta.env.DEV || clusterKeyCheckRef.current || data.length === 0) {
+    return;
+  }
+  clusterKeyCheckRef.current = true;
+  const sampleKey = keyExtractor(data[0], 0);
+  if (!sampleKey.includes('|')) {
+    warnDevOnce(
+      `GridTable: keyExtractor returned "${sampleKey}" which does not appear ` +
+        `cluster-scoped (missing "|" separator). Use buildClusterScopedKey() ` +
+        'to prevent key collisions in multi-cluster views.'
+    );
+  }
+}
 
 // ---------------------------------------------------------------------------
 // Return type — every value the render section of GridTable consumes
@@ -167,23 +274,7 @@ export function useGridTableController<T>({
   const externalColumnWidths = useGridTableExternalWidths(controlledColumnWidths);
 
   const { wrapWithProfiler, warnDevOnce, startFrameSampler, stopFrameSampler } =
-    useGridTableProfiler({
-      sampleLabel: diagnosticsLabel ? `${diagnosticsLabel} scroll` : 'GridTable scroll',
-      sampleWindowMs: 2000,
-      minSampleCount: 10,
-      onFrameSample: diagnosticsLabel
-        ? (sample) => {
-            recordGridTableScrollFrameSample(diagnosticsLabel, sample);
-          }
-        : undefined,
-      onRenderSample: diagnosticsLabel
-        ? (phase, actualDuration) => {
-            recordGridTablePerformanceSample(diagnosticsLabel, 'render', actualDuration, {
-              renderPhase: phase,
-            });
-          }
-        : undefined,
-    });
+    useGridTableProfiler(getProfilerOptions(diagnosticsLabel));
 
   const { renderedColumns, isColumnVisible, applyVisibilityChanges, lockedColumns } =
     useColumnVisibilityController<T>({
@@ -228,12 +319,20 @@ export function useGridTableController<T>({
     config: localPagination,
     resetIdentity: `${filterSignature}|${sortConfig?.key ?? ''}|${sortConfig?.direction ?? ''}`,
   });
-  const tableData = localPage.data;
-  const resolvedPagePrevious = localPagination ? localPage.onPrevious : onPagePrevious;
-  const resolvedPageNext = localPagination ? localPage.onNext : onPageNext;
-  const resolvedCanPagePrevious = localPagination ? localPage.canPagePrevious : canPagePrevious;
-  const resolvedCanPageNext = localPagination ? localPage.canPageNext : canPageNext;
-  const paginationControls = localPagination ? localPage.controls : externalPaginationControls;
+  const {
+    data: tableData,
+    controls: paginationControls,
+    onPrevious: resolvedPagePrevious,
+    onNext: resolvedPageNext,
+    canPagePrevious: resolvedCanPagePrevious,
+    canPageNext: resolvedCanPageNext,
+  } = resolvePagination(Boolean(localPagination), localPage, {
+    controls: externalPaginationControls,
+    onPrevious: onPagePrevious,
+    onNext: onPageNext,
+    canPagePrevious,
+    canPageNext,
+  });
 
   useEffect(() => {
     if (!diagnosticsLabel) {
@@ -255,8 +354,11 @@ export function useGridTableController<T>({
   // Whether any filter is actively narrowing results (search text, kind, or namespace selections).
   const hasActiveFilters = filteringEnabled && hasNarrowingGridTableFilters(activeFilters);
 
-  const loadingOverlayMessage = loadingOverlay?.message ?? 'Refreshing...';
-  const showLoadingOverlay = loadingOverlay ? loadingOverlay.show : loading && tableData.length > 0;
+  const { message: loadingOverlayMessage, show: showLoadingOverlay } = resolveLoadingOverlay(
+    loading,
+    tableData.length,
+    loadingOverlay
+  );
 
   const {
     hoverState,
@@ -442,21 +544,13 @@ export function useGridTableController<T>({
     virtualizationHandlesScroll: shouldVirtualize,
   });
 
-  if (keyExtractorRef.current !== keyExtractor) {
-    keyExtractorRef.current = keyExtractor;
-    clusterKeyCheckRef.current = false;
-  }
-  if (import.meta.env.DEV && !clusterKeyCheckRef.current && tableData.length > 0) {
-    clusterKeyCheckRef.current = true;
-    const sampleKey = keyExtractor(tableData[0], 0);
-    if (!sampleKey.includes('|')) {
-      warnDevOnce(
-        `GridTable: keyExtractor returned "${sampleKey}" which does not appear ` +
-          `cluster-scoped (missing "|" separator). Use buildClusterScopedKey() ` +
-          'to prevent key collisions in multi-cluster views.'
-      );
-    }
-  }
+  checkClusterScopedKey({
+    data: tableData,
+    keyExtractor,
+    keyExtractorRef,
+    clusterKeyCheckRef,
+    warnDevOnce,
+  });
 
   const { renderSortIndicator, handleHeaderClick, handleHeaderContextMenu, headerContextMenuNode } =
     useGridTableHeaderActions<T>({

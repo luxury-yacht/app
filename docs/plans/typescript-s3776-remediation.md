@@ -42,6 +42,22 @@ points above an aggregate maximum of 15 per function.
 | Refresh and diagnostics | 16 |
 | **Total** | **91** |
 
+## Progress snapshot
+
+Checkboxes track local implementation and validation. Sonar verification is
+reported separately and remains pending until the branch is pushed and analyzed.
+
+| Phase | Local progress | Sonar verification |
+|---|---:|---|
+| Phase 0: no-regression rail | 6/7 | Branch protection remains external/unverified |
+| Phase 1: shared and app foundations | **15/15** | Pending branch analysis |
+| Phase 2: GridTable and query-backed data | **16/16** | Pending branch analysis |
+| Phase 3: object map | **4/4** | Pending branch analysis |
+| Phase 4: object panel | **4/14** | Pending branch analysis |
+| Phase 5: app shell and interactions | 0/26 | Not started |
+| Phase 6: refresh and diagnostics | 0/16 | Not started |
+| **TypeScript findings** | **39/91 locally remediated** | Pending branch analysis |
+
 Sonar classifies colocated tests separately through
 `.sonarcloud.properties`; no test file appears in this inventory. Generated
 Wails and generated refresh TypeScript are excluded by the same configuration
@@ -77,8 +93,9 @@ Inventory rules:
 
 - The Sonar issue key and function identity own each work item. Current line
   numbers are navigation aids and will move during refactoring.
-- Refresh the inventory after every Sonar analysis. Remove a checkbox only when
-  the issue key closes; add new keys to the earliest applicable phase.
+- Check an item when its local refactor, focused coverage, and repository gate
+  pass. Record Sonar verification separately; remove a baseline issue key only
+  after Sonar closes it. Add new keys to the earliest applicable phase.
 - Deletion or exclusion is not remediation unless the owning behavior is
   intentionally removed and every consumer is updated and tested.
 - A score increase in an existing function is a regression even when it remains
@@ -202,13 +219,13 @@ exercise every branch being moved:
 - [ ] `frontend/src/modules/object-panel/components/ObjectPanel/Details/Overview/schema.ts`
 - [ ] `frontend/src/modules/object-panel/components/ObjectPanel/Logs/hooks/useLogFiltering.ts`
 - [ ] `frontend/src/modules/object-panel/components/ObjectPanel/Yaml/yamlTransaction.ts`
-- [ ] `frontend/src/shared/components/diff/diffUtils.ts`
-- [ ] `frontend/src/shared/components/modals/DrainNodeModal.tsx`
-- [ ] `frontend/src/shared/components/tables/hooks/useGridTableController.tsx`
+- [x] `frontend/src/shared/components/diff/diffUtils.ts`
+- [x] `frontend/src/shared/components/modals/DrainNodeModal.tsx`
+- [x] `frontend/src/shared/components/tables/hooks/useGridTableController.tsx`
 - [ ] `frontend/src/ui/dockable/useDockablePanelDragResize.ts`
 - [ ] `frontend/src/ui/layout/AppLayout.tsx`
 
-## Phase 1: Shared and app foundations (15)
+## Phase 1: Shared and app foundations (15/15 locally complete; Sonar pending)
 
 **Outcome:** establish low-coupling refactor patterns in pure presenters,
 parsers, algorithms, and boundary adapters before changing stateful feature
@@ -220,21 +237,21 @@ dispatch, separate diff trace/backtrack stages, a prepared Sentry scope model,
 and pure geometry for CodeMirror/scrollbars. Keep Sentry privacy filtering and
 object-action GVK identity at their current boundaries.
 
-- [ ] **53** — `ResourceBar`, `frontend/src/shared/components/ResourceBar.tsx:47` — Sonar `AZ-P-P9RmYfklgBeFrDd`.
-- [ ] **43** — `ClusterOverview`, `frontend/src/modules/cluster/components/ClusterOverview.tsx:130` — Sonar `AZ-P-QVJmYfklgBeFrJQ`.
-- [ ] **30** — `layoutSearchPanel`, `frontend/src/core/codemirror/search.ts:159` — Sonar `AZ-P-QgsmYfklgBeFrLy`.
-- [ ] **25** — `buildConnectivityPresentation`, `frontend/src/core/connection/connectivityPresentation.ts:47` — Sonar `AZ-P-QgEmYfklgBeFrLs`.
-- [ ] **24** — `DrainNodeModal`, `frontend/src/shared/components/modals/DrainNodeModal.tsx:100` — Sonar `AZ-P-P6zmYfklgBeFrC9`.
-- [ ] **23** — `emitPreferenceChanges`, `frontend/src/core/settings/appPreferences.ts:654` — Sonar `AZ-P-Qf5mYfklgBeFrLr`.
-- [ ] **23** — `parseResource`, `frontend/src/shared/components/ResourceBar.tsx:90` — Sonar `AZ-P-P9RmYfklgBeFrDf`.
-- [ ] **23** — `buildMyersTrace`, `frontend/src/shared/components/diff/lineDiff.ts:58` — Sonar `AZ-P-P4KmYfklgBeFrCV`.
-- [ ] **21** — Sentry scope-enrichment callback, `frontend/src/core/telemetry/sentry.ts:947` — Sonar `AZ_PMfh-nvllwip2ec40`.
-- [ ] **21** — `mergeDiffLines`, `frontend/src/shared/components/diff/diffUtils.ts:42` — Sonar `AZ-P-P4UmYfklgBeFrCW`.
-- [ ] **18** — `resolveActionGVK`, `frontend/src/shared/actions/objectActionClient.ts:66` — Sonar `AZ-P-P_qmYfklgBeFrD9`.
-- [ ] **17** — `beforeSend`, `frontend/src/core/telemetry/sentry.ts:484` — Sonar `AZ_PMfh-nvllwip2ec4v`.
-- [ ] **16** — `queryNamespacesPermissions`, `frontend/src/core/capabilities/permissionStore.ts:447` — Sonar `AZ-P-QXRmYfklgBeFrJf`.
-- [ ] **16** — `ResourceMetadata` memo renderer, `frontend/src/shared/components/kubernetes/ResourceMetadata.tsx:19` — Sonar `AZ-P-P8vmYfklgBeFrDY`.
-- [ ] **16** — `updateOverlayScrollbarGeometry`, `frontend/src/shared/scrollbars/scrollbarActivity.ts:375` — Sonar `AZ-P-P_KmYfklgBeFrD1`.
+- [x] **53** — `ResourceBar`, `frontend/src/shared/components/ResourceBar.tsx:47` — Sonar `AZ-P-P9RmYfklgBeFrDd`.
+- [x] **43** — `ClusterOverview`, `frontend/src/modules/cluster/components/ClusterOverview.tsx:130` — Sonar `AZ-P-QVJmYfklgBeFrJQ`.
+- [x] **30** — `layoutSearchPanel`, `frontend/src/core/codemirror/search.ts:159` — Sonar `AZ-P-QgsmYfklgBeFrLy`.
+- [x] **25** — `buildConnectivityPresentation`, `frontend/src/core/connection/connectivityPresentation.ts:47` — Sonar `AZ-P-QgEmYfklgBeFrLs`.
+- [x] **24** — `DrainNodeModal`, `frontend/src/shared/components/modals/DrainNodeModal.tsx:100` — Sonar `AZ-P-P6zmYfklgBeFrC9`.
+- [x] **23** — `emitPreferenceChanges`, `frontend/src/core/settings/appPreferences.ts:654` — Sonar `AZ-P-Qf5mYfklgBeFrLr`.
+- [x] **23** — `parseResource`, `frontend/src/shared/components/ResourceBar.tsx:90` — Sonar `AZ-P-P9RmYfklgBeFrDf`.
+- [x] **23** — `buildMyersTrace`, `frontend/src/shared/components/diff/lineDiff.ts:58` — Sonar `AZ-P-P4KmYfklgBeFrCV`.
+- [x] **21** — Sentry scope-enrichment callback, `frontend/src/core/telemetry/sentry.ts:947` — Sonar `AZ_PMfh-nvllwip2ec40`.
+- [x] **21** — `mergeDiffLines`, `frontend/src/shared/components/diff/diffUtils.ts:42` — Sonar `AZ-P-P4UmYfklgBeFrCW`.
+- [x] **18** — `resolveActionGVK`, `frontend/src/shared/actions/objectActionClient.ts:66` — Sonar `AZ-P-P_qmYfklgBeFrD9`.
+- [x] **17** — `beforeSend`, `frontend/src/core/telemetry/sentry.ts:484` — Sonar `AZ_PMfh-nvllwip2ec4v`.
+- [x] **16** — `queryNamespacesPermissions`, `frontend/src/core/capabilities/permissionStore.ts:447` — Sonar `AZ-P-QXRmYfklgBeFrJf`.
+- [x] **16** — `ResourceMetadata` memo renderer, `frontend/src/shared/components/kubernetes/ResourceMetadata.tsx:19` — Sonar `AZ-P-P8vmYfklgBeFrDY`.
+- [x] **16** — `updateOverlayScrollbarGeometry`, `frontend/src/shared/scrollbars/scrollbarActivity.ts:375` — Sonar `AZ-P-P_KmYfklgBeFrD1`.
 
 Required characterization includes empty/malformed resource text, connectivity
 state precedence, permission scope/GVK selection, preference-event ordering,
@@ -329,11 +346,10 @@ Local remediation status (awaiting Sonar analysis):
   the temporary Biome maximum of 12. Keep the issue checkbox open until Sonar
   analyzes the pushed revision.
 
-All 15 recorded Phase 1 findings are locally remediated. The checkboxes remain
-open until the pushed revision receives a successful Sonar analysis and each
-recorded issue key closes.
+All 15 recorded Phase 1 findings are locally remediated. Sonar closure remains
+pending until the pushed revision is analyzed.
 
-## Phase 2: GridTable and query-backed data (16)
+## Phase 2: GridTable and query-backed data (16/16 locally complete; Sonar pending)
 
 **Outcome:** table derivation, caching, measurement, persistence, filters, and
 query reconciliation have explicit pure stages while the shared GridTable
@@ -347,22 +363,22 @@ application. Preserve stable row keys, durable column keys, local-versus-query
 filter ownership, cursor identity, exact/approximate totals, virtualization,
 and controlled focus.
 
-- [ ] **50** — `sortedData` memo, `frontend/src/hooks/useTableSort.ts:119` — Sonar `AZ-P-QrBmYfklgBeFrPG`.
-- [ ] **46** — `getCachedCellContent`, `frontend/src/shared/components/tables/hooks/useGridTableCellCache.tsx:72` — Sonar `AZ-P-PzimYfklgBeFrAG`.
-- [ ] **39** — `useGridTableController`, `frontend/src/shared/components/tables/hooks/useGridTableController.tsx:112` — Sonar `AZ-P-Pw9mYfklgBeFq_i`.
-- [ ] **37** — `measureColumnWidth`, `frontend/src/shared/components/tables/hooks/useGridTableColumnMeasurer.ts:114` — Sonar `AZ-P-Px1mYfklgBeFq_s`.
-- [ ] **25** — `buildColumnWidthState`, `frontend/src/shared/components/tables/hooks/useGridTableColumnWidths.ts:201` — Sonar `AZ-P-PzDmYfklgBeFrAA`.
-- [ ] **24** — `buildTypedResourceQueryScope`, `frontend/src/modules/resource-grid/typedResourceQueryScope.ts:136` — Sonar `AZ-P-QRHmYfklgBeFrIZ`.
-- [ ] **23** — `distributeFlexWidths`, `frontend/src/shared/components/tables/hooks/gridTableColumnWidthMath.ts:172` — Sonar `AZ-P-PytmYfklgBeFq_9`.
-- [ ] **22** — GridTable context-menu builder callback, `frontend/src/shared/components/tables/hooks/useGridTableContextMenuItems.tsx:34` — Sonar `AZ-P-PxemYfklgBeFq_n`.
-- [ ] **21** — `prunePersistedState`, `frontend/src/shared/components/tables/persistence/gridTablePersistence.ts:436` — Sonar `AZ-P-P0OmYfklgBeFrAV`.
-- [ ] **21** — `buildPersistedStateForSave`, `frontend/src/shared/components/tables/persistence/gridTablePersistence.ts:543` — Sonar `AZ-P-P0OmYfklgBeFrAW`.
-- [ ] **20** — catalog page-request transaction, `frontend/src/modules/browse/hooks/useBrowseCatalog.ts:484` — Sonar `AZ-P-QPZmYfklgBeFrH7`.
-- [ ] **20** — `buildGridTableFilterOptions`, `frontend/src/shared/components/tables/gridTableFilterEngine.ts:40` — Sonar `AZ-P-P2hmYfklgBeFrBC`.
-- [ ] **19** — `applyPayload`, `frontend/src/modules/resource-grid/useTypedResourceQuery.ts:372` — Sonar `AZ-P-QSOmYfklgBeFrIl`.
-- [ ] **17** — typed-query request effect, `frontend/src/modules/resource-grid/useTypedResourceQuery.ts:487` — Sonar `AZ-P-QSOmYfklgBeFrIp`.
-- [ ] **16** — `walkQueryCursorPages`, `frontend/src/modules/resource-grid/cursorPageWalk.ts:48` — Sonar `AZ-P-QSDmYfklgBeFrIk`.
-- [ ] **16** — local row-filter predicate, `frontend/src/shared/components/tables/gridTableFilterEngine.ts:227` — Sonar `AZ-P-P2hmYfklgBeFrBD`.
+- [x] **50** — `sortedData` memo, `frontend/src/hooks/useTableSort.ts:119` — Sonar `AZ-P-QrBmYfklgBeFrPG`.
+- [x] **46** — `getCachedCellContent`, `frontend/src/shared/components/tables/hooks/useGridTableCellCache.tsx:72` — Sonar `AZ-P-PzimYfklgBeFrAG`.
+- [x] **39** — `useGridTableController`, `frontend/src/shared/components/tables/hooks/useGridTableController.tsx:112` — Sonar `AZ-P-Pw9mYfklgBeFq_i`.
+- [x] **37** — `measureColumnWidth`, `frontend/src/shared/components/tables/hooks/useGridTableColumnMeasurer.ts:114` — Sonar `AZ-P-Px1mYfklgBeFq_s`.
+- [x] **25** — `buildColumnWidthState`, `frontend/src/shared/components/tables/hooks/useGridTableColumnWidths.ts:201` — Sonar `AZ-P-PzDmYfklgBeFrAA`.
+- [x] **24** — `buildTypedResourceQueryScope`, `frontend/src/modules/resource-grid/typedResourceQueryScope.ts:136` — Sonar `AZ-P-QRHmYfklgBeFrIZ`.
+- [x] **23** — `distributeFlexWidths`, `frontend/src/shared/components/tables/hooks/gridTableColumnWidthMath.ts:172` — Sonar `AZ-P-PytmYfklgBeFq_9`.
+- [x] **22** — GridTable context-menu builder callback, `frontend/src/shared/components/tables/hooks/useGridTableContextMenuItems.tsx:34` — Sonar `AZ-P-PxemYfklgBeFq_n`.
+- [x] **21** — `prunePersistedState`, `frontend/src/shared/components/tables/persistence/gridTablePersistence.ts:436` — Sonar `AZ-P-P0OmYfklgBeFrAV`.
+- [x] **21** — `buildPersistedStateForSave`, `frontend/src/shared/components/tables/persistence/gridTablePersistence.ts:543` — Sonar `AZ-P-P0OmYfklgBeFrAW`.
+- [x] **20** — catalog page-request transaction, `frontend/src/modules/browse/hooks/useBrowseCatalog.ts:484` — Sonar `AZ-P-QPZmYfklgBeFrH7`.
+- [x] **20** — `buildGridTableFilterOptions`, `frontend/src/shared/components/tables/gridTableFilterEngine.ts:40` — Sonar `AZ-P-P2hmYfklgBeFrBC`.
+- [x] **19** — `applyPayload`, `frontend/src/modules/resource-grid/useTypedResourceQuery.ts:372` — Sonar `AZ-P-QSOmYfklgBeFrIl`.
+- [x] **17** — typed-query request effect, `frontend/src/modules/resource-grid/useTypedResourceQuery.ts:487` — Sonar `AZ-P-QSOmYfklgBeFrIp`.
+- [x] **16** — `walkQueryCursorPages`, `frontend/src/modules/resource-grid/cursorPageWalk.ts:48` — Sonar `AZ-P-QSDmYfklgBeFrIk`.
+- [x] **16** — local row-filter predicate, `frontend/src/shared/components/tables/gridTableFilterEngine.ts:227` — Sonar `AZ-P-P2hmYfklgBeFrBD`.
 
 Required characterization includes stable sorting and cache reuse, duplicate or
 missing row identities, primitive/object cache eviction, zero-width and
@@ -371,7 +387,46 @@ query-facet invalidation, stale-response rejection, cursor invalidation,
 anchor/start-rank navigation, approximate totals, warm-up retry, typed
 permission denial, and stream-signal coalescing.
 
-## Phase 3: Object map (4)
+Phase 2 batch 1 separates sorting decoration/cache reuse/comparison, cell-cache
+selection/read/render/write, controller pagination/profiling/key validation,
+and header/cell/kind measurement stages. The 80 focused tests pass. Directly
+affected statement coverage is 92.95% for `useTableSort.ts`, 81.39% for
+`useGridTableCellCache.tsx`, 82.60% for `useGridTableController.tsx` through
+`GridTable.test.tsx`, and 89.11% for `useGridTableColumnMeasurer.ts`. All four
+production files pass the temporary Biome maximum of 12. Sonar verification is
+pending branch analysis.
+
+Phase 2 batch 2 separates controlled/uncontrolled column-width state,
+filter/facet/sort/predicate/page-address query projection, flex scaling and
+rounding correction, and custom/sort context-menu sections. Its 32 focused
+tests pass. Focused statement coverage is 84.09% for
+`useGridTableColumnWidths.ts`, 80.21% for `typedResourceQueryScope.ts`, 86.81%
+for `gridTableColumnWidthMath.ts`, and 97.43% for
+`useGridTableContextMenuItems.tsx`. All four production files pass the
+temporary Biome maximum of 12. Sonar verification is pending branch analysis.
+
+Phase 2 batch 3 centralizes persisted visibility/width/sort/filter/page-size
+pruning so load and save share one schema path, and separates dropdown option
+collection from local row matching. Its 55 focused persistence/filter tests
+pass. Statement coverage is 85.38% for `gridTablePersistence.ts` across the
+persistence suite and 82.24% for `gridTableFilterEngine.ts`. Both production
+files pass the temporary Biome maximum of 12. Sonar verification is pending
+branch analysis.
+
+Phase 2 batch 4 separates catalog request admission, result application, and
+page landing; typed-query payload navigation, anchor landing, request dispatch,
+and export planning; and cursor-walk drift transitions. Its 57 focused tests
+pass. Full-suite statement coverage is 93.63% for `useBrowseCatalog.ts`, 91.45%
+for `useTypedResourceQuery.ts`, and 88.88% for `cursorPageWalk.ts`. All 13 Phase
+2 production files pass the temporary Biome maximum of 12 after the prerelease
+gate. The full frontend coverage run passes 4,066 tests with 80.80% statement
+coverage, and `mise exec -- mage qc:prerelease` passes. Sonar verification is
+pending branch analysis.
+
+All 16 recorded Phase 2 findings are locally remediated. Sonar closure remains
+pending until the pushed revision is analyzed.
+
+## Phase 3: Object map (4/4 locally complete; Sonar pending)
 
 **Outcome:** graph preparation, visibility, layout, and rendering orchestration
 are separate without changing backend-owned identity or relationship facts.
@@ -381,17 +436,33 @@ effects in the component; keep layout inputs/outputs pure; and isolate
 directional traversal from inclusion policy. Do not repair partial identity by
 kind/name guessing, and keep raw, visible, and rendered debug states distinct.
 
-- [ ] **54** — `ObjectMap`, `frontend/src/modules/object-map/ObjectMap.tsx:102` — Sonar `AZ-P-QMsmYfklgBeFrHO`.
-- [ ] **27** — `orderColumnsByBarycenter`, `frontend/src/modules/object-map/objectMapLayout.ts:340` — Sonar `AZ-P-QOEmYfklgBeFrHk`.
-- [ ] **20** — `computeNodeColumns`, `frontend/src/modules/object-map/objectMapLayout.ts:164` — Sonar `AZ-P-QOEmYfklgBeFrHi`.
-- [ ] **17** — `filterByDirectionalReachability`, `frontend/src/modules/object-map/objectMapDirectionalFilter.ts:38` — Sonar `AZ-P-QMLmYfklgBeFrHJ`.
+- [x] **54** — `ObjectMap`, `frontend/src/modules/object-map/ObjectMap.tsx:102` — Sonar `AZ-P-QMsmYfklgBeFrHO`.
+- [x] **27** — `orderColumnsByBarycenter`, `frontend/src/modules/object-map/objectMapLayout.ts:340` — Sonar `AZ-P-QOEmYfklgBeFrHk`.
+- [x] **20** — `computeNodeColumns`, `frontend/src/modules/object-map/objectMapLayout.ts:164` — Sonar `AZ-P-QOEmYfklgBeFrHi`.
+- [x] **17** — `filterByDirectionalReachability`, `frontend/src/modules/object-map/objectMapDirectionalFilter.ts:38` — Sonar `AZ-P-QMLmYfklgBeFrHJ`.
+
+Phase 3 separates toolbar, legend, warnings, viewport preservation, and context
+menu presentation from the object-map shell; graph construction from
+longest-path propagation, cycle fallback, seed anchoring, and source pulling;
+barycenter calculation/comparison from directional sweeps; and adjacency
+construction from the two pure-direction traversals. The 25-file object-map
+suite passes 189 tests, and the four directly affected suites pass 50 tests.
+Focused statement coverage is 91.44% for `ObjectMap.tsx`, 97.27% for
+`objectMapLayout.ts`, and 97.67% for `objectMapDirectionalFilter.ts`. All three
+production files, including the adjacent extracted functions, pass the
+temporary Biome maximum of 12. `mise exec -- mage qc:prerelease` passes all
+4,066 frontend tests and the remaining repository gates. Sonar verification is
+pending branch analysis.
+
+All four recorded Phase 3 findings are locally remediated. Sonar closure remains
+pending until the pushed revision is analyzed.
 
 Required characterization includes empty and truncated graphs, cycles,
 disconnected components, deterministic column/order output, `all`/`some`/`none`
 kind filtering, directional reachability, collapse/selection, renderer cleanup,
 complete refs for open/navigation actions, and bounded large-graph work.
 
-## Phase 4: Object panel (14)
+## Phase 4: Object panel (4/14 locally complete; Sonar pending)
 
 **Outcome:** detail derivation, log viewing, YAML transactions, and capability
 projection are decomposed at their existing ownership boundaries.
@@ -407,16 +478,28 @@ effects without changing dirty-state, save, conflict, or cancellation order.
 - [ ] **36** — `LogViewerInner`, `frontend/src/modules/object-panel/components/ObjectPanel/Logs/LogViewer.tsx:396` — Sonar `AZ-P-QJemYfklgBeFrGK`.
 - [ ] **36** — `logViewerReducer`, `frontend/src/modules/object-panel/components/ObjectPanel/Logs/logViewerReducer.ts:212` — Sonar `AZ-P-QI2mYfklgBeFrGA`.
 - [ ] **29** — `NodeLogsTab`, `frontend/src/modules/object-panel/components/ObjectPanel/NodeLogs/NodeLogsTab.tsx:196` — Sonar `AZ-P-QKzmYfklgBeFrG1`.
-- [ ] **23** — `validateYamlDraft`, `frontend/src/modules/object-panel/components/ObjectPanel/Yaml/yamlValidation.ts:127` — Sonar `AZ-P-QHLmYfklgBeFrFg`.
+- [x] **23** — `validateYamlDraft`, `frontend/src/modules/object-panel/components/ObjectPanel/Yaml/yamlValidation.ts:127` — Sonar `AZ-P-QHLmYfklgBeFrFg`.
 - [ ] **22** — LogViewer action callback, `frontend/src/modules/object-panel/components/ObjectPanel/Logs/LogViewer.tsx:1456` — Sonar `AZ-P-QJemYfklgBeFrGR`.
 - [ ] **21** — policy descriptor `renderMetric`, `frontend/src/modules/object-panel/components/ObjectPanel/Details/Overview/descriptors/policy.tsx:176` — Sonar `AZ-P-QDGmYfklgBeFrEs`.
-- [ ] **19** — `coverageKeys`, `frontend/src/modules/object-panel/components/ObjectPanel/Details/Overview/schema.ts:101` — Sonar `AZ-P-QDmmYfklgBeFrE0`.
+- [x] **19** — `coverageKeys`, `frontend/src/modules/object-panel/components/ObjectPanel/Details/Overview/schema.ts:101` — Sonar `AZ-P-QDmmYfklgBeFrE0`.
 - [ ] **19** — `YamlTab`, `frontend/src/modules/object-panel/components/ObjectPanel/Yaml/YamlTab.tsx:138` — Sonar `AZ-P-QGymYfklgBeFrFV`.
 - [ ] **19** — YAML transaction effect, `frontend/src/modules/object-panel/components/ObjectPanel/Yaml/yamlTransaction.ts:248` — Sonar `AZ-P-QHAmYfklgBeFrFc`.
 - [ ] **19** — `computeCapabilityDescriptors`, `frontend/src/modules/object-panel/components/ObjectPanel/hooks/useObjectPanelCapabilities.ts:74` — Sonar `AZ-P-QB2mYfklgBeFrEa`.
 - [ ] **16** — `formatTimestampForMode`, `frontend/src/modules/object-panel/components/ObjectPanel/Logs/LogViewer.tsx:156` — Sonar `AZ-P-QJemYfklgBeFrGG`.
-- [ ] **16** — `longestSuffixPrefixOverlap`, `frontend/src/modules/object-panel/components/ObjectPanel/Logs/hooks/useAnchoredLogEntries.ts:17` — Sonar `AZ-P-QIFmYfklgBeFrF2`.
-- [ ] **16** — filtered-log memo, `frontend/src/modules/object-panel/components/ObjectPanel/Logs/hooks/useLogFiltering.ts:96` — Sonar `AZ-P-QHymYfklgBeFrFx`.
+- [x] **16** — `longestSuffixPrefixOverlap`, `frontend/src/modules/object-panel/components/ObjectPanel/Logs/hooks/useAnchoredLogEntries.ts:17` — Sonar `AZ-P-QIFmYfklgBeFrF2`.
+- [x] **16** — filtered-log memo, `frontend/src/modules/object-panel/components/ObjectPanel/Logs/hooks/useLogFiltering.ts:96` — Sonar `AZ-P-QHymYfklgBeFrFx`.
+
+Phase 4 batch 1 separates YAML document parsing, mapping/identity extraction,
+and expected-identity comparison; descriptor item coverage; log overlap prefix
+construction/matching; and timestamp ordering, source selection, and text
+matching. Its four focused suites pass 116 tests before the added YAML cases,
+and the final YAML suite passes 17 tests. Focused statement coverage is 95.53%
+for `yamlValidation.ts`, 100% for `schema.ts`, 88.23% for
+`useAnchoredLogEntries.ts`, and 95.34% for `useLogFiltering.ts`. All four
+production files and adjacent extracted functions pass the temporary Biome
+maximum of 12. `mise exec -- mage qc:prerelease` passes all 4,074 frontend
+tests and the remaining repository gates. Sonar verification is pending branch
+analysis.
 
 Required characterization includes complete object/cluster scope, metrics
 absent/stale/error states, every `LogViewMode` transition, streaming/fallback

@@ -94,6 +94,395 @@ export interface ObjectMapProps {
   onOpenObjectMap?: (ref: ObjectMapReference) => void;
 }
 
+const objectMapToolbarButtonClass = (active: boolean): string =>
+  `object-map__toolbar-button ${active ? 'object-map__toolbar-button--active' : ''}`;
+
+const objectMapSearchCountLabel = (
+  normalizedQuery: string,
+  matchCount: number,
+  searchIndex: number
+): string | null => {
+  if (!normalizedQuery) {
+    return null;
+  }
+  if (matchCount === 0) {
+    return '0/0';
+  }
+  return `${Math.min(searchIndex + 1, matchCount)}/${matchCount}`;
+};
+
+type ObjectMapToolbarProps = {
+  elementIdPrefix: string;
+  selectedKinds: MultiSelectFilterSelection;
+  kindOptions: DropdownOption[];
+  onKindsChange: (value: string | string[]) => void;
+  renderFilterOption: (option: DropdownOption, isSelected: boolean) => React.ReactNode;
+  renderKindsValue: (value: string | string[], options: DropdownOption[]) => React.ReactNode;
+  searchQuery: string;
+  normalizedSearchQuery: string;
+  searchMatchCount: number;
+  searchIndex: number;
+  onSearchQueryChange: (value: string) => void;
+  onFocusSearchMatch: () => void;
+  viewportControls: ObjectMapViewportControls | null;
+  autoFit: boolean;
+  onToggleAutoFit: () => void;
+  focusMode: boolean;
+  onToggleFocusMode: () => void;
+  resetLayoutDisabled: boolean;
+  onResetLayout: () => void;
+  showLegend: boolean;
+  onToggleLegend: () => void;
+};
+
+const ObjectMapToolbar: React.FC<ObjectMapToolbarProps> = ({
+  elementIdPrefix,
+  selectedKinds,
+  kindOptions,
+  onKindsChange,
+  renderFilterOption,
+  renderKindsValue,
+  searchQuery,
+  normalizedSearchQuery,
+  searchMatchCount,
+  searchIndex,
+  onSearchQueryChange,
+  onFocusSearchMatch,
+  viewportControls,
+  autoFit,
+  onToggleAutoFit,
+  focusMode,
+  onToggleFocusMode,
+  resetLayoutDisabled,
+  onResetLayout,
+  showLegend,
+  onToggleLegend,
+}) => {
+  const searchCountLabel = objectMapSearchCountLabel(
+    normalizedSearchQuery,
+    searchMatchCount,
+    searchIndex
+  );
+  const viewportControlsReady = Boolean(viewportControls);
+
+  return (
+    <div
+      className="object-map__toolbar"
+      role="toolbar"
+      aria-label="Object map controls"
+      onPointerDown={(event) => event.stopPropagation()}
+      onPointerUp={(event) => event.stopPropagation()}
+    >
+      <form
+        className="object-map__search"
+        aria-label="Search object map"
+        onSubmit={(event) => {
+          event.preventDefault();
+          onFocusSearchMatch();
+        }}
+      >
+        <div className="object-map__kind-filter" data-gridtable-filter-role="kind">
+          <Dropdown
+            id={`${elementIdPrefix}-object-map-kind-filter`}
+            name="object-map-kind-filter"
+            multiple
+            size="compact"
+            searchable
+            showBulkActions
+            placeholder="All kinds"
+            value={filterSelectionToDropdownValues(selectedKinds, kindOptions)}
+            options={kindOptions}
+            disabled={kindOptions.length === 0}
+            onChange={onKindsChange}
+            dropdownClassName="dropdown-filter-menu"
+            ariaLabel="Filter map kinds"
+            renderOption={renderFilterOption}
+            renderValue={renderKindsValue}
+          />
+        </div>
+        <input
+          type="search"
+          className="object-map__search-input"
+          aria-label="Search map objects"
+          placeholder="Search objects"
+          value={searchQuery}
+          onChange={(event) => onSearchQueryChange(event.target.value)}
+        />
+        {!!searchCountLabel && <span className="object-map__search-count">{searchCountLabel}</span>}
+      </form>
+      <button
+        type="button"
+        className="object-map__toolbar-button"
+        onClick={viewportControls?.zoomOut}
+        title="Zoom out"
+        aria-label="Zoom out"
+        disabled={!viewportControlsReady}
+      >
+        <ZoomOutIcon width={18} height={18} />
+      </button>
+      <button
+        type="button"
+        className="object-map__toolbar-button"
+        onClick={viewportControls?.zoomIn}
+        title="Zoom in"
+        aria-label="Zoom in"
+        disabled={!viewportControlsReady}
+      >
+        <ZoomInIcon width={18} height={18} />
+      </button>
+      <button
+        type="button"
+        className="object-map__toolbar-button"
+        onClick={viewportControls?.resetZoom}
+        title="Reset zoom to 100%"
+        aria-label="Reset zoom"
+        disabled={!viewportControlsReady}
+      >
+        <ResetZoomIcon />
+      </button>
+      <span className="object-map__toolbar-separator" aria-hidden="true" />
+      <button
+        type="button"
+        className="object-map__toolbar-button"
+        onClick={viewportControls?.fitToView}
+        title="Fit visible objects into the viewport"
+        aria-label="Fit"
+        disabled={!viewportControlsReady}
+      >
+        <FitToViewIcon width={18} height={18} />
+      </button>
+      <button
+        type="button"
+        className={objectMapToolbarButtonClass(autoFit)}
+        onClick={onToggleAutoFit}
+        title={
+          autoFit
+            ? 'Auto-fit on - automatically fits visible objects into the viewport'
+            : 'Auto-fit off - pan and zoom changes are retained'
+        }
+        aria-label="Toggle auto-fit"
+        aria-pressed={autoFit}
+      >
+        <AutoFitIcon width={18} height={18} />
+      </button>
+      <span className="object-map__toolbar-separator" aria-hidden="true" />
+      <button
+        type="button"
+        className={objectMapToolbarButtonClass(focusMode)}
+        onClick={onToggleFocusMode}
+        title={focusMode ? 'Focus mode on' : 'Focus mode off'}
+        aria-label="Toggle focus mode"
+        aria-pressed={focusMode}
+      >
+        <FocusModeIcon width={18} height={18} />
+      </button>
+      <button
+        type="button"
+        className="object-map__toolbar-button"
+        onClick={onResetLayout}
+        title="Reset layout"
+        aria-label="Reset layout"
+        disabled={resetLayoutDisabled}
+      >
+        <ResetFiltersIcon width={18} height={18} />
+      </button>
+      <span className="object-map__toolbar-separator" aria-hidden="true" />
+      <button
+        type="button"
+        className={objectMapToolbarButtonClass(showLegend)}
+        onClick={onToggleLegend}
+        title={showLegend ? 'Hide legend' : 'Show legend'}
+        aria-label="Toggle legend"
+        aria-pressed={showLegend}
+      >
+        <LegendIcon width={18} height={18} />
+      </button>
+    </div>
+  );
+};
+
+type ObjectMapLegendProps = {
+  groups: ObjectMapLegendGroup[];
+  entries: readonly EdgeKindMeta[];
+  enabledEntryCount: number;
+  nodeCount: number;
+  edgeCount: number;
+  position: { left: number; top: number } | null;
+  pointerHandlers: ReturnType<typeof useObjectMapLegendDrag>['legendPointerHandlers'];
+  isEdgeTypeEnabled: (type: string) => boolean;
+  onToggleEdgeType: (type: string) => void;
+  onShowAllEdgeTypes: () => void;
+  onHideAllEdgeTypes: () => void;
+  onClose: () => void;
+};
+
+const ObjectMapLegend: React.FC<ObjectMapLegendProps> = ({
+  groups,
+  entries,
+  enabledEntryCount,
+  nodeCount,
+  edgeCount,
+  position,
+  pointerHandlers,
+  isEdgeTypeEnabled,
+  onToggleEdgeType,
+  onShowAllEdgeTypes,
+  onHideAllEdgeTypes,
+  onClose,
+}) => (
+  <section
+    className="object-map__legend"
+    aria-label="Object map legend"
+    style={position ? { left: position.left, right: 'auto', top: position.top } : undefined}
+    {...pointerHandlers}
+  >
+    <Tooltip
+      content="Close the legend. You can open it again with the Legend button on the toolbar."
+      placement="bottom"
+      hoverDelay={500}
+      showArrow={false}
+    >
+      <button
+        type="button"
+        className="object-map__legend-close"
+        aria-label="Close legend"
+        onPointerDown={(event) => event.stopPropagation()}
+        onClick={(event) => {
+          event.stopPropagation();
+          onClose();
+        }}
+      >
+        <CloseIcon width={10} height={10} />
+      </button>
+    </Tooltip>
+    {groups.map((group) => (
+      <div key={group.family} className="object-map__legend-group">
+        <div className="object-map__legend-category">{group.label}</div>
+        {group.entries.map((entry) => (
+          <button
+            key={entry.type}
+            type="button"
+            className={`object-map__legend-row ${
+              isEdgeTypeEnabled(entry.type) ? '' : 'object-map__legend-row--disabled'
+            }`}
+            onClick={() => onToggleEdgeType(entry.type)}
+            aria-pressed={isEdgeTypeEnabled(entry.type)}
+          >
+            <ObjectMapLegendSwatchIcon edgeClassName={objectMapEdgeClass(entry.type)} />
+            <span className="object-map__legend-label">{entry.label}</span>
+          </button>
+        ))}
+      </div>
+    ))}
+    {entries.length > 0 && (
+      <div className="object-map__legend-actions">
+        <button
+          type="button"
+          className="object-map__legend-action-button"
+          onClick={onShowAllEdgeTypes}
+          disabled={enabledEntryCount === entries.length}
+        >
+          Show all
+        </button>
+        <button
+          type="button"
+          className="object-map__legend-action-button"
+          onClick={onHideAllEdgeTypes}
+          disabled={enabledEntryCount === 0}
+        >
+          Hide all
+        </button>
+      </div>
+    )}
+    <div className="object-map__legend-separator" aria-hidden="true" />
+    <div className="object-map__legend-counts" role="status" aria-label="Visible map totals">
+      <span className="object-map__legend-count">
+        <span className="object-map__legend-count-value">{nodeCount}</span>
+        <span className="object-map__legend-count-label">Objects</span>
+      </span>
+      <span className="object-map__legend-count">
+        <span className="object-map__legend-count-value">{edgeCount}</span>
+        <span className="object-map__legend-count-label">Links</span>
+      </span>
+    </div>
+  </section>
+);
+
+const ObjectMapMessages: React.FC<{
+  truncated: boolean;
+  nodeCount: number;
+  warnings?: string[];
+}> = ({ truncated, nodeCount, warnings }) => (
+  <>
+    {!!truncated && (
+      <div className="object-map__banner object-map__banner--truncated">
+        Showing {nodeCount} of many. Increase the depth/node limits to see more.
+      </div>
+    )}
+    {!!warnings && warnings.length > 0 && (
+      <details className="object-map__warnings">
+        <summary>
+          {warnings.length} warning{warnings.length === 1 ? '' : 's'}
+        </summary>
+        <ul>
+          {withStableListKeys(warnings, (warning) => warning).map(({ key, value: warning }) => (
+            <li key={key}>{warning}</li>
+          ))}
+        </ul>
+      </details>
+    )}
+  </>
+);
+
+const selectPreservedViewportNodeId = ({
+  autoFit,
+  focusMode,
+  activeNodeId,
+  seedNodeId,
+  visibleNodeIds,
+  fallbackNodeId,
+}: {
+  autoFit: boolean;
+  focusMode: boolean;
+  activeNodeId: string | null;
+  seedNodeId: string;
+  visibleNodeIds: Set<string>;
+  fallbackNodeId: string | null;
+}): string | null => {
+  if (autoFit || focusMode) {
+    return null;
+  }
+  if (activeNodeId && visibleNodeIds.has(activeNodeId)) {
+    return activeNodeId;
+  }
+  return visibleNodeIds.has(seedNodeId) ? seedNodeId : fallbackNodeId;
+};
+
+const objectMapActionHandler = (
+  handler?: (ref: ObjectMapReference) => void
+): ((object: ObjectActionData) => void) | undefined =>
+  handler ? (object) => handler(object as ObjectMapReference) : undefined;
+
+const objectMapContextMenuPosition = (
+  contextMenu: ObjectMapMenuState | null
+): { x: number; y: number } | null => {
+  if (!contextMenu) {
+    return null;
+  }
+  return contextMenu.type === 'object' ? contextMenu.request.position : contextMenu.position;
+};
+
+const ObjectMapContextMenuOverlay: React.FC<{
+  items: ContextMenuItem[];
+  position: { x: number; y: number } | null;
+  onClose: () => void;
+}> = ({ items, position, onClose }) => {
+  if (!position || items.length === 0) {
+    return null;
+  }
+  return <ContextMenu items={items} position={position} onClose={onClose} />;
+};
+
 const ObjectMap: React.FC<ObjectMapProps> = ({
   payload: wirePayload,
   onOpenPanel,
@@ -266,14 +655,14 @@ const ObjectMap: React.FC<ObjectMapProps> = ({
     () => new Set(visibleState.visibleLayout.nodes.map((node) => node.id)),
     [visibleState.visibleLayout.nodes]
   );
-  const selectedViewportNodeId =
-    model.activeNodeId && visibleNodeIds.has(model.activeNodeId) ? model.activeNodeId : null;
-  const seedViewportNodeId = visibleNodeIds.has(model.seedId) ? model.seedId : null;
-  const fallbackViewportNodeId = visibleState.visibleLayout.nodes[0]?.id ?? null;
-  const preserveViewportNodeId =
-    model.autoFit || focusMode
-      ? null
-      : (selectedViewportNodeId ?? seedViewportNodeId ?? fallbackViewportNodeId);
+  const preserveViewportNodeId = selectPreservedViewportNodeId({
+    autoFit: model.autoFit,
+    focusMode,
+    activeNodeId: model.activeNodeId,
+    seedNodeId: model.seedId,
+    visibleNodeIds,
+    fallbackNodeId: visibleState.visibleLayout.nodes[0]?.id ?? null,
+  });
 
   useEffect(() => {
     const debugId = debugMapIdRef.current;
@@ -368,13 +757,9 @@ const ObjectMap: React.FC<ObjectMapProps> = ({
   }, [contextMenu, nodeByReference]);
   const objectActions = useObjectActionController({
     context: 'object-map',
-    onOpen: onOpenPanel ? (object) => onOpenPanel(object as ObjectMapReference) : undefined,
-    onOpenObjectMap: onOpenObjectMap
-      ? (object) => onOpenObjectMap(object as ObjectMapReference)
-      : undefined,
-    onNavigateView: onNavigateView
-      ? (object) => onNavigateView(object as ObjectMapReference)
-      : undefined,
+    onOpen: objectMapActionHandler(onOpenPanel),
+    onOpenObjectMap: objectMapActionHandler(onOpenObjectMap),
+    onNavigateView: objectMapActionHandler(onNavigateView),
   });
   const canvasContextMenuItems = useMemo<ContextMenuItem[]>(() => {
     const items: ContextMenuItem[] = [
@@ -437,8 +822,7 @@ const ObjectMap: React.FC<ObjectMapProps> = ({
       ? objectActions.getMenuItems(contextMenuObject)
       : canvasContextMenuItems;
   }, [canvasContextMenuItems, contextMenu, contextMenuObject, objectActions]);
-  const contextMenuPosition =
-    contextMenu?.type === 'object' ? contextMenu.request.position : contextMenu?.position;
+  const contextMenuPosition = objectMapContextMenuPosition(contextMenu);
   const handleNodeContextMenu = useCallback((request: ObjectMapContextMenuRequest) => {
     setContextMenu({ type: 'object', request });
   }, []);
@@ -448,155 +832,6 @@ const ObjectMap: React.FC<ObjectMapProps> = ({
   const closeContextMenu = useCallback(() => {
     setContextMenu(null);
   }, []);
-
-  const toolbar = (
-    <div
-      className="object-map__toolbar"
-      role="toolbar"
-      aria-label="Object map controls"
-      onPointerDown={(e) => e.stopPropagation()}
-      onPointerUp={(e) => e.stopPropagation()}
-    >
-      <form
-        className="object-map__search"
-        aria-label="Search object map"
-        onSubmit={(event) => {
-          event.preventDefault();
-          focusSearchMatch();
-        }}
-      >
-        <div className="object-map__kind-filter" data-gridtable-filter-role="kind">
-          <Dropdown
-            id={`${elementIdPrefix}-object-map-kind-filter`}
-            name="object-map-kind-filter"
-            multiple
-            size="compact"
-            searchable
-            showBulkActions
-            placeholder="All kinds"
-            value={filterSelectionToDropdownValues(selectedKinds, visibleState.kindOptions)}
-            options={visibleState.kindOptions}
-            disabled={visibleState.kindOptions.length === 0}
-            onChange={handleKindsChange}
-            dropdownClassName="dropdown-filter-menu"
-            ariaLabel="Filter map kinds"
-            renderOption={renderFilterOption}
-            renderValue={renderKindsValue}
-          />
-        </div>
-        <input
-          type="search"
-          className="object-map__search-input"
-          aria-label="Search map objects"
-          placeholder="Search objects"
-          value={searchQuery}
-          onChange={(event) => setSearchQuery(event.target.value)}
-        />
-        {!!visibleState.normalizedSearchQuery && (
-          <span className="object-map__search-count">
-            {visibleState.searchMatches.length === 0
-              ? '0/0'
-              : `${Math.min(searchIndex + 1, visibleState.searchMatches.length)}/${
-                  visibleState.searchMatches.length
-                }`}
-          </span>
-        )}
-      </form>
-      <button
-        type="button"
-        className="object-map__toolbar-button"
-        onClick={g6ViewportControls?.zoomOut}
-        title="Zoom out"
-        aria-label="Zoom out"
-        disabled={!viewportControlsReady}
-      >
-        <ZoomOutIcon width={18} height={18} />
-      </button>
-      <button
-        type="button"
-        className="object-map__toolbar-button"
-        onClick={g6ViewportControls?.zoomIn}
-        title="Zoom in"
-        aria-label="Zoom in"
-        disabled={!viewportControlsReady}
-      >
-        <ZoomInIcon width={18} height={18} />
-      </button>
-      <button
-        type="button"
-        className="object-map__toolbar-button"
-        onClick={g6ViewportControls?.resetZoom}
-        title="Reset zoom to 100%"
-        aria-label="Reset zoom"
-        disabled={!viewportControlsReady}
-      >
-        <ResetZoomIcon />
-      </button>
-      <span className="object-map__toolbar-separator" aria-hidden="true" />
-      <button
-        type="button"
-        className="object-map__toolbar-button"
-        onClick={g6ViewportControls?.fitToView}
-        title="Fit visible objects into the viewport"
-        aria-label="Fit"
-        disabled={!viewportControlsReady}
-      >
-        <FitToViewIcon width={18} height={18} />
-      </button>
-      <button
-        type="button"
-        className={`object-map__toolbar-button ${
-          model.autoFit ? 'object-map__toolbar-button--active' : ''
-        }`}
-        onClick={() => model.setAutoFit((prev) => !prev)}
-        title={
-          model.autoFit
-            ? 'Auto-fit on - automatically fits visible objects into the viewport'
-            : 'Auto-fit off - pan and zoom changes are retained'
-        }
-        aria-label="Toggle auto-fit"
-        aria-pressed={model.autoFit}
-      >
-        <AutoFitIcon width={18} height={18} />
-      </button>
-      <span className="object-map__toolbar-separator" aria-hidden="true" />
-      <button
-        type="button"
-        className={`object-map__toolbar-button ${
-          focusMode ? 'object-map__toolbar-button--active' : ''
-        }`}
-        onClick={() => setFocusMode((prev) => !prev)}
-        title={focusMode ? 'Focus mode on' : 'Focus mode off'}
-        aria-label="Toggle focus mode"
-        aria-pressed={focusMode}
-      >
-        <FocusModeIcon width={18} height={18} />
-      </button>
-      <button
-        type="button"
-        className="object-map__toolbar-button"
-        onClick={resetMapLayout}
-        title="Reset layout"
-        aria-label="Reset layout"
-        disabled={!model.hasNodePositionOverrides && !focusMode}
-      >
-        <ResetFiltersIcon width={18} height={18} />
-      </button>
-      <span className="object-map__toolbar-separator" aria-hidden="true" />
-      <button
-        type="button"
-        className={`object-map__toolbar-button ${
-          showLegend ? 'object-map__toolbar-button--active' : ''
-        }`}
-        onClick={() => setShowLegend((prev) => !prev)}
-        title={showLegend ? 'Hide legend' : 'Show legend'}
-        aria-label="Toggle legend"
-        aria-pressed={showLegend}
-      >
-        <LegendIcon width={18} height={18} />
-      </button>
-    </div>
-  );
 
   if (model.layout.nodes.length === 0) {
     return (
@@ -608,7 +843,31 @@ const ObjectMap: React.FC<ObjectMapProps> = ({
 
   return (
     <div className="object-map" data-testid="object-map">
-      <div className="object-map__header">{toolbar}</div>
+      <div className="object-map__header">
+        <ObjectMapToolbar
+          elementIdPrefix={elementIdPrefix}
+          selectedKinds={selectedKinds}
+          kindOptions={visibleState.kindOptions}
+          onKindsChange={handleKindsChange}
+          renderFilterOption={renderFilterOption}
+          renderKindsValue={renderKindsValue}
+          searchQuery={searchQuery}
+          normalizedSearchQuery={visibleState.normalizedSearchQuery}
+          searchMatchCount={visibleState.searchMatches.length}
+          searchIndex={searchIndex}
+          onSearchQueryChange={setSearchQuery}
+          onFocusSearchMatch={focusSearchMatch}
+          viewportControls={g6ViewportControls}
+          autoFit={model.autoFit}
+          onToggleAutoFit={() => model.setAutoFit((previous) => !previous)}
+          focusMode={focusMode}
+          onToggleFocusMode={() => setFocusMode((previous) => !previous)}
+          resetLayoutDisabled={!model.hasNodePositionOverrides && !focusMode}
+          onResetLayout={resetMapLayout}
+          showLegend={showLegend}
+          onToggleLegend={() => setShowLegend((previous) => !previous)}
+        />
+      </div>
       <div ref={canvasRef} className="object-map__canvas">
         <React.Suspense fallback={<div className="object-map__message">Loading map renderer…</div>}>
           <ObjectMapG6Renderer
@@ -639,123 +898,33 @@ const ObjectMap: React.FC<ObjectMapProps> = ({
           />
         </React.Suspense>
         {!!showLegend && (
-          <section
-            className="object-map__legend"
-            aria-label="Object map legend"
-            style={
-              legendPosition
-                ? { left: legendPosition.left, right: 'auto', top: legendPosition.top }
-                : undefined
-            }
-            {...legendPointerHandlers}
-          >
-            <Tooltip
-              content="Close the legend. You can open it again with the Legend button on the toolbar."
-              placement="bottom"
-              hoverDelay={500}
-              showArrow={false}
-            >
-              <button
-                type="button"
-                className="object-map__legend-close"
-                aria-label="Close legend"
-                onPointerDown={(event) => event.stopPropagation()}
-                onClick={(event) => {
-                  event.stopPropagation();
-                  setShowLegend(false);
-                }}
-              >
-                <CloseIcon width={10} height={10} />
-              </button>
-            </Tooltip>
-            {legendGroups.map((group) => (
-              <div key={group.family} className="object-map__legend-group">
-                <div className="object-map__legend-category">{group.label}</div>
-                {group.entries.map((entry) => (
-                  <button
-                    key={entry.type}
-                    type="button"
-                    className={`object-map__legend-row ${
-                      isEdgeTypeEnabled(entry.type) ? '' : 'object-map__legend-row--disabled'
-                    }`}
-                    onClick={() => toggleEdgeType(entry.type)}
-                    aria-pressed={isEdgeTypeEnabled(entry.type)}
-                  >
-                    <ObjectMapLegendSwatchIcon edgeClassName={objectMapEdgeClass(entry.type)} />
-                    <span className="object-map__legend-label">{entry.label}</span>
-                  </button>
-                ))}
-              </div>
-            ))}
-            {visibleState.legendEntries.length > 0 && (
-              <div className="object-map__legend-actions">
-                <button
-                  type="button"
-                  className="object-map__legend-action-button"
-                  onClick={showAllEdgeTypes}
-                  disabled={enabledLegendEntryCount === visibleState.legendEntries.length}
-                >
-                  Show all
-                </button>
-                <button
-                  type="button"
-                  className="object-map__legend-action-button"
-                  onClick={hideAllEdgeTypes}
-                  disabled={enabledLegendEntryCount === 0}
-                >
-                  Hide all
-                </button>
-              </div>
-            )}
-            <div className="object-map__legend-separator" aria-hidden="true" />
-            <div
-              className="object-map__legend-counts"
-              role="status"
-              aria-label="Visible map totals"
-            >
-              <span className="object-map__legend-count">
-                <span className="object-map__legend-count-value">
-                  {visibleState.visibleLayout.nodes.length}
-                </span>
-                <span className="object-map__legend-count-label">Objects</span>
-              </span>
-              <span className="object-map__legend-count">
-                <span className="object-map__legend-count-value">
-                  {visibleState.visibleLayout.edges.length}
-                </span>
-                <span className="object-map__legend-count-label">Links</span>
-              </span>
-            </div>
-          </section>
+          <ObjectMapLegend
+            groups={legendGroups}
+            entries={visibleState.legendEntries}
+            enabledEntryCount={enabledLegendEntryCount}
+            nodeCount={visibleState.visibleLayout.nodes.length}
+            edgeCount={visibleState.visibleLayout.edges.length}
+            position={legendPosition}
+            pointerHandlers={legendPointerHandlers}
+            isEdgeTypeEnabled={isEdgeTypeEnabled}
+            onToggleEdgeType={toggleEdgeType}
+            onShowAllEdgeTypes={showAllEdgeTypes}
+            onHideAllEdgeTypes={hideAllEdgeTypes}
+            onClose={() => setShowLegend(false)}
+          />
         )}
       </div>
-      {contextMenu && contextMenuPosition && contextMenuItems.length > 0 && (
-        <ContextMenu
-          items={contextMenuItems}
-          position={contextMenuPosition}
-          onClose={closeContextMenu}
-        />
-      )}
+      <ObjectMapContextMenuOverlay
+        items={contextMenuItems}
+        position={contextMenuPosition}
+        onClose={closeContextMenu}
+      />
       {objectActions.modals}
-      {!!payload.truncated && (
-        <div className="object-map__banner object-map__banner--truncated">
-          Showing {model.layout.nodes.length} of many. Increase the depth/node limits to see more.
-        </div>
-      )}
-      {payload.warnings && payload.warnings.length > 0 && (
-        <details className="object-map__warnings">
-          <summary>
-            {payload.warnings.length} warning{payload.warnings.length === 1 ? '' : 's'}
-          </summary>
-          <ul>
-            {withStableListKeys(payload.warnings, (warning) => warning).map(
-              ({ key, value: warning }) => (
-                <li key={key}>{warning}</li>
-              )
-            )}
-          </ul>
-        </details>
-      )}
+      <ObjectMapMessages
+        truncated={payload.truncated}
+        nodeCount={model.layout.nodes.length}
+        warnings={payload.warnings}
+      />
     </div>
   );
 };

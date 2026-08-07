@@ -140,6 +140,148 @@ const compareForColumn = (a: ObjectMapNode, b: ObjectMapNode): number => {
   return a.ref.name.localeCompare(b.ref.name);
 };
 
+type NodeColumnGraph = {
+  outgoing: Map<string, string[]>;
+  inDegree: Map<string, number>;
+};
+
+const appendOutgoingTarget = (
+  outgoing: Map<string, string[]>,
+  sourceId: string,
+  targetId: string
+): void => {
+  const targets = outgoing.get(sourceId);
+  if (targets) {
+    targets.push(targetId);
+    return;
+  }
+  outgoing.set(sourceId, [targetId]);
+};
+
+const buildNodeColumnGraph = (nodes: ObjectMapNode[], edges: ObjectMapEdge[]): NodeColumnGraph => {
+  const validIds = new Set(nodes.map((node) => node.id));
+  const outgoing = new Map<string, string[]>();
+  const inDegree = new Map(nodes.map((node) => [node.id, 0]));
+
+  edges.forEach((edge) => {
+    if (!validIds.has(edge.source) || !validIds.has(edge.target) || edge.source === edge.target) {
+      return;
+    }
+    appendOutgoingTarget(outgoing, edge.source, edge.target);
+    inDegree.set(edge.target, (inDegree.get(edge.target) ?? 0) + 1);
+  });
+
+  return { outgoing, inDegree };
+};
+
+const seedLongestPathSources = (
+  inDegree: Map<string, number>,
+  columns: Map<string, number>
+): string[] => {
+  const queue: string[] = [];
+  inDegree.forEach((degree, id) => {
+    if (degree === 0) {
+      columns.set(id, 0);
+      queue.push(id);
+    }
+  });
+  return queue;
+};
+
+const advanceLongestPathTarget = (
+  targetId: string,
+  sourceColumn: number,
+  columns: Map<string, number>,
+  remaining: Map<string, number>
+): boolean => {
+  const currentColumn = columns.get(targetId);
+  const candidateColumn = sourceColumn + 1;
+  if (currentColumn === undefined || candidateColumn > currentColumn) {
+    columns.set(targetId, candidateColumn);
+  }
+
+  const priorRemaining = remaining.get(targetId);
+  if (priorRemaining === undefined) {
+    return false;
+  }
+  const nextRemaining = priorRemaining - 1;
+  remaining.set(targetId, nextRemaining);
+  return nextRemaining === 0;
+};
+
+const computeLongestPathColumns = ({
+  outgoing,
+  inDegree,
+}: NodeColumnGraph): Map<string, number> => {
+  const columns = new Map<string, number>();
+  const remaining = new Map(inDegree);
+  const queue = seedLongestPathSources(inDegree, columns);
+
+  for (let head = 0; head < queue.length; head += 1) {
+    const sourceId = queue[head];
+    const sourceColumn = sourceId === undefined ? undefined : columns.get(sourceId);
+    if (sourceColumn === undefined || sourceId === undefined) {
+      continue;
+    }
+    for (const targetId of outgoing.get(sourceId) ?? []) {
+      if (advanceLongestPathTarget(targetId, sourceColumn, columns, remaining)) {
+        queue.push(targetId);
+      }
+    }
+  }
+
+  return columns;
+};
+
+const applyCycleFallbackColumns = (nodes: ObjectMapNode[], columns: Map<string, number>): void => {
+  nodes.forEach((node) => {
+    if (!columns.has(node.id)) {
+      columns.set(node.id, node.depth);
+    }
+  });
+};
+
+const anchorColumnsAtSeed = (columns: Map<string, number>, seedId: string): void => {
+  const seedColumn = columns.get(seedId);
+  if (seedColumn === undefined || seedColumn === 0) {
+    return;
+  }
+  columns.forEach((value, id) => {
+    columns.set(id, value - seedColumn);
+  });
+};
+
+const leftmostSuccessorColumn = (
+  sourceId: string,
+  outgoing: Map<string, string[]>,
+  columns: Map<string, number>
+): number | null => {
+  let minimum = Infinity;
+  for (const successorId of outgoing.get(sourceId) ?? []) {
+    const successorColumn = columns.get(successorId);
+    if (successorColumn !== undefined) {
+      minimum = Math.min(minimum, successorColumn);
+    }
+  }
+  return minimum === Infinity ? null : minimum;
+};
+
+const pullSourcesTowardSuccessors = (
+  seedId: string,
+  graph: NodeColumnGraph,
+  columns: Map<string, number>
+): void => {
+  graph.inDegree.forEach((degree, id) => {
+    if (degree !== 0 || id === seedId) {
+      return;
+    }
+    const successorColumn = leftmostSuccessorColumn(id, graph.outgoing, columns);
+    if (successorColumn !== null) {
+      columns.set(id, successorColumn - 1);
+    }
+  });
+};
+
 /**
  * Assign each node a column index via compact min-length layered
  * layout. Three steps:
@@ -162,116 +304,27 @@ const computeNodeColumns = (
   edges: ObjectMapEdge[],
   seedId: string
 ): Map<string, number> => {
-  const validIds = new Set(nodes.map((n) => n.id));
-  const out = new Map<string, string[]>();
-  const inDegree = new Map<string, number>();
-  nodes.forEach((n) => {
-    inDegree.set(n.id, 0);
-  });
-
-  edges.forEach((edge) => {
-    if (!validIds.has(edge.source) || !validIds.has(edge.target)) {
-      return;
-    }
-    if (edge.source === edge.target) {
-      return;
-    }
-    let outs = out.get(edge.source);
-    if (!outs) {
-      outs = [];
-      out.set(edge.source, outs);
-    }
-    outs.push(edge.target);
-    inDegree.set(edge.target, (inDegree.get(edge.target) ?? 0) + 1);
-  });
+  const graph = buildNodeColumnGraph(nodes, edges);
 
   // Step 1: longest-path layering. Sources start at column 0; each
   // other node lands at max(predecessor column + 1).
-  const column = new Map<string, number>();
-  const remaining = new Map(inDegree);
-  const queue: string[] = [];
-  inDegree.forEach((degree, id) => {
-    if (degree === 0) {
-      column.set(id, 0);
-      queue.push(id);
-    }
-  });
-  for (let head = 0; head < queue.length; head += 1) {
-    const u = queue[head];
-    if (u === undefined) {
-      continue;
-    }
-    const cu = column.get(u);
-    if (cu === undefined) {
-      continue;
-    }
-    const outs = out.get(u);
-    if (!outs) {
-      continue;
-    }
-    for (const v of outs) {
-      const cv = column.get(v);
-      const candidate = cu + 1;
-      if (cv === undefined || candidate > cv) {
-        column.set(v, candidate);
-      }
-      const priorRemaining = remaining.get(v);
-      if (priorRemaining === undefined) {
-        continue;
-      }
-      const newRemaining = priorRemaining - 1;
-      remaining.set(v, newRemaining);
-      if (newRemaining === 0) {
-        queue.push(v);
-      }
-    }
-  }
+  const columns = computeLongestPathColumns(graph);
 
   // Defensive fallback for nodes the topological pass never reached
   // (cycles). K8s graphs are normally acyclic so this should not fire.
-  nodes.forEach((node) => {
-    if (!column.has(node.id)) {
-      column.set(node.id, node.depth);
-    }
-  });
+  applyCycleFallbackColumns(nodes, columns);
 
   // Step 2: anchor the seed at column 0.
-  const seedColumn = column.get(seedId);
-  if (seedColumn !== undefined && seedColumn !== 0) {
-    column.forEach((value, id) => {
-      column.set(id, value - seedColumn);
-    });
-  }
+  anchorColumnsAtSeed(columns, seedId);
 
   // Step 3: pull each true source (in-degree zero, not the seed) right
   // to sit one column left of its leftmost successor. Doesn't violate
   // any constraint because the source has no predecessors and its
   // outgoing edges still satisfy col(target) >= col(source) + 1 after
   // the move.
-  inDegree.forEach((degree, id) => {
-    if (degree !== 0) {
-      return;
-    }
-    if (id === seedId) {
-      return;
-    }
-    const outs = out.get(id);
-    if (!outs || outs.length === 0) {
-      return;
-    }
-    let minSuccessorColumn = Infinity;
-    for (const successor of outs) {
-      const sc = column.get(successor);
-      if (sc !== undefined) {
-        minSuccessorColumn = Math.min(minSuccessorColumn, sc);
-      }
-    }
-    if (minSuccessorColumn !== Infinity) {
-      column.set(id, minSuccessorColumn - 1);
-    }
-  });
+  pullSourcesTowardSuccessors(seedId, graph, columns);
 
-  return column;
+  return columns;
 };
 
 const buildCrossColumnPath = (
@@ -332,6 +385,101 @@ const buildCrossColumnAdjacency = (
   return adj;
 };
 
+type BarycenterOrderingContext = {
+  columns: Map<number, ObjectMapNode[]>;
+  adjacency: Map<string, string[]>;
+  columnOf: Map<string, number>;
+};
+
+const nodeIndexInColumn = (context: BarycenterOrderingContext, nodeId: string): number => {
+  const column = context.columnOf.get(nodeId);
+  if (column === undefined) {
+    return -1;
+  }
+  return context.columns.get(column)?.findIndex((node) => node.id === nodeId) ?? -1;
+};
+
+const computeNodeBarycenter = (
+  context: BarycenterOrderingContext,
+  node: ObjectMapNode,
+  neighborColumn: number
+): number => {
+  let indexSum = 0;
+  let neighborCount = 0;
+  for (const neighborId of context.adjacency.get(node.id) ?? []) {
+    if (context.columnOf.get(neighborId) !== neighborColumn) {
+      continue;
+    }
+    const index = nodeIndexInColumn(context, neighborId);
+    if (index < 0) {
+      continue;
+    }
+    indexSum += index;
+    neighborCount += 1;
+  }
+  return neighborCount === 0 ? Infinity : indexSum / neighborCount;
+};
+
+const compareNodesByBarycenter = (
+  context: BarycenterOrderingContext,
+  neighborColumn: number,
+  left: ObjectMapNode,
+  right: ObjectMapNode
+): number => {
+  // Kind is the outermost sort key so same-kind nodes cluster into a
+  // contiguous band. Within a kind group, barycenter and then the
+  // deterministic namespace/name comparison drive alignment.
+  if (left.ref.kind !== right.ref.kind) {
+    return left.ref.kind.localeCompare(right.ref.kind);
+  }
+  const leftBarycenter = computeNodeBarycenter(context, left, neighborColumn);
+  const rightBarycenter = computeNodeBarycenter(context, right, neighborColumn);
+  if (leftBarycenter === rightBarycenter) {
+    return compareForColumn(left, right);
+  }
+  if (leftBarycenter === Infinity) {
+    return 1;
+  }
+  if (rightBarycenter === Infinity) {
+    return -1;
+  }
+  return leftBarycenter - rightBarycenter;
+};
+
+const orderColumnFromNeighbor = (
+  context: BarycenterOrderingContext,
+  column: number,
+  neighborColumn: number
+): void => {
+  context.columns
+    .get(column)
+    ?.sort((left, right) => compareNodesByBarycenter(context, neighborColumn, left, right));
+};
+
+const sweepColumnsForward = (context: BarycenterOrderingContext, sortedColumns: number[]): void => {
+  for (let index = 1; index < sortedColumns.length; index += 1) {
+    const column = sortedColumns[index];
+    const neighborColumn = sortedColumns[index - 1];
+    if (column !== undefined && neighborColumn !== undefined) {
+      orderColumnFromNeighbor(context, column, neighborColumn);
+    }
+  }
+};
+
+const sweepColumnsBackward = (
+  context: BarycenterOrderingContext,
+  sortedColumns: number[],
+  seedColumn: number
+): void => {
+  for (let index = sortedColumns.length - 2; index >= 0; index -= 1) {
+    const column = sortedColumns[index];
+    const neighborColumn = sortedColumns[index + 1];
+    if (column !== undefined && neighborColumn !== undefined && column !== seedColumn) {
+      orderColumnFromNeighbor(context, column, neighborColumn);
+    }
+  }
+};
+
 const orderColumnsByBarycenter = (
   columns: Map<number, ObjectMapNode[]>,
   adj: Map<string, string[]>,
@@ -348,112 +496,18 @@ const orderColumnsByBarycenter = (
   sortedColumns.forEach((col) => {
     columns.get(col)?.sort(compareForColumn);
   });
-
-  // Index lookup is recomputed each pass because column orderings mutate.
-  const indexOf = (nodeId: string): number => {
-    const col = columnOf.get(nodeId);
-    if (col === undefined) {
-      return -1;
-    }
-    return columns.get(col)?.findIndex((n) => n.id === nodeId) ?? -1;
-  };
-
-  const barycenter = (node: ObjectMapNode, neighborColumn: number): number => {
-    const neighbors = adj.get(node.id);
-    if (!neighbors || neighbors.length === 0) {
-      return Infinity;
-    }
-    let sum = 0;
-    let count = 0;
-    for (const neighborId of neighbors) {
-      if (columnOf.get(neighborId) !== neighborColumn) {
-        continue;
-      }
-      const idx = indexOf(neighborId);
-      if (idx < 0) {
-        continue;
-      }
-      sum += idx;
-      count += 1;
-    }
-    return count === 0 ? Infinity : sum / count;
-  };
+  // Index lookup is recomputed through this context because column
+  // orderings mutate after every directional sweep.
+  const context = { columns, adjacency: adj, columnOf };
 
   for (let sweep = 0; sweep < BARYCENTER_SWEEPS; sweep += 1) {
-    const forward = sweep % 2 === 0;
-    if (forward) {
-      // Left-to-right: each column ordered by barycenter of its left neighbours.
-      for (let i = 1; i < sortedColumns.length; i += 1) {
-        const columnKey = sortedColumns[i];
-        const neighborColumn = sortedColumns[i - 1];
-        if (columnKey === undefined || neighborColumn === undefined) {
-          continue;
-        }
-        const col = columns.get(columnKey);
-        if (!col) {
-          continue;
-        }
-        col.sort((a, b) => {
-          // Kind is the outermost sort key so same-kind nodes cluster
-          // into a contiguous band; the position pass below adds an
-          // extra gap when consecutive nodes' kinds differ. Within a
-          // kind group, barycenter (then namespace/name) drives order
-          // for cross-column alignment.
-          if (a.ref.kind !== b.ref.kind) {
-            return a.ref.kind.localeCompare(b.ref.kind);
-          }
-          const ba = barycenter(a, neighborColumn);
-          const bb = barycenter(b, neighborColumn);
-          if (ba === Infinity && bb === Infinity) {
-            return compareForColumn(a, b);
-          }
-          if (ba === Infinity) {
-            return 1;
-          }
-          if (bb === Infinity) {
-            return -1;
-          }
-          return ba - bb || compareForColumn(a, b);
-        });
-      }
-    } else {
-      // Right-to-left: skip the seed column — it pivots the layout and
-      // only contains the seed (plus any unrelated nodes that happen to
-      // share its column).
-      for (let i = sortedColumns.length - 2; i >= 0; i -= 1) {
-        const columnKey = sortedColumns[i];
-        const neighborColumn = sortedColumns[i + 1];
-        if (columnKey === undefined || neighborColumn === undefined || columnKey === seedColumn) {
-          continue;
-        }
-        const col = columns.get(columnKey);
-        if (!col) {
-          continue;
-        }
-        col.sort((a, b) => {
-          // Kind is the outermost sort key so same-kind nodes cluster
-          // into a contiguous band; the position pass below adds an
-          // extra gap when consecutive nodes' kinds differ. Within a
-          // kind group, barycenter (then namespace/name) drives order
-          // for cross-column alignment.
-          if (a.ref.kind !== b.ref.kind) {
-            return a.ref.kind.localeCompare(b.ref.kind);
-          }
-          const ba = barycenter(a, neighborColumn);
-          const bb = barycenter(b, neighborColumn);
-          if (ba === Infinity && bb === Infinity) {
-            return compareForColumn(a, b);
-          }
-          if (ba === Infinity) {
-            return 1;
-          }
-          if (bb === Infinity) {
-            return -1;
-          }
-          return ba - bb || compareForColumn(a, b);
-        });
-      }
+    if (sweep % 2 === 0) {
+      // Left-to-right: order each column by the barycenter of its left neighbors.
+      sweepColumnsForward(context, sortedColumns);
+      continue;
     }
+    // Right-to-left: keep the seed column fixed as the layout pivot.
+    sweepColumnsBackward(context, sortedColumns, seedColumn);
   }
 };
 

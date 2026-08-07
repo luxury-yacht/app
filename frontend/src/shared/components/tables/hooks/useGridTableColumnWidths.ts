@@ -95,6 +95,96 @@ interface ColumnWidthsResult<T> {
   handleManualResizeEvent: (event: ManualResizeEvent) => void;
 }
 
+const hasWidthInput = (value: ColumnWidthInput | null | undefined): boolean =>
+  value !== null && value !== undefined;
+
+const resolveControlledWidthSource = <T>(
+  controlledState: ColumnWidthState,
+  column: GridColumnDefinition<T> | undefined,
+  initialInput: ColumnWidthInput | null | undefined,
+  manual: boolean,
+  autoWidth: boolean
+): ColumnWidthState['source'] => {
+  if (controlledState.source) {
+    return controlledState.source;
+  }
+  if (manual) {
+    return 'user';
+  }
+  if (autoWidth) {
+    return 'auto';
+  }
+  if (hasWidthInput(initialInput)) {
+    return 'table';
+  }
+  return hasWidthInput(column?.width) ? 'column' : 'table';
+};
+
+const buildControlledWidthState = <T>(
+  width: number,
+  controlledState: ColumnWidthState,
+  column: GridColumnDefinition<T> | undefined,
+  initialInput: ColumnWidthInput | null | undefined,
+  manual: boolean
+): ColumnWidthState => {
+  const autoWidth = controlledState.autoWidth ?? Boolean(column?.autoWidth && !manual);
+  const raw = controlledState.raw ?? null;
+  return {
+    width,
+    unit: controlledState.unit ?? 'px',
+    raw,
+    rawValue:
+      controlledState.rawValue ??
+      (typeof controlledState.raw === 'number' ? controlledState.raw : null),
+    autoWidth,
+    source: resolveControlledWidthSource(controlledState, column, initialInput, manual, autoWidth),
+    updatedAt: Date.now(),
+  };
+};
+
+const parseRawWidthValue = (raw: ColumnWidthInput | null): number | null => {
+  if (typeof raw === 'number') {
+    return raw;
+  }
+  return raw ? parseWidthInputToNumber(raw) : null;
+};
+
+const resolveWidthSource = (
+  initialInput: ColumnWidthInput | null | undefined,
+  manual: boolean,
+  autoWidth: boolean
+): ColumnWidthState['source'] => {
+  if (manual) {
+    return 'user';
+  }
+  if (hasWidthInput(initialInput)) {
+    return 'table';
+  }
+  if (autoWidth) {
+    return 'auto';
+  }
+  return 'column';
+};
+
+const buildUncontrolledWidthState = <T>(
+  width: number,
+  column: GridColumnDefinition<T> | undefined,
+  initialInput: ColumnWidthInput | null | undefined,
+  manual: boolean
+): ColumnWidthState => {
+  const raw = column?.width ?? initialInput ?? null;
+  const autoWidth = Boolean(column?.autoWidth) && !manual;
+  return {
+    width,
+    unit: detectWidthUnit(raw) as ColumnWidthState['unit'],
+    raw,
+    rawValue: parseRawWidthValue(raw),
+    autoWidth,
+    source: resolveWidthSource(initialInput, manual, autoWidth),
+    updatedAt: Date.now(),
+  };
+};
+
 // Main hook that keeps GridTable column widths in sync with user actions, data changes,
 // and layout constraints. In plain terms, it:
 // - picks starting widths (controlled, initial overrides, column defaults)
@@ -202,75 +292,11 @@ export function useGridTableColumnWidths<T>(
       const column = columnsRef.current.find((col) => col.key === key);
       const controlledState = controlledColumnWidths?.[key];
       const manual = manuallyResizedColumnsRef.current.has(key);
-
+      const initialInput = initialColumnWidths?.[key];
       if (controlledState) {
-        const resolvedAuto = controlledState.autoWidth ?? Boolean(column?.autoWidth && !manual);
-        let source = controlledState.source;
-        if (!source) {
-          if (manual) {
-            source = 'user';
-          } else if (resolvedAuto) {
-            source = 'auto';
-          } else if (
-            initialColumnWidths?.[key] !== null &&
-            initialColumnWidths?.[key] !== undefined
-          ) {
-            source = 'table';
-          } else if (column?.width !== null && column?.width !== undefined) {
-            source = 'column';
-          } else {
-            source = 'table';
-          }
-        }
-
-        return {
-          width,
-          unit: controlledState.unit ?? 'px',
-          raw: controlledState.raw ?? null,
-          rawValue:
-            controlledState.rawValue ??
-            (typeof controlledState.raw === 'number' ? controlledState.raw : null),
-          autoWidth: resolvedAuto,
-          source,
-          updatedAt: Date.now(),
-        };
+        return buildControlledWidthState(width, controlledState, column, initialInput, manual);
       }
-
-      const initialInput = initialColumnWidths?.[key] ?? null;
-      const columnRaw = column?.width ?? null;
-      const raw = columnRaw ?? initialInput;
-      let parsedRawValue: number | null;
-
-      if (typeof raw === 'number') {
-        parsedRawValue = raw;
-      } else if (raw) {
-        parsedRawValue = parseWidthInputToNumber(raw as ColumnWidthInput);
-      } else {
-        parsedRawValue = null;
-      }
-
-      const autoActive = Boolean(column?.autoWidth) && !manual;
-
-      let source: ColumnWidthState['source'] = 'column';
-      if (manual) {
-        source = 'user';
-      } else if (initialInput !== null && initialInput !== undefined) {
-        source = 'table';
-      } else if (autoActive) {
-        source = 'auto';
-      } else if (column?.width !== null && column?.width !== undefined) {
-        source = 'column';
-      }
-
-      return {
-        width,
-        unit: detectWidthUnit(raw) as ColumnWidthState['unit'],
-        raw: raw ?? null,
-        rawValue: parsedRawValue ?? null,
-        autoWidth: autoActive,
-        source,
-        updatedAt: Date.now(),
-      };
+      return buildUncontrolledWidthState(width, column, initialInput, manual);
     },
     [controlledColumnWidths, initialColumnWidths]
   );

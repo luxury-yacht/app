@@ -31,6 +31,74 @@ export interface DirectionalFilterResult {
   edges: ObjectMapEdge[];
 }
 
+type DirectionalNeighbor = { edgeId: string; neighbor: string };
+
+type DirectionalAdjacency = {
+  outgoing: Map<string, DirectionalNeighbor[]>;
+  incoming: Map<string, DirectionalNeighbor[]>;
+};
+
+const appendDirectionalNeighbor = (
+  adjacency: Map<string, DirectionalNeighbor[]>,
+  nodeId: string,
+  neighbor: DirectionalNeighbor
+): void => {
+  const entries = adjacency.get(nodeId);
+  if (entries) {
+    entries.push(neighbor);
+    return;
+  }
+  adjacency.set(nodeId, [neighbor]);
+};
+
+const buildDirectionalAdjacency = (
+  nodes: ObjectMapNode[],
+  edges: ObjectMapEdge[]
+): DirectionalAdjacency => {
+  const validIds = new Set(nodes.map((node) => node.id));
+  const outgoing = new Map<string, DirectionalNeighbor[]>();
+  const incoming = new Map<string, DirectionalNeighbor[]>();
+
+  edges.forEach((edge) => {
+    if (!validIds.has(edge.source) || !validIds.has(edge.target) || edge.source === edge.target) {
+      return;
+    }
+    appendDirectionalNeighbor(outgoing, edge.source, {
+      edgeId: edge.id,
+      neighbor: edge.target,
+    });
+    appendDirectionalNeighbor(incoming, edge.target, {
+      edgeId: edge.id,
+      neighbor: edge.source,
+    });
+  });
+
+  return { outgoing, incoming };
+};
+
+const collectDirectionalReachability = (
+  seedId: string,
+  adjacency: Map<string, DirectionalNeighbor[]>,
+  reachableNodes: Set<string>,
+  reachableEdges: Set<string>
+): void => {
+  const visited = new Set<string>([seedId]);
+  const queue: string[] = [seedId];
+  for (let head = 0; head < queue.length; head += 1) {
+    const nodeId = queue[head];
+    const neighbors = adjacency.get(nodeId) ?? [];
+    for (const { edgeId, neighbor } of neighbors) {
+      reachableEdges.add(edgeId);
+      if (visited.has(neighbor)) {
+        continue;
+      }
+      visited.add(neighbor);
+      reachableNodes.add(neighbor);
+      queue.push(neighbor);
+    }
+  }
+};
+
 export const filterByDirectionalReachability = (
   nodes: ObjectMapNode[],
   edges: ObjectMapEdge[],
@@ -42,29 +110,7 @@ export const filterByDirectionalReachability = (
     return { nodes, edges };
   }
 
-  const validIds = new Set(nodes.map((n) => n.id));
-  const outgoing = new Map<string, Array<{ edgeId: string; neighbor: string }>>();
-  const incoming = new Map<string, Array<{ edgeId: string; neighbor: string }>>();
-  edges.forEach((edge) => {
-    if (!validIds.has(edge.source) || !validIds.has(edge.target)) {
-      return;
-    }
-    if (edge.source === edge.target) {
-      return;
-    }
-    let outs = outgoing.get(edge.source);
-    if (!outs) {
-      outs = [];
-      outgoing.set(edge.source, outs);
-    }
-    outs.push({ edgeId: edge.id, neighbor: edge.target });
-    let ins = incoming.get(edge.target);
-    if (!ins) {
-      ins = [];
-      incoming.set(edge.target, ins);
-    }
-    ins.push({ edgeId: edge.id, neighbor: edge.source });
-  });
+  const { outgoing, incoming } = buildDirectionalAdjacency(nodes, edges);
 
   const reachableNodes = new Set<string>([seedId]);
   const reachableEdges = new Set<string>();
@@ -72,50 +118,12 @@ export const filterByDirectionalReachability = (
   // Forward BFS — walk outgoing edges only. Nodes reached this way
   // are the seed's descendants/dependencies; we only continue along
   // their outgoing edges, never their incoming.
-  {
-    const visited = new Set<string>([seedId]);
-    const queue: string[] = [seedId];
-    for (let head = 0; head < queue.length; head += 1) {
-      const u = queue[head];
-      const outs = outgoing.get(u);
-      if (!outs) {
-        continue;
-      }
-      for (const { edgeId, neighbor } of outs) {
-        reachableEdges.add(edgeId);
-        if (visited.has(neighbor)) {
-          continue;
-        }
-        visited.add(neighbor);
-        reachableNodes.add(neighbor);
-        queue.push(neighbor);
-      }
-    }
-  }
+  collectDirectionalReachability(seedId, outgoing, reachableNodes, reachableEdges);
 
   // Backward BFS — walk incoming edges only. Nodes reached this way
   // are the seed's ancestors/consumers; from each we only continue
   // backward, never forward.
-  {
-    const visited = new Set<string>([seedId]);
-    const queue: string[] = [seedId];
-    for (let head = 0; head < queue.length; head += 1) {
-      const u = queue[head];
-      const ins = incoming.get(u);
-      if (!ins) {
-        continue;
-      }
-      for (const { edgeId, neighbor } of ins) {
-        reachableEdges.add(edgeId);
-        if (visited.has(neighbor)) {
-          continue;
-        }
-        visited.add(neighbor);
-        reachableNodes.add(neighbor);
-        queue.push(neighbor);
-      }
-    }
-  }
+  collectDirectionalReachability(seedId, incoming, reachableNodes, reachableEdges);
 
   return {
     nodes: nodes.filter((n) => reachableNodes.has(n.id)),
