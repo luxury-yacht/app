@@ -26,27 +26,26 @@ const OVERLAY_SCROLLBAR_OWNER_SELECTOR = [
   '.dockable-panel',
   '.object-panel',
 ].join(',');
+
+interface OverlayScrollbarElements {
+  container: HTMLElement;
+  horizontalGutter: HTMLDivElement;
+  horizontalThumb: HTMLDivElement;
+  verticalGutter: HTMLDivElement;
+  verticalThumb: HTMLDivElement;
+}
+
+interface OverlayHoverState {
+  horizontal: boolean;
+  vertical: boolean;
+}
+
 const activeTimers = new WeakMap<Element, number>();
-const overlayElements = new WeakMap<
-  Element,
-  {
-    container: HTMLElement;
-    horizontalGutter: HTMLDivElement;
-    horizontalThumb: HTMLDivElement;
-    verticalGutter: HTMLDivElement;
-    verticalThumb: HTMLDivElement;
-  }
->();
+const overlayElements = new WeakMap<Element, OverlayScrollbarElements>();
 const overlayGeometryTransitionsDisabled = new WeakSet<Element>();
 const overlayOwnerElements = new WeakMap<Element, HTMLElement>();
 const activeOverlayElements = new Set<Element>();
-const overlayHoverStates = new WeakMap<
-  Element,
-  {
-    horizontal: boolean;
-    vertical: boolean;
-  }
->();
+const overlayHoverStates = new WeakMap<Element, OverlayHoverState>();
 const hoveredOverlayElements = new Set<Element>();
 const opacityAnimations = new WeakMap<
   Element,
@@ -372,6 +371,198 @@ const removeOverlayScrollbars = (element: Element): void => {
   }
 };
 
+interface OverlayGeometryContext {
+  rect: DOMRect;
+  clipRect: DOMRect;
+  scrollbarWidth: number;
+  scrollbarHeight: number;
+  thumbInset: number;
+  minThumbSize: number;
+  hoverScale: number;
+  activeOpacity: number;
+  hoverState?: OverlayHoverState;
+}
+
+const setOverlayPosition = (
+  overlay: OverlayScrollbarElements,
+  position: 'absolute' | 'fixed'
+): void => {
+  overlay.verticalGutter.style.position = position;
+  overlay.verticalThumb.style.position = position;
+  overlay.horizontalGutter.style.position = position;
+  overlay.horizontalThumb.style.position = position;
+};
+
+const readOverlayGeometryContext = (
+  element: HTMLElement,
+  overlay: OverlayScrollbarElements
+): OverlayGeometryContext => ({
+  rect: toOverlayCoordinateRect(element.getBoundingClientRect(), overlay.container),
+  clipRect: toOverlayCoordinateRect(getOverflowClipRect(element), overlay.container),
+  scrollbarWidth: readScrollbarPxToken('--scrollbar-width', 10),
+  scrollbarHeight: readScrollbarPxToken('--scrollbar-height', 10),
+  thumbInset: readScrollbarPxToken('--scrollbar-thumb-inset', 3),
+  minThumbSize: readScrollbarPxToken('--scrollbar-min-thumb-size', 32),
+  hoverScale: readScrollbarNumberToken('--scrollbar-hover-scale', 1.75),
+  activeOpacity: getCurrentScrollbarOpacity(element),
+  hoverState: overlayHoverStates.get(element),
+});
+
+const hideVerticalOverlay = (overlay: OverlayScrollbarElements): void => {
+  overlay.verticalGutter.style.display = 'none';
+  overlay.verticalThumb.style.display = 'none';
+};
+
+const hideHorizontalOverlay = (overlay: OverlayScrollbarElements): void => {
+  overlay.horizontalGutter.style.display = 'none';
+  overlay.horizontalThumb.style.display = 'none';
+};
+
+const toClipRect = ({
+  top,
+  left,
+  width,
+  height,
+}: {
+  top: number;
+  left: number;
+  width: number;
+  height: number;
+}): DOMRect =>
+  ({
+    bottom: top + height,
+    height,
+    left,
+    right: left + width,
+    top,
+    width,
+    x: left,
+    y: top,
+    toJSON: () => undefined,
+  }) as DOMRect;
+
+const updateVerticalOverlayGeometry = (
+  element: HTMLElement,
+  overlay: OverlayScrollbarElements,
+  context: OverlayGeometryContext,
+  enabled: boolean
+): void => {
+  const { rect, clipRect, thumbInset, minThumbSize, hoverScale, activeOpacity, hoverState } =
+    context;
+  if (!enabled || rect.height <= 0 || clipRect.height <= 0) {
+    hideVerticalOverlay(overlay);
+    return;
+  }
+
+  const trackHeight = rect.height - thumbInset * 2;
+  const thumbHeight = Math.max(
+    minThumbSize,
+    Math.min(trackHeight, (element.clientHeight / element.scrollHeight) * trackHeight)
+  );
+  const maxScrollTop = Math.max(1, element.scrollHeight - element.clientHeight);
+  const thumbTop =
+    rect.top + thumbInset + (element.scrollTop / maxScrollTop) * (trackHeight - thumbHeight);
+  const verticalScale = hoverState?.vertical ? hoverScale : 1;
+  const gutterWidth = context.scrollbarWidth * verticalScale;
+  const gutterInset = thumbInset * verticalScale;
+  const thumbWidth = Math.max(1, context.scrollbarWidth - thumbInset * 2) * verticalScale;
+
+  overlay.verticalGutter.style.display = 'block';
+  overlay.verticalGutter.classList.toggle(
+    'scrollbar-overlay-gutter--visible',
+    Boolean(hoverState?.vertical)
+  );
+  overlay.verticalGutter.style.left = `${rect.right - gutterWidth}px`;
+  overlay.verticalGutter.style.top = `${rect.top}px`;
+  overlay.verticalGutter.style.width = `${gutterWidth}px`;
+  overlay.verticalGutter.style.height = `${rect.height}px`;
+  overlay.verticalGutter.style.transform = '';
+  applyOverlayClip(overlay.verticalGutter, rect, clipRect);
+
+  overlay.verticalThumb.style.display = 'block';
+  overlay.verticalThumb.classList.toggle(
+    'scrollbar-overlay-thumb--hovered',
+    Boolean(hoverState?.vertical)
+  );
+  overlay.verticalThumb.style.left = `${rect.right - gutterInset - thumbWidth}px`;
+  overlay.verticalThumb.style.top = `${thumbTop}px`;
+  overlay.verticalThumb.style.width = `${thumbWidth}px`;
+  overlay.verticalThumb.style.height = `${thumbHeight}px`;
+  overlay.verticalThumb.style.opacity = String(activeOpacity);
+  overlay.verticalThumb.style.transform = '';
+  applyOverlayClip(
+    overlay.verticalThumb,
+    toClipRect({
+      top: thumbTop,
+      left: rect.right - gutterWidth,
+      width: gutterWidth,
+      height: thumbHeight,
+    }),
+    clipRect
+  );
+};
+
+const updateHorizontalOverlayGeometry = (
+  element: HTMLElement,
+  overlay: OverlayScrollbarElements,
+  context: OverlayGeometryContext,
+  enabled: boolean
+): void => {
+  const { rect, clipRect, thumbInset, minThumbSize, hoverScale, activeOpacity, hoverState } =
+    context;
+  if (!enabled || rect.width <= 0 || clipRect.width <= 0) {
+    hideHorizontalOverlay(overlay);
+    return;
+  }
+
+  const trackWidth = rect.width - thumbInset * 2;
+  const thumbWidth = Math.max(
+    minThumbSize,
+    Math.min(trackWidth, (element.clientWidth / element.scrollWidth) * trackWidth)
+  );
+  const maxScrollLeft = Math.max(1, element.scrollWidth - element.clientWidth);
+  const thumbLeft =
+    rect.left + thumbInset + (element.scrollLeft / maxScrollLeft) * (trackWidth - thumbWidth);
+  const horizontalScale = hoverState?.horizontal ? hoverScale : 1;
+  const gutterHeight = context.scrollbarHeight * horizontalScale;
+  const gutterInset = thumbInset * horizontalScale;
+  const thumbHeight = Math.max(1, context.scrollbarHeight - thumbInset * 2) * horizontalScale;
+
+  overlay.horizontalGutter.style.display = 'block';
+  overlay.horizontalGutter.classList.toggle(
+    'scrollbar-overlay-gutter--visible',
+    Boolean(hoverState?.horizontal)
+  );
+  overlay.horizontalGutter.style.left = `${rect.left}px`;
+  overlay.horizontalGutter.style.top = `${rect.bottom - gutterHeight}px`;
+  overlay.horizontalGutter.style.width = `${rect.width}px`;
+  overlay.horizontalGutter.style.height = `${gutterHeight}px`;
+  overlay.horizontalGutter.style.transform = '';
+  applyOverlayClip(overlay.horizontalGutter, rect, clipRect);
+
+  overlay.horizontalThumb.style.display = 'block';
+  overlay.horizontalThumb.classList.toggle(
+    'scrollbar-overlay-thumb--hovered',
+    Boolean(hoverState?.horizontal)
+  );
+  overlay.horizontalThumb.style.left = `${thumbLeft}px`;
+  overlay.horizontalThumb.style.top = `${rect.bottom - gutterInset - thumbHeight}px`;
+  overlay.horizontalThumb.style.width = `${thumbWidth}px`;
+  overlay.horizontalThumb.style.height = `${thumbHeight}px`;
+  overlay.horizontalThumb.style.opacity = String(activeOpacity);
+  overlay.horizontalThumb.style.transform = '';
+  applyOverlayClip(
+    overlay.horizontalThumb,
+    toClipRect({
+      top: rect.bottom - gutterHeight,
+      left: thumbLeft,
+      width: thumbWidth,
+      height: gutterHeight,
+    }),
+    clipRect
+  );
+};
+
 const updateOverlayScrollbarGeometry = (element: Element): void => {
   if (!isOverlayScrollbarElement(element)) {
     return;
@@ -390,20 +581,7 @@ const updateOverlayScrollbarGeometry = (element: Element): void => {
   setOverlayGeometryTransitions(element, shouldDisableGeometryTransitions);
 
   const position = overlay.container === document.body ? 'fixed' : 'absolute';
-  overlay.verticalGutter.style.position = position;
-  overlay.verticalThumb.style.position = position;
-  overlay.horizontalGutter.style.position = position;
-  overlay.horizontalThumb.style.position = position;
-
-  const rect = toOverlayCoordinateRect(element.getBoundingClientRect(), overlay.container);
-  const clipRect = toOverlayCoordinateRect(getOverflowClipRect(element), overlay.container);
-  const scrollbarWidth = readScrollbarPxToken('--scrollbar-width', 10);
-  const scrollbarHeight = readScrollbarPxToken('--scrollbar-height', 10);
-  const thumbInset = readScrollbarPxToken('--scrollbar-thumb-inset', 3);
-  const minThumbSize = readScrollbarPxToken('--scrollbar-min-thumb-size', 32);
-  const hoverScale = readScrollbarNumberToken('--scrollbar-hover-scale', 1.75);
-  const activeOpacity = getCurrentScrollbarOpacity(element);
-  const hoverState = overlayHoverStates.get(element);
+  setOverlayPosition(overlay, position);
 
   const hasVerticalScrollbar = canScrollAxis(element, 'vertical');
   const hasHorizontalScrollbar = canScrollAxis(element, 'horizontal');
@@ -413,121 +591,9 @@ const updateOverlayScrollbarGeometry = (element: Element): void => {
     return;
   }
 
-  if (hasVerticalScrollbar && rect.height > 0 && clipRect.height > 0) {
-    const trackHeight = rect.height - thumbInset * 2;
-    const thumbHeight = Math.max(
-      minThumbSize,
-      Math.min(trackHeight, (element.clientHeight / element.scrollHeight) * trackHeight)
-    );
-    const maxScrollTop = Math.max(1, element.scrollHeight - element.clientHeight);
-    const thumbTop =
-      rect.top + thumbInset + (element.scrollTop / maxScrollTop) * (trackHeight - thumbHeight);
-    const baseThumbWidth = Math.max(1, scrollbarWidth - thumbInset * 2);
-    const verticalScale = hoverState?.vertical ? hoverScale : 1;
-    const thumbWidth = baseThumbWidth * verticalScale;
-    const gutterWidth = scrollbarWidth * verticalScale;
-    const gutterInset = thumbInset * verticalScale;
-
-    overlay.verticalGutter.style.display = 'block';
-    overlay.verticalGutter.classList.toggle(
-      'scrollbar-overlay-gutter--visible',
-      Boolean(hoverState?.vertical)
-    );
-    overlay.verticalGutter.style.left = `${rect.right - gutterWidth}px`;
-    overlay.verticalGutter.style.top = `${rect.top}px`;
-    overlay.verticalGutter.style.width = `${gutterWidth}px`;
-    overlay.verticalGutter.style.height = `${rect.height}px`;
-    overlay.verticalGutter.style.transform = '';
-    applyOverlayClip(overlay.verticalGutter, rect, clipRect);
-
-    overlay.verticalThumb.style.display = 'block';
-    overlay.verticalThumb.classList.toggle(
-      'scrollbar-overlay-thumb--hovered',
-      Boolean(hoverState?.vertical)
-    );
-    overlay.verticalThumb.style.left = `${rect.right - gutterInset - thumbWidth}px`;
-    overlay.verticalThumb.style.top = `${thumbTop}px`;
-    overlay.verticalThumb.style.width = `${thumbWidth}px`;
-    overlay.verticalThumb.style.height = `${thumbHeight}px`;
-    overlay.verticalThumb.style.opacity = String(activeOpacity);
-    overlay.verticalThumb.style.transform = '';
-    applyOverlayClip(
-      overlay.verticalThumb,
-      {
-        bottom: thumbTop + thumbHeight,
-        height: thumbHeight,
-        left: rect.right - gutterWidth,
-        right: rect.right,
-        top: thumbTop,
-        width: gutterWidth,
-        x: rect.right - gutterWidth,
-        y: thumbTop,
-        toJSON: () => undefined,
-      } as DOMRect,
-      clipRect
-    );
-  } else {
-    overlay.verticalGutter.style.display = 'none';
-    overlay.verticalThumb.style.display = 'none';
-  }
-
-  if (hasHorizontalScrollbar && rect.width > 0 && clipRect.width > 0) {
-    const trackWidth = rect.width - thumbInset * 2;
-    const thumbWidth = Math.max(
-      minThumbSize,
-      Math.min(trackWidth, (element.clientWidth / element.scrollWidth) * trackWidth)
-    );
-    const maxScrollLeft = Math.max(1, element.scrollWidth - element.clientWidth);
-    const thumbLeft =
-      rect.left + thumbInset + (element.scrollLeft / maxScrollLeft) * (trackWidth - thumbWidth);
-    const baseThumbHeight = Math.max(1, scrollbarHeight - thumbInset * 2);
-    const horizontalScale = hoverState?.horizontal ? hoverScale : 1;
-    const thumbHeight = baseThumbHeight * horizontalScale;
-    const gutterHeight = scrollbarHeight * horizontalScale;
-    const gutterInset = thumbInset * horizontalScale;
-
-    overlay.horizontalGutter.style.display = 'block';
-    overlay.horizontalGutter.classList.toggle(
-      'scrollbar-overlay-gutter--visible',
-      Boolean(hoverState?.horizontal)
-    );
-    overlay.horizontalGutter.style.left = `${rect.left}px`;
-    overlay.horizontalGutter.style.top = `${rect.bottom - gutterHeight}px`;
-    overlay.horizontalGutter.style.width = `${rect.width}px`;
-    overlay.horizontalGutter.style.height = `${gutterHeight}px`;
-    overlay.horizontalGutter.style.transform = '';
-    applyOverlayClip(overlay.horizontalGutter, rect, clipRect);
-
-    overlay.horizontalThumb.style.display = 'block';
-    overlay.horizontalThumb.classList.toggle(
-      'scrollbar-overlay-thumb--hovered',
-      Boolean(hoverState?.horizontal)
-    );
-    overlay.horizontalThumb.style.left = `${thumbLeft}px`;
-    overlay.horizontalThumb.style.top = `${rect.bottom - gutterInset - thumbHeight}px`;
-    overlay.horizontalThumb.style.width = `${thumbWidth}px`;
-    overlay.horizontalThumb.style.height = `${thumbHeight}px`;
-    overlay.horizontalThumb.style.opacity = String(activeOpacity);
-    overlay.horizontalThumb.style.transform = '';
-    applyOverlayClip(
-      overlay.horizontalThumb,
-      {
-        bottom: rect.bottom,
-        height: gutterHeight,
-        left: thumbLeft,
-        right: thumbLeft + thumbWidth,
-        top: rect.bottom - gutterHeight,
-        width: thumbWidth,
-        x: thumbLeft,
-        y: rect.bottom - gutterHeight,
-        toJSON: () => undefined,
-      } as DOMRect,
-      clipRect
-    );
-  } else {
-    overlay.horizontalGutter.style.display = 'none';
-    overlay.horizontalThumb.style.display = 'none';
-  }
+  const context = readOverlayGeometryContext(element, overlay);
+  updateVerticalOverlayGeometry(element, overlay, context, hasVerticalScrollbar);
+  updateHorizontalOverlayGeometry(element, overlay, context, hasHorizontalScrollbar);
 };
 
 const setOverlayHoverState = (

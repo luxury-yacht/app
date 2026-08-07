@@ -15,43 +15,57 @@ interface ResourceMetadataProps {
   showSelector?: boolean;
 }
 
-export const ResourceMetadata = React.memo<ResourceMetadataProps>(
-  ({ labels, annotations, selector, showSelector = false }) => {
-    const selectorEntries =
-      showSelector && selector && Object.keys(selector).length > 0 ? selector : undefined;
+interface ResourceMetadataPresentation {
+  labels?: Record<string, string>;
+  annotations?: Record<string, string>;
+  selectorEntries?: Record<string, string>;
+}
 
-    // Merge selectors into labels so they can be highlighted inline when missing
-    let combinedLabels = labels ? { ...labels } : undefined;
-    if (selectorEntries) {
-      if (!combinedLabels) {
-        // start with selectors if no labels exist
-        const derived: Record<string, string> = {};
-        Object.entries(selectorEntries).forEach(([key, value]) => {
-          derived[key] = value;
-        });
-        combinedLabels = derived;
-      } else {
-        for (const [key, value] of Object.entries(selectorEntries)) {
-          if (!(key in combinedLabels)) {
-            combinedLabels[key] = value;
-          }
-        }
-      }
-    }
+const hasMetadataEntries = (
+  entries: Record<string, string> | undefined
+): entries is Record<string, string> => !!entries && Object.keys(entries).length > 0;
 
-    if (
-      (!combinedLabels || Object.keys(combinedLabels).length === 0) &&
-      (!annotations || Object.keys(annotations).length === 0)
-    ) {
-      return null;
-    }
+const selectVisibleSelector = (
+  selector: Record<string, string> | undefined,
+  showSelector: boolean
+): Record<string, string> | undefined =>
+  showSelector && hasMetadataEntries(selector) ? selector : undefined;
 
-    return (
-      <LabelsAndAnnotations
-        labels={combinedLabels}
-        annotations={annotations}
-        selectorEntries={selectorEntries}
-      />
-    );
+const mergeSelectorLabels = (
+  labels: Record<string, string> | undefined,
+  selectorEntries: Record<string, string> | undefined
+): Record<string, string> | undefined => {
+  if (!labels && !selectorEntries) {
+    return undefined;
   }
-);
+  const combined = { ...labels };
+  for (const [key, value] of Object.entries(selectorEntries ?? {})) {
+    if (!(key in combined)) {
+      combined[key] = value;
+    }
+  }
+  return hasMetadataEntries(combined) ? combined : undefined;
+};
+
+const buildResourceMetadataPresentation = ({
+  labels,
+  annotations,
+  selector,
+  showSelector = false,
+}: ResourceMetadataProps): ResourceMetadataPresentation | null => {
+  const selectorEntries = selectVisibleSelector(selector, showSelector);
+  const combinedLabels = mergeSelectorLabels(labels, selectorEntries);
+  if (!combinedLabels && !hasMetadataEntries(annotations)) {
+    return null;
+  }
+  return { labels: combinedLabels, annotations, selectorEntries };
+};
+
+export const ResourceMetadata = React.memo<ResourceMetadataProps>((props) => {
+  const presentation = buildResourceMetadataPresentation(props);
+  if (!presentation) {
+    return null;
+  }
+
+  return <LabelsAndAnnotations {...presentation} />;
+});

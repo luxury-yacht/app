@@ -481,94 +481,129 @@ const beforeBreadcrumb = (breadcrumb: Breadcrumb): Breadcrumb | null =>
 const recordContext = (value: unknown): Record<string, unknown> =>
   value && typeof value === 'object' ? (value as Record<string, unknown>) : {};
 
-const beforeSend = (event: ErrorEvent): ErrorEvent => {
+interface ErrorEventCorrelation {
+  view?: string;
+  tab?: string;
+  clusterAlias?: string;
+  namespaceAlias?: string;
+  requestId?: string;
+  operationId?: string;
+}
+
+const optionalString = (value: unknown): string | undefined =>
+  typeof value === 'string' ? value : undefined;
+
+const readErrorEventCorrelation = (event: ErrorEvent): ErrorEventCorrelation => {
   const navigation = recordContext(event.contexts?.navigation);
   const request = recordContext(event.contexts?.request);
   const operation = recordContext(event.contexts?.operation);
-  const eventView = typeof navigation.view === 'string' ? navigation.view : undefined;
-  const eventTab = typeof navigation.tab === 'string' ? navigation.tab : undefined;
-  const eventClusterAlias =
-    typeof event.tags?.['cluster.alias'] === 'string'
-      ? event.tags['cluster.alias']
-      : typeof navigation['cluster.alias'] === 'string'
-        ? navigation['cluster.alias']
-        : undefined;
-  const eventNamespaceAlias =
-    typeof event.tags?.['namespace.alias'] === 'string'
-      ? event.tags['namespace.alias']
-      : typeof navigation['namespace.alias'] === 'string'
-        ? navigation['namespace.alias']
-        : undefined;
-  const eventRequestId = typeof request.id === 'string' ? request.id : undefined;
-  const eventOperationId = typeof operation.id === 'string' ? operation.id : undefined;
 
-  const workspaceBreadcrumbs = event.breadcrumbs?.filter((breadcrumb) => {
-    const data = breadcrumb.data ?? {};
-    if (breadcrumb.category === 'request.broker') {
-      return Boolean(eventRequestId && data.id === eventRequestId);
-    }
-    if (eventView && data['ui.view'] && data['ui.view'] !== eventView) {
-      return false;
-    }
-    if (eventTab && data['ui.tab'] && data['ui.tab'] !== eventTab) {
-      return false;
-    }
-    if (eventClusterAlias && data['cluster.alias'] && data['cluster.alias'] !== eventClusterAlias) {
-      return false;
-    }
-    if (
-      eventNamespaceAlias &&
-      data['namespace.alias'] &&
-      data['namespace.alias'] !== eventNamespaceAlias
-    ) {
-      return false;
-    }
+  return {
+    view: optionalString(navigation.view),
+    tab: optionalString(navigation.tab),
+    clusterAlias:
+      optionalString(event.tags?.['cluster.alias']) ?? optionalString(navigation['cluster.alias']),
+    namespaceAlias:
+      optionalString(event.tags?.['namespace.alias']) ??
+      optionalString(navigation['namespace.alias']),
+    requestId: optionalString(request.id),
+    operationId: optionalString(operation.id),
+  };
+};
+
+const hasConflictingBreadcrumbValue = (
+  data: Record<string, unknown>,
+  key: string,
+  expected: string | undefined
+): boolean => Boolean(expected && data[key] && data[key] !== expected);
+
+const belongsToEventWorkspace = (
+  breadcrumb: Breadcrumb,
+  correlation: ErrorEventCorrelation
+): boolean => {
+  const data = breadcrumb.data ?? {};
+  if (breadcrumb.category === 'request.broker') {
+    return Boolean(correlation.requestId && data.id === correlation.requestId);
+  }
+  return !(
+    hasConflictingBreadcrumbValue(data, 'ui.view', correlation.view) ||
+    hasConflictingBreadcrumbValue(data, 'ui.tab', correlation.tab) ||
+    hasConflictingBreadcrumbValue(data, 'cluster.alias', correlation.clusterAlias) ||
+    hasConflictingBreadcrumbValue(data, 'namespace.alias', correlation.namespaceAlias)
+  );
+};
+
+const belongsToRequest = (breadcrumb: Breadcrumb, requestId: string): boolean => {
+  const data = breadcrumb.data ?? {};
+  if (breadcrumb.category === 'request.broker') {
+    return data.id === requestId;
+  }
+  if (breadcrumb.category?.startsWith('navigation.')) {
     return true;
-  });
+  }
+  if (breadcrumb.category === 'ui.error.presented') {
+    return data.requestId === requestId;
+  }
+  const requestIds = data['request.ids'];
+  return Array.isArray(requestIds) && requestIds.includes(requestId);
+};
 
-  let breadcrumbs = workspaceBreadcrumbs;
-  if (eventRequestId) {
-    breadcrumbs = workspaceBreadcrumbs?.filter((breadcrumb) => {
-      const data = breadcrumb.data ?? {};
-      if (breadcrumb.category === 'request.broker') {
-        return data.id === eventRequestId;
-      }
-      if (breadcrumb.category?.startsWith('navigation.')) {
-        return true;
-      }
-      if (breadcrumb.category === 'ui.error.presented') {
-        return data.requestId === eventRequestId;
-      }
-      const requestIds = data['request.ids'];
-      return Array.isArray(requestIds) && requestIds.includes(eventRequestId);
-    });
-  } else if (event.tags?.['error.surface'] === 'user-visible' && workspaceBreadcrumbs) {
-    breadcrumbs = workspaceBreadcrumbs.filter(
-      (breadcrumb) => breadcrumb.data?.operationId === eventOperationId
-    );
-  } else if (event.tags?.['error.surface'] === 'operational' && workspaceBreadcrumbs) {
-    breadcrumbs = workspaceBreadcrumbs.filter(
-      (breadcrumb) =>
-        breadcrumb.category === 'ui.error.handled' &&
-        breadcrumb.data?.operationId === eventOperationId
+const belongsToOperation = (
+  breadcrumb: Breadcrumb,
+  operationId: string | undefined,
+  category?: string
+): boolean =>
+  (!category || breadcrumb.category === category) && breadcrumb.data?.operationId === operationId;
+
+const selectCorrelatedBreadcrumbs = (
+  event: ErrorEvent,
+  correlation: ErrorEventCorrelation
+): Breadcrumb[] | undefined => {
+  const workspaceBreadcrumbs = event.breadcrumbs?.filter((breadcrumb) =>
+    belongsToEventWorkspace(breadcrumb, correlation)
+  );
+  if (correlation.requestId) {
+    return workspaceBreadcrumbs?.filter((breadcrumb) =>
+      belongsToRequest(breadcrumb, correlation.requestId as string)
     );
   }
+  if (event.tags?.['error.surface'] === 'user-visible') {
+    return workspaceBreadcrumbs?.filter((breadcrumb) =>
+      belongsToOperation(breadcrumb, correlation.operationId)
+    );
+  }
+  if (event.tags?.['error.surface'] === 'operational') {
+    return workspaceBreadcrumbs?.filter((breadcrumb) =>
+      belongsToOperation(breadcrumb, correlation.operationId, 'ui.error.handled')
+    );
+  }
+  return workspaceBreadcrumbs;
+};
 
-  const privacyBreadcrumbs = breadcrumbs
+const sanitizeBreadcrumbs = (breadcrumbs: Breadcrumb[] | undefined): Breadcrumb[] | undefined =>
+  breadcrumbs
     ?.map((breadcrumb) => allowlistedBreadcrumb(breadcrumb))
     .filter((breadcrumb): breadcrumb is Breadcrumb => breadcrumb !== null);
-  const contexts = Object.fromEntries(
+
+const sanitizeEventContexts = (event: ErrorEvent): ErrorEvent['contexts'] =>
+  Object.fromEntries(
     Object.entries(event.contexts ?? {})
       .filter(([key]) => key !== 'culture')
       .map(([key, value]) => [key, sanitizeTelemetryValue(value, key)])
+  ) as ErrorEvent['contexts'];
+
+const beforeSend = (event: ErrorEvent): ErrorEvent => {
+  const breadcrumbs = sanitizeBreadcrumbs(
+    selectCorrelatedBreadcrumbs(event, readErrorEventCorrelation(event))
   );
+  const contexts = sanitizeEventContexts(event);
   const userId = normalizeAnonymizedId(
     typeof event.user?.id === 'string' ? event.user.id : undefined
   );
   const sanitized = sanitizeTelemetryValue({
     ...event,
-    breadcrumbs: privacyBreadcrumbs,
-    contexts: contexts as ErrorEvent['contexts'],
+    breadcrumbs,
+    contexts,
   }) as ErrorEvent;
 
   return {
@@ -576,7 +611,7 @@ const beforeSend = (event: ErrorEvent): ErrorEvent => {
     user: userId ? { id: userId } : undefined,
     request: undefined,
     server_name: undefined,
-    contexts: contexts as ErrorEvent['contexts'],
+    contexts,
   };
 };
 
@@ -913,90 +948,158 @@ export async function runUserAction<T>(action: string, work: () => T | Promise<T
   }
 }
 
+const isWeakMapKey = (value: unknown): value is object =>
+  value !== null &&
+  value !== undefined &&
+  (typeof value === 'object' || typeof value === 'function');
+
+const lookupErrorContext = <T>(store: WeakMap<object, T>, error: unknown): T | undefined =>
+  isWeakMapKey(error) ? store.get(error) : undefined;
+
+interface ErrorCaptureScope {
+  setLevel(level: 'error' | 'fatal'): void;
+  setTag(key: string, value: string): void;
+  setContext(key: string, value: Record<string, unknown>): void;
+  addBreadcrumb(breadcrumb: Breadcrumb): void;
+}
+
+interface ResolvedErrorCapture {
+  exception: Error;
+  request?: BrokerRequestContext | CompletedBrokerRequestContext;
+  userAction?: UserActionContext;
+  operationId: string;
+  action?: string;
+  source?: string;
+  operationClusterId?: string;
+  operationNamespace?: string;
+  navigation: ReturnType<typeof getPrivacyNavigationContext>;
+  surface: NonNullable<UserVisibleErrorCapture['surface']>;
+}
+
+const resolveErrorCapture = (
+  error: unknown,
+  details: UserVisibleErrorCapture
+): ResolvedErrorCapture => {
+  const completedRequest = lookupErrorContext(requestByError, error);
+  const explicitOperationId = contextString(details.context, 'operationId');
+  const request =
+    completedRequest ??
+    (explicitOperationId ? activeBrokerRequests.get(explicitOperationId) : undefined);
+  const userAction = lookupErrorContext(userActionByError, error);
+  operationSequence += 1;
+
+  return {
+    exception: error instanceof Error ? error : new Error(String(error)),
+    request,
+    userAction,
+    operationId: request?.id ?? userAction?.id ?? `ui-error-${operationSequence}`,
+    action: contextString(details.context, 'action') ?? userAction?.action,
+    source: contextString(details.context, 'source'),
+    operationClusterId: contextString(details.context, 'clusterId'),
+    operationNamespace: contextString(details.context, 'namespace'),
+    navigation: getPrivacyNavigationContext(),
+    surface: details.surface ?? 'user-visible',
+  };
+};
+
+const applyErrorCaptureTags = (
+  scope: ErrorCaptureScope,
+  details: UserVisibleErrorCapture,
+  capture: ResolvedErrorCapture
+): void => {
+  scope.setLevel(details.severity === 'critical' ? 'fatal' : 'error');
+  scope.setTag('error.surface', capture.surface);
+  scope.setTag('error.category', details.category);
+  if (capture.action) {
+    scope.setTag('ui.action', capture.action);
+  }
+  if (capture.userAction) {
+    scope.setTag('ui.action.id', capture.userAction.id);
+  }
+};
+
+const applyErrorNavigationContext = (
+  scope: ErrorCaptureScope,
+  navigation: ResolvedErrorCapture['navigation']
+): void => {
+  if (!navigation) {
+    return;
+  }
+  scope.setTag('ui.view', String(navigation.view));
+  if (navigation.tab) {
+    scope.setTag('ui.tab', String(navigation.tab));
+  }
+  if (navigation['cluster.alias']) {
+    scope.setTag('cluster.alias', String(navigation['cluster.alias']));
+  }
+  if (navigation['namespace.alias']) {
+    scope.setTag('namespace.alias', String(navigation['namespace.alias']));
+  }
+  scope.setContext('navigation', { ...navigation });
+};
+
+const applyErrorLocationOverrides = (
+  scope: ErrorCaptureScope,
+  capture: ResolvedErrorCapture
+): void => {
+  if (capture.operationClusterId) {
+    scope.setTag('cluster.alias', aliasForCluster(capture.operationClusterId) ?? 'cluster-unknown');
+  }
+  if (capture.operationNamespace) {
+    scope.setTag(
+      'namespace.alias',
+      aliasForNamespace(capture.operationNamespace) ?? 'namespace-unknown'
+    );
+  }
+};
+
+const applyErrorRequestContext = (
+  scope: ErrorCaptureScope,
+  request: ResolvedErrorCapture['request']
+): void => {
+  if (!request) {
+    return;
+  }
+  scope.setTag('request.broker', request.broker);
+  scope.setTag('request.resource', request.resource);
+  if (request.reason) {
+    scope.setTag('request.reason', request.reason);
+  }
+  scope.setContext('request', privacyBrokerRequestContext(request));
+};
+
+const buildErrorOperationContext = (capture: ResolvedErrorCapture): Record<string, unknown> => ({
+  id: capture.operationId,
+  ...(capture.action ? { action: capture.action } : {}),
+  ...(capture.source ? { source: capture.source } : {}),
+});
+
+const buildErrorBreadcrumb = (capture: ResolvedErrorCapture, category: string): Breadcrumb => ({
+  type: 'error',
+  category: capture.surface === 'user-visible' ? 'ui.error.presented' : 'ui.error.handled',
+  level: 'error',
+  message: `${capture.surface === 'user-visible' ? 'Presented' : 'Handled'} ${category} error`,
+  data: {
+    operationId: capture.operationId,
+    ...(capture.action ? { action: capture.action } : {}),
+    ...(capture.request ? { requestId: capture.request.id } : {}),
+  },
+});
+
 export function captureUserVisibleError(error: unknown, details: UserVisibleErrorCapture): void {
   if (!reportingInitialized) {
     return;
   }
 
-  const exception = error instanceof Error ? error : new Error(String(error));
-  const completedRequest =
-    error !== null &&
-    error !== undefined &&
-    (typeof error === 'object' || typeof error === 'function')
-      ? requestByError.get(error)
-      : undefined;
-  const explicitOperationId = contextString(details.context, 'operationId');
-  const request =
-    completedRequest ??
-    (explicitOperationId ? activeBrokerRequests.get(explicitOperationId) : undefined);
-  const userAction =
-    error !== null &&
-    error !== undefined &&
-    (typeof error === 'object' || typeof error === 'function')
-      ? userActionByError.get(error)
-      : undefined;
-  operationSequence += 1;
-  const operationId = request?.id ?? userAction?.id ?? `ui-error-${operationSequence}`;
-  const action = contextString(details.context, 'action') ?? userAction?.action;
-  const source = contextString(details.context, 'source');
-  const operationClusterId = contextString(details.context, 'clusterId');
-  const operationNamespace = contextString(details.context, 'namespace');
-  const navigation = getPrivacyNavigationContext();
-  const surface = details.surface ?? 'user-visible';
+  const capture = resolveErrorCapture(error, details);
 
   Sentry.withScope((scope) => {
-    scope.setLevel(details.severity === 'critical' ? 'fatal' : 'error');
-    scope.setTag('error.surface', surface);
-    scope.setTag('error.category', details.category);
-    if (action) {
-      scope.setTag('ui.action', action);
-    }
-    if (userAction) {
-      scope.setTag('ui.action.id', userAction.id);
-    }
-    if (navigation) {
-      scope.setTag('ui.view', String(navigation.view));
-      if (navigation.tab) {
-        scope.setTag('ui.tab', String(navigation.tab));
-      }
-      if (navigation['cluster.alias']) {
-        scope.setTag('cluster.alias', String(navigation['cluster.alias']));
-      }
-      if (navigation['namespace.alias']) {
-        scope.setTag('namespace.alias', String(navigation['namespace.alias']));
-      }
-      scope.setContext('navigation', { ...navigation });
-    }
-    if (operationClusterId) {
-      scope.setTag('cluster.alias', aliasForCluster(operationClusterId) ?? 'cluster-unknown');
-    }
-    if (operationNamespace) {
-      scope.setTag('namespace.alias', aliasForNamespace(operationNamespace) ?? 'namespace-unknown');
-    }
-    if (request) {
-      scope.setTag('request.broker', request.broker);
-      scope.setTag('request.resource', request.resource);
-      if (request.reason) {
-        scope.setTag('request.reason', request.reason);
-      }
-      scope.setContext('request', privacyBrokerRequestContext(request));
-    }
-    scope.setContext('operation', {
-      id: operationId,
-      ...(action ? { action } : {}),
-      ...(source ? { source } : {}),
-    });
-    scope.addBreadcrumb({
-      type: 'error',
-      category: surface === 'user-visible' ? 'ui.error.presented' : 'ui.error.handled',
-      level: 'error',
-      message: `${surface === 'user-visible' ? 'Presented' : 'Handled'} ${details.category} error`,
-      data: {
-        operationId,
-        ...(action ? { action } : {}),
-        ...(request ? { requestId: request.id } : {}),
-      },
-    });
-    Sentry.captureException(exception);
+    applyErrorCaptureTags(scope, details, capture);
+    applyErrorNavigationContext(scope, capture.navigation);
+    applyErrorLocationOverrides(scope, capture);
+    applyErrorRequestContext(scope, capture.request);
+    scope.setContext('operation', buildErrorOperationContext(capture));
+    scope.addBreadcrumb(buildErrorBreadcrumb(capture, details.category));
+    Sentry.captureException(capture.exception);
   });
 }

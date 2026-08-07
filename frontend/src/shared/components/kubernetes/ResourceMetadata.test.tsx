@@ -79,6 +79,41 @@ describe('ResourceMetadata', () => {
     cleanup();
   });
 
+  it('does not render selector-only metadata when selector display is disabled', async () => {
+    const { container: root, cleanup } = await renderMetadata({
+      selector: { component: 'worker' },
+      showSelector: false,
+    });
+    container = root;
+    expect(root.innerHTML).toBe('');
+    cleanup();
+  });
+
+  it('preserves an explicit label when a selector uses the same key with another value', async () => {
+    const { container: root, cleanup } = await renderMetadata({
+      labels: { app: 'label-value' },
+      selector: { app: 'selector-value' },
+      showSelector: true,
+    });
+    container = root;
+    expect(root.textContent).toContain('label-value');
+    expect(root.textContent).not.toContain('selector-value');
+    expect(root.querySelector('.status-chip--info')).toBeNull();
+    cleanup();
+  });
+
+  it('returns null for empty metadata records', async () => {
+    const { container: root, cleanup } = await renderMetadata({
+      labels: {},
+      annotations: {},
+      selector: {},
+      showSelector: true,
+    });
+    container = root;
+    expect(root.innerHTML).toBe('');
+    cleanup();
+  });
+
   it('renders labels and annotations via shared component', async () => {
     const { container: root, cleanup } = await renderMetadata({
       labels: { app: 'demo' },

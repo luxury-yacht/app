@@ -10,6 +10,50 @@ const TEST_BUDGETS: LineDiffBudgets = {
 };
 
 describe('computeBudgetedLineDiff', () => {
+  it('preserves identical lines and their line numbers', () => {
+    const result = computeBudgetedLineDiff('alpha\nbeta', 'alpha\nbeta', TEST_BUDGETS);
+
+    expect(result.lines).toEqual([
+      { type: 'context', value: 'alpha', leftLineNumber: 1, rightLineNumber: 1 },
+      { type: 'context', value: 'beta', leftLineNumber: 2, rightLineNumber: 2 },
+    ]);
+  });
+
+  it('handles empty inputs and one-sided additions or removals', () => {
+    expect(computeBudgetedLineDiff('', '', TEST_BUDGETS).lines).toEqual([]);
+    expect(computeBudgetedLineDiff('', 'alpha\nbeta', TEST_BUDGETS).lines).toEqual([
+      { type: 'added', value: 'alpha', rightLineNumber: 1 },
+      { type: 'added', value: 'beta', rightLineNumber: 2 },
+    ]);
+    expect(computeBudgetedLineDiff('alpha\nbeta', '', TEST_BUDGETS).lines).toEqual([
+      { type: 'removed', value: 'alpha', leftLineNumber: 1 },
+      { type: 'removed', value: 'beta', leftLineNumber: 2 },
+    ]);
+  });
+
+  it('normalizes line endings before computing the trace', () => {
+    const result = computeBudgetedLineDiff(
+      'alpha\r\nbeta\rgamma',
+      'alpha\nbeta\ngamma',
+      TEST_BUDGETS
+    );
+
+    expect(result.lines.every((line) => line.type === 'context')).toBe(true);
+    expect(result.leftLineCount).toBe(3);
+    expect(result.rightLineCount).toBe(3);
+  });
+
+  it('backtracks duplicate lines deterministically', () => {
+    const result = computeBudgetedLineDiff('same\nleft\nsame', 'same\nright\nsame', TEST_BUDGETS);
+
+    expect(result.lines).toEqual([
+      { type: 'context', value: 'same', leftLineNumber: 1, rightLineNumber: 1 },
+      { type: 'removed', value: 'left', leftLineNumber: 2 },
+      { type: 'added', value: 'right', rightLineNumber: 2 },
+      { type: 'context', value: 'same', leftLineNumber: 3, rightLineNumber: 3 },
+    ]);
+  });
+
   it('produces context, added, and removed lines', () => {
     const before = ['apiVersion: v1', 'kind: Pod', 'metadata:', '  name: demo'].join('\n');
     const after = ['apiVersion: v1', 'kind: Deployment', 'metadata:', '  name: demo'].join('\n');

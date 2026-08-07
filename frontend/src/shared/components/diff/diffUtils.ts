@@ -38,64 +38,92 @@ export const areTruncationMapsEqual = (left: TruncationMap, right: TruncationMap
   });
 };
 
+interface DiffChangeBlock {
+  removed: DiffLine[];
+  added: DiffLine[];
+  nextIndex: number;
+}
+
+const collectDiffChangeBlock = (lines: DiffLine[], startIndex: number): DiffChangeBlock => {
+  const removed: DiffLine[] = [];
+  const added: DiffLine[] = [];
+  let nextIndex = startIndex;
+  while (nextIndex < lines.length && lines[nextIndex].type !== 'context') {
+    if (lines[nextIndex].type === 'removed') {
+      removed.push(lines[nextIndex]);
+    } else {
+      added.push(lines[nextIndex]);
+    }
+    nextIndex += 1;
+  }
+  return { removed, added, nextIndex };
+};
+
+const mergeDiffChangePair = (
+  removedLine: DiffLine | undefined,
+  addedLine: DiffLine | undefined
+): DisplayDiffLine | null => {
+  if (removedLine && addedLine) {
+    return {
+      type: 'context',
+      value: '',
+      leftLineNumber: removedLine.leftLineNumber,
+      rightLineNumber: addedLine.rightLineNumber,
+      leftType: 'removed',
+      rightType: 'added',
+    };
+  }
+  if (removedLine) {
+    return {
+      ...removedLine,
+      leftType: 'removed',
+      rightType: 'context',
+    };
+  }
+  if (addedLine) {
+    return {
+      ...addedLine,
+      leftType: 'context',
+      rightType: 'added',
+    };
+  }
+  return null;
+};
+
+const mergeDiffChangeBlock = ({ removed, added }: DiffChangeBlock): DisplayDiffLine[] => {
+  const merged: DisplayDiffLine[] = [];
+  const rowCount = Math.max(removed.length, added.length);
+  for (let index = 0; index < rowCount; index += 1) {
+    const row = mergeDiffChangePair(removed[index], added[index]);
+    if (row) {
+      merged.push(row);
+    }
+  }
+  return merged;
+};
+
+const displayContextLine = (line: DiffLine): DisplayDiffLine => ({
+  ...line,
+  leftType: 'context',
+  rightType: 'context',
+});
+
 // Merge adjacent remove/add blocks so modifications display on a single row.
 export const mergeDiffLines = (lines: DiffLine[]): DisplayDiffLine[] => {
   const merged: DisplayDiffLine[] = [];
-  for (let i = 0; i < lines.length; i += 1) {
-    const line = lines[i];
+  let index = 0;
+  while (index < lines.length) {
+    const line = lines[index];
     if (line.type === 'context') {
-      merged.push({
-        ...line,
-        leftType: 'context',
-        rightType: 'context',
-      });
+      merged.push(displayContextLine(line));
+      index += 1;
       continue;
     }
 
-    const removed: DiffLine[] = [];
-    const added: DiffLine[] = [];
-    while (i < lines.length && lines[i].type !== 'context') {
-      if (lines[i].type === 'removed') {
-        removed.push(lines[i]);
-      } else {
-        added.push(lines[i]);
-      }
-      i += 1;
-    }
-
-    const maxCount = Math.max(removed.length, added.length);
-    for (let idx = 0; idx < maxCount; idx += 1) {
-      const removedLine = removed[idx];
-      const addedLine = added[idx];
-      if (removedLine && addedLine) {
-        merged.push({
-          type: 'context',
-          value: '',
-          leftLineNumber: removedLine.leftLineNumber,
-          rightLineNumber: addedLine.rightLineNumber,
-          leftType: 'removed',
-          rightType: 'added',
-        });
-      } else if (removedLine) {
-        merged.push({
-          ...removedLine,
-          leftType: 'removed',
-          rightType: 'context',
-        });
-      } else if (addedLine) {
-        merged.push({
-          ...addedLine,
-          leftType: 'context',
-          rightType: 'added',
-        });
-      }
-    }
-
-    if (i < lines.length && lines[i].type === 'context') {
-      i -= 1;
-    }
+    const block = collectDiffChangeBlock(lines, index);
+    merged.push(...mergeDiffChangeBlock(block));
+    index = block.nextIndex;
   }
-
   return merged;
 };
 

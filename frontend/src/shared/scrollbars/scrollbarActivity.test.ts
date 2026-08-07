@@ -79,6 +79,13 @@ const dispatchPointerDown = (target: Element, clientX: number, clientY: number) 
   );
 };
 
+const actResizeObserver = (
+  callback: ResizeObserverCallback | undefined,
+  element: Element
+): void => {
+  callback?.([{ target: element } as ResizeObserverEntry], {} as ResizeObserver);
+};
+
 describe('scrollbar activity tracking', () => {
   beforeEach(() => {
     vi.useFakeTimers();
@@ -107,6 +114,7 @@ describe('scrollbar activity tracking', () => {
   afterEach(() => {
     __resetScrollbarActivityTrackingForTest();
     vi.restoreAllMocks();
+    vi.unstubAllGlobals();
     vi.useRealTimers();
     document.body.innerHTML = '';
     document.documentElement.removeAttribute('style');
@@ -119,6 +127,16 @@ describe('scrollbar activity tracking', () => {
 
     expect(document.body.querySelector('.scrollbar-overlay-thumb--vertical')).toBeTruthy();
     expect(document.body.querySelector('.scrollbar-overlay-gutter--vertical')).toBeTruthy();
+  });
+
+  it('does not create an overlay when overflow is not scrollable', () => {
+    const element = createScrollableElement();
+    element.style.overflowX = 'hidden';
+    element.style.overflowY = 'hidden';
+
+    dispatchWheel(element);
+
+    expect(document.body.querySelector('.scrollbar-overlay-thumb--vertical')).toBeNull();
   });
 
   it('keeps a hovered scrollbar visible until the pointer leaves the hover zone', () => {
@@ -620,6 +638,157 @@ describe('scrollbar activity tracking', () => {
     expect(thumb?.style.top).toBe('199.4px');
     expect(thumb?.style.height).toBe('49.6px');
     expect(thumb?.style.clipPath).toBe('inset(0px 0px 149px 0px)');
+  });
+
+  it('positions a horizontal-only thumb from the current scroll offset', () => {
+    const element = createScrollableElement();
+    defineMetric(element, 'scrollHeight', 100);
+    defineMetric(element, 'scrollWidth', 500);
+    element.scrollLeft = 200;
+
+    dispatchWheel(element);
+
+    const horizontalThumb = document.body.querySelector<HTMLElement>(
+      '.scrollbar-overlay-thumb--horizontal'
+    );
+    const verticalThumb = document.body.querySelector<HTMLElement>(
+      '.scrollbar-overlay-thumb--vertical'
+    );
+    expect(horizontalThumb?.style.display).toBe('block');
+    expect(horizontalThumb?.style.left).toBe('34px');
+    expect(horizontalThumb?.style.width).toBe('32px');
+    expect(verticalThumb?.style.display).toBe('none');
+  });
+
+  it('page-scrolls horizontally when the visible gutter track is clicked', () => {
+    const element = createScrollableElement();
+    defineMetric(element, 'scrollHeight', 100);
+    defineMetric(element, 'scrollWidth', 500);
+    element.scrollLeft = 0;
+    dispatchWheel(element);
+    const gutter = document.body.querySelector('.scrollbar-overlay-gutter--horizontal');
+
+    dispatchPointerDown(
+      requireValue(gutter, 'expected horizontal gutter in scrollbarActivity.test.ts'),
+      95,
+      99
+    );
+
+    expect(element.scrollLeft).toBe(100);
+  });
+
+  it('keeps zero-size overlay axes hidden until measurable geometry exists', () => {
+    const element = createScrollableElement();
+    element.getBoundingClientRect = () =>
+      ({
+        bottom: 0,
+        height: 0,
+        left: 0,
+        right: 0,
+        top: 0,
+        width: 0,
+        x: 0,
+        y: 0,
+        toJSON: () => undefined,
+      }) as DOMRect;
+
+    dispatchWheel(element);
+
+    const verticalThumb = document.body.querySelector<HTMLElement>(
+      '.scrollbar-overlay-thumb--vertical'
+    );
+    const verticalGutter = document.body.querySelector<HTMLElement>(
+      '.scrollbar-overlay-gutter--vertical'
+    );
+    expect(verticalThumb?.style.display).toBe('none');
+    expect(verticalGutter?.style.display).toBe('none');
+  });
+
+  it('removes overlay elements when their scroll owner disconnects before a geometry frame', () => {
+    const ancestor = document.createElement('div');
+    document.body.appendChild(ancestor);
+    const element = createScrollableElement();
+    ancestor.appendChild(element);
+    dispatchWheel(element);
+    expect(document.body.querySelector('.scrollbar-overlay-thumb--vertical')).not.toBeNull();
+
+    ancestor.dispatchEvent(new Event('scroll', { bubbles: true }));
+    element.remove();
+    vi.advanceTimersByTime(0);
+
+    expect(document.body.querySelector('.scrollbar-overlay-thumb--vertical')).toBeNull();
+    expect(document.body.querySelector('.scrollbar-overlay-gutter--vertical')).toBeNull();
+  });
+
+  it('removes overlays after the owner no longer has overflow on either axis', () => {
+    const element = createScrollableElement();
+    dispatchWheel(element);
+    expect(document.body.querySelector('.scrollbar-overlay-thumb--vertical')).not.toBeNull();
+
+    defineMetric(element, 'scrollHeight', 100);
+    element.dispatchEvent(new Event('scroll', { bubbles: true }));
+    vi.advanceTimersByTime(0);
+
+    expect(document.body.querySelector('.scrollbar-overlay-thumb--vertical')).toBeNull();
+  });
+
+  it('moves an existing overlay into a newly owning modal stacking context', () => {
+    const element = createScrollableElement();
+    dispatchWheel(element);
+    const thumb = document.body.querySelector<HTMLElement>('.scrollbar-overlay-thumb--vertical');
+    expect(thumb?.parentElement).toBe(document.body);
+
+    const modal = document.createElement('div');
+    modal.className = 'modal-container';
+    modal.getBoundingClientRect = () =>
+      ({
+        bottom: 200,
+        height: 200,
+        left: 0,
+        right: 200,
+        top: 0,
+        width: 200,
+        x: 0,
+        y: 0,
+        toJSON: () => undefined,
+      }) as DOMRect;
+    document.body.appendChild(modal);
+    modal.appendChild(element);
+
+    dispatchWheel(element);
+
+    expect(thumb?.parentElement).toBe(modal);
+    expect(thumb?.style.position).toBe('absolute');
+  });
+
+  it('recomputes active overlay geometry after a resize observation', () => {
+    let resizeCallback: ResizeObserverCallback | undefined;
+    const observe = vi.fn();
+    const unobserve = vi.fn();
+    const disconnect = vi.fn();
+    vi.stubGlobal(
+      'ResizeObserver',
+      class {
+        constructor(callback: ResizeObserverCallback) {
+          resizeCallback = callback;
+        }
+        observe = observe;
+        unobserve = unobserve;
+        disconnect = disconnect;
+      }
+    );
+    const element = createScrollableElement();
+    dispatchWheel(element);
+
+    expect(observe).toHaveBeenCalledWith(element);
+    actResizeObserver(resizeCallback, element);
+    vi.advanceTimersByTime(0);
+
+    expect(
+      document.body
+        .querySelector('.scrollbar-overlay-thumb--vertical')
+        ?.classList.contains('scrollbar-overlay--geometry-updating')
+    ).toBe(true);
   });
 
   it('does not animate fades when reduced motion is requested', () => {

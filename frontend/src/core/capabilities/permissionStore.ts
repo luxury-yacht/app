@@ -436,6 +436,222 @@ const applyResults = (results: QueryResponseResult[], batchItems: QueryBatchItem
   }
 };
 
+const toPermissionSpec = (item: QueryBatchItem): PermissionSpec => ({
+  kind: item.resourceKind,
+  verb: item.verb,
+  subresource: item.subresource || undefined,
+  group: item.group || undefined,
+  version: item.version || undefined,
+});
+
+const isRecentNamespaceQuery = (requestKey: string): boolean => {
+  const lastQuery = lastQueryTimestamps.get(requestKey);
+  return Boolean(lastQuery && Date.now() - lastQuery < PERMISSION_REFRESH_INTERVAL_MS);
+};
+
+const buildNamespaceQueryTarget = (
+  target: NamespacePermissionTarget,
+  specLists: PermissionSpecList[],
+  force: boolean,
+  seen: Set<string>
+): NamespaceQueryTarget | null => {
+  const namespace = target.namespace.trim();
+  const clusterId = (target.clusterId || currentClusterId).trim();
+  if (!clusterId || !namespace) {
+    return null;
+  }
+
+  const requestKey = buildNamespaceRequestKey(clusterId, namespace, specLists);
+  if (seen.has(requestKey) || inFlightQueries.has(requestKey)) {
+    return null;
+  }
+  seen.add(requestKey);
+  if (!force && isRecentNamespaceQuery(requestKey)) {
+    return null;
+  }
+
+  const batch = buildBatch(specLists, namespace, clusterId);
+  if (batch.length === 0) {
+    return null;
+  }
+
+  return {
+    requestKey,
+    diagnosticsKey: `${clusterId}|${namespace.toLowerCase()}`,
+    clusterId,
+    namespace,
+    specLists,
+    batch,
+    batchSpecs: batch.map(toPermissionSpec),
+    startedAt: Date.now(),
+  };
+};
+
+const prepareNamespaceQueryTargets = (
+  targets: NamespacePermissionTarget[],
+  specLists: PermissionSpecList[],
+  force: boolean
+): NamespaceQueryTarget[] => {
+  const seen = new Set<string>();
+  const prepared: NamespaceQueryTarget[] = [];
+  for (const target of targets) {
+    const queryTarget = buildNamespaceQueryTarget(target, specLists, force, seen);
+    if (queryTarget) {
+      prepared.push(queryTarget);
+    }
+  }
+  return prepared;
+};
+
+const beginNamespaceQuery = (target: NamespaceQueryTarget): void => {
+  pendingSpecs.set(
+    target.requestKey,
+    target.batch.map((item) => ({
+      spec: toPermissionSpec(item),
+      feature: item.feature,
+      clusterId: target.clusterId,
+      namespace: target.namespace,
+    }))
+  );
+  inFlightQueries.add(target.requestKey);
+  beginQueryDiagnostics(
+    target.diagnosticsKey,
+    target.clusterId,
+    target.namespace,
+    'ssrr',
+    target.batchSpecs,
+    target.batch.length
+  );
+};
+
+const toQueryPayloadItem = (item: QueryBatchItem): QueryPayloadItem => ({
+  id: item.id,
+  clusterId: item.clusterId,
+  group: item.group || undefined,
+  version: item.version || undefined,
+  resourceKind: item.resourceKind,
+  verb: item.verb,
+  namespace: item.namespace,
+  subresource: item.subresource,
+  name: item.name,
+});
+
+const completeTransientNamespaceQuery = (
+  target: NamespaceQueryTarget,
+  error: QueryResponseResult
+): void => {
+  completeQueryDiagnostics({
+    queryKey: target.diagnosticsKey,
+    success: false,
+    errorMessage: getPermissionResultErrorMessage(error),
+    startTime: target.startedAt,
+    completedCheckCount: target.batch.length,
+  });
+};
+
+const completeSuccessfulNamespaceQuery = (
+  target: NamespaceQueryTarget,
+  results: QueryResponseResult[],
+  response: Awaited<ReturnType<typeof queryPermissions>>
+): void => {
+  applyResults(results, target.batch);
+  const diagnostics = response.diagnostics?.find((item) => item.key === target.diagnosticsKey);
+  completeQueryDiagnostics({
+    queryKey: target.diagnosticsKey,
+    success: true,
+    errorMessage: null,
+    startTime: target.startedAt,
+    ssarFallbackCount: diagnostics?.ssarFallbackCount,
+    ssrrRuleCount: diagnostics?.ssrrRuleCount,
+    ssrrIncomplete: diagnostics?.ssrrIncomplete,
+    method: diagnostics?.method as 'ssrr' | 'ssar' | undefined,
+    completedCheckCount: target.batch.length,
+  });
+};
+
+const applyNamespaceQueryResponse = (
+  chunk: NamespaceQueryTarget[],
+  response: Awaited<ReturnType<typeof queryPermissions>>,
+  transientTargets: Set<NamespaceQueryTarget>
+): void => {
+  const resultsById = new Map(response.results.map((result) => [result.id, result]));
+  for (const target of chunk) {
+    const targetResults = target.batch
+      .map((item) => resultsById.get(item.id))
+      .filter((result): result is QueryResponseResult => Boolean(result));
+    const transientError = targetResults.find(isTransientPermissionResultError);
+    if (transientError) {
+      transientTargets.add(target);
+      completeTransientNamespaceQuery(target, transientError);
+      continue;
+    }
+    completeSuccessfulNamespaceQuery(target, targetResults, response);
+  }
+};
+
+const recordNamespaceQueryError = (item: QueryBatchItem, reason: string): void => {
+  permissionResults.set(item.id, {
+    allowed: false,
+    source: 'error',
+    reason,
+    descriptor: {
+      clusterId: item.clusterId,
+      group: item.group || null,
+      version: item.version || null,
+      resourceKind: item.resourceKind,
+      verb: item.verb,
+      namespace: item.namespace || null,
+      subresource: item.subresource || null,
+    },
+    feature: item.feature,
+  });
+};
+
+const applyNamespaceQueryFailure = (chunk: NamespaceQueryTarget[], error: unknown): void => {
+  const reason = String(error);
+  for (const target of chunk) {
+    target.batch.forEach((item) => {
+      recordNamespaceQueryError(item, reason);
+    });
+    completeQueryDiagnostics({
+      queryKey: target.diagnosticsKey,
+      success: false,
+      errorMessage: reason,
+      startTime: target.startedAt,
+      completedCheckCount: target.batch.length,
+    });
+  }
+};
+
+const finalizeNamespaceQuery = (
+  target: NamespaceQueryTarget,
+  transientTargets: Set<NamespaceQueryTarget>
+): void => {
+  inFlightQueries.delete(target.requestKey);
+  pendingSpecs.delete(target.requestKey);
+  // The metadata records the interest so cluster-ready can replay it. The
+  // timestamp represents freshness and is valid only for definitive answers.
+  recordNamespaceQueryMetadata(target);
+  if (!transientTargets.has(target)) {
+    recordNamespaceQueryTimestamp(target);
+  }
+};
+
+const queryNamespaceChunk = async (chunk: NamespaceQueryTarget[]): Promise<void> => {
+  const payload = chunk.flatMap((target) => target.batch).map(toQueryPayloadItem);
+  const transientTargets = new Set<NamespaceQueryTarget>();
+  try {
+    const response = await queryPermissions(payload);
+    applyNamespaceQueryResponse(chunk, response, transientTargets);
+  } catch (error) {
+    applyNamespaceQueryFailure(chunk, error);
+  } finally {
+    chunk.forEach((target) => {
+      finalizeNamespaceQuery(target, transientTargets);
+    });
+  }
+};
+
 /**
  * Query permissions for many namespaces. The request key includes the
  * requested spec list set, so a Pods-only discovery pass does not suppress
@@ -450,186 +666,16 @@ export const queryNamespacesPermissions = async (
     return;
   }
 
-  const seen = new Set<string>();
-  const queryTargets: NamespaceQueryTarget[] = [];
-
-  for (const target of targets) {
-    const namespace = target.namespace.trim();
-    const cid = (target.clusterId || currentClusterId).trim();
-    if (!cid || !namespace) {
-      continue;
-    }
-
-    const requestKey = buildNamespaceRequestKey(cid, namespace, specLists);
-    if (seen.has(requestKey) || inFlightQueries.has(requestKey)) {
-      continue;
-    }
-    seen.add(requestKey);
-
-    if (!options?.force) {
-      const lastQuery = lastQueryTimestamps.get(requestKey);
-      if (lastQuery && Date.now() - lastQuery < PERMISSION_REFRESH_INTERVAL_MS) {
-        continue;
-      }
-    }
-
-    const batch = buildBatch(specLists, namespace, cid);
-    if (batch.length === 0) {
-      continue;
-    }
-
-    const diagnosticsKey = `${cid}|${namespace.toLowerCase()}`;
-    const batchSpecs: PermissionSpec[] = batch.map((item) => ({
-      kind: item.resourceKind,
-      verb: item.verb,
-      subresource: item.subresource || undefined,
-      group: item.group || undefined,
-      version: item.version || undefined,
-    }));
-
-    queryTargets.push({
-      requestKey,
-      diagnosticsKey,
-      clusterId: cid,
-      namespace,
-      specLists,
-      batch,
-      batchSpecs,
-      startedAt: Date.now(),
-    });
-  }
+  const queryTargets = prepareNamespaceQueryTargets(targets, specLists, options?.force === true);
 
   if (queryTargets.length === 0) {
     return;
   }
 
-  for (const target of queryTargets) {
-    pendingSpecs.set(
-      target.requestKey,
-      target.batch.map((item) => ({
-        spec: {
-          kind: item.resourceKind,
-          verb: item.verb,
-          subresource: item.subresource || undefined,
-          group: item.group || undefined,
-          version: item.version || undefined,
-        },
-        feature: item.feature,
-        clusterId: target.clusterId,
-        namespace: target.namespace,
-      }))
-    );
-    inFlightQueries.add(target.requestKey);
-    beginQueryDiagnostics(
-      target.diagnosticsKey,
-      target.clusterId,
-      target.namespace,
-      'ssrr',
-      target.batchSpecs,
-      target.batch.length
-    );
-  }
+  queryTargets.forEach(beginNamespaceQuery);
   notify();
 
-  const chunks = splitNamespaceTargets(queryTargets);
-
-  await Promise.all(
-    chunks.map(async (chunk) => {
-      const chunkBatch = chunk.flatMap((target) => target.batch);
-      const payload: QueryPayloadItem[] = chunkBatch.map((item) => ({
-        id: item.id,
-        clusterId: item.clusterId,
-        group: item.group || undefined,
-        version: item.version || undefined,
-        resourceKind: item.resourceKind,
-        verb: item.verb,
-        namespace: item.namespace,
-        subresource: item.subresource,
-        name: item.name,
-      }));
-
-      // Targets whose results were transient (cluster still connecting).
-      // Their results are not cached and their freshness timestamp is not
-      // recorded, so the next caller — or the cluster-ready re-issue —
-      // retries instead of waiting out the TTL. Mirrors queryClusterPermissions.
-      const transientTargets = new Set<NamespaceQueryTarget>();
-
-      try {
-        const response = await queryPermissions(payload);
-        const resultsById = new Map(response.results.map((result) => [result.id, result]));
-        for (const target of chunk) {
-          const targetResults = target.batch
-            .map((item) => resultsById.get(item.id))
-            .filter((result): result is QueryResponseResult => Boolean(result));
-          const transientError = targetResults.find(isTransientPermissionResultError);
-          if (transientError) {
-            transientTargets.add(target);
-            completeQueryDiagnostics({
-              queryKey: target.diagnosticsKey,
-              success: false,
-              errorMessage: getPermissionResultErrorMessage(transientError),
-              startTime: target.startedAt,
-              completedCheckCount: target.batch.length,
-            });
-            continue;
-          }
-          applyResults(targetResults, target.batch);
-          const nsDiag = response.diagnostics?.find((d) => d.key === target.diagnosticsKey);
-          completeQueryDiagnostics({
-            queryKey: target.diagnosticsKey,
-            success: true,
-            errorMessage: null,
-            startTime: target.startedAt,
-            ssarFallbackCount: nsDiag?.ssarFallbackCount,
-            ssrrRuleCount: nsDiag?.ssrrRuleCount,
-            ssrrIncomplete: nsDiag?.ssrrIncomplete,
-            method: nsDiag?.method as 'ssrr' | 'ssar' | undefined,
-            completedCheckCount: target.batch.length,
-          });
-        }
-      } catch (err) {
-        const queryError = String(err);
-        for (const item of chunkBatch) {
-          permissionResults.set(item.id, {
-            allowed: false,
-            source: 'error',
-            reason: queryError,
-            descriptor: {
-              clusterId: item.clusterId,
-              group: item.group || null,
-              version: item.version || null,
-              resourceKind: item.resourceKind,
-              verb: item.verb,
-              namespace: item.namespace || null,
-              subresource: item.subresource || null,
-            },
-            feature: item.feature,
-          });
-        }
-        for (const target of chunk) {
-          completeQueryDiagnostics({
-            queryKey: target.diagnosticsKey,
-            success: false,
-            errorMessage: queryError,
-            startTime: target.startedAt,
-            completedCheckCount: target.batch.length,
-          });
-        }
-      } finally {
-        for (const target of chunk) {
-          inFlightQueries.delete(target.requestKey);
-          pendingSpecs.delete(target.requestKey);
-          // The metadata records the interest (who asked for what) so the
-          // cluster-ready re-issue can replay it; the timestamp records
-          // freshness and is only valid for definitive answers.
-          recordNamespaceQueryMetadata(target);
-          if (!transientTargets.has(target)) {
-            recordNamespaceQueryTimestamp(target);
-          }
-        }
-      }
-    })
-  );
+  await Promise.all(splitNamespaceTargets(queryTargets).map(queryNamespaceChunk));
 
   notify();
 };

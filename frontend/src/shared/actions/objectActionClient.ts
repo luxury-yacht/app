@@ -60,43 +60,81 @@ const normalizeRequired = (
   return trimmed;
 };
 
-const resolveActionGVK = (
-  source: ObjectActionIdentitySource,
-  action: string
-): { group: string; version: string; kind: string } => {
-  const kind = normalizeRequired(source.kind, 'kind', action);
-  const suppliedVersion = source.version?.trim() ?? '';
-  if (
-    kind.toLowerCase() === 'helmrelease' &&
-    (!suppliedVersion || (source.group?.trim() ?? '') === 'helm.sh')
-  ) {
+interface ActionGVK {
+  group: string;
+  version: string;
+  kind: string;
+}
+
+interface SuppliedActionGVK {
+  groupWasCarried: boolean;
+  group: string | undefined;
+  version: string;
+}
+
+const readSuppliedActionGVK = (source: ObjectActionIdentitySource): SuppliedActionGVK => {
+  const groupWasCarried = source.group !== undefined && source.group !== null;
+  return {
+    groupWasCarried,
+    group: groupWasCarried ? (source.group ?? '').trim() : undefined,
+    version: source.version?.trim() ?? '',
+  };
+};
+
+const resolveHelmReleaseActionGVK = (
+  kind: string,
+  supplied: SuppliedActionGVK
+): ActionGVK | null => {
+  if (kind.toLowerCase() !== 'helmrelease') {
+    return null;
+  }
+  if (!supplied.version || supplied.group === 'helm.sh') {
     return { group: 'helm.sh', version: 'v3', kind: 'HelmRelease' };
   }
+  return null;
+};
 
-  const groupWasCarried = source.group !== undefined && source.group !== null;
-  const suppliedGroup = groupWasCarried ? (source.group ?? '').trim() : undefined;
+const resolveBuiltinActionGVK = (kind: string): ActionGVK | null => {
   const builtin = resolveBuiltinGroupVersion(kind);
-  const builtinGVK =
-    builtin.group !== undefined && builtin.version !== undefined
-      ? { group: builtin.group, version: builtin.version, kind }
-      : null;
+  if (builtin.group === undefined || builtin.version === undefined) {
+    return null;
+  }
+  return { group: builtin.group, version: builtin.version, kind };
+};
 
-  if (suppliedVersion) {
-    if (builtinGVK) {
-      const group = groupWasCarried ? (suppliedGroup ?? '') : builtinGVK.group;
-      if (group !== builtinGVK.group || suppliedVersion !== builtinGVK.version) {
-        throw new Error(`Cannot ${action} ${kind}: unsupported group/version`);
-      }
-      return builtinGVK;
+const resolveVersionedActionGVK = (
+  supplied: SuppliedActionGVK,
+  builtin: ActionGVK | null,
+  kind: string,
+  action: string
+): ActionGVK => {
+  if (builtin) {
+    const group = supplied.groupWasCarried ? (supplied.group ?? '') : builtin.group;
+    if (group !== builtin.group || supplied.version !== builtin.version) {
+      throw new Error(`Cannot ${action} ${kind}: unsupported group/version`);
     }
-    if (!groupWasCarried || !suppliedGroup) {
-      throw new Error(`Cannot ${action} ${kind}: group is missing`);
-    }
-    return { group: suppliedGroup, version: suppliedVersion, kind };
+    return builtin;
+  }
+  if (!supplied.groupWasCarried || !supplied.group) {
+    throw new Error(`Cannot ${action} ${kind}: group is missing`);
+  }
+  return { group: supplied.group, version: supplied.version, kind };
+};
+
+const resolveActionGVK = (source: ObjectActionIdentitySource, action: string): ActionGVK => {
+  const kind = normalizeRequired(source.kind, 'kind', action);
+  const supplied = readSuppliedActionGVK(source);
+  const helmRelease = resolveHelmReleaseActionGVK(kind, supplied);
+  if (helmRelease) {
+    return helmRelease;
   }
 
-  if (builtinGVK) {
-    return builtinGVK;
+  const builtin = resolveBuiltinActionGVK(kind);
+  if (supplied.version) {
+    return resolveVersionedActionGVK(supplied, builtin, kind, action);
+  }
+  if (builtin) {
+    return builtin;
   }
   throw new Error(`Cannot ${action} ${kind}: version is missing`);
 };

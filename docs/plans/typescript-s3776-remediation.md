@@ -281,6 +281,57 @@ Local remediation status (awaiting Sonar analysis):
   preference tests pass with 94.5% statement coverage, and every touched
   production function passes the temporary Biome maximum of 12. Keep the issue
   checkbox open until Sonar analyzes the pushed revision.
+- `buildMyersTrace` (`AZ-P-P4KmYfklgBeFrCV`) now separates frontier selection,
+  compute-budget accounting, matching-line traversal, and frontier advancement
+  while retaining the existing trace snapshots and backtracking input.
+- `mergeDiffLines` (`AZ-P-P4UmYfklgBeFrCW`) now separates change-block
+  collection, side pairing, and context projection. The two diff utilities pass
+  14 focused tests with 97.29% combined statement coverage and every touched
+  production function passes the temporary Biome maximum of 12. Keep both issue
+  checkboxes open until Sonar analyzes the pushed revision.
+- `resolveActionGVK` (`AZ-P-P_qmYfklgBeFrD9`) now separates carried identity,
+  synthetic Helm identity, registered built-in identity, and custom-resource
+  group/version validation. Its 12 direct tests pass with 98.57% statement
+  coverage, four action consumer suites pass, and every touched production
+  function passes the temporary Biome maximum of 12. Keep the issue checkbox
+  open until Sonar analyzes the pushed revision.
+- The `ResourceMetadata` memo renderer (`AZ-P-P8vmYfklgBeFrDY`) now renders a
+  prepared metadata model that merges visible selectors without overwriting
+  explicit labels. Its seven focused tests pass with 100% statement, branch,
+  function, and line coverage, and every touched production function passes the
+  temporary Biome maximum of 12. Keep the issue checkbox open until Sonar
+  analyzes the pushed revision.
+- `DrainNodeModal` (`AZ-P-P6zmYfklgBeFrC9`) now retains refresh activation and
+  cluster-scoped drain execution in the owning component while delegating
+  permission explanations, option normalization, job selection, and rendering
+  to named model and view units. Its 13 direct component/model tests pass with
+  94.85% combined statement coverage, and every extracted production function
+  passes the temporary Biome maximum of 12. Keep the issue checkbox open until
+  Sonar analyzes the pushed revision.
+- The Sentry `beforeSend` (`AZ_PMfh-nvllwip2ec4v`) and scope-enrichment callback
+  (`AZ_PMfh-nvllwip2ec40`) now separate event correlation, workspace/request
+  breadcrumb selection, privacy sanitization, capture resolution, tag
+  precedence, and allowlisted context projection. All 25 direct telemetry tests
+  pass with 94.08% statement coverage, and every touched production function
+  passes the temporary Biome maximum of 12. Keep both issue checkboxes open
+  until Sonar analyzes the pushed revision.
+- `queryNamespacesPermissions` (`AZ-P-QXRmYfklgBeFrJf`) now separates target
+  planning, full GVK payload projection, pending/diagnostic registration,
+  response classification, transient retry handling, and finalization. Its 25
+  direct permission-store tests pass with 81.67% statement coverage; the target
+  and its former nested transaction callback pass the temporary Biome maximum
+  of 12. Keep the issue checkbox open until Sonar analyzes the pushed revision.
+- `updateOverlayScrollbarGeometry` (`AZ-P-P_KmYfklgBeFrD1`) now delegates token
+  reads, positioning, zero-size hiding, and vertical/horizontal geometry to
+  axis-specific stages. Its 30 direct tests pass with 81.06% statement coverage,
+  including disconnected, overflow-loss, container-move, resize, zero-size,
+  and horizontal-only cases; the target and extracted production functions pass
+  the temporary Biome maximum of 12. Keep the issue checkbox open until Sonar
+  analyzes the pushed revision.
+
+All 15 recorded Phase 1 findings are locally remediated. The checkboxes remain
+open until the pushed revision receives a successful Sonar analysis and each
+recorded issue key closes.
 
 ## Phase 2: GridTable and query-backed data (16)
 

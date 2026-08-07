@@ -63,6 +63,85 @@ describe('buildObjectActionTarget', () => {
     });
   });
 
+  it('resolves registered built-in identity when group and version are omitted', () => {
+    expect(
+      buildObjectActionTarget(
+        {
+          clusterId: ' cluster-a ',
+          kind: ' deployment ',
+          namespace: ' team-a ',
+          name: ' api ',
+        },
+        'restart'
+      )
+    ).toEqual({
+      clusterId: 'cluster-a',
+      group: 'apps',
+      version: 'v1',
+      kind: 'deployment',
+      namespace: 'team-a',
+      name: 'api',
+    });
+  });
+
+  it('accepts an explicitly carried core group with the registered version', () => {
+    expect(
+      buildObjectActionTarget(
+        {
+          clusterId: 'cluster-a',
+          group: '',
+          version: 'v1',
+          kind: 'Pod',
+          name: 'api',
+        },
+        'delete'
+      )
+    ).toMatchObject({ group: '', version: 'v1', kind: 'Pod' });
+  });
+
+  it.each([
+    [{ group: 'extensions', version: 'v1', kind: 'Deployment' }, 'unsupported group/version'],
+    [{ group: 'apps', version: 'v1beta1', kind: 'Deployment' }, 'unsupported group/version'],
+    [{ version: 'v1alpha1', kind: 'Widget' }, 'group is missing'],
+    [{ group: 'example.com', kind: 'Widget' }, 'version is missing'],
+  ])('rejects incomplete or conflicting GVK %#', (identity, message) => {
+    expect(() =>
+      buildObjectActionTarget(
+        {
+          clusterId: 'cluster-a',
+          namespace: 'team-a',
+          name: 'api',
+          ...identity,
+        },
+        'delete'
+      )
+    ).toThrow(message);
+  });
+
+  it('canonicalizes the synthetic Helm release identity', () => {
+    expect(
+      buildObjectActionTarget(
+        {
+          clusterId: 'cluster-a',
+          group: 'helm.sh',
+          version: 'v2',
+          kind: 'helmrelease',
+          namespace: 'team-a',
+          name: 'api',
+        },
+        'delete'
+      )
+    ).toMatchObject({ group: 'helm.sh', version: 'v3', kind: 'HelmRelease' });
+  });
+
+  it.each([
+    [{ kind: 'Pod', name: 'api' }, 'clusterId is missing'],
+    [{ clusterId: 'cluster-a', name: 'api' }, 'kind is missing'],
+    [{ clusterId: 'cluster-a', kind: 'Pod' }, 'name is missing'],
+  ])('rejects missing required target identity %#', (identity, message) => {
+    expect(() => buildObjectActionTarget(identity, 'delete')).toThrow(message);
+  });
+
   it('gives every object mutation an exact user-action instance', async () => {
     const target = {
       clusterId: 'cluster-a',

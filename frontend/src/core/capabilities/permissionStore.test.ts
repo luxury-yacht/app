@@ -226,6 +226,30 @@ describe('makePermissionStatus', () => {
 });
 
 describe('queryNamespacesPermissions', () => {
+  it('ignores empty inputs, invalid identities, and duplicate namespace targets', async () => {
+    mockSuccessfulQueryPermissions();
+
+    await queryNamespacesPermissions([], { specLists: [POD_PERMISSIONS] });
+    await queryNamespacesPermissions([{ namespace: 'default', clusterId: 'cluster-1' }], {
+      specLists: [],
+    });
+    await queryNamespacesPermissions(
+      [
+        { namespace: '   ', clusterId: 'cluster-1' },
+        { namespace: 'default', clusterId: '   ' },
+        { namespace: ' default ', clusterId: 'cluster-1' },
+        { namespace: 'default', clusterId: 'cluster-1' },
+      ],
+      { specLists: [POD_PERMISSIONS] }
+    );
+
+    expect(hoisted.readQueryPermissions).toHaveBeenCalledTimes(1);
+    const payload = hoisted.readQueryPermissions.mock.calls[0][0] as QueryPayloadItem[];
+    expect(new Set(payload.map((item) => `${item.clusterId}|${item.namespace}`))).toEqual(
+      new Set(['cluster-1|default'])
+    );
+  });
+
   it('queries many namespaces in one QueryPermissions call for a scoped spec list', async () => {
     mockSuccessfulQueryPermissions();
 
@@ -268,6 +292,47 @@ describe('queryNamespacesPermissions', () => {
     }>;
     expect(secondPayload).toHaveLength(WORKLOAD_PERMISSIONS.specs.length);
     expect(new Set(secondPayload.map((item) => item.resourceKind))).toContain('Deployment');
+  });
+
+  it('bypasses the freshness interval only when force is requested', async () => {
+    mockSuccessfulQueryPermissions();
+
+    await queryNamespacesPermissions([{ namespace: 'default', clusterId: 'cluster-1' }], {
+      specLists: [POD_PERMISSIONS],
+    });
+    await queryNamespacesPermissions([{ namespace: 'default', clusterId: 'cluster-1' }], {
+      force: true,
+      specLists: [POD_PERMISSIONS],
+    });
+
+    expect(hoisted.readQueryPermissions).toHaveBeenCalledTimes(2);
+  });
+
+  it('materializes transport failures as cluster-scoped permission errors', async () => {
+    hoisted.requestData.mockImplementation(async (options: PermissionReadRequest) => ({
+      status: 'executed',
+      data: await options.read(),
+    }));
+    hoisted.readQueryPermissions.mockRejectedValue(new Error('permission transport failed'));
+
+    await queryNamespacesPermissions([{ namespace: 'team-a', clusterId: 'cluster-1' }], {
+      specLists: [POD_PERMISSIONS],
+    });
+
+    expect(
+      getUserPermissionMap().get(getPermissionKey('Pod', 'delete', 'team-a', null, 'cluster-1'))
+    ).toMatchObject({
+      allowed: false,
+      pending: false,
+      error: 'Error: permission transport failed',
+      descriptor: {
+        clusterId: 'cluster-1',
+        group: null,
+        version: 'v1',
+        resourceKind: 'Pod',
+        namespace: 'team-a',
+      },
+    });
   });
 });
 

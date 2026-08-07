@@ -48,6 +48,79 @@ const makeTooLargeResult = (
   computeWork,
 });
 
+interface ComputeWorkBudget {
+  used: number;
+  max: number;
+}
+
+const consumeComputeWork = (budget: ComputeWorkBudget): boolean => {
+  budget.used += 1;
+  return budget.used <= budget.max;
+};
+
+const selectMyersFrontierX = (
+  frontier: number[],
+  offset: number,
+  distance: number,
+  diagonal: number
+): number => {
+  if (
+    diagonal === -distance ||
+    (diagonal !== distance && frontier[offset + diagonal - 1] < frontier[offset + diagonal + 1])
+  ) {
+    return frontier[offset + diagonal + 1];
+  }
+  return frontier[offset + diagonal - 1] + 1;
+};
+
+const advanceMatchingLines = (
+  left: string[],
+  right: string[],
+  startX: number,
+  startY: number,
+  budget: ComputeWorkBudget
+): { x: number; y: number } | null => {
+  let x = startX;
+  let y = startY;
+  while (x < left.length && y < right.length && left[x] === right[y]) {
+    if (!consumeComputeWork(budget)) {
+      return null;
+    }
+    x += 1;
+    y += 1;
+  }
+  return { x, y };
+};
+
+const advanceMyersFrontier = ({
+  left,
+  right,
+  frontier,
+  offset,
+  distance,
+  diagonal,
+  budget,
+}: {
+  left: string[];
+  right: string[];
+  frontier: number[];
+  offset: number;
+  distance: number;
+  diagonal: number;
+  budget: ComputeWorkBudget;
+}): boolean | null => {
+  if (!consumeComputeWork(budget)) {
+    return null;
+  }
+  const startX = selectMyersFrontierX(frontier, offset, distance, diagonal);
+  const point = advanceMatchingLines(left, right, startX, startX - diagonal, budget);
+  if (!point) {
+    return null;
+  }
+  frontier[offset + diagonal] = point.x;
+  return point.x >= left.length && point.y >= right.length;
+};
+
 const buildMyersTrace = (
   left: string[],
   right: string[],
@@ -60,41 +133,27 @@ const buildMyersTrace = (
   const offset = max;
   const frontier = new Array<number>(2 * max + 1).fill(0);
   const trace: number[][] = [];
-  let computeWork = 0;
+  const budget: ComputeWorkBudget = { used: 0, max: maxComputeWork };
 
   for (let distance = 0; distance <= max; distance += 1) {
     trace.push(frontier.slice());
     for (let diagonal = -distance; diagonal <= distance; diagonal += 2) {
-      computeWork += 1;
-      if (computeWork > maxComputeWork) {
+      const complete = advanceMyersFrontier({
+        left,
+        right,
+        frontier,
+        offset,
+        distance,
+        diagonal,
+        budget,
+      });
+      if (complete === null) {
         return null;
       }
-
-      let x: number;
-      if (
-        diagonal === -distance ||
-        (diagonal !== distance && frontier[offset + diagonal - 1] < frontier[offset + diagonal + 1])
-      ) {
-        x = frontier[offset + diagonal + 1];
-      } else {
-        x = frontier[offset + diagonal - 1] + 1;
-      }
-      let y = x - diagonal;
-
-      while (x < left.length && y < right.length && left[x] === right[y]) {
-        computeWork += 1;
-        if (computeWork > maxComputeWork) {
-          return null;
-        }
-        x += 1;
-        y += 1;
-      }
-
-      frontier[offset + diagonal] = x;
-      if (x >= left.length && y >= right.length) {
+      if (complete) {
         return {
           trace,
-          computeWork,
+          computeWork: budget.used,
         };
       }
     }
@@ -102,7 +161,7 @@ const buildMyersTrace = (
 
   return {
     trace,
-    computeWork,
+    computeWork: budget.used,
   };
 };
 
