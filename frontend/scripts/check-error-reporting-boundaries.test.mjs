@@ -49,6 +49,47 @@ describe('error reporting presentation boundary', () => {
       'an error-derived component prop',
       'const failure = new Error("failed"); const notice = failure.message; const View = () => <Banner text={notice} />;',
     ],
+    [
+      'an error-derived object binding',
+      'const { message: notice } = new Error("failed"); const View = () => <div>{notice}</div>;',
+    ],
+    [
+      'an error-derived array binding',
+      'const [notice] = [new Error("failed").message]; const View = () => <div>{notice}</div>;',
+    ],
+    [
+      'an error-derived object literal',
+      'const failure = new Error("failed"); const details = { notice: failure.message }; const View = () => <div>{details.notice}</div>;',
+    ],
+    [
+      'an error-derived object spread',
+      'const failure = new Error("failed"); const source = { failure: failure.message }; const details = { ...source }; const View = () => <div>{details.failure}</div>;',
+    ],
+    [
+      'an error-derived template expression',
+      'const failure = new Error("failed"); const notice = `Failure: $' +
+        '{failure.message}`; const View = () => <div>{notice}</div>;',
+    ],
+    [
+      'an error-derived property assignment',
+      'const state = { notice: "" }; state.notice = new Error("failed").message; const View = () => <div>{state.notice}</div>;',
+    ],
+    [
+      'an error-derived conditional expression',
+      'const failure = new Error("failed"); const notice = ready ? "Ready" : failure.message; const View = () => <div>{notice}</div>;',
+    ],
+    [
+      'a Promise then rejection handler',
+      'const View = () => { work().then(undefined, (failure) => <div>{failure.message}</div>); return null; };',
+    ],
+    [
+      'an error-derived function declaration result',
+      'function describe(failure) { return failure.message; } const View = () => <div>{describe(new Error("failed"))}</div>;',
+    ],
+    [
+      'an error-derived function expression result',
+      'const describe = function showFailure(failure) { return failure.message; }; const View = () => <div>{describe(new Error("failed"))}</div>;',
+    ],
   ])('rejects %s', (_caseName, source) => {
     expect(violationsFor(source)).toEqual([
       expect.objectContaining({
@@ -87,6 +128,10 @@ describe('error reporting presentation boundary', () => {
     [
       'domain status messages that are not JavaScript errors',
       'const condition = { message: "Ready" }; const View = () => <div>{condition.message}</div>;',
+    ],
+    [
+      'a one-element React state binding',
+      'const View = () => { const [notice] = useState("Connected"); return <div>{notice}</div>; };',
     ],
   ])('allows %s', (_caseName, source) => {
     expect(violationsFor(source)).toEqual([]);

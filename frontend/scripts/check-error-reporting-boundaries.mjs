@@ -10,6 +10,10 @@ const ERROR_SURFACE = 'ErrorSurface';
 const ERROR_SURFACE_MODULE = '@shared/components/errors/ErrorSurface';
 const REPORTING_BOUNDARY_METHODS = new Set(['handle', 'handleInline', 'handleOperational']);
 const REACT_STATE_HOOKS = new Set(['useReducer', 'useState']);
+const REJECTION_HANDLER_INDEXES = new Map([
+  ['catch', 0],
+  ['then', 1],
+]);
 const virtualSources = new Map();
 let analysisSequence = 0;
 let typescriptAPI;
@@ -183,346 +187,469 @@ const isAssignmentExpression = (node) =>
   node.operatorToken.kind >= ts.SyntaxKind.FirstAssignment &&
   node.operatorToken.kind <= ts.SyntaxKind.LastAssignment;
 
-const analyzeInlineErrorBoundaryViolations = ({ checker, project, sourceFile }, fileName) => {
-  const taintedBindings = new Set();
-  const taintedFunctions = new Set();
-  const stateBySetter = new Map();
+const createTaintAnalysis = ({ checker, project }) => ({
+  checker,
+  project,
+  stateBySetter: new Map(),
+  taintedBindings: new Set(),
+  taintedFunctions: new Set(),
+});
 
-  const getBinding = (node) => (ts.isIdentifier(node) ? checker.getSymbolAtLocation(node) : null);
+const getBinding = (analysis, node) =>
+  ts.isIdentifier(node) ? analysis.checker.getSymbolAtLocation(node) : null;
 
-  const addBinding = (binding) => {
-    if (!binding || taintedBindings.has(binding)) {
-      return false;
-    }
-    taintedBindings.add(binding);
-    return true;
-  };
-
-  const addBindingsFromPattern = (rawNode) => {
-    const node = unwrap(rawNode);
-    if (!node) {
-      return false;
-    }
-    if (ts.isIdentifier(node)) {
-      return addBinding(getBinding(node));
-    }
-    if (ts.isBindingElement(node)) {
-      return addBindingsFromPattern(node.name);
-    }
-    if (ts.isArrayBindingPattern(node) || ts.isArrayLiteralExpression(node)) {
-      let changed = false;
-      for (const element of node.elements) {
-        if (!ts.isOmittedExpression(element) && addBindingsFromPattern(element)) {
-          changed = true;
-        }
-      }
-      return changed;
-    }
-    if (ts.isObjectBindingPattern(node)) {
-      let changed = false;
-      for (const element of node.elements) {
-        if (addBindingsFromPattern(element.name)) {
-          changed = true;
-        }
-      }
-      return changed;
-    }
-    if (ts.isObjectLiteralExpression(node)) {
-      let changed = false;
-      for (const property of node.properties) {
-        const target = ts.isPropertyAssignment(property)
-          ? property.initializer
-          : ts.isShorthandPropertyAssignment(property)
-            ? property.name
-            : ts.isSpreadAssignment(property)
-              ? property.expression
-              : null;
-        if (target && addBindingsFromPattern(target)) {
-          changed = true;
-        }
-      }
-      return changed;
-    }
-    if (ts.isSpreadElement(node) || ts.isSpreadAssignment(node)) {
-      return addBindingsFromPattern(node.expression);
-    }
+const addBinding = (analysis, binding) => {
+  if (!binding || analysis.taintedBindings.has(binding)) {
     return false;
-  };
+  }
+  analysis.taintedBindings.add(binding);
+  return true;
+};
 
-  const bindingFromFunction = (node) => {
-    if ((ts.isFunctionDeclaration(node) || ts.isFunctionExpression(node)) && node.name) {
-      return getBinding(node.name);
+const addBindingsFromNodes = (analysis, nodes) => {
+  let changed = false;
+  for (const node of nodes) {
+    if (node && addBindingsFromPattern(analysis, node)) {
+      changed = true;
     }
-    const parent = node.parent;
-    if (ts.isVariableDeclaration(parent) && ts.isIdentifier(parent.name)) {
-      return getBinding(parent.name);
-    }
-    if (parent && isAssignmentExpression(parent) && ts.isIdentifier(parent.left)) {
-      return getBinding(parent.left);
-    }
-    return null;
-  };
+  }
+  return changed;
+};
 
-  const functionFromBinding = (binding) => {
-    for (const handle of binding?.declarations ?? []) {
-      const declaration = handle.resolve(project);
-      if (!declaration) {
-        continue;
-      }
-      if (ts.isFunctionDeclaration(declaration) || ts.isFunctionExpression(declaration)) {
-        return declaration;
-      }
-      if (
-        ts.isVariableDeclaration(declaration) &&
-        declaration.initializer &&
-        (ts.isArrowFunction(declaration.initializer) ||
-          ts.isFunctionExpression(declaration.initializer))
-      ) {
-        return declaration.initializer;
-      }
-    }
-    return null;
-  };
+const objectPropertyValue = (property) => {
+  if (ts.isPropertyAssignment(property)) {
+    return property.initializer;
+  }
+  if (ts.isShorthandPropertyAssignment(property)) {
+    return property.name;
+  }
+  return ts.isSpreadAssignment(property) ? property.expression : null;
+};
 
-  const isReportingBoundaryCall = (node) => {
-    const callee = node.expression;
-    const owner = getMemberOwner(callee);
-    if (!owner || !ts.isIdentifier(owner) || owner.text !== 'errorHandler') {
-      return false;
-    }
-    return (
-      ERROR_HANDLER_MODULES.has(importModuleForSymbol(getBinding(owner), project)) &&
-      REPORTING_BOUNDARY_METHODS.has(getMemberName(callee))
+const addBindingsFromPattern = (analysis, rawNode) => {
+  const node = unwrap(rawNode);
+  if (!node) {
+    return false;
+  }
+  if (ts.isIdentifier(node)) {
+    return addBinding(analysis, getBinding(analysis, node));
+  }
+  if (ts.isBindingElement(node)) {
+    return addBindingsFromPattern(analysis, node.name);
+  }
+  if (ts.isArrayBindingPattern(node) || ts.isArrayLiteralExpression(node)) {
+    return addBindingsFromNodes(
+      analysis,
+      node.elements.filter((element) => !ts.isOmittedExpression(element))
     );
-  };
+  }
+  if (ts.isObjectBindingPattern(node)) {
+    return addBindingsFromNodes(
+      analysis,
+      node.elements.map((element) => element.name)
+    );
+  }
+  if (ts.isObjectLiteralExpression(node)) {
+    return addBindingsFromNodes(analysis, node.properties.map(objectPropertyValue));
+  }
+  if (ts.isSpreadElement(node) || ts.isSpreadAssignment(node)) {
+    return addBindingsFromPattern(analysis, node.expression);
+  }
+  return false;
+};
 
-  const expressionIsTainted = (rawNode, seen = new Set()) => {
-    const node = unwrap(rawNode);
-    if (!node || seen.has(node)) {
-      return false;
-    }
-    seen.add(node);
+const bindingFromFunction = (analysis, node) => {
+  if ((ts.isFunctionDeclaration(node) || ts.isFunctionExpression(node)) && node.name) {
+    return getBinding(analysis, node.name);
+  }
+  const parent = node.parent;
+  if (ts.isVariableDeclaration(parent) && ts.isIdentifier(parent.name)) {
+    return getBinding(analysis, parent.name);
+  }
+  if (parent && isAssignmentExpression(parent) && ts.isIdentifier(parent.left)) {
+    return getBinding(analysis, parent.left);
+  }
+  return null;
+};
 
-    if (ts.isIdentifier(node)) {
-      return taintedBindings.has(getBinding(node));
+const functionFromBinding = (analysis, binding) => {
+  for (const handle of binding?.declarations ?? []) {
+    const declaration = handle.resolve(analysis.project);
+    if (!declaration) {
+      continue;
     }
-    if (ts.isNewExpression(node)) {
-      return (
-        (ts.isIdentifier(node.expression) && ERROR_CONSTRUCTORS.has(node.expression.text)) ||
-        (node.arguments ?? []).some((argument) => expressionIsTainted(argument, seen))
-      );
+    if (ts.isFunctionDeclaration(declaration) || ts.isFunctionExpression(declaration)) {
+      return declaration;
     }
-    if (ts.isPropertyAccessExpression(node) || ts.isElementAccessExpression(node)) {
-      return expressionIsTainted(node.expression, seen);
+    const initializer = ts.isVariableDeclaration(declaration) ? declaration.initializer : null;
+    if (initializer && (ts.isArrowFunction(initializer) || ts.isFunctionExpression(initializer))) {
+      return initializer;
     }
-    if (ts.isCallExpression(node)) {
-      if (isReportingBoundaryCall(node)) {
-        return false;
-      }
-      const callee = node.expression;
-      if (ts.isIdentifier(callee)) {
-        if (taintedFunctions.has(getBinding(callee))) {
-          return true;
-        }
-        if (
-          callee.text === 'String' &&
-          node.arguments.some((argument) => expressionIsTainted(argument, seen))
-        ) {
-          return true;
-        }
-      }
-      const owner = getMemberOwner(callee);
-      if (owner && expressionIsTainted(owner, seen)) {
-        return true;
-      }
-      return node.arguments.some((argument) => expressionIsTainted(argument, seen));
-    }
-    if (ts.isConditionalExpression(node)) {
-      return expressionIsTainted(node.whenTrue, seen) || expressionIsTainted(node.whenFalse, seen);
-    }
-    if (ts.isBinaryExpression(node)) {
-      return expressionIsTainted(node.left, seen) || expressionIsTainted(node.right, seen);
-    }
-    if (ts.isTemplateExpression(node)) {
-      return node.templateSpans.some((span) => expressionIsTainted(span.expression, seen));
-    }
-    if (ts.isArrayLiteralExpression(node)) {
-      return node.elements.some((element) => expressionIsTainted(element, seen));
-    }
-    if (ts.isObjectLiteralExpression(node)) {
-      return node.properties.some((property) => {
-        if (ts.isSpreadAssignment(property)) {
-          return expressionIsTainted(property.expression, seen);
-        }
-        if (ts.isPropertyAssignment(property)) {
-          return expressionIsTainted(property.initializer, seen);
-        }
-        return ts.isShorthandPropertyAssignment(property)
-          ? expressionIsTainted(property.name, seen)
-          : false;
-      });
-    }
-    if (
-      ts.isAwaitExpression(node) ||
-      ts.isPrefixUnaryExpression(node) ||
-      ts.isPostfixUnaryExpression(node) ||
-      ts.isYieldExpression(node)
-    ) {
-      return node.expression ? expressionIsTainted(node.expression, seen) : false;
-    }
-    if (ts.isSpreadElement(node)) {
-      return expressionIsTainted(node.expression, seen);
-    }
+  }
+  return null;
+};
+
+const isReportingBoundaryCall = (analysis, node) => {
+  const callee = node.expression;
+  const owner = getMemberOwner(callee);
+  if (!owner || !ts.isIdentifier(owner) || owner.text !== 'errorHandler') {
     return false;
-  };
+  }
+  return (
+    ERROR_HANDLER_MODULES.has(
+      importModuleForSymbol(getBinding(analysis, owner), analysis.project)
+    ) && REPORTING_BOUNDARY_METHODS.has(getMemberName(callee))
+  );
+};
 
+const identifierIsTainted = (analysis, node) =>
+  analysis.taintedBindings.has(getBinding(analysis, node));
+
+const newExpressionIsTainted = (analysis, node, seen) => {
+  const constructsError =
+    ts.isIdentifier(node.expression) && ERROR_CONSTRUCTORS.has(node.expression.text);
+  return (
+    constructsError ||
+    (node.arguments ?? []).some((argument) => expressionIsTainted(analysis, argument, seen))
+  );
+};
+
+const memberExpressionIsTainted = (analysis, node, seen) =>
+  expressionIsTainted(analysis, node.expression, seen);
+
+const identifierCallIsTainted = (analysis, callee, arguments_, seen) => {
+  if (analysis.taintedFunctions.has(getBinding(analysis, callee))) {
+    return true;
+  }
+  return (
+    callee.text === 'String' &&
+    arguments_.some((argument) => expressionIsTainted(analysis, argument, seen))
+  );
+};
+
+const callExpressionIsTainted = (analysis, node, seen) => {
+  if (isReportingBoundaryCall(analysis, node)) {
+    return false;
+  }
+  const callee = node.expression;
+  if (ts.isIdentifier(callee) && identifierCallIsTainted(analysis, callee, node.arguments, seen)) {
+    return true;
+  }
+  const owner = getMemberOwner(callee);
+  if (owner && expressionIsTainted(analysis, owner, seen)) {
+    return true;
+  }
+  return node.arguments.some((argument) => expressionIsTainted(analysis, argument, seen));
+};
+
+const conditionalExpressionIsTainted = (analysis, node, seen) =>
+  expressionIsTainted(analysis, node.whenTrue, seen) ||
+  expressionIsTainted(analysis, node.whenFalse, seen);
+
+const binaryExpressionIsTainted = (analysis, node, seen) =>
+  expressionIsTainted(analysis, node.left, seen) || expressionIsTainted(analysis, node.right, seen);
+
+const templateExpressionIsTainted = (analysis, node, seen) =>
+  node.templateSpans.some((span) => expressionIsTainted(analysis, span.expression, seen));
+
+const arrayExpressionIsTainted = (analysis, node, seen) =>
+  node.elements.some((element) => expressionIsTainted(analysis, element, seen));
+
+const objectExpressionIsTainted = (analysis, node, seen) =>
+  node.properties
+    .map(objectPropertyValue)
+    .some((expression) => expression && expressionIsTainted(analysis, expression, seen));
+
+const wrappedExpressionIsTainted = (analysis, node, seen) =>
+  node.expression ? expressionIsTainted(analysis, node.expression, seen) : false;
+
+const EXPRESSION_TAINT_CHECKERS = new Map([
+  [ts.SyntaxKind.Identifier, identifierIsTainted],
+  [ts.SyntaxKind.NewExpression, newExpressionIsTainted],
+  [ts.SyntaxKind.PropertyAccessExpression, memberExpressionIsTainted],
+  [ts.SyntaxKind.ElementAccessExpression, memberExpressionIsTainted],
+  [ts.SyntaxKind.CallExpression, callExpressionIsTainted],
+  [ts.SyntaxKind.ConditionalExpression, conditionalExpressionIsTainted],
+  [ts.SyntaxKind.BinaryExpression, binaryExpressionIsTainted],
+  [ts.SyntaxKind.TemplateExpression, templateExpressionIsTainted],
+  [ts.SyntaxKind.ArrayLiteralExpression, arrayExpressionIsTainted],
+  [ts.SyntaxKind.ObjectLiteralExpression, objectExpressionIsTainted],
+  [ts.SyntaxKind.AwaitExpression, wrappedExpressionIsTainted],
+  [ts.SyntaxKind.PrefixUnaryExpression, wrappedExpressionIsTainted],
+  [ts.SyntaxKind.PostfixUnaryExpression, wrappedExpressionIsTainted],
+  [ts.SyntaxKind.YieldExpression, wrappedExpressionIsTainted],
+  [ts.SyntaxKind.SpreadElement, wrappedExpressionIsTainted],
+]);
+
+const expressionIsTainted = (analysis, rawNode, seen = new Set()) => {
+  const node = unwrap(rawNode);
+  if (!node || seen.has(node)) {
+    return false;
+  }
+  seen.add(node);
+  const checkTaint = EXPRESSION_TAINT_CHECKERS.get(node.kind);
+  return checkTaint ? checkTaint(analysis, node, seen) : false;
+};
+
+const seedCatchBinding = (analysis, node) => {
+  if (ts.isCatchClause(node) && node.variableDeclaration) {
+    addBindingsFromPattern(analysis, node.variableDeclaration.name);
+  }
+};
+
+const seedTypedErrorParameters = (analysis, node) => {
+  if (!isFunctionLikeNode(node)) {
+    return;
+  }
+  for (const parameter of node.parameters) {
+    if (typeContainsError(parameter.type)) {
+      addBindingsFromPattern(analysis, parameter.name);
+    }
+  }
+};
+
+const rejectionHandlerForCall = (node) => {
+  if (!ts.isCallExpression(node)) {
+    return null;
+  }
+  const handlerIndex = REJECTION_HANDLER_INDEXES.get(getMemberName(node.expression));
+  if (handlerIndex === undefined) {
+    return null;
+  }
+  const handler = node.arguments[handlerIndex];
+  return handler && isFunctionLikeNode(handler) ? handler : null;
+};
+
+const seedRejectionHandler = (analysis, node) => {
+  const firstParameter = rejectionHandlerForCall(node)?.parameters[0];
+  if (firstParameter) {
+    addBindingsFromPattern(analysis, firstParameter.name);
+  }
+};
+
+const stateHookElements = (node) => {
+  if (!ts.isVariableDeclaration(node) || !ts.isArrayBindingPattern(node.name)) {
+    return null;
+  }
+  if (!node.initializer || !ts.isCallExpression(node.initializer)) {
+    return null;
+  }
+  const callee = node.initializer.expression;
+  const hookName = ts.isIdentifier(callee) ? callee.text : getMemberName(callee);
+  return hookName && REACT_STATE_HOOKS.has(hookName) ? node.name.elements : null;
+};
+
+const bindingElementIdentifier = (element) => {
+  if (!element || ts.isOmittedExpression(element)) {
+    return null;
+  }
+  const name = element.name;
+  return name && ts.isIdentifier(name) ? name : null;
+};
+
+const seedReactStateHook = (analysis, node) => {
+  const elements = stateHookElements(node);
+  if (!elements) {
+    return;
+  }
+  const state = bindingElementIdentifier(elements[0]);
+  const setter = bindingElementIdentifier(elements[1]);
+  if (!state || !setter) {
+    return;
+  }
+  const stateBinding = getBinding(analysis, state);
+  const setterBinding = getBinding(analysis, setter);
+  if (stateBinding && setterBinding) {
+    analysis.stateBySetter.set(setterBinding, stateBinding);
+  }
+};
+
+const seedTaintSources = (analysis, sourceFile) => {
   visitDescendants(sourceFile, (node) => {
-    if (ts.isCatchClause(node) && node.variableDeclaration) {
-      addBindingsFromPattern(node.variableDeclaration.name);
+    seedCatchBinding(analysis, node);
+    seedTypedErrorParameters(analysis, node);
+    seedRejectionHandler(analysis, node);
+    seedReactStateHook(analysis, node);
+  });
+};
+
+const getFunctionParent = (node) => {
+  let parent = node.parent;
+  while (parent) {
+    if (isFunctionLikeNode(parent)) {
+      return parent;
     }
-    if (isFunctionLikeNode(node)) {
-      for (const parameter of node.parameters) {
-        if (typeContainsError(parameter.type)) {
-          addBindingsFromPattern(parameter.name);
-        }
-      }
-    }
-    if (ts.isCallExpression(node)) {
-      const memberName = getMemberName(node.expression);
-      if (memberName === 'catch' || memberName === 'then') {
-        const handlerIndex = memberName === 'then' ? 1 : 0;
-        const rejectionHandler = node.arguments[handlerIndex];
-        if (rejectionHandler && isFunctionLikeNode(rejectionHandler)) {
-          const firstParameter = rejectionHandler.parameters[0];
-          if (firstParameter) {
-            addBindingsFromPattern(firstParameter.name);
-          }
-        }
-      }
-    }
+    parent = parent.parent;
+  }
+  return null;
+};
+
+const propagateExpressionArrow = (analysis, node) => {
+  if (!ts.isArrowFunction(node) || ts.isBlock(node.body)) {
+    return false;
+  }
+  const binding = bindingFromFunction(analysis, node);
+  if (
+    !binding ||
+    analysis.taintedFunctions.has(binding) ||
+    !expressionIsTainted(analysis, node.body)
+  ) {
+    return false;
+  }
+  analysis.taintedFunctions.add(binding);
+  return true;
+};
+
+const propagateStateSetterAlias = (analysis, left, right) => {
+  if (!ts.isIdentifier(left) || !ts.isIdentifier(right)) {
+    return false;
+  }
+  const stateBinding = analysis.stateBySetter.get(getBinding(analysis, right));
+  const aliasBinding = getBinding(analysis, left);
+  if (!stateBinding || !aliasBinding || analysis.stateBySetter.has(aliasBinding)) {
+    return false;
+  }
+  analysis.stateBySetter.set(aliasBinding, stateBinding);
+  return true;
+};
+
+const assignmentBindingTarget = (left) =>
+  ts.isPropertyAccessExpression(left) || ts.isElementAccessExpression(left)
+    ? left.expression
+    : left;
+
+const propagateAssignment = (analysis, node) => {
+  if (!isAssignmentExpression(node)) {
+    return false;
+  }
+  const aliasChanged = propagateStateSetterAlias(analysis, node.left, node.right);
+  const bindingChanged = expressionIsTainted(analysis, node.right)
+    ? addBindingsFromPattern(analysis, assignmentBindingTarget(node.left))
+    : false;
+  return aliasChanged || bindingChanged;
+};
+
+const propagateStateSetterCall = (analysis, binding, arguments_) => {
+  const stateBinding = analysis.stateBySetter.get(binding);
+  if (!stateBinding || !arguments_.some((argument) => expressionIsTainted(analysis, argument))) {
+    return false;
+  }
+  return addBinding(analysis, stateBinding);
+};
+
+const propagateFunctionArguments = (analysis, binding, arguments_) => {
+  const targetFunction = functionFromBinding(analysis, binding);
+  if (!targetFunction) {
+    return false;
+  }
+  let changed = false;
+  for (const [index, argument] of arguments_.entries()) {
+    const parameter = targetFunction.parameters[index];
     if (
-      ts.isVariableDeclaration(node) &&
-      ts.isArrayBindingPattern(node.name) &&
-      node.initializer &&
-      ts.isCallExpression(node.initializer)
+      parameter &&
+      expressionIsTainted(analysis, argument) &&
+      addBindingsFromPattern(analysis, parameter.name)
     ) {
-      const callee = node.initializer.expression;
-      const hookName = ts.isIdentifier(callee) ? callee.text : getMemberName(callee);
-      if (hookName && REACT_STATE_HOOKS.has(hookName)) {
-        const [stateElement, setterElement] = node.name.elements;
-        const state =
-          stateElement && !ts.isOmittedExpression(stateElement) ? stateElement.name : null;
-        const setter =
-          setterElement && !ts.isOmittedExpression(setterElement) ? setterElement.name : null;
-        if (state && setter && ts.isIdentifier(state) && ts.isIdentifier(setter)) {
-          const stateBinding = getBinding(state);
-          const setterBinding = getBinding(setter);
-          if (stateBinding && setterBinding) {
-            stateBySetter.set(setterBinding, stateBinding);
-          }
-        }
+      changed = true;
+    }
+  }
+  return changed;
+};
+
+const propagateCall = (analysis, node) => {
+  if (!ts.isCallExpression(node) || !ts.isIdentifier(node.expression)) {
+    return false;
+  }
+  const binding = getBinding(analysis, node.expression);
+  const stateChanged = propagateStateSetterCall(analysis, binding, node.arguments);
+  const argumentsChanged = propagateFunctionArguments(analysis, binding, node.arguments);
+  return stateChanged || argumentsChanged;
+};
+
+const propagateReturn = (analysis, node) => {
+  if (!ts.isReturnStatement(node) || !node.expression) {
+    return false;
+  }
+  const functionNode = getFunctionParent(node);
+  const binding = functionNode ? bindingFromFunction(analysis, functionNode) : null;
+  if (
+    !binding ||
+    analysis.taintedFunctions.has(binding) ||
+    !expressionIsTainted(analysis, node.expression)
+  ) {
+    return false;
+  }
+  analysis.taintedFunctions.add(binding);
+  return true;
+};
+
+const propagateVariable = (analysis, node) => {
+  if (!ts.isVariableDeclaration(node) || !node.initializer) {
+    return false;
+  }
+  const aliasChanged = propagateStateSetterAlias(analysis, node.name, node.initializer);
+  const bindingChanged = expressionIsTainted(analysis, node.initializer)
+    ? addBindingsFromPattern(analysis, node.name)
+    : false;
+  return aliasChanged || bindingChanged;
+};
+
+const TAINT_PROPAGATORS = [
+  propagateExpressionArrow,
+  propagateAssignment,
+  propagateCall,
+  propagateReturn,
+  propagateVariable,
+];
+
+const propagateTaintPass = (analysis, sourceFile) => {
+  let changed = false;
+  visitDescendants(sourceFile, (node) => {
+    for (const propagate of TAINT_PROPAGATORS) {
+      if (propagate(analysis, node)) {
+        changed = true;
       }
     }
   });
+  return changed;
+};
 
-  const getFunctionParent = (node) => {
-    let parent = node.parent;
-    while (parent) {
-      if (isFunctionLikeNode(parent)) {
-        return parent;
-      }
-      parent = parent.parent;
-    }
-    return null;
-  };
-
+const propagateTaintToFixedPoint = (analysis, sourceFile, fileName) => {
   let changed = true;
   let iterations = 0;
   while (changed && iterations < 100) {
-    changed = false;
+    changed = propagateTaintPass(analysis, sourceFile);
     iterations += 1;
-    visitDescendants(sourceFile, (node) => {
-      if (ts.isArrowFunction(node) && !ts.isBlock(node.body)) {
-        const binding = bindingFromFunction(node);
-        if (binding && expressionIsTainted(node.body) && !taintedFunctions.has(binding)) {
-          taintedFunctions.add(binding);
-          changed = true;
-        }
-      }
-
-      if (isAssignmentExpression(node)) {
-        if (ts.isIdentifier(node.left) && ts.isIdentifier(node.right)) {
-          const stateBinding = stateBySetter.get(getBinding(node.right));
-          const aliasBinding = getBinding(node.left);
-          if (stateBinding && aliasBinding && !stateBySetter.has(aliasBinding)) {
-            stateBySetter.set(aliasBinding, stateBinding);
-            changed = true;
-          }
-        }
-        if (expressionIsTainted(node.right)) {
-          const target =
-            ts.isPropertyAccessExpression(node.left) || ts.isElementAccessExpression(node.left)
-              ? node.left.expression
-              : node.left;
-          if (addBindingsFromPattern(target)) {
-            changed = true;
-          }
-        }
-      }
-
-      if (ts.isCallExpression(node) && ts.isIdentifier(node.expression)) {
-        const calleeBinding = getBinding(node.expression);
-        const stateBinding = stateBySetter.get(calleeBinding);
-        if (
-          stateBinding &&
-          node.arguments.some((argument) => expressionIsTainted(argument)) &&
-          addBinding(stateBinding)
-        ) {
-          changed = true;
-        }
-
-        const targetFunction = functionFromBinding(calleeBinding);
-        if (targetFunction) {
-          for (const [index, argument] of node.arguments.entries()) {
-            const parameter = targetFunction.parameters[index];
-            if (
-              parameter &&
-              expressionIsTainted(argument) &&
-              addBindingsFromPattern(parameter.name)
-            ) {
-              changed = true;
-            }
-          }
-        }
-      }
-
-      if (ts.isReturnStatement(node) && node.expression) {
-        const functionNode = getFunctionParent(node);
-        const binding = functionNode ? bindingFromFunction(functionNode) : null;
-        if (binding && expressionIsTainted(node.expression) && !taintedFunctions.has(binding)) {
-          taintedFunctions.add(binding);
-          changed = true;
-        }
-      }
-
-      if (ts.isVariableDeclaration(node) && node.initializer) {
-        if (ts.isIdentifier(node.initializer) && ts.isIdentifier(node.name)) {
-          const stateBinding = stateBySetter.get(getBinding(node.initializer));
-          const aliasBinding = getBinding(node.name);
-          if (stateBinding && aliasBinding && !stateBySetter.has(aliasBinding)) {
-            stateBySetter.set(aliasBinding, stateBinding);
-            changed = true;
-          }
-        }
-        if (expressionIsTainted(node.initializer) && addBindingsFromPattern(node.name)) {
-          changed = true;
-        }
-      }
-    });
   }
   if (changed) {
     throw new Error(`Error-reporting boundary analysis did not converge for ${fileName}`);
   }
+};
+
+const isOperationalKindAttribute = (property) =>
+  ts.isJsxAttribute(property) &&
+  ts.isIdentifier(property.name) &&
+  property.name.text === 'kind' &&
+  property.initializer &&
+  ts.isStringLiteral(property.initializer) &&
+  property.initializer.text === 'operational';
+
+const isTaintedErrorAttribute = (property, isExpressionTainted) =>
+  ts.isJsxAttribute(property) &&
+  ts.isIdentifier(property.name) &&
+  property.name.text === 'error' &&
+  property.initializer &&
+  ts.isJsxExpression(property.initializer) &&
+  property.initializer.expression &&
+  isExpressionTainted(property.initializer.expression);
+
+const analyzeInlineErrorBoundaryViolations = ({ checker, project, sourceFile }, fileName) => {
+  const analysis = createTaintAnalysis({ checker, project });
+  seedTaintSources(analysis, sourceFile);
+  propagateTaintToFixedPoint(analysis, sourceFile, fileName);
+
+  const expressionIsTaintedInAnalysis = (node) => expressionIsTainted(analysis, node);
+  const getBindingInAnalysis = (node) => getBinding(analysis, node);
 
   const isCanonicalErrorSurface = (openingElement) => {
     if (!isJsxOpeningLikeElement(openingElement)) {
@@ -532,7 +659,7 @@ const analyzeInlineErrorBoundaryViolations = ({ checker, project, sourceFile }, 
     return (
       ts.isIdentifier(tag) &&
       tag.text === ERROR_SURFACE &&
-      importModuleForSymbol(getBinding(tag), project) === ERROR_SURFACE_MODULE
+      importModuleForSymbol(getBindingInAnalysis(tag), project) === ERROR_SURFACE_MODULE
     );
   };
 
@@ -540,31 +667,13 @@ const analyzeInlineErrorBoundaryViolations = ({ checker, project, sourceFile }, 
     if (!isJsxOpeningLikeElement(openingElement)) {
       return false;
     }
-    let operational = false;
-    let preservesOriginalError = false;
-    for (const property of openingElement.attributes.properties) {
-      if (!ts.isJsxAttribute(property) || !ts.isIdentifier(property.name)) {
-        continue;
-      }
-      if (
-        property.name.text === 'kind' &&
-        property.initializer &&
-        ts.isStringLiteral(property.initializer) &&
-        property.initializer.text === 'operational'
-      ) {
-        operational = true;
-      }
-      if (
-        property.name.text === 'error' &&
-        property.initializer &&
-        ts.isJsxExpression(property.initializer) &&
-        property.initializer.expression &&
-        expressionIsTainted(property.initializer.expression)
-      ) {
-        preservesOriginalError = true;
-      }
-    }
-    return operational && preservesOriginalError;
+    const attributes = openingElement.attributes.properties;
+    return (
+      attributes.some(isOperationalKindAttribute) &&
+      attributes.some((property) =>
+        isTaintedErrorAttribute(property, expressionIsTaintedInAnalysis)
+      )
+    );
   };
 
   const containsOperationalErrorSurface = (root) => {
@@ -584,7 +693,7 @@ const analyzeInlineErrorBoundaryViolations = ({ checker, project, sourceFile }, 
 
   const renderedBranchIsClassified = (rawNode) => {
     const node = unwrap(rawNode);
-    if (!node || !expressionIsTainted(node)) {
+    if (!node || !expressionIsTaintedInAnalysis(node)) {
       return true;
     }
     if (ts.isJsxElement(node) || ts.isJsxFragment(node) || ts.isJsxSelfClosingElement(node)) {
@@ -606,7 +715,11 @@ const analyzeInlineErrorBoundaryViolations = ({ checker, project, sourceFile }, 
 
   const violations = [];
   visitDescendants(sourceFile, (node) => {
-    if (!ts.isJsxExpression(node) || !node.expression || !expressionIsTainted(node.expression)) {
+    if (
+      !ts.isJsxExpression(node) ||
+      !node.expression ||
+      !expressionIsTaintedInAnalysis(node.expression)
+    ) {
       return;
     }
     if (renderedBranchIsClassified(node.expression)) {

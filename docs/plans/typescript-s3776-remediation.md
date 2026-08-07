@@ -15,8 +15,8 @@ result must make responsibilities and invariants easier to state and test.
 
 This plan covers the 91 TypeScript findings in production source. The four
 open `javascript:S3776` findings in
-`frontend/scripts/check-error-reporting-boundaries.mjs` are a separate inventory
-and are not counted here.
+`frontend/scripts/check-error-reporting-boundaries.mjs` are tracked as a
+separate follow-up inventory below and are not counted in the TypeScript total.
 
 ## Baseline
 
@@ -58,6 +58,7 @@ reported separately and remains pending until the branch is pushed and analyzed.
 | Phase 6: refresh and diagnostics | **16/16** | Pending branch analysis |
 | **TypeScript findings** | **91/91 locally remediated** | Pending branch analysis |
 | PR 283 cross-rule recovery | **51/51 locations corrected** | Verified: 0 new issues at `e256225b` |
+| JavaScript checker follow-up | **4/4 locally remediated** | Pushed analysis pending |
 
 Sonar classifies colocated tests separately through
 `.sonarcloud.properties`; no test file appears in this inventory. Generated
@@ -836,6 +837,36 @@ demonstrates why an S3776-only local pass cannot close a remediation batch.
   passes.
 - [ ] Push the follow-up and require the PR all-rule Sonar audit to remain at
   zero before resolving the Copilot threads.
+
+### JavaScript checker S3776 follow-up
+
+- [x] The public main-branch Sonar API reports four open
+  `javascript:S3776` findings in
+  `frontend/scripts/check-error-reporting-boundaries.mjs`: issue
+  `AZ_PMfx9nvllwip2ec45` at original score 36,
+  `AZ_PMfx9nvllwip2ec48` at 29, `AZ_PMfx9nvllwip2ec49` at 46, and
+  `AZ_PMfx9nvllwip2ec4-` at 55.
+- [x] Separate binding-pattern collection, expression classification, source
+  seeding, and fixed-point propagation into named helpers. Also refactor the
+  adjacent over-threshold operational-surface attribute classifier found by
+  the local cognitive-complexity lint.
+- [x] Focused characterization expands from 22 to 33 passing tests and covers
+  binding patterns, object/array/template/conditional propagation, property
+  assignment, rejection handlers, function declarations/expressions, and
+  incomplete React state tuples. Focused coverage is 83.44% statement, 80.26%
+  branch, 87.64% function, and 83.29% line coverage.
+- [x] The production script passes Biome's all-rule check, the local maximum-15
+  cognitive-complexity lint, and the repository-wide error-boundary scan.
+- [x] Full frontend coverage passes 4,160 tests across 467 files with 81.71%
+  statement, 72.42% branch, 81.96% function, and 82.09% line coverage. The
+  checker measures 84.38% statement, 81.84% branch, 88.63% function, and
+  84.25% line coverage. `mise exec -- mage qc:prerelease` passes Go formatting,
+  vet, staticcheck, race tests, frontend checks/type-check/all 4,160 tests,
+  Knip, and Trivy with zero reported dependency vulnerabilities; post-gate
+  `git diff --check` passes.
+- [ ] Push the follow-up and require all four main-branch issue keys to close
+  without any new open/confirmed Sonar finding before marking this inventory
+  complete.
 
 ## PR and batch boundaries
 
