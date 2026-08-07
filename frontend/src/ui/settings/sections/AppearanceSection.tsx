@@ -31,8 +31,12 @@ import {
 import { types } from '@wailsjs/go/models';
 import {
   type CSSProperties,
+  type Dispatch,
   type ReactElement,
+  type KeyboardEvent as ReactKeyboardEvent,
+  type ReactNode,
   type RefObject,
+  type SetStateAction,
   useCallback,
   useEffect,
   useId,
@@ -93,6 +97,136 @@ const buildPaletteSliderStyle = (thumbColor: string, background?: string): Palet
   '--palette-slider-thumb': thumbColor,
   ...(background ? { background } : {}),
 });
+
+interface ThemeAppearanceValues {
+  hue: number;
+  saturation: number;
+  brightness: number;
+  accent: string;
+  link: string;
+}
+
+const getThemeAppearanceValues = (
+  theme: types.Theme,
+  appearance: 'light' | 'dark'
+): ThemeAppearanceValues => {
+  if (appearance === 'light') {
+    return {
+      hue: theme.paletteHueLight,
+      saturation: theme.paletteSaturationLight,
+      brightness: theme.paletteBrightnessLight,
+      accent: theme.accentColorLight || '',
+      link: theme.linkColorLight || '',
+    };
+  }
+  return {
+    hue: theme.paletteHueDark,
+    saturation: theme.paletteSaturationDark,
+    brightness: theme.paletteBrightnessDark,
+    accent: theme.accentColorDark || '',
+    link: theme.linkColorDark || '',
+  };
+};
+
+const getCurrentAppearanceValues = (
+  appearance: 'light' | 'dark',
+  activeAppearance: 'light' | 'dark',
+  activeValues: ThemeAppearanceValues
+): ThemeAppearanceValues => {
+  if (appearance === activeAppearance) {
+    return activeValues;
+  }
+  const tint = getPaletteTint(appearance);
+  return {
+    hue: tint.hue,
+    saturation: tint.saturation,
+    brightness: tint.brightness,
+    accent: getAccentColor(appearance) || '',
+    link: getLinkColor(appearance) || '',
+  };
+};
+
+const appearanceValuesEqual = (left: ThemeAppearanceValues, right: ThemeAppearanceValues) =>
+  left.hue === right.hue &&
+  left.saturation === right.saturation &&
+  left.brightness === right.brightness &&
+  left.accent === right.accent &&
+  left.link === right.link;
+
+const doesThemeMatchCurrentAppearance = (
+  theme: types.Theme,
+  resolvedMode: 'light' | 'dark',
+  activeValues: ThemeAppearanceValues
+) =>
+  appearanceValuesEqual(
+    getThemeAppearanceValues(theme, 'light'),
+    getCurrentAppearanceValues('light', resolvedMode, activeValues)
+  ) &&
+  appearanceValuesEqual(
+    getThemeAppearanceValues(theme, 'dark'),
+    getCurrentAppearanceValues('dark', resolvedMode, activeValues)
+  );
+
+const buildThemeWithCurrentAppearance = ({
+  theme,
+  name,
+  clusterPattern,
+  resolvedMode,
+  activeValues,
+}: {
+  theme: types.Theme;
+  name: string;
+  clusterPattern: string;
+  resolvedMode: 'light' | 'dark';
+  activeValues: ThemeAppearanceValues;
+}) => {
+  const light = getCurrentAppearanceValues('light', resolvedMode, activeValues);
+  const dark = getCurrentAppearanceValues('dark', resolvedMode, activeValues);
+  return new types.Theme({
+    ...theme,
+    name,
+    clusterPattern,
+    paletteHueLight: light.hue,
+    paletteSaturationLight: light.saturation,
+    paletteBrightnessLight: light.brightness,
+    paletteHueDark: dark.hue,
+    paletteSaturationDark: dark.saturation,
+    paletteBrightnessDark: dark.brightness,
+    accentColorLight: light.accent,
+    accentColorDark: dark.accent,
+    linkColorLight: light.link,
+    linkColorDark: dark.link,
+  });
+};
+
+interface ThemeSavePlan {
+  existing: types.Theme;
+  isDefault: boolean;
+  name: string;
+  clusterPattern: string;
+}
+
+const getThemeSavePlan = (
+  activeThemeId: string | null,
+  themes: types.Theme[],
+  draft: { name: string; clusterPattern: string }
+): ThemeSavePlan | null => {
+  if (!activeThemeId) {
+    return null;
+  }
+  const existing = themes.find((theme) => theme.id === activeThemeId);
+  const name = draft.name.trim();
+  if (!existing || !name) {
+    return null;
+  }
+  const isDefault = existing.id === DEFAULT_THEME_ID;
+  return {
+    existing,
+    isDefault,
+    name: isDefault ? existing.name : name,
+    clusterPattern: isDefault ? '' : draft.clusterPattern.trim(),
+  };
+};
 
 function AppearanceModeSelector({
   mode,
@@ -345,6 +479,298 @@ function ColorControl({
     </div>
   );
 }
+
+type ThemeDraft = { name: string; clusterPattern: string };
+
+const handleThemeEditorKeyDown = (
+  event: ReactKeyboardEvent<HTMLInputElement>,
+  onSave: () => void,
+  onCancel: () => void
+) => {
+  if (event.key === 'Enter') {
+    onSave();
+    return;
+  }
+  if (event.key === 'Escape') {
+    onCancel();
+    return;
+  }
+  event.stopPropagation();
+};
+
+const buildThemeRowClassName = (
+  themeId: string,
+  activeThemeId: string | null,
+  draggingThemeId: string | null,
+  dropTargetThemeId: string | null,
+  isDefault: boolean
+) =>
+  [
+    'setting-item setting-item-surface themes-table-row',
+    themeId === draggingThemeId && 'themes-table-row--dragging',
+    themeId === dropTargetThemeId &&
+      themeId !== draggingThemeId &&
+      !isDefault &&
+      'themes-table-row--drop-target',
+    activeThemeId && activeThemeId !== themeId && 'themes-table-row--dimmed',
+  ]
+    .filter(Boolean)
+    .join(' ');
+
+interface ThemeRowSharedProps {
+  elementIdPrefix: string;
+  theme: types.Theme;
+  isDefault: boolean;
+  activeThemeId: string | null;
+  themeDraft: ThemeDraft;
+  themePatternError: string | null;
+  setThemeDraft: Dispatch<SetStateAction<ThemeDraft>>;
+  setThemePatternError: (value: string | null) => void;
+  onSave: () => void;
+  onCancel: () => void;
+}
+
+interface ThemeDragHandleProps {
+  theme: types.Theme;
+  isDefault: boolean;
+  draggingThemeId: string | null;
+  setDraggingThemeId: (id: string | null) => void;
+  setDropTargetThemeId: Dispatch<SetStateAction<string | null>>;
+  onDrop: (themeId: string) => void;
+  onKeyboardReorder: (themeId: string, offset: -1 | 1) => void;
+}
+
+const ThemeDragHandle = ({
+  theme,
+  isDefault,
+  draggingThemeId,
+  setDraggingThemeId,
+  setDropTargetThemeId,
+  onDrop,
+  onKeyboardReorder,
+}: ThemeDragHandleProps) => {
+  if (isDefault) {
+    return <span className="themes-drag-handle themes-drag-handle--placeholder" />;
+  }
+  return (
+    <button
+      type="button"
+      className="themes-drag-handle"
+      draggable
+      onDragStart={(event) => {
+        event.dataTransfer.effectAllowed = 'move';
+        setDraggingThemeId(theme.id);
+      }}
+      onDragEnd={() => {
+        setDraggingThemeId(null);
+        setDropTargetThemeId(null);
+      }}
+      onDragOver={(event) => {
+        if (!draggingThemeId) {
+          return;
+        }
+        event.preventDefault();
+        setDropTargetThemeId(theme.id);
+      }}
+      onDragLeave={() => {
+        setDropTargetThemeId((current) => (current === theme.id ? null : current));
+      }}
+      onDrop={(event) => {
+        event.preventDefault();
+        onDrop(theme.id);
+      }}
+      onKeyDown={(event) => {
+        if (event.key !== 'ArrowUp' && event.key !== 'ArrowDown') {
+          return;
+        }
+        event.preventDefault();
+        onKeyboardReorder(theme.id, event.key === 'ArrowUp' ? -1 : 1);
+      }}
+      aria-label={`Reorder ${theme.name}. Use Up and Down Arrow keys.`}
+      title="Drag or use Up and Down Arrow keys to reorder"
+    >
+      &#x283F;
+    </button>
+  );
+};
+
+const ThemeRowFields = (props: ThemeRowSharedProps) => {
+  if (props.activeThemeId !== props.theme.id || props.isDefault) {
+    return (
+      <div className="theme-summary">
+        <span className="theme-name">{props.theme.name}</span>
+        <span className="theme-pattern">{props.theme.clusterPattern || '*'}</span>
+      </div>
+    );
+  }
+  return (
+    <div className="theme-fields">
+      <input
+        className="theme-name-input"
+        value={props.themeDraft.name}
+        onChange={(event) =>
+          props.setThemeDraft((draft) => ({ ...draft, name: event.target.value }))
+        }
+        placeholder="Name"
+        onKeyDown={(event) => handleThemeEditorKeyDown(event, props.onSave, props.onCancel)}
+      />
+      <input
+        className="theme-pattern-input"
+        value={props.themeDraft.clusterPattern}
+        onChange={(event) => {
+          props.setThemePatternError(null);
+          props.setThemeDraft((draft) => ({
+            ...draft,
+            clusterPattern: event.target.value,
+          }));
+        }}
+        placeholder="Pattern (optional)"
+        aria-invalid={props.themePatternError ? 'true' : undefined}
+        aria-describedby={
+          props.themePatternError
+            ? `${props.elementIdPrefix}-theme-pattern-error-active`
+            : undefined
+        }
+        onKeyDown={(event) => handleThemeEditorKeyDown(event, props.onSave, props.onCancel)}
+      />
+      {props.themePatternError ? (
+        <div
+          id={`${props.elementIdPrefix}-theme-pattern-error-active`}
+          className="theme-pattern-error"
+        >
+          <ErrorSurface kind="validation" message={props.themePatternError} />
+        </div>
+      ) : null}
+    </div>
+  );
+};
+
+interface ThemeRowActionsProps extends ThemeRowSharedProps {
+  currentMatches: boolean;
+  onEdit: (theme: types.Theme) => void;
+  onDelete: (themeId: string) => void;
+}
+
+const isThemeSaveDisabled = (props: ThemeRowActionsProps) => {
+  if (!props.currentMatches) {
+    return false;
+  }
+  if (props.isDefault) {
+    return true;
+  }
+  return (
+    props.themeDraft.name === props.theme.name &&
+    props.themeDraft.clusterPattern === props.theme.clusterPattern
+  );
+};
+
+const ThemeRowActions = (props: ThemeRowActionsProps) => {
+  if (props.activeThemeId === props.theme.id) {
+    return (
+      <>
+        <button
+          type="button"
+          className="theme-action-button"
+          onClick={props.onSave}
+          disabled={isThemeSaveDisabled(props)}
+          aria-label="Save changes to theme"
+          title="Save changes to theme"
+        >
+          <CheckIcon width={16} height={16} />
+        </button>
+        <button
+          type="button"
+          className="theme-action-button"
+          onClick={props.onCancel}
+          aria-label="Cancel"
+          title="Cancel — revert to saved theme"
+        >
+          <CloseIcon width={14} height={14} />
+        </button>
+      </>
+    );
+  }
+  return (
+    <>
+      <button
+        type="button"
+        className="theme-action-button"
+        onClick={() => props.onEdit(props.theme)}
+        aria-label="Edit theme"
+        title="Edit theme"
+      >
+        <EditIcon width={16} height={16} />
+      </button>
+      {props.isDefault ? (
+        <span className="theme-action-spacer" />
+      ) : (
+        <button
+          type="button"
+          className="theme-action-button theme-action-delete"
+          onClick={() => props.onDelete(props.theme.id)}
+          aria-label="Delete theme"
+          title="Delete theme"
+        >
+          <DeleteIcon width={16} height={16} />
+        </button>
+      )}
+    </>
+  );
+};
+
+interface ThemeRowProps extends ThemeRowSharedProps, Omit<ThemeDragHandleProps, 'isDefault'> {
+  dropTargetThemeId: string | null;
+  currentMatches: boolean;
+  onEdit: (theme: types.Theme) => void;
+  onDelete: (themeId: string) => void;
+}
+
+const ThemeRow = (props: ThemeRowProps) => (
+  <div
+    className={buildThemeRowClassName(
+      props.theme.id,
+      props.activeThemeId,
+      props.draggingThemeId,
+      props.dropTargetThemeId,
+      props.isDefault
+    )}
+  >
+    <ThemeDragHandle {...props} />
+    <ThemeRowFields {...props} />
+    <ThemeRowActions {...props} />
+  </div>
+);
+
+const UnsavedDefaultThemePrompt = ({
+  hasChanges,
+  activeThemeId,
+  defaultTheme,
+  onSave,
+}: {
+  hasChanges: boolean;
+  activeThemeId: string | null;
+  defaultTheme: types.Theme | null;
+  onSave: () => void;
+}) => {
+  if (!hasChanges || activeThemeId === DEFAULT_THEME_ID || !defaultTheme) {
+    return null;
+  }
+  return (
+    <div className="themes-unsaved-default" role="status">
+      <span>There are unsaved changes. Save as default?</span>
+      <button type="button" className="themes-unsaved-default-action" onClick={onSave}>
+        Save
+      </button>
+    </div>
+  );
+};
+
+const ThemesTable = ({ loading, children }: { loading: boolean; children: ReactNode }) => {
+  if (loading) {
+    return <div className="themes-loading">Loading themes...</div>;
+  }
+  return <div className="themes-table">{children}</div>;
+};
 
 function AppearanceSection() {
   const elementIdPrefix = useId();
@@ -697,33 +1123,23 @@ function AppearanceSection() {
 
   // Commit the active theme's edits (palette + name/pattern from themeDraft).
   const handleSaveActiveTheme = async () => {
-    if (!activeThemeId) {
+    const plan = getThemeSavePlan(activeThemeId, themes, themeDraft);
+    if (!plan) {
       return;
     }
-    const existing = themes.find((t) => t.id === activeThemeId);
-    if (!existing) {
-      return;
-    }
-    const trimmedName = themeDraft.name.trim();
-    if (!trimmedName) {
-      return; // Name is required.
-    }
-    const isDefault = existing.id === DEFAULT_THEME_ID;
-    const clusterPattern = isDefault ? '' : themeDraft.clusterPattern.trim();
-
-    if (!isDefault && !(await validateThemePatternDraft(clusterPattern))) {
+    if (!plan.isDefault && !(await validateThemePatternDraft(plan.clusterPattern))) {
       return;
     }
 
     try {
       const updated = buildThemeFromCurrentAppearance({
-        theme: existing,
-        name: isDefault ? existing.name : trimmedName,
-        clusterPattern,
+        theme: plan.existing,
+        name: plan.name,
+        clusterPattern: plan.clusterPattern,
       });
       await saveThemeEntry(updated);
       setActiveThemeId(null);
-      if (isDefault) {
+      if (plan.isDefault) {
         setHasUnsavedDefaultThemeChanges(false);
       }
     } catch (error) {
@@ -820,60 +1236,22 @@ function AppearanceSection() {
     }
   };
 
+  const activeAppearanceValues = useMemo<ThemeAppearanceValues>(
+    () => ({
+      hue: paletteHue,
+      saturation: paletteSaturation,
+      brightness: paletteBrightness,
+      accent: accentColor || '',
+      link: linkColor || '',
+    }),
+    [accentColor, linkColor, paletteBrightness, paletteHue, paletteSaturation]
+  );
+
   // True when the current live values match the saved theme exactly.
   const themeMatchesCurrent = useCallback(
-    (theme: types.Theme): boolean => {
-      const isLight = resolvedMode === 'light';
-
-      const activeHueMatch = isLight
-        ? theme.paletteHueLight === paletteHue
-        : theme.paletteHueDark === paletteHue;
-      const activeSatMatch = isLight
-        ? theme.paletteSaturationLight === paletteSaturation
-        : theme.paletteSaturationDark === paletteSaturation;
-      const activeBrtMatch = isLight
-        ? theme.paletteBrightnessLight === paletteBrightness
-        : theme.paletteBrightnessDark === paletteBrightness;
-      const activeAccentMatch = isLight
-        ? (theme.accentColorLight || '') === (accentColor || '')
-        : (theme.accentColorDark || '') === (accentColor || '');
-      const activeLinkMatch = isLight
-        ? (theme.linkColorLight || '') === (linkColor || '')
-        : (theme.linkColorDark || '') === (linkColor || '');
-
-      const otherTint = getPaletteTint(isLight ? 'dark' : 'light');
-      const otherAccent = getAccentColor(isLight ? 'dark' : 'light');
-      const otherLink = getLinkColor(isLight ? 'dark' : 'light');
-      const otherHueMatch = isLight
-        ? theme.paletteHueDark === otherTint.hue
-        : theme.paletteHueLight === otherTint.hue;
-      const otherSatMatch = isLight
-        ? theme.paletteSaturationDark === otherTint.saturation
-        : theme.paletteSaturationLight === otherTint.saturation;
-      const otherBrtMatch = isLight
-        ? theme.paletteBrightnessDark === otherTint.brightness
-        : theme.paletteBrightnessLight === otherTint.brightness;
-      const otherAccentMatch = isLight
-        ? (theme.accentColorDark || '') === (otherAccent || '')
-        : (theme.accentColorLight || '') === (otherAccent || '');
-      const otherLinkMatch = isLight
-        ? (theme.linkColorDark || '') === (otherLink || '')
-        : (theme.linkColorLight || '') === (otherLink || '');
-
-      return (
-        activeHueMatch &&
-        activeSatMatch &&
-        activeBrtMatch &&
-        activeAccentMatch &&
-        activeLinkMatch &&
-        otherHueMatch &&
-        otherSatMatch &&
-        otherBrtMatch &&
-        otherAccentMatch &&
-        otherLinkMatch
-      );
-    },
-    [resolvedMode, paletteHue, paletteSaturation, paletteBrightness, accentColor, linkColor]
+    (theme: types.Theme): boolean =>
+      doesThemeMatchCurrentAppearance(theme, resolvedMode, activeAppearanceValues),
+    [activeAppearanceValues, resolvedMode]
   );
 
   const defaultTheme = themes.find(isDefaultTheme) ?? null;
@@ -887,26 +1265,12 @@ function AppearanceSection() {
     name?: string;
     clusterPattern?: string;
   }): types.Theme {
-    const isLight = resolvedMode === 'light';
-    const otherMode = isLight ? 'dark' : 'light';
-    const otherTint = getPaletteTint(otherMode);
-    const otherAccent = getAccentColor(otherMode);
-    const otherLink = getLinkColor(otherMode);
-
-    return new types.Theme({
-      ...theme,
+    return buildThemeWithCurrentAppearance({
+      theme,
       name,
       clusterPattern,
-      paletteHueLight: isLight ? paletteHue : otherTint.hue,
-      paletteSaturationLight: isLight ? paletteSaturation : otherTint.saturation,
-      paletteBrightnessLight: isLight ? paletteBrightness : otherTint.brightness,
-      paletteHueDark: isLight ? otherTint.hue : paletteHue,
-      paletteSaturationDark: isLight ? otherTint.saturation : paletteSaturation,
-      paletteBrightnessDark: isLight ? otherTint.brightness : paletteBrightness,
-      accentColorLight: isLight ? accentColor : otherAccent,
-      accentColorDark: isLight ? otherAccent : accentColor,
-      linkColorLight: isLight ? linkColor : otherLink,
-      linkColorDark: isLight ? otherLink : linkColor,
+      resolvedMode,
+      activeValues: activeAppearanceValues,
     });
   }
 
@@ -1123,277 +1487,131 @@ function AppearanceSection() {
         </div>
         <div className="settings-row-control">
           <div className="themes-section">
-            {themesLoading ? (
-              <div className="themes-loading">Loading themes...</div>
-            ) : (
-              <div className="themes-table">
-                {hasUnsavedDefaultThemeChanges &&
-                  activeThemeId !== DEFAULT_THEME_ID &&
-                  defaultTheme && (
-                    <div className="themes-unsaved-default" role="status">
-                      <span>There are unsaved changes. Save as default?</span>
-                      <button
-                        type="button"
-                        className="themes-unsaved-default-action"
-                        onClick={handleSaveDefaultThemeFromPrompt}
+            <ThemesTable loading={themesLoading}>
+              <UnsavedDefaultThemePrompt
+                hasChanges={hasUnsavedDefaultThemeChanges}
+                activeThemeId={activeThemeId}
+                defaultTheme={defaultTheme}
+                onSave={() => {
+                  void handleSaveDefaultThemeFromPrompt();
+                }}
+              />
+              {themes.map((theme) => (
+                <ThemeRow
+                  key={theme.id}
+                  elementIdPrefix={elementIdPrefix}
+                  theme={theme}
+                  isDefault={isDefaultTheme(theme)}
+                  activeThemeId={activeThemeId}
+                  themeDraft={themeDraft}
+                  themePatternError={themePatternError}
+                  setThemeDraft={setThemeDraft}
+                  setThemePatternError={setThemePatternError}
+                  onSave={() => {
+                    void handleSaveActiveTheme();
+                  }}
+                  onCancel={() => {
+                    void handleCancelActiveTheme();
+                  }}
+                  draggingThemeId={draggingThemeId}
+                  dropTargetThemeId={dropTargetThemeId}
+                  setDraggingThemeId={setDraggingThemeId}
+                  setDropTargetThemeId={setDropTargetThemeId}
+                  onDrop={(themeId) => {
+                    void handleThemeDrop(themeId);
+                  }}
+                  onKeyboardReorder={(themeId, offset) => {
+                    void handleThemeKeyboardReorder(themeId, offset);
+                  }}
+                  currentMatches={themeMatchesCurrent(theme)}
+                  onEdit={handleEnterEditMode}
+                  onDelete={setDeleteConfirmThemeId}
+                />
+              ))}
+              {editingThemeId === 'new' ? (
+                <div className="setting-item setting-item-surface themes-table-row themes-table-row--new">
+                  <span className="themes-drag-handle themes-drag-handle--placeholder"></span>
+                  <div className="theme-fields">
+                    <input
+                      ref={newThemeNameInputRef}
+                      className="theme-name-input"
+                      value={themeDraft.name}
+                      onChange={(e) => setThemeDraft((d) => ({ ...d, name: e.target.value }))}
+                      placeholder="Name"
+                      onKeyDown={(e) => {
+                        if (e.key === 'Enter') {
+                          handleThemeSave();
+                        } else if (e.key === 'Escape') {
+                          handleThemeEditCancel();
+                        } else {
+                          e.stopPropagation();
+                        }
+                      }}
+                    />
+                    <input
+                      className="theme-pattern-input"
+                      value={themeDraft.clusterPattern}
+                      onChange={(e) => {
+                        setThemePatternError(null);
+                        setThemeDraft((d) => ({
+                          ...d,
+                          clusterPattern: e.target.value,
+                        }));
+                      }}
+                      placeholder="Pattern (optional)"
+                      aria-invalid={themePatternError ? 'true' : undefined}
+                      aria-describedby={
+                        themePatternError ? `${elementIdPrefix}-theme-pattern-error-new` : undefined
+                      }
+                      onKeyDown={(e) => {
+                        if (e.key === 'Enter') {
+                          handleThemeSave();
+                        } else if (e.key === 'Escape') {
+                          handleThemeEditCancel();
+                        } else {
+                          e.stopPropagation();
+                        }
+                      }}
+                    />
+                    {!!themePatternError && (
+                      <div
+                        id={`${elementIdPrefix}-theme-pattern-error-new`}
+                        className="theme-pattern-error"
                       >
-                        Save
-                      </button>
-                    </div>
-                  )}
-                {themes.map((theme) => {
-                  const isDefault = isDefaultTheme(theme);
-                  const isDragging = theme.id === draggingThemeId;
-                  const isDropTarget =
-                    theme.id === dropTargetThemeId && theme.id !== draggingThemeId && !isDefault;
-                  return (
-                    <div
-                      key={theme.id}
-                      className={`setting-item setting-item-surface themes-table-row${isDragging ? ' themes-table-row--dragging' : ''}${isDropTarget ? ' themes-table-row--drop-target' : ''}${activeThemeId && activeThemeId !== theme.id ? ' themes-table-row--dimmed' : ''}`}
-                    >
-                      {isDefault ? (
-                        <span className="themes-drag-handle themes-drag-handle--placeholder"></span>
-                      ) : (
-                        <button
-                          type="button"
-                          className="themes-drag-handle"
-                          draggable
-                          onDragStart={(e) => {
-                            e.dataTransfer.effectAllowed = 'move';
-                            setDraggingThemeId(theme.id);
-                          }}
-                          onDragEnd={() => {
-                            setDraggingThemeId(null);
-                            setDropTargetThemeId(null);
-                          }}
-                          onDragOver={(event) => {
-                            if (!draggingThemeId) {
-                              return;
-                            }
-                            event.preventDefault();
-                            setDropTargetThemeId(theme.id);
-                          }}
-                          onDragLeave={() => {
-                            setDropTargetThemeId((current) =>
-                              current === theme.id ? null : current
-                            );
-                          }}
-                          onDrop={(event) => {
-                            event.preventDefault();
-                            void handleThemeDrop(theme.id);
-                          }}
-                          onKeyDown={(event) => {
-                            if (event.key !== 'ArrowUp' && event.key !== 'ArrowDown') {
-                              return;
-                            }
-                            event.preventDefault();
-                            void handleThemeKeyboardReorder(
-                              theme.id,
-                              event.key === 'ArrowUp' ? -1 : 1
-                            );
-                          }}
-                          aria-label={`Reorder ${theme.name}. Use Up and Down Arrow keys.`}
-                          title="Drag or use Up and Down Arrow keys to reorder"
-                        >
-                          &#x283F;
-                        </button>
-                      )}
-                      {activeThemeId === theme.id && !isDefault ? (
-                        <div className="theme-fields">
-                          <input
-                            className="theme-name-input"
-                            value={themeDraft.name}
-                            onChange={(e) => setThemeDraft((d) => ({ ...d, name: e.target.value }))}
-                            placeholder="Name"
-                            onKeyDown={(e) => {
-                              if (e.key === 'Enter') {
-                                handleSaveActiveTheme();
-                              } else if (e.key === 'Escape') {
-                                handleCancelActiveTheme();
-                              } else {
-                                e.stopPropagation();
-                              }
-                            }}
-                          />
-                          <input
-                            className="theme-pattern-input"
-                            value={themeDraft.clusterPattern}
-                            onChange={(e) => {
-                              setThemePatternError(null);
-                              setThemeDraft((d) => ({
-                                ...d,
-                                clusterPattern: e.target.value,
-                              }));
-                            }}
-                            placeholder="Pattern (optional)"
-                            aria-invalid={themePatternError ? 'true' : undefined}
-                            aria-describedby={
-                              themePatternError ? 'theme-pattern-error-active' : undefined
-                            }
-                            onKeyDown={(e) => {
-                              if (e.key === 'Enter') {
-                                handleSaveActiveTheme();
-                              } else if (e.key === 'Escape') {
-                                handleCancelActiveTheme();
-                              } else {
-                                e.stopPropagation();
-                              }
-                            }}
-                          />
-                          {!!themePatternError && (
-                            <div
-                              id={`${elementIdPrefix}-theme-pattern-error-active`}
-                              className="theme-pattern-error"
-                            >
-                              <ErrorSurface kind="validation" message={themePatternError} />
-                            </div>
-                          )}
-                        </div>
-                      ) : (
-                        <div className="theme-summary">
-                          <span className="theme-name">{theme.name}</span>
-                          <span className="theme-pattern">{theme.clusterPattern || '*'}</span>
-                        </div>
-                      )}
-                      {activeThemeId === theme.id ? (
-                        <>
-                          <button
-                            type="button"
-                            className="theme-action-button"
-                            onClick={handleSaveActiveTheme}
-                            disabled={
-                              themeMatchesCurrent(theme) &&
-                              (isDefault ||
-                                (themeDraft.name === theme.name &&
-                                  themeDraft.clusterPattern === theme.clusterPattern))
-                            }
-                            aria-label="Save changes to theme"
-                            title="Save changes to theme"
-                          >
-                            <CheckIcon width={16} height={16} />
-                          </button>
-                          <button
-                            type="button"
-                            className="theme-action-button"
-                            onClick={handleCancelActiveTheme}
-                            aria-label="Cancel"
-                            title="Cancel — revert to saved theme"
-                          >
-                            <CloseIcon width={14} height={14} />
-                          </button>
-                        </>
-                      ) : (
-                        <>
-                          <button
-                            type="button"
-                            className="theme-action-button"
-                            onClick={() => handleEnterEditMode(theme)}
-                            aria-label="Edit theme"
-                            title="Edit theme"
-                          >
-                            <EditIcon width={16} height={16} />
-                          </button>
-                          {isDefault ? (
-                            <span className="theme-action-spacer"></span>
-                          ) : (
-                            <button
-                              type="button"
-                              className="theme-action-button theme-action-delete"
-                              onClick={() => setDeleteConfirmThemeId(theme.id)}
-                              aria-label="Delete theme"
-                              title="Delete theme"
-                            >
-                              <DeleteIcon width={16} height={16} />
-                            </button>
-                          )}
-                        </>
-                      )}
-                    </div>
-                  );
-                })}
-                {editingThemeId === 'new' ? (
-                  <div className="setting-item setting-item-surface themes-table-row themes-table-row--new">
-                    <span className="themes-drag-handle themes-drag-handle--placeholder"></span>
-                    <div className="theme-fields">
-                      <input
-                        ref={newThemeNameInputRef}
-                        className="theme-name-input"
-                        value={themeDraft.name}
-                        onChange={(e) => setThemeDraft((d) => ({ ...d, name: e.target.value }))}
-                        placeholder="Name"
-                        onKeyDown={(e) => {
-                          if (e.key === 'Enter') {
-                            handleThemeSave();
-                          } else if (e.key === 'Escape') {
-                            handleThemeEditCancel();
-                          } else {
-                            e.stopPropagation();
-                          }
-                        }}
-                      />
-                      <input
-                        className="theme-pattern-input"
-                        value={themeDraft.clusterPattern}
-                        onChange={(e) => {
-                          setThemePatternError(null);
-                          setThemeDraft((d) => ({
-                            ...d,
-                            clusterPattern: e.target.value,
-                          }));
-                        }}
-                        placeholder="Pattern (optional)"
-                        aria-invalid={themePatternError ? 'true' : undefined}
-                        aria-describedby={themePatternError ? 'theme-pattern-error-new' : undefined}
-                        onKeyDown={(e) => {
-                          if (e.key === 'Enter') {
-                            handleThemeSave();
-                          } else if (e.key === 'Escape') {
-                            handleThemeEditCancel();
-                          } else {
-                            e.stopPropagation();
-                          }
-                        }}
-                      />
-                      {!!themePatternError && (
-                        <div
-                          id={`${elementIdPrefix}-theme-pattern-error-new`}
-                          className="theme-pattern-error"
-                        >
-                          <ErrorSurface kind="validation" message={themePatternError} />
-                        </div>
-                      )}
-                    </div>
-                    <button
-                      type="button"
-                      className="theme-action-button"
-                      onClick={handleThemeSave}
-                      aria-label="Save new theme"
-                      title="Save new theme"
-                    >
-                      <CheckIcon width={16} height={16} />
-                    </button>
-                    <button
-                      type="button"
-                      className="theme-action-button"
-                      onClick={handleThemeEditCancel}
-                      aria-label="Cancel"
-                      title="Cancel"
-                    >
-                      <CloseIcon width={14} height={14} />
-                    </button>
+                        <ErrorSurface kind="validation" message={themePatternError} />
+                      </div>
+                    )}
                   </div>
-                ) : (
                   <button
                     type="button"
-                    className="button generic settings-add-button themes-save-new-row"
-                    onClick={handleSaveCurrentAsTheme}
+                    className="theme-action-button"
+                    onClick={handleThemeSave}
+                    aria-label="Save new theme"
+                    title="Save new theme"
                   >
-                    <PlusIcon width={12} height={12} />
-                    Save new theme
+                    <CheckIcon width={16} height={16} />
                   </button>
-                )}
-              </div>
-            )}
+                  <button
+                    type="button"
+                    className="theme-action-button"
+                    onClick={handleThemeEditCancel}
+                    aria-label="Cancel"
+                    title="Cancel"
+                  >
+                    <CloseIcon width={14} height={14} />
+                  </button>
+                </div>
+              ) : (
+                <button
+                  type="button"
+                  className="button generic settings-add-button themes-save-new-row"
+                  onClick={handleSaveCurrentAsTheme}
+                >
+                  <PlusIcon width={12} height={12} />
+                  Save new theme
+                </button>
+              )}
+            </ThemesTable>
           </div>
         </div>
       </div>

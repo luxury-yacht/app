@@ -209,32 +209,123 @@ export const applyLogViewerPrefs = (
   mode: prefs.showPreviousContainerLogs ? { kind: 'previous', loading: false } : LIVE_MODE,
 });
 
-export function logViewerReducer(state: LogViewerState, action: LogViewerAction): LogViewerState {
+type LogViewerActionReducer = (
+  state: LogViewerState,
+  action: LogViewerAction
+) => LogViewerState | null;
+
+const cycleTimestampMode = (state: LogViewerState): LogViewerState => {
+  const currentIndex = TIMESTAMP_MODE_ORDER.indexOf(state.timestampMode);
+  return {
+    ...state,
+    timestampMode: TIMESTAMP_MODE_ORDER[(currentIndex + 1) % TIMESTAMP_MODE_ORDER.length],
+  };
+};
+
+const toggleHighlightMatches = (state: LogViewerState): LogViewerState => ({
+  ...state,
+  highlightMatches: state.inverseMatches ? false : !state.highlightMatches,
+});
+
+const toggleInverseMatches = (state: LogViewerState): LogViewerState => ({
+  ...state,
+  inverseMatches: !state.inverseMatches,
+  highlightMatches: state.inverseMatches ? state.highlightMatches : false,
+});
+
+const toggleCaseSensitiveMatches = (state: LogViewerState): LogViewerState =>
+  state.regexMatches ? state : { ...state, caseSensitiveMatches: !state.caseSensitiveMatches };
+
+const toggleRegexMatches = (state: LogViewerState): LogViewerState => ({
+  ...state,
+  regexMatches: !state.regexMatches,
+  caseSensitiveMatches: state.regexMatches ? state.caseSensitiveMatches : false,
+});
+
+const toggleParsedView = (state: LogViewerState): LogViewerState => {
+  const showParsed = state.displayMode !== 'parsed';
+  return {
+    ...state,
+    displayMode: showParsed ? 'parsed' : 'raw',
+    parsedContainerLogs: showParsed ? state.parsedContainerLogs : [],
+    expandedRows: new Set<string>(),
+  };
+};
+
+const setDisplayMode = (state: LogViewerState, displayMode: LogDisplayMode): LogViewerState => ({
+  ...state,
+  displayMode,
+  parsedContainerLogs: displayMode === 'parsed' ? state.parsedContainerLogs : [],
+  expandedRows: new Set<string>(),
+});
+
+const toggleRowExpansion = (state: LogViewerState, rowId: string): LogViewerState => {
+  const expandedRows = new Set(state.expandedRows);
+  if (expandedRows.has(rowId)) {
+    expandedRows.delete(rowId);
+  } else {
+    expandedRows.add(rowId);
+  }
+  return { ...state, expandedRows };
+};
+
+const setFallbackMode = (state: LogViewerState, active: boolean): LogViewerState => {
+  if (active) {
+    return state.mode.kind === 'previous' ? state : { ...state, mode: { kind: 'fallback' } };
+  }
+  return state.mode.kind === 'fallback' ? { ...state, mode: LIVE_MODE } : state;
+};
+
+const setPreviousLogsMode = (state: LogViewerState, visible: boolean): LogViewerState => {
+  if (visible) {
+    return state.mode.kind === 'previous'
+      ? state
+      : { ...state, mode: { kind: 'previous', loading: false } };
+  }
+  return state.mode.kind === 'previous' ? { ...state, mode: LIVE_MODE } : state;
+};
+
+const setPreviousLogsLoading = (state: LogViewerState, loading: boolean): LogViewerState =>
+  state.mode.kind === 'previous' ? { ...state, mode: { kind: 'previous', loading } } : state;
+
+const resetForNewScope = (state: LogViewerState, isWorkload: boolean): LogViewerState => ({
+  ...state,
+  selectedFilters: ALL_MULTISELECT_FILTER,
+  selectedContainer: isWorkload ? state.selectedContainer : '',
+  textFilter: '',
+  highlightMatches: false,
+  inverseMatches: false,
+  caseSensitiveMatches: false,
+  regexMatches: false,
+  displayMode: 'raw',
+  parsedContainerLogs: [],
+  expandedRows: new Set<string>(),
+  mode: LIVE_MODE,
+});
+
+const reduceContainerAndFilterAction: LogViewerActionReducer = (state, action) => {
   switch (action.type) {
-    // Container actions
     case 'SET_CONTAINERS':
       return { ...state, containers: action.payload };
     case 'SET_SELECTED_CONTAINER':
       return { ...state, selectedContainer: action.payload };
-
-    // Workload filter actions
     case 'SET_AVAILABLE_PODS':
       return { ...state, availablePods: action.payload };
     case 'SET_AVAILABLE_CONTAINERS':
       return { ...state, availableContainers: action.payload };
     case 'SET_SELECTED_FILTERS':
       return { ...state, selectedFilters: action.payload };
+    default:
+      return null;
+  }
+};
 
-    // UI settings actions
+const reduceUiSettingsAction: LogViewerActionReducer = (state, action) => {
+  switch (action.type) {
     case 'TOGGLE_AUTO_REFRESH':
       return { ...state, autoRefresh: !state.autoRefresh };
-    case 'CYCLE_TIMESTAMP_MODE': {
-      const currentIndex = TIMESTAMP_MODE_ORDER.indexOf(state.timestampMode);
-      return {
-        ...state,
-        timestampMode: TIMESTAMP_MODE_ORDER[(currentIndex + 1) % TIMESTAMP_MODE_ORDER.length],
-      };
-    }
+    case 'CYCLE_TIMESTAMP_MODE':
+      return cycleTimestampMode(state);
     case 'SET_TIMESTAMP_MODE':
       return { ...state, timestampMode: action.payload };
     case 'TOGGLE_WRAP_TEXT':
@@ -242,108 +333,77 @@ export function logViewerReducer(state: LogViewerState, action: LogViewerAction)
     case 'TOGGLE_SHOW_ANSI_COLORS':
       return { ...state, showAnsiColors: !state.showAnsiColors };
     case 'SET_TEXT_FILTER':
-      return {
-        ...state,
-        textFilter: action.payload,
-      };
+      return { ...state, textFilter: action.payload };
     case 'TOGGLE_HIGHLIGHT_MATCHES':
-      return {
-        ...state,
-        highlightMatches: !state.inverseMatches ? !state.highlightMatches : false,
-      };
+      return toggleHighlightMatches(state);
     case 'TOGGLE_INVERSE_MATCHES':
-      return {
-        ...state,
-        inverseMatches: !state.inverseMatches,
-        highlightMatches: !state.inverseMatches ? false : state.highlightMatches,
-      };
+      return toggleInverseMatches(state);
     case 'TOGGLE_CASE_SENSITIVE_MATCHES':
-      if (state.regexMatches) {
-        return state;
-      }
-      return {
-        ...state,
-        caseSensitiveMatches: !state.caseSensitiveMatches,
-      };
+      return toggleCaseSensitiveMatches(state);
     case 'TOGGLE_REGEX_MATCHES':
-      return {
-        ...state,
-        regexMatches: !state.regexMatches,
-        caseSensitiveMatches: !state.regexMatches ? false : state.caseSensitiveMatches,
-      };
+      return toggleRegexMatches(state);
+    default:
+      return null;
+  }
+};
 
-    // Parsed view actions
+const reduceParsedViewAction: LogViewerActionReducer = (state, action) => {
+  switch (action.type) {
     case 'TOGGLE_PARSED_VIEW':
-      return {
-        ...state,
-        displayMode: state.displayMode === 'parsed' ? 'raw' : 'parsed',
-        parsedContainerLogs: state.displayMode === 'parsed' ? [] : state.parsedContainerLogs,
-        expandedRows: new Set<string>(),
-      };
+      return toggleParsedView(state);
     case 'SET_DISPLAY_MODE':
-      return {
-        ...state,
-        displayMode: action.payload,
-        parsedContainerLogs: action.payload === 'parsed' ? state.parsedContainerLogs : [],
-        expandedRows: new Set<string>(),
-      };
+      return setDisplayMode(state, action.payload);
     case 'SET_PARSED_LOGS':
       return { ...state, parsedContainerLogs: action.payload };
-    case 'TOGGLE_ROW_EXPANSION': {
-      const next = new Set(state.expandedRows);
-      if (next.has(action.payload)) {
-        next.delete(action.payload);
-      } else {
-        next.add(action.payload);
-      }
-      return { ...state, expandedRows: next };
-    }
+    case 'TOGGLE_ROW_EXPANSION':
+      return toggleRowExpansion(state, action.payload);
+    default:
+      return null;
+  }
+};
 
-    // Async/status actions — each maps to a `mode` transition.
+const reduceAsyncStatusAction: LogViewerActionReducer = (state, action) => {
+  switch (action.type) {
     case 'SET_COPY_FEEDBACK':
       return { ...state, copyFeedback: action.payload };
     case 'SET_FALLBACK_ACTIVE':
-      if (action.payload) {
-        // Fallback applies only to the live stream; never interrupt the
-        // previous-logs view (which has no stream to fall back from).
-        return state.mode.kind === 'previous' ? state : { ...state, mode: { kind: 'fallback' } };
-      }
-      return state.mode.kind === 'fallback' ? { ...state, mode: LIVE_MODE } : state;
+      return setFallbackMode(state, action.payload);
     case 'SET_SHOW_PREVIOUS_LOGS':
-      if (action.payload) {
-        return state.mode.kind === 'previous'
-          ? state
-          : { ...state, mode: { kind: 'previous', loading: false } };
-      }
-      return state.mode.kind === 'previous' ? { ...state, mode: LIVE_MODE } : state;
+      return setPreviousLogsMode(state, action.payload);
     case 'SET_IS_LOADING_PREVIOUS_LOGS':
-      // Loading only exists inside the previous-logs mode.
-      return state.mode.kind === 'previous'
-        ? { ...state, mode: { kind: 'previous', loading: action.payload } }
-        : state;
+      return setPreviousLogsLoading(state, action.payload);
+    default:
+      return null;
+  }
+};
 
-    // Compound actions
+const reduceCompoundAction: LogViewerActionReducer = (state, action) => {
+  switch (action.type) {
     case 'RESET_FOR_NEW_SCOPE':
-      return {
-        ...state,
-        selectedFilters: ALL_MULTISELECT_FILTER,
-        selectedContainer: action.isWorkload ? state.selectedContainer : '',
-        textFilter: '',
-        highlightMatches: false,
-        inverseMatches: false,
-        caseSensitiveMatches: false,
-        regexMatches: false,
-        displayMode: 'raw',
-        parsedContainerLogs: [],
-        expandedRows: new Set<string>(),
-        mode: LIVE_MODE,
-      };
+      return resetForNewScope(state, action.isWorkload);
     case 'START_PREVIOUS_LOGS':
       return { ...state, mode: { kind: 'previous', loading: true } };
     case 'STOP_PREVIOUS_LOGS':
       return { ...state, mode: LIVE_MODE };
-
     default:
-      return state;
+      return null;
   }
+};
+
+const LOG_VIEWER_ACTION_REDUCERS: LogViewerActionReducer[] = [
+  reduceContainerAndFilterAction,
+  reduceUiSettingsAction,
+  reduceParsedViewAction,
+  reduceAsyncStatusAction,
+  reduceCompoundAction,
+];
+
+export function logViewerReducer(state: LogViewerState, action: LogViewerAction): LogViewerState {
+  for (const reducer of LOG_VIEWER_ACTION_REDUCERS) {
+    const nextState = reducer(state, action);
+    if (nextState) {
+      return nextState;
+    }
+  }
+  return state;
 }

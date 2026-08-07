@@ -83,6 +83,60 @@ import {
   SYSTEM_REFRESHERS,
 } from './refresherTypes';
 
+const normalizeClusterIds = (ids?: string[]): string[] =>
+  (ids ?? []).map((id) => id.trim()).filter(Boolean);
+
+const hasSameClusterSelection = (left?: string[], right?: string[]): boolean => {
+  const leftSet = new Set(normalizeClusterIds(left));
+  const rightSet = new Set(normalizeClusterIds(right));
+  return leftSet.size === rightSet.size && Array.from(leftSet).every((id) => rightSet.has(id));
+};
+
+const selectedClusters = (context: RefreshContext): string[] | undefined =>
+  context.allConnectedClusterIds ?? context.selectedClusterIds;
+
+const namespaceScopeChanged = (previous: RefreshContext, current: RefreshContext): boolean =>
+  previous.selectedNamespace !== current.selectedNamespace ||
+  previous.selectedNamespaceClusterId !== current.selectedNamespaceClusterId;
+
+const clusterSelectionChanged = (previous: RefreshContext, current: RefreshContext): boolean =>
+  !hasSameClusterSelection(selectedClusters(previous), selectedClusters(current));
+
+const selectedClusterChanged = (previous: RefreshContext, current: RefreshContext): boolean =>
+  previous.selectedClusterId !== current.selectedClusterId;
+
+const activeNamespaceRefresher = (context: RefreshContext): RefresherName | null =>
+  context.activeNamespaceView ? namespaceViewToRefresher[context.activeNamespaceView] : null;
+
+const activeClusterRefresher = (context: RefreshContext): RefresherName | null =>
+  context.activeClusterView ? clusterViewToRefresher[context.activeClusterView] : null;
+
+const namespaceForegroundChanged = (previous: RefreshContext, current: RefreshContext): boolean =>
+  current.currentView === 'namespace' && namespaceScopeChanged(previous, current);
+
+const clusterForegroundChanged = (previous: RefreshContext, current: RefreshContext): boolean =>
+  current.currentView === 'cluster' &&
+  (previous.activeClusterView !== current.activeClusterView ||
+    clusterSelectionChanged(previous, current) ||
+    selectedClusterChanged(previous, current));
+
+const canStartRefresh = (
+  instance: RefresherInstance,
+  invocation: RefreshInvocation,
+  globallyPaused: boolean
+): boolean => {
+  if (invocation !== 'automatic') {
+    return true;
+  }
+  return (
+    instance.isEnabled &&
+    !globallyPaused &&
+    instance.state.status !== 'paused' &&
+    instance.state.status !== 'refreshing' &&
+    instance.state.status !== 'cooldown'
+  );
+};
+
 class RefreshManager {
   private static instance: RefreshManager;
   private refreshers: Map<RefresherName, RefresherInstance> = new Map();
@@ -500,73 +554,24 @@ class RefreshManager {
     current: RefreshContext
   ): RefresherName[] {
     const targets = new Set<RefresherName>();
-    const normalizeClusterIds = (ids?: string[]) =>
-      (ids ?? []).map((id) => id.trim()).filter(Boolean);
-    const hasSameClusterSelection = (left?: string[], right?: string[]) => {
-      const leftSet = new Set(normalizeClusterIds(left));
-      const rightSet = new Set(normalizeClusterIds(right));
-      if (leftSet.size !== rightSet.size) {
-        return false;
+
+    if (namespaceForegroundChanged(previous, current)) {
+      const refresher = activeNamespaceRefresher(current);
+      if (refresher) {
+        targets.add(refresher);
       }
-      for (const id of leftSet) {
-        if (!rightSet.has(id)) {
-          return false;
-        }
-      }
-      return true;
-    };
-    const connectedClusterSelectionChanged = !hasSameClusterSelection(
-      previous.allConnectedClusterIds ?? previous.selectedClusterIds,
-      current.allConnectedClusterIds ?? current.selectedClusterIds
-    );
+    }
+
     // A foreground tab switch repaints retained scoped state immediately, then
     // refreshes the visible view so that snapshot is replaced with current data.
-    const clusterChanged = previous.selectedClusterId !== current.selectedClusterId;
-
-    // Namespace scope changes include the cluster identity tied to the selection.
-    const namespaceChanged =
-      previous.selectedNamespace !== current.selectedNamespace ||
-      previous.selectedNamespaceClusterId !== current.selectedNamespaceClusterId;
-    if (namespaceChanged && current.currentView === 'namespace') {
-      const namespaceRefresher = current.activeNamespaceView
-        ? namespaceViewToRefresher[current.activeNamespaceView]
-        : null;
-      if (namespaceRefresher) {
-        targets.add(namespaceRefresher);
+    if (clusterForegroundChanged(previous, current)) {
+      const refresher = activeClusterRefresher(current);
+      if (refresher) {
+        targets.add(refresher);
       }
     }
 
-    if (
-      previous.activeClusterView !== current.activeClusterView &&
-      current.currentView === 'cluster'
-    ) {
-      const clusterRefresher = current.activeClusterView
-        ? clusterViewToRefresher[current.activeClusterView]
-        : null;
-      if (clusterRefresher) {
-        targets.add(clusterRefresher);
-      }
-    }
-
-    if (connectedClusterSelectionChanged && current.currentView === 'cluster') {
-      const clusterRefresher = current.activeClusterView
-        ? clusterViewToRefresher[current.activeClusterView]
-        : null;
-      if (clusterRefresher) {
-        targets.add(clusterRefresher);
-      }
-    }
-
-    if (clusterChanged && current.currentView === 'cluster') {
-      const clusterRefresher = current.activeClusterView
-        ? clusterViewToRefresher[current.activeClusterView]
-        : null;
-      if (clusterRefresher) {
-        targets.add(clusterRefresher);
-      }
-    }
-
-    if (clusterChanged && current.currentView === 'overview') {
+    if (selectedClusterChanged(previous, current) && current.currentView === 'overview') {
       targets.add(SYSTEM_REFRESHERS.clusterOverview);
     }
 
@@ -602,138 +607,106 @@ class RefreshManager {
    */
   private async refreshSingle(name: RefresherName, invocation: RefreshInvocation): Promise<void> {
     const instance = this.refreshers.get(name);
-    if (!instance) {
+    if (!instance || !canStartRefresh(instance, invocation, this.isGloballyPaused)) {
       return;
     }
 
     const isManual = invocation === 'manual';
-    const isForeground = invocation === 'foreground';
-
-    if (!instance.isEnabled && !isManual && !isForeground) {
-      return;
-    }
-
-    // Don't refresh if globally paused (unless manual refresh)
-    if (this.isGloballyPaused && !isManual && !isForeground) {
-      return;
-    }
-
-    // Don't refresh if individually paused (unless manual refresh)
-    if (instance.state.status === 'paused' && !isManual && !isForeground) {
-      return;
-    }
-
-    // Handle concurrent refresh based on type
     if (instance.state.status === 'refreshing') {
-      if (isManual || isForeground) {
-        // A manual request or a newly visible context supersedes stale work.
-        if (instance.abortController) {
-          instance.abortController.abort();
-          instance.abortController = undefined;
-        }
-        // Wait for it to finish aborting
-        if (instance.refreshPromise) {
-          try {
-            await instance.refreshPromise;
-          } catch {
-            // Ignore abort errors
-          }
-        }
-      } else {
-        // Auto-refresh cannot interrupt anything
-        return;
-      }
+      await this.supersedeRefresh(instance);
     }
 
-    // Don't start auto-refresh if in cooldown
-    if (!isManual && !isForeground && instance.state.status === 'cooldown') {
-      return;
-    }
-
-    // Clear timers if manual refresh
     if (isManual) {
       this.clearTimers(instance);
     }
 
-    // Create new abort controller
     const abortController = new AbortController();
     instance.abortController = abortController;
-
-    // Update state
     instance.state.status = 'refreshing';
     this.emitStateChange(name);
-
-    // Emit refresh start event
     eventBus.emit('refresh:start', { name, isManual });
-
-    // Notify subscribers
     const callbacks = this.subscribers.get(name) || new Set();
-
-    // Perform refresh with abort signal
     const refreshPromise = this.executeRefresh(
       callbacks,
       isManual,
       abortController.signal,
       instance.config.timeout
     );
-
-    // Store the promise for potential cancellation
     instance.refreshPromise = refreshPromise;
 
     try {
-      const { successCount, failures } = await instance.refreshPromise;
-      if (failures.length > 0 && successCount === 0) {
-        throw failures[0].error;
-      }
-
-      // Update state
-      instance.state.lastRefreshTime = new Date();
-      instance.state.error = null;
-      instance.state.consecutiveErrors = 0;
-
-      // Emit refresh complete event
-      eventBus.emit('refresh:complete', { name, isManual, success: true });
-
-      // Enter cooldown
-      this.enterCooldown(name, instance, isManual, false);
+      const summary = await refreshPromise;
+      this.completeRefresh(name, instance, isManual, summary);
     } catch (error) {
-      // Check if this was an intentional abort, not a real error
-      const wasAborted =
-        abortController.signal.aborted || (error instanceof Error && error.name === 'AbortError');
-
-      if (wasAborted) {
-        // Clean up abort controller
-        if (instance.abortController) {
-          instance.abortController = undefined;
-        }
-        // Don't treat abort as error - just reset to idle
-        instance.state.status = 'idle';
-        this.emitStateChange(name);
+      if (this.completeAbortedRefresh(name, instance, abortController, error)) {
         return;
       }
-
-      // Abort the underlying refresh to cancel in-flight requests
-      if (instance.abortController) {
-        instance.abortController.abort();
-        instance.abortController = undefined;
-      }
-
-      // Handle error
-      instance.state.error = error as Error;
-      instance.state.consecutiveErrors++;
-      instance.state.status = 'error';
-      this.emitStateChange(name);
-
-      // Emit refresh complete event with error
-      eventBus.emit('refresh:complete', { name, isManual, success: false, error });
-
-      // Refresh failed - error stored in state
-
-      // Still enter cooldown to prevent rapid retries
-      this.enterCooldown(name, instance, isManual, true);
+      this.completeFailedRefresh(name, instance, isManual, error);
     } finally {
       instance.refreshPromise = undefined;
     }
+  }
+
+  private async supersedeRefresh(instance: RefresherInstance): Promise<void> {
+    instance.abortController?.abort();
+    instance.abortController = undefined;
+    if (!instance.refreshPromise) {
+      return;
+    }
+    try {
+      await instance.refreshPromise;
+    } catch {
+      // Superseded work owns its own error state; the new refresh proceeds.
+    }
+  }
+
+  private completeRefresh(
+    name: RefresherName,
+    instance: RefresherInstance,
+    isManual: boolean,
+    summary: RefreshExecutionSummary
+  ): void {
+    if (summary.failures.length > 0 && summary.successCount === 0) {
+      throw summary.failures[0].error;
+    }
+    instance.state.lastRefreshTime = new Date();
+    instance.state.error = null;
+    instance.state.consecutiveErrors = 0;
+    eventBus.emit('refresh:complete', { name, isManual, success: true });
+    this.enterCooldown(name, instance, isManual, false);
+  }
+
+  private completeAbortedRefresh(
+    name: RefresherName,
+    instance: RefresherInstance,
+    abortController: AbortController,
+    error: unknown
+  ): boolean {
+    const wasAborted =
+      abortController.signal.aborted || (error instanceof Error && error.name === 'AbortError');
+    if (!wasAborted) {
+      return false;
+    }
+    instance.abortController = undefined;
+    instance.state.status = 'idle';
+    this.emitStateChange(name);
+    return true;
+  }
+
+  private completeFailedRefresh(
+    name: RefresherName,
+    instance: RefresherInstance,
+    isManual: boolean,
+    error: unknown
+  ): void {
+    instance.abortController?.abort();
+    instance.abortController = undefined;
+    instance.state.error = error as Error;
+    instance.state.consecutiveErrors++;
+    instance.state.status = 'error';
+    this.emitStateChange(name);
+    eventBus.emit('refresh:complete', { name, isManual, success: false, error });
+    this.enterCooldown(name, instance, isManual, true);
   }
 
   /**

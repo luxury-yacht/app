@@ -19,6 +19,25 @@ export const formatInterval = (intervalMs: number | null): string => {
   return `${(intervalMs / 1000).toFixed(1)}s`;
 };
 
+const resolvePodsNamespace = (scope: string): string => {
+  if (scope.startsWith('workload:')) {
+    const [, namespace] = scope.split(':');
+    return namespace || '-';
+  }
+  if (!scope.startsWith('namespace:')) {
+    return '-';
+  }
+  const namespace = scope.slice('namespace:'.length);
+  return namespace === 'all' ? 'All' : namespace || '-';
+};
+
+const resolveMaintenanceTarget = (scope: string): string => {
+  if (!scope.startsWith('node:')) {
+    return scope;
+  }
+  return scope.slice('node:'.length) || '-';
+};
+
 export const resolveDomainNamespace = (domain: RefreshDomain, scope?: string): string => {
   if (!scope) {
     return '-';
@@ -32,25 +51,10 @@ export const resolveDomainNamespace = (domain: RefreshDomain, scope?: string): s
     return parts[parts.length - 1] || normalizedScope;
   }
   if (domain === 'pods') {
-    if (normalizedScope.startsWith('workload:')) {
-      const [, namespace] = normalizedScope.split(':');
-      return namespace || '-';
-    }
-    if (normalizedScope.startsWith('namespace:')) {
-      const namespace = normalizedScope.slice('namespace:'.length);
-      if (!namespace) {
-        return '-';
-      }
-      return namespace === 'all' ? 'All' : namespace;
-    }
-    return '-';
+    return resolvePodsNamespace(normalizedScope);
   }
   if (domain === 'object-maintenance') {
-    if (normalizedScope.startsWith('node:')) {
-      const node = normalizedScope.slice('node:'.length);
-      return node || '-';
-    }
-    return normalizedScope;
+    return resolveMaintenanceTarget(normalizedScope);
   }
   return '-';
 };

@@ -62,52 +62,33 @@ const isValidLogEntry = (value: unknown): boolean =>
   typeof value.isInit === 'boolean' &&
   (value.isEphemeral === undefined || typeof value.isEphemeral === 'boolean');
 
+const hasValidRequiredPayloadFields = (value: Record<string, unknown>): boolean =>
+  typeof value.domain === 'string' &&
+  typeof value.scope === 'string' &&
+  typeof value.sequence === 'number' &&
+  typeof value.generatedAt === 'number';
+
+const hasValidWarnings = (warnings: unknown): boolean =>
+  warnings === null ||
+  warnings === undefined ||
+  (Array.isArray(warnings) && warnings.every((warning) => typeof warning === 'string'));
+
+const hasValidEntries = (entries: unknown): boolean =>
+  entries === undefined ||
+  (Array.isArray(entries) && entries.every((entry) => isValidLogEntry(entry)));
+
+const hasValidOptionalPayloadFields = (value: Record<string, unknown>): boolean =>
+  (value.reset === undefined || typeof value.reset === 'boolean') &&
+  (value.error === undefined || typeof value.error === 'string') &&
+  hasValidWarnings(value.warnings) &&
+  (value.errorDetails === undefined || isValidPermissionStatus(value.errorDetails)) &&
+  hasValidEntries(value.entries);
+
 function isValidContainerLogsStreamPayload(data: unknown): data is StreamEventPayload {
   if (!isRecord(data)) {
     return false;
   }
-
-  const obj = data;
-
-  // Required fields
-  if (typeof obj.domain !== 'string' || typeof obj.scope !== 'string') {
-    return false;
-  }
-
-  // sequence and generatedAt should be numbers
-  if (typeof obj.sequence !== 'number' || typeof obj.generatedAt !== 'number') {
-    return false;
-  }
-
-  // Optional fields type checks
-  if (obj.reset !== undefined && typeof obj.reset !== 'boolean') {
-    return false;
-  }
-
-  if (obj.error !== undefined && typeof obj.error !== 'string') {
-    return false;
-  }
-
-  if (
-    obj.warnings !== null &&
-    obj.warnings !== undefined &&
-    (!Array.isArray(obj.warnings) || obj.warnings.some((warning) => typeof warning !== 'string'))
-  ) {
-    return false;
-  }
-
-  if (obj.errorDetails !== undefined && !isValidPermissionStatus(obj.errorDetails)) {
-    return false;
-  }
-
-  // entries must be an array if present
-  if (obj.entries !== undefined) {
-    if (!Array.isArray(obj.entries) || obj.entries.some((entry) => !isValidLogEntry(entry))) {
-      return false;
-    }
-  }
-
-  return true;
+  return hasValidRequiredPayloadFields(data) && hasValidOptionalPayloadFields(data);
 }
 
 const DOMAIN_NAME = 'container-logs' as const;
@@ -118,6 +99,12 @@ const DEFAULT_PAYLOAD: ContainerLogsSnapshotPayload = {
   generatedAt: 0,
   resetCount: 0,
   error: null,
+};
+
+type ProjectedLogBuffer = {
+  entries: ContainerLogsEntry[];
+  total: number;
+  truncated: boolean;
 };
 
 class ContainerLogsStreamConnection {
@@ -424,9 +411,8 @@ export class ContainerLogsStreamManager {
     }
   }
 
-  applyPayload(scope: string, payload: StreamEventPayload, mode: StreamMode): void {
-    const existing = this.buffers.get(scope) ?? [];
-    const incoming: ContainerLogsEntry[] = (payload.entries ?? []).map((entry) => ({
+  private createIncomingEntries(payload: StreamEventPayload): ContainerLogsEntry[] {
+    return (payload.entries ?? []).map((entry) => ({
       timestamp: entry.timestamp ?? '',
       pod: entry.pod ?? '',
       container: entry.container ?? '',
@@ -435,7 +421,108 @@ export class ContainerLogsStreamManager {
       isEphemeral: Boolean(entry.isEphemeral),
       _seq: ++this.seqCounter,
     }));
+  }
 
+  private mergeBufferEntries(
+    existing: ContainerLogsEntry[],
+    incoming: ContainerLogsEntry[],
+    reset?: boolean
+  ): ContainerLogsEntry[] {
+    if (!reset) {
+      return existing.concat(incoming);
+    }
+    return incoming.length > 0 ? incoming : existing;
+  }
+
+  private resolveBufferTotal(
+    previousTotal: number,
+    incomingCount: number,
+    shouldReplace: boolean,
+    mode: StreamMode
+  ): number {
+    if (!shouldReplace) {
+      return previousTotal + incomingCount;
+    }
+    return mode === 'stream' ? Math.max(previousTotal, incomingCount) : incomingCount;
+  }
+
+  private projectBuffer(
+    scope: string,
+    payload: StreamEventPayload,
+    mode: StreamMode
+  ): ProjectedLogBuffer {
+    const existing = this.buffers.get(scope) ?? [];
+    const incoming = this.createIncomingEntries(payload);
+    const previousMeta = this.bufferMeta.get(scope);
+    const shouldReplace = Boolean(payload.reset && incoming.length > 0);
+    const previousTotal = previousMeta?.total ?? existing.length;
+    let total = this.resolveBufferTotal(previousTotal, incoming.length, shouldReplace, mode);
+    let entries = this.mergeBufferEntries(existing, incoming, payload.reset);
+    let truncated = previousMeta?.truncated ?? false;
+    if (entries.length > this.maxBufferSize) {
+      truncated = true;
+      entries = entries.slice(entries.length - this.maxBufferSize);
+    }
+    total = Math.max(total, entries.length);
+    return { entries, total, truncated };
+  }
+
+  private updateBackendWarnings(scope: string, payload: StreamEventPayload): void {
+    if (payload.warnings !== undefined) {
+      if (payload.warnings && payload.warnings.length > 0) {
+        this.backendWarnings.set(scope, payload.warnings);
+        return;
+      }
+      this.backendWarnings.delete(scope);
+      return;
+    }
+    if (payload.reset) {
+      this.backendWarnings.delete(scope);
+    }
+  }
+
+  private commitPayload(
+    scope: string,
+    payload: StreamEventPayload,
+    mode: StreamMode,
+    buffer: ProjectedLogBuffer,
+    generatedAt: number,
+    errorMessage: string | null
+  ): void {
+    const payloadSequence = payload.sequence ?? (payload.reset ? 1 : 0);
+    const isManual = mode === 'manual';
+    const stats = this.buildStats(scope, buffer.entries.length);
+    setScopedDomainState(DOMAIN_NAME, scope, (previous) => {
+      const previousPayload = previous.data ?? DEFAULT_PAYLOAD;
+      const resetCount = payload.reset
+        ? previousPayload.resetCount + 1
+        : previousPayload.resetCount;
+      // Client sequence remains monotonic when server connection counters reset.
+      const nextSequence = Math.max(payloadSequence, previousPayload.sequence ?? 0);
+      const nextPayload: ContainerLogsSnapshotPayload = {
+        entries: buffer.entries,
+        sequence: nextSequence,
+        generatedAt,
+        resetCount,
+        error: errorMessage,
+      };
+
+      return {
+        ...previous,
+        status: errorMessage ? 'error' : 'ready',
+        data: nextPayload,
+        stats,
+        error: errorMessage,
+        lastUpdated: generatedAt,
+        lastAutoRefresh: isManual ? previous.lastAutoRefresh : generatedAt,
+        lastManualRefresh: isManual ? generatedAt : previous.lastManualRefresh,
+        isManual,
+        scope,
+      };
+    });
+  }
+
+  applyPayload(scope: string, payload: StreamEventPayload, mode: StreamMode): void {
     // Buffer replacement policy:
     // - reset=true with non-empty incoming → replace the buffered entries.
     //   For live streams, this frame is a fresh tail snapshot after a
@@ -449,98 +536,16 @@ export class ContainerLogsStreamManager {
     //   cluster-switch remount flash the initial-load spinner even when
     //   the client already had plenty of log history cached.
     // - reset=false → append, unchanged.
-    const shouldReplace = payload.reset && incoming.length > 0;
-    const previousMeta = this.bufferMeta.get(scope);
-    const previousTotal = previousMeta?.total ?? existing.length;
-    let totalItems: number;
-
-    if (shouldReplace) {
-      if (mode === 'stream') {
-        totalItems = Math.max(previousTotal, incoming.length);
-      } else {
-        totalItems = incoming.length;
-      }
-    } else {
-      totalItems = previousTotal + incoming.length;
-    }
-
-    let nextEntries: ContainerLogsEntry[];
-
-    if (shouldReplace) {
-      nextEntries = incoming;
-    } else if (payload.reset) {
-      nextEntries = existing;
-    } else {
-      nextEntries = existing.concat(incoming);
-    }
-
-    let truncated = previousMeta?.truncated ?? false;
-    if (nextEntries.length > this.maxBufferSize) {
-      truncated = true;
-      nextEntries = nextEntries.slice(nextEntries.length - this.maxBufferSize);
-    }
-    if (totalItems < nextEntries.length) {
-      totalItems = nextEntries.length;
-    }
-
-    this.buffers.set(scope, nextEntries);
-    this.bufferMeta.set(scope, { total: totalItems, truncated });
-
+    const buffer = this.projectBuffer(scope, payload, mode);
+    this.buffers.set(scope, buffer.entries);
+    this.bufferMeta.set(scope, { total: buffer.total, truncated: buffer.truncated });
     const generatedAt = payload.generatedAt || Date.now();
-    const payloadSequence = payload.sequence ?? (payload.reset ? 1 : 0);
     const errorMessage = resolvePermissionDeniedMessage(
       payload.error ?? null,
       payload.errorDetails
     );
-    const isManual = mode === 'manual';
-    if (payload.warnings !== undefined) {
-      if (payload.warnings && payload.warnings.length > 0) {
-        this.backendWarnings.set(scope, payload.warnings);
-      } else {
-        this.backendWarnings.delete(scope);
-      }
-    } else if (payload.reset) {
-      this.backendWarnings.delete(scope);
-    }
-    const stats = this.buildStats(scope, nextEntries.length);
-
-    setScopedDomainState(DOMAIN_NAME, scope, (previous) => {
-      const previousPayload = previous.data ?? DEFAULT_PAYLOAD;
-      const resetCount = payload.reset
-        ? previousPayload.resetCount + 1
-        : previousPayload.resetCount;
-
-      // Sequence is monotonic per-scope on the client. The server may
-      // restart its own per-connection counter on every reconnect, but at
-      // the view layer "have we ever received data for this scope" must
-      // survive stream restarts — otherwise the initial-load spinner
-      // reappears on every reconnect even though the cached entries are
-      // still present.
-      const nextSequence = Math.max(payloadSequence, previousPayload.sequence ?? 0);
-
-      const nextPayload: ContainerLogsSnapshotPayload = {
-        entries: nextEntries,
-        sequence: nextSequence,
-        generatedAt,
-        resetCount,
-        error: errorMessage,
-      };
-
-      const nextStatus = errorMessage ? 'error' : 'ready';
-
-      return {
-        ...previous,
-        status: nextStatus,
-        data: nextPayload,
-        stats,
-        error: errorMessage,
-        lastUpdated: generatedAt,
-        lastAutoRefresh: isManual ? previous.lastAutoRefresh : generatedAt,
-        lastManualRefresh: isManual ? generatedAt : previous.lastManualRefresh,
-        isManual,
-        scope,
-      };
-    });
+    this.updateBackendWarnings(scope, payload);
+    this.commitPayload(scope, payload, mode, buffer, generatedAt, errorMessage);
     if (errorMessage) {
       this.notifyStreamError(scope, errorMessage);
     } else {

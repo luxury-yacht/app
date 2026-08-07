@@ -103,6 +103,91 @@ type SelectionTransitionOptions = {
   errorMessage: string;
 };
 
+type SelectionTransitionResult = Awaited<ReturnType<typeof ApplyClusterWorkspace>>;
+
+const resolveActiveAfterClose = (
+  previousSelections: string[],
+  previousActive: string,
+  normalizedSelections: string[]
+): string => {
+  const removedSelections = previousSelections.filter(
+    (selection) => !normalizedSelections.includes(selection)
+  );
+  if (removedSelections.length !== 1) {
+    return normalizedSelections[0] || '';
+  }
+  const nextAfterClose = getNextClusterTabSelectionAfterClose(
+    previousSelections,
+    removedSelections[0],
+    previousActive,
+    getClusterTabOrder()
+  );
+  return nextAfterClose && normalizedSelections.includes(nextAfterClose)
+    ? nextAfterClose
+    : normalizedSelections[0] || '';
+};
+
+const resolveNextActiveSelection = (
+  previousSelections: string[],
+  previousActive: string,
+  normalizedSelections: string[],
+  activeSelection?: string
+): string => {
+  if (activeSelection !== undefined) {
+    return normalizedSelections.includes(activeSelection) ? activeSelection : '';
+  }
+  const addedSelections = normalizedSelections.filter(
+    (selection) => !previousSelections.includes(selection)
+  );
+  if (addedSelections.length > 0) {
+    return addedSelections[addedSelections.length - 1];
+  }
+  if (previousActive && !normalizedSelections.includes(previousActive)) {
+    return resolveActiveAfterClose(previousSelections, previousActive, normalizedSelections);
+  }
+  return previousActive && normalizedSelections.includes(previousActive)
+    ? previousActive
+    : normalizedSelections[0] || '';
+};
+
+interface SelectionTransitionPlan {
+  normalizedSelections: string[];
+  nextActive: string;
+  nextClusterId: string;
+  shouldEmitChanging: boolean;
+  shouldEmitChanged: boolean;
+  shouldEmitSelectionChanged: boolean;
+}
+
+const selectionsAreEqual = (left: string[], right: string[]): boolean =>
+  left.length === right.length && left.every((selection, index) => selection === right[index]);
+
+const buildSelectionTransitionPlan = (
+  previousSelections: string[],
+  previousActive: string,
+  normalizedSelections: string[],
+  activeSelection: string | undefined,
+  nextClusterId: string
+): SelectionTransitionPlan => {
+  const nextActive = resolveNextActiveSelection(
+    previousSelections,
+    previousActive,
+    normalizedSelections,
+    activeSelection
+  );
+  const wasEmpty = previousSelections.length === 0;
+  const willBeEmpty = normalizedSelections.length === 0;
+  const selectionChanged = !selectionsAreEqual(previousSelections, normalizedSelections);
+  return {
+    normalizedSelections,
+    nextActive,
+    nextClusterId,
+    shouldEmitChanging: selectionChanged && willBeEmpty,
+    shouldEmitChanged: !willBeEmpty && wasEmpty,
+    shouldEmitSelectionChanged: selectionChanged && !willBeEmpty,
+  };
+};
+
 export const KubeconfigProvider: React.FC<KubeconfigProviderProps> = ({ children }) => {
   const [kubeconfigs, setKubeconfigs] = useState<types.KubeconfigInfo[]>([]);
   const [selectedKubeconfigs, setSelectedKubeconfigsState] = useState<string[]>([]);
@@ -295,49 +380,71 @@ export const KubeconfigProvider: React.FC<KubeconfigProviderProps> = ({ children
     [normalizeSelections]
   );
 
-  const resolveNextActiveSelection = useCallback(
-    (
-      previousSelections: string[],
-      previousActive: string,
-      normalizedSelections: string[],
-      activeSelection?: string
-    ) => {
-      if (activeSelection !== undefined) {
-        return normalizedSelections.includes(activeSelection) ? activeSelection : '';
-      }
+  const applyVisibleSelection = useCallback((selections: string[], activeSelection: string) => {
+    selectedKubeconfigsRef.current = selections;
+    selectedKubeconfigRef.current = activeSelection;
+    setSelectedKubeconfigsState(selections);
+    setSelectedKubeconfigState(activeSelection);
+  }, []);
 
-      const addedSelections = normalizedSelections.filter(
-        (selection) => !previousSelections.includes(selection)
-      );
-      if (addedSelections.length > 0) {
-        return addedSelections[addedSelections.length - 1];
-      }
+  const applyCommittedSelection = useCallback((selections: string[], activeSelection: string) => {
+    committedSelectionsRef.current = selections;
+    committedActiveRef.current = activeSelection;
+    setCommittedSelectedKubeconfigs(selections);
+    setCommittedSelectedKubeconfig(activeSelection);
+  }, []);
 
-      if (previousActive && !normalizedSelections.includes(previousActive)) {
-        const removedSelections = previousSelections.filter(
-          (selection) => !normalizedSelections.includes(selection)
-        );
-        if (removedSelections.length === 1) {
-          const nextAfterClose = getNextClusterTabSelectionAfterClose(
-            previousSelections,
-            removedSelections[0],
-            previousActive,
-            getClusterTabOrder()
-          );
-          if (nextAfterClose && normalizedSelections.includes(nextAfterClose)) {
-            return nextAfterClose;
-          }
-        }
-        return normalizedSelections[0] || '';
+  const beginSelectionTransition = useCallback(
+    (plan: SelectionTransitionPlan) => {
+      selectionPendingRef.current = true;
+      applyVisibleSelection(plan.normalizedSelections, plan.nextActive);
+      if (plan.shouldEmitChanging) {
+        eventBus.emit('kubeconfig:changing', '');
       }
-
-      if (previousActive && normalizedSelections.includes(previousActive)) {
-        return previousActive;
-      }
-      return normalizedSelections[0] || '';
     },
-    []
+    [applyVisibleSelection]
   );
+
+  const completeSelectionTransition = useCallback(
+    (plan: SelectionTransitionPlan, result: SelectionTransitionResult) => {
+      clusterWorkspaceStore.applyWireState(result.state);
+      if (result.error) {
+        throw new Error(result.error);
+      }
+      const confirmedSelections = normalizeSelections(result.state.selectedKubeconfigs || []);
+      const confirmedActive = confirmedSelections.includes(plan.nextActive)
+        ? plan.nextActive
+        : confirmedSelections[0] || '';
+      applyVisibleSelection(confirmedSelections, confirmedActive);
+      if (plan.shouldEmitSelectionChanged) {
+        eventBus.emit('kubeconfig:selection-changed');
+      }
+      selectionPendingRef.current = false;
+      applyCommittedSelection(confirmedSelections, confirmedActive);
+      if (plan.shouldEmitChanged) {
+        eventBus.emit('kubeconfig:changed', '');
+      }
+    },
+    [applyCommittedSelection, applyVisibleSelection, normalizeSelections]
+  );
+
+  const rollbackSelectionTransition = useCallback(() => {
+    selectionPendingRef.current = false;
+    const workspaceSelections = normalizeSelections([
+      ...clusterWorkspaceStore.getSnapshot().selectedKubeconfigs,
+    ]);
+    const rollbackSelections =
+      workspaceSelections.length === 0 && committedSelectionsRef.current.length > 0
+        ? committedSelectionsRef.current
+        : workspaceSelections;
+    const committedActive = committedActiveRef.current;
+    const rollbackActive =
+      committedActive && rollbackSelections.includes(committedActive)
+        ? committedActive
+        : rollbackSelections[0] || '';
+    applyCommittedSelection(rollbackSelections, rollbackActive);
+    applyVisibleSelection(rollbackSelections, rollbackActive);
+  }, [applyCommittedSelection, applyVisibleSelection, normalizeSelections]);
 
   const applySelectionTransition = useCallback(
     async ({
@@ -356,100 +463,32 @@ export const KubeconfigProvider: React.FC<KubeconfigProviderProps> = ({ children
         normalizedSelections,
         activeSelection
       );
-      const wasEmpty = previousSelections.length === 0;
-      const willBeEmpty = normalizedSelections.length === 0;
-      const selectionChanged =
-        normalizedSelections.length !== previousSelections.length ||
-        normalizedSelections.some((selection, index) => selection !== previousSelections[index]);
-      const shouldEmitChanging = selectionChanged && willBeEmpty;
-      const shouldEmitChanged = !willBeEmpty && wasEmpty;
-      const shouldEmitSelectionChanged = selectionChanged && !willBeEmpty;
       const nextMeta = resolveClusterMeta(nextActive, kubeconfigsRef.current);
+      const plan = buildSelectionTransitionPlan(
+        previousSelections,
+        previousActive,
+        normalizedSelections,
+        activeSelection,
+        nextMeta.id
+      );
 
       try {
-        selectionPendingRef.current = true;
-        // Keep refs in sync immediately so superseding requests read the latest state.
-        selectedKubeconfigsRef.current = normalizedSelections;
-        selectedKubeconfigRef.current = nextActive;
-
-        // Optimistically update the UI immediately so the dropdown reflects the intent.
-        setSelectedKubeconfigsState(normalizedSelections);
-        setSelectedKubeconfigState(nextActive);
-
-        // Follow the required order while keeping per-tab state intact.
-        // 1. Show the loading spinner (handled by kubeconfig:changing event)
-        // 2. Cancel any refresh in progress (also handled by kubeconfig:changing event)
-        if (shouldEmitChanging) {
-          eventBus.emit('kubeconfig:changing', '');
-        }
-
-        // The backend serializes selection before foreground activation and
-        // returns the authoritative state for both operations.
+        beginSelectionTransition(plan);
         const result = await ApplyClusterWorkspace({
-          selectedKubeconfigs: normalizedSelections,
+          selectedKubeconfigs: plan.normalizedSelections,
           updateSelectedKubeconfigs: true,
-          visibleClusterId: nextMeta.id,
+          visibleClusterId: plan.nextClusterId,
         });
 
-        // A newer intent has already been issued; ignore stale completion.
         if (requestId !== latestSelectionRequestIdRef.current) {
           return;
         }
-        clusterWorkspaceStore.applyWireState(result.state);
-        if (result.error) {
-          throw new Error(result.error);
-        }
-        const confirmedSelections = normalizeSelections(result.state.selectedKubeconfigs || []);
-        const confirmedActive = confirmedSelections.includes(nextActive)
-          ? nextActive
-          : confirmedSelections[0] || '';
-        selectedKubeconfigsRef.current = confirmedSelections;
-        selectedKubeconfigRef.current = confirmedActive;
-        setSelectedKubeconfigsState(confirmedSelections);
-        setSelectedKubeconfigState(confirmedActive);
-
-        // Emit after backend updates to avoid refreshing with inactive clusters.
-        if (shouldEmitSelectionChanged) {
-          eventBus.emit('kubeconfig:selection-changed');
-        }
-        selectionPendingRef.current = false;
-        // Publish cluster-data identities only after the backend activates the
-        // matching client pool and refresh subsystems.
-        committedSelectionsRef.current = confirmedSelections;
-        committedActiveRef.current = confirmedActive;
-        setCommittedSelectedKubeconfigs(confirmedSelections);
-        setCommittedSelectedKubeconfig(confirmedActive);
-
-        // 4. Perform a manual refresh (will be triggered by kubeconfig:changed event).
-        if (shouldEmitChanged) {
-          eventBus.emit('kubeconfig:changed', '');
-        }
+        completeSelectionTransition(plan, result);
       } catch (error) {
-        // Ignore stale errors from superseded requests.
         if (requestId !== latestSelectionRequestIdRef.current) {
           return;
         }
-        selectionPendingRef.current = false;
-        // Roll back to the last authoritative workspace snapshot.
-        let rollbackSelections = normalizeSelections([
-          ...clusterWorkspaceStore.getSnapshot().selectedKubeconfigs,
-        ]);
-        if (rollbackSelections.length === 0 && committedSelectionsRef.current.length > 0) {
-          rollbackSelections = committedSelectionsRef.current;
-        }
-        let rollbackActive = committedActiveRef.current;
-        rollbackActive =
-          rollbackActive && rollbackSelections.includes(rollbackActive)
-            ? rollbackActive
-            : rollbackSelections[0] || '';
-        committedSelectionsRef.current = rollbackSelections;
-        committedActiveRef.current = rollbackActive;
-        selectedKubeconfigsRef.current = rollbackSelections;
-        selectedKubeconfigRef.current = rollbackActive;
-        setSelectedKubeconfigsState(rollbackSelections);
-        setSelectedKubeconfigState(rollbackActive);
-        setCommittedSelectedKubeconfigs(rollbackSelections);
-        setCommittedSelectedKubeconfig(rollbackActive);
+        rollbackSelectionTransition();
         errorHandler.handle(
           error,
           {
@@ -461,7 +500,13 @@ export const KubeconfigProvider: React.FC<KubeconfigProviderProps> = ({ children
         throw error;
       }
     },
-    [normalizeSelections, resolveClusterMeta, resolveNextActiveSelection]
+    [
+      beginSelectionTransition,
+      completeSelectionTransition,
+      normalizeSelections,
+      resolveClusterMeta,
+      rollbackSelectionTransition,
+    ]
   );
 
   const setSelectedKubeconfigs = useCallback(

@@ -167,6 +167,86 @@ function firstGroupWithTabs(tabGroups: TabGroupState): GroupKey | null {
   return tabGroups.floating.find((group) => group.tabs.length > 0)?.groupId ?? null;
 }
 
+const isFloatingGroupKey = (groupKey: GroupKey | null): groupKey is GroupKey =>
+  groupKey !== null && groupKey !== 'right' && groupKey !== 'bottom';
+
+const resolveFocusedFloatingGroup = (
+  tabGroups: TabGroupState,
+  currentGroup: GroupKey | null,
+  focusedGroup: GroupKey | null
+): GroupKey | 'floating' => {
+  if (isFloatingGroupKey(currentGroup)) {
+    return currentGroup;
+  }
+  if (!isFloatingGroupKey(focusedGroup)) {
+    return 'floating';
+  }
+  const group = getGroupTabs(tabGroups, focusedGroup);
+  return group && group.tabs.length > 0 ? focusedGroup : 'floating';
+};
+
+const resolvePanelTargetGroup = (
+  tabGroups: TabGroupState,
+  currentGroup: GroupKey | null,
+  position: DockPosition,
+  preferredGroup: GroupKey | 'floating' | undefined,
+  focusedGroup: GroupKey | null
+): GroupKey | 'floating' => {
+  if (currentGroup === null && preferredGroup !== undefined) {
+    return preferredGroup;
+  }
+  if (position === 'floating') {
+    return resolveFocusedFloatingGroup(tabGroups, currentGroup, focusedGroup);
+  }
+  return position;
+};
+
+const panelAlreadyInTargetGroup = (
+  currentGroup: GroupKey | null,
+  targetGroup: GroupKey | 'floating'
+) =>
+  targetGroup === 'floating'
+    ? isFloatingGroupKey(currentGroup)
+    : currentGroup !== null && currentGroup === targetGroup;
+
+const addPanelToResolvedGroup = (
+  tabGroups: TabGroupState,
+  panelId: string,
+  targetGroup: GroupKey | 'floating',
+  fallbackPosition: DockPosition
+): TabGroupState => {
+  if (targetGroup === 'right' || targetGroup === 'bottom' || targetGroup === 'floating') {
+    return addPanelToGroup(tabGroups, panelId, targetGroup);
+  }
+  const existingTarget = getGroupTabs(tabGroups, targetGroup);
+  if (existingTarget && existingTarget.tabs.length > 0) {
+    return addPanelToFloatingGroup(tabGroups, panelId, targetGroup);
+  }
+  return fallbackPosition === 'right' || fallbackPosition === 'bottom'
+    ? addPanelToGroup(tabGroups, panelId, fallbackPosition)
+    : addPanelToGroup(tabGroups, panelId, 'floating');
+};
+
+const syncPanelGroupState = (
+  tabGroups: TabGroupState,
+  panelId: string,
+  position: DockPosition,
+  preferredGroup: GroupKey | 'floating' | undefined,
+  focusedGroup: GroupKey | null
+): TabGroupState => {
+  const currentGroup = getGroupForPanel(tabGroups, panelId);
+  const targetGroup = resolvePanelTargetGroup(
+    tabGroups,
+    currentGroup,
+    position,
+    preferredGroup,
+    focusedGroup
+  );
+  return panelAlreadyInTargetGroup(currentGroup, targetGroup)
+    ? tabGroups
+    : addPanelToResolvedGroup(tabGroups, panelId, targetGroup, position);
+};
+
 export const useDockablePanelHost = (): HTMLElement | null => {
   const contextHost = useContext(DockablePanelHostContext);
   if (contextHost === undefined) {
@@ -442,57 +522,15 @@ export const DockablePanelProvider: React.FC<DockablePanelProviderProps> = ({ ch
   // -----------------------------------------------------------------------
   const syncPanelGroup = useCallback(
     (panelId: string, position: DockPosition, preferredGroupKey?: GroupKey | 'floating') => {
-      activeStore.setTabGroups((prev) => {
-        const currentGroup = getGroupForPanel(prev, panelId);
-        const isCurrentFloating =
-          currentGroup !== null && currentGroup !== 'right' && currentGroup !== 'bottom';
-        // `preferredGroupKey` is only an initial placement hint.
-        // Once grouped, follow the panel position + focus routing rules.
-        const effectivePreferredGroupKey = currentGroup === null ? preferredGroupKey : undefined;
-        let targetGroupKey: GroupKey | 'floating' = effectivePreferredGroupKey ?? position;
-        if (!effectivePreferredGroupKey && position === 'floating') {
-          if (isCurrentFloating) {
-            // Keep already-floating panels in their current floating group.
-            // This prevents unrelated tab-group updates from collapsing
-            // independent floating windows into the currently focused one.
-            targetGroupKey = currentGroup;
-          } else {
-            const focusedGroupKey = lastFocusedGroupKeyRef.current;
-            if (focusedGroupKey && focusedGroupKey !== 'right' && focusedGroupKey !== 'bottom') {
-              const focusedFloatingGroup = getGroupTabs(prev, focusedGroupKey);
-              if (focusedFloatingGroup && focusedFloatingGroup.tabs.length > 0) {
-                targetGroupKey = focusedGroupKey;
-              }
-            }
-          }
-        }
-        const alreadyInDesiredGroup =
-          targetGroupKey === 'floating'
-            ? isCurrentFloating
-            : currentGroup !== null && currentGroup === targetGroupKey;
-
-        if (alreadyInDesiredGroup) {
-          return prev;
-        }
-
-        if (targetGroupKey === 'right' || targetGroupKey === 'bottom') {
-          return addPanelToGroup(prev, panelId, targetGroupKey);
-        }
-        if (targetGroupKey === 'floating') {
-          return addPanelToGroup(prev, panelId, 'floating');
-        }
-
-        const targetGroup = getGroupTabs(prev, targetGroupKey);
-        if (targetGroup && targetGroup.tabs.length > 0) {
-          return addPanelToFloatingGroup(prev, panelId, targetGroupKey);
-        }
-
-        // Preferred floating group disappeared -- fall back to position behavior.
-        if (position === 'right' || position === 'bottom') {
-          return addPanelToGroup(prev, panelId, position);
-        }
-        return addPanelToGroup(prev, panelId, 'floating');
-      });
+      activeStore.setTabGroups((prev) =>
+        syncPanelGroupState(
+          prev,
+          panelId,
+          position,
+          preferredGroupKey,
+          lastFocusedGroupKeyRef.current
+        )
+      );
     },
     [activeStore]
   );

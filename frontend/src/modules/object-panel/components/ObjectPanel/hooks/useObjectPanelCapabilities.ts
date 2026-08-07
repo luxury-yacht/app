@@ -67,72 +67,85 @@ const createDefaultCapabilityStates = (): CapabilityStates => ({
   debug: createCapabilityState(),
 });
 
-const computeCapabilityDescriptors = (
+type CapabilityIdMap = ReturnType<typeof createEmptyCapabilityIdMap>;
+
+type CapabilityDescriptorContext = {
+  resourceKind: string;
+  namespace: string | undefined;
+  resourceName: string | undefined;
+  objectGroup: string | undefined;
+  objectVersion: string | undefined;
+  clusterId: string | undefined;
+};
+
+type CapabilityDescriptorAccumulator = {
+  descriptors: CapabilityDescriptor[];
+  idMap: CapabilityIdMap;
+  context: CapabilityDescriptorContext;
+};
+
+const normalizeOptionalIdentity = (value: string | null | undefined): string | undefined => {
+  const normalized = value?.trim();
+  return normalized || undefined;
+};
+
+const buildCapabilityDescriptorContext = (
   objectData: PanelObjectData | null,
-  objectKind: string | null,
-  featureSupport: FeatureSupport
-) => {
+  objectKind: string | null
+): CapabilityDescriptorContext | null => {
   if (!objectData || !objectKind) {
-    return {
-      descriptors: [] as CapabilityDescriptor[],
-      idMap: createEmptyCapabilityIdMap(),
-    };
+    return null;
   }
-
-  const resourceKind = (objectData.kind ?? '').trim();
+  const resourceKind = normalizeOptionalIdentity(objectData.kind);
   if (!resourceKind) {
-    return {
-      descriptors: [] as CapabilityDescriptor[],
-      idMap: createEmptyCapabilityIdMap(),
-    };
+    return null;
   }
-
-  const namespace =
-    objectData.namespace && objectData.namespace.trim().length > 0
-      ? objectData.namespace.trim()
-      : undefined;
-  const resourceName =
-    objectData.name && objectData.name.trim().length > 0 ? objectData.name.trim() : undefined;
-
-  // Group/version from the panel's object identity. When populated these
-  // travel through every capability descriptor below so the backend's
-  // permission resolver disambiguates colliding kinds (e.g. two different
-  // DBInstance CRDs). Empty for legacy callers; the backend falls back
-  // to kind-only resolution in that case.
-  const objectGroup = objectData.group?.trim() ?? undefined;
-  const objectVersion = objectData.version?.trim() ?? undefined;
-  // Core/v1 Pod is hardcoded for a few cross-resource checks (log on a
-  // non-pod workload, debug ephemeral containers). Those descriptors
-  // target Pod regardless of what kind the object panel is showing, so
-  // they use this fixed GVK rather than the object's group/version.
-  const corePodGroup = '';
-  const corePodVersion = 'v1';
-
-  const descriptors: CapabilityDescriptor[] = [];
-  const idMap = createEmptyCapabilityIdMap();
-  const clusterId = objectData?.clusterId?.trim() || undefined;
-
-  const add = (descriptor: CapabilityDescriptor, key?: keyof typeof idMap) => {
-    descriptors.push(clusterId ? { ...descriptor, clusterId } : descriptor);
-    if (key) {
-      idMap[key] = descriptor.id;
-    }
+  return {
+    resourceKind,
+    namespace: normalizeOptionalIdentity(objectData.namespace),
+    resourceName: normalizeOptionalIdentity(objectData.name),
+    objectGroup: normalizeOptionalIdentity(objectData.group),
+    objectVersion: normalizeOptionalIdentity(objectData.version),
+    clusterId: normalizeOptionalIdentity(objectData.clusterId),
   };
-  const addObjectActionCapability = (actionId: MutatingObjectActionId, key: keyof typeof idMap) => {
-    const descriptor = buildObjectActionCapabilityDescriptor(actionId, {
-      clusterId,
-      group: objectGroup,
-      version: objectVersion,
-      kind: resourceKind,
-      namespace,
-      name: resourceName,
-    });
-    if (descriptor) {
-      add(descriptor, key);
-    }
-  };
+};
 
-  add(
+const addCapabilityDescriptor = (
+  accumulator: CapabilityDescriptorAccumulator,
+  descriptor: CapabilityDescriptor,
+  key?: keyof CapabilityIdMap
+): void => {
+  const { clusterId } = accumulator.context;
+  accumulator.descriptors.push(clusterId ? { ...descriptor, clusterId } : descriptor);
+  if (key) {
+    accumulator.idMap[key] = descriptor.id;
+  }
+};
+
+const addObjectActionCapability = (
+  accumulator: CapabilityDescriptorAccumulator,
+  actionId: MutatingObjectActionId,
+  key: keyof CapabilityIdMap
+): void => {
+  const { clusterId, objectGroup, objectVersion, resourceKind, namespace, resourceName } =
+    accumulator.context;
+  const descriptor = buildObjectActionCapabilityDescriptor(actionId, {
+    clusterId,
+    group: objectGroup,
+    version: objectVersion,
+    kind: resourceKind,
+    namespace,
+    name: resourceName,
+  });
+  if (descriptor) {
+    addCapabilityDescriptor(accumulator, descriptor, key);
+  }
+};
+
+const addYamlCapabilityDescriptors = (accumulator: CapabilityDescriptorAccumulator): void => {
+  const { objectGroup, objectVersion, resourceKind, namespace, resourceName } = accumulator.context;
+  addCapabilityDescriptor(
+    accumulator,
     {
       id: 'view-yaml',
       verb: 'get',
@@ -144,8 +157,8 @@ const computeCapabilityDescriptors = (
     },
     'viewYaml'
   );
-
-  add(
+  addCapabilityDescriptor(
+    accumulator,
     {
       id: 'edit-yaml',
       verb: 'patch',
@@ -157,138 +170,219 @@ const computeCapabilityDescriptors = (
     },
     'editYaml'
   );
-
-  if (featureSupport.delete) {
-    addObjectActionCapability(OBJECT_ACTION_IDS.delete, 'delete');
-  }
-
-  if (featureSupport.restart) {
-    addObjectActionCapability(OBJECT_ACTION_IDS.restart, 'restart');
-  }
-
-  if (featureSupport.scale) {
-    addObjectActionCapability(OBJECT_ACTION_IDS.scale, 'scale');
-  }
-
-  if (featureSupport.trigger) {
-    addObjectActionCapability(OBJECT_ACTION_IDS.triggerNow, 'trigger');
-  }
-
-  if (featureSupport.suspend) {
-    addObjectActionCapability(OBJECT_ACTION_IDS.suspend, 'suspend');
-  }
-
-  if (featureSupport.objPanelLogs) {
-    if (objectKind === 'pod') {
-      add(
-        {
-          id: 'view-logs',
-          verb: 'get',
-          group: objectGroup,
-          version: objectVersion,
-          resourceKind,
-          namespace,
-          name: resourceName,
-          subresource: 'log',
-        },
-        'viewObjPanelLogs'
-      );
-    } else {
-      // Non-pod workloads get a container log permission check against core/v1 Pod.
-      add(
-        {
-          id: 'view-logs',
-          verb: 'get',
-          group: corePodGroup,
-          version: corePodVersion,
-          resourceKind: 'Pod',
-          namespace,
-          subresource: 'log',
-        },
-        'viewObjPanelLogs'
-      );
-    }
-  }
-
-  if (featureSupport.shell) {
-    add(
-      {
-        id: 'shell-exec-get',
-        verb: 'get',
-        group: objectGroup,
-        version: objectVersion,
-        resourceKind,
-        namespace,
-        name: resourceName,
-        subresource: 'exec',
-      },
-      'shellExecGet'
-    );
-    add(
-      {
-        id: 'shell-exec-create',
-        verb: 'create',
-        group: objectGroup,
-        version: objectVersion,
-        resourceKind,
-        namespace,
-        name: resourceName,
-        subresource: 'exec',
-      },
-      'shellExecCreate'
-    );
-  }
-
-  if (featureSupport.debug) {
-    // Debug ephemeral containers always targets core/v1 Pod, regardless
-    // of what kind the panel is displaying.
-    add(
-      {
-        id: 'debug-ephemeral',
-        verb: 'update',
-        group: corePodGroup,
-        version: corePodVersion,
-        resourceKind: 'Pod',
-        namespace,
-        name: resourceName,
-        subresource: 'ephemeralcontainers',
-      },
-      'debug'
-    );
-  }
-
-  if (featureSupport.manifest) {
-    add(
-      {
-        id: 'view-manifest',
-        verb: 'get',
-        group: objectGroup,
-        version: objectVersion,
-        resourceKind,
-        namespace,
-        name: resourceName,
-      },
-      'viewManifest'
-    );
-  }
-
-  if (featureSupport.values) {
-    add(
-      {
-        id: 'view-values',
-        verb: 'get',
-        group: objectGroup,
-        version: objectVersion,
-        resourceKind,
-        namespace,
-        name: resourceName,
-      },
-      'viewValues'
-    );
-  }
-
-  return { descriptors, idMap };
 };
+
+const addMutatingCapabilityDescriptors = (
+  accumulator: CapabilityDescriptorAccumulator,
+  featureSupport: FeatureSupport
+): void => {
+  if (featureSupport.delete) {
+    addObjectActionCapability(accumulator, OBJECT_ACTION_IDS.delete, 'delete');
+  }
+  if (featureSupport.restart) {
+    addObjectActionCapability(accumulator, OBJECT_ACTION_IDS.restart, 'restart');
+  }
+  if (featureSupport.scale) {
+    addObjectActionCapability(accumulator, OBJECT_ACTION_IDS.scale, 'scale');
+  }
+  if (featureSupport.trigger) {
+    addObjectActionCapability(accumulator, OBJECT_ACTION_IDS.triggerNow, 'trigger');
+  }
+  if (featureSupport.suspend) {
+    addObjectActionCapability(accumulator, OBJECT_ACTION_IDS.suspend, 'suspend');
+  }
+};
+
+const addLogsCapabilityDescriptor = (
+  accumulator: CapabilityDescriptorAccumulator,
+  objectKind: string,
+  featureSupport: FeatureSupport
+): void => {
+  if (!featureSupport.objPanelLogs) {
+    return;
+  }
+  const { objectGroup, objectVersion, resourceKind, namespace, resourceName } = accumulator.context;
+  const isPod = objectKind === 'pod';
+  addCapabilityDescriptor(
+    accumulator,
+    {
+      id: 'view-logs',
+      verb: 'get',
+      group: isPod ? objectGroup : '',
+      version: isPod ? objectVersion : 'v1',
+      resourceKind: isPod ? resourceKind : 'Pod',
+      namespace,
+      name: isPod ? resourceName : undefined,
+      subresource: 'log',
+    },
+    'viewObjPanelLogs'
+  );
+};
+
+const addShellCapabilityDescriptors = (
+  accumulator: CapabilityDescriptorAccumulator,
+  featureSupport: FeatureSupport
+): void => {
+  if (!featureSupport.shell) {
+    return;
+  }
+  const { objectGroup, objectVersion, resourceKind, namespace, resourceName } = accumulator.context;
+  (['get', 'create'] as const).forEach((verb) => {
+    addCapabilityDescriptor(
+      accumulator,
+      {
+        id: `shell-exec-${verb}`,
+        verb,
+        group: objectGroup,
+        version: objectVersion,
+        resourceKind,
+        namespace,
+        name: resourceName,
+        subresource: 'exec',
+      },
+      verb === 'get' ? 'shellExecGet' : 'shellExecCreate'
+    );
+  });
+};
+
+const addDebugCapabilityDescriptor = (
+  accumulator: CapabilityDescriptorAccumulator,
+  featureSupport: FeatureSupport
+): void => {
+  if (!featureSupport.debug) {
+    return;
+  }
+  addCapabilityDescriptor(
+    accumulator,
+    {
+      id: 'debug-ephemeral',
+      verb: 'update',
+      group: '',
+      version: 'v1',
+      resourceKind: 'Pod',
+      namespace: accumulator.context.namespace,
+      name: accumulator.context.resourceName,
+      subresource: 'ephemeralcontainers',
+    },
+    'debug'
+  );
+};
+
+const addHelmCapabilityDescriptors = (
+  accumulator: CapabilityDescriptorAccumulator,
+  featureSupport: FeatureSupport
+): void => {
+  const { objectGroup, objectVersion, resourceKind, namespace, resourceName } = accumulator.context;
+  const addRead = (id: string, key: keyof CapabilityIdMap): void => {
+    addCapabilityDescriptor(
+      accumulator,
+      {
+        id,
+        verb: 'get',
+        group: objectGroup,
+        version: objectVersion,
+        resourceKind,
+        namespace,
+        name: resourceName,
+      },
+      key
+    );
+  };
+  if (featureSupport.manifest) {
+    addRead('view-manifest', 'viewManifest');
+  }
+  if (featureSupport.values) {
+    addRead('view-values', 'viewValues');
+  }
+};
+
+const computeCapabilityDescriptors = (
+  objectData: PanelObjectData | null,
+  objectKind: string | null,
+  featureSupport: FeatureSupport
+) => {
+  const context = buildCapabilityDescriptorContext(objectData, objectKind);
+  if (!context || !objectKind) {
+    return {
+      descriptors: [] as CapabilityDescriptor[],
+      idMap: createEmptyCapabilityIdMap(),
+    };
+  }
+  const accumulator: CapabilityDescriptorAccumulator = {
+    descriptors: [],
+    idMap: createEmptyCapabilityIdMap(),
+    context,
+  };
+  addYamlCapabilityDescriptors(accumulator);
+  addMutatingCapabilityDescriptors(accumulator, featureSupport);
+  addLogsCapabilityDescriptor(accumulator, objectKind, featureSupport);
+  addShellCapabilityDescriptors(accumulator, featureSupport);
+  addDebugCapabilityDescriptor(accumulator, featureSupport);
+  addHelmCapabilityDescriptors(accumulator, featureSupport);
+  return { descriptors: accumulator.descriptors, idMap: accumulator.idMap };
+};
+
+type NodeLogDiscoveryTarget = { clusterId: string; nodeName: string };
+
+type NodeLogDiscoveryResponse = {
+  supported: boolean;
+  sources?: NodeLogSource[] | null;
+  reason?: string | null;
+};
+
+type NodeLogCapabilityResult = {
+  sources: NodeLogSource[];
+  state: CapabilityState;
+};
+
+const resolveNodeLogDiscoveryTarget = (
+  objectData: PanelObjectData | null,
+  objectKind: string | null,
+  enabled: boolean
+): NodeLogDiscoveryTarget | null => {
+  const clusterId = objectData?.clusterId?.trim() ?? '';
+  const nodeName = objectData?.name?.trim() ?? '';
+  return objectKind === 'node' && enabled && clusterId && nodeName ? { clusterId, nodeName } : null;
+};
+
+const nodeLogCapabilityResult = (response: NodeLogDiscoveryResponse): NodeLogCapabilityResult => {
+  const sources = Array.isArray(response.sources) ? response.sources : [];
+  const allowed = Boolean(response.supported && sources.length > 0);
+  return {
+    sources,
+    state: createCapabilityState({
+      allowed,
+      reason: allowed
+        ? undefined
+        : (response.reason ?? 'Node logs are not available for this node'),
+    }),
+  };
+};
+
+const nodeLogCapabilityFailure = (error: unknown): NodeLogCapabilityResult => ({
+  sources: [],
+  state: createCapabilityState({
+    reason: error instanceof Error ? error.message : 'Failed to discover node logs',
+  }),
+});
+
+const capabilityReason = (state: CapabilityState): string | undefined =>
+  state.allowed ? undefined : state.reason;
+
+const computeCapabilityReasons = (
+  capabilityStates: CapabilityStates,
+  nodeLogsCapabilityState: CapabilityState
+): CapabilityReasons => ({
+  nodeLogs: capabilityReason(nodeLogsCapabilityState),
+  delete: capabilityReason(capabilityStates.delete),
+  restart: capabilityReason(capabilityStates.restart),
+  scale: capabilityReason(capabilityStates.scale),
+  trigger: capabilityReason(capabilityStates.trigger),
+  suspend: capabilityReason(capabilityStates.suspend),
+  editYaml: capabilityReason(capabilityStates.editYaml),
+  shell: capabilityReason(capabilityStates.shell),
+  debug: capabilityReason(capabilityStates.debug),
+});
 
 export const useObjectPanelCapabilities = ({
   objectData,
@@ -378,31 +472,28 @@ export const useObjectPanelCapabilities = ({
     objectData?.clusterId ?? null
   );
 
-  useEffect(() => {
-    const isNodePanel = objectKind === 'node';
-    const clusterId = objectData?.clusterId?.trim() ?? '';
-    const nodeName = objectData?.name?.trim() ?? '';
+  const nodeLogDiscoveryTarget = useMemo(
+    () => resolveNodeLogDiscoveryTarget(objectData, objectKind, featureSupport.nodeLogs),
+    [featureSupport.nodeLogs, objectData, objectKind]
+  );
 
-    if (!isNodePanel || !featureSupport.nodeLogs || !clusterId || !nodeName) {
+  useEffect(() => {
+    const applyResult = (result: NodeLogCapabilityResult): void => {
+      setNodeLogSources(result.sources);
+      setNodeLogsCapabilityState(result.state);
+    };
+    if (!nodeLogDiscoveryTarget) {
       setNodeLogSources([]);
       setNodeLogsCapabilityState(createCapabilityState());
       return;
     }
 
-    const cachedDiscovery = getCachedNodeLogDiscovery(clusterId, nodeName);
+    const cachedDiscovery = getCachedNodeLogDiscovery(
+      nodeLogDiscoveryTarget.clusterId,
+      nodeLogDiscoveryTarget.nodeName
+    );
     if (cachedDiscovery) {
-      const sources = Array.isArray(cachedDiscovery.sources) ? cachedDiscovery.sources : [];
-      setNodeLogSources(sources);
-      setNodeLogsCapabilityState(
-        createCapabilityState({
-          allowed: Boolean(cachedDiscovery.supported && sources.length > 0),
-          pending: false,
-          reason:
-            cachedDiscovery.supported && sources.length > 0
-              ? undefined
-              : (cachedDiscovery.reason ?? 'Node logs are not available for this node'),
-        })
-      );
+      applyResult(nodeLogCapabilityResult(cachedDiscovery));
       return;
     }
 
@@ -410,40 +501,24 @@ export const useObjectPanelCapabilities = ({
     setNodeLogSources([]);
     setNodeLogsCapabilityState(createCapabilityState({ pending: true }));
 
-    void discoverNodeLogs(clusterId, nodeName)
+    void discoverNodeLogs(nodeLogDiscoveryTarget.clusterId, nodeLogDiscoveryTarget.nodeName)
       .then((response) => {
         if (cancelled) {
           return;
         }
-        const sources = Array.isArray(response.sources) ? response.sources : [];
-        setNodeLogSources(sources);
-        setNodeLogsCapabilityState(
-          createCapabilityState({
-            allowed: Boolean(response.supported && sources.length > 0),
-            pending: false,
-            reason:
-              response.supported && sources.length > 0
-                ? undefined
-                : (response.reason ?? 'Node logs are not available for this node'),
-          })
-        );
+        applyResult(nodeLogCapabilityResult(response));
       })
       .catch((error) => {
         if (cancelled) {
           return;
         }
-        setNodeLogSources([]);
-        setNodeLogsCapabilityState(
-          createCapabilityState({
-            reason: error instanceof Error ? error.message : 'Failed to discover node logs',
-          })
-        );
+        applyResult(nodeLogCapabilityFailure(error));
       });
 
     return () => {
       cancelled = true;
     };
-  }, [featureSupport.nodeLogs, objectData?.clusterId, objectData?.name, objectKind]);
+  }, [nodeLogDiscoveryTarget]);
 
   const capabilities = useMemo<ComputedCapabilities>(() => {
     const hasObjPanelLogs =
@@ -478,37 +553,8 @@ export const useObjectPanelCapabilities = ({
   ]);
 
   const capabilityReasons = useMemo<CapabilityReasons>(
-    () => ({
-      nodeLogs: nodeLogsCapabilityState.allowed ? undefined : nodeLogsCapabilityState.reason,
-      delete: capabilityStates.delete.allowed ? undefined : capabilityStates.delete.reason,
-      restart: capabilityStates.restart.allowed ? undefined : capabilityStates.restart.reason,
-      scale: capabilityStates.scale.allowed ? undefined : capabilityStates.scale.reason,
-      trigger: capabilityStates.trigger.allowed ? undefined : capabilityStates.trigger.reason,
-      suspend: capabilityStates.suspend.allowed ? undefined : capabilityStates.suspend.reason,
-      editYaml: capabilityStates.editYaml.allowed ? undefined : capabilityStates.editYaml.reason,
-      shell: capabilityStates.shell.allowed ? undefined : capabilityStates.shell.reason,
-      debug: capabilityStates.debug.allowed ? undefined : capabilityStates.debug.reason,
-    }),
-    [
-      capabilityStates.delete.allowed,
-      capabilityStates.delete.reason,
-      capabilityStates.debug.allowed,
-      capabilityStates.debug.reason,
-      capabilityStates.editYaml.allowed,
-      capabilityStates.editYaml.reason,
-      capabilityStates.restart.allowed,
-      capabilityStates.restart.reason,
-      capabilityStates.scale.allowed,
-      capabilityStates.scale.reason,
-      capabilityStates.shell.allowed,
-      capabilityStates.shell.reason,
-      capabilityStates.suspend.allowed,
-      capabilityStates.suspend.reason,
-      capabilityStates.trigger.allowed,
-      capabilityStates.trigger.reason,
-      nodeLogsCapabilityState.allowed,
-      nodeLogsCapabilityState.reason,
-    ]
+    () => computeCapabilityReasons(capabilityStates, nodeLogsCapabilityState),
+    [capabilityStates, nodeLogsCapabilityState]
   );
 
   return {

@@ -84,6 +84,11 @@ type UpdateMessage = ServerMessage & {
   signalEnvelope?: SignalEnvelope;
 };
 
+type ResolvedSubscriptionMessage = {
+  update: UpdateMessage;
+  subscription: StreamSubscription;
+};
+
 const hasMessageType = (value: unknown): value is ResourceStreamMessageType =>
   typeof value === 'string' &&
   RESOURCE_STREAM_MESSAGE_TYPES.includes(value as ResourceStreamMessageType);
@@ -319,29 +324,31 @@ export class ResourceStreamManager {
     );
   }
 
-  handleMessage(clusterId: string, raw: string): void {
-    let parsed: ServerMessage | null = null;
+  private parseMessage(clusterId: string, raw: string): ServerMessage | null {
     try {
-      parsed = JSON.parse(raw) as ServerMessage;
+      return JSON.parse(raw) as ServerMessage;
     } catch (error) {
       reportOperationalError(error, {
         source: 'ResourceStreamManager',
         action: 'parseResourceStreamPayload',
         clusterId,
       });
-      return;
+      return null;
     }
-    if (!parsed) {
-      return;
-    }
+  }
+
+  private resolveSubscriptionMessage(
+    clusterId: string,
+    parsed: ServerMessage
+  ): ResolvedSubscriptionMessage | null {
     const update = resolveUpdateMessage(parsed);
     if (!update) {
-      return;
+      return null;
     }
     const messageClusterId =
       update.signalEnvelope?.clusterId ?? update.clusterId?.trim() ?? clusterId;
     if (!messageClusterId) {
-      return;
+      return null;
     }
     const subscriptionKey = resourceStreamSubscriptionKey(
       messageClusterId,
@@ -352,18 +359,22 @@ export class ResourceStreamManager {
     let resolvedUpdate = update;
     if (!subscription) {
       if (update.signalEnvelope) {
-        return;
+        return null;
       }
       // Fall back when cluster IDs drift but the scope/domain pair is unique.
       subscription = this.findSubscriptionByScope(update.domain, update.scope);
       if (!subscription) {
-        return;
+        return null;
       }
       resolvedUpdate = normalizeUpdateClusterId(update, subscription.clusterId);
     }
-    const errorMessage = resolvePermissionDeniedMessage(update.error, update.errorDetails);
-    this.recordSubscriptionMessage(subscription);
+    return { update: resolvedUpdate, subscription };
+  }
 
+  private captureSubscriptionClusterName(
+    subscription: StreamSubscription,
+    parsed: ServerMessage
+  ): void {
     // Server frames carry the cluster DISPLAY NAME (the subscribe ACK always
     // does); capture it so subscription-labeled logging shows the same name
     // as the backend's per-cluster log lines instead of falling back to the
@@ -372,63 +383,101 @@ export class ResourceStreamManager {
     if (messageClusterName && subscription.clusterName !== messageClusterName) {
       subscription.clusterName = messageClusterName;
     }
+  }
 
-    if (resolvedUpdate.signalEnvelope) {
-      switch (resolvedUpdate.signalEnvelope.signal) {
-        case 'changed':
-          this.handleUpdate(subscription, resolvedUpdate);
-          this.updateHealthForSubscription(subscription);
-          return;
-        case 'reset':
-          if (subscription.pendingReset) {
-            subscription.pendingReset = false;
-            if (this.hasRetainedData(subscription)) {
-              this.bumpSourceVersionOnly(
-                subscription,
-                Date.now(),
-                {
-                  [resolvedUpdate.signalEnvelope.source]: resolvedUpdate.signalEnvelope.version,
-                },
-                resolvedUpdate.signalEnvelope.version
-              );
-            }
-            this.updateHealthForSubscription(subscription);
-            return;
-          }
-          this.bumpSourceVersionOnly(
-            subscription,
-            Date.now(),
-            { [resolvedUpdate.signalEnvelope.source]: resolvedUpdate.signalEnvelope.version },
-            resolvedUpdate.signalEnvelope.version
-          );
-          void this.resyncSubscription(subscription, 'reset');
-          this.updateHealthForSubscription(subscription);
-          return;
-        case 'error':
-          this.recordSubscriptionError(subscription, errorMessage || 'stream error');
-          // A permission-denied frame is a SETTLED answer: resyncing cannot
-          // succeed until RBAC or the namespace scope changes. Hand the scope
-          // to the orchestrator's streaming block (cleared on scope change /
-          // auth recovery) instead of the endless resync loop. Health keeps
-          // reporting "unhealthy (permissions)" for diagnostics.
-          if (isPermissionDeniedStatus(update.errorDetails)) {
-            this.updateHealthForSubscription(subscription);
-            eventBus.emit('refresh:resource-stream-permission-denied', {
-              domain: subscription.domain,
-              scope: subscription.storeScope,
-              reason: errorMessage || 'permission denied',
-            });
-            return;
-          }
-          void this.resyncSubscription(subscription, errorMessage || 'stream error', true);
-          this.updateHealthForSubscription(subscription);
-          return;
-        default:
-          return;
-      }
+  private handleSignalReset(subscription: StreamSubscription, update: UpdateMessage): void {
+    const signal = update.signalEnvelope;
+    if (!signal) {
+      return;
     }
+    if (subscription.pendingReset) {
+      subscription.pendingReset = false;
+      if (this.hasRetainedData(subscription)) {
+        this.bumpSourceVersionOnly(
+          subscription,
+          Date.now(),
+          { [signal.source]: signal.version },
+          signal.version
+        );
+      }
+      this.updateHealthForSubscription(subscription);
+      return;
+    }
+    this.bumpSourceVersionOnly(
+      subscription,
+      Date.now(),
+      { [signal.source]: signal.version },
+      signal.version
+    );
+    void this.resyncSubscription(subscription, 'reset');
+    this.updateHealthForSubscription(subscription);
+  }
 
-    switch (resolvedUpdate.type) {
+  private handleSignalError(
+    subscription: StreamSubscription,
+    update: UpdateMessage,
+    errorMessage: string | null
+  ): void {
+    this.recordSubscriptionError(subscription, errorMessage || 'stream error');
+    // Permission denial is settled until scope/auth recovery; block streaming
+    // instead of entering the resync loop, while retaining unhealthy health.
+    if (isPermissionDeniedStatus(update.errorDetails)) {
+      this.updateHealthForSubscription(subscription);
+      eventBus.emit('refresh:resource-stream-permission-denied', {
+        domain: subscription.domain,
+        scope: subscription.storeScope,
+        reason: errorMessage || 'permission denied',
+      });
+      return;
+    }
+    void this.resyncSubscription(subscription, errorMessage || 'stream error', true);
+    this.updateHealthForSubscription(subscription);
+  }
+
+  private handleSignalMessage(
+    subscription: StreamSubscription,
+    update: UpdateMessage,
+    errorMessage: string | null
+  ): void {
+    switch (update.signalEnvelope?.signal) {
+      case 'changed':
+        this.handleUpdate(subscription, update);
+        this.updateHealthForSubscription(subscription);
+        return;
+      case 'reset':
+        this.handleSignalReset(subscription, update);
+        return;
+      case 'error':
+        this.handleSignalError(subscription, update, errorMessage);
+        return;
+      default:
+        return;
+    }
+  }
+
+  private handleLegacyReset(subscription: StreamSubscription, update: UpdateMessage): void {
+    if (subscription.pendingReset) {
+      subscription.pendingReset = false;
+      // Without a resume token, retained data needs a new doorbell clock
+      // before synchronization can be trusted on this connection.
+      if (this.hasRetainedData(subscription)) {
+        this.bumpLegacyResyncSourceVersion(subscription, update);
+      }
+      this.markSubscriptionSynchronized(subscription);
+      this.updateHealthForSubscription(subscription);
+      return;
+    }
+    this.bumpLegacyResyncSourceVersion(subscription, update);
+    void this.resyncSubscription(subscription, 'reset');
+    this.updateHealthForSubscription(subscription);
+  }
+
+  private handleLegacyMessage(
+    subscription: StreamSubscription,
+    update: UpdateMessage,
+    errorMessage: string | null
+  ): void {
+    switch (update.type) {
       case 'HEARTBEAT':
         return;
       case 'ACK':
@@ -441,24 +490,10 @@ export class ResourceStreamManager {
         this.updateHealthForSubscription(subscription);
         return;
       case 'RESET':
-        if (subscription.pendingReset) {
-          subscription.pendingReset = false;
-          // With no resume token, RESET means the server cannot prove that the
-          // retained snapshot spans the disconnected interval. Invalidate its
-          // doorbell clock so the existing consumer contract reconciles it.
-          if (this.hasRetainedData(subscription)) {
-            this.bumpLegacyResyncSourceVersion(subscription, resolvedUpdate);
-          }
-          this.markSubscriptionSynchronized(subscription);
-          this.updateHealthForSubscription(subscription);
-          return;
-        }
-        this.bumpLegacyResyncSourceVersion(subscription, resolvedUpdate);
-        void this.resyncSubscription(subscription, 'reset');
-        this.updateHealthForSubscription(subscription);
+        this.handleLegacyReset(subscription, update);
         return;
       case 'COMPLETE':
-        this.bumpLegacyResyncSourceVersion(subscription, resolvedUpdate);
+        this.bumpLegacyResyncSourceVersion(subscription, update);
         void this.resyncSubscription(subscription, errorMessage || 'complete');
         this.updateHealthForSubscription(subscription);
         return;
@@ -470,12 +505,33 @@ export class ResourceStreamManager {
       case 'ADDED':
       case 'MODIFIED':
       case 'DELETED':
-        this.handleUpdate(subscription, resolvedUpdate);
+        this.handleUpdate(subscription, update);
         this.updateHealthForSubscription(subscription);
         return;
       default:
         return;
     }
+  }
+
+  handleMessage(clusterId: string, raw: string): void {
+    const parsed = this.parseMessage(clusterId, raw);
+    if (!parsed) {
+      return;
+    }
+    const resolved = this.resolveSubscriptionMessage(clusterId, parsed);
+    if (!resolved) {
+      return;
+    }
+
+    const { subscription, update } = resolved;
+    const errorMessage = resolvePermissionDeniedMessage(update.error, update.errorDetails);
+    this.recordSubscriptionMessage(subscription);
+    this.captureSubscriptionClusterName(subscription, parsed);
+    if (update.signalEnvelope) {
+      this.handleSignalMessage(subscription, update, errorMessage);
+      return;
+    }
+    this.handleLegacyMessage(subscription, update, errorMessage);
   }
 
   private findSubscriptionByScope(

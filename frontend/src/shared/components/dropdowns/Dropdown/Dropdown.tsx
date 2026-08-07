@@ -18,6 +18,7 @@ import {
   DropdownSelectNoneIcon,
 } from '@shared/components/icons/DropdownIcons';
 import { useKeyboardSurface } from '@ui/shortcuts';
+import type { DropdownOption } from './types';
 
 type DropdownMenuStyle = React.CSSProperties & {
   '--dropdown-menu-anchor-width': string;
@@ -28,6 +29,706 @@ const DROPDOWN_MENU_GAP = 2;
 const DROPDOWN_VIEWPORT_PADDING = 8;
 const DROPDOWN_MENU_MAX_HEIGHT = 400;
 const DROPDOWN_MENU_MIN_VISIBLE_HEIGHT = 48;
+
+type DropdownPosition = 'bottom' | 'top';
+type HorizontalPosition = 'start' | 'end';
+
+interface DropdownPlacement {
+  dropdownPosition: DropdownPosition;
+  horizontalPosition: HorizontalPosition;
+  menuStyle: DropdownMenuStyle;
+}
+
+const getZoomFactor = () => {
+  const parsed = Number.parseFloat(
+    getComputedStyle(document.documentElement).getPropertyValue('--app-zoom-factor')
+  );
+  return Number.isFinite(parsed) && parsed > 0 ? parsed : 1;
+};
+
+const getVerticalPosition = (
+  measuredMenuHeight: number,
+  spaceBelow: number,
+  spaceAbove: number
+): DropdownPosition =>
+  measuredMenuHeight <= spaceBelow || spaceBelow >= spaceAbove ? 'bottom' : 'top';
+
+const getPreferredTop = (
+  position: DropdownPosition,
+  triggerRect: Pick<DOMRect, 'bottom' | 'top'>,
+  renderedMenuHeight: number
+) =>
+  position === 'bottom'
+    ? triggerRect.bottom + DROPDOWN_MENU_GAP
+    : triggerRect.top - DROPDOWN_MENU_GAP - renderedMenuHeight;
+
+const calculateDropdownPlacement = (
+  trigger: HTMLButtonElement,
+  menu: HTMLDivElement
+): DropdownPlacement => {
+  const zoomFactor = getZoomFactor();
+  const visualTriggerRect = trigger.getBoundingClientRect();
+  const triggerRect = {
+    top: visualTriggerRect.top / zoomFactor,
+    right: visualTriggerRect.right / zoomFactor,
+    bottom: visualTriggerRect.bottom / zoomFactor,
+    left: visualTriggerRect.left / zoomFactor,
+    width: visualTriggerRect.width / zoomFactor,
+    height: visualTriggerRect.height / zoomFactor,
+  };
+  const viewportHeight = window.innerHeight / zoomFactor;
+  const viewportWidth = window.innerWidth / zoomFactor;
+  const viewportMenuWidth = Math.max(0, viewportWidth - DROPDOWN_VIEWPORT_PADDING * 2);
+  const viewportMenuHeight = Math.max(0, viewportHeight - DROPDOWN_VIEWPORT_PADDING * 2);
+  const anchorWidth = Math.min(triggerRect.width, viewportMenuWidth);
+
+  menu.style.setProperty('--dropdown-menu-anchor-width', `${anchorWidth}px`);
+  menu.style.setProperty(
+    '--dropdown-menu-available-height',
+    `${Math.min(DROPDOWN_MENU_MAX_HEIGHT, viewportMenuHeight)}px`
+  );
+  menu.style.maxWidth = `${viewportMenuWidth}px`;
+
+  const measuredMenuWidth = Math.min(Math.max(menu.offsetWidth, anchorWidth), viewportMenuWidth);
+  const measuredMenuHeight = Math.min(menu.offsetHeight, DROPDOWN_MENU_MAX_HEIGHT);
+  const spaceBelow = Math.max(
+    0,
+    viewportHeight - DROPDOWN_VIEWPORT_PADDING - triggerRect.bottom - DROPDOWN_MENU_GAP
+  );
+  const spaceAbove = Math.max(0, triggerRect.top - DROPDOWN_VIEWPORT_PADDING - DROPDOWN_MENU_GAP);
+  const dropdownPosition = getVerticalPosition(measuredMenuHeight, spaceBelow, spaceAbove);
+  const selectedSpace = dropdownPosition === 'bottom' ? spaceBelow : spaceAbove;
+  const availableHeight = Math.min(
+    DROPDOWN_MENU_MAX_HEIGHT,
+    viewportMenuHeight,
+    Math.max(selectedSpace, Math.min(DROPDOWN_MENU_MIN_VISIBLE_HEIGHT, viewportMenuHeight))
+  );
+
+  menu.style.setProperty('--dropdown-menu-available-height', `${availableHeight}px`);
+  const renderedMenuHeight = Math.min(menu.offsetHeight, availableHeight);
+  const maxLeft = Math.max(
+    DROPDOWN_VIEWPORT_PADDING,
+    viewportWidth - DROPDOWN_VIEWPORT_PADDING - measuredMenuWidth
+  );
+  const left = Math.max(DROPDOWN_VIEWPORT_PADDING, Math.min(triggerRect.left, maxLeft));
+  const maxTop = Math.max(
+    DROPDOWN_VIEWPORT_PADDING,
+    viewportHeight - DROPDOWN_VIEWPORT_PADDING - renderedMenuHeight
+  );
+  const preferredTop = getPreferredTop(dropdownPosition, triggerRect, renderedMenuHeight);
+  const top = Math.max(DROPDOWN_VIEWPORT_PADDING, Math.min(preferredTop, maxTop));
+  const horizontalPosition =
+    triggerRect.left + measuredMenuWidth > viewportWidth - DROPDOWN_VIEWPORT_PADDING
+      ? 'end'
+      : 'start';
+
+  return {
+    dropdownPosition,
+    horizontalPosition,
+    menuStyle: {
+      position: 'fixed',
+      top,
+      right: 'auto',
+      bottom: 'auto',
+      left,
+      maxWidth: viewportMenuWidth,
+      visibility: 'visible',
+      '--dropdown-menu-anchor-width': `${anchorWidth}px`,
+      '--dropdown-menu-available-height': `${availableHeight}px`,
+    },
+  };
+};
+
+const observeDropdownElements = (
+  positionMenu: () => void,
+  trigger: HTMLButtonElement,
+  menu: HTMLDivElement
+) => {
+  if (typeof ResizeObserver === 'undefined') {
+    return null;
+  }
+  const observer = new ResizeObserver(positionMenu);
+  observer.observe(trigger);
+  observer.observe(menu);
+  let ancestor = trigger.parentElement;
+  while (ancestor) {
+    observer.observe(ancestor);
+    ancestor = ancestor.parentElement;
+  }
+  return observer;
+};
+
+const useDropdownPlacement = (
+  isOpen: boolean,
+  triggerRef: React.RefObject<HTMLButtonElement | null>,
+  menuRef: React.RefObject<HTMLDivElement | null>
+) => {
+  const [placement, setPlacement] = useState<DropdownPlacement>({
+    dropdownPosition: 'bottom',
+    horizontalPosition: 'start',
+    menuStyle: {
+      position: 'fixed',
+      visibility: 'hidden',
+      '--dropdown-menu-anchor-width': '0px',
+      '--dropdown-menu-available-height': `${DROPDOWN_MENU_MAX_HEIGHT}px`,
+    },
+  });
+
+  useLayoutEffect(() => {
+    const trigger = triggerRef.current;
+    const menu = menuRef.current;
+    if (!isOpen || !trigger || !menu) {
+      return;
+    }
+
+    const positionMenu = () => setPlacement(calculateDropdownPlacement(trigger, menu));
+    positionMenu();
+    document.addEventListener('scroll', positionMenu, true);
+    window.addEventListener('resize', positionMenu);
+    const resizeObserver = observeDropdownElements(positionMenu, trigger, menu);
+
+    return () => {
+      document.removeEventListener('scroll', positionMenu, true);
+      window.removeEventListener('resize', positionMenu);
+      resizeObserver?.disconnect();
+    };
+  }, [isOpen, menuRef, triggerRef]);
+
+  return placement;
+};
+
+const getMultipleDisplayText = <TMetadata,>(
+  value: string[],
+  options: DropdownOption<TMetadata>[],
+  placeholder: string
+) => {
+  if (value.length === 0) {
+    return placeholder;
+  }
+  return value
+    .map((optionValue) => options.find((option) => option.value === optionValue)?.label)
+    .filter(Boolean)
+    .join(', ');
+};
+
+const getDropdownDisplayText = <TMetadata,>({
+  loading,
+  renderValue,
+  displayValue,
+  multiple,
+  value,
+  options,
+  placeholder,
+}: Pick<
+  DropdownProps<TMetadata>,
+  'displayValue' | 'loading' | 'multiple' | 'options' | 'placeholder' | 'renderValue' | 'value'
+>) => {
+  if (loading) {
+    return 'Loading...';
+  }
+  if (renderValue) {
+    return renderValue(value, options);
+  }
+  if (typeof displayValue === 'function') {
+    return displayValue(value as string);
+  }
+  if (displayValue) {
+    return displayValue;
+  }
+  if (multiple && Array.isArray(value)) {
+    return getMultipleDisplayText(value, options, placeholder ?? 'Select...');
+  }
+  return options.find((option) => option.value === value)?.label || placeholder;
+};
+
+const getActiveOptionId = (isOpen: boolean, highlightedIndex: number, controlId: string) =>
+  isOpen && highlightedIndex >= 0 ? `${controlId}-option-${highlightedIndex}` : undefined;
+
+interface DropdownTriggerProps {
+  triggerRef: React.RefObject<HTMLButtonElement | null>;
+  searchable: boolean;
+  isOpen: boolean;
+  menuId: string;
+  activeOptionId?: string;
+  disabled: boolean;
+  id?: string;
+  ariaLabel?: string;
+  ariaDescribedBy?: string;
+  ariaLabelledBy?: string;
+  toggleDropdown: () => void;
+  children: React.ReactNode;
+}
+
+const DropdownTrigger = ({
+  triggerRef,
+  searchable,
+  isOpen,
+  menuId,
+  activeOptionId,
+  disabled,
+  id,
+  ariaLabel,
+  ariaDescribedBy,
+  ariaLabelledBy,
+  toggleDropdown,
+  children,
+}: DropdownTriggerProps) => {
+  if (searchable) {
+    return (
+      <button
+        type="button"
+        ref={triggerRef}
+        className="dropdown-trigger"
+        onClick={toggleDropdown}
+        aria-expanded={isOpen}
+        aria-haspopup="listbox"
+        aria-label={ariaLabel}
+        aria-describedby={ariaDescribedBy}
+        aria-labelledby={ariaLabelledBy}
+        aria-controls={menuId}
+        tabIndex={disabled ? -1 : 0}
+        id={id}
+        disabled={disabled}
+      >
+        {children}
+      </button>
+    );
+  }
+  return (
+    <button
+      type="button"
+      ref={triggerRef}
+      className="dropdown-trigger"
+      onClick={toggleDropdown}
+      role="combobox"
+      aria-expanded={isOpen}
+      aria-haspopup="listbox"
+      aria-label={ariaLabel}
+      aria-describedby={ariaDescribedBy}
+      aria-labelledby={ariaLabelledBy}
+      aria-controls={menuId}
+      aria-activedescendant={activeOptionId}
+      tabIndex={disabled ? -1 : 0}
+      id={id}
+      disabled={disabled}
+    >
+      {children}
+    </button>
+  );
+};
+
+interface DropdownBulkActionsProps {
+  showLabels: boolean;
+  selectedCount: number;
+  selectableCount: number;
+  onSelectAll: () => void;
+  onSelectNone: () => void;
+}
+
+const DropdownBulkActions = ({
+  showLabels,
+  selectedCount,
+  selectableCount,
+  onSelectAll,
+  onSelectNone,
+}: DropdownBulkActionsProps) => (
+  <div
+    className={`dropdown-bulk-actions icon-bar${
+      showLabels ? ' dropdown-bulk-actions--labeled' : ''
+    }`}
+  >
+    <button
+      type="button"
+      className={`dropdown-bulk-action icon-bar-button${
+        showLabels ? ' dropdown-bulk-action--labeled' : ''
+      }`}
+      onClick={(event) => {
+        event.stopPropagation();
+        onSelectAll();
+      }}
+      disabled={selectedCount === selectableCount}
+      title="Select all"
+      aria-label="Select all"
+    >
+      <DropdownSelectAllIcon width={20} height={20} />
+      {showLabels ? <span className="dropdown-bulk-action-label">All</span> : null}
+    </button>
+    <button
+      type="button"
+      className={`dropdown-bulk-action icon-bar-button${
+        showLabels ? ' dropdown-bulk-action--labeled' : ''
+      }`}
+      onClick={(event) => {
+        event.stopPropagation();
+        onSelectNone();
+      }}
+      disabled={selectedCount === 0}
+      title="Select none"
+      aria-label="Select none"
+    >
+      <DropdownSelectNoneIcon width={20} height={20} />
+      {showLabels ? <span className="dropdown-bulk-action-label">None</span> : null}
+    </button>
+  </div>
+);
+
+interface DropdownMenuControlsProps {
+  searchable: boolean;
+  searchInputRef: React.RefObject<HTMLInputElement | null>;
+  searchPlaceholder: string;
+  searchValue: string;
+  menuId: string;
+  activeOptionId?: string;
+  showBulkActions: boolean;
+  showBulkActionLabels: boolean;
+  selectedCount: number;
+  selectableCount: number;
+  onSearchChange: (value: string) => void;
+  onSearchFocusChange: (focused: boolean) => void;
+  onSelectAll: () => void;
+  onSelectNone: () => void;
+}
+
+const DropdownMenuControls = ({
+  searchable,
+  searchInputRef,
+  searchPlaceholder,
+  searchValue,
+  menuId,
+  activeOptionId,
+  showBulkActions,
+  showBulkActionLabels,
+  selectedCount,
+  selectableCount,
+  onSearchChange,
+  onSearchFocusChange,
+  onSelectAll,
+  onSelectNone,
+}: DropdownMenuControlsProps) => {
+  if (!searchable && !showBulkActions) {
+    return null;
+  }
+
+  return (
+    <div className="dropdown-menu-controls">
+      {searchable ? (
+        <div className="search-container">
+          <input
+            ref={searchInputRef}
+            type="text"
+            className="search-input"
+            placeholder={searchPlaceholder}
+            value={searchValue}
+            onChange={(event) => onSearchChange(event.target.value)}
+            onClick={(event) => event.stopPropagation()}
+            onFocus={() => onSearchFocusChange(true)}
+            onBlur={() => onSearchFocusChange(false)}
+            role="combobox"
+            aria-label={searchPlaceholder}
+            aria-autocomplete="list"
+            aria-expanded="true"
+            aria-controls={menuId}
+            aria-activedescendant={activeOptionId}
+          />
+        </div>
+      ) : null}
+      {showBulkActions ? (
+        <DropdownBulkActions
+          showLabels={showBulkActionLabels}
+          selectedCount={selectedCount}
+          selectableCount={selectableCount}
+          onSelectAll={onSelectAll}
+          onSelectNone={onSelectNone}
+        />
+      ) : null}
+    </div>
+  );
+};
+
+interface DropdownOptionContentProps<TMetadata> {
+  option: DropdownOption<TMetadata>;
+  optionIsSelected: boolean;
+  multiple: boolean;
+  renderOption?: DropdownProps<TMetadata>['renderOption'];
+}
+
+const DropdownOptionContent = <TMetadata,>({
+  option,
+  optionIsSelected,
+  multiple,
+  renderOption,
+}: DropdownOptionContentProps<TMetadata>) => {
+  if (renderOption) {
+    return renderOption(option, optionIsSelected);
+  }
+  return (
+    <>
+      {multiple ? (
+        <span className="dropdown-filter-check">{optionIsSelected ? '✓' : ''}</span>
+      ) : null}
+      <span className="option-label">{option.label}</span>
+    </>
+  );
+};
+
+interface DropdownOptionRowProps<TMetadata> {
+  option: DropdownOption<TMetadata>;
+  index: number;
+  controlId: string;
+  multiple: boolean;
+  highlightedIndex: number;
+  optionIsSelected: boolean;
+  renderOption?: DropdownProps<TMetadata>['renderOption'];
+  selectOption: (value: string) => void;
+  setHighlightedIndex: (index: number) => void;
+}
+
+const DropdownOptionRow = <TMetadata,>({
+  option,
+  index,
+  controlId,
+  multiple,
+  highlightedIndex,
+  optionIsSelected,
+  renderOption,
+  selectOption,
+  setHighlightedIndex,
+}: DropdownOptionRowProps<TMetadata>) => {
+  const isGroupHeader = option.group === 'header';
+  if (isGroupHeader && option.label.trim().length === 0) {
+    return <hr className="dropdown-separator" />;
+  }
+  if (isGroupHeader) {
+    return (
+      <div className="dropdown-group-header" role="presentation">
+        {renderOption ? renderOption(option, false) : option.label}
+      </div>
+    );
+  }
+
+  const optionIsHighlighted = index === highlightedIndex;
+  const optionAriaSelected = multiple
+    ? optionIsSelected
+    : optionIsHighlighted || (highlightedIndex < 0 && optionIsSelected);
+  const handleMouseEnter = () => {
+    if (!option.disabled) {
+      setHighlightedIndex(index);
+    }
+  };
+
+  return (
+    <button
+      type="button"
+      id={`${controlId}-option-${index}`}
+      className={[
+        'dropdown-option',
+        optionIsSelected && 'selected',
+        optionIsHighlighted && 'highlighted',
+        option.disabled && 'disabled',
+      ]
+        .filter(Boolean)
+        .join(' ')}
+      onClick={() => selectOption(option.value)}
+      onMouseEnter={handleMouseEnter}
+      role="option"
+      aria-selected={optionAriaSelected}
+      aria-disabled={option.disabled}
+      disabled={option.disabled}
+      tabIndex={-1}
+    >
+      <DropdownOptionContent
+        option={option}
+        optionIsSelected={optionIsSelected}
+        multiple={multiple}
+        renderOption={renderOption}
+      />
+    </button>
+  );
+};
+
+interface DropdownOptionListProps<TMetadata> {
+  options: DropdownOption<TMetadata>[];
+  controlId: string;
+  multiple: boolean;
+  highlightedIndex: number;
+  renderOption?: DropdownProps<TMetadata>['renderOption'];
+  isSelected: (value: string) => boolean;
+  selectOption: (value: string) => void;
+  setHighlightedIndex: (index: number) => void;
+}
+
+const DropdownOptionList = <TMetadata,>({
+  options,
+  controlId,
+  multiple,
+  highlightedIndex,
+  renderOption,
+  isSelected,
+  selectOption,
+  setHighlightedIndex,
+}: DropdownOptionListProps<TMetadata>) => {
+  if (options.length === 0) {
+    return <div className="no-options">No options available</div>;
+  }
+  return options.map((option, index) => (
+    <DropdownOptionRow
+      key={option.value}
+      option={option}
+      index={index}
+      controlId={controlId}
+      multiple={multiple}
+      highlightedIndex={highlightedIndex}
+      optionIsSelected={isSelected(option.value)}
+      renderOption={renderOption}
+      selectOption={selectOption}
+      setHighlightedIndex={setHighlightedIndex}
+    />
+  ));
+};
+
+interface DropdownMenuPortalProps<TMetadata> {
+  isOpen: boolean;
+  disabled: boolean;
+  loading: boolean;
+  menuRef: React.RefObject<HTMLDivElement | null>;
+  menuClasses: string;
+  menuStyle: DropdownMenuStyle;
+  multiple: boolean;
+  menuId: string;
+  searchable: boolean;
+  searchInputRef: React.RefObject<HTMLInputElement | null>;
+  searchPlaceholder: string;
+  searchValue: string;
+  activeOptionId?: string;
+  showBulkActions: boolean;
+  showBulkActionLabels: boolean;
+  selectedCount: number;
+  selectableCount: number;
+  options: DropdownOption<TMetadata>[];
+  controlId: string;
+  highlightedIndex: number;
+  renderOption?: DropdownProps<TMetadata>['renderOption'];
+  isSelected: (value: string) => boolean;
+  selectOption: (value: string) => void;
+  setHighlightedIndex: (index: number) => void;
+  onSearchChange: (value: string) => void;
+  onSearchFocusChange: (focused: boolean) => void;
+  onSelectAll: () => void;
+  onSelectNone: () => void;
+}
+
+const DropdownMenuPortal = <TMetadata,>({
+  isOpen,
+  disabled,
+  loading,
+  menuRef,
+  menuClasses,
+  menuStyle,
+  multiple,
+  menuId,
+  searchable,
+  searchInputRef,
+  searchPlaceholder,
+  searchValue,
+  activeOptionId,
+  showBulkActions,
+  showBulkActionLabels,
+  selectedCount,
+  selectableCount,
+  options,
+  controlId,
+  highlightedIndex,
+  renderOption,
+  isSelected,
+  selectOption,
+  setHighlightedIndex,
+  onSearchChange,
+  onSearchFocusChange,
+  onSelectAll,
+  onSelectNone,
+}: DropdownMenuPortalProps<TMetadata>) => {
+  if (!isOpen || disabled || loading || typeof document === 'undefined') {
+    return null;
+  }
+
+  return createPortal(
+    <div
+      ref={menuRef}
+      className={menuClasses}
+      style={menuStyle}
+      role="listbox"
+      aria-multiselectable={multiple}
+      id={menuId}
+      data-focus-portal-owner={menuId}
+    >
+      <DropdownMenuControls
+        searchable={searchable}
+        searchInputRef={searchInputRef}
+        searchPlaceholder={searchPlaceholder}
+        searchValue={searchValue}
+        menuId={menuId}
+        activeOptionId={activeOptionId}
+        showBulkActions={showBulkActions}
+        showBulkActionLabels={showBulkActionLabels}
+        selectedCount={selectedCount}
+        selectableCount={selectableCount}
+        onSearchChange={onSearchChange}
+        onSearchFocusChange={onSearchFocusChange}
+        onSelectAll={onSelectAll}
+        onSelectNone={onSelectNone}
+      />
+      <DropdownOptionList
+        options={options}
+        controlId={controlId}
+        multiple={multiple}
+        highlightedIndex={highlightedIndex}
+        renderOption={renderOption}
+        isSelected={isSelected}
+        selectOption={selectOption}
+        setHighlightedIndex={setHighlightedIndex}
+      />
+    </div>,
+    document.body
+  );
+};
+
+interface DropdownClearButtonProps {
+  clearable: boolean;
+  multiple: boolean;
+  value: string | string[];
+  disabled: boolean;
+  onClear: () => void;
+}
+
+const DropdownClearButton = ({
+  clearable,
+  multiple,
+  value,
+  disabled,
+  onClear,
+}: DropdownClearButtonProps) => {
+  if (!clearable || multiple || !value || disabled) {
+    return null;
+  }
+  return (
+    <button
+      type="button"
+      className="clear-button"
+      onClick={onClear}
+      aria-label="Clear selection"
+      tabIndex={-1}
+    >
+      ×
+    </button>
+  );
+};
+
+const DropdownHiddenInput = ({ name, value }: Pick<DropdownProps, 'name' | 'value'>) => {
+  if (!name) {
+    return null;
+  }
+  return <input type="hidden" name={name} value={Array.isArray(value) ? value.join(',') : value} />;
+};
 
 const Dropdown = <TMetadata,>({
   options,
@@ -77,19 +778,12 @@ const Dropdown = <TMetadata,>({
 
   const [isFocused, setIsFocused] = useState(false);
   const [isSearchFocused, setIsSearchFocused] = useState(false);
-  const [menuStyle, setMenuStyle] = useState<DropdownMenuStyle>({
-    position: 'fixed',
-    visibility: 'hidden',
-    '--dropdown-menu-anchor-width': '0px',
-    '--dropdown-menu-available-height': `${DROPDOWN_MENU_MAX_HEIGHT}px`,
-  });
   const menuScrollTopRef = useRef(0);
   const searchInputRef = useRef<HTMLInputElement>(null);
   const generatedId = React.useId().replace(/:/g, '');
   const controlId = id || `dropdown-${generatedId}`;
   const menuId = `${controlId}-menu`;
-  const activeOptionId =
-    isOpen && highlightedIndex >= 0 ? `${controlId}-option-${highlightedIndex}` : undefined;
+  const activeOptionId = getActiveOptionId(isOpen, highlightedIndex, controlId);
 
   useEffect(() => {
     const nodes = [dropdownRef.current, isOpen ? menuRef.current : null].filter(
@@ -231,37 +925,6 @@ const Dropdown = <TMetadata,>({
     [multiple, onChange, selectableFilteredValues, value]
   );
 
-  // Get display text for current value
-  const getDisplayText = () => {
-    if (loading) {
-      return 'Loading...';
-    }
-
-    if (renderValue) {
-      return renderValue(value, options);
-    }
-
-    if (displayValue) {
-      if (typeof displayValue === 'function') {
-        return displayValue(value as string);
-      }
-      return displayValue;
-    }
-
-    if (multiple && Array.isArray(value)) {
-      if (value.length === 0) {
-        return placeholder;
-      }
-      const selectedLabels = value
-        .map((v) => options.find((opt) => opt.value === v)?.label)
-        .filter(Boolean);
-      return selectedLabels.join(', ');
-    }
-
-    const selectedOption = options.find((opt) => opt.value === value);
-    return selectedOption?.label || placeholder;
-  };
-
   // Scroll highlighted option into view
   useEffect(() => {
     if (isOpen && highlightedIndex >= 0 && menuRef.current) {
@@ -310,127 +973,11 @@ const Dropdown = <TMetadata,>({
     }
   }, [isOpen]);
 
-  // Calculate dropdown position to avoid viewport edges
-  const [dropdownPosition, setDropdownPosition] = React.useState<'bottom' | 'top'>('bottom');
-  const [horizontalPosition, setHorizontalPosition] = React.useState<'start' | 'end'>('start');
-
-  useLayoutEffect(() => {
-    if (!isOpen || !triggerRef.current || !menuRef.current) {
-      return;
-    }
-
-    const trigger = triggerRef.current;
-    const menu = menuRef.current;
-
-    const positionMenu = () => {
-      const visualTriggerRect = trigger.getBoundingClientRect();
-      const parsedZoomFactor = Number.parseFloat(
-        getComputedStyle(document.documentElement).getPropertyValue('--app-zoom-factor')
-      );
-      const zoomFactor =
-        Number.isFinite(parsedZoomFactor) && parsedZoomFactor > 0 ? parsedZoomFactor : 1;
-      // CSS zoom scales client rectangles, but the fixed menu's left/top and
-      // offset dimensions are authored in the document's unscaled CSS space.
-      const triggerRect = {
-        top: visualTriggerRect.top / zoomFactor,
-        right: visualTriggerRect.right / zoomFactor,
-        bottom: visualTriggerRect.bottom / zoomFactor,
-        left: visualTriggerRect.left / zoomFactor,
-        width: visualTriggerRect.width / zoomFactor,
-        height: visualTriggerRect.height / zoomFactor,
-      };
-      const viewportHeight = window.innerHeight / zoomFactor;
-      const viewportWidth = window.innerWidth / zoomFactor;
-      const viewportMenuWidth = Math.max(0, viewportWidth - DROPDOWN_VIEWPORT_PADDING * 2);
-      const viewportMenuHeight = Math.max(0, viewportHeight - DROPDOWN_VIEWPORT_PADDING * 2);
-      const anchorWidth = Math.min(triggerRect.width, viewportMenuWidth);
-
-      menu.style.setProperty('--dropdown-menu-anchor-width', `${anchorWidth}px`);
-      menu.style.setProperty(
-        '--dropdown-menu-available-height',
-        `${Math.min(DROPDOWN_MENU_MAX_HEIGHT, viewportMenuHeight)}px`
-      );
-      menu.style.maxWidth = `${viewportMenuWidth}px`;
-
-      const measuredMenuWidth = Math.min(
-        Math.max(menu.offsetWidth, anchorWidth),
-        viewportMenuWidth
-      );
-      const measuredMenuHeight = Math.min(menu.offsetHeight, DROPDOWN_MENU_MAX_HEIGHT);
-      const spaceBelow = Math.max(
-        0,
-        viewportHeight - DROPDOWN_VIEWPORT_PADDING - triggerRect.bottom - DROPDOWN_MENU_GAP
-      );
-      const spaceAbove = Math.max(
-        0,
-        triggerRect.top - DROPDOWN_VIEWPORT_PADDING - DROPDOWN_MENU_GAP
-      );
-      const nextVerticalPosition =
-        measuredMenuHeight <= spaceBelow || spaceBelow >= spaceAbove ? 'bottom' : 'top';
-      const selectedSpace = nextVerticalPosition === 'bottom' ? spaceBelow : spaceAbove;
-      const availableHeight = Math.min(
-        DROPDOWN_MENU_MAX_HEIGHT,
-        viewportMenuHeight,
-        Math.max(selectedSpace, Math.min(DROPDOWN_MENU_MIN_VISIBLE_HEIGHT, viewportMenuHeight))
-      );
-
-      menu.style.setProperty('--dropdown-menu-available-height', `${availableHeight}px`);
-      const renderedMenuHeight = Math.min(menu.offsetHeight, availableHeight);
-      const maxLeft = Math.max(
-        DROPDOWN_VIEWPORT_PADDING,
-        viewportWidth - DROPDOWN_VIEWPORT_PADDING - measuredMenuWidth
-      );
-      const preferredLeft = triggerRect.left;
-      const left = Math.max(DROPDOWN_VIEWPORT_PADDING, Math.min(preferredLeft, maxLeft));
-      const maxTop = Math.max(
-        DROPDOWN_VIEWPORT_PADDING,
-        viewportHeight - DROPDOWN_VIEWPORT_PADDING - renderedMenuHeight
-      );
-      const preferredTop =
-        nextVerticalPosition === 'bottom'
-          ? triggerRect.bottom + DROPDOWN_MENU_GAP
-          : triggerRect.top - DROPDOWN_MENU_GAP - renderedMenuHeight;
-      const top = Math.max(DROPDOWN_VIEWPORT_PADDING, Math.min(preferredTop, maxTop));
-      const nextHorizontalPosition =
-        preferredLeft + measuredMenuWidth > viewportWidth - DROPDOWN_VIEWPORT_PADDING
-          ? 'end'
-          : 'start';
-
-      setDropdownPosition(nextVerticalPosition);
-      setHorizontalPosition(nextHorizontalPosition);
-      setMenuStyle({
-        position: 'fixed',
-        top,
-        right: 'auto',
-        bottom: 'auto',
-        left,
-        maxWidth: viewportMenuWidth,
-        visibility: 'visible',
-        '--dropdown-menu-anchor-width': `${anchorWidth}px`,
-        '--dropdown-menu-available-height': `${availableHeight}px`,
-      });
-    };
-
-    positionMenu();
-    document.addEventListener('scroll', positionMenu, true);
-    window.addEventListener('resize', positionMenu);
-
-    const resizeObserver =
-      typeof ResizeObserver === 'undefined' ? null : new ResizeObserver(positionMenu);
-    resizeObserver?.observe(trigger);
-    resizeObserver?.observe(menu);
-    let ancestor = trigger.parentElement;
-    while (ancestor) {
-      resizeObserver?.observe(ancestor);
-      ancestor = ancestor.parentElement;
-    }
-
-    return () => {
-      document.removeEventListener('scroll', positionMenu, true);
-      window.removeEventListener('resize', positionMenu);
-      resizeObserver?.disconnect();
-    };
-  }, [isOpen, menuRef, triggerRef]);
+  const { dropdownPosition, horizontalPosition, menuStyle } = useDropdownPlacement(
+    isOpen,
+    triggerRef,
+    menuRef
+  );
 
   const containerClasses = [
     'dropdown',
@@ -509,7 +1056,17 @@ const Dropdown = <TMetadata,>({
   const showBulkActionLabels = !searchable;
   const triggerContent = (
     <>
-      <span className="dropdown-value">{getDisplayText()}</span>
+      <span className="dropdown-value">
+        {getDropdownDisplayText({
+          loading,
+          renderValue,
+          displayValue,
+          multiple,
+          value,
+          options,
+          placeholder,
+        })}
+      </span>
       <span className="dropdown-arrow">
         <DropdownArrowIcon />
       </span>
@@ -518,215 +1075,59 @@ const Dropdown = <TMetadata,>({
 
   return (
     <div ref={dropdownRef} className={containerClasses}>
-      {/* Trigger */}
-      {searchable ? (
-        <button
-          type="button"
-          ref={triggerRef}
-          className="dropdown-trigger"
-          onClick={toggleDropdown}
-          aria-expanded={isOpen}
-          aria-haspopup="listbox"
-          aria-label={ariaLabel}
-          aria-describedby={ariaDescribedBy}
-          aria-labelledby={ariaLabelledBy}
-          aria-controls={menuId}
-          tabIndex={disabled ? -1 : 0}
-          id={id}
-          disabled={disabled}
-        >
-          {triggerContent}
-        </button>
-      ) : (
-        <button
-          type="button"
-          ref={triggerRef}
-          className="dropdown-trigger"
-          onClick={toggleDropdown}
-          role="combobox"
-          aria-expanded={isOpen}
-          aria-haspopup="listbox"
-          aria-label={ariaLabel}
-          aria-describedby={ariaDescribedBy}
-          aria-labelledby={ariaLabelledBy}
-          aria-controls={menuId}
-          aria-activedescendant={activeOptionId}
-          tabIndex={disabled ? -1 : 0}
-          id={id}
-          disabled={disabled}
-        >
-          {triggerContent}
-        </button>
-      )}
-
-      {clearable && !multiple && value && !disabled && (
-        <button
-          type="button"
-          className="clear-button"
-          onClick={() => onChange('')}
-          aria-label="Clear selection"
-          tabIndex={-1}
-        >
-          ×
-        </button>
-      )}
-
-      {/* Menu */}
-      {isOpen &&
-        !disabled &&
-        !loading &&
-        typeof document !== 'undefined' &&
-        createPortal(
-          <div
-            ref={menuRef}
-            className={menuClasses}
-            style={menuStyle}
-            role="listbox"
-            aria-multiselectable={multiple}
-            id={menuId}
-            data-focus-portal-owner={menuId}
-          >
-            {(searchable ||
-              (multiple && showBulkActions && selectableFilteredValues.length > 0)) && (
-              <div className="dropdown-menu-controls">
-                {!!searchable && (
-                  <div className="search-container">
-                    <input
-                      ref={searchInputRef}
-                      type="text"
-                      className="search-input"
-                      placeholder={searchPlaceholder}
-                      value={effectiveSearchQuery}
-                      onChange={(e) => handleSearchInputChange(e.target.value)}
-                      onClick={(e) => e.stopPropagation()}
-                      onFocus={() => setIsSearchFocused(true)}
-                      onBlur={() => setIsSearchFocused(false)}
-                      role="combobox"
-                      aria-label={searchPlaceholder}
-                      aria-autocomplete="list"
-                      aria-expanded="true"
-                      aria-controls={menuId}
-                      aria-activedescendant={activeOptionId}
-                    />
-                  </div>
-                )}
-
-                {multiple && showBulkActions && selectableFilteredValues.length > 0 && (
-                  <div
-                    className={`dropdown-bulk-actions icon-bar${
-                      showBulkActionLabels ? ' dropdown-bulk-actions--labeled' : ''
-                    }`}
-                  >
-                    <button
-                      type="button"
-                      className={`dropdown-bulk-action icon-bar-button${
-                        showBulkActionLabels ? ' dropdown-bulk-action--labeled' : ''
-                      }`}
-                      onClick={(e) => {
-                        e.stopPropagation();
-                        handleSelectAll();
-                      }}
-                      disabled={selectableSelectedCount === selectableFilteredValues.length}
-                      title="Select all"
-                      aria-label="Select all"
-                    >
-                      <DropdownSelectAllIcon width={20} height={20} />
-                      {showBulkActionLabels && (
-                        <span className="dropdown-bulk-action-label">All</span>
-                      )}
-                    </button>
-                    <button
-                      type="button"
-                      className={`dropdown-bulk-action icon-bar-button${
-                        showBulkActionLabels ? ' dropdown-bulk-action--labeled' : ''
-                      }`}
-                      onClick={(e) => {
-                        e.stopPropagation();
-                        handleSelectNone();
-                      }}
-                      disabled={selectableSelectedCount === 0}
-                      title="Select none"
-                      aria-label="Select none"
-                    >
-                      <DropdownSelectNoneIcon width={20} height={20} />
-                      {showBulkActionLabels && (
-                        <span className="dropdown-bulk-action-label">None</span>
-                      )}
-                    </button>
-                  </div>
-                )}
-              </div>
-            )}
-
-            {filteredOptions.length === 0 ? (
-              <div className="no-options">No options available</div>
-            ) : (
-              filteredOptions.map((option, index) => {
-                const optionIsSelected = isSelected(option.value);
-                const optionIsHighlighted = index === highlightedIndex;
-                const isGroupHeader = option.group === 'header';
-                const isSeparator = isGroupHeader && option.label.trim().length === 0;
-
-                if (isGroupHeader) {
-                  return isSeparator ? (
-                    <hr key={option.value} className="dropdown-separator" />
-                  ) : (
-                    <div key={option.value} className="dropdown-group-header" role="presentation">
-                      {renderOption ? renderOption(option, false) : option.label}
-                    </div>
-                  );
-                }
-
-                const optionAriaSelected = multiple
-                  ? optionIsSelected
-                  : optionIsHighlighted || (highlightedIndex < 0 && optionIsSelected);
-                return (
-                  <button
-                    type="button"
-                    key={option.value}
-                    id={`${controlId}-option-${index}`}
-                    className={[
-                      'dropdown-option',
-                      optionIsSelected && 'selected',
-                      optionIsHighlighted && 'highlighted',
-                      option.disabled && 'disabled',
-                    ]
-                      .filter(Boolean)
-                      .join(' ')}
-                    onClick={() => selectOption(option.value)}
-                    onMouseEnter={() => !option.disabled && setHighlightedIndex(index)}
-                    role="option"
-                    aria-selected={optionAriaSelected}
-                    aria-disabled={option.disabled}
-                    disabled={option.disabled}
-                    tabIndex={-1}
-                  >
-                    {renderOption ? (
-                      renderOption(option, optionIsSelected)
-                    ) : (
-                      <>
-                        {!!multiple && (
-                          <span className="dropdown-filter-check">
-                            {optionIsSelected ? '✓' : ''}
-                          </span>
-                        )}
-                        <span className="option-label">{option.label}</span>
-                      </>
-                    )}
-                  </button>
-                );
-              })
-            )}
-          </div>,
-          document.body
-        )}
-
-      {/* Hidden input for form integration */}
-      {!!name && (
-        <input type="hidden" name={name} value={Array.isArray(value) ? value.join(',') : value} />
-      )}
-
-      {/* ARIA live region for announcements */}
+      <DropdownTrigger
+        triggerRef={triggerRef}
+        searchable={searchable}
+        isOpen={isOpen}
+        menuId={menuId}
+        activeOptionId={activeOptionId}
+        disabled={disabled}
+        id={id}
+        ariaLabel={ariaLabel}
+        ariaDescribedBy={ariaDescribedBy}
+        ariaLabelledBy={ariaLabelledBy}
+        toggleDropdown={toggleDropdown}
+      >
+        {triggerContent}
+      </DropdownTrigger>
+      <DropdownClearButton
+        clearable={clearable}
+        multiple={multiple}
+        value={value}
+        disabled={disabled}
+        onClear={() => onChange('')}
+      />
+      <DropdownMenuPortal
+        isOpen={isOpen}
+        disabled={disabled}
+        loading={loading}
+        menuRef={menuRef}
+        menuClasses={menuClasses}
+        menuStyle={menuStyle}
+        multiple={multiple}
+        menuId={menuId}
+        searchable={searchable}
+        searchInputRef={searchInputRef}
+        searchPlaceholder={searchPlaceholder}
+        searchValue={effectiveSearchQuery}
+        activeOptionId={activeOptionId}
+        showBulkActions={multiple && showBulkActions && selectableFilteredValues.length > 0}
+        showBulkActionLabels={showBulkActionLabels}
+        selectedCount={selectableSelectedCount}
+        selectableCount={selectableFilteredValues.length}
+        options={filteredOptions}
+        controlId={controlId}
+        highlightedIndex={highlightedIndex}
+        renderOption={renderOption}
+        isSelected={isSelected}
+        selectOption={selectOption}
+        setHighlightedIndex={setHighlightedIndex}
+        onSearchChange={handleSearchInputChange}
+        onSearchFocusChange={setIsSearchFocused}
+        onSelectAll={handleSelectAll}
+        onSelectNone={handleSelectNone}
+      />
+      <DropdownHiddenInput name={name} value={value} />
       <div ref={announcementRef} aria-live="polite" aria-atomic="true" className="sr-only" />
     </div>
   );

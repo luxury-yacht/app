@@ -36,6 +36,284 @@ interface DockablePanelDragResizeOptions {
 
 const KEYBOARD_RESIZE_STEP = 16;
 const KEYBOARD_MOVE_STEP = 16;
+const KEYBOARD_MOVE_DIRECTIONS: Partial<Record<string, { x: number; y: number }>> = {
+  ArrowLeft: { x: -1, y: 0 },
+  ArrowRight: { x: 1, y: 0 },
+  ArrowUp: { x: 0, y: -1 },
+  ArrowDown: { x: 0, y: 1 },
+};
+
+type PanelSize = DockablePanelState['size'];
+type FloatingPosition = DockablePanelState['floatingPosition'];
+type ContentBounds = ReturnType<typeof getContentBounds>;
+
+interface ResizeStart {
+  width: number;
+  height: number;
+  x: number;
+  y: number;
+  left: number;
+  top: number;
+}
+
+interface ResizeGeometry {
+  size: PanelSize;
+  position?: FloatingPosition;
+}
+
+interface ResizeCalculation {
+  position: DockPosition;
+  direction: string;
+  start: ResizeStart;
+  mouseX: number;
+  mouseY: number;
+  safeMinWidth: number;
+  safeMinHeight: number;
+  content: ContentBounds;
+}
+
+type DockedResizeAction = number | 'minimum' | 'maximum';
+
+const DOCKED_RESIZE_ACTIONS: Record<
+  'right' | 'bottom',
+  Partial<Record<string, DockedResizeAction>>
+> = {
+  right: {
+    ArrowLeft: KEYBOARD_RESIZE_STEP,
+    ArrowRight: -KEYBOARD_RESIZE_STEP,
+    Home: 'minimum',
+    End: 'maximum',
+  },
+  bottom: {
+    ArrowUp: KEYBOARD_RESIZE_STEP,
+    ArrowDown: -KEYBOARD_RESIZE_STEP,
+    Home: 'minimum',
+    End: 'maximum',
+  },
+};
+
+const calculateDockedKeyboardSize = (
+  key: string,
+  position: 'right' | 'bottom',
+  current: number,
+  minimum: number,
+  maximum: number
+): number | null => {
+  const action = DOCKED_RESIZE_ACTIONS[position][key];
+  if (action === undefined) {
+    return null;
+  }
+  if (action === 'minimum') {
+    return minimum;
+  }
+  if (action === 'maximum') {
+    return maximum;
+  }
+  return Math.min(Math.max(current + action, minimum), maximum);
+};
+
+const calculateFloatingDragPosition = (
+  mouseX: number,
+  mouseY: number,
+  dragOffset: FloatingPosition,
+  panelState: DockablePanelState,
+  content: ContentBounds
+): FloatingPosition => ({
+  x: Math.max(0, Math.min(content.width - panelState.size.width, mouseX - dragOffset.x)),
+  y: Math.max(0, Math.min(content.height - panelState.size.height, mouseY - dragOffset.y)),
+});
+
+const resizeFromWest = (
+  start: ResizeStart,
+  deltaX: number,
+  safeMinWidth: number,
+  contentWidth: number
+) => {
+  const proposedWidth = start.width - deltaX;
+  if (proposedWidth < safeMinWidth) {
+    return {
+      width: safeMinWidth,
+      left: start.left + start.width - safeMinWidth,
+    };
+  }
+  const proposedLeft = start.left + deltaX;
+  if (proposedLeft < 0) {
+    return { width: start.width + start.left, left: 0 };
+  }
+  return {
+    width: Math.min(contentWidth, proposedWidth),
+    left: proposedLeft,
+  };
+};
+
+const calculateFloatingHorizontalResize = (
+  direction: string,
+  start: ResizeStart,
+  deltaX: number,
+  safeMinWidth: number,
+  content: ContentBounds
+) => {
+  if (direction.includes('w')) {
+    return resizeFromWest(start, deltaX, safeMinWidth, content.width);
+  }
+  if (direction.includes('e')) {
+    const maxAllowedWidth = content.width - start.left;
+    return {
+      width: Math.max(safeMinWidth, Math.min(maxAllowedWidth, start.width + deltaX)),
+      left: start.left,
+    };
+  }
+  return { width: start.width, left: start.left };
+};
+
+const resizeFromNorth = (
+  start: ResizeStart,
+  deltaY: number,
+  safeMinHeight: number,
+  contentHeight: number
+) => {
+  const proposedHeight = start.height - deltaY;
+  if (proposedHeight < safeMinHeight) {
+    return {
+      height: safeMinHeight,
+      top: start.top + start.height - safeMinHeight,
+    };
+  }
+  const proposedTop = start.top + deltaY;
+  return {
+    height: proposedTop < 0 ? start.height + start.top : Math.min(contentHeight, proposedHeight),
+    top: Math.max(0, proposedTop),
+  };
+};
+
+const calculateFloatingVerticalResize = (
+  direction: string,
+  start: ResizeStart,
+  deltaY: number,
+  safeMinHeight: number,
+  content: ContentBounds
+) => {
+  if (direction.includes('n')) {
+    return resizeFromNorth(start, deltaY, safeMinHeight, content.height);
+  }
+  if (direction.includes('s')) {
+    const maxAvailableHeight = content.height - start.top;
+    return {
+      height: Math.max(safeMinHeight, Math.min(maxAvailableHeight, start.height + deltaY)),
+      top: start.top,
+    };
+  }
+  return { height: start.height, top: start.top };
+};
+
+const calculateFloatingResize = (
+  direction: string,
+  start: ResizeStart,
+  deltaX: number,
+  deltaY: number,
+  safeMinWidth: number,
+  safeMinHeight: number,
+  content: ContentBounds
+): ResizeGeometry => {
+  const horizontal = calculateFloatingHorizontalResize(
+    direction,
+    start,
+    deltaX,
+    safeMinWidth,
+    content
+  );
+  const vertical = calculateFloatingVerticalResize(
+    direction,
+    start,
+    deltaY,
+    safeMinHeight,
+    content
+  );
+  return {
+    size: { width: horizontal.width, height: vertical.height },
+    position: { x: horizontal.left, y: vertical.top },
+  };
+};
+
+const calculateResizeGeometry = ({
+  position,
+  direction,
+  start,
+  mouseX,
+  mouseY,
+  safeMinWidth,
+  safeMinHeight,
+  content,
+}: ResizeCalculation): ResizeGeometry => {
+  const deltaX = mouseX - start.x;
+  const deltaY = mouseY - start.y;
+  if (position === 'right') {
+    return {
+      size: {
+        width: Math.max(safeMinWidth, Math.min(content.width, start.width - deltaX)),
+        height: start.height,
+      },
+    };
+  }
+  if (position === 'bottom') {
+    return {
+      size: {
+        width: start.width,
+        height: Math.max(safeMinHeight, Math.min(content.height, start.height - deltaY)),
+      },
+    };
+  }
+  return calculateFloatingResize(
+    direction,
+    start,
+    deltaX,
+    deltaY,
+    safeMinWidth,
+    safeMinHeight,
+    content
+  );
+};
+
+const hasMeaningfulSizeChange = (current: PanelSize, next: PanelSize) =>
+  Math.abs(current.width - next.width) >= 0.5 || Math.abs(current.height - next.height) >= 0.5;
+
+const hasMeaningfulPositionChange = (current: FloatingPosition, next: FloatingPosition | null) =>
+  next !== null && (Math.abs(next.x - current.x) >= 0.5 || Math.abs(next.y - current.y) >= 0.5);
+
+interface PendingSizeUpdate extends PanelSize {
+  position: FloatingPosition | null;
+}
+
+const createPendingSizeUpdate = (
+  panelState: DockablePanelState,
+  size: PanelSize,
+  floatingPosition: FloatingPosition | undefined
+): PendingSizeUpdate | null => {
+  const comparisonPosition =
+    panelState.position === 'floating' ? (floatingPosition ?? panelState.floatingPosition) : null;
+  if (
+    !hasMeaningfulSizeChange(panelState.size, size) &&
+    !hasMeaningfulPositionChange(panelState.floatingPosition, comparisonPosition)
+  ) {
+    return null;
+  }
+  return {
+    ...size,
+    position: panelState.position === 'floating' ? (floatingPosition ?? null) : null,
+  };
+};
+
+const cancelScheduledFrame = (frameRef: RefObject<number | null>) => {
+  const frame = frameRef.current;
+  if (
+    typeof window !== 'undefined' &&
+    typeof window.cancelAnimationFrame === 'function' &&
+    frame !== null
+  ) {
+    window.cancelAnimationFrame(frame);
+  }
+  frameRef.current = null;
+};
 
 /**
  * Handle drag/resize interactions and cursor updates for dockable panels.
@@ -119,50 +397,16 @@ export function useDockablePanelDragResize(options: DockablePanelDragResizeOptio
       const minimum = isRightDock ? safeMinWidth : safeMinHeight;
       const maximum = Math.max(minimum, isRightDock ? content.width : content.height);
       const current = isRightDock ? panelState.size.width : panelState.size.height;
-      let nextValue: number | null = null;
-
-      switch (event.key) {
-        case 'ArrowLeft':
-          if (!isRightDock) {
-            return;
-          }
-          nextValue = current + KEYBOARD_RESIZE_STEP;
-          break;
-        case 'ArrowRight':
-          if (!isRightDock) {
-            return;
-          }
-          nextValue = current - KEYBOARD_RESIZE_STEP;
-          break;
-        case 'ArrowUp':
-          if (isRightDock) {
-            return;
-          }
-          nextValue = current + KEYBOARD_RESIZE_STEP;
-          break;
-        case 'ArrowDown':
-          if (isRightDock) {
-            return;
-          }
-          nextValue = current - KEYBOARD_RESIZE_STEP;
-          break;
-        case 'Home':
-          nextValue = minimum;
-          break;
-        case 'End':
-          nextValue = maximum;
-          break;
-        default:
-          return;
+      const nextValue = calculateDockedKeyboardSize(event.key, position, current, minimum, maximum);
+      if (nextValue === null) {
+        return;
       }
-
       event.preventDefault();
       event.stopPropagation();
-      const clampedValue = Math.min(Math.max(nextValue, minimum), maximum);
       panelState.setSize({
         ...panelState.size,
-        width: isRightDock ? clampedValue : panelState.size.width,
-        height: isRightDock ? panelState.size.height : clampedValue,
+        width: isRightDock ? nextValue : panelState.size.width,
+        height: isRightDock ? panelState.size.height : nextValue,
       });
     },
     [panelState, safeMinHeight, safeMinWidth]
@@ -219,29 +463,11 @@ export function useDockablePanelDragResize(options: DockablePanelDragResizeOptio
   const scheduleSizeUpdate = useCallback(
     (size: { width: number; height: number }, floatingPosition?: { x: number; y: number }) => {
       const currentPanelState = panelStateRef.current;
-      const currentSize = currentPanelState.size;
-      const hasSizeChange =
-        Math.abs(currentSize.width - size.width) >= 0.5 ||
-        Math.abs(currentSize.height - size.height) >= 0.5;
-      const nextFloatingPosition =
-        currentPanelState.position === 'floating'
-          ? (floatingPosition ?? currentPanelState.floatingPosition)
-          : null;
-      const hasPositionChange =
-        currentPanelState.position === 'floating' &&
-        nextFloatingPosition !== null &&
-        nextFloatingPosition !== undefined &&
-        (Math.abs(nextFloatingPosition.x - currentPanelState.floatingPosition.x) >= 0.5 ||
-          Math.abs(nextFloatingPosition.y - currentPanelState.floatingPosition.y) >= 0.5);
-      // Skip redundant size updates to avoid thrashing resize observers downstream.
-      if (!hasSizeChange && !hasPositionChange) {
+      const pending = createPendingSizeUpdate(currentPanelState, size, floatingPosition);
+      if (!pending) {
         return;
       }
-      pendingSizeRef.current = {
-        width: size.width,
-        height: size.height,
-        position: currentPanelState.position === 'floating' ? (floatingPosition ?? null) : null,
-      };
+      pendingSizeRef.current = pending;
       if (typeof window === 'undefined' || typeof window.requestAnimationFrame !== 'function') {
         flushSizeUpdate();
         return;
@@ -256,16 +482,8 @@ export function useDockablePanelDragResize(options: DockablePanelDragResizeOptio
 
   useEffect(() => {
     return () => {
-      if (typeof window !== 'undefined' && typeof window.cancelAnimationFrame === 'function') {
-        if (dragFrameRef.current !== null && dragFrameRef.current !== undefined) {
-          window.cancelAnimationFrame(dragFrameRef.current);
-        }
-        if (sizeFrameRef.current !== null && sizeFrameRef.current !== undefined) {
-          window.cancelAnimationFrame(sizeFrameRef.current);
-        }
-      }
-      dragFrameRef.current = null;
-      sizeFrameRef.current = null;
+      cancelScheduledFrame(dragFrameRef);
+      cancelScheduledFrame(sizeFrameRef);
       pendingDragPositionRef.current = null;
       pendingSizeRef.current = null;
     };
@@ -318,90 +536,23 @@ export function useDockablePanelDragResize(options: DockablePanelDragResizeOptio
       const mouseY = e.clientY - content.top;
 
       if (isDragging && currentPanelState.position === 'floating') {
-        const newX = Math.max(
-          0,
-          Math.min(content.width - currentPanelState.size.width, mouseX - dragOffset.x)
+        scheduleFloatingPosition(
+          calculateFloatingDragPosition(mouseX, mouseY, dragOffset, currentPanelState, content)
         );
-        const newY = Math.max(
-          0,
-          Math.min(content.height - currentPanelState.size.height, mouseY - dragOffset.y)
-        );
-
-        scheduleFloatingPosition({ x: newX, y: newY });
-      } else if (isResizing) {
-        const deltaX = mouseX - resizeStart.x;
-        const deltaY = mouseY - resizeStart.y;
-
-        let newWidth = resizeStart.width;
-        let newHeight = resizeStart.height;
-        let newLeft = resizeStart.left;
-        let newTop = resizeStart.top;
-
-        if (currentPanelState.position === 'right') {
-          // For right-docked panels, dragging left (negative deltaX) increases width
-          newWidth = Math.max(safeMinWidth, Math.min(content.width, resizeStart.width - deltaX));
-        } else if (currentPanelState.position === 'bottom') {
-          // For bottom-docked panels, dragging up (negative deltaY) increases height
-          newHeight = Math.max(
-            safeMinHeight,
-            Math.min(content.height, resizeStart.height - deltaY)
-          );
-        } else if (currentPanelState.position === 'floating') {
-          // Handle multi-directional resizing for floating panels
-          if (resizeDirection.includes('e')) {
-            // Don't allow resizing beyond the right edge of the content area
-            const maxAllowedWidth = content.width - resizeStart.left;
-            newWidth = Math.max(
-              safeMinWidth,
-              Math.min(maxAllowedWidth, resizeStart.width + deltaX)
-            );
-          }
-          if (resizeDirection.includes('w')) {
-            const proposedWidth = resizeStart.width - deltaX;
-            if (proposedWidth >= safeMinWidth) {
-              newWidth = Math.min(content.width, proposedWidth);
-              newLeft = Math.max(0, resizeStart.left + deltaX); // Don't go beyond left edge
-              // Adjust width if we hit the left edge
-              if (resizeStart.left + deltaX < 0) {
-                newWidth = resizeStart.width + resizeStart.left;
-                newLeft = 0;
-              }
-            } else {
-              // Clamp at minimum width; pin the right edge in place.
-              newWidth = safeMinWidth;
-              newLeft = resizeStart.left + resizeStart.width - safeMinWidth;
-            }
-          }
-          if (resizeDirection.includes('s')) {
-            // Allow resizing down to the bottom of the content area
-            const maxAvailableHeight = content.height - resizeStart.top;
-            newHeight = Math.max(
-              safeMinHeight,
-              Math.min(maxAvailableHeight, resizeStart.height + deltaY)
-            );
-          }
-          if (resizeDirection.includes('n')) {
-            const proposedHeight = resizeStart.height - deltaY;
-            if (proposedHeight >= safeMinHeight) {
-              newHeight = Math.min(content.height, proposedHeight);
-              // Don't allow dragging above the top of the content area.
-              newTop = Math.max(0, resizeStart.top + deltaY);
-              // Adjust height if we hit the top edge.
-              if (resizeStart.top + deltaY < 0) {
-                newHeight = resizeStart.height + resizeStart.top;
-              }
-            } else {
-              // Clamp at minimum height; pin the bottom edge in place.
-              newHeight = safeMinHeight;
-              newTop = resizeStart.top + resizeStart.height - safeMinHeight;
-            }
-          }
-        }
-
-        const nextSize = { width: newWidth, height: newHeight };
-        const nextPosition =
-          currentPanelState.position === 'floating' ? { x: newLeft, y: newTop } : undefined;
-        scheduleSizeUpdate(nextSize, nextPosition);
+        return;
+      }
+      if (isResizing) {
+        const nextGeometry = calculateResizeGeometry({
+          position: currentPanelState.position,
+          direction: resizeDirection,
+          start: resizeStart,
+          mouseX,
+          mouseY,
+          safeMinWidth,
+          safeMinHeight,
+          content,
+        });
+        scheduleSizeUpdate(nextGeometry.size, nextGeometry.position);
       }
     };
 
@@ -451,20 +602,7 @@ export function useDockablePanelDragResize(options: DockablePanelDragResizeOptio
       if (isMaximized || panelState.position !== 'floating') {
         return;
       }
-      let direction: { x: number; y: number } | null;
-
-      if (event.key === 'ArrowLeft') {
-        direction = { x: -1, y: 0 };
-      } else if (event.key === 'ArrowRight') {
-        direction = { x: 1, y: 0 };
-      } else if (event.key === 'ArrowUp') {
-        direction = { x: 0, y: -1 };
-      } else if (event.key === 'ArrowDown') {
-        direction = { x: 0, y: 1 };
-      } else {
-        direction = null;
-      }
-
+      const direction = KEYBOARD_MOVE_DIRECTIONS[event.key];
       if (!direction) {
         return;
       }

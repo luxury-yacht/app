@@ -42,6 +42,8 @@ import type { Favorite, FavoritePaneState } from '@/core/persistence/favorites';
 import { compareUtf16Strings } from '@/shared/utils/sort';
 import FavSaveModal from './FavSaveModal';
 
+type ActiveViewType = ReturnType<typeof useViewState>['viewType'];
+
 /** Current view state that the FavToggle needs to snapshot when saving a favorite.
  *  Also accepts setters for restoring state from a pending favorite on navigation. */
 export interface FavToggleState {
@@ -188,6 +190,150 @@ const favoriteFilterOptionsSignature = (options: GridTableFilterOptions): string
     })),
   });
 
+const getActiveViewTab = (
+  viewType: ActiveViewType,
+  activeGlobalTab: string | null,
+  activeNamespaceTab: string | null,
+  activeClusterTab: string | null
+): string | null => {
+  if (viewType === 'global') {
+    return activeGlobalTab;
+  }
+  if (viewType === 'namespace') {
+    return activeNamespaceTab;
+  }
+  return activeClusterTab;
+};
+
+interface FavoriteLocation {
+  selectedKubeconfig: string;
+  selectedClusterId: string;
+  viewType: ActiveViewType;
+  activeViewTab: string | null;
+  selectedNamespace: string | undefined;
+}
+
+const favoriteMatchesCluster = (favorite: Favorite, location: FavoriteLocation): boolean => {
+  const route = resolveFavoriteRoute(favorite.viewType, favorite.view);
+  if (route.scope === 'global' || favorite.clusterSelection === '') {
+    return true;
+  }
+  return favorite.clusterId
+    ? location.selectedClusterId === favorite.clusterId
+    : location.selectedKubeconfig === favorite.clusterSelection;
+};
+
+const favoriteMatchesLocation = (favorite: Favorite, location: FavoriteLocation): boolean => {
+  const route = resolveFavoriteRoute(favorite.viewType, favorite.view);
+  if (!favoriteMatchesCluster(favorite, location) || location.viewType !== route.scope) {
+    return false;
+  }
+  if (location.activeViewTab !== favorite.view) {
+    return false;
+  }
+  return location.viewType !== 'namespace' || location.selectedNamespace === favorite.namespace;
+};
+
+interface MatchableFavoritePane {
+  id: string;
+  snapshot: FavoritePaneState;
+}
+
+const getFavoritePanesToMatch = (
+  paneGroup: FavoritePaneGroupValue | null,
+  paneId: string,
+  currentPane: FavoritePaneState
+): Array<MatchableFavoritePane | undefined> =>
+  paneGroup
+    ? paneGroup.expectedPaneIds.map((id) => paneGroup.getPane(id))
+    : [{ id: paneId, snapshot: currentPane }];
+
+const favoriteMatchesPanes = (
+  favorite: Favorite,
+  panes: Array<MatchableFavoritePane | undefined>
+): boolean =>
+  panes.every((pane) => {
+    if (!pane) {
+      return false;
+    }
+    const savedPane = favorite.panes[pane.id];
+    return Boolean(savedPane && favoritePaneMatches(pane.snapshot, savedPane));
+  });
+
+const findMatchingFavorite = (
+  favorites: Favorite[],
+  location: FavoriteLocation,
+  panes: Array<MatchableFavoritePane | undefined>
+): Favorite | null =>
+  favorites.find(
+    (favorite) =>
+      favoriteMatchesLocation(favorite, location) && favoriteMatchesPanes(favorite, panes)
+  ) ?? null;
+
+interface RestorableFavoritePane {
+  id: string;
+  state: FavToggleState;
+}
+
+interface FavoritePaneRestoreEntry {
+  pane: RestorableFavoritePane;
+  savedPane: FavoritePaneState;
+}
+
+const getFavoritePanesToRestore = (
+  paneGroup: FavoritePaneGroupValue | null,
+  paneId: string,
+  state: FavToggleState
+): Array<RestorableFavoritePane | undefined> =>
+  paneGroup
+    ? paneGroup.expectedPaneIds.map((id) => paneGroup.getPane(id))
+    : [{ id: paneId, state }];
+
+const areFavoritePanesHydrated = (panes: Array<RestorableFavoritePane | undefined>): boolean =>
+  panes.every((pane) => Boolean(pane?.state.hydrated));
+
+const pendingFavoriteTargetIsActive = (
+  favorite: Favorite,
+  location: Pick<FavoriteLocation, 'viewType' | 'activeViewTab' | 'selectedNamespace'>
+): boolean => {
+  const route = resolveFavoriteRoute(favorite.viewType, favorite.view);
+  if (route.scope !== location.viewType || favorite.view !== location.activeViewTab) {
+    return false;
+  }
+  return location.viewType !== 'namespace' || favorite.namespace === location.selectedNamespace;
+};
+
+const buildFavoritePaneRestoreEntries = (
+  favorite: Favorite,
+  panes: Array<RestorableFavoritePane | undefined>
+): FavoritePaneRestoreEntry[] | null => {
+  const entries: FavoritePaneRestoreEntry[] = [];
+  for (const pane of panes) {
+    if (!pane) {
+      return null;
+    }
+    const savedPane = favorite.panes[pane.id];
+    if (!savedPane) {
+      return null;
+    }
+    entries.push({ pane, savedPane });
+  }
+  return entries;
+};
+
+const restoreFavoritePane = ({ pane, savedPane }: FavoritePaneRestoreEntry) => {
+  pane.state.setFilters?.(savedPane.filters);
+  pane.state.setSortConfig?.(
+    savedPane.tableState.sortColumn
+      ? {
+          key: savedPane.tableState.sortColumn,
+          direction: savedPane.tableState.sortDirection as 'asc' | 'desc',
+        }
+      : null
+  );
+  pane.state.setColumnVisibility?.(savedPane.tableState.columnVisibility);
+};
+
 /**
  * Returns an IconBarItem (toggle type) for the heart favorite button
  * in the GridTableFiltersBar's preActions slot.
@@ -251,71 +397,41 @@ export function useFavToggle(state: FavToggleState): {
   const groupReady = !paneGroup || groupedPanes.length === paneGroup.expectedPaneIds.length;
   const isPrimaryPane = !paneGroup || paneId === paneGroup.primaryPaneId;
 
-  // Derive the active view tab.
-  let activeViewTab: string | null;
-
-  if (viewType === 'global') {
-    activeViewTab = activeGlobalTab;
-  } else if (viewType === 'namespace') {
-    activeViewTab = activeNamespaceTab;
-  } else {
-    activeViewTab = activeClusterTab;
-  }
+  const activeViewTab = getActiveViewTab(
+    viewType,
+    activeGlobalTab,
+    activeNamespaceTab,
+    activeClusterTab
+  );
 
   // Match the current view + filter state against saved favorites.
   // Includes filter comparison so multiple favorites on the same view
   // with different filters are treated as distinct entries.
-  const currentFavoriteMatch = useMemo<Favorite | null>(() => {
-    for (const fav of favorites) {
-      const favoriteRoute = resolveFavoriteRoute(fav.viewType, fav.view);
-      const clusterMatches =
-        favoriteRoute.scope === 'global' ||
-        fav.clusterSelection === '' ||
-        (fav.clusterId
-          ? selectedClusterId === fav.clusterId
-          : selectedKubeconfig === fav.clusterSelection);
-      if (!clusterMatches) {
-        continue;
-      }
-      if (viewType !== favoriteRoute.scope) {
-        continue;
-      }
-      if (activeViewTab !== fav.view) {
-        continue;
-      }
-      if (viewType === 'namespace' && selectedNamespace !== fav.namespace) {
-        continue;
-      }
-
-      const panesToMatch = paneGroup
-        ? paneGroup.expectedPaneIds.map((id) => paneGroup.getPane(id))
-        : [{ id: paneId, snapshot: currentPane }];
-      if (
-        panesToMatch.some((pane) => {
-          if (!pane) {
-            return true;
-          }
-          const savedPane = fav.panes[pane.id];
-          return !savedPane || !favoritePaneMatches(pane.snapshot, savedPane);
-        })
-      ) {
-        continue;
-      }
-
-      return fav;
-    }
-    return null;
-  }, [
-    favorites,
-    selectedKubeconfig,
-    selectedClusterId,
-    viewType,
-    activeViewTab,
-    selectedNamespace,
-    currentPane,
-    paneGroup,
-    paneId,
-  ]);
+  const currentFavoriteMatch = useMemo<Favorite | null>(
+    () =>
+      findMatchingFavorite(
+        favorites,
+        {
+          selectedKubeconfig,
+          selectedClusterId,
+          viewType,
+          activeViewTab,
+          selectedNamespace,
+        },
+        getFavoritePanesToMatch(paneGroup, paneId, currentPane)
+      ),
+    [
+      favorites,
+      selectedKubeconfig,
+      selectedClusterId,
+      viewType,
+      activeViewTab,
+      selectedNamespace,
+      currentPane,
+      paneGroup,
+      paneId,
+    ]
+  );
 
   // Restore filter/table state from a pending favorite once:
   // 1. The correct view is active (viewType + tab + namespace match)
@@ -327,71 +443,36 @@ export function useFavToggle(state: FavToggleState): {
     if (!pendingFavorite || !isPrimaryPane || !groupReady) {
       return;
     }
-    const panesToRestore = paneGroup
-      ? paneGroup.expectedPaneIds.map((id) => paneGroup.getPane(id))
-      : [{ id: paneId, state }];
-    if (panesToRestore.some((pane) => !pane?.state.hydrated)) {
+    const panesToRestore = getFavoritePanesToRestore(paneGroup, paneId, state);
+    if (!areFavoritePanesHydrated(panesToRestore)) {
       return;
     }
 
-    // Only apply in the view that matches the favorite's target.
-    const pendingRoute = resolveFavoriteRoute(pendingFavorite.viewType, pendingFavorite.view);
-    if (pendingRoute.scope !== viewType) {
-      return;
-    }
-    let expectedTab: string | null;
-
-    if (viewType === 'global') {
-      expectedTab = activeGlobalTab;
-    } else if (viewType === 'namespace') {
-      expectedTab = activeNamespaceTab;
-    } else {
-      expectedTab = activeClusterTab;
-    }
-
-    if (pendingFavorite.view !== expectedTab) {
-      return;
-    }
-    if (viewType === 'namespace' && pendingFavorite.namespace !== selectedNamespace) {
+    if (
+      !pendingFavoriteTargetIsActive(pendingFavorite, {
+        viewType,
+        activeViewTab,
+        selectedNamespace,
+      })
+    ) {
       return;
     }
 
-    const restorablePanes = panesToRestore.map((pane) => {
-      if (!pane) {
-        return null;
-      }
-      const savedPane = pendingFavorite.panes[pane.id];
-      return savedPane ? { pane, savedPane } : null;
-    });
-    if (restorablePanes.some((entry) => !entry)) {
+    const restorablePanes = buildFavoritePaneRestoreEntries(pendingFavorite, panesToRestore);
+    if (!restorablePanes) {
       setPendingFavorite(null);
       return;
     }
 
     for (const entry of restorablePanes) {
-      if (!entry) {
-        continue;
-      }
-      const { pane, savedPane } = entry;
-      pane.state.setFilters?.(savedPane.filters);
-      pane.state.setSortConfig?.(
-        savedPane.tableState.sortColumn
-          ? {
-              key: savedPane.tableState.sortColumn,
-              direction: savedPane.tableState.sortDirection as 'asc' | 'desc',
-            }
-          : null
-      );
-      pane.state.setColumnVisibility?.(savedPane.tableState.columnVisibility);
+      restoreFavoritePane(entry);
     }
     setPendingFavorite(null);
   }, [
     pendingFavorite,
     setPendingFavorite,
     viewType,
-    activeNamespaceTab,
-    activeClusterTab,
-    activeGlobalTab,
+    activeViewTab,
     selectedNamespace,
     state,
     paneGroup,

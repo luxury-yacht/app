@@ -137,36 +137,96 @@ const renderReplicasSummary = (d: HorizontalPodAutoscalerDetails): React.ReactNo
 // Match a configured metric spec to its current status entry. The generated MetricSpec.target and
 // MetricStatus.current are flattened to string maps, so fields like `resource`/`metric`/`object`
 // are read by key.
+const metricStatusMatchesSpec = (metric: hpa.MetricSpec, candidate: hpa.MetricStatus): boolean => {
+  const kind = metric.kind?.toLowerCase();
+  if (candidate.kind?.toLowerCase() !== kind) {
+    return false;
+  }
+
+  const target = metric.target ?? {};
+  const currentData = candidate.current ?? {};
+  if (kind === 'resource') {
+    return target.resource && currentData.resource
+      ? target.resource.toLowerCase() === currentData.resource.toLowerCase()
+      : true;
+  }
+  if (target.metric && currentData.metric) {
+    return target.metric === currentData.metric;
+  }
+  return target.object && currentData.object ? target.object === currentData.object : true;
+};
+
 const findCurrentMetric = (
   metric: hpa.MetricSpec,
   currentMetrics: hpa.MetricStatus[]
-): hpa.MetricStatus | undefined => {
-  const kind = metric.kind?.toLowerCase();
-  const target = metric.target ?? {};
+): hpa.MetricStatus | undefined =>
+  currentMetrics.find((candidate) => metricStatusMatchesSpec(metric, candidate));
 
-  return currentMetrics.find((candidate) => {
-    if (candidate.kind?.toLowerCase() !== kind) {
-      return false;
-    }
+type MetricValueMap = Record<string, string>;
 
-    const currentData = candidate.current ?? {};
-    if (kind === 'resource') {
-      if (target.resource && currentData.resource) {
-        return target.resource.toLowerCase() === currentData.resource.toLowerCase();
-      }
-      return true;
-    }
+type MetricDisplay = {
+  name: string;
+  containerName: string | null;
+};
 
-    if (target.metric && currentData.metric) {
-      return target.metric === currentData.metric;
-    }
+const objectMetricName = (target: MetricValueMap): string => {
+  const objectName = target.object || target.describedObject || '';
+  const objectSuffix = objectName ? ` (${objectName})` : '';
+  return target.metric ? `${target.metric}${objectSuffix}` : objectName || 'Object Metric';
+};
 
-    if (target.object && currentData.object) {
-      return target.object === currentData.object;
-    }
+const metricDisplay = (
+  kind: string | undefined,
+  target: MetricValueMap,
+  current: MetricValueMap
+): MetricDisplay => {
+  switch (kind) {
+    case 'resource':
+      return {
+        name: (target.resource || current.resource || 'Unknown').toUpperCase(),
+        containerName: null,
+      };
+    case 'containerresource':
+      return {
+        name: (target.resource || current.resource || 'Unknown').toUpperCase(),
+        containerName: target.container || current.container || null,
+      };
+    case 'pods':
+      return { name: target.metric || 'Pods Metric', containerName: null };
+    case 'object':
+      return { name: objectMetricName(target), containerName: null };
+    case 'external':
+      return { name: target.metric || 'External Metric', containerName: null };
+    default:
+      return { name: target.metric || kind || 'Unknown', containerName: null };
+  }
+};
 
-    return true;
-  });
+type TargetMetricValue = { type: string; value: string };
+
+const targetMetricValue = (target: MetricValueMap): TargetMetricValue | null => {
+  if (target.averageUtilization) {
+    return {
+      type: 'Utilization',
+      value: target.averageUtilization.includes('%')
+        ? target.averageUtilization
+        : `${target.averageUtilization}%`,
+    };
+  }
+  if (target.averageValue) {
+    return { type: 'Average', value: target.averageValue };
+  }
+  const value = target.value || target.targetValue;
+  return value ? { type: 'Value', value } : null;
+};
+
+const currentMetricValue = (current: MetricValueMap): string | null => {
+  if (current.averageUtilization) {
+    return current.averageUtilization.includes('%')
+      ? current.averageUtilization
+      : `${current.averageUtilization}%`;
+  }
+  return current.averageValue || current.value || null;
 };
 
 // Render a single metric with detailed target information.
@@ -175,75 +235,29 @@ const renderMetric = (
   currentMetrics: hpa.MetricStatus[]
 ): React.ReactNode => {
   const kind = metric.kind?.toLowerCase();
-  const target = metric.target ?? {};
+  const target = (metric.target ?? {}) as MetricValueMap;
   const current = findCurrentMetric(metric, currentMetrics);
-  const currentData = current?.current ?? {};
-
-  // Determine the metric name/resource.
-  let metricName: string;
-  let containerName: string | null = null;
-  if (kind === 'resource') {
-    metricName = (target.resource || currentData.resource || 'Unknown').toUpperCase();
-  } else if (kind === 'containerresource') {
-    metricName = (target.resource || currentData.resource || 'Unknown').toUpperCase();
-    containerName = target.container || currentData.container || null;
-  } else if (kind === 'pods') {
-    metricName = target.metric || 'Pods Metric';
-  } else if (kind === 'object') {
-    const objName = target.object || target.describedObject || '';
-    const objectSuffix = objName ? ` (${objName})` : '';
-    metricName = target.metric ? `${target.metric}${objectSuffix}` : objName || 'Object Metric';
-  } else if (kind === 'external') {
-    metricName = target.metric || 'External Metric';
-  } else {
-    metricName = target.metric || kind || 'Unknown';
-  }
-
-  // Determine target type and value.
-  let targetType: string | null = null;
-  let targetValue: string | null = null;
-
-  if (target.averageUtilization) {
-    targetType = 'Utilization';
-    targetValue = target.averageUtilization.includes('%')
-      ? target.averageUtilization
-      : `${target.averageUtilization}%`;
-  } else if (target.averageValue) {
-    targetType = 'Average';
-    targetValue = target.averageValue;
-  } else if (target.value || target.targetValue) {
-    targetType = 'Value';
-    targetValue = target.value || target.targetValue;
-  }
-
-  // Get current value.
-  let currentValue: string | null = null;
-  if (currentData.averageUtilization) {
-    currentValue = currentData.averageUtilization.includes('%')
-      ? currentData.averageUtilization
-      : `${currentData.averageUtilization}%`;
-  } else if (currentData.averageValue) {
-    currentValue = currentData.averageValue;
-  } else if (currentData.value) {
-    currentValue = currentData.value;
-  }
+  const currentData = (current?.current ?? {}) as MetricValueMap;
+  const display = metricDisplay(kind, target, currentData);
+  const targetValue = targetMetricValue(target);
+  const currentValue = currentMetricValue(currentData);
 
   return (
-    <div key={`metric:${metricName}`} className="policy-metric-block">
+    <div key={`metric:${display.name}`} className="policy-metric-block">
       <div className="policy-metric-name">
-        {metricName}
-        {!!containerName && (
-          <span className="policy-detail-muted"> (container: {containerName})</span>
+        {display.name}
+        {!!display.containerName && (
+          <span className="policy-detail-muted"> (container: {display.containerName})</span>
         )}
         {kind && kind !== 'resource' && kind !== 'containerresource' && (
           <span className="policy-detail-muted"> ({kind})</span>
         )}
       </div>
       <div className="policy-metric-details">
-        {!!(targetType && targetValue) && (
+        {!!targetValue && (
           <div className="policy-detail-row">
             <span className="policy-detail-label--medium">Target:</span>
-            {targetValue} ({targetType.toLowerCase()})
+            {targetValue.value} ({targetValue.type.toLowerCase()})
           </div>
         )}
         {!!currentValue && (

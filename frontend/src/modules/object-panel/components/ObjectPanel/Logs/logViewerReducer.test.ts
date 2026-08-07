@@ -97,3 +97,96 @@ describe('logViewerReducer view mode', () => {
     expect(applyLogViewerPrefs(initialLogViewerState, prefs).mode).toEqual(LIVE_MODE);
   });
 });
+
+describe('logViewerReducer state transitions', () => {
+  it('updates container and workload filter inventory', () => {
+    const selectedFilters = { mode: 'some' as const, values: ['pod:api'] };
+    const actions = [
+      { type: 'SET_CONTAINERS' as const, payload: ['api', 'sidecar'] },
+      { type: 'SET_SELECTED_CONTAINER' as const, payload: 'api' },
+      { type: 'SET_AVAILABLE_PODS' as const, payload: ['api-1'] },
+      { type: 'SET_AVAILABLE_CONTAINERS' as const, payload: ['api'] },
+      { type: 'SET_SELECTED_FILTERS' as const, payload: selectedFilters },
+    ];
+    const result = actions.reduce(logViewerReducer, base());
+
+    expect(result).toMatchObject({
+      containers: ['api', 'sidecar'],
+      selectedContainer: 'api',
+      availablePods: ['api-1'],
+      availableContainers: ['api'],
+      selectedFilters,
+    });
+  });
+
+  it('applies every display preference transition', () => {
+    const actions = [
+      { type: 'TOGGLE_AUTO_REFRESH' as const },
+      { type: 'CYCLE_TIMESTAMP_MODE' as const },
+      { type: 'SET_TIMESTAMP_MODE' as const, payload: 'hidden' as const },
+      { type: 'TOGGLE_WRAP_TEXT' as const },
+      { type: 'TOGGLE_SHOW_ANSI_COLORS' as const },
+      { type: 'SET_TEXT_FILTER' as const, payload: 'error' },
+      { type: 'TOGGLE_HIGHLIGHT_MATCHES' as const },
+      { type: 'TOGGLE_INVERSE_MATCHES' as const },
+      { type: 'TOGGLE_CASE_SENSITIVE_MATCHES' as const },
+      { type: 'TOGGLE_REGEX_MATCHES' as const },
+    ];
+    const result = actions.reduce(logViewerReducer, base());
+
+    expect(result).toMatchObject({
+      autoRefresh: false,
+      timestampMode: 'hidden',
+      wrapText: false,
+      showAnsiColors: false,
+      textFilter: 'error',
+      highlightMatches: false,
+      inverseMatches: true,
+      caseSensitiveMatches: false,
+      regexMatches: true,
+    });
+    expect(logViewerReducer(result, { type: 'TOGGLE_CASE_SENSITIVE_MATCHES' })).toBe(result);
+  });
+
+  it('toggles parsed rows and clears parsed state when returning to raw mode', () => {
+    const parsedEntry = { data: { level: 'info' }, rawLine: '{}', lineNumber: 1 };
+    const parsed = logViewerReducer(base(), { type: 'SET_PARSED_LOGS', payload: [parsedEntry] });
+    const shown = logViewerReducer(parsed, { type: 'TOGGLE_PARSED_VIEW' });
+    const expanded = logViewerReducer(shown, { type: 'TOGGLE_ROW_EXPANSION', payload: 'row-1' });
+    const collapsed = logViewerReducer(expanded, {
+      type: 'TOGGLE_ROW_EXPANSION',
+      payload: 'row-1',
+    });
+    const raw = logViewerReducer(collapsed, { type: 'SET_DISPLAY_MODE', payload: 'raw' });
+
+    expect(shown.displayMode).toBe('parsed');
+    expect(expanded.expandedRows.has('row-1')).toBe(true);
+    expect(collapsed.expandedRows.has('row-1')).toBe(false);
+    expect(raw.displayMode).toBe('raw');
+    expect(raw.parsedContainerLogs).toEqual([]);
+    expect(logViewerReducer(shown, { type: 'TOGGLE_PARSED_VIEW' }).parsedContainerLogs).toEqual([]);
+  });
+
+  it('updates copy feedback and preserves the selected container on workload resets', () => {
+    const copied = logViewerReducer(base(), { type: 'SET_COPY_FEEDBACK', payload: 'copied' });
+    const reset = logViewerReducer(
+      { ...copied, selectedContainer: 'api', textFilter: 'error', displayMode: 'parsed' },
+      { type: 'RESET_FOR_NEW_SCOPE', isWorkload: true }
+    );
+
+    expect(copied.copyFeedback).toBe('copied');
+    expect(reset).toMatchObject({
+      selectedContainer: 'api',
+      textFilter: '',
+      displayMode: 'raw',
+      mode: LIVE_MODE,
+    });
+  });
+
+  it('keeps state unchanged for redundant mode changes and unknown actions', () => {
+    const live = base();
+    expect(logViewerReducer(live, { type: 'SET_FALLBACK_ACTIVE', payload: false })).toBe(live);
+    expect(logViewerReducer(live, { type: 'SET_SHOW_PREVIOUS_LOGS', payload: false })).toBe(live);
+    expect(logViewerReducer(live, { type: 'UNKNOWN' } as never)).toBe(live);
+  });
+});

@@ -19,6 +19,140 @@ interface UseKeyboardNavigationProps {
   disabled?: boolean;
 }
 
+type KeyActionResult = 'handled' | 'handled-no-prevent' | 'ignored';
+type MoveDirection = 'up' | 'down';
+
+const isSelectableOption = (option: DropdownOption | undefined): boolean =>
+  Boolean(option && !option.disabled && option.group !== 'header');
+
+const findSelectableIndex = (
+  options: DropdownOption[],
+  start: number,
+  end: number,
+  step: 1 | -1
+): number => {
+  for (let index = start; step > 0 ? index <= end : index >= end; index += step) {
+    if (isSelectableOption(options[index])) {
+      return index;
+    }
+  }
+  return -1;
+};
+
+const findNextSelectableIndex = (
+  options: DropdownOption[],
+  currentIndex: number,
+  direction: MoveDirection
+): number => {
+  if (direction === 'down') {
+    const nextIndex = findSelectableIndex(options, currentIndex + 1, options.length - 1, 1);
+    return nextIndex >= 0 ? nextIndex : findSelectableIndex(options, 0, currentIndex, 1);
+  }
+  const previousIndex = findSelectableIndex(options, currentIndex - 1, 0, -1);
+  return previousIndex >= 0
+    ? previousIndex
+    : findSelectableIndex(options, options.length - 1, currentIndex, -1);
+};
+
+interface KeyboardNavigationContext {
+  options: DropdownOption[];
+  isOpen: boolean;
+  highlightedIndex: number;
+  setHighlightedIndex: (index: number) => void;
+  selectOption: (value: string) => void;
+  openDropdown: () => void;
+  closeDropdown: () => void;
+  getNextEnabledIndex: (currentIndex: number, direction: MoveDirection) => number;
+}
+
+type KeyHandler = (context: KeyboardNavigationContext) => KeyActionResult;
+
+const handleActivate: KeyHandler = (context) => {
+  if (!context.isOpen) {
+    context.openDropdown();
+    return 'handled';
+  }
+  const highlightedOption = context.options[context.highlightedIndex];
+  if (context.highlightedIndex >= 0 && highlightedOption && !highlightedOption.disabled) {
+    context.selectOption(highlightedOption.value);
+  }
+  return 'handled';
+};
+
+const handleEscape: KeyHandler = (context) => {
+  if (!context.isOpen) {
+    return 'ignored';
+  }
+  context.closeDropdown();
+  return 'handled';
+};
+
+const moveHighlight = (
+  context: KeyboardNavigationContext,
+  currentIndex: number,
+  direction: MoveDirection
+): KeyActionResult => {
+  const nextIndex = context.getNextEnabledIndex(currentIndex, direction);
+  if (nextIndex < 0) {
+    return 'ignored';
+  }
+  context.setHighlightedIndex(nextIndex);
+  return 'handled';
+};
+
+const handleArrowDown: KeyHandler = (context) => {
+  if (!context.isOpen) {
+    context.openDropdown();
+    moveHighlight(context, -1, 'down');
+    return 'handled';
+  }
+  return moveHighlight(context, context.highlightedIndex, 'down');
+};
+
+const handleArrowUp: KeyHandler = (context) => {
+  if (!context.isOpen) {
+    context.openDropdown();
+    moveHighlight(context, context.options.length, 'up');
+    return 'handled';
+  }
+  return moveHighlight(context, context.highlightedIndex, 'up');
+};
+
+const handleHome: KeyHandler = (context) => {
+  if (!context.isOpen) {
+    context.openDropdown();
+    return 'handled';
+  }
+  return moveHighlight(context, -1, 'down');
+};
+
+const handleEnd: KeyHandler = (context) => {
+  if (!context.isOpen) {
+    context.openDropdown();
+    return 'handled';
+  }
+  return moveHighlight(context, context.options.length, 'up');
+};
+
+const handleTab: KeyHandler = (context) => {
+  if (!context.isOpen) {
+    return 'ignored';
+  }
+  context.closeDropdown();
+  return 'handled-no-prevent';
+};
+
+const KEY_HANDLERS: Partial<Record<string, KeyHandler>> = {
+  Enter: handleActivate,
+  ' ': handleActivate,
+  Escape: handleEscape,
+  ArrowDown: handleArrowDown,
+  ArrowUp: handleArrowUp,
+  Home: handleHome,
+  End: handleEnd,
+  Tab: handleTab,
+};
+
 export function useKeyboardNavigation({
   options,
   isOpen,
@@ -30,155 +164,30 @@ export function useKeyboardNavigation({
   disabled,
 }: UseKeyboardNavigationProps) {
   const getNextEnabledIndex = useCallback(
-    (currentIndex: number, direction: 'up' | 'down'): number => {
-      const isSelectable = (opt: DropdownOption) => !opt.disabled && opt.group !== 'header';
-      const enabledOptions = options.filter(isSelectable);
-      if (enabledOptions.length === 0) {
-        return -1;
-      }
-
-      if (direction === 'down') {
-        for (let i = currentIndex + 1; i < options.length; i++) {
-          if (isSelectable(options[i])) {
-            return i;
-          }
-        }
-        // Wrap to first enabled option
-        for (let i = 0; i <= currentIndex; i++) {
-          if (isSelectable(options[i])) {
-            return i;
-          }
-        }
-      } else {
-        for (let i = currentIndex - 1; i >= 0; i--) {
-          if (isSelectable(options[i])) {
-            return i;
-          }
-        }
-        // Wrap to last enabled option
-        for (let i = options.length - 1; i >= currentIndex; i--) {
-          if (isSelectable(options[i])) {
-            return i;
-          }
-        }
-      }
-
-      return currentIndex;
-    },
+    (currentIndex: number, direction: MoveDirection): number =>
+      findNextSelectableIndex(options, currentIndex, direction),
     [options]
   );
-
-  type KeyActionResult = 'handled' | 'handled-no-prevent' | 'ignored';
 
   const handleKeyAction = useCallback(
     (key: string): KeyActionResult => {
       if (disabled) {
         return 'ignored';
       }
-
-      const openIfPossible = () => {
-        if (!isOpen) {
-          openDropdown();
-          return true;
-        }
-        return false;
-      };
-
-      switch (key) {
-        case 'Enter':
-        case ' ': {
-          if (!isOpen) {
-            openDropdown();
-            return 'handled';
-          }
-          if (highlightedIndex >= 0 && !options[highlightedIndex]?.disabled) {
-            selectOption(options[highlightedIndex].value);
-            return 'handled';
-          }
-          return 'handled';
-        }
-        case 'Escape':
-          if (isOpen) {
-            closeDropdown();
-            return 'handled';
-          }
-          return 'ignored';
-
-        case 'ArrowDown': {
-          if (!isOpen) {
-            openDropdown();
-            const firstEnabledIndex = getNextEnabledIndex(-1, 'down');
-            if (firstEnabledIndex >= 0) {
-              setHighlightedIndex(firstEnabledIndex);
-            }
-            return 'handled';
-          }
-          const nextIndex = getNextEnabledIndex(highlightedIndex, 'down');
-          if (nextIndex >= 0) {
-            setHighlightedIndex(nextIndex);
-            return 'handled';
-          }
-          return 'ignored';
-        }
-
-        case 'ArrowUp': {
-          if (!isOpen) {
-            const opened = openIfPossible();
-            if (opened) {
-              const lastEnabledIndex = getNextEnabledIndex(options.length, 'up');
-              if (lastEnabledIndex >= 0) {
-                setHighlightedIndex(lastEnabledIndex);
-              }
-            }
-            return opened ? 'handled' : 'ignored';
-          }
-          const nextIndex = getNextEnabledIndex(highlightedIndex, 'up');
-          if (nextIndex >= 0) {
-            setHighlightedIndex(nextIndex);
-            return 'handled';
-          }
-          return 'ignored';
-        }
-
-        case 'Home': {
-          if (!isOpen) {
-            return openIfPossible() ? 'handled' : 'ignored';
-          }
-          const firstEnabledIndex = options.findIndex(
-            (opt) => !opt.disabled && opt.group !== 'header'
-          );
-          if (firstEnabledIndex >= 0) {
-            setHighlightedIndex(firstEnabledIndex);
-            return 'handled';
-          }
-          return 'ignored';
-        }
-
-        case 'End': {
-          if (!isOpen) {
-            return openIfPossible() ? 'handled' : 'ignored';
-          }
-          const lastEnabledIndex = options
-            .map((opt, idx) => (!opt.disabled && opt.group !== 'header' ? idx : -1))
-            .filter((idx) => idx >= 0)
-            .pop();
-          if (lastEnabledIndex !== undefined) {
-            setHighlightedIndex(lastEnabledIndex);
-            return 'handled';
-          }
-          return 'ignored';
-        }
-
-        case 'Tab':
-          if (isOpen) {
-            closeDropdown();
-            return 'handled-no-prevent';
-          }
-          return 'ignored';
-
-        default:
-          return 'ignored';
+      const handler = KEY_HANDLERS[key];
+      if (!handler) {
+        return 'ignored';
       }
+      return handler({
+        options,
+        isOpen,
+        highlightedIndex,
+        setHighlightedIndex,
+        selectOption,
+        openDropdown,
+        closeDropdown,
+        getNextEnabledIndex,
+      });
     },
     [
       closeDropdown,

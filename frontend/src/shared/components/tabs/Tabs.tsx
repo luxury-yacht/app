@@ -10,7 +10,7 @@
  */
 
 import { TabOverflowIcon } from '@shared/components/icons/SharedIcons';
-import React, {
+import {
   type CSSProperties,
   type HTMLAttributes,
   type KeyboardEvent as ReactKeyboardEvent,
@@ -68,6 +68,83 @@ const RESERVED_TAB_KEYS = new Set([
   'onKeyDown',
 ]);
 
+const clampScrollLeft = (value: number, maxScrollLeft: number): number =>
+  Math.max(0, Math.min(maxScrollLeft, value));
+
+const getOverflowIndicatorSize = (bar: HTMLDivElement): number =>
+  Number.parseFloat(
+    getComputedStyle(bar).getPropertyValue('--tab-strip-overflow-indicator-size')
+  ) || 32;
+
+const findForwardClippedTab = (
+  tabs: TabDescriptor[],
+  tabRefs: Map<string, HTMLElement>,
+  visibleRight: number
+): HTMLElement | null => {
+  for (const tab of tabs) {
+    const element = tabRefs.get(tab.id);
+    if (element && element.offsetLeft + element.offsetWidth > visibleRight) {
+      return element;
+    }
+  }
+  return null;
+};
+
+const findBackwardClippedTab = (
+  tabs: TabDescriptor[],
+  tabRefs: Map<string, HTMLElement>,
+  visibleLeft: number
+): HTMLElement | null => {
+  for (let index = tabs.length - 1; index >= 0; index -= 1) {
+    const element = tabRefs.get(tabs[index]?.id ?? '');
+    if (element && element.offsetLeft < visibleLeft) {
+      return element;
+    }
+  }
+  return null;
+};
+
+const findClippedTab = ({
+  direction,
+  tabs,
+  tabRefs,
+  barLeft,
+  barRight,
+  indicatorSize,
+}: {
+  direction: -1 | 1;
+  tabs: TabDescriptor[];
+  tabRefs: Map<string, HTMLElement>;
+  barLeft: number;
+  barRight: number;
+  indicatorSize: number;
+}): HTMLElement | null => {
+  if (direction === 1) {
+    return findForwardClippedTab(tabs, tabRefs, barRight - indicatorSize + 1);
+  }
+  return findBackwardClippedTab(tabs, tabRefs, barLeft + indicatorSize - 1);
+};
+
+const calculateTabScrollTarget = ({
+  direction,
+  target,
+  clientWidth,
+  indicatorSize,
+  maxScrollLeft,
+}: {
+  direction: -1 | 1;
+  target: HTMLElement;
+  clientWidth: number;
+  indicatorSize: number;
+  maxScrollLeft: number;
+}): number => {
+  const rawTarget =
+    direction === 1
+      ? target.offsetLeft + target.offsetWidth - clientWidth + indicatorSize
+      : target.offsetLeft - indicatorSize;
+  return clampScrollLeft(rawTarget, maxScrollLeft);
+};
+
 function warnReservedKeys(tabId: string, extraProps: HTMLAttributes<HTMLElement> | undefined) {
   if (process.env.NODE_ENV === 'production' || !extraProps) {
     return;
@@ -80,6 +157,83 @@ function warnReservedKeys(tabId: string, extraProps: HTMLAttributes<HTMLElement>
     }
   }
 }
+
+const TabStripItem = ({
+  tab,
+  index,
+  activeId,
+  hasActiveTab,
+  fallbackFocusIndex,
+  disableRovingTabIndex,
+  dropInsertIndex,
+  tabRefs,
+  onActivate,
+  onKeyDown,
+}: {
+  tab: TabDescriptor;
+  index: number;
+  activeId: string | null;
+  hasActiveTab: boolean;
+  fallbackFocusIndex: number;
+  disableRovingTabIndex: boolean;
+  dropInsertIndex: number | null;
+  tabRefs: Map<string, HTMLElement>;
+  onActivate: (id: string) => void;
+  onKeyDown: (event: ReactKeyboardEvent<HTMLElement>, index: number) => void;
+}) => {
+  const isActive = tab.id === activeId;
+  const isCloseable = Boolean(tab.onClose);
+  const isFocusStop = hasActiveTab ? isActive : index === fallbackFocusIndex;
+  warnReservedKeys(tab.id, tab.extraProps);
+  return (
+    <>
+      {dropInsertIndex === index && (
+        <div className="tab-strip__drop-indicator" data-testid="tab-strip-drop-indicator" />
+      )}
+      {/* A div owns the tab role so the nested close affordance can remain a button. */}
+      <div
+        ref={(element) => {
+          if (element) {
+            tabRefs.set(tab.id, element);
+          } else {
+            tabRefs.delete(tab.id);
+          }
+        }}
+        {...tab.extraProps}
+        role="tab"
+        aria-selected={isActive}
+        aria-controls={tab.ariaControls}
+        aria-disabled={tab.disabled || undefined}
+        aria-label={tab.ariaLabel}
+        tabIndex={disableRovingTabIndex || !isFocusStop ? -1 : 0}
+        className={`tab-item${isActive ? ' tab-item--active' : ''}${isCloseable ? ' tab-item--closeable' : ''}`}
+        onClick={() => {
+          if (!tab.disabled) {
+            onActivate(tab.id);
+          }
+        }}
+        onKeyDown={(event) => onKeyDown(event, index)}
+      >
+        {tab.leading}
+        <span className="tab-item__label">{tab.label}</span>
+        {!!tab.onClose && (
+          <button
+            type="button"
+            className="tab-item__close"
+            aria-label={tab.closeAriaLabel ?? 'Close'}
+            tabIndex={-1}
+            onClick={(event) => {
+              event.stopPropagation();
+              tab.onClose?.();
+            }}
+          >
+            {tab.closeIcon ?? '×'}
+          </button>
+        )}
+      </div>
+    </>
+  );
+};
 
 export interface TabsProps {
   tabs: TabDescriptor[];
@@ -168,10 +322,7 @@ export function Tabs({
     if (!bar) {
       return;
     }
-    const indicatorSize =
-      Number.parseFloat(
-        getComputedStyle(bar).getPropertyValue('--tab-strip-overflow-indicator-size')
-      ) || 32;
+    const indicatorSize = getOverflowIndicatorSize(bar);
 
     // If a smooth scroll is already in flight, compute the next target
     // from its destination instead of the intermediate scrollLeft. That
@@ -179,45 +330,27 @@ export function Tabs({
     const maxScrollLeft = Math.max(0, bar.scrollWidth - bar.clientWidth);
     const barLeft =
       pendingScrollTargetRef.current !== null
-        ? Math.max(0, Math.min(maxScrollLeft, pendingScrollTargetRef.current))
+        ? clampScrollLeft(pendingScrollTargetRef.current, maxScrollLeft)
         : bar.scrollLeft;
     const barRight = barLeft + bar.clientWidth;
-    let target: HTMLElement | null = null;
-
-    if (direction === 1) {
-      // First tab whose right edge is hidden past the right indicator.
-      for (const tab of tabs) {
-        const btn = tabRefs.current.get(tab.id);
-        if (!btn) {
-          continue;
-        }
-        if (btn.offsetLeft + btn.offsetWidth > barRight - indicatorSize + 1) {
-          target = btn;
-          break;
-        }
-      }
-    } else {
-      // Last tab whose left edge is hidden before the left indicator.
-      for (let i = tabs.length - 1; i >= 0; i--) {
-        const btn = tabRefs.current.get(tabs[i].id);
-        if (!btn) {
-          continue;
-        }
-        if (btn.offsetLeft < barLeft + indicatorSize - 1) {
-          target = btn;
-          break;
-        }
-      }
-    }
+    const target = findClippedTab({
+      direction,
+      tabs,
+      tabRefs: tabRefs.current,
+      barLeft,
+      barRight,
+      indicatorSize,
+    });
     if (!target) {
       return;
     }
-
-    const rawTarget =
-      direction === 1
-        ? target.offsetLeft + target.offsetWidth - bar.clientWidth + indicatorSize
-        : target.offsetLeft - indicatorSize;
-    const scrollTarget = Math.max(0, Math.min(maxScrollLeft, rawTarget));
+    const scrollTarget = calculateTabScrollTarget({
+      direction,
+      target,
+      clientWidth: bar.clientWidth,
+      indicatorSize,
+      maxScrollLeft,
+    });
     pendingScrollTargetRef.current = scrollTarget;
     animateScrollTo(scrollTarget);
   };
@@ -463,62 +596,21 @@ export function Tabs({
           <TabOverflowIcon direction="left" />
         </button>
       )}
-      {tabs.map((tab, index) => {
-        const isActive = tab.id === activeId;
-        const isCloseable = Boolean(tab.onClose);
-        const isFocusStop = hasActiveTab ? isActive : index === fallbackFocusIndex;
-        warnReservedKeys(tab.id, tab.extraProps);
-        return (
-          <React.Fragment key={tab.id}>
-            {dropInsertIndex === index && (
-              <div className="tab-strip__drop-indicator" data-testid="tab-strip-drop-indicator" />
-            )}
-            {/* Outer element is a <div role="tab"> rather than <button> so
-                the close affordance inside can be a real <button> without
-                violating HTML's ban on interactive-in-interactive nesting. */}
-            <div
-              ref={(el) => {
-                if (el) {
-                  tabRefs.current.set(tab.id, el);
-                } else {
-                  tabRefs.current.delete(tab.id);
-                }
-              }}
-              {...tab.extraProps}
-              role="tab"
-              aria-selected={isActive}
-              aria-controls={tab.ariaControls}
-              aria-disabled={tab.disabled || undefined}
-              aria-label={tab.ariaLabel}
-              tabIndex={disableRovingTabIndex || !isFocusStop ? -1 : 0}
-              className={`tab-item${isActive ? ' tab-item--active' : ''}${isCloseable ? ' tab-item--closeable' : ''}`}
-              onClick={() => {
-                if (!tab.disabled) {
-                  onActivate(tab.id);
-                }
-              }}
-              onKeyDown={(event) => handleKeyDown(event, index)}
-            >
-              {tab.leading}
-              <span className="tab-item__label">{tab.label}</span>
-              {!!tab.onClose && (
-                <button
-                  type="button"
-                  className="tab-item__close"
-                  aria-label={tab.closeAriaLabel ?? 'Close'}
-                  tabIndex={-1}
-                  onClick={(event) => {
-                    event.stopPropagation();
-                    tab.onClose?.();
-                  }}
-                >
-                  {tab.closeIcon ?? '×'}
-                </button>
-              )}
-            </div>
-          </React.Fragment>
-        );
-      })}
+      {tabs.map((tab, index) => (
+        <TabStripItem
+          key={tab.id}
+          tab={tab}
+          index={index}
+          activeId={activeId}
+          hasActiveTab={hasActiveTab}
+          fallbackFocusIndex={fallbackFocusIndex}
+          disableRovingTabIndex={disableRovingTabIndex}
+          dropInsertIndex={dropInsertIndex}
+          tabRefs={tabRefs.current}
+          onActivate={onActivate}
+          onKeyDown={handleKeyDown}
+        />
+      ))}
       {dropInsertIndex === tabs.length && (
         <div className="tab-strip__drop-indicator" data-testid="tab-strip-drop-indicator" />
       )}

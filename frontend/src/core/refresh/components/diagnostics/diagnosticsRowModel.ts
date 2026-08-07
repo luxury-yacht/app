@@ -400,26 +400,24 @@ const formatBrokerReadLabel = (value: string): string => {
     .join(' ');
 };
 
+const resolveBrokerReadStatus = (entry: BrokerReadDiagnosticsEntry): string => {
+  if (entry.inFlightCount > 0) {
+    return 'In Flight';
+  }
+  const labels: Record<string, string> = {
+    never: '—',
+    blocked: 'Blocked',
+    error: 'Error',
+  };
+  return labels[entry.lastStatus] ?? 'Success';
+};
+
 export const buildBrokerReadRows = (
   diagnostics: BrokerReadDiagnosticsEntry[],
   resolveScope: (scopes: string[]) => { display: string; tooltip?: string }
 ): BrokerReadRow[] => {
   return diagnostics.map((entry) => {
     const updatedInfo = formatLastUpdated(entry.lastCompletedAt);
-    let lastStatus: string;
-
-    if (entry.inFlightCount > 0) {
-      lastStatus = 'In Flight';
-    } else if (entry.lastStatus === 'never') {
-      lastStatus = '—';
-    } else if (entry.lastStatus === 'blocked') {
-      lastStatus = 'Blocked';
-    } else if (entry.lastStatus === 'error') {
-      lastStatus = 'Error';
-    } else {
-      lastStatus = 'Success';
-    }
-
     const broker = entry.broker === 'data-access' ? 'Cluster Data' : 'App State';
     const label = entry.label ?? formatBrokerReadLabel(entry.resource);
     const scopeInfo = resolveScope(entry.recentScopes);
@@ -438,7 +436,7 @@ export const buildBrokerReadRows = (
       successCount: entry.successCount,
       errorCount: entry.errorCount,
       blockedCount: entry.blockedCount,
-      lastStatus,
+      lastStatus: resolveBrokerReadStatus(entry),
       lastDuration: formatDurationMs(entry.lastDurationMs),
       lastUpdated: updatedInfo.display,
       lastUpdatedTooltip: updatedInfo.tooltip,
@@ -455,6 +453,165 @@ export const buildBrokerReadsSummary = (rows: BrokerReadRow[]): string => {
   return `Rows: ${rows.length} • In Flight: ${inFlight} • Requests: ${totalRequests} • Blocked: ${blocked} • Errors: ${errors}`;
 };
 
+type CapabilityDescriptor = PermissionQueryDiagnostics['lastDescriptors'][number];
+type FeatureDescriptorMap = Map<PermissionFeatureKey, Map<string, string[]>>;
+
+const shouldIncludeCapabilityBatch = (entry: PermissionQueryDiagnostics): boolean =>
+  entry.inFlightCount > 0 ||
+  entry.pendingCount > 0 ||
+  (entry.lastRunCompletedAt !== null && entry.lastRunCompletedAt !== undefined) ||
+  entry.lastDescriptors.length > 0;
+
+const capabilityResultLabel = (result: PermissionQueryDiagnostics['lastResult']): string => {
+  if (result === 'success') {
+    return 'Success';
+  }
+  return result === 'error' ? 'Error' : '—';
+};
+
+const addFeatureDescriptor = (
+  featureDescriptors: FeatureDescriptorMap,
+  feature: PermissionFeatureKey,
+  descriptor: CapabilityDescriptor
+) => {
+  let resources = featureDescriptors.get(feature);
+  if (!resources) {
+    resources = new Map<string, string[]>();
+    featureDescriptors.set(feature, resources);
+  }
+  let verbs = resources.get(descriptor.resourceKind);
+  if (!verbs) {
+    verbs = [];
+    resources.set(descriptor.resourceKind, verbs);
+  }
+  const verbLabel = descriptor.subresource
+    ? `${descriptor.verb}/${descriptor.subresource}`
+    : descriptor.verb;
+  if (!verbs.includes(verbLabel)) {
+    verbs.push(verbLabel);
+  }
+};
+
+interface CapabilityDescriptorContext {
+  entry: PermissionQueryDiagnostics;
+  scope: string;
+  runtimeDisplay: string;
+  lastDurationDisplay: string;
+  age: ReturnType<typeof formatLastUpdated>;
+  lastResultLabel: string;
+  totalChecks: number;
+}
+
+const recordCapabilityDescriptor = (
+  descriptor: CapabilityDescriptor,
+  context: CapabilityDescriptorContext,
+  permissionMap: Map<string, PermissionStatus>,
+  featureDescriptors: FeatureDescriptorMap,
+  descriptorIndex: Map<string, CapabilityDescriptorActivityDetails>
+) => {
+  const { entry } = context;
+  const key = getPermissionKey(
+    descriptor.resourceKind,
+    descriptor.verb,
+    descriptor.namespace ?? null,
+    descriptor.subresource ?? null,
+    entry.clusterId ?? null
+  );
+  const feature = permissionMap.get(key)?.feature ?? PERMISSION_FEATURES.other;
+  addFeatureDescriptor(featureDescriptors, feature, descriptor);
+  const descriptorLabel = descriptor.subresource
+    ? `${descriptor.resourceKind}/${descriptor.subresource} (${descriptor.verb})`
+    : `${descriptor.resourceKind} (${descriptor.verb})`;
+  descriptorIndex.set(key, {
+    scope: context.scope,
+    descriptorLabel,
+    resourceKind: descriptor.resourceKind,
+    verb: descriptor.verb,
+    subresource: descriptor.subresource ?? null,
+    pendingCount: entry.pendingCount,
+    inFlightCount: entry.inFlightCount,
+    runtimeDisplay: context.runtimeDisplay,
+    lastDurationDisplay: context.lastDurationDisplay,
+    age: context.age,
+    lastResult: context.lastResultLabel,
+    consecutiveFailureCount: entry.consecutiveFailureCount,
+    totalChecks: context.totalChecks,
+    lastError: entry.lastError ?? null,
+  });
+};
+
+const formatFeatureDescriptors = (featureDescriptors: FeatureDescriptorMap) =>
+  featureDescriptors.size > 0
+    ? Array.from(featureDescriptors.entries()).map(([feature, resources]) => ({
+        feature,
+        resources: Array.from(resources.entries()).map(
+          ([resource, verbs]) => `${resource} (${verbs.join(', ')})`
+        ),
+      }))
+    : null;
+
+const buildCapabilityBatchRow = (
+  entry: PermissionQueryDiagnostics,
+  diagnosticsClock: number,
+  permissionMap: Map<string, PermissionStatus>,
+  descriptorIndex: Map<string, CapabilityDescriptorActivityDetails>
+): CapabilityBatchRow | null => {
+  if (!shouldIncludeCapabilityBatch(entry)) {
+    return null;
+  }
+  const scope = entry.namespace ?? 'Cluster';
+  const runtimeMs =
+    entry.inFlightCount > 0 && entry.inFlightStartedAt
+      ? Math.max(0, diagnosticsClock - entry.inFlightStartedAt)
+      : null;
+  const age = formatLastUpdated(entry.lastRunCompletedAt);
+  const lastDurationDisplay = formatDurationMs(entry.lastRunDurationMs);
+  const runtimeDisplay = formatDurationMs(runtimeMs);
+  const lastResultLabel = capabilityResultLabel(entry.lastResult);
+  const descriptorCount = entry.lastDescriptors.length;
+  const totalChecks =
+    entry.totalChecks && entry.totalChecks > 0 ? entry.totalChecks : descriptorCount;
+  const featureDescriptors: FeatureDescriptorMap = new Map();
+  const context = {
+    entry,
+    scope,
+    runtimeDisplay,
+    lastDurationDisplay,
+    age,
+    lastResultLabel,
+    totalChecks,
+  };
+  entry.lastDescriptors.forEach((descriptor) => {
+    recordCapabilityDescriptor(
+      descriptor,
+      context,
+      permissionMap,
+      featureDescriptors,
+      descriptorIndex
+    );
+  });
+  return {
+    key: entry.key,
+    clusterId: entry.clusterId ?? '',
+    scope,
+    pendingCount: entry.pendingCount,
+    inFlightCount: entry.inFlightCount,
+    runtimeDisplay,
+    runtimeMs,
+    lastDurationDisplay,
+    age,
+    lastResult: lastResultLabel,
+    lastError: entry.lastError ?? null,
+    totalChecks,
+    consecutiveFailureCount: entry.consecutiveFailureCount,
+    descriptorsByFeature: formatFeatureDescriptors(featureDescriptors),
+    method: entry.method ?? null,
+    ssrrIncomplete: entry.ssrrIncomplete ?? null,
+    ssrrRuleCount: entry.ssrrRuleCount ?? null,
+    ssarFallbackCount: entry.ssarFallbackCount ?? null,
+  };
+};
+
 export const buildCapabilityBatchRows = (
   capabilityDiagnostics: PermissionQueryDiagnostics[],
   diagnosticsClock: number,
@@ -466,119 +623,9 @@ export const buildCapabilityBatchRows = (
   const descriptorIndex = new Map<string, CapabilityDescriptorActivityDetails>();
 
   const batchRows = capabilityDiagnostics
-    .map((entry) => {
-      const include =
-        entry.inFlightCount > 0 ||
-        entry.pendingCount > 0 ||
-        (entry.lastRunCompletedAt !== null && entry.lastRunCompletedAt !== undefined) ||
-        entry.lastDescriptors.length > 0;
-      if (!include) {
-        return null;
-      }
-
-      const scope = entry.namespace ?? 'Cluster';
-      const runtimeMs =
-        entry.inFlightCount > 0 && entry.inFlightStartedAt
-          ? Math.max(0, diagnosticsClock - entry.inFlightStartedAt)
-          : null;
-      const age = formatLastUpdated(entry.lastRunCompletedAt);
-      const lastDurationDisplay = formatDurationMs(entry.lastRunDurationMs);
-      const runtimeDisplay = formatDurationMs(runtimeMs);
-      let lastResultLabel: string;
-
-      if (entry.lastResult === 'success') {
-        lastResultLabel = 'Success';
-      } else if (entry.lastResult === 'error') {
-        lastResultLabel = 'Error';
-      } else {
-        lastResultLabel = '—';
-      }
-
-      const descriptorCount = entry.lastDescriptors.length;
-      const totalChecks =
-        entry.totalChecks && entry.totalChecks > 0 ? entry.totalChecks : descriptorCount;
-      const featureDescriptors = new Map<PermissionFeatureKey, Map<string, string[]>>();
-      entry.lastDescriptors.forEach((descriptor) => {
-        const key = getPermissionKey(
-          descriptor.resourceKind,
-          descriptor.verb,
-          descriptor.namespace ?? null,
-          descriptor.subresource ?? null,
-          entry.clusterId ?? null
-        );
-        const status = permissionMap.get(key);
-        const feature = status?.feature ?? PERMISSION_FEATURES.other;
-
-        let resources = featureDescriptors.get(feature);
-        if (!resources) {
-          resources = new Map<string, string[]>();
-          featureDescriptors.set(feature, resources);
-        }
-        const resource = descriptor.resourceKind;
-        let verbs = resources.get(resource);
-        if (!verbs) {
-          verbs = [];
-          resources.set(resource, verbs);
-        }
-        const verbLabel = descriptor.subresource
-          ? `${descriptor.verb}/${descriptor.subresource}`
-          : descriptor.verb;
-        if (!verbs.includes(verbLabel)) {
-          verbs.push(verbLabel);
-        }
-
-        const descriptorLabel = descriptor.subresource
-          ? `${descriptor.resourceKind}/${descriptor.subresource} (${descriptor.verb})`
-          : `${descriptor.resourceKind} (${descriptor.verb})`;
-        descriptorIndex.set(key, {
-          scope,
-          descriptorLabel,
-          resourceKind: descriptor.resourceKind,
-          verb: descriptor.verb,
-          subresource: descriptor.subresource ?? null,
-          pendingCount: entry.pendingCount,
-          inFlightCount: entry.inFlightCount,
-          runtimeDisplay,
-          lastDurationDisplay,
-          age,
-          lastResult: lastResultLabel,
-          consecutiveFailureCount: entry.consecutiveFailureCount,
-          totalChecks,
-          lastError: entry.lastError ?? null,
-        });
-      });
-
-      const descriptorsByFeature =
-        featureDescriptors.size > 0
-          ? Array.from(featureDescriptors.entries()).map(([feature, resources]) => ({
-              feature,
-              resources: Array.from(resources.entries()).map(
-                ([resource, verbs]) => `${resource} (${verbs.join(', ')})`
-              ),
-            }))
-          : null;
-
-      return {
-        key: entry.key,
-        clusterId: entry.clusterId ?? '',
-        scope,
-        pendingCount: entry.pendingCount,
-        inFlightCount: entry.inFlightCount,
-        runtimeDisplay,
-        runtimeMs,
-        lastDurationDisplay,
-        age,
-        lastResult: lastResultLabel,
-        lastError: entry.lastError ?? null,
-        totalChecks,
-        consecutiveFailureCount: entry.consecutiveFailureCount,
-        descriptorsByFeature,
-        method: entry.method ?? null,
-        ssrrIncomplete: entry.ssrrIncomplete ?? null,
-        ssrrRuleCount: entry.ssrrRuleCount ?? null,
-        ssarFallbackCount: entry.ssarFallbackCount ?? null,
-      };
-    })
+    .map((entry) =>
+      buildCapabilityBatchRow(entry, diagnosticsClock, permissionMap, descriptorIndex)
+    )
     .filter((row): row is NonNullable<typeof row> => row !== null)
     .sort((a, b) => {
       if (a.scope === 'Cluster' && b.scope !== 'Cluster') {
@@ -591,6 +638,107 @@ export const buildCapabilityBatchRows = (
     });
 
   return { capabilityBatchRows: batchRows, capabilityDescriptorIndex: descriptorIndex };
+};
+
+const permissionAllowedLabel = (status: PermissionStatus): string => {
+  if (status.pending) {
+    return 'Pending';
+  }
+  return status.allowed ? 'True' : 'False';
+};
+
+const permissionDescriptorLabel = (
+  status: PermissionStatus,
+  activity: CapabilityDescriptorActivityDetails | undefined
+): string =>
+  activity?.descriptorLabel ??
+  (status.descriptor.subresource
+    ? `${status.descriptor.resourceKind}/${status.descriptor.subresource} (${status.descriptor.verb})`
+    : `${status.descriptor.resourceKind} (${status.descriptor.verb})`);
+
+const permissionActivityFields = (activity: CapabilityDescriptorActivityDetails | undefined) => ({
+  pendingCount: activity?.pendingCount ?? null,
+  inFlightCount: activity?.inFlightCount ?? null,
+  runtimeDisplay: activity?.runtimeDisplay ?? '—',
+  lastDurationDisplay: activity?.lastDurationDisplay ?? '—',
+  age: activity?.age ?? { display: '—', tooltip: '—' },
+  lastResult: activity?.lastResult ?? '—',
+  consecutiveFailureCount: activity?.consecutiveFailureCount ?? 0,
+  totalChecks: activity?.totalChecks ?? null,
+  lastError: activity?.lastError ?? null,
+});
+
+const buildPermissionRow = (
+  status: PermissionStatus,
+  capabilityDescriptorIndex: Map<string, CapabilityDescriptorActivityDetails>
+): PermissionRow => {
+  const scope = status.descriptor.namespace ? status.descriptor.namespace : 'Cluster';
+  const activity = capabilityDescriptorIndex.get(status.id);
+  return {
+    clusterId: status.descriptor.clusterId,
+    scope:
+      activity?.scope ?? status.descriptor.namespace ?? (scope === 'Cluster' ? 'Cluster' : scope),
+    descriptorLabel: permissionDescriptorLabel(status, activity),
+    resource: status.descriptor.resourceKind,
+    verb: status.descriptor.verb,
+    allowed: permissionAllowedLabel(status),
+    isDenied: !status.pending && !status.allowed,
+    reason: status.reason ?? status.error ?? undefined,
+    id: status.id,
+    feature: status.feature,
+    featureLabel: permissionFeatureLabel(status.feature) ?? undefined,
+    descriptorNamespace: status.descriptor.namespace ?? null,
+    ...permissionActivityFields(activity),
+    descriptorKey: status.id,
+  };
+};
+
+interface PermissionRowFilter {
+  scopedFeatureSet: Set<PermissionFeatureKey>;
+  hasFeatureFilters: boolean;
+  viewType: string;
+  selectedNamespaceKey: string | null;
+  selectedClusterId?: string | null;
+}
+
+const permissionRowMatchesClusterView = (
+  row: PermissionRow,
+  scopedFeatureSet: Set<PermissionFeatureKey>
+): boolean =>
+  row.scope === 'Cluster' ||
+  Boolean(
+    row.descriptorNamespace &&
+      row.feature !== null &&
+      row.feature !== undefined &&
+      scopedFeatureSet.has(row.feature)
+  );
+
+const permissionRowMatchesNamespaceView = (
+  row: PermissionRow,
+  selectedNamespaceKey: string | null
+): boolean => {
+  if (!row.descriptorNamespace) {
+    return false;
+  }
+  return !selectedNamespaceKey || row.descriptorNamespace.toLowerCase() === selectedNamespaceKey;
+};
+
+const permissionRowMatchesFilter = (row: PermissionRow, filter: PermissionRowFilter): boolean => {
+  if (filter.selectedClusterId && row.clusterId && row.clusterId !== filter.selectedClusterId) {
+    return false;
+  }
+  const matchesFeature =
+    !filter.hasFeatureFilters || Boolean(row.feature && filter.scopedFeatureSet.has(row.feature));
+  if (!matchesFeature) {
+    return false;
+  }
+  if (filter.viewType === 'cluster' || filter.viewType === 'overview') {
+    return permissionRowMatchesClusterView(row, filter.scopedFeatureSet);
+  }
+  if (filter.viewType === 'namespace') {
+    return permissionRowMatchesNamespaceView(row, filter.selectedNamespaceKey);
+  }
+  return false;
 };
 
 export const buildPermissionRows = (params: {
@@ -616,91 +764,17 @@ export const buildPermissionRows = (params: {
       ? selectedNamespace.toLowerCase()
       : null;
 
-  const allPermissionRows = Array.from(permissionMap.values()).map((status) => {
-    const scope = status.descriptor.namespace ? status.descriptor.namespace : 'Cluster';
-    let allowedLabel: string;
-
-    if (status.pending) {
-      allowedLabel = 'Pending';
-    } else if (status.allowed) {
-      allowedLabel = 'True';
-    } else {
-      allowedLabel = 'False';
-    }
-
-    const reason = status.reason ?? status.error ?? undefined;
-    const descriptorKey = status.id;
-    const activity = capabilityDescriptorIndex.get(descriptorKey);
-    const descriptorLabel =
-      activity?.descriptorLabel ??
-      (status.descriptor.subresource
-        ? `${status.descriptor.resourceKind}/${status.descriptor.subresource} (${status.descriptor.verb})`
-        : `${status.descriptor.resourceKind} (${status.descriptor.verb})`);
-    const scopeLabel =
-      activity?.scope ?? status.descriptor.namespace ?? (scope === 'Cluster' ? 'Cluster' : scope);
-    const age = activity?.age ?? { display: '—', tooltip: '—' };
-
-    return {
-      clusterId: status.descriptor.clusterId,
-      scope: scopeLabel,
-      descriptorLabel,
-      resource: status.descriptor.resourceKind,
-      verb: status.descriptor.verb,
-      allowed: allowedLabel,
-      isDenied: !status.pending && !status.allowed,
-      reason,
-      id: status.id,
-      feature: status.feature,
-      featureLabel: permissionFeatureLabel(status.feature) ?? undefined,
-      descriptorNamespace: status.descriptor.namespace ?? null,
-      pendingCount: activity?.pendingCount ?? null,
-      inFlightCount: activity?.inFlightCount ?? null,
-      runtimeDisplay: activity?.runtimeDisplay ?? '—',
-      lastDurationDisplay: activity?.lastDurationDisplay ?? '—',
-      age,
-      lastResult: activity?.lastResult ?? '—',
-      consecutiveFailureCount: activity?.consecutiveFailureCount ?? 0,
-      totalChecks: activity?.totalChecks ?? null,
-      lastError: activity?.lastError ?? null,
-      descriptorKey,
-    };
-  });
-
-  const scopedRows = allPermissionRows.filter((row) => {
-    if (selectedClusterId && row.clusterId && row.clusterId !== selectedClusterId) {
-      return false;
-    }
-
-    const matchesFeature = !hasFeatureFilters || (row.feature && scopedFeatureSet.has(row.feature));
-
-    if (!matchesFeature && hasFeatureFilters) {
-      return false;
-    }
-
-    if (viewType === 'cluster' || viewType === 'overview') {
-      if (row.scope === 'Cluster') {
-        return true;
-      }
-      return (
-        row.descriptorNamespace &&
-        row.feature !== null &&
-        row.feature !== undefined &&
-        scopedFeatureSet.has(row.feature)
-      );
-    }
-
-    if (viewType === 'namespace') {
-      if (!row.descriptorNamespace) {
-        return false;
-      }
-      if (!selectedNamespaceKey) {
-        return true;
-      }
-      return row.descriptorNamespace.toLowerCase() === selectedNamespaceKey;
-    }
-
-    return false;
-  });
+  const allPermissionRows = Array.from(permissionMap.values()).map((status) =>
+    buildPermissionRow(status, capabilityDescriptorIndex)
+  );
+  const filter = {
+    scopedFeatureSet,
+    hasFeatureFilters,
+    viewType,
+    selectedNamespaceKey,
+    selectedClusterId,
+  } satisfies PermissionRowFilter;
+  const scopedRows = allPermissionRows.filter((row) => permissionRowMatchesFilter(row, filter));
 
   return scopedRows.sort((a, b) => {
     const scopeA = a.scope;
@@ -725,6 +799,38 @@ export const buildPermissionRows = (params: {
   });
 };
 
+const orchestratorSummaryClassName = (
+  pendingRequests: number,
+  queueDepth: number,
+  failedMutations: number,
+  diagnosticsUnavailable: boolean
+): string | undefined => {
+  if (diagnosticsUnavailable) {
+    return 'diagnostics-summary-warning';
+  }
+  if (failedMutations > 0) {
+    return 'diagnostics-summary-error';
+  }
+  return queueDepth > 0 || pendingRequests > 0 ? 'diagnostics-summary-warning' : undefined;
+};
+
+const orchestratorSummaryTitle = (
+  selectionDiagnostics: SelectionDiagnostics | null,
+  selectionDiagnosticsError: string | null
+): string | undefined => {
+  const titleParts: string[] = [];
+  if (selectionDiagnosticsError && !selectionDiagnostics) {
+    titleParts.push(selectionDiagnosticsError);
+  }
+  if (selectionDiagnostics?.lastReason) {
+    titleParts.push(`Last mutation: ${selectionDiagnostics.lastReason}`);
+  }
+  if (selectionDiagnostics?.lastError) {
+    titleParts.push(`Last error: ${selectionDiagnostics.lastError}`);
+  }
+  return titleParts.length > 0 ? titleParts.join(' | ') : undefined;
+};
+
 export const buildOrchestratorSummary = (params: {
   pendingRequests: number;
   selectionDiagnostics: SelectionDiagnostics | null;
@@ -737,33 +843,91 @@ export const buildOrchestratorSummary = (params: {
   const failedMutations = selectionDiagnostics?.failedMutations ?? 0;
   const canceledMutations = selectionDiagnostics?.canceledMutations ?? 0;
   const supersededMutations = selectionDiagnostics?.supersededMutations ?? 0;
-
-  let className: string | undefined;
-  if (selectionDiagnosticsError && !selectionDiagnostics) {
-    className = 'diagnostics-summary-warning';
-  } else if (failedMutations > 0) {
-    className = 'diagnostics-summary-error';
-  } else if (queueDepth > 0 || pendingRequests > 0) {
-    className = 'diagnostics-summary-warning';
-  }
-
-  const titleParts: string[] = [];
-  if (selectionDiagnosticsError && !selectionDiagnostics) {
-    titleParts.push(selectionDiagnosticsError);
-  }
-  if (selectionDiagnostics?.lastReason) {
-    titleParts.push(`Last mutation: ${selectionDiagnostics.lastReason}`);
-  }
-  if (selectionDiagnostics?.lastError) {
-    titleParts.push(`Last error: ${selectionDiagnostics.lastError}`);
-  }
+  const diagnosticsUnavailable = Boolean(selectionDiagnosticsError && !selectionDiagnostics);
 
   return {
     primary: `Pending Requests: ${pendingRequests} • Selection Queue: ${queueDepth}`,
     secondary: `Queue p95: ${queueP95} ms • Total: ${totalMutations} • Failed: ${failedMutations} • Canceled: ${canceledMutations} • Superseded: ${supersededMutations}`,
-    className,
-    title: titleParts.length > 0 ? titleParts.join(' | ') : undefined,
+    className: orchestratorSummaryClassName(
+      pendingRequests,
+      queueDepth,
+      failedMutations,
+      diagnosticsUnavailable
+    ),
+    title: orchestratorSummaryTitle(selectionDiagnostics, selectionDiagnosticsError),
   };
+};
+
+interface MetricsSummaryPresentation {
+  statusText: string;
+  pollsText: string;
+  className?: string;
+  title?: string;
+  isIdle: boolean;
+}
+
+const resolveMetricsSummaryPresentation = (
+  telemetryMetrics: TelemetryMetricsStatus | undefined,
+  telemetrySummary: TelemetrySummary | null,
+  telemetryError: string | null
+): MetricsSummaryPresentation => {
+  const isIdle = telemetryMetrics?.active === false;
+  if (telemetryError && !telemetrySummary) {
+    return {
+      statusText: 'Unavailable',
+      pollsText: '—',
+      className: 'diagnostics-summary-warning',
+      title: telemetryError,
+      isIdle,
+    };
+  }
+  if (!telemetryMetrics) {
+    return {
+      statusText: telemetrySummary ? 'No data' : 'Loading…',
+      pollsText: '—',
+      isIdle,
+    };
+  }
+  if (telemetryMetrics.lastError) {
+    return {
+      statusText: 'Error',
+      pollsText: String(telemetryMetrics.successCount),
+      className: 'diagnostics-summary-error',
+      title: telemetryMetrics.lastError,
+      isIdle,
+    };
+  }
+  if (telemetryMetrics.consecutiveFailures > 0) {
+    return {
+      statusText: 'Retrying',
+      pollsText: String(telemetryMetrics.successCount),
+      className: 'diagnostics-summary-warning',
+      isIdle,
+    };
+  }
+  return {
+    statusText: isIdle ? 'Idle' : 'OK',
+    pollsText: String(telemetryMetrics.successCount),
+    isIdle,
+  };
+};
+
+const buildMetricsTooltip = (
+  telemetryMetrics: TelemetryMetricsStatus | undefined,
+  updatedTooltip: string,
+  isIdle: boolean
+): string | undefined => {
+  const tooltipParts: string[] = [];
+  if (isIdle) {
+    tooltipParts.push('Polling idle (no active metrics views)');
+  }
+  if (telemetryMetrics?.failureCount) {
+    tooltipParts.push(`Failures: ${telemetryMetrics.failureCount}`);
+  }
+  if (updatedTooltip) {
+    tooltipParts.push(`Updated ${updatedTooltip}`);
+  }
+  return tooltipParts.length > 0 ? tooltipParts.join(' | ') : undefined;
 };
 
 export const buildMetricsSummary = (params: {
@@ -773,53 +937,18 @@ export const buildMetricsSummary = (params: {
 }): SummaryCardData => {
   const { telemetryMetrics, telemetrySummary, telemetryError } = params;
   const updatedInfo = formatLastUpdated(telemetryMetrics?.lastCollected);
-  const isIdle = telemetryMetrics?.active === false;
-  let statusText: string;
-  let className: string | undefined;
-  let title: string | undefined;
-  let pollsText = '—';
-
-  if (telemetryError && !telemetrySummary) {
-    statusText = 'Unavailable';
-    className = 'diagnostics-summary-warning';
-    title = telemetryError;
-  } else if (!telemetryMetrics) {
-    statusText = telemetrySummary ? 'No data' : 'Loading…';
-  } else {
-    pollsText = String(telemetryMetrics.successCount);
-    if (telemetryMetrics.lastError) {
-      statusText = 'Error';
-      className = 'diagnostics-summary-error';
-      title = telemetryMetrics.lastError;
-    } else if (telemetryMetrics.consecutiveFailures > 0) {
-      statusText = 'Retrying';
-      className = 'diagnostics-summary-warning';
-    } else if (isIdle) {
-      statusText = 'Idle';
-    } else {
-      statusText = 'OK';
-    }
-  }
-
-  const tooltipParts: string[] = [];
-  if (isIdle) {
-    tooltipParts.push('Polling idle (no active metrics views)');
-  }
-  if (telemetryMetrics?.failureCount) {
-    tooltipParts.push(`Failures: ${telemetryMetrics.failureCount}`);
-  }
-  if (updatedInfo.tooltip) {
-    tooltipParts.push(`Updated ${updatedInfo.tooltip}`);
-  }
-  if (!title && telemetryMetrics?.lastError) {
-    title = telemetryMetrics.lastError;
-  }
+  const presentation = resolveMetricsSummaryPresentation(
+    telemetryMetrics,
+    telemetrySummary,
+    telemetryError
+  );
+  const tooltip = buildMetricsTooltip(telemetryMetrics, updatedInfo.tooltip, presentation.isIdle);
 
   return {
-    primary: `Status: ${statusText} • Polls: ${pollsText}`,
+    primary: `Status: ${presentation.statusText} • Polls: ${presentation.pollsText}`,
     secondary: `Updated: ${updatedInfo.display}`,
-    className,
-    title: title ?? (tooltipParts.length > 0 ? tooltipParts.join(' | ') : undefined),
+    className: presentation.className,
+    title: presentation.title ?? tooltip,
   };
 };
 
@@ -877,6 +1006,41 @@ export const buildEventStreamSummary = (params: {
   };
 };
 
+const streamSummaryClassName = (telemetry: TelemetryStreamStatus): string | undefined => {
+  if (telemetry.errorCount > 0) {
+    return 'diagnostics-summary-error';
+  }
+  return telemetry.droppedMessages > 0 ? 'diagnostics-summary-warning' : undefined;
+};
+
+const buildCatalogStreamSummary = (
+  telemetry: TelemetryStreamStatus,
+  firstRowLatencyMs: number | null,
+  firstRowDisplay: string
+): SummaryCardData => {
+  const updatedInfo = formatLastUpdated(telemetry.lastConnect);
+  const newestInfo = formatLastUpdated(telemetry.lastEvent);
+  const tooltipParts: string[] = [];
+  if (telemetry.lastError) {
+    tooltipParts.push(telemetry.lastError);
+  }
+  if (firstRowLatencyMs && firstRowLatencyMs > 0) {
+    tooltipParts.push(`First row in ${firstRowDisplay}`);
+  }
+  if (updatedInfo.tooltip) {
+    tooltipParts.push(`Updated ${updatedInfo.tooltip}`);
+  }
+  if (newestInfo.tooltip) {
+    tooltipParts.push(`Latest batch ${newestInfo.tooltip}`);
+  }
+  return {
+    primary: `Active: ${telemetry.activeSessions} • Batches: ${telemetry.totalMessages} • Dropped: ${telemetry.droppedMessages}`,
+    secondary: `Updated: ${updatedInfo.display} • Latest Batch: ${newestInfo.display} • First Row: ${firstRowDisplay}`,
+    className: streamSummaryClassName(telemetry),
+    title: tooltipParts.length > 0 ? tooltipParts.join(' | ') : undefined,
+  };
+};
+
 export const buildCatalogSummary = (params: {
   catalogState: DomainSnapshotState<unknown>;
   catalogStreamTelemetry?: TelemetryStreamStatus;
@@ -890,37 +1054,7 @@ export const buildCatalogSummary = (params: {
   const firstRowDisplay = formatDurationMs(firstRowLatencyMs);
 
   if (catalogStreamTelemetry) {
-    const updatedInfo = formatLastUpdated(catalogStreamTelemetry.lastConnect);
-    const newestInfo = formatLastUpdated(catalogStreamTelemetry.lastEvent);
-    let className: string | undefined;
-
-    if (catalogStreamTelemetry.errorCount > 0) {
-      className = 'diagnostics-summary-error';
-    } else if (catalogStreamTelemetry.droppedMessages > 0) {
-      className = 'diagnostics-summary-warning';
-    } else {
-      className = undefined;
-    }
-
-    const tooltipParts: string[] = [];
-    if (catalogStreamTelemetry.lastError) {
-      tooltipParts.push(catalogStreamTelemetry.lastError);
-    }
-    if (firstRowLatencyMs && firstRowLatencyMs > 0) {
-      tooltipParts.push(`First row in ${firstRowDisplay}`);
-    }
-    if (updatedInfo.tooltip) {
-      tooltipParts.push(`Updated ${updatedInfo.tooltip}`);
-    }
-    if (newestInfo.tooltip) {
-      tooltipParts.push(`Latest batch ${newestInfo.tooltip}`);
-    }
-    return {
-      primary: `Active: ${catalogStreamTelemetry.activeSessions} • Batches: ${catalogStreamTelemetry.totalMessages} • Dropped: ${catalogStreamTelemetry.droppedMessages}`,
-      secondary: `Updated: ${updatedInfo.display} • Latest Batch: ${newestInfo.display} • First Row: ${firstRowDisplay}`,
-      className,
-      title: tooltipParts.length > 0 ? tooltipParts.join(' | ') : undefined,
-    };
+    return buildCatalogStreamSummary(catalogStreamTelemetry, firstRowLatencyMs, firstRowDisplay);
   }
 
   if (telemetryError && !telemetrySummary) {
@@ -940,28 +1074,105 @@ export const buildCatalogSummary = (params: {
   };
 };
 
+interface ContainerLogsSummaryStats {
+  totalScopes: number;
+  activeScopes: number;
+  errorScopes: number;
+  lastUpdatedInfo: ReturnType<typeof formatLastUpdated>;
+}
+
+const buildContainerLogsStats = (
+  entries: Array<[string, DomainSnapshotState<unknown>]>
+): ContainerLogsSummaryStats => {
+  const activeScopes = entries.filter(([, state]) =>
+    ['ready', 'loading', 'updating'].includes(state.status)
+  ).length;
+  const errorScopes = entries.filter(([, state]) => state.status === 'error').length;
+  const latestUpdate = entries.reduce((latest, [, state]) => {
+    const timestamp = state.lastUpdated ?? state.lastAutoRefresh ?? state.lastManualRefresh ?? 0;
+    return Math.max(latest, timestamp);
+  }, 0);
+  return {
+    totalScopes: entries.length,
+    activeScopes,
+    errorScopes,
+    lastUpdatedInfo: formatLastUpdated(latestUpdate > 0 ? latestUpdate : undefined),
+  };
+};
+
+const buildContainerLogsPrimary = (
+  stats: ContainerLogsSummaryStats,
+  telemetry?: TelemetryStreamStatus
+): string => {
+  const parts = [`Scopes: ${stats.totalScopes}`, `Active Scopes: ${stats.activeScopes}`];
+  if (telemetry) {
+    parts.push(`Sessions: ${telemetry.activeSessions}`);
+    parts.push(`Delivered: ${telemetry.totalMessages}`);
+    parts.push(`Dropped: ${telemetry.droppedMessages}`);
+    if (telemetry.skippedTargets > 0) {
+      parts.push(`Skipped Targets: ${telemetry.skippedTargets}`);
+    }
+  }
+  return parts.join(' • ');
+};
+
+const buildContainerLogsSecondary = (
+  updatedDisplay: string,
+  lastConnectDisplay: string,
+  lastEventDisplay: string,
+  hasTelemetry: boolean
+): string => {
+  const parts = [`Updated: ${updatedDisplay}`];
+  if (hasTelemetry) {
+    parts.push(`Last Connect: ${lastConnectDisplay}`);
+    parts.push(`Last Stream: ${lastEventDisplay}`);
+  }
+  return parts.join(' • ');
+};
+
+const buildContainerLogsTitle = (
+  stats: ContainerLogsSummaryStats,
+  telemetry: TelemetryStreamStatus | undefined,
+  lastConnectTooltip: string
+): string | undefined => {
+  const parts: string[] = [];
+  if (stats.errorScopes > 0) {
+    const suffix = stats.errorScopes === 1 ? '' : 's';
+    parts.push(`${stats.errorScopes} scope${suffix} reporting errors`);
+  }
+  if (stats.lastUpdatedInfo.tooltip) {
+    parts.push(`Updated ${stats.lastUpdatedInfo.tooltip}`);
+  }
+  if (telemetry?.lastError) {
+    parts.push(telemetry.lastError);
+  }
+  if (telemetry?.lastSkipReason) {
+    parts.push(telemetry.lastSkipReason);
+  }
+  if (lastConnectTooltip) {
+    parts.push(`Connected ${lastConnectTooltip}`);
+  }
+  return parts.length > 0 ? parts.join(' | ') : undefined;
+};
+
+const containerLogsSummaryClassName = (
+  errorScopes: number,
+  telemetry?: TelemetryStreamStatus
+): string | undefined => {
+  if (errorScopes > 0) {
+    return 'diagnostics-summary-error';
+  }
+  return telemetry && (telemetry.droppedMessages > 0 || telemetry.skippedTargets > 0)
+    ? 'diagnostics-summary-warning'
+    : undefined;
+};
+
 export const buildContainerLogsSummary = (params: {
   containerLogsScopeEntries: Array<[string, DomainSnapshotState<unknown>]>;
   containerLogsStreamTelemetry?: TelemetryStreamStatus;
 }): SummaryCardData => {
   const { containerLogsScopeEntries, containerLogsStreamTelemetry } = params;
-  const totalScopes = containerLogsScopeEntries.length;
-  const activeScopes = containerLogsScopeEntries.filter(([, state]) =>
-    ['ready', 'loading', 'updating'].includes(state.status)
-  ).length;
-  const errorScopes = containerLogsScopeEntries.filter(
-    ([, state]) => state.status === 'error'
-  ).length;
-  const latestUpdate = containerLogsScopeEntries.reduce((latest, [, state]) => {
-    const timestamp = state.lastUpdated ?? state.lastAutoRefresh ?? state.lastManualRefresh ?? 0;
-    return Math.max(latest, timestamp);
-  }, 0);
-  const lastUpdatedInfo = formatLastUpdated(latestUpdate > 0 ? latestUpdate : undefined);
-
-  const delivered = containerLogsStreamTelemetry?.totalMessages ?? 0;
-  const dropped = containerLogsStreamTelemetry?.droppedMessages ?? 0;
-  const skippedTargets = containerLogsStreamTelemetry?.skippedTargets ?? 0;
-  const activeSessions = containerLogsStreamTelemetry?.activeSessions ?? 0;
+  const stats = buildContainerLogsStats(containerLogsScopeEntries);
   const lastConnectInfo = formatLastUpdated(
     containerLogsStreamTelemetry?.lastConnect && containerLogsStreamTelemetry.lastConnect > 0
       ? containerLogsStreamTelemetry.lastConnect
@@ -973,47 +1184,15 @@ export const buildContainerLogsSummary = (params: {
       : undefined
   );
 
-  const summaryParts: string[] = [`Scopes: ${totalScopes}`, `Active Scopes: ${activeScopes}`];
-  if (containerLogsStreamTelemetry) {
-    summaryParts.push(`Sessions: ${activeSessions}`);
-    summaryParts.push(`Delivered: ${delivered}`);
-    summaryParts.push(`Dropped: ${dropped}`);
-    if (skippedTargets > 0) {
-      summaryParts.push(`Skipped Targets: ${skippedTargets}`);
-    }
-  }
-
-  const secondaryParts: string[] = [`Updated: ${lastUpdatedInfo.display}`];
-  if (containerLogsStreamTelemetry) {
-    secondaryParts.push(`Last Connect: ${lastConnectInfo.display}`);
-    secondaryParts.push(`Last Stream: ${lastEventInfo.display}`);
-  }
-
-  let className = errorScopes > 0 ? 'diagnostics-summary-error' : undefined;
-  const titleParts: string[] = [];
-  if (errorScopes > 0) {
-    titleParts.push(`${errorScopes} scope${errorScopes === 1 ? '' : 's'} reporting errors`);
-  }
-  if (lastUpdatedInfo.tooltip) {
-    titleParts.push(`Updated ${lastUpdatedInfo.tooltip}`);
-  }
-  if (containerLogsStreamTelemetry?.lastError) {
-    titleParts.push(containerLogsStreamTelemetry.lastError);
-  }
-  if (containerLogsStreamTelemetry?.lastSkipReason) {
-    titleParts.push(containerLogsStreamTelemetry.lastSkipReason);
-  }
-  if (lastConnectInfo.tooltip) {
-    titleParts.push(`Connected ${lastConnectInfo.tooltip}`);
-  }
-  if (className !== 'diagnostics-summary-error' && (dropped > 0 || skippedTargets > 0)) {
-    className = 'diagnostics-summary-warning';
-  }
-
   return {
-    primary: summaryParts.join(' • '),
-    secondary: secondaryParts.join(' • '),
-    className,
-    title: titleParts.length > 0 ? titleParts.join(' | ') : undefined,
+    primary: buildContainerLogsPrimary(stats, containerLogsStreamTelemetry),
+    secondary: buildContainerLogsSecondary(
+      stats.lastUpdatedInfo.display,
+      lastConnectInfo.display,
+      lastEventInfo.display,
+      Boolean(containerLogsStreamTelemetry)
+    ),
+    className: containerLogsSummaryClassName(stats.errorScopes, containerLogsStreamTelemetry),
+    title: buildContainerLogsTitle(stats, containerLogsStreamTelemetry, lastConnectInfo.tooltip),
   };
 };

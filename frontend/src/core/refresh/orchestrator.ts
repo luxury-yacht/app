@@ -31,7 +31,12 @@ import { RefreshErrorNotifier } from './refreshErrorNotifier';
 import { type RefresherTiming, refresherConfig } from './refresherConfig';
 import type { RefresherName, StaticRefresherName } from './refresherTypes';
 import type { DomainRegistration, StreamingRegistration } from './refreshRegistration';
-import { ClusterRefreshRuntime, makeInFlightKey, type RefreshDemand } from './refreshRuntime';
+import {
+  ClusterRefreshRuntime,
+  type InFlightRequest,
+  makeInFlightKey,
+  type RefreshDemand,
+} from './refreshRuntime';
 import { isResourceStreamDomain, isResourceStreamViewActive } from './resourceStreamViews';
 import {
   normalizeNamespaceScope as normalizeNamespaceScopeValue,
@@ -39,6 +44,7 @@ import {
 } from './scopeNormalization';
 import { mergePollingListPayload } from './snapshotMerge';
 import {
+  type DomainSnapshotState,
   getRefreshState,
   getScopedDomainState,
   markPendingRequest,
@@ -73,6 +79,15 @@ type PendingClusterReadinessRequest = {
   isManual: boolean;
   streamSignal: boolean;
   queryReconcile: boolean;
+};
+
+type ScopedFetchExecution<K extends RefreshDomain> = {
+  runtime: ClusterRefreshRuntime;
+  scope: string;
+  previousState: DomainSnapshotState<DomainPayloadMap[K]>;
+  controller: AbortController;
+  requestId: number;
+  contextVersion: number;
 };
 
 // Refreshers are disabled at registration by default. Most domains rely on
@@ -431,6 +446,66 @@ class RefreshOrchestrator {
     resetAllScopedDomainStates(domain);
   }
 
+  private clearStaleScopes(
+    domain: RefreshDomain,
+    staleScopes: string[],
+    streaming?: StreamingRegistration
+  ): void {
+    staleScopes.forEach((staleScope) => {
+      this.cancelInFlightForScopedDomain(domain, staleScope);
+      if (streaming) {
+        this.getRuntimeForScope(domain, staleScope).clearStreamingReady(domain, staleScope);
+        this.stopStreamingScope(domain, staleScope, streaming, true);
+        return;
+      }
+      resetScopedDomainState(domain, staleScope);
+    });
+  }
+
+  private reconcileRefresherActivity(
+    config: DomainRegistration<RefreshDomain>,
+    wasActive: boolean,
+    isActive: boolean
+  ): void {
+    if (!this.shouldAllowRefresher(config) || wasActive === isActive) {
+      return;
+    }
+    if (isActive) {
+      refreshManager.enable(config.refresherName);
+      return;
+    }
+    refreshManager.disable(config.refresherName);
+  }
+
+  private reconcileStreamingScopeEnabled(
+    domain: RefreshDomain,
+    scope: string,
+    enabled: boolean,
+    preserveState: boolean,
+    runtime: ClusterRefreshRuntime,
+    streaming: StreamingRegistration
+  ): void {
+    const shouldStream = this.shouldStreamScope(domain, scope);
+    if (enabled && shouldStream) {
+      runtime.clearStreamingReady(domain, scope);
+      if (!preserveState) {
+        resetScopedDomainState(domain, scope);
+      }
+      this.scheduleStreamingStart(domain, scope, streaming);
+      return;
+    }
+    if (!enabled) {
+      runtime.clearStreamingReady(domain, scope);
+      this.stopStreamingScope(domain, scope, streaming, !preserveState);
+      this.cancelInFlightForScopedDomain(domain, scope);
+      return;
+    }
+    if (runtime.hasStreamingBookkeeping(domain, scope)) {
+      runtime.clearStreamingReady(domain, scope);
+      this.stopStreamingScope(domain, scope, streaming, false);
+    }
+  }
+
   setScopedDomainEnabled(
     domain: RefreshDomain,
     scope: string,
@@ -438,7 +513,6 @@ class RefreshOrchestrator {
     options?: { preserveState?: boolean }
   ): void {
     const config = this.getConfig(domain);
-    const allowRefresher = this.shouldAllowRefresher(config);
     const normalizedScope = this.normalizeDomainScope(domain, scope);
     if (!normalizedScope) {
       throw new Error(`Scoped domain "${domain}" requires a non-empty scope value`);
@@ -462,61 +536,36 @@ class RefreshOrchestrator {
       normalizedScope,
       enabled
     );
-    staleScopes.forEach((staleScope) => {
-      this.cancelInFlightForScopedDomain(domain, staleScope);
-      if (config.streaming) {
-        this.getRuntimeForScope(domain, staleScope).clearStreamingReady(domain, staleScope);
-        this.stopStreamingScope(domain, staleScope, config.streaming, true);
-      } else {
-        resetScopedDomainState(domain, staleScope);
-      }
-    });
+    this.clearStaleScopes(domain, staleScopes, config.streaming);
     if (!changed) {
       this.updateMetricsDemand();
       return;
     }
 
     const isActive = this.hasEnabledScopedSources(domain);
-
-    if (allowRefresher) {
-      if (!wasActive && isActive) {
-        refreshManager.enable(config.refresherName);
-      } else if (wasActive && !isActive) {
-        refreshManager.disable(config.refresherName);
-      }
-    }
+    this.reconcileRefresherActivity(config, wasActive, isActive);
 
     // When preserveState is true, toggling the domain stops/restarts activity
     // without clearing the last scoped snapshot from the store. This is useful
     // for event streams where reconnects should not blank the visible table.
     const preserveState = Boolean(options?.preserveState);
-    const resetOnDisable = !preserveState;
 
     if (config.streaming) {
-      const shouldStream = this.shouldStreamScope(domain, normalizedScope);
-      if (enabled && shouldStream) {
-        runtime.clearStreamingReady(domain, normalizedScope);
-        if (!preserveState) {
-          resetScopedDomainState(domain, normalizedScope);
-        }
-        this.scheduleStreamingStart(domain, normalizedScope, config.streaming);
-      } else if (!enabled) {
-        runtime.clearStreamingReady(domain, normalizedScope);
-        this.stopStreamingScope(domain, normalizedScope, config.streaming, resetOnDisable);
-        this.cancelInFlightForScopedDomain(domain, normalizedScope);
-      } else if (!shouldStream) {
-        if (runtime.hasStreamingBookkeeping(domain, normalizedScope)) {
-          runtime.clearStreamingReady(domain, normalizedScope);
-          this.stopStreamingScope(domain, normalizedScope, config.streaming, false);
-        }
-      }
+      this.reconcileStreamingScopeEnabled(
+        domain,
+        normalizedScope,
+        enabled,
+        preserveState,
+        runtime,
+        config.streaming
+      );
       this.updateMetricsDemand();
       return;
     }
 
     if (!enabled) {
       this.cancelInFlightForScopedDomain(domain, normalizedScope);
-      if (resetOnDisable) {
+      if (!preserveState) {
         resetScopedDomainState(domain, normalizedScope);
       }
     }
@@ -814,64 +863,74 @@ class RefreshOrchestrator {
     runtime.beginStreamingStart(domain, scope, startPromise);
 
     startPromise
-      .then((cleanup) => {
-        const enabledNow = this.isScopedDomainEnabledInternal(domain, scope);
-        if (!enabledNow || runtime.isStreamingCancelled(domain, scope)) {
-          runtime.failStreamingStart(domain, scope);
-          runtime.clearStreamingCancelled(domain, scope);
-          if (typeof cleanup === 'function') {
-            try {
-              cleanup();
-            } catch (error) {
-              reportOperationalError(error, {
-                source: 'RefreshOrchestrator',
-                action: 'cleanupStreamingDomain',
-                domain,
-                scope,
-              });
-            }
-          }
-          if (enabledNow) {
-            // LOAD-BEARING — docs/architecture/refresh-system.md,
-            // "Streaming Start Lifecycle". A stop cancelled this start
-            // mid-flight, but the scope was re-enabled before it resolved
-            // (the mount-time lease flap on every first view visit). The re-enable's own start attempt
-            // early-returned on THIS pending start, so dying here would
-            // orphan the scope in 'initialising' until the fallback poller's
-            // first tick (observed live: 5-10s first-paint stalls; forever
-            // without an active poller). The cancellation is obsolete —
-            // restart cleanly; the stream manager re-ensures the
-            // linger-stopped subscription.
-            this.startStreamingScope(domain, scope, streaming);
-          }
-          return;
-        }
-
-        runtime.finishStreamingStart(domain, scope, cleanup ?? noopStreamingCleanup);
-        // Initial reconciliation: a freshly-subscribed scope has no snapshot
-        // yet and the stream only signals CHANGES, so a quiet (or denied)
-        // domain would sit in 'initialising' until the first fallback poll
-        // tick — observed live as 5–10s first-paint stalls on every first
-        // visit to a streaming view. Fetch once now; streamSignal bypasses
-        // the healthy-stream skip, performFetch dedupes in-flight, and a
-        // denied domain gets its typed-403 stamp immediately.
-        this.reconcileInitialStreamingSnapshot(domain, scope, streaming);
-      })
-      .catch((error) => {
-        runtime.failStreamingStart(domain, scope);
-        const message = error instanceof Error ? error.message : String(error);
-        // All domains are scoped — write error to scoped store.
-        setScopedDomainState(domain, scope, (previous) => ({
-          ...previous,
-          status: 'error',
-          error: message,
-          scope,
-        }));
-        const notificationScope = scope?.trim() || undefined;
-        this.notifyRefreshError(domain, notificationScope, message, error);
-      });
+      .then((cleanup) => this.completeStreamingStart(domain, scope, streaming, runtime, cleanup))
+      .catch((error) => this.failStreamingStart(domain, scope, runtime, error));
 
     return startPromise.then(() => undefined).catch(() => undefined);
+  }
+
+  private completeStreamingStart(
+    domain: RefreshDomain,
+    scope: string,
+    streaming: StreamingRegistration,
+    runtime: ClusterRefreshRuntime,
+    cleanup: (() => void) | undefined
+  ): void {
+    const enabledNow = this.isScopedDomainEnabledInternal(domain, scope);
+    if (!enabledNow || runtime.isStreamingCancelled(domain, scope)) {
+      runtime.failStreamingStart(domain, scope);
+      runtime.clearStreamingCancelled(domain, scope);
+      this.runStreamingCleanup(cleanup, domain, scope);
+      if (enabledNow) {
+        // A re-enable can race the cancelled start. Restart here because the
+        // re-enable observed this pending promise and could not start its own.
+        this.startStreamingScope(domain, scope, streaming);
+      }
+      return;
+    }
+
+    runtime.finishStreamingStart(domain, scope, cleanup ?? noopStreamingCleanup);
+    // A newly subscribed notify-only stream needs one bounded snapshot so a
+    // quiet or permission-denied scope can settle without waiting for polling.
+    this.reconcileInitialStreamingSnapshot(domain, scope, streaming);
+  }
+
+  private runStreamingCleanup(
+    cleanup: (() => void) | undefined,
+    domain: RefreshDomain,
+    scope: string
+  ): void {
+    if (typeof cleanup !== 'function') {
+      return;
+    }
+    try {
+      cleanup();
+    } catch (error) {
+      reportOperationalError(error, {
+        source: 'RefreshOrchestrator',
+        action: 'cleanupStreamingDomain',
+        domain,
+        scope,
+      });
+    }
+  }
+
+  private failStreamingStart(
+    domain: RefreshDomain,
+    scope: string,
+    runtime: ClusterRefreshRuntime,
+    error: unknown
+  ): void {
+    runtime.failStreamingStart(domain, scope);
+    const message = error instanceof Error ? error.message : String(error);
+    setScopedDomainState(domain, scope, (previous) => ({
+      ...previous,
+      status: 'error',
+      error: message,
+      scope,
+    }));
+    const notificationScope = scope.trim() || undefined;
+    this.notifyRefreshError(domain, notificationScope, message, error);
   }
 
   private reconcileInitialStreamingSnapshot(
@@ -1163,6 +1222,73 @@ class RefreshOrchestrator {
     );
   }
 
+  private reconcileQueryOnlyDemand(
+    domain: RefreshDomain,
+    scope: string,
+    options: { isManual?: boolean; queryReconcile?: boolean },
+    config: DomainRegistration<RefreshDomain>,
+    runtime: ClusterRefreshRuntime
+  ): boolean {
+    const hasQueryOnlyDemand =
+      runtime.hasScopedDemand(domain, scope, 'query') &&
+      !runtime.hasScopedDemand(domain, scope, 'snapshot');
+    if (!options.queryReconcile || !hasQueryOnlyDemand) {
+      return false;
+    }
+
+    let streamingHealthy = false;
+    if (config.streaming && this.shouldStreamScope(domain, scope)) {
+      this.startStreamingScope(domain, scope, config.streaming);
+      streamingHealthy = this.isStreamingHealthy(domain, scope);
+    }
+    if (!options.isManual && streamingHealthy) {
+      return true;
+    }
+    setScopedDomainState(domain, scope, (previous) => ({
+      ...previous,
+      queryReconcileVersion: (previous.queryReconcileVersion ?? 0) + 1,
+      scope,
+    }));
+    return true;
+  }
+
+  private async reconcileStreamingFetch(
+    domain: RefreshDomain,
+    scope: string,
+    options: { isManual?: boolean; streamSignal?: boolean },
+    streaming: StreamingRegistration | undefined,
+    runtime: ClusterRefreshRuntime
+  ): Promise<boolean> {
+    if (!streaming) {
+      return false;
+    }
+
+    const shouldStream = this.shouldStreamScope(domain, scope);
+    if (
+      shouldStream &&
+      options.isManual &&
+      isResourceStreamDomain(domain) &&
+      this.isStreamingActive(domain, scope)
+    ) {
+      await this.refreshStreamingDomainOnce(domain, scope);
+      return true;
+    }
+    if (shouldStream && !options.isManual) {
+      this.startStreamingScope(domain, scope, streaming);
+    }
+
+    const fetchMode = runtime.resolveStreamingFetchMode({
+      domain,
+      scope,
+      shouldStream,
+      isManual: Boolean(options.isManual),
+      streamSignal: Boolean(options.streamSignal),
+      streamingHealthy: this.isStreamingHealthy(domain, scope),
+      hasData: Boolean(getScopedDomainState(domain, scope).data),
+    });
+    return fetchMode === 'skip';
+  }
+
   async fetchScopedDomain<K extends RefreshDomain>(
     domain: K,
     scope: string,
@@ -1198,60 +1324,20 @@ class RefreshOrchestrator {
     }
 
     const runtime = this.getRuntimeForScope(domain, normalizedScope);
-    const hasQueryOnlyDemand =
-      runtime.hasScopedDemand(domain, normalizedScope, 'query') &&
-      !runtime.hasScopedDemand(domain, normalizedScope, 'snapshot');
-    if (options.queryReconcile && hasQueryOnlyDemand) {
-      let streamingHealthy = false;
-      if (config.streaming) {
-        const shouldStream = this.shouldStreamScope(domain, normalizedScope);
-        if (shouldStream) {
-          this.startStreamingScope(domain, normalizedScope, config.streaming);
-          streamingHealthy = this.isStreamingHealthy(domain, normalizedScope);
-        }
-      }
-      if (!options.isManual && streamingHealthy) {
-        return;
-      }
-      setScopedDomainState(domain, normalizedScope, (previous) => ({
-        ...previous,
-        queryReconcileVersion: (previous.queryReconcileVersion ?? 0) + 1,
-        scope: normalizedScope,
-      }));
+    if (this.reconcileQueryOnlyDemand(domain, normalizedScope, options, config, runtime)) {
       return;
     }
 
-    if (config.streaming) {
-      const shouldStream = this.shouldStreamScope(domain, normalizedScope);
-      if (shouldStream) {
-        if (options.isManual) {
-          // For resource-stream (WebSocket) domains, use refreshOnce when
-          // the stream is already connected for immediate delta delivery.
-          // For SSE domains (catalog, events), always fall through to a
-          // snapshot fetch — the SSE stream delivers full snapshots on its
-          // own schedule and refreshStreamingDomainOnce just restarts the
-          // connection, which is wasteful for a manual refresh.
-          if (isResourceStreamDomain(domain) && this.isStreamingActive(domain, normalizedScope)) {
-            await this.refreshStreamingDomainOnce(domain, normalizedScope);
-            return;
-          }
-          // SSE domains and inactive streams fall through to performFetch.
-        } else {
-          this.startStreamingScope(domain, normalizedScope, config.streaming);
-        }
-      }
-      const fetchMode = runtime.resolveStreamingFetchMode({
+    if (
+      await this.reconcileStreamingFetch(
         domain,
-        scope: normalizedScope,
-        shouldStream,
-        isManual: Boolean(options.isManual),
-        streamSignal: Boolean(options.streamSignal),
-        streamingHealthy: this.isStreamingHealthy(domain, normalizedScope),
-        hasData: Boolean(getScopedDomainState(domain, normalizedScope).data),
-      });
-      if (fetchMode === 'skip') {
-        return;
-      }
+        normalizedScope,
+        options,
+        config.streaming,
+        runtime
+      )
+    ) {
+      return;
     }
 
     await this.performFetch(domain, normalizedScope, {
@@ -1262,60 +1348,219 @@ class RefreshOrchestrator {
     });
   }
 
+  private canFetchScope(
+    domain: RefreshDomain,
+    scope: string,
+    options: DomainFetchOptions
+  ): boolean {
+    if (options.signal?.aborted) {
+      return false;
+    }
+    if (!this.isScopeClusterServiceable(scope)) {
+      if (!options.allowDisabledRetainedScope) {
+        this.recordPendingClusterReadiness(domain, scope, options);
+      }
+      return false;
+    }
+    if (!options.allowDisabledRetainedScope && !this.isScopedDomainEnabledInternal(domain, scope)) {
+      resetScopedDomainState(domain, scope);
+      return false;
+    }
+    return true;
+  }
+
+  private claimFetchSlot(
+    domain: RefreshDomain,
+    scope: string,
+    options: DomainFetchOptions,
+    runtime: ClusterRefreshRuntime
+  ): boolean {
+    const currentInFlight = runtime.getInFlight(domain, scope);
+    if (!currentInFlight) {
+      return true;
+    }
+    if (options.isManual) {
+      currentInFlight.controller.abort();
+      this.teardownInFlight(runtime, makeInFlightKey(domain, scope), currentInFlight);
+      return true;
+    }
+    if (options.streamSignal) {
+      // Coalesce doorbells arriving during the request into one trailing
+      // refetch. Aborting here can starve a busy scope indefinitely.
+      currentInFlight.rerunStreamSignal = true;
+    }
+    return false;
+  }
+
+  private beginFetch<K extends RefreshDomain>(
+    domain: K,
+    scope: string,
+    options: DomainFetchOptions,
+    runtime: ClusterRefreshRuntime,
+    previousState: DomainSnapshotState<DomainPayloadMap[K]>,
+    contextVersion: number
+  ): ScopedFetchExecution<K> | null {
+    setScopedDomainState(domain, scope, (previous) => ({
+      ...previous,
+      status: previousState.data ? 'updating' : 'loading',
+      error: null,
+      isManual: options.isManual,
+      scope,
+    }));
+
+    const controller = new AbortController();
+    if (options.signal?.aborted) {
+      return null;
+    }
+    const cleanup = this.forwardAbortSignal(options.signal, controller);
+    const requestId = ++this.requestCounter;
+    const request: InFlightRequest = {
+      controller,
+      isManual: options.isManual,
+      streamSignal: options.streamSignal,
+      requestId,
+      cleanup,
+      contextVersion,
+      domain,
+      scope,
+    };
+    runtime.setInFlight(request);
+    markPendingRequest(1);
+    return { runtime, scope, previousState, controller, requestId, contextVersion };
+  }
+
+  private forwardAbortSignal(
+    signal: AbortSignal | undefined,
+    controller: AbortController
+  ): (() => void) | undefined {
+    if (!signal) {
+      return undefined;
+    }
+    const abortListener = () => controller.abort();
+    signal.addEventListener('abort', abortListener);
+    return () => signal.removeEventListener('abort', abortListener);
+  }
+
+  private fetchCanCommit<K extends RefreshDomain>(execution: ScopedFetchExecution<K>): boolean {
+    return !execution.controller.signal.aborted && execution.contextVersion === this.contextVersion;
+  }
+
+  private applyFetchResult<K extends RefreshDomain>(
+    domain: K,
+    execution: ScopedFetchExecution<K>,
+    options: DomainFetchOptions,
+    result: {
+      snapshot?: Snapshot<DomainPayloadMap[K]>;
+      etag?: string;
+      notModified?: boolean;
+    }
+  ): void {
+    const { scope } = execution;
+    if (result.notModified || !result.snapshot) {
+      if (
+        !options.allowDisabledRetainedScope &&
+        !this.isScopedDomainEnabledInternal(domain, scope)
+      ) {
+        return;
+      }
+      setScopedDomainState(domain, scope, (previous) => ({
+        ...previous,
+        status: previous.data ? 'ready' : 'idle',
+        isManual: options.isManual,
+        lastAutoRefresh: options.isManual ? previous.lastAutoRefresh : Date.now(),
+      }));
+      this.clearRefreshError(domain, scope);
+      return;
+    }
+
+    this.applySnapshot(
+      domain,
+      result.snapshot,
+      result.etag,
+      options.isManual,
+      scope,
+      options.allowDisabledRetainedScope
+    );
+  }
+
+  private handleFetchFailure<K extends RefreshDomain>(
+    domain: K,
+    execution: ScopedFetchExecution<K>,
+    options: DomainFetchOptions,
+    error: unknown
+  ): void {
+    if (!this.fetchCanCommit(execution)) {
+      return;
+    }
+
+    const message = error instanceof Error ? error.message : String(error);
+    if (isSnapshotPermissionDenied(error)) {
+      // A typed 403 is a settled answer and bypasses startup network-error
+      // suppression so automatic retries stop for this scope.
+      setScopedDomainState(domain, execution.scope, (previous) => ({
+        ...previous,
+        status: 'error',
+        error: message,
+        permissionDenied: true,
+        isManual: options.isManual,
+      }));
+      this.notifyRefreshError(domain, execution.scope, message, error, options.correlationId);
+      return;
+    }
+    if (this.errorNotifier.shouldSuppressNetworkError(message)) {
+      setScopedDomainState(domain, execution.scope, (previous) => ({
+        ...previous,
+        status: previous.data ? 'ready' : previous.status,
+        error: null,
+        isManual: options.isManual,
+      }));
+      return;
+    }
+
+    setScopedDomainState(domain, execution.scope, (previous) => ({
+      ...previous,
+      status: 'error',
+      error: message,
+      isManual: options.isManual,
+    }));
+    this.notifyRefreshError(domain, execution.scope, message, error, options.correlationId);
+  }
+
+  private finishFetch<K extends RefreshDomain>(
+    domain: K,
+    execution: ScopedFetchExecution<K>
+  ): void {
+    const { runtime, scope, requestId, contextVersion } = execution;
+    const tracked = runtime.getInFlight(domain, scope);
+    if (tracked?.requestId === requestId) {
+      tracked.cleanup?.();
+      runtime.deleteInFlight(domain, scope);
+      if (tracked.rerunStreamSignal && contextVersion === this.contextVersion) {
+        void this.performFetch(domain, scope, {
+          isManual: false,
+          streamSignal: true,
+        });
+      }
+    }
+    markPendingRequest(-1);
+  }
+
   private async performFetch<K extends RefreshDomain>(
     domain: K,
     scope: string | undefined,
     options: DomainFetchOptions
   ): Promise<void> {
-    // All domains are scoped — normalizeScope without allowEmpty.
     const normalizedScope = this.normalizeDomainScope(domain, scope);
-
-    if (options.signal?.aborted) {
-      return;
-    }
-
-    if (!normalizedScope || normalizedScope.length === 0) {
+    if (!normalizedScope) {
       throw new Error(`Scoped domain "${domain}" requires a valid scope`);
     }
-
-    if (!this.isScopeClusterServiceable(normalizedScope)) {
-      if (!options.allowDisabledRetainedScope) {
-        this.recordPendingClusterReadiness(domain, normalizedScope, options);
-      }
-      return;
-    }
-
-    if (
-      !options.allowDisabledRetainedScope &&
-      !this.isScopedDomainEnabledInternal(domain, normalizedScope)
-    ) {
-      resetScopedDomainState(domain, normalizedScope);
+    if (!this.canFetchScope(domain, normalizedScope, options)) {
       return;
     }
 
     const runtime = this.getRuntimeForScope(domain, normalizedScope);
-    const contextVersion = this.contextVersion;
-    const inFlightKey = makeInFlightKey(domain, normalizedScope);
-    const currentInFlight = runtime.getInFlight(domain, normalizedScope);
-
-    if (currentInFlight) {
-      if (options.isManual) {
-        // Manual fetches always replace whatever is in flight.
-        currentInFlight.controller.abort();
-        this.teardownInFlight(runtime, inFlightKey, currentInFlight);
-      } else if (options.streamSignal) {
-        // The doorbell proves the data changed AFTER the in-flight request
-        // started, so that response is already stale — but dropping the signal
-        // loses the update until an unrelated event, and aborting starves the
-        // scope when signals arrive faster than a round trip. Latch exactly
-        // ONE trailing refetch behind the in-flight request; any number of
-        // signals coalesce into it.
-        currentInFlight.rerunStreamSignal = true;
-        return;
-      } else {
-        // Plain background polls yield to an in-flight request.
-        return;
-      }
+    if (!this.claimFetchSlot(domain, normalizedScope, options, runtime)) {
+      return;
     }
 
     const previousState = getScopedDomainState(domain, normalizedScope);
@@ -1330,141 +1575,33 @@ class RefreshOrchestrator {
     if (!options.isManual && previousState.permissionDenied) {
       return;
     }
-    const nextStatus = previousState.data ? 'updating' : 'loading';
-
-    setScopedDomainState(domain, normalizedScope, (prev) => ({
-      ...prev,
-      status: nextStatus,
-      error: null,
-      isManual: options.isManual,
-      scope: normalizedScope,
-    }));
-
-    const controller = new AbortController();
-    const requestId = ++this.requestCounter;
-
-    let cleanup: (() => void) | undefined;
-    if (options.signal) {
-      if (options.signal.aborted) {
-        return;
-      }
-      const abortListener = () => controller.abort();
-      options.signal.addEventListener('abort', abortListener);
-      cleanup = () => options.signal?.removeEventListener('abort', abortListener);
+    const execution = this.beginFetch(
+      domain,
+      normalizedScope,
+      options,
+      runtime,
+      previousState,
+      this.contextVersion
+    );
+    if (!execution) {
+      return;
     }
 
-    runtime.setInFlight({
-      controller,
-      isManual: options.isManual,
-      streamSignal: options.streamSignal,
-      requestId,
-      cleanup,
-      contextVersion,
-      domain,
-      scope: normalizedScope,
-    });
-
-    markPendingRequest(1);
-
     try {
-      const { snapshot, etag, notModified } = await fetchSnapshot<DomainPayloadMap[K]>(domain, {
+      const result = await fetchSnapshot<DomainPayloadMap[K]>(domain, {
         scope: normalizedScope,
-        signal: controller.signal,
+        signal: execution.controller.signal,
         ifNoneMatch: previousState.sourceVersion ?? previousState.etag,
         manual: Boolean(options.isManual && !isResourceStreamDomain(domain)),
         correlationId: options.correlationId,
       });
-
-      if (controller.signal.aborted) {
-        return;
+      if (this.fetchCanCommit(execution)) {
+        this.applyFetchResult(domain, execution, options, result);
       }
-
-      if (contextVersion !== this.contextVersion) {
-        return;
-      }
-
-      if (notModified || !snapshot) {
-        if (
-          !options.allowDisabledRetainedScope &&
-          !this.isScopedDomainEnabledInternal(domain, normalizedScope)
-        ) {
-          return;
-        }
-        setScopedDomainState(domain, normalizedScope, (prev) => ({
-          ...prev,
-          status: prev.data ? 'ready' : 'idle',
-          isManual: options.isManual,
-          lastAutoRefresh: options.isManual ? prev.lastAutoRefresh : Date.now(),
-        }));
-        this.clearRefreshError(domain, normalizedScope);
-        return;
-      }
-
-      this.applySnapshot(
-        domain,
-        snapshot,
-        etag,
-        options.isManual,
-        normalizedScope,
-        options.allowDisabledRetainedScope
-      );
     } catch (error) {
-      if (controller.signal.aborted) {
-        return;
-      }
-      if (contextVersion !== this.contextVersion) {
-        // Ignore errors from refreshes started before a context switch.
-        return;
-      }
-
-      const message = error instanceof Error ? error.message : String(error);
-      if (isSnapshotPermissionDenied(error)) {
-        // Handled BEFORE the startup grace-window suppression: a typed 403 is
-        // a real answer, not a transient network blip — swallowing it would
-        // leave the scope unmarked and the retry loop running.
-        setScopedDomainState(domain, normalizedScope, (prev) => ({
-          ...prev,
-          status: 'error',
-          error: message,
-          permissionDenied: true,
-          isManual: options.isManual,
-        }));
-        this.notifyRefreshError(domain, normalizedScope, message, error, options.correlationId);
-        return;
-      }
-      if (this.errorNotifier.shouldSuppressNetworkError(message)) {
-        setScopedDomainState(domain, normalizedScope, (prev) => ({
-          ...prev,
-          status: prev.data ? 'ready' : prev.status,
-          error: null,
-          isManual: options.isManual,
-        }));
-        return;
-      }
-
-      setScopedDomainState(domain, normalizedScope, (prev) => ({
-        ...prev,
-        status: 'error',
-        error: message,
-        isManual: options.isManual,
-      }));
-      this.notifyRefreshError(domain, normalizedScope, message, error, options.correlationId);
+      this.handleFetchFailure(domain, execution, options, error);
     } finally {
-      const tracked = runtime.getInFlight(domain, normalizedScope);
-      if (tracked && tracked.requestId === requestId) {
-        tracked.cleanup?.();
-        runtime.deleteInFlight(domain, normalizedScope);
-        // Doorbells that rang during this request latched a trailing refetch:
-        // run it now that the slot is free (one fetch coalesces them all).
-        if (tracked.rerunStreamSignal && contextVersion === this.contextVersion) {
-          void this.performFetch(domain, normalizedScope, {
-            isManual: false,
-            streamSignal: true,
-          });
-        }
-      }
-
-      markPendingRequest(-1);
+      this.finishFetch(domain, execution);
     }
   }
 

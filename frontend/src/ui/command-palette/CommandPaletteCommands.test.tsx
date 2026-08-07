@@ -16,6 +16,7 @@ import {
   setAppPreferencesForTesting,
 } from '@/core/settings/appPreferences';
 import { installWindowProperty } from '@/test-utils/windowProperty';
+import { changeAppearanceMode } from '@/utils/appearanceMode';
 import { type Command, useCommandPaletteCommands } from './CommandPaletteCommands';
 
 const { mocks } = vi.hoisted(() => ({
@@ -38,6 +39,7 @@ const { mocks } = vi.hoisted(() => ({
       setIsAboutOpen: vi.fn(),
       setIsSettingsOpen: vi.fn(),
       setIsObjectDiffOpen: vi.fn(),
+      toggleSidebar: vi.fn(),
       onClusterObjectsClick: vi.fn(),
       setActiveClusterView: vi.fn(),
       navigateToGlobal: vi.fn(),
@@ -172,8 +174,17 @@ describe('CommandPaletteCommands', () => {
     mocks.kubeconfig.openKubeconfig.mockResolvedValue(undefined);
     mocks.kubeconfig.closeKubeconfig.mockReset();
     mocks.kubeconfig.closeKubeconfig.mockResolvedValue(undefined);
+    mocks.namespace.namespaces = [];
+    mocks.namespace.setSelectedNamespace.mockReset();
     mocks.viewState.viewType = 'cluster';
     mocks.viewState.sidebarSelection = undefined;
+    mocks.viewState.setIsAboutOpen.mockReset();
+    mocks.viewState.setIsSettingsOpen.mockReset();
+    mocks.viewState.setIsObjectDiffOpen.mockReset();
+    mocks.viewState.toggleSidebar.mockReset();
+    mocks.viewState.navigateToNamespace.mockReset();
+    mocks.viewState.setActiveNamespaceTab.mockReset();
+    mocks.viewState.onNamespaceSelect.mockReset();
     mocks.kubeconfig.loadKubeconfigs.mockReset();
     mocks.kubeconfig.loadKubeconfigs.mockResolvedValue(undefined);
     mocks.autoRefresh.enabled = true;
@@ -506,6 +517,60 @@ describe('CommandPaletteCommands', () => {
     expect(commands.find((entry) => entry.id === 'mode-system')?.label).toBe(
       'Follow the system for light/dark mode'
     );
+
+    unmount();
+  });
+
+  it('routes application and appearance commands to their registered actions', async () => {
+    const { getCommands, unmount } = renderHook();
+    const commands = new Map(getCommands().map((command) => [command.id, command]));
+
+    await act(async () => {
+      commands.get('open-about')?.action();
+      commands.get('open-settings')?.action();
+      commands.get('toggle-sidebar')?.action();
+      commands.get('open-object-diff')?.action();
+      commands.get('toggle-application-logs')?.action();
+      commands.get('toggle-diagnostics')?.action();
+      await commands.get('mode-system')?.action();
+      await commands.get('mode-light')?.action();
+      await commands.get('mode-dark')?.action();
+    });
+
+    expect(mocks.viewState.setIsAboutOpen).toHaveBeenCalledWith(true);
+    expect(mocks.viewState.setIsSettingsOpen).toHaveBeenCalledWith(true);
+    expect(mocks.viewState.toggleSidebar).toHaveBeenCalledTimes(1);
+    expect(mocks.viewState.setIsObjectDiffOpen).toHaveBeenCalledWith(true);
+    expect(changeAppearanceMode).toHaveBeenNthCalledWith(1, 'system');
+    expect(changeAppearanceMode).toHaveBeenNthCalledWith(2, 'light');
+    expect(changeAppearanceMode).toHaveBeenNthCalledWith(3, 'dark');
+
+    unmount();
+  });
+
+  it('routes namespace view and namespace selection commands through their navigation contracts', () => {
+    mocks.viewState.sidebarSelection = { type: 'namespace', value: 'default' };
+    mocks.namespace.namespaces = [
+      { name: 'Default', scope: 'default' },
+      { name: 'All Namespaces', scope: 'namespace:all' },
+    ];
+
+    const { getCommands, unmount } = renderHook();
+    const commands = new Map(getCommands().map((command) => [command.id, command]));
+
+    act(() => {
+      commands.get('namespace-map')?.action();
+      commands.get('namespace-default')?.action();
+      commands.get('namespace-namespace:all')?.action();
+    });
+
+    expect(mocks.viewState.navigateToNamespace).toHaveBeenCalledTimes(1);
+    expect(mocks.viewState.setActiveNamespaceTab).toHaveBeenNthCalledWith(1, 'map');
+    expect(mocks.namespace.setSelectedNamespace).toHaveBeenNthCalledWith(1, 'default');
+    expect(mocks.namespace.setSelectedNamespace).toHaveBeenNthCalledWith(2, 'namespace:all');
+    expect(mocks.viewState.onNamespaceSelect).toHaveBeenNthCalledWith(1, 'default');
+    expect(mocks.viewState.onNamespaceSelect).toHaveBeenNthCalledWith(2, 'namespace:all');
+    expect(mocks.viewState.setActiveNamespaceTab).toHaveBeenNthCalledWith(2, 'workloads');
 
     unmount();
   });

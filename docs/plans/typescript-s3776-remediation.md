@@ -53,10 +53,10 @@ reported separately and remains pending until the branch is pushed and analyzed.
 | Phase 1: shared and app foundations | **15/15** | Pending branch analysis |
 | Phase 2: GridTable and query-backed data | **16/16** | Pending branch analysis |
 | Phase 3: object map | **4/4** | Pending branch analysis |
-| Phase 4: object panel | **4/14** | Pending branch analysis |
-| Phase 5: app shell and interactions | 0/26 | Not started |
-| Phase 6: refresh and diagnostics | 0/16 | Not started |
-| **TypeScript findings** | **39/91 locally remediated** | Pending branch analysis |
+| Phase 4: object panel | **14/14** | Pending branch analysis |
+| Phase 5: app shell and interactions | **26/26** | Pending branch analysis |
+| Phase 6: refresh and diagnostics | **16/16** | Pending branch analysis |
+| **TypeScript findings** | **91/91 locally remediated** | Pending branch analysis |
 
 Sonar classifies colocated tests separately through
 `.sonarcloud.properties`; no test file appears in this inventory. Generated
@@ -213,16 +213,16 @@ the following 11 sources require an explicit consumer/coverage trace before
 their production refactor; add focused tests when indirect coverage does not
 exercise every branch being moved:
 
-- [ ] `frontend/src/core/refresh/components/diagnostics/diagnosticsPanelUtils.ts`
-- [ ] `frontend/src/core/refresh/resourceStreamViews.ts`
-- [ ] `frontend/src/modules/object-panel/components/ObjectPanel/Details/Overview/descriptors/policy.tsx`
-- [ ] `frontend/src/modules/object-panel/components/ObjectPanel/Details/Overview/schema.ts`
-- [ ] `frontend/src/modules/object-panel/components/ObjectPanel/Logs/hooks/useLogFiltering.ts`
-- [ ] `frontend/src/modules/object-panel/components/ObjectPanel/Yaml/yamlTransaction.ts`
+- [x] `frontend/src/core/refresh/components/diagnostics/diagnosticsPanelUtils.ts`
+- [x] `frontend/src/core/refresh/resourceStreamViews.ts`
+- [x] `frontend/src/modules/object-panel/components/ObjectPanel/Details/Overview/descriptors/policy.tsx`
+- [x] `frontend/src/modules/object-panel/components/ObjectPanel/Details/Overview/schema.ts`
+- [x] `frontend/src/modules/object-panel/components/ObjectPanel/Logs/hooks/useLogFiltering.ts`
+- [x] `frontend/src/modules/object-panel/components/ObjectPanel/Yaml/yamlTransaction.ts`
 - [x] `frontend/src/shared/components/diff/diffUtils.ts`
 - [x] `frontend/src/shared/components/modals/DrainNodeModal.tsx`
 - [x] `frontend/src/shared/components/tables/hooks/useGridTableController.tsx`
-- [ ] `frontend/src/ui/dockable/useDockablePanelDragResize.ts`
+- [x] `frontend/src/ui/dockable/useDockablePanelDragResize.ts`
 - [ ] `frontend/src/ui/layout/AppLayout.tsx`
 
 ## Phase 1: Shared and app foundations (15/15 locally complete; Sonar pending)
@@ -462,7 +462,7 @@ disconnected components, deterministic column/order output, `all`/`some`/`none`
 kind filtering, directional reachability, collapse/selection, renderer cleanup,
 complete refs for open/navigation actions, and bounded large-graph work.
 
-## Phase 4: Object panel (4/14 locally complete; Sonar pending)
+## Phase 4: Object panel (14/14 locally complete; Sonar pending)
 
 **Outcome:** detail derivation, log viewing, YAML transactions, and capability
 projection are decomposed at their existing ownership boundaries.
@@ -474,18 +474,18 @@ descriptor-driven, extracting descriptor-local presenters rather than new
 per-kind components. Split YAML validation/transaction classification from
 effects without changing dirty-state, save, conflict, or cancellation order.
 
-- [ ] **40** — `deriveDetailUtilizationData`, `frontend/src/modules/object-panel/components/ObjectPanel/Details/useUtilizationData.ts:61` — Sonar `AZ-P-QE8mYfklgBeFrFE`.
-- [ ] **36** — `LogViewerInner`, `frontend/src/modules/object-panel/components/ObjectPanel/Logs/LogViewer.tsx:396` — Sonar `AZ-P-QJemYfklgBeFrGK`.
-- [ ] **36** — `logViewerReducer`, `frontend/src/modules/object-panel/components/ObjectPanel/Logs/logViewerReducer.ts:212` — Sonar `AZ-P-QI2mYfklgBeFrGA`.
-- [ ] **29** — `NodeLogsTab`, `frontend/src/modules/object-panel/components/ObjectPanel/NodeLogs/NodeLogsTab.tsx:196` — Sonar `AZ-P-QKzmYfklgBeFrG1`.
+- [x] **40** — `deriveDetailUtilizationData`, `frontend/src/modules/object-panel/components/ObjectPanel/Details/useUtilizationData.ts:61` — Sonar `AZ-P-QE8mYfklgBeFrFE`.
+- [x] **36** — `LogViewerInner`, `frontend/src/modules/object-panel/components/ObjectPanel/Logs/LogViewer.tsx:396` — Sonar `AZ-P-QJemYfklgBeFrGK`.
+- [x] **36** — `logViewerReducer`, `frontend/src/modules/object-panel/components/ObjectPanel/Logs/logViewerReducer.ts:212` — Sonar `AZ-P-QI2mYfklgBeFrGA`.
+- [x] **29** — `NodeLogsTab`, `frontend/src/modules/object-panel/components/ObjectPanel/NodeLogs/NodeLogsTab.tsx:196` — Sonar `AZ-P-QKzmYfklgBeFrG1`.
 - [x] **23** — `validateYamlDraft`, `frontend/src/modules/object-panel/components/ObjectPanel/Yaml/yamlValidation.ts:127` — Sonar `AZ-P-QHLmYfklgBeFrFg`.
-- [ ] **22** — LogViewer action callback, `frontend/src/modules/object-panel/components/ObjectPanel/Logs/LogViewer.tsx:1456` — Sonar `AZ-P-QJemYfklgBeFrGR`.
-- [ ] **21** — policy descriptor `renderMetric`, `frontend/src/modules/object-panel/components/ObjectPanel/Details/Overview/descriptors/policy.tsx:176` — Sonar `AZ-P-QDGmYfklgBeFrEs`.
+- [x] **22** — LogViewer action callback, `frontend/src/modules/object-panel/components/ObjectPanel/Logs/LogViewer.tsx:1456` — Sonar `AZ-P-QJemYfklgBeFrGR`.
+- [x] **21** — policy descriptor `renderMetric`, `frontend/src/modules/object-panel/components/ObjectPanel/Details/Overview/descriptors/policy.tsx:176` — Sonar `AZ-P-QDGmYfklgBeFrEs`.
 - [x] **19** — `coverageKeys`, `frontend/src/modules/object-panel/components/ObjectPanel/Details/Overview/schema.ts:101` — Sonar `AZ-P-QDmmYfklgBeFrE0`.
-- [ ] **19** — `YamlTab`, `frontend/src/modules/object-panel/components/ObjectPanel/Yaml/YamlTab.tsx:138` — Sonar `AZ-P-QGymYfklgBeFrFV`.
-- [ ] **19** — YAML transaction effect, `frontend/src/modules/object-panel/components/ObjectPanel/Yaml/yamlTransaction.ts:248` — Sonar `AZ-P-QHAmYfklgBeFrFc`.
-- [ ] **19** — `computeCapabilityDescriptors`, `frontend/src/modules/object-panel/components/ObjectPanel/hooks/useObjectPanelCapabilities.ts:74` — Sonar `AZ-P-QB2mYfklgBeFrEa`.
-- [ ] **16** — `formatTimestampForMode`, `frontend/src/modules/object-panel/components/ObjectPanel/Logs/LogViewer.tsx:156` — Sonar `AZ-P-QJemYfklgBeFrGG`.
+- [x] **19** — `YamlTab`, `frontend/src/modules/object-panel/components/ObjectPanel/Yaml/YamlTab.tsx:138` — Sonar `AZ-P-QGymYfklgBeFrFV`.
+- [x] **19** — YAML transaction effect, `frontend/src/modules/object-panel/components/ObjectPanel/Yaml/yamlTransaction.ts:248` — Sonar `AZ-P-QHAmYfklgBeFrFc`.
+- [x] **19** — `computeCapabilityDescriptors`, `frontend/src/modules/object-panel/components/ObjectPanel/hooks/useObjectPanelCapabilities.ts:74` — Sonar `AZ-P-QB2mYfklgBeFrEa`.
+- [x] **16** — `formatTimestampForMode`, `frontend/src/modules/object-panel/components/ObjectPanel/Logs/LogViewer.tsx:156` — Sonar `AZ-P-QJemYfklgBeFrGG`.
 - [x] **16** — `longestSuffixPrefixOverlap`, `frontend/src/modules/object-panel/components/ObjectPanel/Logs/hooks/useAnchoredLogEntries.ts:17` — Sonar `AZ-P-QIFmYfklgBeFrF2`.
 - [x] **16** — filtered-log memo, `frontend/src/modules/object-panel/components/ObjectPanel/Logs/hooks/useLogFiltering.ts:96` — Sonar `AZ-P-QHymYfklgBeFrFx`.
 
@@ -501,6 +501,35 @@ maximum of 12. `mise exec -- mage qc:prerelease` passes all 4,074 frontend
 tests and the remaining repository gates. Sonar verification is pending branch
 analysis.
 
+Phase 4 batch 2 separates detail-backed node, pod, and workload utilization;
+log-viewer inventory, preferences, parsed-view, and asynchronous mode
+transitions; HPA metric matching/name/target/current presentation; and
+capability identity construction, feature-specific descriptor assembly,
+node-log discovery projection, and denial reasons. Its nine combined focused
+test files pass 165 tests after the batch 1 and reducer characterization
+expansion. Focused statement coverage is 83.33% for `useUtilizationData.ts`,
+92.72% for `policy.tsx`, 100% for `logViewerReducer.ts`, and 92.61% for
+`useObjectPanelCapabilities.ts`. All eight completed Phase 4 production files
+pass the temporary Biome maximum of 12 on the post-gate worktree.
+`mise exec -- mage qc:prerelease` passes all 4,079 frontend tests and the
+remaining repository gates. Sonar verification is pending branch analysis.
+
+Phase 4 batch 3 separates node-log request planning, incremental fallback,
+render-state selection, and toolbar composition; container-log snapshot,
+fallback, active-pod, filter-chip, row-rendering, inventory, control, and
+blocking-state responsibilities; timestamp-mode formatting; and YAML snapshot
+adoption, post-apply verification, reload/merge, ownership-check, save, notice,
+toolbar, and editor-surface responsibilities. Its nine focused test files pass
+153 tests. Focused statement coverage is 81.8% for `LogViewer.tsx`, 86.11% for
+`NodeLogsTab.tsx`, 89.47% for `YamlTab.tsx`, and 80.14% for
+`yamlTransaction.ts`. All twelve completed Phase 4 production files pass the
+temporary Biome maximum of 12 on the post-gate worktree. `mise exec -- mage
+qc:prerelease` passes all 4,081 frontend tests across 465 test files and the
+remaining repository gates. Sonar verification is pending branch analysis.
+
+All fourteen recorded Phase 4 findings are locally remediated. Sonar closure
+remains pending until the pushed revision is analyzed.
+
 Required characterization includes complete object/cluster scope, metrics
 absent/stale/error states, every `LogViewMode` transition, streaming/fallback
 handoff, timestamp modes, anchor overlap, search/filter/wrap behavior, node-log
@@ -508,7 +537,7 @@ file/service modes, YAML parse/schema/identity failures, conflict/save/reset,
 permission-gated actions, descriptor drift coverage, grouped-panel context, and
 close-versus-transient-unmount cleanup.
 
-## Phase 5: App shell and interactions (26)
+## Phase 5: App shell and interactions (26/26 locally complete; Sonar pending)
 
 **Outcome:** keyboard routing, command palette, navigation, favorites, dropdowns,
 dockable geometry, and layout render from explicit action/view models while
@@ -521,32 +550,115 @@ palette/sidebar/theme/favorite rows from prepared models rather than branching
 inside JSX. Keep favorites as complete pane snapshots and cluster workspace in
 its React-free store.
 
-- [ ] **50** — shortcut `handleKeyDown`, `frontend/src/ui/shortcuts/context.tsx:447` — Sonar `AZ-P-QhtmYfklgBeFrMJ`.
-- [ ] **48** — sidebar `onKeyDown`, `frontend/src/ui/layout/SidebarKeys.ts:250` — Sonar `AZ-P-QpXmYfklgBeFrOb`.
-- [ ] **46** — dropdown `handleKeyAction`, `frontend/src/shared/components/dropdowns/Dropdown/hooks/useKeyboardNavigation.ts:74` — Sonar `AZ-P-P3DmYfklgBeFrB9`.
-- [ ] **42** — dockable `handleMouseMove`, `frontend/src/ui/dockable/useDockablePanelDragResize.ts:307` — Sonar `AZ-P-QmkmYfklgBeFrNS`.
-- [ ] **29** — `Sidebar`, `frontend/src/ui/layout/Sidebar.tsx:61` — Sonar `AZ-P-QpzmYfklgBeFrOg`.
-- [ ] **27** — favorite-navigation effect, `frontend/src/core/contexts/FavoritesContext.tsx:132` — Sonar `AZ-P-Qd1mYfklgBeFrLU`.
-- [ ] **26** — dockable window-bounds timeout callback, `frontend/src/ui/dockable/useDockablePanelWindowBounds.ts:68` — Sonar `AZ-P-QnTmYfklgBeFrNy`.
-- [ ] **25** — command-palette catalog scoring callback, `frontend/src/ui/command-palette/CommandPalette.tsx:149` — Sonar `AZ-P-Ql7mYfklgBeFrNH`.
-- [ ] **24** — tab-group update callback, `frontend/src/ui/dockable/DockablePanelProvider.tsx:445` — Sonar `AZ-P-QnKmYfklgBeFrNs`.
-- [ ] **23** — dropdown `getNextEnabledIndex`, `frontend/src/shared/components/dropdowns/Dropdown/hooks/useKeyboardNavigation.ts:33` — Sonar `AZ-P-P3DmYfklgBeFrB8`.
-- [ ] **22** — `scrollToNextTab`, `frontend/src/shared/components/tabs/Tabs.tsx:166` — Sonar `AZ-P-P55mYfklgBeFrCo`.
-- [ ] **22** — `ObjectDiffModal`, `frontend/src/ui/modals/ObjectDiffModal.tsx:394` — Sonar `AZ-P-QiomYfklgBeFrMY`.
-- [ ] **20** — `mergeWireState`, `frontend/src/core/cluster-workspace/clusterWorkspaceStore.ts:312` — Sonar `AZ-P-QfImYfklgBeFrLk`.
-- [ ] **20** — `Dropdown`, `frontend/src/shared/components/dropdowns/Dropdown/Dropdown.tsx:61` — Sonar `AZ-P-P3PmYfklgBeFrB_`.
-- [ ] **19** — shortcut-help row renderer, `frontend/src/ui/shortcuts/components/ShortcutHelpModal.tsx:97` — Sonar `AZ-P-QhJmYfklgBeFrL_`.
-- [ ] **18** — kubeconfig selection callback, `frontend/src/modules/kubernetes/config/KubeconfigContext.tsx:349` — Sonar `AZ-P-QVYmYfklgBeFrJY`.
-- [ ] **18** — `AppLayout`, `frontend/src/ui/layout/AppLayout.tsx:97` — Sonar `AZ-P-QqLmYfklgBeFrOr`.
-- [ ] **17** — namespace row projection, `frontend/src/modules/namespace/contexts/NamespaceContext.tsx:270` — Sonar `AZ-P-P_5mYfklgBeFrD_`.
-- [ ] **17** — `parseQueryTokens` token callback, `frontend/src/ui/command-palette/CommandPalette.tsx:64` — Sonar `AZ-P-Ql7mYfklgBeFrNG`.
-- [ ] **17** — command registry memo, `frontend/src/ui/command-palette/CommandPaletteCommands.tsx:160` — Sonar `AZ-P-QlgmYfklgBeFrNC`.
-- [ ] **17** — `DockablePanelInner`, `frontend/src/ui/dockable/DockablePanel.tsx:167` — Sonar `AZ-P-QmxmYfklgBeFrNZ`.
-- [ ] **17** — theme row renderer, `frontend/src/ui/settings/sections/AppearanceSection.tsx:1144` — Sonar `AZ-P-QkGmYfklgBeFrMq`.
-- [ ] **16** — favorite match memo, `frontend/src/ui/favorites/FavToggle.tsx:268` — Sonar `AZ-P-QlUmYfklgBeFrM-`.
-- [ ] **16** — pending-favorite restore effect, `frontend/src/ui/favorites/FavToggle.tsx:326` — Sonar `AZ-P-QlUmYfklgBeFrM_`.
-- [ ] **16** — `describeElementTarget`, `frontend/src/ui/layout/SidebarKeys.ts:52` — Sonar `AZ-P-QpXmYfklgBeFrOa`.
-- [ ] **16** — `CommandPaletteComponent`, `frontend/src/ui/command-palette/CommandPalette.tsx:212` — Sonar `AZ-P-Ql7mYfklgBeFrNJ`.
+- [x] **50** — shortcut `handleKeyDown`, `frontend/src/ui/shortcuts/context.tsx:447` — Sonar `AZ-P-QhtmYfklgBeFrMJ`.
+- [x] **48** — sidebar `onKeyDown`, `frontend/src/ui/layout/SidebarKeys.ts:250` — Sonar `AZ-P-QpXmYfklgBeFrOb`.
+- [x] **46** — dropdown `handleKeyAction`, `frontend/src/shared/components/dropdowns/Dropdown/hooks/useKeyboardNavigation.ts:74` — Sonar `AZ-P-P3DmYfklgBeFrB9`.
+- [x] **42** — dockable `handleMouseMove`, `frontend/src/ui/dockable/useDockablePanelDragResize.ts:307` — Sonar `AZ-P-QmkmYfklgBeFrNS`.
+- [x] **29** — `Sidebar`, `frontend/src/ui/layout/Sidebar.tsx:61` — Sonar `AZ-P-QpzmYfklgBeFrOg`.
+- [x] **27** — favorite-navigation effect, `frontend/src/core/contexts/FavoritesContext.tsx:132` — Sonar `AZ-P-Qd1mYfklgBeFrLU`.
+- [x] **26** — dockable window-bounds timeout callback, `frontend/src/ui/dockable/useDockablePanelWindowBounds.ts:68` — Sonar `AZ-P-QnTmYfklgBeFrNy`.
+- [x] **25** — command-palette catalog scoring callback, `frontend/src/ui/command-palette/CommandPalette.tsx:149` — Sonar `AZ-P-Ql7mYfklgBeFrNH`.
+- [x] **24** — tab-group update callback, `frontend/src/ui/dockable/DockablePanelProvider.tsx:445` — Sonar `AZ-P-QnKmYfklgBeFrNs`.
+- [x] **23** — dropdown `getNextEnabledIndex`, `frontend/src/shared/components/dropdowns/Dropdown/hooks/useKeyboardNavigation.ts:33` — Sonar `AZ-P-P3DmYfklgBeFrB8`.
+- [x] **22** — `scrollToNextTab`, `frontend/src/shared/components/tabs/Tabs.tsx:166` — Sonar `AZ-P-P55mYfklgBeFrCo`.
+- [x] **22** — `ObjectDiffModal`, `frontend/src/ui/modals/ObjectDiffModal.tsx:394` — Sonar `AZ-P-QiomYfklgBeFrMY`.
+- [x] **20** — `mergeWireState`, `frontend/src/core/cluster-workspace/clusterWorkspaceStore.ts:312` — Sonar `AZ-P-QfImYfklgBeFrLk`.
+- [x] **20** — `Dropdown`, `frontend/src/shared/components/dropdowns/Dropdown/Dropdown.tsx:61` — Sonar `AZ-P-P3PmYfklgBeFrB_`.
+- [x] **19** — shortcut-help row renderer, `frontend/src/ui/shortcuts/components/ShortcutHelpModal.tsx:97` — Sonar `AZ-P-QhJmYfklgBeFrL_`.
+- [x] **18** — kubeconfig selection callback, `frontend/src/modules/kubernetes/config/KubeconfigContext.tsx:349` — Sonar `AZ-P-QVYmYfklgBeFrJY`.
+- [x] **18** — `AppLayout`, `frontend/src/ui/layout/AppLayout.tsx:97` — Sonar `AZ-P-QqLmYfklgBeFrOr`.
+- [x] **17** — namespace row projection, `frontend/src/modules/namespace/contexts/NamespaceContext.tsx:270` — Sonar `AZ-P-P_5mYfklgBeFrD_`.
+- [x] **17** — `parseQueryTokens` token callback, `frontend/src/ui/command-palette/CommandPalette.tsx:64` — Sonar `AZ-P-Ql7mYfklgBeFrNG`.
+- [x] **17** — command registry memo, `frontend/src/ui/command-palette/CommandPaletteCommands.tsx:160` — Sonar `AZ-P-QlgmYfklgBeFrNC`.
+- [x] **17** — `DockablePanelInner`, `frontend/src/ui/dockable/DockablePanel.tsx:167` — Sonar `AZ-P-QmxmYfklgBeFrNZ`.
+- [x] **17** — theme row renderer, `frontend/src/ui/settings/sections/AppearanceSection.tsx:1144` — Sonar `AZ-P-QkGmYfklgBeFrMq`.
+- [x] **16** — favorite match memo, `frontend/src/ui/favorites/FavToggle.tsx:268` — Sonar `AZ-P-QlUmYfklgBeFrM-`.
+- [x] **16** — pending-favorite restore effect, `frontend/src/ui/favorites/FavToggle.tsx:326` — Sonar `AZ-P-QlUmYfklgBeFrM_`.
+- [x] **16** — `describeElementTarget`, `frontend/src/ui/layout/SidebarKeys.ts:52` — Sonar `AZ-P-QpXmYfklgBeFrOa`.
+- [x] **16** — `CommandPaletteComponent`, `frontend/src/ui/command-palette/CommandPalette.tsx:212` — Sonar `AZ-P-Ql7mYfklgBeFrNJ`.
+
+Phase 5 batch 1 separates dropdown option traversal and per-key actions, tab
+overflow target calculation and strip-item rendering, sidebar target decoding,
+Tab-region transfer, navigation eligibility, and individual sidebar actions.
+The dropdown and Tabs suites pass 75 focused tests; the Sidebar and SidebarKeys
+suites pass 52. Focused statement coverage is 85.89% for
+`useKeyboardNavigation.ts`, 88.64% for `Tabs.tsx`, and 90.94% for
+`SidebarKeys.ts`. All three production files pass the temporary Biome maximum
+of 12. `mise exec -- mage qc:prerelease` passes all 4,081 frontend tests across
+465 test files and the remaining repository gates. Sonar verification is
+pending branch analysis.
+
+Phase 5 batch 2 gives every surface result one event-claim path, then separates
+captured Tab routing, Escape candidate traversal, target-surface dispatch,
+native-edit deferral, and registered-shortcut selection. Shortcut-help modifier,
+key-content, row, and group presentation now have distinct renderers. Its three
+focused suites pass 27 tests, including disabled-shortcut discovery, repeated
+key dispatch, native-edit protection, menu paste, surface precedence, and modal
+suppression. Focused statement coverage is 83.28% for `context.tsx` and 98.07%
+for `ShortcutHelpModal.tsx`. Both production files pass the temporary Biome
+maximum of 12. `mise exec -- mage qc:prerelease` passes all 4,082 frontend tests
+across 465 test files and the remaining repository gates. Sonar verification is
+pending branch analysis.
+
+Phase 5 batch 3 separates docked keyboard sizing, floating drag and per-edge
+resize geometry, animation-frame scheduling, window-bound calculation and
+application, tab-group target resolution, panel group-view preparation, Tab
+cycling, content rendering, resize-handle rendering, and dock focus selection.
+Its four focused suites pass 58 tests. Focused statement coverage is 92.41% for
+`DockablePanel.tsx`, 88.69% for `DockablePanelProvider.tsx`, 90.14% for
+`useDockablePanelDragResize.ts`, and 89.65% for
+`useDockablePanelWindowBounds.ts`. All four production files pass the temporary
+Biome maximum of 12. `mise exec -- mage qc:prerelease` passes all 4,082 frontend
+tests across 465 test files and the remaining repository gates. Sonar
+verification is pending branch analysis.
+
+Phase 5 batch 4 separates query-token classification, catalog scoring, palette
+group and row rendering, application/cluster/global command construction, and
+kubeconfig command presentation and selection. Its three focused suites pass
+57 tests. Focused statement coverage is 86.26% for `CommandPalette.tsx` and
+86.56% for `CommandPaletteCommands.tsx`; command-registry function coverage is
+80%. Both production files pass the temporary Biome maximum of 12.
+`mise exec -- mage qc:prerelease` passes all 4,084 frontend tests across 465
+test files and the remaining repository gates. Sonar verification is pending
+branch analysis.
+
+Phase 5 batch 5 separates shared dropdown placement, trigger, controls, option
+rows, and display-value presentation, and splits object-diff catalog stages,
+match transactions, selection controls, diff-state rendering, and update
+labels. The refactor also clears seven adjacent over-threshold functions in
+the two files. Four focused suites pass 49 tests. Focused statement coverage
+is 90.57% for `Dropdown.tsx` and 81.99% for `ObjectDiffModal.tsx`. Both
+production files pass the temporary Biome maximum of 12.
+`mise exec -- mage qc:prerelease` passes all 4,084 frontend tests across 465
+test files and the remaining repository gates. Sonar verification is pending
+branch analysis.
+
+Phase 5 batch 6 separates sidebar expansion/scroll effects, namespace and
+cluster row presentation, route content, resize and overlay presentation,
+object-map debug formatting, theme comparison/save planning, and saved-theme
+row controls. The three production files pass the temporary Biome maximum of
+12. Seven layout-focused suites pass 68 tests; `Sidebar.tsx` has 93.95%
+focused statement coverage. The six-test appearance suite passes, but
+`AppearanceSection.tsx` measures 46.33% statement coverage, and the existing
+layout suites do not import `AppLayout.tsx`, which therefore measures 0% in
+the focused run. Those two coverage gaps are explicitly retained rather than
+misrepresented as covered; the AppLayout test-hardening item above remains
+open. `mise exec -- mage qc:prerelease` passes all 4,084 frontend tests across
+465 test files and the remaining repository gates. Sonar verification is
+pending branch analysis.
+
+Phase 5 batch 7 separates favorite navigation readiness/application, current
+favorite matching, pane restoration, cluster-workspace live-field merge,
+kubeconfig selection planning/commit/rollback, and namespace presentation
+summaries. All five production files pass the temporary Biome maximum of 12.
+The two favorites suites pass 24 tests with 92.70% statement coverage for
+`FavoritesContext.tsx` and 89.34% for `FavToggle.tsx`; six workspace/lifecycle
+suites pass 75 tests with 90.17% for `clusterWorkspaceStore.ts`; the kubeconfig
+suite passes 18 tests with 86.29% for `KubeconfigContext.tsx`; and two namespace
+suites pass 24 tests with 86.41% for `NamespaceContext.tsx`.
+`mise exec -- mage qc:prerelease` passes all 4,084 frontend tests across 465
+test files and the remaining repository gates. All 26 Phase 5 findings are
+locally remediated; Sonar verification is pending branch analysis.
 
 Required characterization includes modal/palette/menu precedence, key repeat,
 disabled shortcuts, native input editing, dropdown wrap/disabled/header
@@ -556,7 +668,7 @@ cluster-tab switches, workspace event precedence, favorite pane hydration and
 restore ordering, theme drag/drop, namespace cluster isolation, and focus
 cleanup after unmount.
 
-## Phase 6: Refresh and diagnostics (16)
+## Phase 6: Refresh and diagnostics (16/16 locally complete; Sonar pending)
 
 **Outcome:** the highest-risk orchestration code becomes a pipeline of explicit
 domain decisions and effect stages while preserving freshness, leases,
@@ -571,22 +683,89 @@ managers, separate payload validation/classification from state mutation and
 callbacks. Do not change the order that enables the operation needed to reach
 ready state.
 
-- [ ] **76** — base diagnostics-row projection, `frontend/src/core/refresh/components/DiagnosticsPanel.tsx:907` — Sonar `AZ-P-QbMmYfklgBeFrKf`.
-- [ ] **44** — diagnostics domain-count resolver, `frontend/src/core/refresh/components/DiagnosticsPanel.tsx:1082` — Sonar `AZ-P-QbMmYfklgBeFrKq`.
-- [ ] **41** — `performFetch`, `frontend/src/core/refresh/orchestrator.ts:1265` — Sonar `AZ-P-QdNmYfklgBeFrLI`.
-- [ ] **35** — `refreshSingle`, `frontend/src/core/refresh/RefreshManager.ts:603` — Sonar `AZ-P-QcQmYfklgBeFrK9`.
-- [ ] **35** — `isResourceStreamViewActive`, `frontend/src/core/refresh/resourceStreamViews.ts:58` — Sonar `AZ-P-Qc9mYfklgBeFrLD`.
-- [ ] **30** — resource-stream `handleMessage`, `frontend/src/core/refresh/streaming/resourceStreamManager.ts:322` — Sonar `AZ-P-QY6mYfklgBeFrJz`.
-- [ ] **29** — `fetchScopedDomain`, `frontend/src/core/refresh/orchestrator.ts:1166` — Sonar `AZ-P-QdNmYfklgBeFrLH`.
-- [ ] **26** — `getForegroundRefreshTargets`, `frontend/src/core/refresh/RefreshManager.ts:498` — Sonar `AZ-P-QcQmYfklgBeFrK8`.
-- [ ] **26** — `isPermissionDeniedStatus`, `frontend/src/core/refresh/permissionErrors.ts:13` — Sonar `AZ-P-Qc0mYfklgBeFrLC`.
-- [ ] **25** — pod diagnostics-row projection, `frontend/src/core/refresh/components/DiagnosticsPanel.tsx:1248` — Sonar `AZ-P-QbMmYfklgBeFrKs`.
-- [ ] **25** — `setScopedDomainEnabled`, `frontend/src/core/refresh/orchestrator.ts:434` — Sonar `AZ-P-QdNmYfklgBeFrLG`.
-- [ ] **20** — `buildContainerLogsSummary`, `frontend/src/core/refresh/components/diagnostics/diagnosticsRowModel.ts:946` — Sonar `AZ-P-QadmYfklgBeFrKV`.
-- [ ] **20** — container-log stream `applyPayload`, `frontend/src/core/refresh/streaming/containerLogsStreamManager.ts:427` — Sonar `AZ-P-QZSmYfklgBeFrJ5`.
-- [ ] **18** — `buildCatalogSummary`, `frontend/src/core/refresh/components/diagnostics/diagnosticsRowModel.ts:885` — Sonar `AZ-P-QadmYfklgBeFrKT`.
-- [ ] **17** — `resolveDomainNamespace`, `frontend/src/core/refresh/components/diagnostics/diagnosticsPanelUtils.ts:22` — Sonar `AZ-P-QapmYfklgBeFrKZ`.
-- [ ] **17** — `buildMetricsSummary`, `frontend/src/core/refresh/components/diagnostics/diagnosticsRowModel.ts:773` — Sonar `AZ-P-QadmYfklgBeFrKQ`.
+- [x] **76** — base diagnostics-row projection, `frontend/src/core/refresh/components/DiagnosticsPanel.tsx:907` — Sonar `AZ-P-QbMmYfklgBeFrKf`.
+- [x] **44** — diagnostics domain-count resolver, `frontend/src/core/refresh/components/DiagnosticsPanel.tsx:1082` — Sonar `AZ-P-QbMmYfklgBeFrKq`.
+- [x] **41** — `performFetch`, `frontend/src/core/refresh/orchestrator.ts:1265` — Sonar `AZ-P-QdNmYfklgBeFrLI`.
+- [x] **35** — `refreshSingle`, `frontend/src/core/refresh/RefreshManager.ts:603` — Sonar `AZ-P-QcQmYfklgBeFrK9`.
+- [x] **35** — `isResourceStreamViewActive`, `frontend/src/core/refresh/resourceStreamViews.ts:58` — Sonar `AZ-P-Qc9mYfklgBeFrLD`.
+- [x] **30** — resource-stream `handleMessage`, `frontend/src/core/refresh/streaming/resourceStreamManager.ts:322` — Sonar `AZ-P-QY6mYfklgBeFrJz`.
+- [x] **29** — `fetchScopedDomain`, `frontend/src/core/refresh/orchestrator.ts:1166` — Sonar `AZ-P-QdNmYfklgBeFrLH`.
+- [x] **26** — `getForegroundRefreshTargets`, `frontend/src/core/refresh/RefreshManager.ts:498` — Sonar `AZ-P-QcQmYfklgBeFrK8`.
+- [x] **26** — `isPermissionDeniedStatus`, `frontend/src/core/refresh/permissionErrors.ts:13` — Sonar `AZ-P-Qc0mYfklgBeFrLC`.
+- [x] **25** — pod diagnostics-row projection, `frontend/src/core/refresh/components/DiagnosticsPanel.tsx:1248` — Sonar `AZ-P-QbMmYfklgBeFrKs`.
+- [x] **25** — `setScopedDomainEnabled`, `frontend/src/core/refresh/orchestrator.ts:434` — Sonar `AZ-P-QdNmYfklgBeFrLG`.
+- [x] **20** — `buildContainerLogsSummary`, `frontend/src/core/refresh/components/diagnostics/diagnosticsRowModel.ts:946` — Sonar `AZ-P-QadmYfklgBeFrKV`.
+- [x] **20** — container-log stream `applyPayload`, `frontend/src/core/refresh/streaming/containerLogsStreamManager.ts:427` — Sonar `AZ-P-QZSmYfklgBeFrJ5`.
+- [x] **18** — `buildCatalogSummary`, `frontend/src/core/refresh/components/diagnostics/diagnosticsRowModel.ts:885` — Sonar `AZ-P-QadmYfklgBeFrKT`.
+- [x] **17** — `resolveDomainNamespace`, `frontend/src/core/refresh/components/diagnostics/diagnosticsPanelUtils.ts:22` — Sonar `AZ-P-QapmYfklgBeFrKZ`.
+- [x] **17** — `buildMetricsSummary`, `frontend/src/core/refresh/components/diagnostics/diagnosticsRowModel.ts:773` — Sonar `AZ-P-QadmYfklgBeFrKQ`.
+
+Phase 6 batch 1 separates namespace/scope decoding, broker-read status,
+capability descriptor indexing, permission row projection/filtering,
+orchestrator and metrics presentation, catalog stream presentation, and
+container-log summary statistics/content. It also clears six adjacent
+over-threshold functions in `diagnosticsRowModel.ts`. Both production files
+pass the temporary Biome maximum of 12. A new 29-case utility suite covers the
+previously untested scope and duration helpers; the three diagnostics suites
+pass 63 tests. Focused statement coverage is 91.97% for
+`diagnosticsRowModel.ts` and 100% for `diagnosticsPanelUtils.ts`.
+`mise exec -- mage qc:prerelease` passes all 4,113 frontend tests across 466
+test files and the remaining repository gates. Sonar verification is pending
+branch analysis.
+
+Phase 6 batch 2 separates scope-role decoding, preferred cluster-state
+selection, stream health/polling presentation, telemetry/metrics/count models,
+pod/log/object-panel row projection, capability grouping, and diagnostics Tab
+navigation. It clears the three recorded `DiagnosticsPanel.tsx` findings plus
+eight adjacent over-threshold functions. The production file passes the
+temporary Biome maximum of 12. Its 24-test suite passes with 85.90% focused
+statement coverage; the three diagnostics suites pass 63 tests together.
+`mise exec -- mage qc:prerelease` passes all 4,113 frontend tests across 466
+test files and the remaining repository gates. Sonar verification is pending
+branch analysis.
+
+Phase 6 batch 3 replaces nested permission-payload validation with typed field
+tables and separates permission-message detail assembly. It also replaces the
+resource-stream view switch tree with explicit namespace and cluster domain
+maps while preserving focused Pod leases. Both production files pass the
+temporary Biome maximum of 12. The two focused suites pass 35 tests; statement
+coverage is 100% for `permissionErrors.ts` and 95.23% for
+`resourceStreamViews.ts`. `mise exec -- mage qc:prerelease` passes all 4,143
+frontend tests across 467 test files and the remaining repository gates. Sonar
+verification is pending branch analysis.
+
+Phase 6 batch 4 separates normalized cluster-set comparison and visible target
+selection from `RefreshManager` foreground scheduling. It also separates
+automatic-refresh eligibility, in-flight supersession, successful completion,
+intentional aborts, and failed completion from refresh execution. The
+production file passes the temporary Biome maximum of 12. Its 59-test suite
+passes with 94.45% focused statement coverage. `mise exec -- mage
+qc:prerelease` passes all 4,143 frontend tests across 467 test files and the
+remaining repository gates. Sonar verification is pending branch analysis.
+
+Phase 6 batch 5 separates stale-scope cleanup, refresher activity, streaming
+enablement, query-only reconciliation, streaming fetch decisions, in-flight
+claiming, request setup, commit eligibility, response application, error
+classification, and trailing doorbell replay from the orchestrator entry
+points. It clears the three recorded findings plus the adjacent streaming-start
+completion callback. The production file passes the temporary Biome maximum of
+12. Its two focused suites pass 100 tests with 82.32% statement coverage.
+`mise exec -- mage qc:prerelease` passes all 4,143 frontend tests across 467
+test files and the remaining repository gates. Sonar verification is pending
+branch analysis.
+
+Phase 6 batch 6 separates resource-stream parsing, subscription resolution,
+cluster-name capture, signal-envelope dispatch, legacy dispatch, reset replay,
+and permission-error handling. Container-log payload validation is split into
+required and optional field predicates, while payload application now separates
+buffer projection, truncation totals, backend warnings, and scoped-store
+commit. It clears both remaining recorded findings plus the adjacent payload
+validator. Both production files pass the temporary Biome maximum of 12. Their
+focused suites pass 74 tests; statement coverage is 83.40% for
+`resourceStreamManager.ts` and 90.24% for `containerLogsStreamManager.ts`.
+`mise exec -- mage qc:prerelease` passes all 4,143 frontend tests across 467
+test files and the remaining repository gates. Sonar verification is pending
+branch analysis.
 
 Required characterization includes retained first paint, foreground versus user
 intent, paused automatic refresh, query-versus-snapshot leases, stale response
@@ -613,17 +792,21 @@ diagnostics, and empty/error/recovery row presentation.
 ## Validation by phase
 
 - [ ] Every touched source has focused characterization for the branches moved.
-- [ ] Focused Vitest files pass.
+- [x] Focused Vitest files pass.
 - [ ] Directly affected statement coverage is at least 80%, or the measured gap
   has been reported and explicitly accepted.
-- [ ] `mise exec -- mage test:frontendCoverage` records frontend coverage on the
+- [x] `mise exec -- mage test:frontendCoverage` records frontend coverage on the
   latest worktree.
-- [ ] `mise exec -- npm run check --prefix frontend` passes.
-- [ ] `mise exec -- npm run typecheck --prefix frontend` passes.
-- [ ] `mise exec -- mage qc:prerelease` passes on the latest worktree.
-- [ ] `git diff --check` passes and the post-gate worktree has been inspected.
+- [x] `mise exec -- npm run check --prefix frontend` passes.
+- [x] `mise exec -- npm run typecheck --prefix frontend` passes.
+- [x] `mise exec -- mage qc:prerelease` passes on the latest worktree.
+- [x] `git diff --check` passes and the post-gate worktree has been inspected.
 - [ ] The PR Sonar analysis shows the expected S3776 reduction, no increased
   retained finding, and zero open/confirmed new-code findings across all rules.
+
+Latest aggregate coverage evidence: `mise exec -- mage test:frontendCoverage`
+passes 4,143 tests across 467 files with 81.58% statement coverage, 72.27%
+branch coverage, 81.83% function coverage, and 81.96% line coverage.
 - [ ] The main-branch analysis confirms the reduction before the baseline and
   plan are updated.
 - [ ] Rendered changes exercise relevant loading, error, denial, empty,

@@ -56,6 +56,23 @@ describe('permissionErrors', () => {
     expect(isPermissionDeniedStatus({ reason: 'Other', code: 400 })).toBe(false);
   });
 
+  test.each([
+    null,
+    [],
+    { kind: 1, reason: 'Forbidden' },
+    { apiVersion: 1, reason: 'Forbidden' },
+    { message: 1, reason: 'Forbidden' },
+    { reason: 1, code: 403 },
+    { reason: 'Forbidden', code: '403' },
+    { reason: 'Forbidden', details: 'invalid' },
+    { reason: 'Forbidden', details: { domain: 1 } },
+    { reason: 'Forbidden', details: { resource: 1 } },
+    { reason: 'Forbidden', details: { kind: 1 } },
+    { reason: 'Forbidden', details: { name: 1 } },
+  ])('rejects malformed permission payload %#', (payload) => {
+    expect(isPermissionDeniedStatus(payload)).toBe(false);
+  });
+
   test('resolvePermissionDeniedMessage prefers structured status', () => {
     const status: PermissionDeniedStatus = {
       message: 'permission denied',

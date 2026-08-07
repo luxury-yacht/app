@@ -51,6 +51,32 @@ const isFocusedPodsScope = (scope?: string): boolean => {
   return base.startsWith('workload:') || base.startsWith('node:');
 };
 
+const NAMESPACE_VIEW_BY_DOMAIN: Partial<
+  Record<ResourceStreamRefreshDomain, NonNullable<RefreshContext['activeNamespaceView']>>
+> = {
+  pods: 'workloads',
+  'namespace-workloads': 'workloads',
+  'namespace-config': 'config',
+  'namespace-network': 'network',
+  'namespace-rbac': 'rbac',
+  'namespace-custom': 'custom',
+  'namespace-helm': 'helm',
+  'namespace-autoscaling': 'autoscaling',
+  'namespace-quotas': 'quotas',
+  'namespace-storage': 'storage',
+};
+
+const CLUSTER_VIEW_BY_DOMAIN: Partial<
+  Record<ResourceStreamRefreshDomain, NonNullable<RefreshContext['activeClusterView']>>
+> = {
+  nodes: 'nodes',
+  'cluster-rbac': 'rbac',
+  'cluster-storage': 'storage',
+  'cluster-config': 'config',
+  'cluster-crds': 'crds',
+  'cluster-custom': 'custom',
+};
+
 export const isResourceStreamViewActive = (
   domain: RefreshDomain,
   context: RefreshContext,
@@ -64,68 +90,14 @@ export const isResourceStreamViewActive = (
     if (isFocusedPodsScope(scope)) {
       return true;
     }
-    return context.currentView === 'namespace' && context.activeNamespaceView === 'workloads';
   }
-
-  if (domain === 'namespace-workloads') {
-    return context.currentView === 'namespace' && context.activeNamespaceView === 'workloads';
+  const namespaceView = NAMESPACE_VIEW_BY_DOMAIN[domain];
+  if (namespaceView) {
+    return context.currentView === 'namespace' && context.activeNamespaceView === namespaceView;
   }
-
-  if (domain === 'namespace-config') {
-    return context.currentView === 'namespace' && context.activeNamespaceView === 'config';
+  const clusterView = CLUSTER_VIEW_BY_DOMAIN[domain];
+  if (clusterView) {
+    return context.currentView === 'cluster' && context.activeClusterView === clusterView;
   }
-
-  if (domain === 'namespace-network') {
-    return context.currentView === 'namespace' && context.activeNamespaceView === 'network';
-  }
-
-  if (domain === 'namespace-rbac') {
-    return context.currentView === 'namespace' && context.activeNamespaceView === 'rbac';
-  }
-
-  if (domain === 'namespace-custom') {
-    return context.currentView === 'namespace' && context.activeNamespaceView === 'custom';
-  }
-
-  if (domain === 'namespace-helm') {
-    return context.currentView === 'namespace' && context.activeNamespaceView === 'helm';
-  }
-
-  if (domain === 'namespace-autoscaling') {
-    return context.currentView === 'namespace' && context.activeNamespaceView === 'autoscaling';
-  }
-
-  if (domain === 'namespace-quotas') {
-    return context.currentView === 'namespace' && context.activeNamespaceView === 'quotas';
-  }
-
-  if (domain === 'namespace-storage') {
-    return context.currentView === 'namespace' && context.activeNamespaceView === 'storage';
-  }
-
-  if (domain === 'nodes') {
-    return context.currentView === 'cluster' && context.activeClusterView === 'nodes';
-  }
-
-  if (domain === 'cluster-rbac') {
-    return context.currentView === 'cluster' && context.activeClusterView === 'rbac';
-  }
-
-  if (domain === 'cluster-storage') {
-    return context.currentView === 'cluster' && context.activeClusterView === 'storage';
-  }
-
-  if (domain === 'cluster-config') {
-    return context.currentView === 'cluster' && context.activeClusterView === 'config';
-  }
-
-  if (domain === 'cluster-crds') {
-    return context.currentView === 'cluster' && context.activeClusterView === 'crds';
-  }
-
-  if (domain === 'cluster-custom') {
-    return context.currentView === 'cluster' && context.activeClusterView === 'custom';
-  }
-
   return true;
 };

@@ -10,6 +10,7 @@ import ModalHeader from '@shared/components/modals/ModalHeader';
 import ModalSurface from '@shared/components/modals/ModalSurface';
 import { useModalFocusTrap } from '@shared/components/modals/useModalFocusTrap';
 import React, { useEffect, useRef, useState } from 'react';
+import type { ShortcutGroup, ShortcutModifiers } from '@/types/shortcuts';
 import { useKeyboardContext } from '../context';
 import './ShortcutHelpModal.css';
 
@@ -18,12 +19,93 @@ interface ShortcutHelpModalProps {
   onClose: () => void;
 }
 
+type ShortcutItem = ShortcutGroup['shortcuts'][number];
+type ModifierName = keyof ShortcutModifiers;
+
+const MODIFIER_KEYCAPS: Array<{
+  modifier: ModifierName;
+  macLabel: string;
+  defaultLabel: string;
+}> = [
+  { modifier: 'meta', macLabel: '⌘', defaultLabel: 'Win' },
+  { modifier: 'ctrl', macLabel: '⌃', defaultLabel: 'Ctrl' },
+  { modifier: 'alt', macLabel: '⌥', defaultLabel: 'Alt' },
+  { modifier: 'shift', macLabel: '⇧', defaultLabel: 'Shift' },
+];
+
+const ARROW_DIRECTIONS: Partial<
+  Record<string, React.ComponentProps<typeof ShortcutArrowIcon>['direction']>
+> = {
+  ArrowLeft: 'left',
+  ArrowRight: 'right',
+  ArrowUp: 'up',
+  ArrowDown: 'down',
+};
+
+const buildModifierKeycaps = (shortcut: ShortcutItem, isMac: boolean) =>
+  MODIFIER_KEYCAPS.filter(({ modifier }) => shortcut.modifiers?.[modifier]).map(
+    ({ modifier, macLabel, defaultLabel }) => {
+      const label = isMac ? macLabel : defaultLabel;
+      return <kbd key={modifier}>{label}</kbd>;
+    }
+  );
+
+const ShortcutKeyContent = ({ shortcutKey }: { shortcutKey: string }) => {
+  const arrowDirection = ARROW_DIRECTIONS[shortcutKey];
+  if (arrowDirection) {
+    return <ShortcutArrowIcon direction={arrowDirection} />;
+  }
+  return shortcutKey.length === 1 ? shortcutKey.toUpperCase() : shortcutKey;
+};
+
+const ShortcutKeycap = ({ shortcut, isMac }: { shortcut: ShortcutItem; isMac: boolean }) => {
+  const keyParts = [
+    ...buildModifierKeycaps(shortcut, isMac),
+    <kbd key="key">
+      <ShortcutKeyContent shortcutKey={shortcut.key} />
+    </kbd>,
+  ];
+  return (
+    <span className="keycap">
+      {keyParts.map((part, index) => (
+        <React.Fragment key={String(part.key)}>
+          {index > 0 && <span className="key-separator">+</span>}
+          {part}
+        </React.Fragment>
+      ))}
+    </span>
+  );
+};
+
+const ShortcutRow = ({ shortcut, isMac }: { shortcut: ShortcutItem; isMac: boolean }) => (
+  <div className="shortcut-item">
+    <ShortcutKeycap shortcut={shortcut} isMac={isMac} />
+    <span className="shortcut-description">{shortcut.description}</span>
+  </div>
+);
+
+const ShortcutGroupSection = ({ group, isMac }: { group: ShortcutGroup; isMac: boolean }) => (
+  <div className="shortcut-group">
+    <h3>{group.category}</h3>
+    <div className="shortcut-list">
+      {group.shortcuts.map((shortcut) => (
+        <ShortcutRow
+          key={`${shortcut.key}:${shortcut.description}`}
+          shortcut={shortcut}
+          isMac={isMac}
+        />
+      ))}
+    </div>
+  </div>
+);
+
 export function ShortcutHelpModal({ isOpen, onClose }: ShortcutHelpModalProps) {
   const { getAvailableShortcuts } = useKeyboardContext();
   const [shortcuts, setShortcuts] = useState(getAvailableShortcuts());
   const [isClosing, setIsClosing] = useState(false);
   const [shouldRender, setShouldRender] = useState(false);
   const modalRef = useRef<HTMLDivElement>(null);
+  const isMac = navigator.userAgent.includes('Mac');
 
   // Handle open/close animation states
   useEffect(() => {
@@ -91,60 +173,7 @@ export function ShortcutHelpModal({ isOpen, onClose }: ShortcutHelpModalProps) {
           <p className="no-shortcuts">No shortcuts available in this context</p>
         ) : (
           shortcuts.map((group) => (
-            <div key={group.category} className="shortcut-group">
-              <h3>{group.category}</h3>
-              <div className="shortcut-list">
-                {group.shortcuts.map((shortcut) => {
-                  // Build key combination display
-                  const keyParts: React.ReactElement[] = [];
-                  const isMac = navigator.userAgent.includes('Mac');
-
-                  if (shortcut.modifiers?.meta) {
-                    keyParts.push(<kbd key="meta">{isMac ? '⌘' : 'Win'}</kbd>);
-                  }
-                  if (shortcut.modifiers?.ctrl) {
-                    keyParts.push(<kbd key="ctrl">{isMac ? '⌃' : 'Ctrl'}</kbd>);
-                  }
-                  if (shortcut.modifiers?.alt) {
-                    keyParts.push(<kbd key="alt">{isMac ? '⌥' : 'Alt'}</kbd>);
-                  }
-                  if (shortcut.modifiers?.shift) {
-                    keyParts.push(<kbd key="shift">{isMac ? '⇧' : 'Shift'}</kbd>);
-                  }
-
-                  let keyContent: React.ReactNode;
-                  if (shortcut.key === 'ArrowLeft') {
-                    keyContent = <ShortcutArrowIcon direction="left" />;
-                  } else if (shortcut.key === 'ArrowRight') {
-                    keyContent = <ShortcutArrowIcon direction="right" />;
-                  } else if (shortcut.key === 'ArrowUp') {
-                    keyContent = <ShortcutArrowIcon direction="up" />;
-                  } else if (shortcut.key === 'ArrowDown') {
-                    keyContent = <ShortcutArrowIcon direction="down" />;
-                  } else {
-                    const formattedKey =
-                      shortcut.key.length === 1 ? shortcut.key.toUpperCase() : shortcut.key;
-                    keyContent = formattedKey;
-                  }
-
-                  keyParts.push(<kbd key="key">{keyContent}</kbd>);
-
-                  return (
-                    <div key={`${shortcut.key}:${shortcut.description}`} className="shortcut-item">
-                      <span className="keycap">
-                        {keyParts.map((part, i) => (
-                          <React.Fragment key={String(part.key)}>
-                            {i > 0 && <span className="key-separator">+</span>}
-                            {part}
-                          </React.Fragment>
-                        ))}
-                      </span>
-                      <span className="shortcut-description">{shortcut.description}</span>
-                    </div>
-                  );
-                })}
-              </div>
-            </div>
+            <ShortcutGroupSection key={group.category} group={group} isMac={isMac} />
           ))
         )}
       </div>

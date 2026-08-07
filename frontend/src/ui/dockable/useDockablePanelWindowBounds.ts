@@ -25,6 +25,80 @@ interface WindowBoundsOptions {
   isMaximized: boolean;
 }
 
+type PanelSize = DockablePanelState['size'];
+type PanelPosition = DockablePanelState['floatingPosition'];
+type ContentBounds = ReturnType<typeof getContentBounds>;
+
+interface BoundsAdjustment {
+  size: PanelSize;
+  position: PanelPosition;
+}
+
+const clampFloatingPanel = (
+  size: PanelSize,
+  position: PanelPosition,
+  content: ContentBounds
+): BoundsAdjustment => {
+  const nextSize = {
+    width: Math.min(size.width, content.width),
+    height: Math.min(size.height, content.height),
+  };
+  return {
+    size: nextSize,
+    position: {
+      x: Math.min(Math.max(position.x, 0), Math.max(0, content.width - nextSize.width)),
+      y: Math.min(Math.max(position.y, 0), Math.max(0, content.height - nextSize.height)),
+    },
+  };
+};
+
+const clampDockedPanel = (
+  panelState: DockablePanelState,
+  content: ContentBounds,
+  minWidth: number
+): BoundsAdjustment => {
+  if (panelState.position === 'right' && panelState.size.width > content.width) {
+    return {
+      size: { ...panelState.size, width: Math.max(minWidth, content.width) },
+      position: panelState.floatingPosition,
+    };
+  }
+  if (panelState.position === 'bottom' && panelState.size.height > content.height) {
+    return {
+      size: { ...panelState.size, height: content.height },
+      position: panelState.floatingPosition,
+    };
+  }
+  return { size: panelState.size, position: panelState.floatingPosition };
+};
+
+const calculateBoundsAdjustment = (
+  panelState: DockablePanelState,
+  content: ContentBounds,
+  minWidth: number
+): BoundsAdjustment =>
+  panelState.position === 'floating'
+    ? clampFloatingPanel(panelState.size, panelState.floatingPosition, content)
+    : clampDockedPanel(panelState, content, minWidth);
+
+const sizesAreEqual = (left: PanelSize, right: PanelSize) =>
+  left.width === right.width && left.height === right.height;
+
+const positionsAreEqual = (left: PanelPosition, right: PanelPosition) =>
+  left.x === right.x && left.y === right.y;
+
+const applyBoundsAdjustment = (panelState: DockablePanelState, adjustment: BoundsAdjustment) => {
+  if (!sizesAreEqual(adjustment.size, panelState.size)) {
+    panelState.setSize(adjustment.size);
+  }
+  if (
+    panelState.position === 'floating' &&
+    !positionsAreEqual(adjustment.position, panelState.floatingPosition)
+  ) {
+    panelState.setFloatingPosition(adjustment.position);
+  }
+};
+
 /**
  * Hook to constrain panel size and position within window bounds.
  * Handles debouncing, dock positions, and respects user resize operations.
@@ -57,6 +131,19 @@ export function useWindowBoundsConstraint(
     let resizeTimer: NodeJS.Timeout;
     let initialResizeTimer: NodeJS.Timeout | null = null;
 
+    const constrainToCurrentBounds = () => {
+      const currentPanelState = panelStateRef.current;
+      if (!currentPanelState.isOpen || isResizing) {
+        return;
+      }
+      const viewport = getZoomAwareViewport(zoomLevelRef.current);
+      const content = getContentBounds(viewport.zoomFactor);
+      applyBoundsAdjustment(
+        currentPanelState,
+        calculateBoundsAdjustment(currentPanelState, content, minWidth)
+      );
+    };
+
     const handleResize = () => {
       // If the window object is not available, return early.
       if (typeof window === 'undefined') {
@@ -65,97 +152,7 @@ export function useWindowBoundsConstraint(
 
       // Debounce resize handling so we don't thrash during rapid resizes.
       clearTimeout(resizeTimer);
-      resizeTimer = setTimeout(() => {
-        // Get the latest panel state.
-        const currentPanelState = panelStateRef.current;
-
-        // Skip if panel is closed or user is actively resizing.
-        if (!currentPanelState.isOpen || isResizing) {
-          return;
-        }
-
-        const currentSize = currentPanelState.size;
-        const currentPosition = currentPanelState.floatingPosition;
-        let needsUpdate = false;
-        const newSize = { ...currentSize };
-        const newPosition = { ...currentPosition };
-
-        // Use content bounds instead of viewport dimensions.
-        const viewport = getZoomAwareViewport(zoomLevelRef.current);
-        const content = getContentBounds(viewport.zoomFactor);
-
-        // If the panel is floating, constrain its size and position within content bounds.
-        if (currentPanelState.position === 'floating') {
-          const maxWidth = content.width;
-          const maxHeight = content.height;
-
-          // Constrain width.
-          if (currentSize.width > maxWidth) {
-            newSize.width = maxWidth;
-            needsUpdate = true;
-          }
-
-          // Constrain height.
-          if (currentSize.height > maxHeight) {
-            newSize.height = maxHeight;
-            needsUpdate = true;
-          }
-
-          // Constrain position.
-          const rightEdge = currentPosition.x + newSize.width;
-          const bottomEdge = currentPosition.y + newSize.height;
-
-          // Ensure panel stays within right edge.
-          if (rightEdge > content.width) {
-            newPosition.x = Math.max(0, content.width - newSize.width);
-            needsUpdate = true;
-          }
-
-          // Ensure panel stays within bottom edge.
-          if (bottomEdge > content.height) {
-            newPosition.y = Math.max(0, content.height - newSize.height);
-            needsUpdate = true;
-          }
-
-          // Ensure panel stays within left edge.
-          if (currentPosition.x < 0) {
-            newPosition.x = 0;
-            needsUpdate = true;
-          }
-
-          // Ensure panel stays within top edge.
-          if (currentPosition.y < 0) {
-            newPosition.y = 0;
-            needsUpdate = true;
-          }
-        } else if (currentPanelState.position === 'right') {
-          // Constrain right-docked panel width to the full content width.
-          const maxWidth = content.width;
-          if (currentSize.width > maxWidth) {
-            newSize.width = Math.max(minWidth, maxWidth);
-            needsUpdate = true;
-          }
-        } else if (currentPanelState.position === 'bottom') {
-          // Constrain bottom-docked panel height to the full content height.
-          const maxHeight = content.height;
-          if (currentSize.height > maxHeight) {
-            newSize.height = maxHeight;
-            needsUpdate = true;
-          }
-        }
-
-        if (needsUpdate) {
-          if (newSize.width !== currentSize.width || newSize.height !== currentSize.height) {
-            currentPanelState.setSize(newSize);
-          }
-          if (
-            currentPanelState.position === 'floating' &&
-            (newPosition.x !== currentPosition.x || newPosition.y !== currentPosition.y)
-          ) {
-            currentPanelState.setFloatingPosition(newPosition);
-          }
-        }
-      }, LAYOUT.RESIZE_DEBOUNCE_MS);
+      resizeTimer = setTimeout(constrainToCurrentBounds, LAYOUT.RESIZE_DEBOUNCE_MS);
     };
 
     window.addEventListener('resize', handleResize);

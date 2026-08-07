@@ -87,6 +87,180 @@ const WelcomeContent: React.FC = () => (
   </div>
 );
 
+type ViewStateValue = ReturnType<typeof useViewState>;
+type NamespaceContextValue = ReturnType<typeof useNamespace>;
+type KubeconfigContextValue = ReturnType<typeof useKubeconfig>;
+
+const NamespaceRouteContent = ({
+  selectedNamespace,
+  activeNamespaceTab,
+  onTabChange,
+}: {
+  selectedNamespace?: string;
+  activeNamespaceTab: NamespaceViewType | null;
+  onTabChange: (tab: NamespaceViewType) => void;
+}) => {
+  if (!selectedNamespace) {
+    return <WelcomeContent />;
+  }
+  if (isAllNamespaces(selectedNamespace)) {
+    return (
+      <RouteErrorBoundary routeName="namespace-all">
+        <NamespaceResourcesProvider namespace={selectedNamespace}>
+          <AllNamespacesView activeTab={activeNamespaceTab || 'workloads'} />
+        </NamespaceResourcesProvider>
+      </RouteErrorBoundary>
+    );
+  }
+  return (
+    <RouteErrorBoundary routeName="namespace">
+      <NamespaceResourcesProvider namespace={selectedNamespace}>
+        <NamespaceResourcesViews
+          namespace={selectedNamespace}
+          activeTab={activeNamespaceTab || 'workloads'}
+          onTabChange={onTabChange}
+        />
+      </NamespaceResourcesProvider>
+    </RouteErrorBoundary>
+  );
+};
+
+const AppRouteContent = ({
+  hasActiveClusters,
+  namespace,
+  viewState,
+  kubeconfig,
+}: {
+  hasActiveClusters: boolean;
+  namespace: NamespaceContextValue;
+  viewState: ViewStateValue;
+  kubeconfig: KubeconfigContextValue;
+}) => {
+  if (!hasActiveClusters) {
+    return null;
+  }
+  if (viewState.viewType === 'global') {
+    return (
+      <RouteErrorBoundary routeName="global">
+        <GlobalViews activeView={viewState.activeGlobalTab} />
+      </RouteErrorBoundary>
+    );
+  }
+  if (viewState.viewType === 'cluster' && viewState.activeClusterTab === 'browse') {
+    return (
+      <RouteErrorBoundary routeName="browse">
+        <div className="view-content">
+          <BrowseView />
+        </div>
+      </RouteErrorBoundary>
+    );
+  }
+  if (viewState.viewType === 'cluster') {
+    return (
+      <RouteErrorBoundary routeName="cluster">
+        <ClusterResourcesManager
+          activeTab={viewState.activeClusterTab}
+          onTabChange={viewState.setActiveClusterView}
+        />
+      </RouteErrorBoundary>
+    );
+  }
+  if (viewState.viewType === 'namespace') {
+    return (
+      <NamespaceRouteContent
+        selectedNamespace={namespace.selectedNamespace}
+        activeNamespaceTab={viewState.activeNamespaceTab}
+        onTabChange={viewState.setActiveNamespaceTab}
+      />
+    );
+  }
+  if (viewState.viewType === 'overview') {
+    return (
+      <RouteErrorBoundary routeName="cluster-overview">
+        <div className="view-content view-content--cluster-overview">
+          <ClusterOverview clusterContext={kubeconfig.selectedKubeconfig || 'Default'} />
+        </div>
+      </RouteErrorBoundary>
+    );
+  }
+  return <WelcomeContent />;
+};
+
+const SidebarResizer = ({ viewState }: { viewState: ViewStateValue }) => {
+  if (!viewState.isSidebarVisible) {
+    return null;
+  }
+  return (
+    <hr
+      className="sidebar-resizer"
+      aria-label="Resize sidebar"
+      aria-orientation="vertical"
+      aria-valuemin={SIDEBAR_MIN_WIDTH}
+      aria-valuemax={SIDEBAR_MAX_WIDTH}
+      aria-valuenow={viewState.sidebarWidth}
+      tabIndex={0}
+      onMouseDown={(event) => {
+        event.preventDefault();
+        viewState.setIsResizing(true);
+      }}
+      onKeyDown={(event) => {
+        const width = getSidebarWidthFromKey(viewState.sidebarWidth, event.key);
+        if (width === null) {
+          return;
+        }
+        event.preventDefault();
+        viewState.setSidebarWidth(width);
+      }}
+    />
+  );
+};
+
+const ClusterSelectionOverlay = ({ phase }: { phase: string }) => {
+  if (phase !== 'empty') {
+    return null;
+  }
+  return (
+    <div className="no-active-clusters-overlay" role="status">
+      <div className="no-active-clusters-message">
+        No active clusters. Press <kbd>{isMacPlatform() ? '⌘' : 'Ctrl'}</kbd>+<kbd>O</kbd> or click
+        Open Cluster.
+      </div>
+    </div>
+  );
+};
+
+const ActiveClusterAuthOverlay = ({
+  hasActiveClusters,
+  viewType,
+}: {
+  hasActiveClusters: boolean;
+  viewType: ViewStateValue['viewType'];
+}) =>
+  shouldShowActiveClusterAuthFailure(hasActiveClusters, viewType) ? <AuthFailureOverlay /> : null;
+
+interface AppDebugOverlaysProps {
+  panel: boolean;
+  focus: boolean;
+  error: boolean;
+  map: boolean;
+  icon: boolean;
+  closePanel: () => void;
+  closeFocus: () => void;
+  closeError: () => void;
+  closeMap: () => void;
+  closeIcon: () => void;
+}
+
+const AppDebugOverlays = (props: AppDebugOverlaysProps) => (
+  <>
+    {props.panel ? <PanelDebugOverlay onClose={props.closePanel} /> : null}
+    {props.focus ? <KeyboardFocusOverlay onClose={props.closeFocus} /> : null}
+    {props.error ? <ErrorBoundaryDebugOverlay onClose={props.closeError} /> : null}
+    {props.map ? <MapDebugOverlay onClose={props.closeMap} /> : null}
+    {props.icon ? <IconDebugOverlay onClose={props.closeIcon} /> : null}
+  </>
+);
+
 // ObjectPanel is imported eagerly because panels are only rendered on-demand
 // (when openPanels has entries). A lazy boundary would flash a loading spinner
 // on the first click before the chunk loads.
@@ -156,70 +330,14 @@ export const AppLayout: React.FC = () => {
     });
   }, []);
 
-  let routeContent: React.ReactNode = null;
-  if (hasActiveClusters) {
-    if (viewState.viewType === 'global') {
-      routeContent = (
-        <RouteErrorBoundary routeName="global">
-          <GlobalViews activeView={viewState.activeGlobalTab} />
-        </RouteErrorBoundary>
-      );
-    } else if (viewState.viewType === 'cluster') {
-      if (viewState.activeClusterTab === 'browse') {
-        routeContent = (
-          <RouteErrorBoundary routeName="browse">
-            <div className="view-content">
-              <BrowseView />
-            </div>
-          </RouteErrorBoundary>
-        );
-      } else {
-        routeContent = (
-          <RouteErrorBoundary routeName="cluster">
-            <ClusterResourcesManager
-              activeTab={viewState.activeClusterTab}
-              onTabChange={viewState.setActiveClusterView}
-            />
-          </RouteErrorBoundary>
-        );
-      }
-    } else if (viewState.viewType === 'namespace') {
-      const selectedNamespace = namespace.selectedNamespace;
-      if (!selectedNamespace) {
-        routeContent = <WelcomeContent />;
-      } else if (isAllNamespaces(selectedNamespace)) {
-        routeContent = (
-          <RouteErrorBoundary routeName="namespace-all">
-            <NamespaceResourcesProvider namespace={selectedNamespace}>
-              <AllNamespacesView activeTab={viewState.activeNamespaceTab} />
-            </NamespaceResourcesProvider>
-          </RouteErrorBoundary>
-        );
-      } else {
-        routeContent = (
-          <RouteErrorBoundary routeName="namespace">
-            <NamespaceResourcesProvider namespace={selectedNamespace}>
-              <NamespaceResourcesViews
-                namespace={selectedNamespace}
-                activeTab={viewState.activeNamespaceTab || 'workloads'}
-                onTabChange={(tab: NamespaceViewType) => viewState.setActiveNamespaceTab(tab)}
-              />
-            </NamespaceResourcesProvider>
-          </RouteErrorBoundary>
-        );
-      }
-    } else if (viewState.viewType === 'overview') {
-      routeContent = (
-        <RouteErrorBoundary routeName="cluster-overview">
-          <div className="view-content view-content--cluster-overview">
-            <ClusterOverview clusterContext={kubeconfig.selectedKubeconfig || 'Default'} />
-          </div>
-        </RouteErrorBoundary>
-      );
-    } else {
-      routeContent = <WelcomeContent />;
-    }
-  }
+  const routeContent = (
+    <AppRouteContent
+      hasActiveClusters={hasActiveClusters}
+      namespace={namespace}
+      viewState={viewState}
+      kubeconfig={kubeconfig}
+    />
+  );
 
   return (
     <div className="app-container">
@@ -231,48 +349,18 @@ export const AppLayout: React.FC = () => {
         className={`app-main ${hasActiveClusters ? '' : 'app-main-inactive'}`}
       >
         <Sidebar />
-        {!!viewState.isSidebarVisible && (
-          <hr
-            className="sidebar-resizer"
-            aria-label="Resize sidebar"
-            aria-orientation="vertical"
-            aria-valuemin={SIDEBAR_MIN_WIDTH}
-            aria-valuemax={SIDEBAR_MAX_WIDTH}
-            aria-valuenow={viewState.sidebarWidth}
-            tabIndex={0}
-            onMouseDown={(e) => {
-              e.preventDefault();
-              viewState.setIsResizing(true);
-            }}
-            onKeyDown={(event) => {
-              const width = getSidebarWidthFromKey(viewState.sidebarWidth, event.key);
-              if (width === null) {
-                return;
-              }
-              event.preventDefault();
-              viewState.setSidebarWidth(width);
-            }}
-          />
-        )}
+        <SidebarResizer viewState={viewState} />
 
         <div className="content">
           <div ref={contentBodyRef} className="content-body" data-app-region="content">
             <div className="content-body__main">{routeContent}</div>
           </div>
         </div>
-        {clusterSelectionPhase === 'empty' && (
-          <div className="no-active-clusters-overlay" role="status">
-            {/* Block interactions and loading when no clusters are active. */}
-            <div className="no-active-clusters-message">
-              No active clusters. Press <kbd>{isMacPlatform() ? '⌘' : 'Ctrl'}</kbd>+<kbd>O</kbd> or
-              click Open Cluster.
-            </div>
-          </div>
-        )}
-        {/* Per-cluster auth failure overlay - blocks sidebar and content when active cluster has auth error */}
-        {shouldShowActiveClusterAuthFailure(hasActiveClusters, viewState.viewType) && (
-          <AuthFailureOverlay />
-        )}
+        <ClusterSelectionOverlay phase={clusterSelectionPhase} />
+        <ActiveClusterAuthOverlay
+          hasActiveClusters={hasActiveClusters}
+          viewType={viewState.viewType}
+        />
       </main>
 
       <PanelErrorBoundary onClose={() => viewState.setShowAppLogsPanel(false)} panelName="app-logs">
@@ -318,21 +406,18 @@ export const AppLayout: React.FC = () => {
       </PanelErrorBoundary>
       <ErrorNotificationSystem />
       <CommandPalette commands={commands} />
-      {!!isPanelDebugOverlayVisible && (
-        <PanelDebugOverlay onClose={() => setIsPanelDebugOverlayVisible(false)} />
-      )}
-      {!!isFocusOverlayVisible && (
-        <KeyboardFocusOverlay onClose={() => setIsFocusOverlayVisible(false)} />
-      )}
-      {!!isErrorOverlayVisible && (
-        <ErrorBoundaryDebugOverlay onClose={() => setIsErrorOverlayVisible(false)} />
-      )}
-      {!!isMapDebugOverlayVisible && (
-        <MapDebugOverlay onClose={() => setIsMapDebugOverlayVisible(false)} />
-      )}
-      {!!isIconDebugOverlayVisible && (
-        <IconDebugOverlay onClose={() => setIsIconDebugOverlayVisible(false)} />
-      )}
+      <AppDebugOverlays
+        panel={isPanelDebugOverlayVisible}
+        focus={isFocusOverlayVisible}
+        error={isErrorOverlayVisible}
+        map={isMapDebugOverlayVisible}
+        icon={isIconDebugOverlayVisible}
+        closePanel={() => setIsPanelDebugOverlayVisible(false)}
+        closeFocus={() => setIsFocusOverlayVisible(false)}
+        closeError={() => setIsErrorOverlayVisible(false)}
+        closeMap={() => setIsMapDebugOverlayVisible(false)}
+        closeIcon={() => setIsIconDebugOverlayVisible(false)}
+      />
     </div>
   );
 };
@@ -428,6 +513,36 @@ const getSurfaceDescription = (element: HTMLElement) => {
   return null;
 };
 
+const getFocusArea = (element: HTMLElement) => {
+  const direct = element.getAttribute('data-focus-area');
+  if (direct) {
+    return direct;
+  }
+  return element.closest<HTMLElement>('[data-focus-area]')?.getAttribute('data-focus-area') ?? null;
+};
+
+const getFocusSummary = (
+  element: HTMLElement,
+  focusArea: string | null,
+  label: string | null,
+  text: string | null
+) => {
+  if (focusArea) {
+    return focusArea;
+  }
+  if (label) {
+    return label;
+  }
+  const tag = element.tagName.toLowerCase();
+  if (element.id) {
+    return `${tag}#${element.id}`;
+  }
+  if (text) {
+    return `${tag} "${text}"`;
+  }
+  return tag;
+};
+
 const describeFocusTarget = (element: Element | null): FocusDebugInfo => {
   if (!(element instanceof HTMLElement)) {
     return {
@@ -446,10 +561,7 @@ const describeFocusTarget = (element: Element | null): FocusDebugInfo => {
     };
   }
 
-  const focusArea =
-    element.getAttribute('data-focus-area') ||
-    element.closest<HTMLElement>('[data-focus-area]')?.getAttribute('data-focus-area') ||
-    null;
+  const focusArea = getFocusArea(element);
   const label = getFocusableLabel(element);
   const text = element.textContent?.trim() || null;
   const summarizedText = text ? text.slice(0, 120) : null;
@@ -461,12 +573,7 @@ const describeFocusTarget = (element: Element | null): FocusDebugInfo => {
   }
 
   return {
-    summary:
-      focusArea ||
-      label ||
-      (element.id ? `${element.tagName.toLowerCase()}#${element.id}` : null) ||
-      (summarizedText ? `${element.tagName.toLowerCase()} "${summarizedText}"` : null) ||
-      element.tagName.toLowerCase(),
+    summary: getFocusSummary(element, focusArea, label, summarizedText),
     tag: element.tagName.toLowerCase(),
     role: element.getAttribute('role'),
     label,
@@ -820,150 +927,174 @@ const formatObjectMapDebugMs = (value: number | null): string => {
   }
 };
 
+const formatDebugBoolean = (value: boolean) => (value ? 'true' : 'false');
+
+const formatRendererCounts = (map: ObjectMapDebugSnapshot) => {
+  if (!map.renderer) {
+    return 'unknown';
+  }
+  return `${map.renderer.renderedNodeCount} objects / ${map.renderer.renderedEdgeCount} links`;
+};
+
+const formatSelectedKinds = (map: ObjectMapDebugSnapshot) =>
+  map.selectedKinds.mode === 'some' ? map.selectedKinds.values.join(', ') : map.selectedKinds.mode;
+
+const formatEnabledEdgeTypes = (map: ObjectMapDebugSnapshot) => {
+  if (!map.enabledEdgeTypes) {
+    return 'all';
+  }
+  return map.enabledEdgeTypes.join(', ') || 'none';
+};
+
+const formatMapSearch = (map: ObjectMapDebugSnapshot) =>
+  map.search.query ? `"${map.search.query}" (${map.search.matches})` : 'none';
+
+const ObjectMapViewportDebug = ({ map }: { map: ObjectMapDebugSnapshot }) => {
+  if (!map.renderer?.viewport) {
+    return <div className="debug-overlay__meta">No renderer viewport snapshot.</div>;
+  }
+  return (
+    <dl className="map-debug-grid">
+      <dt>ready</dt>
+      <dd>{formatDebugBoolean(map.renderer.graphReady)}</dd>
+      <dt>zoom</dt>
+      <dd>{map.renderer.viewport.zoom.toFixed(3)}</dd>
+      <dt>position</dt>
+      <dd>{formatObjectMapDebugVector(map.renderer.viewport.position)}</dd>
+      <dt>size</dt>
+      <dd>{formatObjectMapDebugVector(map.renderer.viewport.size)}</dd>
+      <dt>cards</dt>
+      <dd>{map.renderer.cardDetailLevel}</dd>
+      <dt>links</dt>
+      <dd>{map.renderer.edgeDetailLevel}</dd>
+    </dl>
+  );
+};
+
+const ObjectMapTimingDebug = ({ map }: { map: ObjectMapDebugSnapshot }) => {
+  const applyMode = map.renderer?.timings.graphDataApplyMode;
+  return (
+    <dl className="map-debug-grid">
+      <dt>model</dt>
+      <dd>{formatObjectMapDebugMs(map.timings.modelMs)}</dd>
+      <dt>visible</dt>
+      <dd>{formatObjectMapDebugMs(map.timings.visibleStateMs)}</dd>
+      <dt>g6 data</dt>
+      <dd>{formatObjectMapDebugMs(map.renderer?.timings.g6DataMs ?? null)}</dd>
+      <dt>g6 apply</dt>
+      <dd>
+        {formatObjectMapDebugMs(map.renderer?.timings.graphDataApplyMs ?? null)}
+        {applyMode ? ` (${applyMode})` : ''}
+      </dd>
+      <dt>selection</dt>
+      <dd>{formatObjectMapDebugMs(map.renderer?.timings.selectionStateApplyMs ?? null)}</dd>
+    </dl>
+  );
+};
+
+const ObjectMapDebugEntry = ({ map }: { map: ObjectMapDebugSnapshot }) => (
+  <div className="map-debug-entry">
+    <div className="debug-overlay__section">
+      <div className="debug-overlay__label">Map</div>
+      <div className="debug-overlay__value">{map.id}</div>
+      <div className="debug-overlay__meta">
+        {map.clusterName ?? map.clusterId} - updated {new Date(map.updatedAt).toLocaleTimeString()}
+      </div>
+    </div>
+    <div className="debug-overlay__section">
+      <div className="debug-overlay__label">Seed</div>
+      <div className="debug-overlay__value">{formatObjectMapDebugRef(map.seedRef)}</div>
+      <div className="debug-overlay__meta">seed node: {map.seedNodeId || 'none'}</div>
+    </div>
+    <div className="debug-overlay__section">
+      <div className="debug-overlay__label">State</div>
+      <dl className="map-debug-grid">
+        <dt>auto-fit</dt>
+        <dd>{map.autoFit ? 'on' : 'off'}</dd>
+        <dt>focus</dt>
+        <dd>{map.focusMode ? 'on' : 'off'}</dd>
+        <dt>active</dt>
+        <dd>{map.activeNodeId ?? 'none'}</dd>
+        <dt>preserve</dt>
+        <dd>{map.preserveViewportNodeId ?? 'none'}</dd>
+      </dl>
+    </div>
+    <div className="debug-overlay__section">
+      <div className="debug-overlay__label">Counts</div>
+      <dl className="map-debug-grid">
+        <dt>payload</dt>
+        <dd>
+          {map.payload.nodes} objects / {map.payload.edges} links
+        </dd>
+        <dt>layout</dt>
+        <dd>
+          {map.layout.nodes} objects / {map.layout.edges} links
+        </dd>
+        <dt>visible</dt>
+        <dd>
+          {map.visibleLayout.nodes} objects / {map.visibleLayout.edges} links
+        </dd>
+        <dt>rendered</dt>
+        <dd>{formatRendererCounts(map)}</dd>
+      </dl>
+    </div>
+    <div className="debug-overlay__section">
+      <div className="debug-overlay__label">Viewport</div>
+      <ObjectMapViewportDebug map={map} />
+    </div>
+    <div className="debug-overlay__section">
+      <div className="debug-overlay__label">Timings</div>
+      <ObjectMapTimingDebug map={map} />
+    </div>
+    <div className="debug-overlay__section">
+      <div className="debug-overlay__label">Filters</div>
+      <dl className="map-debug-grid">
+        <dt>kinds</dt>
+        <dd>{formatSelectedKinds(map)}</dd>
+        <dt>links</dt>
+        <dd>{formatEnabledEdgeTypes(map)}</dd>
+        <dt>search</dt>
+        <dd>{formatMapSearch(map)}</dd>
+      </dl>
+    </div>
+    <div className="debug-overlay__section">
+      <div className="debug-overlay__label">Bounds</div>
+      <dl className="map-debug-grid">
+        <dt>layout</dt>
+        <dd>{formatObjectMapDebugBounds(map.layout.bounds)}</dd>
+        <dt>visible</dt>
+        <dd>{formatObjectMapDebugBounds(map.visibleLayout.bounds)}</dd>
+      </dl>
+    </div>
+    <div className="debug-overlay__section">
+      <div className="debug-overlay__label">Limits</div>
+      <dl className="map-debug-grid">
+        <dt>max depth</dt>
+        <dd>{map.payload.maxDepth}</dd>
+        <dt>max objects</dt>
+        <dd>{map.payload.maxNodes}</dd>
+        <dt>truncated</dt>
+        <dd>{formatDebugBoolean(map.payload.truncated)}</dd>
+        <dt>warnings</dt>
+        <dd>{map.payload.warnings}</dd>
+      </dl>
+    </div>
+  </div>
+);
+
+const ObjectMapDebugEntries = ({ maps }: { maps: ObjectMapDebugSnapshot[] }) => {
+  if (maps.length === 0) {
+    return <div className="debug-overlay__meta">No object maps are mounted.</div>;
+  }
+  return maps.map((map) => <ObjectMapDebugEntry key={map.id} map={map} />);
+};
+
 const MapDebugOverlay: React.FC<OverlayCloseProps> = ({ onClose }) => {
   const maps = useObjectMapDebugSnapshots();
 
   return (
     <DebugOverlay title="Map Debug (Ctrl+Alt+M)" testId="map-debug-overlay" onClose={onClose}>
-      {maps.length === 0 ? (
-        <div className="debug-overlay__meta">No object maps are mounted.</div>
-      ) : (
-        maps.map((map) => (
-          <div key={map.id} className="map-debug-entry">
-            <div className="debug-overlay__section">
-              <div className="debug-overlay__label">Map</div>
-              <div className="debug-overlay__value">{map.id}</div>
-              <div className="debug-overlay__meta">
-                {map.clusterName ?? map.clusterId} - updated{' '}
-                {new Date(map.updatedAt).toLocaleTimeString()}
-              </div>
-            </div>
-            <div className="debug-overlay__section">
-              <div className="debug-overlay__label">Seed</div>
-              <div className="debug-overlay__value">{formatObjectMapDebugRef(map.seedRef)}</div>
-              <div className="debug-overlay__meta">seed node: {map.seedNodeId || 'none'}</div>
-            </div>
-            <div className="debug-overlay__section">
-              <div className="debug-overlay__label">State</div>
-              <dl className="map-debug-grid">
-                <dt>auto-fit</dt>
-                <dd>{map.autoFit ? 'on' : 'off'}</dd>
-                <dt>focus</dt>
-                <dd>{map.focusMode ? 'on' : 'off'}</dd>
-                <dt>active</dt>
-                <dd>{map.activeNodeId ?? 'none'}</dd>
-                <dt>preserve</dt>
-                <dd>{map.preserveViewportNodeId ?? 'none'}</dd>
-              </dl>
-            </div>
-            <div className="debug-overlay__section">
-              <div className="debug-overlay__label">Counts</div>
-              <dl className="map-debug-grid">
-                <dt>payload</dt>
-                <dd>
-                  {map.payload.nodes} objects / {map.payload.edges} links
-                </dd>
-                <dt>layout</dt>
-                <dd>
-                  {map.layout.nodes} objects / {map.layout.edges} links
-                </dd>
-                <dt>visible</dt>
-                <dd>
-                  {map.visibleLayout.nodes} objects / {map.visibleLayout.edges} links
-                </dd>
-                <dt>rendered</dt>
-                <dd>
-                  {map.renderer
-                    ? `${map.renderer.renderedNodeCount} objects / ${map.renderer.renderedEdgeCount} links`
-                    : 'unknown'}
-                </dd>
-              </dl>
-            </div>
-            <div className="debug-overlay__section">
-              <div className="debug-overlay__label">Viewport</div>
-              {map.renderer?.viewport ? (
-                <dl className="map-debug-grid">
-                  <dt>ready</dt>
-                  <dd>{map.renderer.graphReady ? 'true' : 'false'}</dd>
-                  <dt>zoom</dt>
-                  <dd>{map.renderer.viewport.zoom.toFixed(3)}</dd>
-                  <dt>position</dt>
-                  <dd>{formatObjectMapDebugVector(map.renderer.viewport.position)}</dd>
-                  <dt>size</dt>
-                  <dd>{formatObjectMapDebugVector(map.renderer.viewport.size)}</dd>
-                  <dt>cards</dt>
-                  <dd>{map.renderer.cardDetailLevel}</dd>
-                  <dt>links</dt>
-                  <dd>{map.renderer.edgeDetailLevel}</dd>
-                </dl>
-              ) : (
-                <div className="debug-overlay__meta">No renderer viewport snapshot.</div>
-              )}
-            </div>
-            <div className="debug-overlay__section">
-              <div className="debug-overlay__label">Timings</div>
-              <dl className="map-debug-grid">
-                <dt>model</dt>
-                <dd>{formatObjectMapDebugMs(map.timings.modelMs)}</dd>
-                <dt>visible</dt>
-                <dd>{formatObjectMapDebugMs(map.timings.visibleStateMs)}</dd>
-                <dt>g6 data</dt>
-                <dd>{formatObjectMapDebugMs(map.renderer?.timings.g6DataMs ?? null)}</dd>
-                <dt>g6 apply</dt>
-                <dd>
-                  {formatObjectMapDebugMs(map.renderer?.timings.graphDataApplyMs ?? null)}
-                  {map.renderer?.timings.graphDataApplyMode
-                    ? ` (${map.renderer.timings.graphDataApplyMode})`
-                    : ''}
-                </dd>
-                <dt>selection</dt>
-                <dd>
-                  {formatObjectMapDebugMs(map.renderer?.timings.selectionStateApplyMs ?? null)}
-                </dd>
-              </dl>
-            </div>
-            <div className="debug-overlay__section">
-              <div className="debug-overlay__label">Filters</div>
-              <dl className="map-debug-grid">
-                <dt>kinds</dt>
-                <dd>
-                  {map.selectedKinds.mode === 'some'
-                    ? map.selectedKinds.values.join(', ')
-                    : map.selectedKinds.mode}
-                </dd>
-                <dt>links</dt>
-                <dd>{map.enabledEdgeTypes ? map.enabledEdgeTypes.join(', ') || 'none' : 'all'}</dd>
-                <dt>search</dt>
-                <dd>
-                  {map.search.query ? `"${map.search.query}" (${map.search.matches})` : 'none'}
-                </dd>
-              </dl>
-            </div>
-            <div className="debug-overlay__section">
-              <div className="debug-overlay__label">Bounds</div>
-              <dl className="map-debug-grid">
-                <dt>layout</dt>
-                <dd>{formatObjectMapDebugBounds(map.layout.bounds)}</dd>
-                <dt>visible</dt>
-                <dd>{formatObjectMapDebugBounds(map.visibleLayout.bounds)}</dd>
-              </dl>
-            </div>
-            <div className="debug-overlay__section">
-              <div className="debug-overlay__label">Limits</div>
-              <dl className="map-debug-grid">
-                <dt>max depth</dt>
-                <dd>{map.payload.maxDepth}</dd>
-                <dt>max objects</dt>
-                <dd>{map.payload.maxNodes}</dd>
-                <dt>truncated</dt>
-                <dd>{map.payload.truncated ? 'true' : 'false'}</dd>
-                <dt>warnings</dt>
-                <dd>{map.payload.warnings}</dd>
-              </dl>
-            </div>
-          </div>
-        ))
-      )}
+      <ObjectMapDebugEntries maps={maps} />
     </DebugOverlay>
   );
 };

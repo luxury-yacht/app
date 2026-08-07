@@ -49,44 +49,52 @@ export const targetsAreEqual = (a: SidebarCursorTarget | null, b: SidebarCursorT
   }
 };
 
+const describeClusterViewTarget = (element: HTMLElement): SidebarCursorTarget | null => {
+  const view = parseClusterViewType(element.dataset.sidebarTargetView);
+  return view ? { kind: 'cluster-view', view } : null;
+};
+
+const describeGlobalViewTarget = (element: HTMLElement): SidebarCursorTarget | null => {
+  const view = parseGlobalViewType(element.dataset.sidebarTargetView);
+  return view ? { kind: 'global-view', view } : null;
+};
+
+const describeNamespaceViewTarget = (element: HTMLElement): SidebarCursorTarget | null => {
+  const namespace = element.dataset.sidebarTargetNamespace;
+  const view = parseNamespaceViewType(element.dataset.sidebarTargetView);
+  return namespace && view ? { kind: 'namespace-view', namespace, view } : null;
+};
+
+const describeNamespaceToggleTarget = (element: HTMLElement): SidebarCursorTarget | null => {
+  const namespace = element.dataset.sidebarTargetNamespace;
+  return namespace ? { kind: 'namespace-toggle', namespace } : null;
+};
+
+const describeClusterToggleTarget = (element: HTMLElement): SidebarCursorTarget | null => {
+  const id = element.dataset.sidebarTargetId;
+  return id ? { kind: 'cluster-toggle', id: id as 'resources' } : null;
+};
+
 export const describeElementTarget = (element: HTMLElement | null): SidebarCursorTarget | null => {
   if (!element) {
     return null;
   }
-  const kind = element.dataset.sidebarTargetKind;
-  if (kind === 'overview') {
-    return { kind: 'overview' };
+  switch (element.dataset.sidebarTargetKind) {
+    case 'overview':
+      return { kind: 'overview' };
+    case 'cluster-view':
+      return describeClusterViewTarget(element);
+    case 'global-view':
+      return describeGlobalViewTarget(element);
+    case 'namespace-view':
+      return describeNamespaceViewTarget(element);
+    case 'namespace-toggle':
+      return describeNamespaceToggleTarget(element);
+    case 'cluster-toggle':
+      return describeClusterToggleTarget(element);
+    default:
+      return null;
   }
-  if (kind === 'cluster-view') {
-    // The dataset round-trips through the DOM as strings; validate membership
-    // instead of blind-casting so a bogus value yields no target.
-    const view = parseClusterViewType(element.dataset.sidebarTargetView);
-    return view ? { kind: 'cluster-view', view } : null;
-  }
-  if (kind === 'global-view') {
-    const view = parseGlobalViewType(element.dataset.sidebarTargetView);
-    return view ? { kind: 'global-view', view } : null;
-  }
-  if (kind === 'namespace-view' && element.dataset.sidebarTargetNamespace) {
-    const view = parseNamespaceViewType(element.dataset.sidebarTargetView);
-    return view
-      ? {
-          kind: 'namespace-view',
-          namespace: element.dataset.sidebarTargetNamespace,
-          view,
-        }
-      : null;
-  }
-  if (kind === 'namespace-toggle' && element.dataset.sidebarTargetNamespace) {
-    return {
-      kind: 'namespace-toggle',
-      namespace: element.dataset.sidebarTargetNamespace,
-    };
-  }
-  if (kind === 'cluster-toggle' && element.dataset.sidebarTargetId) {
-    return { kind: 'cluster-toggle', id: element.dataset.sidebarTargetId as 'resources' };
-  }
-  return null;
 };
 
 export const getFocusableSidebarItems = (sidebar: HTMLElement): HTMLElement[] =>
@@ -116,6 +124,197 @@ interface SidebarKeyboardApi {
   describeTarget: (element: HTMLElement | null) => SidebarCursorTarget | null;
   isKeyboardNavActive: boolean;
 }
+
+interface SidebarTabContext {
+  sidebar: HTMLElement | null;
+  focusPreviousRegion: () => boolean;
+  getDisplaySelectionTarget: () => SidebarCursorTarget | null;
+  setKeyboardNavActive: (active: boolean) => void;
+  setCursorPreview: (target: SidebarCursorTarget | null) => void;
+  focusSelectedSidebarItem: () => void;
+}
+
+const isFocusInsideSidebar = (sidebar: HTMLElement | null, eventTarget: HTMLElement | null) =>
+  Boolean(
+    sidebar &&
+      ((eventTarget && sidebar.contains(eventTarget)) ||
+        (document.activeElement instanceof HTMLElement && sidebar.contains(document.activeElement)))
+  );
+
+const handleSidebarTab = (event: KeyboardEvent, context: SidebarTabContext): boolean => {
+  if (event.metaKey || event.ctrlKey || event.altKey) {
+    return false;
+  }
+  const targetElement = resolveEventElement(event.target);
+  if (hasNativeTabHandling(targetElement) || isInputElement(targetElement)) {
+    return false;
+  }
+  if (isFocusInsideSidebar(context.sidebar, targetElement)) {
+    return event.shiftKey ? context.focusPreviousRegion() : false;
+  }
+  if (event.shiftKey || !targetElement?.closest('[data-app-header-last-focusable="true"]')) {
+    return false;
+  }
+  const target = context.getDisplaySelectionTarget();
+  context.setKeyboardNavActive(true);
+  context.setCursorPreview(target);
+  context.focusSelectedSidebarItem();
+  return true;
+};
+
+interface SidebarNavigationContext {
+  sidebar: HTMLElement | null;
+  getFocusableItems: () => HTMLElement[];
+  getSelectionIndex: () => number;
+  focusItemByIndex: (index: number) => HTMLElement | null;
+  focusSelectedSidebarItem: () => void;
+  setKeyboardNavActive: (active: boolean) => void;
+  setCursorPreview: (target: SidebarCursorTarget | null) => void;
+  setPendingSelection: (target: SidebarCursorTarget | null) => void;
+  keyboardCursorIndexRef: RefObject<number | null>;
+  pendingCommitRef: RefObject<SidebarCursorTarget | null>;
+  keyboardActivationRef: RefObject<boolean>;
+}
+
+interface SidebarNavigationState {
+  items: HTMLElement[];
+  selectionIndex: number;
+  cursorIndex: number;
+}
+
+const resolveSidebarCursorIndex = (
+  items: HTMLElement[],
+  selectionIndex: number,
+  cursorIndexRef: RefObject<number | null>
+) => {
+  const activeElement = document.activeElement as HTMLElement | null;
+  const activeIndex = activeElement ? items.indexOf(activeElement) : -1;
+  if (activeIndex !== -1) {
+    cursorIndexRef.current = activeIndex;
+  }
+  return cursorIndexRef.current ?? selectionIndex;
+};
+
+const prepareSidebarNavigation = (
+  event: KeyboardEvent,
+  context: SidebarNavigationContext
+): SidebarNavigationState | null => {
+  if (!context.sidebar?.contains(document.activeElement)) {
+    return null;
+  }
+  if (event.metaKey || event.ctrlKey || event.altKey || event.shiftKey) {
+    return null;
+  }
+  if (isInputElement(resolveEventElement(event.target))) {
+    return null;
+  }
+  const items = context.getFocusableItems();
+  if (items.length === 0) {
+    return null;
+  }
+  const selectionIndex = context.getSelectionIndex();
+  const cursorIndex = resolveSidebarCursorIndex(
+    items,
+    selectionIndex,
+    context.keyboardCursorIndexRef
+  );
+  context.setKeyboardNavActive(true);
+  return { items, selectionIndex, cursorIndex };
+};
+
+const resolveDirectionalOrigin = (
+  cursorIndex: number,
+  selectionIndex: number,
+  itemCount: number,
+  delta: number
+) => {
+  const origin = cursorIndex === -1 ? selectionIndex : cursorIndex;
+  if (origin !== -1) {
+    return origin;
+  }
+  return delta > 0 ? -1 : itemCount;
+};
+
+const moveSidebarCursor = (
+  key: 'ArrowDown' | 'ArrowUp',
+  state: SidebarNavigationState,
+  context: SidebarNavigationContext
+) => {
+  const delta = key === 'ArrowDown' ? 1 : -1;
+  const origin = resolveDirectionalOrigin(
+    state.cursorIndex,
+    state.selectionIndex,
+    state.items.length,
+    delta
+  );
+  const nextIndex = Math.min(Math.max(origin + delta, 0), state.items.length - 1);
+  context.setCursorPreview(describeElementTarget(context.focusItemByIndex(nextIndex)));
+  return true;
+};
+
+const focusSidebarEdge = (
+  key: 'Home' | 'End',
+  state: SidebarNavigationState,
+  context: SidebarNavigationContext
+) => {
+  const edgeIndex = key === 'Home' ? 0 : state.items.length - 1;
+  context.setCursorPreview(describeElementTarget(context.focusItemByIndex(edgeIndex)));
+  return true;
+};
+
+const activateSidebarCursor = (
+  state: SidebarNavigationState,
+  context: SidebarNavigationContext
+) => {
+  const targetIndex = state.cursorIndex === -1 ? state.selectionIndex : state.cursorIndex;
+  const element = state.items[targetIndex];
+  if (!element) {
+    return true;
+  }
+  const targetDescriptor = describeElementTarget(element);
+  if (targetDescriptor) {
+    context.pendingCommitRef.current = targetDescriptor;
+    context.setPendingSelection(targetDescriptor);
+    context.setCursorPreview(targetDescriptor);
+  }
+  context.keyboardActivationRef.current = true;
+  try {
+    element.click();
+  } finally {
+    context.keyboardActivationRef.current = false;
+  }
+  return true;
+};
+
+const cancelSidebarNavigation = (context: SidebarNavigationContext) => {
+  context.pendingCommitRef.current = null;
+  context.setCursorPreview(null);
+  context.keyboardCursorIndexRef.current = null;
+  context.focusSelectedSidebarItem();
+  return true;
+};
+
+const handleSidebarNavigationKey = (
+  key: string,
+  state: SidebarNavigationState,
+  context: SidebarNavigationContext
+): boolean => {
+  switch (key) {
+    case 'ArrowDown':
+    case 'ArrowUp':
+      return moveSidebarCursor(key, state, context);
+    case 'Home':
+    case 'End':
+      return focusSidebarEdge(key, state, context);
+    case 'Enter':
+    case ' ':
+      return activateSidebarCursor(state, context);
+    case 'Escape':
+      return cancelSidebarNavigation(context);
+    default:
+      return false;
+  }
+};
 
 export const useSidebarKeyboardControls = ({
   sidebarRef,
@@ -249,128 +448,30 @@ export const useSidebarKeyboardControls = ({
     priority: KeyboardScopePriority.SIDEBAR,
     onKeyDown: (event) => {
       if (event.key === 'Tab') {
-        if (event.metaKey || event.ctrlKey || event.altKey) {
-          return false;
-        }
-        const targetElement = resolveEventElement(event.target);
-        const container = sidebarRef.current;
-        const focusIsInsideSidebar =
-          Boolean(container) &&
-          ((targetElement && container?.contains(targetElement)) ||
-            (document.activeElement instanceof HTMLElement &&
-              container?.contains(document.activeElement)));
-
-        if (hasNativeTabHandling(targetElement) || isInputElement(targetElement)) {
-          return false;
-        }
-        if (focusIsInsideSidebar) {
-          if (!event.shiftKey) {
-            return false;
-          }
-          return focusPreviousRegion();
-        }
-        if (event.shiftKey || !targetElement?.closest('[data-app-header-last-focusable="true"]')) {
-          return false;
-        }
-        const target = getDisplaySelectionTarget();
-        setIsKeyboardNavActive(true);
-        setCursorPreview(target);
-        focusSelectedSidebarItem();
-        return true;
+        return handleSidebarTab(event, {
+          sidebar: sidebarRef.current,
+          focusPreviousRegion,
+          getDisplaySelectionTarget,
+          setKeyboardNavActive: setIsKeyboardNavActive,
+          setCursorPreview,
+          focusSelectedSidebarItem,
+        });
       }
-
-      const container = sidebarRef.current;
-      if (!container?.contains(document.activeElement)) {
-        return false;
-      }
-      if (event.metaKey || event.ctrlKey || event.altKey || event.shiftKey) {
-        return false;
-      }
-      // Native text editing owns the keys while an input inside the sidebar
-      // has focus (the inline namespace-scope editor): claiming Enter/arrows
-      // here would both break editing and beep — the framework prevents the
-      // default on a key the input needed. Mirrors the Tab branch's guard.
-      if (isInputElement(resolveEventElement(event.target))) {
-        return false;
-      }
-
-      const items = getFocusableItems();
-      if (items.length === 0) {
-        return false;
-      }
-
-      const selectionIndex = getSelectionIndex();
-      const activeElement = document.activeElement as HTMLElement | null;
-      const activeIndex = activeElement ? items.indexOf(activeElement) : -1;
-      if (activeIndex !== -1 && keyboardCursorIndexRef.current !== activeIndex) {
-        keyboardCursorIndexRef.current = activeIndex;
-      }
-      const cursorIndex =
-        keyboardCursorIndexRef.current !== null ? keyboardCursorIndexRef.current : selectionIndex;
-
-      if (!isKeyboardNavActive) {
-        setIsKeyboardNavActive(true);
-      }
-
-      if (event.key === 'ArrowDown' || event.key === 'ArrowUp') {
-        const delta = event.key === 'ArrowDown' ? 1 : -1;
-        const origin = cursorIndex === -1 ? selectionIndex : cursorIndex;
-        let start: number;
-
-        if (origin === -1) {
-          if (delta > 0) {
-            start = -1;
-          } else {
-            start = items.length;
-          }
-        } else {
-          start = origin;
-        }
-
-        const nextIndex = Math.min(Math.max(start + delta, 0), items.length - 1);
-        const element = focusItemByIndex(nextIndex);
-        const targetDescriptor = describeElementTarget(element);
-        setCursorPreview(targetDescriptor);
-        return true;
-      }
-
-      if (event.key === 'Home' || event.key === 'End') {
-        const edgeIndex = event.key === 'Home' ? 0 : items.length - 1;
-        const element = focusItemByIndex(edgeIndex);
-        const targetDescriptor = describeElementTarget(element);
-        setCursorPreview(targetDescriptor);
-        return true;
-      }
-
-      if (event.key === 'Enter' || event.key === ' ') {
-        const targetIndex = cursorIndex === -1 ? selectionIndex : cursorIndex;
-        if (targetIndex >= 0 && targetIndex < items.length) {
-          const element = items[targetIndex];
-          const targetDescriptor = describeElementTarget(element);
-          if (targetDescriptor) {
-            pendingCommitRef.current = targetDescriptor;
-            setPendingSelection(targetDescriptor);
-            setCursorPreview(targetDescriptor);
-          }
-          keyboardActivationRef.current = true;
-          try {
-            element.click();
-          } finally {
-            keyboardActivationRef.current = false;
-          }
-        }
-        return true;
-      }
-
-      if (event.key === 'Escape') {
-        pendingCommitRef.current = null;
-        setCursorPreview(null);
-        keyboardCursorIndexRef.current = null;
-        focusSelectedSidebarItem();
-        return true;
-      }
-
-      return false;
+      const context: SidebarNavigationContext = {
+        sidebar: sidebarRef.current,
+        getFocusableItems,
+        getSelectionIndex,
+        focusItemByIndex,
+        focusSelectedSidebarItem,
+        setKeyboardNavActive: setIsKeyboardNavActive,
+        setCursorPreview,
+        setPendingSelection,
+        keyboardCursorIndexRef,
+        pendingCommitRef,
+        keyboardActivationRef,
+      };
+      const state = prepareSidebarNavigation(event, context);
+      return state ? handleSidebarNavigationKey(event.key, state, context) : false;
     },
   });
 

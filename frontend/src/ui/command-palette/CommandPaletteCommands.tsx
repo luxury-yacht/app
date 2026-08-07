@@ -71,6 +71,112 @@ export interface Command {
   shortcut?: string | string[];
 }
 
+const platformShortcut = (mac: string[], other: string[]) => (isMacPlatform() ? mac : other);
+
+const toggleLabel = (enabled: boolean, disableLabel: string, enableLabel: string) =>
+  enabled ? disableLabel : enableLabel;
+
+const currentModeDescription = (description: string, isCurrent: boolean) =>
+  `${description}${isCurrent ? ' (current)' : ''}`;
+
+const SidebarVisibilityIcon = ({ isVisible }: { isVisible: boolean }) =>
+  isVisible ? (
+    <CollapseSidebarIcon width={16} height={16} />
+  ) : (
+    <ExpandSidebarIcon width={16} height={16} />
+  );
+
+type GlobalViewId = (typeof GLOBAL_VIEW_DESCRIPTORS)[number]['id'];
+
+const buildGlobalViewCommands = (
+  include: boolean,
+  openGlobalView: (view: GlobalViewId) => void
+): Command[] => {
+  if (!include) {
+    return [];
+  }
+  return GLOBAL_VIEW_DESCRIPTORS.map((view) => ({
+    id: `global-${view.id}`,
+    label: `Global - ${view.label}`,
+    icon: <CategoryIcon width={16} height={16} />,
+    description: view.description,
+    category: 'Navigation',
+    action: () => openGlobalView(view.id),
+    keywords: [...view.keywords],
+  }));
+};
+
+const getClusterViewIcon = (viewId: ClusterViewType) =>
+  viewId === 'attention' ? (
+    <WarningIcon width={16} height={16} />
+  ) : (
+    <CategoryIcon width={16} height={16} />
+  );
+
+const buildClusterViewCommands = (openClusterTab: (view: ClusterViewType) => void): Command[] =>
+  CLUSTER_VIEW_DESCRIPTORS.map((view) => ({
+    id: `cluster-${view.id}`,
+    label: `Cluster - ${view.label}`,
+    icon: getClusterViewIcon(view.id),
+    description: view.description,
+    category: 'Navigation',
+    action: () => openClusterTab(view.id),
+    keywords: [...view.keywords],
+  }));
+
+type KubeconfigContextValue = ReturnType<typeof useKubeconfig>;
+type KubeconfigEntry = KubeconfigContextValue['kubeconfigs'][number];
+
+const getKubeconfigDescription = (config: KubeconfigEntry) => {
+  if (config.invalid) {
+    return `Invalid: ${config.invalidReason || 'unusable context'}`;
+  }
+  return config.name !== config.context ? `From ${config.name}` : 'Switch to this context';
+};
+
+const KubeconfigCommandLabel = ({ config }: { config: KubeconfigEntry }) => (
+  <span className="command-palette-kubeconfig-label">
+    <span className="command-palette-kubeconfig-context">{config.context}</span>
+    {config.invalid ? (
+      <span className="command-palette-kubeconfig-invalid" title={config.invalidReason}>
+        ⚠ invalid
+      </span>
+    ) : null}
+    {config.name !== config.context ? (
+      <span className="command-palette-kubeconfig-file">{config.name}</span>
+    ) : null}
+  </span>
+);
+
+const buildKubeconfigCommand = (
+  config: KubeconfigEntry,
+  selectedKubeconfigs: string[],
+  setActiveKubeconfig: KubeconfigContextValue['setActiveKubeconfig'],
+  openKubeconfig: KubeconfigContextValue['openKubeconfig']
+): Command => {
+  const configValue = `${config.path}:${config.context}`;
+  const isActive = selectedKubeconfigs.includes(configValue);
+  return {
+    id: `kubeconfig-${configValue}`,
+    label: `${config.name}:${config.context}`,
+    renderLabel: <KubeconfigCommandLabel config={config} />,
+    description: getKubeconfigDescription(config),
+    category: 'Kubeconfigs',
+    icon: !config.invalid && isActive ? '✓' : undefined,
+    action: () => {
+      if (config.invalid) {
+        return;
+      }
+      if (isActive) {
+        setActiveKubeconfig(configValue);
+        return;
+      }
+      void openKubeconfig(configValue);
+    },
+    keywords: ['kubeconfig', 'context', config.name, config.context],
+  };
+};
+
 export function useCommandPaletteCommands() {
   const viewState = useViewState();
   const namespace = useNamespace();
@@ -143,18 +249,15 @@ export function useCommandPaletteCommands() {
     [namespace, viewState]
   );
 
-  const closeTabShortcut = useMemo(() => (isMacPlatform() ? ['⌘', 'W'] : ['Ctrl', 'W']), []);
-  const diffObjectsShortcut = useMemo(() => (isMacPlatform() ? ['⌘', 'D'] : ['Ctrl', 'D']), []);
+  const closeTabShortcut = useMemo(() => platformShortcut(['⌘', 'W'], ['Ctrl', 'W']), []);
+  const diffObjectsShortcut = useMemo(() => platformShortcut(['⌘', 'D'], ['Ctrl', 'D']), []);
   const selectNamespaceShortcut = useMemo(
-    () => (isMacPlatform() ? ['⇧', '⌘', 'N'] : ['Ctrl', 'Shift', 'N']),
+    () => platformShortcut(['⇧', '⌘', 'N'], ['Ctrl', 'Shift', 'N']),
     []
   );
   // The same accelerator as File → Open Cluster (backend/menu.go), which opens
   // the palette in kubeconfig selection.
-  const selectKubeconfigShortcut = useMemo(
-    () => (isMacPlatform() ? ['⌘', 'O'] : ['Ctrl', 'O']),
-    []
-  );
+  const selectKubeconfigShortcut = useMemo(() => platformShortcut(['⌘', 'O'], ['Ctrl', 'O']), []);
 
   const commands = useMemo(
     () => [
@@ -184,19 +287,19 @@ export function useCommandPaletteCommands() {
       },
       {
         id: 'toggle-sidebar',
-        label: viewState.isSidebarVisible ? 'Hide Sidebar' : 'Show Sidebar',
-        icon: viewState.isSidebarVisible ? (
-          <CollapseSidebarIcon width={16} height={16} />
-        ) : (
-          <ExpandSidebarIcon width={16} height={16} />
+        label: toggleLabel(viewState.isSidebarVisible, 'Hide Sidebar', 'Show Sidebar'),
+        icon: <SidebarVisibilityIcon isVisible={viewState.isSidebarVisible} />,
+        description: toggleLabel(
+          viewState.isSidebarVisible,
+          'Hide the sidebar',
+          'Show the sidebar'
         ),
-        description: viewState.isSidebarVisible ? 'Hide the sidebar' : 'Show the sidebar',
         category: 'Application',
         action: () => {
           viewState.toggleSidebar();
         },
         keywords: ['sidebar', 'toggle', 'hide', 'show'],
-        shortcut: isMacPlatform() ? ['⌘', 'B'] : ['Ctrl', 'B'],
+        shortcut: platformShortcut(['⌘', 'B'], ['Ctrl', 'B']),
       },
       {
         id: 'open-object-diff',
@@ -244,7 +347,7 @@ export function useCommandPaletteCommands() {
         category: 'View',
         action: zoomIn,
         keywords: ['zoom', 'in', 'bigger', 'larger', 'increase', 'magnify'],
-        shortcut: isMacPlatform() ? ['⌘', '+'] : ['Ctrl', '+'],
+        shortcut: platformShortcut(['⌘', '+'], ['Ctrl', '+']),
       },
       {
         id: 'zoom-out',
@@ -254,7 +357,7 @@ export function useCommandPaletteCommands() {
         category: 'View',
         action: zoomOut,
         keywords: ['zoom', 'out', 'smaller', 'decrease', 'reduce'],
-        shortcut: isMacPlatform() ? ['⌘', '-'] : ['Ctrl', '-'],
+        shortcut: platformShortcut(['⌘', '-'], ['Ctrl', '-']),
       },
       {
         id: 'zoom-reset',
@@ -263,7 +366,7 @@ export function useCommandPaletteCommands() {
         category: 'View',
         action: resetZoom,
         keywords: ['zoom', 'reset', 'default', 'normal', '100'],
-        shortcut: isMacPlatform() ? ['⌘', '0'] : ['Ctrl', '0'],
+        shortcut: platformShortcut(['⌘', '0'], ['Ctrl', '0']),
       },
 
       // Settings Commands
@@ -271,7 +374,7 @@ export function useCommandPaletteCommands() {
         id: 'mode-system',
         label: 'Follow the system for light/dark mode',
         icon: <AppearanceModeIcon width={16} height={16} />,
-        description: `Use system appearance mode${mode === 'system' ? ' (current)' : ''}`,
+        description: currentModeDescription('Use system appearance mode', mode === 'system'),
         category: 'Settings',
         action: async () => {
           try {
@@ -289,7 +392,7 @@ export function useCommandPaletteCommands() {
         id: 'mode-light',
         label: 'Light mode',
         icon: <LightModeIcon width={16} height={16} />,
-        description: `Switch to light mode${mode === 'light' ? ' (current)' : ''}`,
+        description: currentModeDescription('Switch to light mode', mode === 'light'),
         category: 'Settings',
         action: async () => {
           try {
@@ -307,7 +410,7 @@ export function useCommandPaletteCommands() {
         id: 'mode-dark',
         label: 'Dark mode',
         icon: <DarkModeIcon width={16} height={16} />,
-        description: `Switch to dark mode${mode === 'dark' ? ' (current)' : ''}`,
+        description: currentModeDescription('Switch to dark mode', mode === 'dark'),
         category: 'Settings',
         action: async () => {
           try {
@@ -323,12 +426,12 @@ export function useCommandPaletteCommands() {
       },
       {
         id: 'toggle-exclusive-namespaces',
-        label: exclusiveNamespaces ? 'Disable exclusive namespaces' : 'Enable exclusive namespaces',
-        icon: viewState.isSidebarVisible ? (
-          <CollapseSidebarIcon width={16} height={16} />
-        ) : (
-          <ExpandSidebarIcon width={16} height={16} />
+        label: toggleLabel(
+          exclusiveNamespaces,
+          'Disable exclusive namespaces',
+          'Enable exclusive namespaces'
         ),
+        icon: <SidebarVisibilityIcon isVisible={viewState.isSidebarVisible} />,
         description:
           'When enabled, only one namespace at a time can be expanded in the Sidebar. Expanding a different namespace will collapse the currently expanded one.',
         category: 'Settings',
@@ -348,14 +451,12 @@ export function useCommandPaletteCommands() {
       },
       {
         id: 'toggle-dim-inactive-namespaces',
-        label: dimInactiveNamespaces
-          ? 'Disable inactive namespace dimming'
-          : 'Enable inactive namespace dimming',
-        icon: viewState.isSidebarVisible ? (
-          <CollapseSidebarIcon width={16} height={16} />
-        ) : (
-          <ExpandSidebarIcon width={16} height={16} />
+        label: toggleLabel(
+          dimInactiveNamespaces,
+          'Disable inactive namespace dimming',
+          'Enable inactive namespace dimming'
         ),
+        icon: <SidebarVisibilityIcon isVisible={viewState.isSidebarVisible} />,
         description: 'Dim namespaces in the Sidebar that have no Workloads.',
         category: 'Settings',
         action: async () => {
@@ -374,7 +475,7 @@ export function useCommandPaletteCommands() {
       },
       {
         id: 'toggle-auto-refresh',
-        label: autoRefreshEnabled ? 'Disable auto-refresh' : 'Enable auto-refresh',
+        label: toggleLabel(autoRefreshEnabled, 'Disable auto-refresh', 'Enable auto-refresh'),
         icon: <RefreshIcon width={16} height={16} />,
         description: 'Enable or disable automatic refresh',
         category: 'Settings',
@@ -406,7 +507,7 @@ export function useCommandPaletteCommands() {
       },
       {
         id: 'toggle-short-names',
-        label: useShortResourceNames ? 'Disable short names' : 'Enable short names',
+        label: toggleLabel(useShortResourceNames, 'Disable short names', 'Enable short names'),
         icon: <SettingsIcon width={16} height={16} />,
         description: 'Toggle between short and full resource type names',
         category: 'Settings',
@@ -460,31 +561,8 @@ export function useCommandPaletteCommands() {
         keywords: ['namespace', 'change', 'select'],
         shortcut: selectNamespaceShortcut,
       },
-      ...(selectedKubeconfigs.length > 1
-        ? GLOBAL_VIEW_DESCRIPTORS.map((view) => ({
-            id: `global-${view.id}`,
-            label: `Global - ${view.label}`,
-            icon: <CategoryIcon width={16} height={16} />,
-            description: view.description,
-            category: 'Navigation',
-            action: () => openGlobalView(view.id),
-            keywords: [...view.keywords],
-          }))
-        : []),
-      ...CLUSTER_VIEW_DESCRIPTORS.map((view) => ({
-        id: `cluster-${view.id}`,
-        label: `Cluster - ${view.label}`,
-        icon:
-          view.id === 'attention' ? (
-            <WarningIcon width={16} height={16} />
-          ) : (
-            <CategoryIcon width={16} height={16} />
-          ),
-        description: view.description,
-        category: 'Navigation',
-        action: () => openClusterTab(view.id),
-        keywords: [...view.keywords],
-      })),
+      ...buildGlobalViewCommands(selectedKubeconfigs.length > 1, openGlobalView),
+      ...buildClusterViewCommands(openClusterTab),
     ],
     [
       viewState,
@@ -563,55 +641,9 @@ export function useCommandPaletteCommands() {
       return byContext !== 0 ? byContext : a.name.localeCompare(b.name);
     });
 
-    return sorted.map((config) => {
-      // Backend ALWAYS expects format "path:context"
-      const configValue = `${config.path}:${config.context}`;
-      const isActive = selectedKubeconfigs.includes(configValue);
-      const label = `${config.name}:${config.context}`;
-      const isInvalid = config.invalid;
-      let description = 'Switch to this context';
-      if (isInvalid) {
-        description = `Invalid: ${config.invalidReason || 'unusable context'}`;
-      } else if (config.name !== config.context) {
-        description = `From ${config.name}`;
-      }
-      let icon: string | undefined;
-      if (!isInvalid && isActive) {
-        icon = '✓';
-      }
-
-      return {
-        id: `kubeconfig-${configValue}`,
-        label,
-        renderLabel: (
-          <span className="command-palette-kubeconfig-label">
-            <span className="command-palette-kubeconfig-context">{config.context}</span>
-            {!!isInvalid && (
-              <span className="command-palette-kubeconfig-invalid" title={config.invalidReason}>
-                ⚠ invalid
-              </span>
-            )}
-            {config.name !== config.context && (
-              <span className="command-palette-kubeconfig-file">{config.name}</span>
-            )}
-          </span>
-        ),
-        description,
-        category: 'Kubeconfigs',
-        icon,
-        action: () => {
-          if (isInvalid) {
-            return; // A structurally-invalid context can't be opened.
-          }
-          if (isActive) {
-            setActiveKubeconfig(configValue);
-            return;
-          }
-          void openKubeconfig(configValue);
-        },
-        keywords: ['kubeconfig', 'context', config.name, config.context],
-      };
-    });
+    return sorted.map((config) =>
+      buildKubeconfigCommand(config, selectedKubeconfigs, setActiveKubeconfig, openKubeconfig)
+    );
   }, [kubeconfigs, openKubeconfig, selectedKubeconfigs, setActiveKubeconfig]);
 
   // Build commands from saved favorites so they appear as a searchable group.

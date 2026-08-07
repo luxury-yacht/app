@@ -177,6 +177,575 @@ const buildNodeLogSourceOptions = (sources: NodeLogSource[]): DropdownOption[] =
   return options;
 };
 
+type NodeLogRequestReason = 'user' | 'background';
+
+type NodeLogFetchBatch = {
+  appendMode: boolean;
+  response: NodeLogFetchResponse | null;
+};
+
+type NodeLogBatchResolution =
+  | { status: 'error'; message: string }
+  | { status: 'success'; content: string; truncated: boolean };
+
+type NodeLogFetchPlan = {
+  activeSourcePath: string;
+  sourceChanged: boolean;
+  incrementalSinceTime: string | undefined;
+  requestReason: NodeLogRequestReason;
+  requestStartedAt: string;
+};
+
+const buildNodeLogFetchPlan = ({
+  isActive,
+  clusterId,
+  nodeName,
+  sourcePath,
+  loadedSourcePath,
+  lastSuccessfulFetchAt,
+  refreshNonce,
+}: {
+  isActive: boolean;
+  clusterId?: string | null;
+  nodeName: string;
+  sourcePath?: string;
+  loadedSourcePath: string | null;
+  lastSuccessfulFetchAt: string | null;
+  refreshNonce: number;
+}): NodeLogFetchPlan | null => {
+  if (!isActive || !clusterId || !nodeName || !sourcePath) {
+    return null;
+  }
+  const sourceChanged = loadedSourcePath !== sourcePath;
+  return {
+    activeSourcePath: sourcePath,
+    sourceChanged,
+    incrementalSinceTime:
+      !sourceChanged && refreshNonce > 0 ? buildNodeLogSinceTime(lastSuccessfulFetchAt) : undefined,
+    requestReason: sourceChanged || refreshNonce === 0 ? 'user' : 'background',
+    requestStartedAt: new Date().toISOString(),
+  };
+};
+
+const executeNodeLogFetch = (
+  clusterId: string,
+  nodeName: string,
+  sourcePath: string,
+  requestReason: NodeLogRequestReason,
+  sinceTime?: string
+) => {
+  const request = { sourcePath, tailBytes: NODE_LOG_TAIL_BYTES, sinceTime };
+  return requestReason === 'background'
+    ? fetchNodeLogs(clusterId, nodeName, request, requestReason)
+    : fetchNodeLogs(clusterId, nodeName, request);
+};
+
+const fetchNodeLogBatch = async (
+  clusterId: string,
+  nodeName: string,
+  plan: NodeLogFetchPlan
+): Promise<NodeLogFetchBatch> => {
+  let appendMode = Boolean(plan.incrementalSinceTime);
+  let result = await executeNodeLogFetch(
+    clusterId,
+    nodeName,
+    plan.activeSourcePath,
+    plan.requestReason,
+    plan.incrementalSinceTime
+  );
+  let response = getExecutedNodeLogResponse(result);
+  if (!response) {
+    return { appendMode, response: null };
+  }
+  if (appendMode && (response.error || response.truncated)) {
+    result = await executeNodeLogFetch(
+      clusterId,
+      nodeName,
+      plan.activeSourcePath,
+      plan.requestReason
+    );
+    response = getExecutedNodeLogResponse(result);
+    appendMode = false;
+  }
+  return { appendMode, response };
+};
+
+const nodeLogResponseError = (response: NodeLogFetchResponse, clusterId: string): string | null => {
+  if (!response.error) {
+    return null;
+  }
+  return errorHandler.handleInline(new Error(response.error), {
+    action: 'loadNodeLogs',
+    source: 'NodeLogsTab',
+    clusterId,
+  }).message;
+};
+
+const resolveNodeLogBatch = (
+  batch: NodeLogFetchBatch,
+  existingContent: string,
+  clusterId: string
+): NodeLogBatchResolution | null => {
+  if (!batch.response) {
+    return null;
+  }
+  const responseError = nodeLogResponseError(batch.response, clusterId);
+  if (responseError) {
+    return { status: 'error', message: responseError };
+  }
+  const incomingContent = batch.response.content ?? '';
+  const content =
+    batch.appendMode && existingContent
+      ? appendNodeLogContent(existingContent, incomingContent)
+      : incomingContent;
+  return {
+    status: 'success',
+    content,
+    truncated: Boolean(batch.response.truncated),
+  };
+};
+
+const useNodeLogRequest = ({
+  clusterId,
+  nodeName,
+  isActive,
+  sourcePath,
+  autoRefresh,
+}: {
+  clusterId?: string | null;
+  nodeName: string;
+  isActive: boolean;
+  sourcePath?: string;
+  autoRefresh: boolean;
+}) => {
+  const [content, setContent] = useState('');
+  const [error, setError] = useState<string | null>(null);
+  const [loading, setLoading] = useState(false);
+  const [refreshNonce, setRefreshNonce] = useState(0);
+  const [truncated, setTruncated] = useState(false);
+  const contentRef = useRef('');
+  const loadedSourcePathRef = useRef<string | null>(null);
+  const lastSuccessfulFetchAtRef = useRef<string | null>(null);
+  const previousSourcePathRef = useRef<string | null>(null);
+
+  useEffect(() => {
+    contentRef.current = content;
+  }, [content]);
+
+  useEffect(() => {
+    const plan = buildNodeLogFetchPlan({
+      isActive,
+      clusterId,
+      nodeName,
+      sourcePath,
+      loadedSourcePath: loadedSourcePathRef.current,
+      lastSuccessfulFetchAt: lastSuccessfulFetchAtRef.current,
+      refreshNonce,
+    });
+    if (!plan || !clusterId) {
+      return;
+    }
+
+    let cancelled = false;
+    if (plan.sourceChanged) {
+      setContent('');
+      setTruncated(false);
+    }
+    setLoading(true);
+    setError(null);
+
+    void fetchNodeLogBatch(clusterId, nodeName, plan)
+      .then((batch) => {
+        if (cancelled) {
+          return;
+        }
+        const resolution = resolveNodeLogBatch(batch, contentRef.current, clusterId);
+        if (!resolution) {
+          return;
+        }
+        if (resolution.status === 'error') {
+          setError(resolution.message);
+          setContent((current) => (plan.sourceChanged ? '' : current));
+          setTruncated(false);
+          return;
+        }
+        loadedSourcePathRef.current = plan.activeSourcePath;
+        lastSuccessfulFetchAtRef.current = plan.requestStartedAt;
+        startTransition(() => {
+          setContent(resolution.content);
+          setTruncated(resolution.truncated);
+        });
+      })
+      .catch((fetchError) => {
+        if (cancelled) {
+          return;
+        }
+        const details = errorHandler.handleInline(fetchError, {
+          action: 'loadNodeLogs',
+          source: 'NodeLogsTab',
+          clusterId,
+        });
+        setError(details.message || 'Failed to fetch node logs');
+        if (plan.sourceChanged) {
+          setContent('');
+        }
+        setTruncated(false);
+      })
+      .finally(() => {
+        if (!cancelled) {
+          setLoading(false);
+        }
+      });
+
+    return () => {
+      cancelled = true;
+    };
+  }, [clusterId, isActive, nodeName, refreshNonce, sourcePath]);
+
+  useEffect(() => {
+    if (!autoRefresh || !isActive || !sourcePath) {
+      return;
+    }
+    const timerId = window.setInterval(() => {
+      setRefreshNonce((value) => value + 1);
+    }, NODE_LOG_AUTO_REFRESH_MS);
+    return () => {
+      window.clearInterval(timerId);
+    };
+  }, [autoRefresh, isActive, sourcePath]);
+
+  const resetSourceTracking = useCallback((nextSourcePath: string | null): boolean => {
+    if (nextSourcePath === previousSourcePathRef.current) {
+      return false;
+    }
+    previousSourcePathRef.current = nextSourcePath;
+    loadedSourcePathRef.current = null;
+    lastSuccessfulFetchAtRef.current = null;
+    return true;
+  }, []);
+
+  return { content, error, loading, truncated, resetSourceTracking };
+};
+
+const getNodeLogCountLabel = (hasSelectedSource: boolean, displayedLogCount: number): string => {
+  if (!hasSelectedSource) {
+    return 'Select a log source';
+  }
+  const suffix = displayedLogCount === 1 ? '' : 's';
+  return `${displayedLogCount} matching log${suffix}`;
+};
+
+const getNodeLogRowCount = (
+  content: string,
+  isParsedView: boolean,
+  parsedCount: number,
+  renderedCount: number
+): number => {
+  if (!content) {
+    return 0;
+  }
+  return isParsedView ? parsedCount : renderedCount;
+};
+
+const getCopyIconFeedback = (copyFeedback: CopyFeedback): 'success' | 'error' | null => {
+  if (copyFeedback === 'copied') {
+    return 'success';
+  }
+  return copyFeedback === 'error' ? 'error' : null;
+};
+
+const renderNodeLogSourceOption = (option: DropdownOption): React.ReactNode => {
+  if (option.group === 'header') {
+    return <span className="node-log-source-header">{option.label}</span>;
+  }
+  const metadata = option.metadata as NodeLogSourceOptionMetadata | undefined;
+  if (metadata?.kind !== 'child') {
+    return <span className="node-log-source-label">{option.label}</span>;
+  }
+  const className = [
+    'node-log-source-label',
+    'node-log-source-child',
+    metadata.isLastChild && 'node-log-source-child-last',
+  ]
+    .filter(Boolean)
+    .join(' ');
+  return (
+    <span className={className}>
+      <span className="node-log-source-child-text">{metadata.childLabel}</span>
+    </span>
+  );
+};
+
+const NodeLogsAvailability = ({
+  availability,
+  hasSources,
+}: {
+  availability: CapabilityState;
+  hasSources: boolean;
+}) => {
+  if (availability.pending) {
+    return (
+      <div className="object-panel-tab-content">
+        <div className="logs-viewer-display">
+          <div className="logs-viewer-content">
+            <div className="logs-viewer-display-loading">
+              Checking if logs are available for this node...
+            </div>
+          </div>
+        </div>
+      </div>
+    );
+  }
+  if (hasSources) {
+    return null;
+  }
+  return (
+    <div className="object-panel-tab-content">
+      <div className="logs-viewer-display">
+        <div className="logs-viewer-content">
+          <div className="logs-viewer-display-error">
+            <div className="node-log-unavailable-message">
+              <div>Logs are not available on this node</div>
+              {availability.reason ? (
+                <div>
+                  Error: <ErrorSurface kind="status" message={availability.reason} />
+                </div>
+              ) : null}
+            </div>
+          </div>
+        </div>
+      </div>
+    </div>
+  );
+};
+
+type NodeLogContentProps = {
+  error: string | null;
+  hasSelectedSource: boolean;
+  loading: boolean;
+  hasLoadedContent: boolean;
+  hasInvalidRegex: boolean;
+  hasFilteredLines: boolean;
+  hasContent: boolean;
+  isParsedView: boolean;
+  canParseLogs: boolean;
+  renderedDisplayRows: RenderedLogRow[];
+  logsContentRef: React.RefObject<HTMLDivElement | null>;
+  wrapText: boolean;
+  renderMessageContent: (message: string, keyPrefix: string) => React.ReactNode;
+  parsedLogs: ParsedLogEntry[];
+  tableColumns: GridColumnDefinition<ParsedLogEntry>[];
+  expandedRows: Set<string>;
+  onToggleParsedRow: (rowKey: string) => void;
+};
+
+const NodeLogContent = ({
+  error,
+  hasSelectedSource,
+  loading,
+  hasLoadedContent,
+  hasInvalidRegex,
+  hasFilteredLines,
+  hasContent,
+  isParsedView,
+  canParseLogs,
+  renderedDisplayRows,
+  logsContentRef,
+  wrapText,
+  renderMessageContent,
+  parsedLogs,
+  tableColumns,
+  expandedRows,
+  onToggleParsedRow,
+}: NodeLogContentProps) => {
+  if (error) {
+    return (
+      <div className="logs-viewer-display-error">
+        <ErrorSurface kind="reported" message={error} />
+      </div>
+    );
+  }
+  if (!hasSelectedSource) {
+    return <div className="logs-viewer-display-loading">Select a log source to view logs.</div>;
+  }
+  if (loading && !hasLoadedContent) {
+    return <div className="logs-viewer-display-loading">Loading logs…</div>;
+  }
+  if (hasInvalidRegex) {
+    return <div className="logs-viewer-display-error">Enter a valid regular expression.</div>;
+  }
+  if (!hasFilteredLines) {
+    const message = hasContent
+      ? 'No log lines match the current filter.'
+      : 'No logs returned for this source.';
+    return <div className="logs-viewer-display-loading">{message}</div>;
+  }
+  if (!isParsedView) {
+    return (
+      <RawLogViewer
+        rows={renderedDisplayRows}
+        scrollContainerRef={logsContentRef}
+        wrapText={wrapText}
+        renderRow={(row, index) => (
+          <div className="log-viewer-line">
+            {renderMessageContent(row.line, `node-log-line-${index}`)}
+          </div>
+        )}
+      />
+    );
+  }
+  if (!canParseLogs) {
+    return (
+      <div className="logs-viewer-display-loading">No JSON log lines match the current filter.</div>
+    );
+  }
+  return (
+    <ParsedLogTable
+      rows={parsedLogs}
+      columns={tableColumns}
+      expandedRows={expandedRows}
+      onToggleRow={onToggleParsedRow}
+    />
+  );
+};
+
+type NodeLogIconItemsOptions = {
+  highlightMatches: boolean;
+  inverseMatches: boolean;
+  caseSensitiveMatches: boolean;
+  regexMatches: boolean;
+  autoRefresh: boolean;
+  wrapText: boolean;
+  hasAnsiLogEntries: boolean;
+  showAnsiColors: boolean;
+  canParseLogs: boolean;
+  displayMode: LogDisplayMode;
+  isParsedView: boolean;
+  hasCopyableContent: boolean;
+  copyIconFeedback: 'success' | 'error' | null;
+  toggleHighlightMatches: () => void;
+  toggleInverseMatches: () => void;
+  toggleCaseSensitiveMatches: () => void;
+  toggleRegexMatches: () => void;
+  toggleAutoRefresh: () => void;
+  toggleWrapText: () => void;
+  toggleAnsiColors: () => void;
+  togglePrettyJson: () => void;
+  toggleParsedJson: () => void;
+  copyLogs: () => void;
+};
+
+const buildNodeLogIconItems = (options: NodeLogIconItemsOptions): IconBarItem[] => {
+  const items: IconBarItem[] = [
+    {
+      type: 'toggle',
+      id: 'highlightSearch',
+      icon: <HighlightSearchIcon width={16} height={16} />,
+      active: options.highlightMatches,
+      onClick: options.toggleHighlightMatches,
+      title: 'Highlight matching text - disabled when Invert is enabled',
+      ariaLabel: 'Highlight matching text - disabled when Invert is enabled',
+      disabled: options.inverseMatches,
+    },
+    {
+      type: 'toggle',
+      id: 'inverseSearch',
+      icon: <InverseSearchIcon width={16} height={16} />,
+      active: options.inverseMatches,
+      onClick: options.toggleInverseMatches,
+      title: 'Invert the text filter to show only non-matching logs',
+      ariaLabel: 'Invert the text filter to show only non-matching logs',
+    },
+    {
+      type: 'toggle',
+      id: 'caseSensitiveSearch',
+      icon: <CaseSensitiveIcon width={16} height={16} />,
+      active: options.caseSensitiveMatches,
+      onClick: options.toggleCaseSensitiveMatches,
+      title: 'Case-sensitive search - disabled when regex is enabled',
+      ariaLabel: 'Case-sensitive search - disabled when regex is enabled',
+      disabled: options.regexMatches,
+    },
+    {
+      type: 'toggle',
+      id: 'regexSearch',
+      icon: <RegexSearchIcon width={16} height={16} />,
+      active: options.regexMatches,
+      onClick: options.toggleRegexMatches,
+      title: 'Enable regular expression support for the text filter',
+      ariaLabel: 'Enable regular expression support for the text filter',
+    },
+    { type: 'separator' },
+    {
+      type: 'toggle',
+      id: 'autoRefresh',
+      icon: <AutoRefreshIcon width={16} height={16} />,
+      active: options.autoRefresh,
+      onClick: options.toggleAutoRefresh,
+      title: 'Toggle auto-refresh',
+      ariaLabel: 'Toggle auto-refresh',
+    },
+    {
+      type: 'toggle',
+      id: 'wrapText',
+      icon: <WrapTextIcon />,
+      active: options.wrapText,
+      onClick: options.toggleWrapText,
+      title: 'Wrap text',
+      ariaLabel: 'Wrap text',
+      disabled: options.isParsedView,
+    },
+  ];
+  if (options.hasAnsiLogEntries) {
+    items.push({
+      type: 'toggle',
+      id: 'ansiColors',
+      icon: <AnsiColorIcon width={16} height={16} />,
+      active: options.showAnsiColors,
+      onClick: options.toggleAnsiColors,
+      title: 'Show ANSI colors if present',
+      ariaLabel: 'Show ANSI colors if present',
+      disabled: options.isParsedView,
+    });
+  }
+  if (options.canParseLogs) {
+    items.push(
+      {
+        type: 'toggle',
+        id: 'prettyJson',
+        icon: <PrettyJsonIcon width={16} height={16} />,
+        active: options.displayMode === 'pretty',
+        onClick: options.togglePrettyJson,
+        title: 'Show pretty JSON',
+        ariaLabel: 'Show pretty JSON',
+      },
+      {
+        type: 'toggle',
+        id: 'parsedJson',
+        icon: <ParseJsonIcon width={16} height={16} />,
+        active: options.isParsedView,
+        onClick: options.toggleParsedJson,
+        title: 'Parse the JSON into a table',
+        ariaLabel: 'Parse the JSON into a table',
+      }
+    );
+  }
+  items.push(
+    { type: 'separator' },
+    {
+      type: 'action',
+      id: 'copy',
+      icon: <CopyIcon width={20} height={20} />,
+      onClick: options.copyLogs,
+      title: 'Copy to clipboard',
+      ariaLabel: 'Copy to clipboard',
+      disabled: !options.hasCopyableContent,
+      feedback: options.copyIconFeedback,
+    }
+  );
+  return items;
+};
+
 interface NodeLogsTabProps {
   panelId: string;
   nodeName: string;
@@ -196,11 +765,6 @@ const NodeLogsTab = ({
 }: NodeLogsTabProps) => {
   const [selectedSourcePath, setSelectedSourcePath] = useState('');
   const [textFilter, setTextFilter] = useState('');
-  const [content, setContent] = useState('');
-  const [error, setError] = useState<string | null>(null);
-  const [loading, setLoading] = useState(false);
-  const [refreshNonce, setRefreshNonce] = useState(0);
-  const [truncated, setTruncated] = useState(false);
   const [autoRefresh, setAutoRefresh] = useState(true);
   const [wrapText, setWrapText] = useState(true);
   const [showAnsiColors, setShowAnsiColors] = useState(true);
@@ -214,10 +778,6 @@ const NodeLogsTab = ({
   const [expandedRows, setExpandedRows] = useState<Set<string>>(() => new Set<string>());
   const logsContentRef = useRef<HTMLDivElement>(null);
   const terminalTheme = useTerminalTheme(logsContentRef);
-  const contentRef = useRef('');
-  const loadedSourcePathRef = useRef<string | null>(null);
-  const lastSuccessfulFetchAtRef = useRef<string | null>(null);
-  const previousSourcePathRef = useRef<string | null>(null);
   const deferredTextFilter = useDeferredValue(textFilter);
   const sourceOptions = useMemo<DropdownOption[]>(
     () => buildNodeLogSourceOptions(sources),
@@ -239,9 +799,14 @@ const NodeLogsTab = ({
     [selectedSourcePath, sources]
   );
 
-  useEffect(() => {
-    contentRef.current = content;
-  }, [content]);
+  const { content, error, loading, truncated, resetSourceTracking } = useNodeLogRequest({
+    clusterId,
+    nodeName,
+    isActive,
+    sourcePath: selectedSource?.path,
+    autoRefresh,
+  });
+
   const filterRegex = useMemo(
     () =>
       buildLogSearchRegex(deferredTextFilter, {
@@ -263,131 +828,6 @@ const NodeLogsTab = ({
   );
   const hasInvalidRegex = Boolean(regexMatches && deferredTextFilter.trim() && !filterRegex);
   const isParsedView = displayMode === 'parsed';
-
-  useEffect(() => {
-    if (!isActive || !clusterId || !nodeName || !selectedSource?.path) {
-      return;
-    }
-
-    let cancelled = false;
-    const activeSourcePath = selectedSource.path;
-    const sourceChanged = loadedSourcePathRef.current !== activeSourcePath;
-    const incrementalSinceTime =
-      !sourceChanged && refreshNonce > 0
-        ? buildNodeLogSinceTime(lastSuccessfulFetchAtRef.current)
-        : undefined;
-    const requestReason = sourceChanged || refreshNonce === 0 ? 'user' : 'background';
-    const requestStartedAt = new Date().toISOString();
-
-    if (sourceChanged) {
-      setContent('');
-      setTruncated(false);
-    }
-    setLoading(true);
-    setError(null);
-
-    const fetchLogs = async () => {
-      const runFetch = async (sinceTime?: string) => {
-        const request = {
-          sourcePath: activeSourcePath,
-          tailBytes: NODE_LOG_TAIL_BYTES,
-          sinceTime,
-        };
-        return requestReason === 'background'
-          ? fetchNodeLogs(clusterId, nodeName, request, requestReason)
-          : fetchNodeLogs(clusterId, nodeName, request);
-      };
-
-      let appendMode = Boolean(incrementalSinceTime);
-      let result = await runFetch(incrementalSinceTime);
-      let response = getExecutedNodeLogResponse(result);
-      if (!response) {
-        return { appendMode, response: null };
-      }
-
-      if (appendMode && (response.error || response.truncated)) {
-        result = await runFetch();
-        response = getExecutedNodeLogResponse(result);
-        if (!response) {
-          return { appendMode, response: null };
-        }
-        appendMode = false;
-      }
-
-      return { appendMode, response };
-    };
-
-    void fetchLogs()
-      .then(({ appendMode, response }) => {
-        if (cancelled) {
-          return;
-        }
-        if (!response) {
-          return;
-        }
-        if (response.error) {
-          const details = errorHandler.handleInline(new Error(response.error), {
-            action: 'loadNodeLogs',
-            source: 'NodeLogsTab',
-            clusterId,
-          });
-          setError(details.message);
-          if (sourceChanged) {
-            setContent('');
-          }
-          setTruncated(false);
-          return;
-        }
-        const nextContent =
-          appendMode && contentRef.current
-            ? appendNodeLogContent(contentRef.current, response.content ?? '')
-            : (response.content ?? '');
-        loadedSourcePathRef.current = activeSourcePath;
-        lastSuccessfulFetchAtRef.current = requestStartedAt;
-        startTransition(() => {
-          setContent(nextContent);
-          setTruncated(Boolean(response.truncated));
-        });
-      })
-      .catch((fetchError) => {
-        if (cancelled) {
-          return;
-        }
-        const details = errorHandler.handleInline(fetchError, {
-          action: 'loadNodeLogs',
-          source: 'NodeLogsTab',
-          clusterId,
-        });
-        setError(details.message || 'Failed to fetch node logs');
-        if (sourceChanged) {
-          setContent('');
-        }
-        setTruncated(false);
-      })
-      .finally(() => {
-        if (!cancelled) {
-          setLoading(false);
-        }
-      });
-
-    return () => {
-      cancelled = true;
-    };
-  }, [clusterId, isActive, nodeName, refreshNonce, selectedSource?.path]);
-
-  useEffect(() => {
-    if (!autoRefresh || !isActive || !selectedSource?.path) {
-      return;
-    }
-
-    const timerId = window.setInterval(() => {
-      setRefreshNonce((value) => value + 1);
-    }, NODE_LOG_AUTO_REFRESH_MS);
-
-    return () => {
-      window.clearInterval(timerId);
-    };
-  }, [autoRefresh, isActive, selectedSource?.path]);
 
   const filteredLines = useMemo(() => {
     const lines = content.split('\n');
@@ -523,18 +963,13 @@ const NodeLogsTab = ({
   const displayedLogCount = isParsedView
     ? parsedLogs.length
     : filteredLines.filter((line) => line.length > 0).length;
-  let countLabel: string;
-
-  if (selectedSource) {
-    countLabel = `${displayedLogCount} matching log${displayedLogCount === 1 ? '' : 's'}`;
-  } else {
-    countLabel = 'Select a log source';
-  }
-
-  let rowCount = 0;
-  if (content.length > 0) {
-    rowCount = isParsedView ? parsedLogs.length : renderedDisplayRows.length;
-  }
+  const countLabel = getNodeLogCountLabel(Boolean(selectedSource), displayedLogCount);
+  const rowCount = getNodeLogRowCount(
+    content,
+    isParsedView,
+    parsedLogs.length,
+    renderedDisplayRows.length
+  );
 
   const { resetScrollRestoration } = useLogScrollRestoration({
     rootRef: logsContentRef,
@@ -549,15 +984,11 @@ const NodeLogsTab = ({
 
   useEffect(() => {
     const sourcePath = selectedSource?.path ?? null;
-    if (sourcePath === previousSourcePathRef.current) {
+    if (!resetSourceTracking(sourcePath)) {
       return;
     }
-
-    previousSourcePathRef.current = sourcePath;
-    loadedSourcePathRef.current = null;
-    lastSuccessfulFetchAtRef.current = null;
     resetScrollRestoration({ forceTail: true });
-  }, [resetScrollRestoration, selectedSource?.path]);
+  }, [resetScrollRestoration, resetSourceTracking, selectedSource?.path]);
 
   const handleToggleParsedRow = useCallback((rowKey: string) => {
     if (!rowKey) {
@@ -627,100 +1058,37 @@ const NodeLogsTab = ({
     plainSegmentWrapper: 'span',
   });
 
-  if (availability.pending) {
-    return (
-      <div className="object-panel-tab-content">
-        <div className="logs-viewer-display">
-          <div className="logs-viewer-content">
-            <div className="logs-viewer-display-loading">
-              Checking if logs are available for this node...
-            </div>
-          </div>
-        </div>
-      </div>
-    );
+  if (availability.pending || sources.length === 0) {
+    return <NodeLogsAvailability availability={availability} hasSources={sources.length > 0} />;
   }
 
-  if (sources.length === 0) {
-    return (
-      <div className="object-panel-tab-content">
-        <div className="logs-viewer-display">
-          <div className="logs-viewer-content">
-            <div className="logs-viewer-display-error">
-              <div className="node-log-unavailable-message">
-                <div>Logs are not available on this node</div>
-                {availability.reason ? (
-                  <div>
-                    Error: <ErrorSurface kind="status" message={availability.reason} />
-                  </div>
-                ) : null}
-              </div>
-            </div>
-          </div>
-        </div>
-      </div>
-    );
-  }
-
-  let copyIconFeedback: 'success' | 'error' | null = null;
-  if (copyFeedback === 'copied') {
-    copyIconFeedback = 'success';
-  } else if (copyFeedback === 'error') {
-    copyIconFeedback = 'error';
-  }
-
-  let renderedLogContent: React.ReactNode;
-  if (error) {
-    renderedLogContent = (
-      <div className="logs-viewer-display-error">
-        <ErrorSurface kind="reported" message={error} />
-      </div>
-    );
-  } else if (!selectedSource) {
-    renderedLogContent = (
-      <div className="logs-viewer-display-loading">Select a log source to view logs.</div>
-    );
-  } else if (loading && !hasLoadedContent) {
-    renderedLogContent = <div className="logs-viewer-display-loading">Loading logs…</div>;
-  } else if (hasInvalidRegex) {
-    renderedLogContent = (
-      <div className="logs-viewer-display-error">Enter a valid regular expression.</div>
-    );
-  } else if (filteredLines.length === 0) {
-    renderedLogContent = (
-      <div className="logs-viewer-display-loading">
-        {content.length === 0
-          ? 'No logs returned for this source.'
-          : 'No log lines match the current filter.'}
-      </div>
-    );
-  } else if (!isParsedView) {
-    renderedLogContent = (
-      <RawLogViewer
-        rows={renderedDisplayRows}
-        scrollContainerRef={logsContentRef}
-        wrapText={wrapText}
-        renderRow={(row, index) => (
-          <div className="log-viewer-line">
-            {renderMessageContent(row.line, `node-log-line-${index}`)}
-          </div>
-        )}
-      />
-    );
-  } else if (!canParseLogs) {
-    renderedLogContent = (
-      <div className="logs-viewer-display-loading">No JSON log lines match the current filter.</div>
-    );
-  } else {
-    renderedLogContent = (
-      <ParsedLogTable
-        rows={parsedLogs}
-        columns={tableColumns}
-        expandedRows={expandedRows}
-        onToggleRow={handleToggleParsedRow}
-      />
-    );
-  }
+  const copyIconFeedback = getCopyIconFeedback(copyFeedback);
+  const iconItems = buildNodeLogIconItems({
+    highlightMatches,
+    inverseMatches,
+    caseSensitiveMatches,
+    regexMatches,
+    autoRefresh,
+    wrapText,
+    hasAnsiLogEntries,
+    showAnsiColors,
+    canParseLogs,
+    displayMode,
+    isParsedView,
+    hasCopyableContent,
+    copyIconFeedback,
+    toggleHighlightMatches: () => setHighlightMatches((value) => (inverseMatches ? false : !value)),
+    toggleInverseMatches: () => setInverseMatches((value) => !value),
+    toggleCaseSensitiveMatches: () =>
+      setCaseSensitiveMatches((value) => (regexMatches ? false : !value)),
+    toggleRegexMatches: () => setRegexMatches((value) => !value),
+    toggleAutoRefresh: () => setAutoRefresh((value) => !value),
+    toggleWrapText: () => setWrapText((value) => !value),
+    toggleAnsiColors: () => setShowAnsiColors((value) => !value),
+    togglePrettyJson: () => updateDisplayMode(displayMode === 'pretty' ? 'raw' : 'pretty'),
+    toggleParsedJson: () => updateDisplayMode(displayMode === 'parsed' ? 'raw' : 'parsed'),
+    copyLogs: handleCopyLogs,
+  });
 
   return (
     <div className="object-panel-tab-content">
@@ -739,31 +1107,7 @@ const NodeLogsTab = ({
                 className="logs-viewer-selector-dropdown"
                 dropdownClassName="node-log-source-menu"
                 ariaLabel="Node log source"
-                renderOption={(option) => {
-                  if (option.group === 'header') {
-                    return <span className="node-log-source-header">{option.label}</span>;
-                  }
-
-                  const metadata = option.metadata as NodeLogSourceOptionMetadata | undefined;
-
-                  if (metadata?.kind === 'child') {
-                    return (
-                      <span
-                        className={[
-                          'node-log-source-label',
-                          'node-log-source-child',
-                          metadata.isLastChild && 'node-log-source-child-last',
-                        ]
-                          .filter(Boolean)
-                          .join(' ')}
-                      >
-                        <span className="node-log-source-child-text">{metadata.childLabel}</span>
-                      </span>
-                    );
-                  }
-
-                  return <span className="node-log-source-label">{option.label}</span>;
-                }}
+                renderOption={renderNodeLogSourceOption}
                 renderValue={() =>
                   selectedSource
                     ? getNodeLogSourceLeafLabel(selectedSource.label)
@@ -794,121 +1138,7 @@ const NodeLogsTab = ({
               )}
             </div>
 
-            <IconBar
-              items={
-                [
-                  {
-                    type: 'toggle',
-                    id: 'highlightSearch',
-                    icon: <HighlightSearchIcon width={16} height={16} />,
-                    active: highlightMatches,
-                    onClick: () =>
-                      setHighlightMatches((value) => (inverseMatches ? false : !value)),
-                    title: 'Highlight matching text - disabled when Invert is enabled',
-                    ariaLabel: 'Highlight matching text - disabled when Invert is enabled',
-                    disabled: inverseMatches,
-                  },
-                  {
-                    type: 'toggle',
-                    id: 'inverseSearch',
-                    icon: <InverseSearchIcon width={16} height={16} />,
-                    active: inverseMatches,
-                    onClick: () => setInverseMatches((value) => !value),
-                    title: 'Invert the text filter to show only non-matching logs',
-                    ariaLabel: 'Invert the text filter to show only non-matching logs',
-                  },
-                  {
-                    type: 'toggle',
-                    id: 'caseSensitiveSearch',
-                    icon: <CaseSensitiveIcon width={16} height={16} />,
-                    active: caseSensitiveMatches,
-                    onClick: () =>
-                      setCaseSensitiveMatches((value) => (regexMatches ? false : !value)),
-                    title: 'Case-sensitive search - disabled when regex is enabled',
-                    ariaLabel: 'Case-sensitive search - disabled when regex is enabled',
-                    disabled: regexMatches,
-                  },
-                  {
-                    type: 'toggle',
-                    id: 'regexSearch',
-                    icon: <RegexSearchIcon width={16} height={16} />,
-                    active: regexMatches,
-                    onClick: () => setRegexMatches((value) => !value),
-                    title: 'Enable regular expression support for the text filter',
-                    ariaLabel: 'Enable regular expression support for the text filter',
-                  },
-                  { type: 'separator' },
-                  {
-                    type: 'toggle',
-                    id: 'autoRefresh',
-                    icon: <AutoRefreshIcon width={16} height={16} />,
-                    active: autoRefresh,
-                    onClick: () => setAutoRefresh((value) => !value),
-                    title: 'Toggle auto-refresh',
-                    ariaLabel: 'Toggle auto-refresh',
-                  },
-                  {
-                    type: 'toggle',
-                    id: 'wrapText',
-                    icon: <WrapTextIcon />,
-                    active: wrapText,
-                    onClick: () => setWrapText((value) => !value),
-                    title: 'Wrap text',
-                    ariaLabel: 'Wrap text',
-                    disabled: isParsedView,
-                  },
-                  ...(hasAnsiLogEntries
-                    ? [
-                        {
-                          type: 'toggle' as const,
-                          id: 'ansiColors',
-                          icon: <AnsiColorIcon width={16} height={16} />,
-                          active: showAnsiColors,
-                          onClick: () => setShowAnsiColors((value) => !value),
-                          title: 'Show ANSI colors if present',
-                          ariaLabel: 'Show ANSI colors if present',
-                          disabled: isParsedView,
-                        },
-                      ]
-                    : []),
-                  ...(canParseLogs
-                    ? [
-                        {
-                          type: 'toggle' as const,
-                          id: 'prettyJson',
-                          icon: <PrettyJsonIcon width={16} height={16} />,
-                          active: displayMode === 'pretty',
-                          onClick: () =>
-                            updateDisplayMode(displayMode === 'pretty' ? 'raw' : 'pretty'),
-                          title: 'Show pretty JSON',
-                          ariaLabel: 'Show pretty JSON',
-                        },
-                        {
-                          type: 'toggle' as const,
-                          id: 'parsedJson',
-                          icon: <ParseJsonIcon width={16} height={16} />,
-                          active: isParsedView,
-                          onClick: () =>
-                            updateDisplayMode(displayMode === 'parsed' ? 'raw' : 'parsed'),
-                          title: 'Parse the JSON into a table',
-                          ariaLabel: 'Parse the JSON into a table',
-                        },
-                      ]
-                    : []),
-                  { type: 'separator' },
-                  {
-                    type: 'action',
-                    id: 'copy',
-                    icon: <CopyIcon width={20} height={20} />,
-                    onClick: handleCopyLogs,
-                    title: 'Copy to clipboard',
-                    ariaLabel: 'Copy to clipboard',
-                    disabled: !hasCopyableContent,
-                    feedback: copyIconFeedback,
-                  },
-                ] satisfies IconBarItem[]
-              }
-            />
+            <IconBar items={iconItems} />
 
             <span
               className="logs-viewer-count"
@@ -929,7 +1159,25 @@ const NodeLogsTab = ({
         )}
 
         <div ref={logsContentRef} className="logs-viewer-content selectable" tabIndex={-1}>
-          {renderedLogContent}
+          <NodeLogContent
+            error={error}
+            hasSelectedSource={Boolean(selectedSource)}
+            loading={loading}
+            hasLoadedContent={hasLoadedContent}
+            hasInvalidRegex={hasInvalidRegex}
+            hasFilteredLines={filteredLines.length > 0}
+            hasContent={content.length > 0}
+            isParsedView={isParsedView}
+            canParseLogs={canParseLogs}
+            renderedDisplayRows={renderedDisplayRows}
+            logsContentRef={logsContentRef}
+            wrapText={wrapText}
+            renderMessageContent={renderMessageContent}
+            parsedLogs={parsedLogs}
+            tableColumns={tableColumns}
+            expandedRows={expandedRows}
+            onToggleParsedRow={handleToggleParsedRow}
+          />
         </div>
       </div>
     </div>

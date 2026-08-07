@@ -65,6 +65,7 @@ import {
   buildMetricsSummary,
   buildOrchestratorSummary,
   buildPermissionRows,
+  type CapabilityBatchRow,
   CLUSTER_SCOPE,
   type DiagnosticsPanelProps,
   type DiagnosticsRow,
@@ -263,76 +264,60 @@ const isTransientResourceTableQueryScope = (
   return scopeTailHasQuery(scopeTail);
 };
 
+const FIXED_SCOPE_ROLES: Partial<Record<RefreshDomain, { label: string; tooltip: string }>> = {
+  'catalog-diff': { label: 'Object Diff', tooltip: 'Object diff modal catalog query' },
+  'container-logs': { label: 'Log Stream', tooltip: 'Object panel log stream scope' },
+  'object-details': { label: 'Object Panel', tooltip: 'Scoped object panel data' },
+  'object-events': { label: 'Object Panel', tooltip: 'Scoped object panel data' },
+  'object-yaml': { label: 'Object Panel', tooltip: 'Scoped object panel data' },
+  'object-helm-manifest': { label: 'Object Panel', tooltip: 'Scoped object panel data' },
+  'object-helm-values': { label: 'Object Panel', tooltip: 'Scoped object panel data' },
+  pods: { label: 'Object Panel', tooltip: 'Scoped object panel data' },
+  'object-maintenance': { label: 'Operation', tooltip: 'Node maintenance operation state' },
+  namespaces: { label: 'System', tooltip: 'System refresh scope' },
+  'cluster-overview': { label: 'System', tooltip: 'System refresh scope' },
+};
+
+const resolveCatalogScopeRole = (scopeTail: string): { label: string; tooltip: string } => {
+  const params = parseScopeQueryParams(scopeTail);
+  return params.get('limit') === '1'
+    ? {
+        label: 'Metadata',
+        tooltip: 'Catalog metadata/facet support query for the current Browse view',
+      }
+    : { label: 'Page Query', tooltip: 'Current Browse table page query' };
+};
+
+const resolveResourceStreamScopeRole = (scopeTail: string): { label: string; tooltip: string } => {
+  if (scopeTailHasQuery(scopeTail)) {
+    return {
+      label: 'Table Query',
+      tooltip: 'Query-backed GridTable snapshot for filters, sorting, or pagination',
+    };
+  }
+  const normalizedTail = scopeTail.trim().toLowerCase();
+  return {
+    label: 'Live Scope',
+    tooltip:
+      !normalizedTail || normalizedTail === 'cluster'
+        ? 'Base resource-stream scope retained for live data and metrics'
+        : 'Resource-stream scope retained for live data and metrics',
+  };
+};
+
 const resolveScopeRole = (
   domain: RefreshDomain,
   scope: string | undefined
 ): { label: string; tooltip?: string } => {
   const trimmed = (scope ?? '').trim();
   const { scope: scopeTail } = parseClusterScopeList(trimmed);
-  const normalizedTail = scopeTail.trim().toLowerCase();
-  const hasQueryScope = scopeTailHasQuery(scopeTail);
-
   if (domain === 'catalog') {
-    const params = parseScopeQueryParams(scopeTail);
-    if (params.get('limit') === '1') {
-      return {
-        label: 'Metadata',
-        tooltip: 'Catalog metadata/facet support query for the current Browse view',
-      };
-    }
-    return {
-      label: 'Page Query',
-      tooltip: 'Current Browse table page query',
-    };
+    return resolveCatalogScopeRole(scopeTail);
   }
-
-  if (domain === 'catalog-diff') {
-    return { label: 'Object Diff', tooltip: 'Object diff modal catalog query' };
-  }
-
-  if (domain === 'container-logs') {
-    return { label: 'Log Stream', tooltip: 'Object panel log stream scope' };
-  }
-
-  if (
-    domain === 'object-details' ||
-    domain === 'object-events' ||
-    domain === 'object-yaml' ||
-    domain === 'object-helm-manifest' ||
-    domain === 'object-helm-values' ||
-    domain === 'pods'
-  ) {
-    return { label: 'Object Panel', tooltip: 'Scoped object panel data' };
-  }
-
-  if (domain === 'object-maintenance') {
-    return { label: 'Operation', tooltip: 'Node maintenance operation state' };
-  }
-
   if (DOMAIN_STREAM_MAP[domain] === 'resources') {
-    if (hasQueryScope) {
-      return {
-        label: 'Table Query',
-        tooltip: 'Query-backed GridTable snapshot for filters, sorting, or pagination',
-      };
-    }
-    if (!normalizedTail || normalizedTail === 'cluster') {
-      return {
-        label: 'Live Scope',
-        tooltip: 'Base resource-stream scope retained for live data and metrics',
-      };
-    }
-    return {
-      label: 'Live Scope',
-      tooltip: 'Resource-stream scope retained for live data and metrics',
-    };
+    return resolveResourceStreamScopeRole(scopeTail);
   }
-
-  if (domain === 'namespaces' || domain === 'cluster-overview') {
-    return { label: 'System', tooltip: 'System refresh scope' };
-  }
-
-  return { label: 'Snapshot', tooltip: 'Snapshot refresh scope' };
+  return FIXED_SCOPE_ROLES[domain] ?? { label: 'Snapshot', tooltip: 'Snapshot refresh scope' };
 };
 
 const resolveErrorReason = (error?: string | null): string | null => {
@@ -403,6 +388,923 @@ const resolveBrokerReadScope = (
   };
 };
 
+const emptyDomainSnapshotState = (): DomainSnapshotState<unknown> => ({
+  status: 'idle',
+  data: null,
+  stats: null,
+  error: null,
+  droppedAutoRefreshes: 0,
+});
+
+const entryMatchesCluster = (
+  entry: [string, DomainSnapshotState<unknown>],
+  clusterId: string
+): boolean => {
+  const [scopeKey, state] = entry;
+  return parseClusterScopeList(state.scope ?? scopeKey).clusterIds.includes(clusterId);
+};
+
+const entryHasClusterScope = (entry: [string, DomainSnapshotState<unknown>]): boolean => {
+  const [scopeKey, state] = entry;
+  return parseClusterScopeList(state.scope ?? scopeKey).clusterIds.length > 0;
+};
+
+const pickPreferredScopeState = (
+  entries: Array<[string, DomainSnapshotState<unknown>]>,
+  preferredClusterId: string | undefined
+): DomainSnapshotState<unknown> => {
+  if (entries.length === 0) {
+    return emptyDomainSnapshotState();
+  }
+  const clusterId = (preferredClusterId ?? '').trim();
+  const clusterMatches = clusterId
+    ? entries.filter((entry) => entryMatchesCluster(entry, clusterId))
+    : [];
+  if (clusterId && clusterMatches.length === 0 && entries.some(entryHasClusterScope)) {
+    return emptyDomainSnapshotState();
+  }
+  const candidates = clusterMatches.length > 0 ? clusterMatches : entries;
+  const selected =
+    candidates.find(([, state]) => state.data !== null) ??
+    candidates.find(([, state]) => state.status !== 'idle') ??
+    candidates[0];
+  const [scopeKey, scopedState] = selected;
+  return scopedState.scope?.trim() ? scopedState : { ...scopedState, scope: scopeKey };
+};
+
+const toStreamHealthSummary = (
+  health: ReturnType<typeof resourceStreamManager.getHealthSnapshot> | null
+): StreamHealthSummary | null => {
+  if (!health) {
+    return null;
+  }
+  return {
+    status: health.status,
+    reason: health.reason,
+    connectionStatus: health.connectionStatus,
+    lastMessageAt: health.lastMessageAt,
+    lastDeliveryAt: health.lastDeliveryAt,
+  };
+};
+
+const buildStreamHealthTooltip = (streamHealth: StreamHealthSummary): string[] => {
+  const parts = [`Reason: ${streamHealth.reason}`];
+  if (streamHealth.connectionStatus) {
+    parts.push(`Connection: ${streamHealth.connectionStatus}`);
+  }
+  if (streamHealth.lastDeliveryAt) {
+    parts.push(`Last delivery: ${formatLastUpdated(streamHealth.lastDeliveryAt).tooltip}`);
+  }
+  if (streamHealth.lastMessageAt) {
+    parts.push(`Last message: ${formatLastUpdated(streamHealth.lastMessageAt).tooltip}`);
+  }
+  return parts;
+};
+
+interface HealthDetails {
+  label: string;
+  tooltip?: string;
+  status: HealthStatus;
+}
+
+const resolveStreamHealthDetails = (
+  status: DiagnosticsRow['status'],
+  streamHealth: StreamHealthSummary
+): HealthDetails => {
+  const tooltipParts = buildStreamHealthTooltip(streamHealth);
+  if (streamHealth.reason === 'inactive' && status !== 'idle') {
+    return {
+      label: formatHealthLabel('degraded', 'inactive'),
+      tooltip: ['Retained snapshot is ready; stream is inactive for this scope.']
+        .concat(tooltipParts)
+        .join('\n'),
+      status: 'degraded',
+    };
+  }
+  return {
+    label: formatHealthLabel(streamHealth.status, streamHealth.reason),
+    tooltip: tooltipParts.join('\n'),
+    status: streamHealth.status,
+  };
+};
+
+const resolveHealthDetails = (params: {
+  domain: RefreshDomain;
+  status: DiagnosticsRow['status'];
+  error?: string | null;
+  scope?: string;
+  streamHealth?: StreamHealthSummary | null;
+}): HealthDetails => {
+  const { domain, status, error, scope, streamHealth } = params;
+  const scopeTrimmed = (scope ?? '').trim();
+  if (!scopeTrimmed && (domain === 'pods' || domain === 'container-logs')) {
+    return {
+      label: formatHealthLabel('unhealthy', 'no scope'),
+      tooltip: 'No active scope',
+      status: 'unhealthy',
+    };
+  }
+  if (status === 'error') {
+    const reason = resolveErrorReason(error) ?? 'error';
+    return {
+      label: formatHealthLabel('unhealthy', reason),
+      tooltip: error ?? reason,
+      status: 'unhealthy',
+    };
+  }
+  if (streamHealth) {
+    return resolveStreamHealthDetails(status, streamHealth);
+  }
+  if (status === 'loading' || status === 'initialising') {
+    return {
+      label: formatHealthLabel('degraded', status),
+      tooltip: 'Awaiting snapshot data',
+      status: 'degraded',
+    };
+  }
+  if (status === 'idle') {
+    return {
+      label: formatHealthLabel('degraded', 'idle'),
+      tooltip: 'Domain is idle',
+      status: 'degraded',
+    };
+  }
+  return {
+    label: formatHealthLabel('healthy', 'ready'),
+    tooltip: 'Snapshot data is up to date',
+    status: 'healthy',
+  };
+};
+
+interface PollingDetails {
+  label: string;
+  tooltip?: string;
+  enabled: boolean;
+}
+
+const resolveDisabledPollingDetails = (
+  domain: RefreshDomain,
+  streamActive: boolean,
+  streamHealthy: boolean
+): PollingDetails => {
+  if (PAUSE_POLLING_WHEN_STREAMING_DOMAINS.has(domain) && streamActive) {
+    const reason = streamHealthy ? 'stream healthy' : 'stream active';
+    return { label: 'paused', tooltip: `Paused while ${reason}`, enabled: false };
+  }
+  return { label: 'disabled', tooltip: 'Polling disabled for this domain', enabled: false };
+};
+
+const resolvePollingDetails = (params: {
+  domain: RefreshDomain;
+  refresherName?: (typeof DOMAIN_REFRESHER_MAP)[RefreshDomain];
+  streamActive: boolean;
+  streamHealthy: boolean;
+}): PollingDetails => {
+  const { domain, refresherName, streamActive, streamHealthy } = params;
+  if (!refresherName) {
+    return { label: '—', tooltip: 'No polling refresher', enabled: false };
+  }
+  const refresherState = refreshManager.getState(refresherName);
+  if (!refresherState) {
+    return { label: '—', tooltip: 'Polling not registered', enabled: false };
+  }
+  if (refresherState.status === 'paused') {
+    return { label: 'paused', tooltip: 'Polling paused by auto-refresh', enabled: false };
+  }
+  if (refresherState.status === 'disabled') {
+    return resolveDisabledPollingDetails(domain, streamActive, streamHealthy);
+  }
+  return { label: 'enabled', tooltip: `State: ${refresherState.status}`, enabled: true };
+};
+
+const ROW_COUNT_DOMAINS = new Set<RefreshDomain>([
+  'nodes',
+  'cluster-rbac',
+  'cluster-storage',
+  'cluster-config',
+  'cluster-crds',
+  'cluster-events',
+  'namespace-workloads',
+  'namespace-config',
+  'namespace-network',
+  'namespace-rbac',
+  'namespace-storage',
+  'namespace-autoscaling',
+  'namespace-quotas',
+  'namespace-events',
+  'namespace-helm',
+]);
+
+const arrayLength = (value: unknown): number => (Array.isArray(value) ? value.length : 0);
+
+const resolveDomainCount = (
+  domain: RefreshDomain,
+  data: Record<string, unknown> | null
+): number => {
+  if (!data) {
+    return 0;
+  }
+  if (domain === 'namespaces') {
+    return arrayLength(data.namespaces);
+  }
+  if (domain === 'cluster-overview') {
+    const totalNodes = asRecord(data.overview)?.totalNodes;
+    return typeof totalNodes === 'number' ? totalNodes : 0;
+  }
+  if (domain === 'object-maintenance') {
+    return arrayLength(data.drains);
+  }
+  if (domain === 'cluster-custom' || domain === 'namespace-custom') {
+    return arrayLength(data.resources);
+  }
+  if (domain === 'catalog') {
+    return arrayLength(data.items);
+  }
+  return ROW_COUNT_DOMAINS.has(domain) ? arrayLength(data.rows) : 0;
+};
+
+interface DiagnosticsCountDetails {
+  count: number;
+  countDisplay: string;
+  countTooltip?: string;
+  countClassName?: string;
+  warnings: string[];
+  truncated: boolean;
+  totalItems?: number;
+}
+
+const filteredWarnings = (state: DomainSnapshotState<unknown>): string[] =>
+  (state.stats?.warnings ?? []).filter((warning) => warning?.trim().length);
+
+const buildDiagnosticsCountDetails = (
+  count: number,
+  state: DomainSnapshotState<unknown>,
+  itemLabel: string
+): DiagnosticsCountDetails => {
+  const truncated = Boolean(state.stats?.truncated);
+  const totalItems = state.stats?.totalItems ?? (truncated ? count : undefined);
+  const warnings = filteredWarnings(state);
+  if (truncated && totalItems !== undefined && warnings.length === 0 && count !== totalItems) {
+    warnings.push(`Showing most recent ${count} of ${totalItems} ${itemLabel}`);
+  }
+  return {
+    count,
+    countDisplay:
+      truncated && totalItems !== undefined ? `${count} / ${totalItems}` : String(count),
+    countTooltip: warnings.length > 0 ? warnings.join('\n') : undefined,
+    countClassName: warnings.length > 0 ? 'diagnostics-count-warning' : undefined,
+    warnings,
+    truncated,
+    totalItems,
+  };
+};
+
+const buildCatalogCountDetails = (
+  data: Record<string, unknown> | null,
+  state: DomainSnapshotState<unknown>
+): DiagnosticsCountDetails => {
+  const dataTotal = typeof data?.total === 'number' ? data.total : arrayLength(data?.items);
+  const count = state.stats?.totalItems ?? dataTotal;
+  const warnings = filteredWarnings(state);
+  return {
+    count,
+    countDisplay: String(count),
+    countTooltip: warnings.length > 0 ? warnings.join('\n') : undefined,
+    countClassName: warnings.length > 0 ? 'diagnostics-count-warning' : undefined,
+    warnings,
+    truncated: false,
+    totalItems: count,
+  };
+};
+
+const resolveDiagnosticsCountDetails = (
+  domain: RefreshDomain,
+  state: DomainSnapshotState<unknown>,
+  data: Record<string, unknown> | null
+): DiagnosticsCountDetails =>
+  domain === 'catalog'
+    ? buildCatalogCountDetails(data, state)
+    : buildDiagnosticsCountDetails(resolveDomainCount(domain, data), state, 'items');
+
+type SnapshotTelemetryEntry = NormalizedTelemetrySummary['snapshots'][number];
+type ResourceStreamStats = ReturnType<typeof resourceStreamManager.getTelemetrySummary>;
+
+interface DomainTelemetrySources {
+  telemetryInfo?: SnapshotTelemetryEntry;
+  streamTelemetry?: TelemetryStreamStatus;
+  isResourceStreamDomain: boolean;
+  streamMode: Parameters<typeof resolveModeDetails>[0]['streamMode'];
+}
+
+const resolveDomainTelemetrySources = (
+  domain: RefreshDomain,
+  telemetrySummary: NormalizedTelemetrySummary | null
+): DomainTelemetrySources => {
+  const streamName = DOMAIN_STREAM_MAP[domain];
+  return {
+    telemetryInfo: telemetrySummary?.snapshots.find((entry) => entry.domain === domain),
+    streamTelemetry: streamName
+      ? telemetrySummary?.streams.find((entry) => entry.name === streamName)
+      : undefined,
+    isResourceStreamDomain: streamName === 'resources',
+    streamMode: streamName ? (STREAM_MODE_BY_NAME[streamName] ?? 'streaming') : null,
+  };
+};
+
+const formatTelemetryMilliseconds = (value: number | undefined): string =>
+  value ? `${value} ms` : '—';
+
+const resolveTelemetryError = (
+  telemetryLastError: string,
+  stateError: string | null | undefined
+): string => telemetryLastError || stateError || '—';
+
+const resolveStreamDropped = (
+  isResourceStreamDomain: boolean,
+  streamTelemetry: TelemetryStreamStatus | undefined
+): number => (isResourceStreamDomain ? (streamTelemetry?.droppedMessages ?? 0) : 0);
+
+const resolveStreamActive = (
+  isResourceStreamDomain: boolean,
+  streamTelemetry: TelemetryStreamStatus | undefined,
+  streamHealth: StreamHealthSummary | null
+): boolean =>
+  isResourceStreamDomain
+    ? Boolean(streamHealth && streamHealth.reason !== 'inactive')
+    : Boolean(streamTelemetry?.activeSessions);
+
+const isTimestampStale = (timestamp: number | undefined): boolean =>
+  timestamp ? Date.now() - timestamp > STALE_THRESHOLD_MS : false;
+
+const resolveSnapshotTelemetryStatus = (
+  telemetrySummary: NormalizedTelemetrySummary | null,
+  telemetryInfo: SnapshotTelemetryEntry | undefined
+): string => {
+  if (!telemetrySummary) {
+    return '—';
+  }
+  if (!telemetryInfo) {
+    return 'No data';
+  }
+  return telemetryInfo.lastStatus === 'error'
+    ? `Error (${telemetryInfo.failureCount})`
+    : `Success (${telemetryInfo.successCount})`;
+};
+
+const resolveStreamTelemetryStatus = (
+  isResourceStreamDomain: boolean,
+  streamTelemetry: TelemetryStreamStatus | undefined
+): string | null => {
+  if (!isResourceStreamDomain || !streamTelemetry) {
+    return null;
+  }
+  if (streamTelemetry.errorCount > 0) {
+    return `Stream Error (${streamTelemetry.errorCount})`;
+  }
+  return streamTelemetry.droppedMessages > 0
+    ? `Stream Dropped (${streamTelemetry.droppedMessages})`
+    : 'Stream OK';
+};
+
+const resolveStreamHealthStatus = (streamHealth: StreamHealthSummary | null): string | null => {
+  if (!streamHealth) {
+    return null;
+  }
+  return streamHealth.reason === 'inactive' ? 'Stream inactive' : `Stream ${streamHealth.status}`;
+};
+
+const appendResourceStreamTelemetryTooltip = (
+  parts: string[],
+  streamTelemetry: TelemetryStreamStatus,
+  resourceStreamStats: ResourceStreamStats
+) => {
+  parts.push(`Stream delivered: ${streamTelemetry.totalMessages}`);
+  parts.push(`Stream dropped: ${streamTelemetry.droppedMessages}`);
+  if (streamTelemetry.lastError) {
+    parts.push(`Stream error: ${streamTelemetry.lastError}`);
+  }
+  if (resourceStreamStats.resyncCount > 0) {
+    parts.push(`Stream resyncs: ${resourceStreamStats.resyncCount}`);
+  }
+  if (resourceStreamStats.fallbackCount > 0) {
+    parts.push(`Stream fallbacks: ${resourceStreamStats.fallbackCount}`);
+  }
+  if (resourceStreamStats.lastResyncReason) {
+    parts.push(`Last resync: ${resourceStreamStats.lastResyncReason}`);
+  }
+  if (resourceStreamStats.lastFallbackReason) {
+    parts.push(`Last fallback: ${resourceStreamStats.lastFallbackReason}`);
+  }
+};
+
+const appendStreamHealthTelemetryTooltip = (parts: string[], streamHealth: StreamHealthSummary) => {
+  parts.push(`Stream health: ${streamHealth.status}`);
+  parts.push(`Stream reason: ${streamHealth.reason}`);
+  if (streamHealth.lastDeliveryAt) {
+    parts.push(`Stream last delivery: ${formatLastUpdated(streamHealth.lastDeliveryAt).tooltip}`);
+  }
+  if (streamHealth.lastMessageAt) {
+    parts.push(`Stream last message: ${formatLastUpdated(streamHealth.lastMessageAt).tooltip}`);
+  }
+};
+
+const buildTelemetryTooltip = (params: {
+  telemetryLastError: string;
+  isResourceStreamDomain: boolean;
+  streamTelemetry?: TelemetryStreamStatus;
+  resourceStreamStats: ResourceStreamStats;
+  streamHealth: StreamHealthSummary | null;
+}): string | undefined => {
+  const parts: string[] = [];
+  if (params.telemetryLastError) {
+    parts.push(params.telemetryLastError);
+  }
+  if (params.isResourceStreamDomain && params.streamTelemetry) {
+    appendResourceStreamTelemetryTooltip(parts, params.streamTelemetry, params.resourceStreamStats);
+  }
+  if (params.streamHealth) {
+    appendStreamHealthTelemetryTooltip(parts, params.streamHealth);
+  }
+  return parts.length > 0 ? parts.join('\n') : undefined;
+};
+
+const resolveTelemetryLastUpdated = (
+  streamLastEvent: number | undefined,
+  telemetryInfo: SnapshotTelemetryEntry | undefined
+): ReturnType<typeof formatLastUpdated> | null => {
+  if (streamLastEvent && streamLastEvent > 0) {
+    return formatLastUpdated(streamLastEvent);
+  }
+  return telemetryInfo?.lastUpdated ? formatLastUpdated(telemetryInfo.lastUpdated) : null;
+};
+
+const resolveStreamHealth = (
+  domain: RefreshDomain,
+  scope: string | undefined,
+  isResourceStreamDomain: boolean,
+  streamTelemetry: TelemetryStreamStatus | undefined
+): StreamHealthSummary | null =>
+  isResourceStreamDomain && scope
+    ? toStreamHealthSummary(resourceStreamManager.getHealthSnapshot(domain, scope))
+    : resolveStreamTelemetryHealth(streamTelemetry);
+
+interface DomainTelemetryDetails {
+  streamMode: Parameters<typeof resolveModeDetails>[0]['streamMode'];
+  lastUpdated: number | undefined;
+  telemetryLastUpdatedInfo: ReturnType<typeof formatLastUpdated> | null;
+  combinedError: string;
+  telemetryStatus: string;
+  telemetryTooltip?: string;
+  streamDropped: number;
+  telemetrySuccess?: number;
+  telemetryFailure?: number;
+  durationLabel: string;
+  syncWaitLabel: string;
+  streamHealth: StreamHealthSummary | null;
+  streamActive: boolean;
+  streamHealthy: boolean;
+}
+
+const buildDomainTelemetryDetails = (params: {
+  domain: RefreshDomain;
+  state: DomainSnapshotState<unknown>;
+  scope?: string;
+  telemetrySummary: NormalizedTelemetrySummary | null;
+  resourceStreamStats: ResourceStreamStats;
+}): DomainTelemetryDetails => {
+  const { domain, state, scope, telemetrySummary, resourceStreamStats } = params;
+  const { telemetryInfo, streamTelemetry, isResourceStreamDomain, streamMode } =
+    resolveDomainTelemetrySources(domain, telemetrySummary);
+  const streamLastEvent = isResourceStreamDomain ? streamTelemetry?.lastEvent : 0;
+  const baseLastUpdated = state.lastUpdated ?? state.lastAutoRefresh ?? state.lastManualRefresh;
+  const combinedLastUpdated = Math.max(baseLastUpdated ?? 0, streamLastEvent ?? 0);
+  const streamHealth = resolveStreamHealth(domain, scope, isResourceStreamDomain, streamTelemetry);
+  const telemetryLastError = telemetryInfo?.lastError?.trim() ?? '';
+  return {
+    streamMode,
+    lastUpdated: combinedLastUpdated > 0 ? combinedLastUpdated : undefined,
+    telemetryLastUpdatedInfo: resolveTelemetryLastUpdated(streamLastEvent, telemetryInfo),
+    combinedError: resolveTelemetryError(telemetryLastError, state.error),
+    telemetryStatus: [
+      resolveSnapshotTelemetryStatus(telemetrySummary, telemetryInfo),
+      resolveStreamTelemetryStatus(isResourceStreamDomain, streamTelemetry),
+      resolveStreamHealthStatus(streamHealth),
+    ]
+      .filter(Boolean)
+      .join(' • '),
+    telemetryTooltip: buildTelemetryTooltip({
+      telemetryLastError,
+      isResourceStreamDomain,
+      streamTelemetry,
+      resourceStreamStats,
+      streamHealth,
+    }),
+    streamDropped: resolveStreamDropped(isResourceStreamDomain, streamTelemetry),
+    telemetrySuccess: telemetryInfo?.successCount,
+    telemetryFailure: telemetryInfo?.failureCount,
+    durationLabel: formatTelemetryMilliseconds(telemetryInfo?.lastDurationMs),
+    syncWaitLabel: formatTelemetryMilliseconds(telemetryInfo?.maxInformerSyncWaitMs),
+    streamHealth,
+    streamActive: resolveStreamActive(isResourceStreamDomain, streamTelemetry, streamHealth),
+    streamHealthy: streamHealth?.status === 'healthy',
+  };
+};
+
+const resolveNodeMetricsInfo = (
+  state: DomainSnapshotState<unknown>,
+  hasMetrics: boolean
+): NodeMetricsInfo | undefined => {
+  if (!hasMetrics) {
+    return undefined;
+  }
+  const metrics = asRecord(state.data)?.metrics;
+  return asRecord(metrics) ? (metrics as NodeMetricsInfo) : undefined;
+};
+
+const resolveMetricsStatus = (
+  metricsInfo: NodeMetricsInfo | undefined,
+  hasMetrics: boolean,
+  successCount: number | undefined,
+  failureCount: number | undefined
+): string => {
+  if (!hasMetrics) {
+    return '—';
+  }
+  if (!metricsInfo) {
+    return 'N/A';
+  }
+  if (metricsInfo.lastError) {
+    return `Error (${failureCount} fails)`;
+  }
+  return metricsInfo.stale ? `Unavailable (${failureCount} fails)` : `OK (${successCount} polls)`;
+};
+
+const resolveMetricsTooltip = (
+  metricsInfo: NodeMetricsInfo | undefined,
+  hasMetrics: boolean,
+  successCount: number | undefined,
+  failureCount: number | undefined
+): string => {
+  if (!metricsInfo) {
+    return hasMetrics ? 'No metrics available' : 'Not applicable';
+  }
+  const lines = [`Successful polls: ${successCount}`, `Failed polls: ${failureCount}`];
+  if (metricsInfo.lastError) {
+    lines.push(`Last error: ${metricsInfo.lastError}`);
+  } else if (metricsInfo.stale) {
+    lines.push('Metrics API unavailable');
+  } else if (metricsInfo.collectedAt) {
+    lines.push('Metrics are up to date');
+  }
+  return lines.join('\n');
+};
+
+const buildDomainMetricsDetails = (state: DomainSnapshotState<unknown>, hasMetrics: boolean) => {
+  const metricsInfo = resolveNodeMetricsInfo(state, hasMetrics);
+  const successCount = metricsInfo?.successCount ?? (hasMetrics ? 0 : undefined);
+  const failureCount = metricsInfo?.failureCount ?? (hasMetrics ? 0 : undefined);
+  return {
+    metricsInfo,
+    successCount,
+    failureCount,
+    metricsStatus: resolveMetricsStatus(metricsInfo, hasMetrics, successCount, failureCount),
+    metricsTooltip: resolveMetricsTooltip(metricsInfo, hasMetrics, successCount, failureCount),
+  };
+};
+
+type GetClusterMeta = (config: string) => { id: string; name: string };
+
+interface ScopedRowContext {
+  selectedClusterId: string;
+  getClusterMeta: GetClusterMeta;
+}
+
+const stateLastUpdated = (state: DomainSnapshotState<unknown>): number | undefined =>
+  state.lastUpdated ?? state.lastAutoRefresh ?? state.lastManualRefresh;
+
+const stateVersion = (state: DomainSnapshotState<unknown>): string =>
+  state.version !== null && state.version !== undefined ? String(state.version) : '—';
+
+const resolvePodLabel = (scope: string): string => {
+  const displayScope = stripClusterScope(scope);
+  if (displayScope.startsWith('namespace:')) {
+    const namespace = displayScope.slice('namespace:'.length) || 'all';
+    return namespace === 'all'
+      ? 'ObjPanel - Pods - All namespaces'
+      : `ObjPanel - Pods - ${namespace}`;
+  }
+  if (displayScope.startsWith('node:')) {
+    return `ObjPanel - Pods - ${displayScope.slice('node:'.length)}`;
+  }
+  if (displayScope.startsWith('workload:')) {
+    const parts = displayScope.split(':');
+    return `ObjPanel - Pods - ${parts[parts.length - 1]}`;
+  }
+  return 'ObjPanel - Pods';
+};
+
+const buildPodTelemetryTooltip = (
+  error: string | null | undefined,
+  streamHealth: StreamHealthSummary | null
+): string | undefined => {
+  const parts: string[] = [];
+  if (error) {
+    parts.push(error);
+  }
+  if (streamHealth) {
+    appendStreamHealthTelemetryTooltip(parts, streamHealth);
+  }
+  return parts.length > 0 ? parts.join('\n') : undefined;
+};
+
+const buildPodDiagnosticsRow = (
+  [scope, state]: [string, DomainSnapshotState<unknown>],
+  context: ScopedRowContext
+): DiagnosticsRow => {
+  const payload = state.data as PodSnapshotPayload | null;
+  const lastUpdated = stateLastUpdated(state);
+  const lastUpdatedInfo = formatLastUpdated(lastUpdated);
+  const refresherName = DOMAIN_REFRESHER_MAP.pods;
+  const streamHealth = toStreamHealthSummary(
+    resourceStreamManager.getHealthSnapshot('pods', scope)
+  );
+  const streamActive = Boolean(streamHealth && streamHealth.reason !== 'inactive');
+  const streamHealthy = streamHealth?.status === 'healthy';
+  const pollingDetails = resolvePollingDetails({
+    domain: 'pods',
+    refresherName,
+    streamActive,
+    streamHealthy,
+  });
+  const modeDetails = resolveModeDetails({
+    domain: 'pods',
+    streamMode: STREAM_MODE_BY_NAME.resources,
+    streamActive,
+    streamHealthy,
+    pollingEnabled: pollingDetails.enabled,
+    streamingBlocked: refreshOrchestrator.isStreamingBlocked('pods', scope),
+    streamOnly: STREAM_ONLY_DOMAINS.has('pods'),
+  });
+  const healthDetails = resolveHealthDetails({
+    domain: 'pods',
+    status: state.status,
+    error: state.error,
+    scope,
+    streamHealth,
+  });
+  const scopeDetails = resolveScopeDetails(
+    scope,
+    context.selectedClusterId,
+    context.getClusterMeta
+  );
+  const roleDetails = resolveScopeRole('pods', scope);
+  const countDetails = buildDiagnosticsCountDetails(payload?.rows?.length ?? 0, state, 'pods');
+  return {
+    rowKey: `pods:${scope}`,
+    domain: 'pods',
+    label: resolvePodLabel(scope),
+    status: state.status,
+    version: stateVersion(state),
+    interval: formatInterval(
+      refresherName ? refreshManager.getRefresherInterval(refresherName) : null
+    ),
+    lastUpdated: lastUpdatedInfo.display,
+    lastUpdatedTooltip: lastUpdatedInfo.tooltip,
+    duration: '—',
+    dropped: state.droppedAutoRefreshes,
+    stale: lastUpdated ? Date.now() - lastUpdated > STALE_THRESHOLD_MS : false,
+    error: state.error ?? '—',
+    telemetryStatus: [state.status, streamHealth ? `Stream ${streamHealth.status}` : null]
+      .filter(Boolean)
+      .join(' • '),
+    telemetryTooltip: buildPodTelemetryTooltip(state.error, streamHealth),
+    metricsStatus: 'N/A',
+    metricsTooltip: 'Pod usage is joined onto the pods rows at serve',
+    hasMetrics: false,
+    ...countDetails,
+    namespace: resolveDomainNamespace('pods', scope),
+    scope: scopeDetails.display,
+    scopeTooltip: scopeDetails.tooltip,
+    role: roleDetails.label,
+    roleTooltip: roleDetails.tooltip,
+    scopeEntries: scopeDetails.entries,
+    mode: modeDetails.label,
+    modeTooltip: modeDetails.tooltip,
+    healthStatus: healthDetails.label,
+    healthTooltip: healthDetails.tooltip,
+    pollingStatus: pollingDetails.label,
+    pollingTooltip: pollingDetails.tooltip,
+  };
+};
+
+const resolveObjectPanelScopeIdentity = (
+  scope: string
+): { namespaceLabel: string; name: string } => {
+  const parts = stripClusterScope(scope).split(':');
+  const namespace = parts[0] ?? '';
+  return {
+    namespaceLabel: namespace && namespace !== CLUSTER_SCOPE ? namespace : '-',
+    name: parts.slice(2).join(':'),
+  };
+};
+
+interface ContainerLogsRowContext extends ScopedRowContext {
+  streamHealth: StreamHealthSummary | null;
+  modeDetails: ReturnType<typeof resolveModeDetails>;
+  pollingDetails: PollingDetails;
+}
+
+const buildContainerLogsDiagnosticsRow = (
+  [scope, state]: [string, DomainSnapshotState<unknown>],
+  context: ContainerLogsRowContext
+): DiagnosticsRow => {
+  const payload = state.data as ContainerLogsSnapshotPayload | null;
+  const lastUpdatedInfo = formatLastUpdated(stateLastUpdated(state));
+  const identity = resolveObjectPanelScopeIdentity(scope);
+  const roleDetails = resolveScopeRole('container-logs', scope);
+  const countDetails = buildDiagnosticsCountDetails(
+    payload?.entries?.length ?? 0,
+    state,
+    'entries'
+  );
+  const scopeDetails = resolveScopeDetails(
+    scope,
+    context.selectedClusterId,
+    context.getClusterMeta
+  );
+  const healthDetails = resolveHealthDetails({
+    domain: 'container-logs',
+    status: state.status,
+    error: state.error,
+    scope,
+    streamHealth: context.streamHealth,
+  });
+  const resetCount = payload?.resetCount ?? 0;
+  return {
+    rowKey: `container-logs:${scope}`,
+    domain: 'container-logs',
+    label: identity.name ? `ObjPanel - Logs - ${identity.name}` : scope,
+    status: state.status,
+    version: resetCount > 0 ? String(resetCount) : '—',
+    interval: '—',
+    lastUpdated: lastUpdatedInfo.display,
+    lastUpdatedTooltip: lastUpdatedInfo.tooltip,
+    duration: '—',
+    dropped: state.droppedAutoRefreshes,
+    stale: false,
+    error: state.error ?? '—',
+    telemetryStatus: state.status,
+    telemetryTooltip: state.error ?? undefined,
+    metricsStatus: '—',
+    metricsTooltip: 'Streaming domain',
+    metricsStale: false,
+    metricsSuccess: undefined,
+    metricsFailure: undefined,
+    telemetrySuccess: undefined,
+    telemetryFailure: undefined,
+    hasMetrics: false,
+    ...countDetails,
+    namespace: identity.namespaceLabel,
+    scope: scopeDetails.display,
+    scopeTooltip: scopeDetails.tooltip,
+    role: roleDetails.label,
+    roleTooltip: roleDetails.tooltip,
+    scopeEntries: scopeDetails.entries,
+    mode: context.modeDetails.label,
+    modeTooltip: context.modeDetails.tooltip,
+    healthStatus: healthDetails.label,
+    healthTooltip: healthDetails.tooltip,
+    pollingStatus: context.pollingDetails.label,
+    pollingTooltip: context.pollingDetails.tooltip,
+  };
+};
+
+const buildObjectPanelDiagnosticsRow = (
+  domain: RefreshDomain,
+  tabName: string,
+  [scope, state]: [string, DomainSnapshotState<unknown>],
+  context: ScopedRowContext
+): DiagnosticsRow => {
+  const lastUpdatedInfo = formatLastUpdated(stateLastUpdated(state));
+  const identity = resolveObjectPanelScopeIdentity(scope);
+  const scopeDetails = resolveScopeDetails(
+    scope,
+    context.selectedClusterId,
+    context.getClusterMeta
+  );
+  const roleDetails = resolveScopeRole(domain, scope);
+  const healthDetails = resolveHealthDetails({
+    domain,
+    status: state.status,
+    error: state.error,
+    scope,
+  });
+  return {
+    rowKey: `${domain}:${scope}`,
+    domain,
+    label: identity.name ? `ObjPanel - ${tabName} - ${identity.name}` : `ObjPanel - ${tabName}`,
+    status: state.status,
+    version: stateVersion(state),
+    interval: '—',
+    lastUpdated: lastUpdatedInfo.display,
+    lastUpdatedTooltip: lastUpdatedInfo.tooltip,
+    duration: '—',
+    dropped: state.droppedAutoRefreshes,
+    stale: false,
+    error: state.error ?? '—',
+    telemetryStatus: state.status,
+    telemetryTooltip: state.error ?? undefined,
+    metricsStatus: '—',
+    metricsTooltip: 'Polling domain',
+    metricsStale: false,
+    metricsSuccess: undefined,
+    metricsFailure: undefined,
+    telemetrySuccess: undefined,
+    telemetryFailure: undefined,
+    hasMetrics: false,
+    count: 0,
+    countDisplay: '—',
+    namespace: identity.namespaceLabel,
+    scope: scopeDetails.display,
+    scopeTooltip: scopeDetails.tooltip,
+    role: roleDetails.label,
+    roleTooltip: roleDetails.tooltip,
+    scopeEntries: scopeDetails.entries,
+    mode: 'polling',
+    modeTooltip: 'Polling via object panel refresher',
+    healthStatus: healthDetails.label,
+    healthTooltip: healthDetails.tooltip,
+    pollingStatus: '—',
+    pollingTooltip: undefined,
+  };
+};
+
+const capabilityRowIsCurrent = (
+  row: CapabilityBatchRow,
+  activeNamespaceKey: string | null
+): boolean =>
+  row.scope === 'Cluster' ||
+  row.pendingCount > 0 ||
+  row.inFlightCount > 0 ||
+  Boolean(activeNamespaceKey && row.scope.toLowerCase() === activeNamespaceKey);
+
+const splitCapabilityRows = (
+  rows: CapabilityBatchRow[],
+  selectedNamespace: string | undefined,
+  selectedClusterId: string
+): {
+  currentCapabilityRows: CapabilityBatchRow[];
+  previousCapabilityRows: CapabilityBatchRow[];
+} => {
+  const currentCapabilityRows: CapabilityBatchRow[] = [];
+  const previousCapabilityRows: CapabilityBatchRow[] = [];
+  const activeNamespaceKey = selectedNamespace?.toLowerCase() ?? null;
+  for (const row of rows) {
+    if (selectedClusterId && row.clusterId && row.clusterId !== selectedClusterId) {
+      continue;
+    }
+    if (capabilityRowIsCurrent(row, activeNamespaceKey)) {
+      currentCapabilityRows.push(row);
+    } else {
+      previousCapabilityRows.push(row);
+    }
+  }
+  return { currentCapabilityRows, previousCapabilityRows };
+};
+
+interface DiagnosticsFocusNavigation {
+  panel: HTMLDivElement | null;
+  focusables: () => HTMLElement[];
+  findActiveIndex: () => number;
+  focusFirst: () => boolean;
+  focusLast: () => boolean;
+  focusAt: (index: number) => boolean;
+}
+
+const handleDiagnosticsTabKey = (
+  event: KeyboardEvent,
+  navigation: DiagnosticsFocusNavigation
+): boolean => {
+  if (event.key !== 'Tab') {
+    return false;
+  }
+  const target = event.target as HTMLElement | null;
+  if (target?.closest('.diagnostics-content')) {
+    return false;
+  }
+  const items = navigation.focusables();
+  if (items.length === 0) {
+    return false;
+  }
+  const direction = event.shiftKey ? -1 : 1;
+  const current = target && navigation.panel?.contains(target) ? navigation.findActiveIndex() : -1;
+  if (current === -1) {
+    return direction > 0 ? navigation.focusFirst() : navigation.focusLast();
+  }
+  const next = current + direction;
+  return next >= 0 && next < items.length ? navigation.focusAt(next) : false;
+};
+
 export const DiagnosticsPanel: React.FC<DiagnosticsPanelProps> = ({ onClose, isOpen }) => {
   const [activeTab, setActiveTab] = useState<DiagnosticsTabId>('k8s-api');
   const gridTablePerformanceRows = useGridTablePerformanceDiagnostics();
@@ -440,60 +1342,6 @@ export const DiagnosticsPanel: React.FC<DiagnosticsPanelProps> = ({ onClose, isO
   const objectHelmManifestScopeEntries = useRefreshScopedDomainEntries('object-helm-manifest');
   const objectHelmValuesScopeEntries = useRefreshScopedDomainEntries('object-helm-values');
 
-  // Pick the scoped domain state that best matches the active cluster context.
-  // Diagnostics renders one summary row per domain, so prefer entries scoped to the
-  // active cluster before falling back to generic "first populated" selection.
-  const pickPreferredScopeState = useCallback(
-    (
-      entries: Array<[string, DomainSnapshotState<unknown>]>,
-      preferredClusterId: string | undefined
-    ): DomainSnapshotState<unknown> => {
-      if (entries.length === 0) {
-        return { status: 'idle', data: null, stats: null, error: null, droppedAutoRefreshes: 0 };
-      }
-
-      let candidates = entries;
-      const clusterId = (preferredClusterId ?? '').trim();
-      if (clusterId) {
-        const clusterMatches = entries.filter(([entryScopeKey, state]) => {
-          const parsed = parseClusterScopeList(state.scope ?? entryScopeKey);
-          return parsed.clusterIds.includes(clusterId);
-        });
-        if (clusterMatches.length > 0) {
-          candidates = clusterMatches;
-        } else {
-          const hasClusterScopedEntries = entries.some(([entryScopeKey, state]) => {
-            const parsed = parseClusterScopeList(state.scope ?? entryScopeKey);
-            return parsed.clusterIds.length > 0;
-          });
-          if (hasClusterScopedEntries) {
-            // Keep diagnostics cluster-aware: never fall back to a different
-            // cluster's scoped entry when the active cluster has no match.
-            return {
-              status: 'idle',
-              data: null,
-              stats: null,
-              error: null,
-              droppedAutoRefreshes: 0,
-            };
-          }
-        }
-      }
-
-      // Prefer entries with data, then non-idle entries, then the first candidate.
-      const selected =
-        candidates.find(([, s]) => s.data !== null) ??
-        candidates.find(([, s]) => s.status !== 'idle') ??
-        candidates[0];
-
-      const [scopeKey, scopedState] = selected;
-      if (scopedState.scope?.trim()) {
-        return scopedState;
-      }
-      return { ...scopedState, scope: scopeKey };
-    },
-    []
-  );
   const [telemetrySummary, setTelemetrySummary] = useState<NormalizedTelemetrySummary | null>(null);
   const [telemetryError, setTelemetryError] = useState<string | null>(null);
   const [selectionDiagnostics, setSelectionDiagnostics] = useState<SelectionDiagnostics | null>(
@@ -787,406 +1635,44 @@ export const DiagnosticsPanel: React.FC<DiagnosticsPanelProps> = ({ onClose, isO
   const rows = useMemo<DiagnosticsRow[]>(() => {
     const prioritySet = new Set(PRIORITY_DOMAINS);
 
-    const toStreamHealthSummary = (
-      health: ReturnType<typeof resourceStreamManager.getHealthSnapshot> | null
-    ): StreamHealthSummary | null => {
-      if (!health) {
-        return null;
-      }
-      return {
-        status: health.status,
-        reason: health.reason,
-        connectionStatus: health.connectionStatus,
-        lastMessageAt: health.lastMessageAt,
-        lastDeliveryAt: health.lastDeliveryAt,
-      };
-    };
-
-    const resolveHealthDetails = (params: {
-      domain: RefreshDomain;
-      status: DiagnosticsRow['status'];
-      error?: string | null;
-      scope?: string;
-      streamHealth?: StreamHealthSummary | null;
-    }): { label: string; tooltip?: string; status: HealthStatus } => {
-      const { domain, status, error, scope, streamHealth } = params;
-      const scopeTrimmed = (scope ?? '').trim();
-      if (!scopeTrimmed && (domain === 'pods' || domain === 'container-logs')) {
-        return {
-          label: formatHealthLabel('unhealthy', 'no scope'),
-          tooltip: 'No active scope',
-          status: 'unhealthy',
-        };
-      }
-      if (status === 'error') {
-        const reason = resolveErrorReason(error) ?? 'error';
-        return {
-          label: formatHealthLabel('unhealthy', reason),
-          tooltip: error ?? reason,
-          status: 'unhealthy',
-        };
-      }
-      if (streamHealth) {
-        const tooltipParts: string[] = [`Reason: ${streamHealth.reason}`];
-        if (streamHealth.connectionStatus) {
-          tooltipParts.push(`Connection: ${streamHealth.connectionStatus}`);
-        }
-        if (streamHealth.lastDeliveryAt) {
-          const deliveryInfo = formatLastUpdated(streamHealth.lastDeliveryAt);
-          tooltipParts.push(`Last delivery: ${deliveryInfo.tooltip}`);
-        }
-        if (streamHealth.lastMessageAt) {
-          const messageInfo = formatLastUpdated(streamHealth.lastMessageAt);
-          tooltipParts.push(`Last message: ${messageInfo.tooltip}`);
-        }
-        if (streamHealth.reason === 'inactive' && status !== 'idle') {
-          return {
-            label: formatHealthLabel('degraded', 'inactive'),
-            tooltip: ['Retained snapshot is ready; stream is inactive for this scope.']
-              .concat(tooltipParts)
-              .join('\n'),
-            status: 'degraded',
-          };
-        }
-        return {
-          label: formatHealthLabel(streamHealth.status, streamHealth.reason),
-          tooltip: tooltipParts.join('\n'),
-          status: streamHealth.status,
-        };
-      }
-      if (status === 'loading' || status === 'initialising') {
-        return {
-          label: formatHealthLabel('degraded', status),
-          tooltip: 'Awaiting snapshot data',
-          status: 'degraded',
-        };
-      }
-      if (status === 'idle') {
-        return {
-          label: formatHealthLabel('degraded', 'idle'),
-          tooltip: 'Domain is idle',
-          status: 'degraded',
-        };
-      }
-      return {
-        label: formatHealthLabel('healthy', 'ready'),
-        tooltip: 'Snapshot data is up to date',
-        status: 'healthy',
-      };
-    };
-
-    const resolvePollingDetails = (params: {
-      domain: RefreshDomain;
-      refresherName?: (typeof DOMAIN_REFRESHER_MAP)[RefreshDomain];
-      streamActive: boolean;
-      streamHealthy: boolean;
-    }): { label: string; tooltip?: string; enabled: boolean } => {
-      const { domain, refresherName, streamActive, streamHealthy } = params;
-      if (!refresherName) {
-        return { label: '—', tooltip: 'No polling refresher', enabled: false };
-      }
-      const refresherState = refreshManager.getState(refresherName);
-      if (!refresherState) {
-        return { label: '—', tooltip: 'Polling not registered', enabled: false };
-      }
-      if (refresherState.status === 'paused') {
-        return { label: 'paused', tooltip: 'Polling paused by auto-refresh', enabled: false };
-      }
-      if (refresherState.status === 'disabled') {
-        if (PAUSE_POLLING_WHEN_STREAMING_DOMAINS.has(domain) && streamActive) {
-          const reason = streamHealthy ? 'stream healthy' : 'stream active';
-          return { label: 'paused', tooltip: `Paused while ${reason}`, enabled: false };
-        }
-        return { label: 'disabled', tooltip: 'Polling disabled for this domain', enabled: false };
-      }
-      return { label: 'enabled', tooltip: `State: ${refresherState.status}`, enabled: true };
-    };
-
     const baseRows = domainScopedStates
       .filter(({ domain, state }) => !isTransientResourceTableQueryScope(domain, state.scope))
       .map<DiagnosticsRow>(({ domain, state, label, hasMetrics }) => {
         const effectiveScope = state.scope;
         const hasMetricsFlag = hasMetrics;
-        const telemetryInfo = telemetrySummary?.snapshots.find((entry) => entry.domain === domain);
-        const streamName = DOMAIN_STREAM_MAP[domain];
-        const streamTelemetry = streamName
-          ? telemetrySummary?.streams.find((entry) => entry.name === streamName)
-          : undefined;
-        const isResourceStreamDomain = streamName === 'resources';
-        const streamMode = streamName ? (STREAM_MODE_BY_NAME[streamName] ?? 'streaming') : null;
         const scopeDetails = resolveScopeDetails(effectiveScope, selectedClusterId, getClusterMeta);
         const roleDetails = resolveScopeRole(domain, effectiveScope);
-        const streamLastEvent = isResourceStreamDomain ? streamTelemetry?.lastEvent : 0;
-        const baseLastUpdated =
-          state.lastUpdated ?? state.lastAutoRefresh ?? state.lastManualRefresh;
-        const lastUpdated = (() => {
-          const combined = Math.max(baseLastUpdated ?? 0, streamLastEvent ?? 0);
-          return combined > 0 ? combined : undefined;
-        })();
-        const isStale = lastUpdated ? Date.now() - lastUpdated > STALE_THRESHOLD_MS : false;
-        const metricsInfo: NodeMetricsInfo | undefined = (() => {
-          if (!hasMetricsFlag) {
-            return undefined;
-          }
-          const metrics = asRecord(state.data)?.metrics;
-          return asRecord(metrics) ? (metrics as NodeMetricsInfo) : undefined;
-        })();
-        const telemetryLastUpdatedInfo = (() => {
-          if (streamLastEvent && streamLastEvent > 0) {
-            return formatLastUpdated(streamLastEvent);
-          }
-          if (telemetryInfo?.lastUpdated) {
-            return formatLastUpdated(telemetryInfo.lastUpdated);
-          }
-          return null;
-        })();
-        const durationLabel = telemetryInfo?.lastDurationMs
-          ? `${telemetryInfo.lastDurationMs} ms`
-          : '—';
-        // Peak time this domain's Build blocked on the informer-sync gate (the
-        // initial-LIST gating cost). Surfaced so a slow cold-start load is visible
-        // here even though the build Duration column excludes the wait.
-        const syncWaitLabel = telemetryInfo?.maxInformerSyncWaitMs
-          ? `${telemetryInfo.maxInformerSyncWaitMs} ms`
-          : '—';
-        const telemetrySuccess = telemetryInfo?.successCount;
-        const telemetryFailure = telemetryInfo?.failureCount;
-        const telemetryLastError = telemetryInfo?.lastError?.trim() ?? '';
-        const combinedError = telemetryLastError || state.error || '—';
-        const snapshotTelemetryStatus = (() => {
-          if (!telemetrySummary) {
-            return '—';
-          }
-          if (!telemetryInfo) {
-            return 'No data';
-          }
-          return telemetryInfo.lastStatus === 'error'
-            ? `Error (${telemetryInfo.failureCount})`
-            : `Success (${telemetryInfo.successCount})`;
-        })();
-        let streamTelemetryStatus: string | null;
-
-        if (isResourceStreamDomain && streamTelemetry) {
-          if (streamTelemetry.errorCount > 0) {
-            streamTelemetryStatus = `Stream Error (${streamTelemetry.errorCount})`;
-          } else if (streamTelemetry.droppedMessages > 0) {
-            streamTelemetryStatus = `Stream Dropped (${streamTelemetry.droppedMessages})`;
-          } else {
-            streamTelemetryStatus = 'Stream OK';
-          }
-        } else {
-          streamTelemetryStatus = null;
-        }
-
-        // Show resource stream health alongside snapshot and telemetry summaries.
-        const streamHealth =
-          isResourceStreamDomain && effectiveScope
-            ? toStreamHealthSummary(resourceStreamManager.getHealthSnapshot(domain, effectiveScope))
-            : resolveStreamTelemetryHealth(streamTelemetry);
-        let streamHealthStatus: string | null;
-
-        if (streamHealth) {
-          if (streamHealth.reason === 'inactive') {
-            streamHealthStatus = 'Stream inactive';
-          } else {
-            streamHealthStatus = `Stream ${streamHealth.status}`;
-          }
-        } else {
-          streamHealthStatus = null;
-        }
-
-        const telemetryStatus = [snapshotTelemetryStatus, streamTelemetryStatus, streamHealthStatus]
-          .filter(Boolean)
-          .join(' • ');
-        const streamDropped = isResourceStreamDomain ? (streamTelemetry?.droppedMessages ?? 0) : 0;
-        const telemetryTooltipParts: string[] = [];
-        if (telemetryLastError) {
-          telemetryTooltipParts.push(telemetryLastError);
-        }
-        if (isResourceStreamDomain && streamTelemetry) {
-          telemetryTooltipParts.push(`Stream delivered: ${streamTelemetry.totalMessages}`);
-          telemetryTooltipParts.push(`Stream dropped: ${streamTelemetry.droppedMessages}`);
-          if (streamTelemetry.lastError) {
-            telemetryTooltipParts.push(`Stream error: ${streamTelemetry.lastError}`);
-          }
-          if (resourceStreamStats.resyncCount > 0) {
-            telemetryTooltipParts.push(`Stream resyncs: ${resourceStreamStats.resyncCount}`);
-          }
-          if (resourceStreamStats.fallbackCount > 0) {
-            telemetryTooltipParts.push(`Stream fallbacks: ${resourceStreamStats.fallbackCount}`);
-          }
-          if (resourceStreamStats.lastResyncReason) {
-            telemetryTooltipParts.push(`Last resync: ${resourceStreamStats.lastResyncReason}`);
-          }
-          if (resourceStreamStats.lastFallbackReason) {
-            telemetryTooltipParts.push(`Last fallback: ${resourceStreamStats.lastFallbackReason}`);
-          }
-        }
-        if (streamHealth) {
-          telemetryTooltipParts.push(`Stream health: ${streamHealth.status}`);
-          telemetryTooltipParts.push(`Stream reason: ${streamHealth.reason}`);
-          if (streamHealth.lastDeliveryAt) {
-            const deliveryInfo = formatLastUpdated(streamHealth.lastDeliveryAt);
-            telemetryTooltipParts.push(`Stream last delivery: ${deliveryInfo.tooltip}`);
-          }
-          if (streamHealth.lastMessageAt) {
-            const messageInfo = formatLastUpdated(streamHealth.lastMessageAt);
-            telemetryTooltipParts.push(`Stream last message: ${messageInfo.tooltip}`);
-          }
-        }
-        const telemetryTooltip =
-          telemetryTooltipParts.length > 0 ? telemetryTooltipParts.join('\n') : undefined;
-        const successCount = metricsInfo?.successCount ?? (hasMetricsFlag ? 0 : undefined);
-        const failureCount = metricsInfo?.failureCount ?? (hasMetricsFlag ? 0 : undefined);
-        let metricsStatus: string;
-
-        if (hasMetricsFlag) {
-          if (metricsInfo) {
-            if (metricsInfo.lastError) {
-              metricsStatus = `Error (${failureCount} fails)`;
-            } else if (metricsInfo.stale) {
-              metricsStatus = `Unavailable (${failureCount} fails)`;
-            } else {
-              metricsStatus = `OK (${successCount} polls)`;
-            }
-          } else {
-            metricsStatus = 'N/A';
-          }
-        } else {
-          metricsStatus = '—';
-        }
-
-        const tooltipLines: string[] = [];
-        if (metricsInfo) {
-          tooltipLines.push(`Successful polls: ${successCount}`);
-          tooltipLines.push(`Failed polls: ${failureCount}`);
-          if (metricsInfo.lastError) {
-            tooltipLines.push(`Last error: ${metricsInfo.lastError}`);
-          } else if (metricsInfo.stale) {
-            tooltipLines.push('Metrics API unavailable');
-          } else if (metricsInfo.collectedAt) {
-            tooltipLines.push('Metrics are up to date');
-          }
-        }
-        let metricsTooltip: string;
-
-        if (tooltipLines.length > 0) {
-          metricsTooltip = tooltipLines.join('\n');
-        } else if (hasMetricsFlag) {
-          metricsTooltip = 'No metrics available';
-        } else {
-          metricsTooltip = 'Not applicable';
-        }
+        const telemetryDetails = buildDomainTelemetryDetails({
+          domain,
+          state,
+          scope: effectiveScope,
+          telemetrySummary,
+          resourceStreamStats,
+        });
+        const metricsDetails = buildDomainMetricsDetails(state, hasMetricsFlag);
 
         const data = asRecord(state.data);
-        let count = (() => {
-          if (!data) {
-            return 0;
-          }
-          switch (domain) {
-            case 'namespaces':
-              if (!Array.isArray(data.namespaces)) {
-                return 0;
-              }
-              return data.namespaces.length;
-            case 'cluster-overview': {
-              const totalNodes = asRecord(data.overview)?.totalNodes;
-              return typeof totalNodes === 'number' ? totalNodes : 0;
-            }
-            case 'nodes':
-              return Array.isArray(data.rows) ? data.rows.length : 0;
-            case 'object-maintenance':
-              return Array.isArray(data.drains) ? data.drains.length : 0;
-            case 'cluster-rbac':
-              return Array.isArray(data.rows) ? data.rows.length : 0;
-            case 'cluster-storage':
-              return Array.isArray(data.rows) ? data.rows.length : 0;
-            case 'cluster-config':
-              return Array.isArray(data.rows) ? data.rows.length : 0;
-            case 'cluster-crds':
-              return Array.isArray(data.rows) ? data.rows.length : 0;
-            case 'cluster-custom':
-              return Array.isArray(data.resources) ? data.resources.length : 0;
-            case 'cluster-events':
-              return Array.isArray(data.rows) ? data.rows.length : 0;
-            case 'catalog':
-              return Array.isArray(data.items) ? data.items.length : 0;
-            case 'namespace-workloads':
-              return Array.isArray(data.rows) ? data.rows.length : 0;
-            case 'namespace-config':
-              return Array.isArray(data.rows) ? data.rows.length : 0;
-            case 'namespace-network':
-              return Array.isArray(data.rows) ? data.rows.length : 0;
-            case 'namespace-rbac':
-              return Array.isArray(data.rows) ? data.rows.length : 0;
-            case 'namespace-storage':
-              return Array.isArray(data.rows) ? data.rows.length : 0;
-            case 'namespace-autoscaling':
-              return Array.isArray(data.rows) ? data.rows.length : 0;
-            case 'namespace-quotas':
-              return Array.isArray(data.rows) ? data.rows.length : 0;
-            case 'namespace-events':
-              return Array.isArray(data.rows) ? data.rows.length : 0;
-            case 'namespace-custom':
-              return Array.isArray(data.resources) ? data.resources.length : 0;
-            case 'namespace-helm':
-              return Array.isArray(data.rows) ? data.rows.length : 0;
-            default:
-              return 0;
-          }
-        })();
-        const lastUpdatedInfo = formatLastUpdated(lastUpdated);
+        const countDetails = resolveDiagnosticsCountDetails(domain, state, data);
+        const lastUpdatedInfo = formatLastUpdated(telemetryDetails.lastUpdated);
         const refresherName = DOMAIN_REFRESHER_MAP[domain];
         const intervalLabel = formatInterval(
           refresherName ? refreshManager.getRefresherInterval(refresherName) : null
         );
         const namespaceLabel = resolveDomainNamespace(domain, effectiveScope);
-        const stats = state.stats;
-        let truncated = Boolean(stats?.truncated);
-        let totalItems = stats?.totalItems ?? (truncated ? count : undefined);
-        let warnings = (stats?.warnings ?? []).filter((warning) => warning?.trim().length);
-        if (domain === 'catalog') {
-          let catalogDataTotal = 0;
-          if (typeof data?.total === 'number') {
-            catalogDataTotal = data.total;
-          } else if (Array.isArray(data?.items)) {
-            catalogDataTotal = data.items.length;
-          }
-          const catalogTotal = stats?.totalItems ?? catalogDataTotal;
-          count = catalogTotal;
-          totalItems = catalogTotal;
-          truncated = false;
-        }
-        if (
-          truncated &&
-          totalItems !== undefined &&
-          warnings.length === 0 &&
-          count !== totalItems
-        ) {
-          warnings = [`Showing most recent ${count} of ${totalItems} items`];
-        }
-        const countDisplay =
-          truncated && totalItems !== undefined ? `${count} / ${totalItems}` : String(count);
-        const countTooltip = warnings.length > 0 ? warnings.join('\n') : undefined;
-        const countClassName = warnings.length > 0 ? 'diagnostics-count-warning' : undefined;
 
         const version =
           state.version !== null && state.version !== undefined ? String(state.version) : '—';
-        const streamActive = isResourceStreamDomain
-          ? Boolean(streamHealth && streamHealth.reason !== 'inactive')
-          : Boolean(streamTelemetry?.activeSessions);
-        const streamHealthy = streamHealth?.status === 'healthy';
         const pollingDetails = resolvePollingDetails({
           domain,
           refresherName,
-          streamActive,
-          streamHealthy,
+          streamActive: telemetryDetails.streamActive,
+          streamHealthy: telemetryDetails.streamHealthy,
         });
         const modeDetails = resolveModeDetails({
           domain,
-          streamMode,
-          streamActive,
-          streamHealthy,
+          streamMode: telemetryDetails.streamMode,
+          streamActive: telemetryDetails.streamActive,
+          streamHealthy: telemetryDetails.streamHealthy,
           pollingEnabled: pollingDetails.enabled,
           streamingBlocked: refreshOrchestrator.isStreamingBlocked(domain, effectiveScope),
           streamOnly: STREAM_ONLY_DOMAINS.has(domain),
@@ -1196,7 +1682,7 @@ export const DiagnosticsPanel: React.FC<DiagnosticsPanelProps> = ({ onClose, isO
           status: state.status,
           error: state.error,
           scope: effectiveScope,
-          streamHealth,
+          streamHealth: telemetryDetails.streamHealth,
         });
 
         return {
@@ -1206,30 +1692,26 @@ export const DiagnosticsPanel: React.FC<DiagnosticsPanelProps> = ({ onClose, isO
           status: state.status,
           version,
           interval: intervalLabel,
-          lastUpdated: telemetryLastUpdatedInfo?.display ?? lastUpdatedInfo.display,
-          lastUpdatedTooltip: telemetryLastUpdatedInfo?.tooltip ?? lastUpdatedInfo.tooltip,
-          dropped: state.droppedAutoRefreshes + streamDropped,
-          stale: isStale,
-          error: combinedError,
-          telemetryStatus,
-          telemetryTooltip,
-          metricsStatus,
-          metricsTooltip,
-          metricsStale: metricsInfo?.stale,
-          metricsSuccess: successCount,
-          metricsFailure: failureCount,
-          duration: durationLabel,
-          syncWait: syncWaitLabel,
-          telemetrySuccess,
-          telemetryFailure,
+          lastUpdated:
+            telemetryDetails.telemetryLastUpdatedInfo?.display ?? lastUpdatedInfo.display,
+          lastUpdatedTooltip:
+            telemetryDetails.telemetryLastUpdatedInfo?.tooltip ?? lastUpdatedInfo.tooltip,
+          dropped: state.droppedAutoRefreshes + telemetryDetails.streamDropped,
+          stale: isTimestampStale(telemetryDetails.lastUpdated),
+          error: telemetryDetails.combinedError,
+          telemetryStatus: telemetryDetails.telemetryStatus,
+          telemetryTooltip: telemetryDetails.telemetryTooltip,
+          metricsStatus: metricsDetails.metricsStatus,
+          metricsTooltip: metricsDetails.metricsTooltip,
+          metricsStale: metricsDetails.metricsInfo?.stale,
+          metricsSuccess: metricsDetails.successCount,
+          metricsFailure: metricsDetails.failureCount,
+          duration: telemetryDetails.durationLabel,
+          syncWait: telemetryDetails.syncWaitLabel,
+          telemetrySuccess: telemetryDetails.telemetrySuccess,
+          telemetryFailure: telemetryDetails.telemetryFailure,
           hasMetrics: hasMetricsFlag,
-          count,
-          countDisplay,
-          countTooltip,
-          countClassName,
-          warnings,
-          truncated,
-          totalItems,
+          ...countDetails,
           namespace: namespaceLabel,
           scope: scopeDetails.display,
           scopeTooltip: scopeDetails.tooltip,
@@ -1245,137 +1727,8 @@ export const DiagnosticsPanel: React.FC<DiagnosticsPanelProps> = ({ onClose, isO
         };
       });
 
-    const podRows = podScopeEntries.map<DiagnosticsRow>(([scope, state]) => {
-      const payload = state.data as PodSnapshotPayload | null;
-      const lastUpdated = state.lastUpdated ?? state.lastAutoRefresh ?? state.lastManualRefresh;
-      const isStale = lastUpdated ? Date.now() - lastUpdated > STALE_THRESHOLD_MS : false;
-      const lastUpdatedInfo = formatLastUpdated(lastUpdated);
-      const refresherName = DOMAIN_REFRESHER_MAP.pods;
-      const intervalLabel = formatInterval(
-        refresherName ? refreshManager.getRefresherInterval(refresherName) : null
-      );
-      const namespaceLabel = resolveDomainNamespace('pods', scope);
-      const count = payload?.rows?.length ?? 0;
-      const stats = state.stats;
-      const truncated = Boolean(stats?.truncated);
-      const totalItems = stats?.totalItems ?? (truncated ? count : undefined);
-      let warnings = (stats?.warnings ?? []).filter((warning) => warning?.trim().length);
-      if (truncated && totalItems !== undefined && warnings.length === 0 && count !== totalItems) {
-        warnings = [`Showing most recent ${count} of ${totalItems} pods`];
-      }
-      const countDisplay =
-        truncated && totalItems !== undefined ? `${count} / ${totalItems}` : String(count);
-      const countTooltip = warnings.length > 0 ? warnings.join('\n') : undefined;
-      const countClassName = warnings.length > 0 ? 'diagnostics-count-warning' : undefined;
-      const version =
-        state.version !== null && state.version !== undefined ? String(state.version) : '—';
-      const streamHealth = toStreamHealthSummary(
-        resourceStreamManager.getHealthSnapshot('pods', scope)
-      );
-      const roleDetails = resolveScopeRole('pods', scope);
-      const streamActive = Boolean(streamHealth && streamHealth.reason !== 'inactive');
-      const streamHealthy = streamHealth?.status === 'healthy';
-      const pollingDetails = resolvePollingDetails({
-        domain: 'pods',
-        refresherName: DOMAIN_REFRESHER_MAP.pods,
-        streamActive,
-        streamHealthy,
-      });
-      const modeDetails = resolveModeDetails({
-        domain: 'pods',
-        streamMode: STREAM_MODE_BY_NAME.resources,
-        streamActive,
-        streamHealthy,
-        pollingEnabled: pollingDetails.enabled,
-        streamingBlocked: refreshOrchestrator.isStreamingBlocked('pods', scope),
-        streamOnly: STREAM_ONLY_DOMAINS.has('pods'),
-      });
-      const healthDetails = resolveHealthDetails({
-        domain: 'pods',
-        status: state.status,
-        error: state.error,
-        scope,
-        streamHealth,
-      });
-      const scopeDetails = resolveScopeDetails(scope, selectedClusterId, getClusterMeta);
-      const telemetryStatus = [state.status, streamHealth ? `Stream ${streamHealth.status}` : null]
-        .filter(Boolean)
-        .join(' • ');
-      const telemetryTooltipParts: string[] = [];
-      if (state.error) {
-        telemetryTooltipParts.push(state.error);
-      }
-      if (streamHealth) {
-        telemetryTooltipParts.push(`Stream health: ${streamHealth.status}`);
-        telemetryTooltipParts.push(`Stream reason: ${streamHealth.reason}`);
-        if (streamHealth.lastDeliveryAt) {
-          const deliveryInfo = formatLastUpdated(streamHealth.lastDeliveryAt);
-          telemetryTooltipParts.push(`Stream last delivery: ${deliveryInfo.tooltip}`);
-        }
-        if (streamHealth.lastMessageAt) {
-          const messageInfo = formatLastUpdated(streamHealth.lastMessageAt);
-          telemetryTooltipParts.push(`Stream last message: ${messageInfo.tooltip}`);
-        }
-      }
-      const telemetryTooltip =
-        telemetryTooltipParts.length > 0 ? telemetryTooltipParts.join('\n') : undefined;
-
-      const displayScope = stripClusterScope(scope);
-      let label = 'ObjPanel - Pods';
-      if (displayScope.startsWith('namespace:')) {
-        const namespace = displayScope.slice('namespace:'.length) || 'all';
-        label =
-          namespace === 'all'
-            ? 'ObjPanel - Pods - All namespaces'
-            : `ObjPanel - Pods - ${namespace}`;
-      } else if (displayScope.startsWith('node:')) {
-        const nodeName = displayScope.slice('node:'.length);
-        label = `ObjPanel - Pods - ${nodeName}`;
-      } else if (displayScope.startsWith('workload:')) {
-        const parts = displayScope.split(':');
-        const workloadName = parts[parts.length - 1];
-        label = `ObjPanel - Pods - ${workloadName}`;
-      }
-
-      return {
-        rowKey: `pods:${scope}`,
-        domain: 'pods' as RefreshDomain,
-        label,
-        status: state.status,
-        version,
-        interval: intervalLabel,
-        lastUpdated: lastUpdatedInfo.display,
-        lastUpdatedTooltip: lastUpdatedInfo.tooltip,
-        duration: '—',
-        dropped: state.droppedAutoRefreshes,
-        stale: isStale,
-        error: state.error ?? '—',
-        telemetryStatus,
-        telemetryTooltip,
-        metricsStatus: 'N/A',
-        metricsTooltip: 'Pod usage is joined onto the pods rows at serve',
-        hasMetrics: false,
-        count,
-        countDisplay,
-        countTooltip,
-        countClassName,
-        warnings,
-        truncated,
-        totalItems,
-        namespace: namespaceLabel,
-        scope: scopeDetails.display,
-        scopeTooltip: scopeDetails.tooltip,
-        role: roleDetails.label,
-        roleTooltip: roleDetails.tooltip,
-        scopeEntries: scopeDetails.entries,
-        mode: modeDetails.label,
-        modeTooltip: modeDetails.tooltip,
-        healthStatus: healthDetails.label,
-        healthTooltip: healthDetails.tooltip,
-        pollingStatus: pollingDetails.label,
-        pollingTooltip: pollingDetails.tooltip,
-      };
-    });
+    const scopedRowContext = { selectedClusterId, getClusterMeta };
+    const podRows = podScopeEntries.map((entry) => buildPodDiagnosticsRow(entry, scopedRowContext));
 
     const orderedPodRows = podRows.sort((a, b) => a.label.localeCompare(b.label));
 
@@ -1400,83 +1753,15 @@ export const DiagnosticsPanel: React.FC<DiagnosticsPanelProps> = ({ onClose, isO
       streamingBlocked: false,
       streamOnly: STREAM_ONLY_DOMAINS.has('container-logs'),
     });
-    const logRows = containerLogsScopeEntries.map<DiagnosticsRow>(([scope, state]) => {
-      const payload = state.data as ContainerLogsSnapshotPayload | null;
-      const lastUpdated = state.lastUpdated ?? state.lastAutoRefresh ?? state.lastManualRefresh;
-      const lastUpdatedInfo = formatLastUpdated(lastUpdated);
-      const normalizedScope = stripClusterScope(scope);
-      const parts = normalizedScope.split(':');
-      const namespace = parts[0] ?? '';
-      const name = parts.slice(2).join(':');
-      const namespaceLabel = namespace && namespace !== CLUSTER_SCOPE ? namespace : '-';
-      const label = name ? `ObjPanel - Logs - ${name}` : scope;
-      const roleDetails = resolveScopeRole('container-logs', scope);
-      const resetCount = payload?.resetCount ?? 0;
-      const count = payload?.entries?.length ?? 0;
-      const stats = state.stats;
-      const truncated = Boolean(stats?.truncated);
-      const totalItems = stats?.totalItems ?? (truncated ? count : undefined);
-      let warnings = (stats?.warnings ?? []).filter((warning) => warning?.trim().length);
-      if (truncated && totalItems !== undefined && warnings.length === 0 && count !== totalItems) {
-        warnings = [`Showing most recent ${count} of ${totalItems} entries`];
-      }
-      const countDisplay =
-        truncated && totalItems !== undefined ? `${count} / ${totalItems}` : String(count);
-      const countTooltip = warnings.length > 0 ? warnings.join('\n') : undefined;
-      const countClassName = warnings.length > 0 ? 'diagnostics-count-warning' : undefined;
-      const scopeDetails = resolveScopeDetails(scope, selectedClusterId, getClusterMeta);
-      const healthDetails = resolveHealthDetails({
-        domain: 'container-logs',
-        status: state.status,
-        error: state.error,
-        scope,
-        streamHealth: containerLogsStreamHealth,
-      });
-
-      return {
-        rowKey: `container-logs:${scope}`,
-        domain: 'container-logs' as RefreshDomain,
-        label,
-        status: state.status,
-        version: resetCount > 0 ? String(resetCount) : '—',
-        interval: '—',
-        lastUpdated: lastUpdatedInfo.display,
-        lastUpdatedTooltip: lastUpdatedInfo.tooltip,
-        duration: '—',
-        dropped: state.droppedAutoRefreshes,
-        stale: false,
-        error: state.error ?? '—',
-        telemetryStatus: state.status,
-        telemetryTooltip: state.error ?? undefined,
-        metricsStatus: '—',
-        metricsTooltip: 'Streaming domain',
-        metricsStale: false,
-        metricsSuccess: undefined,
-        metricsFailure: undefined,
-        telemetrySuccess: undefined,
-        telemetryFailure: undefined,
-        hasMetrics: false,
-        count,
-        countDisplay,
-        countTooltip,
-        countClassName,
-        warnings,
-        truncated,
-        totalItems,
-        namespace: namespaceLabel,
-        scope: scopeDetails.display,
-        scopeTooltip: scopeDetails.tooltip,
-        role: roleDetails.label,
-        roleTooltip: roleDetails.tooltip,
-        scopeEntries: scopeDetails.entries,
-        mode: logModeDetails.label,
-        modeTooltip: logModeDetails.tooltip,
-        healthStatus: healthDetails.label,
-        healthTooltip: healthDetails.tooltip,
-        pollingStatus: logPollingDetails.label,
-        pollingTooltip: logPollingDetails.tooltip,
-      };
-    });
+    const logRowContext = {
+      ...scopedRowContext,
+      streamHealth: containerLogsStreamHealth,
+      modeDetails: logModeDetails,
+      pollingDetails: logPollingDetails,
+    };
+    const logRows = containerLogsScopeEntries.map((entry) =>
+      buildContainerLogsDiagnosticsRow(entry, logRowContext)
+    );
 
     const orderedLogRows = logRows.sort((a, b) => a.label.localeCompare(b.label));
 
@@ -1485,67 +1770,10 @@ export const DiagnosticsPanel: React.FC<DiagnosticsPanelProps> = ({ onClose, isO
       domain: RefreshDomain,
       tabName: string,
       entries: Array<[string, DomainSnapshotState<unknown>]>
-    ): DiagnosticsRow[] => {
-      return entries.map(([scope, state]) => {
-        const lastUpdated = state.lastUpdated ?? state.lastAutoRefresh ?? state.lastManualRefresh;
-        const lastUpdatedInfo = formatLastUpdated(lastUpdated);
-        const normalizedScope = stripClusterScope(scope);
-        const parts = normalizedScope.split(':');
-        const namespace = parts[0] ?? '';
-        const name = parts.slice(2).join(':');
-        const namespaceLabel = namespace && namespace !== CLUSTER_SCOPE ? namespace : '-';
-        const label = name ? `ObjPanel - ${tabName} - ${name}` : `ObjPanel - ${tabName}`;
-        const version =
-          state.version !== null && state.version !== undefined ? String(state.version) : '—';
-        const scopeDetails = resolveScopeDetails(scope, selectedClusterId, getClusterMeta);
-        const roleDetails = resolveScopeRole(domain, scope);
-        const healthDetails = resolveHealthDetails({
-          domain,
-          status: state.status,
-          error: state.error,
-          scope,
-        });
-
-        return {
-          rowKey: `${domain}:${scope}`,
-          domain,
-          label,
-          status: state.status,
-          version,
-          interval: '—',
-          lastUpdated: lastUpdatedInfo.display,
-          lastUpdatedTooltip: lastUpdatedInfo.tooltip,
-          duration: '—',
-          dropped: state.droppedAutoRefreshes,
-          stale: false,
-          error: state.error ?? '—',
-          telemetryStatus: state.status,
-          telemetryTooltip: state.error ?? undefined,
-          metricsStatus: '—',
-          metricsTooltip: 'Polling domain',
-          metricsStale: false,
-          metricsSuccess: undefined,
-          metricsFailure: undefined,
-          telemetrySuccess: undefined,
-          telemetryFailure: undefined,
-          hasMetrics: false,
-          count: 0,
-          countDisplay: '—',
-          namespace: namespaceLabel,
-          scope: scopeDetails.display,
-          scopeTooltip: scopeDetails.tooltip,
-          role: roleDetails.label,
-          roleTooltip: roleDetails.tooltip,
-          scopeEntries: scopeDetails.entries,
-          mode: 'polling',
-          modeTooltip: 'Polling via object panel refresher',
-          healthStatus: healthDetails.label,
-          healthTooltip: healthDetails.tooltip,
-          pollingStatus: '—',
-          pollingTooltip: undefined,
-        };
-      });
-    };
+    ): DiagnosticsRow[] =>
+      entries.map((entry) =>
+        buildObjectPanelDiagnosticsRow(domain, tabName, entry, scopedRowContext)
+      );
 
     const objectDetailsRows = buildObjectPanelRows(
       'object-details',
@@ -1699,7 +1927,6 @@ export const DiagnosticsPanel: React.FC<DiagnosticsPanelProps> = ({ onClose, isO
     });
   }, [
     catalogScopeEntries,
-    pickPreferredScopeState,
     selectedClusterId,
     catalogStreamTelemetry,
     telemetryError,
@@ -1767,31 +1994,10 @@ export const DiagnosticsPanel: React.FC<DiagnosticsPanelProps> = ({ onClose, isO
 
   // Split capability batch rows into current (Cluster + selected namespace + in-flight)
   // and previous (everything else).
-  const { currentCapabilityRows, previousCapabilityRows } = useMemo(() => {
-    const current: typeof capabilityBatchRows = [];
-    const previous: typeof capabilityBatchRows = [];
-    const activeNamespaceKey = selectedNamespace?.toLowerCase() ?? null;
-
-    for (const row of capabilityBatchRows) {
-      // Filter to active cluster only.
-      if (selectedClusterId && row.clusterId && row.clusterId !== selectedClusterId) {
-        continue;
-      }
-      const isCurrent =
-        row.scope === 'Cluster' ||
-        row.pendingCount > 0 ||
-        row.inFlightCount > 0 ||
-        (activeNamespaceKey !== null &&
-          activeNamespaceKey !== undefined &&
-          row.scope.toLowerCase() === activeNamespaceKey);
-      if (isCurrent) {
-        current.push(row);
-      } else {
-        previous.push(row);
-      }
-    }
-    return { currentCapabilityRows: current, previousCapabilityRows: previous };
-  }, [capabilityBatchRows, selectedNamespace, selectedClusterId]);
+  const { currentCapabilityRows, previousCapabilityRows } = useMemo(
+    () => splitCapabilityRows(capabilityBatchRows, selectedNamespace, selectedClusterId),
+    [capabilityBatchRows, selectedNamespace, selectedClusterId]
+  );
 
   // Cap Checks tab content.
   const capabilityChecksContent = (
@@ -1865,32 +2071,15 @@ export const DiagnosticsPanel: React.FC<DiagnosticsPanelProps> = ({ onClose, isO
     active: isOpen,
     captureWhenActive: true,
     priority: KeyboardScopePriority.DIAGNOSTICS_PANEL,
-    onKeyDown: (event) => {
-      if (event.key !== 'Tab') {
-        return false;
-      }
-
-      const direction = event.shiftKey ? 'backward' : 'forward';
-      const target = event.target as HTMLElement | null;
-      if (target?.closest('.diagnostics-content')) {
-        return false;
-      }
-
-      const items = focusables();
-      if (items.length === 0) {
-        return false;
-      }
-
-      const current = target && panelRef.current?.contains(target) ? findActiveIndex() : -1;
-      if (current === -1) {
-        return direction === 'forward' ? focusFirst() : focusLast();
-      }
-      const next = direction === 'forward' ? current + 1 : current - 1;
-      if (next < 0 || next >= items.length) {
-        return false;
-      }
-      return focusAt(next);
-    },
+    onKeyDown: (event) =>
+      handleDiagnosticsTabKey(event, {
+        panel: panelRef.current,
+        focusables,
+        findActiveIndex,
+        focusFirst,
+        focusLast,
+        focusAt,
+      }),
   });
 
   const contentByTab: Record<DiagnosticsTabId, React.ReactNode> = {

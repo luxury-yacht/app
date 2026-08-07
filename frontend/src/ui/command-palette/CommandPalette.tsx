@@ -54,6 +54,34 @@ export interface ParsedQueryTokens {
   otherTokens: string[];
 }
 
+const resolveKindToken = (token: string): string | null => {
+  const singularToken = token.replace(/s$/, '');
+  const aliasMatch = aliasToKindMap.get(token) ?? aliasToKindMap.get(singularToken);
+  if (aliasMatch) {
+    return aliasMatch.toLowerCase();
+  }
+  if (token.length < 3) {
+    return null;
+  }
+  const prefix = singularToken.length >= 3 ? singularToken : token;
+  const partialMatches = canonicalKinds.filter((kind) => kind.startsWith(prefix.toLowerCase()));
+  return partialMatches.length === 1 ? partialMatches[0] : null;
+};
+
+const appendSearchTokens = (token: string, otherTokens: string[]) => {
+  if (!token.includes('/')) {
+    otherTokens.push(token);
+    return;
+  }
+  const [namespacePart, namePart] = token.split('/', 2);
+  if (namePart) {
+    otherTokens.push(namePart);
+  }
+  if (namespacePart) {
+    otherTokens.push(namespacePart);
+  }
+};
+
 export const parseQueryTokens = (query: string): ParsedQueryTokens => {
   const rawTokens = query.trim().toLowerCase().split(/\s+/).filter(Boolean);
 
@@ -62,47 +90,15 @@ export const parseQueryTokens = (query: string): ParsedQueryTokens => {
   const seenKindTokens = new Set<string>();
 
   rawTokens.forEach((token) => {
-    if (!token) {
+    const kind = resolveKindToken(token);
+    if (kind && !seenKindTokens.has(kind)) {
+      kindTokens.push(kind);
+      seenKindTokens.add(kind);
       return;
     }
-
-    const normalizedToken = token.replace(/s$/, '');
-    const matchedKind = aliasToKindMap.get(token) ?? aliasToKindMap.get(normalizedToken);
-    if (matchedKind) {
-      const canonical = matchedKind.toLowerCase();
-      if (!seenKindTokens.has(canonical)) {
-        kindTokens.push(canonical);
-        seenKindTokens.add(canonical);
-      }
-      return;
+    if (!kind) {
+      appendSearchTokens(token, otherTokens);
     }
-
-    if (token.length >= 3) {
-      const normalized = normalizedToken.length >= 3 ? normalizedToken : token;
-      const lower = normalized.toLowerCase();
-      const partialMatches = canonicalKinds.filter((kind) => kind.startsWith(lower));
-      if (partialMatches.length === 1) {
-        const canonical = partialMatches[0];
-        if (!seenKindTokens.has(canonical)) {
-          kindTokens.push(canonical);
-          seenKindTokens.add(canonical);
-        }
-        return;
-      }
-    }
-
-    if (token.includes('/')) {
-      const [namespacePart, namePart] = token.split('/', 2);
-      if (namePart) {
-        otherTokens.push(namePart);
-      }
-      if (namespacePart) {
-        otherTokens.push(namespacePart);
-      }
-      return;
-    }
-
-    otherTokens.push(token);
   });
 
   return { kindTokens, otherTokens };
@@ -131,6 +127,79 @@ type CatalogDisplayEntry = {
 };
 
 type ScoredCatalogEntry = CatalogDisplayEntry & { score: number };
+type CatalogStats = { total: number; truncated: boolean } | null;
+
+interface CatalogSearchFields {
+  namespace: string;
+  name: string;
+  combined: string;
+}
+
+const scoreKindTokens = (kindTokens: string[], kindCanonical: string): number | null => {
+  if (kindTokens.length === 0) {
+    return 0;
+  }
+  return kindTokens.includes(kindCanonical) ? 100 : null;
+};
+
+const scoreSearchToken = (token: string, fields: CatalogSearchFields): number | null => {
+  const namespaceMatch = fields.namespace.includes(token);
+  const nameMatch = fields.name.includes(token);
+  const combinedMatch = fields.combined.includes(token);
+  if (!namespaceMatch && !nameMatch && !combinedMatch) {
+    return null;
+  }
+  let score = 0;
+  if (namespaceMatch) {
+    score += fields.namespace === token ? 30 : 20;
+  }
+  if (nameMatch) {
+    score += fields.name === token ? 60 : 40;
+  }
+  if (!namespaceMatch && !nameMatch && combinedMatch) {
+    score += 10;
+  }
+  return score;
+};
+
+const scoreOtherTokens = (tokens: string[], fields: CatalogSearchFields): number | null => {
+  let score = 0;
+  for (const token of tokens) {
+    const tokenScore = scoreSearchToken(token, fields);
+    if (tokenScore === null) {
+      return null;
+    }
+    score += tokenScore;
+  }
+  return score;
+};
+
+const scoreCatalogEntry = (
+  item: CatalogItem,
+  tokens: ParsedQueryTokens,
+  useShortResourceNames: boolean
+): ScoredCatalogEntry | null => {
+  const kindScore = scoreKindTokens(tokens.kindTokens, item.ref.kind.toLowerCase());
+  if (kindScore === null) {
+    return null;
+  }
+  const otherScore = scoreOtherTokens(tokens.otherTokens, {
+    namespace: item.ref.namespace?.toLowerCase() ?? '',
+    name: item.ref.name.toLowerCase(),
+    combined: `${item.ref.namespace ?? ''}/${item.ref.name}`.toLowerCase(),
+  });
+  if (otherScore === null) {
+    return null;
+  }
+  return {
+    item,
+    kindLabel: getDisplayKind(item.ref.kind, useShortResourceNames),
+    kindClass: normalizeKindClass(item.ref.kind),
+    displayName: item.ref.namespace ? `${item.ref.namespace}/${item.ref.name}` : item.ref.name,
+    score:
+      kindScore + otherScore + (tokens.kindTokens.length + tokens.otherTokens.length === 0 ? 5 : 0),
+  };
+};
 
 export function buildCatalogDisplayEntries(
   items: CatalogItem[],
@@ -142,72 +211,254 @@ export function buildCatalogDisplayEntries(
     return [];
   }
 
-  const { kindTokens, otherTokens } = tokens;
-  const totalTokenCount = kindTokens.length + otherTokens.length;
-
   const scored: ScoredCatalogEntry[] = items
-    .map((item) => {
-      const kindLabel = getDisplayKind(item.ref.kind, useShortResourceNames);
-      const kindCanonical = item.ref.kind.toLowerCase();
-      const displayName = item.ref.namespace
-        ? `${item.ref.namespace}/${item.ref.name}`
-        : item.ref.name;
-
-      let score = 0;
-
-      if (kindTokens.length > 0) {
-        if (kindTokens.some((kind) => kind === kindCanonical)) {
-          score += 100;
-        } else {
-          return null;
-        }
-      }
-
-      const searchableNamespace = item.ref.namespace?.toLowerCase() ?? '';
-      const searchableName = item.ref.name.toLowerCase();
-      const searchableCombined = `${item.ref.namespace ?? ''}/${item.ref.name}`.toLowerCase();
-
-      for (const token of otherTokens) {
-        if (!token) {
-          continue;
-        }
-
-        const namespaceMatch = searchableNamespace.includes(token);
-        const nameMatch = searchableName.includes(token);
-        const combinedMatch = searchableCombined.includes(token);
-
-        if (namespaceMatch) {
-          score += searchableNamespace === token ? 30 : 20;
-        }
-        if (nameMatch) {
-          score += searchableName === token ? 60 : 40;
-        }
-        if (!namespaceMatch && !nameMatch && combinedMatch) {
-          score += 10;
-        }
-
-        if (!namespaceMatch && !nameMatch && !combinedMatch) {
-          return null;
-        }
-      }
-
-      if (totalTokenCount === 0) {
-        score += 5;
-      }
-
-      return {
-        item,
-        kindLabel,
-        kindClass: normalizeKindClass(item.ref.kind),
-        displayName,
-        score,
-      };
-    })
+    .map((item) => scoreCatalogEntry(item, tokens, useShortResourceNames))
     .filter((entry): entry is ScoredCatalogEntry => entry !== null)
     .sort((a, b) => b.score - a.score || a.displayName.localeCompare(b.displayName));
 
   return scored.slice(0, limit).map(({ score: _score, ...entry }) => entry);
 }
+
+const getPaletteInputCopy = (mode: PaletteSelectMode) => {
+  if (mode === 'namespaces') {
+    return { label: 'Select a namespace', placeholder: 'Select a namespace...' };
+  }
+  if (mode === 'kubeconfigs') {
+    return { label: 'Select a kubeconfig', placeholder: 'Select a kubeconfig...' };
+  }
+  return {
+    label: 'Search commands and Kubernetes objects',
+    placeholder: 'Type a command or search...',
+  };
+};
+
+const CommandResultIcon = ({ icon }: { icon: Command['icon'] }) => {
+  if (icon === '✓') {
+    return (
+      <span className="command-palette-item-check" aria-hidden="true">
+        ✓
+      </span>
+    );
+  }
+  return icon ? <span className="command-palette-item-icon">{icon}</span> : null;
+};
+
+const CommandShortcut = ({ shortcut }: { shortcut: Command['shortcut'] }) => {
+  if (!shortcut) {
+    return null;
+  }
+  const keys = Array.isArray(shortcut)
+    ? withStableListKeys(shortcut, (key) => key)
+    : [{ key: shortcut, value: shortcut }];
+  return (
+    <div className="keycap">
+      {keys.map(({ key, value }) => (
+        <kbd key={key}>{value}</kbd>
+      ))}
+    </div>
+  );
+};
+
+interface ResultRowInteractionProps {
+  currentIndex: number;
+  selectedIndex: number;
+  itemRefs: React.MutableRefObject<(HTMLButtonElement | null)[]>;
+  mouseSelectionArmedRef: React.MutableRefObject<boolean>;
+  updateSelection: (index: number) => void;
+}
+
+interface CommandResultRowProps extends ResultRowInteractionProps {
+  command: Command;
+  executePaletteItem: (item: PaletteItem) => void;
+}
+
+const CommandResultRow = ({
+  command,
+  currentIndex,
+  selectedIndex,
+  itemRefs,
+  mouseSelectionArmedRef,
+  updateSelection,
+  executePaletteItem,
+}: CommandResultRowProps) => {
+  const isSelected = currentIndex === selectedIndex;
+  return (
+    <button
+      type="button"
+      ref={(element) => {
+        itemRefs.current[currentIndex] = element;
+      }}
+      className={`command-palette-item ${isSelected ? 'selected' : ''}`}
+      id={`command-palette-option-${currentIndex}`}
+      role="option"
+      aria-selected={isSelected}
+      tabIndex={-1}
+      onClick={() => executePaletteItem({ type: 'command', command })}
+      onMouseEnter={() => {
+        if (mouseSelectionArmedRef.current) {
+          updateSelection(currentIndex);
+        }
+      }}
+    >
+      <CommandResultIcon icon={command.icon} />
+      <div className="command-palette-item-content">
+        <div className="command-palette-item-label">{command.renderLabel ?? command.label}</div>
+      </div>
+      <CommandShortcut shortcut={command.shortcut} />
+    </button>
+  );
+};
+
+interface CommandGroupsProps extends Omit<ResultRowInteractionProps, 'currentIndex'> {
+  groupedCommands: Array<[string, Command[]]>;
+  commandIndexMap: Map<string, number>;
+  executePaletteItem: (item: PaletteItem) => void;
+}
+
+const CommandGroups = (props: CommandGroupsProps) => (
+  <>
+    {props.groupedCommands.map(([category, commands]) => (
+      <fieldset key={category} className="command-palette-group">
+        <legend className="command-palette-group-header">{category}</legend>
+        {commands.map((command) => (
+          <CommandResultRow
+            key={command.id}
+            command={command}
+            currentIndex={props.commandIndexMap.get(command.id) ?? 0}
+            selectedIndex={props.selectedIndex}
+            itemRefs={props.itemRefs}
+            mouseSelectionArmedRef={props.mouseSelectionArmedRef}
+            updateSelection={props.updateSelection}
+            executePaletteItem={props.executePaletteItem}
+          />
+        ))}
+      </fieldset>
+    ))}
+  </>
+);
+
+interface CatalogResultRowProps extends ResultRowInteractionProps {
+  entry: CatalogDisplayEntry;
+  executePaletteItem: (item: PaletteItem) => void;
+}
+
+const CatalogResultRow = ({
+  entry,
+  currentIndex,
+  selectedIndex,
+  itemRefs,
+  mouseSelectionArmedRef,
+  updateSelection,
+  executePaletteItem,
+}: CatalogResultRowProps) => {
+  const isSelected = currentIndex === selectedIndex;
+  return (
+    <button
+      type="button"
+      ref={(element) => {
+        itemRefs.current[currentIndex] = element;
+      }}
+      className={`command-palette-item ${isSelected ? 'selected' : ''}`}
+      id={`command-palette-option-${currentIndex}`}
+      role="option"
+      aria-selected={isSelected}
+      tabIndex={-1}
+      onClick={() => executePaletteItem({ type: 'catalog', item: entry.item })}
+      onMouseEnter={() => {
+        if (mouseSelectionArmedRef.current) {
+          updateSelection(currentIndex);
+        }
+      }}
+    >
+      <div className="command-palette-item-content">
+        <div className="command-palette-item-label catalog">
+          <span className={`kind-badge ${entry.kindClass}`}>{entry.kindLabel}</span>
+          <span className="command-palette-item-name">{entry.displayName}</span>
+        </div>
+      </div>
+    </button>
+  );
+};
+
+interface CatalogGroupProps extends Omit<ResultRowInteractionProps, 'currentIndex'> {
+  entries: CatalogDisplayEntry[];
+  stats: CatalogStats;
+  loading: boolean;
+  baseIndex: number;
+  executePaletteItem: (item: PaletteItem) => void;
+}
+
+const CatalogGroup = (props: CatalogGroupProps) => (
+  <fieldset className="command-palette-group">
+    <legend className="command-palette-group-header">
+      Catalog Results
+      {props.stats?.truncated && props.entries.length > 0
+        ? ` (${props.entries.length} / ${props.stats.total})`
+        : ''}
+    </legend>
+    {props.loading && props.entries.length === 0 ? (
+      <div className="command-palette-loading">Searching catalog…</div>
+    ) : null}
+    {props.entries.map((entry, index) => (
+      <CatalogResultRow
+        key={entry.item.ref.uid}
+        entry={entry}
+        currentIndex={props.baseIndex + index}
+        selectedIndex={props.selectedIndex}
+        itemRefs={props.itemRefs}
+        mouseSelectionArmedRef={props.mouseSelectionArmedRef}
+        updateSelection={props.updateSelection}
+        executePaletteItem={props.executePaletteItem}
+      />
+    ))}
+    {props.stats?.truncated && props.entries.length > 0 ? (
+      <div className="command-palette-note">
+        Showing first {props.entries.length} of {props.stats.total} results. Refine your search to
+        narrow further.
+      </div>
+    ) : null}
+  </fieldset>
+);
+
+interface PaletteResultsProps extends Omit<ResultRowInteractionProps, 'currentIndex'> {
+  noResults: boolean;
+  searchQuery: string;
+  hasCommandResults: boolean;
+  groupedCommands: Array<[string, Command[]]>;
+  commandIndexMap: Map<string, number>;
+  catalogLoading: boolean;
+  catalogEntries: CatalogDisplayEntry[];
+  catalogStats: CatalogStats;
+  catalogBaseIndex: number;
+  executePaletteItem: (item: PaletteItem) => void;
+}
+
+const PaletteResults = (props: PaletteResultsProps) => {
+  if (props.noResults) {
+    const message = props.searchQuery.trim()
+      ? `No commands or objects found for "${props.searchQuery}"`
+      : 'No commands available';
+    return <div className="command-palette-empty">{message}</div>;
+  }
+  return (
+    <>
+      {props.hasCommandResults ? <CommandGroups {...props} /> : null}
+      {props.catalogLoading || props.catalogEntries.length > 0 ? (
+        <CatalogGroup
+          entries={props.catalogEntries}
+          stats={props.catalogStats}
+          loading={props.catalogLoading}
+          baseIndex={props.catalogBaseIndex}
+          selectedIndex={props.selectedIndex}
+          itemRefs={props.itemRefs}
+          mouseSelectionArmedRef={props.mouseSelectionArmedRef}
+          updateSelection={props.updateSelection}
+          executePaletteItem={props.executePaletteItem}
+        />
+      ) : null}
+    </>
+  );
+};
 
 export const CommandPalette = memo(function CommandPaletteComponent({
   commands = [],
@@ -219,9 +470,7 @@ export const CommandPalette = memo(function CommandPaletteComponent({
   const [hideCursor, setHideCursor] = useState(false);
   const [mouseSelectionArmed, setMouseSelectionArmed] = useState(false);
   const [catalogResults, setCatalogResults] = useState<CatalogItem[]>([]);
-  const [catalogStats, setCatalogStats] = useState<{ total: number; truncated: boolean } | null>(
-    null
-  );
+  const [catalogStats, setCatalogStats] = useState<CatalogStats>(null);
   const [catalogLoading, setCatalogLoading] = useState(false);
   const catalogAbortRef = useRef<AbortController | null>(null);
   const catalogDebounceRef = useRef<number | null>(null);
@@ -451,19 +700,7 @@ export const CommandPalette = memo(function CommandPaletteComponent({
   const resultsId = 'command-palette-results';
   const selectedOptionId =
     paletteItems.length > 0 ? `command-palette-option-${selectedIndex}` : undefined;
-  let inputLabel: string;
-  let inputPlaceholder: string;
-
-  if (selectMode === 'namespaces') {
-    inputLabel = 'Select a namespace';
-    inputPlaceholder = 'Select a namespace...';
-  } else if (selectMode === 'kubeconfigs') {
-    inputLabel = 'Select a kubeconfig';
-    inputPlaceholder = 'Select a kubeconfig...';
-  } else {
-    inputLabel = 'Search commands and Kubernetes objects';
-    inputPlaceholder = 'Type a command or search...';
-  }
+  const { label: inputLabel, placeholder: inputPlaceholder } = getPaletteInputCopy(selectMode);
 
   const paletteItemCount = paletteItems.length;
 
@@ -992,127 +1229,22 @@ export const CommandPalette = memo(function CommandPaletteComponent({
           role="listbox"
           aria-label={`${inputLabel} results`}
         >
-          {noResults ? (
-            <div className="command-palette-empty">
-              {searchQuery.trim().length > 0
-                ? `No commands or objects found for "${searchQuery}"`
-                : 'No commands available'}
-            </div>
-          ) : (
-            <>
-              {hasCommandResults &&
-                groupedCommands.map(([category, categoryCommands]) => (
-                  <fieldset key={category} className="command-palette-group">
-                    <legend className="command-palette-group-header">{category}</legend>
-                    {categoryCommands.map((command) => {
-                      const currentIndex = commandIndexMap.get(command.id) ?? 0;
-                      const isSelected = currentIndex === selectedIndex;
-                      return (
-                        <button
-                          type="button"
-                          key={command.id}
-                          ref={(el) => {
-                            itemRefs.current[currentIndex] = el;
-                          }}
-                          className={`command-palette-item ${isSelected ? 'selected' : ''}`}
-                          id={`command-palette-option-${currentIndex}`}
-                          role="option"
-                          aria-selected={isSelected}
-                          tabIndex={-1}
-                          onClick={() => executePaletteItem({ type: 'command', command })}
-                          onMouseEnter={() => {
-                            if (mouseSelectionArmedRef.current) {
-                              updateSelection(currentIndex);
-                            }
-                          }}
-                        >
-                          {command.icon === '✓' ? (
-                            <span className="command-palette-item-check" aria-hidden="true">
-                              ✓
-                            </span>
-                          ) : (
-                            command.icon && (
-                              <span className="command-palette-item-icon">{command.icon}</span>
-                            )
-                          )}
-                          <div className="command-palette-item-content">
-                            <div className="command-palette-item-label">
-                              {command.renderLabel ?? command.label}
-                            </div>
-                          </div>
-                          {!!command.shortcut && (
-                            <div className="keycap">
-                              {Array.isArray(command.shortcut) ? (
-                                withStableListKeys(command.shortcut, (key) => key).map(
-                                  ({ key: stableKey, value: shortcutKey }) => (
-                                    <kbd key={stableKey}>{shortcutKey}</kbd>
-                                  )
-                                )
-                              ) : (
-                                <kbd>{command.shortcut}</kbd>
-                              )}
-                            </div>
-                          )}
-                        </button>
-                      );
-                    })}
-                  </fieldset>
-                ))}
-
-              {!!(catalogLoading || hasCatalogResults) && (
-                <fieldset className="command-palette-group">
-                  <legend className="command-palette-group-header">
-                    Catalog Results
-                    {catalogStats?.truncated && hasCatalogResults
-                      ? ` (${catalogDisplayItems.length} / ${catalogStats.total})`
-                      : ''}
-                  </legend>
-                  {catalogLoading && catalogDisplayItems.length === 0 && (
-                    <div className="command-palette-loading">Searching catalog…</div>
-                  )}
-                  {catalogDisplayItems.map((entry, idx) => {
-                    const currentIndex = catalogBaseIndex + idx;
-                    const isSelected = currentIndex === selectedIndex;
-                    return (
-                      <button
-                        type="button"
-                        key={entry.item.ref.uid}
-                        ref={(el) => {
-                          itemRefs.current[currentIndex] = el;
-                        }}
-                        className={`command-palette-item ${isSelected ? 'selected' : ''}`}
-                        id={`command-palette-option-${currentIndex}`}
-                        role="option"
-                        aria-selected={isSelected}
-                        tabIndex={-1}
-                        onClick={() => executePaletteItem({ type: 'catalog', item: entry.item })}
-                        onMouseEnter={() => {
-                          if (mouseSelectionArmedRef.current) {
-                            updateSelection(currentIndex);
-                          }
-                        }}
-                      >
-                        <div className="command-palette-item-content">
-                          <div className="command-palette-item-label catalog">
-                            <span className={`kind-badge ${entry.kindClass}`}>
-                              {entry.kindLabel}
-                            </span>
-                            <span className="command-palette-item-name">{entry.displayName}</span>
-                          </div>
-                        </div>
-                      </button>
-                    );
-                  })}
-                  {catalogStats?.truncated && catalogDisplayItems.length > 0 && (
-                    <div className="command-palette-note">
-                      Showing first {catalogDisplayItems.length} of {catalogStats.total} results.
-                      Refine your search to narrow further.
-                    </div>
-                  )}
-                </fieldset>
-              )}
-            </>
-          )}
+          <PaletteResults
+            noResults={noResults}
+            searchQuery={searchQuery}
+            hasCommandResults={hasCommandResults}
+            groupedCommands={groupedCommands}
+            commandIndexMap={commandIndexMap}
+            catalogLoading={catalogLoading}
+            catalogEntries={catalogDisplayItems}
+            catalogStats={catalogStats}
+            catalogBaseIndex={catalogBaseIndex}
+            selectedIndex={selectedIndex}
+            itemRefs={itemRefs}
+            mouseSelectionArmedRef={mouseSelectionArmedRef}
+            updateSelection={updateSelection}
+            executePaletteItem={executePaletteItem}
+          />
         </div>
 
         <div className="command-palette-footer">

@@ -201,6 +201,112 @@ const authStateFromWire = (
 const fieldKey = (clusterId: string, field: string): string => `${clusterId}\0${field}`;
 const serviceableStates = new Set<ClusterLifecycleState>(['loading', 'loading_slow', 'ready']);
 
+const isWireFieldLive = (
+  liveFields: ReadonlySet<string> | undefined,
+  clusterId: string,
+  field: string
+): boolean => liveFields?.has(fieldKey(clusterId, field)) ?? false;
+
+const clusterHasLiveField = (liveFields: ReadonlySet<string>, clusterId: string): boolean => {
+  const prefix = `${clusterId}\0`;
+  for (const key of liveFields) {
+    if (key.startsWith(prefix)) {
+      return true;
+    }
+  }
+  return false;
+};
+
+const retainLiveClusters = (
+  current: ReadonlyMap<string, ClusterWorkspaceClusterState>,
+  liveFields?: ReadonlySet<string>
+): Map<string, ClusterWorkspaceClusterState> => {
+  const retained = new Map<string, ClusterWorkspaceClusterState>();
+  if (!liveFields) {
+    return retained;
+  }
+  for (const [clusterId, cluster] of current) {
+    if (clusterHasLiveField(liveFields, clusterId)) {
+      retained.set(clusterId, cluster);
+    }
+  }
+  return retained;
+};
+
+const resolveWireHealth = (
+  rawHealth: string,
+  previous: ClusterWorkspaceClusterState | undefined,
+  live: boolean
+): ClusterHealthStatus => {
+  if (live) {
+    return previous?.health ?? 'unknown';
+  }
+  return rawHealth === 'healthy' || rawHealth === 'degraded' ? rawHealth : 'unknown';
+};
+
+interface MergedWireCluster {
+  state: ClusterWorkspaceClusterState;
+  parsedLifecycle?: ClusterLifecycleState;
+  lifecycleIsLive: boolean;
+}
+
+const mergeWireCluster = (
+  clusterId: string,
+  raw: ClusterWorkspaceWireClusterState,
+  previous: ClusterWorkspaceClusterState | undefined,
+  liveFields?: ReadonlySet<string>
+): MergedWireCluster => {
+  const clusterName = raw.clusterName || previous?.clusterName || clusterId;
+  const parsedLifecycle = parseClusterLifecycleState(raw.lifecycle);
+  const lifecycleIsLive = isWireFieldLive(liveFields, clusterId, 'lifecycle');
+  const authIsLive = isWireFieldLive(liveFields, clusterId, 'auth');
+  const healthIsLive = isWireFieldLive(liveFields, clusterId, 'health');
+  const scopeIsLive = isWireFieldLive(liveFields, clusterId, 'scope');
+  return {
+    state: {
+      clusterId,
+      clusterName,
+      lifecycle: lifecycleIsLive ? previous?.lifecycle : parsedLifecycle,
+      auth: authIsLive
+        ? (previous?.auth ?? DEFAULT_CLUSTER_AUTH_STATE)
+        : authStateFromWire(raw.auth ?? { state: 'unknown' }, raw.clusterName || clusterId),
+      health: resolveWireHealth(raw.health, previous, healthIsLive),
+      scopeRevision: scopeIsLive ? (previous?.scopeRevision ?? 0) : (raw.scopeRevision ?? 0),
+    },
+    parsedLifecycle,
+    lifecycleIsLive,
+  };
+};
+
+const shouldEmitHydratedLifecycle = (
+  merged: MergedWireCluster,
+  previous: ClusterWorkspaceClusterState | undefined,
+  liveFields?: ReadonlySet<string>
+): merged is MergedWireCluster & { parsedLifecycle: ClusterLifecycleState } =>
+  Boolean(
+    liveFields &&
+      merged.parsedLifecycle &&
+      !merged.lifecycleIsLive &&
+      previous?.lifecycle !== merged.parsedLifecycle
+  );
+
+const mergeWireClusters = (
+  wireClusters: Record<string, ClusterWorkspaceWireClusterState> | undefined,
+  current: ReadonlyMap<string, ClusterWorkspaceClusterState>,
+  liveFields?: ReadonlySet<string>
+): Map<string, ClusterWorkspaceClusterState> => {
+  const next = retainLiveClusters(current, liveFields);
+  for (const [clusterId, raw] of Object.entries(wireClusters ?? {})) {
+    const previous = next.get(clusterId) ?? current.get(clusterId);
+    const merged = mergeWireCluster(clusterId, raw, previous, liveFields);
+    next.set(clusterId, merged.state);
+    if (shouldEmitHydratedLifecycle(merged, previous, liveFields)) {
+      eventBus.emit('cluster:lifecycle', { clusterId, state: merged.parsedLifecycle });
+    }
+  }
+  return next;
+};
+
 export class ClusterWorkspaceStore {
   private readonly options: ClusterWorkspaceStoreOptions;
   private snapshot = emptySnapshot();
@@ -310,52 +416,10 @@ export class ClusterWorkspaceStore {
   }
 
   private mergeWireState(wire: ClusterWorkspaceWireState, liveFields?: ReadonlySet<string>): void {
-    const nextClusters = new Map<string, ClusterWorkspaceClusterState>();
-    if (liveFields) {
-      for (const [clusterId, cluster] of this.snapshot.clusters) {
-        if ([...liveFields].some((key) => key.startsWith(`${clusterId}\0`))) {
-          nextClusters.set(clusterId, cluster);
-        }
-      }
-    }
-    for (const [clusterId, raw] of Object.entries(wire.clusters ?? {})) {
-      const previous = nextClusters.get(clusterId) ?? this.snapshot.clusters.get(clusterId);
-      const parsedLifecycle = parseClusterLifecycleState(raw.lifecycle);
-      const isLiveField = (field: string) => liveFields?.has(fieldKey(clusterId, field)) ?? false;
-      let health: ClusterWorkspaceClusterState['health'];
-      if (isLiveField('health')) {
-        health = previous?.health ?? 'unknown';
-      } else if (raw.health === 'healthy' || raw.health === 'degraded') {
-        health = raw.health;
-      } else {
-        health = 'unknown';
-      }
-      const cluster: ClusterWorkspaceClusterState = {
-        clusterId,
-        clusterName: raw.clusterName || previous?.clusterName || clusterId,
-        lifecycle: isLiveField('lifecycle') ? previous?.lifecycle : parsedLifecycle,
-        auth: isLiveField('auth')
-          ? (previous?.auth ?? DEFAULT_CLUSTER_AUTH_STATE)
-          : authStateFromWire(raw.auth ?? { state: 'unknown' }, raw.clusterName || clusterId),
-        health,
-        scopeRevision: isLiveField('scope')
-          ? (previous?.scopeRevision ?? 0)
-          : (raw.scopeRevision ?? 0),
-      };
-      nextClusters.set(clusterId, cluster);
-      if (
-        liveFields &&
-        parsedLifecycle &&
-        !isLiveField('lifecycle') &&
-        previous?.lifecycle !== parsedLifecycle
-      ) {
-        eventBus.emit('cluster:lifecycle', { clusterId, state: parsedLifecycle });
-      }
-    }
     this.publish({
       selectedKubeconfigs: [...(wire.selectedKubeconfigs ?? [])],
       visibleClusterId: wire.visibleClusterId ?? '',
-      clusters: nextClusters,
+      clusters: mergeWireClusters(wire.clusters, this.snapshot.clusters, liveFields),
     });
   }
 

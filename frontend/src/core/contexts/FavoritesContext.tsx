@@ -71,6 +71,85 @@ interface FavoritesProviderProps {
   children: React.ReactNode;
 }
 
+type FavoriteRoute = ReturnType<typeof resolveFavoriteRoute>;
+type ClusterLifecycle = ReturnType<typeof useClusterLifecycle>;
+type ViewState = ReturnType<typeof useViewState>;
+type NamespaceContext = ReturnType<typeof useNamespace>;
+
+interface FavoriteNavigationReadiness {
+  favorite: Favorite;
+  route: FavoriteRoute;
+  selectedKubeconfig: string;
+  selectedClusterId: string;
+  namespaceReady: boolean;
+  isClusterReady: ClusterLifecycle['isClusterReady'];
+}
+
+const isFavoriteClusterReady = ({
+  favorite,
+  route,
+  selectedKubeconfig,
+  selectedClusterId,
+  isClusterReady,
+}: FavoriteNavigationReadiness): boolean => {
+  const favoriteClusterId = favorite.clusterId?.trim() ?? '';
+  const isClusterSpecific =
+    route.scope !== 'global' && (favorite.clusterSelection !== '' || favoriteClusterId !== '');
+  if (!isClusterSpecific) {
+    return !selectedClusterId || isClusterReady(selectedClusterId);
+  }
+  if (favoriteClusterId && selectedClusterId !== favoriteClusterId) {
+    return false;
+  }
+  if (!favoriteClusterId && selectedKubeconfig !== favorite.clusterSelection) {
+    return false;
+  }
+  return isClusterReady(favoriteClusterId || selectedClusterId);
+};
+
+const canApplyFavoriteNavigation = (readiness: FavoriteNavigationReadiness): boolean =>
+  isFavoriteClusterReady(readiness) &&
+  (readiness.route.scope !== 'namespace' || readiness.namespaceReady);
+
+const applyNamespaceFavoriteNavigation = (
+  favorite: Favorite,
+  viewState: ViewState,
+  namespaceContext: NamespaceContext
+) => {
+  viewState.setViewType('namespace');
+  if (favorite.namespace) {
+    namespaceContext.setSelectedNamespace(favorite.namespace);
+    viewState.onNamespaceSelect(favorite.namespace);
+  }
+  const favoriteTab = parseNamespaceViewType(favorite.view);
+  if (favoriteTab) {
+    viewState.setActiveNamespaceTab(favoriteTab);
+  }
+  viewState.setSidebarSelection({ type: 'namespace', value: favorite.namespace || '' });
+};
+
+const applyFavoriteNavigation = (
+  favorite: Favorite,
+  route: FavoriteRoute,
+  viewState: ViewState,
+  namespaceContext: NamespaceContext
+) => {
+  if (route.scope === 'global') {
+    const globalView = parseGlobalViewType(route.view);
+    if (globalView) {
+      viewState.navigateToGlobal(globalView);
+    }
+    return;
+  }
+  if (route.scope === 'namespace') {
+    applyNamespaceFavoriteNavigation(favorite, viewState, namespaceContext);
+    return;
+  }
+  viewState.setViewType('cluster');
+  viewState.setActiveClusterView(parseClusterViewType(favorite.view) ?? null);
+  viewState.setSidebarSelection({ type: 'cluster', value: 'cluster' });
+};
+
 export const FavoritesProvider: React.FC<FavoritesProviderProps> = ({ children }) => {
   const [favorites, setFavorites] = useState<Favorite[]>([]);
   const [pendingFavorite, setPendingFavoriteState] = useState<Favorite | null>(null);
@@ -138,65 +217,22 @@ export const FavoritesProvider: React.FC<FavoritesProviderProps> = ({ children }
       return;
     }
 
-    // For cluster-specific favorites, wait for the correct cluster to be active AND ready.
-    // New favorites carry clusterId; older persisted favorites only have the kubeconfig
-    // selection string, so keep that fallback for compatibility.
     const route = resolveFavoriteRoute(pendingFavorite.viewType, pendingFavorite.view);
-    const favoriteClusterId = pendingFavorite.clusterId?.trim() ?? '';
-    const isClusterSpecific =
-      route.scope !== 'global' &&
-      (pendingFavorite.clusterSelection !== '' || favoriteClusterId !== '');
-    if (isClusterSpecific) {
-      if (favoriteClusterId) {
-        if (selectedClusterId !== favoriteClusterId) {
-          return;
-        }
-      } else if (selectedKubeconfig !== pendingFavorite.clusterSelection) {
-        return;
-      }
-      if (!isClusterReady(favoriteClusterId || selectedClusterId)) {
-        return;
-      }
-    } else {
-      // Generic favorite: wait for the active cluster to be ready.
-      if (selectedClusterId && !isClusterReady(selectedClusterId)) {
-        return;
-      }
-    }
-    if (route.scope === 'namespace' && !namespaceReady) {
+    if (
+      !canApplyFavoriteNavigation({
+        favorite: pendingFavorite,
+        route,
+        selectedKubeconfig,
+        selectedClusterId,
+        namespaceReady,
+        isClusterReady,
+      })
+    ) {
       return;
     }
 
     navigationAppliedRef.current = true;
-
-    if (route.scope === 'global') {
-      const globalView = parseGlobalViewType(route.view);
-      if (globalView) {
-        viewState.navigateToGlobal(globalView);
-      }
-    } else if (route.scope === 'namespace') {
-      viewState.setViewType('namespace');
-      if (pendingFavorite.namespace) {
-        namespaceCtx.setSelectedNamespace(pendingFavorite.namespace);
-        viewState.onNamespaceSelect(pendingFavorite.namespace);
-      }
-      // Set the tab AFTER onNamespaceSelect, which defaults to 'browse'
-      // when coming from a non-namespace view. The favorite's view overrides
-      // that — unless the persisted string is no longer a valid tab (saved
-      // before a rename, or corrupted), in which case the default stands.
-      const favoriteTab = parseNamespaceViewType(pendingFavorite.view);
-      if (favoriteTab) {
-        viewState.setActiveNamespaceTab(favoriteTab);
-      }
-      viewState.setSidebarSelection({
-        type: 'namespace',
-        value: pendingFavorite.namespace || '',
-      });
-    } else {
-      viewState.setViewType('cluster');
-      viewState.setActiveClusterView(parseClusterViewType(pendingFavorite.view) ?? null);
-      viewState.setSidebarSelection({ type: 'cluster', value: 'cluster' });
-    }
+    applyFavoriteNavigation(pendingFavorite, route, viewState, namespaceCtx);
   }, [
     pendingFavorite,
     selectedKubeconfig,

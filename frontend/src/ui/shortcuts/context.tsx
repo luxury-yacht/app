@@ -113,6 +113,28 @@ interface KeyboardProviderProps {
   disabled?: boolean; // Disable all shortcuts (e.g., when modal is open)
 }
 
+const YAML_COPY_CLASSES = ['yaml-pre', 'yaml-content'] as const;
+const LOG_COPY_CLASSES = ['logs-viewer-text', 'logs-viewer-content'] as const;
+
+const hasAnyClass = (element: Element, classNames: readonly string[]) =>
+  classNames.some((className) => element.classList.contains(className));
+
+const findCopySurface = (anchorNode: Node | null): 'yaml' | 'logs' | null => {
+  let currentNode = anchorNode;
+  while (currentNode && currentNode !== document.body) {
+    if (currentNode instanceof Element) {
+      if (hasAnyClass(currentNode, YAML_COPY_CLASSES)) {
+        return 'yaml';
+      }
+      if (hasAnyClass(currentNode, LOG_COPY_CLASSES)) {
+        return 'logs';
+      }
+    }
+    currentNode = currentNode.parentNode;
+  }
+  return null;
+};
+
 export const deriveCopyText = (selection: Selection | null): string | null => {
   if (!selection || selection.isCollapsed) {
     return null;
@@ -122,30 +144,9 @@ export const deriveCopyText = (selection: Selection | null): string | null => {
   if (!selectedText) {
     return null;
   }
-
-  let currentNode: Node | null = selection.anchorNode;
-  let isYamlContent = false;
-
-  while (currentNode && currentNode !== document.body) {
-    if (currentNode instanceof Element) {
-      if (
-        currentNode.classList?.contains('yaml-pre') ||
-        currentNode.classList?.contains('yaml-content')
-      ) {
-        isYamlContent = true;
-        break;
-      }
-      if (
-        currentNode.classList?.contains('logs-viewer-text') ||
-        currentNode.classList?.contains('logs-viewer-content')
-      ) {
-        break;
-      }
-    }
-    currentNode = currentNode.parentNode;
-  }
-
-  return isYamlContent ? selectedText.replace(/^[ \t]*\d+[ \t]*/gm, '') : selectedText;
+  return findCopySurface(selection.anchorNode) === 'yaml'
+    ? selectedText.replace(/^[ \t]*\d+[ \t]*/gm, '')
+    : selectedText;
 };
 
 export const applySelectAll = (selection: Selection | null, activeElement: Element | null) => {
@@ -161,6 +162,194 @@ export const applySelectAll = (selection: Selection | null, activeElement: Eleme
   } else if (typeof document.execCommand === 'function') {
     document.execCommand('selectAll');
   }
+};
+
+type TextEntryElement = HTMLInputElement | HTMLTextAreaElement;
+
+const isTextEntryElement = (element: Element | null): element is TextEntryElement =>
+  element instanceof HTMLInputElement || element instanceof HTMLTextAreaElement;
+
+const cutTextEntrySelection = (element: TextEntryElement): boolean => {
+  if (element.readOnly || element.disabled) {
+    return false;
+  }
+  const start = element.selectionStart;
+  const end = element.selectionEnd;
+  if (start === null || end === null || start === end) {
+    return false;
+  }
+  void navigator.clipboard.writeText(element.value.slice(start, end));
+  element.setRangeText('', start, end, 'end');
+  element.dispatchEvent(new Event('input', { bubbles: true }));
+  return true;
+};
+
+const cutContentEditableSelection = (): boolean => {
+  const text = deriveCopyText(window.getSelection());
+  if (!text) {
+    return false;
+  }
+  void navigator.clipboard.writeText(text);
+  return typeof document.execCommand === 'function' ? document.execCommand('delete') : false;
+};
+
+const pasteIntoTextEntry = (element: TextEntryElement, text: string): boolean => {
+  if (element.readOnly || element.disabled) {
+    return false;
+  }
+  const start = element.selectionStart ?? element.value.length;
+  const end = element.selectionEnd ?? start;
+  element.setRangeText(text, start, end, 'end');
+  element.dispatchEvent(new Event('input', { bubbles: true }));
+  return true;
+};
+
+const pasteIntoContentEditable = (text: string): boolean =>
+  typeof document.execCommand === 'function'
+    ? document.execCommand('insertText', false, text)
+    : false;
+
+const isHandledSurfaceResult = (result: KeyboardSurfaceKeyResult) =>
+  result === true || result === 'handled-no-prevent';
+
+const claimKeyboardEvent = (event: KeyboardEvent, result: KeyboardSurfaceKeyResult): boolean => {
+  if (!isHandledSurfaceResult(result)) {
+    return false;
+  }
+  if (result !== 'handled-no-prevent') {
+    event.preventDefault();
+  }
+  event.stopPropagation();
+  return true;
+};
+
+const dispatchSurfaceHandler = (
+  event: KeyboardEvent,
+  handler: ((event: KeyboardEvent) => KeyboardSurfaceKeyResult) | undefined
+) => claimKeyboardEvent(event, handler?.(event));
+
+const dispatchKeyThroughSurfaces = (
+  event: KeyboardEvent,
+  surfaces: RegisteredKeyboardSurface[]
+): boolean => {
+  for (const surface of surfaces) {
+    if (dispatchSurfaceHandler(event, surface.onKeyDown)) {
+      return true;
+    }
+  }
+  return false;
+};
+
+const dispatchEscapeThroughSurfaces = (
+  event: KeyboardEvent,
+  surfaces: RegisteredKeyboardSurface[]
+): boolean => {
+  for (const surface of surfaces) {
+    if (dispatchSurfaceHandler(event, surface.onEscape)) {
+      return true;
+    }
+    if (dispatchSurfaceHandler(event, surface.onKeyDown)) {
+      return true;
+    }
+    if (surface.suppressShortcuts) {
+      return true;
+    }
+  }
+  return false;
+};
+
+const STANDARD_EDIT_KEYS = new Set(['a', 'c', 'v', 'x']);
+
+const isUnmodifiedStandardEditKey = (event: KeyboardEvent): boolean =>
+  (event.metaKey || event.ctrlKey) &&
+  !event.shiftKey &&
+  !event.altKey &&
+  STANDARD_EDIT_KEYS.has(event.key.toLowerCase());
+
+const hasAnyShortcutModifier = (event: KeyboardEvent) =>
+  event.metaKey || event.ctrlKey || event.shiftKey || event.altKey;
+
+const shouldDeferToNativeEditing = (event: KeyboardEvent): boolean => {
+  if (isUnmodifiedStandardEditKey(event)) {
+    return true;
+  }
+  return isInputElement(event.target) && !hasAnyShortcutModifier(event);
+};
+
+const findHighestPriorityShortcut = (
+  event: KeyboardEvent,
+  shortcuts: ShortcutMap
+): RegisteredShortcut | null => {
+  const shortcutKey = getShortcutKey(event.key, {
+    ctrl: event.ctrlKey,
+    shift: event.shiftKey,
+    alt: event.altKey,
+    meta: event.metaKey,
+  });
+  const candidates = shortcuts.get(shortcutKey);
+  if (!candidates) {
+    return null;
+  }
+  return (
+    candidates
+      .filter((shortcut) => shortcut.enabled !== false && modifiersMatch(event, shortcut.modifiers))
+      .sort((a, b) => (b.priority ?? 0) - (a.priority ?? 0))[0] ?? null
+  );
+};
+
+const dispatchRegisteredShortcut = (event: KeyboardEvent, shortcuts: ShortcutMap) => {
+  const shortcut = findHighestPriorityShortcut(event, shortcuts);
+  if (!shortcut) {
+    return;
+  }
+  const result = shortcut.handler(event);
+  if (result !== false) {
+    event.preventDefault();
+    event.stopPropagation();
+  }
+};
+
+interface KeyboardEventRoutingContext {
+  getTargetSurface: (target: EventTarget | null) => RegisteredKeyboardSurface | null;
+  getSurfaceCandidates: (target: EventTarget | null) => RegisteredKeyboardSurface[];
+  shortcuts: ShortcutMap;
+}
+
+const routeEscapeKey = (event: KeyboardEvent, context: KeyboardEventRoutingContext): boolean => {
+  if (event.key !== 'Escape') {
+    return false;
+  }
+  return dispatchEscapeThroughSurfaces(event, context.getSurfaceCandidates(event.target));
+};
+
+const routeTargetSurfaceKey = (
+  event: KeyboardEvent,
+  targetSurface: RegisteredKeyboardSurface | null
+): boolean => {
+  if (event.key === 'Escape') {
+    return false;
+  }
+  return dispatchSurfaceHandler(event, targetSurface?.onKeyDown);
+};
+
+const routeKeyboardEvent = (event: KeyboardEvent, context: KeyboardEventRoutingContext) => {
+  if (event.key === 'Tab') {
+    return;
+  }
+  const targetSurface = context.getTargetSurface(event.target);
+  if (routeEscapeKey(event, context)) {
+    return;
+  }
+  if (routeTargetSurfaceKey(event, targetSurface)) {
+    return;
+  }
+  if (targetSurface?.suppressShortcuts) {
+    return;
+  }
+  if (shouldDeferToNativeEditing(event)) {
+    return;
+  }
+  dispatchRegisteredShortcut(event, context.shortcuts);
 };
 
 export function KeyboardProvider({ children, disabled = false }: KeyboardProviderProps) {
@@ -361,54 +550,23 @@ const KeyboardProviderInner: React.FC<KeyboardProviderProps> = ({ children, disa
 
   const applyNativeCutFallback = useCallback((): boolean => {
     const activeElement = document.activeElement;
-    if (activeElement instanceof HTMLInputElement || activeElement instanceof HTMLTextAreaElement) {
-      if (activeElement.readOnly || activeElement.disabled) {
-        return false;
-      }
-      const start = activeElement.selectionStart;
-      const end = activeElement.selectionEnd;
-      if (start === null || end === null || start === end) {
-        return false;
-      }
-      void navigator.clipboard.writeText(activeElement.value.slice(start, end));
-      activeElement.setRangeText('', start, end, 'end');
-      activeElement.dispatchEvent(new Event('input', { bubbles: true }));
-      return true;
+    if (isTextEntryElement(activeElement)) {
+      return cutTextEntrySelection(activeElement);
     }
-
     if (activeElement instanceof HTMLElement && activeElement.isContentEditable) {
-      const text = deriveCopyText(window.getSelection());
-      if (!text) {
-        return false;
-      }
-      void navigator.clipboard.writeText(text);
-      if (typeof document.execCommand === 'function') {
-        return document.execCommand('delete');
-      }
+      return cutContentEditableSelection();
     }
-
     return false;
   }, []);
 
   const applyNativePasteFallback = useCallback((text: string): boolean => {
     const activeElement = document.activeElement;
-    if (activeElement instanceof HTMLInputElement || activeElement instanceof HTMLTextAreaElement) {
-      if (activeElement.readOnly || activeElement.disabled) {
-        return false;
-      }
-      const start = activeElement.selectionStart ?? activeElement.value.length;
-      const end = activeElement.selectionEnd ?? start;
-      activeElement.setRangeText(text, start, end, 'end');
-      activeElement.dispatchEvent(new Event('input', { bubbles: true }));
-      return true;
+    if (isTextEntryElement(activeElement)) {
+      return pasteIntoTextEntry(activeElement, text);
     }
-
     if (activeElement instanceof HTMLElement && activeElement.isContentEditable) {
-      if (typeof document.execCommand === 'function') {
-        return document.execCommand('insertText', false, text);
-      }
+      return pasteIntoContentEditable(text);
     }
-
     return false;
   }, []);
 
@@ -419,137 +577,13 @@ const KeyboardProviderInner: React.FC<KeyboardProviderProps> = ({ children, disa
     }
 
     const handleCapturedTabKeyDown = (event: KeyboardEvent) => {
-      if (event.key !== 'Tab') {
-        return;
-      }
-
-      for (const surface of getSurfaceCandidates(event.target)) {
-        if (!surface.onKeyDown) {
-          continue;
-        }
-
-        const keyResult = surface.onKeyDown(event);
-        const handledKey = keyResult === true || keyResult === 'handled-no-prevent';
-        const handledKeyNoPrevent = keyResult === 'handled-no-prevent';
-
-        if (!handledKey) {
-          continue;
-        }
-
-        if (!handledKeyNoPrevent) {
-          event.preventDefault();
-        }
-        event.stopPropagation();
-        return;
-      }
-    };
-
-    const handleKeyDown = (event: KeyboardEvent) => {
       if (event.key === 'Tab') {
-        return;
-      }
-
-      const targetSurface = getTargetSurface(event.target);
-      if (event.key === 'Escape') {
-        for (const surface of getSurfaceCandidates(event.target)) {
-          if (surface.onEscape) {
-            const escapeResult = surface.onEscape(event);
-            const handledEscape = escapeResult === true || escapeResult === 'handled-no-prevent';
-            const handledEscapeNoPrevent = escapeResult === 'handled-no-prevent';
-
-            if (handledEscape) {
-              if (!handledEscapeNoPrevent) {
-                event.preventDefault();
-              }
-              event.stopPropagation();
-              return;
-            }
-          }
-
-          if (surface.onKeyDown) {
-            const keyResult = surface.onKeyDown(event);
-            const handledKey = keyResult === true || keyResult === 'handled-no-prevent';
-            const handledKeyNoPrevent = keyResult === 'handled-no-prevent';
-
-            if (handledKey) {
-              if (!handledKeyNoPrevent) {
-                event.preventDefault();
-              }
-              event.stopPropagation();
-              return;
-            }
-          }
-
-          if (surface.suppressShortcuts) {
-            return;
-          }
-        }
-      }
-
-      if (targetSurface && event.key !== 'Escape') {
-        const keyResult = targetSurface.onKeyDown ? targetSurface.onKeyDown(event) : false;
-        const handledKey = keyResult === true || keyResult === 'handled-no-prevent';
-        const handledKeyNoPrevent = keyResult === 'handled-no-prevent';
-
-        if (handledKey) {
-          if (!handledKeyNoPrevent) {
-            event.preventDefault();
-          }
-          event.stopPropagation();
-          return;
-        }
-      }
-
-      if (targetSurface?.suppressShortcuts) {
-        return;
-      }
-
-      const key = event.key;
-      const keyLower = key.toLowerCase();
-      const hasCtrlOrMeta = event.metaKey || event.ctrlKey;
-      const hasAnyModifier = hasCtrlOrMeta || event.shiftKey || event.altKey;
-      const isStandardEditKey =
-        keyLower === 'c' || keyLower === 'x' || keyLower === 'v' || keyLower === 'a';
-
-      if (hasCtrlOrMeta && !event.shiftKey && !event.altKey && isStandardEditKey) {
-        return;
-      }
-
-      // Ignore if user is typing in an input field
-      if (isInputElement(event.target)) {
-        if (!hasAnyModifier) {
-          return;
-        }
-      }
-
-      const shortcutKey = getShortcutKey(event.key, {
-        ctrl: event.ctrlKey,
-        shift: event.shiftKey,
-        alt: event.altKey,
-        meta: event.metaKey,
-      });
-
-      const matchingShortcuts = shortcuts.get(shortcutKey);
-      if (!matchingShortcuts || matchingShortcuts.length === 0) {
-        return;
-      }
-
-      // Find matching shortcuts for current context
-      const matching = matchingShortcuts
-        .filter((s) => (s.enabled || s.enabled === undefined) && modifiersMatch(event, s.modifiers))
-        .sort((a, b) => {
-          return (b.priority ?? 0) - (a.priority ?? 0);
-        });
-
-      if (matching.length > 0) {
-        // Execute the highest priority matching shortcut
-        const result = matching[0].handler(event);
-        if (result !== false) {
-          event.preventDefault();
-          event.stopPropagation();
-        }
+        dispatchKeyThroughSurfaces(event, getSurfaceCandidates(event.target));
       }
     };
+
+    const handleKeyDown = (event: KeyboardEvent) =>
+      routeKeyboardEvent(event, { getTargetSurface, getSurfaceCandidates, shortcuts });
 
     document.addEventListener('keydown', handleCapturedTabKeyDown, true);
     document.addEventListener('keydown', handleKeyDown);

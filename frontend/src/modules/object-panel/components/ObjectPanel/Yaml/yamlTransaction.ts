@@ -47,12 +47,12 @@ export type YamlPostApplyNotice = {
   diff: YamlTransactionDiffResult | null;
 };
 
-type VerifiedPostApplyState = {
+export type VerifiedPostApplyState = {
   identity: ObjectIdentity;
   semanticYaml: string;
 };
 
-type RecentVerifiedSemanticEntry = {
+export type RecentVerifiedSemanticEntry = {
   reference: string;
   semanticYaml: string;
 };
@@ -123,6 +123,335 @@ const buildObjectReferenceKey = (identity: ObjectIdentity): string =>
     identity.name,
     identity.uid ?? '',
   ].join('|');
+
+export const matchesVerifiedSnapshot = (
+  snapshotYaml: string,
+  verifiedPostApply: VerifiedPostApplyState,
+  recentVerifiedSemanticYamls: RecentVerifiedSemanticEntry[]
+): boolean => {
+  const snapshotSemanticYaml = sanitizeYamlForSemanticCompare(snapshotYaml);
+  if (snapshotSemanticYaml === verifiedPostApply.semanticYaml) {
+    return true;
+  }
+  const currentObjectReference = buildObjectReferenceKey(verifiedPostApply.identity);
+  return recentVerifiedSemanticYamls.some(
+    (entry) =>
+      entry.reference === currentObjectReference && entry.semanticYaml === snapshotSemanticYaml
+  );
+};
+
+const shouldClearSameObjectOverride = ({
+  snapshotYaml,
+  snapshotIdentity,
+  latestObjectIdentity,
+  pendingSnapshotAdoptionYaml,
+  verifiedPostApply,
+  recentVerifiedSemanticYamls,
+}: {
+  snapshotYaml: string;
+  snapshotIdentity: ObjectIdentity;
+  latestObjectIdentity: ObjectIdentity;
+  pendingSnapshotAdoptionYaml: string | null;
+  verifiedPostApply: VerifiedPostApplyState | null;
+  recentVerifiedSemanticYamls: RecentVerifiedSemanticEntry[];
+}): boolean => {
+  if (pendingSnapshotAdoptionYaml === snapshotYaml) {
+    return false;
+  }
+  if (snapshotIdentity.resourceVersion === latestObjectIdentity.resourceVersion) {
+    return Boolean(snapshotIdentity.resourceVersion);
+  }
+  if (verifiedPostApply) {
+    return !matchesVerifiedSnapshot(snapshotYaml, verifiedPostApply, recentVerifiedSemanticYamls);
+  }
+  return Boolean(pendingSnapshotAdoptionYaml);
+};
+
+const shouldClearManualYamlOverride = ({
+  snapshotYaml,
+  snapshotIdentity,
+  overrideIdentity,
+  latestObjectIdentity,
+  pendingSnapshotAdoptionYaml,
+  verifiedPostApply,
+  recentVerifiedSemanticYamls,
+}: {
+  snapshotYaml: string;
+  snapshotIdentity: ObjectIdentity | null;
+  overrideIdentity: ObjectIdentity | null;
+  latestObjectIdentity: ObjectIdentity;
+  pendingSnapshotAdoptionYaml: string | null;
+  verifiedPostApply: VerifiedPostApplyState | null;
+  recentVerifiedSemanticYamls: RecentVerifiedSemanticEntry[];
+}): boolean => {
+  if (
+    snapshotIdentity &&
+    overrideIdentity &&
+    isSameObjectReference(snapshotIdentity, overrideIdentity)
+  ) {
+    return shouldClearSameObjectOverride({
+      snapshotYaml,
+      snapshotIdentity,
+      latestObjectIdentity,
+      pendingSnapshotAdoptionYaml,
+      verifiedPostApply,
+      recentVerifiedSemanticYamls,
+    });
+  }
+  return Boolean(
+    snapshotIdentity?.resourceVersion &&
+      snapshotIdentity.resourceVersion === latestObjectIdentity.resourceVersion
+  );
+};
+
+type PostApplySnapshotDecision =
+  | { kind: 'ignore' }
+  | { kind: 'reset' }
+  | { kind: 'clear-stale' }
+  | { kind: 'stale'; notice: YamlPostApplyNotice };
+
+const classifyPostApplySnapshot = ({
+  verifiedPostApply,
+  isEditing,
+  hasManualOverride,
+  yamlContent,
+}: {
+  verifiedPostApply: VerifiedPostApplyState | null;
+  isEditing: boolean;
+  hasManualOverride: boolean;
+  yamlContent: string;
+}): PostApplySnapshotDecision => {
+  if (!verifiedPostApply || isEditing || hasManualOverride || !yamlContent) {
+    return { kind: 'ignore' };
+  }
+  const snapshotYaml = normalizeYamlString(yamlContent);
+  const snapshotIdentity = parseObjectIdentity(snapshotYaml);
+  if (!snapshotIdentity || !isSameObjectReference(snapshotIdentity, verifiedPostApply.identity)) {
+    return { kind: 'reset' };
+  }
+  const verifiedResourceVersion = verifiedPostApply.identity.resourceVersion ?? null;
+  const snapshotResourceVersion = snapshotIdentity.resourceVersion ?? null;
+  if (
+    !verifiedResourceVersion ||
+    !snapshotResourceVersion ||
+    snapshotResourceVersion === verifiedResourceVersion
+  ) {
+    return { kind: 'clear-stale' };
+  }
+  const snapshotSemanticYaml = sanitizeYamlForSemanticCompare(snapshotYaml);
+  if (snapshotSemanticYaml === verifiedPostApply.semanticYaml) {
+    return { kind: 'clear-stale' };
+  }
+  return {
+    kind: 'stale',
+    notice: {
+      kind: 'stale',
+      message:
+        'The live object changed again after save. Review the diff below for later controller mutations or concurrent edits.',
+      diff: buildYamlTransactionDiff(verifiedPostApply.semanticYaml, snapshotSemanticYaml),
+    },
+  };
+};
+
+const clearStalePostApplyNotice = (
+  current: YamlPostApplyNotice | null
+): YamlPostApplyNotice | null => (current?.kind === 'stale' ? null : current);
+
+type PreparedYamlMerge = {
+  normalizedLatestYaml: string;
+  preparedLatestYaml: string;
+  mergedDraftYaml: string;
+  latestIdentity: ObjectIdentity;
+};
+
+const resolveMergedObjectIdentity = (
+  normalizedLatestYaml: string,
+  effectiveIdentity: ObjectIdentity,
+  resourceVersion: string | null | undefined
+): ObjectIdentity => {
+  const parsedIdentity = parseObjectIdentity(normalizedLatestYaml);
+  if (parsedIdentity) {
+    return {
+      ...parsedIdentity,
+      resourceVersion: parsedIdentity.resourceVersion ?? resourceVersion ?? null,
+    };
+  }
+  return {
+    apiVersion: effectiveIdentity.apiVersion,
+    kind: effectiveIdentity.kind,
+    name: effectiveIdentity.name,
+    namespace: effectiveIdentity.namespace ?? null,
+    uid: effectiveIdentity.uid ?? null,
+    resourceVersion: resourceVersion ?? null,
+  };
+};
+
+const prepareYamlMerge = (
+  mergeResult: Awaited<ReturnType<typeof mergeYamlWithLatestOnServer>>,
+  effectiveIdentity: ObjectIdentity,
+  prepareVisibleDraftYaml: (rawYaml: string) => string
+): PreparedYamlMerge => {
+  const normalizedLatestYaml = normalizeYamlString(mergeResult.currentYAML);
+  return {
+    normalizedLatestYaml,
+    preparedLatestYaml: prepareVisibleDraftYaml(normalizedLatestYaml),
+    mergedDraftYaml: prepareVisibleDraftYaml(normalizeYamlString(mergeResult.mergedYAML)),
+    latestIdentity: resolveMergedObjectIdentity(
+      normalizedLatestYaml,
+      effectiveIdentity,
+      mergeResult.resourceVersion
+    ),
+  };
+};
+
+const requestPreparedYamlMerge = async ({
+  clusterId,
+  baselineMergeYaml,
+  sourceYaml,
+  draftYaml,
+  effectiveIdentity,
+  prepareVisibleDraftYaml,
+}: {
+  clusterId: string;
+  baselineMergeYaml: string;
+  sourceYaml: string;
+  draftYaml: string;
+  effectiveIdentity: ObjectIdentity;
+  prepareVisibleDraftYaml: (rawYaml: string) => string;
+}): Promise<PreparedYamlMerge> => {
+  const mergeBaseYaml =
+    baselineMergeYaml || prepareVisibleDraftYaml(normalizeYamlString(sourceYaml));
+  const mergeResult = await mergeYamlWithLatestOnServer(
+    clusterId,
+    mergeBaseYaml,
+    draftYaml,
+    effectiveIdentity
+  );
+  return prepareYamlMerge(mergeResult, effectiveIdentity, prepareVisibleDraftYaml);
+};
+
+type ReloadMergeError =
+  | { kind: 'object-yaml'; parsed: NonNullable<ReturnType<typeof parseObjectYamlError>> }
+  | { kind: 'generic'; message: string };
+
+const classifyReloadMergeError = (error: unknown): ReloadMergeError => {
+  const parsed = parseObjectYamlError(error);
+  if (parsed) {
+    return { kind: 'object-yaml', parsed };
+  }
+  return {
+    kind: 'generic',
+    message: error instanceof Error ? error.message : 'Failed to reload latest YAML.',
+  };
+};
+
+const addRecentVerifiedYaml = (
+  current: RecentVerifiedSemanticEntry[],
+  verified: VerifiedPostApplyState | null
+): RecentVerifiedSemanticEntry[] => {
+  if (!verified) {
+    return current;
+  }
+  const candidate = {
+    reference: buildObjectReferenceKey(verified.identity),
+    semanticYaml: verified.semanticYaml,
+  };
+  return [
+    candidate,
+    ...current.filter(
+      (entry) =>
+        entry.reference !== candidate.reference || entry.semanticYaml !== candidate.semanticYaml
+    ),
+  ].slice(0, 4);
+};
+
+const buildPostApplyDiffNotice = (
+  submittedYaml: string,
+  storedYaml: string
+): YamlPostApplyNotice | null => {
+  if (submittedYaml === storedYaml) {
+    return null;
+  }
+  return {
+    kind: 'diff',
+    message:
+      'Your changes were applied to the latest live object, which also included other changes made while you were editing. Review the diff below to see how the final stored object differs from the exact YAML you submitted.',
+    diff: buildYamlTransactionDiff(submittedYaml, storedYaml),
+  };
+};
+
+type PreparedSaveRequest =
+  | { kind: 'ignore' }
+  | { kind: 'identity-error' }
+  | { kind: 'validation-error'; message: string }
+  | {
+      kind: 'ready';
+      identity: ObjectIdentity;
+      validation: ValidationSuccess;
+      baselineYaml: string;
+    };
+
+const prepareSaveRequest = ({
+  isEditing,
+  isSaving,
+  effectiveIdentity,
+  draftYaml,
+  baselineResourceVersion,
+  baselineMergeYaml,
+  sourceYaml,
+  prepareVisibleDraftYaml,
+}: {
+  isEditing: boolean;
+  isSaving: boolean;
+  effectiveIdentity: ObjectIdentity | null;
+  draftYaml: string;
+  baselineResourceVersion: string | null;
+  baselineMergeYaml: string;
+  sourceYaml: string;
+  prepareVisibleDraftYaml: (rawYaml: string) => string;
+}): PreparedSaveRequest => {
+  if (!isEditing || isSaving) {
+    return { kind: 'ignore' };
+  }
+  if (!effectiveIdentity) {
+    return { kind: 'identity-error' };
+  }
+  const validation = validateYamlDraft(draftYaml, effectiveIdentity, baselineResourceVersion);
+  if (!validation.isValid) {
+    return { kind: 'validation-error', message: validation.message };
+  }
+  const baselineYaml =
+    baselineMergeYaml || prepareVisibleDraftYaml(normalizeYamlString(sourceYaml));
+  return { kind: 'ready', identity: effectiveIdentity, validation, baselineYaml };
+};
+
+const checkYamlOwnershipFailOpen = async ({
+  clusterId,
+  baselineYaml,
+  validation,
+  identity,
+  resourceVersion,
+}: {
+  clusterId: string;
+  baselineYaml: string;
+  validation: ValidationSuccess;
+  identity: ObjectIdentity;
+  resourceVersion: string;
+}): Promise<ObjectYamlOwnershipConflict[]> => {
+  try {
+    const ownership = await checkYamlOwnershipOnServer(
+      clusterId,
+      baselineYaml,
+      validation.normalizedYAML,
+      identity,
+      resourceVersion
+    );
+    return ownership?.conflicts ?? [];
+  } catch (error) {
+    errorHandler.handle(error, { action: 'checkYamlOwnership' });
+    return [];
+  }
+};
 
 const normalizeYamlTransactionDiff = (
   diff: YamlTransactionDiffResult
@@ -253,56 +582,20 @@ export const useYamlTransaction = ({
     const snapshotIdentity = parseObjectIdentity(snapshotNormalizedYaml);
     const overrideIdentity = parseObjectIdentity(manualYamlOverride.yaml);
     if (
-      snapshotIdentity &&
-      overrideIdentity &&
-      isSameObjectReference(snapshotIdentity, overrideIdentity)
+      !shouldClearManualYamlOverride({
+        snapshotYaml: snapshotNormalizedYaml,
+        snapshotIdentity,
+        overrideIdentity,
+        latestObjectIdentity,
+        pendingSnapshotAdoptionYaml,
+        verifiedPostApply,
+        recentVerifiedSemanticYamls: recentVerifiedSemanticYamlsRef.current,
+      })
     ) {
-      if (pendingSnapshotAdoptionYaml && snapshotNormalizedYaml === pendingSnapshotAdoptionYaml) {
-        return;
-      }
-
-      if (
-        snapshotIdentity.resourceVersion &&
-        snapshotIdentity.resourceVersion === latestObjectIdentity.resourceVersion
-      ) {
-        setManualYamlOverride(null);
-        setPendingSnapshotAdoptionYaml(null);
-        return;
-      }
-
-      if (verifiedPostApply) {
-        const snapshotSemanticYaml = sanitizeYamlForSemanticCompare(snapshotNormalizedYaml);
-        const currentObjectReference = buildObjectReferenceKey(verifiedPostApply.identity);
-        if (
-          snapshotSemanticYaml === verifiedPostApply.semanticYaml ||
-          recentVerifiedSemanticYamlsRef.current.some(
-            (entry) =>
-              entry.reference === currentObjectReference &&
-              entry.semanticYaml === snapshotSemanticYaml
-          )
-        ) {
-          return;
-        }
-
-        setManualYamlOverride(null);
-        setPendingSnapshotAdoptionYaml(null);
-        return;
-      }
-
-      if (pendingSnapshotAdoptionYaml && snapshotNormalizedYaml !== pendingSnapshotAdoptionYaml) {
-        setManualYamlOverride(null);
-        setPendingSnapshotAdoptionYaml(null);
-        return;
-      }
-    }
-    if (
-      snapshotIdentity?.resourceVersion &&
-      snapshotIdentity.resourceVersion === latestObjectIdentity.resourceVersion
-    ) {
-      setManualYamlOverride(null);
-      setPendingSnapshotAdoptionYaml(null);
       return;
     }
+    setManualYamlOverride(null);
+    setPendingSnapshotAdoptionYaml(null);
   }, [
     latestObjectIdentity,
     manualYamlOverride,
@@ -319,41 +612,25 @@ export const useYamlTransaction = ({
   }, [manualYamlOverride, postApplyNotice]);
 
   useEffect(() => {
-    if (!verifiedPostApply || isEditing || manualYamlOverride || !yamlContent) {
-      return;
-    }
-
-    const snapshotYaml = normalizeYamlString(yamlContent);
-    const snapshotIdentity = parseObjectIdentity(snapshotYaml);
-    if (!snapshotIdentity || !isSameObjectReference(snapshotIdentity, verifiedPostApply.identity)) {
-      setVerifiedPostApply(null);
-      setPostApplyNotice((current) => (current?.kind === 'stale' ? null : current));
-      return;
-    }
-
-    const verifiedResourceVersion = verifiedPostApply.identity.resourceVersion ?? null;
-    const snapshotResourceVersion = snapshotIdentity.resourceVersion ?? null;
-    if (
-      !verifiedResourceVersion ||
-      !snapshotResourceVersion ||
-      snapshotResourceVersion === verifiedResourceVersion
-    ) {
-      setPostApplyNotice((current) => (current?.kind === 'stale' ? null : current));
-      return;
-    }
-
-    const snapshotSemanticYaml = sanitizeYamlForSemanticCompare(snapshotYaml);
-    if (snapshotSemanticYaml === verifiedPostApply.semanticYaml) {
-      setPostApplyNotice((current) => (current?.kind === 'stale' ? null : current));
-      return;
-    }
-
-    setPostApplyNotice({
-      kind: 'stale',
-      message:
-        'The live object changed again after save. Review the diff below for later controller mutations or concurrent edits.',
-      diff: buildYamlTransactionDiff(verifiedPostApply.semanticYaml, snapshotSemanticYaml),
+    const decision = classifyPostApplySnapshot({
+      verifiedPostApply,
+      isEditing,
+      hasManualOverride: Boolean(manualYamlOverride),
+      yamlContent,
     });
+    if (decision.kind === 'ignore') {
+      return;
+    }
+    if (decision.kind === 'reset') {
+      setVerifiedPostApply(null);
+      setPostApplyNotice(clearStalePostApplyNotice);
+      return;
+    }
+    if (decision.kind === 'clear-stale') {
+      setPostApplyNotice(clearStalePostApplyNotice);
+      return;
+    }
+    setPostApplyNotice(decision.notice);
   }, [isEditing, manualYamlOverride, verifiedPostApply, yamlContent]);
 
   const hydrateLatestObject = useCallback(
@@ -588,38 +865,44 @@ export const useYamlTransaction = ({
     exitEditMode();
   }, [exitEditMode, isSaving]);
 
+  const handleReloadMergeError = useCallback(
+    (caughtError: unknown) => {
+      const error = classifyReloadMergeError(caughtError);
+      if (error.kind === 'object-yaml') {
+        setActionError(error.parsed.message);
+        setActionDetails(error.parsed.causes ?? []);
+        setHasRemoteDrift(true);
+        setDriftForced(true);
+        setHasServerYamlError(false);
+        if (error.parsed.currentYaml) {
+          setBackendDriftCurrentYaml(
+            prepareVisibleDraftYaml(normalizeYamlString(error.parsed.currentYaml))
+          );
+        }
+      } else {
+        setActionError(error.message);
+        setActionDetails([]);
+      }
+      errorHandler.handle(caughtError, { action: 'reloadAndMerge' });
+    },
+    [prepareVisibleDraftYaml]
+  );
+
   const handleReloadAndMerge = useCallback(async () => {
     if (isSaving || !effectiveIdentity) {
       return;
     }
 
     try {
-      const mergeBaseYaml =
-        baselineMergeYaml ||
-        prepareVisibleDraftYaml(normalizeYamlString(manualYamlOverride?.yaml ?? yamlContent));
-      const mergeResult = await mergeYamlWithLatestOnServer(
-        resolvedClusterId,
-        mergeBaseYaml,
-        draftYaml,
-        effectiveIdentity
-      );
-      const normalizedLatestYaml = normalizeYamlString(mergeResult.currentYAML);
-      const preparedLatestYaml = prepareVisibleDraftYaml(normalizedLatestYaml);
-      const mergedDraftYaml = prepareVisibleDraftYaml(normalizeYamlString(mergeResult.mergedYAML));
-      const parsedIdentity = parseObjectIdentity(normalizedLatestYaml);
-      const latestIdentity: ObjectIdentity = parsedIdentity
-        ? {
-            ...parsedIdentity,
-            resourceVersion: parsedIdentity.resourceVersion ?? mergeResult.resourceVersion ?? null,
-          }
-        : {
-            apiVersion: effectiveIdentity.apiVersion,
-            kind: effectiveIdentity.kind,
-            name: effectiveIdentity.name,
-            namespace: effectiveIdentity.namespace ?? null,
-            uid: effectiveIdentity.uid ?? null,
-            resourceVersion: mergeResult.resourceVersion ?? null,
-          };
+      const { normalizedLatestYaml, preparedLatestYaml, mergedDraftYaml, latestIdentity } =
+        await requestPreparedYamlMerge({
+          clusterId: resolvedClusterId,
+          baselineMergeYaml,
+          sourceYaml: manualYamlOverride?.yaml ?? yamlContent,
+          draftYaml,
+          effectiveIdentity,
+          prepareVisibleDraftYaml,
+        });
 
       skipNextOverrideDraftSyncRef.current = true;
       setBaselineIdentity(latestIdentity);
@@ -650,30 +933,14 @@ export const useYamlTransaction = ({
           reason: 'user',
         });
       }
-    } catch (err) {
-      const objectYamlError = parseObjectYamlError(err);
-      if (objectYamlError) {
-        setActionError(objectYamlError.message);
-        setActionDetails(objectYamlError.causes ?? []);
-        setHasRemoteDrift(true);
-        setDriftForced(true);
-        setHasServerYamlError(false);
-        if (objectYamlError.currentYaml) {
-          setBackendDriftCurrentYaml(
-            prepareVisibleDraftYaml(normalizeYamlString(objectYamlError.currentYaml))
-          );
-        }
-      } else {
-        const message = err instanceof Error ? err.message : 'Failed to reload latest YAML.';
-        setActionError(message);
-        setActionDetails([]);
-      }
-      errorHandler.handle(err, { action: 'reloadAndMerge' });
+    } catch (error) {
+      handleReloadMergeError(error);
     }
   }, [
     baselineMergeYaml,
     draftYaml,
     effectiveIdentity,
+    handleReloadMergeError,
     isSaving,
     manualYamlOverride,
     prepareVisibleDraftYaml,
@@ -681,6 +948,56 @@ export const useYamlTransaction = ({
     scope,
     yamlContent,
   ]);
+
+  const verifyAppliedYaml = useCallback(
+    async (identity: ObjectIdentity, immediateYaml: string) => {
+      try {
+        const { latestIdentity, normalizedYaml } = await hydrateLatestObject(identity);
+        const submittedYaml = sanitizeYamlForSemanticCompare(immediateYaml);
+        const storedYaml = sanitizeYamlForSemanticCompare(normalizedYaml);
+        recentVerifiedSemanticYamlsRef.current = addRecentVerifiedYaml(
+          recentVerifiedSemanticYamlsRef.current,
+          verifiedPostApply
+        );
+        setVerifiedPostApply({
+          identity: latestIdentity,
+          semanticYaml: storedYaml,
+        });
+        setPostApplyNotice(buildPostApplyDiffNotice(submittedYaml, storedYaml));
+      } catch (error) {
+        setVerifiedPostApply(null);
+        setPostApplyNotice({
+          kind: 'warning',
+          message:
+            'YAML applied, but the editor could not reload the final live object. The manifest shown here is the submitted YAML with the returned resourceVersion, not a verified live read.',
+          diff: null,
+        });
+        errorHandler.handle(error, { action: 'loadLatestObjectYAML' });
+      }
+    },
+    [hydrateLatestObject, verifiedPostApply]
+  );
+
+  const handleSaveError = useCallback((caughtError: unknown) => {
+    const parsed = parseObjectYamlError(caughtError);
+    if (parsed) {
+      setActionError(parsed.message);
+      setActionDetails(parsed.causes ?? []);
+      setHasServerYamlError(true);
+      setPendingSnapshotAdoptionYaml(null);
+      setIsSaving(false);
+    } else {
+      const message =
+        caughtError instanceof Error ? caughtError.message : 'Failed to save YAML changes.';
+      setActionError(message);
+      setActionDetails([]);
+      setPostApplyNotice(null);
+      setVerifiedPostApply(null);
+      setPendingSnapshotAdoptionYaml(null);
+      setHasServerYamlError(false);
+    }
+    errorHandler.handle(caughtError, { action: 'saveObjectYAML' });
+  }, []);
 
   const performSave = useCallback(
     async (identity: ObjectIdentity, validation: ValidationSuccess, baselineYaml: string) => {
@@ -717,49 +1034,7 @@ export const useYamlTransaction = ({
           resourceVersion: appliedResourceVersion,
         });
 
-        try {
-          const { latestIdentity, normalizedYaml } = await hydrateLatestObject(identity);
-          const submittedYaml = sanitizeYamlForSemanticCompare(immediateYaml);
-          const storedYaml = sanitizeYamlForSemanticCompare(normalizedYaml);
-          if (verifiedPostApply?.semanticYaml) {
-            recentVerifiedSemanticYamlsRef.current = [
-              {
-                reference: buildObjectReferenceKey(verifiedPostApply.identity),
-                semanticYaml: verifiedPostApply.semanticYaml,
-              },
-              ...recentVerifiedSemanticYamlsRef.current.filter(
-                (entry) =>
-                  !(
-                    entry.reference === buildObjectReferenceKey(verifiedPostApply.identity) &&
-                    entry.semanticYaml === verifiedPostApply.semanticYaml
-                  )
-              ),
-            ].slice(0, 4);
-          }
-          setVerifiedPostApply({
-            identity: latestIdentity,
-            semanticYaml: storedYaml,
-          });
-          if (submittedYaml !== storedYaml) {
-            setPostApplyNotice({
-              kind: 'diff',
-              message:
-                'Your changes were applied to the latest live object, which also included other changes made while you were editing. Review the diff below to see how the final stored object differs from the exact YAML you submitted.',
-              diff: buildYamlTransactionDiff(submittedYaml, storedYaml),
-            });
-          } else {
-            setPostApplyNotice(null);
-          }
-        } catch (fetchErr) {
-          setVerifiedPostApply(null);
-          setPostApplyNotice({
-            kind: 'warning',
-            message:
-              'YAML applied, but the editor could not reload the final live object. The manifest shown here is the submitted YAML with the returned resourceVersion, not a verified live read.',
-            diff: null,
-          });
-          errorHandler.handle(fetchErr, { action: 'loadLatestObjectYAML' });
-        }
+        await verifyAppliedYaml(identity, immediateYaml);
         exitEditMode();
         setPendingSnapshotAdoptionYaml(snapshotYamlBeforeSave);
         if (scope) {
@@ -770,26 +1045,8 @@ export const useYamlTransaction = ({
           });
         }
         setActionDetails([]);
-      } catch (err) {
-        const parsed = parseObjectYamlError(err);
-        if (parsed) {
-          setActionError(parsed.message);
-          setActionDetails(parsed.causes ?? []);
-          setHasServerYamlError(true);
-          errorHandler.handle(err, { action: 'saveObjectYAML' });
-          setPendingSnapshotAdoptionYaml(null);
-          setIsSaving(false);
-          return;
-        }
-
-        const message = err instanceof Error ? err.message : 'Failed to save YAML changes.';
-        setActionError(message);
-        setActionDetails([]);
-        setPostApplyNotice(null);
-        setVerifiedPostApply(null);
-        setPendingSnapshotAdoptionYaml(null);
-        setHasServerYamlError(false);
-        errorHandler.handle(err, { action: 'saveObjectYAML' });
+      } catch (error) {
+        handleSaveError(error);
       } finally {
         setIsSaving(false);
       }
@@ -797,63 +1054,57 @@ export const useYamlTransaction = ({
     [
       baselineResourceVersion,
       exitEditMode,
-      hydrateLatestObject,
+      handleSaveError,
       resolvedClusterId,
       scope,
+      verifyAppliedYaml,
       yamlContent,
-      verifiedPostApply,
     ]
   );
 
   const handleSaveClick = useCallback(async () => {
-    if (!isEditing || isSaving) {
+    const request = prepareSaveRequest({
+      isEditing,
+      isSaving,
+      effectiveIdentity,
+      draftYaml,
+      baselineResourceVersion,
+      baselineMergeYaml,
+      sourceYaml: manualYamlOverride?.yaml ?? yamlContent,
+      prepareVisibleDraftYaml,
+    });
+    if (request.kind === 'ignore') {
       return;
     }
-    const identity = effectiveIdentity;
-    if (!identity) {
+    if (request.kind === 'identity-error') {
       setActionError('Unable to resolve object identity. Reload and try again.');
       return;
     }
-
-    const validation = validateYamlDraft(draftYaml, identity, baselineResourceVersion);
-    if (!validation.isValid) {
-      setLintError(validation.message);
+    if (request.kind === 'validation-error') {
+      setLintError(request.message);
       return;
     }
-
-    const baselineYaml =
-      baselineMergeYaml ||
-      prepareVisibleDraftYaml(normalizeYamlString(manualYamlOverride?.yaml ?? yamlContent));
-
     // Advisory ownership check: warn before taking ownership of fields that
     // controllers or operators manage. Never let a failed check block saving.
     setIsSaving(true);
-    let ownershipConflicts: ObjectYamlOwnershipConflict[] = [];
-    try {
-      const ownership = await checkYamlOwnershipOnServer(
-        resolvedClusterId,
-        baselineYaml,
-        validation.normalizedYAML,
-        identity,
-        baselineResourceVersion ?? identity.resourceVersion ?? ''
-      );
-      ownershipConflicts = ownership?.conflicts ?? [];
-    } catch (err) {
-      errorHandler.handle(err, { action: 'checkYamlOwnership' });
-    }
-
+    const ownershipConflicts = await checkYamlOwnershipFailOpen({
+      clusterId: resolvedClusterId,
+      baselineYaml: request.baselineYaml,
+      validation: request.validation,
+      identity: request.identity,
+      resourceVersion: baselineResourceVersion ?? request.identity.resourceVersion ?? '',
+    });
     if (ownershipConflicts.length > 0) {
       setIsSaving(false);
       setPendingOwnershipWarning({
         conflicts: ownershipConflicts,
-        identity,
-        validation,
-        baselineYaml,
+        identity: request.identity,
+        validation: request.validation,
+        baselineYaml: request.baselineYaml,
       });
       return;
     }
-
-    await performSave(identity, validation, baselineYaml);
+    await performSave(request.identity, request.validation, request.baselineYaml);
   }, [
     baselineMergeYaml,
     baselineResourceVersion,

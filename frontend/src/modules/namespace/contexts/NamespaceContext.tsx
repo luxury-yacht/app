@@ -133,6 +133,107 @@ const buildNamespaceScopes = (clusterIds: string[]): string[] => {
   return scopes;
 };
 
+const namespaceWorkloadSummary = (namespace: NamespaceSummaryWithMetrics): string => {
+  if (namespace.workloadsUnknown) {
+    return 'Workloads: Unknown';
+  }
+  return namespace.hasWorkloads ? 'Workloads: Present' : 'Workloads: None';
+};
+
+const namespaceWarningEventSummary = (
+  state: NamespaceListItem['warningEventsState'],
+  count: number
+): string => {
+  if (state === 'available') {
+    return String(count);
+  }
+  return state === 'loading' ? 'Loading' : 'Unavailable';
+};
+
+interface NamespaceUtilizationPresentation {
+  state: NamespaceListItem['utilizationState'];
+  bannerMessage?: string;
+  errorMessage?: string;
+}
+
+const namespaceUtilizationSummary = (
+  cpuUsageMilli: number,
+  memoryUsageBytes: number,
+  presentation: NamespaceUtilizationPresentation
+): string => {
+  if (presentation.state === 'available') {
+    const usage = namespaceAggregateUsageDisplay(cpuUsageMilli, memoryUsageBytes);
+    const banner = presentation.bannerMessage ? ` (${presentation.bannerMessage})` : '';
+    return `${usage.cpu} CPU, ${usage.memory} memory${banner}`;
+  }
+  if (presentation.state === 'loading') {
+    return presentation.bannerMessage ?? 'Collecting';
+  }
+  return presentation.errorMessage?.trim() || 'Unavailable';
+};
+
+const namespaceQuotaSummary = (
+  state: NamespaceListItem['quotaPressureState'],
+  count: number,
+  highestUsedPercentage: number
+): string => {
+  if (state === 'available') {
+    return count > 0 ? `${highestUsedPercentage}%` : 'No quotas';
+  }
+  return state === 'loading' ? 'Loading' : 'Unavailable';
+};
+
+const getNamespaceListValues = (namespace: NamespaceSummaryWithMetrics) => ({
+  workloadsUnknown: Boolean(namespace.workloadsUnknown),
+  unhealthyWorkloads: namespace.unhealthyWorkloads ?? 0,
+  warningEvents: namespace.warningEvents ?? 0,
+  warningEventsState: namespace.warningEventsState ?? 'unavailable',
+  cpuUsageMilli: namespace.cpuUsageMilli ?? 0,
+  memoryUsageBytes: namespace.memoryUsageBytes ?? 0,
+  quotaCount: namespace.quotaCount ?? 0,
+  quotaHighestUsedPercentage: namespace.quotaHighestUsedPercentage ?? 0,
+  quotaPressure: namespace.quotaPressure ?? '',
+  quotaPressureState: namespace.quotaPressureState ?? 'unavailable',
+});
+
+const projectNamespaceListItem = (
+  namespace: NamespaceSummaryWithMetrics,
+  utilization: NamespaceUtilizationPresentation
+): NamespaceListItem => {
+  const createdAtMs = (namespace.creationTimestamp || 0) * 1000;
+  const values = getNamespaceListValues(namespace);
+  const status = namespace.status || namespace.phase;
+  const details = [
+    `Status: ${status}`,
+    namespaceWorkloadSummary(namespace),
+    `Unhealthy workloads: ${values.unhealthyWorkloads}`,
+    `Warning events: ${namespaceWarningEventSummary(values.warningEventsState, values.warningEvents)}`,
+    `Utilization: ${namespaceUtilizationSummary(values.cpuUsageMilli, values.memoryUsageBytes, utilization)}`,
+    `Quota pressure: ${namespaceQuotaSummary(values.quotaPressureState, values.quotaCount, values.quotaHighestUsedPercentage)}`,
+  ].join(' • ');
+  return {
+    name: namespace.ref.name,
+    scope: namespace.ref.name,
+    status,
+    details,
+    age: formatAge(createdAtMs || Date.now()),
+    hasWorkloads: namespace.hasWorkloads ?? false,
+    workloadsUnknown: values.workloadsUnknown,
+    unhealthyWorkloads: values.unhealthyWorkloads,
+    warningEvents: values.warningEvents,
+    warningEventsState: values.warningEventsState,
+    cpuUsageMilli: values.cpuUsageMilli,
+    memoryUsageBytes: values.memoryUsageBytes,
+    utilizationState: utilization.state,
+    quotaCount: values.quotaCount,
+    quotaHighestUsedPercentage: values.quotaHighestUsedPercentage,
+    quotaPressure: values.quotaPressure,
+    quotaPressureState: values.quotaPressureState,
+    resourceVersion: namespace.resourceVersion,
+    scopeStatus: namespace.scopeStatus,
+  };
+};
+
 export const NamespaceProvider: React.FC<NamespaceProviderProps> = ({ children }) => {
   const { selectedKubeconfig, selectedClusterId, selectedClusterIds } = useKubeconfig();
   const { getClusterState } = useClusterLifecycle();
@@ -267,89 +368,14 @@ export const NamespaceProvider: React.FC<NamespaceProviderProps> = ({ children }
       updateNamespaces([]);
       return;
     }
-    const mappedNamespaces = scopedNamespaces.map((ns) => {
-      const createdAtMs = (ns.creationTimestamp || 0) * 1000;
-      const age = formatAge(createdAtMs || Date.now());
-      const workloadsUnknown = Boolean(ns.workloadsUnknown);
-      let workloadSummary: string;
-
-      if (workloadsUnknown) {
-        workloadSummary = 'Workloads: Unknown';
-      } else if (ns.hasWorkloads) {
-        workloadSummary = 'Workloads: Present';
-      } else {
-        workloadSummary = 'Workloads: None';
-      }
-
-      const unhealthyWorkloads = ns.unhealthyWorkloads ?? 0;
-      const warningEvents = ns.warningEvents ?? 0;
-      const warningEventsState = ns.warningEventsState ?? 'unavailable';
-      let warningEventSummary: string;
-
-      if (warningEventsState === 'available') {
-        warningEventSummary = String(warningEvents);
-      } else if (warningEventsState === 'loading') {
-        warningEventSummary = 'Loading';
-      } else {
-        warningEventSummary = 'Unavailable';
-      }
-
-      const cpuUsageMilli = ns.cpuUsageMilli ?? 0;
-      const memoryUsageBytes = ns.memoryUsageBytes ?? 0;
-      const utilizationState = namespaceMetricsDomain.data?.metricsState ?? 'unavailable';
-      const usageDisplay = namespaceAggregateUsageDisplay(cpuUsageMilli, memoryUsageBytes);
-      let utilizationSummary: string;
-
-      if (utilizationState === 'available') {
-        const bannerSummary = namespaceMetricsBanner ? ` (${namespaceMetricsBanner.message})` : '';
-        utilizationSummary = `${usageDisplay.cpu} CPU, ${usageDisplay.memory} memory${bannerSummary}`;
-      } else if (utilizationState === 'loading') {
-        utilizationSummary = namespaceMetricsBanner?.message ?? 'Collecting';
-      } else {
-        utilizationSummary =
-          namespaceMetricsDomain.data?.metrics?.lastError?.trim() ?? 'Unavailable';
-      }
-
-      const quotaCount = ns.quotaCount ?? 0;
-      const quotaHighestUsedPercentage = ns.quotaHighestUsedPercentage ?? 0;
-      const quotaPressure = ns.quotaPressure ?? '';
-      const quotaPressureState = ns.quotaPressureState ?? 'unavailable';
-      let quotaSummary: string;
-
-      if (quotaPressureState === 'available') {
-        if (quotaCount > 0) {
-          quotaSummary = `${quotaHighestUsedPercentage}%`;
-        } else {
-          quotaSummary = 'No quotas';
-        }
-      } else if (quotaPressureState === 'loading') {
-        quotaSummary = 'Loading';
-      } else {
-        quotaSummary = 'Unavailable';
-      }
-
-      return {
-        name: ns.ref.name,
-        scope: ns.ref.name,
-        status: ns.status || ns.phase,
-        details: `Status: ${ns.status || ns.phase} • ${workloadSummary} • Unhealthy workloads: ${unhealthyWorkloads} • Warning events: ${warningEventSummary} • Utilization: ${utilizationSummary} • Quota pressure: ${quotaSummary}`,
-        age,
-        hasWorkloads: ns.hasWorkloads ?? false,
-        workloadsUnknown,
-        unhealthyWorkloads,
-        warningEvents,
-        warningEventsState,
-        cpuUsageMilli,
-        memoryUsageBytes,
-        utilizationState,
-        quotaCount,
-        quotaHighestUsedPercentage,
-        quotaPressure,
-        quotaPressureState,
-        resourceVersion: ns.resourceVersion,
-        scopeStatus: ns.scopeStatus,
-      } satisfies NamespaceListItem;
-    });
+    const utilization = {
+      state: namespaceMetricsDomain.data?.metricsState ?? 'unavailable',
+      bannerMessage: namespaceMetricsBanner?.message,
+      errorMessage: namespaceMetricsDomain.data?.metrics?.lastError,
+    } satisfies NamespaceUtilizationPresentation;
+    const mappedNamespaces = scopedNamespaces.map((namespace) =>
+      projectNamespaceListItem(namespace, utilization)
+    );
 
     updateNamespaces([allNamespaceItem, ...mappedNamespaces]);
   }, [
