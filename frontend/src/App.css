@@ -144,12 +144,33 @@ textarea,
 
 .no-active-clusters-paths {
   display: grid;
-  gap: 0.15rem;
-  margin: 0.75rem 0 0;
+  margin: 1rem;
   padding: 0;
   list-style: none;
   text-align: left;
   overflow-wrap: anywhere;
+}
+
+.no-active-clusters-settings-hint {
+  margin-top: 0.75rem;
+}
+
+.no-active-clusters-settings-link {
+  padding: 0;
+  border: 0;
+  color: var(--color-accent);
+  background: transparent;
+  text-decoration: none;
+  cursor: pointer;
+}
+
+.no-active-clusters-settings-link:hover {
+  color: var(--color-accent-hover);
+}
+
+.no-active-clusters-settings-link:focus-visible {
+  outline: 2px solid var(--color-accent);
+  outline-offset: 2px;
 }
 
 .content h2 {

@@ -53,6 +53,7 @@ import { useAppDebugShortcuts } from '@ui/layout/useAppDebugShortcuts';
 import type { NamespaceViewType } from '@ui/navigation/types';
 // Auth Failure Overlay
 import { AuthFailureOverlay } from '@ui/overlays/AuthFailureOverlay';
+import { setLastSettingsTab } from '@ui/settings/settingsTabPreference';
 import { eventBus } from '@/core/events';
 import { shouldShowActiveClusterAuthFailure } from '@/core/navigation/workspace';
 import { DiagnosticsPanel } from '@/core/refresh/components/DiagnosticsPanel';
@@ -279,6 +280,10 @@ export const AppLayout: React.FC = () => {
   const handleOpenCluster = useCallback(() => {
     eventBus.emit('command-palette:open-kubeconfigs');
   }, []);
+  const handleOpenKubeconfigSettings = useCallback(() => {
+    setLastSettingsTab('kubeconfigs');
+    viewState.setIsSettingsOpen(true);
+  }, [viewState.setIsSettingsOpen]);
   // Empty-space drop target for dockable tabs: dropping a tab in empty
   // content area spawns a new floating group at the cursor. The ref is
   // merged onto the existing `<main>` element below — no new wrapper,
@@ -346,6 +351,7 @@ export const AppLayout: React.FC = () => {
           phase={clusterSelectionPhase}
           discoveryState={kubeconfig.kubeconfigDiscoveryState}
           searchPaths={kubeconfig.kubeconfigSearchPaths}
+          onOpenKubeconfigSettings={handleOpenKubeconfigSettings}
         />
         <ActiveClusterAuthOverlay
           hasActiveClusters={hasActiveClusters}

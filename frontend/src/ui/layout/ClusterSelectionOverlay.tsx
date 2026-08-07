@@ -7,12 +7,14 @@ interface ClusterSelectionOverlayProps {
   phase: ClusterSelectionPhase;
   discoveryState: KubeconfigDiscoveryState;
   searchPaths: string[];
+  onOpenKubeconfigSettings: () => void;
 }
 
 export const ClusterSelectionOverlay = ({
   phase,
   discoveryState,
   searchPaths,
+  onOpenKubeconfigSettings,
 }: ClusterSelectionOverlayProps) => {
   if (phase !== 'empty') {
     return null;
@@ -33,7 +35,7 @@ export const ClusterSelectionOverlay = ({
   } else if (discoveryState === 'no_kubeconfigs') {
     message = (
       <>
-        <div>No kubeconfig files were found in the configured search paths.</div>
+        <div>⚠️ No kubeconfig files were found in the configured search paths.</div>
         <ul className="no-active-clusters-paths">
           {searchPaths.map((path) => (
             <li key={path}>
@@ -41,6 +43,17 @@ export const ClusterSelectionOverlay = ({
             </li>
           ))}
         </ul>
+        <div className="no-active-clusters-settings-hint">
+          Go to{' '}
+          <button
+            type="button"
+            className="no-active-clusters-settings-link"
+            onClick={onOpenKubeconfigSettings}
+          >
+            Settings -&gt; Kubeconfigs
+          </button>{' '}
+          to modify the list of search paths.
+        </div>
       </>
     );
   }
