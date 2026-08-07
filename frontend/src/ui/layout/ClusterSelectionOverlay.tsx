@@ -34,7 +34,9 @@ export const ClusterSelectionOverlay = ({
   if (kubeconfigDiscoveryMessage) {
     message = (
       <>
-        <div>⚠️ {kubeconfigDiscoveryMessage}</div>
+        <div>
+          <strong>⚠️ {kubeconfigDiscoveryMessage}</strong>
+        </div>
         <ul className="no-active-clusters-paths">
           {searchPaths.map((path) => (
             <li key={path}>

@@ -21,6 +21,9 @@ it('explains when no configured kubeconfig search paths exist', () => {
   });
 
   expect(container.textContent).toContain('None of the configured search paths exist.');
+  expect(container.querySelector('strong')?.textContent).toBe(
+    '⚠️ None of the configured search paths exist.'
+  );
   expect(container.textContent).toContain('/Users/john/.kube');
   expect(container.textContent).toContain('/etc/kubernetes');
   expect(container.textContent).toContain(
@@ -56,6 +59,9 @@ it('explains when configured search paths contain no kubeconfigs', () => {
   });
 
   expect(container.textContent).toContain(
+    '⚠️ No kubeconfig files were found in the configured search paths.'
+  );
+  expect(container.querySelector('strong')?.textContent).toBe(
     '⚠️ No kubeconfig files were found in the configured search paths.'
   );
   expect(container.textContent).toContain('/Users/john/.kube');

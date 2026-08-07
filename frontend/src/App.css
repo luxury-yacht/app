@@ -132,7 +132,7 @@ textarea,
   text-align: center;
   padding: 2rem;
   color: var(--color-text-secondary);
-  background-color: color-mix(in srgb, var(--color-bg) 80%, transparent);
+  background-color: var(--color-bg);
   z-index: 2;
 }
 
