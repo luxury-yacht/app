@@ -25,17 +25,16 @@ export const ClusterSelectionOverlay = ({
       Open Cluster.
     </>
   );
-  if (discoveryState === 'search_paths_missing') {
+  const kubeconfigDiscoveryMessage =
+    discoveryState === 'search_paths_missing'
+      ? 'None of the configured search paths exist.'
+      : discoveryState === 'no_kubeconfigs'
+        ? 'No kubeconfig files were found in the configured search paths.'
+        : null;
+  if (kubeconfigDiscoveryMessage) {
     message = (
       <>
-        None of the configured kubeconfig search paths exist. Add a directory in Settings →
-        Kubeconfigs.
-      </>
-    );
-  } else if (discoveryState === 'no_kubeconfigs') {
-    message = (
-      <>
-        <div>⚠️ No kubeconfig files were found in the configured search paths.</div>
+        <div>⚠️ {kubeconfigDiscoveryMessage}</div>
         <ul className="no-active-clusters-paths">
           {searchPaths.map((path) => (
             <li key={path}>

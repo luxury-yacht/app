@@ -138,16 +138,19 @@ textarea,
 
 .no-active-clusters-message {
   font-size: 1rem;
-  max-width: 520px;
+  max-width: 600px;
   line-height: 1.5;
+  text-align: left;
+  border: 1px solid var(--color-border);
+  border-radius: 8px;
+  padding: 1.5rem;
 }
 
 .no-active-clusters-paths {
   display: grid;
-  margin: 1rem;
-  padding: 0;
+  margin: 1rem 0;
+  /* padding: 0; */
   list-style: none;
-  text-align: left;
   overflow-wrap: anywhere;
 }
 

@@ -7,20 +7,32 @@ it('explains when no configured kubeconfig search paths exist', () => {
   const container = document.createElement('div');
   document.body.appendChild(container);
   const root = ReactDOM.createRoot(container);
+  const onOpenKubeconfigSettings = vi.fn();
 
   act(() => {
     root.render(
       <ClusterSelectionOverlay
         phase="empty"
         discoveryState="search_paths_missing"
-        searchPaths={[]}
-        onOpenKubeconfigSettings={vi.fn()}
+        searchPaths={['/Users/john/.kube', '/etc/kubernetes']}
+        onOpenKubeconfigSettings={onOpenKubeconfigSettings}
       />
     );
   });
 
-  expect(container.textContent).toContain('None of the configured kubeconfig search paths exist.');
-  expect(container.textContent).toContain('Settings → Kubeconfigs');
+  expect(container.textContent).toContain('None of the configured search paths exist.');
+  expect(container.textContent).toContain('/Users/john/.kube');
+  expect(container.textContent).toContain('/etc/kubernetes');
+  expect(container.textContent).toContain(
+    'Go to Settings -> Kubeconfigs to modify the list of search paths.'
+  );
+
+  const settingsLink = container.querySelector<HTMLButtonElement>(
+    '.no-active-clusters-settings-link'
+  );
+  expect(settingsLink?.textContent).toBe('Settings -> Kubeconfigs');
+  act(() => settingsLink?.click());
+  expect(onOpenKubeconfigSettings).toHaveBeenCalledOnce();
 
   act(() => root.unmount());
   container.remove();

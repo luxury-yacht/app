@@ -214,6 +214,7 @@ describe('KubeconfigContext', () => {
     const { getContext, unmount } = await renderProvider();
 
     expect(getContext().kubeconfigDiscoveryState).toBe('search_paths_missing');
+    expect(getContext().kubeconfigSearchPaths).toEqual(['~/.kube']);
     expect(errorHandlerHandleMock).not.toHaveBeenCalled();
 
     unmount();
