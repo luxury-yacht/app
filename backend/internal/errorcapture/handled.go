@@ -9,9 +9,11 @@ type telemetryHandledError struct {
 	err error
 }
 
-func (e telemetryHandledError) Error() string   { return e.err.Error() }
-func (e telemetryHandledError) Unwrap() error   { return e.err }
-func (telemetryHandledError) telemetryHandled() {}
+func (e telemetryHandledError) Error() string { return e.err.Error() }
+func (e telemetryHandledError) Unwrap() error { return e.err }
+func (telemetryHandledError) telemetryHandled() {
+	// This method is intentionally behaviorless; its presence is the marker.
+}
 
 type telemetryHandled interface {
 	error

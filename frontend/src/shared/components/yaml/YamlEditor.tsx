@@ -232,7 +232,7 @@ const YamlEditor = ({
     items: ContextMenuItem[];
   } | null>(null);
   const [isDarkMode, setIsDarkMode] = useState(
-    () => document.documentElement.getAttribute('data-appearance-mode') === 'dark'
+    () => document.documentElement.dataset.appearanceMode === 'dark'
   );
 
   const editorRef = useRef<ReactCodeMirrorRef>(null);
@@ -243,7 +243,7 @@ const YamlEditor = ({
 
   useEffect(() => {
     const checkAppearanceMode = () => {
-      setIsDarkMode(document.documentElement.getAttribute('data-appearance-mode') === 'dark');
+      setIsDarkMode(document.documentElement.dataset.appearanceMode === 'dark');
     };
 
     const observer = new MutationObserver(checkAppearanceMode);

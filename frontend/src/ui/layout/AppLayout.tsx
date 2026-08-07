@@ -469,7 +469,7 @@ const getFocusableLabel = (element: HTMLElement) =>
 
 const describePathSegment = (element: HTMLElement) => {
   const tag = element.tagName.toLowerCase();
-  const dataFocusArea = element.getAttribute('data-focus-area');
+  const dataFocusArea = element.dataset.focusArea;
   if (dataFocusArea) {
     return `${tag}[data-focus-area="${dataFocusArea}"]`;
   }

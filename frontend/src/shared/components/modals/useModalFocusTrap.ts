@@ -30,7 +30,7 @@ const isOwnedFocusPortalTarget = (root: HTMLElement, target: EventTarget | null)
   }
 
   const portal = target.closest<HTMLElement>('[data-focus-portal-owner]');
-  const ownerId = portal?.getAttribute('data-focus-portal-owner');
+  const ownerId = portal?.dataset.focusPortalOwner;
   if (!ownerId) {
     return false;
   }
@@ -159,7 +159,7 @@ export const useModalFocusTrap = ({
     }
     const items = getFocusableItems();
     const target =
-      items.find((item) => item.hasAttribute('data-modal-initial-focus')) ?? items[0] ?? root;
+      items.find((item) => item.dataset.modalInitialFocus !== undefined) ?? items[0] ?? root;
     target.focus();
     return true;
   }, [getFocusableItems, ref]);

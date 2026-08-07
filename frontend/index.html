@@ -46,7 +46,7 @@
               : 'light';
         }
 
-        document.documentElement.setAttribute('data-appearance-mode', mode);
+        document.documentElement.dataset.appearanceMode = mode;
         document.documentElement.className = mode;
 
         try {

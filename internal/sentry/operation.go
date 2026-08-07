@@ -54,6 +54,8 @@ const (
 	operationKindKubernetesCapabilityBatch
 )
 
+const kubernetesCapabilityBatchTelemetryType = "kubernetes.capability_batch"
+
 // Operation is opaque outside this package so telemetry producers cannot add
 // unreviewed fields. Constructors below are the only way to create one.
 type Operation struct {
@@ -161,7 +163,7 @@ func (o Operation) telemetryContext() map[string]any {
 		result["type"] = "kubernetes.request"
 		return result
 	case operationKindKubernetesCapabilityBatch:
-		result := map[string]any{"type": "kubernetes.capability_batch"}
+		result := map[string]any{"type": kubernetesCapabilityBatchTelemetryType}
 		if o.failureCount > 0 {
 			result["failure_count"] = o.failureCount
 		}
@@ -224,7 +226,7 @@ func operationTelemetryCheckMaps(value any) []map[string]any {
 }
 
 func sanitizeCapabilityBatchTelemetryContext(values map[string]any) map[string]any {
-	result := map[string]any{"type": "kubernetes.capability_batch"}
+	result := map[string]any{"type": kubernetesCapabilityBatchTelemetryType}
 	if failureCount, ok := positiveOperationTelemetryInt(values, "failure_count"); ok {
 		result["failure_count"] = failureCount
 	}
@@ -255,7 +257,7 @@ func sanitizeOperationTelemetryContext(value any) map[string]any {
 	switch operationTelemetryString(values, "type") {
 	case "kubernetes.request":
 		return sanitizeKubernetesRequestTelemetryContext(values)
-	case "kubernetes.capability_batch":
+	case kubernetesCapabilityBatchTelemetryType:
 		return sanitizeCapabilityBatchTelemetryContext(values)
 	default:
 		return nil

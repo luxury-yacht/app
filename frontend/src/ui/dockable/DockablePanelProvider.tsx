@@ -145,7 +145,7 @@ function focusDockableTab(panelId: string): void {
 
   const tab = Array.from(
     document.querySelectorAll<HTMLElement>('[role="tab"][data-panel-id]')
-  ).find((element) => element.getAttribute('data-panel-id') === panelId);
+  ).find((element) => element.dataset.panelId === panelId);
   tab?.focus();
 }
 

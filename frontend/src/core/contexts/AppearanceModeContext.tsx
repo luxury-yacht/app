@@ -28,7 +28,7 @@ const detectSystemAppearanceMode = (): ResolvedAppearanceMode => {
 };
 
 const getInitialResolvedMode = (): ResolvedAppearanceMode => {
-  const attr = document.documentElement.getAttribute('data-appearance-mode');
+  const attr = document.documentElement.dataset.appearanceMode;
   return attr === 'dark' ? 'dark' : 'light';
 };
 
@@ -50,7 +50,7 @@ export const AppearanceModeProvider: React.FC<AppearanceModeProviderProps> = ({ 
   const [resolvedMode, setResolvedMode] = useState<ResolvedAppearanceMode>(getInitialResolvedMode);
 
   const applyResolvedMode = useCallback((next: ResolvedAppearanceMode) => {
-    document.documentElement.setAttribute('data-appearance-mode', next);
+    document.documentElement.dataset.appearanceMode = next;
     document.documentElement.className = next;
     setResolvedMode((prev) => {
       if (prev !== next) {

@@ -50,7 +50,7 @@ import { useConnectionStatusListener, useWailsRuntimeEvents } from '@/hooks/useW
 
 // Resolve the current active appearance mode from the document attribute.
 const resolveAppearanceMode = (): 'light' | 'dark' => {
-  const attr = document.documentElement.getAttribute('data-appearance-mode');
+  const attr = document.documentElement.dataset.appearanceMode;
   return attr === 'dark' ? 'dark' : 'light';
 };
 

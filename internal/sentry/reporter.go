@@ -277,12 +277,20 @@ func (disabledReporter) Enabled() bool {
 	return false
 }
 
-func (disabledReporter) SetEnabled(bool) error           { return nil }
-func (disabledReporter) CaptureException(error, Context) {}
-func (disabledReporter) CaptureLogError(string, Context) {}
-func (disabledReporter) CapturePanic(any, Context)       {}
-func (disabledReporter) AddBreadcrumb(Breadcrumb)        {}
-func (disabledReporter) Shutdown(time.Duration) bool     { return true }
+func (disabledReporter) SetEnabled(bool) error { return nil }
+func (disabledReporter) CaptureException(error, Context) {
+	// A disabled reporter intentionally discards captured exceptions.
+}
+func (disabledReporter) CaptureLogError(string, Context) {
+	// A disabled reporter intentionally discards captured log errors.
+}
+func (disabledReporter) CapturePanic(any, Context) {
+	// A disabled reporter intentionally discards captured panics.
+}
+func (disabledReporter) AddBreadcrumb(Breadcrumb) {
+	// A disabled reporter intentionally discards breadcrumbs.
+}
+func (disabledReporter) Shutdown(time.Duration) bool { return true }
 
 type sentryReporter struct {
 	mu               sync.RWMutex
