@@ -6,11 +6,13 @@ import type { ClusterSelectionPhase } from './clusterSelectionPhase';
 interface ClusterSelectionOverlayProps {
   phase: ClusterSelectionPhase;
   discoveryState: KubeconfigDiscoveryState;
+  searchPaths: string[];
 }
 
 export const ClusterSelectionOverlay = ({
   phase,
   discoveryState,
+  searchPaths,
 }: ClusterSelectionOverlayProps) => {
   if (phase !== 'empty') {
     return null;
@@ -29,7 +31,18 @@ export const ClusterSelectionOverlay = ({
       </>
     );
   } else if (discoveryState === 'no_kubeconfigs') {
-    message = <>No kubeconfig files were found in the configured search paths.</>;
+    message = (
+      <>
+        <div>No kubeconfig files were found in the configured search paths.</div>
+        <ul className="no-active-clusters-paths">
+          {searchPaths.map((path) => (
+            <li key={path}>
+              <code>{path}</code>
+            </li>
+          ))}
+        </ul>
+      </>
+    );
   }
   return (
     <div className="no-active-clusters-overlay" role="status">

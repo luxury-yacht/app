@@ -937,6 +937,7 @@ export namespace backend {
 	export class KubeconfigDiscoveryResult {
 	    kubeconfigs: types.KubeconfigInfo[];
 	    state: string;
+	    searchPaths: string[];
 	
 	    static createFrom(source: any = {}) {
 	        return new KubeconfigDiscoveryResult(source);
@@ -946,6 +947,7 @@ export namespace backend {
 	        if ('string' === typeof source) source = JSON.parse(source);
 	        this.kubeconfigs = this.convertValues(source["kubeconfigs"], types.KubeconfigInfo);
 	        this.state = source["state"];
+	        this.searchPaths = source["searchPaths"];
 	    }
 	
 		convertValues(a: any, classs: any, asMap: boolean = false): any {

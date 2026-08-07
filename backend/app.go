@@ -27,6 +27,7 @@ type App struct {
 	Ctx                      context.Context
 	selectedKubeconfigs      []string
 	availableKubeconfigs     []KubeconfigInfo
+	kubeconfigSearchPaths    []string
 	kubeconfigDiscoveryState KubeconfigDiscoveryState
 	windowSettings           *WindowSettings
 	appSettings              *AppSettings
@@ -96,7 +97,7 @@ type App struct {
 	// persistenceMu guards persistence.json read/write operations.
 	persistenceMu sync.Mutex
 
-	// kubeconfigsMu guards kubeconfig discovery state and selected kubeconfig reads/writes.
+	// kubeconfigsMu guards kubeconfig discovery data and selected kubeconfig reads/writes.
 	kubeconfigsMu sync.RWMutex
 	// selectionMutationMu serializes coordinated cluster runtime mutations.
 	// This preserves sequential behavior while allowing kubeconfigChangeMu to stay

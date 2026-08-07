@@ -82,6 +82,7 @@ const installMockKubeconfigs = () => {
         },
       ],
       state: 'available',
+      searchPaths: ['~/.kube'],
     });
   overrides.GetClusterWorkspaceState = () =>
     Promise.resolve({

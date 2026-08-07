@@ -49,6 +49,7 @@ const resolveKubeconfigDiscoveryState = (
 interface KubeconfigContextType {
   kubeconfigs: types.KubeconfigInfo[];
   kubeconfigDiscoveryState: KubeconfigDiscoveryState;
+  kubeconfigSearchPaths: string[];
   selectedKubeconfigs: string[];
   selectedKubeconfig: string;
   selectedClusterId: string;
@@ -205,6 +206,7 @@ export const KubeconfigProvider: React.FC<KubeconfigProviderProps> = ({ children
   const [kubeconfigs, setKubeconfigs] = useState<types.KubeconfigInfo[]>([]);
   const [kubeconfigDiscoveryState, setKubeconfigDiscoveryState] =
     useState<KubeconfigDiscoveryState>('available');
+  const [kubeconfigSearchPaths, setKubeconfigSearchPaths] = useState<string[]>([]);
   const [selectedKubeconfigs, setSelectedKubeconfigsState] = useState<string[]>([]);
   const [selectedKubeconfig, setSelectedKubeconfigState] = useState<string>('');
   const [committedSelectedKubeconfigs, setCommittedSelectedKubeconfigs] = useState<string[]>([]);
@@ -369,6 +371,7 @@ export const KubeconfigProvider: React.FC<KubeconfigProviderProps> = ({ children
         const configs = discovery.kubeconfigs || [];
         setKubeconfigs(configs);
         setKubeconfigDiscoveryState(resolveKubeconfigDiscoveryState(discovery.state, configs));
+        setKubeconfigSearchPaths(discovery.searchPaths || []);
         // Set the selection from the backend
         const normalizedSelection = normalizeSelections(
           currentSelection?.selectedKubeconfigs || []
@@ -685,6 +688,7 @@ export const KubeconfigProvider: React.FC<KubeconfigProviderProps> = ({ children
     () => ({
       kubeconfigs,
       kubeconfigDiscoveryState,
+      kubeconfigSearchPaths,
       selectedKubeconfigs,
       selectedKubeconfig,
       // Cluster-scoped UI follows the selected tab immediately; refresh context
@@ -703,6 +707,7 @@ export const KubeconfigProvider: React.FC<KubeconfigProviderProps> = ({ children
     [
       kubeconfigs,
       kubeconfigDiscoveryState,
+      kubeconfigSearchPaths,
       selectedKubeconfigs,
       selectedKubeconfig,
       selectedClusterMeta.id,

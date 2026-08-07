@@ -29,7 +29,8 @@ const runtimeProxy = new Proxy(
 // Pre-seed overrides for layout providers that mount immediately.
 // Individual stories can add more overrides in their decorators.
 window.__storybookGoOverrides = {
-  GetKubeconfigs: () => Promise.resolve({ kubeconfigs: [], state: 'no_kubeconfigs' }),
+  GetKubeconfigs: () =>
+    Promise.resolve({ kubeconfigs: [], state: 'no_kubeconfigs', searchPaths: ['~/.kube'] }),
   GetSelectedKubeconfigs: () => Promise.resolve([]),
   SetSelectedKubeconfigs: () => Promise.resolve(),
   SetSidebarVisible: () => Promise.resolve(),

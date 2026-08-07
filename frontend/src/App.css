@@ -142,6 +142,16 @@ textarea,
   line-height: 1.5;
 }
 
+.no-active-clusters-paths {
+  display: grid;
+  gap: 0.15rem;
+  margin: 0.75rem 0 0;
+  padding: 0;
+  list-style: none;
+  text-align: left;
+  overflow-wrap: anywhere;
+}
+
 .content h2 {
   font-size: var(--font-size-title);
   margin-top: 0;

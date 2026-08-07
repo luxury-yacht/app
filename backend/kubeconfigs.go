@@ -29,6 +29,7 @@ const (
 type KubeconfigDiscoveryResult struct {
 	Kubeconfigs []KubeconfigInfo         `json:"kubeconfigs"`
 	State       KubeconfigDiscoveryState `json:"state"`
+	SearchPaths []string                 `json:"searchPaths"`
 }
 
 type kubeconfigWatchDirectory struct {
@@ -53,6 +54,7 @@ func (a *App) discoverKubeconfigs() error {
 func (a *App) discoverKubeconfigsLocked() error {
 	a.logger.Debug("Starting kubeconfig discovery", logsources.KubeconfigManager)
 	a.availableKubeconfigs = []KubeconfigInfo{}
+	a.kubeconfigSearchPaths = []string{}
 	a.kubeconfigDiscoveryState = KubeconfigDiscoveryStateNoKubeconfigs
 
 	searchPaths, err := a.loadKubeconfigSearchPaths()
@@ -60,6 +62,7 @@ func (a *App) discoverKubeconfigsLocked() error {
 		a.logger.ErrorWithCause(err, "Failed to load kubeconfig search paths", logsources.KubeconfigManager)
 		return err
 	}
+	a.kubeconfigSearchPaths = append([]string(nil), searchPaths...)
 	if len(searchPaths) == 0 {
 		a.logger.Warn("No kubeconfig search paths configured", logsources.KubeconfigManager)
 		a.kubeconfigDiscoveryState = KubeconfigDiscoveryStateSearchPathsMissing
@@ -382,6 +385,7 @@ func (a *App) GetKubeconfigs() (KubeconfigDiscoveryResult, error) {
 		result := KubeconfigDiscoveryResult{
 			Kubeconfigs: append([]KubeconfigInfo(nil), a.availableKubeconfigs...),
 			State:       KubeconfigDiscoveryStateAvailable,
+			SearchPaths: append([]string(nil), a.kubeconfigSearchPaths...),
 		}
 		a.kubeconfigsMu.RUnlock()
 		return result, nil
@@ -397,6 +401,7 @@ func (a *App) GetKubeconfigs() (KubeconfigDiscoveryResult, error) {
 	return KubeconfigDiscoveryResult{
 		Kubeconfigs: append([]KubeconfigInfo(nil), a.availableKubeconfigs...),
 		State:       a.kubeconfigDiscoveryState,
+		SearchPaths: append([]string(nil), a.kubeconfigSearchPaths...),
 	}, nil
 }
 

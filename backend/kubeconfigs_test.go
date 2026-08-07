@@ -301,6 +301,7 @@ func TestApp_GetKubeconfigsReportsEmptySearchPathsAsNoKubeconfigs(t *testing.T) 
 	require.NoError(t, err)
 	assert.Empty(t, result.Kubeconfigs)
 	assert.Equal(t, KubeconfigDiscoveryStateNoKubeconfigs, result.State)
+	assert.Equal(t, []string{"~/.kube"}, result.SearchPaths)
 }
 
 func TestNormalizeKubeconfigSearchPathsDedupesResolvedPaths(t *testing.T) {

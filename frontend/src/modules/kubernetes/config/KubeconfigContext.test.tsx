@@ -93,6 +93,7 @@ const flushPromises = () => new Promise((resolve) => setTimeout(resolve, 0));
 const kubeconfigDiscoveryResult = (kubeconfigs: types.KubeconfigInfo[]) => ({
   kubeconfigs,
   state: kubeconfigs.length > 0 ? 'available' : 'no_kubeconfigs',
+  searchPaths: [],
 });
 
 const renderProvider = async () => {
@@ -206,6 +207,7 @@ describe('KubeconfigContext', () => {
     getKubeconfigsMock.mockResolvedValue({
       kubeconfigs: [],
       state: 'search_paths_missing',
+      searchPaths: ['~/.kube'],
     });
     getSelectedKubeconfigsMock.mockResolvedValue([]);
 
@@ -218,12 +220,17 @@ describe('KubeconfigContext', () => {
   });
 
   it('exposes an empty kubeconfig scan without reporting an application error', async () => {
-    getKubeconfigsMock.mockResolvedValue(kubeconfigDiscoveryResult([]));
+    getKubeconfigsMock.mockResolvedValue({
+      kubeconfigs: [],
+      state: 'no_kubeconfigs',
+      searchPaths: ['~/.kube', '/etc/kubernetes'],
+    });
     getSelectedKubeconfigsMock.mockResolvedValue([]);
 
     const { getContext, unmount } = await renderProvider();
 
     expect(getContext().kubeconfigDiscoveryState).toBe('no_kubeconfigs');
+    expect(getContext().kubeconfigSearchPaths).toEqual(['~/.kube', '/etc/kubernetes']);
     expect(errorHandlerHandleMock).not.toHaveBeenCalled();
 
     unmount();

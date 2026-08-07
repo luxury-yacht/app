@@ -40,7 +40,8 @@ export function setMockSettingsBackend(options: SettingsMockOptions = {}): void 
   overrides.SetKubeconfigSearchPaths = () => Promise.resolve();
   overrides.OpenKubeconfigSearchPathDialog = () => Promise.resolve('');
   // Stub kubeconfig list calls used by KubeconfigProvider.
-  overrides.GetKubeconfigs = () => Promise.resolve({ kubeconfigs: [], state: 'no_kubeconfigs' });
+  overrides.GetKubeconfigs = () =>
+    Promise.resolve({ kubeconfigs: [], state: 'no_kubeconfigs', searchPaths: ['~/.kube'] });
   overrides.GetSelectedKubeconfigs = () => Promise.resolve([]);
   overrides.SetSelectedKubeconfigs = () => Promise.resolve();
 }

@@ -345,6 +345,7 @@ export const AppLayout: React.FC = () => {
         <ClusterSelectionOverlay
           phase={clusterSelectionPhase}
           discoveryState={kubeconfig.kubeconfigDiscoveryState}
+          searchPaths={kubeconfig.kubeconfigSearchPaths}
         />
         <ActiveClusterAuthOverlay
           hasActiveClusters={hasActiveClusters}
