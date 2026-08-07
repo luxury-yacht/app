@@ -141,7 +141,7 @@ func TestApp_discoverKubeconfigs(t *testing.T) {
 				tempDir := t.TempDir()
 				return tempDir, func() {}
 			},
-			expectError: true,
+			expectError: false,
 			expectedLen: 0,
 		},
 		{
@@ -248,16 +248,59 @@ func TestApp_GetKubeconfigs(t *testing.T) {
 	app := NewApp()
 
 	// Test that GetKubeconfigs discovers configs if not already done
-	configs, err := app.GetKubeconfigs()
+	result, err := app.GetKubeconfigs()
 	assert.NoError(t, err)
+	configs := result.Kubeconfigs
 	assert.Len(t, configs, 1)
 	assert.Equal(t, "config", configs[0].Name)
 	assert.True(t, configs[0].IsDefault)
 
 	// Test that subsequent calls return cached results
-	configs2, err := app.GetKubeconfigs()
+	result2, err := app.GetKubeconfigs()
 	assert.NoError(t, err)
-	assert.Equal(t, configs, configs2)
+	assert.Equal(t, result, result2)
+}
+
+func TestApp_GetKubeconfigsReportsMissingSearchPathsAsEmptyState(t *testing.T) {
+	setTestConfigEnv(t)
+	homeDir := t.TempDir()
+	t.Setenv("HOME", homeDir)
+
+	app := NewApp()
+	result, err := app.GetKubeconfigs()
+
+	require.NoError(t, err)
+	assert.Empty(t, result.Kubeconfigs)
+	assert.Equal(t, KubeconfigDiscoveryStateSearchPathsMissing, result.State)
+}
+
+func TestApp_GetKubeconfigsReportsNoConfiguredSearchPathsAsEmptyState(t *testing.T) {
+	setTestConfigEnv(t)
+	app := NewApp()
+	settings, err := app.loadSettingsFile()
+	require.NoError(t, err)
+	settings.Kubeconfig.SearchPaths = []string{}
+	require.NoError(t, app.saveSettingsFile(settings))
+
+	result, err := app.GetKubeconfigs()
+
+	require.NoError(t, err)
+	assert.Empty(t, result.Kubeconfigs)
+	assert.Equal(t, KubeconfigDiscoveryStateSearchPathsMissing, result.State)
+}
+
+func TestApp_GetKubeconfigsReportsEmptySearchPathsAsNoKubeconfigs(t *testing.T) {
+	setTestConfigEnv(t)
+	homeDir := t.TempDir()
+	require.NoError(t, os.Mkdir(filepath.Join(homeDir, ".kube"), 0o755))
+	t.Setenv("HOME", homeDir)
+
+	app := NewApp()
+	result, err := app.GetKubeconfigs()
+
+	require.NoError(t, err)
+	assert.Empty(t, result.Kubeconfigs)
+	assert.Equal(t, KubeconfigDiscoveryStateNoKubeconfigs, result.State)
 }
 
 func TestNormalizeKubeconfigSearchPathsDedupesResolvedPaths(t *testing.T) {

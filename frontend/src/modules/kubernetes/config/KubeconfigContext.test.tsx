@@ -22,6 +22,7 @@ const {
   getSelectedKubeconfigsMock,
   setSelectedKubeconfigsMock,
   setVisibleClusterMock,
+  errorHandlerHandleMock,
   workspaceState,
   mocks,
 } = vi.hoisted(() => ({
@@ -29,6 +30,7 @@ const {
   getSelectedKubeconfigsMock: vi.fn(),
   setSelectedKubeconfigsMock: vi.fn(),
   setVisibleClusterMock: vi.fn(),
+  errorHandlerHandleMock: vi.fn(),
   workspaceState: { selections: [] as string[], visibleClusterId: '' },
   mocks: {
     refreshOrchestrator: {
@@ -78,7 +80,7 @@ vi.mock('@/core/refresh', () => ({
 }));
 
 vi.mock('@utils/errorHandler', () => ({
-  errorHandler: { handle: vi.fn() },
+  errorHandler: { handle: errorHandlerHandleMock },
 }));
 
 vi.mock('@shared/components/tables/persistence/gridTablePersistenceGC', () => ({
@@ -87,6 +89,11 @@ vi.mock('@shared/components/tables/persistence/gridTablePersistenceGC', () => ({
 }));
 
 const flushPromises = () => new Promise((resolve) => setTimeout(resolve, 0));
+
+const kubeconfigDiscoveryResult = (kubeconfigs: types.KubeconfigInfo[]) => ({
+  kubeconfigs,
+  state: kubeconfigs.length > 0 ? 'available' : 'no_kubeconfigs',
+});
 
 const renderProvider = async () => {
   const container = document.createElement('div');
@@ -135,6 +142,7 @@ describe('KubeconfigContext', () => {
     setSelectedKubeconfigsMock.mockResolvedValue(undefined);
     setVisibleClusterMock.mockReset();
     setVisibleClusterMock.mockResolvedValue(undefined);
+    errorHandlerHandleMock.mockReset();
     workspaceState.selections = [];
     workspaceState.visibleClusterId = '';
     mocks.backgroundRefreshState.enabled = true;
@@ -147,10 +155,11 @@ describe('KubeconfigContext', () => {
   });
 
   it('reports the initial cluster selection as loading before hydration settles', async () => {
-    let resolveKubeconfigs: (configs: types.KubeconfigInfo[]) => void = () => undefined;
+    let resolveKubeconfigs: (result: ReturnType<typeof kubeconfigDiscoveryResult>) => void = () =>
+      undefined;
     let resolveSelectedKubeconfigs: (selections: string[]) => void = () => undefined;
     getKubeconfigsMock.mockReturnValue(
-      new Promise<types.KubeconfigInfo[]>((resolve) => {
+      new Promise<ReturnType<typeof kubeconfigDiscoveryResult>>((resolve) => {
         resolveKubeconfigs = resolve;
       })
     );
@@ -181,7 +190,7 @@ describe('KubeconfigContext', () => {
     const initialLoadingState = observedLoadingStates[0];
 
     await act(async () => {
-      resolveKubeconfigs([]);
+      resolveKubeconfigs(kubeconfigDiscoveryResult([]));
       resolveSelectedKubeconfigs([]);
       await flushPromises();
     });
@@ -191,6 +200,33 @@ describe('KubeconfigContext', () => {
     });
 
     expect(initialLoadingState).toBe(true);
+  });
+
+  it('exposes missing search paths as a non-error discovery state', async () => {
+    getKubeconfigsMock.mockResolvedValue({
+      kubeconfigs: [],
+      state: 'search_paths_missing',
+    });
+    getSelectedKubeconfigsMock.mockResolvedValue([]);
+
+    const { getContext, unmount } = await renderProvider();
+
+    expect(getContext().kubeconfigDiscoveryState).toBe('search_paths_missing');
+    expect(errorHandlerHandleMock).not.toHaveBeenCalled();
+
+    unmount();
+  });
+
+  it('exposes an empty kubeconfig scan without reporting an application error', async () => {
+    getKubeconfigsMock.mockResolvedValue(kubeconfigDiscoveryResult([]));
+    getSelectedKubeconfigsMock.mockResolvedValue([]);
+
+    const { getContext, unmount } = await renderProvider();
+
+    expect(getContext().kubeconfigDiscoveryState).toBe('no_kubeconfigs');
+    expect(errorHandlerHandleMock).not.toHaveBeenCalled();
+
+    unmount();
   });
 
   it('syncs refresh context with all selected clusters when background refresh is enabled', async () => {
@@ -214,7 +250,7 @@ describe('KubeconfigContext', () => {
         invalidReason: '',
       },
     ];
-    getKubeconfigsMock.mockResolvedValue(kubeconfigs);
+    getKubeconfigsMock.mockResolvedValue(kubeconfigDiscoveryResult(kubeconfigs));
     getSelectedKubeconfigsMock.mockResolvedValue(['/kube/alpha:dev', '/kube/beta:prod']);
 
     const { unmount } = await renderProvider();
@@ -252,7 +288,7 @@ describe('KubeconfigContext', () => {
         invalidReason: '',
       },
     ];
-    getKubeconfigsMock.mockResolvedValue(kubeconfigs);
+    getKubeconfigsMock.mockResolvedValue(kubeconfigDiscoveryResult(kubeconfigs));
     getSelectedKubeconfigsMock.mockResolvedValue(['/kube/alpha:dev', '/kube/beta:prod']);
 
     const { unmount } = await renderProvider();
@@ -289,7 +325,7 @@ describe('KubeconfigContext', () => {
         invalidReason: '',
       },
     ];
-    getKubeconfigsMock.mockResolvedValue(kubeconfigs);
+    getKubeconfigsMock.mockResolvedValue(kubeconfigDiscoveryResult(kubeconfigs));
     getSelectedKubeconfigsMock.mockResolvedValue(['/kube/alpha:dev', '/kube/beta:prod']);
 
     const { getContext, unmount } = await renderProvider();
@@ -330,7 +366,7 @@ describe('KubeconfigContext', () => {
         invalidReason: '',
       },
     ];
-    getKubeconfigsMock.mockResolvedValue(kubeconfigs);
+    getKubeconfigsMock.mockResolvedValue(kubeconfigDiscoveryResult(kubeconfigs));
     getSelectedKubeconfigsMock.mockResolvedValue(['/kube/alpha:dev', '/kube/beta:prod']);
 
     const { getContext, unmount } = await renderProvider();
@@ -402,7 +438,7 @@ describe('KubeconfigContext', () => {
         invalidReason: '',
       },
     ];
-    getKubeconfigsMock.mockResolvedValue(kubeconfigs);
+    getKubeconfigsMock.mockResolvedValue(kubeconfigDiscoveryResult(kubeconfigs));
     getSelectedKubeconfigsMock.mockResolvedValue(['/kube/alpha:dev', '/kube/beta:prod']);
 
     const { getContext, unmount } = await renderProvider();
@@ -451,7 +487,7 @@ describe('KubeconfigContext', () => {
         invalidReason: '',
       },
     ];
-    getKubeconfigsMock.mockResolvedValue(kubeconfigs);
+    getKubeconfigsMock.mockResolvedValue(kubeconfigDiscoveryResult(kubeconfigs));
     getSelectedKubeconfigsMock.mockResolvedValue([]);
     setSelectedKubeconfigsMock.mockResolvedValue(undefined);
 
@@ -484,7 +520,7 @@ describe('KubeconfigContext', () => {
         invalidReason: '',
       },
     ];
-    getKubeconfigsMock.mockResolvedValue(kubeconfigs);
+    getKubeconfigsMock.mockResolvedValue(kubeconfigDiscoveryResult(kubeconfigs));
     getSelectedKubeconfigsMock.mockResolvedValue([]);
     setSelectedKubeconfigsMock.mockResolvedValue(undefined);
 
@@ -514,7 +550,7 @@ describe('KubeconfigContext', () => {
         invalidReason: '',
       },
     ];
-    getKubeconfigsMock.mockResolvedValue(kubeconfigs);
+    getKubeconfigsMock.mockResolvedValue(kubeconfigDiscoveryResult(kubeconfigs));
     getSelectedKubeconfigsMock.mockResolvedValue(['/kube/alpha:dev']);
     setSelectedKubeconfigsMock.mockResolvedValue(undefined);
 
@@ -573,7 +609,7 @@ describe('KubeconfigContext', () => {
         invalidReason: '',
       },
     ];
-    getKubeconfigsMock.mockResolvedValue(kubeconfigs);
+    getKubeconfigsMock.mockResolvedValue(kubeconfigDiscoveryResult(kubeconfigs));
     getSelectedKubeconfigsMock.mockResolvedValue(['/kube/alpha:dev']);
 
     let resolveFirst!: () => void;
@@ -634,7 +670,7 @@ describe('KubeconfigContext', () => {
         invalidReason: '',
       },
     ];
-    getKubeconfigsMock.mockResolvedValue(kubeconfigs);
+    getKubeconfigsMock.mockResolvedValue(kubeconfigDiscoveryResult(kubeconfigs));
     getSelectedKubeconfigsMock.mockResolvedValue(['/kube/alpha:dev']);
 
     let resolveSelection!: () => void;
@@ -712,7 +748,7 @@ describe('KubeconfigContext', () => {
         invalidReason: '',
       },
     ];
-    getKubeconfigsMock.mockResolvedValue(kubeconfigs);
+    getKubeconfigsMock.mockResolvedValue(kubeconfigDiscoveryResult(kubeconfigs));
     getSelectedKubeconfigsMock.mockResolvedValue(['/kube/alpha:dev', '/kube/beta:prod']);
 
     let resolveSelection!: () => void;
@@ -797,7 +833,7 @@ describe('KubeconfigContext', () => {
         invalidReason: '',
       },
     ];
-    getKubeconfigsMock.mockResolvedValue(kubeconfigs);
+    getKubeconfigsMock.mockResolvedValue(kubeconfigDiscoveryResult(kubeconfigs));
     getSelectedKubeconfigsMock.mockResolvedValue([
       '/kube/alpha:dev',
       '/kube/beta:prod',
@@ -851,7 +887,7 @@ describe('KubeconfigContext', () => {
         invalidReason: '',
       },
     ];
-    getKubeconfigsMock.mockResolvedValue(kubeconfigs);
+    getKubeconfigsMock.mockResolvedValue(kubeconfigDiscoveryResult(kubeconfigs));
     getSelectedKubeconfigsMock.mockResolvedValue([
       '/kube/alpha:dev',
       '/kube/beta:prod',
@@ -896,7 +932,7 @@ describe('KubeconfigContext', () => {
         invalidReason: '',
       },
     ];
-    getKubeconfigsMock.mockResolvedValue(kubeconfigs);
+    getKubeconfigsMock.mockResolvedValue(kubeconfigDiscoveryResult(kubeconfigs));
     getSelectedKubeconfigsMock.mockResolvedValue(['/kube/beta:prod']);
 
     const { getContext, unmount } = await renderProvider();
@@ -946,7 +982,7 @@ describe('KubeconfigContext', () => {
         invalidReason: '',
       },
     ];
-    getKubeconfigsMock.mockResolvedValue(kubeconfigs);
+    getKubeconfigsMock.mockResolvedValue(kubeconfigDiscoveryResult(kubeconfigs));
     getSelectedKubeconfigsMock.mockResolvedValue([
       '/kube/alpha:dev',
       '/kube/beta:prod',
@@ -1001,7 +1037,7 @@ describe('KubeconfigContext', () => {
         invalidReason: '',
       },
     ];
-    getKubeconfigsMock.mockResolvedValue(kubeconfigs);
+    getKubeconfigsMock.mockResolvedValue(kubeconfigDiscoveryResult(kubeconfigs));
     getSelectedKubeconfigsMock.mockResolvedValue([
       '/kube/alpha:dev',
       '/kube/beta:prod',
@@ -1060,7 +1096,7 @@ describe('KubeconfigContext', () => {
         invalidReason: '',
       },
     ];
-    getKubeconfigsMock.mockResolvedValue(kubeconfigs);
+    getKubeconfigsMock.mockResolvedValue(kubeconfigDiscoveryResult(kubeconfigs));
     getSelectedKubeconfigsMock.mockResolvedValue([
       'C\\\\Users\\\\John\\\\.kube\\\\default:minikube',
     ]);

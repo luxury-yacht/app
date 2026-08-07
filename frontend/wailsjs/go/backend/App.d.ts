@@ -173,7 +173,7 @@ export function GetJob(arg1:string,arg2:string,arg3:string):Promise<job.JobDetai
 
 export function GetKubeconfigSearchPaths():Promise<Array<string>>;
 
-export function GetKubeconfigs():Promise<Array<types.KubeconfigInfo>>;
+export function GetKubeconfigs():Promise<backend.KubeconfigDiscoveryResult>;
 
 export function GetKubernetesAPIClientDiagnostics():Promise<Array<backend.KubernetesAPIClientDiagnostics>>;
 

@@ -24,13 +24,14 @@ var defaultLoopbackListener = func() (net.Listener, error) {
 
 // App provides the backend façade exposed to Wails.
 type App struct {
-	Ctx                  context.Context
-	selectedKubeconfigs  []string
-	availableKubeconfigs []KubeconfigInfo
-	windowSettings       *WindowSettings
-	appSettings          *AppSettings
-	logger               *Logger
-	errorReporter        sentryreporting.Reporter
+	Ctx                      context.Context
+	selectedKubeconfigs      []string
+	availableKubeconfigs     []KubeconfigInfo
+	kubeconfigDiscoveryState KubeconfigDiscoveryState
+	windowSettings           *WindowSettings
+	appSettings              *AppSettings
+	logger                   *Logger
+	errorReporter            sentryreporting.Reporter
 	// responseCache stores short-lived detail/YAML/helm GET responses.
 	responseCache           *responseCache
 	sidebarVisible          bool
@@ -95,7 +96,7 @@ type App struct {
 	// persistenceMu guards persistence.json read/write operations.
 	persistenceMu sync.Mutex
 
-	// kubeconfigsMu guards availableKubeconfigs and selectedKubeconfigs reads/writes.
+	// kubeconfigsMu guards kubeconfig discovery state and selected kubeconfig reads/writes.
 	kubeconfigsMu sync.RWMutex
 	// selectionMutationMu serializes coordinated cluster runtime mutations.
 	// This preserves sequential behavior while allowing kubeconfigChangeMu to stay

@@ -11,7 +11,7 @@ import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { KubernetesProvider } from './KubernetesProvider';
 
 const wailsMocks = vi.hoisted(() => ({
-  GetKubeconfigs: vi.fn().mockResolvedValue([]),
+  GetKubeconfigs: vi.fn().mockResolvedValue({ kubeconfigs: [], state: 'no_kubeconfigs' }),
   GetClusterWorkspaceState: vi.fn().mockResolvedValue({
     selectedKubeconfigs: [],
     visibleClusterId: '',

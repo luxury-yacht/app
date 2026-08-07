@@ -44,6 +44,7 @@ import {
   useContentRegionShiftTabHandoff,
   useTopLevelAppRegionTracking,
 } from '@ui/layout/appFocusRegions';
+import { ClusterSelectionOverlay } from '@ui/layout/ClusterSelectionOverlay';
 import ClusterTabs from '@ui/layout/ClusterTabs';
 import { getClusterSelectionPhase } from '@ui/layout/clusterSelectionPhase';
 import { DebugOverlay } from '@ui/layout/DebugOverlay';
@@ -61,7 +62,6 @@ import {
   SIDEBAR_MIN_WIDTH,
 } from '@/hooks/useSidebarResize';
 import BrowseView from '@/modules/browse/components/BrowseView';
-import { isMacPlatform } from '@/utils/platform';
 
 const Sidebar = withLazyBoundary(() => import('@ui/layout/Sidebar'), 'Loading sidebar...');
 
@@ -215,20 +215,6 @@ const SidebarResizer = ({ viewState }: { viewState: ViewStateValue }) => {
   );
 };
 
-const ClusterSelectionOverlay = ({ phase }: { phase: string }) => {
-  if (phase !== 'empty') {
-    return null;
-  }
-  return (
-    <div className="no-active-clusters-overlay" role="status">
-      <div className="no-active-clusters-message">
-        No active clusters. Press <kbd>{isMacPlatform() ? '⌘' : 'Ctrl'}</kbd>+<kbd>O</kbd> or click
-        Open Cluster.
-      </div>
-    </div>
-  );
-};
-
 const ActiveClusterAuthOverlay = ({
   hasActiveClusters,
   viewType,
@@ -356,7 +342,10 @@ export const AppLayout: React.FC = () => {
             <div className="content-body__main">{routeContent}</div>
           </div>
         </div>
-        <ClusterSelectionOverlay phase={clusterSelectionPhase} />
+        <ClusterSelectionOverlay
+          phase={clusterSelectionPhase}
+          discoveryState={kubeconfig.kubeconfigDiscoveryState}
+        />
         <ActiveClusterAuthOverlay
           hasActiveClusters={hasActiveClusters}
           viewType={viewState.viewType}

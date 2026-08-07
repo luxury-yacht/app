@@ -57,29 +57,32 @@ const mockExistingFavorite: Favorite = {
 const installMockKubeconfigs = () => {
   const overrides = window.__storybookGoOverrides || {};
   overrides.GetKubeconfigs = () =>
-    Promise.resolve([
-      {
-        name: 'config',
-        path: '/Users/john/.kube/config',
-        context: 'prod-cluster',
-        isDefault: true,
-        isCurrentContext: true,
-      },
-      {
-        name: 'config',
-        path: '/Users/john/.kube/config',
-        context: 'staging-cluster',
-        isDefault: true,
-        isCurrentContext: false,
-      },
-      {
-        name: 'dev-kubeconfig',
-        path: '/Users/john/.kube/dev-kubeconfig',
-        context: 'dev-cluster',
-        isDefault: false,
-        isCurrentContext: false,
-      },
-    ]);
+    Promise.resolve({
+      kubeconfigs: [
+        {
+          name: 'config',
+          path: '/Users/john/.kube/config',
+          context: 'prod-cluster',
+          isDefault: true,
+          isCurrentContext: true,
+        },
+        {
+          name: 'config',
+          path: '/Users/john/.kube/config',
+          context: 'staging-cluster',
+          isDefault: true,
+          isCurrentContext: false,
+        },
+        {
+          name: 'dev-kubeconfig',
+          path: '/Users/john/.kube/dev-kubeconfig',
+          context: 'dev-cluster',
+          isDefault: false,
+          isCurrentContext: false,
+        },
+      ],
+      state: 'available',
+    });
   overrides.GetClusterWorkspaceState = () =>
     Promise.resolve({
       selectedKubeconfigs: ['/Users/john/.kube/config:prod-cluster'],
