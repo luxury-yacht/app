@@ -500,6 +500,40 @@ describe('appPreferences', () => {
     expect(getAccentColor('dark')).toBe('#f59e0b');
   });
 
+  it('emits hydrated preference changes in the established event order', async () => {
+    const events: string[] = [];
+    const unsubscribers = [
+      eventBus.on('settings:appearance-mode', () => events.push('appearance')),
+      eventBus.on('settings:short-names', () => events.push('short-names')),
+      eventBus.on('settings:dim-inactive-namespaces', () => events.push('dim')),
+      eventBus.on('settings:exclusive-namespaces', () => events.push('exclusive')),
+      eventBus.on('settings:auto-refresh', () => events.push('auto-refresh')),
+      eventBus.on('settings:refresh-background', () => events.push('background')),
+    ];
+    appMocks.GetAppSettings.mockResolvedValue({
+      appearanceMode: 'dark',
+      useShortResourceNames: true,
+      dimInactiveNamespaces: false,
+      exclusiveNamespaces: false,
+      autoRefreshEnabled: false,
+      refreshBackgroundClustersEnabled: false,
+    });
+
+    await hydrateAppPreferences({ force: true });
+
+    expect(events).toEqual([
+      'appearance',
+      'short-names',
+      'dim',
+      'exclusive',
+      'auto-refresh',
+      'background',
+    ]);
+    unsubscribers.forEach((unsubscribe) => {
+      unsubscribe();
+    });
+  });
+
   it('hydrates preferences from backend schema when available', async () => {
     appMocks.GetAppSettingsSchema.mockResolvedValue({
       anonymizedId: '123e4567-e89b-42d3-a456-426614174000',

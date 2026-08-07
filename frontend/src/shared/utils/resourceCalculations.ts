@@ -14,6 +14,8 @@ export interface ResourceData {
   allocatable?: string;
 }
 
+export type ResourceType = 'cpu' | 'memory';
+
 export interface ResourceCalculations {
   usage: number;
   request: number;
@@ -28,56 +30,44 @@ export interface ResourceCalculations {
   hasConfigIssue: boolean;
 }
 
-// Parse CPU values to millicores
-const parseCpuValue = (value: string | undefined): number => {
-  if (!value || value === '-' || value === 'undefined' || value === 'null' || value === 'not set') {
-    return 0;
-  }
+const EMPTY_RESOURCE_VALUES = new Set(['-', 'undefined', 'null', 'not set']);
 
-  try {
-    if (value.endsWith('m')) {
-      const parsed = Number.parseFloat(value.slice(0, -1));
-      return Number.isNaN(parsed) ? 0 : parsed;
-    } else {
-      const parsed = Number.parseFloat(value) * 1000; // Convert cores to millicores
-      return Number.isNaN(parsed) ? 0 : parsed;
-    }
-  } catch {
+const isEmptyResourceValue = (value: string): boolean => !value || EMPTY_RESOURCE_VALUES.has(value);
+
+// Parse CPU values to millicores.
+const parseCpuValue = (value: string): number => {
+  const parsed = Number.parseFloat(value);
+  if (Number.isNaN(parsed)) {
     return 0;
   }
+  return value.endsWith('m') ? parsed : parsed * 1000;
 };
 
 // Parse Memory values to MB (Mi)
-const parseMemoryValue = (value: string | undefined): number => {
-  if (!value || value === '-' || value === 'undefined' || value === 'null' || value === 'not set') {
+const MEMORY_MIB_FACTORS = [
+  ['Ki', 1 / 1024],
+  ['Mi', 1],
+  ['Gi', 1024],
+  ['Ti', 1024 * 1024],
+  ['GB', 1024],
+  ['MB', 1],
+] as const;
+
+const parseMemoryValue = (value: string): number => {
+  const parsed = Number.parseFloat(value);
+  if (Number.isNaN(parsed)) {
     return 0;
   }
 
-  try {
-    const num = Number.parseFloat(value);
-    if (Number.isNaN(num)) {
-      return 0;
-    }
+  const unit = MEMORY_MIB_FACTORS.find(([suffix]) => value.endsWith(suffix));
+  return unit ? parsed * unit[1] : parsed / (1024 * 1024);
+};
 
-    if (value.endsWith('Ki')) {
-      return num / 1024; // Convert Ki to Mi
-    } else if (value.endsWith('Mi')) {
-      return num; // Already in Mi
-    } else if (value.endsWith('Gi')) {
-      return num * 1024; // Convert Gi to Mi
-    } else if (value.endsWith('Ti')) {
-      return num * 1024 * 1024; // Convert Ti to Mi
-    } else if (value.endsWith('GB')) {
-      return num * 1024; // Convert GB to Mi
-    } else if (value.endsWith('MB')) {
-      return num; // Already in Mi
-    } else {
-      // No unit suffix - assume bytes
-      return num / (1024 * 1024); // Convert bytes to Mi
-    }
-  } catch {
+export const parseResourceValue = (value: string | undefined, type: ResourceType): number => {
+  if (value === undefined || isEmptyResourceValue(value)) {
     return 0;
   }
+  return type === 'cpu' ? parseCpuValue(value) : parseMemoryValue(value);
 };
 
 // Format CPU values for display
@@ -110,44 +100,83 @@ export const formatMemoryValue = (mb: number): string => {
   }
 };
 
+export const formatResourceValue = (
+  value: string | undefined,
+  parsedValue: number,
+  type: ResourceType
+): string => {
+  if (value === undefined || isEmptyResourceValue(value)) {
+    return '-';
+  }
+  if (type === 'cpu') {
+    return `${Math.round(parsedValue)}m`;
+  }
+  return parsedValue === 0 ? '-' : formatMemoryValue(parsedValue);
+};
+
+const calculateResourceScale = ({
+  usage,
+  request,
+  limit,
+  allocatable,
+}: Omit<
+  ResourceCalculations,
+  | 'usagePercent'
+  | 'requestPercent'
+  | 'limitPercent'
+  | 'consumption'
+  | 'overcommittedAmount'
+  | 'overcommittedPercent'
+  | 'hasConfigIssue'
+>): number => {
+  if (allocatable > 0) {
+    return allocatable;
+  }
+  return limit > 0 ? limit : Math.max(usage, request * 1.2);
+};
+
+const percentageOfScale = (value: number, scale: number): number => {
+  if (scale <= 0) {
+    return 0;
+  }
+  return Math.max(0, (value / scale) * 100);
+};
+
+const calculateOvercommit = (
+  limit: number,
+  allocatable: number
+): Pick<ResourceCalculations, 'overcommittedAmount' | 'overcommittedPercent'> => {
+  const overcommittedAmount = allocatable > 0 && limit > allocatable ? limit - allocatable : 0;
+  return {
+    overcommittedAmount,
+    overcommittedPercent:
+      overcommittedAmount > 0 ? Math.round((overcommittedAmount / allocatable) * 100) : 0,
+  };
+};
+
 // Calculate all resource metrics
 export const calculateResourceMetrics = (
   data: ResourceData,
-  type: 'cpu' | 'memory'
+  type: ResourceType
 ): ResourceCalculations => {
-  const parseValue = type === 'cpu' ? parseCpuValue : parseMemoryValue;
+  const usage = parseResourceValue(data.usage, type);
+  const request = parseResourceValue(data.request, type);
+  const limit = parseResourceValue(data.limit, type);
+  const allocatable = parseResourceValue(data.allocatable, type);
 
-  const usage = parseValue(data.usage);
-  const request = parseValue(data.request);
-  const limit = parseValue(data.limit);
-  const allocatable = parseValue(data.allocatable);
-
-  // Determine scale based on context
-  let scale: number;
-
-  if (allocatable > 0) {
-    scale = allocatable;
-  } else if (limit > 0) {
-    scale = limit;
-  } else {
-    scale = Math.max(usage, request * 1.2);
-  }
+  const scale = calculateResourceScale({ usage, request, limit, allocatable });
 
   // Calculate true percentages. Rendering code clamps these only when using
   // them as CSS widths or marker positions.
-  const usagePercent = scale > 0 ? Math.max(0, (usage / scale) * 100) : 0;
-  const requestPercent = scale > 0 && request > 0 ? Math.max(0, (request / scale) * 100) : 0;
-  const limitPercent = scale > 0 && limit > 0 ? Math.max(0, (limit / scale) * 100) : 0;
+  const usagePercent = percentageOfScale(usage, scale);
+  const requestPercent = percentageOfScale(request, scale);
+  const limitPercent = percentageOfScale(limit, scale);
 
   // Calculate consumption (usage vs request)
   const consumption = request > 0 ? Math.round((usage / request) * 100) : null;
 
   // Calculate overcommitted resources (limit vs allocatable)
-  const overcommittedAmount = allocatable > 0 && limit > allocatable ? limit - allocatable : 0;
-  const overcommittedPercent =
-    allocatable > 0 && overcommittedAmount > 0
-      ? Math.round((overcommittedAmount / allocatable) * 100)
-      : 0;
+  const { overcommittedAmount, overcommittedPercent } = calculateOvercommit(limit, allocatable);
 
   // Check for configuration issues
   const hasConfigIssue = request > 0 && limit > 0 && request > limit;

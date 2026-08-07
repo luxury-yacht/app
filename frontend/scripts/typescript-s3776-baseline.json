@@ -1,0 +1,650 @@
+{
+  "schemaVersion": 1,
+  "projectKey": "luxury-yacht_app",
+  "rule": "typescript:S3776",
+  "threshold": 15,
+  "analysis": {
+    "branch": "main",
+    "revision": "b0d3344b976bf451f5a71ab6344599ae3e0754d9",
+    "date": "2026-08-07T00:18:02+0000"
+  },
+  "issues": [
+    {
+      "key": "AZ-P-QbMmYfklgBeFrKf",
+      "path": "frontend/src/core/refresh/components/DiagnosticsPanel.tsx",
+      "line": 907,
+      "symbol": "base diagnostics-row projection",
+      "score": 76
+    },
+    {
+      "key": "AZ-P-QMsmYfklgBeFrHO",
+      "path": "frontend/src/modules/object-map/ObjectMap.tsx",
+      "line": 102,
+      "symbol": "ObjectMap",
+      "score": 54
+    },
+    {
+      "key": "AZ-P-P9RmYfklgBeFrDd",
+      "path": "frontend/src/shared/components/ResourceBar.tsx",
+      "line": 47,
+      "symbol": "ResourceBar",
+      "score": 53
+    },
+    {
+      "key": "AZ-P-QrBmYfklgBeFrPG",
+      "path": "frontend/src/hooks/useTableSort.ts",
+      "line": 119,
+      "symbol": "sortedData memo",
+      "score": 50
+    },
+    {
+      "key": "AZ-P-QhtmYfklgBeFrMJ",
+      "path": "frontend/src/ui/shortcuts/context.tsx",
+      "line": 447,
+      "symbol": "handleKeyDown",
+      "score": 50
+    },
+    {
+      "key": "AZ-P-QpXmYfklgBeFrOb",
+      "path": "frontend/src/ui/layout/SidebarKeys.ts",
+      "line": 250,
+      "symbol": "onKeyDown",
+      "score": 48
+    },
+    {
+      "key": "AZ-P-P3DmYfklgBeFrB9",
+      "path": "frontend/src/shared/components/dropdowns/Dropdown/hooks/useKeyboardNavigation.ts",
+      "line": 74,
+      "symbol": "handleKeyAction",
+      "score": 46
+    },
+    {
+      "key": "AZ-P-PzimYfklgBeFrAG",
+      "path": "frontend/src/shared/components/tables/hooks/useGridTableCellCache.tsx",
+      "line": 72,
+      "symbol": "getCachedCellContent",
+      "score": 46
+    },
+    {
+      "key": "AZ-P-QbMmYfklgBeFrKq",
+      "path": "frontend/src/core/refresh/components/DiagnosticsPanel.tsx",
+      "line": 1082,
+      "symbol": "diagnostics domain-count resolver",
+      "score": 44
+    },
+    {
+      "key": "AZ-P-QVJmYfklgBeFrJQ",
+      "path": "frontend/src/modules/cluster/components/ClusterOverview.tsx",
+      "line": 130,
+      "symbol": "ClusterOverview",
+      "score": 43
+    },
+    {
+      "key": "AZ-P-QmkmYfklgBeFrNS",
+      "path": "frontend/src/ui/dockable/useDockablePanelDragResize.ts",
+      "line": 307,
+      "symbol": "handleMouseMove",
+      "score": 42
+    },
+    {
+      "key": "AZ-P-QdNmYfklgBeFrLI",
+      "path": "frontend/src/core/refresh/orchestrator.ts",
+      "line": 1265,
+      "symbol": "performFetch",
+      "score": 41
+    },
+    {
+      "key": "AZ-P-QE8mYfklgBeFrFE",
+      "path": "frontend/src/modules/object-panel/components/ObjectPanel/Details/useUtilizationData.ts",
+      "line": 61,
+      "symbol": "deriveDetailUtilizationData",
+      "score": 40
+    },
+    {
+      "key": "AZ-P-Pw9mYfklgBeFq_i",
+      "path": "frontend/src/shared/components/tables/hooks/useGridTableController.tsx",
+      "line": 112,
+      "symbol": "useGridTableController",
+      "score": 39
+    },
+    {
+      "key": "AZ-P-Px1mYfklgBeFq_s",
+      "path": "frontend/src/shared/components/tables/hooks/useGridTableColumnMeasurer.ts",
+      "line": 114,
+      "symbol": "measureColumnWidth",
+      "score": 37
+    },
+    {
+      "key": "AZ-P-QJemYfklgBeFrGK",
+      "path": "frontend/src/modules/object-panel/components/ObjectPanel/Logs/LogViewer.tsx",
+      "line": 396,
+      "symbol": "LogViewerInner",
+      "score": 36
+    },
+    {
+      "key": "AZ-P-QI2mYfklgBeFrGA",
+      "path": "frontend/src/modules/object-panel/components/ObjectPanel/Logs/logViewerReducer.ts",
+      "line": 212,
+      "symbol": "logViewerReducer",
+      "score": 36
+    },
+    {
+      "key": "AZ-P-QcQmYfklgBeFrK9",
+      "path": "frontend/src/core/refresh/RefreshManager.ts",
+      "line": 603,
+      "symbol": "refreshSingle",
+      "score": 35
+    },
+    {
+      "key": "AZ-P-Qc9mYfklgBeFrLD",
+      "path": "frontend/src/core/refresh/resourceStreamViews.ts",
+      "line": 58,
+      "symbol": "isResourceStreamViewActive",
+      "score": 35
+    },
+    {
+      "key": "AZ-P-QgsmYfklgBeFrLy",
+      "path": "frontend/src/core/codemirror/search.ts",
+      "line": 159,
+      "symbol": "layoutSearchPanel",
+      "score": 30
+    },
+    {
+      "key": "AZ-P-QY6mYfklgBeFrJz",
+      "path": "frontend/src/core/refresh/streaming/resourceStreamManager.ts",
+      "line": 322,
+      "symbol": "handleMessage",
+      "score": 30
+    },
+    {
+      "key": "AZ-P-QdNmYfklgBeFrLH",
+      "path": "frontend/src/core/refresh/orchestrator.ts",
+      "line": 1166,
+      "symbol": "fetchScopedDomain",
+      "score": 29
+    },
+    {
+      "key": "AZ-P-QKzmYfklgBeFrG1",
+      "path": "frontend/src/modules/object-panel/components/ObjectPanel/NodeLogs/NodeLogsTab.tsx",
+      "line": 196,
+      "symbol": "NodeLogsTab",
+      "score": 29
+    },
+    {
+      "key": "AZ-P-QpzmYfklgBeFrOg",
+      "path": "frontend/src/ui/layout/Sidebar.tsx",
+      "line": 61,
+      "symbol": "Sidebar",
+      "score": 29
+    },
+    {
+      "key": "AZ-P-Qd1mYfklgBeFrLU",
+      "path": "frontend/src/core/contexts/FavoritesContext.tsx",
+      "line": 132,
+      "symbol": "favorite-navigation effect",
+      "score": 27
+    },
+    {
+      "key": "AZ-P-QOEmYfklgBeFrHk",
+      "path": "frontend/src/modules/object-map/objectMapLayout.ts",
+      "line": 340,
+      "symbol": "orderColumnsByBarycenter",
+      "score": 27
+    },
+    {
+      "key": "AZ-P-Qc0mYfklgBeFrLC",
+      "path": "frontend/src/core/refresh/permissionErrors.ts",
+      "line": 13,
+      "symbol": "isPermissionDeniedStatus",
+      "score": 26
+    },
+    {
+      "key": "AZ-P-QcQmYfklgBeFrK8",
+      "path": "frontend/src/core/refresh/RefreshManager.ts",
+      "line": 498,
+      "symbol": "getForegroundRefreshTargets",
+      "score": 26
+    },
+    {
+      "key": "AZ-P-QnTmYfklgBeFrNy",
+      "path": "frontend/src/ui/dockable/useDockablePanelWindowBounds.ts",
+      "line": 68,
+      "symbol": "window-bounds timeout callback",
+      "score": 26
+    },
+    {
+      "key": "AZ-P-QgEmYfklgBeFrLs",
+      "path": "frontend/src/core/connection/connectivityPresentation.ts",
+      "line": 47,
+      "symbol": "buildConnectivityPresentation",
+      "score": 25
+    },
+    {
+      "key": "AZ-P-QbMmYfklgBeFrKs",
+      "path": "frontend/src/core/refresh/components/DiagnosticsPanel.tsx",
+      "line": 1248,
+      "symbol": "pod diagnostics-row projection",
+      "score": 25
+    },
+    {
+      "key": "AZ-P-QdNmYfklgBeFrLG",
+      "path": "frontend/src/core/refresh/orchestrator.ts",
+      "line": 434,
+      "symbol": "setScopedDomainEnabled",
+      "score": 25
+    },
+    {
+      "key": "AZ-P-PzDmYfklgBeFrAA",
+      "path": "frontend/src/shared/components/tables/hooks/useGridTableColumnWidths.ts",
+      "line": 201,
+      "symbol": "buildColumnWidthState",
+      "score": 25
+    },
+    {
+      "key": "AZ-P-Ql7mYfklgBeFrNH",
+      "path": "frontend/src/ui/command-palette/CommandPalette.tsx",
+      "line": 149,
+      "symbol": "catalog scoring callback",
+      "score": 25
+    },
+    {
+      "key": "AZ-P-QRHmYfklgBeFrIZ",
+      "path": "frontend/src/modules/resource-grid/typedResourceQueryScope.ts",
+      "line": 136,
+      "symbol": "buildTypedResourceQueryScope",
+      "score": 24
+    },
+    {
+      "key": "AZ-P-P6zmYfklgBeFrC9",
+      "path": "frontend/src/shared/components/modals/DrainNodeModal.tsx",
+      "line": 100,
+      "symbol": "DrainNodeModal",
+      "score": 24
+    },
+    {
+      "key": "AZ-P-QnKmYfklgBeFrNs",
+      "path": "frontend/src/ui/dockable/DockablePanelProvider.tsx",
+      "line": 445,
+      "symbol": "tab-group update callback",
+      "score": 24
+    },
+    {
+      "key": "AZ-P-Qf5mYfklgBeFrLr",
+      "path": "frontend/src/core/settings/appPreferences.ts",
+      "line": 654,
+      "symbol": "emitPreferenceChanges",
+      "score": 23
+    },
+    {
+      "key": "AZ-P-QHLmYfklgBeFrFg",
+      "path": "frontend/src/modules/object-panel/components/ObjectPanel/Yaml/yamlValidation.ts",
+      "line": 127,
+      "symbol": "validateYamlDraft",
+      "score": 23
+    },
+    {
+      "key": "AZ-P-P4KmYfklgBeFrCV",
+      "path": "frontend/src/shared/components/diff/lineDiff.ts",
+      "line": 58,
+      "symbol": "buildMyersTrace",
+      "score": 23
+    },
+    {
+      "key": "AZ-P-P3DmYfklgBeFrB8",
+      "path": "frontend/src/shared/components/dropdowns/Dropdown/hooks/useKeyboardNavigation.ts",
+      "line": 33,
+      "symbol": "getNextEnabledIndex",
+      "score": 23
+    },
+    {
+      "key": "AZ-P-P9RmYfklgBeFrDf",
+      "path": "frontend/src/shared/components/ResourceBar.tsx",
+      "line": 90,
+      "symbol": "parseResource",
+      "score": 23
+    },
+    {
+      "key": "AZ-P-PytmYfklgBeFq_9",
+      "path": "frontend/src/shared/components/tables/hooks/gridTableColumnWidthMath.ts",
+      "line": 172,
+      "symbol": "distributeFlexWidths",
+      "score": 23
+    },
+    {
+      "key": "AZ-P-QJemYfklgBeFrGR",
+      "path": "frontend/src/modules/object-panel/components/ObjectPanel/Logs/LogViewer.tsx",
+      "line": 1456,
+      "symbol": "LogViewer action callback",
+      "score": 22
+    },
+    {
+      "key": "AZ-P-PxemYfklgBeFq_n",
+      "path": "frontend/src/shared/components/tables/hooks/useGridTableContextMenuItems.tsx",
+      "line": 34,
+      "symbol": "context-menu builder callback",
+      "score": 22
+    },
+    {
+      "key": "AZ-P-P55mYfklgBeFrCo",
+      "path": "frontend/src/shared/components/tabs/Tabs.tsx",
+      "line": 166,
+      "symbol": "scrollToNextTab",
+      "score": 22
+    },
+    {
+      "key": "AZ-P-QiomYfklgBeFrMY",
+      "path": "frontend/src/ui/modals/ObjectDiffModal.tsx",
+      "line": 394,
+      "symbol": "ObjectDiffModal",
+      "score": 22
+    },
+    {
+      "key": "AZ_PMfh-nvllwip2ec40",
+      "path": "frontend/src/core/telemetry/sentry.ts",
+      "line": 947,
+      "symbol": "Sentry scope-enrichment callback",
+      "score": 21
+    },
+    {
+      "key": "AZ-P-QDGmYfklgBeFrEs",
+      "path": "frontend/src/modules/object-panel/components/ObjectPanel/Details/Overview/descriptors/policy.tsx",
+      "line": 176,
+      "symbol": "renderMetric",
+      "score": 21
+    },
+    {
+      "key": "AZ-P-P4UmYfklgBeFrCW",
+      "path": "frontend/src/shared/components/diff/diffUtils.ts",
+      "line": 42,
+      "symbol": "mergeDiffLines",
+      "score": 21
+    },
+    {
+      "key": "AZ-P-P0OmYfklgBeFrAV",
+      "path": "frontend/src/shared/components/tables/persistence/gridTablePersistence.ts",
+      "line": 436,
+      "symbol": "prunePersistedState",
+      "score": 21
+    },
+    {
+      "key": "AZ-P-P0OmYfklgBeFrAW",
+      "path": "frontend/src/shared/components/tables/persistence/gridTablePersistence.ts",
+      "line": 543,
+      "symbol": "buildPersistedStateForSave",
+      "score": 21
+    },
+    {
+      "key": "AZ-P-QfImYfklgBeFrLk",
+      "path": "frontend/src/core/cluster-workspace/clusterWorkspaceStore.ts",
+      "line": 312,
+      "symbol": "mergeWireState",
+      "score": 20
+    },
+    {
+      "key": "AZ-P-QadmYfklgBeFrKV",
+      "path": "frontend/src/core/refresh/components/diagnostics/diagnosticsRowModel.ts",
+      "line": 946,
+      "symbol": "buildContainerLogsSummary",
+      "score": 20
+    },
+    {
+      "key": "AZ-P-QZSmYfklgBeFrJ5",
+      "path": "frontend/src/core/refresh/streaming/containerLogsStreamManager.ts",
+      "line": 427,
+      "symbol": "applyPayload",
+      "score": 20
+    },
+    {
+      "key": "AZ-P-QPZmYfklgBeFrH7",
+      "path": "frontend/src/modules/browse/hooks/useBrowseCatalog.ts",
+      "line": 484,
+      "symbol": "catalog page-request transaction",
+      "score": 20
+    },
+    {
+      "key": "AZ-P-QOEmYfklgBeFrHi",
+      "path": "frontend/src/modules/object-map/objectMapLayout.ts",
+      "line": 164,
+      "symbol": "computeNodeColumns",
+      "score": 20
+    },
+    {
+      "key": "AZ-P-P3PmYfklgBeFrB_",
+      "path": "frontend/src/shared/components/dropdowns/Dropdown/Dropdown.tsx",
+      "line": 61,
+      "symbol": "Dropdown",
+      "score": 20
+    },
+    {
+      "key": "AZ-P-P2hmYfklgBeFrBC",
+      "path": "frontend/src/shared/components/tables/gridTableFilterEngine.ts",
+      "line": 40,
+      "symbol": "buildGridTableFilterOptions",
+      "score": 20
+    },
+    {
+      "key": "AZ-P-QDmmYfklgBeFrE0",
+      "path": "frontend/src/modules/object-panel/components/ObjectPanel/Details/Overview/schema.ts",
+      "line": 101,
+      "symbol": "coverageKeys",
+      "score": 19
+    },
+    {
+      "key": "AZ-P-QB2mYfklgBeFrEa",
+      "path": "frontend/src/modules/object-panel/components/ObjectPanel/hooks/useObjectPanelCapabilities.ts",
+      "line": 74,
+      "symbol": "computeCapabilityDescriptors",
+      "score": 19
+    },
+    {
+      "key": "AZ-P-QGymYfklgBeFrFV",
+      "path": "frontend/src/modules/object-panel/components/ObjectPanel/Yaml/YamlTab.tsx",
+      "line": 138,
+      "symbol": "YamlTab",
+      "score": 19
+    },
+    {
+      "key": "AZ-P-QHAmYfklgBeFrFc",
+      "path": "frontend/src/modules/object-panel/components/ObjectPanel/Yaml/yamlTransaction.ts",
+      "line": 248,
+      "symbol": "YAML transaction effect",
+      "score": 19
+    },
+    {
+      "key": "AZ-P-QSOmYfklgBeFrIl",
+      "path": "frontend/src/modules/resource-grid/useTypedResourceQuery.ts",
+      "line": 372,
+      "symbol": "applyPayload",
+      "score": 19
+    },
+    {
+      "key": "AZ-P-QhJmYfklgBeFrL_",
+      "path": "frontend/src/ui/shortcuts/components/ShortcutHelpModal.tsx",
+      "line": 97,
+      "symbol": "shortcut-help row renderer",
+      "score": 19
+    },
+    {
+      "key": "AZ-P-QadmYfklgBeFrKT",
+      "path": "frontend/src/core/refresh/components/diagnostics/diagnosticsRowModel.ts",
+      "line": 885,
+      "symbol": "buildCatalogSummary",
+      "score": 18
+    },
+    {
+      "key": "AZ-P-QVYmYfklgBeFrJY",
+      "path": "frontend/src/modules/kubernetes/config/KubeconfigContext.tsx",
+      "line": 349,
+      "symbol": "kubeconfig selection callback",
+      "score": 18
+    },
+    {
+      "key": "AZ-P-P_qmYfklgBeFrD9",
+      "path": "frontend/src/shared/actions/objectActionClient.ts",
+      "line": 66,
+      "symbol": "resolveActionGVK",
+      "score": 18
+    },
+    {
+      "key": "AZ-P-QqLmYfklgBeFrOr",
+      "path": "frontend/src/ui/layout/AppLayout.tsx",
+      "line": 97,
+      "symbol": "AppLayout",
+      "score": 18
+    },
+    {
+      "key": "AZ-P-QapmYfklgBeFrKZ",
+      "path": "frontend/src/core/refresh/components/diagnostics/diagnosticsPanelUtils.ts",
+      "line": 22,
+      "symbol": "resolveDomainNamespace",
+      "score": 17
+    },
+    {
+      "key": "AZ-P-QadmYfklgBeFrKQ",
+      "path": "frontend/src/core/refresh/components/diagnostics/diagnosticsRowModel.ts",
+      "line": 773,
+      "symbol": "buildMetricsSummary",
+      "score": 17
+    },
+    {
+      "key": "AZ_PMfh-nvllwip2ec4v",
+      "path": "frontend/src/core/telemetry/sentry.ts",
+      "line": 484,
+      "symbol": "beforeSend",
+      "score": 17
+    },
+    {
+      "key": "AZ-P-P_5mYfklgBeFrD_",
+      "path": "frontend/src/modules/namespace/contexts/NamespaceContext.tsx",
+      "line": 270,
+      "symbol": "namespace row projection",
+      "score": 17
+    },
+    {
+      "key": "AZ-P-QMLmYfklgBeFrHJ",
+      "path": "frontend/src/modules/object-map/objectMapDirectionalFilter.ts",
+      "line": 38,
+      "symbol": "filterByDirectionalReachability",
+      "score": 17
+    },
+    {
+      "key": "AZ-P-QSOmYfklgBeFrIp",
+      "path": "frontend/src/modules/resource-grid/useTypedResourceQuery.ts",
+      "line": 487,
+      "symbol": "typed-query request effect",
+      "score": 17
+    },
+    {
+      "key": "AZ-P-Ql7mYfklgBeFrNG",
+      "path": "frontend/src/ui/command-palette/CommandPalette.tsx",
+      "line": 64,
+      "symbol": "parseQueryTokens token callback",
+      "score": 17
+    },
+    {
+      "key": "AZ-P-QlgmYfklgBeFrNC",
+      "path": "frontend/src/ui/command-palette/CommandPaletteCommands.tsx",
+      "line": 160,
+      "symbol": "command registry memo",
+      "score": 17
+    },
+    {
+      "key": "AZ-P-QmxmYfklgBeFrNZ",
+      "path": "frontend/src/ui/dockable/DockablePanel.tsx",
+      "line": 167,
+      "symbol": "DockablePanelInner",
+      "score": 17
+    },
+    {
+      "key": "AZ-P-QkGmYfklgBeFrMq",
+      "path": "frontend/src/ui/settings/sections/AppearanceSection.tsx",
+      "line": 1144,
+      "symbol": "theme row renderer",
+      "score": 17
+    },
+    {
+      "key": "AZ-P-QXRmYfklgBeFrJf",
+      "path": "frontend/src/core/capabilities/permissionStore.ts",
+      "line": 447,
+      "symbol": "queryNamespacesPermissions",
+      "score": 16
+    },
+    {
+      "key": "AZ-P-QIFmYfklgBeFrF2",
+      "path": "frontend/src/modules/object-panel/components/ObjectPanel/Logs/hooks/useAnchoredLogEntries.ts",
+      "line": 17,
+      "symbol": "longestSuffixPrefixOverlap",
+      "score": 16
+    },
+    {
+      "key": "AZ-P-QHymYfklgBeFrFx",
+      "path": "frontend/src/modules/object-panel/components/ObjectPanel/Logs/hooks/useLogFiltering.ts",
+      "line": 96,
+      "symbol": "filtered-log memo",
+      "score": 16
+    },
+    {
+      "key": "AZ-P-QJemYfklgBeFrGG",
+      "path": "frontend/src/modules/object-panel/components/ObjectPanel/Logs/LogViewer.tsx",
+      "line": 156,
+      "symbol": "formatTimestampForMode",
+      "score": 16
+    },
+    {
+      "key": "AZ-P-QSDmYfklgBeFrIk",
+      "path": "frontend/src/modules/resource-grid/cursorPageWalk.ts",
+      "line": 48,
+      "symbol": "walkQueryCursorPages",
+      "score": 16
+    },
+    {
+      "key": "AZ-P-P8vmYfklgBeFrDY",
+      "path": "frontend/src/shared/components/kubernetes/ResourceMetadata.tsx",
+      "line": 19,
+      "symbol": "ResourceMetadata memo renderer",
+      "score": 16
+    },
+    {
+      "key": "AZ-P-P2hmYfklgBeFrBD",
+      "path": "frontend/src/shared/components/tables/gridTableFilterEngine.ts",
+      "line": 227,
+      "symbol": "local row-filter predicate",
+      "score": 16
+    },
+    {
+      "key": "AZ-P-P_KmYfklgBeFrD1",
+      "path": "frontend/src/shared/scrollbars/scrollbarActivity.ts",
+      "line": 375,
+      "symbol": "updateOverlayScrollbarGeometry",
+      "score": 16
+    },
+    {
+      "key": "AZ-P-Ql7mYfklgBeFrNJ",
+      "path": "frontend/src/ui/command-palette/CommandPalette.tsx",
+      "line": 212,
+      "symbol": "CommandPaletteComponent",
+      "score": 16
+    },
+    {
+      "key": "AZ-P-QlUmYfklgBeFrM-",
+      "path": "frontend/src/ui/favorites/FavToggle.tsx",
+      "line": 268,
+      "symbol": "favorite match memo",
+      "score": 16
+    },
+    {
+      "key": "AZ-P-QlUmYfklgBeFrM_",
+      "path": "frontend/src/ui/favorites/FavToggle.tsx",
+      "line": 326,
+      "symbol": "pending-favorite restore effect",
+      "score": 16
+    },
+    {
+      "key": "AZ-P-QpXmYfklgBeFrOa",
+      "path": "frontend/src/ui/layout/SidebarKeys.ts",
+      "line": 52,
+      "symbol": "describeElementTarget",
+      "score": 16
+    }
+  ]
+}

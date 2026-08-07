@@ -21,6 +21,9 @@
     "check:fix": "biome check --write . && npm run check:error-reporting-boundaries && npm run check:biome-suppressions",
     "check:error-reporting-boundaries": "node scripts/check-error-reporting-boundaries.mjs",
     "check:biome-suppressions": "node scripts/check-biome-suppressions.mjs",
+    "sonar:audit": "node scripts/check-typescript-s3776.mjs",
+    "sonar:audit:main": "node scripts/check-typescript-s3776.mjs --branch main",
+    "sonar:baseline:update": "node scripts/check-typescript-s3776.mjs --branch main --update-baseline",
     "test": "vitest run",
     "knip": "knip",
     "storybook": "storybook dev -p 6006"

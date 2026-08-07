@@ -5,47 +5,15 @@
  * Provides shared helper functions for the frontend.
  */
 
-export const parseCpuToMillicores = (val: string | undefined): number => {
-  if (!val || val === '-' || val === 'not set') {
-    return 0;
-  }
-  if (val.endsWith('m')) {
-    return Number.parseFloat(val.slice(0, -1));
-  }
-  return Number.parseFloat(val) * 1000; // Convert cores to millicores
-};
+import { parseResourceValue } from '@shared/utils/resourceCalculations';
+
+export const parseCpuToMillicores = (val: string | undefined): number =>
+  parseResourceValue(val, 'cpu');
 
 /**
  * Parse memory value to MB
  */
-export const parseMemToMB = (val: string | undefined): number => {
-  if (!val || val === '-' || val === 'not set') {
-    return 0;
-  }
-  const num = Number.parseFloat(val);
-  if (Number.isNaN(num)) {
-    return 0;
-  }
-  if (val.endsWith('Ki')) {
-    return num / 1024; // Convert Ki to Mi
-  }
-  if (val.endsWith('Mi')) {
-    return num;
-  }
-  if (val.endsWith('Gi')) {
-    return num * 1024; // Convert Gi to Mi
-  }
-  if (val.endsWith('Ti')) {
-    return num * 1024 * 1024; // Convert Ti to Mi
-  }
-  if (val.endsWith('GB')) {
-    return num * 1024;
-  }
-  if (val.endsWith('MB')) {
-    return num;
-  }
-  return num / (1024 * 1024); // Assume bytes
-};
+export const parseMemToMB = (val: string | undefined): number => parseResourceValue(val, 'memory');
 
 /**
  * Calculate overcommitted percentage for CPU

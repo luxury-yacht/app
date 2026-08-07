@@ -34,19 +34,15 @@ const formatClusterLabel = (clusterName?: string, clusterId?: string): string =>
   return id || 'the selected cluster';
 };
 
-export const buildConnectivityPresentation = ({
-  clusterId,
-  clusterName,
-  lifecycleState,
-  namespaceReady,
-  namespacesPermissionDenied,
-  health,
-  isPaused,
-  isRefreshing,
-  authState,
-}: ConnectivityPresentationInput): ConnectivityPresentation => {
-  const clusterLabel = formatClusterLabel(clusterName || authState.clusterName, clusterId);
+type ConnectivityPresentationStage = (
+  input: ConnectivityPresentationInput,
+  clusterLabel: string
+) => ConnectivityPresentation | null;
 
+const buildInactivePresentation: ConnectivityPresentationStage = (
+  { isPaused, lifecycleState },
+  clusterLabel
+) => {
   if (isPaused) {
     return {
       status: 'inactive',
@@ -62,7 +58,13 @@ export const buildConnectivityPresentation = ({
       detail: 'Select a cluster to connect and load Kubernetes data.',
     };
   }
+  return null;
+};
 
+const buildAuthenticationRecoveryPresentation: ConnectivityPresentationStage = (
+  { lifecycleState, authState },
+  clusterLabel
+) => {
   if (lifecycleState === 'auth_failed') {
     return {
       status: 'unhealthy',
@@ -73,7 +75,6 @@ export const buildConnectivityPresentation = ({
       actionLabel: 'Retry Auth',
     };
   }
-
   if (authState.hasError && authState.isRecovering && authState.errorClass !== 'auth') {
     // Recovery is waiting on reachability, not on credentials: the latest
     // probe verdict is connectivity (or no verdict exists yet). The backend
@@ -84,7 +85,6 @@ export const buildConnectivityPresentation = ({
       detail: `${clusterLabel} is unreachable. The app will reconnect automatically when the cluster responds.`,
     };
   }
-
   if (authState.hasError && authState.isRecovering) {
     const retryLabel =
       authState.secondsUntilRetry > 0
@@ -96,49 +96,56 @@ export const buildConnectivityPresentation = ({
       detail: `${clusterLabel} is recovering from an authentication failure.${retryLabel}`,
     };
   }
+  return null;
+};
 
-  if (lifecycleState === 'disconnected') {
-    return {
-      status: 'unhealthy',
-      summary: 'Cluster disconnected',
-      detail: `The app lost its connection to ${clusterLabel}. Refresh to try again.`,
-      actionLabel: 'Refresh Now',
-    };
+const buildLifecyclePresentation: ConnectivityPresentationStage = (
+  { lifecycleState },
+  clusterLabel
+) => {
+  switch (lifecycleState) {
+    case 'disconnected':
+      return {
+        status: 'unhealthy',
+        summary: 'Cluster disconnected',
+        detail: `The app lost its connection to ${clusterLabel}. Refresh to try again.`,
+        actionLabel: 'Refresh Now',
+      };
+    case 'reconnecting':
+      return {
+        status: 'degraded',
+        summary: 'Reconnecting',
+        detail: `The app is trying to restore its connection to ${clusterLabel}.`,
+      };
+    case 'connecting':
+      return {
+        status: 'refreshing',
+        summary: 'Connecting to cluster',
+        detail: `Building Kubernetes clients for ${clusterLabel}.`,
+      };
+    case 'connected':
+    case 'loading':
+      return {
+        status: 'refreshing',
+        summary: 'Starting data services',
+        detail: `The app is loading initial data for ${clusterLabel}.`,
+      };
+    case 'loading_slow':
+      return {
+        status: 'degraded',
+        summary: 'Still loading cluster data',
+        detail: `Initial data for ${clusterLabel} is taking longer than expected to become usable.`,
+        actionLabel: 'Refresh Now',
+      };
+    default:
+      return null;
   }
+};
 
-  if (lifecycleState === 'reconnecting') {
-    return {
-      status: 'degraded',
-      summary: 'Reconnecting',
-      detail: `The app is trying to restore its connection to ${clusterLabel}.`,
-    };
-  }
-
-  if (lifecycleState === 'connecting') {
-    return {
-      status: 'refreshing',
-      summary: 'Connecting to cluster',
-      detail: `Building Kubernetes clients for ${clusterLabel}.`,
-    };
-  }
-
-  if (lifecycleState === 'connected' || lifecycleState === 'loading') {
-    return {
-      status: 'refreshing',
-      summary: 'Starting data services',
-      detail: `The app is loading initial data for ${clusterLabel}.`,
-    };
-  }
-
-  if (lifecycleState === 'loading_slow') {
-    return {
-      status: 'degraded',
-      summary: 'Still loading cluster data',
-      detail: `Initial data for ${clusterLabel} is taking longer than expected to become usable.`,
-      actionLabel: 'Refresh Now',
-    };
-  }
-
+const buildNamespacePresentation: ConnectivityPresentationStage = (
+  { lifecycleState, namespacesPermissionDenied, namespaceReady },
+  clusterLabel
+) => {
   if (lifecycleState === 'ready' && namespacesPermissionDenied) {
     return {
       status: 'healthy',
@@ -154,7 +161,13 @@ export const buildConnectivityPresentation = ({
       detail: `${clusterLabel} is connected, but the namespace list is not ready to render yet.`,
     };
   }
+  return null;
+};
 
+const buildSettledPresentation = (
+  { authState, health, isRefreshing }: ConnectivityPresentationInput,
+  clusterLabel: string
+): ConnectivityPresentation => {
   if (authState.hasError) {
     return {
       status: 'unhealthy',
@@ -190,4 +203,28 @@ export const buildConnectivityPresentation = ({
     detail: `${clusterLabel} is connected is ready to use.`,
     actionLabel: 'Refresh Now',
   };
+};
+
+const CONNECTIVITY_PRESENTATION_STAGES: ConnectivityPresentationStage[] = [
+  buildInactivePresentation,
+  buildAuthenticationRecoveryPresentation,
+  buildLifecyclePresentation,
+  buildNamespacePresentation,
+];
+
+export const buildConnectivityPresentation = (
+  input: ConnectivityPresentationInput
+): ConnectivityPresentation => {
+  const clusterLabel = formatClusterLabel(
+    input.clusterName || input.authState.clusterName,
+    input.clusterId
+  );
+
+  for (const buildStage of CONNECTIVITY_PRESENTATION_STAGES) {
+    const presentation = buildStage(input, clusterLabel);
+    if (presentation) {
+      return presentation;
+    }
+  }
+  return buildSettledPresentation(input, clusterLabel);
 };

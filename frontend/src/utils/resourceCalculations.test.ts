@@ -20,6 +20,7 @@ describe('resourceCalculations utilities', () => {
     expect(parseCpuToMillicores('2')).toBe(2000);
     expect(parseCpuToMillicores('-')).toBe(0);
     expect(parseCpuToMillicores(undefined)).toBe(0);
+    expect(parseCpuToMillicores('invalid')).toBe(0);
   });
 
   it('parses memory strings into megabytes', () => {

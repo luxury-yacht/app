@@ -200,6 +200,89 @@ describe('core/codemirror/search helpers', () => {
     expect(panel.querySelector('.cm-search-nav')).toBeTruthy();
   });
 
+  it('preserves the search panel row order and native control semantics across layouts', () => {
+    const { view, panel } = createView();
+    const raf = vi
+      .spyOn(window, 'requestAnimationFrame')
+      .mockImplementation((cb: FrameRequestCallback) => {
+        cb(0);
+        return 0;
+      });
+
+    openReplacePanel(view);
+    openSearchPanel(view);
+
+    const primary = requireValue(
+      panel.querySelector<HTMLElement>('.cm-search-primary'),
+      'expected the primary search row'
+    );
+    const nav = requireValue(
+      panel.querySelector<HTMLElement>('.cm-search-nav'),
+      'expected the search navigation row'
+    );
+    const replace = requireValue(
+      panel.querySelector<HTMLElement>('.cm-search-replace'),
+      'expected the replace row'
+    );
+    const advanced = requireValue(
+      panel.querySelector<HTMLElement>('.cm-search-advanced'),
+      'expected the advanced row'
+    );
+    const previous = requireValue(
+      nav.querySelector<HTMLButtonElement>('button[name="prev"]'),
+      'expected the previous-match button'
+    );
+    const next = requireValue(
+      nav.querySelector<HTMLButtonElement>('button[name="next"]'),
+      'expected the next-match button'
+    );
+
+    expect(Array.from(panel.children)).toEqual([primary, replace, advanced]);
+    expect(primary.firstElementChild?.getAttribute('name')).toBe('search');
+    expect(Array.from(nav.children)).toEqual([previous, next]);
+    expect(previous).toMatchObject({ textContent: '<', title: 'Previous match' });
+    expect(previous.getAttribute('aria-label')).toBe('Previous match');
+    expect(next).toMatchObject({ textContent: '>', title: 'Next match' });
+    expect(next.getAttribute('aria-label')).toBe('Next match');
+    expect(replace.hidden).toBe(true);
+    expect(replace.getAttribute('aria-hidden')).toBe('true');
+    expect(advanced.hidden).toBe(true);
+    expect(advanced.getAttribute('aria-hidden')).toBe('true');
+    expect(panel.querySelectorAll('.cm-search-primary')).toHaveLength(1);
+    expect(panel.querySelectorAll('.cm-search-nav')).toHaveLength(1);
+    expect(panel.querySelector('br')).toBeNull();
+    expect(panel.querySelector('button[name="close"]')).toBeNull();
+
+    raf.mockRestore();
+  });
+
+  it('retries enhancement when CodeMirror attaches the panel on the next frame', () => {
+    const root = document.createElement('div');
+    const view = {
+      dom: root,
+      state: { readOnly: false },
+    } as unknown as import('@codemirror/view').EditorView;
+    let scheduled: FrameRequestCallback | undefined;
+    const raf = vi
+      .spyOn(window, 'requestAnimationFrame')
+      .mockImplementation((callback: FrameRequestCallback) => {
+        scheduled = callback;
+        return 1;
+      });
+
+    openSearchPanel(view);
+    expect(scheduled).toBeTypeOf('function');
+
+    const panel = createPanel();
+    root.appendChild(panel);
+    requireValue(scheduled, 'expected a scheduled enhancement callback')(0);
+
+    expect(panel.dataset.mode).toBe('find');
+    expect(panel.querySelector('.cm-search-primary')).toBeTruthy();
+    expect(raf).toHaveBeenCalledTimes(1);
+    raf.mockRestore();
+  });
+
   it('opens the replace panel, updates query, and focuses replace input', () => {
     const { view, panel } = createView();
     const replaceInput = requireValue(

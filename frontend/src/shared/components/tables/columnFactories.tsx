@@ -12,6 +12,7 @@ import type {
   GridColumnAlignmentOptions,
   GridColumnDefinition,
 } from '@shared/components/tables/GridTable';
+import { formatResourceValue, parseResourceValue } from '@shared/utils/resourceCalculations';
 import type React from 'react';
 import { getUseShortResourceNames } from '@/core/settings/appPreferences';
 
@@ -115,61 +116,9 @@ export function createResourceBarColumn<T>(
     return str.length > 0 ? str : undefined;
   };
 
-  const parseResourceForExport = (value: string | undefined): number => {
-    if (
-      !value ||
-      value === '-' ||
-      value === 'undefined' ||
-      value === 'null' ||
-      value === 'not set'
-    ) {
-      return 0;
-    }
-
-    if (type === 'cpu') {
-      if (value.endsWith('m')) {
-        const parsed = Number.parseFloat(value.slice(0, -1));
-        return Number.isNaN(parsed) ? 0 : parsed;
-      }
-      const parsed = Number.parseFloat(value) * 1000;
-      return Number.isNaN(parsed) ? 0 : parsed;
-    }
-
-    const num = Number.parseFloat(value);
-    if (Number.isNaN(num)) {
-      return 0;
-    }
-    if (value.endsWith('Ki')) {
-      return num / 1024;
-    }
-    if (value.endsWith('Mi')) {
-      return num;
-    }
-    if (value.endsWith('Gi') || value.endsWith('GB')) {
-      return num * 1024;
-    }
-    if (value.endsWith('MB')) {
-      return num;
-    }
-    return num / (1024 * 1024);
-  };
-
   const formatResourceForExport = (value: string | undefined): string => {
-    if (!value || value === '-' || value === 'undefined' || value === 'null') {
-      return '-';
-    }
-
-    const parsedValue = parseResourceForExport(value);
-    if (type === 'cpu') {
-      return `${Math.round(parsedValue)}m`;
-    }
-    if (parsedValue === 0) {
-      return '-';
-    }
-    if (parsedValue >= 1024) {
-      return `${(parsedValue / 1024).toFixed(1)}Gi`;
-    }
-    return `${Math.round(parsedValue)}Mi`;
+    const parsedValue = parseResourceValue(value, type);
+    return formatResourceValue(value, parsedValue, type);
   };
 
   return {

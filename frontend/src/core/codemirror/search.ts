@@ -156,46 +156,52 @@ const getSearchPanel = (view: EditorView): HTMLElement | null => {
   return root.querySelector<HTMLElement>('.cm-search');
 };
 
-const layoutSearchPanel = (panel: HTMLElement): void => {
+const removeNativeSearchLayout = (panel: HTMLElement): void => {
   panel.querySelectorAll('br').forEach((br) => {
     br.remove();
   });
-
-  const mode = (panel.dataset.mode as PanelMode | undefined) ?? 'find';
   panel.querySelector<HTMLButtonElement>('button[name="close"]')?.remove();
-
-  const searchInput = panel.querySelector<HTMLInputElement>('input[name="search"]');
-  const nextButton = panel.querySelector<HTMLButtonElement>('button[name="next"]');
-  const previousButton = panel.querySelector<HTMLButtonElement>('button[name="prev"]');
   panel.querySelector<HTMLButtonElement>('button[name="select"]')?.remove();
+};
 
-  const updateNavButton = (button: HTMLButtonElement | null, label: '<' | '>') => {
-    if (!button) {
-      return;
-    }
-    button.textContent = label;
-    button.setAttribute('aria-label', label === '>' ? 'Next match' : 'Previous match');
-    button.title = label === '>' ? 'Next match' : 'Previous match';
-  };
-
-  let primaryRow = panel.querySelector<HTMLDivElement>('.cm-search-primary');
-  if (!primaryRow) {
-    primaryRow = document.createElement('div');
-    primaryRow.className = 'cm-search-primary';
+const getOrCreateSearchRow = (panel: HTMLElement, className: string): HTMLDivElement => {
+  const existing = panel.querySelector<HTMLDivElement>(`.${className}`);
+  if (existing) {
+    return existing;
   }
+  const row = document.createElement('div');
+  row.className = className;
+  return row;
+};
+
+const updateNavButton = (button: HTMLButtonElement | null, label: '<' | '>'): void => {
+  if (!button) {
+    return;
+  }
+  const accessibleLabel = label === '>' ? 'Next match' : 'Previous match';
+  button.textContent = label;
+  button.setAttribute('aria-label', accessibleLabel);
+  button.title = accessibleLabel;
+};
+
+const preparePrimarySearchRow = (panel: HTMLElement): HTMLDivElement => {
+  const primaryRow = getOrCreateSearchRow(panel, 'cm-search-primary');
+  const searchInput = panel.querySelector<HTMLInputElement>('input[name="search"]');
 
   if (searchInput && searchInput.parentElement !== primaryRow) {
     primaryRow.insertBefore(searchInput, primaryRow.firstChild ?? null);
   }
+  return primaryRow;
+};
 
-  let navRow = panel.querySelector<HTMLDivElement>('.cm-search-nav');
-  if (!navRow) {
-    navRow = document.createElement('div');
-    navRow.className = 'cm-search-nav';
-  }
+const prepareSearchNavigation = (panel: HTMLElement, primaryRow: HTMLDivElement): void => {
+  const navRow = getOrCreateSearchRow(panel, 'cm-search-nav');
+  const previousButton = panel.querySelector<HTMLButtonElement>('button[name="prev"]');
+  const nextButton = panel.querySelector<HTMLButtonElement>('button[name="next"]');
   while (navRow.firstChild) {
     navRow.removeChild(navRow.firstChild);
   }
+
   updateNavButton(previousButton, '<');
   updateNavButton(nextButton, '>');
   if (previousButton) {
@@ -207,76 +213,76 @@ const layoutSearchPanel = (panel: HTMLElement): void => {
   if (navRow.parentElement !== primaryRow) {
     primaryRow.appendChild(navRow);
   }
+};
 
+const prepareReplaceSearchRow = (panel: HTMLElement, mode: PanelMode): HTMLDivElement | null => {
   const replaceInput = panel.querySelector<HTMLInputElement>('input[name="replace"]');
   const replaceButtons = panel.querySelectorAll<HTMLButtonElement>(
     'button[name="replace"], button[name="replaceAll"]'
   );
-  let replaceContainer = panel.querySelector<HTMLDivElement>('.cm-search-replace');
-  if (replaceInput || replaceButtons.length > 0) {
-    if (!replaceContainer) {
-      replaceContainer = document.createElement('div');
-      replaceContainer.className = 'cm-search-replace';
-    }
-    const container = replaceContainer as HTMLDivElement;
-    if (replaceInput && replaceInput.parentElement !== container) {
-      container.appendChild(replaceInput);
-    }
-    replaceButtons.forEach((button) => {
-      if (button.parentElement !== container) {
-        container.appendChild(button);
-      }
-    });
-    const showReplace = mode === 'replace';
-    container.toggleAttribute('hidden', !showReplace);
-    container.setAttribute('aria-hidden', showReplace ? 'false' : 'true');
-  } else if (replaceContainer) {
-    replaceContainer.remove();
-    replaceContainer = null;
+  const existing = panel.querySelector<HTMLDivElement>('.cm-search-replace');
+  if (!replaceInput && replaceButtons.length === 0) {
+    existing?.remove();
+    return null;
   }
 
+  const container = existing ?? getOrCreateSearchRow(panel, 'cm-search-replace');
+  if (replaceInput && replaceInput.parentElement !== container) {
+    container.appendChild(replaceInput);
+  }
+  replaceButtons.forEach((button) => {
+    if (button.parentElement !== container) {
+      container.appendChild(button);
+    }
+  });
+  const showReplace = mode === 'replace';
+  container.toggleAttribute('hidden', !showReplace);
+  container.setAttribute('aria-hidden', showReplace ? 'false' : 'true');
+  return container;
+};
+
+const prepareAdvancedSearchRow = (panel: HTMLElement): HTMLDivElement | null => {
   const labels = Array.from(panel.querySelectorAll<HTMLLabelElement>('label'));
-  let advancedContainer = panel.querySelector<HTMLDivElement>('.cm-search-advanced');
-  if (labels.length > 0) {
-    if (!advancedContainer) {
-      advancedContainer = document.createElement('div');
-      advancedContainer.className = 'cm-search-advanced';
-    }
-    const advanced = advancedContainer as HTMLDivElement;
-    while (advanced.firstChild) {
-      advanced.removeChild(advanced.firstChild);
-    }
-    labels.forEach((label) => {
-      if (label.parentElement !== advanced) {
-        advanced.appendChild(label);
-      }
-    });
-    advanced.hidden = true;
-    advanced.setAttribute('aria-hidden', 'true');
-    advancedContainer = advanced;
-  } else if (advancedContainer) {
-    advancedContainer.remove();
-    advancedContainer = null;
+  const existing = panel.querySelector<HTMLDivElement>('.cm-search-advanced');
+  if (labels.length === 0) {
+    existing?.remove();
+    return null;
   }
 
-  if (primaryRow.parentElement !== panel) {
-    panel.appendChild(primaryRow);
+  const advanced = existing ?? getOrCreateSearchRow(panel, 'cm-search-advanced');
+  while (advanced.firstChild) {
+    advanced.removeChild(advanced.firstChild);
   }
-  panel.insertBefore(primaryRow, panel.firstChild);
-  let insertAfter: Node = primaryRow;
-  if (replaceContainer) {
-    if (replaceContainer.parentElement !== panel) {
-      panel.appendChild(replaceContainer);
+  labels.forEach((label) => {
+    advanced.appendChild(label);
+  });
+  advanced.hidden = true;
+  advanced.setAttribute('aria-hidden', 'true');
+  return advanced;
+};
+
+const orderSearchRows = (
+  panel: HTMLElement,
+  primaryRow: HTMLDivElement,
+  replaceRow: HTMLDivElement | null,
+  advancedRow: HTMLDivElement | null
+): void => {
+  const rows = [advancedRow, replaceRow, primaryRow];
+  for (const row of rows) {
+    if (row) {
+      panel.insertBefore(row, panel.firstChild);
     }
-    panel.insertBefore(replaceContainer, insertAfter.nextSibling);
-    insertAfter = replaceContainer;
   }
-  if (advancedContainer) {
-    if (advancedContainer.parentElement !== panel) {
-      panel.appendChild(advancedContainer);
-    }
-    panel.insertBefore(advancedContainer, insertAfter.nextSibling);
-  }
+};
+
+const layoutSearchPanel = (panel: HTMLElement): void => {
+  removeNativeSearchLayout(panel);
+  const mode = (panel.dataset.mode as PanelMode | undefined) ?? 'find';
+  const primaryRow = preparePrimarySearchRow(panel);
+  prepareSearchNavigation(panel, primaryRow);
+  const replaceRow = prepareReplaceSearchRow(panel, mode);
+  const advancedRow = prepareAdvancedSearchRow(panel);
+  orderSearchRows(panel, primaryRow, replaceRow, advancedRow);
 };
 
 interface EnsureSearchPanelOptions {

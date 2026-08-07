@@ -26,7 +26,7 @@ import {
   UpdateAppPreferences,
   ValidateThemeClusterPattern,
 } from '@/core/backend-api';
-import { eventBus } from '@/core/events';
+import { type AppEvents, eventBus } from '@/core/events';
 import { captureBootstrapError } from '@/core/telemetry/sentry';
 import {
   APPEARANCE_BOOTSTRAP_STORAGE_KEY,
@@ -651,113 +651,194 @@ const normalizeObjPanelLogsTargetGlobalLimit = (value?: number): number =>
     defaultOnNonPositive: true,
   });
 
+const emitSelectedPreferenceChange = <T>(
+  previous: AppPreferences,
+  next: AppPreferences,
+  select: (preferences: AppPreferences) => T,
+  emit: (value: T) => void,
+  areEqual: (previousValue: T, nextValue: T) => boolean = Object.is
+): void => {
+  const previousValue = select(previous);
+  const nextValue = select(next);
+  if (!areEqual(previousValue, nextValue)) {
+    emit(nextValue);
+  }
+};
+
+type PaletteTint = AppEvents['settings:palette-tint'];
+
+const selectPaletteTint = (preferences: AppPreferences, mode: 'light' | 'dark'): PaletteTint =>
+  mode === 'light'
+    ? {
+        mode,
+        hue: preferences.paletteHueLight,
+        saturation: preferences.paletteSaturationLight,
+        brightness: preferences.paletteBrightnessLight,
+      }
+    : {
+        mode,
+        hue: preferences.paletteHueDark,
+        saturation: preferences.paletteSaturationDark,
+        brightness: preferences.paletteBrightnessDark,
+      };
+
+const paletteTintsEqual = (previous: PaletteTint, next: PaletteTint): boolean =>
+  previous.hue === next.hue &&
+  previous.saturation === next.saturation &&
+  previous.brightness === next.brightness;
+
+type ModeColor = AppEvents['settings:accent-color'];
+
+const selectModeColor = (mode: 'light' | 'dark', color: string): ModeColor => ({ mode, color });
+
+const modeColorsEqual = (previous: ModeColor, next: ModeColor): boolean =>
+  previous.color === next.color;
+
 const emitPreferenceChanges = (previous: AppPreferences, next: AppPreferences): void => {
-  if (previous.appearanceMode !== next.appearanceMode) {
-    eventBus.emit('settings:appearance-mode', next.appearanceMode);
-  }
-  if (previous.useShortResourceNames !== next.useShortResourceNames) {
-    eventBus.emit('settings:short-names', next.useShortResourceNames);
-  }
-  if (previous.dimInactiveNamespaces !== next.dimInactiveNamespaces) {
-    eventBus.emit('settings:dim-inactive-namespaces', next.dimInactiveNamespaces);
-  }
-  if (previous.exclusiveNamespaces !== next.exclusiveNamespaces) {
-    eventBus.emit('settings:exclusive-namespaces', next.exclusiveNamespaces);
-  }
-  if (previous.errorReportingEnabled !== next.errorReportingEnabled) {
-    eventBus.emit('settings:error-reporting', next.errorReportingEnabled);
-  }
-  if (previous.autoRefreshEnabled !== next.autoRefreshEnabled) {
-    eventBus.emit('settings:auto-refresh', next.autoRefreshEnabled);
-  }
-  if (previous.refreshBackgroundClustersEnabled !== next.refreshBackgroundClustersEnabled) {
-    eventBus.emit('settings:refresh-background', next.refreshBackgroundClustersEnabled);
-  }
-  if (previous.kubernetesClientQPS !== next.kubernetesClientQPS) {
-    eventBus.emit('settings:kubernetes-client-qps', next.kubernetesClientQPS);
-  }
-  if (previous.kubernetesClientBurst !== next.kubernetesClientBurst) {
-    eventBus.emit('settings:kubernetes-client-burst', next.kubernetesClientBurst);
-  }
-  if (previous.permissionSSRRFetchConcurrency !== next.permissionSSRRFetchConcurrency) {
-    eventBus.emit(
-      'settings:permission-ssrr-fetch-concurrency',
-      next.permissionSSRRFetchConcurrency
-    );
-  }
-  if (previous.objPanelLogsBufferMaxSize !== next.objPanelLogsBufferMaxSize) {
-    eventBus.emit('settings:obj-panel-logs-buffer-size', next.objPanelLogsBufferMaxSize);
-  }
-  if (previous.objPanelLogsApiTimestampFormat !== next.objPanelLogsApiTimestampFormat) {
-    eventBus.emit(
-      'settings:obj-panel-logs-api-timestamp-format',
-      next.objPanelLogsApiTimestampFormat
-    );
-  }
-  if (
-    previous.objPanelLogsApiTimestampUseLocalTimeZone !==
-    next.objPanelLogsApiTimestampUseLocalTimeZone
-  ) {
-    eventBus.emit(
-      'settings:obj-panel-logs-api-timestamp-use-local-time-zone',
-      next.objPanelLogsApiTimestampUseLocalTimeZone
-    );
-  }
-  if (previous.objPanelLogsTargetPerScopeLimit !== next.objPanelLogsTargetPerScopeLimit) {
-    eventBus.emit(
-      'settings:obj-panel-logs-target-per-scope-limit',
-      next.objPanelLogsTargetPerScopeLimit
-    );
-  }
-  if (previous.objPanelLogsTargetGlobalLimit !== next.objPanelLogsTargetGlobalLimit) {
-    eventBus.emit(
-      'settings:obj-panel-logs-target-global-limit',
-      next.objPanelLogsTargetGlobalLimit
-    );
-  }
-  if (previous.gridTablePersistenceMode !== next.gridTablePersistenceMode) {
-    eventBus.emit('gridtable:persistence-mode', next.gridTablePersistenceMode);
-  }
-  if (previous.defaultTablePageSize !== next.defaultTablePageSize) {
-    eventBus.emit('settings:default-table-page-size', next.defaultTablePageSize);
-  }
-  // Emit per-mode palette changes separately for light and dark.
-  if (
-    previous.paletteHueLight !== next.paletteHueLight ||
-    previous.paletteSaturationLight !== next.paletteSaturationLight ||
-    previous.paletteBrightnessLight !== next.paletteBrightnessLight
-  ) {
-    eventBus.emit('settings:palette-tint', {
-      mode: 'light',
-      hue: next.paletteHueLight,
-      saturation: next.paletteSaturationLight,
-      brightness: next.paletteBrightnessLight,
-    });
-  }
-  if (
-    previous.paletteHueDark !== next.paletteHueDark ||
-    previous.paletteSaturationDark !== next.paletteSaturationDark ||
-    previous.paletteBrightnessDark !== next.paletteBrightnessDark
-  ) {
-    eventBus.emit('settings:palette-tint', {
-      mode: 'dark',
-      hue: next.paletteHueDark,
-      saturation: next.paletteSaturationDark,
-      brightness: next.paletteBrightnessDark,
-    });
-  }
-  if (previous.accentColorLight !== next.accentColorLight) {
-    eventBus.emit('settings:accent-color', { mode: 'light', color: next.accentColorLight });
-  }
-  if (previous.accentColorDark !== next.accentColorDark) {
-    eventBus.emit('settings:accent-color', { mode: 'dark', color: next.accentColorDark });
-  }
-  if (previous.linkColorLight !== next.linkColorLight) {
-    eventBus.emit('settings:link-color', { mode: 'light', color: next.linkColorLight });
-  }
-  if (previous.linkColorDark !== next.linkColorDark) {
-    eventBus.emit('settings:link-color', { mode: 'dark', color: next.linkColorDark });
-  }
+  emitSelectedPreferenceChange(
+    previous,
+    next,
+    (value) => value.appearanceMode,
+    (value) => eventBus.emit('settings:appearance-mode', value)
+  );
+  emitSelectedPreferenceChange(
+    previous,
+    next,
+    (value) => value.useShortResourceNames,
+    (value) => eventBus.emit('settings:short-names', value)
+  );
+  emitSelectedPreferenceChange(
+    previous,
+    next,
+    (value) => value.dimInactiveNamespaces,
+    (value) => eventBus.emit('settings:dim-inactive-namespaces', value)
+  );
+  emitSelectedPreferenceChange(
+    previous,
+    next,
+    (value) => value.exclusiveNamespaces,
+    (value) => eventBus.emit('settings:exclusive-namespaces', value)
+  );
+  emitSelectedPreferenceChange(
+    previous,
+    next,
+    (value) => value.errorReportingEnabled,
+    (value) => eventBus.emit('settings:error-reporting', value)
+  );
+  emitSelectedPreferenceChange(
+    previous,
+    next,
+    (value) => value.autoRefreshEnabled,
+    (value) => eventBus.emit('settings:auto-refresh', value)
+  );
+  emitSelectedPreferenceChange(
+    previous,
+    next,
+    (value) => value.refreshBackgroundClustersEnabled,
+    (value) => eventBus.emit('settings:refresh-background', value)
+  );
+  emitSelectedPreferenceChange(
+    previous,
+    next,
+    (value) => value.kubernetesClientQPS,
+    (value) => eventBus.emit('settings:kubernetes-client-qps', value)
+  );
+  emitSelectedPreferenceChange(
+    previous,
+    next,
+    (value) => value.kubernetesClientBurst,
+    (value) => eventBus.emit('settings:kubernetes-client-burst', value)
+  );
+  emitSelectedPreferenceChange(
+    previous,
+    next,
+    (value) => value.permissionSSRRFetchConcurrency,
+    (value) => eventBus.emit('settings:permission-ssrr-fetch-concurrency', value)
+  );
+  emitSelectedPreferenceChange(
+    previous,
+    next,
+    (value) => value.objPanelLogsBufferMaxSize,
+    (value) => eventBus.emit('settings:obj-panel-logs-buffer-size', value)
+  );
+  emitSelectedPreferenceChange(
+    previous,
+    next,
+    (value) => value.objPanelLogsApiTimestampFormat,
+    (value) => eventBus.emit('settings:obj-panel-logs-api-timestamp-format', value)
+  );
+  emitSelectedPreferenceChange(
+    previous,
+    next,
+    (value) => value.objPanelLogsApiTimestampUseLocalTimeZone,
+    (value) => eventBus.emit('settings:obj-panel-logs-api-timestamp-use-local-time-zone', value)
+  );
+  emitSelectedPreferenceChange(
+    previous,
+    next,
+    (value) => value.objPanelLogsTargetPerScopeLimit,
+    (value) => eventBus.emit('settings:obj-panel-logs-target-per-scope-limit', value)
+  );
+  emitSelectedPreferenceChange(
+    previous,
+    next,
+    (value) => value.objPanelLogsTargetGlobalLimit,
+    (value) => eventBus.emit('settings:obj-panel-logs-target-global-limit', value)
+  );
+  emitSelectedPreferenceChange(
+    previous,
+    next,
+    (value) => value.gridTablePersistenceMode,
+    (value) => eventBus.emit('gridtable:persistence-mode', value)
+  );
+  emitSelectedPreferenceChange(
+    previous,
+    next,
+    (value) => value.defaultTablePageSize,
+    (value) => eventBus.emit('settings:default-table-page-size', value)
+  );
+  emitSelectedPreferenceChange(
+    previous,
+    next,
+    (value) => selectPaletteTint(value, 'light'),
+    (value) => eventBus.emit('settings:palette-tint', value),
+    paletteTintsEqual
+  );
+  emitSelectedPreferenceChange(
+    previous,
+    next,
+    (value) => selectPaletteTint(value, 'dark'),
+    (value) => eventBus.emit('settings:palette-tint', value),
+    paletteTintsEqual
+  );
+  emitSelectedPreferenceChange(
+    previous,
+    next,
+    (value) => selectModeColor('light', value.accentColorLight),
+    (value) => eventBus.emit('settings:accent-color', value),
+    modeColorsEqual
+  );
+  emitSelectedPreferenceChange(
+    previous,
+    next,
+    (value) => selectModeColor('dark', value.accentColorDark),
+    (value) => eventBus.emit('settings:accent-color', value),
+    modeColorsEqual
+  );
+  emitSelectedPreferenceChange(
+    previous,
+    next,
+    (value) => selectModeColor('light', value.linkColorLight),
+    (value) => eventBus.emit('settings:link-color', value),
+    modeColorsEqual
+  );
+  emitSelectedPreferenceChange(
+    previous,
+    next,
+    (value) => selectModeColor('dark', value.linkColorDark),
+    (value) => eventBus.emit('settings:link-color', value),
+    modeColorsEqual
+  );
 };
 
 const updatePreferenceCache = (updates: Partial<AppPreferences>): void => {

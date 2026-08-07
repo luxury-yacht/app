@@ -1,7 +1,138 @@
 import { describe, expect, it } from 'vitest';
-import { buildConnectivityPresentation } from './connectivityPresentation';
+import {
+  buildConnectivityPresentation,
+  type ConnectivityPresentationInput,
+} from './connectivityPresentation';
+
+type InputOverrides = Partial<Omit<ConnectivityPresentationInput, 'authState'>> & {
+  authState?: Partial<ConnectivityPresentationInput['authState']>;
+};
+
+const createInput = (overrides: InputOverrides = {}): ConnectivityPresentationInput => ({
+  clusterId: 'cluster-a',
+  clusterName: 'alpha',
+  lifecycleState: 'ready',
+  namespaceReady: true,
+  health: 'healthy',
+  isPaused: false,
+  isRefreshing: false,
+  ...overrides,
+  authState: {
+    hasError: false,
+    isRecovering: false,
+    reason: '',
+    clusterName: '',
+    secondsUntilRetry: 0,
+    errorClass: '',
+    execCommand: '',
+    diagnosticKind: '',
+    diagnosticSummary: '',
+    ...overrides.authState,
+  },
+});
 
 describe('buildConnectivityPresentation', () => {
+  it.each([
+    {
+      name: 'paused before authentication errors',
+      overrides: {
+        isPaused: true,
+        lifecycleState: 'auth_failed' as const,
+        authState: { hasError: true, reason: 'denied' },
+      },
+      status: 'inactive',
+      summary: 'Auto-refresh paused',
+    },
+    {
+      name: 'lifecycle authentication failure',
+      overrides: { lifecycleState: 'auth_failed' as const },
+      status: 'unhealthy',
+      summary: 'Authentication failed',
+    },
+    {
+      name: 'disconnected lifecycle',
+      overrides: { lifecycleState: 'disconnected' as const },
+      status: 'unhealthy',
+      summary: 'Cluster disconnected',
+    },
+    {
+      name: 'reconnecting lifecycle',
+      overrides: { lifecycleState: 'reconnecting' as const },
+      status: 'degraded',
+      summary: 'Reconnecting',
+    },
+    {
+      name: 'connecting lifecycle',
+      overrides: { lifecycleState: 'connecting' as const },
+      status: 'refreshing',
+      summary: 'Connecting to cluster',
+    },
+    {
+      name: 'connected lifecycle startup',
+      overrides: { lifecycleState: 'connected' as const },
+      status: 'refreshing',
+      summary: 'Starting data services',
+    },
+    {
+      name: 'loading lifecycle startup',
+      overrides: { lifecycleState: 'loading' as const },
+      status: 'refreshing',
+      summary: 'Starting data services',
+    },
+    {
+      name: 'slow lifecycle loading',
+      overrides: { lifecycleState: 'loading_slow' as const },
+      status: 'degraded',
+      summary: 'Still loading cluster data',
+    },
+    {
+      name: 'namespace startup after lifecycle readiness',
+      overrides: { namespaceReady: false },
+      status: 'refreshing',
+      summary: 'Loading namespaces',
+    },
+    {
+      name: 'settled authentication error',
+      overrides: { authState: { hasError: true, reason: 'token expired' } },
+      status: 'unhealthy',
+      summary: 'Authentication failed',
+    },
+    {
+      name: 'degraded background health',
+      overrides: { health: 'degraded' as const },
+      status: 'degraded',
+      summary: 'Connection degraded',
+    },
+    {
+      name: 'settled healthy connection',
+      overrides: {},
+      status: 'healthy',
+      summary: 'Ready',
+    },
+  ])('preserves precedence for $name', ({ overrides, status, summary }) => {
+    expect(buildConnectivityPresentation(createInput(overrides))).toMatchObject({
+      status,
+      summary,
+    });
+  });
+
+  it('reports an immediate authentication retry without a countdown', () => {
+    const presentation = buildConnectivityPresentation(
+      createInput({
+        authState: {
+          hasError: true,
+          isRecovering: true,
+          errorClass: 'auth',
+          secondsUntilRetry: 0,
+        },
+      })
+    );
+
+    expect(presentation.detail).toBe(
+      'alpha is recovering from an authentication failure. Rechecking now.'
+    );
+  });
+
   it('shows "No cluster selected" when there is no lifecycle state (untracked/none selected)', () => {
     const presentation = buildConnectivityPresentation({
       clusterId: undefined,
