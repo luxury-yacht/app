@@ -547,6 +547,27 @@ describe('Sentry error reporting', () => {
     expect(sentryMocks.captureException).toHaveBeenCalledWith(error);
   });
 
+  it.each(['AUTHENTICATION', 'NETWORK', 'TIMEOUT'] as const)(
+    'does not capture %s errors from any user-visible error surface',
+    (category) => {
+      initializeErrorReporting({
+        enabled: true,
+        dsn: 'https://public@example.com/1',
+        environment: 'production',
+        release: 'luxury-yacht@v1.2.3',
+      });
+
+      captureUserVisibleError(new Error('expected cluster failure'), {
+        category,
+        severity: 'error',
+        surface: 'operational',
+      });
+
+      expect(sentryMocks.withScope).not.toHaveBeenCalled();
+      expect(sentryMocks.captureException).not.toHaveBeenCalled();
+    }
+  );
+
   it('captures event-handler exceptions through the centralized operational boundary', () => {
     configureErrorReporting(
       {
@@ -668,7 +689,7 @@ describe('Sentry error reporting', () => {
       error,
     });
     captureUserVisibleError(error, {
-      category: 'NETWORK',
+      category: 'SERVER_ERROR',
       severity: 'error',
       context: { action: 'manualRefresh' },
     });
@@ -733,7 +754,7 @@ describe('Sentry error reporting', () => {
 
     recordBrokerRequestStarted(request);
     captureUserVisibleError(new Error('refresh failed before broker completion'), {
-      category: 'NETWORK',
+      category: 'SERVER_ERROR',
       severity: 'error',
       context: {
         source: 'refresh-orchestrator',

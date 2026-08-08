@@ -3,12 +3,15 @@ package backend
 import (
 	"context"
 	"errors"
+	"fmt"
+	"net/url"
 	"sync"
 	"testing"
 	"time"
 
 	"github.com/getsentry/sentry-go"
 	"github.com/luxury-yacht/app/backend/internal/applog"
+	"github.com/luxury-yacht/app/backend/internal/authstate"
 	"github.com/luxury-yacht/app/backend/internal/errorcapture"
 	"github.com/luxury-yacht/app/backend/internal/logsources"
 	"github.com/luxury-yacht/app/internal/sentry"
@@ -207,6 +210,56 @@ func TestLoggerReportsStructuredErrorWithoutFlatteningCause(t *testing.T) {
 	entries := base.GetEntries()
 	require.Len(t, entries, 1)
 	require.Equal(t, "Failed to get deployment default/web: forbidden", entries[0].Message)
+}
+
+func TestLoggerKeepsExpectedClusterFailuresLocal(t *testing.T) {
+	tests := []struct {
+		name string
+		err  error
+	}{
+		{
+			name: "authentication",
+			err: fmt.Errorf(
+				"request failed: %w",
+				&authstate.AuthInvalidError{Reason: "credentials rejected"},
+			),
+		},
+		{
+			name: "connectivity",
+			err: &url.Error{
+				Op:  "Get",
+				URL: "https://cluster.example.test",
+				Err: errors.New("connection refused"),
+			},
+		},
+		{
+			name: "cancellation",
+			err:  context.Canceled,
+		},
+		{
+			name: "API server unavailable",
+			err:  apierrors.NewServiceUnavailable("cluster temporarily unavailable"),
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			reporter := &recordingErrorReporter{}
+			logger := NewLogger(10, reporter)
+
+			logger.ErrorWithCause(tt.err, "cluster request failed", "ResourceLoader", "cluster-a", "Production")
+
+			reporter.mu.Lock()
+			require.Empty(t, reporter.messages)
+			require.Empty(t, reporter.exceptions)
+			reporter.mu.Unlock()
+
+			entries := logger.GetEntries()
+			require.Len(t, entries, 1)
+			require.Equal(t, "ERROR", entries[0].Level)
+			require.Contains(t, entries[0].Message, tt.err.Error())
+		})
+	}
 }
 
 func TestLoggerSentryReportIncludesOriginalMessageAndCluster(t *testing.T) {

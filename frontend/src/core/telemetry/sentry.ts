@@ -56,6 +56,7 @@ interface UserActionContext {
 
 let configuredRuntime: SentryRuntimeConfig | null = null;
 let reportingInitialized = false;
+const nonReportableErrorCategories = new Set(['AUTHENTICATION', 'NETWORK', 'TIMEOUT']);
 let unsubscribePreference: (() => void) | null = null;
 let operationSequence = 0;
 let userActionSequence = 0;
@@ -1087,7 +1088,7 @@ const buildErrorBreadcrumb = (capture: ResolvedErrorCapture, category: string): 
 });
 
 export function captureUserVisibleError(error: unknown, details: UserVisibleErrorCapture): void {
-  if (!reportingInitialized) {
+  if (!reportingInitialized || nonReportableErrorCategories.has(details.category)) {
     return;
   }
 
