@@ -13,7 +13,6 @@ import (
 	"fmt"
 	"time"
 
-	"github.com/luxury-yacht/app/backend/internal/applog"
 	"github.com/luxury-yacht/app/backend/internal/authstate"
 	"github.com/luxury-yacht/app/backend/internal/config"
 	"github.com/luxury-yacht/app/backend/internal/errorcapture"
@@ -112,12 +111,7 @@ func (a *App) reportClusterAuthState(command clusterAuthStateCommand) {
 }
 
 func (a *App) reportInvalidClusterAuthState(command clusterAuthStateCommand) {
-	operation := fmt.Sprintf("Cluster %s auth failed", command.clusterName)
-	if command.diagnostic.Cause != nil {
-		applog.ReportError(a.logger, command.diagnostic.Cause, operation, logsources.Auth, command.clusterID, command.clusterName)
-	} else {
-		a.logger.Error(fmt.Sprintf("Cluster %s: auth failed - %s", command.clusterName, command.diagnostic.Reason), logsources.Auth, command.clusterID, command.clusterName)
-	}
+	a.logger.Warn(fmt.Sprintf("Cluster %s: auth failed - %s", command.clusterName, command.diagnostic.Reason), logsources.Auth, command.clusterID, command.clusterName)
 	errorcapture.CaptureWithCluster(command.clusterID, fmt.Sprintf("auth failed: %s", command.diagnostic.Reason))
 }
 

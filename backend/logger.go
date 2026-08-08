@@ -5,6 +5,7 @@ import (
 	"sync"
 	"time"
 
+	"github.com/luxury-yacht/app/backend/internal/errorcapture"
 	"github.com/luxury-yacht/app/backend/internal/logsources"
 	"github.com/luxury-yacht/app/internal/sentry"
 )
@@ -198,6 +199,9 @@ func (l *Logger) report(
 	operation sentryreporting.Operation,
 ) {
 	if dispatch.reporter == nil || dispatch.entry.Source == logsources.ErrorCapture {
+		return
+	}
+	if cause != nil && errorcapture.IsExpectedClusterFailure(cause) {
 		return
 	}
 	if level == LogLevelError {

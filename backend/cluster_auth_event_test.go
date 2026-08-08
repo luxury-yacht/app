@@ -8,7 +8,6 @@ import (
 	"time"
 
 	"github.com/luxury-yacht/app/backend/internal/authstate"
-	"github.com/luxury-yacht/app/internal/sentry"
 	"github.com/stretchr/testify/require"
 )
 
@@ -82,10 +81,13 @@ func TestHandleClusterAuthStateChange_InvalidEmitsAuthFailed(t *testing.T) {
 	require.Equal(t, "missing-helper", authFailedEvents[0]["kind"])
 	require.Equal(t, "gke-gcloud-auth-plugin", authFailedEvents[0]["execCommand"])
 	require.Equal(t, "The kubeconfig's credential helper could not be found.", authFailedEvents[0]["summary"])
+	entries := app.logger.GetEntries()
+	require.Len(t, entries, 1)
+	require.Equal(t, "WARN", entries[0].Level)
+	require.Equal(t, "Cluster Test Cluster: auth failed - token expired", entries[0].Message)
 	reporter.mu.Lock()
-	require.Len(t, reporter.exceptions, 1)
-	require.EqualError(t, reporter.exceptions[0].err, "token expired")
-	require.Equal(t, sentryreporting.Operation{}, reporter.exceptions[0].context.Operation)
+	require.Empty(t, reporter.messages)
+	require.Empty(t, reporter.exceptions)
 	reporter.mu.Unlock()
 }
 
@@ -205,6 +207,8 @@ func TestHandleClusterAuthStateChange_ValidEmitsRecoveredEvent(t *testing.T) {
 
 func TestHandleClusterAuthStateChange_InvalidWithoutCauseIsolatesBackgroundCluster(t *testing.T) {
 	app := newTestAppWithDefaults(t)
+	reporter := &recordingErrorReporter{}
+	app.logger = NewLogger(100, reporter)
 	app.Ctx = context.Background()
 	app.governorVisible = "cluster-foreground"
 	app.clusterLifecycle = newClusterLifecycle(nil)
@@ -241,10 +245,14 @@ func TestHandleClusterAuthStateChange_InvalidWithoutCauseIsolatesBackgroundClust
 
 	entries := app.logger.GetEntries()
 	require.Len(t, entries, 1)
-	require.Equal(t, "ERROR", entries[0].Level)
+	require.Equal(t, "WARN", entries[0].Level)
 	require.Equal(t, "Cluster Background: auth failed - credentials rejected", entries[0].Message)
 	require.Equal(t, "cluster-background", entries[0].ClusterID)
 	require.Equal(t, "Background", entries[0].ClusterName)
+	reporter.mu.Lock()
+	require.Empty(t, reporter.messages)
+	require.Empty(t, reporter.exceptions)
+	reporter.mu.Unlock()
 }
 
 func TestHandleClusterAuthStateChange_QueuesRecoveringMutationOutsideManagerLock(t *testing.T) {
