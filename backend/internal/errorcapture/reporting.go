@@ -3,9 +3,9 @@ package errorcapture
 import (
 	"context"
 	"errors"
-	"net"
 
 	"github.com/luxury-yacht/app/backend/internal/authstate"
+	"github.com/luxury-yacht/app/backend/internal/credentialerrors"
 	apierrors "k8s.io/apimachinery/pkg/api/errors"
 )
 
@@ -17,18 +17,21 @@ func IsExpectedClusterFailure(err error) bool {
 	if err == nil {
 		return false
 	}
+	if errors.Is(err, context.DeadlineExceeded) {
+		return false
+	}
 	if errors.Is(err, context.Canceled) {
 		return true
+	}
+	if apierrors.IsForbidden(err) {
+		return false
 	}
 
 	var authErr *authstate.AuthInvalidError
 	if errors.As(err, &authErr) {
 		return true
 	}
-	if apierrors.IsServiceUnavailable(err) || apierrors.IsTimeout(err) || apierrors.IsServerTimeout(err) {
-		return true
-	}
-
-	var networkErr net.Error
-	return errors.As(err, &networkErr)
+	diagnostic := credentialerrors.ClassifyKnown(err, credentialerrors.Context{})
+	return diagnostic.Class == credentialerrors.ClassAuth ||
+		diagnostic.Class == credentialerrors.ClassConnectivity
 }

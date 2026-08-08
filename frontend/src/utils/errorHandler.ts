@@ -6,20 +6,9 @@
  */
 
 import { captureUserVisibleError } from '@/core/telemetry/sentry';
+import { ErrorCategory, isExpectedClusterErrorCategory } from '@/shared/constants/errorCategories';
 
-export const ErrorCategory = {
-  NETWORK: 'NETWORK',
-  AUTHENTICATION: 'AUTHENTICATION',
-  PERMISSION: 'PERMISSION',
-  NOT_FOUND: 'NOT_FOUND',
-  VALIDATION: 'VALIDATION',
-  TIMEOUT: 'TIMEOUT',
-  RATE_LIMIT: 'RATE_LIMIT',
-  SERVER_ERROR: 'SERVER_ERROR',
-  UNKNOWN: 'UNKNOWN',
-} as const;
-
-export type ErrorCategory = (typeof ErrorCategory)[keyof typeof ErrorCategory];
+export { ErrorCategory };
 
 export const ErrorSeverity = {
   INFO: 'info',
@@ -37,7 +26,7 @@ const authTokenPattern = /\btokens?\b/;
 const forbiddenStatusPattern =
   /\b(?:http(?:\/\d(?:\.\d)?)?\s+403|status(?:\s+(?:code|of))?(?:\s*[:=]\s*|\s+)403)\b/;
 const connectivityPattern =
-  /\b(?:network|fetch|cors|connection|disconnected|dial tcp|no such host|tls handshake|x509|offline|econnrefused)\b/;
+  /\b(?:network|[a-z0-9_-]*fetch[a-z0-9_-]*|cors|connections?|disconnected|dial tcp|no such host|tls handshake|x509|offline|econnrefused)\b/;
 const timeoutPattern = /\b(?:timeout|timed out)\b/;
 
 export interface ErrorDetails {
@@ -319,7 +308,8 @@ class ErrorHandler {
   private reportError(
     error: unknown,
     details: ErrorDetails,
-    surface: 'operational' | 'user-visible' = 'user-visible'
+    surface: 'operational' | 'user-visible' = 'user-visible',
+    expectedCondition = false
   ): void {
     const reactRootAlreadyCaptured =
       details.context?.source === 'ErrorBoundary' || details.context?.action === 'componentError';
@@ -328,6 +318,7 @@ class ErrorHandler {
         category: details.category,
         severity: details.severity,
         surface,
+        expectedCondition,
         context: details.context,
       });
     }
@@ -371,7 +362,12 @@ class ErrorHandler {
     if (suppressNotification) {
       this.logExpectedCondition(errorDetails);
     } else {
-      this.reportError(error, errorDetails);
+      this.reportError(
+        error,
+        errorDetails,
+        'user-visible',
+        isExpectedClusterErrorCategory(category)
+      );
       // Store in history
       this.addToHistory(errorDetails);
 

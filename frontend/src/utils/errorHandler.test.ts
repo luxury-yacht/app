@@ -60,6 +60,13 @@ describe('ErrorHandler', () => {
     expect(listener).toHaveBeenCalledWith(
       expect.objectContaining({ category: ErrorCategory.NETWORK })
     );
+    expect(telemetryMocks.captureUserVisibleError).toHaveBeenCalledWith(
+      expect.any(Error),
+      expect.objectContaining({
+        category: ErrorCategory.NETWORK,
+        expectedCondition: true,
+      })
+    );
 
     unsubscribe();
   });
@@ -94,6 +101,7 @@ describe('ErrorHandler', () => {
       error,
       expect.objectContaining({
         context: { action: 'startPortForward', clusterId: 'cluster-a' },
+        expectedCondition: false,
       })
     );
     expect(listener).not.toHaveBeenCalled();
@@ -111,6 +119,7 @@ describe('ErrorHandler', () => {
       error,
       expect.objectContaining({
         surface: 'operational',
+        expectedCondition: false,
         context: { action: 'persistTableState' },
       })
     );
@@ -155,6 +164,9 @@ describe('ErrorHandler', () => {
 
   it.each([
     ['Failed to fetch: dial tcp 10.0.0.1:8403: connection refused', ErrorCategory.NETWORK],
+    ['Fetching cluster state failed', ErrorCategory.NETWORK],
+    ['Could not refetch cluster state', ErrorCategory.NETWORK],
+    ['All cluster connections were closed', ErrorCategory.NETWORK],
     [
       'Post "https://cluster.example.test": dial tcp: lookup cluster.example.test: no such host',
       ErrorCategory.NETWORK,

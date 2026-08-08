@@ -68,6 +68,12 @@ successful probe or cancellation. Probe failures are classified
   upgrade (multi-minute outage, often with transient 401s) from stranding the
   cluster in `invalid`.
 
+These expected auth and connectivity outcomes stay in the local application log
+and lifecycle UI instead of creating Sentry issues. Telemetry suppression uses
+only positively recognized conditions; an unrelated error remains reportable.
+Client-side `context.DeadlineExceeded` also remains reportable even though a
+deadline is a connectivity verdict for recovery.
+
 State transitions are driven only by probe results: `ReportFailure` moves
 valid → recovering; the loop settles recovering → invalid and recovers any
 non-valid state → valid. `TriggerRetry` restarts the loop (immediate probe)

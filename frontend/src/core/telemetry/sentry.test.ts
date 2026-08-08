@@ -548,7 +548,7 @@ describe('Sentry error reporting', () => {
   });
 
   it.each(['AUTHENTICATION', 'NETWORK', 'TIMEOUT'] as const)(
-    'does not capture %s errors from any user-visible error surface',
+    'captures %s errors at an operational exception boundary',
     (category) => {
       initializeErrorReporting({
         enabled: true,
@@ -561,6 +561,27 @@ describe('Sentry error reporting', () => {
         category,
         severity: 'error',
         surface: 'operational',
+      });
+
+      expect(sentryMocks.withScope).toHaveBeenCalledOnce();
+      expect(sentryMocks.captureException).toHaveBeenCalledOnce();
+    }
+  );
+
+  it.each(['AUTHENTICATION', 'NETWORK', 'TIMEOUT'] as const)(
+    'does not capture an explicitly expected %s condition',
+    (category) => {
+      initializeErrorReporting({
+        enabled: true,
+        dsn: 'https://public@example.com/1',
+        environment: 'production',
+        release: 'luxury-yacht@v1.2.3',
+      });
+
+      captureUserVisibleError(new Error('expected cluster failure'), {
+        category,
+        severity: 'error',
+        expectedCondition: true,
       });
 
       expect(sentryMocks.withScope).not.toHaveBeenCalled();

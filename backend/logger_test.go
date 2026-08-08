@@ -225,6 +225,14 @@ func TestLoggerKeepsExpectedClusterFailuresLocal(t *testing.T) {
 			),
 		},
 		{
+			name: "raw structured authentication",
+			err:  apierrors.NewUnauthorized("credentials rejected"),
+		},
+		{
+			name: "raw credential helper failure",
+			err:  errors.New("getting credentials: exec: executable aws failed with exit code 255"),
+		},
+		{
 			name: "connectivity",
 			err: &url.Error{
 				Op:  "Get",
@@ -258,6 +266,38 @@ func TestLoggerKeepsExpectedClusterFailuresLocal(t *testing.T) {
 			require.Len(t, entries, 1)
 			require.Equal(t, "ERROR", entries[0].Level)
 			require.Contains(t, entries[0].Message, tt.err.Error())
+		})
+	}
+}
+
+func TestLoggerReportsDeadlineAndUnexpectedURLFailures(t *testing.T) {
+	tests := []struct {
+		name string
+		err  error
+	}{
+		{name: "deadline exceeded", err: context.DeadlineExceeded},
+		{
+			name: "URL application failure",
+			err: &url.Error{
+				Op:  "Get",
+				URL: "https://cluster.example.test",
+				Err: errors.New("redirect policy rejected"),
+			},
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			reporter := &recordingErrorReporter{}
+			logger := NewLogger(10, reporter)
+
+			logger.ErrorWithCause(tt.err, "cluster request failed", "ResourceLoader", "cluster-a", "Production")
+
+			reporter.mu.Lock()
+			require.Empty(t, reporter.messages)
+			require.Len(t, reporter.exceptions, 1)
+			require.ErrorIs(t, reporter.exceptions[0].err, tt.err)
+			reporter.mu.Unlock()
 		})
 	}
 }

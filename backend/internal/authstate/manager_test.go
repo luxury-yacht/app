@@ -352,15 +352,13 @@ func TestOnStateChangeReceivesDiagnostic(t *testing.T) {
 	require.Equal(t, want, got, "the diagnostic flows through OnStateChange unchanged")
 }
 
-func TestFailureDiagnosticEqualityIgnoresOriginalCause(t *testing.T) {
+func TestFailureDiagnosticEqualityIncludesUserVisibleDiagnosis(t *testing.T) {
 	left := FailureDiagnostic{
 		Reason: "credential helper failed",
 		Class:  "auth",
 		Kind:   "exec-failed",
-		Cause:  errors.New("first instance"),
 	}
 	right := left
-	right.Cause = errors.New("second instance")
 
 	require.True(t, equalFailureDiagnostic(left, right))
 	right.Summary = "different diagnosis"

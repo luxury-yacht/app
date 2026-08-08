@@ -22,9 +22,6 @@ type FailureDiagnostic struct {
 	Summary string
 	// ExecCommand is the kubeconfig exec credential command, when known.
 	ExecCommand string
-	// Cause retains the original credential error for structured reporting. It
-	// is deliberately omitted from UI payloads and state equality.
-	Cause error
 }
 
 // NewFailureDiagnostic builds a FailureDiagnostic from a classified credential
@@ -40,7 +37,6 @@ func NewFailureDiagnostic(err error, d credentialerrors.Diagnostic) FailureDiagn
 		Kind:        string(d.Kind),
 		Summary:     d.Summary,
 		ExecCommand: d.ExecCommand,
-		Cause:       err,
 	}
 }
 

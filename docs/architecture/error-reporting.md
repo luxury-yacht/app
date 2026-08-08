@@ -21,14 +21,17 @@ data-collection defaults with an application-owned privacy boundary:
   notification except when it classifies authentication or permission failure
   as an expected UI condition already owned by the auth overlay or permission
   state. Those conditions stay as local informational diagnostics: they do not
-  create Sentry exceptions or breadcrumbs. `handleInline` and
+  create Sentry exceptions or breadcrumbs. Network and timeout conditions may
+  still publish their normal UI notification, but `handle` marks them as
+  expected cluster conditions so the telemetry boundary keeps them local.
+  Category alone never suppresses an exception: `handleInline` and
   `handleOperational` remain exception boundaries even for permission-shaped
-  text, so an unexpected internal failure does not disappear merely because
-  its message contains `permission` or `403`. Both preserve the original
-  JavaScript `Error` for `captureException`. Validation messages and advisory
-  warnings are not exceptions and stay local. Render failures already owned by
-  the React 19 root handler are not captured a second time by legacy component
-  boundaries.
+  or connectivity-shaped text, so an unexpected internal failure does not
+  disappear merely because its message contains `permission`, `403`, `network`,
+  or `timeout`. Both preserve the original JavaScript `Error` for
+  `captureException`. Validation messages and advisory warnings are not
+  exceptions and stay local. Render failures already owned by the React 19 root
+  handler are not captured a second time by legacy component boundaries.
 - `frontend/src/shared/components/errors/ErrorSurface.tsx` is the rendering
   boundary for dynamic inline error text. An operational surface receives the
   original error and reports it when presented; validation, runtime-status,
@@ -152,9 +155,10 @@ data-collection defaults with an application-owned privacy boundary:
   it produces one warning breadcrumb per uninterrupted unavailable run and no
   exception. Other repeated poll failures produce at most one exception per API
   in an uninterrupted failure run; a successful full collection re-arms the
-  report so a later outage remains visible. Authentication diagnostics retain
-  the original cause internally while exposing only their existing sanitized
-  fields to the frontend. Capability
+  report so a later outage remains visible. Authentication diagnostics expose
+  only their existing sanitized fields to the frontend; the original failure
+  remains in the local application log rather than auth lifecycle state.
+  Capability
   batch summaries and slow-review breadcrumbs retain group/version, resource,
   verb, and namespaced-versus-cluster scope, but never the caller-supplied
   permission key, namespace, or object name. Batch timing breadcrumbs aggregate
@@ -322,6 +326,19 @@ poller shut down — and must not be reported as a failure.
 
 `context.DeadlineExceeded` is deliberately still an error: a request that ran
 out of time is a real problem, unlike one the app itself cancelled.
+
+Expected cluster authentication and connectivity outcomes also remain in the
+local application log instead of creating Sentry issues. The backend uses the
+known-only credential classifier for this decision: wrapped auth-state errors,
+raw 401 credential rejection or helper failures, API-server
+unavailable/timeouts, and recognized DNS, TCP, or TLS failures are expected.
+Unrecognized errors are reported. Structured Kubernetes 403 authorization
+failures remain reportable at backend exception boundaries. The auth recovery
+loop separately retains its conservative fallback that treats an unknown probe
+failure as connectivity, because an inconclusive probe must not invalidate
+credentials. A client-side
+`context.DeadlineExceeded` is explicitly excluded from suppression even though
+it is connectivity-shaped for recovery purposes.
 
 Entries from `logsources.ErrorCapture` never reach the reporter at all.
 `backend/internal/errorcapture` scrapes third-party stderr — klog lines from

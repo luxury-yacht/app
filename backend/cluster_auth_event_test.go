@@ -2,7 +2,6 @@ package backend
 
 import (
 	"context"
-	"errors"
 	"sync"
 	"testing"
 	"time"
@@ -57,7 +56,6 @@ func TestHandleClusterAuthStateChange_InvalidEmitsAuthFailed(t *testing.T) {
 	// Trigger the StateInvalid handler with a typed diagnostic (missing exec helper).
 	app.handleClusterAuthStateChange("test-cluster", authstate.StateInvalid, authstate.FailureDiagnostic{
 		Reason:      "token expired",
-		Cause:       errors.New("token expired"),
 		Kind:        "missing-helper",
 		Summary:     "The kubeconfig's credential helper could not be found.",
 		ExecCommand: "gke-gcloud-auth-plugin",

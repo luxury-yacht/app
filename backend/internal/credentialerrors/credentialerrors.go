@@ -5,6 +5,9 @@
 package credentialerrors
 
 import (
+	"context"
+	"errors"
+	"net"
 	"strings"
 
 	apierrors "k8s.io/apimachinery/pkg/api/errors"
@@ -17,7 +20,7 @@ import (
 type Class string
 
 const (
-	// ClassUnknown is returned only for a nil error.
+	// ClassUnknown means no credential or connectivity condition was recognized.
 	ClassUnknown Class = ""
 	// ClassAuth means the credentials were rejected or the credential plugin failed.
 	ClassAuth Class = "auth"
@@ -81,6 +84,21 @@ const (
 // auth-class. The order of checks matters: a "not found" exec error is reported
 // as a missing helper before the more general helper-failed bucket.
 func Classify(err error, ctx Context) Diagnostic {
+	d := ClassifyKnown(err, ctx)
+	if err != nil && d.Class == ClassUnknown {
+		if isRejected(strings.ToLower(err.Error())) {
+			d.Class, d.Kind, d.Summary = ClassAuth, KindRejected, summaryRejected
+		} else {
+			d.Class, d.Kind, d.Summary = ClassConnectivity, KindConnectivity, summaryConnectivity
+		}
+	}
+	return d
+}
+
+// ClassifyKnown classifies only errors that prove an authentication or
+// connectivity condition. Unlike Classify, it leaves unrelated failures
+// unknown so reporting boundaries can avoid hiding application defects.
+func ClassifyKnown(err error, ctx Context) Diagnostic {
 	d := Diagnostic{ExecCommand: strings.TrimSpace(ctx.ExecCommand)}
 	if err == nil {
 		return d
@@ -101,12 +119,50 @@ func Classify(err error, ctx Context) Diagnostic {
 		d.Class, d.Kind, d.Summary = ClassAuth, KindHelperFailed, summaryHelperFailed
 	case isExpired(msg):
 		d.Class, d.Kind, d.Summary = ClassAuth, KindExpired, summaryExpired
-	case isRejected(msg):
+	case isKnownRejected(msg):
 		d.Class, d.Kind, d.Summary = ClassAuth, KindRejected, summaryRejected
-	default:
+	case isConnectivity(err, msg):
 		d.Class, d.Kind, d.Summary = ClassConnectivity, KindConnectivity, summaryConnectivity
 	}
 	return d
+}
+
+func isKnownRejected(msg string) bool {
+	return strings.Contains(msg, "authentication required") ||
+		strings.Contains(msg, "unauthorized")
+}
+
+func isConnectivity(err error, msg string) bool {
+	if errors.Is(err, context.DeadlineExceeded) ||
+		apierrors.IsServiceUnavailable(err) ||
+		apierrors.IsTimeout(err) ||
+		apierrors.IsServerTimeout(err) {
+		return true
+	}
+
+	var operationErr *net.OpError
+	if errors.As(err, &operationErr) {
+		return true
+	}
+	var networkErr net.Error
+	if errors.As(err, &networkErr) && networkErr.Timeout() {
+		return true
+	}
+
+	return strings.Contains(msg, "connection refused") ||
+		strings.Contains(msg, "connection reset") ||
+		strings.Contains(msg, "connection aborted") ||
+		strings.Contains(msg, "network is unreachable") ||
+		strings.Contains(msg, "no route to host") ||
+		strings.Contains(msg, "no such host") ||
+		strings.Contains(msg, "temporary failure in name resolution") ||
+		strings.Contains(msg, "dial tcp") ||
+		strings.Contains(msg, "i/o timeout") ||
+		strings.Contains(msg, "context deadline exceeded") ||
+		strings.Contains(msg, "tls handshake") ||
+		strings.Contains(msg, "x509") ||
+		strings.Contains(msg, "econnrefused") ||
+		strings.Contains(msg, "econnreset")
 }
 
 // isMissingHelper reports an exec credential helper that could not be located.
@@ -135,8 +191,7 @@ func isExpired(msg string) bool {
 // isRejected reports credentials the cluster refused (by string, e.g. an
 // unstructured 401/403 or a provider authorization message).
 func isRejected(msg string) bool {
-	return strings.Contains(msg, "authentication required") ||
-		strings.Contains(msg, "unauthorized") ||
+	return isKnownRejected(msg) ||
 		strings.Contains(msg, "access denied") ||
 		strings.Contains(msg, "permission denied")
 }

@@ -66,6 +66,22 @@ func TestClassify(t *testing.T) {
 	}
 }
 
+func TestClassifyKnownLeavesUnrelatedFailuresUnknown(t *testing.T) {
+	for _, message := range []string{"invariant violated", "permission denied"} {
+		got := ClassifyKnown(errors.New(message), Context{})
+		require.Equal(t, ClassUnknown, got.Class)
+		require.Equal(t, KindNone, got.Kind)
+		require.Empty(t, got.Summary)
+	}
+
+	legacy := Classify(errors.New("invariant violated"), Context{})
+	require.Equal(t, ClassConnectivity, legacy.Class,
+		"auth recovery keeps its conservative connectivity fallback")
+	legacyPermission := Classify(errors.New("permission denied"), Context{})
+	require.Equal(t, ClassAuth, legacyPermission.Class,
+		"auth recovery keeps its legacy provider rejection classification")
+}
+
 // TestClassifyWindowsErrorShapes confirms the classifier handles the error
 // strings produced on Windows, where kubeconfig exec helpers run through the
 // app's wrapper binary (see backend/exec_wrapper.go) and Go's exec error names
