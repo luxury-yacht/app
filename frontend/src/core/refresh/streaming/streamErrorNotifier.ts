@@ -13,7 +13,7 @@ export interface StreamErrorNotification {
 }
 
 export class StreamErrorNotifier {
-  private lastNotifiedErrors = new Map<string, string>();
+  private readonly lastNotifiedErrors = new Map<string, string>();
   private suppressErrorsUntil = 0;
 
   notify({ source, domain, scope, message, context, error }: StreamErrorNotification): void {

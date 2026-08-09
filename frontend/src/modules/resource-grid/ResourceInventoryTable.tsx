@@ -57,7 +57,7 @@ export default function ResourceInventoryTable<T>({
   allowPartial,
   suppressEmptyWarning,
   ...tableProps
-}: ResourceInventoryTableProps<T>) {
+}: Readonly<ResourceInventoryTableProps<T>>) {
   const render = useResourceInventoryTable(source);
   // The binding owns local table ordering. Use its rows while the controller is
   // rendering the live source; when the controller substitutes cached rows for

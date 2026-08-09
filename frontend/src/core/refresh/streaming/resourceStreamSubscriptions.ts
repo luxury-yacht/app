@@ -89,8 +89,8 @@ export const resolveResourceStreamSubscriptionScope = (
 export class ResourceStreamSubscriptionStore {
   private readonly unsubscribeDebounceMs: number;
   private readonly logInfo: (message: string) => void;
-  private subscriptions = new Map<string, StreamSubscription>();
-  private pendingUnsubscribes = new Map<string, PendingUnsubscribe>();
+  private readonly subscriptions = new Map<string, StreamSubscription>();
+  private readonly pendingUnsubscribes = new Map<string, PendingUnsubscribe>();
 
   constructor(unsubscribeDebounceMs: number, logInfo: (message: string) => void) {
     this.unsubscribeDebounceMs = unsubscribeDebounceMs;

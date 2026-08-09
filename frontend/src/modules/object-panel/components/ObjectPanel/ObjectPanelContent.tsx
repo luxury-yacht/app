@@ -110,7 +110,7 @@ export function ObjectPanelContent({
   deletedResourceName,
   onClosePanel,
   panelId,
-}: ObjectPanelContentProps) {
+}: Readonly<ObjectPanelContentProps>) {
   const showDetails = activeTab === 'details' && detailTabProps;
   const showLogs = activeTab === 'logs' && capabilities.hasObjPanelLogs && objectData;
   const showShell = activeTab === 'shell' && capabilities.hasShell && objectData;

@@ -84,7 +84,7 @@ function GridTableBody<T>({
   loading,
   hasActiveFilters,
   onClearFilters,
-}: GridTableBodyProps<T>) {
+}: Readonly<GridTableBodyProps<T>>) {
   const stretchDecisionRef = useRef<boolean | null>(null);
 
   if (!shouldVirtualize) {

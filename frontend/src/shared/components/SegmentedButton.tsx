@@ -29,7 +29,7 @@ function SegmentedButton<T = string>({
   ariaLabel,
   className = '',
   size = 'medium',
-}: SegmentedButtonProps<T>) {
+}: Readonly<SegmentedButtonProps<T>>) {
   return (
     <fieldset
       className={`segmented-button segmented-button--${size} ${className}`}

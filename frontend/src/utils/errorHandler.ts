@@ -61,7 +61,7 @@ export interface ErrorHandlerOptions {
 
 class ErrorHandler {
   private options: ErrorHandlerOptions;
-  private errorListeners: Set<(error: ErrorDetails) => void> = new Set();
+  private readonly errorListeners: Set<(error: ErrorDetails) => void> = new Set();
   private errorHistory: ErrorDetails[] = [];
   private readonly maxHistorySize = 100;
 
@@ -558,8 +558,8 @@ class ErrorHandler {
  * Scoped error handler for specific contexts
  */
 class ScopedErrorHandler {
-  private parent: ErrorHandler;
-  private contextName: string;
+  private readonly parent: ErrorHandler;
+  private readonly contextName: string;
 
   constructor(parent: ErrorHandler, contextName: string) {
     this.parent = parent;

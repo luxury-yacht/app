@@ -25,7 +25,7 @@ import { navigateToFavorite } from './navigateToFavorite';
 import './FavMenuDropdown.css';
 
 /** Returns a dashed-circle for generic favorites or a pin for cluster-specific ones. */
-function TypeIcon({ clusterSelection }: { clusterSelection: string }) {
+function TypeIcon({ clusterSelection }: Readonly<{ clusterSelection: string }>) {
   return (
     <span className="fav-dropdown-type-icon">
       {clusterSelection ? (

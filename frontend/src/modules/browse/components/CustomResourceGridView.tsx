@@ -234,7 +234,7 @@ export function CustomResourceGridFrame({
   emptyText,
   extraLoading = false,
   extraLoaded = false,
-}: {
+}: Readonly<{
   parts: ReturnType<typeof useCustomResourceGridParts>;
   catalog: CatalogRowsResult;
   gridTableProps: Partial<GridTableProps<CustomResourceGridRow>> &
@@ -251,7 +251,7 @@ export function CustomResourceGridFrame({
   emptyText: string;
   extraLoading?: boolean;
   extraLoaded?: boolean;
-}) {
+}>) {
   const {
     rows,
     loading: catalogLoading,

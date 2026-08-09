@@ -398,7 +398,7 @@ const routeKeyboardEvent = (event: KeyboardEvent, context: KeyboardEventRoutingC
   dispatchRegisteredShortcut(event, context.shortcuts);
 };
 
-export function KeyboardProvider({ children, disabled = false }: KeyboardProviderProps) {
+export function KeyboardProvider({ children, disabled = false }: Readonly<KeyboardProviderProps>) {
   return <KeyboardProviderInner disabled={disabled}>{children}</KeyboardProviderInner>;
 }
 

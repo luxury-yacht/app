@@ -232,11 +232,11 @@ function AppearanceModeSelector({
   mode,
   options,
   onChange,
-}: {
+}: Readonly<{
   mode: AppearanceMode;
   options: ReadonlyArray<(typeof appearanceModeOptions)[number]>;
   onChange: (mode: AppearanceMode) => void;
-}) {
+}>) {
   return (
     <div className="settings-row">
       <div className="settings-row-label">
@@ -284,7 +284,7 @@ function PaletteControls({
   onHueReset,
   onSaturationReset,
   onBrightnessReset,
-}: {
+}: Readonly<{
   paletteHue: number;
   paletteSaturation: number;
   paletteBrightness: number;
@@ -307,7 +307,7 @@ function PaletteControls({
   onHueReset: () => void;
   onSaturationReset: () => void;
   onBrightnessReset: () => void;
-}) {
+}>) {
   const elementIdPrefix = useId();
 
   return (
@@ -406,7 +406,7 @@ function ColorControl({
   onHexCommit,
   onHexCancel,
   onReset,
-}: {
+}: Readonly<{
   title: string;
   help: string;
   value: string;
@@ -420,7 +420,7 @@ function ColorControl({
   onHexCommit: () => void;
   onHexCancel: () => void;
   onReset: () => void;
-}) {
+}>) {
   return (
     <div className="settings-row">
       <div className="settings-row-label">

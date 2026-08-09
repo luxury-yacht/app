@@ -55,7 +55,7 @@ interface ObjectPanelProps {
 // ============================================================================
 // MAIN COMPONENT
 // ============================================================================
-function ObjectPanel({ panelId, objectRef }: ObjectPanelProps) {
+function ObjectPanel({ panelId, objectRef }: Readonly<ObjectPanelProps>) {
   const objectData = objectRef;
   const { closePanel, setObjectPanelActiveTab } = useObjectPanelState();
   const { tabGroups, getPreferredOpenGroupKey } = useDockablePanelContext();

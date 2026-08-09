@@ -26,7 +26,7 @@ function ToggleSwitch({
   ariaLabelledBy,
   size = 'medium',
   className = '',
-}: ToggleSwitchProps) {
+}: Readonly<ToggleSwitchProps>) {
   const handleClick = () => {
     if (disabled) {
       return;

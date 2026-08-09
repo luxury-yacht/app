@@ -197,7 +197,7 @@ function useAggregatedGridCore<D extends AggregatedRowBase>(
 export function ClusterAggregatedResourceGridView<
   P extends TypedQueryPayload,
   D extends AggregatedRowBase,
->({ spec, error }: { spec: AggregatedResourceGridViewSpec<D>; error?: string | null }) {
+>({ spec, error }: Readonly<{ spec: AggregatedResourceGridViewSpec<D>; error?: string | null }>) {
   const core = useAggregatedGridCore(spec);
   const diagnosticsLabel = spec.labels.cluster ?? '';
 
@@ -257,11 +257,11 @@ export function NamespaceAggregatedResourceGridView<
   spec,
   namespace,
   showNamespaceColumn = false,
-}: {
+}: Readonly<{
   spec: AggregatedResourceGridViewSpec<D>;
   namespace: string;
   showNamespaceColumn?: boolean;
-}) {
+}>) {
   const core = useAggregatedGridCore(spec);
   const namespaceColumnLink = useNamespaceColumnLink<D>(spec.namespaceLinkTab ?? 'config');
 

@@ -31,7 +31,7 @@ export function ObjectPanelResourceGridTableSurface<T extends ResourceGridTableR
   onRowClick,
   enableContextMenu,
   getCustomContextMenuItems,
-}: ObjectPanelResourceGridTableSurfaceProps<T>) {
+}: Readonly<ObjectPanelResourceGridTableSurfaceProps<T>>) {
   const hasRows = gridTableProps.data.length > 0;
   // Bounded local: the array IS the complete owner-scoped set. `loaded` mirrors
   // the surface's former hasLoaded — visible rows count as loaded, and a load in

@@ -221,7 +221,7 @@ const accumulateStreamTelemetry = (
 };
 
 export class ResourceStreamManager {
-  private subscriptions = new ResourceStreamSubscriptionStore(
+  private readonly subscriptions = new ResourceStreamSubscriptionStore(
     STREAM_UNSUBSCRIBE_DEBOUNCE_MS,
     logInfo
   );
@@ -230,10 +230,10 @@ export class ResourceStreamManager {
   private connectionStatus: ResourceStreamConnectionStatus = 'disconnected';
   private connectionEpoch = 0;
   private lastConnectionError = '';
-  private streamHealth = new ResourceStreamHealthStore();
-  private errorNotifier = new StreamErrorNotifier();
+  private readonly streamHealth = new ResourceStreamHealthStore();
+  private readonly errorNotifier = new StreamErrorNotifier();
   private legacyResyncVersionCounter = 0;
-  private visibility = new StreamVisibilityController<StreamSubscription>({
+  private readonly visibility = new StreamVisibilityController<StreamSubscription>({
     captureActive: () => Array.from(this.subscriptions.values()),
     suspendActive: () => {
       this.markConnectionError('visibility hidden');
@@ -245,7 +245,7 @@ export class ResourceStreamManager {
       void this.resyncSubscription(subscription, 'visibility resume');
     },
   });
-  private streamTelemetry = new Map<string, StreamTelemetry>();
+  private readonly streamTelemetry = new Map<string, StreamTelemetry>();
 
   constructor() {
     eventBus.on('kubeconfig:changing', () => this.stopAll(true));

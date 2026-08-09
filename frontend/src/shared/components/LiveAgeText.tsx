@@ -25,7 +25,7 @@ export function LiveAgeText({
   fullDateTitle = false,
   title,
   ...spanProps
-}: LiveAgeTextProps) {
+}: Readonly<LiveAgeTextProps>) {
   const now = useAgeClock(timestamp);
   const age = formatAge(timestamp, now);
   const hasAge = age !== '-';

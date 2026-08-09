@@ -37,7 +37,7 @@ export default function AttentionIgnoredModal({
   onRestoreClusterType,
   onRestoreGlobalType,
   onClose,
-}: AttentionIgnoredModalProps) {
+}: Readonly<AttentionIgnoredModalProps>) {
   const modalRef = useRef<HTMLDivElement>(null);
   const [currentRules, setCurrentRules] = useState(rules);
   const [busyKey, setBusyKey] = useState<string | null>(null);

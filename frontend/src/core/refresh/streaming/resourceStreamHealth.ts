@@ -20,7 +20,7 @@ export const STREAM_HEALTH_STATUS_ORDER: Record<ResourceStreamHealthStatus, numb
 };
 
 export class ResourceStreamHealthStore {
-  private snapshots = new Map<string, ResourceStreamHealthPayload>();
+  private readonly snapshots = new Map<string, ResourceStreamHealthPayload>();
 
   private key(domain: DoorbellDomain, scope: string): string {
     return `${domain}::${scope}`;

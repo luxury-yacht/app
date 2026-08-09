@@ -151,7 +151,7 @@ interface AppLogsPanelProps {
   onClose: () => void;
 }
 
-function AppLogsPanel({ isOpen, onClose }: AppLogsPanelProps) {
+function AppLogsPanel({ isOpen, onClose }: Readonly<AppLogsPanelProps>) {
   const [logs, setLogs] = useState<LogEntry[]>([]);
   const [isAutoScroll, setIsAutoScroll] = useState(true);
   const [isLoading, setIsLoading] = useState(false);

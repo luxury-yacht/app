@@ -174,7 +174,7 @@ interface Subscription {
 }
 
 class EventBus {
-  private listeners = new Map<keyof AppEvents, Set<Subscription>>();
+  private readonly listeners = new Map<keyof AppEvents, Set<Subscription>>();
   private handlerErrorReporter: EventHandlerErrorReporter | null = null;
 
   emit<K extends keyof AppEvents>(

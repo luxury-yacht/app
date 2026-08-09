@@ -57,7 +57,7 @@ function ClusterResourcesViews({
   storageError = null,
   activeTab: controlledActiveTab,
   onTabChange: _onTabChangeCallback,
-}: ClusterResourcesViewsProps) {
+}: Readonly<ClusterResourcesViewsProps>) {
   const activeTab = controlledActiveTab ?? null;
 
   // Render content based on active tab

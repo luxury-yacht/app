@@ -13,7 +13,7 @@ type NotifyRefreshErrorOptions = {
 };
 
 export class RefreshErrorNotifier {
-  private lastNotifiedErrors = new Map<string, string>();
+  private readonly lastNotifiedErrors = new Map<string, string>();
   private suppressNetworkErrorsUntil = 0;
 
   notify({

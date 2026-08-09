@@ -152,7 +152,7 @@ function ConfirmationModal({
   onSecondaryAction,
   onConfirm,
   onCancel,
-}: ConfirmationModalProps) {
+}: Readonly<ConfirmationModalProps>) {
   if (!isOpen) {
     return null;
   }

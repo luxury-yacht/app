@@ -6,7 +6,7 @@ interface GlobalViewsProps {
   activeView: GlobalViewType;
 }
 
-export default function GlobalViews({ activeView }: GlobalViewsProps) {
+export default function GlobalViews({ activeView }: Readonly<GlobalViewsProps>) {
   return (
     <div className="view-content">
       {activeView === 'fleet' ? <GlobalViewClusters /> : <GlobalViewNamespaces />}

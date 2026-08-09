@@ -139,9 +139,9 @@ const canStartRefresh = (
 
 class RefreshManager {
   private static instance: RefreshManager;
-  private refreshers: Map<RefresherName, RefresherInstance> = new Map();
+  private readonly refreshers: Map<RefresherName, RefresherInstance> = new Map();
   private context: RefreshContext;
-  private subscribers: Map<RefresherName, Set<RefreshCallback>> = new Map();
+  private readonly subscribers: Map<RefresherName, Set<RefreshCallback>> = new Map();
   private isGloballyPaused = false;
 
   private emitStateChange(name: RefresherName): void {

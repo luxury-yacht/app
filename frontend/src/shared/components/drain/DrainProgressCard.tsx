@@ -41,7 +41,7 @@ export function DrainProgressCard({
   onCancel,
   cancelDisabled,
   cancelDisabledReason,
-}: DrainProgressCardProps) {
+}: Readonly<DrainProgressCardProps>) {
   const progress = useMemo(() => deriveDrainProgress(job), [job]);
   const [now, setNow] = useState(() => Date.now());
   const showCancel = ACTIVE_STATUSES.has(job.status) && Boolean(onCancel);
@@ -149,7 +149,7 @@ export function DrainProgressCard({
   );
 }
 
-function ProgressBar({ progress }: { progress: DrainProgress }) {
+function ProgressBar({ progress }: Readonly<{ progress: DrainProgress }>) {
   const denominator = Math.max(progress.totalPlanned ?? 0, progress.totalSeen, 1);
   const donePct = (progress.done / denominator) * 100;
   const failedPct = (progress.failed / denominator) * 100;
@@ -169,7 +169,7 @@ function ProgressBar({ progress }: { progress: DrainProgress }) {
   );
 }
 
-function PodTable({ pods }: { pods: DrainPodProgress[] }) {
+function PodTable({ pods }: Readonly<{ pods: DrainPodProgress[] }>) {
   return (
     <table className="drain-progress-pod-table" data-test="drain-pod-table">
       <colgroup>

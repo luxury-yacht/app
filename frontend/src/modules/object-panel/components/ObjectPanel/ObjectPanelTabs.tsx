@@ -24,7 +24,7 @@ interface ObjectPanelTabsProps {
   onSelect: (tab: ViewType) => void;
 }
 
-export function ObjectPanelTabs({ tabs, activeTab, onSelect }: ObjectPanelTabsProps) {
+export function ObjectPanelTabs({ tabs, activeTab, onSelect }: Readonly<ObjectPanelTabsProps>) {
   const descriptors = useMemo<TabDescriptor[]>(
     () =>
       tabs.map((tab) => ({

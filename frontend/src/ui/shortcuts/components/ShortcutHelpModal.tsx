@@ -99,7 +99,7 @@ const ShortcutGroupSection = ({ group, isMac }: { group: ShortcutGroup; isMac: b
   </div>
 );
 
-export function ShortcutHelpModal({ isOpen, onClose }: ShortcutHelpModalProps) {
+export function ShortcutHelpModal({ isOpen, onClose }: Readonly<ShortcutHelpModalProps>) {
   const { getAvailableShortcuts } = useKeyboardContext();
   const [shortcuts, setShortcuts] = useState(getAvailableShortcuts());
   const [isClosing, setIsClosing] = useState(false);

@@ -110,15 +110,18 @@ const logWarning = (message: string, cluster?: AppLogsClusterMeta): void => {
 };
 
 class RefreshOrchestrator {
-  private configs = new Map<RefreshDomain, DomainRegistration<RefreshDomain>>();
-  private unsubscriptions = new Map<RefreshDomain, () => void>();
-  private registeredRefreshers = new Set<RefresherName>();
-  private coordinatorRuntime = new ClusterRefreshRuntime('__coordinator__');
-  private clusterRuntimes = new Map<string, ClusterRefreshRuntime>();
+  private readonly configs = new Map<RefreshDomain, DomainRegistration<RefreshDomain>>();
+  private readonly unsubscriptions = new Map<RefreshDomain, () => void>();
+  private readonly registeredRefreshers = new Set<RefresherName>();
+  private readonly coordinatorRuntime = new ClusterRefreshRuntime('__coordinator__');
+  private readonly clusterRuntimes = new Map<string, ClusterRefreshRuntime>();
   // Scoped fetches held because the scope's cluster backend is still
   // initializing; keyed by clusterId and then by domain + scope. Repeated
   // demand coalesces without losing manual or stream-signal intent.
-  private pendingClusterReadiness = new Map<string, Map<string, PendingClusterReadinessRequest>>();
+  private readonly pendingClusterReadiness = new Map<
+    string,
+    Map<string, PendingClusterReadinessRequest>
+  >();
 
   private requestCounter = 0;
   private metricsDemandClusterKey = '';
@@ -127,16 +130,16 @@ class RefreshOrchestrator {
   private metricsDemandRetryTimer: ReturnType<typeof setTimeout> | null = null;
   private metricsDemandRetryDelayMs = METRICS_DEMAND_RETRY_INITIAL_MS;
 
-  private suspendedDomains = new Map<RefreshDomain, boolean>();
+  private readonly suspendedDomains = new Map<RefreshDomain, boolean>();
   private contextVersion = 0;
   private context: RefreshContext = {
     currentView: 'namespace',
     objectPanel: { isOpen: false },
   };
-  private errorNotifier = new RefreshErrorNotifier();
+  private readonly errorNotifier = new RefreshErrorNotifier();
 
   // Tracks clusters with auth failures so duplicate events do not repeat teardown.
-  private authFailedClusters = new Set<string>();
+  private readonly authFailedClusters = new Set<string>();
 
   constructor() {
     eventBus.on('view:reset', this.handleResetViews);
@@ -1751,7 +1754,7 @@ class RefreshOrchestrator {
     }
   }
 
-  private handleResourceStreamPermissionDenied = (
+  private readonly handleResourceStreamPermissionDenied = (
     payload: AppEvents['refresh:resource-stream-permission-denied']
   ): void => {
     const scope = payload.scope.trim();
@@ -1782,7 +1785,7 @@ class RefreshOrchestrator {
     });
   };
 
-  private handleResourceStreamDrift = (
+  private readonly handleResourceStreamDrift = (
     payload: AppEvents['refresh:resource-stream-drift']
   ): void => {
     const scope = payload.scope.trim();
@@ -1807,7 +1810,7 @@ class RefreshOrchestrator {
     );
   };
 
-  private handleResourceStreamHealth = (
+  private readonly handleResourceStreamHealth = (
     payload: AppEvents['refresh:resource-stream-health']
   ): void => {
     const scope = payload.scope.trim();
@@ -1824,7 +1827,7 @@ class RefreshOrchestrator {
     }
   };
 
-  private handleClusterAuthFailed = (payload: { clusterId: string }) => {
+  private readonly handleClusterAuthFailed = (payload: { clusterId: string }) => {
     const clusterId = payload.clusterId.trim();
     if (!clusterId || this.authFailedClusters.has(clusterId)) {
       return;
@@ -1845,7 +1848,7 @@ class RefreshOrchestrator {
     runtime.clearAsyncStreamingBookkeeping();
   };
 
-  private handleClusterAuthRecovered = (payload: { clusterId: string }) => {
+  private readonly handleClusterAuthRecovered = (payload: { clusterId: string }) => {
     const clusterId = payload.clusterId.trim();
     if (!clusterId || !this.authFailedClusters.delete(clusterId)) {
       return;
@@ -1865,7 +1868,7 @@ class RefreshOrchestrator {
     this.handleStreamingScopeChanges();
   };
 
-  private handleClusterScopeChanged = (payload: { clusterId: string }) => {
+  private readonly handleClusterScopeChanged = (payload: { clusterId: string }) => {
     // The cluster's namespace scope changed and the backend finished tearing
     // down + rebuilding its refresh subsystem (docs/plans/namespace-scope.md):
     // every stream to that subsystem is dead and every cached snapshot is
@@ -1889,7 +1892,7 @@ class RefreshOrchestrator {
     this.handleStreamingScopeChanges();
   };
 
-  private handleResetViews = () => {
+  private readonly handleResetViews = () => {
     this.incrementContextVersion();
     invalidateRefreshBaseURL();
     this.stopAllStreaming(true);
@@ -1901,7 +1904,7 @@ class RefreshOrchestrator {
     });
   };
 
-  private handleKubeconfigChanging = () => {
+  private readonly handleKubeconfigChanging = () => {
     // A kubeconfig change supersedes tracked auth-failure state.
     this.authFailedClusters.clear();
     this.incrementContextVersion();
@@ -1948,7 +1951,7 @@ class RefreshOrchestrator {
     });
   }
 
-  private handleKubeconfigChanged = () => {
+  private readonly handleKubeconfigChanged = () => {
     this.incrementContextVersion();
     invalidateRefreshBaseURL();
     this.errorNotifier.suppressNetworkErrors(6000);
@@ -1957,7 +1960,7 @@ class RefreshOrchestrator {
     this.clearAllStreamHealth();
   };
 
-  private handleKubeconfigSelectionChanged = () => {
+  private readonly handleKubeconfigSelectionChanged = () => {
     // Backend may rebuild the refresh subsystem; invalidate base URL and suppress transient errors.
     this.incrementContextVersion();
     invalidateRefreshBaseURL();
@@ -1966,7 +1969,7 @@ class RefreshOrchestrator {
     this.clearAllStreamHealth();
   };
 
-  private handleAutoRefreshChanged = () => {
+  private readonly handleAutoRefreshChanged = () => {
     this.handleStreamingScopeChanges();
   };
 }

@@ -216,7 +216,7 @@ class ContainerLogsStreamConnection {
     }, delay);
   }
 
-  private handleLogEvent = (event: MessageEvent) => {
+  private readonly handleLogEvent = (event: MessageEvent) => {
     if (this.closed) {
       return;
     }
@@ -250,7 +250,7 @@ class ContainerLogsStreamConnection {
     }
   }
 
-  private handleError = () => {
+  private readonly handleError = () => {
     if (this.closed) {
       return;
     }
@@ -269,14 +269,14 @@ class ContainerLogsStreamConnection {
 }
 
 export class ContainerLogsStreamManager {
-  private connections = new Map<string, ContainerLogsStreamConnection>();
-  private buffers = new Map<string, ContainerLogsEntry[]>();
-  private bufferMeta = new Map<string, { total: number; truncated: boolean }>();
-  private backendWarnings = new Map<string, string[]>();
+  private readonly connections = new Map<string, ContainerLogsStreamConnection>();
+  private readonly buffers = new Map<string, ContainerLogsEntry[]>();
+  private readonly bufferMeta = new Map<string, { total: number; truncated: boolean }>();
+  private readonly backendWarnings = new Map<string, string[]>();
   /** Monotonically increasing counter for stable entry keys across buffer truncations. */
   private seqCounter = 0;
-  private errorNotifier = new StreamErrorNotifier();
-  private visibility = new StreamVisibilityController<string>({
+  private readonly errorNotifier = new StreamErrorNotifier();
+  private readonly visibility = new StreamVisibilityController<string>({
     captureActive: () => Array.from(this.connections.keys()),
     suspendActive: () => {
       for (const connection of this.connections.values()) {

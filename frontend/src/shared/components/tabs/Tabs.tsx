@@ -282,7 +282,7 @@ export function Tabs({
   id,
   dropInsertIndex = null,
   disableRovingTabIndex = false,
-}: TabsProps) {
+}: Readonly<TabsProps>) {
   // Mode-specific default for minTabWidth: 'fit' should size to content
   // (no floor) so short labels like "YAML" don't get bloated; 'equal' needs
   // a floor so tabs sharing a strip don't collapse below readable width.

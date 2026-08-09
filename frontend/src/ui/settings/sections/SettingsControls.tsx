@@ -20,11 +20,11 @@ export function SettingRow({
   title,
   help,
   children,
-}: {
+}: Readonly<{
   title: string;
   help: ReactNode;
   children: ReactNode;
-}) {
+}>) {
   return (
     <div className="settings-row">
       <div className="settings-row-label">
@@ -47,14 +47,14 @@ export function PreferenceNumberInput({
   value,
   onChange,
   onCommit,
-}: {
+}: Readonly<{
   id: string;
   prefKey: AppPreferenceKey;
   step: number;
   value: string;
   onChange: (raw: string) => void;
   onCommit: (raw: string) => void;
-}) {
+}>) {
   const metadata = getIntegerPreferenceMetadata(prefKey);
   return (
     <input

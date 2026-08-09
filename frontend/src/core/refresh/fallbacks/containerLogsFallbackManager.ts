@@ -18,7 +18,7 @@ interface FallbackEntry {
 }
 
 class ContainerLogsFallbackManager {
-  private entries = new Map<string, FallbackEntry>();
+  private readonly entries = new Map<string, FallbackEntry>();
   private unsubscribe: (() => void) | null = null;
 
   constructor() {

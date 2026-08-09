@@ -42,7 +42,7 @@ export function GlobalShortcuts({
   isAppLogsPanelOpen,
   isObjectPanelOpen,
   isSettingsOpen,
-}: GlobalShortcutsProps) {
+}: Readonly<GlobalShortcutsProps>) {
   const [isHelpOpen, setIsHelpOpen] = useState(false);
   const [isModalAnimating, setIsModalAnimating] = useState(false);
   const { selectedKubeconfig, selectedKubeconfigs, setActiveKubeconfig, closeKubeconfig } =

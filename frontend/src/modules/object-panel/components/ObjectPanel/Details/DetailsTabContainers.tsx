@@ -152,7 +152,7 @@ const ContainerList: React.FC<{ containers: Container[] }> = ({ containers }) =>
   </div>
 );
 
-function Containers({ containers = [], initContainers = [] }: ContainersProps) {
+function Containers({ containers = [], initContainers = [] }: Readonly<ContainersProps>) {
   if (containers.length === 0 && initContainers.length === 0) {
     return null;
   }

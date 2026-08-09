@@ -13,7 +13,7 @@ interface ObjectPanelHeaderProps {
   name: string | null;
 }
 
-export function ObjectPanelHeader({ kind, kindAlias, name }: ObjectPanelHeaderProps) {
+export function ObjectPanelHeader({ kind, kindAlias, name }: Readonly<ObjectPanelHeaderProps>) {
   const displayKind = kindAlias || kind || 'Object';
   const kindTitle = kindAlias && kind && kindAlias !== kind ? kind : undefined;
 

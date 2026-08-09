@@ -80,7 +80,7 @@ export function OverviewRenderer<T>({
   descriptor,
   data,
   context = {},
-}: OverviewRendererProps<T>): React.ReactElement | null {
+}: Readonly<OverviewRendererProps<T>>): React.ReactElement | null {
   if (!data) {
     return null;
   }

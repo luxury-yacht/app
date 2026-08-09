@@ -55,7 +55,7 @@ export interface TabDragProviderProps {
   onTearOff?: (payload: TabDragPayload, cursor: { x: number; y: number }) => void;
 }
 
-export function TabDragProvider({ children, onTearOff }: TabDragProviderProps) {
+export function TabDragProvider({ children, onTearOff }: Readonly<TabDragProviderProps>) {
   const [currentDrag, setCurrentDrag] = useState<TabDragPayload | null>(null);
   const targetsRef = useRef<Map<number, DropTargetRegistration>>(new Map());
   const lastDragRef = useRef<TabDragPayload | null>(null);

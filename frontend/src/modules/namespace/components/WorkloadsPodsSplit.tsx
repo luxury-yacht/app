@@ -19,7 +19,7 @@ export default function WorkloadsPodsSplit({
   upper,
   lower,
   collapsed = false,
-}: WorkloadsPodsSplitProps) {
+}: Readonly<WorkloadsPodsSplitProps>) {
   const rootRef = useRef<HTMLDivElement | null>(null);
   const resizingRef = useRef(false);
   const resizeStartRef = useRef({ clientY: 0, upperPercent: 50 });

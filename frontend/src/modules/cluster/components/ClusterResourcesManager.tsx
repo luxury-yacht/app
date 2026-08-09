@@ -37,7 +37,10 @@ interface ClusterResourceManagerProps {
 // Supplies the per-view permission-denial messages and resets the managed
 // cluster domains when the kubeconfig changes. Each tab's table owns its own
 // data via the query-backed grid.
-export function ClusterResourcesManager({ activeTab, onTabChange }: ClusterResourceManagerProps) {
+export function ClusterResourcesManager({
+  activeTab,
+  onTabChange,
+}: Readonly<ClusterResourceManagerProps>) {
   useEffect(() => {
     const handleKubeconfigChanging = () => {
       CLUSTER_DOMAIN_SET.forEach((domain) => {

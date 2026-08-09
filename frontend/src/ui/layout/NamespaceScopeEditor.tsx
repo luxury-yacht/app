@@ -138,7 +138,7 @@ interface NamespaceScopeAddRowProps {
  * The "Add namespace" row: a sidebar item that turns into an inline input.
  * Enter commits (backend validates and rebuilds), Escape cancels.
  */
-export function NamespaceScopeAddRow({ state }: NamespaceScopeAddRowProps) {
+export function NamespaceScopeAddRow({ state }: Readonly<NamespaceScopeAddRowProps>) {
   const [editing, setEditing] = useState(false);
   const [value, setValue] = useState('');
   const inputRef = useRef<HTMLInputElement>(null);
