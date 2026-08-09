@@ -8,6 +8,8 @@
 package backend
 
 import (
+	"context"
+
 	"github.com/luxury-yacht/app/backend/resources/helm"
 )
 
@@ -17,8 +19,8 @@ func (a *App) GetHelmReleaseDetails(clusterID, namespace, name string) (*HelmRel
 		return nil, err
 	}
 	helmDeps := helm.Dependencies{Common: deps}
-	return FetchNamespacedResource(a, deps, selectionKey, "HelmRelease", namespace, name, func() (*HelmReleaseDetails, error) {
-		return helm.NewService(helmDeps).ReleaseDetails(namespace, name)
+	return FetchNamespacedResource(a, deps, selectionKey, "HelmRelease", namespace, name, func(ctx context.Context) (*HelmReleaseDetails, error) {
+		return helm.NewService(helmDeps).ReleaseDetails(ctx, namespace, name)
 	})
 }
 func (a *App) GetHelmManifest(clusterID, namespace, name string) (string, error) {
@@ -27,7 +29,7 @@ func (a *App) GetHelmManifest(clusterID, namespace, name string) (string, error)
 		return "", err
 	}
 	helmDeps := helm.Dependencies{Common: deps}
-	return FetchNamespacedResource(a, deps, selectionKey, "HelmManifest", namespace, name, func() (string, error) {
+	return FetchNamespacedResource(a, deps, selectionKey, "HelmManifest", namespace, name, func(context.Context) (string, error) {
 		return helm.NewService(helmDeps).ReleaseManifest(namespace, name)
 	})
 }
@@ -37,7 +39,7 @@ func (a *App) GetHelmValues(clusterID, namespace, name string) (map[string]inter
 		return nil, err
 	}
 	helmDeps := helm.Dependencies{Common: deps}
-	return FetchNamespacedResource(a, deps, selectionKey, "HelmValues", namespace, name, func() (map[string]interface{}, error) {
+	return FetchNamespacedResource(a, deps, selectionKey, "HelmValues", namespace, name, func(context.Context) (map[string]interface{}, error) {
 		return helm.NewService(helmDeps).ReleaseValues(namespace, name)
 	})
 }

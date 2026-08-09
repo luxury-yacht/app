@@ -21,7 +21,8 @@ func (a *App) deletePodAction(target ObjectActionTargetRef) error {
 	if err != nil {
 		return err
 	}
-	if err := a.requireResourcePermission(deps.Context, deps, resourcePermissionCheck{
+	ctx := a.CtxOrBackground()
+	if err := a.requireResourcePermission(ctx, deps, resourcePermissionCheck{
 		Group:     target.Group,
 		Version:   target.Version,
 		Kind:      target.Kind,
@@ -31,7 +32,7 @@ func (a *App) deletePodAction(target ObjectActionTargetRef) error {
 	}); err != nil {
 		return err
 	}
-	if err := pods.DeletePod(deps, target.Namespace, target.Name); err != nil {
+	if err := pods.DeletePod(ctx, deps, target.Namespace, target.Name); err != nil {
 		return err
 	}
 	a.invalidateResponseCacheForGVK(selectionKey, objectActionTargetGVK(target), target.Namespace, target.Name)
@@ -49,7 +50,8 @@ func (a *App) createDebugContainerAction(target ObjectActionTargetRef, options O
 	if err != nil {
 		return nil, err
 	}
-	if err := a.requireResourcePermission(deps.Context, deps, resourcePermissionCheck{
+	ctx := a.CtxOrBackground()
+	if err := a.requireResourcePermission(ctx, deps, resourcePermissionCheck{
 		Group:       target.Group,
 		Version:     target.Version,
 		Kind:        target.Kind,
@@ -61,7 +63,7 @@ func (a *App) createDebugContainerAction(target ObjectActionTargetRef, options O
 		return nil, err
 	}
 	service := pods.NewService(deps)
-	response, err := service.CreateDebugContainer(target.Namespace, target.Name, options.Image, options.TargetContainer)
+	response, err := service.CreateDebugContainer(ctx, target.Namespace, target.Name, options.Image, options.TargetContainer)
 	if err != nil {
 		return nil, err
 	}

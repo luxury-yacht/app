@@ -8,6 +8,7 @@
 package rolebinding
 
 import (
+	"context"
 	"fmt"
 
 	"github.com/luxury-yacht/app/backend/resources/common"
@@ -27,8 +28,8 @@ func NewService(deps common.Dependencies) *Service {
 }
 
 // RoleBinding returns the detailed view for a single role binding.
-func (s *Service) RoleBinding(namespace, name string) (*RoleBindingDetails, error) {
-	rb, err := s.deps.KubernetesClient.RbacV1().RoleBindings(namespace).Get(s.deps.Context, name, metav1.GetOptions{})
+func (s *Service) RoleBinding(ctx context.Context, namespace, name string) (*RoleBindingDetails, error) {
+	rb, err := s.deps.KubernetesClient.RbacV1().RoleBindings(namespace).Get(ctx, name, metav1.GetOptions{})
 	if err != nil {
 		err = s.deps.LogResourceRequestFailure(err, fmt.Sprintf("Failed to get role binding %s/%s", namespace, name), "get", Identity, "RBAC")
 		return nil, fmt.Errorf("failed to get role binding: %w", err)

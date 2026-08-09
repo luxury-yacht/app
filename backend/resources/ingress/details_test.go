@@ -24,7 +24,6 @@ import (
 func newService(t testing.TB, client *fake.Clientset) *ingress.Service {
 	t.Helper()
 	deps := testsupport.NewResourceDependencies(
-		testsupport.WithDepsContext(context.Background()),
 		testsupport.WithDepsKubeClient(client),
 		testsupport.WithDepsLogger(applog.Noop),
 	)
@@ -71,7 +70,7 @@ func TestServiceIngressDetails(t *testing.T) {
 
 	service := newService(t, fake.NewClientset(ing))
 
-	detail, err := service.Ingress("default", "web")
+	detail, err := service.Ingress(context.Background(), "default", "web")
 	require.NoError(t, err)
 	require.Equal(t, "Ingress", detail.Kind)
 	require.Equal(t, 1, len(detail.Rules))

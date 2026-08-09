@@ -53,7 +53,7 @@ func TestServiceEventReturnsCompleteDetails(t *testing.T) {
 	}
 	service := newEventsService(t, fake.NewClientset(event))
 
-	details, err := service.Event("apps", "orders.123")
+	details, err := service.Event(context.Background(), "apps", "orders.123")
 
 	require.NoError(t, err)
 	require.Equal(t, "Event", details.Kind)
@@ -80,7 +80,6 @@ func TestServiceEventReturnsCompleteDetails(t *testing.T) {
 func newEventsService(t testing.TB, client *fake.Clientset) *Service {
 	t.Helper()
 	deps := testsupport.NewResourceDependencies(
-		testsupport.WithDepsContext(context.Background()),
 		testsupport.WithDepsKubeClient(client),
 		testsupport.WithDepsLogger(applog.Noop),
 		testsupport.WithDepsEnsureClient(func(string) error { return nil }),

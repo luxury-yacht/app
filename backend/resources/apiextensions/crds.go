@@ -8,6 +8,7 @@
 package apiextensions
 
 import (
+	"context"
 	"fmt"
 
 	"github.com/luxury-yacht/app/backend/internal/logsources"
@@ -17,13 +18,13 @@ import (
 )
 
 // CustomResourceDefinition returns a detailed view for a single CRD.
-func (s *Service) CustomResourceDefinition(name string) (*CustomResourceDefinitionDetails, error) {
+func (s *Service) CustomResourceDefinition(ctx context.Context, name string) (*CustomResourceDefinitionDetails, error) {
 	if err := s.ensureAPIExtensions("CustomResourceDefinition"); err != nil {
 		return nil, err
 	}
 
 	client := s.deps.APIExtensionsClient
-	crd, err := client.ApiextensionsV1().CustomResourceDefinitions().Get(s.deps.Context, name, metav1.GetOptions{})
+	crd, err := client.ApiextensionsV1().CustomResourceDefinitions().Get(ctx, name, metav1.GetOptions{})
 	if err != nil {
 		err = s.logError(err, fmt.Sprintf("Failed to get CRD %s", name))
 		return nil, fmt.Errorf("failed to get CRD: %w", err)

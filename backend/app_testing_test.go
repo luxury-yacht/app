@@ -19,7 +19,8 @@ func TestInitializeForTestingSetsContextAndLogger(t *testing.T) {
 
 	InitializeForTesting(app, ctx, nil)
 
-	require.Equal(t, ctx, app.Ctx)
+	require.True(t, app.runtimeAvailable())
+	require.NoError(t, app.CtxOrBackground().Err())
 	require.NotNil(t, app.logger)
 }
 

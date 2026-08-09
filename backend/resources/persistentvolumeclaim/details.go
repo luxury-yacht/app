@@ -7,6 +7,7 @@
 package persistentvolumeclaim
 
 import (
+	"context"
 	"fmt"
 
 	"github.com/luxury-yacht/app/backend/internal/logsources"
@@ -27,8 +28,8 @@ func NewService(deps common.Dependencies) *Service {
 	return &Service{deps: deps}
 }
 
-func (s *Service) listNamespacePods(namespace string) *corev1.PodList {
-	pods, err := s.deps.KubernetesClient.CoreV1().Pods(namespace).List(s.deps.Context, metav1.ListOptions{})
+func (s *Service) listNamespacePods(ctx context.Context, namespace string) *corev1.PodList {
+	pods, err := s.deps.KubernetesClient.CoreV1().Pods(namespace).List(ctx, metav1.ListOptions{})
 	if err != nil {
 		s.deps.Logger.Warn(fmt.Sprintf("Failed to list pods in namespace %s: %v", namespace, err), logsources.ResourceLoader)
 		return nil
@@ -37,18 +38,18 @@ func (s *Service) listNamespacePods(namespace string) *corev1.PodList {
 }
 
 // PersistentVolumeClaim returns the detailed view for a single PVC.
-func (s *Service) PersistentVolumeClaim(namespace, name string) (*PersistentVolumeClaimDetails, error) {
+func (s *Service) PersistentVolumeClaim(ctx context.Context, namespace, name string) (*PersistentVolumeClaimDetails, error) {
 	if s.deps.KubernetesClient == nil {
 		return nil, fmt.Errorf("kubernetes client not initialized")
 	}
 
-	pvc, err := s.deps.KubernetesClient.CoreV1().PersistentVolumeClaims(namespace).Get(s.deps.Context, name, metav1.GetOptions{})
+	pvc, err := s.deps.KubernetesClient.CoreV1().PersistentVolumeClaims(namespace).Get(ctx, name, metav1.GetOptions{})
 	if err != nil {
 		err = s.deps.LogResourceRequestFailure(err, fmt.Sprintf("Failed to get PVC %s/%s", namespace, name), "get", Identity, logsources.ResourceLoader)
 		return nil, fmt.Errorf("failed to get PVC: %w", err)
 	}
 
-	pods := s.listNamespacePods(namespace)
+	pods := s.listNamespacePods(ctx, namespace)
 	return s.processPersistentVolumeClaimDetails(pvc, pods), nil
 }
 

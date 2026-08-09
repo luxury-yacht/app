@@ -35,11 +35,10 @@ func NewService(deps common.Dependencies) *Service {
 }
 
 // Event returns the detailed view for one namespaced Event.
-func (s *Service) Event(namespace, name string) (*EventDetails, error) {
+func (s *Service) Event(ctx context.Context, namespace, name string) (*EventDetails, error) {
 	if err := s.ensureClient(); err != nil {
 		return nil, err
 	}
-	ctx := s.deps.Context
 	if ctx == nil {
 		ctx = context.Background()
 	}

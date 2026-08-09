@@ -134,7 +134,7 @@ func (a *App) objectCatalogServiceForCluster(clusterID string) *objectcatalog.Se
 }
 
 func (a *App) startObjectCatalog() {
-	if a == nil || a.Ctx == nil {
+	if a == nil || !a.runtimeAvailable() {
 		return
 	}
 
@@ -672,10 +672,7 @@ func (a *App) prepareCatalogHydration(clusterID string, rows []snapshot.Resource
 		return nil, nil, snapshot.ClusterMeta{}, nil, fmt.Errorf("dynamic client unavailable for cluster %q", trimmedClusterID)
 	}
 	meta := snapshot.ClusterMeta{ClusterID: clients.meta.ID, ClusterName: clients.meta.Name}
-	ctx := a.Ctx
-	if ctx == nil {
-		ctx = context.Background()
-	}
+	ctx := a.CtxOrBackground()
 	requests := make([]catalogHydrationRequest, 0, len(rows))
 	for _, row := range rows {
 		request, err := catalogHydrationRequestForRow(trimmedClusterID, row)

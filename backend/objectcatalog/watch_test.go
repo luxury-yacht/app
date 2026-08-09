@@ -82,7 +82,7 @@ func TestFlushAddEvent(t *testing.T) {
 		UID: "uid-1", ResourceVersion: "100",
 	}}
 
-	notifier := newWatchNotifier(context.Background(), svc)
+	notifier := newWatchNotifier(svc)
 	notifier.flush([]watchEvent{{
 		eventType: watchEventAdd,
 		gvr:       desc.GVR.String(),
@@ -114,7 +114,7 @@ func TestFlushUpdateEvent(t *testing.T) {
 		UID: "uid-1", ResourceVersion: "200",
 	}}
 
-	notifier := newWatchNotifier(context.Background(), svc)
+	notifier := newWatchNotifier(svc)
 	notifier.flush([]watchEvent{{
 		eventType: watchEventUpdate,
 		gvr:       desc.GVR.String(),
@@ -141,7 +141,7 @@ func TestFlushDeleteEvent(t *testing.T) {
 	svc.lastSeen[key] = time.Now()
 	svc.rebuildCacheFromItems(cloneSummaryMap(svc.items), svc.Descriptors())
 
-	notifier := newWatchNotifier(context.Background(), svc)
+	notifier := newWatchNotifier(svc)
 	notifier.flush([]watchEvent{{
 		eventType: watchEventDelete,
 		gvr:       desc.GVR.String(),
@@ -157,7 +157,7 @@ func TestFlushSkipsUnknownGVR(t *testing.T) {
 	svc := newTestWatchService()
 	obj := &corev1.Pod{ObjectMeta: metav1.ObjectMeta{Name: "orphan", Namespace: "default"}}
 
-	notifier := newWatchNotifier(context.Background(), svc)
+	notifier := newWatchNotifier(svc)
 	notifier.flush([]watchEvent{{
 		eventType: watchEventAdd,
 		gvr:       "unknown/v1/things",
@@ -178,7 +178,7 @@ func TestFlushSkipsDuringSyncInProgress(t *testing.T) {
 
 	obj := &corev1.Pod{ObjectMeta: metav1.ObjectMeta{Name: "blocked", Namespace: "default"}}
 
-	notifier := newWatchNotifier(context.Background(), svc)
+	notifier := newWatchNotifier(svc)
 	notifier.flush([]watchEvent{{
 		eventType: watchEventAdd,
 		gvr:       desc.GVR.String(),
@@ -203,7 +203,7 @@ func TestFlushClusterScopedResource(t *testing.T) {
 		Name: "node-1", UID: "node-uid", ResourceVersion: "50",
 	}}
 
-	notifier := newWatchNotifier(context.Background(), svc)
+	notifier := newWatchNotifier(svc)
 	notifier.flush([]watchEvent{{
 		eventType: watchEventAdd,
 		gvr:       desc.GVR.String(),
@@ -228,7 +228,7 @@ func TestFlushBroadcastsToSubscribers(t *testing.T) {
 
 	obj := &corev1.Pod{ObjectMeta: metav1.ObjectMeta{Name: "x", Namespace: "default"}}
 
-	notifier := newWatchNotifier(context.Background(), svc)
+	notifier := newWatchNotifier(svc)
 	notifier.flush([]watchEvent{{
 		eventType: watchEventAdd,
 		gvr:       desc.GVR.String(),
@@ -253,8 +253,8 @@ func TestWatchNotifierDebouncesBatch(t *testing.T) {
 
 	ctx, cancel := context.WithCancel(context.Background())
 	defer cancel()
-	notifier := newWatchNotifier(ctx, svc)
-	go notifier.run()
+	notifier := newWatchNotifier(svc)
+	go notifier.run(ctx)
 
 	for i := 0; i < 3; i++ {
 		name := "pod-" + string(rune('a'+i))
@@ -282,8 +282,8 @@ func TestWatchNotifierFlushesDuringContinuousEvents(t *testing.T) {
 
 	ctx, cancel := context.WithCancel(context.Background())
 	defer cancel()
-	notifier := newWatchNotifier(ctx, svc)
-	go notifier.run()
+	notifier := newWatchNotifier(svc)
+	go notifier.run(ctx)
 
 	for i := 0; i < 6; i++ {
 		name := "busy-" + string(rune('a'+i))
@@ -312,7 +312,7 @@ func TestWatchNotifierOverflowCoalescesAndThrottlesWarnings(t *testing.T) {
 	svc.deps.Logger = logger
 	svc.now = func() time.Time { return now }
 
-	notifier := newWatchNotifier(context.Background(), svc)
+	notifier := newWatchNotifier(svc)
 	evt := watchEvent{}
 	for i := 0; i < cap(notifier.pending); i++ {
 		notifier.send(evt)
@@ -348,10 +348,10 @@ func TestWatchNotifierOverflowCoalescesAndThrottlesWarnings(t *testing.T) {
 
 func TestWatchNotifierStopsOnContextCancel(t *testing.T) {
 	ctx, cancel := context.WithCancel(context.Background())
-	notifier := newWatchNotifier(ctx, newTestWatchService())
+	notifier := newWatchNotifier(newTestWatchService())
 
 	done := make(chan struct{})
-	go func() { notifier.run(); close(done) }()
+	go func() { notifier.run(ctx); close(done) }()
 
 	cancel()
 	select {
@@ -363,7 +363,7 @@ func TestWatchNotifierStopsOnContextCancel(t *testing.T) {
 
 func TestRegisterWatchHandlersNilFactory(t *testing.T) {
 	svc := newTestWatchService()
-	notifier := newWatchNotifier(context.Background(), svc)
+	notifier := newWatchNotifier(svc)
 	registerWatchHandlers(nil, nil, notifier, svc)
 	if len(notifier.pending) != 0 {
 		t.Fatal("expected no events from nil factory")
@@ -375,9 +375,7 @@ func TestMakeHandlerSkipsNoOpUpdates(t *testing.T) {
 	desc := testDeploymentDescriptor()
 	registerDesc(svc, desc)
 
-	ctx, cancel := context.WithCancel(context.Background())
-	defer cancel()
-	notifier := newWatchNotifier(ctx, svc)
+	notifier := newWatchNotifier(svc)
 
 	gr := schema.GroupResource{Group: "apps", Resource: "deployments"}
 	handler := makeHandler(gr, notifier, svc)
@@ -420,8 +418,8 @@ func TestReactiveUpdateEndToEnd(t *testing.T) {
 
 	ctx, cancel := context.WithCancel(context.Background())
 	defer cancel()
-	notifier := newWatchNotifier(ctx, svc)
-	go notifier.run()
+	notifier := newWatchNotifier(svc)
+	go notifier.run(ctx)
 
 	obj := &corev1.Pod{ObjectMeta: metav1.ObjectMeta{
 		Name: "e2e-pod", Namespace: "prod", UID: "e2e-uid", ResourceVersion: "1",

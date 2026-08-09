@@ -225,8 +225,8 @@ func (a *App) prepareShellLaunch(clusterID string, req ShellSessionRequest) (she
 	defer cancel()
 
 	podIdentifier := fmt.Sprintf("%s/%s", req.Namespace, req.PodName)
-	pod, err := executeWithRetry(ctx, a, clusterID, "pod-shell", podIdentifier, func() (*corev1.Pod, error) {
-		return deps.KubernetesClient.CoreV1().Pods(req.Namespace).Get(ctx, req.PodName, metav1.GetOptions{})
+	pod, err := executeWithRetry(ctx, a, clusterID, "pod-shell", podIdentifier, func(fetchCtx context.Context) (*corev1.Pod, error) {
+		return deps.KubernetesClient.CoreV1().Pods(req.Namespace).Get(fetchCtx, req.PodName, metav1.GetOptions{})
 	})
 	if err != nil {
 		return shellLaunch{}, fmt.Errorf("failed to load pod: %w", err)
@@ -235,7 +235,7 @@ func (a *App) prepareShellLaunch(clusterID string, req ShellSessionRequest) (she
 	if err != nil {
 		return shellLaunch{}, err
 	}
-	if err := a.requireShellExecPermission(deps, req); err != nil {
+	if err := a.requireShellExecPermission(ctx, deps, req); err != nil {
 		return shellLaunch{}, err
 	}
 	command := shellCommand(req.Command)
@@ -273,8 +273,8 @@ func shellContainerForPod(pod *corev1.Pod, requested string) (string, error) {
 	return container, nil
 }
 
-func (a *App) requireShellExecPermission(deps common.Dependencies, req ShellSessionRequest) error {
-	return a.requireAnyResourcePermission(deps.Context, deps,
+func (a *App) requireShellExecPermission(ctx context.Context, deps common.Dependencies, req ShellSessionRequest) error {
+	return a.requireAnyResourcePermission(ctx, deps,
 		resourcePermissionCheck{
 			Version:     "v1",
 			Kind:        podspkg.Identity.Kind,

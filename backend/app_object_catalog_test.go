@@ -39,7 +39,7 @@ func catalogLifecycleTestApp(t *testing.T, tier system.ResourceTier, cooled bool
 	t.Helper()
 	const clusterID = "cluster-a:context-a"
 	app := newTestAppWithDefaults(t)
-	app.Ctx = context.Background()
+	app.setRuntimeContext(context.Background())
 	app.governorPlanned = map[string]system.ResourceTier{clusterID: tier}
 	app.governorApplied = map[string]system.ResourceTier{clusterID: tier}
 
@@ -553,7 +553,7 @@ func TestHydrateCatalogCustomRowsReportsCanceledContext(t *testing.T) {
 	}
 	canceled, cancel := context.WithCancel(context.Background())
 	cancel()
-	app.Ctx = canceled
+	app.setRuntimeContext(canceled)
 
 	_, err := app.HydrateCatalogCustomRows(clusterID, []snapshot.ResourceQueryRow{
 		{
@@ -599,7 +599,7 @@ func TestHydrateCatalogCustomRowsKeepsPageOnRowFailure(t *testing.T) {
 	})
 
 	app := NewApp()
-	app.Ctx = context.Background()
+	app.setRuntimeContext(context.Background())
 	app.clusterClients[clusterID] = &clusterClients{
 		meta:          ClusterMeta{ID: clusterID, Name: "Cluster B"},
 		dynamicClient: dynamicClient,

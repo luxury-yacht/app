@@ -8,6 +8,7 @@
 package ingressclass
 
 import (
+	"context"
 	"fmt"
 
 	"github.com/luxury-yacht/app/backend/internal/logsources"
@@ -27,8 +28,8 @@ func NewService(deps common.Dependencies) *Service {
 }
 
 // IngressClass returns the detailed view for a single ingress class.
-func (s *Service) IngressClass(name string) (*IngressClassDetails, error) {
-	ic, err := s.deps.KubernetesClient.NetworkingV1().IngressClasses().Get(s.deps.Context, name, metav1.GetOptions{})
+func (s *Service) IngressClass(ctx context.Context, name string) (*IngressClassDetails, error) {
+	ic, err := s.deps.KubernetesClient.NetworkingV1().IngressClasses().Get(ctx, name, metav1.GetOptions{})
 	if err != nil {
 		err = s.deps.LogResourceRequestFailure(err, fmt.Sprintf("Failed to get ingress class %s", name), "get", Identity, logsources.ResourceLoader)
 		return nil, fmt.Errorf("failed to get ingress class: %w", err)

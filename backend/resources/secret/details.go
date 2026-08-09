@@ -8,6 +8,7 @@
 package secret
 
 import (
+	"context"
 	"fmt"
 
 	"github.com/luxury-yacht/app/backend/internal/logsources"
@@ -29,8 +30,8 @@ func NewService(deps common.Dependencies) *Service {
 }
 
 // Secret returns the detailed view for a single secret.
-func (s *Service) Secret(namespace, name string) (*SecretDetails, error) {
-	sec, err := s.deps.KubernetesClient.CoreV1().Secrets(namespace).Get(s.deps.Context, name, metav1.GetOptions{})
+func (s *Service) Secret(ctx context.Context, namespace, name string) (*SecretDetails, error) {
+	sec, err := s.deps.KubernetesClient.CoreV1().Secrets(namespace).Get(ctx, name, metav1.GetOptions{})
 	if err != nil {
 		err = s.deps.LogResourceRequestFailure(err, fmt.Sprintf("Failed to get secret %s/%s", namespace, name), "get", Identity, logsources.ResourceLoader)
 		return nil, fmt.Errorf("failed to get secret: %w", err)
@@ -38,7 +39,7 @@ func (s *Service) Secret(namespace, name string) (*SecretDetails, error) {
 
 	relationships := resourcemodel.NewResourceRelationshipIndex(
 		s.deps.ClusterID,
-		resourcemodel.ResourceRelationshipIndexOptions{Pods: s.listNamespacePods(namespace)},
+		resourcemodel.ResourceRelationshipIndexOptions{Pods: s.listNamespacePods(ctx, namespace)},
 	)
 	return s.processSecretDetails(sec, relationships), nil
 }
@@ -71,8 +72,8 @@ func (s *Service) processSecretDetails(sec *corev1.Secret, relationships *resour
 	return details
 }
 
-func (s *Service) listNamespacePods(namespace string) *corev1.PodList {
-	pods, err := s.deps.KubernetesClient.CoreV1().Pods(namespace).List(s.deps.Context, metav1.ListOptions{})
+func (s *Service) listNamespacePods(ctx context.Context, namespace string) *corev1.PodList {
+	pods, err := s.deps.KubernetesClient.CoreV1().Pods(namespace).List(ctx, metav1.ListOptions{})
 	if err != nil {
 		s.deps.Logger.Warn(fmt.Sprintf("Failed to list pods in namespace %s: %v", namespace, err), logsources.ResourceLoader)
 		return nil

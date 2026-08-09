@@ -1,7 +1,6 @@
 package backend
 
 import (
-	"context"
 	"fmt"
 	"strings"
 
@@ -86,10 +85,7 @@ func (a *App) GetRevisionHistory(clusterID, namespace, group, version, workloadK
 		return nil, fmt.Errorf("kubernetes client is not initialized")
 	}
 
-	ctx := deps.Context
-	if ctx == nil {
-		ctx = context.Background()
-	}
+	ctx := a.CtxOrBackground()
 
 	revisions, err := ops.RevisionHistory(ctx, deps.KubernetesClient, namespace, name)
 	if err != nil {
@@ -129,10 +125,7 @@ func (a *App) rollbackWorkloadInternal(clusterID, namespace, group, version, wor
 		return fmt.Errorf("kubernetes client is not initialized")
 	}
 
-	ctx := deps.Context
-	if ctx == nil {
-		ctx = context.Background()
-	}
+	ctx := a.CtxOrBackground()
 
 	// Fetch the full revision history to locate the target revision's pod template.
 	entries, err := a.GetRevisionHistory(clusterID, namespace, group, version, workloadKind, name)

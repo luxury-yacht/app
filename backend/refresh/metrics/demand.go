@@ -6,6 +6,7 @@ import (
 	"time"
 
 	"github.com/luxury-yacht/app/backend/internal/config"
+	"github.com/luxury-yacht/app/backend/internal/lifecycle"
 )
 
 type pollerControl interface {
@@ -24,7 +25,8 @@ type DemandPoller struct {
 	active     bool
 	running    bool
 	stopped    bool
-	baseCtx    context.Context
+	baseSet    bool
+	baseDone   <-chan struct{}
 	runCancel  context.CancelFunc
 	idleTimer  *time.Timer
 	lastDemand time.Time
@@ -44,7 +46,7 @@ func NewDemandPoller(poller pollerControl, provider Provider, idleTimeout time.D
 	}
 }
 
-// Start stores the base context used for on-demand polling.
+// Start retains the base cancellation signal used for on-demand polling.
 func (d *DemandPoller) Start(ctx context.Context) error {
 	if d == nil {
 		return nil
@@ -56,8 +58,9 @@ func (d *DemandPoller) Start(ctx context.Context) error {
 	if d.stopped {
 		d.stopped = false
 	}
-	if d.baseCtx == nil {
-		d.baseCtx = ctx
+	if !d.baseSet {
+		d.baseSet = true
+		d.baseDone = ctx.Done()
 	}
 	shouldStart := d.active
 	if shouldStart {
@@ -75,7 +78,8 @@ func (d *DemandPoller) Stop(ctx context.Context) error {
 	d.mu.Lock()
 	d.stopped = true
 	d.active = false
-	d.baseCtx = nil
+	d.baseSet = false
+	d.baseDone = nil
 	cancel, stopped := d.stopLocked()
 	poller := d.poller
 	d.mu.Unlock()
@@ -189,11 +193,7 @@ func (d *DemandPoller) startLocked() {
 	if d.stopped || d.running || d.poller == nil {
 		return
 	}
-	baseCtx := d.baseCtx
-	if baseCtx == nil {
-		baseCtx = context.Background()
-		d.baseCtx = baseCtx
-	}
+	baseCtx := lifecycle.Context(d.baseDone)
 	if baseCtx.Err() != nil {
 		return
 	}

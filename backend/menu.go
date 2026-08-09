@@ -109,24 +109,20 @@ func asyncMenuCallback(action func()) func(*menu.CallbackData) {
 func hideApplicationCallback(app *App) func(*menu.CallbackData) {
 	return func(_ *menu.CallbackData) {
 		go func() {
-			if app.Ctx != nil {
-				wailsRuntime.Hide(app.Ctx)
-			}
+			app.runWithRuntimeContext(wailsRuntime.Hide)
 		}()
 	}
 }
 
 func quitApplicationCallback(app *App) func(*menu.CallbackData) {
 	return func(_ *menu.CallbackData) {
-		if app.Ctx != nil {
-			wailsRuntime.Quit(app.Ctx)
-		}
+		app.runWithRuntimeContext(wailsRuntime.Quit)
 	}
 }
 
 func emitMenuEventWhenReady(app *App, event string) func(*menu.CallbackData) {
 	return func(_ *menu.CallbackData) {
-		if app.Ctx != nil {
+		if app.runtimeAvailable() {
 			app.emitEvent(event)
 		}
 	}
@@ -139,7 +135,7 @@ func createEditMenu(appMenu *menu.Menu, app *App) {
 	// Cut
 	editMenu.AddText("Cut", keys.CmdOrCtrl("x"), func(_ *menu.CallbackData) {
 		// This will be handled by the frontend
-		if app.Ctx != nil {
+		if app.runtimeAvailable() {
 			app.emitEvent("menu:cut")
 		}
 	})
@@ -147,17 +143,21 @@ func createEditMenu(appMenu *menu.Menu, app *App) {
 	// Copy
 	editMenu.AddText("Copy", keys.CmdOrCtrl("c"), func(_ *menu.CallbackData) {
 		// This will be handled by the frontend
-		if app.Ctx != nil {
+		if app.runtimeAvailable() {
 			app.emitEvent("menu:copy")
 		}
 	})
 
 	// Paste
 	editMenu.AddText("Paste", keys.CmdOrCtrl("v"), func(_ *menu.CallbackData) {
-		if app.Ctx == nil {
+		if !app.runtimeAvailable() {
 			return
 		}
-		text, err := wailsRuntime.ClipboardGetText(app.Ctx)
+		var text string
+		var err error
+		app.runWithRuntimeContext(func(ctx context.Context) {
+			text, err = wailsRuntime.ClipboardGetText(ctx)
+		})
 		if err != nil {
 			return
 		}
@@ -167,7 +167,7 @@ func createEditMenu(appMenu *menu.Menu, app *App) {
 	// Select All
 	editMenu.AddText("Select All", keys.CmdOrCtrl("a"), func(_ *menu.CallbackData) {
 		// This will be handled by the frontend
-		if app.Ctx != nil {
+		if app.runtimeAvailable() {
 			app.emitEvent("menu:selectAll")
 		}
 	})
@@ -270,7 +270,7 @@ func createDebugMenu(appMenu *menu.Menu, app *App) {
 	debugMenu := appMenu.AddSubmenu("Debug")
 
 	debugMenu.AddText("Open Inspector", keys.Combo("f12", keys.ShiftKey, keys.CmdOrCtrlKey), func(_ *menu.CallbackData) {
-		if app.Ctx != nil {
+		if app.runtimeAvailable() {
 			app.emitEvent("debug:open-inspector")
 		}
 	})
@@ -286,7 +286,7 @@ func createDebugMenu(appMenu *menu.Menu, app *App) {
 
 func addDebugOverlayMenuItem(debugMenu *menu.Menu, app *App, label string, key string, event string) {
 	debugMenu.AddText(label, keys.Combo(key, keys.ControlKey, keys.OptionOrAltKey), func(_ *menu.CallbackData) {
-		if app.Ctx != nil {
+		if app.runtimeAvailable() {
 			app.emitEvent(event)
 		}
 	})
@@ -310,9 +310,7 @@ func createWindowMenu(appMenu *menu.Menu, app *App) {
 func addWindowMenuAction(windowMenu *menu.Menu, app *App, label string, accelerator *keys.Accelerator, action func(context.Context)) {
 	windowMenu.AddText(label, accelerator, func(_ *menu.CallbackData) {
 		go func() {
-			if app.Ctx != nil {
-				action(app.Ctx)
-			}
+			app.runWithRuntimeContext(action)
 		}()
 	})
 }
@@ -327,12 +325,11 @@ func addDarwinWindowMenu(windowMenu *menu.Menu, app *App) {
 }
 
 func bringAllWindowsToFront(app *App) {
-	if app.Ctx == nil {
-		return
-	}
-	wailsRuntime.WindowShow(app.Ctx)
-	wailsRuntime.WindowSetAlwaysOnTop(app.Ctx, true)
-	wailsRuntime.WindowSetAlwaysOnTop(app.Ctx, false)
+	app.runWithRuntimeContext(func(ctx context.Context) {
+		wailsRuntime.WindowShow(ctx)
+		wailsRuntime.WindowSetAlwaysOnTop(ctx, true)
+		wailsRuntime.WindowSetAlwaysOnTop(ctx, false)
+	})
 }
 
 // createHelpMenu creates the Help menu for Windows and Linux (macOS uses the app menu instead)

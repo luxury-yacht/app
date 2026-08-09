@@ -31,7 +31,7 @@ import (
 	"k8s.io/apimachinery/pkg/runtime/schema"
 
 	"github.com/luxury-yacht/app/backend/resources/common"
-	"github.com/luxury-yacht/app/internal/sentry"
+	sentryreporting "github.com/luxury-yacht/app/internal/sentry"
 )
 
 type recordingHelmLogger struct {
@@ -149,8 +149,8 @@ items:
 ---
 `
 
-	service := &Service{deps: Dependencies{Common: common.Dependencies{Context: context.Background(), ResourceResolver: helmTestResourceResolver}}}
-	resources := service.extractResourcesFromManifest(manifest, "default")
+	service := &Service{deps: Dependencies{Common: common.Dependencies{ResourceResolver: helmTestResourceResolver}}}
+	resources := service.extractResourcesFromManifest(context.Background(), manifest, "default")
 
 	require.Equal(t, []HelmResource{
 		{Kind: "ConfigMap", APIVersion: "v1", Name: "app-config", Namespace: "default", Scope: "namespaced"},
@@ -189,8 +189,8 @@ items:
 ---
 `
 
-	service := &Service{deps: Dependencies{Common: common.Dependencies{Context: context.Background(), ResourceResolver: helmTestResourceResolver}}}
-	resources := service.extractResourcesFromManifest(manifest, "team-default")
+	service := &Service{deps: Dependencies{Common: common.Dependencies{ResourceResolver: helmTestResourceResolver}}}
+	resources := service.extractResourcesFromManifest(context.Background(), manifest, "team-default")
 
 	require.Equal(t, []HelmResource{
 		{Kind: "Secret", APIVersion: "v1", Name: "credentials", Namespace: "team-a", Scope: "namespaced"},
@@ -225,8 +225,8 @@ metadata:
 ---
 `
 
-	service := &Service{deps: Dependencies{Common: common.Dependencies{Context: context.Background(), ResourceResolver: helmTestResourceResolver}}}
-	resources := service.extractResourcesFromManifest(manifest, "default")
+	service := &Service{deps: Dependencies{Common: common.Dependencies{ResourceResolver: helmTestResourceResolver}}}
+	resources := service.extractResourcesFromManifest(context.Background(), manifest, "default")
 
 	require.Equal(t, []HelmResource{
 		{Kind: "DBCluster", APIVersion: "rds.services.k8s.aws/v1alpha1", Name: "primary", Namespace: "data", Scope: "namespaced"},
@@ -251,8 +251,8 @@ metadata:
 ---
 `
 
-	service := &Service{deps: Dependencies{Common: common.Dependencies{Context: context.Background(), ResourceResolver: helmTestResourceResolver}}}
-	resources := service.extractResourcesFromManifest(manifest, "release-ns")
+	service := &Service{deps: Dependencies{Common: common.Dependencies{ResourceResolver: helmTestResourceResolver}}}
+	resources := service.extractResourcesFromManifest(context.Background(), manifest, "release-ns")
 
 	require.Equal(t, []HelmResource{
 		{Kind: "ClusterRole", APIVersion: "rbac.authorization.k8s.io/v1", Name: "reader", Namespace: "", Scope: "cluster"},
@@ -289,15 +289,14 @@ items: not-a-list
 
 	service := &Service{deps: Dependencies{Common: common.Dependencies{
 		ClusterID:        "cluster-a",
-		Context:          context.Background(),
 		ResourceResolver: helmTestResourceResolver,
 	}}}
 	require.Equal(t, []HelmResource{
 		{Kind: "ConfigMap", APIVersion: "v1", Name: "pre-install-config", Namespace: "release-ns", Scope: "namespaced"},
 		{Kind: "Deployment", APIVersion: "apps/v1", Name: "application", Namespace: "release-ns", Scope: "namespaced"},
-	}, service.extractResourcesFromManifest(manifest, "release-ns"))
+	}, service.extractResourcesFromManifest(context.Background(), manifest, "release-ns"))
 
-	links := service.extractResourceLinksFromManifest(manifest, "release-ns")
+	links := service.extractResourceLinksFromManifest(context.Background(), manifest, "release-ns")
 	require.Len(t, links, 2)
 	require.NotNil(t, links[0].Ref)
 	require.Equal(t, "cluster-a", links[0].Ref.ClusterID)
@@ -357,7 +356,7 @@ metadata:
 
 	service := newHelmServiceWithReleases(t, "default", previous, current)
 
-	details, err := service.ReleaseDetails("default", "demo")
+	details, err := service.ReleaseDetails(context.Background(), "default", "demo")
 	require.NoError(t, err)
 
 	require.Equal(t, "helmrelease", details.Kind)
@@ -395,7 +394,7 @@ func TestReleaseDetailsInitError(t *testing.T) {
 		},
 	})
 
-	_, err := service.ReleaseDetails("default", "demo")
+	_, err := service.ReleaseDetails(context.Background(), "default", "demo")
 	require.Error(t, err)
 	require.Contains(t, err.Error(), "init failure")
 }
@@ -415,7 +414,7 @@ func TestReleaseDetailsReturnsErrorWhenReleaseMissing(t *testing.T) {
 		},
 	})
 
-	_, err := service.ReleaseDetails("default", "missing")
+	_, err := service.ReleaseDetails(context.Background(), "default", "missing")
 	require.Error(t, err)
 	require.Contains(t, err.Error(), "failed to get release")
 }
@@ -532,7 +531,6 @@ func TestReleaseManifestInitError(t *testing.T) {
 
 	service := NewService(Dependencies{
 		Common: common.Dependencies{
-			Context:            context.Background(),
 			EnsureClient:       func(string) error { return nil },
 			SelectedKubeconfig: missingConfig,
 		},
@@ -551,7 +549,7 @@ func TestReleaseDetailsEnsureClientError(t *testing.T) {
 		},
 	}})
 
-	_, err := service.ReleaseDetails("default", "demo")
+	_, err := service.ReleaseDetails(context.Background(), "default", "demo")
 	require.Error(t, err)
 	require.Contains(t, err.Error(), "ensure fail")
 }

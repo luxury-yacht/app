@@ -8,6 +8,7 @@
 package poddisruptionbudget
 
 import (
+	"context"
 	"fmt"
 
 	"github.com/luxury-yacht/app/backend/internal/logsources"
@@ -29,13 +30,13 @@ func NewService(deps common.Dependencies) *Service {
 }
 
 // PodDisruptionBudget returns a detailed description for a single PDB.
-func (s *Service) PodDisruptionBudget(namespace, name string) (*PodDisruptionBudgetDetails, error) {
+func (s *Service) PodDisruptionBudget(ctx context.Context, namespace, name string) (*PodDisruptionBudgetDetails, error) {
 	client := s.deps.KubernetesClient
 	if client == nil {
 		return nil, fmt.Errorf("kubernetes client not initialized")
 	}
 
-	pdb, err := client.PolicyV1().PodDisruptionBudgets(namespace).Get(s.deps.Context, name, metav1.GetOptions{})
+	pdb, err := client.PolicyV1().PodDisruptionBudgets(namespace).Get(ctx, name, metav1.GetOptions{})
 	if err != nil {
 		err = s.logError(err, fmt.Sprintf("Failed to get pod disruption budget %s/%s", namespace, name))
 		return nil, fmt.Errorf("failed to get pod disruption budget: %w", err)

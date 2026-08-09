@@ -26,11 +26,11 @@ func NewService(deps common.Dependencies) *Service {
 }
 
 // GetPod returns detailed information about a single pod.
-func GetPod(deps common.Dependencies, namespace string, name string, detailed bool) (*types.PodDetailInfo, error) {
-	return NewService(deps).GetPod(namespace, name, detailed)
+func GetPod(ctx context.Context, deps common.Dependencies, namespace string, name string, detailed bool) (*types.PodDetailInfo, error) {
+	return NewService(deps).GetPod(ctx, namespace, name, detailed)
 }
 
-func (s *Service) GetPod(namespace string, name string, detailed bool) (*types.PodDetailInfo, error) {
+func (s *Service) GetPod(ctx context.Context, namespace string, name string, detailed bool) (*types.PodDetailInfo, error) {
 	s.deps.Logger.Debug(fmt.Sprintf("GetPod called for %s/%s (detailed: %v)", namespace, name, detailed), "Pod")
 	if s.deps.KubernetesClient == nil {
 		return nil, fmt.Errorf("kubernetes client not initialized")
@@ -41,7 +41,7 @@ func (s *Service) GetPod(namespace string, name string, detailed bool) (*types.P
 	if strings.TrimSpace(name) == "" {
 		return nil, fmt.Errorf("pod name is required")
 	}
-	details, err := s.fetchSinglePodFull(namespace, name)
+	details, err := s.fetchSinglePodFull(ctx, namespace, name)
 	if err != nil {
 		return nil, err
 	}
@@ -50,12 +50,12 @@ func (s *Service) GetPod(namespace string, name string, detailed bool) (*types.P
 }
 
 // DeletePod removes the named pod from the cluster.
-func DeletePod(deps common.Dependencies, namespace, name string) error {
-	return NewService(deps).DeletePod(namespace, name)
+func DeletePod(ctx context.Context, deps common.Dependencies, namespace, name string) error {
+	return NewService(deps).DeletePod(ctx, namespace, name)
 }
 
-func (s *Service) DeletePod(namespace, name string) error {
-	if s.deps.KubernetesClient == nil || s.deps.Context == nil {
+func (s *Service) DeletePod(ctx context.Context, namespace, name string) error {
+	if s.deps.KubernetesClient == nil || ctx == nil {
 		return fmt.Errorf("kubernetes client not initialized")
 	}
 	if strings.TrimSpace(namespace) == "" {
@@ -64,9 +64,6 @@ func (s *Service) DeletePod(namespace, name string) error {
 	if strings.TrimSpace(name) == "" {
 		return fmt.Errorf("pod name is required")
 	}
-
-	ctx, cancel := context.WithCancel(s.deps.Context)
-	defer cancel()
 
 	if err := s.deps.KubernetesClient.CoreV1().Pods(namespace).Delete(ctx, name, metav1.DeleteOptions{}); err != nil {
 		err = s.deps.LogResourceRequestFailure(err, fmt.Sprintf("Failed to delete pod %s/%s", namespace, name), "delete", Identity, "Pod")

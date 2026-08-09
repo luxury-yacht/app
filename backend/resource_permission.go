@@ -50,9 +50,6 @@ func (a *App) requireResolvedResourcePermission(
 		namespace = ""
 	}
 
-	if ctx == nil {
-		ctx = deps.Context
-	}
 	checkCtx, cancel := permissionCheckContext(ctx)
 	defer cancel()
 

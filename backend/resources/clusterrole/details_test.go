@@ -27,7 +27,6 @@ import (
 
 func newService(client kubernetes.Interface) *Service {
 	return NewService(common.Dependencies{
-		Context:          context.Background(),
 		Logger:           applog.Noop,
 		KubernetesClient: client,
 		ClusterID:        "cluster-a",
@@ -64,7 +63,7 @@ func TestClusterRoleDetailsIncludeBindings(t *testing.T) {
 
 	manager := newService(fake.NewClientset(cr, crb, rb))
 
-	details, err := manager.ClusterRole("cluster-reader")
+	details, err := manager.ClusterRole(context.Background(), "cluster-reader")
 	require.NoError(t, err)
 	require.Len(t, details.Rules, 1)
 	require.Len(t, details.ClusterRoleBindings, 1)
@@ -95,7 +94,7 @@ func TestClusterRoleDetailsAggregatesBindingsAndSelectors(t *testing.T) {
 	}
 
 	manager := newService(fake.NewClientset(clusterRole, crb))
-	details, err := manager.ClusterRole("aggregator")
+	details, err := manager.ClusterRole(context.Background(), "aggregator")
 	require.NoError(t, err)
 
 	require.Equal(t, "aggregator", details.Name)
@@ -115,7 +114,7 @@ func TestClusterRoleDetailsTolerateBindingListFailure(t *testing.T) {
 	})
 
 	manager := newService(client)
-	details, err := manager.ClusterRole("reader")
+	details, err := manager.ClusterRole(context.Background(), "reader")
 	require.NoError(t, err)
 	require.Empty(t, details.ClusterRoleBindings)
 }

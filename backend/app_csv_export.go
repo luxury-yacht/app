@@ -1,6 +1,7 @@
 package backend
 
 import (
+	"context"
 	"fmt"
 	"os"
 	"path/filepath"
@@ -34,17 +35,21 @@ func (a *App) SaveCsvFile(defaultFilename, content string) (CatalogQueryCSVExpor
 	if a == nil {
 		return empty, fmt.Errorf("app is not initialised")
 	}
-	if a.Ctx == nil {
+	if !a.runtimeAvailable() {
 		return empty, fmt.Errorf("application context is not available")
 	}
 
-	path, err := runtimeSaveFileDialog(a.Ctx, wailsruntime.SaveDialogOptions{
-		Title:           "Export CSV",
-		DefaultFilename: sanitizeCsvFilename(defaultFilename),
-		Filters: []wailsruntime.FileFilter{
-			{DisplayName: "CSV files (*.csv)", Pattern: "*.csv"},
-		},
-		CanCreateDirectories: true,
+	var path string
+	var err error
+	a.runWithRuntimeContext(func(ctx context.Context) {
+		path, err = runtimeSaveFileDialog(ctx, wailsruntime.SaveDialogOptions{
+			Title:           "Export CSV",
+			DefaultFilename: sanitizeCsvFilename(defaultFilename),
+			Filters: []wailsruntime.FileFilter{
+				{DisplayName: "CSV files (*.csv)", Pattern: "*.csv"},
+			},
+			CanCreateDirectories: true,
+		})
 	})
 	if err != nil {
 		return empty, fmt.Errorf("select CSV export file: %w", err)

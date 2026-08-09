@@ -60,7 +60,7 @@ func FetchResourceWithSelection[T any](
 	cacheKey string,
 	resourceKind string,
 	identifier string,
-	fetchFunc func() (T, error),
+	fetchFunc func(context.Context) (T, error),
 ) (T, error) {
 	var zero T
 	if a != nil {
@@ -111,7 +111,7 @@ func FetchNamespacedResource[T any](
 	selectionKey string,
 	resourceKind string,
 	namespace, name string,
-	fetchFunc func() (T, error),
+	fetchFunc func(context.Context) (T, error),
 ) (T, error) {
 	var zero T
 	if err := requireNamespacedObject(namespace, name); err != nil {
@@ -133,7 +133,7 @@ func FetchClusterResource[T any](
 	selectionKey string,
 	resourceKind string,
 	name string,
-	fetchFunc func() (T, error),
+	fetchFunc func(context.Context) (T, error),
 ) (T, error) {
 	var zero T
 	if err := requireObjectName(name); err != nil {
@@ -159,7 +159,7 @@ func ensureDependenciesInitialized(a *App, deps common.Dependencies, resourceKin
 	return nil
 }
 
-func executeWithRetry[T any](ctx context.Context, a *App, clusterID, resourceKind, target string, fetchFunc func() (T, error)) (T, error) {
+func executeWithRetry[T any](ctx context.Context, a *App, clusterID, resourceKind, target string, fetchFunc func(context.Context) (T, error)) (T, error) {
 	var zero T
 	if ctx == nil {
 		ctx = context.Background()
@@ -181,7 +181,7 @@ type fetchRetryOperation[T any] struct {
 	clusterID    string
 	resourceKind string
 	target       string
-	fetch        func() (T, error)
+	fetch        func(context.Context) (T, error)
 }
 
 func (o fetchRetryOperation[T]) run(ctx context.Context) (T, error) {
@@ -190,7 +190,7 @@ func (o fetchRetryOperation[T]) run(ctx context.Context) (T, error) {
 		if err := ctx.Err(); err != nil {
 			return zero, err
 		}
-		result, err := o.fetch()
+		result, err := o.fetch(ctx)
 		if err == nil {
 			o.recordSuccess(attempt)
 			return result, nil

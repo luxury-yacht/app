@@ -15,7 +15,7 @@ import (
 	"github.com/luxury-yacht/app/backend/internal/applog"
 	"github.com/luxury-yacht/app/backend/internal/errorcapture"
 	"github.com/luxury-yacht/app/backend/resourcekind"
-	"github.com/luxury-yacht/app/internal/sentry"
+	sentryreporting "github.com/luxury-yacht/app/internal/sentry"
 	"k8s.io/apiextensions-apiserver/pkg/client/clientset/clientset"
 	"k8s.io/client-go/dynamic"
 	"k8s.io/client-go/kubernetes"
@@ -121,7 +121,6 @@ type VersionResolver interface {
 
 // Dependencies provides the common set of collaborators required by resource handlers.
 type Dependencies struct {
-	Context                context.Context
 	Logger                 Logger
 	KubernetesClient       kubernetes.Interface
 	GatewayClient          gatewayversioned.Interface
@@ -144,9 +143,8 @@ type Dependencies struct {
 	ClusterName string
 }
 
-// CloneWithContext returns a shallow copy using the supplied context.
-func (d Dependencies) CloneWithContext(ctx context.Context) Dependencies {
-	d.Context = ctx
+// WithOperationContext returns a shallow copy with operation-scoped logging.
+func (d Dependencies) WithOperationContext(ctx context.Context) Dependencies {
 	d.Logger = applog.OperationScoped(d.Logger, applog.OperationIDFromContext(ctx))
 	return d
 }

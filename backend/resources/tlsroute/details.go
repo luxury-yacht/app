@@ -8,6 +8,8 @@
 package tlsroute
 
 import (
+	"context"
+
 	"github.com/luxury-yacht/app/backend/resources/common"
 	"github.com/luxury-yacht/app/backend/resources/gatewayapi"
 	"github.com/luxury-yacht/app/backend/resources/types"
@@ -26,10 +28,10 @@ func NewService(deps common.Dependencies) *Service {
 }
 
 // TLSRoute returns the detail payload for a single TLSRoute.
-func (s *Service) TLSRoute(namespace, name string) (*types.RouteDetails, error) {
+func (s *Service) TLSRoute(ctx context.Context, namespace, name string) (*types.RouteDetails, error) {
 	return gatewayapi.GetResource(s.deps, "TLSRoute", "tls route",
 		func() (*gatewayv1.TLSRoute, error) {
-			return s.deps.GatewayClient.GatewayV1().TLSRoutes(namespace).Get(s.deps.Context, name, metav1.GetOptions{})
+			return s.deps.GatewayClient.GatewayV1().TLSRoutes(namespace).Get(ctx, name, metav1.GetOptions{})
 		}, s.buildDetails)
 }
 

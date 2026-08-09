@@ -342,7 +342,9 @@ func FetchResource[T any](
 	identifier string,
 	fetchFunc func() (T, error),
 ) (T, error) {
-	return FetchResourceWithSelection(a, "", cacheKey, resourceKind, identifier, fetchFunc)
+	return FetchResourceWithSelection(a, "", cacheKey, resourceKind, identifier, func(context.Context) (T, error) {
+		return fetchFunc()
+	})
 }
 
 // FetchResourceList executes a list fetch function for a given resource kind
@@ -367,7 +369,9 @@ func FetchResourceList[T any](
 		defer cancel()
 	}
 
-	result, err := executeWithRetry(ctx, a, clusterID, resourceKind, scope, fetchFunc)
+	result, err := executeWithRetry(ctx, a, clusterID, resourceKind, scope, func(context.Context) (T, error) {
+		return fetchFunc()
+	})
 	if err != nil {
 		a.logger.Error(fmt.Sprintf("Failed to list %s in %s: %v", resourceKind, scope, err), logsources.ResourceLoader, clusterID, a.clusterNameForID(clusterID))
 		// Include clusterId in error payload so frontend can identify which cluster

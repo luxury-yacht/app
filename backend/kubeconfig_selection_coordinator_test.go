@@ -52,9 +52,9 @@ func TestRunSelectionMutationSupersededGenerationCancelsPriorContext(t *testing.
 	go func() {
 		err := app.runSelectionMutation("first", func(mutation *selectionMutation) error {
 			close(firstStarted)
-			<-mutation.ctx.Done()
+			<-mutation.context().Done()
 			close(firstDone)
-			return mutation.ctx.Err()
+			return mutation.context().Err()
 		})
 		firstErrCh <- err
 	}()

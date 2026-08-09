@@ -79,7 +79,7 @@ type nodeLogDiscoveryState struct {
 }
 
 // DiscoverLogs probes the kubelet node log endpoint and returns directly readable sources.
-func (s *Service) DiscoverLogs(nodeName string) restypes.NodeLogDiscoveryResponse {
+func (s *Service) DiscoverLogs(ctx context.Context, nodeName string) restypes.NodeLogDiscoveryResponse {
 	if err := s.ensureClient("Nodes"); err != nil {
 		return restypes.NodeLogDiscoveryResponse{Reason: err.Error()}
 	}
@@ -87,7 +87,7 @@ func (s *Service) DiscoverLogs(nodeName string) restypes.NodeLogDiscoveryRespons
 		return restypes.NodeLogDiscoveryResponse{Reason: "kubernetes client not initialized"}
 	}
 
-	rootBody, err := s.fetchNodeLogPath(nodeName, "", "")
+	rootBody, err := s.fetchNodeLogPath(ctx, nodeName, "", "")
 	if err != nil {
 		return restypes.NodeLogDiscoveryResponse{Reason: classifyNodeLogError(err)}
 	}
@@ -111,8 +111,8 @@ func (s *Service) DiscoverLogs(nodeName string) restypes.NodeLogDiscoveryRespons
 	}
 
 	sources := make(map[string]restypes.NodeLogSource)
-	s.discoverNodeLogSources(nodeName, rootBody, sources)
-	s.discoverWellKnownNodeLogServices(nodeName, sources)
+	s.discoverNodeLogSources(ctx, nodeName, rootBody, sources)
+	s.discoverWellKnownNodeLogServices(ctx, nodeName, sources)
 
 	if len(sources) == 0 {
 		return restypes.NodeLogDiscoveryResponse{Reason: "node log endpoint did not expose any directly readable log sources"}
@@ -133,7 +133,7 @@ func (s *Service) DiscoverLogs(nodeName string) restypes.NodeLogDiscoveryRespons
 }
 
 // FetchLogs returns the raw content for a previously discovered node log source.
-func (s *Service) FetchLogs(nodeName string, req restypes.NodeLogFetchRequest) restypes.NodeLogFetchResponse {
+func (s *Service) FetchLogs(ctx context.Context, nodeName string, req restypes.NodeLogFetchRequest) restypes.NodeLogFetchResponse {
 	sourcePath := strings.TrimSpace(req.SourcePath)
 	tailBytes := normalizeNodeLogTailBytes(req.TailBytes)
 	source := restypes.NodeLogSource{
@@ -177,7 +177,7 @@ func (s *Service) FetchLogs(nodeName string, req restypes.NodeLogFetchRequest) r
 	}
 
 	sinceTime := strings.TrimSpace(req.SinceTime)
-	body, err := s.fetchNodeLogPath(nodeName, sourcePath, sinceTime)
+	body, err := s.fetchNodeLogPath(ctx, nodeName, sourcePath, sinceTime)
 	if err != nil {
 		return restypes.NodeLogFetchResponse{
 			Source:     source,
@@ -213,6 +213,7 @@ func (s *Service) FetchLogs(nodeName string, req restypes.NodeLogFetchRequest) r
 }
 
 func (s *Service) discoverNodeLogSources(
+	ctx context.Context,
 	nodeName string,
 	rootBody []byte,
 	sources map[string]restypes.NodeLogSource,
@@ -231,7 +232,7 @@ func (s *Service) discoverNodeLogSources(
 		go func() {
 			defer workerWG.Done()
 			for task := range taskCh {
-				s.processNodeLogDiscoveryTask(nodeName, task, state, &taskWG, taskCh)
+				s.processNodeLogDiscoveryTask(ctx, nodeName, task, state, &taskWG, taskCh)
 				taskWG.Done()
 			}
 		}()
@@ -245,6 +246,7 @@ func (s *Service) discoverNodeLogSources(
 }
 
 func (s *Service) discoverWellKnownNodeLogServices(
+	ctx context.Context,
 	nodeName string,
 	sources map[string]restypes.NodeLogSource,
 ) {
@@ -254,7 +256,7 @@ func (s *Service) discoverWellKnownNodeLogServices(
 			continue
 		}
 
-		body, err := s.fetchNodeLogProbePath(nodeName, sourcePath)
+		body, err := s.fetchNodeLogProbePath(ctx, nodeName, sourcePath)
 		if err != nil {
 			continue
 		}
@@ -273,6 +275,7 @@ func (s *Service) discoverWellKnownNodeLogServices(
 }
 
 func (s *Service) processNodeLogDiscoveryTask(
+	ctx context.Context,
 	nodeName string,
 	task nodeLogDiscoveryTask,
 	state *nodeLogDiscoveryState,
@@ -287,11 +290,12 @@ func (s *Service) processNodeLogDiscoveryTask(
 		if state.hasReachedSourceLimit() {
 			return
 		}
-		s.processNodeLogDiscoveryEntry(nodeName, task, entry, state, taskWG, taskCh)
+		s.processNodeLogDiscoveryEntry(ctx, nodeName, task, entry, state, taskWG, taskCh)
 	}
 }
 
 func (s *Service) processNodeLogDiscoveryEntry(
+	ctx context.Context,
 	nodeName string,
 	task nodeLogDiscoveryTask,
 	entry nodeLogListingEntry,
@@ -303,7 +307,7 @@ func (s *Service) processNodeLogDiscoveryEntry(
 	if !ok || !state.markVisited(nextPath) || shouldSkipNodeLogDiscoveryPath(nextPath) {
 		return
 	}
-	childBody, err := s.fetchNodeLogDiscoveryPath(nodeName, nextPath)
+	childBody, err := s.fetchNodeLogDiscoveryPath(ctx, nodeName, nextPath)
 	if err != nil {
 		return
 	}
@@ -353,35 +357,33 @@ func (s *nodeLogDiscoveryState) addSource(path string) {
 	}
 }
 
-func (s *Service) fetchNodeLogPath(nodeName, sourcePath, sinceTime string) ([]byte, error) {
-	return s.fetchNodeLogPathWithOptions(nodeName, sourcePath, sinceTime, 0)
+func (s *Service) fetchNodeLogPath(ctx context.Context, nodeName, sourcePath, sinceTime string) ([]byte, error) {
+	return s.fetchNodeLogPathWithOptions(ctx, nodeName, sourcePath, sinceTime, 0)
 }
 
-func (s *Service) fetchNodeLogProbePath(nodeName, sourcePath string) ([]byte, error) {
+func (s *Service) fetchNodeLogProbePath(ctx context.Context, nodeName, sourcePath string) ([]byte, error) {
 	if err := validateNodeLogSourcePath(sourcePath); err != nil {
 		return nil, err
 	}
 	restClient := s.deps.KubernetesClient.Discovery().RESTClient()
-	ctx := s.deps.Context
 	if ctx == nil {
 		ctx = context.Background()
 	}
 	return nodeLogFetchProbeFunc(ctx, restClient, nodeLogProxyPathWithOptions(nodeName, sourcePath, "", 0), maxNodeLogProbeBytes)
 }
 
-func (s *Service) fetchNodeLogDiscoveryPath(nodeName, sourcePath string) ([]byte, error) {
+func (s *Service) fetchNodeLogDiscoveryPath(ctx context.Context, nodeName, sourcePath string) ([]byte, error) {
 	if strings.HasSuffix(strings.TrimSpace(sourcePath), "/") {
-		return s.fetchNodeLogPathWithOptions(nodeName, sourcePath, "", 0)
+		return s.fetchNodeLogPathWithOptions(ctx, nodeName, sourcePath, "", 0)
 	}
-	return s.fetchNodeLogProbePath(nodeName, sourcePath)
+	return s.fetchNodeLogProbePath(ctx, nodeName, sourcePath)
 }
 
-func (s *Service) fetchNodeLogPathWithOptions(nodeName, sourcePath, sinceTime string, tailLines int) ([]byte, error) {
+func (s *Service) fetchNodeLogPathWithOptions(ctx context.Context, nodeName, sourcePath, sinceTime string, tailLines int) ([]byte, error) {
 	if err := validateNodeLogSourcePath(sourcePath); err != nil {
 		return nil, err
 	}
 	restClient := s.deps.KubernetesClient.Discovery().RESTClient()
-	ctx := s.deps.Context
 	if ctx == nil {
 		ctx = context.Background()
 	}

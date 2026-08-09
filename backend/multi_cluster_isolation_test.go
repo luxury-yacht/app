@@ -89,7 +89,7 @@ func TestIsolation_AuthFailureDoesNotAffectOtherClusters(t *testing.T) {
 	app := newTestAppWithDefaults(t)
 	ctx, cancel := context.WithCancel(context.Background())
 	defer cancel()
-	app.Ctx = ctx
+	app.setRuntimeContext(ctx)
 
 	// Create auth managers for two clusters.
 	// MaxAttempts=0 means failures immediately transition to StateInvalid.
@@ -138,7 +138,7 @@ func TestIsolation_HeartbeatRunsIndependently(t *testing.T) {
 	app := newTestAppWithDefaults(t)
 	ctx, cancel := context.WithCancel(context.Background())
 	defer cancel()
-	app.Ctx = ctx
+	app.setRuntimeContext(ctx)
 
 	// Track emitted events
 	emittedEvents := make(map[string][]map[string]any)
@@ -197,7 +197,7 @@ func TestIsolation_RecoveryOnlyAffectsOneCluster(t *testing.T) {
 	app := newTestAppWithDefaults(t)
 	ctx, cancel := context.WithCancel(context.Background())
 	defer cancel()
-	app.Ctx = ctx
+	app.setRuntimeContext(ctx)
 	app.refreshSubsystems = make(map[string]*system.Subsystem)
 
 	// Mock subsystems for two clusters
@@ -345,7 +345,7 @@ func TestIsolation_MultiClusterAuthStateRetrieval(t *testing.T) {
 	app := newTestAppWithDefaults(t)
 	ctx, cancel := context.WithCancel(context.Background())
 	defer cancel()
-	app.Ctx = ctx
+	app.setRuntimeContext(ctx)
 
 	// Create auth managers with different states
 	authMgrValid := authstate.New(authstate.Config{MaxAttempts: 0})
@@ -400,7 +400,7 @@ func TestIsolation_RetryAuthPerCluster(t *testing.T) {
 	app := newTestAppWithDefaults(t)
 	ctx, cancel := context.WithCancel(context.Background())
 	defer cancel()
-	app.Ctx = ctx
+	app.setRuntimeContext(ctx)
 
 	// Create auth managers - both in invalid state with MaxAttempts=0
 	authMgrA := authstate.New(authstate.Config{MaxAttempts: 0})
@@ -446,7 +446,7 @@ func TestIsolation_HeartbeatSkipsInvalidAuthClusters(t *testing.T) {
 	app := newTestAppWithDefaults(t)
 	ctx, cancel := context.WithCancel(context.Background())
 	defer cancel()
-	app.Ctx = ctx
+	app.setRuntimeContext(ctx)
 
 	// Track emitted events
 	emittedEvents := make(map[string][]map[string]any)

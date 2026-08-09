@@ -235,9 +235,6 @@ func objectMutationContext(ctx context.Context, deps common.Dependencies) (conte
 	if ctx != nil {
 		return ctx, nil
 	}
-	if deps.Context != nil {
-		return deps.Context, nil
-	}
 	return nil, fmt.Errorf("operation context is required")
 }
 

@@ -24,7 +24,9 @@ var defaultLoopbackListener = func() (net.Listener, error) {
 
 // App provides the backend façade exposed to Wails.
 type App struct {
-	Ctx                      context.Context
+	appDone                  <-chan struct{}
+	runtimeReady             bool
+	withRuntimeContext       func(func(context.Context))
 	selectedKubeconfigs      []string
 	availableKubeconfigs     []KubeconfigInfo
 	kubeconfigSearchPaths    []string
@@ -42,11 +44,11 @@ type App struct {
 	refreshManager    *refresh.Manager
 	refreshHTTPServer *http.Server
 	refreshListener   net.Listener
-	// refreshRuntimeMu owns refreshCtx and refreshCancel. Selection mutations and
+	// refreshRuntimeMu owns refreshDone and refreshCancel. Selection mutations and
 	// governor reconciliation use different lifecycle locks, so neither is a
 	// substitute for this process-runtime boundary.
 	refreshRuntimeMu sync.Mutex
-	refreshCtx       context.Context
+	refreshDone      <-chan struct{}
 	refreshCancel    context.CancelFunc
 	// refreshRuntimeStopped distinguishes a deliberate global teardown from the
 	// never-started state that auth recovery is allowed to initialise.
@@ -233,10 +235,10 @@ func NewApp(reporters ...sentryreporting.Reporter) *App {
 }
 
 func (a *App) emitEvent(name string, args ...interface{}) {
-	if a == nil || a.eventEmitter == nil || a.Ctx == nil {
+	if a == nil || a.eventEmitter == nil || !a.runtimeAvailable() {
 		return
 	}
-	a.eventEmitter(a.Ctx, name, args...)
+	a.eventEmitter(a.CtxOrBackground(), name, args...)
 }
 
 // initAuthManager is kept for backwards compatibility but is now a no-op.

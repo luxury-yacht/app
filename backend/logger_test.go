@@ -408,7 +408,7 @@ func TestFetchResourceReportsOriginalKubernetesError(t *testing.T) {
 		"deployment/default/web",
 		"Deployment",
 		"default/web",
-		func() (string, error) { return "", cause },
+		func(context.Context) (string, error) { return "", cause },
 	)
 	require.Error(t, err)
 
@@ -432,7 +432,7 @@ func TestFetchResourceDoesNotReportTelemetryHandledErrorAgain(t *testing.T) {
 		"deployment/default/web",
 		"Deployment",
 		"default/web",
-		func() (string, error) { return "", errorcapture.MarkTelemetryHandled(cause) },
+		func(context.Context) (string, error) { return "", errorcapture.MarkTelemetryHandled(cause) },
 	)
 	require.Error(t, err)
 	require.ErrorIs(t, err, cause)

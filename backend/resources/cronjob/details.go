@@ -9,6 +9,7 @@
 package cronjob
 
 import (
+	"context"
 	"fmt"
 	"strings"
 	"time"
@@ -38,24 +39,24 @@ func NewService(deps common.Dependencies) *Service {
 }
 
 // CronJob returns the detailed view for a single cronjob.
-func (s *Service) CronJob(namespace, name string) (*CronJobDetails, error) {
+func (s *Service) CronJob(ctx context.Context, namespace, name string) (*CronJobDetails, error) {
 	client := s.deps.KubernetesClient
 	if client == nil {
 		return nil, fmt.Errorf("kubernetes client not initialized")
 	}
 
-	cronJob, err := client.BatchV1().CronJobs(namespace).Get(s.deps.Context, name, metav1.GetOptions{})
+	cronJob, err := client.BatchV1().CronJobs(namespace).Get(ctx, name, metav1.GetOptions{})
 	if err != nil {
 		err = s.deps.LogResourceRequestFailure(err, fmt.Sprintf("Failed to get CronJob %s/%s", namespace, name), "get", Identity, logsources.ResourceLoader)
 		return nil, fmt.Errorf("failed to get cronjob: %w", err)
 	}
 
-	jobs, err := client.BatchV1().Jobs(namespace).List(s.deps.Context, metav1.ListOptions{})
+	jobs, err := client.BatchV1().Jobs(namespace).List(ctx, metav1.ListOptions{})
 	if err != nil {
 		jobs = nil
 	}
 
-	podInfos, podSummary := s.collectCronJobPods(namespace, cronJob, jobs)
+	podInfos, podSummary := s.collectCronJobPods(ctx, namespace, cronJob, jobs)
 	jobInfos := collectCronJobJobs(s.deps.ClusterID, cronJob, jobs)
 	return buildCronJobDetails(s.deps.ClusterID, cronJob, jobs, podInfos, podSummary, jobInfos), nil
 }
@@ -207,7 +208,7 @@ func describeActiveJobs(cronJob *batchv1.CronJob, jobs *batchv1.JobList) []resty
 	return references
 }
 
-func (s *Service) collectCronJobPods(namespace string, cronJob *batchv1.CronJob, jobs *batchv1.JobList) ([]restypes.PodSimpleInfo, *restypes.PodMetricsSummary) {
+func (s *Service) collectCronJobPods(ctx context.Context, namespace string, cronJob *batchv1.CronJob, jobs *batchv1.JobList) ([]restypes.PodSimpleInfo, *restypes.PodMetricsSummary) {
 	if jobs == nil {
 		return nil, nil
 	}
@@ -217,14 +218,14 @@ func (s *Service) collectCronJobPods(namespace string, cronJob *batchv1.CronJob,
 	}
 
 	podService := pods.NewService(s.deps)
-	rsMap := podService.BuildReplicaSetToDeploymentMap(namespace)
-	collected := s.podsOwnedByCronJob(namespace, cronJob, jobs)
+	rsMap := podService.BuildReplicaSetToDeploymentMap(ctx, namespace)
+	collected := s.podsOwnedByCronJob(ctx, namespace, cronJob, jobs)
 
 	if len(collected) == 0 {
 		return nil, nil
 	}
 
-	metrics := podService.GetPodMetricsForPods(namespace, collected)
+	metrics := podService.GetPodMetricsForPods(ctx, namespace, collected)
 	podInfos := make([]restypes.PodSimpleInfo, 0, len(collected))
 	for _, pod := range collected {
 		ownerKind, ownerName, ownerAPIVersion := pods.ResolveOwner(pod, rsMap)
@@ -235,7 +236,7 @@ func (s *Service) collectCronJobPods(namespace string, cronJob *batchv1.CronJob,
 	return podInfos, podSummary
 }
 
-func (s *Service) podsOwnedByCronJob(namespace string, cronJob *batchv1.CronJob, jobs *batchv1.JobList) []corev1.Pod {
+func (s *Service) podsOwnedByCronJob(ctx context.Context, namespace string, cronJob *batchv1.CronJob, jobs *batchv1.JobList) []corev1.Pod {
 	client := s.deps.KubernetesClient
 	collected := make([]corev1.Pod, 0)
 	seen := make(map[string]struct{})
@@ -244,7 +245,7 @@ func (s *Service) podsOwnedByCronJob(namespace string, cronJob *batchv1.CronJob,
 		if !ownedByCronJob(job.OwnerReferences, cronJob.UID) {
 			continue
 		}
-		podList, err := client.CoreV1().Pods(namespace).List(s.deps.Context, cronJobPodListOptions(job))
+		podList, err := client.CoreV1().Pods(namespace).List(ctx, cronJobPodListOptions(job))
 		if err != nil {
 			s.deps.Logger.Debug(fmt.Sprintf("Failed to list pods for job %s/%s: %v", namespace, job.Name, err), logsources.ResourceLoader)
 			continue

@@ -8,6 +8,7 @@
 package networkpolicy
 
 import (
+	"context"
 	"fmt"
 
 	"github.com/luxury-yacht/app/backend/internal/logsources"
@@ -27,8 +28,8 @@ func NewService(deps common.Dependencies) *Service {
 }
 
 // NetworkPolicy returns the detailed view for a single network policy.
-func (s *Service) NetworkPolicy(namespace, name string) (*NetworkPolicyDetails, error) {
-	np, err := s.deps.KubernetesClient.NetworkingV1().NetworkPolicies(namespace).Get(s.deps.Context, name, metav1.GetOptions{})
+func (s *Service) NetworkPolicy(ctx context.Context, namespace, name string) (*NetworkPolicyDetails, error) {
+	np, err := s.deps.KubernetesClient.NetworkingV1().NetworkPolicies(namespace).Get(ctx, name, metav1.GetOptions{})
 	if err != nil {
 		err = s.deps.LogResourceRequestFailure(err, fmt.Sprintf("Failed to get network policy %s/%s", namespace, name), "get", Identity, logsources.ResourceLoader)
 		return nil, fmt.Errorf("failed to get network policy: %w", err)

@@ -8,6 +8,8 @@
 package httproute
 
 import (
+	"context"
+
 	"github.com/luxury-yacht/app/backend/resources/common"
 	"github.com/luxury-yacht/app/backend/resources/gatewayapi"
 	"github.com/luxury-yacht/app/backend/resources/types"
@@ -26,10 +28,10 @@ func NewService(deps common.Dependencies) *Service {
 }
 
 // HTTPRoute returns the detail payload for a single HTTPRoute.
-func (s *Service) HTTPRoute(namespace, name string) (*types.RouteDetails, error) {
+func (s *Service) HTTPRoute(ctx context.Context, namespace, name string) (*types.RouteDetails, error) {
 	return gatewayapi.GetResource(s.deps, "HTTPRoute", "http route",
 		func() (*gatewayv1.HTTPRoute, error) {
-			return s.deps.GatewayClient.GatewayV1().HTTPRoutes(namespace).Get(s.deps.Context, name, metav1.GetOptions{})
+			return s.deps.GatewayClient.GatewayV1().HTTPRoutes(namespace).Get(ctx, name, metav1.GetOptions{})
 		}, s.buildDetails)
 }
 

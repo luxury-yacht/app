@@ -8,7 +8,6 @@
 package generic
 
 import (
-	"context"
 	"fmt"
 
 	"github.com/luxury-yacht/app/backend/internal/applog"
@@ -32,13 +31,6 @@ func (s *Service) dynamicClient() (dynamic.Interface, error) {
 		return nil, fmt.Errorf("rest config not initialized")
 	}
 	return dynamic.NewForConfig(s.deps.RestConfig)
-}
-
-func (s *Service) context() context.Context {
-	if s.deps.Context != nil {
-		return s.deps.Context
-	}
-	return context.Background()
 }
 
 func (s *Service) logInfo(msg string) {

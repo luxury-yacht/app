@@ -26,7 +26,6 @@ import (
 
 func newService(client kubernetes.Interface) *Service {
 	return NewService(common.Dependencies{
-		Context:          context.Background(),
 		Logger:           applog.Noop,
 		KubernetesClient: client,
 		ClusterID:        "cluster-a",
@@ -53,7 +52,7 @@ func TestManagerRoleIncludesBindings(t *testing.T) {
 	}
 
 	manager := newService(fake.NewClientset(r, rb))
-	details, err := manager.Role("team-a", "reader")
+	details, err := manager.Role(context.Background(), "team-a", "reader")
 	require.NoError(t, err)
 	require.NotNil(t, details)
 	require.Len(t, details.Rules, 1)
@@ -75,7 +74,7 @@ func TestManagerRoleSkipsBindingsOnListFailure(t *testing.T) {
 	})
 
 	manager := newService(client)
-	details, err := manager.Role("team-a", "orphan")
+	details, err := manager.Role(context.Background(), "team-a", "orphan")
 	require.NoError(t, err)
 	require.Empty(t, details.UsedByRoleBindings)
 	require.True(t, strings.Contains(details.Details, "Rules"))
@@ -96,7 +95,7 @@ func TestRoleWarnsWhenBindingsListFails(t *testing.T) {
 	})
 
 	manager := newService(client)
-	details, err := manager.Role("ns", "reader")
+	details, err := manager.Role(context.Background(), "ns", "reader")
 	require.NoError(t, err)
 	require.Empty(t, details.UsedByRoleBindings)
 }

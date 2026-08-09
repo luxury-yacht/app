@@ -8,6 +8,7 @@
 package hpa
 
 import (
+	"context"
 	"fmt"
 
 	"github.com/luxury-yacht/app/backend/internal/logsources"
@@ -29,13 +30,13 @@ func NewService(deps common.Dependencies) *Service {
 }
 
 // HorizontalPodAutoscaler returns a detailed view for a single HPA.
-func (s *Service) HorizontalPodAutoscaler(namespace, name string) (*HorizontalPodAutoscalerDetails, error) {
+func (s *Service) HorizontalPodAutoscaler(ctx context.Context, namespace, name string) (*HorizontalPodAutoscalerDetails, error) {
 	client := s.deps.KubernetesClient
 	if client == nil {
 		return nil, fmt.Errorf("kubernetes client not initialized")
 	}
 
-	h, err := client.AutoscalingV2().HorizontalPodAutoscalers(namespace).Get(s.deps.Context, name, metav1.GetOptions{})
+	h, err := client.AutoscalingV2().HorizontalPodAutoscalers(namespace).Get(ctx, name, metav1.GetOptions{})
 	if err != nil {
 		err = s.logError(err, fmt.Sprintf("Failed to get HPA %s/%s", namespace, name))
 		return nil, fmt.Errorf("failed to get HPA: %w", err)

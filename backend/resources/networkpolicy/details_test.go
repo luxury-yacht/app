@@ -29,7 +29,6 @@ import (
 func newService(t testing.TB, client *fake.Clientset) *networkpolicy.Service {
 	t.Helper()
 	deps := testsupport.NewResourceDependencies(
-		testsupport.WithDepsContext(context.Background()),
 		testsupport.WithDepsKubeClient(client),
 		testsupport.WithDepsLogger(applog.Noop),
 	)
@@ -64,7 +63,7 @@ func TestNetworkPolicyDetails(t *testing.T) {
 	client := fake.NewClientset(np)
 	service := newService(t, client)
 
-	detail, err := service.NetworkPolicy("default", "allow-http")
+	detail, err := service.NetworkPolicy(context.Background(), "default", "allow-http")
 	require.NoError(t, err)
 	require.Equal(t, "NetworkPolicy", detail.Kind)
 	require.Len(t, detail.IngressRules, 1)
@@ -107,7 +106,7 @@ func TestNetworkPolicyDetailsWithEgressAndIPBlock(t *testing.T) {
 	client := fake.NewClientset(np)
 	service := newService(t, client)
 
-	detail, err := service.NetworkPolicy("default", "dns-egress")
+	detail, err := service.NetworkPolicy(context.Background(), "default", "dns-egress")
 	require.NoError(t, err)
 	require.Contains(t, detail.Details, "All pods")
 	require.Len(t, detail.EgressRules, 1)
@@ -128,7 +127,7 @@ func TestNetworkPolicyErrorWhenGetFails(t *testing.T) {
 
 	service := newService(t, client)
 
-	_, err := service.NetworkPolicy("default", "missing")
+	_, err := service.NetworkPolicy(context.Background(), "default", "missing")
 	require.Error(t, err)
 	require.Contains(t, err.Error(), "failed to get network policy")
 }

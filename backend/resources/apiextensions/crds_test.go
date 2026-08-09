@@ -59,7 +59,6 @@ func TestCustomResourceDefinition(t *testing.T) {
 	client := fake.NewClientset(crd)
 	var ensureCalled bool
 	svc := NewService(common.Dependencies{
-		Context:             context.Background(),
 		Logger:              applog.Noop,
 		APIExtensionsClient: client,
 		EnsureAPIExtensions: func(resource string) error {
@@ -71,7 +70,7 @@ func TestCustomResourceDefinition(t *testing.T) {
 		},
 	})
 
-	details, err := svc.CustomResourceDefinition("widgets.example.com")
+	details, err := svc.CustomResourceDefinition(context.Background(), "widgets.example.com")
 	if err != nil {
 		t.Fatalf("CustomResourceDefinition returned error: %v", err)
 	}

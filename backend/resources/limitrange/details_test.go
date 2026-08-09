@@ -25,7 +25,6 @@ import (
 func newService(t testing.TB, client *fake.Clientset) *limitrange.Service {
 	t.Helper()
 	deps := testsupport.NewResourceDependencies(
-		testsupport.WithDepsContext(context.Background()),
 		testsupport.WithDepsKubeClient(client),
 		testsupport.WithDepsLogger(applog.Noop),
 		testsupport.WithDepsEnsureClient(func(string) error { return nil }),
@@ -35,7 +34,7 @@ func newService(t testing.TB, client *fake.Clientset) *limitrange.Service {
 
 func TestLimitRangeRequiresClient(t *testing.T) {
 	svc := limitrange.NewService(testsupport.NewResourceDependencies())
-	_, err := svc.LimitRange("default", "lr")
+	_, err := svc.LimitRange(context.Background(), "default", "lr")
 	require.Error(t, err)
 }
 
@@ -64,7 +63,7 @@ func TestServiceLimitRangeDetails(t *testing.T) {
 	client := fake.NewClientset(lr.DeepCopy())
 	service := newService(t, client)
 
-	detail, err := service.LimitRange("default", "lr")
+	detail, err := service.LimitRange(context.Background(), "default", "lr")
 	require.NoError(t, err)
 	require.Equal(t, "LimitRange", detail.Kind)
 	require.Len(t, detail.Limits, 1)

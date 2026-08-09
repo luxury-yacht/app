@@ -23,7 +23,6 @@ import (
 func newService(t testing.TB, client *fake.Clientset) *secret.Service {
 	t.Helper()
 	deps := testsupport.NewResourceDependencies(
-		testsupport.WithDepsContext(context.Background()),
 		testsupport.WithDepsKubeClient(client),
 		testsupport.WithDepsLogger(applog.Noop),
 	)
@@ -69,7 +68,7 @@ func TestServiceSecretDetailsIncludesUsage(t *testing.T) {
 	client := fake.NewClientset(sec.DeepCopy(), pod.DeepCopy())
 	service := newService(t, client)
 
-	detail, err := service.Secret("default", "app-secret")
+	detail, err := service.Secret(context.Background(), "default", "app-secret")
 	require.NoError(t, err)
 	require.Equal(t, "Secret", detail.Kind)
 	require.Equal(t, 1, detail.DataCount)

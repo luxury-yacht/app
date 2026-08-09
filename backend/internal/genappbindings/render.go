@@ -92,9 +92,9 @@ func (b binding) fetchExpr() string {
 		return b.Fetch
 	}
 	if b.Namespaced {
-		return fmt.Sprintf("%s.%s(namespace, name)", b.Service, b.method())
+		return fmt.Sprintf("%s.%s(ctx, namespace, name)", b.Service, b.method())
 	}
-	return fmt.Sprintf("%s.%s(name)", b.Service, b.method())
+	return fmt.Sprintf("%s.%s(ctx, name)", b.Service, b.method())
 }
 
 // fromSpec adapts a kind package's appbinding.Spec to the generator's internal
@@ -141,8 +141,8 @@ func bindingsFromRegistry() []binding {
 // only in detail-fetcher generation, never in App.Get binding generation. Their
 // Identity is declared inline because HelmRelease is not a built-in Kubernetes kind.
 var detailExtras = fromSpecs([]appbinding.Spec{
-	{Identity: pods.Identity, Fetch: "pods.GetPod(deps, namespace, name, true)", Import: resourcesPkg + "pods"},
-	{Identity: resourcekind.Identity{Kind: "HelmRelease", Namespaced: true}, Fetch: "helm.NewService(helm.Dependencies{Common: deps}).ReleaseDetails(namespace, name)", Import: resourcesPkg + "helm"},
+	{Identity: pods.Identity, Fetch: "pods.GetPod(ctx, deps, namespace, name, true)", Import: resourcesPkg + "pods"},
+	{Identity: resourcekind.Identity{Kind: "HelmRelease", Namespaced: true}, Fetch: "helm.NewService(helm.Dependencies{Common: deps}).ReleaseDetails(ctx, namespace, name)", Import: resourcesPkg + "helm"},
 	{Identity: apiextensions.Identity, Service: "apiextensions.NewService(deps)", Import: resourcesPkg + "apiextensions"},
 })
 
@@ -151,7 +151,7 @@ func Render() ([]byte, error) {
 	rows := append([]binding(nil), Bindings...)
 	sort.Slice(rows, func(i, j int) bool { return rows[i].Name < rows[j].Name })
 
-	importSet := map[string]struct{}{}
+	importSet := map[string]struct{}{"context": {}}
 	for _, r := range rows {
 		importSet[r.Import] = struct{}{}
 		importSet[r.dtoImport()] = struct{}{}
@@ -185,7 +185,10 @@ func RenderDetailFetchers() ([]byte, error) {
 	rows = append(rows, detailExtras...)
 	sort.Slice(rows, func(i, j int) bool { return rows[i].detailKey() < rows[j].detailKey() })
 
-	importSet := map[string]struct{}{"github.com/luxury-yacht/app/backend/resources/common": {}}
+	importSet := map[string]struct{}{
+		"context": {},
+		"github.com/luxury-yacht/app/backend/resources/common": {},
+	}
 	for _, r := range rows {
 		importSet[r.Import] = struct{}{}
 	}
@@ -207,7 +210,7 @@ func RenderDetailFetchers() ([]byte, error) {
 	b.WriteString("var objectDetailFetchers = map[string]objectDetailFetcher{\n")
 	for _, r := range rows {
 		fmt.Fprintf(&b, "\t%q: {\n", r.detailKey())
-		b.WriteString("\t\twithDeps: func(deps common.Dependencies, namespace, name string) (interface{}, error) {\n")
+		b.WriteString("\t\twithDeps: func(ctx context.Context, deps common.Dependencies, namespace, name string) (interface{}, error) {\n")
 		fmt.Fprintf(&b, "\t\t\tdetail, err := %s\n", r.fetchExpr())
 		b.WriteString("\t\t\treturn detail, err\n")
 		b.WriteString("\t\t},\n")
@@ -225,8 +228,8 @@ func writeBinding(b *bytes.Buffer, r binding) {
 	if err != nil {
 		return nil, err
 	}
-	return FetchNamespacedResource(a, deps, selectionKey, %[3]q, namespace, name, func() (*%[2]s, error) {
-		return %[4]s.%[5]s(namespace, name)
+	return FetchNamespacedResource(a, deps, selectionKey, %[3]q, namespace, name, func(ctx context.Context) (*%[2]s, error) {
+		return %[4]s.%[5]s(ctx, namespace, name)
 	})
 }
 
@@ -238,8 +241,8 @@ func writeBinding(b *bytes.Buffer, r binding) {
 	if err != nil {
 		return nil, err
 	}
-	return FetchClusterResource(a, deps, selectionKey, %[3]q, name, func() (*%[2]s, error) {
-		return %[4]s.%[5]s(name)
+	return FetchClusterResource(a, deps, selectionKey, %[3]q, name, func(ctx context.Context) (*%[2]s, error) {
+		return %[4]s.%[5]s(ctx, name)
 	})
 }
 

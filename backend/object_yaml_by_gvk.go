@@ -55,7 +55,7 @@ func (a *App) GetObjectYAMLByGVK(clusterID, apiVersion, kind, namespace, name st
 	if err != nil {
 		return "", err
 	}
-	return fetchObjectYAMLByGVK(deps.Context, deps, gvk, namespace, name)
+	return fetchObjectYAMLByGVK(a.CtxOrBackground(), deps, gvk, namespace, name)
 }
 
 // fetchObjectYAMLByGVK is the shared core: given already-resolved
@@ -84,10 +84,7 @@ func fetchObjectByGVK(ctx context.Context, deps common.Dependencies, gvk schema.
 		return nil, fmt.Errorf("dynamic client not initialized")
 	}
 	if ctx == nil {
-		ctx = deps.Context
-		if ctx == nil {
-			ctx = context.Background()
-		}
+		ctx = context.Background()
 	}
 
 	gvr, isNamespaced, err := resolveObjectYAMLGVR(ctx, deps, gvk, objectYAMLResolverStrict)

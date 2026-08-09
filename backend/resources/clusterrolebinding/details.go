@@ -8,6 +8,7 @@
 package clusterrolebinding
 
 import (
+	"context"
 	"fmt"
 
 	"github.com/luxury-yacht/app/backend/resources/common"
@@ -27,8 +28,8 @@ func NewService(deps common.Dependencies) *Service {
 }
 
 // ClusterRoleBinding returns the detailed view for a single cluster role binding.
-func (s *Service) ClusterRoleBinding(name string) (*ClusterRoleBindingDetails, error) {
-	crb, err := s.deps.KubernetesClient.RbacV1().ClusterRoleBindings().Get(s.deps.Context, name, metav1.GetOptions{})
+func (s *Service) ClusterRoleBinding(ctx context.Context, name string) (*ClusterRoleBindingDetails, error) {
+	crb, err := s.deps.KubernetesClient.RbacV1().ClusterRoleBindings().Get(ctx, name, metav1.GetOptions{})
 	if err != nil {
 		err = s.deps.LogResourceRequestFailure(err, fmt.Sprintf("Failed to get cluster role binding %s", name), "get", Identity, "RBAC")
 		return nil, fmt.Errorf("failed to get cluster role binding: %w", err)

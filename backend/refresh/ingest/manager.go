@@ -47,6 +47,8 @@ import (
 	"k8s.io/client-go/rest"
 	"k8s.io/client-go/tools/cache"
 	"k8s.io/klog/v2"
+
+	"github.com/luxury-yacht/app/backend/internal/lifecycle"
 	gatewayversioned "sigs.k8s.io/gateway-api/pkg/client/clientset/versioned"
 	gatewayscheme "sigs.k8s.io/gateway-api/pkg/client/clientset/versioned/scheme"
 )
@@ -180,11 +182,11 @@ type IngestManager struct {
 
 	mu     sync.Mutex
 	cancel context.CancelFunc
-	// runCtx is the context Start derived for the running reflectors, retained so a
+	// runDone is the cancellation signal for the running reflectors, retained so a
 	// reflector registered AFTER Start (an on-demand dynamic reflector) can launch on the
 	// same lifetime — Stop or cancelling Start's ctx winds it down with the rest. nil
 	// before Start and after Stop.
-	runCtx context.Context
+	runDone <-chan struct{}
 
 	// syncDeadline bounds how long a kind's store may take to complete its initial
 	// relist before it is degraded out of the readiness gate (so one never-syncing
@@ -358,7 +360,7 @@ func (m *IngestManager) RegisterReflector(gvr schema.GroupVersionResource, gvk s
 func (m *IngestManager) RegisterDynamicCatalogReflector(gvr schema.GroupVersionResource, gvk schema.GroupVersionKind, project CatalogProjector, namespaced bool) bool {
 	m.mu.Lock()
 	defer m.mu.Unlock()
-	if m.dynamic == nil || m.runCtx == nil {
+	if m.dynamic == nil || m.runDone == nil {
 		return false
 	}
 	if _, exists := m.entries[gvr]; exists {
@@ -390,7 +392,7 @@ func (m *IngestManager) RegisterDynamicCatalogReflector(gvr schema.GroupVersionR
 	}
 	e.store.SetExpectedPartitions(namespaces)
 	m.entries[gvr] = e
-	ctx, cancel := context.WithCancel(m.runCtx)
+	ctx, cancel := context.WithCancel(lifecycle.Context(m.runDone))
 	e.cancel = cancel
 	for _, part := range e.parts {
 		go part.reflector.Run(ctx)
@@ -603,7 +605,7 @@ func (m *IngestManager) beginRun(ctx context.Context) (context.Context, []ingest
 	}
 	runCtx, cancel := context.WithCancel(ctx)
 	m.cancel = cancel
-	m.runCtx = runCtx
+	m.runDone = runCtx.Done()
 	filter := m.permissionFilter
 	entries := make([]ingestLaunchEntry, 0, len(m.entries))
 	for gvr, e := range m.entries {
@@ -808,7 +810,7 @@ func (m *IngestManager) Stop() {
 	m.mu.Lock()
 	cancel := m.cancel
 	m.cancel = nil
-	m.runCtx = nil
+	m.runDone = nil
 	m.mu.Unlock()
 	if cancel != nil {
 		cancel()

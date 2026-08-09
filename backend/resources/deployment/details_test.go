@@ -76,12 +76,11 @@ func TestDeploymentServiceDeployment(t *testing.T) {
 	)
 
 	deps := testsupport.NewResourceDependencies(
-		testsupport.WithDepsContext(context.Background()),
 		testsupport.WithDepsKubeClient(client),
 	)
 
 	service := deployment.NewService(deps)
-	details, err := service.Deployment("default", "web")
+	details, err := service.Deployment(context.Background(), "default", "web")
 	if err != nil {
 		t.Fatalf("Deployment returned error: %v", err)
 	}

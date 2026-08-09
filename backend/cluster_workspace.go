@@ -256,7 +256,7 @@ func (a *App) ApplyClusterWorkspace(command ClusterWorkspaceCommand) ClusterWork
 				return err
 			}
 		}
-		if err := mutation.ctx.Err(); err != nil {
+		if err := mutation.context().Err(); err != nil {
 			return err
 		}
 		if clusterID := strings.TrimSpace(command.VisibleClusterID); clusterID != "" {

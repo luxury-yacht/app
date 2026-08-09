@@ -33,24 +33,24 @@ func NewService(deps common.Dependencies) *Service {
 }
 
 // Namespace returns a detailed description for the given namespace.
-func (s *Service) Namespace(name string) (*NamespaceDetails, error) {
+func (s *Service) Namespace(ctx context.Context, name string) (*NamespaceDetails, error) {
 	if err := s.ensureClient("namespace"); err != nil {
 		return nil, err
 	}
 
 	client := s.deps.KubernetesClient
-	ns, err := client.CoreV1().Namespaces().Get(s.deps.Context, name, metav1.GetOptions{})
+	ns, err := client.CoreV1().Namespaces().Get(ctx, name, metav1.GetOptions{})
 	if err != nil {
 		err = s.deps.LogResourceRequestFailure(err, fmt.Sprintf("Failed to get namespace %s", name), "get", Identity, logsources.ResourceLoader)
 		return nil, fmt.Errorf("failed to get namespace: %w", err)
 	}
 
-	return s.buildNamespaceDetails(ns), nil
+	return s.buildNamespaceDetails(ctx, ns), nil
 }
 
-func (s *Service) buildNamespaceDetails(namespace *corev1.Namespace) *NamespaceDetails {
-	hasWorkloads, workloadsUnknown := s.hasWorkloads(namespace.Name)
-	quotas, limits := s.collectQuotasAndLimits(namespace.Name)
+func (s *Service) buildNamespaceDetails(ctx context.Context, namespace *corev1.Namespace) *NamespaceDetails {
+	hasWorkloads, workloadsUnknown := s.hasWorkloads(ctx, namespace.Name)
+	quotas, limits := s.collectQuotasAndLimits(ctx, namespace.Name)
 	opts := resourcemodel.ResourceModelBuildOptions{
 		Materialization: resourcemodel.MaterializeSummaryFacts | resourcemodel.MaterializeRelationshipFacts | resourcemodel.MaterializeDetailFacts,
 	}
@@ -89,14 +89,14 @@ func (s *Service) buildNamespaceDetails(namespace *corev1.Namespace) *NamespaceD
 	return details
 }
 
-func (s *Service) hasWorkloads(namespace string) (bool, bool) {
+func (s *Service) hasWorkloads(ctx context.Context, namespace string) (bool, bool) {
 	client := s.deps.KubernetesClient
 	if client == nil {
 		s.logError("hasWorkloads: kubernetes client not initialised")
 		return false, true
 	}
 
-	ctx, cancel := context.WithTimeout(s.deps.Context, config.NamespaceOperationTimeout)
+	ctx, cancel := context.WithTimeout(ctx, config.NamespaceOperationTimeout)
 	defer cancel()
 
 	opts := metav1.ListOptions{Limit: 1}
@@ -167,13 +167,13 @@ func (s *Service) logWorkloadProbeError(group, version, resource, namespace stri
 	}
 }
 
-func (s *Service) collectQuotasAndLimits(namespace string) (quotas, limits []string) {
+func (s *Service) collectQuotasAndLimits(ctx context.Context, namespace string) (quotas, limits []string) {
 	client := s.deps.KubernetesClient
 	if client == nil {
 		return nil, nil
 	}
 
-	ctx, cancel := context.WithTimeout(s.deps.Context, config.NamespaceOperationTimeout)
+	ctx, cancel := context.WithTimeout(ctx, config.NamespaceOperationTimeout)
 	defer cancel()
 
 	if rqList, err := client.CoreV1().ResourceQuotas(namespace).List(ctx, metav1.ListOptions{}); err == nil {

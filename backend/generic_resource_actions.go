@@ -19,7 +19,8 @@ func (a *App) deleteGenericResourceAction(target ObjectActionTargetRef) error {
 	if err != nil {
 		return err
 	}
-	if err := a.requireResourcePermission(deps.Context, deps, resourcePermissionCheck{
+	ctx := a.CtxOrBackground()
+	if err := a.requireResourcePermission(ctx, deps, resourcePermissionCheck{
 		Group:     target.Group,
 		Version:   target.Version,
 		Kind:      target.Kind,
@@ -30,7 +31,7 @@ func (a *App) deleteGenericResourceAction(target ObjectActionTargetRef) error {
 		return err
 	}
 	service := generic.NewService(deps)
-	if err := service.DeleteByGVK(objectActionTargetGVK(target), target.Namespace, target.Name); err != nil {
+	if err := service.DeleteByGVK(ctx, objectActionTargetGVK(target), target.Namespace, target.Name); err != nil {
 		return err
 	}
 	a.invalidateResponseCacheForGVK(selectionKey, objectActionTargetGVK(target), target.Namespace, target.Name)

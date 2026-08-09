@@ -9,6 +9,7 @@
 package job
 
 import (
+	"context"
 	"fmt"
 	"time"
 
@@ -34,25 +35,25 @@ func NewService(deps common.Dependencies) *Service {
 }
 
 // Job returns the detailed view for a single job.
-func (s *Service) Job(namespace, name string) (*JobDetails, error) {
+func (s *Service) Job(ctx context.Context, namespace, name string) (*JobDetails, error) {
 	client := s.deps.KubernetesClient
 	if client == nil {
 		return nil, fmt.Errorf("kubernetes client not initialized")
 	}
 
-	job, err := client.BatchV1().Jobs(namespace).Get(s.deps.Context, name, metav1.GetOptions{})
+	job, err := client.BatchV1().Jobs(namespace).Get(ctx, name, metav1.GetOptions{})
 	if err != nil {
 		err = s.deps.LogResourceRequestFailure(err, fmt.Sprintf("Failed to get Job %s/%s", namespace, name), "get", Identity, logsources.ResourceLoader)
 		return nil, fmt.Errorf("failed to get job: %w", err)
 	}
 
-	podList, err := client.CoreV1().Pods(namespace).List(s.deps.Context, metav1.ListOptions{LabelSelector: metav1.FormatLabelSelector(job.Spec.Selector)})
+	podList, err := client.CoreV1().Pods(namespace).List(ctx, metav1.ListOptions{LabelSelector: metav1.FormatLabelSelector(job.Spec.Selector)})
 	if err != nil {
 		s.deps.Logger.Warn(fmt.Sprintf("Failed to list pods for Job %s/%s: %v", namespace, name, err), logsources.ResourceLoader)
 	}
 
 	podsForJob := filterPodsForJob(job, podList)
-	metrics := pods.NewService(s.deps).GetPodMetricsForPods(namespace, podsForJob)
+	metrics := pods.NewService(s.deps).GetPodMetricsForPods(ctx, namespace, podsForJob)
 	return buildJobDetails(s.deps.ClusterID, job, podsForJob, metrics), nil
 }
 

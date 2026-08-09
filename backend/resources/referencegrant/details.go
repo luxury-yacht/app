@@ -7,6 +7,7 @@
 package referencegrant
 
 import (
+	"context"
 	"fmt"
 
 	"github.com/luxury-yacht/app/backend/resources/common"
@@ -27,10 +28,10 @@ func NewService(deps common.Dependencies) *Service {
 }
 
 // ReferenceGrant returns the detail payload for a single ReferenceGrant.
-func (s *Service) ReferenceGrant(namespace, name string) (*ReferenceGrantDetails, error) {
+func (s *Service) ReferenceGrant(ctx context.Context, namespace, name string) (*ReferenceGrantDetails, error) {
 	return gatewayapi.GetResource(s.deps, "ReferenceGrant", "reference grant",
 		func() (*gatewayv1.ReferenceGrant, error) {
-			return s.deps.GatewayClient.GatewayV1().ReferenceGrants(namespace).Get(s.deps.Context, name, metav1.GetOptions{})
+			return s.deps.GatewayClient.GatewayV1().ReferenceGrants(namespace).Get(ctx, name, metav1.GetOptions{})
 		}, s.buildDetails)
 }
 

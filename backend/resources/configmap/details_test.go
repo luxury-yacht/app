@@ -23,7 +23,6 @@ import (
 func newService(t testing.TB, client *fake.Clientset) *configmap.Service {
 	t.Helper()
 	deps := testsupport.NewResourceDependencies(
-		testsupport.WithDepsContext(context.Background()),
 		testsupport.WithDepsKubeClient(client),
 		testsupport.WithDepsLogger(applog.Noop),
 	)
@@ -73,7 +72,7 @@ func TestServiceConfigMapDetailsIncludesUsage(t *testing.T) {
 	client := fake.NewClientset(cm.DeepCopy(), pod.DeepCopy())
 	service := newService(t, client)
 
-	detail, err := service.ConfigMap("default", "app-config")
+	detail, err := service.ConfigMap(context.Background(), "default", "app-config")
 	require.NoError(t, err)
 	require.Equal(t, "ConfigMap", detail.Kind)
 	require.Equal(t, 2, detail.DataCount)

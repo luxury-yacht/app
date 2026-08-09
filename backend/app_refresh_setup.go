@@ -8,6 +8,7 @@ import (
 	"time"
 
 	"github.com/luxury-yacht/app/backend/internal/config"
+	"github.com/luxury-yacht/app/backend/internal/lifecycle"
 	"github.com/luxury-yacht/app/backend/internal/logsources"
 	"github.com/luxury-yacht/app/backend/internal/parallel"
 	"github.com/luxury-yacht/app/backend/objectcatalog"
@@ -27,7 +28,7 @@ func (a *App) resolveMetricsInterval() time.Duration {
 }
 
 func (a *App) setupRefreshSubsystem() error {
-	if a.Ctx == nil {
+	if !a.runtimeAvailable() {
 		return errors.New("application context not initialised")
 	}
 
@@ -91,7 +92,7 @@ func (a *App) ensureRefreshRuntimeContext() context.Context {
 }
 
 func (a *App) refreshRuntimeContext(reopen bool) context.Context {
-	if a == nil || a.Ctx == nil {
+	if a == nil || !a.runtimeAvailable() {
 		return nil
 	}
 	a.refreshRuntimeMu.Lock()
@@ -101,13 +102,13 @@ func (a *App) refreshRuntimeContext(reopen bool) context.Context {
 		a.refreshRuntimeMu.Unlock()
 		return nil
 	}
-	if a.refreshCtx != nil && a.refreshCtx.Err() == nil {
-		ctx := a.refreshCtx
+	if a.refreshDone != nil && !doneClosed(a.refreshDone) {
+		ctx := lifecycle.Context(a.refreshDone)
 		a.refreshRuntimeMu.Unlock()
 		return ctx
 	}
-	ctx, cancel := context.WithCancel(a.Ctx)
-	a.refreshCtx = ctx
+	ctx, cancel := context.WithCancel(a.CtxOrBackground())
+	a.refreshDone = ctx.Done()
 	a.refreshCancel = cancel
 	a.refreshRuntimeMu.Unlock()
 
@@ -123,10 +124,10 @@ func (a *App) currentRefreshRuntimeContext() context.Context {
 	}
 	a.refreshRuntimeMu.Lock()
 	defer a.refreshRuntimeMu.Unlock()
-	if a.refreshRuntimeStopped || a.refreshCtx == nil || a.refreshCtx.Err() != nil {
+	if a.refreshRuntimeStopped || a.refreshDone == nil || doneClosed(a.refreshDone) {
 		return nil
 	}
-	return a.refreshCtx
+	return lifecycle.Context(a.refreshDone)
 }
 
 func (a *App) stopRefreshRuntimeContext() {
@@ -136,11 +137,20 @@ func (a *App) stopRefreshRuntimeContext() {
 	a.refreshRuntimeMu.Lock()
 	cancel := a.refreshCancel
 	a.refreshCancel = nil
-	a.refreshCtx = nil
+	a.refreshDone = nil
 	a.refreshRuntimeStopped = true
 	a.refreshRuntimeMu.Unlock()
 	if cancel != nil {
 		cancel()
+	}
+}
+
+func doneClosed(done <-chan struct{}) bool {
+	select {
+	case <-done:
+		return true
+	default:
+		return false
 	}
 }
 

@@ -22,7 +22,7 @@ import (
 func TestFetchResourceErrorEmits(t *testing.T) {
 	app := newTestAppWithDefaults(t)
 	var emitted map[string]any
-	app.Ctx = context.Background()
+	app.setRuntimeContext(context.Background())
 	app.eventEmitter = func(_ context.Context, name string, args ...interface{}) {
 		if name == "backend-error" && len(args) > 0 {
 			if payload, ok := args[0].(map[string]any); ok {
@@ -101,7 +101,7 @@ func TestFetchResourceSkipsCacheWhenKeyEmpty(t *testing.T) {
 
 func TestFetchResourceListErrorEmits(t *testing.T) {
 	app := newTestAppWithDefaults(t)
-	app.Ctx = context.Background()
+	app.setRuntimeContext(context.Background())
 	var emitted map[string]any
 	app.eventEmitter = func(_ context.Context, name string, args ...interface{}) {
 		if name == "backend-error" && len(args) > 0 {
@@ -138,7 +138,7 @@ func TestFetchNamespacedResourceRequiresObjectIdentity(t *testing.T) {
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
 			called := false
-			_, err := FetchNamespacedResource(app, common.Dependencies{}, "cluster-1", "Widget", tt.namespace, tt.object, func() (string, error) {
+			_, err := FetchNamespacedResource(app, common.Dependencies{}, "cluster-1", "Widget", tt.namespace, tt.object, func(context.Context) (string, error) {
 				called = true
 				return "unexpected", nil
 			})
@@ -155,7 +155,7 @@ func TestFetchClusterResourceRequiresObjectName(t *testing.T) {
 	for _, name := range []string{"", "  "} {
 		t.Run("name="+name, func(t *testing.T) {
 			called := false
-			_, err := FetchClusterResource(app, common.Dependencies{}, "cluster-1", "Widget", name, func() (string, error) {
+			_, err := FetchClusterResource(app, common.Dependencies{}, "cluster-1", "Widget", name, func(context.Context) (string, error) {
 				called = true
 				return "unexpected", nil
 			})
@@ -170,7 +170,7 @@ func TestFetchResourceRetriesOnTransientError(t *testing.T) {
 	app := newTestAppWithDefaults(t)
 	app.telemetryRecorder = telemetry.NewRecorder()
 	app.logger = NewLogger(100)
-	app.Ctx = context.Background()
+	app.setRuntimeContext(context.Background())
 
 	originalSleep := fetchRetrySleep
 	fetchRetrySleep = func(time.Duration) {}
@@ -199,7 +199,7 @@ func TestFetchResourceExhaustsRetriesAndEmits(t *testing.T) {
 	app := newTestAppWithDefaults(t)
 	app.telemetryRecorder = telemetry.NewRecorder()
 	app.logger = NewLogger(100)
-	app.Ctx = context.Background()
+	app.setRuntimeContext(context.Background())
 	var emitted map[string]any
 	app.eventEmitter = func(_ context.Context, name string, args ...interface{}) {
 		if name == "backend-error" && len(args) > 0 {
@@ -235,7 +235,7 @@ func TestExecuteWithRetryValidatesInputs(t *testing.T) {
 	_, err := executeWithRetry[string](context.Background(), nil, "", "Widget", "", nil)
 	require.ErrorContains(t, err, "fetch function not provided")
 
-	value, err := executeWithRetry[string](context.Background(), nil, "", "Widget", "", func() (string, error) {
+	value, err := executeWithRetry[string](context.Background(), nil, "", "Widget", "", func(context.Context) (string, error) {
 		return "ok", nil
 	})
 	require.NoError(t, err)
@@ -249,7 +249,7 @@ func TestExecuteWithRetryWithoutAppUsesConfiguredSleep(t *testing.T) {
 	t.Cleanup(func() { fetchRetrySleep = originalSleep })
 
 	attempts := 0
-	value, err := executeWithRetry(context.Background(), nil, "cluster-a", "Widget", "demo", func() (string, error) {
+	value, err := executeWithRetry(context.Background(), nil, "cluster-a", "Widget", "demo", func(context.Context) (string, error) {
 		attempts++
 		if attempts == 1 {
 			return "", io.EOF
@@ -269,7 +269,7 @@ func TestExecuteWithRetryReturnsContextSleepFailure(t *testing.T) {
 	contextSleep = func(context.Context, time.Duration) error { return sleepErr }
 	t.Cleanup(func() { contextSleep = originalSleep })
 
-	_, err := executeWithRetry(context.Background(), app, "cluster-a", "Widget", "demo", func() (string, error) {
+	_, err := executeWithRetry(context.Background(), app, "cluster-a", "Widget", "demo", func(context.Context) (string, error) {
 		return "", io.EOF
 	})
 	require.ErrorIs(t, err, sleepErr)
@@ -278,7 +278,7 @@ func TestExecuteWithRetryReturnsContextSleepFailure(t *testing.T) {
 func TestExecuteWithRetryDoesNotRetryPermanentErrorWithoutApp(t *testing.T) {
 	attempts := 0
 	permanent := errors.New("validation failed")
-	_, err := executeWithRetry(context.Background(), nil, "cluster-a", "Widget", "demo", func() (string, error) {
+	_, err := executeWithRetry(context.Background(), nil, "cluster-a", "Widget", "demo", func(context.Context) (string, error) {
 		attempts++
 		return "", permanent
 	})

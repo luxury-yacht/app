@@ -3,6 +3,7 @@
 package backend
 
 import (
+	"context"
 	"github.com/luxury-yacht/app/backend/resources/admission"
 	"github.com/luxury-yacht/app/backend/resources/backendtlspolicy"
 	"github.com/luxury-yacht/app/backend/resources/clusterrole"
@@ -48,8 +49,8 @@ func (a *App) GetBackendTLSPolicy(clusterID, namespace, name string) (*backendtl
 	if err != nil {
 		return nil, err
 	}
-	return FetchNamespacedResource(a, deps, selectionKey, "BackendTLSPolicy", namespace, name, func() (*backendtlspolicy.BackendTLSPolicyDetails, error) {
-		return backendtlspolicy.NewService(deps).BackendTLSPolicy(namespace, name)
+	return FetchNamespacedResource(a, deps, selectionKey, "BackendTLSPolicy", namespace, name, func(ctx context.Context) (*backendtlspolicy.BackendTLSPolicyDetails, error) {
+		return backendtlspolicy.NewService(deps).BackendTLSPolicy(ctx, namespace, name)
 	})
 }
 
@@ -58,8 +59,8 @@ func (a *App) GetClusterRole(clusterID, name string) (*clusterrole.ClusterRoleDe
 	if err != nil {
 		return nil, err
 	}
-	return FetchClusterResource(a, deps, selectionKey, "ClusterRole", name, func() (*clusterrole.ClusterRoleDetails, error) {
-		return clusterrole.NewService(deps).ClusterRole(name)
+	return FetchClusterResource(a, deps, selectionKey, "ClusterRole", name, func(ctx context.Context) (*clusterrole.ClusterRoleDetails, error) {
+		return clusterrole.NewService(deps).ClusterRole(ctx, name)
 	})
 }
 
@@ -68,8 +69,8 @@ func (a *App) GetClusterRoleBinding(clusterID, name string) (*clusterrolebinding
 	if err != nil {
 		return nil, err
 	}
-	return FetchClusterResource(a, deps, selectionKey, "ClusterRoleBinding", name, func() (*clusterrolebinding.ClusterRoleBindingDetails, error) {
-		return clusterrolebinding.NewService(deps).ClusterRoleBinding(name)
+	return FetchClusterResource(a, deps, selectionKey, "ClusterRoleBinding", name, func(ctx context.Context) (*clusterrolebinding.ClusterRoleBindingDetails, error) {
+		return clusterrolebinding.NewService(deps).ClusterRoleBinding(ctx, name)
 	})
 }
 
@@ -78,8 +79,8 @@ func (a *App) GetConfigMap(clusterID, namespace, name string) (*configmap.Config
 	if err != nil {
 		return nil, err
 	}
-	return FetchNamespacedResource(a, deps, selectionKey, "ConfigMap", namespace, name, func() (*configmap.ConfigMapDetails, error) {
-		return configmap.NewService(deps).ConfigMap(namespace, name)
+	return FetchNamespacedResource(a, deps, selectionKey, "ConfigMap", namespace, name, func(ctx context.Context) (*configmap.ConfigMapDetails, error) {
+		return configmap.NewService(deps).ConfigMap(ctx, namespace, name)
 	})
 }
 
@@ -88,8 +89,8 @@ func (a *App) GetCronJob(clusterID, namespace, name string) (*cronjob.CronJobDet
 	if err != nil {
 		return nil, err
 	}
-	return FetchNamespacedResource(a, deps, selectionKey, "CronJob", namespace, name, func() (*cronjob.CronJobDetails, error) {
-		return cronjob.NewService(deps).CronJob(namespace, name)
+	return FetchNamespacedResource(a, deps, selectionKey, "CronJob", namespace, name, func(ctx context.Context) (*cronjob.CronJobDetails, error) {
+		return cronjob.NewService(deps).CronJob(ctx, namespace, name)
 	})
 }
 
@@ -98,8 +99,8 @@ func (a *App) GetDaemonSet(clusterID, namespace, name string) (*daemonset.Daemon
 	if err != nil {
 		return nil, err
 	}
-	return FetchNamespacedResource(a, deps, selectionKey, "DaemonSet", namespace, name, func() (*daemonset.DaemonSetDetails, error) {
-		return daemonset.NewService(deps).DaemonSet(namespace, name)
+	return FetchNamespacedResource(a, deps, selectionKey, "DaemonSet", namespace, name, func(ctx context.Context) (*daemonset.DaemonSetDetails, error) {
+		return daemonset.NewService(deps).DaemonSet(ctx, namespace, name)
 	})
 }
 
@@ -108,8 +109,8 @@ func (a *App) GetDeployment(clusterID, namespace, name string) (*deployment.Depl
 	if err != nil {
 		return nil, err
 	}
-	return FetchNamespacedResource(a, deps, selectionKey, "Deployment", namespace, name, func() (*deployment.DeploymentDetails, error) {
-		return deployment.NewService(deps).Deployment(namespace, name)
+	return FetchNamespacedResource(a, deps, selectionKey, "Deployment", namespace, name, func(ctx context.Context) (*deployment.DeploymentDetails, error) {
+		return deployment.NewService(deps).Deployment(ctx, namespace, name)
 	})
 }
 
@@ -118,8 +119,8 @@ func (a *App) GetEndpointSlice(clusterID, namespace, name string) (*endpointslic
 	if err != nil {
 		return nil, err
 	}
-	return FetchNamespacedResource(a, deps, selectionKey, "EndpointSlice", namespace, name, func() (*endpointslice.EndpointSliceDetails, error) {
-		return endpointslice.NewService(deps).EndpointSlice(namespace, name)
+	return FetchNamespacedResource(a, deps, selectionKey, "EndpointSlice", namespace, name, func(ctx context.Context) (*endpointslice.EndpointSliceDetails, error) {
+		return endpointslice.NewService(deps).EndpointSlice(ctx, namespace, name)
 	})
 }
 
@@ -128,8 +129,8 @@ func (a *App) GetEvent(clusterID, namespace, name string) (*events.EventDetails,
 	if err != nil {
 		return nil, err
 	}
-	return FetchNamespacedResource(a, deps, selectionKey, "Event", namespace, name, func() (*events.EventDetails, error) {
-		return events.NewService(deps).Event(namespace, name)
+	return FetchNamespacedResource(a, deps, selectionKey, "Event", namespace, name, func(ctx context.Context) (*events.EventDetails, error) {
+		return events.NewService(deps).Event(ctx, namespace, name)
 	})
 }
 
@@ -138,8 +139,8 @@ func (a *App) GetGRPCRoute(clusterID, namespace, name string) (*types.GRPCRouteD
 	if err != nil {
 		return nil, err
 	}
-	return FetchNamespacedResource(a, deps, selectionKey, "GRPCRoute", namespace, name, func() (*types.GRPCRouteDetails, error) {
-		return grpcroute.NewService(deps).GRPCRoute(namespace, name)
+	return FetchNamespacedResource(a, deps, selectionKey, "GRPCRoute", namespace, name, func(ctx context.Context) (*types.GRPCRouteDetails, error) {
+		return grpcroute.NewService(deps).GRPCRoute(ctx, namespace, name)
 	})
 }
 
@@ -148,8 +149,8 @@ func (a *App) GetGateway(clusterID, namespace, name string) (*gateway.GatewayDet
 	if err != nil {
 		return nil, err
 	}
-	return FetchNamespacedResource(a, deps, selectionKey, "Gateway", namespace, name, func() (*gateway.GatewayDetails, error) {
-		return gateway.NewService(deps).Gateway(namespace, name)
+	return FetchNamespacedResource(a, deps, selectionKey, "Gateway", namespace, name, func(ctx context.Context) (*gateway.GatewayDetails, error) {
+		return gateway.NewService(deps).Gateway(ctx, namespace, name)
 	})
 }
 
@@ -158,8 +159,8 @@ func (a *App) GetGatewayClass(clusterID, name string) (*gatewayclass.GatewayClas
 	if err != nil {
 		return nil, err
 	}
-	return FetchClusterResource(a, deps, selectionKey, "GatewayClass", name, func() (*gatewayclass.GatewayClassDetails, error) {
-		return gatewayclass.NewService(deps).GatewayClass(name)
+	return FetchClusterResource(a, deps, selectionKey, "GatewayClass", name, func(ctx context.Context) (*gatewayclass.GatewayClassDetails, error) {
+		return gatewayclass.NewService(deps).GatewayClass(ctx, name)
 	})
 }
 
@@ -168,8 +169,8 @@ func (a *App) GetHTTPRoute(clusterID, namespace, name string) (*types.HTTPRouteD
 	if err != nil {
 		return nil, err
 	}
-	return FetchNamespacedResource(a, deps, selectionKey, "HTTPRoute", namespace, name, func() (*types.HTTPRouteDetails, error) {
-		return httproute.NewService(deps).HTTPRoute(namespace, name)
+	return FetchNamespacedResource(a, deps, selectionKey, "HTTPRoute", namespace, name, func(ctx context.Context) (*types.HTTPRouteDetails, error) {
+		return httproute.NewService(deps).HTTPRoute(ctx, namespace, name)
 	})
 }
 
@@ -178,8 +179,8 @@ func (a *App) GetHorizontalPodAutoscaler(clusterID, namespace, name string) (*hp
 	if err != nil {
 		return nil, err
 	}
-	return FetchNamespacedResource(a, deps, selectionKey, "HPA", namespace, name, func() (*hpa.HorizontalPodAutoscalerDetails, error) {
-		return hpa.NewService(deps).HorizontalPodAutoscaler(namespace, name)
+	return FetchNamespacedResource(a, deps, selectionKey, "HPA", namespace, name, func(ctx context.Context) (*hpa.HorizontalPodAutoscalerDetails, error) {
+		return hpa.NewService(deps).HorizontalPodAutoscaler(ctx, namespace, name)
 	})
 }
 
@@ -188,8 +189,8 @@ func (a *App) GetIngress(clusterID, namespace, name string) (*ingress.IngressDet
 	if err != nil {
 		return nil, err
 	}
-	return FetchNamespacedResource(a, deps, selectionKey, "Ingress", namespace, name, func() (*ingress.IngressDetails, error) {
-		return ingress.NewService(deps).Ingress(namespace, name)
+	return FetchNamespacedResource(a, deps, selectionKey, "Ingress", namespace, name, func(ctx context.Context) (*ingress.IngressDetails, error) {
+		return ingress.NewService(deps).Ingress(ctx, namespace, name)
 	})
 }
 
@@ -198,8 +199,8 @@ func (a *App) GetIngressClass(clusterID, name string) (*ingressclass.IngressClas
 	if err != nil {
 		return nil, err
 	}
-	return FetchClusterResource(a, deps, selectionKey, "IngressClass", name, func() (*ingressclass.IngressClassDetails, error) {
-		return ingressclass.NewService(deps).IngressClass(name)
+	return FetchClusterResource(a, deps, selectionKey, "IngressClass", name, func(ctx context.Context) (*ingressclass.IngressClassDetails, error) {
+		return ingressclass.NewService(deps).IngressClass(ctx, name)
 	})
 }
 
@@ -208,8 +209,8 @@ func (a *App) GetJob(clusterID, namespace, name string) (*job.JobDetails, error)
 	if err != nil {
 		return nil, err
 	}
-	return FetchNamespacedResource(a, deps, selectionKey, "Job", namespace, name, func() (*job.JobDetails, error) {
-		return job.NewService(deps).Job(namespace, name)
+	return FetchNamespacedResource(a, deps, selectionKey, "Job", namespace, name, func(ctx context.Context) (*job.JobDetails, error) {
+		return job.NewService(deps).Job(ctx, namespace, name)
 	})
 }
 
@@ -218,8 +219,8 @@ func (a *App) GetLimitRange(clusterID, namespace, name string) (*limitrange.Limi
 	if err != nil {
 		return nil, err
 	}
-	return FetchNamespacedResource(a, deps, selectionKey, "LimitRange", namespace, name, func() (*limitrange.LimitRangeDetails, error) {
-		return limitrange.NewService(deps).LimitRange(namespace, name)
+	return FetchNamespacedResource(a, deps, selectionKey, "LimitRange", namespace, name, func(ctx context.Context) (*limitrange.LimitRangeDetails, error) {
+		return limitrange.NewService(deps).LimitRange(ctx, namespace, name)
 	})
 }
 
@@ -228,8 +229,8 @@ func (a *App) GetListenerSet(clusterID, namespace, name string) (*listenerset.Li
 	if err != nil {
 		return nil, err
 	}
-	return FetchNamespacedResource(a, deps, selectionKey, "ListenerSet", namespace, name, func() (*listenerset.ListenerSetDetails, error) {
-		return listenerset.NewService(deps).ListenerSet(namespace, name)
+	return FetchNamespacedResource(a, deps, selectionKey, "ListenerSet", namespace, name, func(ctx context.Context) (*listenerset.ListenerSetDetails, error) {
+		return listenerset.NewService(deps).ListenerSet(ctx, namespace, name)
 	})
 }
 
@@ -238,8 +239,8 @@ func (a *App) GetMutatingWebhookConfiguration(clusterID, name string) (*admissio
 	if err != nil {
 		return nil, err
 	}
-	return FetchClusterResource(a, deps, selectionKey, "MutatingWebhookConfiguration", name, func() (*admission.MutatingWebhookConfigurationDetails, error) {
-		return admission.NewService(deps).MutatingWebhookConfiguration(name)
+	return FetchClusterResource(a, deps, selectionKey, "MutatingWebhookConfiguration", name, func(ctx context.Context) (*admission.MutatingWebhookConfigurationDetails, error) {
+		return admission.NewService(deps).MutatingWebhookConfiguration(ctx, name)
 	})
 }
 
@@ -248,8 +249,8 @@ func (a *App) GetNamespace(clusterID, name string) (*namespaces.NamespaceDetails
 	if err != nil {
 		return nil, err
 	}
-	return FetchClusterResource(a, deps, selectionKey, "Namespace", name, func() (*namespaces.NamespaceDetails, error) {
-		return namespaces.NewService(deps).Namespace(name)
+	return FetchClusterResource(a, deps, selectionKey, "Namespace", name, func(ctx context.Context) (*namespaces.NamespaceDetails, error) {
+		return namespaces.NewService(deps).Namespace(ctx, name)
 	})
 }
 
@@ -258,8 +259,8 @@ func (a *App) GetNetworkPolicy(clusterID, namespace, name string) (*networkpolic
 	if err != nil {
 		return nil, err
 	}
-	return FetchNamespacedResource(a, deps, selectionKey, "NetworkPolicy", namespace, name, func() (*networkpolicy.NetworkPolicyDetails, error) {
-		return networkpolicy.NewService(deps).NetworkPolicy(namespace, name)
+	return FetchNamespacedResource(a, deps, selectionKey, "NetworkPolicy", namespace, name, func(ctx context.Context) (*networkpolicy.NetworkPolicyDetails, error) {
+		return networkpolicy.NewService(deps).NetworkPolicy(ctx, namespace, name)
 	})
 }
 
@@ -268,8 +269,8 @@ func (a *App) GetNode(clusterID, name string) (*nodes.NodeDetails, error) {
 	if err != nil {
 		return nil, err
 	}
-	return FetchClusterResource(a, deps, selectionKey, "Node", name, func() (*nodes.NodeDetails, error) {
-		return nodes.NewService(deps).Node(name)
+	return FetchClusterResource(a, deps, selectionKey, "Node", name, func(ctx context.Context) (*nodes.NodeDetails, error) {
+		return nodes.NewService(deps).Node(ctx, name)
 	})
 }
 
@@ -278,8 +279,8 @@ func (a *App) GetPersistentVolume(clusterID, name string) (*persistentvolume.Per
 	if err != nil {
 		return nil, err
 	}
-	return FetchClusterResource(a, deps, selectionKey, "PersistentVolume", name, func() (*persistentvolume.PersistentVolumeDetails, error) {
-		return persistentvolume.NewService(deps).PersistentVolume(name)
+	return FetchClusterResource(a, deps, selectionKey, "PersistentVolume", name, func(ctx context.Context) (*persistentvolume.PersistentVolumeDetails, error) {
+		return persistentvolume.NewService(deps).PersistentVolume(ctx, name)
 	})
 }
 
@@ -288,8 +289,8 @@ func (a *App) GetPersistentVolumeClaim(clusterID, namespace, name string) (*pers
 	if err != nil {
 		return nil, err
 	}
-	return FetchNamespacedResource(a, deps, selectionKey, "PVC", namespace, name, func() (*persistentvolumeclaim.PersistentVolumeClaimDetails, error) {
-		return persistentvolumeclaim.NewService(deps).PersistentVolumeClaim(namespace, name)
+	return FetchNamespacedResource(a, deps, selectionKey, "PVC", namespace, name, func(ctx context.Context) (*persistentvolumeclaim.PersistentVolumeClaimDetails, error) {
+		return persistentvolumeclaim.NewService(deps).PersistentVolumeClaim(ctx, namespace, name)
 	})
 }
 
@@ -298,8 +299,8 @@ func (a *App) GetPodDisruptionBudget(clusterID, namespace, name string) (*poddis
 	if err != nil {
 		return nil, err
 	}
-	return FetchNamespacedResource(a, deps, selectionKey, "PodDisruptionBudget", namespace, name, func() (*poddisruptionbudget.PodDisruptionBudgetDetails, error) {
-		return poddisruptionbudget.NewService(deps).PodDisruptionBudget(namespace, name)
+	return FetchNamespacedResource(a, deps, selectionKey, "PodDisruptionBudget", namespace, name, func(ctx context.Context) (*poddisruptionbudget.PodDisruptionBudgetDetails, error) {
+		return poddisruptionbudget.NewService(deps).PodDisruptionBudget(ctx, namespace, name)
 	})
 }
 
@@ -308,8 +309,8 @@ func (a *App) GetReferenceGrant(clusterID, namespace, name string) (*referencegr
 	if err != nil {
 		return nil, err
 	}
-	return FetchNamespacedResource(a, deps, selectionKey, "ReferenceGrant", namespace, name, func() (*referencegrant.ReferenceGrantDetails, error) {
-		return referencegrant.NewService(deps).ReferenceGrant(namespace, name)
+	return FetchNamespacedResource(a, deps, selectionKey, "ReferenceGrant", namespace, name, func(ctx context.Context) (*referencegrant.ReferenceGrantDetails, error) {
+		return referencegrant.NewService(deps).ReferenceGrant(ctx, namespace, name)
 	})
 }
 
@@ -318,8 +319,8 @@ func (a *App) GetReplicaSet(clusterID, namespace, name string) (*replicaset.Repl
 	if err != nil {
 		return nil, err
 	}
-	return FetchNamespacedResource(a, deps, selectionKey, "ReplicaSet", namespace, name, func() (*replicaset.ReplicaSetDetails, error) {
-		return replicaset.NewService(deps).ReplicaSet(namespace, name)
+	return FetchNamespacedResource(a, deps, selectionKey, "ReplicaSet", namespace, name, func(ctx context.Context) (*replicaset.ReplicaSetDetails, error) {
+		return replicaset.NewService(deps).ReplicaSet(ctx, namespace, name)
 	})
 }
 
@@ -328,8 +329,8 @@ func (a *App) GetResourceQuota(clusterID, namespace, name string) (*resourcequot
 	if err != nil {
 		return nil, err
 	}
-	return FetchNamespacedResource(a, deps, selectionKey, "ResourceQuota", namespace, name, func() (*resourcequota.ResourceQuotaDetails, error) {
-		return resourcequota.NewService(deps).ResourceQuota(namespace, name)
+	return FetchNamespacedResource(a, deps, selectionKey, "ResourceQuota", namespace, name, func(ctx context.Context) (*resourcequota.ResourceQuotaDetails, error) {
+		return resourcequota.NewService(deps).ResourceQuota(ctx, namespace, name)
 	})
 }
 
@@ -338,8 +339,8 @@ func (a *App) GetRole(clusterID, namespace, name string) (*role.RoleDetails, err
 	if err != nil {
 		return nil, err
 	}
-	return FetchNamespacedResource(a, deps, selectionKey, "Role", namespace, name, func() (*role.RoleDetails, error) {
-		return role.NewService(deps).Role(namespace, name)
+	return FetchNamespacedResource(a, deps, selectionKey, "Role", namespace, name, func(ctx context.Context) (*role.RoleDetails, error) {
+		return role.NewService(deps).Role(ctx, namespace, name)
 	})
 }
 
@@ -348,8 +349,8 @@ func (a *App) GetRoleBinding(clusterID, namespace, name string) (*rolebinding.Ro
 	if err != nil {
 		return nil, err
 	}
-	return FetchNamespacedResource(a, deps, selectionKey, "RoleBinding", namespace, name, func() (*rolebinding.RoleBindingDetails, error) {
-		return rolebinding.NewService(deps).RoleBinding(namespace, name)
+	return FetchNamespacedResource(a, deps, selectionKey, "RoleBinding", namespace, name, func(ctx context.Context) (*rolebinding.RoleBindingDetails, error) {
+		return rolebinding.NewService(deps).RoleBinding(ctx, namespace, name)
 	})
 }
 
@@ -358,8 +359,8 @@ func (a *App) GetSecret(clusterID, namespace, name string) (*secret.SecretDetail
 	if err != nil {
 		return nil, err
 	}
-	return FetchNamespacedResource(a, deps, selectionKey, "Secret", namespace, name, func() (*secret.SecretDetails, error) {
-		return secret.NewService(deps).Secret(namespace, name)
+	return FetchNamespacedResource(a, deps, selectionKey, "Secret", namespace, name, func(ctx context.Context) (*secret.SecretDetails, error) {
+		return secret.NewService(deps).Secret(ctx, namespace, name)
 	})
 }
 
@@ -368,8 +369,8 @@ func (a *App) GetService(clusterID, namespace, name string) (*service.ServiceDet
 	if err != nil {
 		return nil, err
 	}
-	return FetchNamespacedResource(a, deps, selectionKey, "Service", namespace, name, func() (*service.ServiceDetails, error) {
-		return service.NewService(deps).GetService(namespace, name)
+	return FetchNamespacedResource(a, deps, selectionKey, "Service", namespace, name, func(ctx context.Context) (*service.ServiceDetails, error) {
+		return service.NewService(deps).GetService(ctx, namespace, name)
 	})
 }
 
@@ -378,8 +379,8 @@ func (a *App) GetServiceAccount(clusterID, namespace, name string) (*serviceacco
 	if err != nil {
 		return nil, err
 	}
-	return FetchNamespacedResource(a, deps, selectionKey, "ServiceAccount", namespace, name, func() (*serviceaccount.ServiceAccountDetails, error) {
-		return serviceaccount.NewService(deps).ServiceAccount(namespace, name)
+	return FetchNamespacedResource(a, deps, selectionKey, "ServiceAccount", namespace, name, func(ctx context.Context) (*serviceaccount.ServiceAccountDetails, error) {
+		return serviceaccount.NewService(deps).ServiceAccount(ctx, namespace, name)
 	})
 }
 
@@ -388,8 +389,8 @@ func (a *App) GetStatefulSet(clusterID, namespace, name string) (*statefulset.St
 	if err != nil {
 		return nil, err
 	}
-	return FetchNamespacedResource(a, deps, selectionKey, "StatefulSet", namespace, name, func() (*statefulset.StatefulSetDetails, error) {
-		return statefulset.NewService(deps).StatefulSet(namespace, name)
+	return FetchNamespacedResource(a, deps, selectionKey, "StatefulSet", namespace, name, func(ctx context.Context) (*statefulset.StatefulSetDetails, error) {
+		return statefulset.NewService(deps).StatefulSet(ctx, namespace, name)
 	})
 }
 
@@ -398,8 +399,8 @@ func (a *App) GetStorageClass(clusterID, name string) (*storageclass.StorageClas
 	if err != nil {
 		return nil, err
 	}
-	return FetchClusterResource(a, deps, selectionKey, "StorageClass", name, func() (*storageclass.StorageClassDetails, error) {
-		return storageclass.NewService(deps).StorageClass(name)
+	return FetchClusterResource(a, deps, selectionKey, "StorageClass", name, func(ctx context.Context) (*storageclass.StorageClassDetails, error) {
+		return storageclass.NewService(deps).StorageClass(ctx, name)
 	})
 }
 
@@ -408,8 +409,8 @@ func (a *App) GetTLSRoute(clusterID, namespace, name string) (*types.TLSRouteDet
 	if err != nil {
 		return nil, err
 	}
-	return FetchNamespacedResource(a, deps, selectionKey, "TLSRoute", namespace, name, func() (*types.TLSRouteDetails, error) {
-		return tlsroute.NewService(deps).TLSRoute(namespace, name)
+	return FetchNamespacedResource(a, deps, selectionKey, "TLSRoute", namespace, name, func(ctx context.Context) (*types.TLSRouteDetails, error) {
+		return tlsroute.NewService(deps).TLSRoute(ctx, namespace, name)
 	})
 }
 
@@ -418,7 +419,7 @@ func (a *App) GetValidatingWebhookConfiguration(clusterID, name string) (*admiss
 	if err != nil {
 		return nil, err
 	}
-	return FetchClusterResource(a, deps, selectionKey, "ValidatingWebhookConfiguration", name, func() (*admission.ValidatingWebhookConfigurationDetails, error) {
-		return admission.NewService(deps).ValidatingWebhookConfiguration(name)
+	return FetchClusterResource(a, deps, selectionKey, "ValidatingWebhookConfiguration", name, func(ctx context.Context) (*admission.ValidatingWebhookConfigurationDetails, error) {
+		return admission.NewService(deps).ValidatingWebhookConfiguration(ctx, name)
 	})
 }

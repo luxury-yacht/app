@@ -12,6 +12,7 @@
 package statefulset
 
 import (
+	"context"
 	"fmt"
 
 	"github.com/luxury-yacht/app/backend/internal/logsources"
@@ -37,19 +38,19 @@ func NewService(deps common.Dependencies) *Service {
 }
 
 // StatefulSet returns the detailed view for a single StatefulSet.
-func (s *Service) StatefulSet(namespace, name string) (*StatefulSetDetails, error) {
+func (s *Service) StatefulSet(ctx context.Context, namespace, name string) (*StatefulSetDetails, error) {
 	client := s.deps.KubernetesClient
 	if client == nil {
 		return nil, fmt.Errorf("kubernetes client not initialized")
 	}
 
-	ss, err := client.AppsV1().StatefulSets(namespace).Get(s.deps.Context, name, metav1.GetOptions{})
+	ss, err := client.AppsV1().StatefulSets(namespace).Get(ctx, name, metav1.GetOptions{})
 	if err != nil {
 		err = s.deps.LogResourceRequestFailure(err, fmt.Sprintf("Failed to get StatefulSet %s/%s", namespace, name), "get", Identity, logsources.ResourceLoader)
 		return nil, fmt.Errorf("failed to get statefulset: %w", err)
 	}
 
-	podsForSet, podMetrics, err := s.getStatefulSetPods(ss)
+	podsForSet, podMetrics, err := s.getStatefulSetPods(ctx, ss)
 	if err != nil {
 		s.deps.Logger.Warn(fmt.Sprintf("Failed to collect pods for StatefulSet %s/%s: %v", namespace, name, err), logsources.ResourceLoader)
 	}
@@ -114,20 +115,20 @@ func (s *Service) buildStatefulSetDetails(
 	return details
 }
 
-func (s *Service) getStatefulSetPods(statefulSet *appsv1.StatefulSet) ([]corev1.Pod, map[string]*metricsv1beta1.PodMetrics, error) {
+func (s *Service) getStatefulSetPods(ctx context.Context, statefulSet *appsv1.StatefulSet) ([]corev1.Pod, map[string]*metricsv1beta1.PodMetrics, error) {
 	client := s.deps.KubernetesClient
 	if client == nil {
 		return nil, nil, fmt.Errorf("kubernetes client not initialized")
 	}
 
 	selector := labels.Set(statefulSet.Spec.Selector.MatchLabels).String()
-	podList, err := client.CoreV1().Pods(statefulSet.Namespace).List(s.deps.Context, metav1.ListOptions{LabelSelector: selector})
+	podList, err := client.CoreV1().Pods(statefulSet.Namespace).List(ctx, metav1.ListOptions{LabelSelector: selector})
 	if err != nil {
 		return nil, nil, err
 	}
 
 	filtered := common.FilterPodsByControllerOwner(podList, "StatefulSet", statefulSet.Name)
-	metrics := pods.NewService(s.deps).GetPodMetricsForPods(statefulSet.Namespace, filtered)
+	metrics := pods.NewService(s.deps).GetPodMetricsForPods(ctx, statefulSet.Namespace, filtered)
 
 	return filtered, metrics, nil
 }

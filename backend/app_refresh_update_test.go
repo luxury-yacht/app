@@ -26,7 +26,7 @@ func TestUpdateRefreshSubsystemSelectionsValidatesReceiverAndAllowsEmptySelectio
 
 func TestApplyRefreshSelectionUpdateReportsClustersWhenRuntimeUnavailable(t *testing.T) {
 	app := newTestAppWithDefaults(t)
-	app.Ctx = context.Background()
+	app.setRuntimeContext(context.Background())
 	app.stopRefreshRuntimeContext()
 
 	err := app.applyRefreshSelectionUpdate(refreshSelectionPlan{
@@ -39,10 +39,10 @@ func TestApplyRefreshSelectionUpdateReportsClustersWhenRuntimeUnavailable(t *tes
 func TestSetSelectedKubeconfigsKeepsRefreshServerOnSelectionChange(t *testing.T) {
 	setTestConfigEnv(t)
 	app := newTestAppWithDefaults(t)
-	app.Ctx = context.Background()
+	app.setRuntimeContext(context.Background())
 
 	// Stub refresh wiring so selection updates exercise the in-place path.
-	app.refreshCtx = context.Background()
+	setRefreshRuntimeContextForTest(app, context.Background())
 	app.refreshHTTPServer = &http.Server{}
 	app.refreshAggregates.Store(&refreshAggregateHandlers{})
 
@@ -100,10 +100,10 @@ func TestSetSelectedKubeconfigsKeepsRefreshServerOnSelectionChange(t *testing.T)
 func TestAuthFailedClusterDoesNotBlockNewClusterSelection(t *testing.T) {
 	setTestConfigEnv(t)
 	app := newTestAppWithDefaults(t)
-	app.Ctx = context.Background()
+	app.setRuntimeContext(context.Background())
 
 	// Stub refresh wiring so selection updates exercise the in-place path.
-	app.refreshCtx = context.Background()
+	setRefreshRuntimeContextForTest(app, context.Background())
 	app.refreshHTTPServer = &http.Server{}
 	app.refreshAggregates.Store(&refreshAggregateHandlers{})
 
@@ -180,10 +180,10 @@ func TestAuthFailedClusterDoesNotBlockNewClusterSelection(t *testing.T) {
 func TestAuthFailedOnInitClusterDoesNotBlockNewClusterSelection(t *testing.T) {
 	setTestConfigEnv(t)
 	app := newTestAppWithDefaults(t)
-	app.Ctx = context.Background()
+	app.setRuntimeContext(context.Background())
 
 	// Stub refresh wiring so selection updates exercise the in-place path.
-	app.refreshCtx = context.Background()
+	setRefreshRuntimeContextForTest(app, context.Background())
 	app.refreshHTTPServer = &http.Server{}
 	app.refreshAggregates.Store(&refreshAggregateHandlers{})
 
@@ -241,10 +241,10 @@ func TestAuthFailedOnInitClusterDoesNotBlockNewClusterSelection(t *testing.T) {
 func TestSetSelectedKubeconfigsRapidChurnLeavesConsistentClusterState(t *testing.T) {
 	setTestConfigEnv(t)
 	app := newTestAppWithDefaults(t)
-	app.Ctx = context.Background()
+	app.setRuntimeContext(context.Background())
 
 	// Stub refresh wiring so selection updates exercise in-place updates only.
-	app.refreshCtx = context.Background()
+	setRefreshRuntimeContextForTest(app, context.Background())
 	app.refreshHTTPServer = &http.Server{}
 	app.refreshAggregates.Store(&refreshAggregateHandlers{})
 
@@ -338,7 +338,7 @@ func TestSetSelectedKubeconfigsRemovesClusterRuntimeStateOnChurn(t *testing.T) {
 	app := newTestAppWithDefaults(t)
 
 	// Keep selection updates on the in-place refresh reconciliation path.
-	app.refreshCtx = context.Background()
+	setRefreshRuntimeContextForTest(app, context.Background())
 	app.refreshHTTPServer = &http.Server{}
 	app.refreshAggregates.Store(&refreshAggregateHandlers{})
 
@@ -465,7 +465,7 @@ func TestSetSelectedKubeconfigsClearCleansRuntimeStateForAllClusters(t *testing.
 	app := newTestAppWithDefaults(t)
 
 	// Keep selection updates on the in-place refresh reconciliation path.
-	app.refreshCtx = context.Background()
+	setRefreshRuntimeContextForTest(app, context.Background())
 	app.refreshHTTPServer = &http.Server{}
 	app.refreshAggregates.Store(&refreshAggregateHandlers{})
 
@@ -578,7 +578,7 @@ func TestSetSelectedKubeconfigsKeepsResponseCacheClusterScopedDuringChurn(t *tes
 	app := newTestAppWithDefaults(t)
 
 	// Keep selection updates on the in-place refresh reconciliation path.
-	app.refreshCtx = context.Background()
+	setRefreshRuntimeContextForTest(app, context.Background())
 	app.refreshHTTPServer = &http.Server{}
 	app.refreshAggregates.Store(&refreshAggregateHandlers{})
 	app.responseCache = newResponseCache(time.Minute, 64)

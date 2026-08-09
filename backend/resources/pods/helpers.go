@@ -8,6 +8,7 @@
 package pods
 
 import (
+	"context"
 	"fmt"
 
 	"github.com/luxury-yacht/app/backend/internal/logsources"
@@ -25,8 +26,8 @@ type PodDetailInfo = types.PodDetailInfo
 type PodDetailInfoContainer = types.PodDetailInfoContainer
 
 // Helper to fetch a single pod with full details
-func (s *Service) fetchSinglePodFull(namespace, name string) (*types.PodDetailInfo, error) {
-	pod, err := s.deps.KubernetesClient.CoreV1().Pods(namespace).Get(s.deps.Context, name, metav1.GetOptions{})
+func (s *Service) fetchSinglePodFull(ctx context.Context, namespace, name string) (*types.PodDetailInfo, error) {
+	pod, err := s.deps.KubernetesClient.CoreV1().Pods(namespace).Get(ctx, name, metav1.GetOptions{})
 	if err != nil {
 		err = s.deps.LogResourceRequestFailure(err, fmt.Sprintf("Failed to fetch pod %s/%s from Kubernetes API", namespace, name), "get", Identity, "Pod")
 		return nil, fmt.Errorf("failed to fetch pod from API: %w", err)
@@ -34,15 +35,15 @@ func (s *Service) fetchSinglePodFull(namespace, name string) (*types.PodDetailIn
 	s.deps.Logger.Debug(fmt.Sprintf("Fetched pod %s/%s from Kubernetes API", namespace, name), "Pod")
 
 	// Get metrics and owner info
-	podMetrics := s.getPodMetrics(namespace)
-	rsToDeployment := s.buildReplicaSetToDeploymentMap(namespace)
+	podMetrics := s.getPodMetrics(ctx, namespace)
+	rsToDeployment := s.buildReplicaSetToDeploymentMap(ctx, namespace)
 
 	// Build full details
 	details := s.buildPodDetailInfo(*pod, podMetrics, rsToDeployment)
 
 	// Add node IP
 	if pod.Spec.NodeName != "" {
-		details.NodeIP = s.getNodeIP(pod.Spec.NodeName)
+		details.NodeIP = s.getNodeIP(ctx, pod.Spec.NodeName)
 	}
 
 	// Add containers
@@ -69,10 +70,10 @@ func (s *Service) fetchSinglePodFull(namespace, name string) (*types.PodDetailIn
 // Helper functions for simplified pod handling
 
 // buildReplicaSetToDeploymentMap builds a map of ReplicaSet names to Deployment names.
-func (s *Service) buildReplicaSetToDeploymentMap(namespace string) map[string]string {
+func (s *Service) buildReplicaSetToDeploymentMap(ctx context.Context, namespace string) map[string]string {
 	rsToDeployment := make(map[string]string)
 
-	rsList, err := s.deps.KubernetesClient.AppsV1().ReplicaSets(namespace).List(s.deps.Context, metav1.ListOptions{})
+	rsList, err := s.deps.KubernetesClient.AppsV1().ReplicaSets(namespace).List(ctx, metav1.ListOptions{})
 	if err != nil {
 		return rsToDeployment
 	}
@@ -113,12 +114,12 @@ func getPodOwnerWithMap(pod corev1.Pod, rsToDeployment map[string]string) (strin
 
 // getNodeIP retrieves the internal IP address for the given node, returning an empty
 // string if the lookup fails.
-func (s *Service) getNodeIP(nodeName string) string {
+func (s *Service) getNodeIP(ctx context.Context, nodeName string) string {
 	if nodeName == "" {
 		return ""
 	}
 
-	node, err := s.deps.KubernetesClient.CoreV1().Nodes().Get(s.deps.Context, nodeName, metav1.GetOptions{})
+	node, err := s.deps.KubernetesClient.CoreV1().Nodes().Get(ctx, nodeName, metav1.GetOptions{})
 	if err != nil {
 		return ""
 	}
@@ -272,7 +273,7 @@ func calculatePodResources(pod corev1.Pod) (*resource.Quantity, *resource.Quanti
 }
 
 // getPodMetrics fetches metrics from the metrics-server API
-func (s *Service) getPodMetrics(namespace string) map[string]*metricsv1beta1.PodMetrics {
+func (s *Service) getPodMetrics(ctx context.Context, namespace string) map[string]*metricsv1beta1.PodMetrics {
 	metrics := make(map[string]*metricsv1beta1.PodMetrics)
 
 	client := s.deps.MetricsClient
@@ -293,7 +294,7 @@ func (s *Service) getPodMetrics(namespace string) map[string]*metricsv1beta1.Pod
 	}
 
 	// Fetch pod metrics
-	podMetricsList, err := client.MetricsV1beta1().PodMetricses(namespace).List(s.deps.Context, metav1.ListOptions{})
+	podMetricsList, err := client.MetricsV1beta1().PodMetricses(namespace).List(ctx, metav1.ListOptions{})
 	if err != nil {
 		s.deps.Logger.Info(fmt.Sprintf("Failed to fetch pod metrics for namespace %s: %v", namespace, err), logsources.ResourceLoader)
 		return metrics
@@ -312,7 +313,7 @@ func (s *Service) getPodMetrics(namespace string) map[string]*metricsv1beta1.Pod
 }
 
 // getPodMetricsForPods fetches metrics only for specific pods
-func (s *Service) getPodMetricsForPods(namespace string, pods []corev1.Pod) map[string]*metricsv1beta1.PodMetrics {
+func (s *Service) getPodMetricsForPods(ctx context.Context, namespace string, pods []corev1.Pod) map[string]*metricsv1beta1.PodMetrics {
 	metrics := make(map[string]*metricsv1beta1.PodMetrics)
 	if len(pods) == 0 {
 		return metrics
@@ -322,9 +323,9 @@ func (s *Service) getPodMetricsForPods(namespace string, pods []corev1.Pod) map[
 		return metrics
 	}
 	if len(pods) <= 3 {
-		return s.fetchIndividualPodMetrics(client, namespace, pods)
+		return s.fetchIndividualPodMetrics(ctx, client, namespace, pods)
 	}
-	return s.fetchListedPodMetrics(client, namespace, pods)
+	return s.fetchListedPodMetrics(ctx, client, namespace, pods)
 }
 
 func (s *Service) podMetricsClient() metricsclient.Interface {
@@ -344,10 +345,10 @@ func (s *Service) podMetricsClient() metricsclient.Interface {
 	return client
 }
 
-func (s *Service) fetchIndividualPodMetrics(client metricsclient.Interface, namespace string, pods []corev1.Pod) map[string]*metricsv1beta1.PodMetrics {
+func (s *Service) fetchIndividualPodMetrics(ctx context.Context, client metricsclient.Interface, namespace string, pods []corev1.Pod) map[string]*metricsv1beta1.PodMetrics {
 	metrics := make(map[string]*metricsv1beta1.PodMetrics)
 	for _, pod := range pods {
-		podMetric, err := client.MetricsV1beta1().PodMetricses(namespace).Get(s.deps.Context, pod.Name, metav1.GetOptions{})
+		podMetric, err := client.MetricsV1beta1().PodMetricses(namespace).Get(ctx, pod.Name, metav1.GetOptions{})
 		if err != nil {
 			s.deps.Logger.Debug(fmt.Sprintf("No metrics for pod %s: %v", pod.Name, err), logsources.ResourceLoader)
 			continue
@@ -357,9 +358,9 @@ func (s *Service) fetchIndividualPodMetrics(client metricsclient.Interface, name
 	return metrics
 }
 
-func (s *Service) fetchListedPodMetrics(client metricsclient.Interface, namespace string, pods []corev1.Pod) map[string]*metricsv1beta1.PodMetrics {
+func (s *Service) fetchListedPodMetrics(ctx context.Context, client metricsclient.Interface, namespace string, pods []corev1.Pod) map[string]*metricsv1beta1.PodMetrics {
 	metrics := make(map[string]*metricsv1beta1.PodMetrics)
-	podMetricsList, err := client.MetricsV1beta1().PodMetricses(namespace).List(s.deps.Context, metav1.ListOptions{})
+	podMetricsList, err := client.MetricsV1beta1().PodMetricses(namespace).List(ctx, metav1.ListOptions{})
 	if err != nil {
 		s.deps.Logger.Info(fmt.Sprintf("Failed to fetch pod metrics for namespace %s: %v", namespace, err), logsources.ResourceLoader)
 		return metrics
@@ -647,13 +648,13 @@ func PodRestartCount(pod corev1.Pod) int32 {
 }
 
 // GetPodMetricsForPods exposes selective pod metrics fetching for other packages.
-func (s *Service) GetPodMetricsForPods(namespace string, pods []corev1.Pod) map[string]*metricsv1beta1.PodMetrics {
-	return s.getPodMetricsForPods(namespace, pods)
+func (s *Service) GetPodMetricsForPods(ctx context.Context, namespace string, pods []corev1.Pod) map[string]*metricsv1beta1.PodMetrics {
+	return s.getPodMetricsForPods(ctx, namespace, pods)
 }
 
 // BuildReplicaSetToDeploymentMap exposes replica set ownership lookups.
-func (s *Service) BuildReplicaSetToDeploymentMap(namespace string) map[string]string {
-	return s.buildReplicaSetToDeploymentMap(namespace)
+func (s *Service) BuildReplicaSetToDeploymentMap(ctx context.Context, namespace string) map[string]string {
+	return s.buildReplicaSetToDeploymentMap(ctx, namespace)
 }
 
 // SummarizePod converts a pod object and optional metrics into a PodSimpleInfo for list views.

@@ -34,15 +34,14 @@ import (
 
 func TestGetPodRequiresTargetIdentity(t *testing.T) {
 	service := NewService(common.Dependencies{
-		Context:          context.Background(),
 		Logger:           applog.Noop,
 		KubernetesClient: fake.NewClientset(),
 	})
 
-	_, err := service.GetPod("", "demo-pod", false)
+	_, err := service.GetPod(context.Background(), "", "demo-pod", false)
 	require.EqualError(t, err, "namespace is required")
 
-	_, err = service.GetPod("team-a", "", false)
+	_, err = service.GetPod(context.Background(), "team-a", "", false)
 	require.EqualError(t, err, "pod name is required")
 }
 
@@ -53,12 +52,11 @@ func TestGetPodPropagatesError(t *testing.T) {
 	})
 
 	deps := common.Dependencies{
-		Context:          context.Background(),
 		Logger:           applog.Noop,
 		KubernetesClient: client,
 	}
 
-	if _, err := GetPod(deps, "ns", "name", false); err == nil {
+	if _, err := GetPod(context.Background(), deps, "ns", "name", false); err == nil {
 		t.Fatalf("expected error from GetPod when API fails")
 	}
 }
@@ -73,12 +71,11 @@ func TestDeletePodSucceeds(t *testing.T) {
 	client := fake.NewClientset(pod)
 
 	deps := common.Dependencies{
-		Context:          context.Background(),
 		Logger:           applog.Noop,
 		KubernetesClient: client,
 	}
 
-	if err := DeletePod(deps, "team-a", "delete-me"); err != nil {
+	if err := DeletePod(context.Background(), deps, "team-a", "delete-me"); err != nil {
 		t.Fatalf("DeletePod returned error: %v", err)
 	}
 
@@ -96,15 +93,14 @@ func TestDeletePodSucceeds(t *testing.T) {
 
 func TestDeletePodRequiresTargetIdentity(t *testing.T) {
 	service := NewService(common.Dependencies{
-		Context:          context.Background(),
 		Logger:           applog.Noop,
 		KubernetesClient: fake.NewClientset(),
 	})
 
-	err := service.DeletePod("", "delete-me")
+	err := service.DeletePod(context.Background(), "", "delete-me")
 	require.EqualError(t, err, "namespace is required")
 
-	err = service.DeletePod("team-a", "")
+	err = service.DeletePod(context.Background(), "team-a", "")
 	require.EqualError(t, err, "pod name is required")
 }
 
@@ -117,28 +113,21 @@ func TestDeletePodReturnsErrorWhenAPIFails(t *testing.T) {
 	})
 
 	deps := common.Dependencies{
-		Context:          context.Background(),
 		Logger:           applog.Noop,
 		KubernetesClient: client,
 	}
 
-	if err := DeletePod(deps, "team-a", "delete-me"); err == nil {
+	if err := DeletePod(context.Background(), deps, "team-a", "delete-me"); err == nil {
 		t.Fatalf("expected DeletePod to surface API error")
 	}
 }
 
-func TestDeletePodReturnsErrorWhenContextMissing(t *testing.T) {
-	client := fake.NewClientset(&corev1.Pod{
-		ObjectMeta: metav1.ObjectMeta{Name: "delete-me", Namespace: "team-a"},
-	})
-
+func TestDeletePodReturnsErrorWhenClientMissing(t *testing.T) {
 	deps := common.Dependencies{
-		Context:          nil,
-		Logger:           applog.Noop,
-		KubernetesClient: client,
+		Logger: applog.Noop,
 	}
 
-	err := DeletePod(deps, "team-a", "delete-me")
+	err := DeletePod(context.Background(), deps, "team-a", "delete-me")
 	require.Error(t, err)
 	require.Contains(t, err.Error(), "kubernetes client not initialized")
 }
@@ -256,11 +245,10 @@ func TestBuildReplicaSetToDeploymentMap(t *testing.T) {
 
 	client := fake.NewClientset(rs)
 	service := NewService(common.Dependencies{
-		Context:          context.Background(),
 		KubernetesClient: client,
 	})
 
-	mapping := service.buildReplicaSetToDeploymentMap("team-a")
+	mapping := service.buildReplicaSetToDeploymentMap(context.Background(), "team-a")
 	require.Equal(t, "demo-deploy", mapping["demo-rs"])
 }
 
@@ -280,11 +268,10 @@ func TestBuildReplicaSetToDeploymentMapExported(t *testing.T) {
 
 	client := fake.NewClientset(rs)
 	service := NewService(common.Dependencies{
-		Context:          context.Background(),
 		KubernetesClient: client,
 	})
 
-	mapping := service.BuildReplicaSetToDeploymentMap("team-a")
+	mapping := service.BuildReplicaSetToDeploymentMap(context.Background(), "team-a")
 	require.Equal(t, "demo-deploy", mapping["demo-rs"])
 }
 
@@ -334,30 +321,27 @@ func TestGetNodeIP(t *testing.T) {
 	}
 	client := fake.NewClientset(node)
 	service := NewService(common.Dependencies{
-		Context:          context.Background(),
 		KubernetesClient: client,
 	})
 
-	require.Equal(t, "10.0.0.1", service.getNodeIP("node-1"))
-	require.Equal(t, "", service.getNodeIP("missing"))
+	require.Equal(t, "10.0.0.1", service.getNodeIP(context.Background(), "node-1"))
+	require.Equal(t, "", service.getNodeIP(context.Background(), "missing"))
 }
 
 func TestGetNodeIPReturnsEmptyOnError(t *testing.T) {
 	service := NewService(common.Dependencies{
-		Context:          context.Background(),
 		KubernetesClient: fake.NewClientset(),
 	})
 
-	require.Equal(t, "", service.getNodeIP("node-does-not-exist"))
+	require.Equal(t, "", service.getNodeIP(context.Background(), "node-does-not-exist"))
 }
 
 func TestGetPodMetricsFallbackWhenClientMissing(t *testing.T) {
 	service := NewService(common.Dependencies{
-		Context: context.Background(),
-		Logger:  applog.Noop,
+		Logger: applog.Noop,
 	})
 
-	metrics := service.getPodMetrics("team-a")
+	metrics := service.getPodMetrics(context.Background(), "team-a")
 	require.Empty(t, metrics)
 }
 
@@ -374,7 +358,6 @@ func TestGetPodMetricsForPodsUsesIndividualFetchForSmallSets(t *testing.T) {
 	})
 
 	service := NewService(common.Dependencies{
-		Context:          ctx,
 		Logger:           applog.Noop,
 		KubernetesClient: fake.NewClientset(),
 		MetricsClient:    metricsClient,
@@ -384,7 +367,7 @@ func TestGetPodMetricsForPodsUsesIndividualFetchForSmallSets(t *testing.T) {
 		ObjectMeta: metav1.ObjectMeta{Name: "pod-a", Namespace: "team-a"},
 	}}
 
-	metrics := service.getPodMetricsForPods("team-a", pods)
+	metrics := service.getPodMetricsForPods(ctx, "team-a", pods)
 	require.Len(t, metrics, len(pods))
 
 	require.Equal(t, len(pods), getCalls)
@@ -404,7 +387,6 @@ func TestGetPodMetricsForPodsListsForLargeSets(t *testing.T) {
 	})
 
 	service := NewService(common.Dependencies{
-		Context:          ctx,
 		Logger:           applog.Noop,
 		KubernetesClient: fake.NewClientset(),
 		MetricsClient:    metricsClient,
@@ -417,7 +399,7 @@ func TestGetPodMetricsForPodsListsForLargeSets(t *testing.T) {
 		{ObjectMeta: metav1.ObjectMeta{Name: "pod-d", Namespace: "team-a"}},
 	}
 
-	metrics := service.getPodMetricsForPods("team-a", pods)
+	metrics := service.getPodMetricsForPods(ctx, "team-a", pods)
 	require.Len(t, metrics, len(pods))
 
 	require.Equal(t, 1, listCalls)
@@ -431,13 +413,12 @@ func TestGetPodMetricsListErrorReturnsEmpty(t *testing.T) {
 	})
 
 	service := NewService(common.Dependencies{
-		Context:          ctx,
 		Logger:           applog.Noop,
 		KubernetesClient: fake.NewClientset(),
 		MetricsClient:    metricsClient,
 	})
 
-	values := service.getPodMetrics("team-a")
+	values := service.getPodMetrics(ctx, "team-a")
 	require.Empty(t, values)
 }
 
@@ -740,13 +721,12 @@ func TestGetPodReturnsDetailedInfo(t *testing.T) {
 	client := fake.NewClientset(pod, replicaSet, node)
 
 	deps := common.Dependencies{
-		Context:          context.Background(),
 		Logger:           applog.Noop,
 		KubernetesClient: client,
 		ClusterID:        "cluster-a",
 	}
 
-	details, err := GetPod(deps, "team-a", "demo-pod", true)
+	details, err := GetPod(context.Background(), deps, "team-a", "demo-pod", true)
 	if err != nil {
 		t.Fatalf("GetPod returned error: %v", err)
 	}

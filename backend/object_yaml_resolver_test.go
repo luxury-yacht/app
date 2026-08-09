@@ -74,7 +74,6 @@ func objectYAMLResolverFallbackDeps() common.Dependencies {
 		}},
 	}}
 	return common.Dependencies{
-		Context:          context.Background(),
 		KubernetesClient: client,
 		ResourceResolver: failingResourceResolver{},
 	}

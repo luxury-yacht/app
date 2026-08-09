@@ -62,7 +62,6 @@ func TestServiceSyncCollectsResources(t *testing.T) {
 
 	deps := Dependencies{
 		Common: common.Dependencies{
-			Context:       context.Background(),
 			DynamicClient: dyn,
 		},
 		Now: now,

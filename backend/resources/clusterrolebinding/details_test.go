@@ -24,7 +24,6 @@ import (
 
 func newService(client kubernetes.Interface) *Service {
 	return NewService(common.Dependencies{
-		Context:          context.Background(),
 		Logger:           applog.Noop,
 		KubernetesClient: client,
 		ClusterID:        "cluster-a",
@@ -65,7 +64,7 @@ func TestClusterRoleBindingGetError(t *testing.T) {
 	})
 
 	manager := newService(client)
-	if _, err := manager.ClusterRoleBinding("crb"); err == nil {
+	if _, err := manager.ClusterRoleBinding(context.Background(), "crb"); err == nil {
 		t.Fatalf("expected clusterrolebinding get error")
 	}
 }

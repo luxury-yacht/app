@@ -137,10 +137,7 @@ func (r *resourceIdentityResolver) lookup(key resourceIdentityKey) (common.Resol
 
 func (r *resourceIdentityResolver) hydrate(ctx context.Context, gvk schema.GroupVersionKind) error {
 	if ctx == nil {
-		ctx = r.deps.Context
-		if ctx == nil {
-			ctx = context.Background()
-		}
+		ctx = context.Background()
 	}
 
 	var discoveryErr error

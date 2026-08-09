@@ -30,12 +30,11 @@ func TestCreateDebugContainerSuccess(t *testing.T) {
 	fakeEphemeralStatusReactor(client)
 
 	svc := NewService(common.Dependencies{
-		Context:          context.Background(),
 		Logger:           applog.Noop,
 		KubernetesClient: client,
 	})
 
-	resp, err := svc.CreateDebugContainer("team-a", "demo-pod", "busybox:latest", "app")
+	resp, err := svc.CreateDebugContainer(context.Background(), "team-a", "demo-pod", "busybox:latest", "app")
 	require.NoError(t, err)
 	require.NotEmpty(t, resp.ContainerName)
 	require.Equal(t, "demo-pod", resp.PodName)
@@ -78,12 +77,11 @@ func TestCreateDebugContainerPollTimeout(t *testing.T) {
 	}
 	client := fake.NewClientset(pod)
 	svc := NewService(common.Dependencies{
-		Context:          context.Background(),
 		Logger:           applog.Noop,
 		KubernetesClient: client,
 	})
 
-	_, err := svc.CreateDebugContainer("team-a", "demo-pod", "busybox:latest", "app")
+	_, err := svc.CreateDebugContainer(context.Background(), "team-a", "demo-pod", "busybox:latest", "app")
 	require.Error(t, err)
 	require.Contains(t, err.Error(), "timed out waiting for debug container")
 }
@@ -91,31 +89,29 @@ func TestCreateDebugContainerPollTimeout(t *testing.T) {
 func TestCreateDebugContainerValidation(t *testing.T) {
 	client := fake.NewClientset()
 	svc := NewService(common.Dependencies{
-		Context:          context.Background(),
 		Logger:           applog.Noop,
 		KubernetesClient: client,
 	})
 
-	_, err := svc.CreateDebugContainer("", "demo-pod", "busybox:latest", "app")
+	_, err := svc.CreateDebugContainer(context.Background(), "", "demo-pod", "busybox:latest", "app")
 	require.Error(t, err)
 	require.Contains(t, err.Error(), "namespace is required")
 
-	_, err = svc.CreateDebugContainer("team-a", "", "busybox:latest", "app")
+	_, err = svc.CreateDebugContainer(context.Background(), "team-a", "", "busybox:latest", "app")
 	require.Error(t, err)
 	require.Contains(t, err.Error(), "pod name is required")
 
-	_, err = svc.CreateDebugContainer("team-a", "demo-pod", "", "app")
+	_, err = svc.CreateDebugContainer(context.Background(), "team-a", "demo-pod", "", "app")
 	require.Error(t, err)
 	require.Contains(t, err.Error(), "image is required")
 }
 
 func TestCreateDebugContainerNilClient(t *testing.T) {
 	svc := NewService(common.Dependencies{
-		Context: context.Background(),
-		Logger:  applog.Noop,
+		Logger: applog.Noop,
 	})
 
-	_, err := svc.CreateDebugContainer("team-a", "demo-pod", "busybox", "app")
+	_, err := svc.CreateDebugContainer(context.Background(), "team-a", "demo-pod", "busybox", "app")
 	require.Error(t, err)
 	require.Contains(t, err.Error(), "kubernetes client not initialized")
 }

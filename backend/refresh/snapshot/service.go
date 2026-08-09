@@ -64,7 +64,6 @@ type cacheEntry struct {
 var sourceVersionEpochSerial uint64
 
 type BuildRequest struct {
-	Context context.Context
 	Domain  string
 	Scope   string
 	Cluster ClusterMeta
@@ -152,16 +151,15 @@ func (s *Service) WithDomainReadiness(readiness map[string][]string) *Service {
 
 // Build returns a snapshot for the requested domain/scope.
 func (s *Service) Build(ctx context.Context, domainName, scope string) (*refresh.Snapshot, error) {
-	return s.BuildRequest(BuildRequest{
-		Context: ctx,
+	return s.BuildRequest(ctx, BuildRequest{
 		Domain:  domainName,
 		Scope:   scope,
 		Cluster: s.cluster,
 	})
 }
 
-func (s *Service) BuildRequest(req BuildRequest) (*refresh.Snapshot, error) {
-	ctx, plan, err := s.prepareBuildRequest(req)
+func (s *Service) BuildRequest(ctx context.Context, req BuildRequest) (*refresh.Snapshot, error) {
+	ctx, plan, err := s.prepareBuildRequest(ctx, req)
 	if err != nil {
 		return nil, err
 	}
@@ -187,11 +185,11 @@ type snapshotBuildRequestPlan struct {
 	syncWait            time.Duration
 }
 
-func (s *Service) prepareBuildRequest(req BuildRequest) (context.Context, snapshotBuildRequestPlan, error) {
+func (s *Service) prepareBuildRequest(ctx context.Context, req BuildRequest) (context.Context, snapshotBuildRequestPlan, error) {
 	if err := req.Cluster.Validate(); err != nil {
 		return nil, snapshotBuildRequestPlan{}, err
 	}
-	ctx := WithClusterMeta(req.Context, req.Cluster)
+	ctx = WithClusterMeta(ctx, req.Cluster)
 	ctx, permissionCacheKey, err := s.ensurePermissions(ctx, req.Domain, req.Scope)
 	if err != nil {
 		return nil, snapshotBuildRequestPlan{}, err

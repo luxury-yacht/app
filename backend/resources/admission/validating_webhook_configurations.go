@@ -8,6 +8,7 @@
 package admission
 
 import (
+	"context"
 	"fmt"
 
 	admissionregistrationv1 "k8s.io/api/admissionregistration/v1"
@@ -15,13 +16,13 @@ import (
 )
 
 // ValidatingWebhookConfiguration returns details for a single validating configuration.
-func (s *Service) ValidatingWebhookConfiguration(name string) (*ValidatingWebhookConfigurationDetails, error) {
+func (s *Service) ValidatingWebhookConfiguration(ctx context.Context, name string) (*ValidatingWebhookConfigurationDetails, error) {
 	client := s.deps.KubernetesClient
 	if client == nil {
 		return nil, fmt.Errorf("kubernetes client not initialized")
 	}
 
-	config, err := client.AdmissionregistrationV1().ValidatingWebhookConfigurations().Get(s.deps.Context, name, metav1.GetOptions{})
+	config, err := client.AdmissionregistrationV1().ValidatingWebhookConfigurations().Get(ctx, name, metav1.GetOptions{})
 	if err != nil {
 		err = s.logError(err, fmt.Sprintf("Failed to get validating webhook configuration %s", name), ValidatingIdentity)
 		return nil, fmt.Errorf("failed to get validating webhook configuration: %w", err)

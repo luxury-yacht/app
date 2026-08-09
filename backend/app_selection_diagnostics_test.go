@@ -104,8 +104,8 @@ func TestSelectionDiagnosticsTracksCanceledAndSuperseded(t *testing.T) {
 		defer wg.Done()
 		_ = app.runSelectionMutation("cancel-me", func(m *selectionMutation) error {
 			close(cancelStarted)
-			<-m.ctx.Done()
-			return m.ctx.Err()
+			<-m.context().Done()
+			return m.context().Err()
 		})
 	}()
 	<-cancelStarted

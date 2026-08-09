@@ -30,10 +30,7 @@ func (a *App) IsWorkloadHPAManaged(clusterID, namespace, group, version, kind, n
 	if err != nil {
 		return false, err
 	}
-	ctx := deps.Context
-	if ctx == nil {
-		ctx = context.Background()
-	}
+	ctx := a.CtxOrBackground()
 
 	return isWorkloadHPAManaged(ctx, deps, namespace, group, version, kind, name)
 }

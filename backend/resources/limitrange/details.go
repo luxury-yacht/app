@@ -7,6 +7,7 @@
 package limitrange
 
 import (
+	"context"
 	"fmt"
 
 	"github.com/luxury-yacht/app/backend/internal/logsources"
@@ -27,13 +28,13 @@ func NewService(deps common.Dependencies) *Service {
 }
 
 // LimitRange returns a detailed limit range description.
-func (s *Service) LimitRange(namespace, name string) (*LimitRangeDetails, error) {
+func (s *Service) LimitRange(ctx context.Context, namespace, name string) (*LimitRangeDetails, error) {
 	client := s.deps.KubernetesClient
 	if client == nil {
 		return nil, fmt.Errorf("kubernetes client not initialized")
 	}
 
-	lr, err := client.CoreV1().LimitRanges(namespace).Get(s.deps.Context, name, metav1.GetOptions{})
+	lr, err := client.CoreV1().LimitRanges(namespace).Get(ctx, name, metav1.GetOptions{})
 	if err != nil {
 		err = s.logError(err, fmt.Sprintf("Failed to get limit range %s/%s", namespace, name))
 		return nil, fmt.Errorf("failed to get limit range: %w", err)

@@ -72,10 +72,7 @@ func TestDiscoverGVRByKindFallsBackToGroupsAndResources(t *testing.T) {
 		GroupVersion: "apps/v1",
 		APIResources: []metav1.APIResource{{Name: "deployments", SingularName: "deployment", Kind: "Deployment", Namespaced: true}},
 	}}, nil)
-	deps.Context = context.Background()
-
-	var nilContext context.Context
-	gvr, namespaced, err := DiscoverGVRByKind(nilContext, deps, "deployments")
+	gvr, namespaced, err := DiscoverGVRByKind(context.Background(), deps, "deployments")
 	require.NoError(t, err)
 	require.Equal(t, schema.GroupVersionResource{Group: "apps", Version: "v1", Resource: "deployments"}, gvr)
 	require.True(t, namespaced)
@@ -127,10 +124,10 @@ func TestDiscoverGVRByKindFailureContracts(t *testing.T) {
 func TestKindDiscoveryHelpersCoverContextAndCRDVersionFallbacks(t *testing.T) {
 	fallback := context.WithValue(context.Background(), discoverContextKey("source"), "fallback")
 	var nilContext context.Context
-	resolved, err := kindDiscoveryContext(nilContext, fallback)
+	resolved, err := kindDiscoveryContext(fallback)
 	require.NoError(t, err)
 	require.Same(t, fallback, resolved)
-	_, err = kindDiscoveryContext(nilContext, nilContext)
+	_, err = kindDiscoveryContext(nilContext)
 	require.ErrorContains(t, err, "discovery context not initialized")
 
 	crd := apiextensionsv1.CustomResourceDefinition{Spec: apiextensionsv1.CustomResourceDefinitionSpec{

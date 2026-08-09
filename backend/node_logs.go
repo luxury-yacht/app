@@ -19,7 +19,8 @@ func (a *App) DiscoverNodeLogs(clusterID, nodeName string) NodeLogDiscoveryRespo
 	if err != nil {
 		return NodeLogDiscoveryResponse{Reason: err.Error()}
 	}
-	if err := a.requireResourcePermission(deps.Context, deps, resourcePermissionCheck{
+	ctx := a.CtxOrBackground()
+	if err := a.requireResourcePermission(ctx, deps, resourcePermissionCheck{
 		Version:     "v1",
 		Kind:        nodes.Identity.Kind,
 		Name:        nodeName,
@@ -28,7 +29,7 @@ func (a *App) DiscoverNodeLogs(clusterID, nodeName string) NodeLogDiscoveryRespo
 	}); err != nil {
 		return NodeLogDiscoveryResponse{Reason: err.Error()}
 	}
-	return nodes.NewService(deps).DiscoverLogs(nodeName)
+	return nodes.NewService(deps).DiscoverLogs(ctx, nodeName)
 }
 func (a *App) FetchNodeLogs(clusterID, nodeName string, req NodeLogFetchRequest) NodeLogFetchResponse {
 	if err := requireObjectName(nodeName); err != nil {
@@ -38,7 +39,8 @@ func (a *App) FetchNodeLogs(clusterID, nodeName string, req NodeLogFetchRequest)
 	if err != nil {
 		return NodeLogFetchResponse{Error: err.Error(), SourcePath: req.SourcePath}
 	}
-	if err := a.requireResourcePermission(deps.Context, deps, resourcePermissionCheck{
+	ctx := a.CtxOrBackground()
+	if err := a.requireResourcePermission(ctx, deps, resourcePermissionCheck{
 		Version:     "v1",
 		Kind:        nodes.Identity.Kind,
 		Name:        nodeName,
@@ -47,5 +49,5 @@ func (a *App) FetchNodeLogs(clusterID, nodeName string, req NodeLogFetchRequest)
 	}); err != nil {
 		return NodeLogFetchResponse{Error: err.Error(), SourcePath: req.SourcePath}
 	}
-	return nodes.NewService(deps).FetchLogs(nodeName, req)
+	return nodes.NewService(deps).FetchLogs(ctx, nodeName, req)
 }

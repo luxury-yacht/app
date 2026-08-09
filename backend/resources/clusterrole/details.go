@@ -9,6 +9,7 @@
 package clusterrole
 
 import (
+	"context"
 	"fmt"
 
 	"github.com/luxury-yacht/app/backend/resourcemodel"
@@ -29,17 +30,17 @@ func NewService(deps common.Dependencies) *Service {
 }
 
 // ClusterRole returns the detailed view for a single cluster role.
-func (s *Service) ClusterRole(name string) (*ClusterRoleDetails, error) {
-	cr, err := s.deps.KubernetesClient.RbacV1().ClusterRoles().Get(s.deps.Context, name, metav1.GetOptions{})
+func (s *Service) ClusterRole(ctx context.Context, name string) (*ClusterRoleDetails, error) {
+	cr, err := s.deps.KubernetesClient.RbacV1().ClusterRoles().Get(ctx, name, metav1.GetOptions{})
 	if err != nil {
 		err = s.deps.LogResourceRequestFailure(err, fmt.Sprintf("Failed to get cluster role %s", name), "get", Identity, "RBAC")
 		return nil, fmt.Errorf("failed to get cluster role: %w", err)
 	}
-	return s.buildClusterRoleDetails(cr, s.listClusterRoleBindings(), s.listAllRoleBindings()), nil
+	return s.buildClusterRoleDetails(cr, s.listClusterRoleBindings(ctx), s.listAllRoleBindings(ctx)), nil
 }
 
-func (s *Service) listClusterRoleBindings() *rbacv1.ClusterRoleBindingList {
-	bindings, err := s.deps.KubernetesClient.RbacV1().ClusterRoleBindings().List(s.deps.Context, metav1.ListOptions{})
+func (s *Service) listClusterRoleBindings(ctx context.Context) *rbacv1.ClusterRoleBindingList {
+	bindings, err := s.deps.KubernetesClient.RbacV1().ClusterRoleBindings().List(ctx, metav1.ListOptions{})
 	if err != nil {
 		s.deps.Logger.Warn(fmt.Sprintf("Failed to list cluster role bindings: %v", err), "RBAC")
 		return nil
@@ -47,8 +48,8 @@ func (s *Service) listClusterRoleBindings() *rbacv1.ClusterRoleBindingList {
 	return bindings
 }
 
-func (s *Service) listAllRoleBindings() *rbacv1.RoleBindingList {
-	bindings, err := s.deps.KubernetesClient.RbacV1().RoleBindings(metav1.NamespaceAll).List(s.deps.Context, metav1.ListOptions{})
+func (s *Service) listAllRoleBindings(ctx context.Context) *rbacv1.RoleBindingList {
+	bindings, err := s.deps.KubernetesClient.RbacV1().RoleBindings(metav1.NamespaceAll).List(ctx, metav1.ListOptions{})
 	if err != nil {
 		s.deps.Logger.Warn(fmt.Sprintf("Failed to list role bindings across all namespaces: %v", err), "RBAC")
 		return nil

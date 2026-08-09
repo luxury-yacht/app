@@ -7,6 +7,7 @@
 package gateway
 
 import (
+	"context"
 	"fmt"
 
 	"github.com/luxury-yacht/app/backend/resources/common"
@@ -27,10 +28,10 @@ func NewService(deps common.Dependencies) *Service {
 }
 
 // Gateway returns the detail payload for a single Gateway.
-func (s *Service) Gateway(namespace, name string) (*GatewayDetails, error) {
+func (s *Service) Gateway(ctx context.Context, namespace, name string) (*GatewayDetails, error) {
 	return gatewayapi.GetResource(s.deps, "Gateway", "gateway",
 		func() (*gatewayv1.Gateway, error) {
-			return s.deps.GatewayClient.GatewayV1().Gateways(namespace).Get(s.deps.Context, name, metav1.GetOptions{})
+			return s.deps.GatewayClient.GatewayV1().Gateways(namespace).Get(ctx, name, metav1.GetOptions{})
 		}, s.buildDetails)
 }
 

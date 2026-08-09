@@ -7,6 +7,7 @@
 package listenerset
 
 import (
+	"context"
 	"fmt"
 
 	"github.com/luxury-yacht/app/backend/resources/common"
@@ -27,10 +28,10 @@ func NewService(deps common.Dependencies) *Service {
 }
 
 // ListenerSet returns the detail payload for a single ListenerSet.
-func (s *Service) ListenerSet(namespace, name string) (*ListenerSetDetails, error) {
+func (s *Service) ListenerSet(ctx context.Context, namespace, name string) (*ListenerSetDetails, error) {
 	return gatewayapi.GetResource(s.deps, "ListenerSet", "listener set",
 		func() (*gatewayv1.ListenerSet, error) {
-			return s.deps.GatewayClient.GatewayV1().ListenerSets(namespace).Get(s.deps.Context, name, metav1.GetOptions{})
+			return s.deps.GatewayClient.GatewayV1().ListenerSets(namespace).Get(ctx, name, metav1.GetOptions{})
 		}, s.buildDetails)
 }
 

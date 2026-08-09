@@ -25,7 +25,7 @@ func TestCanServeCachedResponseDeniedEvictsCaches(t *testing.T) {
 	detailKey := objectDetailCacheKey("HelmManifest", "default", "demo")
 	app.responseCacheStore(selectionKey, detailKey, "manifest")
 
-	deps := common.Dependencies{Context: context.Background()}
+	deps := common.Dependencies{}
 	if allowed := app.canServeCachedResponse(context.Background(), deps, selectionKey, schema.GroupVersionKind{Group: "helm.sh", Version: "v3", Kind: "HelmManifest"}, "default", "demo"); allowed {
 		t.Fatalf("expected permission denial to block cached response")
 	}
@@ -48,7 +48,7 @@ func TestCanServeCachedResponseAllowedKeepsCaches(t *testing.T) {
 	detailKey := objectDetailCacheKey("HelmValues", "default", "demo")
 	app.responseCacheStore(selectionKey, detailKey, "values")
 
-	deps := common.Dependencies{Context: context.Background()}
+	deps := common.Dependencies{}
 	if allowed := app.canServeCachedResponse(context.Background(), deps, selectionKey, schema.GroupVersionKind{Group: "helm.sh", Version: "v3", Kind: "HelmValues"}, "default", "demo"); !allowed {
 		t.Fatalf("expected permission allow to serve cached response")
 	}

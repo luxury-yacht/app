@@ -399,11 +399,11 @@ func TestApp_SetKubeconfigSearchPathsPersistsAndDiscovers(t *testing.T) {
 func TestApp_SetKubeconfigSearchPathsPrunesSelectionsFromRemovedPaths(t *testing.T) {
 	setTestConfigEnv(t)
 	app := NewApp()
-	app.Ctx = context.Background()
+	app.setRuntimeContext(context.Background())
 	app.appSettings = getDefaultAppSettings()
 	app.refreshAggregates.Store(&refreshAggregateHandlers{})
 	app.refreshHTTPServer = &http.Server{}
-	app.refreshCtx = context.Background()
+	setRefreshRuntimeContextForTest(app, context.Background())
 
 	baseDir := t.TempDir()
 	dirA := filepath.Join(baseDir, "configs-a")
@@ -492,7 +492,7 @@ func TestApp_SetKubeconfig(t *testing.T) {
 	t.Setenv("HOME", tempDir)
 
 	app := NewApp()
-	app.Ctx = context.Background()
+	app.setRuntimeContext(context.Background())
 
 	// Discover kubeconfigs first
 	err = app.discoverKubeconfigs()
@@ -571,7 +571,7 @@ func TestApp_SetSelectedKubeconfigs(t *testing.T) {
 	t.Setenv("HOME", tempDir)
 
 	app := NewApp()
-	app.Ctx = context.Background()
+	app.setRuntimeContext(context.Background())
 	app.kubeClientInitializer = func() error { return nil }
 
 	require.NoError(t, app.discoverKubeconfigs())
@@ -601,7 +601,7 @@ func TestApp_SetSelectedKubeconfigsAllowsSameContextNameFromDifferentFiles(t *te
 	t.Setenv("HOME", tempDir)
 
 	app := NewApp()
-	app.Ctx = context.Background()
+	app.setRuntimeContext(context.Background())
 	app.kubeClientInitializer = func() error { return nil }
 
 	require.NoError(t, app.discoverKubeconfigs())
@@ -623,7 +623,7 @@ func TestApp_SetSelectedKubeconfigsRejectsDuplicateSelections(t *testing.T) {
 	t.Setenv("HOME", tempDir)
 
 	app := NewApp()
-	app.Ctx = context.Background()
+	app.setRuntimeContext(context.Background())
 	app.kubeClientInitializer = func() error { return nil }
 
 	require.NoError(t, app.discoverKubeconfigs())
@@ -641,7 +641,7 @@ func TestApp_SetSelectedKubeconfigsClearsSelection(t *testing.T) {
 	t.Setenv("HOME", tempDir)
 
 	app := NewApp()
-	app.Ctx = context.Background()
+	app.setRuntimeContext(context.Background())
 	app.selectedKubeconfigs = []string{"/path/to/config:ctx"}
 
 	require.NoError(t, app.SetSelectedKubeconfigs(nil))
@@ -668,13 +668,14 @@ func TestApp_discoverKubeconfigs_noAutoSelection(t *testing.T) {
 	ctx := context.Background()
 
 	// Setup app state (avoid startup which has runtime calls)
-	app.Ctx = ctx
+	app.setRuntimeContext(ctx)
 	app.setupEnvironment()
 	err = app.discoverKubeconfigs()
 	require.NoError(t, err)
 
 	// Verify kubeconfigs were discovered but not auto-selected
-	assert.Equal(t, ctx, app.Ctx)
+	assert.True(t, app.runtimeAvailable())
+	assert.NoError(t, app.CtxOrBackground().Err())
 	assert.Len(t, app.availableKubeconfigs, 2)
 	assert.Empty(t, app.selectedKubeconfigs) // No auto-selection
 

@@ -13,6 +13,7 @@
 package generic
 
 import (
+	"context"
 	"fmt"
 	"strings"
 
@@ -25,7 +26,7 @@ import (
 // strictly: if two CRDs share a Kind, the caller picks which one is
 // targeted. Returns an error if the resource cannot be resolved, if the
 // dynamic client is unavailable, or if the delete call itself fails.
-func (s *Service) DeleteByGVK(gvk schema.GroupVersionKind, namespace, name string) error {
+func (s *Service) DeleteByGVK(ctx context.Context, gvk schema.GroupVersionKind, namespace, name string) error {
 	if gvk.Kind == "" {
 		return fmt.Errorf("kind is required")
 	}
@@ -39,7 +40,7 @@ func (s *Service) DeleteByGVK(gvk schema.GroupVersionKind, namespace, name strin
 	if s.deps.ResourceResolver == nil {
 		return fmt.Errorf("resource resolver not initialized")
 	}
-	resolved, ok, err := s.deps.ResourceResolver.ResolveResourceForGVK(s.context(), gvk)
+	resolved, ok, err := s.deps.ResourceResolver.ResolveResourceForGVK(ctx, gvk)
 	if err != nil {
 		err = s.logError(err, fmt.Sprintf("Failed to resolve GVR for %s", gvk.String()))
 		return fmt.Errorf("failed to resolve %s: %w", gvk.String(), err)
@@ -57,8 +58,6 @@ func (s *Service) DeleteByGVK(gvk schema.GroupVersionKind, namespace, name strin
 		err = s.logError(err, "Failed to create dynamic client")
 		return fmt.Errorf("failed to create dynamic client: %w", err)
 	}
-
-	ctx := s.context()
 
 	var deleteErr error
 	if isNamespaced {

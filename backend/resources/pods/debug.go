@@ -31,7 +31,7 @@ var (
 
 // CreateDebugContainer adds an ephemeral debug container to the specified pod
 // and waits for it to reach Running state.
-func (s *Service) CreateDebugContainer(namespace, podName, image, targetContainer string) (*types.DebugContainerResponse, error) {
+func (s *Service) CreateDebugContainer(ctx context.Context, namespace, podName, image, targetContainer string) (*types.DebugContainerResponse, error) {
 	if s.deps.KubernetesClient == nil {
 		return nil, fmt.Errorf("kubernetes client not initialized")
 	}
@@ -45,7 +45,7 @@ func (s *Service) CreateDebugContainer(namespace, podName, image, targetContaine
 		return nil, fmt.Errorf("image is required")
 	}
 
-	ctx, cancel := context.WithTimeout(s.ctx(), debugContainerPollTimeout)
+	ctx, cancel := context.WithTimeout(ctx, debugContainerPollTimeout)
 	defer cancel()
 
 	pod, err := s.deps.KubernetesClient.CoreV1().Pods(namespace).Get(ctx, podName, metav1.GetOptions{})

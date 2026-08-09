@@ -8,6 +8,7 @@
 package backend
 
 import (
+	"context"
 	"fmt"
 
 	"github.com/luxury-yacht/app/backend/resources/apiextensions"
@@ -21,7 +22,7 @@ func (a *App) GetCustomResourceDefinition(clusterID, name string) (*CustomResour
 	if deps.APIExtensionsClient == nil {
 		return nil, fmt.Errorf("apiextensions client not initialized")
 	}
-	return FetchClusterResource(a, deps, selectionKey, "CustomResourceDefinition", name, func() (*CustomResourceDefinitionDetails, error) {
-		return apiextensions.NewService(deps).CustomResourceDefinition(name)
+	return FetchClusterResource(a, deps, selectionKey, "CustomResourceDefinition", name, func(ctx context.Context) (*CustomResourceDefinitionDetails, error) {
+		return apiextensions.NewService(deps).CustomResourceDefinition(ctx, name)
 	})
 }

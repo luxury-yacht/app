@@ -65,7 +65,7 @@ func TestCronJobServiceCollectsPods(t *testing.T) {
 	deps := newDeps(t, client)
 
 	service := cronjob.NewService(deps)
-	detail, err := service.CronJob("default", "nightly")
+	detail, err := service.CronJob(context.Background(), "default", "nightly")
 	require.NoError(t, err)
 	require.Equal(t, "CronJob", detail.Kind)
 	require.NotEmpty(t, detail.ActiveJobs)
@@ -90,7 +90,7 @@ func TestCronJobServiceComputesNextScheduleBeforeFirstRun(t *testing.T) {
 	deps := newDeps(t, client)
 
 	service := cronjob.NewService(deps)
-	detail, err := service.CronJob("default", "nightly")
+	detail, err := service.CronJob(context.Background(), "default", "nightly")
 	require.NoError(t, err)
 	require.NotEmpty(t, detail.NextScheduleTime)
 	_, err = time.Parse(time.RFC3339, detail.NextScheduleTime)
@@ -109,7 +109,7 @@ func TestCronJobServiceUsesSpecTimeZoneForNextSchedule(t *testing.T) {
 	deps := newDeps(t, client)
 
 	service := cronjob.NewService(deps)
-	detail, err := service.CronJob("default", "nightly")
+	detail, err := service.CronJob(context.Background(), "default", "nightly")
 	after := time.Now()
 	require.NoError(t, err)
 	require.NotEmpty(t, detail.NextScheduleTime)
@@ -165,7 +165,7 @@ func TestCronJobServiceCollectsJobs(t *testing.T) {
 	deps := newDeps(t, client)
 
 	service := cronjob.NewService(deps)
-	detail, err := service.CronJob("default", "nightly")
+	detail, err := service.CronJob(context.Background(), "default", "nightly")
 	require.NoError(t, err)
 
 	// Verify jobs are collected and unrelated job is filtered out.
@@ -201,7 +201,6 @@ func TestCronJobServiceCollectsJobs(t *testing.T) {
 func newDeps(t testing.TB, client *cgofake.Clientset) common.Dependencies {
 	t.Helper()
 	return testsupport.NewResourceDependencies(
-		testsupport.WithDepsContext(context.Background()),
 		testsupport.WithDepsKubeClient(client),
 		testsupport.WithDepsLogger(applog.Noop),
 		testsupport.WithDepsEnsureClient(func(string) error { return nil }),

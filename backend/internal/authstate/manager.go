@@ -131,11 +131,8 @@ type Manager struct {
 	// config holds the manager configuration.
 	config Config
 
-	// ctx is the context for the manager's lifecycle.
-	ctx context.Context
-
-	// cancel cancels the manager's context (used in Shutdown).
-	cancel context.CancelFunc
+	// stopped prevents recovery from restarting after Shutdown.
+	stopped bool
 
 	// recoveryCancel cancels the current recovery goroutine, if any.
 	recoveryCancel context.CancelFunc
@@ -155,8 +152,6 @@ func New(cfg Config) *Manager {
 		backoff = DefaultBackoffSchedule
 	}
 
-	ctx, cancel := context.WithCancel(context.Background())
-
 	return &Manager{
 		state: StateValid,
 		config: Config{
@@ -170,8 +165,6 @@ func New(cfg Config) *Manager {
 			ClassifyError:             cfg.ClassifyError,
 			ConnectivityRetryInterval: cfg.ConnectivityRetryInterval,
 		},
-		ctx:    ctx,
-		cancel: cancel,
 	}
 }
 
@@ -277,8 +270,7 @@ func (m *Manager) Shutdown() {
 		m.recoveryCancel()
 		m.recoveryCancel = nil
 	}
-	// Cancel the manager's context
-	m.cancel()
+	m.stopped = true
 	m.mu.Unlock()
 
 	// Wait for goroutines to finish
@@ -316,13 +308,16 @@ func (m *Manager) markSnapshotChangeLocked() {
 // startRecoveryLocked starts the recovery process in a background goroutine.
 // Must be called with m.mu held.
 func (m *Manager) startRecoveryLocked() {
+	if m.stopped {
+		return
+	}
 	// Cancel any existing recovery
 	if m.recoveryCancel != nil {
 		m.recoveryCancel()
 	}
 
 	// Create a new context for this recovery attempt
-	recoveryCtx, recoveryCancel := context.WithCancel(m.ctx)
+	recoveryCtx, recoveryCancel := context.WithCancel(context.Background())
 	m.recoveryCancel = recoveryCancel
 
 	m.wg.Add(1)

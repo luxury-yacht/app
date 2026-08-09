@@ -29,7 +29,6 @@ import (
 func newService(t testing.TB, client *fake.Clientset) *Service {
 	t.Helper()
 	deps := testsupport.NewResourceDependencies(
-		testsupport.WithDepsContext(context.Background()),
 		testsupport.WithDepsKubeClient(client),
 		testsupport.WithDepsLogger(applog.Noop),
 	)
@@ -172,7 +171,7 @@ func TestManagerServiceDetails(t *testing.T) {
 	client := fake.NewClientset(svc, slice)
 	manager := newService(t, client)
 
-	detail, err := manager.GetService("default", "web")
+	detail, err := manager.GetService(context.Background(), "default", "web")
 	require.NoError(t, err)
 	require.Equal(t, "Service", detail.Kind)
 	require.Equal(t, "Healthy", detail.HealthStatus)
@@ -190,7 +189,7 @@ func TestManagerServiceErrorWhenGetFails(t *testing.T) {
 
 	manager := newService(t, client)
 
-	_, err := manager.GetService("default", "web")
+	_, err := manager.GetService(context.Background(), "default", "web")
 	require.Error(t, err)
 	require.Contains(t, err.Error(), "failed to get service")
 }
@@ -214,7 +213,7 @@ func TestManagerServicesHandlesEndpointListError(t *testing.T) {
 
 	manager := newService(t, client)
 
-	detail, err := manager.GetService("default", "web")
+	detail, err := manager.GetService(context.Background(), "default", "web")
 	require.NoError(t, err)
 	require.Equal(t, "Unknown", detail.HealthStatus)
 	require.Contains(t, detail.Details, "ClusterIP")
@@ -243,7 +242,7 @@ func TestManagerServicesReflectsPendingLoadBalancer(t *testing.T) {
 	client := fake.NewClientset(svc)
 	manager := newService(t, client)
 
-	detail, err := manager.GetService("default", "lb-web")
+	detail, err := manager.GetService(context.Background(), "default", "lb-web")
 	require.NoError(t, err)
 	require.Equal(t, "Pending", detail.LoadBalancerStatus)
 	require.Equal(t, "", detail.LoadBalancerIP)
@@ -301,7 +300,7 @@ func TestManagerServicesLoadBalancerActiveWhenIngressPresent(t *testing.T) {
 	client := fake.NewClientset(svc, slice)
 	manager := newService(t, client)
 
-	detail, err := manager.GetService("default", "lb-active")
+	detail, err := manager.GetService(context.Background(), "default", "lb-active")
 	require.NoError(t, err)
 	require.Equal(t, "Active", detail.LoadBalancerStatus)
 	require.Equal(t, "lb.example.com", detail.LoadBalancerIP)
@@ -319,6 +318,6 @@ func TestManagerServiceErrors(t *testing.T) {
 		Logger:           applog.Noop,
 	})
 
-	_, err := manager.GetService("default", "web")
+	_, err := manager.GetService(context.Background(), "default", "web")
 	require.Error(t, err)
 }

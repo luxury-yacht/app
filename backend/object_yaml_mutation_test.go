@@ -130,7 +130,7 @@ func setupYAMLTestApp(t *testing.T) (*App, *dynamicfake.FakeDynamicClient, strin
 		return true, patchedObj, nil
 	})
 	app := NewApp()
-	app.Ctx = context.Background()
+	app.setRuntimeContext(context.Background())
 	apiExtClient := apiextensionsfake.NewClientset()
 	clusterID := "config:ctx"
 	// Per-cluster clients are stored in clusterClients, not in global fields.
@@ -181,8 +181,6 @@ func TestObjectMutationContextRequiresOperationContext(t *testing.T) {
 func TestObjectMutationContextUsesAvailableContext(t *testing.T) {
 	callerContext, cancelCallerContext := context.WithCancel(context.Background())
 	defer cancelCallerContext()
-	dependencyContext, cancelDependencyContext := context.WithCancel(context.Background())
-	defer cancelDependencyContext()
 	baseDependencies := common.Dependencies{
 		KubernetesClient: clientfake.NewClientset(),
 		DynamicClient:    dynamicfake.NewSimpleDynamicClient(runtime.NewScheme()),
@@ -195,7 +193,6 @@ func TestObjectMutationContextUsesAvailableContext(t *testing.T) {
 		expected context.Context
 	}{
 		{name: "caller context", ctx: callerContext, deps: baseDependencies, expected: callerContext},
-		{name: "dependency context", deps: baseDependencies.CloneWithContext(dependencyContext), expected: dependencyContext},
 	}
 	for _, test := range tests {
 		t.Run(test.name, func(t *testing.T) {

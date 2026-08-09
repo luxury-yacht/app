@@ -312,10 +312,10 @@ func (s *Service) runLoop(ctx context.Context) error {
 	// incremental appliers TryLock syncMu and DROP their update while a sync runs
 	// (the sync reconciles from the same stores).
 	if s.opts.EnableReactiveUpdates && s.deps.InformerFactory != nil {
-		notifier := newWatchNotifier(ctx, s)
+		notifier := newWatchNotifier(s)
 		go func() {
 			registerWatchHandlers(s.deps.InformerFactory, s.deps.APIExtensionsInformerFactory, notifier, s)
-			go notifier.run()
+			go notifier.run(ctx)
 			s.logInfo("catalog reactive updates enabled")
 		}()
 	}

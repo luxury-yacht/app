@@ -8,6 +8,7 @@
 package helm
 
 import (
+	"context"
 	"fmt"
 	"strings"
 
@@ -22,7 +23,7 @@ import (
 )
 
 // ReleaseDetails returns detailed information about a Helm release.
-func (s *Service) ReleaseDetails(namespace, name string) (*HelmReleaseDetails, error) {
+func (s *Service) ReleaseDetails(ctx context.Context, namespace, name string) (*HelmReleaseDetails, error) {
 	if err := s.ensureClient(); err != nil {
 		return nil, err
 	}
@@ -45,8 +46,8 @@ func (s *Service) ReleaseDetails(namespace, name string) (*HelmReleaseDetails, e
 		s.logWarn(fmt.Sprintf("Failed to get Helm history for %s/%s: %v", namespace, name, err))
 	}
 
-	resources := s.extractResourcesFromManifest(release.Manifest, namespace)
-	resourceLinks := s.extractResourceLinksFromManifest(release.Manifest, namespace)
+	resources := s.extractResourcesFromManifest(ctx, release.Manifest, namespace)
+	resourceLinks := s.extractResourceLinksFromManifest(ctx, release.Manifest, namespace)
 	opts := resourcemodel.ResourceModelBuildOptions{
 		Materialization: resourcemodel.MaterializeSummaryFacts | resourcemodel.MaterializeRelationshipFacts | resourcemodel.MaterializeDetailFacts,
 	}
@@ -207,11 +208,11 @@ func (s *Service) initActionConfig(settings *cli.EnvSettings, namespace string) 
 	return actionConfig, nil
 }
 
-func (s *Service) extractResourcesFromManifest(manifest, defaultNamespace string) []HelmResource {
+func (s *Service) extractResourcesFromManifest(ctx context.Context, manifest, defaultNamespace string) []HelmResource {
 	resources := newManifestResourceAccumulator(s, defaultNamespace)
 	for _, document := range splitManifestDocuments(manifest) {
 		if object, ok := parseManifestDocument(document); ok {
-			resources.addObject(object)
+			resources.addObject(ctx, object)
 		}
 	}
 	return resources.items
@@ -256,7 +257,7 @@ func parseManifestDocument(document string) (map[string]interface{}, bool) {
 	return object, object != nil
 }
 
-func (resources *manifestResourceAccumulator) addObject(object map[string]interface{}) {
+func (resources *manifestResourceAccumulator) addObject(ctx context.Context, object map[string]interface{}) {
 	kind, _ := object["kind"].(string)
 	if kind == "" {
 		return
@@ -265,23 +266,23 @@ func (resources *manifestResourceAccumulator) addObject(object map[string]interf
 	// resources), allowing Helm-managed CRDs to retain their complete GVK.
 	apiVersion, _ := object["apiVersion"].(string)
 	if strings.HasSuffix(kind, "List") {
-		resources.addListItems(object, apiVersion)
+		resources.addListItems(ctx, object, apiVersion)
 		return
 	}
-	resources.addResource(object, apiVersion, kind)
+	resources.addResource(ctx, object, apiVersion, kind)
 }
 
-func (resources *manifestResourceAccumulator) addListItems(object map[string]interface{}, inheritedAPIVersion string) {
+func (resources *manifestResourceAccumulator) addListItems(ctx context.Context, object map[string]interface{}, inheritedAPIVersion string) {
 	items, ok := object["items"].([]interface{})
 	if !ok {
 		return
 	}
 	for _, item := range items {
-		resources.addListItem(item, inheritedAPIVersion)
+		resources.addListItem(ctx, item, inheritedAPIVersion)
 	}
 }
 
-func (resources *manifestResourceAccumulator) addListItem(item interface{}, inheritedAPIVersion string) {
+func (resources *manifestResourceAccumulator) addListItem(ctx context.Context, item interface{}, inheritedAPIVersion string) {
 	object, ok := toStringMap(item)
 	if !ok {
 		return
@@ -294,10 +295,10 @@ func (resources *manifestResourceAccumulator) addListItem(item interface{}, inhe
 	if apiVersion == "" {
 		apiVersion = inheritedAPIVersion
 	}
-	resources.addResource(object, apiVersion, kind)
+	resources.addResource(ctx, object, apiVersion, kind)
 }
 
-func (resources *manifestResourceAccumulator) addResource(object map[string]interface{}, apiVersion, kind string) {
+func (resources *manifestResourceAccumulator) addResource(ctx context.Context, object map[string]interface{}, apiVersion, kind string) {
 	name, namespace, namespaceExplicit := extractNameNamespace(object, resources.defaultNamespace)
 	if name == "" {
 		return
@@ -308,7 +309,7 @@ func (resources *manifestResourceAccumulator) addResource(object map[string]inte
 	}
 	resources.seen[key] = struct{}{}
 	identity := resourcemodel.ResolveHelmManifestResourceIdentityWithResolver(
-		resources.service.deps.Common.Context,
+		ctx,
 		resources.service.deps.Common.ResourceResolver,
 		apiVersion,
 		kind,
@@ -374,15 +375,15 @@ func toStringMap(value interface{}) (map[string]interface{}, bool) {
 	}
 }
 
-func (s *Service) extractResourceLinksFromManifest(manifest, defaultNamespace string) []resourcemodel.ResourceLink {
-	resources := s.extractResourcesFromManifest(manifest, defaultNamespace)
+func (s *Service) extractResourceLinksFromManifest(ctx context.Context, manifest, defaultNamespace string) []resourcemodel.ResourceLink {
+	resources := s.extractResourcesFromManifest(ctx, manifest, defaultNamespace)
 	if len(resources) == 0 {
 		return nil
 	}
 	links := make([]resourcemodel.ResourceLink, 0, len(resources))
 	for _, resource := range resources {
 		link := resourcemodel.BuildHelmManifestResourceLinkWithNamespaceSourceAndResolver(
-			s.deps.Common.Context,
+			ctx,
 			s.deps.Common.ResourceResolver,
 			s.deps.Common.ClusterID,
 			resource.APIVersion,

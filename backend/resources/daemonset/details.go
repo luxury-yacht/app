@@ -9,6 +9,7 @@
 package daemonset
 
 import (
+	"context"
 	"fmt"
 
 	"github.com/luxury-yacht/app/backend/internal/logsources"
@@ -34,19 +35,19 @@ func NewService(deps common.Dependencies) *Service {
 }
 
 // DaemonSet returns the detailed view for a single daemonset.
-func (s *Service) DaemonSet(namespace, name string) (*DaemonSetDetails, error) {
+func (s *Service) DaemonSet(ctx context.Context, namespace, name string) (*DaemonSetDetails, error) {
 	client := s.deps.KubernetesClient
 	if client == nil {
 		return nil, fmt.Errorf("kubernetes client not initialized")
 	}
 
-	ds, err := client.AppsV1().DaemonSets(namespace).Get(s.deps.Context, name, metav1.GetOptions{})
+	ds, err := client.AppsV1().DaemonSets(namespace).Get(ctx, name, metav1.GetOptions{})
 	if err != nil {
 		err = s.deps.LogResourceRequestFailure(err, fmt.Sprintf("Failed to get DaemonSet %s/%s", namespace, name), "get", Identity, logsources.ResourceLoader)
 		return nil, fmt.Errorf("failed to get daemonset: %w", err)
 	}
 
-	podsForSet, podMetrics, err := s.getDaemonSetPods(ds)
+	podsForSet, podMetrics, err := s.getDaemonSetPods(ctx, ds)
 	if err != nil {
 		s.deps.Logger.Warn(fmt.Sprintf("Failed to collect pods for DaemonSet %s/%s: %v", namespace, name, err), logsources.ResourceLoader)
 	}
@@ -101,19 +102,19 @@ func (s *Service) buildDaemonSetDetails(
 	return details
 }
 
-func (s *Service) getDaemonSetPods(daemonSet *appsv1.DaemonSet) ([]corev1.Pod, map[string]*metricsv1beta1.PodMetrics, error) {
+func (s *Service) getDaemonSetPods(ctx context.Context, daemonSet *appsv1.DaemonSet) ([]corev1.Pod, map[string]*metricsv1beta1.PodMetrics, error) {
 	client := s.deps.KubernetesClient
 	if client == nil {
 		return nil, nil, fmt.Errorf("kubernetes client not initialized")
 	}
 
 	selector := labels.Set(daemonSet.Spec.Selector.MatchLabels).String()
-	podList, err := client.CoreV1().Pods(daemonSet.Namespace).List(s.deps.Context, metav1.ListOptions{LabelSelector: selector})
+	podList, err := client.CoreV1().Pods(daemonSet.Namespace).List(ctx, metav1.ListOptions{LabelSelector: selector})
 	if err != nil {
 		return nil, nil, err
 	}
 
 	filtered := common.FilterPodsByControllerOwner(podList, "DaemonSet", daemonSet.Name)
-	metrics := pods.NewService(s.deps).GetPodMetricsForPods(daemonSet.Namespace, filtered)
+	metrics := pods.NewService(s.deps).GetPodMetricsForPods(ctx, daemonSet.Namespace, filtered)
 	return filtered, metrics, nil
 }

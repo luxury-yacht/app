@@ -8,6 +8,8 @@
 package grpcroute
 
 import (
+	"context"
+
 	"github.com/luxury-yacht/app/backend/resources/common"
 	"github.com/luxury-yacht/app/backend/resources/gatewayapi"
 	"github.com/luxury-yacht/app/backend/resources/types"
@@ -26,10 +28,10 @@ func NewService(deps common.Dependencies) *Service {
 }
 
 // GRPCRoute returns the detail payload for a single GRPCRoute.
-func (s *Service) GRPCRoute(namespace, name string) (*types.RouteDetails, error) {
+func (s *Service) GRPCRoute(ctx context.Context, namespace, name string) (*types.RouteDetails, error) {
 	return gatewayapi.GetResource(s.deps, "GRPCRoute", "grpc route",
 		func() (*gatewayv1.GRPCRoute, error) {
-			return s.deps.GatewayClient.GatewayV1().GRPCRoutes(namespace).Get(s.deps.Context, name, metav1.GetOptions{})
+			return s.deps.GatewayClient.GatewayV1().GRPCRoutes(namespace).Get(ctx, name, metav1.GetOptions{})
 		}, s.buildDetails)
 }
 

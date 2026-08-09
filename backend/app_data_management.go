@@ -1,6 +1,7 @@
 package backend
 
 import (
+	"context"
 	"encoding/json"
 	"fmt"
 	"io"
@@ -143,21 +144,25 @@ func (a *App) requireDataManagementContext() error {
 	if a == nil {
 		return fmt.Errorf("app is not initialised")
 	}
-	if a.Ctx == nil {
+	if !a.runtimeAvailable() {
 		return fmt.Errorf("application context is not available")
 	}
 	return nil
 }
 
 func (a *App) exportDataFile(title, defaultFilename string, document any) (DataManagementResult, error) {
-	path, err := runtimeSaveFileDialog(a.Ctx, wailsruntime.SaveDialogOptions{
-		Title:            title,
-		DefaultDirectory: dataManagementDefaultDirectory(),
-		DefaultFilename:  defaultFilename,
-		Filters: []wailsruntime.FileFilter{
-			{DisplayName: "JSON files (*.json)", Pattern: "*.json"},
-		},
-		CanCreateDirectories: true,
+	var path string
+	var err error
+	a.runWithRuntimeContext(func(ctx context.Context) {
+		path, err = runtimeSaveFileDialog(ctx, wailsruntime.SaveDialogOptions{
+			Title:            title,
+			DefaultDirectory: dataManagementDefaultDirectory(),
+			DefaultFilename:  defaultFilename,
+			Filters: []wailsruntime.FileFilter{
+				{DisplayName: "JSON files (*.json)", Pattern: "*.json"},
+			},
+			CanCreateDirectories: true,
+		})
 	})
 	if err != nil {
 		return DataManagementResult{}, fmt.Errorf("select export file: %w", err)
@@ -179,12 +184,14 @@ func (a *App) exportDataFile(title, defaultFilename string, document any) (DataM
 }
 
 func (a *App) chooseDataImportFile(title string) (path string, canceled bool, err error) {
-	path, err = runtimeOpenFileDialog(a.Ctx, wailsruntime.OpenDialogOptions{
-		Title:            title,
-		DefaultDirectory: dataManagementDefaultDirectory(),
-		Filters: []wailsruntime.FileFilter{
-			{DisplayName: "JSON files (*.json)", Pattern: "*.json"},
-		},
+	a.runWithRuntimeContext(func(ctx context.Context) {
+		path, err = runtimeOpenFileDialog(ctx, wailsruntime.OpenDialogOptions{
+			Title:            title,
+			DefaultDirectory: dataManagementDefaultDirectory(),
+			Filters: []wailsruntime.FileFilter{
+				{DisplayName: "JSON files (*.json)", Pattern: "*.json"},
+			},
+		})
 	})
 	if err != nil {
 		return "", false, fmt.Errorf("select import file: %w", err)

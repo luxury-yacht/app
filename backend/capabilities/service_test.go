@@ -62,7 +62,6 @@ func TestEvaluateAllowed(t *testing.T) {
 
 	service := NewService(Dependencies{
 		Common: common.Dependencies{
-			Context:          context.Background(),
 			Logger:           applog.Noop,
 			KubernetesClient: client,
 		},
@@ -111,7 +110,6 @@ func TestEvaluateSlowWarningOmitsCallerIDAndResourceNames(t *testing.T) {
 	timeIndex := 0
 	service := NewService(Dependencies{
 		Common: common.Dependencies{
-			Context:          context.Background(),
 			Logger:           logger,
 			KubernetesClient: client,
 		},
@@ -164,7 +162,6 @@ func TestEvaluateLogsOneSummaryWhenEveryReviewFails(t *testing.T) {
 	logger := &captureLogger{}
 	service := NewService(Dependencies{
 		Common: common.Dependencies{
-			Context:          context.Background(),
 			Logger:           logger,
 			KubernetesClient: client,
 		},
@@ -216,7 +213,7 @@ func TestEvaluateSummaryDescribesFailedChecksWithoutResourceNames(t *testing.T) 
 
 	logger := &captureLogger{}
 	service := NewService(Dependencies{Common: common.Dependencies{
-		Context: context.Background(), Logger: logger, KubernetesClient: client,
+		Logger: logger, KubernetesClient: client,
 	}})
 
 	checks := []ReviewAttributes{
@@ -256,7 +253,7 @@ func TestEvaluateSummaryPutsTheCauseBeforeTheIdentities(t *testing.T) {
 
 	logger := &captureLogger{}
 	service := NewService(Dependencies{Common: common.Dependencies{
-		Context: context.Background(), Logger: logger, KubernetesClient: client,
+		Logger: logger, KubernetesClient: client,
 	}})
 
 	// Namespace-scoped checks keep their scope type, never the namespace value.
@@ -299,7 +296,6 @@ func TestEvaluateSummaryCountsOnlyTheFailedReviews(t *testing.T) {
 	logger := &captureLogger{}
 	service := NewService(Dependencies{
 		Common: common.Dependencies{
-			Context:          context.Background(),
 			Logger:           logger,
 			KubernetesClient: client,
 		},
@@ -334,7 +330,6 @@ func TestEvaluateLogsNothingWhenEveryReviewSucceeds(t *testing.T) {
 	logger := &captureLogger{}
 	service := NewService(Dependencies{
 		Common: common.Dependencies{
-			Context:          context.Background(),
 			Logger:           logger,
 			KubernetesClient: client,
 		},
@@ -367,7 +362,6 @@ func TestEvaluateDenied(t *testing.T) {
 
 	service := NewService(Dependencies{
 		Common: common.Dependencies{
-			Context:          context.Background(),
 			Logger:           applog.Noop,
 			KubernetesClient: client,
 		},
@@ -410,7 +404,6 @@ func TestEvaluateHandlesAPIError(t *testing.T) {
 
 	service := NewService(Dependencies{
 		Common: common.Dependencies{
-			Context:          context.Background(),
 			Logger:           applog.Noop,
 			KubernetesClient: client,
 		},
@@ -456,7 +449,6 @@ func TestEvaluateRetriesTransientAuthorizationError(t *testing.T) {
 
 	service := NewService(Dependencies{
 		Common: common.Dependencies{
-			Context:          context.Background(),
 			Logger:           applog.Noop,
 			KubernetesClient: client,
 		},
@@ -493,7 +485,6 @@ func TestEvaluateUsesRateLimiter(t *testing.T) {
 
 	service := NewService(Dependencies{
 		Common: common.Dependencies{
-			Context:          context.Background(),
 			Logger:           applog.Noop,
 			KubernetesClient: client,
 		},
@@ -603,7 +594,6 @@ func TestEvaluateSkipsAPICallWhenRateLimiterErrors(t *testing.T) {
 
 	service := NewService(Dependencies{
 		Common: common.Dependencies{
-			Context:          context.Background(),
 			Logger:           applog.Noop,
 			KubernetesClient: client,
 		},

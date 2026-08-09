@@ -25,7 +25,6 @@ import (
 func newService(t testing.TB, client *fake.Clientset) *resourcequota.Service {
 	t.Helper()
 	deps := testsupport.NewResourceDependencies(
-		testsupport.WithDepsContext(context.Background()),
 		testsupport.WithDepsKubeClient(client),
 		testsupport.WithDepsLogger(applog.Noop),
 		testsupport.WithDepsEnsureClient(func(string) error { return nil }),
@@ -35,7 +34,7 @@ func newService(t testing.TB, client *fake.Clientset) *resourcequota.Service {
 
 func TestResourceQuotaRequiresClient(t *testing.T) {
 	svc := resourcequota.NewService(testsupport.NewResourceDependencies())
-	_, err := svc.ResourceQuota("default", "rq")
+	_, err := svc.ResourceQuota(context.Background(), "default", "rq")
 	require.Error(t, err)
 }
 
@@ -62,7 +61,7 @@ func TestServiceResourceQuotaDetails(t *testing.T) {
 	client := fake.NewClientset(rq.DeepCopy())
 	service := newService(t, client)
 
-	detail, err := service.ResourceQuota("default", "rq")
+	detail, err := service.ResourceQuota(context.Background(), "default", "rq")
 	require.NoError(t, err)
 	require.Equal(t, "ResourceQuota", detail.Kind)
 	require.Equal(t, "4", detail.Hard[string(corev1.ResourceCPU)])

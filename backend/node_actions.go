@@ -23,10 +23,11 @@ func (a *App) cordonNodeAction(target ObjectActionTargetRef) error {
 	if err != nil {
 		return err
 	}
-	if err := a.requireNodeMaintenancePermission(deps, target.Name); err != nil {
+	ctx := a.CtxOrBackground()
+	if err := a.requireNodeMaintenancePermission(ctx, deps, target.Name); err != nil {
 		return err
 	}
-	if err := nodes.NewService(deps).Cordon(target.Name); err != nil {
+	if err := nodes.NewService(deps).Cordon(ctx, target.Name); err != nil {
 		return err
 	}
 	a.clearNodeCaches(selectionKey, target.Name)
@@ -40,10 +41,11 @@ func (a *App) uncordonNodeAction(target ObjectActionTargetRef) error {
 	if err != nil {
 		return err
 	}
-	if err := a.requireNodeMaintenancePermission(deps, target.Name); err != nil {
+	ctx := a.CtxOrBackground()
+	if err := a.requireNodeMaintenancePermission(ctx, deps, target.Name); err != nil {
 		return err
 	}
-	if err := nodes.NewService(deps).Uncordon(target.Name); err != nil {
+	if err := nodes.NewService(deps).Uncordon(ctx, target.Name); err != nil {
 		return err
 	}
 	a.clearNodeCaches(selectionKey, target.Name)
@@ -60,13 +62,14 @@ func (a *App) drainNodeAction(target ObjectActionTargetRef, options DrainNodeOpt
 	if err != nil {
 		return err
 	}
-	if err := a.requireNodeMaintenancePermission(deps, target.Name); err != nil {
+	ctx := a.CtxOrBackground()
+	if err := a.requireNodeMaintenancePermission(ctx, deps, target.Name); err != nil {
 		return err
 	}
-	if err := a.requireDrainPodPermission(deps, options); err != nil {
+	if err := a.requireDrainPodPermission(ctx, deps, options); err != nil {
 		return err
 	}
-	if err := nodes.NewService(deps).Drain(target.Name, options); err != nil {
+	if err := nodes.NewService(deps).Drain(ctx, target.Name, options); err != nil {
 		return err
 	}
 	a.clearNodeCaches(selectionKey, target.Name)
@@ -83,13 +86,14 @@ func (a *App) startDrainNodeAction(target ObjectActionTargetRef, options DrainNo
 	if err != nil {
 		return "", err
 	}
-	if err := a.requireNodeMaintenancePermission(deps, target.Name); err != nil {
+	ctx := a.CtxOrBackground()
+	if err := a.requireNodeMaintenancePermission(ctx, deps, target.Name); err != nil {
 		return "", err
 	}
-	if err := a.requireDrainPodPermission(deps, options); err != nil {
+	if err := a.requireDrainPodPermission(ctx, deps, options); err != nil {
 		return "", err
 	}
-	job, err := nodes.NewService(deps).StartDrainWithCompletion(target.Name, options, func(jobID string) {
+	job, err := nodes.NewService(deps).StartDrainWithCompletion(ctx, target.Name, options, func(jobID string) {
 		a.clearNodeCaches(selectionKey, target.Name)
 		a.unregisterRuntimeOperation(jobID)
 	})
@@ -117,7 +121,7 @@ func (a *App) CancelDrainNodeJob(clusterID, jobID string) error {
 	if !ok {
 		return fmt.Errorf("drain job %s not found for cluster %s", trimmedJobID, deps.ClusterID)
 	}
-	if err := a.requireNodeMaintenancePermission(deps, job.NodeName); err != nil {
+	if err := a.requireNodeMaintenancePermission(a.CtxOrBackground(), deps, job.NodeName); err != nil {
 		return err
 	}
 	return store.CancelDrainForCluster(trimmedJobID, deps.ClusterID)
@@ -130,7 +134,8 @@ func (a *App) deleteNodeAction(target ObjectActionTargetRef, force bool) error {
 	if err != nil {
 		return err
 	}
-	if err := a.requireResourcePermission(deps.Context, deps, resourcePermissionCheck{
+	ctx := a.CtxOrBackground()
+	if err := a.requireResourcePermission(ctx, deps, resourcePermissionCheck{
 		Group:   target.Group,
 		Version: target.Version,
 		Kind:    target.Kind,
@@ -139,7 +144,7 @@ func (a *App) deleteNodeAction(target ObjectActionTargetRef, force bool) error {
 	}); err != nil {
 		return err
 	}
-	if err := nodes.NewService(deps).Delete(target.Name, force); err != nil {
+	if err := nodes.NewService(deps).Delete(ctx, target.Name, force); err != nil {
 		return err
 	}
 	a.clearNodeCaches(selectionKey, target.Name)

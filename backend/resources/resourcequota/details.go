@@ -7,6 +7,7 @@
 package resourcequota
 
 import (
+	"context"
 	"fmt"
 
 	"github.com/luxury-yacht/app/backend/internal/logsources"
@@ -27,13 +28,13 @@ func NewService(deps common.Dependencies) *Service {
 }
 
 // ResourceQuota returns a detailed quota description.
-func (s *Service) ResourceQuota(namespace, name string) (*ResourceQuotaDetails, error) {
+func (s *Service) ResourceQuota(ctx context.Context, namespace, name string) (*ResourceQuotaDetails, error) {
 	client := s.deps.KubernetesClient
 	if client == nil {
 		return nil, fmt.Errorf("kubernetes client not initialized")
 	}
 
-	rq, err := client.CoreV1().ResourceQuotas(namespace).Get(s.deps.Context, name, metav1.GetOptions{})
+	rq, err := client.CoreV1().ResourceQuotas(namespace).Get(ctx, name, metav1.GetOptions{})
 	if err != nil {
 		err = s.logError(err, fmt.Sprintf("Failed to get resource quota %s/%s", namespace, name))
 		return nil, fmt.Errorf("failed to get resource quota: %w", err)

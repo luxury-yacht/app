@@ -36,10 +36,11 @@ var (
 
 const beforeCloseSelectionFlushTimeout = 2 * time.Second
 
-// Startup is called when the app starts. The context passed is stored for later use.
+// Startup is called when the app starts. Backend operations retain only its
+// cancellation signal; Wails calls use the runtime capability installed here.
 func (a *App) Startup(ctx context.Context) {
-	a.Ctx = ctx
-	a.eventEmitter = runtimeEventsEmit
+	a.setRuntimeContext(ctx)
+	a.eventEmitter = bindRuntimeEventEmitter(ctx, runtimeEventsEmit)
 	a.initializeClusterLifecycle()
 	a.logger.Info("Application startup initiated", logsources.App)
 	a.startDiagnosticDumpHandler(ctx)
@@ -59,6 +60,15 @@ func (a *App) Startup(ctx context.Context) {
 	}
 	a.startUpdateCheck()
 	a.scheduleInstallationMetricRegistration(ctx)
+}
+
+func bindRuntimeEventEmitter(
+	ctx context.Context,
+	emit func(context.Context, string, ...interface{}),
+) func(context.Context, string, ...interface{}) {
+	return func(_ context.Context, name string, args ...interface{}) {
+		emit(ctx, name, args...)
+	}
 }
 
 func (a *App) initializeClusterLifecycle() {

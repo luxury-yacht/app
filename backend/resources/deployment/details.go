@@ -9,6 +9,7 @@
 package deployment
 
 import (
+	"context"
 	"fmt"
 	"sort"
 
@@ -36,20 +37,20 @@ func NewService(deps common.Dependencies) *Service {
 }
 
 // Deployment returns the detailed view for a single deployment.
-func (s *Service) Deployment(namespace, name string) (*DeploymentDetails, error) {
+func (s *Service) Deployment(ctx context.Context, namespace, name string) (*DeploymentDetails, error) {
 	client := s.deps.KubernetesClient
 	if client == nil {
 		return nil, fmt.Errorf("kubernetes client not initialized")
 	}
 
-	deployment, err := client.AppsV1().Deployments(namespace).Get(s.deps.Context, name, metav1.GetOptions{})
+	deployment, err := client.AppsV1().Deployments(namespace).Get(ctx, name, metav1.GetOptions{})
 	if err != nil {
 		err = s.deps.LogResourceRequestFailure(err, fmt.Sprintf("Failed to get deployment %s/%s", namespace, name), "get", Identity, logsources.ResourceLoader)
 		return nil, fmt.Errorf("failed to get deployment: %w", err)
 	}
 
 	// getDeploymentPods also fetches ReplicaSets for filtering; reuse them to avoid a second list call.
-	deploymentPods, podMetrics, replicaSets, err := s.getDeploymentPods(deployment)
+	deploymentPods, podMetrics, replicaSets, err := s.getDeploymentPods(ctx, deployment)
 	if err != nil {
 		s.deps.Logger.Warn(fmt.Sprintf("Failed to collect pods for deployment %s/%s: %v", namespace, name, err), logsources.ResourceLoader)
 	}
@@ -114,25 +115,25 @@ func (s *Service) buildDeploymentDetails(
 	return details
 }
 
-func (s *Service) getDeploymentPods(deployment *appsv1.Deployment) ([]corev1.Pod, map[string]*metricsv1beta1.PodMetrics, *appsv1.ReplicaSetList, error) {
+func (s *Service) getDeploymentPods(ctx context.Context, deployment *appsv1.Deployment) ([]corev1.Pod, map[string]*metricsv1beta1.PodMetrics, *appsv1.ReplicaSetList, error) {
 	client := s.deps.KubernetesClient
 	if client == nil {
 		return nil, nil, nil, fmt.Errorf("kubernetes client not initialized")
 	}
 
 	labelSelector := labels.Set(deployment.Spec.Selector.MatchLabels).String()
-	podList, err := client.CoreV1().Pods(deployment.Namespace).List(s.deps.Context, metav1.ListOptions{LabelSelector: labelSelector})
+	podList, err := client.CoreV1().Pods(deployment.Namespace).List(ctx, metav1.ListOptions{LabelSelector: labelSelector})
 	if err != nil {
 		return nil, nil, nil, err
 	}
 
-	replicaSets, err := client.AppsV1().ReplicaSets(deployment.Namespace).List(s.deps.Context, metav1.ListOptions{LabelSelector: labelSelector})
+	replicaSets, err := client.AppsV1().ReplicaSets(deployment.Namespace).List(ctx, metav1.ListOptions{LabelSelector: labelSelector})
 	if err != nil {
 		replicaSets = nil
 	}
 
 	filteredPods := filterPodsForDeployment(deployment, podList, replicaSets)
-	metrics := pods.NewService(s.deps).GetPodMetricsForPods(deployment.Namespace, filteredPods)
+	metrics := pods.NewService(s.deps).GetPodMetricsForPods(ctx, deployment.Namespace, filteredPods)
 
 	return filteredPods, metrics, replicaSets, nil
 }

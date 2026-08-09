@@ -1,6 +1,7 @@
 package backend
 
 import (
+	"context"
 	"encoding/json"
 	"fmt"
 	"os"
@@ -639,9 +640,16 @@ func writeFileAtomicWithReplace(
 }
 
 func (a *App) SaveWindowSettings() error {
-	x, y := runtimeWindowGetPosition(a.Ctx)
-	width, height := runtimeWindowGetSize(a.Ctx)
-	maximized := runtimeWindowIsMaximised(a.Ctx)
+	if !a.runtimeAvailable() {
+		return fmt.Errorf("application context is not available")
+	}
+	var x, y, width, height int
+	var maximized bool
+	a.runWithRuntimeContext(func(ctx context.Context) {
+		x, y = runtimeWindowGetPosition(ctx)
+		width, height = runtimeWindowGetSize(ctx)
+		maximized = runtimeWindowIsMaximised(ctx)
+	})
 
 	a.windowSettings = &WindowSettings{X: x, Y: y, Width: width, Height: height, Maximized: maximized}
 
@@ -1176,7 +1184,7 @@ func (a *App) applyErrorReportingSideEffect(apply, enabled bool) {
 		return
 	}
 	if enabled {
-		a.scheduleInstallationMetricRegistration(a.Ctx)
+		a.scheduleInstallationMetricRegistration(a.CtxOrBackground())
 	}
 }
 
@@ -1370,7 +1378,7 @@ func (a *App) GetAppearanceModeInfo() (*AppearanceModeInfo, error) {
 func (a *App) ShowSettings() {
 	maxRetries := config.AppMenuTriggerMaxRetries
 	for i := 0; i < maxRetries; i++ {
-		if a.Ctx != nil {
+		if a.runtimeAvailable() {
 			a.logger.Debug("Settings menu triggered", logsources.App)
 			a.emitEvent("open-settings")
 			return
@@ -1385,7 +1393,7 @@ func (a *App) ShowSettings() {
 func (a *App) ShowAbout() {
 	maxRetries := config.AppMenuTriggerMaxRetries
 	for i := 0; i < maxRetries; i++ {
-		if a.Ctx != nil {
+		if a.runtimeAvailable() {
 			a.logger.Debug("About menu triggered", logsources.App)
 			a.emitEvent("open-about")
 			return

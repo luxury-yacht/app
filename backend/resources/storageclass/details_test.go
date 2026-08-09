@@ -26,7 +26,6 @@ import (
 func newService(t testing.TB, client *fake.Clientset) *storageclass.Service {
 	t.Helper()
 	deps := testsupport.NewResourceDependencies(
-		testsupport.WithDepsContext(context.Background()),
 		testsupport.WithDepsKubeClient(client),
 		testsupport.WithDepsLogger(applog.Noop),
 	)
@@ -42,7 +41,7 @@ func TestServiceStorageClassDetails(t *testing.T) {
 	client := fake.NewClientset(sc.DeepCopy(), pv.DeepCopy())
 	service := newService(t, client)
 
-	detail, err := service.StorageClass("standard")
+	detail, err := service.StorageClass(context.Background(), "standard")
 	require.NoError(t, err)
 	require.Equal(t, "StorageClass", detail.Kind)
 	require.Equal(t, "Default", detail.Status)
@@ -70,7 +69,7 @@ func TestServiceStorageClassDetailsIncludesTopologies(t *testing.T) {
 	client := fake.NewClientset(sc.DeepCopy(), pv.DeepCopy())
 	service := newService(t, client)
 
-	detail, err := service.StorageClass("zonal")
+	detail, err := service.StorageClass(context.Background(), "zonal")
 	require.NoError(t, err)
 	require.Len(t, detail.AllowedTopologies, 1)
 	require.Contains(t, detail.Details, "PV(s)")
@@ -85,7 +84,7 @@ func TestServiceStorageClassDetailsHandlesPVListFailure(t *testing.T) {
 
 	service := newService(t, client)
 
-	detail, err := service.StorageClass("slow")
+	detail, err := service.StorageClass(context.Background(), "slow")
 	require.NoError(t, err)
 	require.NotNil(t, detail)
 	require.Empty(t, detail.PersistentVolumes)

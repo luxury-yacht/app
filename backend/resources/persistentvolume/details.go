@@ -7,6 +7,7 @@
 package persistentvolume
 
 import (
+	"context"
 	"fmt"
 	"strings"
 
@@ -28,12 +29,12 @@ func NewService(deps common.Dependencies) *Service {
 }
 
 // PersistentVolume returns the detailed view for a single persistent volume.
-func (s *Service) PersistentVolume(name string) (*PersistentVolumeDetails, error) {
+func (s *Service) PersistentVolume(ctx context.Context, name string) (*PersistentVolumeDetails, error) {
 	if s.deps.KubernetesClient == nil {
 		return nil, fmt.Errorf("kubernetes client not initialized")
 	}
 
-	pv, err := s.deps.KubernetesClient.CoreV1().PersistentVolumes().Get(s.deps.Context, name, metav1.GetOptions{})
+	pv, err := s.deps.KubernetesClient.CoreV1().PersistentVolumes().Get(ctx, name, metav1.GetOptions{})
 	if err != nil {
 		err = s.deps.LogResourceRequestFailure(err, fmt.Sprintf("Failed to get persistent volume %s", name), "get", Identity, logsources.ResourceLoader)
 		return nil, fmt.Errorf("failed to get persistent volume: %w", err)

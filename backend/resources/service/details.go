@@ -35,14 +35,14 @@ func NewService(deps common.Dependencies) *Service {
 
 // GetService returns the detailed view for a single service, including endpoint
 // health derived from its EndpointSlices.
-func (s *Service) GetService(namespace, name string) (*ServiceDetails, error) {
-	svc, err := s.deps.KubernetesClient.CoreV1().Services(namespace).Get(s.deps.Context, name, metav1.GetOptions{})
+func (s *Service) GetService(ctx context.Context, namespace, name string) (*ServiceDetails, error) {
+	svc, err := s.deps.KubernetesClient.CoreV1().Services(namespace).Get(ctx, name, metav1.GetOptions{})
 	if err != nil {
 		err = s.deps.LogResourceRequestFailure(err, fmt.Sprintf("Failed to get service %s/%s", namespace, name), "get", Identity, logsources.ResourceLoader)
 		return nil, fmt.Errorf("failed to get service: %w", err)
 	}
 
-	ctx, cancel := s.ctx()
+	ctx, cancel := serviceLookupContext(ctx)
 	defer cancel()
 	slices, err := s.listEndpointSlices(ctx, namespace, name)
 	if err != nil {
@@ -52,8 +52,8 @@ func (s *Service) GetService(namespace, name string) (*ServiceDetails, error) {
 	return s.buildServiceDetails(svc, slices), nil
 }
 
-func (s *Service) ctx() (context.Context, context.CancelFunc) {
-	base := s.deps.Context
+func serviceLookupContext(ctx context.Context) (context.Context, context.CancelFunc) {
+	base := ctx
 	if base == nil {
 		base = context.Background()
 	}

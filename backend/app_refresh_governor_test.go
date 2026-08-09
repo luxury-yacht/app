@@ -239,7 +239,7 @@ func TestGovernorDoesNotCoolBeforeColdServingSnapshotsAreReady(t *testing.T) {
 	app := newTestAppWithDefaults(t)
 	ctx, cancel := context.WithCancel(context.Background())
 	t.Cleanup(cancel)
-	app.refreshCtx = ctx
+	setRefreshRuntimeContextForTest(app, ctx)
 	app.spillRoot = t.TempDir()
 	app.clusterLifecycle = newClusterLifecycle(nil)
 	app.clusterLifecycle.SetState("cluster-a", ClusterStateLoading)
@@ -262,7 +262,7 @@ func TestColdPreparationDoesNotPollSnapshotsWhileNamespaceLifecycleIsLoading(t *
 	app := newTestAppWithDefaults(t)
 	ctx, cancel := context.WithCancel(context.Background())
 	t.Cleanup(cancel)
-	app.refreshCtx = ctx
+	setRefreshRuntimeContextForTest(app, ctx)
 	app.spillRoot = t.TempDir()
 	keepGovernorForeground(app, "cluster-a")
 	app.clusterLifecycle = newClusterLifecycle(nil)
@@ -289,7 +289,7 @@ func TestReconcileGovernorDoesNotRecordDeferredColdTransitionAsApplied(t *testin
 	clusterID := ids[0]
 	ctx, cancel := context.WithCancel(context.Background())
 	t.Cleanup(cancel)
-	app.refreshCtx = ctx
+	setRefreshRuntimeContextForTest(app, ctx)
 	app.spillRoot = t.TempDir()
 	app.governorMRU = []string{clusterID}
 	app.governorApplied[clusterID] = system.TierBackground
@@ -314,7 +314,7 @@ func TestColdPreparationUsesAggregateLifecycleBeforeCooling(t *testing.T) {
 	app := newTestAppWithDefaults(t)
 	ctx, cancel := context.WithCancel(context.Background())
 	t.Cleanup(cancel)
-	app.refreshCtx = ctx
+	setRefreshRuntimeContextForTest(app, ctx)
 	app.spillRoot = t.TempDir()
 	keepGovernorForeground(app, "cluster-a")
 	app.clusterLifecycle = newClusterLifecycle(nil)
@@ -352,7 +352,7 @@ func TestColdPreparationBuildsExactRetainedScopesBeforeCooling(t *testing.T) {
 	app := newTestAppWithDefaults(t)
 	ctx, cancel := context.WithCancel(context.Background())
 	t.Cleanup(cancel)
-	app.refreshCtx = ctx
+	setRefreshRuntimeContextForTest(app, ctx)
 	app.spillRoot = t.TempDir()
 	keepGovernorForeground(app, "cluster-a")
 	app.clusterLifecycle = newClusterLifecycle(nil)
@@ -377,7 +377,7 @@ func TestColdPreparationRequiresCurrentSubsystemWorkloadReadiness(t *testing.T) 
 	app := newTestAppWithDefaults(t)
 	ctx, cancel := context.WithCancel(context.Background())
 	t.Cleanup(cancel)
-	app.refreshCtx = ctx
+	setRefreshRuntimeContextForTest(app, ctx)
 	app.spillRoot = t.TempDir()
 	keepGovernorForeground(app, "cluster-a")
 	app.clusterLifecycle = newClusterLifecycle(nil)
@@ -410,7 +410,7 @@ func TestColdPreparationContinuesWhenNamespaceSourcesBecomeReady(t *testing.T) {
 	app := newTestAppWithDefaults(t)
 	ctx, cancel := context.WithCancel(context.Background())
 	t.Cleanup(cancel)
-	app.refreshCtx = ctx
+	setRefreshRuntimeContextForTest(app, ctx)
 	app.spillRoot = t.TempDir()
 	keepGovernorForeground(app, "cluster-a")
 	app.clusterLifecycle = newClusterLifecycle(nil)
@@ -439,7 +439,7 @@ func TestReplacingSubsystemCancelsInFlightColdPreparationBuild(t *testing.T) {
 	app := newTestAppWithDefaults(t)
 	ctx, cancel := context.WithCancel(context.Background())
 	t.Cleanup(cancel)
-	app.refreshCtx = ctx
+	setRefreshRuntimeContextForTest(app, ctx)
 	app.clusterLifecycle = newClusterLifecycle(nil)
 	app.clusterLifecycle.SetState("cluster-a", ClusterStateReady)
 
@@ -469,7 +469,7 @@ func TestColdPreparationRetryStopsWhenSubsystemIsNoLongerCurrent(t *testing.T) {
 	app := newTestAppWithDefaults(t)
 	ctx, cancel := context.WithCancel(context.Background())
 	t.Cleanup(cancel)
-	app.refreshCtx = ctx
+	setRefreshRuntimeContextForTest(app, ctx)
 	app.clusterLifecycle = newClusterLifecycle(nil)
 	app.clusterLifecycle.SetState("cluster-a", ClusterStateReady)
 
@@ -500,7 +500,7 @@ func TestReconcileGovernorAppliesColdAfterRetainedBaselineIsReady(t *testing.T) 
 	clusterID := ids[0]
 	ctx, cancel := context.WithCancel(context.Background())
 	t.Cleanup(cancel)
-	app.refreshCtx = ctx
+	setRefreshRuntimeContextForTest(app, ctx)
 	app.spillRoot = t.TempDir()
 	app.governorMRU = []string{clusterID}
 	app.governorApplied[clusterID] = system.TierBackground
@@ -664,7 +664,7 @@ func TestColdPreparationIsNotForcedWithoutMemoryPressure(t *testing.T) {
 	app := newTestAppWithDefaults(t)
 	ctx, cancel := context.WithCancel(context.Background())
 	t.Cleanup(cancel)
-	app.refreshCtx = ctx
+	setRefreshRuntimeContextForTest(app, ctx)
 	app.clusterLifecycle = newClusterLifecycle(nil)
 	app.clusterLifecycle.SetState("cluster-a", ClusterStateLoading)
 	now := time.Now()
@@ -689,7 +689,7 @@ func TestSustainedMemoryPressureForcesFullTeardownAfterColdPreparationGrace(t *t
 	clusterID := ids[0]
 	ctx, cancel := context.WithCancel(context.Background())
 	t.Cleanup(cancel)
-	app.refreshCtx = ctx
+	setRefreshRuntimeContextForTest(app, ctx)
 	app.spillRoot = t.TempDir()
 	app.governorBudget = 1
 	app.governorMRU = []string{clusterID}

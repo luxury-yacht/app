@@ -8,6 +8,7 @@
 package backend
 
 import (
+	"context"
 	"strings"
 
 	configmappkg "github.com/luxury-yacht/app/backend/resources/configmap"
@@ -27,7 +28,8 @@ func (a *App) deleteHelmReleaseAction(target ObjectActionTargetRef) error {
 	if err != nil {
 		return err
 	}
-	if err := a.requireAnyResourcePermission(deps.Context, deps,
+	ctx := a.CtxOrBackground()
+	if err := a.requireAnyResourcePermission(ctx, deps,
 		resourcePermissionCheck{
 			Version:   "v1",
 			Kind:      secretpkg.Identity.Kind,
@@ -43,7 +45,7 @@ func (a *App) deleteHelmReleaseAction(target ObjectActionTargetRef) error {
 	); err != nil {
 		return err
 	}
-	_, err = FetchResourceWithSelection(a, selectionKey, "", "HelmDelete", target.Namespace+"/"+target.Name, func() (struct{}, error) {
+	_, err = FetchResourceWithSelection(a, selectionKey, "", "HelmDelete", target.Namespace+"/"+target.Name, func(context.Context) (struct{}, error) {
 		service := helm.NewService(helm.Dependencies{Common: deps})
 		return struct{}{}, service.DeleteRelease(target.Namespace, target.Name)
 	})

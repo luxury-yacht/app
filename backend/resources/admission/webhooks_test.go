@@ -8,7 +8,6 @@
 package admission
 
 import (
-	"context"
 	"testing"
 
 	"k8s.io/apimachinery/pkg/runtime"
@@ -28,7 +27,6 @@ func newAdmissionService(t testing.TB, objects ...runtime.Object) *Service {
 
 	client := fake.NewClientset(runtimeObjects...)
 	deps := testsupport.NewResourceDependencies(
-		testsupport.WithDepsContext(context.Background()),
 		testsupport.WithDepsKubeClient(client),
 		testsupport.WithDepsLogger(applog.Noop),
 		testsupport.WithDepsEnsureClient(func(string) error { return nil }),

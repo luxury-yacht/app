@@ -46,7 +46,6 @@ var watchInformerGroupResources = catalogGroupResources(kindspec.CatalogShared)
 type watchNotifier struct {
 	service            *Service
 	pending            chan watchEvent
-	ctx                context.Context
 	recoveryMu         sync.Mutex
 	fullSyncRequested  bool
 	coalescedDropCount int
@@ -59,11 +58,10 @@ type watchBatch struct {
 	timerChannel <-chan time.Time
 }
 
-func newWatchNotifier(ctx context.Context, svc *Service) *watchNotifier {
+func newWatchNotifier(svc *Service) *watchNotifier {
 	return &watchNotifier{
 		service: svc,
 		pending: make(chan watchEvent, config.ObjectCatalogWatchPendingBufferSize),
-		ctx:     ctx,
 	}
 }
 
@@ -122,23 +120,23 @@ func (n *watchNotifier) flush(events []watchEvent) {
 }
 
 // run collects events and flushes in debounced batches.
-func (n *watchNotifier) run() {
+func (n *watchNotifier) run(ctx context.Context) {
 	batch := watchBatch{}
 	for {
 		select {
-		case <-n.ctx.Done():
-			n.finishWatchBatch(&batch, false)
+		case <-ctx.Done():
+			n.finishWatchBatch(ctx, &batch, false)
 			return
 		case evt, ok := <-n.pending:
 			if !ok {
-				n.finishWatchBatch(&batch, false)
+				n.finishWatchBatch(ctx, &batch, false)
 				return
 			}
 			if batch.add(evt) {
-				n.finishWatchBatch(&batch, true)
+				n.finishWatchBatch(ctx, &batch, true)
 			}
 		case <-batch.timerChannel:
-			n.finishWatchBatch(&batch, true)
+			n.finishWatchBatch(ctx, &batch, true)
 		}
 	}
 }
@@ -152,12 +150,12 @@ func (b *watchBatch) add(event watchEvent) bool {
 	return len(b.events) >= config.ObjectCatalogWatchPendingBufferSize
 }
 
-func (n *watchNotifier) finishWatchBatch(batch *watchBatch, runRecovery bool) {
+func (n *watchNotifier) finishWatchBatch(ctx context.Context, batch *watchBatch, runRecovery bool) {
 	if len(batch.events) > 0 {
 		n.flush(batch.events)
 	}
 	if runRecovery {
-		n.runRecoverySync()
+		n.runRecoverySync(ctx)
 	}
 	batch.events = nil
 	batch.stopTimer()
@@ -215,12 +213,12 @@ func (n *watchNotifier) takeFullSyncRequest() (int, bool) {
 	return count, true
 }
 
-func (n *watchNotifier) runRecoverySync() {
+func (n *watchNotifier) runRecoverySync(ctx context.Context) {
 	coalescedDrops, requested := n.takeFullSyncRequest()
 	if !requested {
 		return
 	}
-	if err := n.service.sync(n.ctx); err != nil && !errors.Is(err, context.Canceled) {
+	if err := n.service.sync(ctx); err != nil && !errors.Is(err, context.Canceled) {
 		n.service.logWarn(fmt.Sprintf("catalog watch recovery sync failed after coalescing %d event(s): %v", coalescedDrops, err))
 	}
 }

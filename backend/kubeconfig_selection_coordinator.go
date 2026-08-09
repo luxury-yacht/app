@@ -6,6 +6,8 @@ import (
 	"fmt"
 	"sync"
 	"time"
+
+	"github.com/luxury-yacht/app/backend/internal/lifecycle"
 )
 
 // selectionMutation carries metadata for a coordinated cluster mutation operation.
@@ -14,8 +16,15 @@ type selectionMutation struct {
 	generation uint64
 	reason     string
 	startedAt  time.Time
-	ctx        context.Context
+	done       <-chan struct{}
 	phases     selectionMutationPhases
+}
+
+func (m *selectionMutation) context() context.Context {
+	if m == nil || m.done == nil {
+		return context.Background()
+	}
+	return lifecycle.Context(m.done)
 }
 
 type selectionMutationPhases struct {
@@ -64,11 +73,12 @@ func (a *App) runSelectionMutation(reason string, fn func(*selectionMutation) er
 
 	var mutation selectionMutation
 	a.withKubeconfigStateTransition(func() {
+		generationCtx := a.activateSelectionGeneration()
 		mutation = selectionMutation{
 			generation: generation,
 			reason:     reason,
 			startedAt:  time.Now(),
-			ctx:        a.activateSelectionGeneration(),
+			done:       generationCtx.Done(),
 		}
 	})
 
@@ -225,12 +235,7 @@ func (a *App) activateSelectionGeneration() context.Context {
 		return context.Background()
 	}
 
-	base := context.Background()
-	if a.Ctx != nil {
-		base = a.Ctx
-	}
-
-	ctx, cancel := context.WithCancel(base)
+	ctx, cancel := context.WithCancel(a.CtxOrBackground())
 
 	a.selectionGenCtxMu.Lock()
 	if prev := a.selectionGenCancel; prev != nil {

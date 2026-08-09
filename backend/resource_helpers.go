@@ -25,7 +25,6 @@ func (a *App) resourceDependenciesForSelection(selection kubeconfigSelection, cl
 	}
 
 	deps := common.Dependencies{
-		Context:             a.Ctx,
 		Logger:              a.logger,
 		KubernetesClient:    nil,
 		MetricsClient:       metricsClient,

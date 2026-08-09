@@ -48,7 +48,6 @@ func (l *capturingLogger) Error(msg string, _ ...string) {
 func newService(t testing.TB, client *fake.Clientset) *persistentvolume.Service {
 	t.Helper()
 	deps := testsupport.NewResourceDependencies(
-		testsupport.WithDepsContext(context.Background()),
 		testsupport.WithDepsKubeClient(client),
 		testsupport.WithDepsLogger(applog.Noop),
 	)
@@ -63,7 +62,7 @@ func TestServicePersistentVolumeDetails(t *testing.T) {
 	client := fake.NewClientset(pv.DeepCopy())
 	service := newService(t, client)
 
-	detail, err := service.PersistentVolume("pv-standard")
+	detail, err := service.PersistentVolume(context.Background(), "pv-standard")
 	require.NoError(t, err)
 	require.Equal(t, "PersistentVolume", detail.Kind)
 	require.Equal(t, "pv-standard", detail.Name)
@@ -105,7 +104,7 @@ func TestServicePersistentVolumeDetailsIncludesNodeAffinityAndConditions(t *test
 	client := fake.NewClientset(pv.DeepCopy())
 	service := newService(t, client)
 
-	detail, err := service.PersistentVolume("pv-csi")
+	detail, err := service.PersistentVolume(context.Background(), "pv-csi")
 	require.NoError(t, err)
 	require.Equal(t, "PersistentVolume", detail.Kind)
 	require.Equal(t, "Block", detail.VolumeMode)
@@ -196,7 +195,7 @@ func TestServicePersistentVolumeDetailsProjectsEveryVolumeSource(t *testing.T) {
 			pv := testsupport.PersistentVolumeFixture("pv-source", func(pv *corev1.PersistentVolume) {
 				pv.Spec.PersistentVolumeSource = tt.source
 			})
-			detail, err := newService(t, fake.NewClientset(pv)).PersistentVolume(pv.Name)
+			detail, err := newService(t, fake.NewClientset(pv)).PersistentVolume(context.Background(), pv.Name)
 			require.NoError(t, err)
 			require.Equal(t, tt.wantType, detail.VolumeSource.Type)
 			require.Equal(t, tt.wantDetails, detail.VolumeSource.Details)
@@ -222,7 +221,7 @@ func TestServicePersistentVolumeDetailsPreservesOrderingDefaultsAndUnknownAccess
 		pv.Status.Message = ""
 	})
 
-	detail, err := newService(t, fake.NewClientset(pv)).PersistentVolume(pv.Name)
+	detail, err := newService(t, fake.NewClientset(pv)).PersistentVolume(context.Background(), pv.Name)
 	require.NoError(t, err)
 	require.Empty(t, detail.Capacity)
 	require.Equal(t, []string{"ReadWriteOnce", "ReadOnlyMany", "ReadWriteMany", "ReadWriteOncePod"}, detail.AccessModes)
@@ -242,12 +241,11 @@ func TestPersistentVolumeLogsErrorOnFailure(t *testing.T) {
 	})
 
 	service := persistentvolume.NewService(common.Dependencies{
-		Context:          context.Background(),
 		Logger:           logger,
 		KubernetesClient: client,
 	})
 
-	_, err := service.PersistentVolume("pv-one")
+	_, err := service.PersistentVolume(context.Background(), "pv-one")
 	require.Error(t, err)
 	require.Contains(t, err.Error(), "failed to get persistent volume")
 

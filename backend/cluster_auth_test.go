@@ -64,7 +64,7 @@ func TestRebuildClusterSubsystemPreservesAuthManagerWiring(t *testing.T) {
 	defer server.Close()
 
 	app := newTestAppWithDefaults(t)
-	app.Ctx = context.Background()
+	app.setRuntimeContext(context.Background())
 	app.clusterOps = newClusterOperationCoordinator()
 	configPath := writeTestKubeconfig(t, server.URL)
 
@@ -128,7 +128,7 @@ func TestClusterSubsystemRebuildHelperPaths(t *testing.T) {
 	require.Nil(t, clients)
 
 	require.False(t, rebuild.startManager(nil))
-	app.refreshCtx = context.Background()
+	setRefreshRuntimeContextForTest(app, context.Background())
 	require.False(t, rebuild.startManager(&system.Subsystem{}))
 
 	subsystems, order := refreshSubsystemTopology(map[string]*system.Subsystem{
@@ -156,13 +156,13 @@ func TestClusterClientsAuthInvalid(t *testing.T) {
 }
 
 // When the first selected cluster fails authentication, refresh setup never
-// runs and refreshCtx remains nil. Recovery must create that runtime before it
+// runs and the refresh lifetime remains absent. Recovery must create that runtime before it
 // starts the rebuilt manager; otherwise the HTTP/catalog shell comes up around
 // stopped informers and the cluster remains loading_slow forever.
 func TestClusterSubsystemRebuildStartsMissingRefreshRuntimeBeforeReadiness(t *testing.T) {
 	const clusterID = "cluster-a"
 	app := newTestAppWithDefaults(t)
-	app.Ctx = context.Background()
+	app.setRuntimeContext(context.Background())
 	t.Cleanup(func() {
 		if app.refreshCancel != nil {
 			app.refreshCancel()
@@ -171,7 +171,7 @@ func TestClusterSubsystemRebuildStartsMissingRefreshRuntimeBeforeReadiness(t *te
 	emitter, _ := collectingEmitter()
 	app.clusterLifecycle = newClusterLifecycleWithSlowThreshold(emitter, time.Minute)
 	app.clusterLifecycle.SetState(clusterID, ClusterStateLoading)
-	require.Nil(t, app.refreshCtx, "precondition: initial auth failure left refresh uninitialised")
+	require.Nil(t, app.currentRefreshRuntimeContext(), "precondition: initial auth failure left refresh uninitialised")
 
 	hub := &recoveryStartInformerHub{started: make(chan struct{})}
 	service := stubSnapshotService{build: func(context.Context, string, string) (*refresh.Snapshot, error) {
@@ -205,7 +205,7 @@ func TestClusterSubsystemRebuildStartsMissingRefreshRuntimeBeforeReadiness(t *te
 	require.True(t, rebuild.startManager(subsystem))
 	require.Eventually(t, hub.isStarted, time.Second, 10*time.Millisecond,
 		"auth recovery must start the rebuilt manager even when refresh setup never ran")
-	require.NotNil(t, app.refreshCtx)
+	require.NotNil(t, app.currentRefreshRuntimeContext())
 
 	app.sweepNamespacesReadiness(map[string]*system.Subsystem{clusterID: subsystem})
 	require.Eventually(t, func() bool {
@@ -216,7 +216,7 @@ func TestClusterSubsystemRebuildStartsMissingRefreshRuntimeBeforeReadiness(t *te
 
 func TestClusterSubsystemRebuildDoesNotPublishWhenRefreshRuntimeStopped(t *testing.T) {
 	app := newTestAppWithDefaults(t)
-	app.Ctx = context.Background()
+	app.setRuntimeContext(context.Background())
 	require.NotNil(t, app.ensureRefreshRuntimeContext())
 	app.stopRefreshRuntimeContext()
 
@@ -234,7 +234,7 @@ func TestClusterSubsystemRebuildDoesNotPublishWhenRefreshRuntimeStopped(t *testi
 
 func TestClusterSubsystemRebuildPublishesAfterManagerStartIsScheduled(t *testing.T) {
 	app := newTestAppWithDefaults(t)
-	app.Ctx = context.Background()
+	app.setRuntimeContext(context.Background())
 	require.NotNil(t, app.ensureRefreshRuntimeContext())
 	app.refreshHTTPServer = &http.Server{}
 	app.refreshAggregates.Store(&refreshAggregateHandlers{})

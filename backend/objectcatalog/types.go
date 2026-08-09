@@ -300,9 +300,3 @@ func (e *PartialSyncError) FailedCount() int {
 	}
 	return len(e.FailedDescriptors)
 }
-
-// RunContext couples a context with its cancellation signal.
-type RunContext struct {
-	Context context.Context
-	Cancel  context.CancelFunc
-}

@@ -77,6 +77,24 @@ func TestDemandPollerStartsOnDemand(t *testing.T) {
 	}
 }
 
+func TestDemandPollerKeepsFirstBackgroundLifetimeAcrossRepeatedStart(t *testing.T) {
+	fake := newFakeDemandPoller()
+	poller := NewDemandPoller(fake, fake, time.Minute)
+	require.NoError(t, poller.Start(context.Background()))
+
+	canceled, cancel := context.WithCancel(context.Background())
+	cancel()
+	require.NoError(t, poller.Start(canceled))
+	poller.SetActive(true)
+
+	select {
+	case <-fake.startCh:
+	case <-time.After(100 * time.Millisecond):
+		t.Fatal("repeated Start replaced the poller's original background lifetime")
+	}
+	require.NoError(t, poller.Stop(context.Background()))
+}
+
 func TestDemandPollerStopsAfterIdle(t *testing.T) {
 	fake := newFakeDemandPoller()
 	poller := NewDemandPoller(fake, fake, 10*time.Millisecond)

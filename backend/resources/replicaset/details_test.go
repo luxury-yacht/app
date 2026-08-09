@@ -87,12 +87,11 @@ func TestReplicaSetServiceReplicaSet(t *testing.T) {
 
 	client := cgofake.NewClientset(deployment.DeepCopy(), replicaSet.DeepCopy(), podA.DeepCopy(), podB.DeepCopy())
 	deps := testsupport.NewResourceDependencies(
-		testsupport.WithDepsContext(context.Background()),
 		testsupport.WithDepsKubeClient(client),
 	)
 
 	service := replicaset.NewService(deps)
-	details, err := service.ReplicaSet("default", "web-rs")
+	details, err := service.ReplicaSet(context.Background(), "default", "web-rs")
 	if err != nil {
 		t.Fatalf("ReplicaSet returned error: %v", err)
 	}
@@ -156,12 +155,11 @@ func TestReplicaSetServiceReplicaSetInactiveRevision(t *testing.T) {
 
 	client := cgofake.NewClientset(deployment.DeepCopy(), replicaSet.DeepCopy())
 	deps := testsupport.NewResourceDependencies(
-		testsupport.WithDepsContext(context.Background()),
 		testsupport.WithDepsKubeClient(client),
 	)
 
 	service := replicaset.NewService(deps)
-	details, err := service.ReplicaSet("default", "web-rs")
+	details, err := service.ReplicaSet(context.Background(), "default", "web-rs")
 	if err != nil {
 		t.Fatalf("ReplicaSet returned error: %v", err)
 	}

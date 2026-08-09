@@ -25,7 +25,7 @@ func (a *App) FetchContainerLogs(clusterID string, req ContainerLogsFetchRequest
 		return ContainerLogsFetchResponse{Error: err.Error()}
 	}
 	service := pods.NewService(deps)
-	return service.FetchContainerLogs(req)
+	return service.FetchContainerLogs(a.CtxOrBackground(), req)
 }
 func (a *App) GetPodContainers(clusterID, namespace, podName string) ([]string, error) {
 	if err := requirePodObject(namespace, podName); err != nil {
@@ -36,7 +36,7 @@ func (a *App) GetPodContainers(clusterID, namespace, podName string) ([]string, 
 		return nil, err
 	}
 	service := pods.NewService(deps)
-	return service.PodContainers(namespace, podName)
+	return service.PodContainers(a.CtxOrBackground(), namespace, podName)
 }
 func (a *App) GetContainerLogsScopeContainers(clusterID, scope string) ([]string, error) {
 	if err := requireMatchingContainerLogsScopeCluster(clusterID, scope); err != nil {
@@ -47,7 +47,7 @@ func (a *App) GetContainerLogsScopeContainers(clusterID, scope string) ([]string
 		return nil, err
 	}
 	service := pods.NewService(deps)
-	return service.ContainerLogsScopeContainers(scope)
+	return service.ContainerLogsScopeContainers(a.CtxOrBackground(), scope)
 }
 
 func requireMatchingContainerLogsScopeCluster(clusterID, scope string) error {

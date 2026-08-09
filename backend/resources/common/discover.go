@@ -48,7 +48,7 @@ func DiscoverGVRByKind(ctx context.Context, deps Dependencies, resourceKind stri
 		return schema.GroupVersionResource{}, false, fmt.Errorf("kubernetes client not initialized")
 	}
 	var err error
-	ctx, err = kindDiscoveryContext(ctx, deps.Context)
+	ctx, err = kindDiscoveryContext(ctx)
 	if err != nil {
 		return schema.GroupVersionResource{}, false, err
 	}
@@ -69,12 +69,9 @@ type discoveredKind struct {
 	namespaced bool
 }
 
-func kindDiscoveryContext(ctx, fallback context.Context) (context.Context, error) {
+func kindDiscoveryContext(ctx context.Context) (context.Context, error) {
 	if ctx != nil {
 		return ctx, nil
-	}
-	if fallback != nil {
-		return fallback, nil
 	}
 	return nil, fmt.Errorf("discovery context not initialized")
 }

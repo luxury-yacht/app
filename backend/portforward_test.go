@@ -16,7 +16,7 @@ const portForwardClusterID = "config:ctx"
 
 func TestStartPortForward_InvalidCluster(t *testing.T) {
 	app := newTestAppWithDefaults(t)
-	app.Ctx = context.Background()
+	app.setRuntimeContext(context.Background())
 	app.portForwardSessions = make(map[string]*portForwardSessionInternal)
 	app.clusterClients = make(map[string]*clusterClients)
 
@@ -35,7 +35,7 @@ func TestStartPortForward_InvalidCluster(t *testing.T) {
 
 func TestStartPortForward_MissingClient(t *testing.T) {
 	app := newTestAppWithDefaults(t)
-	app.Ctx = context.Background()
+	app.setRuntimeContext(context.Background())
 	app.portForwardSessions = make(map[string]*portForwardSessionInternal)
 
 	// Create a cluster entry WITHOUT a client to test the error path.
@@ -63,7 +63,7 @@ func TestStartPortForward_MissingClient(t *testing.T) {
 
 func TestStartPortForward_MissingRestConfig(t *testing.T) {
 	app := newTestAppWithDefaults(t)
-	app.Ctx = context.Background()
+	app.setRuntimeContext(context.Background())
 	app.portForwardSessions = make(map[string]*portForwardSessionInternal)
 
 	fakeClient := fake.NewClientset()
@@ -92,7 +92,7 @@ func TestStartPortForward_MissingRestConfig(t *testing.T) {
 
 func TestStartPortForward_ValidationErrors(t *testing.T) {
 	app := newTestAppWithDefaults(t)
-	app.Ctx = context.Background()
+	app.setRuntimeContext(context.Background())
 	app.portForwardSessions = make(map[string]*portForwardSessionInternal)
 
 	fakeClient := fake.NewClientset()
@@ -147,7 +147,7 @@ func TestStartPortForward_ValidationErrors(t *testing.T) {
 
 func TestStartPortForwardRequiresPortForwardPermission(t *testing.T) {
 	app := newTestAppWithDefaults(t)
-	app.Ctx = context.Background()
+	app.setRuntimeContext(context.Background())
 	app.portForwardSessions = make(map[string]*portForwardSessionInternal)
 
 	pod := &corev1.Pod{
@@ -259,7 +259,7 @@ func TestListPortForwards_ReturnsSessions(t *testing.T) {
 
 func TestStopPortForward_NotFound(t *testing.T) {
 	app := newTestAppWithDefaults(t)
-	app.Ctx = context.Background()
+	app.setRuntimeContext(context.Background())
 	app.portForwardSessions = make(map[string]*portForwardSessionInternal)
 	app.eventEmitter = func(context.Context, string, ...interface{}) {}
 
@@ -271,7 +271,7 @@ func TestStopPortForward_NotFound(t *testing.T) {
 
 func TestStopPortForward_Success(t *testing.T) {
 	app := newTestAppWithDefaults(t)
-	app.Ctx = context.Background()
+	app.setRuntimeContext(context.Background())
 	app.portForwardSessions = make(map[string]*portForwardSessionInternal)
 
 	var statusEvents []PortForwardStatusEvent
@@ -322,7 +322,7 @@ func TestStopPortForward_Success(t *testing.T) {
 
 func TestPortForwardLifecycleFinishTerminalIsIdempotent(t *testing.T) {
 	app := newTestAppWithDefaults(t)
-	app.Ctx = context.Background()
+	app.setRuntimeContext(context.Background())
 	app.portForwardSessions = make(map[string]*portForwardSessionInternal)
 
 	portForwardListEvents := 0
@@ -374,7 +374,7 @@ func TestPortForwardLifecycleFinishTerminalIsIdempotent(t *testing.T) {
 
 func TestPortForwardLifecycleStopForRuntimeIsIdempotent(t *testing.T) {
 	app := newTestAppWithDefaults(t)
-	app.Ctx = context.Background()
+	app.setRuntimeContext(context.Background())
 	app.portForwardSessions = make(map[string]*portForwardSessionInternal)
 
 	var statusEvents []PortForwardStatusEvent
@@ -428,7 +428,7 @@ func TestPortForwardLifecycleStopForRuntimeIsIdempotent(t *testing.T) {
 
 func TestRunPortForwarderUnregistersRuntimeOperationOnTerminalError(t *testing.T) {
 	app := newTestAppWithDefaults(t)
-	app.Ctx = context.Background()
+	app.setRuntimeContext(context.Background())
 	app.portForwardSessions = make(map[string]*portForwardSessionInternal)
 	app.clusterClients = make(map[string]*clusterClients)
 	app.eventEmitter = func(context.Context, string, ...interface{}) {}
@@ -465,7 +465,7 @@ func TestRunPortForwarderUnregistersRuntimeOperationOnTerminalError(t *testing.T
 
 func TestStopClusterPortForwards(t *testing.T) {
 	app := newTestAppWithDefaults(t)
-	app.Ctx = context.Background()
+	app.setRuntimeContext(context.Background())
 	app.portForwardSessions = make(map[string]*portForwardSessionInternal)
 	app.eventEmitter = func(context.Context, string, ...interface{}) {}
 
@@ -669,7 +669,7 @@ func TestValidatePortForwardURL(t *testing.T) {
 
 func TestEmitPortForwardStatusGuards(t *testing.T) {
 	app := newTestAppWithDefaults(t)
-	app.Ctx = context.Background()
+	app.setRuntimeContext(context.Background())
 
 	calls := 0
 	app.eventEmitter = func(_ context.Context, _ string, _ ...interface{}) {

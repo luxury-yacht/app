@@ -27,7 +27,6 @@ import (
 
 func newService(client kubernetes.Interface) *Service {
 	return NewService(common.Dependencies{
-		Context:          context.Background(),
 		Logger:           applog.Noop,
 		KubernetesClient: client,
 		ClusterID:        "cluster-a",
@@ -66,7 +65,7 @@ func TestManagerServiceAccountAggregatesRelations(t *testing.T) {
 	}
 
 	manager := newService(fake.NewClientset(sa, pod, roleBinding, clusterRoleBinding))
-	details, err := manager.ServiceAccount("team-a", "builder")
+	details, err := manager.ServiceAccount(context.Background(), "team-a", "builder")
 	require.NoError(t, err)
 	require.NotNil(t, details)
 	require.Len(t, details.UsedByPods, 1)
@@ -89,7 +88,7 @@ func TestServiceAccountGetError(t *testing.T) {
 	})
 
 	manager := newService(client)
-	if _, err := manager.ServiceAccount("default", "sa"); err == nil {
+	if _, err := manager.ServiceAccount(context.Background(), "default", "sa"); err == nil {
 		t.Fatalf("expected serviceaccount get error")
 	}
 }

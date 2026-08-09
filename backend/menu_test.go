@@ -115,7 +115,8 @@ func TestEditMenuOffersStandardClipboardCommands(t *testing.T) {
 }
 
 func TestEditMenuItemsEmitFrontendEvents(t *testing.T) {
-	app := &App{Ctx: context.Background()}
+	app := &App{}
+	app.setRuntimeContext(context.Background())
 	events := []string{}
 	app.eventEmitter = func(_ context.Context, name string, _ ...interface{}) {
 		events = append(events, name)
@@ -164,7 +165,8 @@ func TestViewMenuKeepsApplicationLogsAndDiagnosticsEntries(t *testing.T) {
 }
 
 func TestFileMenuOffersOpenCluster(t *testing.T) {
-	app := &App{Ctx: context.Background()}
+	app := &App{}
+	app.setRuntimeContext(context.Background())
 	events := []string{}
 	app.eventEmitter = func(_ context.Context, name string, _ ...interface{}) {
 		events = append(events, name)
@@ -193,7 +195,8 @@ func TestFileMenuOffersOpenCluster(t *testing.T) {
 }
 
 func TestViewMenuOffersCommandPalette(t *testing.T) {
-	app := &App{Ctx: context.Background()}
+	app := &App{}
+	app.setRuntimeContext(context.Background())
 	events := []string{}
 	app.eventEmitter = func(_ context.Context, name string, _ ...interface{}) {
 		events = append(events, name)
@@ -232,7 +235,8 @@ func assertMenuContainsLabel(t *testing.T, labels []string, want string) {
 }
 
 func TestDebugMenuItemsEmitFrontendEvents(t *testing.T) {
-	app := &App{Ctx: context.Background()}
+	app := &App{}
+	app.setRuntimeContext(context.Background())
 	events := []string{}
 	app.eventEmitter = func(_ context.Context, name string, _ ...interface{}) {
 		events = append(events, name)

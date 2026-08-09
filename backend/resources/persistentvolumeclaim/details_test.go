@@ -22,7 +22,6 @@ import (
 func newService(t testing.TB, client *fake.Clientset) *persistentvolumeclaim.Service {
 	t.Helper()
 	deps := testsupport.NewResourceDependencies(
-		testsupport.WithDepsContext(context.Background()),
 		testsupport.WithDepsKubeClient(client),
 		testsupport.WithDepsLogger(applog.Noop),
 	)
@@ -34,7 +33,7 @@ func TestServicePersistentVolumeClaimDetailsUsesSharedStatus(t *testing.T) {
 	client := fake.NewClientset(pvc.DeepCopy())
 	service := newService(t, client)
 
-	detail, err := service.PersistentVolumeClaim("default", "data")
+	detail, err := service.PersistentVolumeClaim(context.Background(), "default", "data")
 	require.NoError(t, err)
 	require.Equal(t, "PersistentVolumeClaim", detail.Kind)
 	require.Equal(t, string(corev1.ClaimBound), detail.Status)

@@ -35,7 +35,7 @@ import (
 func wrapperTestApp(t *testing.T) *App {
 	t.Helper()
 	app := newTestAppWithDefaults(t)
-	app.Ctx = context.Background()
+	app.setRuntimeContext(context.Background())
 	app.logger = NewLogger(5)
 	return app
 }
@@ -328,7 +328,7 @@ func TestWrapperHappyPathsWithFakeClients(t *testing.T) {
 
 func TestNetworkWrappersHappyPath(t *testing.T) {
 	app := wrapperTestApp(t)
-	app.Ctx = context.Background()
+	app.setRuntimeContext(context.Background())
 	clusterID := "config:ctx"
 
 	now := metav1.NewTime(time.Now().Add(-5 * time.Minute))
@@ -426,7 +426,7 @@ func TestNetworkWrappersHappyPath(t *testing.T) {
 
 func TestConfigWrappersHappyPath(t *testing.T) {
 	app := wrapperTestApp(t)
-	app.Ctx = context.Background()
+	app.setRuntimeContext(context.Background())
 	clusterID := "config:ctx"
 
 	client := cgofake.NewClientset(
@@ -459,7 +459,7 @@ func TestConfigWrappersHappyPath(t *testing.T) {
 func TestGetConfigMapReportsKubernetesFailureOnce(t *testing.T) {
 	reporter := &recordingErrorReporter{}
 	app := NewApp(reporter)
-	app.Ctx = context.Background()
+	app.setRuntimeContext(context.Background())
 	clusterID := "config:ctx"
 	app.clusterClients = map[string]*clusterClients{
 		clusterID: {
@@ -487,7 +487,7 @@ func TestGetConfigMapReportsKubernetesFailureOnce(t *testing.T) {
 
 func TestRBACWrappersHappyPath(t *testing.T) {
 	app := wrapperTestApp(t)
-	app.Ctx = context.Background()
+	app.setRuntimeContext(context.Background())
 	clusterID := "config:ctx"
 
 	clusterRole := &rbacv1.ClusterRole{ObjectMeta: metav1.ObjectMeta{Name: "viewer"}}
@@ -536,7 +536,7 @@ func TestRBACWrappersHappyPath(t *testing.T) {
 
 func TestStorageWrappersHappyPath(t *testing.T) {
 	app := wrapperTestApp(t)
-	app.Ctx = context.Background()
+	app.setRuntimeContext(context.Background())
 	clusterID := "config:ctx"
 
 	pv := &corev1.PersistentVolume{
@@ -588,7 +588,7 @@ func TestStorageWrappersHappyPath(t *testing.T) {
 
 func TestWrapperGuardPathsRequireClient(t *testing.T) {
 	app := newTestAppWithDefaults(t)
-	app.Ctx = context.Background()
+	app.setRuntimeContext(context.Background())
 	clusterID := "config:ctx"
 	app.clusterClients = map[string]*clusterClients{
 		clusterID: {

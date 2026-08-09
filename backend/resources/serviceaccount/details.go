@@ -9,6 +9,7 @@
 package serviceaccount
 
 import (
+	"context"
 	"fmt"
 
 	"github.com/luxury-yacht/app/backend/resourcemodel"
@@ -30,22 +31,22 @@ func NewService(deps common.Dependencies) *Service {
 }
 
 // ServiceAccount returns the detailed view for a single service account.
-func (s *Service) ServiceAccount(namespace, name string) (*ServiceAccountDetails, error) {
-	sa, err := s.deps.KubernetesClient.CoreV1().ServiceAccounts(namespace).Get(s.deps.Context, name, metav1.GetOptions{})
+func (s *Service) ServiceAccount(ctx context.Context, namespace, name string) (*ServiceAccountDetails, error) {
+	sa, err := s.deps.KubernetesClient.CoreV1().ServiceAccounts(namespace).Get(ctx, name, metav1.GetOptions{})
 	if err != nil {
 		err = s.deps.LogResourceRequestFailure(err, fmt.Sprintf("Failed to get service account %s/%s", namespace, name), "get", Identity, "RBAC")
 		return nil, fmt.Errorf("failed to get service account: %w", err)
 	}
 
-	pods := s.listNamespacePods(namespace)
-	roleBindings := s.listRoleBindings(namespace)
-	clusterRoleBindings := s.listClusterRoleBindings()
+	pods := s.listNamespacePods(ctx, namespace)
+	roleBindings := s.listRoleBindings(ctx, namespace)
+	clusterRoleBindings := s.listClusterRoleBindings(ctx)
 
 	return s.buildServiceAccountDetails(sa, pods, roleBindings, clusterRoleBindings), nil
 }
 
-func (s *Service) listNamespacePods(namespace string) *corev1.PodList {
-	pods, err := s.deps.KubernetesClient.CoreV1().Pods(namespace).List(s.deps.Context, metav1.ListOptions{})
+func (s *Service) listNamespacePods(ctx context.Context, namespace string) *corev1.PodList {
+	pods, err := s.deps.KubernetesClient.CoreV1().Pods(namespace).List(ctx, metav1.ListOptions{})
 	if err != nil {
 		s.deps.Logger.Warn(fmt.Sprintf("Failed to list pods in namespace %s: %v", namespace, err), "RBAC")
 		return nil
@@ -53,8 +54,8 @@ func (s *Service) listNamespacePods(namespace string) *corev1.PodList {
 	return pods
 }
 
-func (s *Service) listRoleBindings(namespace string) *rbacv1.RoleBindingList {
-	bindings, err := s.deps.KubernetesClient.RbacV1().RoleBindings(namespace).List(s.deps.Context, metav1.ListOptions{})
+func (s *Service) listRoleBindings(ctx context.Context, namespace string) *rbacv1.RoleBindingList {
+	bindings, err := s.deps.KubernetesClient.RbacV1().RoleBindings(namespace).List(ctx, metav1.ListOptions{})
 	if err != nil {
 		s.deps.Logger.Warn(fmt.Sprintf("Failed to list role bindings in namespace %s: %v", namespace, err), "RBAC")
 		return nil
@@ -62,8 +63,8 @@ func (s *Service) listRoleBindings(namespace string) *rbacv1.RoleBindingList {
 	return bindings
 }
 
-func (s *Service) listClusterRoleBindings() *rbacv1.ClusterRoleBindingList {
-	bindings, err := s.deps.KubernetesClient.RbacV1().ClusterRoleBindings().List(s.deps.Context, metav1.ListOptions{})
+func (s *Service) listClusterRoleBindings(ctx context.Context) *rbacv1.ClusterRoleBindingList {
+	bindings, err := s.deps.KubernetesClient.RbacV1().ClusterRoleBindings().List(ctx, metav1.ListOptions{})
 	if err != nil {
 		s.deps.Logger.Warn(fmt.Sprintf("Failed to list cluster role bindings: %v", err), "RBAC")
 		return nil

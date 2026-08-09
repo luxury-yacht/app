@@ -64,7 +64,7 @@ func (a *App) startPortForwardAction(targetRef ObjectActionTargetRef, options Ob
 		return "", fmt.Errorf("failed to resolve pod: %w", err)
 	}
 
-	if err := a.requireResourcePermission(deps.Context, deps, resourcePermissionCheck{
+	if err := a.requireResourcePermission(ctx, deps, resourcePermissionCheck{
 		Version:     "v1",
 		Kind:        podspkg.Identity.Kind,
 		Namespace:   target.Namespace,

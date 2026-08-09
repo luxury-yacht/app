@@ -28,8 +28,8 @@ func NewService(deps common.Dependencies) *Service {
 	return &Service{deps: deps}
 }
 
-func (s *Service) ctx() (context.Context, context.CancelFunc) {
-	base := s.deps.Context
+func endpointSliceContext(ctx context.Context) (context.Context, context.CancelFunc) {
+	base := ctx
 	if base == nil {
 		base = context.Background()
 	}
@@ -42,8 +42,8 @@ func (s *Service) ctx() (context.Context, context.CancelFunc) {
 }
 
 // EndpointSlice returns details for one concrete EndpointSlice object.
-func (s *Service) EndpointSlice(namespace, name string) (*EndpointSliceDetails, error) {
-	ctx, cancel := s.ctx()
+func (s *Service) EndpointSlice(ctx context.Context, namespace, name string) (*EndpointSliceDetails, error) {
+	ctx, cancel := endpointSliceContext(ctx)
 	defer cancel()
 	slice, err := s.deps.KubernetesClient.DiscoveryV1().EndpointSlices(namespace).Get(ctx, name, metav1.GetOptions{})
 	if err != nil {

@@ -49,7 +49,6 @@ func stubNodeFetchLogs(t *testing.T, responses map[string][]byte) {
 func TestDiscoverLogsFindsReadableSourcesOneLevelBelowRoot(t *testing.T) {
 	client := fake.NewClientset()
 	service := NewService(testsupport.NewResourceDependencies(
-		testsupport.WithDepsContext(context.Background()),
 		testsupport.WithDepsKubeClient(client),
 	))
 
@@ -64,7 +63,7 @@ func TestDiscoverLogsFindsReadableSourcesOneLevelBelowRoot(t *testing.T) {
 	}
 	stubNodeFetchLogs(t, responses)
 
-	resp := service.DiscoverLogs(nodeName)
+	resp := service.DiscoverLogs(context.Background(), nodeName)
 	require.True(t, resp.Supported)
 	require.Empty(t, resp.Reason)
 	require.Equal(t,
@@ -78,7 +77,6 @@ func TestDiscoverLogsFindsReadableSourcesOneLevelBelowRoot(t *testing.T) {
 func TestDiscoverLogsSkipsCompressedSources(t *testing.T) {
 	client := fake.NewClientset()
 	service := NewService(testsupport.NewResourceDependencies(
-		testsupport.WithDepsContext(context.Background()),
 		testsupport.WithDepsKubeClient(client),
 	))
 
@@ -91,7 +89,7 @@ func TestDiscoverLogsSkipsCompressedSources(t *testing.T) {
 	}
 	stubNodeFetchLogs(t, responses)
 
-	resp := service.DiscoverLogs(nodeName)
+	resp := service.DiscoverLogs(context.Background(), nodeName)
 	require.True(t, resp.Supported)
 	require.Len(t, resp.Sources, 1)
 	require.Equal(t, "journal/kubelet", resp.Sources[0].Path)
@@ -100,7 +98,6 @@ func TestDiscoverLogsSkipsCompressedSources(t *testing.T) {
 func TestDiscoverLogsSkipsBinaryJournalLeaves(t *testing.T) {
 	client := fake.NewClientset()
 	service := NewService(testsupport.NewResourceDependencies(
-		testsupport.WithDepsContext(context.Background()),
 		testsupport.WithDepsKubeClient(client),
 	))
 
@@ -114,7 +111,7 @@ func TestDiscoverLogsSkipsBinaryJournalLeaves(t *testing.T) {
 	}
 	stubNodeFetchLogs(t, responses)
 
-	resp := service.DiscoverLogs(nodeName)
+	resp := service.DiscoverLogs(context.Background(), nodeName)
 	require.True(t, resp.Supported)
 	require.Len(t, resp.Sources, 1)
 	require.Equal(t, "journal/kubelet", resp.Sources[0].Path)
@@ -123,7 +120,6 @@ func TestDiscoverLogsSkipsBinaryJournalLeaves(t *testing.T) {
 func TestDiscoverLogsSkipsPodAndContainerSources(t *testing.T) {
 	client := fake.NewClientset()
 	service := NewService(testsupport.NewResourceDependencies(
-		testsupport.WithDepsContext(context.Background()),
 		testsupport.WithDepsKubeClient(client),
 	))
 
@@ -135,7 +131,7 @@ func TestDiscoverLogsSkipsPodAndContainerSources(t *testing.T) {
 	}
 	stubNodeFetchLogs(t, responses)
 
-	resp := service.DiscoverLogs(nodeName)
+	resp := service.DiscoverLogs(context.Background(), nodeName)
 	require.True(t, resp.Supported)
 	require.Len(t, resp.Sources, 1)
 	require.Equal(t, "journal/kubelet", resp.Sources[0].Path)
@@ -144,7 +140,6 @@ func TestDiscoverLogsSkipsPodAndContainerSources(t *testing.T) {
 func TestDiscoverLogsTraversesNestedJournalDirectories(t *testing.T) {
 	client := fake.NewClientset()
 	service := NewService(testsupport.NewResourceDependencies(
-		testsupport.WithDepsContext(context.Background()),
 		testsupport.WithDepsKubeClient(client),
 	))
 
@@ -158,7 +153,7 @@ func TestDiscoverLogsTraversesNestedJournalDirectories(t *testing.T) {
 	}
 	stubNodeFetchLogs(t, responses)
 
-	resp := service.DiscoverLogs(nodeName)
+	resp := service.DiscoverLogs(context.Background(), nodeName)
 	require.True(t, resp.Supported)
 	require.Len(t, resp.Sources, 1)
 	require.Equal(t, "journal/services/kubernetes/kubelet", resp.Sources[0].Path)
@@ -167,7 +162,6 @@ func TestDiscoverLogsTraversesNestedJournalDirectories(t *testing.T) {
 func TestDiscoverLogsIncludesWellKnownServiceQueries(t *testing.T) {
 	client := fake.NewClientset()
 	service := NewService(testsupport.NewResourceDependencies(
-		testsupport.WithDepsContext(context.Background()),
 		testsupport.WithDepsKubeClient(client),
 	))
 
@@ -184,7 +178,7 @@ func TestDiscoverLogsIncludesWellKnownServiceQueries(t *testing.T) {
 	}
 	stubNodeFetchLogs(t, responses)
 
-	resp := service.DiscoverLogs(nodeName)
+	resp := service.DiscoverLogs(context.Background(), nodeName)
 	require.True(t, resp.Supported)
 	require.Contains(t, resp.Sources, restypes.NodeLogSource{
 		ID:    "service:kubelet",
@@ -203,7 +197,6 @@ func TestDiscoverLogsIncludesWellKnownServiceQueries(t *testing.T) {
 func TestDiscoverLogsReturnsReasonForForbiddenEndpoint(t *testing.T) {
 	client := fake.NewClientset()
 	service := NewService(testsupport.NewResourceDependencies(
-		testsupport.WithDepsContext(context.Background()),
 		testsupport.WithDepsKubeClient(client),
 	))
 
@@ -216,7 +209,7 @@ func TestDiscoverLogsReturnsReasonForForbiddenEndpoint(t *testing.T) {
 		return nil, apierrors.NewForbidden(schema.GroupResource{Resource: "nodes"}, "node-a", errors.New("denied"))
 	}
 
-	resp := service.DiscoverLogs("node-a")
+	resp := service.DiscoverLogs(context.Background(), "node-a")
 	require.False(t, resp.Supported)
 	require.Contains(t, resp.Reason, "not accessible")
 }
@@ -224,7 +217,6 @@ func TestDiscoverLogsReturnsReasonForForbiddenEndpoint(t *testing.T) {
 func TestFetchLogsRejectsDirectorySources(t *testing.T) {
 	client := fake.NewClientset()
 	service := NewService(testsupport.NewResourceDependencies(
-		testsupport.WithDepsContext(context.Background()),
 		testsupport.WithDepsKubeClient(client),
 	))
 
@@ -237,25 +229,23 @@ func TestFetchLogsRejectsDirectorySources(t *testing.T) {
 		return []byte(`<!doctype html><pre><a href="kubelet">kubelet</a></pre>`), nil
 	}
 
-	resp := service.FetchLogs("node-a", restypes.NodeLogFetchRequest{SourcePath: "journal/"})
+	resp := service.FetchLogs(context.Background(), "node-a", restypes.NodeLogFetchRequest{SourcePath: "journal/"})
 	require.Contains(t, resp.Error, "directory")
 }
 
 func TestFetchLogsRejectsCompressedSources(t *testing.T) {
 	client := fake.NewClientset()
 	service := NewService(testsupport.NewResourceDependencies(
-		testsupport.WithDepsContext(context.Background()),
 		testsupport.WithDepsKubeClient(client),
 	))
 
-	resp := service.FetchLogs("node-a", restypes.NodeLogFetchRequest{SourcePath: "journal/kubelet.log.gz"})
+	resp := service.FetchLogs(context.Background(), "node-a", restypes.NodeLogFetchRequest{SourcePath: "journal/kubelet.log.gz"})
 	require.Contains(t, resp.Error, "compressed or binary")
 }
 
 func TestFetchLogsRejectsUnsafeSourcePaths(t *testing.T) {
 	client := fake.NewClientset()
 	service := NewService(testsupport.NewResourceDependencies(
-		testsupport.WithDepsContext(context.Background()),
 		testsupport.WithDepsKubeClient(client),
 	))
 
@@ -276,7 +266,7 @@ func TestFetchLogsRejectsUnsafeSourcePaths(t *testing.T) {
 		"/api/v1/nodes/node-a/proxy/logs/journal/kubelet",
 		"service:kubelet/../../pods",
 	} {
-		resp := service.FetchLogs("node-a", restypes.NodeLogFetchRequest{SourcePath: sourcePath})
+		resp := service.FetchLogs(context.Background(), "node-a", restypes.NodeLogFetchRequest{SourcePath: sourcePath})
 		require.Contains(t, resp.Error, "invalid node log source path", sourcePath)
 	}
 }
@@ -284,7 +274,6 @@ func TestFetchLogsRejectsUnsafeSourcePaths(t *testing.T) {
 func TestFetchLogsSupportsWellKnownServiceQueries(t *testing.T) {
 	client := fake.NewClientset()
 	service := NewService(testsupport.NewResourceDependencies(
-		testsupport.WithDepsContext(context.Background()),
 		testsupport.WithDepsKubeClient(client),
 	))
 
@@ -298,7 +287,7 @@ func TestFetchLogsSupportsWellKnownServiceQueries(t *testing.T) {
 		return []byte("kubelet service log line"), nil
 	}
 
-	resp := service.FetchLogs("node-a", restypes.NodeLogFetchRequest{SourcePath: "service:kubelet"})
+	resp := service.FetchLogs(context.Background(), "node-a", restypes.NodeLogFetchRequest{SourcePath: "service:kubelet"})
 	require.Empty(t, resp.Error)
 	require.Equal(t, "kubelet service log line", resp.Content)
 	require.Equal(t, "service", resp.Source.Kind)
@@ -308,7 +297,6 @@ func TestFetchLogsSupportsWellKnownServiceQueries(t *testing.T) {
 func TestFetchLogsForwardsSinceTimeQueryParameter(t *testing.T) {
 	client := fake.NewClientset()
 	service := NewService(testsupport.NewResourceDependencies(
-		testsupport.WithDepsContext(context.Background()),
 		testsupport.WithDepsKubeClient(client),
 	))
 
@@ -327,7 +315,7 @@ func TestFetchLogsForwardsSinceTimeQueryParameter(t *testing.T) {
 		return []byte("kubelet log line"), nil
 	}
 
-	resp := service.FetchLogs("node-a", restypes.NodeLogFetchRequest{
+	resp := service.FetchLogs(context.Background(), "node-a", restypes.NodeLogFetchRequest{
 		SourcePath: "journal/kubelet",
 		SinceTime:  sinceTime,
 	})
@@ -346,7 +334,6 @@ func TestNodeLogProxyPathWithSinceTimeSupportsServiceQueries(t *testing.T) {
 func TestFetchLogsRejectsBinaryBodiesWithoutBinaryExtension(t *testing.T) {
 	client := fake.NewClientset()
 	service := NewService(testsupport.NewResourceDependencies(
-		testsupport.WithDepsContext(context.Background()),
 		testsupport.WithDepsKubeClient(client),
 	))
 
@@ -359,28 +346,26 @@ func TestFetchLogsRejectsBinaryBodiesWithoutBinaryExtension(t *testing.T) {
 		return []byte{0x00, 0xff, 0x10, 0x1f, 0x00}, nil
 	}
 
-	resp := service.FetchLogs("node-a", restypes.NodeLogFetchRequest{SourcePath: "journal/opaque-leaf"})
+	resp := service.FetchLogs(context.Background(), "node-a", restypes.NodeLogFetchRequest{SourcePath: "journal/opaque-leaf"})
 	require.Contains(t, resp.Error, "compressed or binary")
 }
 
 func TestFetchLogsRejectsPodAndContainerSources(t *testing.T) {
 	client := fake.NewClientset()
 	service := NewService(testsupport.NewResourceDependencies(
-		testsupport.WithDepsContext(context.Background()),
 		testsupport.WithDepsKubeClient(client),
 	))
 
-	resp := service.FetchLogs("node-a", restypes.NodeLogFetchRequest{SourcePath: "pods/kube-system/coredns"})
+	resp := service.FetchLogs(context.Background(), "node-a", restypes.NodeLogFetchRequest{SourcePath: "pods/kube-system/coredns"})
 	require.Contains(t, resp.Error, "already available in the pod/workload logs views")
 
-	resp = service.FetchLogs("node-a", restypes.NodeLogFetchRequest{SourcePath: "containers/containerd.log"})
+	resp = service.FetchLogs(context.Background(), "node-a", restypes.NodeLogFetchRequest{SourcePath: "containers/containerd.log"})
 	require.Contains(t, resp.Error, "already available in the pod/workload logs views")
 }
 
 func TestFetchLogsTruncatesLargeResponses(t *testing.T) {
 	client := fake.NewClientset()
 	service := NewService(testsupport.NewResourceDependencies(
-		testsupport.WithDepsContext(context.Background()),
 		testsupport.WithDepsKubeClient(client),
 	))
 
@@ -393,7 +378,7 @@ func TestFetchLogsTruncatesLargeResponses(t *testing.T) {
 		return []byte("line-a\nline-b\nline-c\n"), nil
 	}
 
-	resp := service.FetchLogs("node-a", restypes.NodeLogFetchRequest{
+	resp := service.FetchLogs(context.Background(), "node-a", restypes.NodeLogFetchRequest{
 		SourcePath: "journal/kubelet",
 		TailBytes:  8,
 	})

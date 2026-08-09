@@ -59,7 +59,7 @@ func TestJobServiceReturnsDetail(t *testing.T) {
 	deps := newDeps(t, client)
 
 	service := job.NewService(deps)
-	detail, err := service.Job("default", "report")
+	detail, err := service.Job(context.Background(), "default", "report")
 	require.NoError(t, err)
 	require.Equal(t, "Job", detail.Kind)
 	require.Equal(t, int32(1), detail.Succeeded)
@@ -74,7 +74,6 @@ func TestJobServiceReturnsDetail(t *testing.T) {
 func newDeps(t testing.TB, client *cgofake.Clientset) common.Dependencies {
 	t.Helper()
 	return testsupport.NewResourceDependencies(
-		testsupport.WithDepsContext(context.Background()),
 		testsupport.WithDepsKubeClient(client),
 		testsupport.WithDepsLogger(applog.Noop),
 		testsupport.WithDepsEnsureClient(func(string) error { return nil }),

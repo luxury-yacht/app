@@ -18,5 +18,5 @@ func (a *App) GetPod(clusterID, namespace, name string, detailed bool) (*PodDeta
 	if err != nil {
 		return nil, err
 	}
-	return pods.GetPod(deps, namespace, name, detailed)
+	return pods.GetPod(a.CtxOrBackground(), deps, namespace, name, detailed)
 }

@@ -8,6 +8,7 @@
 package configmap
 
 import (
+	"context"
 	"encoding/base64"
 	"fmt"
 
@@ -30,8 +31,8 @@ func NewService(deps common.Dependencies) *Service {
 }
 
 // ConfigMap returns the detailed view for a single configmap.
-func (s *Service) ConfigMap(namespace, name string) (*ConfigMapDetails, error) {
-	cm, err := s.deps.KubernetesClient.CoreV1().ConfigMaps(namespace).Get(s.deps.Context, name, metav1.GetOptions{})
+func (s *Service) ConfigMap(ctx context.Context, namespace, name string) (*ConfigMapDetails, error) {
+	cm, err := s.deps.KubernetesClient.CoreV1().ConfigMaps(namespace).Get(ctx, name, metav1.GetOptions{})
 	if err != nil {
 		err = s.deps.LogResourceRequestFailure(err, fmt.Sprintf("Failed to get configmap %s/%s", namespace, name), "get", Identity, logsources.ResourceLoader)
 		return nil, fmt.Errorf("failed to get configmap: %w", err)
@@ -39,7 +40,7 @@ func (s *Service) ConfigMap(namespace, name string) (*ConfigMapDetails, error) {
 
 	relationships := resourcemodel.NewResourceRelationshipIndex(
 		s.deps.ClusterID,
-		resourcemodel.ResourceRelationshipIndexOptions{Pods: s.listNamespacePods(namespace)},
+		resourcemodel.ResourceRelationshipIndexOptions{Pods: s.listNamespacePods(ctx, namespace)},
 	)
 	return s.processConfigMapDetails(cm, relationships), nil
 }
@@ -73,8 +74,8 @@ func (s *Service) processConfigMapDetails(cm *corev1.ConfigMap, relationships *r
 	return details
 }
 
-func (s *Service) listNamespacePods(namespace string) *corev1.PodList {
-	pods, err := s.deps.KubernetesClient.CoreV1().Pods(namespace).List(s.deps.Context, metav1.ListOptions{})
+func (s *Service) listNamespacePods(ctx context.Context, namespace string) *corev1.PodList {
+	pods, err := s.deps.KubernetesClient.CoreV1().Pods(namespace).List(ctx, metav1.ListOptions{})
 	if err != nil {
 		s.deps.Logger.Warn(fmt.Sprintf("Failed to list pods in namespace %s: %v", namespace, err), logsources.ResourceLoader)
 		return nil

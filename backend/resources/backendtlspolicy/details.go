@@ -7,6 +7,7 @@
 package backendtlspolicy
 
 import (
+	"context"
 	"fmt"
 
 	"github.com/luxury-yacht/app/backend/resources/common"
@@ -27,10 +28,10 @@ func NewService(deps common.Dependencies) *Service {
 }
 
 // BackendTLSPolicy returns the detail payload for a single BackendTLSPolicy.
-func (s *Service) BackendTLSPolicy(namespace, name string) (*BackendTLSPolicyDetails, error) {
+func (s *Service) BackendTLSPolicy(ctx context.Context, namespace, name string) (*BackendTLSPolicyDetails, error) {
 	return gatewayapi.GetResource(s.deps, "BackendTLSPolicy", "backend tls policy",
 		func() (*gatewayv1.BackendTLSPolicy, error) {
-			return s.deps.GatewayClient.GatewayV1().BackendTLSPolicies(namespace).Get(s.deps.Context, name, metav1.GetOptions{})
+			return s.deps.GatewayClient.GatewayV1().BackendTLSPolicies(namespace).Get(ctx, name, metav1.GetOptions{})
 		}, s.buildDetails)
 }
 

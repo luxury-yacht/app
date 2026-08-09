@@ -9,6 +9,7 @@
 package replicaset
 
 import (
+	"context"
 	"fmt"
 
 	"github.com/luxury-yacht/app/backend/internal/logsources"
@@ -34,27 +35,28 @@ func NewService(deps common.Dependencies) *Service {
 }
 
 // ReplicaSet returns the detailed view for a single ReplicaSet.
-func (s *Service) ReplicaSet(namespace, name string) (*ReplicaSetDetails, error) {
+func (s *Service) ReplicaSet(ctx context.Context, namespace, name string) (*ReplicaSetDetails, error) {
 	client := s.deps.KubernetesClient
 	if client == nil {
 		return nil, fmt.Errorf("kubernetes client not initialized")
 	}
 
-	replicaSet, err := client.AppsV1().ReplicaSets(namespace).Get(s.deps.Context, name, metav1.GetOptions{})
+	replicaSet, err := client.AppsV1().ReplicaSets(namespace).Get(ctx, name, metav1.GetOptions{})
 	if err != nil {
 		err = s.deps.LogResourceRequestFailure(err, fmt.Sprintf("Failed to get ReplicaSet %s/%s", namespace, name), "get", Identity, logsources.ResourceLoader)
 		return nil, fmt.Errorf("failed to get replicaset: %w", err)
 	}
 
-	podsForSet, podMetrics, err := s.getReplicaSetPods(replicaSet)
+	podsForSet, podMetrics, err := s.getReplicaSetPods(ctx, replicaSet)
 	if err != nil {
 		s.deps.Logger.Warn(fmt.Sprintf("Failed to collect pods for ReplicaSet %s/%s: %v", namespace, name, err), logsources.ResourceLoader)
 	}
 
-	return s.buildReplicaSetDetails(replicaSet, podsForSet, podMetrics), nil
+	return s.buildReplicaSetDetails(ctx, replicaSet, podsForSet, podMetrics), nil
 }
 
 func (s *Service) buildReplicaSetDetails(
+	ctx context.Context,
 	replicaSet *appsv1.ReplicaSet,
 	podsList []corev1.Pod,
 	podMetrics map[string]*metricsv1beta1.PodMetrics,
@@ -87,30 +89,30 @@ func (s *Service) buildReplicaSetDetails(
 		PodMetricsSummary:   podSummary,
 		ObservedGeneration:  facts.ObservedGeneration,
 		// IsActive needs a live deployment lookup, so it stays here (not intrinsic).
-		IsActive: s.isReplicaSetActive(replicaSet),
+		IsActive: s.isReplicaSetActive(ctx, replicaSet),
 	}
 
 	return details
 }
 
-func (s *Service) getReplicaSetPods(replicaSet *appsv1.ReplicaSet) ([]corev1.Pod, map[string]*metricsv1beta1.PodMetrics, error) {
+func (s *Service) getReplicaSetPods(ctx context.Context, replicaSet *appsv1.ReplicaSet) ([]corev1.Pod, map[string]*metricsv1beta1.PodMetrics, error) {
 	client := s.deps.KubernetesClient
 	if client == nil {
 		return nil, nil, fmt.Errorf("kubernetes client not initialized")
 	}
 
 	selector := labels.Set(replicaSet.Spec.Selector.MatchLabels).String()
-	podList, err := client.CoreV1().Pods(replicaSet.Namespace).List(s.deps.Context, metav1.ListOptions{LabelSelector: selector})
+	podList, err := client.CoreV1().Pods(replicaSet.Namespace).List(ctx, metav1.ListOptions{LabelSelector: selector})
 	if err != nil {
 		return nil, nil, err
 	}
 
 	filtered := filterPodsForReplicaSet(replicaSet, podList)
-	metrics := pods.NewService(s.deps).GetPodMetricsForPods(replicaSet.Namespace, filtered)
+	metrics := pods.NewService(s.deps).GetPodMetricsForPods(ctx, replicaSet.Namespace, filtered)
 	return filtered, metrics, nil
 }
 
-func (s *Service) isReplicaSetActive(replicaSet *appsv1.ReplicaSet) bool {
+func (s *Service) isReplicaSetActive(ctx context.Context, replicaSet *appsv1.ReplicaSet) bool {
 	deploymentName := replicaSetDeploymentName(replicaSet)
 	if deploymentName == "" {
 		return true
@@ -127,7 +129,7 @@ func (s *Service) isReplicaSetActive(replicaSet *appsv1.ReplicaSet) bool {
 		return true
 	}
 
-	deployment, err := client.AppsV1().Deployments(replicaSet.Namespace).Get(s.deps.Context, deploymentName, metav1.GetOptions{})
+	deployment, err := client.AppsV1().Deployments(replicaSet.Namespace).Get(ctx, deploymentName, metav1.GetOptions{})
 	if err != nil {
 		s.deps.Logger.Debug(fmt.Sprintf("Failed to fetch deployment %s/%s for ReplicaSet activity: %v", replicaSet.Namespace, deploymentName, err), logsources.ResourceLoader)
 		return true

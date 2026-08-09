@@ -267,14 +267,19 @@ func (a *App) refreshKubeconfigDiscoveryAfterSearchPathChange() {
 
 // OpenKubeconfigSearchPathDialog opens a directory picker for kubeconfig search paths.
 func (a *App) OpenKubeconfigSearchPathDialog() (string, error) {
-	if a.Ctx == nil {
+	if !a.runtimeAvailable() {
 		return "", fmt.Errorf("application context is not available")
 	}
 
-	return wailsruntime.OpenDirectoryDialog(a.Ctx, wailsruntime.OpenDialogOptions{
-		Title:            "Select kubeconfig directory",
-		DefaultDirectory: a.defaultKubeconfigSearchDirectory(),
+	var path string
+	var err error
+	a.runWithRuntimeContext(func(ctx context.Context) {
+		path, err = wailsruntime.OpenDirectoryDialog(ctx, wailsruntime.OpenDialogOptions{
+			Title:            "Select kubeconfig directory",
+			DefaultDirectory: a.defaultKubeconfigSearchDirectory(),
+		})
 	})
+	return path, err
 }
 
 // defaultKubeconfigSearchDirectory selects a safe default folder for the directory picker.
@@ -488,7 +493,7 @@ func (a *App) setSelectedKubeconfigs(mutation *selectionMutation, selections []s
 	commitStart := time.Now()
 	a.commitSelectionChangeIntent(intent)
 	mutation.phases.commit = time.Since(commitStart)
-	return a.executeSelectionChangeWork(mutation.ctx, intent, &mutation.phases)
+	return a.executeSelectionChangeWork(mutation.context(), intent, &mutation.phases)
 }
 
 // CloseCluster atomically tears down runtime operations for a selected cluster

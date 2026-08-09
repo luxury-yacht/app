@@ -8,7 +8,7 @@ import (
 )
 
 func (a *App) ToggleDiagnosticsPanel() error {
-	if a.Ctx == nil {
+	if !a.runtimeAvailable() {
 		return fmt.Errorf("application context not available")
 	}
 
@@ -20,7 +20,7 @@ func (a *App) ToggleDiagnosticsPanel() error {
 }
 
 func (a *App) ToggleAppLogsPanel() error {
-	if a.Ctx == nil {
+	if !a.runtimeAvailable() {
 		return fmt.Errorf("application context not available")
 	}
 
@@ -32,7 +32,7 @@ func (a *App) ToggleAppLogsPanel() error {
 }
 
 func (a *App) ToggleSidebar() error {
-	if a.Ctx == nil {
+	if !a.runtimeAvailable() {
 		return fmt.Errorf("application context not available")
 	}
 
@@ -44,7 +44,7 @@ func (a *App) ToggleSidebar() error {
 
 // ToggleObjectDiff emits an event that opens or closes the object diff modal.
 func (a *App) ToggleObjectDiff() error {
-	if a.Ctx == nil {
+	if !a.runtimeAvailable() {
 		return fmt.Errorf("application context not available")
 	}
 
@@ -53,7 +53,7 @@ func (a *App) ToggleObjectDiff() error {
 }
 
 func (a *App) UpdateMenu() {
-	if a.Ctx == nil {
+	if !a.runtimeAvailable() {
 		return
 	}
 	// On Linux, refreshing the menu rebuilds the GTK menubar without reattaching it,

@@ -1,8 +1,6 @@
 package testsupport
 
 import (
-	"context"
-
 	"github.com/luxury-yacht/app/backend/resources/common"
 	apiextensionsclientset "k8s.io/apiextensions-apiserver/pkg/client/clientset/clientset"
 	"k8s.io/client-go/dynamic"
@@ -15,7 +13,6 @@ import (
 type DependenciesOption func(*dependenciesBuilder)
 
 type dependenciesBuilder struct {
-	ctx                 context.Context
 	logger              common.Logger
 	kubeClient          kubernetes.Interface
 	metricsClient       metricsclient.Interface
@@ -27,13 +24,6 @@ type dependenciesBuilder struct {
 	ensureAPIExtensions common.EnsureAPIExtensionsFunc
 	selectedKubeconfig  string
 	selectedContext     string
-}
-
-// WithDepsContext overrides the context embedded in Dependencies.
-func WithDepsContext(ctx context.Context) DependenciesOption {
-	return func(b *dependenciesBuilder) {
-		b.ctx = ctx
-	}
 }
 
 // WithDepsLogger sets the logger used by resource services.
@@ -110,7 +100,6 @@ func WithDepsSelection(configPath, contextName string) DependenciesOption {
 // NewResourceDependencies returns a fully-populated Dependencies bundle suitable for resource services.
 func NewResourceDependencies(opts ...DependenciesOption) common.Dependencies {
 	builder := dependenciesBuilder{
-		ctx: context.Background(),
 		setMetrics: func(metricsclient.Interface) {
 			// The default test dependency does not retain a metrics client.
 		},
@@ -124,7 +113,6 @@ func NewResourceDependencies(opts ...DependenciesOption) common.Dependencies {
 	}
 
 	return common.Dependencies{
-		Context:             builder.ctx,
 		Logger:              builder.logger,
 		KubernetesClient:    builder.kubeClient,
 		MetricsClient:       builder.metricsClient,

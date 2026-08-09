@@ -27,7 +27,7 @@ import (
 
 	"github.com/luxury-yacht/app/backend/internal/applog"
 	"github.com/luxury-yacht/app/backend/testsupport"
-	"github.com/luxury-yacht/app/internal/sentry"
+	sentryreporting "github.com/luxury-yacht/app/internal/sentry"
 )
 
 type recordingNamespaceLogger struct {
@@ -53,7 +53,7 @@ func (l *recordingNamespaceLogger) ErrorWithCauseAndOperation(
 func TestHasWorkloadsWithoutClient(t *testing.T) {
 	service := NewService(testsupport.NewResourceDependencies())
 
-	has, unknown := service.hasWorkloads("default")
+	has, unknown := service.hasWorkloads(context.Background(), "default")
 	require.False(t, has)
 	require.True(t, unknown)
 }
@@ -77,7 +77,7 @@ func TestServiceNamespaceDetailsIncludesUsage(t *testing.T) {
 	client := fake.NewClientset(ns.DeepCopy(), quota.DeepCopy(), limit.DeepCopy(), deploy.DeepCopy(), job.DeepCopy())
 	service := newNamespaceService(t, client)
 
-	detail, err := service.Namespace("default")
+	detail, err := service.Namespace(context.Background(), "default")
 	require.NoError(t, err)
 	require.Equal(t, "Namespace", detail.Kind)
 	require.Equal(t, "Active", detail.Status)
@@ -106,7 +106,6 @@ func TestServiceNamespaceDetailsIncludesUsage(t *testing.T) {
 func TestServiceNamespaceEnsureClientError(t *testing.T) {
 	client := fake.NewClientset()
 	deps := testsupport.NewResourceDependencies(
-		testsupport.WithDepsContext(context.Background()),
 		testsupport.WithDepsKubeClient(client),
 		testsupport.WithDepsLogger(applog.Noop),
 		testsupport.WithDepsEnsureClient(func(string) error { return fmt.Errorf("ensure fail") }),
@@ -114,7 +113,7 @@ func TestServiceNamespaceEnsureClientError(t *testing.T) {
 
 	service := NewService(deps)
 
-	_, err := service.Namespace("default")
+	_, err := service.Namespace(context.Background(), "default")
 	require.Error(t, err)
 	require.Contains(t, err.Error(), "ensure fail")
 }
@@ -127,7 +126,7 @@ func TestServiceNamespaceMarksWorkloadsUnknownOnForbidden(t *testing.T) {
 	})
 
 	service := newNamespaceService(t, client)
-	detail, err := service.Namespace("default")
+	detail, err := service.Namespace(context.Background(), "default")
 	require.NoError(t, err)
 	require.True(t, detail.WorkloadsUnknown)
 	require.False(t, detail.HasWorkloads)
@@ -155,13 +154,12 @@ func TestHasWorkloadsReportsEachProbeWithItsActualAPIIdentity(t *testing.T) {
 			})
 			logger := &recordingNamespaceLogger{}
 			deps := testsupport.NewResourceDependencies(
-				testsupport.WithDepsContext(context.Background()),
 				testsupport.WithDepsKubeClient(client),
 				testsupport.WithDepsLogger(logger),
 			)
 			service := NewService(deps)
 
-			has, unknown := service.hasWorkloads("default")
+			has, unknown := service.hasWorkloads(context.Background(), "default")
 
 			require.False(t, has)
 			require.True(t, unknown)
@@ -180,7 +178,6 @@ func TestHasWorkloadsReportsEachProbeWithItsActualAPIIdentity(t *testing.T) {
 func newNamespaceService(t testing.TB, client *fake.Clientset) *Service {
 	t.Helper()
 	deps := testsupport.NewResourceDependencies(
-		testsupport.WithDepsContext(context.Background()),
 		testsupport.WithDepsKubeClient(client),
 		testsupport.WithDepsLogger(applog.Noop),
 		testsupport.WithDepsEnsureClient(func(string) error { return nil }),

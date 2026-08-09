@@ -39,7 +39,6 @@ func TestServiceDeleteByGVKCoreResource(t *testing.T) {
 	}))
 
 	deps := testsupport.NewResourceDependencies(
-		testsupport.WithDepsContext(context.Background()),
 		testsupport.WithDepsKubeClient(kubeClient),
 		testsupport.WithDepsDynamicClient(dynamicClient),
 	)
@@ -47,7 +46,7 @@ func TestServiceDeleteByGVKCoreResource(t *testing.T) {
 	service := NewService(deps)
 
 	gvk := schema.GroupVersionKind{Group: "", Version: "v1", Kind: "Pod"}
-	if err := service.DeleteByGVK(gvk, "default", "web-0"); err != nil {
+	if err := service.DeleteByGVK(context.Background(), gvk, "default", "web-0"); err != nil {
 		t.Fatalf("DeleteByGVK returned error: %v", err)
 	}
 
@@ -64,7 +63,7 @@ func TestServiceDeleteByGVKRequiresName(t *testing.T) {
 
 	for _, name := range []string{"", "  "} {
 		t.Run("name="+name, func(t *testing.T) {
-			err := service.DeleteByGVK(gvk, "default", name)
+			err := service.DeleteByGVK(context.Background(), gvk, "default", name)
 			if err == nil {
 				t.Fatal("expected error when name is empty")
 			}
@@ -100,7 +99,6 @@ func TestServiceDeleteByGVKCustomResource(t *testing.T) {
 	dynamicClient := testsupport.NewDynamicClient(t, nil, obj)
 
 	deps := testsupport.NewResourceDependencies(
-		testsupport.WithDepsContext(context.Background()),
 		testsupport.WithDepsKubeClient(kubeClient),
 		testsupport.WithDepsDynamicClient(dynamicClient),
 	)
@@ -108,7 +106,7 @@ func TestServiceDeleteByGVKCustomResource(t *testing.T) {
 	service := NewService(deps)
 
 	gvk := schema.GroupVersionKind{Group: "example.com", Version: "v1", Kind: "Widget"}
-	if err := service.DeleteByGVK(gvk, "default", "sample"); err != nil {
+	if err := service.DeleteByGVK(context.Background(), gvk, "default", "sample"); err != nil {
 		t.Fatalf("DeleteByGVK returned error: %v", err)
 	}
 

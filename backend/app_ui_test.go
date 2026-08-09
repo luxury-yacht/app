@@ -37,7 +37,7 @@ func TestToggleAppLogsPanelTogglesAndEmits(t *testing.T) {
 	app.eventEmitter = func(_ context.Context, name string, _ ...interface{}) {
 		events = append(events, name)
 	}
-	app.Ctx = context.Background()
+	app.setRuntimeContext(context.Background())
 
 	err := app.ToggleAppLogsPanel()
 	require.NoError(t, err)
@@ -63,7 +63,7 @@ func TestToggleSidebarTogglesAndEmits(t *testing.T) {
 	app.eventEmitter = func(_ context.Context, name string, _ ...interface{}) {
 		events = append(events, name)
 	}
-	app.Ctx = context.Background()
+	app.setRuntimeContext(context.Background())
 
 	err := app.ToggleSidebar()
 	require.NoError(t, err)
@@ -88,7 +88,7 @@ func TestToggleObjectDiffEmits(t *testing.T) {
 	app.eventEmitter = func(_ context.Context, name string, _ ...interface{}) {
 		events = append(events, name)
 	}
-	app.Ctx = context.Background()
+	app.setRuntimeContext(context.Background())
 
 	err := app.ToggleObjectDiff()
 	require.NoError(t, err)
@@ -112,7 +112,7 @@ func TestUpdateMenuSkipsOnLinux(t *testing.T) {
 	}
 
 	app := newUIApp(t)
-	app.Ctx = context.Background()
+	app.setRuntimeContext(context.Background())
 	emitted := false
 	app.eventEmitter = func(context.Context, string, ...interface{}) {
 		emitted = true
@@ -124,7 +124,7 @@ func TestUpdateMenuSkipsOnLinux(t *testing.T) {
 
 func TestSetSidebarVisibleOnlyWhenChanged(t *testing.T) {
 	app := newUIApp(t)
-	app.Ctx = context.Background()
+	app.setRuntimeContext(context.Background())
 	events := []string{}
 	app.eventEmitter = func(_ context.Context, name string, _ ...interface{}) {
 		events = append(events, name)
@@ -148,7 +148,7 @@ func TestSetSidebarVisibleOnlyWhenChanged(t *testing.T) {
 
 func TestSetAppLogsPanelVisibleOnlyWhenChanged(t *testing.T) {
 	app := newUIApp(t)
-	app.Ctx = context.Background()
+	app.setRuntimeContext(context.Background())
 	events := []string{}
 	app.eventEmitter = func(_ context.Context, name string, _ ...interface{}) {
 		events = append(events, name)
@@ -176,7 +176,7 @@ func TestToggleDiagnosticsPanelTogglesAndEmits(t *testing.T) {
 	app.eventEmitter = func(_ context.Context, name string, _ ...interface{}) {
 		events = append(events, name)
 	}
-	app.Ctx = context.Background()
+	app.setRuntimeContext(context.Background())
 
 	err := app.ToggleDiagnosticsPanel()
 	require.NoError(t, err)
@@ -199,7 +199,7 @@ func TestEmitEventNoContext(t *testing.T) {
 	app.emitEvent("something")
 	require.False(t, called)
 
-	app.Ctx = context.Background()
+	app.setRuntimeContext(context.Background())
 	app.emitEvent("something")
 	require.True(t, called)
 }

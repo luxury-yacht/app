@@ -21,7 +21,6 @@ import (
 func newDeps(t testing.TB, client *cgofake.Clientset) common.Dependencies {
 	t.Helper()
 	return testsupport.NewResourceDependencies(
-		testsupport.WithDepsContext(context.Background()),
 		testsupport.WithDepsKubeClient(client),
 		testsupport.WithDepsLogger(applog.Noop),
 		testsupport.WithDepsEnsureClient(func(string) error { return nil }),
@@ -97,7 +96,7 @@ func TestStatefulSetServiceReturnsDetail(t *testing.T) {
 	deps := newDeps(t, client)
 
 	service := statefulset.NewService(deps)
-	detail, err := service.StatefulSet("default", "db")
+	detail, err := service.StatefulSet(context.Background(), "default", "db")
 	require.NoError(t, err)
 	require.Equal(t, "StatefulSet", detail.Kind)
 	require.Equal(t, "db", detail.Name)

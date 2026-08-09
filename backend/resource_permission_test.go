@@ -33,7 +33,7 @@ func TestRestartWorkloadRequiresPatchPermission(t *testing.T) {
 	denySelfSubjectAccessReviews(client, "no patch deployments")
 
 	app := NewApp()
-	app.Ctx = context.Background()
+	app.setRuntimeContext(context.Background())
 	registerTestClusterWithClients(app, "cluster-a", &clusterClients{
 		meta:              ClusterMeta{ID: "cluster-a", Name: "cluster-a"},
 		kubeconfigPath:    "/path",
@@ -58,7 +58,7 @@ func TestDeleteResourceByGVKRequiresDeletePermission(t *testing.T) {
 	dynamicClient := dynamicfake.NewSimpleDynamicClient(runtime.NewScheme())
 
 	app := NewApp()
-	app.Ctx = context.Background()
+	app.setRuntimeContext(context.Background())
 	registerTestClusterWithClients(app, "cluster-a", &clusterClients{
 		meta:              ClusterMeta{ID: "cluster-a", Name: "cluster-a"},
 		kubeconfigPath:    "/path",
@@ -96,7 +96,7 @@ func TestTriggerCronJobRequiresJobCreatePermission(t *testing.T) {
 	denySelfSubjectAccessReviews(client, "no create jobs")
 
 	app := NewApp()
-	app.Ctx = context.Background()
+	app.setRuntimeContext(context.Background())
 	registerTestClusterWithClients(app, "cluster-a", &clusterClients{
 		meta:              ClusterMeta{ID: "cluster-a", Name: "cluster-a"},
 		kubeconfigPath:    "/path",
@@ -122,7 +122,7 @@ func TestSuspendCronJobRequiresPatchPermission(t *testing.T) {
 	denySelfSubjectAccessReviews(client, "no patch cronjobs")
 
 	app := NewApp()
-	app.Ctx = context.Background()
+	app.setRuntimeContext(context.Background())
 	registerTestClusterWithClients(app, "cluster-a", &clusterClients{
 		meta:              ClusterMeta{ID: "cluster-a", Name: "cluster-a"},
 		kubeconfigPath:    "/path",
@@ -186,12 +186,11 @@ func TestDrainPodPermissionFollowsEvictionSupport(t *testing.T) {
 
 			app := NewApp()
 			deps := common.Dependencies{
-				Context:          context.Background(),
 				KubernetesClient: client,
 				ClusterID:        "cluster-a",
 			}
 			deps.ResourceResolver = objectcatalog.NewResourceResolver(deps, nil)
-			err := app.requireDrainPodPermission(deps, DrainNodeOptions{DisableEviction: tc.disableEviction})
+			err := app.requireDrainPodPermission(context.Background(), deps, DrainNodeOptions{DisableEviction: tc.disableEviction})
 			if err != nil {
 				t.Fatalf("requireDrainPodPermission: %v", err)
 			}
@@ -214,7 +213,7 @@ func TestCancelDrainNodeJobRequiresNodeMaintenancePermission(t *testing.T) {
 	denySelfSubjectAccessReviews(client, "no node maintenance")
 
 	app := NewApp()
-	app.Ctx = context.Background()
+	app.setRuntimeContext(context.Background())
 	registerTestClusterWithClients(app, clusterID, &clusterClients{
 		meta:              ClusterMeta{ID: clusterID, Name: clusterID},
 		kubeconfigPath:    "/path",

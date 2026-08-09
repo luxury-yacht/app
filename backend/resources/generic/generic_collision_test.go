@@ -124,14 +124,13 @@ func TestServiceDeleteByGVKDisambiguatesCollidingDBInstances(t *testing.T) {
 		dynamicClient := testsupport.NewDynamicClient(t, nil, ack, kindaRocks)
 
 		deps := testsupport.NewResourceDependencies(
-			testsupport.WithDepsContext(context.Background()),
 			testsupport.WithDepsKubeClient(kubeClient),
 			testsupport.WithDepsDynamicClient(dynamicClient),
 		)
 		deps.ResourceResolver = objectcatalog.NewResourceResolver(deps, nil)
 		service := NewService(deps)
 
-		err := service.DeleteByGVK(schema.GroupVersionKind{
+		err := service.DeleteByGVK(context.Background(), schema.GroupVersionKind{
 			Group: "rds.services.k8s.aws", Version: "v1alpha1", Kind: "DBInstance",
 		}, "default", "my-db")
 		if err != nil {
@@ -157,14 +156,13 @@ func TestServiceDeleteByGVKDisambiguatesCollidingDBInstances(t *testing.T) {
 		dynamicClient := testsupport.NewDynamicClient(t, nil, ack, kindaRocks)
 
 		deps := testsupport.NewResourceDependencies(
-			testsupport.WithDepsContext(context.Background()),
 			testsupport.WithDepsKubeClient(kubeClient),
 			testsupport.WithDepsDynamicClient(dynamicClient),
 		)
 		deps.ResourceResolver = objectcatalog.NewResourceResolver(deps, nil)
 		service := NewService(deps)
 
-		err := service.DeleteByGVK(schema.GroupVersionKind{
+		err := service.DeleteByGVK(context.Background(), schema.GroupVersionKind{
 			Group: "kinda.rocks", Version: "v1beta1", Kind: "DbInstance",
 		}, "default", "my-db")
 		if err != nil {

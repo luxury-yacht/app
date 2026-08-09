@@ -8,6 +8,7 @@
 package admission
 
 import (
+	"context"
 	"fmt"
 
 	admissionregistrationv1 "k8s.io/api/admissionregistration/v1"
@@ -15,13 +16,13 @@ import (
 )
 
 // MutatingWebhookConfiguration returns details for a single mutating configuration.
-func (s *Service) MutatingWebhookConfiguration(name string) (*MutatingWebhookConfigurationDetails, error) {
+func (s *Service) MutatingWebhookConfiguration(ctx context.Context, name string) (*MutatingWebhookConfigurationDetails, error) {
 	client := s.deps.KubernetesClient
 	if client == nil {
 		return nil, fmt.Errorf("kubernetes client not initialized")
 	}
 
-	config, err := client.AdmissionregistrationV1().MutatingWebhookConfigurations().Get(s.deps.Context, name, metav1.GetOptions{})
+	config, err := client.AdmissionregistrationV1().MutatingWebhookConfigurations().Get(ctx, name, metav1.GetOptions{})
 	if err != nil {
 		err = s.logError(err, fmt.Sprintf("Failed to get mutating webhook configuration %s", name), MutatingIdentity)
 		return nil, fmt.Errorf("failed to get mutating webhook configuration: %w", err)

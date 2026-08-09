@@ -84,7 +84,7 @@ func TestServiceMutatingWebhookConfigurationDetails(t *testing.T) {
 
 	service := newAdmissionService(t, config.DeepCopy())
 
-	detail, err := service.MutatingWebhookConfiguration("webhook-mutate")
+	detail, err := service.MutatingWebhookConfiguration(context.Background(), "webhook-mutate")
 	require.NoError(t, err)
 
 	require.Equal(t, "MutatingWebhookConfiguration", detail.Kind)
@@ -117,12 +117,11 @@ func TestMutatingWebhookConfigurationLogsErrorOnFailure(t *testing.T) {
 	})
 
 	service := NewService(common.Dependencies{
-		Context:          context.Background(),
 		Logger:           logger,
 		KubernetesClient: client,
 	})
 
-	_, err := service.MutatingWebhookConfiguration("hook-one")
+	_, err := service.MutatingWebhookConfiguration(context.Background(), "hook-one")
 	require.Error(t, err)
 	require.Contains(t, err.Error(), "failed to get mutating webhook configuration")
 
@@ -135,7 +134,7 @@ func TestMutatingWebhookConfigurationLogsErrorOnFailure(t *testing.T) {
 func TestMutatingWebhookConfigurationRequiresClient(t *testing.T) {
 	service := NewService(common.Dependencies{})
 
-	_, err := service.MutatingWebhookConfiguration("hook-one")
+	_, err := service.MutatingWebhookConfiguration(context.Background(), "hook-one")
 
 	require.Error(t, err)
 	require.Contains(t, err.Error(), "kubernetes client not initialized")

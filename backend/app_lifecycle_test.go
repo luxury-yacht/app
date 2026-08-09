@@ -50,7 +50,7 @@ func TestContainsAuthPatternDoesNotTreatPermissionDenialAsAuthentication(t *test
 
 func TestSetupRefreshSubsystemRequiresSelections(t *testing.T) {
 	app := newTestAppWithDefaults(t)
-	app.Ctx = context.Background()
+	app.setRuntimeContext(context.Background())
 
 	err := app.setupRefreshSubsystem()
 	require.Error(t, err)
@@ -58,7 +58,6 @@ func TestSetupRefreshSubsystemRequiresSelections(t *testing.T) {
 
 func TestSetupRefreshSubsystemRequiresContext(t *testing.T) {
 	app := newTestAppWithDefaults(t)
-	app.Ctx = nil
 
 	err := app.setupRefreshSubsystem()
 	require.Error(t, err)
@@ -73,20 +72,20 @@ func TestEnsureRefreshRuntimeContextGuardsMissingContextAndReusesLiveRuntime(t *
 	app := newTestAppWithDefaults(t)
 	require.Nil(t, app.ensureRefreshRuntimeContext())
 
-	app.Ctx = context.Background()
+	app.setRuntimeContext(context.Background())
 	first := app.ensureRefreshRuntimeContext()
 	require.NotNil(t, first)
 	t.Cleanup(app.refreshCancel)
 
 	second := app.ensureRefreshRuntimeContext()
-	require.Equal(t, first, second, "an active refresh runtime must not be replaced")
+	require.Equal(t, first.Done(), second.Done(), "an active refresh runtime must not be replaced")
 }
 
 func TestEnsureRefreshRuntimeContextSharesOneRuntimeAcrossLifecycleCallers(t *testing.T) {
 	parent, cancelParent := context.WithCancel(context.Background())
 	t.Cleanup(cancelParent)
 	app := newTestAppWithDefaults(t)
-	app.Ctx = parent
+	app.setRuntimeContext(parent)
 
 	const callers = 32
 	contexts := make([]context.Context, callers)
@@ -113,7 +112,7 @@ func TestEnsureRefreshRuntimeContextSharesOneRuntimeAcrossLifecycleCallers(t *te
 	first := contexts[0]
 	require.NotNil(t, first)
 	for _, runtimeCtx := range contexts[1:] {
-		require.Same(t, first, runtimeCtx, "all lifecycle paths must share one refresh runtime")
+		require.Equal(t, first.Done(), runtimeCtx.Done(), "all lifecycle paths must share one refresh runtime")
 	}
 	if app.refreshCancel != nil {
 		app.refreshCancel()
@@ -124,7 +123,7 @@ func TestSetupRefreshSubsystemDoesNotStorePermissionCache(t *testing.T) {
 	app := newTestAppWithDefaults(t)
 	ctx, cancel := context.WithCancel(context.Background())
 	defer cancel()
-	app.Ctx = ctx
+	app.setRuntimeContext(ctx)
 
 	// Create per-cluster clients - there are no global client fields anymore.
 	fakeClient := cgofake.NewClientset()
@@ -252,7 +251,7 @@ func TestStdLogBridgeWritesToLogger(t *testing.T) {
 
 func TestInitKubernetesClientRequiresSelections(t *testing.T) {
 	app := newTestAppWithDefaults(t)
-	app.Ctx = context.Background()
+	app.setRuntimeContext(context.Background())
 
 	err := app.initKubernetesClient()
 	require.Error(t, err)
@@ -263,7 +262,7 @@ func TestInitKubernetesClientFailsWhenRefreshSubsystemFails(t *testing.T) {
 	app := newTestAppWithDefaults(t)
 	ctx, cancel := context.WithCancel(context.Background())
 	defer cancel()
-	app.Ctx = ctx
+	app.setRuntimeContext(ctx)
 
 	kubeconfig := `
 apiVersion: v1
@@ -346,7 +345,7 @@ func TestStartupAppliesWindowSettings(t *testing.T) {
 	t.Setenv("APPDATA", filepath.Join(baseDir, "AppData", "Roaming"))
 	app := newTestAppWithDefaults(t)
 	ctx, cancel := context.WithCancel(context.Background())
-	app.Ctx = ctx
+	app.setRuntimeContext(ctx)
 
 	settingsPath, err := app.getSettingsFilePath()
 	require.NoError(t, err)
@@ -397,7 +396,7 @@ func TestBeforeClosePersistsWindowSettings(t *testing.T) {
 	t.Setenv("HOME", t.TempDir())
 	app := newTestAppWithDefaults(t)
 	ctx := context.Background()
-	app.Ctx = ctx
+	app.setRuntimeContext(ctx)
 
 	runtimeWindowGetPosition = func(context.Context) (int, int) { return 11, 22 }
 	runtimeWindowGetSize = func(context.Context) (int, int) { return 800, 600 }
@@ -430,7 +429,7 @@ func TestBeforeCloseWaitsForSelectionMutationBeforeSavingWindowSettings(t *testi
 	t.Setenv("HOME", t.TempDir())
 	app := newTestAppWithDefaults(t)
 	ctx := context.Background()
-	app.Ctx = ctx
+	app.setRuntimeContext(ctx)
 
 	saveStarted := make(chan struct{})
 	var saveStartedOnce sync.Once
@@ -519,7 +518,7 @@ func TestStartupBetaExpiryShowsDialogAndQuits(t *testing.T) {
 	reporter := &recordingErrorReporter{}
 	app.logger = NewLogger(100, reporter)
 	ctx := context.Background()
-	app.Ctx = ctx
+	app.setRuntimeContext(ctx)
 
 	dialogCalled := false
 	quitCalled := false

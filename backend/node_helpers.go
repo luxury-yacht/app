@@ -8,6 +8,7 @@
 package backend
 
 import (
+	"context"
 	"fmt"
 	"time"
 
@@ -24,8 +25,8 @@ func requireNodeActionTarget(action string, target ObjectActionTargetRef) error 
 	}
 	return requireObjectName(target.Name)
 }
-func (a *App) requireNodeMaintenancePermission(deps common.Dependencies, nodeName string) error {
-	if err := a.requireResourcePermission(deps.Context, deps, resourcePermissionCheck{
+func (a *App) requireNodeMaintenancePermission(ctx context.Context, deps common.Dependencies, nodeName string) error {
+	if err := a.requireResourcePermission(ctx, deps, resourcePermissionCheck{
 		Version: "v1",
 		Kind:    nodes.Identity.Kind,
 		Name:    nodeName,
@@ -33,14 +34,14 @@ func (a *App) requireNodeMaintenancePermission(deps common.Dependencies, nodeNam
 	}); err != nil {
 		return err
 	}
-	return a.requireResourcePermission(deps.Context, deps, resourcePermissionCheck{
+	return a.requireResourcePermission(ctx, deps, resourcePermissionCheck{
 		Version: "v1",
 		Kind:    nodes.Identity.Kind,
 		Name:    nodeName,
 		Verb:    "patch",
 	})
 }
-func (a *App) requireDrainPodPermission(deps common.Dependencies, options DrainNodeOptions) error {
+func (a *App) requireDrainPodPermission(ctx context.Context, deps common.Dependencies, options DrainNodeOptions) error {
 	podCheck := resourcePermissionCheck{
 		Version:     "v1",
 		Kind:        pods.Identity.Kind,
@@ -58,7 +59,7 @@ func (a *App) requireDrainPodPermission(deps common.Dependencies, options DrainN
 			podCheck = resourcePermissionCheck{Version: "v1", Kind: pods.Identity.Kind, Verb: "delete"}
 		}
 	}
-	return a.requireResourcePermission(deps.Context, deps, podCheck)
+	return a.requireResourcePermission(ctx, deps, podCheck)
 }
 func runtimeOperationFromDrainJob(job *nodemaintenance.DrainJob) RuntimeOperation {
 	if job == nil {

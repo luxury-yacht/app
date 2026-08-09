@@ -31,7 +31,6 @@ func ptrToInt32(v int32) *int32 { return &v }
 func newHPAService(t testing.TB, client *fake.Clientset) *Service {
 	t.Helper()
 	deps := testsupport.NewResourceDependencies(
-		testsupport.WithDepsContext(context.Background()),
 		testsupport.WithDepsKubeClient(client),
 		testsupport.WithDepsLogger(applog.Noop),
 		testsupport.WithDepsEnsureClient(func(string) error { return nil }),
@@ -93,7 +92,7 @@ func TestServiceHorizontalPodAutoscalerDetails(t *testing.T) {
 
 	service := newHPAService(t, fake.NewClientset(h.DeepCopy()))
 
-	detail, err := service.HorizontalPodAutoscaler("default", "web-hpa")
+	detail, err := service.HorizontalPodAutoscaler(context.Background(), "default", "web-hpa")
 	require.NoError(t, err)
 	require.Equal(t, "HorizontalPodAutoscaler", detail.Kind)
 	require.Equal(t, int32(5), detail.MaxReplicas)
@@ -105,6 +104,6 @@ func TestServiceHorizontalPodAutoscalerDetails(t *testing.T) {
 func TestHPAServiceRequiresClient(t *testing.T) {
 	svc := NewService(testsupport.NewResourceDependencies())
 
-	_, err := svc.HorizontalPodAutoscaler("default", "missing")
+	_, err := svc.HorizontalPodAutoscaler(context.Background(), "default", "missing")
 	require.Error(t, err)
 }

@@ -63,7 +63,7 @@ func TestDaemonSetServiceReturnsDetail(t *testing.T) {
 	deps := newDeps(t, client)
 
 	service := daemonset.NewService(deps)
-	detail, err := service.DaemonSet("default", "agent")
+	detail, err := service.DaemonSet(context.Background(), "default", "agent")
 	require.NoError(t, err)
 	require.Equal(t, "DaemonSet", detail.Kind)
 	require.Len(t, detail.Pods, 1)
@@ -83,7 +83,7 @@ func TestDaemonSetServiceProjectsNoEligibleNodesStatus(t *testing.T) {
 	ds.Status = appsv1.DaemonSetStatus{}
 	client := cgofake.NewClientset(ds.DeepCopy())
 
-	detail, err := daemonset.NewService(newDeps(t, client)).DaemonSet("default", "agent")
+	detail, err := daemonset.NewService(newDeps(t, client)).DaemonSet(context.Background(), "default", "agent")
 	require.NoError(t, err)
 	require.Equal(t, "No eligible nodes", detail.Status)
 	require.Equal(t, "0/0", detail.StatusState)
@@ -94,7 +94,6 @@ func TestDaemonSetServiceProjectsNoEligibleNodesStatus(t *testing.T) {
 func newDeps(t testing.TB, client *cgofake.Clientset) common.Dependencies {
 	t.Helper()
 	return testsupport.NewResourceDependencies(
-		testsupport.WithDepsContext(context.Background()),
 		testsupport.WithDepsKubeClient(client),
 		testsupport.WithDepsLogger(applog.Noop),
 		testsupport.WithDepsEnsureClient(func(string) error { return nil }),

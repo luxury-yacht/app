@@ -101,10 +101,7 @@ func (a *App) restartWorkloadInternal(clusterID, namespace, group, version, work
 		return fmt.Errorf("failed to marshal restart patch: %w", err)
 	}
 
-	ctx := deps.Context
-	if ctx == nil {
-		ctx = context.Background()
-	}
+	ctx := a.CtxOrBackground()
 
 	ops := workloadOperationsByKind[workloadKind]
 	if ops == nil || ops.Restart == nil {
@@ -156,10 +153,7 @@ func (a *App) scaleWorkloadInternal(clusterID, namespace, group, version, worklo
 		return fmt.Errorf("kubernetes client is not initialized")
 	}
 
-	ctx := deps.Context
-	if ctx == nil {
-		ctx = context.Background()
-	}
+	ctx := a.CtxOrBackground()
 
 	if err := ensureHPAManagedScaleAllowed(ctx, deps, namespace, group, version, workloadKind, name, replicas); err != nil {
 		return err
@@ -246,10 +240,7 @@ func (a *App) triggerCronJobInternal(clusterID, namespace, name string) (string,
 		return "", fmt.Errorf("kubernetes client is not initialized")
 	}
 
-	ctx := deps.Context
-	if ctx == nil {
-		ctx = context.Background()
-	}
+	ctx := a.CtxOrBackground()
 
 	// Permission to create the Job is checked here; the CronJob fetch, suspended
 	// guard, and Job creation live in the cronjob package.
@@ -292,7 +283,8 @@ func (a *App) suspendCronJobInternal(clusterID, namespace, name string, suspend 
 		return fmt.Errorf("kubernetes client is not initialized")
 	}
 
-	if err := a.requireResourcePermission(deps.Context, deps, resourcePermissionCheck{
+	ctx := a.CtxOrBackground()
+	if err := a.requireResourcePermission(ctx, deps, resourcePermissionCheck{
 		Group:     cronjob.Identity.Group,
 		Version:   cronjob.Identity.Version,
 		Kind:      cronjob.Identity.Kind,
@@ -301,11 +293,6 @@ func (a *App) suspendCronJobInternal(clusterID, namespace, name string, suspend 
 		Verb:      "patch",
 	}); err != nil {
 		return err
-	}
-
-	ctx := deps.Context
-	if ctx == nil {
-		ctx = context.Background()
 	}
 
 	if err := cronjob.SetSuspend(ctx, deps.KubernetesClient, namespace, name, suspend); err != nil {
@@ -324,12 +311,4 @@ func (a *App) suspendCronJobInternal(clusterID, namespace, name string, suspend 
 // boolPtr returns a pointer to a bool value.
 func boolPtr(b bool) *bool {
 	return &b
-}
-
-// Helper to obtain context even when Startup not yet run.
-func (a *App) CtxOrBackground() context.Context {
-	if a.Ctx != nil {
-		return a.Ctx
-	}
-	return context.Background()
 }

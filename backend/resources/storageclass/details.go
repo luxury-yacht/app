@@ -8,6 +8,7 @@
 package storageclass
 
 import (
+	"context"
 	"fmt"
 
 	"github.com/luxury-yacht/app/backend/internal/logsources"
@@ -29,30 +30,30 @@ func NewService(deps common.Dependencies) *Service {
 }
 
 // StorageClass returns the detailed view for a single storage class.
-func (s *Service) StorageClass(name string) (*StorageClassDetails, error) {
+func (s *Service) StorageClass(ctx context.Context, name string) (*StorageClassDetails, error) {
 	if s.deps.KubernetesClient == nil {
 		return nil, fmt.Errorf("kubernetes client not initialized")
 	}
 
-	sc, err := s.deps.KubernetesClient.StorageV1().StorageClasses().Get(s.deps.Context, name, metav1.GetOptions{})
+	sc, err := s.deps.KubernetesClient.StorageV1().StorageClasses().Get(ctx, name, metav1.GetOptions{})
 	if err != nil {
 		err = s.deps.LogResourceRequestFailure(err, fmt.Sprintf("Failed to get storage class %s", name), "get", Identity, logsources.ResourceLoader)
 		return nil, fmt.Errorf("failed to get storage class: %w", err)
 	}
 
-	pvs := s.listPersistentVolumes()
+	pvs := s.listPersistentVolumes(ctx)
 	return s.processStorageClassDetails(sc, pvs), nil
 }
 
 // listPersistentVolumes lists all PVs so the StorageClass detail can enumerate
 // the volumes using this class. The PersistentVolume kind owns its own detail in
 // resources/storage; this is the StorageClass detail's own dependency.
-func (s *Service) listPersistentVolumes() *corev1.PersistentVolumeList {
+func (s *Service) listPersistentVolumes(ctx context.Context) *corev1.PersistentVolumeList {
 	if s.deps.KubernetesClient == nil {
 		return nil
 	}
 
-	pvs, err := s.deps.KubernetesClient.CoreV1().PersistentVolumes().List(s.deps.Context, metav1.ListOptions{})
+	pvs, err := s.deps.KubernetesClient.CoreV1().PersistentVolumes().List(ctx, metav1.ListOptions{})
 	if err != nil {
 		s.deps.Logger.Warn(fmt.Sprintf("Failed to list persistent volumes: %v", err), logsources.ResourceLoader)
 		return nil

@@ -122,13 +122,13 @@ func TestKubeconfigWatcher_DebounceAccumulatesPaths(t *testing.T) {
 func TestApp_HandleKubeconfigChange_ContextRemovedDeselectsOnlyAffectedFromSameFile(t *testing.T) {
 	setTestConfigEnv(t)
 	app := newTestAppWithDefaults(t)
-	app.Ctx = context.Background()
+	app.setRuntimeContext(context.Background())
 	app.clusterClients = make(map[string]*clusterClients)
 	app.refreshSubsystems = make(map[string]*system.Subsystem)
 	app.objectCatalogEntries = make(map[string]*objectCatalogEntry)
 	app.refreshAggregates.Store(&refreshAggregateHandlers{})
 	app.refreshHTTPServer = &http.Server{}
-	app.refreshCtx = context.Background()
+	setRefreshRuntimeContextForTest(app, context.Background())
 	app.appSettings = getDefaultAppSettings()
 
 	baseDir := t.TempDir()
@@ -265,7 +265,7 @@ func TestClassifyChangedKubeconfigClusterCoversEveryDisposition(t *testing.T) {
 func TestDeselectClusters_AbortsOnReconciliationFailure(t *testing.T) {
 	setTestConfigEnv(t)
 	app := newTestAppWithDefaults(t)
-	app.Ctx = context.Background()
+	app.setRuntimeContext(context.Background())
 	app.clusterClients = make(map[string]*clusterClients)
 
 	app.kubeconfigsMu.Lock()
@@ -287,7 +287,7 @@ func TestDeselectClusters_AbortsOnReconciliationFailure(t *testing.T) {
 	// Force updateRefreshSubsystemSelections to take the setupRefreshSubsystem path and fail.
 	app.refreshAggregates.Store(nil)
 	app.refreshHTTPServer = nil
-	app.refreshCtx = nil
+	setRefreshRuntimeContextForTest(app, nil)
 
 	app.selectionMutationMu.Lock()
 	app.deselectClusters([]string{"b:ctx-b"})

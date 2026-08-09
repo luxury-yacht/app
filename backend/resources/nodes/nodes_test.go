@@ -35,7 +35,7 @@ import (
 func TestServiceNodeReturnsDetails(t *testing.T) {
 	service, _, node := newNodeService(t)
 
-	detail, err := service.Node(node.Name)
+	detail, err := service.Node(context.Background(), node.Name)
 	require.NoError(t, err)
 	require.Equal(t, node.Name, detail.Name)
 	require.Equal(t, "Ready", detail.Status)
@@ -56,7 +56,7 @@ func TestServiceNodeStatusUsesSharedResourceModel(t *testing.T) {
 	_, err = client.CoreV1().Nodes().Update(context.Background(), current, metav1.UpdateOptions{})
 	require.NoError(t, err)
 
-	detail, err := service.Node(node.Name)
+	detail, err := service.Node(context.Background(), node.Name)
 	require.NoError(t, err)
 	require.Equal(t, "Ready (Cordoned)", detail.Status)
 	require.Equal(t, "True", detail.StatusState)
@@ -79,7 +79,7 @@ func TestServiceDeleteHonorsForce(t *testing.T) {
 		return false, nil, nil
 	})
 
-	require.NoError(t, service.Delete(node.Name, true))
+	require.NoError(t, service.Delete(context.Background(), node.Name, true))
 	require.NotNil(t, recordedGrace)
 	require.Equal(t, int64(0), *recordedGrace)
 }
@@ -96,7 +96,7 @@ func TestServiceDeleteWithoutForceUsesDefaultGrace(t *testing.T) {
 		return false, nil, nil
 	})
 
-	require.NoError(t, service.Delete(node.Name, false))
+	require.NoError(t, service.Delete(context.Background(), node.Name, false))
 	require.False(t, recordedGraceSeen, "default delete should not force grace period")
 }
 
@@ -106,7 +106,7 @@ func TestServiceDeleteReturnsEnsureClientError(t *testing.T) {
 	)
 	service := nodes.NewService(deps)
 
-	err := service.Delete("node-1", false)
+	err := service.Delete(context.Background(), "node-1", false)
 	require.Error(t, err)
 	require.Contains(t, err.Error(), "ensure failed")
 }
@@ -115,13 +115,13 @@ func TestServiceCordonAndUncordon(t *testing.T) {
 	service, client, node := newNodeService(t)
 	addNodePatchReactor(t, client)
 
-	require.NoError(t, service.Cordon(node.Name))
+	require.NoError(t, service.Cordon(context.Background(), node.Name))
 
 	updated, err := client.CoreV1().Nodes().Get(context.Background(), node.Name, metav1.GetOptions{})
 	require.NoError(t, err)
 	require.True(t, updated.Spec.Unschedulable)
 
-	require.NoError(t, service.Uncordon(node.Name))
+	require.NoError(t, service.Uncordon(context.Background(), node.Name))
 	updated, err = client.CoreV1().Nodes().Get(context.Background(), node.Name, metav1.GetOptions{})
 	require.NoError(t, err)
 	require.False(t, updated.Spec.Unschedulable)
@@ -138,7 +138,7 @@ func TestServiceDrainDeletesPods(t *testing.T) {
 		SkipWaitForPodsToTerminate: true,
 	}
 
-	require.NoError(t, service.Drain(node.Name, options))
+	require.NoError(t, service.Drain(context.Background(), node.Name, options))
 
 	list, err := client.CoreV1().Pods("").List(context.Background(), metav1.ListOptions{})
 	require.NoError(t, err)
@@ -165,7 +165,7 @@ func TestServiceDrainDeleteUsesPodDefaultGraceWhenUnset(t *testing.T) {
 		SkipWaitForPodsToTerminate: true,
 	}
 
-	require.NoError(t, service.Drain(node.Name, options))
+	require.NoError(t, service.Drain(context.Background(), node.Name, options))
 	require.NotEmpty(t, recordedGrace)
 	for _, grace := range recordedGrace {
 		require.Nil(t, grace, "unset gracePeriodSeconds should omit pod delete grace period")
@@ -197,7 +197,7 @@ func TestServiceDrainEvictionUsesPodDefaultGraceWhenUnset(t *testing.T) {
 		SkipWaitForPodsToTerminate: true,
 	}
 
-	require.NoError(t, service.Drain(node.Name, options))
+	require.NoError(t, service.Drain(context.Background(), node.Name, options))
 	require.NotEmpty(t, recordedGrace)
 	for _, grace := range recordedGrace {
 		require.Nil(t, grace, "unset gracePeriodSeconds should omit pod eviction grace period")
@@ -208,11 +208,11 @@ func TestServiceDrainValidatesGracePeriod(t *testing.T) {
 	service, _, node := newNodeService(t)
 
 	negativeGrace := -1
-	err := service.Drain(node.Name, types.DrainNodeOptions{GracePeriodSeconds: &negativeGrace})
+	err := service.Drain(context.Background(), node.Name, types.DrainNodeOptions{GracePeriodSeconds: &negativeGrace})
 	require.EqualError(t, err, "gracePeriodSeconds must be non-negative")
 
 	tooLongGrace := 901
-	err = service.Drain(node.Name, types.DrainNodeOptions{GracePeriodSeconds: &tooLongGrace})
+	err = service.Drain(context.Background(), node.Name, types.DrainNodeOptions{GracePeriodSeconds: &tooLongGrace})
 	require.EqualError(t, err, "gracePeriodSeconds must be less than or equal to 900")
 }
 
@@ -220,7 +220,7 @@ func TestServiceDrainValidatesTimeout(t *testing.T) {
 	service, _, node := newNodeService(t)
 
 	negativeTimeout := -1
-	err := service.Drain(node.Name, types.DrainNodeOptions{TimeoutSeconds: &negativeTimeout})
+	err := service.Drain(context.Background(), node.Name, types.DrainNodeOptions{TimeoutSeconds: &negativeTimeout})
 	require.EqualError(t, err, "timeoutSeconds must be non-negative")
 
 	zeroTimeout := 0
@@ -243,7 +243,7 @@ func TestServiceDrainLeavesNodeCordonedAfterFailure(t *testing.T) {
 	_, err := client.CoreV1().Pods(pod.Namespace).Create(context.Background(), pod, metav1.CreateOptions{})
 	require.NoError(t, err)
 
-	err = service.Drain(node.Name, types.DrainNodeOptions{
+	err = service.Drain(context.Background(), node.Name, types.DrainNodeOptions{
 		DeleteEmptyDirData: false,
 		IgnoreDaemonSets:   true,
 	})
@@ -282,12 +282,12 @@ func TestServiceDrainUsesKubectlDaemonSetFiltering(t *testing.T) {
 		DeleteEmptyDirData:         true,
 		SkipWaitForPodsToTerminate: true,
 	}
-	err = service.Drain(node.Name, options)
+	err = service.Drain(context.Background(), node.Name, options)
 	require.Error(t, err)
 	require.Contains(t, err.Error(), "DaemonSet-managed Pods")
 
 	options.IgnoreDaemonSets = true
-	require.NoError(t, service.Drain(node.Name, options))
+	require.NoError(t, service.Drain(context.Background(), node.Name, options))
 }
 
 func TestServiceDrainUsesKubectlUnmanagedPodFiltering(t *testing.T) {
@@ -305,18 +305,16 @@ func TestServiceDrainUsesKubectlUnmanagedPodFiltering(t *testing.T) {
 		IgnoreDaemonSets:           true,
 		SkipWaitForPodsToTerminate: true,
 	}
-	err = service.Drain(node.Name, options)
+	err = service.Drain(context.Background(), node.Name, options)
 	require.Error(t, err)
 	require.Contains(t, err.Error(), "declare no controller")
 
 	options.Force = true
-	require.NoError(t, service.Drain(node.Name, options))
+	require.NoError(t, service.Drain(context.Background(), node.Name, options))
 }
 
 func newNodeService(t *testing.T) (*nodes.Service, *fake.Clientset, *corev1.Node) {
 	t.Helper()
-	ctx := context.Background()
-
 	now := time.Now()
 
 	node := &corev1.Node{
@@ -370,7 +368,6 @@ func newNodeService(t *testing.T) (*nodes.Service, *fake.Clientset, *corev1.Node
 	seedEvictionSupport(t, client)
 
 	deps := testsupport.NewResourceDependencies(
-		testsupport.WithDepsContext(ctx),
 		testsupport.WithDepsKubeClient(client),
 		testsupport.WithDepsLogger(applog.Noop),
 	)
