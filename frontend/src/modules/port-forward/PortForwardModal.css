@@ -117,12 +117,10 @@
 }
 
 .port-forward-port-option:hover {
-  /* border-color: var(--color-accent); */
   background: var(--color-bg-tertiary);
 }
 
 .port-forward-port-option.selected {
-  /* border-color: var(--color-accent); */
   background: var(--color-bg-tertiary);
 }
 

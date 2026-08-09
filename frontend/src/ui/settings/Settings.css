@@ -656,7 +656,6 @@
   cursor: pointer;
   font-size: var(--font-size-small);
   white-space: nowrap;
-  /* padding: 0.3rem; */
   display: inline-flex;
   align-items: center;
   justify-content: center;
@@ -675,11 +674,6 @@
   opacity: 0.35;
   cursor: default;
 }
-
-/* .theme-action-spacer {
-  min-width: 1rem;
-  min-height: 1rem;
-} */
 
 .theme-action-delete:hover {
   color: var(--color-danger, #f87171);

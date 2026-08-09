@@ -267,8 +267,6 @@
   border: 0;
   background: transparent;
   padding: 0;
-
-  /* transition: background-color var(--transition-fast); */
 }
 
 .dockable-panel__resize-zone--top {

@@ -17,8 +17,6 @@
   flex-wrap: wrap;
   padding: 0.75rem;
   background-color: var(--color-bg-secondary);
-  /* border-radius: var(--border-radius-sm); */
-  /* box-shadow: 0 2px 4px rgba(0, 0, 0, 0.08); */
 }
 
 .yaml-controls {
@@ -108,7 +106,6 @@
 
 .yaml-validation-message {
   font-size: 0.85rem;
-  /* margin-bottom: 0.75rem; */
   margin: 0.5rem;
   padding: 0.5rem 0.75rem;
   border-radius: var(--border-radius-sm);

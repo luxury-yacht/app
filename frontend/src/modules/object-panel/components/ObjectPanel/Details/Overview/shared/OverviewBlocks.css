@@ -161,13 +161,6 @@
   gap: var(--spacing-xs);
 }
 
-/* When conditions live inside a card (e.g., listener), separate them
-   from the card body above with a subtle divider. */
-/* .overview-card .overview-condition-list {
-  padding-top: var(--spacing-sm);
-  border-top: 1px dashed var(--color-border);
-} */
-
 /* ---------- Stacked section ----------
    For overview rows where the content needs the panel's full width — label
    on its own line above, content block below. Mirrors the metadata-section
