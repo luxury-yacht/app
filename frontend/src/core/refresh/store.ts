@@ -181,9 +181,10 @@ export const getScopedDomainStates = <K extends RefreshDomain>(
   const domainMap = state.scopedDomains[domain] as
     | Record<string, DomainSnapshotState<DomainPayloadMap[K]>>
     | undefined;
-  return domainMap
-    ? domainMap
-    : (EMPTY_SCOPED_MAP as unknown as Record<string, DomainSnapshotState<DomainPayloadMap[K]>>);
+  return (
+    domainMap ??
+    (EMPTY_SCOPED_MAP as unknown as Record<string, DomainSnapshotState<DomainPayloadMap[K]>>)
+  );
 };
 
 export const getScopedDomainEntries = <K extends RefreshDomain>(
@@ -192,11 +193,10 @@ export const getScopedDomainEntries = <K extends RefreshDomain>(
   const entries = state.scopedDomainEntries[domain] as
     | Array<[string, DomainSnapshotState<DomainPayloadMap[K]>]>
     | undefined;
-  return entries
-    ? entries
-    : (EMPTY_SCOPED_ENTRIES as unknown as Array<
-        [string, DomainSnapshotState<DomainPayloadMap[K]>]
-      >);
+  return (
+    entries ??
+    (EMPTY_SCOPED_ENTRIES as unknown as Array<[string, DomainSnapshotState<DomainPayloadMap[K]>]>)
+  );
 };
 
 export const setDomainState = <K extends RefreshDomain>(

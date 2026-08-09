@@ -419,9 +419,7 @@ const YamlEditor = ({
       );
       let touchedRange: ProtectedYamlRange | null = null;
       transaction.changes.iterChanges((fromA, toA) => {
-        if (!touchedRange) {
-          touchedRange = changeTouchesRange(fromA, toA, ranges);
-        }
+        touchedRange ??= changeTouchesRange(fromA, toA, ranges);
       });
       const blockedRange = touchedRange as ProtectedYamlRange | null;
       if (!blockedRange) {

@@ -42,10 +42,9 @@ export class ResourceStreamHealthStore {
     const previous = this.snapshots.get(key);
     this.snapshots.set(key, next);
     if (
-      !previous ||
-      previous.status !== next.status ||
-      previous.reason !== next.reason ||
-      previous.connectionStatus !== next.connectionStatus
+      previous?.status !== next.status ||
+      previous?.reason !== next.reason ||
+      previous?.connectionStatus !== next.connectionStatus
     ) {
       eventBus.emit('refresh:resource-stream-health', next);
     }

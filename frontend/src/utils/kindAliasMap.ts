@@ -83,7 +83,7 @@ export function getTypeAlias(kind: string): string | undefined {
 // Get display type (short or full) based on user preference
 export function getDisplayKind(kind: string, useShortNames?: boolean): string {
   // If not provided, read from the preference cache.
-  const shouldUseShort = useShortNames !== undefined ? useShortNames : getUseShortResourceNames();
+  const shouldUseShort = useShortNames ?? getUseShortResourceNames();
 
   if (shouldUseShort) {
     return kindAliasMap[kind] || kind;

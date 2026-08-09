@@ -97,7 +97,7 @@ export const moveObjectMapLegendDrag = (
   canvasRect: ObjectMapLegendRect,
   legendRect: ObjectMapLegendRect
 ): ObjectMapLegendPosition | null => {
-  if (!drag || drag.pointerId !== pointerId) {
+  if (drag?.pointerId !== pointerId) {
     return null;
   }
 
@@ -112,7 +112,7 @@ export const moveObjectMapLegendDrag = (
 export const endObjectMapLegendDrag = (
   drag: ObjectMapLegendDragState | null,
   pointerId: number
-): boolean => Boolean(drag && drag.pointerId === pointerId);
+): boolean => drag?.pointerId === pointerId;
 
 export const useObjectMapLegendDrag = (canvasRef: RefObject<HTMLElement | null>) => {
   const [legendPosition, setLegendPosition] = useState<ObjectMapLegendPosition | null>(null);

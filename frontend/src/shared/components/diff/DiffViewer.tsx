@@ -488,12 +488,8 @@ const DiffViewer: React.FC<DiffViewerProps> = ({
   const renderDiffRow = (line: DisplayDiffLine, index: number) => {
     const leftLineText = getLineText(leftDisplayLines, line.leftLineNumber);
     const rightLineText = getLineText(rightDisplayLines, line.rightLineNumber);
-    const leftNumber =
-      line.leftLineNumber !== null && line.leftLineNumber !== undefined ? line.leftLineNumber : '';
-    const rightNumber =
-      line.rightLineNumber !== null && line.rightLineNumber !== undefined
-        ? line.rightLineNumber
-        : '';
+    const leftNumber = line.leftLineNumber ?? '';
+    const rightNumber = line.rightLineNumber ?? '';
     const leftType = line.leftType;
     const rightType = line.rightType;
     const leftMuted =

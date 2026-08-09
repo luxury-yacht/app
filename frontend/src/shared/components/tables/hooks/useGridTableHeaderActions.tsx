@@ -43,7 +43,7 @@ export function useGridTableHeaderActions<T>({
 
   const renderSortIndicator = useCallback(
     (columnKey: string) => {
-      if (!sortConfig || sortConfig.key !== columnKey) {
+      if (sortConfig?.key !== columnKey) {
         return null;
       }
       let indicator = '';

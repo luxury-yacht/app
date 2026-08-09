@@ -402,7 +402,7 @@ export function useAnchorOnUnmatchedFocusRequest<TRow>({
       return;
     }
     const request = peekPendingFocusRequest();
-    if (!request || request.clusterId !== clusterId) {
+    if (request?.clusterId !== clusterId) {
       return;
     }
     // Only the navigation DESTINATION table reacts: the request is stamped with

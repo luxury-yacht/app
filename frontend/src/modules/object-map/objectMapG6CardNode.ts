@@ -24,9 +24,7 @@ const measureTextWidth = (
   if (typeof document === 'undefined') {
     return text.length * fontSize * 0.62 + Math.max(0, text.length - 1) * letterSpacing;
   }
-  if (!measureContext) {
-    measureContext = document.createElement('canvas').getContext('2d');
-  }
+  measureContext ??= document.createElement('canvas').getContext('2d');
   if (!measureContext) {
     return text.length * fontSize * 0.62 + Math.max(0, text.length - 1) * letterSpacing;
   }

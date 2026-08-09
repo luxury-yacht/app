@@ -160,7 +160,7 @@ export const computeCollapseInfo = (
       return;
     }
     const owner = nodesById.get(ownerId);
-    if (!owner || owner.ref.kind !== DEPLOYMENT_KIND) {
+    if (owner?.ref.kind !== DEPLOYMENT_KIND) {
       return;
     }
     let group = rsByDeployment.get(ownerId);

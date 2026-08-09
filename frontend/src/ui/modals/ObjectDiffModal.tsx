@@ -114,12 +114,12 @@ const buildCatalogDiffScope = (params: {
 
 const buildNamespaceLabel = (namespace?: string) => {
   const trimmed = namespace?.trim();
-  return trimmed ? trimmed : 'cluster';
+  return trimmed || 'cluster';
 };
 
 const buildNamespaceScope = (namespace?: string) => {
   const trimmed = namespace?.trim();
-  return trimmed ? trimmed : CLUSTER_SCOPE;
+  return trimmed || CLUSTER_SCOPE;
 };
 
 const buildSelectionParts = (
@@ -159,7 +159,7 @@ const formatChangeAge = (timestamp: number): string => {
 
 const normalizeMatchNamespace = (namespace?: string | null): string => {
   const trimmed = namespace?.trim();
-  return trimmed ? trimmed : CLUSTER_SCOPE;
+  return trimmed || CLUSTER_SCOPE;
 };
 
 const toCatalogItem = (value: unknown): CatalogItem | null => {

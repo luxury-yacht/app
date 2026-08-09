@@ -7,7 +7,7 @@ export const collectSuppressionErrors = (sources) => {
   for (const { file, content } of sources) {
     content.split('\n').forEach((line, index) => {
       const markerMatch = line.match(/biome-ignore(?:-all|-start|-end)?\s/);
-      if (!markerMatch || markerMatch.index === undefined) {
+      if (markerMatch?.index === undefined) {
         return;
       }
       const suppressionForm = markerMatch[0].trim();

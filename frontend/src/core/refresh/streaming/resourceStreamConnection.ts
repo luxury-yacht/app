@@ -88,7 +88,7 @@ export class ResourceStreamConnection {
   }
 
   send(message: ResourceStreamClientMessage): void {
-    if (this.socket && this.socket.readyState === WebSocket.OPEN) {
+    if (this.socket?.readyState === WebSocket.OPEN) {
       this.socket.send(JSON.stringify(message));
       return;
     }

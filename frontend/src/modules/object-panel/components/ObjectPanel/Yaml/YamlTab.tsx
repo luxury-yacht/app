@@ -675,7 +675,7 @@ const YamlTab: React.FC<YamlTabProps> = ({
       const doc = YAML.parseDocument(effectiveYamlContent);
       const obj = doc.toJSON();
 
-      if (!showManagedFields && obj && obj.metadata && obj.metadata.managedFields) {
+      if (!showManagedFields && obj?.metadata?.managedFields) {
         obj.metadata.managedFields = undefined;
       }
 

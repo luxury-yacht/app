@@ -152,9 +152,9 @@ const autoscalingSpec: AggregatedResourceGridViewSpec<AutoscalingData> = {
         (resource) => {
           if (resource.ref.kind === 'HorizontalPodAutoscaler') {
             const minValue = resource.minReplicas ?? resource.min;
-            const min = minValue !== undefined && minValue !== null ? minValue : 1;
+            const min = minValue ?? 1;
             const maxValue = resource.maxReplicas ?? resource.max;
-            return `${min}/${maxValue !== undefined && maxValue !== null ? maxValue : '-'}`;
+            return `${min}/${maxValue ?? '-'}`;
           }
           return '-';
         },
@@ -171,7 +171,7 @@ const autoscalingSpec: AggregatedResourceGridViewSpec<AutoscalingData> = {
         (resource) => {
           if (resource.ref.kind === 'HorizontalPodAutoscaler') {
             const current = resource.currentReplicas ?? resource.current;
-            return `${current !== undefined && current !== null ? current : 0}`;
+            return `${current ?? 0}`;
           }
           if (resource.ref.kind === 'VerticalPodAutoscaler') {
             return resource.status || 'Unknown';

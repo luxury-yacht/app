@@ -123,12 +123,12 @@ const normalizeError = (error: unknown): string | null => {
 
 const normalizeLabel = (label?: string): string | undefined => {
   const trimmed = label?.trim();
-  return trimmed ? trimmed : undefined;
+  return trimmed || undefined;
 };
 
 const normalizeScope = (scope?: string): string | null => {
   const trimmed = scope?.trim();
-  return trimmed ? trimmed : null;
+  return trimmed || null;
 };
 
 const applyEntryMetadata = (

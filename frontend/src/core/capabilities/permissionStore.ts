@@ -1199,48 +1199,40 @@ export const initializePermissionStore = (clusterId: string): void => {
   queryClusterPermissions(clusterId);
   startRefreshTimer();
 
-  if (!unsubChanging) {
-    unsubChanging = eventBus.on('kubeconfig:changing', () => {
-      resetPermissionStore();
-    });
-  }
-  if (!unsubChanged) {
-    unsubChanged = eventBus.on('kubeconfig:changed', () => {
-      if (currentClusterId) {
-        queryClusterPermissions(currentClusterId);
+  unsubChanging ??= eventBus.on('kubeconfig:changing', () => {
+    resetPermissionStore();
+  });
+  unsubChanged ??= eventBus.on('kubeconfig:changed', () => {
+    if (currentClusterId) {
+      queryClusterPermissions(currentClusterId);
+    }
+  });
+  unsubSelectionChanged ??= eventBus.on('kubeconfig:selection-changed', () => {
+    if (currentClusterId) {
+      queryClusterPermissions(currentClusterId);
+    }
+  });
+  unsubClusterLifecycle ??= eventBus.on('cluster:lifecycle', (payload) => {
+    if (payload.state !== 'ready') {
+      return;
+    }
+    if (payload.clusterId === currentClusterId) {
+      queryClusterPermissions(currentClusterId);
+    }
+    // Re-issue recorded namespace queries for the cluster that just became
+    // ready. Surfaces that queried while it was connecting (e.g. restored
+    // object panels) got transient errors and have no other re-query
+    // trigger of their own.
+    for (const metadata of namespaceQueryMetadata.values()) {
+      if (metadata.clusterId !== payload.clusterId) {
+        continue;
       }
-    });
-  }
-  if (!unsubSelectionChanged) {
-    unsubSelectionChanged = eventBus.on('kubeconfig:selection-changed', () => {
-      if (currentClusterId) {
-        queryClusterPermissions(currentClusterId);
-      }
-    });
-  }
-  if (!unsubClusterLifecycle) {
-    unsubClusterLifecycle = eventBus.on('cluster:lifecycle', (payload) => {
-      if (payload.state !== 'ready') {
-        return;
-      }
-      if (payload.clusterId === currentClusterId) {
-        queryClusterPermissions(currentClusterId);
-      }
-      // Re-issue recorded namespace queries for the cluster that just became
-      // ready. Surfaces that queried while it was connecting (e.g. restored
-      // object panels) got transient errors and have no other re-query
-      // trigger of their own.
-      for (const metadata of namespaceQueryMetadata.values()) {
-        if (metadata.clusterId !== payload.clusterId) {
-          continue;
-        }
-        void queryNamespacesPermissions(
-          [{ namespace: metadata.namespace, clusterId: metadata.clusterId }],
-          { force: true, specLists: metadata.specLists }
-        );
-      }
-    });
-  }
+      void queryNamespacesPermissions(
+        [{ namespace: metadata.namespace, clusterId: metadata.clusterId }],
+        { force: true, specLists: metadata.specLists }
+      );
+    }
+  });
 };
 
 /**

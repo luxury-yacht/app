@@ -356,7 +356,7 @@ const findCondition = (conditions: string[] | undefined, type: string): ParsedCo
   }
   for (const raw of conditions) {
     const parsed = parseCondition(raw);
-    if (parsed && parsed.type === type) {
+    if (parsed?.type === type) {
       return parsed;
     }
   }

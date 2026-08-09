@@ -795,7 +795,7 @@ export const CommandPalette = memo(function CommandPaletteComponent({
   }, []);
 
   const markKeyboardNavigation = useCallback(() => {
-    setHideCursor((prev) => (prev ? prev : true));
+    setHideCursor(true);
   }, []);
 
   const getPageSize = useCallback(() => {

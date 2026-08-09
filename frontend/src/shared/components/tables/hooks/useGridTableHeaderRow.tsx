@@ -58,7 +58,7 @@ export function useGridTableHeaderRow<T>({
           if (!isSortable) {
             return undefined;
           }
-          if (!sortConfig || sortConfig.key !== column.key || !sortConfig.direction) {
+          if (sortConfig?.key !== column.key || !sortConfig.direction) {
             return 'none';
           }
           return sortConfig.direction === 'asc' ? 'ascending' : 'descending';

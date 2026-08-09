@@ -627,7 +627,7 @@ const ShellTab: React.FC<ShellTabProps> = ({
         return;
       }
       const pendingReplay = pendingReplayRef.current;
-      if (pendingReplay && pendingReplay.sessionId === evt.sessionId) {
+      if (pendingReplay?.sessionId === evt.sessionId) {
         pendingReplay.bufferedOutput.push(evt.data);
         return;
       }
@@ -818,7 +818,7 @@ const ShellTab: React.FC<ShellTabProps> = ({
         // Ignore replay failures; user can continue with live output.
       } finally {
         const replayState = pendingReplayRef.current;
-        if (replayState && replayState.sessionId === latest.sessionId) {
+        if (replayState?.sessionId === latest.sessionId) {
           const bufferedOutput = replayState.bufferedOutput.join('');
           const replayRemainder = trimBacklogOverlap(backlog, bufferedOutput);
           if (replayRemainder) {

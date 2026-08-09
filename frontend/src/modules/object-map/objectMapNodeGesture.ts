@@ -56,7 +56,7 @@ export const updateObjectMapNodeGesture = (
   }
 ): boolean => {
   const drag = state.activeDrag;
-  if (!drag || drag.pointerId !== pointer.pointerId) {
+  if (drag?.pointerId !== pointer.pointerId) {
     return false;
   }
 
@@ -78,7 +78,7 @@ export const endObjectMapNodeGesture = (
   pointerId: number
 ): { nodeId: string; didDrag: boolean } | null => {
   const drag = state.activeDrag;
-  if (!drag || drag.pointerId !== pointerId) {
+  if (drag?.pointerId !== pointerId) {
     return null;
   }
 

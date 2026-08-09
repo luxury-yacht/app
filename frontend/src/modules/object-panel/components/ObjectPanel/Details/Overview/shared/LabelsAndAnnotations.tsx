@@ -56,8 +56,7 @@ export const LabelsAndAnnotations: React.FC<LabelsAndAnnotationsProps> = ({
               displayValue = `${value.substring(0, TRUNCATE_LENGTH)}... (click to expand)`;
             }
 
-            const isSelector =
-              type === 'labels' && selectorEntries && selectorEntries[key] === value;
+            const isSelector = type === 'labels' && selectorEntries?.[key] === value;
             return (
               <div
                 key={key}

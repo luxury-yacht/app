@@ -283,7 +283,7 @@ export const loadPersistedState = (key: string | null): GridTablePersistedState 
     return null;
   }
   const state = persistenceCache[key];
-  if (!state || state.version !== STORAGE_VERSION) {
+  if (state?.version !== STORAGE_VERSION) {
     return null;
   }
   return state;

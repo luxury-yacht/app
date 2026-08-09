@@ -220,7 +220,7 @@ export const useObjectMapModel = (payload: NormalizedObjectMapPayload) => {
 
   const moveNodeDrag = useCallback((pointer: ObjectMapPointer) => {
     const drag = nodeDragRef.current;
-    if (!drag || drag.pointerId !== pointer.pointerId) {
+    if (drag?.pointerId !== pointer.pointerId) {
       return;
     }
     const dxScreen = pointer.clientX - drag.originClientX;
@@ -253,7 +253,7 @@ export const useObjectMapModel = (payload: NormalizedObjectMapPayload) => {
 
   const endNodeDrag = useCallback((pointer: ObjectMapPointer) => {
     const drag = nodeDragRef.current;
-    if (!drag || drag.pointerId !== pointer.pointerId) {
+    if (drag?.pointerId !== pointer.pointerId) {
       return;
     }
     nodeDragRef.current = null;

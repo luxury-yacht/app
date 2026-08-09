@@ -110,7 +110,7 @@ export const FavoritePaneGroup: React.FC<FavoritePaneGroupProps> = ({
   const updatePane = useCallback((pane: RegisteredFavoritePane) => {
     const previous = panesRef.current.get(pane.id);
     panesRef.current.set(pane.id, pane);
-    if (!previous || previous.signature !== pane.signature) {
+    if (previous?.signature !== pane.signature) {
       setVersion((current) => current + 1);
     }
   }, []);
