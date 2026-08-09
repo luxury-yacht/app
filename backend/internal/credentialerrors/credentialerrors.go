@@ -84,13 +84,9 @@ const (
 // auth-class. The order of checks matters: a "not found" exec error is reported
 // as a missing helper before the more general helper-failed bucket.
 func Classify(err error, ctx Context) Diagnostic {
-	d := ClassifyKnown(err, ctx)
+	d := classify(err, ctx, isRejected)
 	if err != nil && d.Class == ClassUnknown {
-		if isRejected(strings.ToLower(err.Error())) {
-			d.Class, d.Kind, d.Summary = ClassAuth, KindRejected, summaryRejected
-		} else {
-			d.Class, d.Kind, d.Summary = ClassConnectivity, KindConnectivity, summaryConnectivity
-		}
+		d.Class, d.Kind, d.Summary = ClassConnectivity, KindConnectivity, summaryConnectivity
 	}
 	return d
 }
@@ -99,6 +95,10 @@ func Classify(err error, ctx Context) Diagnostic {
 // connectivity condition. Unlike Classify, it leaves unrelated failures
 // unknown so reporting boundaries can avoid hiding application defects.
 func ClassifyKnown(err error, ctx Context) Diagnostic {
+	return classify(err, ctx, isKnownRejected)
+}
+
+func classify(err error, ctx Context, rejects func(string) bool) Diagnostic {
 	d := Diagnostic{ExecCommand: strings.TrimSpace(ctx.ExecCommand)}
 	if err == nil {
 		return d
@@ -119,7 +119,7 @@ func ClassifyKnown(err error, ctx Context) Diagnostic {
 		d.Class, d.Kind, d.Summary = ClassAuth, KindHelperFailed, summaryHelperFailed
 	case isExpired(msg):
 		d.Class, d.Kind, d.Summary = ClassAuth, KindExpired, summaryExpired
-	case isKnownRejected(msg):
+	case rejects(msg):
 		d.Class, d.Kind, d.Summary = ClassAuth, KindRejected, summaryRejected
 	case isConnectivity(err, msg):
 		d.Class, d.Kind, d.Summary = ClassConnectivity, KindConnectivity, summaryConnectivity

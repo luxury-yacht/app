@@ -35,6 +35,8 @@ func TestClassify(t *testing.T) {
 		{"unauthorized string", errors.New("the server has asked for the client to provide credentials (get pods): Unauthorized"), ClassAuth, KindRejected},
 		{"access denied", errors.New("access denied for user"), ClassAuth, KindRejected},
 		{"permission denied", errors.New("permission denied"), ClassAuth, KindRejected},
+		{"dial permission denied", errors.New(`Get "https://cluster.example.test/api": dial tcp 10.0.0.1:443: connect: permission denied`), ClassAuth, KindRejected},
+		{"dial access denied", errors.New("dial tcp 10.0.0.1:443: access denied"), ClassAuth, KindRejected},
 		{"authentication required", errors.New("authentication required"), ClassAuth, KindRejected},
 
 		// Expired credentials.
@@ -80,6 +82,13 @@ func TestClassifyKnownLeavesUnrelatedFailuresUnknown(t *testing.T) {
 	legacyPermission := Classify(errors.New("permission denied"), Context{})
 	require.Equal(t, ClassAuth, legacyPermission.Class,
 		"auth recovery keeps its legacy provider rejection classification")
+
+	mixed := ClassifyKnown(
+		errors.New("dial tcp 10.0.0.1:443: connect: permission denied"),
+		Context{},
+	)
+	require.Equal(t, ClassConnectivity, mixed.Class,
+		"known-only reporting classification uses the concrete connectivity marker")
 }
 
 // TestClassifyWindowsErrorShapes confirms the classifier handles the error

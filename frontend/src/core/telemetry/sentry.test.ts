@@ -568,7 +568,7 @@ describe('Sentry error reporting', () => {
     }
   );
 
-  it.each(['AUTHENTICATION', 'NETWORK', 'TIMEOUT'] as const)(
+  it.each(['NETWORK', 'TIMEOUT'] as const)(
     'does not capture an explicitly expected %s condition',
     (category) => {
       initializeErrorReporting({

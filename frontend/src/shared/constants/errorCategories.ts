@@ -13,7 +13,6 @@ export const ErrorCategory = {
 export type ErrorCategory = (typeof ErrorCategory)[keyof typeof ErrorCategory];
 
 const expectedClusterErrorCategories = new Set<ErrorCategory>([
-  ErrorCategory.AUTHENTICATION,
   ErrorCategory.NETWORK,
   ErrorCategory.TIMEOUT,
 ]);
