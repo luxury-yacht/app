@@ -79,6 +79,24 @@ describe('DeletionSection', () => {
   it('shows the force-removal warning and Remove button for every finalizer', async () => {
     await renderSection();
 
+    const finalizerCards = Array.from(
+      container.querySelectorAll<HTMLElement>('.deletion-finalizer-card')
+    );
+    expect(finalizerCards).toHaveLength(2);
+    expect(
+      finalizerCards.every(
+        (card) =>
+          card.querySelector('.deletion-finalizer-header') &&
+          card.querySelector('.deletion-finalizer-diagnostics') &&
+          card.querySelector('[role="note"]')
+      )
+    ).toBe(true);
+    expect(
+      Array.from(container.querySelectorAll('.deletion-finalizer-removal-title')).map(
+        (element) => element.textContent
+      )
+    ).toEqual(['Force removal', 'Force removal']);
+
     expect(
       Array.from(container.querySelectorAll('.deletion-finalizer-removal-warning')).map(
         (element) => element.textContent

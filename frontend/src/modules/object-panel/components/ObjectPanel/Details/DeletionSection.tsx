@@ -1,6 +1,7 @@
 import type { CapabilityState } from '@modules/object-panel/components/ObjectPanel/types';
 import type { ObjectPanelRef } from '@modules/object-panel/objectPanelRef';
 import type { FinalizerPath } from '@shared/actions/objectActionClient';
+import { WarningIcon } from '@shared/components/icons/SharedIcons';
 import { LiveAgeText } from '@shared/components/LiveAgeText';
 import { useObjectActionController } from '@shared/hooks/useObjectActionController';
 import type { ObjectDeletionMetadata } from '@/core/refresh/types.generated';
@@ -52,19 +53,34 @@ function FinalizerGroup({ source, values, capability, onRemove }: Readonly<Final
         {finalizers.map((finalizer) => {
           const guidance = finalizerGuidance(finalizer);
           return (
-            <div className="deletion-card" key={`${source}:${finalizer}`}>
-              <code className="deletion-finalizer-name">{finalizer}</code>
-              <div className="deletion-guidance-title">{guidance.title}</div>
-              <div>{guidance.explanation}</div>
-              <div className="deletion-next-step">{guidance.nextStep}</div>
-              {!!guidance.consequence && (
-                <div className="deletion-consequence">{guidance.consequence}</div>
-              )}
-              <p className="deletion-finalizer-removal-warning">
-                You may force the removal of this Finalizer. This may leave objects in an unknown or
-                bad state.
-              </p>
-              <div className="deletion-finalizer-actions">
+            <div className="deletion-card deletion-finalizer-card" key={`${source}:${finalizer}`}>
+              <div className="deletion-finalizer-header">
+                <code className="deletion-finalizer-name">{finalizer}</code>
+                <span className="deletion-finalizer-guidance">{guidance.title}</span>
+              </div>
+              <div className="deletion-finalizer-diagnostics">
+                <div>{guidance.explanation}</div>
+                <div className="deletion-next-step">
+                  <span className="deletion-next-step-label">Recommended next step</span>
+                  {guidance.nextStep}
+                </div>
+                {!!guidance.consequence && (
+                  <div className="deletion-consequence">{guidance.consequence}</div>
+                )}
+              </div>
+              <div
+                className="deletion-finalizer-removal"
+                role="note"
+                aria-label={`Force removal warning for ${finalizer}`}
+              >
+                <WarningIcon width={18} height={18} className="deletion-finalizer-removal-icon" />
+                <div className="deletion-finalizer-removal-copy">
+                  <div className="deletion-finalizer-removal-title">Force removal</div>
+                  <p className="deletion-finalizer-removal-warning">
+                    You may force the removal of this Finalizer. This may leave objects in an
+                    unknown or bad state.
+                  </p>
+                </div>
                 <button
                   type="button"
                   className="button danger"
