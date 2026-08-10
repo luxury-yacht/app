@@ -8,9 +8,9 @@ import { useObjectActionController } from '@shared/hooks/useObjectActionControll
 import type { ObjectDeletionMetadata } from '@/core/refresh/types.generated';
 import { finalizerGuidance } from './finalizerCatalog';
 import type { DetailCondition, NamespaceFinalizationDetails } from './objectDetailModel';
-import './DeletionSection.css';
+import './FinalizersSection.css';
 
-interface DeletionSectionProps {
+interface FinalizersSectionProps {
   deletion: ObjectDeletionMetadata | null;
   namespaceFinalization: NamespaceFinalizationDetails | null;
   objectData: ObjectPanelRef;
@@ -90,13 +90,13 @@ function FinalizerRow({ entry, showPath, onRemove }: Readonly<FinalizerRowProps>
   );
 }
 
-export default function DeletionSection({
+export default function FinalizersSection({
   deletion,
   namespaceFinalization,
   objectData,
   removalCapabilities,
   onAfterAction,
-}: Readonly<DeletionSectionProps>) {
+}: Readonly<FinalizersSectionProps>) {
   const actionController = useObjectActionController({
     context: 'object-panel',
     useDefaultHandlers: false,
@@ -131,7 +131,7 @@ export default function DeletionSection({
   return (
     <div className="object-panel-section deletion-section">
       <div className="object-panel-section-header">
-        <div className="object-panel-section-title">Deletion</div>
+        <div className="object-panel-section-title">Finalizers</div>
         <div className="deletion-age">
           Terminating for{' '}
           <LiveAgeText timestamp={deletion.deletionTimestamp} fullDateTitle fallback="unknown" />

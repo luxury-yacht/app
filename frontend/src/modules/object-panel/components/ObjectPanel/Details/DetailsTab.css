@@ -226,3 +226,9 @@
 .details-section-spaced {
   margin-top: var(--spacing-xl);
 }
+
+/* The finalizer section leads the tab when an object is terminating, so it
+   carries the same gap below it that the stacked sections carry above. */
+.details-section-lead {
+  margin-bottom: var(--spacing-xl);
+}

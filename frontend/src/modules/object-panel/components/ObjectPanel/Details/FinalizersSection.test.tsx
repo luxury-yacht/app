@@ -4,7 +4,7 @@ import type { ObjectActionData } from '@shared/hooks/useObjectActions';
 import { act } from 'react';
 import * as ReactDOM from 'react-dom/client';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
-import DeletionSection from './DeletionSection';
+import FinalizersSection from './FinalizersSection';
 import type { NamespaceFinalizationDetails } from './objectDetailModel';
 
 const requestFinalizerRemovalMock = vi.hoisted(() => vi.fn());
@@ -37,7 +37,7 @@ const textOf = (container: HTMLElement, selector: string): string[] =>
     (element.textContent ?? '').trim()
   );
 
-describe('DeletionSection', () => {
+describe('FinalizersSection', () => {
   let container: HTMLDivElement;
   let root: ReactDOM.Root;
 
@@ -65,7 +65,7 @@ describe('DeletionSection', () => {
     const onAfterAction = vi.fn();
     await act(async () => {
       root.render(
-        <DeletionSection
+        <FinalizersSection
           deletion={{ deletionTimestamp: '2026-08-09T12:34:56Z', finalizers }}
           namespaceFinalization={namespaceFinalization}
           objectData={objectData}

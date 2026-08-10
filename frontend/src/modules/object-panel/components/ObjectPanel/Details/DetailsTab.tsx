@@ -10,7 +10,7 @@ import Overview from '@modules/object-panel/components/ObjectPanel/Details/Overv
 import { ErrorSurface } from '@shared/components/errors/ErrorSurface';
 import { WarningIcon } from '@shared/components/icons/SharedIcons';
 import type React from 'react';
-import DeletionSection from './DeletionSection';
+import FinalizersSection from './FinalizersSection';
 import './DetailsTab.css';
 import './DetailsTabData.css';
 
@@ -86,6 +86,20 @@ const DetailsTabContent: React.FC<DetailsTabProps> = ({
           </div>
         )}
 
+        {/* A terminating object leads the tab: what blocks its deletion outranks
+            the object's own summary until the deletion completes. */}
+        {!!deletion && !!objectData && (
+          <div className="details-section-lead">
+            <FinalizersSection
+              deletion={deletion}
+              namespaceFinalization={model.namespaceFinalization}
+              objectData={objectData}
+              removalCapabilities={finalizerRemovalCapabilities}
+              onAfterAction={onAfterAction}
+            />
+          </div>
+        )}
+
         {!!objectData && (
           <Overview
             kind={objectData.kind ?? ''}
@@ -103,18 +117,6 @@ const DetailsTabContent: React.FC<DetailsTabProps> = ({
             onAfterDelete={onAfterDelete}
             onAfterAction={onAfterAction}
           />
-        )}
-
-        {!!deletion && !!objectData && (
-          <div className="details-section-spaced">
-            <DeletionSection
-              deletion={deletion}
-              namespaceFinalization={model.namespaceFinalization}
-              objectData={objectData}
-              removalCapabilities={finalizerRemovalCapabilities}
-              onAfterAction={onAfterAction}
-            />
-          </div>
         )}
 
         {(hasUtilization || objectData?.kind?.toLowerCase() === 'node') && utilizationData && (

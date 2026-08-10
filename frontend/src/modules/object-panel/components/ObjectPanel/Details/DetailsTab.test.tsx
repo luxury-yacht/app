@@ -339,7 +339,7 @@ describe('DetailsTab', () => {
 
     const { container, cleanup } = await renderDetailsTab(props);
 
-    expect(container.textContent).toContain('Deletion');
+    expect(container.textContent).toContain('Finalizers');
     expect(container.textContent).toContain('Terminating for');
     expect(container.textContent).toContain('kubernetes.io/pvc-protection');
     expect(container.textContent).toContain('In use');
