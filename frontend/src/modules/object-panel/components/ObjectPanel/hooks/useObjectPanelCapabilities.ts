@@ -65,6 +65,8 @@ const createDefaultCapabilityStates = (): CapabilityStates => ({
   suspend: createCapabilityState(),
   shell: createCapabilityState(),
   debug: createCapabilityState(),
+  removeFinalizer: createCapabilityState(),
+  removeNamespaceFinalizer: createCapabilityState(),
 });
 
 type CapabilityIdMap = ReturnType<typeof createEmptyCapabilityIdMap>;
@@ -193,6 +195,23 @@ const addMutatingCapabilityDescriptors = (
   }
 };
 
+const addFinalizerRemovalCapabilityDescriptors = (
+  accumulator: CapabilityDescriptorAccumulator
+): void => {
+  addObjectActionCapability(accumulator, OBJECT_ACTION_IDS.removeFinalizer, 'removeFinalizer');
+
+  const { objectGroup, objectVersion, resourceKind } = accumulator.context;
+  const isCoreNamespace =
+    (objectGroup ?? '') === '' && objectVersion === 'v1' && resourceKind === 'Namespace';
+  if (isCoreNamespace) {
+    addObjectActionCapability(
+      accumulator,
+      OBJECT_ACTION_IDS.removeNamespaceFinalizer,
+      'removeNamespaceFinalizer'
+    );
+  }
+};
+
 const addLogsCapabilityDescriptor = (
   accumulator: CapabilityDescriptorAccumulator,
   objectKind: string,
@@ -314,6 +333,7 @@ const computeCapabilityDescriptors = (
     context,
   };
   addYamlCapabilityDescriptors(accumulator);
+  addFinalizerRemovalCapabilityDescriptors(accumulator);
   addMutatingCapabilityDescriptors(accumulator, featureSupport);
   addLogsCapabilityDescriptor(accumulator, objectKind, featureSupport);
   addShellCapabilityDescriptors(accumulator, featureSupport);
@@ -461,6 +481,10 @@ export const useObjectPanelCapabilities = ({
         reason: shellReason,
       }),
       debug: getCapabilityState(capabilityDescriptorInfo.idMap.debug),
+      removeFinalizer: getCapabilityState(capabilityDescriptorInfo.idMap.removeFinalizer),
+      removeNamespaceFinalizer: getCapabilityState(
+        capabilityDescriptorInfo.idMap.removeNamespaceFinalizer
+      ),
     };
   }, [capabilityDescriptorInfo.idMap, capabilitiesEnabled, getCapabilityState]);
 

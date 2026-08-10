@@ -99,6 +99,7 @@ describe('useObjectPanelCapabilities', () => {
       'view-yaml': { allowed: true, pending: false },
       'view-manifest': { allowed: false, pending: false },
       'view-values': { allowed: false, pending: false },
+      'remove-finalizer': { allowed: true, pending: false },
     };
 
     mockUseCapabilities.mockImplementation(() => ({
@@ -126,7 +127,15 @@ describe('useObjectPanelCapabilities', () => {
     const [descriptors] = mockUseCapabilities.mock.calls[0];
     const descriptorIds = (descriptors as Array<{ id: string }>).map((d) => d.id);
     expect(descriptorIds).toEqual(
-      expect.arrayContaining(['view-yaml', 'edit-yaml', 'view-logs', 'delete', 'restart', 'scale'])
+      expect.arrayContaining([
+        'view-yaml',
+        'edit-yaml',
+        'view-logs',
+        'delete',
+        'restart',
+        'scale',
+        'remove-finalizer',
+      ])
     );
     expect(descriptors).toContainEqual(
       expect.objectContaining({
@@ -152,6 +161,52 @@ describe('useObjectPanelCapabilities', () => {
     expect(result.capabilities.canScale).toBe(false);
     expect(result.capabilityReasons.scale).toBe('forbidden');
     expect(result.capabilityReasons.editYaml).toBe('locked');
+    expect(result.capabilityStates.removeFinalizer.allowed).toBe(true);
+  });
+
+  it('requests exact metadata and Namespace finalize permissions for a Namespace', async () => {
+    mockUseCapabilities.mockImplementation(() => ({
+      getState: () => ({ allowed: true, pending: false }),
+    }));
+    mockUseUserPermission.mockReturnValue({ allowed: true, pending: false });
+
+    const result = await renderHook({
+      objectData: {
+        kind: 'Namespace',
+        name: 'terminating',
+        namespace: '',
+        clusterId: 'cluster-a',
+        group: '',
+        version: 'v1',
+      },
+      objectKind: 'namespace',
+      detailScope: 'cluster-a|_:core/v1:namespace:terminating',
+      featureSupport: { ...baseFeatureSupport, delete: false, restart: false, scale: false },
+    });
+
+    const [descriptors] = mockUseCapabilities.mock.calls[0];
+    expect(descriptors).toContainEqual(
+      expect.objectContaining({
+        id: 'remove-finalizer',
+        clusterId: 'cluster-a',
+        verb: 'patch',
+        version: 'v1',
+        resourceKind: 'Namespace',
+        name: 'terminating',
+      })
+    );
+    expect(descriptors).toContainEqual({
+      id: 'remove-namespace-finalizer',
+      clusterId: 'cluster-a',
+      verb: 'update',
+      group: '',
+      version: 'v1',
+      resourceKind: 'Namespace',
+      name: 'terminating',
+      subresource: 'finalize',
+    });
+    expect(result.capabilityStates.removeFinalizer.allowed).toBe(true);
+    expect(result.capabilityStates.removeNamespaceFinalizer.allowed).toBe(true);
   });
 
   it('disables logs when the user lacks log permissions', async () => {

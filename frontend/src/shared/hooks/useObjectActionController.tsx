@@ -11,9 +11,11 @@ import { isObjectMapSupportedKind } from '@modules/object-panel/objectPanelRef';
 import { PortForwardModal, type PortForwardTarget } from '@modules/port-forward';
 import {
   buildObjectActionTarget,
+  type FinalizerPath,
   runCronJobSuspend,
   runCronJobTrigger,
   runObjectDelete,
+  runObjectFinalizerRemoval,
   runObjectRestart,
   runObjectScale,
 } from '@shared/actions/objectActionClient';
@@ -88,6 +90,12 @@ interface ScaleState {
 interface ScaleConfirmationState {
   object: ObjectActionData;
   replicas: number;
+}
+
+interface FinalizerRemovalTarget {
+  object: ObjectActionData;
+  finalizer: string;
+  path: FinalizerPath;
 }
 
 const clampReplicas = (value: number): number => Math.max(0, Math.min(9999, value));
@@ -408,6 +416,8 @@ export const useObjectActionController = ({
   const [triggerTarget, setTriggerTarget] = useState<ObjectActionData | null>(null);
   const [rollbackTarget, setRollbackTarget] = useState<ObjectActionData | null>(null);
   const [portForwardTarget, setPortForwardTarget] = useState<PortForwardTarget | null>(null);
+  const [finalizerRemovalTarget, setFinalizerRemovalTarget] =
+    useState<FinalizerRemovalTarget | null>(null);
   const [scaleConfirmation, setScaleConfirmation] = useState<ScaleConfirmationState | null>(null);
   const [scaleState, setScaleState] = useState<ScaleState>({
     object: null,
@@ -571,7 +581,47 @@ export const useObjectActionController = ({
     }
   }, [onAfterAction, scaleConfirmation]);
 
+  const requestFinalizerRemoval = useCallback(
+    (object: ObjectActionData, finalizer: string, path: FinalizerPath) => {
+      setFinalizerRemovalTarget({ object, finalizer, path });
+    },
+    []
+  );
+
+  const confirmFinalizerRemoval = useCallback(async () => {
+    const target = finalizerRemovalTarget;
+    if (!target) {
+      return;
+    }
+    const { object, finalizer, path } = target;
+    try {
+      await runObjectFinalizerRemoval(actionTargetFor(object, 'remove finalizer'), finalizer, path);
+      onAfterAction?.(object, 'removeFinalizer');
+    } catch (error) {
+      errorHandler.handle(error, {
+        action: 'removeFinalizer',
+        kind: object.kind,
+        name: object.name,
+      });
+    } finally {
+      setFinalizerRemovalTarget(null);
+    }
+  }, [finalizerRemovalTarget, onAfterAction]);
+
   const confirmation = useMemo(() => {
+    if (finalizerRemovalTarget) {
+      const { object, finalizer } = finalizerRemovalTarget;
+      return {
+        title: 'Remove Finalizer',
+        message: `Remove finalizer "${finalizer}" from ${object.kind.toLowerCase()} "${object.name}"?`,
+        warning:
+          'This may leave objects in an unknown or bad state. Only continue if the responsible controller cannot complete cleanup.',
+        confirmText: 'Remove',
+        confirmButtonClass: 'danger',
+        onConfirm: confirmFinalizerRemoval,
+        onCancel: () => setFinalizerRemovalTarget(null),
+      };
+    }
     if (restartTarget) {
       return {
         title: `Restart ${restartTarget.kind || 'Workload'}`,
@@ -622,10 +672,12 @@ export const useObjectActionController = ({
     return null;
   }, [
     confirmDelete,
+    confirmFinalizerRemoval,
     confirmRestart,
     confirmScaleToZero,
     confirmTrigger,
     deleteTarget,
+    finalizerRemovalTarget,
     restartTarget,
     scaleConfirmation,
     triggerTarget,
@@ -694,5 +746,5 @@ export const useObjectActionController = ({
     ]
   );
 
-  return { getMenuItems, modals };
+  return { getMenuItems, modals, requestFinalizerRemoval };
 };

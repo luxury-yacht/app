@@ -21,6 +21,7 @@ import (
 
 const (
 	ObjectActionDelete               = objectaction.BackendDelete
+	ObjectActionRemoveFinalizer      = objectaction.BackendRemoveFinalizer
 	ObjectActionForceDelete          = objectaction.BackendForceDelete
 	ObjectActionRestart              = objectaction.BackendRestart
 	ObjectActionScale                = objectaction.BackendScale
@@ -57,6 +58,7 @@ type objectActionHandler func(objectActionInvocation) (ObjectActionResponse, err
 
 var objectActionHandlers = map[string]objectActionHandler{
 	ObjectActionDelete:               runDeleteObjectAction,
+	ObjectActionRemoveFinalizer:      runRemoveFinalizerObjectAction,
 	ObjectActionForceDelete:          runForceDeleteObjectAction,
 	ObjectActionRestart:              runRestartObjectAction,
 	ObjectActionScale:                runScaleObjectAction,
@@ -94,6 +96,8 @@ type ObjectActionRequest struct {
 	PortForward    *ObjectActionPortForwardOptions    `json:"portForward,omitempty"`
 	DebugContainer *ObjectActionDebugContainerOptions `json:"debugContainer,omitempty"`
 	Revision       *int64                             `json:"revision,omitempty"`
+	Finalizer      string                             `json:"finalizer,omitempty"`
+	FinalizerPath  string                             `json:"finalizerPath,omitempty"`
 }
 
 type ObjectActionResponse struct {
@@ -193,6 +197,24 @@ func (a *App) RunObjectAction(req ObjectActionRequest) (ObjectActionResponse, er
 
 func runDeleteObjectAction(invocation objectActionInvocation) (ObjectActionResponse, error) {
 	return ObjectActionResponse{}, invocation.app.deleteObjectAction(invocation.target, false)
+}
+
+func runRemoveFinalizerObjectAction(invocation objectActionInvocation) (ObjectActionResponse, error) {
+	finalizer := strings.TrimSpace(invocation.request.Finalizer)
+	if finalizer == "" {
+		return ObjectActionResponse{}, fmt.Errorf("%s action requires finalizer", invocation.action)
+	}
+	path := strings.TrimSpace(invocation.request.FinalizerPath)
+	if path == "" {
+		return ObjectActionResponse{}, fmt.Errorf("%s action requires finalizerPath", invocation.action)
+	}
+	if path == objectFinalizerPathSpec && !isNamespaceFinalizerTarget(invocation.target) {
+		return ObjectActionResponse{}, fmt.Errorf("%s requires core/v1 Namespace target", path)
+	}
+	if path != objectFinalizerPathMetadata && path != objectFinalizerPathSpec {
+		return ObjectActionResponse{}, fmt.Errorf("unsupported finalizer path %q", path)
+	}
+	return ObjectActionResponse{}, invocation.app.removeObjectFinalizerAction(invocation.target, finalizer, path)
 }
 
 func runForceDeleteObjectAction(invocation objectActionInvocation) (ObjectActionResponse, error) {

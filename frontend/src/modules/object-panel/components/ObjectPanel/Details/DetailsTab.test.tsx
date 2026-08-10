@@ -26,6 +26,14 @@ vi.mock('@ui/shortcuts', () => ({
   useSearchShortcutTarget: () => undefined,
 }));
 
+vi.mock('@shared/hooks/useObjectActionController', () => ({
+  useObjectActionController: () => ({
+    getMenuItems: () => [],
+    modals: null,
+    requestFinalizerRemoval: vi.fn(),
+  }),
+}));
+
 vi.mock('@modules/object-panel/components/ObjectPanel/Details/Overview', () => ({
   __esModule: true,
   default: (props: unknown) => {
@@ -108,6 +116,10 @@ const createBaseProps = (
     isActive: true,
     detailsLoading: false,
     detailsError: null,
+    finalizerRemovalCapabilities: {
+      metadata: { allowed: true, pending: false },
+      namespaceSpec: { allowed: true, pending: false },
+    },
     resourceDeleted: false,
     deletedResourceName: '',
     onAfterDelete: vi.fn(),

@@ -1073,6 +1073,8 @@ export namespace backend {
 	    portForward?: ObjectActionPortForwardOptions;
 	    debugContainer?: ObjectActionDebugContainerOptions;
 	    revision?: number;
+	    finalizer?: string;
+	    finalizerPath?: string;
 	
 	    static createFrom(source: any = {}) {
 	        return new ObjectActionRequest(source);
@@ -1088,6 +1090,8 @@ export namespace backend {
 	        this.portForward = this.convertValues(source["portForward"], ObjectActionPortForwardOptions);
 	        this.debugContainer = this.convertValues(source["debugContainer"], ObjectActionDebugContainerOptions);
 	        this.revision = source["revision"];
+	        this.finalizer = source["finalizer"];
+	        this.finalizerPath = source["finalizerPath"];
 	    }
 	
 		convertValues(a: any, classs: any, asMap: boolean = false): any {

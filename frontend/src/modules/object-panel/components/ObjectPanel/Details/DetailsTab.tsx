@@ -34,6 +34,7 @@ const DetailsTabContent: React.FC<DetailsTabProps> = ({
   detailsLoading,
   detailsError,
   deletion = null,
+  finalizerRemovalCapabilities,
   resourceDeleted = false,
   deletedResourceName = '',
   onAfterDelete,
@@ -104,11 +105,14 @@ const DetailsTabContent: React.FC<DetailsTabProps> = ({
           />
         )}
 
-        {!!deletion && (
+        {!!deletion && !!objectData && (
           <div className="details-section-spaced">
             <DeletionSection
               deletion={deletion}
               namespaceFinalization={model.namespaceFinalization}
+              objectData={objectData}
+              removalCapabilities={finalizerRemovalCapabilities}
+              onAfterAction={onAfterAction}
             />
           </div>
         )}

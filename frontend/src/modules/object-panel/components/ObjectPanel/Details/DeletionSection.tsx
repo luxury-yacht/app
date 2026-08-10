@@ -1,4 +1,8 @@
+import type { CapabilityState } from '@modules/object-panel/components/ObjectPanel/types';
+import type { ObjectPanelRef } from '@modules/object-panel/objectPanelRef';
+import type { FinalizerPath } from '@shared/actions/objectActionClient';
 import { LiveAgeText } from '@shared/components/LiveAgeText';
+import { useObjectActionController } from '@shared/hooks/useObjectActionController';
 import type { ObjectDeletionMetadata } from '@/core/refresh/types.generated';
 import { finalizerGuidance } from './finalizerCatalog';
 import type { NamespaceFinalizationDetails } from './objectDetailModel';
@@ -7,12 +11,35 @@ import './DeletionSection.css';
 interface DeletionSectionProps {
   deletion: ObjectDeletionMetadata | null;
   namespaceFinalization: NamespaceFinalizationDetails | null;
+  objectData: ObjectPanelRef;
+  removalCapabilities: {
+    metadata: CapabilityState;
+    namespaceSpec: CapabilityState;
+  };
+  onAfterAction: () => void;
 }
 
 const normalizedFinalizers = (values?: string[]): string[] =>
   Array.from(new Set((values ?? []).map((value) => value.trim()).filter(Boolean))).sort();
 
-function FinalizerGroup({ source, values }: Readonly<{ source: string; values?: string[] }>) {
+const disabledReason = (capability: CapabilityState): string | undefined => {
+  if (capability.pending) {
+    return 'Checking permission…';
+  }
+  if (!capability.allowed) {
+    return capability.reason ?? 'You do not have permission to remove this finalizer.';
+  }
+  return undefined;
+};
+
+interface FinalizerGroupProps {
+  source: FinalizerPath;
+  values?: string[];
+  capability: CapabilityState;
+  onRemove: (finalizer: string, source: FinalizerPath) => void;
+}
+
+function FinalizerGroup({ source, values, capability, onRemove }: Readonly<FinalizerGroupProps>) {
   const finalizers = normalizedFinalizers(values);
   if (finalizers.length === 0) {
     return null;
@@ -33,6 +60,22 @@ function FinalizerGroup({ source, values }: Readonly<{ source: string; values?: 
               {!!guidance.consequence && (
                 <div className="deletion-consequence">{guidance.consequence}</div>
               )}
+              <p className="deletion-finalizer-removal-warning">
+                You may force the removal of this Finalizer. This may leave objects in an unknown or
+                bad state.
+              </p>
+              <div className="deletion-finalizer-actions">
+                <button
+                  type="button"
+                  className="button danger"
+                  aria-label={`Remove finalizer ${finalizer}`}
+                  disabled={!capability.allowed || capability.pending}
+                  title={disabledReason(capability)}
+                  onClick={() => onRemove(finalizer, source)}
+                >
+                  Remove
+                </button>
+              </div>
             </div>
           );
         })}
@@ -44,7 +87,16 @@ function FinalizerGroup({ source, values }: Readonly<{ source: string; values?: 
 export default function DeletionSection({
   deletion,
   namespaceFinalization,
+  objectData,
+  removalCapabilities,
+  onAfterAction,
 }: Readonly<DeletionSectionProps>) {
+  const actionController = useObjectActionController({
+    context: 'object-panel',
+    useDefaultHandlers: false,
+    onAfterAction: () => onAfterAction(),
+  });
+
   if (!deletion) {
     return null;
   }
@@ -65,8 +117,18 @@ export default function DeletionSection({
         Finalizers keep an object present until its controller finishes protected cleanup.
       </p>
 
-      <FinalizerGroup source="metadata.finalizers" values={metadataFinalizers} />
-      <FinalizerGroup source="spec.finalizers" values={namespaceFinalizers} />
+      <FinalizerGroup
+        source="metadata.finalizers"
+        values={metadataFinalizers}
+        capability={removalCapabilities.metadata}
+        onRemove={actionController.requestFinalizerRemoval.bind(null, objectData)}
+      />
+      <FinalizerGroup
+        source="spec.finalizers"
+        values={namespaceFinalizers}
+        capability={removalCapabilities.namespaceSpec}
+        onRemove={actionController.requestFinalizerRemoval.bind(null, objectData)}
+      />
 
       {!hasFinalizers && (
         <div className="deletion-empty">
@@ -96,6 +158,7 @@ export default function DeletionSection({
           </div>
         </div>
       )}
+      {actionController.modals}
     </div>
   );
 }

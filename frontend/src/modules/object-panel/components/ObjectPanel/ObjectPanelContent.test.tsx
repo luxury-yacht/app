@@ -112,6 +112,10 @@ describe('ObjectPanelContent', () => {
       isActive: true,
       detailsLoading: false,
       detailsError: null,
+      finalizerRemovalCapabilities: {
+        metadata: { allowed: true, pending: false },
+        namespaceSpec: { allowed: false, pending: false },
+      },
       resourceDeleted: false,
       deletedResourceName: '',
       onAfterDelete: vi.fn(),

@@ -73,6 +73,8 @@ export type CapabilityIdMap = {
   shellExecGet?: string;
   shellExecCreate?: string;
   debug?: string;
+  removeFinalizer?: string;
+  removeNamespaceFinalizer?: string;
 };
 
 export type CapabilityState = {
@@ -93,6 +95,8 @@ export type CapabilityStates = {
   suspend: CapabilityState;
   shell: CapabilityState;
   debug: CapabilityState;
+  removeFinalizer: CapabilityState;
+  removeNamespaceFinalizer: CapabilityState;
 };
 
 export type NodeLogsState = CapabilityState;
@@ -122,6 +126,8 @@ export const createEmptyCapabilityIdMap = (): CapabilityIdMap => ({
   shellExecGet: undefined,
   shellExecCreate: undefined,
   debug: undefined,
+  removeFinalizer: undefined,
+  removeNamespaceFinalizer: undefined,
 });
 
 export type ViewType =

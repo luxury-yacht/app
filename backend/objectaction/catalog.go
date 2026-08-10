@@ -7,37 +7,40 @@ type BackendAction = string
 type PayloadField string
 
 const (
-	ViewDetails           ID            = "view-details"
-	ViewMap               ID            = "view-map"
-	GoToTable             ID            = "go-to-table"
-	Diff                  ID            = "diff"
-	ViewInvolved          ID            = "view-involved-object"
-	TriggerNow            ID            = "trigger-now"
-	Suspend               ID            = "suspend"
-	Resume                ID            = "resume"
-	Restart               ID            = "restart"
-	Rollback              ID            = "rollback"
-	Scale                 ID            = "scale"
-	ScaleToZero           ID            = "scale-to-zero"
-	ResumeFromZero        ID            = "resume-from-zero"
-	PortForward           ID            = "port-forward"
-	Cordon                ID            = "cordon"
-	Uncordon              ID            = "uncordon"
-	Drain                 ID            = "drain"
-	Delete                ID            = "delete"
-	BackendDelete         BackendAction = "delete"
-	BackendForceDelete    BackendAction = "forceDelete"
-	BackendRestart        BackendAction = "restart"
-	BackendScale          BackendAction = "scale"
-	BackendTrigger        BackendAction = "trigger"
-	BackendSuspend        BackendAction = "suspend"
-	BackendCordon         BackendAction = "cordon"
-	BackendUncordon       BackendAction = "uncordon"
-	BackendDrain          BackendAction = "drain"
-	BackendStartDrain     BackendAction = "startDrain"
-	BackendPortForward    BackendAction = "startPortForward"
-	BackendDebugContainer BackendAction = "createDebugContainer"
-	BackendRollback       BackendAction = "rollback"
+	ViewDetails              ID            = "view-details"
+	ViewMap                  ID            = "view-map"
+	GoToTable                ID            = "go-to-table"
+	Diff                     ID            = "diff"
+	ViewInvolved             ID            = "view-involved-object"
+	TriggerNow               ID            = "trigger-now"
+	Suspend                  ID            = "suspend"
+	Resume                   ID            = "resume"
+	Restart                  ID            = "restart"
+	Rollback                 ID            = "rollback"
+	Scale                    ID            = "scale"
+	ScaleToZero              ID            = "scale-to-zero"
+	ResumeFromZero           ID            = "resume-from-zero"
+	PortForward              ID            = "port-forward"
+	Cordon                   ID            = "cordon"
+	Uncordon                 ID            = "uncordon"
+	Drain                    ID            = "drain"
+	Delete                   ID            = "delete"
+	RemoveFinalizer          ID            = "remove-finalizer"
+	RemoveNamespaceFinalizer ID            = "remove-namespace-finalizer"
+	BackendDelete            BackendAction = "delete"
+	BackendRemoveFinalizer   BackendAction = "removeFinalizer"
+	BackendForceDelete       BackendAction = "forceDelete"
+	BackendRestart           BackendAction = "restart"
+	BackendScale             BackendAction = "scale"
+	BackendTrigger           BackendAction = "trigger"
+	BackendSuspend           BackendAction = "suspend"
+	BackendCordon            BackendAction = "cordon"
+	BackendUncordon          BackendAction = "uncordon"
+	BackendDrain             BackendAction = "drain"
+	BackendStartDrain        BackendAction = "startDrain"
+	BackendPortForward       BackendAction = "startPortForward"
+	BackendDebugContainer    BackendAction = "createDebugContainer"
+	BackendRollback          BackendAction = "rollback"
 
 	scaleFrontendPermission = "target workload scale update"
 	scaleBackendPermission  = "resourcePermissionCheck(target-workload-scale, update)"
@@ -115,10 +118,13 @@ var Definitions = []Definition{
 	{Key: "uncordon", ID: Uncordon, Label: "Uncordon", BackendAction: BackendUncordon, Permission: fixedPermission(nodePatchPermissionID, "cordon", "patch", fixedPermissionTarget{group: "", version: "v1", kind: "Node", subresource: "", namespace: false, name: false}), FrontendPermission: "core/v1 Node get and patch", BackendPermission: "resourcePermissionCheck(node, get) and resourcePermissionCheck(node, patch)", DeniedReason: "cordon permission state"},
 	{Key: "drain", ID: Drain, Label: "Drain", BackendAction: BackendStartDrain, PayloadFields: []PayloadField{"drainOptions"}, Permission: fixedPermission(nodePatchPermissionID, "drain", "patch", fixedPermissionTarget{group: "", version: "v1", kind: "Node", subresource: "", namespace: false, name: false}), FrontendPermission: "core/v1 Node get+patch and Pod eviction create or Pod delete", BackendPermission: "resourcePermissionCheck(node, get) and resourcePermissionCheck(node, patch) and resourcePermissionCheck(pod-eviction, create optional) and resourcePermissionCheck(pod-delete, delete optional)", DeniedReason: "drain permission state"},
 	{Key: "delete", ID: Delete, Label: "Delete", BackendAction: BackendDelete, Permission: sourcePermission("delete", "delete", "delete"), FrontendPermission: "target object delete", BackendPermission: "resourcePermissionCheck(target, delete)", DeniedReason: "delete permission state"},
+	{Key: "removeFinalizer", ID: RemoveFinalizer, Label: "Remove Finalizer", BackendAction: BackendRemoveFinalizer, PayloadFields: []PayloadField{"finalizer", "finalizerPath"}, Permission: sourcePermission("remove-finalizer", "removeFinalizer", "patch"), FrontendPermission: "target object patch", BackendPermission: "resourcePermissionCheck(target, patch)", DeniedReason: "finalizer removal permission state"},
+	{Key: "removeNamespaceFinalizer", ID: RemoveNamespaceFinalizer, Label: "Remove Namespace Finalizer", BackendAction: BackendRemoveFinalizer, PayloadFields: []PayloadField{"finalizer", "finalizerPath"}, Permission: fixedPermission("remove-namespace-finalizer", "removeNamespaceFinalizer", "update", fixedPermissionTarget{group: "", version: "v1", kind: "Namespace", subresource: "finalize", namespace: false, name: true}), FrontendPermission: "core/v1 Namespace finalize update", BackendPermission: "resourcePermissionCheck(namespace-finalize, update)", DeniedReason: "namespace finalizer removal permission state"},
 }
 
 var FrontendBackendActions = []BackendActionDefinition{
 	{Key: "delete", Action: BackendDelete},
+	{Key: "removeFinalizer", Action: BackendRemoveFinalizer},
 	{Key: "restart", Action: BackendRestart},
 	{Key: "scale", Action: BackendScale},
 	{Key: "trigger", Action: BackendTrigger},

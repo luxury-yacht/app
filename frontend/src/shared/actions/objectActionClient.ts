@@ -14,6 +14,7 @@ import { OBJECT_ACTIONS } from './objectActionContract';
 export type { ObjectActionName } from './objectActionContract';
 
 export type ObjectActionTargetRef = Omit<ResourceRef, 'name'> & { name: string };
+export type FinalizerPath = 'metadata.finalizers' | 'spec.finalizers';
 
 export interface ObjectActionIdentitySource {
   clusterId?: string | null;
@@ -39,6 +40,8 @@ export interface ObjectActionRequest {
     targetContainer?: string;
   };
   revision?: number;
+  finalizer?: string;
+  finalizerPath?: FinalizerPath;
 }
 
 export interface ObjectActionResponse {
@@ -213,3 +216,15 @@ export const runObjectRollback = (
   revision: number
 ): Promise<ObjectActionResponse> =>
   runObjectAction({ action: OBJECT_ACTIONS.rollback, target, revision });
+
+export const runObjectFinalizerRemoval = (
+  target: ObjectActionTargetRef,
+  finalizer: string,
+  finalizerPath: FinalizerPath
+): Promise<ObjectActionResponse> =>
+  runObjectAction({
+    action: OBJECT_ACTIONS.removeFinalizer,
+    target,
+    finalizer,
+    finalizerPath,
+  });

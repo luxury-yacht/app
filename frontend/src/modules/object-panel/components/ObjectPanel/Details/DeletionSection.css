@@ -59,6 +59,18 @@
   font-weight: var(--font-weight-bold);
 }
 
+.deletion-finalizer-removal-warning {
+  margin: var(--spacing-sm) 0 0;
+  color: var(--color-warning);
+  font-weight: var(--font-weight-bold);
+}
+
+.deletion-finalizer-actions {
+  display: flex;
+  justify-content: flex-end;
+  margin-top: var(--spacing-xs);
+}
+
 .deletion-condition-header {
   display: flex;
   align-items: center;

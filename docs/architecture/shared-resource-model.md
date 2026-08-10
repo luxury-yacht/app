@@ -148,6 +148,13 @@ envelope carries kind-agnostic `metadata.deletionTimestamp` and
 `metadata.finalizers`; frontend deletion diagnostics combine those fields with
 the typed Namespace projection without reinterpreting lifecycle status.
 
+Object Panel finalizer removal is available only for objects already carrying a
+deletion timestamp. Metadata finalizers use an exact-GVK JSON Patch guarded by a
+`test` operation so a concurrent finalizer update is not overwritten. Namespace
+`spec.finalizers` use the core/v1 Namespace `/finalize` subresource. These paths
+require exact-object `patch` and `update namespaces/finalize` permissions,
+respectively, and remove only the selected finalizer.
+
 When migrating a resource family, project status consistently into every surface
 that renders it: snapshot rows, stream rows, rich detail DTOs, object-map data,
 and object-panel overview data. Then remove duplicated frontend or service-layer

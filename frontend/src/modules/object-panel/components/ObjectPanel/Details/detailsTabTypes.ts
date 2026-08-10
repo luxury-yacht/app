@@ -5,6 +5,7 @@
  * Defines shared interfaces and payload shapes for the object panel feature.
  */
 
+import type { CapabilityState } from '@modules/object-panel/components/ObjectPanel/types';
 import type { ObjectPanelRef } from '@modules/object-panel/objectPanelRef';
 import type { ObjectDeletionMetadata } from '@/core/refresh/types.generated';
 import type { ObjectDetailModel } from './objectDetailModel';
@@ -16,6 +17,10 @@ export interface DetailsTabProps {
   detailsLoading: boolean;
   detailsError: string | null;
   deletion?: ObjectDeletionMetadata | null;
+  finalizerRemovalCapabilities: {
+    metadata: CapabilityState;
+    namespaceSpec: CapabilityState;
+  };
   resourceDeleted?: boolean;
   deletedResourceName?: string;
   /** Called after a successful delete so the panel can close. */

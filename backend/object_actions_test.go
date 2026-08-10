@@ -95,6 +95,10 @@ func TestRunObjectActionValidatesActionSpecificRequirements(t *testing.T) {
 		{name: "debug namespace", req: actionRequestWithDebugContainer(debugContainer), wantErr: "requires namespace"},
 		{name: "rollback option", req: namespacedActionRequest(ObjectActionRollback, "apps", "v1", "Deployment"), wantErr: "requires revision"},
 		{name: "rollback namespace", req: actionRequestWithRevision(revision), wantErr: "requires namespace"},
+		{name: "remove finalizer value", req: namespacedActionRequest(ObjectActionRemoveFinalizer, "", "v1", "ConfigMap"), wantErr: "requires finalizer"},
+		{name: "remove finalizer path", req: actionRequestWithFinalizer("example.com/cleanup", ""), wantErr: "requires finalizerPath"},
+		{name: "remove finalizer invalid path", req: actionRequestWithFinalizer("example.com/cleanup", "status.finalizers"), wantErr: "unsupported finalizer path"},
+		{name: "namespace spec path target", req: actionRequestWithFinalizerTarget("example.com/cleanup", "spec.finalizers", "apps", "v1", "Deployment"), wantErr: "requires core/v1 Namespace"},
 	}
 
 	for _, tt := range tests {
@@ -105,6 +109,17 @@ func TestRunObjectActionValidatesActionSpecificRequirements(t *testing.T) {
 			}
 		})
 	}
+}
+
+func actionRequestWithFinalizer(finalizer, path string) ObjectActionRequest {
+	return actionRequestWithFinalizerTarget(finalizer, path, "", "v1", "ConfigMap")
+}
+
+func actionRequestWithFinalizerTarget(finalizer, path, group, version, kind string) ObjectActionRequest {
+	request := namespacedActionRequest(ObjectActionRemoveFinalizer, group, version, kind)
+	request.Finalizer = finalizer
+	request.FinalizerPath = path
+	return request
 }
 
 func TestRunObjectActionInvokesStartDrainAndDebugHandlers(t *testing.T) {

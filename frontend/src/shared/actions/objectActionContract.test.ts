@@ -36,6 +36,8 @@ describe('object action contract', () => {
         OBJECT_ACTION_IDS.uncordon,
         OBJECT_ACTION_IDS.drain,
         OBJECT_ACTION_IDS.delete,
+        OBJECT_ACTION_IDS.removeFinalizer,
+        OBJECT_ACTION_IDS.removeNamespaceFinalizer,
       ])
     );
   });
@@ -60,6 +62,38 @@ describe('object action contract', () => {
 
     expect(objectActionPayloadFields(OBJECT_ACTION_IDS.drain)).toEqual(['drainOptions']);
     expect(objectActionBackendAction(OBJECT_ACTION_IDS.drain)).toBe(OBJECT_ACTIONS.startDrain);
+
+    expect(objectActionPayloadFields(OBJECT_ACTION_IDS.removeFinalizer)).toEqual([
+      'finalizer',
+      'finalizerPath',
+    ]);
+    expect(objectActionBackendAction(OBJECT_ACTION_IDS.removeFinalizer)).toBe(
+      OBJECT_ACTIONS.removeFinalizer
+    );
+  });
+
+  it('uses the Namespace finalize subresource for spec finalizers', () => {
+    expect(
+      buildObjectActionPermissionDescriptor(OBJECT_ACTION_IDS.removeNamespaceFinalizer, {
+        clusterId: 'cluster-a',
+        group: '',
+        version: 'v1',
+        kind: 'Namespace',
+        namespace: '',
+        name: 'terminating',
+      })
+    ).toEqual({
+      id: 'remove-namespace-finalizer',
+      actionId: OBJECT_ACTION_IDS.removeNamespaceFinalizer,
+      slot: 'removeNamespaceFinalizer',
+      clusterId: 'cluster-a',
+      group: '',
+      version: 'v1',
+      resourceKind: 'Namespace',
+      verb: 'update',
+      name: 'terminating',
+      subresource: 'finalize',
+    });
   });
 
   it('builds permission descriptors with full target identity', () => {

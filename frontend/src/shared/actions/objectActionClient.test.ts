@@ -25,6 +25,7 @@ import {
   runNodeCordon,
   runNodeUncordon,
   runObjectDelete,
+  runObjectFinalizerRemoval,
   runObjectRestart,
   runObjectRollback,
   runObjectScale,
@@ -211,6 +212,16 @@ describe('buildObjectActionTarget', () => {
         action: 'rollback',
         run: () => runObjectRollback(target, 4),
         request: { action: 'rollback', target, revision: 4 },
+      },
+      {
+        action: 'removeFinalizer',
+        run: () => runObjectFinalizerRemoval(target, 'example.com/cleanup', 'metadata.finalizers'),
+        request: {
+          action: 'removeFinalizer',
+          target,
+          finalizer: 'example.com/cleanup',
+          finalizerPath: 'metadata.finalizers',
+        },
       },
     ];
 

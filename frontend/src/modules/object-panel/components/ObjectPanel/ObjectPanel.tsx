@@ -127,7 +127,7 @@ function ObjectPanel({ panelId, objectRef }: Readonly<ObjectPanelProps>) {
     isHelmRelease
   );
 
-  const { capabilities, capabilityReasons, nodeLogsState, nodeLogSources } =
+  const { capabilityStates, capabilities, capabilityReasons, nodeLogsState, nodeLogSources } =
     useObjectPanelCapabilities({
       objectData,
       objectKind,
@@ -285,6 +285,10 @@ function ObjectPanel({ panelId, objectRef }: Readonly<ObjectPanelProps>) {
         detailsLoading,
         detailsError,
         deletion,
+        finalizerRemovalCapabilities: {
+          metadata: capabilityStates.removeFinalizer,
+          namespaceSpec: capabilityStates.removeNamespaceFinalizer,
+        },
         resourceDeleted,
         deletedResourceName,
         onAfterDelete: handleAfterDelete,

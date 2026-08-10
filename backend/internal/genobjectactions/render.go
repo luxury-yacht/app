@@ -23,8 +23,8 @@ export const OBJECT_ACTIONS = catalog.actions;
 export type ObjectActionName = (typeof OBJECT_ACTIONS)[keyof typeof OBJECT_ACTIONS];
 export const MUTATING_OBJECT_ACTION_IDS = catalog.mutatingIds;
 export type MutatingObjectActionId = (typeof MUTATING_OBJECT_ACTION_IDS)[number];
-export type ObjectActionPayloadField = 'replicas' | 'suspend' | 'drainOptions' | 'portForward' | 'debugContainer' | 'revision';
-export type ObjectActionPermissionSlot = 'restart' | 'rollback' | 'scale' | 'trigger' | 'suspend' | 'delete' | 'portForward' | 'cordon' | 'drain';
+export type ObjectActionPayloadField = 'replicas' | 'suspend' | 'drainOptions' | 'portForward' | 'debugContainer' | 'revision' | 'finalizer' | 'finalizerPath';
+export type ObjectActionPermissionSlot = 'restart' | 'rollback' | 'scale' | 'trigger' | 'suspend' | 'delete' | 'portForward' | 'cordon' | 'drain' | 'removeFinalizer' | 'removeNamespaceFinalizer';
 
 export interface GeneratedObjectActionPermission {
   id: string;
