@@ -1,19 +1,34 @@
+/**
+ * What the chip label is derived from: a catalog entry, the domain prefix that
+ * owns the finalizer, or nothing at all — the one case worth warning about.
+ */
+export type FinalizerAttribution = 'catalog' | 'domain' | 'none';
+
 export interface FinalizerGuidance {
-  /** Short chip label naming why the finalizer is still held. */
+  /** Short chip label: why the finalizer is held, or the domain that owns it. */
   category: string;
+  attribution: FinalizerAttribution;
   explanation: string;
   nextStep: string;
   /** Set only where forcing removal has a specific, known cost. */
   consequence?: string;
-  /** False when no catalog entry matches the finalizer name. */
-  recognized: boolean;
 }
 
-type CatalogEntry = Omit<FinalizerGuidance, 'recognized'>;
+type CatalogEntry = Omit<FinalizerGuidance, 'attribution'>;
 
-const UNKNOWN_FINALIZER: CatalogEntry = {
-  category: 'Unrecognized',
-  explanation: 'No controller known to Luxury Yacht is responsible for this finalizer.',
+// Not in the catalog, but domain-qualified: the prefix names the controller,
+// which is more than "we have no blurb for this string" ever told anyone.
+const UNCATALOGUED_FINALIZER: Omit<CatalogEntry, 'category'> = {
+  explanation:
+    'Luxury Yacht has no guidance for this finalizer. Its domain prefix names the controller responsible for the cleanup.',
+  nextStep: 'Confirm that controller is running and able to finish its cleanup before removing it.',
+};
+
+// Kubernetes validates finalizers as qualified names, so a bare name is legal
+// but attributes the cleanup to nobody. That is the case worth flagging.
+const UNATTRIBUTABLE_FINALIZER: CatalogEntry = {
+  category: 'Unqualified',
+  explanation: 'This finalizer has no domain prefix, so nothing identifies the controller behind it.',
   nextStep: 'Identify the controller and the cleanup it protects before removing it.',
 };
 
@@ -40,6 +55,11 @@ const KNOWN_FINALIZERS = new Map<string, CatalogEntry>(
       category: 'Dependents',
       explanation: 'Kubernetes is waiting for dependent objects that block owner deletion.',
       nextStep: 'Inspect and resolve the remaining dependents instead of removing this finalizer.',
+    },
+    orphan: {
+      category: 'Orphaning',
+      explanation: 'Kubernetes is orphaning the dependents of this owner before deleting it.',
+      nextStep: 'Let the garbage collector finish; it clears this finalizer once dependents are orphaned.',
     },
     'service.kubernetes.io/load-balancer-cleanup': {
       category: 'Cleanup',
@@ -75,7 +95,19 @@ const KNOWN_FINALIZERS = new Map<string, CatalogEntry>(
   } satisfies Record<string, CatalogEntry>)
 );
 
+/** The domain prefix of a qualified finalizer name, or '' when there is none. */
+const qualifierOf = (name: string): string => {
+  const separator = name.indexOf('/');
+  return separator > 0 ? name.slice(0, separator) : '';
+};
+
 export const finalizerGuidance = (name: string): FinalizerGuidance => {
   const entry = KNOWN_FINALIZERS.get(name);
-  return entry ? { ...entry, recognized: true } : { ...UNKNOWN_FINALIZER, recognized: false };
+  if (entry) {
+    return { ...entry, attribution: 'catalog' };
+  }
+  const qualifier = qualifierOf(name);
+  return qualifier
+    ? { ...UNCATALOGUED_FINALIZER, category: qualifier, attribution: 'domain' }
+    : { ...UNATTRIBUTABLE_FINALIZER, attribution: 'none' };
 };

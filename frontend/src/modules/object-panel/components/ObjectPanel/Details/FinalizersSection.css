@@ -64,6 +64,13 @@
   -webkit-user-select: text;
 }
 
+/* Domain chips carry a hostname, which reads as a name rather than a label. */
+.status-chip.deletion-domain-chip {
+  text-transform: none;
+  font-family: var(--font-family-mono);
+  letter-spacing: 0;
+}
+
 .deletion-finalizer-path {
   color: var(--color-text-secondary);
   font-family: var(--font-family-mono);

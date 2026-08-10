@@ -62,7 +62,12 @@ function FinalizerRow({ entry, showPath, onRemove }: Readonly<FinalizerRowProps>
       <div className="deletion-finalizer-heading">
         <code className="deletion-finalizer-name">{entry.name}</code>
         {showPath ? <span className="deletion-finalizer-path">{entry.path}</span> : null}
-        <StatusChip variant={guidance.recognized ? 'info' : 'warning'}>
+        <StatusChip
+          variant={guidance.attribution === 'none' ? 'warning' : 'info'}
+          // A domain is a proper noun, so it keeps its own case instead of the
+          // chip's default uppercase.
+          className={guidance.attribution === 'domain' ? 'deletion-domain-chip' : undefined}
+        >
           {guidance.category}
         </StatusChip>
       </div>

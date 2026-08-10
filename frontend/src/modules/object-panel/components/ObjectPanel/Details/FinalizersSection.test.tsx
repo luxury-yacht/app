@@ -85,15 +85,29 @@ describe('FinalizersSection', () => {
       'example.com/metadata-cleanup',
       'kubernetes',
     ]);
+    // An uncatalogued finalizer is chipped with the domain that owns it, which
+    // is a fact about the cluster rather than about Luxury Yacht's catalog.
     expect(textOf(container, '.deletion-finalizer-row .status-chip')).toEqual([
-      'Unrecognized',
+      'example.com',
       'Namespace cleanup',
     ]);
     const chipClasses = Array.from(
       container.querySelectorAll<HTMLElement>('.deletion-finalizer-row .status-chip')
     ).map((chip) => chip.className);
-    expect(chipClasses[0]).toContain('status-chip--warning');
+    expect(chipClasses[0]).toContain('status-chip--info');
     expect(chipClasses[1]).toContain('status-chip--info');
+    // Only the domain chip opts out of the shared chip's uppercase treatment.
+    expect(chipClasses[0]).toContain('deletion-domain-chip');
+    expect(chipClasses[1]).not.toContain('deletion-domain-chip');
+  });
+
+  it('reserves the warning chip for a finalizer no domain attributes', async () => {
+    await renderSection({ finalizers: ['leftover-cleanup'], namespaceFinalization: null });
+
+    const chip = container.querySelector<HTMLElement>('.deletion-finalizer-row .status-chip');
+    expect(chip?.textContent).toBe('Unqualified');
+    expect(chip?.className).toContain('status-chip--warning');
+    expect(container.textContent).toContain('nothing identifies the controller behind it');
   });
 
   it('leaves the force-removal consequence to the confirmation dialog', async () => {
