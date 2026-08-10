@@ -108,12 +108,7 @@ func (s *Service) fetchSelectedContainerLogs(
 	var entries []types.ContainerLogsEntry
 	var fetchErrors []error
 	for _, target := range targets {
-		fetched, err := s.fetchContainerLogs(
-			ctx,
-			target.Namespace, target.PodName, target.Container.Name,
-			target.Container.IsInit, target.Container.IsEphemeral,
-			req.TailLines, req.Previous, req.SinceSeconds, lineFilter,
-		)
+		fetched, err := s.fetchContainerLogs(ctx, target, req, lineFilter)
 		if err != nil {
 			s.logWarn(fmt.Sprintf("Failed to fetch logs for container %s/%s: %v", target.PodName, target.Container.Name, err))
 			fetchErrors = append(fetchErrors, fmt.Errorf("pod %s container %s: %w", target.PodName, target.Container.Name, err))
@@ -363,23 +358,23 @@ func (s *Service) podObjectsForCronJob(ctx context.Context, namespace, cronJobNa
 	return podObjects, nil
 }
 
-func (s *Service) fetchContainerLogs(ctx context.Context, namespace, podName, containerName string, isInit bool, isEphemeral bool, tailLines int, previous bool, sinceSeconds int64, lineFilter containerlogs.LineFilter) ([]types.ContainerLogsEntry, error) {
+func (s *Service) fetchContainerLogs(ctx context.Context, target containerlogs.SelectedTarget, req types.ContainerLogsFetchRequest, lineFilter containerlogs.LineFilter) ([]types.ContainerLogsEntry, error) {
 	logOptions := &corev1.PodLogOptions{
-		Container:  containerName,
+		Container:  target.Container.Name,
 		Timestamps: true,
-		Previous:   previous,
+		Previous:   req.Previous,
 	}
 
-	if tailLines > 0 {
-		tail := int64(tailLines)
+	if req.TailLines > 0 {
+		tail := int64(req.TailLines)
 		logOptions.TailLines = &tail
 	}
-	if sinceSeconds > 0 {
-		logOptions.SinceSeconds = &sinceSeconds
+	if req.SinceSeconds > 0 {
+		logOptions.SinceSeconds = &req.SinceSeconds
 	}
 
-	pods := s.deps.KubernetesClient.CoreV1().Pods(namespace)
-	stream, err := containerLogsStreamFunc(pods, ctx, podName, logOptions)
+	pods := s.deps.KubernetesClient.CoreV1().Pods(target.Namespace)
+	stream, err := containerLogsStreamFunc(pods, ctx, target.PodName, logOptions)
 	if err != nil {
 		if containerLogStreamUnavailable(err) {
 			return []types.ContainerLogsEntry{}, nil
@@ -398,11 +393,11 @@ func (s *Service) fetchContainerLogs(ctx context.Context, namespace, podName, co
 
 		entries = append(entries, types.ContainerLogsEntry{
 			Timestamp:   timestamp,
-			Pod:         podName,
-			Container:   containerName,
+			Pod:         target.PodName,
+			Container:   target.Container.Name,
 			Line:        logLine,
-			IsInit:      isInit,
-			IsEphemeral: isEphemeral,
+			IsInit:      target.Container.IsInit,
+			IsEphemeral: target.Container.IsEphemeral,
 		})
 	}
 

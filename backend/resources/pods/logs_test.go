@@ -39,6 +39,22 @@ func workloadLogScope(namespace, group, version, kind, name string) string {
 	return fmt.Sprintf("cluster-a|%s:%s/%s:%s:%s", namespace, group, version, kind, name)
 }
 
+func testContainerLogTarget() containerlogs.SelectedTarget {
+	return containerlogs.SelectedTarget{
+		Namespace: "default",
+		PodName:   "demo",
+		Container: containerlogs.ContainerRef{Name: "app"},
+	}
+}
+
+func testContainerLogRequest(tailLines int, previous bool, sinceSeconds int64) types.ContainerLogsFetchRequest {
+	return types.ContainerLogsFetchRequest{
+		TailLines:    tailLines,
+		Previous:     previous,
+		SinceSeconds: sinceSeconds,
+	}
+}
+
 func TestFetchContainerLogsRequiresScopeWhenRequestEmpty(t *testing.T) {
 	service := NewService(common.Dependencies{
 		Logger:           applog.Noop,
@@ -360,7 +376,7 @@ func TestFetchContainerLogsParsesTimestamps(t *testing.T) {
 		KubernetesClient: client,
 	})
 
-	entries, err := service.fetchContainerLogs(context.Background(), "default", "demo", "app", false, false, 50, false, 0, containerlogs.LineFilter{})
+	entries, err := service.fetchContainerLogs(context.Background(), testContainerLogTarget(), testContainerLogRequest(50, false, 0), containerlogs.LineFilter{})
 	require.NoError(t, err)
 	require.Len(t, entries, 2)
 	require.Equal(t, "2024-01-01T00:00:00Z", entries[0].Timestamp)
@@ -399,7 +415,7 @@ func TestFetchContainerLogsSwallowsCommonErrors(t *testing.T) {
 				KubernetesClient: client,
 			})
 
-			entries, err := service.fetchContainerLogs(context.Background(), "default", "demo", "app", false, false, 10, true, 5, containerlogs.LineFilter{})
+			entries, err := service.fetchContainerLogs(context.Background(), testContainerLogTarget(), testContainerLogRequest(10, true, 5), containerlogs.LineFilter{})
 			require.NoError(t, err)
 			require.Empty(t, entries)
 		})
@@ -423,7 +439,7 @@ func TestFetchContainerLogsUnexpectedErrorPropagates(t *testing.T) {
 		KubernetesClient: client,
 	})
 
-	_, err := service.fetchContainerLogs(context.Background(), "default", "demo", "app", false, false, 10, false, 0, containerlogs.LineFilter{})
+	_, err := service.fetchContainerLogs(context.Background(), testContainerLogTarget(), testContainerLogRequest(10, false, 0), containerlogs.LineFilter{})
 	require.Error(t, err)
 	require.Contains(t, err.Error(), "forbidden")
 }
@@ -503,7 +519,7 @@ func TestFetchContainerLogsScannerError(t *testing.T) {
 		KubernetesClient: client,
 	})
 
-	_, err := service.fetchContainerLogs(context.Background(), "default", "demo", "app", false, false, 10, false, 0, containerlogs.LineFilter{})
+	_, err := service.fetchContainerLogs(context.Background(), testContainerLogTarget(), testContainerLogRequest(10, false, 0), containerlogs.LineFilter{})
 	require.Error(t, err)
 	require.Contains(t, err.Error(), "read failure")
 }
@@ -525,7 +541,7 @@ func TestFetchContainerLogsHandlesOversizedLine(t *testing.T) {
 		KubernetesClient: client,
 	})
 
-	entries, err := service.fetchContainerLogs(context.Background(), "default", "demo", "app", false, false, 10, false, 0, containerlogs.LineFilter{})
+	entries, err := service.fetchContainerLogs(context.Background(), testContainerLogTarget(), testContainerLogRequest(10, false, 0), containerlogs.LineFilter{})
 	require.NoError(t, err)
 	require.Len(t, entries, 1)
 	require.Equal(t, longLine, entries[0].Line)
