@@ -27,6 +27,13 @@ func TestClusterOverviewRuntimePolicyAllowsAnyPrimaryResource(t *testing.T) {
 	require.NotEmpty(t, policy.Reason, "ModeAny denial needs an explicit human-readable reason")
 }
 
+func TestClusterAttentionOperationalSourcesAreOptional(t *testing.T) {
+	policy, ok := RuntimePoliciesByDomain()["cluster-attention"]
+	require.True(t, ok)
+	require.Equal(t, ModeOptional, policy.Mode)
+	require.NotEmpty(t, policy.Runtime)
+}
+
 func TestStreamDomainsDeriveFromCompositions(t *testing.T) {
 	compositions := CompositionByDomain()
 

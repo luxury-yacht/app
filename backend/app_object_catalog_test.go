@@ -11,6 +11,7 @@ import (
 	"github.com/luxury-yacht/app/backend/internal/config"
 	"github.com/luxury-yacht/app/backend/kind/streamrows"
 	"github.com/luxury-yacht/app/backend/objectcatalog"
+	"github.com/luxury-yacht/app/backend/refresh/domain"
 	refreshinformer "github.com/luxury-yacht/app/backend/refresh/informer"
 	"github.com/luxury-yacht/app/backend/refresh/ingest"
 	refreshpermissions "github.com/luxury-yacht/app/backend/refresh/permissions"
@@ -34,6 +35,66 @@ import (
 	cgofake "k8s.io/client-go/kubernetes/fake"
 	cgotesting "k8s.io/client-go/testing"
 )
+
+func TestCatalogFinalizerBridgeProjectsArbitraryKindsIntoAttention(t *testing.T) {
+	registry := domain.New()
+	index, err := snapshot.RegisterClusterAttentionDomain(
+		registry, nil, snapshot.ClusterAttentionPermissions{},
+		snapshot.ClusterMeta{ClusterID: "cluster-a", ClusterName: "A"}, nil,
+		snapshot.ClusterAttentionOptions{},
+	)
+	require.NoError(t, err)
+	t.Cleanup(index.Stop)
+
+	updates := make(chan objectcatalog.FinalizerBlockerUpdate, 1)
+	blockers := []objectcatalog.FinalizerBlocker{{
+		Ref: resourcemodel.ResourceRef{
+			ClusterID: "cluster-a", Group: "example.com", Version: "v1", Kind: "Widget", Resource: "widgets",
+			Namespace: "default", Name: "sample", UID: "widget-uid",
+		},
+		DeletionTimestamp: time.Now().Add(-time.Minute).UnixMilli(),
+	}}
+	ctx, cancel := context.WithCancel(context.Background())
+	done := make(chan struct{})
+	go func() {
+		defer close(done)
+		runCatalogFinalizerBridge(ctx, updates, func() []objectcatalog.FinalizerBlocker { return blockers }, index)
+	}()
+
+	updates <- objectcatalog.FinalizerBlockerUpdate{Revision: 1}
+	require.Eventually(t, func() bool { return len(index.Snapshot()) == 1 }, time.Second, time.Millisecond)
+	require.Equal(t, "Widget", index.Snapshot()[0].Ref.Kind)
+
+	cancel()
+	require.Eventually(t, func() bool {
+		select {
+		case <-done:
+			return true
+		default:
+			return false
+		}
+	}, time.Second, time.Millisecond)
+}
+
+func TestCatalogFinalizerBridgeStopsForUnavailableInputs(t *testing.T) {
+	registry := domain.New()
+	index, err := snapshot.RegisterClusterAttentionDomain(
+		registry, nil, snapshot.ClusterAttentionPermissions{},
+		snapshot.ClusterMeta{ClusterID: "cluster-a"}, nil,
+		snapshot.ClusterAttentionOptions{},
+	)
+	require.NoError(t, err)
+	t.Cleanup(index.Stop)
+
+	closedUpdates := make(chan objectcatalog.FinalizerBlockerUpdate)
+	close(closedUpdates)
+
+	runCatalogFinalizerBridge(context.Background(), closedUpdates, func() []objectcatalog.FinalizerBlocker {
+		t.Fatal("a closed update channel must not read blocker state")
+		return nil
+	}, index)
+	runCatalogFinalizerBridge(context.Background(), nil, nil, nil)
+}
 
 func catalogLifecycleTestApp(t *testing.T, tier system.ResourceTier, cooled bool) (*App, catalogTarget) {
 	t.Helper()

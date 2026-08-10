@@ -73,6 +73,21 @@ func TestRuntimeAccessDeniesAnyPolicyWhenNoRequirementsAllowed(t *testing.T) {
 	require.Equal(t, "core/configmaps,secrets", decision.DeniedReason)
 }
 
+func TestRuntimeAccessKeepsOptionalAttentionSourcesWhenAllAreDenied(t *testing.T) {
+	access := NewRuntimeAccess()
+	checker := permissions.NewCheckerWithReview("cluster-a", 0, func(context.Context, string, string, string, string) (bool, error) {
+		return false, nil
+	})
+
+	decision, err := access.Check(context.Background(), "cluster-attention", checker)
+	require.NoError(t, err)
+	require.True(t, decision.Allowed)
+	require.NotEmpty(t, decision.AllowedResources)
+	for _, allowed := range decision.AllowedResources {
+		require.False(t, allowed)
+	}
+}
+
 // The namespace-helm domain reads from the CLUSTER-WIDE helm-storage factory,
 // so its runtime policy must stay a cluster-wide check under a namespace
 // scope (docs/plans/namespace-scope.md): a per-namespace secrets grant must

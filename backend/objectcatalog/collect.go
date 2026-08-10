@@ -17,6 +17,7 @@ import (
 	"github.com/luxury-yacht/app/backend/internal/parallel"
 	"github.com/luxury-yacht/app/backend/internal/timeutil"
 	"github.com/luxury-yacht/app/backend/resourcemodel"
+	corev1 "k8s.io/api/core/v1"
 	apierrors "k8s.io/apimachinery/pkg/api/errors"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	unstructuredv1 "k8s.io/apimachinery/pkg/apis/meta/v1/unstructured"
@@ -431,10 +432,20 @@ func summaryFromObject(clusterID string, desc resourceDescriptor, item metav1.Ob
 		creationTimestamp = ts.UTC().Format(time.RFC3339)
 	}
 
+	meta := metav1.ObjectMeta{
+		DeletionTimestamp: item.GetDeletionTimestamp(),
+		Finalizers:        item.GetFinalizers(),
+	}
+	deletionTime := int64(0)
+	if meta.DeletionTimestamp != nil {
+		deletionTime = meta.DeletionTimestamp.UnixMilli()
+	}
 	summary := Summary{
 		Ref:               resourcemodel.NewResourceRef(resourcemodel.ResourceRef{ClusterID: clusterID, Group: desc.Group, Version: desc.Version, Kind: desc.Kind, Resource: desc.Resource, Namespace: item.GetNamespace(), Name: item.GetName(), UID: string(item.GetUID())}),
 		ResourceVersion:   item.GetResourceVersion(),
 		CreationTimestamp: creationTimestamp,
+		lifecycle:         resourcemodel.ObjectLifecycleWithFinalizers(meta, additionalObjectFinalizers(desc, item)),
+		deletionTime:      deletionTime,
 		Scope:             desc.Scope,
 	}
 
@@ -444,4 +455,23 @@ func summaryFromObject(clusterID string, desc resourceDescriptor, item metav1.Ob
 	summary.ActionFacts = buildSummaryActionFacts(desc, item)
 
 	return summary
+}
+
+func additionalObjectFinalizers(desc resourceDescriptor, item metav1.Object) []string {
+	if desc.Group != "" || desc.Version != "v1" || desc.Kind != "Namespace" {
+		return nil
+	}
+	switch namespace := item.(type) {
+	case *corev1.Namespace:
+		finalizers := make([]string, 0, len(namespace.Spec.Finalizers))
+		for _, finalizer := range namespace.Spec.Finalizers {
+			finalizers = append(finalizers, string(finalizer))
+		}
+		return finalizers
+	case *unstructuredv1.Unstructured:
+		finalizers, _, _ := unstructuredv1.NestedStringSlice(namespace.Object, "spec", "finalizers")
+		return finalizers
+	default:
+		return nil
+	}
 }

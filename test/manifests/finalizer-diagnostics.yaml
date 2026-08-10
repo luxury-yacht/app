@@ -3,30 +3,37 @@
 # Apply:
 #   kubectl apply -f test/manifests/finalizer-diagnostics.yaml
 #
-# Exercise terminating object details:
+# Exercise Attention findings:
+#   kubectl delete pod attention-finalizer-demo \
+#     --namespace luxury-yacht-finalizer-demo --wait=false
 #   kubectl delete configmap unknown-finalizer-demo \
 #     --namespace luxury-yacht-finalizer-demo --wait=false
 #   kubectl delete persistentvolumeclaim pvc-protection-demo \
 #     --namespace luxury-yacht-finalizer-demo --wait=false
 #
-# The ConfigMap remains terminating because its example.com finalizer has no
-# controller. The PVC remains terminating while pvc-consumer-demo references it.
-# Open each object in Luxury Yacht and inspect its Details tab.
+# The Pod and ConfigMap remain terminating because their example.com finalizers
+# have no controller. Both appear in Attention under "Deletion blocked by
+# Finalizer", demonstrating that the category is not workload-only. The PVC
+# remains terminating while pvc-consumer-demo references it and appears in the
+# same category while its protection finalizer remains.
 #
-# Exercise Namespace finalization details after inspecting the objects:
+# Exercise the cluster-scoped Namespace case after inspecting the objects:
 #   kubectl delete namespace luxury-yacht-finalizer-demo --wait=false
 #
-# The Namespace remains terminating while the ConfigMap finalizer is present.
-# Its Details tab can then show spec.finalizers and controller-authored Namespace
-# deletion conditions.
+# The Namespace remains terminating while namespaced content with finalizers is
+# present.
 #
 # Cleanup the deliberately stuck fixture:
 #   kubectl patch configmap unknown-finalizer-demo \
 #     --namespace luxury-yacht-finalizer-demo --type=merge \
 #     --patch '{"metadata":{"finalizers":[]}}'
+#   kubectl patch pod attention-finalizer-demo \
+#     --namespace luxury-yacht-finalizer-demo --type=merge \
+#     --patch '{"metadata":{"finalizers":[]}}'
 #
-# The Namespace deletion removes the Pod, which allows Kubernetes to clear PVC
-# protection. If the PVC is still present, remove the Pod explicitly and wait:
+# The deleting Namespace also appears in the category while its spec.finalizers
+# remain. Namespace deletion removes the Pod, which allows Kubernetes to clear
+# PVC protection. If the PVC is still present, remove the Pod explicitly and wait:
 #   kubectl delete pod pvc-consumer-demo \
 #     --namespace luxury-yacht-finalizer-demo --wait=false --ignore-not-found
 #
@@ -52,7 +59,26 @@ metadata:
   finalizers:
     - example.com/luxury-yacht-finalizer-demo
 data:
-  purpose: Exercise unknown-finalizer diagnosis in the Luxury Yacht Object Panel.
+  purpose: Exercise catalog-wide finalizer findings in Luxury Yacht Attention.
+---
+apiVersion: v1
+kind: Pod
+metadata:
+  name: attention-finalizer-demo
+  namespace: luxury-yacht-finalizer-demo
+  labels:
+    app.kubernetes.io/name: finalizer-diagnostics
+    app.kubernetes.io/part-of: luxury-yacht
+  finalizers:
+    - example.com/luxury-yacht-finalizer-demo
+spec:
+  automountServiceAccountToken: false
+  containers:
+    - name: pause
+      image: registry.k8s.io/pause:3.9
+      imagePullPolicy: IfNotPresent
+  restartPolicy: Never
+  terminationGracePeriodSeconds: 0
 ---
 apiVersion: v1
 kind: PersistentVolumeClaim

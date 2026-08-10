@@ -7,10 +7,41 @@ import (
 	"testing"
 	"time"
 
+	"github.com/luxury-yacht/app/backend/objectcatalog"
 	"github.com/luxury-yacht/app/backend/refresh"
 	"github.com/luxury-yacht/app/backend/resourcemodel"
 	"github.com/stretchr/testify/require"
 )
+
+func TestClusterAttentionBuilderQueriesCatalogDiscoveredKinds(t *testing.T) {
+	now := time.Date(2026, time.August, 10, 12, 0, 0, 0, time.UTC)
+	meta := ClusterMeta{ClusterID: "cluster-a", ClusterName: "A"}
+	index := newClusterAttentionIndex(meta, func() time.Time { return now })
+	t.Cleanup(index.Stop)
+	index.ReplaceFinalizerBlockers([]objectcatalog.FinalizerBlocker{{
+		Ref: resourcemodel.ResourceRef{
+			ClusterID: meta.ClusterID, Group: "example.com", Version: "v1", Kind: "Widget", Resource: "widgets",
+			Namespace: "payments", Name: "sample", UID: "widget-uid",
+		},
+		DeletionTimestamp: now.Add(-time.Minute).UnixMilli(),
+	}})
+	index.UpsertSource("pods", attentionSourceRecord{
+		Ref: attentionTestRef("Pod", "payments", "unhealthy"), Source: attentionSourcePod,
+		Status: "Running", StatusPresentation: "ready", Restarts: 1,
+		AgeTimestamp: now.Add(-time.Hour).UnixMilli(),
+	})
+
+	result, err := (&ClusterAttentionBuilder{index: index}).Build(
+		WithClusterMeta(context.Background(), meta),
+		refresh.JoinClusterScope(meta.ClusterID, "?limit=10&kinds=Widget&facet.findings=deletion-blocked-by-finalizer"),
+	)
+	require.NoError(t, err)
+	payload := result.Payload.(ClusterAttentionSnapshot)
+	require.Len(t, payload.Rows, 1)
+	require.Equal(t, "Widget", payload.Rows[0].Ref.Kind)
+	require.Equal(t, []string{"Widget"}, payload.Kinds)
+	require.Equal(t, []string{"Pod", "Widget"}, payload.Capabilities.KindVocabulary)
+}
 
 func TestAttentionQueryAdapterUsesFindingLabelsForSearchAndSort(t *testing.T) {
 	row := AttentionFinding{Ref: resourcemodel.ResourceRef{Kind: "Pod", Namespace: "payments", Name: "checkout-0"}, Status: "CrashLoopBackOff",

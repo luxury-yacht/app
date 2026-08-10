@@ -34,14 +34,15 @@ type listWatchCheck struct {
 
 // listDomainConfig describes a list-only gated domain registration.
 type listDomainConfig struct {
-	name          string
-	issueResource string
-	logGroup      string
-	logResource   string
-	checks        []listCheck
-	allowAny      bool                                                   // When true, register if any check passes (not all).
-	register      func(allowed domainpermissions.AllowedResources) error // Callback receives per-resource allow map.
-	deniedReason  string
+	name           string
+	issueResource  string
+	logGroup       string
+	logResource    string
+	checks         []listCheck
+	allowAny       bool                                                   // When true, register if any check passes (not all).
+	alwaysRegister bool                                                   // Optional sources may all be denied while another RBAC-aware source still serves the domain.
+	register       func(allowed domainpermissions.AllowedResources) error // Callback receives per-resource allow map.
+	deniedReason   string
 }
 
 // listWatchDomainConfig describes a list/watch gated domain registration with an optional list fallback.
@@ -206,6 +207,9 @@ func (g *permissionGate) registerListDomain(cfg listDomainConfig) error {
 	allowed := g.allListAllowed(results)
 	if cfg.allowAny {
 		allowed = g.anyListAllowed(results)
+	}
+	if cfg.alwaysRegister {
+		return cfg.register(g.listAllowedByKey(results))
 	}
 
 	if len(errs) == 0 && allowed {

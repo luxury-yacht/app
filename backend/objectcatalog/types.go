@@ -61,11 +61,29 @@ type HealthStatus struct {
 // Summary represents the lightweight metadata captured for each Kubernetes object.
 type Summary struct {
 	Ref               resourcemodel.ResourceRef `json:"ref"`
-	ResourceVersion   string                    `json:"resourceVersion"`        // resource version
-	CreationTimestamp string                    `json:"creationTimestamp"`      // resource creation timestamp
-	Scope             Scope                     `json:"scope"`                  // resource scope
-	LabelsDigest      string                    `json:"labelsDigest,omitempty"` // optional digest of resource labels
-	ActionFacts       *ActionFacts              `json:"actionFacts,omitempty"`  // optional facts needed to present object actions correctly
+	ResourceVersion   string                    `json:"resourceVersion"`   // resource version
+	CreationTimestamp string                    `json:"creationTimestamp"` // resource creation timestamp
+	lifecycle         resourcemodel.ResourceLifecycle
+	deletionTime      int64
+	Scope             Scope        `json:"scope"`                  // resource scope
+	LabelsDigest      string       `json:"labelsDigest,omitempty"` // optional digest of resource labels
+	ActionFacts       *ActionFacts `json:"actionFacts,omitempty"`  // optional facts needed to present object actions correctly
+}
+
+// FinalizerBlocker is the catalog's small backend-only lifecycle projection
+// for a concrete Kubernetes object awaiting finalizer cleanup.
+type FinalizerBlocker struct {
+	Ref               resourcemodel.ResourceRef
+	DeletionTimestamp int64
+}
+
+// FinalizerBlocker returns the complete object identity and deletion time only
+// when the object is currently awaiting finalizer cleanup.
+func (s Summary) FinalizerBlocker() (FinalizerBlocker, bool) {
+	if !s.lifecycle.FinalizerBlocked || s.deletionTime <= 0 {
+		return FinalizerBlocker{}, false
+	}
+	return FinalizerBlocker{Ref: s.Ref, DeletionTimestamp: s.deletionTime}, true
 }
 
 // ActionFacts carries lightweight, action-relevant state for catalog rows.

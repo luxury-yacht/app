@@ -247,6 +247,13 @@ func (a *App) startObjectCatalogForTarget(target catalogTarget) error {
 			runCatalogDoorbellBridge(ctx, catalogUpdates, subsystem.ResourceStream)
 		}()
 	}
+	if subsystem.AttentionIndex != nil {
+		finalizerUpdates, cancelFinalizerUpdates := svc.SubscribeFinalizerBlockers()
+		go func() {
+			defer cancelFinalizerUpdates()
+			runCatalogFinalizerBridge(ctx, finalizerUpdates, svc.FinalizerBlockers, subsystem.AttentionIndex)
+		}()
+	}
 
 	a.storeObjectCatalogEntry(target.meta.ID, &objectCatalogEntry{
 		service: svc,
@@ -270,6 +277,28 @@ func (a *App) startObjectCatalogForTarget(target catalogTarget) error {
 	}()
 
 	return nil
+}
+
+func runCatalogFinalizerBridge(
+	ctx context.Context,
+	updates <-chan objectcatalog.FinalizerBlockerUpdate,
+	blockers func() []objectcatalog.FinalizerBlocker,
+	index *snapshot.ClusterAttentionIndex,
+) {
+	if blockers == nil || index == nil {
+		return
+	}
+	for {
+		select {
+		case <-ctx.Done():
+			return
+		case _, ok := <-updates:
+			if !ok {
+				return
+			}
+			index.ReplaceFinalizerBlockers(blockers())
+		}
+	}
 }
 
 func runCatalogDoorbellBridge(ctx context.Context, updates <-chan objectcatalog.StreamingUpdate, manager *resourcestream.Manager) {

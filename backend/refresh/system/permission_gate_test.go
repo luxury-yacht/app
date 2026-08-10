@@ -12,6 +12,7 @@ import (
 	cgotesting "k8s.io/client-go/testing"
 
 	"github.com/luxury-yacht/app/backend/refresh/domain"
+	"github.com/luxury-yacht/app/backend/refresh/domainpermissions"
 	"github.com/luxury-yacht/app/backend/refresh/informer"
 	"github.com/luxury-yacht/app/backend/refresh/permissions"
 )
@@ -145,6 +146,28 @@ func TestRegisterListWatchDomainFallbackAllowAnyDeniesWhenNothingAllowed(t *test
 	require.NoError(t, err)
 	require.False(t, fallbackRegistered)
 	require.True(t, registry.IsPermissionDenied("test-overview"))
+}
+
+func TestRegisterListDomainKeepsCatalogBackedDomainWhenOptionalSourcesAreDenied(t *testing.T) {
+	gate, registry := permissionGateFixture(t, nil, nil)
+	registered := false
+
+	err := gate.registerListDomain(listDomainConfig{
+		name:           "catalog-backed",
+		checks:         []listCheck{{group: "", resource: "pods"}, {group: "apps", resource: "deployments"}},
+		alwaysRegister: true,
+		register: func(allowed domainpermissions.AllowedResources) error {
+			registered = true
+			require.False(t, allowed.Allows("", "pods"))
+			require.False(t, allowed.Allows("apps", "deployments"))
+			return nil
+		},
+		deniedReason: "optional health sources",
+	})
+
+	require.NoError(t, err)
+	require.True(t, registered)
+	require.False(t, registry.IsPermissionDenied("catalog-backed"))
 }
 
 // The default (all-of) fallback semantics are unchanged: a partially allowed

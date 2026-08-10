@@ -46,3 +46,20 @@ func TestNamespaceMetricsRegistrationIsIndependentFromNamespaceObjectPermissions
 	require.NotNil(t, metricRegistration.direct)
 	require.True(t, metricRegistration.skipRuntimePolicy)
 }
+
+func TestAttentionRegistrationTreatsOperationalHealthSourcesAsOptional(t *testing.T) {
+	registrations := domainRegistrations(registrationDeps{cfg: Config{ClusterID: "cluster-a"}})
+
+	var attention *domainRegistration
+	for i := range registrations {
+		if registrations[i].name == "cluster-attention" {
+			attention = &registrations[i]
+			break
+		}
+	}
+
+	require.NotNil(t, attention)
+	require.NotNil(t, attention.list)
+	require.True(t, attention.list.alwaysRegister, "catalog findings must not depend on optional health-source permissions")
+	require.False(t, attention.skipRuntimePolicy, "serve-time checks must keep reporting revoked operational-source permissions")
+}

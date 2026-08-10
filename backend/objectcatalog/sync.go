@@ -435,6 +435,7 @@ func (run *catalogSync) publishEmpty() {
 	s.mu.Lock()
 	s.catalogIndex.reset()
 	s.mu.Unlock()
+	s.replaceFinalizerBlockers(nil)
 	s.logDebug("no resources discovered; catalog cleared")
 	elapsed := s.now().Sub(run.start)
 	s.updateHealth(true, false, nil, 0)

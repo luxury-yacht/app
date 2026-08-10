@@ -277,6 +277,11 @@ func catalogSnapshotIssues(result objectcatalog.QueryResult, health objectcatalo
 			Message: "Catalog filter options are approximate because the catalog metadata is incomplete.",
 		})
 	}
+	return append(issues, catalogHealthIssues(health)...)
+}
+
+func catalogHealthIssues(health objectcatalog.HealthStatus) []ResourceQueryIssue {
+	issues := make([]ResourceQueryIssue, 0, 2)
 	if health.Status == objectcatalog.HealthStateDegraded ||
 		health.Status == objectcatalog.HealthStateError ||
 		health.Stale ||

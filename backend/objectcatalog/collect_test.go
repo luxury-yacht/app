@@ -15,6 +15,8 @@ import (
 	"github.com/luxury-yacht/app/backend/refresh/ingest"
 	"github.com/luxury-yacht/app/backend/resourcemodel"
 	"github.com/luxury-yacht/app/backend/resources/common"
+	"github.com/stretchr/testify/require"
+	corev1 "k8s.io/api/core/v1"
 	k8serrors "k8s.io/apimachinery/pkg/api/errors"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/apis/meta/v1/unstructured"
@@ -449,6 +451,60 @@ func TestBuildSummaryNamespaced(t *testing.T) {
 	if summary.LabelsDigest == "" {
 		t.Fatalf("expected labels digest to be populated")
 	}
+}
+
+func TestBuildSummaryCapturesFinalizerBlockedForBackendConsumers(t *testing.T) {
+	desc := resourceDescriptor{Kind: "Pod", Group: "", Version: "v1", Resource: "pods", Scope: ScopeNamespace}
+	deletionTimestamp := metav1.NewTime(time.Date(2026, time.August, 10, 12, 0, 0, 0, time.UTC))
+	obj := &unstructured.Unstructured{}
+	obj.SetNamespace("default")
+	obj.SetName("example")
+	obj.SetDeletionTimestamp(&deletionTimestamp)
+	obj.SetFinalizers([]string{"example.com/cleanup"})
+
+	summary := summaryFromObject("cluster-a", desc, obj)
+	if _, blocked := summary.FinalizerBlocker(); !blocked {
+		t.Fatal("expected deleting object with a finalizer to be marked finalizer-blocked")
+	}
+
+	obj.SetFinalizers(nil)
+	if _, blocked := summaryFromObject("cluster-a", desc, obj).FinalizerBlocker(); blocked {
+		t.Fatal("expected deleting object without a finalizer not to be marked finalizer-blocked")
+	}
+}
+
+func TestBuildSummaryTreatsNamespaceSpecFinalizersAsDeletionBlockers(t *testing.T) {
+	deletingAt := metav1.NewTime(time.Date(2026, time.August, 10, 12, 0, 0, 0, time.UTC))
+	namespace := &corev1.Namespace{
+		ObjectMeta: metav1.ObjectMeta{
+			Name:              "attention-finalizer-demo",
+			UID:               "namespace-uid",
+			DeletionTimestamp: &deletingAt,
+		},
+		Spec: corev1.NamespaceSpec{Finalizers: []corev1.FinalizerName{"kubernetes"}},
+	}
+	desc := builtinDescriptor("", "v1", "Namespace", "namespaces", false)
+
+	summary := summaryFromObject("cluster-a", desc, namespace)
+	blocker, blocked := summary.FinalizerBlocker()
+	require.True(t, blocked)
+	require.Equal(t, "cluster-a", blocker.Ref.ClusterID)
+	require.Equal(t, "Namespace", blocker.Ref.Kind)
+	require.Equal(t, deletingAt.UnixMilli(), blocker.DeletionTimestamp)
+
+	unstructuredNamespace := &unstructured.Unstructured{Object: map[string]interface{}{
+		"apiVersion": "v1",
+		"kind":       "Namespace",
+		"metadata": map[string]interface{}{
+			"name":              "dynamic-path",
+			"uid":               "dynamic-uid",
+			"deletionTimestamp": deletingAt.Format(time.RFC3339),
+		},
+		"spec": map[string]interface{}{"finalizers": []interface{}{"kubernetes"}},
+	}}
+	dynamicSummary := summaryFromObject("cluster-a", desc, unstructuredNamespace)
+	_, dynamicBlocked := dynamicSummary.FinalizerBlocker()
+	require.True(t, dynamicBlocked, "the dynamic list fallback must preserve Namespace spec.finalizers")
 }
 
 func TestBuildSummaryIncludesActionFactsFromUnstructured(t *testing.T) {

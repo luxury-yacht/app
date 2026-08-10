@@ -109,4 +109,5 @@ func (s *Service) rebuildCacheFromItems(items map[string]Summary, descriptors []
 	s.mu.Lock()
 	s.catalogIndex.rebuildCacheFromItems(items, descriptors)
 	s.mu.Unlock()
+	s.replaceFinalizerBlockers(items)
 }

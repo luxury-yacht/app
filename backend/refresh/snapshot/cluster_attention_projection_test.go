@@ -6,6 +6,7 @@ import (
 
 	"github.com/luxury-yacht/app/backend/kind/objectmapnode"
 	"github.com/luxury-yacht/app/backend/objectcatalog"
+	"github.com/luxury-yacht/app/backend/refresh/domain"
 	"github.com/luxury-yacht/app/backend/refresh/ingest"
 	"github.com/luxury-yacht/app/backend/resourcemodel"
 	"github.com/luxury-yacht/app/backend/resources/daemonset"
@@ -31,6 +32,50 @@ func TestAttentionRecordFromBundleUsesCatalogIdentityAndTypedSummary(t *testing.
 	require.Equal(t, "pod-uid", record.Ref.UID)
 	require.Equal(t, "CrashLoopBackOff", record.Status)
 	require.Equal(t, int32(4), record.Restarts)
+}
+
+func TestDeletingPodBlockedByFinalizerProjectsIntoAttentionCategory(t *testing.T) {
+	now := time.Date(2026, time.August, 10, 12, 0, 0, 0, time.UTC)
+	deletionTimestamp := metav1.NewTime(now.Add(-time.Minute))
+	pod := &corev1.Pod{
+		ObjectMeta: metav1.ObjectMeta{
+			Name:              "checkout-0",
+			Namespace:         "payments",
+			UID:               "pod-uid",
+			CreationTimestamp: metav1.NewTime(now.Add(-10 * time.Minute)),
+			DeletionTimestamp: &deletionTimestamp,
+			Finalizers:        []string{"example.com/cleanup"},
+		},
+		Status: corev1.PodStatus{Phase: corev1.PodRunning},
+	}
+
+	raw, err := NewPodIngestProjector(
+		ClusterMeta{ClusterID: "cluster-a", ClusterName: "A"},
+		PodOwnerSources{},
+	)(pod)
+	require.NoError(t, err)
+	bundle, ok := raw.(ingest.Bundle)
+	require.True(t, ok)
+
+	catalog, ok := bundle.Catalog.(objectcatalog.Summary)
+	require.True(t, ok)
+	blocker, blocked := catalog.FinalizerBlocker()
+	require.True(t, blocked)
+	index := newClusterAttentionIndex(ClusterMeta{ClusterID: "cluster-a", ClusterName: "A"}, func() time.Time { return now })
+	t.Cleanup(index.Stop)
+	index.ReplaceFinalizerBlockers([]objectcatalog.FinalizerBlocker{blocker})
+	rows := index.Snapshot()
+	require.Len(t, rows, 1)
+	require.Contains(t, rows[0].Causes, AttentionCause{
+		Type:     "deletion-blocked-by-finalizer",
+		Label:    "Deletion blocked by Finalizer",
+		Message:  "Waiting for finalizer cleanup",
+		Severity: AttentionSeverityWarning,
+	})
+	require.Contains(t, AttentionFindingTypes(), AttentionFindingTypeDefinition{
+		ID:    "deletion-blocked-by-finalizer",
+		Label: "Deletion blocked by Finalizer",
+	})
 }
 
 func TestDaemonSetNoEligibleNodesProjectsConsistentlyIntoAttention(t *testing.T) {
@@ -124,4 +169,37 @@ func TestAttentionFindingForClusterScopedEventHasNoDisplayNamespace(t *testing.T
 	require.Len(t, rows, 1)
 	require.Equal(t, "default", rows[0].Ref.Namespace, "event identity must retain the Event object's namespace")
 	require.Empty(t, rows[0].Namespace, "the cluster-scoped involved object has no display namespace")
+}
+
+func TestDeletingEventWithFinalizerAppearsWithoutWarningEventStatus(t *testing.T) {
+	now := time.Date(2026, time.August, 10, 12, 0, 0, 0, time.UTC)
+	deletingAt := metav1.NewTime(now.Add(-time.Minute))
+	event := &corev1.Event{
+		ObjectMeta: metav1.ObjectMeta{
+			Name: "normal-event", Namespace: "default", UID: "event-uid",
+			DeletionTimestamp: &deletingAt, Finalizers: []string{"example.com/cleanup"},
+		},
+		Type: "Normal", Reason: "Scheduled", Message: "Successfully assigned",
+		LastTimestamp: metav1.NewTime(now.Add(-time.Hour)),
+	}
+
+	record, ok := attentionRecordFromEvent(ClusterMeta{ClusterID: "cluster-a"}, event)
+	require.True(t, ok)
+	evaluation := evaluateEventAttention(record, now)
+	require.NotNil(t, evaluation.Finding)
+	require.Equal(t, "Terminating", evaluation.Finding.Status)
+	require.Equal(t, deletingAt.UnixMilli(), evaluation.Finding.AgeTimestamp)
+	require.Equal(t, []string{"deletion-blocked-by-finalizer"}, attentionCauseTypes(evaluation.Finding.Causes))
+}
+
+func TestClusterAttentionDomainDelegatesOpenKindPermissionsToCatalog(t *testing.T) {
+	registry := domain.New()
+	index, err := RegisterClusterAttentionDomain(
+		registry, nil, ClusterAttentionPermissions{}, ClusterMeta{ClusterID: "cluster-a"}, nil, ClusterAttentionOptions{},
+	)
+	require.NoError(t, err)
+	t.Cleanup(index.Stop)
+	config, exists := registry.Get(clusterAttentionDomainName)
+	require.True(t, exists)
+	require.False(t, config.RuntimePolicyExempt)
 }

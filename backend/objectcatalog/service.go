@@ -112,6 +112,12 @@ type Service struct {
 	streamSubMu       sync.Mutex
 	streamSubscribers map[int]chan StreamingUpdate
 	nextStreamSubID   int
+
+	finalizerMu          sync.RWMutex
+	finalizerBlockers    map[string]FinalizerBlocker
+	finalizerRevision    uint64
+	finalizerSubscribers map[int]chan FinalizerBlockerUpdate
+	nextFinalizerSubID   int
 }
 
 type resourceDescriptor struct {
@@ -141,16 +147,18 @@ func NewService(deps Dependencies, opts *Options) *Service {
 	}
 
 	service := &Service{
-		deps:              deps,
-		opts:              serviceOpts,
-		clusterID:         deps.ClusterID,
-		catalogIndex:      newCatalogIndex(),
-		identity:          newResourceIdentityResolver(deps.Common, deps.Logger),
-		dynamicIngested:   make(map[schema.GroupVersionResource]struct{}),
-		health:            healthStatus{State: HealthStateUnknown},
-		doneCh:            make(chan struct{}),
-		now:               nowFn,
-		streamSubscribers: make(map[int]chan StreamingUpdate),
+		deps:                 deps,
+		opts:                 serviceOpts,
+		clusterID:            deps.ClusterID,
+		catalogIndex:         newCatalogIndex(),
+		identity:             newResourceIdentityResolver(deps.Common, deps.Logger),
+		dynamicIngested:      make(map[schema.GroupVersionResource]struct{}),
+		health:               healthStatus{State: HealthStateUnknown},
+		doneCh:               make(chan struct{}),
+		now:                  nowFn,
+		streamSubscribers:    make(map[int]chan StreamingUpdate),
+		finalizerBlockers:    make(map[string]FinalizerBlocker),
+		finalizerSubscribers: make(map[int]chan FinalizerBlockerUpdate),
 	}
 	service.queryStore = serviceOpts.QueryStore
 	if service.queryStore == nil {

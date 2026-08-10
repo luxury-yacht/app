@@ -4,9 +4,118 @@ import (
 	"testing"
 	"time"
 
+	"github.com/luxury-yacht/app/backend/objectcatalog"
 	"github.com/luxury-yacht/app/backend/resourcemodel"
 	"github.com/stretchr/testify/require"
 )
+
+func TestClusterAttentionIndexAcceptsFinalizerBlockersForArbitraryKinds(t *testing.T) {
+	now := time.Date(2026, time.August, 10, 12, 0, 0, 0, time.UTC)
+	index := newClusterAttentionIndex(ClusterMeta{ClusterID: "cluster-a", ClusterName: "A"}, func() time.Time { return now })
+	t.Cleanup(index.Stop)
+	widget := objectcatalog.FinalizerBlocker{
+		Ref: resourcemodel.ResourceRef{
+			ClusterID: "cluster-a", Group: "example.com", Version: "v1alpha1", Kind: "Widget", Resource: "widgets",
+			Namespace: "payments", Name: "sample", UID: "widget-uid",
+		},
+		DeletionTimestamp: now.Add(-2 * time.Minute).UnixMilli(),
+	}
+
+	index.ReplaceFinalizerBlockers([]objectcatalog.FinalizerBlocker{widget})
+	rows := index.Snapshot()
+	require.Len(t, rows, 1)
+	require.Equal(t, widget.Ref, rows[0].Ref)
+	require.Equal(t, "Terminating", rows[0].Status)
+	require.Equal(t, widget.DeletionTimestamp, rows[0].AgeTimestamp)
+	require.Equal(t, []AttentionCause{{
+		Type: "deletion-blocked-by-finalizer", Label: "Deletion blocked by Finalizer",
+		Message: "Waiting for finalizer cleanup", Severity: AttentionSeverityWarning,
+	}}, rows[0].Causes)
+	require.Nil(t, clusterAttentionQueryCapabilities().KindVocabulary, "Attention kinds must be open to discovered catalog kinds")
+}
+
+func TestClusterAttentionIndexMergesFinalizerAndHealthFindingsForOneObject(t *testing.T) {
+	now := time.Date(2026, time.August, 10, 12, 0, 0, 0, time.UTC)
+	index := newClusterAttentionIndex(ClusterMeta{ClusterID: "cluster-a", ClusterName: "A"}, func() time.Time { return now })
+	t.Cleanup(index.Stop)
+	ref := attentionTestRef("Pod", "payments", "checkout-0")
+	index.UpsertSource("pods", attentionSourceRecord{
+		Ref: ref, Source: attentionSourcePod, Status: "CrashLoopBackOff", StatusPresentation: "error",
+		StatusReason: "CrashLoopBackOff", Restarts: 4, AgeTimestamp: now.Add(-10 * time.Minute).UnixMilli(),
+	})
+	index.ReplaceFinalizerBlockers([]objectcatalog.FinalizerBlocker{{
+		Ref: ref, DeletionTimestamp: now.Add(-time.Minute).UnixMilli(),
+	}})
+
+	rows := index.Snapshot()
+	require.Len(t, rows, 1)
+	require.Equal(t, "Terminating", rows[0].Status)
+	require.Equal(t, []string{
+		"deletion-blocked-by-finalizer", "error-presentation", "restarts",
+	}, attentionCauseTypes(rows[0].Causes))
+
+	index.ReplaceFinalizerBlockers(nil)
+	rows = index.Snapshot()
+	require.Len(t, rows, 1)
+	require.Equal(t, "CrashLoopBackOff", rows[0].Status)
+	require.Equal(t, []string{"error-presentation", "restarts"}, attentionCauseTypes(rows[0].Causes))
+}
+
+func TestClusterAttentionIndexFiltersFinalizerCauseWithoutDiscardingHealth(t *testing.T) {
+	now := time.Date(2026, time.August, 10, 12, 0, 0, 0, time.UTC)
+	index := newClusterAttentionIndex(ClusterMeta{ClusterID: "cluster-a"}, func() time.Time { return now })
+	t.Cleanup(index.Stop)
+	ref := attentionTestRef("Pod", "payments", "checkout-0")
+	index.UpsertSource("pods", attentionSourceRecord{
+		Ref: ref, Source: attentionSourcePod, Status: "Running", StatusPresentation: "ready",
+		Restarts: 2, AgeTimestamp: now.Add(-time.Hour).UnixMilli(),
+	})
+	index.ReplaceFinalizerBlockers([]objectcatalog.FinalizerBlocker{{
+		Ref: ref, DeletionTimestamp: now.Add(-time.Minute).UnixMilli(),
+	}})
+	index.SetIgnoreRules(AttentionIgnoreRules{ObjectFindings: []AttentionObjectFindingIgnore{{
+		Ref: ref, FindingType: "deletion-blocked-by-finalizer",
+	}}})
+
+	rows := index.Snapshot()
+	require.Len(t, rows, 1)
+	require.Equal(t, []string{"restarts"}, attentionCauseTypes(rows[0].Causes))
+	require.Equal(t, "Terminating", rows[0].Status)
+}
+
+func TestClusterAttentionIndexRestoresCatalogFinalizerRowsAcrossColdSpill(t *testing.T) {
+	now := time.Date(2026, time.August, 10, 12, 0, 0, 0, time.UTC)
+	meta := ClusterMeta{ClusterID: "cluster-a"}
+	blocker := objectcatalog.FinalizerBlocker{
+		Ref: resourcemodel.ResourceRef{
+			ClusterID: meta.ClusterID, Group: "example.com", Version: "v1", Kind: "Widget", Resource: "widgets",
+			Namespace: "payments", Name: "sample", UID: "widget-uid",
+		},
+		DeletionTimestamp: now.Add(-time.Minute).UnixMilli(),
+	}
+	original := newClusterAttentionIndex(meta, func() time.Time { return now })
+	original.ReplaceFinalizerBlockers([]objectcatalog.FinalizerBlocker{blocker})
+	spillPath := t.TempDir() + "/attention.spill"
+	require.NoError(t, original.SpillTo(spillPath))
+	original.Stop()
+
+	restored := newClusterAttentionIndex(meta, func() time.Time { return now })
+	t.Cleanup(restored.Stop)
+	require.NoError(t, restored.RestoreFrom(spillPath))
+	require.Len(t, restored.Snapshot(), 1)
+	restored.ReplaceFinalizerBlockers(nil)
+	require.Empty(t, restored.Snapshot())
+}
+
+func TestClusterAttentionIndexKeepsClustersDistinctForSameObjectCoordinates(t *testing.T) {
+	now := time.Date(2026, time.August, 10, 12, 0, 0, 0, time.UTC)
+	index := newClusterAttentionIndex(ClusterMeta{ClusterID: "cluster-a"}, func() time.Time { return now })
+	t.Cleanup(index.Stop)
+	ref := resourcemodel.ResourceRef{ClusterID: "cluster-b", Version: "v1", Kind: "ConfigMap", Resource: "configmaps", Namespace: "default", Name: "sample", UID: "uid-b"}
+
+	index.ReplaceFinalizerBlockers([]objectcatalog.FinalizerBlocker{{Ref: ref, DeletionTimestamp: now.UnixMilli()}})
+	require.Empty(t, index.Snapshot(), "a per-cluster index must reject blocker rows from a different cluster")
+}
 
 func TestClusterAttentionIndexReplacesOnlyTheNamedSource(t *testing.T) {
 	now := time.Date(2026, time.July, 16, 12, 0, 0, 0, time.UTC)

@@ -97,8 +97,11 @@ func statusPresentation(namespace *corev1.Namespace, facts Facts) resourcemodel.
 	}
 	lifecycle := resourcemodel.ObjectLifecycle(meta)
 	if namespace != nil {
-		lifecycle.FinalizerBlocked = lifecycle.Deleting &&
-			(len(meta.Finalizers) > 0 || len(namespace.Spec.Finalizers) > 0)
+		finalizers := make([]string, 0, len(namespace.Spec.Finalizers))
+		for _, finalizer := range namespace.Spec.Finalizers {
+			finalizers = append(finalizers, string(finalizer))
+		}
+		lifecycle = resourcemodel.ObjectLifecycleWithFinalizers(meta, finalizers)
 		if status, ok := resourcemodel.DeletingObjectStatus(meta, state, signals, lifecycle); ok {
 			return status
 		}

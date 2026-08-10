@@ -83,8 +83,15 @@ func ObjectSourceStatus(label, state, reason, message, presentation string, sign
 
 // ObjectLifecycle derives the deletion lifecycle flags from object metadata.
 func ObjectLifecycle(meta metav1.ObjectMeta) ResourceLifecycle {
+	return ObjectLifecycleWithFinalizers(meta, nil)
+}
+
+// ObjectLifecycleWithFinalizers derives lifecycle flags for objects whose API
+// stores additional finalizers outside metadata.finalizers. Namespace
+// spec.finalizers is Kubernetes' built-in exception.
+func ObjectLifecycleWithFinalizers(meta metav1.ObjectMeta, additionalFinalizers []string) ResourceLifecycle {
 	return ResourceLifecycle{
 		Deleting:         meta.DeletionTimestamp != nil,
-		FinalizerBlocked: meta.DeletionTimestamp != nil && len(meta.Finalizers) > 0,
+		FinalizerBlocked: meta.DeletionTimestamp != nil && (len(meta.Finalizers) > 0 || len(additionalFinalizers) > 0),
 	}
 }

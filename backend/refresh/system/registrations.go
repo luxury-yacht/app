@@ -367,35 +367,7 @@ func domainRegistrations(deps registrationDeps) []domainRegistration {
 			deniedReason: "cluster overview requires nodes, pods, or namespaces",
 		}),
 
-		accessListRegistration(runtimeAccess, listDomainConfig{
-			name: "cluster-attention",
-			register: func(allowed domainpermissions.AllowedResources) error {
-				index, err := snapshot.RegisterClusterAttentionDomain(
-					deps.registry,
-					deps.informerFactory.SharedInformerFactory(),
-					snapshot.ClusterAttentionPermissions{
-						IncludePods:         allowed.Allows("", "pods"),
-						IncludeDeployments:  allowed.Allows("apps", "deployments"),
-						IncludeStatefulSets: allowed.Allows("apps", "statefulsets"),
-						IncludeDaemonSets:   allowed.Allows("apps", "daemonsets"),
-						IncludeJobs:         allowed.Allows("batch", "jobs"),
-						IncludeCronJobs:     allowed.Allows("batch", "cronjobs"),
-						IncludeNodes:        allowed.Allows("", "nodes"),
-						IncludeEvents:       allowed.Allows("", "events"),
-					},
-					snapshot.ClusterMeta{ClusterID: deps.cfg.ClusterID, ClusterName: deps.cfg.ClusterName},
-					deps.ingestManager,
-					snapshot.ClusterAttentionOptions{
-						IgnoreRules:         deps.cfg.AttentionIgnoreRules,
-						IgnoredObjectPruner: deps.cfg.AttentionIgnoredObjectPruner,
-					},
-				)
-				if err == nil && deps.noteAttentionIndex != nil {
-					deps.noteAttentionIndex(index)
-				}
-				return err
-			},
-		}),
+		clusterAttentionRegistration(deps, runtimeAccess),
 
 		withSkipUnless(directRegistration("catalog", func() error {
 			return snapshot.RegisterCatalogDomain(deps.registry, catalogConfig)
@@ -668,6 +640,41 @@ func domainRegistrations(deps registrationDeps) []domainRegistration {
 			return snapshot.RegisterNodeMaintenanceDomain(deps.registry)
 		}),
 	}
+}
+
+func clusterAttentionRegistration(deps registrationDeps, access domainpermissions.RuntimeAccess) domainRegistration {
+	registration := accessListRegistration(access, listDomainConfig{
+		name:           "cluster-attention",
+		alwaysRegister: true,
+		register: func(allowed domainpermissions.AllowedResources) error {
+			index, err := snapshot.RegisterClusterAttentionDomain(
+				deps.registry,
+				deps.informerFactory.SharedInformerFactory(),
+				snapshot.ClusterAttentionPermissions{
+					IncludePods:         allowed.Allows("", "pods"),
+					IncludeDeployments:  allowed.Allows("apps", "deployments"),
+					IncludeStatefulSets: allowed.Allows("apps", "statefulsets"),
+					IncludeDaemonSets:   allowed.Allows("apps", "daemonsets"),
+					IncludeJobs:         allowed.Allows("batch", "jobs"),
+					IncludeCronJobs:     allowed.Allows("batch", "cronjobs"),
+					IncludeNodes:        allowed.Allows("", "nodes"),
+					IncludeEvents:       allowed.Allows("", "events"),
+				},
+				snapshot.ClusterMeta{ClusterID: deps.cfg.ClusterID, ClusterName: deps.cfg.ClusterName},
+				deps.ingestManager,
+				snapshot.ClusterAttentionOptions{
+					IgnoreRules:         deps.cfg.AttentionIgnoreRules,
+					IgnoredObjectPruner: deps.cfg.AttentionIgnoredObjectPruner,
+					CatalogService:      deps.cfg.ObjectCatalogService,
+				},
+			)
+			if err == nil && deps.noteAttentionIndex != nil {
+				deps.noteAttentionIndex(index)
+			}
+			return err
+		},
+	})
+	return registration
 }
 
 func directRegistration(name string, register func() error) domainRegistration {

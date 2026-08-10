@@ -77,9 +77,10 @@ var attentionClassificationRules = []attentionClassificationRule{
 type attentionSignal string
 
 const (
-	attentionSignalPodNotReady     attentionSignal = "pod-not-ready"
-	attentionSignalRestarts        attentionSignal = "restarts"
-	attentionSignalReplicaMismatch attentionSignal = "replica-mismatch"
+	attentionSignalDeletionBlockedByFinalizer attentionSignal = "deletion-blocked-by-finalizer"
+	attentionSignalPodNotReady                attentionSignal = "pod-not-ready"
+	attentionSignalRestarts                   attentionSignal = "restarts"
+	attentionSignalReplicaMismatch            attentionSignal = "replica-mismatch"
 )
 
 type attentionSignalPolicy struct {
@@ -90,12 +91,14 @@ type attentionSignalPolicy struct {
 }
 
 var attentionSignalPolicies = map[attentionSignal]attentionSignalPolicy{
-	attentionSignalPodNotReady:     {Severity: AttentionSeverityWarning, Grace: attentionWarningGrace, GraceSeverity: AttentionSeverityInfo, Label: "Pods not ready"},
-	attentionSignalRestarts:        {Severity: AttentionSeverityWarning, Label: "Restarts"},
-	attentionSignalReplicaMismatch: {Severity: AttentionSeverityWarning, Grace: attentionWarningGrace, Label: "Replica mismatch"},
+	attentionSignalDeletionBlockedByFinalizer: {Severity: AttentionSeverityWarning, Label: "Deletion blocked by Finalizer"},
+	attentionSignalPodNotReady:                {Severity: AttentionSeverityWarning, Grace: attentionWarningGrace, GraceSeverity: AttentionSeverityInfo, Label: "Pods not ready"},
+	attentionSignalRestarts:                   {Severity: AttentionSeverityWarning, Label: "Restarts"},
+	attentionSignalReplicaMismatch:            {Severity: AttentionSeverityWarning, Grace: attentionWarningGrace, Label: "Replica mismatch"},
 }
 
 var attentionSignalOrder = []attentionSignal{
+	attentionSignalDeletionBlockedByFinalizer,
 	attentionSignalPodNotReady,
 	attentionSignalRestarts,
 	attentionSignalReplicaMismatch,

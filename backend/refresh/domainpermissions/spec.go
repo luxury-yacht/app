@@ -50,8 +50,9 @@ import (
 type Mode string
 
 const (
-	ModeAll Mode = "all"
-	ModeAny Mode = "any"
+	ModeAll      Mode = "all"
+	ModeAny      Mode = "any"
+	ModeOptional Mode = "optional"
 )
 
 // Policy is the shared permission contract for one refresh domain. Runtime
@@ -412,8 +413,11 @@ var policySpecs = []policySpec{
 	},
 	{
 		Domain: "cluster-attention",
-		Mode:   ModeAny,
-		Reason: "attention resources",
+		// Attention's catalog source owns RBAC for its open discovery set.
+		// These fixed sources add operational health when readable but must
+		// never gate catalog-backed findings.
+		Mode:   ModeOptional,
+		Reason: "optional attention health resources",
 		Runtime: []Resource{
 			fromIdentity(pods.Identity),
 			fromIdentity(deployment.Identity),

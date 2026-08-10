@@ -197,6 +197,9 @@ func runtimePolicyAllows(ctx context.Context, checker *permissions.Checker, poli
 			allAllowed = false
 		}
 	}
+	if policy.Mode == ModeOptional {
+		return allowedResources, true, nil
+	}
 	if policy.Mode == ModeAny {
 		return allowedResources, anyAllowed, nil
 	}

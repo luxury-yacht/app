@@ -41,6 +41,12 @@ view. Attention rows
 combine the active typed causes for one object and carry the object's complete
 cluster/GVR identity; their Kind and Name links open that object. Resource views
 remain the place for browsing and operating on the full unfiltered inventory.
+The Kind set is open rather than workload-specific: any RBAC-visible catalog
+object can appear. A deleting object that still has finalizers publishes the
+`deletion-blocked-by-finalizer` cause labeled **Deletion blocked by Finalizer**,
+including discovered custom resources and the Namespace `spec.finalizers`
+exception. Events retain their informer-owned path because they are not catalog
+inventory.
 
 The Attention Findings dropdown is a backend-owned typed query facet. One row
 can publish several finding type IDs; values are ORed within Findings and ANDed
@@ -50,10 +56,15 @@ filter state use stable finding type IDs.
 
 The backend owns the Attention finding set in a per-cluster maintained query
 store. Existing Pod, workload, and Node reflector bundles plus the shared Event
-informer update it incrementally. A domain-owned timer advances grace periods
-and event expiry. The distinct `attention` stream clock is a change signal: the
-frontend refetches the current query page, with polling only as the stream-down
-fallback.
+informer update operational health incrementally. The object catalog publishes
+a coalesced, backend-only subset of objects whose deletion is waiting on a
+finalizer; Attention merges that lifecycle component with health causes for the
+same concrete UID. This keeps catalog scans off the render path and preserves
+the maintained-store spill/Cold-serving contract. A domain-owned timer advances
+grace periods and event expiry. The distinct `attention` stream clock remains
+the only change signal: catalog lifecycle changes update the Attention index,
+which rings that clock; the frontend refetches the current query page, with
+polling only as the stream-down fallback.
 
 Attention severity is a closed `info`, `warning`, or `error` vocabulary. The
 ordered status rules, restart/replica signal policies, severity precedence, and
@@ -78,7 +89,8 @@ until the user restores them.
   remediation. Deployment and StatefulSet `Scaled to 0`, CronJob `Idle`,
   DaemonSets with no eligible nodes, and transient unhealthy Pods within their
   grace period are info findings.
-- `warning`: restarts, insufficient ready replicas, warning Events, and
+- `warning`: deletion blocked by a finalizer, restarts, insufficient ready
+  replicas, warning Events, and
   non-ready Pod states after their grace period plus workload or Node states
   that are not errors.
 - `error`: Pod, workload, or Node states whose canonical status presentation is
