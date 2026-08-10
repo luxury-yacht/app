@@ -1,0 +1,98 @@
+# Finalizer diagnostics fixture for a disposable test cluster.
+#
+# Apply:
+#   kubectl apply -f test/manifests/finalizer-diagnostics.yaml
+#
+# Exercise terminating object details:
+#   kubectl delete configmap unknown-finalizer-demo \
+#     --namespace luxury-yacht-finalizer-demo --wait=false
+#   kubectl delete persistentvolumeclaim pvc-protection-demo \
+#     --namespace luxury-yacht-finalizer-demo --wait=false
+#
+# The ConfigMap remains terminating because its example.com finalizer has no
+# controller. The PVC remains terminating while pvc-consumer-demo references it.
+# Open each object in Luxury Yacht and inspect its Details tab.
+#
+# Exercise Namespace finalization details after inspecting the objects:
+#   kubectl delete namespace luxury-yacht-finalizer-demo --wait=false
+#
+# The Namespace remains terminating while the ConfigMap finalizer is present.
+# Its Details tab can then show spec.finalizers and controller-authored Namespace
+# deletion conditions.
+#
+# Cleanup the deliberately stuck fixture:
+#   kubectl patch configmap unknown-finalizer-demo \
+#     --namespace luxury-yacht-finalizer-demo --type=merge \
+#     --patch '{"metadata":{"finalizers":[]}}'
+#
+# The Namespace deletion removes the Pod, which allows Kubernetes to clear PVC
+# protection. If the PVC is still present, remove the Pod explicitly and wait:
+#   kubectl delete pod pvc-consumer-demo \
+#     --namespace luxury-yacht-finalizer-demo --wait=false --ignore-not-found
+#
+apiVersion: v1
+kind: Namespace
+metadata:
+  name: luxury-yacht-finalizer-demo
+  labels:
+    app.kubernetes.io/name: finalizer-diagnostics
+    app.kubernetes.io/part-of: luxury-yacht
+spec:
+  finalizers:
+    - kubernetes
+---
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: unknown-finalizer-demo
+  namespace: luxury-yacht-finalizer-demo
+  labels:
+    app.kubernetes.io/name: finalizer-diagnostics
+    app.kubernetes.io/part-of: luxury-yacht
+  finalizers:
+    - example.com/luxury-yacht-finalizer-demo
+data:
+  purpose: Exercise unknown-finalizer diagnosis in the Luxury Yacht Object Panel.
+---
+apiVersion: v1
+kind: PersistentVolumeClaim
+metadata:
+  name: pvc-protection-demo
+  namespace: luxury-yacht-finalizer-demo
+  labels:
+    app.kubernetes.io/name: finalizer-diagnostics
+    app.kubernetes.io/part-of: luxury-yacht
+  finalizers:
+    - kubernetes.io/pvc-protection
+spec:
+  accessModes:
+    - ReadWriteOnce
+  resources:
+    requests:
+      storage: 1Mi
+  # Avoid provisioning real storage; the Pod only needs to reference this claim.
+  storageClassName: ""
+---
+apiVersion: v1
+kind: Pod
+metadata:
+  name: pvc-consumer-demo
+  namespace: luxury-yacht-finalizer-demo
+  labels:
+    app.kubernetes.io/name: finalizer-diagnostics
+    app.kubernetes.io/part-of: luxury-yacht
+spec:
+  automountServiceAccountToken: false
+  containers:
+    - name: pause
+      image: registry.k8s.io/pause:3.9
+      imagePullPolicy: IfNotPresent
+      volumeMounts:
+        - name: protected-claim
+          mountPath: /data
+  restartPolicy: Never
+  terminationGracePeriodSeconds: 0
+  volumes:
+    - name: protected-claim
+      persistentVolumeClaim:
+        claimName: pvc-protection-demo

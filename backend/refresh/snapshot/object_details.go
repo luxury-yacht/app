@@ -30,10 +30,16 @@ type ObjectDetailProvider interface {
 	FetchObjectDetails(ctx context.Context, gvk schema.GroupVersionKind, namespace, name string) (interface{}, error)
 }
 
-// ObjectHeaderMetadata carries the kind-agnostic header fields the object panel
-// derives from the live object: the creation timestamp (drives Age) and the
-// most recent spec/metadata change (drives Last Modified). Both come from a
-// single object read so they are gathered together.
+// ObjectDeletionMetadata carries deletion fields shared by every Kubernetes
+// object. Namespace spec finalizers and deletion conditions remain owned by the
+// Namespace detail DTO because they are not metadata fields.
+type ObjectDeletionMetadata struct {
+	DeletionTimestamp string   `json:"deletionTimestamp"`
+	Finalizers        []string `json:"finalizers,omitempty"`
+}
+
+// ObjectHeaderMetadata carries the kind-agnostic fields the object panel
+// derives from one live-object read.
 type ObjectHeaderMetadata struct {
 	// CreationTimestamp is the object's creation time in RFC3339 UTC (the same
 	// format the object catalog stores), or "" when unavailable. It is delivered
@@ -49,6 +55,8 @@ type ObjectHeaderMetadata struct {
 	// re-renders whenever the object changes (e.g. a Deployment's image tag). Read
 	// from the same single live-object read as the other header fields.
 	ResourceVersion string
+	// Deletion is present once metadata.deletionTimestamp is set.
+	Deletion *ObjectDeletionMetadata
 }
 
 // ObjectHeaderMetadataProvider optionally resolves the header metadata for an
@@ -74,7 +82,9 @@ type ObjectDetailsSnapshotPayload struct {
 	CreationTimestamp string `json:"creationTimestamp,omitempty"`
 	// LastModified is the relative time of the object's most recent
 	// spec/metadata change (same format as Age); omitted when unavailable.
-	LastModified  string                       `json:"lastModified,omitempty"`
+	LastModified string `json:"lastModified,omitempty"`
+	// Deletion is present while the live object is terminating.
+	Deletion      *ObjectDeletionMetadata      `json:"deletion,omitempty"`
 	ResourceModel *resourcemodel.ResourceModel `json:"resourceModel,omitempty"`
 }
 
@@ -175,6 +185,7 @@ func (b *ObjectDetailsBuilder) buildSnapshotWithModel(ctx context.Context, scope
 			Details:           details,
 			CreationTimestamp: meta.CreationTimestamp,
 			LastModified:      meta.LastModified,
+			Deletion:          meta.Deletion,
 			ResourceModel:     resourceModel,
 		},
 		Stats: refresh.SnapshotStats{

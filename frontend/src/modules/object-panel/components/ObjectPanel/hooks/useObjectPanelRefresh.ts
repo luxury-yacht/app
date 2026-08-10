@@ -13,6 +13,7 @@ import { useAutoRefreshLoadingState } from '@/core/refresh/hooks/useAutoRefreshL
 import { useRefreshWatcher } from '@/core/refresh/hooks/useRefreshWatcher';
 import { applyPassiveLoadingPolicy } from '@/core/refresh/loadingPolicy';
 import { useRefreshScopedDomain } from '@/core/refresh/store';
+import type { ObjectDeletionMetadata } from '@/core/refresh/types.generated';
 
 import { getObjectDetailsRefresherName, INACTIVE_SCOPE } from '../constants';
 import type { PanelObjectData } from '../types';
@@ -40,6 +41,7 @@ interface ObjectPanelRefreshResult {
   // Relative "last modified" time from the details envelope (same format as
   // Age); null when the backend can't determine it.
   lastModified: string | null;
+  deletion: ObjectDeletionMetadata | null;
   detailsLoading: boolean;
   detailsError: string | null;
   fetchResourceDetails: (reason?: DataRequestReason) => Promise<void>;
@@ -60,6 +62,7 @@ export const useObjectPanelRefresh = ({
   const detailPayload = detailScope ? (detailSnapshot.data?.details ?? null) : null;
   const creationTimestamp = detailScope ? (detailSnapshot.data?.creationTimestamp ?? null) : null;
   const lastModified = detailScope ? (detailSnapshot.data?.lastModified ?? null) : null;
+  const deletion = detailScope ? (detailSnapshot.data?.deletion ?? null) : null;
   const detailStatus = detailScope ? detailSnapshot.status : 'idle';
 
   const detailsLoadingState = applyPassiveLoadingPolicy({
@@ -154,6 +157,7 @@ export const useObjectPanelRefresh = ({
     detailPayload,
     creationTimestamp,
     lastModified,
+    deletion,
     detailsLoading,
     detailsError,
     fetchResourceDetails,

@@ -34,6 +34,19 @@ export interface DetailContainerSection {
   initContainers?: DetailContainer[];
 }
 
+export interface DetailCondition {
+  type?: string;
+  status: string;
+  reason?: string;
+  message?: string;
+  lastTransitionTime?: string;
+}
+
+export interface NamespaceFinalizationDetails {
+  finalizers?: string[];
+  conditions?: DetailCondition[];
+}
+
 export interface ObjectDetailModel {
   objectData: ObjectPanelRef | null;
   objectKind: string | null;
@@ -45,6 +58,7 @@ export interface ObjectDetailModel {
   dataSection: DetailDataSection | null;
   portForwardAvailable: boolean | undefined;
   roleRules?: PolicyRule[];
+  namespaceFinalization: NamespaceFinalizationDetails | null;
   desiredScaleReplicas: number;
   cronJobSuspended: boolean;
 }
@@ -73,6 +87,8 @@ interface DetailKindConfig {
   activePods?: boolean;
   /** CronJob surfaces its suspend toggle. */
   cronSuspend?: boolean;
+  /** Namespace carries spec.finalizers and controller-authored deletion conditions. */
+  namespaceFinalization?: boolean;
 }
 
 const DETAIL_KIND_CONFIG: Record<string, DetailKindConfig> = {
@@ -88,6 +104,7 @@ const DETAIL_KIND_CONFIG: Record<string, DetailKindConfig> = {
   service: { portForward: 'service' },
   role: { roleRules: true },
   clusterrole: { roleRules: true },
+  namespace: { namespaceFinalization: true },
 };
 
 type DerivableContainer = DetailContainer & { ports?: string[] | null };
@@ -103,6 +120,8 @@ interface DerivableDetail {
   binaryData?: Record<string, string>;
   rules?: PolicyRule[];
   ports?: Array<{ protocol?: string }> | null;
+  finalizers?: string[];
+  conditions?: DetailCondition[];
 }
 
 const NON_TCP_PORT_SUFFIX = /\/(UDP|SCTP)$/i;
@@ -147,6 +166,12 @@ export function buildObjectDetailModel(
     dataSection: selectDataSection(config, detail),
     portForwardAvailable: selectPortForwardAvailable(config, detail),
     roleRules: config?.roleRules ? detail?.rules : undefined,
+    namespaceFinalization: config?.namespaceFinalization
+      ? {
+          finalizers: detail?.finalizers,
+          conditions: detail?.conditions,
+        }
+      : null,
     desiredScaleReplicas: config?.scalable ? (detail?.desiredReplicas ?? 0) : 0,
     cronJobSuspended: config?.cronSuspend ? (detail?.suspend ?? false) : false,
   };

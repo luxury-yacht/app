@@ -247,9 +247,9 @@ export const namespaceDescriptor: OverviewDescriptor<NamespaceDetails> = {
       },
     ],
   },
-  // details (table-summary string) plus resourceQuotas/limitRanges (surfaced in related sections,
-  // not the Overview) are not rendered here.
-  coveredElsewhere: ['details', 'resourceQuotas', 'limitRanges'],
+  // details (table-summary string), resourceQuotas/limitRanges (related sections), and
+  // finalizers/conditions (the shared Deletion section) are not rendered in the Overview.
+  coveredElsewhere: ['details', 'finalizers', 'conditions', 'resourceQuotas', 'limitRanges'],
 };
 
 export const mutatingWebhookDescriptor: OverviewDescriptor<MutatingWebhookConfigurationDetails> = {

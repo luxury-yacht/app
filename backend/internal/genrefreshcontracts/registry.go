@@ -115,6 +115,7 @@ var contractTypes = []typeSpec{
 	{name: "PodSnapshotEntry", typeOf: typeOf[streamrows.PodSummary]()},
 	{name: "PodMetricsInfo", typeOf: typeOf[snapshot.PodMetricsInfo]()},
 	{name: "PodSnapshotPayload", typeOf: typeOf[snapshot.PodSnapshot]()},
+	{name: "ObjectDeletionMetadata", typeOf: typeOf[snapshot.ObjectDeletionMetadata]()},
 	{name: "ObjectDetailsSnapshotPayload", typeOf: typeOf[snapshot.ObjectDetailsSnapshotPayload]()},
 	{name: "ObjectEventSummary", typeOf: typeOf[snapshot.ObjectEventSummary]()},
 	{name: "ObjectEventsSnapshotPayload", typeOf: typeOf[snapshot.ObjectEventsSnapshotPayload]()},

@@ -10,6 +10,7 @@ import Overview from '@modules/object-panel/components/ObjectPanel/Details/Overv
 import { ErrorSurface } from '@shared/components/errors/ErrorSurface';
 import { WarningIcon } from '@shared/components/icons/SharedIcons';
 import type React from 'react';
+import DeletionSection from './DeletionSection';
 import './DetailsTab.css';
 import './DetailsTabData.css';
 
@@ -32,6 +33,7 @@ const DetailsTabContent: React.FC<DetailsTabProps> = ({
   detailModel,
   detailsLoading,
   detailsError,
+  deletion = null,
   resourceDeleted = false,
   deletedResourceName = '',
   onAfterDelete,
@@ -100,6 +102,15 @@ const DetailsTabContent: React.FC<DetailsTabProps> = ({
             onAfterDelete={onAfterDelete}
             onAfterAction={onAfterAction}
           />
+        )}
+
+        {!!deletion && (
+          <div className="details-section-spaced">
+            <DeletionSection
+              deletion={deletion}
+              namespaceFinalization={model.namespaceFinalization}
+            />
+          </div>
         )}
 
         {(hasUtilization || objectData?.kind?.toLowerCase() === 'node') && utilizationData && (

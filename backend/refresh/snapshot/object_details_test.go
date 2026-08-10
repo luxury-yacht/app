@@ -138,6 +138,38 @@ func TestObjectDetailsBuilderIncludesCreationTimestampOnTypedPath(t *testing.T) 
 	}
 }
 
+func TestObjectDetailsBuilderIncludesDeletionMetadataOnTypedPath(t *testing.T) {
+	deletion := &ObjectDeletionMetadata{
+		DeletionTimestamp: "2026-08-09T12:34:56Z",
+		Finalizers:        []string{"example.com/cleanup"},
+	}
+	provider := &stubDetailProvider{
+		details: map[string]string{"foo": "bar"},
+		meta:    ObjectHeaderMetadata{Deletion: deletion},
+	}
+
+	builder := &ObjectDetailsBuilder{provider: provider, metadataProvider: provider}
+
+	snapshot, err := builder.Build(context.Background(), "default:/v1:Pod:demo")
+	if err != nil {
+		t.Fatalf("Build failed: %v", err)
+	}
+
+	payload, ok := snapshot.Payload.(ObjectDetailsSnapshotPayload)
+	if !ok {
+		t.Fatalf("unexpected payload type: %T", snapshot.Payload)
+	}
+	if payload.Deletion == nil {
+		t.Fatal("expected deletion metadata on typed path")
+	}
+	if payload.Deletion.DeletionTimestamp != deletion.DeletionTimestamp {
+		t.Fatalf("expected deletion timestamp %q, got %q", deletion.DeletionTimestamp, payload.Deletion.DeletionTimestamp)
+	}
+	if len(payload.Deletion.Finalizers) != 1 || payload.Deletion.Finalizers[0] != "example.com/cleanup" {
+		t.Fatalf("expected finalizers on typed path, got %#v", payload.Deletion.Finalizers)
+	}
+}
+
 func TestObjectDetailsBuilderIncludesCreationTimestampOnGenericPath(t *testing.T) {
 	provider := &stubDetailProvider{
 		err:  ErrObjectDetailNotImplemented,
@@ -158,6 +190,30 @@ func TestObjectDetailsBuilderIncludesCreationTimestampOnGenericPath(t *testing.T
 	}
 	if payload.CreationTimestamp != "2023-01-02T03:04:05Z" {
 		t.Fatalf("expected creation timestamp on generic fallback path, got %q", payload.CreationTimestamp)
+	}
+}
+
+func TestObjectDetailsBuilderIncludesDeletionMetadataOnGenericPath(t *testing.T) {
+	provider := &stubDetailProvider{
+		err: ErrObjectDetailNotImplemented,
+		meta: ObjectHeaderMetadata{Deletion: &ObjectDeletionMetadata{
+			DeletionTimestamp: "2026-08-09T12:34:56Z",
+			Finalizers:        []string{"example.com/cleanup"},
+		}},
+	}
+
+	builder := &ObjectDetailsBuilder{provider: provider, metadataProvider: provider}
+	snapshot, err := builder.Build(context.Background(), "default:example.com/v1:Widget:demo")
+	if err != nil {
+		t.Fatalf("Build failed: %v", err)
+	}
+
+	payload, ok := snapshot.Payload.(ObjectDetailsSnapshotPayload)
+	if !ok {
+		t.Fatalf("unexpected payload type: %T", snapshot.Payload)
+	}
+	if payload.Deletion == nil || payload.Deletion.DeletionTimestamp != "2026-08-09T12:34:56Z" {
+		t.Fatalf("expected deletion metadata on generic fallback path, got %#v", payload.Deletion)
 	}
 }
 

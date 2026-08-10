@@ -103,6 +103,33 @@ func TestServiceNamespaceDetailsIncludesUsage(t *testing.T) {
 	require.Equal(t, "limits", detail.LimitRanges[0].Name)
 }
 
+func TestServiceNamespaceDetailsIncludesFinalizationDiagnostics(t *testing.T) {
+	deletionTime := metav1.NewTime(time.Date(2026, 8, 9, 12, 0, 0, 0, time.UTC))
+	ns := &corev1.Namespace{
+		ObjectMeta: metav1.ObjectMeta{Name: "terminating", DeletionTimestamp: &deletionTime},
+		Spec: corev1.NamespaceSpec{
+			Finalizers: []corev1.FinalizerName{corev1.FinalizerKubernetes},
+		},
+		Status: corev1.NamespaceStatus{
+			Phase: corev1.NamespaceTerminating,
+			Conditions: []corev1.NamespaceCondition{{
+				Type:    corev1.NamespaceDeletionDiscoveryFailure,
+				Status:  corev1.ConditionTrue,
+				Reason:  "DiscoveryFailed",
+				Message: "unable to retrieve the complete list of server APIs",
+			}},
+		},
+	}
+	service := newNamespaceService(t, fake.NewClientset(ns))
+
+	detail, err := service.Namespace(context.Background(), "terminating")
+	require.NoError(t, err)
+	require.Equal(t, []string{"kubernetes"}, detail.Finalizers)
+	require.Equal(t, []string{"NamespaceDeletionDiscoveryFailure"}, []string{detail.Conditions[0].Type})
+	require.Equal(t, "DiscoveryFailed", detail.Conditions[0].Reason)
+	require.Equal(t, "unable to retrieve the complete list of server APIs", detail.Conditions[0].Message)
+}
+
 func TestServiceNamespaceEnsureClientError(t *testing.T) {
 	client := fake.NewClientset()
 	deps := testsupport.NewResourceDependencies(

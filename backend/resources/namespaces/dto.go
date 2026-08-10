@@ -15,10 +15,12 @@ type NamespaceDetails struct {
 	Name    string `json:"name"`
 	Details string `json:"details"`
 	restypes.StatusProjection
-	HasWorkloads     bool                 `json:"hasWorkloads"`
-	WorkloadsUnknown bool                 `json:"workloadsUnknown,omitempty"`
-	Labels           map[string]string    `json:"labels,omitempty"`
-	Annotations      map[string]string    `json:"annotations,omitempty"`
-	ResourceQuotas   []restypes.ObjectRef `json:"resourceQuotas,omitempty"`
-	LimitRanges      []restypes.ObjectRef `json:"limitRanges,omitempty"`
+	HasWorkloads     bool                      `json:"hasWorkloads"`
+	WorkloadsUnknown bool                      `json:"workloadsUnknown,omitempty"`
+	Finalizers       []string                  `json:"finalizers,omitempty"`
+	Conditions       []restypes.ConditionState `json:"conditions,omitempty"`
+	Labels           map[string]string         `json:"labels,omitempty"`
+	Annotations      map[string]string         `json:"annotations,omitempty"`
+	ResourceQuotas   []restypes.ObjectRef      `json:"resourceQuotas,omitempty"`
+	LimitRanges      []restypes.ObjectRef      `json:"limitRanges,omitempty"`
 }

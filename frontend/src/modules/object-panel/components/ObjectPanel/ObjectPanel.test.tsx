@@ -14,6 +14,10 @@ import { requireValue } from '@/test-utils/requireValue';
 interface DetailsTabCapture {
   onAfterDelete: () => void;
   onAfterAction: () => void;
+  deletion?: {
+    deletionTimestamp: string;
+    finalizers?: string[];
+  } | null;
   detailModel: {
     activeDetail: unknown;
     containerSection: unknown;
@@ -704,6 +708,25 @@ describe('ObjectPanel tab availability', () => {
       expect(getDetailsTabProps().detailModel.activeDetail).toEqual(detailsPayload);
     }
   );
+
+  it('passes deletion metadata from the refresh envelope to DetailsTab', async () => {
+    const deletion = {
+      deletionTimestamp: '2026-08-09T12:34:56Z',
+      finalizers: ['example.com/cleanup'],
+    };
+    await renderObjectPanel({
+      kind: 'Pod',
+      name: 'api',
+      namespace: 'team-a',
+      scopedDomain: {
+        data: { details: { status: 'Running' }, deletion },
+        status: 'ready',
+        error: null,
+      },
+    });
+
+    expect(getDetailsTabProps().deletion).toEqual(deletion);
+  });
 
   it('derives no typed detail sections for unknown kinds', async () => {
     await renderObjectPanel({

@@ -68,7 +68,8 @@ func TestBuildNamespaceFactsSummaryOmitsRelationshipFacts(t *testing.T) {
 func TestBuildNamespaceResourceModelTerminatingPreservesSourcePhase(t *testing.T) {
 	deletionTime := metav1.NewTime(time.Date(2026, 1, 3, 12, 0, 0, 0, time.UTC))
 	ns := &corev1.Namespace{
-		ObjectMeta: metav1.ObjectMeta{Name: "apps", DeletionTimestamp: &deletionTime, Finalizers: []string{"kubernetes"}},
+		ObjectMeta: metav1.ObjectMeta{Name: "apps", DeletionTimestamp: &deletionTime},
+		Spec:       corev1.NamespaceSpec{Finalizers: []corev1.FinalizerName{corev1.FinalizerKubernetes}},
 		Status:     corev1.NamespaceStatus{Phase: corev1.NamespaceActive},
 	}
 
@@ -86,4 +87,34 @@ func TestBuildNamespaceResourceModelTerminatingPreservesSourcePhase(t *testing.T
 
 	facts := BuildFacts("cluster-a", ns, false, false, nil, nil, resourcemodel.ResourceModelBuildOptions{})
 	require.Equal(t, workloadStateUnknown, facts.WorkloadState)
+}
+
+func TestBuildNamespaceFactsIncludesSpecFinalizersAndDeletionConditions(t *testing.T) {
+	transitionTime := metav1.NewTime(time.Date(2026, 8, 9, 12, 34, 56, 0, time.UTC))
+	ns := &corev1.Namespace{
+		ObjectMeta: metav1.ObjectMeta{Name: "apps"},
+		Spec: corev1.NamespaceSpec{
+			Finalizers: []corev1.FinalizerName{corev1.FinalizerKubernetes},
+		},
+		Status: corev1.NamespaceStatus{
+			Phase: corev1.NamespaceTerminating,
+			Conditions: []corev1.NamespaceCondition{{
+				Type:               corev1.NamespaceFinalizersRemaining,
+				Status:             corev1.ConditionTrue,
+				Reason:             "SomeFinalizersRemain",
+				Message:            "Some content in the namespace has finalizers remaining",
+				LastTransitionTime: transitionTime,
+			}},
+		},
+	}
+
+	facts := BuildFacts("cluster-a", ns, false, true, nil, nil, resourcemodel.ResourceModelBuildOptions{})
+	require.Equal(t, []string{"kubernetes"}, facts.Finalizers)
+	require.Equal(t, []resourcemodel.ConditionFacts{{
+		Type:               string(corev1.NamespaceFinalizersRemaining),
+		Status:             string(corev1.ConditionTrue),
+		Reason:             "SomeFinalizersRemain",
+		Message:            "Some content in the namespace has finalizers remaining",
+		LastTransitionTime: transitionTime,
+	}}, facts.Conditions)
 }

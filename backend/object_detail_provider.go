@@ -169,13 +169,12 @@ func (p *objectDetailProvider) FetchObjectDetails(ctx context.Context, gvk schem
 }
 
 // FetchObjectHeaderMetadata returns the object panel's kind-agnostic header
-// fields: the creation timestamp (RFC3339 UTC, drives Age) and the relative
-// "last modified" string (the most recent spec/metadata managedFields time,
-// formatted like Age). Both derive from a single live-object read via the
+// fields: creation time, last-modified time, resource version, and deletion
+// metadata. They derive from a single live-object read via the
 // shared strict GVK resolver (which retains managedFields), so Age works for
 // every kind — including custom resources that have no typed detail panel.
-// Either field is "" when unavailable. Results are cached alongside details so
-// an open Details tab does not issue a live GET per poll.
+// Optional fields are omitted when unavailable. Results are cached alongside
+// details so an open Details tab does not issue a live GET per poll.
 func (p *objectDetailProvider) FetchObjectHeaderMetadata(ctx context.Context, gvk schema.GroupVersionKind, namespace, name string) (snapshot.ObjectHeaderMetadata, error) {
 	resolved := p.resolveDetailContext(ctx)
 	if !resolved.scoped {
@@ -203,6 +202,12 @@ func (p *objectDetailProvider) FetchObjectHeaderMetadata(ctx context.Context, gv
 	}
 	if created := obj.GetCreationTimestamp(); !created.IsZero() {
 		meta.CreationTimestamp = created.UTC().Format(time.RFC3339)
+	}
+	if deleted := obj.GetDeletionTimestamp(); deleted != nil {
+		meta.Deletion = &snapshot.ObjectDeletionMetadata{
+			DeletionTimestamp: deleted.UTC().Format(time.RFC3339),
+			Finalizers:        append([]string(nil), obj.GetFinalizers()...),
+		}
 	}
 	if p != nil && p.app != nil {
 		p.app.responseCacheStore(resolved.selectionKey, cacheKey, meta)

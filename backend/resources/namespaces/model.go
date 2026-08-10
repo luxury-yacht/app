@@ -40,6 +40,11 @@ func BuildFacts(clusterID string, namespace *corev1.Namespace, hasWorkloads, wor
 	}
 	if namespace != nil {
 		facts.RawPhase = string(namespace.Status.Phase)
+		facts.Finalizers = make([]string, 0, len(namespace.Spec.Finalizers))
+		for _, finalizer := range namespace.Spec.Finalizers {
+			facts.Finalizers = append(facts.Finalizers, string(finalizer))
+		}
+		facts.Conditions = namespaceConditionFacts(namespace.Status.Conditions)
 	}
 	if options.Materialization.Has(resourcemodel.MaterializeRelationshipFacts) || options.Materialization.Has(resourcemodel.MaterializeDetailFacts) {
 		namespaceName := ""
@@ -48,6 +53,23 @@ func BuildFacts(clusterID string, namespace *corev1.Namespace, hasWorkloads, wor
 		}
 		facts.ResourceQuotas = namespacedNameLinks(clusterID, "", "v1", "ResourceQuota", "resourcequotas", namespaceName, resourceQuotaNames)
 		facts.LimitRanges = namespacedNameLinks(clusterID, "", "v1", "LimitRange", "limitranges", namespaceName, limitRangeNames)
+	}
+	return facts
+}
+
+func namespaceConditionFacts(conditions []corev1.NamespaceCondition) []resourcemodel.ConditionFacts {
+	if len(conditions) == 0 {
+		return nil
+	}
+	facts := make([]resourcemodel.ConditionFacts, 0, len(conditions))
+	for _, condition := range conditions {
+		facts = append(facts, resourcemodel.ConditionFacts{
+			Type:               string(condition.Type),
+			Status:             string(condition.Status),
+			Reason:             condition.Reason,
+			Message:            condition.Message,
+			LastTransitionTime: condition.LastTransitionTime,
+		})
 	}
 	return facts
 }
@@ -75,6 +97,8 @@ func statusPresentation(namespace *corev1.Namespace, facts Facts) resourcemodel.
 	}
 	lifecycle := resourcemodel.ObjectLifecycle(meta)
 	if namespace != nil {
+		lifecycle.FinalizerBlocked = lifecycle.Deleting &&
+			(len(meta.Finalizers) > 0 || len(namespace.Spec.Finalizers) > 0)
 		if status, ok := resourcemodel.DeletingObjectStatus(meta, state, signals, lifecycle); ok {
 			return status
 		}

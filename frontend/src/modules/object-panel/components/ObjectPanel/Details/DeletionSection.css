@@ -1,0 +1,74 @@
+.deletion-section {
+  border: 1px solid var(--color-warning-border);
+  background: var(--color-warning-bg);
+}
+
+.deletion-summary {
+  color: var(--color-text);
+  font-weight: var(--font-weight-bold);
+}
+
+.deletion-explanation,
+.deletion-empty {
+  color: var(--color-text-secondary);
+}
+
+.deletion-subtitle {
+  margin: var(--spacing-md) 0 var(--spacing-sm);
+  color: var(--color-text-secondary);
+  font-size: var(--font-size-normal);
+  font-weight: var(--font-weight-bold);
+  text-transform: uppercase;
+}
+
+.deletion-card-list {
+  display: flex;
+  flex-direction: column;
+  gap: var(--spacing-sm);
+}
+
+.deletion-card {
+  display: flex;
+  flex-direction: column;
+  gap: var(--spacing-xs);
+  padding: var(--spacing-md);
+  border: 1px solid var(--color-border);
+  border-radius: var(--border-radius-md);
+  background: var(--color-bg-secondary);
+  color: var(--color-text);
+}
+
+.deletion-finalizer-name,
+.deletion-condition-header code {
+  overflow-wrap: anywhere;
+  color: var(--color-warning);
+  user-select: text;
+  -webkit-user-select: text;
+}
+
+.deletion-guidance-title {
+  font-weight: var(--font-weight-bold);
+}
+
+.deletion-next-step {
+  color: var(--color-text-secondary);
+}
+
+.deletion-consequence {
+  color: var(--color-warning);
+  font-weight: var(--font-weight-bold);
+}
+
+.deletion-condition-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: var(--spacing-sm);
+}
+
+.deletion-condition-status {
+  color: var(--color-text-secondary);
+  font-size: var(--font-size-small);
+  font-weight: var(--font-weight-bold);
+  text-transform: uppercase;
+}

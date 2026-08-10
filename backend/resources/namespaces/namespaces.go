@@ -64,6 +64,8 @@ func (s *Service) buildNamespaceDetails(ctx context.Context, namespace *corev1.N
 		Annotations:      model.Metadata.Annotations,
 		HasWorkloads:     facts.HasWorkloads,
 		WorkloadsUnknown: !facts.WorkloadsKnown,
+		Finalizers:       append([]string(nil), facts.Finalizers...),
+		Conditions:       restypes.ConditionStatesFromFacts(facts.Conditions),
 		ResourceQuotas:   restypes.ObjectRefsFromResourceLinks(facts.ResourceQuotas),
 		LimitRanges:      restypes.ObjectRefsFromResourceLinks(facts.LimitRanges),
 	}

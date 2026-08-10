@@ -140,6 +140,14 @@ projection is visible. `statusState` is source state, not a styling fallback.
 Deletion lifecycle from `metadata.deletionTimestamp` takes precedence over
 reason-derived labels while preserving source state.
 
+Namespace deletion is the Kubernetes exception to metadata-only finalizer
+inspection: `ResourceLifecycle.FinalizerBlocked` also accounts for
+`spec.finalizers`, while Namespace `status.conditions` and `spec.finalizers`
+remain typed Namespace facts projected into its detail DTO. The object-details
+envelope carries kind-agnostic `metadata.deletionTimestamp` and
+`metadata.finalizers`; frontend deletion diagnostics combine those fields with
+the typed Namespace projection without reinterpreting lifecycle status.
+
 When migrating a resource family, project status consistently into every surface
 that renders it: snapshot rows, stream rows, rich detail DTOs, object-map data,
 and object-panel overview data. Then remove duplicated frontend or service-layer

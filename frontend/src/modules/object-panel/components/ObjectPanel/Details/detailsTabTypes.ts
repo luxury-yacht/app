@@ -6,6 +6,7 @@
  */
 
 import type { ObjectPanelRef } from '@modules/object-panel/objectPanelRef';
+import type { ObjectDeletionMetadata } from '@/core/refresh/types.generated';
 import type { ObjectDetailModel } from './objectDetailModel';
 
 export interface DetailsTabProps {
@@ -14,6 +15,7 @@ export interface DetailsTabProps {
   isActive?: boolean;
   detailsLoading: boolean;
   detailsError: string | null;
+  deletion?: ObjectDeletionMetadata | null;
   resourceDeleted?: boolean;
   deletedResourceName?: string;
   /** Called after a successful delete so the panel can close. */

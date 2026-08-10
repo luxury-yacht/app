@@ -3116,6 +3116,8 @@ export namespace namespaces {
 	    statusReason?: string;
 	    hasWorkloads: boolean;
 	    workloadsUnknown?: boolean;
+	    finalizers?: string[];
+	    conditions?: types.ConditionState[];
 	    labels?: Record<string, string>;
 	    annotations?: Record<string, string>;
 	    resourceQuotas?: resourcemodel.ResourceRef[];
@@ -3136,6 +3138,8 @@ export namespace namespaces {
 	        this.statusReason = source["statusReason"];
 	        this.hasWorkloads = source["hasWorkloads"];
 	        this.workloadsUnknown = source["workloadsUnknown"];
+	        this.finalizers = source["finalizers"];
+	        this.conditions = this.convertValues(source["conditions"], types.ConditionState);
 	        this.labels = source["labels"];
 	        this.annotations = source["annotations"];
 	        this.resourceQuotas = this.convertValues(source["resourceQuotas"], resourcemodel.ResourceRef);

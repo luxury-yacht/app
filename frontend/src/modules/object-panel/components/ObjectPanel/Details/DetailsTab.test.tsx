@@ -311,4 +311,55 @@ describe('DetailsTab', () => {
     expect(container.textContent).toContain('Error loading details: fetch failed');
     cleanup();
   });
+
+  it('renders deletion duration and finalizer guidance for a terminating object', async () => {
+    const props: DetailsTabProps = {
+      ...createBaseProps({
+        kind: 'PersistentVolumeClaim',
+        name: 'data',
+        namespace: 'default',
+      }),
+      deletion: {
+        deletionTimestamp: '2026-08-09T12:34:56Z',
+        finalizers: ['kubernetes.io/pvc-protection'],
+      },
+    };
+
+    const { container, cleanup } = await renderDetailsTab(props);
+
+    expect(container.textContent).toContain('Deletion');
+    expect(container.textContent).toContain('Terminating for');
+    expect(container.textContent).toContain('kubernetes.io/pvc-protection');
+    expect(container.textContent).toContain('PersistentVolumeClaim protection');
+    expect(container.textContent).toContain('Resolve the Pods using this claim');
+    cleanup();
+  });
+
+  it('renders Namespace spec finalizers and controller-authored deletion conditions', async () => {
+    const props: DetailsTabProps = {
+      ...createBaseProps(
+        { kind: 'Namespace', name: 'apps', namespace: '' },
+        {
+          finalizers: ['kubernetes'],
+          conditions: [
+            {
+              type: 'NamespaceDeletionDiscoveryFailure',
+              status: 'True',
+              reason: 'DiscoveryFailed',
+              message: 'unable to retrieve the complete list of server APIs',
+            },
+          ],
+        }
+      ),
+      deletion: { deletionTimestamp: '2026-08-09T12:34:56Z' },
+    };
+
+    const { container, cleanup } = await renderDetailsTab(props);
+
+    expect(container.textContent).toContain('spec.finalizers');
+    expect(container.textContent).toContain('kubernetes');
+    expect(container.textContent).toContain('NamespaceDeletionDiscoveryFailure');
+    expect(container.textContent).toContain('unable to retrieve the complete list of server APIs');
+    cleanup();
+  });
 });

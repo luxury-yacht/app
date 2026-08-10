@@ -12,12 +12,14 @@ import "github.com/luxury-yacht/app/backend/resourcemodel"
 
 // Facts is the canonical Namespace model facts.
 type Facts struct {
-	RawPhase       string                       `json:"rawPhase,omitempty"`
-	WorkloadState  string                       `json:"workloadState,omitempty"`
-	ResourceQuotas []resourcemodel.ResourceLink `json:"resourceQuotas,omitempty"`
-	LimitRanges    []resourcemodel.ResourceLink `json:"limitRanges,omitempty"`
-	WorkloadsKnown bool                         `json:"workloadsKnown"`
-	HasWorkloads   bool                         `json:"hasWorkloads"`
+	RawPhase       string                         `json:"rawPhase,omitempty"`
+	WorkloadState  string                         `json:"workloadState,omitempty"`
+	Finalizers     []string                       `json:"finalizers,omitempty"`
+	Conditions     []resourcemodel.ConditionFacts `json:"conditions,omitempty"`
+	ResourceQuotas []resourcemodel.ResourceLink   `json:"resourceQuotas,omitempty"`
+	LimitRanges    []resourcemodel.ResourceLink   `json:"limitRanges,omitempty"`
+	WorkloadsKnown bool                           `json:"workloadsKnown"`
+	HasWorkloads   bool                           `json:"hasWorkloads"`
 }
 
 // Workload-presence states carried by Facts.WorkloadState.

@@ -204,6 +204,78 @@ describe('useObjectPanelRefresh', () => {
     );
   });
 
+  it('exposes deletion metadata from the object-details envelope', async () => {
+    const deletion = {
+      deletionTimestamp: '2026-08-09T12:34:56Z',
+      finalizers: ['example.com/cleanup'],
+    };
+    mockUseRefreshScopedDomain.mockReturnValue({
+      data: { details: { replicas: 3 }, deletion },
+      status: 'ready',
+      error: null,
+    });
+
+    const { getResult } = await renderHook();
+
+    expect(getResult().deletion).toEqual(deletion);
+  });
+
+  it('surfaces detail errors while suppressing unsupported-provider errors', async () => {
+    mockUseRefreshScopedDomain.mockReturnValue({
+      data: null,
+      status: 'error',
+      error: 'fetch failed',
+    });
+    const { getResult, rerender } = await renderHook();
+    expect(getResult().detailsError).toBe('fetch failed');
+
+    mockUseRefreshScopedDomain.mockReturnValue({
+      data: null,
+      status: 'error',
+      error: 'object detail provider not implemented for Widget',
+    });
+    await rerender();
+    expect(getResult().detailsError).toBeNull();
+  });
+
+  it('runs watcher refreshes and ignores an aborted watcher signal', async () => {
+    await renderHook();
+    const watcherCall =
+      mockUseRefreshWatcher.mock.calls[mockUseRefreshWatcher.mock.calls.length - 1];
+    const watcher = watcherCall?.[0] as {
+      onRefresh: (isManual: boolean, signal: AbortSignal) => Promise<void>;
+    };
+    mockRefreshOrchestrator.fetchScopedDomain.mockClear();
+
+    await watcher.onRefresh(false, new AbortController().signal);
+    expect(mockRefreshOrchestrator.fetchScopedDomain).toHaveBeenCalledWith(
+      'object-details',
+      'cluster-a|team-a:apps/v1:deployment:api',
+      expect.objectContaining({ isManual: false })
+    );
+
+    const controller = new AbortController();
+    controller.abort();
+    mockRefreshOrchestrator.fetchScopedDomain.mockClear();
+    await watcher.onRefresh(true, controller.signal);
+    expect(mockRefreshOrchestrator.fetchScopedDomain).not.toHaveBeenCalled();
+  });
+
+  it('keeps the fetch helper inert without an object scope', async () => {
+    const { getResult } = await renderHook({
+      detailScope: null,
+      objectKind: null,
+      objectData: null,
+      panelId: null,
+    });
+    mockRefreshOrchestrator.fetchScopedDomain.mockClear();
+
+    await getResult().fetchResourceDetails('user');
+
+    expect(mockRefreshOrchestrator.fetchScopedDomain).not.toHaveBeenCalled();
+    expect(mockRefreshManager.register).not.toHaveBeenCalled();
+  });
+
   it('suppresses passive detail loading while auto-refresh is paused', async () => {
     autoRefreshLoadingState.isPaused = true;
     autoRefreshLoadingState.suppressPassiveLoading = true;

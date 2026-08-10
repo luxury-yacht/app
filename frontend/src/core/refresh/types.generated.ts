@@ -1070,12 +1070,18 @@ export interface NodeTaint {
   effect: string;
 }
 
+export interface ObjectDeletionMetadata {
+  deletionTimestamp: string;
+  finalizers?: Array<string>;
+}
+
 export interface ObjectDetailsSnapshotPayload {
   clusterId: string;
   clusterName: string;
   details: unknown;
   creationTimestamp?: string;
   lastModified?: string;
+  deletion?: ObjectDeletionMetadata;
   resourceModel?: ResourceModel;
 }
 

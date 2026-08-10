@@ -5,6 +5,7 @@ import type {
   hpa,
   ingress,
   job,
+  namespaces,
   nodes,
   replicaset,
   secret,
@@ -136,5 +137,26 @@ describe('objectDetailModel', () => {
       pods: [{ name: 'p' }],
     } as unknown as nodes.NodeDetails);
     expect(model.activePodNames).toBeNull();
+  });
+
+  it('selects Namespace finalization diagnostics from the typed detail DTO', () => {
+    const detail = {
+      finalizers: ['kubernetes'],
+      conditions: [
+        {
+          type: 'NamespaceDeletionDiscoveryFailure',
+          status: 'True',
+          reason: 'DiscoveryFailed',
+          message: 'unable to retrieve the complete list of server APIs',
+        },
+      ],
+    } as namespaces.NamespaceDetails;
+
+    const model = buildObjectDetailModel(null, 'namespace', detail);
+
+    expect(model.namespaceFinalization).toEqual({
+      finalizers: detail.finalizers,
+      conditions: detail.conditions,
+    });
   });
 });
