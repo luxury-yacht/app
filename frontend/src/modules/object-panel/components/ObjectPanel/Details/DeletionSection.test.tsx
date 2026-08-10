@@ -5,6 +5,7 @@ import { act } from 'react';
 import * as ReactDOM from 'react-dom/client';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import DeletionSection from './DeletionSection';
+import type { NamespaceFinalizationDetails } from './objectDetailModel';
 
 const requestFinalizerRemovalMock = vi.hoisted(() => vi.fn());
 const controllerOptionsMock = vi.hoisted(() => vi.fn());
@@ -31,6 +32,11 @@ const objectData: ObjectPanelRef = {
 
 const allowed: CapabilityState = { allowed: true, pending: false };
 
+const textOf = (container: HTMLElement, selector: string): string[] =>
+  Array.from(container.querySelectorAll<HTMLElement>(selector)).map((element) =>
+    (element.textContent ?? '').trim()
+  );
+
 describe('DeletionSection', () => {
   let container: HTMLDivElement;
   let root: ReactDOM.Root;
@@ -48,24 +54,20 @@ describe('DeletionSection', () => {
     container.remove();
   });
 
-  const renderSection = async (
-    removalCapabilities = {
-      metadata: allowed,
-      namespaceSpec: allowed,
-    }
-  ) => {
+  const renderSection = async ({
+    removalCapabilities = { metadata: allowed, namespaceSpec: allowed },
+    finalizers = ['example.com/metadata-cleanup'],
+    namespaceFinalization = {
+      finalizers: ['kubernetes'],
+      conditions: [],
+    } as NamespaceFinalizationDetails | null,
+  } = {}) => {
     const onAfterAction = vi.fn();
     await act(async () => {
       root.render(
         <DeletionSection
-          deletion={{
-            deletionTimestamp: '2026-08-09T12:34:56Z',
-            finalizers: ['example.com/metadata-cleanup'],
-          }}
-          namespaceFinalization={{
-            finalizers: ['kubernetes'],
-            conditions: [],
-          }}
+          deletion={{ deletionTimestamp: '2026-08-09T12:34:56Z', finalizers }}
+          namespaceFinalization={namespaceFinalization}
           objectData={objectData}
           removalCapabilities={removalCapabilities}
           onAfterAction={onAfterAction}
@@ -76,42 +78,43 @@ describe('DeletionSection', () => {
     return onAfterAction;
   };
 
-  it('shows the force-removal warning and Remove button for every finalizer', async () => {
+  it('lists every finalizer as one row classified by a status chip', async () => {
     await renderSection();
 
-    const finalizerCards = Array.from(
-      container.querySelectorAll<HTMLElement>('.deletion-finalizer-card')
-    );
-    expect(finalizerCards).toHaveLength(2);
-    expect(
-      finalizerCards.every(
-        (card) =>
-          card.querySelector('.deletion-finalizer-header') &&
-          card.querySelector('.deletion-finalizer-diagnostics') &&
-          card.querySelector('[role="note"]')
-      )
-    ).toBe(true);
-    expect(
-      Array.from(container.querySelectorAll('.deletion-finalizer-removal-title')).map(
-        (element) => element.textContent
-      )
-    ).toEqual(['Force removal', 'Force removal']);
-
-    expect(
-      Array.from(container.querySelectorAll('.deletion-finalizer-removal-warning')).map(
-        (element) => element.textContent
-      )
-    ).toEqual([
-      'You may force the removal of this Finalizer. This may leave objects in an unknown or bad state.',
-      'You may force the removal of this Finalizer. This may leave objects in an unknown or bad state.',
+    expect(textOf(container, '.deletion-finalizer-name')).toEqual([
+      'example.com/metadata-cleanup',
+      'kubernetes',
     ]);
+    expect(textOf(container, '.deletion-finalizer-row .status-chip')).toEqual([
+      'Unrecognized',
+      'Namespace cleanup',
+    ]);
+    const chipClasses = Array.from(
+      container.querySelectorAll<HTMLElement>('.deletion-finalizer-row .status-chip')
+    ).map((chip) => chip.className);
+    expect(chipClasses[0]).toContain('status-chip--warning');
+    expect(chipClasses[1]).toContain('status-chip--info');
+  });
 
-    const buttons = Array.from(container.querySelectorAll<HTMLButtonElement>('button'));
+  it('leaves the force-removal consequence to the confirmation dialog', async () => {
+    await renderSection();
+
+    expect(container.querySelector('.deletion-finalizer-removal')).toBeNull();
+    expect(container.textContent).not.toContain('Force removal');
+    expect(container.textContent).not.toContain('You may force the removal');
+  });
+
+  it('routes each row Remove button to the matching finalizer path', async () => {
+    await renderSection();
+
+    const buttons = Array.from(
+      container.querySelectorAll<HTMLButtonElement>('.deletion-remove-button')
+    );
     expect(buttons.map((button) => button.textContent)).toEqual(['Remove', 'Remove']);
 
     act(() => {
-      buttons[0]?.dispatchEvent(new MouseEvent('click', { bubbles: true }));
-      buttons[1]?.dispatchEvent(new MouseEvent('click', { bubbles: true }));
+      buttons[0]?.click();
+      buttons[1]?.click();
     });
 
     expect(requestFinalizerRemovalMock).toHaveBeenNthCalledWith(
@@ -128,13 +131,33 @@ describe('DeletionSection', () => {
     );
   });
 
+  it('names the API field path on every row once a spec finalizer list is present', async () => {
+    await renderSection();
+    expect(textOf(container, '.deletion-finalizer-path')).toEqual([
+      'metadata.finalizers',
+      'spec.finalizers',
+    ]);
+
+    await renderSection({ finalizers: [] });
+    expect(textOf(container, '.deletion-finalizer-path')).toEqual(['spec.finalizers']);
+  });
+
+  it('leaves the field path off when metadata.finalizers is the only list', async () => {
+    await renderSection({ namespaceFinalization: null });
+
+    expect(textOf(container, '.deletion-finalizer-path')).toEqual([]);
+    expect(textOf(container, '.deletion-finalizer-name')).toEqual(['example.com/metadata-cleanup']);
+  });
+
   it('keeps a permission-denied Remove button visible and disabled with the reason', async () => {
     await renderSection({
-      metadata: allowed,
-      namespaceSpec: {
-        allowed: false,
-        pending: false,
-        reason: 'Missing update namespaces/finalize',
+      removalCapabilities: {
+        metadata: allowed,
+        namespaceSpec: {
+          allowed: false,
+          pending: false,
+          reason: 'Missing update namespaces/finalize',
+        },
       },
     });
 
@@ -143,5 +166,79 @@ describe('DeletionSection', () => {
     );
     expect(namespaceButton?.disabled).toBe(true);
     expect(namespaceButton?.title).toBe('Missing update namespaces/finalize');
+  });
+
+  it('disables Remove while the permission check is still in flight', async () => {
+    await renderSection({
+      removalCapabilities: {
+        metadata: { allowed: false, pending: true },
+        namespaceSpec: allowed,
+      },
+    });
+
+    const pendingButton = container.querySelector<HTMLButtonElement>(
+      'button[aria-label="Remove finalizer example.com/metadata-cleanup"]'
+    );
+    expect(pendingButton?.disabled).toBe(true);
+    expect(pendingButton?.title).toBe('Checking permission…');
+  });
+
+  it('keeps the deletion-condition message on screen next to its chip', async () => {
+    await renderSection({
+      namespaceFinalization: {
+        finalizers: ['kubernetes'],
+        conditions: [
+          {
+            type: 'NamespaceDeletionContentFailure',
+            status: 'True',
+            reason: 'ContentDeletionFailed',
+            message: 'Failed to delete all resource types',
+          },
+          {
+            type: 'NamespaceFinalizersRemaining',
+            status: 'Unknown',
+            reason: 'SomeFinalizersRemain',
+          },
+        ],
+      },
+    });
+
+    const chips = Array.from(
+      container.querySelectorAll<HTMLElement>('.deletion-condition .status-chip')
+    );
+    expect(chips.map((chip) => chip.textContent)).toEqual([
+      'NamespaceDeletionContentFailure',
+      'NamespaceFinalizersRemaining',
+    ]);
+    expect(chips[0].className).toContain('status-chip--unhealthy');
+    expect(chips[1].className).toContain('status-chip--warning');
+    // The message is the diagnosis for a stuck namespace — it stays readable
+    // without hovering. A condition without one falls back to its reason.
+    expect(textOf(container, '.deletion-condition-message')).toEqual([
+      'Failed to delete all resource types',
+      'SomeFinalizersRemain',
+    ]);
+    expect(container.querySelector('.deletion-card')).toBeNull();
+  });
+
+  it('drops deletion conditions that report no problem', async () => {
+    await renderSection({
+      namespaceFinalization: {
+        finalizers: ['kubernetes'],
+        conditions: [
+          {
+            type: 'NamespaceDeletionDiscoveryFailure',
+            status: 'False',
+            reason: 'ResourcesDiscovered',
+            message: 'All resources successfully discovered',
+          },
+        ],
+      },
+    });
+
+    // These condition types are negative-polarity, so False carries no
+    // diagnosis — surfacing it would bury the conditions that do.
+    expect(container.querySelector('.deletion-conditions')).toBeNull();
+    expect(container.textContent).not.toContain('All resources successfully discovered');
   });
 });

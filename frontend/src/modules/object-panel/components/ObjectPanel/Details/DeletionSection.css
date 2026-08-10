@@ -1,61 +1,61 @@
+/* Deletion section — a terminating object is a state, not an alarm. The amber
+   rail marks the section; red is spent only on the force-removal control and
+   on the specific consequences the finalizer catalog knows about. */
+
 .deletion-section {
-  border: 1px solid var(--color-warning-border);
-  background: var(--color-bg-secondary);
   box-shadow: inset 3px 0 0 var(--color-warning);
 }
 
-.deletion-summary {
-  color: var(--color-text);
+.deletion-section .object-panel-section-header {
+  align-items: baseline;
+}
+
+.deletion-age {
+  color: var(--color-warning);
   font-weight: var(--font-weight-bold);
+  white-space: nowrap;
 }
 
 .deletion-explanation,
 .deletion-empty {
+  margin: 0 0 var(--spacing-md);
   color: var(--color-text-secondary);
 }
 
-.deletion-subtitle {
-  margin: var(--spacing-md) 0 var(--spacing-sm);
-  color: var(--color-text-secondary);
-  font-size: var(--font-size-normal);
-  font-weight: var(--font-weight-bold);
-  text-transform: uppercase;
+.deletion-empty {
+  margin-bottom: 0;
 }
 
-.deletion-card-list {
-  display: flex;
-  flex-direction: column;
-  gap: var(--spacing-sm);
-}
-
-.deletion-card {
-  display: flex;
-  flex-direction: column;
-  gap: var(--spacing-xs);
-  padding: var(--spacing-md);
+/* One bordered container for the whole list: rows are separated by hairlines
+   rather than each carrying its own box. */
+.deletion-finalizer-list {
+  overflow: hidden;
   border: 1px solid var(--color-border);
   border-radius: var(--border-radius-md);
   background: var(--color-bg);
-  color: var(--color-text);
 }
 
-.deletion-finalizer-card {
-  gap: 0;
-  overflow: hidden;
-  padding: 0;
-}
-
-.deletion-finalizer-header {
-  display: flex;
-  align-items: flex-start;
-  justify-content: space-between;
-  gap: var(--spacing-sm);
+.deletion-finalizer-row {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) auto;
+  align-items: start;
+  gap: var(--spacing-xs) var(--spacing-md);
   padding: var(--spacing-md);
-  border-bottom: 1px solid var(--color-border);
+}
+
+.deletion-finalizer-row + .deletion-finalizer-row {
+  border-top: 1px solid var(--color-border);
+}
+
+.deletion-finalizer-heading {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: baseline;
+  gap: var(--spacing-sm);
+  min-width: 0;
 }
 
 .deletion-finalizer-name {
-  min-width: 0;
   overflow-wrap: anywhere;
   color: var(--color-text);
   font-weight: var(--font-weight-bold);
@@ -64,114 +64,112 @@
   -webkit-user-select: text;
 }
 
-.deletion-condition-header code {
-  overflow-wrap: anywhere;
-  color: var(--color-warning);
+.deletion-finalizer-path {
+  color: var(--color-text-secondary);
+  font-family: var(--font-family-mono);
+  font-size: var(--font-size-mono);
   user-select: text;
   -webkit-user-select: text;
 }
 
 .deletion-finalizer-guidance {
-  flex: 0 0 auto;
-  padding: 0.15rem var(--spacing-sm);
-  border: 1px solid var(--color-warning-border);
-  border-radius: var(--border-radius-pill);
-  background: var(--color-warning-bg);
-  color: var(--color-warning);
-  font-size: var(--font-size-small);
-  font-weight: var(--font-weight-bold);
-  line-height: 1.35;
-}
-
-.deletion-finalizer-diagnostics {
-  display: flex;
-  flex-direction: column;
-  gap: var(--spacing-sm);
-  padding: var(--spacing-md);
-}
-
-.deletion-guidance-title {
-  font-weight: var(--font-weight-bold);
-}
-
-.deletion-next-step {
   display: flex;
   flex-direction: column;
   gap: 0.125rem;
-  padding-left: var(--spacing-sm);
-  border-left: 2px solid var(--color-border);
-  color: var(--color-text-secondary);
-}
-
-.deletion-next-step-label {
-  color: var(--color-text);
-  font-size: var(--font-size-small);
-  font-weight: var(--font-weight-bold);
-}
-
-.deletion-consequence {
-  color: var(--color-warning);
-  font-weight: var(--font-weight-bold);
-}
-
-.deletion-finalizer-removal {
-  display: grid;
-  grid-template-columns: auto minmax(0, 1fr) auto;
-  align-items: center;
-  gap: var(--spacing-sm);
-  padding: var(--spacing-sm) var(--spacing-md);
-  border-top: 1px solid var(--color-error-border);
-  background: var(--color-error-bg);
-}
-
-.deletion-finalizer-removal-icon {
-  align-self: start;
-  margin-top: 0.1rem;
-  color: var(--color-error-text);
-}
-
-.deletion-finalizer-removal-copy {
+  grid-column: 1;
   min-width: 0;
 }
 
-.deletion-finalizer-removal-title {
-  color: var(--color-error-text);
-  font-size: var(--font-size-small);
-  font-weight: var(--font-weight-bold);
+.deletion-finalizer-explanation {
+  margin: 0;
+  color: var(--color-text);
+  line-height: 1.45;
 }
 
-.deletion-finalizer-removal-warning {
-  margin: 0.125rem 0 0;
+.deletion-finalizer-next-step {
+  margin: 0;
   color: var(--color-text-secondary);
-  font-size: var(--font-size-small);
-  line-height: 1.4;
+  line-height: 1.45;
 }
 
-.deletion-condition-header {
+.deletion-finalizer-consequence {
   display: flex;
-  align-items: center;
-  justify-content: space-between;
-  gap: var(--spacing-sm);
+  align-items: baseline;
+  gap: var(--spacing-xs);
+  margin: var(--spacing-xs) 0 0;
+  color: var(--color-warning);
+  font-size: var(--font-size-sm);
+  line-height: 1.45;
 }
 
-.deletion-condition-status {
+.deletion-finalizer-consequence svg {
+  flex: 0 0 auto;
+  transform: translateY(2px);
+}
+
+/* Quiet danger: outlined until hovered, so the escape hatch is available
+   without competing with the object's actual state. The disabled treatment is
+   left to the shared .button:disabled rule. */
+.button.deletion-remove-button {
+  grid-row: 1;
+  grid-column: 2;
+  padding: 0.15rem var(--spacing-sm);
+}
+
+.button.deletion-remove-button:not(:disabled) {
+  background: transparent;
+  box-shadow: inset 0 0 0 1px var(--color-error-border);
+  color: var(--color-error-text);
+}
+
+.button.deletion-remove-button:not(:disabled):hover {
+  background: var(--button-danger-bg);
+  box-shadow: none;
+  color: var(--button-danger-text);
+}
+
+/* Deletion conditions only exist when something is wrong, so the message is
+   the payload — chip for the type, message on the same line, no hover. */
+.deletion-conditions {
+  display: flex;
+  flex-direction: column;
+  gap: var(--spacing-sm);
+  margin-top: var(--spacing-lg);
+}
+
+.deletion-conditions-label {
   color: var(--color-text-secondary);
-  font-size: var(--font-size-small);
+  font-size: var(--font-size-sm);
   font-weight: var(--font-weight-bold);
   text-transform: uppercase;
 }
 
+.deletion-condition {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: baseline;
+  gap: var(--spacing-sm);
+}
+
+.deletion-condition-message {
+  min-width: 0;
+  overflow-wrap: anywhere;
+  color: var(--color-text-secondary);
+  line-height: 1.45;
+  user-select: text;
+  -webkit-user-select: text;
+}
+
+/* Narrow panel: the action drops below the finalizer it belongs to instead of
+   squeezing the name. */
 @media (max-width: 420px) {
-  .deletion-finalizer-header {
-    flex-direction: column;
+  .deletion-finalizer-row {
+    grid-template-columns: minmax(0, 1fr);
   }
 
-  .deletion-finalizer-removal {
-    grid-template-columns: auto minmax(0, 1fr);
-  }
-
-  .deletion-finalizer-removal .button {
-    grid-column: 2;
+  .button.deletion-remove-button {
+    grid-row: auto;
+    grid-column: 1;
     justify-self: start;
   }
 }

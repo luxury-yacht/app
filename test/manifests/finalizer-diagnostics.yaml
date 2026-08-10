@@ -77,6 +77,13 @@ spec:
     - name: pause
       image: registry.k8s.io/pause:3.9
       imagePullPolicy: IfNotPresent
+      resources:
+        requests:
+          cpu: 10m
+          memory: 32Mi
+        limits:
+          cpu: 100m
+          memory: 32Mi
   restartPolicy: Never
   terminationGracePeriodSeconds: 0
 ---
@@ -113,6 +120,13 @@ spec:
     - name: pause
       image: registry.k8s.io/pause:3.9
       imagePullPolicy: IfNotPresent
+      resources:
+        requests:
+          cpu: 10m
+          memory: 32Mi
+        limits:
+          cpu: 100m
+          memory: 32Mi
       volumeMounts:
         - name: protected-claim
           mountPath: /data
