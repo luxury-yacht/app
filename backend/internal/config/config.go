@@ -359,7 +359,8 @@ const (
 	// ResourceFetchRetryMaxDelay caps retry delays for direct resource fetches.
 	ResourceFetchRetryMaxDelay = 2 * time.Second
 
-	// ResourceFetchCallTimeout bounds direct resource fetch calls that do not already have a deadline.
+	// ResourceFetchCallTimeout is the end-to-end budget passed to a direct fetch
+	// operation and shared by its retry attempts when no earlier deadline exists.
 	ResourceFetchCallTimeout = 30 * time.Second
 )
 

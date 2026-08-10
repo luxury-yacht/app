@@ -33,6 +33,28 @@ func TestBackendLifecycleContextTracksRuntimeCancellation(t *testing.T) {
 	require.ErrorIs(t, backendCtx.Err(), context.Canceled)
 }
 
+func TestRuntimeContextCapabilityCanBeCleared(t *testing.T) {
+	app := &App{}
+	app.setRuntimeContext(context.Background())
+	require.True(t, app.runtimeAvailable())
+
+	var unavailable context.Context
+	app.setRuntimeContext(unavailable)
+	require.False(t, app.runtimeAvailable())
+	require.Nil(t, app.CtxOrBackground().Done())
+}
+
+func TestNilAppUsesBackgroundContext(t *testing.T) {
+	var app *App
+	app.setRuntimeContext(context.Background())
+
+	require.False(t, app.runtimeAvailable())
+	require.False(t, app.runWithRuntimeContext(func(context.Context) {
+		t.Fatal("action must not run for a nil app")
+	}))
+	require.Nil(t, app.CtxOrBackground().Done())
+}
+
 func TestRuntimeContextCapabilityRejectsMissingRuntime(t *testing.T) {
 	app := &App{}
 	require.False(t, app.runWithRuntimeContext(func(context.Context) {
@@ -55,4 +77,18 @@ func TestRuntimeEventEmitterBindsEmitterAndRuntimeContext(t *testing.T) {
 
 	require.Equal(t, "bound", receivedContext.Value(key))
 	require.Equal(t, "test:event", receivedName)
+}
+
+func TestEmitEventDoesNotAllocateLifecycleContext(t *testing.T) {
+	runtimeCtx, cancel := context.WithCancel(context.Background())
+	t.Cleanup(cancel)
+
+	app := &App{}
+	app.setRuntimeContext(runtimeCtx)
+	app.eventEmitter = func(context.Context, string, ...interface{}) {}
+
+	allocations := testing.AllocsPerRun(100, func() {
+		app.emitEvent("test:event")
+	})
+	require.Zero(t, allocations)
 }

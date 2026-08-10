@@ -275,6 +275,35 @@ func TestExecuteWithRetryReturnsContextSleepFailure(t *testing.T) {
 	require.ErrorIs(t, err, sleepErr)
 }
 
+func TestFetchResourcePropagatesConfiguredDeadline(t *testing.T) {
+	app := newTestAppWithDefaults(t)
+	app.setRuntimeContext(context.Background())
+
+	startedAt := time.Now()
+	_, err := FetchResourceWithSelection(app, "cluster-a", "", "Widget", "demo", func(ctx context.Context) (string, error) {
+		deadline, ok := ctx.Deadline()
+		require.True(t, ok)
+		require.WithinDuration(t, startedAt.Add(config.ResourceFetchCallTimeout), deadline, time.Second)
+		return "ok", nil
+	})
+
+	require.NoError(t, err)
+}
+
+func TestExecuteWithRetryAbortsSlowFetcherAtDeadline(t *testing.T) {
+	ctx, cancel := context.WithTimeout(context.Background(), 20*time.Millisecond)
+	defer cancel()
+
+	startedAt := time.Now()
+	_, err := executeWithRetry(ctx, nil, "cluster-a", "Widget", "demo", func(fetchCtx context.Context) (string, error) {
+		<-fetchCtx.Done()
+		return "", fetchCtx.Err()
+	})
+
+	require.ErrorIs(t, err, context.DeadlineExceeded)
+	require.Less(t, time.Since(startedAt), time.Second)
+}
+
 func TestExecuteWithRetryDoesNotRetryPermanentErrorWithoutApp(t *testing.T) {
 	attempts := 0
 	permanent := errors.New("validation failed")
