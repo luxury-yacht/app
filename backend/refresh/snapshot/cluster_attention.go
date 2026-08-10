@@ -142,17 +142,19 @@ func (b *ClusterAttentionBuilder) Build(ctx context.Context, scope string) (*ref
 	resolved := resolveMaintainedDirect(
 		b.index.maintained.store,
 		query,
-		availableKinds,
-		"",
+		maintainedQueryScope{availableKinds: availableKinds, namespace: ""},
 		attentionTableQueryAdapter(),
 		attentionQuerypageSchema(),
-		clusterAttentionQueryCapabilities(),
-		config.SnapshotClusterAttentionEntryLimit,
-		"findings",
-		func(row AttentionFinding) string { return row.Ref.Kind },
 		windowRows,
-		typedTableQueryResourceIssues(ctx, clusterAttentionDomainName, query, b.sources),
+		newTypedSnapshotPageConfig(
+			clusterAttentionQueryCapabilities(),
+			config.SnapshotClusterAttentionEntryLimit,
+			"findings",
+			func(row AttentionFinding) string { return row.Ref.Kind },
+			typedTableQueryResourceIssues(ctx, clusterAttentionDomainName, query, b.sources),
+		),
 	)
+
 	snapshotScope := ""
 	if query.Enabled {
 		snapshotScope = refresh.JoinClusterScope(clusterID, strings.TrimSpace(trimmed))

@@ -19,12 +19,12 @@ func ReplicaStatusPresentation(facts WorkloadCommonFacts, signals []ResourceStat
 	return ObjectSourceStatus("Pending", state, "", "", "warning", signals, lifecycle)
 }
 
-func WorkloadConditionStatus(name, state, reason, message, label, presentation string, signals []ResourceStatusSignal, lifecycle ResourceLifecycle) ResourceStatusPresentation {
+func WorkloadConditionStatus(condition ConditionFacts, label, presentation string, signals []ResourceStatusSignal, lifecycle ResourceLifecycle) ResourceStatusPresentation {
 	return ResourceStatusPresentation{
 		Label:        label,
-		State:        state,
+		State:        condition.Status,
 		Presentation: presentation,
-		Reason:       firstNonEmpty(reason, name),
+		Reason:       firstNonEmpty(condition.Reason, condition.Type),
 		Signals:      signals,
 		Lifecycle:    lifecycle,
 	}

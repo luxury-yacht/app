@@ -164,14 +164,16 @@ func representativeResourceRowFixtures() []representativeRowFixture {
 				}}
 				return customresource.BuildNamespaceStreamSummary(
 					metaFor(index),
-					object,
-					"database.example.io",
-					"v1alpha1",
-					"databases",
-					"Database",
-					"databases.database.example.io",
-					fmt.Sprintf("namespace-%d", index%5),
-				)
+					object, customresource.NewDescriptor(
+
+						"database.example.io",
+						"v1alpha1",
+						"databases",
+						"Database",
+						"databases.database.example.io"),
+
+					fmt.Sprintf("namespace-%d", index%5))
+
 			},
 		},
 	}

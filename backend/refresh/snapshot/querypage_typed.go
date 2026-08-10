@@ -592,28 +592,34 @@ func maintainedQueryFacetValues[T any](counts map[string]map[string]int, facets 
 // The kind facet list is mapped back to original casing from availableKinds (whose
 // keys are the original-cased Kind the rows carry — the descriptor identity), so it
 // matches collectTypedTableFacet's output without reconstructing the matched rows.
-func resolveMaintainedDirect[T any](
-	store *querypage.Store[T],
-	query typedTableQuery,
-	availableKinds map[string]bool,
-	namespace string,
-	adapter typedTableQueryAdapter[T],
-	schema querypage.Schema[T],
-	capabilities ResourceQueryCapabilities,
-	windowLimit int,
-	windowNoun string,
-	kindOf func(T) string,
-	windowRows func() []T,
-	issues []ResourceQueryIssue,
-) typedSnapshotPage[T] {
+type maintainedQueryScope struct {
+	availableKinds map[string]bool
+	namespace      string
+}
+
+type typedSnapshotPageConfig[T any] struct {
+	capabilities ResourceQueryCapabilities
+	windowLimit  int
+	windowNoun   string
+	kindOf       func(T) string
+	issues       []ResourceQueryIssue
+}
+
+func newTypedSnapshotPageConfig[T any](capabilities ResourceQueryCapabilities, windowLimit int, windowNoun string, kindOf func(T) string, issues []ResourceQueryIssue) typedSnapshotPageConfig[T] {
+	return typedSnapshotPageConfig[T]{
+		capabilities: capabilities, windowLimit: windowLimit, windowNoun: windowNoun,
+		kindOf: kindOf, issues: issues,
+	}
+}
+
+func resolveMaintainedDirect[T any](store *querypage.Store[T], query typedTableQuery, scope maintainedQueryScope, adapter typedTableQueryAdapter[T], schema querypage.Schema[T], windowRows func() []T, config typedSnapshotPageConfig[T]) typedSnapshotPage[T] {
 	if !query.Enabled {
 		// Window mode reproduces the truncated, domain-sorted local window exactly via
 		// the existing path. windowRows supplies the scope-filtered rows already in the
 		// domain's canonical sort order (the same order the list path produces), so the
 		// truncated window is byte-identical. This runs only off the paged hot path.
 		return resolveTypedSnapshotPageViaStore(
-			query.Request.Table, windowRows(), query, adapter, schema,
-			capabilities, windowLimit, windowNoun, kindOf, issues,
+			query.Request.Table, windowRows(), query, adapter, schema, config,
 		)
 	}
 
@@ -635,7 +641,7 @@ func resolveMaintainedDirect[T any](
 	// the full index, the page rows, order, and boundary cursor are identical to a
 	// matched-only store queried with no filters. Cursor decode/validate is owned by
 	// the engine: an invalid token restarts at page 1 on page.CursorInvalid.
-	pageBase := maintainedScopeBase(availableKinds, namespace, query.Request.Kinds, query.Request.Namespaces, true)
+	pageBase := maintainedScopeBase(scope.availableKinds, scope.namespace, query.Request.Kinds, query.Request.Namespaces, true)
 	for key, selected := range query.Request.Facets {
 		pageBase[key] = stableFacetSelection(selected)
 	}
@@ -671,7 +677,7 @@ func resolveMaintainedDirect[T any](
 	// is over the scope-only set (available kinds + namespace, NO user filters/search) —
 	// the count of in-scope rows the list path passed in as `items`.
 	matchedFacets, matchedTotal := store.Scope(pageBase, searchLower)
-	scopeOnlyBase := maintainedScopeBase(availableKinds, namespace, nil, nil, false)
+	scopeOnlyBase := maintainedScopeBase(scope.availableKinds, scope.namespace, nil, nil, false)
 	scopeOnlyFacets, unfilteredTotal := store.Scope(scopeOnlyBase, "")
 	if query.Request.MatchNone {
 		matchedFacets = map[string]map[string]int{}
@@ -680,8 +686,8 @@ func resolveMaintainedDirect[T any](
 
 	// availableKinds keys are the original-cased Kind the rows carry (the descriptor
 	// identity), so lowered facet value -> original casing for the kind facet list.
-	kindCasing := make(map[string]string, len(availableKinds))
-	for kind := range availableKinds {
+	kindCasing := make(map[string]string, len(scope.availableKinds))
+	for kind := range scope.availableKinds {
 		kindCasing[strings.ToLower(strings.TrimSpace(kind))] = kind
 	}
 
@@ -710,7 +716,7 @@ func resolveMaintainedDirect[T any](
 		SortField:       query.Request.SortField,
 	}
 	return typedSnapshotPage[T]{
-		Envelope: typedQueryEnvelope(query.Request.Table, resultPage, capabilities).withDegraded(len(issues) == 0, issues),
+		Envelope: typedQueryEnvelope(query.Request.Table, resultPage, config.capabilities).withDegraded(len(config.issues) == 0, config.issues),
 		Rows:     resultPage.Rows,
 		Stats:    refresh.SnapshotStats{ItemCount: len(resultPage.Rows)},
 	}
@@ -726,27 +732,23 @@ func resolveTypedSnapshotPageViaStore[T any](
 	query typedTableQuery,
 	adapter typedTableQueryAdapter[T],
 	schema querypage.Schema[T],
-	capabilities ResourceQueryCapabilities,
-	windowLimit int,
-	windowNoun string,
-	kindOf func(T) string,
-	issues []ResourceQueryIssue,
+	config typedSnapshotPageConfig[T],
 	opts ...typedServeOption[T],
 ) typedSnapshotPage[T] {
 	if query.Enabled {
 		page := applyTypedTableQueryViaStore(rows, query, adapter, schema, opts...)
 		return typedSnapshotPage[T]{
-			Envelope: typedQueryEnvelope(domain, page, capabilities).withDegraded(len(issues) == 0, issues),
+			Envelope: typedQueryEnvelope(domain, page, config.capabilities).withDegraded(len(config.issues) == 0, config.issues),
 			Rows:     page.Rows,
 			Stats:    refresh.SnapshotStats{ItemCount: len(page.Rows)},
 		}
 	}
-	window, totalItems := truncateSnapshotWindow(rows, windowLimit)
-	exact := totalItems == len(window) && len(issues) == 0
+	window, totalItems := truncateSnapshotWindow(rows, config.windowLimit)
+	exact := totalItems == len(window) && len(config.issues) == 0
 	return typedSnapshotPage[T]{
-		Envelope: typedWindowEnvelope(domain, totalItems, exact, snapshotSortedKinds(window, kindOf), collectTypedTableFacetValues(rows, adapter.Facets, len(issues) == 0), capabilities).withIssues(issues),
+		Envelope: typedWindowEnvelope(domain, totalItems, exact, snapshotSortedKinds(window, config.kindOf), collectTypedTableFacetValues(rows, adapter.Facets, len(config.issues) == 0), config.capabilities).withIssues(config.issues),
 		Rows:     window,
-		Stats:    snapshotWindowStats(len(window), totalItems, windowNoun),
+		Stats:    snapshotWindowStats(len(window), totalItems, config.windowNoun),
 	}
 }
 

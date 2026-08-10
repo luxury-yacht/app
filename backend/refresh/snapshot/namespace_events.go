@@ -181,12 +181,15 @@ func (b *NamespaceEventsBuilder) Build(ctx context.Context, scope string) (*refr
 		query,
 		namespacedEventTableQueryAdapter(),
 		namespaceEventsQuerypageSchema(),
-		namespaceEventsQueryCapabilities(),
-		config.SnapshotNamespaceEventsLimit,
-		"events",
-		func(e EventSummary) string { return e.Kind },
-		nil,
+		newTypedSnapshotPageConfig(
+			namespaceEventsQueryCapabilities(),
+			config.SnapshotNamespaceEventsLimit,
+			"events",
+			func(e EventSummary) string { return e.Kind },
+			nil,
+		),
 	)
+
 	return namespaceEventsSnapshot(meta, clusterID, trimmed, parsedScope, query, resolved, version), nil
 }
 

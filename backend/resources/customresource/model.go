@@ -15,6 +15,7 @@ import (
 	"strings"
 	"time"
 
+	"github.com/luxury-yacht/app/backend/resourcekind"
 	"github.com/luxury-yacht/app/backend/resourcemodel"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/apis/meta/v1/unstructured"
@@ -25,20 +26,35 @@ import (
 // a custom resource back to its CRD.
 const apiextensionsAPIGroup = "apiextensions.k8s.io"
 
+// Descriptor is the discovery-backed identity shared by custom-resource model
+// and stream projections.
+type Descriptor struct {
+	GVR          schema.GroupVersionResource
+	KindFallback string
+	CRDName      string
+}
+
+func NewDescriptor(group, version, resource, kindFallback, crdName string) Descriptor {
+	return Descriptor{
+		GVR:          schema.GroupVersionResource{Group: group, Version: version, Resource: resource},
+		KindFallback: kindFallback,
+		CRDName:      crdName,
+	}
+}
+
 // BuildResourceModel builds a CustomResource resource model. Facts are owned by this
 // package (customresource.Facts); callers needing facts use BuildFacts.
 func BuildResourceModel(
 	clusterID string,
 	resource *unstructured.Unstructured,
-	gvr schema.GroupVersionResource,
-	kindFallback string,
-	crdName string,
+	descriptor Descriptor,
 	scope resourcemodel.ResourceScope,
 	namespaceFallback string,
 	options ...resourcemodel.ResourceModelBuildOptions,
 ) resourcemodel.ResourceModel {
+	gvr := descriptor.GVR
 	buildOptions := resourcemodel.BuildOptions(options...)
-	facts := BuildFacts(clusterID, resource, gvr, crdName, buildOptions)
+	facts := BuildFacts(clusterID, resource, gvr, descriptor.CRDName, buildOptions)
 	status := statusPresentation(resource, facts)
 	meta := metav1.ObjectMeta{}
 	if resource != nil {
@@ -47,8 +63,11 @@ func BuildResourceModel(
 			meta.Namespace = namespaceFallback
 		}
 	}
-	kind := resourceKind(resource, kindFallback)
-	return resourcemodel.KubernetesResourceModel(clusterID, gvr.Group, gvr.Version, kind, gvr.Resource, scope, meta, status, resourcemodel.ResourceFacts{})
+	kind := resourceKind(resource, descriptor.KindFallback)
+	return resourcemodel.KubernetesResourceModel(clusterID, resourcekind.Identity{
+		Group: gvr.Group, Version: gvr.Version, Kind: kind, Resource: gvr.Resource,
+		Namespaced: scope == resourcemodel.ResourceScopeNamespaced,
+	}, meta, status, resourcemodel.ResourceFacts{})
 }
 
 // BuildFacts extracts the CustomResource facts from the unstructured object. RawStatus

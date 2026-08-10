@@ -295,10 +295,10 @@ func (b *ClusterOverviewListBuilder) Build(ctx context.Context, scope string) (*
 	data.normalizeForbiddenSources()
 	podAggregates, podVersion := projectClusterOverviewPods(data.pods, data.replicaSets)
 	nodeFacts := projectClusterOverviewNodes(data.nodes)
-	snapshot, err := buildClusterOverviewSnapshot(
-		ctx, scope, nodeFacts, podAggregates, podVersion, data.namespaces,
-		b.metrics, clusterOverviewVersionFunc(b.versionFn), b.serverHost,
-	)
+	snapshot, err := buildClusterOverviewSnapshot(ctx, scope, clusterOverviewSnapshotInputs{
+		nodes: nodeFacts, podAggregates: podAggregates, podVersion: podVersion, namespaces: data.namespaces,
+		provider: b.metrics, versionFn: clusterOverviewVersionFunc(b.versionFn), serverHost: b.serverHost,
+	})
 	if err != nil {
 		return nil, err
 	}
@@ -539,33 +539,33 @@ func (b *ClusterOverviewBuilder) Build(ctx context.Context, scope string) (*refr
 	return b.buildFromListers(ctx, scope)
 }
 
-func buildClusterOverviewSnapshot(
-	ctx context.Context,
-	scope string,
-	nodes []nodeOverviewFact,
-	podAggregates []streamrows.PodAggregate,
-	podVersion uint64,
-	namespaces []*corev1.Namespace,
-	provider metrics.Provider,
-	versionFn func(context.Context) string,
-	serverHost string,
-) (*refresh.Snapshot, error) {
+type clusterOverviewSnapshotInputs struct {
+	nodes         []nodeOverviewFact
+	podAggregates []streamrows.PodAggregate
+	podVersion    uint64
+	namespaces    []*corev1.Namespace
+	provider      metrics.Provider
+	versionFn     func(context.Context) string
+	serverHost    string
+}
+
+func buildClusterOverviewSnapshot(ctx context.Context, scope string, inputs clusterOverviewSnapshotInputs) (*refresh.Snapshot, error) {
 	accumulator := clusterOverviewAccumulator{}
-	for _, node := range nodes {
+	for _, node := range inputs.nodes {
 		accumulator.addNode(node)
 	}
-	metricsResult := buildClusterOverviewMetrics(provider)
+	metricsResult := buildClusterOverviewMetrics(inputs.provider)
 	accumulator.cpuUsageMilli = metricsResult.cpuUsageMilli
 	accumulator.memUsageBytes = metricsResult.memUsageBytes
-	accumulator.overview.WorkloadResourceUsage = buildWorkloadResourceUsage(podAggregates, metricsResult.podUsage)
-	accumulator.version = maxClusterOverviewVersion(accumulator.version, podVersion)
-	for _, agg := range podAggregates {
+	accumulator.overview.WorkloadResourceUsage = buildWorkloadResourceUsage(inputs.podAggregates, metricsResult.podUsage)
+	accumulator.version = maxClusterOverviewVersion(accumulator.version, inputs.podVersion)
+	for _, agg := range inputs.podAggregates {
 		accumulator.addPod(agg)
 	}
-	for _, ns := range namespaces {
+	for _, ns := range inputs.namespaces {
 		accumulator.addNamespace(ns)
 	}
-	accumulator.finalize(ctx, versionFn, serverHost)
+	accumulator.finalize(ctx, inputs.versionFn, inputs.serverHost)
 	return &refresh.Snapshot{
 		Domain:  clusterOverviewDomainName,
 		Scope:   scope,
@@ -1041,7 +1041,10 @@ func (b *ClusterOverviewBuilder) buildFromListers(ctx context.Context, scope str
 	// watermark. A runtime-denied source is dropped even when its store still holds rows.
 	nodeFacts := b.clusterOverviewNodeFacts(availability.nodes)
 	podAggregates, podVersion := b.clusterOverviewPodInputs(availability.pods)
-	snapshot, err := buildClusterOverviewSnapshot(ctx, scope, nodeFacts, podAggregates, podVersion, inputs.namespaces, b.metrics, b.serverVersion, b.serverHost)
+	snapshot, err := buildClusterOverviewSnapshot(ctx, scope, clusterOverviewSnapshotInputs{
+		nodes: nodeFacts, podAggregates: podAggregates, podVersion: podVersion, namespaces: inputs.namespaces,
+		provider: b.metrics, versionFn: b.serverVersion, serverHost: b.serverHost,
+	})
 	if err != nil {
 		return nil, err
 	}

@@ -54,9 +54,14 @@ func boolPreference(key string, defaultValue, sideEffect bool, logText string, f
 // intPreference declares an integer preference over a field pointer. transform
 // clamps/defaults the incoming value; effect (optional) flags a runtime side
 // effect to apply after save.
-func intPreference(key string, defaultValue int, minValue, maxValue *int, sideEffect bool, logText string, transform func(int) int, effect func(*settingsSideEffects), field func(*AppSettings) *int) preferenceDescriptor {
+type intPreferenceLimits struct {
+	defaultValue       int
+	minValue, maxValue *int
+}
+
+func intPreference(key string, limits intPreferenceLimits, sideEffect bool, logText string, transform func(int) int, effect func(*settingsSideEffects), field func(*AppSettings) *int) preferenceDescriptor {
 	return preferenceDescriptor{
-		key: key, valueType: "integer", defaultValue: defaultValue, min: minValue, max: maxValue,
+		key: key, valueType: "integer", defaultValue: limits.defaultValue, min: limits.minValue, max: limits.maxValue,
 		runtimeSideEffect: sideEffect, logText: logText, logsValue: logText != "",
 		current: func(s *AppSettings) any { return *field(s) },
 		apply: func(settings *AppSettings, key string, raw any, effects *settingsSideEffects) error {
@@ -143,10 +148,11 @@ func rateLimitEffect(e *settingsSideEffects) { e.kubernetesClientRateLimits = tr
 // appPreferenceDescriptors builds the preference table. It is rebuilt per call
 // because the metrics-interval default is derived at read time.
 func appPreferenceDescriptors() []preferenceDescriptor {
-	metricsInterval := intPreference(appPreferenceMetricsRefreshIntervalMs, defaultMetricsIntervalMs(), intPtr(1), nil, true, "",
+	metricsInterval := intPreference(appPreferenceMetricsRefreshIntervalMs, intPreferenceLimits{defaultValue: defaultMetricsIntervalMs(), minValue: intPtr(1), maxValue: nil}, true, "",
 		zeroDefaulted(defaultMetricsIntervalMs(), nil),
 		func(e *settingsSideEffects) { e.metricsInterval = true },
 		func(s *AppSettings) *int { return &s.MetricsRefreshIntervalMs })
+
 	// The metrics interval logs its applied value under the generic line.
 	metricsInterval.logsValue = true
 
@@ -198,72 +204,91 @@ func appPreferenceDescriptors() []preferenceDescriptor {
 		boolPreference(appPreferenceRefreshBackgroundClustersEnabled, true, true,
 			"Background refresh enabled changed to", func(s *AppSettings) *bool { return &s.RefreshBackgroundClustersEnabled }),
 		metricsInterval,
-		intPreference(appPreferenceKubernetesClientQPS, defaultKubernetesClientQPS, intPtr(minKubernetesClientQPS), intPtr(maxKubernetesClientQPS), true,
+		intPreference(appPreferenceKubernetesClientQPS, intPreferenceLimits{defaultValue: defaultKubernetesClientQPS, minValue: intPtr(minKubernetesClientQPS), maxValue: intPtr(maxKubernetesClientQPS)}, true,
 			"Kubernetes client QPS changed to", clampKubernetesClientQPS, rateLimitEffect,
 			func(s *AppSettings) *int { return &s.KubernetesClientQPS }),
-		intPreference(appPreferenceKubernetesClientBurst, defaultKubernetesClientBurst, intPtr(minKubernetesClientBurst), intPtr(maxKubernetesClientBurst), true,
+
+		intPreference(appPreferenceKubernetesClientBurst, intPreferenceLimits{defaultValue: defaultKubernetesClientBurst, minValue: intPtr(minKubernetesClientBurst), maxValue: intPtr(maxKubernetesClientBurst)}, true,
 			"Kubernetes client burst changed to", clampKubernetesClientBurst, rateLimitEffect,
 			func(s *AppSettings) *int { return &s.KubernetesClientBurst }),
-		intPreference(appPreferencePermissionSSRRFetchConcurrency, defaultPermissionSSRRFetchConcurrency, intPtr(minPermissionSSRRFetchConcurrency), intPtr(maxPermissionSSRRFetchConcurrency), false,
+
+		intPreference(appPreferencePermissionSSRRFetchConcurrency, intPreferenceLimits{defaultValue: defaultPermissionSSRRFetchConcurrency, minValue: intPtr(minPermissionSSRRFetchConcurrency), maxValue: intPtr(maxPermissionSSRRFetchConcurrency)}, false,
 			"Permission SSRR fetch concurrency changed to", clampPermissionSSRRFetchConcurrency, nil,
 			func(s *AppSettings) *int { return &s.PermissionSSRRFetchConcurrency }),
-		intPreference(appPreferenceObjPanelLogsBufferMaxSize, defaultObjPanelLogsBufferMaxSize, intPtr(minObjPanelLogsBufferMaxSize), intPtr(maxObjPanelLogsBufferMaxSize), false,
+
+		intPreference(appPreferenceObjPanelLogsBufferMaxSize, intPreferenceLimits{defaultValue: defaultObjPanelLogsBufferMaxSize, minValue: intPtr(minObjPanelLogsBufferMaxSize), maxValue: intPtr(maxObjPanelLogsBufferMaxSize)}, false,
 			"ObjPanelLogs buffer max size changed to", clampObjPanelLogsBufferMaxSize, nil,
 			func(s *AppSettings) *int { return &s.ObjPanelLogsBufferMaxSize }),
+
 		timestampFormat,
 		boolPreference(appPreferenceObjPanelLogsAPITimestampUseLocalTimeZone, false, false,
 			"Object Panel Logs Tab API timestamp local timezone changed to", func(s *AppSettings) *bool { return &s.ObjPanelLogsAPITimestampUseLocalTimeZone }),
-		intPreference(appPreferenceObjPanelLogsTargetPerScopeLimit, defaultObjPanelLogsTargetPerScopeLimit, intPtr(minObjPanelLogsTargetPerScopeLimit), intPtr(maxObjPanelLogsTargetPerScopeLimit), true,
+		intPreference(appPreferenceObjPanelLogsTargetPerScopeLimit, intPreferenceLimits{defaultValue: defaultObjPanelLogsTargetPerScopeLimit, minValue: intPtr(minObjPanelLogsTargetPerScopeLimit), maxValue: intPtr(maxObjPanelLogsTargetPerScopeLimit)}, true,
 			"Object Panel Logs Tab target per-scope limit changed to", clampObjPanelLogsTargetPerScopeLimit,
 			func(e *settingsSideEffects) { e.containerLogsPerScopeLimit = true },
 			func(s *AppSettings) *int { return &s.ObjPanelLogsTargetPerScopeLimit }),
-		intPreference(appPreferenceObjPanelLogsTargetGlobalLimit, defaultObjPanelLogsTargetGlobalLimit, intPtr(minObjPanelLogsTargetGlobalLimit), intPtr(maxObjPanelLogsTargetGlobalLimit), true,
+
+		intPreference(appPreferenceObjPanelLogsTargetGlobalLimit, intPreferenceLimits{defaultValue: defaultObjPanelLogsTargetGlobalLimit, minValue: intPtr(minObjPanelLogsTargetGlobalLimit), maxValue: intPtr(maxObjPanelLogsTargetGlobalLimit)}, true,
 			"Object Panel Logs Tab target global limit changed to", clampObjPanelLogsTargetGlobalLimit,
 			func(e *settingsSideEffects) { e.containerLogsGlobalLimit = true },
 			func(s *AppSettings) *int { return &s.ObjPanelLogsTargetGlobalLimit }),
+
 		enumPreference(appPreferenceGridTablePersistenceMode, "shared", "grid table persistence mode", []string{"shared", "namespaced"}, false,
 			"Grid table persistence mode changed to", func(s *AppSettings) *string { return &s.GridTablePersistenceMode }),
-		intPreference(appPreferenceDefaultTablePageSize, defaultTablePageSize, intPtr(minTablePageSize), intPtr(maxTablePageSize), false,
+		intPreference(appPreferenceDefaultTablePageSize, intPreferenceLimits{defaultValue: defaultTablePageSize, minValue: intPtr(minTablePageSize), maxValue: intPtr(maxTablePageSize)}, false,
 			"Default table page size changed to", clampRange(minTablePageSize, maxTablePageSize), nil,
 			func(s *AppSettings) *int { return &s.DefaultTablePageSize }),
+
 		enumPreference(appPreferenceDefaultObjectPanelPosition, defaultObjectPanelPosition, "default object panel position", []string{"right", "bottom", "floating"}, false,
 			"Default object panel position changed to", func(s *AppSettings) *string { return &s.DefaultObjectPanelPosition }),
-		intPreference(appPreferenceObjectPanelDockedRightWidth, defaultObjectPanelDockedRightWidth, intPtr(minObjectPanelDockedRightWidth), intPtr(maxObjectPanelLayoutValue), false,
+		intPreference(appPreferenceObjectPanelDockedRightWidth, intPreferenceLimits{defaultValue: defaultObjectPanelDockedRightWidth, minValue: intPtr(minObjectPanelDockedRightWidth), maxValue: intPtr(maxObjectPanelLayoutValue)}, false,
 			"", clampRange(minObjectPanelDockedRightWidth, maxObjectPanelLayoutValue), nil,
 			func(s *AppSettings) *int { return &s.ObjectPanelDockedRightWidth }),
-		intPreference(appPreferenceObjectPanelDockedBottomHeight, defaultObjectPanelDockedBottomHeight, intPtr(minObjectPanelDockedBottomHeight), intPtr(maxObjectPanelLayoutValue), false,
+
+		intPreference(appPreferenceObjectPanelDockedBottomHeight, intPreferenceLimits{defaultValue: defaultObjectPanelDockedBottomHeight, minValue: intPtr(minObjectPanelDockedBottomHeight), maxValue: intPtr(maxObjectPanelLayoutValue)}, false,
 			"", clampRange(minObjectPanelDockedBottomHeight, maxObjectPanelLayoutValue), nil,
 			func(s *AppSettings) *int { return &s.ObjectPanelDockedBottomHeight }),
-		intPreference(appPreferenceObjectPanelFloatingWidth, defaultObjectPanelFloatingWidth, intPtr(minObjectPanelFloatingWidth), intPtr(maxObjectPanelLayoutValue), false,
+
+		intPreference(appPreferenceObjectPanelFloatingWidth, intPreferenceLimits{defaultValue: defaultObjectPanelFloatingWidth, minValue: intPtr(minObjectPanelFloatingWidth), maxValue: intPtr(maxObjectPanelLayoutValue)}, false,
 			"", clampRange(minObjectPanelFloatingWidth, maxObjectPanelLayoutValue), nil,
 			func(s *AppSettings) *int { return &s.ObjectPanelFloatingWidth }),
-		intPreference(appPreferenceObjectPanelFloatingHeight, defaultObjectPanelFloatingHeight, intPtr(minObjectPanelFloatingHeight), intPtr(maxObjectPanelLayoutValue), false,
+
+		intPreference(appPreferenceObjectPanelFloatingHeight, intPreferenceLimits{defaultValue: defaultObjectPanelFloatingHeight, minValue: intPtr(minObjectPanelFloatingHeight), maxValue: intPtr(maxObjectPanelLayoutValue)}, false,
 			"", clampRange(minObjectPanelFloatingHeight, maxObjectPanelLayoutValue), nil,
 			func(s *AppSettings) *int { return &s.ObjectPanelFloatingHeight }),
-		intPreference(appPreferenceObjectPanelFloatingX, defaultObjectPanelFloatingX, intPtr(minObjectPanelFloatingX), intPtr(maxObjectPanelLayoutValue), false,
+
+		intPreference(appPreferenceObjectPanelFloatingX, intPreferenceLimits{defaultValue: defaultObjectPanelFloatingX, minValue: intPtr(minObjectPanelFloatingX), maxValue: intPtr(maxObjectPanelLayoutValue)}, false,
 			"", zeroDefaulted(defaultObjectPanelFloatingX, clampRange(minObjectPanelFloatingX, maxObjectPanelLayoutValue)), nil,
 			func(s *AppSettings) *int { return &s.ObjectPanelFloatingX }),
-		intPreference(appPreferenceObjectPanelFloatingY, defaultObjectPanelFloatingY, intPtr(minObjectPanelFloatingY), intPtr(maxObjectPanelLayoutValue), false,
+
+		intPreference(appPreferenceObjectPanelFloatingY, intPreferenceLimits{defaultValue: defaultObjectPanelFloatingY, minValue: intPtr(minObjectPanelFloatingY), maxValue: intPtr(maxObjectPanelLayoutValue)}, false,
 			"", zeroDefaulted(defaultObjectPanelFloatingY, clampRange(minObjectPanelFloatingY, maxObjectPanelLayoutValue)), nil,
 			func(s *AppSettings) *int { return &s.ObjectPanelFloatingY }),
-		intPreference(appPreferencePaletteHueLight, 0, intPtr(minPaletteHue), intPtr(maxPaletteHue), false,
+
+		intPreference(appPreferencePaletteHueLight, intPreferenceLimits{defaultValue: 0, minValue: intPtr(minPaletteHue), maxValue: intPtr(maxPaletteHue)}, false,
 			"", clampRange(minPaletteHue, maxPaletteHue), nil,
 			func(s *AppSettings) *int { return &s.PaletteHueLight }),
-		intPreference(appPreferencePaletteSaturationLight, 0, intPtr(minPaletteSaturation), intPtr(maxPaletteSaturation), false,
+
+		intPreference(appPreferencePaletteSaturationLight, intPreferenceLimits{defaultValue: 0, minValue: intPtr(minPaletteSaturation), maxValue: intPtr(maxPaletteSaturation)}, false,
 			"", clampRange(minPaletteSaturation, maxPaletteSaturation), nil,
 			func(s *AppSettings) *int { return &s.PaletteSaturationLight }),
-		intPreference(appPreferencePaletteBrightnessLight, 0, intPtr(minPaletteBrightness), intPtr(maxPaletteBrightness), false,
+
+		intPreference(appPreferencePaletteBrightnessLight, intPreferenceLimits{defaultValue: 0, minValue: intPtr(minPaletteBrightness), maxValue: intPtr(maxPaletteBrightness)}, false,
 			"", clampRange(minPaletteBrightness, maxPaletteBrightness), nil,
 			func(s *AppSettings) *int { return &s.PaletteBrightnessLight }),
-		intPreference(appPreferencePaletteHueDark, 0, intPtr(minPaletteHue), intPtr(maxPaletteHue), false,
+
+		intPreference(appPreferencePaletteHueDark, intPreferenceLimits{defaultValue: 0, minValue: intPtr(minPaletteHue), maxValue: intPtr(maxPaletteHue)}, false,
 			"", clampRange(minPaletteHue, maxPaletteHue), nil,
 			func(s *AppSettings) *int { return &s.PaletteHueDark }),
-		intPreference(appPreferencePaletteSaturationDark, 0, intPtr(minPaletteSaturation), intPtr(maxPaletteSaturation), false,
+
+		intPreference(appPreferencePaletteSaturationDark, intPreferenceLimits{defaultValue: 0, minValue: intPtr(minPaletteSaturation), maxValue: intPtr(maxPaletteSaturation)}, false,
 			"", clampRange(minPaletteSaturation, maxPaletteSaturation), nil,
 			func(s *AppSettings) *int { return &s.PaletteSaturationDark }),
-		intPreference(appPreferencePaletteBrightnessDark, 0, intPtr(minPaletteBrightness), intPtr(maxPaletteBrightness), false,
+
+		intPreference(appPreferencePaletteBrightnessDark, intPreferenceLimits{defaultValue: 0, minValue: intPtr(minPaletteBrightness), maxValue: intPtr(maxPaletteBrightness)}, false,
 			"", clampRange(minPaletteBrightness, maxPaletteBrightness), nil,
 			func(s *AppSettings) *int { return &s.PaletteBrightnessDark }),
+
 		colorPreference(appPreferenceAccentColorLight, func(s *AppSettings) *string { return &s.AccentColorLight }),
 		colorPreference(appPreferenceAccentColorDark, func(s *AppSettings) *string { return &s.AccentColorDark }),
 		colorPreference(appPreferenceLinkColorLight, func(s *AppSettings) *string { return &s.LinkColorLight }),

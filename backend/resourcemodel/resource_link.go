@@ -8,39 +8,55 @@ import (
 // NewResourceRef builds the canonical identity for an openable Kubernetes
 // object. It does not infer resource from kind; callers must pass resource only
 // when discovery/catalog data already supplied it.
-func NewResourceRef(clusterID, group, version, kind, resource, namespace, name, uid string) ResourceRef {
+func NewResourceRef(ref ResourceRef) ResourceRef {
 	return ResourceRef{
-		ClusterID: strings.TrimSpace(clusterID),
-		Group:     strings.TrimSpace(group),
-		Version:   strings.TrimSpace(version),
-		Kind:      strings.TrimSpace(kind),
-		Resource:  strings.TrimSpace(resource),
-		Namespace: strings.TrimSpace(namespace),
-		Name:      strings.TrimSpace(name),
-		UID:       strings.TrimSpace(uid),
+		ClusterID: strings.TrimSpace(ref.ClusterID),
+		Group:     strings.TrimSpace(ref.Group),
+		Version:   strings.TrimSpace(ref.Version),
+		Kind:      strings.TrimSpace(ref.Kind),
+		Resource:  strings.TrimSpace(ref.Resource),
+		Namespace: strings.TrimSpace(ref.Namespace),
+		Name:      strings.TrimSpace(ref.Name),
+		UID:       strings.TrimSpace(ref.UID),
 	}
 }
 
 // NewDisplayRef builds a display-only identity for a relationship that should
 // not be opened because the source data did not provide a complete GVK.
-func NewDisplayRef(clusterID, group, version, kind, resource, namespace, name, uid string) DisplayRef {
-	return DisplayRef(NewResourceRef(clusterID, group, version, kind, resource, namespace, name, uid))
+func NewDisplayRef(ref DisplayRef) DisplayRef {
+	return DisplayRef(NewResourceRef(ResourceRef(ref)))
 }
 
 func NewResourceLink(ref ResourceRef) ResourceLink {
 	return ResourceLink{Ref: &ref}
 }
 
-func NewNamespacedResourceLink(clusterID, group, version, kind, resource, namespace, name, uid string) ResourceLink {
-	return NewResourceLink(NewResourceRef(clusterID, group, version, kind, resource, namespace, name, uid))
+func NewNamespacedResourceLink(ref ResourceRef) ResourceLink {
+	return NewResourceLink(NewResourceRef(ref))
 }
 
 func NewClusterResourceLink(clusterID, group, version, kind, resource, name, uid string) ResourceLink {
-	return NewNamespacedResourceLink(clusterID, group, version, kind, resource, "", name, uid)
+	return NewNamespacedResourceLink(ResourceRef{
+		ClusterID: clusterID,
+		Group:     group,
+		Version:   version,
+		Kind:      kind,
+		Resource:  resource,
+		Name:      name,
+		UID:       uid,
+	})
 }
 
 func NewDisplayResourceLink(clusterID, group, version, kind, resource, namespace, name string) ResourceLink {
-	display := NewDisplayRef(clusterID, group, version, kind, resource, namespace, name, "")
+	display := NewDisplayRef(DisplayRef{
+		ClusterID: clusterID,
+		Group:     group,
+		Version:   version,
+		Kind:      kind,
+		Resource:  resource,
+		Namespace: namespace,
+		Name:      name,
+	})
 	return ResourceLink{Display: &display}
 }
 

@@ -74,11 +74,9 @@ func (m *Manager) lookupWorkloadRef(kind, namespace, name string) (resourcemodel
 	}
 	// Test path: a wired typed lister resolves the object (and its UID) directly.
 	if obj, err := m.lookupWorkloadObject(kind, namespace, name); err == nil && obj != nil {
-		return resourcemodel.NewResourceRef(
-			m.clusterMeta.ClusterID,
-			identity.Group, identity.Version, identity.Kind, identity.Resource,
-			obj.GetNamespace(), obj.GetName(), string(obj.GetUID()),
-		), true
+		return resourcemodel.NewResourceRef(resourcemodel.ResourceRef{ClusterID: m.clusterMeta.ClusterID, Group: identity.Group, Version: identity.Version, Kind: identity.Kind, Resource: identity.Resource, Namespace: obj.GetNamespace(), Name: obj.GetName(), UID: string(obj.GetUID())}),
+
+			true
 	}
 	// Production path: read the projected catalog half (UID) from the ingest store.
 	if m.workloadIngest == nil {
@@ -93,11 +91,9 @@ func (m *Manager) lookupWorkloadRef(kind, namespace, name string) (resourcemodel
 		if !ok || catalog.Ref.Namespace != namespace || catalog.Ref.Name != name {
 			continue
 		}
-		return resourcemodel.NewResourceRef(
-			m.clusterMeta.ClusterID,
-			identity.Group, identity.Version, identity.Kind, identity.Resource,
-			catalog.Ref.Namespace, catalog.Ref.Name, catalog.Ref.UID,
-		), true
+		return resourcemodel.NewResourceRef(resourcemodel.ResourceRef{ClusterID: m.clusterMeta.ClusterID, Group: identity.Group, Version: identity.Version, Kind: identity.Kind, Resource: identity.Resource, Namespace: catalog.Ref.Namespace, Name: catalog.Ref.Name, UID: catalog.Ref.UID}),
+
+			true
 	}
 	return resourcemodel.ResourceRef{}, false
 }
@@ -184,10 +180,7 @@ func (s workloadNotifyCatalogSink) broadcast(row interface{}, updateType Message
 	if !ok {
 		return
 	}
-	ref := resourcemodel.NewResourceRef(
-		s.manager.clusterMeta.ClusterID,
-		s.identity.Group, s.identity.Version, s.identity.Kind, s.identity.Resource,
-		summary.Ref.Namespace, summary.Ref.Name, summary.Ref.UID,
-	)
+	ref := resourcemodel.NewResourceRef(resourcemodel.ResourceRef{ClusterID: s.manager.clusterMeta.ClusterID, Group: s.identity.Group, Version: s.identity.Version, Kind: s.identity.Kind, Resource: s.identity.Resource, Namespace: summary.Ref.Namespace, Name: summary.Ref.Name, UID: summary.Ref.UID})
+
 	s.manager.broadcastWorkloadNotificationRef(ref, summary.Ref.Namespace, summary.ResourceVersion, updateType)
 }

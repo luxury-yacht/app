@@ -23,7 +23,7 @@ import (
 func BuildResourceModel(clusterID string, storageClass *storagev1.StorageClass) resourcemodel.ResourceModel {
 	facts := BuildFacts(storageClass)
 	status := statusPresentation(storageClass, facts)
-	return resourcemodel.KubernetesResourceModel(clusterID, "storage.k8s.io", "v1", "StorageClass", "storageclasses", resourcemodel.ResourceScopeCluster, storageClass.ObjectMeta, status, resourcemodel.ResourceFacts{})
+	return resourcemodel.KubernetesResourceModel(clusterID, Identity, storageClass.ObjectMeta, status, resourcemodel.ResourceFacts{})
 }
 
 // BuildFacts extracts the StorageClass facts from the raw object.

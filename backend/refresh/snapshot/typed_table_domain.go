@@ -106,21 +106,23 @@ func buildTypedTableSnapshot[T any](
 		resolved = resolveMaintainedDirect(
 			maintained.store,
 			query,
-			available,
-			rowsScope,
+			maintainedQueryScope{availableKinds: available, namespace: rowsScope},
 			spec.adapter,
 			spec.schema,
-			capabilitiesWithAvailableKinds(spec.capabilities, sources),
-			spec.entryLimit,
-			spec.description,
-			spec.kindOf,
 			func() []T {
 				rows := maintained.rows(rowsScope, available)
 				spec.sortRows(rows)
 				return rows
 			},
-			typedTableQueryResourceIssues(ctx, spec.domain, query, sources),
+			newTypedSnapshotPageConfig(
+				capabilitiesWithAvailableKinds(spec.capabilities, sources),
+				spec.entryLimit,
+				spec.description,
+				spec.kindOf,
+				typedTableQueryResourceIssues(ctx, spec.domain, query, sources),
+			),
 		)
+
 		version = maintained.snapshotVersion()
 	} else {
 		rows, sources, v, listErr := collectDescriptorTableRows[T](ctx, spec.domain, collectIndexer, meta, rowsScope)
@@ -138,11 +140,13 @@ func buildTypedTableSnapshot[T any](
 			query,
 			spec.adapter,
 			spec.schema,
-			capabilitiesWithAvailableKinds(spec.capabilities, sources),
-			spec.entryLimit,
-			spec.description,
-			spec.kindOf,
-			typedTableQueryResourceIssues(ctx, spec.domain, query, sources),
+			newTypedSnapshotPageConfig(
+				capabilitiesWithAvailableKinds(spec.capabilities, sources),
+				spec.entryLimit,
+				spec.description,
+				spec.kindOf,
+				typedTableQueryResourceIssues(ctx, spec.domain, query, sources),
+			),
 		)
 	}
 

@@ -63,9 +63,7 @@ func TestInvalidateResponseCacheEvictsHeaderMetadata(t *testing.T) {
 	app.responseCacheStore(selectionKey, headerKey, "header")
 
 	// The ingest Catalog sink evicts by kind/namespace/name on every object change.
-	app.invalidateResponseCacheForResource(selectionKey, resourcemodel.NewResourceRef(
-		"cluster-a", "apps", "v1", "Deployment", "deployments", "default", "demo", "",
-	))
+	app.invalidateResponseCacheForResource(selectionKey, resourcemodel.NewResourceRef(resourcemodel.ResourceRef{ClusterID: "cluster-a", Group: "apps", Version: "v1", Kind: "Deployment", Resource: "deployments", Namespace: "default", Name: "demo", UID: ""}))
 
 	if _, ok := app.responseCacheLookup(selectionKey, detailKey); ok {
 		t.Fatalf("expected detail cache entry to be evicted")

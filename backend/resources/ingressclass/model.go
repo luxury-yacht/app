@@ -22,7 +22,7 @@ import (
 func BuildResourceModel(clusterID string, ingressClass *networkingv1.IngressClass) resourcemodel.ResourceModel {
 	facts := BuildFacts(ingressClass)
 	status := statusPresentation(ingressClass, facts)
-	return resourcemodel.KubernetesResourceModel(clusterID, "networking.k8s.io", "v1", "IngressClass", "ingressclasses", resourcemodel.ResourceScopeCluster, ingressClass.ObjectMeta, status, resourcemodel.ResourceFacts{})
+	return resourcemodel.KubernetesResourceModel(clusterID, Identity, ingressClass.ObjectMeta, status, resourcemodel.ResourceFacts{})
 }
 
 // BuildFacts extracts the IngressClass facts from the raw object.

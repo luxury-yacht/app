@@ -226,6 +226,6 @@ func (a *App) runtimeOperationClusterIDs() []string {
 }
 
 func runtimeOperationTarget(clusterID, group, version, kind, namespace, name string) *RuntimeOperationTargetRef {
-	ref := resourcemodel.NewResourceRef(clusterID, group, version, kind, "", namespace, name, "")
+	ref := resourcemodel.NewResourceRef(resourcemodel.ResourceRef{ClusterID: clusterID, Group: group, Version: version, Kind: kind, Resource: "", Namespace: namespace, Name: name, UID: ""})
 	return &ref
 }

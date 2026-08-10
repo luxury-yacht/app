@@ -24,7 +24,7 @@ import (
 func BuildResourceModel(clusterID string, svc *corev1.Service, slices []*discoveryv1.EndpointSlice) resourcemodel.ResourceModel {
 	facts := BuildFacts(svc, slices)
 	status := statusPresentation(svc, facts)
-	return resourcemodel.KubernetesResourceModel(clusterID, "", "v1", "Service", "services", resourcemodel.ResourceScopeNamespaced, svc.ObjectMeta, status, resourcemodel.ResourceFacts{})
+	return resourcemodel.KubernetesResourceModel(clusterID, Identity, svc.ObjectMeta, status, resourcemodel.ResourceFacts{})
 }
 
 // BuildFacts extracts the Service facts from the raw object and its EndpointSlices.

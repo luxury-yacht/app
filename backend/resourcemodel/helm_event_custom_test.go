@@ -29,7 +29,7 @@ var helmTestResolver = testResourceResolver{
 }
 
 func TestBuildHelmManifestResourceLinkDoesNotGuessMissingAPIVersion(t *testing.T) {
-	link := BuildHelmManifestResourceLinkWithNamespaceSourceAndResolver(context.Background(), nil, "cluster-a", "", "Deployment", "apps", "orders", true)
+	link := BuildHelmManifestResourceLinkWithNamespaceSourceAndResolver(context.Background(), nil, "cluster-a", HelmManifestResource{APIVersion: "", Kind: "Deployment", Namespace: "apps", Name: "orders", NamespaceExplicit: true})
 
 	require.Nil(t, link.Ref)
 	require.NotNil(t, link.Display)
@@ -42,13 +42,8 @@ func TestBuildHelmManifestResourceLinkRespectsBuiltinScope(t *testing.T) {
 	clusterRole := BuildHelmManifestResourceLinkWithNamespaceSourceAndResolver(
 		context.Background(),
 		helmTestResolver,
-		"cluster-a",
-		"rbac.authorization.k8s.io/v1",
-		"ClusterRole",
-		"release-ns",
-		"reader",
-		false,
-	)
+		"cluster-a", HelmManifestResource{APIVersion: "rbac.authorization.k8s.io/v1", Kind: "ClusterRole", Namespace: "release-ns", Name: "reader", NamespaceExplicit: false})
+
 	require.NotNil(t, clusterRole.Ref)
 	require.Equal(t, ResourceScopeCluster, ResolveHelmManifestResourceIdentityWithResolver(context.Background(), helmTestResolver, "rbac.authorization.k8s.io/v1", "ClusterRole", "release-ns", "reader", false).Scope)
 	require.Equal(t, "ClusterRole", clusterRole.Ref.Kind)
@@ -58,13 +53,8 @@ func TestBuildHelmManifestResourceLinkRespectsBuiltinScope(t *testing.T) {
 	configMap := BuildHelmManifestResourceLinkWithNamespaceSourceAndResolver(
 		context.Background(),
 		helmTestResolver,
-		"cluster-a",
-		"v1",
-		"ConfigMap",
-		"release-ns",
-		"settings",
-		false,
-	)
+		"cluster-a", HelmManifestResource{APIVersion: "v1", Kind: "ConfigMap", Namespace: "release-ns", Name: "settings", NamespaceExplicit: false})
+
 	require.NotNil(t, configMap.Ref)
 	require.Equal(t, "ConfigMap", configMap.Ref.Kind)
 	require.Equal(t, "configmaps", configMap.Ref.Resource)
@@ -75,13 +65,7 @@ func TestBuildHelmManifestResourceLinkKeepsUnknownDefaultNamespaceDisplayOnly(t 
 	link := BuildHelmManifestResourceLinkWithNamespaceSourceAndResolver(
 		context.Background(),
 		nil,
-		"cluster-a",
-		"databases.example.com/v1alpha1",
-		"Database",
-		"release-ns",
-		"orders",
-		false,
-	)
+		"cluster-a", HelmManifestResource{APIVersion: "databases.example.com/v1alpha1", Kind: "Database", Namespace: "release-ns", Name: "orders", NamespaceExplicit: false})
 
 	require.Nil(t, link.Ref)
 	require.NotNil(t, link.Display)
@@ -94,13 +78,7 @@ func TestBuildHelmManifestResourceLinkKeepsExplicitUnknownNamespaceOpenable(t *t
 	link := BuildHelmManifestResourceLinkWithNamespaceSourceAndResolver(
 		context.Background(),
 		nil,
-		"cluster-a",
-		"databases.example.com/v1alpha1",
-		"Database",
-		"release-ns",
-		"orders",
-		true,
-	)
+		"cluster-a", HelmManifestResource{APIVersion: "databases.example.com/v1alpha1", Kind: "Database", Namespace: "release-ns", Name: "orders", NamespaceExplicit: true})
 
 	require.NotNil(t, link.Ref)
 	require.Equal(t, "databases.example.com", link.Ref.Group)

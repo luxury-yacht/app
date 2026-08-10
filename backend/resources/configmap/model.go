@@ -20,7 +20,7 @@ import (
 // and callers needing facts use BuildFacts.
 func BuildResourceModel(clusterID string, configMap *corev1.ConfigMap) resourcemodel.ResourceModel {
 	status := BuildStatusPresentation(configMap)
-	return resourcemodel.KubernetesResourceModel(clusterID, "", "v1", "ConfigMap", "configmaps", resourcemodel.ResourceScopeNamespaced, configMap.ObjectMeta, status, resourcemodel.ResourceFacts{})
+	return resourcemodel.KubernetesResourceModel(clusterID, Identity, configMap.ObjectMeta, status, resourcemodel.ResourceFacts{})
 }
 
 // BuildFacts extracts the ConfigMap facts from the raw object.

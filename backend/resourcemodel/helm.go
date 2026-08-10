@@ -19,15 +19,23 @@ type HelmManifestResourceIdentity struct {
 	Openable  bool
 }
 
-func BuildHelmManifestResourceLinkWithNamespaceSourceAndResolver(ctx context.Context, resolver common.ResourceResolver, clusterID, apiVersion, kind, namespace, name string, namespaceExplicit bool) ResourceLink {
-	identity := ResolveHelmManifestResourceIdentityWithResolver(ctx, resolver, apiVersion, kind, namespace, name, namespaceExplicit)
+type HelmManifestResource struct {
+	APIVersion        string
+	Kind              string
+	Namespace         string
+	Name              string
+	NamespaceExplicit bool
+}
+
+func BuildHelmManifestResourceLinkWithNamespaceSourceAndResolver(ctx context.Context, resolver common.ResourceResolver, clusterID string, resource HelmManifestResource) ResourceLink {
+	identity := ResolveHelmManifestResourceIdentityWithResolver(ctx, resolver, resource.APIVersion, resource.Kind, resource.Namespace, resource.Name, resource.NamespaceExplicit)
 	if !identity.Openable {
 		return displayResourceLink(clusterID, identity.Group, identity.Version, identity.Kind, identity.Resource, identity.Namespace, identity.Name)
 	}
 	if identity.Scope == ResourceScopeCluster {
 		return ClusterResourceLink(clusterID, identity.Group, identity.Version, identity.Kind, identity.Resource, identity.Name, "")
 	}
-	return namespacedResourceLink(clusterID, identity.Group, identity.Version, identity.Kind, identity.Resource, identity.Namespace, identity.Name, "")
+	return NewNamespacedResourceLink(ResourceRef{ClusterID: clusterID, Group: identity.Group, Version: identity.Version, Kind: identity.Kind, Resource: identity.Resource, Namespace: identity.Namespace, Name: identity.Name, UID: ""})
 }
 
 func ResolveHelmManifestResourceIdentityWithResolver(ctx context.Context, resolver common.ResourceResolver, apiVersion, kind, namespace, name string, namespaceExplicit bool) HelmManifestResourceIdentity {

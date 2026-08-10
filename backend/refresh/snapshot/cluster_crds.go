@@ -135,12 +135,15 @@ func (b *ClusterCRDBuilder) Build(ctx context.Context, scope string) (*refresh.S
 		query,
 		clusterCRDTableQueryAdapter(),
 		crdsQuerypageSchema(),
-		clusterCRDQueryCapabilities(),
-		config.SnapshotClusterCRDEntryLimit,
-		"CRDs",
-		func(ClusterCRDEntry) string { return "CustomResourceDefinition" },
-		nil,
+		newTypedSnapshotPageConfig(
+			clusterCRDQueryCapabilities(),
+			config.SnapshotClusterCRDEntryLimit,
+			"CRDs",
+			func(ClusterCRDEntry) string { return "CustomResourceDefinition" },
+			nil,
+		),
 	)
+
 	// The window snapshot is the canonical unscoped refresh payload; only the
 	// query page publishes the request scope.
 	snapshotScope := ""

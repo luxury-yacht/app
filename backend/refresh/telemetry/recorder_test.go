@@ -84,8 +84,8 @@ func TestConnectionStatsRecording(t *testing.T) {
 func TestRecordSnapshotAggregatesWarningsAndAverages(t *testing.T) {
 	rec := NewRecorder()
 
-	rec.RecordSnapshot("domains", "scopeA", "cluster-1", "cluster-one", 100*time.Millisecond, errors.New("boom"), false, 10, []string{"catalog fallback on namespaces", "hydration failed"}, 0, 2, 5, false, 12, 0)
-	rec.RecordSnapshot("domains", "scopeB", "cluster-1", "cluster-one", 200*time.Millisecond, nil, true, 5, nil, 1, 2, 3, true, 0, 0)
+	rec.RecordSnapshot(SnapshotRecord{Domain: "domains", Scope: "scopeA", ClusterID: "cluster-1", ClusterName: "cluster-one", Duration: 100 * time.Millisecond, Err: errors.New("boom"), Truncated: false, TotalItems: 10, Warnings: []string{"catalog fallback on namespaces", "hydration failed"}, BatchIndex: 0, TotalBatches: 2, BatchSize: 5, IsFinal: false, TimeToFirstBatchMs: 12, InformerSyncWaitMs: 0})
+	rec.RecordSnapshot(SnapshotRecord{Domain: "domains", Scope: "scopeB", ClusterID: "cluster-1", ClusterName: "cluster-one", Duration: 200 * time.Millisecond, Err: nil, Truncated: true, TotalItems: 5, Warnings: nil, BatchIndex: 1, TotalBatches: 2, BatchSize: 3, IsFinal: true, TimeToFirstBatchMs: 0, InformerSyncWaitMs: 0})
 
 	summary := rec.SnapshotSummary()
 	require.Len(t, summary.Snapshots, 1)
@@ -115,10 +115,10 @@ func TestRecordSnapshotTracksPeakInformerSyncWait(t *testing.T) {
 
 	// Cold-start build: the snapshot blocked 800ms waiting for its informers to
 	// settle (the initial-LIST gate) before building.
-	rec.RecordSnapshot("pods", "cluster:c1", "c1", "c-one", 30*time.Millisecond, nil, false, 5, nil, 0, 0, 0, true, 0, 800)
+	rec.RecordSnapshot(SnapshotRecord{Domain: "pods", Scope: "cluster:c1", ClusterID: "c1", ClusterName: "c-one", Duration: 30 * time.Millisecond, Err: nil, Truncated: false, TotalItems: 5, Warnings: nil, BatchIndex: 0, TotalBatches: 0, BatchSize: 0, IsFinal: true, TimeToFirstBatchMs: 0, InformerSyncWaitMs: 800})
 	// A later warm build has no wait; the recorded PEAK must not drop to 0, or the
 	// initial-LIST cost would be invisible by the time anyone opens diagnostics.
-	rec.RecordSnapshot("pods", "cluster:c1", "c1", "c-one", 25*time.Millisecond, nil, false, 5, nil, 0, 0, 0, true, 0, 0)
+	rec.RecordSnapshot(SnapshotRecord{Domain: "pods", Scope: "cluster:c1", ClusterID: "c1", ClusterName: "c-one", Duration: 25 * time.Millisecond, Err: nil, Truncated: false, TotalItems: 5, Warnings: nil, BatchIndex: 0, TotalBatches: 0, BatchSize: 0, IsFinal: true, TimeToFirstBatchMs: 0, InformerSyncWaitMs: 0})
 
 	summary := rec.SnapshotSummary()
 	require.Len(t, summary.Snapshots, 1)

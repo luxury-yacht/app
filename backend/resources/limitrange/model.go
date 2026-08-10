@@ -20,7 +20,7 @@ import (
 func BuildResourceModel(clusterID string, limitRange *corev1.LimitRange) resourcemodel.ResourceModel {
 	facts := BuildFacts(limitRange)
 	status := statusPresentation(limitRange, facts)
-	return resourcemodel.PolicyResourceModel(clusterID, "", "v1", "LimitRange", "limitranges", limitRange.ObjectMeta, status, resourcemodel.ResourceFacts{})
+	return resourcemodel.PolicyResourceModel(clusterID, Identity, limitRange.ObjectMeta, status, resourcemodel.ResourceFacts{})
 }
 
 // BuildFacts extracts the LimitRange facts from the raw object.

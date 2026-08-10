@@ -54,11 +54,8 @@ func (m *Manager) lookupNodeRef(name string) (resourcemodel.ResourceRef, string,
 		if !ok || catalog.Ref.Name != name {
 			continue
 		}
-		ref := resourcemodel.NewResourceRef(
-			m.clusterMeta.ClusterID,
-			nodespkg.Identity.Group, nodespkg.Identity.Version, nodespkg.Identity.Kind, nodespkg.Identity.Resource,
-			"", catalog.Ref.Name, catalog.Ref.UID,
-		)
+		ref := resourcemodel.NewResourceRef(resourcemodel.ResourceRef{ClusterID: m.clusterMeta.ClusterID, Group: nodespkg.Identity.Group, Version: nodespkg.Identity.Version, Kind: nodespkg.Identity.Kind, Resource: nodespkg.Identity.Resource, Namespace: "", Name: catalog.Ref.Name, UID: catalog.Ref.UID})
+
 		return ref, catalog.ResourceVersion, true
 	}
 	return resourcemodel.ResourceRef{}, "", false
@@ -102,11 +99,8 @@ func (s nodeNotifyCatalogSink) broadcast(row interface{}, updateType MessageType
 	if !ok {
 		return
 	}
-	ref := resourcemodel.NewResourceRef(
-		s.manager.clusterMeta.ClusterID,
-		nodespkg.Identity.Group, nodespkg.Identity.Version, nodespkg.Identity.Kind, nodespkg.Identity.Resource,
-		"", summary.Ref.Name, summary.Ref.UID,
-	)
+	ref := resourcemodel.NewResourceRef(resourcemodel.ResourceRef{ClusterID: s.manager.clusterMeta.ClusterID, Group: nodespkg.Identity.Group, Version: nodespkg.Identity.Version, Kind: nodespkg.Identity.Kind, Resource: nodespkg.Identity.Resource, Namespace: "", Name: summary.Ref.Name, UID: summary.Ref.UID})
+
 	update := Update{
 		Type:            updateType,
 		Domain:          domainNodes,

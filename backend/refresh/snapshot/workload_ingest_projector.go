@@ -71,22 +71,15 @@ func projectJobControllerOwner(meta ClusterMeta, job *batchv1.Job) JobController
 	if job == nil {
 		return JobControllerOwner{}
 	}
-	result := JobControllerOwner{Job: resourcemodel.NewResourceRef(
-		meta.ClusterID,
-		jobres.Identity.Group, jobres.Identity.Version, jobres.Identity.Kind, jobres.Identity.Resource,
-		job.Namespace, job.Name, string(job.UID),
-	)}
+	result := JobControllerOwner{Job: resourcemodel.NewResourceRef(resourcemodel.ResourceRef{ClusterID: meta.ClusterID, Group: jobres.Identity.Group, Version: jobres.Identity.Version, Kind: jobres.Identity.Kind, Resource: jobres.Identity.Resource, Namespace: job.Namespace, Name: job.Name, UID: string(job.UID)})}
 	for _, owner := range job.OwnerReferences {
 		if owner.Controller != nil && *owner.Controller && owner.Kind == cronjob.Identity.Kind && owner.Name != "" {
 			gv, err := schema.ParseGroupVersion(owner.APIVersion)
 			if err != nil {
 				return result
 			}
-			result.Controller = resourcemodel.NewResourceRef(
-				meta.ClusterID,
-				gv.Group, gv.Version, owner.Kind, cronjob.Identity.Resource,
-				job.Namespace, owner.Name, string(owner.UID),
-			)
+			result.Controller = resourcemodel.NewResourceRef(resourcemodel.ResourceRef{ClusterID: meta.ClusterID, Group: gv.Group, Version: gv.Version, Kind: owner.Kind, Resource: cronjob.Identity.Resource, Namespace: job.Namespace, Name: owner.Name, UID: string(owner.UID)})
+
 			return result
 		}
 	}

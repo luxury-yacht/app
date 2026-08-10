@@ -192,6 +192,7 @@ func appendManifestResourceLinks(
 	obj map[string]interface{},
 	defaultNamespace string,
 ) {
+	target := manifestResourceLinkTarget{links: links, seen: seen, clusterID: clusterID}
 	kind, _ := obj["kind"].(string)
 	apiVersion, _ := obj["apiVersion"].(string)
 	if kind == "" {
@@ -215,19 +216,24 @@ func appendManifestResourceLinks(
 			if itemAPIVersion == "" {
 				itemAPIVersion = apiVersion
 			}
-			appendSingleManifestResourceLink(ctx, resolver, links, seen, clusterID, itemAPIVersion, itemKind, itemMap, defaultNamespace)
+			appendSingleManifestResourceLink(ctx, resolver, target, itemAPIVersion, itemKind, itemMap, defaultNamespace)
 		}
 		return
 	}
-	appendSingleManifestResourceLink(ctx, resolver, links, seen, clusterID, apiVersion, kind, obj, defaultNamespace)
+	appendSingleManifestResourceLink(ctx, resolver, target, apiVersion, kind, obj, defaultNamespace)
+}
+
+type manifestResourceLinkTarget struct {
+	links     *[]resourcemodel.ResourceLink
+	seen      map[string]struct{}
+	clusterID string
 }
 
 func appendSingleManifestResourceLink(
 	ctx context.Context,
 	resolver common.ResourceResolver,
-	links *[]resourcemodel.ResourceLink,
-	seen map[string]struct{},
-	clusterID, apiVersion, kind string,
+	target manifestResourceLinkTarget,
+	apiVersion, kind string,
 	obj map[string]interface{},
 	defaultNamespace string,
 ) {
@@ -236,12 +242,12 @@ func appendSingleManifestResourceLink(
 		return
 	}
 	key := apiVersion + "/" + kind + "/" + namespace + "/" + name
-	if _, ok := seen[key]; ok {
+	if _, ok := target.seen[key]; ok {
 		return
 	}
-	seen[key] = struct{}{}
-	link := resourcemodel.BuildHelmManifestResourceLinkWithNamespaceSourceAndResolver(ctx, resolver, clusterID, apiVersion, kind, namespace, name, namespaceExplicit)
-	*links = append(*links, link)
+	target.seen[key] = struct{}{}
+	link := resourcemodel.BuildHelmManifestResourceLinkWithNamespaceSourceAndResolver(ctx, resolver, target.clusterID, resourcemodel.HelmManifestResource{APIVersion: apiVersion, Kind: kind, Namespace: namespace, Name: name, NamespaceExplicit: namespaceExplicit})
+	*target.links = append(*target.links, link)
 }
 
 func manifestNameNamespace(obj map[string]interface{}, defaultNamespace string) (string, string, bool) {

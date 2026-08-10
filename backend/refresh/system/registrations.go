@@ -656,13 +656,12 @@ func domainRegistrations(deps registrationDeps) []domainRegistration {
 		directRegistration("object-map", func() error {
 			return snapshot.RegisterObjectMapDomain(
 				deps.registry,
-				deps.informerFactory.SharedInformerFactory(),
-				deps.informerFactory,
-				deps.informerFactory.GatewayInformerFactory(),
-				deps.cfg.GatewayAPIPresence,
-				deps.cfg.ObjectCatalogService,
-				deps.ingestManager,
-				deps.cfg.AllowedNamespaces,
+				snapshot.ObjectMapDomainConfig{
+					Shared: deps.informerFactory.SharedInformerFactory(), Permissions: deps.informerFactory,
+					GatewayShared: deps.informerFactory.GatewayInformerFactory(), GatewayPresence: deps.cfg.GatewayAPIPresence,
+					CatalogService: deps.cfg.ObjectCatalogService, IngestSource: deps.ingestManager,
+					AllowedNamespaces: deps.cfg.AllowedNamespaces,
+				},
 			)
 		}),
 		directRegistration("object-maintenance", func() error {

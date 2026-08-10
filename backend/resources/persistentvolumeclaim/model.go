@@ -15,7 +15,7 @@ import (
 // BuildResourceModel builds the PVC resource model (status only; facts via BuildFacts).
 func BuildResourceModel(clusterID string, pvc *corev1.PersistentVolumeClaim) resourcemodel.ResourceModel {
 	status := BuildStatusPresentation(pvc)
-	return resourcemodel.KubernetesResourceModel(clusterID, "", "v1", "PersistentVolumeClaim", "persistentvolumeclaims", resourcemodel.ResourceScopeNamespaced, pvc.ObjectMeta, status, resourcemodel.ResourceFacts{})
+	return resourcemodel.KubernetesResourceModel(clusterID, Identity, pvc.ObjectMeta, status, resourcemodel.ResourceFacts{})
 }
 
 // BuildFacts extracts the PVC facts from the raw object, materializing reverse

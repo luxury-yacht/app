@@ -23,7 +23,7 @@ import (
 func BuildResourceModel(clusterID string, event *corev1.Event) resourcemodel.ResourceModel {
 	facts := BuildFacts(clusterID, event)
 	status := statusPresentation(event, facts)
-	return resourcemodel.KubernetesResourceModel(clusterID, "", "v1", "Event", "events", resourcemodel.ResourceScopeNamespaced, event.ObjectMeta, status, resourcemodel.ResourceFacts{})
+	return resourcemodel.KubernetesResourceModel(clusterID, Identity, event.ObjectMeta, status, resourcemodel.ResourceFacts{})
 }
 
 // BuildFacts extracts the Event facts from the raw object.
@@ -196,7 +196,7 @@ func eventObjectLink(clusterID string, ref corev1.ObjectReference) *resourcemode
 		}
 		return &link
 	}
-	link := resourcemodel.NewNamespacedResourceLink(clusterID, group, version, kind, "", namespace, name, uid)
+	link := resourcemodel.NewNamespacedResourceLink(resourcemodel.ResourceRef{ClusterID: clusterID, Group: group, Version: version, Kind: kind, Resource: "", Namespace: namespace, Name: name, UID: uid})
 	return &link
 }
 

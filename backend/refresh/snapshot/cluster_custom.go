@@ -187,8 +187,8 @@ func buildClusterCustomSummaries(
 			continue
 		}
 		summaries = append(summaries, customresource.BuildClusterStreamSummary(
-			meta, item, gvr.Group, gvr.Version, gvr.Resource, crd.Spec.Names.Kind, crd.Name,
-		))
+			meta, item, customresource.NewDescriptor(
+				gvr.Group, gvr.Version, gvr.Resource, crd.Spec.Names.Kind, crd.Name)))
 		version = maxSnapshotVersion(version, item)
 	}
 	if len(summaries) > 0 && version == 0 {

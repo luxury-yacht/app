@@ -125,17 +125,8 @@ func (h *Handler) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 	}
 
 	session := newSession(
-		conn,
-		h.adapter,
-		h.logger,
-		h.telemetry,
-		h.clusterID,
-		h.clusterName,
-		h.streamName,
-		h.sendReset,
-		h.allowClusterScopedRequests,
-		h.resolveClusterName,
-	)
+		conn, Config{Adapter: h.adapter, Logger: h.logger, Telemetry: h.telemetry, ClusterID: h.clusterID, ClusterName: h.clusterName, StreamName: h.streamName, SendReset: h.sendReset, AllowClusterScopedRequests: h.allowClusterScopedRequests, ResolveClusterName: h.resolveClusterName})
+
 	h.sessionsMu.Lock()
 	h.sessions[session] = struct{}{}
 	h.sessionsMu.Unlock()
@@ -209,27 +200,18 @@ func isExpectedStreamCloseError(err error) bool {
 	)
 }
 
-func newSession(
-	conn wsConn,
-	adapter Adapter,
-	logger containerlogsstream.Logger,
-	recorder *telemetry.Recorder,
-	clusterID, clusterName, streamName string,
-	sendReset bool,
-	allowClusterScopedRequest bool,
-	resolveClusterName func(clusterID string) string,
-) *session {
+func newSession(conn wsConn, cfg Config) *session {
 	return &session{
 		conn:                      conn,
-		adapter:                   adapter,
-		logger:                    logger,
-		telemetry:                 recorder,
-		clusterID:                 clusterID,
-		clusterName:               clusterName,
-		streamName:                streamName,
-		sendReset:                 sendReset,
-		allowClusterScopedRequest: allowClusterScopedRequest,
-		resolveClusterName:        resolveClusterName,
+		adapter:                   cfg.Adapter,
+		logger:                    cfg.Logger,
+		telemetry:                 cfg.Telemetry,
+		clusterID:                 cfg.ClusterID,
+		clusterName:               cfg.ClusterName,
+		streamName:                cfg.StreamName,
+		sendReset:                 cfg.SendReset,
+		allowClusterScopedRequest: cfg.AllowClusterScopedRequests,
+		resolveClusterName:        cfg.ResolveClusterName,
 		subs:                      make(map[string]*sessionSubscription),
 		outgoing:                  make(chan ServerMessage, config.StreamMuxOutgoingBufferSize),
 		done:                      make(chan struct{}),

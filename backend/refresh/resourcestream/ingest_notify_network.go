@@ -73,11 +73,8 @@ func (s networkNotifyCatalogSink) broadcast(row interface{}, updateType MessageT
 	if !ok {
 		return
 	}
-	ref := resourcemodel.NewResourceRef(
-		s.manager.clusterMeta.ClusterID,
-		s.identity.Group, s.identity.Version, s.identity.Kind, s.identity.Resource,
-		summary.Ref.Namespace, summary.Ref.Name, summary.Ref.UID,
-	)
+	ref := resourcemodel.NewResourceRef(resourcemodel.ResourceRef{ClusterID: s.manager.clusterMeta.ClusterID, Group: s.identity.Group, Version: s.identity.Version, Kind: s.identity.Kind, Resource: s.identity.Resource, Namespace: summary.Ref.Namespace, Name: summary.Ref.Name, UID: summary.Ref.UID})
+
 	update := Update{
 		Type:            updateType,
 		Domain:          domainNamespaceNetwork,

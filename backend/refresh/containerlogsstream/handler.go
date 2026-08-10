@@ -270,9 +270,8 @@ func (s *containerLogsHTTPRequest) startRunner(
 	go func() {
 		defer s.finishRunner(channels)
 		s.handler.streamer.run(
-			s.request.Context(), s.options, initial.pods, initial.selector, initial.states,
-			limiterSession, initial.warnings, channels.entries, channels.warnings, channels.errors, channels.drops,
-		)
+			s.request.Context(), initial.pods, initial.selector, containerLogRunConfig{opts: s.options, states: initial.states, limiterSession: limiterSession, initialWarnings: initial.warnings, entriesCh: channels.entries, warningsCh: channels.warnings, errCh: channels.errors, dropCh: channels.drops})
+
 	}()
 }
 

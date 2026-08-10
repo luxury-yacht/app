@@ -124,9 +124,8 @@ func canonicalRowWireFixtures(t *testing.T) canonicalRowWireFixtureDocument {
 	node := &corev1.Node{ObjectMeta: canonicalFixtureObjectMeta("node-wire", "", created)}
 	nodeRow := buildNodeOwnSummary(meta, node)
 
-	attentionRef := resourcemodel.NewResourceRef(
-		meta.ClusterID, "", "v1", "Pod", "pods", namespace, "pod-attention", "pod-attention-uid",
-	)
+	attentionRef := resourcemodel.NewResourceRef(resourcemodel.ResourceRef{ClusterID: meta.ClusterID, Group: "", Version: "v1", Kind: "Pod", Resource: "pods", Namespace: namespace, Name: "pod-attention", UID: "pod-attention-uid"})
+
 	attentionRow := findingEvaluation(attentionSourceRecord{
 		Ref: attentionRef, Source: attentionSourcePod, Status: "Not Ready", AgeTimestamp: created.UnixMilli(),
 	}, []AttentionCause{{Type: "pod-not-ready", Label: "Pod not ready", Message: "Pod is not ready", Severity: AttentionSeverityWarning}}).Finding
@@ -235,13 +234,13 @@ func canonicalRowWireFixtures(t *testing.T) canonicalRowWireFixtureDocument {
 		"apiVersion": "example.io/v1", "kind": "Widget",
 		"metadata": map[string]any{"name": "widget-wire", "namespace": namespace, "uid": "widget-wire-uid", "creationTimestamp": created.Format(time.RFC3339)},
 	}}
-	namespaceCustomRow := customres.BuildNamespaceStreamSummary(meta, namespacedCustomObject, "example.io", "v1", "widgets", "Widget", "widgets.example.io", namespace)
+	namespaceCustomRow := customres.BuildNamespaceStreamSummary(meta, namespacedCustomObject, customres.NewDescriptor("example.io", "v1", "widgets", "Widget", "widgets.example.io"), namespace)
 
 	clusterCustomObject := &unstructured.Unstructured{Object: map[string]any{
 		"apiVersion": "example.io/v1", "kind": "ClusterWidget",
 		"metadata": map[string]any{"name": "cluster-widget-wire", "uid": "cluster-widget-wire-uid", "creationTimestamp": created.Format(time.RFC3339)},
 	}}
-	clusterCustomRow := customres.BuildClusterStreamSummary(meta, clusterCustomObject, "example.io", "v1", "clusterwidgets", "ClusterWidget", "clusterwidgets.example.io")
+	clusterCustomRow := customres.BuildClusterStreamSummary(meta, clusterCustomObject, customres.NewDescriptor("example.io", "v1", "clusterwidgets", "ClusterWidget", "clusterwidgets.example.io"))
 	hydratedCustomRow := CustomResourceSummaryFromCluster(clusterCustomRow)
 
 	objectEventRow := convertObjectEvent(meta, *namespaceEvent)

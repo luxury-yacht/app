@@ -253,12 +253,15 @@ func (b *NamespaceNetworkBuilder) Build(ctx context.Context, scope string) (*ref
 		query,
 		networkTableQueryAdapter(),
 		networkQuerypageSchema(),
-		capabilitiesWithAvailableKinds(namespaceNetworkQueryCapabilities(), sources),
-		config.SnapshotNamespaceNetworkEntryLimit,
-		"network resources",
-		func(resource NetworkSummary) string { return resource.Ref.Kind },
-		issues,
+		newTypedSnapshotPageConfig(
+			capabilitiesWithAvailableKinds(namespaceNetworkQueryCapabilities(), sources),
+			config.SnapshotNamespaceNetworkEntryLimit,
+			"network resources",
+			func(resource NetworkSummary) string { return resource.Ref.Kind },
+			issues,
+		),
 	)
+
 	return &refresh.Snapshot{
 		Domain:  namespaceNetworkDomainName,
 		Scope:   refresh.JoinClusterScope(clusterID, strings.TrimSpace(trimmed)),

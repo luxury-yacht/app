@@ -192,47 +192,51 @@ func (r *Recorder) RecordCatalog(enabled bool, itemCount, resourceCount int, dur
 	}
 }
 
-// RecordSnapshot logs a snapshot outcome. The clusterID and clusterName parameters
-// identify the cluster that produced this snapshot, allowing accurate attribution
-// even when the recorder is shared across clusters (e.g., in aggregate handlers).
-func (r *Recorder) RecordSnapshot(
-	domain, scope string,
-	clusterID, clusterName string,
-	duration time.Duration,
-	err error,
-	truncated bool,
-	totalItems int,
-	warnings []string,
-	batchIndex int,
-	totalBatches int,
-	batchSize int,
-	isFinal bool,
-	timeToFirstBatchMs int64,
-	informerSyncWaitMs int64,
-) {
-	if domain == "" {
+// SnapshotRecord identifies one snapshot outcome and its timing/batch metadata.
+type SnapshotRecord struct {
+	Domain             string
+	Scope              string
+	ClusterID          string
+	ClusterName        string
+	Duration           time.Duration
+	Err                error
+	Truncated          bool
+	TotalItems         int
+	Warnings           []string
+	BatchIndex         int
+	TotalBatches       int
+	BatchSize          int
+	IsFinal            bool
+	TimeToFirstBatchMs int64
+	InformerSyncWaitMs int64
+}
+
+// RecordSnapshot logs a snapshot outcome. ClusterID and ClusterName identify
+// the producer when the recorder is shared across clusters.
+func (r *Recorder) RecordSnapshot(record SnapshotRecord) {
+	if record.Domain == "" {
 		return
 	}
 
 	r.mu.Lock()
 	defer r.mu.Unlock()
 
-	entry := r.snapshotStatus(domain)
+	entry := r.snapshotStatus(record.Domain)
 	updateSnapshotBatch(entry, snapshotBatchUpdate{
-		scope:        scope,
-		clusterID:    clusterID,
-		clusterName:  clusterName,
-		duration:     duration,
-		truncated:    truncated,
-		totalItems:   totalItems,
-		batchIndex:   batchIndex,
-		totalBatches: totalBatches,
-		batchSize:    batchSize,
-		isFinal:      isFinal,
+		scope:        record.Scope,
+		clusterID:    record.ClusterID,
+		clusterName:  record.ClusterName,
+		duration:     record.Duration,
+		truncated:    record.Truncated,
+		totalItems:   record.TotalItems,
+		batchIndex:   record.BatchIndex,
+		totalBatches: record.TotalBatches,
+		batchSize:    record.BatchSize,
+		isFinal:      record.IsFinal,
 	})
-	updateSnapshotTiming(entry, batchIndex, timeToFirstBatchMs, informerSyncWaitMs)
-	updateSnapshotWarnings(entry, warnings)
-	updateSnapshotResult(entry, err)
+	updateSnapshotTiming(entry, record.BatchIndex, record.TimeToFirstBatchMs, record.InformerSyncWaitMs)
+	updateSnapshotWarnings(entry, record.Warnings)
+	updateSnapshotResult(entry, record.Err)
 }
 
 func (r *Recorder) snapshotStatus(domain string) *SnapshotStatus {

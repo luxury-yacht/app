@@ -272,7 +272,10 @@ func (b *NamespaceWorkloadsBuilder) Build(ctx context.Context, scope string) (*r
 	// coverage is unavailable, leave ownership unknown instead of emitting false.
 	hpas, hpaErr := b.listHPAs(namespace)
 
-	snapshot, err := b.buildSnapshot(meta, refresh.JoinClusterScope(clusterID, strings.TrimSpace(trimmed)), query, podAggregates, podSummaries, ownRows, hpas, hpaErr == nil, podUsage, metricsMetadata, issues)
+	snapshot, err := b.buildSnapshot(meta, refresh.JoinClusterScope(clusterID, strings.TrimSpace(trimmed)), namespaceWorkloadSnapshotInputs{
+		query: query, podAggregates: podAggregates, podSummaries: podSummaries, ownRows: ownRows,
+		hpas: hpas, hpaKnown: hpaErr == nil, podUsage: podUsage, metricsMetadata: metricsMetadata, issues: issues,
+	})
 	if err != nil {
 		return nil, err
 	}
@@ -289,63 +292,59 @@ func (b *NamespaceWorkloadsBuilder) workloadOwnRows(ctx context.Context, namespa
 	return b.workloadsMaintained.rows(namespace, b.allowedWorkloadKinds(ctx))
 }
 
-func (b *NamespaceWorkloadsBuilder) buildSnapshot(
-	meta ClusterMeta,
-	scope string,
-	query typedTableQuery,
-	podAggregates []streamrows.PodAggregate,
-	podSummaries map[string]streamrows.PodSummary,
-	ownRows []WorkloadSummary,
-	hpas []*autoscalingv1.HorizontalPodAutoscaler,
-	hpaKnown bool,
-	podUsage map[string]metrics.PodUsage,
-	metricsMetadata metrics.Metadata,
-	issues []ResourceQueryIssue,
-) (*refresh.Snapshot, error) {
-	items, version := assembleWorkloadRows(
-		meta, podAggregates, podSummaries,
-		ownRows,
-		hpas, hpaKnown, podUsage,
-		namespaceWorkloadIngestVersion(b.workloadIngest, DeploymentGVR, StatefulSetGVR, DaemonSetGVR, JobGVR, CronJobGVR),
-		namespacePodIngestVersion(b.podIngest),
-	)
+type namespaceWorkloadSnapshotInputs struct {
+	query           typedTableQuery
+	podAggregates   []streamrows.PodAggregate
+	podSummaries    map[string]streamrows.PodSummary
+	ownRows         []WorkloadSummary
+	hpas            []*autoscalingv1.HorizontalPodAutoscaler
+	hpaKnown        bool
+	podUsage        map[string]metrics.PodUsage
+	metricsMetadata metrics.Metadata
+	issues          []ResourceQueryIssue
+}
+
+func (b *NamespaceWorkloadsBuilder) buildSnapshot(meta ClusterMeta, scope string, inputs namespaceWorkloadSnapshotInputs) (*refresh.Snapshot, error) {
+	items, version := assembleWorkloadRows(workloadRowInputs{
+		podAggregates: inputs.podAggregates, podSummaries: inputs.podSummaries, ownRows: inputs.ownRows,
+		hpas: inputs.hpas, hpaKnown: inputs.hpaKnown, podUsage: inputs.podUsage,
+		workloadIngestVersion: namespaceWorkloadIngestVersion(b.workloadIngest, DeploymentGVR, StatefulSetGVR, DaemonSetGVR, JobGVR, CronJobGVR),
+		podIngestVersion:      namespacePodIngestVersion(b.podIngest),
+	})
 	// Sort ONLY for the window branch, which truncates input order. The query
 	// branch re-sorts via the engine and ignores this order — sorting the full
 	// scope there is wasted work on every doorbell refetch (pinned by
 	// TestNamespaceWorkloadsBuilderWindowScopeOrdersRowsByKindThenName).
-	if !query.Enabled {
+	if !inputs.query.Enabled {
 		sortWorkloadSummaries(items)
 	}
 
 	resolved := resolveTypedSnapshotPageViaStore(
 		namespaceWorkloadsDomainName,
 		items,
-		query,
+		inputs.query,
 		workloadTableQueryAdapter(),
 		workloadsQuerypageSchema(),
-		b.queryCapabilities(),
-		config.SnapshotNamespaceWorkloadsEntryLimit,
-		"workloads",
-		func(r WorkloadSummary) string { return r.Ref.Kind },
-		issues,
-		// Reuse the per-Build engine store across page turns/sort flips while the
-		// version watermark and metric tick (DynamicRevision, inside the cache
-		// key) are unchanged. The key is exactly the domain's existing refetch
-		// identity (the same watermark gates the 304 validator), so anything it
-		// doesn't cover — e.g. the HPA overlay, which advances no RV here — was
-		// already served stale by 304s and gains no new staleness from the cache.
+		newTypedSnapshotPageConfig(
+			b.queryCapabilities(),
+			config.SnapshotNamespaceWorkloadsEntryLimit,
+			"workloads",
+			func(r WorkloadSummary) string { return r.Ref.Kind },
+			inputs.issues,
+		),
 		withPerBuildCache(b.perBuild, strconv.FormatUint(version, 10)),
 	)
+
 	return &refresh.Snapshot{
 		Domain:         namespaceWorkloadsDomainName,
 		Scope:          scope,
 		Version:        version,
-		SourceVersions: metricSourceVersions(metricRevisionFromMetadata(metricsMetadata)),
+		SourceVersions: metricSourceVersions(metricRevisionFromMetadata(inputs.metricsMetadata)),
 		Payload: NamespaceWorkloadsSnapshot{
 			ClusterMeta:           meta,
 			ResourceQueryEnvelope: resolved.Envelope,
 			Rows:                  resolved.Rows,
-			Metrics:               podMetricsInfoFromMetadata(metricsMetadata),
+			Metrics:               podMetricsInfoFromMetadata(inputs.metricsMetadata),
 		},
 		Stats: resolved.Stats,
 	}, nil
@@ -359,27 +358,27 @@ func (b *NamespaceWorkloadsBuilder) buildSnapshot(
 // workloadIngestVersion/podIngestVersion are the
 // cut stores' watermarks, folded into the returned version only when a workload / standalone-pod
 // row is actually emitted (matching the prior per-object RV fold).
-func assembleWorkloadRows(
-	meta ClusterMeta,
-	podAggregates []streamrows.PodAggregate,
-	podSummaries map[string]streamrows.PodSummary,
-	ownRows []WorkloadSummary,
-	hpas []*autoscalingv1.HorizontalPodAutoscaler,
-	hpaKnown bool,
-	podUsage map[string]metrics.PodUsage,
-	workloadIngestVersion uint64,
-	podIngestVersion uint64,
-) ([]WorkloadSummary, uint64) {
-	_ = meta
+type workloadRowInputs struct {
+	podAggregates         []streamrows.PodAggregate
+	podSummaries          map[string]streamrows.PodSummary
+	ownRows               []WorkloadSummary
+	hpas                  []*autoscalingv1.HorizontalPodAutoscaler
+	hpaKnown              bool
+	podUsage              map[string]metrics.PodUsage
+	workloadIngestVersion uint64
+	podIngestVersion      uint64
+}
+
+func assembleWorkloadRows(inputs workloadRowInputs) ([]WorkloadSummary, uint64) {
 	assembler := workloadRowAssembler{
-		hpaTargets:   buildHPATargetSet(hpas),
-		hpaKnown:     hpaKnown,
-		podUsage:     podUsage,
-		podSummaries: podSummaries,
-		podsByOwner:  groupPodAggregatesByOwner(podAggregates),
+		hpaTargets:   buildHPATargetSet(inputs.hpas),
+		hpaKnown:     inputs.hpaKnown,
+		podUsage:     inputs.podUsage,
+		podSummaries: inputs.podSummaries,
+		podsByOwner:  groupPodAggregatesByOwner(inputs.podAggregates),
 	}
-	assembler.appendWorkloads(ownRows, workloadIngestVersion)
-	assembler.appendStandalonePods(podAggregates, podIngestVersion)
+	assembler.appendWorkloads(inputs.ownRows, inputs.workloadIngestVersion)
+	assembler.appendStandalonePods(inputs.podAggregates, inputs.podIngestVersion)
 	// Ordering is the caller's concern: buildSnapshot sorts only for the window
 	// branch (the query branch's engine ignores input order).
 	return assembler.items, assembler.version

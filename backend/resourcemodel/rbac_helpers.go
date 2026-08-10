@@ -4,6 +4,7 @@ import (
 	"fmt"
 	"strconv"
 
+	"github.com/luxury-yacht/app/backend/resourcekind"
 	rbacv1 "k8s.io/api/rbac/v1"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 )
@@ -17,7 +18,10 @@ func RBACResourceModel(
 	status ResourceStatusPresentation,
 	facts ResourceFacts,
 ) ResourceModel {
-	return KubernetesResourceModel(clusterID, rbacAPIGroup, "v1", kind, resource, scope, meta, status, facts)
+	return KubernetesResourceModel(clusterID, resourcekind.Identity{
+		Group: rbacAPIGroup, Version: "v1", Kind: kind, Resource: resource,
+		Namespaced: scope == ResourceScopeNamespaced,
+	}, meta, status, facts)
 }
 
 func ServiceAccountResourceModel(
@@ -26,7 +30,9 @@ func ServiceAccountResourceModel(
 	status ResourceStatusPresentation,
 	facts ResourceFacts,
 ) ResourceModel {
-	return KubernetesResourceModel(clusterID, "", "v1", "ServiceAccount", "serviceaccounts", ResourceScopeNamespaced, meta, status, facts)
+	return KubernetesResourceModel(clusterID, resourcekind.Identity{
+		Version: "v1", Kind: "ServiceAccount", Resource: "serviceaccounts", Namespaced: true,
+	}, meta, status, facts)
 }
 
 func CopyPolicyRuleFacts(rules []rbacv1.PolicyRule) []PolicyRuleFacts {
@@ -97,7 +103,7 @@ func ServiceAccountStatus(meta metav1.ObjectMeta, secretCount int) ResourceStatu
 }
 
 func rbacRoleBindingLink(clusterID string, binding rbacv1.RoleBinding) ResourceLink {
-	return namespacedResourceLink(clusterID, rbacAPIGroup, "v1", "RoleBinding", "rolebindings", binding.Namespace, binding.Name, string(binding.UID))
+	return NewNamespacedResourceLink(ResourceRef{ClusterID: clusterID, Group: rbacAPIGroup, Version: "v1", Kind: "RoleBinding", Resource: "rolebindings", Namespace: binding.Namespace, Name: binding.Name, UID: string(binding.UID)})
 }
 
 func rbacClusterRoleBindingLink(clusterID string, binding rbacv1.ClusterRoleBinding) ResourceLink {
@@ -113,7 +119,7 @@ func RBACRoleRefLink(clusterID, namespace string, ref rbacv1.RoleRef) ResourceLi
 		if ref.Name == "" {
 			break
 		}
-		return namespacedResourceLink(clusterID, rbacAPIGroup, "v1", "Role", "roles", namespace, ref.Name, "")
+		return NewNamespacedResourceLink(ResourceRef{ClusterID: clusterID, Group: rbacAPIGroup, Version: "v1", Kind: "Role", Resource: "roles", Namespace: namespace, Name: ref.Name, UID: ""})
 	case "ClusterRole":
 		if ref.Name == "" {
 			break
@@ -138,7 +144,7 @@ func rbacSubjectFacts(clusterID, fallbackNamespace string, subject rbacv1.Subjec
 			namespace = fallbackNamespace
 		}
 		if namespace != "" && subject.Name != "" {
-			link := namespacedResourceLink(clusterID, "", "v1", "ServiceAccount", "serviceaccounts", namespace, subject.Name, "")
+			link := NewNamespacedResourceLink(ResourceRef{ClusterID: clusterID, Group: "", Version: "v1", Kind: "ServiceAccount", Resource: "serviceaccounts", Namespace: namespace, Name: subject.Name, UID: ""})
 			facts.Link = &link
 		}
 	case "User", "Group":
@@ -163,5 +169,5 @@ func RBACSubjectFactsList(clusterID, fallbackNamespace string, subjects []rbacv1
 }
 
 func SecretLink(clusterID, namespace, name string) ResourceLink {
-	return namespacedResourceLink(clusterID, "", "v1", "Secret", "secrets", namespace, name, "")
+	return NewNamespacedResourceLink(ResourceRef{ClusterID: clusterID, Group: "", Version: "v1", Kind: "Secret", Resource: "secrets", Namespace: namespace, Name: name, UID: ""})
 }

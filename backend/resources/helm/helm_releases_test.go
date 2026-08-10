@@ -621,9 +621,9 @@ func TestDeleteReleaseMissingReturnsError(t *testing.T) {
 	require.Contains(t, err.Error(), "failed to delete Helm release")
 	require.Error(t, logger.cause)
 	require.Equal(t,
-		common.DynamicResourceRequestOperation(
-			"delete", "helm.sh", "v3", "releases", "", true,
-		).WithPrivateResourceNames("missing"),
+		common.DynamicResourceRequestOperation(common.DynamicResourceRequestSpec{
+			Action: "delete", Group: "helm.sh", Version: "v3", Resource: "releases", Namespaced: true,
+		}).WithPrivateResourceNames("missing"),
 		logger.operation,
 	)
 }

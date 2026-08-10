@@ -21,7 +21,7 @@ import (
 // status, and callers needing facts use BuildFacts.
 func BuildResourceModel(clusterID string, deployment *appsv1.Deployment) resourcemodel.ResourceModel {
 	status := BuildStatusPresentation(deployment)
-	return resourcemodel.KubernetesResourceModel(clusterID, "apps", "v1", "Deployment", "deployments", resourcemodel.ResourceScopeNamespaced, deployment.ObjectMeta, status, resourcemodel.ResourceFacts{})
+	return resourcemodel.KubernetesResourceModel(clusterID, Identity, deployment.ObjectMeta, status, resourcemodel.ResourceFacts{})
 }
 
 // BuildFacts extracts the Deployment facts from the raw object.
@@ -116,10 +116,10 @@ func BuildStatusPresentation(deployment *appsv1.Deployment) resourcemodel.Resour
 		return status
 	}
 	if failed := findCondition(deployment, appsv1.DeploymentReplicaFailure); failed != nil && failed.Status == corev1.ConditionTrue {
-		return resourcemodel.WorkloadConditionStatus("ReplicaFailure", string(failed.Status), failed.Reason, failed.Message, "Replica failure", "error", signals, lifecycle)
+		return resourcemodel.WorkloadConditionStatus(resourcemodel.ConditionFacts{Type: "ReplicaFailure", Status: string(failed.Status), Reason: failed.Reason, Message: failed.Message}, "Replica failure", "error", signals, lifecycle)
 	}
 	if progressing := findCondition(deployment, appsv1.DeploymentProgressing); progressing != nil && progressing.Status == corev1.ConditionFalse {
-		return resourcemodel.WorkloadConditionStatus("Progressing", string(progressing.Status), progressing.Reason, progressing.Message, "Progress deadline", "error", signals, lifecycle)
+		return resourcemodel.WorkloadConditionStatus(resourcemodel.ConditionFacts{Type: "Progressing", Status: string(progressing.Status), Reason: progressing.Reason, Message: progressing.Message}, "Progress deadline", "error", signals, lifecycle)
 	}
 	if deployment.Spec.Paused {
 		return resourcemodel.ObjectSourceStatus("Paused", "true", "SpecPaused", "", "warning", signals, lifecycle)

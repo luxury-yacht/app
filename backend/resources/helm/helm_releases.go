@@ -385,13 +385,8 @@ func (s *Service) extractResourceLinksFromManifest(ctx context.Context, manifest
 		link := resourcemodel.BuildHelmManifestResourceLinkWithNamespaceSourceAndResolver(
 			ctx,
 			s.deps.Common.ResourceResolver,
-			s.deps.Common.ClusterID,
-			resource.APIVersion,
-			resource.Kind,
-			resource.Namespace,
-			resource.Name,
-			resource.Scope == string(resourcemodel.ResourceScopeNamespaced),
-		)
+			s.deps.Common.ClusterID, resourcemodel.HelmManifestResource{APIVersion: resource.APIVersion, Kind: resource.Kind, Namespace: resource.Namespace, Name: resource.Name, NamespaceExplicit: resource.Scope == string(resourcemodel.ResourceScopeNamespaced)})
+
 		if link.Ref != nil || link.Display != nil {
 			links = append(links, link)
 		}
@@ -426,14 +421,9 @@ func (s *Service) logWarn(msg string) {
 }
 
 func (s *Service) logDeleteError(err error, msg string, privateResourceNames ...string) error {
-	operation := common.DynamicResourceRequestOperation(
-		"delete",
-		"helm.sh",
-		"v3",
-		"releases",
-		"",
-		true,
-	).WithPrivateResourceNames(privateResourceNames...)
+	operation := common.DynamicResourceRequestOperation(common.DynamicResourceRequestSpec{
+		Action: "delete", Group: "helm.sh", Version: "v3", Resource: "releases", Namespaced: true,
+	}).WithPrivateResourceNames(privateResourceNames...)
 	return s.deps.Common.LogRequestFailure(
 		err,
 		msg,

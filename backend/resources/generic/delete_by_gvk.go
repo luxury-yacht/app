@@ -17,6 +17,7 @@ import (
 	"fmt"
 	"strings"
 
+	"github.com/luxury-yacht/app/backend/resources/common"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/runtime/schema"
 )
@@ -73,12 +74,10 @@ func (s *Service) DeleteByGVK(ctx context.Context, gvk schema.GroupVersionKind, 
 		deleteErr = s.deps.LogDynamicResourceRequestFailure(
 			deleteErr,
 			fmt.Sprintf("Failed to delete %s %s/%s", gvk.String(), namespace, name),
-			"delete",
-			gvr.Group,
-			gvr.Version,
-			gvr.Resource,
-			"",
-			isNamespaced,
+			common.DynamicResourceRequestSpec{
+				Action: "delete", Group: gvr.Group, Version: gvr.Version,
+				Resource: gvr.Resource, Namespaced: isNamespaced,
+			},
 			"GenericResource",
 		)
 		return fmt.Errorf("failed to delete %s: %w", gvk.String(), deleteErr)

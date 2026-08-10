@@ -160,11 +160,17 @@ func TestMaintainedDirectAnchorServesAlignedPage(t *testing.T) {
 		},
 	}
 	resolved := resolveMaintainedDirect(
-		maintained.store, query, available, "", autoscalingTableQueryAdapter(),
-		autoscalingQuerypageSchema(), ResourceQueryCapabilities{}, 100, "items",
-		func(r AutoscalingSummary) string { return r.Ref.Kind },
+		maintained.store,
+		query,
+		maintainedQueryScope{availableKinds: available, namespace: ""},
+		autoscalingTableQueryAdapter(),
+		autoscalingQuerypageSchema(),
 		func() []AutoscalingSummary { return nil },
-		nil,
+		newTypedSnapshotPageConfig(
+			ResourceQueryCapabilities{}, 100, "items",
+			func(r AutoscalingSummary) string { return r.Ref.Kind },
+			nil,
+		),
 	)
 
 	env := resolved.Envelope
@@ -185,12 +191,19 @@ func TestMaintainedDirectAnchorServesAlignedPage(t *testing.T) {
 	// a namespace filter that excludes the anchor row.
 	query.Request.Namespaces = []string{"other-ns"}
 	resolved = resolveMaintainedDirect(
-		maintained.store, query, available, "", autoscalingTableQueryAdapter(),
-		autoscalingQuerypageSchema(), ResourceQueryCapabilities{}, 100, "items",
-		func(r AutoscalingSummary) string { return r.Ref.Kind },
+		maintained.store,
+		query,
+		maintainedQueryScope{availableKinds: available, namespace: ""},
+		autoscalingTableQueryAdapter(),
+		autoscalingQuerypageSchema(),
 		func() []AutoscalingSummary { return nil },
-		nil,
+		newTypedSnapshotPageConfig(
+			ResourceQueryCapabilities{}, 100, "items",
+			func(r AutoscalingSummary) string { return r.Ref.Kind },
+			nil,
+		),
 	)
+
 	if resolved.Envelope.Anchor == nil || resolved.Envelope.Anchor.Found ||
 		resolved.Envelope.Anchor.Reason != "filtered" {
 		t.Fatalf("maintained filtered anchor = %+v", resolved.Envelope.Anchor)
@@ -209,9 +222,16 @@ func TestMaintainedDirectAppliesProviderFacetsAndPublishesStructuralOptions(t *t
 		},
 	}
 	resolved := resolveMaintainedDirect(
-		store, query, map[string]bool{"Node": true}, "", nodeTableQueryAdapter(),
-		nodesQuerypageSchema(), nodeQueryCapabilities(), 100, "nodes",
-		func(NodeSummary) string { return "Node" }, func() []NodeSummary { return nil }, nil,
+		store,
+		query,
+		maintainedQueryScope{availableKinds: map[string]bool{"Node": true}, namespace: ""},
+		nodeTableQueryAdapter(),
+		nodesQuerypageSchema(),
+		func() []NodeSummary { return nil },
+		newTypedSnapshotPageConfig(
+			nodeQueryCapabilities(), 100, "nodes",
+			func(NodeSummary) string { return "Node" }, nil,
+		),
 	)
 
 	if len(resolved.Rows) != 1 || resolved.Rows[0].Status != "NotReady" {
@@ -224,10 +244,18 @@ func TestMaintainedDirectAppliesProviderFacetsAndPublishesStructuralOptions(t *t
 
 	query.Request.Facets = map[string][]string{"statuses": {"notready"}}
 	caseFolded := resolveMaintainedDirect(
-		store, query, map[string]bool{"Node": true}, "", nodeTableQueryAdapter(),
-		nodesQuerypageSchema(), nodeQueryCapabilities(), 100, "nodes",
-		func(NodeSummary) string { return "Node" }, func() []NodeSummary { return nil }, nil,
+		store,
+		query,
+		maintainedQueryScope{availableKinds: map[string]bool{"Node": true}, namespace: ""},
+		nodeTableQueryAdapter(),
+		nodesQuerypageSchema(),
+		func() []NodeSummary { return nil },
+		newTypedSnapshotPageConfig(
+			nodeQueryCapabilities(), 100, "nodes",
+			func(NodeSummary) string { return "Node" }, nil,
+		),
 	)
+
 	if len(caseFolded.Rows) != 1 || caseFolded.Rows[0].Status != "NotReady" {
 		t.Fatalf("case-folded maintained facet rows = %#v, want NotReady only", caseFolded.Rows)
 	}
@@ -377,13 +405,19 @@ func TestMaintainedDirectStartRankServesOffsetPage(t *testing.T) {
 		},
 	}
 	resolved := resolveMaintainedDirect(
-		maintained.store, query, map[string]bool{"HorizontalPodAutoscaler": true}, "",
-		autoscalingTableQueryAdapter(), autoscalingQuerypageSchema(),
-		ResourceQueryCapabilities{}, 100, "items",
-		func(r AutoscalingSummary) string { return r.Ref.Kind },
+		maintained.store,
+		query,
+		maintainedQueryScope{availableKinds: map[string]bool{"HorizontalPodAutoscaler": true}, namespace: ""},
+		autoscalingTableQueryAdapter(),
+		autoscalingQuerypageSchema(),
 		func() []AutoscalingSummary { return nil },
-		nil,
+		newTypedSnapshotPageConfig(
+			ResourceQueryCapabilities{}, 100, "items",
+			func(r AutoscalingSummary) string { return r.Ref.Kind },
+			nil,
+		),
 	)
+
 	env := resolved.Envelope
 	if env.PageStartRank == nil || *env.PageStartRank != 30 {
 		t.Fatalf("maintained pageStartRank = %v, want 30", env.PageStartRank)

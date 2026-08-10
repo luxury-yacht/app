@@ -23,7 +23,7 @@ const apiGroup = "admissionregistration.k8s.io"
 func BuildMutatingResourceModel(clusterID string, config *admissionregistrationv1.MutatingWebhookConfiguration) resourcemodel.ResourceModel {
 	facts := BuildMutatingFacts(clusterID, config)
 	status := statusPresentation(config.ObjectMeta, len(facts.Webhooks))
-	return resourcemodel.KubernetesResourceModel(clusterID, apiGroup, "v1", "MutatingWebhookConfiguration", "mutatingwebhookconfigurations", resourcemodel.ResourceScopeCluster, config.ObjectMeta, status, resourcemodel.ResourceFacts{})
+	return resourcemodel.KubernetesResourceModel(clusterID, MutatingIdentity, config.ObjectMeta, status, resourcemodel.ResourceFacts{})
 }
 
 // BuildMutatingFacts extracts the MutatingWebhookConfiguration facts.
@@ -33,7 +33,7 @@ func BuildMutatingFacts(clusterID string, config *admissionregistrationv1.Mutati
 	}
 	for _, webhook := range config.Webhooks {
 		facts.Webhooks = append(facts.Webhooks, MutatingWebhookFacts{
-			WebhookFacts:       buildWebhookFacts(clusterID, webhook.Name, webhook.AdmissionReviewVersions, webhook.ClientConfig, webhook.Rules, webhook.NamespaceSelector, webhook.ObjectSelector, webhook.FailurePolicy, webhook.MatchPolicy, webhook.SideEffects, webhook.TimeoutSeconds),
+			WebhookFacts:       buildWebhookFacts(clusterID, webhookSourceFromMutating(webhook)),
 			ReinvocationPolicy: stringPtrValue(webhook.ReinvocationPolicy),
 		})
 	}
@@ -44,7 +44,7 @@ func BuildMutatingFacts(clusterID string, config *admissionregistrationv1.Mutati
 func BuildValidatingResourceModel(clusterID string, config *admissionregistrationv1.ValidatingWebhookConfiguration) resourcemodel.ResourceModel {
 	facts := BuildValidatingFacts(clusterID, config)
 	status := statusPresentation(config.ObjectMeta, len(facts.Webhooks))
-	return resourcemodel.KubernetesResourceModel(clusterID, apiGroup, "v1", "ValidatingWebhookConfiguration", "validatingwebhookconfigurations", resourcemodel.ResourceScopeCluster, config.ObjectMeta, status, resourcemodel.ResourceFacts{})
+	return resourcemodel.KubernetesResourceModel(clusterID, ValidatingIdentity, config.ObjectMeta, status, resourcemodel.ResourceFacts{})
 }
 
 // BuildValidatingFacts extracts the ValidatingWebhookConfiguration facts.
@@ -54,7 +54,7 @@ func BuildValidatingFacts(clusterID string, config *admissionregistrationv1.Vali
 	}
 	for _, webhook := range config.Webhooks {
 		facts.Webhooks = append(facts.Webhooks, ValidatingWebhookFacts{
-			WebhookFacts: buildWebhookFacts(clusterID, webhook.Name, webhook.AdmissionReviewVersions, webhook.ClientConfig, webhook.Rules, webhook.NamespaceSelector, webhook.ObjectSelector, webhook.FailurePolicy, webhook.MatchPolicy, webhook.SideEffects, webhook.TimeoutSeconds),
+			WebhookFacts: buildWebhookFacts(clusterID, webhookSourceFromValidating(webhook)),
 		})
 	}
 	return facts
@@ -83,30 +83,49 @@ func WebhookCountDetails(count int) string {
 	return fmt.Sprintf("%d webhooks", count)
 }
 
-func buildWebhookFacts(
-	clusterID string,
-	name string,
-	admissionVersions []string,
-	clientConfig admissionregistrationv1.WebhookClientConfig,
-	rules []admissionregistrationv1.RuleWithOperations,
-	namespaceSelector *metav1.LabelSelector,
-	objectSelector *metav1.LabelSelector,
-	failurePolicy *admissionregistrationv1.FailurePolicyType,
-	matchPolicy *admissionregistrationv1.MatchPolicyType,
-	sideEffects *admissionregistrationv1.SideEffectClass,
-	timeoutSeconds *int32,
-) WebhookFacts {
+type webhookSource struct {
+	name              string
+	admissionVersions []string
+	clientConfig      admissionregistrationv1.WebhookClientConfig
+	rules             []admissionregistrationv1.RuleWithOperations
+	namespaceSelector *metav1.LabelSelector
+	objectSelector    *metav1.LabelSelector
+	failurePolicy     *admissionregistrationv1.FailurePolicyType
+	matchPolicy       *admissionregistrationv1.MatchPolicyType
+	sideEffects       *admissionregistrationv1.SideEffectClass
+	timeoutSeconds    *int32
+}
+
+func webhookSourceFromMutating(webhook admissionregistrationv1.MutatingWebhook) webhookSource {
+	return webhookSource{
+		name: webhook.Name, admissionVersions: webhook.AdmissionReviewVersions, clientConfig: webhook.ClientConfig,
+		rules: webhook.Rules, namespaceSelector: webhook.NamespaceSelector, objectSelector: webhook.ObjectSelector,
+		failurePolicy: webhook.FailurePolicy, matchPolicy: webhook.MatchPolicy, sideEffects: webhook.SideEffects,
+		timeoutSeconds: webhook.TimeoutSeconds,
+	}
+}
+
+func webhookSourceFromValidating(webhook admissionregistrationv1.ValidatingWebhook) webhookSource {
+	return webhookSource{
+		name: webhook.Name, admissionVersions: webhook.AdmissionReviewVersions, clientConfig: webhook.ClientConfig,
+		rules: webhook.Rules, namespaceSelector: webhook.NamespaceSelector, objectSelector: webhook.ObjectSelector,
+		failurePolicy: webhook.FailurePolicy, matchPolicy: webhook.MatchPolicy, sideEffects: webhook.SideEffects,
+		timeoutSeconds: webhook.TimeoutSeconds,
+	}
+}
+
+func buildWebhookFacts(clusterID string, source webhookSource) WebhookFacts {
 	return WebhookFacts{
-		Name:                    name,
-		AdmissionReviewVersions: append([]string(nil), admissionVersions...),
-		ClientConfig:            webhookClientConfigFacts(clusterID, clientConfig),
-		FailurePolicy:           stringPtrValue(failurePolicy),
-		MatchPolicy:             stringPtrValue(matchPolicy),
-		SideEffects:             stringPtrValue(sideEffects),
-		TimeoutSeconds:          copyInt32Ptr(timeoutSeconds),
-		NamespaceSelector:       labelSelectorFacts(namespaceSelector),
-		ObjectSelector:          labelSelectorFacts(objectSelector),
-		Rules:                   webhookRuleFacts(rules),
+		Name:                    source.name,
+		AdmissionReviewVersions: append([]string(nil), source.admissionVersions...),
+		ClientConfig:            webhookClientConfigFacts(clusterID, source.clientConfig),
+		FailurePolicy:           stringPtrValue(source.failurePolicy),
+		MatchPolicy:             stringPtrValue(source.matchPolicy),
+		SideEffects:             stringPtrValue(source.sideEffects),
+		TimeoutSeconds:          copyInt32Ptr(source.timeoutSeconds),
+		NamespaceSelector:       labelSelectorFacts(source.namespaceSelector),
+		ObjectSelector:          labelSelectorFacts(source.objectSelector),
+		Rules:                   webhookRuleFacts(source.rules),
 	}
 }
 
@@ -120,7 +139,7 @@ func webhookClientConfigFacts(clusterID string, config admissionregistrationv1.W
 			Port:      copyInt32Ptr(config.Service.Port),
 		}
 		if service.Namespace != "" && service.Name != "" {
-			link := resourcemodel.NewNamespacedResourceLink(clusterID, "", "v1", "Service", "services", service.Namespace, service.Name, "")
+			link := resourcemodel.NewNamespacedResourceLink(resourcemodel.ResourceRef{ClusterID: clusterID, Group: "", Version: "v1", Kind: "Service", Resource: "services", Namespace: service.Namespace, Name: service.Name, UID: ""})
 			service.Service = &link
 		}
 		facts.Service = &service

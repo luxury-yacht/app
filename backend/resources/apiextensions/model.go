@@ -16,14 +16,12 @@ import (
 	apiextensionsv1 "k8s.io/apiextensions-apiserver/pkg/apis/apiextensions/v1"
 )
 
-const apiGroup = "apiextensions.k8s.io"
-
 // BuildResourceModel builds the CustomResourceDefinition resource model. Facts are
 // owned by this package (apiextensions.Facts); callers needing facts use BuildFacts.
 func BuildResourceModel(clusterID string, crd *apiextensionsv1.CustomResourceDefinition) resourcemodel.ResourceModel {
 	facts := BuildFacts(crd)
 	status := statusPresentation(crd, facts)
-	return resourcemodel.KubernetesResourceModel(clusterID, apiGroup, "v1", "CustomResourceDefinition", "customresourcedefinitions", resourcemodel.ResourceScopeCluster, crd.ObjectMeta, status, resourcemodel.ResourceFacts{})
+	return resourcemodel.KubernetesResourceModel(clusterID, Identity, crd.ObjectMeta, status, resourcemodel.ResourceFacts{})
 }
 
 // BuildFacts extracts the CustomResourceDefinition facts from the raw object.

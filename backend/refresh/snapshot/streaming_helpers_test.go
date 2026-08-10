@@ -436,14 +436,16 @@ func TestBuildNamespaceCustomSummaryFallsBackToDefaultNamespace(t *testing.T) {
 
 	row := customresource.BuildNamespaceStreamSummary(
 		ClusterMeta{ClusterID: "c1"},
-		resourceWithNamespace,
-		"example.com",
-		"v1",
-		"foos",
-		"Foo",
-		"foos.example.com",
-		"fallback-ns",
-	)
+		resourceWithNamespace, customresource.NewDescriptor(
+
+			"example.com",
+			"v1",
+			"foos",
+			"Foo",
+			"foos.example.com"),
+
+		"fallback-ns")
+
 	require.Equal(t, "team-a", row.Ref.Namespace, "resource's own namespace wins over fallback")
 	require.Equal(t, "foos.example.com", row.CRDName, "CRDName threads through verbatim")
 
@@ -454,14 +456,16 @@ func TestBuildNamespaceCustomSummaryFallsBackToDefaultNamespace(t *testing.T) {
 
 	row = customresource.BuildNamespaceStreamSummary(
 		ClusterMeta{ClusterID: "c1"},
-		resourceWithoutNamespace,
-		"example.com",
-		"v1",
-		"foos",
-		"Foo",
-		"foos.example.com",
-		"fallback-ns",
-	)
+		resourceWithoutNamespace, customresource.NewDescriptor(
+
+			"example.com",
+			"v1",
+			"foos",
+			"Foo",
+			"foos.example.com"),
+
+		"fallback-ns")
+
 	require.Equal(t, "fallback-ns", row.Ref.Namespace, "empty namespace falls back to default")
 }
 
@@ -470,14 +474,16 @@ func TestBuildNamespaceCustomSummaryFallsBackToDefaultNamespace(t *testing.T) {
 func TestBuildNamespaceCustomSummaryNilResourceIsSafe(t *testing.T) {
 	row := customresource.BuildNamespaceStreamSummary(
 		ClusterMeta{ClusterID: "c1"},
-		nil,
-		"example.com",
-		"v1",
-		"foos",
-		"Foo",
-		"foos.example.com",
-		"fallback-ns",
-	)
+		nil, customresource.NewDescriptor(
+
+			"example.com",
+			"v1",
+			"foos",
+			"Foo",
+			"foos.example.com"),
+
+		"fallback-ns")
+
 	require.Equal(t, "c1", row.Ref.ClusterID)
 	require.Equal(t, "Foo", row.Ref.Kind)
 	require.Equal(t, "example.com", row.Ref.Group)
@@ -488,14 +494,16 @@ func TestBuildNamespaceCustomSummaryNilResourceIsSafe(t *testing.T) {
 func TestBuildNamespaceCustomSummaryWireIdentityUsesGroupVersion(t *testing.T) {
 	row := customresource.BuildNamespaceStreamSummary(
 		ClusterMeta{ClusterID: "c1"},
-		nil,
-		"example.com",
-		"v1",
-		"foos",
-		"Foo",
-		"foos.example.com",
-		"fallback-ns",
-	)
+		nil, customresource.NewDescriptor(
+
+			"example.com",
+			"v1",
+			"foos",
+			"Foo",
+			"foos.example.com"),
+
+		"fallback-ns")
+
 	payload, err := json.Marshal(row)
 	require.NoError(t, err)
 
@@ -527,13 +535,14 @@ func TestBuildClusterCustomSummaryThreadsCRDName(t *testing.T) {
 
 	row := customresource.BuildClusterStreamSummary(
 		ClusterMeta{ClusterID: "c1"},
-		resource,
-		"rds.services.k8s.aws",
-		"v1alpha1",
-		"dbclusters",
-		"DBCluster",
-		"dbclusters.rds.services.k8s.aws",
-	)
+		resource, customresource.NewDescriptor(
+
+			"rds.services.k8s.aws",
+			"v1alpha1",
+			"dbclusters",
+			"DBCluster",
+			"dbclusters.rds.services.k8s.aws"))
+
 	require.Equal(t, "c1", row.Ref.ClusterID)
 	require.Equal(t, "DBCluster", row.Ref.Kind)
 	require.Equal(t, "primary", row.Ref.Name)
@@ -550,13 +559,14 @@ func TestBuildClusterCustomSummaryThreadsCRDName(t *testing.T) {
 func TestBuildClusterCustomSummaryNilResourceIsSafe(t *testing.T) {
 	row := customresource.BuildClusterStreamSummary(
 		ClusterMeta{ClusterID: "c1"},
-		nil,
-		"rds.services.k8s.aws",
-		"v1alpha1",
-		"dbclusters",
-		"DBCluster",
-		"dbclusters.rds.services.k8s.aws",
-	)
+		nil, customresource.NewDescriptor(
+
+			"rds.services.k8s.aws",
+			"v1alpha1",
+			"dbclusters",
+			"DBCluster",
+			"dbclusters.rds.services.k8s.aws"))
+
 	require.Equal(t, "c1", row.Ref.ClusterID)
 	require.Equal(t, "DBCluster", row.Ref.Kind)
 	require.Equal(t, "rds.services.k8s.aws", row.Ref.Group)
@@ -580,14 +590,16 @@ func TestBuildNamespaceCustomSummaryThreadsCRDName(t *testing.T) {
 
 	row := customresource.BuildNamespaceStreamSummary(
 		ClusterMeta{ClusterID: "c1"},
-		resource,
-		"rds.services.k8s.aws",
-		"v1alpha1",
-		"dbinstances",
-		"DBInstance",
-		"dbinstances.rds.services.k8s.aws",
-		"data",
-	)
+		resource, customresource.NewDescriptor(
+
+			"rds.services.k8s.aws",
+			"v1alpha1",
+			"dbinstances",
+			"DBInstance",
+			"dbinstances.rds.services.k8s.aws"),
+
+		"data")
+
 	require.Equal(t, "dbinstances.rds.services.k8s.aws", row.CRDName)
 	require.Equal(t, "Unknown", row.Status)
 	require.Equal(t, "unknown", row.StatusState)

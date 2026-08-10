@@ -10,31 +10,15 @@ import (
 
 func (m *Manager) resourceRefForObject(obj metav1.Object, group, version, kind, resource string) resourcemodel.ResourceRef {
 	if obj == nil {
-		return resourcemodel.NewResourceRef(m.clusterMeta.ClusterID, group, version, kind, resource, "", "", "")
+		return resourcemodel.NewResourceRef(resourcemodel.ResourceRef{ClusterID: m.clusterMeta.ClusterID, Group: group, Version: version, Kind: kind, Resource: resource, Namespace: "", Name: "", UID: ""})
 	}
-	return resourcemodel.NewResourceRef(
-		m.clusterMeta.ClusterID,
-		group,
-		version,
-		kind,
-		resource,
-		obj.GetNamespace(),
-		obj.GetName(),
-		string(obj.GetUID()),
-	)
+	return resourcemodel.NewResourceRef(resourcemodel.ResourceRef{ClusterID: m.clusterMeta.ClusterID, Group: group, Version: version, Kind: kind, Resource: resource, Namespace: obj.GetNamespace(), Name: obj.GetName(), UID: string(obj.GetUID())})
+
 }
 
 func (m *Manager) helmReleaseRef(namespace, name string) resourcemodel.ResourceRef {
-	return resourcemodel.NewResourceRef(
-		m.clusterMeta.ClusterID,
-		"helm.sh",
-		"v3",
-		"HelmRelease",
-		"releases",
-		namespace,
-		name,
-		"",
-	)
+	return resourcemodel.NewResourceRef(resourcemodel.ResourceRef{ClusterID: m.clusterMeta.ClusterID, Group: "helm.sh", Version: "v3", Kind: "HelmRelease", Resource: "releases", Namespace: namespace, Name: name, UID: ""})
+
 }
 
 func (m *Manager) newObjectUpdate(updateType MessageType, domain string, obj metav1.Object, ref resourcemodel.ResourceRef) Update {

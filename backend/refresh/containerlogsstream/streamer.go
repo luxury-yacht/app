@@ -180,28 +180,18 @@ func sortInitialLogEntries(entries []Entry) {
 
 func (s *Streamer) run(
 	ctx context.Context,
-	opts Options,
 	initialPods []*corev1.Pod,
 	selector string,
-	states map[string]*containerState,
-	limiterSession *TargetSession,
-	initialWarnings []string,
-	entriesCh chan<- Entry,
-	warningsCh chan<- []string,
-	errCh chan<- error,
-	dropCh chan<- int,
+	config containerLogRunConfig,
 ) {
-	if opts.MatchNone {
+	if config.opts.MatchNone {
 		<-ctx.Done()
 		return
 	}
-	run := newContainerLogRun(s, containerLogRunConfig{
-		opts: opts, states: states, limiterSession: limiterSession, initialWarnings: initialWarnings,
-		entriesCh: entriesCh, warningsCh: warningsCh, errCh: errCh, dropCh: dropCh,
-	})
+	run := newContainerLogRun(s, config)
 	defer run.shutdown()
 	run.replacePodInventory(ctx, initialPods)
-	if strings.EqualFold(opts.Kind, "pod") {
+	if strings.EqualFold(config.opts.Kind, "pod") {
 		run.waitForPodSession(ctx)
 		return
 	}
@@ -464,11 +454,8 @@ func (r *containerLogRun) handleWatchStartError(ctx context.Context, err error, 
 
 func (r *containerLogRun) consumePodWatch(ctx context.Context, watcher watch.Interface, cronCache map[string]bool) error {
 	return r.streamer.consumeWatch(
-		ctx, watcher, r.opts, cronCache, r.limiterNotify,
-		func() { r.reconcileTargets(ctx) },
-		func(pod *corev1.Pod) { r.updatePod(ctx, pod) },
-		func(name string) { r.removePod(ctx, name) },
-	)
+		ctx, watcher, r.opts, cronCache, r.limiterNotify, podWatchCallbacks{reconcileTargets: func() { r.reconcileTargets(ctx) }, startPod: func(pod *corev1.Pod) { r.updatePod(ctx, pod) }, stopPod: func(name string) { r.removePod(ctx, name) }})
+
 }
 
 func (r *containerLogRun) handleWatchEnd(ctx context.Context, err error, backoff time.Duration) bool {
@@ -530,16 +517,13 @@ func nextBackoff(current time.Duration) time.Duration {
 	return next
 }
 
-func (s *Streamer) consumeWatch(
-	ctx context.Context,
-	watcher watch.Interface,
-	opts Options,
-	cronCache map[string]bool,
-	limiterNotify <-chan struct{},
-	reconcileTargets func(),
-	startPod func(*corev1.Pod),
-	stopPod func(string),
-) error {
+type podWatchCallbacks struct {
+	reconcileTargets func()
+	startPod         func(*corev1.Pod)
+	stopPod          func(string)
+}
+
+func (s *Streamer) consumeWatch(ctx context.Context, watcher watch.Interface, opts Options, cronCache map[string]bool, limiterNotify <-chan struct{}, callbacks podWatchCallbacks) error {
 	if watcher == nil {
 		return errors.New("containerlogsstream: watcher not initialised")
 	}
@@ -549,14 +533,14 @@ func (s *Streamer) consumeWatch(
 		case <-ctx.Done():
 			return ctx.Err()
 		case <-limiterNotify:
-			if reconcileTargets != nil {
-				reconcileTargets()
+			if callbacks.reconcileTargets != nil {
+				callbacks.reconcileTargets()
 			}
 		case event, ok := <-result:
 			if !ok {
 				return errors.New("watch channel closed")
 			}
-			if err := s.consumePodWatchEvent(ctx, event, opts, cronCache, startPod, stopPod); err != nil {
+			if err := s.consumePodWatchEvent(ctx, event, opts, cronCache, callbacks.startPod, callbacks.stopPod); err != nil {
 				return err
 			}
 		}

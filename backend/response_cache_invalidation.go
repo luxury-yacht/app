@@ -252,16 +252,7 @@ func (a *App) invalidateResponseCacheForObjectEvent(
 		return
 	}
 	namespace := strings.TrimSpace(metaObj.GetNamespace())
-	a.invalidateResponseCacheForResource(selectionKey, resourcemodel.NewResourceRef(
-		selectionKey,
-		identity.Group,
-		identity.Version,
-		identity.Kind,
-		identity.Resource,
-		namespace,
-		name,
-		string(metaObj.GetUID()),
-	))
+	a.invalidateResponseCacheForResource(selectionKey, resourcemodel.NewResourceRef(resourcemodel.ResourceRef{ClusterID: selectionKey, Group: identity.Group, Version: identity.Version, Kind: identity.Kind, Resource: identity.Resource, Namespace: namespace, Name: name, UID: string(metaObj.GetUID())}))
 	a.invalidateHelmCacheIfNeeded(selectionKey, obj)
 }
 

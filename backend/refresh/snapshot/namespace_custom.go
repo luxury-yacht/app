@@ -219,8 +219,9 @@ func buildNamespaceCustomSummaries(
 	for i := range items {
 		item := &items[i]
 		summaries = append(summaries, customresource.BuildNamespaceStreamSummary(
-			meta, item, gvr.Group, gvr.Version, gvr.Resource, crd.Spec.Names.Kind, crd.Name, namespace,
-		))
+			meta, item, customresource.NewDescriptor(
+				gvr.Group, gvr.Version, gvr.Resource, crd.Spec.Names.Kind, crd.Name),
+			namespace))
 		version = maxSnapshotVersion(version, item)
 	}
 	return summaries, version

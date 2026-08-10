@@ -89,11 +89,8 @@ func (s ingestNotifySink) broadcastSignal(row interface{}, updateType MessageTyp
 		return
 	}
 	d := s.desc
-	ref := resourcemodel.NewResourceRef(
-		s.manager.clusterMeta.ClusterID,
-		d.Group, d.Version, d.Kind, d.Resource,
-		summary.Ref.Namespace, summary.Ref.Name, summary.Ref.UID,
-	)
+	ref := resourcemodel.NewResourceRef(resourcemodel.ResourceRef{ClusterID: s.manager.clusterMeta.ClusterID, Group: d.Group, Version: d.Version, Kind: d.Kind, Resource: d.Resource, Namespace: summary.Ref.Namespace, Name: summary.Ref.Name, UID: summary.Ref.UID})
+
 	update := Update{
 		Type:            updateType,
 		Domain:          d.Domain,

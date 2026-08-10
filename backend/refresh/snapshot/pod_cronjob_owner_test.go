@@ -40,10 +40,8 @@ func jobOwnedPod() *corev1.Pod {
 
 func testJobControllerOwner(jobName, cronJobName string) JobControllerOwner {
 	return JobControllerOwner{
-		Job: resourcemodel.NewResourceRef("c-1", "batch", "v1", "Job", "jobs", "batch", jobName, "job-uid"),
-		Controller: resourcemodel.NewResourceRef(
-			"c-1", "batch", "v1", "CronJob", "cronjobs", "batch", cronJobName, "cronjob-uid",
-		),
+		Job:        resourcemodel.NewResourceRef(resourcemodel.ResourceRef{ClusterID: "c-1", Group: "batch", Version: "v1", Kind: "Job", Resource: "jobs", Namespace: "batch", Name: jobName, UID: "job-uid"}),
+		Controller: resourcemodel.NewResourceRef(resourcemodel.ResourceRef{ClusterID: "c-1", Group: "batch", Version: "v1", Kind: "CronJob", Resource: "cronjobs", Namespace: "batch", Name: cronJobName, UID: "cronjob-uid"}),
 	}
 }
 

@@ -123,17 +123,10 @@ func TestMatchNoneTailAndStreamDoNotTouchKubernetes(t *testing.T) {
 		defer close(done)
 		streamer.run(
 			ctx,
-			opts,
+
 			pods,
-			selector,
-			states,
-			nil,
-			warnings,
-			make(chan Entry),
-			make(chan []string),
-			make(chan error),
-			make(chan int),
-		)
+			selector, containerLogRunConfig{opts: opts, states: states, limiterSession: nil, initialWarnings: warnings, entriesCh: make(chan Entry), warningsCh: make(chan []string), errCh: make(chan error), dropCh: make(chan int)})
+
 	}()
 	cancel()
 	select {
@@ -453,11 +446,8 @@ func TestConsumeWatchReturnsErrorOnWatchErrorEvent(t *testing.T) {
 			fw,
 			Options{},
 			map[string]bool{},
-			nil,
-			nil,
-			func(*corev1.Pod) {},
-			func(string) {},
-		)
+			nil, podWatchCallbacks{reconcileTargets: nil, startPod: func(*corev1.Pod) {}, stopPod: func(string) {}})
+
 	}()
 
 	fw.ch <- watch.Event{
@@ -489,11 +479,8 @@ func TestConsumeWatchReportsClosedChannelAndIgnoresUnrelatedEvents(t *testing.T)
 		fw,
 		Options{PodFilter: "selected"},
 		map[string]bool{},
-		nil,
-		nil,
-		func(*corev1.Pod) { started++ },
-		func(string) { stopped++ },
-	)
+		nil, podWatchCallbacks{reconcileTargets: nil, startPod: func(*corev1.Pod) { started++ }, stopPod: func(string) { stopped++ }})
+
 	require.EqualError(t, err, "watch channel closed")
 	require.Zero(t, started)
 	require.Zero(t, stopped)
@@ -548,7 +535,7 @@ func TestStreamerRunCancellationBeforeAndAfterStartup(t *testing.T) {
 		cancel()
 		done := make(chan struct{})
 		go func() {
-			streamer.run(ctx, Options{MatchNone: true}, nil, "", nil, nil, nil, nil, nil, nil, nil)
+			streamer.run(ctx, nil, "", containerLogRunConfig{opts: Options{MatchNone: true}, states: nil, limiterSession: nil, initialWarnings: nil, entriesCh: nil, warningsCh: nil, errCh: nil, dropCh: nil})
 			close(done)
 		}()
 		select {
@@ -562,7 +549,7 @@ func TestStreamerRunCancellationBeforeAndAfterStartup(t *testing.T) {
 		ctx, cancel := context.WithCancel(context.Background())
 		done := make(chan struct{})
 		go func() {
-			streamer.run(ctx, Options{Kind: "pod"}, nil, "", map[string]*containerState{}, nil, nil, nil, nil, nil, nil)
+			streamer.run(ctx, nil, "", containerLogRunConfig{opts: Options{Kind: "pod"}, states: map[string]*containerState{}, limiterSession: nil, initialWarnings: nil, entriesCh: nil, warningsCh: nil, errCh: nil, dropCh: nil})
 			close(done)
 		}()
 		cancel()
@@ -591,7 +578,7 @@ func TestStreamerRunRestartsClosedWatchAndInterruptsBackoff(t *testing.T) {
 		defer cancel()
 		done := make(chan struct{})
 		go func() {
-			streamer.run(ctx, Options{Kind: "deployment", Namespace: "default"}, nil, "app=test", map[string]*containerState{}, nil, nil, nil, nil, make(chan error, 1), nil)
+			streamer.run(ctx, nil, "app=test", containerLogRunConfig{opts: Options{Kind: "deployment", Namespace: "default"}, states: map[string]*containerState{}, limiterSession: nil, initialWarnings: nil, entriesCh: nil, warningsCh: nil, errCh: make(chan error, 1), dropCh: nil})
 			close(done)
 		}()
 
@@ -632,7 +619,7 @@ func TestStreamerRunRestartsClosedWatchAndInterruptsBackoff(t *testing.T) {
 		ctx, cancel := context.WithCancel(context.Background())
 		done := make(chan struct{})
 		go func() {
-			streamer.run(ctx, Options{Kind: "deployment", Namespace: "default"}, nil, "", map[string]*containerState{}, nil, nil, nil, nil, make(chan error, 1), nil)
+			streamer.run(ctx, nil, "", containerLogRunConfig{opts: Options{Kind: "deployment", Namespace: "default"}, states: map[string]*containerState{}, limiterSession: nil, initialWarnings: nil, entriesCh: nil, warningsCh: nil, errCh: make(chan error, 1), dropCh: nil})
 			close(done)
 		}()
 		select {
@@ -670,17 +657,10 @@ func TestStreamerRunReconcilesContainerLossAndRestartWithCleanup(t *testing.T) {
 	go func() {
 		streamer.run(
 			ctx,
-			Options{Kind: "deployment", Namespace: "default", IncludeInit: true, IncludeEphemeral: true, ContainerState: containerlogs.ContainerStateAll},
+
 			nil,
-			"app=web",
-			map[string]*containerState{},
-			nil,
-			nil,
-			make(chan Entry, 4),
-			make(chan []string, 4),
-			make(chan error, 4),
-			make(chan int, 4),
-		)
+			"app=web", containerLogRunConfig{opts: Options{Kind: "deployment", Namespace: "default", IncludeInit: true, IncludeEphemeral: true, ContainerState: containerlogs.ContainerStateAll}, states: map[string]*containerState{}, limiterSession: nil, initialWarnings: nil, entriesCh: make(chan Entry, 4), warningsCh: make(chan []string, 4), errCh: make(chan error, 4), dropCh: make(chan int, 4)})
+
 		close(done)
 	}()
 
@@ -742,16 +722,13 @@ func TestConsumeWatchReconcilesTargetsOnLimiterNotification(t *testing.T) {
 			fw,
 			Options{},
 			map[string]bool{},
-			limiterNotify,
-			func() {
+			limiterNotify, podWatchCallbacks{reconcileTargets: func() {
 				select {
 				case reconciled <- struct{}{}:
 				default:
 				}
-			},
-			func(*corev1.Pod) {},
-			func(string) {},
-		)
+			}, startPod: func(*corev1.Pod) {}, stopPod: func(string) {}})
+
 	}()
 
 	limiterNotify <- struct{}{}
@@ -904,11 +881,8 @@ func TestCronJobWatchPicksUpFutureJob(t *testing.T) {
 			fw,
 			Options{Kind: "cronjob", Namespace: "default", Name: "cron"},
 			map[string]bool{},
-			nil,
-			nil,
-			startPod,
-			stopPod,
-		)
+			nil, podWatchCallbacks{reconcileTargets: nil, startPod: startPod, stopPod: stopPod})
+
 	}()
 
 	// Deliver a pod from the future Job via the watch.

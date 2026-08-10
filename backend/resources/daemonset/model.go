@@ -19,7 +19,7 @@ import (
 // status, and callers needing facts use BuildFacts.
 func BuildResourceModel(clusterID string, daemonSet *appsv1.DaemonSet) resourcemodel.ResourceModel {
 	status := BuildStatusPresentation(daemonSet)
-	return resourcemodel.KubernetesResourceModel(clusterID, "apps", "v1", "DaemonSet", "daemonsets", resourcemodel.ResourceScopeNamespaced, daemonSet.ObjectMeta, status, resourcemodel.ResourceFacts{})
+	return resourcemodel.KubernetesResourceModel(clusterID, Identity, daemonSet.ObjectMeta, status, resourcemodel.ResourceFacts{})
 }
 
 // BuildFacts extracts the DaemonSet facts from the raw object.

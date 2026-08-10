@@ -432,7 +432,7 @@ func summaryFromObject(clusterID string, desc resourceDescriptor, item metav1.Ob
 	}
 
 	summary := Summary{
-		Ref:               resourcemodel.NewResourceRef(clusterID, desc.Group, desc.Version, desc.Kind, desc.Resource, item.GetNamespace(), item.GetName(), string(item.GetUID())),
+		Ref:               resourcemodel.NewResourceRef(resourcemodel.ResourceRef{ClusterID: clusterID, Group: desc.Group, Version: desc.Version, Kind: desc.Kind, Resource: desc.Resource, Namespace: item.GetNamespace(), Name: item.GetName(), UID: string(item.GetUID())}),
 		ResourceVersion:   item.GetResourceVersion(),
 		CreationTimestamp: creationTimestamp,
 		Scope:             desc.Scope,

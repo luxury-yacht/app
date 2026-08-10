@@ -84,7 +84,7 @@ type WorkloadSelector struct {
 // The resource (plural) is supplied separately because workload
 // selectors carry GVK but not the discovered GVR plural.
 func (w WorkloadSelector) AsResourceRef(clusterID, resource string) resourcemodel.ResourceRef {
-	return resourcemodel.NewResourceRef(clusterID, w.Group, w.Version, w.Kind, resource, w.Namespace, w.Name, "")
+	return resourcemodel.NewResourceRef(resourcemodel.ResourceRef{ClusterID: clusterID, Group: w.Group, Version: w.Version, Kind: w.Kind, Resource: resource, Namespace: w.Namespace, Name: w.Name, UID: ""})
 }
 
 // ParseStreamSelector parses the transport scope string for a domain

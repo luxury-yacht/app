@@ -211,12 +211,15 @@ func (b *ClusterEventsBuilder) Build(ctx context.Context, scope string) (*refres
 		query,
 		clusterEventTableQueryAdapter(),
 		clusterEventsQuerypageSchema(),
-		clusterEventsQueryCapabilities(),
-		config.SnapshotClusterEventsLimit,
-		"events",
-		func(e ClusterEventEntry) string { return e.Ref.Kind },
-		nil,
+		newTypedSnapshotPageConfig(
+			clusterEventsQueryCapabilities(),
+			config.SnapshotClusterEventsLimit,
+			"events",
+			func(e ClusterEventEntry) string { return e.Ref.Kind },
+			nil,
+		),
 	)
+
 	// The query branch echoes the raw request scope; the window branch leaves the
 	// scope empty (matching the pre-cutover returns for this cluster-scoped domain).
 	snapshotScope := ""

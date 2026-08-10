@@ -21,7 +21,7 @@ import (
 func BuildResourceModel(clusterID string, quota *corev1.ResourceQuota) resourcemodel.ResourceModel {
 	facts := BuildFacts(quota)
 	status := statusPresentation(quota, facts)
-	return resourcemodel.PolicyResourceModel(clusterID, "", "v1", "ResourceQuota", "resourcequotas", quota.ObjectMeta, status, resourcemodel.ResourceFacts{})
+	return resourcemodel.PolicyResourceModel(clusterID, Identity, quota.ObjectMeta, status, resourcemodel.ResourceFacts{})
 }
 
 // BuildFacts extracts the ResourceQuota facts from the raw object.

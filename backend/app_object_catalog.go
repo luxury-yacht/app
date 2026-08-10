@@ -774,24 +774,25 @@ func hydrateCatalogCustomRow(
 	if row.Namespace != "" {
 		return snapshot.CustomResourceSummaryFromNamespace(customresource.BuildNamespaceStreamSummary(
 			meta,
-			obj,
+			obj, customresource.NewDescriptor(
+
+				row.Group,
+				row.Version,
+				row.Resource,
+				row.Kind,
+				crdName),
+
+			row.Namespace)), true
+	}
+	return snapshot.CustomResourceSummaryFromCluster(customresource.BuildClusterStreamSummary(
+		meta,
+		obj, customresource.NewDescriptor(
+
 			row.Group,
 			row.Version,
 			row.Resource,
 			row.Kind,
-			crdName,
-			row.Namespace,
-		)), true
-	}
-	return snapshot.CustomResourceSummaryFromCluster(customresource.BuildClusterStreamSummary(
-		meta,
-		obj,
-		row.Group,
-		row.Version,
-		row.Resource,
-		row.Kind,
-		crdName,
-	)), true
+			crdName))), true
 }
 
 func failedCatalogCustomHydrationSummary(meta snapshot.ClusterMeta, row snapshot.ResourceQueryRow) snapshot.CustomResourceSummary {
@@ -800,7 +801,7 @@ func failedCatalogCustomHydrationSummary(meta snapshot.ClusterMeta, row snapshot
 		crdName = row.Resource + "." + row.Group
 	}
 	return snapshot.CustomResourceSummary{
-		Ref:                resourcemodel.NewResourceRef(meta.ClusterID, row.Group, row.Version, row.Kind, row.Resource, row.Namespace, row.Name, ""),
+		Ref:                resourcemodel.NewResourceRef(resourcemodel.ResourceRef{ClusterID: meta.ClusterID, Group: row.Group, Version: row.Version, Kind: row.Kind, Resource: row.Resource, Namespace: row.Namespace, Name: row.Name, UID: ""}),
 		CRDName:            crdName,
 		Status:             "Hydration failed",
 		StatusState:        "warning",

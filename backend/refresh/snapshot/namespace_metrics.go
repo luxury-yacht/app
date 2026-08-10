@@ -81,16 +81,8 @@ func (b *NamespaceMetricsBuilder) Build(_ context.Context, scope string) (*refre
 	for _, name := range names {
 		usage := rollups[name]
 		items = append(items, NamespaceMetric{
-			Ref: resourcemodel.NewResourceRef(
-				b.clusterMeta.ClusterID,
-				"",
-				"v1",
-				"Namespace",
-				"namespaces",
-				"",
-				name,
-				"",
-			),
+			Ref: resourcemodel.NewResourceRef(resourcemodel.ResourceRef{ClusterID: b.clusterMeta.ClusterID, Group: "", Version: "v1", Kind: "Namespace", Resource: "namespaces", Namespace: "", Name: name, UID: ""}),
+
 			CPUUsageMilli:    usage.cpuMilli,
 			MemoryUsageBytes: usage.memoryBytes,
 		})

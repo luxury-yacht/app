@@ -413,7 +413,7 @@ func TestOptionsPreflight(t *testing.T) {
 
 func TestTelemetrySummary(t *testing.T) {
 	recorder := telemetry.NewRecorder()
-	recorder.RecordSnapshot("nodes", "", "test-cluster", "test", 50*time.Millisecond, nil, false, 0, nil, 0, 0, 0, true, 50, 0)
+	recorder.RecordSnapshot(telemetry.SnapshotRecord{Domain: "nodes", Scope: "", ClusterID: "test-cluster", ClusterName: "test", Duration: 50 * time.Millisecond, Err: nil, Truncated: false, TotalItems: 0, Warnings: nil, BatchIndex: 0, TotalBatches: 0, BatchSize: 0, IsFinal: true, TimeToFirstBatchMs: 50, InformerSyncWaitMs: 0})
 	recorder.RecordMetrics(25*time.Millisecond, time.Now(), nil, 0, true)
 
 	svc := snapshotService()

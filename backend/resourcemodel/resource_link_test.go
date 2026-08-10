@@ -5,7 +5,7 @@ import (
 )
 
 func TestResourceLinkConstructorsProduceExclusiveLinks(t *testing.T) {
-	openable := NewNamespacedResourceLink("cluster-a", "apps", "v1", "Deployment", "deployments", "prod", "api", "uid-a")
+	openable := NewNamespacedResourceLink(ResourceRef{ClusterID: "cluster-a", Group: "apps", Version: "v1", Kind: "Deployment", Resource: "deployments", Namespace: "prod", Name: "api", UID: "uid-a"})
 	if openable.Ref == nil {
 		t.Fatal("openable link should carry ref")
 	}
@@ -29,13 +29,13 @@ func TestResourceLinkConstructorsProduceExclusiveLinks(t *testing.T) {
 }
 
 func TestValidateResourceLinkRejectsAmbiguousAndIncompleteLinks(t *testing.T) {
-	ref := NewResourceRef("cluster-a", "", "v1", "Pod", "pods", "default", "api", "")
-	display := NewDisplayRef("cluster-a", "", "v1", "Pod", "pods", "default", "api", "")
+	ref := NewResourceRef(ResourceRef{ClusterID: "cluster-a", Group: "", Version: "v1", Kind: "Pod", Resource: "pods", Namespace: "default", Name: "api", UID: ""})
+	display := NewDisplayRef(DisplayRef{ClusterID: "cluster-a", Version: "v1", Kind: "Pod", Resource: "pods", Namespace: "default", Name: "api"})
 	if err := ValidateResourceLink(ResourceLink{Ref: &ref, Display: &display}); err == nil {
 		t.Fatal("expected ambiguous ref+display link to fail validation")
 	}
 
-	if err := ValidateResourceLink(NewNamespacedResourceLink("cluster-a", "", "", "Pod", "pods", "default", "api", "")); err == nil {
+	if err := ValidateResourceLink(NewNamespacedResourceLink(ResourceRef{ClusterID: "cluster-a", Group: "", Version: "", Kind: "Pod", Resource: "pods", Namespace: "default", Name: "api", UID: ""})); err == nil {
 		t.Fatal("expected openable ref without version to fail validation")
 	}
 
@@ -45,11 +45,11 @@ func TestValidateResourceLinkRejectsAmbiguousAndIncompleteLinks(t *testing.T) {
 }
 
 func TestValidateResourceRefRejectsMissingGroupForNonCoreResource(t *testing.T) {
-	if err := ValidateResourceRef(NewResourceRef("cluster-a", "", "v1", "Deployment", "deployments", "default", "api", "")); err == nil {
+	if err := ValidateResourceRef(NewResourceRef(ResourceRef{ClusterID: "cluster-a", Group: "", Version: "v1", Kind: "Deployment", Resource: "deployments", Namespace: "default", Name: "api", UID: ""})); err == nil {
 		t.Fatal("expected non-core ref without group to fail validation")
 	}
 
-	if err := ValidateResourceRef(NewResourceRef("cluster-a", "", "v1", "EndpointSlice", "endpointslices", "default", "api", "")); err == nil {
+	if err := ValidateResourceRef(NewResourceRef(ResourceRef{ClusterID: "cluster-a", Group: "", Version: "v1", Kind: "EndpointSlice", Resource: "endpointslices", Namespace: "default", Name: "api", UID: ""})); err == nil {
 		t.Fatal("expected EndpointSlice without discovery group to fail validation")
 	}
 }

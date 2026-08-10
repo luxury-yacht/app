@@ -23,7 +23,7 @@ import (
 func BuildResourceModel(clusterID string, policy *networkingv1.NetworkPolicy) resourcemodel.ResourceModel {
 	facts := BuildFacts(policy)
 	status := statusPresentation(policy, facts)
-	return resourcemodel.KubernetesResourceModel(clusterID, "networking.k8s.io", "v1", "NetworkPolicy", "networkpolicies", resourcemodel.ResourceScopeNamespaced, policy.ObjectMeta, status, resourcemodel.ResourceFacts{})
+	return resourcemodel.KubernetesResourceModel(clusterID, Identity, policy.ObjectMeta, status, resourcemodel.ResourceFacts{})
 }
 
 // BuildFacts extracts the NetworkPolicy facts from the raw object.

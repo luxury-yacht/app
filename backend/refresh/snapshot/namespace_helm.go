@@ -253,12 +253,15 @@ func (b *NamespaceHelmBuilder) Build(ctx context.Context, scope string) (*refres
 		query,
 		helmTableQueryAdapter(),
 		helmQuerypageSchema(),
-		namespaceHelmQueryCapabilities(),
-		config.SnapshotNamespaceHelmEntryLimit,
-		"Helm releases",
-		func(NamespaceHelmSummary) string { return "HelmRelease" },
-		nil,
+		newTypedSnapshotPageConfig(
+			namespaceHelmQueryCapabilities(),
+			config.SnapshotNamespaceHelmEntryLimit,
+			"Helm releases",
+			func(NamespaceHelmSummary) string { return "HelmRelease" },
+			nil,
+		),
 	)
+
 	return &refresh.Snapshot{
 		Domain:  namespaceHelmDomainName,
 		Scope:   snapshotScope,

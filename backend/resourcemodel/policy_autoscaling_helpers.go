@@ -3,18 +3,20 @@ package resourcemodel
 import (
 	"math"
 
+	"github.com/luxury-yacht/app/backend/resourcekind"
 	corev1 "k8s.io/api/core/v1"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/util/intstr"
 )
 
 func PolicyResourceModel(
-	clusterID, group, version, kind, resource string,
+	clusterID string,
+	identity resourcekind.Identity,
 	meta metav1.ObjectMeta,
 	status ResourceStatusPresentation,
 	facts ResourceFacts,
 ) ResourceModel {
-	return KubernetesResourceModel(clusterID, group, version, kind, resource, ResourceScopeNamespaced, meta, status, facts)
+	return KubernetesResourceModel(clusterID, identity, meta, status, facts)
 }
 
 func NewIntOrStringFacts(value intstr.IntOrString) IntOrStringFacts {
@@ -81,7 +83,7 @@ func QuotaUsedPercentages(used, hard corev1.ResourceList) map[string]int {
 }
 
 func podDisruptedPodLink(clusterID, namespace, name string) ResourceLink {
-	return namespacedResourceLink(clusterID, "", "v1", "Pod", "pods", namespace, name, "")
+	return NewNamespacedResourceLink(ResourceRef{ClusterID: clusterID, Version: "v1", Kind: "Pod", Resource: "pods", Namespace: namespace, Name: name})
 }
 
 func DisruptedPodsFromMap(clusterID, namespace string, pods map[string]metav1.Time) []DisruptedPodFacts {

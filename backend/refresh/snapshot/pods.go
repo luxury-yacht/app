@@ -389,14 +389,13 @@ func (b *PodBuilder) Build(ctx context.Context, scope string) (*refresh.Snapshot
 		query,
 		adapter,
 		podQuerypageSchema(),
-		podQueryCapabilities(),
-		config.SnapshotNamespacePodsEntryLimit,
-		"pods",
-		func(PodSummary) string { return podres.Identity.Kind },
-		nil,
-		// Reuse the per-Build engine store across page turns/sort flips while the
-		// object version and metric tick (DynamicRevision, inside the cache key)
-		// are unchanged.
+		newTypedSnapshotPageConfig(
+			podQueryCapabilities(),
+			config.SnapshotNamespacePodsEntryLimit,
+			"pods",
+			func(PodSummary) string { return podres.Identity.Kind },
+			nil,
+		),
 		withPerBuildCache(b.perBuild, strconv.FormatUint(version, 10)),
 	)
 

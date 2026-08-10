@@ -79,12 +79,10 @@ func TestReaggregateNodeSummaryMatchesFullBuild(t *testing.T) {
 	snap, err := buildNodeSnapshotFromUsage(
 		WithClusterMeta(context.Background(), meta),
 		"",
-		[]*corev1.Node{node},
-		aggregates,
-		0,
-		nodeMetrics,
-		podMetrics,
-		metrics.Metadata{},
+		nodeSnapshotInputs{
+			nodes: []*corev1.Node{node}, podAggregates: aggregates,
+			usage: nodeUsageInputs{nodes: nodeMetrics, pods: podMetrics, metadata: metrics.Metadata{}},
+		},
 	)
 	if err != nil {
 		t.Fatalf("buildNodeSnapshotFromUsage error: %v", err)

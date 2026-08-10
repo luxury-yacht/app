@@ -27,7 +27,7 @@ import (
 func BuildResourceModel(clusterID string, h *autoscalingv2.HorizontalPodAutoscaler) resourcemodel.ResourceModel {
 	facts := BuildFacts(clusterID, h)
 	status := statusPresentation(h.ObjectMeta, facts)
-	return resourcemodel.KubernetesResourceModel(clusterID, "autoscaling", "v2", "HorizontalPodAutoscaler", "horizontalpodautoscalers", resourcemodel.ResourceScopeNamespaced, h.ObjectMeta, status, resourcemodel.ResourceFacts{})
+	return resourcemodel.KubernetesResourceModel(clusterID, Identity, h.ObjectMeta, status, resourcemodel.ResourceFacts{})
 }
 
 // BuildFacts extracts the HPA facts from a v2 object.
@@ -86,7 +86,7 @@ func scaleTargetLink(clusterID, namespace, apiVersion, kind, name string) resour
 	if err != nil || gv.Version == "" {
 		return resourcemodel.NewDisplayResourceLink(clusterID, "", "", kind, "", namespace, name)
 	}
-	return resourcemodel.NewNamespacedResourceLink(clusterID, gv.Group, gv.Version, kind, "", namespace, name, "")
+	return resourcemodel.NewNamespacedResourceLink(resourcemodel.ResourceRef{ClusterID: clusterID, Group: gv.Group, Version: gv.Version, Kind: kind, Resource: "", Namespace: namespace, Name: name, UID: ""})
 }
 
 func statusPresentation(meta metav1.ObjectMeta, facts Facts) resourcemodel.ResourceStatusPresentation {

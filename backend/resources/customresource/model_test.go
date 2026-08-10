@@ -34,7 +34,9 @@ func TestBuildResourceModelExtractsDynamicStatus(t *testing.T) {
 	}}
 	gvr := schema.GroupVersionResource{Group: "databases.example.com", Version: "v1alpha1", Resource: "databases"}
 
-	model := BuildResourceModel("cluster-a", resource, gvr, "Database", "databases.databases.example.com", resourcemodel.ResourceScopeNamespaced, "")
+	model := BuildResourceModel("cluster-a", resource, Descriptor{
+		GVR: gvr, KindFallback: "Database", CRDName: "databases.databases.example.com",
+	}, resourcemodel.ResourceScopeNamespaced, "")
 	require.Equal(t, resourcemodel.ResourceRef{
 		ClusterID: "cluster-a",
 		Group:     "databases.example.com",

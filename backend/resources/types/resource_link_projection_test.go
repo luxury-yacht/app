@@ -7,7 +7,7 @@ import (
 )
 
 func TestRefOrDisplayFromResourceLinkProjectsOpenableRefs(t *testing.T) {
-	link := resourcemodel.NewNamespacedResourceLink("cluster-a", "apps", "v1", "Deployment", "deployments", "prod", "api", "uid-a")
+	link := resourcemodel.NewNamespacedResourceLink(resourcemodel.ResourceRef{ClusterID: "cluster-a", Group: "apps", Version: "v1", Kind: "Deployment", Resource: "deployments", Namespace: "prod", Name: "api", UID: "uid-a"})
 
 	projected := RefOrDisplayFromResourceLink(link)
 	if projected.Ref == nil {

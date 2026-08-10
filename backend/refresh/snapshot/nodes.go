@@ -175,15 +175,17 @@ func (b *NodeBuilder) Build(ctx context.Context, scope string) (*refresh.Snapsho
 	return buildNodeSnapshotFromIngestUsage(
 		ctx,
 		scope,
-		b.ownRows(),
-		// Two-store watermark (node + pod RVs): the rows join pod aggregates,
-		// so pod changes must advance the validator or refetches 304 with
-		// stale pod counts.
-		version,
-		podAggregatesFromIngest(b.ingest),
-		nodeUsage,
-		podUsage,
-		metadata,
+		nodeIngestSnapshotInputs{
+			ownRows: b.ownRows(),
+			// Two-store watermark (node + pod RVs): the rows join pod aggregates,
+			// so pod changes must advance the validator or refetches 304 with
+			// stale pod counts.
+			storeVersion:  version,
+			podAggregates: podAggregatesFromIngest(b.ingest),
+			usage: nodeUsageInputs{
+				nodes: nodeUsage, pods: podUsage, metadata: metadata,
+			},
+		},
 		// Reuse the per-Build engine store across page turns/sort flips while
 		// the watermark and metric tick (DynamicRevision, in the cache key) are
 		// unchanged. The same watermark keys the cache: pod-aggregate changes
@@ -268,7 +270,10 @@ func (b *NodeListBuilder) Build(ctx context.Context, scope string) (*refresh.Sna
 		}
 	}
 	nodeUsage, podUsage, metadata := latestNodeMetrics(b.metrics)
-	return buildNodeSnapshotFromUsage(ctx, scope, nodes, aggregates, podsVersion, nodeUsage, podUsage, metadata)
+	return buildNodeSnapshotFromUsage(ctx, scope, nodeSnapshotInputs{
+		nodes: nodes, podAggregates: aggregates, podsVersion: podsVersion,
+		usage: nodeUsageInputs{nodes: nodeUsage, pods: podUsage, metadata: metadata},
+	})
 }
 
 // buildNodeSnapshotFromUsage assembles node summaries using pre-resolved
@@ -278,27 +283,31 @@ func (b *NodeListBuilder) Build(ctx context.Context, scope string) (*refresh.Sna
 // deterministic and tests can use fixture metrics. The pod aggregation reads the
 // projected PodAggregate rows (the same rows the typed-pod path produced), so pods is
 // never touched here.
-func buildNodeSnapshotFromUsage(
-	ctx context.Context,
-	scope string,
-	nodes []*corev1.Node,
-	podAggregates []streamrows.PodAggregate,
+type nodeUsageInputs struct {
+	nodes    map[string]metrics.NodeUsage
+	pods     map[string]metrics.PodUsage
+	metadata metrics.Metadata
+}
+
+type nodeSnapshotInputs struct {
+	nodes         []*corev1.Node
+	podAggregates []streamrows.PodAggregate
 	// podsVersion is the max RV of the pods the aggregates were projected from;
 	// it floors the version watermark so pod-driven aggregate changes advance
 	// the validator (0 when the caller has no pod versions, e.g. the
 	// single-node stream projection, which never reads the snapshot version).
-	podsVersion uint64,
-	nodeMetrics map[string]metrics.NodeUsage,
-	podMetrics map[string]metrics.PodUsage,
-	metricsMetadata metrics.Metadata,
-) (*refresh.Snapshot, error) {
+	podsVersion uint64
+	usage       nodeUsageInputs
+}
+
+func buildNodeSnapshotFromUsage(ctx context.Context, scope string, inputs nodeSnapshotInputs) (*refresh.Snapshot, error) {
 	meta := ClusterMetaFromContext(ctx)
-	items := make([]NodeSummary, 0, len(nodes))
-	version := podsVersion
+	items := make([]NodeSummary, 0, len(inputs.nodes))
+	version := inputs.podsVersion
 
-	podsByNode := podAggregatesByNode(podAggregates)
+	podsByNode := podAggregatesByNode(inputs.podAggregates)
 
-	for _, node := range nodes {
+	for _, node := range inputs.nodes {
 		if node == nil {
 			continue
 		}
@@ -309,7 +318,7 @@ func buildNodeSnapshotFromUsage(
 		// serve-side additions — the pod-aggregate join + per-pod/node metrics — re-joined
 		// here exactly as before.
 		own := buildNodeOwnSummary(meta, node)
-		summary := reaggregateNodeSummary(own, podsByNode[node.Name], podMetrics, nodeMetrics)
+		summary := reaggregateNodeSummary(own, podsByNode[node.Name], inputs.usage.pods, inputs.usage.nodes)
 
 		items = append(items, summary)
 		if v := parseNodeResourceVersion(node); v > version {
@@ -317,7 +326,7 @@ func buildNodeSnapshotFromUsage(
 		}
 	}
 
-	return finishNodeSnapshot(ctx, scope, items, version, metricsMetadata)
+	return finishNodeSnapshot(ctx, scope, items, version, inputs.usage.metadata)
 }
 
 // buildNodeSnapshotFromIngestUsage assembles the node snapshot from the cut node kind's
@@ -325,23 +334,20 @@ func buildNodeSnapshotFromUsage(
 // It re-joins the per-node pod aggregates + metrics onto each own-row exactly as the typed
 // serve loop does, so the resulting rows are byte-identical. The version watermark is the
 // ingest store's RV (in place of the per-node RV the dropped typed object no longer carries).
-func buildNodeSnapshotFromIngestUsage(
-	ctx context.Context,
-	scope string,
-	ownRows []NodeSummary,
-	storeVersion uint64,
-	podAggregates []streamrows.PodAggregate,
-	nodeMetrics map[string]metrics.NodeUsage,
-	podMetrics map[string]metrics.PodUsage,
-	metricsMetadata metrics.Metadata,
-	opts ...typedServeOption[NodeSummary],
-) (*refresh.Snapshot, error) {
-	items := make([]NodeSummary, 0, len(ownRows))
-	podsByNode := podAggregatesByNode(podAggregates)
-	for _, own := range ownRows {
-		items = append(items, reaggregateNodeSummary(own, podsByNode[own.Ref.Name], podMetrics, nodeMetrics))
+type nodeIngestSnapshotInputs struct {
+	ownRows       []NodeSummary
+	storeVersion  uint64
+	podAggregates []streamrows.PodAggregate
+	usage         nodeUsageInputs
+}
+
+func buildNodeSnapshotFromIngestUsage(ctx context.Context, scope string, inputs nodeIngestSnapshotInputs, opts ...typedServeOption[NodeSummary]) (*refresh.Snapshot, error) {
+	items := make([]NodeSummary, 0, len(inputs.ownRows))
+	podsByNode := podAggregatesByNode(inputs.podAggregates)
+	for _, own := range inputs.ownRows {
+		items = append(items, reaggregateNodeSummary(own, podsByNode[own.Ref.Name], inputs.usage.pods, inputs.usage.nodes))
 	}
-	return finishNodeSnapshot(ctx, scope, items, storeVersion, metricsMetadata, opts...)
+	return finishNodeSnapshot(ctx, scope, items, inputs.storeVersion, inputs.usage.metadata, opts...)
 }
 
 // podAggregatesByNode groups the projected pod aggregates by their NodeName for the per-node
@@ -388,11 +394,13 @@ func finishNodeSnapshot(
 		query,
 		nodeTableQueryAdapter(),
 		nodesQuerypageSchema(),
-		nodeQueryCapabilities(),
-		config.SnapshotClusterNodesEntryLimit,
-		"nodes",
-		func(NodeSummary) string { return nodepkg.Identity.Kind },
-		nil,
+		newTypedSnapshotPageConfig(
+			nodeQueryCapabilities(),
+			config.SnapshotClusterNodesEntryLimit,
+			"nodes",
+			func(NodeSummary) string { return nodepkg.Identity.Kind },
+			nil,
+		),
 		opts...,
 	)
 	// The window snapshot is the canonical unscoped refresh payload; only the

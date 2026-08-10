@@ -39,7 +39,7 @@ func TestBuildResourceModelSyntheticIdentityAndFacts(t *testing.T) {
 		Info:    &release.Info{Status: release.StatusSuperseded, LastDeployed: first},
 	}}
 	resources := []resourcemodel.ResourceLink{
-		resourcemodel.NewNamespacedResourceLink("cluster-a", "apps", "v1", "Deployment", "", "apps", "orders", ""),
+		resourcemodel.NewNamespacedResourceLink(resourcemodel.ResourceRef{ClusterID: "cluster-a", Group: "apps", Version: "v1", Kind: "Deployment", Resource: "", Namespace: "apps", Name: "orders", UID: ""}),
 	}
 	opts := resourcemodel.ResourceModelBuildOptions{
 		Materialization: resourcemodel.MaterializeSummaryFacts | resourcemodel.MaterializeRelationshipFacts | resourcemodel.MaterializeDetailFacts,
@@ -91,7 +91,7 @@ func TestBuildFactsSummaryMaterializationOmitsDetailPayloads(t *testing.T) {
 	}
 	history := []*release.Release{{Version: 2, Info: &release.Info{Status: release.StatusSuperseded}}}
 	resources := []resourcemodel.ResourceLink{
-		resourcemodel.NewNamespacedResourceLink("cluster-a", "apps", "v1", "Deployment", "", "apps", "orders", ""),
+		resourcemodel.NewNamespacedResourceLink(resourcemodel.ResourceRef{ClusterID: "cluster-a", Group: "apps", Version: "v1", Kind: "Deployment", Resource: "", Namespace: "apps", Name: "orders", UID: ""}),
 	}
 
 	facts := BuildFacts(rel, resources, history, resourcemodel.ResourceModelBuildOptions{Materialization: resourcemodel.MaterializeSummaryFacts})

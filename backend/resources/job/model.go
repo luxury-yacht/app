@@ -21,7 +21,7 @@ import (
 // callers needing facts use BuildFacts.
 func BuildResourceModel(clusterID string, job *batchv1.Job) resourcemodel.ResourceModel {
 	status := BuildStatusPresentation(job)
-	return resourcemodel.KubernetesResourceModel(clusterID, "batch", "v1", "Job", "jobs", resourcemodel.ResourceScopeNamespaced, job.ObjectMeta, status, resourcemodel.ResourceFacts{})
+	return resourcemodel.KubernetesResourceModel(clusterID, Identity, job.ObjectMeta, status, resourcemodel.ResourceFacts{})
 }
 
 // BuildFacts extracts the Job facts from the raw object.
@@ -83,10 +83,10 @@ func BuildStatusPresentation(job *batchv1.Job) resourcemodel.ResourceStatusPrese
 		return status
 	}
 	if failed := findCondition(job, batchv1.JobFailed); failed != nil && failed.Status == corev1.ConditionTrue {
-		return resourcemodel.WorkloadConditionStatus(string(batchv1.JobFailed), string(failed.Status), failed.Reason, failed.Message, "Failed", "error", signals, lifecycle)
+		return resourcemodel.WorkloadConditionStatus(resourcemodel.ConditionFacts{Type: string(batchv1.JobFailed), Status: string(failed.Status), Reason: failed.Reason, Message: failed.Message}, "Failed", "error", signals, lifecycle)
 	}
 	if complete := findCondition(job, batchv1.JobComplete); complete != nil && complete.Status == corev1.ConditionTrue {
-		return resourcemodel.WorkloadConditionStatus(string(batchv1.JobComplete), string(complete.Status), complete.Reason, complete.Message, "Completed", "ready", signals, lifecycle)
+		return resourcemodel.WorkloadConditionStatus(resourcemodel.ConditionFacts{Type: string(batchv1.JobComplete), Status: string(complete.Status), Reason: complete.Reason, Message: complete.Message}, "Completed", "ready", signals, lifecycle)
 	}
 	if facts.Succeeded >= facts.DesiredReplicas && facts.DesiredReplicas > 0 {
 		return resourcemodel.ObjectSourceStatus("Completed", strconv.FormatInt(int64(facts.Succeeded), 10), "", "", "ready", signals, lifecycle)

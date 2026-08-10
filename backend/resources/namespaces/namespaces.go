@@ -156,12 +156,9 @@ func (s *Service) logWorkloadProbeError(group, version, resource, namespace stri
 		_ = s.deps.LogDynamicResourceRequestFailure(
 			err,
 			fmt.Sprintf("Failed to list %s in namespace %s", resource, namespace),
-			"list",
-			group,
-			version,
-			resource,
-			"",
-			true,
+			common.DynamicResourceRequestSpec{
+				Action: "list", Group: group, Version: version, Resource: resource, Namespaced: true,
+			},
 			logsources.ResourceLoader,
 		)
 	}

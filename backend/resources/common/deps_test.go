@@ -240,23 +240,17 @@ func TestDynamicRequestHelperBuildsCustomResourceOperation(t *testing.T) {
 	deps.LogDynamicResourceRequestFailure(
 		fmt.Errorf("forbidden"),
 		"Failed to delete DatabaseBackup customer-prod/backup-7",
-		"delete",
-		"storage.example.com",
-		"v1alpha1",
-		"databasebackups",
-		"status",
-		true,
+		DynamicResourceRequestSpec{
+			Action: "delete", Group: "storage.example.com", Version: "v1alpha1",
+			Resource: "databasebackups", Subresource: "status", Namespaced: true,
+		},
 		"GenericResource",
 	)
 
-	require.Equal(t, DynamicResourceRequestOperation(
-		"delete",
-		"storage.example.com",
-		"v1alpha1",
-		"databasebackups",
-		"status",
-		true,
-	), logger.operation)
+	require.Equal(t, DynamicResourceRequestOperation(DynamicResourceRequestSpec{
+		Action: "delete", Group: "storage.example.com", Version: "v1alpha1",
+		Resource: "databasebackups", Subresource: "status", Namespaced: true,
+	}), logger.operation)
 }
 
 func TestOperationalFailurePreservesCauseWithoutInventingOperation(t *testing.T) {

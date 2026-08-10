@@ -104,7 +104,7 @@ type ObjectActionResponse struct {
 }
 
 func objectActionTarget(clusterID, group, version, kind, namespace, name string) ObjectActionTargetRef {
-	return resourcemodel.NewResourceRef(clusterID, group, version, kind, "", namespace, name, "")
+	return resourcemodel.NewResourceRef(resourcemodel.ResourceRef{ClusterID: clusterID, Group: group, Version: version, Kind: kind, Resource: "", Namespace: namespace, Name: name, UID: ""})
 }
 
 func objectActionTargetGVK(t ObjectActionTargetRef) schema.GroupVersionKind {

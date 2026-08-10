@@ -7,10 +7,6 @@ import (
 	discoveryv1 "k8s.io/api/discovery/v1"
 )
 
-func namespacedResourceLink(clusterID, group, version, kind, resource, namespace, name, uid string) ResourceLink {
-	return NewNamespacedResourceLink(clusterID, group, version, kind, resource, namespace, name, uid)
-}
-
 func ClusterResourceLink(clusterID, group, version, kind, resource, name, uid string) ResourceLink {
 	return NewClusterResourceLink(clusterID, group, version, kind, resource, name, uid)
 }

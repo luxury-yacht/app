@@ -4,6 +4,7 @@ import (
 	"fmt"
 	"strconv"
 
+	"github.com/luxury-yacht/app/backend/resourcekind"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	gatewayv1 "sigs.k8s.io/gateway-api/apis/v1"
 )
@@ -17,7 +18,10 @@ func GatewayAPIResourceModel(
 	status ResourceStatusPresentation,
 	facts ResourceFacts,
 ) ResourceModel {
-	return KubernetesResourceModel(clusterID, gatewayAPIGroup, "v1", kind, resource, scope, meta, status, facts)
+	return KubernetesResourceModel(clusterID, resourcekind.Identity{
+		Group: gatewayAPIGroup, Version: "v1", Kind: kind, Resource: resource,
+		Namespaced: scope == ResourceScopeNamespaced,
+	}, meta, status, facts)
 }
 
 func GatewayConditionFacts(conditions []metav1.Condition) []ConditionFacts {
@@ -133,7 +137,7 @@ func ResourceLinkName(link ResourceLink) string {
 func GatewayRefLink(clusterID, group, kind, namespace, name string) ResourceLink {
 	resource := gatewayResourceName(group, kind)
 	if version := gatewayRefVersion(group, kind); version != "" && name != "" {
-		return namespacedResourceLink(clusterID, group, version, kind, resource, namespace, name, "")
+		return NewNamespacedResourceLink(ResourceRef{ClusterID: clusterID, Group: group, Version: version, Kind: kind, Resource: resource, Namespace: namespace, Name: name, UID: ""})
 	}
 	return displayResourceLink(clusterID, group, "", kind, resource, namespace, name)
 }

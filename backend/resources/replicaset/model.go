@@ -20,7 +20,7 @@ import (
 // status, and callers needing facts use BuildFacts.
 func BuildResourceModel(clusterID string, replicaSet *appsv1.ReplicaSet) resourcemodel.ResourceModel {
 	status := BuildStatusPresentation(replicaSet)
-	return resourcemodel.KubernetesResourceModel(clusterID, "apps", "v1", "ReplicaSet", "replicasets", resourcemodel.ResourceScopeNamespaced, replicaSet.ObjectMeta, status, resourcemodel.ResourceFacts{})
+	return resourcemodel.KubernetesResourceModel(clusterID, Identity, replicaSet.ObjectMeta, status, resourcemodel.ResourceFacts{})
 }
 
 // BuildFacts extracts the ReplicaSet facts from the raw object.
@@ -71,7 +71,7 @@ func BuildStatusPresentation(replicaSet *appsv1.ReplicaSet) resourcemodel.Resour
 		return status
 	}
 	if failed := findCondition(replicaSet, appsv1.ReplicaSetReplicaFailure); failed != nil && failed.Status == corev1.ConditionTrue {
-		return resourcemodel.WorkloadConditionStatus("ReplicaFailure", string(failed.Status), failed.Reason, failed.Message, "Replica failure", "error", signals, lifecycle)
+		return resourcemodel.WorkloadConditionStatus(resourcemodel.ConditionFacts{Type: "ReplicaFailure", Status: string(failed.Status), Reason: failed.Reason, Message: failed.Message}, "Replica failure", "error", signals, lifecycle)
 	}
 	return resourcemodel.ReplicaStatusPresentation(facts.WorkloadCommonFacts, signals, lifecycle)
 }

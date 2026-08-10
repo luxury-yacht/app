@@ -39,7 +39,7 @@ func (stubAdapter) Resume(Selector, uint64) ([]ServerMessage, bool) {
 }
 
 func TestSessionBackpressureKeepsSessionOpenAndResetsScope(t *testing.T) {
-	session := newSession(stubConn{}, nil, applog.Noop, nil, "cluster-1", "cluster-a", "resources", true, false, nil)
+	session := newSession(stubConn{}, Config{Adapter: nil, Logger: applog.Noop, Telemetry: nil, ClusterID: "cluster-1", ClusterName: "cluster-a", StreamName: "resources", SendReset: true, AllowClusterScopedRequests: false, ResolveClusterName: nil})
 	// Match production buffer sizing for backpressure behavior.
 	for i := 0; i < config.StreamMuxOutgoingBufferSize; i++ {
 		session.outgoing <- ServerMessage{
@@ -88,7 +88,7 @@ func TestSessionBackpressureKeepsSessionOpenAndResetsScope(t *testing.T) {
 }
 
 func TestSessionSendErrorIncludesPermissionDetails(t *testing.T) {
-	session := newSession(stubConn{}, nil, applog.Noop, nil, "cluster-1", "cluster-a", "resources", true, false, nil)
+	session := newSession(stubConn{}, Config{Adapter: nil, Logger: applog.Noop, Telemetry: nil, ClusterID: "cluster-1", ClusterName: "cluster-a", StreamName: "resources", SendReset: true, AllowClusterScopedRequests: false, ResolveClusterName: nil})
 	err := refresh.NewPermissionDeniedError("pods", "core/pods")
 	session.sendError("cluster-1", "pods", "namespace:default", err)
 
@@ -102,7 +102,7 @@ func TestSessionSendErrorIncludesPermissionDetails(t *testing.T) {
 }
 
 func TestSessionResolveClusterIDRejectsMultiClusterScope(t *testing.T) {
-	session := newSession(stubConn{}, stubAdapter{}, applog.Noop, nil, "", "", "resources", true, true, nil)
+	session := newSession(stubConn{}, Config{Adapter: stubAdapter{}, Logger: applog.Noop, Telemetry: nil, ClusterID: "", ClusterName: "", StreamName: "resources", SendReset: true, AllowClusterScopedRequests: true, ResolveClusterName: nil})
 
 	_, err := session.resolveClusterID(ClientMessage{
 		ClusterID: "cluster-a",
@@ -115,7 +115,7 @@ func TestSessionResolveClusterIDRejectsMultiClusterScope(t *testing.T) {
 }
 
 func TestSessionResolveClusterIDRequiresScopeClusterToMatchMessageCluster(t *testing.T) {
-	session := newSession(stubConn{}, stubAdapter{}, applog.Noop, nil, "", "", "resources", true, true, nil)
+	session := newSession(stubConn{}, Config{Adapter: stubAdapter{}, Logger: applog.Noop, Telemetry: nil, ClusterID: "", ClusterName: "", StreamName: "resources", SendReset: true, AllowClusterScopedRequests: true, ResolveClusterName: nil})
 
 	_, err := session.resolveClusterID(ClientMessage{
 		ClusterID: "cluster-a",
@@ -128,7 +128,7 @@ func TestSessionResolveClusterIDRequiresScopeClusterToMatchMessageCluster(t *tes
 }
 
 func TestSessionResolveClusterIDRejectsMismatchedScopeForSingleClusterHandler(t *testing.T) {
-	session := newSession(stubConn{}, stubAdapter{}, applog.Noop, nil, "cluster-a", "", "resources", true, false, nil)
+	session := newSession(stubConn{}, Config{Adapter: stubAdapter{}, Logger: applog.Noop, Telemetry: nil, ClusterID: "cluster-a", ClusterName: "", StreamName: "resources", SendReset: true, AllowClusterScopedRequests: false, ResolveClusterName: nil})
 
 	_, err := session.resolveClusterID(ClientMessage{
 		Scope: "cluster-b|namespace:default",
@@ -193,7 +193,7 @@ func drainOutgoingTypes(s *session) []MessageType {
 // ignored one.
 func TestHandleSubscribeAcksEveryAcceptedSubscribe(t *testing.T) {
 	// Fresh subscribe: ACK then RESET.
-	fresh := newSession(stubConn{}, ackStubAdapter{}, applog.Noop, nil, "cluster-1", "cluster-a", "resources", true, false, nil)
+	fresh := newSession(stubConn{}, Config{Adapter: ackStubAdapter{}, Logger: applog.Noop, Telemetry: nil, ClusterID: "cluster-1", ClusterName: "cluster-a", StreamName: "resources", SendReset: true, AllowClusterScopedRequests: false, ResolveClusterName: nil})
 	fresh.handleSubscribe(ClientMessage{Type: MessageTypeRequest, ClusterID: "cluster-1", Domain: "namespaces", Scope: ""})
 	freshTypes := drainOutgoingTypes(fresh)
 	if len(freshTypes) < 2 || freshTypes[0] != MessageTypeAck || freshTypes[1] != MessageTypeReset {
@@ -201,7 +201,7 @@ func TestHandleSubscribeAcksEveryAcceptedSubscribe(t *testing.T) {
 	}
 
 	// Resumed subscribe with ZERO buffered updates: still ACKs (no RESET needed).
-	resumed := newSession(stubConn{}, ackStubAdapter{resumeOK: true}, applog.Noop, nil, "cluster-1", "cluster-a", "resources", true, false, nil)
+	resumed := newSession(stubConn{}, Config{Adapter: ackStubAdapter{resumeOK: true}, Logger: applog.Noop, Telemetry: nil, ClusterID: "cluster-1", ClusterName: "cluster-a", StreamName: "resources", SendReset: true, AllowClusterScopedRequests: false, ResolveClusterName: nil})
 	resumed.handleSubscribe(ClientMessage{Type: MessageTypeRequest, ClusterID: "cluster-1", Domain: "pods", Scope: "namespace:default", ResumeToken: "7"})
 	resumedTypes := drainOutgoingTypes(resumed)
 	if len(resumedTypes) != 1 || resumedTypes[0] != MessageTypeAck {

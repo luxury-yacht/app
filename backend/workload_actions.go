@@ -155,7 +155,14 @@ func (a *App) scaleWorkloadInternal(clusterID, namespace, group, version, worklo
 
 	ctx := a.CtxOrBackground()
 
-	if err := ensureHPAManagedScaleAllowed(ctx, deps, namespace, group, version, workloadKind, name, replicas); err != nil {
+	if err := ensureHPAManagedScaleAllowed(ctx, deps, ObjectActionTargetRef{
+		ClusterID: clusterID,
+		Group:     group,
+		Version:   version,
+		Kind:      workloadKind,
+		Namespace: namespace,
+		Name:      name,
+	}, replicas); err != nil {
 		return err
 	}
 
@@ -187,10 +194,10 @@ func (a *App) scaleWorkloadInternal(clusterID, namespace, group, version, worklo
 	return nil
 }
 
-func ensureHPAManagedScaleAllowed(ctx context.Context, deps common.Dependencies, namespace, group, version, workloadKind, name string, replicas int) error {
-	managed, err := isWorkloadHPAManaged(ctx, deps, namespace, group, version, workloadKind, name)
+func ensureHPAManagedScaleAllowed(ctx context.Context, deps common.Dependencies, target ObjectActionTargetRef, replicas int) error {
+	managed, err := isWorkloadHPAManaged(ctx, deps, target.Namespace, target.Group, target.Version, target.Kind, target.Name)
 	if err != nil {
-		return fmt.Errorf("failed to determine HPA ownership for %s %s/%s: %w", workloadKind, namespace, name, err)
+		return fmt.Errorf("failed to determine HPA ownership for %s %s/%s: %w", target.Kind, target.Namespace, target.Name, err)
 	}
 	if !managed {
 		return nil
@@ -199,15 +206,15 @@ func ensureHPAManagedScaleAllowed(ctx context.Context, deps common.Dependencies,
 		return nil
 	}
 	if replicas == 1 {
-		current, err := currentWorkloadDesiredReplicas(ctx, deps, namespace, workloadKind, name)
+		current, err := currentWorkloadDesiredReplicas(ctx, deps, target.Namespace, target.Kind, target.Name)
 		if err != nil {
-			return fmt.Errorf("failed to read current scale for HPA-managed %s %s/%s: %w", workloadKind, namespace, name, err)
+			return fmt.Errorf("failed to read current scale for HPA-managed %s %s/%s: %w", target.Kind, target.Namespace, target.Name, err)
 		}
 		if current == 0 {
 			return nil
 		}
 	}
-	return fmt.Errorf("manual scale is disabled for HPA-managed %s %s/%s", workloadKind, namespace, name)
+	return fmt.Errorf("manual scale is disabled for HPA-managed %s %s/%s", target.Kind, target.Namespace, target.Name)
 }
 
 func currentWorkloadDesiredReplicas(ctx context.Context, deps common.Dependencies, namespace, workloadKind, name string) (int32, error) {

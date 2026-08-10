@@ -13,24 +13,26 @@ import (
 	"github.com/luxury-yacht/app/backend/kind/streamrows"
 	"github.com/luxury-yacht/app/backend/resourcemodel"
 	"k8s.io/apimachinery/pkg/apis/meta/v1/unstructured"
-	"k8s.io/apimachinery/pkg/runtime/schema"
 )
 
 // BuildNamespaceStreamSummary builds the namespace-custom row for one namespaced
 // custom resource. defaultNamespace is used when the object carries no namespace.
-func BuildNamespaceStreamSummary(meta streamrows.ClusterMeta, resource *unstructured.Unstructured, group, version, resourceName, kindFallback, crdName, defaultNamespace string) streamrows.NamespaceCustomSummary {
+func BuildNamespaceStreamSummary(meta streamrows.ClusterMeta, resource *unstructured.Unstructured, descriptor Descriptor, defaultNamespace string) streamrows.NamespaceCustomSummary {
 	if resource == nil {
 		return streamrows.NamespaceCustomSummary{
-			Ref:     resourcemodel.NewResourceRef(meta.ClusterID, group, version, kindFallback, resourceName, "", "", ""),
-			CRDName: crdName,
+			Ref: resourcemodel.NewResourceRef(resourcemodel.ResourceRef{
+				ClusterID: meta.ClusterID, Group: descriptor.GVR.Group, Version: descriptor.GVR.Version,
+				Kind: descriptor.KindFallback, Resource: descriptor.GVR.Resource,
+			}),
+			CRDName: descriptor.CRDName,
 		}
 	}
-	gvr := schema.GroupVersionResource{Group: group, Version: version, Resource: resourceName}
-	model := BuildResourceModel(meta.ClusterID, resource, gvr, kindFallback, crdName, resourcemodel.ResourceScopeNamespaced, defaultNamespace)
-	facts := BuildFacts(meta.ClusterID, resource, gvr, crdName, resourcemodel.ResourceModelBuildOptions{})
+	gvr := descriptor.GVR
+	model := BuildResourceModel(meta.ClusterID, resource, descriptor, resourcemodel.ResourceScopeNamespaced, defaultNamespace)
+	facts := BuildFacts(meta.ClusterID, resource, gvr, descriptor.CRDName, resourcemodel.ResourceModelBuildOptions{})
 	return streamrows.NamespaceCustomSummary{
 		Ref:                model.Ref,
-		CRDName:            crdName,
+		CRDName:            descriptor.CRDName,
 		Status:             model.Status.Label,
 		StatusState:        model.Status.State,
 		StatusPresentation: model.Status.Presentation,
@@ -45,19 +47,22 @@ func BuildNamespaceStreamSummary(meta streamrows.ClusterMeta, resource *unstruct
 
 // BuildClusterStreamSummary builds the cluster-custom row for one cluster-scoped
 // custom resource.
-func BuildClusterStreamSummary(meta streamrows.ClusterMeta, resource *unstructured.Unstructured, group, version, resourceName, kindFallback, crdName string) streamrows.ClusterCustomSummary {
+func BuildClusterStreamSummary(meta streamrows.ClusterMeta, resource *unstructured.Unstructured, descriptor Descriptor) streamrows.ClusterCustomSummary {
 	if resource == nil {
 		return streamrows.ClusterCustomSummary{
-			Ref:     resourcemodel.NewResourceRef(meta.ClusterID, group, version, kindFallback, resourceName, "", "", ""),
-			CRDName: crdName,
+			Ref: resourcemodel.NewResourceRef(resourcemodel.ResourceRef{
+				ClusterID: meta.ClusterID, Group: descriptor.GVR.Group, Version: descriptor.GVR.Version,
+				Kind: descriptor.KindFallback, Resource: descriptor.GVR.Resource,
+			}),
+			CRDName: descriptor.CRDName,
 		}
 	}
-	gvr := schema.GroupVersionResource{Group: group, Version: version, Resource: resourceName}
-	model := BuildResourceModel(meta.ClusterID, resource, gvr, kindFallback, crdName, resourcemodel.ResourceScopeCluster, "")
-	facts := BuildFacts(meta.ClusterID, resource, gvr, crdName, resourcemodel.ResourceModelBuildOptions{})
+	gvr := descriptor.GVR
+	model := BuildResourceModel(meta.ClusterID, resource, descriptor, resourcemodel.ResourceScopeCluster, "")
+	facts := BuildFacts(meta.ClusterID, resource, gvr, descriptor.CRDName, resourcemodel.ResourceModelBuildOptions{})
 	return streamrows.ClusterCustomSummary{
 		Ref:                model.Ref,
-		CRDName:            crdName,
+		CRDName:            descriptor.CRDName,
 		Status:             model.Status.Label,
 		StatusState:        model.Status.State,
 		StatusPresentation: model.Status.Presentation,

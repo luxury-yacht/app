@@ -23,7 +23,7 @@ import (
 func BuildResourceModel(clusterID string, slice *discoveryv1.EndpointSlice) resourcemodel.ResourceModel {
 	facts := BuildFacts(clusterID, slice)
 	status := statusPresentation(slice, facts)
-	return resourcemodel.KubernetesResourceModel(clusterID, "discovery.k8s.io", "v1", "EndpointSlice", "endpointslices", resourcemodel.ResourceScopeNamespaced, slice.ObjectMeta, status, resourcemodel.ResourceFacts{})
+	return resourcemodel.KubernetesResourceModel(clusterID, Identity, slice.ObjectMeta, status, resourcemodel.ResourceFacts{})
 }
 
 // BuildFacts extracts the EndpointSlice facts from the raw object.
@@ -99,7 +99,7 @@ func endpointTargetLink(clusterID, fallbackNamespace string, target *corev1.Obje
 		namespace = fallbackNamespace
 	}
 	if version != "" {
-		link := resourcemodel.NewNamespacedResourceLink(clusterID, group, version, target.Kind, "", namespace, target.Name, string(target.UID))
+		link := resourcemodel.NewNamespacedResourceLink(resourcemodel.ResourceRef{ClusterID: clusterID, Group: group, Version: version, Kind: target.Kind, Resource: "", Namespace: namespace, Name: target.Name, UID: string(target.UID)})
 		return &link
 	}
 	link := resourcemodel.NewDisplayResourceLink(clusterID, group, version, target.Kind, "", namespace, target.Name)

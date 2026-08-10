@@ -16,7 +16,7 @@ import (
 // by this package; the shared ResourceModel carries identity + status.
 func BuildResourceModel(clusterID string, pv *corev1.PersistentVolume) resourcemodel.ResourceModel {
 	status := BuildStatusPresentation(pv)
-	return resourcemodel.KubernetesResourceModel(clusterID, "", "v1", "PersistentVolume", "persistentvolumes", resourcemodel.ResourceScopeCluster, pv.ObjectMeta, status, resourcemodel.ResourceFacts{})
+	return resourcemodel.KubernetesResourceModel(clusterID, Identity, pv.ObjectMeta, status, resourcemodel.ResourceFacts{})
 }
 
 // BuildFacts extracts the PersistentVolume facts from the raw object.

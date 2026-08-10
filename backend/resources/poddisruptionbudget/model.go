@@ -21,7 +21,7 @@ import (
 func BuildResourceModel(clusterID string, pdb *policyv1.PodDisruptionBudget) resourcemodel.ResourceModel {
 	facts := BuildFacts(clusterID, pdb)
 	status := statusPresentation(pdb, facts)
-	return resourcemodel.PolicyResourceModel(clusterID, "policy", "v1", "PodDisruptionBudget", "poddisruptionbudgets", pdb.ObjectMeta, status, resourcemodel.ResourceFacts{})
+	return resourcemodel.PolicyResourceModel(clusterID, Identity, pdb.ObjectMeta, status, resourcemodel.ResourceFacts{})
 }
 
 // BuildFacts extracts the PodDisruptionBudget facts from the raw object.

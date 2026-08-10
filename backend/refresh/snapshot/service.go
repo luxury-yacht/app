@@ -217,7 +217,7 @@ func (s *Service) prepareBuildRequest(ctx context.Context, req BuildRequest) (co
 
 func (s *Service) recordInformerSyncFailure(domainName, scope string, syncWait time.Duration, err error) {
 	if errors.Is(err, errInformerSyncTimeout) {
-		s.recordTelemetry(domainName, scope, 0, err, false, 0, nil, 0, 0, 0, true, 0, syncWait.Milliseconds())
+		s.recordTelemetry(telemetry.SnapshotRecord{Domain: domainName, Scope: scope, Duration: 0, Err: err, Truncated: false, TotalItems: 0, Warnings: nil, BatchIndex: 0, TotalBatches: 0, BatchSize: 0, IsFinal: true, TimeToFirstBatchMs: 0, InformerSyncWaitMs: syncWait.Milliseconds()})
 	}
 }
 
@@ -274,10 +274,8 @@ func (s *Service) finalizeBuiltSnapshot(snapshot *refresh.Snapshot, start time.T
 }
 
 func (s *Service) recordBuildFailure(plan snapshotBuildRequestPlan, duration time.Duration, err error) {
-	s.recordTelemetry(
-		plan.domain, plan.scope, duration, err, false, 0, nil, 0, 0, 0, true,
-		duration.Milliseconds(), plan.syncWait.Milliseconds(),
-	)
+	s.recordTelemetry(telemetry.SnapshotRecord{Domain: plan.domain, Scope: plan.scope, Duration: duration, Err: err, Truncated: false, TotalItems: 0, Warnings: nil, BatchIndex: 0, TotalBatches: 0, BatchSize: 0, IsFinal: true, TimeToFirstBatchMs: duration.Milliseconds(), InformerSyncWaitMs: plan.syncWait.Milliseconds()})
+
 }
 
 func (s *Service) recordBuildSuccess(
@@ -285,21 +283,8 @@ func (s *Service) recordBuildSuccess(
 	snapshot *refresh.Snapshot,
 	duration time.Duration,
 ) {
-	s.recordTelemetry(
-		plan.domain,
-		plan.scope,
-		duration,
-		nil,
-		snapshot.Stats.Truncated,
-		snapshot.Stats.TotalItems,
-		snapshot.Stats.Warnings,
-		snapshot.Stats.BatchIndex,
-		snapshot.Stats.TotalBatches,
-		snapshot.Stats.BatchSize,
-		snapshot.Stats.IsFinalBatch,
-		snapshot.Stats.TimeToFirstRowMs,
-		plan.syncWait.Milliseconds(),
-	)
+	s.recordTelemetry(telemetry.SnapshotRecord{Domain: plan.domain, Scope: plan.scope, Duration: duration, Err: nil, Truncated: snapshot.Stats.Truncated, TotalItems: snapshot.Stats.TotalItems, Warnings: snapshot.Stats.Warnings, BatchIndex: snapshot.Stats.BatchIndex, TotalBatches: snapshot.Stats.TotalBatches, BatchSize: snapshot.Stats.BatchSize, IsFinal: snapshot.Stats.IsFinalBatch, TimeToFirstBatchMs: snapshot.Stats.TimeToFirstRowMs, InformerSyncWaitMs: plan.syncWait.Milliseconds()})
+
 }
 
 // waitForInformerSync blocks until the domain's informers have settled, returning the
@@ -385,21 +370,8 @@ func (s *Service) ensurePermissions(ctx context.Context, domainName, scope strin
 	}
 	if err != nil {
 		duration := time.Since(start)
-		s.recordTelemetry(
-			domainName,
-			scope,
-			duration,
-			err,
-			false,
-			0,
-			nil,
-			0,
-			0,
-			0,
-			true,
-			duration.Milliseconds(),
-			0,
-		)
+		s.recordTelemetry(telemetry.SnapshotRecord{Domain: domainName, Scope: scope, Duration: duration, Err: err, Truncated: false, TotalItems: 0, Warnings: nil, BatchIndex: 0, TotalBatches: 0, BatchSize: 0, IsFinal: true, TimeToFirstBatchMs: duration.Milliseconds(), InformerSyncWaitMs: 0})
+
 		return ctx, permissionCacheKey, err
 	}
 	if decision.Allowed {
@@ -407,59 +379,18 @@ func (s *Service) ensurePermissions(ctx context.Context, domainName, scope strin
 	}
 	denied := refresh.NewPermissionDeniedError(domainName, decision.DeniedReason)
 	duration := time.Since(start)
-	s.recordTelemetry(
-		domainName,
-		scope,
-		duration,
-		denied,
-		false,
-		0,
-		nil,
-		0,
-		0,
-		0,
-		true,
-		duration.Milliseconds(),
-		0,
-	)
+	s.recordTelemetry(telemetry.SnapshotRecord{Domain: domainName, Scope: scope, Duration: duration, Err: denied, Truncated: false, TotalItems: 0, Warnings: nil, BatchIndex: 0, TotalBatches: 0, BatchSize: 0, IsFinal: true, TimeToFirstBatchMs: duration.Milliseconds(), InformerSyncWaitMs: 0})
+
 	return ctx, permissionCacheKey, denied
 }
 
-func (s *Service) recordTelemetry(
-	domain string,
-	scope string,
-	duration time.Duration,
-	err error,
-	truncated bool,
-	totalItems int,
-	warnings []string,
-	batchIndex int,
-	totalBatches int,
-	batchSize int,
-	isFinal bool,
-	timeToFirstRowMs int64,
-	informerSyncWaitMs int64,
-) {
+func (s *Service) recordTelemetry(record telemetry.SnapshotRecord) {
 	if s.telemetry == nil {
 		return
 	}
-	s.telemetry.RecordSnapshot(
-		domain,
-		scope,
-		s.cluster.ClusterID,
-		s.cluster.ClusterName,
-		duration,
-		err,
-		truncated,
-		totalItems,
-		warnings,
-		batchIndex,
-		totalBatches,
-		batchSize,
-		isFinal,
-		timeToFirstRowMs,
-		informerSyncWaitMs,
-	)
+	record.ClusterID = s.cluster.ClusterID
+	record.ClusterName = s.cluster.ClusterName
+	s.telemetry.RecordSnapshot(record)
 }
 
 func (s *Service) cacheKey(domainName, scope string) string {

@@ -227,27 +227,28 @@ const (
 // RegisterObjectMapDomain wires the backend relationship graph domain into the registry.
 // ingestSource supplies the projected object-map nodes for ingest-owned (cut) kinds;
 // it may be nil when no kind is cut over to the ingest path.
-func RegisterObjectMapDomain(
-	reg *domain.Registry,
-	shared informers.SharedInformerFactory,
-	permissions objectMapPermissionChecker,
-	gatewayShared gatewayinformers.SharedInformerFactory,
-	gatewayPresence objectMapGatewayPresenceChecker,
-	catalogService func() *objectcatalog.Service,
-	ingestSource objectMapRowsProvider,
-	allowedNamespaces []string,
-) error {
-	if shared == nil {
+type ObjectMapDomainConfig struct {
+	Shared            informers.SharedInformerFactory
+	Permissions       objectMapPermissionChecker
+	GatewayShared     gatewayinformers.SharedInformerFactory
+	GatewayPresence   objectMapGatewayPresenceChecker
+	CatalogService    func() *objectcatalog.Service
+	IngestSource      objectMapRowsProvider
+	AllowedNamespaces []string
+}
+
+func RegisterObjectMapDomain(reg *domain.Registry, config ObjectMapDomainConfig) error {
+	if config.Shared == nil {
 		return fmt.Errorf("shared informer factory is required for object map domain")
 	}
 	builder := &objectMapBuilder{
-		gatewayShared:     gatewayShared,
-		gatewayPresence:   gatewayPresence,
-		catalogService:    catalogService,
-		shared:            shared,
-		permissions:       permissions,
-		ingest:            ingestSource,
-		allowedNamespaces: append([]string(nil), allowedNamespaces...),
+		gatewayShared:     config.GatewayShared,
+		gatewayPresence:   config.GatewayPresence,
+		catalogService:    config.CatalogService,
+		shared:            config.Shared,
+		permissions:       config.Permissions,
+		ingest:            config.IngestSource,
+		allowedNamespaces: append([]string(nil), config.AllowedNamespaces...),
 	}
 	return reg.Register(refresh.DomainConfig{
 		Name:          objectMapDomain,

@@ -421,7 +421,10 @@ func setCatalogServiceNamespaces(t *testing.T, svc *objectcatalog.Service, names
 func TestGetCatalogDiagnosticsFromTelemetryRecorder(t *testing.T) {
 	recorder := telemetry.NewRecorder()
 	recorder.RecordCatalog(true, 5, 2, 1500*time.Millisecond, errors.New("collect failed"))
-	recorder.RecordSnapshot("pods", "default", "test-cluster", "test", 50*time.Millisecond, nil, false, 3, nil, 1, 0, 0, true, 25, 0)
+	recorder.RecordSnapshot(telemetry.SnapshotRecord{
+		Domain: "pods", Scope: "default", ClusterID: "test-cluster", ClusterName: "test",
+		Duration: 50 * time.Millisecond, TotalItems: 3, BatchIndex: 1, IsFinal: true, TimeToFirstBatchMs: 25,
+	})
 
 	app := &App{telemetryRecorder: recorder}
 

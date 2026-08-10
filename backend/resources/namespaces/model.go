@@ -27,7 +27,7 @@ func BuildResourceModel(clusterID string, namespace *corev1.Namespace, hasWorklo
 	if namespace != nil {
 		meta = namespace.ObjectMeta
 	}
-	return resourcemodel.KubernetesResourceModel(clusterID, "", "v1", "Namespace", "namespaces", resourcemodel.ResourceScopeCluster, meta, status, resourcemodel.ResourceFacts{})
+	return resourcemodel.KubernetesResourceModel(clusterID, Identity, meta, status, resourcemodel.ResourceFacts{})
 }
 
 // BuildFacts extracts the Namespace facts. Quota/limit links materialize only when
@@ -110,7 +110,7 @@ func namespacedNameLinks(clusterID, group, version, kind, resource, namespace st
 		if name == "" {
 			continue
 		}
-		links = append(links, resourcemodel.NewNamespacedResourceLink(clusterID, group, version, kind, resource, namespace, name, ""))
+		links = append(links, resourcemodel.NewNamespacedResourceLink(resourcemodel.ResourceRef{ClusterID: clusterID, Group: group, Version: version, Kind: kind, Resource: resource, Namespace: namespace, Name: name, UID: ""}))
 	}
 	resourcemodel.SortResourceLinksByObjectName(links)
 	return links

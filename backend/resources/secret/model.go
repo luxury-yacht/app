@@ -20,7 +20,7 @@ import (
 // callers needing facts use BuildFacts.
 func BuildResourceModel(clusterID string, sec *corev1.Secret) resourcemodel.ResourceModel {
 	status := BuildStatusPresentation(sec)
-	return resourcemodel.KubernetesResourceModel(clusterID, "", "v1", "Secret", "secrets", resourcemodel.ResourceScopeNamespaced, sec.ObjectMeta, status, resourcemodel.ResourceFacts{})
+	return resourcemodel.KubernetesResourceModel(clusterID, Identity, sec.ObjectMeta, status, resourcemodel.ResourceFacts{})
 }
 
 // BuildFacts extracts the Secret facts from the raw object.

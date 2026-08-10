@@ -428,16 +428,8 @@ type NodeSummary struct {
 // NewResourceRef builds a row's canonical identity from the owning kind's
 // descriptor and the object's metadata.
 func NewResourceRef(meta ClusterMeta, identity resourcekind.Identity, obj metav1.Object) resourcemodel.ResourceRef {
-	ref := resourcemodel.NewResourceRef(
-		meta.ClusterID,
-		identity.Group,
-		identity.Version,
-		identity.Kind,
-		identity.Resource,
-		"",
-		"",
-		"",
-	)
+	ref := resourcemodel.NewResourceRef(resourcemodel.ResourceRef{ClusterID: meta.ClusterID, Group: identity.Group, Version: identity.Version, Kind: identity.Kind, Resource: identity.Resource, Namespace: "", Name: "", UID: ""})
+
 	if obj == nil {
 		return ref
 	}

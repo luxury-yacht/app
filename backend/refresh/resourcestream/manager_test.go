@@ -372,11 +372,11 @@ func TestManagerResumeReturnsBufferedUpdates(t *testing.T) {
 		ClusterID:       "c1",
 		ClusterName:     "cluster",
 		ResourceVersion: "1",
-		Ref:             refPtr(resourcemodel.NewResourceRef("c1", "", "v1", "Pod", "pods", "default", "pod-1", "pod-1")),
+		Ref:             refPtr(resourcemodel.NewResourceRef(resourcemodel.ResourceRef{ClusterID: "c1", Group: "", Version: "v1", Kind: "Pod", Resource: "pods", Namespace: "default", Name: "pod-1", UID: "pod-1"})),
 	}
 	second := first
 	second.ResourceVersion = "2"
-	second.Ref = refPtr(resourcemodel.NewResourceRef("c1", "", "v1", "Pod", "pods", "default", "pod-2", "pod-2"))
+	second.Ref = refPtr(resourcemodel.NewResourceRef(resourcemodel.ResourceRef{ClusterID: "c1", Group: "", Version: "v1", Kind: "Pod", Resource: "pods", Namespace: "default", Name: "pod-2", UID: "pod-2"}))
 
 	manager.broadcast(domainPods, []string{"namespace:default"}, first)
 	manager.broadcast(domainPods, []string{"namespace:default"}, second)
@@ -423,7 +423,7 @@ func TestManagerChangeSignalInvalidatesSnapshotCacheBeforeDelivery(t *testing.T)
 		ClusterID:       "c1",
 		ClusterName:     "cluster",
 		ResourceVersion: "2",
-		Ref:             refPtr(resourcemodel.NewResourceRef("c1", "rbac.authorization.k8s.io", "v1", "ClusterRole", "clusterroles", "", "admin", "uid-admin")),
+		Ref:             refPtr(resourcemodel.NewResourceRef(resourcemodel.ResourceRef{ClusterID: "c1", Group: "rbac.authorization.k8s.io", Version: "v1", Kind: "ClusterRole", Resource: "clusterroles", Namespace: "", Name: "admin", UID: "uid-admin"})),
 	}
 	manager.broadcast(domainClusterRBAC, []string{""}, update)
 	require.Equal(t, domainClusterRBAC, requireNextUpdate(t, sub).Domain)
@@ -451,7 +451,7 @@ func TestManagerEvictsResumeBufferWhenLastSubscriberCancels(t *testing.T) {
 		ClusterID:       "c1",
 		ClusterName:     "cluster",
 		ResourceVersion: "1",
-		Ref:             refPtr(resourcemodel.NewResourceRef("c1", "", "v1", "Pod", "pods", "default", "pod-1", "pod-1")),
+		Ref:             refPtr(resourcemodel.NewResourceRef(resourcemodel.ResourceRef{ClusterID: "c1", Group: "", Version: "v1", Kind: "Pod", Resource: "pods", Namespace: "default", Name: "pod-1", UID: "pod-1"})),
 	}
 	manager.broadcast(domainPods, []string{"namespace:default"}, update)
 
@@ -718,9 +718,9 @@ func TestManagerCustomUpdateInvalidatesCache(t *testing.T) {
 	manager.handleCustomResource(resource, MessageTypeModified, info)
 
 	require.True(t, called)
-	require.Equal(t, resourcemodel.NewResourceRef(
-		"c1", "example.com", "v1", "Widget", "widgets", "default", "widget-1", "",
-	), gotRef)
+	require.Equal(t, resourcemodel.NewResourceRef(resourcemodel.ResourceRef{ClusterID: "c1", Group: "example.com", Version: "v1", Kind: "Widget", Resource: "widgets", Namespace: "default", Name: "widget-1", UID: ""}),
+
+		gotRef)
 }
 
 func TestManagerSkipsCustomInformerForFirstClassGatewayCRD(t *testing.T) {
@@ -1691,7 +1691,7 @@ func TestManagerBackpressureTriggersReset(t *testing.T) {
 		Domain:      domainPods,
 		ClusterID:   "c1",
 		ClusterName: "cluster",
-		Ref:         refPtr(resourcemodel.NewResourceRef("c1", "", "v1", "Pod", "pods", "default", "pod-1", "")),
+		Ref:         refPtr(resourcemodel.NewResourceRef(resourcemodel.ResourceRef{ClusterID: "c1", Group: "", Version: "v1", Kind: "Pod", Resource: "pods", Namespace: "default", Name: "pod-1", UID: ""})),
 	}
 
 	for i := 0; i < config.ResourceStreamSubscriberBufferSize+1; i++ {

@@ -98,11 +98,8 @@ func (s podNotifyBundleSink) broadcastBundle(bundle ingest.Bundle, updateType Me
 
 	// Pod row signal: a Ref (with the catalog half's UID + resourceVersion) on the pod's
 	// own scopes (namespace/all-namespaces, node, owner-workload), exactly scopesForPod.
-	ref := resourcemodel.NewResourceRef(
-		m.clusterMeta.ClusterID,
-		podres.Identity.Group, podres.Identity.Version, podres.Identity.Kind, podres.Identity.Resource,
-		summary.Ref.Namespace, summary.Ref.Name, catalog.Ref.UID,
-	)
+	ref := resourcemodel.NewResourceRef(resourcemodel.ResourceRef{ClusterID: m.clusterMeta.ClusterID, Group: podres.Identity.Group, Version: podres.Identity.Version, Kind: podres.Identity.Kind, Resource: podres.Identity.Resource, Namespace: summary.Ref.Namespace, Name: summary.Ref.Name, UID: catalog.Ref.UID})
+
 	update := Update{
 		Type:            updateType,
 		Domain:          domainPods,

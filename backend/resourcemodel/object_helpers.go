@@ -3,6 +3,7 @@ package resourcemodel
 import (
 	"time"
 
+	"github.com/luxury-yacht/app/backend/resourcekind"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 )
 
@@ -11,19 +12,23 @@ import (
 // Every kind package builds its model through this one constructor (directly or
 // via a group-baking adapter like RBACResourceModel).
 func KubernetesResourceModel(
-	clusterID, group, version, kind, resource string,
-	scope ResourceScope,
+	clusterID string,
+	identity resourcekind.Identity,
 	meta metav1.ObjectMeta,
 	status ResourceStatusPresentation,
 	facts ResourceFacts,
 ) ResourceModel {
+	scope := ResourceScopeCluster
+	if identity.Namespaced {
+		scope = ResourceScopeNamespaced
+	}
 	return ResourceModel{
 		Ref: ResourceRef{
 			ClusterID: clusterID,
-			Group:     group,
-			Version:   version,
-			Kind:      kind,
-			Resource:  resource,
+			Group:     identity.Group,
+			Version:   identity.Version,
+			Kind:      identity.Kind,
+			Resource:  identity.Resource,
 			Namespace: meta.Namespace,
 			Name:      meta.Name,
 			UID:       string(meta.UID),

@@ -24,7 +24,7 @@ import (
 // carries only the identity + status; callers needing facts use BuildFacts.
 func BuildResourceModel(clusterID string, statefulSet *appsv1.StatefulSet) resourcemodel.ResourceModel {
 	status := BuildStatusPresentation(statefulSet)
-	return resourcemodel.KubernetesResourceModel(clusterID, "apps", "v1", "StatefulSet", "statefulsets", resourcemodel.ResourceScopeNamespaced, statefulSet.ObjectMeta, status, resourcemodel.ResourceFacts{})
+	return resourcemodel.KubernetesResourceModel(clusterID, Identity, statefulSet.ObjectMeta, status, resourcemodel.ResourceFacts{})
 }
 
 // BuildFacts extracts the StatefulSet facts from the raw object.

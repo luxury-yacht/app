@@ -93,11 +93,8 @@ func (m *Manager) broadcastStandalonePodWorkloadRow(namespace, name, resourceVer
 	if !ok {
 		return
 	}
-	ref := resourcemodel.NewResourceRef(
-		m.clusterMeta.ClusterID,
-		podres.Identity.Group, podres.Identity.Version, podres.Identity.Kind, podres.Identity.Resource,
-		namespace, name, catalog.Ref.UID,
-	)
+	ref := resourcemodel.NewResourceRef(resourcemodel.ResourceRef{ClusterID: m.clusterMeta.ClusterID, Group: podres.Identity.Group, Version: podres.Identity.Version, Kind: podres.Identity.Kind, Resource: podres.Identity.Resource, Namespace: namespace, Name: name, UID: catalog.Ref.UID})
+
 	m.broadcastWorkloadNotificationRef(ref, namespace, resourceVersion, MessageTypeModified)
 }
 
@@ -146,11 +143,8 @@ func (m *Manager) broadcastStandalonePodWorkloadFromSummary(summary snapshot.Pod
 	if podSummaryTerminal(summary) {
 		updateType = MessageTypeDeleted
 	}
-	ref := resourcemodel.NewResourceRef(
-		m.clusterMeta.ClusterID,
-		podres.Identity.Group, podres.Identity.Version, podres.Identity.Kind, podres.Identity.Resource,
-		summary.Ref.Namespace, summary.Ref.Name, "",
-	)
+	ref := resourcemodel.NewResourceRef(resourcemodel.ResourceRef{ClusterID: m.clusterMeta.ClusterID, Group: podres.Identity.Group, Version: podres.Identity.Version, Kind: podres.Identity.Kind, Resource: podres.Identity.Resource, Namespace: summary.Ref.Namespace, Name: summary.Ref.Name, UID: ""})
+
 	m.broadcastWorkloadNotificationRef(ref, summary.Ref.Namespace, "", updateType)
 }
 
