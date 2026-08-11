@@ -3,6 +3,8 @@ package errorcapture
 import (
 	"context"
 	"errors"
+	"net"
+	"net/url"
 
 	"github.com/luxury-yacht/app/backend/internal/authstate"
 	"github.com/luxury-yacht/app/backend/internal/credentialerrors"
@@ -18,9 +20,16 @@ func IsExpectedClusterFailure(err error) bool {
 		return false
 	}
 	if errors.Is(err, context.DeadlineExceeded) {
-		return false
+		var requestErr *url.Error
+		var operationErr *net.OpError
+		if !errors.As(err, &requestErr) && !errors.As(err, &operationErr) {
+			return false
+		}
 	}
 	if errors.Is(err, context.Canceled) {
+		return true
+	}
+	if apierrors.IsNotFound(err) {
 		return true
 	}
 	if apierrors.IsForbidden(err) {

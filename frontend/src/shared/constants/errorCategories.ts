@@ -14,6 +14,7 @@ export type ErrorCategory = (typeof ErrorCategory)[keyof typeof ErrorCategory];
 
 const expectedClusterErrorCategories = new Set<ErrorCategory>([
   ErrorCategory.NETWORK,
+  ErrorCategory.NOT_FOUND,
   ErrorCategory.TIMEOUT,
 ]);
 

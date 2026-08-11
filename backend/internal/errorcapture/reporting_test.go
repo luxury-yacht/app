@@ -4,6 +4,7 @@ import (
 	"context"
 	"errors"
 	"fmt"
+	"net"
 	"net/url"
 	"testing"
 
@@ -42,6 +43,19 @@ func TestIsExpectedClusterFailure(t *testing.T) {
 			want: false,
 		},
 		{
+			name: "wrapped structured not found failure",
+			err: fmt.Errorf(
+				"resource fetch failed: %w",
+				apierrors.NewNotFound(schema.GroupResource{Resource: "pods"}, "pod-a"),
+			),
+			want: true,
+		},
+		{
+			name: "unstructured not found application failure",
+			err:  errors.New("cache invariant failed after 404 not found"),
+			want: false,
+		},
+		{
 			name: "raw credential helper failure",
 			err:  errors.New("getting credentials: exec: executable aws failed with exit code 255"),
 			want: true,
@@ -52,6 +66,19 @@ func TestIsExpectedClusterFailure(t *testing.T) {
 				Op:  "Get",
 				URL: "https://cluster.example.test",
 				Err: errors.New("connection refused"),
+			},
+			want: true,
+		},
+		{
+			name: "URL network operation timeout",
+			err: &url.Error{
+				Op:  "Get",
+				URL: "https://cluster.example.test",
+				Err: &net.OpError{
+					Op:  "dial",
+					Net: "tcp",
+					Err: syntheticNetworkTimeout{},
+				},
 			},
 			want: true,
 		},
@@ -87,3 +114,11 @@ func TestIsExpectedClusterFailure(t *testing.T) {
 		})
 	}
 }
+
+type syntheticNetworkTimeout struct{}
+
+func (syntheticNetworkTimeout) Error() string { return "synthetic network timeout" }
+
+func (syntheticNetworkTimeout) Timeout() bool { return true }
+
+func (syntheticNetworkTimeout) Is(target error) bool { return target == context.DeadlineExceeded }

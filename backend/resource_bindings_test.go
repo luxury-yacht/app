@@ -12,6 +12,7 @@ package backend
 
 import (
 	"context"
+	"errors"
 	"strings"
 	"testing"
 	"time"
@@ -27,8 +28,10 @@ import (
 	apierrors "k8s.io/apimachinery/pkg/api/errors"
 	"k8s.io/apimachinery/pkg/api/resource"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
+	"k8s.io/apimachinery/pkg/runtime"
 	"k8s.io/apimachinery/pkg/util/intstr"
 	cgofake "k8s.io/client-go/kubernetes/fake"
+	cgotesting "k8s.io/client-go/testing"
 	"k8s.io/utils/ptr"
 )
 
@@ -456,7 +459,7 @@ func TestConfigWrappersHappyPath(t *testing.T) {
 	}
 }
 
-func TestGetConfigMapReportsKubernetesFailureOnce(t *testing.T) {
+func TestGetConfigMapKeepsNotFoundFailureLocal(t *testing.T) {
 	reporter := &recordingErrorReporter{}
 	app := NewApp(reporter)
 	app.setRuntimeContext(context.Background())
@@ -473,6 +476,46 @@ func TestGetConfigMapReportsKubernetesFailureOnce(t *testing.T) {
 	_, err := app.GetConfigMap(clusterID, "default", "missing")
 	if err == nil {
 		t.Fatal("expected missing configmap to fail")
+	}
+	if !apierrors.IsNotFound(err) {
+		t.Fatalf("expected Kubernetes not found failure, got %v", err)
+	}
+
+	reporter.mu.Lock()
+	defer reporter.mu.Unlock()
+	if len(reporter.exceptions) != 0 {
+		t.Fatalf("expected no Sentry exceptions, got %d", len(reporter.exceptions))
+	}
+}
+
+func TestGetConfigMapReportsUnexpectedKubernetesFailureOnce(t *testing.T) {
+	reporter := &recordingErrorReporter{}
+	app := NewApp(reporter)
+	app.setRuntimeContext(context.Background())
+	clusterID := "config:ctx"
+	client := cgofake.NewClientset()
+	client.Fake.PrependReactor(
+		"get",
+		"configmaps",
+		func(cgotesting.Action) (bool, runtime.Object, error) {
+			return true, nil, apierrors.NewInternalError(errors.New("synthetic API failure"))
+		},
+	)
+	app.clusterClients = map[string]*clusterClients{
+		clusterID: {
+			meta:              ClusterMeta{ID: clusterID, Name: "ctx"},
+			kubeconfigPath:    "/path",
+			kubeconfigContext: "ctx",
+			client:            client,
+		},
+	}
+
+	_, err := app.GetConfigMap(clusterID, "default", "settings")
+	if err == nil {
+		t.Fatal("expected configmap request to fail")
+	}
+	if !apierrors.IsInternalError(err) {
+		t.Fatalf("expected Kubernetes internal failure, got %v", err)
 	}
 
 	reporter.mu.Lock()

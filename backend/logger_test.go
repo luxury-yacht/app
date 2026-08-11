@@ -229,6 +229,13 @@ func TestLoggerKeepsExpectedClusterFailuresLocal(t *testing.T) {
 			err:  apierrors.NewUnauthorized("credentials rejected"),
 		},
 		{
+			name: "wrapped structured not found",
+			err: fmt.Errorf(
+				"resource fetch failed: %w",
+				apierrors.NewNotFound(schema.GroupResource{Resource: "pods"}, "pod-a"),
+			),
+		},
+		{
 			name: "raw credential helper failure",
 			err:  errors.New("getting credentials: exec: executable aws failed with exit code 255"),
 		},
@@ -238,6 +245,14 @@ func TestLoggerKeepsExpectedClusterFailuresLocal(t *testing.T) {
 				Op:  "Get",
 				URL: "https://cluster.example.test",
 				Err: errors.New("connection refused"),
+			},
+		},
+		{
+			name: "URL timeout",
+			err: &url.Error{
+				Op:  "Get",
+				URL: "https://cluster.example.test",
+				Err: context.DeadlineExceeded,
 			},
 		},
 		{

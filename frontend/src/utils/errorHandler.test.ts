@@ -86,6 +86,25 @@ describe('ErrorHandler', () => {
     );
   });
 
+  it('keeps not found conditions user-visible while marking telemetry as expected', () => {
+    const listener = vi.fn();
+    handler.subscribe(listener);
+    const error = new Error('Requested resource was not found');
+
+    const details = handler.handle(error, { source: 'object-panel' });
+
+    expect(details.category).toBe(ErrorCategory.NOT_FOUND);
+    expect(handler.getHistory()).toContainEqual(details);
+    expect(listener).toHaveBeenCalledWith(details);
+    expect(telemetryMocks.captureUserVisibleError).toHaveBeenCalledWith(
+      error,
+      expect.objectContaining({
+        category: ErrorCategory.NOT_FOUND,
+        expectedCondition: true,
+      })
+    );
+  });
+
   it('reports an inline failure without creating a duplicate toast', () => {
     const listener = vi.fn();
     handler.subscribe(listener);

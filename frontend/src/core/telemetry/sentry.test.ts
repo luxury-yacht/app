@@ -547,7 +547,7 @@ describe('Sentry error reporting', () => {
     expect(sentryMocks.captureException).toHaveBeenCalledWith(error);
   });
 
-  it.each(['AUTHENTICATION', 'NETWORK', 'TIMEOUT'] as const)(
+  it.each(['AUTHENTICATION', 'NETWORK', 'NOT_FOUND', 'TIMEOUT'] as const)(
     'captures %s errors at an operational exception boundary',
     (category) => {
       initializeErrorReporting({
@@ -568,7 +568,7 @@ describe('Sentry error reporting', () => {
     }
   );
 
-  it.each(['NETWORK', 'TIMEOUT'] as const)(
+  it.each(['NETWORK', 'NOT_FOUND', 'TIMEOUT'] as const)(
     'does not capture an explicitly expected %s condition',
     (category) => {
       initializeErrorReporting({
