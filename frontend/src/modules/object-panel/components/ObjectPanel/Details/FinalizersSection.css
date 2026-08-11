@@ -1,6 +1,5 @@
 /* Deletion section — a terminating object is a state, not an alarm. The amber
-   rail marks the section; red is spent only on the force-removal control and
-   on the specific consequences the finalizer catalog knows about. */
+   rail marks the section; red is reserved for the force-removal control. */
 
 .deletion-section {
   box-shadow: inset 3px 0 0 var(--color-warning);
@@ -16,7 +15,6 @@
   white-space: nowrap;
 }
 
-.deletion-explanation,
 .deletion-empty {
   margin: 0 0 var(--spacing-md);
   color: var(--color-text-secondary);
@@ -24,6 +22,20 @@
 
 .deletion-empty {
   margin-bottom: 0;
+}
+
+.deletion-section-title {
+  display: flex;
+  align-items: center;
+  gap: var(--spacing-xs);
+}
+
+.deletion-finalizers-tooltip-copy p {
+  margin: 0;
+}
+
+.deletion-finalizers-tooltip-copy p + p {
+  margin-top: var(--spacing-md);
 }
 
 /* One bordered container for the whole list: rows are separated by hairlines
@@ -70,50 +82,6 @@
   font-size: var(--font-size-mono);
   user-select: text;
   -webkit-user-select: text;
-}
-
-.deletion-finalizer-guidance {
-  display: flex;
-  flex-direction: column;
-  gap: 0.125rem;
-  grid-column: 1;
-  min-width: 0;
-}
-
-.deletion-finalizer-explanation {
-  display: flex;
-  align-items: baseline;
-  gap: var(--spacing-xs);
-  margin: 0;
-  color: var(--color-text);
-  line-height: 1.45;
-}
-
-.deletion-finalizer-attribution-warning {
-  flex: 0 0 auto;
-  color: var(--color-warning);
-  transform: translateY(2px);
-}
-
-.deletion-finalizer-next-step {
-  margin: 0;
-  color: var(--color-text-secondary);
-  line-height: 1.45;
-}
-
-.deletion-finalizer-consequence {
-  display: flex;
-  align-items: baseline;
-  gap: var(--spacing-xs);
-  margin: var(--spacing-xs) 0 0;
-  color: var(--color-warning);
-  font-size: var(--font-size-sm);
-  line-height: 1.45;
-}
-
-.deletion-finalizer-consequence svg {
-  flex: 0 0 auto;
-  transform: translateY(2px);
 }
 
 /* The shared danger button owns appearance and interaction; this class only

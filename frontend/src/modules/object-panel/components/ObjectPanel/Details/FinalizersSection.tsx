@@ -1,12 +1,11 @@
 import type { CapabilityState } from '@modules/object-panel/components/ObjectPanel/types';
 import type { ObjectPanelRef } from '@modules/object-panel/objectPanelRef';
 import type { FinalizerPath } from '@shared/actions/objectActionClient';
-import { WarningIcon } from '@shared/components/icons/SharedIcons';
 import { LiveAgeText } from '@shared/components/LiveAgeText';
 import { StatusChip, type StatusChipVariant } from '@shared/components/StatusChip';
+import Tooltip from '@shared/components/Tooltip';
 import { useObjectActionController } from '@shared/hooks/useObjectActionController';
 import type { ObjectDeletionMetadata } from '@/core/refresh/types.generated';
-import { finalizerGuidance } from './finalizerCatalog';
 import type { DetailCondition, NamespaceFinalizationDetails } from './objectDetailModel';
 import './FinalizersSection.css';
 
@@ -56,7 +55,6 @@ interface FinalizerRowProps {
 }
 
 function FinalizerRow({ entry, showPath, onRemove }: Readonly<FinalizerRowProps>) {
-  const guidance = finalizerGuidance(entry.name);
   return (
     <div className="deletion-finalizer-row">
       <div className="deletion-finalizer-heading">
@@ -73,27 +71,6 @@ function FinalizerRow({ entry, showPath, onRemove }: Readonly<FinalizerRowProps>
       >
         Remove
       </button>
-      <div className="deletion-finalizer-guidance">
-        <p
-          className={`deletion-finalizer-explanation${guidance.warnsAboutMissingAttribution ? ' deletion-finalizer-explanation--warning' : ''}`}
-        >
-          {guidance.warnsAboutMissingAttribution ? (
-            <WarningIcon
-              width={14}
-              height={14}
-              className="deletion-finalizer-attribution-warning"
-            />
-          ) : null}
-          <span>{guidance.explanation}</span>
-        </p>
-        <p className="deletion-finalizer-next-step">{guidance.nextStep}</p>
-        {!!guidance.consequence && (
-          <p className="deletion-finalizer-consequence">
-            <WarningIcon width={14} height={14} />
-            {guidance.consequence}
-          </p>
-        )}
-      </div>
     </div>
   );
 }
@@ -139,22 +116,36 @@ export default function FinalizersSection({
   return (
     <div className="object-panel-section deletion-section">
       <div className="object-panel-section-header">
-        <div className="object-panel-section-title">Finalizers</div>
+        <div className="object-panel-section-title deletion-section-title">
+          <span>Finalizers</span>
+          <Tooltip
+            maxWidth={420}
+            content={
+              <div className="deletion-finalizers-tooltip-copy">
+                <p>
+                  Finalizers are used to ensure that required cleanup is completed before an object
+                  is deleted. A Finalizer can block object deletion until its controller has
+                  finished its work.
+                </p>
+                <p>
+                  There is no simple way to determine what is preventing a Finalizer from
+                  completing. You may be able to get more information by checking Events, the logs
+                  of the responsible controller, or the YAML <code>status</code> block of this
+                  object.
+                </p>
+                <p>
+                  If you are certain that this object can be safely deleted, you can remove the
+                  finalizer(s) below.
+                </p>
+              </div>
+            }
+          />
+        </div>
         <div className="deletion-age">
           Terminating for{' '}
           <LiveAgeText timestamp={deletion.deletionTimestamp} fullDateTitle fallback="unknown" />
         </div>
       </div>
-      <p className="deletion-explanation">
-        Finalizers are used to ensure that required cleanup is completed before an object is deleted.
-        A Finalizer can block object deletion until its controller has finished its work.
-      </p>
-      <p className="deletion-explanation">
-        There is no simple way to determine what is preventing a Finalizer from completing. You may be able to get more information by checking Events, the logs of the responsible controller, or the YAML <code>status</code> block of this object.
-      </p>
-      <p className="deletion-explanation">
-        If you are certain that this object can be safely deleted, you can remove the finalizer(s) below.
-      </p>
 
       {entries.length > 0 ? (
         <div className="deletion-finalizer-list">

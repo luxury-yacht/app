@@ -21,6 +21,10 @@ const containersMock = vi.fn();
 const rbacRulesMock = vi.fn();
 const dataMock = vi.fn();
 
+vi.mock('@core/contexts/ZoomContext', () => ({
+  useZoom: () => ({ zoomLevel: 100 }),
+}));
+
 vi.mock('@ui/shortcuts', () => ({
   useShortcut: (options: unknown) => useShortcutMock(options),
   useSearchShortcutTarget: () => undefined,
@@ -324,7 +328,7 @@ describe('DetailsTab', () => {
     cleanup();
   });
 
-  it('renders deletion duration and finalizer guidance for a terminating object', async () => {
+  it('renders deletion duration and a removable finalizer for a terminating object', async () => {
     const props: DetailsTabProps = {
       ...createBaseProps({
         kind: 'PersistentVolumeClaim',
@@ -342,10 +346,10 @@ describe('DetailsTab', () => {
     expect(container.textContent).toContain('Finalizers');
     expect(container.textContent).toContain('Terminating for');
     expect(container.textContent).toContain('kubernetes.io/pvc-protection');
-    expect(container.textContent).toContain(
+    expect(container.querySelector('.object-panel-section-title .tooltip-trigger')).not.toBeNull();
+    expect(container.textContent).not.toContain(
       'Kubernetes keeps this finalizer while the claim is in use'
     );
-    expect(container.textContent).toContain('Resolve the Pods using this claim');
     // A single metadata.finalizers list needs no field-path disambiguation.
     expect(container.textContent).not.toContain('metadata.finalizers');
     cleanup();
