@@ -32,7 +32,8 @@
   font-size: var(--font-size-normal);
   color: var(--color-text);
   font-weight: 600;
-  word-break: break-word;
+  overflow-wrap: anywhere;
+  word-break: normal;
 }
 
 .scale-input-group {

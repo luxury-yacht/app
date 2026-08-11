@@ -115,7 +115,8 @@
   font-size: var(--font-size-mono);
   flex: 1;
   min-width: 0;
-  word-break: break-word;
+  overflow-wrap: anywhere;
+  word-break: normal;
   user-select: text;
   -webkit-user-select: text;
 }
@@ -220,7 +221,8 @@
   font-size: var(--font-size-mono);
   color: var(--color-text);
   line-height: 1.5;
-  word-break: break-word;
+  overflow-wrap: anywhere;
+  word-break: normal;
 }
 
 .reference-grant-arrow {

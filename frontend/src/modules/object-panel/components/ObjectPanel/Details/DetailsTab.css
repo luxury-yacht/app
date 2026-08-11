@@ -27,7 +27,8 @@
 .overview-value {
   font-size: var(--font-size-normal);
   color: var(--color-text);
-  word-break: break-word;
+  overflow-wrap: anywhere;
+  word-break: normal;
   flex: 1;
   user-select: text;
   -webkit-user-select: text;

@@ -137,7 +137,7 @@
 .object-diff-cell-expanded .object-diff-line-text {
   white-space: pre-wrap;
   overflow-wrap: anywhere;
-  word-break: break-word;
+  word-break: normal;
   overflow: visible;
   text-overflow: clip;
 }

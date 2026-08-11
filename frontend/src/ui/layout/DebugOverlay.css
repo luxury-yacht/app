@@ -128,14 +128,15 @@
   margin: 0;
   padding-left: 1rem;
   font-family: var(--font-family-mono, monospace);
-  word-break: break-word;
+  overflow-wrap: anywhere;
+  word-break: normal;
 }
 
 .debug-overlay__value {
   font-family: var(--font-family-mono, monospace);
   white-space: pre-wrap;
   overflow-wrap: anywhere;
-  word-break: break-word;
+  word-break: normal;
   color: var(--color-text);
 }
 
@@ -316,7 +317,7 @@
   font-size: 0.68rem;
   white-space: normal;
   overflow-wrap: anywhere;
-  word-break: break-word;
+  word-break: normal;
 }
 
 .panel-debug-tree__integrity-row {

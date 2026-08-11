@@ -71,7 +71,8 @@
   line-height: 1.5;
   color: #ff6b6b;
   white-space: pre-wrap;
-  word-break: break-word;
+  overflow-wrap: anywhere;
+  word-break: normal;
 }
 
 .error-actions {
