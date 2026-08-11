@@ -100,9 +100,6 @@ const NodesViewGrid: React.FC<NodesViewProps> = React.memo(({ error }) => {
   );
 
   const tableColumns = useMemo<GridColumnDefinition<ClusterNodeRow>[]>(() => {
-    const metricsLastUpdatedDate = metricsInfo?.collectedAt
-      ? new Date(metricsInfo.collectedAt * 1000)
-      : undefined;
     const ageSortNow = Date.now();
 
     const resolveNodeStatus = (node: ClusterNodeRow) => {
@@ -215,7 +212,6 @@ const NodesViewGrid: React.FC<NodesViewProps> = React.memo(({ error }) => {
         },
         getMetricsStale: () => Boolean(metricsInfo?.stale),
         getMetricsError: () => metricsInfo?.lastError ?? undefined,
-        getMetricsLastUpdated: () => metricsLastUpdatedDate ?? undefined,
         getVariant: () => 'compact',
         getAnimationKey: (row) => `node:${row.ref.name}:cpu`,
         sortable: true,
@@ -235,7 +231,6 @@ const NodesViewGrid: React.FC<NodesViewProps> = React.memo(({ error }) => {
         },
         getMetricsStale: () => Boolean(metricsInfo?.stale),
         getMetricsError: () => metricsInfo?.lastError ?? undefined,
-        getMetricsLastUpdated: () => metricsLastUpdatedDate ?? undefined,
         getVariant: () => 'compact',
         getAnimationKey: (row) => `node:${row.ref.name}:memory`,
         sortable: true,
@@ -271,7 +266,6 @@ const NodesViewGrid: React.FC<NodesViewProps> = React.memo(({ error }) => {
     handleNodeAltClick,
     metricsInfo?.stale,
     metricsInfo?.lastError,
-    metricsInfo?.collectedAt,
     nodeMaintenance,
     selectedClusterName,
     useShortResourceNames,

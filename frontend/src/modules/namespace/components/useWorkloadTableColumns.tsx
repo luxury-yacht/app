@@ -77,8 +77,6 @@ const useWorkloadTableColumns = ({
 
     const metricsStale = Boolean(metrics?.stale);
     const metricsError = metrics?.lastError ?? undefined;
-    const metricsLastUpdated =
-      typeof metrics?.collectedAt === 'number' ? new Date(metrics.collectedAt * 1000) : undefined;
 
     const columns: GridColumnDefinition<WorkloadData>[] = [];
 
@@ -154,7 +152,6 @@ const useWorkloadTableColumns = ({
         getVariant: () => 'compact',
         getMetricsStale: () => metricsStale,
         getMetricsError: () => metricsError,
-        getMetricsLastUpdated: () => metricsLastUpdated,
         getAnimationKey: (row) => `workload:${row.ref.namespace}/${row.ref.name}:cpu`,
         getShowEmptyState: () => true,
         sortable: true,
@@ -173,7 +170,6 @@ const useWorkloadTableColumns = ({
         getVariant: () => 'compact',
         getMetricsStale: () => metricsStale,
         getMetricsError: () => metricsError,
-        getMetricsLastUpdated: () => metricsLastUpdated,
         getAnimationKey: (row) => `workload:${row.ref.namespace}/${row.ref.name}:memory`,
         getShowEmptyState: () => true,
         sortable: true,
@@ -203,7 +199,6 @@ const useWorkloadTableColumns = ({
     return columns;
   }, [
     handleWorkloadClick,
-    metrics?.collectedAt,
     metrics?.lastError,
     metrics?.stale,
     namespaceColumnLink,

@@ -1060,7 +1060,7 @@ describe('NsViewPods', () => {
     expect(key).toBe('alpha:ctx|/v1/Pod/team-a/api');
   });
 
-  it('derives metrics helper values for resource columns', async () => {
+  it('derives metric freshness values for resource columns', async () => {
     await renderPods({
       metrics: {
         stale: true,
@@ -1078,11 +1078,9 @@ describe('NsViewPods', () => {
     const cpuElement = requireReactElement<{
       metricsStale?: boolean;
       metricsError?: string;
-      metricsLastUpdated?: Date;
     }>(cpuColumn.render(gridTablePropsRef.current.data[0]), 'expected the pod CPU cell element');
     expect(cpuElement.props.metricsStale).toBe(true);
     expect(cpuElement.props.metricsError).toBe('cpu metrics unavailable');
-    expect(cpuElement.props.metricsLastUpdated).toEqual(new Date(1700001000 * 1000));
   });
 
   it('keeps the column definitions stable across metric interval rerenders', async () => {

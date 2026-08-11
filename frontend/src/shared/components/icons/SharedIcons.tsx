@@ -13,6 +13,10 @@ export interface IconProps {
   className?: string;
 }
 
+type FixedColorIconProps = Omit<IconProps, 'fill'>;
+type IconSizeProps = Pick<IconProps, 'width' | 'height'>;
+type IconClassNameProps = Pick<IconProps, 'className'>;
+
 export const CordonIcon: React.FC<IconProps> = ({
   width = 24,
   height = 24,
@@ -456,7 +460,11 @@ export const CategoryIcon: React.FC<IconProps> = ({
   </svg>
 );
 
-export const CloseIcon: React.FC<IconProps> = ({ width = 24, height = 24, className }) => (
+export const CloseIcon: React.FC<FixedColorIconProps> = ({
+  width = 24,
+  height = 24,
+  className,
+}) => (
   <svg
     className={className}
     aria-hidden="true"
@@ -643,7 +651,7 @@ export const DiagnosticsIcon: React.FC<IconProps> = ({
   </svg>
 );
 
-export const DiffIcon: React.FC<IconProps> = ({ width = 24, height = 24, className }) => (
+export const DiffIcon: React.FC<FixedColorIconProps> = ({ width = 24, height = 24, className }) => (
   <svg
     className={className}
     aria-hidden="true"
@@ -662,7 +670,7 @@ export const DiffIcon: React.FC<IconProps> = ({ width = 24, height = 24, classNa
   </svg>
 );
 
-export const LogsIcon: React.FC<IconProps> = ({ width = 24, height = 24, className }) => (
+export const LogsIcon: React.FC<FixedColorIconProps> = ({ width = 24, height = 24, className }) => (
   <svg
     className={className}
     aria-hidden="true"
@@ -681,7 +689,11 @@ export const LogsIcon: React.FC<IconProps> = ({ width = 24, height = 24, classNa
   </svg>
 );
 
-export const RefreshIcon: React.FC<IconProps> = ({ width = 24, height = 24, className }) => (
+export const RefreshIcon: React.FC<FixedColorIconProps> = ({
+  width = 24,
+  height = 24,
+  className,
+}) => (
   <svg
     className={className}
     aria-hidden="true"
@@ -700,7 +712,7 @@ export const RefreshIcon: React.FC<IconProps> = ({ width = 24, height = 24, clas
   </svg>
 );
 
-export const IconBarSeparatorIcon: React.FC<IconProps> = ({
+export const IconBarSeparatorIcon: React.FC<FixedColorIconProps> = ({
   width = 2,
   height = 16,
   className = 'icon-bar-separator',
@@ -759,7 +771,7 @@ export const WarningIcon: React.FC<IconProps> = ({
 );
 
 export const ShortcutArrowIcon: React.FC<
-  IconProps & { direction: 'left' | 'right' | 'up' | 'down' }
+  IconSizeProps & { direction: 'left' | 'right' | 'up' | 'down' }
 > = ({ width = 24, height = 24, direction }) => {
   const path = {
     left: 'M9.5 2.5L5 7l4.5 4.5',
@@ -789,7 +801,7 @@ export const ShortcutArrowIcon: React.FC<
   );
 };
 
-export const TabOverflowIcon: React.FC<IconProps & { direction: 'left' | 'right' }> = ({
+export const TabOverflowIcon: React.FC<IconClassNameProps & { direction: 'left' | 'right' }> = ({
   direction,
   className = 'tab-strip__overflow-icon',
 }) => (
@@ -802,7 +814,7 @@ export const TabOverflowIcon: React.FC<IconProps & { direction: 'left' | 'right'
   </svg>
 );
 
-export const TooltipInfoIcon: React.FC<IconProps> = ({
+export const TooltipInfoIcon: React.FC<FixedColorIconProps> = ({
   width = 14,
   height = 14,
   className = 'tooltip-info-icon',
@@ -823,7 +835,7 @@ export const TooltipInfoIcon: React.FC<IconProps> = ({
   </svg>
 );
 
-export const StatusDotIcon: React.FC<IconProps & { outlined?: boolean }> = ({
+export const StatusDotIcon: React.FC<IconSizeProps & { outlined?: boolean }> = ({
   width = 12,
   height = 12,
   outlined = false,
@@ -846,7 +858,11 @@ export const StatusDotIcon: React.FC<IconProps & { outlined?: boolean }> = ({
   </svg>
 );
 
-export const StopSquareIcon: React.FC<IconProps> = ({ width = 24, height = 24, className }) => (
+export const StopSquareIcon: React.FC<FixedColorIconProps> = ({
+  width = 24,
+  height = 24,
+  className,
+}) => (
   <svg
     className={className}
     viewBox="0 0 16 16"
@@ -860,7 +876,7 @@ export const StopSquareIcon: React.FC<IconProps> = ({ width = 24, height = 24, c
   </svg>
 );
 
-export const PlusIcon: React.FC<IconProps> = ({ width = 24, height = 24, className }) => (
+export const PlusIcon: React.FC<FixedColorIconProps> = ({ width = 24, height = 24, className }) => (
   <svg
     viewBox="0 0 16 16"
     width={width}
@@ -874,7 +890,11 @@ export const PlusIcon: React.FC<IconProps> = ({ width = 24, height = 24, classNa
 );
 
 /** Plain magnifying glass (search). Same geometry as ZoomInIcon minus the plus. */
-export const SearchIcon: React.FC<IconProps> = ({ width = 24, height = 24, className }) => (
+export const SearchIcon: React.FC<FixedColorIconProps> = ({
+  width = 24,
+  height = 24,
+  className,
+}) => (
   <svg
     viewBox="0 0 24 24"
     width={width}

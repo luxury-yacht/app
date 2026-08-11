@@ -187,8 +187,6 @@ describe('ObjectPanelContent', () => {
   it('renders logs viewer when logs tab is active and capability present', () => {
     renderContent({ activeTab: 'logs' });
     expect(hoistedRefs.logViewerProps.current).toMatchObject({
-      namespace: 'team-a',
-      resourceName: 'api',
       resourceKind: 'deployment',
       isActive: true,
     });

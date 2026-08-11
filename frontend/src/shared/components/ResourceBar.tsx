@@ -24,7 +24,6 @@ interface ResourceBarProps {
   overcommitPercent?: number;
   metricsStale?: boolean;
   metricsError?: string;
-  metricsLastUpdated?: Date;
   animationScopeKey?: string;
   showEmptyState?: boolean;
 }
@@ -76,12 +75,14 @@ const useResourceBarTransitions = (animationScopeKey: string | undefined): boole
 
 const ResourceBarEmptyState = ({
   containerClasses,
+  exportText,
   showEmptyState,
 }: {
   containerClasses: string;
+  exportText?: string;
   showEmptyState: boolean;
 }) => (
-  <div className={containerClasses}>
+  <div className={containerClasses} data-gridtable-export-text={exportText}>
     {showEmptyState ? (
       <div className="resource-bar-empty">
         <span>No data</span>
@@ -316,6 +317,7 @@ const ResourceBar: React.FC<ResourceBarProps> = ({
   metricsError,
   animationScopeKey,
   showEmptyState = true,
+  'data-gridtable-export-text': exportText,
 }) => {
   const containerRef = useRef<HTMLDivElement>(null);
   const transitionsEnabled = useResourceBarTransitions(animationScopeKey);
@@ -333,7 +335,11 @@ const ResourceBar: React.FC<ResourceBarProps> = ({
 
   if (model.maxScale === 0) {
     return (
-      <ResourceBarEmptyState containerClasses={containerClasses} showEmptyState={showEmptyState} />
+      <ResourceBarEmptyState
+        containerClasses={containerClasses}
+        exportText={exportText}
+        showEmptyState={showEmptyState}
+      />
     );
   }
 
@@ -348,7 +354,7 @@ const ResourceBar: React.FC<ResourceBarProps> = ({
       disabled={!enableTooltip || variant !== 'compact'}
       inline={false}
     >
-      <div ref={containerRef} className={containerClasses}>
+      <div ref={containerRef} className={containerClasses} data-gridtable-export-text={exportText}>
         {variant === 'compact' && (
           <div className="resource-bar-value">
             <span className="resource-bar-leading">{displayUsage}</span>

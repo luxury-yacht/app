@@ -87,6 +87,29 @@ describe('ResourceBar', () => {
     cleanup();
   });
 
+  it('forwards GridTable export text in populated and empty states', async () => {
+    const { container, root, cleanup } = await renderBar({
+      type: 'cpu',
+      usage: '250m',
+      'data-gridtable-export-text': '250m',
+    });
+
+    expect(
+      container.querySelector('.resource-bar-container')?.getAttribute('data-gridtable-export-text')
+    ).toBe('250m');
+
+    await act(async () => {
+      root.render(<ResourceBar type="cpu" data-gridtable-export-text="-" />);
+      await Promise.resolve();
+    });
+
+    expect(
+      container.querySelector('.resource-bar-container')?.getAttribute('data-gridtable-export-text')
+    ).toBe('-');
+
+    cleanup();
+  });
+
   it('computes CPU usage status classes and formats output', async () => {
     const { container, cleanup } = await renderBar({
       type: 'cpu',
@@ -104,15 +127,13 @@ describe('ResourceBar', () => {
     cleanup();
   });
 
-  it('renders node metrics with stale timestamp information', async () => {
-    const lastUpdated = new Date(Date.now() - 90_000);
+  it('renders stale node metrics with freshness styling', async () => {
     const { container, cleanup } = await renderBar({
       type: 'memory',
       usage: '512Mi',
       limit: '1024Mi',
       allocatable: '2048Mi',
       metricsStale: true,
-      metricsLastUpdated: lastUpdated,
     });
 
     const wrapper = container.querySelector('.resource-bar-container');
@@ -253,26 +274,17 @@ describe('ResourceBar', () => {
     // Simulate environments without requestAnimationFrame (e.g., server-side render)
     Reflect.deleteProperty(window, 'requestAnimationFrame');
 
-    const metricsTimestamp = new Date();
     const { container, root, cleanup } = await renderBar({
       type: 'cpu',
       usage: '0.25',
       animationScopeKey: 'scope-1',
-      metricsLastUpdated: metricsTimestamp,
     });
 
     const containerEl = container.querySelector('.resource-bar-container') as HTMLElement;
     expect(containerEl.className).toContain('unbounded');
 
     await act(async () => {
-      root.render(
-        <ResourceBar
-          type="cpu"
-          usage="0.25"
-          animationScopeKey="scope-2"
-          metricsLastUpdated={metricsTimestamp}
-        />
-      );
+      root.render(<ResourceBar type="cpu" usage="0.25" animationScopeKey="scope-2" />);
       await Promise.resolve();
     });
 

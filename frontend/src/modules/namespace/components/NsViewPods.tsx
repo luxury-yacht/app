@@ -85,7 +85,6 @@ const getReadySortValue = (value?: string | null): number => {
 const podMetricsState = (info: PodMetricsInfo | null | undefined) => ({
   stale: Boolean(info?.stale),
   lastError: info?.lastError || undefined,
-  lastUpdated: info?.collectedAt ? new Date(info.collectedAt * 1000) : undefined,
 });
 
 /**
@@ -200,7 +199,6 @@ const NsViewPods: React.FC<PodsViewProps> = React.memo(
     const metricsStateRef = useRef<{
       stale: boolean;
       lastError?: string;
-      lastUpdated?: Date;
     }>(podMetricsState(fallbackMetrics));
 
     const columns: GridColumnDefinition<PodSnapshotEntry>[] = useMemo(() => {
@@ -298,7 +296,6 @@ const NsViewPods: React.FC<PodsViewProps> = React.memo(
           getLimit: (pod) => podRowCpuValue(pod, 'limit'),
           getMetricsStale: () => metricsStateRef.current.stale,
           getMetricsError: () => metricsStateRef.current.lastError,
-          getMetricsLastUpdated: () => metricsStateRef.current.lastUpdated,
           getAnimationKey: (pod) => `pod:${pod.ref.namespace}/${pod.ref.name}:cpu`,
           sortable: true,
           sortValue: (pod) => parseCpuToMillicores(pod.cpuUsage),
@@ -312,7 +309,6 @@ const NsViewPods: React.FC<PodsViewProps> = React.memo(
           getLimit: (pod) => podRowMemoryValue(pod, 'limit'),
           getMetricsStale: () => metricsStateRef.current.stale,
           getMetricsError: () => metricsStateRef.current.lastError,
-          getMetricsLastUpdated: () => metricsStateRef.current.lastUpdated,
           getAnimationKey: (pod) => `pod:${pod.ref.namespace}/${pod.ref.name}:memory`,
           sortable: true,
           sortValue: (pod) => parseMemToMB(pod.memUsage),

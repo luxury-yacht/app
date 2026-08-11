@@ -85,10 +85,6 @@ export const PodsTab: React.FC<PodsTabProps> = ({ isActive }) => {
   // be a different one). The query hook needs `columns`, so the column
   // callbacks read this ref instead of closing over the query result.
   const metricsRef = React.useRef<PodMetricsInfo | null>(null);
-  const metricsLastUpdated = useCallback(() => {
-    const collectedAt = metricsRef.current?.collectedAt;
-    return collectedAt ? new Date(collectedAt * 1000) : undefined;
-  }, []);
 
   const getPodIdentity = useCallback(
     (pod: PodSnapshotEntry) => ({
@@ -232,7 +228,6 @@ export const PodsTab: React.FC<PodsTabProps> = ({ isActive }) => {
         getVariant: () => 'compact',
         getMetricsStale: () => Boolean(metricsRef.current?.stale),
         getMetricsError: () => metricsRef.current?.lastError || undefined,
-        getMetricsLastUpdated: metricsLastUpdated,
         getAnimationKey: (pod) => `pod:${pod.ref.namespace}/${pod.ref.name}:cpu`,
         getShowEmptyState: () => true,
       }),
@@ -246,7 +241,6 @@ export const PodsTab: React.FC<PodsTabProps> = ({ isActive }) => {
         getVariant: () => 'compact',
         getMetricsStale: () => Boolean(metricsRef.current?.stale),
         getMetricsError: () => metricsRef.current?.lastError || undefined,
-        getMetricsLastUpdated: metricsLastUpdated,
         getAnimationKey: (pod) => `pod:${pod.ref.namespace}/${pod.ref.name}:memory`,
         getShowEmptyState: () => true,
       }),
@@ -262,7 +256,6 @@ export const PodsTab: React.FC<PodsTabProps> = ({ isActive }) => {
   }, [
     handleNamespaceSelect,
     handlePodOpen,
-    metricsLastUpdated,
     objectData?.clusterId,
     objectData?.clusterName,
     objectLink,

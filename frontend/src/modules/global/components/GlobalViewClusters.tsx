@@ -148,8 +148,6 @@ const createClusterResourceColumn = (
     getAllocatable: (row) => (row.overview ? value(row.overview, 'allocatable') : undefined),
     getMetricsStale: (row) => row.metricsInfo?.stale,
     getMetricsError: (row) => row.metricsInfo?.lastError,
-    getMetricsLastUpdated: (row) =>
-      row.metricsInfo?.collectedAt ? new Date(row.metricsInfo.collectedAt * 1000) : undefined,
     getVariant: () => 'compact',
     getAnimationKey: (row) => `cluster:${row.clusterId}:${type}`,
     sortable: true,

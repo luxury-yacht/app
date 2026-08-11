@@ -123,8 +123,6 @@ import RawLogViewer, { type RenderedLogRow } from './RawLogViewer';
 import { getSelectedTextWithinRoot, selectAllTextWithinRoot } from './textSelection';
 
 interface LogViewerProps {
-  namespace: string;
-  resourceName: string;
   resourceKind: string;
   /**
    * Refresh-domain scope string for the container-logs producer. Owned by

@@ -183,9 +183,7 @@ export function ObjectPanelContent({
           fallback={(_, reset) => <TabErrorFallback tabName="Logs" reset={reset} />}
         >
           <LogViewer
-            namespace={objectData?.namespace || ''}
             isActive={isPanelOpen && activeTab === 'logs'}
-            resourceName={objectData?.name || ''}
             resourceKind={objectKind || 'pod'}
             containerLogsScope={containerLogsScope}
             activePodNames={activePodNames}

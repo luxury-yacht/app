@@ -532,8 +532,6 @@ describe('ObjectPanel tab availability', () => {
     });
 
     expect(logViewerPropsRef.current).toMatchObject({
-      namespace: 'team-a',
-      resourceName: 'api',
       resourceKind: 'pod',
       isActive: true,
       clusterId: defaultClusterId,

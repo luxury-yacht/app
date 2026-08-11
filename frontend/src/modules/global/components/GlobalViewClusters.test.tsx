@@ -395,7 +395,6 @@ describe('GlobalViewClusters', () => {
       type: 'cpu',
       variant: 'compact',
       metricsStale: false,
-      metricsLastUpdated: new Date(1_700_001_000 * 1000),
       animationScopeKey: 'cluster:cluster-a:cpu',
     });
     const memoryCell = columns.find(({ key }) => key === 'memory')?.render?.(rows[0]);

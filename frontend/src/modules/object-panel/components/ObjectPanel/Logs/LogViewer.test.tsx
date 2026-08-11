@@ -343,8 +343,6 @@ describe('LogViewer active pod synchronisation', () => {
     overrides: Partial<React.ComponentProps<typeof LogViewer>> = {}
   ): Promise<void> => {
     const {
-      namespace = 'team-a',
-      resourceName = 'api',
       resourceKind = 'deployment',
       isActive = true,
       activePodNames = null,
@@ -360,8 +358,6 @@ describe('LogViewer active pod synchronisation', () => {
     await act(async () => {
       root.render(
         <LogViewer
-          namespace={namespace}
-          resourceName={resourceName}
           resourceKind={resourceKind}
           containerLogsScope={containerLogsScope}
           isActive={isActive}
@@ -445,7 +441,6 @@ describe('LogViewer active pod synchronisation', () => {
       resourceKind: 'pod',
       activePodNames: ['api'],
       isActive: true,
-      resourceName: 'api',
     });
 
     expect(getLatestShortcut('j')?.enabled).toBe(false);
@@ -470,7 +465,6 @@ describe('LogViewer active pod synchronisation', () => {
       isActive: true,
       activePodNames: ['api'],
       resourceKind: 'Pod',
-      resourceName: 'api',
       panelId: 'obj:test:shortcut-toggles',
     });
 
@@ -554,7 +548,6 @@ describe('LogViewer active pod synchronisation', () => {
       isActive: true,
       activePodNames: ['api'],
       resourceKind: 'Pod',
-      resourceName: 'api',
       panelId: 'obj:test:shortcut-pretty',
     });
 
@@ -625,7 +618,6 @@ describe('LogViewer active pod synchronisation', () => {
       isActive: false,
       activePodNames: ['api'],
       resourceKind: 'Pod',
-      resourceName: 'api',
     });
 
     expectDisabledShortcut('v');
@@ -1124,7 +1116,7 @@ describe('LogViewer active pod synchronisation', () => {
       buildContainerLogsScope('team-a:/v1:pod:api-pod-0')
     );
 
-    await renderViewer({ resourceKind: 'pod', resourceName: 'api-pod-0' });
+    await renderViewer({ resourceKind: 'pod' });
     await waitForMockCalls(GetContainerLogsScopeContainers as unknown as ViMock, 1);
 
     const allMetadataSpans = Array.from(
@@ -1571,7 +1563,6 @@ describe('LogViewer active pod synchronisation', () => {
 
     await renderViewer({
       resourceKind: 'Pod',
-      resourceName: 'api',
       activePodNames: ['api'],
       panelId: 'obj:test:pod:team-a:api',
     });
@@ -1676,7 +1667,6 @@ describe('LogViewer active pod synchronisation', () => {
 
     await renderViewer({
       resourceKind: 'Pod',
-      resourceName: 'api',
       activePodNames: ['api'],
       panelId,
     });
@@ -1723,7 +1713,6 @@ describe('LogViewer active pod synchronisation', () => {
 
     await renderViewer({
       resourceKind: 'Pod',
-      resourceName: 'api',
       activePodNames: ['api'],
       panelId,
     });
@@ -1752,7 +1741,6 @@ describe('LogViewer active pod synchronisation', () => {
 
     await renderViewer({
       resourceKind: 'Pod',
-      resourceName: 'api',
       activePodNames: ['api'],
       panelId,
     });
@@ -1793,7 +1781,6 @@ describe('LogViewer active pod synchronisation', () => {
 
     await renderViewer({
       resourceKind: 'Pod',
-      resourceName: 'api',
       activePodNames: ['api'],
     });
 
@@ -1823,7 +1810,6 @@ describe('LogViewer active pod synchronisation', () => {
 
     await renderViewer({
       resourceKind: 'Pod',
-      resourceName: 'api',
       activePodNames: ['api'],
     });
 
@@ -1863,7 +1849,6 @@ describe('LogViewer active pod synchronisation', () => {
 
     await renderViewer({
       resourceKind: 'Pod',
-      resourceName: 'api',
       activePodNames: ['api'],
     });
 
@@ -2106,7 +2091,6 @@ describe('LogViewer active pod synchronisation', () => {
 
     await renderViewer({
       resourceKind: 'Pod',
-      resourceName: 'api',
       activePodNames: ['api'],
       panelId,
     });
@@ -2158,7 +2142,6 @@ describe('LogViewer active pod synchronisation', () => {
 
     await renderViewer({
       resourceKind: 'Pod',
-      resourceName: 'api',
       activePodNames: ['api'],
     });
 
@@ -2195,8 +2178,6 @@ describe('LogViewer active pod synchronisation', () => {
     );
 
     await renderViewer({
-      namespace: 'kube-system',
-      resourceName: 'aws-node',
       resourceKind: 'daemonset',
       activePodNames: ['aws-node-a', 'aws-node-b'],
       containerLogsScope: buildContainerLogsScope('kube-system:apps/v1:daemonset:aws-node'),
@@ -2536,7 +2517,6 @@ describe('LogViewer active pod synchronisation', () => {
 
     await renderViewer({
       resourceKind: 'Pod',
-      resourceName: 'api',
       activePodNames: ['api'],
     });
 
@@ -2554,9 +2534,7 @@ describe('LogViewer active pod synchronisation', () => {
     // gates its loading-vs-rendered path on containerLogsScope, not on
     // resourceName/resourceKind directly.
     await renderViewer({
-      resourceName: '',
       resourceKind: '',
-      namespace: '',
       activePodNames: null,
       containerLogsScope: null,
     });
@@ -2997,7 +2975,6 @@ describe('LogViewer active pod synchronisation', () => {
     await renderViewer({
       panelId,
       resourceKind: 'Pod',
-      resourceName: 'api',
       activePodNames: ['api'],
       containerLogsScope: buildContainerLogsScope('team-a:/v1:pod:api'),
     });
@@ -3046,7 +3023,6 @@ describe('LogViewer active pod synchronisation', () => {
     await renderViewer({
       panelId,
       resourceKind: 'Pod',
-      resourceName: 'api',
       activePodNames: ['api'],
       containerLogsScope: buildContainerLogsScope('team-a:/v1:pod:api'),
     });

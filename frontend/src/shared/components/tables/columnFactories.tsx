@@ -68,7 +68,6 @@ export interface CreateResourceBarColumnOptions<T> extends GridColumnAlignmentOp
   getShowTooltip?: (item: T) => boolean | undefined;
   getMetricsStale?: (item: T) => boolean | undefined;
   getMetricsError?: (item: T) => string | undefined;
-  getMetricsLastUpdated?: (item: T) => Date | undefined;
   getAnimationKey?: (item: T) => string | undefined;
   getShowEmptyState?: (item: T) => boolean;
   className?: string;
@@ -92,7 +91,6 @@ export function createResourceBarColumn<T>(
     getShowTooltip,
     getMetricsStale,
     getMetricsError,
-    getMetricsLastUpdated,
     getAnimationKey,
     getShowEmptyState,
     className,
@@ -149,7 +147,6 @@ export function createResourceBarColumn<T>(
           overcommitPercent={getOvercommitPercent?.(item)}
           metricsStale={getMetricsStale?.(item)}
           metricsError={getMetricsError?.(item)}
-          metricsLastUpdated={getMetricsLastUpdated?.(item)}
           animationScopeKey={getAnimationKey?.(item)}
           showEmptyState={showEmptyState ?? true}
           data-gridtable-export-text={exportText}
