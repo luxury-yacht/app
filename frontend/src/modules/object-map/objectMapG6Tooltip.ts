@@ -227,15 +227,17 @@ export const computeObjectMapTooltipLayout = ({
       );
     }
   } else {
-    rows.push({
-      type: 'object',
-      endpoint: endpoint(hoverEdge.sourceLabel, hoverEdge.sourceKind),
-    });
-    rows.push(relationshipRow(hoverEdge.label, hoverEdge.type));
-    rows.push({
-      type: 'object',
-      endpoint: endpoint(hoverEdge.targetLabel, hoverEdge.targetKind),
-    });
+    rows.push(
+      {
+        type: 'object',
+        endpoint: endpoint(hoverEdge.sourceLabel, hoverEdge.sourceKind),
+      },
+      relationshipRow(hoverEdge.label, hoverEdge.type),
+      {
+        type: 'object',
+        endpoint: endpoint(hoverEdge.targetLabel, hoverEdge.targetKind),
+      }
+    );
   }
 
   const widestRow = rows.reduce((max, row) => {

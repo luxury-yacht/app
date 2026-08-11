@@ -336,8 +336,10 @@ export const getObjectPanelScopeEvictions = (
   const scopes = getObjectPanelScopes(ref);
   const evictions: ObjectPanelScopeEviction[] = [];
   if (scopes.detailScope) {
-    evictions.push({ domain: 'object-details', scope: scopes.detailScope });
-    evictions.push({ domain: 'object-yaml', scope: scopes.detailScope });
+    evictions.push(
+      { domain: 'object-details', scope: scopes.detailScope },
+      { domain: 'object-yaml', scope: scopes.detailScope }
+    );
   }
   if (scopes.eventsScope) {
     evictions.push({ domain: 'object-events', scope: scopes.eventsScope });
@@ -349,8 +351,10 @@ export const getObjectPanelScopeEvictions = (
     evictions.push({ domain: 'object-map', scope: scopes.mapScope });
   }
   if (scopes.helmScope) {
-    evictions.push({ domain: 'object-helm-manifest', scope: scopes.helmScope });
-    evictions.push({ domain: 'object-helm-values', scope: scopes.helmScope });
+    evictions.push(
+      { domain: 'object-helm-manifest', scope: scopes.helmScope },
+      { domain: 'object-helm-values', scope: scopes.helmScope }
+    );
   }
   if (scopes.podsScope) {
     evictions.push({ domain: 'pods', scope: scopes.podsScope });

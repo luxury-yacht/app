@@ -506,11 +506,13 @@ const YamlEditor = ({
             });
           }
 
-          items.push({ divider: true });
-          items.push({
-            label: 'Select All',
-            onClick: () => selectCodeMirrorContent(view),
-          });
+          items.push(
+            { divider: true },
+            {
+              label: 'Select All',
+              onClick: () => selectCodeMirrorContent(view),
+            }
+          );
 
           setContextMenu({
             position: { x: event.clientX, y: event.clientY },

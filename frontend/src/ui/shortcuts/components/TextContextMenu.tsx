@@ -153,23 +153,24 @@ const TextContextMenu: React.FC = () => {
         });
       }
 
-      items.push({ divider: true });
-
-      items.push({
-        label: 'Select All',
-        onClick: () => {
-          const el = targetRef.current;
-          if (el instanceof HTMLInputElement || el instanceof HTMLTextAreaElement) {
-            el.focus();
-            el.select();
-          } else if (logSelectionRoot) {
-            logSelectionRoot.focus();
-            selectNodeContents(logSelectionRoot);
-          } else {
-            document.execCommand('selectAll');
-          }
-        },
-      });
+      items.push(
+        { divider: true },
+        {
+          label: 'Select All',
+          onClick: () => {
+            const el = targetRef.current;
+            if (el instanceof HTMLInputElement || el instanceof HTMLTextAreaElement) {
+              el.focus();
+              el.select();
+            } else if (logSelectionRoot) {
+              logSelectionRoot.focus();
+              selectNodeContents(logSelectionRoot);
+            } else {
+              document.execCommand('selectAll');
+            }
+          },
+        }
+      );
 
       setMenu({ position: { x: event.clientX, y: event.clientY }, items });
     };

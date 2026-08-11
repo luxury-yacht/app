@@ -862,8 +862,7 @@ export const DockablePanelProvider: React.FC<DockablePanelProviderProps> = ({ ch
     return () => {
       target.style.removeProperty('--dock-right-offset');
       target.style.removeProperty('--dock-bottom-offset');
-      document.body.classList.remove('dock-right-open');
-      document.body.classList.remove('dock-bottom-open');
+      document.body.classList.remove('dock-right-open', 'dock-bottom-open');
     };
   }, []);
 

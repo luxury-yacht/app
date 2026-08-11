@@ -2077,8 +2077,8 @@ const LogViewerInner: React.FC<LogViewerProps> = ({
     const options: DropdownOption[] = [];
 
     if (isWorkload) {
-      options.push({ value: '_pods_header', label: 'Pods', disabled: true, group: 'header' });
       options.push(
+        { value: '_pods_header', label: 'Pods', disabled: true, group: 'header' },
         ...workloadPodsForSelector.map((pod) => ({
           value: toPodFilterValue(pod),
           label: pod,
@@ -2135,8 +2135,7 @@ const LogViewerInner: React.FC<LogViewerProps> = ({
         group: 'header',
       });
     }
-    options.push(...regularContainerOptions);
-    options.push(...debugContainerOptions);
+    options.push(...regularContainerOptions, ...debugContainerOptions);
 
     return options;
   }, [containers, isWorkload, workloadPodsForSelector]);
@@ -2618,11 +2617,9 @@ const LogViewerInner: React.FC<LogViewerProps> = ({
 
     // Promote well-known timestamp and level fields to appear first, then add
     // the remaining user-data columns (shared with the node-logs tab).
-    columns.push(
-      ...buildParsedLogDataColumns(derivedFieldKeys, new Set(columns.map((col) => col.key)))
+    return columns.concat(
+      buildParsedLogDataColumns(derivedFieldKeys, new Set(columns.map((col) => col.key)))
     );
-
-    return columns;
   }, [
     derivedFieldKeys,
     handleSelectContainerFilter,

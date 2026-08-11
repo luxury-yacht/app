@@ -155,35 +155,39 @@ export default function ClusterViewAttention() {
           continue;
         }
         seenTypes.add(cause.type);
-        items.push({
-          actionId: `attention-ignore-object-finding:${cause.type}`,
-          label: `Ignore "${cause.label}" for this object only`,
-          disabled: !row.ref.uid,
-          disabledReason: !row.ref.uid ? 'The object has no UID' : undefined,
-          onClick: () => {
-            void ignoreClusterAttentionObjectFinding(selectedClusterId, row.ref, cause.type).catch(
-              (error) => reportIgnoreError(error, 'ignoreAttentionObjectFinding')
-            );
+        items.push(
+          {
+            actionId: `attention-ignore-object-finding:${cause.type}`,
+            label: `Ignore "${cause.label}" for this object only`,
+            disabled: !row.ref.uid,
+            disabledReason: !row.ref.uid ? 'The object has no UID' : undefined,
+            onClick: () => {
+              void ignoreClusterAttentionObjectFinding(
+                selectedClusterId,
+                row.ref,
+                cause.type
+              ).catch((error) => reportIgnoreError(error, 'ignoreAttentionObjectFinding'));
+            },
           },
-        });
-        items.push({
-          actionId: `attention-ignore-cluster-type:${cause.type}`,
-          label: `Ignore "${cause.label}" in this cluster`,
-          onClick: () => {
-            void ignoreClusterAttentionFindingType(selectedClusterId, cause.type).catch((error) =>
-              reportIgnoreError(error, 'ignoreAttentionFindingType')
-            );
+          {
+            actionId: `attention-ignore-cluster-type:${cause.type}`,
+            label: `Ignore "${cause.label}" in this cluster`,
+            onClick: () => {
+              void ignoreClusterAttentionFindingType(selectedClusterId, cause.type).catch((error) =>
+                reportIgnoreError(error, 'ignoreAttentionFindingType')
+              );
+            },
           },
-        });
-        items.push({
-          actionId: `attention-ignore-global-type:${cause.type}`,
-          label: `Ignore "${cause.label}" in all clusters`,
-          onClick: () => {
-            void ignoreGlobalAttentionFindingType(selectedClusterId, cause.type).catch((error) =>
-              reportIgnoreError(error, 'ignoreGlobalAttentionFindingType')
-            );
-          },
-        });
+          {
+            actionId: `attention-ignore-global-type:${cause.type}`,
+            label: `Ignore "${cause.label}" in all clusters`,
+            onClick: () => {
+              void ignoreGlobalAttentionFindingType(selectedClusterId, cause.type).catch((error) =>
+                reportIgnoreError(error, 'ignoreGlobalAttentionFindingType')
+              );
+            },
+          }
+        );
       }
       return items;
     },

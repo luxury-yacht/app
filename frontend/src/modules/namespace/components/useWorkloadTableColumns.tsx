@@ -90,10 +90,7 @@ const useWorkloadTableColumns = ({
         onAltClick,
         isInteractive: () => true,
         sortValue: (row) => row.ref.kind.toLowerCase(),
-      })
-    );
-
-    columns.push(
+      }),
       cf.createTextColumn<WorkloadData>('name', 'Name', (row) => row.ref.name, {
         onClick: (row) => handleWorkloadClick(row),
         onAltClick,
@@ -145,9 +142,8 @@ const useWorkloadTableColumns = ({
       }
     );
     restartsColumn.sortValue = (row) => row.restarts ?? 0;
-    columns.push(restartsColumn);
-
     columns.push(
+      restartsColumn,
       cf.createResourceBarColumn<WorkloadData>({
         key: 'cpu',
         header: 'CPU',
@@ -166,10 +162,7 @@ const useWorkloadTableColumns = ({
           parseCpuToMillicores(
             row.cpuUsage !== null && row.cpuUsage !== undefined ? String(row.cpuUsage) : undefined
           ),
-      })
-    );
-
-    columns.push(
+      }),
       cf.createResourceBarColumn<WorkloadData>({
         key: 'memory',
         header: 'Memory',
@@ -188,10 +181,7 @@ const useWorkloadTableColumns = ({
           parseMemToMB(
             row.memUsage !== null && row.memUsage !== undefined ? String(row.memUsage) : undefined
           ),
-      })
-    );
-
-    columns.push(
+      }),
       cf.createAgeColumn<WorkloadData & { age?: string }>('age', 'Age', (row) => {
         return row.age ?? '—';
       }) as GridColumnDefinition<WorkloadData>
