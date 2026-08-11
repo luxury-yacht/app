@@ -148,13 +148,15 @@ describe('FinalizersSection', () => {
       1,
       objectData as ObjectActionData,
       'example.com/metadata-cleanup',
-      'metadata.finalizers'
+      'metadata.finalizers',
+      '2026-08-09T12:34:56Z'
     );
     expect(requestFinalizerRemovalMock).toHaveBeenNthCalledWith(
       2,
       objectData as ObjectActionData,
       'kubernetes',
-      'spec.finalizers'
+      'spec.finalizers',
+      '2026-08-09T12:34:56Z'
     );
   });
 

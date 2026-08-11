@@ -153,7 +153,9 @@ deletion timestamp. Metadata finalizers use an exact-GVK JSON Patch guarded by a
 `test` operation so a concurrent finalizer update is not overwritten. Namespace
 `spec.finalizers` use the core/v1 Namespace `/finalize` subresource. These paths
 require exact-object `patch` and `update namespaces/finalize` permissions,
-respectively, and remove only the selected finalizer.
+respectively, and remove only the selected finalizer. When fewer than five
+minutes have elapsed since the deletion timestamp, the confirmation warns the
+user to consider giving the responsible controller more cleanup time.
 
 When migrating a resource family, project status consistently into every surface
 that renders it: snapshot rows, stream rows, rich detail DTOs, object-map data,

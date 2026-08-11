@@ -172,9 +172,11 @@ const makeNode = (overrides?: Partial<ObjectActionData>): ObjectActionData =>
 const FinalizerControllerHarness = ({
   object,
   onAfterAction,
+  deletionTimestamp,
 }: {
   object: ObjectActionData;
   onAfterAction: (object: ObjectActionData, action: string) => void;
+  deletionTimestamp?: string;
 }) => {
   const controller = useObjectActionController({ context: 'object-panel', onAfterAction });
   return (
@@ -182,7 +184,12 @@ const FinalizerControllerHarness = ({
       <button
         type="button"
         onClick={() =>
-          controller.requestFinalizerRemoval(object, 'example.com/cleanup', 'metadata.finalizers')
+          controller.requestFinalizerRemoval(
+            object,
+            'example.com/cleanup',
+            'metadata.finalizers',
+            deletionTimestamp
+          )
         }
       >
         Request finalizer removal
@@ -225,6 +232,7 @@ describe('ActionsMenu', () => {
       root.unmount();
     });
     container.remove();
+    vi.useRealTimers();
   });
 
   it('renders available actions as native menu buttons', async () => {
@@ -354,6 +362,66 @@ describe('ActionsMenu', () => {
       'metadata.finalizers'
     );
     expect(onAfterAction).toHaveBeenCalledWith(object, 'removeFinalizer');
+  });
+
+  it('warns when finalizer removal is requested less than five minutes after deletion', async () => {
+    vi.useFakeTimers();
+    vi.setSystemTime(new Date('2026-08-10T12:04:59Z'));
+    const onAfterAction = vi.fn();
+
+    await act(async () => {
+      root.render(
+        <FinalizerControllerHarness
+          object={makeDeployment()}
+          onAfterAction={onAfterAction}
+          deletionTimestamp="2026-08-10T12:00:00Z"
+        />
+      );
+      await Promise.resolve();
+    });
+    act(() => {
+      container
+        .querySelector<HTMLButtonElement>('button')
+        ?.dispatchEvent(new MouseEvent('click', { bubbles: true }));
+    });
+
+    const paragraphs = Array.from(
+      document.querySelectorAll<HTMLElement>('.confirmation-modal-body > p')
+    );
+    expect(paragraphs.map((paragraph) => paragraph.textContent)).toEqual([
+      'Remove finalizer "example.com/cleanup" from deployment "test-resource"?',
+      "Less than 5 minutes has elapsed since the delete was requested. Are you sure you want to delete the finalizer now, without giving the controller more time to clean up?",
+      'This may leave objects in an unknown or bad state. Only continue if the responsible controller cannot complete cleanup.',
+    ]);
+    expect(paragraphs[1]?.classList.contains('confirmation-modal-notice')).toBe(true);
+    expect(paragraphs[2]?.classList.contains('confirmation-modal-warning')).toBe(true);
+  });
+
+  it('omits the cleanup-time notice once five minutes has elapsed', async () => {
+    vi.useFakeTimers();
+    vi.setSystemTime(new Date('2026-08-10T12:05:00Z'));
+    const onAfterAction = vi.fn();
+
+    await act(async () => {
+      root.render(
+        <FinalizerControllerHarness
+          object={makeDeployment()}
+          onAfterAction={onAfterAction}
+          deletionTimestamp="2026-08-10T12:00:00Z"
+        />
+      );
+      await Promise.resolve();
+    });
+    act(() => {
+      container
+        .querySelector<HTMLButtonElement>('button')
+        ?.dispatchEvent(new MouseEvent('click', { bubbles: true }));
+    });
+
+    expect(document.querySelector('.confirmation-modal-notice')).toBeNull();
+    expect(document.querySelector('.confirmation-modal-warning')?.textContent).toContain(
+      'This may leave objects in an unknown or bad state.'
+    );
   });
 
   it('can cancel finalizer removal and reports backend failures without signaling refresh', async () => {

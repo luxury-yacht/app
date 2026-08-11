@@ -31,6 +31,8 @@ interface ConfirmationModalProps {
   message: string;
   /** Optional table rendered between the message and the warning. */
   detailsTable?: ConfirmationModalDetailsTable;
+  /** Optional notice rendered between the main content and warning. */
+  notice?: string;
   /** Optional warning text rendered below the main message in warning style. */
   warning?: string;
   confirmText?: string;
@@ -48,6 +50,7 @@ const ConfirmationModalContent: React.FC<Omit<ConfirmationModalProps, 'isOpen'>>
   title,
   message,
   detailsTable,
+  notice,
   warning,
   confirmText,
   cancelText,
@@ -115,6 +118,7 @@ const ConfirmationModalContent: React.FC<Omit<ConfirmationModalProps, 'isOpen'>>
             </table>
           </div>
         )}
+        {!!notice && <p className="confirmation-modal-notice">{notice}</p>}
         {!!warning && <p className="confirmation-modal-warning">{warning}</p>}
       </div>
       <div className="confirmation-modal-footer">
@@ -143,6 +147,7 @@ function ConfirmationModal({
   title,
   message,
   detailsTable,
+  notice,
   warning,
   confirmText = 'Confirm',
   cancelText = 'Cancel',
@@ -162,6 +167,7 @@ function ConfirmationModal({
       title={title}
       message={message}
       detailsTable={detailsTable}
+      notice={notice}
       warning={warning}
       secondaryActionText={secondaryActionText}
       secondaryActionButtonClass={secondaryActionButtonClass}

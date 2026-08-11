@@ -111,7 +111,13 @@ export default function FinalizersSection({
   // field. Objects with only metadata.finalizers have nothing to disambiguate.
   const showPaths = namespaceFinalizers.length > 0;
   const conditions = (namespaceFinalization?.conditions ?? []).filter(blockingCondition);
-  const removeFinalizer = actionController.requestFinalizerRemoval.bind(null, objectData);
+  const removeFinalizer = (finalizer: string, path: FinalizerPath) =>
+    actionController.requestFinalizerRemoval(
+      objectData,
+      finalizer,
+      path,
+      deletion.deletionTimestamp
+    );
 
   return (
     <div className="object-panel-section deletion-section">

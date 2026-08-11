@@ -25,6 +25,7 @@
   margin-top: 0.75rem;
 }
 
+.confirmation-modal-body p.confirmation-modal-notice,
 .confirmation-modal-body p.confirmation-modal-warning {
   color: var(--color-warning);
   font-weight: var(--font-weight-medium);

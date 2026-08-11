@@ -187,6 +187,24 @@ describe('ConfirmationModal', () => {
     expect(firstRowCells[1]?.classList.contains('monospace')).toBe(true);
   });
 
+  it('renders an optional notice between the main message and warning', async () => {
+    await renderModal({
+      notice: 'Give the controller more time.',
+      warning: 'This may leave objects in an unknown or bad state.',
+    });
+
+    const paragraphs = Array.from(
+      document.querySelectorAll<HTMLElement>('.confirmation-modal-body > p')
+    );
+    expect(paragraphs.map((paragraph) => paragraph.textContent)).toEqual([
+      'Are you sure?',
+      'Give the controller more time.',
+      'This may leave objects in an unknown or bad state.',
+    ]);
+    expect(paragraphs[1]?.classList.contains('confirmation-modal-notice')).toBe(true);
+    expect(paragraphs[2]?.classList.contains('confirmation-modal-warning')).toBe(true);
+  });
+
   it('omits the details table when not provided', async () => {
     await renderModal({});
     expect(document.querySelector('.confirmation-modal-details-table')).toBeNull();

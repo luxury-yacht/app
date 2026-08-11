@@ -96,7 +96,20 @@ interface FinalizerRemovalTarget {
   object: ObjectActionData;
   finalizer: string;
   path: FinalizerPath;
+  deletionTimestamp?: string;
 }
+
+const FINALIZER_CLEANUP_GRACE_MS = 5 * 60 * 1000;
+const RECENT_FINALIZER_REMOVAL_NOTICE =
+  "Less than 5 minutes has elapsed since the delete was requested. Are you sure you want to delete the finalizer now, without giving the controller more time to clean up?";
+
+const deletionIsWithinFinalizerCleanupGrace = (deletionTimestamp?: string): boolean => {
+  if (!deletionTimestamp) {
+    return false;
+  }
+  const requestedAt = Date.parse(deletionTimestamp);
+  return Number.isFinite(requestedAt) && Date.now() < requestedAt + FINALIZER_CLEANUP_GRACE_MS;
+};
 
 const clampReplicas = (value: number): number => Math.max(0, Math.min(9999, value));
 
@@ -582,8 +595,13 @@ export const useObjectActionController = ({
   }, [onAfterAction, scaleConfirmation]);
 
   const requestFinalizerRemoval = useCallback(
-    (object: ObjectActionData, finalizer: string, path: FinalizerPath) => {
-      setFinalizerRemovalTarget({ object, finalizer, path });
+    (
+      object: ObjectActionData,
+      finalizer: string,
+      path: FinalizerPath,
+      deletionTimestamp?: string
+    ) => {
+      setFinalizerRemovalTarget({ object, finalizer, path, deletionTimestamp });
     },
     []
   );
@@ -610,10 +628,13 @@ export const useObjectActionController = ({
 
   const confirmation = useMemo(() => {
     if (finalizerRemovalTarget) {
-      const { object, finalizer } = finalizerRemovalTarget;
+      const { object, finalizer, deletionTimestamp } = finalizerRemovalTarget;
       return {
         title: 'Remove Finalizer',
         message: `Remove finalizer "${finalizer}" from ${object.kind.toLowerCase()} "${object.name}"?`,
+        notice: deletionIsWithinFinalizerCleanupGrace(deletionTimestamp)
+          ? RECENT_FINALIZER_REMOVAL_NOTICE
+          : undefined,
         warning:
           'This may leave objects in an unknown or bad state. Only continue if the responsible controller cannot complete cleanup.',
         confirmText: 'Remove',
@@ -690,6 +711,7 @@ export const useObjectActionController = ({
           isOpen={Boolean(confirmation)}
           title={confirmation?.title ?? ''}
           message={confirmation?.message ?? ''}
+          notice={confirmation?.notice}
           warning={confirmation?.warning}
           confirmText={confirmation?.confirmText ?? 'Confirm'}
           cancelText="Cancel"
