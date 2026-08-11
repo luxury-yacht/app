@@ -35,7 +35,7 @@ export const sanitizeYamlForDiff = (raw: string): string => {
   }
 };
 
-const getIndentDepth = (line: string): number => line.match(/^\s*/)?.[0].length ?? 0;
+const getIndentDepth = (line: string): number => /^\s*/.exec(line)?.[0].length ?? 0;
 
 // Replace muted field values with stable placeholders for diffing.
 export const maskMutedMetadataLines = (raw: string, mutedLines: Set<number>): string => {
@@ -55,12 +55,12 @@ export const maskMutedMetadataLines = (raw: string, mutedLines: Set<number>): st
       return line;
     }
 
-    const indent = line.match(/^\s*/)?.[0] ?? '';
+    const indent = /^\s*/.exec(line)?.[0] ?? '';
     if (trimmed.startsWith('-')) {
       return `${indent}- <muted>`;
     }
 
-    const keyMatch = trimmed.match(/^([A-Za-z0-9_-]+):/);
+    const keyMatch = /^([A-Za-z0-9_-]+):/.exec(trimmed);
     if (keyMatch) {
       return `${indent}${keyMatch[1]}: <muted>`;
     }
@@ -103,7 +103,7 @@ export const buildIgnoredMetadataLineSet = (raw: string): Set<number> => {
     }
 
     if (metadataActive && !trimmed.startsWith('-')) {
-      const keyMatch = trimmed.match(/^([A-Za-z0-9_-]+):/);
+      const keyMatch = /^([A-Za-z0-9_-]+):/.exec(trimmed);
       if (keyMatch && MUTED_METADATA_FIELDS.has(keyMatch[1])) {
         muted.add(lineNumber);
         ignoredActive = true;

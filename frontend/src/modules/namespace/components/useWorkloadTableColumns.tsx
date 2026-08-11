@@ -32,7 +32,7 @@ const parseReadyCounts = (value?: string | null): { ready: number; total: number
   if (!value) {
     return null;
   }
-  const match = value.match(/^(\d+)\s*\/\s*(\d+)$/);
+  const match = /^(\d+)\s*\/\s*(\d+)$/.exec(value);
   if (!match) {
     return null;
   }

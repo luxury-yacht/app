@@ -88,7 +88,7 @@ const metricFreshnessFromInfo = (
 const parseReadyPodCounts = (
   ready: string | null | undefined
 ): { readyPodCount: number; podCount: number } | undefined => {
-  const match = (ready ?? '').trim().match(/^(\d+)\s*\/\s*(\d+)$/);
+  const match = /^(\d+)\s*\/\s*(\d+)$/.exec((ready ?? '').trim());
   if (!match) {
     return undefined;
   }

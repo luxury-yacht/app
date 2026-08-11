@@ -280,7 +280,7 @@ const mergeTargetLimitWarnings = (warnings: string[]): string[] => {
   let globalMatch: RegExpMatchArray | null = null;
 
   for (const warning of warnings) {
-    const match = warning.match(TARGET_LIMIT_WARNING_PATTERN);
+    const match = TARGET_LIMIT_WARNING_PATTERN.exec(warning);
     if (!match) {
       merged.push(warning);
       continue;

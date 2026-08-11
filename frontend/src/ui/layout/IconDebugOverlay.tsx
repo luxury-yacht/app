@@ -24,7 +24,7 @@ type IconDebugMetricsMap = Record<string, IconDebugMetrics>;
 const SVG_DEFAULT_SIZE = '300x150';
 
 const parseGridSize = (value: string): [number, number] | null => {
-  const match = value.match(/^(\d+(?:\.\d+)?)x(\d+(?:\.\d+)?)$/);
+  const match = /^(\d+(?:\.\d+)?)x(\d+(?:\.\d+)?)$/.exec(value);
   if (!match) {
     return null;
   }

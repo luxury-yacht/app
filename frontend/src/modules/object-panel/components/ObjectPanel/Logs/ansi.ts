@@ -52,7 +52,7 @@ export const stripAnsi = (text: string): string => text.replace(ANSI_PATTERN, ''
 
 const normalizeHex = (hex: string): [number, number, number, number] | null => {
   const value = hex.trim();
-  const match = value.match(HEX_PATTERN);
+  const match = HEX_PATTERN.exec(value);
   if (!match?.[1]) {
     return null;
   }
@@ -78,7 +78,7 @@ const normalizeHex = (hex: string): [number, number, number, number] | null => {
 };
 
 const normalizeRgb = (color: string): [number, number, number, number] | null => {
-  const match = color.trim().match(RGB_PATTERN);
+  const match = RGB_PATTERN.exec(color.trim());
   if (!match) {
     return null;
   }

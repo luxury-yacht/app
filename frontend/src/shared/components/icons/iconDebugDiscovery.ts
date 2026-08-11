@@ -42,13 +42,13 @@ const isIconComponentExport = (name: string, value: unknown): value is React.Ele
 
 const formatPath = (path: string) => path.replace(/^\.\//, '');
 
-const getCursorName = (path: string) => path.match(/\/([^/]+)\.svg$/)?.[1] ?? path;
+const getCursorName = (path: string) => /\/([^/]+)\.svg$/.exec(path)?.[1] ?? path;
 
 const parseSvgSize = (source: string): { gridSize: string; defaultSize: string } => {
-  const viewBox = source.match(/\bviewBox=["']([^"']+)["']/)?.[1]?.trim();
+  const viewBox = /\bviewBox=["']([^"']+)["']/.exec(source)?.[1]?.trim();
   const viewBoxParts = viewBox?.split(/\s+/).map(Number);
-  const width = source.match(/\bwidth=["']([^"']+)["']/)?.[1];
-  const height = source.match(/\bheight=["']([^"']+)["']/)?.[1];
+  const width = /\bwidth=["']([^"']+)["']/.exec(source)?.[1];
+  const height = /\bheight=["']([^"']+)["']/.exec(source)?.[1];
   let gridSize: string;
 
   if (viewBoxParts?.length === 4) {

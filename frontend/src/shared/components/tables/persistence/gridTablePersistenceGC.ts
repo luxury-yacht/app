@@ -27,7 +27,7 @@ const parseStorageKey = (key: string): ParsedKey | null => {
   if (!key.startsWith(`${STORAGE_PREFIX}:`)) {
     return null;
   }
-  const match = key.match(/^gridtable:v(\d+):([^:]+):([^:]+?)(?::(.*))?$/);
+  const match = /^gridtable:v(\d+):([^:]+):([^:]+?)(?::(.*))?$/.exec(key);
   if (!match) {
     return null;
   }
