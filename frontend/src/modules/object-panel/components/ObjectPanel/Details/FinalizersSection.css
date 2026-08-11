@@ -116,25 +116,12 @@
   transform: translateY(2px);
 }
 
-/* Quiet danger: outlined until hovered, so the escape hatch is available
-   without competing with the object's actual state. The disabled treatment is
-   left to the shared .button:disabled rule. */
+/* The shared danger button owns appearance and interaction; this class only
+   places the compact action within its finalizer row. */
 .button.deletion-remove-button {
   grid-row: 1;
   grid-column: 2;
   padding: 0.15rem var(--spacing-sm);
-}
-
-.button.deletion-remove-button:not(:disabled) {
-  background: transparent;
-  box-shadow: inset 0 0 0 1px var(--color-error-border);
-  color: var(--color-error-text);
-}
-
-.button.deletion-remove-button:not(:disabled):hover {
-  background: var(--button-danger-bg);
-  box-shadow: none;
-  color: var(--button-danger-text);
 }
 
 /* Deletion conditions only exist when something is wrong, so the message is

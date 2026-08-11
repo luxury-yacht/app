@@ -65,7 +65,7 @@ function FinalizerRow({ entry, showPath, onRemove }: Readonly<FinalizerRowProps>
       </div>
       <button
         type="button"
-        className="button deletion-remove-button"
+        className="button danger deletion-remove-button"
         aria-label={`Remove finalizer ${entry.name}`}
         disabled={!entry.capability.allowed || entry.capability.pending}
         title={disabledReason(entry.capability)}
@@ -146,7 +146,14 @@ export default function FinalizersSection({
         </div>
       </div>
       <p className="deletion-explanation">
-        Finalizers keep an object present until its controller finishes protected cleanup.
+        Finalizers are used to ensure that required cleanup is completed before an object is deleted.
+        A Finalizer can block object deletion until its controller has finished its work.
+      </p>
+      <p className="deletion-explanation">
+        There is no simple way to determine what is preventing a Finalizer from completing. You may be able to get more information by checking Events, the logs of the responsible controller, or the YAML <code>status</code> block of this object.
+      </p>
+      <p className="deletion-explanation">
+        If you are certain that this object can be safely deleted, you can remove the finalizer(s) below.
       </p>
 
       {entries.length > 0 ? (

@@ -133,6 +133,16 @@ describe('FinalizersSection', () => {
     );
   });
 
+  it('uses the shared danger button treatment for Remove', async () => {
+    await renderSection();
+
+    const buttons = Array.from(
+      container.querySelectorAll<HTMLButtonElement>('.deletion-remove-button')
+    );
+    expect(buttons).toHaveLength(2);
+    expect(buttons.every((button) => button.classList.contains('danger'))).toBe(true);
+  });
+
   it('names the API field path on every row once a spec finalizer list is present', async () => {
     await renderSection();
     expect(textOf(container, '.deletion-finalizer-path')).toEqual([
