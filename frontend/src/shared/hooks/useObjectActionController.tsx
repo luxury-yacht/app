@@ -101,7 +101,7 @@ interface FinalizerRemovalTarget {
 
 const FINALIZER_CLEANUP_GRACE_MS = 5 * 60 * 1000;
 const RECENT_FINALIZER_REMOVAL_NOTICE =
-  "Less than 5 minutes has elapsed since the delete was requested. Are you sure you want to delete the finalizer now, without giving the controller more time to clean up?";
+  'Less than 5 minutes has elapsed since the delete was requested. Are you sure you want to delete the finalizer now, without giving the controller more time to clean up?';
 
 const deletionIsWithinFinalizerCleanupGrace = (deletionTimestamp?: string): boolean => {
   if (!deletionTimestamp) {

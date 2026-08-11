@@ -50,7 +50,7 @@
 .deletion-finalizer-row {
   display: grid;
   grid-template-columns: minmax(0, 1fr) auto;
-  align-items: start;
+  align-items: center;
   gap: var(--spacing-xs) var(--spacing-md);
   padding: var(--spacing-md);
 }

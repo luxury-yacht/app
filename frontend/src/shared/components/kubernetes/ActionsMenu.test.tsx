@@ -390,7 +390,7 @@ describe('ActionsMenu', () => {
     );
     expect(paragraphs.map((paragraph) => paragraph.textContent)).toEqual([
       'Remove finalizer "example.com/cleanup" from deployment "test-resource"?',
-      "Less than 5 minutes has elapsed since the delete was requested. Are you sure you want to delete the finalizer now, without giving the controller more time to clean up?",
+      'Less than 5 minutes has elapsed since the delete was requested. Are you sure you want to delete the finalizer now, without giving the controller more time to clean up?',
       'This may leave objects in an unknown or bad state. Only continue if the responsible controller cannot complete cleanup.',
     ]);
     expect(paragraphs[1]?.classList.contains('confirmation-modal-notice')).toBe(true);
