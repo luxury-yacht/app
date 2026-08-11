@@ -28,6 +28,12 @@ frontend bindings, and a visible Taskfile-based build system.
   `curl -fsSL https://proxy.golang.org/github.com/wailsapp/wails/v3/@v/list | sort -V | tail -n 20`
   ended at `v3.0.0-beta.7`; re-run this check and review intervening release
   notes immediately before changing dependencies.
+- Pin the frontend runtime version carried by the selected Wails source rather
+  than assuming its suffix matches the Go module or accepting a template's
+  `latest`. The `v3.0.0-beta.7` source manifest vendors
+  `@wailsio/runtime@3.0.0-beta.5`
+  (`internal/runtime/desktop/@wailsio/runtime/package.json:1-4`); re-read that
+  manifest if the selected Wails beta changes.
 - Accept the Wails v3 beta risk for this branch. Do not wait for an RC or GA and
   do not preserve v2 as a release fallback. Wails currently calls v3 a beta
   with a stable desktop API and advises thorough deployment testing in its
@@ -49,12 +55,38 @@ frontend bindings, and a visible Taskfile-based build system.
   placeholder command. Reintroduce the option only through the Phase 5 native
   v3 multi-window track after process, Kubernetes client, persistence, refresh,
   and teardown ownership are defined and tested.
-- Make the pinned v3 CLI's generated project layout the product metadata and
-  native-build source of truth. Confirm during the spike whether that release
-  requires only `build/config.yml` or also a v3-formatted `wails.json`. Keep
-  Mage as the repository-facing command layer for quality checks, release
-  orchestration, signing coordination, and artifact collection, but remove
-  Mage code that depends on v2-only CLI flags or v2 internal templates.
+- Make the pinned v3 CLI's generated `build/config.yml` and Taskfiles the product
+  metadata and native-build source of truth. The beta.7 generated build assets
+  contain no replacement project `wails.json`
+  (`find internal/commands/build_assets -name wails.json` returns no file), and
+  the NSIS task does not request one
+  (`internal/commands/build_assets/windows/Taskfile.yml:118-135`). Delete the v2
+  file after all repository consumers move. Keep Mage as the
+  repository-facing command layer for quality checks, release orchestration,
+  signing coordination, and artifact collection, but remove Mage code that
+  depends on v2-only CLI flags or v2 internal templates.
+- Retain exactly one loopback refresh HTTP server under the v3 lifecycle. Do not
+  mount the aggregate mux as a Wails service route: beta.7's asset server returns
+  HTTP 501 for WebSocket upgrades
+  (`internal/assetserver/assetserver.go:83-87`), and its Windows response writer
+  cannot flush streaming responses
+  (`internal/assetserver/webview/responsewriter_windows.go:33-43`), so the
+  current WebSocket resource stream and SSE log stream cannot satisfy their
+  contracts there. Recheck these two upstream
+  limitations only if the selected Wails beta changes; do not carry a dormant
+  service-route implementation.
+- Build one persistent native-menu model before the main window starts. Refresh
+  it through platform-specific ownership: mutate then `Menu.Update()` in place
+  on GTK4 Linux, reset the application menu on macOS, and reinstall it on the
+  named window on Windows. Do not rebuild and attempt to reattach a new Linux
+  menu after window construction. In beta.7, Linux consumes the native menu in
+  `webview_window_linux.go:338-356`, its later setter only changes stored fields
+  at `webview_window_linux.go:304-311`, its application-menu platform setter is
+  empty at `application_linux.go:110-114`, and `menu_linux.go:23-44` rerenders
+  the existing native menu during `Menu.Update()`. macOS attaches an application
+  menu in `application_darwin.go:303-312`; Windows stores the app-level menu in
+  `application_windows.go:138-146` but attaches a menu to an existing window in
+  `webview_window_windows.go:115-123`.
 - Treat this branch as a one-way v3 cutover. V2 may be run only to record the
   pre-migration baseline before implementation starts. Git history is the only
   rollback boundary: do not keep dual runtime code, build modes, dependency
@@ -63,7 +95,7 @@ frontend bindings, and a visible Taskfile-based build system.
   Do not build, package, test, auto-detect, or document a `-tags gtk3` fallback.
   This deliberately drops distributions that only provide the legacy stack,
   including Ubuntu 22.04 LTS and Debian 12; the
-  [installation guide](https://v3.wails.io/quick-start/installation/#build-tools-and-webkit)
+  [installation guide](https://v3.wails.io/quick-start/installation/)
   currently sets the default-stack floor at Ubuntu 24.04 or Debian 13. Recheck
   the pinned beta's requirements before implementation and update the product's
   supported-distro documentation as part of the cutover.
@@ -81,10 +113,10 @@ frontend bindings, and a visible Taskfile-based build system.
 - Leave one coherent v3-only build architecture. Required Taskfile, Mage, CI,
   packaging, metadata, and generated-binding cleanup is migration work, not
   unrelated cleanup.
-- Evaluate mounting the private refresh API through a v3 service HTTP route. Use
-  it only if a spike proves snapshot, manual-job, SSE, WebSocket, readiness,
-  cancellation, correlation-ID, multi-cluster routing, and teardown parity; do
-  not reduce this to a base-URL substitution.
+- Keep the private refresh API on one v3-owned loopback server because the pinned
+  asset-service route cannot carry its WebSocket and Windows SSE contracts.
+  Preserve snapshot, manual-job, stream, readiness, cancellation,
+  correlation-ID, multi-cluster routing, CORS, and teardown behavior.
 - Decide process multiplicity explicitly. With **New Window** removed, either
   enable v3 single-instance handling with a defined second-launch contract or
   document why independently launched processes remain supported.
@@ -132,8 +164,11 @@ and [System Tray Menus](https://v3.wails.io/features/menus/systray/).
 - Reworking Kubernetes refresh, cluster lifecycle, permission, or object
   identity semantics beyond the lifecycle adaptation required by v3.
 - Mobile targets or server builds.
-- Legacy GTK3/WebKit2GTK 4.1 builds and Linux distributions that cannot provide
+- Legacy GTK3/WebKit2GTK 4.x builds and Linux distributions that cannot provide
   the pinned Wails v3 release's GTK4/WebKitGTK 6.0 runtime dependencies.
+- New package formats such as MSIX; the current Windows release contract remains
+  NSIS, so beta.7's separate MSIX configuration path does not justify retaining
+  the v2 `wails.json`.
 - Unrelated visual redesign.
 - Persisted-settings schema/key changes or release artifact renames that are not
   required by a selected v3 feature or platform constraint.
@@ -150,12 +185,12 @@ and [System Tray Menus](https://v3.wails.io/features/menus/systray/).
 
 | Domain | Current evidence | Migration consequence |
 | --- | --- | --- |
-| Application composition | `main.go:57-160` creates the backend, menu, lifecycle callbacks, one window, embedded assets, and platform options in one `wails.Run`. | Create the v3 application first, create and retain a named main window, inject a desktop adapter, register the backend service, install lifecycle hooks, then call `app.Run()`. |
+| Application composition | `main.go:57-160` creates the backend, menu, lifecycle callbacks, one window, embedded assets, and platform options in one `wails.Run`. | Create the v3 application, construct the name-resolving desktop adapter and backend service, build the persistent native menu, create the named main window with that menu, install lifecycle hooks, then call `app.Run()`. |
 | Backend runtime lifecycle | `backend/app.go:25-35`, `backend/app.go:196-241`, and `backend/app_runtime.go:9-48` store a Wails context capability separately from the backend cancellation signal. | Retain the cancellation boundary from `ServiceStartup(ctx, ...)`, but replace context-bound runtime operations with an injected app/window adapter. |
-| Startup and shutdown | `backend/app_lifecycle.go:41-63` performs UI and cluster startup; `backend/app_lifecycle.go:223-272` saves window state before close and tears down background systems at shutdown. | Split service readiness from webview readiness. Persist window state while the main window is alive, and run backend teardown from `ServiceShutdown`. |
-| Refresh webview transport | `backend/app_refresh_setup.go:457-479` builds the aggregate HTTP mux and `backend/app_refresh_setup.go:522-543` binds it to a random loopback port. `backend/refresh/api/server.go:311-325` and `backend/refresh_stream_cors.go:5-30` own CORS, while `frontend/src/core/refresh/client.ts:47-55` and `frontend/src/core/refresh/client.ts:159-175` discover and retry the runtime base URL. | Spike a stable v3 service route against every HTTP and streaming contract. If it passes, mount the existing aggregate handler behind one stable same-origin route and remove only the transport-specific listener/base-URL/CORS machinery; do not change refresh domain semantics. |
+| Startup and shutdown | `backend/app_lifecycle.go:41-63` performs UI and cluster startup; `backend/app_lifecycle.go:223-272` saves window state before close and tears down background systems at shutdown. | Split synchronous service startup from webview readiness. `ServiceStartup` captures the application context and completes non-UI setup before native windows run; an error aborts `App.Run()`. Persist window state while the main window is alive, and run backend teardown from `ServiceShutdown`. |
+| Refresh webview transport | `backend/app_refresh_setup.go:457-479` builds the aggregate HTTP mux and `backend/app_refresh_setup.go:522-543` binds it to a random loopback port. `backend/refresh/api/server.go:311-325` and `backend/refresh_stream_cors.go:5-30` own CORS, while `frontend/src/core/refresh/client.ts:47-55` and `frontend/src/core/refresh/client.ts:159-175` discover and retry the runtime base URL. The resource stream upgrades to WebSocket at `backend/refresh_aggregate_resourcestream.go:109-115`, and the log stream requires SSE flushing in `backend/refresh/containerlogsstream/handler.go:145-149`. | Port exactly one loopback server to v3 lifecycle ownership. Beta.7's service-route asset server rejects WebSockets and cannot stream on Windows, so preserve base-URL discovery, CORS, readiness, replacement, and teardown instead of adding a same-origin compatibility route. |
 | Native capabilities | Nine production Go files import Wails v2 (`rg -l 'github.com/wailsapp/wails/v2' --glob '*.go' .` classified by `_test.go` -> `9` production and `5` test files). Menus, events, dialogs, clipboard, window state, quit/hide, and window commands are represented in `main.go`, `backend/app_lifecycle.go`, `backend/app_settings.go`, `backend/app_data_management.go`, `backend/app_csv_export.go`, `backend/kubeconfigs.go`, and `backend/menu.go`. | Define the adapter around the needed capabilities and port each producer/consumer pair to v3 managers. Avoid a local wrapper per call site. |
-| Menu contract | `backend/menu.go:14-38` owns the menu tree; `backend/menu.go:65-100`, `backend/menu.go:131-174`, `backend/menu.go:176-250`, and `backend/menu.go:295-347` connect native items to frontend events and window/app operations. | Rebuild the menu labels, accelerators, platform differences, callbacks, and dynamic visibility labels using the v3 menu manager, with **New Window** deliberately removed. |
+| Menu contract | `backend/menu.go:14-38` owns the menu tree; `backend/menu.go:65-100`, `backend/menu.go:131-174`, `backend/menu.go:176-250`, and `backend/menu.go:295-347` connect native items to frontend events and window/app operations. `main.go:80-92` currently rebuilds and reinstalls a new menu, while `backend/app_ui.go:55-65` disables that path on Linux. | Build a persistent v3 menu before the main window and preserve labels, accelerators, platform differences, callbacks, and dynamic visibility labels with **New Window** removed. On GTK4 Linux, window construction consumes the menu and later `SetMenu` does not reattach it, so mutate the installed model and call `Menu.Update()`; use macOS application-menu reset and Windows named-window reinstall for their native ownership. |
 | New Window removal | `backend/menu.go:41-55` respawns the executable; `backend/menu.go:74-80` exposes it as **New Window** with `Cmd/Ctrl+N`. `rg -n -i 'new window|spawnNewWindow' . --glob '!docs/plans/wails-v3-migration.md' --glob '!frontend/wailsjs/**'` finds no other implementation surface. | Remove the menu item, accelerator, callback, now-unused process imports, tests, and user/developer documentation during the core menu port. Assert the option is absent until Phase 5 implements native windows. |
 | Process multiplicity | `rg -n 'SingleInstance|single instance|single-instance' main.go backend frontend/src mage .github` returns no match; process spawning is currently explicit only in the **New Window** implementation above. | Decide whether v3 should reject/funnel subsequent launches or continue allowing independent manual processes. If single-instance is enabled, second-launch handling restores/focuses the named main window and validates all incoming data. |
 | Binding surface | `frontend/wailsjs/go/backend/App.js` exposes 178 methods, while `frontend/src/core/backend-api/index.ts:1-74` explicitly allows 67 of them into application code. | Generate v3 TypeScript bindings for one `App` service and repoint the explicit facade. Do not make the other generated methods reachable merely because v3 generated them. |
@@ -173,34 +208,47 @@ and [System Tray Menus](https://v3.wails.io/features/menus/systray/).
 | Platform packaging | macOS builds append v2 `--platform` (`mage/macos.go:248-270`); Windows appends `-o`/`-nsis` and reads a v2 internal NSIS template (`mage/windows.go:13-24`, `mage/windows.go:66-97`, `mage/windows.go:157-176`); Linux detects WebKit2GTK and conditionally adds `webkit2_41` (`mage/linux.go:13-50`). | Port platform packaging to v3 Taskfiles/build assets. Use only the default GTK4/WebKitGTK 6.0 Linux backend and delete legacy WebKit detection/tags. The v3 build command no longer accepts the v2 flags; the [v3 build-system reference](https://v3.wails.io/concepts/build-system/) assigns platform builds, output paths, icons, and packaging to Taskfiles and `build/config.yml`. |
 | Build directory ownership | `.gitignore:26-29` ignores all of `build/`, while existing Mage/Wails output already occupies `build/bin`, `build/darwin`, `build/artifacts`, and `build/packages` (`mage/build-config.go:54-74`, `mage/macos.go:12-13`, `mage/linux.go:142-169`). | Reserve tracked portions of `build/` for v3 configuration/platform assets and ignore only generated output paths. Decide output locations before generating v3 assets so configuration is not hidden by the current blanket ignore. |
 | Release matrix | `.github/workflows/release.yml:35-58` builds macOS Intel/Apple Silicon, Windows amd64/arm64, and Linux amd64/arm64; `.github/actions/setup-toolchain/action.yaml:20-43` installs the v2 CLI and Linux WebKit2GTK 4.1 headers. | Update the shared action to install GTK4/WebKitGTK 6.0 and prove every existing architecture target and artifact path before cutover. Distro compatibility below the new GTK4 baseline is deliberately not preserved. |
-| Product metadata | `wails.json:1-24` owns app/release metadata; `frontend/vite.config.ts:14-24`, `mage/utils.go:49-84`, `DEVELOPMENT.md:87-103`, and `RELEASE.md:75-81` consume it. | Move these consumers atomically to the pinned v3 metadata source (or a generated repository-owned view). Delete the v2 file if obsolete, or replace its contents with the v3 schema if the pinned CLI still requires that filename. |
+| Product metadata | `wails.json:1-24` owns app/release metadata; `frontend/vite.config.ts:14-24`, `mage/utils.go:49-84`, `DEVELOPMENT.md:87-103`, and `RELEASE.md:75-81` consume it. | Move these consumers atomically to `build/config.yml` or a generated repository-owned view and delete `wails.json`. The beta.7 NSIS build path does not require a v3 replacement file. |
 | Test scaffolding | Storybook emulates `window.runtime` and `window.go` in `frontend/.storybook/preview.ts:4-17` and `frontend/.storybook/preview.ts:64-96`; frontend globals declare the same v2 shape in `frontend/src/types/global.d.ts:10-25`. | Mock the new frontend adapter and generated binding module instead of recreating v2 globals. Keep Storybook browser-only behavior available. |
 
 ## Target model and ordering
 
 1. `main` creates `application.App` with embedded frontend assets and no backend
    service cycle.
-2. `main` creates a named main `WebviewWindow`, initially hidden where the
-   current platform behavior requires it, and registers that exact window in a
-   window resolver. Window-scoped operations require an explicit window name or
-   handle even while only one window exists.
-3. `main` constructs a Wails v3 desktop adapter with the application and window
-   resolver, constructs `backend.App` with that adapter, and initially registers
-   `backend.App` as one process-scoped service.
+2. `main` constructs a Wails v3 desktop adapter with the application and the
+   constant main-window name. The adapter resolves windows through
+   `app.Window.GetByName`; do not add a parallel window registry or fall back to
+   the focused window. Beta.7 provides this lookup in
+   `pkg/application/window_manager.go:16-32`, keyed by
+   `WebviewWindowOptions.Name` (`webview_window_options.go:80-83`). `main` then
+   constructs `backend.App` with that adapter and registers it as one
+   process-scoped service.
+3. `main` builds one persistent menu from backend actions, sets the application
+   menu, and creates the initially hidden named main `WebviewWindow`. Pass that
+   same menu through the explicit Linux window options before `app.Run()`; use
+   the application-menu option on Windows and the global application menu on
+   macOS.
 4. `main` registers `WindowRuntimeReady` and quit hooks before `app.Run()`.
-5. `backend.App.ServiceStartup` receives the application-lifetime cancellation
-   context. It may initialize non-UI prerequisites, but the desktop adapter
-   remains unable to emit frontend events or invoke interactive UI until the
-   window runtime-ready callback advances it.
-6. The runtime-ready callback advances the adapter exactly once, then runs the
+5. `app.Run()` calls `backend.App.ServiceStartup` synchronously before it runs
+   pending native windows. Startup captures the application-lifetime context and
+   completes only bounded non-UI prerequisites; a non-nil error aborts
+   `app.Run()` and triggers shutdown for services that already started. The
+   desktop adapter remains unable to emit frontend events or invoke interactive
+   UI at this point (`pkg/application/application.go:651-662` and
+   `pkg/application/services.go:90-97`).
+6. The pending main window starts with its initial native menu. Calls made before
+   its platform implementation exists are dropped by Wails; after it exists,
+   JavaScript and event delivery are queued until the frontend sends
+   `wails:runtime:ready`.
+7. The runtime-ready callback advances the adapter exactly once, then runs the
    interactive startup sequence: beta-expiry dialog/quit gate, window restore,
    window show, cluster initialization, watcher startup, update check, and
    installation metric scheduling. The transition that marks the adapter ready
    must not itself depend on the ready gate.
-7. A single idempotent pre-quit path waits for pending selection persistence and
+8. A single idempotent pre-quit path waits for pending selection persistence and
    reads/saves main-window geometry before the window is closed. Test window
    close, native Quit/Exit, and programmatic `app.Quit()` paths.
-8. `backend.App.ServiceShutdown` cancels and tears down auth recovery, runtime
+9. `backend.App.ServiceShutdown` cancels and tears down auth recovery, runtime
    operations, kubeconfig watching, and refresh subsystems. It does not use a
    closed window or frontend runtime.
 
@@ -210,8 +258,14 @@ The adapter distinguishes application-scoped operations from window-scoped
 operations so Phase 5 can add native windows without reintroducing implicit
 global window state. V3 services remain process-scoped and must not acquire a
 window identity by guessing from focus.
-It also addresses the v3 warning that Go-to-frontend events should wait for
-`WindowRuntimeReady`; see the official
+The readiness gate reflects beta.7's actual delivery behavior: `ExecJS` and
+event dispatch return while the window implementation is absent, then queue
+JavaScript after native construction until `wails:runtime:ready` marks the
+runtime loaded and flushes the queue
+(`pkg/application/webview_window.go:651-665`, `825-837`, and `1426-1456`).
+Waiting for `WindowRuntimeReady` prevents
+startup work from depending on either silent early drops or queued delivery;
+see the official
 [Events API](https://v3.wails.io/reference/events/) and
 [window events reference](https://v3.wails.io/features/windows/events/).
 
@@ -225,19 +279,18 @@ It also addresses the v3 warning that Go-to-frontend events should wait for
 - [ ] Generate a fresh v3 React/TypeScript project outside the repository with
       the pinned CLI. Inventory its `main.go`, binding command/output, runtime
       package version, `Taskfile.yml`, `build/config.yml`, and platform assets.
+      For beta.7, confirm the source-carried runtime is
+      `@wailsio/runtime@3.0.0-beta.5` even though the template requests `latest`,
+      then pin the source-carried version rather than the floating template.
 - [ ] Build an application/window event matrix from the pinned release. For each
       current startup, ready, focus, theme, menu-update, close, quit, shutdown,
       and platform-workaround behavior, record the v3 event/hook owner,
       cancellability, ordering, readiness, window identity, cleanup, and test.
-- [ ] Spike the existing aggregate refresh mux as a v3 service HTTP route. Prove
-      snapshots, ETags, permission errors, manual POST/jobs, telemetry, metrics,
-      SSE resume/error behavior, WebSocket subscribe/replay/reset, correlation
-      IDs, cancellation, multi-cluster handler replacement, and shutdown. Record
-      request origin and whether CORS remains necessary.
-- [ ] Refresh-route decision gate: prefer the stable v3 service route only if all
-      transport and freshness contracts pass. Otherwise retain the v3-owned
-      loopback transport with the failed contract and upstream limitation
-      documented; do not ship two refresh transports.
+- [ ] Confirm the selected beta still rejects WebSocket upgrades in its asset
+      server and lacks `http.Flusher` in its Windows webview response writer.
+      Record those exact upstream source references as the reason the aggregate
+      refresh mux remains on loopback; if either limitation changed, rerun the
+      full HTTP/SSE/WebSocket contract analysis before reconsidering the decision.
 - [ ] Exercise the pinned v3 single-instance callback before choosing process
       policy. Record behavior for a second launch before runtime-ready, after
       ready, while minimized/hidden, and during shutdown, including all incoming
@@ -245,11 +298,10 @@ It also addresses the v3 warning that Go-to-frontend events should wait for
 - [ ] Verify v3 screen coordinates/work areas on macOS, Windows, X11, and Wayland
       use the logical coordinate contract expected by persisted window settings,
       including a monitor positioned left of or above the primary display.
-- [ ] Resolve the documentation mismatch before editing repository config: the
-      migration guide still illustrates a v3 `wails.json`, while the current
-      [build-system reference](https://v3.wails.io/concepts/build-system/) says
-      project metadata lives in `build/config.yml`. Follow the pinned CLI's
-      generated project and record the result here.
+- [ ] Generate and inventory beta.7's build assets to confirm
+      `build/config.yml` plus Taskfiles own the current NSIS release path. Record
+      the unused MSIX task's separate legacy JSON input without retaining
+      `wails.json` in Luxury Yacht's supported build.
 - [ ] Run the current v2 focused lifecycle/menu/frontend runtime tests and
       `mise exec -- mage qc:prerelease`; record exact baseline failures, if any.
 - [ ] Produce current unsigned artifacts on the available host and record the
@@ -258,7 +310,11 @@ It also addresses the v3 warning that Go-to-frontend events should wait for
 - [ ] Generate v3 bindings for the existing single `App` service into a scratch
       directory. Record unsupported methods/types, generated service path,
       model path structure, constructor behavior, enum behavior, and error
-      mapping before changing frontend imports.
+      mapping before changing frontend imports. Run explicit combinations for
+      class versus interface output, `--time-type string|Date`, and call IDs
+      versus `--names`; record the exact invocation selected for committed
+      generation and drift checks. These are independent beta.7 generator flags
+      (`internal/flags/bindings.go:10-27`), not consequences of the output path.
 - [ ] Map all 178 bound methods and the 67-method frontend allowlist to candidate
       v3 service owners. Record shared dependencies, lifecycle ordering, event
       ownership, and methods that should cease to be bound.
@@ -277,8 +333,8 @@ It also addresses the v3 warning that Go-to-frontend events should wait for
 - [ ] Red: add ordering tests for service startup, runtime-ready interactive
       startup, pre-quit persistence, service cancellation, and service shutdown.
 - [ ] Define the narrow backend desktop contract needed by current consumers:
-      event emission, menu replacement, dialogs, clipboard text, current-window
-      state/actions, browser/application hide/quit, and readiness.
+      event emission, platform-aware menu refresh, dialogs, clipboard text,
+      named-window state/actions, browser/application hide/quit, and readiness.
 - [ ] Inject that contract through `NewApp`; keep Kubernetes and persistence
       code unaware of `application.App` and `WebviewWindow`.
 - [ ] Replace `setRuntimeContext`/`runWithRuntimeContext` with an
@@ -286,23 +342,23 @@ It also addresses the v3 warning that Go-to-frontend events should wait for
       capability. Preserve `CtxOrBackground` cancellation semantics used by
       refresh/auth/session work.
 - [ ] Implement `ServiceStartup` and `ServiceShutdown` on the single App service
-      using the exact lifecycle interface of the pinned v3 release.
+      using the exact lifecycle interface of the pinned v3 release. Keep startup
+      bounded and non-UI because it runs inline before pending windows; add an
+      error-path test proving a startup failure aborts `App.Run()` and shuts down
+      services that already started.
 - [ ] Split current `Startup` into non-UI service initialization and a once-only
       runtime-ready interactive startup path.
 - [ ] Red: add refresh-transport contract tests proving an early request cannot
       read an unready handler while the initialization/replacement operation
       needed to publish the ready aggregate mux remains allowed.
-- [ ] If the v3 service route passes Phase 0, register one stable route backed by
-      an atomically replaceable aggregate handler. Preserve per-cluster
-      initialization order, cluster-scoped routing, retained data, stream replay
-      or reset, queued-job migration, diagnostics, and teardown.
-- [ ] Move the frontend refresh client to the stable same-origin route only after
-      every snapshot/job/SSE/WebSocket test passes. Then delete
-      `GetRefreshBaseURL`, URL retry/cache state, the loopback listener/server
-      fields, and CORS code proven unnecessary by the selected origin contract.
-- [ ] If Phase 0 rejects the service route, port exactly one loopback transport
-      to the v3 lifecycle and retain its exposure, CORS, readiness, and teardown
-      tests. Record why it remains; do not keep service-route compatibility code.
+- [ ] Port exactly one atomically replaceable aggregate mux on one loopback
+      server to the v3 lifecycle. Preserve per-cluster initialization order,
+      cluster-scoped routing, retained data, snapshot and job behavior, stream
+      replay/reset, queued-job migration, diagnostics, and teardown.
+- [ ] Preserve `GetRefreshBaseURL`, frontend URL retry/cache behavior, and the
+      loopback CORS contract, adapting only their ownership and readiness to v3.
+      Add an absence test proving no aggregate refresh handler is registered as
+      a Wails service route and no second transport is present.
 - [ ] Make pre-quit persistence idempotent and cover pending selection mutation,
       missing runtime, window-state read failure, and repeated quit requests.
 - [ ] Green/refactor: remove v2 runtime-context globals and tests only after the
@@ -342,12 +398,24 @@ It also addresses the v3 warning that Go-to-frontend events should wait for
 - [ ] Port beta-expiry, open/save/directory dialogs, window geometry restore,
       window show/maximize/minimize/restore, app hide/quit, clipboard read, and
       bring-to-front behavior through the backend adapter.
-- [ ] Rebuild the native menu through the v3 menu manager. Preserve top-level
-      order, labels, accelerators, platform-only items, asynchronous callbacks,
-      frontend event names, dynamic panel/sidebar labels, and the development
-      debug menu except for the explicitly removed **New Window** command.
-- [ ] Replace the `update-menu` round trip with one explicit menu refresh method
-      owned by the adapter. Test state change -> rebuilt menu -> installed menu.
+- [ ] Build one persistent native-menu model before constructing the main window.
+      Preserve top-level order, labels, accelerators, platform-only items,
+      asynchronous callbacks, frontend event names, dynamic panel/sidebar
+      labels, and the development debug menu except for the explicitly removed
+      **New Window** command. Pass the menu through the Linux window options so
+      GTK4 constructs its native window with the menubar already attached.
+- [ ] Replace the `update-menu` round trip with one adapter-owned refresh that
+      mutates the persistent model. On GTK4 Linux call `Menu.Update()` so Wails
+      clears and rerenders the attached native menu in place; do not call the
+      post-construction Linux `SetMenu`, which only changes stored fields. On
+      macOS reset the application menu; on Windows reinstall the menu on the
+      explicitly named main window rather than merely changing the app-level
+      pointer.
+- [ ] Red: add platform menu-lifecycle tests proving Linux receives the initial
+      menu before window construction and retains the same menu object across a
+      dynamic-label refresh, macOS refreshes the global application menu, and
+      Windows refreshes the named window menu. In every case, invoke a refreshed
+      callback to prove it remains connected.
 - [ ] Update `--wails-draggable` values from `true`/`none` to
       `drag`/`no-drag`; verify the header and modal drag regions plus every
       interactive child.
@@ -367,18 +435,23 @@ It also addresses the v3 warning that Go-to-frontend events should wait for
 ### Phase 3: Generated bindings and frontend runtime
 
 - [ ] Add a generated-binding drift check that runs the pinned v3 generator and
-      fails when committed bindings differ.
+      fails when committed bindings differ. Put the full invocation in one
+      repository task, including TypeScript/class mode, output paths,
+      `--time-type`, and the selected call-ID versus `--names` mode so generator
+      defaults cannot drift silently.
 - [ ] Generate TypeScript class bindings for the single `App` service and
       compare all DTO field names, optional/null behavior, nested namespace
-      exports, constructors, and error results used by current consumers.
+      exports, constructors, `time.Time` representation, call identifiers, and
+      error results used by current consumers.
 - [ ] Replace the `@wailsjs` alias with a v3 `@bindings` alias and update the
       explicit `core/backend-api` allowlist to the generated App service path.
 - [ ] Replace all production `window.go` reads with typed backend API or desktop
       availability helpers; then remove `Window.go` from `global.d.ts`.
-- [ ] Add `@wailsio/runtime` at the version paired with the pinned v3 release and
-      create one frontend desktop-runtime module for typed event subscription,
-      browser URL open, clipboard text, current-window actions, and environment
-      access.
+- [ ] Add the source-carried `@wailsio/runtime` version paired with the pinned v3
+      release (`3.0.0-beta.5` for Wails `v3.0.0-beta.7`), not the template's
+      floating `latest`, and create one frontend desktop-runtime module for typed
+      event subscription, browser URL open, clipboard text, current-window
+      actions, and environment access.
 - [ ] Normalize `Events.On` callbacks to deliver `event.data` to application
       handlers. Add table-driven tests for menu/paste, connection status,
       lifecycle/auth/health, app logs, shell output/status/list, port-forward
@@ -404,8 +477,9 @@ It also addresses the v3 warning that Go-to-frontend events should wait for
       `.gitignore` from blanket `build/` exclusion to tracked config/assets plus
       explicit generated-output exclusions.
 - [ ] Move product name, identifier, description, copyright, version, and beta
-      expiry inputs to one authoritative metadata contract. Update Mage, Vite,
-      development docs, release docs, and tests in the same phase.
+      expiry inputs to `build/config.yml` plus a generated repository-owned view
+      for consumers or custom fields that cannot read it directly. Update Mage,
+      Vite, development docs, release docs, and tests in the same phase.
 - [ ] Make v3 Taskfiles own frontend build, binding generation, native resource
       generation, application build, and platform packaging. Make Mage invoke
       those tasks and collect/rename outputs for the existing release workflow.
@@ -417,21 +491,22 @@ It also addresses the v3 warning that Go-to-frontend events should wait for
       artifact names. Remove the code that reads v2's internal NSIS template.
 - [ ] Port Linux builds to Wails v3's default GTK4 + WebKitGTK 6.0 backend.
       Delete WebKit version auto-detection and every `gtk3`, `webkit2_41`, and
-      WebKit2GTK 4.1 build/dependency fallback; do not produce a legacy Linux
+      WebKit2GTK 4.x build/dependency fallback; do not produce a legacy Linux
       artifact.
 - [ ] Port Linux amd64/arm64 binary, DEB, and RPM output while preserving desktop
       file, icon, permissions, and release artifact names.
 - [ ] Move Linux development and CI images to the pinned release's GTK4/WebKitGTK
       6.0 dependency set. Update README, development, release, and troubleshooting
       documentation to state the new minimum supported distributions and remove
-      Ubuntu 22.04/WebKit2GTK 4.1 installation instructions.
+      WebKit2GTK 4.0/4.1 installation instructions, including Ubuntu 22.04.
 - [ ] Update `mage dev`, `mage build`, `mage package:*`, the shared toolchain
       action, and release workflow. Verify that no removed v2 flags remain.
-- [ ] Delete the v2-formatted `wails.json` (or replace it with the pinned v3
-      schema if that CLI still requires the filename), all v2 module/CLI/runtime
-      references, obsolete indirect dependencies, `frontend/wailsjs`, v2 global
-      mocks, v2-only tests, and obsolete build assets after their consumers have
-      moved and `go mod tidy` is clean. Do not retain compatibility shims.
+- [ ] Delete the v2-formatted `wails.json` without creating a v3 replacement,
+      all v2 module/CLI/runtime references, obsolete indirect dependencies,
+      `frontend/wailsjs`, v2 global mocks, v2-only tests, and obsolete build
+      assets after their consumers have moved and `go mod tidy` is clean. Do not
+      retain compatibility shims or enable the out-of-scope MSIX task that still
+      expects a separate JSON configuration in beta.7.
 - [ ] Phase exit gate: active source, tests, package manifests, lockfiles, build
       tasks, CI, agent instructions, and durable product documentation contain
       no Wails v2 import, module, command, runtime alias, global, generated file,
@@ -529,9 +604,9 @@ plan with its target contract, dependencies, tests, and explicit non-goals.
       directly affected backend coverage with
       `mise exec -- mage test:backendCoverage`; target 80% statement coverage or
       record the measured gap for review.
-- [ ] Run the selected refresh transport's snapshot, job, SSE, WebSocket,
-      permission, readiness, recovery, teardown, and multi-cluster suites. Search
-      for and remove the rejected transport's production code and tests.
+- [ ] Run the loopback refresh transport's snapshot, job, SSE, WebSocket,
+      permission, readiness, recovery, teardown, and multi-cluster suites. Assert
+      that the Wails asset/service router does not own any refresh endpoint.
 - [ ] Run focused frontend binding/runtime/event/app-shell tests and measure
       directly affected frontend coverage with
       `mise exec -- mage test:frontendCoverage`; target 80% statement coverage or
@@ -547,10 +622,13 @@ plan with its target contract, dependencies, tests, and explicit non-goals.
       modal focus, shortcuts, menus, draggable header, maximize/restore, browser
       links, clipboard paste, file/directory dialogs, shell, logs, port-forward,
       refresh diagnostics, auth failure/recovery, and multi-cluster switching.
-- [ ] On the minimum supported Linux GTK4 environment, exercise every
-      portal-backed import, export, CSV-save, and kubeconfig-directory dialog.
-      Verify titles, default filenames/directories, filters, cancellation, and
-      returned paths without relying on dialog options that the portal owns.
+- [ ] On the minimum supported Linux GTK4 environment, exercise every import,
+      export, CSV-save, and kubeconfig-directory flow through beta.7's
+      `GtkFileDialog` implementation
+      (`pkg/application/linux_cgo.go:1935-1990`). Verify titles, default
+      filenames/directories, filters, cancellation, and returned paths in a
+      normal desktop session. If the validation environment delegates the dialog
+      through a desktop portal, repeat the same contract there.
 - [ ] Exercise every promoted Phase 5 workflow in its required states. For native
       windows, include two concurrent windows; for updater, include signed staged
       update failure/recovery; for tray, include close/hide/reopen/quit behavior.
@@ -585,18 +663,22 @@ plan with its target contract, dependencies, tests, and explicit non-goals.
 
 - Backend desktop adapter rejects event/dialog/window calls before ready, but
   the readiness transition itself succeeds and enables calls afterward.
-- Backend window operations require explicit registered window identity; a
-  focused-window lookup cannot silently choose the target.
+- Backend named-window operations resolve through `app.Window.GetByName`, fail
+  explicitly when the name is absent, and never use a parallel registry or
+  focused-window lookup.
 - Saved window X/Y/width/height/maximized values round-trip unchanged when
   visible; restoration accepts valid negative coordinates and recovers an
   off-screen or oversized rectangle into a current logical work area.
 - The event matrix has one tested owner per adopted application/window event or
   hook, including cancellation and readiness ordering; obsolete callback paths
   are absent.
-- `ServiceStartup` cancellation propagates through `CtxOrBackground`; shutdown
-  cancels refresh/auth/session work without a Wails context.
-- No frontend event is emitted before `WindowRuntimeReady`; interactive startup
-  runs once after readiness even if a callback repeats.
+- `ServiceStartup` runs before pending native windows, propagates its context
+  through `CtxOrBackground`, and aborts `App.Run()` on error after shutting down
+  already-started services; normal shutdown cancels refresh/auth/session work
+  without a Wails context.
+- No adapter-owned frontend event or JavaScript call is attempted before
+  `WindowRuntimeReady`; tests prove startup producers cannot reach Wails' early
+  drop/queue paths and run exactly once after the ready transition.
 - All current Go event producers arrive at frontend handlers with the same
   application payload after the v3 event-envelope adapter.
 - Pre-quit waits for selection persistence before reading window geometry and
@@ -604,14 +686,20 @@ plan with its target contract, dependencies, tests, and explicit non-goals.
 - Menu labels, top-level order, platform entries, accelerators, callbacks, and
   dynamic visibility labels match the current menu contract minus the explicitly
   removed **New Window** item and `Cmd/Ctrl+N` accelerator.
+- Linux menu refresh mutates and updates the same menu attached before window
+  construction; macOS refreshes the global application menu; Windows reinstalls
+  the menu on the named main window. Refreshed callbacks remain callable.
 - Until native multi-window is promoted, menu, shortcut, command-palette, help,
   and callback registries contain no **New Window** entry or process-spawn path.
 - Generated App facade exports exactly the intentional frontend allowlist; an
   added backend method is not automatically available through the facade.
 - Representative generated DTOs preserve JSON field names, nullability,
-  nested types, and class construction used by descriptor drift tests.
+  nested types, class construction, the selected `time.Time` representation,
+  and the selected names-versus-call-ID mode used by descriptor drift tests.
 - Build metadata has one owner and Vite Sentry release, Go build manifest,
   package metadata, and release tag commands read the same version.
+- Supported build tasks and metadata consumers read `build/config.yml` or its
+  generated view and contain no `wails.json` dependency.
 - Packaging tests assert current artifact names and required platform metadata
   before CI uploads them.
 - Linux build/configuration tests assert the GTK4/WebKitGTK 6.0 dependency set
@@ -623,19 +711,21 @@ plan with its target contract, dependencies, tests, and explicit non-goals.
   complete identity.
 - If updater or tray is promoted, their state machines and quit/restart paths
   are proven independently from the core window lifecycle.
-- The selected refresh transport preserves routes, methods, validators, typed
+- The loopback refresh transport preserves routes, methods, validators, typed
   errors, correlation identity, stream replay/reset, cancellation, readiness,
-  multi-cluster isolation, handler replacement, and teardown without a second
-  fallback transport.
+  multi-cluster isolation, handler replacement, and teardown without a Wails
+  service-route or second fallback transport.
 - If single-instance is enabled, a subsequent process cannot start a second
   service/refresh lifecycle and can affect the main window only through the
   validated second-launch contract.
 
 ## Open decisions
 
-1. **Generated model layout.** Decide only after inspecting pinned generator
+1. **Generated binding shape.** Decide only after inspecting pinned generator
    output. Preserve class constructors unless all constructor consumers and
-   descriptor drift tests are deliberately redesigned.
+   descriptor drift tests are deliberately redesigned. Explicitly choose and
+   pin `--time-type string|Date` and numeric call IDs versus `--names`; do not
+   inherit these choices implicitly from generator defaults.
 2. **Quit-hook placement.** Confirm on the pinned beta whether `ShouldQuit`
    covers every current single-window quit route while the window remains
    queryable. If not, use one idempotent function from both the application quit
@@ -652,10 +742,7 @@ plan with its target contract, dependencies, tests, and explicit non-goals.
    security contracts and therefore requires explicit approval.
 7. **Tray lifecycle.** Decide close-to-tray versus quit, platform availability,
    and whether tray adoption is required for the v3 cutover.
-8. **Refresh route hosting.** Decide from the Phase 0 contract spike whether the
-   aggregate refresh mux moves to a v3 service route or remains on one v3-owned
-   loopback server. Prefer the service route only with full HTTP/stream parity.
-9. **Process multiplicity.** Recommended while **New Window** is absent: enable
+8. **Process multiplicity.** Recommended while **New Window** is absent: enable
     single-instance behavior that restores/focuses the named main window. Decide
     explicitly if independently launched processes remain a supported workflow.
 
@@ -674,8 +761,8 @@ plan with its target contract, dependencies, tests, and explicit non-goals.
   and `docs/frontend/component-structure.md` for generated v3 binding/model
   ownership.
 - `docs/architecture/data-freshness.md`, `docs/architecture/refresh-system.md`,
-  `backend/AGENTS.md`, and `frontend/AGENTS.md` if refresh transport ownership,
-  origin, readiness, or generation commands change.
+  `backend/AGENTS.md`, and `frontend/AGENTS.md` for loopback refresh transport
+  ownership, origin, readiness, and generation commands.
 - `docs/frontend/keyboard.md` and any app-shell docs whose native menu or
   window-runtime references change.
 - App-shell persistence documentation for screen-aware geometry restoration and
