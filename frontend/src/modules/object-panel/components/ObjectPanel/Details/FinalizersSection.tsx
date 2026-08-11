@@ -27,7 +27,9 @@ interface FinalizerEntry {
 }
 
 const normalizedFinalizers = (values?: string[]): string[] =>
-  Array.from(new Set((values ?? []).map((value) => value.trim()).filter(Boolean))).sort();
+  Array.from(new Set((values ?? []).map((value) => value.trim()).filter(Boolean))).sort(
+    (left, right) => left.localeCompare(right)
+  );
 
 const disabledReason = (capability: CapabilityState): string | undefined => {
   if (capability.pending) {

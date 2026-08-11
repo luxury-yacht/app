@@ -80,6 +80,7 @@ spec:
       resources:
         requests:
           cpu: 10m
+          ephemeral-storage: 1Mi
           memory: 32Mi
         limits:
           cpu: 100m
@@ -123,9 +124,11 @@ spec:
       resources:
         requests:
           cpu: 10m
+          ephemeral-storage: 1Mi
           memory: 32Mi
         limits:
           cpu: 100m
+          ephemeral-storage: 10Mi
           memory: 32Mi
       volumeMounts:
         - name: protected-claim

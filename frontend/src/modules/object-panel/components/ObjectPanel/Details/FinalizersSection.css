@@ -16,12 +16,8 @@
 }
 
 .deletion-empty {
-  margin: 0 0 var(--spacing-md);
+  margin: 0;
   color: var(--color-text-secondary);
-}
-
-.deletion-empty {
-  margin-bottom: 0;
 }
 
 .deletion-section-title {

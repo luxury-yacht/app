@@ -759,13 +759,13 @@ func (i *clusterAttentionIndex) ReplaceFinalizerBlockers(blockers []objectcatalo
 		return
 	}
 	next := make(map[string]AttentionFinding, len(blockers))
+	clusterID := strings.TrimSpace(i.meta.ClusterID)
 	for _, blocker := range blockers {
-		if !completeAttentionRef(blocker.Ref) || blocker.DeletionTimestamp <= 0 ||
-			(strings.TrimSpace(i.meta.ClusterID) != "" && blocker.Ref.ClusterID != i.meta.ClusterID) {
+		key, finding, valid := finalizerFindingForCluster(clusterID, blocker)
+		if !valid {
 			continue
 		}
-		key := attentionRefKey(blocker.Ref)
-		next[key] = finalizerAttentionFinding(blocker)
+		next[key] = finding
 	}
 
 	i.mu.Lock()
@@ -793,6 +793,16 @@ func (i *clusterAttentionIndex) ReplaceFinalizerBlockers(blockers []objectcatalo
 	pruner := i.ignoredObjectPruner
 	i.mu.Unlock()
 	pruneAttentionRefs(pruner, pruned)
+}
+
+func finalizerFindingForCluster(clusterID string, blocker objectcatalog.FinalizerBlocker) (string, AttentionFinding, bool) {
+	if !completeAttentionRef(blocker.Ref) || blocker.DeletionTimestamp <= 0 {
+		return "", AttentionFinding{}, false
+	}
+	if clusterID != "" && blocker.Ref.ClusterID != clusterID {
+		return "", AttentionFinding{}, false
+	}
+	return attentionRefKey(blocker.Ref), finalizerAttentionFinding(blocker), true
 }
 
 func (i *clusterAttentionIndex) finalizerConfirmsObjectLocked(ref resourcemodel.ResourceRef) bool {

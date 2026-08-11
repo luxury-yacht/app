@@ -93,6 +93,15 @@ describe('FinalizersSection', () => {
     expect(container.querySelector('.deletion-finalizer-row .status-chip')).toBeNull();
   });
 
+  it('sorts finalizer names alphabetically', async () => {
+    const finalizers = ['example.com/a-cleanup', 'example.com/a.cleanup', 'example.com/a_cleanup'];
+    await renderSection({ finalizers, namespaceFinalization: null });
+
+    expect(textOf(container, '.deletion-finalizer-name')).toEqual(
+      [...finalizers].sort((left, right) => left.localeCompare(right))
+    );
+  });
+
   it('moves finalizer guidance into the shared tooltip beside the section title', async () => {
     await renderSection();
 
