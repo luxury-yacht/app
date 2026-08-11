@@ -342,7 +342,9 @@ describe('DetailsTab', () => {
     expect(container.textContent).toContain('Finalizers');
     expect(container.textContent).toContain('Terminating for');
     expect(container.textContent).toContain('kubernetes.io/pvc-protection');
-    expect(container.textContent).toContain('In use');
+    expect(container.textContent).toContain(
+      'Kubernetes keeps this finalizer while the claim is in use'
+    );
     expect(container.textContent).toContain('Resolve the Pods using this claim');
     // A single metadata.finalizers list needs no field-path disambiguation.
     expect(container.textContent).not.toContain('metadata.finalizers');

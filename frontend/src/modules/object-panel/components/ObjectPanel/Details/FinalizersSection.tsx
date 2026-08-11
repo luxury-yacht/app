@@ -62,14 +62,6 @@ function FinalizerRow({ entry, showPath, onRemove }: Readonly<FinalizerRowProps>
       <div className="deletion-finalizer-heading">
         <code className="deletion-finalizer-name">{entry.name}</code>
         {showPath ? <span className="deletion-finalizer-path">{entry.path}</span> : null}
-        <StatusChip
-          variant={guidance.attribution === 'none' ? 'warning' : 'info'}
-          // A domain is a proper noun, so it keeps its own case instead of the
-          // chip's default uppercase.
-          className={guidance.attribution === 'domain' ? 'deletion-domain-chip' : undefined}
-        >
-          {guidance.category}
-        </StatusChip>
       </div>
       <button
         type="button"
@@ -82,7 +74,18 @@ function FinalizerRow({ entry, showPath, onRemove }: Readonly<FinalizerRowProps>
         Remove
       </button>
       <div className="deletion-finalizer-guidance">
-        <p className="deletion-finalizer-explanation">{guidance.explanation}</p>
+        <p
+          className={`deletion-finalizer-explanation${guidance.warnsAboutMissingAttribution ? ' deletion-finalizer-explanation--warning' : ''}`}
+        >
+          {guidance.warnsAboutMissingAttribution ? (
+            <WarningIcon
+              width={14}
+              height={14}
+              className="deletion-finalizer-attribution-warning"
+            />
+          ) : null}
+          <span>{guidance.explanation}</span>
+        </p>
         <p className="deletion-finalizer-next-step">{guidance.nextStep}</p>
         {!!guidance.consequence && (
           <p className="deletion-finalizer-consequence">
