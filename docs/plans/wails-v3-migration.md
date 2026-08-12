@@ -1,14 +1,14 @@
 # Wails v3 Migration Plan
 
-Status: implementation active; core v3-only cutover implemented, Phase 6
-platform validation remains
+Status: implementation active; core v3-only cutover implemented, beta.8 native
+refresh-stream migration and Phase 6 platform validation remain
 Created: 2026-08-11
 Last updated: 2026-08-12
 
 ## Implementation status
 
-The branch now has the core Wails v3 cutover in place: beta.7 application and
-service composition, the paired beta.5 frontend runtime, generated v3 bindings,
+The branch now has the core Wails v3 cutover in place: beta.8 application and
+service composition, the paired beta.7 frontend runtime, generated v3 bindings,
 direct backend application injection, one frontend runtime adapter, one named
 main window, persistent native menus, screen-aware
 geometry restoration, framework-provided single-instance handling,
@@ -59,14 +59,14 @@ frontend bindings, and a visible Taskfile-based build system.
 ## Initial decisions
 
 - Start with an integration spike against an exact Wails v3 beta, not
-  `@latest`. On 2026-08-11,
+  `@latest`. On 2026-08-12,
   `curl -fsSL https://proxy.golang.org/github.com/wailsapp/wails/v3/@v/list | sort -V | tail -n 20`
-  ended at `v3.0.0-beta.7`; re-run this check and review intervening release
+  ended at `v3.0.0-beta.8`; re-run this check and review intervening release
   notes immediately before changing dependencies.
 - Pin the frontend runtime version carried by the selected Wails source rather
   than assuming its suffix matches the Go module or accepting a template's
-  `latest`. The `v3.0.0-beta.7` source manifest vendors
-  `@wailsio/runtime@3.0.0-beta.5`
+  `latest`. The `v3.0.0-beta.8` source manifest vendors
+  `@wailsio/runtime@3.0.0-beta.7`
   (`internal/runtime/desktop/@wailsio/runtime/package.json:1-4`); re-read that
   manifest if the selected Wails beta changes.
 - Accept the Wails v3 beta risk for this branch. Do not wait for an RC or GA and
@@ -94,7 +94,7 @@ frontend bindings, and a visible Taskfile-based build system.
   v3 multi-window track after process, Kubernetes client, persistence, refresh,
   and teardown ownership are defined and tested.
 - Make the pinned v3 CLI's generated `build/config.yml` and Taskfiles the product
-  metadata and native-build source of truth. The beta.7 generated build assets
+  metadata and native-build source of truth. The beta.8 generated build assets
   contain no replacement project `wails.json`
   (`find internal/commands/build_assets -name wails.json` returns no file), and
   the NSIS task does not request one
@@ -102,21 +102,24 @@ frontend bindings, and a visible Taskfile-based build system.
   file after all repository consumers move. Keep the root Wails Taskfile as the
   repository-facing command layer, with ordinary Go helper commands for
   cross-platform or release logic that should not be embedded in YAML.
-- Retain exactly one loopback refresh HTTP server under the v3 lifecycle. Do not
-  mount the aggregate mux as a Wails service route: beta.7's asset server returns
-  HTTP 501 for WebSocket upgrades
-  (`internal/assetserver/assetserver.go:83-87`), and its Windows response writer
-  cannot flush streaming responses
-  (`internal/assetserver/webview/responsewriter_windows.go:33-43`), so the
-  current WebSocket resource stream and SSE log stream cannot satisfy their
-  contracts there. Recheck these two upstream
-  limitations only if the selected Wails beta changes; do not carry a dormant
-  service-route implementation.
+- Replace the loopback refresh transport with beta.8's framework-owned
+  transports. Mount the non-streaming snapshot, manual-job, diagnostics, and
+  metrics HTTP mux at a same-origin Wails service route. Register the resource
+  and container-log protocols with `App.HandleStream`, and use the paired
+  frontend runtime's `Stream`/`JSONStream` API. The framework models each
+  `StreamConn` after a WebSocket, provides ordered receive and blocking or
+  non-blocking backpressure (`pkg/application/stream.go:158-179` and
+  `223-274`), and owns the desktop held-poll versus server WebSocket transport
+  behind the same handler (`pkg/application/stream.go:164-167`). Delete the
+  loopback listener, random base-URL binding/cache/retry path, CORS wrapper, raw
+  browser `WebSocket`, and `EventSource`; do not retain them as fallbacks. The
+  asset server's WebSocket rejection remains irrelevant because these streams
+  use the dedicated framework endpoint rather than a service route.
 - Build one persistent native-menu model before the main window starts. Refresh
   it through platform-specific ownership: mutate then `Menu.Update()` in place
   on GTK4 Linux, reset the application menu on macOS, and reinstall it on the
   named window on Windows. Do not rebuild and attempt to reattach a new Linux
-  menu after window construction. In beta.7, Linux consumes the native menu in
+  menu after window construction. In beta.8, Linux consumes the native menu in
   `webview_window_linux.go:338-356`, its later setter only changes stored fields
   at `webview_window_linux.go:304-311`, its application-menu platform setter is
   empty at `application_linux.go:110-114`, and `menu_linux.go:23-44` rerenders
@@ -151,10 +154,12 @@ frontend bindings, and a visible Taskfile-based build system.
 - Leave one coherent v3-only build architecture. Required Taskfile, CI,
   packaging, metadata, and generated-binding cleanup is migration work, not
   unrelated cleanup.
-- Keep the private refresh API on one v3-owned loopback server because the pinned
-  asset-service route cannot carry its WebSocket and Windows SSE contracts.
-  Preserve snapshot, manual-job, stream, readiness, cancellation,
-  correlation-ID, multi-cluster routing, CORS, and teardown behavior.
+- Keep one framework-owned refresh API: same-origin Wails service routes for
+  request/response operations and named Wails Streams for resource and
+  container-log traffic. Preserve snapshot, manual-job, stream, readiness,
+  cancellation, correlation-ID, multi-cluster routing, replay/reset,
+  backpressure, and teardown behavior while deleting listener, base-URL, CORS,
+  raw WebSocket, and SSE ownership from the application.
 - Decide process multiplicity explicitly. With **New Window** removed, either
   enable v3 single-instance handling with a defined second-launch contract or
   document why independently launched processes remain supported.
@@ -205,7 +210,7 @@ and [System Tray Menus](https://v3.wails.io/features/menus/systray/).
 - Legacy GTK3/WebKit2GTK 4.x builds and Linux distributions that cannot provide
   the pinned Wails v3 release's GTK4/WebKitGTK 6.0 runtime dependencies.
 - New package formats such as MSIX; the current Windows release contract remains
-  NSIS, so beta.7's separate MSIX configuration path does not justify retaining
+  NSIS, so beta.8's separate MSIX configuration path does not justify retaining
   the v2 `wails.json`.
 - Unrelated visual redesign.
 - Persisted-settings schema/key changes or release artifact renames that are not
@@ -226,7 +231,7 @@ and [System Tray Menus](https://v3.wails.io/features/menus/systray/).
 | Application composition | `main.go:57-160` creates the backend, menu, lifecycle callbacks, one window, embedded assets, and platform options in one `wails.Run`. | Create the v3 application, inject it into the backend service, build the persistent native menu, create the named main window with that menu, install lifecycle hooks, then call `app.Run()`. |
 | Backend runtime lifecycle | `backend/app.go:25-35`, `backend/app.go:196-241`, and `backend/app_runtime.go:9-48` store a Wails context capability separately from the backend cancellation signal. | Retain the cancellation boundary from `ServiceStartup(ctx, ...)`, but replace context-bound runtime operations with the injected v3 application and its managers. |
 | Startup and shutdown | `backend/app_lifecycle.go:41-63` performs UI and cluster startup; `backend/app_lifecycle.go:223-272` saves window state before close and tears down background systems at shutdown. | Split synchronous service startup from webview readiness. `ServiceStartup` captures the application context and completes non-UI setup before native windows run; an error aborts `App.Run()`. Persist window state while the main window is alive, and run backend teardown from `ServiceShutdown`. |
-| Refresh webview transport | `backend/app_refresh_setup.go:457-479` builds the aggregate HTTP mux and `backend/app_refresh_setup.go:522-543` binds it to a random loopback port. `backend/refresh/api/server.go:311-325` and `backend/refresh_stream_cors.go:5-30` own CORS, while `frontend/src/core/refresh/client.ts:47-55` and `frontend/src/core/refresh/client.ts:159-175` discover and retry the runtime base URL. The resource stream upgrades to WebSocket at `backend/refresh_aggregate_resourcestream.go:109-115`, and the log stream requires SSE flushing in `backend/refresh/containerlogsstream/handler.go:145-149`. | Port exactly one loopback server to v3 lifecycle ownership. Beta.7's service-route asset server rejects WebSockets and cannot stream on Windows, so preserve base-URL discovery, CORS, readiness, replacement, and teardown instead of adding a same-origin compatibility route. |
+| Refresh webview transport | `backend/app_refresh_setup.go:457-479` builds the aggregate HTTP mux and `backend/app_refresh_setup.go:522-543` binds it to a random loopback port. `backend/refresh/api/server.go:311-325` and `backend/refresh_stream_cors.go:5-30` own CORS, while `frontend/src/core/refresh/client.ts:47-55` and `frontend/src/core/refresh/client.ts:159-175` discover and retry the runtime base URL. The resource stream upgrades to WebSocket at `backend/refresh_aggregate_resourcestream.go:109-115`, and the log stream requires SSE flushing in `backend/refresh/containerlogsstream/handler.go:145-149`. | Mount request/response handlers at one same-origin service route and adapt both stream protocols to beta.8 named Streams. Delete the listener, base-URL discovery/cache/retry, CORS, WebSocket upgrade, and SSE framing after contract tests prove equivalent readiness, replay/reset, cancellation, errors, backpressure, topology replacement, and teardown. |
 | Native capabilities | Nine production Go files import Wails v2 (`rg -l 'github.com/wailsapp/wails/v2' --glob '*.go' .` classified by `_test.go` -> `9` production and `5` test files). Menus, events, dialogs, clipboard, window state, quit/hide, and window commands are represented in `main.go`, `backend/app_lifecycle.go`, `backend/app_settings.go`, `backend/app_data_management.go`, `backend/app_csv_export.go`, `backend/kubeconfigs.go`, and `backend/menu.go`. | Inject the v3 application directly and port each producer/consumer pair to its managers. Reuse Wails menu and dialog types instead of maintaining parallel models. |
 | Menu contract | `backend/menu.go:14-38` owns the menu tree; `backend/menu.go:65-100`, `backend/menu.go:131-174`, `backend/menu.go:176-250`, and `backend/menu.go:295-347` connect native items to frontend events and window/app operations. `main.go:80-92` currently rebuilds and reinstalls a new menu, while `backend/app_ui.go:55-65` disables that path on Linux. | Build a persistent v3 menu before the main window and preserve labels, accelerators, platform differences, callbacks, and dynamic visibility labels with **New Window** removed. On GTK4 Linux, window construction consumes the menu and later `SetMenu` does not reattach it, so mutate the installed model and call `Menu.Update()`; use macOS application-menu reset and Windows named-window reinstall for their native ownership. |
 | New Window removal | `backend/menu.go:41-55` respawns the executable; `backend/menu.go:74-80` exposes it as **New Window** with `Cmd/Ctrl+N`. `rg -n -i 'new window|spawnNewWindow' . --glob '!docs/plans/wails-v3-migration.md' --glob '!frontend/wailsjs/**'` finds no other implementation surface. | Remove the menu item, accelerator, callback, now-unused process imports, tests, and user/developer documentation during the core menu port. Assert the option is absent until Phase 5 implements native windows. |
@@ -246,7 +251,7 @@ and [System Tray Menus](https://v3.wails.io/features/menus/systray/).
 | Platform packaging | macOS builds append v2 `--platform` (`mage/macos.go:248-270`); Windows appends `-o`/`-nsis` and reads a v2 internal NSIS template (`mage/windows.go:13-24`, `mage/windows.go:66-97`, `mage/windows.go:157-176`); Linux detects WebKit2GTK and conditionally adds `webkit2_41` (`mage/linux.go:13-50`). | Port native application/resource builds, per-architecture macOS DMGs, Windows NSIS creation, and Linux DEB/RPM output to v3 Taskfiles/build assets. Delete Mage packaging implementations. Use only GTK4/WebKitGTK 6.0 and delete legacy WebKit detection/tags. |
 | Build directory ownership | `.gitignore:26-29` ignores all of `build/`, while existing Mage/Wails output already occupies `build/bin`, `build/darwin`, `build/artifacts`, and `build/packages` (`mage/build-config.go:54-74`, `mage/macos.go:12-13`, `mage/linux.go:142-169`). | Reserve tracked portions of `build/` for v3 configuration/platform assets and ignore only generated output paths. Decide output locations before generating v3 assets so configuration is not hidden by the current blanket ignore. |
 | Release matrix | `.github/workflows/release.yml:35-58` builds macOS Intel/Apple Silicon, Windows amd64/arm64, and Linux amd64/arm64; `.github/actions/setup-toolchain/action.yaml:20-43` installs the v2 CLI and Linux WebKit2GTK 4.1 headers. | Update the shared action to install GTK4/WebKitGTK 6.0 and prove every existing architecture target and artifact path before cutover. Distro compatibility below the new GTK4 baseline is deliberately not preserved. |
-| Product metadata | `wails.json:1-24` owns app/release metadata; `frontend/vite.config.ts:14-24`, `mage/utils.go:49-84`, `DEVELOPMENT.md:87-103`, and `RELEASE.md:75-81` consume it. | Move these consumers atomically to `build/config.yml` or a generated repository-owned view and delete `wails.json`. The beta.7 NSIS build path does not require a v3 replacement file. |
+| Product metadata | `wails.json:1-24` owns app/release metadata; `frontend/vite.config.ts:14-24`, `mage/utils.go:49-84`, `DEVELOPMENT.md:87-103`, and `RELEASE.md:75-81` consume it. | Move these consumers atomically to `build/config.yml` or a generated repository-owned view and delete `wails.json`. The beta.8 NSIS build path does not require a v3 replacement file. |
 | Test scaffolding | Storybook emulates `window.runtime` and `window.go` in `frontend/.storybook/preview.ts:4-17` and `frontend/.storybook/preview.ts:64-96`; frontend globals declare the same v2 shape in `frontend/src/types/global.d.ts:10-25`. | Mock the new frontend adapter and generated binding module instead of recreating v2 globals. Keep Storybook browser-only behavior available. |
 
 ## Target model and ordering
@@ -256,7 +261,7 @@ and [System Tray Menus](https://v3.wails.io/features/menus/systray/).
 2. `main` injects the Wails v3 application into `backend.App` and registers it as
    one process-scoped service. Backend window operations resolve the constant
    main-window name through `app.Window.GetByName`; do not add a parallel window
-   registry or fall back to the focused window. Beta.7 provides this lookup in
+   registry or fall back to the focused window. Beta.8 provides this lookup in
    `pkg/application/window_manager.go:16-32`, keyed by
    `WebviewWindowOptions.Name` (`webview_window_options.go:80-83`).
 3. `main` builds one persistent menu from backend actions, sets the application
@@ -294,7 +299,7 @@ the backend service and is injected directly into it. Application-scoped calls
 use application managers; window-scoped calls resolve the explicitly named main
 window. V3 services remain process-scoped and must not acquire a window identity
 by guessing from focus.
-The readiness gate reflects beta.7's actual delivery behavior: `ExecJS` and
+The readiness gate reflects beta.8's actual delivery behavior: `ExecJS` and
 event dispatch return while the window implementation is absent, then queue
 JavaScript after native construction until `wails:runtime:ready` marks the
 runtime loaded and flushes the queue
@@ -315,24 +320,24 @@ single-instance scenarios and screen behavior on Windows/Linux remain Phase 6
 release-host validation. The method-to-future-service owner map remains part of
 the deferred service-decomposition track.
 
-- [ ] Re-run the v3 version query, read the migration notes and release notes
+- [x] Re-run the v3 version query, read the migration notes and release notes
       from v2.14.0 through the selected v3 beta, and record the selected module,
       CLI, and `@wailsio/runtime` versions in this plan.
 - [x] Generate a fresh v3 React/TypeScript project outside the repository with
       the pinned CLI. Inventory its `main.go`, binding command/output, runtime
       package version, `Taskfile.yml`, `build/config.yml`, and platform assets.
-      For beta.7, confirm the source-carried runtime is
-      `@wailsio/runtime@3.0.0-beta.5` even though the template requests `latest`,
+      For beta.8, confirm the source-carried runtime is
+      `@wailsio/runtime@3.0.0-beta.7` even though the template requests `latest`,
       then pin the source-carried version rather than the floating template.
 - [ ] Build an application/window event matrix from the pinned release. For each
       current startup, ready, focus, theme, menu-update, close, quit, shutdown,
       and platform-workaround behavior, record the v3 event/hook owner,
       cancellability, ordering, readiness, window identity, cleanup, and test.
-- [ ] Confirm the selected beta still rejects WebSocket upgrades in its asset
-      server and lacks `http.Flusher` in its Windows webview response writer.
-      Record those exact upstream source references as the reason the aggregate
-      refresh mux remains on loopback; if either limitation changed, rerun the
-      full HTTP/SSE/WebSocket contract analysis before reconsidering the decision.
+- [x] Confirm beta.8 adds named, bidirectional Streams through
+      `App.HandleStream` and the paired runtime's `Stream`/`JSONStream`, with a
+      desktop held-poll transport and a real WebSocket only in server mode.
+      Replace the beta.7 loopback decision; do not route raw WebSocket or SSE
+      responses through the asset-service handler.
 - [ ] Exercise the pinned v3 single-instance callback before choosing process
       policy. Record behavior for a second launch before runtime-ready, after
       ready, while minimized/hidden, and during shutdown, including all incoming
@@ -340,7 +345,7 @@ the deferred service-decomposition track.
 - [ ] Verify v3 screen coordinates/work areas on macOS, Windows, X11, and Wayland
       use the logical coordinate contract expected by persisted window settings,
       including a monitor positioned left of or above the primary display.
-- [ ] Generate and inventory beta.7's build assets to confirm
+- [x] Generate and inventory beta.8's build assets to confirm
       `build/config.yml` plus Taskfiles own the current NSIS release path. Record
       the unused MSIX task's separate legacy JSON input without retaining
       `wails.json` in Luxury Yacht's supported build.
@@ -355,7 +360,7 @@ the deferred service-decomposition track.
       mapping before changing frontend imports. Run explicit combinations for
       class versus interface output, `--time-type string|Date`, and call IDs
       versus `--names`; record the exact invocation selected for committed
-      generation and drift checks. These are independent beta.7 generator flags
+      generation and drift checks. These are independent beta.8 generator flags
       (`internal/flags/bindings.go:10-27`), not consequences of the output path.
 - [ ] Map all 179 bound methods and the current 83-method frontend allowlist to candidate
       v3 service owners. Record shared dependencies, lifecycle ordering, event
@@ -369,9 +374,10 @@ the deferred service-decomposition track.
 
 ### Phase 1: Backend application injection and lifecycle
 
-Execution status: implemented. The branch injects Wails' application directly,
-uses v3 service startup/shutdown, a runtime-ready transition, idempotent pre-quit
-persistence, and the existing backend-owned loopback refresh transport.
+Execution status: application injection and lifecycle are implemented. The
+branch uses v3 service startup/shutdown, a runtime-ready transition, and
+idempotent pre-quit persistence. Replacing the existing backend-owned loopback
+refresh transport with beta.8 service routes and Streams remains open.
 
 - [x] Red: add tests proving UI/runtime operations fail or no-op before
       readiness while the explicit `MarkRuntimeReady` transition remains
@@ -399,14 +405,27 @@ persistence, and the existing backend-owned loopback refresh transport.
 - [ ] Red: add refresh-transport contract tests proving an early request cannot
       read an unready handler while the initialization/replacement operation
       needed to publish the ready aggregate mux remains allowed.
-- [ ] Port exactly one atomically replaceable aggregate mux on one loopback
-      server to the v3 lifecycle. Preserve per-cluster initialization order,
-      cluster-scoped routing, retained data, snapshot and job behavior, stream
-      replay/reset, queued-job migration, diagnostics, and teardown.
-- [ ] Preserve `GetRefreshBaseURL`, frontend URL retry/cache behavior, and the
-      loopback CORS contract, adapting only their ownership and readiness to v3.
-      Add an absence test proving no aggregate refresh handler is registered as
-      a Wails service route and no second transport is present.
+- [ ] Make the backend service an atomically replaceable HTTP handler and mount
+      its non-streaming refresh mux at one versioned Wails service route.
+      Preserve per-cluster initialization order, cluster-scoped routing,
+      retained data, snapshot and job behavior, queued-job migration,
+      diagnostics, readiness, and teardown; use mount-relative mux paths rather
+      than a prefix-restoring compatibility wrapper.
+- [ ] Adapt the existing resource-stream protocol to one named Wails Stream.
+      Preserve REQUEST/CANCEL, ACK/RESET/COMPLETE/update messages, resume
+      sequence semantics, topology replacement, telemetry, subscriber limits,
+      cancellation, and backpressure. Use `ReceiveJSON`/`SendJSON` in Go and
+      `JSONStream` in TypeScript rather than a second application protocol.
+- [ ] Adapt container logs to a second named Wails Stream. Send the current
+      scope/container/filter request as the first client frame and preserve
+      permission errors, reset/manual completion, reconnect, visibility,
+      filtering, target limits, cancellation, and bounded buffering without SSE
+      event framing.
+- [ ] Make frontend request/response fetches same-origin and delete
+      `GetRefreshBaseURL`, listener/server lifecycle, URL retry/cache
+      invalidation, CORS wrappers, raw `WebSocket`, `EventSource`, and their
+      tests. Add absence tests proving no loopback listener or fallback
+      transport remains.
 - [ ] Make pre-quit persistence idempotent and cover pending selection mutation,
       missing runtime, window-state read failure, and repeated quit requests.
 - [ ] Green/refactor: remove v2 runtime-context globals and tests only after the
@@ -507,7 +526,7 @@ runtime test harness replace the v2 surfaces.
 - [x] Replace all production `window.go` reads with typed backend API or desktop
       availability helpers; then remove `Window.go` from `global.d.ts`.
 - [x] Add the source-carried `@wailsio/runtime` version paired with the pinned v3
-      release (`3.0.0-beta.5` for Wails `v3.0.0-beta.7`), not the template's
+      release (`3.0.0-beta.7` for Wails `v3.0.0-beta.8`), not the template's
       floating `latest`, and create one frontend desktop-runtime module for typed
       event subscription, browser URL open, clipboard text, current-window
       actions, and environment access.
@@ -576,7 +595,7 @@ signing/notarization inspection remain Phase 6 work on their release hosts.
       `frontend/wailsjs`, v2 global mocks, v2-only tests, and obsolete build
       assets after their consumers have moved and `go mod tidy` is clean. Do not
       retain compatibility shims or enable the out-of-scope MSIX task that still
-      expects a separate JSON configuration in beta.7.
+      expects a separate JSON configuration in beta.8.
 - [x] Phase exit gate: active source, tests, package manifests, lockfiles, build
       tasks, CI, agent instructions, and durable product documentation contain
       no Wails v2 import, module, command, runtime alias, global, generated file,
@@ -685,9 +704,10 @@ into unrelated backend test work.
       directly affected backend coverage with
       `mise exec -- wails3 task test:backend-coverage`; target 80% statement coverage or
       record the measured gap for review.
-- [x] Run the loopback refresh transport's snapshot, job, SSE, WebSocket,
-      permission, readiness, recovery, teardown, and multi-cluster suites. Assert
-      that the Wails asset/service router does not own any refresh endpoint.
+- [ ] Run the framework-owned refresh transport's snapshot, job, named-stream,
+      permission, readiness, recovery, backpressure, teardown, and multi-cluster
+      suites. Assert that no loopback listener, base-URL bridge, raw WebSocket,
+      SSE, CORS, or fallback transport remains.
 - [x] Run focused frontend binding/runtime/event/app-shell tests and measure
       directly affected frontend coverage with
       `mise exec -- wails3 task test:frontend-coverage`; target 80% statement coverage or
@@ -704,7 +724,7 @@ into unrelated backend test work.
       links, clipboard paste, file/directory dialogs, shell, logs, port-forward,
       refresh diagnostics, auth failure/recovery, and multi-cluster switching.
 - [ ] On the minimum supported Linux GTK4 environment, exercise every import,
-      export, CSV-save, and kubeconfig-directory flow through beta.7's
+      export, CSV-save, and kubeconfig-directory flow through beta.8's
       `GtkFileDialog` implementation
       (`pkg/application/linux_cgo.go:1935-1990`). Verify titles, default
       filenames/directories, filters, cancellation, and returned paths in a
@@ -792,10 +812,11 @@ into unrelated backend test work.
   complete identity.
 - If updater or tray is promoted, their state machines and quit/restart paths
   are proven independently from the core window lifecycle.
-- The loopback refresh transport preserves routes, methods, validators, typed
-  errors, correlation identity, stream replay/reset, cancellation, readiness,
-  multi-cluster isolation, handler replacement, and teardown without a Wails
-  service-route or second fallback transport.
+- The framework-owned refresh transport preserves routes, methods, validators,
+  typed errors, correlation identity, stream replay/reset, cancellation,
+  readiness, backpressure, multi-cluster isolation, handler replacement, and
+  teardown without a loopback listener, base-URL bridge, CORS layer, raw
+  WebSocket, SSE, or fallback transport.
 - If single-instance is enabled, a subsequent process cannot start a second
   service/refresh lifecycle and can affect the main window only through the
   validated second-launch contract.
@@ -846,8 +867,8 @@ into unrelated backend test work.
   and `docs/frontend/component-structure.md` for generated v3 binding/model
   ownership.
 - `docs/architecture/data-freshness.md`, `docs/architecture/refresh-system.md`,
-  `backend/AGENTS.md`, and `frontend/AGENTS.md` for loopback refresh transport
-  ownership, origin, readiness, and generation commands.
+  `backend/AGENTS.md`, and `frontend/AGENTS.md` for Wails service-route and named
+  Stream ownership, origin, readiness, and generation commands.
 - `docs/frontend/keyboard.md` and any app-shell docs whose native menu or
   window-runtime references change.
 - App-shell persistence documentation for screen-aware geometry restoration and

@@ -6,8 +6,10 @@ node = "26.7.0"
 npm = "12.0.2"
 "go:honnef.co/go/tools/cmd/staticcheck" = "0.7.0"
 trivy = "0.73.0"
-"go:github.com/wailsapp/wails/v3/cmd/wails3" = "3.0.0-beta.7"
+"go:github.com/wailsapp/wails/v3/cmd/wails3" = "3.0.0-beta.8"
 
 [vars]
+# The frontend runtime version paired with the pinned Wails release.
+wails_runtime_version = "3.0.0-beta.7"
 # NSIS is installed by the Windows-specific release action rather than Mise.
 nsis_version = "3.10"
