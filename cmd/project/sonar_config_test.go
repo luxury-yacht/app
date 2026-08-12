@@ -9,13 +9,20 @@ import (
 	"testing"
 )
 
-func TestSonarExcludesGeneratedSources(t *testing.T) {
+func TestSonarExcludesGeneratedSourcesAndBinaryAssets(t *testing.T) {
 	repoRoot := filepath.Join("..", "..")
 	exclusions := readSonarExclusions(t, repoRoot)
 
 	// Wails output does not consistently carry a generated-code header, so keep
 	// one representative file in the check alongside header-marked generators.
 	assertSonarPathExcluded(t, exclusions, "frontend/bindings/github.com/luxury-yacht/app/backend/models.ts")
+	for _, path := range []string{
+		"build/appicon.png",
+		"build/darwin/icons.icns",
+		"build/windows/icon.ico",
+	} {
+		assertSonarPathExcluded(t, exclusions, path)
+	}
 
 	for _, root := range []string{"backend", "frontend/src"} {
 		err := filepath.WalkDir(filepath.Join(repoRoot, root), func(path string, entry fs.DirEntry, walkErr error) error {
@@ -83,7 +90,7 @@ func assertSonarPathExcluded(t *testing.T, exclusions []string, path string) {
 			return
 		}
 	}
-	t.Errorf("generated source %q is not covered by sonar.exclusions", path)
+	t.Errorf("path %q is not covered by sonar.exclusions", path)
 }
 
 func sonarPatternMatches(pattern, path string) bool {
