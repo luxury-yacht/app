@@ -155,8 +155,7 @@ func TestRemoveObjectFinalizerActionRejectsInvalidDirectPathsAndMissingClusters(
 func finalizerActionTestApp(t testing.TB, kubeClient *cgofake.Clientset, dynamicClient *dynamicfake.FakeDynamicClient) *App {
 	t.Helper()
 	app := NewApp(nil)
-	app.setApplicationContext(context.Background())
-	app.markRuntimeReady()
+	setTestAppRuntimeReady(t, app, context.Background())
 	registerTestClusterWithClients(app, "cluster-a", &clusterClients{
 		meta: ClusterMeta{ID: "cluster-a", Name: "cluster-a"}, kubeconfigPath: "/path", kubeconfigContext: "ctx",
 		client: kubeClient, dynamicClient: dynamicClient,

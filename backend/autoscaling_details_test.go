@@ -21,8 +21,7 @@ func TestIsWorkloadHPAManagedMatchesFullGVK(t *testing.T) {
 		},
 	})
 	app := NewApp(nil)
-	app.setApplicationContext(context.Background())
-	app.markRuntimeReady()
+	setTestAppRuntimeReady(t, app, context.Background())
 	registerTestClusterWithClients(app, "cluster-a", &clusterClients{
 		meta:              ClusterMeta{ID: "cluster-a", Name: "cluster-a"},
 		kubeconfigPath:    "/path",
@@ -51,8 +50,7 @@ func TestIsWorkloadHPAManagedDoesNotMatchKindOnlyCollision(t *testing.T) {
 		},
 	})
 	app := NewApp(nil)
-	app.setApplicationContext(context.Background())
-	app.markRuntimeReady()
+	setTestAppRuntimeReady(t, app, context.Background())
 	registerTestClusterWithClients(app, "cluster-a", &clusterClients{
 		meta:              ClusterMeta{ID: "cluster-a", Name: "cluster-a"},
 		kubeconfigPath:    "/path",

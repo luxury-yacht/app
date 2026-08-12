@@ -26,8 +26,7 @@ func TestUpdateRefreshSubsystemSelectionsValidatesReceiverAndAllowsEmptySelectio
 
 func TestApplyRefreshSelectionUpdateReportsClustersWhenRuntimeUnavailable(t *testing.T) {
 	app := newTestAppWithDefaults(t)
-	app.setApplicationContext(context.Background())
-	app.markRuntimeReady()
+	setTestAppRuntimeReady(t, app, context.Background())
 	app.stopRefreshRuntimeContext()
 
 	err := app.applyRefreshSelectionUpdate(refreshSelectionPlan{
@@ -40,8 +39,7 @@ func TestApplyRefreshSelectionUpdateReportsClustersWhenRuntimeUnavailable(t *tes
 func TestSetSelectedKubeconfigsKeepsRefreshServerOnSelectionChange(t *testing.T) {
 	setTestConfigEnv(t)
 	app := newTestAppWithDefaults(t)
-	app.setApplicationContext(context.Background())
-	app.markRuntimeReady()
+	setTestAppRuntimeReady(t, app, context.Background())
 
 	// Stub refresh wiring so selection updates exercise the in-place path.
 	setRefreshRuntimeContextForTest(app, context.Background())
@@ -102,8 +100,7 @@ func TestSetSelectedKubeconfigsKeepsRefreshServerOnSelectionChange(t *testing.T)
 func TestAuthFailedClusterDoesNotBlockNewClusterSelection(t *testing.T) {
 	setTestConfigEnv(t)
 	app := newTestAppWithDefaults(t)
-	app.setApplicationContext(context.Background())
-	app.markRuntimeReady()
+	setTestAppRuntimeReady(t, app, context.Background())
 
 	// Stub refresh wiring so selection updates exercise the in-place path.
 	setRefreshRuntimeContextForTest(app, context.Background())
@@ -183,8 +180,7 @@ func TestAuthFailedClusterDoesNotBlockNewClusterSelection(t *testing.T) {
 func TestAuthFailedOnInitClusterDoesNotBlockNewClusterSelection(t *testing.T) {
 	setTestConfigEnv(t)
 	app := newTestAppWithDefaults(t)
-	app.setApplicationContext(context.Background())
-	app.markRuntimeReady()
+	setTestAppRuntimeReady(t, app, context.Background())
 
 	// Stub refresh wiring so selection updates exercise the in-place path.
 	setRefreshRuntimeContextForTest(app, context.Background())
@@ -245,8 +241,7 @@ func TestAuthFailedOnInitClusterDoesNotBlockNewClusterSelection(t *testing.T) {
 func TestSetSelectedKubeconfigsRapidChurnLeavesConsistentClusterState(t *testing.T) {
 	setTestConfigEnv(t)
 	app := newTestAppWithDefaults(t)
-	app.setApplicationContext(context.Background())
-	app.markRuntimeReady()
+	setTestAppRuntimeReady(t, app, context.Background())
 
 	// Stub refresh wiring so selection updates exercise in-place updates only.
 	setRefreshRuntimeContextForTest(app, context.Background())

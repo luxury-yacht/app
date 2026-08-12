@@ -13,6 +13,19 @@ type desktopEvent struct {
 	data []any
 }
 
+func TestSetTestAppRuntimeReadySetsContextAndReadiness(t *testing.T) {
+	ctx, cancel := context.WithCancel(context.Background())
+	app := NewApp(nil)
+
+	setTestAppRuntimeReady(t, app, ctx)
+
+	require.True(t, app.runtimeAvailable())
+	backendCtx := app.CtxOrBackground()
+	require.NoError(t, backendCtx.Err())
+	cancel()
+	require.ErrorIs(t, backendCtx.Err(), context.Canceled)
+}
+
 func TestDesktopRuntimeRequiresExplicitWindowReadiness(t *testing.T) {
 	events := []desktopEvent{}
 	app := NewApp(nil)

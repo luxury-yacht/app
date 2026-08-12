@@ -12,8 +12,7 @@ import (
 
 func TestCleanupClusterRuntimeOperationsStopsSessionsAndCancelsActiveDrains(t *testing.T) {
 	app := newTestAppWithDefaults(t)
-	app.setApplicationContext(context.Background())
-	app.markRuntimeReady()
+	setTestAppRuntimeReady(t, app, context.Background())
 	clusterID := fmt.Sprintf("cleanup-%s", t.Name())
 	otherClusterID := clusterID + "-other"
 
@@ -70,8 +69,7 @@ func TestCleanupClusterRuntimeOperationsStopsSessionsAndCancelsActiveDrains(t *t
 
 func TestShutdownCleansRuntimeOperationsForActiveClusters(t *testing.T) {
 	app := newTestAppWithDefaults(t)
-	app.setApplicationContext(context.Background())
-	app.markRuntimeReady()
+	setTestAppRuntimeReady(t, app, context.Background())
 	clusterID := fmt.Sprintf("shutdown-%s", t.Name())
 	app.clusterClients = map[string]*clusterClients{
 		clusterID: {meta: ClusterMeta{ID: clusterID, Name: "Cluster"}},
@@ -111,8 +109,7 @@ func TestShutdownCleansRuntimeOperationsForActiveClusters(t *testing.T) {
 func TestCloseClusterCleansRuntimeOperationsAndUpdatesSelection(t *testing.T) {
 	setTestConfigEnv(t)
 	app := newTestAppWithDefaults(t)
-	app.setApplicationContext(context.Background())
-	app.markRuntimeReady()
+	setTestAppRuntimeReady(t, app, context.Background())
 
 	selection := kubeconfigSelection{Path: "/path/config", Context: "ctx"}
 	app.availableKubeconfigs = []KubeconfigInfo{{

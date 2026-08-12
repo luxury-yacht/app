@@ -44,8 +44,7 @@ func TestTeardownRefreshSubsystem(t *testing.T) {
 
 func TestTeardownRefreshSubsystemBlocksRuntimeResurrectionUntilSetup(t *testing.T) {
 	app := newTestAppWithDefaults(t)
-	app.setApplicationContext(context.Background())
-	app.markRuntimeReady()
+	setTestAppRuntimeReady(t, app, context.Background())
 	require.NotNil(t, app.ensureRefreshRuntimeContext())
 
 	app.teardownRefreshSubsystem()
@@ -60,8 +59,7 @@ func TestTeardownRefreshSubsystemBlocksRuntimeResurrectionUntilSetup(t *testing.
 
 func TestTeardownRefreshSubsystemCoordinatesWithConcurrentRuntimeEnsure(t *testing.T) {
 	app := newTestAppWithDefaults(t)
-	app.setApplicationContext(context.Background())
-	app.markRuntimeReady()
+	setTestAppRuntimeReady(t, app, context.Background())
 	require.NotNil(t, app.ensureRefreshRuntimeContext())
 
 	start := make(chan struct{})

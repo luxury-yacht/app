@@ -117,8 +117,7 @@ func TestResolvePortForwardDestination_ServiceMapsServicePortToPodTargetPort(t *
 
 func TestGetTargetPorts_ServiceUsesServicePortsAndFiltersNonTCP(t *testing.T) {
 	app := newTestAppWithDefaults(t)
-	app.setApplicationContext(context.Background())
-	app.markRuntimeReady()
+	setTestAppRuntimeReady(t, app, context.Background())
 	app.clusterClients = map[string]*clusterClients{
 		portForwardClusterID: {
 			meta:              ClusterMeta{ID: portForwardClusterID, Name: "ctx"},

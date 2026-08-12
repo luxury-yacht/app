@@ -130,8 +130,7 @@ func setupYAMLTestApp(t *testing.T) (*App, *dynamicfake.FakeDynamicClient, strin
 		return true, patchedObj, nil
 	})
 	app := NewApp(nil)
-	app.setApplicationContext(context.Background())
-	app.markRuntimeReady()
+	setTestAppRuntimeReady(t, app, context.Background())
 	apiExtClient := apiextensionsfake.NewClientset()
 	clusterID := "config:ctx"
 	// Per-cluster clients are stored in clusterClients, not in global fields.

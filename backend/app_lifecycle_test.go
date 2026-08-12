@@ -50,8 +50,7 @@ func TestContainsAuthPatternDoesNotTreatPermissionDenialAsAuthentication(t *test
 
 func TestSetupRefreshSubsystemRequiresSelections(t *testing.T) {
 	app := newTestAppWithDefaults(t)
-	app.setApplicationContext(context.Background())
-	app.markRuntimeReady()
+	setTestAppRuntimeReady(t, app, context.Background())
 
 	err := app.setupRefreshSubsystem()
 	require.Error(t, err)
@@ -73,8 +72,7 @@ func TestEnsureRefreshRuntimeContextGuardsMissingContextAndReusesLiveRuntime(t *
 	app := newTestAppWithDefaults(t)
 	require.Nil(t, app.ensureRefreshRuntimeContext())
 
-	app.setApplicationContext(context.Background())
-	app.markRuntimeReady()
+	setTestAppRuntimeReady(t, app, context.Background())
 	first := app.ensureRefreshRuntimeContext()
 	require.NotNil(t, first)
 	t.Cleanup(app.refreshCancel)
@@ -87,8 +85,7 @@ func TestEnsureRefreshRuntimeContextSharesOneRuntimeAcrossLifecycleCallers(t *te
 	parent, cancelParent := context.WithCancel(context.Background())
 	t.Cleanup(cancelParent)
 	app := newTestAppWithDefaults(t)
-	app.setApplicationContext(parent)
-	app.markRuntimeReady()
+	setTestAppRuntimeReady(t, app, parent)
 
 	const callers = 32
 	contexts := make([]context.Context, callers)
@@ -126,8 +123,7 @@ func TestSetupRefreshSubsystemDoesNotStorePermissionCache(t *testing.T) {
 	app := newTestAppWithDefaults(t)
 	ctx, cancel := context.WithCancel(context.Background())
 	defer cancel()
-	app.setApplicationContext(ctx)
-	app.markRuntimeReady()
+	setTestAppRuntimeReady(t, app, ctx)
 
 	// Create per-cluster clients - there are no global client fields anymore.
 	fakeClient := cgofake.NewClientset()
@@ -255,8 +251,7 @@ func TestStdLogBridgeWritesToLogger(t *testing.T) {
 
 func TestInitKubernetesClientRequiresSelections(t *testing.T) {
 	app := newTestAppWithDefaults(t)
-	app.setApplicationContext(context.Background())
-	app.markRuntimeReady()
+	setTestAppRuntimeReady(t, app, context.Background())
 
 	err := app.initKubernetesClient()
 	require.Error(t, err)
@@ -267,8 +262,7 @@ func TestInitKubernetesClientFailsWhenRefreshSubsystemFails(t *testing.T) {
 	app := newTestAppWithDefaults(t)
 	ctx, cancel := context.WithCancel(context.Background())
 	defer cancel()
-	app.setApplicationContext(ctx)
-	app.markRuntimeReady()
+	setTestAppRuntimeReady(t, app, ctx)
 
 	kubeconfig := `
 apiVersion: v1
@@ -367,8 +361,7 @@ func TestBeforeClosePersistsWindowSettings(t *testing.T) {
 	app.windowGeometry = func() (WindowGeometry, error) {
 		return WindowGeometry{X: 11, Y: 22, Width: 800, Height: 600, Maximised: true}, nil
 	}
-	app.setApplicationContext(context.Background())
-	app.markRuntimeReady()
+	setTestAppRuntimeReady(t, app, context.Background())
 
 	require.True(t, app.PrepareQuit(), "expected the application quit to proceed")
 
@@ -384,8 +377,7 @@ func TestBeforeClosePersistsWindowSettings(t *testing.T) {
 func TestBeforeCloseWaitsForSelectionMutationBeforeSavingWindowSettings(t *testing.T) {
 	t.Setenv("HOME", t.TempDir())
 	app := newTestAppWithDefaults(t)
-	app.setApplicationContext(context.Background())
-	app.markRuntimeReady()
+	setTestAppRuntimeReady(t, app, context.Background())
 
 	saveStarted := make(chan struct{})
 	var saveStartedOnce sync.Once

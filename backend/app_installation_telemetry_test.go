@@ -241,8 +241,7 @@ func TestEnablingErrorReportingEmitsPendingInstallationMetric(t *testing.T) {
 	require.NoError(t, app.saveAppSettings())
 	app.appSettings = nil
 	require.NoError(t, InitializeErrorReporting(app))
-	app.setApplicationContext(context.Background())
-	app.markRuntimeReady()
+	setTestAppRuntimeReady(t, app, context.Background())
 
 	_, err := app.UpdateAppPreferences(UpdateAppPreferencesRequest{Changes: []AppPreferenceChange{{
 		Key:   appPreferenceErrorReportingEnabled,

@@ -14,8 +14,7 @@ import (
 func TestSaveCSVFileUsesWailsDialogOptionsAndWritesSelection(t *testing.T) {
 	path := filepath.Join(t.TempDir(), "pods.csv")
 	app := NewApp(nil)
-	app.setApplicationContext(context.Background())
-	app.markRuntimeReady()
+	setTestAppRuntimeReady(t, app, context.Background())
 	var options application.SaveFileDialogOptions
 	app.saveFileDialog = func(input *application.SaveFileDialogOptions) (string, error) {
 		options = *input

@@ -14,8 +14,7 @@ import (
 func TestInitKubernetesClientUsesExistingClusterClients(t *testing.T) {
 	app := NewApp(nil)
 	app.logger = NewLogger(10)
-	app.setApplicationContext(context.Background())
-	app.markRuntimeReady()
+	setTestAppRuntimeReady(t, app, context.Background())
 
 	// Seed a selection and client pool so init uses the existing cluster client.
 	configPath := "/tmp/config"
@@ -86,8 +85,7 @@ users:
 
 	app := NewApp(nil)
 	app.logger = NewLogger(10)
-	app.setApplicationContext(context.Background())
-	app.markRuntimeReady()
+	setTestAppRuntimeReady(t, app, context.Background())
 	app.availableKubeconfigs = []KubeconfigInfo{{
 		Name:    "config",
 		Path:    file,

@@ -17,8 +17,7 @@ import (
 func TestOpenKubeconfigSearchPathDialogUsesWailsDirectoryOptions(t *testing.T) {
 	setTestConfigEnv(t)
 	app := newTestAppWithDefaults(t)
-	app.setApplicationContext(context.Background())
-	app.markRuntimeReady()
+	setTestAppRuntimeReady(t, app, context.Background())
 	var options application.OpenFileDialogOptions
 	app.openFileDialog = func(input *application.OpenFileDialogOptions) (string, error) {
 		options = *input
@@ -421,8 +420,7 @@ func TestApp_SetKubeconfigSearchPathsPersistsAndDiscovers(t *testing.T) {
 func TestApp_SetKubeconfigSearchPathsPrunesSelectionsFromRemovedPaths(t *testing.T) {
 	setTestConfigEnv(t)
 	app := NewApp(nil)
-	app.setApplicationContext(context.Background())
-	app.markRuntimeReady()
+	setTestAppRuntimeReady(t, app, context.Background())
 	app.appSettings = getDefaultAppSettings()
 	app.refreshAggregates.Store(&refreshAggregateHandlers{})
 	app.refreshHTTPServer = &http.Server{}
@@ -515,8 +513,7 @@ func TestApp_SetKubeconfig(t *testing.T) {
 	t.Setenv("HOME", tempDir)
 
 	app := NewApp(nil)
-	app.setApplicationContext(context.Background())
-	app.markRuntimeReady()
+	setTestAppRuntimeReady(t, app, context.Background())
 
 	// Discover kubeconfigs first
 	err = app.discoverKubeconfigs()
@@ -595,8 +592,7 @@ func TestApp_SetSelectedKubeconfigs(t *testing.T) {
 	t.Setenv("HOME", tempDir)
 
 	app := NewApp(nil)
-	app.setApplicationContext(context.Background())
-	app.markRuntimeReady()
+	setTestAppRuntimeReady(t, app, context.Background())
 	app.kubeClientInitializer = func() error { return nil }
 
 	require.NoError(t, app.discoverKubeconfigs())
@@ -626,8 +622,7 @@ func TestApp_SetSelectedKubeconfigsAllowsSameContextNameFromDifferentFiles(t *te
 	t.Setenv("HOME", tempDir)
 
 	app := NewApp(nil)
-	app.setApplicationContext(context.Background())
-	app.markRuntimeReady()
+	setTestAppRuntimeReady(t, app, context.Background())
 	app.kubeClientInitializer = func() error { return nil }
 
 	require.NoError(t, app.discoverKubeconfigs())
@@ -649,8 +644,7 @@ func TestApp_SetSelectedKubeconfigsRejectsDuplicateSelections(t *testing.T) {
 	t.Setenv("HOME", tempDir)
 
 	app := NewApp(nil)
-	app.setApplicationContext(context.Background())
-	app.markRuntimeReady()
+	setTestAppRuntimeReady(t, app, context.Background())
 	app.kubeClientInitializer = func() error { return nil }
 
 	require.NoError(t, app.discoverKubeconfigs())
@@ -668,8 +662,7 @@ func TestApp_SetSelectedKubeconfigsClearsSelection(t *testing.T) {
 	t.Setenv("HOME", tempDir)
 
 	app := NewApp(nil)
-	app.setApplicationContext(context.Background())
-	app.markRuntimeReady()
+	setTestAppRuntimeReady(t, app, context.Background())
 	app.selectedKubeconfigs = []string{"/path/to/config:ctx"}
 
 	require.NoError(t, app.SetSelectedKubeconfigs(nil))
@@ -696,8 +689,7 @@ func TestApp_discoverKubeconfigs_noAutoSelection(t *testing.T) {
 	ctx := context.Background()
 
 	// Setup app state (avoid startup which has runtime calls)
-	app.setApplicationContext(ctx)
-	app.markRuntimeReady()
+	setTestAppRuntimeReady(t, app, ctx)
 	app.setupEnvironment()
 	err = app.discoverKubeconfigs()
 	require.NoError(t, err)

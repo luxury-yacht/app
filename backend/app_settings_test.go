@@ -69,8 +69,7 @@ func setTestConfigEnv(t *testing.T) {
 func TestClearAppStateRemovesCacheDir(t *testing.T) {
 	setTestConfigEnv(t)
 	app := newTestAppWithDefaults(t)
-	app.setApplicationContext(context.Background())
-	app.markRuntimeReady()
+	setTestAppRuntimeReady(t, app, context.Background())
 
 	// The app cache dir lives under the user cache dir (redirected into a temp
 	// dir by setTestConfigEnv). Seed the subdirs the three cache subsystems use
@@ -140,8 +139,7 @@ func TestAppLoadWindowSettingsReadsExistingFile(t *testing.T) {
 func TestAppSaveWindowSettingsPreservesInMemoryKubeconfigSelection(t *testing.T) {
 	setTestConfigEnv(t)
 	app := newTestAppWithDefaults(t)
-	app.setApplicationContext(context.Background())
-	app.markRuntimeReady()
+	setTestAppRuntimeReady(t, app, context.Background())
 	app.appSettings = getDefaultAppSettings()
 	app.appSettings.SelectedKubeconfigs = []string{"/new/config:ctx-new"}
 
@@ -1093,8 +1091,7 @@ func TestApplySettingsSideEffectsDoesNotScheduleRegistrationAfterReporterFailure
 		err:                           errors.New("forced reporter failure"),
 	}
 	app := NewApp(nil, reporter)
-	app.setApplicationContext(context.Background())
-	app.markRuntimeReady()
+	setTestAppRuntimeReady(t, app, context.Background())
 	settings := getDefaultAppSettings()
 	settings.ErrorReportingEnabled = true
 

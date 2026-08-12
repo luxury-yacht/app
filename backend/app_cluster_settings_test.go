@@ -171,8 +171,7 @@ func TestScopeRebuildQueueCoalescesUntilStarted(t *testing.T) {
 
 func TestPerformClusterScopeRebuildEmitsScopeChangedEvent(t *testing.T) {
 	app := newTestAppWithDefaults(t)
-	app.setApplicationContext(context.Background())
-	app.markRuntimeReady()
+	setTestAppRuntimeReady(t, app, context.Background())
 	var events []string
 	app.eventEmitter = func(_ context.Context, name string, _ ...interface{}) {
 		events = append(events, name)

@@ -54,8 +54,7 @@ func TestPerClusterHeartbeat(t *testing.T) {
 	app.logger = NewLogger(10)
 	ctx, cancel := context.WithCancel(context.Background())
 	defer cancel()
-	app.setApplicationContext(ctx)
-	app.markRuntimeReady()
+	setTestAppRuntimeReady(t, app, ctx)
 
 	// Track emitted events
 	emittedEvents := make(map[string][]map[string]any)
@@ -150,8 +149,7 @@ func TestPerClusterHeartbeatSkipsInvalidAuth(t *testing.T) {
 	app.logger = NewLogger(10)
 	ctx, cancel := context.WithCancel(context.Background())
 	defer cancel()
-	app.setApplicationContext(ctx)
-	app.markRuntimeReady()
+	setTestAppRuntimeReady(t, app, ctx)
 
 	// Track emitted events
 	emittedEvents := make(map[string][]map[string]any)
@@ -234,8 +232,7 @@ func TestPerClusterHeartbeatReportsToAuthManager(t *testing.T) {
 	app.logger = NewLogger(10)
 	ctx, cancel := context.WithCancel(context.Background())
 	defer cancel()
-	app.setApplicationContext(ctx)
-	app.markRuntimeReady()
+	setTestAppRuntimeReady(t, app, ctx)
 
 	// Track emitted events (required by the heartbeat implementation)
 	app.eventEmitter = func(_ context.Context, _ string, _ ...interface{}) {}
@@ -299,8 +296,7 @@ func TestPerClusterHeartbeatConnectivityDoesNotAffectAuth(t *testing.T) {
 	app.logger = NewLogger(10)
 	ctx, cancel := context.WithCancel(context.Background())
 	defer cancel()
-	app.setApplicationContext(ctx)
-	app.markRuntimeReady()
+	setTestAppRuntimeReady(t, app, ctx)
 
 	app.eventEmitter = func(_ context.Context, _ string, _ ...interface{}) {}
 
@@ -349,8 +345,7 @@ func TestPerClusterHeartbeatEmitsDegradedEvent(t *testing.T) {
 	app.logger = NewLogger(10)
 	ctx, cancel := context.WithCancel(context.Background())
 	defer cancel()
-	app.setApplicationContext(ctx)
-	app.markRuntimeReady()
+	setTestAppRuntimeReady(t, app, ctx)
 
 	// Track emitted events
 	emittedEvents := make(map[string][]map[string]any)
@@ -410,8 +405,7 @@ func TestCheckClusterHealth(t *testing.T) {
 	app.logger = NewLogger(10)
 	ctx, cancel := context.WithCancel(context.Background())
 	defer cancel()
-	app.setApplicationContext(ctx)
-	app.markRuntimeReady()
+	setTestAppRuntimeReady(t, app, ctx)
 
 	t.Run("healthy cluster returns healthOK", func(t *testing.T) {
 		healthyDisco := &heartbeatDiscovery{
@@ -556,8 +550,7 @@ func TestCheckClusterHealthUsesReadyz(t *testing.T) {
 	app.logger = NewLogger(10)
 	ctx, cancel := context.WithCancel(context.Background())
 	defer cancel()
-	app.setApplicationContext(ctx)
-	app.markRuntimeReady()
+	setTestAppRuntimeReady(t, app, ctx)
 
 	var requestedPath string
 	disco := &heartbeatDiscovery{
@@ -594,8 +587,7 @@ func TestStartHeartbeatLoopStopsOnContextCancel(t *testing.T) {
 	app.logger = NewLogger(10)
 	bgCtx, bgCancel := context.WithCancel(context.Background())
 	defer bgCancel()
-	app.setApplicationContext(bgCtx)
-	app.markRuntimeReady()
+	setTestAppRuntimeReady(t, app, bgCtx)
 
 	// No-op event emitter
 	app.eventEmitter = func(_ context.Context, _ string, _ ...interface{}) {}
@@ -629,8 +621,7 @@ func TestStartHeartbeatLoopRunsImmediately(t *testing.T) {
 	app.logger = NewLogger(10)
 	bgCtx, bgCancel := context.WithCancel(context.Background())
 	defer bgCancel()
-	app.setApplicationContext(bgCtx)
-	app.markRuntimeReady()
+	setTestAppRuntimeReady(t, app, bgCtx)
 
 	// Track how many times runHeartbeatIteration executes by counting emitted events.
 	var iterationCount int

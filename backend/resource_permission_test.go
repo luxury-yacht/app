@@ -33,8 +33,7 @@ func TestRestartWorkloadRequiresPatchPermission(t *testing.T) {
 	denySelfSubjectAccessReviews(client, "no patch deployments")
 
 	app := NewApp(nil)
-	app.setApplicationContext(context.Background())
-	app.markRuntimeReady()
+	setTestAppRuntimeReady(t, app, context.Background())
 	registerTestClusterWithClients(app, "cluster-a", &clusterClients{
 		meta:              ClusterMeta{ID: "cluster-a", Name: "cluster-a"},
 		kubeconfigPath:    "/path",
@@ -59,8 +58,7 @@ func TestDeleteResourceByGVKRequiresDeletePermission(t *testing.T) {
 	dynamicClient := dynamicfake.NewSimpleDynamicClient(runtime.NewScheme())
 
 	app := NewApp(nil)
-	app.setApplicationContext(context.Background())
-	app.markRuntimeReady()
+	setTestAppRuntimeReady(t, app, context.Background())
 	registerTestClusterWithClients(app, "cluster-a", &clusterClients{
 		meta:              ClusterMeta{ID: "cluster-a", Name: "cluster-a"},
 		kubeconfigPath:    "/path",
@@ -98,8 +96,7 @@ func TestTriggerCronJobRequiresJobCreatePermission(t *testing.T) {
 	denySelfSubjectAccessReviews(client, "no create jobs")
 
 	app := NewApp(nil)
-	app.setApplicationContext(context.Background())
-	app.markRuntimeReady()
+	setTestAppRuntimeReady(t, app, context.Background())
 	registerTestClusterWithClients(app, "cluster-a", &clusterClients{
 		meta:              ClusterMeta{ID: "cluster-a", Name: "cluster-a"},
 		kubeconfigPath:    "/path",
@@ -125,8 +122,7 @@ func TestSuspendCronJobRequiresPatchPermission(t *testing.T) {
 	denySelfSubjectAccessReviews(client, "no patch cronjobs")
 
 	app := NewApp(nil)
-	app.setApplicationContext(context.Background())
-	app.markRuntimeReady()
+	setTestAppRuntimeReady(t, app, context.Background())
 	registerTestClusterWithClients(app, "cluster-a", &clusterClients{
 		meta:              ClusterMeta{ID: "cluster-a", Name: "cluster-a"},
 		kubeconfigPath:    "/path",
@@ -217,8 +213,7 @@ func TestCancelDrainNodeJobRequiresNodeMaintenancePermission(t *testing.T) {
 	denySelfSubjectAccessReviews(client, "no node maintenance")
 
 	app := NewApp(nil)
-	app.setApplicationContext(context.Background())
-	app.markRuntimeReady()
+	setTestAppRuntimeReady(t, app, context.Background())
 	registerTestClusterWithClients(app, clusterID, &clusterClients{
 		meta:              ClusterMeta{ID: clusterID, Name: clusterID},
 		kubeconfigPath:    "/path",

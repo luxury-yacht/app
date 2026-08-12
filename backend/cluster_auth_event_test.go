@@ -20,8 +20,7 @@ func TestHandleClusterAuthStateChange_InvalidEmitsAuthFailed(t *testing.T) {
 	app.logger = NewLogger(100, reporter)
 	ctx, cancel := context.WithCancel(context.Background())
 	defer cancel()
-	app.setApplicationContext(ctx)
-	app.markRuntimeReady()
+	setTestAppRuntimeReady(t, app, ctx)
 
 	// Capture emitted events.
 	var emittedEvents []struct {
@@ -96,8 +95,7 @@ func TestHandleClusterAuthStateChange_RecoveringEmitsEvent(t *testing.T) {
 	app := newTestAppWithDefaults(t)
 	ctx, cancel := context.WithCancel(context.Background())
 	defer cancel()
-	app.setApplicationContext(ctx)
-	app.markRuntimeReady()
+	setTestAppRuntimeReady(t, app, ctx)
 
 	var emittedEvents []struct {
 		name string
@@ -157,8 +155,7 @@ func TestHandleClusterAuthStateChange_ValidEmitsRecoveredEvent(t *testing.T) {
 	app := newTestAppWithDefaults(t)
 	ctx, cancel := context.WithCancel(context.Background())
 	defer cancel()
-	app.setApplicationContext(ctx)
-	app.markRuntimeReady()
+	setTestAppRuntimeReady(t, app, ctx)
 
 	var emittedEvents []struct {
 		name string
@@ -210,8 +207,7 @@ func TestHandleClusterAuthStateChange_InvalidWithoutCauseIsolatesBackgroundClust
 	app := newTestAppWithDefaults(t)
 	reporter := &recordingErrorReporter{}
 	app.logger = NewLogger(100, reporter)
-	app.setApplicationContext(context.Background())
-	app.markRuntimeReady()
+	setTestAppRuntimeReady(t, app, context.Background())
 	app.governorVisible = "cluster-foreground"
 	app.clusterLifecycle = newClusterLifecycle(nil)
 	app.clusterLifecycle.SetState("cluster-foreground", ClusterStateReady)
@@ -259,8 +255,7 @@ func TestHandleClusterAuthStateChange_InvalidWithoutCauseIsolatesBackgroundClust
 
 func TestHandleClusterAuthStateChange_QueuesRecoveringMutationOutsideManagerLock(t *testing.T) {
 	app := newTestAppWithDefaults(t)
-	app.setApplicationContext(context.Background())
-	app.markRuntimeReady()
+	setTestAppRuntimeReady(t, app, context.Background())
 	app.selectionMutationMu.Lock()
 	selectionLocked := true
 	defer func() {
@@ -303,8 +298,7 @@ func TestHandleClusterAuthStateChange_QueuesRecoveringMutationOutsideManagerLock
 
 func TestHandleClusterAuthStateChange_UnknownStateNoOp(t *testing.T) {
 	app := newTestAppWithDefaults(t)
-	app.setApplicationContext(context.Background())
-	app.markRuntimeReady()
+	setTestAppRuntimeReady(t, app, context.Background())
 	app.eventEmitter = func(context.Context, string, ...interface{}) {
 		require.Fail(t, "unknown auth state emitted an event")
 	}
@@ -339,8 +333,7 @@ func TestHandleClusterAuthStateChange_EmptyClusterIDNoOp(t *testing.T) {
 	app := newTestAppWithDefaults(t)
 	ctx, cancel := context.WithCancel(context.Background())
 	defer cancel()
-	app.setApplicationContext(ctx)
-	app.markRuntimeReady()
+	setTestAppRuntimeReady(t, app, ctx)
 
 	eventCalled := false
 	app.eventEmitter = func(_ context.Context, _ string, _ ...interface{}) {
@@ -359,8 +352,7 @@ func TestHandleClusterAuthRecoveryProgress_CarriesErrorClass(t *testing.T) {
 	app := newTestAppWithDefaults(t)
 	ctx, cancel := context.WithCancel(context.Background())
 	defer cancel()
-	app.setApplicationContext(ctx)
-	app.markRuntimeReady()
+	setTestAppRuntimeReady(t, app, ctx)
 
 	var progressEvents []map[string]any
 	var mu sync.Mutex
@@ -395,8 +387,7 @@ func TestHandleClusterAuthRecoveryProgress_CarriesExecCommand(t *testing.T) {
 	app := newTestAppWithDefaults(t)
 	ctx, cancel := context.WithCancel(context.Background())
 	defer cancel()
-	app.setApplicationContext(ctx)
-	app.markRuntimeReady()
+	setTestAppRuntimeReady(t, app, ctx)
 
 	mgr := authstate.New(authstate.Config{MaxAttempts: 0})
 	defer mgr.Shutdown()
@@ -465,8 +456,7 @@ func TestClusterWorkspaceStateIncludesErrorClass(t *testing.T) {
 	app := newTestAppWithDefaults(t)
 	ctx, cancel := context.WithCancel(context.Background())
 	defer cancel()
-	app.setApplicationContext(ctx)
-	app.markRuntimeReady()
+	setTestAppRuntimeReady(t, app, ctx)
 
 	gate := make(chan struct{})
 	probeStarted := make(chan struct{}, 8)

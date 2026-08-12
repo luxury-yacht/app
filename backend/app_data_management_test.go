@@ -42,8 +42,7 @@ func installDataManagementDialogs(t *testing.T, app *App, savePath, openPath str
 func TestDataManagementDialogsDefaultToUserHomeDirectory(t *testing.T) {
 	setTestConfigEnv(t)
 	app := newTestAppWithDefaults(t)
-	app.setApplicationContext(context.Background())
-	app.markRuntimeReady()
+	setTestAppRuntimeReady(t, app, context.Background())
 	home, err := os.UserHomeDir()
 	require.NoError(t, err)
 	require.NotEmpty(t, home)
@@ -63,8 +62,7 @@ func TestDataManagementDialogsDefaultToUserHomeDirectory(t *testing.T) {
 func TestExportSettingsExportsPreferencesAndSearchPathsOnly(t *testing.T) {
 	setTestConfigEnv(t)
 	app := newTestAppWithDefaults(t)
-	app.setApplicationContext(context.Background())
-	app.markRuntimeReady()
+	setTestAppRuntimeReady(t, app, context.Background())
 
 	settings := defaultSettingsFile()
 	settings.Preferences.AppearanceMode = "dark"
@@ -110,8 +108,7 @@ func TestExportSettingsExportsPreferencesAndSearchPathsOnly(t *testing.T) {
 func TestImportSettingsReplacesPortableSettingsAndPreservesSessionState(t *testing.T) {
 	setTestConfigEnv(t)
 	app := newTestAppWithDefaults(t)
-	app.setApplicationContext(context.Background())
-	app.markRuntimeReady()
+	setTestAppRuntimeReady(t, app, context.Background())
 
 	current := defaultSettingsFile()
 	current.Preferences.AppearanceMode = "dark"
@@ -189,8 +186,7 @@ func TestImportSettingsReplacesPortableSettingsAndPreservesSessionState(t *testi
 func TestImportSettingsRejectsWrongFormatWithoutChangingSettings(t *testing.T) {
 	setTestConfigEnv(t)
 	app := newTestAppWithDefaults(t)
-	app.setApplicationContext(context.Background())
-	app.markRuntimeReady()
+	setTestAppRuntimeReady(t, app, context.Background())
 	current := defaultSettingsFile()
 	current.Preferences.AppearanceMode = "dark"
 	require.NoError(t, app.saveSettingsFile(current))
@@ -213,8 +209,7 @@ func TestImportSettingsRejectsWrongFormatWithoutChangingSettings(t *testing.T) {
 func TestFavoritesExportImportRoundTripReplacesLibrary(t *testing.T) {
 	setTestConfigEnv(t)
 	app := newTestAppWithDefaults(t)
-	app.setApplicationContext(context.Background())
-	app.markRuntimeReady()
+	setTestAppRuntimeReady(t, app, context.Background())
 
 	original := &favoritesFile{
 		Favorites: []Favorite{
@@ -255,8 +250,7 @@ func TestFavoritesExportImportRoundTripReplacesLibrary(t *testing.T) {
 func TestImportFavoritesRejectsDuplicateIDsWithoutChangingLibrary(t *testing.T) {
 	setTestConfigEnv(t)
 	app := newTestAppWithDefaults(t)
-	app.setApplicationContext(context.Background())
-	app.markRuntimeReady()
+	setTestAppRuntimeReady(t, app, context.Background())
 	beforeFavorite := dataManagementFavorite("existing", "Existing")
 	require.NoError(t, app.saveFavoritesFile(&favoritesFile{Favorites: []Favorite{beforeFavorite}}))
 
@@ -284,8 +278,7 @@ func TestImportFavoritesRejectsDuplicateIDsWithoutChangingLibrary(t *testing.T) 
 func TestDataManagementDialogsTreatCancelAsSuccess(t *testing.T) {
 	setTestConfigEnv(t)
 	app := newTestAppWithDefaults(t)
-	app.setApplicationContext(context.Background())
-	app.markRuntimeReady()
+	setTestAppRuntimeReady(t, app, context.Background())
 	installDataManagementDialogs(t, app, "", "")
 
 	for _, action := range []func() (DataManagementResult, error){

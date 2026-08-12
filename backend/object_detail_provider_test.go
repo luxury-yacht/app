@@ -46,8 +46,7 @@ func TestObjectDetailProviderFetchesKnownKinds(t *testing.T) {
 	event := &corev1.Event{ObjectMeta: metav1.ObjectMeta{Name: "demo-event", Namespace: "default"}}
 
 	app := NewApp(nil)
-	app.setApplicationContext(context.Background())
-	app.markRuntimeReady()
+	setTestAppRuntimeReady(t, app, context.Background())
 	// Per-cluster clients are stored in clusterClients, not in global fields.
 	clusterID := "config:ctx"
 	fakeClient := fake.NewClientset(deploy, configMap, clusterRole, namespace, event)
@@ -113,8 +112,7 @@ func TestObjectDetailProviderRejectsKnownKindWithoutGVK(t *testing.T) {
 
 func TestObjectDetailProviderRejectsKnownKindWithWrongGVK(t *testing.T) {
 	app := NewApp(nil)
-	app.setApplicationContext(context.Background())
-	app.markRuntimeReady()
+	setTestAppRuntimeReady(t, app, context.Background())
 	clusterID := "config:ctx"
 	client := fake.NewClientset(&corev1.ConfigMap{
 		ObjectMeta: metav1.ObjectMeta{Name: "demo", Namespace: "default"},
@@ -249,8 +247,7 @@ func TestObjectDetailProviderCacheKeyIncludesGVK(t *testing.T) {
 
 func TestObjectDetailProviderUsesClusterContext(t *testing.T) {
 	app := NewApp(nil)
-	app.setApplicationContext(context.Background())
-	app.markRuntimeReady()
+	setTestAppRuntimeReady(t, app, context.Background())
 
 	clusterAID := "config-a:ctx-a"
 	clusterBID := "config-b:ctx-b"
@@ -445,8 +442,7 @@ func TestObjectDetailProviderCoversAdditionalKinds(t *testing.T) {
 	)
 
 	app := NewApp(nil)
-	app.setApplicationContext(context.Background())
-	app.markRuntimeReady()
+	setTestAppRuntimeReady(t, app, context.Background())
 	// Per-cluster clients are stored in clusterClients, not in global fields.
 	clusterID := "config:ctx"
 	app.clusterClients = map[string]*clusterClients{
@@ -533,8 +529,7 @@ func testObjectDetailGVK(kind string) schema.GroupVersionKind {
 // resolving to whichever colliding CRD discovery returns first.
 func TestObjectDetailProviderFetchObjectYAMLRejectsKindOnly(t *testing.T) {
 	app := NewApp(nil)
-	app.setApplicationContext(context.Background())
-	app.markRuntimeReady()
+	setTestAppRuntimeReady(t, app, context.Background())
 	app.logger = NewLogger(10)
 
 	clusterID := "config:ctx"

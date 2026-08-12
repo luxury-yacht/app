@@ -138,8 +138,7 @@ func TestViewMenuOffersCommandPalette(t *testing.T) {
 
 func TestDebugMenuEventsUseReadinessGuard(t *testing.T) {
 	app := &App{}
-	app.setApplicationContext(context.Background())
-	app.markRuntimeReady()
+	setTestAppRuntimeReady(t, app, context.Background())
 	events := []string{}
 	app.eventEmitter = func(_ context.Context, name string, _ ...interface{}) {
 		events = append(events, name)

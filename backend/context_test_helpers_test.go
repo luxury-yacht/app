@@ -1,6 +1,17 @@
 package backend
 
-import "context"
+import (
+	"context"
+	"testing"
+)
+
+func setTestAppRuntimeReady(t testing.TB, app *App, ctx context.Context) {
+	t.Helper()
+	app.setApplicationContext(ctx)
+	if !app.markRuntimeReady() {
+		t.Fatal("expected app runtime to become ready")
+	}
+}
 
 func setRefreshRuntimeContextForTest(app *App, parent context.Context) {
 	app.refreshRuntimeMu.Lock()

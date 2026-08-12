@@ -50,8 +50,7 @@ func TestToggleAppLogsPanelTogglesAndEmits(t *testing.T) {
 	app.eventEmitter = func(_ context.Context, name string, _ ...interface{}) {
 		events = append(events, name)
 	}
-	app.setApplicationContext(context.Background())
-	app.markRuntimeReady()
+	setTestAppRuntimeReady(t, app, context.Background())
 
 	err := app.ToggleAppLogsPanel()
 	require.NoError(t, err)
@@ -75,8 +74,7 @@ func TestToggleSidebarTogglesAndEmits(t *testing.T) {
 	app.eventEmitter = func(_ context.Context, name string, _ ...interface{}) {
 		events = append(events, name)
 	}
-	app.setApplicationContext(context.Background())
-	app.markRuntimeReady()
+	setTestAppRuntimeReady(t, app, context.Background())
 
 	err := app.ToggleSidebar()
 	require.NoError(t, err)
@@ -98,8 +96,7 @@ func TestToggleObjectDiffEmits(t *testing.T) {
 	app.eventEmitter = func(_ context.Context, name string, _ ...interface{}) {
 		events = append(events, name)
 	}
-	app.setApplicationContext(context.Background())
-	app.markRuntimeReady()
+	setTestAppRuntimeReady(t, app, context.Background())
 
 	err := app.ToggleObjectDiff()
 	require.NoError(t, err)
@@ -120,8 +117,7 @@ func TestUpdateMenuRefreshesPersistentNativeMenu(t *testing.T) {
 	app := newUIApp(t)
 	CreateMenu(app)
 	before := viewMenuItem(t, app, "Hide Sidebar")
-	app.setApplicationContext(context.Background())
-	app.markRuntimeReady()
+	setTestAppRuntimeReady(t, app, context.Background())
 	app.sidebarVisible = false
 
 	app.UpdateMenu()
@@ -132,8 +128,7 @@ func TestUpdateMenuRefreshesPersistentNativeMenu(t *testing.T) {
 func TestSetSidebarVisibleOnlyWhenChanged(t *testing.T) {
 	app := newUIApp(t)
 	CreateMenu(app)
-	app.setApplicationContext(context.Background())
-	app.markRuntimeReady()
+	setTestAppRuntimeReady(t, app, context.Background())
 	before := viewMenuItem(t, app, "Hide Sidebar")
 
 	app.SetSidebarVisible(true)
@@ -151,8 +146,7 @@ func TestSetSidebarVisibleOnlyWhenChanged(t *testing.T) {
 func TestSetAppLogsPanelVisibleOnlyWhenChanged(t *testing.T) {
 	app := newUIApp(t)
 	CreateMenu(app)
-	app.setApplicationContext(context.Background())
-	app.markRuntimeReady()
+	setTestAppRuntimeReady(t, app, context.Background())
 	before := viewMenuItem(t, app, "Show Application Logs")
 
 	app.SetAppLogsPanelVisible(false)
@@ -174,8 +168,7 @@ func TestToggleDiagnosticsPanelTogglesAndEmits(t *testing.T) {
 	app.eventEmitter = func(_ context.Context, name string, _ ...interface{}) {
 		events = append(events, name)
 	}
-	app.setApplicationContext(context.Background())
-	app.markRuntimeReady()
+	setTestAppRuntimeReady(t, app, context.Background())
 
 	err := app.ToggleDiagnosticsPanel()
 	require.NoError(t, err)
@@ -195,8 +188,7 @@ func TestEmitEventNoContext(t *testing.T) {
 	app.emitEvent("something")
 	require.False(t, called)
 
-	app.setApplicationContext(context.Background())
-	app.markRuntimeReady()
+	setTestAppRuntimeReady(t, app, context.Background())
 	app.emitEvent("something")
 	require.True(t, called)
 }

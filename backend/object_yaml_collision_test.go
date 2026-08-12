@@ -130,8 +130,7 @@ func newCollidingDBInstanceCluster(t *testing.T, clusterID string) *App {
 	t.Helper()
 
 	app := newTestAppWithDefaults(t)
-	app.setApplicationContext(context.Background())
-	app.markRuntimeReady()
+	setTestAppRuntimeReady(t, app, context.Background())
 
 	kubeClient := kubernetesfake.NewClientset()
 	allowSelfSubjectAccessReviews(kubeClient)
