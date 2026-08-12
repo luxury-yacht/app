@@ -8,6 +8,13 @@ tasks:
     cmds:
       - go run ./cmd/project build-metadata
 
+  prepare:build-manifests:
+    summary: Renders platform manifests from canonical project metadata
+    internal: true
+    run: once
+    cmds:
+      - go run ./cmd/project build-manifests
+
   go:mod:tidy:
     summary: Runs `go mod tidy`
     internal: true
@@ -243,7 +250,7 @@ tasks:
     summary: Updates the build assets
     dir: build
     cmds:
-      - wails3 update build-assets -name "{{.APP_NAME}}" -binaryname "{{.APP_NAME}}" -config config.yml -dir .
+      - wails3 update build-assets -name "__APP_BINARY_NAME__" -binaryname "__APP_BINARY_NAME__" -productcompany "__APP_COMPANY__" -productname "__APP_NAME__" -productidentifier "__APP_IDENTIFIER__" -productdescription "__APP_DESCRIPTION__" -productcopyright "__APP_COPYRIGHT__" -productcomments "__APP_COMMENTS__" -productversion "__APP_VERSION__" -config config.yml -dir .
 
   build:server:
     summary: Builds the application in server mode (no GUI, HTTP server only)

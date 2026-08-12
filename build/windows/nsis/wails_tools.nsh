@@ -5,19 +5,19 @@
 !include "FileFunc.nsh"
 
 !ifndef INFO_PROJECTNAME
-    !define INFO_PROJECTNAME "luxury-yacht"
+    !define INFO_PROJECTNAME "__APP_BINARY_NAME__"
 !endif
 !ifndef INFO_COMPANYNAME
-    !define INFO_COMPANYNAME "Luxury Yacht"
+    !define INFO_COMPANYNAME "__APP_COMPANY__"
 !endif
 !ifndef INFO_PRODUCTNAME
-    !define INFO_PRODUCTNAME "Luxury Yacht"
+    !define INFO_PRODUCTNAME "__APP_NAME__"
 !endif
 !ifndef INFO_PRODUCTVERSION
-    !define INFO_PRODUCTVERSION "1.11.6"
+    !define INFO_PRODUCTVERSION "__APP_VERSION__"
 !endif
 !ifndef INFO_COPYRIGHT
-    !define INFO_COPYRIGHT "Copyright © 2025-2026 Luxury Yacht"
+    !define INFO_COPYRIGHT "__APP_COPYRIGHT__"
 !endif
 !ifndef PRODUCT_EXECUTABLE
     !define PRODUCT_EXECUTABLE "${INFO_PROJECTNAME}.exe"

@@ -14,6 +14,12 @@ func TestReadProjectMetadataFromWailsV3BuildConfig(t *testing.T) {
 	configPath := filepath.Join(t.TempDir(), "config.yml")
 	config := `version: '3'
 info:
+  companyName: Test Company
+  productName: Test App
+  productIdentifier: app.test.desktop
+  description: Test description
+  copyright: Copyright Test
+  comments: Test comments
   version: "v2.0.0-beta.3"
 luxuryYacht:
   betaExpiryDays: 45
@@ -29,6 +35,12 @@ luxuryYacht:
 	if metadata.Info.Version != "v2.0.0-beta.3" {
 		t.Errorf("Version = %q, want v2.0.0-beta.3", metadata.Info.Version)
 	}
+	require.Equal(t, "Test Company", metadata.Info.CompanyName)
+	require.Equal(t, "Test App", metadata.Info.ProductName)
+	require.Equal(t, "app.test.desktop", metadata.Info.ProductIdentifier)
+	require.Equal(t, "Test description", metadata.Info.Description)
+	require.Equal(t, "Copyright Test", metadata.Info.Copyright)
+	require.Equal(t, "Test comments", metadata.Info.Comments)
 	if metadata.LuxuryYacht.BetaExpiryDays != 45 {
 		t.Errorf("BetaExpiryDays = %d, want 45", metadata.LuxuryYacht.BetaExpiryDays)
 	}
@@ -89,4 +101,19 @@ func TestWriteProjectVersion(t *testing.T) {
 	var output bytes.Buffer
 	require.NoError(t, writeProjectVersion(&output, " 1.2.3-beta.4 "))
 	require.Equal(t, "1.2.3-beta.4\n", output.String())
+}
+
+func TestProjectBinaryNameUsesConfiguredProductName(t *testing.T) {
+	var metadata projectMetadata
+	metadata.Info.ProductName = " Luxury Yacht Pro "
+
+	name, err := projectBinaryName(metadata)
+
+	require.NoError(t, err)
+	require.Equal(t, "luxury-yacht-pro", name)
+}
+
+func TestProjectBinaryNameRejectsMissingProductName(t *testing.T) {
+	_, err := projectBinaryName(projectMetadata{})
+	require.ErrorContains(t, err, "has no info.productName")
 }

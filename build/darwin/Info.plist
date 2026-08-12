@@ -3,28 +3,28 @@
 <plist version="1.0">
 	<dict>
 		<key>CFBundleExecutable</key>
-		<string>luxury-yacht</string>
+		<string>__APP_BINARY_NAME__</string>
 		<key>CFBundleGetInfoString</key>
-		<string>Luxury Yacht desktop application</string>
+		<string>__APP_COMMENTS__</string>
 		<key>CFBundleIconFile</key>
 		<string>icons</string>
 		<key>CFBundleIconName</key>
 		<string>appicon</string>
 		<key>CFBundleIdentifier</key>
-		<string>app.luxury-yacht.desktop</string>
+		<string>__APP_IDENTIFIER__</string>
 		<key>CFBundleName</key>
-		<string>Luxury Yacht</string>
+		<string>__APP_NAME__</string>
 		<key>CFBundlePackageType</key>
 		<string>APPL</string>
 		<key>CFBundleShortVersionString</key>
-		<string>1.11.6</string>
+		<string>__APP_VERSION__</string>
 		<key>CFBundleVersion</key>
-		<string>1.11.6</string>
+		<string>__APP_VERSION__</string>
 		<key>LSMinimumSystemVersion</key>
 		<string>12.0.0</string>
 		<key>NSHighResolutionCapable</key>
 		<string>true</string>
 		<key>NSHumanReadableCopyright</key>
-		<string>Copyright © 2025-2026 Luxury Yacht</string>
+		<string>__APP_COPYRIGHT__</string>
 	</dict>
 </plist>

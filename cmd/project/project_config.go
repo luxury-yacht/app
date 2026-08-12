@@ -30,7 +30,13 @@ var projectReleaseAssets = []string{".deb", ".rpm", ".dmg", ".exe", ".zip"}
 
 type projectMetadata struct {
 	Info struct {
-		Version string `yaml:"version"`
+		CompanyName       string `yaml:"companyName"`
+		ProductName       string `yaml:"productName"`
+		ProductIdentifier string `yaml:"productIdentifier"`
+		Description       string `yaml:"description"`
+		Copyright         string `yaml:"copyright"`
+		Comments          string `yaml:"comments"`
+		Version           string `yaml:"version"`
 	} `yaml:"info"`
 	LuxuryYacht struct {
 		BetaExpiryDays int `yaml:"betaExpiryDays"`
@@ -138,4 +144,12 @@ func writeProjectConfig(output io.Writer) error {
 func writeProjectVersion(output io.Writer, version string) error {
 	_, err := fmt.Fprintln(output, strings.TrimSpace(version))
 	return err
+}
+
+func projectBinaryName(metadata projectMetadata) (string, error) {
+	productName := strings.TrimSpace(metadata.Info.ProductName)
+	if productName == "" {
+		return "", fmt.Errorf("wails config has no info.productName")
+	}
+	return strings.ToLower(strings.ReplaceAll(productName, " ", "-")), nil
 }

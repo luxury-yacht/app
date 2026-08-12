@@ -14,14 +14,27 @@ func main() {
 
 func run(args []string) error {
 	if len(args) != 1 {
-		return fmt.Errorf("usage: project <backend-coverage|bindings|build-metadata|clean-all|clean-build|clean-frontend|config|fmt|go-mod-update|go-mod-update-check|release-app|release-site|reset|version|windows-version>")
+		return fmt.Errorf("usage: project <backend-coverage|binary-name|bindings|build-manifests|build-metadata|clean-all|clean-build|clean-frontend|config|fmt|go-mod-update|go-mod-update-check|release-app|release-site|reset|version|windows-version>")
 	}
 
 	switch args[0] {
 	case "backend-coverage":
 		return runBackendCoverage()
+	case "binary-name":
+		metadata, err := readProjectMetadata(projectConfigPath)
+		if err != nil {
+			return fmt.Errorf("read app name: %w", err)
+		}
+		name, err := projectBinaryName(metadata)
+		if err != nil {
+			return fmt.Errorf("read app name: %w", err)
+		}
+		_, err = fmt.Fprintln(os.Stdout, name)
+		return err
 	case "bindings":
 		return checkWailsBindings()
+	case "build-manifests":
+		return renderProjectPlatformManifests(projectConfigPath, projectPlatformManifestSpecs)
 	case "build-metadata":
 		_, err := generateBuildMetadata(buildMetadataOptions{
 			ConfigPath: projectConfigPath,

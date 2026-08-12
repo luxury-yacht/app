@@ -3,26 +3,26 @@
 #
 # The lines below are called `modelines`. See `:help modeline`
 
-name: "luxury-yacht"
+name: "__APP_BINARY_NAME__"
 arch: ${GOARCH}
 platform: "linux"
-version: "${PACKAGE_VERSION}"
+version: "__APP_VERSION__"
 section: "default"
 priority: "extra"
 maintainer: ${GIT_COMMITTER_NAME} <${GIT_COMMITTER_EMAIL}>
-description: "Luxury Yacht is a desktop app for managing Kubernetes clusters. Sail the seas of Kubernetes in style!"
-vendor: "Luxury Yacht"
+description: "__APP_DESCRIPTION__"
+vendor: "__APP_COMPANY__"
 homepage: "https://luxury-yacht.app"
 license: "GPLv3"
 release: "1"
 
 contents:
-  - src: "./bin/luxury-yacht"
-    dst: "/usr/local/bin/luxury-yacht"
+  - src: "./bin/__APP_BINARY_NAME__"
+    dst: "/usr/local/bin/__APP_BINARY_NAME__"
   - src: "./build/appicon.png"
-    dst: "/usr/share/icons/hicolor/128x128/apps/luxury-yacht.png"
-  - src: "./build/linux/luxury-yacht.desktop"
-    dst: "/usr/share/applications/luxury-yacht.desktop"
+    dst: "/usr/share/icons/hicolor/128x128/apps/__APP_BINARY_NAME__.png"
+  - src: "./build/linux/__APP_BINARY_NAME__.desktop"
+    dst: "/usr/share/applications/__APP_BINARY_NAME__.desktop"
 
 # Default dependencies for the GTK4 + WebKitGTK 6.0 stack (Ubuntu 24.04+ / Debian 13+)
 depends:

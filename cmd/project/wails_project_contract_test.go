@@ -6,6 +6,7 @@ import (
 	"go/token"
 	"os"
 	"path/filepath"
+	"regexp"
 	"strings"
 	"testing"
 
@@ -39,14 +40,147 @@ func TestWailsProjectUsesFreshInitBuildDefaults(t *testing.T) {
 	require.NotContains(t, string(config), "build/bin")
 }
 
-func TestLinuxPackagesUseCanonicalProjectVersion(t *testing.T) {
+func TestPlatformBuildManifestsUseCanonicalProjectMetadata(t *testing.T) {
 	nfpmConfig := readTestFile(t, repositoryPath("build", "linux", "nfpm", "nfpm.yaml"))
-	require.Contains(t, nfpmConfig, `version: "${PACKAGE_VERSION}"`)
-	require.NotContains(t, nfpmConfig, `version: "1.11.6"`)
+	require.Contains(t, nfpmConfig, `version: "__APP_VERSION__"`)
+	require.Contains(t, nfpmConfig, `name: "__APP_BINARY_NAME__"`)
+	require.Contains(t, nfpmConfig, `description: "__APP_DESCRIPTION__"`)
+	require.Contains(t, nfpmConfig, `vendor: "__APP_COMPANY__"`)
+
+	linuxDesktop := readTestFile(t, repositoryPath("build", "linux", "desktop"))
+	require.Contains(t, linuxDesktop, "Name=__APP_NAME__")
+	require.Contains(t, linuxDesktop, "Comment=__APP_DESCRIPTION__")
+	require.Contains(t, linuxDesktop, "Exec=/usr/local/bin/__APP_BINARY_NAME__ %u")
+	require.Contains(t, linuxDesktop, "Icon=__APP_BINARY_NAME__")
 
 	linuxTaskfile := readTestFile(t, repositoryPath("build", "linux", "Taskfile.yml"))
-	require.Contains(t, linuxTaskfile, "sh: go run ./cmd/project version")
-	require.Contains(t, linuxTaskfile, `PACKAGE_VERSION: '{{.PROJECT_VERSION}}'`)
+	require.Contains(t, linuxTaskfile, "common:prepare:build-manifests")
+	require.Contains(t, linuxTaskfile, "bin/build-manifests/linux/nfpm.yaml")
+	require.Contains(t, linuxTaskfile, "bin/build-manifests/linux/app.desktop")
+
+	for _, path := range []string{
+		"build/darwin/Info.plist",
+		"build/darwin/Info.dev.plist",
+	} {
+		manifest := readTestFile(t, repositoryPath(path))
+		require.Contains(t, manifest, "<string>__APP_BINARY_NAME__</string>")
+		require.Equalf(t, 2, strings.Count(manifest, "__APP_VERSION__"), "%s must derive both bundle versions", path)
+		require.Contains(t, manifest, "<string>__APP_NAME__</string>")
+		require.Contains(t, manifest, "<string>__APP_COPYRIGHT__</string>")
+		require.Contains(t, manifest, "<string>__APP_COMMENTS__</string>")
+	}
+
+	windowsManifest := readTestFile(t, repositoryPath("build", "windows", "wails.exe.manifest"))
+	require.Contains(t, windowsManifest, `name="__APP_IDENTIFIER__" version="__APP_VERSION__"`)
+
+	windowsInfo := readTestFile(t, repositoryPath("build", "windows", "info.json"))
+	require.Equal(t, 2, strings.Count(windowsInfo, "__APP_VERSION__"))
+	for _, placeholder := range []string{
+		"__APP_COMPANY__",
+		"__APP_DESCRIPTION__",
+		"__APP_COPYRIGHT__",
+		"__APP_NAME__",
+		"__APP_COMMENTS__",
+	} {
+		require.Contains(t, windowsInfo, placeholder)
+	}
+
+	windowsTools := readTestFile(t, repositoryPath("build", "windows", "nsis", "wails_tools.nsh"))
+	require.Contains(t, windowsTools, `!define INFO_PRODUCTVERSION "__APP_VERSION__"`)
+	require.Contains(t, windowsTools, `!define INFO_PROJECTNAME "__APP_BINARY_NAME__"`)
+	require.Contains(t, windowsTools, `!define INFO_COMPANYNAME "__APP_COMPANY__"`)
+	require.Contains(t, windowsTools, `!define INFO_PRODUCTNAME "__APP_NAME__"`)
+	require.Contains(t, windowsTools, `!define INFO_COPYRIGHT "__APP_COPYRIGHT__"`)
+	require.NotRegexp(t, `!define INFO_PRODUCTVERSION\s+"[v0-9]`, windowsTools)
+
+	windowsMetadata := readTestFile(t, repositoryPath("build", "windows", "nsis", "project_metadata.nsh"))
+	for _, placeholder := range []string{
+		"__APP_COMPANY__",
+		"__APP_BINARY_NAME__",
+		"__APP_DESCRIPTION__",
+		"__APP_COPYRIGHT__",
+		"__APP_NAME__",
+		"__APP_VERSION__",
+		"__WINDOWS_VERSION__",
+	} {
+		require.Contains(t, windowsMetadata, placeholder)
+	}
+
+	windowsInstaller := readTestFile(t, repositoryPath("build", "windows", "nsis", "project.nsi"))
+	require.Contains(t, windowsInstaller, `!include "..\..\..\bin\build-manifests\windows\nsis\project_metadata.nsh"`)
+	require.Contains(t, windowsInstaller, `VIAddVersionKey "FileDescription" "${INFO_PRODUCTDESCRIPTION}"`)
+
+	darwinTaskfile := readTestFile(t, repositoryPath("build", "darwin", "Taskfile.yml"))
+	require.Contains(t, darwinTaskfile, "common:prepare:build-manifests")
+	require.Contains(t, darwinTaskfile, "bin/build-manifests/darwin/Info.plist")
+	require.Contains(t, darwinTaskfile, "bin/build-manifests/darwin/Info.dev.plist")
+
+	windowsTaskfile := readTestFile(t, repositoryPath("build", "windows", "Taskfile.yml"))
+	require.Contains(t, windowsTaskfile, "common:prepare:build-manifests")
+	require.Contains(t, windowsTaskfile, "bin/build-manifests/windows/wails.exe.manifest")
+	require.Contains(t, windowsTaskfile, "bin/build-manifests/windows/info.json")
+
+	commonTaskfile := readTestFile(t, repositoryPath("build", "Taskfile.yml"))
+	for _, flag := range []string{
+		`-name "__APP_BINARY_NAME__"`,
+		`-binaryname "__APP_BINARY_NAME__"`,
+		`-productcompany "__APP_COMPANY__"`,
+		`-productname "__APP_NAME__"`,
+		`-productidentifier "__APP_IDENTIFIER__"`,
+		`-productdescription "__APP_DESCRIPTION__"`,
+		`-productcopyright "__APP_COPYRIGHT__"`,
+		`-productcomments "__APP_COMMENTS__"`,
+		`-productversion "__APP_VERSION__"`,
+	} {
+		require.Contains(t, commonTaskfile, flag)
+	}
+
+	rootTaskfile := readTestFile(t, repositoryPath("Taskfile.yml"))
+	require.Contains(t, rootTaskfile, "sh: go run ./cmd/project binary-name")
+	require.NotContains(t, rootTaskfile, `APP_NAME: "luxury-yacht"`)
+
+	metadata, err := readProjectMetadata(repositoryPath("build", "config.yml"))
+	require.NoError(t, err)
+	manifestPaths := []string{
+		"build/darwin/Info.plist",
+		"build/darwin/Info.dev.plist",
+		"build/linux/desktop",
+		"build/linux/nfpm/nfpm.yaml",
+		"build/windows/info.json",
+		"build/windows/wails.exe.manifest",
+		"build/windows/nsis/project.nsi",
+		"build/windows/nsis/project_metadata.nsh",
+		"build/windows/nsis/wails_tools.nsh",
+	}
+	canonicalValues := []string{
+		metadata.Info.CompanyName,
+		metadata.Info.ProductName,
+		metadata.Info.ProductIdentifier,
+		metadata.Info.Description,
+		metadata.Info.Copyright,
+		metadata.Info.Comments,
+	}
+	hardcodedVersion := regexp.MustCompile(`(^|[^0-9.])` + regexp.QuoteMeta(metadata.Info.Version) + `([^0-9.]|$)`)
+	for _, path := range manifestPaths {
+		manifest := readTestFile(t, repositoryPath(path))
+		for _, value := range canonicalValues {
+			require.NotContainsf(t, manifest, value, "%s must not hardcode metadata from build/config.yml", path)
+		}
+		require.NotRegexpf(t, hardcodedVersion, manifest, "%s must not hardcode info.version from build/config.yml", path)
+	}
+	for _, path := range []string{
+		"build/darwin/Info.plist",
+		"build/darwin/Info.dev.plist",
+		"build/linux/desktop",
+		"build/windows/nsis/project_metadata.nsh",
+		"build/windows/nsis/wails_tools.nsh",
+	} {
+		manifest := readTestFile(t, repositoryPath(path))
+		require.NotContainsf(t, manifest, "luxury-yacht", "%s must not hardcode the binary name", path)
+	}
+	require.NotContains(t, nfpmConfig, `name: "luxury-yacht"`)
+	require.NotContains(t, nfpmConfig, `./bin/luxury-yacht`)
+	require.NotContains(t, nfpmConfig, `/usr/local/bin/luxury-yacht`)
 }
 
 func TestWailsProjectUsesFrameworkSingleInstanceHandling(t *testing.T) {
@@ -152,6 +286,7 @@ func TestProjectCommandOwnsItsImplementation(t *testing.T) {
 		"clean.go",
 		"command.go",
 		"go_modules.go",
+		"platform_manifests.go",
 		"project_config.go",
 		"quality.go",
 		"release.go",
@@ -175,8 +310,8 @@ func TestProjectCommandOwnsItsImplementation(t *testing.T) {
 		require.ErrorIs(t, err, os.ErrNotExist)
 	}
 
-	windowsTaskfile := readTestFile(t, repositoryPath("build", "windows", "Taskfile.yml"))
-	require.Contains(t, windowsTaskfile, "go run ./cmd/project windows-version")
+	manifestRenderer := readTestFile(t, repositoryPath("cmd", "project", "platform_manifests.go"))
+	require.Contains(t, manifestRenderer, "windowsNumericVersion(metadata.Info.Version)")
 }
 
 func TestProjectCommandHasNoExportedGoDeclarations(t *testing.T) {

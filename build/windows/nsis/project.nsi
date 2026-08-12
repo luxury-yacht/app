@@ -8,7 +8,7 @@ Unicode true
 ## from outside of Wails for debugging and development of the installer.
 ## 
 ## For development first make a wails nsis build to populate the "wails_tools.nsh":
-## > wails3 package GOOS=windows GOARCH=amd64 WINDOWS_VERSION=1.2.3.4
+## > wails3 task windows:package ARCH=amd64
 ## Then you can call makensis on this file with specifying the path to your binary:
 ## For a AMD64 only installer:
 ## > makensis -DARG_WAILS_AMD64_BINARY=..\..\bin\app.exe
@@ -19,11 +19,7 @@ Unicode true
 ####
 ## The following information is taken from the wails_tools.nsh file, but they can be overwritten here.
 ####
-## !define INFO_PROJECTNAME    "my-project" # Default "Luxury Yacht"
-## !define INFO_COMPANYNAME    "My Company" # Default "Luxury Yacht"
-## !define INFO_PRODUCTNAME    "My Product Name" # Default "Luxury Yacht"
-## !define INFO_PRODUCTVERSION "1.0.0"     # Default "v1.11.6"
-## !define INFO_COPYRIGHT      "(c) Now, My Company" # Default "Copyright © 2025-2026 Luxury Yacht"
+## Product metadata and both version formats are rendered from build/config.yml.
 ###
 ## !define PRODUCT_EXECUTABLE  "Application.exe"      # Default "${INFO_PROJECTNAME}.exe"
 ## !define UNINST_KEY_NAME     "UninstKeyInRegistry"  # Default "${INFO_COMPANYNAME}${INFO_PRODUCTNAME}"
@@ -31,17 +27,18 @@ Unicode true
 ## !define REQUEST_EXECUTION_LEVEL "admin"            # Default "admin"  see also https://nsis.sourceforge.io/Docs/Chapter4.html
 ## !define WAILS_INSTALL_SCOPE     "user"             # Default "machine" - set to "user" for per-user install ($LOCALAPPDATA) without UAC prompt
 ####
-## Include the wails tools
+## Include canonical project metadata before the Wails defaults.
 ####
+!include "..\..\..\bin\build-manifests\windows\nsis\project_metadata.nsh"
 !include "wails_tools.nsh"
 
-# Windows requires a four-part numeric file version. The project helper derives
-# this from build/config.yml and the Wails v3 package task passes it here.
+# Windows requires a four-part numeric file version. The rendered metadata
+# derives it from the semantic version in build/config.yml.
 VIProductVersion "${LY_WINDOWS_VERSION}"
 VIFileVersion    "${LY_WINDOWS_VERSION}"
 
 VIAddVersionKey "CompanyName"     "${INFO_COMPANYNAME}"
-VIAddVersionKey "FileDescription" "${INFO_PRODUCTNAME} Installer"
+VIAddVersionKey "FileDescription" "${INFO_PRODUCTDESCRIPTION}"
 VIAddVersionKey "ProductVersion"  "${INFO_PRODUCTVERSION}"
 VIAddVersionKey "FileVersion"     "${INFO_PRODUCTVERSION}"
 VIAddVersionKey "LegalCopyright"  "${INFO_COPYRIGHT}"
