@@ -64,6 +64,12 @@ source contract is unclear.
 
 ## Validation
 
+- In the Codex workspace sandbox, set
+  `GOCACHE=/tmp/luxury-yacht-go-build` and
+  `STATICCHECK_CACHE=/tmp/luxury-yacht-staticcheck`. Full backend, race, and
+  coverage suites—including the prerelease gate—open localhost `httptest`
+  listeners, so request escalated sandbox permission on the first invocation
+  instead of attempting the known-blocked default sandbox.
 - Run focused tests during development and measure directly affected coverage
   with `mise exec -- wails3 task test:backend-coverage` or
   `mise exec -- wails3 task test:frontend-coverage`; target 80% statement coverage or

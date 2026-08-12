@@ -42,8 +42,8 @@ func runUnsignedInstall() error {
 }
 
 func installUnsigned(config unsignedInstallConfig) error {
-	if config.goos != "darwin" && config.goos != "linux" && config.goos != "windows" {
-		return fmt.Errorf("unsigned install is not supported on %s", config.goos)
+	if err := validateUnsignedInstallPlatform(config.goos); err != nil {
+		return err
 	}
 	productName := strings.TrimSpace(config.metadata.Info.ProductName)
 	if err := validateInstallLeaf("product name", productName); err != nil {
@@ -57,44 +57,78 @@ func installUnsigned(config unsignedInstallConfig) error {
 		return err
 	}
 
-	var destination string
-	switch config.goos {
-	case "darwin":
-		source := filepath.Join(config.binDir, binaryName+".app")
-		if info, err := os.Stat(source); err != nil {
-			return fmt.Errorf("macOS app bundle not found at %s: %w", source, err)
-		} else if !info.IsDir() {
-			return fmt.Errorf("macOS app bundle at %s is not a directory", source)
-		}
-		destination = filepath.Join(config.applicationsDir, productName+".app")
-		if config.run == nil {
-			return fmt.Errorf("macOS unsigned install has no command runner")
-		}
-		if err := config.run("sudo", "rm", "-rf", destination); err != nil {
-			return fmt.Errorf("remove existing macOS app bundle %s: %w", destination, err)
-		}
-		if err := config.run("sudo", "cp", "-R", source, destination); err != nil {
-			return fmt.Errorf("install macOS app bundle to %s: %w", destination, err)
-		}
-	case "linux":
-		destination = filepath.Join(config.homeDir, ".local", "bin", binaryName)
-		if err := copyInstalledBinary(filepath.Join(config.binDir, binaryName), destination); err != nil {
-			return err
-		}
-	case "windows":
-		installRoot := config.localAppData
-		if installRoot == "" {
-			installRoot = config.homeDir
-		} else {
-			installRoot = filepath.Join(installRoot, "Programs")
-		}
-		destination = filepath.Join(installRoot, productName, binaryName+".exe")
-		if err := copyInstalledBinary(filepath.Join(config.binDir, binaryName+".exe"), destination); err != nil {
-			return err
-		}
+	destination, err := installUnsignedForPlatform(config, productName, binaryName)
+	if err != nil {
+		return err
 	}
 	_, err = fmt.Fprintf(config.output, "Successfully installed %s to %s\n", productName, destination)
 	return err
+}
+
+func validateUnsignedInstallPlatform(goos string) error {
+	switch goos {
+	case "darwin", "linux", "windows":
+		return nil
+	default:
+		return fmt.Errorf("unsigned install is not supported on %s", goos)
+	}
+}
+
+func installUnsignedForPlatform(config unsignedInstallConfig, productName, binaryName string) (string, error) {
+	switch config.goos {
+	case "darwin":
+		return installUnsignedMacOS(config, productName, binaryName)
+	case "linux":
+		return installUnsignedLinux(config, binaryName)
+	case "windows":
+		return installUnsignedWindows(config, productName, binaryName)
+	default:
+		return "", fmt.Errorf("unsigned install is not supported on %s", config.goos)
+	}
+}
+
+func installUnsignedMacOS(config unsignedInstallConfig, productName, binaryName string) (string, error) {
+	source := filepath.Join(config.binDir, binaryName+".app")
+	info, err := os.Stat(source)
+	if err != nil {
+		return "", fmt.Errorf("macOS app bundle not found at %s: %w", source, err)
+	}
+	if !info.IsDir() {
+		return "", fmt.Errorf("macOS app bundle at %s is not a directory", source)
+	}
+	destination := filepath.Join(config.applicationsDir, productName+".app")
+	if config.run == nil {
+		return "", fmt.Errorf("macOS unsigned install has no command runner")
+	}
+	if err := config.run("sudo", "rm", "-rf", destination); err != nil {
+		return "", fmt.Errorf("remove existing macOS app bundle %s: %w", destination, err)
+	}
+	if err := config.run("sudo", "cp", "-R", source, destination); err != nil {
+		return "", fmt.Errorf("install macOS app bundle to %s: %w", destination, err)
+	}
+	return destination, nil
+}
+
+func installUnsignedLinux(config unsignedInstallConfig, binaryName string) (string, error) {
+	destination := filepath.Join(config.homeDir, ".local", "bin", binaryName)
+	if err := copyInstalledBinary(filepath.Join(config.binDir, binaryName), destination); err != nil {
+		return "", err
+	}
+	return destination, nil
+}
+
+func installUnsignedWindows(config unsignedInstallConfig, productName, binaryName string) (string, error) {
+	installRoot := config.localAppData
+	if installRoot == "" {
+		installRoot = config.homeDir
+	} else {
+		installRoot = filepath.Join(installRoot, "Programs")
+	}
+	destination := filepath.Join(installRoot, productName, binaryName+".exe")
+	if err := copyInstalledBinary(filepath.Join(config.binDir, binaryName+".exe"), destination); err != nil {
+		return "", err
+	}
+	return destination, nil
 }
 
 func validateInstallLeaf(label, value string) error {

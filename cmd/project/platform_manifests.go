@@ -16,6 +16,7 @@ const (
 	appIdentifierPlaceholder  = "__APP_IDENTIFIER__"
 	appNamePlaceholder        = "__APP_NAME__"
 	appVersionPlaceholder     = "__APP_VERSION__"
+	platformManifestDirectory = "build-manifests"
 	windowsVersionPlaceholder = "__WINDOWS_VERSION__"
 )
 
@@ -27,31 +28,31 @@ type platformManifestSpec struct {
 var projectPlatformManifestSpecs = []platformManifestSpec{
 	{
 		sourcePath: filepath.Join("build", "darwin", "Info.plist"),
-		outputPath: filepath.Join("bin", "build-manifests", "darwin", "Info.plist"),
+		outputPath: filepath.Join("bin", platformManifestDirectory, "darwin", "Info.plist"),
 	},
 	{
 		sourcePath: filepath.Join("build", "darwin", "Info.dev.plist"),
-		outputPath: filepath.Join("bin", "build-manifests", "darwin", "Info.dev.plist"),
+		outputPath: filepath.Join("bin", platformManifestDirectory, "darwin", "Info.dev.plist"),
 	},
 	{
 		sourcePath: filepath.Join("build", "linux", "nfpm", "nfpm.yaml"),
-		outputPath: filepath.Join("bin", "build-manifests", "linux", "nfpm.yaml"),
+		outputPath: filepath.Join("bin", platformManifestDirectory, "linux", "nfpm.yaml"),
 	},
 	{
 		sourcePath: filepath.Join("build", "linux", "desktop"),
-		outputPath: filepath.Join("bin", "build-manifests", "linux", "app.desktop"),
+		outputPath: filepath.Join("bin", platformManifestDirectory, "linux", "app.desktop"),
 	},
 	{
 		sourcePath: filepath.Join("build", "windows", "wails.exe.manifest"),
-		outputPath: filepath.Join("bin", "build-manifests", "windows", "wails.exe.manifest"),
+		outputPath: filepath.Join("bin", platformManifestDirectory, "windows", "wails.exe.manifest"),
 	},
 	{
 		sourcePath: filepath.Join("build", "windows", "info.json"),
-		outputPath: filepath.Join("bin", "build-manifests", "windows", "info.json"),
+		outputPath: filepath.Join("bin", platformManifestDirectory, "windows", "info.json"),
 	},
 	{
 		sourcePath: filepath.Join("build", "windows", "nsis", "project_metadata.nsh"),
-		outputPath: filepath.Join("bin", "build-manifests", "windows", "nsis", "project_metadata.nsh"),
+		outputPath: filepath.Join("bin", platformManifestDirectory, "windows", "nsis", "project_metadata.nsh"),
 	},
 }
 
@@ -78,34 +79,53 @@ func renderProjectPlatformManifests(configPath string, specs []platformManifestS
 
 	rendered := make([]renderedPlatformManifest, 0, len(specs))
 	for _, spec := range specs {
-		contents, err := os.ReadFile(spec.sourcePath)
+		manifest, err := renderPlatformManifest(spec, replacements)
 		if err != nil {
-			return fmt.Errorf("read platform manifest template %s: %w", spec.sourcePath, err)
+			return err
 		}
-		result := string(contents)
-		hasPlaceholder := false
-		for _, replacement := range replacements {
-			if strings.Contains(result, replacement.placeholder) {
-				hasPlaceholder = true
-				result = strings.ReplaceAll(result, replacement.placeholder, replacement.value)
-			}
-		}
-		if !hasPlaceholder {
-			return fmt.Errorf("platform manifest template %s has no project metadata placeholder", spec.sourcePath)
-		}
-		rendered = append(rendered, renderedPlatformManifest{
-			contents:   []byte(result),
-			outputPath: spec.outputPath,
-		})
+		rendered = append(rendered, manifest)
 	}
 
 	for _, manifest := range rendered {
-		if err := os.MkdirAll(filepath.Dir(manifest.outputPath), 0o755); err != nil {
-			return fmt.Errorf("create platform manifest directory for %s: %w", manifest.outputPath, err)
+		if err := writePlatformManifest(manifest); err != nil {
+			return err
 		}
-		if err := os.WriteFile(manifest.outputPath, manifest.contents, 0o644); err != nil {
-			return fmt.Errorf("write platform manifest %s: %w", manifest.outputPath, err)
+	}
+	return nil
+}
+
+func renderPlatformManifest(spec platformManifestSpec, replacements []platformManifestReplacement) (renderedPlatformManifest, error) {
+	contents, err := os.ReadFile(spec.sourcePath)
+	if err != nil {
+		return renderedPlatformManifest{}, fmt.Errorf("read platform manifest template %s: %w", spec.sourcePath, err)
+	}
+	result, hasPlaceholder := replacePlatformManifestMetadata(string(contents), replacements)
+	if !hasPlaceholder {
+		return renderedPlatformManifest{}, fmt.Errorf("platform manifest template %s has no project metadata placeholder", spec.sourcePath)
+	}
+	return renderedPlatformManifest{
+		contents:   []byte(result),
+		outputPath: spec.outputPath,
+	}, nil
+}
+
+func replacePlatformManifestMetadata(contents string, replacements []platformManifestReplacement) (string, bool) {
+	hasPlaceholder := false
+	for _, replacement := range replacements {
+		if strings.Contains(contents, replacement.placeholder) {
+			hasPlaceholder = true
+			contents = strings.ReplaceAll(contents, replacement.placeholder, replacement.value)
 		}
+	}
+	return contents, hasPlaceholder
+}
+
+func writePlatformManifest(manifest renderedPlatformManifest) error {
+	if err := os.MkdirAll(filepath.Dir(manifest.outputPath), 0o755); err != nil {
+		return fmt.Errorf("create platform manifest directory for %s: %w", manifest.outputPath, err)
+	}
+	if err := os.WriteFile(manifest.outputPath, manifest.contents, 0o644); err != nil {
+		return fmt.Errorf("write platform manifest %s: %w", manifest.outputPath, err)
 	}
 	return nil
 }
