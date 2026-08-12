@@ -51,7 +51,6 @@ func newTestAppWithDefaults(t *testing.T) *App {
 	t.Helper()
 	return &App{
 		logger:         NewLogger(100),
-		desktop:        &fakeDesktop{},
 		eventEmitter:   func(context.Context, string, ...interface{}) {},
 		sidebarVisible: true,
 		listenLoopback: defaultLoopbackListener,
@@ -150,9 +149,9 @@ func TestAppSaveWindowSettingsPreservesInMemoryKubeconfigSelection(t *testing.T)
 	settings.Kubeconfig.Selected = []string{"/old/config:ctx-old"}
 	require.NoError(t, app.saveSettingsFile(settings))
 
-	app.desktop = &fakeDesktop{mainWindowGeometry: func() (WindowGeometry, error) {
+	app.windowGeometry = func() (WindowGeometry, error) {
 		return WindowGeometry{X: 10, Y: 20, Width: 900, Height: 600}, nil
-	}}
+	}
 
 	require.NoError(t, app.SaveWindowSettings())
 

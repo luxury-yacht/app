@@ -11,6 +11,7 @@ import (
 
 	"github.com/luxury-yacht/app/backend/internal/config"
 	"github.com/luxury-yacht/app/backend/internal/logsources"
+	"github.com/wailsapp/wails/v3/pkg/application"
 	"k8s.io/client-go/tools/clientcmd"
 	"k8s.io/client-go/util/homedir"
 )
@@ -270,12 +271,11 @@ func (a *App) OpenKubeconfigSearchPathDialog() (string, error) {
 		return "", fmt.Errorf("application context is not available")
 	}
 
-	if a.desktop == nil {
-		return "", fmt.Errorf("desktop runtime is not available")
-	}
-	return a.desktop.OpenDirectory(OpenFileDialogOptions{
-		Title:     "Select kubeconfig directory",
-		Directory: a.defaultKubeconfigSearchDirectory(),
+	return a.promptForOpenFile(&application.OpenFileDialogOptions{
+		CanChooseDirectories: true,
+		CanChooseFiles:       false,
+		Title:                "Select kubeconfig directory",
+		Directory:            a.defaultKubeconfigSearchDirectory(),
 	})
 }
 

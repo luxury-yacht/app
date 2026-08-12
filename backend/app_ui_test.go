@@ -5,11 +5,26 @@ import (
 	"testing"
 
 	"github.com/stretchr/testify/require"
+	"github.com/wailsapp/wails/v3/pkg/application"
 )
 
 func newUIApp(t *testing.T) *App {
 	t.Helper()
 	return newTestAppWithDefaults(t)
+}
+
+func viewMenuItem(t *testing.T, app *App, label string) *application.MenuItem {
+	t.Helper()
+	view := findSubmenu(t, app.menu, "View")
+	for index := 0; ; index++ {
+		item := view.ItemAt(index)
+		if item == nil {
+			t.Fatalf("expected View menu item %q", label)
+		}
+		if item.Label() == label {
+			return item
+		}
+	}
 }
 
 func TestToggleAppLogsPanelRequiresContext(t *testing.T) {
@@ -31,8 +46,7 @@ func TestToggleDiagnosticsPanelRequiresContext(t *testing.T) {
 func TestToggleAppLogsPanelTogglesAndEmits(t *testing.T) {
 	app := newUIApp(t)
 	events := []string{}
-	menuUpdates := 0
-	app.desktop = &fakeDesktop{refreshMenu: func() error { menuUpdates++; return nil }}
+	CreateMenu(app)
 	app.eventEmitter = func(_ context.Context, name string, _ ...interface{}) {
 		events = append(events, name)
 	}
@@ -43,7 +57,7 @@ func TestToggleAppLogsPanelTogglesAndEmits(t *testing.T) {
 	require.NoError(t, err)
 	require.True(t, app.IsAppLogsPanelVisible())
 	require.Equal(t, []string{"toggle-app-logs-panel"}, events)
-	require.Equal(t, 1, menuUpdates)
+	require.NotNil(t, viewMenuItem(t, app, "Hide Application Logs"))
 }
 
 func TestToggleSidebarRequiresContext(t *testing.T) {
@@ -57,8 +71,7 @@ func TestToggleSidebarRequiresContext(t *testing.T) {
 func TestToggleSidebarTogglesAndEmits(t *testing.T) {
 	app := newUIApp(t)
 	events := []string{}
-	menuUpdates := 0
-	app.desktop = &fakeDesktop{refreshMenu: func() error { menuUpdates++; return nil }}
+	CreateMenu(app)
 	app.eventEmitter = func(_ context.Context, name string, _ ...interface{}) {
 		events = append(events, name)
 	}
@@ -69,7 +82,7 @@ func TestToggleSidebarTogglesAndEmits(t *testing.T) {
 	require.NoError(t, err)
 	require.False(t, app.IsSidebarVisible())
 	require.Equal(t, []string{"toggle-sidebar"}, events)
-	require.Equal(t, 1, menuUpdates)
+	require.NotNil(t, viewMenuItem(t, app, "Show Sidebar"))
 }
 
 func TestToggleObjectDiffRequiresContext(t *testing.T) {
@@ -95,65 +108,69 @@ func TestToggleObjectDiffEmits(t *testing.T) {
 
 func TestUpdateMenuNoContext(t *testing.T) {
 	app := newUIApp(t)
-	updated := false
-	app.desktop = &fakeDesktop{refreshMenu: func() error { updated = true; return nil }}
+	CreateMenu(app)
+	before := viewMenuItem(t, app, "Hide Sidebar")
+	app.sidebarVisible = false
 
 	app.UpdateMenu()
-	require.False(t, updated)
+	require.Same(t, before, viewMenuItem(t, app, "Hide Sidebar"))
 }
 
 func TestUpdateMenuRefreshesPersistentNativeMenu(t *testing.T) {
 	app := newUIApp(t)
+	CreateMenu(app)
+	before := viewMenuItem(t, app, "Hide Sidebar")
 	app.setApplicationContext(context.Background())
 	app.markRuntimeReady()
-	updated := false
-	app.desktop = &fakeDesktop{refreshMenu: func() error { updated = true; return nil }}
+	app.sidebarVisible = false
 
 	app.UpdateMenu()
-	require.True(t, updated)
+	after := viewMenuItem(t, app, "Show Sidebar")
+	require.NotSame(t, before, after)
 }
 
 func TestSetSidebarVisibleOnlyWhenChanged(t *testing.T) {
 	app := newUIApp(t)
+	CreateMenu(app)
 	app.setApplicationContext(context.Background())
 	app.markRuntimeReady()
-	menuUpdates := 0
-	app.desktop = &fakeDesktop{refreshMenu: func() error { menuUpdates++; return nil }}
+	before := viewMenuItem(t, app, "Hide Sidebar")
 
 	app.SetSidebarVisible(true)
-	require.Zero(t, menuUpdates)
+	require.Same(t, before, viewMenuItem(t, app, "Hide Sidebar"))
 
 	app.SetSidebarVisible(false)
-	require.Equal(t, 1, menuUpdates)
+	after := viewMenuItem(t, app, "Show Sidebar")
+	require.NotSame(t, before, after)
 	require.False(t, app.IsSidebarVisible())
 
 	app.SetSidebarVisible(false)
-	require.Equal(t, 1, menuUpdates)
+	require.Same(t, after, viewMenuItem(t, app, "Show Sidebar"))
 }
 
 func TestSetAppLogsPanelVisibleOnlyWhenChanged(t *testing.T) {
 	app := newUIApp(t)
+	CreateMenu(app)
 	app.setApplicationContext(context.Background())
 	app.markRuntimeReady()
-	menuUpdates := 0
-	app.desktop = &fakeDesktop{refreshMenu: func() error { menuUpdates++; return nil }}
+	before := viewMenuItem(t, app, "Show Application Logs")
 
 	app.SetAppLogsPanelVisible(false)
-	require.Zero(t, menuUpdates)
+	require.Same(t, before, viewMenuItem(t, app, "Show Application Logs"))
 
 	app.SetAppLogsPanelVisible(true)
-	require.Equal(t, 1, menuUpdates)
+	after := viewMenuItem(t, app, "Hide Application Logs")
+	require.NotSame(t, before, after)
 	require.True(t, app.IsAppLogsPanelVisible())
 
 	app.SetAppLogsPanelVisible(true)
-	require.Equal(t, 1, menuUpdates)
+	require.Same(t, after, viewMenuItem(t, app, "Hide Application Logs"))
 }
 
 func TestToggleDiagnosticsPanelTogglesAndEmits(t *testing.T) {
 	app := newUIApp(t)
 	events := []string{}
-	menuUpdates := 0
-	app.desktop = &fakeDesktop{refreshMenu: func() error { menuUpdates++; return nil }}
+	CreateMenu(app)
 	app.eventEmitter = func(_ context.Context, name string, _ ...interface{}) {
 		events = append(events, name)
 	}
@@ -164,7 +181,7 @@ func TestToggleDiagnosticsPanelTogglesAndEmits(t *testing.T) {
 	require.NoError(t, err)
 	require.True(t, app.IsDiagnosticsPanelVisible())
 	require.Equal(t, []string{"toggle-diagnostics"}, events)
-	require.Equal(t, 1, menuUpdates)
+	require.NotNil(t, viewMenuItem(t, app, "Hide Diagnostics Panel"))
 }
 
 // Legacy permission cache behavior retained for compatibility.

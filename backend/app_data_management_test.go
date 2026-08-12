@@ -8,6 +8,7 @@ import (
 	"testing"
 
 	"github.com/stretchr/testify/require"
+	"github.com/wailsapp/wails/v3/pkg/application"
 )
 
 func dataManagementFavorite(id, name string) Favorite {
@@ -23,19 +24,17 @@ func dataManagementFavorite(id, name string) Favorite {
 	}
 }
 
-func installDataManagementDialogs(t *testing.T, app *App, savePath, openPath string) (*SaveFileDialogOptions, *OpenFileDialogOptions) {
+func installDataManagementDialogs(t *testing.T, app *App, savePath, openPath string) (*application.SaveFileDialogOptions, *application.OpenFileDialogOptions) {
 	t.Helper()
-	saveOptions := &SaveFileDialogOptions{}
-	openOptions := &OpenFileDialogOptions{}
-	app.desktop = &fakeDesktop{
-		saveFile: func(options SaveFileDialogOptions) (string, error) {
-			*saveOptions = options
-			return savePath, nil
-		},
-		openFile: func(options OpenFileDialogOptions) (string, error) {
-			*openOptions = options
-			return openPath, nil
-		},
+	saveOptions := &application.SaveFileDialogOptions{}
+	openOptions := &application.OpenFileDialogOptions{}
+	app.saveFileDialog = func(options *application.SaveFileDialogOptions) (string, error) {
+		*saveOptions = *options
+		return savePath, nil
+	}
+	app.openFileDialog = func(options *application.OpenFileDialogOptions) (string, error) {
+		*openOptions = *options
+		return openPath, nil
 	}
 	return saveOptions, openOptions
 }

@@ -635,10 +635,7 @@ func (a *App) SaveWindowSettings() error {
 	if !a.runtimeAvailable() {
 		return fmt.Errorf("application context is not available")
 	}
-	if a.desktop == nil {
-		return fmt.Errorf("desktop runtime is not available")
-	}
-	geometry, err := a.desktop.MainWindowGeometry()
+	geometry, err := a.readMainWindowGeometry()
 	if err != nil {
 		return fmt.Errorf("read main window geometry: %w", err)
 	}

@@ -52,9 +52,9 @@ return a display-ready `<Kind>Details`. Keep raw, sensitive, or tab-specific
 payloads detail-only; keep durable facts, links, and status in the model. Embed
 `restypes.StatusProjection` when the kind exposes primary status.
 
-After changing Go DTOs, refresh or verify `frontend/wailsjs/go/models.ts` and
-run frontend typecheck. Wails generation may be unavailable in some local
-environments.
+After changing Go DTOs, refresh or verify the relevant generated `models.ts`
+under `frontend/bindings/github.com/luxury-yacht/app/backend` and run frontend
+typecheck. Wails generation may be unavailable in some local environments.
 
 ## Generated detail binding
 

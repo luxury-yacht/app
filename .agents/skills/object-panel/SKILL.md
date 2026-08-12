@@ -61,7 +61,7 @@ contains more than one version for the same kind.
 - `frontend/src/core/resource-metrics` for Resource Utilization data/adapters
 - `frontend/src/ui/dockable`
 - `frontend/src/shared/components/modals`
-- `frontend/wailsjs/go/models.ts` when Go DTOs change
+- `frontend/bindings/github.com/luxury-yacht/app/backend/models.ts` when Go DTOs change
 
 Frontend object-panel work must use backend-provided `statusPresentation` and
 `ResourceLink.ref` where available. Do not reconstruct object identity from kind

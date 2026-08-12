@@ -1,11 +1,39 @@
 package backend
 
 import (
+	"context"
 	"os"
 	"path/filepath"
 	"runtime"
 	"testing"
+
+	"github.com/stretchr/testify/require"
+	"github.com/wailsapp/wails/v3/pkg/application"
 )
+
+func TestSaveCSVFileUsesWailsDialogOptionsAndWritesSelection(t *testing.T) {
+	path := filepath.Join(t.TempDir(), "pods.csv")
+	app := NewApp(nil)
+	app.setApplicationContext(context.Background())
+	app.markRuntimeReady()
+	var options application.SaveFileDialogOptions
+	app.saveFileDialog = func(input *application.SaveFileDialogOptions) (string, error) {
+		options = *input
+		return path, nil
+	}
+
+	result, err := app.SaveCsvFile("pods", "name\npod-a\n")
+
+	require.NoError(t, err)
+	require.Equal(t, "Export CSV", options.Title)
+	require.Equal(t, "pods.csv", options.Filename)
+	require.Equal(t, []application.FileFilter{{DisplayName: "CSV files (*.csv)", Pattern: "*.csv"}}, options.Filters)
+	require.Equal(t, path, result.Path)
+	require.Equal(t, int64(len("name\npod-a\n")), result.Bytes)
+	contents, err := os.ReadFile(path)
+	require.NoError(t, err)
+	require.Equal(t, "name\npod-a\n", string(contents))
+}
 
 // The atomic write must produce an owner-only file with the full content
 // durably written. Exports carry cluster resource data, so they stay unreadable

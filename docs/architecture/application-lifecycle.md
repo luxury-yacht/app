@@ -2,8 +2,9 @@
 
 Wails v3 application composition owns the native application, one named main
 window, its persistent menu, service registration, and process-level hooks.
-Backend domain code reaches native capabilities only through the `Desktop`
-boundary.
+The Wails application is injected directly into `backend.App`, following the v3
+service-injection model. Backend native operations use its window, menu, dialog,
+clipboard, event, and screen managers directly.
 
 ## Startup and readiness
 
@@ -20,7 +21,8 @@ and enables desktop event delivery. Keep native hooks registered before
 ## Window identity and restoration
 
 The only supported window is named `main`. Resolve it by name through the
-desktop adapter; backend code must not rely on an implicit current window.
+injected application's window manager; backend code must not rely on an implicit
+current window.
 **New Window** is intentionally absent until a native multi-window contract is
 implemented.
 
@@ -57,7 +59,7 @@ upgrade, cancellation, CORS, and Windows behavior.
 ## Starting points
 
 - Composition and process hooks: `main.go`
-- Native adapter and named-window resolution: `internal/desktop/adapter.go`
+- Native operations and named-window resolution: `backend/app_runtime.go`
 - Backend lifecycle: `backend/app_lifecycle.go`, `backend/app_runtime.go`
 - Geometry validation: `backend/window_restore.go`
 - Build identity: `build/config.yml`

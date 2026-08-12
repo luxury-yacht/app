@@ -6,7 +6,7 @@ import (
 	"testing"
 	"time"
 
-	desktopruntime "github.com/luxury-yacht/app/internal/desktop"
+	"github.com/luxury-yacht/app/backend"
 	"github.com/luxury-yacht/app/internal/sentry"
 	"github.com/stretchr/testify/require"
 )
@@ -94,14 +94,13 @@ func TestApplicationCompositionOwnsOneNamedWindowMenuAndService(t *testing.T) {
 
 	require.NotNil(t, composition.application)
 	require.NotNil(t, composition.backend)
-	require.NotNil(t, composition.desktop)
 	require.NotNil(t, composition.menu)
 	require.Equal(t, composition.menu, composition.application.Menu.GetApplicationMenu())
 
-	window, ok := composition.application.Window.GetByName(desktopruntime.MainWindowName)
+	window, ok := composition.application.Window.GetByName(backend.MainWindowName)
 	require.True(t, ok)
 	require.Same(t, composition.window, window)
-	require.Equal(t, desktopruntime.MainWindowName, window.Name())
+	require.Equal(t, backend.MainWindowName, window.Name())
 	require.Len(t, composition.application.Config().Services, 1)
 }
 

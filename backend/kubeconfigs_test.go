@@ -11,7 +11,29 @@ import (
 	"github.com/luxury-yacht/app/backend/refresh/system"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
+	"github.com/wailsapp/wails/v3/pkg/application"
 )
+
+func TestOpenKubeconfigSearchPathDialogUsesWailsDirectoryOptions(t *testing.T) {
+	setTestConfigEnv(t)
+	app := newTestAppWithDefaults(t)
+	app.setApplicationContext(context.Background())
+	app.markRuntimeReady()
+	var options application.OpenFileDialogOptions
+	app.openFileDialog = func(input *application.OpenFileDialogOptions) (string, error) {
+		options = *input
+		return "/selected", nil
+	}
+
+	selected, err := app.OpenKubeconfigSearchPathDialog()
+
+	require.NoError(t, err)
+	require.Equal(t, "/selected", selected)
+	require.True(t, options.CanChooseDirectories)
+	require.False(t, options.CanChooseFiles)
+	require.Equal(t, "Select kubeconfig directory", options.Title)
+	require.NotEmpty(t, options.Directory)
+}
 
 // createTempKubeconfig creates a temporary kubeconfig file for testing
 func createTempKubeconfig(t *testing.T, dir, filename, context string) string {

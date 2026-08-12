@@ -7,6 +7,8 @@ import (
 	"os"
 	"strings"
 	"time"
+
+	"github.com/wailsapp/wails/v3/pkg/application"
 )
 
 const (
@@ -144,18 +146,15 @@ func (a *App) requireDataManagementContext() error {
 	if !a.runtimeAvailable() {
 		return fmt.Errorf("application context is not available")
 	}
-	if a.desktop == nil {
-		return fmt.Errorf("desktop runtime is not available")
-	}
 	return nil
 }
 
 func (a *App) exportDataFile(title, defaultFilename string, document any) (DataManagementResult, error) {
-	path, err := a.desktop.SaveFile(SaveFileDialogOptions{
+	path, err := a.promptForSaveFile(&application.SaveFileDialogOptions{
 		Title:                title,
 		Directory:            dataManagementDefaultDirectory(),
 		Filename:             defaultFilename,
-		Filters:              []FileFilter{{DisplayName: "JSON files (*.json)", Pattern: "*.json"}},
+		Filters:              []application.FileFilter{{DisplayName: "JSON files (*.json)", Pattern: "*.json"}},
 		CanCreateDirectories: true,
 	})
 	if err != nil {
@@ -178,10 +177,11 @@ func (a *App) exportDataFile(title, defaultFilename string, document any) (DataM
 }
 
 func (a *App) chooseDataImportFile(title string) (path string, canceled bool, err error) {
-	path, err = a.desktop.OpenFile(OpenFileDialogOptions{
-		Title:     title,
-		Directory: dataManagementDefaultDirectory(),
-		Filters:   []FileFilter{{DisplayName: "JSON files (*.json)", Pattern: "*.json"}},
+	path, err = a.promptForOpenFile(&application.OpenFileDialogOptions{
+		CanChooseFiles: true,
+		Title:          title,
+		Directory:      dataManagementDefaultDirectory(),
+		Filters:        []application.FileFilter{{DisplayName: "JSON files (*.json)", Pattern: "*.json"}},
 	})
 	if err != nil {
 		return "", false, fmt.Errorf("select import file: %w", err)

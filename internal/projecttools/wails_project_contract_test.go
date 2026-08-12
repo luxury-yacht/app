@@ -49,9 +49,21 @@ func TestWailsProjectUsesFrameworkSingleInstanceHandling(t *testing.T) {
 
 	_, err := os.Stat(repositoryPath("internal", "desktop", "single_instance.go"))
 	require.ErrorIs(t, err, os.ErrNotExist)
+}
 
-	adapterSource := readTestFile(t, repositoryPath("internal", "desktop", "adapter.go"))
-	require.NotContains(t, adapterSource, "SetAlwaysOnTop")
+func TestWailsApplicationIsInjectedDirectlyWithoutDesktopAdapter(t *testing.T) {
+	mainSource := readTestFile(t, repositoryPath("main.go"))
+	require.Contains(t, mainSource, "backend.NewApp(wailsApp, reporter)")
+	require.NotContains(t, mainSource, "NewAdapter")
+
+	runtimeSource := readTestFile(t, repositoryPath("backend", "app_runtime.go"))
+	require.NotContains(t, runtimeSource, "type Desktop interface")
+
+	menuSource := readTestFile(t, repositoryPath("backend", "menu.go"))
+	require.NotContains(t, menuSource, "MenuModel")
+
+	_, err := os.Stat(repositoryPath("internal", "desktop"))
+	require.ErrorIs(t, err, os.ErrNotExist)
 }
 
 func TestWailsBuildPreparesProjectMetadataWithoutMage(t *testing.T) {

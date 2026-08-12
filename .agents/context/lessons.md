@@ -111,11 +111,11 @@ sessions. Keep it short, durable, and tied to code contracts.
 
 - When Go DTOs change, generated frontend bindings may need refresh. If
   automated generation is unreliable in the local environment, manually verify
-  `frontend/wailsjs/go/models.ts` against the Go shape and run frontend
+  `frontend/bindings/github.com/luxury-yacht/app/backend/models.ts` against the Go shape and run frontend
   typecheck.
 
 ## Local Development
 
-- If the Wails development server is not running, start it with `mise exec -- mage dev`,
+- If the Wails development server is not running, start it with `mise exec -- wails3 task dev`,
   wait for the command to report its active URL, and use that URL for rendered
   UI diagnosis.

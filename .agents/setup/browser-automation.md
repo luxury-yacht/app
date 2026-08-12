@@ -25,7 +25,7 @@ Wails development UI.
 1. Use the active Wails development-server URL supplied for the run.
 2. Confirm that the URL responds before browser work because Wails may choose a
    different port on a later run.
-3. If no server is running, start one with `mise exec -- mage dev`, wait for the
+3. If no server is running, start one with `mise exec -- wails3 task dev`, wait for the
    command to report its active URL, and use that URL.
 4. Ask the user for the URL only when a development process is already running
    and its URL cannot be determined. Do not ask the user for screenshots while

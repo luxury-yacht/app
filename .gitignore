@@ -44,7 +44,6 @@ frontend/coverage/
 package.json.md5
 
 # Wails specific
-wails.json.bak
 *.wails
 
 # Editor/IDE

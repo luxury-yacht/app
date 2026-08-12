@@ -14,6 +14,7 @@ import (
 	"github.com/luxury-yacht/app/backend/refresh/system"
 	"github.com/luxury-yacht/app/backend/refresh/telemetry"
 	"github.com/luxury-yacht/app/internal/sentry"
+	"github.com/wailsapp/wails/v3/pkg/application"
 	apiextinformers "k8s.io/apiextensions-apiserver/pkg/client/informers/externalversions"
 	informers "k8s.io/client-go/informers"
 )
@@ -26,7 +27,8 @@ var defaultLoopbackListener = func() (net.Listener, error) {
 type App struct {
 	appDone                  <-chan struct{}
 	runtimeReady             atomic.Bool
-	desktop                  Desktop
+	wailsApplication         *application.App
+	menu                     *application.Menu
 	selectedKubeconfigs      []string
 	availableKubeconfigs     []KubeconfigInfo
 	kubeconfigSearchPaths    []string
@@ -195,17 +197,20 @@ type App struct {
 	kubeconfigWatcher *kubeconfigWatcher
 
 	eventEmitter          func(context.Context, string, ...interface{})
+	openFileDialog        func(*application.OpenFileDialogOptions) (string, error)
+	saveFileDialog        func(*application.SaveFileDialogOptions) (string, error)
+	windowGeometry        func() (WindowGeometry, error)
 	kubeClientInitializer func() error
 }
 
-// NewApp constructs a backend App with its desktop boundary and sane defaults.
-func NewApp(desktop Desktop, reporters ...sentryreporting.Reporter) *App {
+// NewApp constructs a backend App with its Wails application and sane defaults.
+func NewApp(wailsApplication *application.App, reporters ...sentryreporting.Reporter) *App {
 	var reporter sentryreporting.Reporter
 	if len(reporters) > 0 {
 		reporter = reporters[0]
 	}
 	app := &App{
-		desktop:                  desktop,
+		wailsApplication:         wailsApplication,
 		logger:                   NewLogger(1000, reporters...),
 		errorReporter:            reporter,
 		responseCache:            newDefaultResponseCache(),
@@ -221,8 +226,8 @@ func NewApp(desktop Desktop, reporters ...sentryreporting.Reporter) *App {
 		portForwardSessions:      make(map[string]*portForwardSessionInternal),
 		runtimeOperations:        newRuntimeOperationRegistry(),
 		eventEmitter: func(_ context.Context, name string, data ...interface{}) {
-			if desktop != nil {
-				desktop.EmitEvent(name, data...)
+			if wailsApplication != nil {
+				wailsApplication.Event.Emit(name, data...)
 			}
 		},
 		clusterHealth:         make(map[string]ClusterHealthState),

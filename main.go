@@ -6,7 +6,6 @@ import (
 	"time"
 
 	"github.com/luxury-yacht/app/backend"
-	desktopruntime "github.com/luxury-yacht/app/internal/desktop"
 	"github.com/luxury-yacht/app/internal/sentry"
 	"github.com/wailsapp/wails/v3/pkg/application"
 	"github.com/wailsapp/wails/v3/pkg/events"
@@ -52,7 +51,6 @@ func newSentryReporter(enabled bool, defaultDSN, version string) (sentryreportin
 type applicationComposition struct {
 	application *application.App
 	backend     *backend.App
-	desktop     *desktopruntime.Adapter
 	window      *application.WebviewWindow
 	menu        *application.Menu
 }
@@ -63,7 +61,7 @@ type compositionOptions struct {
 
 func mainWindowOptions(nativeMenu *application.Menu) application.WebviewWindowOptions {
 	return application.WebviewWindowOptions{
-		Name:             desktopruntime.MainWindowName,
+		Name:             backend.MainWindowName,
 		Title:            "Luxury Yacht",
 		Width:            1200,
 		Height:           800,
@@ -129,13 +127,11 @@ func newApplicationComposition(reporter sentryreporting.Reporter, options compos
 	}
 	wailsApp := application.New(applicationOptions)
 
-	desktop := desktopruntime.NewAdapter(wailsApp, desktopruntime.MainWindowName)
-	backendApp = backend.NewApp(desktop, reporter)
+	backendApp = backend.NewApp(wailsApp, reporter)
 	wailsApp.RegisterService(application.NewService(backendApp))
 
-	nativeMenu := desktop.InitialiseMenu(func() *backend.MenuModel {
-		return backend.CreateMenu(backendApp)
-	})
+	nativeMenu := backend.CreateMenu(backendApp)
+	wailsApp.Menu.SetApplicationMenu(nativeMenu)
 
 	mainWindow = wailsApp.Window.NewWithOptions(mainWindowOptions(nativeMenu))
 
@@ -151,7 +147,6 @@ func newApplicationComposition(reporter sentryreporting.Reporter, options compos
 	return &applicationComposition{
 		application: wailsApp,
 		backend:     backendApp,
-		desktop:     desktop,
 		window:      mainWindow,
 		menu:        nativeMenu,
 	}

@@ -5,6 +5,8 @@ import (
 	"os"
 	"path/filepath"
 	"strings"
+
+	"github.com/wailsapp/wails/v3/pkg/application"
 )
 
 // sanitizeCsvFilename returns a safe, non-empty default filename ending in .csv for
@@ -36,13 +38,10 @@ func (a *App) SaveCsvFile(defaultFilename, content string) (CatalogQueryCSVExpor
 		return empty, fmt.Errorf("application context is not available")
 	}
 
-	if a.desktop == nil {
-		return empty, fmt.Errorf("desktop runtime is not available")
-	}
-	path, err := a.desktop.SaveFile(SaveFileDialogOptions{
+	path, err := a.promptForSaveFile(&application.SaveFileDialogOptions{
 		Title:                "Export CSV",
 		Filename:             sanitizeCsvFilename(defaultFilename),
-		Filters:              []FileFilter{{DisplayName: "CSV files (*.csv)", Pattern: "*.csv"}},
+		Filters:              []application.FileFilter{{DisplayName: "CSV files (*.csv)", Pattern: "*.csv"}},
 		CanCreateDirectories: true,
 	})
 	if err != nil {

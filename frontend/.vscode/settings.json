@@ -3,10 +3,10 @@
   "javascript.validate.enable": false,
   "typescript.tsserver.experimental.enableProjectDiagnostics": false,
   "files.exclude": {
-    "wailsjs/**/*.js": false
+    "bindings/**/*.ts": false
   },
   "search.exclude": {
-    "wailsjs/**/*.js": true
+    "bindings/**/*.ts": true
   },
   "typescript.tsserver.excludeLibrarySymbolsInNavigation": true,
   "typescript.preferences.includePackageJsonAutoImports": "off",

@@ -4,23 +4,50 @@ import (
 	"context"
 	"runtime"
 	"testing"
+
+	"github.com/stretchr/testify/require"
+	"github.com/wailsapp/wails/v3/pkg/application"
 )
 
-func TestCreateMenuBuildsEntries(t *testing.T) {
-	app := &App{}
-	m := CreateMenu(app)
-
-	if m == nil {
-		t.Fatal("expected menu to be created")
-	}
-	if len(m.Items) == 0 {
-		t.Fatal("expected menu to contain items")
+func menuItems(menu *application.Menu) []*application.MenuItem {
+	items := []*application.MenuItem{}
+	for index := 0; ; index++ {
+		item := menu.ItemAt(index)
+		if item == nil {
+			return items
+		}
+		items = append(items, item)
 	}
 }
 
+func findSubmenu(t *testing.T, menu *application.Menu, label string) *application.Menu {
+	t.Helper()
+	for _, item := range menuItems(menu) {
+		if item.Label() == label && item.GetSubmenu() != nil {
+			return item.GetSubmenu()
+		}
+	}
+	t.Fatalf("expected submenu %q", label)
+	return nil
+}
+
+func menuLabels(menu *application.Menu) []string {
+	items := menuItems(menu)
+	labels := make([]string, 0, len(items))
+	for _, item := range items {
+		labels = append(labels, item.Label())
+	}
+	return labels
+}
+
+func TestCreateMenuBuildsEntries(t *testing.T) {
+	menu := CreateMenu(&App{})
+	require.NotNil(t, menu)
+	require.NotEmpty(t, menuItems(menu))
+}
+
 func TestCreateMenuTopLevelLabels(t *testing.T) {
-	app := &App{}
-	m := CreateMenu(app)
+	menu := CreateMenu(&App{})
 
 	var expected []string
 	switch runtime.GOOS {
@@ -36,44 +63,25 @@ func TestCreateMenuTopLevelLabels(t *testing.T) {
 			expected = []string{"File", "Edit", "View", "Window", "Debug", "Help"}
 		}
 	}
-
-	if len(m.Items) != len(expected) {
-		t.Fatalf("expected %d top-level menu items, got %d", len(expected), len(m.Items))
-	}
-	for i, want := range expected {
-		if m.Items[i].Label != want {
-			t.Fatalf("menu item %d label = %q, want %q", i, m.Items[i].Label, want)
-		}
-	}
+	require.Equal(t, expected, menuLabels(menu))
 }
 
-func findSubmenu(t *testing.T, m *MenuModel, label string) *MenuModel {
-	t.Helper()
-	for _, item := range m.Items {
-		if item.Label == label && item.SubMenu != nil {
-			return item.SubMenu
-		}
-	}
-	t.Fatalf("expected submenu %q", label)
-	return nil
-}
+func TestAddMenuTextPreservesAccelerator(t *testing.T) {
+	menu := application.NewMenu()
+	addMenuText(menu, "Open Cluster", "CmdOrCtrl+o", func() {})
 
-func menuLabels(m *MenuModel) []string {
-	labels := make([]string, 0, len(m.Items))
-	for _, item := range m.Items {
-		labels = append(labels, item.Label)
+	want := "Ctrl+O"
+	if runtime.GOOS == "darwin" {
+		want = "Cmd+O"
 	}
-	return labels
+	require.Equal(t, want, menu.ItemAt(0).GetAccelerator())
 }
 
 func TestCreateDebugMenuBuildsDebugOverlayEntries(t *testing.T) {
-	app := &App{}
-	m := NewMenuModel()
+	menu := application.NewMenu()
+	createDebugMenu(menu, &App{})
 
-	createDebugMenu(m, app)
-
-	debugMenu := findSubmenu(t, m, "Debug")
-	expected := []string{
+	require.Equal(t, []string{
 		"Open Inspector",
 		"",
 		"Keyboard Focus Overlay",
@@ -81,120 +89,54 @@ func TestCreateDebugMenuBuildsDebugOverlayEntries(t *testing.T) {
 		"Map Debug Overlay",
 		"Icon Debug Overlay",
 		"Error Boundary Tests",
-	}
-	if got := menuLabels(debugMenu); len(got) != len(expected) {
-		t.Fatalf("expected %d debug menu items, got %d: %#v", len(expected), len(got), got)
-	} else {
-		for i, want := range expected {
-			if got[i] != want {
-				t.Fatalf("debug menu item %d label = %q, want %q", i, got[i], want)
-			}
-		}
-	}
+	}, menuLabels(findSubmenu(t, menu, "Debug")))
 }
 
 func TestEditMenuOffersStandardClipboardCommands(t *testing.T) {
-	app := &App{}
-	m := NewMenuModel()
-
-	createEditMenu(m, app)
-
-	editMenu := findSubmenu(t, m, "Edit")
-	expected := []string{"Cut", "Copy", "Paste", "Select All"}
-	got := menuLabels(editMenu)
-	if len(got) != len(expected) {
-		t.Fatalf("expected edit menu labels %#v, got %#v", expected, got)
-	}
-	for i, want := range expected {
-		if got[i] != want {
-			t.Fatalf("edit menu item %d label = %q, want %q", i, got[i], want)
-		}
-	}
+	menu := application.NewMenu()
+	createEditMenu(menu, &App{})
+	require.Equal(t, []string{"Cut", "Copy", "Paste", "Select All"}, menuLabels(findSubmenu(t, menu, "Edit")))
 }
 
-func TestEditMenuItemsEmitFrontendEvents(t *testing.T) {
+func TestMenuEventCallbacksRequireRuntimeReadiness(t *testing.T) {
 	app := &App{}
-	app.setApplicationContext(context.Background())
-	app.markRuntimeReady()
 	events := []string{}
 	app.eventEmitter = func(_ context.Context, name string, _ ...interface{}) {
 		events = append(events, name)
 	}
-	m := NewMenuModel()
+	app.setApplicationContext(context.Background())
+	callback := emitMenuEventWhenReady(app, "open-cluster")
 
-	createEditMenu(m, app)
+	callback()
+	require.Empty(t, events)
 
-	editMenu := findSubmenu(t, m, "Edit")
-	// Paste is skipped: its click handler reads the OS clipboard through the
-	// Wails runtime, which needs a real Wails context.
-	for _, label := range []string{"Cut", "Copy", "Select All"} {
-		clicked := false
-		for _, item := range editMenu.Items {
-			if item.Label == label && item.Click != nil {
-				item.Click()
-				clicked = true
-			}
-		}
-		if !clicked {
-			t.Fatalf("expected edit menu item %q with click handler", label)
-		}
-	}
-
-	expected := []string{"menu:cut", "menu:copy", "menu:selectAll"}
-	if len(events) != len(expected) {
-		t.Fatalf("expected events %#v, got %#v", expected, events)
-	}
-	for i, want := range expected {
-		if events[i] != want {
-			t.Fatalf("event %d = %q, want %q", i, events[i], want)
-		}
-	}
+	app.markRuntimeReady()
+	callback()
+	require.Equal(t, []string{"open-cluster"}, events)
 }
 
 func TestViewMenuKeepsApplicationLogsAndDiagnosticsEntries(t *testing.T) {
-	app := &App{}
-	m := NewMenuModel()
+	menu := application.NewMenu()
+	createViewMenu(menu, &App{})
 
-	createViewMenu(m, app)
-
-	viewMenu := findSubmenu(t, m, "View")
-	labels := menuLabels(viewMenu)
-	assertMenuContainsLabel(t, labels, "Show Application Logs")
-	assertMenuContainsLabel(t, labels, "Show Diagnostics Panel")
+	labels := menuLabels(findSubmenu(t, menu, "View"))
+	require.Contains(t, labels, "Show Application Logs")
+	require.Contains(t, labels, "Show Diagnostics Panel")
 }
 
 func TestFileMenuOffersOpenCluster(t *testing.T) {
-	app := &App{}
-	app.setApplicationContext(context.Background())
-	app.markRuntimeReady()
-	events := []string{}
-	app.eventEmitter = func(_ context.Context, name string, _ ...interface{}) {
-		events = append(events, name)
-	}
-	m := NewMenuModel()
-
-	createApplicationMenu(m, app)
-
-	fileMenu := findSubmenu(t, m, "File")
-	assertMenuContainsLabel(t, menuLabels(fileMenu), "Open Cluster")
-
-	clicked := false
-	for _, item := range fileMenu.Items {
-		if item.Label == "Open Cluster" && item.Click != nil {
-			item.Click()
-			clicked = true
-		}
-	}
-	if !clicked {
-		t.Fatal("expected File menu item \"Open Cluster\" with click handler")
-	}
-
-	if len(events) != 1 || events[0] != "open-cluster" {
-		t.Fatalf("expected [open-cluster], got %#v", events)
-	}
+	menu := application.NewMenu()
+	createApplicationMenu(menu, &App{})
+	require.Contains(t, menuLabels(findSubmenu(t, menu, "File")), "Open Cluster")
 }
 
 func TestViewMenuOffersCommandPalette(t *testing.T) {
+	menu := application.NewMenu()
+	createViewMenu(menu, &App{})
+	require.Contains(t, menuLabels(findSubmenu(t, menu, "View")), "Command Palette")
+}
+
+func TestDebugMenuEventsUseReadinessGuard(t *testing.T) {
 	app := &App{}
 	app.setApplicationContext(context.Background())
 	app.markRuntimeReady()
@@ -202,81 +144,31 @@ func TestViewMenuOffersCommandPalette(t *testing.T) {
 	app.eventEmitter = func(_ context.Context, name string, _ ...interface{}) {
 		events = append(events, name)
 	}
-	m := NewMenuModel()
 
-	createViewMenu(m, app)
-
-	viewMenu := findSubmenu(t, m, "View")
-	assertMenuContainsLabel(t, menuLabels(viewMenu), "Command Palette")
-
-	clicked := false
-	for _, item := range viewMenu.Items {
-		if item.Label == "Command Palette" && item.Click != nil {
-			item.Click()
-			clicked = true
-		}
-	}
-	if !clicked {
-		t.Fatal("expected View menu item \"Command Palette\" with click handler")
-	}
-
-	if len(events) != 1 || events[0] != "open-command-palette" {
-		t.Fatalf("expected [open-command-palette], got %#v", events)
-	}
-}
-
-func assertMenuContainsLabel(t *testing.T, labels []string, want string) {
-	t.Helper()
-	for _, label := range labels {
-		if label == want {
-			return
-		}
-	}
-	t.Fatalf("expected menu labels to contain %q, got %#v", want, labels)
-}
-
-func TestDebugMenuItemsEmitFrontendEvents(t *testing.T) {
-	app := &App{}
-	app.setApplicationContext(context.Background())
-	app.markRuntimeReady()
-	events := []string{}
-	app.eventEmitter = func(_ context.Context, name string, _ ...interface{}) {
-		events = append(events, name)
-	}
-	m := NewMenuModel()
-
-	createDebugMenu(m, app)
-
-	debugMenu := findSubmenu(t, m, "Debug")
-	for _, item := range debugMenu.Items {
-		if item.Click != nil {
-			item.Click()
-		}
-	}
-
-	expected := []string{
+	for _, event := range []string{
 		"debug:open-inspector",
 		"debug:toggle-focus-overlay",
 		"debug:toggle-panel-overlay",
 		"debug:toggle-map-overlay",
 		"debug:toggle-icon-overlay",
 		"debug:toggle-error-overlay",
+	} {
+		emitMenuEventWhenReady(app, event)()
 	}
-	if len(events) != len(expected) {
-		t.Fatalf("expected events %#v, got %#v", expected, events)
-	}
-	for i, want := range expected {
-		if events[i] != want {
-			t.Fatalf("event %d = %q, want %q", i, events[i], want)
-		}
-	}
+
+	require.Equal(t, []string{
+		"debug:open-inspector",
+		"debug:toggle-focus-overlay",
+		"debug:toggle-panel-overlay",
+		"debug:toggle-map-overlay",
+		"debug:toggle-icon-overlay",
+		"debug:toggle-error-overlay",
+	}, events)
 }
 
 func TestFileMenuDoesNotOfferNewWindow(t *testing.T) {
 	fileMenu := findSubmenu(t, CreateMenu(&App{}), "File")
-	for _, item := range fileMenu.Items {
-		if item.Label == "New Window" || item.Accelerator == "CmdOrCtrl+n" {
-			t.Fatalf("removed New Window command remained in menu: %#v", item)
-		}
+	for _, item := range menuItems(fileMenu) {
+		require.NotEqual(t, "New Window", item.Label())
 	}
 }

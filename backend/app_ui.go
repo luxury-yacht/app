@@ -2,6 +2,7 @@ package backend
 
 import (
 	"fmt"
+	"runtime"
 
 	"github.com/luxury-yacht/app/backend/internal/logsources"
 )
@@ -52,10 +53,24 @@ func (a *App) ToggleObjectDiff() error {
 }
 
 func (a *App) UpdateMenu() {
-	if !a.desktopAvailable() {
+	if a == nil || !a.runtimeAvailable() || a.menu == nil {
 		return
 	}
-	_ = a.desktop.RefreshMenu()
+	a.menu.Clear()
+	populateMenu(a.menu, a)
+
+	switch runtime.GOOS {
+	case "linux":
+		a.menu.Update()
+	case "darwin":
+		if a.wailsApplication != nil {
+			a.wailsApplication.Menu.SetApplicationMenu(a.menu)
+		}
+	case "windows":
+		if window, err := a.mainWindow(); err == nil {
+			window.SetMenu(a.menu)
+		}
+	}
 }
 
 func (a *App) IsSidebarVisible() bool {

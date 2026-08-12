@@ -3,13 +3,14 @@
 Status: implementation active; core v3-only cutover implemented, Phase 6
 platform validation remains
 Created: 2026-08-11
-Last updated: 2026-08-11
+Last updated: 2026-08-12
 
 ## Implementation status
 
 The branch now has the core Wails v3 cutover in place: beta.7 application and
 service composition, the paired beta.5 frontend runtime, generated v3 bindings,
-desktop adapters, one named main window, persistent native menus, screen-aware
+direct backend application injection, one frontend runtime adapter, one named
+main window, persistent native menus, screen-aware
 geometry restoration, framework-provided single-instance handling,
 GTK4/WebKitGTK 6.0-only Linux support, and Taskfile-based v3 builds. **New
 Window** is absent. The
@@ -81,9 +82,11 @@ frontend bindings, and a visible Taskfile-based build system.
   reports `178`); the v3 service generates 179 because `WindowRuntimeReady` is now
   an explicit lifecycle boundary.
   Do not change transport and service ownership in the same red/green step.
-- Put Wails v3 application/window objects behind one backend desktop-runtime
-  adapter and one frontend desktop-runtime adapter. Do not spread Wails manager
-  calls or `@wailsio/runtime` imports through domain code.
+- Inject Wails v3's `*application.App` directly into `backend.App`, as documented
+  for v3 services. Keep native manager calls in the small set of backend files
+  that own menus, dialogs, window lifecycle, events, clipboard, and screens; do
+  not duplicate Wails types behind a parallel backend adapter. Keep one frontend
+  desktop-runtime adapter so `@wailsio/runtime` imports remain centralized.
 - Remove **New Window** during the core port. Delete the process-spawning
   implementation (`backend/menu.go:41-55`), File-menu item, `Cmd/Ctrl+N`
   accelerator, tests, and documentation references; do not leave a disabled or
@@ -139,8 +142,8 @@ frontend bindings, and a visible Taskfile-based build system.
 ### Required target-design outcomes
 
 - Make application, process, service, and window ownership explicit. Use named
-  window references behind the desktop adapter; do not embed an implicit
-  "current window" assumption in backend domain code.
+  window references resolved through the injected application's window manager;
+  do not embed an implicit "current window" assumption in backend domain code.
 - Produce a target service map for all 179 currently bound methods as the first
   deliverable of the deferred service-decomposition track. The core v3 cutover
   intentionally registers one `App` service; no method moves until its
@@ -220,11 +223,11 @@ and [System Tray Menus](https://v3.wails.io/features/menus/systray/).
 
 | Domain | Current evidence | Migration consequence |
 | --- | --- | --- |
-| Application composition | `main.go:57-160` creates the backend, menu, lifecycle callbacks, one window, embedded assets, and platform options in one `wails.Run`. | Create the v3 application, construct the name-resolving desktop adapter and backend service, build the persistent native menu, create the named main window with that menu, install lifecycle hooks, then call `app.Run()`. |
-| Backend runtime lifecycle | `backend/app.go:25-35`, `backend/app.go:196-241`, and `backend/app_runtime.go:9-48` store a Wails context capability separately from the backend cancellation signal. | Retain the cancellation boundary from `ServiceStartup(ctx, ...)`, but replace context-bound runtime operations with an injected app/window adapter. |
+| Application composition | `main.go:57-160` creates the backend, menu, lifecycle callbacks, one window, embedded assets, and platform options in one `wails.Run`. | Create the v3 application, inject it into the backend service, build the persistent native menu, create the named main window with that menu, install lifecycle hooks, then call `app.Run()`. |
+| Backend runtime lifecycle | `backend/app.go:25-35`, `backend/app.go:196-241`, and `backend/app_runtime.go:9-48` store a Wails context capability separately from the backend cancellation signal. | Retain the cancellation boundary from `ServiceStartup(ctx, ...)`, but replace context-bound runtime operations with the injected v3 application and its managers. |
 | Startup and shutdown | `backend/app_lifecycle.go:41-63` performs UI and cluster startup; `backend/app_lifecycle.go:223-272` saves window state before close and tears down background systems at shutdown. | Split synchronous service startup from webview readiness. `ServiceStartup` captures the application context and completes non-UI setup before native windows run; an error aborts `App.Run()`. Persist window state while the main window is alive, and run backend teardown from `ServiceShutdown`. |
 | Refresh webview transport | `backend/app_refresh_setup.go:457-479` builds the aggregate HTTP mux and `backend/app_refresh_setup.go:522-543` binds it to a random loopback port. `backend/refresh/api/server.go:311-325` and `backend/refresh_stream_cors.go:5-30` own CORS, while `frontend/src/core/refresh/client.ts:47-55` and `frontend/src/core/refresh/client.ts:159-175` discover and retry the runtime base URL. The resource stream upgrades to WebSocket at `backend/refresh_aggregate_resourcestream.go:109-115`, and the log stream requires SSE flushing in `backend/refresh/containerlogsstream/handler.go:145-149`. | Port exactly one loopback server to v3 lifecycle ownership. Beta.7's service-route asset server rejects WebSockets and cannot stream on Windows, so preserve base-URL discovery, CORS, readiness, replacement, and teardown instead of adding a same-origin compatibility route. |
-| Native capabilities | Nine production Go files import Wails v2 (`rg -l 'github.com/wailsapp/wails/v2' --glob '*.go' .` classified by `_test.go` -> `9` production and `5` test files). Menus, events, dialogs, clipboard, window state, quit/hide, and window commands are represented in `main.go`, `backend/app_lifecycle.go`, `backend/app_settings.go`, `backend/app_data_management.go`, `backend/app_csv_export.go`, `backend/kubeconfigs.go`, and `backend/menu.go`. | Define the adapter around the needed capabilities and port each producer/consumer pair to v3 managers. Avoid a local wrapper per call site. |
+| Native capabilities | Nine production Go files import Wails v2 (`rg -l 'github.com/wailsapp/wails/v2' --glob '*.go' .` classified by `_test.go` -> `9` production and `5` test files). Menus, events, dialogs, clipboard, window state, quit/hide, and window commands are represented in `main.go`, `backend/app_lifecycle.go`, `backend/app_settings.go`, `backend/app_data_management.go`, `backend/app_csv_export.go`, `backend/kubeconfigs.go`, and `backend/menu.go`. | Inject the v3 application directly and port each producer/consumer pair to its managers. Reuse Wails menu and dialog types instead of maintaining parallel models. |
 | Menu contract | `backend/menu.go:14-38` owns the menu tree; `backend/menu.go:65-100`, `backend/menu.go:131-174`, `backend/menu.go:176-250`, and `backend/menu.go:295-347` connect native items to frontend events and window/app operations. `main.go:80-92` currently rebuilds and reinstalls a new menu, while `backend/app_ui.go:55-65` disables that path on Linux. | Build a persistent v3 menu before the main window and preserve labels, accelerators, platform differences, callbacks, and dynamic visibility labels with **New Window** removed. On GTK4 Linux, window construction consumes the menu and later `SetMenu` does not reattach it, so mutate the installed model and call `Menu.Update()`; use macOS application-menu reset and Windows named-window reinstall for their native ownership. |
 | New Window removal | `backend/menu.go:41-55` respawns the executable; `backend/menu.go:74-80` exposes it as **New Window** with `Cmd/Ctrl+N`. `rg -n -i 'new window|spawnNewWindow' . --glob '!docs/plans/wails-v3-migration.md' --glob '!frontend/wailsjs/**'` finds no other implementation surface. | Remove the menu item, accelerator, callback, now-unused process imports, tests, and user/developer documentation during the core menu port. Assert the option is absent until Phase 5 implements native windows. |
 | Process multiplicity | `rg -n 'SingleInstance|single instance|single-instance' main.go backend frontend/src mage .github` returns no match; process spawning is currently explicit only in the **New Window** implementation above. | Decide whether v3 should reject/funnel subsequent launches or continue allowing independent manual processes. If single-instance is enabled, second-launch handling restores/focuses the named main window and validates all incoming data. |
@@ -250,16 +253,14 @@ and [System Tray Menus](https://v3.wails.io/features/menus/systray/).
 
 1. `main` creates `application.App` with embedded frontend assets and no backend
    service cycle.
-2. `main` constructs a Wails v3 desktop adapter with the application and the
-   constant main-window name. The adapter resolves windows through
-   `app.Window.GetByName`; do not add a parallel window registry or fall back to
-   the focused window. Beta.7 provides this lookup in
+2. `main` injects the Wails v3 application into `backend.App` and registers it as
+   one process-scoped service. Backend window operations resolve the constant
+   main-window name through `app.Window.GetByName`; do not add a parallel window
+   registry or fall back to the focused window. Beta.7 provides this lookup in
    `pkg/application/window_manager.go:16-32`, keyed by
-   `WebviewWindowOptions.Name` (`webview_window_options.go:80-83`). `main` then
-   constructs `backend.App` with that adapter and registers it as one
-   process-scoped service.
+   `WebviewWindowOptions.Name` (`webview_window_options.go:80-83`).
 3. `main` builds one persistent menu from backend actions, sets the application
-   menu, and creates the initially hidden named main `WebviewWindow`. Pass that
+   menu, and creates the named main `WebviewWindow`. Pass that
    same menu through the explicit Linux window options before `app.Run()`; use
    the application-menu option on Windows and the global application menu on
    macOS.
@@ -268,17 +269,18 @@ and [System Tray Menus](https://v3.wails.io/features/menus/systray/).
    pending native windows. Startup captures the application-lifetime context and
    completes only bounded non-UI prerequisites; a non-nil error aborts
    `app.Run()` and triggers shutdown for services that already started. The
-   desktop adapter remains unable to emit frontend events or invoke interactive
-   UI at this point (`pkg/application/application.go:651-662` and
+   backend readiness gate remains closed, so it cannot emit frontend events or
+   invoke interactive UI at this point (`pkg/application/application.go:651-662` and
    `pkg/application/services.go:90-97`).
 6. The pending main window starts with its initial native menu. Calls made before
    its platform implementation exists are dropped by Wails; after it exists,
    JavaScript and event delivery are queued until the frontend sends
    `wails:runtime:ready`.
-7. The runtime-ready callback advances the adapter exactly once, then runs the
+7. The runtime-ready callback advances the backend readiness gate exactly once,
+   then runs the
    interactive startup sequence: beta-expiry dialog/quit gate, window restore,
    window show, cluster initialization, watcher startup, update check, and
-   installation metric scheduling. The transition that marks the adapter ready
+   installation metric scheduling. The transition that marks the runtime ready
    must not itself depend on the ready gate.
 8. A single idempotent pre-quit path waits for pending selection persistence and
    reads/saves main-window geometry before the window is closed. Test window
@@ -288,11 +290,10 @@ and [System Tray Menus](https://v3.wails.io/features/menus/systray/).
    closed window or frontend runtime.
 
 This ordering avoids a constructor cycle: the Wails application exists before
-the backend service, while backend code receives only the adapter it needs.
-The adapter distinguishes application-scoped operations from window-scoped
-operations so Phase 5 can add native windows without reintroducing implicit
-global window state. V3 services remain process-scoped and must not acquire a
-window identity by guessing from focus.
+the backend service and is injected directly into it. Application-scoped calls
+use application managers; window-scoped calls resolve the explicitly named main
+window. V3 services remain process-scoped and must not acquire a window identity
+by guessing from focus.
 The readiness gate reflects beta.7's actual delivery behavior: `ExecJS` and
 event dispatch return while the window implementation is absent, then queue
 JavaScript after native construction until `wails:runtime:ready` marks the
@@ -366,25 +367,27 @@ the deferred service-decomposition track.
       frontend, calls one backend method, exchanges one event, opens one dialog,
       and produces one local development build without a dual runtime path.
 
-### Phase 1: Backend desktop-runtime seam and lifecycle
+### Phase 1: Backend application injection and lifecycle
 
-Execution status: implemented. The branch uses an injected desktop boundary,
-v3 service startup/shutdown, a runtime-ready transition, idempotent pre-quit
+Execution status: implemented. The branch injects Wails' application directly,
+uses v3 service startup/shutdown, a runtime-ready transition, idempotent pre-quit
 persistence, and the existing backend-owned loopback refresh transport.
 
-- [ ] Red: add adapter tests proving UI/runtime operations fail or no-op before
+- [x] Red: add tests proving UI/runtime operations fail or no-op before
       readiness while the explicit `MarkRuntimeReady` transition remains
       callable and enables subsequent operations.
 - [ ] Red: add ordering tests for service startup, runtime-ready interactive
       startup, pre-quit persistence, service cancellation, and service shutdown.
-- [ ] Define the narrow backend desktop contract needed by current consumers:
+- [x] Inject `*application.App` through `NewApp` and call v3 managers directly for
       event emission, platform-aware menu refresh, dialogs, clipboard text,
-      named-window state/actions, browser/application hide/quit, and readiness.
-- [ ] Inject that contract through `NewApp`; keep Kubernetes and persistence
-      code unaware of `application.App` and `WebviewWindow`.
+      named-window state/actions, application hide/quit, and screens. Keep the
+      Wails-specific calls in the backend files that own those native behaviors.
+- [x] Delete the broad backend desktop interface, its adapter package, duplicate
+      menu/dialog models, and full-interface fakes. Retain only narrow function
+      seams for native dialogs and live-window geometry in headless tests.
 - [ ] Replace `setRuntimeContext`/`runWithRuntimeContext` with an
-      application-lifetime cancellation boundary plus the injected desktop
-      capability. Preserve `CtxOrBackground` cancellation semantics used by
+      application-lifetime cancellation boundary plus the injected Wails
+      application. Preserve `CtxOrBackground` cancellation semantics used by
       refresh/auth/session work.
 - [ ] Implement `ServiceStartup` and `ServiceShutdown` on the single App service
       using the exact lifecycle interface of the pinned v3 release. Keep startup
@@ -407,12 +410,12 @@ persistence, and the existing backend-owned loopback refresh transport.
 - [ ] Make pre-quit persistence idempotent and cover pending selection mutation,
       missing runtime, window-state read failure, and repeated quit requests.
 - [ ] Green/refactor: remove v2 runtime-context globals and tests only after the
-      new adapter/lifecycle tests pass.
+      new application-injection/lifecycle tests pass.
 
 ### Phase 2: Application, window, menus, and native capabilities
 
 Execution status: implemented for the core single-window contract. Focused
-composition, adapter, readiness, menu, geometry, and framework-configuration
+composition, application-injection, readiness, menu, geometry, and framework-configuration
 tests are in place; macOS rendered validation is complete. Platform-native
 interaction and workaround checks remain in Phase 6.
 
@@ -448,14 +451,14 @@ interaction and workaround checks remain in Phase 6.
       persistence later requires a schema decision.
 - [ ] Port beta-expiry, open/save/directory dialogs, window geometry restore,
       window show/maximize/minimize/restore, app hide/quit, clipboard read, and
-      bring-to-front behavior through the backend adapter.
+      bring-to-front behavior through the injected Wails application.
 - [ ] Build one persistent native-menu model before constructing the main window.
       Preserve top-level order, labels, accelerators, platform-only items,
       asynchronous callbacks, frontend event names, dynamic panel/sidebar
       labels, and the development debug menu except for the explicitly removed
       **New Window** command. Pass the menu through the Linux window options so
       GTK4 constructs its native window with the menubar already attached.
-- [ ] Replace the `update-menu` round trip with one adapter-owned refresh that
+- [ ] Replace the `update-menu` round trip with one backend-owned refresh that
       mutates the persistent model. On GTK4 Linux call `Menu.Update()` so Wails
       clears and rerenders the attached native menu in place; do not call the
       post-construction Linux `SetMenu`, which only changes stored fields. On
@@ -739,7 +742,7 @@ into unrelated backend test work.
 
 ## Contract tests to add before behavior changes
 
-- Backend desktop adapter rejects event/dialog/window calls before ready, but
+- Backend native operations reject event/dialog/window calls before ready, but
   the readiness transition itself succeeds and enables calls afterward.
 - Backend named-window operations resolve through `app.Window.GetByName`, fail
   explicitly when the name is absent, and never use a parallel registry or
@@ -754,7 +757,7 @@ into unrelated backend test work.
   through `CtxOrBackground`, and aborts `App.Run()` on error after shutting down
   already-started services; normal shutdown cancels refresh/auth/session work
   without a Wails context.
-- No adapter-owned frontend event or JavaScript call is attempted before
+- No backend-owned frontend event or JavaScript call is attempted before
   `WindowRuntimeReady`; tests prove startup producers cannot reach Wails' early
   drop/queue paths and run exactly once after the ready transition.
 - All current Go event producers arrive at frontend handlers with the same

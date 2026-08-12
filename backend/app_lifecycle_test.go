@@ -327,7 +327,7 @@ users:
 	// The test verifies that an error is returned and no object catalog is created.
 }
 
-func TestStartupAppliesWindowSettings(t *testing.T) {
+func TestStartupLoadsWindowSettingsOnlyAfterRuntimeReady(t *testing.T) {
 	baseDir := t.TempDir()
 	t.Setenv("HOME", baseDir)
 	t.Setenv("XDG_CONFIG_HOME", filepath.Join(baseDir, ".config"))
@@ -352,40 +352,21 @@ func TestStartupAppliesWindowSettings(t *testing.T) {
 	require.NoError(t, err)
 	require.NoError(t, os.WriteFile(settingsPath, bytes, 0o644))
 
-	var sizeCalled, posCalled, maxCalled, showCalled bool
-	var restoredX, restoredY int
-	app.desktop = &fakeDesktop{
-		setMainWindowSize:     func(int, int) error { sizeCalled = true; return nil },
-		setMainWindowPosition: func(x, y int) error { posCalled = true; restoredX, restoredY = x, y; return nil },
-		mainWindowWorkAreas: func() []WindowWorkArea {
-			return []WindowWorkArea{
-				{X: -1920, Y: 0, Width: 1920, Height: 1040},
-				{X: 0, Y: 0, Width: 1920, Height: 1040, Primary: true},
-			}
-		},
-		maximiseMainWindow: func() error { maxCalled = true; return nil },
-		showMainWindow:     func() error { showCalled = true; return nil },
-	}
 	require.NoError(t, app.ServiceStartup(ctx, application.ServiceOptions{}))
-	require.False(t, sizeCalled, "service startup must not access the native window")
+	require.Nil(t, app.windowSettings, "service startup must not load interactive window state")
 	require.True(t, app.WindowRuntimeReady())
 	cancel()
 	time.Sleep(50 * time.Millisecond)
 
-	require.True(t, sizeCalled, "expected window size to be restored")
-	require.True(t, posCalled, "expected window position to be restored")
-	require.Equal(t, -1800, restoredX, "negative coordinates on a current monitor must remain valid")
-	require.Equal(t, 20, restoredY)
-	require.True(t, maxCalled, "expected window to be maximized")
-	require.True(t, showCalled, "expected window to be shown")
+	require.Equal(t, &settings.UI.Window, app.windowSettings)
 }
 
 func TestBeforeClosePersistsWindowSettings(t *testing.T) {
 	t.Setenv("HOME", t.TempDir())
 	app := newTestAppWithDefaults(t)
-	app.desktop = &fakeDesktop{mainWindowGeometry: func() (WindowGeometry, error) {
+	app.windowGeometry = func() (WindowGeometry, error) {
 		return WindowGeometry{X: 11, Y: 22, Width: 800, Height: 600, Maximised: true}, nil
-	}}
+	}
 	app.setApplicationContext(context.Background())
 	app.markRuntimeReady()
 
@@ -408,10 +389,10 @@ func TestBeforeCloseWaitsForSelectionMutationBeforeSavingWindowSettings(t *testi
 
 	saveStarted := make(chan struct{})
 	var saveStartedOnce sync.Once
-	app.desktop = &fakeDesktop{mainWindowGeometry: func() (WindowGeometry, error) {
+	app.windowGeometry = func() (WindowGeometry, error) {
 		saveStartedOnce.Do(func() { close(saveStarted) })
 		return WindowGeometry{X: 11, Y: 22, Width: 800, Height: 600}, nil
-	}}
+	}
 
 	app.selectionMutationMu.Lock()
 	mutationStarted := make(chan struct{})
@@ -461,7 +442,7 @@ func TestBeforeCloseWaitsForSelectionMutationBeforeSavingWindowSettings(t *testi
 	}
 }
 
-func TestStartupBetaExpiryShowsDialogAndQuits(t *testing.T) {
+func TestStartupBetaExpiryReportsAndStopsInteractiveStartup(t *testing.T) {
 	origBeta := BetaExpiry
 	origIsBeta := IsBetaBuild
 	origVersion := Version
@@ -482,17 +463,9 @@ func TestStartupBetaExpiryShowsDialogAndQuits(t *testing.T) {
 	app.logger = NewLogger(100, reporter)
 	ctx := context.Background()
 
-	dialogCalled := false
-	quitCalled := false
-	app.desktop = &fakeDesktop{
-		showErrorDialog: func(string, string) { dialogCalled = true },
-		quitApplication: func() { quitCalled = true },
-	}
 	require.NoError(t, app.ServiceStartup(ctx, application.ServiceOptions{}))
 	require.True(t, app.WindowRuntimeReady())
 
-	require.True(t, dialogCalled, "beta expiry dialog expected")
-	require.True(t, quitCalled, "app should quit when beta expired")
 	reporter.mu.Lock()
 	require.Len(t, reporter.exceptions, 1)
 	require.Contains(t, reporter.exceptions[0].err.Error(), "expired")

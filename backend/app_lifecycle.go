@@ -49,8 +49,8 @@ func (a *App) WindowRuntimeReady() bool {
 		return true
 	}
 	a.restoreStartupWindow()
-	if a.desktop != nil {
-		_ = a.desktop.ShowMainWindow()
+	if window, err := a.mainWindow(); err == nil {
+		window.Show()
 	}
 	a.logger.Info("Luxury Yacht - Sail the Seas of Kubernetes In Style", logsources.App)
 	a.initializeStartupClusters()
@@ -122,9 +122,13 @@ func (a *App) configureStartupErrorCapture() {
 func (a *App) checkStartupBetaExpiry() bool {
 	if err := a.checkBetaExpiry(); err != nil {
 		applog.ReportError(a.logger, err, "Beta version expired", logsources.App)
-		if a.desktop != nil {
-			a.desktop.ShowErrorDialog("Beta Version Expired", err.Error())
-			a.desktop.QuitApplication()
+		if a.wailsApplication != nil {
+			dialog := a.wailsApplication.Dialog.Error().SetTitle("Beta Version Expired").SetMessage(err.Error())
+			if window, windowErr := a.mainWindow(); windowErr == nil {
+				dialog.AttachToWindow(window)
+			}
+			dialog.Show()
+			a.wailsApplication.Quit()
 		}
 		return false
 	}
@@ -144,16 +148,17 @@ func (a *App) restoreStartupWindow() {
 	if settings, err := a.LoadWindowSettings(); err != nil {
 		a.logger.Warn(fmt.Sprintf("Failed to load window settings: %v", err), logsources.App)
 	} else if settings != nil {
-		if a.desktop == nil {
+		window, windowErr := a.mainWindow()
+		if windowErr != nil {
 			return
 		}
-		geometry, restorePosition := resolveWindowRestore(*settings, a.desktop.MainWindowWorkAreas())
-		_ = a.desktop.SetMainWindowSize(geometry.Width, geometry.Height)
+		geometry, restorePosition := resolveWindowRestore(*settings, a.mainWindowWorkAreas())
+		window.SetSize(geometry.Width, geometry.Height)
 		if restorePosition {
-			_ = a.desktop.SetMainWindowPosition(geometry.X, geometry.Y)
+			window.SetPosition(geometry.X, geometry.Y)
 		}
 		if settings.Maximized {
-			_ = a.desktop.MaximiseMainWindow()
+			window.Maximise()
 		}
 	}
 }
