@@ -1,4 +1,4 @@
-package main
+package desktop
 
 import (
 	"runtime"
@@ -10,9 +10,9 @@ import (
 )
 
 func TestDesktopAdapterResolvesOnlyTheNamedMainWindow(t *testing.T) {
-	app := sharedTestComposition().application
+	app := application.New(application.Options{})
 	const testWindowName = "adapter-test"
-	adapter := newDesktopAdapter(app, testWindowName)
+	adapter := NewAdapter(app, testWindowName)
 
 	_, err := adapter.mainWindow()
 	require.ErrorContains(t, err, `window "adapter-test" is not available`)

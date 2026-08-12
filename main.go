@@ -6,6 +6,7 @@ import (
 	"time"
 
 	"github.com/luxury-yacht/app/backend"
+	desktopruntime "github.com/luxury-yacht/app/internal/desktop"
 	"github.com/luxury-yacht/app/internal/sentry"
 	"github.com/wailsapp/wails/v3/pkg/application"
 	"github.com/wailsapp/wails/v3/pkg/events"
@@ -13,6 +14,8 @@ import (
 
 //go:embed all:frontend/dist
 var assets embed.FS
+
+const applicationProductIdentifier = "app.luxury-yacht.desktop"
 
 func reportPanic(reporter sentryreporting.Reporter) {
 	if recovered := recover(); recovered != nil {
@@ -49,7 +52,7 @@ func newSentryReporter(enabled bool, defaultDSN, version string) (sentryreportin
 type applicationComposition struct {
 	application *application.App
 	backend     *backend.App
-	desktop     *desktopAdapter
+	desktop     *desktopruntime.Adapter
 	window      *application.WebviewWindow
 	menu        *application.Menu
 }
@@ -60,7 +63,7 @@ type compositionOptions struct {
 
 func mainWindowOptions(nativeMenu *application.Menu) application.WebviewWindowOptions {
 	return application.WebviewWindowOptions{
-		Name:             mainWindowName,
+		Name:             desktopruntime.MainWindowName,
 		Title:            "Luxury Yacht",
 		Width:            1200,
 		Height:           800,
@@ -91,7 +94,7 @@ func mainWindowOptions(nativeMenu *application.Menu) application.WebviewWindowOp
 
 func newApplicationComposition(reporter sentryreporting.Reporter, options compositionOptions) *applicationComposition {
 	var backendApp *backend.App
-	secondLaunch := newSecondLaunchCoordinator(application.InvokeAsync)
+	var mainWindow *application.WebviewWindow
 	applicationOptions := application.Options{
 		Name:        "Luxury Yacht",
 		Description: "Sail the seas of Kubernetes in style",
@@ -107,28 +110,37 @@ func newApplicationComposition(reporter sentryreporting.Reporter, options compos
 		ErrorHandler: func(err error) {
 			reportRunError(reporter, err)
 		},
-		OnShutdown: secondLaunch.Stop,
 	}
 	if options.SingleInstance {
-		applicationOptions.SingleInstance = newSingleInstanceOptions(secondLaunch)
+		applicationOptions.SingleInstance = &application.SingleInstanceOptions{
+			UniqueID: applicationProductIdentifier,
+			ExitCode: 0,
+			OnSecondInstanceLaunch: func(application.SecondInstanceData) {
+				if mainWindow == nil {
+					return
+				}
+				mainWindow.Show()
+				if mainWindow.IsMinimised() {
+					mainWindow.Restore()
+				}
+				mainWindow.Focus()
+			},
+		}
 	}
 	wailsApp := application.New(applicationOptions)
 
-	desktop := newDesktopAdapter(wailsApp, mainWindowName)
+	desktop := desktopruntime.NewAdapter(wailsApp, desktopruntime.MainWindowName)
 	backendApp = backend.NewApp(desktop, reporter)
 	wailsApp.RegisterService(application.NewService(backendApp))
 
-	nativeMenu := desktop.initialiseMenu(func() *backend.MenuModel {
+	nativeMenu := desktop.InitialiseMenu(func() *backend.MenuModel {
 		return backend.CreateMenu(backendApp)
 	})
 
-	mainWindow := wailsApp.Window.NewWithOptions(mainWindowOptions(nativeMenu))
+	mainWindow = wailsApp.Window.NewWithOptions(mainWindowOptions(nativeMenu))
 
 	mainWindow.OnWindowEvent(events.Common.WindowRuntimeReady, func(*application.WindowEvent) {
 		backendApp.WindowRuntimeReady()
-		secondLaunch.Bind(func() {
-			_ = desktop.BringMainWindowToFront()
-		})
 	})
 	mainWindow.RegisterHook(events.Common.WindowClosing, func(event *application.WindowEvent) {
 		if !backendApp.PrepareQuit() {

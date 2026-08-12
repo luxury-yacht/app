@@ -10,8 +10,9 @@ Last updated: 2026-08-11
 The branch now has the core Wails v3 cutover in place: beta.7 application and
 service composition, the paired beta.5 frontend runtime, generated v3 bindings,
 desktop adapters, one named main window, persistent native menus, screen-aware
-geometry restoration, single-instance focus handling, GTK4/WebKitGTK 6.0-only
-Linux support, and Taskfile-based v3 builds. **New Window** is absent. The
+geometry restoration, framework-provided single-instance handling,
+GTK4/WebKitGTK 6.0-only Linux support, and Taskfile-based v3 builds. **New
+Window** is absent. The
 repository prerelease gate regenerates interface bindings in isolation and
 rejects drift. The Wails Taskfile owns development, builds, packaging, quality
 checks, tests, cleanup, Storybook, and release publication; Mage has been
@@ -411,9 +412,9 @@ persistence, and the existing backend-owned loopback refresh transport.
 ### Phase 2: Application, window, menus, and native capabilities
 
 Execution status: implemented for the core single-window contract. Focused
-composition, adapter, readiness, menu, geometry, and single-instance tests are
-in place; macOS rendered validation is complete. Platform-native interaction
-and workaround checks remain in Phase 6.
+composition, adapter, readiness, menu, geometry, and framework-configuration
+tests are in place; macOS rendered validation is complete. Platform-native
+interaction and workaround checks remain in Phase 6.
 
 - [ ] Red: add composition tests around an application factory so service,
       window, hooks, assets, and platform option mapping can be inspected without
@@ -427,11 +428,12 @@ and workaround checks remain in Phase 6.
       Recommended while **New Window** is absent: configure the product identifier
       as the unique ID and make a second launch restore/focus the named main
       window rather than start another application lifecycle.
-- [ ] Red if single-instance is enabled: prove second launch before readiness is
-      queued safely, after readiness restores/focuses the main window, shutdown
-      does not resurrect it, and arguments/working directory/additional data are
-      ignored or validated as untrusted input. Do not embed a reusable secret in
-      source solely to enable optional instance-message encryption.
+- [ ] If single-instance is enabled, use Wails `SingleInstanceOptions` directly.
+      In its callback, use the named window's documented show/restore/focus
+      methods and ignore the arguments, working directory, and additional data
+      as untrusted input. Do not add an application-owned launch coordinator or
+      embed a reusable secret solely to enable optional instance-message
+      encryption.
 - [ ] Map title, initial/min/max size, background color/type, hidden state,
       macOS title-bar/transparency behavior, Windows theme/zoom behavior, and
       embedded assets field by field. Record any v2 option without a v3
@@ -820,9 +822,11 @@ into unrelated backend test work.
 7. **Tray lifecycle — planned follow-up.** Do not add a tray or close-to-tray
    behavior in the migration. Define platform availability and last-window
    semantics before promotion.
-8. **Process multiplicity — resolved.** Production is single-instance. A second
-   launch may only restore/show/focus the named main window; its arguments,
-   working directory, and additional data are ignored as untrusted input.
+8. **Process multiplicity — resolved.** Production uses Wails' built-in
+   single-instance support directly. A second launch may only
+   restore/show/focus the named main window; its arguments, working directory,
+   and additional data are ignored as untrusted input. No application-owned
+   second-launch queue is maintained.
 
 ## Documentation to update during implementation
 

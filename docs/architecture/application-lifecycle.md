@@ -39,16 +39,16 @@ launch may only request that the named main window be shown, restored if
 minimized, and focused. Treat its arguments, working directory, and additional
 data as untrusted and ignore them.
 
-Requests received before window runtime readiness are coalesced and delivered
-after readiness. Shutdown disables and discards queued focus requests so a late
-launch cannot resurrect the window.
+Wails owns the instance lock, inter-process notification, second-process exit,
+and callback delivery. The callback uses Wails window methods directly and does
+not maintain an application-owned launch queue.
 
 ## Shutdown
 
 The window-closing hook and application `ShouldQuit` call `PrepareQuit` while
 the main window is still queryable. Persist window geometry there. Wails then
 cancels the application context and calls `ServiceShutdown` for backend
-teardown. Process shutdown also disables second-launch focus handling.
+teardown.
 
 The refresh HTTP/SSE/WebSocket surface remains on the backend-owned loopback
 server. Do not move it onto Wails' asset handler without revalidating streaming,
@@ -56,8 +56,8 @@ upgrade, cancellation, CORS, and Windows behavior.
 
 ## Starting points
 
-- Composition and process hooks: `main.go`, `single_instance.go`
-- Native adapter and named-window resolution: `desktop_adapter.go`
+- Composition and process hooks: `main.go`
+- Native adapter and named-window resolution: `internal/desktop/adapter.go`
 - Backend lifecycle: `backend/app_lifecycle.go`, `backend/app_runtime.go`
 - Geometry validation: `backend/window_restore.go`
 - Build identity: `build/config.yml`

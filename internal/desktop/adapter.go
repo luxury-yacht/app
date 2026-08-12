@@ -1,4 +1,4 @@
-package main
+package desktop
 
 import (
 	"fmt"
@@ -8,20 +8,20 @@ import (
 	"github.com/wailsapp/wails/v3/pkg/application"
 )
 
-const mainWindowName = "main"
+const MainWindowName = "main"
 
-type desktopAdapter struct {
+type Adapter struct {
 	app         *application.App
 	windowName  string
 	menu        *application.Menu
 	menuFactory func() *backend.MenuModel
 }
 
-func newDesktopAdapter(app *application.App, windowName string) *desktopAdapter {
-	return &desktopAdapter{app: app, windowName: windowName}
+func NewAdapter(app *application.App, windowName string) *Adapter {
+	return &Adapter{app: app, windowName: windowName}
 }
 
-func (d *desktopAdapter) mainWindow() (application.Window, error) {
+func (d *Adapter) mainWindow() (application.Window, error) {
 	if d == nil || d.app == nil {
 		return nil, fmt.Errorf("desktop application is not available")
 	}
@@ -32,11 +32,11 @@ func (d *desktopAdapter) mainWindow() (application.Window, error) {
 	return window, nil
 }
 
-func (d *desktopAdapter) EmitEvent(name string, data ...any) bool {
+func (d *Adapter) EmitEvent(name string, data ...any) bool {
 	return d.app.Event.Emit(name, data...)
 }
 
-func (d *desktopAdapter) ShowErrorDialog(title, message string) {
+func (d *Adapter) ShowErrorDialog(title, message string) {
 	dialog := d.app.Dialog.Error().SetTitle(title).SetMessage(message)
 	if window, err := d.mainWindow(); err == nil {
 		dialog.AttachToWindow(window)
@@ -55,7 +55,7 @@ func applicationFileFilters(filters []backend.FileFilter) []application.FileFilt
 	return result
 }
 
-func (d *desktopAdapter) OpenFile(options backend.OpenFileDialogOptions) (string, error) {
+func (d *Adapter) OpenFile(options backend.OpenFileDialogOptions) (string, error) {
 	window, err := d.mainWindow()
 	if err != nil {
 		return "", err
@@ -69,7 +69,7 @@ func (d *desktopAdapter) OpenFile(options backend.OpenFileDialogOptions) (string
 	}).PromptForSingleSelection()
 }
 
-func (d *desktopAdapter) SaveFile(options backend.SaveFileDialogOptions) (string, error) {
+func (d *Adapter) SaveFile(options backend.SaveFileDialogOptions) (string, error) {
 	window, err := d.mainWindow()
 	if err != nil {
 		return "", err
@@ -84,7 +84,7 @@ func (d *desktopAdapter) SaveFile(options backend.SaveFileDialogOptions) (string
 	}).PromptForSingleSelection()
 }
 
-func (d *desktopAdapter) OpenDirectory(options backend.OpenFileDialogOptions) (string, error) {
+func (d *Adapter) OpenDirectory(options backend.OpenFileDialogOptions) (string, error) {
 	window, err := d.mainWindow()
 	if err != nil {
 		return "", err
@@ -99,7 +99,7 @@ func (d *desktopAdapter) OpenDirectory(options backend.OpenFileDialogOptions) (s
 	}).PromptForSingleSelection()
 }
 
-func (d *desktopAdapter) ClipboardText() (string, error) {
+func (d *Adapter) ClipboardText() (string, error) {
 	text, ok := d.app.Clipboard.Text()
 	if !ok {
 		return "", fmt.Errorf("clipboard text is not available")
@@ -107,7 +107,7 @@ func (d *desktopAdapter) ClipboardText() (string, error) {
 	return text, nil
 }
 
-func (d *desktopAdapter) initialiseMenu(factory func() *backend.MenuModel) *application.Menu {
+func (d *Adapter) InitialiseMenu(factory func() *backend.MenuModel) *application.Menu {
 	d.menuFactory = factory
 	d.menu = application.NewMenu()
 	materialiseMenu(d.menu, factory())
@@ -115,7 +115,7 @@ func (d *desktopAdapter) initialiseMenu(factory func() *backend.MenuModel) *appl
 	return d.menu
 }
 
-func (d *desktopAdapter) RefreshMenu() error {
+func (d *Adapter) RefreshMenu() error {
 	if d.menu == nil || d.menuFactory == nil {
 		return fmt.Errorf("application menu is not initialised")
 	}
@@ -164,10 +164,10 @@ func materialiseMenu(target *application.Menu, model *backend.MenuModel) {
 	}
 }
 
-func (d *desktopAdapter) HideApplication() { d.app.Hide() }
-func (d *desktopAdapter) QuitApplication() { d.app.Quit() }
+func (d *Adapter) HideApplication() { d.app.Hide() }
+func (d *Adapter) QuitApplication() { d.app.Quit() }
 
-func (d *desktopAdapter) ShowMainWindow() error {
+func (d *Adapter) ShowMainWindow() error {
 	window, err := d.mainWindow()
 	if err != nil {
 		return err
@@ -176,7 +176,7 @@ func (d *desktopAdapter) ShowMainWindow() error {
 	return nil
 }
 
-func (d *desktopAdapter) SetMainWindowSize(width, height int) error {
+func (d *Adapter) SetMainWindowSize(width, height int) error {
 	window, err := d.mainWindow()
 	if err != nil {
 		return err
@@ -185,7 +185,7 @@ func (d *desktopAdapter) SetMainWindowSize(width, height int) error {
 	return nil
 }
 
-func (d *desktopAdapter) SetMainWindowPosition(x, y int) error {
+func (d *Adapter) SetMainWindowPosition(x, y int) error {
 	window, err := d.mainWindow()
 	if err != nil {
 		return err
@@ -194,7 +194,7 @@ func (d *desktopAdapter) SetMainWindowPosition(x, y int) error {
 	return nil
 }
 
-func (d *desktopAdapter) MinimiseMainWindow() error {
+func (d *Adapter) MinimiseMainWindow() error {
 	window, err := d.mainWindow()
 	if err != nil {
 		return err
@@ -203,7 +203,7 @@ func (d *desktopAdapter) MinimiseMainWindow() error {
 	return nil
 }
 
-func (d *desktopAdapter) MaximiseMainWindow() error {
+func (d *Adapter) MaximiseMainWindow() error {
 	window, err := d.mainWindow()
 	if err != nil {
 		return err
@@ -212,7 +212,7 @@ func (d *desktopAdapter) MaximiseMainWindow() error {
 	return nil
 }
 
-func (d *desktopAdapter) RestoreMainWindow() error {
+func (d *Adapter) RestoreMainWindow() error {
 	window, err := d.mainWindow()
 	if err != nil {
 		return err
@@ -221,7 +221,7 @@ func (d *desktopAdapter) RestoreMainWindow() error {
 	return nil
 }
 
-func (d *desktopAdapter) ToggleMainWindowMaximise() error {
+func (d *Adapter) ToggleMainWindowMaximise() error {
 	window, err := d.mainWindow()
 	if err != nil {
 		return err
@@ -230,7 +230,7 @@ func (d *desktopAdapter) ToggleMainWindowMaximise() error {
 	return nil
 }
 
-func (d *desktopAdapter) BringMainWindowToFront() error {
+func (d *Adapter) BringMainWindowToFront() error {
 	window, err := d.mainWindow()
 	if err != nil {
 		return err
@@ -239,13 +239,11 @@ func (d *desktopAdapter) BringMainWindowToFront() error {
 	if window.IsMinimised() {
 		window.Restore()
 	}
-	window.SetAlwaysOnTop(true)
-	window.SetAlwaysOnTop(false)
 	window.Focus()
 	return nil
 }
 
-func (d *desktopAdapter) MainWindowGeometry() (backend.WindowGeometry, error) {
+func (d *Adapter) MainWindowGeometry() (backend.WindowGeometry, error) {
 	window, err := d.mainWindow()
 	if err != nil {
 		return backend.WindowGeometry{}, err
@@ -261,7 +259,7 @@ func (d *desktopAdapter) MainWindowGeometry() (backend.WindowGeometry, error) {
 	}, nil
 }
 
-func (d *desktopAdapter) MainWindowWorkAreas() []backend.WindowWorkArea {
+func (d *Adapter) MainWindowWorkAreas() []backend.WindowWorkArea {
 	if d == nil || d.app == nil || d.app.Screen == nil {
 		return nil
 	}
