@@ -33,9 +33,12 @@ jobs:
           echo "Run a build to ensure frontend/dist is generated"
           wails3 build
           echo "Run backend tests"
-          mage qc:vet test:backend
+          wails3 task qc:vet
+          wails3 task test:backend
           echo "Run frontend tests"
-          mage qc:lint qc:typecheck test:frontend
+          wails3 task qc:lint
+          wails3 task qc:typecheck
+          wails3 task test:frontend
 
   build:
     needs: test
@@ -172,7 +175,6 @@ jobs:
         uses: ./.github/actions/setup-toolchain
         with:
           setup-node: "false"
-          install-wails: "false"
 
       - name: Download all artifacts
         uses: actions/download-artifact@v8
@@ -182,7 +184,7 @@ jobs:
       - name: Publish GitHub release
         run: |
           export GITHUB_RUN_NUMBER="${{ github.run_number }}"
-          mage release:app
+          wails3 task release:app
 
   update-site:
     if: ${{ github.event.inputs.release == 'true' || github.event_name == 'push' }}
@@ -196,9 +198,8 @@ jobs:
         uses: ./.github/actions/setup-toolchain
         with:
           setup-node: "false"
-          install-wails: "false"
 
       - name: Update version on website
         env:
           GH_TOKEN: ${{ secrets.RELEASES_REPO_TOKEN }}
-        run: mage release:site
+        run: wails3 task release:site

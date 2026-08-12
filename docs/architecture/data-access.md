@@ -104,4 +104,4 @@ When adding a read:
 
 Run targeted frontend tests for the broker or consumer and `npm run typecheck
 --prefix frontend` for TypeScript changes. For non-documentation work, finish
-with `mage qc:prerelease`.
+with `wails3 task qc:prerelease`.

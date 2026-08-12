@@ -133,4 +133,4 @@ When changing auth behavior:
 ## Validation
 
 Run targeted auth, cluster lifecycle, and refresh recovery tests. For
-non-documentation work, finish with `mage qc:prerelease`.
+non-documentation work, finish with `wails3 task qc:prerelease`.

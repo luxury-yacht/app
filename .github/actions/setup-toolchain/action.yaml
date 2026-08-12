@@ -9,10 +9,6 @@ inputs:
     description: Whether to install Wails.
     required: false
     default: 'true'
-  install-mage:
-    description: Whether to install Mage.
-    required: false
-    default: 'true'
   install-linux-deps:
     description: Whether to install Linux build dependencies.
     required: false
@@ -28,7 +24,6 @@ runs:
           go:honnef.co/go/tools/cmd/staticcheck
           ${{ inputs.setup-node == 'true' && 'node npm' || '' }}
           ${{ inputs.install-wails == 'true' && 'go:github.com/wailsapp/wails/v3/cmd/wails3' || '' }}
-          ${{ inputs.install-mage == 'true' && 'go:github.com/magefile/mage' || '' }}
 
     - name: Install Linux build dependencies
       if: ${{ inputs.install-linux-deps == 'true' && runner.os == 'Linux' }}

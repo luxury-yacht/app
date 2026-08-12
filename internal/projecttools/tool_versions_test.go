@@ -1,4 +1,4 @@
-package mage
+package projecttools
 
 import (
 	"encoding/json"
@@ -14,7 +14,6 @@ func TestReadToolVersionsRequiresEveryCanonicalVersion(t *testing.T) {
 go = "1.26.0"
 node = "26.5.0"
 npm = "12.0.1"
-"go:github.com/magefile/mage" = "1.17.2"
 "go:github.com/wailsapp/wails/v3/cmd/wails3" = "3.0.0-beta.7"
 "go:honnef.co/go/tools/cmd/staticcheck" = "0.7.0"
 trivy = "0.72.0"
@@ -35,7 +34,6 @@ nsis_version = "3.10"
 		Go:          "1.26.0",
 		Node:        "26.5.0",
 		NPM:         "12.0.1",
-		Mage:        "1.17.2",
 		Wails:       "3.0.0-beta.7",
 		Staticcheck: "0.7.0",
 		Trivy:       "0.72.0",
@@ -52,7 +50,6 @@ func TestReadToolVersionsRejectsMissingCanonicalVersion(t *testing.T) {
 go = "1.26.0"
 node = "26.5.0"
 npm = "12.0.1"
-"go:github.com/magefile/mage" = "1.17.2"
 "go:github.com/wailsapp/wails/v3/cmd/wails3" = "3.0.0-beta.7"
 "go:honnef.co/go/tools/cmd/staticcheck" = "0.7.0"
 trivy = "0.72.0"
@@ -71,7 +68,7 @@ trivy = "0.72.0"
 }
 
 func TestCanonicalToolVersionsMatchCompatibilityMetadata(t *testing.T) {
-	repoRoot := ".."
+	repoRoot := filepath.Join("..", "..")
 	versions, err := readToolVersions(filepath.Join(repoRoot, "mise.toml"))
 	if err != nil {
 		t.Fatalf("read canonical tool versions: %v", err)
@@ -79,7 +76,6 @@ func TestCanonicalToolVersionsMatchCompatibilityMetadata(t *testing.T) {
 
 	goMod := readTestFile(t, filepath.Join(repoRoot, "go.mod"))
 	assertContains(t, goMod, "\ngo "+versions.Go+"\n", "Go directive")
-	assertContains(t, goMod, "\tgithub.com/magefile/mage v"+versions.Mage+"\n", "Mage module")
 	assertContains(t, goMod, "\tgithub.com/wailsapp/wails/v3 v"+versions.Wails+"\n", "Wails module")
 
 	var frontendConfig struct {
@@ -100,64 +96,6 @@ func TestCanonicalToolVersionsMatchCompatibilityMetadata(t *testing.T) {
 		t.Errorf("frontend npm engine = %q, want %q from mise.toml", frontendConfig.Engines["npm"], want)
 	}
 
-}
-
-func TestCheckNodeVersionReadsCanonicalMiseConfig(t *testing.T) {
-	t.Chdir(t.TempDir())
-	if err := os.WriteFile("mise.toml", []byte("not valid toml"), 0o600); err != nil {
-		t.Fatalf("write mise config: %v", err)
-	}
-
-	err := CheckNodeVersion()
-	if err == nil {
-		t.Fatal("CheckNodeVersion returned no error for invalid mise.toml")
-	}
-	if !strings.Contains(err.Error(), "mise.toml") {
-		t.Fatalf("CheckNodeVersion error = %q, want canonical mise.toml source", err)
-	}
-}
-
-func TestCheckNodeVersionRequiresCanonicalNodeOnPath(t *testing.T) {
-	t.Chdir(t.TempDir())
-	t.Setenv("PATH", t.TempDir())
-	nvmDir := t.TempDir()
-	t.Setenv("NVM_DIR", nvmDir)
-
-	config := `[tools]
-go = "1.26.0"
-node = "26.5.0"
-npm = "12.0.1"
-"go:github.com/magefile/mage" = "1.17.2"
-"go:github.com/wailsapp/wails/v3/cmd/wails3" = "3.0.0-beta.7"
-"go:honnef.co/go/tools/cmd/staticcheck" = "0.7.0"
-trivy = "0.72.0"
-
-[vars]
-nsis_version = "3.10"
-`
-	if err := os.WriteFile("mise.toml", []byte(config), 0o600); err != nil {
-		t.Fatalf("write mise config: %v", err)
-	}
-
-	// An NVM installation must not silently replace the inactive Mise toolchain.
-	nvmNodeDir := filepath.Join(nvmDir, "versions", "node", "v26.5.0", "bin")
-	if err := os.MkdirAll(nvmNodeDir, 0o700); err != nil {
-		t.Fatalf("create legacy NVM Node directory: %v", err)
-	}
-	if err := os.WriteFile(filepath.Join(nvmNodeDir, "node"), nil, 0o700); err != nil {
-		t.Fatalf("write legacy NVM Node executable: %v", err)
-	}
-
-	err := CheckNodeVersion()
-	if err == nil {
-		t.Fatal("CheckNodeVersion returned no error without the canonical Node version on PATH")
-	}
-	if !strings.Contains(err.Error(), "node v26.5.0 is not active") {
-		t.Fatalf("CheckNodeVersion error = %q, want inactive canonical Node version", err)
-	}
-	if !strings.Contains(err.Error(), "mise exec --") {
-		t.Fatalf("CheckNodeVersion error = %q, want Mise activation guidance", err)
-	}
 }
 
 func readTestFile(t *testing.T, path string) string {

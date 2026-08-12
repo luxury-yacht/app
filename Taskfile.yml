@@ -15,46 +15,200 @@ vars:
 
 tasks:
   build:
-    summary: Builds the application
+    desc: Builds the application
     cmds:
       - task: '{{.GOOS}}:build'
 
   package:
-    summary: Packages a production build of the application
+    desc: Packages a production build of the application
     cmds:
       - task: '{{.GOOS}}:package'
 
   run:
-    summary: Runs the application
+    desc: Runs the application
     cmds:
       - task: '{{.GOOS}}:run'
 
   dev:
-    summary: Runs the application in development mode
+    desc: Runs the application in development mode
     cmds:
       - wails3 dev -config ./build/config.yml -port {{.VITE_PORT}}
 
   setup:docker:
-    summary: Builds Docker image for cross-compilation (~800MB download)
+    desc: Builds Docker image for cross-compilation (~800MB download)
     cmds:
       - task: common:setup:docker
 
   build:server:
-    summary: Builds the application in server mode (no GUI, HTTP server only)
+    desc: Builds the application in server mode (no GUI, HTTP server only)
     cmds:
       - task: common:build:server
 
   run:server:
-    summary: Runs the application in server mode
+    desc: Runs the application in server mode
     cmds:
       - task: common:run:server
 
   build:docker:
-    summary: Builds a Docker image for server mode deployment
+    desc: Builds a Docker image for server mode deployment
     cmds:
       - task: common:build:docker
 
   run:docker:
-    summary: Builds and runs the Docker image
+    desc: Builds and runs the Docker image
     cmds:
       - task: common:run:docker
+
+  clean:all:
+    desc: Cleans repository build output, frontend output, and frontend dependencies
+    cmds:
+      - go run ./cmd/project clean-all
+
+  clean:build:
+    desc: Cleans generated build and packaging output
+    cmds:
+      - go run ./cmd/project clean-build
+
+  clean:frontend:
+    desc: Cleans frontend build output, coverage, and dependencies
+    cmds:
+      - go run ./cmd/project clean-frontend
+
+  config:
+    desc: Displays project build configuration
+    cmds:
+      - go run ./cmd/project config
+
+  storybook:
+    desc: Runs Storybook for frontend component development
+    cmds:
+      - npm --prefix frontend run storybook
+
+  qc:bindings:
+    desc: Checks that committed TypeScript bindings match the pinned Wails v3 generator
+    cmds:
+      - go run ./cmd/project bindings
+
+  qc:fmt:
+    desc: Checks that all Go files are gofmt-formatted
+    cmds:
+      - go run ./cmd/project fmt
+
+  qc:vet:
+    desc: Runs go vet and staticcheck
+    cmds:
+      - go vet ./...
+      - staticcheck ./...
+
+  qc:lint:
+    desc: Runs the frontend linter
+    cmds:
+      - npm --prefix frontend run check
+
+  qc:lint-fix:
+    desc: Runs the frontend linter and applies fixes
+    cmds:
+      - npm --prefix frontend run check:fix
+
+  qc:typecheck:
+    desc: Runs the frontend typechecker
+    cmds:
+      - npm --prefix frontend run typecheck
+
+  qc:go-mod-update-check:
+    desc: Checks for Go module updates
+    cmds:
+      - go run ./cmd/project go-mod-update-check
+
+  qc:go-mod-update:
+    desc: Updates direct Go module dependencies
+    cmds:
+      - go run ./cmd/project go-mod-update
+
+  qc:npm-update-check:
+    desc: Checks for frontend package updates
+    dir: frontend
+    cmds:
+      - npx npm-check-updates
+
+  qc:npm-update:
+    desc: Updates frontend package requirements
+    dir: frontend
+    cmds:
+      - npx npm-check-updates -u
+
+  qc:benchmark:
+    desc: Runs shared resource model performance benchmarks
+    cmds:
+      - go test ./backend/resourcemodel ./backend/refresh/snapshot -run '^$' -bench 'Benchmark(ResourceRelationship|SharedModel)' -benchtime=20x
+
+  qc:knip:
+    desc: Finds unused frontend files, dependencies, and exports
+    dir: frontend
+    cmds:
+      - npx knip
+
+  qc:trivy:
+    desc: Scans project dependencies for critical and high vulnerabilities
+    cmds:
+      - trivy fs --exit-code 1 --severity CRITICAL,HIGH .
+
+  qc:reset:
+    desc: Resets application settings and cached data
+    cmds:
+      - go run ./cmd/project reset
+
+  qc:prerelease:
+    desc: Runs all checks that can cause a release to fail
+    cmds:
+      - task: qc:fmt
+      - task: qc:bindings
+      - task: qc:vet
+      - task: test:race
+      - task: qc:lint-fix
+      - task: qc:lint
+      - task: qc:typecheck
+      - task: test:frontend
+      - task: qc:knip
+      - task: qc:trivy
+
+  test:all:
+    desc: Runs backend and frontend tests
+    cmds:
+      - task: test:backend
+      - task: test:frontend
+
+  test:backend:
+    desc: Runs backend tests
+    cmds:
+      - go test ./...
+
+  test:backend-coverage:
+    desc: Runs backend tests with coverage
+    cmds:
+      - go run ./cmd/project backend-coverage
+
+  test:race:
+    desc: Runs Go tests with the race detector
+    cmds:
+      - go test ./... -race
+
+  test:frontend:
+    desc: Runs frontend tests
+    cmds:
+      - npm --prefix frontend run test
+
+  test:frontend-coverage:
+    desc: Runs frontend tests with coverage
+    cmds:
+      - npm --prefix frontend run test -- --coverage
+
+  release:app:
+    desc: Publishes a GitHub release using downloaded artifacts
+    cmds:
+      - go run ./cmd/project release-app
+
+  release:site:
+    desc: Updates the version displayed on the website
+    cmds:
+      - go run ./cmd/project release-site

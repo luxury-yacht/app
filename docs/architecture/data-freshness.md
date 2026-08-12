@@ -230,4 +230,4 @@ For a freshness change, test the contract at the producer/consumer seam:
     and under sustained memory pressure re-drives until either a settled mmap
     transition or the bounded full-teardown fallback completes.
 
-Finish non-documentation changes with `mage qc:prerelease`.
+Finish non-documentation changes with `wails3 task qc:prerelease`.

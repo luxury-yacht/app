@@ -1,13 +1,10 @@
-package mage
+package projecttools
 
 import (
-	"encoding/json"
 	"fmt"
 	"os"
 	"os/exec"
-	"runtime"
 	"strings"
-	"time"
 
 	"gopkg.in/yaml.v3"
 )
@@ -25,27 +22,32 @@ func ToolCommand(name string, args ...string) (*exec.Cmd, error) {
 	return exec.Command(resolved, args...), nil
 }
 
-// CheckNodeVersion reads mise.toml and ensures the canonical Node version is active.
-func CheckNodeVersion() error {
-	versions, err := readToolVersions("mise.toml")
+// RunCommand executes a project tool with terminal streams attached.
+func RunCommand(name string, args ...string) error {
+	cmd, err := ToolCommand(name, args...)
 	if err != nil {
 		return err
 	}
-	expected := versions.Node
-
-	nodeCmd, err := ToolCommand("node", "--version")
-	if err != nil {
-		return fmt.Errorf("node v%s is not active: %v; activate Mise in your shell or prefix the command with 'mise exec --'", expected, err)
-	}
-	out, err := nodeCmd.Output()
-	if err != nil {
-		return fmt.Errorf("check active Node version: %w; activate Mise in your shell or prefix the command with 'mise exec --'", err)
-	}
-	actual := strings.TrimPrefix(strings.TrimSpace(string(out)), "v")
-	if actual != expected {
-		return fmt.Errorf("node v%s is active, but mise.toml requires v%s; activate Mise in your shell or prefix the command with 'mise exec --'", actual, expected)
+	cmd.Stdin = os.Stdin
+	cmd.Stdout = os.Stdout
+	cmd.Stderr = os.Stderr
+	if err := cmd.Run(); err != nil {
+		return fmt.Errorf("run %s: %w", name, err)
 	}
 	return nil
+}
+
+// CommandOutput executes a project tool and returns trimmed standard output.
+func CommandOutput(name string, args ...string) (string, error) {
+	cmd, err := ToolCommand(name, args...)
+	if err != nil {
+		return "", err
+	}
+	output, err := cmd.Output()
+	if err != nil {
+		return "", fmt.Errorf("run %s: %w", name, err)
+	}
+	return strings.TrimSpace(string(output)), nil
 }
 
 type projectMetadata struct {
@@ -106,33 +108,4 @@ func gitRevParse() string {
 		return ""
 	}
 	return strings.TrimSpace(string(out))
-}
-
-// Credit to https://github.com/sfate
-// https://gist.github.com/sfate/9d45f6c5405dc4c9bf63bf95fe6d1a7c
-func PrettyPrint(args ...interface{}) {
-	var caller string
-
-	timeNow := time.Now().Format("01-02-2006 15:04:05")
-	prefix := fmt.Sprintf("[%s] %s -- ", "PrettyPrint", timeNow)
-	_, fileName, fileLine, ok := runtime.Caller(1)
-
-	if ok {
-		caller = fmt.Sprintf("%s:%d", fileName, fileLine)
-	} else {
-		caller = ""
-	}
-
-	fmt.Printf("\n%s%s\n", prefix, caller)
-
-	if len(args) == 2 {
-		label := args[0]
-		value := args[1]
-
-		s, _ := json.MarshalIndent(value, "", "\t")
-		fmt.Printf("%s%s: %s\n", prefix, label, string(s))
-	} else {
-		s, _ := json.MarshalIndent(args, "", "\t")
-		fmt.Printf("%s%s\n", prefix, string(s))
-	}
 }

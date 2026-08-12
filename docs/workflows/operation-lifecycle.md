@@ -58,4 +58,4 @@ When changing runtime operations:
 ## Validation
 
 Run focused backend operation tests plus affected frontend status/workflow tests.
-For non-documentation work, finish with `mage qc:prerelease`.
+For non-documentation work, finish with `wails3 task qc:prerelease`.

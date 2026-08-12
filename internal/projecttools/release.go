@@ -1,4 +1,4 @@
-package mage
+package projecttools
 
 import (
 	"fmt"
@@ -9,8 +9,6 @@ import (
 	"sort"
 	"strings"
 	"text/template"
-
-	"github.com/magefile/mage/sh"
 )
 
 type releaseNotesData struct {
@@ -34,7 +32,7 @@ func checkGhCli() error {
 // Check if the release already exists.
 func releaseExists(repo, tag string) (bool, error) {
 	fmt.Printf("\n🔎 Checking if release %s exists in repo %s\n", tag, repo)
-	if sh.Run("gh", "release", "view", tag, "--repo", repo) != nil {
+	if RunCommand("gh", "release", "view", tag, "--repo", repo) != nil {
 		return false, nil
 	}
 	return true, nil
@@ -44,7 +42,7 @@ func releaseExists(repo, tag string) (bool, error) {
 func findReleaseAssets(cfg BuildConfig) ([]string, error) {
 	var assets []string
 
-	err := filepath.WalkDir("./artifacts", func(path string, d fs.DirEntry, walkErr error) error {
+	err := filepath.WalkDir(cfg.ArtifactsDir, func(path string, d fs.DirEntry, walkErr error) error {
 		if walkErr != nil {
 			return walkErr
 		}
@@ -90,7 +88,7 @@ func readPendingReleaseNotes(path string) (string, error) {
 
 // Create the release notes and write them to a temporary file.
 func writeReleaseNotes(cfg BuildConfig, runNumber string) (string, error) {
-	notesTemplate := filepath.Join("mage", "release", "release-notes.md")
+	notesTemplate := filepath.Join("docs", "release", "template.md")
 	tmpl, err := template.ParseFiles(notesTemplate)
 	if err != nil {
 		return "", fmt.Errorf("failed to parse release notes template: %w", err)
@@ -149,7 +147,7 @@ func createRelease(cfg BuildConfig, notesFile string, assets []string) error {
 
 	fmt.Printf("\n🎯 Creating release %s\n", cfg.Version)
 
-	if err := sh.RunV("gh", args...); err != nil {
+	if err := RunCommand("gh", args...); err != nil {
 		return fmt.Errorf("failed to create release %s: %w", cfg.Version, err)
 	}
 

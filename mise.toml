@@ -4,9 +4,6 @@
 go = "1.26.5"
 node = "26.7.0"
 npm = "12.0.2"
-# Mage remains the repository's quality-check and release-publication runner;
-# Wails owns development, builds, and platform packaging.
-"go:github.com/magefile/mage" = "1.17.2"
 "go:honnef.co/go/tools/cmd/staticcheck" = "0.7.0"
 trivy = "0.73.0"
 "go:github.com/wailsapp/wails/v3/cmd/wails3" = "3.0.0-beta.7"

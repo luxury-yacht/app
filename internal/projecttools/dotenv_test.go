@@ -1,4 +1,4 @@
-package mage
+package projecttools
 
 import (
 	"os"

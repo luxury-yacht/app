@@ -133,4 +133,4 @@ subscribers indicates this contract regressed.
 3. Trace producer, consumers, ordering, teardown, and permission recovery.
 4. Add contract parity plus behavior tests at the real snapshot/stream/consumer
    seams.
-5. Run focused backend/frontend tests and `mage qc:prerelease`.
+5. Run focused backend/frontend tests and `wails3 task qc:prerelease`.

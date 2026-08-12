@@ -64,4 +64,4 @@ npm run test --prefix frontend -- LiveAgeText columnFactories browse object-pane
 npm run typecheck --prefix frontend
 ```
 
-For non-documentation changes, finish with `mage qc:prerelease`.
+For non-documentation changes, finish with `wails3 task qc:prerelease`.

@@ -40,10 +40,9 @@ wails3 doctor
 
 This will print a list of dependencies for Wails. You must install at least the required dependencies.
 
-Wails v3 owns the development, build, run, and packaging task graph. Luxury Yacht
-keeps [Mage](https://magefile.org/) only for repository quality checks, tests,
-cleanup, Storybook, and release publication. Run `wails3 task -list` or
-`mage -l` to inspect the respective command surfaces.
+Wails v3 owns the complete project task graph, including development, builds,
+packaging, quality checks, tests, cleanup, Storybook, and release publication.
+Run `wails3 task -list` to inspect the command surface.
 
 ## Development Mode
 
@@ -62,7 +61,7 @@ Note that hot-reload of the Go backend will cause the app to restart, while chan
 Run `mise install` first so Storybook uses the canonical Node and npm versions.
 
 ```bash
-mage storybook
+wails3 task storybook
 ```
 
 This starts the Storybook dev server at [http://localhost:6006](http://localhost:6006).
@@ -106,7 +105,9 @@ mise config get tools.node
 mise config get tools.trivy
 ```
 
-The Go directive and Mage/Wails requirements in `go.mod` and the Node/npm metadata in `frontend/package.json` are compatibility mirrors. `go test ./mage` checks that they match `mise.toml`.
+The Go directive and Wails requirement in `go.mod` and the Node/npm metadata in
+`frontend/package.json` are compatibility mirrors. Tests in
+`internal/projecttools` check that they match `mise.toml`.
 
 ## Maintainer Documentation
 

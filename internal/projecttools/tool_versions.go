@@ -1,4 +1,4 @@
-package mage
+package projecttools
 
 import (
 	"fmt"
@@ -11,7 +11,6 @@ type toolVersions struct {
 	Go          string `toml:"go_version"`
 	Node        string `toml:"node_version"`
 	NPM         string `toml:"npm_version"`
-	Mage        string `toml:"mage_version"`
 	Wails       string `toml:"wails_version"`
 	Staticcheck string `toml:"staticcheck_version"`
 	Trivy       string `toml:"trivy_version"`
@@ -24,7 +23,6 @@ func readToolVersions(configPath string) (toolVersions, error) {
 			Go          string `toml:"go"`
 			Node        string `toml:"node"`
 			NPM         string `toml:"npm"`
-			Mage        string `toml:"go:github.com/magefile/mage"`
 			Wails       string `toml:"go:github.com/wailsapp/wails/v3/cmd/wails3"`
 			Staticcheck string `toml:"go:honnef.co/go/tools/cmd/staticcheck"`
 			Trivy       string `toml:"trivy"`
@@ -40,7 +38,6 @@ func readToolVersions(configPath string) (toolVersions, error) {
 		Go:          config.Tools.Go,
 		Node:        config.Tools.Node,
 		NPM:         config.Tools.NPM,
-		Mage:        config.Tools.Mage,
 		Wails:       config.Tools.Wails,
 		Staticcheck: config.Tools.Staticcheck,
 		Trivy:       config.Tools.Trivy,
@@ -54,7 +51,6 @@ func readToolVersions(configPath string) (toolVersions, error) {
 		{name: "tools.go", version: versions.Go},
 		{name: "tools.node", version: versions.Node},
 		{name: "tools.npm", version: versions.NPM},
-		{name: "tools.go:github.com/magefile/mage", version: versions.Mage},
 		{name: "tools.go:github.com/wailsapp/wails/v3/cmd/wails3", version: versions.Wails},
 		{name: "tools.go:honnef.co/go/tools/cmd/staticcheck", version: versions.Staticcheck},
 		{name: "tools.trivy", version: versions.Trivy},

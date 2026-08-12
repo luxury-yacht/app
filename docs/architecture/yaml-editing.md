@@ -89,4 +89,4 @@ backend and the object panel. The shared text editor itself is covered by
 
 - Backend: `go test ./backend -run 'ObjectYaml|YAMLFieldPolicy' ./backend/objectyaml`
 - Frontend: vitest over `frontend/src/modules/object-panel/.../Yaml/`
-- Full gate: `mage qc:prerelease`
+- Full gate: `wails3 task qc:prerelease`

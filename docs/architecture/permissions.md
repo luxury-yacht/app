@@ -110,4 +110,4 @@ When changing permissions:
 
 Run focused permission/capability tests for the changed evaluator and affected
 frontend action tests. For non-documentation work, finish with
-`mage qc:prerelease`.
+`wails3 task qc:prerelease`.

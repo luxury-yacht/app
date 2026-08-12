@@ -1,12 +1,10 @@
-package mage
+package projecttools
 
 import (
 	"encoding/json"
 	"fmt"
 	"os"
 	"path/filepath"
-
-	"github.com/magefile/mage/sh"
 )
 
 const (
@@ -36,7 +34,7 @@ func PublishSiteVersion(cfg BuildConfig) error {
 	}
 
 	// Check if there are any changes to commit.
-	status, err := sh.Output("git", "-C", tmpDir, "status", "--porcelain")
+	status, err := CommandOutput("git", "-C", tmpDir, "status", "--porcelain")
 	if err != nil {
 		return fmt.Errorf("failed to check site repo status: %w", err)
 	}
@@ -53,15 +51,15 @@ func PublishSiteVersion(cfg BuildConfig) error {
 	}
 
 	// Stage and commit the changes.
-	if err := sh.Run("git", "-C", tmpDir, "add", siteDataFile); err != nil {
+	if err := RunCommand("git", "-C", tmpDir, "add", siteDataFile); err != nil {
 		return fmt.Errorf("failed to stage site version update: %w", err)
 	}
-	if err := sh.Run("git", "-C", tmpDir, "commit", "-m", fmt.Sprintf("Update version to %s", cfg.Version)); err != nil {
+	if err := RunCommand("git", "-C", tmpDir, "commit", "-m", fmt.Sprintf("Update version to %s", cfg.Version)); err != nil {
 		return fmt.Errorf("failed to commit site version update: %w", err)
 	}
 
 	// Push the changes.
-	if err := sh.Run("git", "-C", tmpDir, "push", "origin", siteBranch); err != nil {
+	if err := RunCommand("git", "-C", tmpDir, "push", "origin", siteBranch); err != nil {
 		return fmt.Errorf("failed to push site repo updates: %w", err)
 	}
 
@@ -77,7 +75,7 @@ func cloneSiteRepo() (string, error) {
 	}
 
 	cloneURL := buildCloneURL(siteRepo)
-	if err := sh.Run("git", "clone", "--depth", "1", "--branch", siteBranch, cloneURL, tmpDir); err != nil {
+	if err := RunCommand("git", "clone", "--depth", "1", "--branch", siteBranch, cloneURL, tmpDir); err != nil {
 		os.RemoveAll(tmpDir)
 		return "", fmt.Errorf("failed to clone site repo: %w", err)
 	}

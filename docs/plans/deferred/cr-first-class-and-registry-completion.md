@@ -59,7 +59,7 @@ and make the generic custom-resource experience first-class.
   capabilities, and map membership are all per-cluster facts. Every new
   contract payload carries `clusterId`; nothing may cache column/capability
   metadata keyed on kind alone.
-- **Red/green TDD** per behavior change; `mage qc:prerelease` green before any
+- **Red/green TDD** per behavior change; `wails3 task qc:prerelease` green before any
   phase is reported complete.
 - Per-version columns: a CRD declares printer columns per served version; use
   the version the informer actually watches. Fall back to the generic five

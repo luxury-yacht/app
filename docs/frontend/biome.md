@@ -206,5 +206,5 @@ npm run check --prefix frontend
 For non-documentation work, finish with:
 
 ```sh
-mage qc:prerelease
+wails3 task qc:prerelease
 ```

@@ -201,7 +201,7 @@ reviews, not object-state queries).
 - Per-domain `…MaintainedMatchesListPath` byte-identity gates (store serve == list+project).
 - `querypage` fuzz/property test (`apply(deltas) == recompute`) + the catalog brute-force
   oracle.
-- `mage qc:prerelease` (backend `-race`, vitest, knip, trivy) is the release gate.
+- `wails3 task qc:prerelease` (backend `-race`, vitest, knip, trivy) is the release gate.
 
 ## Deliberately not built (do not re-attempt as TODOs)
 

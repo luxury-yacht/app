@@ -1,11 +1,9 @@
-package mage
+package projecttools
 
 import (
 	"fmt"
 	"os"
 	"strings"
-
-	"github.com/magefile/mage/sh"
 )
 
 const (
@@ -28,20 +26,22 @@ func buildCloneURL(repo string) string {
 // ensureGitUserConfig makes sure git user.name and user.email are set in the given repo.
 func ensureGitUserConfig(repoDir string) error {
 	// Check if user.name is set.
-	userName, err := sh.Output("git", "-C", repoDir, "config", "user.name")
+	userName, err := CommandOutput("git", "-C", repoDir, "config", "user.name")
 	if err != nil || strings.TrimSpace(userName) == "" {
-		if err := sh.Run("git", "-C", repoDir, "config", "user.name", gitUserName); err != nil {
+		if err := RunCommand("git", "-C", repoDir, "config", "user.name", gitUserName); err != nil {
 			return fmt.Errorf("failed to set git user.name: %w", err)
 		}
+		userName = gitUserName
 	}
 	fmt.Printf("git user.name: %s\n", userName)
 
 	// Check if user.email is set.
-	userEmail, err := sh.Output("git", "-C", repoDir, "config", "user.email")
+	userEmail, err := CommandOutput("git", "-C", repoDir, "config", "user.email")
 	if err != nil || strings.TrimSpace(userEmail) == "" {
-		if err := sh.Run("git", "-C", repoDir, "config", "user.email", gitUserEmail); err != nil {
+		if err := RunCommand("git", "-C", repoDir, "config", "user.email", gitUserEmail); err != nil {
 			return fmt.Errorf("failed to set git user.email: %w", err)
 		}
+		userEmail = gitUserEmail
 	}
 	fmt.Printf("git user.email: %s\n", userEmail)
 

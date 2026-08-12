@@ -66,3 +66,28 @@ func TestWailsProjectGeneratesModernMacOSIconAssets(t *testing.T) {
 		require.Contains(t, string(plist), "<string>appicon</string>")
 	}
 }
+
+func TestProjectUsesWailsTaskRunnerWithoutMage(t *testing.T) {
+	taskfile, err := os.ReadFile("Taskfile.yml")
+	require.NoError(t, err)
+	for _, task := range []string{
+		"clean:all:",
+		"qc:prerelease:",
+		"test:backend-coverage:",
+		"release:app:",
+		"storybook:",
+	} {
+		require.Contains(t, string(taskfile), task)
+	}
+
+	for _, path := range []string{"magefile.go", "mage"} {
+		_, err := os.Stat(path)
+		require.ErrorIs(t, err, os.ErrNotExist)
+	}
+
+	for _, path := range []string{"go.mod", "mise.toml", ".github/workflows/release.yml"} {
+		contents, err := os.ReadFile(path)
+		require.NoError(t, err)
+		require.NotContains(t, strings.ToLower(string(contents)), "github.com/magefile/")
+	}
+}

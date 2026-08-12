@@ -65,12 +65,12 @@ source contract is unclear.
 ## Validation
 
 - Run focused tests during development and measure directly affected coverage
-  with `mise exec -- mage test:backendCoverage` or
-  `mise exec -- mage test:frontendCoverage`; target 80% statement coverage or
+  with `mise exec -- wails3 task test:backend-coverage` or
+  `mise exec -- wails3 task test:frontend-coverage`; target 80% statement coverage or
   report the measured gap and ask for guidance.
 - Base final evidence on the latest worktree. Before reporting
   non-documentation work, run
-  `mise exec -- mage qc:prerelease`, then inspect the worktree because the gate
+  `mise exec -- wails3 task qc:prerelease`, then inspect the worktree because the gate
   may format files. Report exact failures. Documentation/comment-only work is
   exempt and must at least pass `git diff --check`.
 - Rendered Wails UI validation uses the standalone Playwright MCP when

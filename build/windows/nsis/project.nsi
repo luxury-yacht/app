@@ -35,8 +35,8 @@ Unicode true
 ####
 !include "wails_tools.nsh"
 
-# Windows requires a four-part numeric file version. Mage derives this from
-# build/config.yml and passes it to the Wails v3 package task.
+# Windows requires a four-part numeric file version. The project helper derives
+# this from build/config.yml and the Wails v3 package task passes it here.
 VIProductVersion "${LY_WINDOWS_VERSION}"
 VIFileVersion    "${LY_WINDOWS_VERSION}"
 

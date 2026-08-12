@@ -16,7 +16,7 @@ func TestRepositoryStructsDoNotStoreContext(t *testing.T) {
 	t.Parallel()
 
 	var findings []string
-	productionRoots := []string{".", "../internal", "../mage", "../magefile.go", "../main.go"}
+	productionRoots := []string{".", "../internal", "../main.go"}
 	for _, root := range productionRoots {
 		err := filepath.WalkDir(root, func(path string, entry fs.DirEntry, walkErr error) error {
 			if walkErr != nil {

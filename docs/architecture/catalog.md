@@ -80,4 +80,4 @@ When touching catalog behavior:
 ## Validation
 
 Run focused catalog/objectcatalog tests and the frontend browse tests affected
-by the change. For non-documentation work, finish with `mage qc:prerelease`.
+by the change. For non-documentation work, finish with `wails3 task qc:prerelease`.

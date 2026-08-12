@@ -1,4 +1,4 @@
-package mage
+package projecttools
 
 import (
 	"bytes"
@@ -6,8 +6,6 @@ import (
 	"os"
 	"path/filepath"
 	"sort"
-
-	"github.com/magefile/mage/sh"
 )
 
 // CheckWailsBindings regenerates the pinned Wails v3 TypeScript model in an
@@ -19,7 +17,7 @@ func CheckWailsBindings(cfg BuildConfig) error {
 	}
 	defer os.RemoveAll(generatedDir)
 
-	if err := sh.RunV(
+	if err := RunCommand(
 		"wails3",
 		"generate", "bindings",
 		"-ts",

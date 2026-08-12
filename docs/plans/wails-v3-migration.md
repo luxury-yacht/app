@@ -13,9 +13,9 @@ desktop adapters, one named main window, persistent native menus, screen-aware
 geometry restoration, single-instance focus handling, GTK4/WebKitGTK 6.0-only
 Linux support, and Taskfile-based v3 builds. **New Window** is absent. The
 repository prerelease gate regenerates interface bindings in isolation and
-rejects drift. Mage is limited to repository quality checks, tests, cleanup,
-Storybook, and release publication; Wails owns development, builds, and
-platform packaging.
+rejects drift. The Wails Taskfile owns development, builds, packaging, quality
+checks, tests, cleanup, Storybook, and release publication; Mage has been
+removed.
 
 Phase 5 decisions for this migration are explicit:
 
@@ -95,10 +95,9 @@ frontend bindings, and a visible Taskfile-based build system.
   (`find internal/commands/build_assets -name wails.json` returns no file), and
   the NSIS task does not request one
   (`internal/commands/build_assets/windows/Taskfile.yml:118-135`). Delete the v2
-  file after all repository consumers move. Keep Mage as the
-  repository-facing command layer for quality checks, release orchestration,
-  signing coordination, and artifact collection, but remove Mage code that
-  depends on v2-only CLI flags or v2 internal templates.
+  file after all repository consumers move. Keep the root Wails Taskfile as the
+  repository-facing command layer, with ordinary Go helper commands for
+  cross-platform or release logic that should not be embedded in YAML.
 - Retain exactly one loopback refresh HTTP server under the v3 lifecycle. Do not
   mount the aggregate mux as a Wails service route: beta.7's asset server returns
   HTTP 501 for WebSocket upgrades
@@ -145,7 +144,7 @@ frontend bindings, and a visible Taskfile-based build system.
   deliverable of the deferred service-decomposition track. The core v3 cutover
   intentionally registers one `App` service; no method moves until its
   long-term owner and affected frontend facade are approved.
-- Leave one coherent v3-only build architecture. Required Taskfile, Mage, CI,
+- Leave one coherent v3-only build architecture. Required Taskfile, CI,
   packaging, metadata, and generated-binding cleanup is migration work, not
   unrelated cleanup.
 - Keep the private refresh API on one v3-owned loopback server because the pinned
@@ -343,8 +342,8 @@ the deferred service-decomposition track.
       `build/config.yml` plus Taskfiles own the current NSIS release path. Record
       the unused MSIX task's separate legacy JSON input without retaining
       `wails.json` in Luxury Yacht's supported build.
-- [ ] Run the current v2 focused lifecycle/menu/frontend runtime tests and
-      `mise exec -- mage qc:prerelease`; record exact baseline failures, if any.
+- [ ] Run the focused lifecycle/menu/frontend runtime tests and
+      `mise exec -- wails3 task qc:prerelease`; record exact failures, if any.
 - [ ] Produce current unsigned artifacts on the available host and record the
       binary/app/installer names and internal metadata. Let CI provide the other
       platform baselines.
@@ -534,18 +533,19 @@ signing/notarization inspection remain Phase 6 work on their release hosts.
 
 - [x] Pin `github.com/wailsapp/wails/v3` and
       `github.com/wailsapp/wails/v3/cmd/wails3` to the same exact beta in
-      `go.mod` and `mise.toml`; update the Mage compatibility test first.
+      `go.mod` and `mise.toml`; update the tool-version compatibility test first.
 - [x] Generate v3 Taskfiles and platform assets into a reviewed layout. Change
       `.gitignore` from blanket `build/` exclusion to tracked config/assets plus
       explicit generated-output exclusions.
 - [x] Move product name, identifier, description, copyright, version, and beta
       expiry inputs to `build/config.yml` plus a generated repository-owned view
-      for consumers or custom fields that cannot read it directly. Update Mage,
-      Vite, development docs, release docs, and tests in the same phase.
+      for consumers or custom fields that cannot read it directly. Update the
+      project helper, Vite, development docs, release docs, and tests in the
+      same phase.
 - [x] Make v3 Taskfiles own frontend build, binding generation, native resource
       generation, native application build, and Windows NSIS creation. Make
-      Delete the duplicate Mage development/build/install/package targets;
-      retain Mage only for repository checks and release publication.
+      the root Taskfile own repository checks, tests, cleanup, Storybook, and
+      release publication, then remove Mage entirely.
 - [x] Port macOS per-architecture app builds, code signing, notarization, DMG
       staging, and existing artifact names. Do not switch to one universal DMG
       without a separate release decision.
@@ -562,10 +562,10 @@ signing/notarization inspection remain Phase 6 work on their release hosts.
       6.0 dependency set. Update README, development, release, and troubleshooting
       documentation to state the new minimum supported distributions and remove
       WebKit2GTK 4.0/4.1 installation instructions, including Ubuntu 22.04.
-- [x] Replace `mage dev`, `mage build`, `mage install:*`, and `mage package:*`
-      with the generated Wails v3 task graph; update the shared toolchain action,
-      release workflow, and contributor documentation. Verify that no removed
-      v2 flags remain.
+- [x] Replace the complete Mage command surface with the Wails v3 task graph;
+      update the shared toolchain action, release workflow, and contributor
+      documentation, and remove the Mage dependency and source package. Verify
+      that no removed v2 flags remain.
 - [x] Delete the v2-formatted `wails.json` without creating a v3 replacement,
       all v2 module/CLI/runtime references, obsolete indirect dependencies,
       `frontend/wailsjs`, v2 global mocks, v2-only tests, and obsolete build
@@ -678,18 +678,18 @@ into unrelated backend test work.
 
 - [x] Run focused backend lifecycle/runtime/menu/dialog/window tests and measure
       directly affected backend coverage with
-      `mise exec -- mage test:backendCoverage`; target 80% statement coverage or
+      `mise exec -- wails3 task test:backend-coverage`; target 80% statement coverage or
       record the measured gap for review.
 - [x] Run the loopback refresh transport's snapshot, job, SSE, WebSocket,
       permission, readiness, recovery, teardown, and multi-cluster suites. Assert
       that the Wails asset/service router does not own any refresh endpoint.
 - [x] Run focused frontend binding/runtime/event/app-shell tests and measure
       directly affected frontend coverage with
-      `mise exec -- mage test:frontendCoverage`; target 80% statement coverage or
+      `mise exec -- wails3 task test:frontend-coverage`; target 80% statement coverage or
       record the measured gap for review.
 - [x] Run `wails3 generate bindings` through the pinned tool and confirm the
       worktree remains unchanged.
-- [x] Run `mise exec -- mage qc:prerelease`, then inspect the worktree because
+- [x] Run `mise exec -- wails3 task qc:prerelease`, then inspect the worktree because
       the gate may format generated or handwritten files.
 - [ ] Run `wails3 doctor` on each release operating system and retain its output
       with CI diagnostics.

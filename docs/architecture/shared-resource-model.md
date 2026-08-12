@@ -216,4 +216,4 @@ When changing resource semantics:
 ## Validation
 
 Run focused `backend/resourcemodel`, snapshot, detail DTO, and affected frontend
-tests. For non-documentation work, finish with `mage qc:prerelease`.
+tests. For non-documentation work, finish with `wails3 task qc:prerelease`.

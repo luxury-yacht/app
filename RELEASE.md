@@ -64,13 +64,13 @@ The signed macOS build additionally reads:
 Run the prerelease checks. This surfaces problems that could cause the release workflow to fail:
 
 ```bash
-mage qc:prerelease
+wails3 task qc:prerelease
 ```
 
 If the release includes backend changes, run the benchmarks and compare the results with the baseline from before the change:
 
 ```bash
-mage qc:benchmark
+wails3 task qc:benchmark
 ```
 
 1. Update `info.version` in [build/config.yml](build/config.yml), then run

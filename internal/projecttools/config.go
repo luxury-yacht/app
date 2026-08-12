@@ -1,4 +1,4 @@
-package mage
+package projecttools
 
 import (
 	"fmt"
@@ -20,14 +20,14 @@ type BuildConfig struct {
 	Version       string   // Version of the app build
 }
 
-func NewBuildConfig() BuildConfig {
+func NewBuildConfig() (BuildConfig, error) {
 	appShortName := "luxury-yacht"
 	frontendDir := "frontend"
 	now := time.Now().UTC()
 
 	version, err := getProductVersion()
 	if err != nil {
-		panic(fmt.Sprintf("failed to get app version: %v", err))
+		return BuildConfig{}, fmt.Errorf("read app version: %w", err)
 	}
 
 	// Determine if this is a beta version and set beta expiry accordingly
@@ -36,7 +36,7 @@ func NewBuildConfig() BuildConfig {
 	if isBeta {
 		betaExpiryDays, err = getBetaExpiryDays()
 		if err != nil {
-			panic(fmt.Sprintf("failed to get beta expiry days: %v", err))
+			return BuildConfig{}, fmt.Errorf("read beta expiry days: %w", err)
 		}
 	}
 
@@ -55,5 +55,5 @@ func NewBuildConfig() BuildConfig {
 		Version:       version,
 	}
 
-	return cfg
+	return cfg, nil
 }

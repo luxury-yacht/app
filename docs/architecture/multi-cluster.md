@@ -151,4 +151,4 @@ When touching multi-cluster behavior:
 ## Validation
 
 Use targeted backend/frontend tests for the touched lifecycle path. For
-non-documentation work, finish with `mage qc:prerelease`.
+non-documentation work, finish with `wails3 task qc:prerelease`.

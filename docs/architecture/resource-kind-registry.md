@@ -80,4 +80,4 @@ and tests. New occurrences outside these categories are a contract violation.
   stays registry-driven.
 - Done-test: grep any kind name; it should appear only in its own package, the
   single `kindregistry.All` entry, and the sanctioned exceptions above.
-- Run `mage qc:prerelease` after any change to these packages.
+- Run `wails3 task qc:prerelease` after any change to these packages.

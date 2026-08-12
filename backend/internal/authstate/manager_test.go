@@ -606,7 +606,7 @@ func TestTriggerRetryWhileRecovering(t *testing.T) {
 // the recovery goroutine's probe (testRecovery) and SetRecoveryTest. The
 // recovery loop reads config.RecoveryTest while the app may swap it in once the
 // Kubernetes client is ready; both must be safe to call concurrently. This test
-// is meaningful under the race detector (mage test:race / go test -race): before
+// is meaningful under the race detector (wails3 task test:race / go test -race): before
 // the fix the lock-free read in testRecovery races the locked write in
 // SetRecoveryTest.
 func TestRecoveryTestRaceFreeUnderConcurrentSet(t *testing.T) {

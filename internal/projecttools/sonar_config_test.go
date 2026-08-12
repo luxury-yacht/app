@@ -1,4 +1,4 @@
-package mage
+package projecttools
 
 import (
 	"io/fs"
@@ -10,7 +10,7 @@ import (
 )
 
 func TestSonarExcludesGeneratedSources(t *testing.T) {
-	repoRoot := ".."
+	repoRoot := filepath.Join("..", "..")
 	exclusions := readSonarExclusions(t, repoRoot)
 
 	// Wails output does not consistently carry a generated-code header, so keep

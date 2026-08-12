@@ -1,4 +1,4 @@
-package mage
+package projecttools
 
 import (
 	"errors"
@@ -26,5 +26,5 @@ func NewBuildConfigFromDotEnv(path string) (BuildConfig, error) {
 	if err := LoadDotEnv(path); err != nil {
 		return BuildConfig{}, err
 	}
-	return NewBuildConfig(), nil
+	return NewBuildConfig()
 }

@@ -72,4 +72,4 @@ boundary with partial identity.
 
 Run affected snapshot, metric-selector, table/panel, orchestrator, and
 multi-cluster tests plus frontend typecheck. Finish non-doc-only changes with
-`mage qc:prerelease`.
+`wails3 task qc:prerelease`.
