@@ -5,7 +5,7 @@ import (
 	"os"
 )
 
-const projectUsage = "usage: project <backend-coverage|binary-name|bindings|build-manifests|build-metadata|clean-all|clean-build|clean-frontend|config|fmt|go-mod-update|go-mod-update-check|install-unsigned|release-app|release-site|reset|version|windows-version>"
+const projectUsage = "usage: project <backend-coverage|binary-name|bindings|build-manifests|build-metadata|clean-all|clean-build|clean-frontend|config|fmt|go-mod-update|go-mod-update-check|install-unsigned|release-app|release-site|reset>"
 
 var projectCommands = map[string]func() error{
 	"backend-coverage":    runBackendCoverage,
@@ -24,8 +24,6 @@ var projectCommands = map[string]func() error{
 	"release-app":         publishConfiguredRelease,
 	"release-site":        publishConfiguredSiteVersion,
 	"reset":               resetConfiguredAppState,
-	"version":             writeConfiguredProjectVersion,
-	"windows-version":     writeConfiguredWindowsVersion,
 }
 
 func main() {
@@ -97,20 +95,4 @@ func resetConfiguredAppState() error {
 		fmt.Println(directory)
 	}
 	return resetErr
-}
-
-func writeConfiguredProjectVersion() error {
-	metadata, err := readProjectMetadata(projectConfigPath)
-	if err != nil {
-		return fmt.Errorf("read app version: %w", err)
-	}
-	return writeProjectVersion(os.Stdout, metadata.Info.Version)
-}
-
-func writeConfiguredWindowsVersion() error {
-	metadata, err := readProjectMetadata(projectConfigPath)
-	if err != nil {
-		return fmt.Errorf("read app version: %w", err)
-	}
-	return writeWindowsVersion(os.Stdout, metadata.Info.Version)
 }

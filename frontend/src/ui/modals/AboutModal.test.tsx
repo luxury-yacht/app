@@ -17,7 +17,6 @@ const appInfoMock = vi.hoisted(() => ({
 
 const runtimeMock = vi.hoisted(() => ({
   eventsOn: vi.fn(() => () => undefined),
-  eventsOff: vi.fn(),
   openURL: vi.fn(),
 }));
 
@@ -28,7 +27,6 @@ vi.mock('@core/backend-api', () => ({
 vi.mock('@core/desktop-runtime', () => ({
   desktopRuntimeAvailable: () => false,
   onEvent: runtimeMock.eventsOn,
-  offEvent: runtimeMock.eventsOff,
   openURL: runtimeMock.openURL,
 }));
 
@@ -77,7 +75,6 @@ const renderModal = async (props: AboutModalProps) => {
 describe('AboutModal', () => {
   beforeEach(() => {
     runtimeMock.eventsOn.mockReset().mockReturnValue(() => undefined);
-    runtimeMock.eventsOff.mockReset();
     runtimeMock.openURL.mockReset();
     appInfoMock.GetAppInfo.mockReset();
     document.body.style.overflow = '';

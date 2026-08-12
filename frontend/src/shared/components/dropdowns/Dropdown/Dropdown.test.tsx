@@ -17,13 +17,11 @@ import type { DropdownOption } from './types';
 
 const runtimeMocks = vi.hoisted(() => ({
   eventsOn: vi.fn(() => () => undefined),
-  eventsOff: vi.fn(),
 }));
 
 vi.mock('@core/desktop-runtime', () => ({
   desktopRuntimeAvailable: () => false,
   onEvent: runtimeMocks.eventsOn,
-  offEvent: runtimeMocks.eventsOff,
 }));
 
 const OPTIONS: DropdownOption[] = [
@@ -54,7 +52,6 @@ describe('Dropdown', () => {
     });
     container.remove();
     runtimeMocks.eventsOn.mockReset().mockReturnValue(() => undefined);
-    runtimeMocks.eventsOff.mockReset();
   });
 
   const mount = async (element: React.ReactElement) => {

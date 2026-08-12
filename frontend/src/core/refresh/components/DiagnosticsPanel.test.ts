@@ -163,7 +163,6 @@ vi.mock('../RefreshManager', () => ({
 vi.mock('@core/desktop-runtime', () => ({
   desktopRuntimeAvailable: () => false,
   onEvent: vi.fn(() => () => undefined),
-  offEvent: vi.fn(),
 }));
 
 vi.mock('@/core/contexts/ViewStateContext', () => ({

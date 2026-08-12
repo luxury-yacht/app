@@ -30,7 +30,6 @@ vi.mock('@shared/components/ContextMenu', () => ({
 vi.mock('@core/desktop-runtime', () => ({
   desktopRuntimeAvailable: () => false,
   onEvent: vi.fn(() => () => undefined),
-  offEvent: vi.fn(),
 }));
 
 vi.mock('../context', async () => {

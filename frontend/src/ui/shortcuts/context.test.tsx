@@ -22,13 +22,11 @@ const runtimeMocks = vi.hoisted(() => ({
   eventsOn: vi.fn<(event: string, handler: (...args: unknown[]) => void) => () => void>(
     () => () => undefined
   ),
-  eventsOff: vi.fn(),
 }));
 
 vi.mock('@core/desktop-runtime', () => ({
   desktopRuntimeAvailable: () => false,
   onEvent: runtimeMocks.eventsOn,
-  offEvent: runtimeMocks.eventsOff,
 }));
 
 type KeyboardContextApi = ReturnType<typeof useKeyboardContext>;
@@ -50,7 +48,6 @@ describe('KeyboardProvider', () => {
     container.remove();
     vi.restoreAllMocks();
     runtimeMocks.eventsOn.mockReset().mockReturnValue(() => undefined);
-    runtimeMocks.eventsOff.mockReset();
   });
 
   it('reports availability for registered shortcuts', async () => {
@@ -402,7 +399,6 @@ describe('keyboard handling edge cases', () => {
     expect(disposedEvents).toEqual(
       expect.arrayContaining(['menu:cut', 'menu:copy', 'menu:paste', 'menu:selectAll'])
     );
-    expect(runtimeMocks.eventsOff).not.toHaveBeenCalled();
   });
 
   it('routes menu cut to the surface containing the focused element', async () => {

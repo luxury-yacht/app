@@ -16,13 +16,11 @@ import ContextMenu from './ContextMenu';
 
 const runtimeMocks = vi.hoisted(() => ({
   eventsOn: vi.fn(() => () => undefined),
-  eventsOff: vi.fn(),
 }));
 
 vi.mock('@core/desktop-runtime', () => ({
   desktopRuntimeAvailable: () => false,
   onEvent: runtimeMocks.eventsOn,
-  offEvent: runtimeMocks.eventsOff,
 }));
 
 vi.mock('@core/backend-api', () => ({
@@ -46,7 +44,6 @@ describe('ContextMenu', () => {
     });
     container.remove();
     runtimeMocks.eventsOn.mockReset().mockReturnValue(() => undefined);
-    runtimeMocks.eventsOff.mockReset();
   });
 
   const renderMenu = async (overrides: Partial<React.ComponentProps<typeof ContextMenu>> = {}) => {

@@ -159,9 +159,6 @@ vi.mock('@core/desktop-runtime', () => ({
       }
     };
   },
-  offEvent: (name: string) => {
-    delete eventRegistry.handlers[name];
-  },
 }));
 
 vi.mock('@xterm/xterm', () => ({

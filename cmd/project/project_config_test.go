@@ -1,7 +1,6 @@
 package main
 
 import (
-	"bytes"
 	"os"
 	"path/filepath"
 	"testing"
@@ -95,12 +94,6 @@ func TestDeriveProjectFactsUsesOneMetadataSnapshot(t *testing.T) {
 	require.Equal(t, "abc123", facts.commit)
 	require.True(t, facts.isBeta)
 	require.Equal(t, "2026-09-11T12:00:00Z", facts.betaExpiry)
-}
-
-func TestWriteProjectVersion(t *testing.T) {
-	var output bytes.Buffer
-	require.NoError(t, writeProjectVersion(&output, " 1.2.3-beta.4 "))
-	require.Equal(t, "1.2.3-beta.4\n", output.String())
 }
 
 func TestProjectBinaryNameUsesConfiguredProductName(t *testing.T) {

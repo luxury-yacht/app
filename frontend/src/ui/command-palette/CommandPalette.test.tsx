@@ -184,9 +184,6 @@ vi.mock('@core/desktop-runtime', () => ({
     wailsEventHandlers.set(event, handler);
     return () => wailsEventHandlers.delete(event);
   },
-  offEvent: (event: string) => {
-    wailsEventHandlers.delete(event);
-  },
 }));
 
 vi.mock('@ui/shortcuts', () => ({

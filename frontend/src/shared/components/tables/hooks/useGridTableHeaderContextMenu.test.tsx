@@ -24,13 +24,11 @@ import { requireValue } from '@/test-utils/requireValue';
 
 const runtimeMocks = vi.hoisted(() => ({
   eventsOn: vi.fn(() => () => undefined),
-  eventsOff: vi.fn(),
 }));
 
 vi.mock('@core/desktop-runtime', () => ({
   desktopRuntimeAvailable: () => false,
   onEvent: runtimeMocks.eventsOn,
-  offEvent: runtimeMocks.eventsOff,
 }));
 
 vi.mock('@core/backend-api', () => ({
@@ -235,7 +233,6 @@ describe('header context menu integration', () => {
     });
     cleanBody();
     runtimeMocks.eventsOn.mockReset().mockReturnValue(() => undefined);
-    runtimeMocks.eventsOff.mockReset();
   });
 
   // 1. Sortable + hideable column (status)

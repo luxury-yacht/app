@@ -142,11 +142,6 @@ func writeProjectConfig(output io.Writer) error {
 	return encoder.Encode(config)
 }
 
-func writeProjectVersion(output io.Writer, version string) error {
-	_, err := fmt.Fprintln(output, strings.TrimSpace(version))
-	return err
-}
-
 func projectBinaryName(metadata projectMetadata) (string, error) {
 	productName := strings.TrimSpace(metadata.Info.ProductName)
 	if productName == "" {

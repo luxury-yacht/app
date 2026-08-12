@@ -138,6 +138,8 @@ func TestPlatformBuildManifestsUseCanonicalProjectMetadata(t *testing.T) {
 	require.Contains(t, windowsTaskfile, "common:prepare:build-manifests")
 	require.Contains(t, windowsTaskfile, "bin/build-manifests/windows/wails.exe.manifest")
 	require.Contains(t, windowsTaskfile, "bin/build-manifests/windows/info.json")
+	require.Contains(t, windowsTaskfile, `--input "{{.BIN_DIR}}/{{.APP_NAME}}-{{.ARCH}}-installer.exe"`)
+	require.NotContains(t, windowsTaskfile, `--input "build/windows/nsis/{{.APP_NAME}}-installer.exe"`)
 
 	commonTaskfile := readTestFile(t, repositoryPath("build", "Taskfile.yml"))
 	for _, flag := range []string{

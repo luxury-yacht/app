@@ -7,13 +7,11 @@ import ObjPanelLogsSettingsModal from './ObjPanelLogsSettingsModal';
 
 const runtimeMocks = vi.hoisted(() => ({
   eventsOn: vi.fn(() => () => undefined),
-  eventsOff: vi.fn(),
 }));
 
 vi.mock('@core/desktop-runtime', () => ({
   desktopRuntimeAvailable: () => false,
   onEvent: runtimeMocks.eventsOn,
-  offEvent: runtimeMocks.eventsOff,
 }));
 
 vi.mock('@modules/object-panel/components/ObjectPanel/Logs/ObjPanelLogsSettings', () => ({
@@ -27,7 +25,6 @@ describe('ObjPanelLogsSettingsModal', () => {
 
   beforeEach(async () => {
     runtimeMocks.eventsOn.mockReset().mockReturnValue(() => undefined);
-    runtimeMocks.eventsOff.mockReset();
     container = document.createElement('div');
     document.body.appendChild(container);
     root = ReactDOM.createRoot(container);

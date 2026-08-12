@@ -32,7 +32,6 @@ const kubeconfigMocks = vi.hoisted(() => ({
 
 const runtimeMocks = vi.hoisted(() => ({
   eventsOn: vi.fn(() => () => undefined),
-  eventsOff: vi.fn(),
 }));
 
 const appMocks = vi.hoisted(() => ({
@@ -42,7 +41,6 @@ const appMocks = vi.hoisted(() => ({
 vi.mock('@core/desktop-runtime', () => ({
   desktopRuntimeAvailable: () => false,
   onEvent: runtimeMocks.eventsOn,
-  offEvent: runtimeMocks.eventsOff,
 }));
 
 vi.mock('@core/backend-api', () => ({
@@ -270,7 +268,6 @@ describe('ObjectDiffModal', () => {
 
   beforeEach(async () => {
     runtimeMocks.eventsOn.mockReset().mockReturnValue(() => undefined);
-    runtimeMocks.eventsOff.mockReset();
     appMocks.FindCatalogObjectMatch.mockReset();
     appMocks.FindCatalogObjectMatch.mockResolvedValue(null);
     refreshMocks.useRefreshScopedDomain.mockImplementation((domain: string, scope: string) =>

@@ -13,13 +13,11 @@ import ConfirmationModal from './ConfirmationModal';
 
 const runtimeMocks = vi.hoisted(() => ({
   eventsOn: vi.fn(() => () => undefined),
-  eventsOff: vi.fn(),
 }));
 
 vi.mock('@core/desktop-runtime', () => ({
   desktopRuntimeAvailable: () => false,
   onEvent: runtimeMocks.eventsOn,
-  offEvent: runtimeMocks.eventsOff,
 }));
 
 describe('ConfirmationModal', () => {
@@ -39,7 +37,6 @@ describe('ConfirmationModal', () => {
     container.remove();
     document.body.innerHTML = '';
     runtimeMocks.eventsOn.mockReset().mockReturnValue(() => undefined);
-    runtimeMocks.eventsOff.mockReset();
   });
 
   const renderModal = async (props: Partial<React.ComponentProps<typeof ConfirmationModal>>) => {

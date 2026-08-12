@@ -35,12 +35,10 @@ const eventsOnMock = vi.hoisted(() =>
     return cancel;
   })
 );
-const eventsOffMock = vi.hoisted(() => vi.fn());
 
 vi.mock('@core/desktop-runtime', () => ({
   desktopRuntimeAvailable: () => false,
   onEvent: (...args: unknown[]) => eventsOnMock(...args),
-  offEvent: (...args: unknown[]) => eventsOffMock(...args),
   openURL: vi.fn(),
 }));
 
@@ -399,7 +397,7 @@ describe('PortForwardsPanel', () => {
       await Promise.resolve();
     });
 
-    // Component calls the cancel functions returned by onEvent, not offEvent.
+    // Component calls the cancel functions returned by onEvent.
     expect(cancelList).toHaveBeenCalled();
     expect(cancelStatus).toHaveBeenCalled();
   });

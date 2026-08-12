@@ -2,7 +2,6 @@ package main
 
 import (
 	"fmt"
-	"io"
 	"regexp"
 	"strconv"
 	"strings"
@@ -10,15 +9,6 @@ import (
 
 var semanticVersionPattern = regexp.MustCompile(`^v?(\d+)\.(\d+)\.(\d+)(?:-([0-9A-Za-z.-]+))?(?:\+.*)?$`)
 var trailingNumberPattern = regexp.MustCompile(`(\d+)$`)
-
-func writeWindowsVersion(output io.Writer, version string) error {
-	windowsVersion, err := windowsNumericVersion(version)
-	if err != nil {
-		return err
-	}
-	_, err = fmt.Fprintln(output, windowsVersion)
-	return err
-}
 
 func windowsNumericVersion(version string) (string, error) {
 	parts := semanticVersionPattern.FindStringSubmatch(strings.TrimSpace(version))

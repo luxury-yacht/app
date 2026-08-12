@@ -7,8 +7,6 @@ export const onEvent = <T = unknown>(
   handler: DesktopEventHandler<T>
 ): (() => void) => Events.On(eventName, (event) => handler(event.data as T));
 
-export const offEvent = (eventName: string): void => Events.Off(eventName);
-
 export const openURL = (url: string | URL): Promise<void> => Browser.OpenURL(url);
 
 export const readClipboardText = (): Promise<string> => Clipboard.Text();

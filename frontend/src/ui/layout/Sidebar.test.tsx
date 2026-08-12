@@ -24,7 +24,6 @@ const sidebarStyles = readFileSync(resolve(process.cwd(), 'src/ui/layout/Sidebar
 
 const runtimeMocks = vi.hoisted(() => ({
   eventsOn: vi.fn(() => () => undefined),
-  eventsOff: vi.fn(),
 }));
 
 const autoRefreshLoadingState = vi.hoisted(() => ({
@@ -52,7 +51,6 @@ const namespaceKey = (scope: string) => `${testClusterId}|${scope}`;
 vi.mock('@core/desktop-runtime', () => ({
   desktopRuntimeAvailable: () => false,
   onEvent: runtimeMocks.eventsOn,
-  offEvent: runtimeMocks.eventsOff,
 }));
 
 vi.mock('@modules/kubernetes/config/KubeconfigContext', () => ({

@@ -13,13 +13,11 @@ import SettingsModal from './SettingsModal';
 
 const runtimeMocks = vi.hoisted(() => ({
   eventsOn: vi.fn(() => () => undefined),
-  eventsOff: vi.fn(),
 }));
 
 vi.mock('@core/desktop-runtime', () => ({
   desktopRuntimeAvailable: () => false,
   onEvent: runtimeMocks.eventsOn,
-  offEvent: runtimeMocks.eventsOff,
 }));
 
 vi.mock('@ui/settings/sections/AppearanceSection', () => ({
@@ -85,7 +83,6 @@ describe('SettingsModal', () => {
 
   beforeEach(async () => {
     runtimeMocks.eventsOn.mockReset().mockReturnValue(() => undefined);
-    runtimeMocks.eventsOff.mockReset();
     // Reset persisted-tab so each test starts on the default tab.
     try {
       localStorage.removeItem('app-settings-last-tab');

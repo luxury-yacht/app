@@ -20,9 +20,6 @@ type ShortcutOptions = Parameters<typeof import('../hooks').useShortcut>[0];
 vi.mock('@core/desktop-runtime', () => ({
   desktopRuntimeAvailable: () => false,
   onEventMultiple: () => undefined,
-  offEvent: (eventName: string) => {
-    delete wailsEventHandlers[eventName];
-  },
   onEvent: (eventName: string, handler: (...args: unknown[]) => void) => {
     wailsEventHandlers[eventName] = handler;
     return () => {

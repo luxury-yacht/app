@@ -73,7 +73,6 @@ type EventHandler = (...args: unknown[]) => void;
  */
 interface MockRuntime {
   onEvent: ReturnType<typeof vi.fn<(event: string, handler: EventHandler) => () => void>>;
-  offEvent: ReturnType<typeof vi.fn<(event: string) => void>>;
   handlers: Map<string, EventHandler>;
   emit: (event: string, payload: unknown) => void;
 }
@@ -92,14 +91,9 @@ function createMockRuntime(): MockRuntime {
       }
     };
   });
-  const offEvent = vi.fn<(event: string) => void>((event) => {
-    handlers.delete(event);
-  });
-
   return {
     handlers,
     onEvent,
-    offEvent,
     emit: (event: string, payload: unknown) => {
       const handler = handlers.get(event);
       if (handler) {
@@ -156,7 +150,6 @@ describe('Wails Runtime Event Listener Cleanup', () => {
     });
 
     expect(mockRuntime.handlers.size).toBe(0);
-    expect(mockRuntime.offEvent).not.toHaveBeenCalled();
   });
 });
 
@@ -543,7 +536,6 @@ describe('Cluster Health Listener Isolation', () => {
 
     expect(mockRuntime.handlers.has('cluster:health:healthy')).toBe(false);
     expect(mockRuntime.handlers.has('cluster:health:degraded')).toBe(false);
-    expect(mockRuntime.offEvent).not.toHaveBeenCalled();
   });
 
   it('updates health status when cluster transitions between states', async () => {

@@ -4,7 +4,6 @@ const runtimeMocks = vi.hoisted(() => ({
   browserOpenURL: vi.fn(),
   clipboardText: vi.fn(),
   environment: vi.fn(),
-  eventsOff: vi.fn(),
   eventsOn: vi.fn<
     (eventName: string, handler: (event: { name: string; data: unknown }) => void) => () => void
   >(() => () => undefined),
@@ -15,7 +14,7 @@ const runtimeMocks = vi.hoisted(() => ({
 vi.mock('@wailsio/runtime', () => ({
   Browser: { OpenURL: runtimeMocks.browserOpenURL },
   Clipboard: { Text: runtimeMocks.clipboardText },
-  Events: { Off: runtimeMocks.eventsOff, On: runtimeMocks.eventsOn },
+  Events: { On: runtimeMocks.eventsOn },
   System: { Environment: runtimeMocks.environment },
   Window: {
     OpenDevTools: runtimeMocks.openDevTools,
@@ -23,10 +22,10 @@ vi.mock('@wailsio/runtime', () => ({
   },
 }));
 
+import * as desktopRuntime from './index';
 import {
   desktopRuntimeAvailable,
   getEnvironment,
-  offEvent,
   onEvent,
   openDevTools,
   openURL,
@@ -38,6 +37,10 @@ describe('desktop runtime adapter', () => {
   afterEach(() => {
     vi.clearAllMocks();
     (window as Window & { _wails?: unknown })._wails = undefined;
+  });
+
+  it('does not expose event-wide listener removal', () => {
+    expect(desktopRuntime).not.toHaveProperty('offEvent');
   });
 
   it('unwraps v3 event payloads and returns the v3 disposer', () => {
@@ -61,14 +64,12 @@ describe('desktop runtime adapter', () => {
     await openURL('https://luxury-yacht.app');
     await openDevTools();
     await toggleMaximise();
-    await offEvent('cluster:changed');
 
     await expect(readClipboardText()).resolves.toBe('clipboard');
     await expect(getEnvironment()).resolves.toEqual({ OS: 'darwin' });
     expect(runtimeMocks.browserOpenURL).toHaveBeenCalledWith('https://luxury-yacht.app');
     expect(runtimeMocks.openDevTools).toHaveBeenCalledOnce();
     expect(runtimeMocks.toggleMaximise).toHaveBeenCalledOnce();
-    expect(runtimeMocks.eventsOff).toHaveBeenCalledWith('cluster:changed');
   });
 
   it('detects the environment injected by the Wails host', () => {
