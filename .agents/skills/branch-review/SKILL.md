@@ -121,25 +121,26 @@ Run focused tests first when the branch has clear areas:
 - Frontend changes: targeted Vitest specs and `mise exec -- npm run typecheck --prefix frontend`.
 - Runtime operations/logs/shell/port-forward/drain: focused backend workflow
   tests plus affected frontend lifecycle/orchestrator tests.
-- Broad frontend/shared changes: consider `mise exec -- mage qc:knip`.
+- Broad frontend/shared changes: consider `mise exec -- wails3 task qc:knip`.
 
 Before a final "ready" verdict on non-documentation or non-comment-only work,
 run:
 
 ```sh
-mise exec -- mage qc:prerelease
+mise exec -- wails3 task qc:prerelease
 git diff --check
 git status --short
 ```
 
-If `mise exec -- mage qc:prerelease` cannot run or fails, report the exact command and first
-concrete failure. Do not call the branch ready.
+If `mise exec -- wails3 task qc:prerelease` cannot run or fails, report the
+exact command and first concrete failure. Do not call the branch ready.
 
-`mise exec -- mage qc:prerelease` includes `lint:fix`, so inspect changed files afterward.
+`mise exec -- wails3 task qc:prerelease` includes `qc:lint-fix`, so inspect
+changed files afterward.
 
-For documentation-only or comment-only branches, `mise exec -- mage qc:prerelease` may be
-skipped, but still run `git diff --check` and `git status --short` before the
-verdict.
+For documentation-only or comment-only branches,
+`mise exec -- wails3 task qc:prerelease` may be skipped, but still run
+`git diff --check` and `git status --short` before the verdict.
 
 ## Output Format
 

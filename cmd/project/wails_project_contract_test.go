@@ -40,7 +40,7 @@ func TestWailsProjectUsesFreshInitBuildDefaults(t *testing.T) {
 	require.NotContains(t, string(config), "build/bin")
 }
 
-func TestUnsignedInstallTaskPreservesMageWorkflow(t *testing.T) {
+func TestUnsignedInstallTaskPreservesExpectedWorkflow(t *testing.T) {
 	rootTaskfile := readTestFile(t, repositoryPath("Taskfile.yml"))
 	require.Contains(t, rootTaskfile, "install:unsigned:")
 	require.Contains(t, rootTaskfile, "task: '{{OS}}:install:unsigned'")
@@ -294,6 +294,23 @@ func TestProjectUsesWailsTaskRunnerWithoutMage(t *testing.T) {
 		require.NoError(t, err)
 		require.NotContains(t, strings.ToLower(string(contents)), "github.com/magefile/")
 	}
+
+	for _, root := range []string{".agents", "docs"} {
+		err := filepath.Walk(repositoryPath(root), func(path string, info os.FileInfo, walkErr error) error {
+			require.NoError(t, walkErr)
+			if info.IsDir() || filepath.Ext(path) != ".md" {
+				return nil
+			}
+
+			contents := readTestFile(t, path)
+			require.NotContainsf(t, strings.ToLower(contents), "mise exec -- mage", "%s contains an obsolete Mage command", path)
+			return nil
+		})
+		require.NoError(t, err)
+	}
+
+	editorSettings := readTestFile(t, repositoryPath(".vscode", "settings.json"))
+	require.NotContains(t, strings.ToLower(editorSettings), "-tags=mage")
 }
 
 func TestProjectCommandOwnsItsImplementation(t *testing.T) {

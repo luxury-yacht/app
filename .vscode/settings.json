@@ -64,10 +64,6 @@
   "[go]": {
     "editor.defaultFormatter": "golang.go"
   },
-  // Stop gopls from complaining about mage build tags
-  "gopls": {
-    "build.buildFlags": ["-tags=mage"]
-  },
   "makefile.configureOnOpen": false,
   "git.ignoreLimitWarning": true
 }

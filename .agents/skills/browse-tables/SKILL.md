@@ -60,6 +60,7 @@ mise exec -- npm run test --prefix frontend -- browse tables cluster namespace
 mise exec -- npm run typecheck --prefix frontend
 ```
 
-For broad shared-table changes, also run `mise exec -- mage qc:knip` and add a
-static/contract test preventing unclassified production resource-table usage.
-Then follow the root final validation gate.
+For broad shared-table changes, also run
+`mise exec -- wails3 task qc:knip` and add a static/contract test preventing
+unclassified production resource-table usage. Then follow the root final
+validation gate.
