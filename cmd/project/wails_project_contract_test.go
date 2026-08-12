@@ -343,6 +343,16 @@ func TestProjectUsesWailsTaskRunnerWithoutMage(t *testing.T) {
 	require.NotContains(t, strings.ToLower(editorSettings), "-tags=mage")
 }
 
+func TestReleaseWorkflowUsesConfiguredVVersionTags(t *testing.T) {
+	workflow := readTestFile(t, repositoryPath(".github", "workflows", "release.yml"))
+	require.Contains(t, workflow, `- "v[1-9]*"`)
+	require.NotContains(t, workflow, `- "[1-9]*"`)
+
+	metadata, err := readProjectMetadata(repositoryPath("build", "config.yml"))
+	require.NoError(t, err)
+	require.True(t, strings.HasPrefix(strings.ToLower(metadata.Info.Version), "v"))
+}
+
 func TestProjectCommandOwnsItsImplementation(t *testing.T) {
 	for _, path := range []string{
 		"app_state.go",

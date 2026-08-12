@@ -55,6 +55,7 @@ func TestRenderNFPMManifestUsesConfiguredMaintainer(t *testing.T) {
 	))
 
 	manifest := readTestFile(t, outputPath)
+	require.Contains(t, manifest, `version: "v2.0.0"`)
 	require.Contains(t, manifest, `maintainer: "Luxury Yacht <info@luxury-yacht.app>"`)
 	require.NotContains(t, manifest, appMaintainerPlaceholder)
 	require.NotContains(t, manifest, "GIT_COMMITTER")

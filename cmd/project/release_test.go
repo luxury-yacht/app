@@ -4,7 +4,15 @@ import (
 	"os"
 	"path/filepath"
 	"testing"
+
+	"github.com/stretchr/testify/require"
 )
+
+func TestNewReleaseConfigUsesConfiguredVersionTag(t *testing.T) {
+	cfg := newReleaseConfig(projectFacts{version: "v2.0.0"})
+
+	require.Equal(t, "v2.0.0", cfg.version)
+}
 
 func TestFindReleaseAssetsUsesConfiguredDirectory(t *testing.T) {
 	artifactDir := filepath.Join(t.TempDir(), "downloaded")
