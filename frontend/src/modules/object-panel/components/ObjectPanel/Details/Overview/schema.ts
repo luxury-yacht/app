@@ -71,15 +71,10 @@ export interface OverviewSchema<T> {
   showSelector?: boolean;
 }
 
-/**
- * A constructable Wails model class. The generated constructor accepts a partial DTO and fills
- * required fields with their Go zero values.
- */
-export type DtoClass<T> = (new (source?: Partial<T>) => T) & { readonly name: string };
-
 export interface OverviewDescriptor<T> {
   displayKind: string;
-  dtoClass: DtoClass<T>;
+  /** Generated interface name used by the source-level contract drift test. */
+  dtoName: string;
   schema: OverviewSchema<T>;
   /**
    * DTO keys handled OUTSIDE the Overview schema: consumed by a derived sibling section (e.g.
@@ -118,7 +113,7 @@ const addItemCoverageKeys = <T>(keys: Set<string>, item: OverviewItemSpec<T>): v
 /**
  * Every DTO key the descriptor accounts for: frame ∪ schema field keys (+ each field's
  * `derivedFrom`) ∪ status-item fields ∪ widget `consumes` ∪ `selector` (when shown) ∪
- * `coveredElsewhere`. The drift-check asserts this covers `Object.keys(new dto)`.
+ * `coveredElsewhere`. The drift-check compares this set with the generated interface fields.
  */
 export function coverageKeys<T>(descriptor: OverviewDescriptor<T>): Set<string> {
   const keys = new Set<string>(FRAME_FIELDS);

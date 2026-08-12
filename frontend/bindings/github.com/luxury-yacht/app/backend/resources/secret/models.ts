@@ -3,86 +3,18 @@
 
 // eslint-disable-next-line @typescript-eslint/ban-ts-comment
 // @ts-ignore: Unused imports
-import { Create as $Create } from "@wailsio/runtime";
-
-// eslint-disable-next-line @typescript-eslint/ban-ts-comment
-// @ts-ignore: Unused imports
-import * as resourcemodel$0 from "../../resourcemodel/models.js";
-// eslint-disable-next-line @typescript-eslint/ban-ts-comment
-// @ts-ignore: Unused imports
 import * as types$0 from "../types/models.js";
 
-export class SecretDetails {
+export interface SecretDetails {
     "kind": string;
     "name": string;
     "namespace": string;
     "details": string;
     "secretType": string;
-    "data"?: { [_ in string]?: string };
-    "dataKeys": string[];
+    "data"?: { [_ in string]?: string } | null;
+    "dataKeys": string[] | null;
     "dataCount": number;
-    "labels"?: { [_ in string]?: string };
-    "annotations"?: { [_ in string]?: string };
-    "usedBy"?: types$0.ObjectRef[];
-
-    /** Creates a new SecretDetails instance. */
-    constructor($$source: Partial<SecretDetails> = {}) {
-        if (!("kind" in $$source)) {
-            this["kind"] = "";
-        }
-        if (!("name" in $$source)) {
-            this["name"] = "";
-        }
-        if (!("namespace" in $$source)) {
-            this["namespace"] = "";
-        }
-        if (!("details" in $$source)) {
-            this["details"] = "";
-        }
-        if (!("secretType" in $$source)) {
-            this["secretType"] = "";
-        }
-        if (!("dataKeys" in $$source)) {
-            this["dataKeys"] = [];
-        }
-        if (!("dataCount" in $$source)) {
-            this["dataCount"] = 0;
-        }
-
-        Object.assign(this, $$source);
-    }
-
-    /**
-     * Creates a new SecretDetails instance from a string or object.
-     */
-    static createFrom($$source: any = {}): SecretDetails {
-        const $$createField5_0 = $$createType0;
-        const $$createField6_0 = $$createType1;
-        const $$createField8_0 = $$createType0;
-        const $$createField9_0 = $$createType0;
-        const $$createField10_0 = $$createType3;
-        let $$parsedSource = typeof $$source === 'string' ? JSON.parse($$source) : $$source;
-        if ("data" in $$parsedSource) {
-            $$parsedSource["data"] = $$createField5_0($$parsedSource["data"]);
-        }
-        if ("dataKeys" in $$parsedSource) {
-            $$parsedSource["dataKeys"] = $$createField6_0($$parsedSource["dataKeys"]);
-        }
-        if ("labels" in $$parsedSource) {
-            $$parsedSource["labels"] = $$createField8_0($$parsedSource["labels"]);
-        }
-        if ("annotations" in $$parsedSource) {
-            $$parsedSource["annotations"] = $$createField9_0($$parsedSource["annotations"]);
-        }
-        if ("usedBy" in $$parsedSource) {
-            $$parsedSource["usedBy"] = $$createField10_0($$parsedSource["usedBy"]);
-        }
-        return new SecretDetails($$parsedSource as Partial<SecretDetails>);
-    }
+    "labels"?: { [_ in string]?: string } | null;
+    "annotations"?: { [_ in string]?: string } | null;
+    "usedBy"?: types$0.ObjectRef[] | null;
 }
-
-// Private type creation functions
-const $$createType0 = $Create.Map($Create.Any, $Create.Any);
-const $$createType1 = $Create.Array($Create.Any);
-const $$createType2 = resourcemodel$0.ResourceRef.createFrom;
-const $$createType3 = $Create.Array($$createType2);

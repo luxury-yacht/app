@@ -48,14 +48,6 @@ var Aliases = map[string]interface{}{
 	"clean-build":         Clean.Build,
 	"clean-frontend":      Clean.Frontend,
 	"clean-go-cache":      Clean.GoCache,
-	"deps":                Deps.All,
-	"deps-all":            Deps.All,
-	"deps-go":             Deps.Go,
-	"deps-npm":            Deps.Npm,
-	"install-signed":      Install.Signed,
-	"install-unsigned":    Install.Unsigned,
-	"package-signed":      Package.Signed,
-	"package-unsigned":    Package.Unsigned,
 	"lint":                QC.Lint,
 	"lint-fix":            QC.LintFix,
 	"typecheck":           QC.Typecheck,
@@ -64,7 +56,6 @@ var Aliases = map[string]interface{}{
 	"go-mod-update-check": QC.GoModUpdateCheck,
 	"go-mod-update":       QC.GoModUpdate,
 	"benchmark":           QC.Benchmark,
-	"build-assets":        BuildAssets,
 	"bindings":            QC.Bindings,
 	"knip":                QC.Knip,
 	"vet":                 QC.Vet,
@@ -76,12 +67,6 @@ var Aliases = map[string]interface{}{
 	"test-fe":             Test.Frontend,
 	"test-fe-cov":         Test.FrontendCoverage,
 	"storybook":           Storybook,
-}
-
-// Refreshes Wails v3 platform metadata and reapplies the repository's
-// desktop-only build-asset contract.
-func BuildAssets() error {
-	return mage.UpdateWailsBuildAssets(cfg)
 }
 
 // ===============================
@@ -114,35 +99,6 @@ func isTrivyInstalled() error {
 		return fmt.Errorf("trivy is not installed.")
 	}
 	return nil
-}
-
-// ===============================
-// Dependency Management Tasks
-// ===============================
-
-type Deps mg.Namespace
-
-// Installs all dependencies
-func (Deps) All() {
-	mg.SerialDeps(Deps.Go, Deps.Npm)
-}
-
-// Installs Go dependencies
-func (Deps) Go() error {
-	fmt.Println("Installing go dependencies...")
-	return sh.RunV("go", "mod", "tidy")
-}
-
-// Installs npm dependencies
-func (Deps) Npm() error {
-	if err := isNpmInstalled(); err != nil {
-		return err
-	}
-	if err := mage.CheckNodeVersion(); err != nil {
-		return err
-	}
-	fmt.Println("Installing npm dependencies...")
-	return sh.RunV("npm", "install", npmPrefixArg, cfg.FrontendDir)
 }
 
 // ===============================
@@ -198,14 +154,6 @@ func (Clean) Frontend() error {
 // ===============================
 // Development Tasks
 // ===============================
-
-// Runs the app in dev mode
-func Dev() error {
-	if err := mage.PrepareWailsBuild(cfg); err != nil {
-		return err
-	}
-	return sh.Run("wails3", "dev", "-config", "./build/config.yml", "-port", "5173")
-}
 
 // Runs Storybook for frontend component development
 func Storybook() error {
@@ -431,112 +379,6 @@ func (Test) FrontendCoverage() error {
 // Runs all tests
 func (Test) All() {
 	mg.SerialDeps(Test.Backend, Test.Frontend)
-}
-
-// ===============================
-// Build Tasks
-// ===============================
-
-// Builds the application.
-func Build() error {
-	switch cfg.OsType {
-	case "darwin":
-		return mage.BuildMacOS(cfg)
-	case "linux":
-		return mage.BuildLinux(cfg)
-	case "windows":
-		return mage.BuildWindows(cfg)
-	default:
-		return fmt.Errorf("Build is not supported on %s", cfg.OsType)
-	}
-}
-
-// ===============================
-// Install Tasks
-// ===============================
-
-type Install mg.Namespace
-
-// Installs the app locally with signing and notarization.
-func (Install) Signed() error {
-	// mg.Deps(Build)
-
-	switch cfg.OsType {
-	case "darwin":
-		return mage.InstallMacOS(cfg, true)
-	case "linux":
-		return mage.InstallLinux(cfg)
-	case "windows":
-		return mage.InstallWindows(cfg, true)
-	default:
-		return fmt.Errorf("Install is not supported on %s", cfg.OsType)
-	}
-}
-
-// Installs the app locally without signing or notarization.
-func (Install) Unsigned() error {
-	mg.Deps(Build)
-
-	switch cfg.OsType {
-	case "darwin":
-		return mage.InstallMacOS(cfg, false)
-	case "linux":
-		return mage.InstallLinux(cfg)
-	case "windows":
-		return mage.InstallWindows(cfg, false)
-	default:
-		return fmt.Errorf("Install is not supported on %s", cfg.OsType)
-	}
-}
-
-// ===============================
-// Packaging Tasks
-// ===============================
-
-type Package mg.Namespace
-
-// Packages the app with signing and notarization.
-func (Package) Signed() error {
-	if cfg.OsType == "linux" {
-		if err := mage.CheckPackageDependencies(); err != nil {
-			return err
-		}
-	}
-	// Only build if Linux because Windows and macOS packaging handle their own builds.
-	if cfg.OsType == "linux" {
-		mg.Deps(Build)
-	}
-
-	switch cfg.OsType {
-	case "darwin":
-		return mage.PackageMacOS(cfg, true)
-	case "linux":
-		return mage.PackageLinux(cfg)
-	case "windows":
-		return mage.PackageWindows(cfg, true)
-	default:
-		return fmt.Errorf("Package is not supported on %s", cfg.OsType)
-	}
-}
-
-// Packages the app without signing and notarization.
-func (Package) Unsigned() error {
-	// Windows packaging runs its own NSIS build to produce the installer.
-	// Only build if Linux because Windows and macOS packaging handle their own builds.
-	if cfg.OsType == "linux" {
-		mg.Deps(Build)
-	}
-
-	switch cfg.OsType {
-	case "darwin":
-		return mage.PackageMacOS(cfg, false)
-	case "linux":
-		return mage.PackageLinux(cfg)
-	case "windows":
-		return mage.PackageWindows(cfg, false)
-	default:
-		return fmt.Errorf("Package is not supported on %s", cfg.OsType)
-	}
 }
 
 // ===============================

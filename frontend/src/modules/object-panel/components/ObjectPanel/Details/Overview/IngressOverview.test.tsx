@@ -2,6 +2,8 @@
  * frontend/src/modules/object-panel/components/ObjectPanel/Details/Overview/IngressOverview.test.tsx
  */
 
+import { partialModelFixture } from '@/test-utils/partialModelFixture';
+
 import { ingress } from '@core/backend-api/models';
 import type React from 'react';
 import { act } from 'react';
@@ -49,7 +51,7 @@ describe('IngressOverview', () => {
   let root: ReactDOM.Root;
 
   const renderComponent = async (fixture: Record<string, unknown>) => {
-    const dto = ingress.IngressDetails.createFrom(fixture);
+    const dto = partialModelFixture<ingress.IngressDetails>(fixture);
     await act(async () => {
       root.render(
         <OverviewRenderer

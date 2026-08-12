@@ -7,6 +7,14 @@ export {
 };
 
 export {
+    ClusterHealthState,
+    ClusterLifecycleState,
+    KubeconfigDiscoveryState,
+    PortForwardStatus,
+    RuntimeOperationType
+} from "./models.js";
+
+export type {
     AppInfo,
     AppSettings,
     AppSettingsSchema,
@@ -15,8 +23,6 @@ export {
     CatalogDomainDiagnostics,
     CatalogHealth,
     CatalogQueryCSVExport,
-    ClusterHealthState,
-    ClusterLifecycleState,
     ClusterWorkspaceAuthState,
     ClusterWorkspaceClusterState,
     ClusterWorkspaceCommand,
@@ -36,7 +42,6 @@ export {
     FavoriteTableState,
     HelmReleaseDetails,
     KubeconfigDiscoveryResult,
-    KubeconfigDiscoveryState,
     KubeconfigInfo,
     KubernetesAPIClientDiagnostics,
     LogEntry,
@@ -56,11 +61,9 @@ export {
     ObjectYAMLReloadMergeResponse,
     PodDetailInfo,
     PortForwardSession,
-    PortForwardStatus,
     RevisionEntry,
     RuntimeOperation,
     RuntimeOperationTargetRef,
-    RuntimeOperationType,
     SelectionDiagnostics,
     ShellSession,
     ShellSessionInfo,

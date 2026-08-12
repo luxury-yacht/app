@@ -200,7 +200,7 @@ const renderTls = (d: IngressDetails, context: OverviewContext): React.ReactNode
 
 export const ingressDescriptor: OverviewDescriptor<IngressDetails> = {
   displayKind: 'Ingress',
-  dtoClass: ingress.IngressDetails,
+  dtoName: 'IngressDetails',
   schema: {
     items: [
       {

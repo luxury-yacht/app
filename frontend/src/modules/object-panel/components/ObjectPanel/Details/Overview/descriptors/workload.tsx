@@ -462,12 +462,12 @@ const strategyTooltip = (strategy: string, kind: StrategyKind): React.ReactNode 
 
 interface PodTemplate {
   serviceAccount?: string;
-  nodeSelector?: Record<string, string | undefined>;
-  tolerations?: string[];
+  nodeSelector?: Record<string, string | undefined> | null;
+  tolerations?: string[] | null;
   namespace?: string;
 }
 
-const nonDefaultTolerations = (tolerations: string[] | undefined): ParsedToleration[] =>
+const nonDefaultTolerations = (tolerations: string[] | null | undefined): ParsedToleration[] =>
   tolerations
     ?.filter((tol) => !DEFAULT_TOLERATION_RE.test(tol))
     .map(parseToleration)
@@ -615,7 +615,7 @@ const deploymentItems: OverviewItemSpec<DeploymentDetails>[] = [
     field: 'conditions',
     label: 'Availability',
     render: (d) => {
-      const c = findCondition(d.conditions, 'Available');
+      const c = findCondition(d.conditions ?? undefined, 'Available');
       if (c?.status !== 'False') {
         return null;
       }
@@ -631,7 +631,7 @@ const deploymentItems: OverviewItemSpec<DeploymentDetails>[] = [
   {
     label: 'Replica Failure',
     render: (d) => {
-      const c = findCondition(d.conditions, 'ReplicaFailure');
+      const c = findCondition(d.conditions ?? undefined, 'ReplicaFailure');
       if (c?.status !== 'True') {
         return null;
       }
@@ -759,7 +759,7 @@ const deploymentItems: OverviewItemSpec<DeploymentDetails>[] = [
 
 export const deploymentDescriptor: OverviewDescriptor<DeploymentDetails> = {
   displayKind: 'Deployment',
-  dtoClass: deployment.DeploymentDetails,
+  dtoName: 'DeploymentDetails',
   schema: { showSelector: true, items: deploymentItems },
   // details/updated -> table-summary only; replicaSets/replicaSetSummaries/observedGeneration ->
   // not surfaced in the Overview; containers -> Containers section; cpu/mem/pods -> Utilization.
@@ -854,7 +854,7 @@ const daemonSetItems: OverviewItemSpec<DaemonSetDetails>[] = [
 
 export const daemonSetDescriptor: OverviewDescriptor<DaemonSetDetails> = {
   displayKind: 'DaemonSet',
-  dtoClass: daemonset.DaemonSetDetails,
+  dtoName: 'DaemonSetDetails',
   schema: { showSelector: true, items: daemonSetItems },
   // details -> table summary; conditions/updated/minReadySeconds/revisionHistoryLimit/
   // observedGeneration/collisionCount -> not surfaced in the DaemonSet Overview; containers ->
@@ -1057,7 +1057,7 @@ const statefulSetItems: OverviewItemSpec<StatefulSetDetails>[] = [
 
 export const statefulSetDescriptor: OverviewDescriptor<StatefulSetDetails> = {
   displayKind: 'StatefulSet',
-  dtoClass: statefulset.StatefulSetDetails,
+  dtoName: 'StatefulSetDetails',
   schema: { showSelector: true, items: statefulSetItems },
   // details -> table summary; conditions/revisionHistoryLimit/serviceName/currentRevision/
   // updateRevision/currentReplicas/updatedReplicas/observedGeneration/collisionCount -> not
@@ -1114,7 +1114,7 @@ const replicaSetItems: OverviewItemSpec<ReplicaSetDetails>[] = [
 
 export const replicaSetDescriptor: OverviewDescriptor<ReplicaSetDetails> = {
   displayKind: 'ReplicaSet',
-  dtoClass: replicaset.ReplicaSetDetails,
+  dtoName: 'ReplicaSetDetails',
   schema: { showSelector: true, items: replicaSetItems },
   // details -> table summary; conditions/observedGeneration/isActive -> not surfaced in the
   // ReplicaSet Overview; containers -> Containers section; cpu/mem/pods -> Utilization section.

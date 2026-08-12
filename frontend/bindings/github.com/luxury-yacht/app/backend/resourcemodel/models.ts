@@ -3,41 +3,17 @@
 
 // eslint-disable-next-line @typescript-eslint/ban-ts-comment
 // @ts-ignore: Unused imports
-import { Create as $Create } from "@wailsio/runtime";
-
-// eslint-disable-next-line @typescript-eslint/ban-ts-comment
-// @ts-ignore: Unused imports
 import * as v1$0 from "../../../../../k8s.io/apimachinery/pkg/apis/meta/v1/models.js";
 
-export class ConditionFacts {
+export interface ConditionFacts {
     "type": string;
     "status": string;
     "reason"?: string;
     "message"?: string;
     "lastTransitionTime"?: v1$0.Time;
-
-    /** Creates a new ConditionFacts instance. */
-    constructor($$source: Partial<ConditionFacts> = {}) {
-        if (!("type" in $$source)) {
-            this["type"] = "";
-        }
-        if (!("status" in $$source)) {
-            this["status"] = "";
-        }
-
-        Object.assign(this, $$source);
-    }
-
-    /**
-     * Creates a new ConditionFacts instance from a string or object.
-     */
-    static createFrom($$source: any = {}): ConditionFacts {
-        let $$parsedSource = typeof $$source === 'string' ? JSON.parse($$source) : $$source;
-        return new ConditionFacts($$parsedSource as Partial<ConditionFacts>);
-    }
 }
 
-export class DisplayRef {
+export interface DisplayRef {
     "clusterId": string;
     "group"?: string;
     "version"?: string;
@@ -46,56 +22,14 @@ export class DisplayRef {
     "namespace"?: string;
     "name"?: string;
     "uid"?: string;
-
-    /** Creates a new DisplayRef instance. */
-    constructor($$source: Partial<DisplayRef> = {}) {
-        if (!("clusterId" in $$source)) {
-            this["clusterId"] = "";
-        }
-        if (!("kind" in $$source)) {
-            this["kind"] = "";
-        }
-
-        Object.assign(this, $$source);
-    }
-
-    /**
-     * Creates a new DisplayRef instance from a string or object.
-     */
-    static createFrom($$source: any = {}): DisplayRef {
-        let $$parsedSource = typeof $$source === 'string' ? JSON.parse($$source) : $$source;
-        return new DisplayRef($$parsedSource as Partial<DisplayRef>);
-    }
 }
 
-export class ResourceLink {
+export interface ResourceLink {
     "ref"?: ResourceRef | null;
     "display"?: DisplayRef | null;
-
-    /** Creates a new ResourceLink instance. */
-    constructor($$source: Partial<ResourceLink> = {}) {
-
-        Object.assign(this, $$source);
-    }
-
-    /**
-     * Creates a new ResourceLink instance from a string or object.
-     */
-    static createFrom($$source: any = {}): ResourceLink {
-        const $$createField0_0 = $$createType1;
-        const $$createField1_0 = $$createType3;
-        let $$parsedSource = typeof $$source === 'string' ? JSON.parse($$source) : $$source;
-        if ("ref" in $$parsedSource) {
-            $$parsedSource["ref"] = $$createField0_0($$parsedSource["ref"]);
-        }
-        if ("display" in $$parsedSource) {
-            $$parsedSource["display"] = $$createField1_0($$parsedSource["display"]);
-        }
-        return new ResourceLink($$parsedSource as Partial<ResourceLink>);
-    }
 }
 
-export class ResourceRef {
+export interface ResourceRef {
     "clusterId": string;
     "group": string;
     "version": string;
@@ -104,36 +38,4 @@ export class ResourceRef {
     "namespace"?: string;
     "name"?: string;
     "uid"?: string;
-
-    /** Creates a new ResourceRef instance. */
-    constructor($$source: Partial<ResourceRef> = {}) {
-        if (!("clusterId" in $$source)) {
-            this["clusterId"] = "";
-        }
-        if (!("group" in $$source)) {
-            this["group"] = "";
-        }
-        if (!("version" in $$source)) {
-            this["version"] = "";
-        }
-        if (!("kind" in $$source)) {
-            this["kind"] = "";
-        }
-
-        Object.assign(this, $$source);
-    }
-
-    /**
-     * Creates a new ResourceRef instance from a string or object.
-     */
-    static createFrom($$source: any = {}): ResourceRef {
-        let $$parsedSource = typeof $$source === 'string' ? JSON.parse($$source) : $$source;
-        return new ResourceRef($$parsedSource as Partial<ResourceRef>);
-    }
 }
-
-// Private type creation functions
-const $$createType0 = ResourceRef.createFrom;
-const $$createType1 = $Create.Nullable($$createType0);
-const $$createType2 = DisplayRef.createFrom;
-const $$createType3 = $Create.Nullable($$createType2);

@@ -218,7 +218,7 @@ const renderAggregation = (aggregationRule: clusterrole.AggregationRule): React.
 
 export const serviceAccountDescriptor: OverviewDescriptor<ServiceAccountDetails> = {
   displayKind: 'ServiceAccount',
-  dtoClass: serviceaccount.ServiceAccountDetails,
+  dtoName: 'ServiceAccountDetails',
   schema: {
     items: [
       {
@@ -265,7 +265,7 @@ export const serviceAccountDescriptor: OverviewDescriptor<ServiceAccountDetails>
 
 export const roleDescriptor: OverviewDescriptor<RoleDetails> = {
   displayKind: 'Role',
-  dtoClass: role.RoleDetails,
+  dtoName: 'RoleDetails',
   schema: {
     items: [
       {
@@ -283,7 +283,7 @@ export const roleDescriptor: OverviewDescriptor<RoleDetails> = {
 
 export const roleBindingDescriptor: OverviewDescriptor<RoleBindingDetails> = {
   displayKind: 'RoleBinding',
-  dtoClass: rolebinding.RoleBindingDetails,
+  dtoName: 'RoleBindingDetails',
   schema: {
     items: [
       {
@@ -298,7 +298,7 @@ export const roleBindingDescriptor: OverviewDescriptor<RoleBindingDetails> = {
         fullWidth: true,
         hidden: (d) => !(d.subjects && d.subjects.length > 0),
         render: (d, context) => (
-          <SubjectGroups subjects={d.subjects} clusterMeta={clusterMetaFromContext(context)} />
+          <SubjectGroups subjects={d.subjects ?? []} clusterMeta={clusterMetaFromContext(context)} />
         ),
       },
     ],
@@ -309,7 +309,7 @@ export const roleBindingDescriptor: OverviewDescriptor<RoleBindingDetails> = {
 
 export const clusterRoleDescriptor: OverviewDescriptor<ClusterRoleDetails> = {
   displayKind: 'ClusterRole',
-  dtoClass: clusterrole.ClusterRoleDetails,
+  dtoName: 'ClusterRoleDetails',
   schema: {
     items: [
       {
@@ -341,7 +341,7 @@ export const clusterRoleDescriptor: OverviewDescriptor<ClusterRoleDetails> = {
 
 export const clusterRoleBindingDescriptor: OverviewDescriptor<ClusterRoleBindingDetails> = {
   displayKind: 'ClusterRoleBinding',
-  dtoClass: clusterrolebinding.ClusterRoleBindingDetails,
+  dtoName: 'ClusterRoleBindingDetails',
   schema: {
     items: [
       {
@@ -358,7 +358,7 @@ export const clusterRoleBindingDescriptor: OverviewDescriptor<ClusterRoleBinding
         fullWidth: true,
         hidden: (d) => !(d.subjects && d.subjects.length > 0),
         render: (d, context) => (
-          <SubjectGroups subjects={d.subjects} clusterMeta={clusterMetaFromContext(context)} />
+          <SubjectGroups subjects={d.subjects ?? []} clusterMeta={clusterMetaFromContext(context)} />
         ),
       },
     ],

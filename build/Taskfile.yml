@@ -1,6 +1,13 @@
 version: '3'
 
 tasks:
+  prepare:build:
+    summary: Generates project build metadata
+    internal: true
+    run: once
+    cmds:
+      - go run ./cmd/buildmeta
+
   go:mod:tidy:
     summary: Runs `go mod tidy`
     internal: true
@@ -85,6 +92,7 @@ tasks:
     generates:
       - dist/**/*
     deps:
+      - task: prepare:build
       - task: install:frontend:deps
       - task: generate:bindings
         vars:
@@ -188,19 +196,20 @@ tasks:
     generates:
       - frontend/bindings/**/*
     cmds:
-      - wails3 generate bindings -f '{{.BUILD_FLAGS}}' -clean=true -time-type=string -names{{if eq .OBFUSCATED "true"}} -obfuscated{{end}} -ts
+      - wails3 generate bindings -f '{{.BUILD_FLAGS}}' -clean=true -time-type=string -names{{if eq .OBFUSCATED "true"}} -obfuscated{{end}} -ts -i
 
   generate:icons:
-    summary: Generates Windows `.ico` and Mac `.icns` from the application icon.
+    summary: Generates Windows `.ico`, Mac `.icns`, and modern macOS `Assets.car` icons.
     run: once
     dir: build
     sources:
       - "appicon.png"
+      - "appicon.icon"
     generates:
       - "darwin/icons.icns"
       - "windows/icon.ico"
     cmds:
-      - wails3 generate icons -input appicon.png -macfilename darwin/icons.icns -windowsfilename windows/icon.ico
+      - wails3 generate icons -input appicon.png -macfilename darwin/icons.icns -windowsfilename windows/icon.ico -iconcomposerinput appicon.icon -macassetdir darwin
 
   dev:frontend:
     summary: Runs the frontend in development mode
@@ -231,9 +240,9 @@ tasks:
 
   update:build-assets:
     summary: Updates the build assets
-    dir: ..
+    dir: build
     cmds:
-      - mage build-assets
+      - wails3 update build-assets -name "{{.APP_NAME}}" -binaryname "{{.APP_NAME}}" -config config.yml -dir .
 
   build:server:
     summary: Builds the application in server mode (no GUI, HTTP server only)

@@ -3,10 +3,6 @@
 
 // eslint-disable-next-line @typescript-eslint/ban-ts-comment
 // @ts-ignore: Unused imports
-import { Create as $Create } from "@wailsio/runtime";
-
-// eslint-disable-next-line @typescript-eslint/ban-ts-comment
-// @ts-ignore: Unused imports
 import * as resourcemodel$0 from "../resourcemodel/models.js";
 
 /**
@@ -14,26 +10,12 @@ import * as resourcemodel$0 from "../resourcemodel/models.js";
  * Identity stays on Summary; these fields only answer whether a known action
  * variant is appropriate for the current object state.
  */
-export class ActionFacts {
+export interface ActionFacts {
     "status"?: string;
     "unschedulable"?: boolean | null;
     "portForwardAvailable"?: boolean | null;
     "hpaManaged"?: boolean | null;
     "desiredReplicas"?: number | null;
-
-    /** Creates a new ActionFacts instance. */
-    constructor($$source: Partial<ActionFacts> = {}) {
-
-        Object.assign(this, $$source);
-    }
-
-    /**
-     * Creates a new ActionFacts instance from a string or object.
-     */
-    static createFrom($$source: any = {}): ActionFacts {
-        let $$parsedSource = typeof $$source === 'string' ? JSON.parse($$source) : $$source;
-        return new ActionFacts($$parsedSource as Partial<ActionFacts>);
-    }
 }
 
 /**
@@ -59,7 +41,7 @@ export enum Scope {
 /**
  * Summary represents the lightweight metadata captured for each Kubernetes object.
  */
-export class Summary {
+export interface Summary {
     "ref": resourcemodel$0.ResourceRef;
 
     /**
@@ -86,43 +68,4 @@ export class Summary {
      * optional facts needed to present object actions correctly
      */
     "actionFacts"?: ActionFacts | null;
-
-    /** Creates a new Summary instance. */
-    constructor($$source: Partial<Summary> = {}) {
-        if (!("ref" in $$source)) {
-            this["ref"] = (new resourcemodel$0.ResourceRef());
-        }
-        if (!("resourceVersion" in $$source)) {
-            this["resourceVersion"] = "";
-        }
-        if (!("creationTimestamp" in $$source)) {
-            this["creationTimestamp"] = "";
-        }
-        if (!("scope" in $$source)) {
-            this["scope"] = Scope.$zero;
-        }
-
-        Object.assign(this, $$source);
-    }
-
-    /**
-     * Creates a new Summary instance from a string or object.
-     */
-    static createFrom($$source: any = {}): Summary {
-        const $$createField0_0 = $$createType0;
-        const $$createField5_0 = $$createType2;
-        let $$parsedSource = typeof $$source === 'string' ? JSON.parse($$source) : $$source;
-        if ("ref" in $$parsedSource) {
-            $$parsedSource["ref"] = $$createField0_0($$parsedSource["ref"]);
-        }
-        if ("actionFacts" in $$parsedSource) {
-            $$parsedSource["actionFacts"] = $$createField5_0($$parsedSource["actionFacts"]);
-        }
-        return new Summary($$parsedSource as Partial<Summary>);
-    }
 }
-
-// Private type creation functions
-const $$createType0 = resourcemodel$0.ResourceRef.createFrom;
-const $$createType1 = ActionFacts.createFrom;
-const $$createType2 = $Create.Nullable($$createType1);

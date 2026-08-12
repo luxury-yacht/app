@@ -68,7 +68,7 @@ describe('OverviewRenderer hidden fields', () => {
 
     const descriptor = {
       displayKind: 'Test',
-      dtoClass: class {},
+      dtoName: 'TestDetails',
       schema: {
         items: [
           {

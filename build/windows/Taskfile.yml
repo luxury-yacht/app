@@ -100,10 +100,12 @@ tasks:
       - task: create:nsis:installer
         vars:
           INSTALL_SCOPE: '{{.INSTALL_SCOPE | default "machine"}}'
-          WINDOWS_VERSION: '{{.WINDOWS_VERSION}}'
+          WINDOWS_VERSION: '{{.WINDOWS_VERSION | default .PROJECT_WINDOWS_VERSION}}'
     vars:
       INSTALL_SCOPE: '{{.INSTALL_SCOPE | default "machine"}}'
       WINDOWS_VERSION: '{{.WINDOWS_VERSION}}'
+      PROJECT_WINDOWS_VERSION:
+        sh: go run ./cmd/windowsversion
 
   generate:syso:
     summary: Generates Windows `.syso` file

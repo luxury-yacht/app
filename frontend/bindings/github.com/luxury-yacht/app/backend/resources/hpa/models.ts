@@ -3,16 +3,12 @@
 
 // eslint-disable-next-line @typescript-eslint/ban-ts-comment
 // @ts-ignore: Unused imports
-import { Create as $Create } from "@wailsio/runtime";
-
-// eslint-disable-next-line @typescript-eslint/ban-ts-comment
-// @ts-ignore: Unused imports
 import * as v1$0 from "../../../../../../k8s.io/apimachinery/pkg/apis/meta/v1/models.js";
 
 /**
  * HorizontalPodAutoscalerDetails represents comprehensive HPA information.
  */
-export class HorizontalPodAutoscalerDetails {
+export interface HorizontalPodAutoscalerDetails {
     "kind": string;
     "name": string;
     "namespace": string;
@@ -22,243 +18,53 @@ export class HorizontalPodAutoscalerDetails {
     "maxReplicas": number;
     "currentReplicas": number;
     "desiredReplicas": number;
-    "metrics": MetricSpec[];
-    "currentMetrics"?: MetricStatus[];
+    "metrics": MetricSpec[] | null;
+    "currentMetrics"?: MetricStatus[] | null;
     "behavior"?: ScalingBehavior | null;
-    "conditions"?: string[];
-    "labels"?: { [_ in string]?: string };
-    "annotations"?: { [_ in string]?: string };
+    "conditions"?: string[] | null;
+    "labels"?: { [_ in string]?: string } | null;
+    "annotations"?: { [_ in string]?: string } | null;
     "lastScaleTime"?: v1$0.Time | null;
-
-    /** Creates a new HorizontalPodAutoscalerDetails instance. */
-    constructor($$source: Partial<HorizontalPodAutoscalerDetails> = {}) {
-        if (!("kind" in $$source)) {
-            this["kind"] = "";
-        }
-        if (!("name" in $$source)) {
-            this["name"] = "";
-        }
-        if (!("namespace" in $$source)) {
-            this["namespace"] = "";
-        }
-        if (!("details" in $$source)) {
-            this["details"] = "";
-        }
-        if (!("scaleTargetRef" in $$source)) {
-            this["scaleTargetRef"] = (new ScaleTargetReference());
-        }
-        if (!("maxReplicas" in $$source)) {
-            this["maxReplicas"] = 0;
-        }
-        if (!("currentReplicas" in $$source)) {
-            this["currentReplicas"] = 0;
-        }
-        if (!("desiredReplicas" in $$source)) {
-            this["desiredReplicas"] = 0;
-        }
-        if (!("metrics" in $$source)) {
-            this["metrics"] = [];
-        }
-
-        Object.assign(this, $$source);
-    }
-
-    /**
-     * Creates a new HorizontalPodAutoscalerDetails instance from a string or object.
-     */
-    static createFrom($$source: any = {}): HorizontalPodAutoscalerDetails {
-        const $$createField4_0 = $$createType0;
-        const $$createField9_0 = $$createType2;
-        const $$createField10_0 = $$createType4;
-        const $$createField11_0 = $$createType6;
-        const $$createField12_0 = $$createType7;
-        const $$createField13_0 = $$createType8;
-        const $$createField14_0 = $$createType8;
-        let $$parsedSource = typeof $$source === 'string' ? JSON.parse($$source) : $$source;
-        if ("scaleTargetRef" in $$parsedSource) {
-            $$parsedSource["scaleTargetRef"] = $$createField4_0($$parsedSource["scaleTargetRef"]);
-        }
-        if ("metrics" in $$parsedSource) {
-            $$parsedSource["metrics"] = $$createField9_0($$parsedSource["metrics"]);
-        }
-        if ("currentMetrics" in $$parsedSource) {
-            $$parsedSource["currentMetrics"] = $$createField10_0($$parsedSource["currentMetrics"]);
-        }
-        if ("behavior" in $$parsedSource) {
-            $$parsedSource["behavior"] = $$createField11_0($$parsedSource["behavior"]);
-        }
-        if ("conditions" in $$parsedSource) {
-            $$parsedSource["conditions"] = $$createField12_0($$parsedSource["conditions"]);
-        }
-        if ("labels" in $$parsedSource) {
-            $$parsedSource["labels"] = $$createField13_0($$parsedSource["labels"]);
-        }
-        if ("annotations" in $$parsedSource) {
-            $$parsedSource["annotations"] = $$createField14_0($$parsedSource["annotations"]);
-        }
-        return new HorizontalPodAutoscalerDetails($$parsedSource as Partial<HorizontalPodAutoscalerDetails>);
-    }
 }
 
 /**
  * MetricSpec represents a metric specification.
  */
-export class MetricSpec {
+export interface MetricSpec {
     "kind": string;
-    "target": { [_ in string]?: string };
-
-    /** Creates a new MetricSpec instance. */
-    constructor($$source: Partial<MetricSpec> = {}) {
-        if (!("kind" in $$source)) {
-            this["kind"] = "";
-        }
-        if (!("target" in $$source)) {
-            this["target"] = {};
-        }
-
-        Object.assign(this, $$source);
-    }
-
-    /**
-     * Creates a new MetricSpec instance from a string or object.
-     */
-    static createFrom($$source: any = {}): MetricSpec {
-        const $$createField1_0 = $$createType8;
-        let $$parsedSource = typeof $$source === 'string' ? JSON.parse($$source) : $$source;
-        if ("target" in $$parsedSource) {
-            $$parsedSource["target"] = $$createField1_0($$parsedSource["target"]);
-        }
-        return new MetricSpec($$parsedSource as Partial<MetricSpec>);
-    }
+    "target": { [_ in string]?: string } | null;
 }
 
 /**
  * MetricStatus represents the current status of a metric.
  */
-export class MetricStatus {
+export interface MetricStatus {
     "kind": string;
-    "current": { [_ in string]?: string };
-
-    /** Creates a new MetricStatus instance. */
-    constructor($$source: Partial<MetricStatus> = {}) {
-        if (!("kind" in $$source)) {
-            this["kind"] = "";
-        }
-        if (!("current" in $$source)) {
-            this["current"] = {};
-        }
-
-        Object.assign(this, $$source);
-    }
-
-    /**
-     * Creates a new MetricStatus instance from a string or object.
-     */
-    static createFrom($$source: any = {}): MetricStatus {
-        const $$createField1_0 = $$createType8;
-        let $$parsedSource = typeof $$source === 'string' ? JSON.parse($$source) : $$source;
-        if ("current" in $$parsedSource) {
-            $$parsedSource["current"] = $$createField1_0($$parsedSource["current"]);
-        }
-        return new MetricStatus($$parsedSource as Partial<MetricStatus>);
-    }
+    "current": { [_ in string]?: string } | null;
 }
 
 /**
  * ScaleTargetReference represents the target of the HPA.
  */
-export class ScaleTargetReference {
+export interface ScaleTargetReference {
     "kind": string;
     "name": string;
     "apiVersion"?: string;
-
-    /** Creates a new ScaleTargetReference instance. */
-    constructor($$source: Partial<ScaleTargetReference> = {}) {
-        if (!("kind" in $$source)) {
-            this["kind"] = "";
-        }
-        if (!("name" in $$source)) {
-            this["name"] = "";
-        }
-
-        Object.assign(this, $$source);
-    }
-
-    /**
-     * Creates a new ScaleTargetReference instance from a string or object.
-     */
-    static createFrom($$source: any = {}): ScaleTargetReference {
-        let $$parsedSource = typeof $$source === 'string' ? JSON.parse($$source) : $$source;
-        return new ScaleTargetReference($$parsedSource as Partial<ScaleTargetReference>);
-    }
 }
 
 /**
  * ScalingBehavior represents the scaling behavior configuration.
  */
-export class ScalingBehavior {
+export interface ScalingBehavior {
     "scaleUp"?: ScalingRules | null;
     "scaleDown"?: ScalingRules | null;
-
-    /** Creates a new ScalingBehavior instance. */
-    constructor($$source: Partial<ScalingBehavior> = {}) {
-
-        Object.assign(this, $$source);
-    }
-
-    /**
-     * Creates a new ScalingBehavior instance from a string or object.
-     */
-    static createFrom($$source: any = {}): ScalingBehavior {
-        const $$createField0_0 = $$createType10;
-        const $$createField1_0 = $$createType10;
-        let $$parsedSource = typeof $$source === 'string' ? JSON.parse($$source) : $$source;
-        if ("scaleUp" in $$parsedSource) {
-            $$parsedSource["scaleUp"] = $$createField0_0($$parsedSource["scaleUp"]);
-        }
-        if ("scaleDown" in $$parsedSource) {
-            $$parsedSource["scaleDown"] = $$createField1_0($$parsedSource["scaleDown"]);
-        }
-        return new ScalingBehavior($$parsedSource as Partial<ScalingBehavior>);
-    }
 }
 
 /**
  * ScalingRules represents rules for scaling.
  */
-export class ScalingRules {
+export interface ScalingRules {
     "stabilizationWindowSeconds"?: number | null;
     "selectPolicy"?: string;
-    "policies"?: string[];
-
-    /** Creates a new ScalingRules instance. */
-    constructor($$source: Partial<ScalingRules> = {}) {
-
-        Object.assign(this, $$source);
-    }
-
-    /**
-     * Creates a new ScalingRules instance from a string or object.
-     */
-    static createFrom($$source: any = {}): ScalingRules {
-        const $$createField2_0 = $$createType7;
-        let $$parsedSource = typeof $$source === 'string' ? JSON.parse($$source) : $$source;
-        if ("policies" in $$parsedSource) {
-            $$parsedSource["policies"] = $$createField2_0($$parsedSource["policies"]);
-        }
-        return new ScalingRules($$parsedSource as Partial<ScalingRules>);
-    }
+    "policies"?: string[] | null;
 }
-
-// Private type creation functions
-const $$createType0 = ScaleTargetReference.createFrom;
-const $$createType1 = MetricSpec.createFrom;
-const $$createType2 = $Create.Array($$createType1);
-const $$createType3 = MetricStatus.createFrom;
-const $$createType4 = $Create.Array($$createType3);
-const $$createType5 = ScalingBehavior.createFrom;
-const $$createType6 = $Create.Nullable($$createType5);
-const $$createType7 = $Create.Array($Create.Any);
-const $$createType8 = $Create.Map($Create.Any, $Create.Any);
-const $$createType9 = ScalingRules.createFrom;
-const $$createType10 = $Create.Nullable($$createType9);

@@ -389,5 +389,5 @@ export async function fetchSelectionDiagnostics(): Promise<SelectionDiagnostics>
 export async function fetchKubernetesAPIClientDiagnostics(): Promise<
   KubernetesAPIClientDiagnostics[]
 > {
-  return GetKubernetesAPIClientDiagnostics();
+  return (await GetKubernetesAPIClientDiagnostics()) ?? [];
 }

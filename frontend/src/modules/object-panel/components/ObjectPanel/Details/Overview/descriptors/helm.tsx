@@ -151,7 +151,7 @@ const HelmExtraSections: React.FC<{ data: HelmReleaseDetails }> = ({ data }) => 
 
 export const helmReleaseDescriptor: OverviewDescriptor<HelmReleaseDetails> = {
   displayKind: 'HelmRelease',
-  dtoClass: helm.HelmReleaseDetails,
+  dtoName: 'HelmReleaseDetails',
   schema: {
     items: [
       { field: 'chart', label: 'Chart', hidden: (d) => !d.chart },

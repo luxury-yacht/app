@@ -7,6 +7,8 @@
  * NodeDetails-shaped DTO and a context object.
  */
 
+import { partialModelFixture } from '@/test-utils/partialModelFixture';
+
 import { nodes } from '@core/backend-api/models';
 import type React from 'react';
 import { act } from 'react';
@@ -82,7 +84,7 @@ describe('NodeOverview', () => {
 
   it('renders node details including capacity, runtime, and taints', async () => {
     await renderNode(
-      nodes.NodeDetails.createFrom({
+      partialModelFixture<nodes.NodeDetails>({
         name: 'node-a',
         status: 'Ready',
         statusState: 'True',
@@ -134,7 +136,7 @@ describe('NodeOverview', () => {
 
   it('renders every condition as a status chip with the correct variant', async () => {
     await renderNode(
-      nodes.NodeDetails.createFrom({
+      partialModelFixture<nodes.NodeDetails>({
         name: 'node-b',
         conditions: [
           { kind: 'Ready', status: 'True' },
@@ -160,7 +162,7 @@ describe('NodeOverview', () => {
 
   it('renders the inline drain affordance when a drain is in progress', async () => {
     const onOpenDrain = vi.fn();
-    await renderNode(nodes.NodeDetails.createFrom({ name: 'node-c', status: 'Ready' }), {
+    await renderNode(partialModelFixture<nodes.NodeDetails>({ name: 'node-c', status: 'Ready' }), {
       onOpenDrain,
       drainInProgress: true,
       clusterId: 'cluster-1',

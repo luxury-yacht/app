@@ -3,10 +3,6 @@
 
 // eslint-disable-next-line @typescript-eslint/ban-ts-comment
 // @ts-ignore: Unused imports
-import { Create as $Create } from "@wailsio/runtime";
-
-// eslint-disable-next-line @typescript-eslint/ban-ts-comment
-// @ts-ignore: Unused imports
 import * as resourcemodel$0 from "../../resourcemodel/models.js";
 // eslint-disable-next-line @typescript-eslint/ban-ts-comment
 // @ts-ignore: Unused imports
@@ -15,7 +11,7 @@ import * as v1$0 from "../../../../../../k8s.io/apimachinery/pkg/apis/meta/v1/mo
 /**
  * EventDetails is the complete Event payload rendered by the object panel.
  */
-export class EventDetails {
+export interface EventDetails {
     "kind": string;
     "name": string;
     "namespace": string;
@@ -40,65 +36,6 @@ export class EventDetails {
     "involvedObjectFieldPath"?: string;
     "relatedObject"?: resourcemodel$0.ResourceLink | null;
     "relatedObjectFieldPath"?: string;
-    "labels"?: { [_ in string]?: string };
-    "annotations"?: { [_ in string]?: string };
-
-    /** Creates a new EventDetails instance. */
-    constructor($$source: Partial<EventDetails> = {}) {
-        if (!("kind" in $$source)) {
-            this["kind"] = "";
-        }
-        if (!("name" in $$source)) {
-            this["name"] = "";
-        }
-        if (!("namespace" in $$source)) {
-            this["namespace"] = "";
-        }
-        if (!("status" in $$source)) {
-            this["status"] = "";
-        }
-        if (!("eventType" in $$source)) {
-            this["eventType"] = "";
-        }
-        if (!("count" in $$source)) {
-            this["count"] = 0;
-        }
-        if (!("firstTimestamp" in $$source)) {
-            this["firstTimestamp"] = null;
-        }
-        if (!("lastTimestamp" in $$source)) {
-            this["lastTimestamp"] = null;
-        }
-
-        Object.assign(this, $$source);
-    }
-
-    /**
-     * Creates a new EventDetails instance from a string or object.
-     */
-    static createFrom($$source: any = {}): EventDetails {
-        const $$createField20_0 = $$createType1;
-        const $$createField22_0 = $$createType1;
-        const $$createField24_0 = $$createType2;
-        const $$createField25_0 = $$createType2;
-        let $$parsedSource = typeof $$source === 'string' ? JSON.parse($$source) : $$source;
-        if ("involvedObject" in $$parsedSource) {
-            $$parsedSource["involvedObject"] = $$createField20_0($$parsedSource["involvedObject"]);
-        }
-        if ("relatedObject" in $$parsedSource) {
-            $$parsedSource["relatedObject"] = $$createField22_0($$parsedSource["relatedObject"]);
-        }
-        if ("labels" in $$parsedSource) {
-            $$parsedSource["labels"] = $$createField24_0($$parsedSource["labels"]);
-        }
-        if ("annotations" in $$parsedSource) {
-            $$parsedSource["annotations"] = $$createField25_0($$parsedSource["annotations"]);
-        }
-        return new EventDetails($$parsedSource as Partial<EventDetails>);
-    }
+    "labels"?: { [_ in string]?: string } | null;
+    "annotations"?: { [_ in string]?: string } | null;
 }
-
-// Private type creation functions
-const $$createType0 = resourcemodel$0.ResourceLink.createFrom;
-const $$createType1 = $Create.Nullable($$createType0);
-const $$createType2 = $Create.Map($Create.Any, $Create.Any);

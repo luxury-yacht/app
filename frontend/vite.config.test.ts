@@ -10,8 +10,10 @@ import { describe, expect, it, vi } from 'vitest';
 import { parse } from 'yaml';
 
 const sentryPluginMock = vi.hoisted(() => vi.fn(() => [{ name: 'sentry-vite-plugin' }]));
+const wailsPluginMock = vi.hoisted(() => vi.fn(() => ({ name: 'wails-vite-plugin' })));
 
 vi.mock('@sentry/vite-plugin', () => ({ sentryVitePlugin: sentryPluginMock }));
+vi.mock('@wailsio/runtime/plugins/vite', () => ({ default: wailsPluginMock }));
 
 import { createViteConfig } from './vite.config';
 
@@ -28,9 +30,19 @@ const expectedSentryRelease = `luxury-yacht@${wailsBuildConfig.info.version}`;
 
 describe('Vite configuration', () => {
   it('pre-bundles the object-map renderer dependency', () => {
-    const config = createViteConfig({}, 'serve');
+    const config = createViteConfig({}, 'serve', 'development');
 
     expect(config.optimizeDeps?.include).toContain('@antv/g6');
+  });
+
+  it('uses the Wails Vite plugin and Wails-provided development port', () => {
+    wailsPluginMock.mockClear();
+
+    const config = createViteConfig({ WAILS_VITE_PORT: '9246' }, 'serve', 'development');
+
+    expect(wailsPluginMock).toHaveBeenCalledWith('./bindings');
+    expect(config.plugins).toContainEqual({ name: 'wails-vite-plugin' });
+    expect(config.server).toMatchObject({ host: '127.0.0.1', port: 9246 });
   });
 
   it('disables the Sentry build integration while serving development', () => {
@@ -44,7 +56,8 @@ describe('Vite configuration', () => {
         SENTRY_ORG: 'luxury-yacht',
         SENTRY_FRONTEND_PROJECT: 'desktop-frontend',
       },
-      'serve'
+      'serve',
+      'development'
     );
 
     expect(config.build?.sourcemap).toBe(false);
@@ -57,7 +70,7 @@ describe('Vite configuration', () => {
   it('enables private source-map upload only with complete Sentry build credentials', () => {
     sentryPluginMock.mockClear();
 
-    const disabled = createViteConfig({}, 'build');
+    const disabled = createViteConfig({}, 'build', 'production');
     expect(disabled.build?.sourcemap).toBe(false);
     expect(sentryPluginMock).not.toHaveBeenCalled();
 
@@ -68,7 +81,8 @@ describe('Vite configuration', () => {
         SENTRY_ORG: 'luxury-yacht',
         SENTRY_FRONTEND_PROJECT: 'desktop-frontend',
       },
-      'build'
+      'build',
+      'production'
     );
     expect(enabled.build?.sourcemap).toBe('hidden');
     expect(sentryPluginMock).toHaveBeenCalledWith({
@@ -87,5 +101,24 @@ describe('Vite configuration', () => {
       JSON.stringify('https://public@example.com/1')
     );
     expect(enabled.define?.__SENTRY_RELEASE__).toBe(JSON.stringify(expectedSentryRelease));
+  });
+
+  it('keeps a Wails development build out of the production Sentry path', () => {
+    sentryPluginMock.mockClear();
+
+    const config = createViteConfig(
+      {
+        SENTRY_AUTH_TOKEN: 'token',
+        SENTRY_FRONTEND_DSN: 'https://public@example.com/1',
+        SENTRY_ORG: 'luxury-yacht',
+        SENTRY_FRONTEND_PROJECT: 'desktop-frontend',
+      },
+      'build',
+      'development'
+    );
+
+    expect(config.define?.__SENTRY_ENABLED__).toBe(JSON.stringify(false));
+    expect(config.build?.sourcemap).toBe(false);
+    expect(sentryPluginMock).not.toHaveBeenCalled();
   });
 });

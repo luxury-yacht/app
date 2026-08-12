@@ -10,7 +10,7 @@ func TestCleanBuildOutputsPreservesWailsSources(t *testing.T) {
 	root := t.TempDir()
 	buildDir := filepath.Join(root, "build")
 	configPath := filepath.Join(buildDir, "config.yml")
-	artifactPath := filepath.Join(buildDir, "bin", "luxury-yacht")
+	artifactPath := filepath.Join(root, "bin", "luxury-yacht")
 	manifestPath := filepath.Join(root, "backend", "buildinfo", "generated.json")
 
 	for path, contents := range map[string]string{
@@ -31,6 +31,14 @@ func TestCleanBuildOutputsPreservesWailsSources(t *testing.T) {
 		ArtifactsDir: filepath.Join(buildDir, "artifacts"),
 		ManifestPath: manifestPath,
 	}
+	originalWorkingDirectory, err := os.Getwd()
+	if err != nil {
+		t.Fatal(err)
+	}
+	if err := os.Chdir(root); err != nil {
+		t.Fatal(err)
+	}
+	t.Cleanup(func() { _ = os.Chdir(originalWorkingDirectory) })
 	if err := CleanBuildOutputs(cfg); err != nil {
 		t.Fatalf("CleanBuildOutputs() error = %v", err)
 	}

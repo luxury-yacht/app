@@ -3,13 +3,9 @@
 
 // eslint-disable-next-line @typescript-eslint/ban-ts-comment
 // @ts-ignore: Unused imports
-import { Create as $Create } from "@wailsio/runtime";
-
-// eslint-disable-next-line @typescript-eslint/ban-ts-comment
-// @ts-ignore: Unused imports
 import * as types$0 from "../types/models.js";
 
-export class StatefulSetDetails {
+export interface StatefulSetDetails {
     /**
      * Basic information
      */
@@ -48,42 +44,42 @@ export class StatefulSetDetails {
      */
     "serviceName"?: string;
     "serviceAccount"?: string;
-    "pvcRetentionPolicy"?: { [_ in string]?: string };
+    "pvcRetentionPolicy"?: { [_ in string]?: string } | null;
 
     /**
      * Pod placement constraints (from the pod template).
      */
-    "nodeSelector"?: { [_ in string]?: string };
-    "tolerations"?: string[];
+    "nodeSelector"?: { [_ in string]?: string } | null;
+    "tolerations"?: string[] | null;
 
     /**
      * Selector and labels
      */
-    "selector"?: { [_ in string]?: string };
-    "labels"?: { [_ in string]?: string };
-    "annotations"?: { [_ in string]?: string };
+    "selector"?: { [_ in string]?: string } | null;
+    "labels"?: { [_ in string]?: string } | null;
+    "annotations"?: { [_ in string]?: string } | null;
 
     /**
      * Conditions
      */
-    "conditions"?: string[];
+    "conditions"?: string[] | null;
 
     /**
      * Template information
      */
-    "containers"?: types$0.PodDetailInfoContainer[];
-    "initContainers"?: types$0.PodDetailInfoContainer[];
+    "containers"?: types$0.PodDetailInfoContainer[] | null;
+    "initContainers"?: types$0.PodDetailInfoContainer[] | null;
 
     /**
      * Volume claim templates — structured summaries of each entry in
      * `spec.volumeClaimTemplates`.
      */
-    "volumeClaimTemplates"?: VolumeClaimTemplateSummary[];
+    "volumeClaimTemplates"?: VolumeClaimTemplateSummary[] | null;
 
     /**
      * Pod information
      */
-    "pods"?: types$0.PodSimpleInfo[];
+    "pods"?: types$0.PodSimpleInfo[] | null;
     "podMetricsSummary"?: types$0.PodMetricsSummary | null;
 
     /**
@@ -99,102 +95,13 @@ export class StatefulSetDetails {
      */
     "observedGeneration"?: number;
     "collisionCount"?: number | null;
-
-    /** Creates a new StatefulSetDetails instance. */
-    constructor($$source: Partial<StatefulSetDetails> = {}) {
-        if (!("kind" in $$source)) {
-            this["kind"] = "";
-        }
-        if (!("name" in $$source)) {
-            this["name"] = "";
-        }
-        if (!("namespace" in $$source)) {
-            this["namespace"] = "";
-        }
-        if (!("status" in $$source)) {
-            this["status"] = "";
-        }
-        if (!("details" in $$source)) {
-            this["details"] = "";
-        }
-        if (!("replicas" in $$source)) {
-            this["replicas"] = "";
-        }
-        if (!("ready" in $$source)) {
-            this["ready"] = "";
-        }
-        if (!("available" in $$source)) {
-            this["available"] = 0;
-        }
-        if (!("desiredReplicas" in $$source)) {
-            this["desiredReplicas"] = 0;
-        }
-
-        Object.assign(this, $$source);
-    }
-
-    /**
-     * Creates a new StatefulSetDetails instance from a string or object.
-     */
-    static createFrom($$source: any = {}): StatefulSetDetails {
-        const $$createField27_0 = $$createType0;
-        const $$createField28_0 = $$createType0;
-        const $$createField29_0 = $$createType1;
-        const $$createField30_0 = $$createType0;
-        const $$createField31_0 = $$createType0;
-        const $$createField32_0 = $$createType0;
-        const $$createField33_0 = $$createType1;
-        const $$createField34_0 = $$createType3;
-        const $$createField35_0 = $$createType3;
-        const $$createField36_0 = $$createType5;
-        const $$createField37_0 = $$createType7;
-        const $$createField38_0 = $$createType9;
-        let $$parsedSource = typeof $$source === 'string' ? JSON.parse($$source) : $$source;
-        if ("pvcRetentionPolicy" in $$parsedSource) {
-            $$parsedSource["pvcRetentionPolicy"] = $$createField27_0($$parsedSource["pvcRetentionPolicy"]);
-        }
-        if ("nodeSelector" in $$parsedSource) {
-            $$parsedSource["nodeSelector"] = $$createField28_0($$parsedSource["nodeSelector"]);
-        }
-        if ("tolerations" in $$parsedSource) {
-            $$parsedSource["tolerations"] = $$createField29_0($$parsedSource["tolerations"]);
-        }
-        if ("selector" in $$parsedSource) {
-            $$parsedSource["selector"] = $$createField30_0($$parsedSource["selector"]);
-        }
-        if ("labels" in $$parsedSource) {
-            $$parsedSource["labels"] = $$createField31_0($$parsedSource["labels"]);
-        }
-        if ("annotations" in $$parsedSource) {
-            $$parsedSource["annotations"] = $$createField32_0($$parsedSource["annotations"]);
-        }
-        if ("conditions" in $$parsedSource) {
-            $$parsedSource["conditions"] = $$createField33_0($$parsedSource["conditions"]);
-        }
-        if ("containers" in $$parsedSource) {
-            $$parsedSource["containers"] = $$createField34_0($$parsedSource["containers"]);
-        }
-        if ("initContainers" in $$parsedSource) {
-            $$parsedSource["initContainers"] = $$createField35_0($$parsedSource["initContainers"]);
-        }
-        if ("volumeClaimTemplates" in $$parsedSource) {
-            $$parsedSource["volumeClaimTemplates"] = $$createField36_0($$parsedSource["volumeClaimTemplates"]);
-        }
-        if ("pods" in $$parsedSource) {
-            $$parsedSource["pods"] = $$createField37_0($$parsedSource["pods"]);
-        }
-        if ("podMetricsSummary" in $$parsedSource) {
-            $$parsedSource["podMetricsSummary"] = $$createField38_0($$parsedSource["podMetricsSummary"]);
-        }
-        return new StatefulSetDetails($$parsedSource as Partial<StatefulSetDetails>);
-    }
 }
 
 /**
  * VolumeClaimTemplateSummary is a structured summary of a StatefulSet
  * spec.volumeClaimTemplates entry.
  */
-export class VolumeClaimTemplateSummary {
+export interface VolumeClaimTemplateSummary {
     "name": string;
 
     /**
@@ -210,43 +117,10 @@ export class VolumeClaimTemplateSummary {
     /**
      * e.g. ["ReadWriteOnce"]
      */
-    "accessModes"?: string[];
+    "accessModes"?: string[] | null;
 
     /**
      * "Filesystem" (default) or "Block"
      */
     "volumeMode"?: string;
-
-    /** Creates a new VolumeClaimTemplateSummary instance. */
-    constructor($$source: Partial<VolumeClaimTemplateSummary> = {}) {
-        if (!("name" in $$source)) {
-            this["name"] = "";
-        }
-
-        Object.assign(this, $$source);
-    }
-
-    /**
-     * Creates a new VolumeClaimTemplateSummary instance from a string or object.
-     */
-    static createFrom($$source: any = {}): VolumeClaimTemplateSummary {
-        const $$createField3_0 = $$createType1;
-        let $$parsedSource = typeof $$source === 'string' ? JSON.parse($$source) : $$source;
-        if ("accessModes" in $$parsedSource) {
-            $$parsedSource["accessModes"] = $$createField3_0($$parsedSource["accessModes"]);
-        }
-        return new VolumeClaimTemplateSummary($$parsedSource as Partial<VolumeClaimTemplateSummary>);
-    }
 }
-
-// Private type creation functions
-const $$createType0 = $Create.Map($Create.Any, $Create.Any);
-const $$createType1 = $Create.Array($Create.Any);
-const $$createType2 = types$0.PodDetailInfoContainer.createFrom;
-const $$createType3 = $Create.Array($$createType2);
-const $$createType4 = VolumeClaimTemplateSummary.createFrom;
-const $$createType5 = $Create.Array($$createType4);
-const $$createType6 = types$0.PodSimpleInfo.createFrom;
-const $$createType7 = $Create.Array($$createType6);
-const $$createType8 = types$0.PodMetricsSummary.createFrom;
-const $$createType9 = $Create.Nullable($$createType8);

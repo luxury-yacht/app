@@ -7,8 +7,8 @@ is an in-memory ring (not stderr), and a `wails3 dev` child's stderr is not
 reliably capturable, so SIGQUIT dumps are effectively lost.
 
 - **Opt-in per run**: the handler arms only when `ENABLE_GOROUTINE_DUMP` is
-  truthy — `ENABLE_GOROUTINE_DUMP=true wails3 dev` (or `… mage dev`, or set on
-  a built binary's environment). Default off. Because a wedge may not
+  truthy — `ENABLE_GOROUTINE_DUMP=true wails3 dev` (or set it on a built
+  binary's environment). Default off. Because a wedge may not
   reproduce on demand, relaunch with the flag *before* trying to reproduce.
 - Handler: `backend/app_diagnostic_dump.go` (unix-only; Windows no-op in
   `backend/app_diagnostic_dump_windows.go`), armed in `App.Startup`
@@ -33,8 +33,8 @@ readiness but the dump showed synced stores and pointed downstream (catalog).
 
 ## How to use it
 
-1. Launch with the opt-in: `ENABLE_GOROUTINE_DUMP=true mage dev` (or `wails
-   dev`), then reproduce the problem.
+1. Launch with the opt-in: `ENABLE_GOROUTINE_DUMP=true wails3 dev`, then
+   reproduce the problem.
 2. Find the arming line in the app log (log viewer or startup output):
    `goroutine dump armed: pid <N> — kill -USR1 <N> writes all goroutine stacks to <dir>`
    If that line is absent, the opt-in did not take effect — the handler is not

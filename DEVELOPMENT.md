@@ -22,7 +22,7 @@ Open a new terminal after saving the startup file.
 If you don't want to change your shell configuration, you have two options
 
 1. Manually run the shell command in the table above prior to starting development work.
-2. Prefix each tool managed by Mise with `mise exec --` (for example `mise exec -- mage dev`).
+2. Prefix each tool managed by Mise with `mise exec --` (for example `mise exec -- wails3 dev`).
 
 ### Install the Toolchain
 
@@ -40,14 +40,17 @@ wails3 doctor
 
 This will print a list of dependencies for Wails. You must install at least the required dependencies.
 
-Luxury Yacht uses [Mage](https://magefile.org/) for cross-platform development commands. Mage is similar to `make`, but is written in Go, so will work the same across all platforms. To see what `mage` targets are available, run `mage -l` in the repo root.
+Wails v3 owns the development, build, run, and packaging task graph. Luxury Yacht
+keeps [Mage](https://magefile.org/) only for repository quality checks, tests,
+cleanup, Storybook, and release publication. Run `wails3 task -list` or
+`mage -l` to inspect the respective command surfaces.
 
 ## Development Mode
 
 The fastest way to get the app up and running for development is to run in Wails development mode. This gives you hot-reloads and access to the browser console for debugging.
 
 ```bash
-mage dev
+wails3 dev
 ```
 
 Note that hot-reload of the Go backend will cause the app to restart, while changes to frontend code will be reflected immediately without an app restart.
@@ -67,16 +70,19 @@ This starts the Storybook dev server at [http://localhost:6006](http://localhost
 ## Build
 
 ```bash
-mage build
+wails3 build
 ```
 
-## Install
+## Package
 
-To install the app locally:
+Create the platform-native app bundle, installer, and/or packages under `bin/`:
 
 ```bash
-mage install:unsigned
+wails3 package
 ```
+
+Use the generated artifact appropriate for the host platform. During active
+development, use `wails3 dev` instead of installing a package.
 
 ## Versions
 

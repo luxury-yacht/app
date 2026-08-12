@@ -4,9 +4,8 @@
 go = "1.26.5"
 node = "26.7.0"
 npm = "12.0.2"
-# Built from source rather than downloaded: mage stamps the magefile's GOARCH
-# from its own process, so a prebuilt x64 mage on a Windows ARM64 runner would
-# name artifacts amd64. The go: backend compiles it with the toolchain above.
+# Mage remains the repository's quality-check and release-publication runner;
+# Wails owns development, builds, and platform packaging.
 "go:github.com/magefile/mage" = "1.17.2"
 "go:honnef.co/go/tools/cmd/staticcheck" = "0.7.0"
 trivy = "0.73.0"

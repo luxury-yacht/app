@@ -3,16 +3,12 @@
 
 // eslint-disable-next-line @typescript-eslint/ban-ts-comment
 // @ts-ignore: Unused imports
-import { Create as $Create } from "@wailsio/runtime";
-
-// eslint-disable-next-line @typescript-eslint/ban-ts-comment
-// @ts-ignore: Unused imports
 import * as types$0 from "../types/models.js";
 // eslint-disable-next-line @typescript-eslint/ban-ts-comment
 // @ts-ignore: Unused imports
 import * as v1$0 from "../../../../../../k8s.io/apimachinery/pkg/apis/meta/v1/models.js";
 
-export class CronJobDetails {
+export interface CronJobDetails {
     /**
      * Basic information
      */
@@ -54,12 +50,12 @@ export class CronJobDetails {
     /**
      * Active jobs
      */
-    "activeJobs"?: types$0.JobReference[];
+    "activeJobs"?: types$0.JobReference[] | null;
 
     /**
      * All owned jobs (completed, failed, running, etc.)
      */
-    "jobs"?: types$0.JobSimpleInfo[];
+    "jobs"?: types$0.JobSimpleInfo[] | null;
 
     /**
      * Job template information
@@ -69,99 +65,12 @@ export class CronJobDetails {
     /**
      * Labels and annotations
      */
-    "labels"?: { [_ in string]?: string };
-    "annotations"?: { [_ in string]?: string };
+    "labels"?: { [_ in string]?: string } | null;
+    "annotations"?: { [_ in string]?: string } | null;
 
     /**
      * Related pods
      */
-    "pods"?: types$0.PodSimpleInfo[];
+    "pods"?: types$0.PodSimpleInfo[] | null;
     "podMetricsSummary"?: types$0.PodMetricsSummary | null;
-
-    /** Creates a new CronJobDetails instance. */
-    constructor($$source: Partial<CronJobDetails> = {}) {
-        if (!("kind" in $$source)) {
-            this["kind"] = "";
-        }
-        if (!("name" in $$source)) {
-            this["name"] = "";
-        }
-        if (!("namespace" in $$source)) {
-            this["namespace"] = "";
-        }
-        if (!("status" in $$source)) {
-            this["status"] = "";
-        }
-        if (!("details" in $$source)) {
-            this["details"] = "";
-        }
-        if (!("schedule" in $$source)) {
-            this["schedule"] = "";
-        }
-        if (!("suspend" in $$source)) {
-            this["suspend"] = false;
-        }
-        if (!("concurrencyPolicy" in $$source)) {
-            this["concurrencyPolicy"] = "";
-        }
-        if (!("successfulJobsHistory" in $$source)) {
-            this["successfulJobsHistory"] = 0;
-        }
-        if (!("failedJobsHistory" in $$source)) {
-            this["failedJobsHistory"] = 0;
-        }
-        if (!("jobTemplate" in $$source)) {
-            this["jobTemplate"] = (new types$0.JobTemplateDetails());
-        }
-
-        Object.assign(this, $$source);
-    }
-
-    /**
-     * Creates a new CronJobDetails instance from a string or object.
-     */
-    static createFrom($$source: any = {}): CronJobDetails {
-        const $$createField20_0 = $$createType1;
-        const $$createField21_0 = $$createType3;
-        const $$createField22_0 = $$createType4;
-        const $$createField23_0 = $$createType5;
-        const $$createField24_0 = $$createType5;
-        const $$createField25_0 = $$createType7;
-        const $$createField26_0 = $$createType9;
-        let $$parsedSource = typeof $$source === 'string' ? JSON.parse($$source) : $$source;
-        if ("activeJobs" in $$parsedSource) {
-            $$parsedSource["activeJobs"] = $$createField20_0($$parsedSource["activeJobs"]);
-        }
-        if ("jobs" in $$parsedSource) {
-            $$parsedSource["jobs"] = $$createField21_0($$parsedSource["jobs"]);
-        }
-        if ("jobTemplate" in $$parsedSource) {
-            $$parsedSource["jobTemplate"] = $$createField22_0($$parsedSource["jobTemplate"]);
-        }
-        if ("labels" in $$parsedSource) {
-            $$parsedSource["labels"] = $$createField23_0($$parsedSource["labels"]);
-        }
-        if ("annotations" in $$parsedSource) {
-            $$parsedSource["annotations"] = $$createField24_0($$parsedSource["annotations"]);
-        }
-        if ("pods" in $$parsedSource) {
-            $$parsedSource["pods"] = $$createField25_0($$parsedSource["pods"]);
-        }
-        if ("podMetricsSummary" in $$parsedSource) {
-            $$parsedSource["podMetricsSummary"] = $$createField26_0($$parsedSource["podMetricsSummary"]);
-        }
-        return new CronJobDetails($$parsedSource as Partial<CronJobDetails>);
-    }
 }
-
-// Private type creation functions
-const $$createType0 = types$0.JobReference.createFrom;
-const $$createType1 = $Create.Array($$createType0);
-const $$createType2 = types$0.JobSimpleInfo.createFrom;
-const $$createType3 = $Create.Array($$createType2);
-const $$createType4 = types$0.JobTemplateDetails.createFrom;
-const $$createType5 = $Create.Map($Create.Any, $Create.Any);
-const $$createType6 = types$0.PodSimpleInfo.createFrom;
-const $$createType7 = $Create.Array($$createType6);
-const $$createType8 = types$0.PodMetricsSummary.createFrom;
-const $$createType9 = $Create.Nullable($$createType8);

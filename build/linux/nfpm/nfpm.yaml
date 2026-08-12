@@ -17,7 +17,7 @@ license: "MIT"
 release: "1"
 
 contents:
-  - src: "./build/bin/luxury-yacht"
+  - src: "./bin/luxury-yacht"
     dst: "/usr/local/bin/luxury-yacht"
   - src: "./build/appicon.png"
     dst: "/usr/share/icons/hicolor/128x128/apps/luxury-yacht.png"

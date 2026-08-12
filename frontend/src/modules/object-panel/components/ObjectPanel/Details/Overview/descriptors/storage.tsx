@@ -131,7 +131,7 @@ const renderStorageClassLink = (
 
 export const pvcDescriptor: OverviewDescriptor<PersistentVolumeClaimDetails> = {
   displayKind: 'PersistentVolumeClaim',
-  dtoClass: persistentvolumeclaim.PersistentVolumeClaimDetails,
+  dtoName: 'PersistentVolumeClaimDetails',
   schema: {
     items: [
       { kind: 'status' },
@@ -233,7 +233,7 @@ export const pvcDescriptor: OverviewDescriptor<PersistentVolumeClaimDetails> = {
 
 export const pvDescriptor: OverviewDescriptor<PersistentVolumeDetails> = {
   displayKind: 'PersistentVolume',
-  dtoClass: persistentvolume.PersistentVolumeDetails,
+  dtoName: 'PersistentVolumeDetails',
   schema: {
     items: [
       { kind: 'status' },
@@ -332,7 +332,7 @@ export const pvDescriptor: OverviewDescriptor<PersistentVolumeDetails> = {
 
 export const storageClassDescriptor: OverviewDescriptor<StorageClassDetails> = {
   displayKind: 'StorageClass',
-  dtoClass: storageclass.StorageClassDetails,
+  dtoName: 'StorageClassDetails',
   schema: {
     items: [
       { kind: 'status' },
@@ -419,11 +419,11 @@ export const storageClassDescriptor: OverviewDescriptor<StorageClassDetails> = {
             ).map(({ key, value: selector }) => (
               <div key={key} className="overview-condition-list">
                 {withStableListKeys(
-                  selector.matchLabelExpressions,
-                  (req) => `${req.key}:${req.values.join(',')}`
+                  selector.matchLabelExpressions ?? [],
+                  (req) => `${req.key}:${(req.values ?? []).join(',')}`
                 ).map(({ key: requirementKey, value: req }) => (
                   <StatusChip key={requirementKey} variant="info">
-                    {req.key}: {req.values.join(', ')}
+                    {req.key}: {(req.values ?? []).join(', ')}
                   </StatusChip>
                 ))}
               </div>

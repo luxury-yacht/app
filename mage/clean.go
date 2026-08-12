@@ -11,10 +11,7 @@ import (
 // repository-owned Wails v3 Taskfiles, packaging definitions, and metadata.
 func CleanBuildOutputs(cfg BuildConfig) error {
 	paths := []string{
-		filepath.Join(cfg.BuildDir, "bin"),
-		cfg.ArtifactsDir,
-		filepath.Join(cfg.BuildDir, "packages"),
-		filepath.Join(cfg.BuildDir, "staging"),
+		"bin",
 		filepath.Join(cfg.BuildDir, "coverage"),
 		filepath.Join(cfg.BuildDir, "linux", "appimage", "build"),
 		cfg.ManifestPath,
@@ -22,7 +19,7 @@ func CleanBuildOutputs(cfg BuildConfig) error {
 
 	patterns := []string{
 		filepath.Join(cfg.BuildDir, "linux", "*.desktop"),
-		filepath.Join(cfg.BuildDir, "wails_windows_*.syso"),
+		"wails_windows_*.syso",
 	}
 	for _, pattern := range patterns {
 		matches, err := filepath.Glob(pattern)

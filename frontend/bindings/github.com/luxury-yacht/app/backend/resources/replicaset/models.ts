@@ -3,13 +3,9 @@
 
 // eslint-disable-next-line @typescript-eslint/ban-ts-comment
 // @ts-ignore: Unused imports
-import { Create as $Create } from "@wailsio/runtime";
-
-// eslint-disable-next-line @typescript-eslint/ban-ts-comment
-// @ts-ignore: Unused imports
 import * as types$0 from "../types/models.js";
 
-export class ReplicaSetDetails {
+export interface ReplicaSetDetails {
     /**
      * Basic information
      */
@@ -36,25 +32,25 @@ export class ReplicaSetDetails {
      * ReplicaSet configuration
      */
     "minReadySeconds"?: number;
-    "selector"?: { [_ in string]?: string };
-    "labels"?: { [_ in string]?: string };
-    "annotations"?: { [_ in string]?: string };
+    "selector"?: { [_ in string]?: string } | null;
+    "labels"?: { [_ in string]?: string } | null;
+    "annotations"?: { [_ in string]?: string } | null;
 
     /**
      * Conditions
      */
-    "conditions"?: string[];
+    "conditions"?: string[] | null;
 
     /**
      * Template information
      */
-    "containers"?: types$0.PodDetailInfoContainer[];
-    "initContainers"?: types$0.PodDetailInfoContainer[];
+    "containers"?: types$0.PodDetailInfoContainer[] | null;
+    "initContainers"?: types$0.PodDetailInfoContainer[] | null;
 
     /**
      * Pod information
      */
-    "pods"?: types$0.PodSimpleInfo[];
+    "pods"?: types$0.PodSimpleInfo[] | null;
     "podMetricsSummary"?: types$0.PodMetricsSummary | null;
 
     /**
@@ -62,90 +58,4 @@ export class ReplicaSetDetails {
      */
     "observedGeneration"?: number;
     "isActive": boolean;
-
-    /** Creates a new ReplicaSetDetails instance. */
-    constructor($$source: Partial<ReplicaSetDetails> = {}) {
-        if (!("kind" in $$source)) {
-            this["kind"] = "";
-        }
-        if (!("name" in $$source)) {
-            this["name"] = "";
-        }
-        if (!("namespace" in $$source)) {
-            this["namespace"] = "";
-        }
-        if (!("status" in $$source)) {
-            this["status"] = "";
-        }
-        if (!("details" in $$source)) {
-            this["details"] = "";
-        }
-        if (!("replicas" in $$source)) {
-            this["replicas"] = "";
-        }
-        if (!("ready" in $$source)) {
-            this["ready"] = "";
-        }
-        if (!("available" in $$source)) {
-            this["available"] = 0;
-        }
-        if (!("desiredReplicas" in $$source)) {
-            this["desiredReplicas"] = 0;
-        }
-        if (!("isActive" in $$source)) {
-            this["isActive"] = false;
-        }
-
-        Object.assign(this, $$source);
-    }
-
-    /**
-     * Creates a new ReplicaSetDetails instance from a string or object.
-     */
-    static createFrom($$source: any = {}): ReplicaSetDetails {
-        const $$createField19_0 = $$createType0;
-        const $$createField20_0 = $$createType0;
-        const $$createField21_0 = $$createType0;
-        const $$createField22_0 = $$createType1;
-        const $$createField23_0 = $$createType3;
-        const $$createField24_0 = $$createType3;
-        const $$createField25_0 = $$createType5;
-        const $$createField26_0 = $$createType7;
-        let $$parsedSource = typeof $$source === 'string' ? JSON.parse($$source) : $$source;
-        if ("selector" in $$parsedSource) {
-            $$parsedSource["selector"] = $$createField19_0($$parsedSource["selector"]);
-        }
-        if ("labels" in $$parsedSource) {
-            $$parsedSource["labels"] = $$createField20_0($$parsedSource["labels"]);
-        }
-        if ("annotations" in $$parsedSource) {
-            $$parsedSource["annotations"] = $$createField21_0($$parsedSource["annotations"]);
-        }
-        if ("conditions" in $$parsedSource) {
-            $$parsedSource["conditions"] = $$createField22_0($$parsedSource["conditions"]);
-        }
-        if ("containers" in $$parsedSource) {
-            $$parsedSource["containers"] = $$createField23_0($$parsedSource["containers"]);
-        }
-        if ("initContainers" in $$parsedSource) {
-            $$parsedSource["initContainers"] = $$createField24_0($$parsedSource["initContainers"]);
-        }
-        if ("pods" in $$parsedSource) {
-            $$parsedSource["pods"] = $$createField25_0($$parsedSource["pods"]);
-        }
-        if ("podMetricsSummary" in $$parsedSource) {
-            $$parsedSource["podMetricsSummary"] = $$createField26_0($$parsedSource["podMetricsSummary"]);
-        }
-        return new ReplicaSetDetails($$parsedSource as Partial<ReplicaSetDetails>);
-    }
 }
-
-// Private type creation functions
-const $$createType0 = $Create.Map($Create.Any, $Create.Any);
-const $$createType1 = $Create.Array($Create.Any);
-const $$createType2 = types$0.PodDetailInfoContainer.createFrom;
-const $$createType3 = $Create.Array($$createType2);
-const $$createType4 = types$0.PodSimpleInfo.createFrom;
-const $$createType5 = $Create.Array($$createType4);
-const $$createType6 = types$0.PodMetricsSummary.createFrom;
-const $$createType7 = $Create.Nullable($$createType6);

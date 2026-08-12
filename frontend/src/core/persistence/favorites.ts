@@ -101,7 +101,7 @@ const fromBackendPane = (pane: backend.FavoritePaneState): FavoritePaneState => 
   tableState: {
     ...pane.tableState,
     columnVisibility: Object.fromEntries(
-      Object.entries(pane.tableState.columnVisibility).filter(
+      Object.entries(pane.tableState.columnVisibility ?? {}).filter(
         (entry): entry is [string, boolean] => typeof entry[1] === 'boolean'
       )
     ),
@@ -125,29 +125,35 @@ const fromBackendFavorite = (favorite: backend.Favorite): Favorite => ({
   order: favorite.order,
 });
 
-const toBackendFavorite = (favorite: Favorite): backend.Favorite =>
-  new backend.Favorite({
+const toBackendSelection = (
+  selection: MultiSelectFilterSelection
+): backend.FavoriteFilterSelection => ({
+  mode: selection.mode,
+  values: selection.mode === 'some' ? selection.values : undefined,
+});
+
+const toBackendFavorite = (favorite: Favorite): backend.Favorite => ({
     ...favorite,
     panes: Object.fromEntries(
       Object.entries(favorite.panes).map(([key, pane]) => [
         key,
-        new backend.FavoritePaneState({
-          filters: new backend.FavoriteFilters({
+        {
+          filters: {
             ...pane.filters,
-            kinds: new backend.FavoriteFilterSelection(pane.filters.kinds),
-            namespaces: new backend.FavoriteFilterSelection(pane.filters.namespaces),
-            clusters: new backend.FavoriteFilterSelection(pane.filters.clusters),
+            kinds: toBackendSelection(pane.filters.kinds),
+            namespaces: toBackendSelection(pane.filters.namespaces),
+            clusters: toBackendSelection(pane.filters.clusters),
             queryFacets: pane.filters.queryFacets
               ? Object.fromEntries(
                   Object.entries(pane.filters.queryFacets).map(([facetKey, selection]) => [
                     facetKey,
-                    new backend.FavoriteFilterSelection(selection),
+                    toBackendSelection(selection),
                   ])
                 )
               : undefined,
-          }),
-          tableState: new backend.FavoriteTableState(pane.tableState),
-        }),
+          },
+          tableState: pane.tableState,
+        },
       ])
     ),
   });

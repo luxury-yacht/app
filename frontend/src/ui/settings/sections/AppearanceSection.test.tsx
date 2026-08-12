@@ -4,6 +4,8 @@
  * Tests for Appearance settings interactions and preference workflow wiring.
  */
 
+import { partialModelFixture } from '@/test-utils/partialModelFixture';
+
 import { types } from '@core/backend-api/models';
 import { act } from 'react';
 import * as ReactDOM from 'react-dom/client';
@@ -145,7 +147,7 @@ describe('AppearanceSection', () => {
 
   beforeEach(async () => {
     appPreferenceMocks.getThemes.mockResolvedValue([
-      new types.Theme({ id: 'default', name: 'default', clusterPattern: '' }),
+      partialModelFixture<types.Theme>({ id: 'default', name: 'default', clusterPattern: '' }),
     ]);
     appPreferenceMocks.saveTheme.mockResolvedValue(undefined);
     appPreferenceMocks.validateThemeClusterPattern.mockResolvedValue({ valid: true });

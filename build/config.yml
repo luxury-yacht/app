@@ -1,6 +1,7 @@
 # This file contains the configuration for this project.
-# When you update `info` or `fileAssociations`, run `mage build-assets` to
-# refresh Wails-owned metadata and reapply the desktop-only asset contract.
+# When you update `info` or `fileAssociations`, run
+# `wails3 task common:update:build-assets` to refresh Wails-owned metadata.
+# The upstream command overwrites generated assets; review the diff afterward.
 version: '3'
 
 # This information is used to generate the build assets.
@@ -27,7 +28,7 @@ dev_mode:
       - .git
       - node_modules
       - frontend
-      - build/bin
+      - bin
     file:
       - .DS_Store
       - .gitignore

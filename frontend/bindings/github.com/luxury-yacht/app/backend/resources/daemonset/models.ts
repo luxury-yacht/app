@@ -3,13 +3,9 @@
 
 // eslint-disable-next-line @typescript-eslint/ban-ts-comment
 // @ts-ignore: Unused imports
-import { Create as $Create } from "@wailsio/runtime";
-
-// eslint-disable-next-line @typescript-eslint/ban-ts-comment
-// @ts-ignore: Unused imports
 import * as types$0 from "../types/models.js";
 
-export class DaemonSetDetails {
+export interface DaemonSetDetails {
     /**
      * Basic information
      */
@@ -51,31 +47,31 @@ export class DaemonSetDetails {
     /**
      * Selector and labels
      */
-    "selector"?: { [_ in string]?: string };
-    "labels"?: { [_ in string]?: string };
-    "annotations"?: { [_ in string]?: string };
+    "selector"?: { [_ in string]?: string } | null;
+    "labels"?: { [_ in string]?: string } | null;
+    "annotations"?: { [_ in string]?: string } | null;
 
     /**
      * Pod placement constraints (from the pod template).
      */
-    "nodeSelector"?: { [_ in string]?: string };
-    "tolerations"?: string[];
+    "nodeSelector"?: { [_ in string]?: string } | null;
+    "tolerations"?: string[] | null;
 
     /**
      * Conditions
      */
-    "conditions"?: string[];
+    "conditions"?: string[] | null;
 
     /**
      * Template information
      */
-    "containers"?: types$0.PodDetailInfoContainer[];
-    "initContainers"?: types$0.PodDetailInfoContainer[];
+    "containers"?: types$0.PodDetailInfoContainer[] | null;
+    "initContainers"?: types$0.PodDetailInfoContainer[] | null;
 
     /**
      * Pod information
      */
-    "pods"?: types$0.PodSimpleInfo[];
+    "pods"?: types$0.PodSimpleInfo[] | null;
     "podMetricsSummary"?: types$0.PodMetricsSummary | null;
 
     /**
@@ -84,95 +80,4 @@ export class DaemonSetDetails {
     "observedGeneration"?: number;
     "numberMisscheduled"?: number;
     "collisionCount"?: number | null;
-
-    /** Creates a new DaemonSetDetails instance. */
-    constructor($$source: Partial<DaemonSetDetails> = {}) {
-        if (!("kind" in $$source)) {
-            this["kind"] = "";
-        }
-        if (!("name" in $$source)) {
-            this["name"] = "";
-        }
-        if (!("namespace" in $$source)) {
-            this["namespace"] = "";
-        }
-        if (!("status" in $$source)) {
-            this["status"] = "";
-        }
-        if (!("details" in $$source)) {
-            this["details"] = "";
-        }
-        if (!("desired" in $$source)) {
-            this["desired"] = 0;
-        }
-        if (!("current" in $$source)) {
-            this["current"] = 0;
-        }
-        if (!("ready" in $$source)) {
-            this["ready"] = 0;
-        }
-        if (!("available" in $$source)) {
-            this["available"] = 0;
-        }
-
-        Object.assign(this, $$source);
-    }
-
-    /**
-     * Creates a new DaemonSetDetails instance from a string or object.
-     */
-    static createFrom($$source: any = {}): DaemonSetDetails {
-        const $$createField26_0 = $$createType0;
-        const $$createField27_0 = $$createType0;
-        const $$createField28_0 = $$createType0;
-        const $$createField29_0 = $$createType0;
-        const $$createField30_0 = $$createType1;
-        const $$createField31_0 = $$createType1;
-        const $$createField32_0 = $$createType3;
-        const $$createField33_0 = $$createType3;
-        const $$createField34_0 = $$createType5;
-        const $$createField35_0 = $$createType7;
-        let $$parsedSource = typeof $$source === 'string' ? JSON.parse($$source) : $$source;
-        if ("selector" in $$parsedSource) {
-            $$parsedSource["selector"] = $$createField26_0($$parsedSource["selector"]);
-        }
-        if ("labels" in $$parsedSource) {
-            $$parsedSource["labels"] = $$createField27_0($$parsedSource["labels"]);
-        }
-        if ("annotations" in $$parsedSource) {
-            $$parsedSource["annotations"] = $$createField28_0($$parsedSource["annotations"]);
-        }
-        if ("nodeSelector" in $$parsedSource) {
-            $$parsedSource["nodeSelector"] = $$createField29_0($$parsedSource["nodeSelector"]);
-        }
-        if ("tolerations" in $$parsedSource) {
-            $$parsedSource["tolerations"] = $$createField30_0($$parsedSource["tolerations"]);
-        }
-        if ("conditions" in $$parsedSource) {
-            $$parsedSource["conditions"] = $$createField31_0($$parsedSource["conditions"]);
-        }
-        if ("containers" in $$parsedSource) {
-            $$parsedSource["containers"] = $$createField32_0($$parsedSource["containers"]);
-        }
-        if ("initContainers" in $$parsedSource) {
-            $$parsedSource["initContainers"] = $$createField33_0($$parsedSource["initContainers"]);
-        }
-        if ("pods" in $$parsedSource) {
-            $$parsedSource["pods"] = $$createField34_0($$parsedSource["pods"]);
-        }
-        if ("podMetricsSummary" in $$parsedSource) {
-            $$parsedSource["podMetricsSummary"] = $$createField35_0($$parsedSource["podMetricsSummary"]);
-        }
-        return new DaemonSetDetails($$parsedSource as Partial<DaemonSetDetails>);
-    }
 }
-
-// Private type creation functions
-const $$createType0 = $Create.Map($Create.Any, $Create.Any);
-const $$createType1 = $Create.Array($Create.Any);
-const $$createType2 = types$0.PodDetailInfoContainer.createFrom;
-const $$createType3 = $Create.Array($$createType2);
-const $$createType4 = types$0.PodSimpleInfo.createFrom;
-const $$createType5 = $Create.Array($$createType4);
-const $$createType6 = types$0.PodMetricsSummary.createFrom;
-const $$createType7 = $Create.Nullable($$createType6);

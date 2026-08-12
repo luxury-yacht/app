@@ -3,10 +3,6 @@
 
 // eslint-disable-next-line @typescript-eslint/ban-ts-comment
 // @ts-ignore: Unused imports
-import { Create as $Create } from "@wailsio/runtime";
-
-// eslint-disable-next-line @typescript-eslint/ban-ts-comment
-// @ts-ignore: Unused imports
 import * as resourcemodel$0 from "../../resourcemodel/models.js";
 
 /**
@@ -14,45 +10,10 @@ import * as resourcemodel$0 from "../../resourcemodel/models.js";
  * ClusterFindingTypes apply only to this cluster; GlobalFindingTypes apply to
  * every cluster, including clusters opened after the rule was persisted.
  */
-export class AttentionIgnoreRules {
-    "objectFindings": AttentionObjectFindingIgnore[];
-    "clusterFindingTypes": string[];
-    "globalFindingTypes": string[];
-
-    /** Creates a new AttentionIgnoreRules instance. */
-    constructor($$source: Partial<AttentionIgnoreRules> = {}) {
-        if (!("objectFindings" in $$source)) {
-            this["objectFindings"] = [];
-        }
-        if (!("clusterFindingTypes" in $$source)) {
-            this["clusterFindingTypes"] = [];
-        }
-        if (!("globalFindingTypes" in $$source)) {
-            this["globalFindingTypes"] = [];
-        }
-
-        Object.assign(this, $$source);
-    }
-
-    /**
-     * Creates a new AttentionIgnoreRules instance from a string or object.
-     */
-    static createFrom($$source: any = {}): AttentionIgnoreRules {
-        const $$createField0_0 = $$createType1;
-        const $$createField1_0 = $$createType2;
-        const $$createField2_0 = $$createType2;
-        let $$parsedSource = typeof $$source === 'string' ? JSON.parse($$source) : $$source;
-        if ("objectFindings" in $$parsedSource) {
-            $$parsedSource["objectFindings"] = $$createField0_0($$parsedSource["objectFindings"]);
-        }
-        if ("clusterFindingTypes" in $$parsedSource) {
-            $$parsedSource["clusterFindingTypes"] = $$createField1_0($$parsedSource["clusterFindingTypes"]);
-        }
-        if ("globalFindingTypes" in $$parsedSource) {
-            $$parsedSource["globalFindingTypes"] = $$createField2_0($$parsedSource["globalFindingTypes"]);
-        }
-        return new AttentionIgnoreRules($$parsedSource as Partial<AttentionIgnoreRules>);
-    }
+export interface AttentionIgnoreRules {
+    "objectFindings": AttentionObjectFindingIgnore[] | null;
+    "clusterFindingTypes": string[] | null;
+    "globalFindingTypes": string[] | null;
 }
 
 /**
@@ -60,33 +21,9 @@ export class AttentionIgnoreRules {
  * object identity. The UID prevents a replacement object from inheriting the
  * old object's suppression.
  */
-export class AttentionObjectFindingIgnore {
+export interface AttentionObjectFindingIgnore {
     "ref": resourcemodel$0.ResourceRef;
     "findingType": string;
-
-    /** Creates a new AttentionObjectFindingIgnore instance. */
-    constructor($$source: Partial<AttentionObjectFindingIgnore> = {}) {
-        if (!("ref" in $$source)) {
-            this["ref"] = (new resourcemodel$0.ResourceRef());
-        }
-        if (!("findingType" in $$source)) {
-            this["findingType"] = "";
-        }
-
-        Object.assign(this, $$source);
-    }
-
-    /**
-     * Creates a new AttentionObjectFindingIgnore instance from a string or object.
-     */
-    static createFrom($$source: any = {}): AttentionObjectFindingIgnore {
-        const $$createField0_0 = $$createType3;
-        let $$parsedSource = typeof $$source === 'string' ? JSON.parse($$source) : $$source;
-        if ("ref" in $$parsedSource) {
-            $$parsedSource["ref"] = $$createField0_0($$parsedSource["ref"]);
-        }
-        return new AttentionObjectFindingIgnore($$parsedSource as Partial<AttentionObjectFindingIgnore>);
-    }
 }
 
 /**
@@ -95,7 +32,7 @@ export class AttentionObjectFindingIgnore {
  * the legacy namespace/cluster custom snapshot rows without requiring the
  * production Custom tabs to subscribe to full CRD fanout domains.
  */
-export class CustomResourceSummary {
+export interface CustomResourceSummary {
     "ref": resourcemodel$0.ResourceRef;
     "crdName"?: string;
     "status"?: string;
@@ -103,49 +40,13 @@ export class CustomResourceSummary {
     "statusPresentation"?: string;
     "ready"?: boolean | null;
     "observedGeneration"?: number | null;
-    "conditions"?: resourcemodel$0.ConditionFacts[];
+    "conditions"?: resourcemodel$0.ConditionFacts[] | null;
     "age": string;
-    "labels"?: { [_ in string]?: string };
-    "annotations"?: { [_ in string]?: string };
-
-    /** Creates a new CustomResourceSummary instance. */
-    constructor($$source: Partial<CustomResourceSummary> = {}) {
-        if (!("ref" in $$source)) {
-            this["ref"] = (new resourcemodel$0.ResourceRef());
-        }
-        if (!("age" in $$source)) {
-            this["age"] = "";
-        }
-
-        Object.assign(this, $$source);
-    }
-
-    /**
-     * Creates a new CustomResourceSummary instance from a string or object.
-     */
-    static createFrom($$source: any = {}): CustomResourceSummary {
-        const $$createField0_0 = $$createType3;
-        const $$createField7_0 = $$createType5;
-        const $$createField9_0 = $$createType6;
-        const $$createField10_0 = $$createType6;
-        let $$parsedSource = typeof $$source === 'string' ? JSON.parse($$source) : $$source;
-        if ("ref" in $$parsedSource) {
-            $$parsedSource["ref"] = $$createField0_0($$parsedSource["ref"]);
-        }
-        if ("conditions" in $$parsedSource) {
-            $$parsedSource["conditions"] = $$createField7_0($$parsedSource["conditions"]);
-        }
-        if ("labels" in $$parsedSource) {
-            $$parsedSource["labels"] = $$createField9_0($$parsedSource["labels"]);
-        }
-        if ("annotations" in $$parsedSource) {
-            $$parsedSource["annotations"] = $$createField10_0($$parsedSource["annotations"]);
-        }
-        return new CustomResourceSummary($$parsedSource as Partial<CustomResourceSummary>);
-    }
+    "labels"?: { [_ in string]?: string } | null;
+    "annotations"?: { [_ in string]?: string } | null;
 }
 
-export class ResourceQueryRow {
+export interface ResourceQueryRow {
     "clusterId": string;
     "group": string;
     "version": string;
@@ -177,45 +78,4 @@ export class ResourceQueryRow {
     "autoscalingDesired"?: string;
     "cpu"?: string;
     "memory"?: string;
-
-    /** Creates a new ResourceQueryRow instance. */
-    constructor($$source: Partial<ResourceQueryRow> = {}) {
-        if (!("clusterId" in $$source)) {
-            this["clusterId"] = "";
-        }
-        if (!("group" in $$source)) {
-            this["group"] = "";
-        }
-        if (!("version" in $$source)) {
-            this["version"] = "";
-        }
-        if (!("kind" in $$source)) {
-            this["kind"] = "";
-        }
-        if (!("resource" in $$source)) {
-            this["resource"] = "";
-        }
-        if (!("name" in $$source)) {
-            this["name"] = "";
-        }
-
-        Object.assign(this, $$source);
-    }
-
-    /**
-     * Creates a new ResourceQueryRow instance from a string or object.
-     */
-    static createFrom($$source: any = {}): ResourceQueryRow {
-        let $$parsedSource = typeof $$source === 'string' ? JSON.parse($$source) : $$source;
-        return new ResourceQueryRow($$parsedSource as Partial<ResourceQueryRow>);
-    }
 }
-
-// Private type creation functions
-const $$createType0 = AttentionObjectFindingIgnore.createFrom;
-const $$createType1 = $Create.Array($$createType0);
-const $$createType2 = $Create.Array($Create.Any);
-const $$createType3 = resourcemodel$0.ResourceRef.createFrom;
-const $$createType4 = resourcemodel$0.ConditionFacts.createFrom;
-const $$createType5 = $Create.Array($$createType4);
-const $$createType6 = $Create.Map($Create.Any, $Create.Any);

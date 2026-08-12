@@ -3,85 +3,19 @@
 
 // eslint-disable-next-line @typescript-eslint/ban-ts-comment
 // @ts-ignore: Unused imports
-import { Create as $Create } from "@wailsio/runtime";
-
-// eslint-disable-next-line @typescript-eslint/ban-ts-comment
-// @ts-ignore: Unused imports
-import * as resourcemodel$0 from "../../resourcemodel/models.js";
-// eslint-disable-next-line @typescript-eslint/ban-ts-comment
-// @ts-ignore: Unused imports
 import * as types$0 from "../types/models.js";
 
-export class ServiceAccountDetails {
+export interface ServiceAccountDetails {
     "kind": string;
     "name": string;
     "namespace": string;
     "details": string;
-    "secrets"?: types$0.ObjectRef[];
-    "imagePullSecrets"?: types$0.ObjectRef[];
+    "secrets"?: types$0.ObjectRef[] | null;
+    "imagePullSecrets"?: types$0.ObjectRef[] | null;
     "automountServiceAccountToken"?: boolean | null;
-    "labels"?: { [_ in string]?: string };
-    "annotations"?: { [_ in string]?: string };
-    "usedByPods"?: types$0.ObjectRef[];
-    "roleBindings"?: types$0.ObjectRef[];
-    "clusterRoleBindings"?: types$0.ObjectRef[];
-
-    /** Creates a new ServiceAccountDetails instance. */
-    constructor($$source: Partial<ServiceAccountDetails> = {}) {
-        if (!("kind" in $$source)) {
-            this["kind"] = "";
-        }
-        if (!("name" in $$source)) {
-            this["name"] = "";
-        }
-        if (!("namespace" in $$source)) {
-            this["namespace"] = "";
-        }
-        if (!("details" in $$source)) {
-            this["details"] = "";
-        }
-
-        Object.assign(this, $$source);
-    }
-
-    /**
-     * Creates a new ServiceAccountDetails instance from a string or object.
-     */
-    static createFrom($$source: any = {}): ServiceAccountDetails {
-        const $$createField4_0 = $$createType1;
-        const $$createField5_0 = $$createType1;
-        const $$createField7_0 = $$createType2;
-        const $$createField8_0 = $$createType2;
-        const $$createField9_0 = $$createType1;
-        const $$createField10_0 = $$createType1;
-        const $$createField11_0 = $$createType1;
-        let $$parsedSource = typeof $$source === 'string' ? JSON.parse($$source) : $$source;
-        if ("secrets" in $$parsedSource) {
-            $$parsedSource["secrets"] = $$createField4_0($$parsedSource["secrets"]);
-        }
-        if ("imagePullSecrets" in $$parsedSource) {
-            $$parsedSource["imagePullSecrets"] = $$createField5_0($$parsedSource["imagePullSecrets"]);
-        }
-        if ("labels" in $$parsedSource) {
-            $$parsedSource["labels"] = $$createField7_0($$parsedSource["labels"]);
-        }
-        if ("annotations" in $$parsedSource) {
-            $$parsedSource["annotations"] = $$createField8_0($$parsedSource["annotations"]);
-        }
-        if ("usedByPods" in $$parsedSource) {
-            $$parsedSource["usedByPods"] = $$createField9_0($$parsedSource["usedByPods"]);
-        }
-        if ("roleBindings" in $$parsedSource) {
-            $$parsedSource["roleBindings"] = $$createField10_0($$parsedSource["roleBindings"]);
-        }
-        if ("clusterRoleBindings" in $$parsedSource) {
-            $$parsedSource["clusterRoleBindings"] = $$createField11_0($$parsedSource["clusterRoleBindings"]);
-        }
-        return new ServiceAccountDetails($$parsedSource as Partial<ServiceAccountDetails>);
-    }
+    "labels"?: { [_ in string]?: string } | null;
+    "annotations"?: { [_ in string]?: string } | null;
+    "usedByPods"?: types$0.ObjectRef[] | null;
+    "roleBindings"?: types$0.ObjectRef[] | null;
+    "clusterRoleBindings"?: types$0.ObjectRef[] | null;
 }
-
-// Private type creation functions
-const $$createType0 = resourcemodel$0.ResourceRef.createFrom;
-const $$createType1 = $Create.Array($$createType0);
-const $$createType2 = $Create.Map($Create.Any, $Create.Any);

@@ -17,13 +17,17 @@ import {
 export const readKubeconfigs = () => GetKubeconfigs();
 export const readAppSettings = () => GetAppSettings();
 export const readAppSettingsSchema = () => GetAppSettingsSchema();
-export const readThemes = () => GetThemes();
+export const readThemes = async () => (await GetThemes()) ?? [];
 export const readZoomLevel = () => GetZoomLevel();
-export const readKubeconfigSearchPaths = () => GetKubeconfigSearchPaths();
+export const readKubeconfigSearchPaths = async () => (await GetKubeconfigSearchPaths()) ?? [];
 export const readAppInfo = () => GetAppInfo();
-export const readAppLogs = () => GetAppLogs();
-export const readAppLogsSince = (sequence: number) => GetAppLogsSince(sequence);
-export const readPortForwardSessions = () => ListPortForwards();
-export const readRuntimeOperations = () => ListRuntimeOperations();
-export const readShellSessions = () => ListShellSessions();
+export const readAppLogs = async () => (await GetAppLogs()) ?? [];
+export const readAppLogsSince = async (sequence: number) => (await GetAppLogsSince(sequence)) ?? [];
+export const readPortForwardSessions = async () => (await ListPortForwards()) ?? [];
+export const readRuntimeOperations = async () => (await ListRuntimeOperations()) ?? [];
+export const readShellSessions = async () =>
+  ((await ListShellSessions()) ?? []).map((session) => ({
+    ...session,
+    command: session.command ?? [],
+  }));
 export const readShellSessionBacklog = (sessionId: string) => GetShellSessionBacklog(sessionId);

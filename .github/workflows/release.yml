@@ -31,7 +31,7 @@ jobs:
       - name: Run tests
         run: |
           echo "Run a build to ensure frontend/dist is generated"
-          mage build
+          wails3 build
           echo "Run backend tests"
           mage qc:vet test:backend
           echo "Run frontend tests"
@@ -52,27 +52,36 @@ jobs:
         include:
           - runner: macos-latest
             goos: darwin
-            targets: darwin/arm64,darwin/amd64
+            arch: arm64-and-amd64
             artifact_name: artifacts-darwin
+            artifact_path: bin/*-darwin-*.dmg
           - runner: windows-latest
             goos: windows
-            targets: windows/amd64
+            arch: amd64
             artifact_name: artifacts-windows-amd64
+            artifact_path: bin/*-amd64-installer.exe
           - runner: windows-latest-arm
             goos: windows
-            targets: windows/arm64
+            arch: arm64
             artifact_name: artifacts-windows-arm64
+            artifact_path: bin/*-arm64-installer.exe
           - runner: ubuntu-latest
             goos: linux
-            targets: linux/amd64
+            arch: amd64
             artifact_name: artifacts-linux-amd64
+            artifact_path: |
+              bin/*.deb
+              bin/*.rpm
           - runner: ubuntu-latest-arm
             goos: linux
-            targets: linux/arm64
+            arch: arm64
             artifact_name: artifacts-linux-arm64
+            artifact_path: |
+              bin/*.deb
+              bin/*.rpm
 
     runs-on: ${{ matrix.runner }}
-    name: Build ${{ matrix.goos }} (${{ matrix.targets}})
+    name: Build ${{ matrix.goos }} (${{ matrix.arch }})
     steps:
       - uses: actions/checkout@v7
         with:
@@ -99,27 +108,52 @@ jobs:
         if: matrix.goos == 'darwin'
         env:
           MACOS_SIGNING_IDENTITY: ${{ steps.macos_signing.outputs.macos_identity }}
-          MACOS_KEYCHAIN_PATH: ${{ steps.macos_signing.outputs.keychain_path }}
           MACOS_APPLE_ID: ${{ secrets.APPLE_ID }}
           MACOS_APPLE_APP_PASSWORD: ${{ secrets.APPLE_APP_PASSWORD }}
           MACOS_APPLE_TEAM_ID: ${{ secrets.APPLE_TEAM_ID }}
         run: |
-          mage package:signed
+          xcrun notarytool store-credentials luxury-yacht-ci \
+            --apple-id "$MACOS_APPLE_ID" \
+            --team-id "$MACOS_APPLE_TEAM_ID" \
+            --password "$MACOS_APPLE_APP_PASSWORD"
+
+          wails3 task darwin:package ARCH=arm64
+          wails3 tool sign \
+            --input bin/luxury-yacht.app \
+            --identity "$MACOS_SIGNING_IDENTITY" \
+            --notarize \
+            --keychain-profile luxury-yacht-ci
+          wails3 task darwin:create:dmg
+          mv bin/luxury-yacht.dmg bin/luxury-yacht-darwin-arm64.dmg
+
+          wails3 task darwin:package ARCH=amd64
+          wails3 tool sign \
+            --input bin/luxury-yacht.app \
+            --identity "$MACOS_SIGNING_IDENTITY" \
+            --notarize \
+            --keychain-profile luxury-yacht-ci
+          wails3 task darwin:create:dmg
+          mv bin/luxury-yacht.dmg bin/luxury-yacht-darwin-amd64.dmg
 
       - name: Create package for Linux
         if: matrix.goos == 'linux'
+        env:
+          GOARCH: ${{ matrix.arch }}
         run: |
-          mage package:unsigned
+          wails3 task linux:build ARCH=${{ matrix.arch }}
+          wails3 task linux:generate:deb
+          wails3 task linux:generate:rpm
 
       - name: Create package for Windows (unsigned)
         if: matrix.goos == 'windows'
         run: |
-          mage package:unsigned
+          wails3 task windows:package ARCH=${{ matrix.arch }}
 
       - uses: actions/upload-artifact@v7
         with:
           name: ${{ matrix.artifact_name }}
-          path: build/artifacts/**
+          path: ${{ matrix.artifact_path }}
+          if-no-files-found: error
 
   release:
     if: ${{ github.event.inputs.release == 'true' || github.event_name == 'push' }}

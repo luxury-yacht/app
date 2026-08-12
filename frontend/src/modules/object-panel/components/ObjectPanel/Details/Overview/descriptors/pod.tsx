@@ -101,7 +101,7 @@ const hasRuntimeGroup = (d: PodDetailInfo): boolean =>
 
 export const podDescriptor: OverviewDescriptor<PodDetailInfo> = {
   displayKind: 'Pod',
-  dtoClass: types.PodDetailInfo,
+  dtoName: 'PodDetailInfo',
   schema: {
     items: [
       { kind: 'status' },

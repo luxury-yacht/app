@@ -3,10 +3,6 @@
 
 // eslint-disable-next-line @typescript-eslint/ban-ts-comment
 // @ts-ignore: Unused imports
-import { Create as $Create } from "@wailsio/runtime";
-
-// eslint-disable-next-line @typescript-eslint/ban-ts-comment
-// @ts-ignore: Unused imports
 import * as telemetry$0 from "./refresh/telemetry/models.js";
 // eslint-disable-next-line @typescript-eslint/ban-ts-comment
 // @ts-ignore: Unused imports
@@ -24,57 +20,14 @@ import * as types$0 from "./resources/types/models.js";
 /**
  * AppInfo contains application version information
  */
-export class AppInfo {
+export interface AppInfo {
     "version": string;
     "buildTime": string;
     "gitCommit": string;
     "isBeta": boolean;
     "expiryDate"?: string;
     "update"?: UpdateInfo | null;
-
-    /** Creates a new AppInfo instance. */
-    constructor($$source: Partial<AppInfo> = {}) {
-        if (!("version" in $$source)) {
-            this["version"] = "";
-        }
-        if (!("buildTime" in $$source)) {
-            this["buildTime"] = "";
-        }
-        if (!("gitCommit" in $$source)) {
-            this["gitCommit"] = "";
-        }
-        if (!("isBeta" in $$source)) {
-            this["isBeta"] = false;
-        }
-
-        Object.assign(this, $$source);
-    }
-
-    /**
-     * Creates a new AppInfo instance from a string or object.
-     */
-    static createFrom($$source: any = {}): AppInfo {
-        const $$createField5_0 = $$createType1;
-        let $$parsedSource = typeof $$source === 'string' ? JSON.parse($$source) : $$source;
-        if ("update" in $$parsedSource) {
-            $$parsedSource["update"] = $$createField5_0($$parsedSource["update"]);
-        }
-        return new AppInfo($$parsedSource as Partial<AppInfo>);
-    }
 }
-
-/**
- * Per-kind detail DTOs are no longer re-exported here. The generated
- * App.Get<Kind> wrappers (resource_details_generated.go) reference each kind's DTO by
- * its own package (e.g. deployment.DeploymentDetails), and Wails reaches every
- * nested sub-type through those parent structs — so no package-backend alias is
- * needed for any kind DTO or its sub-types. What remains is app-level and shared
- * types (settings, logs, shell, cluster-tab infos, common ref/condition/route
- * sub-types in resources/types) plus the three DTOs whose App.Get binding is
- * hand-written and therefore still named in package backend (HelmReleaseDetails,
- * PodDetailInfo, CustomResourceDefinitionDetails).
- */
-export const AppSettings = types$0.AppSettings;
 
 /**
  * Per-kind detail DTOs are no longer re-exported here. The generated
@@ -100,33 +53,7 @@ export type AppSettings = types$0.AppSettings;
  * hand-written and therefore still named in package backend (HelmReleaseDetails,
  * PodDetailInfo, CustomResourceDefinitionDetails).
  */
-export const AppSettingsSchema = types$0.AppSettingsSchema;
-
-/**
- * Per-kind detail DTOs are no longer re-exported here. The generated
- * App.Get<Kind> wrappers (resource_details_generated.go) reference each kind's DTO by
- * its own package (e.g. deployment.DeploymentDetails), and Wails reaches every
- * nested sub-type through those parent structs — so no package-backend alias is
- * needed for any kind DTO or its sub-types. What remains is app-level and shared
- * types (settings, logs, shell, cluster-tab infos, common ref/condition/route
- * sub-types in resources/types) plus the three DTOs whose App.Get binding is
- * hand-written and therefore still named in package backend (HelmReleaseDetails,
- * PodDetailInfo, CustomResourceDefinitionDetails).
- */
 export type AppSettingsSchema = types$0.AppSettingsSchema;
-
-/**
- * Per-kind detail DTOs are no longer re-exported here. The generated
- * App.Get<Kind> wrappers (resource_details_generated.go) reference each kind's DTO by
- * its own package (e.g. deployment.DeploymentDetails), and Wails reaches every
- * nested sub-type through those parent structs — so no package-backend alias is
- * needed for any kind DTO or its sub-types. What remains is app-level and shared
- * types (settings, logs, shell, cluster-tab infos, common ref/condition/route
- * sub-types in resources/types) plus the three DTOs whose App.Get binding is
- * hand-written and therefore still named in package backend (HelmReleaseDetails,
- * PodDetailInfo, CustomResourceDefinitionDetails).
- */
-export const AppearanceModeInfo = types$0.AppearanceModeInfo;
 
 /**
  * Per-kind detail DTOs are no longer re-exported here. The generated
@@ -144,7 +71,7 @@ export type AppearanceModeInfo = types$0.AppearanceModeInfo;
 /**
  * CatalogDiagnostics summarizes the catalog feature state for manual inspection.
  */
-export class CatalogDiagnostics {
+export interface CatalogDiagnostics {
     "enabled": boolean;
     "itemCount": number;
     "resourceCount": number;
@@ -159,50 +86,13 @@ export class CatalogDiagnostics {
     "fallbackCount"?: number;
     "hydrationCount"?: number;
     "health"?: CatalogHealth | null;
-    "domains"?: CatalogDomainDiagnostics[];
-
-    /** Creates a new CatalogDiagnostics instance. */
-    constructor($$source: Partial<CatalogDiagnostics> = {}) {
-        if (!("enabled" in $$source)) {
-            this["enabled"] = false;
-        }
-        if (!("itemCount" in $$source)) {
-            this["itemCount"] = 0;
-        }
-        if (!("resourceCount" in $$source)) {
-            this["resourceCount"] = 0;
-        }
-        if (!("lastSyncMs" in $$source)) {
-            this["lastSyncMs"] = 0;
-        }
-        if (!("lastUpdated" in $$source)) {
-            this["lastUpdated"] = 0;
-        }
-
-        Object.assign(this, $$source);
-    }
-
-    /**
-     * Creates a new CatalogDiagnostics instance from a string or object.
-     */
-    static createFrom($$source: any = {}): CatalogDiagnostics {
-        const $$createField13_0 = $$createType3;
-        const $$createField14_0 = $$createType5;
-        let $$parsedSource = typeof $$source === 'string' ? JSON.parse($$source) : $$source;
-        if ("health" in $$parsedSource) {
-            $$parsedSource["health"] = $$createField13_0($$parsedSource["health"]);
-        }
-        if ("domains" in $$parsedSource) {
-            $$parsedSource["domains"] = $$createField14_0($$parsedSource["domains"]);
-        }
-        return new CatalogDiagnostics($$parsedSource as Partial<CatalogDiagnostics>);
-    }
+    "domains"?: CatalogDomainDiagnostics[] | null;
 }
 
 /**
  * CatalogDomainDiagnostics captures per-domain telemetry details.
  */
-export class CatalogDomainDiagnostics {
+export interface CatalogDomainDiagnostics {
     "domain": string;
     "scope"?: string;
     "lastStatus": telemetry$0.SnapshotLastStatus;
@@ -216,35 +106,12 @@ export class CatalogDomainDiagnostics {
     "truncated"?: boolean;
     "fallbackCount"?: number;
     "hydrationCount"?: number;
-
-    /** Creates a new CatalogDomainDiagnostics instance. */
-    constructor($$source: Partial<CatalogDomainDiagnostics> = {}) {
-        if (!("domain" in $$source)) {
-            this["domain"] = "";
-        }
-        if (!("lastStatus" in $$source)) {
-            this["lastStatus"] = telemetry$0.SnapshotLastStatus.$zero;
-        }
-        if (!("lastDurationMs" in $$source)) {
-            this["lastDurationMs"] = 0;
-        }
-
-        Object.assign(this, $$source);
-    }
-
-    /**
-     * Creates a new CatalogDomainDiagnostics instance from a string or object.
-     */
-    static createFrom($$source: any = {}): CatalogDomainDiagnostics {
-        let $$parsedSource = typeof $$source === 'string' ? JSON.parse($$source) : $$source;
-        return new CatalogDomainDiagnostics($$parsedSource as Partial<CatalogDomainDiagnostics>);
-    }
 }
 
 /**
  * CatalogHealth summarises the live health of the catalog service.
  */
-export class CatalogHealth {
+export interface CatalogHealth {
     "status": string;
     "consecutiveFailures": number;
     "lastSyncMs": number;
@@ -252,60 +119,14 @@ export class CatalogHealth {
     "lastError"?: string;
     "stale": boolean;
     "failedResources"?: number;
-
-    /** Creates a new CatalogHealth instance. */
-    constructor($$source: Partial<CatalogHealth> = {}) {
-        if (!("status" in $$source)) {
-            this["status"] = "";
-        }
-        if (!("consecutiveFailures" in $$source)) {
-            this["consecutiveFailures"] = 0;
-        }
-        if (!("lastSyncMs" in $$source)) {
-            this["lastSyncMs"] = 0;
-        }
-        if (!("stale" in $$source)) {
-            this["stale"] = false;
-        }
-
-        Object.assign(this, $$source);
-    }
-
-    /**
-     * Creates a new CatalogHealth instance from a string or object.
-     */
-    static createFrom($$source: any = {}): CatalogHealth {
-        let $$parsedSource = typeof $$source === 'string' ? JSON.parse($$source) : $$source;
-        return new CatalogHealth($$parsedSource as Partial<CatalogHealth>);
-    }
 }
 
 /**
  * CatalogQueryCSVExport describes a file-backed catalog query export.
  */
-export class CatalogQueryCSVExport {
+export interface CatalogQueryCSVExport {
     "path": string;
     "bytes": number;
-
-    /** Creates a new CatalogQueryCSVExport instance. */
-    constructor($$source: Partial<CatalogQueryCSVExport> = {}) {
-        if (!("path" in $$source)) {
-            this["path"] = "";
-        }
-        if (!("bytes" in $$source)) {
-            this["bytes"] = 0;
-        }
-
-        Object.assign(this, $$source);
-    }
-
-    /**
-     * Creates a new CatalogQueryCSVExport instance from a string or object.
-     */
-    static createFrom($$source: any = {}): CatalogQueryCSVExport {
-        let $$parsedSource = typeof $$source === 'string' ? JSON.parse($$source) : $$source;
-        return new CatalogQueryCSVExport($$parsedSource as Partial<CatalogQueryCSVExport>);
-    }
 }
 
 export enum ClusterHealthState {
@@ -338,7 +159,7 @@ export enum ClusterLifecycleState {
     ClusterStateReconnecting = "reconnecting",
 };
 
-export class ClusterWorkspaceAuthState {
+export interface ClusterWorkspaceAuthState {
     "state": string;
     "reason": string;
     "errorClass": string;
@@ -347,199 +168,33 @@ export class ClusterWorkspaceAuthState {
     "kind": string;
     "summary": string;
     "execCommand": string;
-
-    /** Creates a new ClusterWorkspaceAuthState instance. */
-    constructor($$source: Partial<ClusterWorkspaceAuthState> = {}) {
-        if (!("state" in $$source)) {
-            this["state"] = "";
-        }
-        if (!("reason" in $$source)) {
-            this["reason"] = "";
-        }
-        if (!("errorClass" in $$source)) {
-            this["errorClass"] = "";
-        }
-        if (!("secondsUntilRetry" in $$source)) {
-            this["secondsUntilRetry"] = 0;
-        }
-        if (!("class" in $$source)) {
-            this["class"] = "";
-        }
-        if (!("kind" in $$source)) {
-            this["kind"] = "";
-        }
-        if (!("summary" in $$source)) {
-            this["summary"] = "";
-        }
-        if (!("execCommand" in $$source)) {
-            this["execCommand"] = "";
-        }
-
-        Object.assign(this, $$source);
-    }
-
-    /**
-     * Creates a new ClusterWorkspaceAuthState instance from a string or object.
-     */
-    static createFrom($$source: any = {}): ClusterWorkspaceAuthState {
-        let $$parsedSource = typeof $$source === 'string' ? JSON.parse($$source) : $$source;
-        return new ClusterWorkspaceAuthState($$parsedSource as Partial<ClusterWorkspaceAuthState>);
-    }
 }
 
-export class ClusterWorkspaceClusterState {
+export interface ClusterWorkspaceClusterState {
     "clusterId": string;
     "clusterName": string;
     "lifecycle": ClusterLifecycleState;
     "auth": ClusterWorkspaceAuthState;
     "health": ClusterHealthState;
     "scopeRevision": number;
-
-    /** Creates a new ClusterWorkspaceClusterState instance. */
-    constructor($$source: Partial<ClusterWorkspaceClusterState> = {}) {
-        if (!("clusterId" in $$source)) {
-            this["clusterId"] = "";
-        }
-        if (!("clusterName" in $$source)) {
-            this["clusterName"] = "";
-        }
-        if (!("lifecycle" in $$source)) {
-            this["lifecycle"] = ClusterLifecycleState.$zero;
-        }
-        if (!("auth" in $$source)) {
-            this["auth"] = (new ClusterWorkspaceAuthState());
-        }
-        if (!("health" in $$source)) {
-            this["health"] = ClusterHealthState.$zero;
-        }
-        if (!("scopeRevision" in $$source)) {
-            this["scopeRevision"] = 0;
-        }
-
-        Object.assign(this, $$source);
-    }
-
-    /**
-     * Creates a new ClusterWorkspaceClusterState instance from a string or object.
-     */
-    static createFrom($$source: any = {}): ClusterWorkspaceClusterState {
-        const $$createField3_0 = $$createType6;
-        let $$parsedSource = typeof $$source === 'string' ? JSON.parse($$source) : $$source;
-        if ("auth" in $$parsedSource) {
-            $$parsedSource["auth"] = $$createField3_0($$parsedSource["auth"]);
-        }
-        return new ClusterWorkspaceClusterState($$parsedSource as Partial<ClusterWorkspaceClusterState>);
-    }
 }
 
-export class ClusterWorkspaceCommand {
-    "selectedKubeconfigs": string[];
+export interface ClusterWorkspaceCommand {
+    "selectedKubeconfigs": string[] | null;
     "updateSelectedKubeconfigs": boolean;
     "visibleClusterId": string;
-
-    /** Creates a new ClusterWorkspaceCommand instance. */
-    constructor($$source: Partial<ClusterWorkspaceCommand> = {}) {
-        if (!("selectedKubeconfigs" in $$source)) {
-            this["selectedKubeconfigs"] = [];
-        }
-        if (!("updateSelectedKubeconfigs" in $$source)) {
-            this["updateSelectedKubeconfigs"] = false;
-        }
-        if (!("visibleClusterId" in $$source)) {
-            this["visibleClusterId"] = "";
-        }
-
-        Object.assign(this, $$source);
-    }
-
-    /**
-     * Creates a new ClusterWorkspaceCommand instance from a string or object.
-     */
-    static createFrom($$source: any = {}): ClusterWorkspaceCommand {
-        const $$createField0_0 = $$createType7;
-        let $$parsedSource = typeof $$source === 'string' ? JSON.parse($$source) : $$source;
-        if ("selectedKubeconfigs" in $$parsedSource) {
-            $$parsedSource["selectedKubeconfigs"] = $$createField0_0($$parsedSource["selectedKubeconfigs"]);
-        }
-        return new ClusterWorkspaceCommand($$parsedSource as Partial<ClusterWorkspaceCommand>);
-    }
 }
 
-export class ClusterWorkspaceResult {
+export interface ClusterWorkspaceResult {
     "state": ClusterWorkspaceState;
     "error"?: string;
-
-    /** Creates a new ClusterWorkspaceResult instance. */
-    constructor($$source: Partial<ClusterWorkspaceResult> = {}) {
-        if (!("state" in $$source)) {
-            this["state"] = (new ClusterWorkspaceState());
-        }
-
-        Object.assign(this, $$source);
-    }
-
-    /**
-     * Creates a new ClusterWorkspaceResult instance from a string or object.
-     */
-    static createFrom($$source: any = {}): ClusterWorkspaceResult {
-        const $$createField0_0 = $$createType8;
-        let $$parsedSource = typeof $$source === 'string' ? JSON.parse($$source) : $$source;
-        if ("state" in $$parsedSource) {
-            $$parsedSource["state"] = $$createField0_0($$parsedSource["state"]);
-        }
-        return new ClusterWorkspaceResult($$parsedSource as Partial<ClusterWorkspaceResult>);
-    }
 }
 
-export class ClusterWorkspaceState {
-    "selectedKubeconfigs": string[];
+export interface ClusterWorkspaceState {
+    "selectedKubeconfigs": string[] | null;
     "visibleClusterId": string;
-    "clusters": { [_ in string]?: ClusterWorkspaceClusterState };
-
-    /** Creates a new ClusterWorkspaceState instance. */
-    constructor($$source: Partial<ClusterWorkspaceState> = {}) {
-        if (!("selectedKubeconfigs" in $$source)) {
-            this["selectedKubeconfigs"] = [];
-        }
-        if (!("visibleClusterId" in $$source)) {
-            this["visibleClusterId"] = "";
-        }
-        if (!("clusters" in $$source)) {
-            this["clusters"] = {};
-        }
-
-        Object.assign(this, $$source);
-    }
-
-    /**
-     * Creates a new ClusterWorkspaceState instance from a string or object.
-     */
-    static createFrom($$source: any = {}): ClusterWorkspaceState {
-        const $$createField0_0 = $$createType7;
-        const $$createField2_0 = $$createType10;
-        let $$parsedSource = typeof $$source === 'string' ? JSON.parse($$source) : $$source;
-        if ("selectedKubeconfigs" in $$parsedSource) {
-            $$parsedSource["selectedKubeconfigs"] = $$createField0_0($$parsedSource["selectedKubeconfigs"]);
-        }
-        if ("clusters" in $$parsedSource) {
-            $$parsedSource["clusters"] = $$createField2_0($$parsedSource["clusters"]);
-        }
-        return new ClusterWorkspaceState($$parsedSource as Partial<ClusterWorkspaceState>);
-    }
+    "clusters": { [_ in string]?: ClusterWorkspaceClusterState } | null;
 }
-
-/**
- * Per-kind detail DTOs are no longer re-exported here. The generated
- * App.Get<Kind> wrappers (resource_details_generated.go) reference each kind's DTO by
- * its own package (e.g. deployment.DeploymentDetails), and Wails reaches every
- * nested sub-type through those parent structs — so no package-backend alias is
- * needed for any kind DTO or its sub-types. What remains is app-level and shared
- * types (settings, logs, shell, cluster-tab infos, common ref/condition/route
- * sub-types in resources/types) plus the three DTOs whose App.Get binding is
- * hand-written and therefore still named in package backend (HelmReleaseDetails,
- * PodDetailInfo, CustomResourceDefinitionDetails).
- */
-export const ContainerLogsFetchRequest = types$0.ContainerLogsFetchRequest;
 
 /**
  * Per-kind detail DTOs are no longer re-exported here. The generated
@@ -565,59 +220,16 @@ export type ContainerLogsFetchRequest = types$0.ContainerLogsFetchRequest;
  * hand-written and therefore still named in package backend (HelmReleaseDetails,
  * PodDetailInfo, CustomResourceDefinitionDetails).
  */
-export const ContainerLogsFetchResponse = types$0.ContainerLogsFetchResponse;
-
-/**
- * Per-kind detail DTOs are no longer re-exported here. The generated
- * App.Get<Kind> wrappers (resource_details_generated.go) reference each kind's DTO by
- * its own package (e.g. deployment.DeploymentDetails), and Wails reaches every
- * nested sub-type through those parent structs — so no package-backend alias is
- * needed for any kind DTO or its sub-types. What remains is app-level and shared
- * types (settings, logs, shell, cluster-tab infos, common ref/condition/route
- * sub-types in resources/types) plus the three DTOs whose App.Get binding is
- * hand-written and therefore still named in package backend (HelmReleaseDetails,
- * PodDetailInfo, CustomResourceDefinitionDetails).
- */
 export type ContainerLogsFetchResponse = types$0.ContainerLogsFetchResponse;
 
 /**
  * ContainerPortInfo describes a port exposed by a container.
  */
-export class ContainerPortInfo {
+export interface ContainerPortInfo {
     "port": number;
     "name"?: string;
     "protocol"?: string;
-
-    /** Creates a new ContainerPortInfo instance. */
-    constructor($$source: Partial<ContainerPortInfo> = {}) {
-        if (!("port" in $$source)) {
-            this["port"] = 0;
-        }
-
-        Object.assign(this, $$source);
-    }
-
-    /**
-     * Creates a new ContainerPortInfo instance from a string or object.
-     */
-    static createFrom($$source: any = {}): ContainerPortInfo {
-        let $$parsedSource = typeof $$source === 'string' ? JSON.parse($$source) : $$source;
-        return new ContainerPortInfo($$parsedSource as Partial<ContainerPortInfo>);
-    }
 }
-
-/**
- * Per-kind detail DTOs are no longer re-exported here. The generated
- * App.Get<Kind> wrappers (resource_details_generated.go) reference each kind's DTO by
- * its own package (e.g. deployment.DeploymentDetails), and Wails reaches every
- * nested sub-type through those parent structs — so no package-backend alias is
- * needed for any kind DTO or its sub-types. What remains is app-level and shared
- * types (settings, logs, shell, cluster-tab infos, common ref/condition/route
- * sub-types in resources/types) plus the three DTOs whose App.Get binding is
- * hand-written and therefore still named in package backend (HelmReleaseDetails,
- * PodDetailInfo, CustomResourceDefinitionDetails).
- */
-export const CustomResourceDefinitionDetails = apiextensions$0.CustomResourceDefinitionDetails;
 
 /**
  * Per-kind detail DTOs are no longer re-exported here. The generated
@@ -632,44 +244,11 @@ export const CustomResourceDefinitionDetails = apiextensions$0.CustomResourceDef
  */
 export type CustomResourceDefinitionDetails = apiextensions$0.CustomResourceDefinitionDetails;
 
-export class DataManagementResult {
+export interface DataManagementResult {
     "path": string;
     "canceled": boolean;
     "imported"?: number;
-
-    /** Creates a new DataManagementResult instance. */
-    constructor($$source: Partial<DataManagementResult> = {}) {
-        if (!("path" in $$source)) {
-            this["path"] = "";
-        }
-        if (!("canceled" in $$source)) {
-            this["canceled"] = false;
-        }
-
-        Object.assign(this, $$source);
-    }
-
-    /**
-     * Creates a new DataManagementResult instance from a string or object.
-     */
-    static createFrom($$source: any = {}): DataManagementResult {
-        let $$parsedSource = typeof $$source === 'string' ? JSON.parse($$source) : $$source;
-        return new DataManagementResult($$parsedSource as Partial<DataManagementResult>);
-    }
 }
-
-/**
- * Per-kind detail DTOs are no longer re-exported here. The generated
- * App.Get<Kind> wrappers (resource_details_generated.go) reference each kind's DTO by
- * its own package (e.g. deployment.DeploymentDetails), and Wails reaches every
- * nested sub-type through those parent structs — so no package-backend alias is
- * needed for any kind DTO or its sub-types. What remains is app-level and shared
- * types (settings, logs, shell, cluster-tab infos, common ref/condition/route
- * sub-types in resources/types) plus the three DTOs whose App.Get binding is
- * hand-written and therefore still named in package backend (HelmReleaseDetails,
- * PodDetailInfo, CustomResourceDefinitionDetails).
- */
-export const DebugContainerResponse = types$0.DebugContainerResponse;
 
 /**
  * Per-kind detail DTOs are no longer re-exported here. The generated
@@ -695,25 +274,12 @@ export type DebugContainerResponse = types$0.DebugContainerResponse;
  * hand-written and therefore still named in package backend (HelmReleaseDetails,
  * PodDetailInfo, CustomResourceDefinitionDetails).
  */
-export const DrainNodeOptions = types$0.DrainNodeOptions;
-
-/**
- * Per-kind detail DTOs are no longer re-exported here. The generated
- * App.Get<Kind> wrappers (resource_details_generated.go) reference each kind's DTO by
- * its own package (e.g. deployment.DeploymentDetails), and Wails reaches every
- * nested sub-type through those parent structs — so no package-backend alias is
- * needed for any kind DTO or its sub-types. What remains is app-level and shared
- * types (settings, logs, shell, cluster-tab infos, common ref/condition/route
- * sub-types in resources/types) plus the three DTOs whose App.Get binding is
- * hand-written and therefore still named in package backend (HelmReleaseDetails,
- * PodDetailInfo, CustomResourceDefinitionDetails).
- */
 export type DrainNodeOptions = types$0.DrainNodeOptions;
 
 /**
  * Favorite represents a user-saved view bookmark.
  */
-export class Favorite {
+export interface Favorite {
     "id": string;
     "name": string;
     "clusterSelection": string;
@@ -722,227 +288,48 @@ export class Favorite {
     "viewType": string;
     "view": string;
     "namespace": string;
-    "panes": { [_ in string]?: FavoritePaneState };
+    "panes": { [_ in string]?: FavoritePaneState } | null;
     "order": number;
-
-    /** Creates a new Favorite instance. */
-    constructor($$source: Partial<Favorite> = {}) {
-        if (!("id" in $$source)) {
-            this["id"] = "";
-        }
-        if (!("name" in $$source)) {
-            this["name"] = "";
-        }
-        if (!("clusterSelection" in $$source)) {
-            this["clusterSelection"] = "";
-        }
-        if (!("viewType" in $$source)) {
-            this["viewType"] = "";
-        }
-        if (!("view" in $$source)) {
-            this["view"] = "";
-        }
-        if (!("namespace" in $$source)) {
-            this["namespace"] = "";
-        }
-        if (!("panes" in $$source)) {
-            this["panes"] = {};
-        }
-        if (!("order" in $$source)) {
-            this["order"] = 0;
-        }
-
-        Object.assign(this, $$source);
-    }
-
-    /**
-     * Creates a new Favorite instance from a string or object.
-     */
-    static createFrom($$source: any = {}): Favorite {
-        const $$createField8_0 = $$createType12;
-        let $$parsedSource = typeof $$source === 'string' ? JSON.parse($$source) : $$source;
-        if ("panes" in $$parsedSource) {
-            $$parsedSource["panes"] = $$createField8_0($$parsedSource["panes"]);
-        }
-        return new Favorite($$parsedSource as Partial<Favorite>);
-    }
 }
 
 /**
  * FavoriteFilterSelection preserves the semantic difference between every,
  * no, and some selected dropdown values.
  */
-export class FavoriteFilterSelection {
+export interface FavoriteFilterSelection {
     "mode": string;
-    "values"?: string[];
-
-    /** Creates a new FavoriteFilterSelection instance. */
-    constructor($$source: Partial<FavoriteFilterSelection> = {}) {
-        if (!("mode" in $$source)) {
-            this["mode"] = "";
-        }
-
-        Object.assign(this, $$source);
-    }
-
-    /**
-     * Creates a new FavoriteFilterSelection instance from a string or object.
-     */
-    static createFrom($$source: any = {}): FavoriteFilterSelection {
-        const $$createField1_0 = $$createType7;
-        let $$parsedSource = typeof $$source === 'string' ? JSON.parse($$source) : $$source;
-        if ("values" in $$parsedSource) {
-            $$parsedSource["values"] = $$createField1_0($$parsedSource["values"]);
-        }
-        return new FavoriteFilterSelection($$parsedSource as Partial<FavoriteFilterSelection>);
-    }
+    "values"?: string[] | null;
 }
 
 /**
  * FavoriteFilters holds the search and filter state for a favorite.
  */
-export class FavoriteFilters {
+export interface FavoriteFilters {
     "search": string;
     "kinds": FavoriteFilterSelection;
     "namespaces": FavoriteFilterSelection;
     "clusters": FavoriteFilterSelection;
-    "queryFacets"?: { [_ in string]?: FavoriteFilterSelection };
+    "queryFacets"?: { [_ in string]?: FavoriteFilterSelection } | null;
     "caseSensitive": boolean;
     "includeMetadata": boolean;
-
-    /** Creates a new FavoriteFilters instance. */
-    constructor($$source: Partial<FavoriteFilters> = {}) {
-        if (!("search" in $$source)) {
-            this["search"] = "";
-        }
-        if (!("kinds" in $$source)) {
-            this["kinds"] = (new FavoriteFilterSelection());
-        }
-        if (!("namespaces" in $$source)) {
-            this["namespaces"] = (new FavoriteFilterSelection());
-        }
-        if (!("clusters" in $$source)) {
-            this["clusters"] = (new FavoriteFilterSelection());
-        }
-        if (!("caseSensitive" in $$source)) {
-            this["caseSensitive"] = false;
-        }
-        if (!("includeMetadata" in $$source)) {
-            this["includeMetadata"] = false;
-        }
-
-        Object.assign(this, $$source);
-    }
-
-    /**
-     * Creates a new FavoriteFilters instance from a string or object.
-     */
-    static createFrom($$source: any = {}): FavoriteFilters {
-        const $$createField1_0 = $$createType13;
-        const $$createField2_0 = $$createType13;
-        const $$createField3_0 = $$createType13;
-        const $$createField4_0 = $$createType14;
-        let $$parsedSource = typeof $$source === 'string' ? JSON.parse($$source) : $$source;
-        if ("kinds" in $$parsedSource) {
-            $$parsedSource["kinds"] = $$createField1_0($$parsedSource["kinds"]);
-        }
-        if ("namespaces" in $$parsedSource) {
-            $$parsedSource["namespaces"] = $$createField2_0($$parsedSource["namespaces"]);
-        }
-        if ("clusters" in $$parsedSource) {
-            $$parsedSource["clusters"] = $$createField3_0($$parsedSource["clusters"]);
-        }
-        if ("queryFacets" in $$parsedSource) {
-            $$parsedSource["queryFacets"] = $$createField4_0($$parsedSource["queryFacets"]);
-        }
-        return new FavoriteFilters($$parsedSource as Partial<FavoriteFilters>);
-    }
 }
 
 /**
  * FavoritePaneState holds the complete GridTable state for one named pane.
  */
-export class FavoritePaneState {
+export interface FavoritePaneState {
     "filters": FavoriteFilters;
     "tableState": FavoriteTableState;
-
-    /** Creates a new FavoritePaneState instance. */
-    constructor($$source: Partial<FavoritePaneState> = {}) {
-        if (!("filters" in $$source)) {
-            this["filters"] = (new FavoriteFilters());
-        }
-        if (!("tableState" in $$source)) {
-            this["tableState"] = (new FavoriteTableState());
-        }
-
-        Object.assign(this, $$source);
-    }
-
-    /**
-     * Creates a new FavoritePaneState instance from a string or object.
-     */
-    static createFrom($$source: any = {}): FavoritePaneState {
-        const $$createField0_0 = $$createType15;
-        const $$createField1_0 = $$createType16;
-        let $$parsedSource = typeof $$source === 'string' ? JSON.parse($$source) : $$source;
-        if ("filters" in $$parsedSource) {
-            $$parsedSource["filters"] = $$createField0_0($$parsedSource["filters"]);
-        }
-        if ("tableState" in $$parsedSource) {
-            $$parsedSource["tableState"] = $$createField1_0($$parsedSource["tableState"]);
-        }
-        return new FavoritePaneState($$parsedSource as Partial<FavoritePaneState>);
-    }
 }
 
 /**
  * FavoriteTableState holds the table display state for a favorite.
  */
-export class FavoriteTableState {
+export interface FavoriteTableState {
     "sortColumn": string;
     "sortDirection": string;
-    "columnVisibility": { [_ in string]?: boolean };
-
-    /** Creates a new FavoriteTableState instance. */
-    constructor($$source: Partial<FavoriteTableState> = {}) {
-        if (!("sortColumn" in $$source)) {
-            this["sortColumn"] = "";
-        }
-        if (!("sortDirection" in $$source)) {
-            this["sortDirection"] = "";
-        }
-        if (!("columnVisibility" in $$source)) {
-            this["columnVisibility"] = {};
-        }
-
-        Object.assign(this, $$source);
-    }
-
-    /**
-     * Creates a new FavoriteTableState instance from a string or object.
-     */
-    static createFrom($$source: any = {}): FavoriteTableState {
-        const $$createField2_0 = $$createType17;
-        let $$parsedSource = typeof $$source === 'string' ? JSON.parse($$source) : $$source;
-        if ("columnVisibility" in $$parsedSource) {
-            $$parsedSource["columnVisibility"] = $$createField2_0($$parsedSource["columnVisibility"]);
-        }
-        return new FavoriteTableState($$parsedSource as Partial<FavoriteTableState>);
-    }
+    "columnVisibility": { [_ in string]?: boolean } | null;
 }
-
-/**
- * Per-kind detail DTOs are no longer re-exported here. The generated
- * App.Get<Kind> wrappers (resource_details_generated.go) reference each kind's DTO by
- * its own package (e.g. deployment.DeploymentDetails), and Wails reaches every
- * nested sub-type through those parent structs — so no package-backend alias is
- * needed for any kind DTO or its sub-types. What remains is app-level and shared
- * types (settings, logs, shell, cluster-tab infos, common ref/condition/route
- * sub-types in resources/types) plus the three DTOs whose App.Get binding is
- * hand-written and therefore still named in package backend (HelmReleaseDetails,
- * PodDetailInfo, CustomResourceDefinitionDetails).
- */
-export const HelmReleaseDetails = helm$0.HelmReleaseDetails;
 
 /**
  * Per-kind detail DTOs are no longer re-exported here. The generated
@@ -957,41 +344,10 @@ export const HelmReleaseDetails = helm$0.HelmReleaseDetails;
  */
 export type HelmReleaseDetails = helm$0.HelmReleaseDetails;
 
-export class KubeconfigDiscoveryResult {
-    "kubeconfigs": KubeconfigInfo[];
+export interface KubeconfigDiscoveryResult {
+    "kubeconfigs": KubeconfigInfo[] | null;
     "state": KubeconfigDiscoveryState;
-    "searchPaths": string[];
-
-    /** Creates a new KubeconfigDiscoveryResult instance. */
-    constructor($$source: Partial<KubeconfigDiscoveryResult> = {}) {
-        if (!("kubeconfigs" in $$source)) {
-            this["kubeconfigs"] = [];
-        }
-        if (!("state" in $$source)) {
-            this["state"] = KubeconfigDiscoveryState.$zero;
-        }
-        if (!("searchPaths" in $$source)) {
-            this["searchPaths"] = [];
-        }
-
-        Object.assign(this, $$source);
-    }
-
-    /**
-     * Creates a new KubeconfigDiscoveryResult instance from a string or object.
-     */
-    static createFrom($$source: any = {}): KubeconfigDiscoveryResult {
-        const $$createField0_0 = $$createType19;
-        const $$createField2_0 = $$createType7;
-        let $$parsedSource = typeof $$source === 'string' ? JSON.parse($$source) : $$source;
-        if ("kubeconfigs" in $$parsedSource) {
-            $$parsedSource["kubeconfigs"] = $$createField0_0($$parsedSource["kubeconfigs"]);
-        }
-        if ("searchPaths" in $$parsedSource) {
-            $$parsedSource["searchPaths"] = $$createField2_0($$parsedSource["searchPaths"]);
-        }
-        return new KubeconfigDiscoveryResult($$parsedSource as Partial<KubeconfigDiscoveryResult>);
-    }
+    "searchPaths": string[] | null;
 }
 
 export enum KubeconfigDiscoveryState {
@@ -1016,25 +372,12 @@ export enum KubeconfigDiscoveryState {
  * hand-written and therefore still named in package backend (HelmReleaseDetails,
  * PodDetailInfo, CustomResourceDefinitionDetails).
  */
-export const KubeconfigInfo = types$0.KubeconfigInfo;
-
-/**
- * Per-kind detail DTOs are no longer re-exported here. The generated
- * App.Get<Kind> wrappers (resource_details_generated.go) reference each kind's DTO by
- * its own package (e.g. deployment.DeploymentDetails), and Wails reaches every
- * nested sub-type through those parent structs — so no package-backend alias is
- * needed for any kind DTO or its sub-types. What remains is app-level and shared
- * types (settings, logs, shell, cluster-tab infos, common ref/condition/route
- * sub-types in resources/types) plus the three DTOs whose App.Get binding is
- * hand-written and therefore still named in package backend (HelmReleaseDetails,
- * PodDetailInfo, CustomResourceDefinitionDetails).
- */
 export type KubeconfigInfo = types$0.KubeconfigInfo;
 
 /**
  * KubernetesAPIClientDiagnostics reports per-cluster Kubernetes API client usage.
  */
-export class KubernetesAPIClientDiagnostics {
+export interface KubernetesAPIClientDiagnostics {
     "clusterId": string;
     "clusterName": string;
     "configuredQPS": number;
@@ -1051,71 +394,12 @@ export class KubernetesAPIClientDiagnostics {
     "status429": number;
     "errors": number;
     "lastRequestMs"?: number;
-
-    /** Creates a new KubernetesAPIClientDiagnostics instance. */
-    constructor($$source: Partial<KubernetesAPIClientDiagnostics> = {}) {
-        if (!("clusterId" in $$source)) {
-            this["clusterId"] = "";
-        }
-        if (!("clusterName" in $$source)) {
-            this["clusterName"] = "";
-        }
-        if (!("configuredQPS" in $$source)) {
-            this["configuredQPS"] = 0;
-        }
-        if (!("configuredBurst" in $$source)) {
-            this["configuredBurst"] = 0;
-        }
-        if (!("qps1s" in $$source)) {
-            this["qps1s"] = 0;
-        }
-        if (!("qps10s" in $$source)) {
-            this["qps10s"] = 0;
-        }
-        if (!("qps60s" in $$source)) {
-            this["qps60s"] = 0;
-        }
-        if (!("peakQPS1s" in $$source)) {
-            this["peakQPS1s"] = 0;
-        }
-        if (!("totalRequests" in $$source)) {
-            this["totalRequests"] = 0;
-        }
-        if (!("status2xx" in $$source)) {
-            this["status2xx"] = 0;
-        }
-        if (!("status3xx" in $$source)) {
-            this["status3xx"] = 0;
-        }
-        if (!("status4xx" in $$source)) {
-            this["status4xx"] = 0;
-        }
-        if (!("status5xx" in $$source)) {
-            this["status5xx"] = 0;
-        }
-        if (!("status429" in $$source)) {
-            this["status429"] = 0;
-        }
-        if (!("errors" in $$source)) {
-            this["errors"] = 0;
-        }
-
-        Object.assign(this, $$source);
-    }
-
-    /**
-     * Creates a new KubernetesAPIClientDiagnostics instance from a string or object.
-     */
-    static createFrom($$source: any = {}): KubernetesAPIClientDiagnostics {
-        let $$parsedSource = typeof $$source === 'string' ? JSON.parse($$source) : $$source;
-        return new KubernetesAPIClientDiagnostics($$parsedSource as Partial<KubernetesAPIClientDiagnostics>);
-    }
 }
 
 /**
  * LogEntry represents a single log entry
  */
-export class LogEntry {
+export interface LogEntry {
     "sequence": number;
     "timestamp": string;
     "level": string;
@@ -1124,46 +408,7 @@ export class LogEntry {
     "clusterId"?: string;
     "clusterName"?: string;
     "operationId"?: string;
-
-    /** Creates a new LogEntry instance. */
-    constructor($$source: Partial<LogEntry> = {}) {
-        if (!("sequence" in $$source)) {
-            this["sequence"] = 0;
-        }
-        if (!("timestamp" in $$source)) {
-            this["timestamp"] = "";
-        }
-        if (!("level" in $$source)) {
-            this["level"] = "";
-        }
-        if (!("message" in $$source)) {
-            this["message"] = "";
-        }
-
-        Object.assign(this, $$source);
-    }
-
-    /**
-     * Creates a new LogEntry instance from a string or object.
-     */
-    static createFrom($$source: any = {}): LogEntry {
-        let $$parsedSource = typeof $$source === 'string' ? JSON.parse($$source) : $$source;
-        return new LogEntry($$parsedSource as Partial<LogEntry>);
-    }
 }
-
-/**
- * Per-kind detail DTOs are no longer re-exported here. The generated
- * App.Get<Kind> wrappers (resource_details_generated.go) reference each kind's DTO by
- * its own package (e.g. deployment.DeploymentDetails), and Wails reaches every
- * nested sub-type through those parent structs — so no package-backend alias is
- * needed for any kind DTO or its sub-types. What remains is app-level and shared
- * types (settings, logs, shell, cluster-tab infos, common ref/condition/route
- * sub-types in resources/types) plus the three DTOs whose App.Get binding is
- * hand-written and therefore still named in package backend (HelmReleaseDetails,
- * PodDetailInfo, CustomResourceDefinitionDetails).
- */
-export const NodeLogDiscoveryResponse = types$0.NodeLogDiscoveryResponse;
 
 /**
  * Per-kind detail DTOs are no longer re-exported here. The generated
@@ -1189,33 +434,7 @@ export type NodeLogDiscoveryResponse = types$0.NodeLogDiscoveryResponse;
  * hand-written and therefore still named in package backend (HelmReleaseDetails,
  * PodDetailInfo, CustomResourceDefinitionDetails).
  */
-export const NodeLogFetchRequest = types$0.NodeLogFetchRequest;
-
-/**
- * Per-kind detail DTOs are no longer re-exported here. The generated
- * App.Get<Kind> wrappers (resource_details_generated.go) reference each kind's DTO by
- * its own package (e.g. deployment.DeploymentDetails), and Wails reaches every
- * nested sub-type through those parent structs — so no package-backend alias is
- * needed for any kind DTO or its sub-types. What remains is app-level and shared
- * types (settings, logs, shell, cluster-tab infos, common ref/condition/route
- * sub-types in resources/types) plus the three DTOs whose App.Get binding is
- * hand-written and therefore still named in package backend (HelmReleaseDetails,
- * PodDetailInfo, CustomResourceDefinitionDetails).
- */
 export type NodeLogFetchRequest = types$0.NodeLogFetchRequest;
-
-/**
- * Per-kind detail DTOs are no longer re-exported here. The generated
- * App.Get<Kind> wrappers (resource_details_generated.go) reference each kind's DTO by
- * its own package (e.g. deployment.DeploymentDetails), and Wails reaches every
- * nested sub-type through those parent structs — so no package-backend alias is
- * needed for any kind DTO or its sub-types. What remains is app-level and shared
- * types (settings, logs, shell, cluster-tab infos, common ref/condition/route
- * sub-types in resources/types) plus the three DTOs whose App.Get binding is
- * hand-written and therefore still named in package backend (HelmReleaseDetails,
- * PodDetailInfo, CustomResourceDefinitionDetails).
- */
-export const NodeLogFetchResponse = types$0.NodeLogFetchResponse;
 
 /**
  * Per-kind detail DTOs are no longer re-exported here. The generated
@@ -1230,54 +449,17 @@ export const NodeLogFetchResponse = types$0.NodeLogFetchResponse;
  */
 export type NodeLogFetchResponse = types$0.NodeLogFetchResponse;
 
-export class ObjectActionDebugContainerOptions {
+export interface ObjectActionDebugContainerOptions {
     "image": string;
     "targetContainer"?: string;
-
-    /** Creates a new ObjectActionDebugContainerOptions instance. */
-    constructor($$source: Partial<ObjectActionDebugContainerOptions> = {}) {
-        if (!("image" in $$source)) {
-            this["image"] = "";
-        }
-
-        Object.assign(this, $$source);
-    }
-
-    /**
-     * Creates a new ObjectActionDebugContainerOptions instance from a string or object.
-     */
-    static createFrom($$source: any = {}): ObjectActionDebugContainerOptions {
-        let $$parsedSource = typeof $$source === 'string' ? JSON.parse($$source) : $$source;
-        return new ObjectActionDebugContainerOptions($$parsedSource as Partial<ObjectActionDebugContainerOptions>);
-    }
 }
 
-export class ObjectActionPortForwardOptions {
+export interface ObjectActionPortForwardOptions {
     "containerPort": number;
     "localPort": number;
-
-    /** Creates a new ObjectActionPortForwardOptions instance. */
-    constructor($$source: Partial<ObjectActionPortForwardOptions> = {}) {
-        if (!("containerPort" in $$source)) {
-            this["containerPort"] = 0;
-        }
-        if (!("localPort" in $$source)) {
-            this["localPort"] = 0;
-        }
-
-        Object.assign(this, $$source);
-    }
-
-    /**
-     * Creates a new ObjectActionPortForwardOptions instance from a string or object.
-     */
-    static createFrom($$source: any = {}): ObjectActionPortForwardOptions {
-        let $$parsedSource = typeof $$source === 'string' ? JSON.parse($$source) : $$source;
-        return new ObjectActionPortForwardOptions($$parsedSource as Partial<ObjectActionPortForwardOptions>);
-    }
 }
 
-export class ObjectActionRequest {
+export interface ObjectActionRequest {
     "action": string;
     "target": ObjectActionTargetRef;
     "replicas"?: number | null;
@@ -1288,74 +470,14 @@ export class ObjectActionRequest {
     "revision"?: number | null;
     "finalizer"?: string;
     "finalizerPath"?: string;
-
-    /** Creates a new ObjectActionRequest instance. */
-    constructor($$source: Partial<ObjectActionRequest> = {}) {
-        if (!("action" in $$source)) {
-            this["action"] = "";
-        }
-        if (!("target" in $$source)) {
-            this["target"] = (new ObjectActionTargetRef());
-        }
-
-        Object.assign(this, $$source);
-    }
-
-    /**
-     * Creates a new ObjectActionRequest instance from a string or object.
-     */
-    static createFrom($$source: any = {}): ObjectActionRequest {
-        const $$createField1_0 = $$createType20;
-        const $$createField4_0 = $$createType22;
-        const $$createField5_0 = $$createType24;
-        const $$createField6_0 = $$createType26;
-        let $$parsedSource = typeof $$source === 'string' ? JSON.parse($$source) : $$source;
-        if ("target" in $$parsedSource) {
-            $$parsedSource["target"] = $$createField1_0($$parsedSource["target"]);
-        }
-        if ("drainOptions" in $$parsedSource) {
-            $$parsedSource["drainOptions"] = $$createField4_0($$parsedSource["drainOptions"]);
-        }
-        if ("portForward" in $$parsedSource) {
-            $$parsedSource["portForward"] = $$createField5_0($$parsedSource["portForward"]);
-        }
-        if ("debugContainer" in $$parsedSource) {
-            $$parsedSource["debugContainer"] = $$createField6_0($$parsedSource["debugContainer"]);
-        }
-        return new ObjectActionRequest($$parsedSource as Partial<ObjectActionRequest>);
-    }
 }
 
-export class ObjectActionResponse {
+export interface ObjectActionResponse {
     "name"?: string;
     "jobId"?: string;
     "sessionId"?: string;
     "debugContainer"?: DebugContainerResponse | null;
-
-    /** Creates a new ObjectActionResponse instance. */
-    constructor($$source: Partial<ObjectActionResponse> = {}) {
-
-        Object.assign(this, $$source);
-    }
-
-    /**
-     * Creates a new ObjectActionResponse instance from a string or object.
-     */
-    static createFrom($$source: any = {}): ObjectActionResponse {
-        const $$createField3_0 = $$createType28;
-        let $$parsedSource = typeof $$source === 'string' ? JSON.parse($$source) : $$source;
-        if ("debugContainer" in $$parsedSource) {
-            $$parsedSource["debugContainer"] = $$createField3_0($$parsedSource["debugContainer"]);
-        }
-        return new ObjectActionResponse($$parsedSource as Partial<ObjectActionResponse>);
-    }
 }
-
-/**
- * ObjectActionTargetRef is the canonical object identity for state-changing
- * app actions. Core resources use group="" with version="v1".
- */
-export const ObjectActionTargetRef = resourcemodel$0.ResourceRef;
 
 /**
  * ObjectActionTargetRef is the canonical object identity for state-changing
@@ -1366,7 +488,7 @@ export type ObjectActionTargetRef = resourcemodel$0.ResourceRef;
 /**
  * ObjectYAMLMutationRequest captures the payload required to validate or apply object YAML.
  */
-export class ObjectYAMLMutationRequest {
+export interface ObjectYAMLMutationRequest {
     "baseYAML": string;
     "yaml": string;
     "kind": string;
@@ -1375,130 +497,31 @@ export class ObjectYAMLMutationRequest {
     "name": string;
     "uid": string;
     "resourceVersion": string;
-
-    /** Creates a new ObjectYAMLMutationRequest instance. */
-    constructor($$source: Partial<ObjectYAMLMutationRequest> = {}) {
-        if (!("baseYAML" in $$source)) {
-            this["baseYAML"] = "";
-        }
-        if (!("yaml" in $$source)) {
-            this["yaml"] = "";
-        }
-        if (!("kind" in $$source)) {
-            this["kind"] = "";
-        }
-        if (!("apiVersion" in $$source)) {
-            this["apiVersion"] = "";
-        }
-        if (!("namespace" in $$source)) {
-            this["namespace"] = "";
-        }
-        if (!("name" in $$source)) {
-            this["name"] = "";
-        }
-        if (!("uid" in $$source)) {
-            this["uid"] = "";
-        }
-        if (!("resourceVersion" in $$source)) {
-            this["resourceVersion"] = "";
-        }
-
-        Object.assign(this, $$source);
-    }
-
-    /**
-     * Creates a new ObjectYAMLMutationRequest instance from a string or object.
-     */
-    static createFrom($$source: any = {}): ObjectYAMLMutationRequest {
-        let $$parsedSource = typeof $$source === 'string' ? JSON.parse($$source) : $$source;
-        return new ObjectYAMLMutationRequest($$parsedSource as Partial<ObjectYAMLMutationRequest>);
-    }
 }
 
 /**
  * ObjectYAMLMutationResponse returns basic metadata after a validation/apply attempt.
  */
-export class ObjectYAMLMutationResponse {
+export interface ObjectYAMLMutationResponse {
     "resourceVersion": string;
-
-    /** Creates a new ObjectYAMLMutationResponse instance. */
-    constructor($$source: Partial<ObjectYAMLMutationResponse> = {}) {
-        if (!("resourceVersion" in $$source)) {
-            this["resourceVersion"] = "";
-        }
-
-        Object.assign(this, $$source);
-    }
-
-    /**
-     * Creates a new ObjectYAMLMutationResponse instance from a string or object.
-     */
-    static createFrom($$source: any = {}): ObjectYAMLMutationResponse {
-        let $$parsedSource = typeof $$source === 'string' ? JSON.parse($$source) : $$source;
-        return new ObjectYAMLMutationResponse($$parsedSource as Partial<ObjectYAMLMutationResponse>);
-    }
 }
 
 /**
  * ObjectYAMLOwnershipCheckResponse lists the ownership conflicts a save would
  * create. An empty list means the save takes no contested ownership.
  */
-export class ObjectYAMLOwnershipCheckResponse {
-    "conflicts": ObjectYAMLOwnershipConflict[];
-
-    /** Creates a new ObjectYAMLOwnershipCheckResponse instance. */
-    constructor($$source: Partial<ObjectYAMLOwnershipCheckResponse> = {}) {
-        if (!("conflicts" in $$source)) {
-            this["conflicts"] = [];
-        }
-
-        Object.assign(this, $$source);
-    }
-
-    /**
-     * Creates a new ObjectYAMLOwnershipCheckResponse instance from a string or object.
-     */
-    static createFrom($$source: any = {}): ObjectYAMLOwnershipCheckResponse {
-        const $$createField0_0 = $$createType30;
-        let $$parsedSource = typeof $$source === 'string' ? JSON.parse($$source) : $$source;
-        if ("conflicts" in $$parsedSource) {
-            $$parsedSource["conflicts"] = $$createField0_0($$parsedSource["conflicts"]);
-        }
-        return new ObjectYAMLOwnershipCheckResponse($$parsedSource as Partial<ObjectYAMLOwnershipCheckResponse>);
-    }
+export interface ObjectYAMLOwnershipCheckResponse {
+    "conflicts": ObjectYAMLOwnershipConflict[] | null;
 }
 
 /**
  * ObjectYAMLOwnershipConflict describes one edited field whose current owner
  * is another field manager.
  */
-export class ObjectYAMLOwnershipConflict {
+export interface ObjectYAMLOwnershipConflict {
     "field": string;
     "manager": string;
     "message": string;
-
-    /** Creates a new ObjectYAMLOwnershipConflict instance. */
-    constructor($$source: Partial<ObjectYAMLOwnershipConflict> = {}) {
-        if (!("field" in $$source)) {
-            this["field"] = "";
-        }
-        if (!("manager" in $$source)) {
-            this["manager"] = "";
-        }
-        if (!("message" in $$source)) {
-            this["message"] = "";
-        }
-
-        Object.assign(this, $$source);
-    }
-
-    /**
-     * Creates a new ObjectYAMLOwnershipConflict instance from a string or object.
-     */
-    static createFrom($$source: any = {}): ObjectYAMLOwnershipConflict {
-        let $$parsedSource = typeof $$source === 'string' ? JSON.parse($$source) : $$source;
-        return new ObjectYAMLOwnershipConflict($$parsedSource as Partial<ObjectYAMLOwnershipConflict>);
-    }
 }
 
 /**
@@ -1506,7 +529,7 @@ export class ObjectYAMLOwnershipConflict {
  * current local draft so the backend can merge them with the latest live
  * object using kubectl-like patch semantics.
  */
-export class ObjectYAMLReloadMergeRequest {
+export interface ObjectYAMLReloadMergeRequest {
     "baseYAML": string;
     "draftYAML": string;
     "kind": string;
@@ -1514,88 +537,17 @@ export class ObjectYAMLReloadMergeRequest {
     "namespace": string;
     "name": string;
     "uid": string;
-
-    /** Creates a new ObjectYAMLReloadMergeRequest instance. */
-    constructor($$source: Partial<ObjectYAMLReloadMergeRequest> = {}) {
-        if (!("baseYAML" in $$source)) {
-            this["baseYAML"] = "";
-        }
-        if (!("draftYAML" in $$source)) {
-            this["draftYAML"] = "";
-        }
-        if (!("kind" in $$source)) {
-            this["kind"] = "";
-        }
-        if (!("apiVersion" in $$source)) {
-            this["apiVersion"] = "";
-        }
-        if (!("namespace" in $$source)) {
-            this["namespace"] = "";
-        }
-        if (!("name" in $$source)) {
-            this["name"] = "";
-        }
-        if (!("uid" in $$source)) {
-            this["uid"] = "";
-        }
-
-        Object.assign(this, $$source);
-    }
-
-    /**
-     * Creates a new ObjectYAMLReloadMergeRequest instance from a string or object.
-     */
-    static createFrom($$source: any = {}): ObjectYAMLReloadMergeRequest {
-        let $$parsedSource = typeof $$source === 'string' ? JSON.parse($$source) : $$source;
-        return new ObjectYAMLReloadMergeRequest($$parsedSource as Partial<ObjectYAMLReloadMergeRequest>);
-    }
 }
 
 /**
  * ObjectYAMLReloadMergeResponse returns both the merged draft and the latest
  * live YAML the merge was based on.
  */
-export class ObjectYAMLReloadMergeResponse {
+export interface ObjectYAMLReloadMergeResponse {
     "mergedYAML": string;
     "currentYAML": string;
     "resourceVersion": string;
-
-    /** Creates a new ObjectYAMLReloadMergeResponse instance. */
-    constructor($$source: Partial<ObjectYAMLReloadMergeResponse> = {}) {
-        if (!("mergedYAML" in $$source)) {
-            this["mergedYAML"] = "";
-        }
-        if (!("currentYAML" in $$source)) {
-            this["currentYAML"] = "";
-        }
-        if (!("resourceVersion" in $$source)) {
-            this["resourceVersion"] = "";
-        }
-
-        Object.assign(this, $$source);
-    }
-
-    /**
-     * Creates a new ObjectYAMLReloadMergeResponse instance from a string or object.
-     */
-    static createFrom($$source: any = {}): ObjectYAMLReloadMergeResponse {
-        let $$parsedSource = typeof $$source === 'string' ? JSON.parse($$source) : $$source;
-        return new ObjectYAMLReloadMergeResponse($$parsedSource as Partial<ObjectYAMLReloadMergeResponse>);
-    }
 }
-
-/**
- * Per-kind detail DTOs are no longer re-exported here. The generated
- * App.Get<Kind> wrappers (resource_details_generated.go) reference each kind's DTO by
- * its own package (e.g. deployment.DeploymentDetails), and Wails reaches every
- * nested sub-type through those parent structs — so no package-backend alias is
- * needed for any kind DTO or its sub-types. What remains is app-level and shared
- * types (settings, logs, shell, cluster-tab infos, common ref/condition/route
- * sub-types in resources/types) plus the three DTOs whose App.Get binding is
- * hand-written and therefore still named in package backend (HelmReleaseDetails,
- * PodDetailInfo, CustomResourceDefinitionDetails).
- */
-export const PodDetailInfo = types$0.PodDetailInfo;
 
 /**
  * Per-kind detail DTOs are no longer re-exported here. The generated
@@ -1613,7 +565,7 @@ export type PodDetailInfo = types$0.PodDetailInfo;
 /**
  * PortForwardSession represents an active port forwarding session.
  */
-export class PortForwardSession {
+export interface PortForwardSession {
     "id": string;
     "clusterId": string;
     "clusterName": string;
@@ -1628,59 +580,6 @@ export class PortForwardSession {
     "status": PortForwardStatus;
     "statusReason"?: string;
     "startedAt": string;
-
-    /** Creates a new PortForwardSession instance. */
-    constructor($$source: Partial<PortForwardSession> = {}) {
-        if (!("id" in $$source)) {
-            this["id"] = "";
-        }
-        if (!("clusterId" in $$source)) {
-            this["clusterId"] = "";
-        }
-        if (!("clusterName" in $$source)) {
-            this["clusterName"] = "";
-        }
-        if (!("namespace" in $$source)) {
-            this["namespace"] = "";
-        }
-        if (!("podName" in $$source)) {
-            this["podName"] = "";
-        }
-        if (!("containerPort" in $$source)) {
-            this["containerPort"] = 0;
-        }
-        if (!("localPort" in $$source)) {
-            this["localPort"] = 0;
-        }
-        if (!("targetKind" in $$source)) {
-            this["targetKind"] = "";
-        }
-        if (!("targetGroup" in $$source)) {
-            this["targetGroup"] = "";
-        }
-        if (!("targetVersion" in $$source)) {
-            this["targetVersion"] = "";
-        }
-        if (!("targetName" in $$source)) {
-            this["targetName"] = "";
-        }
-        if (!("status" in $$source)) {
-            this["status"] = PortForwardStatus.$zero;
-        }
-        if (!("startedAt" in $$source)) {
-            this["startedAt"] = "";
-        }
-
-        Object.assign(this, $$source);
-    }
-
-    /**
-     * Creates a new PortForwardSession instance from a string or object.
-     */
-    static createFrom($$source: any = {}): PortForwardSession {
-        let $$parsedSource = typeof $$source === 'string' ? JSON.parse($$source) : $$source;
-        return new PortForwardSession($$parsedSource as Partial<PortForwardSession>);
-    }
 }
 
 /**
@@ -1704,7 +603,7 @@ export enum PortForwardStatus {
 /**
  * RevisionEntry describes a single historical revision of a workload rollout.
  */
-export class RevisionEntry {
+export interface RevisionEntry {
     /**
      * Revision is the monotonically increasing revision number.
      */
@@ -1729,38 +628,9 @@ export class RevisionEntry {
      * PodTemplate is the YAML-serialised pod template spec for this revision.
      */
     "podTemplate": string;
-
-    /** Creates a new RevisionEntry instance. */
-    constructor($$source: Partial<RevisionEntry> = {}) {
-        if (!("revision" in $$source)) {
-            this["revision"] = 0;
-        }
-        if (!("createdAt" in $$source)) {
-            this["createdAt"] = "";
-        }
-        if (!("changeCause" in $$source)) {
-            this["changeCause"] = "";
-        }
-        if (!("current" in $$source)) {
-            this["current"] = false;
-        }
-        if (!("podTemplate" in $$source)) {
-            this["podTemplate"] = "";
-        }
-
-        Object.assign(this, $$source);
-    }
-
-    /**
-     * Creates a new RevisionEntry instance from a string or object.
-     */
-    static createFrom($$source: any = {}): RevisionEntry {
-        let $$parsedSource = typeof $$source === 'string' ? JSON.parse($$source) : $$source;
-        return new RevisionEntry($$parsedSource as Partial<RevisionEntry>);
-    }
 }
 
-export class RuntimeOperation {
+export interface RuntimeOperation {
     "id": string;
     "type": RuntimeOperationType;
     "clusterId": string;
@@ -1770,47 +640,9 @@ export class RuntimeOperation {
     "statusReason"?: string;
     "startedAt": string;
     "displayName"?: string;
-    "summary"?: { [_ in string]?: string };
-
-    /** Creates a new RuntimeOperation instance. */
-    constructor($$source: Partial<RuntimeOperation> = {}) {
-        if (!("id" in $$source)) {
-            this["id"] = "";
-        }
-        if (!("type" in $$source)) {
-            this["type"] = RuntimeOperationType.$zero;
-        }
-        if (!("clusterId" in $$source)) {
-            this["clusterId"] = "";
-        }
-        if (!("status" in $$source)) {
-            this["status"] = "";
-        }
-        if (!("startedAt" in $$source)) {
-            this["startedAt"] = "";
-        }
-
-        Object.assign(this, $$source);
-    }
-
-    /**
-     * Creates a new RuntimeOperation instance from a string or object.
-     */
-    static createFrom($$source: any = {}): RuntimeOperation {
-        const $$createField4_0 = $$createType31;
-        const $$createField9_0 = $$createType32;
-        let $$parsedSource = typeof $$source === 'string' ? JSON.parse($$source) : $$source;
-        if ("target" in $$parsedSource) {
-            $$parsedSource["target"] = $$createField4_0($$parsedSource["target"]);
-        }
-        if ("summary" in $$parsedSource) {
-            $$parsedSource["summary"] = $$createField9_0($$parsedSource["summary"]);
-        }
-        return new RuntimeOperation($$parsedSource as Partial<RuntimeOperation>);
-    }
+    "summary"?: { [_ in string]?: string } | null;
 }
 
-export const RuntimeOperationTargetRef = resourcemodel$0.ResourceRef;
 export type RuntimeOperationTargetRef = resourcemodel$0.ResourceRef;
 
 export enum RuntimeOperationType {
@@ -1827,7 +659,7 @@ export enum RuntimeOperationType {
 /**
  * SelectionDiagnostics summarizes cluster selection mutation performance.
  */
-export class SelectionDiagnostics {
+export interface SelectionDiagnostics {
     "activeQueueDepth": number;
     "maxQueueDepth": number;
     "sampleCount": number;
@@ -1855,58 +687,7 @@ export class SelectionDiagnostics {
     "refreshP95Ms"?: number;
     "catalogP50Ms"?: number;
     "catalogP95Ms"?: number;
-
-    /** Creates a new SelectionDiagnostics instance. */
-    constructor($$source: Partial<SelectionDiagnostics> = {}) {
-        if (!("activeQueueDepth" in $$source)) {
-            this["activeQueueDepth"] = 0;
-        }
-        if (!("maxQueueDepth" in $$source)) {
-            this["maxQueueDepth"] = 0;
-        }
-        if (!("sampleCount" in $$source)) {
-            this["sampleCount"] = 0;
-        }
-        if (!("totalMutations" in $$source)) {
-            this["totalMutations"] = 0;
-        }
-        if (!("completedMutations" in $$source)) {
-            this["completedMutations"] = 0;
-        }
-        if (!("failedMutations" in $$source)) {
-            this["failedMutations"] = 0;
-        }
-        if (!("canceledMutations" in $$source)) {
-            this["canceledMutations"] = 0;
-        }
-        if (!("supersededMutations" in $$source)) {
-            this["supersededMutations"] = 0;
-        }
-
-        Object.assign(this, $$source);
-    }
-
-    /**
-     * Creates a new SelectionDiagnostics instance from a string or object.
-     */
-    static createFrom($$source: any = {}): SelectionDiagnostics {
-        let $$parsedSource = typeof $$source === 'string' ? JSON.parse($$source) : $$source;
-        return new SelectionDiagnostics($$parsedSource as Partial<SelectionDiagnostics>);
-    }
 }
-
-/**
- * Per-kind detail DTOs are no longer re-exported here. The generated
- * App.Get<Kind> wrappers (resource_details_generated.go) reference each kind's DTO by
- * its own package (e.g. deployment.DeploymentDetails), and Wails reaches every
- * nested sub-type through those parent structs — so no package-backend alias is
- * needed for any kind DTO or its sub-types. What remains is app-level and shared
- * types (settings, logs, shell, cluster-tab infos, common ref/condition/route
- * sub-types in resources/types) plus the three DTOs whose App.Get binding is
- * hand-written and therefore still named in package backend (HelmReleaseDetails,
- * PodDetailInfo, CustomResourceDefinitionDetails).
- */
-export const ShellSession = types$0.ShellSession;
 
 /**
  * Per-kind detail DTOs are no longer re-exported here. The generated
@@ -1932,33 +713,7 @@ export type ShellSession = types$0.ShellSession;
  * hand-written and therefore still named in package backend (HelmReleaseDetails,
  * PodDetailInfo, CustomResourceDefinitionDetails).
  */
-export const ShellSessionInfo = types$0.ShellSessionInfo;
-
-/**
- * Per-kind detail DTOs are no longer re-exported here. The generated
- * App.Get<Kind> wrappers (resource_details_generated.go) reference each kind's DTO by
- * its own package (e.g. deployment.DeploymentDetails), and Wails reaches every
- * nested sub-type through those parent structs — so no package-backend alias is
- * needed for any kind DTO or its sub-types. What remains is app-level and shared
- * types (settings, logs, shell, cluster-tab infos, common ref/condition/route
- * sub-types in resources/types) plus the three DTOs whose App.Get binding is
- * hand-written and therefore still named in package backend (HelmReleaseDetails,
- * PodDetailInfo, CustomResourceDefinitionDetails).
- */
 export type ShellSessionInfo = types$0.ShellSessionInfo;
-
-/**
- * Per-kind detail DTOs are no longer re-exported here. The generated
- * App.Get<Kind> wrappers (resource_details_generated.go) reference each kind's DTO by
- * its own package (e.g. deployment.DeploymentDetails), and Wails reaches every
- * nested sub-type through those parent structs — so no package-backend alias is
- * needed for any kind DTO or its sub-types. What remains is app-level and shared
- * types (settings, logs, shell, cluster-tab infos, common ref/condition/route
- * sub-types in resources/types) plus the three DTOs whose App.Get binding is
- * hand-written and therefore still named in package backend (HelmReleaseDetails,
- * PodDetailInfo, CustomResourceDefinitionDetails).
- */
-export const ShellSessionRequest = types$0.ShellSessionRequest;
 
 /**
  * Per-kind detail DTOs are no longer re-exported here. The generated
@@ -1984,33 +739,7 @@ export type ShellSessionRequest = types$0.ShellSessionRequest;
  * hand-written and therefore still named in package backend (HelmReleaseDetails,
  * PodDetailInfo, CustomResourceDefinitionDetails).
  */
-export const Theme = types$0.Theme;
-
-/**
- * Per-kind detail DTOs are no longer re-exported here. The generated
- * App.Get<Kind> wrappers (resource_details_generated.go) reference each kind's DTO by
- * its own package (e.g. deployment.DeploymentDetails), and Wails reaches every
- * nested sub-type through those parent structs — so no package-backend alias is
- * needed for any kind DTO or its sub-types. What remains is app-level and shared
- * types (settings, logs, shell, cluster-tab infos, common ref/condition/route
- * sub-types in resources/types) plus the three DTOs whose App.Get binding is
- * hand-written and therefore still named in package backend (HelmReleaseDetails,
- * PodDetailInfo, CustomResourceDefinitionDetails).
- */
 export type Theme = types$0.Theme;
-
-/**
- * Per-kind detail DTOs are no longer re-exported here. The generated
- * App.Get<Kind> wrappers (resource_details_generated.go) reference each kind's DTO by
- * its own package (e.g. deployment.DeploymentDetails), and Wails reaches every
- * nested sub-type through those parent structs — so no package-backend alias is
- * needed for any kind DTO or its sub-types. What remains is app-level and shared
- * types (settings, logs, shell, cluster-tab infos, common ref/condition/route
- * sub-types in resources/types) plus the three DTOs whose App.Get binding is
- * hand-written and therefore still named in package backend (HelmReleaseDetails,
- * PodDetailInfo, CustomResourceDefinitionDetails).
- */
-export const ThemeClusterPatternValidationResult = types$0.ThemeClusterPatternValidationResult;
 
 /**
  * Per-kind detail DTOs are no longer re-exported here. The generated
@@ -2036,33 +765,7 @@ export type ThemeClusterPatternValidationResult = types$0.ThemeClusterPatternVal
  * hand-written and therefore still named in package backend (HelmReleaseDetails,
  * PodDetailInfo, CustomResourceDefinitionDetails).
  */
-export const UpdateAppPreferencesRequest = types$0.UpdateAppPreferencesRequest;
-
-/**
- * Per-kind detail DTOs are no longer re-exported here. The generated
- * App.Get<Kind> wrappers (resource_details_generated.go) reference each kind's DTO by
- * its own package (e.g. deployment.DeploymentDetails), and Wails reaches every
- * nested sub-type through those parent structs — so no package-backend alias is
- * needed for any kind DTO or its sub-types. What remains is app-level and shared
- * types (settings, logs, shell, cluster-tab infos, common ref/condition/route
- * sub-types in resources/types) plus the three DTOs whose App.Get binding is
- * hand-written and therefore still named in package backend (HelmReleaseDetails,
- * PodDetailInfo, CustomResourceDefinitionDetails).
- */
 export type UpdateAppPreferencesRequest = types$0.UpdateAppPreferencesRequest;
-
-/**
- * Per-kind detail DTOs are no longer re-exported here. The generated
- * App.Get<Kind> wrappers (resource_details_generated.go) reference each kind's DTO by
- * its own package (e.g. deployment.DeploymentDetails), and Wails reaches every
- * nested sub-type through those parent structs — so no package-backend alias is
- * needed for any kind DTO or its sub-types. What remains is app-level and shared
- * types (settings, logs, shell, cluster-tab infos, common ref/condition/route
- * sub-types in resources/types) plus the three DTOs whose App.Get binding is
- * hand-written and therefore still named in package backend (HelmReleaseDetails,
- * PodDetailInfo, CustomResourceDefinitionDetails).
- */
-export const UpdateAppPreferencesResponse = types$0.UpdateAppPreferencesResponse;
 
 /**
  * Per-kind detail DTOs are no longer re-exported here. The generated
@@ -2077,7 +780,7 @@ export const UpdateAppPreferencesResponse = types$0.UpdateAppPreferencesResponse
  */
 export type UpdateAppPreferencesResponse = types$0.UpdateAppPreferencesResponse;
 
-export class UpdateInfo {
+export interface UpdateInfo {
     "currentVersion": string;
     "latestVersion": string;
     "releaseUrl": string;
@@ -2098,32 +801,6 @@ export class UpdateInfo {
      */
     "releaseNotes"?: string;
     "error"?: string;
-
-    /** Creates a new UpdateInfo instance. */
-    constructor($$source: Partial<UpdateInfo> = {}) {
-        if (!("currentVersion" in $$source)) {
-            this["currentVersion"] = "";
-        }
-        if (!("latestVersion" in $$source)) {
-            this["latestVersion"] = "";
-        }
-        if (!("releaseUrl" in $$source)) {
-            this["releaseUrl"] = "";
-        }
-        if (!("isUpdateAvailable" in $$source)) {
-            this["isUpdateAvailable"] = false;
-        }
-
-        Object.assign(this, $$source);
-    }
-
-    /**
-     * Creates a new UpdateInfo instance from a string or object.
-     */
-    static createFrom($$source: any = {}): UpdateInfo {
-        let $$parsedSource = typeof $$source === 'string' ? JSON.parse($$source) : $$source;
-        return new UpdateInfo($$parsedSource as Partial<UpdateInfo>);
-    }
 }
 
 /**
@@ -2137,52 +814,4 @@ export class UpdateInfo {
  * hand-written and therefore still named in package backend (HelmReleaseDetails,
  * PodDetailInfo, CustomResourceDefinitionDetails).
  */
-export const WindowSettings = types$0.WindowSettings;
-
-/**
- * Per-kind detail DTOs are no longer re-exported here. The generated
- * App.Get<Kind> wrappers (resource_details_generated.go) reference each kind's DTO by
- * its own package (e.g. deployment.DeploymentDetails), and Wails reaches every
- * nested sub-type through those parent structs — so no package-backend alias is
- * needed for any kind DTO or its sub-types. What remains is app-level and shared
- * types (settings, logs, shell, cluster-tab infos, common ref/condition/route
- * sub-types in resources/types) plus the three DTOs whose App.Get binding is
- * hand-written and therefore still named in package backend (HelmReleaseDetails,
- * PodDetailInfo, CustomResourceDefinitionDetails).
- */
 export type WindowSettings = types$0.WindowSettings;
-
-// Private type creation functions
-const $$createType0 = UpdateInfo.createFrom;
-const $$createType1 = $Create.Nullable($$createType0);
-const $$createType2 = CatalogHealth.createFrom;
-const $$createType3 = $Create.Nullable($$createType2);
-const $$createType4 = CatalogDomainDiagnostics.createFrom;
-const $$createType5 = $Create.Array($$createType4);
-const $$createType6 = ClusterWorkspaceAuthState.createFrom;
-const $$createType7 = $Create.Array($Create.Any);
-const $$createType8 = ClusterWorkspaceState.createFrom;
-const $$createType9 = ClusterWorkspaceClusterState.createFrom;
-const $$createType10 = $Create.Map($Create.Any, $$createType9);
-const $$createType11 = FavoritePaneState.createFrom;
-const $$createType12 = $Create.Map($Create.Any, $$createType11);
-const $$createType13 = FavoriteFilterSelection.createFrom;
-const $$createType14 = $Create.Map($Create.Any, $$createType13);
-const $$createType15 = FavoriteFilters.createFrom;
-const $$createType16 = FavoriteTableState.createFrom;
-const $$createType17 = $Create.Map($Create.Any, $Create.Any);
-const $$createType18 = types$0.KubeconfigInfo.createFrom;
-const $$createType19 = $Create.Array($$createType18);
-const $$createType20 = resourcemodel$0.ResourceRef.createFrom;
-const $$createType21 = types$0.DrainNodeOptions.createFrom;
-const $$createType22 = $Create.Nullable($$createType21);
-const $$createType23 = ObjectActionPortForwardOptions.createFrom;
-const $$createType24 = $Create.Nullable($$createType23);
-const $$createType25 = ObjectActionDebugContainerOptions.createFrom;
-const $$createType26 = $Create.Nullable($$createType25);
-const $$createType27 = types$0.DebugContainerResponse.createFrom;
-const $$createType28 = $Create.Nullable($$createType27);
-const $$createType29 = ObjectYAMLOwnershipConflict.createFrom;
-const $$createType30 = $Create.Array($$createType29);
-const $$createType31 = $Create.Nullable($$createType20);
-const $$createType32 = $Create.Map($Create.Any, $Create.Any);

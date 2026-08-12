@@ -3,13 +3,9 @@
 
 // eslint-disable-next-line @typescript-eslint/ban-ts-comment
 // @ts-ignore: Unused imports
-import { Create as $Create } from "@wailsio/runtime";
-
-// eslint-disable-next-line @typescript-eslint/ban-ts-comment
-// @ts-ignore: Unused imports
 import * as types$0 from "../types/models.js";
 
-export class DeploymentDetails {
+export interface DeploymentDetails {
     /**
      * Basic information
      */
@@ -52,31 +48,31 @@ export class DeploymentDetails {
     /**
      * Pod placement constraints (from the pod template).
      */
-    "nodeSelector"?: { [_ in string]?: string };
-    "tolerations"?: string[];
+    "nodeSelector"?: { [_ in string]?: string } | null;
+    "tolerations"?: string[] | null;
 
     /**
      * Selector and labels
      */
-    "selector"?: { [_ in string]?: string };
-    "labels"?: { [_ in string]?: string };
-    "annotations"?: { [_ in string]?: string };
+    "selector"?: { [_ in string]?: string } | null;
+    "labels"?: { [_ in string]?: string } | null;
+    "annotations"?: { [_ in string]?: string } | null;
 
     /**
      * Conditions
      */
-    "conditions"?: string[];
+    "conditions"?: string[] | null;
 
     /**
      * Template information
      */
-    "containers"?: types$0.PodDetailInfoContainer[];
-    "initContainers"?: types$0.PodDetailInfoContainer[];
+    "containers"?: types$0.PodDetailInfoContainer[] | null;
+    "initContainers"?: types$0.PodDetailInfoContainer[] | null;
 
     /**
      * Pod information
      */
-    "pods"?: types$0.PodSimpleInfo[];
+    "pods"?: types$0.PodSimpleInfo[] | null;
     "podMetricsSummary"?: types$0.PodMetricsSummary | null;
 
     /**
@@ -84,8 +80,8 @@ export class DeploymentDetails {
      */
     "currentRevision"?: string;
     "currentReplicaSet"?: string;
-    "replicaSets"?: string[];
-    "replicaSetSummaries"?: types$0.ReplicaSetSummary[];
+    "replicaSets"?: string[] | null;
+    "replicaSetSummaries"?: types$0.ReplicaSetSummary[] | null;
 
     /**
      * Rollout status
@@ -94,105 +90,4 @@ export class DeploymentDetails {
     "paused"?: boolean;
     "rolloutStatus"?: string;
     "rolloutMessage"?: string;
-
-    /** Creates a new DeploymentDetails instance. */
-    constructor($$source: Partial<DeploymentDetails> = {}) {
-        if (!("kind" in $$source)) {
-            this["kind"] = "";
-        }
-        if (!("name" in $$source)) {
-            this["name"] = "";
-        }
-        if (!("namespace" in $$source)) {
-            this["namespace"] = "";
-        }
-        if (!("status" in $$source)) {
-            this["status"] = "";
-        }
-        if (!("details" in $$source)) {
-            this["details"] = "";
-        }
-        if (!("replicas" in $$source)) {
-            this["replicas"] = "";
-        }
-        if (!("ready" in $$source)) {
-            this["ready"] = "";
-        }
-        if (!("available" in $$source)) {
-            this["available"] = 0;
-        }
-        if (!("desiredReplicas" in $$source)) {
-            this["desiredReplicas"] = 0;
-        }
-
-        Object.assign(this, $$source);
-    }
-
-    /**
-     * Creates a new DeploymentDetails instance from a string or object.
-     */
-    static createFrom($$source: any = {}): DeploymentDetails {
-        const $$createField27_0 = $$createType0;
-        const $$createField28_0 = $$createType1;
-        const $$createField29_0 = $$createType0;
-        const $$createField30_0 = $$createType0;
-        const $$createField31_0 = $$createType0;
-        const $$createField32_0 = $$createType1;
-        const $$createField33_0 = $$createType3;
-        const $$createField34_0 = $$createType3;
-        const $$createField35_0 = $$createType5;
-        const $$createField36_0 = $$createType7;
-        const $$createField39_0 = $$createType1;
-        const $$createField40_0 = $$createType9;
-        let $$parsedSource = typeof $$source === 'string' ? JSON.parse($$source) : $$source;
-        if ("nodeSelector" in $$parsedSource) {
-            $$parsedSource["nodeSelector"] = $$createField27_0($$parsedSource["nodeSelector"]);
-        }
-        if ("tolerations" in $$parsedSource) {
-            $$parsedSource["tolerations"] = $$createField28_0($$parsedSource["tolerations"]);
-        }
-        if ("selector" in $$parsedSource) {
-            $$parsedSource["selector"] = $$createField29_0($$parsedSource["selector"]);
-        }
-        if ("labels" in $$parsedSource) {
-            $$parsedSource["labels"] = $$createField30_0($$parsedSource["labels"]);
-        }
-        if ("annotations" in $$parsedSource) {
-            $$parsedSource["annotations"] = $$createField31_0($$parsedSource["annotations"]);
-        }
-        if ("conditions" in $$parsedSource) {
-            $$parsedSource["conditions"] = $$createField32_0($$parsedSource["conditions"]);
-        }
-        if ("containers" in $$parsedSource) {
-            $$parsedSource["containers"] = $$createField33_0($$parsedSource["containers"]);
-        }
-        if ("initContainers" in $$parsedSource) {
-            $$parsedSource["initContainers"] = $$createField34_0($$parsedSource["initContainers"]);
-        }
-        if ("pods" in $$parsedSource) {
-            $$parsedSource["pods"] = $$createField35_0($$parsedSource["pods"]);
-        }
-        if ("podMetricsSummary" in $$parsedSource) {
-            $$parsedSource["podMetricsSummary"] = $$createField36_0($$parsedSource["podMetricsSummary"]);
-        }
-        if ("replicaSets" in $$parsedSource) {
-            $$parsedSource["replicaSets"] = $$createField39_0($$parsedSource["replicaSets"]);
-        }
-        if ("replicaSetSummaries" in $$parsedSource) {
-            $$parsedSource["replicaSetSummaries"] = $$createField40_0($$parsedSource["replicaSetSummaries"]);
-        }
-        return new DeploymentDetails($$parsedSource as Partial<DeploymentDetails>);
-    }
 }
-
-// Private type creation functions
-const $$createType0 = $Create.Map($Create.Any, $Create.Any);
-const $$createType1 = $Create.Array($Create.Any);
-const $$createType2 = types$0.PodDetailInfoContainer.createFrom;
-const $$createType3 = $Create.Array($$createType2);
-const $$createType4 = types$0.PodSimpleInfo.createFrom;
-const $$createType5 = $Create.Array($$createType4);
-const $$createType6 = types$0.PodMetricsSummary.createFrom;
-const $$createType7 = $Create.Nullable($$createType6);
-const $$createType8 = types$0.ReplicaSetSummary.createFrom;
-const $$createType9 = $Create.Array($$createType8);

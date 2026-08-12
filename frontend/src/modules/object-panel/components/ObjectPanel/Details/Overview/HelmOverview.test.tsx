@@ -2,6 +2,8 @@
  * frontend/src/modules/object-panel/components/ObjectPanel/Details/Overview/HelmOverview.test.tsx
  */
 
+import { partialModelFixture } from '@/test-utils/partialModelFixture';
+
 import { helm } from '@core/backend-api/models';
 import { act } from 'react';
 import * as ReactDOM from 'react-dom/client';
@@ -79,7 +81,7 @@ describe('HelmOverview', () => {
 
   it('renders helm release details and supports navigation to managed resources', async () => {
     await renderDescriptor(
-      helm.HelmReleaseDetails.createFrom({
+      partialModelFixture<helm.HelmReleaseDetails>({
         name: 'api-release',
         namespace: 'prod',
         chart: 'api-chart',
@@ -145,7 +147,7 @@ describe('HelmOverview', () => {
 
   it('falls back to basic props when details are absent', async () => {
     await renderDescriptor(
-      helm.HelmReleaseDetails.createFrom({
+      partialModelFixture<helm.HelmReleaseDetails>({
         name: 'fallback',
         namespace: 'default',
         chart: 'fallback-chart',
@@ -161,7 +163,7 @@ describe('HelmOverview', () => {
 
   it('does not link managed resources whose scope is unknown', async () => {
     await renderDescriptor(
-      helm.HelmReleaseDetails.createFrom({
+      partialModelFixture<helm.HelmReleaseDetails>({
         name: 'api-release',
         namespace: 'prod',
         status: 'Deployed',

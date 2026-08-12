@@ -7,6 +7,8 @@
  * the old useObjectPanel mock). The frame components are mocked; ObjectPanelLink/StatusChip are real.
  */
 
+import { partialModelFixture } from '@/test-utils/partialModelFixture';
+
 import { endpointslice } from '@core/backend-api/models';
 import { act } from 'react';
 import * as ReactDOM from 'react-dom/client';
@@ -45,7 +47,7 @@ describe('EndpointSliceOverview', () => {
   let root: ReactDOM.Root;
 
   const renderComponent = async (fixture: Record<string, unknown>) => {
-    const dto = endpointslice.EndpointSliceDetails.createFrom(fixture);
+    const dto = partialModelFixture<endpointslice.EndpointSliceDetails>(fixture);
     await act(async () => {
       root.render(
         <OverviewRenderer descriptor={endpointSliceDescriptor} data={dto} context={context} />

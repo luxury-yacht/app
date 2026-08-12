@@ -111,7 +111,7 @@ const renderTaints = (d: NodeDetails): React.ReactNode => (
 
 export const nodeDescriptor: OverviewDescriptor<NodeDetails> = {
   displayKind: 'Node',
-  dtoClass: nodes.NodeDetails,
+  dtoName: 'NodeDetails',
   schema: {
     items: [
       // Status + the inline drain affordance. The status block is the shared ResourceStatus; the

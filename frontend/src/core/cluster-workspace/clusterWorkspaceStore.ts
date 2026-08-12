@@ -137,7 +137,8 @@ export const applyAuthProgressEvent = (
   updateAuthMap(prev, payload, (existing) => progressedAuthState(existing, payload));
 
 type BackendWorkspaceState = Awaited<ReturnType<typeof GetClusterWorkspaceState>>;
-type BackendWorkspaceClusterState = NonNullable<BackendWorkspaceState['clusters'][string]>;
+type BackendWorkspaceClusters = NonNullable<BackendWorkspaceState['clusters']>;
+type BackendWorkspaceClusterState = NonNullable<BackendWorkspaceClusters[string]>;
 type BackendWorkspaceAuthState = BackendWorkspaceClusterState['auth'];
 interface ClusterWorkspaceWireAuthState extends Partial<BackendWorkspaceAuthState> {
   state: string;
@@ -150,7 +151,7 @@ interface ClusterWorkspaceWireClusterState
 }
 export interface ClusterWorkspaceWireState
   extends Omit<BackendWorkspaceState, 'clusters' | 'convertValues'> {
-  clusters: Record<string, ClusterWorkspaceWireClusterState | undefined>;
+  clusters: Record<string, ClusterWorkspaceWireClusterState | undefined> | null;
 }
 
 export interface ClusterWorkspaceClusterState {
@@ -292,7 +293,7 @@ const shouldEmitHydratedLifecycle = (
   );
 
 const mergeWireClusters = (
-  wireClusters: Record<string, ClusterWorkspaceWireClusterState | undefined> | undefined,
+  wireClusters: Record<string, ClusterWorkspaceWireClusterState | undefined> | null | undefined,
   current: ReadonlyMap<string, ClusterWorkspaceClusterState>,
   liveFields?: ReadonlySet<string>
 ): Map<string, ClusterWorkspaceClusterState> => {

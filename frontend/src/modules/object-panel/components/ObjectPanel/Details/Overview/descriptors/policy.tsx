@@ -313,7 +313,7 @@ const scaleTargetReference = (d: HorizontalPodAutoscalerDetails, context: Overvi
 
 export const hpaDescriptor: OverviewDescriptor<HorizontalPodAutoscalerDetails> = {
   displayKind: 'HorizontalPodAutoscaler',
-  dtoClass: hpa.HorizontalPodAutoscalerDetails,
+  dtoName: 'HorizontalPodAutoscalerDetails',
   schema: {
     items: [
       {
@@ -362,7 +362,7 @@ export const hpaDescriptor: OverviewDescriptor<HorizontalPodAutoscalerDetails> =
 
 export const limitRangeDescriptor: OverviewDescriptor<LimitRangeDetails> = {
   displayKind: 'LimitRange',
-  dtoClass: limitrange.LimitRangeDetails,
+  dtoName: 'LimitRangeDetails',
   schema: {
     items: [
       {
@@ -382,7 +382,7 @@ export const limitRangeDescriptor: OverviewDescriptor<LimitRangeDetails> = {
 
 export const pdbDescriptor: OverviewDescriptor<PodDisruptionBudgetDetails> = {
   displayKind: 'PodDisruptionBudget',
-  dtoClass: poddisruptionbudget.PodDisruptionBudgetDetails,
+  dtoName: 'PodDisruptionBudgetDetails',
   schema: {
     // Surface selector metadata for PDBs.
     showSelector: true,
@@ -418,7 +418,7 @@ const renderQuotaMap = (entries: Record<string, string | undefined>): React.Reac
 
 export const resourceQuotaDescriptor: OverviewDescriptor<ResourceQuotaDetails> = {
   displayKind: 'ResourceQuota',
-  dtoClass: resourcequota.ResourceQuotaDetails,
+  dtoName: 'ResourceQuotaDetails',
   schema: {
     items: [
       {

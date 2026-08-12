@@ -12,7 +12,7 @@ type ConfigMapDetails = configmap.ConfigMapDetails;
 
 export const configMapDescriptor: OverviewDescriptor<ConfigMapDetails> = {
   displayKind: 'ConfigMap',
-  dtoClass: configmap.ConfigMapDetails,
+  dtoName: 'ConfigMapDetails',
   schema: {
     items: [
       {

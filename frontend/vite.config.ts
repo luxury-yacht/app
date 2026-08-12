@@ -9,6 +9,7 @@ import { readFileSync } from 'node:fs';
 import path from 'node:path';
 import { sentryVitePlugin } from '@sentry/vite-plugin';
 import react from '@vitejs/plugin-react';
+import wails from '@wailsio/runtime/plugins/vite';
 import { defineConfig, type UserConfig } from 'vite';
 import { parse } from 'yaml';
 
@@ -29,9 +30,10 @@ const configuredValue = (environment: NodeJS.ProcessEnv, name: string) =>
 
 export function createViteConfig(
   environment: NodeJS.ProcessEnv = process.env,
-  command: 'build' | 'serve' = 'serve'
+  command: 'build' | 'serve' = 'serve',
+  mode = command === 'build' ? 'production' : 'development'
 ): UserConfig {
-  const productionBuild = command === 'build';
+  const productionBuild = mode === 'production';
   const authToken = configuredValue(environment, 'SENTRY_AUTH_TOKEN');
   const frontendDSN = configuredValue(environment, 'SENTRY_FRONTEND_DSN');
   const org = configuredValue(environment, 'SENTRY_ORG');
@@ -52,20 +54,16 @@ export function createViteConfig(
     : [];
 
   return {
-    plugins: [react(), ...sentryPlugins],
+    plugins: [wails('./bindings'), react(), ...sentryPlugins],
     define: {
       __SENTRY_ENABLED__: JSON.stringify(productionBuild),
       __SENTRY_FRONTEND_DSN__: JSON.stringify(productionBuild ? frontendDSN : ''),
       __SENTRY_RELEASE__: JSON.stringify(productionBuild ? sentryRelease : ''),
     },
     server: {
-      port: 5173,
+      host: '127.0.0.1',
+      port: Number(environment.WAILS_VITE_PORT) || 9245,
       strictPort: true,
-      hmr: {
-        host: 'localhost',
-        port: 5173,
-        protocol: 'ws',
-      },
     },
     envPrefix: ['VITE_', 'ENABLE_', 'ERROR_'],
     optimizeDeps: {
@@ -139,4 +137,4 @@ export function createViteConfig(
   };
 }
 
-export default defineConfig(({ command }) => createViteConfig(process.env, command));
+export default defineConfig(({ command, mode }) => createViteConfig(process.env, command, mode));

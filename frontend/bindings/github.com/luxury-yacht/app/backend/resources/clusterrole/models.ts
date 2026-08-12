@@ -3,105 +3,20 @@
 
 // eslint-disable-next-line @typescript-eslint/ban-ts-comment
 // @ts-ignore: Unused imports
-import { Create as $Create } from "@wailsio/runtime";
-
-// eslint-disable-next-line @typescript-eslint/ban-ts-comment
-// @ts-ignore: Unused imports
-import * as resourcemodel$0 from "../../resourcemodel/models.js";
-// eslint-disable-next-line @typescript-eslint/ban-ts-comment
-// @ts-ignore: Unused imports
 import * as types$0 from "../types/models.js";
 
-export class AggregationRule {
-    "clusterRoleSelectors"?: { [_ in string]?: string }[];
-
-    /** Creates a new AggregationRule instance. */
-    constructor($$source: Partial<AggregationRule> = {}) {
-
-        Object.assign(this, $$source);
-    }
-
-    /**
-     * Creates a new AggregationRule instance from a string or object.
-     */
-    static createFrom($$source: any = {}): AggregationRule {
-        const $$createField0_0 = $$createType1;
-        let $$parsedSource = typeof $$source === 'string' ? JSON.parse($$source) : $$source;
-        if ("clusterRoleSelectors" in $$parsedSource) {
-            $$parsedSource["clusterRoleSelectors"] = $$createField0_0($$parsedSource["clusterRoleSelectors"]);
-        }
-        return new AggregationRule($$parsedSource as Partial<AggregationRule>);
-    }
+export interface AggregationRule {
+    "clusterRoleSelectors"?: ({ [_ in string]?: string } | null)[] | null;
 }
 
-export class ClusterRoleDetails {
+export interface ClusterRoleDetails {
     "kind": string;
     "name": string;
     "details": string;
-    "rules": types$0.PolicyRule[];
+    "rules": types$0.PolicyRule[] | null;
     "aggregationRule"?: AggregationRule | null;
-    "labels"?: { [_ in string]?: string };
-    "annotations"?: { [_ in string]?: string };
-    "clusterRoleBindings"?: types$0.ObjectRef[];
-    "roleBindings"?: types$0.ObjectRef[];
-
-    /** Creates a new ClusterRoleDetails instance. */
-    constructor($$source: Partial<ClusterRoleDetails> = {}) {
-        if (!("kind" in $$source)) {
-            this["kind"] = "";
-        }
-        if (!("name" in $$source)) {
-            this["name"] = "";
-        }
-        if (!("details" in $$source)) {
-            this["details"] = "";
-        }
-        if (!("rules" in $$source)) {
-            this["rules"] = [];
-        }
-
-        Object.assign(this, $$source);
-    }
-
-    /**
-     * Creates a new ClusterRoleDetails instance from a string or object.
-     */
-    static createFrom($$source: any = {}): ClusterRoleDetails {
-        const $$createField3_0 = $$createType3;
-        const $$createField4_0 = $$createType5;
-        const $$createField5_0 = $$createType0;
-        const $$createField6_0 = $$createType0;
-        const $$createField7_0 = $$createType7;
-        const $$createField8_0 = $$createType7;
-        let $$parsedSource = typeof $$source === 'string' ? JSON.parse($$source) : $$source;
-        if ("rules" in $$parsedSource) {
-            $$parsedSource["rules"] = $$createField3_0($$parsedSource["rules"]);
-        }
-        if ("aggregationRule" in $$parsedSource) {
-            $$parsedSource["aggregationRule"] = $$createField4_0($$parsedSource["aggregationRule"]);
-        }
-        if ("labels" in $$parsedSource) {
-            $$parsedSource["labels"] = $$createField5_0($$parsedSource["labels"]);
-        }
-        if ("annotations" in $$parsedSource) {
-            $$parsedSource["annotations"] = $$createField6_0($$parsedSource["annotations"]);
-        }
-        if ("clusterRoleBindings" in $$parsedSource) {
-            $$parsedSource["clusterRoleBindings"] = $$createField7_0($$parsedSource["clusterRoleBindings"]);
-        }
-        if ("roleBindings" in $$parsedSource) {
-            $$parsedSource["roleBindings"] = $$createField8_0($$parsedSource["roleBindings"]);
-        }
-        return new ClusterRoleDetails($$parsedSource as Partial<ClusterRoleDetails>);
-    }
+    "labels"?: { [_ in string]?: string } | null;
+    "annotations"?: { [_ in string]?: string } | null;
+    "clusterRoleBindings"?: types$0.ObjectRef[] | null;
+    "roleBindings"?: types$0.ObjectRef[] | null;
 }
-
-// Private type creation functions
-const $$createType0 = $Create.Map($Create.Any, $Create.Any);
-const $$createType1 = $Create.Array($$createType0);
-const $$createType2 = types$0.PolicyRule.createFrom;
-const $$createType3 = $Create.Array($$createType2);
-const $$createType4 = AggregationRule.createFrom;
-const $$createType5 = $Create.Nullable($$createType4);
-const $$createType6 = resourcemodel$0.ResourceRef.createFrom;
-const $$createType7 = $Create.Array($$createType6);

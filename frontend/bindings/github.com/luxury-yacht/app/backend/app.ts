@@ -8,7 +8,7 @@
 
 // eslint-disable-next-line @typescript-eslint/ban-ts-comment
 // @ts-ignore: Unused imports
-import { Call as $Call, CancellablePromise as $CancellablePromise, Create as $Create } from "@wailsio/runtime";
+import { Call as $Call, CancellablePromise as $CancellablePromise } from "@wailsio/runtime";
 
 // eslint-disable-next-line @typescript-eslint/ban-ts-comment
 // @ts-ignore: Unused imports
@@ -31,9 +31,6 @@ import * as resourcemodel$0 from "./resourcemodel/models.js";
 // eslint-disable-next-line @typescript-eslint/ban-ts-comment
 // @ts-ignore: Unused imports
 import * as admission$0 from "./resources/admission/models.js";
-// eslint-disable-next-line @typescript-eslint/ban-ts-comment
-// @ts-ignore: Unused imports
-import * as apiextensions$0 from "./resources/apiextensions/models.js";
 // eslint-disable-next-line @typescript-eslint/ban-ts-comment
 // @ts-ignore: Unused imports
 import * as backendtlspolicy$0 from "./resources/backendtlspolicy/models.js";
@@ -67,9 +64,6 @@ import * as gateway$0 from "./resources/gateway/models.js";
 // eslint-disable-next-line @typescript-eslint/ban-ts-comment
 // @ts-ignore: Unused imports
 import * as gatewayclass$0 from "./resources/gatewayclass/models.js";
-// eslint-disable-next-line @typescript-eslint/ban-ts-comment
-// @ts-ignore: Unused imports
-import * as helm$0 from "./resources/helm/models.js";
 // eslint-disable-next-line @typescript-eslint/ban-ts-comment
 // @ts-ignore: Unused imports
 import * as hpa$0 from "./resources/hpa/models.js";
@@ -148,9 +142,7 @@ import * as $models from "./models.js";
  * AddFavorite generates an ID, assigns Order, appends the favorite, and persists.
  */
 export function AddFavorite(fav: $models.Favorite): $CancellablePromise<$models.Favorite> {
-    return $Call.ByName("github.com/luxury-yacht/app/backend.App.AddFavorite", fav).then(($result: any) => {
-        return $$createType0($result);
-    });
+    return $Call.ByName("github.com/luxury-yacht/app/backend.App.AddFavorite", fav);
 }
 
 /**
@@ -158,9 +150,7 @@ export function AddFavorite(fav: $models.Favorite): $CancellablePromise<$models.
  * activation and returns the resulting authoritative workspace snapshot.
  */
 export function ApplyClusterWorkspace(command: $models.ClusterWorkspaceCommand): $CancellablePromise<$models.ClusterWorkspaceResult> {
-    return $Call.ByName("github.com/luxury-yacht/app/backend.App.ApplyClusterWorkspace", command).then(($result: any) => {
-        return $$createType1($result);
-    });
+    return $Call.ByName("github.com/luxury-yacht/app/backend.App.ApplyClusterWorkspace", command);
 }
 
 /**
@@ -168,9 +158,7 @@ export function ApplyClusterWorkspace(command: $models.ClusterWorkspaceCommand):
  * baseline plus the user's edited YAML.
  */
 export function ApplyObjectYaml(clusterID: string, req: $models.ObjectYAMLMutationRequest): $CancellablePromise<$models.ObjectYAMLMutationResponse | null> {
-    return $Call.ByName("github.com/luxury-yacht/app/backend.App.ApplyObjectYaml", clusterID, req).then(($result: any) => {
-        return $$createType3($result);
-    });
+    return $Call.ByName("github.com/luxury-yacht/app/backend.App.ApplyObjectYaml", clusterID, req);
 }
 
 /**
@@ -193,9 +181,7 @@ export function CancelDrainNodeJob(clusterID: string, jobID: string): $Cancellab
  * apply (which would make this editor co-owner of the entire document).
  */
 export function CheckObjectYamlOwnership(clusterID: string, req: $models.ObjectYAMLMutationRequest): $CancellablePromise<$models.ObjectYAMLOwnershipCheckResponse | null> {
-    return $Call.ByName("github.com/luxury-yacht/app/backend.App.CheckObjectYamlOwnership", clusterID, req).then(($result: any) => {
-        return $$createType5($result);
-    });
+    return $Call.ByName("github.com/luxury-yacht/app/backend.App.CheckObjectYamlOwnership", clusterID, req);
 }
 
 /**
@@ -271,7 +257,7 @@ export function DeleteGridTablePersistence(key: string): $CancellablePromise<voi
 /**
  * DeleteGridTablePersistenceEntries removes multiple GridTable persistence entries at once.
  */
-export function DeleteGridTablePersistenceEntries(keys: string[]): $CancellablePromise<void> {
+export function DeleteGridTablePersistenceEntries(keys: string[] | null): $CancellablePromise<void> {
     return $Call.ByName("github.com/luxury-yacht/app/backend.App.DeleteGridTablePersistenceEntries", keys);
 }
 
@@ -283,33 +269,23 @@ export function DeleteTheme(id: string): $CancellablePromise<void> {
 }
 
 export function DiscoverNodeLogs(clusterID: string, nodeName: string): $CancellablePromise<$models.NodeLogDiscoveryResponse> {
-    return $Call.ByName("github.com/luxury-yacht/app/backend.App.DiscoverNodeLogs", clusterID, nodeName).then(($result: any) => {
-        return $$createType6($result);
-    });
+    return $Call.ByName("github.com/luxury-yacht/app/backend.App.DiscoverNodeLogs", clusterID, nodeName);
 }
 
 export function ExportFavorites(): $CancellablePromise<$models.DataManagementResult> {
-    return $Call.ByName("github.com/luxury-yacht/app/backend.App.ExportFavorites").then(($result: any) => {
-        return $$createType7($result);
-    });
+    return $Call.ByName("github.com/luxury-yacht/app/backend.App.ExportFavorites");
 }
 
 export function ExportSettings(): $CancellablePromise<$models.DataManagementResult> {
-    return $Call.ByName("github.com/luxury-yacht/app/backend.App.ExportSettings").then(($result: any) => {
-        return $$createType7($result);
-    });
+    return $Call.ByName("github.com/luxury-yacht/app/backend.App.ExportSettings");
 }
 
 export function FetchContainerLogs(clusterID: string, req: $models.ContainerLogsFetchRequest): $CancellablePromise<$models.ContainerLogsFetchResponse> {
-    return $Call.ByName("github.com/luxury-yacht/app/backend.App.FetchContainerLogs", clusterID, req).then(($result: any) => {
-        return $$createType8($result);
-    });
+    return $Call.ByName("github.com/luxury-yacht/app/backend.App.FetchContainerLogs", clusterID, req);
 }
 
 export function FetchNodeLogs(clusterID: string, nodeName: string, req: $models.NodeLogFetchRequest): $CancellablePromise<$models.NodeLogFetchResponse> {
-    return $Call.ByName("github.com/luxury-yacht/app/backend.App.FetchNodeLogs", clusterID, nodeName, req).then(($result: any) => {
-        return $$createType9($result);
-    });
+    return $Call.ByName("github.com/luxury-yacht/app/backend.App.FetchNodeLogs", clusterID, nodeName, req);
 }
 
 /**
@@ -317,9 +293,7 @@ export function FetchNodeLogs(clusterID: string, nodeName: string, req: $models.
  * cluster by resource UID.
  */
 export function FindCatalogObjectByUID(clusterID: string, uid: string): $CancellablePromise<objectcatalog$0.Summary | null> {
-    return $Call.ByName("github.com/luxury-yacht/app/backend.App.FindCatalogObjectByUID", clusterID, uid).then(($result: any) => {
-        return $$createType11($result);
-    });
+    return $Call.ByName("github.com/luxury-yacht/app/backend.App.FindCatalogObjectByUID", clusterID, uid);
 }
 
 /**
@@ -327,73 +301,53 @@ export function FindCatalogObjectByUID(clusterID: string, uid: string): $Cancell
  * cluster by canonical identity.
  */
 export function FindCatalogObjectMatch(clusterID: string, $namespace: string, group: string, version: string, kind: string, name: string): $CancellablePromise<objectcatalog$0.Summary | null> {
-    return $Call.ByName("github.com/luxury-yacht/app/backend.App.FindCatalogObjectMatch", clusterID, $namespace, group, version, kind, name).then(($result: any) => {
-        return $$createType11($result);
-    });
+    return $Call.ByName("github.com/luxury-yacht/app/backend.App.FindCatalogObjectMatch", clusterID, $namespace, group, version, kind, name);
 }
 
 /**
  * GetAppInfo returns the application version information
  */
 export function GetAppInfo(): $CancellablePromise<$models.AppInfo | null> {
-    return $Call.ByName("github.com/luxury-yacht/app/backend.App.GetAppInfo").then(($result: any) => {
-        return $$createType13($result);
-    });
+    return $Call.ByName("github.com/luxury-yacht/app/backend.App.GetAppInfo");
 }
 
-export function GetAppLogs(): $CancellablePromise<$models.LogEntry[]> {
-    return $Call.ByName("github.com/luxury-yacht/app/backend.App.GetAppLogs").then(($result: any) => {
-        return $$createType15($result);
-    });
+export function GetAppLogs(): $CancellablePromise<$models.LogEntry[] | null> {
+    return $Call.ByName("github.com/luxury-yacht/app/backend.App.GetAppLogs");
 }
 
-export function GetAppLogsSince(sequence: number): $CancellablePromise<$models.LogEntry[]> {
-    return $Call.ByName("github.com/luxury-yacht/app/backend.App.GetAppLogsSince", sequence).then(($result: any) => {
-        return $$createType15($result);
-    });
+export function GetAppLogsSince(sequence: number): $CancellablePromise<$models.LogEntry[] | null> {
+    return $Call.ByName("github.com/luxury-yacht/app/backend.App.GetAppLogsSince", sequence);
 }
 
 export function GetAppSettings(): $CancellablePromise<$models.AppSettings | null> {
-    return $Call.ByName("github.com/luxury-yacht/app/backend.App.GetAppSettings").then(($result: any) => {
-        return $$createType17($result);
-    });
+    return $Call.ByName("github.com/luxury-yacht/app/backend.App.GetAppSettings");
 }
 
 export function GetAppSettingsSchema(): $CancellablePromise<$models.AppSettingsSchema | null> {
-    return $Call.ByName("github.com/luxury-yacht/app/backend.App.GetAppSettingsSchema").then(($result: any) => {
-        return $$createType19($result);
-    });
+    return $Call.ByName("github.com/luxury-yacht/app/backend.App.GetAppSettingsSchema");
 }
 
 export function GetAppearanceModeInfo(): $CancellablePromise<$models.AppearanceModeInfo | null> {
-    return $Call.ByName("github.com/luxury-yacht/app/backend.App.GetAppearanceModeInfo").then(($result: any) => {
-        return $$createType21($result);
-    });
+    return $Call.ByName("github.com/luxury-yacht/app/backend.App.GetAppearanceModeInfo");
 }
 
 export function GetBackendTLSPolicy(clusterID: string, $namespace: string, name: string): $CancellablePromise<backendtlspolicy$0.BackendTLSPolicyDetails | null> {
-    return $Call.ByName("github.com/luxury-yacht/app/backend.App.GetBackendTLSPolicy", clusterID, $namespace, name).then(($result: any) => {
-        return $$createType23($result);
-    });
+    return $Call.ByName("github.com/luxury-yacht/app/backend.App.GetBackendTLSPolicy", clusterID, $namespace, name);
 }
 
 /**
  * GetCatalogDiagnostics returns the latest catalog telemetry snapshot for diagnostics tools.
  */
 export function GetCatalogDiagnostics(): $CancellablePromise<$models.CatalogDiagnostics | null> {
-    return $Call.ByName("github.com/luxury-yacht/app/backend.App.GetCatalogDiagnostics").then(($result: any) => {
-        return $$createType25($result);
-    });
+    return $Call.ByName("github.com/luxury-yacht/app/backend.App.GetCatalogDiagnostics");
 }
 
 /**
  * GetClusterAllowedNamespaces returns the persisted namespace scope for the
  * cluster in the order the user saved it. Empty means no scope.
  */
-export function GetClusterAllowedNamespaces(clusterID: string): $CancellablePromise<string[]> {
-    return $Call.ByName("github.com/luxury-yacht/app/backend.App.GetClusterAllowedNamespaces", clusterID).then(($result: any) => {
-        return $$createType26($result);
-    });
+export function GetClusterAllowedNamespaces(clusterID: string): $CancellablePromise<string[] | null> {
+    return $Call.ByName("github.com/luxury-yacht/app/backend.App.GetClusterAllowedNamespaces", clusterID);
 }
 
 /**
@@ -401,9 +355,7 @@ export function GetClusterAllowedNamespaces(clusterID: string): $CancellableProm
  * exactly one cluster, including rules that apply to every cluster.
  */
 export function GetClusterAttentionIgnoreRules(clusterID: string): $CancellablePromise<snapshot$0.AttentionIgnoreRules | null> {
-    return $Call.ByName("github.com/luxury-yacht/app/backend.App.GetClusterAttentionIgnoreRules", clusterID).then(($result: any) => {
-        return $$createType28($result);
-    });
+    return $Call.ByName("github.com/luxury-yacht/app/backend.App.GetClusterAttentionIgnoreRules", clusterID);
 }
 
 /**
@@ -421,15 +373,11 @@ export function GetClusterPortForwardCount(clusterID: string): $CancellablePromi
 }
 
 export function GetClusterRole(clusterID: string, name: string): $CancellablePromise<clusterrole$0.ClusterRoleDetails | null> {
-    return $Call.ByName("github.com/luxury-yacht/app/backend.App.GetClusterRole", clusterID, name).then(($result: any) => {
-        return $$createType30($result);
-    });
+    return $Call.ByName("github.com/luxury-yacht/app/backend.App.GetClusterRole", clusterID, name);
 }
 
 export function GetClusterRoleBinding(clusterID: string, name: string): $CancellablePromise<clusterrolebinding$0.ClusterRoleBindingDetails | null> {
-    return $Call.ByName("github.com/luxury-yacht/app/backend.App.GetClusterRoleBinding", clusterID, name).then(($result: any) => {
-        return $$createType32($result);
-    });
+    return $Call.ByName("github.com/luxury-yacht/app/backend.App.GetClusterRoleBinding", clusterID, name);
 }
 
 /**
@@ -442,10 +390,8 @@ export function GetClusterShellSessionCount(clusterID: string): $CancellableProm
 /**
  * GetClusterTabOrder returns the persisted cluster tab order.
  */
-export function GetClusterTabOrder(): $CancellablePromise<string[]> {
-    return $Call.ByName("github.com/luxury-yacht/app/backend.App.GetClusterTabOrder").then(($result: any) => {
-        return $$createType26($result);
-    });
+export function GetClusterTabOrder(): $CancellablePromise<string[] | null> {
+    return $Call.ByName("github.com/luxury-yacht/app/backend.App.GetClusterTabOrder");
 }
 
 /**
@@ -454,99 +400,69 @@ export function GetClusterTabOrder(): $CancellablePromise<string[]> {
  * namespace-scope consumers.
  */
 export function GetClusterWorkspaceState(): $CancellablePromise<$models.ClusterWorkspaceState> {
-    return $Call.ByName("github.com/luxury-yacht/app/backend.App.GetClusterWorkspaceState").then(($result: any) => {
-        return $$createType33($result);
-    });
+    return $Call.ByName("github.com/luxury-yacht/app/backend.App.GetClusterWorkspaceState");
 }
 
 export function GetConfigMap(clusterID: string, $namespace: string, name: string): $CancellablePromise<configmap$0.ConfigMapDetails | null> {
-    return $Call.ByName("github.com/luxury-yacht/app/backend.App.GetConfigMap", clusterID, $namespace, name).then(($result: any) => {
-        return $$createType35($result);
-    });
+    return $Call.ByName("github.com/luxury-yacht/app/backend.App.GetConfigMap", clusterID, $namespace, name);
 }
 
-export function GetContainerLogsScopeContainers(clusterID: string, scope: string): $CancellablePromise<string[]> {
-    return $Call.ByName("github.com/luxury-yacht/app/backend.App.GetContainerLogsScopeContainers", clusterID, scope).then(($result: any) => {
-        return $$createType26($result);
-    });
+export function GetContainerLogsScopeContainers(clusterID: string, scope: string): $CancellablePromise<string[] | null> {
+    return $Call.ByName("github.com/luxury-yacht/app/backend.App.GetContainerLogsScopeContainers", clusterID, scope);
 }
 
 export function GetCronJob(clusterID: string, $namespace: string, name: string): $CancellablePromise<cronjob$0.CronJobDetails | null> {
-    return $Call.ByName("github.com/luxury-yacht/app/backend.App.GetCronJob", clusterID, $namespace, name).then(($result: any) => {
-        return $$createType37($result);
-    });
+    return $Call.ByName("github.com/luxury-yacht/app/backend.App.GetCronJob", clusterID, $namespace, name);
 }
 
 export function GetCustomResourceDefinition(clusterID: string, name: string): $CancellablePromise<$models.CustomResourceDefinitionDetails | null> {
-    return $Call.ByName("github.com/luxury-yacht/app/backend.App.GetCustomResourceDefinition", clusterID, name).then(($result: any) => {
-        return $$createType39($result);
-    });
+    return $Call.ByName("github.com/luxury-yacht/app/backend.App.GetCustomResourceDefinition", clusterID, name);
 }
 
 export function GetDaemonSet(clusterID: string, $namespace: string, name: string): $CancellablePromise<daemonset$0.DaemonSetDetails | null> {
-    return $Call.ByName("github.com/luxury-yacht/app/backend.App.GetDaemonSet", clusterID, $namespace, name).then(($result: any) => {
-        return $$createType41($result);
-    });
+    return $Call.ByName("github.com/luxury-yacht/app/backend.App.GetDaemonSet", clusterID, $namespace, name);
 }
 
 export function GetDeployment(clusterID: string, $namespace: string, name: string): $CancellablePromise<deployment$0.DeploymentDetails | null> {
-    return $Call.ByName("github.com/luxury-yacht/app/backend.App.GetDeployment", clusterID, $namespace, name).then(($result: any) => {
-        return $$createType43($result);
-    });
+    return $Call.ByName("github.com/luxury-yacht/app/backend.App.GetDeployment", clusterID, $namespace, name);
 }
 
 export function GetEndpointSlice(clusterID: string, $namespace: string, name: string): $CancellablePromise<endpointslice$0.EndpointSliceDetails | null> {
-    return $Call.ByName("github.com/luxury-yacht/app/backend.App.GetEndpointSlice", clusterID, $namespace, name).then(($result: any) => {
-        return $$createType45($result);
-    });
+    return $Call.ByName("github.com/luxury-yacht/app/backend.App.GetEndpointSlice", clusterID, $namespace, name);
 }
 
 export function GetEvent(clusterID: string, $namespace: string, name: string): $CancellablePromise<events$0.EventDetails | null> {
-    return $Call.ByName("github.com/luxury-yacht/app/backend.App.GetEvent", clusterID, $namespace, name).then(($result: any) => {
-        return $$createType47($result);
-    });
+    return $Call.ByName("github.com/luxury-yacht/app/backend.App.GetEvent", clusterID, $namespace, name);
 }
 
 /**
  * GetFavorites returns all saved favorites.
  */
-export function GetFavorites(): $CancellablePromise<$models.Favorite[]> {
-    return $Call.ByName("github.com/luxury-yacht/app/backend.App.GetFavorites").then(($result: any) => {
-        return $$createType48($result);
-    });
+export function GetFavorites(): $CancellablePromise<$models.Favorite[] | null> {
+    return $Call.ByName("github.com/luxury-yacht/app/backend.App.GetFavorites");
 }
 
 export function GetGRPCRoute(clusterID: string, $namespace: string, name: string): $CancellablePromise<types$0.GRPCRouteDetails | null> {
-    return $Call.ByName("github.com/luxury-yacht/app/backend.App.GetGRPCRoute", clusterID, $namespace, name).then(($result: any) => {
-        return $$createType50($result);
-    });
+    return $Call.ByName("github.com/luxury-yacht/app/backend.App.GetGRPCRoute", clusterID, $namespace, name);
 }
 
 export function GetGateway(clusterID: string, $namespace: string, name: string): $CancellablePromise<gateway$0.GatewayDetails | null> {
-    return $Call.ByName("github.com/luxury-yacht/app/backend.App.GetGateway", clusterID, $namespace, name).then(($result: any) => {
-        return $$createType52($result);
-    });
+    return $Call.ByName("github.com/luxury-yacht/app/backend.App.GetGateway", clusterID, $namespace, name);
 }
 
 export function GetGatewayClass(clusterID: string, name: string): $CancellablePromise<gatewayclass$0.GatewayClassDetails | null> {
-    return $Call.ByName("github.com/luxury-yacht/app/backend.App.GetGatewayClass", clusterID, name).then(($result: any) => {
-        return $$createType54($result);
-    });
+    return $Call.ByName("github.com/luxury-yacht/app/backend.App.GetGatewayClass", clusterID, name);
 }
 
 /**
  * GetGridTablePersistence returns all persisted GridTable entries for v1.
  */
-export function GetGridTablePersistence(): $CancellablePromise<{ [_ in string]?: json$0.RawMessage }> {
-    return $Call.ByName("github.com/luxury-yacht/app/backend.App.GetGridTablePersistence").then(($result: any) => {
-        return $$createType55($result);
-    });
+export function GetGridTablePersistence(): $CancellablePromise<{ [_ in string]?: json$0.RawMessage } | null> {
+    return $Call.ByName("github.com/luxury-yacht/app/backend.App.GetGridTablePersistence");
 }
 
 export function GetHTTPRoute(clusterID: string, $namespace: string, name: string): $CancellablePromise<types$0.HTTPRouteDetails | null> {
-    return $Call.ByName("github.com/luxury-yacht/app/backend.App.GetHTTPRoute", clusterID, $namespace, name).then(($result: any) => {
-        return $$createType50($result);
-    });
+    return $Call.ByName("github.com/luxury-yacht/app/backend.App.GetHTTPRoute", clusterID, $namespace, name);
 }
 
 export function GetHelmManifest(clusterID: string, $namespace: string, name: string): $CancellablePromise<string> {
@@ -554,102 +470,72 @@ export function GetHelmManifest(clusterID: string, $namespace: string, name: str
 }
 
 export function GetHelmReleaseDetails(clusterID: string, $namespace: string, name: string): $CancellablePromise<$models.HelmReleaseDetails | null> {
-    return $Call.ByName("github.com/luxury-yacht/app/backend.App.GetHelmReleaseDetails", clusterID, $namespace, name).then(($result: any) => {
-        return $$createType57($result);
-    });
+    return $Call.ByName("github.com/luxury-yacht/app/backend.App.GetHelmReleaseDetails", clusterID, $namespace, name);
 }
 
-export function GetHelmValues(clusterID: string, $namespace: string, name: string): $CancellablePromise<{ [_ in string]?: any }> {
-    return $Call.ByName("github.com/luxury-yacht/app/backend.App.GetHelmValues", clusterID, $namespace, name).then(($result: any) => {
-        return $$createType58($result);
-    });
+export function GetHelmValues(clusterID: string, $namespace: string, name: string): $CancellablePromise<{ [_ in string]?: any } | null> {
+    return $Call.ByName("github.com/luxury-yacht/app/backend.App.GetHelmValues", clusterID, $namespace, name);
 }
 
 export function GetHorizontalPodAutoscaler(clusterID: string, $namespace: string, name: string): $CancellablePromise<hpa$0.HorizontalPodAutoscalerDetails | null> {
-    return $Call.ByName("github.com/luxury-yacht/app/backend.App.GetHorizontalPodAutoscaler", clusterID, $namespace, name).then(($result: any) => {
-        return $$createType60($result);
-    });
+    return $Call.ByName("github.com/luxury-yacht/app/backend.App.GetHorizontalPodAutoscaler", clusterID, $namespace, name);
 }
 
 export function GetIngress(clusterID: string, $namespace: string, name: string): $CancellablePromise<ingress$0.IngressDetails | null> {
-    return $Call.ByName("github.com/luxury-yacht/app/backend.App.GetIngress", clusterID, $namespace, name).then(($result: any) => {
-        return $$createType62($result);
-    });
+    return $Call.ByName("github.com/luxury-yacht/app/backend.App.GetIngress", clusterID, $namespace, name);
 }
 
 export function GetIngressClass(clusterID: string, name: string): $CancellablePromise<ingressclass$0.IngressClassDetails | null> {
-    return $Call.ByName("github.com/luxury-yacht/app/backend.App.GetIngressClass", clusterID, name).then(($result: any) => {
-        return $$createType64($result);
-    });
+    return $Call.ByName("github.com/luxury-yacht/app/backend.App.GetIngressClass", clusterID, name);
 }
 
 export function GetJob(clusterID: string, $namespace: string, name: string): $CancellablePromise<job$0.JobDetails | null> {
-    return $Call.ByName("github.com/luxury-yacht/app/backend.App.GetJob", clusterID, $namespace, name).then(($result: any) => {
-        return $$createType66($result);
-    });
+    return $Call.ByName("github.com/luxury-yacht/app/backend.App.GetJob", clusterID, $namespace, name);
 }
 
 /**
  * GetKubeconfigSearchPaths returns the configured kubeconfig search paths.
  */
-export function GetKubeconfigSearchPaths(): $CancellablePromise<string[]> {
-    return $Call.ByName("github.com/luxury-yacht/app/backend.App.GetKubeconfigSearchPaths").then(($result: any) => {
-        return $$createType26($result);
-    });
+export function GetKubeconfigSearchPaths(): $CancellablePromise<string[] | null> {
+    return $Call.ByName("github.com/luxury-yacht/app/backend.App.GetKubeconfigSearchPaths");
 }
 
 /**
  * GetKubeconfigs returns the available kubeconfigs and the current discovery state.
  */
 export function GetKubeconfigs(): $CancellablePromise<$models.KubeconfigDiscoveryResult> {
-    return $Call.ByName("github.com/luxury-yacht/app/backend.App.GetKubeconfigs").then(($result: any) => {
-        return $$createType67($result);
-    });
+    return $Call.ByName("github.com/luxury-yacht/app/backend.App.GetKubeconfigs");
 }
 
 /**
  * GetKubernetesAPIClientDiagnostics returns per-cluster Kubernetes API client usage.
  */
-export function GetKubernetesAPIClientDiagnostics(): $CancellablePromise<$models.KubernetesAPIClientDiagnostics[]> {
-    return $Call.ByName("github.com/luxury-yacht/app/backend.App.GetKubernetesAPIClientDiagnostics").then(($result: any) => {
-        return $$createType69($result);
-    });
+export function GetKubernetesAPIClientDiagnostics(): $CancellablePromise<$models.KubernetesAPIClientDiagnostics[] | null> {
+    return $Call.ByName("github.com/luxury-yacht/app/backend.App.GetKubernetesAPIClientDiagnostics");
 }
 
 export function GetLimitRange(clusterID: string, $namespace: string, name: string): $CancellablePromise<limitrange$0.LimitRangeDetails | null> {
-    return $Call.ByName("github.com/luxury-yacht/app/backend.App.GetLimitRange", clusterID, $namespace, name).then(($result: any) => {
-        return $$createType71($result);
-    });
+    return $Call.ByName("github.com/luxury-yacht/app/backend.App.GetLimitRange", clusterID, $namespace, name);
 }
 
 export function GetListenerSet(clusterID: string, $namespace: string, name: string): $CancellablePromise<listenerset$0.ListenerSetDetails | null> {
-    return $Call.ByName("github.com/luxury-yacht/app/backend.App.GetListenerSet", clusterID, $namespace, name).then(($result: any) => {
-        return $$createType73($result);
-    });
+    return $Call.ByName("github.com/luxury-yacht/app/backend.App.GetListenerSet", clusterID, $namespace, name);
 }
 
 export function GetMutatingWebhookConfiguration(clusterID: string, name: string): $CancellablePromise<admission$0.MutatingWebhookConfigurationDetails | null> {
-    return $Call.ByName("github.com/luxury-yacht/app/backend.App.GetMutatingWebhookConfiguration", clusterID, name).then(($result: any) => {
-        return $$createType75($result);
-    });
+    return $Call.ByName("github.com/luxury-yacht/app/backend.App.GetMutatingWebhookConfiguration", clusterID, name);
 }
 
 export function GetNamespace(clusterID: string, name: string): $CancellablePromise<namespaces$0.NamespaceDetails | null> {
-    return $Call.ByName("github.com/luxury-yacht/app/backend.App.GetNamespace", clusterID, name).then(($result: any) => {
-        return $$createType77($result);
-    });
+    return $Call.ByName("github.com/luxury-yacht/app/backend.App.GetNamespace", clusterID, name);
 }
 
 export function GetNetworkPolicy(clusterID: string, $namespace: string, name: string): $CancellablePromise<networkpolicy$0.NetworkPolicyDetails | null> {
-    return $Call.ByName("github.com/luxury-yacht/app/backend.App.GetNetworkPolicy", clusterID, $namespace, name).then(($result: any) => {
-        return $$createType79($result);
-    });
+    return $Call.ByName("github.com/luxury-yacht/app/backend.App.GetNetworkPolicy", clusterID, $namespace, name);
 }
 
 export function GetNode(clusterID: string, name: string): $CancellablePromise<nodes$0.NodeDetails | null> {
-    return $Call.ByName("github.com/luxury-yacht/app/backend.App.GetNode", clusterID, name).then(($result: any) => {
-        return $$createType81($result);
-    });
+    return $Call.ByName("github.com/luxury-yacht/app/backend.App.GetNode", clusterID, name);
 }
 
 /**
@@ -669,39 +555,27 @@ export function GetObjectYAMLByGVK(clusterID: string, apiVersion: string, kind: 
 }
 
 export function GetPersistentVolume(clusterID: string, name: string): $CancellablePromise<persistentvolume$0.PersistentVolumeDetails | null> {
-    return $Call.ByName("github.com/luxury-yacht/app/backend.App.GetPersistentVolume", clusterID, name).then(($result: any) => {
-        return $$createType83($result);
-    });
+    return $Call.ByName("github.com/luxury-yacht/app/backend.App.GetPersistentVolume", clusterID, name);
 }
 
 export function GetPersistentVolumeClaim(clusterID: string, $namespace: string, name: string): $CancellablePromise<persistentvolumeclaim$0.PersistentVolumeClaimDetails | null> {
-    return $Call.ByName("github.com/luxury-yacht/app/backend.App.GetPersistentVolumeClaim", clusterID, $namespace, name).then(($result: any) => {
-        return $$createType85($result);
-    });
+    return $Call.ByName("github.com/luxury-yacht/app/backend.App.GetPersistentVolumeClaim", clusterID, $namespace, name);
 }
 
 export function GetPod(clusterID: string, $namespace: string, name: string, detailed: boolean): $CancellablePromise<$models.PodDetailInfo | null> {
-    return $Call.ByName("github.com/luxury-yacht/app/backend.App.GetPod", clusterID, $namespace, name, detailed).then(($result: any) => {
-        return $$createType87($result);
-    });
+    return $Call.ByName("github.com/luxury-yacht/app/backend.App.GetPod", clusterID, $namespace, name, detailed);
 }
 
-export function GetPodContainers(clusterID: string, $namespace: string, podName: string): $CancellablePromise<string[]> {
-    return $Call.ByName("github.com/luxury-yacht/app/backend.App.GetPodContainers", clusterID, $namespace, podName).then(($result: any) => {
-        return $$createType26($result);
-    });
+export function GetPodContainers(clusterID: string, $namespace: string, podName: string): $CancellablePromise<string[] | null> {
+    return $Call.ByName("github.com/luxury-yacht/app/backend.App.GetPodContainers", clusterID, $namespace, podName);
 }
 
 export function GetPodDisruptionBudget(clusterID: string, $namespace: string, name: string): $CancellablePromise<poddisruptionbudget$0.PodDisruptionBudgetDetails | null> {
-    return $Call.ByName("github.com/luxury-yacht/app/backend.App.GetPodDisruptionBudget", clusterID, $namespace, name).then(($result: any) => {
-        return $$createType89($result);
-    });
+    return $Call.ByName("github.com/luxury-yacht/app/backend.App.GetPodDisruptionBudget", clusterID, $namespace, name);
 }
 
 export function GetReferenceGrant(clusterID: string, $namespace: string, name: string): $CancellablePromise<referencegrant$0.ReferenceGrantDetails | null> {
-    return $Call.ByName("github.com/luxury-yacht/app/backend.App.GetReferenceGrant", clusterID, $namespace, name).then(($result: any) => {
-        return $$createType91($result);
-    });
+    return $Call.ByName("github.com/luxury-yacht/app/backend.App.GetReferenceGrant", clusterID, $namespace, name);
 }
 
 export function GetRefreshBaseURL(): $CancellablePromise<string> {
@@ -709,15 +583,11 @@ export function GetRefreshBaseURL(): $CancellablePromise<string> {
 }
 
 export function GetReplicaSet(clusterID: string, $namespace: string, name: string): $CancellablePromise<replicaset$0.ReplicaSetDetails | null> {
-    return $Call.ByName("github.com/luxury-yacht/app/backend.App.GetReplicaSet", clusterID, $namespace, name).then(($result: any) => {
-        return $$createType93($result);
-    });
+    return $Call.ByName("github.com/luxury-yacht/app/backend.App.GetReplicaSet", clusterID, $namespace, name);
 }
 
 export function GetResourceQuota(clusterID: string, $namespace: string, name: string): $CancellablePromise<resourcequota$0.ResourceQuotaDetails | null> {
-    return $Call.ByName("github.com/luxury-yacht/app/backend.App.GetResourceQuota", clusterID, $namespace, name).then(($result: any) => {
-        return $$createType95($result);
-    });
+    return $Call.ByName("github.com/luxury-yacht/app/backend.App.GetResourceQuota", clusterID, $namespace, name);
 }
 
 /**
@@ -728,58 +598,42 @@ export function GetResourceQuota(clusterID: string, $namespace: string, name: st
  * Multi-cluster safety: all Kubernetes requests are scoped to the cluster
  * identified by clusterID, preventing cross-cluster data leakage.
  */
-export function GetRevisionHistory(clusterID: string, $namespace: string, group: string, version: string, workloadKind: string, name: string): $CancellablePromise<$models.RevisionEntry[]> {
-    return $Call.ByName("github.com/luxury-yacht/app/backend.App.GetRevisionHistory", clusterID, $namespace, group, version, workloadKind, name).then(($result: any) => {
-        return $$createType97($result);
-    });
+export function GetRevisionHistory(clusterID: string, $namespace: string, group: string, version: string, workloadKind: string, name: string): $CancellablePromise<$models.RevisionEntry[] | null> {
+    return $Call.ByName("github.com/luxury-yacht/app/backend.App.GetRevisionHistory", clusterID, $namespace, group, version, workloadKind, name);
 }
 
 export function GetRole(clusterID: string, $namespace: string, name: string): $CancellablePromise<role$0.RoleDetails | null> {
-    return $Call.ByName("github.com/luxury-yacht/app/backend.App.GetRole", clusterID, $namespace, name).then(($result: any) => {
-        return $$createType99($result);
-    });
+    return $Call.ByName("github.com/luxury-yacht/app/backend.App.GetRole", clusterID, $namespace, name);
 }
 
 export function GetRoleBinding(clusterID: string, $namespace: string, name: string): $CancellablePromise<rolebinding$0.RoleBindingDetails | null> {
-    return $Call.ByName("github.com/luxury-yacht/app/backend.App.GetRoleBinding", clusterID, $namespace, name).then(($result: any) => {
-        return $$createType101($result);
-    });
+    return $Call.ByName("github.com/luxury-yacht/app/backend.App.GetRoleBinding", clusterID, $namespace, name);
 }
 
 export function GetSecret(clusterID: string, $namespace: string, name: string): $CancellablePromise<secret$0.SecretDetails | null> {
-    return $Call.ByName("github.com/luxury-yacht/app/backend.App.GetSecret", clusterID, $namespace, name).then(($result: any) => {
-        return $$createType103($result);
-    });
+    return $Call.ByName("github.com/luxury-yacht/app/backend.App.GetSecret", clusterID, $namespace, name);
 }
 
 /**
  * GetSelectedKubeconfigs returns the active kubeconfig selections for multi-cluster support.
  */
-export function GetSelectedKubeconfigs(): $CancellablePromise<string[]> {
-    return $Call.ByName("github.com/luxury-yacht/app/backend.App.GetSelectedKubeconfigs").then(($result: any) => {
-        return $$createType26($result);
-    });
+export function GetSelectedKubeconfigs(): $CancellablePromise<string[] | null> {
+    return $Call.ByName("github.com/luxury-yacht/app/backend.App.GetSelectedKubeconfigs");
 }
 
 /**
  * GetSelectionDiagnostics returns rolling selection mutation timing and outcome stats.
  */
 export function GetSelectionDiagnostics(): $CancellablePromise<$models.SelectionDiagnostics | null> {
-    return $Call.ByName("github.com/luxury-yacht/app/backend.App.GetSelectionDiagnostics").then(($result: any) => {
-        return $$createType105($result);
-    });
+    return $Call.ByName("github.com/luxury-yacht/app/backend.App.GetSelectionDiagnostics");
 }
 
 export function GetService(clusterID: string, $namespace: string, name: string): $CancellablePromise<service$0.ServiceDetails | null> {
-    return $Call.ByName("github.com/luxury-yacht/app/backend.App.GetService", clusterID, $namespace, name).then(($result: any) => {
-        return $$createType107($result);
-    });
+    return $Call.ByName("github.com/luxury-yacht/app/backend.App.GetService", clusterID, $namespace, name);
 }
 
 export function GetServiceAccount(clusterID: string, $namespace: string, name: string): $CancellablePromise<serviceaccount$0.ServiceAccountDetails | null> {
-    return $Call.ByName("github.com/luxury-yacht/app/backend.App.GetServiceAccount", clusterID, $namespace, name).then(($result: any) => {
-        return $$createType109($result);
-    });
+    return $Call.ByName("github.com/luxury-yacht/app/backend.App.GetServiceAccount", clusterID, $namespace, name);
 }
 
 /**
@@ -790,45 +644,33 @@ export function GetShellSessionBacklog(sessionID: string): $CancellablePromise<s
 }
 
 export function GetStatefulSet(clusterID: string, $namespace: string, name: string): $CancellablePromise<statefulset$0.StatefulSetDetails | null> {
-    return $Call.ByName("github.com/luxury-yacht/app/backend.App.GetStatefulSet", clusterID, $namespace, name).then(($result: any) => {
-        return $$createType111($result);
-    });
+    return $Call.ByName("github.com/luxury-yacht/app/backend.App.GetStatefulSet", clusterID, $namespace, name);
 }
 
 export function GetStorageClass(clusterID: string, name: string): $CancellablePromise<storageclass$0.StorageClassDetails | null> {
-    return $Call.ByName("github.com/luxury-yacht/app/backend.App.GetStorageClass", clusterID, name).then(($result: any) => {
-        return $$createType113($result);
-    });
+    return $Call.ByName("github.com/luxury-yacht/app/backend.App.GetStorageClass", clusterID, name);
 }
 
 export function GetTLSRoute(clusterID: string, $namespace: string, name: string): $CancellablePromise<types$0.TLSRouteDetails | null> {
-    return $Call.ByName("github.com/luxury-yacht/app/backend.App.GetTLSRoute", clusterID, $namespace, name).then(($result: any) => {
-        return $$createType50($result);
-    });
+    return $Call.ByName("github.com/luxury-yacht/app/backend.App.GetTLSRoute", clusterID, $namespace, name);
 }
 
 /**
  * GetTargetPorts returns the TCP ports a target can be forwarded on.
  */
-export function GetTargetPorts(clusterID: string, $namespace: string, targetKind: string, targetGroup: string, targetVersion: string, targetName: string): $CancellablePromise<$models.ContainerPortInfo[]> {
-    return $Call.ByName("github.com/luxury-yacht/app/backend.App.GetTargetPorts", clusterID, $namespace, targetKind, targetGroup, targetVersion, targetName).then(($result: any) => {
-        return $$createType115($result);
-    });
+export function GetTargetPorts(clusterID: string, $namespace: string, targetKind: string, targetGroup: string, targetVersion: string, targetName: string): $CancellablePromise<$models.ContainerPortInfo[] | null> {
+    return $Call.ByName("github.com/luxury-yacht/app/backend.App.GetTargetPorts", clusterID, $namespace, targetKind, targetGroup, targetVersion, targetName);
 }
 
 /**
  * GetThemes returns the saved theme library.
  */
-export function GetThemes(): $CancellablePromise<$models.Theme[]> {
-    return $Call.ByName("github.com/luxury-yacht/app/backend.App.GetThemes").then(($result: any) => {
-        return $$createType117($result);
-    });
+export function GetThemes(): $CancellablePromise<$models.Theme[] | null> {
+    return $Call.ByName("github.com/luxury-yacht/app/backend.App.GetThemes");
 }
 
 export function GetValidatingWebhookConfiguration(clusterID: string, name: string): $CancellablePromise<admission$0.ValidatingWebhookConfigurationDetails | null> {
-    return $Call.ByName("github.com/luxury-yacht/app/backend.App.GetValidatingWebhookConfiguration", clusterID, name).then(($result: any) => {
-        return $$createType119($result);
-    });
+    return $Call.ByName("github.com/luxury-yacht/app/backend.App.GetValidatingWebhookConfiguration", clusterID, name);
 }
 
 /**
@@ -844,40 +686,28 @@ export function GetZoomLevel(): $CancellablePromise<number> {
  * rows so production Custom tables keep catalog-backed paging without starting
  * the legacy full CRD fanout domains.
  */
-export function HydrateCatalogCustomRows(clusterID: string, rows: snapshot$0.ResourceQueryRow[]): $CancellablePromise<snapshot$0.CustomResourceSummary[]> {
-    return $Call.ByName("github.com/luxury-yacht/app/backend.App.HydrateCatalogCustomRows", clusterID, rows).then(($result: any) => {
-        return $$createType121($result);
-    });
+export function HydrateCatalogCustomRows(clusterID: string, rows: snapshot$0.ResourceQueryRow[] | null): $CancellablePromise<snapshot$0.CustomResourceSummary[] | null> {
+    return $Call.ByName("github.com/luxury-yacht/app/backend.App.HydrateCatalogCustomRows", clusterID, rows);
 }
 
 export function IgnoreClusterAttentionFindingType(clusterID: string, findingType: string): $CancellablePromise<snapshot$0.AttentionIgnoreRules | null> {
-    return $Call.ByName("github.com/luxury-yacht/app/backend.App.IgnoreClusterAttentionFindingType", clusterID, findingType).then(($result: any) => {
-        return $$createType28($result);
-    });
+    return $Call.ByName("github.com/luxury-yacht/app/backend.App.IgnoreClusterAttentionFindingType", clusterID, findingType);
 }
 
 export function IgnoreClusterAttentionObjectFinding(clusterID: string, ref: resourcemodel$0.ResourceRef, findingType: string): $CancellablePromise<snapshot$0.AttentionIgnoreRules | null> {
-    return $Call.ByName("github.com/luxury-yacht/app/backend.App.IgnoreClusterAttentionObjectFinding", clusterID, ref, findingType).then(($result: any) => {
-        return $$createType28($result);
-    });
+    return $Call.ByName("github.com/luxury-yacht/app/backend.App.IgnoreClusterAttentionObjectFinding", clusterID, ref, findingType);
 }
 
 export function IgnoreGlobalAttentionFindingType(clusterID: string, findingType: string): $CancellablePromise<snapshot$0.AttentionIgnoreRules | null> {
-    return $Call.ByName("github.com/luxury-yacht/app/backend.App.IgnoreGlobalAttentionFindingType", clusterID, findingType).then(($result: any) => {
-        return $$createType28($result);
-    });
+    return $Call.ByName("github.com/luxury-yacht/app/backend.App.IgnoreGlobalAttentionFindingType", clusterID, findingType);
 }
 
 export function ImportFavorites(): $CancellablePromise<$models.DataManagementResult> {
-    return $Call.ByName("github.com/luxury-yacht/app/backend.App.ImportFavorites").then(($result: any) => {
-        return $$createType7($result);
-    });
+    return $Call.ByName("github.com/luxury-yacht/app/backend.App.ImportFavorites");
 }
 
 export function ImportSettings(): $CancellablePromise<$models.DataManagementResult> {
-    return $Call.ByName("github.com/luxury-yacht/app/backend.App.ImportSettings").then(($result: any) => {
-        return $$createType7($result);
-    });
+    return $Call.ByName("github.com/luxury-yacht/app/backend.App.ImportSettings");
 }
 
 export function IsAppLogsPanelVisible(): $CancellablePromise<boolean> {
@@ -905,31 +735,23 @@ export function IsWorkloadHPAManaged(clusterID: string, $namespace: string, grou
 /**
  * ListPortForwards returns all active port forwarding sessions.
  */
-export function ListPortForwards(): $CancellablePromise<$models.PortForwardSession[]> {
-    return $Call.ByName("github.com/luxury-yacht/app/backend.App.ListPortForwards").then(($result: any) => {
-        return $$createType123($result);
-    });
+export function ListPortForwards(): $CancellablePromise<$models.PortForwardSession[] | null> {
+    return $Call.ByName("github.com/luxury-yacht/app/backend.App.ListPortForwards");
 }
 
-export function ListRuntimeOperations(): $CancellablePromise<$models.RuntimeOperation[]> {
-    return $Call.ByName("github.com/luxury-yacht/app/backend.App.ListRuntimeOperations").then(($result: any) => {
-        return $$createType125($result);
-    });
+export function ListRuntimeOperations(): $CancellablePromise<$models.RuntimeOperation[] | null> {
+    return $Call.ByName("github.com/luxury-yacht/app/backend.App.ListRuntimeOperations");
 }
 
 /**
  * ListShellSessions returns all active shell exec sessions.
  */
-export function ListShellSessions(): $CancellablePromise<$models.ShellSessionInfo[]> {
-    return $Call.ByName("github.com/luxury-yacht/app/backend.App.ListShellSessions").then(($result: any) => {
-        return $$createType127($result);
-    });
+export function ListShellSessions(): $CancellablePromise<$models.ShellSessionInfo[] | null> {
+    return $Call.ByName("github.com/luxury-yacht/app/backend.App.ListShellSessions");
 }
 
 export function LoadWindowSettings(): $CancellablePromise<$models.WindowSettings | null> {
-    return $Call.ByName("github.com/luxury-yacht/app/backend.App.LoadWindowSettings").then(($result: any) => {
-        return $$createType129($result);
-    });
+    return $Call.ByName("github.com/luxury-yacht/app/backend.App.LoadWindowSettings");
 }
 
 /**
@@ -954,9 +776,7 @@ export function LogAppLogsFromFrontendWithCluster(level: string, message: string
  * context name. Returns nil if no theme matches.
  */
 export function MatchThemeForCluster(contextName: string): $CancellablePromise<$models.Theme | null> {
-    return $Call.ByName("github.com/luxury-yacht/app/backend.App.MatchThemeForCluster", contextName).then(($result: any) => {
-        return $$createType130($result);
-    });
+    return $Call.ByName("github.com/luxury-yacht/app/backend.App.MatchThemeForCluster", contextName);
 }
 
 /**
@@ -966,9 +786,7 @@ export function MatchThemeForCluster(contextName: string): $CancellablePromise<$
  * fallback otherwise.
  */
 export function MergeObjectYamlWithLatest(clusterID: string, req: $models.ObjectYAMLReloadMergeRequest): $CancellablePromise<$models.ObjectYAMLReloadMergeResponse | null> {
-    return $Call.ByName("github.com/luxury-yacht/app/backend.App.MergeObjectYamlWithLatest", clusterID, req).then(($result: any) => {
-        return $$createType132($result);
-    });
+    return $Call.ByName("github.com/luxury-yacht/app/backend.App.MergeObjectYamlWithLatest", clusterID, req);
 }
 
 /**
@@ -990,17 +808,15 @@ export function PrepareQuit(): $CancellablePromise<boolean> {
  * QueryPermissions evaluates a batch of permission queries using SSRR caching
  * with SSAR fallback. All errors are per-item; the top-level error is always nil.
  */
-export function QueryPermissions(queries: capabilities$0.PermissionQuery[]): $CancellablePromise<capabilities$0.QueryPermissionsResponse | null> {
-    return $Call.ByName("github.com/luxury-yacht/app/backend.App.QueryPermissions", queries).then(($result: any) => {
-        return $$createType134($result);
-    });
+export function QueryPermissions(queries: capabilities$0.PermissionQuery[] | null): $CancellablePromise<capabilities$0.QueryPermissionsResponse | null> {
+    return $Call.ByName("github.com/luxury-yacht/app/backend.App.QueryPermissions", queries);
 }
 
 /**
  * ReorderThemes sets the theme ordering. The ids slice must contain exactly the
  * same IDs as the current theme list (first-match priority depends on order).
  */
-export function ReorderThemes(ids: string[]): $CancellablePromise<void> {
+export function ReorderThemes(ids: string[] | null): $CancellablePromise<void> {
     return $Call.ByName("github.com/luxury-yacht/app/backend.App.ReorderThemes", ids);
 }
 
@@ -1012,21 +828,15 @@ export function ResizeShellSession(sessionID: string, columns: number, rows: num
 }
 
 export function RestoreClusterAttentionFindingType(clusterID: string, findingType: string): $CancellablePromise<snapshot$0.AttentionIgnoreRules | null> {
-    return $Call.ByName("github.com/luxury-yacht/app/backend.App.RestoreClusterAttentionFindingType", clusterID, findingType).then(($result: any) => {
-        return $$createType28($result);
-    });
+    return $Call.ByName("github.com/luxury-yacht/app/backend.App.RestoreClusterAttentionFindingType", clusterID, findingType);
 }
 
 export function RestoreClusterAttentionObjectFinding(clusterID: string, ref: resourcemodel$0.ResourceRef, findingType: string): $CancellablePromise<snapshot$0.AttentionIgnoreRules | null> {
-    return $Call.ByName("github.com/luxury-yacht/app/backend.App.RestoreClusterAttentionObjectFinding", clusterID, ref, findingType).then(($result: any) => {
-        return $$createType28($result);
-    });
+    return $Call.ByName("github.com/luxury-yacht/app/backend.App.RestoreClusterAttentionObjectFinding", clusterID, ref, findingType);
 }
 
 export function RestoreGlobalAttentionFindingType(clusterID: string, findingType: string): $CancellablePromise<snapshot$0.AttentionIgnoreRules | null> {
-    return $Call.ByName("github.com/luxury-yacht/app/backend.App.RestoreGlobalAttentionFindingType", clusterID, findingType).then(($result: any) => {
-        return $$createType28($result);
-    });
+    return $Call.ByName("github.com/luxury-yacht/app/backend.App.RestoreGlobalAttentionFindingType", clusterID, findingType);
 }
 
 /**
@@ -1052,9 +862,7 @@ export function RetryClusterAuth(clusterID: string): $CancellablePromise<void> {
  * when the target is namespaced.
  */
 export function RunObjectAction(req: $models.ObjectActionRequest): $CancellablePromise<$models.ObjectActionResponse> {
-    return $Call.ByName("github.com/luxury-yacht/app/backend.App.RunObjectAction", req).then(($result: any) => {
-        return $$createType135($result);
-    });
+    return $Call.ByName("github.com/luxury-yacht/app/backend.App.RunObjectAction", req);
 }
 
 /**
@@ -1064,9 +872,7 @@ export function RunObjectAction(req: $models.ObjectActionRequest): $CancellableP
  * potentially large byte payload) on the Go side. Returns the chosen path and size.
  */
 export function SaveCsvFile(defaultFilename: string, content: string): $CancellablePromise<$models.CatalogQueryCSVExport> {
-    return $Call.ByName("github.com/luxury-yacht/app/backend.App.SaveCsvFile", defaultFilename, content).then(($result: any) => {
-        return $$createType136($result);
-    });
+    return $Call.ByName("github.com/luxury-yacht/app/backend.App.SaveCsvFile", defaultFilename, content);
 }
 
 /**
@@ -1126,16 +932,14 @@ export function SetBackgroundRefreshEnabled(enabled: boolean): $CancellablePromi
  * empty/nil list clears the scope. The whole batch is rejected on the first
  * invalid name: nothing is persisted and no rebuild is requested.
  */
-export function SetClusterAllowedNamespaces(clusterID: string, namespaces: string[]): $CancellablePromise<string[]> {
-    return $Call.ByName("github.com/luxury-yacht/app/backend.App.SetClusterAllowedNamespaces", clusterID, namespaces).then(($result: any) => {
-        return $$createType26($result);
-    });
+export function SetClusterAllowedNamespaces(clusterID: string, namespaces: string[] | null): $CancellablePromise<string[] | null> {
+    return $Call.ByName("github.com/luxury-yacht/app/backend.App.SetClusterAllowedNamespaces", clusterID, namespaces);
 }
 
 /**
  * SetClusterTabOrder stores the persisted cluster tab order.
  */
-export function SetClusterTabOrder(order: string[]): $CancellablePromise<void> {
+export function SetClusterTabOrder(order: string[] | null): $CancellablePromise<void> {
     return $Call.ByName("github.com/luxury-yacht/app/backend.App.SetClusterTabOrder", order);
 }
 
@@ -1158,7 +962,7 @@ export function SetExclusiveNamespaces(enabled: boolean): $CancellablePromise<vo
  * SetFavoriteOrder reorders favorites according to the given ID list.
  * Any favorites not in the list are appended in their existing relative order.
  */
-export function SetFavoriteOrder(ids: string[]): $CancellablePromise<void> {
+export function SetFavoriteOrder(ids: string[] | null): $CancellablePromise<void> {
     return $Call.ByName("github.com/luxury-yacht/app/backend.App.SetFavoriteOrder", ids);
 }
 
@@ -1187,7 +991,7 @@ export function SetKubeconfig(selection: string): $CancellablePromise<void> {
 /**
  * SetKubeconfigSearchPaths persists the search paths and refreshes kubeconfig discovery.
  */
-export function SetKubeconfigSearchPaths(paths: string[]): $CancellablePromise<void> {
+export function SetKubeconfigSearchPaths(paths: string[] | null): $CancellablePromise<void> {
     return $Call.ByName("github.com/luxury-yacht/app/backend.App.SetKubeconfigSearchPaths", paths);
 }
 
@@ -1268,7 +1072,7 @@ export function SetPermissionSSRRFetchConcurrency(limit: number): $CancellablePr
  * which is different from app startup where initKubernetesClient() handles the initial setup.
  * Both code paths must perform the same initialization steps to ensure consistent behavior.
  */
-export function SetSelectedKubeconfigs(selections: string[]): $CancellablePromise<void> {
+export function SetSelectedKubeconfigs(selections: string[] | null): $CancellablePromise<void> {
     return $Call.ByName("github.com/luxury-yacht/app/backend.App.SetSelectedKubeconfigs", selections);
 }
 
@@ -1312,9 +1116,7 @@ export function ShowSettings(): $CancellablePromise<void> {
  * StartShellSession launches a kubectl exec session and begins streaming data back to the frontend.
  */
 export function StartShellSession(clusterID: string, req: $models.ShellSessionRequest): $CancellablePromise<$models.ShellSession | null> {
-    return $Call.ByName("github.com/luxury-yacht/app/backend.App.StartShellSession", clusterID, req).then(($result: any) => {
-        return $$createType138($result);
-    });
+    return $Call.ByName("github.com/luxury-yacht/app/backend.App.StartShellSession", clusterID, req);
 }
 
 /**
@@ -1359,9 +1161,7 @@ export function ToggleSidebar(): $CancellablePromise<void> {
 }
 
 export function UpdateAppPreferences(request: $models.UpdateAppPreferencesRequest): $CancellablePromise<$models.UpdateAppPreferencesResponse | null> {
-    return $Call.ByName("github.com/luxury-yacht/app/backend.App.UpdateAppPreferences", request).then(($result: any) => {
-        return $$createType140($result);
-    });
+    return $Call.ByName("github.com/luxury-yacht/app/backend.App.UpdateAppPreferences", request);
 }
 
 /**
@@ -1379,9 +1179,7 @@ export function UpdateMenu(): $CancellablePromise<void> {
  * ValidateObjectYaml performs a dry-run kubectl-edit-style patch to ensure the YAML is valid and safe to apply.
  */
 export function ValidateObjectYaml(clusterID: string, req: $models.ObjectYAMLMutationRequest): $CancellablePromise<$models.ObjectYAMLMutationResponse | null> {
-    return $Call.ByName("github.com/luxury-yacht/app/backend.App.ValidateObjectYaml", clusterID, req).then(($result: any) => {
-        return $$createType3($result);
-    });
+    return $Call.ByName("github.com/luxury-yacht/app/backend.App.ValidateObjectYaml", clusterID, req);
 }
 
 /**
@@ -1397,9 +1195,7 @@ export function ValidatePortForwardURL(urlStr: string): $CancellablePromise<[boo
  * parsed by the app glob matcher without mutating saved settings.
  */
 export function ValidateThemeClusterPattern(pattern: string): $CancellablePromise<$models.ThemeClusterPatternValidationResult> {
-    return $Call.ByName("github.com/luxury-yacht/app/backend.App.ValidateThemeClusterPattern", pattern).then(($result: any) => {
-        return $$createType141($result);
-    });
+    return $Call.ByName("github.com/luxury-yacht/app/backend.App.ValidateThemeClusterPattern", pattern);
 }
 
 /**
@@ -1409,147 +1205,3 @@ export function ValidateThemeClusterPattern(pattern: string): $CancellablePromis
 export function WindowRuntimeReady(): $CancellablePromise<boolean> {
     return $Call.ByName("github.com/luxury-yacht/app/backend.App.WindowRuntimeReady");
 }
-
-// Private type creation functions
-const $$createType0 = $models.Favorite.createFrom;
-const $$createType1 = $models.ClusterWorkspaceResult.createFrom;
-const $$createType2 = $models.ObjectYAMLMutationResponse.createFrom;
-const $$createType3 = $Create.Nullable($$createType2);
-const $$createType4 = $models.ObjectYAMLOwnershipCheckResponse.createFrom;
-const $$createType5 = $Create.Nullable($$createType4);
-const $$createType6 = types$0.NodeLogDiscoveryResponse.createFrom;
-const $$createType7 = $models.DataManagementResult.createFrom;
-const $$createType8 = types$0.ContainerLogsFetchResponse.createFrom;
-const $$createType9 = types$0.NodeLogFetchResponse.createFrom;
-const $$createType10 = objectcatalog$0.Summary.createFrom;
-const $$createType11 = $Create.Nullable($$createType10);
-const $$createType12 = $models.AppInfo.createFrom;
-const $$createType13 = $Create.Nullable($$createType12);
-const $$createType14 = $models.LogEntry.createFrom;
-const $$createType15 = $Create.Array($$createType14);
-const $$createType16 = types$0.AppSettings.createFrom;
-const $$createType17 = $Create.Nullable($$createType16);
-const $$createType18 = types$0.AppSettingsSchema.createFrom;
-const $$createType19 = $Create.Nullable($$createType18);
-const $$createType20 = types$0.AppearanceModeInfo.createFrom;
-const $$createType21 = $Create.Nullable($$createType20);
-const $$createType22 = backendtlspolicy$0.BackendTLSPolicyDetails.createFrom;
-const $$createType23 = $Create.Nullable($$createType22);
-const $$createType24 = $models.CatalogDiagnostics.createFrom;
-const $$createType25 = $Create.Nullable($$createType24);
-const $$createType26 = $Create.Array($Create.Any);
-const $$createType27 = snapshot$0.AttentionIgnoreRules.createFrom;
-const $$createType28 = $Create.Nullable($$createType27);
-const $$createType29 = clusterrole$0.ClusterRoleDetails.createFrom;
-const $$createType30 = $Create.Nullable($$createType29);
-const $$createType31 = clusterrolebinding$0.ClusterRoleBindingDetails.createFrom;
-const $$createType32 = $Create.Nullable($$createType31);
-const $$createType33 = $models.ClusterWorkspaceState.createFrom;
-const $$createType34 = configmap$0.ConfigMapDetails.createFrom;
-const $$createType35 = $Create.Nullable($$createType34);
-const $$createType36 = cronjob$0.CronJobDetails.createFrom;
-const $$createType37 = $Create.Nullable($$createType36);
-const $$createType38 = apiextensions$0.CustomResourceDefinitionDetails.createFrom;
-const $$createType39 = $Create.Nullable($$createType38);
-const $$createType40 = daemonset$0.DaemonSetDetails.createFrom;
-const $$createType41 = $Create.Nullable($$createType40);
-const $$createType42 = deployment$0.DeploymentDetails.createFrom;
-const $$createType43 = $Create.Nullable($$createType42);
-const $$createType44 = endpointslice$0.EndpointSliceDetails.createFrom;
-const $$createType45 = $Create.Nullable($$createType44);
-const $$createType46 = events$0.EventDetails.createFrom;
-const $$createType47 = $Create.Nullable($$createType46);
-const $$createType48 = $Create.Array($$createType0);
-const $$createType49 = types$0.RouteDetails.createFrom;
-const $$createType50 = $Create.Nullable($$createType49);
-const $$createType51 = gateway$0.GatewayDetails.createFrom;
-const $$createType52 = $Create.Nullable($$createType51);
-const $$createType53 = gatewayclass$0.GatewayClassDetails.createFrom;
-const $$createType54 = $Create.Nullable($$createType53);
-const $$createType55 = $Create.Map($Create.Any, $Create.Any);
-const $$createType56 = helm$0.HelmReleaseDetails.createFrom;
-const $$createType57 = $Create.Nullable($$createType56);
-const $$createType58 = $Create.Map($Create.Any, $Create.Any);
-const $$createType59 = hpa$0.HorizontalPodAutoscalerDetails.createFrom;
-const $$createType60 = $Create.Nullable($$createType59);
-const $$createType61 = ingress$0.IngressDetails.createFrom;
-const $$createType62 = $Create.Nullable($$createType61);
-const $$createType63 = ingressclass$0.IngressClassDetails.createFrom;
-const $$createType64 = $Create.Nullable($$createType63);
-const $$createType65 = job$0.JobDetails.createFrom;
-const $$createType66 = $Create.Nullable($$createType65);
-const $$createType67 = $models.KubeconfigDiscoveryResult.createFrom;
-const $$createType68 = $models.KubernetesAPIClientDiagnostics.createFrom;
-const $$createType69 = $Create.Array($$createType68);
-const $$createType70 = limitrange$0.LimitRangeDetails.createFrom;
-const $$createType71 = $Create.Nullable($$createType70);
-const $$createType72 = listenerset$0.ListenerSetDetails.createFrom;
-const $$createType73 = $Create.Nullable($$createType72);
-const $$createType74 = admission$0.MutatingWebhookConfigurationDetails.createFrom;
-const $$createType75 = $Create.Nullable($$createType74);
-const $$createType76 = namespaces$0.NamespaceDetails.createFrom;
-const $$createType77 = $Create.Nullable($$createType76);
-const $$createType78 = networkpolicy$0.NetworkPolicyDetails.createFrom;
-const $$createType79 = $Create.Nullable($$createType78);
-const $$createType80 = nodes$0.NodeDetails.createFrom;
-const $$createType81 = $Create.Nullable($$createType80);
-const $$createType82 = persistentvolume$0.PersistentVolumeDetails.createFrom;
-const $$createType83 = $Create.Nullable($$createType82);
-const $$createType84 = persistentvolumeclaim$0.PersistentVolumeClaimDetails.createFrom;
-const $$createType85 = $Create.Nullable($$createType84);
-const $$createType86 = types$0.PodDetailInfo.createFrom;
-const $$createType87 = $Create.Nullable($$createType86);
-const $$createType88 = poddisruptionbudget$0.PodDisruptionBudgetDetails.createFrom;
-const $$createType89 = $Create.Nullable($$createType88);
-const $$createType90 = referencegrant$0.ReferenceGrantDetails.createFrom;
-const $$createType91 = $Create.Nullable($$createType90);
-const $$createType92 = replicaset$0.ReplicaSetDetails.createFrom;
-const $$createType93 = $Create.Nullable($$createType92);
-const $$createType94 = resourcequota$0.ResourceQuotaDetails.createFrom;
-const $$createType95 = $Create.Nullable($$createType94);
-const $$createType96 = $models.RevisionEntry.createFrom;
-const $$createType97 = $Create.Array($$createType96);
-const $$createType98 = role$0.RoleDetails.createFrom;
-const $$createType99 = $Create.Nullable($$createType98);
-const $$createType100 = rolebinding$0.RoleBindingDetails.createFrom;
-const $$createType101 = $Create.Nullable($$createType100);
-const $$createType102 = secret$0.SecretDetails.createFrom;
-const $$createType103 = $Create.Nullable($$createType102);
-const $$createType104 = $models.SelectionDiagnostics.createFrom;
-const $$createType105 = $Create.Nullable($$createType104);
-const $$createType106 = service$0.ServiceDetails.createFrom;
-const $$createType107 = $Create.Nullable($$createType106);
-const $$createType108 = serviceaccount$0.ServiceAccountDetails.createFrom;
-const $$createType109 = $Create.Nullable($$createType108);
-const $$createType110 = statefulset$0.StatefulSetDetails.createFrom;
-const $$createType111 = $Create.Nullable($$createType110);
-const $$createType112 = storageclass$0.StorageClassDetails.createFrom;
-const $$createType113 = $Create.Nullable($$createType112);
-const $$createType114 = $models.ContainerPortInfo.createFrom;
-const $$createType115 = $Create.Array($$createType114);
-const $$createType116 = types$0.Theme.createFrom;
-const $$createType117 = $Create.Array($$createType116);
-const $$createType118 = admission$0.ValidatingWebhookConfigurationDetails.createFrom;
-const $$createType119 = $Create.Nullable($$createType118);
-const $$createType120 = snapshot$0.CustomResourceSummary.createFrom;
-const $$createType121 = $Create.Array($$createType120);
-const $$createType122 = $models.PortForwardSession.createFrom;
-const $$createType123 = $Create.Array($$createType122);
-const $$createType124 = $models.RuntimeOperation.createFrom;
-const $$createType125 = $Create.Array($$createType124);
-const $$createType126 = types$0.ShellSessionInfo.createFrom;
-const $$createType127 = $Create.Array($$createType126);
-const $$createType128 = types$0.WindowSettings.createFrom;
-const $$createType129 = $Create.Nullable($$createType128);
-const $$createType130 = $Create.Nullable($$createType116);
-const $$createType131 = $models.ObjectYAMLReloadMergeResponse.createFrom;
-const $$createType132 = $Create.Nullable($$createType131);
-const $$createType133 = capabilities$0.QueryPermissionsResponse.createFrom;
-const $$createType134 = $Create.Nullable($$createType133);
-const $$createType135 = $models.ObjectActionResponse.createFrom;
-const $$createType136 = $models.CatalogQueryCSVExport.createFrom;
-const $$createType137 = types$0.ShellSession.createFrom;
-const $$createType138 = $Create.Nullable($$createType137);
-const $$createType139 = types$0.UpdateAppPreferencesResponse.createFrom;
-const $$createType140 = $Create.Nullable($$createType139);
-const $$createType141 = types$0.ThemeClusterPatternValidationResult.createFrom;

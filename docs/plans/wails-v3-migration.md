@@ -12,7 +12,10 @@ service composition, the paired beta.5 frontend runtime, generated v3 bindings,
 desktop adapters, one named main window, persistent native menus, screen-aware
 geometry restoration, single-instance focus handling, GTK4/WebKitGTK 6.0-only
 Linux support, and Taskfile-based v3 builds. **New Window** is absent. The
-repository prerelease gate regenerates bindings in isolation and rejects drift.
+repository prerelease gate regenerates interface bindings in isolation and
+rejects drift. Mage is limited to repository quality checks, tests, cleanup,
+Storybook, and release publication; Wails owns development, builds, and
+platform packaging.
 
 Phase 5 decisions for this migration are explicit:
 
@@ -232,12 +235,12 @@ and [System Tray Menus](https://v3.wails.io/features/menus/systray/).
 | Application/window events | `main.go:83-93` installs the v2 menu-update listener; `main.go:126-128` installs startup, before-close, and shutdown callbacks. Platform workarounds also depend on window/menu timing (`main.go:100-112`, `backend/app_ui.go:55-65`, `backend/menu.go:198-218`). | Map each behavior to a v3 application event, window event, cancellable hook, service lifecycle method, or explicit adapter action. Do not subscribe to unused events or duplicate one behavior across hook families. |
 | Update flow | `backend/app_update.go:22-214` checks GitHub Releases, builds `UpdateInfo`, and emits `app-update`; `frontend/src/ui/status/UpdateStatus.tsx:75-104` owns the runtime subscription and download-link status. | Preserve this notification contract during the core port. In Phase 5, compare it explicitly with `app.Updater` download, verification, installation, restart, event, and UI behavior before replacing anything. |
 | System tray | `rg -n -i 'system.?tray|systray|tray menu' backend frontend/src main.go --glob '*.{go,ts,tsx}'` finds only the forward-looking comment at `frontend/src/App.tsx:179-184`; no tray lifecycle or native menu is currently registered. | Treat tray adoption as a new app-shell workflow with explicit last-window and quit behavior, not as incidental menu porting. |
-| Generated models | `frontend/wailsjs/go/models.ts` is 6,306 lines (`wc -l frontend/wailsjs/go/models.ts`), and 36 production plus 20 test files import it (`rg -l '@wailsjs/go/models' frontend/src --glob '*.{ts,tsx}'`, classified by `.test.`). Descriptor drift tests instantiate generated DTO classes as documented in `docs/frontend/component-structure.md`. | Generate v3 TypeScript classes into a scratch location first, compare JSON names/nullability/constructors, then update model imports. Do not select interface-only generation unless constructor-dependent consumers are redesigned first. |
+| Generated models | `frontend/wailsjs/go/models.ts` is 6,306 lines (`wc -l frontend/wailsjs/go/models.ts`), and 36 production plus 20 test files import it (`rg -l '@wailsjs/go/models' frontend/src --glob '*.{ts,tsx}'`, classified by `.test.`). Descriptor drift tests instantiate generated DTO classes as documented in `docs/frontend/component-structure.md`. | Generate both v3 shapes in scratch, compare JSON names/nullability and existing constructor-dependent consumers, then select interface output and replace constructor use with ordinary typed values or test-only partial fixtures. Pin that choice with `-i` in generation and drift checks. |
 | Window chrome | `main.go:114-151` sets size bounds, hidden startup, platform appearance, and the v2 drag-property mapping. Current CSS uses `--wails-draggable: true` and `none` in `frontend/src/ui/layout/AppHeader.css:1-43` and `frontend/styles/components/modals.css:16-24`. | Map window options explicitly and change drag values to the v3 `drag`/`no-drag` contract documented in [Frameless Windows](https://v3.wails.io/features/windows/frameless/). Verify controls remain clickable. |
 | Window geometry | `backend/resources/types/types.go:27-33` persists X/Y/width/height/maximized; `backend/app_settings.go:642-684` saves and loads those fields; `backend/app_lifecycle.go:154-167` restores any positive size and only non-negative coordinates without checking current work areas. | Keep the persisted fields, validate the saved logical rectangle with the v3 screen manager, retain valid negative coordinates on left/upper monitors, and clamp or center when no current work area can display the window. |
 | Platform workarounds | `main.go:100-112` carries Linux hidden-window and Wayland maximum-size workarounds; `backend/app_ui.go:55-65` suppresses Linux menu rebuilds; `backend/menu.go:198-218` works around Windows accelerator behavior. | Keep each workaround until its exact behavior is exercised on v3, then retain or remove it with a focused regression test and a comment tied to the observed v3 behavior. |
-| Development/build | `mise.toml:1-13`, `go.mod:1-17`, `magefile.go:194-208`, and `mage/build-config.go:54-74` pin v2 and build through v2 commands/flags. | Pin the v3 module, CLI, and frontend runtime as one compatible set; port `mage dev`/`mage build` to the v3 task model. |
-| Platform packaging | macOS builds append v2 `--platform` (`mage/macos.go:248-270`); Windows appends `-o`/`-nsis` and reads a v2 internal NSIS template (`mage/windows.go:13-24`, `mage/windows.go:66-97`, `mage/windows.go:157-176`); Linux detects WebKit2GTK and conditionally adds `webkit2_41` (`mage/linux.go:13-50`). | Port native application/resource builds and Windows NSIS creation to v3 Taskfiles/build assets. Keep repository-owned Mage orchestration for the established per-architecture macOS DMG and Linux DEB/RPM release artifacts. Use only GTK4/WebKitGTK 6.0 and delete legacy WebKit detection/tags. |
+| Development/build | `mise.toml:1-13`, `go.mod:1-17`, `magefile.go:194-208`, and `mage/build-config.go:54-74` pin v2 and build through v2 commands/flags. | Pin the v3 module, CLI, and frontend runtime as one compatible set; make the generated Wails task graph own development and builds, and delete duplicate Mage targets. |
+| Platform packaging | macOS builds append v2 `--platform` (`mage/macos.go:248-270`); Windows appends `-o`/`-nsis` and reads a v2 internal NSIS template (`mage/windows.go:13-24`, `mage/windows.go:66-97`, `mage/windows.go:157-176`); Linux detects WebKit2GTK and conditionally adds `webkit2_41` (`mage/linux.go:13-50`). | Port native application/resource builds, per-architecture macOS DMGs, Windows NSIS creation, and Linux DEB/RPM output to v3 Taskfiles/build assets. Delete Mage packaging implementations. Use only GTK4/WebKitGTK 6.0 and delete legacy WebKit detection/tags. |
 | Build directory ownership | `.gitignore:26-29` ignores all of `build/`, while existing Mage/Wails output already occupies `build/bin`, `build/darwin`, `build/artifacts`, and `build/packages` (`mage/build-config.go:54-74`, `mage/macos.go:12-13`, `mage/linux.go:142-169`). | Reserve tracked portions of `build/` for v3 configuration/platform assets and ignore only generated output paths. Decide output locations before generating v3 assets so configuration is not hidden by the current blanket ignore. |
 | Release matrix | `.github/workflows/release.yml:35-58` builds macOS Intel/Apple Silicon, Windows amd64/arm64, and Linux amd64/arm64; `.github/actions/setup-toolchain/action.yaml:20-43` installs the v2 CLI and Linux WebKit2GTK 4.1 headers. | Update the shared action to install GTK4/WebKitGTK 6.0 and prove every existing architecture target and artifact path before cutover. Distro compatibility below the new GTK4 baseline is deliberately not preserved. |
 | Product metadata | `wails.json:1-24` owns app/release metadata; `frontend/vite.config.ts:14-24`, `mage/utils.go:49-84`, `DEVELOPMENT.md:87-103`, and `RELEASE.md:75-81` consume it. | Move these consumers atomically to `build/config.yml` or a generated repository-owned view and delete `wails.json`. The beta.7 NSIS build path does not require a v3 replacement file. |
@@ -314,7 +317,7 @@ the deferred service-decomposition track.
 - [ ] Re-run the v3 version query, read the migration notes and release notes
       from v2.14.0 through the selected v3 beta, and record the selected module,
       CLI, and `@wailsio/runtime` versions in this plan.
-- [ ] Generate a fresh v3 React/TypeScript project outside the repository with
+- [x] Generate a fresh v3 React/TypeScript project outside the repository with
       the pinned CLI. Inventory its `main.go`, binding command/output, runtime
       package version, `Taskfile.yml`, `build/config.yml`, and platform assets.
       For beta.7, confirm the source-carried runtime is
@@ -345,7 +348,7 @@ the deferred service-decomposition track.
 - [ ] Produce current unsigned artifacts on the available host and record the
       binary/app/installer names and internal metadata. Let CI provide the other
       platform baselines.
-- [ ] Generate v3 bindings for the existing single `App` service into a scratch
+- [x] Generate v3 bindings for the existing single `App` service into a scratch
       directory. Record unsupported methods/types, generated service path,
       model path structure, constructor behavior, enum behavior, and error
       mapping before changing frontend imports. Run explicit combinations for
@@ -481,17 +484,17 @@ and workaround checks remain in Phase 6.
 
 ### Phase 3: Generated bindings and frontend runtime
 
-Execution status: implemented. The generator is pinned to TypeScript class
+Execution status: implemented. The generator is pinned to TypeScript interface
 output with string time values and named call IDs; a prerelease drift check,
 explicit backend facade, desktop-runtime adapter, Storybook transport, and v3
 runtime test harness replace the v2 surfaces.
 
 - [x] Add a generated-binding drift check that runs the pinned v3 generator and
       fails when committed bindings differ. Put the full invocation in one
-      repository task, including TypeScript/class mode, output paths,
+      repository task, including TypeScript/interface mode, output paths,
       `--time-type`, and the selected call-ID versus `--names` mode so generator
       defaults cannot drift silently.
-- [x] Generate TypeScript class bindings for the single `App` service and
+- [x] Generate TypeScript interface bindings for the single `App` service and
       compare all DTO field names, optional/null behavior, nested namespace
       exports, constructors, `time.Time` representation, call identifiers, and
       error results used by current consumers.
@@ -541,8 +544,8 @@ signing/notarization inspection remain Phase 6 work on their release hosts.
       Vite, development docs, release docs, and tests in the same phase.
 - [x] Make v3 Taskfiles own frontend build, binding generation, native resource
       generation, native application build, and Windows NSIS creation. Make
-      Mage invoke those tasks and retain repository-owned orchestration for the
-      existing per-architecture macOS DMG and Linux DEB/RPM release artifacts.
+      Delete the duplicate Mage development/build/install/package targets;
+      retain Mage only for repository checks and release publication.
 - [x] Port macOS per-architecture app builds, code signing, notarization, DMG
       staging, and existing artifact names. Do not switch to one universal DMG
       without a separate release decision.
@@ -559,8 +562,10 @@ signing/notarization inspection remain Phase 6 work on their release hosts.
       6.0 dependency set. Update README, development, release, and troubleshooting
       documentation to state the new minimum supported distributions and remove
       WebKit2GTK 4.0/4.1 installation instructions, including Ubuntu 22.04.
-- [x] Update `mage dev`, `mage build`, `mage package:*`, the shared toolchain
-      action, and release workflow. Verify that no removed v2 flags remain.
+- [x] Replace `mage dev`, `mage build`, `mage install:*`, and `mage package:*`
+      with the generated Wails v3 task graph; update the shared toolchain action,
+      release workflow, and contributor documentation. Verify that no removed
+      v2 flags remain.
 - [x] Delete the v2-formatted `wails.json` without creating a v3 replacement,
       all v2 module/CLI/runtime references, obsolete indirect dependencies,
       `frontend/wailsjs`, v2 global mocks, v2-only tests, and obsolete build
@@ -792,9 +797,11 @@ into unrelated backend test work.
 
 ## Decision register
 
-1. **Generated binding shape — resolved.** Use TypeScript class output,
-   `--time-type string`, and `--names`; the prerelease gate runs the exact pinned
-   invocation and compares every generated path and byte.
+1. **Generated binding shape — resolved.** Use TypeScript interface output
+   (`-i`), `--time-type string`, and `--names`; the prerelease gate runs the
+   exact pinned invocation and compares every generated path and byte. Existing
+   constructor-dependent consumers use ordinary typed object values instead of
+   preserving class-only compatibility behavior.
 2. **Quit-hook placement — resolved.** Both application `ShouldQuit` and the
    named window's `WindowClosing` hook call the same idempotent `PrepareQuit`
    boundary while the window remains queryable.

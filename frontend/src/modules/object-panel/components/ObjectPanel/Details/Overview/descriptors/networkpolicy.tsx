@@ -114,7 +114,7 @@ const renderRules = (
 
 export const networkPolicyDescriptor: OverviewDescriptor<NetworkPolicyDetails> = {
   displayKind: 'NetworkPolicy',
-  dtoClass: networkpolicy.NetworkPolicyDetails,
+  dtoName: 'NetworkPolicyDetails',
   schema: {
     items: [
       {

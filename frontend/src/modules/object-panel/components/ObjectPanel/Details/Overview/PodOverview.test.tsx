@@ -4,6 +4,8 @@
  * Exercises the Pod Overview through the descriptor-driven renderer (X1).
  */
 
+import { partialModelFixture } from '@/test-utils/partialModelFixture';
+
 import { types } from '@core/backend-api/models';
 import type React from 'react';
 import { act } from 'react';
@@ -70,7 +72,7 @@ describe('PodOverview', () => {
   // Build a PodDetailInfo-shaped DTO from the fields a test cares about. The
   // generated constructor fills the rest from the source object.
   const makeDto = (overrides: Record<string, unknown>): types.PodDetailInfo =>
-    types.PodDetailInfo.createFrom(overrides);
+    partialModelFixture<types.PodDetailInfo>(overrides);
 
   const renderComponent = async (overrides: Record<string, unknown>) => {
     await act(async () => {

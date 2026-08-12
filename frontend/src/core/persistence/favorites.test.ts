@@ -4,6 +4,8 @@
  * Test suite for favorites persistence helpers.
  */
 
+import { partialModelFixture } from '@/test-utils/partialModelFixture';
+
 import { backend } from '@core/backend-api/models';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { eventBus } from '@/core/events';
@@ -196,7 +198,7 @@ describe('favorites persistence', () => {
 
     const result = await addFavorite(input);
 
-    expect(mockApp.AddFavorite).toHaveBeenCalledWith(new backend.Favorite({ ...input }));
+    expect(mockApp.AddFavorite).toHaveBeenCalledWith(partialModelFixture<backend.Favorite>({ ...input }));
     expect(result).toEqual(created);
     expect(getFavorites()).toEqual([created]);
   });
@@ -226,7 +228,7 @@ describe('favorites persistence', () => {
 
     await updateFavorite(updated);
 
-    expect(mockApp.UpdateFavorite).toHaveBeenCalledWith(new backend.Favorite({ ...updated }));
+    expect(mockApp.UpdateFavorite).toHaveBeenCalledWith(partialModelFixture<backend.Favorite>({ ...updated }));
     expect(getFavorites()[0].name).toBe('New Name');
   });
 

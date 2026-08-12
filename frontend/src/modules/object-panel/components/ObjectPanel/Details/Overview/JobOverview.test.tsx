@@ -4,6 +4,8 @@
  * Exercises the Job and CronJob Overviews through the descriptor-driven renderer (X1).
  */
 
+import { partialModelFixture } from '@/test-utils/partialModelFixture';
+
 import { cronjob, job } from '@core/backend-api/models';
 import type React from 'react';
 import { act } from 'react';
@@ -55,7 +57,7 @@ describe('JobOverview', () => {
       root.render(
         <OverviewRenderer
           descriptor={jobDescriptor}
-          data={job.JobDetails.createFrom(overrides)}
+          data={partialModelFixture<job.JobDetails>(overrides)}
           context={{ clusterId: defaultClusterId, clusterName: defaultClusterName }}
         />
       );
@@ -68,7 +70,7 @@ describe('JobOverview', () => {
       root.render(
         <OverviewRenderer
           descriptor={cronJobDescriptor}
-          data={cronjob.CronJobDetails.createFrom(overrides)}
+          data={partialModelFixture<cronjob.CronJobDetails>(overrides)}
           context={{ clusterId: defaultClusterId, clusterName: defaultClusterName }}
         />
       );

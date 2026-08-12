@@ -149,7 +149,7 @@ const renderStatus = (d: EndpointSliceDetails): React.ReactNode => {
 
 export const endpointSliceDescriptor: OverviewDescriptor<EndpointSliceDetails> = {
   displayKind: 'EndpointSlice',
-  dtoClass: endpointslice.EndpointSliceDetails,
+  dtoName: 'EndpointSliceDetails',
   schema: {
     items: [
       {

@@ -74,7 +74,7 @@ source contract is unclear.
   may format files. Report exact failures. Documentation/comment-only work is
   exempt and must at least pass `git diff --check`.
 - Rendered Wails UI validation uses the standalone Playwright MCP when
-  available. Start the app with `mise exec -- mage dev`, use the emitted URL,
+  available. Start the app with `mise exec -- wails3 dev`, use the emitted URL,
   and exercise relevant loading, error, empty, populated, navigation, and
   interaction states. Follow `.agents/setup/browser-automation.md`.
 

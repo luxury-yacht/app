@@ -5,6 +5,8 @@
  * panel-scoped clusterId to useGridTablePersistence.
  */
 
+import { partialModelFixture } from '@/test-utils/partialModelFixture';
+
 import { types } from '@core/backend-api/models';
 import { OBJECT_ACTION_IDS } from '@shared/actions/objectActionContract';
 import type { GridTableProps } from '@shared/components/tables/GridTable';
@@ -121,7 +123,7 @@ vi.mock('@shared/hooks/useNavigateToView', () => ({
 vi.mock('../shared.css', () => ({}));
 
 const makeJob = (overrides: Partial<types.JobSimpleInfo> = {}): types.JobSimpleInfo =>
-  types.JobSimpleInfo.createFrom({
+  partialModelFixture<types.JobSimpleInfo>({
     kind: 'Job',
     name: 'test-job-1',
     namespace: 'default',

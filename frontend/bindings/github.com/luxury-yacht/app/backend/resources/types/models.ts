@@ -3,10 +3,6 @@
 
 // eslint-disable-next-line @typescript-eslint/ban-ts-comment
 // @ts-ignore: Unused imports
-import { Create as $Create } from "@wailsio/runtime";
-
-// eslint-disable-next-line @typescript-eslint/ban-ts-comment
-// @ts-ignore: Unused imports
 import * as resourcemodel$0 from "../../resourcemodel/models.js";
 // eslint-disable-next-line @typescript-eslint/ban-ts-comment
 // @ts-ignore: Unused imports
@@ -15,84 +11,31 @@ import * as v1$0 from "../../../../../../k8s.io/apimachinery/pkg/apis/meta/v1/mo
 /**
  * AppPreferenceChange updates one persisted/runtime app preference.
  */
-export class AppPreferenceChange {
+export interface AppPreferenceChange {
     "key": string;
     "value": any;
-
-    /** Creates a new AppPreferenceChange instance. */
-    constructor($$source: Partial<AppPreferenceChange> = {}) {
-        if (!("key" in $$source)) {
-            this["key"] = "";
-        }
-        if (!("value" in $$source)) {
-            this["value"] = null;
-        }
-
-        Object.assign(this, $$source);
-    }
-
-    /**
-     * Creates a new AppPreferenceChange instance from a string or object.
-     */
-    static createFrom($$source: any = {}): AppPreferenceChange {
-        let $$parsedSource = typeof $$source === 'string' ? JSON.parse($$source) : $$source;
-        return new AppPreferenceChange($$parsedSource as Partial<AppPreferenceChange>);
-    }
 }
 
 /**
  * AppPreferenceSchema describes one persisted/runtime app preference the
  * frontend can edit through the settings contract.
  */
-export class AppPreferenceSchema {
+export interface AppPreferenceSchema {
     "key": string;
     "type": string;
     "defaultValue": any;
     "currentValue": any;
     "min"?: number | null;
     "max"?: number | null;
-    "enumOptions"?: string[];
+    "enumOptions"?: string[] | null;
     "validation"?: string;
     "runtimeSideEffect": boolean;
-
-    /** Creates a new AppPreferenceSchema instance. */
-    constructor($$source: Partial<AppPreferenceSchema> = {}) {
-        if (!("key" in $$source)) {
-            this["key"] = "";
-        }
-        if (!("type" in $$source)) {
-            this["type"] = "";
-        }
-        if (!("defaultValue" in $$source)) {
-            this["defaultValue"] = null;
-        }
-        if (!("currentValue" in $$source)) {
-            this["currentValue"] = null;
-        }
-        if (!("runtimeSideEffect" in $$source)) {
-            this["runtimeSideEffect"] = false;
-        }
-
-        Object.assign(this, $$source);
-    }
-
-    /**
-     * Creates a new AppPreferenceSchema instance from a string or object.
-     */
-    static createFrom($$source: any = {}): AppPreferenceSchema {
-        const $$createField6_0 = $$createType0;
-        let $$parsedSource = typeof $$source === 'string' ? JSON.parse($$source) : $$source;
-        if ("enumOptions" in $$parsedSource) {
-            $$parsedSource["enumOptions"] = $$createField6_0($$parsedSource["enumOptions"]);
-        }
-        return new AppPreferenceSchema($$parsedSource as Partial<AppPreferenceSchema>);
-    }
 }
 
 /**
  * AppSettings represents the application settings
  */
-export class AppSettings {
+export interface AppSettings {
     /**
      * Random local installation identifier used for pseudonymous telemetry
      */
@@ -106,7 +49,7 @@ export class AppSettings {
     /**
      * Multi-cluster selections in "path:context" form
      */
-    "selectedKubeconfigs": string[];
+    "selectedKubeconfigs": string[] | null;
 
     /**
      * Use short names like "po" for pods in badges/headers
@@ -281,181 +224,21 @@ export class AppSettings {
     /**
      * Saved theme library
      */
-    "themes": Theme[];
-
-    /** Creates a new AppSettings instance. */
-    constructor($$source: Partial<AppSettings> = {}) {
-        if (!("anonymizedId" in $$source)) {
-            this["anonymizedId"] = "";
-        }
-        if (!("appearanceMode" in $$source)) {
-            this["appearanceMode"] = "";
-        }
-        if (!("selectedKubeconfigs" in $$source)) {
-            this["selectedKubeconfigs"] = [];
-        }
-        if (!("useShortResourceNames" in $$source)) {
-            this["useShortResourceNames"] = false;
-        }
-        if (!("dimInactiveNamespaces" in $$source)) {
-            this["dimInactiveNamespaces"] = false;
-        }
-        if (!("exclusiveNamespaces" in $$source)) {
-            this["exclusiveNamespaces"] = false;
-        }
-        if (!("errorReportingEnabled" in $$source)) {
-            this["errorReportingEnabled"] = false;
-        }
-        if (!("autoRefreshEnabled" in $$source)) {
-            this["autoRefreshEnabled"] = false;
-        }
-        if (!("refreshBackgroundClustersEnabled" in $$source)) {
-            this["refreshBackgroundClustersEnabled"] = false;
-        }
-        if (!("metricsRefreshIntervalMs" in $$source)) {
-            this["metricsRefreshIntervalMs"] = 0;
-        }
-        if (!("kubernetesClientQPS" in $$source)) {
-            this["kubernetesClientQPS"] = 0;
-        }
-        if (!("kubernetesClientBurst" in $$source)) {
-            this["kubernetesClientBurst"] = 0;
-        }
-        if (!("permissionSSRRFetchConcurrency" in $$source)) {
-            this["permissionSSRRFetchConcurrency"] = 0;
-        }
-        if (!("objPanelLogsBufferMaxSize" in $$source)) {
-            this["objPanelLogsBufferMaxSize"] = 0;
-        }
-        if (!("objPanelLogsTargetPerScopeLimit" in $$source)) {
-            this["objPanelLogsTargetPerScopeLimit"] = 0;
-        }
-        if (!("objPanelLogsTargetGlobalLimit" in $$source)) {
-            this["objPanelLogsTargetGlobalLimit"] = 0;
-        }
-        if (!("objPanelLogsApiTimestampFormat" in $$source)) {
-            this["objPanelLogsApiTimestampFormat"] = "";
-        }
-        if (!("objPanelLogsApiTimestampUseLocalTimeZone" in $$source)) {
-            this["objPanelLogsApiTimestampUseLocalTimeZone"] = false;
-        }
-        if (!("gridTablePersistenceMode" in $$source)) {
-            this["gridTablePersistenceMode"] = "";
-        }
-        if (!("defaultTablePageSize" in $$source)) {
-            this["defaultTablePageSize"] = 0;
-        }
-        if (!("defaultObjectPanelPosition" in $$source)) {
-            this["defaultObjectPanelPosition"] = "";
-        }
-        if (!("objectPanelDockedRightWidth" in $$source)) {
-            this["objectPanelDockedRightWidth"] = 0;
-        }
-        if (!("objectPanelDockedBottomHeight" in $$source)) {
-            this["objectPanelDockedBottomHeight"] = 0;
-        }
-        if (!("objectPanelFloatingWidth" in $$source)) {
-            this["objectPanelFloatingWidth"] = 0;
-        }
-        if (!("objectPanelFloatingHeight" in $$source)) {
-            this["objectPanelFloatingHeight"] = 0;
-        }
-        if (!("objectPanelFloatingX" in $$source)) {
-            this["objectPanelFloatingX"] = 0;
-        }
-        if (!("objectPanelFloatingY" in $$source)) {
-            this["objectPanelFloatingY"] = 0;
-        }
-        if (!("paletteHueLight" in $$source)) {
-            this["paletteHueLight"] = 0;
-        }
-        if (!("paletteSaturationLight" in $$source)) {
-            this["paletteSaturationLight"] = 0;
-        }
-        if (!("paletteBrightnessLight" in $$source)) {
-            this["paletteBrightnessLight"] = 0;
-        }
-        if (!("paletteHueDark" in $$source)) {
-            this["paletteHueDark"] = 0;
-        }
-        if (!("paletteSaturationDark" in $$source)) {
-            this["paletteSaturationDark"] = 0;
-        }
-        if (!("paletteBrightnessDark" in $$source)) {
-            this["paletteBrightnessDark"] = 0;
-        }
-        if (!("accentColorLight" in $$source)) {
-            this["accentColorLight"] = "";
-        }
-        if (!("accentColorDark" in $$source)) {
-            this["accentColorDark"] = "";
-        }
-        if (!("linkColorLight" in $$source)) {
-            this["linkColorLight"] = "";
-        }
-        if (!("linkColorDark" in $$source)) {
-            this["linkColorDark"] = "";
-        }
-        if (!("themes" in $$source)) {
-            this["themes"] = [];
-        }
-
-        Object.assign(this, $$source);
-    }
-
-    /**
-     * Creates a new AppSettings instance from a string or object.
-     */
-    static createFrom($$source: any = {}): AppSettings {
-        const $$createField2_0 = $$createType0;
-        const $$createField37_0 = $$createType2;
-        let $$parsedSource = typeof $$source === 'string' ? JSON.parse($$source) : $$source;
-        if ("selectedKubeconfigs" in $$parsedSource) {
-            $$parsedSource["selectedKubeconfigs"] = $$createField2_0($$parsedSource["selectedKubeconfigs"]);
-        }
-        if ("themes" in $$parsedSource) {
-            $$parsedSource["themes"] = $$createField37_0($$parsedSource["themes"]);
-        }
-        return new AppSettings($$parsedSource as Partial<AppSettings>);
-    }
+    "themes": Theme[] | null;
 }
 
 /**
  * AppSettingsSchema describes the persisted/runtime settings contract.
  */
-export class AppSettingsSchema {
+export interface AppSettingsSchema {
     "anonymizedId": string;
-    "preferences": AppPreferenceSchema[];
-
-    /** Creates a new AppSettingsSchema instance. */
-    constructor($$source: Partial<AppSettingsSchema> = {}) {
-        if (!("anonymizedId" in $$source)) {
-            this["anonymizedId"] = "";
-        }
-        if (!("preferences" in $$source)) {
-            this["preferences"] = [];
-        }
-
-        Object.assign(this, $$source);
-    }
-
-    /**
-     * Creates a new AppSettingsSchema instance from a string or object.
-     */
-    static createFrom($$source: any = {}): AppSettingsSchema {
-        const $$createField1_0 = $$createType4;
-        let $$parsedSource = typeof $$source === 'string' ? JSON.parse($$source) : $$source;
-        if ("preferences" in $$parsedSource) {
-            $$parsedSource["preferences"] = $$createField1_0($$parsedSource["preferences"]);
-        }
-        return new AppSettingsSchema($$parsedSource as Partial<AppSettingsSchema>);
-    }
+    "preferences": AppPreferenceSchema[] | null;
 }
 
 /**
  * AppearanceModeInfo represents the appearance mode payload sent to the frontend.
  */
-export class AppearanceModeInfo {
+export interface AppearanceModeInfo {
     /**
      * Stored appearance mode: "light", "dark", or "system"
      */
@@ -465,94 +248,27 @@ export class AppearanceModeInfo {
      * Stored appearance mode: "light", "dark", or "system"
      */
     "userMode": string;
-
-    /** Creates a new AppearanceModeInfo instance. */
-    constructor($$source: Partial<AppearanceModeInfo> = {}) {
-        if (!("currentMode" in $$source)) {
-            this["currentMode"] = "";
-        }
-        if (!("userMode" in $$source)) {
-            this["userMode"] = "";
-        }
-
-        Object.assign(this, $$source);
-    }
-
-    /**
-     * Creates a new AppearanceModeInfo instance from a string or object.
-     */
-    static createFrom($$source: any = {}): AppearanceModeInfo {
-        let $$parsedSource = typeof $$source === 'string' ? JSON.parse($$source) : $$source;
-        return new AppearanceModeInfo($$parsedSource as Partial<AppearanceModeInfo>);
-    }
 }
 
-export class ConditionState {
+export interface ConditionState {
     "type"?: string;
     "status": string;
     "reason"?: string;
     "message"?: string;
     "lastTransitionTime"?: string;
-
-    /** Creates a new ConditionState instance. */
-    constructor($$source: Partial<ConditionState> = {}) {
-        if (!("status" in $$source)) {
-            this["status"] = "";
-        }
-
-        Object.assign(this, $$source);
-    }
-
-    /**
-     * Creates a new ConditionState instance from a string or object.
-     */
-    static createFrom($$source: any = {}): ConditionState {
-        let $$parsedSource = typeof $$source === 'string' ? JSON.parse($$source) : $$source;
-        return new ConditionState($$parsedSource as Partial<ConditionState>);
-    }
 }
 
-export class ConditionsSummary {
+export interface ConditionsSummary {
     "accepted"?: ConditionState | null;
     "programmed"?: ConditionState | null;
     "ready"?: ConditionState | null;
     "resolvedRefs"?: ConditionState | null;
-
-    /** Creates a new ConditionsSummary instance. */
-    constructor($$source: Partial<ConditionsSummary> = {}) {
-
-        Object.assign(this, $$source);
-    }
-
-    /**
-     * Creates a new ConditionsSummary instance from a string or object.
-     */
-    static createFrom($$source: any = {}): ConditionsSummary {
-        const $$createField0_0 = $$createType6;
-        const $$createField1_0 = $$createType6;
-        const $$createField2_0 = $$createType6;
-        const $$createField3_0 = $$createType6;
-        let $$parsedSource = typeof $$source === 'string' ? JSON.parse($$source) : $$source;
-        if ("accepted" in $$parsedSource) {
-            $$parsedSource["accepted"] = $$createField0_0($$parsedSource["accepted"]);
-        }
-        if ("programmed" in $$parsedSource) {
-            $$parsedSource["programmed"] = $$createField1_0($$parsedSource["programmed"]);
-        }
-        if ("ready" in $$parsedSource) {
-            $$parsedSource["ready"] = $$createField2_0($$parsedSource["ready"]);
-        }
-        if ("resolvedRefs" in $$parsedSource) {
-            $$parsedSource["resolvedRefs"] = $$createField3_0($$parsedSource["resolvedRefs"]);
-        }
-        return new ConditionsSummary($$parsedSource as Partial<ConditionsSummary>);
-    }
 }
 
 /**
  * ContainerLogsEntry represents a single log line with metadata
  */
-export class ContainerLogsEntry {
+export interface ContainerLogsEntry {
     /**
      * RFC3339Nano format
      */
@@ -570,46 +286,17 @@ export class ContainerLogsEntry {
      * Whether this is from an ephemeral/debug container
      */
     "isEphemeral"?: boolean;
-
-    /** Creates a new ContainerLogsEntry instance. */
-    constructor($$source: Partial<ContainerLogsEntry> = {}) {
-        if (!("timestamp" in $$source)) {
-            this["timestamp"] = "";
-        }
-        if (!("pod" in $$source)) {
-            this["pod"] = "";
-        }
-        if (!("container" in $$source)) {
-            this["container"] = "";
-        }
-        if (!("line" in $$source)) {
-            this["line"] = "";
-        }
-        if (!("isInit" in $$source)) {
-            this["isInit"] = false;
-        }
-
-        Object.assign(this, $$source);
-    }
-
-    /**
-     * Creates a new ContainerLogsEntry instance from a string or object.
-     */
-    static createFrom($$source: any = {}): ContainerLogsEntry {
-        let $$parsedSource = typeof $$source === 'string' ? JSON.parse($$source) : $$source;
-        return new ContainerLogsEntry($$parsedSource as Partial<ContainerLogsEntry>);
-    }
 }
 
 /**
  * ContainerLogsFetchRequest represents parameters for fetching logs
  */
-export class ContainerLogsFetchRequest {
+export interface ContainerLogsFetchRequest {
     "scope"?: string;
     "podFilter"?: string;
     "podInclude"?: string;
     "podExclude"?: string;
-    "selectedFilters"?: string[];
+    "selectedFilters"?: string[] | null;
     "matchNone"?: boolean;
 
     /**
@@ -624,103 +311,25 @@ export class ContainerLogsFetchRequest {
     "previous": boolean;
     "tailLines": number;
     "sinceSeconds"?: number;
-
-    /** Creates a new ContainerLogsFetchRequest instance. */
-    constructor($$source: Partial<ContainerLogsFetchRequest> = {}) {
-        if (!("previous" in $$source)) {
-            this["previous"] = false;
-        }
-        if (!("tailLines" in $$source)) {
-            this["tailLines"] = 0;
-        }
-
-        Object.assign(this, $$source);
-    }
-
-    /**
-     * Creates a new ContainerLogsFetchRequest instance from a string or object.
-     */
-    static createFrom($$source: any = {}): ContainerLogsFetchRequest {
-        const $$createField4_0 = $$createType0;
-        let $$parsedSource = typeof $$source === 'string' ? JSON.parse($$source) : $$source;
-        if ("selectedFilters" in $$parsedSource) {
-            $$parsedSource["selectedFilters"] = $$createField4_0($$parsedSource["selectedFilters"]);
-        }
-        return new ContainerLogsFetchRequest($$parsedSource as Partial<ContainerLogsFetchRequest>);
-    }
 }
 
 /**
  * ContainerLogsFetchResponse represents the response from FetchContainerLogs
  */
-export class ContainerLogsFetchResponse {
-    "entries": ContainerLogsEntry[];
-    "warnings"?: string[];
+export interface ContainerLogsFetchResponse {
+    "entries": ContainerLogsEntry[] | null;
+    "warnings"?: string[] | null;
     "error"?: string;
-
-    /** Creates a new ContainerLogsFetchResponse instance. */
-    constructor($$source: Partial<ContainerLogsFetchResponse> = {}) {
-        if (!("entries" in $$source)) {
-            this["entries"] = [];
-        }
-
-        Object.assign(this, $$source);
-    }
-
-    /**
-     * Creates a new ContainerLogsFetchResponse instance from a string or object.
-     */
-    static createFrom($$source: any = {}): ContainerLogsFetchResponse {
-        const $$createField0_0 = $$createType8;
-        const $$createField1_0 = $$createType0;
-        let $$parsedSource = typeof $$source === 'string' ? JSON.parse($$source) : $$source;
-        if ("entries" in $$parsedSource) {
-            $$parsedSource["entries"] = $$createField0_0($$parsedSource["entries"]);
-        }
-        if ("warnings" in $$parsedSource) {
-            $$parsedSource["warnings"] = $$createField1_0($$parsedSource["warnings"]);
-        }
-        return new ContainerLogsFetchResponse($$parsedSource as Partial<ContainerLogsFetchResponse>);
-    }
 }
 
 /**
  * DebugContainerResponse contains the result of creating an ephemeral debug container.
  */
-export class DebugContainerResponse {
+export interface DebugContainerResponse {
     "containerName": string;
     "podName": string;
     "namespace": string;
-
-    /** Creates a new DebugContainerResponse instance. */
-    constructor($$source: Partial<DebugContainerResponse> = {}) {
-        if (!("containerName" in $$source)) {
-            this["containerName"] = "";
-        }
-        if (!("podName" in $$source)) {
-            this["podName"] = "";
-        }
-        if (!("namespace" in $$source)) {
-            this["namespace"] = "";
-        }
-
-        Object.assign(this, $$source);
-    }
-
-    /**
-     * Creates a new DebugContainerResponse instance from a string or object.
-     */
-    static createFrom($$source: any = {}): DebugContainerResponse {
-        let $$parsedSource = typeof $$source === 'string' ? JSON.parse($$source) : $$source;
-        return new DebugContainerResponse($$parsedSource as Partial<DebugContainerResponse>);
-    }
 }
-
-/**
- * DisplayRef preserves unresolved cross-references that cannot be opened safely
- * because the source object did not provide a full GVK.
- */
-export const DisplayRef = resourcemodel$0.DisplayRef;
 
 /**
  * DisplayRef preserves unresolved cross-references that cannot be opened safely
@@ -731,7 +340,7 @@ export type DisplayRef = resourcemodel$0.DisplayRef;
 /**
  * DrainNodeOptions contains options for draining a node.
  */
-export class DrainNodeOptions {
+export interface DrainNodeOptions {
     "gracePeriodSeconds"?: number | null;
     "timeoutSeconds"?: number | null;
     "ignoreDaemonSets": boolean;
@@ -739,102 +348,30 @@ export class DrainNodeOptions {
     "force": boolean;
     "disableEviction": boolean;
     "skipWaitForPodsToTerminate": boolean;
-
-    /** Creates a new DrainNodeOptions instance. */
-    constructor($$source: Partial<DrainNodeOptions> = {}) {
-        if (!("ignoreDaemonSets" in $$source)) {
-            this["ignoreDaemonSets"] = false;
-        }
-        if (!("deleteEmptyDirData" in $$source)) {
-            this["deleteEmptyDirData"] = false;
-        }
-        if (!("force" in $$source)) {
-            this["force"] = false;
-        }
-        if (!("disableEviction" in $$source)) {
-            this["disableEviction"] = false;
-        }
-        if (!("skipWaitForPodsToTerminate" in $$source)) {
-            this["skipWaitForPodsToTerminate"] = false;
-        }
-
-        Object.assign(this, $$source);
-    }
-
-    /**
-     * Creates a new DrainNodeOptions instance from a string or object.
-     */
-    static createFrom($$source: any = {}): DrainNodeOptions {
-        let $$parsedSource = typeof $$source === 'string' ? JSON.parse($$source) : $$source;
-        return new DrainNodeOptions($$parsedSource as Partial<DrainNodeOptions>);
-    }
 }
 
-export class GatewayListenerDetails {
+export type GRPCRouteDetails = RouteDetails;
+
+export interface GatewayListenerDetails {
     "name": string;
     "hostname"?: string;
     "port": number;
     "protocol": string;
     "attachedRoutes": number;
-    "conditions"?: ConditionState[];
-
-    /** Creates a new GatewayListenerDetails instance. */
-    constructor($$source: Partial<GatewayListenerDetails> = {}) {
-        if (!("name" in $$source)) {
-            this["name"] = "";
-        }
-        if (!("port" in $$source)) {
-            this["port"] = 0;
-        }
-        if (!("protocol" in $$source)) {
-            this["protocol"] = "";
-        }
-        if (!("attachedRoutes" in $$source)) {
-            this["attachedRoutes"] = 0;
-        }
-
-        Object.assign(this, $$source);
-    }
-
-    /**
-     * Creates a new GatewayListenerDetails instance from a string or object.
-     */
-    static createFrom($$source: any = {}): GatewayListenerDetails {
-        const $$createField5_0 = $$createType9;
-        let $$parsedSource = typeof $$source === 'string' ? JSON.parse($$source) : $$source;
-        if ("conditions" in $$parsedSource) {
-            $$parsedSource["conditions"] = $$createField5_0($$parsedSource["conditions"]);
-        }
-        return new GatewayListenerDetails($$parsedSource as Partial<GatewayListenerDetails>);
-    }
+    "conditions"?: ConditionState[] | null;
 }
 
-export class JobReference {
+export type HTTPRouteDetails = RouteDetails;
+
+export interface JobReference {
     "name": string;
     "startTime"?: v1$0.Time | null;
-
-    /** Creates a new JobReference instance. */
-    constructor($$source: Partial<JobReference> = {}) {
-        if (!("name" in $$source)) {
-            this["name"] = "";
-        }
-
-        Object.assign(this, $$source);
-    }
-
-    /**
-     * Creates a new JobReference instance from a string or object.
-     */
-    static createFrom($$source: any = {}): JobReference {
-        let $$parsedSource = typeof $$source === 'string' ? JSON.parse($$source) : $$source;
-        return new JobReference($$parsedSource as Partial<JobReference>);
-    }
 }
 
 /**
  * JobSimpleInfo provides a summary of a Job for list/tab views.
  */
-export class JobSimpleInfo {
+export interface JobSimpleInfo {
     "kind": string;
     "name": string;
     "namespace": string;
@@ -856,80 +393,21 @@ export class JobSimpleInfo {
     "durationSeconds"?: number;
     "age": string;
     "ageTimestamp"?: number;
-
-    /** Creates a new JobSimpleInfo instance. */
-    constructor($$source: Partial<JobSimpleInfo> = {}) {
-        if (!("kind" in $$source)) {
-            this["kind"] = "";
-        }
-        if (!("name" in $$source)) {
-            this["name"] = "";
-        }
-        if (!("namespace" in $$source)) {
-            this["namespace"] = "";
-        }
-        if (!("status" in $$source)) {
-            this["status"] = "";
-        }
-        if (!("completions" in $$source)) {
-            this["completions"] = "";
-        }
-        if (!("succeeded" in $$source)) {
-            this["succeeded"] = 0;
-        }
-        if (!("failed" in $$source)) {
-            this["failed"] = 0;
-        }
-        if (!("active" in $$source)) {
-            this["active"] = 0;
-        }
-        if (!("age" in $$source)) {
-            this["age"] = "";
-        }
-
-        Object.assign(this, $$source);
-    }
-
-    /**
-     * Creates a new JobSimpleInfo instance from a string or object.
-     */
-    static createFrom($$source: any = {}): JobSimpleInfo {
-        let $$parsedSource = typeof $$source === 'string' ? JSON.parse($$source) : $$source;
-        return new JobSimpleInfo($$parsedSource as Partial<JobSimpleInfo>);
-    }
 }
 
-export class JobTemplateDetails {
+export interface JobTemplateDetails {
     "completions"?: number | null;
     "parallelism"?: number | null;
     "backoffLimit"?: number | null;
     "activeDeadlineSeconds"?: number | null;
     "ttlSecondsAfterFinished"?: number | null;
-    "containers"?: PodDetailInfoContainer[];
-
-    /** Creates a new JobTemplateDetails instance. */
-    constructor($$source: Partial<JobTemplateDetails> = {}) {
-
-        Object.assign(this, $$source);
-    }
-
-    /**
-     * Creates a new JobTemplateDetails instance from a string or object.
-     */
-    static createFrom($$source: any = {}): JobTemplateDetails {
-        const $$createField5_0 = $$createType11;
-        let $$parsedSource = typeof $$source === 'string' ? JSON.parse($$source) : $$source;
-        if ("containers" in $$parsedSource) {
-            $$parsedSource["containers"] = $$createField5_0($$parsedSource["containers"]);
-        }
-        return new JobTemplateDetails($$parsedSource as Partial<JobTemplateDetails>);
-    }
+    "containers"?: PodDetailInfoContainer[] | null;
 }
 
 /**
  * KubeconfigInfo represents information about a kubeconfig context
  */
-export class KubeconfigInfo {
+export interface KubeconfigInfo {
     /**
      * Display name (filename)
      */
@@ -964,171 +442,46 @@ export class KubeconfigInfo {
      * Why the context is invalid (empty when valid)
      */
     "invalidReason": string;
-
-    /** Creates a new KubeconfigInfo instance. */
-    constructor($$source: Partial<KubeconfigInfo> = {}) {
-        if (!("name" in $$source)) {
-            this["name"] = "";
-        }
-        if (!("path" in $$source)) {
-            this["path"] = "";
-        }
-        if (!("context" in $$source)) {
-            this["context"] = "";
-        }
-        if (!("isDefault" in $$source)) {
-            this["isDefault"] = false;
-        }
-        if (!("isCurrentContext" in $$source)) {
-            this["isCurrentContext"] = false;
-        }
-        if (!("invalid" in $$source)) {
-            this["invalid"] = false;
-        }
-        if (!("invalidReason" in $$source)) {
-            this["invalidReason"] = "";
-        }
-
-        Object.assign(this, $$source);
-    }
-
-    /**
-     * Creates a new KubeconfigInfo instance from a string or object.
-     */
-    static createFrom($$source: any = {}): KubeconfigInfo {
-        let $$parsedSource = typeof $$source === 'string' ? JSON.parse($$source) : $$source;
-        return new KubeconfigInfo($$parsedSource as Partial<KubeconfigInfo>);
-    }
 }
 
 /**
  * NodeLogDiscoveryResponse describes whether node logs are usable and which sources are available.
  */
-export class NodeLogDiscoveryResponse {
+export interface NodeLogDiscoveryResponse {
     "supported": boolean;
-    "sources"?: NodeLogSource[];
+    "sources"?: NodeLogSource[] | null;
     "reason"?: string;
-
-    /** Creates a new NodeLogDiscoveryResponse instance. */
-    constructor($$source: Partial<NodeLogDiscoveryResponse> = {}) {
-        if (!("supported" in $$source)) {
-            this["supported"] = false;
-        }
-
-        Object.assign(this, $$source);
-    }
-
-    /**
-     * Creates a new NodeLogDiscoveryResponse instance from a string or object.
-     */
-    static createFrom($$source: any = {}): NodeLogDiscoveryResponse {
-        const $$createField1_0 = $$createType13;
-        let $$parsedSource = typeof $$source === 'string' ? JSON.parse($$source) : $$source;
-        if ("sources" in $$parsedSource) {
-            $$parsedSource["sources"] = $$createField1_0($$parsedSource["sources"]);
-        }
-        return new NodeLogDiscoveryResponse($$parsedSource as Partial<NodeLogDiscoveryResponse>);
-    }
 }
 
 /**
  * NodeLogFetchRequest selects a discovered node log source to fetch.
  */
-export class NodeLogFetchRequest {
+export interface NodeLogFetchRequest {
     "sourcePath": string;
     "sinceTime"?: string;
     "tailBytes"?: number;
-
-    /** Creates a new NodeLogFetchRequest instance. */
-    constructor($$source: Partial<NodeLogFetchRequest> = {}) {
-        if (!("sourcePath" in $$source)) {
-            this["sourcePath"] = "";
-        }
-
-        Object.assign(this, $$source);
-    }
-
-    /**
-     * Creates a new NodeLogFetchRequest instance from a string or object.
-     */
-    static createFrom($$source: any = {}): NodeLogFetchRequest {
-        let $$parsedSource = typeof $$source === 'string' ? JSON.parse($$source) : $$source;
-        return new NodeLogFetchRequest($$parsedSource as Partial<NodeLogFetchRequest>);
-    }
 }
 
 /**
  * NodeLogFetchResponse contains raw node log content for a selected source.
  */
-export class NodeLogFetchResponse {
+export interface NodeLogFetchResponse {
     "content"?: string;
     "source": NodeLogSource;
     "error"?: string;
     "sourcePath"?: string;
     "truncated"?: boolean;
-
-    /** Creates a new NodeLogFetchResponse instance. */
-    constructor($$source: Partial<NodeLogFetchResponse> = {}) {
-        if (!("source" in $$source)) {
-            this["source"] = (new NodeLogSource());
-        }
-
-        Object.assign(this, $$source);
-    }
-
-    /**
-     * Creates a new NodeLogFetchResponse instance from a string or object.
-     */
-    static createFrom($$source: any = {}): NodeLogFetchResponse {
-        const $$createField1_0 = $$createType12;
-        let $$parsedSource = typeof $$source === 'string' ? JSON.parse($$source) : $$source;
-        if ("source" in $$parsedSource) {
-            $$parsedSource["source"] = $$createField1_0($$parsedSource["source"]);
-        }
-        return new NodeLogFetchResponse($$parsedSource as Partial<NodeLogFetchResponse>);
-    }
 }
 
 /**
  * NodeLogSource represents a discovered node log source that can be fetched directly.
  */
-export class NodeLogSource {
+export interface NodeLogSource {
     "id": string;
     "label": string;
     "kind": string;
     "path": string;
-
-    /** Creates a new NodeLogSource instance. */
-    constructor($$source: Partial<NodeLogSource> = {}) {
-        if (!("id" in $$source)) {
-            this["id"] = "";
-        }
-        if (!("label" in $$source)) {
-            this["label"] = "";
-        }
-        if (!("kind" in $$source)) {
-            this["kind"] = "";
-        }
-        if (!("path" in $$source)) {
-            this["path"] = "";
-        }
-
-        Object.assign(this, $$source);
-    }
-
-    /**
-     * Creates a new NodeLogSource instance from a string or object.
-     */
-    static createFrom($$source: any = {}): NodeLogSource {
-        let $$parsedSource = typeof $$source === 'string' ? JSON.parse($$source) : $$source;
-        return new NodeLogSource($$parsedSource as Partial<NodeLogSource>);
-    }
 }
-
-/**
- * ObjectRef is the shared openable Kubernetes object identity.
- */
-export const ObjectRef = resourcemodel$0.ResourceRef;
 
 /**
  * ObjectRef is the shared openable Kubernetes object identity.
@@ -1138,7 +491,7 @@ export type ObjectRef = resourcemodel$0.ResourceRef;
 /**
  * PodDetailInfo represents comprehensive pod information for the object panel
  */
-export class PodDetailInfo {
+export interface PodDetailInfo {
     /**
      * Basic information (same as PodSimpleInfo)
      */
@@ -1180,14 +533,14 @@ export class PodDetailInfo {
     "priority"?: number | null;
     "priorityClass"?: string;
     "serviceAccount": string;
-    "labels"?: { [_ in string]?: string };
-    "annotations"?: { [_ in string]?: string };
-    "conditions"?: string[];
-    "containers": PodDetailInfoContainer[];
-    "initContainers"?: PodDetailInfoContainer[];
-    "volumes"?: string[];
-    "tolerations"?: string[];
-    "affinity"?: { [_ in string]?: any };
+    "labels"?: { [_ in string]?: string } | null;
+    "annotations"?: { [_ in string]?: string } | null;
+    "conditions"?: string[] | null;
+    "containers": PodDetailInfoContainer[] | null;
+    "initContainers"?: PodDetailInfoContainer[] | null;
+    "volumes"?: string[] | null;
+    "tolerations"?: string[] | null;
+    "affinity"?: { [_ in string]?: any } | null;
     "hostNetwork": boolean;
     "hostPID": boolean;
     "hostIPC": boolean;
@@ -1195,126 +548,13 @@ export class PodDetailInfo {
     "restartPolicy": string;
     "schedulerName"?: string;
     "runtimeClass"?: string;
-    "securityContext"?: { [_ in string]?: any };
-
-    /** Creates a new PodDetailInfo instance. */
-    constructor($$source: Partial<PodDetailInfo> = {}) {
-        if (!("name" in $$source)) {
-            this["name"] = "";
-        }
-        if (!("namespace" in $$source)) {
-            this["namespace"] = "";
-        }
-        if (!("status" in $$source)) {
-            this["status"] = "";
-        }
-        if (!("ready" in $$source)) {
-            this["ready"] = "";
-        }
-        if (!("restarts" in $$source)) {
-            this["restarts"] = 0;
-        }
-        if (!("cpuRequest" in $$source)) {
-            this["cpuRequest"] = "";
-        }
-        if (!("cpuLimit" in $$source)) {
-            this["cpuLimit"] = "";
-        }
-        if (!("cpuUsage" in $$source)) {
-            this["cpuUsage"] = "";
-        }
-        if (!("memRequest" in $$source)) {
-            this["memRequest"] = "";
-        }
-        if (!("memLimit" in $$source)) {
-            this["memLimit"] = "";
-        }
-        if (!("memUsage" in $$source)) {
-            this["memUsage"] = "";
-        }
-        if (!("ownerKind" in $$source)) {
-            this["ownerKind"] = "";
-        }
-        if (!("ownerName" in $$source)) {
-            this["ownerName"] = "";
-        }
-        if (!("node" in $$source)) {
-            this["node"] = "";
-        }
-        if (!("qosClass" in $$source)) {
-            this["qosClass"] = "";
-        }
-        if (!("serviceAccount" in $$source)) {
-            this["serviceAccount"] = "";
-        }
-        if (!("containers" in $$source)) {
-            this["containers"] = [];
-        }
-        if (!("hostNetwork" in $$source)) {
-            this["hostNetwork"] = false;
-        }
-        if (!("hostPID" in $$source)) {
-            this["hostPID"] = false;
-        }
-        if (!("hostIPC" in $$source)) {
-            this["hostIPC"] = false;
-        }
-        if (!("restartPolicy" in $$source)) {
-            this["restartPolicy"] = "";
-        }
-
-        Object.assign(this, $$source);
-    }
-
-    /**
-     * Creates a new PodDetailInfo instance from a string or object.
-     */
-    static createFrom($$source: any = {}): PodDetailInfo {
-        const $$createField24_0 = $$createType14;
-        const $$createField25_0 = $$createType14;
-        const $$createField26_0 = $$createType0;
-        const $$createField27_0 = $$createType11;
-        const $$createField28_0 = $$createType11;
-        const $$createField29_0 = $$createType0;
-        const $$createField30_0 = $$createType0;
-        const $$createField31_0 = $$createType15;
-        const $$createField39_0 = $$createType15;
-        let $$parsedSource = typeof $$source === 'string' ? JSON.parse($$source) : $$source;
-        if ("labels" in $$parsedSource) {
-            $$parsedSource["labels"] = $$createField24_0($$parsedSource["labels"]);
-        }
-        if ("annotations" in $$parsedSource) {
-            $$parsedSource["annotations"] = $$createField25_0($$parsedSource["annotations"]);
-        }
-        if ("conditions" in $$parsedSource) {
-            $$parsedSource["conditions"] = $$createField26_0($$parsedSource["conditions"]);
-        }
-        if ("containers" in $$parsedSource) {
-            $$parsedSource["containers"] = $$createField27_0($$parsedSource["containers"]);
-        }
-        if ("initContainers" in $$parsedSource) {
-            $$parsedSource["initContainers"] = $$createField28_0($$parsedSource["initContainers"]);
-        }
-        if ("volumes" in $$parsedSource) {
-            $$parsedSource["volumes"] = $$createField29_0($$parsedSource["volumes"]);
-        }
-        if ("tolerations" in $$parsedSource) {
-            $$parsedSource["tolerations"] = $$createField30_0($$parsedSource["tolerations"]);
-        }
-        if ("affinity" in $$parsedSource) {
-            $$parsedSource["affinity"] = $$createField31_0($$parsedSource["affinity"]);
-        }
-        if ("securityContext" in $$parsedSource) {
-            $$parsedSource["securityContext"] = $$createField39_0($$parsedSource["securityContext"]);
-        }
-        return new PodDetailInfo($$parsedSource as Partial<PodDetailInfo>);
-    }
+    "securityContext"?: { [_ in string]?: any } | null;
 }
 
 /**
  * PodDetailInfoContainer represents detailed container information within a pod
  */
-export class PodDetailInfoContainer {
+export interface PodDetailInfoContainer {
     "name": string;
     "image": string;
     "imagePullPolicy": string;
@@ -1332,78 +572,14 @@ export class PodDetailInfoContainer {
     "cpuLimit": string;
     "memRequest": string;
     "memLimit": string;
-    "ports"?: string[];
-    "volumeMounts"?: string[];
-    "environment"?: { [_ in string]?: string };
-    "command"?: string[];
-    "args"?: string[];
-
-    /** Creates a new PodDetailInfoContainer instance. */
-    constructor($$source: Partial<PodDetailInfoContainer> = {}) {
-        if (!("name" in $$source)) {
-            this["name"] = "";
-        }
-        if (!("image" in $$source)) {
-            this["image"] = "";
-        }
-        if (!("imagePullPolicy" in $$source)) {
-            this["imagePullPolicy"] = "";
-        }
-        if (!("ready" in $$source)) {
-            this["ready"] = false;
-        }
-        if (!("restartCount" in $$source)) {
-            this["restartCount"] = 0;
-        }
-        if (!("state" in $$source)) {
-            this["state"] = "";
-        }
-        if (!("cpuRequest" in $$source)) {
-            this["cpuRequest"] = "";
-        }
-        if (!("cpuLimit" in $$source)) {
-            this["cpuLimit"] = "";
-        }
-        if (!("memRequest" in $$source)) {
-            this["memRequest"] = "";
-        }
-        if (!("memLimit" in $$source)) {
-            this["memLimit"] = "";
-        }
-
-        Object.assign(this, $$source);
-    }
-
-    /**
-     * Creates a new PodDetailInfoContainer instance from a string or object.
-     */
-    static createFrom($$source: any = {}): PodDetailInfoContainer {
-        const $$createField13_0 = $$createType0;
-        const $$createField14_0 = $$createType0;
-        const $$createField15_0 = $$createType14;
-        const $$createField16_0 = $$createType0;
-        const $$createField17_0 = $$createType0;
-        let $$parsedSource = typeof $$source === 'string' ? JSON.parse($$source) : $$source;
-        if ("ports" in $$parsedSource) {
-            $$parsedSource["ports"] = $$createField13_0($$parsedSource["ports"]);
-        }
-        if ("volumeMounts" in $$parsedSource) {
-            $$parsedSource["volumeMounts"] = $$createField14_0($$parsedSource["volumeMounts"]);
-        }
-        if ("environment" in $$parsedSource) {
-            $$parsedSource["environment"] = $$createField15_0($$parsedSource["environment"]);
-        }
-        if ("command" in $$parsedSource) {
-            $$parsedSource["command"] = $$createField16_0($$parsedSource["command"]);
-        }
-        if ("args" in $$parsedSource) {
-            $$parsedSource["args"] = $$createField17_0($$parsedSource["args"]);
-        }
-        return new PodDetailInfoContainer($$parsedSource as Partial<PodDetailInfoContainer>);
-    }
+    "ports"?: string[] | null;
+    "volumeMounts"?: string[] | null;
+    "environment"?: { [_ in string]?: string } | null;
+    "command"?: string[] | null;
+    "args"?: string[] | null;
 }
 
-export class PodMetricsSummary {
+export interface PodMetricsSummary {
     "pods": number;
     "readyPods": number;
     "cpuUsage"?: string;
@@ -1412,32 +588,12 @@ export class PodMetricsSummary {
     "cpuLimit"?: string;
     "memRequest"?: string;
     "memLimit"?: string;
-
-    /** Creates a new PodMetricsSummary instance. */
-    constructor($$source: Partial<PodMetricsSummary> = {}) {
-        if (!("pods" in $$source)) {
-            this["pods"] = 0;
-        }
-        if (!("readyPods" in $$source)) {
-            this["readyPods"] = 0;
-        }
-
-        Object.assign(this, $$source);
-    }
-
-    /**
-     * Creates a new PodMetricsSummary instance from a string or object.
-     */
-    static createFrom($$source: any = {}): PodMetricsSummary {
-        let $$parsedSource = typeof $$source === 'string' ? JSON.parse($$source) : $$source;
-        return new PodMetricsSummary($$parsedSource as Partial<PodMetricsSummary>);
-    }
 }
 
 /**
  * PodSimpleInfo represents basic pod information for list views
  */
-export class PodSimpleInfo {
+export interface PodSimpleInfo {
     /**
      * pod
      */
@@ -1506,528 +662,113 @@ export class PodSimpleInfo {
      * Spark SparkApplication, etc.
      */
     "ownerApiVersion"?: string;
-
-    /** Creates a new PodSimpleInfo instance. */
-    constructor($$source: Partial<PodSimpleInfo> = {}) {
-        if (!("kind" in $$source)) {
-            this["kind"] = "";
-        }
-        if (!("name" in $$source)) {
-            this["name"] = "";
-        }
-        if (!("namespace" in $$source)) {
-            this["namespace"] = "";
-        }
-        if (!("status" in $$source)) {
-            this["status"] = "";
-        }
-        if (!("ready" in $$source)) {
-            this["ready"] = "";
-        }
-        if (!("restarts" in $$source)) {
-            this["restarts"] = 0;
-        }
-        if (!("age" in $$source)) {
-            this["age"] = "";
-        }
-        if (!("cpuRequest" in $$source)) {
-            this["cpuRequest"] = "";
-        }
-        if (!("cpuLimit" in $$source)) {
-            this["cpuLimit"] = "";
-        }
-        if (!("cpuUsage" in $$source)) {
-            this["cpuUsage"] = "";
-        }
-        if (!("memRequest" in $$source)) {
-            this["memRequest"] = "";
-        }
-        if (!("memLimit" in $$source)) {
-            this["memLimit"] = "";
-        }
-        if (!("memUsage" in $$source)) {
-            this["memUsage"] = "";
-        }
-        if (!("ownerKind" in $$source)) {
-            this["ownerKind"] = "";
-        }
-        if (!("ownerName" in $$source)) {
-            this["ownerName"] = "";
-        }
-
-        Object.assign(this, $$source);
-    }
-
-    /**
-     * Creates a new PodSimpleInfo instance from a string or object.
-     */
-    static createFrom($$source: any = {}): PodSimpleInfo {
-        let $$parsedSource = typeof $$source === 'string' ? JSON.parse($$source) : $$source;
-        return new PodSimpleInfo($$parsedSource as Partial<PodSimpleInfo>);
-    }
 }
 
-export class PolicyRule {
-    "apiGroups"?: string[];
-    "resources"?: string[];
-    "resourceNames"?: string[];
-    "verbs": string[];
-    "nonResourceURLs"?: string[];
-
-    /** Creates a new PolicyRule instance. */
-    constructor($$source: Partial<PolicyRule> = {}) {
-        if (!("verbs" in $$source)) {
-            this["verbs"] = [];
-        }
-
-        Object.assign(this, $$source);
-    }
-
-    /**
-     * Creates a new PolicyRule instance from a string or object.
-     */
-    static createFrom($$source: any = {}): PolicyRule {
-        const $$createField0_0 = $$createType0;
-        const $$createField1_0 = $$createType0;
-        const $$createField2_0 = $$createType0;
-        const $$createField3_0 = $$createType0;
-        const $$createField4_0 = $$createType0;
-        let $$parsedSource = typeof $$source === 'string' ? JSON.parse($$source) : $$source;
-        if ("apiGroups" in $$parsedSource) {
-            $$parsedSource["apiGroups"] = $$createField0_0($$parsedSource["apiGroups"]);
-        }
-        if ("resources" in $$parsedSource) {
-            $$parsedSource["resources"] = $$createField1_0($$parsedSource["resources"]);
-        }
-        if ("resourceNames" in $$parsedSource) {
-            $$parsedSource["resourceNames"] = $$createField2_0($$parsedSource["resourceNames"]);
-        }
-        if ("verbs" in $$parsedSource) {
-            $$parsedSource["verbs"] = $$createField3_0($$parsedSource["verbs"]);
-        }
-        if ("nonResourceURLs" in $$parsedSource) {
-            $$parsedSource["nonResourceURLs"] = $$createField4_0($$parsedSource["nonResourceURLs"]);
-        }
-        return new PolicyRule($$parsedSource as Partial<PolicyRule>);
-    }
+export interface PolicyRule {
+    "apiGroups"?: string[] | null;
+    "resources"?: string[] | null;
+    "resourceNames"?: string[] | null;
+    "verbs": string[] | null;
+    "nonResourceURLs"?: string[] | null;
 }
 
-export class RefOrDisplay {
+export interface RefOrDisplay {
     "ref"?: ObjectRef | null;
     "display"?: DisplayRef | null;
-
-    /** Creates a new RefOrDisplay instance. */
-    constructor($$source: Partial<RefOrDisplay> = {}) {
-
-        Object.assign(this, $$source);
-    }
-
-    /**
-     * Creates a new RefOrDisplay instance from a string or object.
-     */
-    static createFrom($$source: any = {}): RefOrDisplay {
-        const $$createField0_0 = $$createType17;
-        const $$createField1_0 = $$createType19;
-        let $$parsedSource = typeof $$source === 'string' ? JSON.parse($$source) : $$source;
-        if ("ref" in $$parsedSource) {
-            $$parsedSource["ref"] = $$createField0_0($$parsedSource["ref"]);
-        }
-        if ("display" in $$parsedSource) {
-            $$parsedSource["display"] = $$createField1_0($$parsedSource["display"]);
-        }
-        return new RefOrDisplay($$parsedSource as Partial<RefOrDisplay>);
-    }
 }
 
-export class ReferenceGrantFromInfo {
+export interface ReferenceGrantFromInfo {
     "group": string;
     "kind": string;
     "namespace": string;
-
-    /** Creates a new ReferenceGrantFromInfo instance. */
-    constructor($$source: Partial<ReferenceGrantFromInfo> = {}) {
-        if (!("group" in $$source)) {
-            this["group"] = "";
-        }
-        if (!("kind" in $$source)) {
-            this["kind"] = "";
-        }
-        if (!("namespace" in $$source)) {
-            this["namespace"] = "";
-        }
-
-        Object.assign(this, $$source);
-    }
-
-    /**
-     * Creates a new ReferenceGrantFromInfo instance from a string or object.
-     */
-    static createFrom($$source: any = {}): ReferenceGrantFromInfo {
-        let $$parsedSource = typeof $$source === 'string' ? JSON.parse($$source) : $$source;
-        return new ReferenceGrantFromInfo($$parsedSource as Partial<ReferenceGrantFromInfo>);
-    }
 }
 
-export class ReplicaSetSummary {
+export interface ReplicaSetSummary {
     "name": string;
     "revision": string;
     "replicas": string;
     "readyReplicas": string;
     "availableReplicas": string;
     "age": string;
-
-    /** Creates a new ReplicaSetSummary instance. */
-    constructor($$source: Partial<ReplicaSetSummary> = {}) {
-        if (!("name" in $$source)) {
-            this["name"] = "";
-        }
-        if (!("revision" in $$source)) {
-            this["revision"] = "";
-        }
-        if (!("replicas" in $$source)) {
-            this["replicas"] = "";
-        }
-        if (!("readyReplicas" in $$source)) {
-            this["readyReplicas"] = "";
-        }
-        if (!("availableReplicas" in $$source)) {
-            this["availableReplicas"] = "";
-        }
-        if (!("age" in $$source)) {
-            this["age"] = "";
-        }
-
-        Object.assign(this, $$source);
-    }
-
-    /**
-     * Creates a new ReplicaSetSummary instance from a string or object.
-     */
-    static createFrom($$source: any = {}): ReplicaSetSummary {
-        let $$parsedSource = typeof $$source === 'string' ? JSON.parse($$source) : $$source;
-        return new ReplicaSetSummary($$parsedSource as Partial<ReplicaSetSummary>);
-    }
 }
 
-export class RoleRef {
+export interface RoleRef {
     "apiGroup": string;
     "kind": string;
     "name": string;
-
-    /** Creates a new RoleRef instance. */
-    constructor($$source: Partial<RoleRef> = {}) {
-        if (!("apiGroup" in $$source)) {
-            this["apiGroup"] = "";
-        }
-        if (!("kind" in $$source)) {
-            this["kind"] = "";
-        }
-        if (!("name" in $$source)) {
-            this["name"] = "";
-        }
-
-        Object.assign(this, $$source);
-    }
-
-    /**
-     * Creates a new RoleRef instance from a string or object.
-     */
-    static createFrom($$source: any = {}): RoleRef {
-        let $$parsedSource = typeof $$source === 'string' ? JSON.parse($$source) : $$source;
-        return new RoleRef($$parsedSource as Partial<RoleRef>);
-    }
 }
 
-export class RouteDetails {
+export interface RouteDetails {
     "kind": string;
     "name": string;
     "namespace": string;
     "age": string;
     "details": string;
-    "hostnames"?: string[];
-    "parentRefs"?: RefOrDisplay[];
-    "backendRefs"?: RefOrDisplay[];
-    "rules"?: RouteRuleDetails[];
-    "conditions"?: ConditionState[];
+    "hostnames"?: string[] | null;
+    "parentRefs"?: RefOrDisplay[] | null;
+    "backendRefs"?: RefOrDisplay[] | null;
+    "rules"?: RouteRuleDetails[] | null;
+    "conditions"?: ConditionState[] | null;
     "summary": ConditionsSummary;
-    "labels"?: { [_ in string]?: string };
-    "annotations"?: { [_ in string]?: string };
-
-    /** Creates a new RouteDetails instance. */
-    constructor($$source: Partial<RouteDetails> = {}) {
-        if (!("kind" in $$source)) {
-            this["kind"] = "";
-        }
-        if (!("name" in $$source)) {
-            this["name"] = "";
-        }
-        if (!("namespace" in $$source)) {
-            this["namespace"] = "";
-        }
-        if (!("age" in $$source)) {
-            this["age"] = "";
-        }
-        if (!("details" in $$source)) {
-            this["details"] = "";
-        }
-        if (!("summary" in $$source)) {
-            this["summary"] = (new ConditionsSummary());
-        }
-
-        Object.assign(this, $$source);
-    }
-
-    /**
-     * Creates a new RouteDetails instance from a string or object.
-     */
-    static createFrom($$source: any = {}): RouteDetails {
-        const $$createField5_0 = $$createType0;
-        const $$createField6_0 = $$createType21;
-        const $$createField7_0 = $$createType21;
-        const $$createField8_0 = $$createType23;
-        const $$createField9_0 = $$createType9;
-        const $$createField10_0 = $$createType24;
-        const $$createField11_0 = $$createType14;
-        const $$createField12_0 = $$createType14;
-        let $$parsedSource = typeof $$source === 'string' ? JSON.parse($$source) : $$source;
-        if ("hostnames" in $$parsedSource) {
-            $$parsedSource["hostnames"] = $$createField5_0($$parsedSource["hostnames"]);
-        }
-        if ("parentRefs" in $$parsedSource) {
-            $$parsedSource["parentRefs"] = $$createField6_0($$parsedSource["parentRefs"]);
-        }
-        if ("backendRefs" in $$parsedSource) {
-            $$parsedSource["backendRefs"] = $$createField7_0($$parsedSource["backendRefs"]);
-        }
-        if ("rules" in $$parsedSource) {
-            $$parsedSource["rules"] = $$createField8_0($$parsedSource["rules"]);
-        }
-        if ("conditions" in $$parsedSource) {
-            $$parsedSource["conditions"] = $$createField9_0($$parsedSource["conditions"]);
-        }
-        if ("summary" in $$parsedSource) {
-            $$parsedSource["summary"] = $$createField10_0($$parsedSource["summary"]);
-        }
-        if ("labels" in $$parsedSource) {
-            $$parsedSource["labels"] = $$createField11_0($$parsedSource["labels"]);
-        }
-        if ("annotations" in $$parsedSource) {
-            $$parsedSource["annotations"] = $$createField12_0($$parsedSource["annotations"]);
-        }
-        return new RouteDetails($$parsedSource as Partial<RouteDetails>);
-    }
+    "labels"?: { [_ in string]?: string } | null;
+    "annotations"?: { [_ in string]?: string } | null;
 }
 
-export const GRPCRouteDetails = RouteDetails;
-export type GRPCRouteDetails = RouteDetails;
-
-export const HTTPRouteDetails = RouteDetails;
-export type HTTPRouteDetails = RouteDetails;
-
-export class RouteRuleDetails {
-    "matches"?: string[];
-    "backendRefs"?: RefOrDisplay[];
-
-    /** Creates a new RouteRuleDetails instance. */
-    constructor($$source: Partial<RouteRuleDetails> = {}) {
-
-        Object.assign(this, $$source);
-    }
-
-    /**
-     * Creates a new RouteRuleDetails instance from a string or object.
-     */
-    static createFrom($$source: any = {}): RouteRuleDetails {
-        const $$createField0_0 = $$createType0;
-        const $$createField1_0 = $$createType21;
-        let $$parsedSource = typeof $$source === 'string' ? JSON.parse($$source) : $$source;
-        if ("matches" in $$parsedSource) {
-            $$parsedSource["matches"] = $$createField0_0($$parsedSource["matches"]);
-        }
-        if ("backendRefs" in $$parsedSource) {
-            $$parsedSource["backendRefs"] = $$createField1_0($$parsedSource["backendRefs"]);
-        }
-        return new RouteRuleDetails($$parsedSource as Partial<RouteRuleDetails>);
-    }
+export interface RouteRuleDetails {
+    "matches"?: string[] | null;
+    "backendRefs"?: RefOrDisplay[] | null;
 }
 
 /**
  * ShellSession contains details about an active exec session.
  */
-export class ShellSession {
+export interface ShellSession {
     "sessionId": string;
     "namespace": string;
     "podName": string;
     "container": string;
-    "command": string[];
-    "containers": string[];
-
-    /** Creates a new ShellSession instance. */
-    constructor($$source: Partial<ShellSession> = {}) {
-        if (!("sessionId" in $$source)) {
-            this["sessionId"] = "";
-        }
-        if (!("namespace" in $$source)) {
-            this["namespace"] = "";
-        }
-        if (!("podName" in $$source)) {
-            this["podName"] = "";
-        }
-        if (!("container" in $$source)) {
-            this["container"] = "";
-        }
-        if (!("command" in $$source)) {
-            this["command"] = [];
-        }
-        if (!("containers" in $$source)) {
-            this["containers"] = [];
-        }
-
-        Object.assign(this, $$source);
-    }
-
-    /**
-     * Creates a new ShellSession instance from a string or object.
-     */
-    static createFrom($$source: any = {}): ShellSession {
-        const $$createField4_0 = $$createType0;
-        const $$createField5_0 = $$createType0;
-        let $$parsedSource = typeof $$source === 'string' ? JSON.parse($$source) : $$source;
-        if ("command" in $$parsedSource) {
-            $$parsedSource["command"] = $$createField4_0($$parsedSource["command"]);
-        }
-        if ("containers" in $$parsedSource) {
-            $$parsedSource["containers"] = $$createField5_0($$parsedSource["containers"]);
-        }
-        return new ShellSession($$parsedSource as Partial<ShellSession>);
-    }
+    "command": string[] | null;
+    "containers": string[] | null;
 }
 
 /**
  * ShellSessionInfo describes a tracked shell exec session.
  */
-export class ShellSessionInfo {
+export interface ShellSessionInfo {
     "sessionId": string;
     "clusterId": string;
     "clusterName": string;
     "namespace": string;
     "podName": string;
     "container": string;
-    "command": string[];
+    "command": string[] | null;
     "startedAt": v1$0.Time;
-
-    /** Creates a new ShellSessionInfo instance. */
-    constructor($$source: Partial<ShellSessionInfo> = {}) {
-        if (!("sessionId" in $$source)) {
-            this["sessionId"] = "";
-        }
-        if (!("clusterId" in $$source)) {
-            this["clusterId"] = "";
-        }
-        if (!("clusterName" in $$source)) {
-            this["clusterName"] = "";
-        }
-        if (!("namespace" in $$source)) {
-            this["namespace"] = "";
-        }
-        if (!("podName" in $$source)) {
-            this["podName"] = "";
-        }
-        if (!("container" in $$source)) {
-            this["container"] = "";
-        }
-        if (!("command" in $$source)) {
-            this["command"] = [];
-        }
-        if (!("startedAt" in $$source)) {
-            this["startedAt"] = null;
-        }
-
-        Object.assign(this, $$source);
-    }
-
-    /**
-     * Creates a new ShellSessionInfo instance from a string or object.
-     */
-    static createFrom($$source: any = {}): ShellSessionInfo {
-        const $$createField6_0 = $$createType0;
-        let $$parsedSource = typeof $$source === 'string' ? JSON.parse($$source) : $$source;
-        if ("command" in $$parsedSource) {
-            $$parsedSource["command"] = $$createField6_0($$parsedSource["command"]);
-        }
-        return new ShellSessionInfo($$parsedSource as Partial<ShellSessionInfo>);
-    }
 }
 
 /**
  * ShellSessionRequest describes the namespace/pod/container to exec into.
  */
-export class ShellSessionRequest {
+export interface ShellSessionRequest {
     "namespace": string;
     "podName": string;
     "container"?: string;
-    "command"?: string[];
-
-    /** Creates a new ShellSessionRequest instance. */
-    constructor($$source: Partial<ShellSessionRequest> = {}) {
-        if (!("namespace" in $$source)) {
-            this["namespace"] = "";
-        }
-        if (!("podName" in $$source)) {
-            this["podName"] = "";
-        }
-
-        Object.assign(this, $$source);
-    }
-
-    /**
-     * Creates a new ShellSessionRequest instance from a string or object.
-     */
-    static createFrom($$source: any = {}): ShellSessionRequest {
-        const $$createField3_0 = $$createType0;
-        let $$parsedSource = typeof $$source === 'string' ? JSON.parse($$source) : $$source;
-        if ("command" in $$parsedSource) {
-            $$parsedSource["command"] = $$createField3_0($$parsedSource["command"]);
-        }
-        return new ShellSessionRequest($$parsedSource as Partial<ShellSessionRequest>);
-    }
+    "command"?: string[] | null;
 }
 
-export class Subject {
+export interface Subject {
     "kind": string;
     "apiGroup"?: string;
     "name": string;
     "namespace"?: string;
-
-    /** Creates a new Subject instance. */
-    constructor($$source: Partial<Subject> = {}) {
-        if (!("kind" in $$source)) {
-            this["kind"] = "";
-        }
-        if (!("name" in $$source)) {
-            this["name"] = "";
-        }
-
-        Object.assign(this, $$source);
-    }
-
-    /**
-     * Creates a new Subject instance from a string or object.
-     */
-    static createFrom($$source: any = {}): Subject {
-        let $$parsedSource = typeof $$source === 'string' ? JSON.parse($$source) : $$source;
-        return new Subject($$parsedSource as Partial<Subject>);
-    }
 }
 
-export const TLSRouteDetails = RouteDetails;
 export type TLSRouteDetails = RouteDetails;
 
 /**
  * Theme represents a saved color theme with optional cluster pattern matching.
  * Themes are ordered; when matching clusters, the first match wins.
  */
-export class Theme {
+export interface Theme {
     /**
      * UUID
      */
@@ -2092,206 +833,39 @@ export class Theme {
      * Hex "#rrggbb" or empty for default
      */
     "linkColorDark"?: string;
-
-    /** Creates a new Theme instance. */
-    constructor($$source: Partial<Theme> = {}) {
-        if (!("id" in $$source)) {
-            this["id"] = "";
-        }
-        if (!("name" in $$source)) {
-            this["name"] = "";
-        }
-        if (!("clusterPattern" in $$source)) {
-            this["clusterPattern"] = "";
-        }
-        if (!("paletteHueLight" in $$source)) {
-            this["paletteHueLight"] = 0;
-        }
-        if (!("paletteSaturationLight" in $$source)) {
-            this["paletteSaturationLight"] = 0;
-        }
-        if (!("paletteBrightnessLight" in $$source)) {
-            this["paletteBrightnessLight"] = 0;
-        }
-        if (!("paletteHueDark" in $$source)) {
-            this["paletteHueDark"] = 0;
-        }
-        if (!("paletteSaturationDark" in $$source)) {
-            this["paletteSaturationDark"] = 0;
-        }
-        if (!("paletteBrightnessDark" in $$source)) {
-            this["paletteBrightnessDark"] = 0;
-        }
-
-        Object.assign(this, $$source);
-    }
-
-    /**
-     * Creates a new Theme instance from a string or object.
-     */
-    static createFrom($$source: any = {}): Theme {
-        let $$parsedSource = typeof $$source === 'string' ? JSON.parse($$source) : $$source;
-        return new Theme($$parsedSource as Partial<Theme>);
-    }
 }
 
 /**
  * ThemeClusterPatternValidationResult reports whether a saved theme cluster
  * pattern can be parsed by the app glob matcher.
  */
-export class ThemeClusterPatternValidationResult {
+export interface ThemeClusterPatternValidationResult {
     "valid": boolean;
     "message"?: string;
-
-    /** Creates a new ThemeClusterPatternValidationResult instance. */
-    constructor($$source: Partial<ThemeClusterPatternValidationResult> = {}) {
-        if (!("valid" in $$source)) {
-            this["valid"] = false;
-        }
-
-        Object.assign(this, $$source);
-    }
-
-    /**
-     * Creates a new ThemeClusterPatternValidationResult instance from a string or object.
-     */
-    static createFrom($$source: any = {}): ThemeClusterPatternValidationResult {
-        let $$parsedSource = typeof $$source === 'string' ? JSON.parse($$source) : $$source;
-        return new ThemeClusterPatternValidationResult($$parsedSource as Partial<ThemeClusterPatternValidationResult>);
-    }
 }
 
 /**
  * UpdateAppPreferencesRequest applies one atomic batch of preference changes.
  */
-export class UpdateAppPreferencesRequest {
-    "changes": AppPreferenceChange[];
-
-    /** Creates a new UpdateAppPreferencesRequest instance. */
-    constructor($$source: Partial<UpdateAppPreferencesRequest> = {}) {
-        if (!("changes" in $$source)) {
-            this["changes"] = [];
-        }
-
-        Object.assign(this, $$source);
-    }
-
-    /**
-     * Creates a new UpdateAppPreferencesRequest instance from a string or object.
-     */
-    static createFrom($$source: any = {}): UpdateAppPreferencesRequest {
-        const $$createField0_0 = $$createType26;
-        let $$parsedSource = typeof $$source === 'string' ? JSON.parse($$source) : $$source;
-        if ("changes" in $$parsedSource) {
-            $$parsedSource["changes"] = $$createField0_0($$parsedSource["changes"]);
-        }
-        return new UpdateAppPreferencesRequest($$parsedSource as Partial<UpdateAppPreferencesRequest>);
-    }
+export interface UpdateAppPreferencesRequest {
+    "changes": AppPreferenceChange[] | null;
 }
 
 /**
  * UpdateAppPreferencesResponse returns the normalized settings after an update.
  */
-export class UpdateAppPreferencesResponse {
+export interface UpdateAppPreferencesResponse {
     "settings": AppSettings | null;
-    "changedKeys": string[];
-
-    /** Creates a new UpdateAppPreferencesResponse instance. */
-    constructor($$source: Partial<UpdateAppPreferencesResponse> = {}) {
-        if (!("settings" in $$source)) {
-            this["settings"] = null;
-        }
-        if (!("changedKeys" in $$source)) {
-            this["changedKeys"] = [];
-        }
-
-        Object.assign(this, $$source);
-    }
-
-    /**
-     * Creates a new UpdateAppPreferencesResponse instance from a string or object.
-     */
-    static createFrom($$source: any = {}): UpdateAppPreferencesResponse {
-        const $$createField0_0 = $$createType28;
-        const $$createField1_0 = $$createType0;
-        let $$parsedSource = typeof $$source === 'string' ? JSON.parse($$source) : $$source;
-        if ("settings" in $$parsedSource) {
-            $$parsedSource["settings"] = $$createField0_0($$parsedSource["settings"]);
-        }
-        if ("changedKeys" in $$parsedSource) {
-            $$parsedSource["changedKeys"] = $$createField1_0($$parsedSource["changedKeys"]);
-        }
-        return new UpdateAppPreferencesResponse($$parsedSource as Partial<UpdateAppPreferencesResponse>);
-    }
+    "changedKeys": string[] | null;
 }
 
 /**
  * WindowSettings represents the window position and size
  */
-export class WindowSettings {
+export interface WindowSettings {
     "x": number;
     "y": number;
     "width": number;
     "height": number;
     "maximized": boolean;
-
-    /** Creates a new WindowSettings instance. */
-    constructor($$source: Partial<WindowSettings> = {}) {
-        if (!("x" in $$source)) {
-            this["x"] = 0;
-        }
-        if (!("y" in $$source)) {
-            this["y"] = 0;
-        }
-        if (!("width" in $$source)) {
-            this["width"] = 0;
-        }
-        if (!("height" in $$source)) {
-            this["height"] = 0;
-        }
-        if (!("maximized" in $$source)) {
-            this["maximized"] = false;
-        }
-
-        Object.assign(this, $$source);
-    }
-
-    /**
-     * Creates a new WindowSettings instance from a string or object.
-     */
-    static createFrom($$source: any = {}): WindowSettings {
-        let $$parsedSource = typeof $$source === 'string' ? JSON.parse($$source) : $$source;
-        return new WindowSettings($$parsedSource as Partial<WindowSettings>);
-    }
 }
-
-// Private type creation functions
-const $$createType0 = $Create.Array($Create.Any);
-const $$createType1 = Theme.createFrom;
-const $$createType2 = $Create.Array($$createType1);
-const $$createType3 = AppPreferenceSchema.createFrom;
-const $$createType4 = $Create.Array($$createType3);
-const $$createType5 = ConditionState.createFrom;
-const $$createType6 = $Create.Nullable($$createType5);
-const $$createType7 = ContainerLogsEntry.createFrom;
-const $$createType8 = $Create.Array($$createType7);
-const $$createType9 = $Create.Array($$createType5);
-const $$createType10 = PodDetailInfoContainer.createFrom;
-const $$createType11 = $Create.Array($$createType10);
-const $$createType12 = NodeLogSource.createFrom;
-const $$createType13 = $Create.Array($$createType12);
-const $$createType14 = $Create.Map($Create.Any, $Create.Any);
-const $$createType15 = $Create.Map($Create.Any, $Create.Any);
-const $$createType16 = resourcemodel$0.ResourceRef.createFrom;
-const $$createType17 = $Create.Nullable($$createType16);
-const $$createType18 = resourcemodel$0.DisplayRef.createFrom;
-const $$createType19 = $Create.Nullable($$createType18);
-const $$createType20 = RefOrDisplay.createFrom;
-const $$createType21 = $Create.Array($$createType20);
-const $$createType22 = RouteRuleDetails.createFrom;
-const $$createType23 = $Create.Array($$createType22);
-const $$createType24 = ConditionsSummary.createFrom;
-const $$createType25 = AppPreferenceChange.createFrom;
-const $$createType26 = $Create.Array($$createType25);
-const $$createType27 = AppSettings.createFrom;
-const $$createType28 = $Create.Nullable($$createType27);

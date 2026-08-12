@@ -37,7 +37,7 @@ const secretTypeTooltip = (type: string): string | undefined => {
 
 export const secretDescriptor: OverviewDescriptor<SecretDetails> = {
   displayKind: 'Secret',
-  dtoClass: secret.SecretDetails,
+  dtoName: 'SecretDetails',
   masksValues: true,
   schema: {
     items: [

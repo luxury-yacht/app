@@ -270,7 +270,7 @@ const CronJobHistory: React.FC<{ data: CronJobDetails; context: OverviewContext 
 
 export const jobDescriptor: OverviewDescriptor<JobDetails> = {
   displayKind: 'Job',
-  dtoClass: job.JobDetails,
+  dtoName: 'JobDetails',
   schema: {
     showSelector: true,
     items: [
@@ -395,7 +395,7 @@ export const jobDescriptor: OverviewDescriptor<JobDetails> = {
 
 export const cronJobDescriptor: OverviewDescriptor<CronJobDetails> = {
   displayKind: 'CronJob',
-  dtoClass: cronjob.CronJobDetails,
+  dtoName: 'CronJobDetails',
   schema: {
     items: [
       // Suspended state first.

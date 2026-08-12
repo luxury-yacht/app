@@ -8,6 +8,8 @@
  * `context`, not the DTO.
  */
 
+import { partialModelFixture } from '@/test-utils/partialModelFixture';
+
 import { daemonset, deployment, replicaset, statefulset } from '@core/backend-api/models';
 import type React from 'react';
 import { act } from 'react';
@@ -118,7 +120,7 @@ describe('WorkloadOverview', () => {
   it('renders deployment-specific status and configuration details', async () => {
     await renderDescriptor(
       deploymentDescriptor,
-      new deployment.DeploymentDetails({
+      partialModelFixture<deployment.DeploymentDetails>({
         kind: 'Deployment',
         name: 'frontend',
         namespace: 'default',
@@ -168,7 +170,7 @@ describe('WorkloadOverview', () => {
   it('renders backend workload status presentation', async () => {
     await renderDescriptor(
       deploymentDescriptor,
-      new deployment.DeploymentDetails({
+      partialModelFixture<deployment.DeploymentDetails>({
         kind: 'Deployment',
         name: 'frontend',
         namespace: 'default',
@@ -191,7 +193,7 @@ describe('WorkloadOverview', () => {
   it('uses owned pod summary counts for the pod-state bar', async () => {
     await renderDescriptor(
       deploymentDescriptor,
-      new deployment.DeploymentDetails({
+      partialModelFixture<deployment.DeploymentDetails>({
         kind: 'Deployment',
         name: 'frontend',
         namespace: 'default',
@@ -212,7 +214,7 @@ describe('WorkloadOverview', () => {
   it('omits rollout details when the deployment is effectively complete', async () => {
     await renderDescriptor(
       deploymentDescriptor,
-      new deployment.DeploymentDetails({
+      partialModelFixture<deployment.DeploymentDetails>({
         kind: 'Deployment',
         name: 'api',
         strategy: 'RollingUpdate',
@@ -228,7 +230,7 @@ describe('WorkloadOverview', () => {
   it('renders daemonset pod-state bar and highlights misscheduled pods', async () => {
     await renderDescriptor(
       daemonSetDescriptor,
-      new daemonset.DaemonSetDetails({
+      partialModelFixture<daemonset.DaemonSetDetails>({
         kind: 'DaemonSet',
         name: 'logs-agent',
         ready: 8,
@@ -256,7 +258,7 @@ describe('WorkloadOverview', () => {
   it('renders replicaset pod-state bar and min-ready', async () => {
     await renderDescriptor(
       replicaSetDescriptor,
-      new replicaset.ReplicaSetDetails({
+      partialModelFixture<replicaset.ReplicaSetDetails>({
         kind: 'ReplicaSet',
         name: 'web-rs',
         ready: '2/2',
@@ -278,7 +280,7 @@ describe('WorkloadOverview', () => {
   it('renders statefulset service-account link and invokes navigation on click', async () => {
     await renderDescriptor(
       statefulSetDescriptor,
-      new statefulset.StatefulSetDetails({
+      partialModelFixture<statefulset.StatefulSetDetails>({
         kind: 'StatefulSet',
         name: 'db',
         namespace: 'data',
@@ -313,7 +315,7 @@ describe('WorkloadOverview', () => {
   it('surfaces deployment Available=False and ReplicaFailure conditions', async () => {
     await renderDescriptor(
       deploymentDescriptor,
-      new deployment.DeploymentDetails({
+      partialModelFixture<deployment.DeploymentDetails>({
         kind: 'Deployment',
         name: 'broken',
         ready: '0/3',
@@ -337,7 +339,7 @@ describe('WorkloadOverview', () => {
   it('omits availability/replica-failure rows when conditions are healthy', async () => {
     await renderDescriptor(
       deploymentDescriptor,
-      new deployment.DeploymentDetails({
+      partialModelFixture<deployment.DeploymentDetails>({
         kind: 'Deployment',
         name: 'ok',
         ready: '3/3',

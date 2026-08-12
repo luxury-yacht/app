@@ -128,7 +128,7 @@ const renderCRDVersions = (versions: apiextensions.CRDVersion[] | undefined): Re
 
 export const crdDescriptor: OverviewDescriptor<CustomResourceDefinitionDetails> = {
   displayKind: 'CustomResourceDefinition',
-  dtoClass: apiextensions.CustomResourceDefinitionDetails,
+  dtoName: 'CustomResourceDefinitionDetails',
   schema: {
     // Order: Scope → Group → Versions → Kind → Plural. Group/Kind/Plural values render in the
     // monospace token font because they're identifiers the user may need to copy/paste verbatim;
@@ -136,7 +136,7 @@ export const crdDescriptor: OverviewDescriptor<CustomResourceDefinitionDetails> 
     items: [
       { field: 'scope', label: 'Scope' },
       { field: 'group', label: 'Group', render: (d) => renderMonoValue(d.group) },
-      { field: 'versions', label: 'Versions', render: (d) => renderCRDVersions(d.versions) },
+      { field: 'versions', label: 'Versions', render: (d) => renderCRDVersions(d.versions ?? []) },
       {
         field: 'names',
         label: 'Kind',
@@ -158,7 +158,7 @@ export const crdDescriptor: OverviewDescriptor<CustomResourceDefinitionDetails> 
 
 export const ingressClassDescriptor: OverviewDescriptor<IngressClassDetails> = {
   displayKind: 'IngressClass',
-  dtoClass: ingressclass.IngressClassDetails,
+  dtoName: 'IngressClassDetails',
   schema: {
     items: [
       {
@@ -227,7 +227,7 @@ export const ingressClassDescriptor: OverviewDescriptor<IngressClassDetails> = {
 
 export const namespaceDescriptor: OverviewDescriptor<NamespaceDetails> = {
   displayKind: 'Namespace',
-  dtoClass: namespaces.NamespaceDetails,
+  dtoName: 'NamespaceDetails',
   schema: {
     items: [
       { kind: 'status' },
@@ -254,7 +254,7 @@ export const namespaceDescriptor: OverviewDescriptor<NamespaceDetails> = {
 
 export const mutatingWebhookDescriptor: OverviewDescriptor<MutatingWebhookConfigurationDetails> = {
   displayKind: 'MutatingWebhookConfiguration',
-  dtoClass: admission.MutatingWebhookConfigurationDetails,
+  dtoName: 'MutatingWebhookConfigurationDetails',
   schema: {
     items: [
       {
@@ -271,7 +271,7 @@ export const mutatingWebhookDescriptor: OverviewDescriptor<MutatingWebhookConfig
 export const validatingWebhookDescriptor: OverviewDescriptor<ValidatingWebhookConfigurationDetails> =
   {
     displayKind: 'ValidatingWebhookConfiguration',
-    dtoClass: admission.ValidatingWebhookConfigurationDetails,
+    dtoName: 'ValidatingWebhookConfigurationDetails',
     schema: {
       items: [
         {

@@ -1,4 +1,4 @@
-//go:build !dev
+//go:build production
 
 package backend
 

@@ -43,7 +43,7 @@ const renderEndpoints = (d: ServiceDetails): React.ReactNode => {
 
 export const serviceDescriptor: OverviewDescriptor<ServiceDetails> = {
   displayKind: 'Service',
-  dtoClass: service.ServiceDetails,
+  dtoName: 'ServiceDetails',
   schema: {
     showSelector: true,
     items: [

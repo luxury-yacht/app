@@ -3,46 +3,22 @@
 
 // eslint-disable-next-line @typescript-eslint/ban-ts-comment
 // @ts-ignore: Unused imports
-import { Create as $Create } from "@wailsio/runtime";
-
-// eslint-disable-next-line @typescript-eslint/ban-ts-comment
-// @ts-ignore: Unused imports
 import * as types$0 from "../types/models.js";
 
 /**
  * NodeCondition represents a node condition.
  */
-export class NodeCondition {
+export interface NodeCondition {
     "kind": string;
     "status": string;
     "reason"?: string;
     "message"?: string;
-
-    /** Creates a new NodeCondition instance. */
-    constructor($$source: Partial<NodeCondition> = {}) {
-        if (!("kind" in $$source)) {
-            this["kind"] = "";
-        }
-        if (!("status" in $$source)) {
-            this["status"] = "";
-        }
-
-        Object.assign(this, $$source);
-    }
-
-    /**
-     * Creates a new NodeCondition instance from a string or object.
-     */
-    static createFrom($$source: any = {}): NodeCondition {
-        let $$parsedSource = typeof $$source === 'string' ? JSON.parse($$source) : $$source;
-        return new NodeCondition($$parsedSource as Partial<NodeCondition>);
-    }
 }
 
 /**
  * NodeDetails represents comprehensive node information for the object panel.
  */
-export class NodeDetails {
+export interface NodeDetails {
     "name": string;
     "status": string;
     "statusState"?: string;
@@ -78,168 +54,18 @@ export class NodeDetails {
     "cpu": string;
     "memory": string;
     "pods": string;
-    "conditions": NodeCondition[];
-    "taints"?: NodeTaint[];
-    "labels"?: { [_ in string]?: string };
-    "annotations"?: { [_ in string]?: string };
-    "podsList"?: types$0.PodSimpleInfo[];
-
-    /** Creates a new NodeDetails instance. */
-    constructor($$source: Partial<NodeDetails> = {}) {
-        if (!("name" in $$source)) {
-            this["name"] = "";
-        }
-        if (!("status" in $$source)) {
-            this["status"] = "";
-        }
-        if (!("unschedulable" in $$source)) {
-            this["unschedulable"] = false;
-        }
-        if (!("roles" in $$source)) {
-            this["roles"] = "";
-        }
-        if (!("internalIP" in $$source)) {
-            this["internalIP"] = "";
-        }
-        if (!("hostname" in $$source)) {
-            this["hostname"] = "";
-        }
-        if (!("architecture" in $$source)) {
-            this["architecture"] = "";
-        }
-        if (!("os" in $$source)) {
-            this["os"] = "";
-        }
-        if (!("osImage" in $$source)) {
-            this["osImage"] = "";
-        }
-        if (!("kernelVersion" in $$source)) {
-            this["kernelVersion"] = "";
-        }
-        if (!("containerRuntime" in $$source)) {
-            this["containerRuntime"] = "";
-        }
-        if (!("kubeletVersion" in $$source)) {
-            this["kubeletVersion"] = "";
-        }
-        if (!("cpuCapacity" in $$source)) {
-            this["cpuCapacity"] = "";
-        }
-        if (!("cpuAllocatable" in $$source)) {
-            this["cpuAllocatable"] = "";
-        }
-        if (!("memoryCapacity" in $$source)) {
-            this["memoryCapacity"] = "";
-        }
-        if (!("memoryAllocatable" in $$source)) {
-            this["memoryAllocatable"] = "";
-        }
-        if (!("podsCapacity" in $$source)) {
-            this["podsCapacity"] = "";
-        }
-        if (!("podsAllocatable" in $$source)) {
-            this["podsAllocatable"] = "";
-        }
-        if (!("podsCount" in $$source)) {
-            this["podsCount"] = 0;
-        }
-        if (!("restarts" in $$source)) {
-            this["restarts"] = 0;
-        }
-        if (!("cpuRequests" in $$source)) {
-            this["cpuRequests"] = "";
-        }
-        if (!("cpuLimits" in $$source)) {
-            this["cpuLimits"] = "";
-        }
-        if (!("memRequests" in $$source)) {
-            this["memRequests"] = "";
-        }
-        if (!("memLimits" in $$source)) {
-            this["memLimits"] = "";
-        }
-        if (!("kind" in $$source)) {
-            this["kind"] = "";
-        }
-        if (!("cpu" in $$source)) {
-            this["cpu"] = "";
-        }
-        if (!("memory" in $$source)) {
-            this["memory"] = "";
-        }
-        if (!("pods" in $$source)) {
-            this["pods"] = "";
-        }
-        if (!("conditions" in $$source)) {
-            this["conditions"] = [];
-        }
-
-        Object.assign(this, $$source);
-    }
-
-    /**
-     * Creates a new NodeDetails instance from a string or object.
-     */
-    static createFrom($$source: any = {}): NodeDetails {
-        const $$createField35_0 = $$createType1;
-        const $$createField36_0 = $$createType3;
-        const $$createField37_0 = $$createType4;
-        const $$createField38_0 = $$createType4;
-        const $$createField39_0 = $$createType6;
-        let $$parsedSource = typeof $$source === 'string' ? JSON.parse($$source) : $$source;
-        if ("conditions" in $$parsedSource) {
-            $$parsedSource["conditions"] = $$createField35_0($$parsedSource["conditions"]);
-        }
-        if ("taints" in $$parsedSource) {
-            $$parsedSource["taints"] = $$createField36_0($$parsedSource["taints"]);
-        }
-        if ("labels" in $$parsedSource) {
-            $$parsedSource["labels"] = $$createField37_0($$parsedSource["labels"]);
-        }
-        if ("annotations" in $$parsedSource) {
-            $$parsedSource["annotations"] = $$createField38_0($$parsedSource["annotations"]);
-        }
-        if ("podsList" in $$parsedSource) {
-            $$parsedSource["podsList"] = $$createField39_0($$parsedSource["podsList"]);
-        }
-        return new NodeDetails($$parsedSource as Partial<NodeDetails>);
-    }
+    "conditions": NodeCondition[] | null;
+    "taints"?: NodeTaint[] | null;
+    "labels"?: { [_ in string]?: string } | null;
+    "annotations"?: { [_ in string]?: string } | null;
+    "podsList"?: types$0.PodSimpleInfo[] | null;
 }
 
 /**
  * NodeTaint represents a node taint.
  */
-export class NodeTaint {
+export interface NodeTaint {
     "key": string;
     "value"?: string;
     "effect": string;
-
-    /** Creates a new NodeTaint instance. */
-    constructor($$source: Partial<NodeTaint> = {}) {
-        if (!("key" in $$source)) {
-            this["key"] = "";
-        }
-        if (!("effect" in $$source)) {
-            this["effect"] = "";
-        }
-
-        Object.assign(this, $$source);
-    }
-
-    /**
-     * Creates a new NodeTaint instance from a string or object.
-     */
-    static createFrom($$source: any = {}): NodeTaint {
-        let $$parsedSource = typeof $$source === 'string' ? JSON.parse($$source) : $$source;
-        return new NodeTaint($$parsedSource as Partial<NodeTaint>);
-    }
 }
-
-// Private type creation functions
-const $$createType0 = NodeCondition.createFrom;
-const $$createType1 = $Create.Array($$createType0);
-const $$createType2 = NodeTaint.createFrom;
-const $$createType3 = $Create.Array($$createType2);
-const $$createType4 = $Create.Map($Create.Any, $Create.Any);
-const $$createType5 = types$0.PodSimpleInfo.createFrom;
-const $$createType6 = $Create.Array($$createType5);

@@ -34,30 +34,6 @@ func TestLoadDotEnvAllowsMissingFile(t *testing.T) {
 	require.NoError(t, LoadDotEnv(filepath.Join(t.TempDir(), ".env")))
 }
 
-func TestNewBuildConfigFromDotEnvLoadsBackendDSNBeforeConfigCapture(t *testing.T) {
-	previousDSN, hadPreviousDSN := os.LookupEnv("SENTRY_BACKEND_DSN")
-	require.NoError(t, os.Unsetenv("SENTRY_BACKEND_DSN"))
-	t.Cleanup(func() {
-		if hadPreviousDSN {
-			require.NoError(t, os.Setenv("SENTRY_BACKEND_DSN", previousDSN))
-			return
-		}
-		require.NoError(t, os.Unsetenv("SENTRY_BACKEND_DSN"))
-	})
-
-	envPath := filepath.Join(t.TempDir(), ".env")
-	require.NoError(t, os.WriteFile(
-		envPath,
-		[]byte("SENTRY_BACKEND_DSN=https://runtime@example.com/2\n"),
-		0o600,
-	))
-	t.Chdir("..")
-
-	config, err := NewBuildConfigFromDotEnv(envPath)
-	require.NoError(t, err)
-	require.Equal(t, "https://runtime@example.com/2", config.SentryDSN)
-}
-
 func TestNewBuildConfigFromDotEnvRejectsMalformedFile(t *testing.T) {
 	envPath := filepath.Join(t.TempDir(), ".env")
 	require.NoError(t, os.WriteFile(

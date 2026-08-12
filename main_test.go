@@ -103,3 +103,9 @@ func TestApplicationCompositionOwnsOneNamedWindowMenuAndService(t *testing.T) {
 	require.Equal(t, mainWindowName, window.Name())
 	require.Len(t, composition.application.Config().Services, 1)
 }
+
+func TestMainWindowStartsVisible(t *testing.T) {
+	options := mainWindowOptions(nil)
+
+	require.False(t, options.Hidden)
+}

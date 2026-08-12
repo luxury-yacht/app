@@ -2,7 +2,6 @@ package main
 
 import (
 	"embed"
-	"runtime"
 	"strings"
 	"time"
 
@@ -59,6 +58,37 @@ type compositionOptions struct {
 	SingleInstance bool
 }
 
+func mainWindowOptions(nativeMenu *application.Menu) application.WebviewWindowOptions {
+	return application.WebviewWindowOptions{
+		Name:             mainWindowName,
+		Title:            "Luxury Yacht",
+		Width:            1200,
+		Height:           800,
+		MinWidth:         1100,
+		MinHeight:        600,
+		URL:              "/",
+		BackgroundColour: application.NewRGB(30, 30, 30),
+		BackgroundType:   application.BackgroundTypeTransparent,
+		Mac: application.MacWindow{
+			TitleBar: application.MacTitleBar{
+				AppearsTransparent:   true,
+				FullSizeContent:      true,
+				HideTitle:            true,
+				HideToolbarSeparator: true,
+			},
+		},
+		Windows: application.WindowsWindow{
+			Theme: application.SystemDefault,
+		},
+		Linux: application.LinuxWindow{
+			Menu: nativeMenu,
+		},
+		UseApplicationMenu: true,
+		Zoom:               1,
+		ZoomControlEnabled: false,
+	}
+}
+
 func newApplicationComposition(reporter sentryreporting.Reporter, options compositionOptions) *applicationComposition {
 	var backendApp *backend.App
 	secondLaunch := newSecondLaunchCoordinator(application.InvokeAsync)
@@ -92,39 +122,7 @@ func newApplicationComposition(reporter sentryreporting.Reporter, options compos
 		return backend.CreateMenu(backendApp)
 	})
 
-	startHidden := true
-	if runtime.GOOS == "linux" {
-		startHidden = false
-	}
-	mainWindow := wailsApp.Window.NewWithOptions(application.WebviewWindowOptions{
-		Name:             mainWindowName,
-		Title:            "Luxury Yacht",
-		Width:            1200,
-		Height:           800,
-		MinWidth:         1100,
-		MinHeight:        600,
-		Hidden:           startHidden,
-		URL:              "/",
-		BackgroundColour: application.NewRGB(30, 30, 30),
-		BackgroundType:   application.BackgroundTypeTransparent,
-		Mac: application.MacWindow{
-			TitleBar: application.MacTitleBar{
-				AppearsTransparent:   true,
-				FullSizeContent:      true,
-				HideTitle:            true,
-				HideToolbarSeparator: true,
-			},
-		},
-		Windows: application.WindowsWindow{
-			Theme: application.SystemDefault,
-		},
-		Linux: application.LinuxWindow{
-			Menu: nativeMenu,
-		},
-		UseApplicationMenu: true,
-		Zoom:               1,
-		ZoomControlEnabled: false,
-	})
+	mainWindow := wailsApp.Window.NewWithOptions(mainWindowOptions(nativeMenu))
 
 	mainWindow.OnWindowEvent(events.Common.WindowRuntimeReady, func(*application.WindowEvent) {
 		backendApp.WindowRuntimeReady()

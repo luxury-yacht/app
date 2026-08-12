@@ -3,16 +3,12 @@
 
 // eslint-disable-next-line @typescript-eslint/ban-ts-comment
 // @ts-ignore: Unused imports
-import { Create as $Create } from "@wailsio/runtime";
-
-// eslint-disable-next-line @typescript-eslint/ban-ts-comment
-// @ts-ignore: Unused imports
 import * as types$0 from "../types/models.js";
 // eslint-disable-next-line @typescript-eslint/ban-ts-comment
 // @ts-ignore: Unused imports
 import * as v1$0 from "../../../../../../k8s.io/apimachinery/pkg/apis/meta/v1/models.js";
 
-export class JobDetails {
+export interface JobDetails {
     /**
      * Basic information
      */
@@ -49,90 +45,23 @@ export class JobDetails {
     /**
      * Selector and labels
      */
-    "selector"?: { [_ in string]?: string };
-    "labels"?: { [_ in string]?: string };
-    "annotations"?: { [_ in string]?: string };
+    "selector"?: { [_ in string]?: string } | null;
+    "labels"?: { [_ in string]?: string } | null;
+    "annotations"?: { [_ in string]?: string } | null;
 
     /**
      * Pod template information
      */
-    "containers"?: types$0.PodDetailInfoContainer[];
+    "containers"?: types$0.PodDetailInfoContainer[] | null;
 
     /**
      * Conditions
      */
-    "conditions"?: string[];
+    "conditions"?: string[] | null;
 
     /**
      * Related pods
      */
-    "pods"?: types$0.PodSimpleInfo[];
+    "pods"?: types$0.PodSimpleInfo[] | null;
     "podMetricsSummary"?: types$0.PodMetricsSummary | null;
-
-    /** Creates a new JobDetails instance. */
-    constructor($$source: Partial<JobDetails> = {}) {
-        if (!("kind" in $$source)) {
-            this["kind"] = "";
-        }
-        if (!("name" in $$source)) {
-            this["name"] = "";
-        }
-        if (!("namespace" in $$source)) {
-            this["namespace"] = "";
-        }
-        if (!("status" in $$source)) {
-            this["status"] = "";
-        }
-        if (!("details" in $$source)) {
-            this["details"] = "";
-        }
-
-        Object.assign(this, $$source);
-    }
-
-    /**
-     * Creates a new JobDetails instance from a string or object.
-     */
-    static createFrom($$source: any = {}): JobDetails {
-        const $$createField21_0 = $$createType0;
-        const $$createField22_0 = $$createType0;
-        const $$createField23_0 = $$createType0;
-        const $$createField24_0 = $$createType2;
-        const $$createField25_0 = $$createType3;
-        const $$createField26_0 = $$createType5;
-        const $$createField27_0 = $$createType7;
-        let $$parsedSource = typeof $$source === 'string' ? JSON.parse($$source) : $$source;
-        if ("selector" in $$parsedSource) {
-            $$parsedSource["selector"] = $$createField21_0($$parsedSource["selector"]);
-        }
-        if ("labels" in $$parsedSource) {
-            $$parsedSource["labels"] = $$createField22_0($$parsedSource["labels"]);
-        }
-        if ("annotations" in $$parsedSource) {
-            $$parsedSource["annotations"] = $$createField23_0($$parsedSource["annotations"]);
-        }
-        if ("containers" in $$parsedSource) {
-            $$parsedSource["containers"] = $$createField24_0($$parsedSource["containers"]);
-        }
-        if ("conditions" in $$parsedSource) {
-            $$parsedSource["conditions"] = $$createField25_0($$parsedSource["conditions"]);
-        }
-        if ("pods" in $$parsedSource) {
-            $$parsedSource["pods"] = $$createField26_0($$parsedSource["pods"]);
-        }
-        if ("podMetricsSummary" in $$parsedSource) {
-            $$parsedSource["podMetricsSummary"] = $$createField27_0($$parsedSource["podMetricsSummary"]);
-        }
-        return new JobDetails($$parsedSource as Partial<JobDetails>);
-    }
 }
-
-// Private type creation functions
-const $$createType0 = $Create.Map($Create.Any, $Create.Any);
-const $$createType1 = types$0.PodDetailInfoContainer.createFrom;
-const $$createType2 = $Create.Array($$createType1);
-const $$createType3 = $Create.Array($Create.Any);
-const $$createType4 = types$0.PodSimpleInfo.createFrom;
-const $$createType5 = $Create.Array($$createType4);
-const $$createType6 = types$0.PodMetricsSummary.createFrom;
-const $$createType7 = $Create.Nullable($$createType6);

@@ -3,73 +3,15 @@
 
 // eslint-disable-next-line @typescript-eslint/ban-ts-comment
 // @ts-ignore: Unused imports
-import { Create as $Create } from "@wailsio/runtime";
-
-// eslint-disable-next-line @typescript-eslint/ban-ts-comment
-// @ts-ignore: Unused imports
 import * as types$0 from "../types/models.js";
 
-export class RoleBindingDetails {
+export interface RoleBindingDetails {
     "kind": string;
     "name": string;
     "namespace": string;
     "details": string;
     "roleRef": types$0.RoleRef;
-    "subjects": types$0.Subject[];
-    "labels"?: { [_ in string]?: string };
-    "annotations"?: { [_ in string]?: string };
-
-    /** Creates a new RoleBindingDetails instance. */
-    constructor($$source: Partial<RoleBindingDetails> = {}) {
-        if (!("kind" in $$source)) {
-            this["kind"] = "";
-        }
-        if (!("name" in $$source)) {
-            this["name"] = "";
-        }
-        if (!("namespace" in $$source)) {
-            this["namespace"] = "";
-        }
-        if (!("details" in $$source)) {
-            this["details"] = "";
-        }
-        if (!("roleRef" in $$source)) {
-            this["roleRef"] = (new types$0.RoleRef());
-        }
-        if (!("subjects" in $$source)) {
-            this["subjects"] = [];
-        }
-
-        Object.assign(this, $$source);
-    }
-
-    /**
-     * Creates a new RoleBindingDetails instance from a string or object.
-     */
-    static createFrom($$source: any = {}): RoleBindingDetails {
-        const $$createField4_0 = $$createType0;
-        const $$createField5_0 = $$createType2;
-        const $$createField6_0 = $$createType3;
-        const $$createField7_0 = $$createType3;
-        let $$parsedSource = typeof $$source === 'string' ? JSON.parse($$source) : $$source;
-        if ("roleRef" in $$parsedSource) {
-            $$parsedSource["roleRef"] = $$createField4_0($$parsedSource["roleRef"]);
-        }
-        if ("subjects" in $$parsedSource) {
-            $$parsedSource["subjects"] = $$createField5_0($$parsedSource["subjects"]);
-        }
-        if ("labels" in $$parsedSource) {
-            $$parsedSource["labels"] = $$createField6_0($$parsedSource["labels"]);
-        }
-        if ("annotations" in $$parsedSource) {
-            $$parsedSource["annotations"] = $$createField7_0($$parsedSource["annotations"]);
-        }
-        return new RoleBindingDetails($$parsedSource as Partial<RoleBindingDetails>);
-    }
+    "subjects": types$0.Subject[] | null;
+    "labels"?: { [_ in string]?: string } | null;
+    "annotations"?: { [_ in string]?: string } | null;
 }
-
-// Private type creation functions
-const $$createType0 = types$0.RoleRef.createFrom;
-const $$createType1 = types$0.Subject.createFrom;
-const $$createType2 = $Create.Array($$createType1);
-const $$createType3 = $Create.Map($Create.Any, $Create.Any);

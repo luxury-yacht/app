@@ -3,74 +3,15 @@
 
 // eslint-disable-next-line @typescript-eslint/ban-ts-comment
 // @ts-ignore: Unused imports
-import { Create as $Create } from "@wailsio/runtime";
-
-// eslint-disable-next-line @typescript-eslint/ban-ts-comment
-// @ts-ignore: Unused imports
-import * as resourcemodel$0 from "../../resourcemodel/models.js";
-// eslint-disable-next-line @typescript-eslint/ban-ts-comment
-// @ts-ignore: Unused imports
 import * as types$0 from "../types/models.js";
 
-export class RoleDetails {
+export interface RoleDetails {
     "kind": string;
     "name": string;
     "namespace": string;
     "details": string;
-    "rules": types$0.PolicyRule[];
-    "labels"?: { [_ in string]?: string };
-    "annotations"?: { [_ in string]?: string };
-    "usedByRoleBindings"?: types$0.ObjectRef[];
-
-    /** Creates a new RoleDetails instance. */
-    constructor($$source: Partial<RoleDetails> = {}) {
-        if (!("kind" in $$source)) {
-            this["kind"] = "";
-        }
-        if (!("name" in $$source)) {
-            this["name"] = "";
-        }
-        if (!("namespace" in $$source)) {
-            this["namespace"] = "";
-        }
-        if (!("details" in $$source)) {
-            this["details"] = "";
-        }
-        if (!("rules" in $$source)) {
-            this["rules"] = [];
-        }
-
-        Object.assign(this, $$source);
-    }
-
-    /**
-     * Creates a new RoleDetails instance from a string or object.
-     */
-    static createFrom($$source: any = {}): RoleDetails {
-        const $$createField4_0 = $$createType1;
-        const $$createField5_0 = $$createType2;
-        const $$createField6_0 = $$createType2;
-        const $$createField7_0 = $$createType4;
-        let $$parsedSource = typeof $$source === 'string' ? JSON.parse($$source) : $$source;
-        if ("rules" in $$parsedSource) {
-            $$parsedSource["rules"] = $$createField4_0($$parsedSource["rules"]);
-        }
-        if ("labels" in $$parsedSource) {
-            $$parsedSource["labels"] = $$createField5_0($$parsedSource["labels"]);
-        }
-        if ("annotations" in $$parsedSource) {
-            $$parsedSource["annotations"] = $$createField6_0($$parsedSource["annotations"]);
-        }
-        if ("usedByRoleBindings" in $$parsedSource) {
-            $$parsedSource["usedByRoleBindings"] = $$createField7_0($$parsedSource["usedByRoleBindings"]);
-        }
-        return new RoleDetails($$parsedSource as Partial<RoleDetails>);
-    }
+    "rules": types$0.PolicyRule[] | null;
+    "labels"?: { [_ in string]?: string } | null;
+    "annotations"?: { [_ in string]?: string } | null;
+    "usedByRoleBindings"?: types$0.ObjectRef[] | null;
 }
-
-// Private type creation functions
-const $$createType0 = types$0.PolicyRule.createFrom;
-const $$createType1 = $Create.Array($$createType0);
-const $$createType2 = $Create.Map($Create.Any, $Create.Any);
-const $$createType3 = resourcemodel$0.ResourceRef.createFrom;
-const $$createType4 = $Create.Array($$createType3);

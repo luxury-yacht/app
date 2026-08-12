@@ -3,98 +3,21 @@
 
 // eslint-disable-next-line @typescript-eslint/ban-ts-comment
 // @ts-ignore: Unused imports
-import { Create as $Create } from "@wailsio/runtime";
-
-// eslint-disable-next-line @typescript-eslint/ban-ts-comment
-// @ts-ignore: Unused imports
-import * as resourcemodel$0 from "../../resourcemodel/models.js";
-// eslint-disable-next-line @typescript-eslint/ban-ts-comment
-// @ts-ignore: Unused imports
 import * as types$0 from "../types/models.js";
 
 /**
  * GatewayDetails is the detail payload for a Gateway.
  */
-export class GatewayDetails {
+export interface GatewayDetails {
     "kind": string;
     "name": string;
     "namespace": string;
     "details": string;
     "gatewayClassRef": types$0.ObjectRef;
-    "addresses"?: string[];
-    "listeners"?: types$0.GatewayListenerDetails[];
-    "conditions"?: types$0.ConditionState[];
+    "addresses"?: string[] | null;
+    "listeners"?: types$0.GatewayListenerDetails[] | null;
+    "conditions"?: types$0.ConditionState[] | null;
     "summary": types$0.ConditionsSummary;
-    "labels"?: { [_ in string]?: string };
-    "annotations"?: { [_ in string]?: string };
-
-    /** Creates a new GatewayDetails instance. */
-    constructor($$source: Partial<GatewayDetails> = {}) {
-        if (!("kind" in $$source)) {
-            this["kind"] = "";
-        }
-        if (!("name" in $$source)) {
-            this["name"] = "";
-        }
-        if (!("namespace" in $$source)) {
-            this["namespace"] = "";
-        }
-        if (!("details" in $$source)) {
-            this["details"] = "";
-        }
-        if (!("gatewayClassRef" in $$source)) {
-            this["gatewayClassRef"] = (new types$0.ObjectRef());
-        }
-        if (!("summary" in $$source)) {
-            this["summary"] = (new types$0.ConditionsSummary());
-        }
-
-        Object.assign(this, $$source);
-    }
-
-    /**
-     * Creates a new GatewayDetails instance from a string or object.
-     */
-    static createFrom($$source: any = {}): GatewayDetails {
-        const $$createField4_0 = $$createType0;
-        const $$createField5_0 = $$createType1;
-        const $$createField6_0 = $$createType3;
-        const $$createField7_0 = $$createType5;
-        const $$createField8_0 = $$createType6;
-        const $$createField9_0 = $$createType7;
-        const $$createField10_0 = $$createType7;
-        let $$parsedSource = typeof $$source === 'string' ? JSON.parse($$source) : $$source;
-        if ("gatewayClassRef" in $$parsedSource) {
-            $$parsedSource["gatewayClassRef"] = $$createField4_0($$parsedSource["gatewayClassRef"]);
-        }
-        if ("addresses" in $$parsedSource) {
-            $$parsedSource["addresses"] = $$createField5_0($$parsedSource["addresses"]);
-        }
-        if ("listeners" in $$parsedSource) {
-            $$parsedSource["listeners"] = $$createField6_0($$parsedSource["listeners"]);
-        }
-        if ("conditions" in $$parsedSource) {
-            $$parsedSource["conditions"] = $$createField7_0($$parsedSource["conditions"]);
-        }
-        if ("summary" in $$parsedSource) {
-            $$parsedSource["summary"] = $$createField8_0($$parsedSource["summary"]);
-        }
-        if ("labels" in $$parsedSource) {
-            $$parsedSource["labels"] = $$createField9_0($$parsedSource["labels"]);
-        }
-        if ("annotations" in $$parsedSource) {
-            $$parsedSource["annotations"] = $$createField10_0($$parsedSource["annotations"]);
-        }
-        return new GatewayDetails($$parsedSource as Partial<GatewayDetails>);
-    }
+    "labels"?: { [_ in string]?: string } | null;
+    "annotations"?: { [_ in string]?: string } | null;
 }
-
-// Private type creation functions
-const $$createType0 = resourcemodel$0.ResourceRef.createFrom;
-const $$createType1 = $Create.Array($Create.Any);
-const $$createType2 = types$0.GatewayListenerDetails.createFrom;
-const $$createType3 = $Create.Array($$createType2);
-const $$createType4 = types$0.ConditionState.createFrom;
-const $$createType5 = $Create.Array($$createType4);
-const $$createType6 = types$0.ConditionsSummary.createFrom;
-const $$createType7 = $Create.Map($Create.Any, $Create.Any);

@@ -42,7 +42,7 @@ const renderResourceLink = (
 
 export const eventDescriptor: OverviewDescriptor<EventDetails> = {
   displayKind: 'Event',
-  dtoClass: events.EventDetails,
+  dtoName: 'EventDetails',
   schema: {
     items: [
       { kind: 'status', label: EVENT_LABELS.type },
