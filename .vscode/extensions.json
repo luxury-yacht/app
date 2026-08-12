@@ -19,9 +19,6 @@
     "yzhang.markdown-all-in-one",
 
     // YAML
-    "redhat.vscode-yaml",
-
-    // Docker (if you use it)
-    "ms-azuretools.vscode-docker"
+    "redhat.vscode-yaml"
   ]
 }

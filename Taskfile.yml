@@ -40,11 +40,6 @@ tasks:
     cmds:
       - wails3 dev -config ./build/config.yml -port {{.VITE_PORT}}
 
-  setup:docker:
-    desc: Builds Docker image for cross-compilation (~800MB download)
-    cmds:
-      - task: common:setup:docker
-
   build:server:
     desc: Builds the application in server mode (no GUI, HTTP server only)
     cmds:
@@ -54,16 +49,6 @@ tasks:
     desc: Runs the application in server mode
     cmds:
       - task: common:run:server
-
-  build:docker:
-    desc: Builds a Docker image for server mode deployment
-    cmds:
-      - task: common:build:docker
-
-  run:docker:
-    desc: Builds and runs the Docker image
-    cmds:
-      - task: common:run:docker
 
   clean:all:
     desc: Cleans repository build output, frontend output, and frontend dependencies

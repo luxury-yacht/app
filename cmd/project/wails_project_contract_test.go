@@ -244,6 +244,33 @@ func TestWailsBuildPreparesProjectMetadataWithoutMage(t *testing.T) {
 	}
 }
 
+func TestWailsProjectBuildsOnlyOnNativePlatformRunners(t *testing.T) {
+	for _, path := range []string{
+		"Taskfile.yml",
+		"build/Taskfile.yml",
+		"build/darwin/Taskfile.yml",
+		"build/linux/Taskfile.yml",
+		"build/windows/Taskfile.yml",
+	} {
+		taskfile := readTestFile(t, repositoryPath(strings.Split(path, "/")...))
+		require.NotContainsf(t, strings.ToLower(taskfile), "docker", "%s must not expose Docker builds", path)
+	}
+
+	_, err := os.Stat(repositoryPath("build", "docker"))
+	require.ErrorIs(t, err, os.ErrNotExist)
+
+	extensions := readTestFile(t, repositoryPath(".vscode", "extensions.json"))
+	require.NotContains(t, strings.ToLower(extensions), "docker")
+}
+
+func TestBuildDownloadsAreHardened(t *testing.T) {
+	appImageBuild := readTestFile(t, repositoryPath("build", "linux", "appimage", "build.sh"))
+	require.NotContains(t, appImageBuild, "wget ")
+	require.Contains(t, appImageBuild, `--proto "=https"`)
+	require.NotContains(t, appImageBuild, "/continuous/")
+	require.Contains(t, appImageBuild, "sha256sum -c -")
+}
+
 func TestWailsProjectGeneratesModernMacOSIconAssets(t *testing.T) {
 	taskfile, err := os.ReadFile(repositoryPath("build", "Taskfile.yml"))
 	require.NoError(t, err)
