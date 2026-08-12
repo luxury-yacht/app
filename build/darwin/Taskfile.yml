@@ -134,6 +134,14 @@ tasks:
     cmds:
       - task: create:dmg
 
+  install:unsigned:
+    summary: Builds and installs the app locally without Developer ID signing or notarization
+    platforms: [darwin]
+    deps:
+      - task: package
+    cmds:
+      - go run ./cmd/project install-unsigned
+
   create:dmg:
     summary: Creates a configurable `.dmg` from the `.app` bundle
     platforms: [darwin]

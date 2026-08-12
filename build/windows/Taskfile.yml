@@ -103,6 +103,14 @@ tasks:
     vars:
       INSTALL_SCOPE: '{{.INSTALL_SCOPE | default "machine"}}'
 
+  install:unsigned:
+    summary: Builds and installs the app to the current user's Programs directory
+    platforms: [windows]
+    deps:
+      - task: build
+    cmds:
+      - go run ./cmd/project install-unsigned
+
   generate:syso:
     summary: Generates Windows `.syso` file
     dir: build

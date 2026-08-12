@@ -109,6 +109,14 @@ tasks:
       - task: create:rpm
       - task: create:aur
 
+  install:unsigned:
+    summary: Builds and installs the app to the user-local binary directory
+    platforms: [linux]
+    deps:
+      - task: build
+    cmds:
+      - go run ./cmd/project install-unsigned
+
   create:appimage:
     summary: Creates an AppImage
     dir: build/linux/appimage

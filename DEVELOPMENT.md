@@ -83,6 +83,18 @@ wails3 package
 Use the generated artifact appropriate for the host platform. During active
 development, use `wails3 dev` instead of installing a package.
 
+## Install an Unsigned Local Build
+
+Build and install a local copy without Developer ID signing, notarization, or
+package signing:
+
+```bash
+wails3 task install:unsigned
+```
+
+The task installs to `/Applications` on macOS, `~/.local/bin` on Linux, and the
+current user's `Programs` directory on Windows.
+
 ## Versions
 
 The app version and development-tool versions have separate canonical sources. Scripts and workflows must read these sources rather than resolving versions dynamically.

@@ -25,6 +25,11 @@ tasks:
     cmds:
       - task: '{{.GOOS}}:package'
 
+  install:unsigned:
+    desc: Builds and installs an unsigned local copy of the application
+    cmds:
+      - task: '{{OS}}:install:unsigned'
+
   run:
     desc: Runs the application
     cmds:

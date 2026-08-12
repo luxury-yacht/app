@@ -40,6 +40,23 @@ func TestWailsProjectUsesFreshInitBuildDefaults(t *testing.T) {
 	require.NotContains(t, string(config), "build/bin")
 }
 
+func TestUnsignedInstallTaskPreservesMageWorkflow(t *testing.T) {
+	rootTaskfile := readTestFile(t, repositoryPath("Taskfile.yml"))
+	require.Contains(t, rootTaskfile, "install:unsigned:")
+	require.Contains(t, rootTaskfile, "task: '{{OS}}:install:unsigned'")
+
+	for platform, buildDependency := range map[string]string{
+		"darwin":  "package",
+		"linux":   "build",
+		"windows": "build",
+	} {
+		taskfile := readTestFile(t, repositoryPath("build", platform, "Taskfile.yml"))
+		require.Contains(t, taskfile, "install:unsigned:")
+		require.Contains(t, taskfile, "task: "+buildDependency)
+		require.Contains(t, taskfile, "go run ./cmd/project install-unsigned")
+	}
+}
+
 func TestPlatformBuildManifestsUseCanonicalProjectMetadata(t *testing.T) {
 	nfpmConfig := readTestFile(t, repositoryPath("build", "linux", "nfpm", "nfpm.yaml"))
 	require.Contains(t, nfpmConfig, `version: "__APP_VERSION__"`)
@@ -286,6 +303,7 @@ func TestProjectCommandOwnsItsImplementation(t *testing.T) {
 		"clean.go",
 		"command.go",
 		"go_modules.go",
+		"install_unsigned.go",
 		"platform_manifests.go",
 		"project_config.go",
 		"quality.go",

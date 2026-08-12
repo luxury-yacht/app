@@ -14,7 +14,7 @@ func main() {
 
 func run(args []string) error {
 	if len(args) != 1 {
-		return fmt.Errorf("usage: project <backend-coverage|binary-name|bindings|build-manifests|build-metadata|clean-all|clean-build|clean-frontend|config|fmt|go-mod-update|go-mod-update-check|release-app|release-site|reset|version|windows-version>")
+		return fmt.Errorf("usage: project <backend-coverage|binary-name|bindings|build-manifests|build-metadata|clean-all|clean-build|clean-frontend|config|fmt|go-mod-update|go-mod-update-check|install-unsigned|release-app|release-site|reset|version|windows-version>")
 	}
 
 	switch args[0] {
@@ -57,6 +57,8 @@ func run(args []string) error {
 		return updateDirectGoModules()
 	case "go-mod-update-check":
 		return checkDirectGoModuleUpdates()
+	case "install-unsigned":
+		return runUnsignedInstall()
 	case "release-app":
 		if err := loadDotEnv(projectEnvPath); err != nil {
 			return err
