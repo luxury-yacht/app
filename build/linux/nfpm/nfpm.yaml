@@ -9,7 +9,7 @@ platform: "linux"
 version: "__APP_VERSION__"
 section: "default"
 priority: "extra"
-maintainer: ${GIT_COMMITTER_NAME} <${GIT_COMMITTER_EMAIL}>
+maintainer: "__APP_MAINTAINER__"
 description: "__APP_DESCRIPTION__"
 vendor: "__APP_COMPANY__"
 homepage: "https://luxury-yacht.app"

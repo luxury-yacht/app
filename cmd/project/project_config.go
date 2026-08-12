@@ -39,7 +39,8 @@ type projectMetadata struct {
 		Version           string `yaml:"version"`
 	} `yaml:"info"`
 	LuxuryYacht struct {
-		BetaExpiryDays int `yaml:"betaExpiryDays"`
+		BetaExpiryDays int    `yaml:"betaExpiryDays"`
+		Maintainer     string `yaml:"maintainer"`
 	} `yaml:"luxuryYacht"`
 }
 

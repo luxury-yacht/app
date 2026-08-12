@@ -63,6 +63,8 @@ func TestPlatformBuildManifestsUseCanonicalProjectMetadata(t *testing.T) {
 	require.Contains(t, nfpmConfig, `name: "__APP_BINARY_NAME__"`)
 	require.Contains(t, nfpmConfig, `description: "__APP_DESCRIPTION__"`)
 	require.Contains(t, nfpmConfig, `vendor: "__APP_COMPANY__"`)
+	require.Contains(t, nfpmConfig, `maintainer: "__APP_MAINTAINER__"`)
+	require.NotContains(t, nfpmConfig, "GIT_COMMITTER")
 
 	linuxDesktop := readTestFile(t, repositoryPath("build", "linux", "desktop"))
 	require.Contains(t, linuxDesktop, "Name=__APP_NAME__")
@@ -176,6 +178,7 @@ func TestPlatformBuildManifestsUseCanonicalProjectMetadata(t *testing.T) {
 		metadata.Info.Description,
 		metadata.Info.Copyright,
 		metadata.Info.Comments,
+		metadata.LuxuryYacht.Maintainer,
 	}
 	hardcodedVersion := regexp.MustCompile(`(^|[^0-9.])` + regexp.QuoteMeta(metadata.Info.Version) + `([^0-9.]|$)`)
 	for _, path := range manifestPaths {

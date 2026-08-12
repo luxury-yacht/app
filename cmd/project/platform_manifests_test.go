@@ -19,6 +19,7 @@ func TestRenderProjectPlatformManifestsUsesConfigMetadata(t *testing.T) {
 	require.NoError(t, os.WriteFile(firstSource, []byte(
 		appBinaryNamePlaceholder+"|"+
 			appCompanyPlaceholder+"|"+
+			appMaintainerPlaceholder+"|"+
 			appNamePlaceholder+"|"+
 			appIdentifierPlaceholder+"|"+
 			appDescriptionPlaceholder+"|"+
@@ -37,10 +38,26 @@ func TestRenderProjectPlatformManifestsUsesConfigMetadata(t *testing.T) {
 
 	first, err := os.ReadFile(firstOutput)
 	require.NoError(t, err)
-	require.Equal(t, "test-app|Test Company|Test App|app.test.desktop|Test description|Copyright Test|Test comments|9.8.7.6", string(first))
+	require.Equal(t, "test-app|Test Company|Test Maintainer <maintainer@example.com>|Test App|app.test.desktop|Test description|Copyright Test|Test comments|9.8.7.6", string(first))
 	second, err := os.ReadFile(secondOutput)
 	require.NoError(t, err)
 	require.Equal(t, "9.8.7-beta.6/9.8.7-beta.6", string(second))
+}
+
+func TestRenderNFPMManifestUsesConfiguredMaintainer(t *testing.T) {
+	outputPath := filepath.Join(t.TempDir(), "nfpm.yaml")
+	require.NoError(t, renderProjectPlatformManifests(
+		repositoryPath("build", "config.yml"),
+		[]platformManifestSpec{{
+			sourcePath: repositoryPath("build", "linux", "nfpm", "nfpm.yaml"),
+			outputPath: outputPath,
+		}},
+	))
+
+	manifest := readTestFile(t, outputPath)
+	require.Contains(t, manifest, `maintainer: "Luxury Yacht <info@luxury-yacht.app>"`)
+	require.NotContains(t, manifest, appMaintainerPlaceholder)
+	require.NotContains(t, manifest, "GIT_COMMITTER")
 }
 
 func TestRenderProjectPlatformManifestsRejectsTemplateWithoutMetadataPlaceholder(t *testing.T) {
@@ -78,6 +95,17 @@ func TestRenderProjectPlatformManifestsRejectsInvalidInputs(t *testing.T) {
 		err := renderProjectPlatformManifests(configPath, nil)
 
 		require.ErrorContains(t, err, "wails config has no info.productName")
+	})
+
+	t.Run("missing maintainer", func(t *testing.T) {
+		root := t.TempDir()
+		configPath := filepath.Join(root, "config.yml")
+		config := strings.ReplaceAll(string(testPlatformMetadataConfig("9.8.7")), "  maintainer: Test Maintainer <maintainer@example.com>\n", "")
+		require.NoError(t, os.WriteFile(configPath, []byte(config), 0o600))
+
+		err := renderProjectPlatformManifests(configPath, nil)
+
+		require.ErrorContains(t, err, "wails config has no luxuryYacht.maintainer")
 	})
 
 	t.Run("missing template", func(t *testing.T) {
@@ -136,5 +164,8 @@ func testPlatformMetadataConfig(version string) []byte {
   description: Test description
   copyright: Copyright Test
   comments: Test comments
-  version: ` + version + "\n")
+  version: ` + version + `
+luxuryYacht:
+  maintainer: Test Maintainer <maintainer@example.com>
+`)
 }

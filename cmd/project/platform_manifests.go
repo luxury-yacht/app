@@ -14,6 +14,7 @@ const (
 	appCopyrightPlaceholder   = "__APP_COPYRIGHT__"
 	appDescriptionPlaceholder = "__APP_DESCRIPTION__"
 	appIdentifierPlaceholder  = "__APP_IDENTIFIER__"
+	appMaintainerPlaceholder  = "__APP_MAINTAINER__"
 	appNamePlaceholder        = "__APP_NAME__"
 	appVersionPlaceholder     = "__APP_VERSION__"
 	platformManifestDirectory = "build-manifests"
@@ -146,6 +147,7 @@ func platformManifestReplacements(metadata projectMetadata) ([]platformManifestR
 		{configKey: "info.copyright", placeholder: appCopyrightPlaceholder, value: metadata.Info.Copyright},
 		{configKey: "info.description", placeholder: appDescriptionPlaceholder, value: metadata.Info.Description},
 		{configKey: "info.productIdentifier", placeholder: appIdentifierPlaceholder, value: metadata.Info.ProductIdentifier},
+		{configKey: "luxuryYacht.maintainer", placeholder: appMaintainerPlaceholder, value: metadata.LuxuryYacht.Maintainer},
 		{configKey: "info.productName", placeholder: appNamePlaceholder, value: metadata.Info.ProductName},
 		{configKey: "info.version", placeholder: appVersionPlaceholder, value: metadata.Info.Version},
 		{configKey: "info.version", placeholder: windowsVersionPlaceholder, value: windowsVersion},

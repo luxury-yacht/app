@@ -18,6 +18,7 @@ info:
 # Repository-owned release metadata that is not part of Wails' platform metadata.
 luxuryYacht:
   betaExpiryDays: 30
+  maintainer: "Luxury Yacht <info@luxury-yacht.app>"
 
 # Dev mode configuration
 dev_mode:
