@@ -8,7 +8,7 @@
  * `context`, not the DTO.
  */
 
-import { daemonset, deployment, replicaset, statefulset } from '@wailsjs/go/models';
+import { daemonset, deployment, replicaset, statefulset } from '@core/backend-api/models';
 import type React from 'react';
 import { act } from 'react';
 import * as ReactDOM from 'react-dom/client';

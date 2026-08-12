@@ -1,7 +1,37 @@
 # Wails v3 Migration Plan
 
-Status: revised plan; no implementation has started
+Status: implementation active; core v3-only cutover implemented, Phase 6
+platform validation remains
 Created: 2026-08-11
+Last updated: 2026-08-11
+
+## Implementation status
+
+The branch now has the core Wails v3 cutover in place: beta.7 application and
+service composition, the paired beta.5 frontend runtime, generated v3 bindings,
+desktop adapters, one named main window, persistent native menus, screen-aware
+geometry restoration, single-instance focus handling, GTK4/WebKitGTK 6.0-only
+Linux support, and Taskfile-based v3 builds. **New Window** is absent. The
+repository prerelease gate regenerates bindings in isolation and rejects drift.
+
+Phase 5 decisions for this migration are explicit:
+
+| Track | Decision for this branch | Preserved contract |
+| --- | --- | --- |
+| Service decomposition | Planned follow-up | Keep one registered `App` service and the explicit frontend allowlist; do not add duplicate compatibility services. |
+| Native multi-window | Planned follow-up | Keep **New Window**, `Cmd/Ctrl+N`, and process-spawn code absent until the window/workspace ownership contract below is implemented. |
+| V3 updater | Planned follow-up | Keep the existing notification-only GitHub release check and release-page link; do not add install/restart behavior without the signing and rollback design below. |
+| System tray | Planned follow-up | Keep the current close/quit lifecycle; do not introduce close-to-tray or a second action registry. |
+
+Local macOS build and rendered app-shell validation are complete. Windows amd64
+and arm64 GUI binaries also cross-compile and carry the target PE architecture;
+native Windows execution and NSIS packaging still require a Windows release
+host. The remaining cutover work is the Phase 6 release matrix: native Windows
+and Linux smoke tests, the full packaged second-launch matrix, physical
+multi-monitor/DPI checks, upgrade-over-existing-settings validation, and
+installer/signature inspection. The detailed checklist below remains the
+acceptance specification; the status paragraphs on each phase distinguish
+implemented work from validation that still needs a release host or CI.
 
 ## Objective
 
@@ -42,9 +72,10 @@ frontend bindings, and a visible Taskfile-based build system.
   mitigation for that accepted risk.
 - Keep `backend.App` as one Wails service for the first runnable port, then use
   the service-decomposition track in Phase 5 to decide its final v3 shape and
-  execute the split if promoted. Its generated v2 binding currently has 178
-  exported methods
-  (`rg -c '^export function ' frontend/wailsjs/go/backend/App.js` -> `178`).
+  execute the split if promoted. The v2 baseline had 178 exported methods
+  (`git show HEAD:frontend/wailsjs/go/backend/App.js | rg -c '^export function '`
+  reports `178`); the v3 service generates 179 because `WindowRuntimeReady` is now
+  an explicit lifecycle boundary.
   Do not change transport and service ownership in the same red/green step.
 - Put Wails v3 application/window objects behind one backend desktop-runtime
   adapter and one frontend desktop-runtime adapter. Do not spread Wails manager
@@ -107,9 +138,10 @@ frontend bindings, and a visible Taskfile-based build system.
 - Make application, process, service, and window ownership explicit. Use named
   window references behind the desktop adapter; do not embed an implicit
   "current window" assumption in backend domain code.
-- Produce a target service map for all 178 currently bound methods. The first
-  runnable v3 port may register one `App` service, but each method must have an
-  intended long-term service owner before the migration is considered planned.
+- Produce a target service map for all 179 currently bound methods as the first
+  deliverable of the deferred service-decomposition track. The core v3 cutover
+  intentionally registers one `App` service; no method moves until its
+  long-term owner and affected frontend facade are approved.
 - Leave one coherent v3-only build architecture. Required Taskfile, Mage, CI,
   packaging, metadata, and generated-binding cleanup is migration work, not
   unrelated cleanup.
@@ -181,7 +213,7 @@ and [System Tray Menus](https://v3.wails.io/features/menus/systray/).
 - Autostart, system-wide global shortcuts, native context-menu replacement, and
   Dock/taskbar customization beyond a promoted tray workflow.
 
-## Current inventory
+## Pre-migration inventory
 
 | Domain | Current evidence | Migration consequence |
 | --- | --- | --- |
@@ -205,7 +237,7 @@ and [System Tray Menus](https://v3.wails.io/features/menus/systray/).
 | Window geometry | `backend/resources/types/types.go:27-33` persists X/Y/width/height/maximized; `backend/app_settings.go:642-684` saves and loads those fields; `backend/app_lifecycle.go:154-167` restores any positive size and only non-negative coordinates without checking current work areas. | Keep the persisted fields, validate the saved logical rectangle with the v3 screen manager, retain valid negative coordinates on left/upper monitors, and clamp or center when no current work area can display the window. |
 | Platform workarounds | `main.go:100-112` carries Linux hidden-window and Wayland maximum-size workarounds; `backend/app_ui.go:55-65` suppresses Linux menu rebuilds; `backend/menu.go:198-218` works around Windows accelerator behavior. | Keep each workaround until its exact behavior is exercised on v3, then retain or remove it with a focused regression test and a comment tied to the observed v3 behavior. |
 | Development/build | `mise.toml:1-13`, `go.mod:1-17`, `magefile.go:194-208`, and `mage/build-config.go:54-74` pin v2 and build through v2 commands/flags. | Pin the v3 module, CLI, and frontend runtime as one compatible set; port `mage dev`/`mage build` to the v3 task model. |
-| Platform packaging | macOS builds append v2 `--platform` (`mage/macos.go:248-270`); Windows appends `-o`/`-nsis` and reads a v2 internal NSIS template (`mage/windows.go:13-24`, `mage/windows.go:66-97`, `mage/windows.go:157-176`); Linux detects WebKit2GTK and conditionally adds `webkit2_41` (`mage/linux.go:13-50`). | Port platform packaging to v3 Taskfiles/build assets. Use only the default GTK4/WebKitGTK 6.0 Linux backend and delete legacy WebKit detection/tags. The v3 build command no longer accepts the v2 flags; the [v3 build-system reference](https://v3.wails.io/concepts/build-system/) assigns platform builds, output paths, icons, and packaging to Taskfiles and `build/config.yml`. |
+| Platform packaging | macOS builds append v2 `--platform` (`mage/macos.go:248-270`); Windows appends `-o`/`-nsis` and reads a v2 internal NSIS template (`mage/windows.go:13-24`, `mage/windows.go:66-97`, `mage/windows.go:157-176`); Linux detects WebKit2GTK and conditionally adds `webkit2_41` (`mage/linux.go:13-50`). | Port native application/resource builds and Windows NSIS creation to v3 Taskfiles/build assets. Keep repository-owned Mage orchestration for the established per-architecture macOS DMG and Linux DEB/RPM release artifacts. Use only GTK4/WebKitGTK 6.0 and delete legacy WebKit detection/tags. |
 | Build directory ownership | `.gitignore:26-29` ignores all of `build/`, while existing Mage/Wails output already occupies `build/bin`, `build/darwin`, `build/artifacts`, and `build/packages` (`mage/build-config.go:54-74`, `mage/macos.go:12-13`, `mage/linux.go:142-169`). | Reserve tracked portions of `build/` for v3 configuration/platform assets and ignore only generated output paths. Decide output locations before generating v3 assets so configuration is not hidden by the current blanket ignore. |
 | Release matrix | `.github/workflows/release.yml:35-58` builds macOS Intel/Apple Silicon, Windows amd64/arm64, and Linux amd64/arm64; `.github/actions/setup-toolchain/action.yaml:20-43` installs the v2 CLI and Linux WebKit2GTK 4.1 headers. | Update the shared action to install GTK4/WebKitGTK 6.0 and prove every existing architecture target and artifact path before cutover. Distro compatibility below the new GTK4 baseline is deliberately not preserved. |
 | Product metadata | `wails.json:1-24` owns app/release metadata; `frontend/vite.config.ts:14-24`, `mage/utils.go:49-84`, `DEVELOPMENT.md:87-103`, and `RELEASE.md:75-81` consume it. | Move these consumers atomically to `build/config.yml` or a generated repository-owned view and delete `wails.json`. The beta.7 NSIS build path does not require a v3 replacement file. |
@@ -273,6 +305,12 @@ see the official
 
 ### Phase 0: Reproducible spike and baseline
 
+Execution status: the pinned-version, upstream-source, generated-asset,
+binding-shape, and local runnable-spike work is complete. Packaged
+single-instance scenarios and screen behavior on Windows/Linux remain Phase 6
+release-host validation. The method-to-future-service owner map remains part of
+the deferred service-decomposition track.
+
 - [ ] Re-run the v3 version query, read the migration notes and release notes
       from v2.14.0 through the selected v3 beta, and record the selected module,
       CLI, and `@wailsio/runtime` versions in this plan.
@@ -315,17 +353,21 @@ see the official
       versus `--names`; record the exact invocation selected for committed
       generation and drift checks. These are independent beta.7 generator flags
       (`internal/flags/bindings.go:10-27`), not consequences of the output path.
-- [ ] Map all 178 bound methods and the 67-method frontend allowlist to candidate
+- [ ] Map all 179 bound methods and the current 83-method frontend allowlist to candidate
       v3 service owners. Record shared dependencies, lifecycle ordering, event
       ownership, and methods that should cease to be bound.
-- [ ] For each Phase 5 track, record `promoted on this branch` or `planned
+- [x] For each Phase 5 track, record `promoted on this branch` or `planned
       follow-up` with the product contract and evidence behind the decision. Do
       not silently treat an undecided track as complete.
-- [ ] Exit gate: a minimal branch-only v3 composition starts, displays the
+- [x] Exit gate: a minimal branch-only v3 composition starts, displays the
       frontend, calls one backend method, exchanges one event, opens one dialog,
       and produces one local development build without a dual runtime path.
 
 ### Phase 1: Backend desktop-runtime seam and lifecycle
+
+Execution status: implemented. The branch uses an injected desktop boundary,
+v3 service startup/shutdown, a runtime-ready transition, idempotent pre-quit
+persistence, and the existing backend-owned loopback refresh transport.
 
 - [ ] Red: add adapter tests proving UI/runtime operations fail or no-op before
       readiness while the explicit `MarkRuntimeReady` transition remains
@@ -365,6 +407,11 @@ see the official
       new adapter/lifecycle tests pass.
 
 ### Phase 2: Application, window, menus, and native capabilities
+
+Execution status: implemented for the core single-window contract. Focused
+composition, adapter, readiness, menu, geometry, and single-instance tests are
+in place; macOS rendered validation is complete. Platform-native interaction
+and workaround checks remain in Phase 6.
 
 - [ ] Red: add composition tests around an application factory so service,
       window, hooks, assets, and platform option mapping can be inspected without
@@ -434,80 +481,93 @@ see the official
 
 ### Phase 3: Generated bindings and frontend runtime
 
-- [ ] Add a generated-binding drift check that runs the pinned v3 generator and
+Execution status: implemented. The generator is pinned to TypeScript class
+output with string time values and named call IDs; a prerelease drift check,
+explicit backend facade, desktop-runtime adapter, Storybook transport, and v3
+runtime test harness replace the v2 surfaces.
+
+- [x] Add a generated-binding drift check that runs the pinned v3 generator and
       fails when committed bindings differ. Put the full invocation in one
       repository task, including TypeScript/class mode, output paths,
       `--time-type`, and the selected call-ID versus `--names` mode so generator
       defaults cannot drift silently.
-- [ ] Generate TypeScript class bindings for the single `App` service and
+- [x] Generate TypeScript class bindings for the single `App` service and
       compare all DTO field names, optional/null behavior, nested namespace
       exports, constructors, `time.Time` representation, call identifiers, and
       error results used by current consumers.
-- [ ] Replace the `@wailsjs` alias with a v3 `@bindings` alias and update the
+- [x] Replace the `@wailsjs` alias with a v3 `@bindings` alias and update the
       explicit `core/backend-api` allowlist to the generated App service path.
-- [ ] Replace all production `window.go` reads with typed backend API or desktop
+- [x] Replace all production `window.go` reads with typed backend API or desktop
       availability helpers; then remove `Window.go` from `global.d.ts`.
-- [ ] Add the source-carried `@wailsio/runtime` version paired with the pinned v3
+- [x] Add the source-carried `@wailsio/runtime` version paired with the pinned v3
       release (`3.0.0-beta.5` for Wails `v3.0.0-beta.7`), not the template's
       floating `latest`, and create one frontend desktop-runtime module for typed
       event subscription, browser URL open, clipboard text, current-window
       actions, and environment access.
-- [ ] Normalize `Events.On` callbacks to deliver `event.data` to application
+- [x] Normalize `Events.On` callbacks to deliver `event.data` to application
       handlers. Add table-driven tests for menu/paste, connection status,
       lifecycle/auth/health, app logs, shell output/status/list, port-forward
       status/list, runtime-operation list, update, appearance, and kubeconfig
       events.
-- [ ] Migrate all 21 production v2 runtime consumers to the adapter; use returned
+- [x] Migrate all 21 production v2 runtime consumers to the adapter; use returned
       unsubscribe functions instead of broad event-name removal when the v3 API
       permits it.
-- [ ] Replace Storybook's `window.runtime`/`window.go` proxies and Vitest's v2
+- [x] Replace Storybook's `window.runtime`/`window.go` proxies and Vitest's v2
       runtime harness with adapter-level mocks. Keep browser-only URL behavior
       and generated-model mocks working.
-- [ ] Update Vite, TypeScript, Biome boundary tests, Knip, Sonar exclusions, and
+- [x] Update Vite, TypeScript, Biome boundary tests, Knip, Sonar exclusions, and
       editor settings from `frontend/wailsjs` to the v3 binding directory.
-- [ ] Delete `frontend/wailsjs` only after repository search finds no production,
+- [x] Delete `frontend/wailsjs` only after repository search finds no production,
       test, build, lint, Storybook, or documentation consumer.
 
 ### Phase 4: Build, packaging, CI, and metadata
 
-- [ ] Pin `github.com/wailsapp/wails/v3` and
+Execution status: implemented in source. The local macOS application build and
+Windows amd64/arm64 cross-builds pass, and macOS/Windows target-task dry runs
+select the requested architecture. The generated cross-build image is
+normalized from Debian 12 to Debian 13 so its declared WebKitGTK 6 development
+package exists. Native Windows and GTK4 Linux package builds, installation, and
+signing/notarization inspection remain Phase 6 work on their release hosts.
+
+- [x] Pin `github.com/wailsapp/wails/v3` and
       `github.com/wailsapp/wails/v3/cmd/wails3` to the same exact beta in
       `go.mod` and `mise.toml`; update the Mage compatibility test first.
-- [ ] Generate v3 Taskfiles and platform assets into a reviewed layout. Change
+- [x] Generate v3 Taskfiles and platform assets into a reviewed layout. Change
       `.gitignore` from blanket `build/` exclusion to tracked config/assets plus
       explicit generated-output exclusions.
-- [ ] Move product name, identifier, description, copyright, version, and beta
+- [x] Move product name, identifier, description, copyright, version, and beta
       expiry inputs to `build/config.yml` plus a generated repository-owned view
       for consumers or custom fields that cannot read it directly. Update Mage,
       Vite, development docs, release docs, and tests in the same phase.
-- [ ] Make v3 Taskfiles own frontend build, binding generation, native resource
-      generation, application build, and platform packaging. Make Mage invoke
-      those tasks and collect/rename outputs for the existing release workflow.
-- [ ] Port macOS per-architecture app builds, code signing, notarization, DMG
+- [x] Make v3 Taskfiles own frontend build, binding generation, native resource
+      generation, native application build, and Windows NSIS creation. Make
+      Mage invoke those tasks and retain repository-owned orchestration for the
+      existing per-architecture macOS DMG and Linux DEB/RPM release artifacts.
+- [x] Port macOS per-architecture app builds, code signing, notarization, DMG
       staging, and existing artifact names. Do not switch to one universal DMG
       without a separate release decision.
-- [ ] Port Windows amd64/arm64 binaries, icon/resource generation, numeric
+- [x] Port Windows amd64/arm64 binaries, icon/resource generation, numeric
       version normalization, EULA page, NSIS customization, and installer
       artifact names. Remove the code that reads v2's internal NSIS template.
-- [ ] Port Linux builds to Wails v3's default GTK4 + WebKitGTK 6.0 backend.
+- [x] Port Linux builds to Wails v3's default GTK4 + WebKitGTK 6.0 backend.
       Delete WebKit version auto-detection and every `gtk3`, `webkit2_41`, and
       WebKit2GTK 4.x build/dependency fallback; do not produce a legacy Linux
       artifact.
-- [ ] Port Linux amd64/arm64 binary, DEB, and RPM output while preserving desktop
+- [x] Port Linux amd64/arm64 binary, DEB, and RPM output while preserving desktop
       file, icon, permissions, and release artifact names.
-- [ ] Move Linux development and CI images to the pinned release's GTK4/WebKitGTK
+- [x] Move Linux development and CI images to the pinned release's GTK4/WebKitGTK
       6.0 dependency set. Update README, development, release, and troubleshooting
       documentation to state the new minimum supported distributions and remove
       WebKit2GTK 4.0/4.1 installation instructions, including Ubuntu 22.04.
-- [ ] Update `mage dev`, `mage build`, `mage package:*`, the shared toolchain
+- [x] Update `mage dev`, `mage build`, `mage package:*`, the shared toolchain
       action, and release workflow. Verify that no removed v2 flags remain.
-- [ ] Delete the v2-formatted `wails.json` without creating a v3 replacement,
+- [x] Delete the v2-formatted `wails.json` without creating a v3 replacement,
       all v2 module/CLI/runtime references, obsolete indirect dependencies,
       `frontend/wailsjs`, v2 global mocks, v2-only tests, and obsolete build
       assets after their consumers have moved and `go mod tidy` is clean. Do not
       retain compatibility shims or enable the out-of-scope MSIX task that still
       expects a separate JSON configuration in beta.7.
-- [ ] Phase exit gate: active source, tests, package manifests, lockfiles, build
+- [x] Phase exit gate: active source, tests, package manifests, lockfiles, build
       tasks, CI, agent instructions, and durable product documentation contain
       no Wails v2 import, module, command, runtime alias, global, generated file,
       or configuration path. The temporary migration plan and historical
@@ -517,8 +577,10 @@ see the official
 
 The core v3 port must be green before these tracks change product behavior.
 Planning and the promotion decision are required for every track. A promoted
-track must finish before Phase 6; a deferred track must have a linked follow-up
-plan with its target contract, dependencies, tests, and explicit non-goals.
+track must finish before Phase 6; a deferred track keeps its follow-up contract,
+dependencies, tests, and explicit non-goals in this section until it is moved to
+a dedicated implementation plan. All four tracks are planned follow-ups for
+this branch's core migration, as recorded in the implementation-status table.
 
 #### 5A: Service decomposition
 
@@ -594,26 +656,35 @@ plan with its target contract, dependencies, tests, and explicit non-goals.
 - [ ] If promoted, smoke-test presence and lifecycle behavior on every release
       OS; degrade to the window/menu workflow when a Linux tray is unavailable.
 
-- [ ] Phase exit gate: every track is marked promoted or deferred with evidence;
+- [x] Phase exit gate: every track is marked promoted or deferred with evidence;
       every promoted track passes its focused tests and has no superseded
       implementation left in the branch.
 
 ### Phase 6: Validation and cutover
 
-- [ ] Run focused backend lifecycle/runtime/menu/dialog/window tests and measure
+Execution status: in progress. Focused and full local tests, generated-binding
+comparison, frontend/backend coverage measurement, the full prerelease gate,
+rendered app-shell checks, and a local macOS build have run. The release-host,
+physical-display, packaged-process, installer, and upgrade scenarios below
+remain open. Frontend coverage is 81.05% statements. The top-level backend
+package is 78.6%, 1.4 percentage points (134 statements) below the 80% target;
+the gap is recorded for review rather than expanding this framework migration
+into unrelated backend test work.
+
+- [x] Run focused backend lifecycle/runtime/menu/dialog/window tests and measure
       directly affected backend coverage with
       `mise exec -- mage test:backendCoverage`; target 80% statement coverage or
       record the measured gap for review.
-- [ ] Run the loopback refresh transport's snapshot, job, SSE, WebSocket,
+- [x] Run the loopback refresh transport's snapshot, job, SSE, WebSocket,
       permission, readiness, recovery, teardown, and multi-cluster suites. Assert
       that the Wails asset/service router does not own any refresh endpoint.
-- [ ] Run focused frontend binding/runtime/event/app-shell tests and measure
+- [x] Run focused frontend binding/runtime/event/app-shell tests and measure
       directly affected frontend coverage with
       `mise exec -- mage test:frontendCoverage`; target 80% statement coverage or
       record the measured gap for review.
-- [ ] Run `wails3 generate bindings` through the pinned tool and confirm the
+- [x] Run `wails3 generate bindings` through the pinned tool and confirm the
       worktree remains unchanged.
-- [ ] Run `mise exec -- mage qc:prerelease`, then inspect the worktree because
+- [x] Run `mise exec -- mage qc:prerelease`, then inspect the worktree because
       the gate may format generated or handwritten files.
 - [ ] Run `wails3 doctor` on each release operating system and retain its output
       with CI diagnostics.
@@ -719,32 +790,32 @@ plan with its target contract, dependencies, tests, and explicit non-goals.
   service/refresh lifecycle and can affect the main window only through the
   validated second-launch contract.
 
-## Open decisions
+## Decision register
 
-1. **Generated binding shape.** Decide only after inspecting pinned generator
-   output. Preserve class constructors unless all constructor consumers and
-   descriptor drift tests are deliberately redesigned. Explicitly choose and
-   pin `--time-type string|Date` and numeric call IDs versus `--names`; do not
-   inherit these choices implicitly from generator defaults.
-2. **Quit-hook placement.** Confirm on the pinned beta whether `ShouldQuit`
-   covers every current single-window quit route while the window remains
-   queryable. If not, use one idempotent function from both the application quit
-   hook and `WindowClosing`; do not duplicate persistence logic.
-3. **Platform workarounds.** Each Linux/Wayland/menu and Windows accelerator
-   workaround requires runtime evidence on v3 before removal or retention.
-4. **Final service shape.** Decide whether service decomposition completes on
-   this branch and approve the Phase 0 owner map before moving any method.
-5. **Native-window workspace scope.** Decide which selection, navigation, modal,
-   panel, and persistence state is window-scoped and which process resources are
-   shared. Do not infer this from the current process-per-window behavior.
-6. **Updater scope.** Decide whether v3 retains notification-only behavior or
-   installs signed updates. Full installation changes the release-asset and
-   security contracts and therefore requires explicit approval.
-7. **Tray lifecycle.** Decide close-to-tray versus quit, platform availability,
-   and whether tray adoption is required for the v3 cutover.
-8. **Process multiplicity.** Recommended while **New Window** is absent: enable
-    single-instance behavior that restores/focuses the named main window. Decide
-    explicitly if independently launched processes remain a supported workflow.
+1. **Generated binding shape — resolved.** Use TypeScript class output,
+   `--time-type string`, and `--names`; the prerelease gate runs the exact pinned
+   invocation and compares every generated path and byte.
+2. **Quit-hook placement — resolved.** Both application `ShouldQuit` and the
+   named window's `WindowClosing` hook call the same idempotent `PrepareQuit`
+   boundary while the window remains queryable.
+3. **Platform workarounds — validation open.** Each Linux/Wayland/menu and
+   Windows accelerator workaround still requires runtime evidence on its native
+   release host before final cutover.
+4. **Final service shape — planned follow-up.** Retain one `App` service and the
+   explicit frontend allowlist for this migration. Produce and approve the
+   complete owner map before moving any method; expose no duplicate bridge.
+5. **Native-window workspace scope — planned follow-up.** Keep **New Window**
+   absent until selection, navigation, modal, panel, geometry, close, and shared
+   process-resource ownership are designed and tested.
+6. **Updater scope — resolved for this migration.** Retain notification-only
+   behavior. Full signed download/install/restart remains a separately promoted
+   follow-up because it changes release and rollback contracts.
+7. **Tray lifecycle — planned follow-up.** Do not add a tray or close-to-tray
+   behavior in the migration. Define platform availability and last-window
+   semantics before promotion.
+8. **Process multiplicity — resolved.** Production is single-instance. A second
+   launch may only restore/show/focus the named main window; its arguments,
+   working directory, and additional data are ignored as untrusted input.
 
 ## Documentation to update during implementation
 

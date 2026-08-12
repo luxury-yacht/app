@@ -166,10 +166,10 @@ vi.mock('@ui/shortcuts', () => ({
   useKeyboardSurface: vi.fn(),
 }));
 
-vi.mock('@wailsjs/go/backend/App', () => ({
+vi.mock('@core/backend-api', () => ({
   RunObjectAction: vi.fn().mockResolvedValue({}),
 }));
-vi.mock('@wailsjs/go/models', () => ({ types: {} }));
+vi.mock('@core/backend-api/models', () => ({ types: {} }));
 vi.mock('@utils/errorHandler', () => ({ errorHandler: { handle: vi.fn() } }));
 
 import { CurrentObjectPanelContext } from '@modules/object-panel/hooks/useObjectPanel';

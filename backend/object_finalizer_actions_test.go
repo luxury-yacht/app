@@ -143,7 +143,7 @@ func TestRemoveObjectFinalizerActionRejectsInvalidDirectPathsAndMissingClusters(
 	if err := app.removeObjectFinalizerAction(target, "example.com/remove", objectFinalizerPathSpec); err == nil {
 		t.Fatal("expected Namespace target error")
 	}
-	if err := NewApp().removeObjectFinalizerAction(
+	if err := NewApp(nil).removeObjectFinalizerAction(
 		objectActionTarget("missing", "", "v1", "ConfigMap", "default", "sample"),
 		"example.com/remove",
 		objectFinalizerPathMetadata,
@@ -154,8 +154,9 @@ func TestRemoveObjectFinalizerActionRejectsInvalidDirectPathsAndMissingClusters(
 
 func finalizerActionTestApp(t testing.TB, kubeClient *cgofake.Clientset, dynamicClient *dynamicfake.FakeDynamicClient) *App {
 	t.Helper()
-	app := NewApp()
-	app.setRuntimeContext(context.Background())
+	app := NewApp(nil)
+	app.setApplicationContext(context.Background())
+	app.markRuntimeReady()
 	registerTestClusterWithClients(app, "cluster-a", &clusterClients{
 		meta: ClusterMeta{ID: "cluster-a", Name: "cluster-a"}, kubeconfigPath: "/path", kubeconfigContext: "ctx",
 		client: kubeClient, dynamicClient: dynamicClient,

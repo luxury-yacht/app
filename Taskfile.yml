@@ -1,0 +1,35 @@
+version: '3'
+
+includes:
+  common: ./build/Taskfile.yml
+  windows: ./build/windows/Taskfile.yml
+  darwin: ./build/darwin/Taskfile.yml
+  linux: ./build/linux/Taskfile.yml
+
+vars:
+  APP_NAME: luxury-yacht
+  BIN_DIR: build/bin
+  PACKAGE_MANAGER: npm
+  VITE_PORT: '{{.WAILS_VITE_PORT | default 5173}}'
+  GOOS: '{{.GOOS | default OS}}'
+
+tasks:
+  build:
+    summary: Builds the application
+    cmds:
+      - task: '{{.GOOS}}:build'
+
+  package:
+    summary: Packages a production build of the application
+    cmds:
+      - task: '{{.GOOS}}:package'
+
+  run:
+    summary: Runs the application
+    cmds:
+      - task: '{{.GOOS}}:run'
+
+  dev:
+    summary: Runs the application in development mode
+    cmds:
+      - wails3 dev -config ./build/config.yml -port {{.VITE_PORT}}

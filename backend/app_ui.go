@@ -2,7 +2,6 @@ package backend
 
 import (
 	"fmt"
-	"runtime"
 
 	"github.com/luxury-yacht/app/backend/internal/logsources"
 )
@@ -53,16 +52,10 @@ func (a *App) ToggleObjectDiff() error {
 }
 
 func (a *App) UpdateMenu() {
-	if !a.runtimeAvailable() {
+	if !a.desktopAvailable() {
 		return
 	}
-	// On Linux, refreshing the menu rebuilds the GTK menubar without reattaching it,
-	// which invalidates the click callbacks and causes a nil dereference in Wails.
-	// Skip dynamic menu updates there to keep menu callbacks stable.
-	if runtime.GOOS == "linux" {
-		return
-	}
-	a.emitEvent("update-menu")
+	_ = a.desktop.RefreshMenu()
 }
 
 func (a *App) IsSidebarVisible() bool {

@@ -114,7 +114,7 @@ const autoRefreshLoadingState = vi.hoisted(() => ({
   suppressPassiveLoading: false,
 }));
 
-vi.mock('@wailsjs/go/backend/App', () => ({
+vi.mock('@core/backend-api', () => ({
   FetchContainerLogs: vi.fn(),
   GetContainerLogsScopeContainers: vi.fn(),
 }));

@@ -1,4 +1,4 @@
-import type { events } from '@wailsjs/go/models';
+import type { events } from '@core/backend-api/models';
 import type React from 'react';
 import { act } from 'react';
 import * as ReactDOM from 'react-dom/client';

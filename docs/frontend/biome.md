@@ -63,7 +63,7 @@ the module shape. The isolated rule checks the complete frontend with zero diagn
 Two resolution rules are deliberately not enabled:
 
 - `noUndeclaredDependencies` reports 1,688 diagnostics because Biome 2.5.3 treats configured
-  TypeScript/Vite aliases such as `@shared/components`, `@core/contexts`, and `@wailsjs/go` as npm
+  TypeScript/Vite aliases such as `@shared/components`, `@core/contexts`, and `@bindings` as npm
   package names. Adding those aliases to `package.json` would create fake dependency declarations.
 - `useImportExtensions` reports 3,699 diagnostics and requests source `.ts`/`.tsx` suffixes for
   relative and aliased imports. This frontend uses TypeScript `moduleResolution: bundler`; Vite,
@@ -122,9 +122,6 @@ gates. Revisit them when their rule semantics or the application architecture ch
   Most production uses intentionally name the browser owner (`window` for timers, viewport,
   storage, media queries, and Wails globals; `document` for DOM ownership). Replacing those with
   `globalThis` would erase environment intent without changing capability or portability.
-- `style.noNamespace`: both findings are in `.storybook/mocks/wailsModels.ts`, whose exported
-  `backend` and `types` namespaces intentionally reproduce the generated Wails model API in
-  Storybook. Flattening that mock would make stories differ from the runtime import contract.
 - `performance.noReExportAll`: the 12 findings include the generated refresh-contract facade and
   maintained broker/diagnostics/resource-metrics entry points. Explicitly mirroring every generated
   export would create a second registry that can drift; these boundaries intentionally re-export
@@ -172,7 +169,7 @@ plugin globs and backend-binding import patterns, not only the plugin source.
 
 The single disabled-rule scope is `style.noRestrictedImports` under
 `src/core/backend-api/**`. That facade must import the generated Wails App binding it isolates from
-application code. Boundary tests reject both relative and `@wailsjs` imports everywhere outside
+application code. Boundary tests reject direct generated-binding imports everywhere outside
 the facade and accept the same import inside the exact approved directory. Remove the override only
 when Biome can express an allowed entry point without disabling the rule for that directory.
 

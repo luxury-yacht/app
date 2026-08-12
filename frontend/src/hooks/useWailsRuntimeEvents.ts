@@ -12,6 +12,7 @@ import {
   type ConnectionStatusEvent,
   useConnectionStatusActions,
 } from '@/core/connection/connectionStatus';
+import { onEvent } from '@/core/desktop-runtime';
 
 /**
  * Health status for a cluster.
@@ -40,18 +41,6 @@ interface WailsRuntimeEventHandlers {
   onToggleObjectDiff: () => void;
 }
 
-const subscribeRuntimeEvent = (
-  runtime: WailsRuntime,
-  event: string,
-  handler: (...args: unknown[]) => void
-): (() => void) => {
-  const dispose = runtime.EventsOn?.(event, handler);
-  if (typeof dispose === 'function') {
-    return dispose;
-  }
-  return () => runtime.EventsOff?.(event, handler);
-};
-
 /**
  * Subscribes to Wails runtime events for UI actions (menu items, etc.)
  */
@@ -67,11 +56,6 @@ export function useWailsRuntimeEvents(handlers: WailsRuntimeEventHandlers): void
   } = handlers;
 
   useEffect(() => {
-    const runtime = window.runtime;
-    if (!runtime?.EventsOn) {
-      return;
-    }
-
     const eventHandlers: Array<[string, () => void]> = [
       ['open-settings', onOpenSettings],
       ['open-about', onOpenAbout],
@@ -82,9 +66,7 @@ export function useWailsRuntimeEvents(handlers: WailsRuntimeEventHandlers): void
       ['toggle-object-diff', onToggleObjectDiff],
     ];
 
-    const disposers = eventHandlers.map(([event, handler]) =>
-      subscribeRuntimeEvent(runtime, event, handler)
-    );
+    const disposers = eventHandlers.map(([event, handler]) => onEvent(event, handler));
 
     return () => {
       disposers.forEach((dispose) => {
@@ -109,17 +91,11 @@ export function useConnectionStatusListener(): void {
   const { updateFromEvent } = useConnectionStatusActions();
 
   useEffect(() => {
-    const runtime = window.runtime;
-    if (!runtime?.EventsOn) {
-      return;
-    }
-
-    const handleConnectionStatus = (...args: unknown[]) => {
-      const payload = (args[0] as ConnectionStatusEvent) || undefined;
+    const handleConnectionStatus = (payload?: ConnectionStatusEvent) => {
       updateFromEvent(payload);
     };
 
-    const dispose = subscribeRuntimeEvent(runtime, 'connection-status', handleConnectionStatus);
+    const dispose = onEvent('connection-status', handleConnectionStatus);
 
     return () => {
       dispose();

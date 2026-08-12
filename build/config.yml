@@ -1,0 +1,62 @@
+# This file contains the configuration for this project.
+# When you update `info` or `fileAssociations`, run `mage build-assets` to
+# refresh Wails-owned metadata and reapply the desktop-only asset contract.
+version: '3'
+
+# This information is used to generate the build assets.
+info:
+  companyName: "Luxury Yacht"
+  productName: "Luxury Yacht"
+  productIdentifier: "app.luxury-yacht.desktop"
+  description: "Luxury Yacht is a desktop app for managing Kubernetes clusters. Sail the seas of Kubernetes in style!"
+  copyright: "Copyright © 2025-2026 Luxury Yacht"
+  comments: "Luxury Yacht desktop application"
+  version: "1.11.6"
+
+# Repository-owned release metadata that is not part of Wails' platform metadata.
+luxuryYacht:
+  betaExpiryDays: 30
+
+# Dev mode configuration
+dev_mode:
+  root_path: .
+  log_level: warn
+  debounce: 1000
+  ignore:
+    dir:
+      - .git
+      - node_modules
+      - frontend
+      - build/bin
+    file:
+      - .DS_Store
+      - .gitignore
+      - .gitkeep
+      - "*_test.go"
+    watched_extension:
+      - "*.go"
+      - "*.js" # Watch for changes to JS/TS files included using the //wails:include directive.
+      - "*.ts" # The frontend directory will be excluded entirely by the setting above.
+    git_ignore: true
+  executes:
+    - cmd: wails3 build DEV=true
+      type: blocking
+    - cmd: wails3 task common:dev:frontend
+      type: background
+    - cmd: wails3 task run
+      type: primary
+
+# File Associations
+# More information at: https://v3.wails.io/noit/done/yet
+fileAssociations:
+#  - ext: wails
+#    name: Wails
+#    description: Wails Application File
+#    iconName: wailsFileIcon
+#    role: Editor
+#  - ext: jpg
+#    name: JPEG
+#    description: Image File
+#    iconName: jpegFileIcon
+#    role: Editor
+#    mimeType: image/jpeg  # (optional)

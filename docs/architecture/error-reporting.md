@@ -265,7 +265,7 @@ including its acknowledgement write, before deleting settings, so that worker
 cannot restore the previous ID after deletion.
 
 The registration flush has a two-second deadline, but it never runs on the
-pre-`wails.Run` initialization path and therefore cannot add that delay to app
+pre-`app.Run` initialization path and therefore cannot add that delay to app
 launch. Shutdown cancellation stops an in-flight registration. Enabling error
 reporting at runtime schedules the same background path rather than blocking
 the settings RPC.

@@ -51,6 +51,7 @@ func newTestAppWithDefaults(t *testing.T) *App {
 	t.Helper()
 	return &App{
 		logger:         NewLogger(100),
+		desktop:        &fakeDesktop{},
 		eventEmitter:   func(context.Context, string, ...interface{}) {},
 		sidebarVisible: true,
 		listenLoopback: defaultLoopbackListener,
@@ -69,7 +70,8 @@ func setTestConfigEnv(t *testing.T) {
 func TestClearAppStateRemovesCacheDir(t *testing.T) {
 	setTestConfigEnv(t)
 	app := newTestAppWithDefaults(t)
-	app.setRuntimeContext(context.Background())
+	app.setApplicationContext(context.Background())
+	app.markRuntimeReady()
 
 	// The app cache dir lives under the user cache dir (redirected into a temp
 	// dir by setTestConfigEnv). Seed the subdirs the three cache subsystems use
@@ -137,18 +139,10 @@ func TestAppLoadWindowSettingsReadsExistingFile(t *testing.T) {
 }
 
 func TestAppSaveWindowSettingsPreservesInMemoryKubeconfigSelection(t *testing.T) {
-	origGetPos := runtimeWindowGetPosition
-	origGetSize := runtimeWindowGetSize
-	origIsMax := runtimeWindowIsMaximised
-	t.Cleanup(func() {
-		runtimeWindowGetPosition = origGetPos
-		runtimeWindowGetSize = origGetSize
-		runtimeWindowIsMaximised = origIsMax
-	})
-
 	setTestConfigEnv(t)
 	app := newTestAppWithDefaults(t)
-	app.setRuntimeContext(context.Background())
+	app.setApplicationContext(context.Background())
+	app.markRuntimeReady()
 	app.appSettings = getDefaultAppSettings()
 	app.appSettings.SelectedKubeconfigs = []string{"/new/config:ctx-new"}
 
@@ -156,9 +150,9 @@ func TestAppSaveWindowSettingsPreservesInMemoryKubeconfigSelection(t *testing.T)
 	settings.Kubeconfig.Selected = []string{"/old/config:ctx-old"}
 	require.NoError(t, app.saveSettingsFile(settings))
 
-	runtimeWindowGetPosition = func(context.Context) (int, int) { return 10, 20 }
-	runtimeWindowGetSize = func(context.Context) (int, int) { return 900, 600 }
-	runtimeWindowIsMaximised = func(context.Context) bool { return false }
+	app.desktop = &fakeDesktop{mainWindowGeometry: func() (WindowGeometry, error) {
+		return WindowGeometry{X: 10, Y: 20, Width: 900, Height: 600}, nil
+	}}
 
 	require.NoError(t, app.SaveWindowSettings())
 
@@ -206,7 +200,7 @@ func TestErrorReportingPreferenceDefaultsEnabledInSettingsAndSchema(t *testing.T
 func TestErrorReportingPreferencePersistsBeforeApplyingRuntimeState(t *testing.T) {
 	setTestConfigEnv(t)
 	reporter := &recordingErrorReporter{}
-	app := NewApp(reporter)
+	app := NewApp(nil, reporter)
 	configPath, err := app.getSettingsFilePath()
 	require.NoError(t, err)
 
@@ -232,7 +226,7 @@ func TestErrorReportingPreferencePersistsBeforeApplyingRuntimeState(t *testing.T
 func TestInitializeErrorReportingHonorsPersistedOptOut(t *testing.T) {
 	setTestConfigEnv(t)
 	reporter := &recordingErrorReporter{}
-	app := NewApp(reporter)
+	app := NewApp(nil, reporter)
 	app.appSettings = getDefaultAppSettings()
 	app.appSettings.ErrorReportingEnabled = false
 	require.NoError(t, app.saveAppSettings())
@@ -249,7 +243,7 @@ func TestInitializeErrorReportingHonorsPersistedOptOut(t *testing.T) {
 func TestInitializeErrorReportingEnablesDefaultPreferenceAfterLoad(t *testing.T) {
 	setTestConfigEnv(t)
 	reporter := &recordingErrorReporter{}
-	app := NewApp(reporter)
+	app := NewApp(nil, reporter)
 
 	require.NoError(t, InitializeErrorReporting(app))
 	require.True(t, reporter.Enabled())
@@ -262,7 +256,7 @@ func TestInitializeErrorReportingEnablesDefaultPreferenceAfterLoad(t *testing.T)
 func TestInitializeErrorReportingKeepsReporterDisabledWhenSettingsCannotLoad(t *testing.T) {
 	setTestConfigEnv(t)
 	reporter := &recordingErrorReporter{enabled: true}
-	app := NewApp(reporter)
+	app := NewApp(nil, reporter)
 	configPath, err := app.getSettingsFilePath()
 	require.NoError(t, err)
 	require.NoError(t, os.WriteFile(configPath, []byte(`{"preferences":`), 0o644))
@@ -277,7 +271,7 @@ func TestInitializeErrorReportingKeepsReporterDisabledWhenSettingsCannotLoad(t *
 
 func TestSettingsRPCsSurfaceCorruptSettingsInsteadOfReturningDefaultOnValues(t *testing.T) {
 	setTestConfigEnv(t)
-	app := NewApp(&recordingErrorReporter{})
+	app := NewApp(nil, &recordingErrorReporter{})
 	configPath, err := app.getSettingsFilePath()
 	require.NoError(t, err)
 	require.NoError(t, os.WriteFile(configPath, []byte(`{"preferences":`), 0o644))
@@ -293,7 +287,7 @@ func TestSettingsRPCsSurfaceCorruptSettingsInsteadOfReturningDefaultOnValues(t *
 
 func TestInitializeErrorReportingAllowsMissingAppOrReporter(t *testing.T) {
 	require.NoError(t, InitializeErrorReporting(nil))
-	require.NoError(t, InitializeErrorReporting(NewApp()))
+	require.NoError(t, InitializeErrorReporting(NewApp(nil)))
 }
 
 func TestAppSaveAndLoadAppSettingsRoundTrip(t *testing.T) {
@@ -1099,8 +1093,9 @@ func TestApplySettingsSideEffectsDoesNotScheduleRegistrationAfterReporterFailure
 		recordingInstallationReporter: newRecordingInstallationReporter(true),
 		err:                           errors.New("forced reporter failure"),
 	}
-	app := NewApp(reporter)
-	app.setRuntimeContext(context.Background())
+	app := NewApp(nil, reporter)
+	app.setApplicationContext(context.Background())
+	app.markRuntimeReady()
 	settings := getDefaultAppSettings()
 	settings.ErrorReportingEnabled = true
 

@@ -120,7 +120,7 @@ vi.mock('@/core/data-access', async (importOriginal) => {
   };
 });
 
-vi.mock('@wailsjs/go/backend/App', () => ({
+vi.mock('@core/backend-api', () => ({
   RunObjectAction: vi.fn(),
 }));
 

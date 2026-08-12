@@ -265,9 +265,9 @@ vi.mock('@ui/shortcuts', () => ({
   useKeyboardSurface: vi.fn(),
 }));
 
-vi.mock('@wailsjs/go/backend/App', () => mockApp);
+vi.mock('@core/backend-api', () => mockApp);
 
-vi.mock('@wailsjs/go/models', () => ({
+vi.mock('@core/backend-api/models', () => ({
   types: {},
 }));
 

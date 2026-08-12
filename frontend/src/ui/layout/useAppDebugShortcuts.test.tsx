@@ -3,24 +3,22 @@ import * as ReactDOM from 'react-dom/client';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { useAppDebugShortcuts } from './useAppDebugShortcuts';
 
-const platformMocks = vi.hoisted(() => ({
-  isMacPlatform: vi.fn(() => true),
-  isWindowsPlatform: vi.fn(() => false),
+const runtimeMocks = vi.hoisted(() => ({
+  handlers: new Map<string, (...args: unknown[]) => void>(),
+  onEvent: vi.fn<(event: string, handler: (...args: unknown[]) => void) => void>(),
+  openDevTools: vi.fn(),
 }));
+const runtimeHandlers = runtimeMocks.handlers;
+const runtimeonEvent = runtimeMocks.onEvent;
 
-vi.mock('@/utils/platform', () => ({
-  isMacPlatform: platformMocks.isMacPlatform,
-  isWindowsPlatform: platformMocks.isWindowsPlatform,
+vi.mock('@core/desktop-runtime', () => ({
+  onEvent: (event: string, handler: (...args: unknown[]) => void) => {
+    runtimeMocks.onEvent(event, handler);
+    runtimeMocks.handlers.set(event, handler);
+    return () => runtimeMocks.handlers.delete(event);
+  },
+  openDevTools: () => runtimeMocks.openDevTools(),
 }));
-
-const runtimeHandlers = new Map<string, (...args: unknown[]) => void>();
-const runtimeEventsOn = vi.fn((event: string, handler: (...args: unknown[]) => void) => {
-  runtimeHandlers.set(event, handler);
-  return () => runtimeHandlers.delete(event);
-});
-const runtimeEventsOff = vi.fn((event: string) => {
-  runtimeHandlers.delete(event);
-});
 
 const renderHookHost = (handlers?: Partial<Parameters<typeof useAppDebugShortcuts>[0]>) => {
   const container = document.createElement('div');
@@ -59,20 +57,13 @@ const renderHookHost = (handlers?: Partial<Parameters<typeof useAppDebugShortcut
 describe('useAppDebugShortcuts', () => {
   beforeEach(() => {
     runtimeHandlers.clear();
-    runtimeEventsOn.mockClear();
-    runtimeEventsOff.mockClear();
-    platformMocks.isMacPlatform.mockReturnValue(true);
-    platformMocks.isWindowsPlatform.mockReturnValue(false);
-    window.runtime = {
-      EventsOn: runtimeEventsOn,
-      EventsOff: runtimeEventsOff,
-    } as unknown as WailsRuntime;
+    runtimeonEvent.mockClear();
+    runtimeMocks.openDevTools.mockReset();
+    runtimeMocks.openDevTools.mockResolvedValue(undefined);
   });
 
   afterEach(() => {
     document.body.innerHTML = '';
-    window.runtime = undefined;
-    (window as Window & { WailsInvoke?: (message: string) => void }).WailsInvoke = undefined;
   });
 
   it('toggles each debug overlay on its Ctrl+Alt shortcut', () => {
@@ -179,21 +170,12 @@ describe('useAppDebugShortcuts', () => {
       runtimeHandlers.get('debug:toggle-icon-overlay')?.();
     });
 
-    expect(runtimeEventsOn).toHaveBeenCalledWith('debug:open-inspector', expect.any(Function));
-    expect(runtimeEventsOn).toHaveBeenCalledWith(
-      'debug:toggle-panel-overlay',
-      expect.any(Function)
-    );
-    expect(runtimeEventsOn).toHaveBeenCalledWith(
-      'debug:toggle-focus-overlay',
-      expect.any(Function)
-    );
-    expect(runtimeEventsOn).toHaveBeenCalledWith(
-      'debug:toggle-error-overlay',
-      expect.any(Function)
-    );
-    expect(runtimeEventsOn).toHaveBeenCalledWith('debug:toggle-map-overlay', expect.any(Function));
-    expect(runtimeEventsOn).toHaveBeenCalledWith('debug:toggle-icon-overlay', expect.any(Function));
+    expect(runtimeonEvent).toHaveBeenCalledWith('debug:open-inspector', expect.any(Function));
+    expect(runtimeonEvent).toHaveBeenCalledWith('debug:toggle-panel-overlay', expect.any(Function));
+    expect(runtimeonEvent).toHaveBeenCalledWith('debug:toggle-focus-overlay', expect.any(Function));
+    expect(runtimeonEvent).toHaveBeenCalledWith('debug:toggle-error-overlay', expect.any(Function));
+    expect(runtimeonEvent).toHaveBeenCalledWith('debug:toggle-map-overlay', expect.any(Function));
+    expect(runtimeonEvent).toHaveBeenCalledWith('debug:toggle-icon-overlay', expect.any(Function));
     expect(hook.onTogglePanelDebug).toHaveBeenCalledTimes(1);
     expect(hook.onToggleFocusDebug).toHaveBeenCalledTimes(1);
     expect(hook.onToggleErrorDebug).toHaveBeenCalledTimes(1);
@@ -204,31 +186,14 @@ describe('useAppDebugShortcuts', () => {
     expect(runtimeHandlers.size).toBe(0);
   });
 
-  it('opens the Wails inspector from the debug menu event on WebKit platforms', () => {
-    const wailsInvoke = vi.fn();
-    (window as Window & { WailsInvoke?: (message: string) => void }).WailsInvoke = wailsInvoke;
-
+  it('opens the v3 window devtools from the debug menu event', () => {
     const hook = renderHookHost();
 
     act(() => {
       runtimeHandlers.get('debug:open-inspector')?.();
     });
 
-    expect(wailsInvoke).toHaveBeenCalledWith('wails:openInspector');
-
-    platformMocks.isMacPlatform.mockReturnValue(false);
-    act(() => {
-      runtimeHandlers.get('debug:open-inspector')?.();
-    });
-
-    expect(wailsInvoke).toHaveBeenLastCalledWith('wails:showInspector');
-
-    platformMocks.isWindowsPlatform.mockReturnValue(true);
-    act(() => {
-      runtimeHandlers.get('debug:open-inspector')?.();
-    });
-
-    expect(wailsInvoke).toHaveBeenCalledTimes(2);
+    expect(runtimeMocks.openDevTools).toHaveBeenCalledOnce();
 
     hook.unmount();
   });

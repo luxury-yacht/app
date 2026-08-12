@@ -2,7 +2,7 @@
  * frontend/src/modules/object-panel/components/ObjectPanel/Yaml/yamlErrors.ts
  */
 
-import type { backend } from '@wailsjs/go/models';
+import type { backend } from '@core/backend-api/models';
 
 export const OBJECT_YAML_ERROR_PREFIX = 'ObjectYAMLError:';
 

@@ -48,7 +48,7 @@ const sourceExtensions = new Set([
   '.json',
   '.jsonc',
 ]);
-const excludedDirectories = new Set(['node_modules', 'dist', 'wailsjs', 'coverage']);
+const excludedDirectories = new Set(['node_modules', 'dist', 'bindings', 'coverage']);
 const excludedFiles = new Set([
   'package-lock.json',
   'src/core/refresh/types.generated.ts',

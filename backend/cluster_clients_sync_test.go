@@ -78,7 +78,8 @@ users:
 // test verifies the bookkeeping around the desired-vs-existing set comparison.
 func TestSyncClusterClientPool_CreatesClientsForNewSelections(t *testing.T) {
 	app := newTestAppWithDefaults(t)
-	app.setRuntimeContext(context.Background())
+	app.setApplicationContext(context.Background())
+	app.markRuntimeReady()
 	app.clusterClients = make(map[string]*clusterClients)
 	app.clusterOps = newClusterOperationCoordinator()
 	app.shellSessions = make(map[string]*shellSession)
@@ -129,7 +130,8 @@ func TestSyncClusterClientPool_CreatesClientsForNewSelections(t *testing.T) {
 // no longer in the desired selection set are removed during sync.
 func TestSyncClusterClientPool_RemovesStaleClients(t *testing.T) {
 	app := newTestAppWithDefaults(t)
-	app.setRuntimeContext(context.Background())
+	app.setApplicationContext(context.Background())
+	app.markRuntimeReady()
 	app.clusterClients = make(map[string]*clusterClients)
 	app.clusterOps = newClusterOperationCoordinator()
 	app.shellSessions = make(map[string]*shellSession)
@@ -175,7 +177,8 @@ func TestSyncClusterClientPool_RemovesStaleClients(t *testing.T) {
 // twice with the same selection set does not recreate or replace client entries.
 func TestSyncClusterClientPool_IdempotentForExistingClients(t *testing.T) {
 	app := newTestAppWithDefaults(t)
-	app.setRuntimeContext(context.Background())
+	app.setApplicationContext(context.Background())
+	app.markRuntimeReady()
 	app.clusterClients = make(map[string]*clusterClients)
 	app.clusterOps = newClusterOperationCoordinator()
 	app.shellSessions = make(map[string]*shellSession)
@@ -221,7 +224,8 @@ func TestSyncClusterClientPool_IdempotentForExistingClients(t *testing.T) {
 // results in no error and all existing clients being removed.
 func TestSyncClusterClientPool_EmptySelections(t *testing.T) {
 	app := newTestAppWithDefaults(t)
-	app.setRuntimeContext(context.Background())
+	app.setApplicationContext(context.Background())
+	app.markRuntimeReady()
 	app.clusterClients = make(map[string]*clusterClients)
 	app.clusterOps = newClusterOperationCoordinator()
 	app.shellSessions = make(map[string]*shellSession)
@@ -258,7 +262,8 @@ func TestSyncClusterClientPool_NilAppReturnsError(t *testing.T) {
 // returns nil — but no clients are actually created.
 func TestSyncClusterClientPool_CancelledContextSkipsCreation(t *testing.T) {
 	app := newTestAppWithDefaults(t)
-	app.setRuntimeContext(context.Background())
+	app.setApplicationContext(context.Background())
+	app.markRuntimeReady()
 	app.clusterClients = make(map[string]*clusterClients)
 	app.clusterOps = newClusterOperationCoordinator()
 	app.shellSessions = make(map[string]*shellSession)
@@ -288,7 +293,8 @@ func TestSyncClusterClientPool_CancelledContextSkipsCreation(t *testing.T) {
 // operations through their workflow cleanup hooks.
 func TestSyncClusterClientPool_RemovalCleansUpShellAndPortForward(t *testing.T) {
 	app := newTestAppWithDefaults(t)
-	app.setRuntimeContext(context.Background())
+	app.setApplicationContext(context.Background())
+	app.markRuntimeReady()
 	app.clusterClients = make(map[string]*clusterClients)
 	app.clusterOps = newClusterOperationCoordinator()
 	app.shellSessions = make(map[string]*shellSession)
@@ -327,7 +333,8 @@ func TestSyncClusterClientPool_RemovalCleansUpShellAndPortForward(t *testing.T) 
 // a stale cluster shuts down its auth manager.
 func TestSyncClusterClientPool_RemovalShutsDownAuthManager(t *testing.T) {
 	app := newTestAppWithDefaults(t)
-	app.setRuntimeContext(context.Background())
+	app.setApplicationContext(context.Background())
+	app.markRuntimeReady()
 	app.clusterClients = make(map[string]*clusterClients)
 	app.clusterOps = newClusterOperationCoordinator()
 	app.shellSessions = make(map[string]*shellSession)
@@ -356,7 +363,8 @@ func TestSyncClusterClientPool_RemovalShutsDownAuthManager(t *testing.T) {
 // from multiple goroutines (no data race on clusterClients map).
 func TestSyncClusterClientPool_ConcurrentAccess(t *testing.T) {
 	app := newTestAppWithDefaults(t)
-	app.setRuntimeContext(context.Background())
+	app.setApplicationContext(context.Background())
+	app.markRuntimeReady()
 	app.clusterClients = make(map[string]*clusterClients)
 	app.clusterOps = newClusterOperationCoordinator()
 	app.shellSessions = make(map[string]*shellSession)
@@ -395,7 +403,8 @@ func TestSyncClusterClientPool_ConcurrentAccess(t *testing.T) {
 
 func TestSyncClusterClientPoolPublishesEachBuiltClientWithoutWaitingForSiblingBuilds(t *testing.T) {
 	app := newTestAppWithDefaults(t)
-	app.setRuntimeContext(context.Background())
+	app.setApplicationContext(context.Background())
+	app.markRuntimeReady()
 	app.clusterClients = make(map[string]*clusterClients)
 	app.clusterOps = newClusterOperationCoordinator()
 

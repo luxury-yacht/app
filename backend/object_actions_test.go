@@ -16,7 +16,7 @@ import (
 )
 
 func TestRunObjectActionRequiresFullTargetIdentity(t *testing.T) {
-	app := NewApp()
+	app := NewApp(nil)
 
 	tests := []struct {
 		name    string
@@ -71,7 +71,7 @@ func TestRunObjectActionRequiresFullTargetIdentity(t *testing.T) {
 }
 
 func TestRunObjectActionValidatesActionSpecificRequirements(t *testing.T) {
-	app := NewApp()
+	app := NewApp(nil)
 	replicas := 2
 	suspend := true
 	revision := int64(3)
@@ -123,7 +123,7 @@ func actionRequestWithFinalizerTarget(finalizer, path, group, version, kind stri
 }
 
 func TestRunObjectActionInvokesStartDrainAndDebugHandlers(t *testing.T) {
-	app := NewApp()
+	app := NewApp(nil)
 
 	drainResponse, err := app.RunObjectAction(ObjectActionRequest{
 		Action: ObjectActionStartDrain,

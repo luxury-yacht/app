@@ -5,8 +5,8 @@
  * NetworkPolicyOverview.tsx.
  */
 
+import { networkpolicy } from '@core/backend-api/models';
 import { withStableListKeys } from '@shared/utils/stableListKeys';
-import { networkpolicy } from '@wailsjs/go/models';
 import type React from 'react';
 import type { OverviewDescriptor } from '../schema';
 import '../shared/OverviewBlocks.css';

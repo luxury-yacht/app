@@ -2,7 +2,6 @@ package backend
 
 import (
 	"context"
-	"runtime"
 	"testing"
 
 	"github.com/stretchr/testify/require"
@@ -12,8 +11,6 @@ func newUIApp(t *testing.T) *App {
 	t.Helper()
 	return newTestAppWithDefaults(t)
 }
-
-var menuUpdatesEnabled = runtime.GOOS != "linux"
 
 func TestToggleAppLogsPanelRequiresContext(t *testing.T) {
 	app := newUIApp(t)
@@ -34,19 +31,19 @@ func TestToggleDiagnosticsPanelRequiresContext(t *testing.T) {
 func TestToggleAppLogsPanelTogglesAndEmits(t *testing.T) {
 	app := newUIApp(t)
 	events := []string{}
+	menuUpdates := 0
+	app.desktop = &fakeDesktop{refreshMenu: func() error { menuUpdates++; return nil }}
 	app.eventEmitter = func(_ context.Context, name string, _ ...interface{}) {
 		events = append(events, name)
 	}
-	app.setRuntimeContext(context.Background())
+	app.setApplicationContext(context.Background())
+	app.markRuntimeReady()
 
 	err := app.ToggleAppLogsPanel()
 	require.NoError(t, err)
 	require.True(t, app.IsAppLogsPanelVisible())
-	if menuUpdatesEnabled {
-		require.Equal(t, []string{"toggle-app-logs-panel", "update-menu"}, events)
-	} else {
-		require.Equal(t, []string{"toggle-app-logs-panel"}, events)
-	}
+	require.Equal(t, []string{"toggle-app-logs-panel"}, events)
+	require.Equal(t, 1, menuUpdates)
 }
 
 func TestToggleSidebarRequiresContext(t *testing.T) {
@@ -60,19 +57,19 @@ func TestToggleSidebarRequiresContext(t *testing.T) {
 func TestToggleSidebarTogglesAndEmits(t *testing.T) {
 	app := newUIApp(t)
 	events := []string{}
+	menuUpdates := 0
+	app.desktop = &fakeDesktop{refreshMenu: func() error { menuUpdates++; return nil }}
 	app.eventEmitter = func(_ context.Context, name string, _ ...interface{}) {
 		events = append(events, name)
 	}
-	app.setRuntimeContext(context.Background())
+	app.setApplicationContext(context.Background())
+	app.markRuntimeReady()
 
 	err := app.ToggleSidebar()
 	require.NoError(t, err)
 	require.False(t, app.IsSidebarVisible())
-	if menuUpdatesEnabled {
-		require.Equal(t, []string{"toggle-sidebar", "update-menu"}, events)
-	} else {
-		require.Equal(t, []string{"toggle-sidebar"}, events)
-	}
+	require.Equal(t, []string{"toggle-sidebar"}, events)
+	require.Equal(t, 1, menuUpdates)
 }
 
 func TestToggleObjectDiffRequiresContext(t *testing.T) {
@@ -88,7 +85,8 @@ func TestToggleObjectDiffEmits(t *testing.T) {
 	app.eventEmitter = func(_ context.Context, name string, _ ...interface{}) {
 		events = append(events, name)
 	}
-	app.setRuntimeContext(context.Background())
+	app.setApplicationContext(context.Background())
+	app.markRuntimeReady()
 
 	err := app.ToggleObjectDiff()
 	require.NoError(t, err)
@@ -97,95 +95,76 @@ func TestToggleObjectDiffEmits(t *testing.T) {
 
 func TestUpdateMenuNoContext(t *testing.T) {
 	app := newUIApp(t)
-	emitted := false
-	app.eventEmitter = func(context.Context, string, ...interface{}) {
-		emitted = true
-	}
+	updated := false
+	app.desktop = &fakeDesktop{refreshMenu: func() error { updated = true; return nil }}
 
 	app.UpdateMenu()
-	require.False(t, emitted)
+	require.False(t, updated)
 }
 
-func TestUpdateMenuSkipsOnLinux(t *testing.T) {
-	if menuUpdatesEnabled {
-		t.Skip("Linux-specific behavior")
-	}
-
+func TestUpdateMenuRefreshesPersistentNativeMenu(t *testing.T) {
 	app := newUIApp(t)
-	app.setRuntimeContext(context.Background())
-	emitted := false
-	app.eventEmitter = func(context.Context, string, ...interface{}) {
-		emitted = true
-	}
+	app.setApplicationContext(context.Background())
+	app.markRuntimeReady()
+	updated := false
+	app.desktop = &fakeDesktop{refreshMenu: func() error { updated = true; return nil }}
 
 	app.UpdateMenu()
-	require.False(t, emitted)
+	require.True(t, updated)
 }
 
 func TestSetSidebarVisibleOnlyWhenChanged(t *testing.T) {
 	app := newUIApp(t)
-	app.setRuntimeContext(context.Background())
-	events := []string{}
-	app.eventEmitter = func(_ context.Context, name string, _ ...interface{}) {
-		events = append(events, name)
-	}
+	app.setApplicationContext(context.Background())
+	app.markRuntimeReady()
+	menuUpdates := 0
+	app.desktop = &fakeDesktop{refreshMenu: func() error { menuUpdates++; return nil }}
 
 	app.SetSidebarVisible(true)
-	require.Empty(t, events)
+	require.Zero(t, menuUpdates)
 
 	app.SetSidebarVisible(false)
-	if menuUpdatesEnabled {
-		require.Equal(t, []string{"update-menu"}, events)
-	} else {
-		require.Empty(t, events)
-	}
+	require.Equal(t, 1, menuUpdates)
 	require.False(t, app.IsSidebarVisible())
 
-	events = events[:0]
 	app.SetSidebarVisible(false)
-	require.Empty(t, events)
+	require.Equal(t, 1, menuUpdates)
 }
 
 func TestSetAppLogsPanelVisibleOnlyWhenChanged(t *testing.T) {
 	app := newUIApp(t)
-	app.setRuntimeContext(context.Background())
-	events := []string{}
-	app.eventEmitter = func(_ context.Context, name string, _ ...interface{}) {
-		events = append(events, name)
-	}
+	app.setApplicationContext(context.Background())
+	app.markRuntimeReady()
+	menuUpdates := 0
+	app.desktop = &fakeDesktop{refreshMenu: func() error { menuUpdates++; return nil }}
 
 	app.SetAppLogsPanelVisible(false)
-	require.Empty(t, events)
+	require.Zero(t, menuUpdates)
 
 	app.SetAppLogsPanelVisible(true)
-	if menuUpdatesEnabled {
-		require.Equal(t, []string{"update-menu"}, events)
-	} else {
-		require.Empty(t, events)
-	}
+	require.Equal(t, 1, menuUpdates)
 	require.True(t, app.IsAppLogsPanelVisible())
 
-	events = events[:0]
 	app.SetAppLogsPanelVisible(true)
-	require.Empty(t, events)
+	require.Equal(t, 1, menuUpdates)
 }
 
 func TestToggleDiagnosticsPanelTogglesAndEmits(t *testing.T) {
 	app := newUIApp(t)
 	events := []string{}
+	menuUpdates := 0
+	app.desktop = &fakeDesktop{refreshMenu: func() error { menuUpdates++; return nil }}
 	app.eventEmitter = func(_ context.Context, name string, _ ...interface{}) {
 		events = append(events, name)
 	}
-	app.setRuntimeContext(context.Background())
+	app.setApplicationContext(context.Background())
+	app.markRuntimeReady()
 
 	err := app.ToggleDiagnosticsPanel()
 	require.NoError(t, err)
 	require.True(t, app.IsDiagnosticsPanelVisible())
-	if menuUpdatesEnabled {
-		require.Equal(t, []string{"toggle-diagnostics", "update-menu"}, events)
-	} else {
-		require.Equal(t, []string{"toggle-diagnostics"}, events)
-	}
+	require.Equal(t, []string{"toggle-diagnostics"}, events)
+	require.Equal(t, 1, menuUpdates)
 }
 
 // Legacy permission cache behavior retained for compatibility.
@@ -199,7 +178,8 @@ func TestEmitEventNoContext(t *testing.T) {
 	app.emitEvent("something")
 	require.False(t, called)
 
-	app.setRuntimeContext(context.Background())
+	app.setApplicationContext(context.Background())
+	app.markRuntimeReady()
 	app.emitEvent("something")
 	require.True(t, called)
 }

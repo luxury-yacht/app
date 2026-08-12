@@ -19,52 +19,52 @@ or {
       severity = "error"
     )
   },
-  `$receiver.EventsOn("cluster:lifecycle", $...)` as $call where {
+  `$receiver.onEvent("cluster:lifecycle", $...)` as $call where {
     register_diagnostic(span = $call, message = "Subscribe to cluster workspace state through clusterWorkspaceStore.", severity = "error")
   },
-  `$receiver.EventsOn("cluster:auth:failed", $...)` as $call where {
+  `$receiver.onEvent("cluster:auth:failed", $...)` as $call where {
     register_diagnostic(span = $call, message = "Subscribe to cluster workspace state through clusterWorkspaceStore.", severity = "error")
   },
-  `$receiver.EventsOn("cluster:auth:recovering", $...)` as $call where {
+  `$receiver.onEvent("cluster:auth:recovering", $...)` as $call where {
     register_diagnostic(span = $call, message = "Subscribe to cluster workspace state through clusterWorkspaceStore.", severity = "error")
   },
-  `$receiver.EventsOn("cluster:auth:recovered", $...)` as $call where {
+  `$receiver.onEvent("cluster:auth:recovered", $...)` as $call where {
     register_diagnostic(span = $call, message = "Subscribe to cluster workspace state through clusterWorkspaceStore.", severity = "error")
   },
-  `$receiver.EventsOn("cluster:auth:progress", $...)` as $call where {
+  `$receiver.onEvent("cluster:auth:progress", $...)` as $call where {
     register_diagnostic(span = $call, message = "Subscribe to cluster workspace state through clusterWorkspaceStore.", severity = "error")
   },
-  `$receiver.EventsOn("cluster:health:healthy", $...)` as $call where {
+  `$receiver.onEvent("cluster:health:healthy", $...)` as $call where {
     register_diagnostic(span = $call, message = "Subscribe to cluster workspace state through clusterWorkspaceStore.", severity = "error")
   },
-  `$receiver.EventsOn("cluster:health:degraded", $...)` as $call where {
+  `$receiver.onEvent("cluster:health:degraded", $...)` as $call where {
     register_diagnostic(span = $call, message = "Subscribe to cluster workspace state through clusterWorkspaceStore.", severity = "error")
   },
-  `$receiver.EventsOn("cluster:scope:changed", $...)` as $call where {
+  `$receiver.onEvent("cluster:scope:changed", $...)` as $call where {
     register_diagnostic(span = $call, message = "Subscribe to cluster workspace state through clusterWorkspaceStore.", severity = "error")
   },
-  `EventsOn("cluster:lifecycle", $...)` as $call where {
+  `onEvent("cluster:lifecycle", $...)` as $call where {
     register_diagnostic(span = $call, message = "Subscribe to cluster workspace state through clusterWorkspaceStore.", severity = "error")
   },
-  `EventsOn("cluster:auth:failed", $...)` as $call where {
+  `onEvent("cluster:auth:failed", $...)` as $call where {
     register_diagnostic(span = $call, message = "Subscribe to cluster workspace state through clusterWorkspaceStore.", severity = "error")
   },
-  `EventsOn("cluster:auth:recovering", $...)` as $call where {
+  `onEvent("cluster:auth:recovering", $...)` as $call where {
     register_diagnostic(span = $call, message = "Subscribe to cluster workspace state through clusterWorkspaceStore.", severity = "error")
   },
-  `EventsOn("cluster:auth:recovered", $...)` as $call where {
+  `onEvent("cluster:auth:recovered", $...)` as $call where {
     register_diagnostic(span = $call, message = "Subscribe to cluster workspace state through clusterWorkspaceStore.", severity = "error")
   },
-  `EventsOn("cluster:auth:progress", $...)` as $call where {
+  `onEvent("cluster:auth:progress", $...)` as $call where {
     register_diagnostic(span = $call, message = "Subscribe to cluster workspace state through clusterWorkspaceStore.", severity = "error")
   },
-  `EventsOn("cluster:health:healthy", $...)` as $call where {
+  `onEvent("cluster:health:healthy", $...)` as $call where {
     register_diagnostic(span = $call, message = "Subscribe to cluster workspace state through clusterWorkspaceStore.", severity = "error")
   },
-  `EventsOn("cluster:health:degraded", $...)` as $call where {
+  `onEvent("cluster:health:degraded", $...)` as $call where {
     register_diagnostic(span = $call, message = "Subscribe to cluster workspace state through clusterWorkspaceStore.", severity = "error")
   },
-  `EventsOn("cluster:scope:changed", $...)` as $call where {
+  `onEvent("cluster:scope:changed", $...)` as $call where {
     register_diagnostic(span = $call, message = "Subscribe to cluster workspace state through clusterWorkspaceStore.", severity = "error")
   }
 }

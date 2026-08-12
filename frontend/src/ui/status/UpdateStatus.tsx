@@ -7,9 +7,9 @@
  * embedded in ClusterOverview).
  */
 
+import type { backend } from '@core/backend-api/models';
+import { onEvent, openURL } from '@core/desktop-runtime';
 import Tooltip from '@shared/components/Tooltip';
-import type { backend } from '@wailsjs/go/models';
-import { BrowserOpenURL } from '@wailsjs/runtime/runtime';
 import React, { useCallback, useEffect, useState } from 'react';
 import { readAppInfo, requestAppState } from '@/core/app-state-access';
 import { toPlainReleaseNotes } from './releaseNotesText';
@@ -72,25 +72,17 @@ const UpdateStatus: React.FC = () => {
   }, []);
 
   useEffect(() => {
-    const runtime = window.runtime;
-    if (!runtime?.EventsOn) {
-      return;
-    }
-    const handleUpdate = (...args: unknown[]) => {
-      const payload = args[0] as UpdateInfo | undefined;
+    const handleUpdate = (payload?: UpdateInfo) => {
       if (payload) {
         setUpdateInfo(payload);
       }
     };
-    runtime.EventsOn('app-update', handleUpdate);
-    return () => {
-      runtime.EventsOff?.('app-update', handleUpdate);
-    };
+    return onEvent('app-update', handleUpdate);
   }, []);
 
   const handleClick = useCallback(() => {
     if (updateInfo?.releaseUrl) {
-      BrowserOpenURL(updateInfo.releaseUrl);
+      openURL(updateInfo.releaseUrl);
     }
   }, [updateInfo]);
 
@@ -102,7 +94,7 @@ const UpdateStatus: React.FC = () => {
   const currentDate = formatPublished(updateInfo.currentPublishedAt);
   const notes = toPlainReleaseNotes(updateInfo.releaseNotes ?? '');
   const notesUrl = `${RELEASE_NOTES_TAG_BASE}${encodeURIComponent(updateInfo.latestVersion)}`;
-  const openNotes = () => BrowserOpenURL(notesUrl);
+  const openNotes = () => openURL(notesUrl);
   const renderVersion = (version: string, date: string | null) => (
     <span>
       {version}

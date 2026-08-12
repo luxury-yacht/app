@@ -30,7 +30,8 @@ func TestTerminalSizeQueueBehavior(t *testing.T) {
 
 func TestShellEventWriterEmits(t *testing.T) {
 	app := newTestAppWithDefaults(t)
-	app.setRuntimeContext(context.Background())
+	app.setApplicationContext(context.Background())
+	app.markRuntimeReady()
 	events := make([]ShellOutputEvent, 0, 1)
 	app.eventEmitter = func(_ context.Context, name string, args ...interface{}) {
 		if name == shellOutputEventName && len(args) == 1 {
@@ -58,7 +59,8 @@ func TestShellEventWriterEmits(t *testing.T) {
 
 func TestShellSessionLifecycleHelpers(t *testing.T) {
 	app := newTestAppWithDefaults(t)
-	app.setRuntimeContext(context.Background())
+	app.setApplicationContext(context.Background())
+	app.markRuntimeReady()
 	app.shellSessions = make(map[string]*shellSession)
 
 	stdinR, stdinW := io.Pipe()
@@ -118,7 +120,8 @@ func TestShellSessionLifecycleHelpers(t *testing.T) {
 
 func TestTerminateShellWithReasonUnregistersRuntimeOperation(t *testing.T) {
 	app := newTestAppWithDefaults(t)
-	app.setRuntimeContext(context.Background())
+	app.setApplicationContext(context.Background())
+	app.markRuntimeReady()
 	app.shellSessions = make(map[string]*shellSession)
 
 	sess := &shellSession{
@@ -149,7 +152,8 @@ func TestTerminateShellWithReasonUnregistersRuntimeOperation(t *testing.T) {
 
 func TestShellSessionLifecycleFinishStreamIsIdempotent(t *testing.T) {
 	app := newTestAppWithDefaults(t)
-	app.setRuntimeContext(context.Background())
+	app.setApplicationContext(context.Background())
+	app.markRuntimeReady()
 	app.shellSessions = make(map[string]*shellSession)
 
 	var statusEvents []ShellStatusEvent
@@ -207,7 +211,8 @@ func TestShellSessionLifecycleFinishStreamIsIdempotent(t *testing.T) {
 
 func TestShellSessionLifecycleCloseForRuntimeIsIdempotent(t *testing.T) {
 	app := newTestAppWithDefaults(t)
-	app.setRuntimeContext(context.Background())
+	app.setApplicationContext(context.Background())
+	app.markRuntimeReady()
 	app.shellSessions = make(map[string]*shellSession)
 
 	var statusEvents []ShellStatusEvent
@@ -325,7 +330,8 @@ func TestListShellSessionsAndClusterCount(t *testing.T) {
 
 func TestStopClusterShellSessions(t *testing.T) {
 	app := newTestAppWithDefaults(t)
-	app.setRuntimeContext(context.Background())
+	app.setApplicationContext(context.Background())
+	app.markRuntimeReady()
 	app.shellSessions = map[string]*shellSession{
 		"s1": {
 			id:        "s1",
@@ -437,7 +443,8 @@ func TestHasEphemeralContainer(t *testing.T) {
 
 func TestEmitShellEventsGuards(t *testing.T) {
 	app := newTestAppWithDefaults(t)
-	app.setRuntimeContext(context.Background())
+	app.setApplicationContext(context.Background())
+	app.markRuntimeReady()
 
 	calls := 0
 	app.eventEmitter = func(_ context.Context, _ string, _ ...interface{}) {
@@ -507,7 +514,8 @@ func TestGetShellSessionBacklog(t *testing.T) {
 
 func TestStartShellSessionValidation(t *testing.T) {
 	app := newTestAppWithDefaults(t)
-	app.setRuntimeContext(context.Background())
+	app.setApplicationContext(context.Background())
+	app.markRuntimeReady()
 	app.clusterClients = map[string]*clusterClients{
 		shellClusterID: {
 			meta:              ClusterMeta{ID: shellClusterID, Name: "ctx"},
@@ -544,7 +552,8 @@ func TestStartShellSessionValidation(t *testing.T) {
 
 func TestStartShellSessionPodValidation(t *testing.T) {
 	app := newTestAppWithDefaults(t)
-	app.setRuntimeContext(context.Background())
+	app.setApplicationContext(context.Background())
+	app.markRuntimeReady()
 
 	// Per-cluster clients are stored in clusterClients, not in global fields.
 	restConfig := &rest.Config{}
@@ -588,7 +597,8 @@ func TestStartShellSessionPodValidation(t *testing.T) {
 
 func TestStartShellSessionRequiresExecPermission(t *testing.T) {
 	app := newTestAppWithDefaults(t)
-	app.setRuntimeContext(context.Background())
+	app.setApplicationContext(context.Background())
+	app.markRuntimeReady()
 
 	pod := &corev1.Pod{
 		ObjectMeta: metav1.ObjectMeta{Namespace: "default", Name: "pod-1"},

@@ -8,10 +8,11 @@ import { act } from 'react';
 import * as ReactDOM from 'react-dom/client';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 
-// The global setup mock omits BrowserOpenURL; supply it locally so clicks work.
+// The global setup mock omits openURL; supply it locally so clicks work.
 const browserOpenURL = vi.fn();
-vi.mock('@wailsjs/runtime/runtime', () => ({
-  BrowserOpenURL: (url: string) => browserOpenURL(url),
+vi.mock('@core/desktop-runtime', () => ({
+  desktopRuntimeAvailable: () => false,
+  openURL: (url: string) => browserOpenURL(url),
 }));
 
 import { ExternalHostLinks } from './ExternalHostLinks';

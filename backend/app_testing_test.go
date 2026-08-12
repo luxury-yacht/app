@@ -57,7 +57,7 @@ func TestAppTestingSettersUpdateClusterClients(t *testing.T) {
 // TestAppSettersAssignToAllClusterClients verifies that setter methods
 // update all cluster clients, not just a single one.
 func TestAppSettersAssignToAllClusterClients(t *testing.T) {
-	app := NewApp()
+	app := NewApp(nil)
 	app.clusterClients = map[string]*clusterClients{
 		"cluster-1": {
 			meta:   ClusterMeta{ID: "cluster-1", Name: "Cluster 1"},

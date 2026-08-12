@@ -4,13 +4,13 @@
  * Centralized preference cache and backend sync for app settings.
  */
 
+import type { types } from '@core/backend-api/models';
 import {
   DEFAULT_TABLE_PAGE_SIZE,
   normalizeTablePageSize,
   TABLE_PAGE_SIZE_OPTIONS,
   type TablePageSize,
 } from '@shared/components/tables/pageSizeOptions';
-import type { types } from '@wailsjs/go/models';
 import {
   readAppSettings,
   readAppSettingsSchema,
@@ -26,6 +26,7 @@ import {
   UpdateAppPreferences,
   ValidateThemeClusterPattern,
 } from '@/core/backend-api';
+import { desktopRuntimeAvailable } from '@/core/desktop-runtime';
 import { type AppEvents, eventBus } from '@/core/events';
 import { captureBootstrapError } from '@/core/telemetry/sentry';
 import {
@@ -503,8 +504,8 @@ const schemaEntryToMetadata = (entry: types.AppPreferenceSchema): AppPreferenceM
     currentValue: (entry.currentValue ??
       entry.defaultValue ??
       fallback.defaultValue) as AppPreferences[AppPreferenceKey],
-    min: entry.min,
-    max: entry.max,
+    min: entry.min ?? undefined,
+    max: entry.max ?? undefined,
     enumOptions: entry.enumOptions ?? fallback.enumOptions,
     validation: entry.validation ?? fallback.validation,
     runtimeSideEffect: entry.runtimeSideEffect ?? fallback.runtimeSideEffect,
@@ -849,7 +850,7 @@ const updatePreferenceCache = (updates: Partial<AppPreferences>): void => {
 };
 
 const wailsRuntimeAvailable = (): boolean => {
-  return Boolean(window.go?.backend?.App);
+  return desktopRuntimeAvailable();
 };
 
 interface LocalStorageSnapshot {

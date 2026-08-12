@@ -18,57 +18,48 @@ import (
 	"github.com/luxury-yacht/app/backend/internal/logclassify"
 	"github.com/luxury-yacht/app/backend/internal/logsources"
 	"github.com/luxury-yacht/app/backend/refresh/system"
-	"github.com/wailsapp/wails/v2/pkg/runtime"
+	"github.com/wailsapp/wails/v3/pkg/application"
 )
 
 var newRefreshSubsystemWithServices = system.NewSubsystemWithServices
-var (
-	runtimeEventsEmit     = runtime.EventsEmit
-	runtimeMessageDialog  = runtime.MessageDialog
-	runtimeOpenFileDialog = runtime.OpenFileDialog
-	runtimeSaveFileDialog = runtime.SaveFileDialog
-	runtimeQuit           = runtime.Quit
-	runtimeWindowSetSize  = runtime.WindowSetSize
-	runtimeWindowSetPos   = runtime.WindowSetPosition
-	runtimeWindowMaximise = runtime.WindowMaximise
-	runtimeWindowShow     = runtime.WindowShow
-)
 
 const beforeCloseSelectionFlushTimeout = 2 * time.Second
 
-// Startup is called when the app starts. Backend operations retain only its
-// cancellation signal; Wails calls use the runtime capability installed here.
-func (a *App) Startup(ctx context.Context) {
-	a.setRuntimeContext(ctx)
-	a.eventEmitter = bindRuntimeEventEmitter(ctx, runtimeEventsEmit)
+// ServiceStartup performs bounded, non-UI process initialization before native
+// windows start. Interactive startup waits for WindowRuntimeReady.
+func (a *App) ServiceStartup(ctx context.Context, _ application.ServiceOptions) error {
+	a.setApplicationContext(ctx)
 	a.initializeClusterLifecycle()
 	a.logger.Info("Application startup initiated", logsources.App)
 	a.startDiagnosticDumpHandler(ctx)
 	a.configureStartupErrorCapture()
-	if !a.checkStartupBetaExpiry(ctx) {
-		return
-	}
 	a.configureStartupLogging()
 	a.setupEnvironment()
 	a.logger.Debug("Environment setup completed", logsources.App)
-	a.restoreStartupWindow(ctx)
-	runtimeWindowShow(ctx)
+	return nil
+}
+
+// WindowRuntimeReady runs interactive initialization once the webview runtime
+// can receive events and JavaScript without dropping or merely queueing them.
+func (a *App) WindowRuntimeReady() bool {
+	if !a.markRuntimeReady() {
+		return false
+	}
+	if !a.checkStartupBetaExpiry() {
+		return true
+	}
+	a.restoreStartupWindow()
+	if a.desktop != nil {
+		_ = a.desktop.ShowMainWindow()
+	}
 	a.logger.Info("Luxury Yacht - Sail the Seas of Kubernetes In Style", logsources.App)
 	a.initializeStartupClusters()
 	if err := a.startKubeconfigWatcher(); err != nil {
 		a.logger.Warn(fmt.Sprintf("Kubeconfig directory watcher not available: %v", err), logsources.App)
 	}
 	a.startUpdateCheck()
-	a.scheduleInstallationMetricRegistration(ctx)
-}
-
-func bindRuntimeEventEmitter(
-	ctx context.Context,
-	emit func(context.Context, string, ...interface{}),
-) func(context.Context, string, ...interface{}) {
-	return func(_ context.Context, name string, args ...interface{}) {
-		emit(ctx, name, args...)
-	}
+	a.scheduleInstallationMetricRegistration(a.CtxOrBackground())
+	return true
 }
 
 func (a *App) initializeClusterLifecycle() {
@@ -128,15 +119,13 @@ func (a *App) configureStartupErrorCapture() {
 	})
 }
 
-func (a *App) checkStartupBetaExpiry(ctx context.Context) bool {
+func (a *App) checkStartupBetaExpiry() bool {
 	if err := a.checkBetaExpiry(); err != nil {
 		applog.ReportError(a.logger, err, "Beta version expired", logsources.App)
-		runtimeMessageDialog(ctx, runtime.MessageDialogOptions{
-			Type:    runtime.ErrorDialog,
-			Title:   "Beta Version Expired",
-			Message: err.Error(),
-		})
-		runtimeQuit(ctx)
+		if a.desktop != nil {
+			a.desktop.ShowErrorDialog("Beta Version Expired", err.Error())
+			a.desktop.QuitApplication()
+		}
 		return false
 	}
 	return true
@@ -151,18 +140,20 @@ func (a *App) configureStartupLogging() {
 	log.SetOutput(&stdLogBridge{logger: a.logger})
 }
 
-func (a *App) restoreStartupWindow(ctx context.Context) {
+func (a *App) restoreStartupWindow() {
 	if settings, err := a.LoadWindowSettings(); err != nil {
 		a.logger.Warn(fmt.Sprintf("Failed to load window settings: %v", err), logsources.App)
 	} else if settings != nil {
-		if settings.Width > 0 && settings.Height > 0 {
-			runtimeWindowSetSize(ctx, settings.Width, settings.Height)
+		if a.desktop == nil {
+			return
 		}
-		if settings.X >= 0 && settings.Y >= 0 {
-			runtimeWindowSetPos(ctx, settings.X, settings.Y)
+		geometry, restorePosition := resolveWindowRestore(*settings, a.desktop.MainWindowWorkAreas())
+		_ = a.desktop.SetMainWindowSize(geometry.Width, geometry.Height)
+		if restorePosition {
+			_ = a.desktop.SetMainWindowPosition(geometry.X, geometry.Y)
 		}
 		if settings.Maximized {
-			runtimeWindowMaximise(ctx)
+			_ = a.desktop.MaximiseMainWindow()
 		}
 	}
 }
@@ -220,27 +211,29 @@ func (b *stdLogBridge) Write(p []byte) (int, error) {
 	return len(p), nil
 }
 
-// NewBeforeCloseHandler runs while the window is still alive so window metrics can be read safely.
-func NewBeforeCloseHandler(app *App) func(context.Context) bool {
-	return func(ctx context.Context) bool {
-		app.logger.Info("Application close requested", logsources.App)
-
-		if !app.waitForSelectionMutationIdle(beforeCloseSelectionFlushTimeout) {
-			app.logger.Warn("Timed out waiting for cluster selection persistence before close", logsources.App)
-		}
-
-		if err := app.SaveWindowSettings(); err != nil {
-			app.logger.Warn(fmt.Sprintf("Failed to save window settings: %v", err), logsources.App)
-		} else {
-			app.logger.Debug("Window settings saved successfully", logsources.App)
-		}
-
-		return false
+// PrepareQuit persists process state while the main window is still queryable.
+// It is safe to call from both application and window close hooks.
+func (a *App) PrepareQuit() bool {
+	if a == nil {
+		return true
 	}
+	a.preQuitOnce.Do(func() {
+		a.logger.Info("Application close requested", logsources.App)
+		if !a.waitForSelectionMutationIdle(beforeCloseSelectionFlushTimeout) {
+			a.logger.Warn("Timed out waiting for cluster selection persistence before close", logsources.App)
+		}
+		if err := a.SaveWindowSettings(); err != nil {
+			a.logger.Warn(fmt.Sprintf("Failed to save window settings: %v", err), logsources.App)
+		} else {
+			a.logger.Debug("Window settings saved successfully", logsources.App)
+		}
+	})
+	return true
 }
 
-// Shutdown is called when the app is about to close and the frontend has been torn down.
-func (a *App) Shutdown(ctx context.Context) {
+// ServiceShutdown tears down process resources after the application context is
+// cancelled and does not access the frontend runtime.
+func (a *App) ServiceShutdown() error {
 	a.logger.Info("Application shutdown initiated", logsources.App)
 
 	// Shutdown all per-cluster auth managers to stop any recovery goroutines.
@@ -269,6 +262,8 @@ func (a *App) Shutdown(ctx context.Context) {
 	a.teardownRefreshSubsystem()
 
 	a.logger.Info("Application shutdown completed", logsources.App)
+	a.clearApplicationContext()
+	return nil
 }
 
 // anyClusterAuthInvalid returns true if any cluster has an auth state that is not Valid.

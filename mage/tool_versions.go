@@ -25,7 +25,7 @@ func readToolVersions(configPath string) (toolVersions, error) {
 			Node        string `toml:"node"`
 			NPM         string `toml:"npm"`
 			Mage        string `toml:"go:github.com/magefile/mage"`
-			Wails       string `toml:"go:github.com/wailsapp/wails/v2/cmd/wails"`
+			Wails       string `toml:"go:github.com/wailsapp/wails/v3/cmd/wails3"`
 			Staticcheck string `toml:"go:honnef.co/go/tools/cmd/staticcheck"`
 			Trivy       string `toml:"trivy"`
 		} `toml:"tools"`
@@ -55,7 +55,7 @@ func readToolVersions(configPath string) (toolVersions, error) {
 		{name: "tools.node", version: versions.Node},
 		{name: "tools.npm", version: versions.NPM},
 		{name: "tools.go:github.com/magefile/mage", version: versions.Mage},
-		{name: "tools.go:github.com/wailsapp/wails/v2/cmd/wails", version: versions.Wails},
+		{name: "tools.go:github.com/wailsapp/wails/v3/cmd/wails3", version: versions.Wails},
 		{name: "tools.go:honnef.co/go/tools/cmd/staticcheck", version: versions.Staticcheck},
 		{name: "tools.trivy", version: versions.Trivy},
 		{name: "vars.nsis_version", version: versions.NSIS},

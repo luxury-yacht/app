@@ -6,6 +6,7 @@
  * @ui/settings/sections/.
  */
 
+import type { backend } from '@core/backend-api/models';
 import { FloatPanelIcon } from '@shared/components/icons/DockableIcons';
 import {
   AdvancedIcon,
@@ -28,7 +29,6 @@ import {
   type SettingsTabId,
   setLastSettingsTab,
 } from '@ui/settings/settingsTabPreference';
-import type { backend } from '@wailsjs/go/models';
 import type React from 'react';
 import { useEffect, useId, useMemo, useRef, useState } from 'react';
 import { readAppInfo, requestAppState } from '@/core/app-state-access';

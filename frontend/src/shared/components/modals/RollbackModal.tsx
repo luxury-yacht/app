@@ -7,6 +7,7 @@
  * with history loaded from a full object ref.
  */
 
+import type { backend } from '@core/backend-api/models';
 import { buildObjectActionTarget, runObjectRollback } from '@shared/actions/objectActionClient';
 import DiffViewer from '@shared/components/diff/DiffViewer';
 import { ROLLBACK_DIFF_BUDGETS } from '@shared/components/diff/diffBudgets';
@@ -20,7 +21,6 @@ import { computeBudgetedLineDiff } from '@shared/components/diff/lineDiff';
 import { ErrorSurface } from '@shared/components/errors/ErrorSurface';
 import { RollbackIcon } from '@shared/components/icons/SharedIcons';
 import { errorHandler } from '@utils/errorHandler';
-import type { backend } from '@wailsjs/go/models';
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { readRevisionHistoryForRef, requestData } from '@/core/data-access';
 import ConfirmationModal from './ConfirmationModal';

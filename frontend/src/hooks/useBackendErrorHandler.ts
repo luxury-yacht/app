@@ -8,6 +8,7 @@
 
 import { errorHandler } from '@utils/errorHandler';
 import { useEffect, useRef } from 'react';
+import { onEvent } from '@/core/desktop-runtime';
 import {
   getBackendErrorKey,
   getBackendErrorMessage,
@@ -22,13 +23,7 @@ export function useBackendErrorHandler(): void {
   const processedErrorsRef = useRef<Set<string>>(new Set());
 
   useEffect(() => {
-    const runtime = window.runtime;
-    if (!runtime?.EventsOn) {
-      return;
-    }
-
-    const handleBackendError = (...args: unknown[]) => {
-      const payload = args[0];
+    const handleBackendError = (payload: unknown) => {
       if (!isBackendErrorPayload(payload)) {
         return;
       }
@@ -67,10 +62,6 @@ export function useBackendErrorHandler(): void {
       });
     };
 
-    runtime.EventsOn('backend-error', handleBackendError);
-
-    return () => {
-      runtime.EventsOff?.('backend-error');
-    };
+    return onEvent('backend-error', handleBackendError);
   }, []);
 }

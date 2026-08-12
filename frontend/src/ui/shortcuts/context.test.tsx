@@ -19,13 +19,16 @@ import {
 } from './context';
 
 const runtimeMocks = vi.hoisted(() => ({
-  eventsOn: vi.fn(),
+  eventsOn: vi.fn<(event: string, handler: (...args: unknown[]) => void) => () => void>(
+    () => () => undefined
+  ),
   eventsOff: vi.fn(),
 }));
 
-vi.mock('@wailsjs/runtime/runtime', () => ({
-  EventsOn: runtimeMocks.eventsOn,
-  EventsOff: runtimeMocks.eventsOff,
+vi.mock('@core/desktop-runtime', () => ({
+  desktopRuntimeAvailable: () => false,
+  onEvent: runtimeMocks.eventsOn,
+  offEvent: runtimeMocks.eventsOff,
 }));
 
 type KeyboardContextApi = ReturnType<typeof useKeyboardContext>;
@@ -46,7 +49,7 @@ describe('KeyboardProvider', () => {
     });
     container.remove();
     vi.restoreAllMocks();
-    runtimeMocks.eventsOn.mockReset();
+    runtimeMocks.eventsOn.mockReset().mockReturnValue(() => undefined);
     runtimeMocks.eventsOff.mockReset();
   });
 
@@ -373,6 +376,11 @@ describe('keyboard handling edge cases', () => {
   });
 
   it('registers Wails menu bridge events for cut/copy/paste/selectAll', async () => {
+    const disposedEvents: string[] = [];
+    runtimeMocks.eventsOn.mockImplementation((event) => () => {
+      disposedEvents.push(event);
+    });
+
     await act(async () => {
       root.render(
         <KeyboardProvider>
@@ -391,10 +399,10 @@ describe('keyboard handling edge cases', () => {
       root.unmount();
     });
 
-    const unregisteredEvents = runtimeMocks.eventsOff.mock.calls.map(([event]) => event);
-    expect(unregisteredEvents).toEqual(
+    expect(disposedEvents).toEqual(
       expect.arrayContaining(['menu:cut', 'menu:copy', 'menu:paste', 'menu:selectAll'])
     );
+    expect(runtimeMocks.eventsOff).not.toHaveBeenCalled();
   });
 
   it('routes menu cut to the surface containing the focused element', async () => {

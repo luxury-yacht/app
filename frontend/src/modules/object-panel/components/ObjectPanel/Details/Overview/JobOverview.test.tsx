@@ -4,7 +4,7 @@
  * Exercises the Job and CronJob Overviews through the descriptor-driven renderer (X1).
  */
 
-import { cronjob, job } from '@wailsjs/go/models';
+import { cronjob, job } from '@core/backend-api/models';
 import type React from 'react';
 import { act } from 'react';
 import * as ReactDOM from 'react-dom/client';

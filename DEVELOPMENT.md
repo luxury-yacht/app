@@ -35,7 +35,7 @@ mise install
 Next, check the platform dependencies required by Wails:
 
 ```shell
-wails doctor
+wails3 doctor
 ```
 
 This will print a list of dependencies for Wails. You must install at least the required dependencies.
@@ -84,10 +84,10 @@ The app version and development-tool versions have separate canonical sources. S
 
 ### App Version
 
-App version is derived from `info.productVersion` in [wails.json](wails.json)
+App version is derived from `info.version` in [build/config.yml](build/config.yml).
 
 ```bash
-APP_VERSION=$(jq -r '.info.productVersion' wails.json)
+APP_VERSION=$(sed -nE 's/^  version: "([^"]+)"/\1/p' build/config.yml)
 ```
 
 ### Toolchain Versions

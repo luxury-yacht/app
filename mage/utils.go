@@ -8,6 +8,8 @@ import (
 	"runtime"
 	"strings"
 	"time"
+
+	"gopkg.in/yaml.v3"
 )
 
 // ToolCommand builds an exec.Cmd for a build tool, resolving it to an absolute
@@ -46,24 +48,37 @@ func CheckNodeVersion() error {
 	return nil
 }
 
-type wailsConfig struct {
+type projectMetadata struct {
 	Info struct {
-		ProductVersion string `json:"productVersion"`
-		BetaExpiryDays int    `json:"betaExpiryDays"`
-	} `json:"info"`
+		Version string `yaml:"version"`
+	} `yaml:"info"`
+	LuxuryYacht struct {
+		BetaExpiryDays int `yaml:"betaExpiryDays"`
+	} `yaml:"luxuryYacht"`
 }
 
-// Gets product version from wails.json
+func readProjectMetadata(path string) (projectMetadata, error) {
+	data, err := os.ReadFile(path)
+	if err != nil {
+		return projectMetadata{}, err
+	}
+	var metadata projectMetadata
+	if err := yaml.Unmarshal(data, &metadata); err != nil {
+		return projectMetadata{}, err
+	}
+	if strings.TrimSpace(metadata.Info.Version) == "" {
+		return projectMetadata{}, fmt.Errorf("read project metadata from %s: info.version is required", path)
+	}
+	return metadata, nil
+}
+
+// Gets the product version from the Wails v3 build configuration.
 func getProductVersion() (string, error) {
-	data, err := os.ReadFile("wails.json")
+	metadata, err := readProjectMetadata("build/config.yml")
 	if err != nil {
 		return "", err
 	}
-	var wailsCfg wailsConfig
-	if err := json.Unmarshal(data, &wailsCfg); err != nil {
-		return "", err
-	}
-	return wailsCfg.Info.ProductVersion, nil
+	return metadata.Info.Version, nil
 }
 
 // If the version string contains "beta", consider it a beta version.
@@ -71,17 +86,13 @@ func isBeta(version string) bool {
 	return strings.Contains(strings.ToLower(version), "beta")
 }
 
-// Gets beta expiry days from wails.json
+// Gets beta expiry days from the repository-owned Wails v3 build configuration.
 func getBetaExpiryDays() (int, error) {
-	data, err := os.ReadFile("wails.json")
+	metadata, err := readProjectMetadata("build/config.yml")
 	if err != nil {
 		return 0, err
 	}
-	var wailsCfg wailsConfig
-	if err := json.Unmarshal(data, &wailsCfg); err != nil {
-		return 0, err
-	}
-	return wailsCfg.Info.BetaExpiryDays, nil
+	return metadata.LuxuryYacht.BetaExpiryDays, nil
 }
 
 // GitRevParse returns the short git commit hash of the current HEAD.

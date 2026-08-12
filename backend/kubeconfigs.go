@@ -11,7 +11,6 @@ import (
 
 	"github.com/luxury-yacht/app/backend/internal/config"
 	"github.com/luxury-yacht/app/backend/internal/logsources"
-	wailsruntime "github.com/wailsapp/wails/v2/pkg/runtime"
 	"k8s.io/client-go/tools/clientcmd"
 	"k8s.io/client-go/util/homedir"
 )
@@ -271,15 +270,13 @@ func (a *App) OpenKubeconfigSearchPathDialog() (string, error) {
 		return "", fmt.Errorf("application context is not available")
 	}
 
-	var path string
-	var err error
-	a.runWithRuntimeContext(func(ctx context.Context) {
-		path, err = wailsruntime.OpenDirectoryDialog(ctx, wailsruntime.OpenDialogOptions{
-			Title:            "Select kubeconfig directory",
-			DefaultDirectory: a.defaultKubeconfigSearchDirectory(),
-		})
+	if a.desktop == nil {
+		return "", fmt.Errorf("desktop runtime is not available")
+	}
+	return a.desktop.OpenDirectory(OpenFileDialogOptions{
+		Title:     "Select kubeconfig directory",
+		Directory: a.defaultKubeconfigSearchDirectory(),
 	})
-	return path, err
 }
 
 // defaultKubeconfigSearchDirectory selects a safe default folder for the directory picker.

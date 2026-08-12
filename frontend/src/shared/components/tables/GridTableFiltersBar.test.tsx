@@ -20,7 +20,7 @@ vi.mock('@ui/shortcuts', () => ({
   useSearchShortcutTarget: (config: unknown) => searchShortcutMock.register(config),
 }));
 
-vi.mock('@wailsjs/go/backend/App', () => ({
+vi.mock('@core/backend-api', () => ({
   GetZoomLevel: vi.fn().mockResolvedValue(100),
   SetZoomLevel: vi.fn().mockResolvedValue(undefined),
 }));

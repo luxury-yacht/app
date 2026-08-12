@@ -15,7 +15,7 @@ import { requireValue } from '@/test-utils/requireValue';
 import DockablePanel from './DockablePanel';
 import { DockablePanelProvider } from './DockablePanelProvider';
 
-vi.mock('@wailsjs/go/backend/App', () => ({
+vi.mock('@core/backend-api', () => ({
   GetZoomLevel: vi.fn().mockResolvedValue(100),
   SetZoomLevel: vi.fn().mockResolvedValue(undefined),
 }));

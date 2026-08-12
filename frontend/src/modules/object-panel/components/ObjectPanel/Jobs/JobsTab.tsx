@@ -5,6 +5,7 @@
  * Modeled after PodsTab but without metrics bars.
  */
 
+import type { types } from '@core/backend-api/models';
 import { useViewState } from '@core/contexts/ViewStateContext';
 import { useNamespace } from '@modules/namespace/contexts/NamespaceContext';
 import { useObjectPanel } from '@modules/object-panel/hooks/useObjectPanel';
@@ -18,7 +19,6 @@ import {
 } from '@shared/components/tables/columnFactories';
 import type { GridColumnDefinition } from '@shared/components/tables/GridTable';
 import { useNavigateToView } from '@shared/hooks/useNavigateToView';
-import type { types } from '@wailsjs/go/models';
 import type React from 'react';
 import { useCallback, useMemo } from 'react';
 import '../shared.css';

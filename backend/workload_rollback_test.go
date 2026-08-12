@@ -710,7 +710,7 @@ func TestRollbackWorkloadUnsupportedKind(t *testing.T) {
 }
 
 func TestRollbackWorkloadRequiresNamespacedObjectIdentity(t *testing.T) {
-	app := NewApp()
+	app := NewApp(nil)
 
 	require.EqualError(t,
 		app.rollbackWorkload("config:ctx", "", "apps", "v1", "Deployment", "webapp", 1),

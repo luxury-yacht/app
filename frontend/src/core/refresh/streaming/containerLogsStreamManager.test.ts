@@ -9,7 +9,7 @@ import { afterEach, beforeEach, describe, expect, test, vi } from 'vitest';
 import { requireValue } from '@/test-utils/requireValue';
 import { installWindowProperty } from '@/test-utils/windowProperty';
 
-vi.mock('@wailsjs/go/backend/App', () => ({
+vi.mock('@core/backend-api', () => ({
   GetRefreshBaseURL: vi.fn(async () => 'http://127.0.0.1:0'),
   GetSelectionDiagnostics: vi.fn(async () => ({})),
 }));

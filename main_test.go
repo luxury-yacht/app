@@ -2,12 +2,25 @@ package main
 
 import (
 	"errors"
+	"sync"
 	"testing"
 	"time"
 
 	"github.com/luxury-yacht/app/internal/sentry"
 	"github.com/stretchr/testify/require"
 )
+
+var (
+	testCompositionOnce sync.Once
+	testComposition     *applicationComposition
+)
+
+func sharedTestComposition() *applicationComposition {
+	testCompositionOnce.Do(func() {
+		testComposition = newApplicationComposition(&mainRecordingReporter{}, compositionOptions{})
+	})
+	return testComposition
+}
 
 type mainRecordingReporter struct {
 	panics     []any
@@ -73,4 +86,20 @@ func TestNewSentryReporterStartsDisabledUntilPersistedPreferenceLoads(t *testing
 
 	require.NoError(t, err)
 	require.False(t, reporter.Enabled())
+}
+
+func TestApplicationCompositionOwnsOneNamedWindowMenuAndService(t *testing.T) {
+	composition := sharedTestComposition()
+
+	require.NotNil(t, composition.application)
+	require.NotNil(t, composition.backend)
+	require.NotNil(t, composition.desktop)
+	require.NotNil(t, composition.menu)
+	require.Equal(t, composition.menu, composition.application.Menu.GetApplicationMenu())
+
+	window, ok := composition.application.Window.GetByName(mainWindowName)
+	require.True(t, ok)
+	require.Same(t, composition.window, window)
+	require.Equal(t, mainWindowName, window.Name())
+	require.Len(t, composition.application.Config().Services, 1)
 }

@@ -1,11 +1,37 @@
 package backend
 
 import (
+	"os"
+	"path/filepath"
 	"regexp"
 	"strings"
 	"testing"
 	"time"
 )
+
+func TestLoadDevAppInfoReadsWailsV3BuildConfig(t *testing.T) {
+	originalVersion := Version
+	t.Cleanup(func() { Version = originalVersion })
+	Version = "dev"
+
+	workingDirectory := t.TempDir()
+	if err := os.MkdirAll(filepath.Join(workingDirectory, "build"), 0o700); err != nil {
+		t.Fatalf("create build directory: %v", err)
+	}
+	config := "version: '3'\ninfo:\n  version: v9.8.7\n"
+	if err := os.WriteFile(filepath.Join(workingDirectory, "build", "config.yml"), []byte(config), 0o600); err != nil {
+		t.Fatalf("write build config: %v", err)
+	}
+	t.Chdir(workingDirectory)
+
+	info := loadDevAppInfo()
+	if info == nil {
+		t.Fatal("loadDevAppInfo returned nil")
+	}
+	if info.Version != "v9.8.7 (dev)" {
+		t.Fatalf("Version = %q, want v9.8.7 (dev)", info.Version)
+	}
+}
 
 // semverRegex matches common SemVer strings and permits a leading "v" prefix.
 var semverRegex = regexp.MustCompile(`^v?(0|[1-9]\d*)\.(0|[1-9]\d*)\.(0|[1-9]\d*)(?:-[0-9A-Za-z.-]+)?(?:\+[0-9A-Za-z.-]+)?$`)

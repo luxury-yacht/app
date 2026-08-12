@@ -150,7 +150,7 @@ func TestMalformedAnonymizedIDIsReplacedInsteadOfReportedAsUserData(t *testing.T
 func TestInitializeErrorReportingDoesNotSynchronouslyEmitInstallationMetric(t *testing.T) {
 	setTestConfigEnv(t)
 	reporter := newRecordingInstallationReporter(true)
-	app := NewApp(reporter)
+	app := NewApp(nil, reporter)
 
 	require.NoError(t, InitializeErrorReporting(app))
 	require.NoError(t, InitializeErrorReporting(app))
@@ -167,7 +167,7 @@ func TestInitializeErrorReportingDoesNotSynchronouslyEmitInstallationMetric(t *t
 func TestPostStartupInstallationRegistrationEmitsMetricOnce(t *testing.T) {
 	setTestConfigEnv(t)
 	reporter := newRecordingInstallationReporter(true)
-	app := NewApp(reporter)
+	app := NewApp(nil, reporter)
 	require.NoError(t, InitializeErrorReporting(app))
 
 	app.reportInstallationMetricIfNeeded(context.Background())
@@ -194,7 +194,7 @@ func TestPostStartupInstallationRegistrationEmitsMetricOnce(t *testing.T) {
 func TestInstallationMetricStaysPendingWhileReportingIsDisabled(t *testing.T) {
 	setTestConfigEnv(t)
 	reporter := newRecordingInstallationReporter(true)
-	app := NewApp(reporter)
+	app := NewApp(nil, reporter)
 	app.appSettings = getDefaultAppSettings()
 	app.appSettings.ErrorReportingEnabled = false
 	require.NoError(t, app.saveAppSettings())
@@ -214,7 +214,7 @@ func TestInstallationMetricStaysPendingWhileReportingIsDisabled(t *testing.T) {
 func TestInstallationMetricRetriesAfterFlushFailure(t *testing.T) {
 	setTestConfigEnv(t)
 	reporter := newRecordingInstallationReporter(false, true)
-	app := NewApp(reporter)
+	app := NewApp(nil, reporter)
 
 	require.NoError(t, InitializeErrorReporting(app))
 	app.reportInstallationMetricIfNeeded(context.Background())
@@ -235,13 +235,14 @@ func TestInstallationMetricRetriesAfterFlushFailure(t *testing.T) {
 func TestEnablingErrorReportingEmitsPendingInstallationMetric(t *testing.T) {
 	setTestConfigEnv(t)
 	reporter := newRecordingInstallationReporter(true)
-	app := NewApp(reporter)
+	app := NewApp(nil, reporter)
 	app.appSettings = getDefaultAppSettings()
 	app.appSettings.ErrorReportingEnabled = false
 	require.NoError(t, app.saveAppSettings())
 	app.appSettings = nil
 	require.NoError(t, InitializeErrorReporting(app))
-	app.setRuntimeContext(context.Background())
+	app.setApplicationContext(context.Background())
+	app.markRuntimeReady()
 
 	_, err := app.UpdateAppPreferences(UpdateAppPreferencesRequest{Changes: []AppPreferenceChange{{
 		Key:   appPreferenceErrorReportingEnabled,
@@ -263,7 +264,7 @@ func TestScheduledInstallationRegistrationDoesNotBlockAndStopsWithContext(t *tes
 		started:                make(chan struct{}),
 		finished:               make(chan struct{}),
 	}
-	app := NewApp(reporter)
+	app := NewApp(nil, reporter)
 	require.NoError(t, InitializeErrorReporting(app))
 	ctx, cancel := context.WithCancel(context.Background())
 	returned := make(chan struct{})
@@ -300,7 +301,7 @@ func TestClearAppStateWaitsForInstallationRegistrationBeforeDeletingSettings(t *
 		release:                make(chan struct{}),
 		finished:               make(chan struct{}),
 	}
-	app := NewApp(reporter)
+	app := NewApp(nil, reporter)
 	require.NoError(t, InitializeErrorReporting(app))
 	settingsPath, err := app.getSettingsFilePath()
 	require.NoError(t, err)

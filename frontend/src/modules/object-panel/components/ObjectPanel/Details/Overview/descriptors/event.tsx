@@ -1,9 +1,9 @@
+import { events, type resourcemodel } from '@core/backend-api/models';
 import type { ResourceLink } from '@core/refresh/types';
 import { LiveAgeText } from '@shared/components/LiveAgeText';
 import { ObjectPanelLink } from '@shared/components/ObjectPanelLink';
 import { EVENT_LABELS } from '@shared/events/eventPresentation';
 import { resourceLinkToObjectReference } from '@shared/utils/resourceLinkIdentity';
-import { events, type resourcemodel } from '@wailsjs/go/models';
 import type React from 'react';
 import type { OverviewContext, OverviewDescriptor } from '../schema';
 
@@ -17,7 +17,7 @@ const renderTimestamp = (value: unknown): React.ReactNode => {
   return timestamp ? <LiveAgeText timestamp={timestamp} fullDateTitle /> : undefined;
 };
 
-const resourceLinkLabel = (link?: resourcemodel.ResourceLink): string | undefined => {
+const resourceLinkLabel = (link?: resourcemodel.ResourceLink | null): string | undefined => {
   const ref = link?.ref ?? link?.display;
   if (!ref?.kind || !ref.name) {
     return undefined;
@@ -26,7 +26,7 @@ const resourceLinkLabel = (link?: resourcemodel.ResourceLink): string | undefine
 };
 
 const renderResourceLink = (
-  link: resourcemodel.ResourceLink | undefined,
+  link: resourcemodel.ResourceLink | null | undefined,
   context: OverviewContext
 ): React.ReactNode => {
   const label = resourceLinkLabel(link);

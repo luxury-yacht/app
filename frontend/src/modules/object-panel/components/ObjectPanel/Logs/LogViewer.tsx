@@ -48,9 +48,9 @@ import {
 import { useLogFiltering } from './hooks/useLogFiltering';
 import { useLogKeyboardShortcuts } from './hooks/useLogKeyboardShortcuts';
 import './LogViewer.css';
+import type { types } from '@core/backend-api/models';
 import ObjPanelLogsSettingsModal from '@ui/modals/ObjPanelLogsSettingsModal';
 import { useKeyboardSurface } from '@ui/shortcuts';
-import type { types } from '@wailsjs/go/models';
 import { eventBus } from '@/core/events';
 import { useAutoRefreshLoadingState } from '@/core/refresh/hooks/useAutoRefreshLoadingState';
 import { applyPassiveLoadingPolicy } from '@/core/refresh/loadingPolicy';

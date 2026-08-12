@@ -5,6 +5,7 @@
  * Mirrors the pattern established in clusterTabOrder.ts.
  */
 
+import { backend } from '@core/backend-api/models';
 import {
   ALL_MULTISELECT_FILTER,
   type MultiSelectFilterSelection,
@@ -12,8 +13,15 @@ import {
   normalizeMultiSelectFilterSelection,
 } from '@shared/components/dropdowns/multiSelectFilterSelection';
 import type { GridTableFilterState } from '@shared/components/tables/GridTable.types';
-import { backend } from '@wailsjs/go/models';
 import { requestAppState } from '@/core/app-state-access';
+import {
+  AddFavorite,
+  DeleteFavorite,
+  GetFavorites,
+  SetFavoriteOrder,
+  UpdateFavorite,
+} from '@/core/backend-api';
+import { desktopRuntimeAvailable } from '@/core/desktop-runtime';
 import { eventBus } from '@/core/events';
 import { reportOperationalError } from '@/utils/errorHandler';
 
@@ -90,7 +98,14 @@ const fromBackendPane = (pane: backend.FavoritePaneState): FavoritePaneState => 
     caseSensitive: false,
     includeMetadata: false,
   },
-  tableState: pane.tableState,
+  tableState: {
+    ...pane.tableState,
+    columnVisibility: Object.fromEntries(
+      Object.entries(pane.tableState.columnVisibility).filter(
+        (entry): entry is [string, boolean] => typeof entry[1] === 'boolean'
+      )
+    ),
+  },
 });
 
 const fromBackendFavorite = (favorite: backend.Favorite): Favorite => ({
@@ -103,7 +118,9 @@ const fromBackendFavorite = (favorite: backend.Favorite): Favorite => ({
   view: favorite.view,
   namespace: favorite.namespace,
   panes: Object.fromEntries(
-    Object.entries(favorite.panes ?? {}).map(([key, pane]) => [key, fromBackendPane(pane)])
+    Object.entries(favorite.panes ?? {}).flatMap(([key, pane]) =>
+      pane ? [[key, fromBackendPane(pane)] as const] : []
+    )
   ),
   order: favorite.order,
 });
@@ -141,13 +158,6 @@ let cachedFavorites: Favorite[] = [];
 let hydrated = false;
 let hydrationPromise: Promise<void> | null = null;
 
-const getRuntimeApp = () => {
-  if (typeof window === 'undefined') {
-    return undefined;
-  }
-  return window.go?.backend?.App;
-};
-
 const emitChanged = () => {
   eventBus.emit('favorites:changed', [...cachedFavorites]);
 };
@@ -168,8 +178,7 @@ export const hydrateFavorites = async (options?: { force?: boolean }): Promise<F
   }
 
   hydrationPromise = (async () => {
-    const runtimeApp = getRuntimeApp();
-    if (!runtimeApp || typeof runtimeApp.GetFavorites !== 'function') {
+    if (!desktopRuntimeAvailable()) {
       hydrated = true;
       return;
     }
@@ -177,7 +186,7 @@ export const hydrateFavorites = async (options?: { force?: boolean }): Promise<F
       const result = await requestAppState({
         resource: 'favorites',
         adapter: 'persistence-read',
-        read: () => runtimeApp.GetFavorites(),
+        read: () => GetFavorites(),
       });
       cachedFavorites = Array.isArray(result) ? result.map(fromBackendFavorite) : [];
       if (options?.force) {
@@ -204,11 +213,10 @@ export const getFavorites = (): Favorite[] => cachedFavorites;
 
 /** Adds a favorite via the backend, updates the cache, and emits a change event. */
 export const addFavorite = async (fav: Favorite): Promise<Favorite> => {
-  const runtimeApp = getRuntimeApp();
-  if (!runtimeApp || typeof runtimeApp.AddFavorite !== 'function') {
+  if (!desktopRuntimeAvailable()) {
     throw new Error('Backend not available');
   }
-  const created = fromBackendFavorite(await runtimeApp.AddFavorite(toBackendFavorite(fav)));
+  const created = fromBackendFavorite(await AddFavorite(toBackendFavorite(fav)));
   cachedFavorites = [...cachedFavorites, created];
   hydrated = true;
   emitChanged();
@@ -217,33 +225,30 @@ export const addFavorite = async (fav: Favorite): Promise<Favorite> => {
 
 /** Updates a favorite via the backend, updates the cache, and emits a change event. */
 export const updateFavorite = async (fav: Favorite): Promise<void> => {
-  const runtimeApp = getRuntimeApp();
-  if (!runtimeApp || typeof runtimeApp.UpdateFavorite !== 'function') {
+  if (!desktopRuntimeAvailable()) {
     throw new Error('Backend not available');
   }
-  await runtimeApp.UpdateFavorite(toBackendFavorite(fav));
+  await UpdateFavorite(toBackendFavorite(fav));
   cachedFavorites = cachedFavorites.map((existing) => (existing.id === fav.id ? fav : existing));
   emitChanged();
 };
 
 /** Deletes a favorite via the backend, removes it from the cache, and emits a change event. */
 export const deleteFavorite = async (id: string): Promise<void> => {
-  const runtimeApp = getRuntimeApp();
-  if (!runtimeApp || typeof runtimeApp.DeleteFavorite !== 'function') {
+  if (!desktopRuntimeAvailable()) {
     throw new Error('Backend not available');
   }
-  await runtimeApp.DeleteFavorite(id);
+  await DeleteFavorite(id);
   cachedFavorites = cachedFavorites.filter((fav) => fav.id !== id);
   emitChanged();
 };
 
 /** Reorders favorites via the backend, reorders the cache, and emits a change event. */
 export const setFavoriteOrder = async (ids: string[]): Promise<void> => {
-  const runtimeApp = getRuntimeApp();
-  if (!runtimeApp || typeof runtimeApp.SetFavoriteOrder !== 'function') {
+  if (!desktopRuntimeAvailable()) {
     throw new Error('Backend not available');
   }
-  await runtimeApp.SetFavoriteOrder(ids);
+  await SetFavoriteOrder(ids);
 
   // Reorder the cache to match the requested ID order.
   const lookup = new Map(cachedFavorites.map((fav) => [fav.id, fav]));

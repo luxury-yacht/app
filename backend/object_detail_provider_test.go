@@ -45,8 +45,9 @@ func TestObjectDetailProviderFetchesKnownKinds(t *testing.T) {
 	namespace := &corev1.Namespace{ObjectMeta: metav1.ObjectMeta{Name: "demo-ns"}}
 	event := &corev1.Event{ObjectMeta: metav1.ObjectMeta{Name: "demo-event", Namespace: "default"}}
 
-	app := NewApp()
-	app.setRuntimeContext(context.Background())
+	app := NewApp(nil)
+	app.setApplicationContext(context.Background())
+	app.markRuntimeReady()
 	// Per-cluster clients are stored in clusterClients, not in global fields.
 	clusterID := "config:ctx"
 	fakeClient := fake.NewClientset(deploy, configMap, clusterRole, namespace, event)
@@ -88,7 +89,7 @@ func TestObjectDetailProviderFetchesKnownKinds(t *testing.T) {
 }
 
 func TestObjectDetailProviderUnknownKind(t *testing.T) {
-	app := NewApp()
+	app := NewApp(nil)
 	provider := app.objectDetailProvider()
 
 	_, err := provider.FetchObjectDetails(context.Background(), schema.GroupVersionKind{Kind: "unknown-kind"}, "ns", "name")
@@ -101,7 +102,7 @@ func TestObjectDetailProviderUnknownKind(t *testing.T) {
 }
 
 func TestObjectDetailProviderRejectsKnownKindWithoutGVK(t *testing.T) {
-	app := NewApp()
+	app := NewApp(nil)
 	provider := app.objectDetailProvider()
 
 	_, err := provider.FetchObjectDetails(context.Background(), schema.GroupVersionKind{Kind: "Pod"}, "default", "api")
@@ -111,8 +112,9 @@ func TestObjectDetailProviderRejectsKnownKindWithoutGVK(t *testing.T) {
 }
 
 func TestObjectDetailProviderRejectsKnownKindWithWrongGVK(t *testing.T) {
-	app := NewApp()
-	app.setRuntimeContext(context.Background())
+	app := NewApp(nil)
+	app.setApplicationContext(context.Background())
+	app.markRuntimeReady()
 	clusterID := "config:ctx"
 	client := fake.NewClientset(&corev1.ConfigMap{
 		ObjectMeta: metav1.ObjectMeta{Name: "demo", Namespace: "default"},
@@ -229,7 +231,7 @@ func TestObjectDetailProviderCacheKeyIncludesGVK(t *testing.T) {
 		t.Fatalf("expected distinct cache keys for colliding GVKs, got %q", coreKey)
 	}
 
-	app := NewApp()
+	app := NewApp(nil)
 	app.responseCache = newResponseCache(time.Minute, 10)
 	selectionKey := "cluster-a"
 	app.responseCacheStore(selectionKey, coreKey, "core")
@@ -246,8 +248,9 @@ func TestObjectDetailProviderCacheKeyIncludesGVK(t *testing.T) {
 }
 
 func TestObjectDetailProviderUsesClusterContext(t *testing.T) {
-	app := NewApp()
-	app.setRuntimeContext(context.Background())
+	app := NewApp(nil)
+	app.setApplicationContext(context.Background())
+	app.markRuntimeReady()
 
 	clusterAID := "config-a:ctx-a"
 	clusterBID := "config-b:ctx-b"
@@ -441,8 +444,9 @@ func TestObjectDetailProviderCoversAdditionalKinds(t *testing.T) {
 		&apiextensionsv1.CustomResourceDefinition{ObjectMeta: metav1.ObjectMeta{Name: "foos.example.com"}},
 	)
 
-	app := NewApp()
-	app.setRuntimeContext(context.Background())
+	app := NewApp(nil)
+	app.setApplicationContext(context.Background())
+	app.markRuntimeReady()
 	// Per-cluster clients are stored in clusterClients, not in global fields.
 	clusterID := "config:ctx"
 	app.clusterClients = map[string]*clusterClients{
@@ -528,8 +532,9 @@ func testObjectDetailGVK(kind string) schema.GroupVersionKind {
 // rather than an old cache entry — fail loud instead of silently
 // resolving to whichever colliding CRD discovery returns first.
 func TestObjectDetailProviderFetchObjectYAMLRejectsKindOnly(t *testing.T) {
-	app := NewApp()
-	app.setRuntimeContext(context.Background())
+	app := NewApp(nil)
+	app.setApplicationContext(context.Background())
+	app.markRuntimeReady()
 	app.logger = NewLogger(10)
 
 	clusterID := "config:ctx"
@@ -610,7 +615,7 @@ func TestObjectDetailProviderFetchObjectYAMLByGVKDisambiguates(t *testing.T) {
 }
 
 func TestObjectDetailProviderHelmErrorsWhenClientMissing(t *testing.T) {
-	app := NewApp()
+	app := NewApp(nil)
 	app.logger = NewLogger(10)
 	// Bind the test client to a concrete cluster scope for Helm detail fetches.
 	clusterID := "config:ctx"

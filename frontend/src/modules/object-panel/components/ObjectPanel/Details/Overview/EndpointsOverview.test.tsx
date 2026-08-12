@@ -7,7 +7,7 @@
  * the old useObjectPanel mock). The frame components are mocked; ObjectPanelLink/StatusChip are real.
  */
 
-import { endpointslice } from '@wailsjs/go/models';
+import { endpointslice } from '@core/backend-api/models';
 import { act } from 'react';
 import * as ReactDOM from 'react-dom/client';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';

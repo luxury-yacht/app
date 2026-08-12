@@ -11,7 +11,7 @@ import { makeTelemetrySummary } from './refreshContractTestBuilders';
 const mockGetBaseURL = vi.fn();
 const mockGetSelectionDiagnostics = vi.fn(async () => ({}));
 const mockGetKubernetesAPIClientDiagnostics = vi.fn(async () => []);
-vi.mock('@wailsjs/go/backend/App', () => ({
+vi.mock('@core/backend-api', () => ({
   GetRefreshBaseURL: mockGetBaseURL,
   GetSelectionDiagnostics: mockGetSelectionDiagnostics,
   GetKubernetesAPIClientDiagnostics: mockGetKubernetesAPIClientDiagnostics,

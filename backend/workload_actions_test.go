@@ -191,7 +191,7 @@ func TestRestartWorkloadErrors(t *testing.T) {
 }
 
 func TestWorkloadActionsRequireNamespacedObjectIdentity(t *testing.T) {
-	app := NewApp()
+	app := NewApp(nil)
 
 	require.EqualError(t,
 		app.restartWorkload("", "", "apps", "v1", "Deployment", "demo"),

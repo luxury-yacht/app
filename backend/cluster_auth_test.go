@@ -64,7 +64,8 @@ func TestRebuildClusterSubsystemPreservesAuthManagerWiring(t *testing.T) {
 	defer server.Close()
 
 	app := newTestAppWithDefaults(t)
-	app.setRuntimeContext(context.Background())
+	app.setApplicationContext(context.Background())
+	app.markRuntimeReady()
 	app.clusterOps = newClusterOperationCoordinator()
 	configPath := writeTestKubeconfig(t, server.URL)
 
@@ -162,7 +163,8 @@ func TestClusterClientsAuthInvalid(t *testing.T) {
 func TestClusterSubsystemRebuildStartsMissingRefreshRuntimeBeforeReadiness(t *testing.T) {
 	const clusterID = "cluster-a"
 	app := newTestAppWithDefaults(t)
-	app.setRuntimeContext(context.Background())
+	app.setApplicationContext(context.Background())
+	app.markRuntimeReady()
 	t.Cleanup(func() {
 		if app.refreshCancel != nil {
 			app.refreshCancel()
@@ -216,7 +218,8 @@ func TestClusterSubsystemRebuildStartsMissingRefreshRuntimeBeforeReadiness(t *te
 
 func TestClusterSubsystemRebuildDoesNotPublishWhenRefreshRuntimeStopped(t *testing.T) {
 	app := newTestAppWithDefaults(t)
-	app.setRuntimeContext(context.Background())
+	app.setApplicationContext(context.Background())
+	app.markRuntimeReady()
 	require.NotNil(t, app.ensureRefreshRuntimeContext())
 	app.stopRefreshRuntimeContext()
 
@@ -234,7 +237,8 @@ func TestClusterSubsystemRebuildDoesNotPublishWhenRefreshRuntimeStopped(t *testi
 
 func TestClusterSubsystemRebuildPublishesAfterManagerStartIsScheduled(t *testing.T) {
 	app := newTestAppWithDefaults(t)
-	app.setRuntimeContext(context.Background())
+	app.setApplicationContext(context.Background())
+	app.markRuntimeReady()
 	require.NotNil(t, app.ensureRefreshRuntimeContext())
 	app.refreshHTTPServer = &http.Server{}
 	app.refreshAggregates.Store(&refreshAggregateHandlers{})

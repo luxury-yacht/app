@@ -67,7 +67,7 @@ export const applyYamlOnServer = async (
   identity: ObjectIdentity,
   resourceVersion: string
 ): Promise<ObjectYamlMutationResponse> => {
-  return ApplyObjectYaml(clusterId, {
+  const response = await ApplyObjectYaml(clusterId, {
     baseYAML,
     yaml: yamlContent,
     kind: identity.kind,
@@ -77,6 +77,10 @@ export const applyYamlOnServer = async (
     uid: identity.uid ?? '',
     resourceVersion,
   });
+  if (!response) {
+    throw new Error('Object YAML update returned no response');
+  }
+  return response;
 };
 
 export interface ObjectYamlOwnershipConflict {
@@ -96,7 +100,7 @@ export const checkYamlOwnershipOnServer = async (
   identity: ObjectIdentity,
   resourceVersion: string
 ): Promise<ObjectYamlOwnershipCheckResponse> => {
-  return CheckObjectYamlOwnership(clusterId, {
+  const response = await CheckObjectYamlOwnership(clusterId, {
     baseYAML,
     yaml: yamlContent,
     kind: identity.kind,
@@ -106,6 +110,10 @@ export const checkYamlOwnershipOnServer = async (
     uid: identity.uid ?? '',
     resourceVersion,
   });
+  if (!response) {
+    throw new Error('Object YAML ownership check returned no response');
+  }
+  return response;
 };
 
 export interface ObjectYamlReloadMergeResponse {
@@ -120,7 +128,7 @@ export const mergeYamlWithLatestOnServer = async (
   draftYAML: string,
   identity: ObjectIdentity
 ): Promise<ObjectYamlReloadMergeResponse> => {
-  return MergeObjectYamlWithLatest(clusterId, {
+  const response = await MergeObjectYamlWithLatest(clusterId, {
     baseYAML,
     draftYAML,
     kind: identity.kind,
@@ -129,4 +137,8 @@ export const mergeYamlWithLatestOnServer = async (
     name: identity.name,
     uid: identity.uid ?? '',
   });
+  if (!response) {
+    throw new Error('Object YAML merge returned no response');
+  }
+  return response;
 };

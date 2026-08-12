@@ -141,7 +141,7 @@ vi.mock('@/hooks/useShortNames', () => ({
   useShortNames: () => false,
 }));
 
-vi.mock('@wailsjs/go/backend/App', () => ({
+vi.mock('@core/backend-api', () => ({
   RunObjectAction: (...args: unknown[]) => runObjectActionMock(...args),
 }));
 
@@ -162,16 +162,6 @@ vi.mock('@/core/capabilities', () => ({
   getPermissionKey: (kind: string, action: string) => `${kind}:${action}`,
   queryKindPermissions: vi.fn(),
 }));
-
-// queryKindPermissions calls window.go.backend.App.QueryPermissions directly.
-(globalThis as unknown as Record<string, unknown>).window = {
-  ...((globalThis as unknown as Record<string, unknown>).window as Record<string, unknown>),
-  go: {
-    backend: {
-      App: { QueryPermissions: vi.fn().mockResolvedValue({ results: [], diagnostics: [] }) },
-    },
-  },
-};
 
 const baseCustom = {
   ref: {

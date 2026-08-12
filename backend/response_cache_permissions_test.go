@@ -12,7 +12,7 @@ import (
 )
 
 func TestCanServeCachedResponseDeniedEvictsCaches(t *testing.T) {
-	app := NewApp()
+	app := NewApp(nil)
 	app.responseCache = newResponseCache(time.Minute, 10)
 	selectionKey := "cluster-a"
 
@@ -35,7 +35,7 @@ func TestCanServeCachedResponseDeniedEvictsCaches(t *testing.T) {
 }
 
 func TestCanServeCachedResponseAllowedKeepsCaches(t *testing.T) {
-	app := NewApp()
+	app := NewApp(nil)
 	app.responseCache = newResponseCache(time.Minute, 10)
 	selectionKey := "cluster-a"
 

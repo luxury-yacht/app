@@ -18,7 +18,7 @@ const backendMocks = vi.hoisted(() => ({
 }));
 const handleInlineMock = vi.hoisted(() => vi.fn());
 
-vi.mock('@wailsjs/go/backend/App', () => ({
+vi.mock('@core/backend-api', () => ({
   GetRevisionHistory: backendMocks.GetRevisionHistory,
   RunObjectAction: backendMocks.RunObjectAction,
 }));

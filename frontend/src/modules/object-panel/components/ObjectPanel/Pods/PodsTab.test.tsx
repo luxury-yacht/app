@@ -154,7 +154,7 @@ vi.mock('@/core/refresh', () => ({
   refreshManager: { triggerManualRefresh: vi.fn() },
 }));
 
-vi.mock('@wailsjs/go/backend/App', () => ({
+vi.mock('@core/backend-api', () => ({
   RunObjectAction: vi.fn(),
   FindCatalogObjectByUID: vi.fn(),
 }));

@@ -9,12 +9,12 @@ import React, { useEffect, useRef, useState } from 'react';
 import './AboutModal.css';
 import captainK8s from '@assets/captain-k8s-color.png';
 import logo from '@assets/luxury-yacht-logo.png';
+import type { backend } from '@core/backend-api/models';
+import { openURL } from '@core/desktop-runtime';
 import { InfoIcon } from '@shared/components/icons/SharedIcons';
 import ModalHeader from '@shared/components/modals/ModalHeader';
 import ModalSurface from '@shared/components/modals/ModalSurface';
 import { useModalFocusTrap } from '@shared/components/modals/useModalFocusTrap';
-import type { backend } from '@wailsjs/go/models';
-import { BrowserOpenURL } from '@wailsjs/runtime/runtime';
 import { readAppInfo, requestAppState } from '@/core/app-state-access';
 
 interface AboutModalProps {
@@ -88,7 +88,7 @@ const AboutModal: React.FC<AboutModalProps> = React.memo(({ isOpen, onClose }) =
             e.preventDefault();
             const releaseUrl = appInfo.update?.releaseUrl;
             if (releaseUrl) {
-              BrowserOpenURL(releaseUrl);
+              openURL(releaseUrl);
             }
           }}
         >
@@ -143,7 +143,7 @@ const AboutModal: React.FC<AboutModalProps> = React.memo(({ isOpen, onClose }) =
                 href="https://luxury-yacht.app"
                 onClick={(e) => {
                   e.preventDefault();
-                  BrowserOpenURL('https://luxury-yacht.app');
+                  openURL('https://luxury-yacht.app');
                 }}
               >
                 luxury-yacht.app
@@ -155,7 +155,7 @@ const AboutModal: React.FC<AboutModalProps> = React.memo(({ isOpen, onClose }) =
                 href="https://wails.io/"
                 onClick={(e) => {
                   e.preventDefault();
-                  BrowserOpenURL('https://wails.io/');
+                  openURL('https://wails.io/');
                 }}
               >
                 Wails
@@ -171,7 +171,7 @@ const AboutModal: React.FC<AboutModalProps> = React.memo(({ isOpen, onClose }) =
                 href="https://www.gnu.org/licenses/gpl-3.0.html"
                 onClick={(e) => {
                   e.preventDefault();
-                  BrowserOpenURL('https://www.gnu.org/licenses/gpl-3.0.html');
+                  openURL('https://www.gnu.org/licenses/gpl-3.0.html');
                 }}
               >
                 GNU General Public License

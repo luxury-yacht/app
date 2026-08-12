@@ -14,7 +14,15 @@ import {
   createWailsRuntimeHarness,
   type WailsRuntimeHarness,
 } from '@/test-utils/wailsRuntimeHarness';
-import { installWindowProperty } from '@/test-utils/windowProperty';
+
+const runtimeHarnessRef = vi.hoisted(() => ({
+  current: null as WailsRuntimeHarness | null,
+}));
+
+vi.mock('@/core/desktop-runtime', () => ({
+  onEvent: (eventName: string, handler: (payload: unknown) => void) =>
+    runtimeHarnessRef.current?.onEvent(eventName, handler) ?? (() => undefined),
+}));
 
 import {
   AuthErrorProvider,
@@ -26,8 +34,8 @@ import {
   useAuthError,
 } from './AuthErrorContext';
 
-// Mock @wailsjs/go/backend/App — provider calls these on mount
-vi.mock('@wailsjs/go/backend/App', () => ({
+// Mock @core/backend-api — provider calls these on mount
+vi.mock('@core/backend-api', () => ({
   RetryClusterAuth: vi.fn(),
   GetClusterWorkspaceState: vi.fn().mockResolvedValue({
     selectedKubeconfigs: [],
@@ -47,7 +55,6 @@ describe('AuthErrorContext', () => {
   const stateRef: { current: ReturnType<typeof useAuthError> | null } = { current: null };
 
   let runtimeHarness: WailsRuntimeHarness;
-  let restoreRuntime: () => void;
 
   const Harness = () => {
     stateRef.current = useAuthError();
@@ -56,7 +63,7 @@ describe('AuthErrorContext', () => {
 
   beforeEach(() => {
     runtimeHarness = createWailsRuntimeHarness();
-    restoreRuntime = installWindowProperty('runtime', runtimeHarness.runtime);
+    runtimeHarnessRef.current = runtimeHarness;
 
     container = document.createElement('div');
     document.body.appendChild(container);
@@ -69,7 +76,7 @@ describe('AuthErrorContext', () => {
       root.unmount();
     });
     container.remove();
-    restoreRuntime();
+    runtimeHarnessRef.current = null;
   });
 
   const renderProvider = async () => {
@@ -83,7 +90,7 @@ describe('AuthErrorContext', () => {
     });
   };
 
-  it('calls per-listener disposers on unmount instead of EventsOff', async () => {
+  it('calls per-listener disposers on unmount', async () => {
     await renderProvider();
 
     // One workspace subscription owns all cluster-state event listeners.

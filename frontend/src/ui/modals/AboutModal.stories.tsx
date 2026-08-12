@@ -4,10 +4,10 @@
  * Storybook stories for the AboutModal component.
  */
 
+import { backend } from '@core/backend-api/models';
 import type { Meta, StoryObj } from '@storybook/react';
 import { KeyboardProviderDecorator } from '../../../.storybook/decorators/KeyboardProviderDecorator';
 import { setMockAppInfo } from '../../../.storybook/mocks/wailsBackendApp';
-import { backend } from '../../../.storybook/mocks/wailsModels';
 import AboutModal from './AboutModal';
 
 const meta: Meta<typeof AboutModal> = {

@@ -6,7 +6,6 @@
 
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { eventBus } from '@/core/events';
-import { installWindowProperty } from '@/test-utils/windowProperty';
 import {
   type AppPreferenceKey,
   commitIntegerPreferenceInput,
@@ -401,7 +400,7 @@ const preferenceSchema = (overrides: Record<string, Partial<Record<string, unkno
   };
 };
 
-vi.mock('@wailsjs/go/backend/App', () => ({
+vi.mock('@core/backend-api', () => ({
   GetAppSettings: (...args: unknown[]) => appMocks.GetAppSettings(...args),
   GetAppSettingsSchema: (...args: unknown[]) => appMocks.GetAppSettingsSchema(...args),
   UpdateAppPreferences: (...args: unknown[]) => appMocks.UpdateAppPreferences(...args),
@@ -409,9 +408,11 @@ vi.mock('@wailsjs/go/backend/App', () => ({
     appMocks.ValidateThemeClusterPattern(...args),
 }));
 
-describe('appPreferences', () => {
-  let restoreGo: () => void;
+vi.mock('@core/desktop-runtime', () => ({
+  desktopRuntimeAvailable: () => true,
+}));
 
+describe('appPreferences', () => {
   beforeEach(() => {
     resetAppPreferencesCacheForTesting();
     appMocks.GetAppSettings.mockReset();
@@ -424,13 +425,6 @@ describe('appPreferences', () => {
     telemetryMocks.recordBrokerRequestStarted.mockReset();
     appMocks.GetAppSettingsSchema.mockResolvedValue(null);
     appMocks.UpdateAppPreferences.mockResolvedValue({ settings: {}, changedKeys: [] });
-    restoreGo = installWindowProperty('go', {
-      backend: {
-        App: {
-          UpdateAppPreferences: vi.fn().mockResolvedValue({ settings: {}, changedKeys: [] }),
-        },
-      },
-    });
   });
 
   it('validates theme cluster patterns through the backend', async () => {
@@ -448,7 +442,6 @@ describe('appPreferences', () => {
 
   afterEach(() => {
     vi.useRealTimers();
-    restoreGo();
   });
 
   it('hydrates preferences from backend settings', async () => {

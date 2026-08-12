@@ -25,7 +25,8 @@ import (
 // clusterClients map - there are no global client fields.
 // This is a standalone function (not a method) so Wails does not bind it.
 func InitializeForTesting(a *App, ctx context.Context, client kubernetes.Interface) {
-	a.setRuntimeContext(ctx)
+	a.setApplicationContext(ctx)
+	a.markRuntimeReady()
 	if a.logger == nil {
 		a.logger = NewLogger(1000)
 	}

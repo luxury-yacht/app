@@ -10,7 +10,7 @@ import (
 const shellClusterID = "config:ctx"
 
 func TestStartShellSessionRequiresClient(t *testing.T) {
-	app := NewApp()
+	app := NewApp(nil)
 	app.logger = NewLogger(10)
 	// Per-cluster clients are stored in clusterClients, not in global fields.
 	// Create a cluster entry WITHOUT a client to test the error path.
@@ -30,7 +30,7 @@ func TestStartShellSessionRequiresClient(t *testing.T) {
 }
 
 func TestStartShellSessionRequiresRestConfig(t *testing.T) {
-	app := NewApp()
+	app := NewApp(nil)
 	app.logger = NewLogger(10)
 	// Per-cluster clients are stored in clusterClients, not in global fields.
 	fakeClient := fake.NewClientset()
@@ -51,7 +51,7 @@ func TestStartShellSessionRequiresRestConfig(t *testing.T) {
 }
 
 func TestStartShellSessionRequiresNamespace(t *testing.T) {
-	app := NewApp()
+	app := NewApp(nil)
 	app.logger = NewLogger(10)
 	// Per-cluster clients are stored in clusterClients, not in global fields.
 	fakeClient := fake.NewClientset()
@@ -73,7 +73,7 @@ func TestStartShellSessionRequiresNamespace(t *testing.T) {
 }
 
 func TestStartShellSessionRequiresPodName(t *testing.T) {
-	app := NewApp()
+	app := NewApp(nil)
 	app.logger = NewLogger(10)
 	// Per-cluster clients are stored in clusterClients, not in global fields.
 	fakeClient := fake.NewClientset()

@@ -18,7 +18,7 @@ const getTargetPortsMock = vi.hoisted(() => vi.fn());
 const handleInlineMock = vi.hoisted(() => vi.fn());
 const runUserActionMock = vi.hoisted(() => vi.fn());
 
-vi.mock('@wailsjs/go/backend/App', () => ({
+vi.mock('@core/backend-api', () => ({
   RunObjectAction: (...args: unknown[]) => runObjectActionMock(...args),
   GetTargetPorts: (...args: unknown[]) => getTargetPortsMock(...args),
 }));

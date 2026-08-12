@@ -4,8 +4,6 @@ import (
 	"context"
 	"runtime"
 	"testing"
-
-	"github.com/wailsapp/wails/v2/pkg/menu"
 )
 
 func TestCreateMenuBuildsEntries(t *testing.T) {
@@ -49,7 +47,7 @@ func TestCreateMenuTopLevelLabels(t *testing.T) {
 	}
 }
 
-func findSubmenu(t *testing.T, m *menu.Menu, label string) *menu.Menu {
+func findSubmenu(t *testing.T, m *MenuModel, label string) *MenuModel {
 	t.Helper()
 	for _, item := range m.Items {
 		if item.Label == label && item.SubMenu != nil {
@@ -60,7 +58,7 @@ func findSubmenu(t *testing.T, m *menu.Menu, label string) *menu.Menu {
 	return nil
 }
 
-func menuLabels(m *menu.Menu) []string {
+func menuLabels(m *MenuModel) []string {
 	labels := make([]string, 0, len(m.Items))
 	for _, item := range m.Items {
 		labels = append(labels, item.Label)
@@ -70,7 +68,7 @@ func menuLabels(m *menu.Menu) []string {
 
 func TestCreateDebugMenuBuildsDebugOverlayEntries(t *testing.T) {
 	app := &App{}
-	m := menu.NewMenu()
+	m := NewMenuModel()
 
 	createDebugMenu(m, app)
 
@@ -97,7 +95,7 @@ func TestCreateDebugMenuBuildsDebugOverlayEntries(t *testing.T) {
 
 func TestEditMenuOffersStandardClipboardCommands(t *testing.T) {
 	app := &App{}
-	m := menu.NewMenu()
+	m := NewMenuModel()
 
 	createEditMenu(m, app)
 
@@ -116,12 +114,13 @@ func TestEditMenuOffersStandardClipboardCommands(t *testing.T) {
 
 func TestEditMenuItemsEmitFrontendEvents(t *testing.T) {
 	app := &App{}
-	app.setRuntimeContext(context.Background())
+	app.setApplicationContext(context.Background())
+	app.markRuntimeReady()
 	events := []string{}
 	app.eventEmitter = func(_ context.Context, name string, _ ...interface{}) {
 		events = append(events, name)
 	}
-	m := menu.NewMenu()
+	m := NewMenuModel()
 
 	createEditMenu(m, app)
 
@@ -132,7 +131,7 @@ func TestEditMenuItemsEmitFrontendEvents(t *testing.T) {
 		clicked := false
 		for _, item := range editMenu.Items {
 			if item.Label == label && item.Click != nil {
-				item.Click(nil)
+				item.Click()
 				clicked = true
 			}
 		}
@@ -154,7 +153,7 @@ func TestEditMenuItemsEmitFrontendEvents(t *testing.T) {
 
 func TestViewMenuKeepsApplicationLogsAndDiagnosticsEntries(t *testing.T) {
 	app := &App{}
-	m := menu.NewMenu()
+	m := NewMenuModel()
 
 	createViewMenu(m, app)
 
@@ -166,12 +165,13 @@ func TestViewMenuKeepsApplicationLogsAndDiagnosticsEntries(t *testing.T) {
 
 func TestFileMenuOffersOpenCluster(t *testing.T) {
 	app := &App{}
-	app.setRuntimeContext(context.Background())
+	app.setApplicationContext(context.Background())
+	app.markRuntimeReady()
 	events := []string{}
 	app.eventEmitter = func(_ context.Context, name string, _ ...interface{}) {
 		events = append(events, name)
 	}
-	m := menu.NewMenu()
+	m := NewMenuModel()
 
 	createApplicationMenu(m, app)
 
@@ -181,7 +181,7 @@ func TestFileMenuOffersOpenCluster(t *testing.T) {
 	clicked := false
 	for _, item := range fileMenu.Items {
 		if item.Label == "Open Cluster" && item.Click != nil {
-			item.Click(nil)
+			item.Click()
 			clicked = true
 		}
 	}
@@ -196,12 +196,13 @@ func TestFileMenuOffersOpenCluster(t *testing.T) {
 
 func TestViewMenuOffersCommandPalette(t *testing.T) {
 	app := &App{}
-	app.setRuntimeContext(context.Background())
+	app.setApplicationContext(context.Background())
+	app.markRuntimeReady()
 	events := []string{}
 	app.eventEmitter = func(_ context.Context, name string, _ ...interface{}) {
 		events = append(events, name)
 	}
-	m := menu.NewMenu()
+	m := NewMenuModel()
 
 	createViewMenu(m, app)
 
@@ -211,7 +212,7 @@ func TestViewMenuOffersCommandPalette(t *testing.T) {
 	clicked := false
 	for _, item := range viewMenu.Items {
 		if item.Label == "Command Palette" && item.Click != nil {
-			item.Click(nil)
+			item.Click()
 			clicked = true
 		}
 	}
@@ -236,19 +237,20 @@ func assertMenuContainsLabel(t *testing.T, labels []string, want string) {
 
 func TestDebugMenuItemsEmitFrontendEvents(t *testing.T) {
 	app := &App{}
-	app.setRuntimeContext(context.Background())
+	app.setApplicationContext(context.Background())
+	app.markRuntimeReady()
 	events := []string{}
 	app.eventEmitter = func(_ context.Context, name string, _ ...interface{}) {
 		events = append(events, name)
 	}
-	m := menu.NewMenu()
+	m := NewMenuModel()
 
 	createDebugMenu(m, app)
 
 	debugMenu := findSubmenu(t, m, "Debug")
 	for _, item := range debugMenu.Items {
 		if item.Click != nil {
-			item.Click(nil)
+			item.Click()
 		}
 	}
 
@@ -266,6 +268,15 @@ func TestDebugMenuItemsEmitFrontendEvents(t *testing.T) {
 	for i, want := range expected {
 		if events[i] != want {
 			t.Fatalf("event %d = %q, want %q", i, events[i], want)
+		}
+	}
+}
+
+func TestFileMenuDoesNotOfferNewWindow(t *testing.T) {
+	fileMenu := findSubmenu(t, CreateMenu(&App{}), "File")
+	for _, item := range fileMenu.Items {
+		if item.Label == "New Window" || item.Accelerator == "CmdOrCtrl+n" {
+			t.Fatalf("removed New Window command remained in menu: %#v", item)
 		}
 	}
 }

@@ -1,5 +1,5 @@
 // This file handles application versioning and beta expiry checks.
-// Version metadata is sourced from the embedded build manifest; in dev it falls back to wails.json.
+// Version metadata is sourced from the embedded build manifest; in dev it falls back to build/config.yml.
 // The code includes error handling for expired beta builds and logs warnings for builds nearing expiry.
 
 package backend
@@ -13,6 +13,7 @@ import (
 	"time"
 
 	"github.com/luxury-yacht/app/backend/internal/logsources"
+	"gopkg.in/yaml.v3"
 )
 
 // Version variables that can be set at build time
@@ -133,27 +134,25 @@ func loadDevAppInfo() *AppInfo {
 	}
 
 	paths := []string{
-		"wails.json",
-		"../wails.json",
-		"../../wails.json",
-		"/Volumes/git/personal/luxury-yacht/wails.json",
-		"/Users/john/git/personal/luxury-yacht/wails.json",
+		"build/config.yml",
+		"../build/config.yml",
+		"../../build/config.yml",
 	}
 	for _, path := range paths {
 		data, err := os.ReadFile(path)
 		if err != nil {
 			continue
 		}
-		var wailsConfig struct {
+		var buildConfig struct {
 			Info struct {
-				ProductVersion string `json:"productVersion"`
-			} `json:"info"`
+				Version string `yaml:"version"`
+			} `yaml:"info"`
 		}
-		if err := json.Unmarshal(data, &wailsConfig); err != nil || wailsConfig.Info.ProductVersion == "" {
+		if err := yaml.Unmarshal(data, &buildConfig); err != nil || buildConfig.Info.Version == "" {
 			continue
 		}
 		return &AppInfo{
-			Version:    wailsConfig.Info.ProductVersion + " (dev)",
+			Version:    buildConfig.Info.Version + " (dev)",
 			BuildTime:  "dev",
 			GitCommit:  "dev",
 			IsBeta:     false,

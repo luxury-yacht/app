@@ -30,6 +30,7 @@ completed phase plans, or test lists that can be discovered with `rg`.
 | How do permission gates and action capabilities work? | [architecture/permissions.md](architecture/permissions.md) |
 | How are auth failures represented and recovered? | [architecture/auth.md](architecture/auth.md) |
 | How is Sentry error reporting configured and bounded? | [architecture/error-reporting.md](architecture/error-reporting.md) |
+| How do Wails startup, readiness, windows, single-instance launches, and shutdown work? | [architecture/application-lifecycle.md](architecture/application-lifecycle.md) |
 | What are the large-data table rules? | [architecture/large-data.md](architecture/large-data.md) |
 | How do YAML edits save, merge, and check field ownership? | [architecture/yaml-editing.md](architecture/yaml-editing.md) |
 

@@ -25,7 +25,7 @@ const nativeActionMocks = vi.hoisted(() => ({
 }));
 
 const wailsRuntimeMocks = vi.hoisted(() => ({
-  ClipboardGetText: vi.fn(() => Promise.resolve('clipboard-text')),
+  readClipboardText: vi.fn(() => Promise.resolve('clipboard-text')),
 }));
 
 const searchMocks = vi.hoisted(() => {
@@ -211,7 +211,7 @@ vi.mock('@/core/codemirror/search', () => ({
 
 vi.mock('@/core/codemirror/nativeActions', () => nativeActionMocks);
 
-vi.mock('@wailsjs/runtime/runtime', () => wailsRuntimeMocks);
+vi.mock('@core/desktop-runtime', () => wailsRuntimeMocks);
 
 vi.mock('@ui/shortcuts', () => ({
   useKeyboardSurface: (config: unknown) => shortcutMocks.useKeyboardSurface(config),
@@ -255,7 +255,7 @@ describe('YamlEditor', () => {
     nativeActionMocks.cutCodeMirrorSelection.mockClear();
     nativeActionMocks.getCodeMirrorSelectedText.mockClear();
     nativeActionMocks.selectCodeMirrorContent.mockClear();
-    wailsRuntimeMocks.ClipboardGetText.mockClear();
+    wailsRuntimeMocks.readClipboardText.mockClear();
     searchMocks.findNext.mockClear();
     searchMocks.findPrevious.mockClear();
     codeMirrorState.props = { value: '', onChange: () => undefined };
@@ -532,7 +532,7 @@ describe('YamlEditor', () => {
 
     // navigator.clipboard.readText is permission-gated inside the Wails
     // WebView; paste must read through the Go-side clipboard instead.
-    expect(wailsRuntimeMocks.ClipboardGetText).toHaveBeenCalled();
+    expect(wailsRuntimeMocks.readClipboardText).toHaveBeenCalled();
     expect(navigator.clipboard.readText).not.toHaveBeenCalled();
     expect(codeMirrorState.editorView.dispatch).toHaveBeenCalledWith(
       expect.objectContaining({

@@ -23,8 +23,15 @@ go.work.sum
 .env.local
 .env.*.local
 
-# Build output
-build/
+# Build output. Wails v3's build definitions and platform metadata are source;
+# only generated products under these paths are ignored.
+build/bin/
+build/artifacts/
+build/packages/
+build/staging/
+build/coverage/
+build/linux/appimage/build/
+build/linux/*.desktop
 dist/
 app.syso
 
@@ -63,6 +70,7 @@ Thumbs.db
 *.tmp
 *.temp
 .cache/
+.task/
 .parcel-cache/
 .gocache/
 

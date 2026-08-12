@@ -8,7 +8,7 @@
  * that can't be opened (empty or a wildcard) shows just the label.
  */
 
-import { BrowserOpenURL } from '@wailsjs/runtime/runtime';
+import { openURL } from '@core/desktop-runtime';
 import type React from 'react';
 import { buildHostUrl, type UrlScheme } from './hostLink';
 
@@ -37,7 +37,7 @@ export const ExternalHostLinks: React.FC<ExternalHostLinksProps> = ({ host, sche
           type="button"
           className="overview-scheme-link"
           title={`Open ${url} in browser`}
-          onClick={() => BrowserOpenURL(url)}
+          onClick={() => openURL(url)}
         >
           {scheme}
         </button>

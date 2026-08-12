@@ -15,8 +15,39 @@ import {
   createWailsRuntimeHarness,
   type WailsRuntimeHarness,
 } from '@/test-utils/wailsRuntimeHarness';
-import { installWindowProperty } from '@/test-utils/windowProperty';
 import { ClusterLifecycleProvider, useClusterLifecycle } from './ClusterLifecycleContext';
+
+const runtimeHarnessRef = vi.hoisted(() => ({
+  current: null as WailsRuntimeHarness | null,
+}));
+const backendMocks = vi.hoisted(() => ({
+  getAllStates: vi.fn<() => Promise<Record<string, string> | null>>(),
+}));
+
+vi.mock('@/core/desktop-runtime', () => ({
+  onEvent: (eventName: string, handler: (payload: unknown) => void) =>
+    runtimeHarnessRef.current?.onEvent(eventName, handler) ?? (() => undefined),
+}));
+
+vi.mock('@/core/backend-api', () => ({
+  GetClusterWorkspaceState: async () => {
+    const lifecycle = await backendMocks.getAllStates();
+    const clusters = Object.fromEntries(
+      Object.entries(lifecycle ?? {}).map(([clusterId, state]) => [
+        clusterId,
+        {
+          clusterId,
+          clusterName: clusterId,
+          lifecycle: state,
+          auth: { state: 'unknown' },
+          health: 'unknown',
+          scopeRevision: 0,
+        },
+      ])
+    );
+    return { selectedKubeconfigs: [], visibleClusterId: '', clusters };
+  },
+}));
 
 // Mock useKubeconfig — tests control selectedClusterIds via this ref.
 const mockSelectedClusterIds = { current: ['cluster-a', 'cluster-b'] };
@@ -33,8 +64,6 @@ describe('ClusterLifecycleContext', () => {
   const stateRef: { current: ReturnType<typeof useClusterLifecycle> | null } = { current: null };
 
   let runtimeHarness: WailsRuntimeHarness;
-  let restoreRuntime: () => void;
-  let restoreGo: () => void;
 
   // Mock data for the combined workspace RPC.
   let mockGetAllStates: ReturnType<typeof vi.fn<() => Promise<Record<string, string> | null>>>;
@@ -47,35 +76,11 @@ describe('ClusterLifecycleContext', () => {
   beforeEach(() => {
     eventBus.clear();
     mockSelectedClusterIds.current = ['cluster-a', 'cluster-b'];
-    mockGetAllStates = vi.fn().mockResolvedValue(null);
+    backendMocks.getAllStates.mockReset().mockResolvedValue(null);
+    mockGetAllStates = backendMocks.getAllStates;
 
     runtimeHarness = createWailsRuntimeHarness();
-    restoreRuntime = installWindowProperty('runtime', runtimeHarness.runtime);
-
-    // Mock the combined workspace snapshot RPC from a compact lifecycle fixture.
-    restoreGo = installWindowProperty('go', {
-      backend: {
-        App: {
-          GetClusterWorkspaceState: async () => {
-            const lifecycle = (await mockGetAllStates()) as Record<string, string> | null;
-            const clusters = Object.fromEntries(
-              Object.entries(lifecycle ?? {}).map(([clusterId, state]) => [
-                clusterId,
-                {
-                  clusterId,
-                  clusterName: clusterId,
-                  lifecycle: state,
-                  auth: { state: 'unknown' },
-                  health: 'unknown',
-                  scopeRevision: 0,
-                },
-              ])
-            );
-            return { selectedKubeconfigs: [], visibleClusterId: '', clusters };
-          },
-        },
-      },
-    });
+    runtimeHarnessRef.current = runtimeHarness;
 
     container = document.createElement('div');
     document.body.appendChild(container);
@@ -89,8 +94,7 @@ describe('ClusterLifecycleContext', () => {
       root.unmount();
     });
     container.remove();
-    restoreRuntime();
-    restoreGo();
+    runtimeHarnessRef.current = null;
   });
 
   const renderProvider = async () => {

@@ -11,17 +11,7 @@ import (
 )
 
 func BuildWindows(cfg BuildConfig) error {
-	// Ensure Wails uses the intended app icon when generating Windows resources.
-	if err := prepareWindowsBuildIcon(cfg); err != nil {
-		return err
-	}
-
-	generateBuildManifest(cfg)
-
-	// Update build args for Windows
-	cfg.BuildArgs = append(cfg.BuildArgs, "-o", cfg.AppShortName+".exe")
-
-	return sh.RunV("wails", cfg.BuildArgs...)
+	return runWailsTask(cfg, "build")
 }
 
 // Annoyingly, Windows won't accept semver strings with prepended `v` or prerelease/build metadata.
@@ -63,162 +53,27 @@ func sanitizeSemverForWindows(semver string) (string, error) {
 	return sanitizedVersion, nil
 }
 
-// buildWindowsInstaller runs Wails with NSIS enabled to generate the installer.
+// buildWindowsInstaller runs the Wails v3 NSIS package task and copies the
+// versioned release artifact into the repository's release staging directory.
 func buildWindowsInstaller(cfg BuildConfig) error {
-	// Keep the Windows icon and build metadata in sync before generating the installer.
-	if err := prepareWindowsBuildIcon(cfg); err != nil {
-		return err
-	}
-
-	generateBuildManifest(cfg)
-
-	// Ensure the artifacts directory exists so NSIS can write the installer there.
 	if err := os.MkdirAll(cfg.ArtifactsDir, 0o755); err != nil {
 		return fmt.Errorf("failed to prepare artifacts directory: %w", err)
 	}
-
-	// Sanitize the version for Windows installer.
 	normalizedVersion, err := sanitizeSemverForWindows(cfg.Version)
 	if err != nil {
 		return err
 	}
-
-	if err := stageNSISLicense(cfg); err != nil {
+	if err := runWailsTask(cfg, "package", "WINDOWS_VERSION="+normalizedVersion); err != nil {
 		return err
 	}
-
-	// Patch the generated NSIS template to use the normalized version.
-	if err := patchGeneratedNSISTemplate(cfg, normalizedVersion); err != nil {
-		return err
-	}
-
-	buildArgs := append([]string{}, cfg.BuildArgs...)
-	buildArgs = append(buildArgs, "-o", cfg.AppShortName+".exe", "-nsis")
-	return sh.RunV("wails", buildArgs...)
-}
-
-// patchGeneratedNSISTemplate updates the generated project.nsi to use a numeric version.
-func patchGeneratedNSISTemplate(cfg BuildConfig, version string) error {
-	projectPath := filepath.Join(cfg.BuildDir, "windows", "installer", "project.nsi")
-	if _, err := os.Stat(projectPath); err != nil {
-		if !os.IsNotExist(err) {
-			return fmt.Errorf("failed to stat NSIS project file at %s: %w", projectPath, err)
-		}
-		if err := stageWailsNSISTemplate(projectPath); err != nil {
-			return err
-		}
-	}
-	content, err := os.ReadFile(projectPath)
-	if err != nil {
-		return fmt.Errorf("failed to read NSIS project file at %s: %w", projectPath, err)
-	}
-
-	fmt.Printf("\n⚙️ Patching NSIS template with version %s...\n", version)
-
-	// Replace the version strings.
-	productRe := regexp.MustCompile(`(?m)^\s*VIProductVersion\s+"[^"]+"\s*.*$`)
-	fileRe := regexp.MustCompile(`(?m)^\s*VIFileVersion\s+"[^"]+"\s*.*$`)
-	outFileRe := regexp.MustCompile(`(?m)^\s*OutFile\s+"[^"]+"\s*.*$`)
-	licenseRe := regexp.MustCompile(`(?m)^\s*[#;]?\s*!insertmacro\s+MUI_PAGE_LICENSE\s+"resources\\eula\.txt"\s*.*$`)
-
-	if !productRe.Match(content) || !fileRe.Match(content) || !outFileRe.Match(content) || !licenseRe.Match(content) {
-		return fmt.Errorf("NSIS project file missing required directives at %s", projectPath)
-	}
-
-	updated := productRe.ReplaceAllString(string(content), fmt.Sprintf(`VIProductVersion "%s"`, version))
-	updated = fileRe.ReplaceAllString(updated, fmt.Sprintf(`VIFileVersion "%s"`, version))
-	// Ensure the installer filename is in the format <appShortName>-<version>-windows-<arch>-installer.exe
-	installerDir := filepath.Join(cfg.BuildDir, "windows", "installer")
-	relArtifactsDir, err := filepath.Rel(installerDir, filepath.Clean(cfg.ArtifactsDir))
-	if err != nil {
-		return fmt.Errorf("failed to build NSIS artifacts path: %w", err)
-	}
-	relArtifactsDir = filepath.FromSlash(relArtifactsDir)
-	outFileLine := fmt.Sprintf(
-		`OutFile "%s\%s-%s-windows-%s-installer.exe"`,
-		relArtifactsDir,
-		cfg.AppShortName,
-		cfg.Version,
-		cfg.ArchType,
+	builtInstaller := filepath.Join(
+		cfg.BuildDir,
+		"bin",
+		fmt.Sprintf("%s-%s-installer.exe", cfg.AppShortName, cfg.ArchType),
 	)
-	updated = outFileRe.ReplaceAllString(updated, outFileLine)
-	// Require license acceptance during install.
-	updated = licenseRe.ReplaceAllString(updated, `!insertmacro MUI_PAGE_LICENSE "resources\eula.txt"`)
-
-	if err := os.WriteFile(projectPath, []byte(updated), 0o644); err != nil {
-		return fmt.Errorf("failed to update NSIS project file at %s: %w", projectPath, err)
+	if err := sh.Copy(getWindowsInstallerPath(cfg), builtInstaller); err != nil {
+		return fmt.Errorf("stage Windows installer artifact: %w", err)
 	}
-
-	fmt.Println("✅ NSIS template patched successfully.")
-
-	return nil
-}
-
-// stageWailsNSISTemplate seeds project.nsi from Wails' default template for clean builds.
-func stageWailsNSISTemplate(destPath string) error {
-	fmt.Println("\n📁 Staging Wails NSIS template...")
-
-	wailsDir, err := sh.Output("go", "list", "-m", "-f", "{{.Dir}}", "github.com/wailsapp/wails/v2")
-	if err != nil {
-		return fmt.Errorf("failed to locate Wails module: %w", err)
-	}
-	sourcePath := filepath.Join(wailsDir, "pkg", "buildassets", "build", "windows", "installer", "project.nsi")
-	if err := os.MkdirAll(filepath.Dir(destPath), 0o755); err != nil {
-		return fmt.Errorf("failed to create NSIS template directory: %w", err)
-	}
-	content, err := os.ReadFile(sourcePath)
-	if err != nil {
-		return fmt.Errorf("failed to read NSIS template from %s: %w", sourcePath, err)
-	}
-	if err := os.WriteFile(destPath, content, 0o644); err != nil {
-		return fmt.Errorf("failed to write NSIS template to %s: %w", destPath, err)
-	}
-	fmt.Println("✅ Wails NSIS template staged at", destPath)
-	return nil
-}
-
-// stageNSISLicense copies the repo LICENSE into the installer resources.
-func stageNSISLicense(cfg BuildConfig) error {
-	licenseSrc := "LICENSE"
-	licenseDest := filepath.Join(cfg.BuildDir, "windows", "installer", "resources", "eula.txt")
-	if err := os.MkdirAll(filepath.Dir(licenseDest), 0o755); err != nil {
-		return fmt.Errorf("failed to create NSIS resources directory: %w", err)
-	}
-	content, err := os.ReadFile(licenseSrc)
-	if err != nil {
-		return fmt.Errorf("failed to read license at %s: %w", licenseSrc, err)
-	}
-	if err := os.WriteFile(licenseDest, content, 0o644); err != nil {
-		return fmt.Errorf("failed to write NSIS license to %s: %w", licenseDest, err)
-	}
-	return nil
-}
-
-// prepareWindowsBuildIcon stages the PNG source and clears stale ICOs so Wails regenerates the icon.
-func prepareWindowsBuildIcon(cfg BuildConfig) error {
-	fmt.Println("\n🎨 Preparing Windows .ico file...")
-
-	if _, err := os.Stat(cfg.IconSource); err != nil {
-		return fmt.Errorf("icon not found at %s: %w", cfg.IconSource, err)
-	}
-
-	if err := os.MkdirAll(cfg.BuildDir, 0o755); err != nil {
-		return fmt.Errorf("failed to create build dir: %w", err)
-	}
-
-	iconDest := filepath.Join(cfg.BuildDir, "appicon.png")
-	if err := sh.Copy(iconDest, cfg.IconSource); err != nil {
-		return fmt.Errorf("failed to copy icon for Windows build: %w", err)
-	}
-
-	// Remove the cached ICO so Wails regenerates it from the updated PNG.
-	windowsIcon := filepath.Join(cfg.BuildDir, "windows", "icon.ico")
-	if err := os.Remove(windowsIcon); err != nil && !os.IsNotExist(err) {
-		return fmt.Errorf("failed to remove stale Windows icon: %w", err)
-	}
-
-	fmt.Println("✅ Icon file staged at", iconDest)
-
 	return nil
 }
 

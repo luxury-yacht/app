@@ -98,7 +98,7 @@ vi.mock('@shared/hooks/useNavigateToView', () => ({
   useNavigateToView: () => ({ navigateToView: vi.fn() }),
 }));
 
-vi.mock('@wailsjs/go/backend/App', () => ({
+vi.mock('@core/backend-api', () => ({
   FindCatalogObjectByUID: (...args: unknown[]) => findCatalogObjectByUIDMock(...args),
 }));
 

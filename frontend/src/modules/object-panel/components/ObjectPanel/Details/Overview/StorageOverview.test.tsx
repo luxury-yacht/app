@@ -5,7 +5,7 @@
  * OverviewRenderer. Each case renders the matching descriptor with a DTO-shaped fixture.
  */
 
-import { persistentvolume, persistentvolumeclaim, storageclass } from '@wailsjs/go/models';
+import { persistentvolume, persistentvolumeclaim, storageclass } from '@core/backend-api/models';
 import type React from 'react';
 import { act } from 'react';
 import * as ReactDOM from 'react-dom/client';

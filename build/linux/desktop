@@ -1,0 +1,13 @@
+[Desktop Entry]
+Version=1.0
+Name=Luxury Yacht
+Comment=Luxury Yacht is a desktop app for managing Kubernetes clusters. Sail the seas of Kubernetes in style!
+# The Exec line includes %u to pass the URL to the application
+Exec=/usr/local/bin/luxury-yacht %u
+Terminal=false
+Type=Application
+Icon=luxury-yacht
+Categories=Utility;
+StartupWMClass=luxury-yacht
+
+ 

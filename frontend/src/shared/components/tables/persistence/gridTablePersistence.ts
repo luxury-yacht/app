@@ -24,6 +24,14 @@ import {
   normalizeGridTableQueryFacets,
 } from '@shared/components/tables/gridTableFilterState';
 import { requestAppState } from '@/core/app-state-access';
+import {
+  ClearGridTablePersistence,
+  DeleteGridTablePersistence,
+  DeleteGridTablePersistenceEntries,
+  GetGridTablePersistence,
+  SetGridTablePersistence,
+} from '@/core/backend-api';
+import { desktopRuntimeAvailable } from '@/core/desktop-runtime';
 import { reportOperationalError } from '@/utils/errorHandler';
 
 export interface GridTablePersistedState {
@@ -152,13 +160,6 @@ let persistenceCache: GridTablePersistenceMap = {};
 let hydrated = false;
 let hydrationPromise: Promise<void> | null = null;
 
-const getRuntimeApp = () => {
-  if (typeof window === 'undefined') {
-    return undefined;
-  }
-  return window.go?.backend?.App;
-};
-
 const migratePersistedQueryFacets = (
   value: unknown
 ): Record<string, MultiSelectFilterSelection> | undefined => {
@@ -223,15 +224,14 @@ const normalizePersistenceMap = (entries: Record<string, unknown>): GridTablePer
 };
 
 const fetchGridTablePersistence = async (): Promise<GridTablePersistenceMap> => {
-  const runtimeApp = getRuntimeApp();
-  if (!runtimeApp || typeof runtimeApp.GetGridTablePersistence !== 'function') {
+  if (!desktopRuntimeAvailable()) {
     return {};
   }
   try {
     const entries = await requestAppState({
       resource: 'grid-table-persistence',
       adapter: 'persistence-read',
-      read: () => runtimeApp.GetGridTablePersistence(),
+      read: () => GetGridTablePersistence(),
     });
     if (!entries || typeof entries !== 'object') {
       return {};
@@ -258,8 +258,7 @@ export const hydrateGridTablePersistence = async (options?: { force?: boolean })
   }
 
   hydrationPromise = (async () => {
-    const runtimeApp = getRuntimeApp();
-    if (!runtimeApp || typeof runtimeApp.GetGridTablePersistence !== 'function') {
+    if (!desktopRuntimeAvailable()) {
       hydrated = true;
       return;
     }
@@ -299,11 +298,10 @@ export const savePersistedState = (
 
   persistenceCache[key] = state;
 
-  const runtimeApp = getRuntimeApp();
-  if (!runtimeApp || typeof runtimeApp.SetGridTablePersistence !== 'function') {
+  if (!desktopRuntimeAvailable()) {
     return;
   }
-  void runtimeApp.SetGridTablePersistence(key, state).catch((error: unknown) => {
+  void SetGridTablePersistence(key, state).catch((error: unknown) => {
     reportOperationalError(error, { source: 'GridTablePersistence', action: 'persistState' });
   });
 };
@@ -315,11 +313,10 @@ export const clearPersistedState = (key: string | null): void => {
 
   delete persistenceCache[key];
 
-  const runtimeApp = getRuntimeApp();
-  if (!runtimeApp || typeof runtimeApp.DeleteGridTablePersistence !== 'function') {
+  if (!desktopRuntimeAvailable()) {
     return;
   }
-  void runtimeApp.DeleteGridTablePersistence(key).catch((error: unknown) => {
+  void DeleteGridTablePersistence(key).catch((error: unknown) => {
     reportOperationalError(error, { source: 'GridTablePersistence', action: 'deleteState' });
   });
 };
@@ -332,11 +329,10 @@ export const deletePersistedStates = (keys: string[]): void => {
     delete persistenceCache[key];
   });
 
-  const runtimeApp = getRuntimeApp();
-  if (!runtimeApp || typeof runtimeApp.DeleteGridTablePersistenceEntries !== 'function') {
+  if (!desktopRuntimeAvailable()) {
     return;
   }
-  void runtimeApp.DeleteGridTablePersistenceEntries(keys).catch((error: unknown) => {
+  void DeleteGridTablePersistenceEntries(keys).catch((error: unknown) => {
     reportOperationalError(error, { source: 'GridTablePersistence', action: 'deleteStates' });
   });
 };
@@ -345,13 +341,12 @@ export const clearAllPersistedStates = async (): Promise<number> => {
   const removed = Object.keys(persistenceCache).length;
   persistenceCache = {};
 
-  const runtimeApp = getRuntimeApp();
-  if (!runtimeApp || typeof runtimeApp.ClearGridTablePersistence !== 'function') {
+  if (!desktopRuntimeAvailable()) {
     return removed;
   }
 
   try {
-    const cleared = await runtimeApp.ClearGridTablePersistence();
+    const cleared = await ClearGridTablePersistence();
     return typeof cleared === 'number' ? cleared : removed;
   } catch (error) {
     reportOperationalError(error, { source: 'GridTablePersistence', action: 'clearState' });

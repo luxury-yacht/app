@@ -6,6 +6,7 @@
  */
 
 import { useZoom } from '@core/contexts/ZoomContext';
+import { onEvent } from '@core/desktop-runtime';
 import {
   getClusterTabOrder,
   hydrateClusterTabOrder,
@@ -13,7 +14,6 @@ import {
   subscribeClusterTabOrder,
 } from '@core/persistence/clusterTabOrder';
 import { useKubeconfig } from '@modules/kubernetes/config/KubeconfigContext';
-import { EventsOff, EventsOn } from '@wailsjs/runtime/runtime';
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { isMacPlatform } from '@/utils/platform';
 import { KeyCodes } from '../constants';
@@ -316,10 +316,7 @@ export function GlobalShortcuts({
       handleCloseClusterTab();
     };
 
-    EventsOn('menu:close', handleMenuClose);
-    return () => {
-      EventsOff('menu:close');
-    };
+    return onEvent('menu:close', handleMenuClose);
   }, [handleCloseClusterTab]);
 
   useShortcut({

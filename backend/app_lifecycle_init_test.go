@@ -12,9 +12,10 @@ import (
 )
 
 func TestInitKubernetesClientUsesExistingClusterClients(t *testing.T) {
-	app := NewApp()
+	app := NewApp(nil)
 	app.logger = NewLogger(10)
-	app.setRuntimeContext(context.Background())
+	app.setApplicationContext(context.Background())
+	app.markRuntimeReady()
 
 	// Seed a selection and client pool so init uses the existing cluster client.
 	configPath := "/tmp/config"
@@ -44,7 +45,7 @@ func TestInitKubernetesClientUsesExistingClusterClients(t *testing.T) {
 func TestInitKubernetesClientErrorsWithoutKubeconfig(t *testing.T) {
 	t.Setenv("HOME", "")
 
-	app := NewApp()
+	app := NewApp(nil)
 	app.logger = NewLogger(10)
 
 	err := app.initKubernetesClient()
@@ -83,9 +84,10 @@ users:
 		t.Fatalf("failed to write kubeconfig: %v", err)
 	}
 
-	app := NewApp()
+	app := NewApp(nil)
 	app.logger = NewLogger(10)
-	app.setRuntimeContext(context.Background())
+	app.setApplicationContext(context.Background())
+	app.markRuntimeReady()
 	app.availableKubeconfigs = []KubeconfigInfo{{
 		Name:    "config",
 		Path:    file,

@@ -64,6 +64,50 @@ const ensureStorage = (key: 'localStorage' | 'sessionStorage') => {
 ensureStorage('localStorage');
 ensureStorage('sessionStorage');
 
+vi.mock('@wailsio/runtime', () => {
+  const identity = (value: unknown) => value;
+  const create = {
+    Any: identity,
+    Array:
+      (convert: (value: unknown) => unknown) =>
+      (value: unknown[] | null): unknown[] =>
+        value === null ? [] : value.map(convert),
+    ByteSlice: (value: unknown) => value ?? '',
+    DateFromTime: (value: string) => new Date(value),
+    Map:
+      (_key: (value: unknown) => unknown, convert: (value: unknown) => unknown) =>
+      (value: Record<string, unknown> | null): Record<string, unknown> =>
+        Object.fromEntries(
+          Object.entries(value ?? {}).map(([key, entry]) => [key, convert(entry)])
+        ),
+    Nullable:
+      (convert: (value: unknown) => unknown) =>
+      (value: unknown): unknown =>
+        value === null ? null : convert(value),
+    Struct:
+      (fields: Record<string, (value: unknown) => unknown>) =>
+      (value: Record<string, unknown>): Record<string, unknown> => {
+        for (const [key, convert] of Object.entries(fields)) {
+          if (key in value) {
+            value[key] = convert(value[key]);
+          }
+        }
+        return value;
+      },
+  };
+  return {
+    Application: { Hide: vi.fn(), Quit: vi.fn(), Show: vi.fn() },
+    Browser: { OpenURL: vi.fn() },
+    Call: { ByID: vi.fn(), ByName: vi.fn() },
+    Clipboard: { SetText: vi.fn(), Text: vi.fn() },
+    Create: create,
+    Events: { Off: vi.fn(), On: vi.fn(() => () => undefined) },
+    objectNames: { Call: 0, Browser: 9 },
+    System: { Environment: vi.fn() },
+    Window: { OpenDevTools: vi.fn(), ToggleMaximise: vi.fn() },
+  };
+});
+
 // JSDOM emits noisy "navigation to another Document" warnings when tests click
 // anchors. The frontend tests assert app-side handlers, not real browser
 // navigation, so dispatch the click event without attempting navigation.
@@ -90,9 +134,3 @@ afterEach(async () => {
 
 // Ensure React testing utilities run without extra warnings
 globalThis.IS_REACT_ACT_ENVIRONMENT = true;
-
-vi.mock('@wailsjs/runtime/runtime', () => ({
-  EventsOnMultiple: () => undefined,
-  EventsOff: () => undefined,
-  EventsOn: () => undefined,
-}));

@@ -8,7 +8,6 @@ import (
 	"testing"
 
 	"github.com/stretchr/testify/require"
-	wailsruntime "github.com/wailsapp/wails/v2/pkg/runtime"
 )
 
 func dataManagementFavorite(id, name string) Favorite {
@@ -24,51 +23,49 @@ func dataManagementFavorite(id, name string) Favorite {
 	}
 }
 
-func installDataManagementDialogs(t *testing.T, savePath, openPath string) (*wailsruntime.SaveDialogOptions, *wailsruntime.OpenDialogOptions) {
+func installDataManagementDialogs(t *testing.T, app *App, savePath, openPath string) (*SaveFileDialogOptions, *OpenFileDialogOptions) {
 	t.Helper()
-	originalSave := runtimeSaveFileDialog
-	originalOpen := runtimeOpenFileDialog
-	saveOptions := &wailsruntime.SaveDialogOptions{}
-	openOptions := &wailsruntime.OpenDialogOptions{}
-	runtimeSaveFileDialog = func(_ context.Context, options wailsruntime.SaveDialogOptions) (string, error) {
-		*saveOptions = options
-		return savePath, nil
+	saveOptions := &SaveFileDialogOptions{}
+	openOptions := &OpenFileDialogOptions{}
+	app.desktop = &fakeDesktop{
+		saveFile: func(options SaveFileDialogOptions) (string, error) {
+			*saveOptions = options
+			return savePath, nil
+		},
+		openFile: func(options OpenFileDialogOptions) (string, error) {
+			*openOptions = options
+			return openPath, nil
+		},
 	}
-	runtimeOpenFileDialog = func(_ context.Context, options wailsruntime.OpenDialogOptions) (string, error) {
-		*openOptions = options
-		return openPath, nil
-	}
-	t.Cleanup(func() {
-		runtimeSaveFileDialog = originalSave
-		runtimeOpenFileDialog = originalOpen
-	})
 	return saveOptions, openOptions
 }
 
 func TestDataManagementDialogsDefaultToUserHomeDirectory(t *testing.T) {
 	setTestConfigEnv(t)
 	app := newTestAppWithDefaults(t)
-	app.setRuntimeContext(context.Background())
+	app.setApplicationContext(context.Background())
+	app.markRuntimeReady()
 	home, err := os.UserHomeDir()
 	require.NoError(t, err)
 	require.NotEmpty(t, home)
 
 	exportPath := filepath.Join(t.TempDir(), "export.json")
-	saveOptions, openOptions := installDataManagementDialogs(t, exportPath, "")
+	saveOptions, openOptions := installDataManagementDialogs(t, app, exportPath, "")
 
 	_, err = app.exportDataFile("Export Data", "export.json", map[string]string{"data": "value"})
 	require.NoError(t, err)
 	_, _, err = app.chooseDataImportFile("Import Data")
 	require.NoError(t, err)
 
-	require.Equal(t, home, saveOptions.DefaultDirectory)
-	require.Equal(t, home, openOptions.DefaultDirectory)
+	require.Equal(t, home, saveOptions.Directory)
+	require.Equal(t, home, openOptions.Directory)
 }
 
 func TestExportSettingsExportsPreferencesAndSearchPathsOnly(t *testing.T) {
 	setTestConfigEnv(t)
 	app := newTestAppWithDefaults(t)
-	app.setRuntimeContext(context.Background())
+	app.setApplicationContext(context.Background())
+	app.markRuntimeReady()
 
 	settings := defaultSettingsFile()
 	settings.Preferences.AppearanceMode = "dark"
@@ -83,7 +80,7 @@ func TestExportSettingsExportsPreferencesAndSearchPathsOnly(t *testing.T) {
 	require.NoError(t, app.saveSettingsFile(settings))
 
 	exportPath := filepath.Join(t.TempDir(), "settings-export.json")
-	installDataManagementDialogs(t, exportPath, "")
+	installDataManagementDialogs(t, app, exportPath, "")
 
 	result, err := app.ExportSettings()
 	require.NoError(t, err)
@@ -114,7 +111,8 @@ func TestExportSettingsExportsPreferencesAndSearchPathsOnly(t *testing.T) {
 func TestImportSettingsReplacesPortableSettingsAndPreservesSessionState(t *testing.T) {
 	setTestConfigEnv(t)
 	app := newTestAppWithDefaults(t)
-	app.setRuntimeContext(context.Background())
+	app.setApplicationContext(context.Background())
+	app.markRuntimeReady()
 
 	current := defaultSettingsFile()
 	current.Preferences.AppearanceMode = "dark"
@@ -153,7 +151,7 @@ func TestImportSettingsReplacesPortableSettingsAndPreservesSessionState(t *testi
 	require.NoError(t, err)
 	importPath := filepath.Join(t.TempDir(), "settings-import.json")
 	require.NoError(t, os.WriteFile(importPath, importData, 0o600))
-	installDataManagementDialogs(t, "", importPath)
+	installDataManagementDialogs(t, app, "", importPath)
 
 	result, err := app.ImportSettings()
 	require.NoError(t, err)
@@ -192,7 +190,8 @@ func TestImportSettingsReplacesPortableSettingsAndPreservesSessionState(t *testi
 func TestImportSettingsRejectsWrongFormatWithoutChangingSettings(t *testing.T) {
 	setTestConfigEnv(t)
 	app := newTestAppWithDefaults(t)
-	app.setRuntimeContext(context.Background())
+	app.setApplicationContext(context.Background())
+	app.markRuntimeReady()
 	current := defaultSettingsFile()
 	current.Preferences.AppearanceMode = "dark"
 	require.NoError(t, app.saveSettingsFile(current))
@@ -203,7 +202,7 @@ func TestImportSettingsRejectsWrongFormatWithoutChangingSettings(t *testing.T) {
 
 	importPath := filepath.Join(t.TempDir(), "favorites.json")
 	require.NoError(t, os.WriteFile(importPath, []byte(`{"format":"luxury-yacht-favorites","schemaVersion":1,"favorites":[]}`), 0o600))
-	installDataManagementDialogs(t, "", importPath)
+	installDataManagementDialogs(t, app, "", importPath)
 
 	_, err = app.ImportSettings()
 	require.ErrorContains(t, err, "not a Luxury Yacht settings export")
@@ -215,7 +214,8 @@ func TestImportSettingsRejectsWrongFormatWithoutChangingSettings(t *testing.T) {
 func TestFavoritesExportImportRoundTripReplacesLibrary(t *testing.T) {
 	setTestConfigEnv(t)
 	app := newTestAppWithDefaults(t)
-	app.setRuntimeContext(context.Background())
+	app.setApplicationContext(context.Background())
+	app.markRuntimeReady()
 
 	original := &favoritesFile{
 		Favorites: []Favorite{
@@ -226,7 +226,7 @@ func TestFavoritesExportImportRoundTripReplacesLibrary(t *testing.T) {
 	require.NoError(t, app.saveFavoritesFile(original))
 
 	exportPath := filepath.Join(t.TempDir(), "favorites-export.json")
-	installDataManagementDialogs(t, exportPath, exportPath)
+	installDataManagementDialogs(t, app, exportPath, exportPath)
 	exportResult, err := app.ExportFavorites()
 	require.NoError(t, err)
 	require.False(t, exportResult.Canceled)
@@ -256,7 +256,8 @@ func TestFavoritesExportImportRoundTripReplacesLibrary(t *testing.T) {
 func TestImportFavoritesRejectsDuplicateIDsWithoutChangingLibrary(t *testing.T) {
 	setTestConfigEnv(t)
 	app := newTestAppWithDefaults(t)
-	app.setRuntimeContext(context.Background())
+	app.setApplicationContext(context.Background())
+	app.markRuntimeReady()
 	beforeFavorite := dataManagementFavorite("existing", "Existing")
 	require.NoError(t, app.saveFavoritesFile(&favoritesFile{Favorites: []Favorite{beforeFavorite}}))
 
@@ -272,7 +273,7 @@ func TestImportFavoritesRejectsDuplicateIDsWithoutChangingLibrary(t *testing.T) 
 	require.NoError(t, err)
 	importPath := filepath.Join(t.TempDir(), "favorites-import.json")
 	require.NoError(t, os.WriteFile(importPath, data, 0o600))
-	installDataManagementDialogs(t, "", importPath)
+	installDataManagementDialogs(t, app, "", importPath)
 
 	_, err = app.ImportFavorites()
 	require.ErrorContains(t, err, `duplicate favorite ID "duplicate"`)
@@ -284,8 +285,9 @@ func TestImportFavoritesRejectsDuplicateIDsWithoutChangingLibrary(t *testing.T) 
 func TestDataManagementDialogsTreatCancelAsSuccess(t *testing.T) {
 	setTestConfigEnv(t)
 	app := newTestAppWithDefaults(t)
-	app.setRuntimeContext(context.Background())
-	installDataManagementDialogs(t, "", "")
+	app.setApplicationContext(context.Background())
+	app.markRuntimeReady()
+	installDataManagementDialogs(t, app, "", "")
 
 	for _, action := range []func() (DataManagementResult, error){
 		app.ExportSettings,

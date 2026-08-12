@@ -10,18 +10,19 @@ import path from 'node:path';
 import { sentryVitePlugin } from '@sentry/vite-plugin';
 import react from '@vitejs/plugin-react';
 import { defineConfig, type UserConfig } from 'vite';
+import { parse } from 'yaml';
 
-interface WailsConfig {
+interface WailsBuildConfig {
   info: {
-    productVersion: string;
+    version: string;
   };
 }
 
 const configDirectory = import.meta.dirname;
-const wailsConfig = JSON.parse(
-  readFileSync(path.resolve(configDirectory, '../wails.json'), 'utf8')
-) as WailsConfig;
-const sentryRelease = `luxury-yacht@${wailsConfig.info.productVersion}`;
+const wailsBuildConfig = parse(
+  readFileSync(path.resolve(configDirectory, '../build/config.yml'), 'utf8')
+) as WailsBuildConfig;
+const sentryRelease = `luxury-yacht@${wailsBuildConfig.info.version}`;
 
 const configuredValue = (environment: NodeJS.ProcessEnv, name: string) =>
   environment[name]?.trim() ?? '';
@@ -111,7 +112,7 @@ export function createViteConfig(
         '@utils': path.resolve(configDirectory, './src/utils'),
         '@contexts': path.resolve(configDirectory, './src/core/contexts'),
         '@assets': path.resolve(configDirectory, './src/assets'),
-        '@wailsjs': path.resolve(configDirectory, './wailsjs'),
+        '@bindings': path.resolve(configDirectory, './bindings'),
 
         // Backend-owned shared contracts
         '@yaml-field-policy-contract': path.resolve(

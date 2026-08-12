@@ -11,6 +11,7 @@ import {
   readShellSessions,
   requestAppState,
 } from '@/core/app-state-access';
+import { onEvent } from '@/core/desktop-runtime';
 import {
   initialRuntimeOperationStatusState,
   normalizePortForwardSession,
@@ -109,44 +110,43 @@ export function useRuntimeOperationStatus(
   }, [onInitialReadError, readInitialState]);
 
   useEffect(() => {
-    const runtime = window.runtime;
-    if (!runtime?.EventsOn) {
-      return;
-    }
+    const cancelShellList = onEvent('object-shell:list', (sessions?: ShellSessionInfo[]) =>
+      dispatch({ type: 'object-shell:list', sessions: sessions || [] })
+    );
 
-    const cancelShellList = runtime.EventsOn('object-shell:list', (...args: unknown[]) =>
-      dispatch({ type: 'object-shell:list', sessions: (args[0] as ShellSessionInfo[]) || [] })
-    ) as unknown as (() => void) | undefined;
+    const cancelPortForwardList = onEvent(
+      'portforward:list',
+      (sessions?: RawPortForwardSession[]) =>
+        dispatch({
+          type: 'portforward:list',
+          sessions: (sessions || []).map(normalizePortForwardSession),
+        })
+    );
 
-    const cancelPortForwardList = runtime.EventsOn('portforward:list', (...args: unknown[]) =>
-      dispatch({
-        type: 'portforward:list',
-        sessions: ((args[0] as RawPortForwardSession[]) || []).map(normalizePortForwardSession),
-      })
-    ) as unknown as (() => void) | undefined;
-
-    const cancelRuntimeOperationsList = runtime.EventsOn(
+    const cancelRuntimeOperationsList = onEvent(
       'runtime-operations:list',
-      (...args: unknown[]) =>
+      (operations?: RuntimeOperation[]) =>
         dispatch({
           type: 'runtime-operations:list',
-          operations: (args[0] as RuntimeOperation[]) || [],
+          operations: operations || [],
         })
-    ) as unknown as (() => void) | undefined;
+    );
 
-    const cancelPortForwardStatus = runtime.EventsOn('portforward:status', (...args: unknown[]) => {
-      const raw = args[0] as RawPortForwardStatusEvent | undefined;
-      if (!raw?.sessionId) {
-        return;
+    const cancelPortForwardStatus = onEvent(
+      'portforward:status',
+      (raw?: RawPortForwardStatusEvent) => {
+        if (!raw?.sessionId) {
+          return;
+        }
+        dispatch({ type: 'portforward:status', event: normalizePortForwardStatusEvent(raw) });
       }
-      dispatch({ type: 'portforward:status', event: normalizePortForwardStatusEvent(raw) });
-    }) as unknown as (() => void) | undefined;
+    );
 
     return () => {
-      cancelShellList?.();
-      cancelPortForwardList?.();
-      cancelRuntimeOperationsList?.();
-      cancelPortForwardStatus?.();
+      cancelShellList();
+      cancelPortForwardList();
+      cancelRuntimeOperationsList();
+      cancelPortForwardStatus();
     };
   }, []);
 

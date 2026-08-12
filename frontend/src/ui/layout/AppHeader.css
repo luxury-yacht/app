@@ -5,7 +5,7 @@
   height: var(--app-header-height);
   background: var(--color-bg-secondary);
   border-bottom: 1px solid var(--border-color);
-  --wails-draggable: true;
+  --wails-draggable: drag;
   user-select: none;
   cursor: default;
   padding: 0 12px;
@@ -25,7 +25,7 @@
   border: 0;
   background: transparent;
   cursor: default;
-  --wails-draggable: true;
+  --wails-draggable: drag;
 }
 
 .app-header-drag-control:focus-visible {
@@ -39,7 +39,7 @@
   gap: 8px;
   flex-shrink: 0;
   margin-left: 0.5rem;
-  --wails-draggable: none;
+  --wails-draggable: no-drag;
 }
 
 .status-indicators {

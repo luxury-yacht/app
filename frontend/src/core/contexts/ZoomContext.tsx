@@ -11,6 +11,7 @@ import type React from 'react';
 import { createContext, type ReactNode, useCallback, useContext, useEffect, useState } from 'react';
 import { readZoomLevel, requestAppState } from '@/core/app-state-access';
 import { SetZoomLevel } from '@/core/backend-api';
+import { onEvent } from '@/core/desktop-runtime';
 import { reportOperationalError } from '@/utils/errorHandler';
 
 // Zoom constraints
@@ -139,19 +140,14 @@ export const ZoomProvider: React.FC<ZoomProviderProps> = ({ children }) => {
 
   // Listen for zoom events from Wails menu
   useEffect(() => {
-    const runtime = window.runtime;
-    if (!runtime?.EventsOn) {
-      return;
-    }
-
-    runtime.EventsOn('zoom-in', zoomIn);
-    runtime.EventsOn('zoom-out', zoomOut);
-    runtime.EventsOn('zoom-reset', resetZoom);
+    const disposeZoomIn = onEvent('zoom-in', zoomIn);
+    const disposeZoomOut = onEvent('zoom-out', zoomOut);
+    const disposeZoomReset = onEvent('zoom-reset', resetZoom);
 
     return () => {
-      runtime.EventsOff?.('zoom-in');
-      runtime.EventsOff?.('zoom-out');
-      runtime.EventsOff?.('zoom-reset');
+      disposeZoomIn();
+      disposeZoomOut();
+      disposeZoomReset();
     };
   }, [zoomIn, zoomOut, resetZoom]);
 

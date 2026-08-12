@@ -23,7 +23,7 @@ import Sidebar from './Sidebar';
 const sidebarStyles = readFileSync(resolve(process.cwd(), 'src/ui/layout/Sidebar.css'), 'utf8');
 
 const runtimeMocks = vi.hoisted(() => ({
-  eventsOn: vi.fn(),
+  eventsOn: vi.fn(() => () => undefined),
   eventsOff: vi.fn(),
 }));
 
@@ -49,9 +49,10 @@ const kubeconfigState = vi.hoisted(() => ({
 const testClusterId = 'cluster-a';
 const namespaceKey = (scope: string) => `${testClusterId}|${scope}`;
 
-vi.mock('@wailsjs/runtime/runtime', () => ({
-  EventsOn: runtimeMocks.eventsOn,
-  EventsOff: runtimeMocks.eventsOff,
+vi.mock('@core/desktop-runtime', () => ({
+  desktopRuntimeAvailable: () => false,
+  onEvent: runtimeMocks.eventsOn,
+  offEvent: runtimeMocks.eventsOff,
 }));
 
 vi.mock('@modules/kubernetes/config/KubeconfigContext', () => ({

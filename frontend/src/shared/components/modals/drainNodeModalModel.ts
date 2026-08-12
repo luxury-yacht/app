@@ -1,5 +1,5 @@
+import type { types } from '@core/backend-api/models';
 import type { NodeDrainOperationPermissions } from '@shared/hooks/nodeActionPermissions';
-import type { types } from '@wailsjs/go/models';
 import type { NodeMaintenanceDrainJob } from '@/core/refresh/types';
 
 export const MAX_NODE_DRAIN_GRACE_SECONDS = 900;

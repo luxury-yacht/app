@@ -1,0 +1,64 @@
+# Feel free to remove those if you don't want/need to use them.
+# Make sure to check the documentation at https://nfpm.goreleaser.com
+#
+# The lines below are called `modelines`. See `:help modeline`
+
+name: "luxury-yacht"
+arch: ${GOARCH}
+platform: "linux"
+version: "1.11.6"
+section: "default"
+priority: "extra"
+maintainer: ${GIT_COMMITTER_NAME} <${GIT_COMMITTER_EMAIL}>
+description: "Luxury Yacht is a desktop app for managing Kubernetes clusters. Sail the seas of Kubernetes in style!"
+vendor: "Luxury Yacht"
+homepage: "https://wails.io"
+license: "MIT"
+release: "1"
+
+contents:
+  - src: "./build/bin/luxury-yacht"
+    dst: "/usr/local/bin/luxury-yacht"
+  - src: "./build/appicon.png"
+    dst: "/usr/share/icons/hicolor/128x128/apps/luxury-yacht.png"
+  - src: "./build/linux/luxury-yacht.desktop"
+    dst: "/usr/share/applications/luxury-yacht.desktop"
+
+# Default dependencies for the GTK4 + WebKitGTK 6.0 stack (Ubuntu 24.04+ / Debian 13+)
+depends:
+  - libgtk-4-1
+  - libwebkitgtk-6.0-4
+
+# Distribution-specific overrides for different package formats
+overrides:
+  # RPM packages for Fedora / RHEL / AlmaLinux / Rocky Linux
+  rpm:
+    depends:
+      - gtk4
+      - webkitgtk6.0
+
+  # Arch Linux packages
+  archlinux:
+    depends:
+      - gtk4
+      - webkitgtk-6.0
+
+# scripts section to ensure desktop database is updated after install
+scripts:
+  postinstall: "./build/linux/nfpm/scripts/postinstall.sh"
+  # You can also add preremove, postremove if needed
+  # preremove: "./build/linux/nfpm/scripts/preremove.sh"
+  # postremove: "./build/linux/nfpm/scripts/postremove.sh"
+
+# replaces:
+#   - foobar
+# provides:
+#   - bar
+# recommends:
+#   - whatever
+# suggests:
+#   - something-else
+# conflicts:
+#   - not-foo
+#   - not-bar
+# changelog: "changelog.yaml"

@@ -5,9 +5,9 @@
  * panel-scoped clusterId to useGridTablePersistence.
  */
 
+import { types } from '@core/backend-api/models';
 import { OBJECT_ACTION_IDS } from '@shared/actions/objectActionContract';
 import type { GridTableProps } from '@shared/components/tables/GridTable';
-import { types } from '@wailsjs/go/models';
 import { act } from 'react';
 import * as ReactDOM from 'react-dom/client';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';

@@ -178,12 +178,13 @@ vi.mock('@/core/refresh/client', () => ({
 // events (e.g. the View → Command Palette item) to the component.
 const wailsEventHandlers = new Map<string, (...args: unknown[]) => void>();
 
-vi.mock('@wailsjs/runtime/runtime', () => ({
-  EventsOn: (event: string, handler: (...args: unknown[]) => void) => {
+vi.mock('@core/desktop-runtime', () => ({
+  desktopRuntimeAvailable: () => false,
+  onEvent: (event: string, handler: (...args: unknown[]) => void) => {
     wailsEventHandlers.set(event, handler);
     return () => wailsEventHandlers.delete(event);
   },
-  EventsOff: (event: string) => {
+  offEvent: (event: string) => {
     wailsEventHandlers.delete(event);
   },
 }));

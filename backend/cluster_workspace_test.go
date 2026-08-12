@@ -28,7 +28,7 @@ func TestReadConsistentClusterWorkspaceStateRetriesChangedCapture(t *testing.T) 
 }
 
 func TestClusterWorkspaceSnapshotSourcesAdvanceRevision(t *testing.T) {
-	app := NewApp()
+	app := NewApp(nil)
 	assertAdvance := func(mutate func()) {
 		t.Helper()
 		before := app.clusterWorkspaceRevision.Load()
@@ -65,7 +65,7 @@ func TestClusterWorkspaceSnapshotSourcesAdvanceRevision(t *testing.T) {
 }
 
 func TestGetClusterWorkspaceStateWaitsForSelectionMutation(t *testing.T) {
-	app := NewApp()
+	app := NewApp(nil)
 	app.selectionMutationMu.Lock()
 	started := make(chan struct{})
 	result := make(chan ClusterWorkspaceState, 1)
@@ -91,7 +91,7 @@ func TestGetClusterWorkspaceStateWaitsForSelectionMutation(t *testing.T) {
 }
 
 func TestClusterWorkspaceStateCombinesClusterFacts(t *testing.T) {
-	app := NewApp()
+	app := NewApp(nil)
 	app.selectedKubeconfigs = []string{"/tmp/config:prod"}
 	app.governorVisible = "cluster-a"
 	app.clusterLifecycle = newClusterLifecycle(nil)
@@ -116,7 +116,7 @@ func TestClusterWorkspaceStateCombinesClusterFacts(t *testing.T) {
 }
 
 func TestClearKubeconfigSelectionRemovesClusterWorkspaceState(t *testing.T) {
-	app := NewApp()
+	app := NewApp(nil)
 	app.clusterLifecycle = newClusterLifecycle(nil)
 	app.clusterLifecycle.SetState("cluster-a", ClusterStateReady)
 	app.setClusterHealth("cluster-a", ClusterHealthDegraded)
@@ -137,7 +137,7 @@ func TestClearKubeconfigSelectionRemovesClusterWorkspaceState(t *testing.T) {
 }
 
 func TestApplySelectionPruneRemovesClusterWorkspaceState(t *testing.T) {
-	app := NewApp()
+	app := NewApp(nil)
 	app.clusterLifecycle = newClusterLifecycle(nil)
 	app.clusterLifecycle.SetState("cluster-a", ClusterStateReady)
 	app.setClusterHealth("cluster-a", ClusterHealthHealthy)
@@ -159,7 +159,7 @@ func TestApplySelectionPruneRemovesClusterWorkspaceState(t *testing.T) {
 }
 
 func TestApplyClusterWorkspaceReturnsAuthoritativeActivationState(t *testing.T) {
-	app := NewApp()
+	app := NewApp(nil)
 	app.clusterClients["cluster-a"] = &clusterClients{meta: ClusterMeta{ID: "cluster-a", Name: "Production"}}
 	app.clusterLifecycle = newClusterLifecycle(nil)
 	app.clusterLifecycle.SetState("cluster-a", ClusterStateReady)
@@ -173,7 +173,7 @@ func TestApplyClusterWorkspaceReturnsAuthoritativeActivationState(t *testing.T) 
 }
 
 func TestApplyClusterWorkspaceSupersedesOlderQueuedActivation(t *testing.T) {
-	app := NewApp()
+	app := NewApp(nil)
 	app.governorApplied["cluster-a"] = system.TierForeground
 	app.governorPlanned["cluster-a"] = system.TierForeground
 	app.governorApplied["cluster-b"] = system.TierForeground

@@ -167,7 +167,7 @@ func TestApp_discoverKubeconfigs(t *testing.T) {
 			// Temporarily override home directory for kubeconfig expansion.
 			t.Setenv("HOME", homeDir)
 
-			app := NewApp()
+			app := NewApp(nil)
 			err := app.discoverKubeconfigs()
 
 			if tt.expectError {
@@ -245,7 +245,7 @@ func TestApp_GetKubeconfigs(t *testing.T) {
 	// Override home directory for kubeconfig expansion.
 	t.Setenv("HOME", tempDir)
 
-	app := NewApp()
+	app := NewApp(nil)
 
 	// Test that GetKubeconfigs discovers configs if not already done
 	result, err := app.GetKubeconfigs()
@@ -266,7 +266,7 @@ func TestApp_GetKubeconfigsReportsMissingSearchPathsAsEmptyState(t *testing.T) {
 	homeDir := t.TempDir()
 	t.Setenv("HOME", homeDir)
 
-	app := NewApp()
+	app := NewApp(nil)
 	result, err := app.GetKubeconfigs()
 
 	require.NoError(t, err)
@@ -276,7 +276,7 @@ func TestApp_GetKubeconfigsReportsMissingSearchPathsAsEmptyState(t *testing.T) {
 
 func TestApp_GetKubeconfigsReportsNoConfiguredSearchPathsAsEmptyState(t *testing.T) {
 	setTestConfigEnv(t)
-	app := NewApp()
+	app := NewApp(nil)
 	settings, err := app.loadSettingsFile()
 	require.NoError(t, err)
 	settings.Kubeconfig.SearchPaths = []string{}
@@ -295,7 +295,7 @@ func TestApp_GetKubeconfigsReportsEmptySearchPathsAsNoKubeconfigs(t *testing.T) 
 	require.NoError(t, os.Mkdir(filepath.Join(homeDir, ".kube"), 0o755))
 	t.Setenv("HOME", homeDir)
 
-	app := NewApp()
+	app := NewApp(nil)
 	result, err := app.GetKubeconfigs()
 
 	require.NoError(t, err)
@@ -364,7 +364,7 @@ func TestNormalizeKubeconfigSearchPathsMixedFilesAndDirs(t *testing.T) {
 
 func TestApp_GetKubeconfigSearchPathsDefaults(t *testing.T) {
 	setTestConfigEnv(t)
-	app := NewApp()
+	app := NewApp(nil)
 
 	paths, err := app.GetKubeconfigSearchPaths()
 	require.NoError(t, err)
@@ -373,7 +373,7 @@ func TestApp_GetKubeconfigSearchPathsDefaults(t *testing.T) {
 
 func TestApp_SetKubeconfigSearchPathsPersistsAndDiscovers(t *testing.T) {
 	setTestConfigEnv(t)
-	app := NewApp()
+	app := NewApp(nil)
 
 	baseDir := t.TempDir()
 	dirPath := filepath.Join(baseDir, "configs")
@@ -398,8 +398,9 @@ func TestApp_SetKubeconfigSearchPathsPersistsAndDiscovers(t *testing.T) {
 
 func TestApp_SetKubeconfigSearchPathsPrunesSelectionsFromRemovedPaths(t *testing.T) {
 	setTestConfigEnv(t)
-	app := NewApp()
-	app.setRuntimeContext(context.Background())
+	app := NewApp(nil)
+	app.setApplicationContext(context.Background())
+	app.markRuntimeReady()
 	app.appSettings = getDefaultAppSettings()
 	app.refreshAggregates.Store(&refreshAggregateHandlers{})
 	app.refreshHTTPServer = &http.Server{}
@@ -457,7 +458,7 @@ func TestApp_SetKubeconfigSearchPathsPrunesSelectionsFromRemovedPaths(t *testing
 
 func TestApp_SetKubeconfigSearchPathsRejectsEmptyList(t *testing.T) {
 	setTestConfigEnv(t)
-	app := NewApp()
+	app := NewApp(nil)
 
 	err := app.SetKubeconfigSearchPaths([]string{" ", ""})
 	require.Error(t, err)
@@ -469,7 +470,7 @@ func TestApp_SetKubeconfigSearchPathsRejectsEmptyList(t *testing.T) {
 }
 
 func TestApp_GetSelectedKubeconfigs(t *testing.T) {
-	app := NewApp()
+	app := NewApp(nil)
 
 	assert.Empty(t, app.GetSelectedKubeconfigs())
 
@@ -491,8 +492,9 @@ func TestApp_SetKubeconfig(t *testing.T) {
 	// Override home directory for kubeconfig expansion.
 	t.Setenv("HOME", tempDir)
 
-	app := NewApp()
-	app.setRuntimeContext(context.Background())
+	app := NewApp(nil)
+	app.setApplicationContext(context.Background())
+	app.markRuntimeReady()
 
 	// Discover kubeconfigs first
 	err = app.discoverKubeconfigs()
@@ -570,8 +572,9 @@ func TestApp_SetSelectedKubeconfigs(t *testing.T) {
 
 	t.Setenv("HOME", tempDir)
 
-	app := NewApp()
-	app.setRuntimeContext(context.Background())
+	app := NewApp(nil)
+	app.setApplicationContext(context.Background())
+	app.markRuntimeReady()
 	app.kubeClientInitializer = func() error { return nil }
 
 	require.NoError(t, app.discoverKubeconfigs())
@@ -600,8 +603,9 @@ func TestApp_SetSelectedKubeconfigsAllowsSameContextNameFromDifferentFiles(t *te
 
 	t.Setenv("HOME", tempDir)
 
-	app := NewApp()
-	app.setRuntimeContext(context.Background())
+	app := NewApp(nil)
+	app.setApplicationContext(context.Background())
+	app.markRuntimeReady()
 	app.kubeClientInitializer = func() error { return nil }
 
 	require.NoError(t, app.discoverKubeconfigs())
@@ -622,8 +626,9 @@ func TestApp_SetSelectedKubeconfigsRejectsDuplicateSelections(t *testing.T) {
 
 	t.Setenv("HOME", tempDir)
 
-	app := NewApp()
-	app.setRuntimeContext(context.Background())
+	app := NewApp(nil)
+	app.setApplicationContext(context.Background())
+	app.markRuntimeReady()
 	app.kubeClientInitializer = func() error { return nil }
 
 	require.NoError(t, app.discoverKubeconfigs())
@@ -640,8 +645,9 @@ func TestApp_SetSelectedKubeconfigsClearsSelection(t *testing.T) {
 	tempDir := t.TempDir()
 	t.Setenv("HOME", tempDir)
 
-	app := NewApp()
-	app.setRuntimeContext(context.Background())
+	app := NewApp(nil)
+	app.setApplicationContext(context.Background())
+	app.markRuntimeReady()
 	app.selectedKubeconfigs = []string{"/path/to/config:ctx"}
 
 	require.NoError(t, app.SetSelectedKubeconfigs(nil))
@@ -664,11 +670,12 @@ func TestApp_discoverKubeconfigs_noAutoSelection(t *testing.T) {
 	// Override home directory for kubeconfig expansion.
 	t.Setenv("HOME", tempDir)
 
-	app := NewApp()
+	app := NewApp(nil)
 	ctx := context.Background()
 
 	// Setup app state (avoid startup which has runtime calls)
-	app.setRuntimeContext(ctx)
+	app.setApplicationContext(ctx)
+	app.markRuntimeReady()
 	app.setupEnvironment()
 	err = app.discoverKubeconfigs()
 	require.NoError(t, err)

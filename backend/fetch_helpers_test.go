@@ -22,7 +22,8 @@ import (
 func TestFetchResourceErrorEmits(t *testing.T) {
 	app := newTestAppWithDefaults(t)
 	var emitted map[string]any
-	app.setRuntimeContext(context.Background())
+	app.setApplicationContext(context.Background())
+	app.markRuntimeReady()
 	app.eventEmitter = func(_ context.Context, name string, args ...interface{}) {
 		if name == "backend-error" && len(args) > 0 {
 			if payload, ok := args[0].(map[string]any); ok {
@@ -101,7 +102,8 @@ func TestFetchResourceSkipsCacheWhenKeyEmpty(t *testing.T) {
 
 func TestFetchResourceListErrorEmits(t *testing.T) {
 	app := newTestAppWithDefaults(t)
-	app.setRuntimeContext(context.Background())
+	app.setApplicationContext(context.Background())
+	app.markRuntimeReady()
 	var emitted map[string]any
 	app.eventEmitter = func(_ context.Context, name string, args ...interface{}) {
 		if name == "backend-error" && len(args) > 0 {
@@ -170,7 +172,8 @@ func TestFetchResourceRetriesOnTransientError(t *testing.T) {
 	app := newTestAppWithDefaults(t)
 	app.telemetryRecorder = telemetry.NewRecorder()
 	app.logger = NewLogger(100)
-	app.setRuntimeContext(context.Background())
+	app.setApplicationContext(context.Background())
+	app.markRuntimeReady()
 
 	originalSleep := fetchRetrySleep
 	fetchRetrySleep = func(time.Duration) {}
@@ -199,7 +202,8 @@ func TestFetchResourceExhaustsRetriesAndEmits(t *testing.T) {
 	app := newTestAppWithDefaults(t)
 	app.telemetryRecorder = telemetry.NewRecorder()
 	app.logger = NewLogger(100)
-	app.setRuntimeContext(context.Background())
+	app.setApplicationContext(context.Background())
+	app.markRuntimeReady()
 	var emitted map[string]any
 	app.eventEmitter = func(_ context.Context, name string, args ...interface{}) {
 		if name == "backend-error" && len(args) > 0 {
@@ -277,7 +281,8 @@ func TestExecuteWithRetryReturnsContextSleepFailure(t *testing.T) {
 
 func TestFetchResourcePropagatesConfiguredDeadline(t *testing.T) {
 	app := newTestAppWithDefaults(t)
-	app.setRuntimeContext(context.Background())
+	app.setApplicationContext(context.Background())
+	app.markRuntimeReady()
 
 	startedAt := time.Now()
 	_, err := FetchResourceWithSelection(app, "cluster-a", "", "Widget", "demo", func(ctx context.Context) (string, error) {

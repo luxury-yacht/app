@@ -1,3 +1,4 @@
+import { openURL } from '@core/desktop-runtime';
 import {
   getObjPanelLogsApiTimestampFormat,
   getObjPanelLogsApiTimestampUseLocalTimeZone,
@@ -21,7 +22,6 @@ import {
 } from '@core/settings/appPreferences';
 import { ErrorSurface } from '@shared/components/errors/ErrorSurface';
 import Tooltip from '@shared/components/Tooltip';
-import { BrowserOpenURL } from '@wailsjs/runtime/runtime';
 import { useId, useMemo, useState } from 'react';
 import {
   formatObjPanelLogsApiTimestamp,
@@ -306,7 +306,7 @@ function ObjPanelLogsSettings() {
                   data-focus-trap-ignore="true"
                   onClick={(e) => {
                     e.preventDefault();
-                    BrowserOpenURL(
+                    openURL(
                       'https://day.js.org/docs/en/parse/string-format#list-of-all-available-parsing-tokens'
                     );
                   }}

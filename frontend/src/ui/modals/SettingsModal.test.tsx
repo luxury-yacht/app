@@ -12,13 +12,14 @@ import { requireValue } from '@/test-utils/requireValue';
 import SettingsModal from './SettingsModal';
 
 const runtimeMocks = vi.hoisted(() => ({
-  eventsOn: vi.fn(),
+  eventsOn: vi.fn(() => () => undefined),
   eventsOff: vi.fn(),
 }));
 
-vi.mock('@wailsjs/runtime/runtime', () => ({
-  EventsOn: runtimeMocks.eventsOn,
-  EventsOff: runtimeMocks.eventsOff,
+vi.mock('@core/desktop-runtime', () => ({
+  desktopRuntimeAvailable: () => false,
+  onEvent: runtimeMocks.eventsOn,
+  offEvent: runtimeMocks.eventsOff,
 }));
 
 vi.mock('@ui/settings/sections/AppearanceSection', () => ({
@@ -51,7 +52,7 @@ vi.mock('@ui/settings/sections/AdvancedSection', () => ({
   default: vi.fn(() => <div data-testid="section-advanced" />),
 }));
 
-vi.mock('@wailsjs/go/backend/App', () => ({
+vi.mock('@core/backend-api', () => ({
   GetAppSettings: vi.fn().mockResolvedValue({ useShortResourceNames: false }),
   GetAppearanceModeInfo: vi.fn().mockResolvedValue({ currentMode: 'dark', userMode: 'dark' }),
   GetAppInfo: vi.fn().mockResolvedValue({ version: '4.2.1' }),
@@ -83,7 +84,7 @@ describe('SettingsModal', () => {
   let root: ReactDOM.Root;
 
   beforeEach(async () => {
-    runtimeMocks.eventsOn.mockReset();
+    runtimeMocks.eventsOn.mockReset().mockReturnValue(() => undefined);
     runtimeMocks.eventsOff.mockReset();
     // Reset persisted-tab so each test starts on the default tab.
     try {

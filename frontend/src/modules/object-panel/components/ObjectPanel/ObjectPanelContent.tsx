@@ -6,6 +6,7 @@
  * cached state when panel content is torn down.
  */
 
+import type { types } from '@core/backend-api/models';
 import type { DetailsTabProps } from '@modules/object-panel/components/ObjectPanel/Details/DetailsTab';
 import DetailsTab from '@modules/object-panel/components/ObjectPanel/Details/DetailsTab';
 import EventsTab from '@modules/object-panel/components/ObjectPanel/Events/EventsTab';
@@ -32,7 +33,6 @@ import type {
 import YamlTab from '@modules/object-panel/components/ObjectPanel/Yaml/YamlTab';
 import { ErrorBoundary } from '@shared/components/errors/ErrorBoundary';
 import { ErrorSurface } from '@shared/components/errors/ErrorSurface';
-import type { types } from '@wailsjs/go/models';
 import { useMemo } from 'react';
 
 const TabErrorFallback = ({ tabName, reset }: { tabName: string; reset: () => void }) => (

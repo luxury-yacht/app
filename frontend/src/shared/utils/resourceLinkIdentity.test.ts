@@ -5,7 +5,7 @@ const { findCatalogObjectByUIDMock, findCatalogObjectMatchMock } = vi.hoisted(()
   findCatalogObjectMatchMock: vi.fn(),
 }));
 
-vi.mock('@wailsjs/go/backend/App', () => ({
+vi.mock('@core/backend-api', () => ({
   FindCatalogObjectByUID: (...args: unknown[]) => findCatalogObjectByUIDMock(...args),
   FindCatalogObjectMatch: (...args: unknown[]) => findCatalogObjectMatchMock(...args),
 }));

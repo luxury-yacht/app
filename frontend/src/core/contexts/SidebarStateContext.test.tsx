@@ -21,7 +21,7 @@ vi.mock('@modules/kubernetes/config/KubeconfigContext', () => ({
   }),
 }));
 
-vi.mock('@wailsjs/go/backend/App', () => ({
+vi.mock('@core/backend-api', () => ({
   SetSidebarVisible: vi.fn(),
 }));
 

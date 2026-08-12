@@ -1,5 +1,4 @@
-import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
-import { installWindowProperty } from '@/test-utils/windowProperty';
+import { beforeEach, describe, expect, it, vi } from 'vitest';
 import {
   logAppLogsDebug,
   logAppLogsError,
@@ -8,37 +7,53 @@ import {
   subscribeAppLogsAdded,
 } from './appLogsClient';
 
-const logAppLogsFromFrontendMock = vi.fn();
-const logAppLogsFromFrontendWithClusterMock = vi.fn();
+const backendMocks = vi.hoisted(() => ({
+  log: vi.fn<(level: string, message: string, source: string) => void>(),
+  logWithCluster:
+    vi.fn<
+      (
+        level: string,
+        message: string,
+        source: string,
+        clusterId: string,
+        clusterName: string
+      ) => void
+    >(),
+}));
+const desktopMocks = vi.hoisted(() => ({
+  available: true,
+  onEvent: vi.fn<(eventName: string, eventHandler: (event?: unknown) => void) => () => void>(
+    () => () => undefined
+  ),
+}));
 
-const setBackendLogApi = (api: unknown) => {
-  installWindowProperty('go', {
-    backend: {
-      App: api,
-    },
-  });
-};
+vi.mock('@core/backend-api', () => ({
+  LogAppLogsFromFrontend: (level: string, message: string, source: string) =>
+    backendMocks.log(level, message, source),
+  LogAppLogsFromFrontendWithCluster: (
+    level: string,
+    message: string,
+    source: string,
+    clusterId: string,
+    clusterName: string
+  ) => backendMocks.logWithCluster(level, message, source, clusterId, clusterName),
+}));
+
+vi.mock('@core/desktop-runtime', () => ({
+  desktopRuntimeAvailable: () => desktopMocks.available,
+  onEvent: (eventName: string, eventHandler: (event?: unknown) => void) =>
+    desktopMocks.onEvent(eventName, eventHandler),
+}));
+
+const logAppLogsFromFrontendMock = backendMocks.log;
+const logAppLogsFromFrontendWithClusterMock = backendMocks.logWithCluster;
 
 describe('appLogsClient', () => {
-  let restoreGo: () => void;
-
   beforeEach(() => {
     logAppLogsFromFrontendMock.mockReset();
     logAppLogsFromFrontendWithClusterMock.mockReset();
-    restoreGo = installWindowProperty('go', {
-      backend: {
-        App: {
-          LogAppLogsFromFrontend: logAppLogsFromFrontendMock,
-          LogAppLogsFromFrontendWithCluster: logAppLogsFromFrontendWithClusterMock,
-        },
-      },
-    });
-    Reflect.deleteProperty(window, 'runtime');
-  });
-
-  afterEach(() => {
-    restoreGo();
-    Reflect.deleteProperty(window, 'runtime');
+    desktopMocks.available = true;
+    desktopMocks.onEvent.mockReset();
   });
 
   it('sends frontend logs to backend application logs with normalized inputs', () => {
@@ -97,18 +112,13 @@ describe('appLogsClient', () => {
     expect(logAppLogsFromFrontendMock).not.toHaveBeenCalled();
   });
 
-  it('ignores unavailable or failing backend logging APIs', () => {
-    Reflect.deleteProperty(window, 'go');
+  it('ignores an unavailable desktop host or failing backend logging call', () => {
+    desktopMocks.available = false;
     expect(() => logAppLogsError('missing api', 'Frontend')).not.toThrow();
 
-    setBackendLogApi({});
-    expect(() => logAppLogsError('missing method', 'Frontend')).not.toThrow();
-
+    desktopMocks.available = true;
     logAppLogsFromFrontendMock.mockImplementationOnce(() => {
       throw new Error('backend failed');
-    });
-    setBackendLogApi({
-      LogAppLogsFromFrontend: logAppLogsFromFrontendMock,
     });
 
     expect(() => logAppLogsError('backend failure', 'Frontend')).not.toThrow();
@@ -117,37 +127,32 @@ describe('appLogsClient', () => {
   it('subscribes to app-logs events and returns the Wails disposer', () => {
     const dispose = vi.fn();
     const handler = vi.fn();
-    installWindowProperty('runtime', {
-      EventsOn: vi.fn((_eventName: string, eventHandler: (event?: unknown) => void) => {
+    desktopMocks.onEvent.mockImplementation(
+      (_eventName: string, eventHandler: (event?: unknown) => void) => {
         eventHandler({ sequence: 12 });
         eventHandler('unexpected payload');
         return dispose;
-      }),
-      EventsOff: vi.fn(),
-    });
+      }
+    );
 
     const unsubscribe = subscribeAppLogsAdded(handler);
 
-    expect(window.runtime?.EventsOn).toHaveBeenCalledWith('app-logs:added', expect.any(Function));
+    expect(desktopMocks.onEvent).toHaveBeenCalledWith('app-logs:added', expect.any(Function));
     expect(handler).toHaveBeenNthCalledWith(1, { sequence: 12 });
     expect(handler).toHaveBeenNthCalledWith(2, undefined);
 
     unsubscribe();
 
     expect(dispose).toHaveBeenCalledTimes(1);
-    expect(window.runtime?.EventsOff).not.toHaveBeenCalled();
   });
 
-  it('falls back to callback-specific EventsOff when EventsOn has no disposer', () => {
+  it('does not subscribe when the desktop host is unavailable', () => {
     const handler = vi.fn();
-    installWindowProperty('runtime', {
-      EventsOn: vi.fn(),
-      EventsOff: vi.fn(),
-    });
+    desktopMocks.available = false;
 
     const unsubscribe = subscribeAppLogsAdded(handler);
     unsubscribe();
 
-    expect(window.runtime?.EventsOff).toHaveBeenCalledWith('app-logs:added', expect.any(Function));
+    expect(desktopMocks.onEvent).not.toHaveBeenCalled();
   });
 });

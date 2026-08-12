@@ -31,5 +31,5 @@ declare module '@storybook/react' {
 }
 
 interface Window {
-  __storybookGoOverrides: Record<string, (...args: unknown[]) => unknown>;
+  __storybookBackendOverrides: Record<string, (...args: unknown[]) => unknown>;
 }

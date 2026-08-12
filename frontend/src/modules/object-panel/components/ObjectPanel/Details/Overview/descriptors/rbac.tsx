@@ -10,10 +10,6 @@
  * functions read `context.clusterId`/`context.clusterName`.
  */
 
-import { ObjectPanelLink } from '@shared/components/ObjectPanelLink';
-import { StatusChip } from '@shared/components/StatusChip';
-import { buildRequiredObjectReference } from '@shared/utils/objectIdentity';
-import { withStableListKeys } from '@shared/utils/stableListKeys';
 import {
   clusterrole,
   clusterrolebinding,
@@ -22,7 +18,11 @@ import {
   rolebinding,
   serviceaccount,
   type types,
-} from '@wailsjs/go/models';
+} from '@core/backend-api/models';
+import { ObjectPanelLink } from '@shared/components/ObjectPanelLink';
+import { StatusChip } from '@shared/components/StatusChip';
+import { buildRequiredObjectReference } from '@shared/utils/objectIdentity';
+import { withStableListKeys } from '@shared/utils/stableListKeys';
 import type React from 'react';
 import type { OverviewContext, OverviewDescriptor } from '../schema';
 import { renderUsedByLinks } from './shared';

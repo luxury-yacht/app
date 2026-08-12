@@ -4,6 +4,7 @@
  * Unified header status indicator for shell sessions and port forwards.
  */
 
+import { openURL } from '@core/desktop-runtime';
 import { useKubeconfig } from '@modules/kubernetes/config/KubeconfigContext';
 import { objectPanelId } from '@modules/object-panel/contexts/ObjectPanelStateContext';
 import { useObjectPanel } from '@modules/object-panel/hooks/useObjectPanel';
@@ -21,7 +22,6 @@ import {
 import StatusIndicator, { type StatusState } from '@shared/components/status/StatusIndicator';
 import { buildRequiredObjectReference } from '@shared/utils/objectIdentity';
 import { errorHandler } from '@utils/errorHandler';
-import { BrowserOpenURL } from '@wailsjs/runtime/runtime';
 import React, { useCallback, useEffect, useMemo, useState } from 'react';
 import { StopPortForward } from '@/core/backend-api';
 import { type ShellSessionInfo, useRuntimeOperationStatus } from './runtimeOperationStatus';
@@ -366,9 +366,7 @@ const SessionsStatus: React.FC = () => {
                                   <button
                                     type="button"
                                     className="pf-local-port pf-local-port-link"
-                                    onClick={() =>
-                                      BrowserOpenURL(`http://localhost:${session.localPort}`)
-                                    }
+                                    onClick={() => openURL(`http://localhost:${session.localPort}`)}
                                     title="Open in browser"
                                     disabled={session.status !== 'active'}
                                   >

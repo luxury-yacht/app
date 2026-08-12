@@ -12,7 +12,7 @@ import type {
   service,
   statefulset,
   types,
-} from '@wailsjs/go/models';
+} from '@core/backend-api/models';
 import { describe, expect, it } from 'vitest';
 import { buildObjectDetailModel } from './objectDetailModel';
 

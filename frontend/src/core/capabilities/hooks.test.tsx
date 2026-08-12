@@ -11,7 +11,6 @@ import * as ReactDOM from 'react-dom/client';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 
 import { eventBus } from '@/core/events';
-import { installWindowProperty } from '@/test-utils/windowProperty';
 import { type UseCapabilitiesOptions, useCapabilities, useCapabilityDiagnostics } from './hooks';
 import type { PermissionQueryDiagnostics, PermissionStatus } from './permissionTypes';
 import type { CapabilityDescriptor } from './types';
@@ -22,6 +21,32 @@ const lifecycleMock = vi.hoisted(() => ({
     | {
         isClusterReady: (clusterId: string) => boolean;
       },
+}));
+const queryPermissionsBridge = vi.hoisted(() => ({
+  current: null as ((...args: unknown[]) => Promise<unknown>) | null,
+}));
+
+const installQueryPermissions = (query: (...args: unknown[]) => Promise<unknown>) => {
+  queryPermissionsBridge.current = query;
+  return () => {
+    if (queryPermissionsBridge.current === query) {
+      queryPermissionsBridge.current = null;
+    }
+  };
+};
+
+vi.mock('@core/backend-api', () => ({
+  QueryPermissions: (...args: unknown[]) => {
+    if (!queryPermissionsBridge.current) {
+      throw new Error('QueryPermissions test mock was not installed');
+    }
+    return queryPermissionsBridge.current(...args);
+  },
+}));
+
+vi.mock('@core/desktop-runtime', () => ({
+  desktopRuntimeAvailable: () => true,
+  onEvent: () => () => undefined,
 }));
 
 vi.mock('@/core/contexts/ClusterLifecycleContext', () => ({
@@ -364,7 +389,6 @@ describe('useCapabilities', () => {
   });
 
   it('queries named-resource descriptors via QueryPermissions RPC', async () => {
-    // Set up the window.go.backend.App.QueryPermissions mock.
     const mockQueryPermissions = vi.fn().mockResolvedValue({
       results: [
         {
@@ -383,13 +407,7 @@ describe('useCapabilities', () => {
       ],
     });
 
-    const restoreGo = installWindowProperty('go', {
-      backend: {
-        App: {
-          QueryPermissions: mockQueryPermissions,
-        },
-      },
-    });
+    const restoreQueryPermissions = installQueryPermissions(mockQueryPermissions);
 
     const hook = await renderCapabilitiesHook([
       {
@@ -419,14 +437,12 @@ describe('useCapabilities', () => {
     await hook.unmount();
 
     // Clean up.
-    restoreGo();
+    restoreQueryPermissions();
   });
 
   it('requeries named-resource descriptors when refreshKey changes', async () => {
     const mockQueryPermissions = vi.fn().mockResolvedValue({ results: [] });
-    const restoreGo = installWindowProperty('go', {
-      backend: { App: { QueryPermissions: mockQueryPermissions } },
-    });
+    const restoreQueryPermissions = installQueryPermissions(mockQueryPermissions);
     const descriptors: CapabilityDescriptor[] = [
       {
         id: 'named:pods:get:default:my-pod',
@@ -448,7 +464,7 @@ describe('useCapabilities', () => {
     expect(mockQueryPermissions).toHaveBeenCalledTimes(2);
 
     await hook.unmount();
-    restoreGo();
+    restoreQueryPermissions();
   });
 
   it('waits for cluster readiness before querying named-resource descriptors', async () => {
@@ -473,13 +489,7 @@ describe('useCapabilities', () => {
       ],
     });
 
-    const restoreGo = installWindowProperty('go', {
-      backend: {
-        App: {
-          QueryPermissions: mockQueryPermissions,
-        },
-      },
-    });
+    const restoreQueryPermissions = installQueryPermissions(mockQueryPermissions);
 
     const hook = await renderCapabilitiesHook([
       {
@@ -526,7 +536,7 @@ describe('useCapabilities', () => {
     });
 
     await hook.unmount();
-    restoreGo();
+    restoreQueryPermissions();
   });
 
   it('keeps transient cluster activation errors pending and retries named descriptors on ready', async () => {
@@ -568,13 +578,7 @@ describe('useCapabilities', () => {
         ],
       });
 
-    const restoreGo = installWindowProperty('go', {
-      backend: {
-        App: {
-          QueryPermissions: mockQueryPermissions,
-        },
-      },
-    });
+    const restoreQueryPermissions = installQueryPermissions(mockQueryPermissions);
 
     const hook = await renderCapabilitiesHook([
       {
@@ -617,7 +621,7 @@ describe('useCapabilities', () => {
     });
 
     await hook.unmount();
-    restoreGo();
+    restoreQueryPermissions();
   });
 });
 

@@ -22,11 +22,13 @@ vi.mock('@/core/app-state-access', () => ({
   readAppInfo: () => readAppInfoMock(),
 }));
 
-vi.mock('@wailsjs/runtime/runtime', () => ({
-  BrowserOpenURL: (...args: unknown[]) => browserOpenURLMock(...args),
+vi.mock('@core/desktop-runtime', () => ({
+  desktopRuntimeAvailable: () => false,
+  onEvent: vi.fn(() => () => undefined),
+  openURL: (...args: unknown[]) => browserOpenURLMock(...args),
 }));
 
-vi.mock('@wailsjs/go/models', () => ({ backend: {} }));
+vi.mock('@core/backend-api/models', () => ({ backend: {} }));
 
 vi.mock('@shared/components/Tooltip', () => ({
   __esModule: true,

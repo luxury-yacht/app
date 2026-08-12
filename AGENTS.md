@@ -1,6 +1,6 @@
 # AGENTS.md
 
-Luxury Yacht is a Wails v2 desktop app for viewing and managing Kubernetes
+Luxury Yacht is a Wails v3 desktop app for viewing and managing Kubernetes
 resources. The backend is Go; the frontend is React and TypeScript. Scoped
 instructions in `backend/AGENTS.md` and `frontend/AGENTS.md` apply when work
 touches those trees.

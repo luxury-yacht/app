@@ -7,9 +7,9 @@ describe('createWailsRuntimeHarness', () => {
     const first = vi.fn();
     const second = vi.fn();
 
-    const disposeFirst = harness.runtime.EventsOn?.('cluster:event', first);
-    harness.runtime.EventsOn?.('cluster:event', second);
-    disposeFirst?.();
+    const disposeFirst = harness.onEvent('cluster:event', first);
+    harness.onEvent('cluster:event', second);
+    disposeFirst();
     harness.emit('cluster:event', { clusterId: 'cluster-a' });
 
     expect(first).not.toHaveBeenCalled();

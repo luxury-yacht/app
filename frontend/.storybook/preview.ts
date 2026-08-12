@@ -1,34 +1,12 @@
 import type { Preview } from '@storybook/react';
+import { setTransport } from '@wailsio/runtime';
+import { createStorybookWailsTransport, type StorybookBackendOverrides } from './wailsTransport';
 import '../styles/index.css';
 
-// Stub Wails globals so generated .js files work outside the Wails desktop shell.
-// The Wails runtime.js calls window.runtime.*, and App.js calls window.go.backend.App.*.
-const noOp = () => undefined;
-const noOpAsync = () => Promise.resolve();
-
-// Proxy that returns noOp for any property access — handles window.runtime.*
-// EventsOn/EventsOnMultiple must return a disposer function (not undefined).
-const noOpDisposer = () => noOp;
-
-const runtimeProxy = new Proxy(
-  {
-    BrowserOpenURL: (url: string) => window.open(url, '_blank'),
-    EventsOn: noOpDisposer,
-    EventsOnMultiple: noOpDisposer,
-    EventsOnce: noOpDisposer,
-  },
-  {
-    get(target: Record<string, unknown>, prop: string) {
-      return target[prop] ?? noOp;
-    },
-  }
-);
-
-// Overrides for specific Go backend methods. Stories populate this via
-// setMockAppInfo() in .storybook/mocks/wailsBackendApp.ts.
+// Overrides for named Wails v3 binding calls. Stories may replace individual methods.
 // Pre-seed overrides for layout providers that mount immediately.
 // Individual stories can add more overrides in their decorators.
-window.__storybookGoOverrides = {
+window.__storybookBackendOverrides = {
   GetKubeconfigs: () =>
     Promise.resolve({ kubeconfigs: [], state: 'no_kubeconfigs', searchPaths: ['~/.kube'] }),
   GetSelectedKubeconfigs: () => Promise.resolve([]),
@@ -59,41 +37,17 @@ window.__storybookGoOverrides = {
   UpdateFavorite: () => Promise.resolve(),
   DeleteFavorite: () => Promise.resolve(),
   SetFavoriteOrder: () => Promise.resolve(),
-} as Record<string, (...args: unknown[]) => unknown>;
+} satisfies StorybookBackendOverrides;
 
-// Nested proxy for window.go.backend.App.* — returns async noOp for Go RPCs
-// unless an override exists.
-const goProxy = new Proxy(
-  {},
-  {
-    get() {
-      // Returns a proxy for each namespace (e.g. "backend")
-      return new Proxy(
-        {},
-        {
-          get() {
-            // Returns a proxy for each struct (e.g. "App")
-            return new Proxy(
-              {},
-              {
-                get(_target: object, method: string) {
-                  const overrides = window.__storybookGoOverrides;
-                  if (overrides[method]) {
-                    return overrides[method];
-                  }
-                  return noOpAsync;
-                },
-              }
-            );
-          },
-        }
-      );
-    },
-  }
-);
-
-window.runtime = runtimeProxy as WailsRuntime;
-window.go = goProxy as NonNullable<Window['go']>;
+setTransport(createStorybookWailsTransport(window.__storybookBackendOverrides));
+(window as Window & { _wails?: { environment?: unknown } })._wails ||= {};
+(window as Window & { _wails: { environment?: unknown } })._wails.environment = {
+  Arch: 'browser',
+  Debug: true,
+  OS: 'browser',
+  OSInfo: { Branding: 'Storybook', ID: 'storybook', Name: 'Storybook', Version: '' },
+  PlatformInfo: {},
+};
 
 const preview: Preview = {
   parameters: {

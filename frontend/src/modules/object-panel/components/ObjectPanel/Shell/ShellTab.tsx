@@ -13,6 +13,8 @@ import {
 } from '@/core/app-state-access';
 import { readPodContainers, requestData } from '@/core/data-access';
 import '@xterm/xterm/css/xterm.css';
+import type { types } from '@core/backend-api/models';
+import { onEvent } from '@core/desktop-runtime';
 import {
   buildObjectActionTarget,
   runCreateDebugContainer,
@@ -23,14 +25,11 @@ import type { DropdownOption } from '@shared/components/dropdowns/Dropdown';
 import { Dropdown } from '@shared/components/dropdowns/Dropdown';
 import { ErrorSurface } from '@shared/components/errors/ErrorSurface';
 import Tooltip from '@shared/components/Tooltip';
-
 import { useVirtualScrollbar } from '@shared/scrollbars/useVirtualScrollbar';
 import { resolveTerminalTheme, toXtermThemeDefinition } from '@shared/terminal/terminalTheme';
 import { useDockablePanelState } from '@ui/dockable';
 import { useKeyboardSurface } from '@ui/shortcuts';
 import { errorHandler } from '@utils/errorHandler';
-import type { types } from '@wailsjs/go/models';
-import { EventsOn } from '@wailsjs/runtime/runtime';
 import {
   CloseShellSession,
   ResizeShellSession,
@@ -577,6 +576,9 @@ const ShellTab: React.FC<ShellTabProps> = ({
           container: containerOverride ?? undefined,
           command: resolvedShell ? [resolvedShell] : undefined,
         });
+        if (!shellSession) {
+          throw new Error('Shell session was not created');
+        }
         if (cancelled) {
           // If a superseding connect was started before this one returned, clean up this session.
           await CloseShellSession(shellSession.sessionId);
@@ -622,7 +624,7 @@ const ShellTab: React.FC<ShellTabProps> = ({
   ]);
 
   useEffect(() => {
-    const offOutput = EventsOn('object-shell:output', (evt: ShellOutputEvent) => {
+    const offOutput = onEvent('object-shell:output', (evt: ShellOutputEvent) => {
       if (!evt || !sessionIdRef.current || evt.sessionId !== sessionIdRef.current) {
         return;
       }
@@ -635,7 +637,7 @@ const ShellTab: React.FC<ShellTabProps> = ({
       appendOutput(evt);
     });
 
-    const offStatus = EventsOn('object-shell:status', (evt: ShellStatusEvent) => {
+    const offStatus = onEvent('object-shell:status', (evt: ShellStatusEvent) => {
       if (!evt || !sessionIdRef.current || evt.sessionId !== sessionIdRef.current) {
         return;
       }

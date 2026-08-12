@@ -72,12 +72,14 @@ If the release includes backend changes, run the benchmarks and compare the resu
 mage qc:benchmark
 ```
 
-1. Update `info.productVersion` in [wails.json](wails.json).
+1. Update `info.version` in [build/config.yml](build/config.yml), then run
+   `mage build-assets` to refresh platform metadata.
 2. Commit and push the version change.
 3. Create and push the matching tag. The `release` workflow builds and
    publishes the release:
 
 ```bash
-git tag $(jq -r '.info.productVersion' wails.json)
+VERSION=$(sed -nE 's/^  version: "([^"]+)"/\1/p' build/config.yml)
+git tag "v${VERSION}"
 git push origin main --tags
 ```

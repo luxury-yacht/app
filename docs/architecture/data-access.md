@@ -64,7 +64,7 @@ loading spinners.
 - App-state broker: `frontend/src/core/app-state-access`
 - Refresh HTTP client: `frontend/src/core/refresh/client.ts`
 - Settings metadata cache: `frontend/src/core/settings/appPreferences.ts`
-- Wails DTOs and generated bindings: `frontend/wailsjs/go`
+- Wails DTOs and generated bindings: `frontend/bindings`
 
 ## Settings Rule
 

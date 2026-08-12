@@ -11,6 +11,7 @@
   "scripts": {
     "dev": "vite",
     "build": "vite build",
+    "build:dev": "vite build --mode development",
     "preview": "vite preview",
     "typecheck": "tsc --noEmit",
     "format": "biome format --write .",
@@ -39,6 +40,7 @@
     "@lezer/highlight": "^1.2.3",
     "@sentry/react": "^10.70.0",
     "@uiw/react-codemirror": "^4.25.11",
+    "@wailsio/runtime": "3.0.0-beta.5",
     "@xterm/addon-clipboard": "^0.2.0",
     "@xterm/addon-fit": "^0.11.0",
     "@xterm/xterm": "^6.0.0",

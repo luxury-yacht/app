@@ -14,16 +14,15 @@ import {
   type KeyBinding,
   keymap,
 } from '@codemirror/view';
+import { readClipboardText } from '@core/desktop-runtime';
 import ContextMenu, { type ContextMenuItem } from '@shared/components/ContextMenu';
 import IconBar, { type IconBarItem } from '@shared/components/IconBar/IconBar';
 import { RegexSearchIcon } from '@shared/components/icons/LogIcons';
 import { CaseSensitiveIcon } from '@shared/components/icons/SharedIcons';
 import { YamlNextIcon, YamlPreviousIcon } from '@shared/components/icons/YamlIcons';
-
 import { useKeyboardSurface, useSearchShortcutTarget } from '@ui/shortcuts';
 import { deriveCopyText } from '@ui/shortcuts/context';
 import CodeMirror, { ExternalChange, type ReactCodeMirrorRef } from '@uiw/react-codemirror';
-import { ClipboardGetText } from '@wailsjs/runtime/runtime';
 import type React from 'react';
 import { useCallback, useEffect, useImperativeHandle, useMemo, useRef, useState } from 'react';
 import {
@@ -494,7 +493,7 @@ const YamlEditor = ({
                 // The browser clipboard-read API is permission-gated inside
                 // the Wails WebView; read through the Go-side clipboard, the
                 // same source the Edit menu paste uses.
-                void ClipboardGetText()
+                void readClipboardText()
                   .then((text) => {
                     if (!text) {
                       return;

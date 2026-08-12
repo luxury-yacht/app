@@ -185,13 +185,14 @@ vi.mock('@/core/contexts/ViewStateContext', () => ({
     onClusterObjectsClick: vi.fn(),
   }),
 }));
-vi.mock('@wailsjs/go/backend/App', () => ({
+vi.mock('@core/backend-api', () => ({
   __esModule: true,
   GetAppInfo: (...args: unknown[]) => getAppInfoMock(...args),
 }));
-vi.mock('@wailsjs/runtime/runtime', () => ({
+vi.mock('@core/desktop-runtime', () => ({
+  desktopRuntimeAvailable: () => false,
   __esModule: true,
-  BrowserOpenURL: (...args: unknown[]) => browserOpenURLMock(...args),
+  openURL: (...args: unknown[]) => browserOpenURLMock(...args),
 }));
 
 vi.mock('@core/contexts/ClusterLifecycleContext', () => ({

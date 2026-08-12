@@ -6,11 +6,11 @@
  * to stop/remove them.
  */
 
+import { openURL } from '@core/desktop-runtime';
 import { assertNever } from '@shared/utils/assertNever';
 import { DockablePanel, useDockablePanelState } from '@ui/dockable';
 import { useKeyboardSurface } from '@ui/shortcuts/surfaces';
 import { errorHandler } from '@utils/errorHandler';
-import { BrowserOpenURL } from '@wailsjs/runtime/runtime';
 import { useCallback, useEffect, useRef, useState } from 'react';
 import { StopPortForward } from '@/core/backend-api';
 import {
@@ -177,7 +177,7 @@ function PortForwardsPanel() {
                 <button
                   type="button"
                   className="pf-local-port pf-local-port-link"
-                  onClick={() => BrowserOpenURL(`http://localhost:${session.localPort}`)}
+                  onClick={() => openURL(`http://localhost:${session.localPort}`)}
                   title="Open in browser"
                   disabled={session.status !== 'active'}
                 >

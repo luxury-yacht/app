@@ -25,8 +25,8 @@ var defaultLoopbackListener = func() (net.Listener, error) {
 // App provides the backend façade exposed to Wails.
 type App struct {
 	appDone                  <-chan struct{}
-	runtimeReady             bool
-	withRuntimeContext       func(func(context.Context))
+	runtimeReady             atomic.Bool
+	desktop                  Desktop
 	selectedKubeconfigs      []string
 	availableKubeconfigs     []KubeconfigInfo
 	kubeconfigSearchPaths    []string
@@ -117,6 +117,7 @@ type App struct {
 	selectionMutationDrainMu   sync.Mutex
 	selectionMutationDrainCond *sync.Cond
 	selectionMutationPending   int
+	preQuitOnce                sync.Once
 	// kubeconfigChangeMu serializes runtime cluster/subsystem mutation paths.
 	// Lock ordering for runtime cluster mutation paths:
 	//   1) selectionMutationMu
@@ -197,13 +198,14 @@ type App struct {
 	kubeClientInitializer func() error
 }
 
-// NewApp constructs a backend App with sane defaults.
-func NewApp(reporters ...sentryreporting.Reporter) *App {
+// NewApp constructs a backend App with its desktop boundary and sane defaults.
+func NewApp(desktop Desktop, reporters ...sentryreporting.Reporter) *App {
 	var reporter sentryreporting.Reporter
 	if len(reporters) > 0 {
 		reporter = reporters[0]
 	}
 	app := &App{
+		desktop:                  desktop,
 		logger:                   NewLogger(1000, reporters...),
 		errorReporter:            reporter,
 		responseCache:            newDefaultResponseCache(),
@@ -218,8 +220,10 @@ func NewApp(reporters ...sentryreporting.Reporter) *App {
 		shellSessions:            make(map[string]*shellSession),
 		portForwardSessions:      make(map[string]*portForwardSessionInternal),
 		runtimeOperations:        newRuntimeOperationRegistry(),
-		eventEmitter: func(context.Context, string, ...interface{}) {
-			// Events are ignored until the runtime emitter is installed.
+		eventEmitter: func(_ context.Context, name string, data ...interface{}) {
+			if desktop != nil {
+				desktop.EmitEvent(name, data...)
+			}
 		},
 		clusterHealth:         make(map[string]ClusterHealthState),
 		clusterScopeRevisions: make(map[string]uint64),

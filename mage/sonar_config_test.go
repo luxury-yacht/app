@@ -15,7 +15,7 @@ func TestSonarExcludesGeneratedSources(t *testing.T) {
 
 	// Wails output does not consistently carry a generated-code header, so keep
 	// one representative file in the check alongside header-marked generators.
-	assertSonarPathExcluded(t, exclusions, "frontend/wailsjs/go/models.ts")
+	assertSonarPathExcluded(t, exclusions, "frontend/bindings/github.com/luxury-yacht/app/backend/models.ts")
 
 	for _, root := range []string{"backend", "frontend/src"} {
 		err := filepath.WalkDir(filepath.Join(repoRoot, root), func(path string, entry fs.DirEntry, walkErr error) error {

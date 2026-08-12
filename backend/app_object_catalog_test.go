@@ -100,7 +100,8 @@ func catalogLifecycleTestApp(t *testing.T, tier system.ResourceTier, cooled bool
 	t.Helper()
 	const clusterID = "cluster-a:context-a"
 	app := newTestAppWithDefaults(t)
-	app.setRuntimeContext(context.Background())
+	app.setApplicationContext(context.Background())
+	app.markRuntimeReady()
 	app.governorPlanned = map[string]system.ResourceTier{clusterID: tier}
 	app.governorApplied = map[string]system.ResourceTier{clusterID: tier}
 
@@ -241,7 +242,7 @@ func TestGovernorEnsureRunningStartsMissingCatalogForLiveCluster(t *testing.T) {
 }
 
 func TestStopObjectCatalogCancelsAndResets(t *testing.T) {
-	app := NewApp()
+	app := NewApp(nil)
 	app.logger = NewLogger(10)
 
 	cancelCalled := 0
@@ -270,7 +271,7 @@ func TestStopObjectCatalogCancelsAndResets(t *testing.T) {
 }
 
 func TestStopObjectCatalogDoesNotBlockForeverWaitingForDone(t *testing.T) {
-	app := NewApp()
+	app := NewApp(nil)
 	app.logger = NewLogger(10)
 
 	cancelCalled := make(chan struct{})
@@ -345,7 +346,7 @@ func TestCatalogDoorbellBridgeBroadcastsCatalogSource(t *testing.T) {
 }
 
 func TestGetCatalogDiagnosticsCombinesTelemetryAndServiceState(t *testing.T) {
-	app := NewApp()
+	app := NewApp(nil)
 	app.logger = NewLogger(10)
 	app.storeObjectCatalogEntry("cluster-a", &objectCatalogEntry{
 		service: &objectcatalog.Service{},
@@ -402,7 +403,7 @@ func TestMergeCatalogHealthFillsOnlyMissingTelemetry(t *testing.T) {
 }
 
 func TestSnapshotObjectCatalogEntriesSortsByClusterID(t *testing.T) {
-	app := NewApp()
+	app := NewApp(nil)
 	entryA := &objectCatalogEntry{meta: ClusterMeta{ID: "cluster-a"}}
 	entryB := &objectCatalogEntry{meta: ClusterMeta{ID: "cluster-b"}}
 
@@ -425,7 +426,7 @@ func TestSnapshotObjectCatalogEntriesSortsByClusterID(t *testing.T) {
 }
 
 func TestCatalogNamespaceGroupsFiltersAndMapsNamespaces(t *testing.T) {
-	app := NewApp()
+	app := NewApp(nil)
 
 	withNamespaces := objectcatalog.NewService(objectcatalog.Dependencies{}, nil)
 	setCatalogServiceNamespaces(t, withNamespaces, []string{"default", "kube-system"})
@@ -501,7 +502,7 @@ func TestGetCatalogDiagnosticsFromTelemetryRecorder(t *testing.T) {
 }
 
 func TestFindCatalogObjectMatchUsesExactCatalogIdentity(t *testing.T) {
-	app := NewApp()
+	app := NewApp(nil)
 	svc := objectcatalog.NewService(objectcatalog.Dependencies{}, nil)
 	setCatalogServiceItems(t, svc, map[string]objectcatalog.Summary{
 		"apps/v1, Resource=deployments/apps/alpha":        {Ref: resourcemodel.ResourceRef{ClusterID: "cluster-b", Group: "apps", Version: "v1", Kind: "Deployment", Resource: "deployments", Namespace: "apps", Name: "alpha", UID: "alpha-uid"}, Scope: objectcatalog.ScopeNamespace},
@@ -520,7 +521,7 @@ func TestFindCatalogObjectMatchUsesExactCatalogIdentity(t *testing.T) {
 }
 
 func TestFindCatalogObjectByUIDUsesCatalogIdentity(t *testing.T) {
-	app := NewApp()
+	app := NewApp(nil)
 	svc := objectcatalog.NewService(objectcatalog.Dependencies{}, nil)
 	setCatalogServiceItems(t, svc, map[string]objectcatalog.Summary{
 		"apps/v1, Resource=deployments/apps/alpha": {Ref: resourcemodel.ResourceRef{ClusterID: "cluster-b", Group: "apps", Version: "v1", Kind: "Deployment", Resource: "deployments", Namespace: "apps", Name: "alpha", UID: "alpha-uid"}, Scope: objectcatalog.ScopeNamespace},
@@ -567,7 +568,7 @@ func TestHydrateCatalogCustomRowsFetchesOnlyCurrentPageRows(t *testing.T) {
 	gvrObject.SetLabels(map[string]string{"env": "prod"})
 	gvrObject.SetAnnotations(map[string]string{"owner": "platform"})
 
-	app := NewApp()
+	app := NewApp(nil)
 	app.clusterClients[clusterID] = &clusterClients{
 		meta:          ClusterMeta{ID: clusterID, Name: "Cluster B"},
 		dynamicClient: fake.NewSimpleDynamicClient(runtime.NewScheme(), gvrObject),
@@ -610,14 +611,15 @@ func TestHydrateCatalogCustomRowsFetchesOnlyCurrentPageRows(t *testing.T) {
 // (or empty) "complete" result.
 func TestHydrateCatalogCustomRowsReportsCanceledContext(t *testing.T) {
 	clusterID := "cluster-b"
-	app := NewApp()
+	app := NewApp(nil)
 	app.clusterClients[clusterID] = &clusterClients{
 		meta:          ClusterMeta{ID: clusterID, Name: "Cluster B"},
 		dynamicClient: fake.NewSimpleDynamicClient(runtime.NewScheme()),
 	}
 	canceled, cancel := context.WithCancel(context.Background())
 	cancel()
-	app.setRuntimeContext(canceled)
+	app.setApplicationContext(canceled)
+	app.markRuntimeReady()
 
 	_, err := app.HydrateCatalogCustomRows(clusterID, []snapshot.ResourceQueryRow{
 		{
@@ -662,8 +664,9 @@ func TestHydrateCatalogCustomRowsKeepsPageOnRowFailure(t *testing.T) {
 		)
 	})
 
-	app := NewApp()
-	app.setRuntimeContext(context.Background())
+	app := NewApp(nil)
+	app.setApplicationContext(context.Background())
+	app.markRuntimeReady()
 	app.clusterClients[clusterID] = &clusterClients{
 		meta:          ClusterMeta{ID: clusterID, Name: "Cluster B"},
 		dynamicClient: dynamicClient,
@@ -758,7 +761,7 @@ func TestCatalogNamespaceGroupsServesConfiguredScope(t *testing.T) {
 	// the catalog having discovered objects (a restricted identity may have
 	// nothing catalogued yet), and it must agree with the sidebar.
 	setTestConfigEnv(t)
-	app := NewApp()
+	app := NewApp(nil)
 	_, err := app.SetClusterAllowedNamespaces("cluster-a", []string{"prod", "dev"})
 	if err != nil {
 		t.Fatalf("set scope: %v", err)

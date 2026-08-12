@@ -4,6 +4,7 @@
  * Pod Overview descriptor (X1). Presentation ported verbatim from PodOverview.tsx.
  */
 
+import { types } from '@core/backend-api/models';
 import { ObjectPanelLink } from '@shared/components/ObjectPanelLink';
 import { StatusChip, type StatusChipVariant } from '@shared/components/StatusChip';
 import {
@@ -11,7 +12,6 @@ import {
   buildRequiredRelatedObjectReference,
 } from '@shared/utils/objectIdentity';
 import { withStableListKeys } from '@shared/utils/stableListKeys';
-import { types } from '@wailsjs/go/models';
 import type React from 'react';
 import type { OverviewContext, OverviewDescriptor } from '../schema';
 import {

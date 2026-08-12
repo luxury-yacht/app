@@ -22,7 +22,7 @@ import {
   useWailsRuntimeEvents,
 } from './useWailsRuntimeEvents';
 
-vi.mock('@wailsjs/go/backend/App', () => ({
+vi.mock('@core/backend-api', () => ({
   RetryClusterAuth: vi.fn(),
   GetClusterWorkspaceState: vi.fn().mockResolvedValue({
     selectedKubeconfigs: [],
@@ -38,6 +38,13 @@ vi.mock('@/core/app-state-access', () => ({
 
 vi.mock('@/core/events', () => ({
   eventBus: { emit: vi.fn() },
+}));
+
+const runtimeRef = vi.hoisted(() => ({ current: null as MockRuntime | null }));
+
+vi.mock('@/core/desktop-runtime', () => ({
+  onEvent: (event: string, handler: EventHandler) =>
+    runtimeRef.current?.onEvent(event, handler) ?? (() => undefined),
 }));
 
 /**
@@ -57,16 +64,16 @@ interface HealthHookResult {
 }
 
 /**
- * Type for event handlers registered via window.runtime.EventsOn.
+ * Type for event handlers registered through the desktop runtime adapter.
  */
 type EventHandler = (...args: unknown[]) => void;
 
 /**
  * Mock runtime interface matching Wails runtime structure.
  */
-interface MockRuntime extends WailsRuntime {
-  EventsOn: ReturnType<typeof vi.fn<NonNullable<WailsRuntime['EventsOn']>>>;
-  EventsOff: ReturnType<typeof vi.fn<NonNullable<WailsRuntime['EventsOff']>>>;
+interface MockRuntime {
+  onEvent: ReturnType<typeof vi.fn<(event: string, handler: EventHandler) => () => void>>;
+  offEvent: ReturnType<typeof vi.fn<(event: string) => void>>;
   handlers: Map<string, EventHandler>;
   emit: (event: string, payload: unknown) => void;
 }
@@ -77,7 +84,7 @@ interface MockRuntime extends WailsRuntime {
  */
 function createMockRuntime(): MockRuntime {
   const handlers = new Map<string, EventHandler>();
-  const EventsOn = vi.fn<NonNullable<WailsRuntime['EventsOn']>>((event, handler) => {
+  const onEvent = vi.fn<(event: string, handler: EventHandler) => () => void>((event, handler) => {
     handlers.set(event, handler);
     return () => {
       if (handlers.get(event) === handler) {
@@ -85,14 +92,14 @@ function createMockRuntime(): MockRuntime {
       }
     };
   });
-  const EventsOff = vi.fn<NonNullable<WailsRuntime['EventsOff']>>((event) => {
+  const offEvent = vi.fn<(event: string) => void>((event) => {
     handlers.delete(event);
   });
 
   return {
     handlers,
-    EventsOn,
-    EventsOff,
+    onEvent,
+    offEvent,
     emit: (event: string, payload: unknown) => {
       const handler = handlers.get(event);
       if (handler) {
@@ -104,21 +111,19 @@ function createMockRuntime(): MockRuntime {
 
 describe('Wails Runtime Event Listener Cleanup', () => {
   let mockRuntime: MockRuntime;
-  let originalRuntime: WailsRuntime | undefined;
 
   beforeEach(() => {
     mockRuntime = createMockRuntime();
-    originalRuntime = window.runtime;
-    window.runtime = mockRuntime;
+    runtimeRef.current = mockRuntime;
   });
 
   afterEach(() => {
     vi.restoreAllMocks();
-    window.runtime = originalRuntime;
+    runtimeRef.current = null;
     document.body.textContent = '';
   });
 
-  it('uses EventsOn disposers instead of clearing whole runtime event names', async () => {
+  it('uses onEvent disposers instead of clearing whole runtime event names', async () => {
     const container = document.createElement('div');
     document.body.appendChild(container);
     const root = ReactDOM.createRoot(container);
@@ -151,24 +156,22 @@ describe('Wails Runtime Event Listener Cleanup', () => {
     });
 
     expect(mockRuntime.handlers.size).toBe(0);
-    expect(mockRuntime.EventsOff).not.toHaveBeenCalled();
+    expect(mockRuntime.offEvent).not.toHaveBeenCalled();
   });
 });
 
 // Tests for auth error tracking per cluster
 describe('Auth Error Context Isolation', () => {
   let mockRuntime: MockRuntime;
-  let originalRuntime: WailsRuntime | undefined;
 
   beforeEach(() => {
     mockRuntime = createMockRuntime();
-    originalRuntime = window.runtime;
-    window.runtime = mockRuntime;
+    runtimeRef.current = mockRuntime;
   });
 
   afterEach(() => {
     vi.restoreAllMocks();
-    window.runtime = originalRuntime;
+    runtimeRef.current = null;
     // Clear document body using textContent (safe DOM method)
     document.body.textContent = '';
   });
@@ -378,17 +381,15 @@ describe('Auth Error Context Isolation', () => {
 // Tests for cluster health tracking
 describe('Cluster Health Listener Isolation', () => {
   let mockRuntime: MockRuntime;
-  let originalRuntime: WailsRuntime | undefined;
 
   beforeEach(() => {
     mockRuntime = createMockRuntime();
-    originalRuntime = window.runtime;
-    window.runtime = mockRuntime;
+    runtimeRef.current = mockRuntime;
   });
 
   afterEach(() => {
     vi.restoreAllMocks();
-    window.runtime = originalRuntime;
+    runtimeRef.current = null;
     // Clear document body using textContent (safe DOM method)
     document.body.textContent = '';
   });
@@ -532,7 +533,7 @@ describe('Cluster Health Listener Isolation', () => {
     unmount();
   });
 
-  it('cleans up health listeners with the EventsOn disposers', async () => {
+  it('cleans up health listeners with the onEvent disposers', async () => {
     const { unmount } = await renderHealthHook();
 
     expect(mockRuntime.handlers.has('cluster:health:healthy')).toBe(true);
@@ -542,7 +543,7 @@ describe('Cluster Health Listener Isolation', () => {
 
     expect(mockRuntime.handlers.has('cluster:health:healthy')).toBe(false);
     expect(mockRuntime.handlers.has('cluster:health:degraded')).toBe(false);
-    expect(mockRuntime.EventsOff).not.toHaveBeenCalled();
+    expect(mockRuntime.offEvent).not.toHaveBeenCalled();
   });
 
   it('updates health status when cluster transitions between states', async () => {

@@ -17,7 +17,7 @@ const listRuntimeOperationsMock = vi.hoisted(() => vi.fn());
 const listShellSessionsMock = vi.hoisted(() => vi.fn());
 const stopPortForwardMock = vi.hoisted(() => vi.fn());
 
-vi.mock('@wailsjs/go/backend/App', () => ({
+vi.mock('@core/backend-api', () => ({
   ListPortForwards: (...args: unknown[]) => listPortForwardsMock(...args),
   ListRuntimeOperations: (...args: unknown[]) => listRuntimeOperationsMock(...args),
   ListShellSessions: (...args: unknown[]) => listShellSessionsMock(...args),
@@ -25,7 +25,7 @@ vi.mock('@wailsjs/go/backend/App', () => ({
 }));
 
 // Mock the Wails runtime events.
-// EventsOn must return a cancel function — the component calls it on unmount.
+// onEvent must return a cancel function — the component calls it on unmount.
 const eventsOnCancels = vi.hoisted(() => new Map<string, ReturnType<typeof vi.fn>>());
 const eventsOnMock = vi.hoisted(() =>
   vi.fn((...args: unknown[]) => {
@@ -37,10 +37,11 @@ const eventsOnMock = vi.hoisted(() =>
 );
 const eventsOffMock = vi.hoisted(() => vi.fn());
 
-vi.mock('@wailsjs/runtime/runtime', () => ({
-  EventsOn: (...args: unknown[]) => eventsOnMock(...args),
-  EventsOff: (...args: unknown[]) => eventsOffMock(...args),
-  BrowserOpenURL: vi.fn(),
+vi.mock('@core/desktop-runtime', () => ({
+  desktopRuntimeAvailable: () => false,
+  onEvent: (...args: unknown[]) => eventsOnMock(...args),
+  offEvent: (...args: unknown[]) => eventsOffMock(...args),
+  openURL: vi.fn(),
 }));
 
 // Mock the error handler
@@ -144,11 +145,11 @@ describe('PortForwardsPanel', () => {
     (
       window as typeof window & {
         runtime?: {
-          EventsOn: (event: string, handler: (...args: unknown[]) => void) => () => void;
+          onEvent: (event: string, handler: (...args: unknown[]) => void) => () => void;
         };
       }
     ).runtime = {
-      EventsOn: (...args: unknown[]) => eventsOnMock(...args) as unknown as () => void,
+      onEvent: (...args: unknown[]) => eventsOnMock(...args) as unknown as () => void,
     };
     listPortForwardsMock.mockResolvedValue([]);
     listRuntimeOperationsMock.mockResolvedValue([]);
@@ -398,7 +399,7 @@ describe('PortForwardsPanel', () => {
       await Promise.resolve();
     });
 
-    // Component calls the cancel functions returned by EventsOn, not EventsOff.
+    // Component calls the cancel functions returned by onEvent, not offEvent.
     expect(cancelList).toHaveBeenCalled();
     expect(cancelStatus).toHaveBeenCalled();
   });

@@ -15,7 +15,7 @@ go = "1.26.0"
 node = "26.5.0"
 npm = "12.0.1"
 "go:github.com/magefile/mage" = "1.17.2"
-"go:github.com/wailsapp/wails/v2/cmd/wails" = "2.13.0"
+"go:github.com/wailsapp/wails/v3/cmd/wails3" = "3.0.0-beta.7"
 "go:honnef.co/go/tools/cmd/staticcheck" = "0.7.0"
 trivy = "0.72.0"
 
@@ -36,7 +36,7 @@ nsis_version = "3.10"
 		Node:        "26.5.0",
 		NPM:         "12.0.1",
 		Mage:        "1.17.2",
-		Wails:       "2.13.0",
+		Wails:       "3.0.0-beta.7",
 		Staticcheck: "0.7.0",
 		Trivy:       "0.72.0",
 		NSIS:        "3.10",
@@ -53,7 +53,7 @@ go = "1.26.0"
 node = "26.5.0"
 npm = "12.0.1"
 "go:github.com/magefile/mage" = "1.17.2"
-"go:github.com/wailsapp/wails/v2/cmd/wails" = "2.13.0"
+"go:github.com/wailsapp/wails/v3/cmd/wails3" = "3.0.0-beta.7"
 "go:honnef.co/go/tools/cmd/staticcheck" = "0.7.0"
 trivy = "0.72.0"
 `
@@ -80,7 +80,7 @@ func TestCanonicalToolVersionsMatchCompatibilityMetadata(t *testing.T) {
 	goMod := readTestFile(t, filepath.Join(repoRoot, "go.mod"))
 	assertContains(t, goMod, "\ngo "+versions.Go+"\n", "Go directive")
 	assertContains(t, goMod, "\tgithub.com/magefile/mage v"+versions.Mage+"\n", "Mage module")
-	assertContains(t, goMod, "\tgithub.com/wailsapp/wails/v2 v"+versions.Wails+"\n", "Wails module")
+	assertContains(t, goMod, "\tgithub.com/wailsapp/wails/v3 v"+versions.Wails+"\n", "Wails module")
 
 	var frontendConfig struct {
 		PackageManager string            `json:"packageManager"`
@@ -128,7 +128,7 @@ go = "1.26.0"
 node = "26.5.0"
 npm = "12.0.1"
 "go:github.com/magefile/mage" = "1.17.2"
-"go:github.com/wailsapp/wails/v2/cmd/wails" = "2.13.0"
+"go:github.com/wailsapp/wails/v3/cmd/wails3" = "3.0.0-beta.7"
 "go:honnef.co/go/tools/cmd/staticcheck" = "0.7.0"
 trivy = "0.72.0"
 

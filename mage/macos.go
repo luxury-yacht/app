@@ -9,72 +9,9 @@ import (
 )
 
 const (
-	binDir      = "build/bin"
-	buildDir    = "build/darwin"
-	iconsetName = "app.iconset"
-	iconsetDir  = buildDir + "/" + iconsetName
-	iconDest    = buildDir + "/iconfile.icns"
+	binDir   = "build/bin"
+	iconDest = "build/darwin/icons.icns"
 )
-
-// Creates the iconset for macOS applications.
-func createMacIconfile(cfg BuildConfig) error {
-	fmt.Println("\n🎨 Creating macOS .icns file...")
-
-	// If the iconset directory exists, remove it first.
-	if _, err := os.Stat(iconsetDir); err == nil {
-		err = os.RemoveAll(iconsetDir)
-		if err != nil {
-			return err
-		}
-	}
-
-	// Create the iconset directory.
-	err := os.MkdirAll(iconsetDir, 0755)
-	if err != nil {
-		return err
-	}
-
-	fmt.Println("Using icon source image at", cfg.IconSource)
-
-	// Copy the source icon to build dir for `wails build`.
-	err = sh.Copy("build/appicon.png", cfg.IconSource)
-	if err != nil {
-		return err
-	}
-
-	// Generate the iconset files.
-	sizes := []int{16, 32, 64, 128, 256, 512}
-	for _, size := range sizes {
-		// Create the standard icon sizes.
-		err = sh.Run("sips", "-Z", fmt.Sprint(size), cfg.IconSource,
-			"--out", iconsetDir+"/icon_"+fmt.Sprint(size)+"x"+fmt.Sprint(size)+".png")
-		if err != nil {
-			return err
-		}
-		// Create the @2x icon sizes.
-		err = sh.Run("sips", "-Z", fmt.Sprint(size*2), cfg.IconSource,
-			"--out", iconsetDir+"/icon_"+fmt.Sprint(size)+"x"+fmt.Sprint(size)+"@2x.png")
-		if err != nil {
-			return err
-		}
-	}
-
-	// Convert the iconset to an icns file.
-	err = sh.RunV("iconutil", "-c", "icns", iconsetDir, "-o", iconDest)
-	if err != nil {
-		return err
-	}
-
-	// Clean up the iconset directory.
-	err = os.RemoveAll(iconsetDir)
-	if err != nil {
-		return err
-	}
-
-	fmt.Println("✅ Icon file created at", iconDest)
-
-	return nil
-}
 
 // Get env variables for macOS code signing and notarization.
 func getMacOSSigningEnv() (string, string, string, string, string) {
@@ -177,7 +114,7 @@ func stageMacApp(cfg BuildConfig) error {
 	}
 
 	// Copy the app to the staging directory.
-	err = sh.Run("cp", "-R", binDir+"/"+cfg.AppLongName+".app", stagingDir+"/"+cfg.AppLongName+".app")
+	err = sh.Run("cp", "-R", binDir+"/"+cfg.AppShortName+".app", stagingDir+"/"+cfg.AppLongName+".app")
 	if err != nil {
 		return err
 	}
@@ -247,49 +184,29 @@ func createDMG(archType, version string) error {
 
 // Builds the macOS app for a specific architecture so we can package per-arch artifacts.
 func buildMacOSForArch(cfg BuildConfig, archType string) error {
-	generateBuildManifest(cfg)
-
-	buildArgs := append([]string{}, cfg.BuildArgs...)
-	buildArgs = append(buildArgs, "--platform", fmt.Sprintf("darwin/%s", archType))
-
-	fmt.Printf("\n🛠️ Wails build args: %v\n\n", buildArgs)
-
-	return sh.RunV("wails", buildArgs...)
+	cfg.ArchType = archType
+	return runWailsTask(cfg, "package")
 }
 
 // Build the application for macOS.
 func BuildMacOS(cfg BuildConfig) error {
-	err := createMacIconfile(cfg)
-	if err != nil {
-		return err
-	}
-
-	generateBuildManifest(cfg)
-	fmt.Printf("\n🛠️ Wails build args: %v\n\n", cfg.BuildArgs)
-
-	return sh.RunV("wails", cfg.BuildArgs...)
+	return runWailsTask(cfg, "package")
 }
 
 // Install the app locally, with optional signing and notarization.
 func InstallMacOS(cfg BuildConfig, signed bool) error {
-	// Create the iconfile.
-	err := createMacIconfile(cfg)
-	if err != nil {
-		return err
-	}
-
-	installSrc := binDir + "/" + cfg.AppLongName + ".app"
+	installSrc := binDir + "/" + cfg.AppShortName + ".app"
 	installDest := "/Applications/" + cfg.AppLongName + ".app"
 
 	if signed {
 		identity, appleID, appleIDPassword, appleTeamId, keychainPath := getMacOSSigningEnv()
 
-		err = signMacApp(identity, keychainPath, binDir+"/"+cfg.AppLongName+".app")
+		err := signMacApp(identity, keychainPath, installSrc)
 		if err != nil {
 			return err
 		}
 
-		err = notarizeMacApp(appleID, appleIDPassword, appleTeamId, binDir+"/"+cfg.AppLongName+".app")
+		err = notarizeMacApp(appleID, appleIDPassword, appleTeamId, installSrc)
 		if err != nil {
 			return err
 		}
@@ -304,7 +221,7 @@ func InstallMacOS(cfg BuildConfig, signed bool) error {
 	}
 
 	// Copy the built app to /Applications.
-	err = sh.RunV("sudo", "cp", "-R", installSrc, installDest)
+	err := sh.RunV("sudo", "cp", "-R", installSrc, installDest)
 	if err != nil {
 		return err
 	}
@@ -316,10 +233,6 @@ func InstallMacOS(cfg BuildConfig, signed bool) error {
 
 // Packages the macOS application with optional signing and notarization.
 func PackageMacOS(cfg BuildConfig, signed bool) error {
-	if err := createMacIconfile(cfg); err != nil {
-		return err
-	}
-
 	archs := []string{"arm64", "amd64"}
 	var signing *macOSSigningConfig
 	if signed {
@@ -356,7 +269,7 @@ func packageMacOSArchitecture(cfg BuildConfig, signing *macOSSigningConfig) erro
 		return err
 	}
 	if signing != nil {
-		appPath := binDir + "/" + cfg.AppLongName + ".app"
+		appPath := binDir + "/" + cfg.AppShortName + ".app"
 		if err := signMacApp(signing.identity, signing.keychainPath, appPath); err != nil {
 			return err
 		}

@@ -10,7 +10,7 @@ npm = "12.0.2"
 "go:github.com/magefile/mage" = "1.17.2"
 "go:honnef.co/go/tools/cmd/staticcheck" = "0.7.0"
 trivy = "0.73.0"
-"go:github.com/wailsapp/wails/v2/cmd/wails" = "2.14.0"
+"go:github.com/wailsapp/wails/v3/cmd/wails3" = "3.0.0-beta.7"
 
 [vars]
 # NSIS is installed by the Windows-specific release action rather than Mise.

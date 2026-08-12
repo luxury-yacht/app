@@ -5,6 +5,7 @@
  * Implements CommandPalette logic for the UI layer.
  */
 
+import { onEvent } from '@core/desktop-runtime';
 import { useKubeconfig } from '@modules/kubernetes/config/KubeconfigContext';
 import { useObjectPanel } from '@modules/object-panel/hooks/useObjectPanel';
 import { ListboxOptionButton } from '@shared/components/aria/ListboxOptionButton';
@@ -15,7 +16,6 @@ import { withStableListKeys } from '@shared/utils/stableListKeys';
 import { useKeyboardContext, useShortcut, useShortcuts } from '@ui/shortcuts';
 import { KeyboardShortcutPriority } from '@ui/shortcuts/priorities';
 import { useKeyboardSurface } from '@ui/shortcuts/surfaces';
-import { EventsOn } from '@wailsjs/runtime/runtime';
 import type React from 'react';
 import { memo, useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { useEventBus } from '@/core/events';
@@ -1031,7 +1031,7 @@ export const CommandPalette = memo(function CommandPaletteComponent({
     openShortcutRef.current = handleGlobalOpenShortcut;
   }, [handleGlobalOpenShortcut]);
   useEffect(() => {
-    const dispose = EventsOn('open-command-palette', () => {
+    const dispose = onEvent('open-command-palette', () => {
       openShortcutRef.current();
     });
     return dispose;

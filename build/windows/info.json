@@ -1,0 +1,15 @@
+{
+	"fixed": {
+		"file_version": "1.11.6"
+	},
+	"info": {
+		"0000": {
+			"ProductVersion": "1.11.6",
+			"CompanyName": "Luxury Yacht",
+			"FileDescription": "Luxury Yacht is a desktop app for managing Kubernetes clusters. Sail the seas of Kubernetes in style!",
+			"LegalCopyright": "Copyright © 2025-2026 Luxury Yacht",
+			"ProductName": "Luxury Yacht",
+			"Comments": "Luxury Yacht desktop application"
+		}
+	}
+}

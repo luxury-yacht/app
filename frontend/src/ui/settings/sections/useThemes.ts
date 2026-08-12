@@ -1,5 +1,5 @@
+import { types } from '@core/backend-api/models';
 import { errorHandler } from '@utils/errorHandler';
-import { types } from '@wailsjs/go/models';
 import { useCallback, useEffect, useState } from 'react';
 import {
   applyTheme as applyThemeApi,

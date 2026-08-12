@@ -6,7 +6,7 @@
 
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 
-vi.mock('@wailsjs/go/backend/App', () => ({
+vi.mock('@core/backend-api', () => ({
   GetClusterAllowedNamespaces: vi.fn(),
   SetClusterAllowedNamespaces: vi.fn(),
 }));

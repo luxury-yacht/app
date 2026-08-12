@@ -5,7 +5,7 @@
  * Implements context logic for the UI layer.
  */
 
-import { EventsOff, EventsOn } from '@wailsjs/runtime/runtime';
+import { onEvent } from '@core/desktop-runtime';
 import type React from 'react';
 import { createContext, useCallback, useContext, useEffect, useRef, useState } from 'react';
 import type {
@@ -674,17 +674,17 @@ const KeyboardProviderInner: React.FC<KeyboardProviderProps> = ({ children, disa
     };
 
     // Register event listeners
-    EventsOn('menu:cut', handleMenuCut);
-    EventsOn('menu:copy', handleMenuCopy);
-    EventsOn('menu:paste', handleMenuPaste);
-    EventsOn('menu:selectAll', handleMenuSelectAll);
+    const disposeCut = onEvent('menu:cut', handleMenuCut);
+    const disposeCopy = onEvent('menu:copy', handleMenuCopy);
+    const disposePaste = onEvent('menu:paste', handleMenuPaste);
+    const disposeSelectAll = onEvent('menu:selectAll', handleMenuSelectAll);
 
     // Cleanup
     return () => {
-      EventsOff('menu:cut');
-      EventsOff('menu:copy');
-      EventsOff('menu:paste');
-      EventsOff('menu:selectAll');
+      disposeCut();
+      disposeCopy();
+      disposePaste();
+      disposeSelectAll();
     };
   }, [applyNativeCutFallback, applyNativePasteFallback, dispatchNativeAction]);
 

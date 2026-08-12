@@ -4,6 +4,9 @@
  * Helpers for sending frontend logs to the backend Application Logs.
  */
 
+import { LogAppLogsFromFrontend, LogAppLogsFromFrontendWithCluster } from '@/core/backend-api';
+import { desktopRuntimeAvailable, onEvent } from '@/core/desktop-runtime';
+
 type AppLogsLevel = 'debug' | 'info' | 'warn' | 'error';
 
 export interface AppLogsClusterMeta {
@@ -39,23 +42,19 @@ const logToAppLogs = (
   source?: string,
   cluster?: AppLogsClusterMeta
 ): void => {
-  if (typeof window === 'undefined') {
+  if (!desktopRuntimeAvailable()) {
     return;
   }
   const trimmed = message.trim();
   if (!trimmed) {
     return;
   }
-  const api = window.go?.backend?.App;
-  if (!api || typeof api.LogAppLogsFromFrontend !== 'function') {
-    return;
-  }
   const safeSource = (source ?? '').trim() || APP_LOG_SOURCES.Frontend;
   const clusterId = cluster?.clusterId?.trim() ?? '';
   const clusterName = cluster?.clusterName?.trim() ?? '';
   try {
-    if ((clusterId || clusterName) && typeof api.LogAppLogsFromFrontendWithCluster === 'function') {
-      void api.LogAppLogsFromFrontendWithCluster(
+    if (clusterId || clusterName) {
+      void LogAppLogsFromFrontendWithCluster(
         normalizeLevel(level),
         trimmed,
         safeSource,
@@ -64,7 +63,7 @@ const logToAppLogs = (
       );
       return;
     }
-    void api.LogAppLogsFromFrontend(normalizeLevel(level), trimmed, safeSource);
+    void LogAppLogsFromFrontend(normalizeLevel(level), trimmed, safeSource);
   } catch (_err) {
     // Ignore logging failures to avoid cascading errors.
   }
@@ -103,12 +102,7 @@ export const logAppLogsError = (
 };
 
 export const subscribeAppLogsAdded = (handler: AppLogsAddedHandler): (() => void) => {
-  if (typeof window === 'undefined') {
-    return () => undefined;
-  }
-
-  const runtime = window.runtime;
-  if (!runtime?.EventsOn) {
+  if (!desktopRuntimeAvailable()) {
     return () => undefined;
   }
 
@@ -116,12 +110,5 @@ export const subscribeAppLogsAdded = (handler: AppLogsAddedHandler): (() => void
     handler(typeof event === 'object' && event !== null ? (event as AppLogsAddedEvent) : undefined);
   };
 
-  const dispose = runtime.EventsOn('app-logs:added', eventHandler);
-  if (typeof dispose === 'function') {
-    return dispose;
-  }
-
-  return () => {
-    runtime.EventsOff?.('app-logs:added', eventHandler);
-  };
+  return onEvent('app-logs:added', eventHandler);
 };

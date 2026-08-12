@@ -1,6 +1,7 @@
 import { GetClusterWorkspaceState } from '@/core/backend-api';
 import type { ClusterLifecycleState } from '@/core/contexts/clusterLifecycleState';
 import { parseClusterLifecycleState } from '@/core/contexts/clusterLifecycleState';
+import { onEvent } from '@/core/desktop-runtime';
 import { eventBus } from '@/core/events';
 import { logAppLogsInfo } from '@/core/logging/appLogsClient';
 import { reportOperationalError } from '@/utils/errorHandler';
@@ -136,7 +137,7 @@ export const applyAuthProgressEvent = (
   updateAuthMap(prev, payload, (existing) => progressedAuthState(existing, payload));
 
 type BackendWorkspaceState = Awaited<ReturnType<typeof GetClusterWorkspaceState>>;
-type BackendWorkspaceClusterState = BackendWorkspaceState['clusters'][string];
+type BackendWorkspaceClusterState = NonNullable<BackendWorkspaceState['clusters'][string]>;
 type BackendWorkspaceAuthState = BackendWorkspaceClusterState['auth'];
 interface ClusterWorkspaceWireAuthState extends Partial<BackendWorkspaceAuthState> {
   state: string;
@@ -149,7 +150,7 @@ interface ClusterWorkspaceWireClusterState
 }
 export interface ClusterWorkspaceWireState
   extends Omit<BackendWorkspaceState, 'clusters' | 'convertValues'> {
-  clusters: Record<string, ClusterWorkspaceWireClusterState>;
+  clusters: Record<string, ClusterWorkspaceWireClusterState | undefined>;
 }
 
 export interface ClusterWorkspaceClusterState {
@@ -169,7 +170,7 @@ export interface ClusterWorkspaceSnapshot {
 
 interface ClusterWorkspaceStoreOptions {
   read: () => Promise<ClusterWorkspaceWireState>;
-  runtime: () => WailsRuntime | undefined;
+  onEvent: (event: string, handler: (payload: unknown) => void) => () => void;
 }
 
 const emptySnapshot = (): ClusterWorkspaceSnapshot => ({
@@ -291,12 +292,15 @@ const shouldEmitHydratedLifecycle = (
   );
 
 const mergeWireClusters = (
-  wireClusters: Record<string, ClusterWorkspaceWireClusterState> | undefined,
+  wireClusters: Record<string, ClusterWorkspaceWireClusterState | undefined> | undefined,
   current: ReadonlyMap<string, ClusterWorkspaceClusterState>,
   liveFields?: ReadonlySet<string>
 ): Map<string, ClusterWorkspaceClusterState> => {
   const next = retainLiveClusters(current, liveFields);
   for (const [clusterId, raw] of Object.entries(wireClusters ?? {})) {
+    if (!raw) {
+      continue;
+    }
     const previous = next.get(clusterId) ?? current.get(clusterId);
     const merged = mergeWireCluster(clusterId, raw, previous, liveFields);
     next.set(clusterId, merged.state);
@@ -426,26 +430,22 @@ export class ClusterWorkspaceStore {
   private start(): void {
     this.generation++;
     this.pendingHydrationFields.clear();
-    const runtime = this.options.runtime();
     const on = (event: string, handler: (...args: unknown[]) => void) => {
       try {
-        const dispose = runtime?.EventsOn?.(event, handler);
-        if (typeof dispose === 'function') {
-          this.disposers.push(dispose);
-        }
+        this.disposers.push(this.options.onEvent(event, handler));
       } catch (error) {
         this.reportIsolationError(`Failed to subscribe to ${event}`, error);
       }
     };
 
-    on('cluster:lifecycle', (...args) => this.handleLifecycle(args[0]));
-    on('cluster:auth:failed', (...args) => this.handleAuthFailed(args[0]));
-    on('cluster:auth:recovering', (...args) => this.handleAuthRecovering(args[0]));
-    on('cluster:auth:recovered', (...args) => this.handleAuthRecovered(args[0]));
-    on('cluster:auth:progress', (...args) => this.handleAuthProgress(args[0]));
-    on('cluster:health:healthy', (...args) => this.handleHealth(args[0], 'healthy'));
-    on('cluster:health:degraded', (...args) => this.handleHealth(args[0], 'degraded'));
-    on('cluster:scope:changed', (...args) => this.handleScopeChanged(args[0]));
+    on('cluster:lifecycle', (payload) => this.handleLifecycle(payload));
+    on('cluster:auth:failed', (payload) => this.handleAuthFailed(payload));
+    on('cluster:auth:recovering', (payload) => this.handleAuthRecovering(payload));
+    on('cluster:auth:recovered', (payload) => this.handleAuthRecovered(payload));
+    on('cluster:auth:progress', (payload) => this.handleAuthProgress(payload));
+    on('cluster:health:healthy', (payload) => this.handleHealth(payload, 'healthy'));
+    on('cluster:health:degraded', (payload) => this.handleHealth(payload, 'degraded'));
+    on('cluster:scope:changed', (payload) => this.handleScopeChanged(payload));
 
     void this.hydrate().catch((error) => {
       reportOperationalError(error, {
@@ -692,5 +692,5 @@ const readClusterWorkspaceState = async (): Promise<ClusterWorkspaceWireState> =
 
 export const clusterWorkspaceStore = new ClusterWorkspaceStore({
   read: readClusterWorkspaceState,
-  runtime: () => window.runtime,
+  onEvent,
 });

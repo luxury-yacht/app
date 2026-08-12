@@ -12,11 +12,11 @@
  * from the renderer context (`context.hpaManaged`).
  */
 
+import { daemonset, deployment, replicaset, statefulset } from '@core/backend-api/models';
 import { ObjectPanelLink } from '@shared/components/ObjectPanelLink';
 import { StatusChip, type StatusChipVariant } from '@shared/components/StatusChip';
 import { buildRequiredObjectReference } from '@shared/utils/objectIdentity';
 import { withStableListKeys } from '@shared/utils/stableListKeys';
-import { daemonset, deployment, replicaset, statefulset } from '@wailsjs/go/models';
 import type React from 'react';
 import type { OverviewContext, OverviewDescriptor, OverviewItemSpec } from '../schema';
 import { OverviewItem } from '../shared/OverviewItem';
@@ -186,7 +186,7 @@ const resolvePodStateCounts = (
   raw: RawCounts,
   ready: string | number | undefined,
   available: number | undefined,
-  podMetricsSummary: { pods?: number; readyPods?: number } | undefined
+  podMetricsSummary: { pods?: number; readyPods?: number } | null | undefined
 ): PodStateCounts | null => {
   let { desiredCount, createdCount } = raw;
 
@@ -462,7 +462,7 @@ const strategyTooltip = (strategy: string, kind: StrategyKind): React.ReactNode 
 
 interface PodTemplate {
   serviceAccount?: string;
-  nodeSelector?: Record<string, string>;
+  nodeSelector?: Record<string, string | undefined>;
   tolerations?: string[];
   namespace?: string;
 }

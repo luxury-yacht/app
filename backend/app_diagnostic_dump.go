@@ -26,7 +26,7 @@ import (
 )
 
 // goroutineDumpEnvVar opts the SIGUSR1 dump handler in for one run:
-// `ENABLE_GOROUTINE_DUMP=true wails dev`. Default off — the handler is a debugging
+// `ENABLE_GOROUTINE_DUMP=true wails3 dev`. Default off — the handler is a debugging
 // instrument, not a standing production feature.
 const goroutineDumpEnvVar = "ENABLE_GOROUTINE_DUMP"
 

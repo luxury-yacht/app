@@ -12,7 +12,7 @@ import {
   role,
   rolebinding,
   serviceaccount,
-} from '@wailsjs/go/models';
+} from '@core/backend-api/models';
 import type React from 'react';
 import { act } from 'react';
 import * as ReactDOM from 'react-dom/client';

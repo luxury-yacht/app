@@ -2,7 +2,7 @@
  * frontend/src/modules/object-panel/components/ObjectPanel/Details/Overview/IngressOverview.test.tsx
  */
 
-import { ingress } from '@wailsjs/go/models';
+import { ingress } from '@core/backend-api/models';
 import type React from 'react';
 import { act } from 'react';
 import * as ReactDOM from 'react-dom/client';

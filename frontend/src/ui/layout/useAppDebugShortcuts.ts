@@ -1,5 +1,5 @@
 import { useEffect } from 'react';
-import { isMacPlatform, isWindowsPlatform } from '@/utils/platform';
+import { onEvent, openDevTools } from '@/core/desktop-runtime';
 
 interface AppDebugShortcutHandlers {
   onTogglePanelDebug: () => void;
@@ -10,12 +10,7 @@ interface AppDebugShortcutHandlers {
 }
 
 const openWailsInspector = () => {
-  const wailsInvoke = (window as Window & { WailsInvoke?: (message: string) => void }).WailsInvoke;
-  if (!wailsInvoke || isWindowsPlatform()) {
-    return;
-  }
-
-  wailsInvoke(isMacPlatform() ? 'wails:openInspector' : 'wails:showInspector');
+  void openDevTools();
 };
 
 /**
@@ -31,11 +26,6 @@ export const useAppDebugShortcuts = ({
   onToggleIconDebug,
 }: AppDebugShortcutHandlers) => {
   useEffect(() => {
-    const runtime = window.runtime;
-    if (!runtime?.EventsOn) {
-      return;
-    }
-
     const eventHandlers: Array<[string, () => void]> = [
       ['debug:open-inspector', openWailsInspector],
       ['debug:toggle-panel-overlay', onTogglePanelDebug],
@@ -44,13 +34,7 @@ export const useAppDebugShortcuts = ({
       ['debug:toggle-map-overlay', onToggleMapDebug],
       ['debug:toggle-icon-overlay', onToggleIconDebug],
     ];
-    const disposers = eventHandlers.map(([event, handler]) => {
-      const dispose = runtime.EventsOn?.(event, handler);
-      if (typeof dispose === 'function') {
-        return dispose;
-      }
-      return () => runtime.EventsOff?.(event, handler);
-    });
+    const disposers = eventHandlers.map(([event, handler]) => onEvent(event, handler));
 
     return () => {
       disposers.forEach((dispose) => {

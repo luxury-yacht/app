@@ -31,7 +31,7 @@ const kubeconfigMocks = vi.hoisted(() => ({
 }));
 
 const runtimeMocks = vi.hoisted(() => ({
-  eventsOn: vi.fn(),
+  eventsOn: vi.fn(() => () => undefined),
   eventsOff: vi.fn(),
 }));
 
@@ -39,12 +39,13 @@ const appMocks = vi.hoisted(() => ({
   FindCatalogObjectMatch: vi.fn(),
 }));
 
-vi.mock('@wailsjs/runtime/runtime', () => ({
-  EventsOn: runtimeMocks.eventsOn,
-  EventsOff: runtimeMocks.eventsOff,
+vi.mock('@core/desktop-runtime', () => ({
+  desktopRuntimeAvailable: () => false,
+  onEvent: runtimeMocks.eventsOn,
+  offEvent: runtimeMocks.eventsOff,
 }));
 
-vi.mock('@wailsjs/go/backend/App', () => ({
+vi.mock('@core/backend-api', () => ({
   FindCatalogObjectMatch: (...args: unknown[]) => appMocks.FindCatalogObjectMatch(...args),
 }));
 
@@ -268,7 +269,7 @@ describe('ObjectDiffModal', () => {
   let root: ReactDOM.Root;
 
   beforeEach(async () => {
-    runtimeMocks.eventsOn.mockReset();
+    runtimeMocks.eventsOn.mockReset().mockReturnValue(() => undefined);
     runtimeMocks.eventsOff.mockReset();
     appMocks.FindCatalogObjectMatch.mockReset();
     appMocks.FindCatalogObjectMatch.mockResolvedValue(null);

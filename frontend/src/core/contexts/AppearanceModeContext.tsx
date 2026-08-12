@@ -7,6 +7,7 @@
  */
 import type React from 'react';
 import { createContext, type ReactNode, useCallback, useContext, useEffect, useState } from 'react';
+import { onEvent } from '@/core/desktop-runtime';
 import { eventBus } from '@/core/events';
 import { type AppearanceMode, getAppearanceModePreference } from '@/core/settings/appPreferences';
 
@@ -93,15 +94,17 @@ export const AppearanceModeProvider: React.FC<AppearanceModeProviderProps> = ({ 
       window.location.reload();
     };
 
-    const runtime = window.runtime;
-    runtime?.EventsOn?.('appearance-mode-changed', handleBackendAppearanceModeChanged);
+    const disposeAppearanceMode = onEvent(
+      'appearance-mode-changed',
+      handleBackendAppearanceModeChanged
+    );
 
     // Cleanup function
     return () => {
       mediaQuery.removeEventListener('change', handleSystemModeChange);
       unsubscribeAppearanceMode();
 
-      runtime?.EventsOff?.('appearance-mode-changed');
+      disposeAppearanceMode();
     };
   }, [applyResolvedMode]);
 

@@ -72,10 +72,10 @@ export interface OverviewSchema<T> {
 }
 
 /**
- * A constructable Wails model class. Its generated constructor assigns every field of the kind's
- * Go struct unconditionally, so `Object.keys(new C({}))` enumerates the kind's full field set.
+ * A constructable Wails model class. The generated constructor accepts a partial DTO and fills
+ * required fields with their Go zero values.
  */
-export type DtoClass<T> = new (source?: unknown) => T;
+export type DtoClass<T> = (new (source?: Partial<T>) => T) & { readonly name: string };
 
 export interface OverviewDescriptor<T> {
   displayKind: string;

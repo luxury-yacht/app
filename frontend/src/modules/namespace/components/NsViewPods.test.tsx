@@ -284,7 +284,7 @@ vi.mock('@/core/refresh', () => ({
   refreshManager: { triggerManualRefresh: vi.fn() },
 }));
 
-vi.mock('@wailsjs/go/backend/App', () => ({
+vi.mock('@core/backend-api', () => ({
   RunObjectAction: (...args: unknown[]) => runObjectActionMock(...(args as [])),
 }));
 

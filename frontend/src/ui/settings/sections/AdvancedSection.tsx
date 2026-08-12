@@ -17,6 +17,7 @@ import { errorHandler } from '@utils/errorHandler';
 import { clearLinkColor } from '@utils/linkColor';
 import { clearTintedPalette } from '@utils/paletteTint';
 import { useEffect, useId, useState } from 'react';
+import { ClearAppState } from '@/core/backend-api';
 import { useAutoRefresh, useBackgroundRefresh } from '@/core/refresh';
 import {
   type AppPreferenceKey,
@@ -116,11 +117,7 @@ function AdvancedSection() {
       clearAccentColor();
       clearLinkColor();
 
-      const clearAppState = window.go?.backend?.App?.ClearAppState;
-      if (typeof clearAppState !== 'function') {
-        throw new Error('ClearAppState is not available');
-      }
-      await clearAppState();
+      await ClearAppState();
 
       await clearAllGridTableState();
       try {

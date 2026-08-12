@@ -79,7 +79,7 @@ vi.mock('@shared/components/modals/ConfirmationModal', () => ({
   default: () => null,
 }));
 
-vi.mock('@wailsjs/go/backend/App', () => ({
+vi.mock('@core/backend-api', () => ({
   RunObjectAction: vi.fn(),
 }));
 

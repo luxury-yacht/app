@@ -4,7 +4,7 @@
  * Tests for Appearance settings interactions and preference workflow wiring.
  */
 
-import { types } from '@wailsjs/go/models';
+import { types } from '@core/backend-api/models';
 import { act } from 'react';
 import * as ReactDOM from 'react-dom/client';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';

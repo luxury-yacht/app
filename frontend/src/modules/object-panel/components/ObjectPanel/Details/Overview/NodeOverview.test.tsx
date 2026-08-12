@@ -7,7 +7,7 @@
  * NodeDetails-shaped DTO and a context object.
  */
 
-import { nodes } from '@wailsjs/go/models';
+import { nodes } from '@core/backend-api/models';
 import type React from 'react';
 import { act } from 'react';
 import * as ReactDOM from 'react-dom/client';

@@ -16,6 +16,34 @@ import * as ReactDOM from 'react-dom/client';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { installWindowProperty } from '@/test-utils/windowProperty';
 
+const persistenceBridge = vi.hoisted(() => ({
+  get: vi.fn<() => Promise<string[]>>().mockResolvedValue([]),
+  set: vi.fn<(order: string[]) => Promise<void>>().mockResolvedValue(undefined),
+}));
+
+const installClusterTabPersistence = (
+  get: () => Promise<string[]>,
+  set: (order: string[]) => Promise<void>
+) => {
+  const previousGet = persistenceBridge.get;
+  const previousSet = persistenceBridge.set;
+  persistenceBridge.get = vi.fn(get);
+  persistenceBridge.set = vi.fn(set);
+  return () => {
+    persistenceBridge.get = previousGet;
+    persistenceBridge.set = previousSet;
+  };
+};
+
+vi.mock('@core/backend-api', () => ({
+  GetClusterTabOrder: () => persistenceBridge.get(),
+  SetClusterTabOrder: (order: string[]) => persistenceBridge.set(order),
+}));
+
+vi.mock('@core/desktop-runtime', () => ({
+  desktopRuntimeAvailable: () => true,
+}));
+
 type MockState = {
   selectedKubeconfigs: string[];
   selectedKubeconfig: string;
@@ -194,14 +222,10 @@ describe('ClusterTabs', () => {
 
   it('does not overwrite saved tab order while saved clusters are loading', async () => {
     const setClusterTabOrderMock = vi.fn().mockResolvedValue(undefined);
-    const restoreGo = installWindowProperty('go', {
-      backend: {
-        App: {
-          GetClusterTabOrder: vi.fn().mockResolvedValue(['b', 'a']),
-          SetClusterTabOrder: setClusterTabOrderMock,
-        },
-      },
-    });
+    const restorePersistence = installClusterTabPersistence(
+      vi.fn().mockResolvedValue(['b', 'a']),
+      setClusterTabOrderMock
+    );
     mockState.selectedKubeconfigs = [];
     mockState.selectedKubeconfig = '';
     mockState.kubeconfigsLoading = true;
@@ -214,7 +238,7 @@ describe('ClusterTabs', () => {
 
       expect(setClusterTabOrderMock).not.toHaveBeenCalled();
     } finally {
-      restoreGo();
+      restorePersistence();
     }
   });
 
@@ -224,14 +248,10 @@ describe('ClusterTabs', () => {
       resolveSavedOrder = resolve;
     });
     const setClusterTabOrderMock = vi.fn().mockResolvedValue(undefined);
-    const restoreGo = installWindowProperty('go', {
-      backend: {
-        App: {
-          GetClusterTabOrder: vi.fn().mockReturnValue(savedOrder),
-          SetClusterTabOrder: setClusterTabOrderMock,
-        },
-      },
-    });
+    const restorePersistence = installClusterTabPersistence(
+      vi.fn().mockReturnValue(savedOrder),
+      setClusterTabOrderMock
+    );
     mockState.selectedKubeconfigs = ['a', 'b'];
     mockState.selectedKubeconfig = 'a';
     mockState.kubeconfigsLoading = false;
@@ -251,20 +271,16 @@ describe('ClusterTabs', () => {
       );
       expect(labels).toEqual(['Global', 'b', 'a']);
     } finally {
-      restoreGo();
+      restorePersistence();
     }
   });
 
   it('persists new clusters after selection and tab-order hydration complete', async () => {
     const setClusterTabOrderMock = vi.fn().mockResolvedValue(undefined);
-    const restoreGo = installWindowProperty('go', {
-      backend: {
-        App: {
-          GetClusterTabOrder: vi.fn().mockResolvedValue(['b', 'a']),
-          SetClusterTabOrder: setClusterTabOrderMock,
-        },
-      },
-    });
+    const restorePersistence = installClusterTabPersistence(
+      vi.fn().mockResolvedValue(['b', 'a']),
+      setClusterTabOrderMock
+    );
     mockState.selectedKubeconfigs = [];
     mockState.selectedKubeconfig = '';
     mockState.kubeconfigsLoading = true;
@@ -281,7 +297,7 @@ describe('ClusterTabs', () => {
       expect(setClusterTabOrderMock).toHaveBeenCalledTimes(1);
       expect(setClusterTabOrderMock).toHaveBeenCalledWith(['b', 'a', 'c']);
     } finally {
-      restoreGo();
+      restorePersistence();
     }
   });
 

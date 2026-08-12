@@ -263,7 +263,7 @@ vi.mock('@utils/errorHandler', () => ({
   },
 }));
 
-vi.mock('@wailsjs/go/backend/App', () => ({
+vi.mock('@core/backend-api', () => ({
   ValidateObjectYaml: wailsMocks.ValidateObjectYaml,
   ApplyObjectYaml: wailsMocks.ApplyObjectYaml,
   CheckObjectYamlOwnership: wailsMocks.CheckObjectYamlOwnership,

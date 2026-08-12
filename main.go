@@ -1,25 +1,18 @@
 package main
 
 import (
-	"context"
 	"embed"
-	"os"
-	goruntime "runtime"
+	"runtime"
 	"strings"
 	"time"
 
 	"github.com/luxury-yacht/app/backend"
 	"github.com/luxury-yacht/app/internal/sentry"
-
-	"github.com/wailsapp/wails/v2"
-	"github.com/wailsapp/wails/v2/pkg/options"
-	"github.com/wailsapp/wails/v2/pkg/options/assetserver"
-	"github.com/wailsapp/wails/v2/pkg/options/mac"
-	"github.com/wailsapp/wails/v2/pkg/options/windows"
-	"github.com/wailsapp/wails/v2/pkg/runtime"
+	"github.com/wailsapp/wails/v3/pkg/application"
+	"github.com/wailsapp/wails/v3/pkg/events"
 )
 
-//go:embed frontend/dist
+//go:embed all:frontend/dist
 var assets embed.FS
 
 func reportPanic(reporter sentryreporting.Reporter) {
@@ -54,9 +47,107 @@ func newSentryReporter(enabled bool, defaultDSN, version string) (sentryreportin
 	))
 }
 
-// main function initializes and runs the Wails application
+type applicationComposition struct {
+	application *application.App
+	backend     *backend.App
+	desktop     *desktopAdapter
+	window      *application.WebviewWindow
+	menu        *application.Menu
+}
+
+type compositionOptions struct {
+	SingleInstance bool
+}
+
+func newApplicationComposition(reporter sentryreporting.Reporter, options compositionOptions) *applicationComposition {
+	var backendApp *backend.App
+	secondLaunch := newSecondLaunchCoordinator(application.InvokeAsync)
+	applicationOptions := application.Options{
+		Name:        "Luxury Yacht",
+		Description: "Sail the seas of Kubernetes in style",
+		Assets: application.AssetOptions{
+			Handler: application.AssetFileServerFS(assets),
+		},
+		Mac: application.MacOptions{
+			ApplicationShouldTerminateAfterLastWindowClosed: true,
+		},
+		ShouldQuit: func() bool {
+			return backendApp == nil || backendApp.PrepareQuit()
+		},
+		ErrorHandler: func(err error) {
+			reportRunError(reporter, err)
+		},
+		OnShutdown: secondLaunch.Stop,
+	}
+	if options.SingleInstance {
+		applicationOptions.SingleInstance = newSingleInstanceOptions(secondLaunch)
+	}
+	wailsApp := application.New(applicationOptions)
+
+	desktop := newDesktopAdapter(wailsApp, mainWindowName)
+	backendApp = backend.NewApp(desktop, reporter)
+	wailsApp.RegisterService(application.NewService(backendApp))
+
+	nativeMenu := desktop.initialiseMenu(func() *backend.MenuModel {
+		return backend.CreateMenu(backendApp)
+	})
+
+	startHidden := true
+	if runtime.GOOS == "linux" {
+		startHidden = false
+	}
+	mainWindow := wailsApp.Window.NewWithOptions(application.WebviewWindowOptions{
+		Name:             mainWindowName,
+		Title:            "Luxury Yacht",
+		Width:            1200,
+		Height:           800,
+		MinWidth:         1100,
+		MinHeight:        600,
+		Hidden:           startHidden,
+		URL:              "/",
+		BackgroundColour: application.NewRGB(30, 30, 30),
+		BackgroundType:   application.BackgroundTypeTransparent,
+		Mac: application.MacWindow{
+			TitleBar: application.MacTitleBar{
+				AppearsTransparent:   true,
+				FullSizeContent:      true,
+				HideTitle:            true,
+				HideToolbarSeparator: true,
+			},
+		},
+		Windows: application.WindowsWindow{
+			Theme: application.SystemDefault,
+		},
+		Linux: application.LinuxWindow{
+			Menu: nativeMenu,
+		},
+		UseApplicationMenu: true,
+		Zoom:               1,
+		ZoomControlEnabled: false,
+	})
+
+	mainWindow.OnWindowEvent(events.Common.WindowRuntimeReady, func(*application.WindowEvent) {
+		backendApp.WindowRuntimeReady()
+		secondLaunch.Bind(func() {
+			_ = desktop.BringMainWindowToFront()
+		})
+	})
+	mainWindow.RegisterHook(events.Common.WindowClosing, func(event *application.WindowEvent) {
+		if !backendApp.PrepareQuit() {
+			event.Cancel()
+		}
+	})
+
+	return &applicationComposition{
+		application: wailsApp,
+		backend:     backendApp,
+		desktop:     desktop,
+		window:      mainWindow,
+		menu:        nativeMenu,
+	}
+}
+
 func main() {
-	// Exit early when running as the exec helper wrapper.
 	backend.MaybeRunExecWrapper()
 
 	reporter, reporterErr := newSentryReporter(
@@ -71,95 +162,11 @@ func main() {
 	defer func() { reporter.Shutdown(2 * time.Second) }()
 	defer reportPanic(reporter)
 
-	// Create an instance of the app structure
-	app := backend.NewApp(reporter)
-	if err := backend.InitializeErrorReporting(app); err != nil {
+	composition := newApplicationComposition(reporter, compositionOptions{SingleInstance: true})
+	if err := backend.InitializeErrorReporting(composition.backend); err != nil {
 		println("Sentry error reporting remains disabled:", err.Error())
 	}
-
-	// Store the initial menu
-	appMenu := backend.CreateMenu(app)
-
-	// Custom startup that sets up menu updates
-	onStartup := func(ctx context.Context) {
-		app.Startup(ctx)
-
-		// Listen for menu update events
-		runtime.EventsOn(ctx, "update-menu", func(optionalData ...any) {
-			// Recreate and set the menu with updated state
-			newMenu := backend.CreateMenu(app)
-			runtime.MenuSetApplicationMenu(ctx, newMenu)
-		})
-	}
-
-	// Create application with options
-	startHidden := true
-	frameless := false
-	maxWidth := 0
-	maxHeight := 0
-	if goruntime.GOOS == "linux" {
-		// Some Linux window managers ignore Show when StartHidden is true.
-		startHidden = false
-		// Wails v2.11.0 on Wayland incorrectly constrains the window when
-		// MaxWidth/MaxHeight are 0 (the default), because the compositor
-		// includes decoration sizes in the reported dimensions. Setting
-		// explicit large values works around the issue until the upstream
-		// fix (PR #4047) ships in a tagged release.
-		if os.Getenv("XDG_SESSION_TYPE") == "wayland" {
-			maxWidth = 15360
-			maxHeight = 8640
-		}
-	}
-
-	err := wails.Run(&options.App{
-		Title:     "Luxury Yacht",
-		Height:    800,
-		Width:     1200,
-		MinHeight: 600,
-		MinWidth:  1100,
-		MaxHeight: maxHeight,
-		MaxWidth:  maxWidth,
-		AssetServer: &assetserver.Options{
-			Assets: assets,
-		},
-		BackgroundColour: &options.RGBA{R: 30, G: 30, B: 30, A: 255},
-		OnStartup:        onStartup,
-		OnBeforeClose:    backend.NewBeforeCloseHandler(app),
-		OnShutdown:       app.Shutdown,
-		Menu:             appMenu,
-		Bind: []any{
-			app,
-		},
-		Mac: &mac.Options{
-			TitleBar: &mac.TitleBar{
-				TitlebarAppearsTransparent: true,
-				FullSizeContent:            true,
-				HideTitle:                  true,
-				UseToolbar:                 false,
-				HideToolbarSeparator:       true,
-			},
-			WebviewIsTransparent: true,
-		},
-		Windows: &windows.Options{
-			Theme:                windows.SystemDefault,
-			IsZoomControlEnabled: false,
-			ZoomFactor:           1.0,
-		},
-		StartHidden:     startHidden,
-		Frameless:       frameless,
-		CSSDragProperty: "--wails-draggable",
-		CSSDragValue:    "true",
-
-		// Open dev tools automatically in development
-		// OnDomReady: func(ctx context.Context) {
-		// 	runtime.WindowExecJS(ctx, "console.log('[Wails] Opening dev tools automatically');")
-		// },
-		// Debug: options.Debug{
-		// 	OpenInspectorOnStartup: true, // This opens dev tools automatically
-		// },
-	})
-
-	if err != nil {
+	if err := composition.application.Run(); err != nil {
 		reportRunError(reporter, err)
 		println("Error:", err.Error())
 	}

@@ -9,7 +9,7 @@ import (
 )
 
 func TestAppResourceResolverReusesColdStartResolver(t *testing.T) {
-	app := NewApp()
+	app := NewApp(nil)
 	clusterID := "config:ctx"
 	app.clusterClients = map[string]*clusterClients{
 		clusterID: {
@@ -54,7 +54,7 @@ func TestAppResourceResolverReusesColdStartResolver(t *testing.T) {
 }
 
 func TestAppResourceResolverUsesCatalogServiceWhenAvailable(t *testing.T) {
-	app := NewApp()
+	app := NewApp(nil)
 	clusterID := "config:ctx"
 	app.storeObjectCatalogEntry(clusterID, &objectCatalogEntry{
 		service: objectcatalog.NewService(objectcatalog.Dependencies{}, nil),

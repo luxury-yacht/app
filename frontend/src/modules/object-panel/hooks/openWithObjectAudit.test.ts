@@ -45,8 +45,7 @@ interface CallSite {
 }
 
 // Walk every .ts/.tsx file under the given directory, skipping the
-// usual noise (node_modules, generated wails bindings, fixtures, and
-// the test files themselves).
+// usual noise (node_modules, fixtures, and the test files themselves).
 function* walkSourceFiles(root: string): Generator<string> {
   const stack: string[] = [root];
   while (stack.length > 0) {
@@ -58,7 +57,6 @@ function* walkSourceFiles(root: string): Generator<string> {
         if (
           entry.name.startsWith('.') ||
           entry.name === 'node_modules' ||
-          entry.name === 'wailsjs' ||
           entry.name === '__fixtures__' ||
           entry.name === 'dist'
         ) {

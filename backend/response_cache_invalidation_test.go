@@ -24,7 +24,7 @@ var (
 )
 
 func TestInvalidateResponseCacheForObjectEvictsDetailAndYAML(t *testing.T) {
-	app := NewApp()
+	app := NewApp(nil)
 	app.responseCache = newResponseCache(time.Minute, 10)
 	selectionKey := "cluster-a"
 
@@ -51,7 +51,7 @@ func TestInvalidateResponseCacheForObjectEvictsDetailAndYAML(t *testing.T) {
 // survived the change, the stale resourceVersion would re-pin the source-version
 // ETag and the Details panel would keep serving a 304 with stale content.
 func TestInvalidateResponseCacheEvictsHeaderMetadata(t *testing.T) {
-	app := NewApp()
+	app := NewApp(nil)
 	app.responseCache = newResponseCache(time.Minute, 10)
 	selectionKey := "cluster-a"
 
@@ -74,7 +74,7 @@ func TestInvalidateResponseCacheEvictsHeaderMetadata(t *testing.T) {
 }
 
 func TestInvalidateResponseCacheForObjectEvictsHelmCaches(t *testing.T) {
-	app := NewApp()
+	app := NewApp(nil)
 	app.responseCache = newResponseCache(time.Minute, 10)
 	selectionKey := "cluster-a"
 
@@ -108,7 +108,7 @@ func TestInvalidateResponseCacheForObjectEvictsHelmCaches(t *testing.T) {
 }
 
 func TestRegisterHelmCacheInvalidationEvictsViaHelmStorageInformer(t *testing.T) {
-	app := NewApp()
+	app := NewApp(nil)
 	app.responseCache = newResponseCache(time.Minute, 10)
 	selectionKey := "cluster-a"
 
@@ -161,7 +161,7 @@ func TestRegisterHelmCacheInvalidationEvictsViaHelmStorageInformer(t *testing.T)
 }
 
 func TestInvalidateResponseCacheSkipsWarmupAddsForOldObjects(t *testing.T) {
-	app := NewApp()
+	app := NewApp(nil)
 	app.responseCache = newResponseCache(time.Minute, 10)
 	selectionKey := "cluster-a"
 
@@ -195,7 +195,7 @@ func TestInvalidateResponseCacheSkipsWarmupAddsForOldObjects(t *testing.T) {
 }
 
 func TestInvalidateResponseCacheEvictsPodDetailsOnUpdate(t *testing.T) {
-	app := NewApp()
+	app := NewApp(nil)
 	app.responseCache = newResponseCache(time.Minute, 10)
 	selectionKey := "cluster-a"
 
@@ -227,7 +227,7 @@ func TestInvalidateResponseCacheEvictsPodDetailsOnUpdate(t *testing.T) {
 }
 
 func TestInvalidateResponseCacheForGVKEvictsExactAndLegacyKindKeys(t *testing.T) {
-	app := NewApp()
+	app := NewApp(nil)
 	app.responseCache = newResponseCache(time.Minute, 10)
 	selectionKey := "cluster-a"
 
@@ -255,7 +255,7 @@ func TestInvalidateResponseCacheForGVKEvictsExactAndLegacyKindKeys(t *testing.T)
 }
 
 func TestInvalidateResponseCacheForGVKEvictsBuiltinLegacyAndGVKKeys(t *testing.T) {
-	app := NewApp()
+	app := NewApp(nil)
 	app.responseCache = newResponseCache(time.Minute, 10)
 	selectionKey := "cluster-a"
 
@@ -282,7 +282,7 @@ func TestInvalidateResponseCacheForGVKEvictsBuiltinLegacyAndGVKKeys(t *testing.T
 // exactly as the shared-informer handler did — but fed the projected Summary, not the
 // typed object.
 func TestIngestResponseCacheSinkEvictsOnUpsertAndDelete(t *testing.T) {
-	app := NewApp()
+	app := NewApp(nil)
 	app.responseCache = newResponseCache(time.Minute, 10)
 	selectionKey := "cluster-a"
 

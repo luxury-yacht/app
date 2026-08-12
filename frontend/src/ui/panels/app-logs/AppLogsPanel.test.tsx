@@ -11,7 +11,6 @@ import * as ReactDOM from 'react-dom/client';
 import { renderToStaticMarkup } from 'react-dom/server';
 import { afterAll, afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { requireValue } from '@/test-utils/requireValue';
-import { installWindowProperty } from '@/test-utils/windowProperty';
 
 interface CapturedDropdownProps {
   options: DropdownOption[];
@@ -68,11 +67,19 @@ vi.mock('@ui/shortcuts', () => ({
   useKeyboardSurface: (...args: unknown[]) => useKeyboardSurfaceMock(...(args as [unknown])),
 }));
 
-vi.mock('@wailsjs/go/backend/App', () => ({
+vi.mock('@core/backend-api', () => ({
   GetAppLogs: (...args: unknown[]) => getAppLogsMock(...args),
   GetAppLogsSince: (...args: unknown[]) => getAppLogsSinceMock(...args),
   ClearAppLogs: (...args: unknown[]) => clearAppLogsMock(...args),
   SetAppLogsPanelVisible: (...args: unknown[]) => setAppLogsPanelVisibleMock(...args),
+}));
+
+vi.mock('@core/desktop-runtime', () => ({
+  desktopRuntimeAvailable: () => true,
+  onEvent: (eventName: string, handler: (...args: unknown[]) => void) => {
+    runtimeEventHandlers.set(eventName, handler);
+    return runtimeDisposerMock;
+  },
 }));
 
 vi.mock('@utils/errorHandler', () => ({
@@ -126,7 +133,6 @@ const setInputValue = (input: HTMLInputElement, value: string) => {
 const latestDropdown = (renderValue: string) =>
   [...dropdownInstances].reverse().find((instance) => instance.renderValue() === renderValue);
 
-let restoreRuntime: (() => void) | undefined;
 let restoreClipboard: (() => void) | undefined;
 
 beforeEach(() => {
@@ -143,13 +149,6 @@ beforeEach(() => {
   runtimeDisposerMock.mockReset();
   clipboardWriteTextMock.mockReset();
   clipboardWriteTextMock.mockResolvedValue(undefined);
-  restoreRuntime = installWindowProperty('runtime', {
-    EventsOn: vi.fn((eventName: string, handler: (...args: unknown[]) => void) => {
-      runtimeEventHandlers.set(eventName, handler);
-      return runtimeDisposerMock;
-    }),
-    EventsOff: vi.fn(),
-  });
   const previousClipboardDescriptor = Object.getOwnPropertyDescriptor(navigator, 'clipboard');
   Object.defineProperty(navigator, 'clipboard', {
     configurable: true,
@@ -165,15 +164,12 @@ beforeEach(() => {
 });
 
 afterEach(() => {
-  restoreRuntime?.();
-  restoreRuntime = undefined;
   restoreClipboard?.();
   restoreClipboard = undefined;
   vi.useRealTimers();
 });
 
 afterAll(() => {
-  restoreRuntime?.();
   restoreClipboard?.();
 });
 
@@ -325,7 +321,6 @@ describe('AppLogsPanel', () => {
     cleanup();
 
     expect(runtimeDisposerMock).toHaveBeenCalledTimes(1);
-    expect(window.runtime?.EventsOff).not.toHaveBeenCalledWith('app-logs:added');
   });
 
   it('does not duplicate logs when overlapping app-logs events read the same delta', async () => {

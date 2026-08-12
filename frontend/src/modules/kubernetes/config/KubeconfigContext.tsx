@@ -5,6 +5,8 @@
  * Defines shared state and accessors for the kubernetes feature.
  */
 
+import type { types } from '@core/backend-api/models';
+import { onEvent } from '@core/desktop-runtime';
 import {
   getClusterTabOrder,
   getNextClusterTabSelectionAfterClose,
@@ -14,8 +16,6 @@ import {
   runGridTableGC,
 } from '@shared/components/tables/persistence/gridTablePersistenceGC';
 import { errorHandler } from '@utils/errorHandler';
-import type { types } from '@wailsjs/go/models';
-import { EventsOn } from '@wailsjs/runtime/runtime';
 import type React from 'react';
 import {
   createContext,
@@ -653,7 +653,7 @@ export const KubeconfigProvider: React.FC<KubeconfigProviderProps> = ({ children
 
   // Listen for backend kubeconfig watcher refresh events.
   useEffect(() => {
-    const cancel = EventsOn('kubeconfig:available-changed', () => {
+    const cancel = onEvent('kubeconfig:available-changed', () => {
       void loadKubeconfigs(true);
     });
 

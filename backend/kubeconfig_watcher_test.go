@@ -122,7 +122,8 @@ func TestKubeconfigWatcher_DebounceAccumulatesPaths(t *testing.T) {
 func TestApp_HandleKubeconfigChange_ContextRemovedDeselectsOnlyAffectedFromSameFile(t *testing.T) {
 	setTestConfigEnv(t)
 	app := newTestAppWithDefaults(t)
-	app.setRuntimeContext(context.Background())
+	app.setApplicationContext(context.Background())
+	app.markRuntimeReady()
 	app.clusterClients = make(map[string]*clusterClients)
 	app.refreshSubsystems = make(map[string]*system.Subsystem)
 	app.objectCatalogEntries = make(map[string]*objectCatalogEntry)
@@ -265,7 +266,8 @@ func TestClassifyChangedKubeconfigClusterCoversEveryDisposition(t *testing.T) {
 func TestDeselectClusters_AbortsOnReconciliationFailure(t *testing.T) {
 	setTestConfigEnv(t)
 	app := newTestAppWithDefaults(t)
-	app.setRuntimeContext(context.Background())
+	app.setApplicationContext(context.Background())
+	app.markRuntimeReady()
 	app.clusterClients = make(map[string]*clusterClients)
 
 	app.kubeconfigsMu.Lock()

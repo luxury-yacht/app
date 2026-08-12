@@ -5,7 +5,7 @@
  * Handles API calls and response shaping for the core layer.
  */
 
-import type { backend } from '@wailsjs/go/models';
+import type { backend } from '@core/backend-api/models';
 import {
   GetKubernetesAPIClientDiagnostics,
   GetRefreshBaseURL,
@@ -379,7 +379,11 @@ export async function setMetricsActive(clusterIds: readonly string[]): Promise<v
 }
 
 export async function fetchSelectionDiagnostics(): Promise<SelectionDiagnostics> {
-  return GetSelectionDiagnostics();
+  const diagnostics = await GetSelectionDiagnostics();
+  if (!diagnostics) {
+    throw new Error('Selection diagnostics were unavailable');
+  }
+  return diagnostics;
 }
 
 export async function fetchKubernetesAPIClientDiagnostics(): Promise<

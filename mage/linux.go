@@ -10,43 +10,9 @@ import (
 	"github.com/magefile/mage/sh"
 )
 
-// Check which version of webkit2gtk is installed.
-func WebkitVersion() (string, error) {
-	if _, err := exec.LookPath("pkg-config"); err != nil {
-		return "", fmt.Errorf("pkg-config not found in PATH")
-	}
-
-	versions := []string{"4.0", "4.1"}
-
-	for _, v := range versions {
-		cmd, err := ToolCommand("pkg-config", "--exists", "webkit2gtk-"+v)
-		if err != nil {
-			return "", err
-		}
-		if err := cmd.Run(); err == nil {
-			return v, nil
-		}
-	}
-	fmt.Println("❌ No webkit2gtk version detected!")
-	return "", fmt.Errorf("no webkit2gtk version detected")
-}
-
 // Builds the application for Linux.
 func BuildLinux(cfg BuildConfig) error {
-	generateBuildManifest(cfg)
-
-	buildArgs := cfg.BuildArgs
-	webkitVersion, err := WebkitVersion()
-	if err != nil {
-		return err
-	}
-	if webkitVersion == "4.1" {
-		buildArgs = append(buildArgs, "-tags", "webkit2_41")
-	}
-
-	fmt.Printf("\n🛠️ Wails build args: %v\n\n", buildArgs)
-
-	return sh.RunV("wails", buildArgs...)
+	return runWailsTask(cfg, "build")
 }
 
 // Installs the application on Linux.

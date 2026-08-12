@@ -12,7 +12,7 @@ import * as ReactDOM from 'react-dom/client';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { useWindowBoundsConstraint } from './useDockablePanelWindowBounds';
 
-vi.mock('@wailsjs/go/backend/App', () => ({
+vi.mock('@core/backend-api', () => ({
   GetZoomLevel: vi.fn().mockResolvedValue(100),
   SetZoomLevel: vi.fn().mockResolvedValue(undefined),
 }));

@@ -6,11 +6,11 @@
  * useObjectPanel); everything else reads the raw ingress.IngressDetails DTO.
  */
 
+import { ingress } from '@core/backend-api/models';
 import { ObjectPanelLink } from '@shared/components/ObjectPanelLink';
 import { StatusChip } from '@shared/components/StatusChip';
 import { buildRequiredObjectReference } from '@shared/utils/objectIdentity';
 import { withStableListKeys } from '@shared/utils/stableListKeys';
-import { ingress } from '@wailsjs/go/models';
 import React from 'react';
 import type { OverviewContext, OverviewDescriptor } from '../schema';
 import { ExternalHostLinks } from '../shared/ExternalHostLinks';

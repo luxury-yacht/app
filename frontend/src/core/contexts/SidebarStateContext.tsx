@@ -9,6 +9,7 @@ import { useKubeconfig } from '@modules/kubernetes/config/KubeconfigContext';
 import type React from 'react';
 import { createContext, useCallback, useContext, useEffect, useMemo, useState } from 'react';
 import { SetSidebarVisible } from '@/core/backend-api';
+import { desktopRuntimeAvailable } from '@/core/desktop-runtime';
 
 export type SidebarSelectionType =
   | { type: 'cluster'; value: 'cluster' }
@@ -48,8 +49,7 @@ const DEFAULT_SIDEBAR_SELECTION: SidebarSelectionType = {
   value: 'overview',
 };
 
-const canUpdateSidebarVisible = () =>
-  typeof window !== 'undefined' && Boolean(window.go?.backend?.App?.SetSidebarVisible);
+const canUpdateSidebarVisible = () => desktopRuntimeAvailable();
 
 export const SidebarStateProvider: React.FC<SidebarStateProviderProps> = ({ children }) => {
   const { selectedClusterId, selectedClusterIds } = useKubeconfig();

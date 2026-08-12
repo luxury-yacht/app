@@ -4,9 +4,9 @@
  * Shared render helpers reused across Overview descriptors.
  */
 
+import type { resourcemodel } from '@core/backend-api/models';
 import { ObjectPanelLink } from '@shared/components/ObjectPanelLink';
 import { StatusChip } from '@shared/components/StatusChip';
-import type { resourcemodel } from '@wailsjs/go/models';
 import type React from 'react';
 
 /**

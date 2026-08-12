@@ -5,19 +5,14 @@
  */
 
 import { requestAppState } from '@/core/app-state-access';
+import { GetClusterTabOrder, SetClusterTabOrder } from '@/core/backend-api';
+import { desktopRuntimeAvailable } from '@/core/desktop-runtime';
 import { eventBus } from '@/core/events';
 import { reportOperationalError } from '@/utils/errorHandler';
 
 let cachedOrder: string[] = [];
 let hydrated = false;
 let hydrationPromise: Promise<void> | null = null;
-
-const getRuntimeApp = () => {
-  if (typeof window === 'undefined') {
-    return undefined;
-  }
-  return window.go?.backend?.App;
-};
 
 const normalizeOrder = (order: string[]): string[] => {
   const seen = new Set<string>();
@@ -42,11 +37,10 @@ const updateOrderCache = (order: string[]) => {
 };
 
 const persistClusterTabOrder = async (order: string[]) => {
-  const runtimeApp = getRuntimeApp();
-  if (!runtimeApp || typeof runtimeApp.SetClusterTabOrder !== 'function') {
+  if (!desktopRuntimeAvailable()) {
     return;
   }
-  await runtimeApp.SetClusterTabOrder(order);
+  await SetClusterTabOrder(order);
 };
 
 export const hydrateClusterTabOrder = async (options?: { force?: boolean }): Promise<string[]> => {
@@ -59,8 +53,7 @@ export const hydrateClusterTabOrder = async (options?: { force?: boolean }): Pro
   }
 
   hydrationPromise = (async () => {
-    const runtimeApp = getRuntimeApp();
-    if (!runtimeApp || typeof runtimeApp.GetClusterTabOrder !== 'function') {
+    if (!desktopRuntimeAvailable()) {
       hydrated = true;
       return;
     }
@@ -68,7 +61,7 @@ export const hydrateClusterTabOrder = async (options?: { force?: boolean }): Pro
       const order = await requestAppState({
         resource: 'cluster-tab-order',
         adapter: 'persistence-read',
-        read: () => runtimeApp.GetClusterTabOrder(),
+        read: () => GetClusterTabOrder(),
       });
       updateOrderCache(Array.isArray(order) ? order : []);
     } catch (error) {

@@ -6,11 +6,11 @@
  * per-kind UI, so they ride along as `widget` items reusing the existing JobTimeline component.
  */
 
+import { cronjob, job } from '@core/backend-api/models';
 import { useObjectPanel } from '@modules/object-panel/hooks/useObjectPanel';
 import { StatusChip, type StatusChipVariant } from '@shared/components/StatusChip';
 import Tooltip from '@shared/components/Tooltip';
 import { buildRequiredObjectReference } from '@shared/utils/objectIdentity';
-import { cronjob, job } from '@wailsjs/go/models';
 import type React from 'react';
 import { useCallback } from 'react';
 import { JobTimeline } from '../JobTimeline';
@@ -360,14 +360,20 @@ export const jobDescriptor: OverviewDescriptor<JobDetails> = {
       {
         field: 'activeDeadlineSeconds',
         label: 'Active Deadline',
-        hidden: (d) => !(d.activeDeadlineSeconds !== undefined && d.activeDeadlineSeconds > 0),
-        render: (d) => `${d.activeDeadlineSeconds}s`,
+        hidden: (d) =>
+          !(typeof d.activeDeadlineSeconds === 'number' && d.activeDeadlineSeconds > 0),
+        render: (d) =>
+          typeof d.activeDeadlineSeconds === 'number' ? `${d.activeDeadlineSeconds}s` : undefined,
       },
       {
         field: 'ttlSecondsAfterFinished',
         label: 'TTL Seconds',
-        hidden: (d) => !(d.ttlSecondsAfterFinished !== undefined && d.ttlSecondsAfterFinished >= 0),
-        render: (d) => `${d.ttlSecondsAfterFinished}s`,
+        hidden: (d) =>
+          !(typeof d.ttlSecondsAfterFinished === 'number' && d.ttlSecondsAfterFinished >= 0),
+        render: (d) =>
+          typeof d.ttlSecondsAfterFinished === 'number'
+            ? `${d.ttlSecondsAfterFinished}s`
+            : undefined,
       },
     ],
   },

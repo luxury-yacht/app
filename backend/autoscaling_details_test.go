@@ -20,8 +20,9 @@ func TestIsWorkloadHPAManagedMatchesFullGVK(t *testing.T) {
 			},
 		},
 	})
-	app := NewApp()
-	app.setRuntimeContext(context.Background())
+	app := NewApp(nil)
+	app.setApplicationContext(context.Background())
+	app.markRuntimeReady()
 	registerTestClusterWithClients(app, "cluster-a", &clusterClients{
 		meta:              ClusterMeta{ID: "cluster-a", Name: "cluster-a"},
 		kubeconfigPath:    "/path",
@@ -49,8 +50,9 @@ func TestIsWorkloadHPAManagedDoesNotMatchKindOnlyCollision(t *testing.T) {
 			},
 		},
 	})
-	app := NewApp()
-	app.setRuntimeContext(context.Background())
+	app := NewApp(nil)
+	app.setApplicationContext(context.Background())
+	app.markRuntimeReady()
 	registerTestClusterWithClients(app, "cluster-a", &clusterClients{
 		meta:              ClusterMeta{ID: "cluster-a", Name: "cluster-a"},
 		kubeconfigPath:    "/path",
@@ -68,7 +70,7 @@ func TestIsWorkloadHPAManagedDoesNotMatchKindOnlyCollision(t *testing.T) {
 }
 
 func TestIsWorkloadHPAManagedRejectsUnsupportedGVK(t *testing.T) {
-	app := NewApp()
+	app := NewApp(nil)
 
 	_, err := app.IsWorkloadHPAManaged("cluster-a", "default", "example.com", "v1", "Deployment", "web")
 	if err == nil {
@@ -77,7 +79,7 @@ func TestIsWorkloadHPAManagedRejectsUnsupportedGVK(t *testing.T) {
 }
 
 func TestIsWorkloadHPAManagedRequiresNamespacedObjectIdentity(t *testing.T) {
-	app := NewApp()
+	app := NewApp(nil)
 
 	_, err := app.IsWorkloadHPAManaged("cluster-a", "", "apps", "v1", "Deployment", "web")
 	if err == nil || err.Error() != "namespace is required" {

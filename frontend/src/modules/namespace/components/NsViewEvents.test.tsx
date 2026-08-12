@@ -132,7 +132,7 @@ vi.mock('@modules/kubernetes/config/KubeconfigContext', () => ({
   }),
 }));
 
-vi.mock('@wailsjs/go/backend/App', () => ({
+vi.mock('@core/backend-api', () => ({
   FindCatalogObjectByUID: (...args: unknown[]) => findCatalogObjectByUIDMock(...args),
 }));
 

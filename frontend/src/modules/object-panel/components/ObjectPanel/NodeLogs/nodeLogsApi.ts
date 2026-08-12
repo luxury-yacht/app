@@ -1,4 +1,4 @@
-import type { types } from '@wailsjs/go/models';
+import type { types } from '@core/backend-api/models';
 import {
   type DataRequestReason,
   readNodeLogDiscovery,

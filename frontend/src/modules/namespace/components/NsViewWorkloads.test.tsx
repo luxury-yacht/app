@@ -240,7 +240,7 @@ vi.mock('@/hooks/useShortNames', () => ({
   useShortNames: () => false,
 }));
 
-vi.mock('@wailsjs/go/backend/App', () => ({
+vi.mock('@core/backend-api', () => ({
   RunObjectAction: vi.fn().mockResolvedValue({ name: 'job-123' }),
 }));
 

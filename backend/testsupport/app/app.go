@@ -83,7 +83,7 @@ func New(t testing.TB, opts ...Option) *backend.App {
 		appCtx = opt(appCtx, &b)
 	}
 
-	app := backend.NewApp()
+	app := backend.NewApp(nil)
 	if appCtx == nil {
 		appCtx = context.Background()
 	}

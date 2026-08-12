@@ -10,15 +10,17 @@ const listRuntimeOperationsMock = vi.hoisted(() => vi.fn());
 const stopPortForwardMock = vi.hoisted(() => vi.fn());
 const browserOpenURLMock = vi.hoisted(() => vi.fn());
 
-vi.mock('@wailsjs/go/backend/App', () => ({
+vi.mock('@core/backend-api', () => ({
   ListShellSessions: listShellSessionsMock,
   ListPortForwards: listPortForwardsMock,
   ListRuntimeOperations: listRuntimeOperationsMock,
   StopPortForward: stopPortForwardMock,
 }));
 
-vi.mock('@wailsjs/runtime/runtime', () => ({
-  BrowserOpenURL: browserOpenURLMock,
+vi.mock('@core/desktop-runtime', () => ({
+  desktopRuntimeAvailable: () => false,
+  onEvent: vi.fn(() => () => undefined),
+  openURL: browserOpenURLMock,
 }));
 
 const statusIndicatorMock = vi.hoisted(() =>
@@ -146,11 +148,11 @@ describe('SessionsStatus shell session jump action', () => {
     (
       window as typeof window & {
         runtime?: {
-          EventsOn: (event: string, handler: (...args: unknown[]) => void) => () => void;
+          onEvent: (event: string, handler: (...args: unknown[]) => void) => () => void;
         };
       }
     ).runtime = {
-      EventsOn: vi.fn((_event, _handler) => vi.fn()),
+      onEvent: vi.fn((_event, _handler) => vi.fn()),
     };
   });
 

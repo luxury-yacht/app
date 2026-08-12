@@ -5,9 +5,9 @@
  * Covers key behaviors and edge cases for CommandPaletteCommands.
  */
 
+import type { types } from '@core/backend-api/models';
 import { WarningIcon } from '@shared/components/icons/SharedIcons';
 import { DockablePanelProvider } from '@ui/dockable/DockablePanelProvider';
-import type { types } from '@wailsjs/go/models';
 import { act, isValidElement } from 'react';
 import * as ReactDOM from 'react-dom/client';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
@@ -15,7 +15,6 @@ import {
   resetAppPreferencesCacheForTesting,
   setAppPreferencesForTesting,
 } from '@/core/settings/appPreferences';
-import { installWindowProperty } from '@/test-utils/windowProperty';
 import { changeAppearanceMode } from '@/utils/appearanceMode';
 import { type Command, useCommandPaletteCommands } from './CommandPaletteCommands';
 
@@ -103,8 +102,12 @@ vi.mock('@/core/refresh', () => ({
   useAutoRefresh: () => mocks.autoRefresh,
 }));
 
-vi.mock('@wailsjs/go/backend/App', () => ({
+vi.mock('@core/backend-api', () => ({
   UpdateAppPreferences: (...args: unknown[]) => mocks.appSettings.UpdateAppPreferences(...args),
+}));
+
+vi.mock('@core/desktop-runtime', () => ({
+  desktopRuntimeAvailable: () => true,
 }));
 
 vi.mock('@/utils/appearanceMode', () => ({
@@ -162,8 +165,6 @@ const renderHook = () => {
 };
 
 describe('CommandPaletteCommands', () => {
-  let restoreGo: () => void;
-
   beforeEach(() => {
     mocks.kubeconfig.kubeconfigs = [];
     mocks.kubeconfig.selectedKubeconfigs = [];
@@ -191,12 +192,10 @@ describe('CommandPaletteCommands', () => {
     mocks.autoRefresh.toggle.mockReset();
     mocks.appSettings.UpdateAppPreferences.mockReset();
     mocks.appSettings.UpdateAppPreferences.mockResolvedValue({ settings: {}, changedKeys: [] });
-    restoreGo = installWindowProperty('go', { backend: { App: {} } });
     resetAppPreferencesCacheForTesting();
   });
 
   afterEach(() => {
-    restoreGo();
     document.body.innerHTML = '';
   });
 

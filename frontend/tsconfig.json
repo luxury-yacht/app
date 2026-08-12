@@ -55,7 +55,7 @@
       "@utils/*": ["./src/utils/*"],
       "@contexts/*": ["./src/core/contexts/*"],
       "@assets/*": ["./src/assets/*"],
-      "@wailsjs/*": ["./wailsjs/*"],
+      "@bindings/*": ["./bindings/*"],
 
       /* Backend-owned shared contracts */
       "@yaml-field-policy-contract": ["../backend/objectyaml/field-policy-contract.json"],
@@ -66,10 +66,9 @@
   },
   "include": [
     "src",
-    "wailsjs/**/*.d.ts",
+    "bindings/**/*.ts",
     "../backend/objectyaml/field-policy-contract.json",
     "../backend/resourcecontract/builtin-resource-identities.json"
   ],
-  "exclude": ["wailsjs/**/*.js"],
   "references": [{ "path": "./tsconfig.node.json" }]
 }

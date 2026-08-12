@@ -14,10 +14,6 @@
  * `{kind:'status'}` item — conditions render as a field and `summary` is not surfaced.
  */
 
-import { ObjectPanelLink } from '@shared/components/ObjectPanelLink';
-import { StatusChip, type StatusChipVariant } from '@shared/components/StatusChip';
-import { buildRequiredObjectReference } from '@shared/utils/objectIdentity';
-import { withStableListKeys } from '@shared/utils/stableListKeys';
 import {
   backendtlspolicy,
   gateway,
@@ -26,7 +22,11 @@ import {
   referencegrant,
   type resourcemodel,
   types,
-} from '@wailsjs/go/models';
+} from '@core/backend-api/models';
+import { ObjectPanelLink } from '@shared/components/ObjectPanelLink';
+import { StatusChip, type StatusChipVariant } from '@shared/components/StatusChip';
+import { buildRequiredObjectReference } from '@shared/utils/objectIdentity';
+import { withStableListKeys } from '@shared/utils/stableListKeys';
 import type React from 'react';
 import type { OverviewDescriptor } from '../schema';
 import { ExternalHostLinks } from '../shared/ExternalHostLinks';
@@ -80,8 +80,8 @@ const getRefParts = (
     return { ref: value };
   }
   return {
-    ref: value.ref,
-    display: value.display,
+    ref: value.ref ?? undefined,
+    display: value.display ?? undefined,
   };
 };
 

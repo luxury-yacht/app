@@ -3,11 +3,11 @@
 The backend can arm a SIGUSR1 handler that writes every goroutine's stack to a
 file **without stopping the app**. It exists because the data layer wedges have
 historically been lock-ordering bugs that logs cannot explain: the app logger
-is an in-memory ring (not stderr), and a `wails dev` child's stderr is not
+is an in-memory ring (not stderr), and a `wails3 dev` child's stderr is not
 reliably capturable, so SIGQUIT dumps are effectively lost.
 
 - **Opt-in per run**: the handler arms only when `ENABLE_GOROUTINE_DUMP` is
-  truthy — `ENABLE_GOROUTINE_DUMP=true wails dev` (or `… mage dev`, or set on
+  truthy — `ENABLE_GOROUTINE_DUMP=true wails3 dev` (or `… mage dev`, or set on
   a built binary's environment). Default off. Because a wedge may not
   reproduce on demand, relaunch with the flag *before* trying to reproduce.
 - Handler: `backend/app_diagnostic_dump.go` (unix-only; Windows no-op in

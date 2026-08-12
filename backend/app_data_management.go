@@ -1,15 +1,12 @@
 package backend
 
 import (
-	"context"
 	"encoding/json"
 	"fmt"
 	"io"
 	"os"
 	"strings"
 	"time"
-
-	wailsruntime "github.com/wailsapp/wails/v2/pkg/runtime"
 )
 
 const (
@@ -147,22 +144,19 @@ func (a *App) requireDataManagementContext() error {
 	if !a.runtimeAvailable() {
 		return fmt.Errorf("application context is not available")
 	}
+	if a.desktop == nil {
+		return fmt.Errorf("desktop runtime is not available")
+	}
 	return nil
 }
 
 func (a *App) exportDataFile(title, defaultFilename string, document any) (DataManagementResult, error) {
-	var path string
-	var err error
-	a.runWithRuntimeContext(func(ctx context.Context) {
-		path, err = runtimeSaveFileDialog(ctx, wailsruntime.SaveDialogOptions{
-			Title:            title,
-			DefaultDirectory: dataManagementDefaultDirectory(),
-			DefaultFilename:  defaultFilename,
-			Filters: []wailsruntime.FileFilter{
-				{DisplayName: "JSON files (*.json)", Pattern: "*.json"},
-			},
-			CanCreateDirectories: true,
-		})
+	path, err := a.desktop.SaveFile(SaveFileDialogOptions{
+		Title:                title,
+		Directory:            dataManagementDefaultDirectory(),
+		Filename:             defaultFilename,
+		Filters:              []FileFilter{{DisplayName: "JSON files (*.json)", Pattern: "*.json"}},
+		CanCreateDirectories: true,
 	})
 	if err != nil {
 		return DataManagementResult{}, fmt.Errorf("select export file: %w", err)
@@ -184,14 +178,10 @@ func (a *App) exportDataFile(title, defaultFilename string, document any) (DataM
 }
 
 func (a *App) chooseDataImportFile(title string) (path string, canceled bool, err error) {
-	a.runWithRuntimeContext(func(ctx context.Context) {
-		path, err = runtimeOpenFileDialog(ctx, wailsruntime.OpenDialogOptions{
-			Title:            title,
-			DefaultDirectory: dataManagementDefaultDirectory(),
-			Filters: []wailsruntime.FileFilter{
-				{DisplayName: "JSON files (*.json)", Pattern: "*.json"},
-			},
-		})
+	path, err = a.desktop.OpenFile(OpenFileDialogOptions{
+		Title:     title,
+		Directory: dataManagementDefaultDirectory(),
+		Filters:   []FileFilter{{DisplayName: "JSON files (*.json)", Pattern: "*.json"}},
 	})
 	if err != nil {
 		return "", false, fmt.Errorf("select import file: %w", err)

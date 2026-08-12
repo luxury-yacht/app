@@ -27,17 +27,17 @@ runs:
           go
           go:honnef.co/go/tools/cmd/staticcheck
           ${{ inputs.setup-node == 'true' && 'node npm' || '' }}
-          ${{ inputs.install-wails == 'true' && 'go:github.com/wailsapp/wails/v2/cmd/wails' || '' }}
+          ${{ inputs.install-wails == 'true' && 'go:github.com/wailsapp/wails/v3/cmd/wails3' || '' }}
           ${{ inputs.install-mage == 'true' && 'go:github.com/magefile/mage' || '' }}
 
     - name: Install Linux build dependencies
       if: ${{ inputs.install-linux-deps == 'true' && runner.os == 'Linux' }}
       shell: bash
       run: |
-        # Wails Linux packaging needs WebKit headers and rpm tooling.
-        if dpkg-query -W -f='${Status}' libwebkit2gtk-4.1-dev 2>/dev/null | grep -q "install ok installed" \
+        # Wails v3's default Linux backend uses GTK4 and WebKitGTK 6.
+        if dpkg-query -W -f='${Status}' libwebkitgtk-6.0-dev 2>/dev/null | grep -q "install ok installed" \
           && dpkg-query -W -f='${Status}' rpm 2>/dev/null | grep -q "install ok installed"; then
           exit 0
         fi
         sudo apt-get update
-        sudo apt-get install -y libwebkit2gtk-4.1-dev rpm
+        sudo apt-get install -y libgtk-4-dev libwebkitgtk-6.0-dev rpm

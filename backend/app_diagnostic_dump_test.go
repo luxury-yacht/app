@@ -15,7 +15,7 @@ import (
 )
 
 // TestGoroutineDumpEnabled pins the ENABLE_GOROUTINE_DUMP opt-in: the handler must arm
-// only on an explicit truthy value (`ENABLE_GOROUTINE_DUMP=true wails dev`), never by
+// only on an explicit truthy value (`ENABLE_GOROUTINE_DUMP=true wails3 dev`), never by
 // default and never on garbage input.
 func TestGoroutineDumpEnabled(t *testing.T) {
 	cases := []struct {
@@ -40,7 +40,7 @@ func TestGoroutineDumpEnabled(t *testing.T) {
 // TestGoroutineDumpOnSignalWritesStacks proves the SIGUSR1 diagnostic handler writes every
 // goroutine's stack to a file in the dump directory without stopping the process — the
 // instrument for naming lock holders when the app wedges (views stuck loading, suspected
-// deadlocks) and stderr is not capturable (wails dev child, Finder-launched .app).
+// deadlocks) and stderr is not capturable (wails3 dev child, Finder-launched .app).
 func TestGoroutineDumpOnSignalWritesStacks(t *testing.T) {
 	dir := t.TempDir()
 	ctx, cancel := context.WithCancel(context.Background())

@@ -213,7 +213,7 @@ func TestReporterTrimsPerPackageLogWrappers(t *testing.T) {
 func TestReporterMarksOnlyApplicationFramesInApp(t *testing.T) {
 	event := &sentry.Event{Exception: []sentry.Exception{{
 		Stacktrace: &sentry.Stacktrace{Frames: []sentry.Frame{
-			{Module: "github.com/wailsapp/wails/v2/internal/frontend/dispatcher", Function: "(*Dispatcher).ProcessMessage", InApp: true},
+			{Module: "github.com/wailsapp/wails/v3/pkg/application", Function: "(*App).Run", InApp: true},
 			{Module: "k8s.io/client-go/rest", Function: "(*Request).Do", InApp: true},
 			{Module: "main", Function: "reportRunError", InApp: true},
 			{Module: "github.com/luxury-yacht/app/backend/capabilities", Function: "(*Service).Evaluate", InApp: true},

@@ -5,13 +5,13 @@
  * Implements AppHeader logic for the UI layer.
  */
 
+import { toggleMaximise } from '@core/desktop-runtime';
 import { SearchIcon } from '@shared/components/icons/SharedIcons';
 import FavMenuDropdown from '@ui/favorites/FavMenuDropdown';
 import ConnectivityStatus from '@ui/status/ConnectivityStatus';
 import MetricsStatus from '@ui/status/MetricsStatus';
 import SessionsStatus from '@ui/status/SessionsStatus';
 import UpdateStatus from '@ui/status/UpdateStatus';
-import { WindowToggleMaximise } from '@wailsjs/runtime/runtime';
 import React from 'react';
 import { eventBus } from '@/core/events';
 import { isMacPlatform } from '@/utils/platform';
@@ -24,7 +24,7 @@ const AppHeader: React.FC = () => {
 
   const toggleWindowMaximize = () => {
     if (!isModalOpen()) {
-      WindowToggleMaximise();
+      toggleMaximise();
     }
   };
 

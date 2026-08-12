@@ -1,7 +1,6 @@
 /**
  * Mock helper for controlling what Settings-related Go RPCs return in Storybook.
- * Works by setting overrides on window.__storybookGoOverrides, which the
- * window.go proxy in preview.ts checks before falling back to a no-op.
+ * Works by setting overrides used by the Storybook Wails v3 transport.
  */
 
 interface SettingsMockOptions {
@@ -22,8 +21,8 @@ const defaultOptions: Required<SettingsMockOptions> = {
  */
 export function setMockSettingsBackend(options: SettingsMockOptions = {}): void {
   const merged = { ...defaultOptions, ...options };
-  const overrides = window.__storybookGoOverrides || {};
-  window.__storybookGoOverrides = overrides;
+  const overrides = window.__storybookBackendOverrides || {};
+  window.__storybookBackendOverrides = overrides;
 
   overrides.GetAppSettings = () =>
     Promise.resolve({

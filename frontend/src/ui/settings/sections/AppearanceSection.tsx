@@ -5,6 +5,7 @@
  * accent, link, saved themes).
  */
 
+import { types } from '@core/backend-api/models';
 import { ErrorSurface } from '@shared/components/errors/ErrorSurface';
 import {
   AppearanceModeIcon,
@@ -28,7 +29,6 @@ import {
   MAX_BRIGHTNESS_OFFSET,
   MAX_SATURATION,
 } from '@utils/paletteTint';
-import { types } from '@wailsjs/go/models';
 import {
   type CSSProperties,
   type Dispatch,

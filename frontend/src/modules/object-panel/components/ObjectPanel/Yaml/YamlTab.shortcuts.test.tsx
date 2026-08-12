@@ -41,7 +41,7 @@ vi.mock('@/core/refresh', () => ({
   },
 }));
 
-vi.mock('@wailsjs/go/backend/App', () => ({
+vi.mock('@core/backend-api', () => ({
   ValidateObjectYaml: vi.fn(),
   ApplyObjectYaml: vi.fn(),
   GetObjectYAMLByGVK: vi.fn().mockResolvedValue({

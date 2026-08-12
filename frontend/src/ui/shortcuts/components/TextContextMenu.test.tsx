@@ -27,9 +27,10 @@ vi.mock('@shared/components/ContextMenu', () => ({
   },
 }));
 
-vi.mock('@wailsjs/runtime/runtime', () => ({
-  EventsOn: vi.fn(),
-  EventsOff: vi.fn(),
+vi.mock('@core/desktop-runtime', () => ({
+  desktopRuntimeAvailable: () => false,
+  onEvent: vi.fn(() => () => undefined),
+  offEvent: vi.fn(),
 }));
 
 vi.mock('../context', async () => {

@@ -64,6 +64,8 @@ var Aliases = map[string]interface{}{
 	"go-mod-update-check": QC.GoModUpdateCheck,
 	"go-mod-update":       QC.GoModUpdate,
 	"benchmark":           QC.Benchmark,
+	"build-assets":        BuildAssets,
+	"bindings":            QC.Bindings,
 	"knip":                QC.Knip,
 	"vet":                 QC.Vet,
 	"trivy":               QC.Trivy,
@@ -74,6 +76,12 @@ var Aliases = map[string]interface{}{
 	"test-fe":             Test.Frontend,
 	"test-fe-cov":         Test.FrontendCoverage,
 	"storybook":           Storybook,
+}
+
+// Refreshes Wails v3 platform metadata and reapplies the repository's
+// desktop-only build-asset contract.
+func BuildAssets() error {
+	return mage.UpdateWailsBuildAssets(cfg)
 }
 
 // ===============================
@@ -150,9 +158,8 @@ func (Clean) All() {
 
 // Cleans build artifacts
 func (Clean) Build() error {
-	fmt.Println("\n🧹 Cleaning build directory...")
-	os.RemoveAll(cfg.BuildDir)
-	return nil
+	fmt.Println("\n🧹 Cleaning generated build outputs...")
+	return mage.CleanBuildOutputs(cfg)
 }
 
 // Cleans the Go cache
@@ -183,6 +190,7 @@ func (Clean) GoCache() error {
 func (Clean) Frontend() error {
 	fmt.Println("\n🧹 Cleaning frontend...")
 	os.RemoveAll(cfg.FrontendDir + "/dist")
+	os.RemoveAll(cfg.FrontendDir + "/coverage")
 	os.RemoveAll(cfg.FrontendDir + "/node_modules")
 	return nil
 }
@@ -193,18 +201,10 @@ func (Clean) Frontend() error {
 
 // Runs the app in dev mode
 func Dev() error {
-	args := []string{"dev"}
-
-	// If Linux, check for webkit2gtk 4.1 and set required tag.
-	if cfg.OsType == "linux" {
-		if webkitVersion, err := mage.WebkitVersion(); err != nil {
-			return err
-		} else if webkitVersion == "4.1" {
-			args = append(args, "-tags", "webkit2_41")
-		}
+	if err := mage.PrepareWailsBuild(cfg); err != nil {
+		return err
 	}
-
-	return sh.Run("wails", args...)
+	return sh.Run("wails3", "dev", "-config", "./build/config.yml", "-port", "5173")
 }
 
 // Runs Storybook for frontend component development
@@ -224,6 +224,12 @@ func Storybook() error {
 // ===============================
 
 type QC mg.Namespace
+
+// Checks that committed TypeScript bindings match the pinned Wails v3 generator.
+func (QC) Bindings() error {
+	fmt.Println("\n🔎 Checking generated Wails v3 bindings...")
+	return mage.CheckWailsBindings(cfg)
+}
 
 // Checks for Go module updates
 func (QC) GoModUpdateCheck() error {
@@ -366,7 +372,7 @@ func (QC) Reset() error {
 
 // Runs all checks that could cause a release to fail.
 func (QC) PreRelease() error {
-	mg.SerialDeps(QC.Fmt, QC.Vet, Test.Race, QC.LintFix, QC.Lint, QC.Typecheck, Test.Frontend, QC.Knip, QC.Trivy)
+	mg.SerialDeps(QC.Fmt, QC.Bindings, QC.Vet, Test.Race, QC.LintFix, QC.Lint, QC.Typecheck, Test.Frontend, QC.Knip, QC.Trivy)
 	return nil
 }
 

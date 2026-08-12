@@ -7,6 +7,7 @@
 import { readFileSync } from 'node:fs';
 import path from 'node:path';
 import { describe, expect, it, vi } from 'vitest';
+import { parse } from 'yaml';
 
 const sentryPluginMock = vi.hoisted(() => vi.fn(() => [{ name: 'sentry-vite-plugin' }]));
 
@@ -14,16 +15,16 @@ vi.mock('@sentry/vite-plugin', () => ({ sentryVitePlugin: sentryPluginMock }));
 
 import { createViteConfig } from './vite.config';
 
-interface WailsConfig {
+interface WailsBuildConfig {
   info: {
-    productVersion: string;
+    version: string;
   };
 }
 
-const wailsConfig = JSON.parse(
-  readFileSync(path.resolve(import.meta.dirname, '../wails.json'), 'utf8')
-) as WailsConfig;
-const expectedSentryRelease = `luxury-yacht@${wailsConfig.info.productVersion}`;
+const wailsBuildConfig = parse(
+  readFileSync(path.resolve(import.meta.dirname, '../build/config.yml'), 'utf8')
+) as WailsBuildConfig;
+const expectedSentryRelease = `luxury-yacht@${wailsBuildConfig.info.version}`;
 
 describe('Vite configuration', () => {
   it('pre-bundles the object-map renderer dependency', () => {

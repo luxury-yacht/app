@@ -1,7 +1,6 @@
 package backend
 
 import (
-	"context"
 	"encoding/json"
 	"fmt"
 	"os"
@@ -14,13 +13,6 @@ import (
 	"github.com/luxury-yacht/app/backend/internal/logsources"
 	"github.com/luxury-yacht/app/backend/refresh/snapshot"
 	"github.com/luxury-yacht/app/backend/refresh/system"
-	"github.com/wailsapp/wails/v2/pkg/runtime"
-)
-
-var (
-	runtimeWindowGetPosition = runtime.WindowGetPosition
-	runtimeWindowGetSize     = runtime.WindowGetSize
-	runtimeWindowIsMaximised = runtime.WindowIsMaximised
 )
 
 const settingsSchemaVersion = 1
@@ -643,15 +635,20 @@ func (a *App) SaveWindowSettings() error {
 	if !a.runtimeAvailable() {
 		return fmt.Errorf("application context is not available")
 	}
-	var x, y, width, height int
-	var maximized bool
-	a.runWithRuntimeContext(func(ctx context.Context) {
-		x, y = runtimeWindowGetPosition(ctx)
-		width, height = runtimeWindowGetSize(ctx)
-		maximized = runtimeWindowIsMaximised(ctx)
-	})
-
-	a.windowSettings = &WindowSettings{X: x, Y: y, Width: width, Height: height, Maximized: maximized}
+	if a.desktop == nil {
+		return fmt.Errorf("desktop runtime is not available")
+	}
+	geometry, err := a.desktop.MainWindowGeometry()
+	if err != nil {
+		return fmt.Errorf("read main window geometry: %w", err)
+	}
+	a.windowSettings = &WindowSettings{
+		X:         geometry.X,
+		Y:         geometry.Y,
+		Width:     geometry.Width,
+		Height:    geometry.Height,
+		Maximized: geometry.Maximised,
+	}
 
 	a.settingsMu.Lock()
 	defer a.settingsMu.Unlock()

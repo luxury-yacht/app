@@ -7,10 +7,10 @@
  * (ResourceHeader / ResourceMetadata).
  */
 
+import { hpa, limitrange, poddisruptionbudget, resourcequota } from '@core/backend-api/models';
 import { ObjectPanelLink } from '@shared/components/ObjectPanelLink';
 import { buildRequiredRelatedObjectReference } from '@shared/utils/objectIdentity';
 import { withStableListKeys } from '@shared/utils/stableListKeys';
-import { hpa, limitrange, poddisruptionbudget, resourcequota } from '@wailsjs/go/models';
 import type React from 'react';
 import type { OverviewContext, OverviewDescriptor } from '../schema';
 import '../PolicyOverview.css';
@@ -409,7 +409,7 @@ export const pdbDescriptor: OverviewDescriptor<PodDisruptionBudgetDetails> = {
 // ResourceQuota
 // ---------------------------------------------------------------------------
 
-const renderQuotaMap = (entries: Record<string, string>): React.ReactNode =>
+const renderQuotaMap = (entries: Record<string, string | undefined>): React.ReactNode =>
   Object.entries(entries).map(([key, value]) => (
     <div key={key}>
       {key}: {value}

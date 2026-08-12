@@ -37,7 +37,7 @@ describe('ClusterWorkspaceStore', () => {
     const unsubscribe = eventBus.on('cluster:lifecycle', ({ state }) =>
       lifecycleEvents.push(state)
     );
-    const store = new ClusterWorkspaceStore({ read, runtime: () => undefined });
+    const store = new ClusterWorkspaceStore({ read, onEvent: () => () => undefined });
     const release = store.acquire();
 
     await store.hydrate();
@@ -57,7 +57,7 @@ describe('ClusterWorkspaceStore', () => {
     vi.spyOn(console, 'error').mockImplementation(() => undefined);
     const store = new ClusterWorkspaceStore({
       read: async () => emptyState(),
-      runtime: () => undefined,
+      onEvent: () => () => undefined,
     });
     store.subscribe(() => {
       throw new Error('broken subscriber');
@@ -72,18 +72,16 @@ describe('ClusterWorkspaceStore', () => {
   it('continues registering workspace events when one runtime subscription throws', async () => {
     vi.spyOn(console, 'error').mockImplementation(() => undefined);
     const registered: string[] = [];
-    const runtime: WailsRuntime = {
-      EventsOn: (eventName) => {
-        registered.push(eventName);
-        if (eventName === 'cluster:lifecycle') {
-          throw new Error('lifecycle subscription failed');
-        }
-        return () => undefined;
-      },
+    const subscribe = (eventName: string) => {
+      registered.push(eventName);
+      if (eventName === 'cluster:lifecycle') {
+        throw new Error('lifecycle subscription failed');
+      }
+      return () => undefined;
     };
     const store = new ClusterWorkspaceStore({
       read: async () => emptyState(),
-      runtime: () => runtime,
+      onEvent: subscribe,
     });
 
     let release: (() => void) | undefined;
@@ -99,17 +97,15 @@ describe('ClusterWorkspaceStore', () => {
   it('runs every runtime disposer when one disposer throws', async () => {
     vi.spyOn(console, 'error').mockImplementation(() => undefined);
     const disposed: string[] = [];
-    const runtime: WailsRuntime = {
-      EventsOn: (eventName) => () => {
-        if (eventName === 'cluster:lifecycle') {
-          throw new Error('lifecycle disposer failed');
-        }
-        disposed.push(eventName);
-      },
+    const subscribe = (eventName: string) => () => {
+      if (eventName === 'cluster:lifecycle') {
+        throw new Error('lifecycle disposer failed');
+      }
+      disposed.push(eventName);
     };
     const store = new ClusterWorkspaceStore({
       read: async () => emptyState(),
-      runtime: () => runtime,
+      onEvent: subscribe,
     });
     const release = store.acquire();
     await store.hydrate();
@@ -127,7 +123,7 @@ describe('ClusterWorkspaceStore', () => {
         ...emptyState(),
         visibleClusterId: 'cluster-a',
       }),
-      runtime: () => runtime.runtime,
+      onEvent: runtime.onEvent,
     });
     const releaseFirst = store.acquire();
     const releaseSecond = store.acquire();
@@ -161,7 +157,7 @@ describe('ClusterWorkspaceStore', () => {
           },
         },
       });
-    const store = new ClusterWorkspaceStore({ read, runtime: () => runtime.runtime });
+    const store = new ClusterWorkspaceStore({ read, onEvent: runtime.onEvent });
     const release = store.acquire();
 
     await expect(store.hydrate()).rejects.toThrow('workspace unavailable');
@@ -182,7 +178,7 @@ describe('ClusterWorkspaceStore', () => {
         })
     );
     const runtime = createWailsRuntimeHarness();
-    const store = new ClusterWorkspaceStore({ read, runtime: () => runtime.runtime });
+    const store = new ClusterWorkspaceStore({ read, onEvent: runtime.onEvent });
 
     const release = store.acquire();
     expect(runtime.listenerCount('cluster:lifecycle')).toBe(1);
@@ -236,7 +232,7 @@ describe('ClusterWorkspaceStore', () => {
           },
         },
       });
-    const store = new ClusterWorkspaceStore({ read, runtime: () => runtime.runtime });
+    const store = new ClusterWorkspaceStore({ read, onEvent: runtime.onEvent });
 
     const release = store.acquire();
     await store.hydrate();
@@ -272,7 +268,7 @@ describe('ClusterWorkspaceStore', () => {
         }
       });
     });
-    const store = new ClusterWorkspaceStore({ read, runtime: () => undefined });
+    const store = new ClusterWorkspaceStore({ read, onEvent: () => () => undefined });
     const release = store.acquire();
     await store.hydrate();
 
@@ -328,7 +324,7 @@ describe('ClusterWorkspaceStore', () => {
           },
         },
       });
-    const store = new ClusterWorkspaceStore({ read, runtime: () => runtime.runtime });
+    const store = new ClusterWorkspaceStore({ read, onEvent: runtime.onEvent });
 
     const release = store.acquire();
     await store.hydrate();
@@ -356,7 +352,7 @@ describe('ClusterWorkspaceStore', () => {
           resolveHydration = resolve;
         })
     );
-    const store = new ClusterWorkspaceStore({ read, runtime: () => undefined });
+    const store = new ClusterWorkspaceStore({ read, onEvent: () => () => undefined });
 
     const release = store.acquire();
     const hydration = store.hydrate();
@@ -384,7 +380,7 @@ describe('ClusterWorkspaceStore', () => {
     const runtime = createWailsRuntimeHarness();
     const store = new ClusterWorkspaceStore({
       read: async () => emptyState(),
-      runtime: () => runtime.runtime,
+      onEvent: runtime.onEvent,
     });
     const release = store.acquire();
     await Promise.resolve();
@@ -403,7 +399,7 @@ describe('ClusterWorkspaceStore', () => {
   it('holds foreground dispatch until activation ends', async () => {
     const store = new ClusterWorkspaceStore({
       read: async () => emptyState(),
-      runtime: () => undefined,
+      onEvent: () => () => undefined,
     });
     store.applyWireState({
       ...emptyState(),

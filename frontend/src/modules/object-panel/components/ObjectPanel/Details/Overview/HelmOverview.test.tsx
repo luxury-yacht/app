@@ -2,7 +2,7 @@
  * frontend/src/modules/object-panel/components/ObjectPanel/Details/Overview/HelmOverview.test.tsx
  */
 
-import { helm } from '@wailsjs/go/models';
+import { helm } from '@core/backend-api/models';
 import { act } from 'react';
 import * as ReactDOM from 'react-dom/client';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';

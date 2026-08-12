@@ -20,7 +20,7 @@
   right: 0;
   height: var(--app-header-height);
   z-index: 1;
-  --wails-draggable: true;
+  --wails-draggable: drag;
   cursor: default;
 }
 

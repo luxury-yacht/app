@@ -15,7 +15,6 @@ type BuildConfig struct {
 	ArtifactsDir   string   // Directory where build artifacts are stored
 	BetaExpiry     string   // Beta expiry date in RFC3339 format
 	BetaExpiryDays int      // Number of days until beta expiry
-	BuildArgs      []string // Arguments for the build command
 	BuildDir       string   // Directory to place build outputs
 	BuildTime      string   // Build time in RFC3339 format
 	FrontendDir    string   // Directory of the frontend source code
@@ -58,7 +57,6 @@ func NewBuildConfig() BuildConfig {
 		ArtifactsDir:   "build/artifacts",
 		BetaExpiry:     now.Add(time.Duration(betaExpiryDays) * 24 * time.Hour).Format(time.RFC3339),
 		BetaExpiryDays: betaExpiryDays,
-		BuildArgs:      []string{"build", "-clean", "-o", appShortName},
 		BuildDir:       "build",
 		BuildTime:      now.Format(time.RFC3339),
 		FrontendDir:    frontendDir,

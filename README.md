@@ -74,11 +74,11 @@ If you prefer to build the app from source, see the Development section.
 
 #### The app won't start on Linux
 
-Luxury Yacht requires webkit2 4.1. Some distros don't include it, or don't install it by default. Installation will vary depending on your distro.
+Luxury Yacht uses GTK4 and WebKitGTK 6.0. Installation will vary depending on your distro.
 
-| Distro       | Installation                           |
-| ------------ | -------------------------------------- |
-| Ubuntu 20.04 | Unsupported                            |
-| Ubuntu 22.04 | `sudo apt install libwebkit2gtk-4.1-0` |
+| Distro      | Installation                                           |
+| ----------- | ------------------------------------------------------ |
+| Ubuntu 24.04 | `sudo apt install libgtk-4-1 libwebkitgtk-6.0-4`      |
+| Debian 13    | `sudo apt install libgtk-4-1 libwebkitgtk-6.0-4`      |
 
 If your distro isn't on this (admittedly short) list, you'll have to search your package manager to determine the exact package name. If you have info you'd like to add to this list, email [admin@luxury-yacht.app](mailto:admin@luxury-yacht.app) or open an issue.

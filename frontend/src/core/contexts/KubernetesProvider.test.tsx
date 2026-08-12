@@ -24,7 +24,7 @@ const wailsMocks = vi.hoisted(() => ({
   GetAppearanceModeInfo: vi.fn().mockResolvedValue({ userMode: 'system' }),
 }));
 
-vi.mock('@wailsjs/go/backend/App', () => ({
+vi.mock('@core/backend-api', () => ({
   GetKubeconfigs: (...args: unknown[]) => wailsMocks.GetKubeconfigs(...args),
   GetClusterWorkspaceState: (...args: unknown[]) => wailsMocks.GetClusterWorkspaceState(...args),
   SetSidebarVisible: (...args: unknown[]) => wailsMocks.SetSidebarVisible(...args),
@@ -32,7 +32,7 @@ vi.mock('@wailsjs/go/backend/App', () => ({
   GetAppearanceModeInfo: (...args: unknown[]) => wailsMocks.GetAppearanceModeInfo(...args),
 }));
 
-vi.mock('@wailsjs/go/models', () => ({
+vi.mock('@core/backend-api/models', () => ({
   types: {},
   backend: {},
 }));

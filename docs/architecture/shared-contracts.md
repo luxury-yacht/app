@@ -38,7 +38,7 @@ Use the lightest enforceable form:
 - Backend-owned resource identities:
   `backend/resourcecontract/builtin-resource-identities.json`
 - Wails DTOs:
-  `frontend/wailsjs/go/models.ts`
+  `frontend/bindings`
 - Frontend data access reader wrappers:
   `frontend/src/core/data-access/readers.ts`,
   `frontend/src/core/app-state-access/readers.ts`
