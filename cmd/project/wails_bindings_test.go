@@ -14,7 +14,7 @@ func TestCompareDirectoryTrees(t *testing.T) {
 		writeTestFile(t, expected, "app/models.ts", "export type App = {}\n")
 		writeTestFile(t, actual, "app/models.ts", "export type App = {}\n")
 
-		if err := CompareDirectoryTrees(expected, actual); err != nil {
+		if err := compareDirectoryTrees(expected, actual); err != nil {
 			t.Fatalf("CompareDirectoryTrees() error = %v", err)
 		}
 	})
@@ -55,7 +55,7 @@ func TestCompareDirectoryTrees(t *testing.T) {
 				writeTestFile(t, actual, path, contents)
 			}
 
-			err := CompareDirectoryTrees(expected, actual)
+			err := compareDirectoryTrees(expected, actual)
 			if err == nil || !strings.Contains(err.Error(), test.wantError) {
 				t.Fatalf("CompareDirectoryTrees() error = %v, want containing %q", err, test.wantError)
 			}

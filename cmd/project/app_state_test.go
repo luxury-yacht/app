@@ -46,7 +46,7 @@ func TestAppStateDirsUsePlatformStateBases(t *testing.T) {
 	home := redirectUserDirs(t)
 	wantConfig, wantCache := wantStateDirs(t, home, "luxury-yacht")
 
-	dirs, err := AppStateDirs("luxury-yacht")
+	dirs, err := appStateDirs("luxury-yacht")
 	if err != nil {
 		t.Fatalf("AppStateDirs: %v", err)
 	}
@@ -82,7 +82,7 @@ func TestResetAppStateRemovesStateDirs(t *testing.T) {
 		}
 	}
 
-	removed, err := ResetAppState("luxury-yacht")
+	removed, err := resetAppState("luxury-yacht")
 	if err != nil {
 		t.Fatalf("ResetAppState: %v", err)
 	}
@@ -100,7 +100,7 @@ func TestResetAppStateRemovesStateDirs(t *testing.T) {
 	}
 
 	// Reset must stay re-runnable once the directories are gone.
-	if _, err := ResetAppState("luxury-yacht"); err != nil {
+	if _, err := resetAppState("luxury-yacht"); err != nil {
 		t.Errorf("second ResetAppState on missing dirs: %v", err)
 	}
 }
@@ -120,7 +120,7 @@ func TestResetAppStateRejectsEmptyAppName(t *testing.T) {
 
 	// An empty name would join to the bare base directory, so removing it would
 	// wipe every application's config, not just this app's.
-	if _, err := ResetAppState(""); err == nil {
+	if _, err := resetAppState(""); err == nil {
 		t.Fatal("ResetAppState(\"\") returned no error")
 	}
 	if _, err := os.Stat(configBase); err != nil {

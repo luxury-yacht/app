@@ -18,9 +18,9 @@ func TestFindReleaseAssetsUsesConfiguredDirectory(t *testing.T) {
 		}
 	}
 
-	assets, err := findReleaseAssets(BuildConfig{
-		ArtifactsDir:  artifactDir,
-		ReleaseAssets: []string{".dmg", ".exe"},
+	assets, err := findReleaseAssets(releaseConfig{
+		artifactsDir:  artifactDir,
+		releaseAssets: []string{".dmg", ".exe"},
 	})
 	if err != nil {
 		t.Fatalf("findReleaseAssets() error = %v", err)

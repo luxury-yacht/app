@@ -1,6 +1,9 @@
 package main
 
 import (
+	"go/ast"
+	"go/parser"
+	"go/token"
 	"os"
 	"path/filepath"
 	"strings"
@@ -136,8 +139,10 @@ func TestProjectCommandOwnsItsImplementation(t *testing.T) {
 	for _, path := range []string{
 		"app_state.go",
 		"build_metadata.go",
-		"build_config.go",
 		"clean.go",
+		"command.go",
+		"go_modules.go",
+		"project_config.go",
 		"quality.go",
 		"release.go",
 		"wails_bindings.go",
@@ -147,11 +152,47 @@ func TestProjectCommandOwnsItsImplementation(t *testing.T) {
 		require.NoError(t, err)
 	}
 
-	for _, path := range []string{"internal/projecttools", "cmd/windowsversion"} {
+	for _, path := range []string{
+		"internal/projecttools",
+		"cmd/windowsversion",
+		"cmd/project/build_config.go",
+		"cmd/project/dotenv.go",
+		"cmd/project/github.go",
+		"cmd/project/gomod.go",
+		"cmd/project/utils.go",
+	} {
 		_, err := os.Stat(repositoryPath(path))
 		require.ErrorIs(t, err, os.ErrNotExist)
 	}
 
 	windowsTaskfile := readTestFile(t, repositoryPath("build", "windows", "Taskfile.yml"))
 	require.Contains(t, windowsTaskfile, "go run ./cmd/project windows-version")
+}
+
+func TestProjectCommandHasNoExportedGoDeclarations(t *testing.T) {
+	projectDir := repositoryPath("cmd", "project")
+	files, err := filepath.Glob(filepath.Join(projectDir, "*.go"))
+	require.NoError(t, err)
+
+	for _, path := range files {
+		if strings.HasSuffix(path, "_test.go") {
+			continue
+		}
+		parsed, err := parser.ParseFile(token.NewFileSet(), path, nil, 0)
+		require.NoError(t, err)
+		for _, declaration := range parsed.Decls {
+			switch declaration := declaration.(type) {
+			case *ast.FuncDecl:
+				if declaration.Name.Name != "main" {
+					require.Falsef(t, declaration.Name.IsExported(), "%s exports %s", path, declaration.Name.Name)
+				}
+			case *ast.GenDecl:
+				for _, spec := range declaration.Specs {
+					if typeSpec, ok := spec.(*ast.TypeSpec); ok {
+						require.Falsef(t, typeSpec.Name.IsExported(), "%s exports %s", path, typeSpec.Name.Name)
+					}
+				}
+			}
+		}
+	}
 }

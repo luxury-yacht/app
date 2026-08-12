@@ -1,7 +1,6 @@
 package main
 
 import (
-	"encoding/json"
 	"fmt"
 	"os"
 )
@@ -18,52 +17,63 @@ func run(args []string) error {
 		return fmt.Errorf("usage: project <backend-coverage|bindings|build-metadata|clean-all|clean-build|clean-frontend|config|fmt|go-mod-update|go-mod-update-check|release-app|release-site|reset|windows-version>")
 	}
 
-	config, err := NewBuildConfigFromDotEnv(".env")
-	if err != nil {
-		return err
-	}
-
 	switch args[0] {
 	case "backend-coverage":
-		return RunBackendCoverage()
+		return runBackendCoverage()
 	case "bindings":
-		return CheckWailsBindings(config)
+		return checkWailsBindings()
 	case "build-metadata":
 		_, err := generateBuildMetadata(buildMetadataOptions{
-			ConfigPath: "build/config.yml",
-			EnvPath:    ".env",
-			OutputPath: "backend/buildinfo/generated.json",
+			ConfigPath: projectConfigPath,
+			EnvPath:    projectEnvPath,
+			OutputPath: projectManifestPath,
 			Summary:    os.Stdout,
 		})
 		return err
 	case "clean-all":
-		return CleanAllOutputs(config)
+		return cleanAllOutputs(defaultCleanConfig())
 	case "clean-build":
-		return CleanBuildOutputs(config)
+		return cleanBuildOutputs(defaultCleanConfig())
 	case "clean-frontend":
-		return CleanFrontendOutputs(config)
+		return cleanFrontendOutputs(defaultCleanConfig())
 	case "config":
-		encoder := json.NewEncoder(os.Stdout)
-		encoder.SetIndent("", "  ")
-		return encoder.Encode(config)
+		return writeProjectConfig(os.Stdout)
 	case "fmt":
-		return CheckGoFormatting()
+		return checkGoFormatting()
 	case "go-mod-update":
-		return UpdateDirectGoModules(CommandOutput, RunCommand)
+		return updateDirectGoModules()
 	case "go-mod-update-check":
-		return CheckDirectGoModuleUpdates()
+		return checkDirectGoModuleUpdates()
 	case "release-app":
-		return PublishRelease(config)
+		if err := loadDotEnv(projectEnvPath); err != nil {
+			return err
+		}
+		facts, err := loadProjectFacts()
+		if err != nil {
+			return fmt.Errorf("read app version: %w", err)
+		}
+		return publishRelease(newReleaseConfig(facts))
 	case "release-site":
-		return PublishSiteVersion(config)
+		if err := loadDotEnv(projectEnvPath); err != nil {
+			return err
+		}
+		metadata, err := readProjectMetadata(projectConfigPath)
+		if err != nil {
+			return fmt.Errorf("read app version: %w", err)
+		}
+		return publishSiteVersion(metadata.Info.Version)
 	case "reset":
-		directories, resetErr := ResetAppState(config.AppShortName)
+		directories, resetErr := resetAppState(projectAppShortName)
 		for _, directory := range directories {
 			fmt.Println(directory)
 		}
 		return resetErr
 	case "windows-version":
-		return WriteWindowsVersion(os.Stdout, config.Version)
+		metadata, err := readProjectMetadata(projectConfigPath)
+		if err != nil {
+			return fmt.Errorf("read app version: %w", err)
+		}
+		return writeWindowsVersion(os.Stdout, metadata.Info.Version)
 	default:
 		return fmt.Errorf("unknown project command %q", args[0])
 	}

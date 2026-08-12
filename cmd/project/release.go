@@ -21,6 +21,30 @@ type releaseNotesData struct {
 	PendingNotesBody string
 }
 
+type releaseConfig struct {
+	artifactsDir  string
+	betaExpiry    string
+	commit        string
+	isBeta        bool
+	packagePath   string
+	releaseAssets []string
+	releaseRepo   string
+	version       string
+}
+
+func newReleaseConfig(facts projectFacts) releaseConfig {
+	return releaseConfig{
+		artifactsDir:  projectArtifactsDir,
+		betaExpiry:    facts.betaExpiry,
+		commit:        facts.commit,
+		isBeta:        facts.isBeta,
+		packagePath:   projectPackagePath,
+		releaseAssets: projectReleaseAssets,
+		releaseRepo:   projectReleaseRepo,
+		version:       facts.version,
+	}
+}
+
 // Make sure the GitHub CLI is installed.
 func checkGhCli() error {
 	if _, err := exec.LookPath("gh"); err != nil {
@@ -32,17 +56,17 @@ func checkGhCli() error {
 // Check if the release already exists.
 func releaseExists(repo, tag string) (bool, error) {
 	fmt.Printf("\n🔎 Checking if release %s exists in repo %s\n", tag, repo)
-	if RunCommand("gh", "release", "view", tag, "--repo", repo) != nil {
+	if runCommand("gh", "release", "view", tag, "--repo", repo) != nil {
 		return false, nil
 	}
 	return true, nil
 }
 
 // Scans for releaseable assets in the artifacts directory.
-func findReleaseAssets(cfg BuildConfig) ([]string, error) {
+func findReleaseAssets(cfg releaseConfig) ([]string, error) {
 	var assets []string
 
-	err := filepath.WalkDir(cfg.ArtifactsDir, func(path string, d fs.DirEntry, walkErr error) error {
+	err := filepath.WalkDir(cfg.artifactsDir, func(path string, d fs.DirEntry, walkErr error) error {
 		if walkErr != nil {
 			return walkErr
 		}
@@ -50,7 +74,7 @@ func findReleaseAssets(cfg BuildConfig) ([]string, error) {
 			return nil
 		}
 		// Check if the file has a valid release asset extension
-		for _, ext := range cfg.ReleaseAssets {
+		for _, ext := range cfg.releaseAssets {
 			if strings.HasSuffix(d.Name(), ext) {
 				assets = append(assets, path)
 				break
@@ -87,7 +111,7 @@ func readPendingReleaseNotes(path string) (string, error) {
 }
 
 // Create the release notes and write them to a temporary file.
-func writeReleaseNotes(cfg BuildConfig, runNumber string) (string, error) {
+func writeReleaseNotes(cfg releaseConfig, runNumber string) (string, error) {
 	notesTemplate := filepath.Join("docs", "release", "template.md")
 	tmpl, err := template.ParseFiles(notesTemplate)
 	if err != nil {
@@ -105,7 +129,7 @@ func writeReleaseNotes(cfg BuildConfig, runNumber string) (string, error) {
 		buildLabel = fmt.Sprintf("#%s", runNumber)
 	}
 
-	repoURL := cfg.PackagePath
+	repoURL := cfg.packagePath
 	if !strings.HasPrefix(repoURL, "http") {
 		repoURL = "https://" + repoURL
 	}
@@ -116,11 +140,11 @@ func writeReleaseNotes(cfg BuildConfig, runNumber string) (string, error) {
 	}
 
 	data := releaseNotesData{
-		Version:          cfg.Version,
+		Version:          cfg.version,
 		BuildLabel:       buildLabel,
-		Commit:           cfg.Commit,
-		IsBeta:           cfg.IsBeta,
-		BetaExpiry:       cfg.BetaExpiry,
+		Commit:           cfg.commit,
+		IsBeta:           cfg.isBeta,
+		BetaExpiry:       cfg.betaExpiry,
 		RepoURL:          repoURL,
 		PendingNotesBody: pendingNotesBody,
 	}
@@ -133,34 +157,34 @@ func writeReleaseNotes(cfg BuildConfig, runNumber string) (string, error) {
 }
 
 // Create the release.
-func createRelease(cfg BuildConfig, notesFile string, assets []string) error {
+func createRelease(cfg releaseConfig, notesFile string, assets []string) error {
 	args := []string{
-		"release", "create", cfg.Version,
-		"--title", cfg.Version,
+		"release", "create", cfg.version,
+		"--title", cfg.version,
 		"--notes-file", notesFile,
-		"--repo", cfg.ReleaseRepo,
+		"--repo", cfg.releaseRepo,
 	}
-	if cfg.IsBeta {
+	if cfg.isBeta {
 		args = append(args, "--prerelease")
 	}
 	args = append(args, assets...)
 
-	fmt.Printf("\n🎯 Creating release %s\n", cfg.Version)
+	fmt.Printf("\n🎯 Creating release %s\n", cfg.version)
 
-	if err := RunCommand("gh", args...); err != nil {
-		return fmt.Errorf("failed to create release %s: %w", cfg.Version, err)
+	if err := runCommand("gh", args...); err != nil {
+		return fmt.Errorf("failed to create release %s: %w", cfg.version, err)
 	}
 
 	return nil
 }
 
-// Publish the release to GitHub.
-func PublishRelease(cfg BuildConfig) error {
+// publishRelease publishes the release to GitHub.
+func publishRelease(cfg releaseConfig) error {
 	if err := checkGhCli(); err != nil {
 		return err
 	}
 	// Check if the release already exists. If it does, bail out.
-	release, err := releaseExists(cfg.ReleaseRepo, cfg.Version)
+	release, err := releaseExists(cfg.releaseRepo, cfg.version)
 	if err != nil {
 		return err
 	}
@@ -176,7 +200,7 @@ func PublishRelease(cfg BuildConfig) error {
 		return err
 	}
 	if len(assets) == 0 {
-		return fmt.Errorf("no release assets found in %s", cfg.ArtifactsDir)
+		return fmt.Errorf("no release assets found in %s", cfg.artifactsDir)
 	}
 
 	// Get the GitHub Actions run number, or use "local" if not set.

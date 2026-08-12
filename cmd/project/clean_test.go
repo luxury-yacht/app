@@ -30,10 +30,10 @@ func TestCleanBuildOutputsPreservesWailsSources(t *testing.T) {
 		}
 	}
 
-	cfg := BuildConfig{
-		BuildDir:     buildDir,
-		ArtifactsDir: filepath.Join(root, "artifacts"),
-		ManifestPath: manifestPath,
+	cfg := cleanConfig{
+		buildDir:     buildDir,
+		artifactsDir: filepath.Join(root, "artifacts"),
+		manifestPath: manifestPath,
 	}
 	originalWorkingDirectory, err := os.Getwd()
 	if err != nil {
@@ -43,7 +43,7 @@ func TestCleanBuildOutputsPreservesWailsSources(t *testing.T) {
 		t.Fatal(err)
 	}
 	t.Cleanup(func() { _ = os.Chdir(originalWorkingDirectory) })
-	if err := CleanBuildOutputs(cfg); err != nil {
+	if err := cleanBuildOutputs(cfg); err != nil {
 		t.Fatalf("CleanBuildOutputs() error = %v", err)
 	}
 
@@ -81,7 +81,7 @@ func TestCleanFrontendOutputsRemovesGeneratedState(t *testing.T) {
 		}
 	}
 
-	if err := CleanFrontendOutputs(BuildConfig{FrontendDir: frontendDir}); err != nil {
+	if err := cleanFrontendOutputs(cleanConfig{frontendDir: frontendDir}); err != nil {
 		t.Fatalf("CleanFrontendOutputs() error = %v", err)
 	}
 	for _, path := range []string{"dist", "coverage", "node_modules"} {

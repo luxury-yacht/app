@@ -8,16 +8,16 @@ import (
 	"sort"
 )
 
-// CheckWailsBindings regenerates the pinned Wails v3 TypeScript model in an
+// checkWailsBindings regenerates the pinned Wails v3 TypeScript model in an
 // isolated directory and fails when the committed bindings have drifted.
-func CheckWailsBindings(cfg BuildConfig) error {
+func checkWailsBindings() error {
 	generatedDir, err := os.MkdirTemp("", "luxury-yacht-wails-bindings-")
 	if err != nil {
 		return fmt.Errorf("create temporary bindings directory: %w", err)
 	}
 	defer os.RemoveAll(generatedDir)
 
-	if err := RunCommand(
+	if err := runCommand(
 		"wails3",
 		"generate", "bindings",
 		"-ts",
@@ -31,16 +31,16 @@ func CheckWailsBindings(cfg BuildConfig) error {
 		return fmt.Errorf("generate Wails bindings: %w", err)
 	}
 
-	committedDir := filepath.Join(cfg.FrontendDir, "bindings")
-	if err := CompareDirectoryTrees(committedDir, generatedDir); err != nil {
+	committedDir := filepath.Join(projectFrontendDir, "bindings")
+	if err := compareDirectoryTrees(committedDir, generatedDir); err != nil {
 		return fmt.Errorf("wails bindings are stale; run `wails3 generate bindings -ts -i -d frontend/bindings -clean -time-type string -names ./...`: %w", err)
 	}
 	return nil
 }
 
-// CompareDirectoryTrees compares file names and contents while ignoring
+// compareDirectoryTrees compares file names and contents while ignoring
 // directory metadata, which is not part of the generated binding contract.
-func CompareDirectoryTrees(expectedRoot, actualRoot string) error {
+func compareDirectoryTrees(expectedRoot, actualRoot string) error {
 	expected, err := directoryFiles(expectedRoot)
 	if err != nil {
 		return fmt.Errorf("read expected directory: %w", err)
