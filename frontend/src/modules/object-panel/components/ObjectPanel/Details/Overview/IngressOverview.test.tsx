@@ -2,13 +2,12 @@
  * frontend/src/modules/object-panel/components/ObjectPanel/Details/Overview/IngressOverview.test.tsx
  */
 
-import { partialModelFixture } from '@/test-utils/partialModelFixture';
-
-import { ingress } from '@core/backend-api/models';
+import type { ingress } from '@core/backend-api/models';
 import type React from 'react';
 import { act } from 'react';
 import * as ReactDOM from 'react-dom/client';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
+import { partialModelFixture } from '@/test-utils/partialModelFixture';
 import { ingressDescriptor } from './descriptors/ingress';
 import { OverviewRenderer } from './OverviewRenderer';
 

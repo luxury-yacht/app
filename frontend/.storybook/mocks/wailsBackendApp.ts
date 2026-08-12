@@ -3,7 +3,7 @@
  * Works by setting an override used by the Storybook Wails v3 transport.
  */
 
-import { backend } from '@core/backend-api/models';
+import type { backend } from '@core/backend-api/models';
 
 // Default app info returned when no override is set.
 const defaultAppInfo: backend.AppInfo = {

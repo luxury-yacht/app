@@ -7,7 +7,7 @@
  * (ResourceHeader / ResourceMetadata).
  */
 
-import { hpa, limitrange, poddisruptionbudget, resourcequota } from '@core/backend-api/models';
+import type { hpa, limitrange, poddisruptionbudget, resourcequota } from '@core/backend-api/models';
 import { ObjectPanelLink } from '@shared/components/ObjectPanelLink';
 import { buildRequiredRelatedObjectReference } from '@shared/utils/objectIdentity';
 import { withStableListKeys } from '@shared/utils/stableListKeys';

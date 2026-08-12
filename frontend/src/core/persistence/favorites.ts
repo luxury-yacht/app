@@ -5,7 +5,7 @@
  * Mirrors the pattern established in clusterTabOrder.ts.
  */
 
-import { backend } from '@core/backend-api/models';
+import type { backend } from '@core/backend-api/models';
 import {
   ALL_MULTISELECT_FILTER,
   type MultiSelectFilterSelection,
@@ -133,30 +133,30 @@ const toBackendSelection = (
 });
 
 const toBackendFavorite = (favorite: Favorite): backend.Favorite => ({
-    ...favorite,
-    panes: Object.fromEntries(
-      Object.entries(favorite.panes).map(([key, pane]) => [
-        key,
-        {
-          filters: {
-            ...pane.filters,
-            kinds: toBackendSelection(pane.filters.kinds),
-            namespaces: toBackendSelection(pane.filters.namespaces),
-            clusters: toBackendSelection(pane.filters.clusters),
-            queryFacets: pane.filters.queryFacets
-              ? Object.fromEntries(
-                  Object.entries(pane.filters.queryFacets).map(([facetKey, selection]) => [
-                    facetKey,
-                    toBackendSelection(selection),
-                  ])
-                )
-              : undefined,
-          },
-          tableState: pane.tableState,
+  ...favorite,
+  panes: Object.fromEntries(
+    Object.entries(favorite.panes).map(([key, pane]) => [
+      key,
+      {
+        filters: {
+          ...pane.filters,
+          kinds: toBackendSelection(pane.filters.kinds),
+          namespaces: toBackendSelection(pane.filters.namespaces),
+          clusters: toBackendSelection(pane.filters.clusters),
+          queryFacets: pane.filters.queryFacets
+            ? Object.fromEntries(
+                Object.entries(pane.filters.queryFacets).map(([facetKey, selection]) => [
+                  facetKey,
+                  toBackendSelection(selection),
+                ])
+              )
+            : undefined,
         },
-      ])
-    ),
-  });
+        tableState: pane.tableState,
+      },
+    ])
+  ),
+});
 
 // ---------- Internal state ----------
 

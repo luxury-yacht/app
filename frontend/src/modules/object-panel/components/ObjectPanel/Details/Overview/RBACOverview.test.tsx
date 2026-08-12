@@ -6,9 +6,7 @@
  * via the OverviewContext.
  */
 
-import { partialModelFixture } from '@/test-utils/partialModelFixture';
-
-import {
+import type {
   clusterrole,
   clusterrolebinding,
   role,
@@ -19,6 +17,7 @@ import type React from 'react';
 import { act } from 'react';
 import * as ReactDOM from 'react-dom/client';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
+import { partialModelFixture } from '@/test-utils/partialModelFixture';
 import {
   clusterRoleBindingDescriptor,
   clusterRoleDescriptor,

@@ -6,7 +6,7 @@
  * useObjectPanel); everything else reads the raw ingress.IngressDetails DTO.
  */
 
-import { ingress } from '@core/backend-api/models';
+import type { ingress } from '@core/backend-api/models';
 import { ObjectPanelLink } from '@shared/components/ObjectPanelLink';
 import { StatusChip } from '@shared/components/StatusChip';
 import { buildRequiredObjectReference } from '@shared/utils/objectIdentity';

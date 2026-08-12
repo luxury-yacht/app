@@ -54,7 +54,7 @@ export function createViteConfig(
     : [];
 
   return {
-    plugins: [wails('./bindings'), react(), ...sentryPlugins],
+    plugins: [react(), wails('./bindings'), ...sentryPlugins],
     define: {
       __SENTRY_ENABLED__: JSON.stringify(productionBuild),
       __SENTRY_FRONTEND_DSN__: JSON.stringify(productionBuild ? frontendDSN : ''),

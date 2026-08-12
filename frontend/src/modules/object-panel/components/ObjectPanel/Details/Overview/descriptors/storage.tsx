@@ -7,7 +7,11 @@
  * and the shared status block.
  */
 
-import { persistentvolume, persistentvolumeclaim, storageclass } from '@core/backend-api/models';
+import type {
+  persistentvolume,
+  persistentvolumeclaim,
+  storageclass,
+} from '@core/backend-api/models';
 import { ObjectPanelLink } from '@shared/components/ObjectPanelLink';
 import { StatusChip, type StatusChipVariant } from '@shared/components/StatusChip';
 import { buildRequiredObjectReference } from '@shared/utils/objectIdentity';

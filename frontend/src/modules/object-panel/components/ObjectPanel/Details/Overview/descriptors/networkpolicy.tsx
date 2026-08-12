@@ -5,7 +5,7 @@
  * NetworkPolicyOverview.tsx.
  */
 
-import { networkpolicy } from '@core/backend-api/models';
+import type { networkpolicy } from '@core/backend-api/models';
 import { withStableListKeys } from '@shared/utils/stableListKeys';
 import type React from 'react';
 import type { OverviewDescriptor } from '../schema';

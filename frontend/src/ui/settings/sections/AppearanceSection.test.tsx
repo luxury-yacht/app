@@ -4,12 +4,11 @@
  * Tests for Appearance settings interactions and preference workflow wiring.
  */
 
-import { partialModelFixture } from '@/test-utils/partialModelFixture';
-
-import { types } from '@core/backend-api/models';
+import type { types } from '@core/backend-api/models';
 import { act } from 'react';
 import * as ReactDOM from 'react-dom/client';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
+import { partialModelFixture } from '@/test-utils/partialModelFixture';
 import { requireValue } from '@/test-utils/requireValue';
 import AppearanceSection, { reorderThemeByOffset } from './AppearanceSection';
 

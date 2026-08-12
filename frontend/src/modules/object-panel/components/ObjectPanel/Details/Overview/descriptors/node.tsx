@@ -8,7 +8,7 @@
  * `drainInProgress`/`onOpenDrain` from the OverviewContext the renderer threads through.
  */
 
-import { nodes } from '@core/backend-api/models';
+import type { nodes } from '@core/backend-api/models';
 import { DrainIcon } from '@shared/components/icons/SharedIcons';
 import { StatusChip, type StatusChipVariant } from '@shared/components/StatusChip';
 import { withStableListKeys } from '@shared/utils/stableListKeys';

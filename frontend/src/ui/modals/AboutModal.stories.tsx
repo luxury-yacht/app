@@ -4,10 +4,9 @@
  * Storybook stories for the AboutModal component.
  */
 
-import { partialModelFixture } from '@/test-utils/partialModelFixture';
-
-import { backend } from '@core/backend-api/models';
+import type { backend } from '@core/backend-api/models';
 import type { Meta, StoryObj } from '@storybook/react';
+import { partialModelFixture } from '@/test-utils/partialModelFixture';
 import { KeyboardProviderDecorator } from '../../../.storybook/decorators/KeyboardProviderDecorator';
 import { setMockAppInfo } from '../../../.storybook/mocks/wailsBackendApp';
 import AboutModal from './AboutModal';

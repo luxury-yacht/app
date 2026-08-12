@@ -4,7 +4,7 @@
  * HelmRelease Overview descriptor (X1). Presentation ported verbatim from HelmOverview.tsx.
  */
 
-import { helm } from '@core/backend-api/models';
+import type { helm } from '@core/backend-api/models';
 import { useObjectPanel } from '@modules/object-panel/hooks/useObjectPanel';
 import { ObjectPanelLink } from '@shared/components/ObjectPanelLink';
 import { backendStatusTextClass } from '@shared/utils/backendStatusPresentation';

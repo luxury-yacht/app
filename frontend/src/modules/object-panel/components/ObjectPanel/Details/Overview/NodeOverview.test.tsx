@@ -7,13 +7,12 @@
  * NodeDetails-shaped DTO and a context object.
  */
 
-import { partialModelFixture } from '@/test-utils/partialModelFixture';
-
-import { nodes } from '@core/backend-api/models';
+import type { nodes } from '@core/backend-api/models';
 import type React from 'react';
 import { act } from 'react';
 import * as ReactDOM from 'react-dom/client';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
+import { partialModelFixture } from '@/test-utils/partialModelFixture';
 import { nodeDescriptor } from './descriptors/node';
 import { OverviewRenderer } from './OverviewRenderer';
 import type { OverviewContext } from './schema';

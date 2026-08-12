@@ -6,7 +6,7 @@
  * per-kind UI, so they ride along as `widget` items reusing the existing JobTimeline component.
  */
 
-import { cronjob, job } from '@core/backend-api/models';
+import type { cronjob, job } from '@core/backend-api/models';
 import { useObjectPanel } from '@modules/object-panel/hooks/useObjectPanel';
 import { StatusChip, type StatusChipVariant } from '@shared/components/StatusChip';
 import Tooltip from '@shared/components/Tooltip';

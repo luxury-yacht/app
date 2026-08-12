@@ -13,6 +13,7 @@ import (
 )
 
 func TestGenerateWritesManifestFromWailsConfigAndEnvironment(t *testing.T) {
+	withoutEnvironment(t, sentryBackendDSN)
 	root := t.TempDir()
 	configPath := filepath.Join(root, "config.yml")
 	envPath := filepath.Join(root, ".env")
@@ -72,6 +73,7 @@ func TestGenerateDoesNotOverrideExportedEnvironment(t *testing.T) {
 }
 
 func TestGenerateAllowsMissingEnvironmentFileForStableBuild(t *testing.T) {
+	withoutEnvironment(t, sentryBackendDSN)
 	root := t.TempDir()
 	configPath := filepath.Join(root, "config.yml")
 	require.NoError(t, os.WriteFile(configPath, []byte("info:\n  version: 2.0.0\n"), 0o600))
@@ -151,6 +153,19 @@ type failingWriter struct{}
 
 func (failingWriter) Write([]byte) (int, error) {
 	return 0, errors.New("write failed")
+}
+
+func withoutEnvironment(t *testing.T, name string) {
+	t.Helper()
+	previous, existed := os.LookupEnv(name)
+	require.NoError(t, os.Unsetenv(name))
+	t.Cleanup(func() {
+		if existed {
+			require.NoError(t, os.Setenv(name, previous))
+			return
+		}
+		require.NoError(t, os.Unsetenv(name))
+	})
 }
 
 func TestGenerateReportsSummaryWriteFailure(t *testing.T) {

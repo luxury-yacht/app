@@ -10,14 +10,14 @@
  * functions read `context.clusterId`/`context.clusterName`.
  */
 
-import {
+import type {
   clusterrole,
   clusterrolebinding,
-  type resourcemodel,
+  resourcemodel,
   role,
   rolebinding,
   serviceaccount,
-  type types,
+  types,
 } from '@core/backend-api/models';
 import { ObjectPanelLink } from '@shared/components/ObjectPanelLink';
 import { StatusChip } from '@shared/components/StatusChip';
@@ -298,7 +298,10 @@ export const roleBindingDescriptor: OverviewDescriptor<RoleBindingDetails> = {
         fullWidth: true,
         hidden: (d) => !(d.subjects && d.subjects.length > 0),
         render: (d, context) => (
-          <SubjectGroups subjects={d.subjects ?? []} clusterMeta={clusterMetaFromContext(context)} />
+          <SubjectGroups
+            subjects={d.subjects ?? []}
+            clusterMeta={clusterMetaFromContext(context)}
+          />
         ),
       },
     ],
@@ -358,7 +361,10 @@ export const clusterRoleBindingDescriptor: OverviewDescriptor<ClusterRoleBinding
         fullWidth: true,
         hidden: (d) => !(d.subjects && d.subjects.length > 0),
         render: (d, context) => (
-          <SubjectGroups subjects={d.subjects ?? []} clusterMeta={clusterMetaFromContext(context)} />
+          <SubjectGroups
+            subjects={d.subjects ?? []}
+            clusterMeta={clusterMetaFromContext(context)}
+          />
         ),
       },
     ],

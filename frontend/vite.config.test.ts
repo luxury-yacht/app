@@ -11,9 +11,11 @@ import { parse } from 'yaml';
 
 const sentryPluginMock = vi.hoisted(() => vi.fn(() => [{ name: 'sentry-vite-plugin' }]));
 const wailsPluginMock = vi.hoisted(() => vi.fn(() => ({ name: 'wails-vite-plugin' })));
+const reactPluginMock = vi.hoisted(() => vi.fn(() => ({ name: 'react-vite-plugin' })));
 
 vi.mock('@sentry/vite-plugin', () => ({ sentryVitePlugin: sentryPluginMock }));
 vi.mock('@wailsio/runtime/plugins/vite', () => ({ default: wailsPluginMock }));
+vi.mock('@vitejs/plugin-react', () => ({ default: reactPluginMock }));
 
 import { createViteConfig } from './vite.config';
 
@@ -41,7 +43,10 @@ describe('Vite configuration', () => {
     const config = createViteConfig({ WAILS_VITE_PORT: '9246' }, 'serve', 'development');
 
     expect(wailsPluginMock).toHaveBeenCalledWith('./bindings');
-    expect(config.plugins).toContainEqual({ name: 'wails-vite-plugin' });
+    expect(config.plugins?.slice(0, 2)).toEqual([
+      { name: 'react-vite-plugin' },
+      { name: 'wails-vite-plugin' },
+    ]);
     expect(config.server).toMatchObject({ host: '127.0.0.1', port: 9246 });
   });
 

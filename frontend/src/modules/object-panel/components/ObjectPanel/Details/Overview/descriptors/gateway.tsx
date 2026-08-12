@@ -14,13 +14,13 @@
  * `{kind:'status'}` item — conditions render as a field and `summary` is not surfaced.
  */
 
-import {
+import type {
   backendtlspolicy,
   gateway,
   gatewayclass,
   listenerset,
   referencegrant,
-  type resourcemodel,
+  resourcemodel,
   types,
 } from '@core/backend-api/models';
 import { ObjectPanelLink } from '@shared/components/ObjectPanelLink';

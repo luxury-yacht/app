@@ -13,6 +13,7 @@ info:
   copyright: "Copyright © 2025-2026 Luxury Yacht"
   comments: "Luxury Yacht desktop application"
   version: "1.11.6"
+  cfBundleIconName: "appicon"
 
 # Repository-owned release metadata that is not part of Wails' platform metadata.
 luxuryYacht:

@@ -2,12 +2,11 @@
  * frontend/src/modules/object-panel/components/ObjectPanel/Details/Overview/HelmOverview.test.tsx
  */
 
-import { partialModelFixture } from '@/test-utils/partialModelFixture';
-
-import { helm } from '@core/backend-api/models';
+import type { helm } from '@core/backend-api/models';
 import { act } from 'react';
 import * as ReactDOM from 'react-dom/client';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
+import { partialModelFixture } from '@/test-utils/partialModelFixture';
 import { helmReleaseDescriptor } from './descriptors/helm';
 import { OverviewRenderer } from './OverviewRenderer';
 

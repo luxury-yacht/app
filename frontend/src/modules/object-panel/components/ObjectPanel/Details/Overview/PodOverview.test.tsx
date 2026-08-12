@@ -4,13 +4,12 @@
  * Exercises the Pod Overview through the descriptor-driven renderer (X1).
  */
 
-import { partialModelFixture } from '@/test-utils/partialModelFixture';
-
-import { types } from '@core/backend-api/models';
+import type { types } from '@core/backend-api/models';
 import type React from 'react';
 import { act } from 'react';
 import * as ReactDOM from 'react-dom/client';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
+import { partialModelFixture } from '@/test-utils/partialModelFixture';
 import { buildObjectPanelPodsScope } from '../../Pods/objectPanelPodsScope';
 import type { PanelObjectData } from '../../types';
 import { podDescriptor } from './descriptors/pod';

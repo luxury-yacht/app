@@ -4,7 +4,7 @@
  * ConfigMap Overview descriptor (X1 P0). Presentation moved verbatim from ConfigMapOverview.tsx.
  */
 
-import { configmap } from '@core/backend-api/models';
+import type { configmap } from '@core/backend-api/models';
 import type { OverviewDescriptor } from '../schema';
 import { renderUsedByLinks } from './shared';
 

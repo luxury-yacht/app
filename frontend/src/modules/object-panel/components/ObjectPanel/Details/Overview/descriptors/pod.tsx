@@ -4,7 +4,7 @@
  * Pod Overview descriptor (X1). Presentation ported verbatim from PodOverview.tsx.
  */
 
-import { types } from '@core/backend-api/models';
+import type { types } from '@core/backend-api/models';
 import { ObjectPanelLink } from '@shared/components/ObjectPanelLink';
 import { StatusChip, type StatusChipVariant } from '@shared/components/StatusChip';
 import {

@@ -12,7 +12,7 @@
  * from the renderer context (`context.hpaManaged`).
  */
 
-import { daemonset, deployment, replicaset, statefulset } from '@core/backend-api/models';
+import type { daemonset, deployment, replicaset, statefulset } from '@core/backend-api/models';
 import { ObjectPanelLink } from '@shared/components/ObjectPanelLink';
 import { StatusChip, type StatusChipVariant } from '@shared/components/StatusChip';
 import { buildRequiredObjectReference } from '@shared/utils/objectIdentity';

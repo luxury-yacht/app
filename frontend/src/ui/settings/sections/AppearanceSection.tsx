@@ -5,7 +5,7 @@
  * accent, link, saved themes).
  */
 
-import { types } from '@core/backend-api/models';
+import type { types } from '@core/backend-api/models';
 import { ErrorSurface } from '@shared/components/errors/ErrorSurface';
 import {
   AppearanceModeIcon,

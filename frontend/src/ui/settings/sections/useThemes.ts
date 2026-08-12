@@ -1,4 +1,4 @@
-import { types } from '@core/backend-api/models';
+import type { types } from '@core/backend-api/models';
 import { errorHandler } from '@utils/errorHandler';
 import { useCallback, useEffect, useState } from 'react';
 import {

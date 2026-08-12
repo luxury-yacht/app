@@ -55,4 +55,14 @@ func TestWailsProjectGeneratesModernMacOSIconAssets(t *testing.T) {
 	legacyIcon, err := os.ReadFile("build/appicon.png")
 	require.NoError(t, err)
 	require.Equal(t, legacyIcon, icon)
+
+	config, err := os.ReadFile("build/config.yml")
+	require.NoError(t, err)
+	require.Contains(t, string(config), `cfBundleIconName: "appicon"`)
+	for _, path := range []string{"build/darwin/Info.plist", "build/darwin/Info.dev.plist"} {
+		plist, err := os.ReadFile(path)
+		require.NoError(t, err)
+		require.Contains(t, string(plist), "<key>CFBundleIconName</key>")
+		require.Contains(t, string(plist), "<string>appicon</string>")
+	}
 }

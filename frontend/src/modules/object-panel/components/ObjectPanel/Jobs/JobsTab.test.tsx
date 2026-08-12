@@ -5,14 +5,13 @@
  * panel-scoped clusterId to useGridTablePersistence.
  */
 
-import { partialModelFixture } from '@/test-utils/partialModelFixture';
-
-import { types } from '@core/backend-api/models';
+import type { types } from '@core/backend-api/models';
 import { OBJECT_ACTION_IDS } from '@shared/actions/objectActionContract';
 import type { GridTableProps } from '@shared/components/tables/GridTable';
 import { act } from 'react';
 import * as ReactDOM from 'react-dom/client';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
+import { partialModelFixture } from '@/test-utils/partialModelFixture';
 import { requireReactElement } from '@/test-utils/requireReactElement';
 import { requireValue } from '@/test-utils/requireValue';
 import { JobsTab } from './JobsTab';

@@ -1,4 +1,4 @@
-import { events, type resourcemodel } from '@core/backend-api/models';
+import type { events, resourcemodel } from '@core/backend-api/models';
 import type { ResourceLink } from '@core/refresh/types';
 import { LiveAgeText } from '@shared/components/LiveAgeText';
 import { ObjectPanelLink } from '@shared/components/ObjectPanelLink';

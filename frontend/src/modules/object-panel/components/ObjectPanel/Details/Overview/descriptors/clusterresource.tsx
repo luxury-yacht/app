@@ -9,7 +9,7 @@
  * namespace value on the DTO).
  */
 
-import { admission, apiextensions, ingressclass, namespaces } from '@core/backend-api/models';
+import type { admission, apiextensions, ingressclass, namespaces } from '@core/backend-api/models';
 import { ObjectPanelLink } from '@shared/components/ObjectPanelLink';
 import { StatusChip } from '@shared/components/StatusChip';
 import { buildRequiredObjectReference } from '@shared/utils/objectIdentity';

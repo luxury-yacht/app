@@ -7,7 +7,7 @@
  * rather than from useObjectPanel — ObjectPanelLink itself still uses the hook for navigation.
  */
 
-import { endpointslice } from '@core/backend-api/models';
+import type { endpointslice } from '@core/backend-api/models';
 import { ObjectPanelLink } from '@shared/components/ObjectPanelLink';
 import { StatusChip } from '@shared/components/StatusChip';
 import { buildRequiredObjectReference } from '@shared/utils/objectIdentity';

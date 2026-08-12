@@ -4,7 +4,7 @@
  * Service Overview descriptor (X1 P2). Presentation ported verbatim from ServiceOverview.tsx.
  */
 
-import { service } from '@core/backend-api/models';
+import type { service } from '@core/backend-api/models';
 import { StatusChip } from '@shared/components/StatusChip';
 import { withStableListKeys } from '@shared/utils/stableListKeys';
 import type React from 'react';

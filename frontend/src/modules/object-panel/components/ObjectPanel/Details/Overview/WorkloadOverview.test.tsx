@@ -8,13 +8,12 @@
  * `context`, not the DTO.
  */
 
-import { partialModelFixture } from '@/test-utils/partialModelFixture';
-
-import { daemonset, deployment, replicaset, statefulset } from '@core/backend-api/models';
+import type { daemonset, deployment, replicaset, statefulset } from '@core/backend-api/models';
 import type React from 'react';
 import { act } from 'react';
 import * as ReactDOM from 'react-dom/client';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
+import { partialModelFixture } from '@/test-utils/partialModelFixture';
 import {
   daemonSetDescriptor,
   deploymentDescriptor,

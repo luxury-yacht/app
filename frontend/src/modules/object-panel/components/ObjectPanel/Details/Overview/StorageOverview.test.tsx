@@ -5,13 +5,16 @@
  * OverviewRenderer. Each case renders the matching descriptor with a DTO-shaped fixture.
  */
 
-import { partialModelFixture } from '@/test-utils/partialModelFixture';
-
-import { persistentvolume, persistentvolumeclaim, storageclass } from '@core/backend-api/models';
+import type {
+  persistentvolume,
+  persistentvolumeclaim,
+  storageclass,
+} from '@core/backend-api/models';
 import type React from 'react';
 import { act } from 'react';
 import * as ReactDOM from 'react-dom/client';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
+import { partialModelFixture } from '@/test-utils/partialModelFixture';
 import { pvcDescriptor, pvDescriptor, storageClassDescriptor } from './descriptors/storage';
 import { OverviewRenderer } from './OverviewRenderer';
 
