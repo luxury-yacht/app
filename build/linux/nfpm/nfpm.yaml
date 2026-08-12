@@ -6,14 +6,14 @@
 name: "luxury-yacht"
 arch: ${GOARCH}
 platform: "linux"
-version: "1.11.6"
+version: "${PACKAGE_VERSION}"
 section: "default"
 priority: "extra"
 maintainer: ${GIT_COMMITTER_NAME} <${GIT_COMMITTER_EMAIL}>
 description: "Luxury Yacht is a desktop app for managing Kubernetes clusters. Sail the seas of Kubernetes in style!"
 vendor: "Luxury Yacht"
-homepage: "https://wails.io"
-license: "MIT"
+homepage: "https://luxury-yacht.app"
+license: "GPLv3"
 release: "1"
 
 contents:

@@ -39,6 +39,16 @@ func TestWailsProjectUsesFreshInitBuildDefaults(t *testing.T) {
 	require.NotContains(t, string(config), "build/bin")
 }
 
+func TestLinuxPackagesUseCanonicalProjectVersion(t *testing.T) {
+	nfpmConfig := readTestFile(t, repositoryPath("build", "linux", "nfpm", "nfpm.yaml"))
+	require.Contains(t, nfpmConfig, `version: "${PACKAGE_VERSION}"`)
+	require.NotContains(t, nfpmConfig, `version: "1.11.6"`)
+
+	linuxTaskfile := readTestFile(t, repositoryPath("build", "linux", "Taskfile.yml"))
+	require.Contains(t, linuxTaskfile, "sh: go run ./cmd/project version")
+	require.Contains(t, linuxTaskfile, `PACKAGE_VERSION: '{{.PROJECT_VERSION}}'`)
+}
+
 func TestWailsProjectUsesFrameworkSingleInstanceHandling(t *testing.T) {
 	mainSource := readTestFile(t, repositoryPath("main.go"))
 	require.Contains(t, mainSource, "&application.SingleInstanceOptions{")

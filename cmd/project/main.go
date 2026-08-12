@@ -14,7 +14,7 @@ func main() {
 
 func run(args []string) error {
 	if len(args) != 1 {
-		return fmt.Errorf("usage: project <backend-coverage|bindings|build-metadata|clean-all|clean-build|clean-frontend|config|fmt|go-mod-update|go-mod-update-check|release-app|release-site|reset|windows-version>")
+		return fmt.Errorf("usage: project <backend-coverage|bindings|build-metadata|clean-all|clean-build|clean-frontend|config|fmt|go-mod-update|go-mod-update-check|release-app|release-site|reset|version|windows-version>")
 	}
 
 	switch args[0] {
@@ -68,6 +68,12 @@ func run(args []string) error {
 			fmt.Println(directory)
 		}
 		return resetErr
+	case "version":
+		metadata, err := readProjectMetadata(projectConfigPath)
+		if err != nil {
+			return fmt.Errorf("read app version: %w", err)
+		}
+		return writeProjectVersion(os.Stdout, metadata.Info.Version)
 	case "windows-version":
 		metadata, err := readProjectMetadata(projectConfigPath)
 		if err != nil {

@@ -134,3 +134,8 @@ func writeProjectConfig(output io.Writer) error {
 	encoder.SetIndent("", "  ")
 	return encoder.Encode(config)
 }
+
+func writeProjectVersion(output io.Writer, version string) error {
+	_, err := fmt.Fprintln(output, strings.TrimSpace(version))
+	return err
+}
