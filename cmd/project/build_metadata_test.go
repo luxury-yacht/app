@@ -1,4 +1,4 @@
-package buildmeta
+package main
 
 import (
 	"bytes"
@@ -26,7 +26,7 @@ luxuryYacht:
 	require.NoError(t, os.WriteFile(envPath, []byte("SENTRY_BACKEND_DSN=https://public@example.com/1\n"), 0o600))
 	var summary bytes.Buffer
 
-	manifest, err := Generate(Options{
+	manifest, err := generateBuildMetadata(buildMetadataOptions{
 		ConfigPath: configPath,
 		EnvPath:    envPath,
 		OutputPath: outputPath,
@@ -45,7 +45,7 @@ luxuryYacht:
 
 	data, err := os.ReadFile(outputPath)
 	require.NoError(t, err)
-	var stored Manifest
+	var stored buildManifest
 	require.NoError(t, json.Unmarshal(data, &stored))
 	require.Equal(t, manifest, stored)
 }
@@ -60,7 +60,7 @@ func TestGenerateDoesNotOverrideExportedEnvironment(t *testing.T) {
 `), 0o600))
 	require.NoError(t, os.WriteFile(envPath, []byte("SENTRY_BACKEND_DSN=https://file@example.com/1\n"), 0o600))
 
-	manifest, err := Generate(Options{
+	manifest, err := generateBuildMetadata(buildMetadataOptions{
 		ConfigPath: configPath,
 		EnvPath:    envPath,
 		OutputPath: filepath.Join(root, "generated.json"),
@@ -78,7 +78,7 @@ func TestGenerateAllowsMissingEnvironmentFileForStableBuild(t *testing.T) {
 	configPath := filepath.Join(root, "config.yml")
 	require.NoError(t, os.WriteFile(configPath, []byte("info:\n  version: 2.0.0\n"), 0o600))
 
-	manifest, err := Generate(Options{
+	manifest, err := generateBuildMetadata(buildMetadataOptions{
 		ConfigPath: configPath,
 		EnvPath:    filepath.Join(root, ".env"),
 		OutputPath: filepath.Join(root, "generated.json"),
@@ -139,7 +139,7 @@ func TestGenerateReportsInvalidInputs(t *testing.T) {
 				envPath = filepath.Join(caseRoot, ".env")
 				require.NoError(t, os.WriteFile(envPath, []byte(test.env), 0o600))
 			}
-			_, err := Generate(Options{
+			_, err := generateBuildMetadata(buildMetadataOptions{
 				ConfigPath: configPath,
 				EnvPath:    envPath,
 				OutputPath: test.output,
@@ -173,7 +173,7 @@ func TestGenerateReportsSummaryWriteFailure(t *testing.T) {
 	configPath := filepath.Join(root, "config.yml")
 	require.NoError(t, os.WriteFile(configPath, []byte("info:\n  version: 2.0.0\n"), 0o600))
 
-	_, err := Generate(Options{
+	_, err := generateBuildMetadata(buildMetadataOptions{
 		ConfigPath: configPath,
 		OutputPath: filepath.Join(root, "generated.json"),
 		Summary:    failingWriter{},
@@ -191,7 +191,7 @@ func TestWindowsNumericVersion(t *testing.T) {
 	}
 	for version, want := range tests {
 		t.Run(version, func(t *testing.T) {
-			got, err := WindowsNumericVersion(version)
+			got, err := windowsNumericVersion(version)
 			require.NoError(t, err)
 			require.Equal(t, want, got)
 		})
@@ -199,6 +199,6 @@ func TestWindowsNumericVersion(t *testing.T) {
 }
 
 func TestWindowsNumericVersionRejectsInvalidVersion(t *testing.T) {
-	_, err := WindowsNumericVersion("beta")
+	_, err := windowsNumericVersion("beta")
 	require.EqualError(t, err, `invalid semantic version "beta"`)
 }

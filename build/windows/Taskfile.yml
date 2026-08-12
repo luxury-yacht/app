@@ -105,7 +105,7 @@ tasks:
       INSTALL_SCOPE: '{{.INSTALL_SCOPE | default "machine"}}'
       WINDOWS_VERSION: '{{.WINDOWS_VERSION}}'
       PROJECT_WINDOWS_VERSION:
-        sh: go run ./cmd/windowsversion
+        sh: go run ./cmd/project windows-version
 
   generate:syso:
     summary: Generates Windows `.syso` file

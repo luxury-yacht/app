@@ -1,4 +1,4 @@
-package buildmeta
+package main
 
 import (
 	"encoding/json"
@@ -7,7 +7,6 @@ import (
 	"io"
 	"io/fs"
 	"os"
-	"os/exec"
 	"path/filepath"
 	"regexp"
 	"strconv"
@@ -15,7 +14,6 @@ import (
 	"time"
 
 	"github.com/joho/godotenv"
-	"gopkg.in/yaml.v3"
 )
 
 const sentryBackendDSN = "SENTRY_BACKEND_DSN"
@@ -23,7 +21,7 @@ const sentryBackendDSN = "SENTRY_BACKEND_DSN"
 var semanticVersionPattern = regexp.MustCompile(`^v?(\d+)\.(\d+)\.(\d+)(?:-([0-9A-Za-z.-]+))?(?:\+.*)?$`)
 var trailingNumberPattern = regexp.MustCompile(`(\d+)$`)
 
-type Manifest struct {
+type buildManifest struct {
 	BetaExpiry string `json:"betaExpiry,omitempty"`
 	BuildTime  string `json:"buildTime"`
 	IsBeta     bool   `json:"isBeta"`
@@ -32,7 +30,7 @@ type Manifest struct {
 	Version    string `json:"version"`
 }
 
-type Options struct {
+type buildMetadataOptions struct {
 	ConfigPath string
 	EnvPath    string
 	OutputPath string
@@ -41,70 +39,53 @@ type Options struct {
 	Summary    io.Writer
 }
 
-type projectConfig struct {
-	Info struct {
-		Version string `yaml:"version"`
-	} `yaml:"info"`
-	LuxuryYacht struct {
-		BetaExpiryDays int `yaml:"betaExpiryDays"`
-	} `yaml:"luxuryYacht"`
-}
-
-func Generate(options Options) (Manifest, error) {
-	config, err := readConfig(options.ConfigPath)
+func generateBuildMetadata(options buildMetadataOptions) (buildManifest, error) {
+	config, err := readProjectMetadata(options.ConfigPath)
 	if err != nil {
-		return Manifest{}, err
+		return buildManifest{}, err
 	}
 
-	env, err := readOptionalEnv(options.EnvPath)
+	env, err := readOptionalBuildEnvironment(options.EnvPath)
 	if err != nil {
-		return Manifest{}, err
+		return buildManifest{}, err
 	}
 
 	now := time.Now
 	if options.Now != nil {
 		now = options.Now
 	}
-	gitCommit := DefaultGitCommit
+	gitCommit := gitRevParse
 	if options.GitCommit != nil {
 		gitCommit = options.GitCommit
 	}
 
 	buildTime := now().UTC()
 	version := strings.TrimSpace(config.Info.Version)
-	isBeta := strings.Contains(strings.ToLower(version), "beta")
-	manifest := Manifest{
+	beta := isBeta(version)
+	manifest := buildManifest{
 		BuildTime: buildTime.Format(time.RFC3339),
-		IsBeta:    isBeta,
+		IsBeta:    beta,
 		GitCommit: strings.TrimSpace(gitCommit()),
-		SentryDSN: environmentValue(sentryBackendDSN, env),
+		SentryDSN: buildMetadataEnvironmentValue(sentryBackendDSN, env),
 		Version:   version,
 	}
-	if isBeta {
+	if beta {
 		manifest.BetaExpiry = buildTime.AddDate(0, 0, config.LuxuryYacht.BetaExpiryDays).Format(time.RFC3339)
 	}
 
-	if err := writeManifest(options.OutputPath, manifest); err != nil {
-		return Manifest{}, err
+	if err := writeBuildManifest(options.OutputPath, manifest); err != nil {
+		return buildManifest{}, err
 	}
 	if options.Summary != nil {
-		if err := writeSummary(options.Summary, manifest); err != nil {
-			return Manifest{}, err
+		if err := writeBuildMetadataSummary(options.Summary, manifest); err != nil {
+			return buildManifest{}, err
 		}
 	}
 
 	return manifest, nil
 }
 
-func DefaultGitCommit() string {
-	output, err := exec.Command("git", "rev-parse", "--short=9", "HEAD").Output()
-	if err != nil {
-		return ""
-	}
-	return strings.TrimSpace(string(output))
-}
-
-func WindowsNumericVersion(version string) (string, error) {
+func windowsNumericVersion(version string) (string, error) {
 	parts := semanticVersionPattern.FindStringSubmatch(strings.TrimSpace(version))
 	if parts == nil {
 		return "", fmt.Errorf("invalid semantic version %q", version)
@@ -119,22 +100,7 @@ func WindowsNumericVersion(version string) (string, error) {
 	return fmt.Sprintf("%s.%s.%s.%d", parts[1], parts[2], parts[3], build), nil
 }
 
-func readConfig(path string) (projectConfig, error) {
-	data, err := os.ReadFile(path)
-	if err != nil {
-		return projectConfig{}, fmt.Errorf("read Wails config %s: %w", path, err)
-	}
-	var config projectConfig
-	if err := yaml.Unmarshal(data, &config); err != nil {
-		return projectConfig{}, fmt.Errorf("parse Wails config %s: %w", path, err)
-	}
-	if strings.TrimSpace(config.Info.Version) == "" {
-		return projectConfig{}, fmt.Errorf("wails config %s has no info.version", path)
-	}
-	return config, nil
-}
-
-func readOptionalEnv(path string) (map[string]string, error) {
+func readOptionalBuildEnvironment(path string) (map[string]string, error) {
 	if path == "" {
 		return nil, nil
 	}
@@ -148,14 +114,14 @@ func readOptionalEnv(path string) (map[string]string, error) {
 	return values, nil
 }
 
-func environmentValue(name string, fileValues map[string]string) string {
+func buildMetadataEnvironmentValue(name string, fileValues map[string]string) string {
 	if value, exists := os.LookupEnv(name); exists {
 		return strings.TrimSpace(value)
 	}
 	return strings.TrimSpace(fileValues[name])
 }
 
-func writeManifest(path string, manifest Manifest) error {
+func writeBuildManifest(path string, manifest buildManifest) error {
 	if path == "" {
 		return errors.New("build manifest output path is required")
 	}
@@ -172,7 +138,7 @@ func writeManifest(path string, manifest Manifest) error {
 	return nil
 }
 
-func writeSummary(writer io.Writer, manifest Manifest) error {
+func writeBuildMetadataSummary(writer io.Writer, manifest buildManifest) error {
 	if manifest.SentryDSN != "" {
 		manifest.SentryDSN = "<configured>"
 	}

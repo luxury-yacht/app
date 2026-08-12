@@ -6,7 +6,7 @@ tasks:
     internal: true
     run: once
     cmds:
-      - go run ./cmd/buildmeta
+      - go run ./cmd/project build-metadata
 
   go:mod:tidy:
     summary: Runs `go mod tidy`

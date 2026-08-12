@@ -1,4 +1,4 @@
-package projecttools
+package main
 
 import (
 	"os"
@@ -70,9 +70,14 @@ func TestWailsBuildPreparesProjectMetadataWithoutMage(t *testing.T) {
 	taskfile, err := os.ReadFile(repositoryPath("build", "Taskfile.yml"))
 	require.NoError(t, err)
 	require.Contains(t, string(taskfile), "prepare:build:")
-	require.Contains(t, string(taskfile), "go run ./cmd/buildmeta")
+	require.Contains(t, string(taskfile), "go run ./cmd/project build-metadata")
 	require.Contains(t, string(taskfile), "task: prepare:build")
 	require.NotContains(t, string(taskfile), "mage build-assets")
+
+	for _, path := range []string{"cmd/buildmeta", "internal/buildmeta"} {
+		_, err := os.Stat(repositoryPath(path))
+		require.ErrorIs(t, err, os.ErrNotExist)
+	}
 }
 
 func TestWailsProjectGeneratesModernMacOSIconAssets(t *testing.T) {
@@ -125,4 +130,28 @@ func TestProjectUsesWailsTaskRunnerWithoutMage(t *testing.T) {
 		require.NoError(t, err)
 		require.NotContains(t, strings.ToLower(string(contents)), "github.com/magefile/")
 	}
+}
+
+func TestProjectCommandOwnsItsImplementation(t *testing.T) {
+	for _, path := range []string{
+		"app_state.go",
+		"build_metadata.go",
+		"build_config.go",
+		"clean.go",
+		"quality.go",
+		"release.go",
+		"wails_bindings.go",
+		"windows_version.go",
+	} {
+		_, err := os.Stat(repositoryPath("cmd", "project", path))
+		require.NoError(t, err)
+	}
+
+	for _, path := range []string{"internal/projecttools", "cmd/windowsversion"} {
+		_, err := os.Stat(repositoryPath(path))
+		require.ErrorIs(t, err, os.ErrNotExist)
+	}
+
+	windowsTaskfile := readTestFile(t, repositoryPath("build", "windows", "Taskfile.yml"))
+	require.Contains(t, windowsTaskfile, "go run ./cmd/project windows-version")
 }

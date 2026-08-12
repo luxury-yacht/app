@@ -1,4 +1,4 @@
-package projecttools
+package main
 
 import (
 	"fmt"
@@ -62,14 +62,14 @@ type projectMetadata struct {
 func readProjectMetadata(path string) (projectMetadata, error) {
 	data, err := os.ReadFile(path)
 	if err != nil {
-		return projectMetadata{}, err
+		return projectMetadata{}, fmt.Errorf("read Wails config %s: %w", path, err)
 	}
 	var metadata projectMetadata
 	if err := yaml.Unmarshal(data, &metadata); err != nil {
-		return projectMetadata{}, err
+		return projectMetadata{}, fmt.Errorf("parse Wails config %s: %w", path, err)
 	}
 	if strings.TrimSpace(metadata.Info.Version) == "" {
-		return projectMetadata{}, fmt.Errorf("read project metadata from %s: info.version is required", path)
+		return projectMetadata{}, fmt.Errorf("wails config %s has no info.version", path)
 	}
 	return metadata, nil
 }

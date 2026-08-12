@@ -107,7 +107,7 @@ mise config get tools.trivy
 
 The Go directive and Wails requirement in `go.mod` and the Node/npm metadata in
 `frontend/package.json` are compatibility mirrors. Tests in
-`internal/projecttools` check that they match `mise.toml`.
+`cmd/project` check that they match `mise.toml`.
 
 ## Maintainer Documentation
 

@@ -1,4 +1,4 @@
-package projecttools
+package main
 
 import (
 	"io/fs"
