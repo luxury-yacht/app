@@ -115,6 +115,14 @@ service-unavailable response. There is no application-owned loopback listener,
 runtime base-URL discovery, CORS layer, raw browser WebSocket, EventSource, or
 fallback refresh transport.
 
+The service route owns snapshots and validators, permission-shaped failures,
+manual-refresh enqueue/status, telemetry summaries, metrics activation,
+correlation identity, and request-context cancellation. The named streams own
+resource replay/reset and container-log delivery, including their
+backpressure, cancellation, manager replacement, and shutdown behavior. Keep
+those contracts on their framework-owned transports rather than recreating an
+application transport between them.
+
 - Signal-driven refetch keys only on the declared `signalVersions`. Snapshot
   responses also update validators and must not echo into another refetch.
 - Signal versions are opaque equality tokens. Sequence and Kubernetes

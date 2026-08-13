@@ -27,8 +27,10 @@ ordinary DTO or local snapshot projection work.
 
 - Per-cluster initialization order is informer factory and permission checker,
   permission preflight, ordered domain registration, snapshots/queues/streams,
-  manager start, then revalidation. Aggregate mux and loopback HTTP server come
-  afterward.
+  manager start, then revalidation. Publish aggregate request/response and
+  stream routing only after their owning aggregates are ready. Wails owns the
+  `/api/v2` service route and named-stream registration; do not add an
+  application-owned loopback server.
 - `buildRefreshSubsystemForSelection` is the construction chokepoint for startup,
   selector-open, recovery, and governor re-warm. Per-cluster readiness,
   invalidation, and lifecycle wiring belong there.

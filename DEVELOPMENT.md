@@ -121,6 +121,26 @@ The Go directive and Wails requirement in `go.mod` and the Node/npm metadata in
 `frontend/package.json` are compatibility mirrors. Tests in
 `cmd/project` check that they match `mise.toml`.
 
+### Wails Version and Binding Contract
+
+The Wails CLI version in `mise.toml` and backend module version in `go.mod`
+move together. The paired `@wailsio/runtime` version is recorded separately as
+`wails_runtime_version` in `mise.toml` and mirrored in
+`frontend/package.json`; its prerelease suffix does not have to match the Go
+module. Before changing Wails, review the selected release's migration notes
+and source-carried runtime manifest, then update all mirrors together. Do not
+resolve any of these dependencies through `latest`.
+
+Generate committed TypeScript bindings with:
+
+```bash
+wails3 generate bindings -ts -i -d frontend/bindings -clean -time-type string -names ./...
+```
+
+The project contract uses TypeScript interfaces, string timestamps, and named
+calls. Run `wails3 task qc:bindings` to regenerate those bindings in isolation
+and reject any drift from `frontend/bindings`.
+
 ## Maintainer Documentation
 
 Project maintainers can find production configuration and publishing steps in
