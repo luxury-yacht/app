@@ -31,7 +31,7 @@ func newAggregateContainerLogsStreamHandler(subsystems map[string]*system.Subsys
 // Handle forwards the first client frame to the matching cluster handler.
 func (h *aggregateContainerLogsStreamHandler) Handle(
 	ctx context.Context,
-	conn containerlogsstream.Conn,
+	conn containerlogsstream.JSONSender,
 	request containerlogsstream.Request,
 ) error {
 	clusterIDs, _ := refresh.SplitClusterScopeList(request.Scope)

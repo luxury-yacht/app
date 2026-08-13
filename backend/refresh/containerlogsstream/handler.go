@@ -37,9 +37,9 @@ type Handler struct {
 	stopped     bool
 }
 
-// Conn is the transport-neutral JSON connection used by container logs.
+// JSONSender is the transport-neutral JSON sender used by container logs.
 // Wails' StreamConn implements this interface directly.
-type Conn interface {
+type JSONSender interface {
 	SendJSON(v interface{}) error
 }
 
@@ -78,7 +78,7 @@ func NewHandler(client kubernetes.Interface, logger Logger, recorder *telemetry.
 
 type containerLogsStream struct {
 	handler  *Handler
-	conn     Conn
+	conn     JSONSender
 	options  Options
 	stream   string
 	target   string
@@ -86,7 +86,7 @@ type containerLogsStream struct {
 }
 
 // Handle serves one already-routed named-stream request.
-func (h *Handler) Handle(ctx context.Context, conn Conn, request Request) {
+func (h *Handler) Handle(ctx context.Context, conn JSONSender, request Request) {
 	options, err := parseRequest(request)
 	if err != nil {
 		_ = conn.SendJSON(EventPayload{

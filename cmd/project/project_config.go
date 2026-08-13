@@ -163,29 +163,47 @@ func releaseArtifactName(metadata projectMetadata, goos, goarch, format string) 
 	goarch = strings.ToLower(strings.TrimSpace(goarch))
 	format = strings.ToLower(strings.TrimSpace(format))
 
+	var artifactName string
 	switch goos {
 	case "darwin":
-		if format != "dmg" || (goarch != "amd64" && goarch != "arm64") {
-			break
-		}
-		return fmt.Sprintf("%s-%s-macos-%s.dmg", name, version, goarch), nil
+		artifactName = darwinReleaseArtifactName(name, version, goarch, format)
 	case "linux":
-		switch format {
-		case "deb":
-			if goarch == "amd64" || goarch == "arm64" {
-				return fmt.Sprintf("%s_%s_linux_%s.deb", name, version, goarch), nil
-			}
-		case "rpm":
-			rpmArch := map[string]string{"amd64": "x86_64", "arm64": "aarch64"}[goarch]
-			if rpmArch != "" {
-				return fmt.Sprintf("%s-%s-linux-%s.rpm", name, version, rpmArch), nil
-			}
-		}
+		artifactName = linuxReleaseArtifactName(name, version, goarch, format)
 	case "windows":
-		if format == "exe" && (goarch == "amd64" || goarch == "arm64") {
-			return fmt.Sprintf("%s-%s-windows-%s-installer.exe", name, version, goarch), nil
-		}
+		artifactName = windowsReleaseArtifactName(name, version, goarch, format)
+	}
+	if artifactName != "" {
+		return artifactName, nil
 	}
 
 	return "", fmt.Errorf("unsupported release artifact target %s/%s format %s", goos, goarch, format)
+}
+
+func darwinReleaseArtifactName(name, version, goarch, format string) string {
+	if format != "dmg" || !isReleaseArchitecture(goarch) {
+		return ""
+	}
+	return fmt.Sprintf("%s-%s-macos-%s.dmg", name, version, goarch)
+}
+
+func linuxReleaseArtifactName(name, version, goarch, format string) string {
+	if format == "deb" && isReleaseArchitecture(goarch) {
+		return fmt.Sprintf("%s_%s_linux_%s.deb", name, version, goarch)
+	}
+	rpmArch := map[string]string{"amd64": "x86_64", "arm64": "aarch64"}[goarch]
+	if format == "rpm" && rpmArch != "" {
+		return fmt.Sprintf("%s-%s-linux-%s.rpm", name, version, rpmArch)
+	}
+	return ""
+}
+
+func windowsReleaseArtifactName(name, version, goarch, format string) string {
+	if format != "exe" || !isReleaseArchitecture(goarch) {
+		return ""
+	}
+	return fmt.Sprintf("%s-%s-windows-%s-installer.exe", name, version, goarch)
+}
+
+func isReleaseArchitecture(goarch string) bool {
+	return goarch == "amd64" || goarch == "arm64"
 }

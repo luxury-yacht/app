@@ -16,12 +16,14 @@ type refreshServiceHandler struct {
 	handler http.Handler
 }
 
+const refreshSubsystemUnavailableMessage = "refresh subsystem not initialised"
+
 // ServeHTTP is mounted by Wails at /api/v2. The framework strips that prefix
 // before dispatch, so every route in the published mux is mount-relative.
 func (a *App) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 	published := a.refreshService.Load()
 	if published == nil || published.handler == nil {
-		http.Error(w, "refresh subsystem not initialised", http.StatusServiceUnavailable)
+		http.Error(w, refreshSubsystemUnavailableMessage, http.StatusServiceUnavailable)
 		return
 	}
 	published.handler.ServeHTTP(w, r)
@@ -53,7 +55,7 @@ func (a *App) handleResourceStream(conn *application.StreamConn) {
 	aggregates := a.refreshAggregates.Load()
 	if aggregates == nil || aggregates.resources == nil {
 		_ = conn.SendJSON(streammux.ServerMessage{
-			Type: streammux.MessageTypeError, Error: "refresh subsystem not initialised",
+			Type: streammux.MessageTypeError, Error: refreshSubsystemUnavailableMessage,
 		})
 		return
 	}
@@ -68,7 +70,7 @@ func (a *App) handleContainerLogsStream(conn *application.StreamConn) {
 	}
 	aggregates := a.refreshAggregates.Load()
 	if aggregates == nil || aggregates.containerLogs == nil {
-		sendContainerLogsStreamError(conn, request.Scope, "refresh subsystem not initialised")
+		sendContainerLogsStreamError(conn, request.Scope, refreshSubsystemUnavailableMessage)
 		return
 	}
 	if err := aggregates.containerLogs.Handle(conn.Context(), conn, request); err != nil {

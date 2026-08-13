@@ -243,7 +243,7 @@ func (s *session) readLoop() {
 	for {
 		var msg ClientMessage
 		if err := s.conn.ReceiveJSON(&msg); err != nil {
-			if ctxErr := s.doneError(); ctxErr == nil {
+			if s.doneError() == nil {
 				s.logger.Debug(fmt.Sprintf("stream mux connection closed: %v", err), logsources.StreamMux)
 			}
 			return

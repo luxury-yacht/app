@@ -139,3 +139,30 @@ func TestReleaseArtifactNamePreservesVersionPlatformAndArchitecture(t *testing.T
 		})
 	}
 }
+
+func TestReleaseArtifactNameRejectsUnsupportedTargets(t *testing.T) {
+	var metadata projectMetadata
+	metadata.Info.ProductName = "Luxury Yacht"
+	metadata.Info.Version = "v2.0.0"
+
+	for _, test := range []struct {
+		goos   string
+		arch   string
+		format string
+	}{
+		{goos: "darwin", arch: "arm64", format: "zip"},
+		{goos: "darwin", arch: "386", format: "dmg"},
+		{goos: "linux", arch: "arm64", format: "dmg"},
+		{goos: "linux", arch: "ppc64", format: "deb"},
+		{goos: "linux", arch: "ppc64", format: "rpm"},
+		{goos: "windows", arch: "arm64", format: "zip"},
+		{goos: "windows", arch: "386", format: "exe"},
+		{goos: "freebsd", arch: "amd64", format: "zip"},
+	} {
+		t.Run(test.goos+"-"+test.arch+"-"+test.format, func(t *testing.T) {
+			_, err := releaseArtifactName(metadata, test.goos, test.arch, test.format)
+
+			require.ErrorContains(t, err, "unsupported release artifact target")
+		})
+	}
+}
