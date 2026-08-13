@@ -2,8 +2,6 @@ package backend
 
 import (
 	"context"
-	"net"
-	"net/http"
 	"sync"
 	"sync/atomic"
 	"time"
@@ -19,9 +17,10 @@ import (
 	informers "k8s.io/client-go/informers"
 )
 
-var defaultLoopbackListener = func() (net.Listener, error) {
-	return net.Listen("tcp", "127.0.0.1:0")
-}
+const (
+	refreshResourceStreamName      = "refresh-resources"
+	refreshContainerLogsStreamName = "refresh-container-logs"
+)
 
 // App provides the backend façade exposed to Wails.
 type App struct {
@@ -43,9 +42,8 @@ type App struct {
 	diagnosticsPanelVisible bool
 	appLogsPanelVisible     bool
 
-	refreshManager    *refresh.Manager
-	refreshHTTPServer *http.Server
-	refreshListener   net.Listener
+	refreshManager *refresh.Manager
+	refreshService atomic.Pointer[refreshServiceHandler]
 	// refreshRuntimeMu owns refreshDone and refreshCancel. Selection mutations and
 	// governor reconciliation use different lifecycle locks, so neither is a
 	// substitute for this process-runtime boundary.
@@ -55,8 +53,6 @@ type App struct {
 	// refreshRuntimeStopped distinguishes a deliberate global teardown from the
 	// never-started state that auth recovery is allowed to initialise.
 	refreshRuntimeStopped bool
-	refreshBaseURL        string
-	refreshServerDone     chan struct{}
 	telemetryRecorder     *telemetry.Recorder
 	// containerLogsTargetLimiter is lazily built by sharedContainerLogsTargetLimiter;
 	// its mutex guards the check-then-set because subsystem builds run concurrently
@@ -192,8 +188,6 @@ type App struct {
 	clusterHealth            map[string]ClusterHealthState
 	clusterScopeRevisions    map[string]uint64
 
-	listenLoopback func() (net.Listener, error)
-
 	kubeconfigWatcher *kubeconfigWatcher
 
 	eventEmitter          func(context.Context, string, ...interface{})
@@ -236,7 +230,10 @@ func NewApp(wailsApplication *application.App, reporters ...sentryreporting.Repo
 	app.kubeClientInitializer = func() error {
 		return app.initKubernetesClient()
 	}
-	app.listenLoopback = defaultLoopbackListener
+	if wailsApplication != nil {
+		wailsApplication.HandleStream(refreshResourceStreamName, app.handleResourceStream)
+		wailsApplication.HandleStream(refreshContainerLogsStreamName, app.handleContainerLogsStream)
+	}
 	app.setupEnvironment()
 	app.initAuthManager()
 	app.initGovernor()

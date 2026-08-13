@@ -578,10 +578,6 @@ export function GetReferenceGrant(clusterID: string, $namespace: string, name: s
     return $Call.ByName("github.com/luxury-yacht/app/backend.App.GetReferenceGrant", clusterID, $namespace, name);
 }
 
-export function GetRefreshBaseURL(): $CancellablePromise<string> {
-    return $Call.ByName("github.com/luxury-yacht/app/backend.App.GetRefreshBaseURL");
-}
-
 export function GetReplicaSet(clusterID: string, $namespace: string, name: string): $CancellablePromise<replicaset$0.ReplicaSetDetails | null> {
     return $Call.ByName("github.com/luxury-yacht/app/backend.App.GetReplicaSet", clusterID, $namespace, name);
 }

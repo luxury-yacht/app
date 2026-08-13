@@ -52,9 +52,10 @@ the main window is still queryable. Persist window geometry there. Wails then
 cancels the application context and calls `ServiceShutdown` for backend
 teardown.
 
-The refresh HTTP/SSE/WebSocket surface remains on the backend-owned loopback
-server. Do not move it onto Wails' asset handler without revalidating streaming,
-upgrade, cancellation, CORS, and Windows behavior.
+The request/response refresh surface is published atomically at the same-origin
+Wails service route `/api/v2`. Resource doorbells and container logs use named
+Wails JSON streams. Backend teardown unpublishes the service handler and stops
+the current per-cluster stream generation before releasing its producers.
 
 ## Starting points
 

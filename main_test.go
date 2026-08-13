@@ -104,8 +104,19 @@ func TestApplicationCompositionOwnsOneNamedWindowMenuAndService(t *testing.T) {
 	require.Len(t, composition.application.Config().Services, 1)
 }
 
-func TestMainWindowStartsVisible(t *testing.T) {
-	options := mainWindowOptions(nil)
+func TestMainWindowVisibilityPreservesPlatformStartupContract(t *testing.T) {
+	for _, test := range []struct {
+		goos       string
+		wantHidden bool
+	}{
+		{goos: "darwin", wantHidden: true},
+		{goos: "windows", wantHidden: true},
+		{goos: "linux", wantHidden: false},
+	} {
+		t.Run(test.goos, func(t *testing.T) {
+			options := mainWindowOptionsForPlatform(nil, test.goos)
 
-	require.False(t, options.Hidden)
+			require.Equal(t, test.wantHidden, options.Hidden)
+		})
+	}
 }

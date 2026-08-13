@@ -138,7 +138,7 @@ func TestClusterSubsystemRebuildHelperPaths(t *testing.T) {
 	require.Len(t, subsystems, 2)
 	require.ElementsMatch(t, []string{"cluster-a", "cluster-b"}, order)
 
-	app.refreshHTTPServer = &http.Server{}
+	setRefreshServiceReadyForTest(app)
 	app.refreshAggregates.Store(&refreshAggregateHandlers{})
 	require.True(t, rebuild.updateRefreshRouting(subsystems, order))
 
@@ -236,7 +236,7 @@ func TestClusterSubsystemRebuildPublishesAfterManagerStartIsScheduled(t *testing
 	app := newTestAppWithDefaults(t)
 	setTestAppRuntimeReady(t, app, context.Background())
 	require.NotNil(t, app.ensureRefreshRuntimeContext())
-	app.refreshHTTPServer = &http.Server{}
+	setRefreshServiceReadyForTest(app)
 	app.refreshAggregates.Store(&refreshAggregateHandlers{})
 
 	hub := &recoveryStartInformerHub{started: make(chan struct{})}

@@ -149,3 +149,43 @@ func projectBinaryName(metadata projectMetadata) (string, error) {
 	}
 	return strings.ToLower(strings.ReplaceAll(productName, " ", "-")), nil
 }
+
+func releaseArtifactName(metadata projectMetadata, goos, goarch, format string) (string, error) {
+	name, err := projectBinaryName(metadata)
+	if err != nil {
+		return "", err
+	}
+	version := strings.TrimSpace(metadata.Info.Version)
+	if version == "" {
+		return "", fmt.Errorf("wails config has no info.version")
+	}
+	goos = strings.ToLower(strings.TrimSpace(goos))
+	goarch = strings.ToLower(strings.TrimSpace(goarch))
+	format = strings.ToLower(strings.TrimSpace(format))
+
+	switch goos {
+	case "darwin":
+		if format != "dmg" || (goarch != "amd64" && goarch != "arm64") {
+			break
+		}
+		return fmt.Sprintf("%s-%s-macos-%s.dmg", name, version, goarch), nil
+	case "linux":
+		switch format {
+		case "deb":
+			if goarch == "amd64" || goarch == "arm64" {
+				return fmt.Sprintf("%s_%s_linux_%s.deb", name, version, goarch), nil
+			}
+		case "rpm":
+			rpmArch := map[string]string{"amd64": "x86_64", "arm64": "aarch64"}[goarch]
+			if rpmArch != "" {
+				return fmt.Sprintf("%s-%s-linux-%s.rpm", name, version, rpmArch), nil
+			}
+		}
+	case "windows":
+		if format == "exe" && (goarch == "amd64" || goarch == "arm64") {
+			return fmt.Sprintf("%s-%s-windows-%s-installer.exe", name, version, goarch), nil
+		}
+	}
+
+	return "", fmt.Errorf("unsupported release artifact target %s/%s format %s", goos, goarch, format)
+}

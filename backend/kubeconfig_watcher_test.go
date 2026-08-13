@@ -2,7 +2,6 @@ package backend
 
 import (
 	"context"
-	"net/http"
 	"os"
 	"path/filepath"
 	"sync/atomic"
@@ -127,7 +126,7 @@ func TestApp_HandleKubeconfigChange_ContextRemovedDeselectsOnlyAffectedFromSameF
 	app.refreshSubsystems = make(map[string]*system.Subsystem)
 	app.objectCatalogEntries = make(map[string]*objectCatalogEntry)
 	app.refreshAggregates.Store(&refreshAggregateHandlers{})
-	app.refreshHTTPServer = &http.Server{}
+	setRefreshServiceReadyForTest(app)
 	setRefreshRuntimeContextForTest(app, context.Background())
 	app.appSettings = getDefaultAppSettings()
 
@@ -286,7 +285,7 @@ func TestDeselectClusters_AbortsOnReconciliationFailure(t *testing.T) {
 
 	// Force updateRefreshSubsystemSelections to take the setupRefreshSubsystem path and fail.
 	app.refreshAggregates.Store(nil)
-	app.refreshHTTPServer = nil
+	app.refreshService.Store(nil)
 	setRefreshRuntimeContextForTest(app, nil)
 
 	app.selectionMutationMu.Lock()

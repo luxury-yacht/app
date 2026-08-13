@@ -43,7 +43,7 @@ func TestSetSelectedKubeconfigsKeepsRefreshServerOnSelectionChange(t *testing.T)
 
 	// Stub refresh wiring so selection updates exercise the in-place path.
 	setRefreshRuntimeContextForTest(app, context.Background())
-	app.refreshHTTPServer = &http.Server{}
+	setRefreshServiceReadyForTest(app)
 	app.refreshAggregates.Store(&refreshAggregateHandlers{})
 
 	app.availableKubeconfigs = []KubeconfigInfo{
@@ -71,7 +71,7 @@ func TestSetSelectedKubeconfigsKeepsRefreshServerOnSelectionChange(t *testing.T)
 		},
 	}
 
-	originalServer := app.refreshHTTPServer
+	originalService := app.refreshService.Load()
 	existingSubsystem := &system.Subsystem{}
 	app.refreshSubsystems = map[string]*system.Subsystem{clusterA: existingSubsystem}
 
@@ -82,13 +82,13 @@ func TestSetSelectedKubeconfigsKeepsRefreshServerOnSelectionChange(t *testing.T)
 	t.Cleanup(func() { newRefreshSubsystemWithServices = originalBuilder })
 
 	require.NoError(t, app.SetSelectedKubeconfigs([]string{selectionA.String(), selectionB.String()}))
-	require.Same(t, originalServer, app.refreshHTTPServer)
+	require.Same(t, originalService, app.refreshService.Load())
 	require.Same(t, existingSubsystem, app.refreshSubsystems[clusterA])
 	require.NotNil(t, app.refreshSubsystems[clusterB])
 
 	remainingSubsystem := app.refreshSubsystems[clusterB]
 	require.NoError(t, app.SetSelectedKubeconfigs([]string{selectionB.String()}))
-	require.Same(t, originalServer, app.refreshHTTPServer)
+	require.Same(t, originalService, app.refreshService.Load())
 	require.Equal(t, 1, len(app.refreshSubsystems))
 	require.Same(t, remainingSubsystem, app.refreshSubsystems[clusterB])
 }
@@ -104,7 +104,7 @@ func TestAuthFailedClusterDoesNotBlockNewClusterSelection(t *testing.T) {
 
 	// Stub refresh wiring so selection updates exercise the in-place path.
 	setRefreshRuntimeContextForTest(app, context.Background())
-	app.refreshHTTPServer = &http.Server{}
+	setRefreshServiceReadyForTest(app)
 	app.refreshAggregates.Store(&refreshAggregateHandlers{})
 
 	app.availableKubeconfigs = []KubeconfigInfo{
@@ -184,7 +184,7 @@ func TestAuthFailedOnInitClusterDoesNotBlockNewClusterSelection(t *testing.T) {
 
 	// Stub refresh wiring so selection updates exercise the in-place path.
 	setRefreshRuntimeContextForTest(app, context.Background())
-	app.refreshHTTPServer = &http.Server{}
+	setRefreshServiceReadyForTest(app)
 	app.refreshAggregates.Store(&refreshAggregateHandlers{})
 
 	app.availableKubeconfigs = []KubeconfigInfo{
@@ -245,7 +245,7 @@ func TestSetSelectedKubeconfigsRapidChurnLeavesConsistentClusterState(t *testing
 
 	// Stub refresh wiring so selection updates exercise in-place updates only.
 	setRefreshRuntimeContextForTest(app, context.Background())
-	app.refreshHTTPServer = &http.Server{}
+	setRefreshServiceReadyForTest(app)
 	app.refreshAggregates.Store(&refreshAggregateHandlers{})
 
 	tempDir := t.TempDir()
@@ -339,7 +339,7 @@ func TestSetSelectedKubeconfigsRemovesClusterRuntimeStateOnChurn(t *testing.T) {
 
 	// Keep selection updates on the in-place refresh reconciliation path.
 	setRefreshRuntimeContextForTest(app, context.Background())
-	app.refreshHTTPServer = &http.Server{}
+	setRefreshServiceReadyForTest(app)
 	app.refreshAggregates.Store(&refreshAggregateHandlers{})
 
 	selectionA := kubeconfigSelection{Path: "/path/a", Context: "ctx-a"}
@@ -466,7 +466,7 @@ func TestSetSelectedKubeconfigsClearCleansRuntimeStateForAllClusters(t *testing.
 
 	// Keep selection updates on the in-place refresh reconciliation path.
 	setRefreshRuntimeContextForTest(app, context.Background())
-	app.refreshHTTPServer = &http.Server{}
+	setRefreshServiceReadyForTest(app)
 	app.refreshAggregates.Store(&refreshAggregateHandlers{})
 
 	selectionA := kubeconfigSelection{Path: "/path/a", Context: "ctx-a"}
@@ -579,7 +579,7 @@ func TestSetSelectedKubeconfigsKeepsResponseCacheClusterScopedDuringChurn(t *tes
 
 	// Keep selection updates on the in-place refresh reconciliation path.
 	setRefreshRuntimeContextForTest(app, context.Background())
-	app.refreshHTTPServer = &http.Server{}
+	setRefreshServiceReadyForTest(app)
 	app.refreshAggregates.Store(&refreshAggregateHandlers{})
 	app.responseCache = newResponseCache(time.Minute, 64)
 

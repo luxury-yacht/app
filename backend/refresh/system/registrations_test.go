@@ -4,8 +4,6 @@ package system
 import (
 	"context"
 	"encoding/json"
-	"net/http"
-	"net/http/httptest"
 	"os"
 	"path/filepath"
 	goruntime "runtime"
@@ -451,9 +449,7 @@ func TestStreamOnlyDomainsHaveEndpointWiring(t *testing.T) {
 	kubeClient := fake.NewClientset()
 	runtimePerms := permissions.NewChecker(kubeClient, "cluster-a", 0)
 	informerFactory := informer.New(kubeClient, nil, 0, runtimePerms)
-	mux := http.NewServeMux()
-
-	_, _, err := registerStreamHandlers(mux, streamDeps{
+	containerLogsHandler, _, resourceManager, err := registerStreamHandlers(streamDeps{
 		informerFactory: informerFactory,
 		snapshotService: streamHandlerSnapshotService{},
 		cfg: Config{
@@ -469,16 +465,12 @@ func TestStreamOnlyDomainsHaveEndpointWiring(t *testing.T) {
 	for _, domain := range streamOnlyDomains {
 		switch domain {
 		case "container-logs":
-			rec := httptest.NewRecorder()
-			req := httptest.NewRequest(http.MethodGet, "/api/v2/stream/container-logs?scope=", nil)
-			mux.ServeHTTP(rec, req)
-
-			require.NotEqual(t, http.StatusNotFound, rec.Code)
-			require.Equal(t, http.StatusBadRequest, rec.Code)
+			require.NotNil(t, containerLogsHandler)
 		default:
 			require.Failf(t, "missing stream-only endpoint assertion", "domain=%s", domain)
 		}
 	}
+	require.NotNil(t, resourceManager)
 }
 
 func TestResourceStreamDomainsMatchAuthoredContract(t *testing.T) {

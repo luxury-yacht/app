@@ -41,7 +41,6 @@ export {
   GetKubernetesAPIClientDiagnostics,
   GetObjectYAMLByGVK,
   GetPodContainers,
-  GetRefreshBaseURL,
   GetRevisionHistory,
   GetSelectionDiagnostics,
   GetShellSessionBacklog,

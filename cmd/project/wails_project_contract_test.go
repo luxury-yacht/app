@@ -138,7 +138,7 @@ func TestPlatformBuildManifestsUseCanonicalProjectMetadata(t *testing.T) {
 	require.Contains(t, windowsTaskfile, "common:prepare:build-manifests")
 	require.Contains(t, windowsTaskfile, "bin/build-manifests/windows/wails.exe.manifest")
 	require.Contains(t, windowsTaskfile, "bin/build-manifests/windows/info.json")
-	require.Contains(t, windowsTaskfile, `--input "{{.BIN_DIR}}/{{.APP_NAME}}-{{.ARCH}}-installer.exe"`)
+	require.Contains(t, windowsTaskfile, `--input "{{.BIN_DIR}}/{{.APP_NAME}}-*-windows-{{.ARCH}}-installer.exe"`)
 	require.NotContains(t, windowsTaskfile, `--input "build/windows/nsis/{{.APP_NAME}}-installer.exe"`)
 
 	commonTaskfile := readTestFile(t, repositoryPath("build", "Taskfile.yml"))
@@ -353,6 +353,61 @@ func TestReleaseWorkflowUsesConfiguredVVersionTags(t *testing.T) {
 	metadata, err := readProjectMetadata(repositoryPath("build", "config.yml"))
 	require.NoError(t, err)
 	require.True(t, strings.HasPrefix(strings.ToLower(metadata.Info.Version), "v"))
+}
+
+func TestReleaseArtifactsPreserveVersionPlatformAndArchitectureIdentity(t *testing.T) {
+	workflow := readTestFile(t, repositoryPath(".github", "workflows", "release.yml"))
+	require.Contains(t, workflow, "artifact_path: bin/*-macos-*.dmg")
+	require.Contains(t, workflow, "GOOS=darwin GOARCH=arm64 RELEASE_FORMAT=dmg go run ./cmd/project release-artifact-name")
+	require.Contains(t, workflow, "GOOS=darwin GOARCH=amd64 RELEASE_FORMAT=dmg go run ./cmd/project release-artifact-name")
+	require.Contains(t, workflow, "linux:generate:deb ARCH=${{ matrix.arch }}")
+	require.Contains(t, workflow, "linux:generate:rpm ARCH=${{ matrix.arch }}")
+
+	linuxTaskfile := readTestFile(t, repositoryPath("build", "linux", "Taskfile.yml"))
+	require.Contains(t, linuxTaskfile, "go run ./cmd/project release-artifact-name")
+
+	windowsInstaller := readTestFile(t, repositoryPath("build", "windows", "nsis", "project.nsi"))
+	require.Contains(t, windowsInstaller, `${INFO_PROJECTNAME}-${INFO_PRODUCTVERSION}-windows-${ARCH}-installer.exe`)
+
+	windowsTaskfile := readTestFile(t, repositoryPath("build", "windows", "Taskfile.yml"))
+	require.Contains(t, windowsTaskfile, `{{.APP_NAME}}-*-windows-{{.ARCH}}-installer.exe`)
+}
+
+func TestRefreshTransportUsesOnlyWailsServiceAndNamedStreams(t *testing.T) {
+	mainSource := readTestFile(t, repositoryPath("main.go"))
+	require.Contains(t, mainSource, `application.ServiceOptions{Route: "/api/v2"}`)
+
+	appSource := readTestFile(t, repositoryPath("backend", "app.go"))
+	require.Contains(t, appSource, `HandleStream(refreshResourceStreamName`)
+	require.Contains(t, appSource, `HandleStream(refreshContainerLogsStreamName`)
+	require.NotContains(t, appSource, "net.Listen")
+	require.NotContains(t, appSource, "refreshHTTPServer")
+	require.NotContains(t, appSource, "refreshListener")
+
+	clientSource := readTestFile(t, repositoryPath("frontend", "src", "core", "refresh", "client.ts"))
+	require.NotContains(t, clientSource, "GetRefreshBaseURL")
+	require.NotContains(t, clientSource, "refreshBaseURL")
+
+	resourceStreamSource := readTestFile(t, repositoryPath("frontend", "src", "core", "refresh", "streaming", "resourceStreamConnection.ts"))
+	require.Contains(t, resourceStreamSource, "JSONStream")
+	require.NotContains(t, resourceStreamSource, "new WebSocket")
+
+	containerLogsSource := readTestFile(t, repositoryPath("frontend", "src", "core", "refresh", "streaming", "containerLogsStreamManager.ts"))
+	require.Contains(t, containerLogsSource, "JSONStream")
+	require.NotContains(t, containerLogsSource, "EventSource")
+
+	apiSource := readTestFile(t, repositoryPath("backend", "refresh", "api", "server.go"))
+	require.NotContains(t, apiSource, `"/api/v2/`)
+	require.NotContains(t, apiSource, "Access-Control-Allow")
+
+	for _, path := range []string{
+		"backend/app_refresh.go",
+		"backend/refresh_stream_cors.go",
+		"frontend/src/core/refresh/streaming/sseStreamTransport.ts",
+	} {
+		_, err := os.Stat(repositoryPath(strings.Split(path, "/")...))
+		require.ErrorIsf(t, err, os.ErrNotExist, "%s must remain absent", path)
+	}
 }
 
 func TestProjectCommandOwnsItsImplementation(t *testing.T) {

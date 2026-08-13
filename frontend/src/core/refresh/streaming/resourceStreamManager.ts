@@ -1,7 +1,7 @@
 /**
  * frontend/src/core/refresh/streaming/resourceStreamManager.ts
  *
- * Coordinates resource WebSocket subscriptions and resyncs for refresh domains
+ * Coordinates resource stream subscriptions and resyncs for refresh domains
  * that receive live change signals. Every streamed table is query-backed, so a
  * delta (or a resync) advances the domain source token to trigger a refetch
  * rather than delivering rows over the bridge.
@@ -324,17 +324,28 @@ export class ResourceStreamManager {
     );
   }
 
-  private parseMessage(clusterId: string, raw: string): ServerMessage | null {
-    try {
-      return JSON.parse(raw) as ServerMessage;
-    } catch (error) {
-      reportOperationalError(error, {
-        source: 'ResourceStreamManager',
-        action: 'parseResourceStreamPayload',
-        clusterId,
-      });
-      return null;
+  private parseMessage(clusterId: string, raw: unknown): ServerMessage | null {
+    if (typeof raw === 'object' && raw !== null && !Array.isArray(raw)) {
+      return raw as ServerMessage;
     }
+    if (typeof raw === 'string') {
+      try {
+        return JSON.parse(raw) as ServerMessage;
+      } catch (error) {
+        reportOperationalError(error, {
+          source: 'ResourceStreamManager',
+          action: 'parseResourceStreamPayload',
+          clusterId,
+        });
+        return null;
+      }
+    }
+    reportOperationalError(new Error('Invalid resource stream payload structure'), {
+      source: 'ResourceStreamManager',
+      action: 'parseResourceStreamPayload',
+      clusterId,
+    });
+    return null;
   }
 
   private resolveSubscriptionMessage(
@@ -513,7 +524,7 @@ export class ResourceStreamManager {
     }
   }
 
-  handleMessage(clusterId: string, raw: string): void {
+  handleMessage(clusterId: string, raw: unknown): void {
     const parsed = this.parseMessage(clusterId, raw);
     if (!parsed) {
       return;
@@ -543,7 +554,7 @@ export class ResourceStreamManager {
 
   handleConnectionOpen(clusterId: string): void {
     const targetClusterId = clusterId.trim();
-    // Log when the websocket is connected so it is clear streaming is active.
+    // Log when the named stream is connected so it is clear streaming is active.
     logInfo(
       `[resource-stream] connection open clusterId=${targetClusterId || 'all'}`,
       targetClusterId ? { clusterId: targetClusterId } : undefined

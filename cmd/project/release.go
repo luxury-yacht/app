@@ -65,6 +65,7 @@ func releaseExists(repo, tag string) (bool, error) {
 // Scans for releaseable assets in the artifacts directory.
 func findReleaseAssets(cfg releaseConfig) ([]string, error) {
 	var assets []string
+	assetPathsByName := make(map[string]string)
 
 	err := filepath.WalkDir(cfg.artifactsDir, func(path string, d fs.DirEntry, walkErr error) error {
 		if walkErr != nil {
@@ -76,6 +77,10 @@ func findReleaseAssets(cfg releaseConfig) ([]string, error) {
 		// Check if the file has a valid release asset extension
 		for _, ext := range cfg.releaseAssets {
 			if strings.HasSuffix(d.Name(), ext) {
+				if previousPath, exists := assetPathsByName[d.Name()]; exists {
+					return fmt.Errorf("duplicate release asset name %q: %s and %s", d.Name(), previousPath, path)
+				}
+				assetPathsByName[d.Name()] = path
 				assets = append(assets, path)
 				break
 			}

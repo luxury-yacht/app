@@ -5,25 +5,44 @@ import (
 	"os"
 )
 
-const projectUsage = "usage: project <backend-coverage|binary-name|bindings|build-manifests|build-metadata|clean-all|clean-build|clean-frontend|config|fmt|go-mod-update|go-mod-update-check|install-unsigned|release-app|release-site|reset>"
+const projectUsage = "usage: project <backend-coverage|binary-name|bindings|build-manifests|build-metadata|clean-all|clean-build|clean-frontend|config|fmt|go-mod-update|go-mod-update-check|install-unsigned|release-app|release-artifact-name|release-site|reset>"
 
 var projectCommands = map[string]func() error{
-	"backend-coverage":    runBackendCoverage,
-	"binary-name":         writeConfiguredBinaryName,
-	"bindings":            checkWailsBindings,
-	"build-manifests":     func() error { return renderProjectPlatformManifests(projectConfigPath, projectPlatformManifestSpecs) },
-	"build-metadata":      generateConfiguredBuildMetadata,
-	"clean-all":           func() error { return cleanAllOutputs(defaultCleanConfig()) },
-	"clean-build":         func() error { return cleanBuildOutputs(defaultCleanConfig()) },
-	"clean-frontend":      func() error { return cleanFrontendOutputs(defaultCleanConfig()) },
-	"config":              func() error { return writeProjectConfig(os.Stdout) },
-	"fmt":                 checkGoFormatting,
-	"go-mod-update":       updateDirectGoModules,
-	"go-mod-update-check": checkDirectGoModuleUpdates,
-	"install-unsigned":    runUnsignedInstall,
-	"release-app":         publishConfiguredRelease,
-	"release-site":        publishConfiguredSiteVersion,
-	"reset":               resetConfiguredAppState,
+	"backend-coverage":      runBackendCoverage,
+	"binary-name":           writeConfiguredBinaryName,
+	"bindings":              checkWailsBindings,
+	"build-manifests":       func() error { return renderProjectPlatformManifests(projectConfigPath, projectPlatformManifestSpecs) },
+	"build-metadata":        generateConfiguredBuildMetadata,
+	"clean-all":             func() error { return cleanAllOutputs(defaultCleanConfig()) },
+	"clean-build":           func() error { return cleanBuildOutputs(defaultCleanConfig()) },
+	"clean-frontend":        func() error { return cleanFrontendOutputs(defaultCleanConfig()) },
+	"config":                func() error { return writeProjectConfig(os.Stdout) },
+	"fmt":                   checkGoFormatting,
+	"go-mod-update":         updateDirectGoModules,
+	"go-mod-update-check":   checkDirectGoModuleUpdates,
+	"install-unsigned":      runUnsignedInstall,
+	"release-app":           publishConfiguredRelease,
+	"release-artifact-name": writeConfiguredReleaseArtifactName,
+	"release-site":          publishConfiguredSiteVersion,
+	"reset":                 resetConfiguredAppState,
+}
+
+func writeConfiguredReleaseArtifactName() error {
+	metadata, err := readProjectMetadata(projectConfigPath)
+	if err != nil {
+		return fmt.Errorf("read release artifact metadata: %w", err)
+	}
+	name, err := releaseArtifactName(
+		metadata,
+		os.Getenv("GOOS"),
+		os.Getenv("GOARCH"),
+		os.Getenv("RELEASE_FORMAT"),
+	)
+	if err != nil {
+		return err
+	}
+	_, err = fmt.Fprintln(os.Stdout, name)
+	return err
 }
 
 func main() {

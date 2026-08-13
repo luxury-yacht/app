@@ -40,9 +40,7 @@ vi.mock('./RefreshManager', () => ({
 }));
 
 vi.mock('./client', () => ({
-  ensureRefreshBaseURL: vi.fn().mockResolvedValue('http://localhost'),
   fetchSnapshot: vi.fn(),
-  invalidateRefreshBaseURL: vi.fn(),
   setMetricsActive: vi.fn().mockResolvedValue(undefined),
 }));
 
@@ -331,7 +329,7 @@ describe('refresh domain contract', () => {
           // namespace-metrics/cluster-overview: metric; object-events: event;
           // cluster-attention: attention — and overview polls
           // STAY ON, since metric doorbells only ring on successful
-          // collections). The doorbell rides the resources WebSocket, so
+          // collections). The doorbell rides the resource named stream, so
           // diagnostics reflect that stream instead of mislabeling the
           // domain as polling.
           expect(registration?.streaming).toBeDefined();

@@ -159,7 +159,7 @@ func TestManagerOnlyBroadcastsClusterScopedEventsToClusterSubscribers(t *testing
 	}
 }
 
-func TestManagerNotifiesSignalObserverWithoutSSESubscribers(t *testing.T) {
+func TestManagerNotifiesSignalObserverWithoutStreamSubscribers(t *testing.T) {
 	client := fake.NewClientset()
 	factory := informers.NewSharedInformerFactory(client, 0)
 	informer := factory.Core().V1().Events()

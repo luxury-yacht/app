@@ -1,7 +1,7 @@
 package backend
 
 import (
-	"net/http"
+	"context"
 	"sync"
 
 	"github.com/luxury-yacht/app/backend/internal/applog"
@@ -15,14 +15,13 @@ import (
 // aggregateResourceStreamHandler multiplexes resource stream subscriptions across clusters.
 //
 // Manager/name lookups go through the handler's LIVE maps (topologyMu):
-// WebSocket sessions bind the adapter once at connect, so Update must change
+// Named-stream sessions bind the adapter once at connect, so Update must change
 // what that same adapter resolves — a rebuilt mux with a fresh map would leave
 // every existing session rejecting late-connecting clusters forever.
 type aggregateResourceStreamHandler struct {
 	mux      *streammux.Handler
 	logger   containerlogsstream.Logger
 	recorder *telemetry.Recorder
-	mu       sync.RWMutex
 
 	topologyMu   sync.RWMutex
 	managers     map[string]*resourcestream.Manager
@@ -106,12 +105,17 @@ func newAggregateResourceStreamHandler(
 	return handler, nil
 }
 
-// ServeHTTP upgrades the websocket and multiplexes resource subscriptions.
-func (h *aggregateResourceStreamHandler) ServeHTTP(w http.ResponseWriter, r *http.Request) {
-	h.mu.RLock()
-	mux := h.mux
-	h.mu.RUnlock()
-	mux.ServeHTTP(w, r)
+// Handle multiplexes resource subscriptions over one Wails named stream.
+func (h *aggregateResourceStreamHandler) Handle(ctx context.Context, conn streammux.Conn) {
+	h.mux.Handle(conn, ctx)
+}
+
+// Stop closes all native stream sessions owned by this aggregate generation.
+func (h *aggregateResourceStreamHandler) Stop() {
+	if h == nil || h.mux == nil {
+		return
+	}
+	h.mux.Stop()
 }
 
 // Update swaps the live cluster topology after selection changes. Existing

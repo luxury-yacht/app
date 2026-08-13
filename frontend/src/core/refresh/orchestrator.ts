@@ -16,9 +16,7 @@ import { getAutoRefreshEnabled } from '@/core/settings/appPreferences';
 import { compareUtf16Strings } from '@/shared/utils/sort';
 import { reportOperationalError } from '@/utils/errorHandler';
 import {
-  ensureRefreshBaseURL,
   fetchSnapshot,
-  invalidateRefreshBaseURL,
   isSnapshotPermissionDenied,
   type Snapshot,
   setMetricsActive,
@@ -384,7 +382,7 @@ class RefreshOrchestrator {
       scope: normalizedScope,
     }));
 
-    const readyTask = ensureRefreshBaseURL()
+    const readyTask = Promise.resolve()
       .then(() => {
         if (!this.isScopedDomainEnabledInternal(domain, normalizedScope)) {
           return;
@@ -781,14 +779,14 @@ class RefreshOrchestrator {
       return false;
     }
     // One-shot typed-query scopes (`?` params) are never streaming targets, for
-    // ANY domain: on the events domains they share the singleton SSE connection
+    // ANY domain: event queries share the singleton named stream
     // with the parameterless base scope and would churn it on every query.
     if (trimmed.includes('?')) {
       return false;
     }
     // No stream can be established while the scope's cluster backend is still
-    // initializing — the SSE endpoint rejects the request and the EventSource
-    // would hot-loop on reconnect attempts.
+    // initializing — the named-stream handler rejects the request and the
+    // client would otherwise hot-loop on reconnect attempts.
     if (!this.isScopeClusterServiceable(trimmed)) {
       return false;
     }
@@ -1883,7 +1881,6 @@ class RefreshOrchestrator {
     // affected scopes re-ask (they hold no data, so nothing blanks).
     resetPermissionDeniedScopedDomainStates();
     this.incrementContextVersion();
-    invalidateRefreshBaseURL();
     // Suppress transient errors while the rebuilt subsystem starts serving.
     this.errorNotifier.suppressNetworkErrors(6000);
     this.clearAllBlockedStreaming();
@@ -1894,7 +1891,6 @@ class RefreshOrchestrator {
 
   private readonly handleResetViews = () => {
     this.incrementContextVersion();
-    invalidateRefreshBaseURL();
     this.stopAllStreaming(true);
     this.abortAllInFlight();
     this.clearAllBlockedStreaming();
@@ -1908,7 +1904,6 @@ class RefreshOrchestrator {
     // A kubeconfig change supersedes tracked auth-failure state.
     this.authFailedClusters.clear();
     this.incrementContextVersion();
-    invalidateRefreshBaseURL();
     this.stopAllStreaming(true);
     this.abortAllInFlight();
     this.clearAllBlockedStreaming();
@@ -1953,7 +1948,6 @@ class RefreshOrchestrator {
 
   private readonly handleKubeconfigChanged = () => {
     this.incrementContextVersion();
-    invalidateRefreshBaseURL();
     this.errorNotifier.suppressNetworkErrors(6000);
     this.suspendedDomains.clear();
     this.clearAllBlockedStreaming();
@@ -1961,9 +1955,8 @@ class RefreshOrchestrator {
   };
 
   private readonly handleKubeconfigSelectionChanged = () => {
-    // Backend may rebuild the refresh subsystem; invalidate base URL and suppress transient errors.
+    // The service route is stable while the backend atomically replaces its handler.
     this.incrementContextVersion();
-    invalidateRefreshBaseURL();
     this.errorNotifier.suppressNetworkErrors(6000);
     this.clearAllBlockedStreaming();
     this.clearAllStreamHealth();

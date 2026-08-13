@@ -7,12 +7,11 @@
 package backend
 
 import (
-	"net/http/httptest"
-	"strings"
+	"context"
+	"errors"
 	"testing"
 	"time"
 
-	"github.com/gorilla/websocket"
 	"github.com/stretchr/testify/require"
 
 	"github.com/luxury-yacht/app/backend/refresh/resourcestream"
@@ -20,43 +19,76 @@ import (
 	"github.com/luxury-yacht/app/backend/refresh/system"
 )
 
-// TestAggregateResourceStreamSessionsSeeClustersAddedAfterConnect pins the
-// live-topology contract: a WebSocket session binds its adapter ONCE, at
-// connect time, so the adapter must resolve cluster managers from the
-// handler's CURRENT state — not from a map copied at build time. With the
-// copied map, a cluster whose subsystem came up after the session connected
-// (SSO auth recovery) had every subscribe rejected with "resource stream
-// manager not available" forever, leaving the domain permanently unhealthy
-// and polling (observed live).
+type resourceStreamTestConn struct {
+	ctx      context.Context
+	incoming chan resourcestream.ClientMessage
+	outgoing chan resourcestream.ServerMessage
+}
+
+func newResourceStreamTestConn(ctx context.Context) *resourceStreamTestConn {
+	return &resourceStreamTestConn{
+		ctx: ctx, incoming: make(chan resourcestream.ClientMessage, 8),
+		outgoing: make(chan resourcestream.ServerMessage, 16),
+	}
+}
+
+func (c *resourceStreamTestConn) ReceiveJSON(value interface{}) error {
+	select {
+	case <-c.ctx.Done():
+		return c.ctx.Err()
+	case message := <-c.incoming:
+		*(value.(*resourcestream.ClientMessage)) = message
+		return nil
+	}
+}
+
+func (c *resourceStreamTestConn) SendJSON(value interface{}) error {
+	message, ok := value.(resourcestream.ServerMessage)
+	if !ok {
+		return errors.New("unexpected resource stream payload")
+	}
+	select {
+	case <-c.ctx.Done():
+		return c.ctx.Err()
+	case c.outgoing <- message:
+		return nil
+	}
+}
+
+func (*resourceStreamTestConn) Close() error { return nil }
+
+func (c *resourceStreamTestConn) read(t *testing.T) resourcestream.ServerMessage {
+	t.Helper()
+	select {
+	case message := <-c.outgoing:
+		return message
+	case <-time.After(time.Second):
+		t.Fatal("timed out waiting for resource stream message")
+		return resourcestream.ServerMessage{}
+	}
+}
+
 func TestAggregateResourceStreamSessionsSeeClustersAddedAfterConnect(t *testing.T) {
-	// Build the handler BEFORE the cluster's subsystem exists (auth pending).
 	handler, err := newAggregateResourceStreamHandler(map[string]*system.Subsystem{}, nil, nil)
 	require.NoError(t, err)
 
-	// The adapter a session would bind at connect time.
 	adapter := handler.sessionAdapter()
 	selector, err := adapter.ParseSelector("cluster-late", "namespaces", "")
 	require.NoError(t, err)
 	_, err = adapter.Subscribe(selector)
-	require.Error(t, err, "no manager yet: subscribe is rejected")
+	require.Error(t, err)
 
-	// The cluster's subsystem comes up later (auth recovery) and the app calls
-	// Update — the SAME adapter (already bound to live sessions) must now
-	// resolve the new manager.
 	manager := resourcestream.NewManager(
-		nil,
-		nil,
-		nil,
+		nil, nil, nil,
 		snapshot.ClusterMeta{ClusterID: "cluster-late", ClusterName: "late"},
-		nil,
-		nil,
+		nil, nil,
 	)
 	require.NoError(t, handler.Update(map[string]*system.Subsystem{
 		"cluster-late": {ResourceStream: manager, ClusterMeta: snapshot.ClusterMeta{ClusterID: "cluster-late", ClusterName: "late"}},
 	}))
 
 	sub, err := adapter.Subscribe(selector)
-	require.NoError(t, err, "existing sessions must see clusters added after they connected")
+	require.NoError(t, err)
 	require.NotNil(t, sub)
 	sub.Cancel()
 }
@@ -69,46 +101,33 @@ func TestAggregateResourceStreamExistingSubscriptionFollowsManagerReplacement(t 
 		clusterID: {ResourceStream: oldManager, ClusterMeta: clusterMeta},
 	}, nil, nil)
 	require.NoError(t, err)
-	server := httptest.NewServer(handler)
-	t.Cleanup(server.Close)
 
-	conn, _, err := websocket.DefaultDialer.Dial("ws"+strings.TrimPrefix(server.URL, "http"), nil)
-	require.NoError(t, err)
-	t.Cleanup(func() { _ = conn.Close() })
-	require.NoError(t, conn.SetReadDeadline(time.Now().Add(time.Second)))
+	ctx, cancel := context.WithCancel(context.Background())
+	t.Cleanup(cancel)
+	conn := newResourceStreamTestConn(ctx)
+	go handler.Handle(ctx, conn)
 
 	subscribe := resourcestream.ClientMessage{
-		Type:      resourcestream.MessageTypeRequest,
-		ClusterID: clusterID,
-		Domain:    "namespaces",
+		Type: resourcestream.MessageTypeRequest, ClusterID: clusterID, Domain: "namespaces",
 	}
-	require.NoError(t, conn.WriteJSON(subscribe))
-	require.Equal(t, resourcestream.MessageTypeAck, readResourceStreamMessage(t, conn).Type)
-	require.Equal(t, resourcestream.MessageTypeReset, readResourceStreamMessage(t, conn).Type)
+	conn.incoming <- subscribe
+	require.Equal(t, resourcestream.MessageTypeAck, conn.read(t).Type)
+	require.Equal(t, resourcestream.MessageTypeReset, conn.read(t).Type)
 
 	newManager := resourcestream.NewManager(nil, nil, nil, clusterMeta, nil, nil)
 	require.NoError(t, handler.Update(map[string]*system.Subsystem{
 		clusterID: {ResourceStream: newManager, ClusterMeta: clusterMeta},
 	}))
-	require.Equal(t, resourcestream.MessageTypeComplete, readResourceStreamMessage(t, conn).Type)
+	require.Equal(t, resourcestream.MessageTypeComplete, conn.read(t).Type)
 
-	// COMPLETE makes the existing client session re-subscribe. That request must
-	// now bind to the replacement manager and establish a new synchronized tail.
-	require.NoError(t, conn.WriteJSON(subscribe))
-	require.Equal(t, resourcestream.MessageTypeAck, readResourceStreamMessage(t, conn).Type)
-	require.Equal(t, resourcestream.MessageTypeReset, readResourceStreamMessage(t, conn).Type)
+	conn.incoming <- subscribe
+	require.Equal(t, resourcestream.MessageTypeAck, conn.read(t).Type)
+	require.Equal(t, resourcestream.MessageTypeReset, conn.read(t).Type)
 
 	newManager.BroadcastNamespacesRefresh("ns-1", "namespace object changed")
-	update := readResourceStreamMessage(t, conn)
+	update := conn.read(t)
 	require.Equal(t, resourcestream.MessageTypeModified, update.Type)
 	require.Equal(t, clusterID, update.ClusterID)
 	require.Equal(t, "namespaces", update.Domain)
 	require.Equal(t, "ns-1", update.Version)
-}
-
-func readResourceStreamMessage(t *testing.T, conn *websocket.Conn) resourcestream.ServerMessage {
-	t.Helper()
-	var message resourcestream.ServerMessage
-	require.NoError(t, conn.ReadJSON(&message))
-	return message
 }

@@ -120,6 +120,9 @@ tasks:
       - task: generate:package
         vars:
           FORMAT: deb
+      - mv "{{.ROOT_DIR}}/bin/{{.APP_NAME}}.deb" "{{.ROOT_DIR}}/bin/$(GOOS=linux GOARCH={{.ARCH}} RELEASE_FORMAT=deb go run ./cmd/project release-artifact-name)"
+    vars:
+      ARCH: '{{.ARCH | default ARCH}}'
 
   generate:rpm:
     summary: Creates a rpm package
@@ -127,6 +130,9 @@ tasks:
       - task: generate:package
         vars:
           FORMAT: rpm
+      - mv "{{.ROOT_DIR}}/bin/{{.APP_NAME}}.rpm" "{{.ROOT_DIR}}/bin/$(GOOS=linux GOARCH={{.ARCH}} RELEASE_FORMAT=rpm go run ./cmd/project release-artifact-name)"
+    vars:
+      ARCH: '{{.ARCH | default ARCH}}'
 
   generate:aur:
     summary: Creates a arch linux packager package

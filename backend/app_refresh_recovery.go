@@ -2,9 +2,7 @@ package backend
 
 import (
 	"context"
-	"errors"
 	"fmt"
-	"net/http"
 	"sync"
 	"time"
 
@@ -21,24 +19,21 @@ func (a *App) teardownRefreshSubsystem() {
 	a.clearRefreshPermissionCancels()
 
 	subsystems := a.replaceRefreshSubsystems(nil)
+	a.refreshService.Store(nil)
+	aggregates := a.refreshAggregates.Load()
+	a.refreshAggregates.Store(nil)
+	if aggregates != nil && aggregates.resources != nil {
+		aggregates.resources.Stop()
+	}
 
 	for _, subsystem := range subsystems {
 		a.shutdownRefreshSubsystem(subsystem)
 	}
 
 	a.refreshManager = nil
-	a.refreshAggregates.Store(nil)
-
-	serverDone := a.refreshServerDone
-	a.shutdownRefreshHTTPServer()
-	a.waitForRefreshServerLoop(serverDone)
-	a.refreshServerDone = nil
-
-	a.closeRefreshListener()
 
 	a.sharedInformerFactory = nil
 	a.apiExtensionsInformerFactory = nil
-	a.refreshBaseURL = ""
 }
 
 func (a *App) shutdownRefreshSubsystem(subsystem *system.Subsystem) {
@@ -46,6 +41,9 @@ func (a *App) shutdownRefreshSubsystem(subsystem *system.Subsystem) {
 		return
 	}
 	subsystem.StopDoorbellNotifiers()
+	if subsystem.ContainerLogs != nil {
+		subsystem.ContainerLogs.Stop()
+	}
 	if subsystem.ResourceStream != nil {
 		subsystem.ResourceStream.Stop()
 	}
@@ -63,48 +61,6 @@ func (a *App) shutdownRefreshSubsystem(subsystem *system.Subsystem) {
 	case <-time.After(config.RefreshShutdownTimeout):
 		a.logger.Warn("Timed out waiting for refresh manager shutdown", logsources.Refresh)
 	}
-}
-
-func (a *App) shutdownRefreshHTTPServer() {
-	if a.refreshHTTPServer == nil {
-		return
-	}
-	done := make(chan struct{})
-	go func(server *http.Server) {
-		ctx, cancel := context.WithTimeout(context.Background(), config.RefreshShutdownTimeout)
-		defer cancel()
-		if err := server.Shutdown(ctx); err != nil && !errors.Is(err, http.ErrServerClosed) {
-			a.logger.Warn(fmt.Sprintf("Failed to shutdown refresh HTTP server: %v", err), logsources.Refresh)
-		}
-		close(done)
-	}(a.refreshHTTPServer)
-	select {
-	case <-done:
-	case <-time.After(config.RefreshShutdownTimeout):
-		a.logger.Warn("Timed out waiting for refresh HTTP server shutdown", logsources.Refresh)
-	}
-	a.refreshHTTPServer = nil
-}
-
-func (a *App) waitForRefreshServerLoop(serverDone <-chan struct{}) {
-	if serverDone == nil {
-		return
-	}
-	select {
-	case <-serverDone:
-	case <-time.After(config.RefreshShutdownTimeout):
-		a.logger.Warn("Timed out waiting for refresh server loop", logsources.Refresh)
-	}
-}
-
-func (a *App) closeRefreshListener() {
-	if a.refreshListener == nil {
-		return
-	}
-	if err := a.refreshListener.Close(); err != nil {
-		a.logger.Debug(fmt.Sprintf("Failed to close refresh listener: %v", err), logsources.Refresh)
-	}
-	a.refreshListener = nil
 }
 
 func (a *App) stopRefreshPermissionRevalidation(clusterID string) {

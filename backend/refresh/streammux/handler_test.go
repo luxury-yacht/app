@@ -1,6 +1,9 @@
 package streammux
 
 import (
+	"context"
+	"errors"
+	"sync"
 	"testing"
 	"time"
 
@@ -11,10 +14,33 @@ import (
 
 type stubConn struct{}
 
-func (stubConn) ReadJSON(interface{}) error       { return nil }
-func (stubConn) WriteJSON(interface{}) error      { return nil }
-func (stubConn) SetWriteDeadline(time.Time) error { return nil }
-func (stubConn) Close() error                     { return nil }
+func (stubConn) ReceiveJSON(interface{}) error { return nil }
+func (stubConn) SendJSON(interface{}) error    { return nil }
+func (stubConn) Close() error                  { return nil }
+
+type blockingConn struct {
+	started   chan struct{}
+	closed    chan struct{}
+	startOnce sync.Once
+	closeOnce sync.Once
+}
+
+func newBlockingConn() *blockingConn {
+	return &blockingConn{started: make(chan struct{}), closed: make(chan struct{})}
+}
+
+func (c *blockingConn) ReceiveJSON(interface{}) error {
+	c.startOnce.Do(func() { close(c.started) })
+	<-c.closed
+	return errors.New("stream closed")
+}
+
+func (c *blockingConn) SendJSON(interface{}) error { return nil }
+
+func (c *blockingConn) Close() error {
+	c.closeOnce.Do(func() { close(c.closed) })
+	return nil
+}
 
 // stubAdapter satisfies the stream Adapter interface for tests.
 type stubAdapter struct{}
@@ -87,6 +113,41 @@ func TestSessionBackpressureKeepsSessionOpenAndResetsScope(t *testing.T) {
 	}
 }
 
+func TestHandlerStopClosesActiveAndFutureSessions(t *testing.T) {
+	handler, err := NewHandler(Config{
+		Adapter: stubAdapter{}, Logger: applog.Noop, StreamName: "resources",
+	})
+	if err != nil {
+		t.Fatalf("NewHandler returned error: %v", err)
+	}
+	active := newBlockingConn()
+	done := make(chan struct{})
+	go func() {
+		defer close(done)
+		handler.Handle(active, context.Background())
+	}()
+
+	select {
+	case <-active.started:
+	case <-time.After(time.Second):
+		t.Fatal("active session did not start")
+	}
+	handler.Stop()
+	select {
+	case <-done:
+	case <-time.After(time.Second):
+		t.Fatal("active session survived handler teardown")
+	}
+
+	future := newBlockingConn()
+	handler.Handle(future, context.Background())
+	select {
+	case <-future.closed:
+	default:
+		t.Fatal("session started after handler teardown")
+	}
+}
+
 func TestSessionSendErrorIncludesPermissionDetails(t *testing.T) {
 	session := newSession(stubConn{}, Config{Adapter: nil, Logger: applog.Noop, Telemetry: nil, ClusterID: "cluster-1", ClusterName: "cluster-a", StreamName: "resources", SendReset: true, AllowClusterScopedRequests: false, ResolveClusterName: nil})
 	err := refresh.NewPermissionDeniedError("pods", "core/pods")
@@ -136,19 +197,6 @@ func TestSessionResolveClusterIDRejectsMismatchedScopeForSingleClusterHandler(t 
 
 	if err == nil || err.Error() != "cluster mismatch" {
 		t.Fatalf("expected cluster mismatch, got %v", err)
-	}
-}
-
-func TestHandlerSetsHandshakeTimeout(t *testing.T) {
-	handler, err := NewHandler(Config{
-		Adapter:    stubAdapter{},
-		StreamName: "resources",
-	})
-	if err != nil {
-		t.Fatalf("unexpected handler error: %v", err)
-	}
-	if handler.upgrader.HandshakeTimeout != config.StreamMuxHandshakeTimeout {
-		t.Fatalf("expected handshake timeout %v, got %v", config.StreamMuxHandshakeTimeout, handler.upgrader.HandshakeTimeout)
 	}
 }
 

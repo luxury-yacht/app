@@ -38,6 +38,25 @@ type Options struct {
 	ScopeString      string
 }
 
+// Request is the first client frame for a container-logs named stream.
+// Scope carries complete cluster and Kubernetes object identity; the remaining
+// fields preserve the existing container and filter controls.
+type Request struct {
+	Scope            string   `json:"scope"`
+	Container        string   `json:"container,omitempty"`
+	SelectedFilters  []string `json:"selectedFilters,omitempty"`
+	MatchNone        bool     `json:"matchNone,omitempty"`
+	Pod              string   `json:"pod,omitempty"`
+	PodInclude       string   `json:"podInclude,omitempty"`
+	PodExclude       string   `json:"podExclude,omitempty"`
+	Include          string   `json:"include,omitempty"`
+	Exclude          string   `json:"exclude,omitempty"`
+	ContainerState   string   `json:"containerState,omitempty"`
+	TailLines        int      `json:"tailLines,omitempty"`
+	IncludeInit      *bool    `json:"includeInit,omitempty"`
+	IncludeEphemeral *bool    `json:"includeEphemeral,omitempty"`
+}
+
 // Entry mirrors the log line payload sent to clients.
 type Entry struct {
 	Timestamp   string `json:"timestamp"`
@@ -48,7 +67,7 @@ type Entry struct {
 	IsEphemeral bool   `json:"isEphemeral,omitempty"`
 }
 
-// EventPayload is the SSE message envelope emitted to clients.
+// EventPayload is the JSON message envelope emitted to clients.
 type EventPayload struct {
 	Domain       string                          `json:"domain"`
 	Scope        string                          `json:"scope"`

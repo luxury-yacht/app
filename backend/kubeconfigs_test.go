@@ -2,7 +2,6 @@ package backend
 
 import (
 	"context"
-	"net/http"
 	"os"
 	"path/filepath"
 	"runtime"
@@ -423,7 +422,7 @@ func TestApp_SetKubeconfigSearchPathsPrunesSelectionsFromRemovedPaths(t *testing
 	setTestAppRuntimeReady(t, app, context.Background())
 	app.appSettings = getDefaultAppSettings()
 	app.refreshAggregates.Store(&refreshAggregateHandlers{})
-	app.refreshHTTPServer = &http.Server{}
+	setRefreshServiceReadyForTest(app)
 	setRefreshRuntimeContextForTest(app, context.Background())
 
 	baseDir := t.TempDir()

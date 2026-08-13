@@ -46,3 +46,19 @@ func TestFindReleaseAssetsUsesConfiguredDirectory(t *testing.T) {
 		}
 	}
 }
+
+func TestFindReleaseAssetsRejectsDuplicateBasenames(t *testing.T) {
+	artifactDir := t.TempDir()
+	for _, platform := range []string{"linux-amd64", "linux-arm64"} {
+		path := filepath.Join(artifactDir, platform, "luxury-yacht.deb")
+		require.NoError(t, os.MkdirAll(filepath.Dir(path), 0o755))
+		require.NoError(t, os.WriteFile(path, []byte(platform), 0o600))
+	}
+
+	_, err := findReleaseAssets(releaseConfig{
+		artifactsDir:  artifactDir,
+		releaseAssets: []string{".deb"},
+	})
+
+	require.ErrorContains(t, err, `duplicate release asset name "luxury-yacht.deb"`)
+}

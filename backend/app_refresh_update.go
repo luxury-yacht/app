@@ -40,7 +40,7 @@ func (a *App) validateRefreshSelectionUpdate() error {
 }
 
 func (a *App) refreshSelectionUpdateNeedsSetup() bool {
-	return a.refreshHTTPServer == nil || a.refreshAggregates.Load() == nil || a.currentRefreshRuntimeContext() == nil
+	return a.refreshService.Load() == nil || a.refreshAggregates.Load() == nil || a.currentRefreshRuntimeContext() == nil
 }
 
 type refreshSelectionPlan struct {
@@ -210,13 +210,16 @@ func (a *App) stopRefreshSubsystem(subsystem *system.Subsystem) {
 		return
 	}
 	subsystem.CancelColdPreparation()
+	if subsystem.ContainerLogs != nil {
+		subsystem.ContainerLogs.Stop()
+	}
+	if subsystem.ResourceStream != nil {
+		subsystem.ResourceStream.Stop()
+	}
 	if subsystem.Manager == nil {
 		return
 	}
 	subsystem.StopDoorbellNotifiers()
-	if subsystem.ResourceStream != nil {
-		subsystem.ResourceStream.Stop()
-	}
 	ctx, cancel := context.WithTimeout(context.Background(), config.RefreshShutdownTimeout)
 	defer cancel()
 	if err := subsystem.Manager.Shutdown(ctx); err != nil {

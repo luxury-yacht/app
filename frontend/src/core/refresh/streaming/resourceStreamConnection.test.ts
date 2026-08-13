@@ -1,23 +1,14 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
-import { installWindowProperty } from '@/test-utils/windowProperty';
-
-const ensureRefreshBaseURLMock = vi.hoisted(() => vi.fn(async () => 'http://127.0.0.1:0'));
-const invalidateRefreshBaseURLMock = vi.hoisted(() => vi.fn());
-
-vi.mock('../client', () => ({
-  ensureRefreshBaseURL: ensureRefreshBaseURLMock,
-  invalidateRefreshBaseURL: invalidateRefreshBaseURLMock,
-}));
 
 import { ResourceStreamConnection } from './resourceStreamConnection';
 
-const createdSockets: FakeWebSocket[] = [];
-let restoreWebSocket: (() => void) | undefined;
+const createdSockets: FakeJSONSocket[] = [];
 
-class FakeWebSocket {
+class FakeJSONSocket {
   readonly url: string;
   static OPEN = 1;
-  readyState = FakeWebSocket.OPEN;
+  readonly OPEN = 1;
+  readyState = FakeJSONSocket.OPEN;
   onopen: ((event?: Event) => void) | null = null;
   onmessage: ((event: MessageEvent) => void) | null = null;
   onerror: (() => void) | null = null;
@@ -25,17 +16,14 @@ class FakeWebSocket {
   send = vi.fn();
   close = vi.fn();
 
-  constructor(url: string) {
-    this.url = url;
+  constructor(name: string) {
+    this.url = name;
     createdSockets.push(this);
   }
 }
 
 describe('ResourceStreamConnection', () => {
   beforeEach(() => {
-    ensureRefreshBaseURLMock.mockReset();
-    ensureRefreshBaseURLMock.mockResolvedValue('http://127.0.0.1:0');
-    invalidateRefreshBaseURLMock.mockReset();
     createdSockets.length = 0;
     if (!globalThis.window) {
       Object.defineProperty(globalThis, 'window', {
@@ -45,13 +33,16 @@ describe('ResourceStreamConnection', () => {
     }
     window.setTimeout = globalThis.setTimeout;
     window.clearTimeout = globalThis.clearTimeout;
-    restoreWebSocket = installWindowProperty('WebSocket', FakeWebSocket);
+    (
+      globalThis as typeof globalThis & {
+        __wailsJSONStreamFactory?: (name: string) => unknown;
+      }
+    ).__wailsJSONStreamFactory = (name) => new FakeJSONSocket(name);
     vi.useRealTimers();
   });
 
   afterEach(() => {
-    restoreWebSocket?.();
-    restoreWebSocket = undefined;
+    Reflect.deleteProperty(globalThis, '__wailsJSONStreamFactory');
     vi.useRealTimers();
   });
 
@@ -66,12 +57,12 @@ describe('ResourceStreamConnection', () => {
     await connection.connect();
 
     const socket = createdSockets[0];
-    expect(socket.url).toBe('ws://127.0.0.1:0/api/v2/stream/resources');
+    expect(socket.url).toBe('refresh-resources');
     socket.onopen?.(new Event('open'));
-    socket.onmessage?.({ data: '{"type":"HEARTBEAT"}' } as MessageEvent);
+    socket.onmessage?.({ data: { type: 'HEARTBEAT' } } as MessageEvent);
 
     expect(delegate.handleConnectionOpen).toHaveBeenCalledWith('');
-    expect(delegate.handleMessage).toHaveBeenCalledWith('', '{"type":"HEARTBEAT"}');
+    expect(delegate.handleMessage).toHaveBeenCalledWith('', { type: 'HEARTBEAT' });
   });
 
   it('queues outbound messages until the socket is available', async () => {
@@ -93,17 +84,15 @@ describe('ResourceStreamConnection', () => {
     const socket = createdSockets[0];
     socket.onopen?.(new Event('open'));
 
-    expect(socket.send).toHaveBeenCalledWith(
-      JSON.stringify({
-        type: 'REQUEST',
-        clusterId: 'cluster-a',
-        domain: 'pods',
-        scope: 'cluster-a|namespace:default',
-      })
-    );
+    expect(socket.send).toHaveBeenCalledWith({
+      type: 'REQUEST',
+      clusterId: 'cluster-a',
+      domain: 'pods',
+      scope: 'cluster-a|namespace:default',
+    });
   });
 
-  it('invalidates the base URL and reconnects after socket close', async () => {
+  it('reconnects the stable named stream after socket close', async () => {
     vi.useFakeTimers();
     window.setTimeout = globalThis.setTimeout;
     window.clearTimeout = globalThis.clearTimeout;
@@ -118,7 +107,6 @@ describe('ResourceStreamConnection', () => {
     createdSockets[0].onclose?.();
     await Promise.resolve();
 
-    expect(invalidateRefreshBaseURLMock).toHaveBeenCalled();
     expect(delegate.handleConnectionError).toHaveBeenCalledWith(
       '',
       'Resource stream connection closed'

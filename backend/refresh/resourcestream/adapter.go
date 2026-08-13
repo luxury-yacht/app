@@ -16,7 +16,7 @@ func NewAdapter(manager *Manager) *Adapter {
 	return &Adapter{manager: manager}
 }
 
-// ParseSelector converts the websocket transport scope into the typed resource
+// ParseSelector converts the named-stream transport scope into the typed resource
 // stream selector used below the adapter seam.
 func (a *Adapter) ParseSelector(clusterID, domain, scope string) (streammux.Selector, error) {
 	return ParseStreamSelector(clusterID, domain, scope)

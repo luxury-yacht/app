@@ -99,7 +99,8 @@ type Subsystem struct {
 	ManualQueue      refresh.ManualQueue     // Queue for manual refresh requests.
 	EventStream      *eventstream.Manager    // Manager for event streams.
 	ResourceStream   *resourcestream.Manager // Manager for resource streams.
-	ClusterMeta      snapshot.ClusterMeta    // Metadata about the cluster.
+	ContainerLogs    *containerlogsstream.Handler
+	ClusterMeta      snapshot.ClusterMeta // Metadata about the cluster.
 	// NamespaceNotifier and ObjectEventsNotifier drive the namespaces and
 	// object-events doorbells. Teardown/cooling MUST Stop() them (via
 	// StopDoorbellNotifiers) or their debounce/rearm timers keep broadcasting
@@ -465,7 +466,7 @@ func NewSubsystemWithServices(cfg Config) (*Subsystem, error) {
 		HealthHub: informerHub,
 	})
 
-	eventManager, resourceManager, err := registerStreamHandlers(mux, streamDeps{
+	containerLogsHandler, eventManager, resourceManager, err := registerStreamHandlers(streamDeps{
 		informerFactory: informerFactory,
 		ingestManager:   ingestManager,
 		snapshotService: snapshotService,
@@ -500,6 +501,7 @@ func NewSubsystemWithServices(cfg Config) (*Subsystem, error) {
 		ManualQueue:          queue,
 		EventStream:          eventManager,
 		ResourceStream:       resourceManager,
+		ContainerLogs:        containerLogsHandler,
 		ClusterMeta:          clusterMeta,
 		NamespaceNotifier:    namespaceNotifier,
 		ObjectEventsNotifier: objectEventsNotifier,

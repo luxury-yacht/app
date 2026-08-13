@@ -4,13 +4,11 @@ import (
 	"context"
 	"errors"
 	"fmt"
-	"net/http"
 	"strconv"
 	"strings"
 	"sync"
 	"time"
 
-	"github.com/gorilla/websocket"
 	apierrors "k8s.io/apimachinery/pkg/api/errors"
 
 	"github.com/luxury-yacht/app/backend/internal/applog"
@@ -21,15 +19,16 @@ import (
 	"github.com/luxury-yacht/app/backend/refresh/telemetry"
 )
 
-type wsConn interface {
-	ReadJSON(v interface{}) error
-	WriteJSON(v interface{}) error
-	SetWriteDeadline(time.Time) error
+// Conn is the transport-neutral JSON stream used by the multiplexer. Wails'
+// StreamConn implements this interface directly.
+type Conn interface {
+	ReceiveJSON(v interface{}) error
+	SendJSON(v interface{}) error
 	Close() error
 }
 
 // Selector is the typed subscription identity produced by an adapter after the
-// websocket boundary resolves cluster routing and strips transport-only cluster
+// stream boundary resolves cluster routing and strips transport-only cluster
 // prefixes from the scope string.
 type Selector interface {
 	Cluster() string
@@ -44,7 +43,7 @@ type Adapter interface {
 	Resume(selector Selector, since uint64) ([]ServerMessage, bool)
 }
 
-// Config captures the dependencies for a websocket stream multiplexer.
+// Config captures the dependencies for a named stream multiplexer.
 type Config struct {
 	Adapter                    Adapter
 	Logger                     containerlogsstream.Logger
@@ -57,7 +56,7 @@ type Config struct {
 	ResolveClusterName         func(clusterID string) string
 }
 
-// Handler exposes a websocket endpoint that multiplexes stream subscriptions.
+// Handler multiplexes subscriptions over a named Wails stream.
 type Handler struct {
 	adapter                    Adapter
 	logger                     containerlogsstream.Logger
@@ -68,12 +67,12 @@ type Handler struct {
 	sendReset                  bool
 	allowClusterScopedRequests bool
 	resolveClusterName         func(clusterID string) string
-	upgrader                   websocket.Upgrader
 	sessionsMu                 sync.Mutex
 	sessions                   map[*session]struct{}
+	stopped                    bool
 }
 
-// NewHandler constructs a websocket stream multiplexer handler.
+// NewHandler constructs a named-stream multiplexer handler.
 func NewHandler(cfg Config) (*Handler, error) {
 	if cfg.Adapter == nil {
 		return nil, errors.New("stream adapter is required")
@@ -96,46 +95,50 @@ func NewHandler(cfg Config) (*Handler, error) {
 		allowClusterScopedRequests: cfg.AllowClusterScopedRequests,
 		resolveClusterName:         cfg.ResolveClusterName,
 		sessions:                   make(map[*session]struct{}),
-		upgrader: websocket.Upgrader{
-			ReadBufferSize:  config.StreamMuxReadBufferSize,
-			WriteBufferSize: config.StreamMuxWriteBufferSize,
-			// Prevent slow or stalled websocket upgrades from hanging indefinitely.
-			HandshakeTimeout: config.StreamMuxHandshakeTimeout,
-			CheckOrigin:      func(r *http.Request) bool { return true },
-		},
 	}, nil
 }
 
-// ServeHTTP upgrades the connection and multiplexes stream subscriptions.
-func (h *Handler) ServeHTTP(w http.ResponseWriter, r *http.Request) {
-	if r.Method != http.MethodGet {
-		http.Error(w, "method not allowed", http.StatusMethodNotAllowed)
+// Handle serves one Wails named-stream connection until the peer closes it.
+func (h *Handler) Handle(conn Conn, ctx context.Context) {
+	h.sessionsMu.Lock()
+	if h.stopped {
+		h.sessionsMu.Unlock()
+		_ = conn.Close()
 		return
 	}
 
-	conn, err := h.upgrader.Upgrade(w, r, nil)
-	if err != nil {
-		h.logger.Warn(fmt.Sprintf("stream mux upgrade failed: %v", err), logsources.StreamMux)
-		return
-	}
+	session := newSession(
+		conn, Config{Adapter: h.adapter, Logger: h.logger, Telemetry: h.telemetry, ClusterID: h.clusterID, ClusterName: h.clusterName, StreamName: h.streamName, SendReset: h.sendReset, AllowClusterScopedRequests: h.allowClusterScopedRequests, ResolveClusterName: h.resolveClusterName})
+	h.sessions[session] = struct{}{}
+	h.sessionsMu.Unlock()
 
 	if h.telemetry != nil {
 		h.telemetry.RecordStreamConnect(h.streamName)
 		defer h.telemetry.RecordStreamDisconnect(h.streamName)
 	}
-
-	session := newSession(
-		conn, Config{Adapter: h.adapter, Logger: h.logger, Telemetry: h.telemetry, ClusterID: h.clusterID, ClusterName: h.clusterName, StreamName: h.streamName, SendReset: h.sendReset, AllowClusterScopedRequests: h.allowClusterScopedRequests, ResolveClusterName: h.resolveClusterName})
-
-	h.sessionsMu.Lock()
-	h.sessions[session] = struct{}{}
-	h.sessionsMu.Unlock()
 	defer func() {
 		h.sessionsMu.Lock()
 		delete(h.sessions, session)
 		h.sessionsMu.Unlock()
 	}()
-	session.run(r.Context())
+	session.run(ctx)
+}
+
+// Stop closes every active session and makes this handler generation terminal.
+func (h *Handler) Stop() {
+	if h == nil {
+		return
+	}
+	h.sessionsMu.Lock()
+	h.stopped = true
+	sessions := make([]*session, 0, len(h.sessions))
+	for active := range h.sessions {
+		sessions = append(sessions, active)
+	}
+	h.sessionsMu.Unlock()
+	for _, active := range sessions {
+		active.shutdown()
+	}
 }
 
 // InvalidateClusterSubscriptions ends every active subscription for one
@@ -158,7 +161,7 @@ func (h *Handler) InvalidateClusterSubscriptions(clusterID string) {
 }
 
 type session struct {
-	conn                      wsConn
+	conn                      Conn
 	adapter                   Adapter
 	logger                    containerlogsstream.Logger
 	telemetry                 *telemetry.Recorder
@@ -184,23 +187,7 @@ type sessionSubscription struct {
 	clusterName string
 }
 
-// Normal view transitions close the websocket without a close status or after we send a close.
-func isExpectedStreamCloseError(err error) bool {
-	if err == nil {
-		return false
-	}
-	if errors.Is(err, websocket.ErrCloseSent) {
-		return true
-	}
-	return websocket.IsCloseError(
-		err,
-		websocket.CloseNormalClosure,
-		websocket.CloseGoingAway,
-		websocket.CloseNoStatusReceived,
-	)
-}
-
-func newSession(conn wsConn, cfg Config) *session {
+func newSession(conn Conn, cfg Config) *session {
 	return &session{
 		conn:                      conn,
 		adapter:                   cfg.Adapter,
@@ -255,16 +242,10 @@ func (s *session) invalidateClusterSubscriptions(clusterID string) {
 func (s *session) readLoop() {
 	for {
 		var msg ClientMessage
-		if err := s.conn.ReadJSON(&msg); err != nil {
-			if !websocket.IsUnexpectedCloseError(
-				err,
-				websocket.CloseNormalClosure,
-				websocket.CloseGoingAway,
-				websocket.CloseNoStatusReceived,
-			) {
-				return
+		if err := s.conn.ReceiveJSON(&msg); err != nil {
+			if ctxErr := s.doneError(); ctxErr == nil {
+				s.logger.Debug(fmt.Sprintf("stream mux connection closed: %v", err), logsources.StreamMux)
 			}
-			s.logger.Warn(fmt.Sprintf("stream mux read error: %v", err), logsources.StreamMux)
 			return
 		}
 
@@ -276,6 +257,15 @@ func (s *session) readLoop() {
 		default:
 			s.sendError(msg.ClusterID, msg.Domain, msg.Scope, errors.New("unsupported request type"))
 		}
+	}
+}
+
+func (s *session) doneError() error {
+	select {
+	case <-s.done:
+		return context.Canceled
+	default:
+		return nil
 	}
 }
 
@@ -554,13 +544,8 @@ func (s *session) writeMessage(msg ServerMessage) error {
 	// MessageType at the one send chokepoint, so live and resume-replayed frames
 	// carry it identically.
 	msg = s.prepareOutgoingMessage(msg)
-	if err := s.conn.SetWriteDeadline(time.Now().Add(config.StreamMuxWriteTimeout)); err != nil {
-		s.logger.Warn(fmt.Sprintf("stream mux: write deadline failed: %v", err), logsources.StreamMux)
-	}
-	if err := s.conn.WriteJSON(msg); err != nil {
-		if !isExpectedStreamCloseError(err) {
-			s.logger.Warn(fmt.Sprintf("stream mux write error: %v", err), logsources.StreamMux)
-		}
+	if err := s.conn.SendJSON(msg); err != nil {
+		s.logger.Debug(fmt.Sprintf("stream mux connection closed while sending: %v", err), logsources.StreamMux)
 		s.shutdown()
 		return err
 	}

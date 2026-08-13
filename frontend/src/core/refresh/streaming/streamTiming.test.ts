@@ -32,7 +32,7 @@ describe('streamReconnectDelay', () => {
     random.mockRestore();
   });
 
-  it('supports proportional jitter for websocket reconnects', () => {
+  it('supports proportional jitter for named-stream reconnects', () => {
     const random = mockUnitRandom(0);
 
     expect(streamReconnectDelay(1, { jitterFactor: 0.2, round: true })).toBe(1600);

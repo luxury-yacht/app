@@ -57,7 +57,7 @@ jobs:
             goos: darwin
             arch: arm64-and-amd64
             artifact_name: artifacts-darwin
-            artifact_path: bin/*-darwin-*.dmg
+            artifact_path: bin/*-macos-*.dmg
           - runner: windows-latest
             goos: windows
             arch: amd64
@@ -127,7 +127,7 @@ jobs:
             --notarize \
             --keychain-profile luxury-yacht-ci
           wails3 task darwin:create:dmg
-          mv bin/luxury-yacht.dmg bin/luxury-yacht-darwin-arm64.dmg
+          mv bin/luxury-yacht.dmg "bin/$(GOOS=darwin GOARCH=arm64 RELEASE_FORMAT=dmg go run ./cmd/project release-artifact-name)"
 
           wails3 task darwin:package ARCH=amd64
           wails3 tool sign \
@@ -136,7 +136,7 @@ jobs:
             --notarize \
             --keychain-profile luxury-yacht-ci
           wails3 task darwin:create:dmg
-          mv bin/luxury-yacht.dmg bin/luxury-yacht-darwin-amd64.dmg
+          mv bin/luxury-yacht.dmg "bin/$(GOOS=darwin GOARCH=amd64 RELEASE_FORMAT=dmg go run ./cmd/project release-artifact-name)"
 
       - name: Create package for Linux
         if: matrix.goos == 'linux'
@@ -144,8 +144,8 @@ jobs:
           GOARCH: ${{ matrix.arch }}
         run: |
           wails3 task linux:build ARCH=${{ matrix.arch }}
-          wails3 task linux:generate:deb
-          wails3 task linux:generate:rpm
+          wails3 task linux:generate:deb ARCH=${{ matrix.arch }}
+          wails3 task linux:generate:rpm ARCH=${{ matrix.arch }}
 
       - name: Create package for Windows (unsigned)
         if: matrix.goos == 'windows'

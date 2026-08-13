@@ -257,7 +257,7 @@ const (
 	// ContainerLogsStreamBackoffMax is the cap for container logs stream reconnection backoff.
 	ContainerLogsStreamBackoffMax = 30 * time.Second
 
-	// StreamHeartbeatInterval defines how often we evaluate heartbeat state for SSE streams.
+	// StreamHeartbeatInterval defines how often we evaluate heartbeat state for native streams.
 	StreamHeartbeatInterval = 15 * time.Second
 
 	// StreamHeartbeatTimeout is the max idle time before we flag the stream as stale.
@@ -278,7 +278,7 @@ const (
 	// ContainerLogsStreamMaxTailLines caps requested log stream tail lines.
 	ContainerLogsStreamMaxTailLines = 10000
 
-	// ContainerLogsStreamBatchMaxSize caps log entries emitted in one SSE batch.
+	// ContainerLogsStreamBatchMaxSize caps log entries emitted in one native-stream batch.
 	ContainerLogsStreamBatchMaxSize = 64
 
 	// ContainerLogsStreamCronCacheMaxSize caps cached cron job owner lookups.
@@ -318,22 +318,10 @@ const (
 	ResourceStreamResumeBufferSize = 1000
 )
 
-// Stream mux websocket settings.
+// Stream mux settings.
 const (
-	// StreamMuxWriteTimeout bounds websocket writes for multiplexed streams.
-	StreamMuxWriteTimeout = 10 * time.Second
-
-	// StreamMuxHandshakeTimeout bounds websocket upgrade handshakes for multiplexed streams.
-	StreamMuxHandshakeTimeout = 45 * time.Second
-
 	// StreamMuxOutgoingBufferSize caps queued outbound messages per multiplexed stream.
 	StreamMuxOutgoingBufferSize = 512
-
-	// StreamMuxReadBufferSize configures websocket read buffer sizing for multiplexed streams.
-	StreamMuxReadBufferSize = 4096
-
-	// StreamMuxWriteBufferSize configures websocket write buffer sizing for multiplexed streams.
-	StreamMuxWriteBufferSize = 4096
 )
 
 // Node maintenance settings.

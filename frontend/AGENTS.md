@@ -35,11 +35,11 @@ Applies to React/TypeScript code under `frontend/`.
 - Register refresher names in `frontend/src/core/refresh/refresherTypes.ts` and timing in `frontend/src/core/refresh/refresherConfig.ts`.
 - Register domains in `frontend/src/core/refresh/orchestrator.ts` and diagnostics config in `frontend/src/core/refresh/components/diagnostics/diagnosticsPanelConfig.ts`.
 - Manual refresh targets are mapped in `frontend/src/core/refresh/refresherTypes.ts` and selected in `frontend/src/core/refresh/RefreshManager.ts`.
-- Wire any SSE managers under `frontend/src/core/refresh/streaming`.
+- Wire Wails `JSONStream` managers under `frontend/src/core/refresh/streaming`.
 - Do not call `fetch` directly; use the refresh orchestrator/client (Biome plugins allow direct fetch only in the refresh and data-access infrastructure; see `frontend/biome.jsonc` and `frontend/biome-plugins/`).
 - Import generated Wails App bindings only through `frontend/src/core/backend-api`; its explicit export list is the frontend backend-call allowlist. Application reads still belong in `appStateAccess` or `dataAccess`, and object mutations belong in their owning action/workflow client.
 - Validate domain state in the Diagnostics panel.
-- Catalog browse: keep snapshot/manual refresh flow (see `frontend/src/core/refresh/orchestrator.ts` catalog registration); avoid SSE-driven renders for Browse.
+- Catalog browse: keep snapshot/manual refresh flow (see `frontend/src/core/refresh/orchestrator.ts` catalog registration); avoid stream-driven renders for Browse.
 - Frontend reads must go through `dataAccess` or `appStateAccess` as documented
   in `docs/architecture/data-access.md`.
 

@@ -6,11 +6,7 @@
  */
 
 import type { backend } from '@core/backend-api/models';
-import {
-  GetKubernetesAPIClientDiagnostics,
-  GetRefreshBaseURL,
-  GetSelectionDiagnostics,
-} from '@/core/backend-api';
+import { GetKubernetesAPIClientDiagnostics, GetSelectionDiagnostics } from '@/core/backend-api';
 import { formatPermissionDeniedStatus, isPermissionDeniedStatus } from './permissionErrors';
 import {
   assertRefreshSnapshotEnvelope,
@@ -44,23 +40,9 @@ type ManualRefreshJob = {
   error?: string;
 };
 
-let cachedRefreshBaseURL: string | null = null;
-let refreshBaseURLPromise: Promise<string> | null = null;
-let refreshReadyPromise: Promise<string> | null = null;
-
-const REFRESH_NOT_READY_PATTERN = /refresh subsystem not initialised/i;
-const MAX_REFRESH_URL_ATTEMPTS = 30;
-const INITIAL_REFRESH_URL_DELAY_MS = 200;
 const MANUAL_REFRESH_TIMEOUT_MS = 60_000;
 const INITIAL_MANUAL_JOB_POLL_MS = 50;
 const MAX_MANUAL_JOB_POLL_MS = 1_000;
-
-const toError = (error: unknown): Error => {
-  if (error instanceof Error) {
-    return error;
-  }
-  return new Error(typeof error === 'string' ? error : 'Unknown error');
-};
 
 const delay = (ms: number) => new Promise((resolve) => setTimeout(resolve, ms));
 
@@ -94,7 +76,6 @@ const parseManualRefreshJob = async (response: Response): Promise<ManualRefreshJ
 };
 
 const waitForManualRefresh = async (
-  baseURL: string,
   domain: RefreshDomain,
   scope: string,
   signal?: AbortSignal,
@@ -114,9 +95,8 @@ const waitForManualRefresh = async (
   }, MANUAL_REFRESH_TIMEOUT_MS);
 
   try {
-    const enqueueURL = new URL(`/api/v2/refresh/${domain}`, baseURL);
     let job = await parseManualRefreshJob(
-      await fetch(enqueueURL.toString(), {
+      await fetch(`/api/v2/refresh/${domain}`, {
         method: 'POST',
         headers: {
           'Content-Type': 'application/json',
@@ -128,9 +108,8 @@ const waitForManualRefresh = async (
     );
     let pollDelayMs = INITIAL_MANUAL_JOB_POLL_MS;
     while (job.state === 'queued' || job.state === 'running') {
-      const statusURL = new URL(`/api/v2/jobs/${job.jobId}`, baseURL);
       job = await parseManualRefreshJob(
-        await fetch(statusURL.toString(), {
+        await fetch(`/api/v2/jobs/${job.jobId}`, {
           signal: controller.signal,
           ...(correlationId ? { headers: { 'X-Correlation-ID': correlationId } } : {}),
         })
@@ -156,60 +135,6 @@ const waitForManualRefresh = async (
   }
 };
 
-async function attemptResolveRefreshBaseURL(attempt = 0): Promise<string> {
-  try {
-    const url = await GetRefreshBaseURL();
-    if (!url) {
-      throw new Error('refresh subsystem not initialised');
-    }
-    return url.endsWith('/') ? url.slice(0, -1) : url;
-  } catch (error) {
-    const resolvedError = toError(error);
-    if (REFRESH_NOT_READY_PATTERN.test(resolvedError.message)) {
-      if (attempt + 1 >= MAX_REFRESH_URL_ATTEMPTS) {
-        throw resolvedError;
-      }
-
-      const delayMs = Math.min(1000, INITIAL_REFRESH_URL_DELAY_MS * 2 ** attempt);
-      await delay(delayMs);
-      return attemptResolveRefreshBaseURL(attempt + 1);
-    }
-
-    throw resolvedError;
-  }
-}
-
-async function resolveRefreshBaseURL(): Promise<string> {
-  if (cachedRefreshBaseURL) {
-    return cachedRefreshBaseURL;
-  }
-
-  refreshBaseURLPromise ??= attemptResolveRefreshBaseURL()
-    .then((url) => {
-      cachedRefreshBaseURL = url;
-      return url;
-    })
-    .catch((error) => {
-      refreshBaseURLPromise = null;
-      throw error;
-    });
-
-  return refreshBaseURLPromise;
-}
-
-export async function ensureRefreshBaseURL(): Promise<string> {
-  if (cachedRefreshBaseURL) {
-    return cachedRefreshBaseURL;
-  }
-
-  refreshReadyPromise ??= resolveRefreshBaseURL().catch((error) => {
-    refreshReadyPromise = null;
-    throw error;
-  });
-
-  return refreshReadyPromise;
-}
-
 export function parseRefreshSnapshotValue<TPayload>(
   value: unknown,
   domain: RefreshDomain
@@ -226,20 +151,13 @@ export async function fetchSnapshot<TPayload>(
     if (!options.scope) {
       throw new Error(`Manual refresh for ${domain} requires a cluster scope`);
     }
-    await waitForManualRefresh(
-      await resolveRefreshBaseURL(),
-      domain,
-      options.scope,
-      options.signal,
-      options.correlationId
-    );
+    await waitForManualRefresh(domain, options.scope, options.signal, options.correlationId);
   }
   const buildRequest = async () => {
-    const baseURL = await resolveRefreshBaseURL();
-    const url = new URL(`/api/v2/snapshots/${domain}`, baseURL);
+    const params = new URLSearchParams();
 
     if (options.scope) {
-      url.searchParams.set('scope', options.scope);
+      params.set('scope', options.scope);
     }
 
     const headers: Record<string, string> = {};
@@ -250,7 +168,8 @@ export async function fetchSnapshot<TPayload>(
       headers['If-None-Match'] = options.ifNoneMatch;
     }
 
-    return fetch(url.toString(), {
+    const query = params.size > 0 ? `?${params.toString()}` : '';
+    return fetch(`/api/v2/snapshots/${domain}${query}`, {
       signal: options.signal,
       headers: Object.keys(headers).length > 0 ? headers : undefined,
     });
@@ -280,8 +199,6 @@ export async function fetchSnapshot<TPayload>(
       if (!isRetryableNetworkError(error) || attempt + 1 >= maxAttempts) {
         throw error;
       }
-      // Refresh base URLs can change when the backend rebuilds the refresh subsystem.
-      invalidateRefreshBaseURL();
       const delayMs = Math.min(1000, 200 * 2 ** attempt);
       await delay(delayMs);
     }
@@ -340,17 +257,8 @@ async function safeParseError(
   };
 }
 
-export function invalidateRefreshBaseURL(): void {
-  cachedRefreshBaseURL = null;
-  refreshBaseURLPromise = null;
-  refreshReadyPromise = null;
-}
-
 export async function fetchTelemetrySummary(): Promise<NormalizedTelemetrySummary> {
-  const baseURL = await resolveRefreshBaseURL();
-  const url = new URL('/api/v2/telemetry/summary', baseURL);
-
-  const response = await fetch(url.toString());
+  const response = await fetch('/api/v2/telemetry/summary');
   if (!response.ok) {
     throw new Error(`Telemetry request failed: ${response.status} ${response.statusText}`);
   }
@@ -365,10 +273,7 @@ export async function fetchTelemetrySummary(): Promise<NormalizedTelemetrySummar
 }
 
 export async function setMetricsActive(clusterIds: readonly string[]): Promise<void> {
-  const baseURL = await resolveRefreshBaseURL();
-  const url = new URL('/api/v2/metrics/active', baseURL);
-
-  const response = await fetch(url.toString(), {
+  const response = await fetch('/api/v2/metrics/active', {
     method: 'POST',
     headers: { 'Content-Type': 'application/json' },
     body: JSON.stringify({ clusterIds }),

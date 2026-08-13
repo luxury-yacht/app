@@ -33,7 +33,7 @@ const (
 // canonical taxonomy referenced by a refresh domain's authored sourceClocks
 // (see resourcestream.ProjectionDescriptor.SourceClocks, which aliases this
 // type). object/metric are used today; event/catalog join as the events and
-// catalog streams fold onto this WS.
+// catalog streams fold onto this named stream.
 type Source string
 
 const (
@@ -56,7 +56,7 @@ const (
 	SignalError   Signal = "error"
 )
 
-// ClientMessage is the request envelope sent from websocket clients.
+// ClientMessage is the request envelope sent from named-stream clients.
 type ClientMessage struct {
 	Type            MessageType `json:"type"`
 	ClusterID       string      `json:"clusterId,omitempty"`
@@ -66,7 +66,7 @@ type ClientMessage struct {
 	ResumeToken     string      `json:"resumeToken,omitempty"`
 }
 
-// ServerMessage is the envelope sent back to websocket clients.
+// ServerMessage is the envelope sent back to named-stream clients.
 //
 // The envelope carries only a change SIGNAL, never a projected row: every
 // streamed table is query-backed, so the visible page is fetched over HTTP and

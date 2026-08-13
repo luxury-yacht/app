@@ -188,7 +188,10 @@ func (a *App) stopClusterFeeds(clusterID string, subsystem *system.Subsystem) {
 	// and would keep broadcasting into the dead manager.
 	subsystem.StopDoorbellNotifiers()
 
-	// Stop the resource stream if present.
+	// Stop active streams before shutting down their producers.
+	if subsystem.ContainerLogs != nil {
+		subsystem.ContainerLogs.Stop()
+	}
 	if subsystem.ResourceStream != nil {
 		subsystem.ResourceStream.Stop()
 	}
@@ -407,7 +410,7 @@ func refreshSubsystemTopology(subsystems map[string]*system.Subsystem) (map[stri
 }
 
 func (r clusterSubsystemRebuild) updateRefreshRouting(subsystems map[string]*system.Subsystem, clusterOrder []string) bool {
-	if r.app.refreshHTTPServer == nil || r.app.refreshAggregates.Load() == nil {
+	if r.app.refreshService.Load() == nil || r.app.refreshAggregates.Load() == nil {
 		return r.bootstrapRefreshRouting(subsystems, clusterOrder)
 	}
 	if err := r.app.refreshAggregates.Load().Update(clusterOrder, subsystems); err != nil {
@@ -424,11 +427,8 @@ func (r clusterSubsystemRebuild) bootstrapRefreshRouting(subsystems map[string]*
 	}
 	r.app.refreshAggregates.Store(aggregates)
 	r.app.sweepNamespacesReadiness(subsystems)
-	if err := r.app.startRefreshHTTPServer(mux, subsystems); err != nil {
-		r.app.logger.ErrorWithCause(err, fmt.Sprintf("Failed to start refresh HTTP server after cluster %s recovery", r.clusterID), logsources.Auth, r.clusterID, r.clusterName)
-		return false
-	}
-	r.app.logger.Info(fmt.Sprintf("Started refresh HTTP server after cluster %s recovery", r.clusterID), logsources.Auth, r.clusterID, r.clusterName)
+	r.app.publishRefreshService(mux, subsystems)
+	r.app.logger.Info(fmt.Sprintf("Published refresh service after cluster %s recovery", r.clusterID), logsources.Auth, r.clusterID, r.clusterName)
 	return true
 }
 

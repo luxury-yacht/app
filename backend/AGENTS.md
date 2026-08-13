@@ -55,13 +55,13 @@ Applies to Go code under `backend/`.
 	`mise exec -- go generate ./backend`.
 - Permission-gated domains: use `RegisterPermissionDeniedDomain` in `backend/refresh/snapshot/permission.go` and surface `PermissionIssue` entries through the refresh system permission-gate paths.
 - Manual refresh entrypoint: `/api/v2/refresh/{domain}` in `backend/refresh/api/server.go`, backed by `ManualQueue` in `backend/refresh/types.go`.
-- Per-cluster stream endpoints are wired in `backend/refresh/system/streams.go`; aggregate stream routes are wired in `backend/app_refresh_setup.go`.
+- Per-cluster stream endpoints are wired in `backend/refresh/system/streams.go`; aggregate named-stream routing is wired in `backend/app_refresh_setup.go` and registered in `backend/app.go`.
 - Diagnostics/telemetry sources: refresh domain telemetry in `backend/refresh/telemetry/recorder.go`; catalog diagnostics in `backend/app_object_catalog.go`.
 - Wedged backend (views stuck loading, suspected deadlock): capture a SIGUSR1
   goroutine dump before hypothesizing — opt in with
   `ENABLE_GOROUTINE_DUMP=true` at launch; see `docs/workflows/goroutine-dump.md`;
   handler in `backend/app_diagnostic_dump.go`.
-- Lifecycle: refresh subsystem setup in `backend/app_refresh_setup.go`, selection updates in `backend/app_refresh_update.go`, replacement helpers in `backend/app_refresh_subsystems.go`, teardown/rebuild in `backend/app_refresh_recovery.go`, base URL in `backend/app_refresh.go`.
+- Lifecycle: refresh subsystem setup in `backend/app_refresh_setup.go`, selection updates in `backend/app_refresh_update.go`, replacement helpers in `backend/app_refresh_subsystems.go`, teardown/rebuild in `backend/app_refresh_recovery.go`, and the atomically published service handler in `backend/app_refresh_transport.go`.
 - Client init: `backend/app_kubernetes_client.go` owns client setup and triggers refresh subsystem + object catalog start.
 - Multi-cluster refresh behavior is documented in
   `docs/architecture/multi-cluster.md`, `docs/architecture/data-freshness.md`,
@@ -100,15 +100,16 @@ Applies to Go code under `backend/`.
 - Regenerate Wails bindings when settings DTOs, schema fields, or response
   shapes change.
 
-## HTTP Server (Refresh API)
+## Wails Refresh Transport
 
-- The loopback HTTP server (`backend/refresh/api/`) is a private Wails webview
-  transport, not a public browser API. CORS handling is still required for
-  webview requests, preflight, and readable error responses; preserve it on
-  snapshot, manual-refresh, telemetry, metrics, and stream paths, including
-  errors emitted before the owning handler runs. Treat loopback binding and the
-  runtime-discovered port as exposure constraints, not substitutes for cluster
-  scoping, RBAC, or request validation.
+- `backend/refresh/api/` owns mount-relative request/response handlers published
+  atomically through the same-origin Wails service route `/api/v2`.
+  `resource-stream` and `container-logs` are named Wails JSON streams, not HTTP
+  upgrade or event-stream routes. Preserve the early-unready response,
+  cluster scoping, complete object identity, RBAC, request validation, ordered
+  publication/replacement, and teardown. Do not add a loopback listener, runtime
+  base-URL bridge, CORS layer, raw browser WebSocket, EventSource, or fallback
+  transport.
 
 ## Testing Guidelines
 

@@ -6,9 +6,7 @@
 
 import { afterEach, beforeEach, describe, expect, it, test, vi } from 'vitest';
 
-const ensureRefreshBaseURLMock = vi.hoisted(() => vi.fn(async () => 'http://127.0.0.1:0'));
 const fetchSnapshotMock = vi.hoisted(() => vi.fn());
-const invalidateRefreshBaseURLMock = vi.hoisted(() => vi.fn());
 const logAppLogsDebugMock = vi.hoisted(() => vi.fn());
 const logAppLogsInfoMock = vi.hoisted(() => vi.fn());
 const logAppLogsWarnMock = vi.hoisted(() => vi.fn());
@@ -16,16 +14,15 @@ const errorHandlerMock = vi.hoisted(() => ({
   handle: vi.fn(),
 }));
 
-const createdSockets: FakeWebSocket[] = [];
+const createdSockets: FakeJSONSocket[] = [];
 
 vi.mock('../client', () => ({
-  ensureRefreshBaseURL: ensureRefreshBaseURLMock,
   fetchSnapshot: fetchSnapshotMock,
-  invalidateRefreshBaseURL: invalidateRefreshBaseURLMock,
 }));
 
 vi.mock('@utils/errorHandler', () => ({
   errorHandler: errorHandlerMock,
+  reportOperationalError: vi.fn(),
 }));
 
 vi.mock('@/core/logging/appLogsClient', () => ({
@@ -47,9 +44,10 @@ import {
 import { getScopedDomainState, resetAllScopedDomainStates, setScopedDomainState } from '../store';
 import { normalizeResourceScope, ResourceStreamManager } from './resourceStreamManager';
 
-class FakeWebSocket {
+class FakeJSONSocket {
   static OPEN = 1;
-  readyState = FakeWebSocket.OPEN;
+  readonly OPEN = 1;
+  readyState = FakeJSONSocket.OPEN;
   onopen: ((event?: Event) => void) | null = null;
   onmessage: ((event: MessageEvent) => void) | null = null;
   onerror: (() => void) | null = null;
@@ -71,12 +69,12 @@ const installWindowTimers = (): void => {
   });
 };
 
-const installFakeWebSocket = (): void => {
-  Object.defineProperty(globalThis, 'WebSocket', {
-    configurable: true,
-    writable: true,
-    value: FakeWebSocket,
-  });
+const installFakeJSONSocket = (): void => {
+  (
+    globalThis as typeof globalThis & {
+      __wailsJSONStreamFactory?: (name: string) => unknown;
+    }
+  ).__wailsJSONStreamFactory = (name) => new FakeJSONSocket(name);
 };
 
 const flushPromises = async () => {
@@ -111,10 +109,7 @@ const resourceRef = ({
 });
 
 beforeEach(() => {
-  ensureRefreshBaseURLMock.mockReset();
-  ensureRefreshBaseURLMock.mockResolvedValue('http://127.0.0.1:0');
   fetchSnapshotMock.mockReset();
-  invalidateRefreshBaseURLMock.mockReset();
   logAppLogsDebugMock.mockClear();
   logAppLogsInfoMock.mockClear();
   logAppLogsWarnMock.mockClear();
@@ -128,7 +123,7 @@ beforeEach(() => {
     });
   }
   installWindowTimers();
-  installFakeWebSocket();
+  installFakeJSONSocket();
 
   resetAllScopedDomainStates('nodes');
   resetAllScopedDomainStates('namespace-workloads');
@@ -171,7 +166,7 @@ afterEach(() => {
   resetAllScopedDomainStates('pods');
   resetAllScopedDomainStates('namespaces');
   resetAllScopedDomainStates('namespace-metrics');
-  Reflect.deleteProperty(globalThis, 'WebSocket');
+  Reflect.deleteProperty(globalThis, '__wailsJSONStreamFactory');
   vi.useRealTimers();
 });
 
@@ -1536,7 +1531,7 @@ describe('ResourceStreamManager', () => {
     expect(socket).toBeDefined();
 
     const cancelCount = () =>
-      socket.send.mock.calls.filter(([payload]) => JSON.parse(payload).type === 'CANCEL').length;
+      socket.send.mock.calls.filter(([payload]) => payload.type === 'CANCEL').length;
 
     manager.stop('nodes', storeScope, false);
     expect(cancelCount()).toBe(0);
@@ -1573,7 +1568,7 @@ describe('ResourceStreamManager', () => {
     expect(socket).toBeDefined();
 
     const cancelCount = () =>
-      socket.send.mock.calls.filter(([payload]) => JSON.parse(payload).type === 'CANCEL').length;
+      socket.send.mock.calls.filter(([payload]) => payload.type === 'CANCEL').length;
 
     manager.stop('nodes', storeScope, false);
     expect(cancelCount()).toBe(0);

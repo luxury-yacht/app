@@ -1,8 +1,6 @@
 package system
 
 import (
-	"net/http"
-
 	"github.com/luxury-yacht/app/backend/internal/applog"
 	"github.com/luxury-yacht/app/backend/refresh"
 	"github.com/luxury-yacht/app/backend/refresh/containerlogsstream"
@@ -26,8 +24,9 @@ type streamDeps struct {
 	clusterMeta     snapshot.ClusterMeta
 }
 
-// registerStreamHandlers wires stream endpoints and returns stream managers.
-func registerStreamHandlers(mux *http.ServeMux, deps streamDeps) (*eventstream.Manager, *resourcestream.Manager, error) {
+// registerStreamHandlers constructs the per-cluster producers consumed by the
+// process-wide Wails named streams.
+func registerStreamHandlers(deps streamDeps) (*containerlogsstream.Handler, *eventstream.Manager, *resourcestream.Manager, error) {
 	logger := applog.ClusterScoped(deps.cfg.Logger, deps.clusterMeta.ClusterID, deps.clusterMeta.ClusterName)
 	logHandler, err := containerlogsstream.NewHandler(
 		deps.cfg.KubernetesClient,
@@ -36,9 +35,8 @@ func registerStreamHandlers(mux *http.ServeMux, deps streamDeps) (*eventstream.M
 		deps.cfg.ContainerLogsTargetLimiter,
 	)
 	if err != nil {
-		return nil, nil, err
+		return nil, nil, nil, err
 	}
-	mux.Handle("/api/v2/stream/container-logs", logHandler)
 
 	eventManager := eventstream.NewManager(
 		deps.informerFactory.SharedInformerFactory().Core().V1().Events(),
@@ -56,11 +54,5 @@ func registerStreamHandlers(mux *http.ServeMux, deps streamDeps) (*eventstream.M
 		deps.ingestManager,
 		deps.cfg.AllowedNamespaces...,
 	)
-	resourceHandler, err := resourcestream.NewHandler(resourceManager, logger, deps.telemetry, deps.clusterMeta)
-	if err != nil {
-		return nil, nil, err
-	}
-	mux.Handle("/api/v2/stream/resources", resourceHandler)
-
-	return eventManager, resourceManager, nil
+	return logHandler, eventManager, resourceManager, nil
 }

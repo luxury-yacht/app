@@ -1,7 +1,7 @@
 # Wails v3 Migration Plan
 
-Status: implementation active; core v3-only cutover implemented, beta.8 native
-refresh-stream migration and Phase 6 platform validation remain
+Status: implementation active; core v3-only cutover and beta.8 native refresh
+transport implemented; Phase 6 platform validation remains
 Created: 2026-08-11
 Last updated: 2026-08-12
 
@@ -13,7 +13,11 @@ direct backend application injection, one frontend runtime adapter, one named
 main window, persistent native menus, screen-aware
 geometry restoration, framework-provided single-instance handling,
 GTK4/WebKitGTK 6.0-only Linux support, and Taskfile-based v3 builds. **New
-Window** is absent. The
+Window** is absent. Refresh request/response traffic uses the atomically
+published same-origin `/api/v2` service route, while resource doorbells and
+container logs use named Wails JSON streams; the application-owned loopback,
+base-URL discovery, CORS, raw browser WebSocket, and EventSource paths are
+absent. The
 repository prerelease gate regenerates interface bindings in isolation and
 rejects drift. The Wails Taskfile owns development, builds, packaging, quality
 checks, tests, cleanup, Storybook, and release publication; Mage has been
@@ -349,7 +353,7 @@ the deferred service-decomposition track.
       `build/config.yml` plus Taskfiles own the current NSIS release path. Record
       the unused MSIX task's separate legacy JSON input without retaining
       `wails.json` in Luxury Yacht's supported build.
-- [ ] Run the focused lifecycle/menu/frontend runtime tests and
+- [x] Run the focused lifecycle/menu/frontend runtime tests and
       `mise exec -- wails3 task qc:prerelease`; record exact failures, if any.
 - [ ] Produce current unsigned artifacts on the available host and record the
       binary/app/installer names and internal metadata. Let CI provide the other
@@ -376,8 +380,10 @@ the deferred service-decomposition track.
 
 Execution status: application injection and lifecycle are implemented. The
 branch uses v3 service startup/shutdown, a runtime-ready transition, and
-idempotent pre-quit persistence. Replacing the existing backend-owned loopback
-refresh transport with beta.8 service routes and Streams remains open.
+idempotent pre-quit persistence. The backend now publishes one same-origin
+refresh service route and registers the resource and container-log protocols as
+named Wails JSON streams; the legacy loopback transport and browser fallbacks
+are removed.
 
 - [x] Red: add tests proving UI/runtime operations fail or no-op before
       readiness while the explicit `MarkRuntimeReady` transition remains
@@ -402,26 +408,26 @@ refresh transport with beta.8 service routes and Streams remains open.
       services that already started.
 - [ ] Split current `Startup` into non-UI service initialization and a once-only
       runtime-ready interactive startup path.
-- [ ] Red: add refresh-transport contract tests proving an early request cannot
+- [x] Red: add refresh-transport contract tests proving an early request cannot
       read an unready handler while the initialization/replacement operation
       needed to publish the ready aggregate mux remains allowed.
-- [ ] Make the backend service an atomically replaceable HTTP handler and mount
+- [x] Make the backend service an atomically replaceable HTTP handler and mount
       its non-streaming refresh mux at one versioned Wails service route.
       Preserve per-cluster initialization order, cluster-scoped routing,
       retained data, snapshot and job behavior, queued-job migration,
       diagnostics, readiness, and teardown; use mount-relative mux paths rather
       than a prefix-restoring compatibility wrapper.
-- [ ] Adapt the existing resource-stream protocol to one named Wails Stream.
+- [x] Adapt the existing resource-stream protocol to one named Wails Stream.
       Preserve REQUEST/CANCEL, ACK/RESET/COMPLETE/update messages, resume
       sequence semantics, topology replacement, telemetry, subscriber limits,
       cancellation, and backpressure. Use `ReceiveJSON`/`SendJSON` in Go and
       `JSONStream` in TypeScript rather than a second application protocol.
-- [ ] Adapt container logs to a second named Wails Stream. Send the current
+- [x] Adapt container logs to a second named Wails Stream. Send the current
       scope/container/filter request as the first client frame and preserve
       permission errors, reset/manual completion, reconnect, visibility,
       filtering, target limits, cancellation, and bounded buffering without SSE
       event framing.
-- [ ] Make frontend request/response fetches same-origin and delete
+- [x] Make frontend request/response fetches same-origin and delete
       `GetRefreshBaseURL`, listener/server lifecycle, URL retry/cache
       invalidation, CORS wrappers, raw `WebSocket`, `EventSource`, and their
       tests. Add absence tests proving no loopback listener or fallback
@@ -695,7 +701,10 @@ Execution status: in progress. Focused and full local tests, generated-binding
 comparison, frontend/backend coverage measurement, the full prerelease gate,
 rendered app-shell checks, and a local macOS build have run. The release-host,
 physical-display, packaged-process, installer, and upgrade scenarios below
-remain open. Frontend coverage is 81.05% statements. The top-level backend
+remain open. `wails3 doctor` reports no issues on the macOS arm64 development
+host; Windows and Linux diagnostics remain open. Frontend coverage is 85.37%
+statements. The directly changed container-log stream package is 81.3%; the
+top-level backend
 package is 78.6%, 1.4 percentage points (134 statements) below the 80% target;
 the gap is recorded for review rather than expanding this framework migration
 into unrelated backend test work.
@@ -704,7 +713,7 @@ into unrelated backend test work.
       directly affected backend coverage with
       `mise exec -- wails3 task test:backend-coverage`; target 80% statement coverage or
       record the measured gap for review.
-- [ ] Run the framework-owned refresh transport's snapshot, job, named-stream,
+- [x] Run the framework-owned refresh transport's snapshot, job, named-stream,
       permission, readiness, recovery, backpressure, teardown, and multi-cluster
       suites. Assert that no loopback listener, base-URL bridge, raw WebSocket,
       SSE, CORS, or fallback transport remains.

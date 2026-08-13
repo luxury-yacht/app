@@ -106,6 +106,15 @@ stream reconciliation path rather than creating a ManualQueue job.
 The authored domain contract declares which clocks can change a payload:
 `object`, `metric`, `event`, `catalog`, and `attention`.
 
+Request/response refresh traffic uses the same-origin Wails service route
+`/api/v2`. Resource doorbells and container logs use the named Wails streams
+`resource-stream` and `container-logs`, with structured JSON frames in both
+directions. The backend publishes or replaces the service handler only after
+the owning aggregate is ready; an earlier request receives a bounded
+service-unavailable response. There is no application-owned loopback listener,
+runtime base-URL discovery, CORS layer, raw browser WebSocket, EventSource, or
+fallback refresh transport.
+
 - Signal-driven refetch keys only on the declared `signalVersions`. Snapshot
   responses also update validators and must not echo into another refetch.
 - Signal versions are opaque equality tokens. Sequence and Kubernetes

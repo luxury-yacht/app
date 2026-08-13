@@ -43,8 +43,8 @@ a ManualQueue job.
 
 Every executed `dataAccess` read receives a `broker-read-N` request id. Refresh
 domain reads forward that id as `X-Correlation-ID` on manual-refresh, job-status,
-and snapshot HTTP requests. The refresh API permits the header in CORS
-preflights. The backend reuses it as the operation identity for snapshot builds
+and snapshot requests through the same-origin Wails service. The backend reuses
+it as the operation identity for snapshot builds
 and carries it through queued manual-refresh execution, so frontend diagnostics,
 structured errors, and breadcrumbs refer to the same request instance.
 Because the refresh orchestrator presents handled failures before the broker

@@ -53,7 +53,6 @@ func newTestAppWithDefaults(t *testing.T) *App {
 		logger:         NewLogger(100),
 		eventEmitter:   func(context.Context, string, ...interface{}) {},
 		sidebarVisible: true,
-		listenLoopback: defaultLoopbackListener,
 	}
 }
 

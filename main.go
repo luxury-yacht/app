@@ -2,6 +2,7 @@ package main
 
 import (
 	"embed"
+	"runtime"
 	"strings"
 	"time"
 
@@ -60,6 +61,10 @@ type compositionOptions struct {
 }
 
 func mainWindowOptions(nativeMenu *application.Menu) application.WebviewWindowOptions {
+	return mainWindowOptionsForPlatform(nativeMenu, runtime.GOOS)
+}
+
+func mainWindowOptionsForPlatform(nativeMenu *application.Menu, goos string) application.WebviewWindowOptions {
 	return application.WebviewWindowOptions{
 		Name:             backend.MainWindowName,
 		Title:            "Luxury Yacht",
@@ -87,6 +92,7 @@ func mainWindowOptions(nativeMenu *application.Menu) application.WebviewWindowOp
 		UseApplicationMenu: true,
 		Zoom:               1,
 		ZoomControlEnabled: false,
+		Hidden:             goos != "linux",
 	}
 }
 
@@ -128,7 +134,10 @@ func newApplicationComposition(reporter sentryreporting.Reporter, options compos
 	wailsApp := application.New(applicationOptions)
 
 	backendApp = backend.NewApp(wailsApp, reporter)
-	wailsApp.RegisterService(application.NewService(backendApp))
+	wailsApp.RegisterService(application.NewServiceWithOptions(
+		backendApp,
+		application.ServiceOptions{Route: "/api/v2"},
+	))
 
 	nativeMenu := backend.CreateMenu(backendApp)
 	wailsApp.Menu.SetApplicationMenu(nativeMenu)

@@ -59,10 +59,7 @@ func (a *App) setupRefreshSubsystem() error {
 	}
 	a.refreshAggregates.Store(aggregates)
 	a.sweepNamespacesReadiness(subsystems)
-
-	if err := a.startRefreshHTTPServer(mux, subsystems); err != nil {
-		return err
-	}
+	a.publishRefreshService(mux, subsystems)
 
 	// The subsystems above all have live manager starts in flight. Begin settling
 	// them to the governor's tiers (visible Foreground, warm set Background, the
@@ -461,13 +458,6 @@ func (a *App) buildRefreshMux(
 		Metrics:         aggregateMetrics,
 		HealthHub:       nil, // Health is per-cluster, not global.
 	})
-	// withStreamCORS guarantees CORS headers on every stream response,
-	// including error responses written before the handlers' own header setup.
-	mux.Handle("/api/v2/stream/container-logs", withStreamCORS(aggregateContainerLogs))
-	mux.Handle("/api/v2/stream/resources", withStreamCORS(aggregateResources))
-	// NOTE: Do NOT mount "/" to any single subsystem's handler.
-	// Requests to "/" should return 404, not route to one cluster.
-
 	aggregates := &refreshAggregateHandlers{
 		snapshot:      aggregateService,
 		manual:        aggregateQueue,
@@ -489,7 +479,7 @@ type refreshAggregateHandlers struct {
 	metrics       *aggregateMetricsController
 }
 
-// Update refreshes aggregate endpoint wiring without rebuilding the HTTP server.
+// Update refreshes aggregate endpoint wiring without replacing the service route.
 func (h *refreshAggregateHandlers) Update(clusterOrder []string, subsystems map[string]*system.Subsystem) error {
 	if h == nil {
 		return nil
@@ -516,60 +506,6 @@ func (h *refreshAggregateHandlers) Update(clusterOrder []string, subsystems map[
 	if h.containerLogs != nil {
 		h.containerLogs.Update(subsystems)
 	}
-	return nil
-}
-
-// startRefreshHTTPServer starts the loopback HTTP server and records the runtime wiring.
-// All clusters are treated equally - no single cluster is primary.
-func (a *App) startRefreshHTTPServer(
-	mux *http.ServeMux,
-	subsystems map[string]*system.Subsystem,
-) error {
-	if a.listenLoopback == nil {
-		a.listenLoopback = defaultLoopbackListener
-	}
-
-	listener, err := a.listenLoopback()
-	if err != nil {
-		return err
-	}
-
-	srv := &http.Server{Handler: mux}
-	// Don't set refreshManager from a single cluster - it's per-cluster now.
-	a.refreshManager = nil
-	a.refreshHTTPServer = srv
-	a.refreshListener = listener
-	a.refreshBaseURL = "http://" + listener.Addr().String()
-	a.refreshServerDone = make(chan struct{})
-	a.replaceRefreshSubsystems(subsystems)
-
-	// Use first available subsystem for telemetry (for global telemetry needs).
-	a.telemetryRecorder = nil
-	for _, sub := range subsystems {
-		if sub != nil && sub.Telemetry != nil {
-			a.telemetryRecorder = sub.Telemetry
-			break
-		}
-	}
-
-	// Use first available subsystem for informer factories (for discovery).
-	a.sharedInformerFactory = nil
-	a.apiExtensionsInformerFactory = nil
-	for _, sub := range subsystems {
-		if sub != nil && sub.InformerFactory != nil {
-			a.sharedInformerFactory = sub.InformerFactory.SharedInformerFactory()
-			a.apiExtensionsInformerFactory = sub.InformerFactory.APIExtensionsInformerFactory()
-			break
-		}
-	}
-
-	go func() {
-		defer close(a.refreshServerDone)
-		if err := srv.Serve(listener); err != nil && !errors.Is(err, http.ErrServerClosed) {
-			a.logger.Warn(fmt.Sprintf("refresh HTTP server stopped: %v", err), logsources.Refresh)
-		}
-	}()
-
 	return nil
 }
 

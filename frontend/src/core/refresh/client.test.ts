@@ -8,11 +8,9 @@
 import { afterEach, beforeEach, describe, expect, test, vi } from 'vitest';
 import { makeTelemetrySummary } from './refreshContractTestBuilders';
 
-const mockGetBaseURL = vi.fn();
 const mockGetSelectionDiagnostics = vi.fn(async () => ({}));
 const mockGetKubernetesAPIClientDiagnostics = vi.fn(async () => []);
 vi.mock('@core/backend-api', () => ({
-  GetRefreshBaseURL: mockGetBaseURL,
   GetSelectionDiagnostics: mockGetSelectionDiagnostics,
   GetKubernetesAPIClientDiagnostics: mockGetKubernetesAPIClientDiagnostics,
 }));
@@ -22,15 +20,12 @@ const originalFetch = globalThis.fetch;
 beforeEach(() => {
   vi.resetModules();
   vi.resetAllMocks();
-  mockGetBaseURL.mockReset();
   mockGetSelectionDiagnostics.mockReset();
   mockGetKubernetesAPIClientDiagnostics.mockReset();
 });
 
 afterEach(async () => {
   vi.useRealTimers();
-  const { invalidateRefreshBaseURL } = await import('./client');
-  invalidateRefreshBaseURL();
 
   if (originalFetch) {
     globalThis.fetch = originalFetch;
@@ -39,60 +34,8 @@ afterEach(async () => {
   }
 });
 
-describe('refresh client readiness helpers', () => {
-  test('ensureRefreshBaseURL caches after first resolution and respects invalidation', async () => {
-    mockGetBaseURL.mockResolvedValue('http://127.0.0.1:0');
-
-    const { ensureRefreshBaseURL, invalidateRefreshBaseURL } = await import('./client');
-
-    const first = await ensureRefreshBaseURL();
-    expect(first).toBe('http://127.0.0.1:0');
-    expect(mockGetBaseURL).toHaveBeenCalledTimes(1);
-
-    const second = await ensureRefreshBaseURL();
-    expect(second).toBe('http://127.0.0.1:0');
-    expect(mockGetBaseURL).toHaveBeenCalledTimes(1);
-
-    invalidateRefreshBaseURL();
-    const third = await ensureRefreshBaseURL();
-    expect(third).toBe('http://127.0.0.1:0');
-    expect(mockGetBaseURL).toHaveBeenCalledTimes(2);
-  });
-
-  test('ensureRefreshBaseURL clears cached promise after failure', async () => {
-    mockGetBaseURL
-      .mockRejectedValueOnce(new Error('fatal bootstrap failure'))
-      .mockResolvedValue('http://127.0.0.1:0');
-
-    const { ensureRefreshBaseURL } = await import('./client');
-
-    await expect(ensureRefreshBaseURL()).rejects.toThrow('fatal bootstrap failure');
-    await expect(ensureRefreshBaseURL()).resolves.toBe('http://127.0.0.1:0');
-    expect(mockGetBaseURL).toHaveBeenCalledTimes(2);
-  });
-
-  test('ensureRefreshBaseURL retries when refresh subsystem is not initialised', async () => {
-    vi.useFakeTimers();
-    mockGetBaseURL
-      .mockRejectedValueOnce(new Error('refresh subsystem not initialised'))
-      .mockResolvedValue('http://127.0.0.1:0/');
-
-    const { ensureRefreshBaseURL } = await import('./client');
-
-    const urlPromise = ensureRefreshBaseURL();
-
-    await vi.advanceTimersByTimeAsync(200);
-    await expect(urlPromise).resolves.toBe('http://127.0.0.1:0');
-    expect(mockGetBaseURL).toHaveBeenCalledTimes(2);
-
-    vi.useRealTimers();
-  });
-});
-
 describe('fetchSnapshot', () => {
   test('fetches snapshot data with scope and conditional headers', async () => {
-    mockGetBaseURL.mockResolvedValue('http://127.0.0.1:0/');
-
     const responseBody = {
       domain: 'namespace-workloads',
       version: 2,
@@ -124,7 +67,7 @@ describe('fetchSnapshot', () => {
 
     expect(fetchMock).toHaveBeenCalledTimes(1);
     const [url, init] = fetchMock.mock.calls[0];
-    expect(url).toBe('http://127.0.0.1:0/api/v2/snapshots/namespace-workloads?scope=team-a');
+    expect(url).toBe('/api/v2/snapshots/namespace-workloads?scope=team-a');
     expect(init).toEqual({
       signal: controller.signal,
       headers: {
@@ -141,7 +84,6 @@ describe('fetchSnapshot', () => {
   });
 
   test('manual refresh waits for the uncached backend job before reading the snapshot', async () => {
-    mockGetBaseURL.mockResolvedValue('http://127.0.0.1:0/');
     const snapshot = {
       domain: 'object-details',
       version: 2,
@@ -177,20 +119,19 @@ describe('fetchSnapshot', () => {
     ).resolves.toMatchObject({ snapshot, notModified: false });
 
     expect(fetchMock.mock.calls[0]).toEqual([
-      'http://127.0.0.1:0/api/v2/refresh/object-details',
+      '/api/v2/refresh/object-details',
       expect.objectContaining({
         method: 'POST',
         body: JSON.stringify({ scope: 'cluster-a|object', reason: 'user' }),
       }),
     ]);
-    expect(fetchMock.mock.calls[1][0]).toBe('http://127.0.0.1:0/api/v2/jobs/job-1');
+    expect(fetchMock.mock.calls[1][0]).toBe('/api/v2/jobs/job-1');
     expect(fetchMock.mock.calls[2][0]).toBe(
-      'http://127.0.0.1:0/api/v2/snapshots/object-details?scope=cluster-a%7Cobject'
+      '/api/v2/snapshots/object-details?scope=cluster-a%7Cobject'
     );
   });
 
   test('manual refresh stops when the backend job is cancelled', async () => {
-    mockGetBaseURL.mockResolvedValue('http://127.0.0.1:0/');
     const fetchMock = vi
       .fn()
       .mockResolvedValueOnce({
@@ -218,7 +159,6 @@ describe('fetchSnapshot', () => {
 
   test('manual refresh times out with bounded backoff when a job never finishes', async () => {
     vi.useFakeTimers();
-    mockGetBaseURL.mockResolvedValue('http://127.0.0.1:0/');
     const fetchMock = vi.fn().mockResolvedValue({
       ok: true,
       status: 200,
@@ -249,7 +189,6 @@ describe('fetchSnapshot', () => {
   });
 
   test('rejects a successful response without a snapshot payload', async () => {
-    mockGetBaseURL.mockResolvedValue('http://127.0.0.1:0');
     globalThis.fetch = vi.fn().mockResolvedValue({
       ok: true,
       status: 200,
@@ -272,7 +211,6 @@ describe('fetchSnapshot', () => {
   });
 
   test('rejects a snapshot returned for a different domain', async () => {
-    mockGetBaseURL.mockResolvedValue('http://127.0.0.1:0');
     globalThis.fetch = vi.fn().mockResolvedValue({
       ok: true,
       status: 200,
@@ -296,8 +234,6 @@ describe('fetchSnapshot', () => {
   });
 
   test('returns notModified when server responds with 304', async () => {
-    mockGetBaseURL.mockResolvedValue('http://127.0.0.1:0');
-
     const fetchMock = vi.fn().mockResolvedValue({
       ok: false,
       status: 304,
@@ -317,8 +253,6 @@ describe('fetchSnapshot', () => {
   });
 
   test('throws parsed message when snapshot request fails', async () => {
-    mockGetBaseURL.mockResolvedValue('http://127.0.0.1:0');
-
     const fetchMock = vi.fn().mockResolvedValue({
       ok: false,
       status: 500,
@@ -334,8 +268,6 @@ describe('fetchSnapshot', () => {
   });
 
   test('throws formatted permission denied message when status payload returned', async () => {
-    mockGetBaseURL.mockResolvedValue('http://127.0.0.1:0');
-
     const fetchMock = vi.fn().mockResolvedValue({
       ok: false,
       status: 403,
@@ -363,8 +295,6 @@ describe('fetchSnapshot', () => {
   });
 
   test('falls back to status text when error body cannot be parsed', async () => {
-    mockGetBaseURL.mockResolvedValue('http://127.0.0.1:0');
-
     const fetchMock = vi.fn().mockResolvedValue({
       ok: false,
       status: 502,
@@ -384,8 +314,6 @@ describe('fetchSnapshot', () => {
 
 describe('fetchTelemetrySummary', () => {
   test('returns parsed telemetry summary payload', async () => {
-    mockGetBaseURL.mockResolvedValue('http://127.0.0.1:0');
-
     const summary = makeTelemetrySummary({
       metrics: {
         lastCollected: 1,
@@ -415,12 +343,11 @@ describe('fetchTelemetrySummary', () => {
 
     await expect(fetchTelemetrySummary()).resolves.toEqual(summary);
     const [url, init] = fetchMock.mock.calls[0];
-    expect(url).toBe('http://127.0.0.1:0/api/v2/telemetry/summary');
+    expect(url).toBe('/api/v2/telemetry/summary');
     expect(init).toBeUndefined();
   });
 
   test('rejects a successful response that does not match the telemetry contract', async () => {
-    mockGetBaseURL.mockResolvedValue('http://127.0.0.1:0');
     globalThis.fetch = vi.fn().mockResolvedValue({
       ok: true,
       status: 200,
@@ -437,7 +364,6 @@ describe('fetchTelemetrySummary', () => {
   });
 
   test('rejects nested telemetry fields that do not match the backend DTO', async () => {
-    mockGetBaseURL.mockResolvedValue('http://127.0.0.1:0');
     globalThis.fetch = vi.fn().mockResolvedValue({
       ok: true,
       status: 200,
@@ -480,7 +406,6 @@ describe('fetchTelemetrySummary', () => {
   });
 
   test('normalizes nullable telemetry collections for frontend consumers', async () => {
-    mockGetBaseURL.mockResolvedValue('http://127.0.0.1:0');
     globalThis.fetch = vi.fn().mockResolvedValue({
       ok: true,
       status: 200,
@@ -512,8 +437,6 @@ describe('fetchTelemetrySummary', () => {
   });
 
   test('throws when telemetry request fails', async () => {
-    mockGetBaseURL.mockResolvedValue('http://127.0.0.1:0');
-
     const fetchMock = vi.fn().mockResolvedValue({
       ok: false,
       status: 503,

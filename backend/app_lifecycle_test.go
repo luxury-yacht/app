@@ -172,10 +172,8 @@ func TestSetupRefreshSubsystemDoesNotStorePermissionCache(t *testing.T) {
 
 	// Note: app.refreshManager is now nil by design - there is no global primary cluster.
 	// The manager is per-cluster, accessible via refreshSubsystems[clusterID].Manager.
-	require.NotNil(t, app.refreshHTTPServer)
-	require.NotNil(t, app.refreshListener)
+	require.NotNil(t, app.refreshService.Load())
 	require.NotNil(t, app.refreshCancel)
-	require.NotEmpty(t, app.refreshBaseURL)
 
 	require.Equal(t, fakeClient, capturedCfg.KubernetesClient)
 	require.Equal(t, metricsClient, capturedCfg.MetricsClient)

@@ -1,9 +1,9 @@
-import { ensureRefreshBaseURL, invalidateRefreshBaseURL } from '../client';
+import { type JSONSocket, JSONStream } from '@wailsio/runtime';
 import type { ResourceStreamClientMessage as ResourceStreamWireClientMessage } from '../types';
 import type { DoorbellDomain } from './resourceStreamDomains';
 import { streamReconnectDelay } from './streamTiming';
 
-const RESOURCE_STREAM_PATH = '/api/v2/stream/resources';
+const RESOURCE_STREAM_NAME = 'refresh-resources';
 const RECONNECT_JITTER_FACTOR = 0.2;
 
 export type ResourceStreamClientMessage = Omit<
@@ -18,13 +18,13 @@ export type ResourceStreamClientMessage = Omit<
 
 export type ResourceStreamConnectionDelegate = {
   handleConnectionOpen(clusterId: string): void;
-  handleMessage(clusterId: string, raw: string): void;
+  handleMessage(clusterId: string, message: unknown): void;
   handleConnectionError(clusterId: string, message: string): void;
 };
 
 export class ResourceStreamConnection {
   private readonly delegate: ResourceStreamConnectionDelegate;
-  private socket: WebSocket | null = null;
+  private socket: JSONSocket | null = null;
   private attempt = 0;
   private closed = false;
   private paused = false;
@@ -40,14 +40,10 @@ export class ResourceStreamConnection {
       return;
     }
     try {
-      const baseURL = await ensureRefreshBaseURL();
       if (this.closed || this.paused) {
         return;
       }
-      const url = new URL(RESOURCE_STREAM_PATH, baseURL);
-      url.protocol = url.protocol === 'https:' ? 'wss:' : 'ws:';
-
-      const socket = new WebSocket(url.toString());
+      const socket = JSONStream(RESOURCE_STREAM_NAME);
       this.socket = socket;
       socket.onopen = () => this.handleOpen();
       socket.onmessage = (event) => this.handleMessage(event);
@@ -88,8 +84,8 @@ export class ResourceStreamConnection {
   }
 
   send(message: ResourceStreamClientMessage): void {
-    if (this.socket?.readyState === WebSocket.OPEN) {
-      this.socket.send(JSON.stringify(message));
+    if (this.socket && this.socket.readyState === this.socket.OPEN) {
+      this.socket.send(message);
       return;
     }
     this.pendingMessages.push(message);
@@ -113,8 +109,6 @@ export class ResourceStreamConnection {
     if (this.closed || this.paused) {
       return;
     }
-    // Refresh base URLs can change when the backend rebuilds the refresh subsystem.
-    invalidateRefreshBaseURL();
     this.delegate.handleConnectionError('', message);
     this.scheduleReconnect();
   }
@@ -123,8 +117,6 @@ export class ResourceStreamConnection {
     if (this.closed || this.paused) {
       return;
     }
-    // Force a fresh base URL lookup on reconnect in case the port rotated.
-    invalidateRefreshBaseURL();
     this.delegate.handleConnectionError('', message);
     this.scheduleReconnect();
   }

@@ -24,8 +24,6 @@ const { fetchSnapshotMock } = vi.hoisted(() => ({
 }));
 
 vi.mock('./client', () => ({
-  ensureRefreshBaseURL: () => Promise.resolve('http://127.0.0.1:0'),
-  invalidateRefreshBaseURL: () => undefined,
   fetchSnapshot: (...args: unknown[]) => fetchSnapshotMock(...args),
   isSnapshotPermissionDenied: () => false,
   setMetricsActive: () => undefined,

@@ -2,12 +2,10 @@ package containerlogsstream
 
 import (
 	"context"
-	"encoding/json"
 	"errors"
 	"fmt"
-	"net/http"
-	"strconv"
 	"strings"
+	"sync"
 	"time"
 
 	"github.com/luxury-yacht/app/backend/internal/applog"
@@ -28,11 +26,21 @@ const (
 	transportDropWarning  = "Live container logs stream dropped one or more log entries due to client backlog. These lines were not intentionally filtered."
 )
 
-// Handler exposes an SSE endpoint for streaming pod/workload logs.
+// Handler serves pod/workload logs over a named Wails stream.
 type Handler struct {
-	streamer  *Streamer
-	telemetry *telemetry.Recorder
-	limiter   *GlobalTargetLimiter
+	streamer    *Streamer
+	telemetry   *telemetry.Recorder
+	limiter     *GlobalTargetLimiter
+	sessionsMu  sync.Mutex
+	nextSession uint64
+	sessions    map[uint64]context.CancelFunc
+	stopped     bool
+}
+
+// Conn is the transport-neutral JSON connection used by container logs.
+// Wails' StreamConn implements this interface directly.
+type Conn interface {
+	SendJSON(v interface{}) error
 }
 
 // permissionDeniedError preserves the original message while exposing details for structured payloads.
@@ -62,113 +70,122 @@ func NewHandler(client kubernetes.Interface, logger Logger, recorder *telemetry.
 	if len(limiters) > 0 {
 		limiter = limiters[0]
 	}
-	return &Handler{streamer: NewStreamer(client, logger, recorder), telemetry: recorder, limiter: limiter}, nil
+	return &Handler{
+		streamer: NewStreamer(client, logger, recorder), telemetry: recorder, limiter: limiter,
+		sessions: make(map[uint64]context.CancelFunc),
+	}, nil
 }
 
-// ServeHTTP implements http.Handler for the container logs streaming endpoint.
-func (h *Handler) ServeHTTP(w http.ResponseWriter, r *http.Request) {
-	request, ok := h.prepareRequest(w, r)
-	if !ok {
-		return
-	}
-	request.serve()
-}
-
-type containerLogsHTTPRequest struct {
+type containerLogsStream struct {
 	handler  *Handler
-	writer   http.ResponseWriter
-	flusher  http.Flusher
-	request  *http.Request
+	conn     Conn
 	options  Options
 	stream   string
 	target   string
 	sequence uint64
 }
 
-func (h *Handler) prepareRequest(w http.ResponseWriter, r *http.Request) (*containerLogsHTTPRequest, bool) {
-	if !applyCORS(w, r) {
-		return nil, false
-	}
-	if r.Method != http.MethodGet {
-		w.WriteHeader(http.StatusMethodNotAllowed)
-		return nil, false
-	}
-	flusher, ok := w.(http.Flusher)
-	if !ok {
-		h.streamer.logger.Warn("containerlogsstream: response does not implement http.Flusher", logsources.ContainerLogsStream)
-		http.Error(w, "streaming not supported", http.StatusInternalServerError)
-		return nil, false
-	}
-	options, err := parseOptions(r)
+// Handle serves one already-routed named-stream request.
+func (h *Handler) Handle(ctx context.Context, conn Conn, request Request) {
+	options, err := parseRequest(request)
 	if err != nil {
-		http.Error(w, err.Error(), http.StatusBadRequest)
-		return nil, false
+		_ = conn.SendJSON(EventPayload{
+			Domain: containerLogsDomain, Scope: strings.TrimSpace(request.Scope),
+			Sequence: 1, GeneratedAt: time.Now().UnixMilli(), Error: err.Error(),
+		})
+		return
 	}
-	return &containerLogsHTTPRequest{
-		handler: h, writer: w, flusher: flusher, request: r, options: options,
+	ctx, cancel := context.WithCancel(ctx)
+	h.sessionsMu.Lock()
+	if h.stopped {
+		h.sessionsMu.Unlock()
+		cancel()
+		return
+	}
+	h.nextSession++
+	sessionID := h.nextSession
+	h.sessions[sessionID] = cancel
+	h.sessionsMu.Unlock()
+	defer func() {
+		cancel()
+		h.sessionsMu.Lock()
+		delete(h.sessions, sessionID)
+		h.sessionsMu.Unlock()
+	}()
+	stream := &containerLogsStream{
+		handler: h, conn: conn, options: options,
 		stream: telemetry.StreamContainerLogs, target: logTargetLabel(options), sequence: 1,
-	}, true
+	}
+	stream.serve(ctx)
 }
 
-func (s *containerLogsHTTPRequest) serve() {
+// Stop ends every active stream owned by this per-cluster handler generation.
+func (h *Handler) Stop() {
+	if h == nil {
+		return
+	}
+	h.sessionsMu.Lock()
+	h.stopped = true
+	cancels := make([]context.CancelFunc, 0, len(h.sessions))
+	for _, cancel := range h.sessions {
+		cancels = append(cancels, cancel)
+	}
+	h.sessionsMu.Unlock()
+	for _, cancel := range cancels {
+		cancel()
+	}
+}
+
+func (s *containerLogsStream) serve(ctx context.Context) {
 	s.recordConnect()
 	defer s.recordDisconnect()
-	s.writeHeaders()
 	if s.writeConnected() != nil {
 		return
 	}
-	s.logDeadline()
+	s.logDeadline(ctx)
 	limiterSession := s.startLimiterSession()
 	if limiterSession != nil {
 		defer limiterSession.Release()
 	}
-	initial, ok := s.loadInitial(limiterSession)
+	initial, ok := s.loadInitial(ctx, limiterSession)
 	if !ok || s.writeInitial(initial) != nil {
 		return
 	}
-	s.forward(initial, limiterSession)
+	s.forward(ctx, initial, limiterSession)
 }
 
-func (s *containerLogsHTTPRequest) recordConnect() {
+func (s *containerLogsStream) recordConnect() {
 	if s.handler.telemetry != nil {
 		s.handler.telemetry.RecordStreamConnect(s.stream)
 	}
 }
 
-func (s *containerLogsHTTPRequest) recordDisconnect() {
+func (s *containerLogsStream) recordDisconnect() {
 	if s.handler.telemetry != nil {
 		s.handler.telemetry.RecordStreamDisconnect(s.stream)
 	}
 }
 
-func (s *containerLogsHTTPRequest) writeHeaders() {
-	s.writer.Header().Set("Content-Type", "text/event-stream")
-	s.writer.Header().Set("Cache-Control", "no-cache")
-	s.writer.Header().Set("Connection", "keep-alive")
-	s.writer.Header().Set("X-Accel-Buffering", "no")
-	s.flusher.Flush()
-}
-
-func (s *containerLogsHTTPRequest) writeConnected() error {
+func (s *containerLogsStream) writeConnected() error {
 	return s.writePayload(EventPayload{Reset: true, Entries: []Entry{}})
 }
 
-func (s *containerLogsHTTPRequest) writePayload(payload EventPayload) error {
+func (s *containerLogsStream) writePayload(payload EventPayload) error {
 	payload.Domain = containerLogsDomain
 	payload.Scope = s.options.ScopeString
 	payload.Sequence = s.sequence
 	payload.GeneratedAt = time.Now().UnixMilli()
 	s.sequence++
-	return writeEvent(s.writer, s.flusher, payload)
+	return s.conn.SendJSON(payload)
 }
 
-func (s *containerLogsHTTPRequest) logDeadline() {
-	if deadline, ok := s.request.Context().Deadline(); ok {
+func (s *containerLogsStream) logDeadline(ctx context.Context) {
+	if deadline, ok := ctx.Deadline(); ok {
 		s.handler.streamer.logger.Debug(fmt.Sprintf("containerlogsstream: client deadline %s", deadline.Format(time.RFC3339)), logsources.ContainerLogsStream)
 	}
 }
 
-func (s *containerLogsHTTPRequest) startLimiterSession() *TargetSession {
+func (s *containerLogsStream) startLimiterSession() *TargetSession {
 	if s.handler.limiter == nil {
 		return nil
 	}
@@ -185,9 +202,9 @@ type containerLogsInitial struct {
 	skipReason     string
 }
 
-func (s *containerLogsHTTPRequest) loadInitial(limiterSession *TargetSession) (containerLogsInitial, bool) {
+func (s *containerLogsStream) loadInitial(ctx context.Context, limiterSession *TargetSession) (containerLogsInitial, bool) {
 	entries, states, pods, selector, warnings, skipped, reason, err := s.handler.streamer.tail(
-		s.request.Context(), s.options, limiterSession,
+		ctx, s.options, limiterSession,
 	)
 	if err != nil {
 		s.handleInitialError(err)
@@ -202,18 +219,13 @@ func (s *containerLogsHTTPRequest) loadInitial(limiterSession *TargetSession) (c
 	}, true
 }
 
-func (s *containerLogsHTTPRequest) handleInitialError(err error) {
+func (s *containerLogsStream) handleInitialError(err error) {
 	s.recordError(err)
 	s.handler.streamer.logger.Warn(fmt.Sprintf("containerlogsstream: initial tail failed: %v", err), logsources.ContainerLogsStream)
-	status := permissionDeniedStatus(err)
-	if status != nil {
-		_ = s.writePayload(EventPayload{Error: err.Error(), ErrorDetails: status})
-		return
-	}
-	http.Error(s.writer, err.Error(), http.StatusInternalServerError)
+	_ = s.writePayload(EventPayload{Error: err.Error(), ErrorDetails: permissionDeniedStatus(err)})
 }
 
-func (s *containerLogsHTTPRequest) writeInitial(initial containerLogsInitial) error {
+func (s *containerLogsStream) writeInitial(initial containerLogsInitial) error {
 	event := EventPayload{Reset: true, Entries: initial.entries, Warnings: warningPayload(initial.warnings, false)}
 	if err := s.writePayload(event); err != nil {
 		s.recordError(err)
@@ -225,7 +237,7 @@ func (s *containerLogsHTTPRequest) writeInitial(initial containerLogsInitial) er
 	return nil
 }
 
-func (s *containerLogsHTTPRequest) recordError(err error) {
+func (s *containerLogsStream) recordError(err error) {
 	if s.handler.telemetry != nil {
 		s.handler.telemetry.RecordStreamErrorForDomain(s.stream, s.target, err)
 	}
@@ -245,24 +257,23 @@ func newContainerLogsStreamChannels() containerLogsStreamChannels {
 	}
 }
 
-func (s *containerLogsHTTPRequest) forward(initial containerLogsInitial, limiterSession *TargetSession) {
+func (s *containerLogsStream) forward(ctx context.Context, initial containerLogsInitial, limiterSession *TargetSession) {
 	channels := newContainerLogsStreamChannels()
-	s.startRunner(initial, limiterSession, channels)
-	keepAlive := time.NewTicker(config.ContainerLogsStreamKeepAliveInterval)
-	defer keepAlive.Stop()
+	s.startRunner(ctx, initial, limiterSession, channels)
 	heartbeat := time.NewTicker(config.StreamHeartbeatInterval)
 	defer heartbeat.Stop()
 	delivery := newContainerLogsDelivery(s, initial.warnings)
 	defer delivery.stopBatchTimer()
 	for {
-		event := delivery.await(s.request.Context(), channels, keepAlive.C, heartbeat.C)
+		event := delivery.await(ctx, channels, heartbeat.C)
 		if delivery.handle(event) {
 			return
 		}
 	}
 }
 
-func (s *containerLogsHTTPRequest) startRunner(
+func (s *containerLogsStream) startRunner(
+	ctx context.Context,
 	initial containerLogsInitial,
 	limiterSession *TargetSession,
 	channels containerLogsStreamChannels,
@@ -270,12 +281,12 @@ func (s *containerLogsHTTPRequest) startRunner(
 	go func() {
 		defer s.finishRunner(channels)
 		s.handler.streamer.run(
-			s.request.Context(), initial.pods, initial.selector, containerLogRunConfig{opts: s.options, states: initial.states, limiterSession: limiterSession, initialWarnings: initial.warnings, entriesCh: channels.entries, warningsCh: channels.warnings, errCh: channels.errors, dropCh: channels.drops})
+			ctx, initial.pods, initial.selector, containerLogRunConfig{opts: s.options, states: initial.states, limiterSession: limiterSession, initialWarnings: initial.warnings, entriesCh: channels.entries, warningsCh: channels.warnings, errCh: channels.errors, dropCh: channels.drops})
 
 	}()
 }
 
-func (s *containerLogsHTTPRequest) finishRunner(channels containerLogsStreamChannels) {
+func (s *containerLogsStream) finishRunner(channels containerLogsStreamChannels) {
 	if recovered := recover(); recovered != nil {
 		applog.ReportPanic(s.handler.streamer.logger, recovered, "containerlogsstream: panic in stream handler", logsources.ContainerLogsStream)
 		s.recordError(fmt.Errorf("panic: %v", recovered))
@@ -294,7 +305,6 @@ const (
 	containerLogsDeliveryWarningsClosed
 	containerLogsDeliveryEntry
 	containerLogsDeliveryEntriesClosed
-	containerLogsDeliveryKeepAlive
 	containerLogsDeliveryHeartbeat
 	containerLogsDeliveryBatch
 	containerLogsDeliveryDrop
@@ -310,7 +320,7 @@ type containerLogsDeliveryEvent struct {
 }
 
 type containerLogsDelivery struct {
-	request               *containerLogsHTTPRequest
+	request               *containerLogsStream
 	batch                 []Entry
 	batchTimer            *time.Timer
 	pendingDropped        int
@@ -320,7 +330,7 @@ type containerLogsDelivery struct {
 	lastDelivery          time.Time
 }
 
-func newContainerLogsDelivery(request *containerLogsHTTPRequest, warnings []string) *containerLogsDelivery {
+func newContainerLogsDelivery(request *containerLogsStream, warnings []string) *containerLogsDelivery {
 	return &containerLogsDelivery{
 		request: request, selectionWarnings: append([]string(nil), warnings...),
 		emittedWarnings: append([]string(nil), warnings...), lastDelivery: time.Now(),
@@ -330,7 +340,6 @@ func newContainerLogsDelivery(request *containerLogsHTTPRequest, warnings []stri
 func (d *containerLogsDelivery) await(
 	ctx context.Context,
 	channels containerLogsStreamChannels,
-	keepAlive <-chan time.Time,
 	heartbeat <-chan time.Time,
 ) containerLogsDeliveryEvent {
 	select {
@@ -348,8 +357,6 @@ func (d *containerLogsDelivery) await(
 			return containerLogsDeliveryEvent{kind: containerLogsDeliveryEntriesClosed}
 		}
 		return containerLogsDeliveryEvent{kind: containerLogsDeliveryEntry, entry: entry}
-	case <-keepAlive:
-		return containerLogsDeliveryEvent{kind: containerLogsDeliveryKeepAlive}
 	case <-heartbeat:
 		return containerLogsDeliveryEvent{kind: containerLogsDeliveryHeartbeat}
 	case <-d.batchChannel():
@@ -382,8 +389,6 @@ func (d *containerLogsDelivery) handle(event containerLogsDeliveryEvent) bool {
 		return d.handleEntry(event.entry)
 	case containerLogsDeliveryEntriesClosed:
 		return d.handleEntriesClosed()
-	case containerLogsDeliveryKeepAlive:
-		return d.handleKeepAlive()
 	case containerLogsDeliveryHeartbeat:
 		d.handleHeartbeat()
 		return false
@@ -437,15 +442,6 @@ func (d *containerLogsDelivery) handleEntry(entry Entry) bool {
 	if d.batchTimer == nil {
 		d.batchTimer = time.NewTimer(config.ContainerLogsStreamBatchWindow)
 	}
-	return false
-}
-
-func (d *containerLogsDelivery) handleKeepAlive() bool {
-	if _, err := d.request.writer.Write([]byte(": keep-alive\n\n")); err != nil {
-		d.request.recordError(err)
-		return true
-	}
-	d.request.flusher.Flush()
 	return false
 }
 
@@ -545,18 +541,6 @@ func warningPayload(warnings []string, includeEmpty bool) *[]string {
 	return &copied
 }
 
-func writeEvent(w http.ResponseWriter, f http.Flusher, payload EventPayload) error {
-	data, err := json.Marshal(payload)
-	if err != nil {
-		return err
-	}
-	if _, err := fmt.Fprintf(w, "event: log\nid: %d\ndata: %s\n\n", payload.Sequence, data); err != nil {
-		return err
-	}
-	f.Flush()
-	return nil
-}
-
 // logTargetLabel identifies the object a log stream is tailing, so container-logs
 // telemetry can be attributed per stream (one diagnostics row per open viewer).
 func logTargetLabel(opts Options) string {
@@ -567,8 +551,8 @@ func logTargetLabel(opts Options) string {
 	return target
 }
 
-func parseOptions(r *http.Request) (Options, error) {
-	rawScope := strings.TrimSpace(r.URL.Query().Get("scope"))
+func parseRequest(request Request) (Options, error) {
+	rawScope := strings.TrimSpace(request.Scope)
 	if rawScope == "" {
 		return Options{}, errors.New("scope is required")
 	}
@@ -587,25 +571,28 @@ func parseOptions(r *http.Request) (Options, error) {
 	if identity.Namespace == "" {
 		return Options{}, errors.New("log scope must reference a namespaced object")
 	}
-	podFilter := strings.TrimSpace(r.URL.Query().Get("pod"))
-	podInclude := strings.TrimSpace(r.URL.Query().Get("podInclude"))
-	podExclude := strings.TrimSpace(r.URL.Query().Get("podExclude"))
-	selectedFilters := trimQueryValues(r.URL.Query()["selectedFilter"])
-	matchNone := strings.TrimSpace(r.URL.Query().Get("matchNone")) == "true"
-	container := strings.TrimSpace(r.URL.Query().Get("container"))
-	includeInit := parseBoolQueryWithDefault(r, "includeInit", true)
-	includeEphemeral := parseBoolQueryWithDefault(r, "includeEphemeral", true)
-	containerState, err := containerlogs.ParseContainerStateFilter(strings.TrimSpace(r.URL.Query().Get("containerState")))
+	podFilter := strings.TrimSpace(request.Pod)
+	podInclude := strings.TrimSpace(request.PodInclude)
+	podExclude := strings.TrimSpace(request.PodExclude)
+	selectedFilters := trimQueryValues(request.SelectedFilters)
+	container := strings.TrimSpace(request.Container)
+	includeInit := true
+	if request.IncludeInit != nil {
+		includeInit = *request.IncludeInit
+	}
+	includeEphemeral := true
+	if request.IncludeEphemeral != nil {
+		includeEphemeral = *request.IncludeEphemeral
+	}
+	containerState, err := containerlogs.ParseContainerStateFilter(strings.TrimSpace(request.ContainerState))
 	if err != nil {
 		return Options{}, fmt.Errorf("invalid container state filter: %w", err)
 	}
-	include := strings.TrimSpace(r.URL.Query().Get("include"))
-	exclude := strings.TrimSpace(r.URL.Query().Get("exclude"))
+	include := strings.TrimSpace(request.Include)
+	exclude := strings.TrimSpace(request.Exclude)
 	tail := config.ContainerLogsStreamDefaultTailLines
-	if rawTail := strings.TrimSpace(r.URL.Query().Get("tailLines")); rawTail != "" {
-		if parsed, err := strconv.Atoi(rawTail); err == nil && parsed > 0 {
-			tail = min(parsed, config.ContainerLogsStreamMaxTailLines)
-		}
+	if request.TailLines > 0 {
+		tail = min(request.TailLines, config.ContainerLogsStreamMaxTailLines)
 	}
 	lineFilter, err := containerlogs.NewLineFilter(include, exclude)
 	if err != nil {
@@ -632,7 +619,7 @@ func parseOptions(r *http.Request) (Options, error) {
 		PodInclude:       podInclude,
 		PodExclude:       podExclude,
 		SelectedFilters:  selectedFilters,
-		MatchNone:        matchNone,
+		MatchNone:        request.MatchNone,
 		Selection:        selection,
 		Container:        container,
 		IncludeInit:      includeInit,
@@ -661,37 +648,6 @@ func trimQueryValues(values []string) []string {
 		trimmed = append(trimmed, next)
 	}
 	return trimmed
-}
-
-func parseBoolQueryWithDefault(r *http.Request, key string, defaultValue bool) bool {
-	raw := strings.TrimSpace(r.URL.Query().Get(key))
-	if raw == "" {
-		return defaultValue
-	}
-	switch strings.ToLower(raw) {
-	case "1", "true", "yes", "on":
-		return true
-	case "0", "false", "no", "off":
-		return false
-	default:
-		return defaultValue
-	}
-}
-
-func applyCORS(w http.ResponseWriter, r *http.Request) bool {
-	origin := r.Header.Get("Origin")
-	if origin != "" {
-		w.Header().Set("Access-Control-Allow-Origin", origin)
-		w.Header().Set("Vary", "Origin")
-	}
-
-	if r.Method == http.MethodOptions {
-		w.Header().Set("Access-Control-Allow-Methods", "GET, OPTIONS")
-		w.Header().Set("Access-Control-Allow-Headers", "Content-Type")
-		w.WriteHeader(http.StatusNoContent)
-		return false
-	}
-	return true
 }
 
 // permissionDeniedStatus translates forbidden log errors into Status-like payloads.

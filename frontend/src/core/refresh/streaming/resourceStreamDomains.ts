@@ -1,7 +1,7 @@
 /**
  * frontend/src/core/refresh/streaming/resourceStreamDomains.ts
  *
- * Domain descriptors for resource WebSocket streams.
+ * Domain descriptors for resource named streams.
  */
 
 import type { AppEvents } from '@/core/events';

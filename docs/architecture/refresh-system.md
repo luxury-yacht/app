@@ -113,7 +113,7 @@ When a governor re-warm or recovery replaces a cluster's stream manager, the
 aggregate router points at the replacement first, then sends `COMPLETE` for only
 that cluster's existing subscriptions. The client re-subscribes through the
 current adapter and the normal ACK/replay/reset handshake re-establishes trust;
-the aggregate WebSocket and other clusters' subscriptions remain connected.
+the aggregate named stream and other clusters' subscriptions remain connected.
 
 The regression harnesses are
 `frontend/src/core/refresh/orchestrator.streamingFlap.test.ts` for lease flaps

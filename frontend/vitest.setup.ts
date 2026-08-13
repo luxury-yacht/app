@@ -102,6 +102,17 @@ vi.mock('@wailsio/runtime', () => {
     Clipboard: { SetText: vi.fn(), Text: vi.fn() },
     Create: create,
     Events: { Off: vi.fn(), On: vi.fn(() => () => undefined) },
+    JSONStream: (name: string) => {
+      const factory = (
+        globalThis as typeof globalThis & {
+          __wailsJSONStreamFactory?: (streamName: string) => unknown;
+        }
+      ).__wailsJSONStreamFactory;
+      if (!factory) {
+        throw new Error(`No JSON stream test factory installed for ${name}`);
+      }
+      return factory(name);
+    },
     objectNames: { Call: 0, Browser: 9 },
     System: { Environment: vi.fn() },
     Window: { OpenDevTools: vi.fn(), ToggleMaximise: vi.fn() },

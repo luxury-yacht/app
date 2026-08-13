@@ -41,7 +41,7 @@ type StreamEvent struct {
 	Sequence uint64
 }
 
-// Payload is the SSE envelope delivered to clients.
+// Payload is the JSON envelope delivered to stream consumers.
 type Payload struct {
 	Domain       string                          `json:"domain"`
 	Scope        string                          `json:"scope"`

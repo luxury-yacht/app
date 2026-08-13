@@ -8,7 +8,7 @@ import (
 
 // ClusterAdapter multiplexes resource stream subscriptions across cluster managers.
 //
-// It resolves managers through a lookup function on EVERY call: WebSocket
+// It resolves managers through a lookup function on EVERY call: named-stream
 // sessions bind their adapter once, at connect time, so a point-in-time
 // manager map would blind every existing session to clusters whose subsystems
 // come up (or are rebuilt) later — their subscribes fail with "resource stream
@@ -23,7 +23,7 @@ func NewResolvingClusterAdapter(resolve func(clusterID string) *Manager) *Cluste
 	return &ClusterAdapter{resolve: resolve}
 }
 
-// ParseSelector converts the websocket transport scope into the typed resource
+// ParseSelector converts the named-stream transport scope into the typed resource
 // stream selector used below the adapter seam.
 func (a *ClusterAdapter) ParseSelector(clusterID, domain, scope string) (streammux.Selector, error) {
 	return ParseStreamSelector(clusterID, domain, scope)

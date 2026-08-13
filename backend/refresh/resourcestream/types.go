@@ -46,10 +46,10 @@ const (
 	DropReasonClosed       = streammux.DropReasonClosed
 )
 
-// ClientMessage is the request envelope sent from the websocket client.
+// ClientMessage is the request envelope sent from the named-stream client.
 type ClientMessage = streammux.ClientMessage
 
-// ServerMessage is the envelope sent back to websocket clients.
+// ServerMessage is the envelope sent back to named-stream clients.
 type ServerMessage = streammux.ServerMessage
 
 // Update is the internal payload emitted by the resource stream manager.

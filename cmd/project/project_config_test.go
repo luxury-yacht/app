@@ -110,3 +110,32 @@ func TestProjectBinaryNameRejectsMissingProductName(t *testing.T) {
 	_, err := projectBinaryName(projectMetadata{})
 	require.ErrorContains(t, err, "has no info.productName")
 }
+
+func TestReleaseArtifactNamePreservesVersionPlatformAndArchitecture(t *testing.T) {
+	var metadata projectMetadata
+	metadata.Info.ProductName = "Luxury Yacht"
+	metadata.Info.Version = "v2.0.0"
+
+	for _, test := range []struct {
+		goos   string
+		arch   string
+		format string
+		want   string
+	}{
+		{goos: "darwin", arch: "arm64", format: "dmg", want: "luxury-yacht-v2.0.0-macos-arm64.dmg"},
+		{goos: "darwin", arch: "amd64", format: "dmg", want: "luxury-yacht-v2.0.0-macos-amd64.dmg"},
+		{goos: "linux", arch: "amd64", format: "deb", want: "luxury-yacht_v2.0.0_linux_amd64.deb"},
+		{goos: "linux", arch: "arm64", format: "deb", want: "luxury-yacht_v2.0.0_linux_arm64.deb"},
+		{goos: "linux", arch: "amd64", format: "rpm", want: "luxury-yacht-v2.0.0-linux-x86_64.rpm"},
+		{goos: "linux", arch: "arm64", format: "rpm", want: "luxury-yacht-v2.0.0-linux-aarch64.rpm"},
+		{goos: "windows", arch: "amd64", format: "exe", want: "luxury-yacht-v2.0.0-windows-amd64-installer.exe"},
+		{goos: "windows", arch: "arm64", format: "exe", want: "luxury-yacht-v2.0.0-windows-arm64-installer.exe"},
+	} {
+		t.Run(test.goos+"-"+test.arch+"-"+test.format, func(t *testing.T) {
+			name, err := releaseArtifactName(metadata, test.goos, test.arch, test.format)
+
+			require.NoError(t, err)
+			require.Equal(t, test.want, name)
+		})
+	}
+}

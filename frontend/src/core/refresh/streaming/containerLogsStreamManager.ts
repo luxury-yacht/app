@@ -6,6 +6,7 @@
  */
 
 import { getContainerLogsStreamScopeParams } from '@modules/object-panel/components/ObjectPanel/Logs/containerLogsStreamScopeParamsCache';
+import { type JSONSocket, JSONStream } from '@wailsio/runtime';
 import { eventBus } from '@/core/events';
 import {
   getObjPanelLogsBufferMaxSize,
@@ -19,7 +20,6 @@ import type {
   ContainerLogsSnapshotPayload,
   ContainerLogsStreamEventPayload,
 } from '../types';
-import { closeRefreshEventSource, openRefreshEventSource } from './sseStreamTransport';
 import { StreamErrorNotifier } from './streamErrorNotifier';
 import { streamReconnectDelay } from './streamTiming';
 import { StreamVisibilityController } from './streamVisibilityController';
@@ -92,6 +92,7 @@ function isValidContainerLogsStreamPayload(data: unknown): data is StreamEventPa
 }
 
 const DOMAIN_NAME = 'container-logs' as const;
+const CONTAINER_LOGS_STREAM_NAME = 'refresh-container-logs';
 
 const DEFAULT_PAYLOAD: ContainerLogsSnapshotPayload = {
   entries: [],
@@ -113,7 +114,7 @@ class ContainerLogsStreamConnection {
   private readonly manager: ContainerLogsStreamManager;
   private readonly resolve?: () => void;
   private readonly reject?: (error: Error) => void;
-  private eventSource: EventSource | null = null;
+  private socket: JSONSocket | null = null;
   private retryTimer: number | null = null;
   private closed = false;
   private attempt = 0;
@@ -144,48 +145,36 @@ class ContainerLogsStreamConnection {
       window.clearTimeout(this.retryTimer);
       this.retryTimer = null;
     }
-    this.closeEventSource();
+    this.closeStream();
     if (intentional) {
       this.manager.markIdle(this.scope);
     }
   }
 
-  private closeEventSource(): void {
-    closeRefreshEventSource(this.eventSource, {
-      log: this.handleLogEvent as EventListener,
-      error: this.handleError as EventListener,
-    });
-    this.eventSource = null;
+  private closeStream(): void {
+    if (!this.socket) {
+      return;
+    }
+    this.socket.onopen = null;
+    this.socket.onmessage = null;
+    this.socket.onerror = null;
+    this.socket.onclose = null;
+    this.socket.close();
+    this.socket = null;
   }
 
   private async openStream(): Promise<void> {
     try {
-      const handle = await openRefreshEventSource({
-        path: '/api/v2/stream/container-logs',
-        configureURL: (url) => {
-          url.searchParams.set('scope', this.scope);
-          const streamParams = getContainerLogsStreamScopeParams(this.scope);
-          if (streamParams?.container) {
-            url.searchParams.set('container', streamParams.container);
-          }
-          for (const selectedFilter of streamParams?.selectedFilters ?? []) {
-            url.searchParams.append('selectedFilter', selectedFilter);
-          }
-          if (streamParams?.matchNone) {
-            url.searchParams.set('matchNone', 'true');
-          }
-        },
-        listeners: {
-          log: this.handleLogEvent as EventListener,
-          error: this.handleError as EventListener,
-        },
-      });
+      const socket = JSONStream(CONTAINER_LOGS_STREAM_NAME);
       if (this.closed) {
-        handle.close();
+        socket.close();
         return;
       }
-      this.eventSource = handle.source;
-      this.manager.markConnected(this.scope);
+      this.socket = socket;
+      socket.onopen = this.handleOpen;
+      socket.onmessage = this.handleLogEvent;
+      socket.onerror = this.handleError;
+      socket.onclose = this.handleError;
     } catch (error) {
       const message =
         error instanceof Error ? error.message : 'Failed to open container logs stream';
@@ -203,7 +192,7 @@ class ContainerLogsStreamConnection {
     if (this.closed || this.mode === 'manual' || this.retryTimer !== null) {
       return;
     }
-    this.closeEventSource();
+    this.closeStream();
     const delay = streamReconnectDelay(this.attempt);
     this.attempt += 1;
     this.manager.handleStreamError(
@@ -216,13 +205,28 @@ class ContainerLogsStreamConnection {
     }, delay);
   }
 
-  private readonly handleLogEvent = (event: MessageEvent) => {
+  private readonly handleOpen = () => {
+    if (this.closed || !this.socket) {
+      return;
+    }
+    const streamParams = getContainerLogsStreamScopeParams(this.scope);
+    this.socket.send({
+      scope: this.scope,
+      container: streamParams?.container ?? '',
+      selectedFilters: streamParams?.selectedFilters ?? [],
+      matchNone: streamParams?.matchNone ?? false,
+    });
+    this.attempt = 0;
+    this.manager.markConnected(this.scope);
+  };
+
+  private readonly handleLogEvent = (event: MessageEvent<unknown>) => {
     if (this.closed) {
       return;
     }
 
     try {
-      const parsed: unknown = JSON.parse(event.data);
+      const parsed = event.data;
       if (!isValidContainerLogsStreamPayload(parsed)) {
         const error = new Error('Invalid container logs stream payload structure');
         this.handleProtocolError('Invalid container logs stream payload', error);
@@ -238,7 +242,7 @@ class ContainerLogsStreamConnection {
         this.stop(false);
       }
     } catch (error) {
-      this.handleProtocolError('Failed to parse container logs stream payload', error);
+      this.handleProtocolError('Failed to process container logs stream payload', error);
     }
   };
 

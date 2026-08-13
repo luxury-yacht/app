@@ -56,21 +56,22 @@ func NewServer(
 
 // Register attaches the API routes to the provided mux.
 func (s *Server) Register(mux *http.ServeMux) {
-	mux.HandleFunc("/api/v2/snapshots/", s.handleSnapshot)
-	mux.HandleFunc("/api/v2/refresh/", s.handleManualRefresh)
-	mux.HandleFunc("/api/v2/jobs/", s.handleJobStatus)
-	mux.HandleFunc("/api/v2/telemetry/summary", s.handleTelemetrySummary)
-	mux.HandleFunc("/api/v2/metrics/active", s.handleMetricsActive)
+	mux.HandleFunc("/snapshots/", s.handleSnapshot)
+	mux.HandleFunc("/refresh/", s.handleManualRefresh)
+	mux.HandleFunc("/jobs/", s.handleJobStatus)
+	mux.HandleFunc("/telemetry/summary", s.handleTelemetrySummary)
+	mux.HandleFunc("/metrics/active", s.handleMetricsActive)
 }
 
 func (s *Server) handleSnapshot(w http.ResponseWriter, r *http.Request) {
-	if !applyCORS(w, r, http.MethodGet) {
+	if r.Method != http.MethodGet {
+		w.WriteHeader(http.StatusMethodNotAllowed)
 		return
 	}
 
 	correlationID := getCorrelationID(r)
 
-	domainName := strings.TrimPrefix(r.URL.Path, "/api/v2/snapshots/")
+	domainName := strings.TrimPrefix(r.URL.Path, "/snapshots/")
 	if domainName == "" {
 		writeError(w, http.StatusBadRequest, errDomainNotSpecified, correlationID)
 		return
@@ -129,10 +130,6 @@ func writeSnapshotBuildError(w http.ResponseWriter, err error, domainName, corre
 }
 
 func (s *Server) handleManualRefresh(w http.ResponseWriter, r *http.Request) {
-	if !applyCORS(w, r, http.MethodPost) {
-		return
-	}
-
 	correlationID := getCorrelationID(r)
 
 	if r.Method != http.MethodPost {
@@ -141,7 +138,7 @@ func (s *Server) handleManualRefresh(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	domainName := strings.TrimPrefix(r.URL.Path, "/api/v2/refresh/")
+	domainName := strings.TrimPrefix(r.URL.Path, "/refresh/")
 	if domainName == "" {
 		writeError(w, http.StatusBadRequest, errDomainNotSpecified, correlationID)
 		return
@@ -188,13 +185,14 @@ func requireClusterScope(scope string) error {
 }
 
 func (s *Server) handleJobStatus(w http.ResponseWriter, r *http.Request) {
-	if !applyCORS(w, r, http.MethodGet) {
+	if r.Method != http.MethodGet {
+		w.WriteHeader(http.StatusMethodNotAllowed)
 		return
 	}
 
 	correlationID := getCorrelationID(r)
 
-	jobID := strings.TrimPrefix(r.URL.Path, "/api/v2/jobs/")
+	jobID := strings.TrimPrefix(r.URL.Path, "/jobs/")
 	if jobID == "" {
 		writeError(w, http.StatusBadRequest, errJobIDNotSpecified, correlationID)
 		return
@@ -212,7 +210,8 @@ func (s *Server) handleJobStatus(w http.ResponseWriter, r *http.Request) {
 }
 
 func (s *Server) handleTelemetrySummary(w http.ResponseWriter, r *http.Request) {
-	if !applyCORS(w, r, http.MethodGet) {
+	if r.Method != http.MethodGet {
+		w.WriteHeader(http.StatusMethodNotAllowed)
 		return
 	}
 
@@ -231,10 +230,6 @@ func (s *Server) handleTelemetrySummary(w http.ResponseWriter, r *http.Request) 
 }
 
 func (s *Server) handleMetricsActive(w http.ResponseWriter, r *http.Request) {
-	if !applyCORS(w, r, http.MethodPost) {
-		return
-	}
-
 	correlationID := getCorrelationID(r)
 
 	if r.Method != http.MethodPost {
@@ -306,21 +301,4 @@ func writePermissionDenied(w http.ResponseWriter, status *refresh.PermissionDeni
 	setCorrelationID(w, correlationID)
 	w.WriteHeader(http.StatusForbidden)
 	_ = json.NewEncoder(w).Encode(status)
-}
-
-func applyCORS(w http.ResponseWriter, r *http.Request, allowedMethods ...string) bool {
-	origin := r.Header.Get("Origin")
-	if origin != "" {
-		w.Header().Set("Access-Control-Allow-Origin", origin)
-		w.Header().Set("Vary", "Origin")
-	}
-
-	if r.Method == http.MethodOptions {
-		allowMethods := strings.Join(append(allowedMethods, http.MethodOptions), ", ")
-		w.Header().Set("Access-Control-Allow-Methods", allowMethods)
-		w.Header().Set("Access-Control-Allow-Headers", "Content-Type, If-None-Match, "+CorrelationIDHeader)
-		w.WriteHeader(http.StatusNoContent)
-		return false
-	}
-	return true
 }

@@ -208,7 +208,7 @@ func (c *customResourceInformer) start() {
 	}
 }
 
-// Manager fan-outs informer updates to websocket subscribers.
+// Manager fans out informer updates to named-stream subscribers.
 type Manager struct {
 	clusterMeta snapshot.ClusterMeta
 	logger      containerlogsstream.Logger

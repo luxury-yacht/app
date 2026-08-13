@@ -111,15 +111,11 @@ vi.mock('./RefreshManager', () => ({
 
 const clientMocks = vi.hoisted(() => ({
   fetchSnapshotMock: vi.fn(),
-  ensureRefreshBaseURLMock: vi.fn().mockResolvedValue('http://localhost'),
-  invalidateRefreshBaseURLMock: vi.fn(),
   setMetricsActiveMock: vi.fn().mockResolvedValue(undefined),
 }));
 
 vi.mock('./client', () => ({
   fetchSnapshot: clientMocks.fetchSnapshotMock,
-  ensureRefreshBaseURL: clientMocks.ensureRefreshBaseURLMock,
-  invalidateRefreshBaseURL: clientMocks.invalidateRefreshBaseURLMock,
   setMetricsActive: clientMocks.setMetricsActiveMock,
   // Mirrors the real structural guard (marker property, not instanceof).
   isSnapshotPermissionDenied: (error: unknown) =>
@@ -206,8 +202,6 @@ describe('refreshOrchestrator', () => {
     catalogStreamMocks.isHealthy.mockReset();
     catalogStreamMocks.isHealthy.mockReturnValue(false);
     clientMocks.fetchSnapshotMock.mockReset();
-    clientMocks.ensureRefreshBaseURLMock.mockClear();
-    clientMocks.invalidateRefreshBaseURLMock.mockClear();
     clientMocks.setMetricsActiveMock.mockClear();
     errorHandlerMock.handle.mockReset();
     errorHandlerMock.reportOperationalError.mockReset();
@@ -2120,7 +2114,7 @@ describe('refreshOrchestrator', () => {
     expect(refreshManagerMocks.enableMock).toHaveBeenCalledWith(NAMESPACE_REFRESHERS.config);
   });
 
-  it('uses snapshot fetch for manual refresh on SSE domains even when stream is active', async () => {
+  it('uses snapshot fetch for manual refresh on streaming domains even when stream is active', async () => {
     catalogStreamMocks.refreshOnce.mockClear();
     clientMocks.fetchSnapshotMock.mockClear();
 
@@ -3095,10 +3089,7 @@ describe('refreshOrchestrator', () => {
     );
   });
 
-  it('surfaces streaming initialisation failures and clears loading state when scope creation fails', async () => {
-    const bootstrapError = new Error('bootstrap failed');
-    clientMocks.ensureRefreshBaseURLMock.mockRejectedValueOnce(bootstrapError);
-
+  it('starts framework named streams without a base URL bootstrap', async () => {
     refreshOrchestrator.registerDomain({
       domain: 'catalog',
       refresherName: CLUSTER_REFRESHERS.browse,
@@ -3116,17 +3107,7 @@ describe('refreshOrchestrator', () => {
     await Promise.resolve();
     await Promise.resolve();
 
-    const state = getScopedDomainState('catalog', 'limit=100');
-    expect(state.status).toBe('error');
-    expect(state.error).toContain('bootstrap failed');
-    expect(errorHandlerMock.handle).toHaveBeenCalledWith(
-      bootstrapError,
-      expect.objectContaining({
-        domain: 'catalog',
-        scope: 'limit=100',
-      }),
-      'bootstrap failed'
-    );
+    expect(catalogStreamMocks.start).toHaveBeenCalledWith('limit=100');
   });
 
   it('deduplicates identical refresh errors for streaming and snapshot domains', async () => {
@@ -3584,7 +3565,7 @@ describe('refreshOrchestrator', () => {
 
   it('never treats one-shot query scopes (`?` params) as streaming targets', () => {
     // Typed events queries use parameterized one-shot scopes on the SAME domain
-    // as the singleton events SSE stream; treating them as streamable churned
+    // as the singleton events change stream; treating them as streamable churned
     // the shared connection on every query.
     expect(
       orchestratorInternals.shouldStreamScope('cluster-events', 'cluster-a|?limit=50&sort=age')
@@ -3663,7 +3644,6 @@ describe('refreshOrchestrator', () => {
     refreshOrchestrator.setScopedDomainEnabled('cluster-config', scope, true);
 
     orchestratorInternals.handleKubeconfigChanging();
-    expect(clientMocks.invalidateRefreshBaseURLMock).toHaveBeenCalled();
     expect(orchestratorInternals.suspendedDomains.get('cluster-config')).toBe(true);
 
     orchestratorInternals.handleKubeconfigChanged();

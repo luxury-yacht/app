@@ -5,7 +5,7 @@
  * and All Namespaces browse views.
  *
  * Key design choice:
- * - Do NOT rely on the catalog SSE stream to drive renders. The catalog stream can emit
+ * - Do NOT rely on the catalog change stream to drive renders. The catalog stream can emit
  *   frequent updates (especially while the catalog warms) which can cause nested store
  *   updates via `useSyncExternalStore` and trip React's "maximum update depth" guard.
  *

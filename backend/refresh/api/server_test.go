@@ -97,7 +97,7 @@ func TestSnapshotEndpoint(t *testing.T) {
 	mux := http.NewServeMux()
 	server.Register(mux)
 
-	req := httptest.NewRequest(http.MethodGet, "/api/v2/snapshots/nodes?scope=cluster-a|", nil)
+	req := httptest.NewRequest(http.MethodGet, "/snapshots/nodes?scope=cluster-a|", nil)
 	req.Header.Set("Origin", "wails://test")
 	rr := httptest.NewRecorder()
 	mux.ServeHTTP(rr, req)
@@ -106,8 +106,8 @@ func TestSnapshotEndpoint(t *testing.T) {
 		t.Fatalf("expected status 200 got %d", rr.Code)
 	}
 
-	if got := rr.Header().Get("Access-Control-Allow-Origin"); got != "wails://test" {
-		t.Fatalf("expected CORS header to echo origin, got %q", got)
+	if got := rr.Header().Get("Access-Control-Allow-Origin"); got != "" {
+		t.Fatalf("expected same-origin service response without CORS header, got %q", got)
 	}
 
 	var snap refresh.Snapshot
@@ -119,23 +119,22 @@ func TestSnapshotEndpoint(t *testing.T) {
 	}
 }
 
-func TestSnapshotPreflightAllowsCorrelationHeader(t *testing.T) {
+func TestSnapshotEndpointRejectsCrossOriginPreflight(t *testing.T) {
 	server := api.NewServer(snapshotService(), &fakeQueue{}, nil, nil)
 	mux := http.NewServeMux()
 	server.Register(mux)
 
-	req := httptest.NewRequest(http.MethodOptions, "/api/v2/snapshots/nodes", nil)
+	req := httptest.NewRequest(http.MethodOptions, "/snapshots/nodes", nil)
 	req.Header.Set("Origin", "wails://test")
 	req.Header.Set("Access-Control-Request-Headers", api.CorrelationIDHeader)
 	rr := httptest.NewRecorder()
 	mux.ServeHTTP(rr, req)
 
-	if rr.Code != http.StatusNoContent {
-		t.Fatalf("expected status 204 got %d", rr.Code)
+	if rr.Code != http.StatusMethodNotAllowed {
+		t.Fatalf("expected status 405 got %d", rr.Code)
 	}
-	allowedHeaders := rr.Header().Get("Access-Control-Allow-Headers")
-	if !strings.Contains(allowedHeaders, api.CorrelationIDHeader) {
-		t.Fatalf("expected correlation header in CORS allow-list, got %q", allowedHeaders)
+	if allowedHeaders := rr.Header().Get("Access-Control-Allow-Headers"); allowedHeaders != "" {
+		t.Fatalf("expected no CORS allow-list, got %q", allowedHeaders)
 	}
 }
 
@@ -145,7 +144,7 @@ func TestSnapshotEndpointPropagatesCorrelationIDAsOperation(t *testing.T) {
 	mux := http.NewServeMux()
 	server.Register(mux)
 
-	req := httptest.NewRequest(http.MethodGet, "/api/v2/snapshots/nodes?scope=cluster-a|", nil)
+	req := httptest.NewRequest(http.MethodGet, "/snapshots/nodes?scope=cluster-a|", nil)
 	req.Header.Set(api.CorrelationIDHeader, "broker-read-12")
 	rr := httptest.NewRecorder()
 	mux.ServeHTTP(rr, req)
@@ -167,7 +166,7 @@ func TestSnapshotEndpointUsesSourceVersionForETagAndNotModified(t *testing.T) {
 	mux := http.NewServeMux()
 	server.Register(mux)
 
-	req := httptest.NewRequest(http.MethodGet, "/api/v2/snapshots/nodes?scope=cluster-a|", nil)
+	req := httptest.NewRequest(http.MethodGet, "/snapshots/nodes?scope=cluster-a|", nil)
 	rr := httptest.NewRecorder()
 	mux.ServeHTTP(rr, req)
 
@@ -178,7 +177,7 @@ func TestSnapshotEndpointUsesSourceVersionForETagAndNotModified(t *testing.T) {
 		t.Fatalf("expected sourceVersion ETag, got %q", got)
 	}
 
-	req = httptest.NewRequest(http.MethodGet, "/api/v2/snapshots/nodes?scope=cluster-a|", nil)
+	req = httptest.NewRequest(http.MethodGet, "/snapshots/nodes?scope=cluster-a|", nil)
 	req.Header.Set("If-None-Match", "payload-checksum")
 	rr = httptest.NewRecorder()
 	mux.ServeHTTP(rr, req)
@@ -186,7 +185,7 @@ func TestSnapshotEndpointUsesSourceVersionForETagAndNotModified(t *testing.T) {
 		t.Fatalf("checksum must not drive 304, got %d", rr.Code)
 	}
 
-	req = httptest.NewRequest(http.MethodGet, "/api/v2/snapshots/nodes?scope=cluster-a|", nil)
+	req = httptest.NewRequest(http.MethodGet, "/snapshots/nodes?scope=cluster-a|", nil)
 	req.Header.Set("If-None-Match", "src-v1")
 	rr = httptest.NewRecorder()
 	mux.ServeHTTP(rr, req)
@@ -204,7 +203,7 @@ func TestSnapshotPermissionDenied(t *testing.T) {
 	mux := http.NewServeMux()
 	server.Register(mux)
 
-	req := httptest.NewRequest(http.MethodGet, "/api/v2/snapshots/nodes?scope=cluster-a|", nil)
+	req := httptest.NewRequest(http.MethodGet, "/snapshots/nodes?scope=cluster-a|", nil)
 	req.Header.Set("Origin", "wails://test")
 	rr := httptest.NewRecorder()
 	mux.ServeHTTP(rr, req)
@@ -231,7 +230,7 @@ func TestSnapshotEndpointRejectsMissingClusterScope(t *testing.T) {
 	mux := http.NewServeMux()
 	server.Register(mux)
 
-	req := httptest.NewRequest(http.MethodGet, "/api/v2/snapshots/nodes", nil)
+	req := httptest.NewRequest(http.MethodGet, "/snapshots/nodes", nil)
 	rr := httptest.NewRecorder()
 	mux.ServeHTTP(rr, req)
 
@@ -255,7 +254,7 @@ func TestSnapshotEndpointRejectsMultiClusterScope(t *testing.T) {
 	mux := http.NewServeMux()
 	server.Register(mux)
 
-	req := httptest.NewRequest(http.MethodGet, "/api/v2/snapshots/nodes?scope=clusters=cluster-a,cluster-b|", nil)
+	req := httptest.NewRequest(http.MethodGet, "/snapshots/nodes?scope=clusters=cluster-a,cluster-b|", nil)
 	rr := httptest.NewRecorder()
 	mux.ServeHTTP(rr, req)
 
@@ -286,7 +285,7 @@ func TestManualRefreshEndpoint(t *testing.T) {
 	mux := http.NewServeMux()
 	server.Register(mux)
 
-	req := httptest.NewRequest(http.MethodPost, "/api/v2/refresh/nodes", strings.NewReader(`{"scope":"cluster-a|default"}`))
+	req := httptest.NewRequest(http.MethodPost, "/refresh/nodes", strings.NewReader(`{"scope":"cluster-a|default"}`))
 	req.Header.Set("Content-Type", "application/json")
 	req.Header.Set("Origin", "wails://test")
 	req.Header.Set(api.CorrelationIDHeader, "broker-read-manual")
@@ -315,7 +314,7 @@ func TestManualRefreshEndpointRejectsMissingClusterScope(t *testing.T) {
 	mux := http.NewServeMux()
 	server.Register(mux)
 
-	req := httptest.NewRequest(http.MethodPost, "/api/v2/refresh/nodes", nil)
+	req := httptest.NewRequest(http.MethodPost, "/refresh/nodes", nil)
 	req.Header.Set("Content-Type", "application/json")
 	rr := httptest.NewRecorder()
 	mux.ServeHTTP(rr, req)
@@ -340,7 +339,7 @@ func TestManualRefreshEndpointRejectsMultiClusterScope(t *testing.T) {
 	mux := http.NewServeMux()
 	server.Register(mux)
 
-	req := httptest.NewRequest(http.MethodPost, "/api/v2/refresh/nodes", strings.NewReader(`{"scope":"clusters=cluster-a,cluster-b|"}`))
+	req := httptest.NewRequest(http.MethodPost, "/refresh/nodes", strings.NewReader(`{"scope":"clusters=cluster-a,cluster-b|"}`))
 	req.Header.Set("Content-Type", "application/json")
 	rr := httptest.NewRecorder()
 	mux.ServeHTTP(rr, req)
@@ -367,7 +366,7 @@ func TestManualRefreshHandlesQueueErrors(t *testing.T) {
 	mux := http.NewServeMux()
 	server.Register(mux)
 
-	req := httptest.NewRequest(http.MethodPost, "/api/v2/refresh/nodes", strings.NewReader(`{"scope":"cluster-a|default"}`))
+	req := httptest.NewRequest(http.MethodPost, "/refresh/nodes", strings.NewReader(`{"scope":"cluster-a|default"}`))
 	req.Header.Set("Content-Type", "application/json")
 	req.Header.Set("Origin", "wails://test")
 	rr := httptest.NewRecorder()
@@ -390,24 +389,24 @@ func TestManualRefreshHandlesQueueErrors(t *testing.T) {
 	}
 }
 
-func TestOptionsPreflight(t *testing.T) {
+func TestManualRefreshRejectsCrossOriginPreflight(t *testing.T) {
 	svc := snapshotService()
 	queue := &fakeQueue{}
 	server := api.NewServer(svc, queue, nil, nil)
 	mux := http.NewServeMux()
 	server.Register(mux)
 
-	req := httptest.NewRequest(http.MethodOptions, "/api/v2/refresh/nodes", nil)
+	req := httptest.NewRequest(http.MethodOptions, "/refresh/nodes", nil)
 	req.Header.Set("Origin", "wails://test")
 	rr := httptest.NewRecorder()
 	mux.ServeHTTP(rr, req)
 
-	if rr.Code != http.StatusNoContent {
-		t.Fatalf("expected status 204 got %d", rr.Code)
+	if rr.Code != http.StatusMethodNotAllowed {
+		t.Fatalf("expected status 405 got %d", rr.Code)
 	}
 
-	if allow := rr.Header().Get("Access-Control-Allow-Methods"); !strings.Contains(allow, http.MethodPost) {
-		t.Fatalf("expected allowed methods to include POST, got %q", allow)
+	if allow := rr.Header().Get("Access-Control-Allow-Methods"); allow != "" {
+		t.Fatalf("expected no CORS allow-list, got %q", allow)
 	}
 }
 
@@ -423,7 +422,7 @@ func TestTelemetrySummary(t *testing.T) {
 	mux := http.NewServeMux()
 	server.Register(mux)
 
-	req := httptest.NewRequest(http.MethodGet, "/api/v2/telemetry/summary", nil)
+	req := httptest.NewRequest(http.MethodGet, "/telemetry/summary", nil)
 	rr := httptest.NewRecorder()
 	mux.ServeHTTP(rr, req)
 
@@ -449,7 +448,7 @@ func TestTelemetrySummaryWithoutRecorderReturnsEmptyArrays(t *testing.T) {
 	mux := http.NewServeMux()
 	server.Register(mux)
 
-	req := httptest.NewRequest(http.MethodGet, "/api/v2/telemetry/summary", nil)
+	req := httptest.NewRequest(http.MethodGet, "/telemetry/summary", nil)
 	rr := httptest.NewRecorder()
 	mux.ServeHTTP(rr, req)
 
@@ -471,7 +470,7 @@ func TestMetricsActiveEndpointRequiresClusterIDs(t *testing.T) {
 	mux := http.NewServeMux()
 	server.Register(mux)
 
-	req := httptest.NewRequest(http.MethodPost, "/api/v2/metrics/active", strings.NewReader(`{"active":true}`))
+	req := httptest.NewRequest(http.MethodPost, "/metrics/active", strings.NewReader(`{"active":true}`))
 	req.Header.Set("Content-Type", "application/json")
 	rr := httptest.NewRecorder()
 	mux.ServeHTTP(rr, req)
@@ -490,7 +489,7 @@ func TestMetricsActiveEndpointRoutesClusterScopedDemand(t *testing.T) {
 	mux := http.NewServeMux()
 	server.Register(mux)
 
-	req := httptest.NewRequest(http.MethodPost, "/api/v2/metrics/active", strings.NewReader(`{"clusterIds":["cluster-b","cluster-a"]}`))
+	req := httptest.NewRequest(http.MethodPost, "/metrics/active", strings.NewReader(`{"clusterIds":["cluster-b","cluster-a"]}`))
 	req.Header.Set("Content-Type", "application/json")
 	rr := httptest.NewRecorder()
 	mux.ServeHTTP(rr, req)
@@ -514,7 +513,7 @@ func TestJobStatusEndpoint(t *testing.T) {
 	mux := http.NewServeMux()
 	server.Register(mux)
 
-	req := httptest.NewRequest(http.MethodGet, "/api/v2/jobs/job-42", nil)
+	req := httptest.NewRequest(http.MethodGet, "/jobs/job-42", nil)
 	req.Header.Set("Origin", "wails://test")
 	rr := httptest.NewRecorder()
 	mux.ServeHTTP(rr, req)
@@ -531,7 +530,7 @@ func TestJobStatusEndpoint(t *testing.T) {
 		t.Fatalf("expected job id %s got %s", job.ID, returned.ID)
 	}
 
-	req = httptest.NewRequest(http.MethodGet, "/api/v2/jobs/unknown", nil)
+	req = httptest.NewRequest(http.MethodGet, "/jobs/unknown", nil)
 	rr = httptest.NewRecorder()
 	mux.ServeHTTP(rr, req)
 	if rr.Code != http.StatusNotFound {
