@@ -8,8 +8,6 @@ import (
 	"github.com/wailsapp/wails/v3/pkg/application"
 )
 
-const MainWindowName = "main"
-
 type WindowGeometry struct {
 	X         int
 	Y         int
@@ -28,26 +26,52 @@ type WindowWorkArea struct {
 	Primary bool
 }
 
-func (a *App) mainWindow() (application.Window, error) {
+func (a *App) workspaceWindow(name string) (application.Window, error) {
 	if a == nil || a.wailsApplication == nil {
 		return nil, fmt.Errorf("wails application is not available")
 	}
-	window, ok := a.wailsApplication.Window.GetByName(MainWindowName)
+	window, ok := a.wailsApplication.Window.GetByName(name)
 	if !ok {
-		return nil, fmt.Errorf("window %q is not available", MainWindowName)
+		return nil, fmt.Errorf("window %q is not available", name)
 	}
 	return window, nil
 }
 
-func (a *App) mainWindowWhenReady() (application.Window, error) {
+func (a *App) workspaceWindowWhenReady(name string) (application.Window, error) {
 	if !a.runtimeAvailable() {
 		return nil, fmt.Errorf("desktop runtime is not available")
 	}
-	return a.mainWindow()
+	return a.workspaceWindow(name)
 }
 
-func (a *App) minimiseMainWindow() error {
-	window, err := a.mainWindowWhenReady()
+func (a *App) currentWindowWhenReady() (application.Window, error) {
+	if !a.runtimeAvailable() {
+		return nil, fmt.Errorf("desktop runtime is not available")
+	}
+	if a == nil || a.wailsApplication == nil {
+		return nil, fmt.Errorf("wails application is not available")
+	}
+	window := a.wailsApplication.Window.Current()
+	if window == nil {
+		return nil, fmt.Errorf("current window is not available")
+	}
+	return window, nil
+}
+
+// emitCurrentWindowEvent targets UI commands at the active peer. Application
+// events continue to use emitEvent and remain process-wide broadcasts.
+func (a *App) emitCurrentWindowEvent(name string, data ...any) {
+	window, err := a.currentWindowWhenReady()
+	if err != nil {
+		// The fallback keeps headless tests and pre-native hosts observable.
+		a.emitEvent(name, data...)
+		return
+	}
+	window.EmitEvent(name, data...)
+}
+
+func (a *App) minimiseCurrentWindow() error {
+	window, err := a.currentWindowWhenReady()
 	if err != nil {
 		return err
 	}
@@ -55,8 +79,8 @@ func (a *App) minimiseMainWindow() error {
 	return nil
 }
 
-func (a *App) maximiseMainWindow() error {
-	window, err := a.mainWindowWhenReady()
+func (a *App) maximiseCurrentWindow() error {
+	window, err := a.currentWindowWhenReady()
 	if err != nil {
 		return err
 	}
@@ -64,8 +88,8 @@ func (a *App) maximiseMainWindow() error {
 	return nil
 }
 
-func (a *App) restoreMainWindow() error {
-	window, err := a.mainWindowWhenReady()
+func (a *App) restoreCurrentWindow() error {
+	window, err := a.currentWindowWhenReady()
 	if err != nil {
 		return err
 	}
@@ -73,8 +97,8 @@ func (a *App) restoreMainWindow() error {
 	return nil
 }
 
-func (a *App) toggleMainWindowMaximise() error {
-	window, err := a.mainWindowWhenReady()
+func (a *App) toggleCurrentWindowMaximise() error {
+	window, err := a.currentWindowWhenReady()
 	if err != nil {
 		return err
 	}
@@ -86,7 +110,7 @@ func (a *App) promptForOpenFile(options *application.OpenFileDialogOptions) (str
 	if a != nil && a.openFileDialog != nil {
 		return a.openFileDialog(options)
 	}
-	window, err := a.mainWindowWhenReady()
+	window, err := a.currentWindowWhenReady()
 	if err != nil {
 		return "", err
 	}
@@ -98,7 +122,7 @@ func (a *App) promptForSaveFile(options *application.SaveFileDialogOptions) (str
 	if a != nil && a.saveFileDialog != nil {
 		return a.saveFileDialog(options)
 	}
-	window, err := a.mainWindowWhenReady()
+	window, err := a.currentWindowWhenReady()
 	if err != nil {
 		return "", err
 	}
@@ -107,8 +131,11 @@ func (a *App) promptForSaveFile(options *application.SaveFileDialogOptions) (str
 }
 
 func (a *App) clipboardText() (string, error) {
-	if _, err := a.mainWindowWhenReady(); err != nil {
-		return "", err
+	if !a.runtimeAvailable() {
+		return "", fmt.Errorf("desktop runtime is not available")
+	}
+	if a == nil || a.wailsApplication == nil {
+		return "", fmt.Errorf("wails application is not available")
 	}
 	text, ok := a.wailsApplication.Clipboard.Text()
 	if !ok {
@@ -117,11 +144,11 @@ func (a *App) clipboardText() (string, error) {
 	return text, nil
 }
 
-func (a *App) readMainWindowGeometry() (WindowGeometry, error) {
+func (a *App) readWindowGeometry(windowName string) (WindowGeometry, error) {
 	if a != nil && a.windowGeometry != nil {
 		return a.windowGeometry()
 	}
-	window, err := a.mainWindowWhenReady()
+	window, err := a.workspaceWindowWhenReady(windowName)
 	if err != nil {
 		return WindowGeometry{}, err
 	}
@@ -136,7 +163,7 @@ func (a *App) readMainWindowGeometry() (WindowGeometry, error) {
 	}, nil
 }
 
-func (a *App) mainWindowWorkAreas() []WindowWorkArea {
+func (a *App) windowWorkAreas() []WindowWorkArea {
 	if a == nil || a.wailsApplication == nil || a.wailsApplication.Screen == nil {
 		return nil
 	}
@@ -159,7 +186,7 @@ func (a *App) mainWindowWorkAreas() []WindowWorkArea {
 
 // setApplicationContext retains only the cancellation signal supplied by the
 // desktop application lifecycle. It deliberately does not make UI operations
-// available; the main window must complete its runtime-ready transition first.
+// available; one peer window must complete its runtime-ready transition first.
 func (a *App) setApplicationContext(ctx context.Context) {
 	if a == nil {
 		return

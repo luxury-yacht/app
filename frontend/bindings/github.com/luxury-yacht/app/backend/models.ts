@@ -180,6 +180,7 @@ export interface ClusterWorkspaceClusterState {
 }
 
 export interface ClusterWorkspaceCommand {
+    "windowId": string;
     "selectedKubeconfigs": string[] | null;
     "updateSelectedKubeconfigs": boolean;
     "visibleClusterId": string;

@@ -5,10 +5,14 @@ const runtimeMocks = vi.hoisted(() => ({
   clipboardText: vi.fn(),
   environment: vi.fn(),
   eventsOn: vi.fn<
-    (eventName: string, handler: (event: { name: string; data: unknown }) => void) => () => void
+    (
+      eventName: string,
+      handler: (event: { name: string; data: unknown; sender?: string }) => void
+    ) => () => void
   >(() => () => undefined),
   openDevTools: vi.fn(),
   toggleMaximise: vi.fn(),
+  windowName: vi.fn(),
 }));
 
 vi.mock('@wailsio/runtime', () => ({
@@ -17,6 +21,7 @@ vi.mock('@wailsio/runtime', () => ({
   Events: { On: runtimeMocks.eventsOn },
   System: { Environment: runtimeMocks.environment },
   Window: {
+    Name: runtimeMocks.windowName,
     OpenDevTools: runtimeMocks.openDevTools,
     ToggleMaximise: runtimeMocks.toggleMaximise,
   },
@@ -26,6 +31,8 @@ import * as desktopRuntime from './index';
 import {
   desktopRuntimeAvailable,
   getEnvironment,
+  getWindowIdentity,
+  initializeWindowIdentity,
   onEvent,
   openDevTools,
   openURL,
@@ -55,6 +62,19 @@ describe('desktop runtime adapter', () => {
 
     expect(handler).toHaveBeenCalledWith({ clusterId: 'cluster-a' });
     expect(dispose).toHaveBeenCalledOnce();
+  });
+
+  it('filters events emitted by a different peer window', async () => {
+    runtimeMocks.windowName.mockResolvedValue('workspace-2');
+    await initializeWindowIdentity();
+    const handler = vi.fn();
+
+    onEvent('menu:copy', handler);
+    const runtimeHandler = runtimeMocks.eventsOn.mock.calls[0]?.[1];
+    runtimeHandler?.({ name: 'menu:copy', data: undefined, sender: 'workspace-1' });
+    runtimeHandler?.({ name: 'menu:copy', data: undefined, sender: getWindowIdentity() });
+
+    expect(handler).toHaveBeenCalledOnce();
   });
 
   it('delegates desktop capabilities to the v3 runtime', async () => {

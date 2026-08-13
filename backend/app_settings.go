@@ -632,12 +632,25 @@ func writeFileAtomicWithReplace(
 }
 
 func (a *App) SaveWindowSettings() error {
+	if a != nil && a.windowGeometry != nil {
+		return a.SaveWindowSettingsForWindow("")
+	}
+	window, err := a.currentWindowWhenReady()
+	if err != nil {
+		return err
+	}
+	return a.SaveWindowSettingsForWindow(window.Name())
+}
+
+// SaveWindowSettingsForWindow persists the geometry of a named peer as the
+// next session's initial geometry.
+func (a *App) SaveWindowSettingsForWindow(windowName string) error {
 	if !a.runtimeAvailable() {
 		return fmt.Errorf("application context is not available")
 	}
-	geometry, err := a.readMainWindowGeometry()
+	geometry, err := a.readWindowGeometry(windowName)
 	if err != nil {
-		return fmt.Errorf("read main window geometry: %w", err)
+		return fmt.Errorf("read window %q geometry: %w", windowName, err)
 	}
 	a.windowSettings = &WindowSettings{
 		X:         geometry.X,
@@ -1374,7 +1387,7 @@ func (a *App) ShowSettings() {
 	for i := 0; i < maxRetries; i++ {
 		if a.runtimeAvailable() {
 			a.logger.Debug("Settings menu triggered", logsources.App)
-			a.emitEvent("open-settings")
+			a.emitCurrentWindowEvent("open-settings")
 			return
 		}
 		if i < maxRetries-1 {
@@ -1389,7 +1402,7 @@ func (a *App) ShowAbout() {
 	for i := 0; i < maxRetries; i++ {
 		if a.runtimeAvailable() {
 			a.logger.Debug("About menu triggered", logsources.App)
-			a.emitEvent("open-about")
+			a.emitCurrentWindowEvent("open-about")
 			return
 		}
 		if i < maxRetries-1 {

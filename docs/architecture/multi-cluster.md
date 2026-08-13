@@ -62,19 +62,30 @@ validation errors. Frontend refresh code should not produce them.
 
 ## Cluster Workspace State Plane
 
-`GetClusterWorkspaceState` returns selected kubeconfig contexts, foreground
-cluster intent, and cluster-indexed lifecycle, auth, health, and namespace-scope
-revision state. `ApplyClusterWorkspace` applies a requested selection mutation
-before visible-cluster activation and returns the resulting authoritative
+`GetClusterWorkspaceStateForWindow` returns the requesting peer's selected
+kubeconfig contexts and foreground cluster intent together with process-wide,
+cluster-indexed lifecycle, auth, health, and namespace-scope revision state.
+`ApplyClusterWorkspace` updates that peer's complete tab set before visible-
+cluster activation and returns the resulting authoritative per-window
 snapshot. Selection UI must use that response instead of chaining separate
 selection, auth, lifecycle, and visible-cluster reads.
+
+The backend retains one tab set per peer window. Their deterministic union owns
+the process-wide selected kubeconfigs, persisted selection, clients, refresh
+subsystems, catalogs, and runtime operations. Closing a tab removes only that
+window's ownership; teardown occurs only after no peer window owns the
+selection. Closing a non-last window releases all of that peer's tab ownership.
+The last window skips ownership release because its accepted close proceeds to
+process shutdown and its tabs remain the next-start persisted selection.
 
 The backend snapshot is revision-consistent: every owning state writer advances
 the workspace revision while holding its own lock, and the aggregate retries if
 that revision changes during capture. Public reads wait for the serialized
-selection boundary; `ApplyClusterWorkspace` captures an applied command's
-snapshot before releasing that boundary. Do not add a workspace-visible state
-writer without advancing the revision in the same locked commit.
+selection boundary; peer commands are ordered so one window cannot supersede a
+different window's tab mutation, and `ApplyClusterWorkspace` captures an
+applied command's snapshot before releasing that boundary. Do not add a
+workspace-visible state writer without advancing the revision in the same
+locked commit.
 
 The React-free `clusterWorkspaceStore` subscribes to runtime events before its
 initial hydration. Live fields win only over hydration responses that were

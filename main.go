@@ -2,14 +2,12 @@ package main
 
 import (
 	"embed"
-	"runtime"
 	"strings"
 	"time"
 
 	"github.com/luxury-yacht/app/backend"
 	"github.com/luxury-yacht/app/internal/sentry"
 	"github.com/wailsapp/wails/v3/pkg/application"
-	"github.com/wailsapp/wails/v3/pkg/events"
 )
 
 //go:embed all:frontend/dist
@@ -52,7 +50,7 @@ func newSentryReporter(enabled bool, defaultDSN, version string) (sentryreportin
 type applicationComposition struct {
 	application *application.App
 	backend     *backend.App
-	window      *application.WebviewWindow
+	windows     *workspaceWindowRegistry
 	menu        *application.Menu
 }
 
@@ -60,45 +58,9 @@ type compositionOptions struct {
 	SingleInstance bool
 }
 
-func mainWindowOptions(nativeMenu *application.Menu) application.WebviewWindowOptions {
-	return mainWindowOptionsForPlatform(nativeMenu, runtime.GOOS)
-}
-
-func mainWindowOptionsForPlatform(nativeMenu *application.Menu, goos string) application.WebviewWindowOptions {
-	return application.WebviewWindowOptions{
-		Name:             backend.MainWindowName,
-		Title:            "Luxury Yacht",
-		Width:            1200,
-		Height:           800,
-		MinWidth:         1100,
-		MinHeight:        600,
-		URL:              "/",
-		BackgroundColour: application.NewRGB(30, 30, 30),
-		BackgroundType:   application.BackgroundTypeTransparent,
-		Mac: application.MacWindow{
-			TitleBar: application.MacTitleBar{
-				AppearsTransparent:   true,
-				FullSizeContent:      true,
-				HideTitle:            true,
-				HideToolbarSeparator: true,
-			},
-		},
-		Windows: application.WindowsWindow{
-			Theme: application.SystemDefault,
-		},
-		Linux: application.LinuxWindow{
-			Menu: nativeMenu,
-		},
-		UseApplicationMenu: true,
-		Zoom:               1,
-		ZoomControlEnabled: false,
-		Hidden:             goos != "linux",
-	}
-}
-
 func newApplicationComposition(reporter sentryreporting.Reporter, options compositionOptions) *applicationComposition {
 	var backendApp *backend.App
-	var mainWindow *application.WebviewWindow
+	var windows *workspaceWindowRegistry
 	applicationOptions := application.Options{
 		Name:        "Luxury Yacht",
 		Description: "Sail the seas of Kubernetes in style",
@@ -109,7 +71,7 @@ func newApplicationComposition(reporter sentryreporting.Reporter, options compos
 			ApplicationShouldTerminateAfterLastWindowClosed: true,
 		},
 		ShouldQuit: func() bool {
-			return backendApp == nil || backendApp.PrepareQuit()
+			return windows == nil || windows.PrepareApplicationQuit()
 		},
 		ErrorHandler: func(err error) {
 			reportRunError(reporter, err)
@@ -120,14 +82,10 @@ func newApplicationComposition(reporter sentryreporting.Reporter, options compos
 			UniqueID: applicationProductIdentifier,
 			ExitCode: 0,
 			OnSecondInstanceLaunch: func(application.SecondInstanceData) {
-				if mainWindow == nil {
+				if windows == nil {
 					return
 				}
-				mainWindow.Show()
-				if mainWindow.IsMinimised() {
-					mainWindow.Restore()
-				}
-				mainWindow.Focus()
+				windows.FocusMostRecent()
 			},
 		}
 	}
@@ -142,21 +100,14 @@ func newApplicationComposition(reporter sentryreporting.Reporter, options compos
 	nativeMenu := backend.CreateMenu(backendApp)
 	wailsApp.Menu.SetApplicationMenu(nativeMenu)
 
-	mainWindow = wailsApp.Window.NewWithOptions(mainWindowOptions(nativeMenu))
-
-	mainWindow.OnWindowEvent(events.Common.WindowRuntimeReady, func(*application.WindowEvent) {
-		backendApp.WindowRuntimeReady()
-	})
-	mainWindow.RegisterHook(events.Common.WindowClosing, func(event *application.WindowEvent) {
-		if !backendApp.PrepareQuit() {
-			event.Cancel()
-		}
-	})
+	windows = newWorkspaceWindowRegistry(wailsApp, backendApp, nativeMenu)
+	backendApp.SetWorkspaceWindowCreator(func() { windows.Create(false) })
+	windows.Create(true)
 
 	return &applicationComposition{
 		application: wailsApp,
 		backend:     backendApp,
-		window:      mainWindow,
+		windows:     windows,
 		menu:        nativeMenu,
 	}
 }

@@ -14,7 +14,7 @@ func (a *App) ToggleDiagnosticsPanel() error {
 
 	a.diagnosticsPanelVisible = !a.diagnosticsPanelVisible
 	a.logger.Info("Diagnostics panel toggled", logsources.App)
-	a.emitEvent("toggle-diagnostics")
+	a.emitCurrentWindowEvent("toggle-diagnostics")
 	a.UpdateMenu()
 	return nil
 }
@@ -26,7 +26,7 @@ func (a *App) ToggleAppLogsPanel() error {
 
 	a.appLogsPanelVisible = !a.appLogsPanelVisible
 	a.logger.Info("Application Logs Panel toggled", logsources.App)
-	a.emitEvent("toggle-app-logs-panel")
+	a.emitCurrentWindowEvent("toggle-app-logs-panel")
 	a.UpdateMenu()
 	return nil
 }
@@ -37,7 +37,7 @@ func (a *App) ToggleSidebar() error {
 	}
 
 	a.sidebarVisible = !a.sidebarVisible
-	a.emitEvent("toggle-sidebar")
+	a.emitCurrentWindowEvent("toggle-sidebar")
 	a.UpdateMenu()
 	return nil
 }
@@ -48,7 +48,7 @@ func (a *App) ToggleObjectDiff() error {
 		return fmt.Errorf("application context not available")
 	}
 
-	a.emitEvent("toggle-object-diff")
+	a.emitCurrentWindowEvent("toggle-object-diff")
 	return nil
 }
 
@@ -68,8 +68,10 @@ func (a *App) UpdateMenu() {
 			}
 		},
 		func() {
-			if window, err := a.mainWindow(); err == nil {
-				window.SetMenu(a.menu)
+			if a.wailsApplication != nil {
+				for _, window := range a.wailsApplication.Window.GetAll() {
+					window.SetMenu(a.menu)
+				}
 			}
 		},
 	)

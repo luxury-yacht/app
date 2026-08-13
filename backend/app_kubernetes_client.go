@@ -97,6 +97,7 @@ func (a *App) restoreKubeconfigSelection() {
 	a.kubeconfigsMu.Lock()
 	a.setSelectedKubeconfigsLocked(normalized)
 	a.kubeconfigsMu.Unlock()
+	a.replaceWorkspaceSelectionsLocked(normalized)
 
 	if len(normalized) > 0 {
 		a.settingsMu.Lock()

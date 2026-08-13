@@ -41,11 +41,11 @@ type GovernorPolicy struct {
 }
 
 // Assign returns the desired tier for each open cluster. `mru` lists the open clusters
-// in most-recently-visible-first order; `visible` is the one cluster the user is
-// currently viewing (always Foreground if open). `underPressure` is the memory
+// in most-recently-visible-first order; `visible` contains every cluster currently
+// shown by at least one peer window (always Foreground if open). `underPressure` is the memory
 // governor's signal: under pressure the warm budget collapses to 0, so every
 // non-visible cluster is demoted Cold to reclaim heap.
-func (p GovernorPolicy) Assign(mru []string, visible string, underPressure bool) map[string]ResourceTier {
+func (p GovernorPolicy) Assign(mru []string, visible map[string]bool, underPressure bool) map[string]ResourceTier {
 	warm := p.KeepWarm
 	if underPressure {
 		warm = 0
@@ -54,7 +54,7 @@ func (p GovernorPolicy) Assign(mru []string, visible string, underPressure bool)
 	warmed := 0
 	for _, id := range mru {
 		switch {
-		case id == visible:
+		case visible[id]:
 			out[id] = TierForeground
 		case warmed < warm:
 			out[id] = TierBackground

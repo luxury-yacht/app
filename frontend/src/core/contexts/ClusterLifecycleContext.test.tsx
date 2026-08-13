@@ -30,7 +30,7 @@ vi.mock('@/core/desktop-runtime', () => ({
 }));
 
 vi.mock('@/core/backend-api', () => ({
-  GetClusterWorkspaceState: async () => {
+  GetClusterWorkspaceStateForWindow: async () => {
     const lifecycle = await backendMocks.getAllStates();
     const clusters = Object.fromEntries(
       Object.entries(lifecycle ?? {}).map(([clusterId, state]) => [
@@ -137,7 +137,7 @@ describe('ClusterLifecycleContext', () => {
     expect(stateRef.current?.isClusterReady('cluster-b')).toBe(false);
   });
 
-  it('hydrates from GetClusterWorkspaceState on mount', async () => {
+  it('hydrates from GetClusterWorkspaceStateForWindow on mount', async () => {
     mockGetAllStates.mockResolvedValue({
       'cluster-a': 'connecting',
       'cluster-b': 'ready',

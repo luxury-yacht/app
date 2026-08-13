@@ -5,6 +5,7 @@ import (
 	"fmt"
 	"runtime"
 	"runtime/debug"
+	"strings"
 	"time"
 
 	"github.com/luxury-yacht/app/backend/internal/config"
@@ -27,6 +28,7 @@ func (a *App) initGovernor() {
 	a.governorMu.Lock()
 	defer a.governorMu.Unlock()
 	a.governorPolicy = system.GovernorPolicy{KeepWarm: config.GovernorKeepWarm}
+	a.governorWindows = make(map[string]string)
 	a.governorPlanned = make(map[string]system.ResourceTier)
 	a.governorApplied = make(map[string]system.ResourceTier)
 	a.governorBudget = config.GovernorHeapBudgetBytes
@@ -37,6 +39,9 @@ func (a *App) initGovernor() {
 // built without NewApp (e.g. test fixtures), so the governor never assigns to a
 // nil map. Callers must hold governorMu.
 func (a *App) ensureGovernorStateLocked() {
+	if a.governorWindows == nil {
+		a.governorWindows = make(map[string]string)
+	}
 	if a.governorPlanned == nil {
 		a.governorPlanned = make(map[string]system.ResourceTier)
 	}
@@ -109,6 +114,79 @@ func (a *App) SetVisibleCluster(clusterID string) {
 	}
 }
 
+// SetWindowVisibleCluster records one peer window's foreground demand. Multiple
+// windows may therefore keep different clusters in the Foreground tier.
+func (a *App) SetWindowVisibleCluster(windowID, clusterID string) {
+	windowID = strings.TrimSpace(windowID)
+	clusterID = strings.TrimSpace(clusterID)
+	if a == nil || windowID == "" {
+		return
+	}
+	a.governorMu.Lock()
+	a.ensureGovernorStateLocked()
+	if clusterID == "" {
+		_, existed := a.governorWindows[windowID]
+		if existed {
+			delete(a.governorWindows, windowID)
+			a.markClusterWorkspaceChanged()
+		}
+		a.governorMu.Unlock()
+		if existed {
+			a.reconcileGovernor()
+		}
+		return
+	}
+	if len(a.governorWindows) == 0 && a.governorVisible != "" {
+		a.governorVisible = ""
+		a.markClusterWorkspaceChanged()
+	}
+	if a.governorWindows[windowID] != clusterID {
+		a.governorWindows[windowID] = clusterID
+		a.markClusterWorkspaceChanged()
+	}
+	a.governorMRU = moveToFront(a.governorMRU, clusterID)
+	a.governorMu.Unlock()
+
+	a.reconcileGovernor()
+	if a.clusterLifecycle != nil {
+		a.clusterLifecycle.Replay(clusterID)
+	}
+}
+
+// releaseWorkspaceWindowForeground removes a closed peer window's foreground
+// demand. Cluster-tab ownership is released by ReleaseWorkspaceWindow at the
+// serialized selection boundary.
+func (a *App) releaseWorkspaceWindowForeground(windowID string) {
+	windowID = strings.TrimSpace(windowID)
+	if a == nil || windowID == "" {
+		return
+	}
+	a.governorMu.Lock()
+	a.ensureGovernorStateLocked()
+	_, existed := a.governorWindows[windowID]
+	if existed {
+		delete(a.governorWindows, windowID)
+		a.markClusterWorkspaceChanged()
+	}
+	a.governorMu.Unlock()
+	if existed {
+		a.reconcileGovernor()
+	}
+}
+
+func (a *App) visibleClustersLocked() map[string]bool {
+	visible := make(map[string]bool, len(a.governorWindows)+1)
+	if a.governorVisible != "" {
+		visible[a.governorVisible] = true
+	}
+	for _, clusterID := range a.governorWindows {
+		if clusterID != "" {
+			visible[clusterID] = true
+		}
+	}
+	return visible
+}
+
 // moveToFront returns mru with id at the front, preserving the relative order of
 // the remaining entries and de-duplicating id.
 func moveToFront(mru []string, id string) []string {
@@ -165,8 +243,9 @@ func (a *App) reconcileGovernorWith(exec governorExecutor) {
 	// The visible cluster is always considered open: the frontend may signal it a
 	// beat before its clients finish registering, and the user's active cluster
 	// must never be dropped from the MRU as if it had closed.
-	if a.governorVisible != "" {
-		open[a.governorVisible] = true
+	visible := a.visibleClustersLocked()
+	for clusterID := range visible {
+		open[clusterID] = true
 	}
 	// Restrict the MRU to clusters that are still open (closed clusters are torn
 	// down by the connection lifecycle, not the governor) and drop their stale
@@ -178,7 +257,7 @@ func (a *App) reconcileGovernorWith(exec governorExecutor) {
 			delete(a.governorApplied, id)
 		}
 	}
-	desired := a.governorPolicy.Assign(mru, a.governorVisible, a.governorPressure)
+	desired := a.governorPolicy.Assign(mru, visible, a.governorPressure)
 	transitions := system.PlanGovernorTransitions(a.governorApplied, desired)
 	// Catalog start/stop runs inside the lifecycle executor. Publish the plan
 	// first so those nested operations see where the serialized transition is

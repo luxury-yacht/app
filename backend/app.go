@@ -28,6 +28,7 @@ type App struct {
 	runtimeReady             atomic.Bool
 	wailsApplication         *application.App
 	menu                     *application.Menu
+	createWorkspaceWindow    func()
 	selectedKubeconfigs      []string
 	availableKubeconfigs     []KubeconfigInfo
 	kubeconfigSearchPaths    []string
@@ -79,7 +80,8 @@ type App struct {
 	governorMu          sync.Mutex
 	governorPolicy      system.GovernorPolicy
 	governorMRU         []string                       // open cluster IDs, most-recently-visible first
-	governorVisible     string                         // the cluster the user is currently viewing
+	governorVisible     string                         // compatibility demand used before a window identifies itself
+	governorWindows     map[string]string              // visible cluster by peer workspace window
 	governorPlanned     map[string]system.ResourceTier // latest tier plan published before lifecycle work starts
 	governorApplied     map[string]system.ResourceTier // last-applied tier per cluster
 	governorPressure    bool                           // memory-pressure signal (HeapInuse over budget)
@@ -110,6 +112,10 @@ type App struct {
 	// This preserves sequential behavior while allowing kubeconfigChangeMu to stay
 	// narrowly scoped to short state-transition sections.
 	selectionMutationMu sync.Mutex
+	// workspaceSelections is the complete tab selection owned by each peer
+	// window. It is guarded by selectionMutationMu; selectedKubeconfigs is the
+	// process-wide union that owns shared cluster clients and refresh lifecycles.
+	workspaceSelections map[string][]string
 	// selectionMutationDrain tracks queued and active selection mutations so app
 	// shutdown can wait for durable selection writes, not just active runtime work.
 	selectionMutationDrainMu   sync.Mutex
@@ -226,6 +232,7 @@ func NewApp(wailsApplication *application.App, reporters ...sentryreporting.Repo
 		},
 		clusterHealth:         make(map[string]ClusterHealthState),
 		clusterScopeRevisions: make(map[string]uint64),
+		workspaceSelections:   make(map[string][]string),
 	}
 	app.kubeClientInitializer = func() error {
 		return app.initKubernetesClient()

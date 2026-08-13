@@ -1,7 +1,8 @@
 # Application Lifecycle
 
-Wails v3 application composition owns the native application, one named main
-window, its persistent menu, service registration, and process-level hooks.
+Wails v3 application composition owns the native application, a registry of
+named peer workspace windows, its persistent menu, service registration, and
+process-level hooks.
 The Wails application is injected directly into `backend.App`, following the v3
 service-injection model. Backend native operations use its window, menu, dialog,
 clipboard, event, and screen managers directly.
@@ -12,10 +13,10 @@ clipboard, event, and screen managers directly.
 window. It may initialize process services and return an error to abort startup,
 but it must not access the window or emit runtime events.
 
-Interactive initialization starts from the main window's
-`WindowRuntimeReady` event. That transition is once-only. It restores window
-geometry, shows the window, starts selected clusters and background watchers,
-and enables desktop event delivery. Keep native hooks registered before
+Interactive initialization starts from the first workspace window's
+`WindowRuntimeReady` event. Process initialization is once-only; every peer
+still handles its own readiness event and becomes visible independently. Only
+the initial window restores saved geometry. Keep native hooks registered before
 `application.Run`.
 
 ## Service and runtime boundaries
@@ -40,27 +41,34 @@ callback, or frontend owner and must not gain a second event subscription.
 
 | Behavior | Owner and Wails v3 surface | Cancellable | Readiness and ordering | Identity, cleanup, and proof |
 | --- | --- | --- | --- | --- |
-| Process startup | `backend.App.ServiceStartup` through the registered Wails service | By returning an error | Runs synchronously before pending windows; UI operations and event emission remain gated | Process-scoped. Wails cancels the service context and shuts down already-started services if startup aborts. Repository contract: `backend/app_lifecycle.go:28`; framework contract: `pkg/application/services.go:87-121`. |
-| Interactive startup | Main window `events.Common.WindowRuntimeReady` listener calls `backend.App.WindowRuntimeReady` | No | Registered before `App.Run`; one successful transition enables desktop operations, then restores/shows the window and starts interactive work | Window name is `main`; repeated delivery is ignored by `markRuntimeReady`. Proof: `main.go:145-154`, `backend/app_runtime_test.go:29-46`, and `backend/app_lifecycle_test.go:321-354`. |
-| Subsequent process launch and focus | `application.SingleInstanceOptions.OnSecondInstanceLaunch` | No | May arrive before the webview is ready; the callback uses only the already-created named window and does not start a second backend lifecycle | Shows, restores when minimized, and focuses `main`; ignores arguments, working directory, and additional data. The callback must remain safe at any readiness point. Proof: `main.go:118-132` and `cmd/project/wails_project_contract_test.go:208-220`. |
-| Ordinary focus changes | Wails/default webview behavior; no application listener | No | No backend work depends on focus | No cleanup. A focus event must not become a refresh or cluster-selection trigger. |
+| Process startup | `backend.App.ServiceStartup` through the registered Wails service | By returning an error | Runs synchronously before pending windows; UI operations and event emission remain gated | Process-scoped. Wails cancels the service context and shuts down already-started services if startup aborts. Repository contract: `backend/app_lifecycle.go`; framework contract: `pkg/application/services.go`. |
+| Interactive startup | Every peer's `events.Common.WindowRuntimeReady` listener calls `backend.App.WindowRuntimeReady(name, restoreGeometry)` | No | Registered when the window is created; the first delivery enables desktop operations and starts interactive process work, while every delivery shows that peer | Names are monotonic `workspace-N`; only process startup is ignored after `markRuntimeReady`. Proof: `workspace_window_registry.go`, `backend/app_lifecycle.go`, and `window_lifecycle_test.go`. |
+| Subsequent process launch and focus | `application.SingleInstanceOptions.OnSecondInstanceLaunch` | No | May arrive before the webview is ready; it does not start a second backend lifecycle | Shows, restores when minimized, and focuses the most recently focused live peer; ignores launch arguments and additional data. Proof: `main.go`, `workspace_window_registry.go`, and `cmd/project/wails_project_contract_test.go`. |
+| Ordinary focus changes | Peer `events.Common.WindowFocus` listener | No | Updates only the registry's most-recent ordering | Focus does not trigger refresh or cluster selection. It chooses the peer used by subsequent-launch focus and explicit application-quit geometry persistence. |
 | System appearance changes | Browser `matchMedia('(prefers-color-scheme: dark)')`; persisted preference changes use the backend `appearance-mode-changed` custom event | No | Frontend subscription exists only after the runtime mounts; system changes apply only while the preference is `system` | Process preference, not cluster data. The React effect removes the media-query and Wails subscriptions on unmount. Proof: `frontend/src/core/contexts/AppearanceModeContext.tsx:67-109`. |
-| Dynamic menu labels | `backend.App.UpdateMenu`; no Wails application event | No | Runs only after runtime-ready state changes such as sidebar or panel visibility | Mutates the one persistent menu. Linux updates it in place, macOS resets the application menu, and Windows reinstalls it on `main`. Proof: `backend/app_ui.go:55-86` and `backend/app_ui_test.go:106-168`. |
-| Main-window close | `events.Common.WindowClosing` cancellable hook calls `PrepareQuit` | Yes | Hook is registered before `App.Run`; persistence runs while the named window is still queryable | `PrepareQuit` is process-idempotent and waits for selection persistence before reading geometry. Proof: `main.go:150-154` and `backend/app_lifecycle_test.go:356-433`. |
-| Application quit | `application.Options.ShouldQuit` calls the same `PrepareQuit` owner | Yes | Covers menu, shortcut, programmatic, and OS quit requests without creating a second persistence path | Shares the same `sync.Once` as window close. Proof: `main.go:102-117` and `backend/app_lifecycle.go:219-237`. |
-| Service cancellation and shutdown | Wails cancels the service context, then calls `backend.App.ServiceShutdown` | No | Occurs after quit is accepted and after pre-quit persistence | Process-scoped teardown stops auth recovery, runtime operations, kubeconfig watching, and refresh before clearing the application context. Proof: `backend/app_lifecycle.go:239-271` and the pinned framework ordering at `pkg/application/application.go:645-815`. |
-| Initial hidden-window workaround | `mainWindowOptionsForPlatform`; no event | No | macOS/Windows start hidden until runtime-ready restoration; Linux starts visible because its native window/menu construction differs | Applies only to `main`. Option mapping proof: `main.go:67-96` and `main_test.go:117-164`. |
-| Native menu ownership workarounds | `backend.App.UpdateMenu`; no event | No | The persistent menu is created and attached before the window, then refreshed through the platform owner | Linux retains the same menu, macOS owns the application menu, Windows owns the named-window menu. Proof: `main.go:142-145` and `backend/app_ui.go:55-86`. |
-| Windows zoom accelerators | Menu construction uses explicit labels instead of native accelerators on Windows; no event | No | The frontend zoom custom events remain the action owner | Process menu targeting `main`; no shutdown work. Proof: `backend/menu.go:129-147`. |
+| Dynamic menu labels | `backend.App.UpdateMenu`; no Wails application event | No | Runs only after runtime-ready state changes such as sidebar or panel visibility | Mutates the persistent menu. Linux updates it in place, macOS resets the application menu, and Windows reinstalls it on every peer. Proof: `backend/app_ui.go` and `backend/app_ui_test.go`. |
+| Peer-window close | Every peer's `events.Common.WindowClosing` cancellable hook decrements `workspaceWindowLifecycle` | Yes | Non-last closes release that window's foreground demand and cluster-tab ownership; shared cluster teardown occurs only when no remaining peer owns the selection. Zero remaining windows enter the process quit flush while the closing peer remains queryable | There is no privileged close hook or main window. The last peer keeps its tab union for next-start persistence; a cancelled last-close restores the peer to the registry. Proof: `workspace_window_registry.go`, `backend/cluster_workspace.go`, `backend/cluster_workspace_test.go`, and `window_lifecycle_test.go`. |
+| Application quit | `application.Options.ShouldQuit` asks the peer registry to prepare application quit | Yes | Covers menu, shortcut, programmatic, and OS quit requests without creating a second persistence path | The most recently focused live peer supplies geometry. The backend flush shares the same `sync.Once` as last-window close. Proof: `main.go`, `workspace_window_registry.go`, and `backend/app_lifecycle.go`. |
+| Service cancellation and shutdown | Wails cancels the service context, then calls `backend.App.ServiceShutdown` | No | Occurs after quit is accepted and after pre-quit persistence | Process-scoped teardown stops auth recovery, runtime operations, kubeconfig watching, and refresh before clearing the application context. Proof: `backend/app_lifecycle.go` and the pinned framework's `pkg/application/application.go`. |
+| Initial hidden-window workaround | `workspaceWindowOptionsForPlatform`; no event | No | macOS/Windows peers start hidden until runtime ready; Linux starts visible because its native window/menu construction differs | Applies equally to every `workspace-N` peer. Option mapping proof: `workspace_window_registry.go` and `main_test.go`. |
+| Native menu ownership workarounds | `backend.App.UpdateMenu`; no event | No | The persistent menu is created and attached before the window, then refreshed through the platform owner | Linux retains the same menu, macOS owns the application menu, Windows installs the menu on every peer. Proof: `main.go`, `workspace_window_registry.go`, and `backend/app_ui.go`. |
+| Windows zoom accelerators | Menu construction uses explicit labels instead of native accelerators on Windows; no event | No | The frontend zoom custom events remain the action owner | Commands target the current peer and carry Wails sender identity; no shutdown work. Proof: `backend/menu.go` and `frontend/src/core/desktop-runtime/index.ts`. |
 
 ## Window identity and restoration
 
-The only supported window is named `main`. Resolve it by name through the
-injected application's window manager; backend code must not rely on an implicit
-current window.
-**New Window** is intentionally absent until a native multi-window contract is
-implemented through the
-[deferred native multi-window track](../plans/deferred/wails-v3-follow-up-tracks.md#native-multi-window).
+Every workspace window is a peer named `workspace-N`; no name is privileged.
+Creation, focus ordering, readiness, and close accounting belong to
+`workspaceWindowRegistry`. Native menu actions and dialogs use Wails' current
+window, while lifecycle and persistence operations resolve an explicit name.
+
+The frontend reads its Wails window name before starting refresh work. Cluster
+workspace commands include that identity. Backend foreground demand is a map
+from window name to cluster ID, while cluster-tab ownership is a map from
+window name to that peer's complete selected kubeconfig set. Consequently,
+clusters displayed in different peers all remain Foreground, and a shared
+cluster remains connected until its final tab owner closes it. Process events
+remain broadcasts; window-targeted menu events include Wails sender identity
+and other peers filter them at the desktop-runtime boundary.
 
 Window persistence keeps logical `x`, `y`, `width`, `height`, and `maximized`
 values. On startup, validate that rectangle against Wails v3 logical screen work
@@ -73,8 +81,8 @@ coordinates.
 
 Production composition enables Wails v3 single-instance handling with
 `app.luxury-yacht.desktop`, which must match `build/config.yml`. A subsequent
-launch may only request that the named main window be shown, restored if
-minimized, and focused. Treat its arguments, working directory, and additional
+launch may only request that the most recently focused live peer be shown,
+restored if minimized, and focused. Treat its arguments, working directory, and additional
 data as untrusted and ignore them.
 
 Wails owns the instance lock, inter-process notification, second-process exit,
@@ -83,10 +91,13 @@ not maintain an application-owned launch queue.
 
 ## Shutdown
 
-The window-closing hook and application `ShouldQuit` call `PrepareQuit` while
-the main window is still queryable. Persist window geometry there. Wails then
-cancels the application context and calls `ServiceShutdown` for backend
-teardown.
+Every window-closing hook first removes that peer from explicit lifecycle
+accounting. Non-last closes release their window-scoped foreground demand and
+tab ownership, reconciling the shared cluster runtime against the remaining
+windows' union. The zero-remaining transition and application `ShouldQuit`
+share the once-only quit flush, preserve the last peer's selection for restart,
+persist geometry from a named live/closing peer, and then allow Wails to cancel
+the application context and call `ServiceShutdown`.
 
 The request/response refresh surface is published atomically at the same-origin
 Wails service route `/api/v2`. Resource doorbells and container logs use named
@@ -96,6 +107,7 @@ the current per-cluster stream generation before releasing its producers.
 ## Starting points
 
 - Composition and process hooks: `main.go`
+- Peer creation and close accounting: `workspace_window_registry.go`, `window_lifecycle.go`
 - Native operations and named-window resolution: `backend/app_runtime.go`
 - Backend lifecycle: `backend/app_lifecycle.go`, `backend/app_runtime.go`
 - Geometry validation: `backend/window_restore.go`

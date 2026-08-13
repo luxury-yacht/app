@@ -115,6 +115,226 @@ func TestClusterWorkspaceStateCombinesClusterFacts(t *testing.T) {
 	require.Equal(t, uint64(1), state.Clusters["cluster-a"].ScopeRevision)
 }
 
+func TestClusterWorkspaceStateProjectsVisibleClusterPerPeerWindow(t *testing.T) {
+	app := NewApp(nil)
+	app.governorMu.Lock()
+	app.governorWindows["workspace-1"] = "cluster-a"
+	app.governorWindows["workspace-2"] = "cluster-b"
+	app.governorMu.Unlock()
+
+	require.Equal(t, "cluster-a", app.GetClusterWorkspaceStateForWindow("workspace-1").VisibleClusterID)
+	require.Equal(t, "cluster-b", app.GetClusterWorkspaceStateForWindow("workspace-2").VisibleClusterID)
+
+	app.ReleaseWorkspaceWindow("workspace-1")
+	require.Empty(t, app.GetClusterWorkspaceStateForWindow("workspace-1").VisibleClusterID)
+	require.Equal(t, "cluster-b", app.GetClusterWorkspaceStateForWindow("workspace-2").VisibleClusterID)
+}
+
+func TestApplyClusterWorkspaceRecordsWindowIdentity(t *testing.T) {
+	app := NewApp(nil)
+
+	first := app.ApplyClusterWorkspace(ClusterWorkspaceCommand{
+		WindowID:         "workspace-1",
+		VisibleClusterID: "cluster-a",
+	})
+	second := app.ApplyClusterWorkspace(ClusterWorkspaceCommand{
+		WindowID:         "workspace-2",
+		VisibleClusterID: "cluster-b",
+	})
+
+	require.Empty(t, first.Error)
+	require.Empty(t, second.Error)
+	require.Equal(t, "cluster-a", app.GetClusterWorkspaceStateForWindow("workspace-1").VisibleClusterID)
+	require.Equal(t, "cluster-b", app.GetClusterWorkspaceStateForWindow("workspace-2").VisibleClusterID)
+	app.governorMu.Lock()
+	require.Equal(t, map[string]string{
+		"workspace-1": "cluster-a",
+		"workspace-2": "cluster-b",
+	}, app.governorWindows)
+	require.Equal(t, map[string]bool{"cluster-a": true, "cluster-b": true}, app.visibleClustersLocked())
+	app.governorMu.Unlock()
+}
+
+func TestApplyClusterWorkspaceKeepsClusterUntilEveryWindowClosesItsTab(t *testing.T) {
+	setTestConfigEnv(t)
+	app := NewApp(nil)
+	selection := "/tmp/config:prod"
+	app.kubeconfigsMu.Lock()
+	app.setSelectedKubeconfigsLocked([]string{selection})
+	app.kubeconfigsMu.Unlock()
+	app.clusterClientsMu.Lock()
+	app.clusterClients["cluster-a"] = &clusterClients{meta: ClusterMeta{ID: "cluster-a", Name: "Production"}}
+	app.clusterClientsMu.Unlock()
+
+	require.Equal(t, []string{selection}, app.GetClusterWorkspaceStateForWindow("workspace-1").SelectedKubeconfigs)
+	require.Equal(t, []string{selection}, app.GetClusterWorkspaceStateForWindow("workspace-2").SelectedKubeconfigs)
+
+	firstClose := app.ApplyClusterWorkspace(ClusterWorkspaceCommand{
+		WindowID:                  "workspace-1",
+		UpdateSelectedKubeconfigs: true,
+	})
+	require.Empty(t, firstClose.Error)
+	require.Empty(t, firstClose.State.SelectedKubeconfigs)
+	require.Equal(t, []string{selection}, app.GetSelectedKubeconfigs())
+	require.Equal(t, []string{selection}, app.GetClusterWorkspaceStateForWindow("workspace-2").SelectedKubeconfigs)
+	app.clusterClientsMu.Lock()
+	require.Contains(t, app.clusterClients, "cluster-a")
+	app.clusterClientsMu.Unlock()
+
+	lastClose := app.ApplyClusterWorkspace(ClusterWorkspaceCommand{
+		WindowID:                  "workspace-2",
+		UpdateSelectedKubeconfigs: true,
+	})
+	require.Empty(t, lastClose.Error)
+	require.Empty(t, app.GetSelectedKubeconfigs())
+	app.clusterClientsMu.Lock()
+	require.NotContains(t, app.clusterClients, "cluster-a")
+	app.clusterClientsMu.Unlock()
+}
+
+func TestReleaseWorkspaceWindowDropsOnlyThatWindowsTabOwnership(t *testing.T) {
+	setTestConfigEnv(t)
+	app := NewApp(nil)
+	selection := "/tmp/config:prod"
+	app.kubeconfigsMu.Lock()
+	app.setSelectedKubeconfigsLocked([]string{selection})
+	app.kubeconfigsMu.Unlock()
+	app.GetClusterWorkspaceStateForWindow("workspace-1")
+	app.GetClusterWorkspaceStateForWindow("workspace-2")
+
+	app.ReleaseWorkspaceWindow("workspace-1")
+
+	require.Equal(t, []string{selection}, app.GetSelectedKubeconfigs())
+	require.Equal(t, []string{selection}, app.GetClusterWorkspaceStateForWindow("workspace-2").SelectedKubeconfigs)
+	app.selectionMutationMu.Lock()
+	require.NotContains(t, app.workspaceSelections, "workspace-1")
+	app.selectionMutationMu.Unlock()
+
+	app.ReleaseWorkspaceWindow("workspace-2")
+
+	require.Empty(t, app.GetSelectedKubeconfigs())
+}
+
+func TestConcurrentPeerWorkspaceCommandsPreserveEachWindowsLatestTabs(t *testing.T) {
+	setTestConfigEnv(t)
+	app := NewApp(nil)
+	selection := "/tmp/config:prod"
+	app.kubeconfigsMu.Lock()
+	app.setSelectedKubeconfigsLocked([]string{selection})
+	app.kubeconfigsMu.Unlock()
+	app.GetClusterWorkspaceStateForWindow("workspace-1")
+	app.GetClusterWorkspaceStateForWindow("workspace-2")
+
+	app.selectionMutationMu.Lock()
+	firstResult := make(chan ClusterWorkspaceResult, 1)
+	go func() {
+		firstResult <- app.ApplyClusterWorkspace(ClusterWorkspaceCommand{
+			WindowID:                  "workspace-1",
+			UpdateSelectedKubeconfigs: true,
+		})
+	}()
+	require.Eventually(t, func() bool {
+		app.selectionMutationDrainMu.Lock()
+		defer app.selectionMutationDrainMu.Unlock()
+		return app.selectionMutationPending == 1
+	}, time.Second, time.Millisecond)
+
+	secondResult := make(chan ClusterWorkspaceResult, 1)
+	go func() {
+		secondResult <- app.ApplyClusterWorkspace(ClusterWorkspaceCommand{
+			WindowID:         "workspace-2",
+			VisibleClusterID: "cluster-a",
+		})
+	}()
+	require.Eventually(t, func() bool {
+		app.selectionMutationDrainMu.Lock()
+		defer app.selectionMutationDrainMu.Unlock()
+		return app.selectionMutationPending == 2
+	}, time.Second, time.Millisecond)
+	app.selectionMutationMu.Unlock()
+
+	requireWorkspaceResult(t, firstResult)
+	requireWorkspaceResult(t, secondResult)
+	require.Empty(t, app.GetClusterWorkspaceStateForWindow("workspace-1").SelectedKubeconfigs)
+	require.Equal(t, []string{selection}, app.GetClusterWorkspaceStateForWindow("workspace-2").SelectedKubeconfigs)
+	require.Equal(t, []string{selection}, app.GetSelectedKubeconfigs())
+}
+
+func TestApplySelectionPruneRemovesSelectionFromEveryWorkspaceWindow(t *testing.T) {
+	setTestConfigEnv(t)
+	app := NewApp(nil)
+	selection := "/tmp/config:prod"
+	app.kubeconfigsMu.Lock()
+	app.setSelectedKubeconfigsLocked([]string{selection})
+	app.kubeconfigsMu.Unlock()
+	app.GetClusterWorkspaceStateForWindow("workspace-1")
+	app.GetClusterWorkspaceStateForWindow("workspace-2")
+
+	app.selectionMutationMu.Lock()
+	app.applySelectionPrune(nil, nil, nil, "test")
+	app.selectionMutationMu.Unlock()
+
+	require.Empty(t, app.GetSelectedKubeconfigs())
+	require.Empty(t, app.GetClusterWorkspaceStateForWindow("workspace-1").SelectedKubeconfigs)
+	require.Empty(t, app.GetClusterWorkspaceStateForWindow("workspace-2").SelectedKubeconfigs)
+}
+
+func TestClearSelectionRemovesTabsFromEveryWorkspaceWindow(t *testing.T) {
+	setTestConfigEnv(t)
+	app := NewApp(nil)
+	selection := "/tmp/config:prod"
+	app.kubeconfigsMu.Lock()
+	app.setSelectedKubeconfigsLocked([]string{selection})
+	app.kubeconfigsMu.Unlock()
+	app.GetClusterWorkspaceStateForWindow("workspace-1")
+	app.GetClusterWorkspaceStateForWindow("workspace-2")
+
+	require.NoError(t, app.SetSelectedKubeconfigs(nil))
+
+	require.Empty(t, app.GetSelectedKubeconfigs())
+	require.Empty(t, app.GetClusterWorkspaceStateForWindow("workspace-1").SelectedKubeconfigs)
+	require.Empty(t, app.GetClusterWorkspaceStateForWindow("workspace-2").SelectedKubeconfigs)
+}
+
+func TestStartupSelectionRestoreUpdatesAnAlreadyRegisteredWorkspaceWindow(t *testing.T) {
+	app := NewApp(nil)
+	configPath := createTempKubeconfig(t, t.TempDir(), "config", "prod")
+	selection := kubeconfigSelection{Path: configPath, Context: "prod"}.String()
+	app.availableKubeconfigs = []KubeconfigInfo{{Path: configPath, Context: "prod"}}
+	app.appSettings = getDefaultAppSettings()
+	app.appSettings.SelectedKubeconfigs = []string{selection}
+	require.Empty(t, app.GetClusterWorkspaceStateForWindow("workspace-1").SelectedKubeconfigs)
+
+	app.selectionMutationMu.Lock()
+	app.restoreKubeconfigSelection()
+	app.selectionMutationMu.Unlock()
+
+	require.Equal(t, []string{selection}, app.GetSelectedKubeconfigs())
+	require.Equal(t, []string{selection}, app.GetClusterWorkspaceStateForWindow("workspace-1").SelectedKubeconfigs)
+}
+
+func TestClosingAWindowsLastTabClearsItsForegroundDemand(t *testing.T) {
+	setTestConfigEnv(t)
+	app := NewApp(nil)
+	selection := "/tmp/config:prod"
+	app.kubeconfigsMu.Lock()
+	app.setSelectedKubeconfigsLocked([]string{selection})
+	app.kubeconfigsMu.Unlock()
+	app.GetClusterWorkspaceStateForWindow("workspace-1")
+	app.SetWindowVisibleCluster("workspace-1", "cluster-a")
+
+	result := app.ApplyClusterWorkspace(ClusterWorkspaceCommand{
+		WindowID:                  "workspace-1",
+		UpdateSelectedKubeconfigs: true,
+	})
+
+	require.Empty(t, result.Error)
+	require.Empty(t, result.State.VisibleClusterID)
+	app.governorMu.Lock()
+	require.NotContains(t, app.governorWindows, "workspace-1")
+	app.governorMu.Unlock()
+}
+
 func TestClearKubeconfigSelectionRemovesClusterWorkspaceState(t *testing.T) {
 	app := NewApp(nil)
 	app.clusterLifecycle = newClusterLifecycle(nil)

@@ -403,6 +403,14 @@ export function GetClusterWorkspaceState(): $CancellablePromise<$models.ClusterW
     return $Call.ByName("github.com/luxury-yacht/app/backend.App.GetClusterWorkspaceState");
 }
 
+/**
+ * GetClusterWorkspaceStateForWindow projects process-wide cluster state with
+ * the visible cluster belonging to the requesting peer window.
+ */
+export function GetClusterWorkspaceStateForWindow(windowID: string): $CancellablePromise<$models.ClusterWorkspaceState> {
+    return $Call.ByName("github.com/luxury-yacht/app/backend.App.GetClusterWorkspaceStateForWindow", windowID);
+}
+
 export function GetConfigMap(clusterID: string, $namespace: string, name: string): $CancellablePromise<configmap$0.ConfigMapDetails | null> {
     return $Call.ByName("github.com/luxury-yacht/app/backend.App.GetConfigMap", clusterID, $namespace, name);
 }
@@ -793,11 +801,19 @@ export function OpenKubeconfigSearchPathDialog(): $CancellablePromise<string> {
 }
 
 /**
- * PrepareQuit persists process state while the main window is still queryable.
- * It is safe to call from both application and window close hooks.
+ * PrepareQuit flushes process state after the last peer window has agreed to
+ * close. Window geometry is saved separately while the chosen window exists.
  */
 export function PrepareQuit(): $CancellablePromise<boolean> {
     return $Call.ByName("github.com/luxury-yacht/app/backend.App.PrepareQuit");
+}
+
+/**
+ * PrepareQuitFromWindow persists the geometry of the peer chosen by the
+ * window registry and then performs the once-only process shutdown flush.
+ */
+export function PrepareQuitFromWindow(windowName: string): $CancellablePromise<boolean> {
+    return $Call.ByName("github.com/luxury-yacht/app/backend.App.PrepareQuitFromWindow", windowName);
 }
 
 /**
@@ -806,6 +822,15 @@ export function PrepareQuit(): $CancellablePromise<boolean> {
  */
 export function QueryPermissions(queries: capabilities$0.PermissionQuery[] | null): $CancellablePromise<capabilities$0.QueryPermissionsResponse | null> {
     return $Call.ByName("github.com/luxury-yacht/app/backend.App.QueryPermissions", queries);
+}
+
+/**
+ * ReleaseWorkspaceWindow relinquishes both foreground demand and every cluster
+ * tab owned by a closed peer. Shared cluster runtime state survives while any
+ * other peer still owns the same selection.
+ */
+export function ReleaseWorkspaceWindow(windowID: string): $CancellablePromise<void> {
+    return $Call.ByName("github.com/luxury-yacht/app/backend.App.ReleaseWorkspaceWindow", windowID);
 }
 
 /**
@@ -881,6 +906,14 @@ export function SaveTheme(theme: $models.Theme): $CancellablePromise<void> {
 
 export function SaveWindowSettings(): $CancellablePromise<void> {
     return $Call.ByName("github.com/luxury-yacht/app/backend.App.SaveWindowSettings");
+}
+
+/**
+ * SaveWindowSettingsForWindow persists the geometry of a named peer as the
+ * next session's initial geometry.
+ */
+export function SaveWindowSettingsForWindow(windowName: string): $CancellablePromise<void> {
+    return $Call.ByName("github.com/luxury-yacht/app/backend.App.SaveWindowSettingsForWindow", windowName);
 }
 
 /**
@@ -1094,6 +1127,22 @@ export function SetVisibleCluster(clusterID: string): $CancellablePromise<void> 
 }
 
 /**
+ * SetWindowVisibleCluster records one peer window's foreground demand. Multiple
+ * windows may therefore keep different clusters in the Foreground tier.
+ */
+export function SetWindowVisibleCluster(windowID: string, clusterID: string): $CancellablePromise<void> {
+    return $Call.ByName("github.com/luxury-yacht/app/backend.App.SetWindowVisibleCluster", windowID, clusterID);
+}
+
+/**
+ * SetWorkspaceWindowCreator connects the native New Window command to the
+ * process-owned peer window registry.
+ */
+export function SetWorkspaceWindowCreator(create: any): $CancellablePromise<void> {
+    return $Call.ByName("github.com/luxury-yacht/app/backend.App.SetWorkspaceWindowCreator", create);
+}
+
+/**
  * SetZoomLevel persists the zoom level (clamped to 50-200).
  */
 export function SetZoomLevel(level: number): $CancellablePromise<void> {
@@ -1198,6 +1247,6 @@ export function ValidateThemeClusterPattern(pattern: string): $CancellablePromis
  * WindowRuntimeReady runs interactive initialization once the webview runtime
  * can receive events and JavaScript without dropping or merely queueing them.
  */
-export function WindowRuntimeReady(): $CancellablePromise<boolean> {
-    return $Call.ByName("github.com/luxury-yacht/app/backend.App.WindowRuntimeReady");
+export function WindowRuntimeReady(windowName: string, restoreGeometry: boolean): $CancellablePromise<boolean> {
+    return $Call.ByName("github.com/luxury-yacht/app/backend.App.WindowRuntimeReady", windowName, restoreGeometry);
 }

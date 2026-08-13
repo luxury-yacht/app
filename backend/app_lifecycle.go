@@ -41,16 +41,19 @@ func (a *App) ServiceStartup(ctx context.Context, _ application.ServiceOptions) 
 
 // WindowRuntimeReady runs interactive initialization once the webview runtime
 // can receive events and JavaScript without dropping or merely queueing them.
-func (a *App) WindowRuntimeReady() bool {
-	if !a.markRuntimeReady() {
-		return false
-	}
-	if !a.checkStartupBetaExpiry() {
+func (a *App) WindowRuntimeReady(windowName string, restoreGeometry bool) bool {
+	firstReadyWindow := a.markRuntimeReady()
+	if firstReadyWindow && !a.checkStartupBetaExpiry(windowName) {
 		return true
 	}
-	a.restoreStartupWindow()
-	if window, err := a.mainWindow(); err == nil {
+	if restoreGeometry {
+		a.restoreStartupWindow(windowName)
+	}
+	if window, err := a.workspaceWindow(windowName); err == nil {
 		window.Show()
+	}
+	if !firstReadyWindow {
+		return false
 	}
 	a.logger.Info("Luxury Yacht - Sail the Seas of Kubernetes In Style", logsources.App)
 	a.initializeStartupClusters()
@@ -119,12 +122,12 @@ func (a *App) configureStartupErrorCapture() {
 	})
 }
 
-func (a *App) checkStartupBetaExpiry() bool {
+func (a *App) checkStartupBetaExpiry(windowName string) bool {
 	if err := a.checkBetaExpiry(); err != nil {
 		applog.ReportError(a.logger, err, "Beta version expired", logsources.App)
 		if a.wailsApplication != nil {
 			dialog := a.wailsApplication.Dialog.Error().SetTitle("Beta Version Expired").SetMessage(err.Error())
-			if window, windowErr := a.mainWindow(); windowErr == nil {
+			if window, windowErr := a.workspaceWindow(windowName); windowErr == nil {
 				dialog.AttachToWindow(window)
 			}
 			dialog.Show()
@@ -144,15 +147,15 @@ func (a *App) configureStartupLogging() {
 	log.SetOutput(&stdLogBridge{logger: a.logger})
 }
 
-func (a *App) restoreStartupWindow() {
+func (a *App) restoreStartupWindow(windowName string) {
 	if settings, err := a.LoadWindowSettings(); err != nil {
 		a.logger.Warn(fmt.Sprintf("Failed to load window settings: %v", err), logsources.App)
 	} else if settings != nil {
-		window, windowErr := a.mainWindow()
+		window, windowErr := a.workspaceWindow(windowName)
 		if windowErr != nil {
 			return
 		}
-		geometry, restorePosition := resolveWindowRestore(*settings, a.mainWindowWorkAreas())
+		geometry, restorePosition := resolveWindowRestore(*settings, a.windowWorkAreas())
 		window.SetSize(geometry.Width, geometry.Height)
 		if restorePosition {
 			window.SetPosition(geometry.X, geometry.Y)
@@ -216,9 +219,19 @@ func (b *stdLogBridge) Write(p []byte) (int, error) {
 	return len(p), nil
 }
 
-// PrepareQuit persists process state while the main window is still queryable.
-// It is safe to call from both application and window close hooks.
+// PrepareQuit flushes process state after the last peer window has agreed to
+// close. Window geometry is saved separately while the chosen window exists.
 func (a *App) PrepareQuit() bool {
+	return a.prepareQuitFromWindow("")
+}
+
+// PrepareQuitFromWindow persists the geometry of the peer chosen by the
+// window registry and then performs the once-only process shutdown flush.
+func (a *App) PrepareQuitFromWindow(windowName string) bool {
+	return a.prepareQuitFromWindow(strings.TrimSpace(windowName))
+}
+
+func (a *App) prepareQuitFromWindow(windowName string) bool {
 	if a == nil {
 		return true
 	}
@@ -227,10 +240,12 @@ func (a *App) PrepareQuit() bool {
 		if !a.waitForSelectionMutationIdle(beforeCloseSelectionFlushTimeout) {
 			a.logger.Warn("Timed out waiting for cluster selection persistence before close", logsources.App)
 		}
-		if err := a.SaveWindowSettings(); err != nil {
-			a.logger.Warn(fmt.Sprintf("Failed to save window settings: %v", err), logsources.App)
-		} else {
-			a.logger.Debug("Window settings saved successfully", logsources.App)
+		if windowName != "" {
+			if err := a.SaveWindowSettingsForWindow(windowName); err != nil {
+				a.logger.Warn(fmt.Sprintf("Failed to save window settings: %v", err), logsources.App)
+			} else {
+				a.logger.Debug("Window settings saved successfully", logsources.App)
+			}
 		}
 	})
 	return true

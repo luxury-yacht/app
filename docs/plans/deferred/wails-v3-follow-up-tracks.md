@@ -33,24 +33,17 @@ binding methods as a compatibility layer.
 
 ## Native multi-window
 
-Decision: keep **New Window**, `Cmd/Ctrl+N`, process spawning, and dormant
-callbacks absent.
+Status: implemented 2026-08-13. The durable ownership and lifecycle contract is
+in [Application Lifecycle](../../architecture/application-lifecycle.md).
 
-- [ ] Define independent workspace state, intentionally shared process services,
-      and the exact selection, navigation, settings, menu, and geometry state
-      owned per window.
-- [ ] Require explicit window identity in commands, events, readiness, menus,
-      persistence, and close hooks while preserving `clusterId` and complete
-      Kubernetes object identity.
-- [ ] Prove two windows become ready independently, closing one does not tear
-      down process services, and each window reads and writes only its own state.
-- [ ] If approved, add named-window creation and user-facing entry points only
-      after the lifecycle tests pass.
-- [ ] Exercise concurrent populated workspaces across auth recovery, dialogs,
-      events, shell/log operations, refresh, and quit.
+**New Window** and `Cmd/Ctrl+N` create an in-process peer window. Process
+services and selected/open kubeconfigs remain shared; active cluster state,
+foreground demand, readiness, native command targeting, and close accounting
+carry explicit window identity. Closing a non-last peer never enters process
+shutdown, and the last peer shares the application quit flush.
 
-Non-goal while deferred: a hidden feature flag or a return to one process per
-window.
+Process spawning, a privileged main window, and hidden compatibility paths
+remain non-goals.
 
 ## Wails v3 updater
 

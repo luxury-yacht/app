@@ -127,7 +127,9 @@ func TestViewMenuKeepsApplicationLogsAndDiagnosticsEntries(t *testing.T) {
 func TestFileMenuOffersOpenCluster(t *testing.T) {
 	menu := application.NewMenu()
 	createApplicationMenu(menu, &App{})
-	require.Contains(t, menuLabels(findSubmenu(t, menu, "File")), "Open Cluster")
+	labels := menuLabels(findSubmenu(t, menu, "File"))
+	require.Contains(t, labels, "New Window")
+	require.Contains(t, labels, "Open Cluster")
 }
 
 func TestViewMenuOffersCommandPalette(t *testing.T) {
@@ -165,11 +167,18 @@ func TestDebugMenuEventsUseReadinessGuard(t *testing.T) {
 	}, events)
 }
 
-func TestFileMenuDoesNotOfferNewWindow(t *testing.T) {
+func TestFileMenuOffersNewWindowAccelerator(t *testing.T) {
 	fileMenu := findSubmenu(t, CreateMenu(&App{}), "File")
 	for _, item := range menuItems(fileMenu) {
-		require.NotEqual(t, "New Window", item.Label())
-		require.NotEqual(t, "Ctrl+N", item.GetAccelerator())
-		require.NotEqual(t, "Cmd+N", item.GetAccelerator())
+		if item.Label() != "New Window" {
+			continue
+		}
+		want := "Ctrl+N"
+		if runtime.GOOS == "darwin" {
+			want = "Cmd+N"
+		}
+		require.Equal(t, want, item.GetAccelerator())
+		return
 	}
+	t.Fatal("New Window menu item not found")
 }

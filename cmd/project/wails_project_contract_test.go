@@ -209,8 +209,7 @@ func TestWailsProjectUsesFrameworkSingleInstanceHandling(t *testing.T) {
 	mainSource := readTestFile(t, repositoryPath("main.go"))
 	require.Contains(t, mainSource, "&application.SingleInstanceOptions{")
 	require.Contains(t, mainSource, `applicationProductIdentifier = "app.luxury-yacht.desktop"`)
-	require.Contains(t, mainSource, "mainWindow.Restore()")
-	require.Contains(t, mainSource, "mainWindow.Focus()")
+	require.Contains(t, mainSource, "windows.FocusMostRecent()")
 	require.NotContains(t, mainSource, "SecondLaunchCoordinator")
 
 	buildConfig := readTestFile(t, repositoryPath("build", "config.yml"))
@@ -220,7 +219,7 @@ func TestWailsProjectUsesFrameworkSingleInstanceHandling(t *testing.T) {
 	require.ErrorIs(t, err, os.ErrNotExist)
 }
 
-func TestNewWindowProcessSpawnPathRemainsAbsent(t *testing.T) {
+func TestNewWindowUsesTheInProcessPeerRegistry(t *testing.T) {
 	for _, root := range []string{"backend", filepath.Join("frontend", "src")} {
 		err := filepath.Walk(repositoryPath(root), func(path string, info os.FileInfo, walkErr error) error {
 			require.NoError(t, walkErr)
@@ -234,17 +233,17 @@ func TestNewWindowProcessSpawnPathRemainsAbsent(t *testing.T) {
 			}
 
 			contents := strings.ToLower(readTestFile(t, path))
-			require.NotContainsf(t, contents, "new window", "%s contains a New Window entry point", path)
 			require.NotContainsf(t, contents, "spawnnewwindow", "%s contains the legacy process-spawn callback", path)
-			require.NotContainsf(t, contents, "cmdorctrl+n", "%s contains the removed native accelerator", path)
 			return nil
 		})
 		require.NoError(t, err)
 	}
 
-	mainSource := strings.ToLower(readTestFile(t, repositoryPath("main.go")))
-	require.NotContains(t, mainSource, "spawnnewwindow")
-	require.NotContains(t, mainSource, "cmdorctrl+n")
+	menuSource := strings.ToLower(readTestFile(t, repositoryPath("backend", "menu.go")))
+	require.Contains(t, menuSource, `"new window", "cmdorctrl+n"`)
+	registrySource := readTestFile(t, repositoryPath("workspace_window_registry.go"))
+	require.Contains(t, registrySource, "Window.NewWithOptions")
+	require.NotContains(t, strings.ToLower(registrySource), "spawnnewwindow")
 }
 
 func TestWailsApplicationIsInjectedDirectlyWithoutDesktopAdapter(t *testing.T) {
@@ -252,14 +251,13 @@ func TestWailsApplicationIsInjectedDirectlyWithoutDesktopAdapter(t *testing.T) {
 	require.Contains(t, mainSource, "backend.NewApp(wailsApp, reporter)")
 	require.NotContains(t, mainSource, "NewAdapter")
 
-	runtimeReadyHook := strings.Index(mainSource, "events.Common.WindowRuntimeReady")
-	closingHook := strings.Index(mainSource, "events.Common.WindowClosing")
+	windowSource := readTestFile(t, repositoryPath("workspace_window_registry.go"))
+	runtimeReadyHook := strings.Index(windowSource, "events.Common.WindowRuntimeReady")
+	closingHook := strings.Index(windowSource, "events.Common.WindowClosing")
 	runCall := strings.Index(mainSource, "composition.application.Run()")
 	require.Positive(t, runtimeReadyHook)
 	require.Positive(t, closingHook)
 	require.Positive(t, runCall)
-	require.Less(t, runtimeReadyHook, runCall)
-	require.Less(t, closingHook, runCall)
 
 	runtimeSource := readTestFile(t, repositoryPath("backend", "app_runtime.go"))
 	require.NotContains(t, runtimeSource, "type Desktop interface")

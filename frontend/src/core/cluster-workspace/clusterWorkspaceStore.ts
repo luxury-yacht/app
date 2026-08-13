@@ -1,9 +1,10 @@
-import { GetClusterWorkspaceState } from '@/core/backend-api';
+import { GetClusterWorkspaceStateForWindow } from '@/core/backend-api';
 import type { ClusterLifecycleState } from '@/core/contexts/clusterLifecycleState';
 import { parseClusterLifecycleState } from '@/core/contexts/clusterLifecycleState';
 import { onEvent } from '@/core/desktop-runtime';
 import { eventBus } from '@/core/events';
 import { logAppLogsInfo } from '@/core/logging/appLogsClient';
+import { getWindowIdentity } from '@/core/window-identity';
 import { reportOperationalError } from '@/utils/errorHandler';
 
 export type ClusterHealthStatus = 'healthy' | 'degraded' | 'unknown';
@@ -136,7 +137,7 @@ export const applyAuthProgressEvent = (
 ): Map<string, ClusterAuthState> =>
   updateAuthMap(prev, payload, (existing) => progressedAuthState(existing, payload));
 
-type BackendWorkspaceState = Awaited<ReturnType<typeof GetClusterWorkspaceState>>;
+type BackendWorkspaceState = Awaited<ReturnType<typeof GetClusterWorkspaceStateForWindow>>;
 type BackendWorkspaceClusters = NonNullable<BackendWorkspaceState['clusters']>;
 type BackendWorkspaceClusterState = NonNullable<BackendWorkspaceClusters[string]>;
 type BackendWorkspaceAuthState = BackendWorkspaceClusterState['auth'];
@@ -689,7 +690,9 @@ export class ClusterWorkspaceStore {
 }
 
 const readClusterWorkspaceState = async (): Promise<ClusterWorkspaceWireState> =>
-  (await GetClusterWorkspaceState()) as unknown as ClusterWorkspaceWireState;
+  (await GetClusterWorkspaceStateForWindow(
+    getWindowIdentity()
+  )) as unknown as ClusterWorkspaceWireState;
 
 export const clusterWorkspaceStore = new ClusterWorkspaceStore({
   read: readClusterWorkspaceState,

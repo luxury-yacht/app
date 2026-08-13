@@ -347,11 +347,23 @@ func TestStartupLoadsWindowSettingsOnlyAfterRuntimeReady(t *testing.T) {
 
 	require.NoError(t, app.ServiceStartup(ctx, application.ServiceOptions{}))
 	require.Nil(t, app.windowSettings, "service startup must not load interactive window state")
-	require.True(t, app.WindowRuntimeReady())
+	require.True(t, app.WindowRuntimeReady("workspace-1", true))
 	cancel()
 	time.Sleep(50 * time.Millisecond)
 
 	require.Equal(t, &settings.UI.Window, app.windowSettings)
+}
+
+func TestEveryPeerHandlesRuntimeReadyWhileProcessStartupRunsOnce(t *testing.T) {
+	t.Setenv("HOME", t.TempDir())
+	app := newTestAppWithDefaults(t)
+	ctx, cancel := context.WithCancel(context.Background())
+	t.Cleanup(cancel)
+
+	require.NoError(t, app.ServiceStartup(ctx, application.ServiceOptions{}))
+	require.True(t, app.WindowRuntimeReady("workspace-1", true))
+	require.False(t, app.WindowRuntimeReady("workspace-2", false))
+	require.True(t, app.runtimeAvailable())
 }
 
 func TestBeforeClosePersistsWindowSettings(t *testing.T) {
@@ -362,7 +374,7 @@ func TestBeforeClosePersistsWindowSettings(t *testing.T) {
 	}
 	setTestAppRuntimeReady(t, app, context.Background())
 
-	require.True(t, app.PrepareQuit(), "expected the application quit to proceed")
+	require.True(t, app.PrepareQuitFromWindow("workspace-1"), "expected the application quit to proceed")
 
 	settings, err := app.LoadWindowSettings()
 	require.NoError(t, err)
@@ -405,7 +417,7 @@ func TestBeforeCloseWaitsForSelectionMutationBeforeSavingWindowSettings(t *testi
 
 	done := make(chan bool)
 	go func() {
-		done <- app.PrepareQuit()
+		done <- app.PrepareQuitFromWindow("workspace-1")
 	}()
 
 	select {
@@ -442,8 +454,8 @@ func TestPrepareQuitWithoutRuntimeSkipsWindowReadAndRemainsIdempotent(t *testing
 		return WindowGeometry{}, nil
 	}
 
-	require.True(t, app.PrepareQuit())
-	require.True(t, app.PrepareQuit())
+	require.True(t, app.PrepareQuitFromWindow("workspace-1"))
+	require.True(t, app.PrepareQuitFromWindow("workspace-1"))
 
 	require.Zero(t, geometryReads)
 	failureLogs := 0
@@ -464,12 +476,12 @@ func TestPrepareQuitLogsWindowGeometryReadFailure(t *testing.T) {
 		return WindowGeometry{}, readFailure
 	}
 
-	require.True(t, app.PrepareQuit())
+	require.True(t, app.PrepareQuitFromWindow("workspace-1"))
 
 	require.Nil(t, app.windowSettings)
 	entries := app.logger.GetEntries()
 	require.NotEmpty(t, entries)
-	require.Contains(t, entries[len(entries)-1].Message, "read main window geometry: geometry unavailable")
+	require.Contains(t, entries[len(entries)-1].Message, `read window "workspace-1" geometry: geometry unavailable`)
 }
 
 func TestPrepareQuitPersistsWindowGeometryOnlyOnceAcrossQuitPaths(t *testing.T) {
@@ -482,8 +494,8 @@ func TestPrepareQuitPersistsWindowGeometryOnlyOnceAcrossQuitPaths(t *testing.T) 
 		return WindowGeometry{X: 7, Y: 9, Width: 1000, Height: 700}, nil
 	}
 
-	require.True(t, app.PrepareQuit())
-	require.True(t, app.PrepareQuit())
+	require.True(t, app.PrepareQuitFromWindow("workspace-1"))
+	require.True(t, app.PrepareQuitFromWindow("workspace-1"))
 
 	require.Equal(t, 1, geometryReads)
 	settings, err := app.LoadWindowSettings()
@@ -528,7 +540,7 @@ func TestStartupBetaExpiryReportsAndStopsInteractiveStartup(t *testing.T) {
 	ctx := context.Background()
 
 	require.NoError(t, app.ServiceStartup(ctx, application.ServiceOptions{}))
-	require.True(t, app.WindowRuntimeReady())
+	require.True(t, app.WindowRuntimeReady("workspace-1", true))
 
 	reporter.mu.Lock()
 	require.Len(t, reporter.exceptions, 1)

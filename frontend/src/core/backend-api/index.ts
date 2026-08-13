@@ -32,7 +32,7 @@ export {
   GetAppSettingsSchema,
   GetClusterAllowedNamespaces,
   GetClusterTabOrder,
-  GetClusterWorkspaceState,
+  GetClusterWorkspaceStateForWindow,
   GetContainerLogsScopeContainers,
   GetFavorites,
   GetGridTablePersistence,

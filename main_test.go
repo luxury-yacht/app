@@ -9,7 +9,6 @@ import (
 	"testing"
 	"time"
 
-	"github.com/luxury-yacht/app/backend"
 	"github.com/luxury-yacht/app/internal/sentry"
 	"github.com/stretchr/testify/require"
 	"github.com/wailsapp/wails/v3/pkg/application"
@@ -93,7 +92,7 @@ func TestNewSentryReporterStartsDisabledUntilPersistedPreferenceLoads(t *testing
 	require.False(t, reporter.Enabled())
 }
 
-func TestApplicationCompositionOwnsOneNamedWindowMenuAndService(t *testing.T) {
+func TestApplicationCompositionOwnsPeerWindowRegistryMenuAndService(t *testing.T) {
 	composition := sharedTestComposition()
 
 	require.NotNil(t, composition.application)
@@ -101,10 +100,11 @@ func TestApplicationCompositionOwnsOneNamedWindowMenuAndService(t *testing.T) {
 	require.NotNil(t, composition.menu)
 	require.Equal(t, composition.menu, composition.application.Menu.GetApplicationMenu())
 
-	window, ok := composition.application.Window.GetByName(backend.MainWindowName)
+	window, ok := composition.application.Window.GetByName("workspace-1")
 	require.True(t, ok)
-	require.Same(t, composition.window, window)
-	require.Equal(t, backend.MainWindowName, window.Name())
+	require.NotNil(t, composition.windows)
+	require.Equal(t, "workspace-1", window.Name())
+	require.Equal(t, 1, composition.windows.lifecycle.Count())
 	config := composition.application.Config()
 	require.Len(t, config.Services, 1)
 	require.NotNil(t, config.Assets.Handler)
@@ -114,7 +114,7 @@ func TestApplicationCompositionOwnsOneNamedWindowMenuAndService(t *testing.T) {
 	require.NotNil(t, config.SingleInstance.OnSecondInstanceLaunch)
 }
 
-func TestMainWindowVisibilityPreservesPlatformStartupContract(t *testing.T) {
+func TestWorkspaceWindowVisibilityPreservesPlatformStartupContract(t *testing.T) {
 	for _, test := range []struct {
 		goos       string
 		wantHidden bool
@@ -124,21 +124,21 @@ func TestMainWindowVisibilityPreservesPlatformStartupContract(t *testing.T) {
 		{goos: "linux", wantHidden: false},
 	} {
 		t.Run(test.goos, func(t *testing.T) {
-			options := mainWindowOptionsForPlatform(nil, test.goos)
+			options := workspaceWindowOptionsForPlatform("workspace-7", nil, test.goos)
 
 			require.Equal(t, test.wantHidden, options.Hidden)
 		})
 	}
 }
 
-func TestMainWindowOptionsPreserveTheSingleWindowContract(t *testing.T) {
+func TestWorkspaceWindowOptionsPreserveTheSharedPeerContract(t *testing.T) {
 	nativeMenu := application.NewMenu()
 
 	for _, goos := range []string{"darwin", "windows", "linux"} {
 		t.Run(goos, func(t *testing.T) {
-			options := mainWindowOptionsForPlatform(nativeMenu, goos)
+			options := workspaceWindowOptionsForPlatform("workspace-7", nativeMenu, goos)
 
-			require.Equal(t, backend.MainWindowName, options.Name)
+			require.Equal(t, "workspace-7", options.Name)
 			require.Equal(t, "Luxury Yacht", options.Title)
 			require.Equal(t, 1200, options.Width)
 			require.Equal(t, 800, options.Height)

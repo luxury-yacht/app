@@ -1,11 +1,32 @@
 import { Browser, Clipboard, Events, System, Window as WailsWindow } from '@wailsio/runtime';
+import { getWindowIdentity, setWindowIdentity } from '@/core/window-identity';
+
+export { getWindowIdentity } from '@/core/window-identity';
 
 export type DesktopEventHandler<T = unknown> = (payload: T) => void;
+
+export const initializeWindowIdentity = async (): Promise<string> => {
+  try {
+    const name = await WailsWindow.Name();
+    if (name.trim()) {
+      setWindowIdentity(name);
+    }
+  } catch {
+    // Storybook and browser-only tests intentionally run without a Wails host.
+  }
+  return getWindowIdentity();
+};
 
 export const onEvent = <T = unknown>(
   eventName: string,
   handler: DesktopEventHandler<T>
-): (() => void) => Events.On(eventName, (event) => handler(event.data as T));
+): (() => void) =>
+  Events.On(eventName, (event) => {
+    if (event.sender && event.sender !== getWindowIdentity()) {
+      return;
+    }
+    handler(event.data as T);
+  });
 
 export const openURL = (url: string | URL): Promise<void> => Browser.OpenURL(url);
 

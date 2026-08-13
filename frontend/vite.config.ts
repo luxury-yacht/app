@@ -127,6 +127,9 @@ export function createViteConfig(
       globals: true,
       environment: 'jsdom',
       setupFiles: './vitest.setup.ts',
+      // The jsdom suite is memory-heavy; unconstrained CPU-count parallelism
+      // can starve fork startup and cascade into unrelated test timeouts.
+      maxWorkers: 4,
       coverage: {
         provider: 'v8',
         reporter: ['text', 'html', 'json-summary'],

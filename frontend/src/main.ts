@@ -8,6 +8,7 @@
 import { initializeScrollbarActivityTracking } from '@shared/scrollbars/scrollbarActivity';
 import React from 'react';
 import * as ReactDOM from 'react-dom/client';
+import { initializeWindowIdentity } from '@/core/desktop-runtime';
 import { initializeAutoRefresh } from '@/core/refresh';
 import { hydrateAppPreferences } from '@/core/settings/appPreferences';
 import {
@@ -31,6 +32,7 @@ if (appElement) {
       sentryRuntimeConfig,
       hydrateAppPreferences
     );
+    await initializeWindowIdentity();
     initializeScrollbarActivityTracking();
     initializeAutoRefresh();
 

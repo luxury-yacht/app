@@ -42,7 +42,7 @@ const {
 
 vi.mock('@core/backend-api', () => ({
   GetKubeconfigs: () => getKubeconfigsMock(),
-  GetClusterWorkspaceState: async () => {
+  GetClusterWorkspaceStateForWindow: async () => {
     workspaceState.selections = [...((await getSelectedKubeconfigsMock()) || [])];
     return {
       selectedKubeconfigs: workspaceState.selections,

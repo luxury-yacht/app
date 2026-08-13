@@ -45,41 +45,37 @@ func TestDesktopRuntimeRequiresExplicitWindowReadiness(t *testing.T) {
 	require.False(t, app.markRuntimeReady(), "the runtime-ready transition must be once-only")
 }
 
-func TestBackendResolvesTheNamedMainWindowFromWails(t *testing.T) {
+func TestBackendResolvesAnyNamedWorkspaceWindowFromWails(t *testing.T) {
 	wailsApp := application.New(application.Options{})
 	app := NewApp(wailsApp)
 
-	_, err := app.mainWindow()
-	require.ErrorContains(t, err, `window "main" is not available`)
+	_, err := app.workspaceWindow("workspace-2")
+	require.ErrorContains(t, err, `window "workspace-2" is not available`)
 
-	want := wailsApp.Window.NewWithOptions(application.WebviewWindowOptions{Name: MainWindowName})
-	got, err := app.mainWindow()
+	want := wailsApp.Window.NewWithOptions(application.WebviewWindowOptions{Name: "workspace-2"})
+	got, err := app.workspaceWindow("workspace-2")
 	require.NoError(t, err)
 	require.Same(t, want, got)
 }
 
-func TestDirectWailsWindowOperationsUseTheNamedMainWindow(t *testing.T) {
+func TestNamedWorkspaceGeometryRequiresRuntimeReadiness(t *testing.T) {
 	wailsApp := application.New(application.Options{})
-	wailsApp.Window.NewWithOptions(application.WebviewWindowOptions{Name: MainWindowName})
+	wailsApp.Window.NewWithOptions(application.WebviewWindowOptions{Name: "workspace-2"})
 	app := NewApp(wailsApp)
 	app.setApplicationContext(context.Background())
 
-	_, err := app.mainWindowWhenReady()
+	_, err := app.workspaceWindowWhenReady("workspace-2")
 	require.ErrorContains(t, err, "desktop runtime is not available")
 	_, err = app.clipboardText()
 	require.ErrorContains(t, err, "desktop runtime is not available")
 
 	app.markRuntimeReady()
-	require.NoError(t, app.minimiseMainWindow())
-	require.NoError(t, app.maximiseMainWindow())
-	require.NoError(t, app.restoreMainWindow())
-	require.NoError(t, app.toggleMainWindowMaximise())
-	geometry, err := app.readMainWindowGeometry()
+	geometry, err := app.readWindowGeometry("workspace-2")
 	require.NoError(t, err)
 	require.Equal(t, WindowGeometry{}, geometry)
 }
 
-func TestMainWindowWorkAreasComeFromWailsScreenManager(t *testing.T) {
+func TestWorkspaceWindowWorkAreasComeFromWailsScreenManager(t *testing.T) {
 	wailsApp := application.New(application.Options{})
 	require.NoError(t, wailsApp.Screen.LayoutScreens([]*application.Screen{
 		{
@@ -93,8 +89,8 @@ func TestMainWindowWorkAreasComeFromWailsScreenManager(t *testing.T) {
 		},
 	}))
 
-	require.Equal(t, []WindowWorkArea{{Width: 1920, Height: 1040, Primary: true}}, NewApp(wailsApp).mainWindowWorkAreas())
-	require.Nil(t, NewApp(nil).mainWindowWorkAreas())
+	require.Equal(t, []WindowWorkArea{{Width: 1920, Height: 1040, Primary: true}}, NewApp(wailsApp).windowWorkAreas())
+	require.Nil(t, NewApp(nil).windowWorkAreas())
 }
 
 func TestBackendLifecycleContextTracksApplicationCancellationWithoutRetainingValues(t *testing.T) {

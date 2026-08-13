@@ -37,7 +37,7 @@ import {
 // Mock @core/backend-api — provider calls these on mount
 vi.mock('@core/backend-api', () => ({
   RetryClusterAuth: vi.fn(),
-  GetClusterWorkspaceState: vi.fn().mockResolvedValue({
+  GetClusterWorkspaceStateForWindow: vi.fn().mockResolvedValue({
     selectedKubeconfigs: [],
     visibleClusterId: '',
     clusters: {},

@@ -33,6 +33,7 @@ import { clusterWorkspaceStore } from '@/core/cluster-workspace/clusterWorkspace
 import { eventBus } from '@/core/events';
 import { refreshOrchestrator, useBackgroundRefresh } from '@/core/refresh';
 import { clusterReadiness } from '@/core/refresh/clusterReadiness';
+import { getWindowIdentity } from '@/core/window-identity';
 
 export type KubeconfigDiscoveryState = 'available' | 'search_paths_missing' | 'no_kubeconfigs';
 
@@ -376,6 +377,19 @@ export const KubeconfigProvider: React.FC<KubeconfigProviderProps> = ({ children
         const normalizedSelection = normalizeSelections(
           currentSelection?.selectedKubeconfigs || []
         );
+        const initialMeta = resolveClusterMeta(normalizedSelection[0] || '', configs);
+        if (initialMeta.id) {
+          const activation = await ApplyClusterWorkspace({
+            windowId: getWindowIdentity(),
+            selectedKubeconfigs: [],
+            updateSelectedKubeconfigs: false,
+            visibleClusterId: initialMeta.id,
+          });
+          clusterWorkspaceStore.applyWireState(activation.state);
+          if (activation.error) {
+            throw new Error(activation.error);
+          }
+        }
         selectedKubeconfigsRef.current = normalizedSelection;
         selectedKubeconfigRef.current = normalizedSelection[0] || '';
         committedSelectionsRef.current = normalizedSelection;
@@ -397,7 +411,7 @@ export const KubeconfigProvider: React.FC<KubeconfigProviderProps> = ({ children
         setKubeconfigsLoading(false);
       }
     },
-    [normalizeSelections]
+    [normalizeSelections, resolveClusterMeta]
   );
 
   const applyVisibleSelection = useCallback((selections: string[], activeSelection: string) => {
@@ -495,6 +509,7 @@ export const KubeconfigProvider: React.FC<KubeconfigProviderProps> = ({ children
       try {
         beginSelectionTransition(plan);
         const result = await ApplyClusterWorkspace({
+          windowId: getWindowIdentity(),
           selectedKubeconfigs: plan.normalizedSelections,
           updateSelectedKubeconfigs: true,
           visibleClusterId: plan.nextClusterId,
@@ -622,6 +637,7 @@ export const KubeconfigProvider: React.FC<KubeconfigProviderProps> = ({ children
           // visible throughout this activation window.
           clusterReadiness.beginForegroundActivation(meta.id);
           void ApplyClusterWorkspace({
+            windowId: getWindowIdentity(),
             selectedKubeconfigs: [],
             updateSelectedKubeconfigs: false,
             visibleClusterId: meta.id,
