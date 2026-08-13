@@ -125,6 +125,31 @@ func TestUpdateMenuRefreshesPersistentNativeMenu(t *testing.T) {
 	require.NotSame(t, before, after)
 }
 
+func TestNativeMenuRefreshUsesPlatformOwner(t *testing.T) {
+	for _, test := range []struct {
+		goos string
+		want string
+	}{
+		{goos: "linux", want: "update-menu"},
+		{goos: "darwin", want: "set-application-menu"},
+		{goos: "windows", want: "set-window-menu"},
+		{goos: "unsupported", want: ""},
+	} {
+		t.Run(test.goos, func(t *testing.T) {
+			called := ""
+
+			applyNativeMenuRefresh(
+				test.goos,
+				func() { called = "update-menu" },
+				func() { called = "set-application-menu" },
+				func() { called = "set-window-menu" },
+			)
+
+			require.Equal(t, test.want, called)
+		})
+	}
+}
+
 func TestSetSidebarVisibleOnlyWhenChanged(t *testing.T) {
 	app := newUIApp(t)
 	CreateMenu(app)

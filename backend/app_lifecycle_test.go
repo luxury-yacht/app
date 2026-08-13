@@ -7,6 +7,7 @@ import (
 	"net/http"
 	"os"
 	"path/filepath"
+	"strings"
 	"sync"
 	"testing"
 	"time"
@@ -430,6 +431,79 @@ func TestBeforeCloseWaitsForSelectionMutationBeforeSavingWindowSettings(t *testi
 	default:
 		t.Fatal("window settings save did not start")
 	}
+}
+
+func TestPrepareQuitWithoutRuntimeSkipsWindowReadAndRemainsIdempotent(t *testing.T) {
+	t.Setenv("HOME", t.TempDir())
+	app := newTestAppWithDefaults(t)
+	geometryReads := 0
+	app.windowGeometry = func() (WindowGeometry, error) {
+		geometryReads++
+		return WindowGeometry{}, nil
+	}
+
+	require.True(t, app.PrepareQuit())
+	require.True(t, app.PrepareQuit())
+
+	require.Zero(t, geometryReads)
+	failureLogs := 0
+	for _, entry := range app.logger.GetEntries() {
+		if strings.Contains(entry.Message, "Failed to save window settings: application context is not available") {
+			failureLogs++
+		}
+	}
+	require.Equal(t, 1, failureLogs)
+}
+
+func TestPrepareQuitLogsWindowGeometryReadFailure(t *testing.T) {
+	t.Setenv("HOME", t.TempDir())
+	app := newTestAppWithDefaults(t)
+	setTestAppRuntimeReady(t, app, context.Background())
+	readFailure := errors.New("geometry unavailable")
+	app.windowGeometry = func() (WindowGeometry, error) {
+		return WindowGeometry{}, readFailure
+	}
+
+	require.True(t, app.PrepareQuit())
+
+	require.Nil(t, app.windowSettings)
+	entries := app.logger.GetEntries()
+	require.NotEmpty(t, entries)
+	require.Contains(t, entries[len(entries)-1].Message, "read main window geometry: geometry unavailable")
+}
+
+func TestPrepareQuitPersistsWindowGeometryOnlyOnceAcrossQuitPaths(t *testing.T) {
+	t.Setenv("HOME", t.TempDir())
+	app := newTestAppWithDefaults(t)
+	setTestAppRuntimeReady(t, app, context.Background())
+	geometryReads := 0
+	app.windowGeometry = func() (WindowGeometry, error) {
+		geometryReads++
+		return WindowGeometry{X: 7, Y: 9, Width: 1000, Height: 700}, nil
+	}
+
+	require.True(t, app.PrepareQuit())
+	require.True(t, app.PrepareQuit())
+
+	require.Equal(t, 1, geometryReads)
+	settings, err := app.LoadWindowSettings()
+	require.NoError(t, err)
+	require.Equal(t, &WindowSettings{X: 7, Y: 9, Width: 1000, Height: 700}, settings)
+}
+
+func TestServiceLifecycleContextIsCancelledBeforeShutdownAndThenCleared(t *testing.T) {
+	app := newTestAppWithDefaults(t)
+	ctx, cancel := context.WithCancel(context.Background())
+	require.NoError(t, app.ServiceStartup(ctx, application.ServiceOptions{}))
+	require.False(t, app.runtimeAvailable())
+
+	serviceContext := app.CtxOrBackground()
+	cancel()
+	require.ErrorIs(t, serviceContext.Err(), context.Canceled)
+
+	require.NoError(t, app.ServiceShutdown())
+	require.False(t, app.runtimeAvailable())
+	require.NoError(t, app.CtxOrBackground().Err())
 }
 
 func TestStartupBetaExpiryReportsAndStopsInteractiveStartup(t *testing.T) {

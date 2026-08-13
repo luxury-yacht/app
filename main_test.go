@@ -1,7 +1,10 @@
 package main
 
 import (
+	"context"
 	"errors"
+	"os"
+	"os/exec"
 	"sync"
 	"testing"
 	"time"
@@ -9,6 +12,7 @@ import (
 	"github.com/luxury-yacht/app/backend"
 	"github.com/luxury-yacht/app/internal/sentry"
 	"github.com/stretchr/testify/require"
+	"github.com/wailsapp/wails/v3/pkg/application"
 )
 
 var (
@@ -18,7 +22,7 @@ var (
 
 func sharedTestComposition() *applicationComposition {
 	testCompositionOnce.Do(func() {
-		testComposition = newApplicationComposition(&mainRecordingReporter{}, compositionOptions{})
+		testComposition = newApplicationComposition(&mainRecordingReporter{}, compositionOptions{SingleInstance: true})
 	})
 	return testComposition
 }
@@ -101,7 +105,13 @@ func TestApplicationCompositionOwnsOneNamedWindowMenuAndService(t *testing.T) {
 	require.True(t, ok)
 	require.Same(t, composition.window, window)
 	require.Equal(t, backend.MainWindowName, window.Name())
-	require.Len(t, composition.application.Config().Services, 1)
+	config := composition.application.Config()
+	require.Len(t, config.Services, 1)
+	require.NotNil(t, config.Assets.Handler)
+	require.NotNil(t, config.ShouldQuit)
+	require.NotNil(t, config.SingleInstance)
+	require.Equal(t, applicationProductIdentifier, config.SingleInstance.UniqueID)
+	require.NotNil(t, config.SingleInstance.OnSecondInstanceLaunch)
 }
 
 func TestMainWindowVisibilityPreservesPlatformStartupContract(t *testing.T) {
@@ -119,4 +129,83 @@ func TestMainWindowVisibilityPreservesPlatformStartupContract(t *testing.T) {
 			require.Equal(t, test.wantHidden, options.Hidden)
 		})
 	}
+}
+
+func TestMainWindowOptionsPreserveTheSingleWindowContract(t *testing.T) {
+	nativeMenu := application.NewMenu()
+
+	for _, goos := range []string{"darwin", "windows", "linux"} {
+		t.Run(goos, func(t *testing.T) {
+			options := mainWindowOptionsForPlatform(nativeMenu, goos)
+
+			require.Equal(t, backend.MainWindowName, options.Name)
+			require.Equal(t, "Luxury Yacht", options.Title)
+			require.Equal(t, 1200, options.Width)
+			require.Equal(t, 800, options.Height)
+			require.Equal(t, 1100, options.MinWidth)
+			require.Equal(t, 600, options.MinHeight)
+			require.Zero(t, options.MaxWidth)
+			require.Zero(t, options.MaxHeight)
+			require.Equal(t, "/", options.URL)
+			require.Equal(t, application.NewRGB(30, 30, 30), options.BackgroundColour)
+			require.Equal(t, application.BackgroundTypeTransparent, options.BackgroundType)
+			require.True(t, options.Mac.TitleBar.AppearsTransparent)
+			require.True(t, options.Mac.TitleBar.FullSizeContent)
+			require.True(t, options.Mac.TitleBar.HideTitle)
+			require.True(t, options.Mac.TitleBar.HideToolbarSeparator)
+			require.Equal(t, application.SystemDefault, options.Windows.Theme)
+			require.Same(t, nativeMenu, options.Linux.Menu)
+			require.True(t, options.UseApplicationMenu)
+			require.Equal(t, 1.0, options.Zoom)
+			require.False(t, options.ZoomControlEnabled)
+			require.Equal(t, goos != "linux", options.Hidden)
+		})
+	}
+}
+
+type startupFailureProbeService struct {
+	name               string
+	startupErr         error
+	context            context.Context
+	shutdownContextErr error
+	sequence           *[]string
+}
+
+func (s *startupFailureProbeService) ServiceName() string { return s.name }
+
+func (s *startupFailureProbeService) ServiceStartup(ctx context.Context, _ application.ServiceOptions) error {
+	s.context = ctx
+	*s.sequence = append(*s.sequence, "start:"+s.name)
+	return s.startupErr
+}
+
+func (s *startupFailureProbeService) ServiceShutdown() error {
+	s.shutdownContextErr = s.context.Err()
+	*s.sequence = append(*s.sequence, "stop:"+s.name)
+	return nil
+}
+
+func TestApplicationRunRollsBackStartedServicesAfterStartupFailure(t *testing.T) {
+	const helperEnv = "LUXURY_YACHT_TEST_STARTUP_FAILURE"
+	if os.Getenv(helperEnv) != "1" {
+		command := exec.Command(os.Args[0], "-test.run=^TestApplicationRunRollsBackStartedServicesAfterStartupFailure$")
+		command.Env = append(os.Environ(), helperEnv+"=1")
+		output, err := command.CombinedOutput()
+		require.NoError(t, err, string(output))
+		return
+	}
+
+	sequence := []string{}
+	started := &startupFailureProbeService{name: "started", sequence: &sequence}
+	failure := errors.New("startup failed")
+	failing := &startupFailureProbeService{name: "failing", startupErr: failure, sequence: &sequence}
+	wailsApp := application.New(application.Options{ErrorHandler: func(error) {}})
+	wailsApp.RegisterService(application.NewService(started))
+	wailsApp.RegisterService(application.NewService(failing))
+
+	err := wailsApp.Run()
+
+	require.ErrorIs(t, err, failure)
+	require.Equal(t, []string{"start:started", "start:failing", "stop:started"}, sequence)
+	require.ErrorIs(t, started.shutdownContextErr, context.Canceled)
 }

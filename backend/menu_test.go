@@ -169,5 +169,7 @@ func TestFileMenuDoesNotOfferNewWindow(t *testing.T) {
 	fileMenu := findSubmenu(t, CreateMenu(&App{}), "File")
 	for _, item := range menuItems(fileMenu) {
 		require.NotEqual(t, "New Window", item.Label())
+		require.NotEqual(t, "Ctrl+N", item.GetAccelerator())
+		require.NotEqual(t, "Cmd+N", item.GetAccelerator())
 	}
 }

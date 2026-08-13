@@ -59,17 +59,30 @@ func (a *App) UpdateMenu() {
 	a.menu.Clear()
 	populateMenu(a.menu, a)
 
-	switch runtime.GOOS {
+	applyNativeMenuRefresh(
+		runtime.GOOS,
+		func() { a.menu.Update() },
+		func() {
+			if a.wailsApplication != nil {
+				a.wailsApplication.Menu.SetApplicationMenu(a.menu)
+			}
+		},
+		func() {
+			if window, err := a.mainWindow(); err == nil {
+				window.SetMenu(a.menu)
+			}
+		},
+	)
+}
+
+func applyNativeMenuRefresh(goos string, updateMenu, setApplicationMenu, setWindowMenu func()) {
+	switch goos {
 	case "linux":
-		a.menu.Update()
+		updateMenu()
 	case "darwin":
-		if a.wailsApplication != nil {
-			a.wailsApplication.Menu.SetApplicationMenu(a.menu)
-		}
+		setApplicationMenu()
 	case "windows":
-		if window, err := a.mainWindow(); err == nil {
-			window.SetMenu(a.menu)
-		}
+		setWindowMenu()
 	}
 }
 

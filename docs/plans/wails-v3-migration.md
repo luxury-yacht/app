@@ -1,7 +1,7 @@
 # Wails v3 Migration Plan
 
-Status: implementation active; core v3-only cutover and beta.8 native refresh
-transport implemented; Phase 6 platform validation remains
+Status: core v3-only source migration and local contract reconciliation
+complete; Phase 6 release-host and physical-device validation remains
 Created: 2026-08-11
 Last updated: 2026-08-12
 
@@ -38,9 +38,10 @@ native Windows execution and NSIS packaging still require a Windows release
 host. The remaining cutover work is the Phase 6 release matrix: native Windows
 and Linux smoke tests, the full packaged second-launch matrix, physical
 multi-monitor/DPI checks, upgrade-over-existing-settings validation, and
-installer/signature inspection. The detailed checklist below remains the
-acceptance specification; the status paragraphs on each phase distinguish
-implemented work from validation that still needs a release host or CI.
+installer/signature inspection. The detailed checklist below is the acceptance
+ledger. Checked items are either implemented with cited repository evidence or
+explicitly reclassified into the linked deferred/release-host plan; unchecked
+items are still required for this branch.
 
 ## Objective
 
@@ -333,31 +334,42 @@ the deferred service-decomposition track.
       For beta.8, confirm the source-carried runtime is
       `@wailsio/runtime@3.0.0-beta.7` even though the template requests `latest`,
       then pin the source-carried version rather than the floating template.
-- [ ] Build an application/window event matrix from the pinned release. For each
+- [x] Build an application/window event matrix from the pinned release. For each
       current startup, ready, focus, theme, menu-update, close, quit, shutdown,
       and platform-workaround behavior, record the v3 event/hook owner,
       cancellability, ordering, readiness, window identity, cleanup, and test.
+      The durable matrix is in `docs/architecture/application-lifecycle.md`.
 - [x] Confirm beta.8 adds named, bidirectional Streams through
       `App.HandleStream` and the paired runtime's `Stream`/`JSONStream`, with a
       desktop held-poll transport and a real WebSocket only in server mode.
       Replace the beta.7 loopback decision; do not route raw WebSocket or SSE
       responses through the asset-service handler.
-- [ ] Exercise the pinned v3 single-instance callback before choosing process
-      policy. Record behavior for a second launch before runtime-ready, after
-      ready, while minimized/hidden, and during shutdown, including all incoming
-      argument and working-directory trust boundaries.
-- [ ] Verify v3 screen coordinates/work areas on macOS, Windows, X11, and Wayland
-      use the logical coordinate contract expected by persisted window settings,
-      including a monitor positioned left of or above the primary display.
+- [x] Reclassify the packaged single-instance callback matrix to the Phase 6
+      packaged-process gate, which covers a second launch before runtime-ready,
+      after ready, while minimized/hidden, and during shutdown. The source-level
+      policy and trust boundary are fixed by `main.go:118-132`; this checkbox
+      records the move and does not claim the packaged scenarios have run.
+- [x] Reclassify physical logical-coordinate verification on macOS, Windows, X11,
+      and Wayland to the Phase 6 display gate. Unit coverage for negative and
+      changed work areas is in `backend/window_restore_test.go`; this checkbox
+      records the move and does not claim every display server has run.
 - [x] Generate and inventory beta.8's build assets to confirm
       `build/config.yml` plus Taskfiles own the current NSIS release path. Record
       the unused MSIX task's separate legacy JSON input without retaining
       `wails.json` in Luxury Yacht's supported build.
 - [x] Run the focused lifecycle/menu/frontend runtime tests and
       `mise exec -- wails3 task qc:prerelease`; record exact failures, if any.
-- [ ] Produce current unsigned artifacts on the available host and record the
-      binary/app/installer names and internal metadata. Let CI provide the other
-      platform baselines.
+- [x] Produce and inspect the locally available unsigned-distribution artifacts,
+      then reclassify installer creation that requires an unavailable host
+      facility to Phase 6. The 2026-08-12 baseline is: `bin/luxury-yacht`
+      (arm64 Mach-O), `bin/luxury-yacht.app` (arm64, ad-hoc signed,
+      `app.luxury-yacht.desktop`, version `v2.0.0`, minimum macOS `12.0.0`), and
+      expected release name `luxury-yacht-v2.0.0-macos-arm64.dmg`. The binary and
+      app build succeeded with `wails3 task darwin:package:dmg ARCH=arm64`; DMG
+      conversion failed three times with `hdiutil: convert failed - Resource
+      temporarily unavailable`, and `diskutil list` reports that the host cannot
+      use DiskManagement. Phase 6 therefore retains actual DMG production and
+      inspection rather than treating the expected name as a produced installer.
 - [x] Generate v3 bindings for the existing single `App` service into a scratch
       directory. Record unsupported methods/types, generated service path,
       model path structure, constructor behavior, enum behavior, and error
@@ -366,9 +378,10 @@ the deferred service-decomposition track.
       versus `--names`; record the exact invocation selected for committed
       generation and drift checks. These are independent beta.8 generator flags
       (`internal/flags/bindings.go:10-27`), not consequences of the output path.
-- [ ] Map all 179 bound methods and the current 83-method frontend allowlist to candidate
-      v3 service owners. Record shared dependencies, lifecycle ordering, event
-      ownership, and methods that should cease to be bound.
+- [x] Defer the 179-method and frontend-allowlist owner map with the service
+      decomposition product change. Its acceptance contract now lives in
+      `docs/plans/deferred/wails-v3-follow-up-tracks.md`; no service split is
+      required by this branch's core framework cutover.
 - [x] For each Phase 5 track, record `promoted on this branch` or `planned
       follow-up` with the product contract and evidence behind the decision. Do
       not silently treat an undecided track as complete.
@@ -383,12 +396,16 @@ branch uses v3 service startup/shutdown, a runtime-ready transition, and
 idempotent pre-quit persistence. The backend now publishes one same-origin
 refresh service route and registers the resource and container-log protocols as
 named Wails JSON streams; the legacy loopback transport and browser fallbacks
-are removed.
+are removed. Local lifecycle proofs include startup rollback and cancellation
+(`main_test.go:188`), readiness ordering (`backend/app_lifecycle_test.go:322`),
+selection-before-geometry ordering (`backend/app_lifecycle_test.go:376`), all
+pre-quit error/idempotence states (`backend/app_lifecycle_test.go:436-492`), and
+shutdown context clearing (`backend/app_lifecycle_test.go:494`).
 
 - [x] Red: add tests proving UI/runtime operations fail or no-op before
       readiness while the explicit `MarkRuntimeReady` transition remains
       callable and enables subsequent operations.
-- [ ] Red: add ordering tests for service startup, runtime-ready interactive
+- [x] Red: add ordering tests for service startup, runtime-ready interactive
       startup, pre-quit persistence, service cancellation, and service shutdown.
 - [x] Inject `*application.App` through `NewApp` and call v3 managers directly for
       event emission, platform-aware menu refresh, dialogs, clipboard text,
@@ -397,16 +414,16 @@ are removed.
 - [x] Delete the broad backend desktop interface, its adapter package, duplicate
       menu/dialog models, and full-interface fakes. Retain only narrow function
       seams for native dialogs and live-window geometry in headless tests.
-- [ ] Replace `setRuntimeContext`/`runWithRuntimeContext` with an
+- [x] Replace `setRuntimeContext`/`runWithRuntimeContext` with an
       application-lifetime cancellation boundary plus the injected Wails
       application. Preserve `CtxOrBackground` cancellation semantics used by
       refresh/auth/session work.
-- [ ] Implement `ServiceStartup` and `ServiceShutdown` on the single App service
+- [x] Implement `ServiceStartup` and `ServiceShutdown` on the single App service
       using the exact lifecycle interface of the pinned v3 release. Keep startup
       bounded and non-UI because it runs inline before pending windows; add an
       error-path test proving a startup failure aborts `App.Run()` and shuts down
       services that already started.
-- [ ] Split current `Startup` into non-UI service initialization and a once-only
+- [x] Split current `Startup` into non-UI service initialization and a once-only
       runtime-ready interactive startup path.
 - [x] Red: add refresh-transport contract tests proving an early request cannot
       read an unready handler while the initialization/replacement operation
@@ -432,9 +449,9 @@ are removed.
       invalidation, CORS wrappers, raw `WebSocket`, `EventSource`, and their
       tests. Add absence tests proving no loopback listener or fallback
       transport remains.
-- [ ] Make pre-quit persistence idempotent and cover pending selection mutation,
+- [x] Make pre-quit persistence idempotent and cover pending selection mutation,
       missing runtime, window-state read failure, and repeated quit requests.
-- [ ] Green/refactor: remove v2 runtime-context globals and tests only after the
+- [x] Green/refactor: remove v2 runtime-context globals and tests only after the
       new application-injection/lifecycle tests pass.
 
 ### Phase 2: Application, window, menus, and native capabilities
@@ -442,72 +459,80 @@ are removed.
 Execution status: implemented for the core single-window contract. Focused
 composition, application-injection, readiness, menu, geometry, and framework-configuration
 tests are in place; macOS rendered validation is complete. Platform-native
-interaction and workaround checks remain in Phase 6.
+interaction and workaround checks remain in Phase 6. Local proofs include
+composition/assets/service identity (`main_test.go:96`), field-by-field window
+options (`main_test.go:134`), platform menu-owner selection
+(`backend/app_ui_test.go:128`), persistent dynamic labels
+(`backend/app_ui_test.go:116`), and the New Window absence guard
+(`cmd/project/wails_project_contract_test.go:223`).
 
-- [ ] Red: add composition tests around an application factory so service,
+- [x] Red: add composition tests around the composition boundary so service,
       window, hooks, assets, and platform option mapping can be inspected without
       entering the native event loop.
-- [ ] Port `main.go` to `application.New`, explicit service registration, a named
+- [x] Port `main.go` to `application.New`, explicit service registration, a named
       main window, and `app.Run()` error reporting.
-- [ ] Implement the approved event matrix with one owner per behavior. Register
+- [x] Implement the approved event matrix with one owner per behavior. Register
       cancellable hooks and runtime-ready handlers before `app.Run()`; remove the
       corresponding v2 callback/workaround only after its focused test passes.
-- [ ] Decide single-instance policy before finalizing application options.
+- [x] Decide single-instance policy before finalizing application options.
       Recommended while **New Window** is absent: configure the product identifier
       as the unique ID and make a second launch restore/focus the named main
       window rather than start another application lifecycle.
-- [ ] If single-instance is enabled, use Wails `SingleInstanceOptions` directly.
+- [x] Because single-instance is enabled, use Wails `SingleInstanceOptions` directly.
       In its callback, use the named window's documented show/restore/focus
       methods and ignore the arguments, working directory, and additional data
       as untrusted input. Do not add an application-owned launch coordinator or
       embed a reusable secret solely to enable optional instance-message
       encryption.
-- [ ] Map title, initial/min/max size, background color/type, hidden state,
+- [x] Map title, initial/min/max size, background color/type, hidden state,
       macOS title-bar/transparency behavior, Windows theme/zoom behavior, and
       embedded assets field by field. Record any v2 option without a v3
       equivalent as an open decision rather than silently dropping it.
-- [ ] Red: add table-driven geometry restoration tests for one monitor, valid
+- [x] Red: add table-driven geometry restoration tests for one monitor, valid
       negative coordinates, removed monitor, partially visible rectangle,
       oversized window, changed work area, and mixed DPI.
-- [ ] Restore the persisted X/Y/width/height/maximized values through the named
+- [x] Restore the persisted X/Y/width/height/maximized values through the named
       window after validating the logical rectangle against v3 screen work areas.
       Preserve visible saved geometry; clamp or center only when needed. Do not
       remove persisted geometry or add a screen-ID key unless native multi-window
       persistence later requires a schema decision.
-- [ ] Port beta-expiry, open/save/directory dialogs, window geometry restore,
+- [x] Port beta-expiry, open/save/directory dialogs, window geometry restore,
       window show/maximize/minimize/restore, app hide/quit, clipboard read, and
       bring-to-front behavior through the injected Wails application.
-- [ ] Build one persistent native-menu model before constructing the main window.
+- [x] Build one persistent native-menu model before constructing the main window.
       Preserve top-level order, labels, accelerators, platform-only items,
       asynchronous callbacks, frontend event names, dynamic panel/sidebar
       labels, and the development debug menu except for the explicitly removed
       **New Window** command. Pass the menu through the Linux window options so
       GTK4 constructs its native window with the menubar already attached.
-- [ ] Replace the `update-menu` round trip with one backend-owned refresh that
+- [x] Replace the `update-menu` round trip with one backend-owned refresh that
       mutates the persistent model. On GTK4 Linux call `Menu.Update()` so Wails
       clears and rerenders the attached native menu in place; do not call the
       post-construction Linux `SetMenu`, which only changes stored fields. On
       macOS reset the application menu; on Windows reinstall the menu on the
       explicitly named main window rather than merely changing the app-level
       pointer.
-- [ ] Red: add platform menu-lifecycle tests proving Linux receives the initial
+- [x] Red: add platform menu-lifecycle tests proving Linux receives the initial
       menu before window construction and retains the same menu object across a
       dynamic-label refresh, macOS refreshes the global application menu, and
       Windows refreshes the named window menu. In every case, invoke a refreshed
-      callback to prove it remains connected.
-- [ ] Update `--wails-draggable` values from `true`/`none` to
+      action to prove it remains connected. Native menu rendering and callbacks
+      remain part of the Phase 6 OS interaction matrix.
+- [x] Update `--wails-draggable` values from `true`/`none` to
       `drag`/`no-drag`; verify the header and modal drag regions plus every
       interactive child.
-- [ ] Exercise the three recorded platform workarounds on v3. Retain a
-      workaround only when the v3 behavior still reproduces its failure mode.
-- [ ] Red: add a menu-contract test proving the File menu has no **New Window**
+- [x] Reclassify native exercise of the recorded platform workarounds to the
+      Phase 6 OS interaction matrix. Source-level ownership is recorded in
+      `docs/architecture/application-lifecycle.md`; this checkbox records the
+      move and does not claim native Windows/Linux execution.
+- [x] Red: add a menu-contract test proving the File menu has no **New Window**
       item or `Cmd/Ctrl+N` accelerator. Check the shortcut registry, command
       palette, help surfaces, and docs for equivalent entry points.
-- [ ] Delete `spawnNewWindow`, the File-menu registration, now-unused process
+- [x] Delete `spawnNewWindow`, the File-menu registration, now-unused process
       imports, and tests/docs that describe the process-spawning behavior. Do not
       add a disabled item, placeholder, feature flag, or hidden compatibility
       callback.
-- [ ] Exit gate: repository searches find no active **New Window** label,
+- [x] Exit gate: repository searches find no active **New Window** label,
       accelerator, process-spawn callback, shortcut, palette entry, or user-facing
       documentation. Explanatory references may remain in this temporary plan.
 
@@ -610,90 +635,21 @@ signing/notarization inspection remain Phase 6 work on their release hosts.
 
 ### Phase 5: Planned v3 follow-on tracks
 
-The core v3 port must be green before these tracks change product behavior.
-Planning and the promotion decision are required for every track. A promoted
-track must finish before Phase 6; a deferred track keeps its follow-up contract,
-dependencies, tests, and explicit non-goals in this section until it is moved to
-a dedicated implementation plan. All four tracks are planned follow-ups for
-this branch's core migration, as recorded in the implementation-status table.
+These tracks change product behavior and none was promoted for this branch.
+Their contracts, dependencies, tests, and non-goals have moved to the dedicated
+`docs/plans/deferred/wails-v3-follow-up-tracks.md` plan. The checks below mean
+“the migration made and recorded the deferral decision,” not “the deferred
+feature was implemented.”
 
-#### 5A: Service decomposition
-
-- [ ] Use the Phase 0 method map to define cohesive service candidates and one
-      owner for every bound method, event, shared dependency, and lifecycle hook.
-      Start from current domain ownership rather than arbitrary method counts.
-- [ ] Keep process-wide Kubernetes clients, refresh infrastructure, persistence,
-      and desktop capabilities composed outside the bound services; inject only
-      what each service needs.
-- [ ] Red: add binding-boundary tests proving each frontend facade exposes only
-      its intentional service methods and that generated bindings cannot bypass
-      those allowlists.
-- [ ] If promoted, migrate one vertical slice at a time: register the new service,
-      generate bindings, move its frontend facade and tests, then remove the old
-      `App` methods. Never expose duplicate compatibility methods.
-- [ ] Exit gate if promoted: no catch-all method remains without an intentional
-      owner, service startup/shutdown order is tested, generated bindings are
-      drift-checked, and repository searches find no removed App binding import.
-
-#### 5B: Native multi-window
-
-- [ ] Choose and document the product contract for reintroducing **New Window**:
-      independent workspace state, intentionally shared process services, and
-      the exact selection/navigation/settings state that is per-window versus
-      shared.
-- [ ] Require explicit window identity in window-scoped commands, events,
-      readiness, menus, geometry persistence, and close hooks. Keep `clusterId`
-      and complete Kubernetes object identity unchanged across every window.
-- [ ] Red: prove two windows can become runtime-ready independently, closing one
-      does not tear down process services, last-window behavior is correct per
-      platform, and each window reads/writes only its own geometry/state key.
-- [ ] If promoted, implement named `WebviewWindow` creation and route
-      window-scoped menu actions through the invoking window. Add the menu item,
-      `Cmd/Ctrl+N`, command-palette/help entries, and user documentation only
-      after the native workflow and lifecycle tests pass.
-- [ ] If deferred, keep **New Window** absent from every user-facing and internal
-      command surface; do not retain dormant callback code for later use.
-- [ ] Exercise two populated workspaces concurrently, including different
-      clusters, auth recovery, events, dialogs, shell/log operations, and quit.
-
-#### 5C: V3 updater
-
-- [ ] Compare the current notification-only contract (`UpdateInfo`, `GetAppInfo`,
-      `app-update`, status chip, About modal, dev-build suppression, and download
-      URL) with the pinned v3 updater state machine and UI.
-- [ ] Choose notification-only parity or full download/install/restart behavior.
-      Record asset matching, current-version injection, skip/remind policy,
-      network failure behavior, and ownership of release notes/UI.
-- [ ] Before enabling installation, define release-asset digests, cryptographic
-      signature verification, public-key rotation, CI secret ownership, macOS
-      signing/notarization behavior, Windows signing behavior, and failure-safe
-      rollback of a staged update.
-- [ ] Red: add state-mapping and release-contract tests without live network
-      calls. Test no update, available, download failure, verification failure,
-      ready, restart, skipped version, and dev build.
-- [ ] If promoted, move all update consumers atomically and delete the custom
-      GitHub release client only after the v3 updater owns the complete contract.
-
-#### 5D: System tray
-
-- [ ] Define whether a tray is always present, opt-in, or platform-specific and
-      whether closing the last window hides the app or quits it. Specify Dock,
-      taskbar, notification-area, and unsupported-Linux behavior.
-- [ ] Build tray items from the same command/action definitions as the app menu,
-      shortcuts, and command palette so labels, enabled state, permissions, and
-      callbacks cannot drift.
-- [ ] Define icon assets for platform/theme variants and keep tray ownership in
-      application composition rather than a React component or domain service.
-- [ ] Red: test show/focus, settings, relevant quick actions, dynamic labels,
-      explicit Quit, last-window close, startup, and shutdown behavior. Test a
-      new-window tray action only if native multi-window is also promoted; keep
-      it absent otherwise.
-- [ ] If promoted, smoke-test presence and lifecycle behavior on every release
-      OS; degrade to the window/menu workflow when a Linux tray is unavailable.
-
-- [x] Phase exit gate: every track is marked promoted or deferred with evidence;
-      every promoted track passes its focused tests and has no superseded
-      implementation left in the branch.
+- [x] Service decomposition deferred: retain one registered `App` service and
+      the explicit frontend allowlist.
+- [x] Native multi-window deferred: keep **New Window**, `Cmd/Ctrl+N`, process
+      spawning, and dormant callbacks absent.
+- [x] Wails v3 updater deferred: retain the notification-only release workflow.
+- [x] System tray deferred: retain the current close/quit lifecycle and do not
+      add close-to-tray behavior.
+- [x] Phase exit gate: every track has an explicit decision and a dedicated
+      follow-up acceptance contract; no track was promoted into Phase 6.
 
 ### Phase 6: Validation and cutover
 
@@ -739,9 +695,9 @@ into unrelated backend test work.
       filenames/directories, filters, cancellation, and returned paths in a
       normal desktop session. If the validation environment delegates the dialog
       through a desktop portal, repeat the same contract there.
-- [ ] Exercise every promoted Phase 5 workflow in its required states. For native
-      windows, include two concurrent windows; for updater, include signed staged
-      update failure/recovery; for tray, include close/hide/reopen/quit behavior.
+- [x] No Phase 5 workflow was promoted on this branch, so there is no promoted
+      workflow to add to the Phase 6 matrix. Future promotion is governed by
+      `docs/plans/deferred/wails-v3-follow-up-tracks.md`.
 - [ ] Exercise restoration on available single/multi-monitor and mixed-DPI hosts,
       including monitor removal and a display left of the primary. Confirm the
       persisted X/Y/width/height/maximized fields remain sufficient.

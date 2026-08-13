@@ -220,10 +220,46 @@ func TestWailsProjectUsesFrameworkSingleInstanceHandling(t *testing.T) {
 	require.ErrorIs(t, err, os.ErrNotExist)
 }
 
+func TestNewWindowProcessSpawnPathRemainsAbsent(t *testing.T) {
+	for _, root := range []string{"backend", filepath.Join("frontend", "src")} {
+		err := filepath.Walk(repositoryPath(root), func(path string, info os.FileInfo, walkErr error) error {
+			require.NoError(t, walkErr)
+			if info.IsDir() || strings.Contains(info.Name(), "_test.") || strings.Contains(info.Name(), ".test.") {
+				return nil
+			}
+			switch filepath.Ext(path) {
+			case ".go", ".ts", ".tsx", ".css":
+			default:
+				return nil
+			}
+
+			contents := strings.ToLower(readTestFile(t, path))
+			require.NotContainsf(t, contents, "new window", "%s contains a New Window entry point", path)
+			require.NotContainsf(t, contents, "spawnnewwindow", "%s contains the legacy process-spawn callback", path)
+			require.NotContainsf(t, contents, "cmdorctrl+n", "%s contains the removed native accelerator", path)
+			return nil
+		})
+		require.NoError(t, err)
+	}
+
+	mainSource := strings.ToLower(readTestFile(t, repositoryPath("main.go")))
+	require.NotContains(t, mainSource, "spawnnewwindow")
+	require.NotContains(t, mainSource, "cmdorctrl+n")
+}
+
 func TestWailsApplicationIsInjectedDirectlyWithoutDesktopAdapter(t *testing.T) {
 	mainSource := readTestFile(t, repositoryPath("main.go"))
 	require.Contains(t, mainSource, "backend.NewApp(wailsApp, reporter)")
 	require.NotContains(t, mainSource, "NewAdapter")
+
+	runtimeReadyHook := strings.Index(mainSource, "events.Common.WindowRuntimeReady")
+	closingHook := strings.Index(mainSource, "events.Common.WindowClosing")
+	runCall := strings.Index(mainSource, "composition.application.Run()")
+	require.Positive(t, runtimeReadyHook)
+	require.Positive(t, closingHook)
+	require.Positive(t, runCall)
+	require.Less(t, runtimeReadyHook, runCall)
+	require.Less(t, closingHook, runCall)
 
 	runtimeSource := readTestFile(t, repositoryPath("backend", "app_runtime.go"))
 	require.NotContains(t, runtimeSource, "type Desktop interface")
