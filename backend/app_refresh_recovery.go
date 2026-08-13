@@ -37,15 +37,12 @@ func (a *App) teardownRefreshSubsystem() {
 }
 
 func (a *App) shutdownRefreshSubsystem(subsystem *system.Subsystem) {
-	if subsystem == nil || subsystem.Manager == nil {
+	if subsystem == nil {
 		return
 	}
-	subsystem.StopDoorbellNotifiers()
-	if subsystem.ContainerLogs != nil {
-		subsystem.ContainerLogs.Stop()
-	}
-	if subsystem.ResourceStream != nil {
-		subsystem.ResourceStream.Stop()
+	a.stopRefreshSubsystemResources(subsystem)
+	if subsystem.Manager == nil {
+		return
 	}
 	done := make(chan struct{})
 	go func(manager *refresh.Manager) {

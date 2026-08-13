@@ -35,13 +35,9 @@ func (a *App) setRefreshSubsystem(clusterID string, subsystem *system.Subsystem)
 	a.syncAttentionIgnoreRulesForSubsystem(clusterID, subsystem)
 }
 
-// swapRefreshSubsystem stores next as clusterID's subsystem and STOPS the
-// previous one. Rebuild paths must use this instead of setRefreshSubsystem:
-// overwriting the map entry leaks the old subsystem whole — its manager,
-// informer factory, ingest reflectors, and namespace notifier keep running on
-// stale transports (observed live as duplicate namespaces-doorbell broadcasts
-// to a subscriber-less manager). Next is stored FIRST so the aggregate mux
-// never routes to a stopped subsystem.
+// swapRefreshSubsystem stores next as clusterID's subsystem and stops the
+// previous one. It is only suitable when no live aggregate route still points
+// at previous; routed rebuilds must update that route before stopping it.
 func (a *App) swapRefreshSubsystem(clusterID string, next *system.Subsystem) {
 	if a == nil || clusterID == "" {
 		return
@@ -51,11 +47,6 @@ func (a *App) swapRefreshSubsystem(clusterID string, next *system.Subsystem) {
 	if previous == nil || previous == next {
 		return
 	}
-	previous.CancelColdPreparation()
-	// stopRefreshSubsystem no-ops without a manager; silence the doorbell
-	// notifiers explicitly so a partially-built previous subsystem cannot keep
-	// them.
-	previous.StopDoorbellNotifiers()
 	a.stopRefreshSubsystem(previous)
 }
 

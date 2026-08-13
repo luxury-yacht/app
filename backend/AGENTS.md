@@ -104,7 +104,8 @@ Applies to Go code under `backend/`.
 
 - `backend/refresh/api/` owns mount-relative request/response handlers published
   atomically through the same-origin Wails service route `/api/v2`.
-  `resource-stream` and `container-logs` are named Wails JSON streams, not HTTP
+  The resource-stream and container-logs protocols use the named Wails JSON
+  streams `refresh-resources` and `refresh-container-logs`; they are not HTTP
   upgrade or event-stream routes. Preserve the early-unready response,
   cluster scoping, complete object identity, RBAC, request validation, ordered
   publication/replacement, and teardown. Do not add a loopback listener, runtime

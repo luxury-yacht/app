@@ -25,6 +25,18 @@ func TestTeardownRefreshSubsystem(t *testing.T) {
 	require.Nil(t, app.refreshService.Load())
 }
 
+func TestShutdownRefreshSubsystemCancelsPartialGenerationWithoutManager(t *testing.T) {
+	app := newTestAppWithDefaults(t)
+	subsystem := &system.Subsystem{}
+	preparationCtx, started := subsystem.BeginColdPreparation(context.Background(), time.Now())
+	require.True(t, started)
+
+	app.shutdownRefreshSubsystem(subsystem)
+
+	require.ErrorIs(t, preparationCtx.Err(), context.Canceled,
+		"global teardown must cancel work owned by a partially built subsystem generation")
+}
+
 func TestTeardownRefreshSubsystemBlocksRuntimeResurrectionUntilSetup(t *testing.T) {
 	app := newTestAppWithDefaults(t)
 	setTestAppRuntimeReady(t, app, context.Background())

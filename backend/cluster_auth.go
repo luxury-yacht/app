@@ -287,15 +287,35 @@ func (r clusterSubsystemRebuild) run() {
 
 func (r clusterSubsystemRebuild) activateSubsystem(newClients *clusterClients, subsystem *system.Subsystem) bool {
 	if !r.startManager(subsystem) {
-		// A subsystem that cannot start has not been published, but its constructed
-		// notifier timers still need an owner to stop them.
-		subsystem.StopDoorbellNotifiers()
+		// A subsystem that cannot start has not been published, but all resources
+		// constructed for that generation still need an owner to stop them.
+		r.app.stopRefreshSubsystem(subsystem)
 		return false
 	}
-	r.app.swapRefreshSubsystem(r.clusterID, subsystem)
+
+	previous := r.app.getRefreshSubsystem(r.clusterID)
+	r.app.setRefreshSubsystem(r.clusterID, subsystem)
 	subsystems, clusterOrder := refreshSubsystemTopology(r.app.snapshotRefreshSubsystems())
 	if !r.updateRefreshRouting(subsystems, clusterOrder) {
+		if previous == nil {
+			r.app.takeRefreshSubsystem(r.clusterID)
+		} else {
+			r.app.setRefreshSubsystem(r.clusterID, previous)
+		}
+		if previous != subsystem {
+			r.app.stopRefreshSubsystem(subsystem)
+		}
 		return false
+	}
+
+	// Commit the clients only after the matching subsystem is started and every
+	// aggregate consumer routes to it. Until this point the previous generation
+	// remains available if activation fails.
+	r.app.clusterClientsMu.Lock()
+	r.app.setClusterClientLocked(r.clusterID, newClients)
+	r.app.clusterClientsMu.Unlock()
+	if previous != nil && previous != subsystem {
+		r.app.stopRefreshSubsystem(previous)
 	}
 	r.startObjectCatalog(newClients)
 	return true
@@ -348,9 +368,6 @@ func (r clusterSubsystemRebuild) rebuildClients() (*clusterClients, bool) {
 		r.reportBuildError("clients", "client rebuild failed", err)
 		return nil, false
 	}
-	r.app.clusterClientsMu.Lock()
-	r.app.setClusterClientLocked(r.clusterID, clients)
-	r.app.clusterClientsMu.Unlock()
 	if clusterClientsAuthInvalid(clients) {
 		r.app.logger.Warn(fmt.Sprintf("Skipping subsystem rebuild for cluster %s: auth not valid after client rebuild", r.clusterID), logsources.Auth, r.clusterID, r.clusterName)
 		return nil, false
@@ -415,6 +432,7 @@ func (r clusterSubsystemRebuild) updateRefreshRouting(subsystems map[string]*sys
 	}
 	if err := r.app.refreshAggregates.Load().Update(clusterOrder, subsystems); err != nil {
 		r.app.logger.ErrorWithCause(err, fmt.Sprintf("Failed to update aggregates for cluster %s", r.clusterID), logsources.Auth, r.clusterID, r.clusterName)
+		return false
 	}
 	return true
 }

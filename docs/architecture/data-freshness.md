@@ -108,9 +108,9 @@ The authored domain contract declares which clocks can change a payload:
 
 Request/response refresh traffic uses the same-origin Wails service route
 `/api/v2`. Resource doorbells and container logs use the named Wails streams
-`resource-stream` and `container-logs`, with structured JSON frames in both
-directions. The backend publishes or replaces the service handler only after
-the owning aggregate is ready; an earlier request receives a bounded
+`refresh-resources` and `refresh-container-logs`, with structured JSON frames
+in both directions. The backend publishes or replaces the service handler only
+after the owning aggregate is ready; an earlier request receives a bounded
 service-unavailable response. There is no application-owned loopback listener,
 runtime base-URL discovery, CORS layer, raw browser WebSocket, EventSource, or
 fallback refresh transport.
