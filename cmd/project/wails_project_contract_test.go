@@ -389,11 +389,6 @@ func TestReleaseWorkflowUsesConfiguredVVersionTags(t *testing.T) {
 	require.True(t, strings.HasPrefix(strings.ToLower(metadata.Info.Version), "v"))
 }
 
-func TestReleaseWorkflowExplicitlyMarksBetaTagsAsPrereleases(t *testing.T) {
-	workflow := readTestFile(t, repositoryPath(".github", "workflows", "release.yml"))
-	require.Contains(t, workflow, `RELEASE_PRERELEASE: ${{ contains(github.ref_name, 'beta') }}`)
-}
-
 func TestReleaseWorkflowValidatesTagBeforeTestsAndBuilds(t *testing.T) {
 	workflow := readTestFile(t, repositoryPath(".github", "workflows", "release.yml"))
 	require.NotContains(t, workflow, "  validate-release:\n")

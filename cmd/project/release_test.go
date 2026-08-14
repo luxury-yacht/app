@@ -14,16 +14,6 @@ func TestNewReleaseConfigUsesConfiguredVersionTag(t *testing.T) {
 	require.Equal(t, "v2.0.0", cfg.version)
 }
 
-func TestReleaseConfigHonorsExplicitPrerelease(t *testing.T) {
-	cfg, err := withExplicitPrerelease(
-		newReleaseConfig(projectFacts{version: "v2.0.0"}),
-		"true",
-	)
-
-	require.NoError(t, err)
-	require.True(t, cfg.isBeta)
-}
-
 func TestValidateReleaseTagRequiresExactConfiguredVersion(t *testing.T) {
 	require.NoError(t, validateReleaseTag("v2.0.0-beta.1", "v2.0.0-beta.1"))
 	require.EqualError(

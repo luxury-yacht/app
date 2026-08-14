@@ -8,7 +8,6 @@ import (
 	"os/exec"
 	"path/filepath"
 	"sort"
-	"strconv"
 	"strings"
 	"text/template"
 )
@@ -45,19 +44,6 @@ func newReleaseConfig(facts projectFacts) releaseConfig {
 		releaseRepo:   projectReleaseRepo,
 		version:       facts.version,
 	}
-}
-
-func withExplicitPrerelease(cfg releaseConfig, value string) (releaseConfig, error) {
-	value = strings.TrimSpace(value)
-	if value == "" {
-		return cfg, nil
-	}
-	prerelease, err := strconv.ParseBool(value)
-	if err != nil {
-		return releaseConfig{}, fmt.Errorf("parse RELEASE_PRERELEASE: %w", err)
-	}
-	cfg.isBeta = cfg.isBeta || prerelease
-	return cfg, nil
 }
 
 func validateReleaseTag(configuredVersion, tag string) error {

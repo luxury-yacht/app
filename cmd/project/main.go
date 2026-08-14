@@ -98,11 +98,7 @@ func publishConfiguredRelease() error {
 	if err != nil {
 		return fmt.Errorf("read app version: %w", err)
 	}
-	cfg, err := withExplicitPrerelease(newReleaseConfig(facts), os.Getenv("RELEASE_PRERELEASE"))
-	if err != nil {
-		return err
-	}
-	return publishRelease(cfg)
+	return publishRelease(newReleaseConfig(facts))
 }
 
 func publishConfiguredSiteVersion() error {

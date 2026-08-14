@@ -174,7 +174,6 @@ jobs:
       contents: write
     env:
       GH_TOKEN: ${{ secrets.RELEASES_REPO_TOKEN }}
-      RELEASE_PRERELEASE: ${{ contains(github.ref_name, 'beta') }}
       RELEASE_TAG: ${{ github.ref_type == 'tag' && github.ref_name || '' }}
     steps:
       - uses: actions/checkout@v7
