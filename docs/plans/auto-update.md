@@ -1,13 +1,14 @@
 # Automatic Application Updates
 
-Status: draft implementation plan. No updater installation or restart behavior
-is approved by this document alone. Resolve the decision gates below before
-changing code or release automation.
+Status: implementation-ready staged plan. The project owner has resolved every
+design decision gate below. Windows Authenticode certificate procurement is in
+progress; it does not block the shared foundation or macOS stage, but it remains
+a Windows enablement and overall-completion dependency.
 
-This plan proposes superseding the notification-only decision in
-`docs/plans/wails-v3-follow-up-tracks.md:3-23` only after the decision gates below
-are accepted. Until then, the recorded notification-only behavior remains the
-project decision. When implementation is complete, move durable lifecycle and
+This plan supersedes the notification-only decision in
+`docs/plans/wails-v3-follow-up-tracks.md:3-23` for staged implementation. The
+running product remains notification-only on each distribution until its rollout
+stage passes. When implementation is complete, move durable lifecycle and
 distribution contracts into `docs/architecture` and
 `docs/workflows/application-updates.md`, then remove the completed updater
 section from the broader follow-up plan.
@@ -69,26 +70,30 @@ plan unless later added as separately approved distribution work.
 
 ## Decision gates
 
-Resolve every unchecked decision with the project owner before implementation:
+Owner decisions recorded before implementation:
 
-- [ ] Confirm that "automatic updates" means silent automatic checks followed
+- [x] "Automatic updates" means silent automatic checks followed
   by separate user-initiated **Download Update** and **Restart & Apply** actions,
   not silent download or forced restart.
 - [x] Deliver in stages beginning with macOS, while requiring supported
   self-update distributions on macOS, Windows, and Linux before declaring the
   initiative complete. DEB/RPM remain notification-only; portable Linux is a
   required completion stage.
-- [ ] Confirm use of an Ed25519 signing key held in a protected CI secret, with
+- [x] Use an Ed25519 signing key held in a protected CI secret, with
   the public key embedded in the application.
-- [ ] Confirm availability or procurement of a Windows Authenticode certificate.
-  Windows remains notification-only until it is provisioned, and the initiative
-  cannot be declared complete in that state.
-- [ ] Confirm whether **Skip This Version** must survive application restarts.
-  The recommended default is yes, implemented as backend-owned update state
-  that is not part of portable settings export.
-- [ ] Confirm use of the separately deployed `luxury-yacht/site` repository for
+- [x] Windows Authenticode certificate procurement is in progress. Windows
+  remains notification-only until the certificate is provisioned, and the
+  initiative cannot be declared complete in that state.
+- [x] **Skip This Version** survives application restarts as backend-owned update
+  state that is not part of portable settings export.
+- [x] Use the separately deployed `luxury-yacht/site` repository for
   fixed channel manifests. That cross-repository publication step and its
   server cache policy must be implemented before enabling production checks.
+  The site-update job must prove that `RELEASES_REPO_TOKEN` has Contents write
+  and Actions read access to the private site repository before its first
+  candidate commit. GitHub requires Actions read
+  permission to list private-repository workflow runs; see
+  [workflow-run API permissions](https://docs.github.com/en/rest/actions/workflow-runs).
   The existing release job invokes a marketing-site version update with a
   repository token, but that helper intentionally returns without publishing
   beta versions. Channel-manifest publication must therefore be a separate
@@ -100,15 +105,13 @@ Resolve every unchecked decision with the project owner before implementation:
 
 The application already pins Wails `v3.0.0-beta.8`, and that pinned module
 contains `app.Updater`, the GitHub and endpoint providers, updater publishing
-commands, the built-in updater window, and the helper-mode swap. Its public API
-supports the core update flow, but production enablement also requires the
-application-owned staging cleanup capability defined below; beta.8 does not
-expose enough ownership information to clean a crash-interrupted download
-safely (`go.mod:15`; pinned dependency sources
+commands, the built-in updater window, and the helper-mode swap. No Wails
+dependency change is required for the planned update and application-owned
+temporary-directory flow (`go.mod:15`; pinned dependency sources
 `pkg/updater/updater.go`, `pkg/updater/providers/github/github.go`,
 `pkg/updater/providers/endpoint/endpoint.go`,
 `internal/commands/updater_tool.go`, `pkg/updater/window.go`, and
-`pkg/updater/helper.go`; `pkg/updater/download.go:24-40`).
+`pkg/updater/helper.go`).
 
 The existing application updater is notification-only:
 
@@ -395,11 +398,15 @@ client-side channel enforcement (`pkg/updater/updater.go:212-216`;
 `pkg/updater/types.go:94-101`;
 `pkg/updater/providers/endpoint/endpoint.go:38-55,148-150,270-309`).
 
-The site implementation must add the static update files to its build output and
-define a cache policy that permits prompt channel rollback. The exact URLs and
-response headers become release-contract constants covered by tests. Versioned
-update artifacts remain assets of their ordinary immutable GitHub release tag;
-each manifest contains absolute URLs to those versioned artifacts.
+The site implementation must add the static update files to its build output.
+Serve the fixed `stable.json` and `beta.json` pointers with
+`Cache-Control: no-store`; their bare URLs are the client contract and must not
+depend on request cache directives or query-string cache busting. Versioned
+candidate manifests may use `Cache-Control: public, max-age=31536000, immutable`.
+The exact URLs and response headers are release-contract constants covered by
+tests. Versioned update artifacts remain assets of their ordinary immutable
+GitHub release tag; each manifest contains absolute URLs to those versioned
+artifacts.
 
 Channel rules:
 
@@ -612,7 +619,10 @@ For each release, the release job must:
    channel manifest.
 7. Download every versioned artifact URL and confirm its bytes match the local
    file that passed verification.
-8. In the application repository's site-update job, use a dedicated
+8. Before writing the site repository, use `RELEASES_REPO_TOKEN` to query its
+   metadata, require `permissions.push: true`, and list runs for its deployment
+   workflow. Fail before the first candidate commit unless the same token proves
+   Contents write and Actions read access. Then use a dedicated
    `publishChannelManifest` helper to commit a versioned candidate manifest to
    `luxury-yacht/site` without changing the fixed live-channel file. The
    marketing-only `publishSiteVersion` remains separate and may continue to
@@ -620,23 +630,26 @@ For each release, the release job must:
    commit SHA.
 9. Wait for the site deployment workflow for that exact candidate commit to
    appear and complete successfully, polling every 10 seconds for at most 10
-   minutes. Then poll the candidate's public URL every 5 seconds for at most 5
-   minutes with `Cache-Control: no-cache` and a `site_commit=<sha>` query. Assert
-   the exact canonical version and channel, and download and verify every
-   referenced artifact again with the embedded public key. A failed or timed-out
-   candidate deploy/readback fails publication while leaving the live-channel
-   file unchanged.
+   minutes. Then poll the candidate's immutable, query-free public URL every 5
+   seconds for at most 5 minutes. Assert the exact canonical version and channel,
+   the candidate cache policy, and every referenced artifact with the embedded
+   public key. A failed or timed-out candidate deploy/readback fails publication
+   while leaving the live-channel file unchanged.
 10. In a second site commit, change the fixed live-channel file to the verified
-    candidate. Wait for deployment of that exact commit and repeat cache-busted
-    public readback before reporting the channel advanced.
+    candidate. Wait for deployment of that exact commit using the same bounded
+    polling, then poll the bare fixed URL without query parameters every 5
+    seconds for at most 5 minutes. Report `advanced` only when that client URL
+    serves the expected version and channel with `Cache-Control: no-store` and
+    no positive `Age` value.
 11. If live readback fails or times out, conditionally restore the preceding
     signed manifest only when the live file still names this job's candidate,
-    then wait for the rollback commit's deployment and public readback. Report
-    the final outcome as `advanced` only when the new manifest is publicly
-    verified, `rolled back` only when the prior manifest is publicly verified,
-    or `indeterminate` otherwise. Both rollback and indeterminate outcomes fail
-    the release workflow; indeterminate additionally blocks later channel
-    publication until an operator reconciles the public pointer.
+    then wait for the rollback commit's exact deployment and poll the same bare
+    fixed URL and response headers. Report the final outcome as `advanced` only
+    when the new manifest is publicly verified, `rolled back` only when the
+    prior manifest is publicly verified, or `indeterminate` otherwise. Both
+    rollback and indeterminate outcomes fail the release workflow;
+    `indeterminate` additionally blocks later channel publication until an
+    operator reconciles the public pointer.
 
 The channel manifest is the rollout pointer. Publishing it last prevents a
 client from observing an update whose artifact is not available yet. A release
@@ -648,9 +661,19 @@ for every release architecture.
 
 Channel publication is a single-writer operation. The site-update job owns
 candidate publication, exact-commit deployment waiting, live-pointer
-advancement, readback, and conditional rollback; one global
-`update-publication` workflow concurrency group with `cancel-in-progress: false`
-prevents beta releases and stable releases that also advance beta from racing.
+advancement, readback, and conditional rollback. Put that job, not the preceding
+release job or entire workflow, in one global `update-publication` concurrency
+group with `cancel-in-progress: false`; this prevents beta releases and stable
+releases that also advance beta from racing while allowing the immutable GitHub
+release to publish first.
+
+GitHub's default concurrency queue retains only the newest pending job, so an
+older site-update job cancelled before it starts is recorded as
+`superseded/not-attempted`: its GitHub release remains published, but that job
+made no channel mutation. It is not reported as `rolled back` or
+`indeterminate`. See
+[GitHub Actions concurrency](https://docs.github.com/en/actions/how-tos/write-workflows/choose-when-workflows-run/control-workflow-concurrency).
+
 The ordinary GitHub release may already be public when this job fails, so
 workflow status must distinguish release publication from channel rollout
 instead of claiming that a timeout means clients could not have observed the
@@ -658,6 +681,12 @@ new pointer. The current app workflow already places site work in a separate
 post-release job
 (`.github/workflows/release.yml:167-212`), while `release:site` currently stops
 after pushing the site repository (`cmd/project/site.go:69-72`).
+
+The current site deployment mechanism is GitHub Actions, not an external hosting
+provider: a push to `main` runs the site's `Deploy` workflow, builds the static
+site, and uses `rsync --delete` to publish it. Workflow runs expose the pushed
+commit as `head_sha`, which is the identity polled above. See the site
+[deployment workflow](https://github.com/luxury-yacht/site/blob/main/.github/workflows/deploy.yaml).
 
 ### Key rotation
 
@@ -694,30 +723,58 @@ are blocked:
   persistence contract in `main.go:65-80` and
   `docs/architecture/application-lifecycle.md:102-113`.
 
-Staging cleanup must use application ownership, never a global filename sweep.
-Before Stage 1 production enablement, pin a Wails release that lets the caller
-configure an application-owned staging parent or receive an ownership token as
-soon as the temporary directory is created. If no released version provides
-that contract, land the minimal capability upstream and update the pin before
-enabling updates. Wails beta.8 creates generic `wails-update-*` directories
-before calling the provider and exposes only the final successful
-`DownloadedPath`; an app crash during the provider call therefore leaves no
-safe app-specific identifier (`pkg/updater/download.go:24-40`;
-`pkg/updater/updater.go:432-438`).
+Staging cleanup uses the pinned beta.8 behavior without a Wails change. As the
+first operation in `main`, before `MaybeRunExecWrapper`, reporter setup, or
+`application.New`, create and validate a stable per-user Luxury Yacht directory
+under the operating system's original temporary directory. The directory must
+have the expected product-specific basename and ownership marker, be owned by
+the current user, reject symlinks, and use owner-only permissions where the
+platform supports them. Reuse a validated inherited `LUXURY_YACHT_TEMP_ROOT` to
+keep helper/relaunch paths idempotent rather than nesting a new root on every
+restart; when a platform launcher does not propagate that marker, derive the
+same stable per-user root from the original system temp directory. Set `TMPDIR`
+on Unix and both `TMP` and `TEMP` on Windows to that root. If setup or validation
+fails, start the app with updates disabled and a diagnostic; do not fall back to
+sweeping the shared operating-system temp directory.
 
-The coordinator configures a dedicated Luxury Yacht staging parent and may
-sweep only validated children of that parent after single-instance ownership is
-established. It must never enumerate and remove every `wails-update-*` directory
-or log under the operating-system temporary directory because those names are
-shared by unrelated Wails applications. After `StateReady`, it validates that
-`DownloadedPath` is inside the owned parent and atomically persists the exact
-staging directory as `preparedUpdate`. A normal quit that is not applying the
-update removes that exact directory and clears the record. A crash leaves the
-record for exact-path startup cleanup; a malformed, symlink-escaped, or
-out-of-root record is logged and cleared without recursive deletion. Wails may
-discard a successful staging directory before the next download, but that
-in-memory cleanup does not cover a process exit
-(`pkg/updater/updater.go:281-285,504-514`).
+This process-global temp-directory choice is intentional. Wails calls
+`os.MkdirTemp("", "wails-update-*")`, and Go resolves an empty parent through
+`os.TempDir`, so staging directories are created below the owned root
+(`pkg/updater/download.go:24-40`;
+[Go `os.TempDir`](https://pkg.go.dev/os#TempDir)). Wails also places the helper
+log below `os.TempDir` and passes the environment to the helper
+(`pkg/updater/updater.go:408-421`); its successful-swap cleanup checks the
+staging basename rather than requiring a particular parent
+(`pkg/updater/helper.go:193-203`). The exec wrapper, credential helpers, Wails
+helper, and other directly spawned child processes intentionally inherit the
+same temp root. A relaunched application runs the same first-step setup and must
+not depend on platform launch services preserving custom environment variables.
+Startup cleanup therefore touches only direct `wails-update-*` directories and
+`wails-update-<pid>.log` files inside the validated Luxury Yacht root; it never
+removes other child-process temp files
+(`backend/exec_wrapper.go:41-49`; `backend/auth_providers.go:137-141`).
+
+The unrecorded leak window is limited but non-zero. `download` attempts to remove
+its directory on returned errors and while its cleanup defer is active,
+including a panic in the provider call; `DownloadAndInstall` explicitly attempts
+the same on verification, finalization, and extraction errors. Those removals
+are best-effort because their errors are discarded
+(`pkg/updater/download.go:34-40`; `pkg/updater/updater.go:285-323`). An orphan
+without a `preparedUpdate` record can therefore remain when immediate removal
+fails, when abrupt process termination bypasses defers between `MkdirTemp` and
+`StateReady`, or when a panic occurs after `download` returns successfully but
+before `StateReady`. The owned-root startup sweep retries those narrower cases.
+
+After `StateReady`, validate that `DownloadedPath` is a direct child of the
+owned root and atomically persist the exact staging directory as
+`preparedUpdate`. A normal quit that is not applying the update removes that
+exact directory and clears the record. On startup, reconcile `preparedUpdate`
+and `updateAttempt` first, exclude their exact active paths, and then sweep
+unreferenced updater-prefixed children of the owned root. A malformed,
+symlink-escaped, or out-of-root record is logged and cleared without recursive
+deletion. Wails may discard a successful staging directory before the next
+download, but that in-memory cleanup does not cover process exit
+(`pkg/updater/updater.go:281-285,432-438,504-514`).
 
 Before calling `Updater.Restart` on macOS, Windows, or portable Linux, persist a
 backend-owned `updateAttempt` containing the canonical source and target
@@ -801,13 +858,18 @@ fetcher, custom version parser, and obsolete tests in one affected-path change.
 
 ### Ordering and readiness
 
+- Process temp-root setup is the first operation in `main`, before exec-wrapper
+  dispatch and `application.New`, so normal, helper, wrapper, and relaunched
+  modes share one validated root.
 - `application.New` and build/distribution eligibility resolution must run
   before the single permitted `app.Updater.Init` call.
 - Eligible released desktop builds initialize Wails once; development, server,
   or invalid-version builds and builds with a missing or malformed distribution
   identity skip `Init` and remain in the application-owned disabled state.
 - Persisted `updateAttempt` and `preparedUpdate` cleanup is reconciled after
-  single-instance ownership and before updater initialization or any check.
+  single-instance ownership; only then does the coordinator sweep unreferenced
+  updater-prefixed children of the owned temp root, before updater initialization
+  or any check.
 - On eligible builds, updater configuration with `WindowNone` and event
   subscription must finish before any check.
 - No UI event or update surface opens during `ServiceStartup`.
@@ -889,6 +951,13 @@ Yacht so tests can use an offline fake provider and deterministic clock.
 Add failing tests for:
 
 - configuration before checking;
+- process temp-root setup runs before wrapper/helper/application dispatch, sets
+  `TMPDIR` or `TMP`/`TEMP`, reuses an inherited validated root without nesting,
+  and disables updates without falling back to shared-temp cleanup when setup
+  fails;
+- the exec wrapper, credential helpers, and updater helper inherit the owned
+  temp root, while a relaunched app resolves the same root whether or not its
+  platform launcher preserves the custom environment;
 - eligible released builds call Wails `Init` exactly once, while development,
   server, or invalid-version builds and builds with a missing or malformed
   distribution identity never call it or any other Wails updater method;
@@ -933,9 +1002,11 @@ Add failing tests proving:
 - `preparedUpdate` records only a normalized exact path inside the
   application-owned staging parent, normal quit removes it, restart transfers
   it atomically to `updateAttempt`, and next-launch reconciliation removes it;
-  and
-- malformed, symlink-escaped, out-of-root, unrelated generic Wails, and active
-  attempt paths are never recursively deleted.
+- abrupt pre-ready orphan directories inside the owned root are swept even
+  without a `preparedUpdate` record; and
+- malformed, symlink-escaped, out-of-root, active-attempt, and non-updater child
+  paths are never recursively deleted, and updater-prefixed paths in the shared
+  operating-system temp directory remain untouched.
 
 Only after these pass, remove the custom GitHub release fetch and numeric
 version parser.
@@ -989,10 +1060,14 @@ extractor directly.
 Add workflow/helper tests proving that beta publication does not pass through
 the marketing helper's beta no-op; candidate publication leaves the fixed live
 file unchanged; the exact candidate and live site commit deployments are
-awaited; public reads are cache-busted and bounded; manifest publication is
-globally serialized; rollback is conditional on the expected live candidate;
-and every timeout/failure resolves to `rolled back` or `indeterminate` rather
-than making an unsupported no-rollout claim.
+awaited; the same site token proves `permissions.push` and can list deployment
+runs before any write; candidate reads use their immutable query-free URLs; live
+and rollback reads use the bare fixed URLs and enforce `Cache-Control: no-store`
+plus no positive `Age`; all polling is bounded; manifest publication is globally
+serialized; a cancelled pending job is `superseded/not-attempted`; rollback is
+conditional on the expected live candidate; and every post-mutation
+timeout/failure resolves to `rolled back` or `indeterminate` rather than making
+an unsupported no-rollout claim.
 
 Then update the platform tasks and release workflow to build, platform-sign,
 archive, validate the extracted payload, upload, manifest-sign, verify, publish
@@ -1027,16 +1102,20 @@ artifacts.
 - Regenerate and verify Wails bindings when backend DTOs or methods change.
 - Generate manifests from explicit file arguments and prove directory, glob,
   installer, package, duplicate, and ambiguous inputs fail before signing.
-- Prove the pinned Wails version provides the application-owned staging-parent
-  or early ownership-token contract before enabling production updates; exercise
-  crash-interrupted-download cleanup without scanning generic Wails paths.
+- Prove beta.8 creates staging and helper logs below the configured process temp
+  root on Unix and Windows. Exercise returned-error cleanup and startup retry,
+  abrupt pre-ready orphan cleanup, ready-state cleanup, inherited child
+  environments, and refusal to scan shared-temp or non-updater paths.
 - Run `wails3 updater verify` against a tampered artifact and wrong public key
   and prove both fail closed.
-- For both channels, wait for the exact candidate and live site commit
-  deployments, read their public manifests back with cache-busting, verify the
-  channel labels and exact expected version, and reverify every downloaded
-  artifact. Exercise successful rollback and an indeterminate deployment/readback
-  result without allowing a later publication to race it.
+- With the same site token used for publication, prove Contents write and
+  Actions read before mutation. For both channels, wait for the exact candidate
+  and live site commit deployments, read candidates through their immutable
+  query-free URLs, and read live/rollback state through the same bare fixed URLs
+  clients use. Verify version, channel, required cache headers, and every
+  downloaded artifact. Exercise successful rollback, a superseded pending job,
+  and an indeterminate deployment/readback result without allowing a later
+  publication to race it.
 - Run the full `mise exec -- wails3 task qc:prerelease` gate on the latest
   worktree, then inspect formatting changes.
 
@@ -1054,9 +1133,12 @@ initiative complete, rerun the combined matrix across every target:
   and launch failures;
 - Windows amd64 and arm64: verify per-user install identity,
   every invalid marker form, Authenticode, executable swap without elevation,
-  Apps & Features version reconciliation, relaunch, uninstall, and machine-scope
-  reason copy, migration-page action, side-by-side installer refusal, settings
-  preservation, and notification-only fallback;
+  Apps & Features version reconciliation, relaunch, and uninstall; assert the
+  recursive NSIS uninstall leaves no installation directory even when
+  `luxury-yacht.exe.old.*` or `luxury-yacht.exe.bak` is present; then verify
+  machine-scope reason copy, migration-page action, side-by-side installer
+  refusal, settings preservation, and notification-only fallback
+  (`build/windows/nsis/project.nsi:103-116`);
 - Linux amd64 and arm64 portable installs: verify valid installation identity,
   invalid-marker and package-owned rejection, bare-binary or single-entry-tar
   replacement without elevation, dependency diagnostics, relaunch, settings,
@@ -1082,12 +1164,12 @@ exactly one process scheduler, download, helper, persistence flush, and relaunch
 
 ### Rollout
 
-- [ ] **Stage 0 — shared foundation:** resolve the remaining decision gates;
+- [ ] **Stage 0 — shared foundation:** with the owner decisions resolved,
   implement the process-owned coordinator, shell actions, version/channel
-  identity, updater signing, explicit artifact selection, application-owned
-  crash-cleanable staging, two-phase static-manifest publication, and
-  notification-only eligibility fallback without enabling an unresolved
-  distribution.
+  identity, updater signing, explicit artifact selection, the inherited
+  application-owned process temp root and abrupt-orphan cleanup, two-phase
+  static-manifest publication, and notification-only eligibility fallback
+  without enabling an unresolved distribution.
 - [ ] **Stage 1 — macOS:** publish updater-capable arm64 and amd64 betas through
   the static beta manifest, prove beta-to-beta update and emergency channel
   rollback, then publish stable only after stable-to-stable, beta-to-stable,
@@ -1131,9 +1213,14 @@ exactly one process scheduler, download, helper, persistence flush, and relaunch
 - Available and ready state are explicitly process-local; quitting without
   applying removes the exact owned staging directory, and the next launch
   rechecks and requires renewed download consent rather than promising resume.
-- Crash-interrupted downloads are cleaned only through an application-owned
-  staging parent or ownership token supplied by the pinned Wails version; the
-  app never sweeps generic `wails-update-*` directories or logs.
+- Before any wrapper, helper, or application dispatch, the process configures a
+  validated per-user temp root that beta.8 uses for staging and helper logs;
+  direct child processes intentionally inherit it, and a relaunched app derives
+  or reuses the same root without nesting.
+- Returned update errors attempt immediate cleanup, and startup retries failed
+  removal and removes abrupt pre-ready updater orphans only from that owned
+  root. Shared operating-system temp paths, active attempt paths, and
+  non-updater child files are never swept.
 - Every ineligible installation renders its exact platform explanation and
   recovery action; no recovery action starts Wails staging.
 - Stable builds never receive a prerelease; beta builds receive newer beta or
@@ -1152,7 +1239,9 @@ exactly one process scheduler, download, helper, persistence flush, and relaunch
   log is absent; a different manually installed version supersedes stale attempt
   state without a false failure.
 - Windows self-update works without elevation from the approved per-user
-  installation marker and preserves correct uninstall metadata.
+  installation marker and preserves correct uninstall metadata; recursive NSIS
+  uninstall removes the complete installation directory, including any
+  best-effort Wails `.old.*` or `.bak` leftovers.
 - Machine-scope Windows users receive the defined per-user migration action;
   the installer prevents side-by-side scope installations and preserves
   user-profile settings through migration.
@@ -1176,9 +1265,14 @@ exactly one process scheduler, download, helper, persistence flush, and relaunch
   marketing version helper, and the site-update job cannot report a channel
   advanced with missing, ambiguous, unsupported, unsigned, unverifiable, or
   stale publicly served artifacts or manifest contents.
+- Before its first site write, the publication token proves Contents write and
+  Actions read access to the private site repository.
 - Channel publication waits for exact site commits, advances candidate then
-  live, serializes all manifest writers, and reports only publicly proven
-  `advanced` or `rolled back` outcomes; an unproven result is `indeterminate`
-  and blocks later publication until reconciled.
+  live, serializes all manifest writers, and verifies live/rollback state through
+  the same bare fixed URL clients use with the required no-store policy. It
+  reports only publicly proven `advanced` or `rolled back` outcomes; an unproven
+  result is `indeterminate` and blocks later publication until reconciled. A
+  pending site job cancelled before execution is explicitly
+  `superseded/not-attempted`, not a failed rollout.
 - No private signing material is committed, logged, embedded, or persisted by
   the application.
