@@ -89,20 +89,26 @@ Resolve every unchecked decision with the project owner before implementation:
 - [ ] Confirm use of the separately deployed `luxury-yacht/site` repository for
   fixed channel manifests. That cross-repository publication step and its
   server cache policy must be implemented before enabling production checks.
-  The existing release job already invokes a site update with a repository
-  token (`cmd/project/site.go:11-32`;
+  The existing release job invokes a marketing-site version update with a
+  repository token, but that helper intentionally returns without publishing
+  beta versions. Channel-manifest publication must therefore be a separate
+  release helper that handles both stable and beta; it must not reuse or inherit
+  the beta no-op from `publishSiteVersion` (`cmd/project/site.go:11-32`;
   `.github/workflows/release.yml:196-212`).
 
 ## Current state
 
 The application already pins Wails `v3.0.0-beta.8`, and that pinned module
 contains `app.Updater`, the GitHub and endpoint providers, updater publishing
-commands, the built-in updater window, and the helper-mode swap. No Wails
-dependency change is currently required (`go.mod:15`; pinned dependency sources
+commands, the built-in updater window, and the helper-mode swap. Its public API
+supports the core update flow, but production enablement also requires the
+application-owned staging cleanup capability defined below; beta.8 does not
+expose enough ownership information to clean a crash-interrupted download
+safely (`go.mod:15`; pinned dependency sources
 `pkg/updater/updater.go`, `pkg/updater/providers/github/github.go`,
 `pkg/updater/providers/endpoint/endpoint.go`,
 `internal/commands/updater_tool.go`, `pkg/updater/window.go`, and
-`pkg/updater/helper.go`).
+`pkg/updater/helper.go`; `pkg/updater/download.go:24-40`).
 
 The existing application updater is notification-only:
 
@@ -158,16 +164,30 @@ exists.
 
 Automatic work is process-scoped, not window-scoped or cluster-scoped:
 
-1. Configure the updater and subscribe to its events before `application.Run`.
+1. For an eligible released desktop build, configure the updater and subscribe
+   to its events before `application.Run`.
 2. Start the coordinator only after the first `WindowRuntimeReady`, preserving
    the existing readiness guarantee in `backend/app_lifecycle.go:42-65`.
 3. Run one silent `Updater.Check` immediately, then repeat every six hours.
 4. Suppress automatic checks for development builds, server builds, and builds
-   without a valid release version or supported distribution identity.
+   without a valid release version or valid distribution identity. A valid
+   notification-only DEB, RPM, or machine-scope installation still checks so it
+   can offer the defined manual recovery action; eligibility blocks staging,
+   not discovery.
 5. Cancel the scheduler during service shutdown.
 6. Allow only one check/download/install flow at a time. A manual check joins,
    focuses, or reports the existing flow rather than starting a competing state
    machine.
+
+Development builds, server builds, builds with an invalid release version, and
+builds without a valid distribution identity do not call `app.Updater.Init` at
+all. Their coordinator enters an application-owned, non-error `disabled` state
+and never calls Wails `Check`, `DownloadAndInstall`, or `Restart`. A manual shell
+action that is reachable in a disabled desktop build opens About with the
+disabled explanation rather than surfacing Wails `ErrNotConfigured`; server
+builds expose no update shell action. Eligible released builds call `Init`
+exactly once because the pinned updater rejects a second initialization
+(`pkg/updater/updater.go:106-115`; `pkg/updater/config.go:58-74`).
 
 Do not configure Wails `CheckInterval` for this behavior. In the pinned module,
 each interval tick calls `CheckAndInstall`; that method opens a window, calls
@@ -206,7 +226,9 @@ The shell action contract is:
 
 1. **Check for Updates…** calls only the coordinator's check command. The manual
    path opens About to its update section so checking, current, available, and
-   error results have an immediate visible owner.
+   error results have an immediate visible owner. Native-menu presentation
+   reuses `ShowAbout` and its `emitCurrentWindowEvent("open-about")` path so only
+   the focused workspace peer opens About (`backend/app_settings.go:1400-1406`).
 2. An automatic result never opens a modal. When a release is available, the
    status chip appears; activating it opens the same About update section and
    does not download.
@@ -233,6 +255,13 @@ All labels and actions must be shared across the header, About, native menu, and
 command palette. Frontend state reads remain behind `appStateAccess`; updater
 commands use the explicit backend API allowlist.
 
+Available and ready state are process-local Wails state, not a durable download
+queue. If the application exits without invoking `Updater.Restart`, the next
+process rechecks and, after renewed user consent, redownloads the update; the UI
+must not promise that an available or prepared update resumes across launches.
+Wails stores `pending`, `resolved`, and `stagingDir` only on the live `Updater`
+instance (`pkg/updater/updater.go:26-32`).
+
 ### Status and recovery presentation
 
 The coordinator exposes a typed semantic status, optional bounded progress,
@@ -251,6 +280,7 @@ produce a user-visible update surface (`pkg/updater/types.go:12-33,79-90`).
 
 | Semantic status | Canonical About copy | Primary action |
 | --- | --- | --- |
+| `disabled` | **Automatic updates are unavailable in this build.** | None |
 | `checking` | **Checking for updates…** | None; About may close |
 | `current` | **Luxury Yacht is up to date.** | None |
 | `available` | **Luxury Yacht {version} is available.** | **Download Update** when eligible; otherwise the reason-specific recovery action below |
@@ -267,7 +297,8 @@ Wails reports written and total bytes. Expose a percentage only when total is
 positive and written is between zero and total; otherwise expose no percentage.
 Never invent progress during verification or preparation. Release notes remain
 visible for `available`, active preparation states, `ready`, and recoverable
-errors (`pkg/updater/types.go:79-84`).
+errors. Wails carries release notes on `Release.Notes` and reports byte progress
+separately (`pkg/updater/types.go:35-49,79-84`).
 
 Eligibility is backend-owned, but user-facing copy and action labels live in
 the one frontend presentation mapping:
@@ -350,6 +381,11 @@ Create two fixed manifests through that existing `luxury-yacht/site` deployment:
 - `https://luxury-yacht.app/updates/stable.json`
 - `https://luxury-yacht.app/updates/beta.json`
 
+Two-phase publication first writes the immutable candidate URL
+`https://luxury-yacht.app/updates/candidates/{channel}/{version}.json`; clients
+continue to read only the fixed channel URLs. Candidate files are retained for
+audit and rollback evidence and never act as client rollout pointers.
+
 Configure one endpoint URL,
 `https://luxury-yacht.app/updates/{{channel}}.json`, and set
 `endpoint.Config.Channel` to the build's normalized `stable` or `beta` channel.
@@ -411,11 +447,16 @@ For each architecture:
 4. Create the archive with `ditto -c -k --keepParent <app> <archive>`. Do not use
    `--sequesterRsrc`; reject any archive containing a sibling `__MACOSX`
    directory because it violates Wails' exactly-one-top-level-entry contract.
-5. Extract the ZIP through the same Wails extraction path used by the client,
-   assert that the only top-level entry is the `.app`, and rerun the signature,
-   Gatekeeper, and stapler validations against that extracted bundle. Signing
-   the source bundle is not evidence that the bytes and metadata survive the
-   updater's extraction path.
+5. Exercise the exact Wails extraction path through a repository-owned
+   black-box conformance helper: construct `updater.New` with a test host and
+   local provider, call `Check` and `DownloadAndInstall`, and obtain the
+   extracted payload through `DownloadedPath`. Assert that the result is the
+   only top-level `.app`, then rerun the signature, Gatekeeper, and stapler
+   validations against that bundle. Wails' own ZIP-bundle test demonstrates
+   this public entry path (`pkg/updater/updater_test.go:556-625`). Do not
+   substitute a direct `ditto -x -k` extraction check, which would validate a
+   different extractor. Signing the source bundle is not evidence that bytes
+   and metadata survive the updater's runtime extraction path.
 6. Give the ZIP a filename containing `darwin` and the Go architecture so the
    manifest and runtime agree on identity.
 7. Publish the ZIP alongside the existing DMG; the DMG remains the manual
@@ -571,11 +612,31 @@ For each release, the release job must:
    channel manifest.
 7. Download every versioned artifact URL and confirm its bytes match the local
    file that passed verification.
-8. Update the applicable static manifest file in `luxury-yacht/site` last.
-9. Read the public channel-manifest URL back after deployment, assert the exact
-   canonical version and expected channel, then download and verify every
-   referenced artifact again with the embedded public key. A stale or mismatched
-   response fails the release.
+8. In the application repository's site-update job, use a dedicated
+   `publishChannelManifest` helper to commit a versioned candidate manifest to
+   `luxury-yacht/site` without changing the fixed live-channel file. The
+   marketing-only `publishSiteVersion` remains separate and may continue to
+   skip beta versions (`cmd/project/site.go:22-26`). Capture the exact site
+   commit SHA.
+9. Wait for the site deployment workflow for that exact candidate commit to
+   appear and complete successfully, polling every 10 seconds for at most 10
+   minutes. Then poll the candidate's public URL every 5 seconds for at most 5
+   minutes with `Cache-Control: no-cache` and a `site_commit=<sha>` query. Assert
+   the exact canonical version and channel, and download and verify every
+   referenced artifact again with the embedded public key. A failed or timed-out
+   candidate deploy/readback fails publication while leaving the live-channel
+   file unchanged.
+10. In a second site commit, change the fixed live-channel file to the verified
+    candidate. Wait for deployment of that exact commit and repeat cache-busted
+    public readback before reporting the channel advanced.
+11. If live readback fails or times out, conditionally restore the preceding
+    signed manifest only when the live file still names this job's candidate,
+    then wait for the rollback commit's deployment and public readback. Report
+    the final outcome as `advanced` only when the new manifest is publicly
+    verified, `rolled back` only when the prior manifest is publicly verified,
+    or `indeterminate` otherwise. Both rollback and indeterminate outcomes fail
+    the release workflow; indeterminate additionally blocks later channel
+    publication until an operator reconciles the public pointer.
 
 The channel manifest is the rollout pointer. Publishing it last prevents a
 client from observing an update whose artifact is not available yet. A release
@@ -584,6 +645,19 @@ delivery stage is absent, duplicated, ambiguously named, unsupported, unsigned,
 unverifiable, or served with stale channel contents. Final completion requires
 the manifests and release contract to cover macOS, Windows, and portable Linux
 for every release architecture.
+
+Channel publication is a single-writer operation. The site-update job owns
+candidate publication, exact-commit deployment waiting, live-pointer
+advancement, readback, and conditional rollback; one global
+`update-publication` workflow concurrency group with `cancel-in-progress: false`
+prevents beta releases and stable releases that also advance beta from racing.
+The ordinary GitHub release may already be public when this job fails, so
+workflow status must distinguish release publication from channel rollout
+instead of claiming that a timeout means clients could not have observed the
+new pointer. The current app workflow already places site work in a separate
+post-release job
+(`.github/workflows/release.yml:167-212`), while `release:site` currently stops
+after pushing the site repository (`cmd/project/site.go:69-72`).
 
 ### Key rotation
 
@@ -620,12 +694,38 @@ are blocked:
   persistence contract in `main.go:65-80` and
   `docs/architecture/application-lifecycle.md:102-113`.
 
+Staging cleanup must use application ownership, never a global filename sweep.
+Before Stage 1 production enablement, pin a Wails release that lets the caller
+configure an application-owned staging parent or receive an ownership token as
+soon as the temporary directory is created. If no released version provides
+that contract, land the minimal capability upstream and update the pin before
+enabling updates. Wails beta.8 creates generic `wails-update-*` directories
+before calling the provider and exposes only the final successful
+`DownloadedPath`; an app crash during the provider call therefore leaves no
+safe app-specific identifier (`pkg/updater/download.go:24-40`;
+`pkg/updater/updater.go:432-438`).
+
+The coordinator configures a dedicated Luxury Yacht staging parent and may
+sweep only validated children of that parent after single-instance ownership is
+established. It must never enumerate and remove every `wails-update-*` directory
+or log under the operating-system temporary directory because those names are
+shared by unrelated Wails applications. After `StateReady`, it validates that
+`DownloadedPath` is inside the owned parent and atomically persists the exact
+staging directory as `preparedUpdate`. A normal quit that is not applying the
+update removes that exact directory and clears the record. A crash leaves the
+record for exact-path startup cleanup; a malformed, symlink-escaped, or
+out-of-root record is logged and cleared without recursive deletion. Wails may
+discard a successful staging directory before the next download, but that
+in-memory cleanup does not cover a process exit
+(`pkg/updater/updater.go:281-285,504-514`).
+
 Before calling `Updater.Restart` on macOS, Windows, or portable Linux, persist a
 backend-owned `updateAttempt` containing the canonical source and target
 versions, start time, platform, architecture, distribution identity, and current
-process ID, plus the validated immutable recovery target for that release. If
-this persistence fails, do not quit or call `Restart`; return to `restart-error`
-with a visible retry action.
+process ID, plus the exact validated staging directory and immutable recovery
+target for that release. Transfer ownership from `preparedUpdate` to
+`updateAttempt` atomically. If this persistence fails, do not quit or call
+`Restart`; return to `restart-error` with a visible retry action.
 
 Wails derives the helper log path from the parent process ID
 (`pkg/updater/updater.go:411-413`), so the next normal launch reads the exact
@@ -642,6 +742,11 @@ the record before starting a new automatic check:
   present a stale failure; and
 - if an expected helper log is absent, report the failed attempt without
   inventing a cause.
+
+After each reconciliation outcome, remove only the exact validated staging
+directory recorded on the attempt and clear that path with the attempt. The
+removal is best-effort because a successful helper normally removes its own
+staging directory (`pkg/updater/helper.go:193-203`).
 
 This contract covers restored-backup relaunches and failures that leave the old
 application closed until the user starts it manually on every self-updating
@@ -664,8 +769,12 @@ both outcomes. This is startup rollback, not general product rollback.
 
 Release rollback rules:
 
-- before client installation, restore the channel pointer to the prior signed
-  manifest to stop further rollout;
+- before client installation, use the publication protocol's conditional
+  rollback to restore the channel pointer to the prior signed manifest and
+  confirm it by exact-commit deployment plus public readback;
+- never describe a failed or timed-out readback as proof that rollout did not
+  advance; record `indeterminate` and block later publication until the public
+  pointer is reconciled;
 - never use the updater to downgrade a client that already installed the bad
   version;
 - ship a higher corrective version for post-launch defects; and
@@ -692,12 +801,21 @@ fetcher, custom version parser, and obsolete tests in one affected-path change.
 
 ### Ordering and readiness
 
-- `application.New` must run before `app.Updater.Init`.
-- Updater configuration with `WindowNone` and event subscription must finish
-  before any check.
+- `application.New` and build/distribution eligibility resolution must run
+  before the single permitted `app.Updater.Init` call.
+- Eligible released desktop builds initialize Wails once; development, server,
+  or invalid-version builds and builds with a missing or malformed distribution
+  identity skip `Init` and remain in the application-owned disabled state.
+- Persisted `updateAttempt` and `preparedUpdate` cleanup is reconciled after
+  single-instance ownership and before updater initialization or any check.
+- On eligible builds, updater configuration with `WindowNone` and event
+  subscription must finish before any check.
 - No UI event or update surface opens during `ServiceStartup`.
 - The first runtime-ready workspace starts the once-only process scheduler.
 - Later workspace windows consume broadcast state but do not create schedulers.
+- A native **Check for Updates…** action uses `ShowAbout`'s current-window event
+  after entering the process-owned check, so the focused peer opens About and
+  other peers only consume the shared state broadcast.
 - Manual actions from different workspace windows enter one coordinator-owned
   single-flight. Do not call concurrent `CheckAndInstall`; beta.8 replaces its
   current window session when another call begins
@@ -715,8 +833,9 @@ fetcher, custom version parser, and obsolete tests in one affected-path change.
   `pkg/application/application.go:42-47`;
   `pkg/application/single_instance_darwin.go:65-70`). Platform smoke tests must
   still prove the installed signed application relaunches exactly once.
-- Shutdown cancels the scheduler before service teardown releases application
-  state.
+- Shutdown cancels the scheduler and removes an exact owned `preparedUpdate`
+  staging directory unless restart has atomically transferred it to
+  `updateAttempt`, then service teardown releases application state.
 
 ### Circular-dependency boundary
 
@@ -770,6 +889,11 @@ Yacht so tests can use an offline fake provider and deterministic clock.
 Add failing tests for:
 
 - configuration before checking;
+- eligible released builds call Wails `Init` exactly once, while development,
+  server, or invalid-version builds and builds with a missing or malformed
+  distribution identity never call it or any other Wails updater method;
+- a reachable manual action in a disabled desktop build returns the app-owned
+  disabled snapshot rather than `ErrNotConfigured`;
 - once-only startup after first runtime readiness;
 - immediate and periodic silent checks;
 - a manual check that never downloads by itself;
@@ -779,6 +903,8 @@ Add failing tests for:
 - single-flight manual/background interaction;
 - simultaneous actions from different workspace windows;
 - final-workspace close cancellation without an updater-window orphan;
+- process restart discards available/ready state and requires a new check and
+  explicit download consent rather than claiming download resumption;
 - no-update, available, downloading, verifying, installing, ready, and error
   projection;
 - invalid early download/restart rejection; and
@@ -803,7 +929,13 @@ Add failing tests proving:
 - persisted `updateAttempt` state on macOS, Windows, and portable Linux reports
   success, restored-old-version failure, missing-log failure, superseded-version
   cleanup, persistence failure before quit, and sanitized size-bounded
-  helper-log diagnostics.
+  helper-log diagnostics;
+- `preparedUpdate` records only a normalized exact path inside the
+  application-owned staging parent, normal quit removes it, restart transfers
+  it atomically to `updateAttempt`, and next-launch reconciliation removes it;
+  and
+- malformed, symlink-escaped, out-of-root, unrelated generic Wails, and active
+  attempt paths are never recursively deleted.
 
 Only after these pass, remove the custom GitHub release fetch and numeric
 version parser.
@@ -833,6 +965,8 @@ Add failing frontend and menu tests before changing the surfaces:
   for machine-scope identity;
 - manual check labels and actions are aligned across native menu and command
   palette surfaces;
+- native manual check reuses `ShowAbout` so only the focused workspace opens the
+  modal while all peers receive the shared state;
 - automatic failures remain non-modal; and
 - focus/keyboard ownership remains with the existing shared About modal
   infrastructure.
@@ -847,12 +981,25 @@ extensions, platform/architecture completeness, manifest URLs, channel
 selection and manifest labels, explicit-file-only input, duplicate rejection,
 macOS extracted-bundle validation, Windows raw-executable selection, Linux
 portable-payload selection, platform recovery targets, Windows migration-page
-availability, public-manifest readback, and publication ordering.
+availability, public-manifest readback, and publication ordering. The macOS
+test must enter extraction through `updater.New`, `Check`, and
+`DownloadAndInstall` and validate `DownloadedPath`, not invoke a second archive
+extractor directly.
+
+Add workflow/helper tests proving that beta publication does not pass through
+the marketing helper's beta no-op; candidate publication leaves the fixed live
+file unchanged; the exact candidate and live site commit deployments are
+awaited; public reads are cache-busted and bounded; manifest publication is
+globally serialized; rollback is conditional on the expected live candidate;
+and every timeout/failure resolves to `rolled back` or `indeterminate` rather
+than making an unsupported no-rollout claim.
 
 Then update the platform tasks and release workflow to build, platform-sign,
 archive, validate the extracted payload, upload, manifest-sign, verify, publish
-channel metadata through `luxury-yacht/site`, and read the public result back.
-Retain the existing manual installation artifacts.
+candidate then live channel metadata through `luxury-yacht/site`, wait for each
+exact deployment, read the public result back, and conditionally roll back when
+advancement cannot be verified. Retain the existing manual installation
+artifacts.
 
 ### Phase 6: affected-path cleanup
 
@@ -880,10 +1027,16 @@ Retain the existing manual installation artifacts.
 - Regenerate and verify Wails bindings when backend DTOs or methods change.
 - Generate manifests from explicit file arguments and prove directory, glob,
   installer, package, duplicate, and ambiguous inputs fail before signing.
+- Prove the pinned Wails version provides the application-owned staging-parent
+  or early ownership-token contract before enabling production updates; exercise
+  crash-interrupted-download cleanup without scanning generic Wails paths.
 - Run `wails3 updater verify` against a tampered artifact and wrong public key
   and prove both fail closed.
-- Read both public channel manifests back, verify their channel labels and exact
-  expected version, and reverify every downloaded artifact.
+- For both channels, wait for the exact candidate and live site commit
+  deployments, read their public manifests back with cache-busting, verify the
+  channel labels and exact expected version, and reverify every downloaded
+  artifact. Exercise successful rollback and an indeterminate deployment/readback
+  result without allowing a later publication to race it.
 - Run the full `mise exec -- wails3 task qc:prerelease` gate on the latest
   worktree, then inspect formatting changes.
 
@@ -931,7 +1084,8 @@ exactly one process scheduler, download, helper, persistence flush, and relaunch
 
 - [ ] **Stage 0 — shared foundation:** resolve the remaining decision gates;
   implement the process-owned coordinator, shell actions, version/channel
-  identity, updater signing, explicit artifact selection, static manifests, and
+  identity, updater signing, explicit artifact selection, application-owned
+  crash-cleanable staging, two-phase static-manifest publication, and
   notification-only eligibility fallback without enabling an unresolved
   distribution.
 - [ ] **Stage 1 — macOS:** publish updater-capable arm64 and amd64 betas through
@@ -963,12 +1117,23 @@ exactly one process scheduler, download, helper, persistence flush, and relaunch
   portable Linux installations all self-update on every release architecture.
 - Automatic checks never open a window when the app is current or the check
   fails.
+- Development, server, or invalid-version builds and builds with a missing or
+  malformed distribution identity never initialize or call Wails updater
+  methods; a reachable disabled desktop action reports the application-owned
+  disabled state without a Wails configuration error. Valid notification-only
+  distributions still check for releases but never stage them.
 - **Check for Updates…** and status-chip activation never download an update.
 - No update downloads without **Download Update**, and no restart occurs without
   **Restart & Apply**.
 - About renders the canonical status copy and actions, shows only real bounded
   progress, and may close and reopen during active work without cancelling or
   duplicating the process-owned operation.
+- Available and ready state are explicitly process-local; quitting without
+  applying removes the exact owned staging directory, and the next launch
+  rechecks and requires renewed download consent rather than promising resume.
+- Crash-interrupted downloads are cleaned only through an application-owned
+  staging parent or ownership token supplied by the pinned Wails version; the
+  app never sweeps generic `wails-update-*` directories or logs.
 - Every ineligible installation renders its exact platform explanation and
   recovery action; no recovery action starts Wails staging.
 - Stable builds never receive a prerelease; beta builds receive newer beta or
@@ -1003,10 +1168,17 @@ exactly one process scheduler, download, helper, persistence flush, and relaunch
   downgrade.
 - `GetAppInfo`, `app-update`, header status, About, native menus, and command
   palette share one backend-owned update state and action path.
+- Native **Check for Updates…** reuses the existing focused-window `ShowAbout`
+  path and never opens About in every workspace peer.
 - The legacy GitHub release client and custom version comparator are removed
   after consumer parity is proven.
-- The release job cannot advance a channel manifest with missing, ambiguous,
-  unsupported, unsigned, unverifiable, or stale publicly served artifacts or
-  manifest contents.
+- The dedicated manifest publisher handles stable and beta independently of the
+  marketing version helper, and the site-update job cannot report a channel
+  advanced with missing, ambiguous, unsupported, unsigned, unverifiable, or
+  stale publicly served artifacts or manifest contents.
+- Channel publication waits for exact site commits, advances candidate then
+  live, serializes all manifest writers, and reports only publicly proven
+  `advanced` or `rolled back` outcomes; an unproven result is `indeterminate`
+  and blocks later publication until reconciled.
 - No private signing material is committed, logged, embedded, or persisted by
   the application.
