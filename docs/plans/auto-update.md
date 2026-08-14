@@ -1,11 +1,11 @@
 # Automatic Application Updates
 
 Status: draft implementation plan. No updater installation or restart behavior
-is approved by this document alone. Resolve the approval gates below before
+is approved by this document alone. Resolve the decision gates below before
 changing code or release automation.
 
 This plan proposes superseding the notification-only decision in
-`docs/plans/wails-v3-follow-up-tracks.md:3-23` only after the approval gates below
+`docs/plans/wails-v3-follow-up-tracks.md:3-23` only after the decision gates below
 are accepted. Until then, the recorded notification-only behavior remains the
 project decision. When implementation is complete, move durable lifecycle and
 distribution contracts into `docs/architecture` and
@@ -14,13 +14,13 @@ section from the broader follow-up plan.
 
 ## Outcome
 
-Luxury Yacht should check for application updates automatically without
+Luxury Yacht will check for application updates automatically without
 interrupting normal work. When a supported installation has an update, the
-existing shell surfaces should offer a user-initiated Wails update flow that
+existing shell surfaces will offer a user-initiated Wails update flow that
 downloads, authenticates, stages, and applies the update through an explicit
 restart action.
 
-The proposed first release:
+The shared updater behavior:
 
 - checks silently after the first workspace window becomes runtime-ready and
   every six hours afterward;
@@ -41,33 +41,57 @@ The proposed first release:
 - retains a release-page notification path for unsupported or non-writable
   installation types.
 
-## Approval gates
+Delivery is deliberately staged. macOS is the first self-update target, but
+macOS completion is not plan completion. This initiative is complete only when
+all of the following are production-supported for every release architecture:
 
-Resolve these decisions with the project owner before implementation:
+- an eligible installed macOS `.app` updates through a signed/notarized app ZIP;
+- an eligible per-user Windows installation updates through a signed raw
+  executable; and
+- an explicitly identified, user-owned portable Linux installation updates
+  through a single binary or single-entry tar payload.
 
-1. Confirm that "automatic updates" means silent automatic checks followed by
-   separate user-initiated **Download Update** and **Restart & Apply** actions,
-   not silent download or forced restart.
-2. Confirm the initial platform policy:
-   - macOS: full self-update only after the installed bundle passes the runtime
-     eligibility preflight;
-   - Windows: full self-update only after per-user installation and signing
-     requirements are satisfied; and
-   - Linux DEB/RPM: notification and manual package-manager update only.
-3. Confirm use of an Ed25519 signing key held in a protected CI secret, with the
-   public key embedded in the application.
-4. Confirm whether a Windows Authenticode certificate is available. If it is
-   not, keep Windows on notification-only behavior until one is provisioned or
-   explicitly accept the unsigned-binary distribution risk.
-5. Confirm whether **Skip This Version** must survive application restarts. The
-   recommended default is yes, implemented as backend-owned update state that
-   is not part of portable settings export.
-6. Confirm use of the separately deployed `luxury-yacht/site` repository for
-   fixed channel manifests. That cross-repository publication step and its
-   server cache policy must be implemented before enabling production checks.
-   The existing release job already invokes a site update with a repository
-   token (`cmd/project/site.go:11-32`;
-   `.github/workflows/release.yml:196-212`).
+DEB and RPM remain package-manager-owned notification-only distributions. The
+cross-platform requirement is one first-class self-updating distribution on
+each desktop operating system, not in-place mutation of every installation
+format. AppImage and automatic package-repository management are outside this
+plan unless later added as separately approved distribution work.
+
+## Non-goals
+
+- silent download, forced restart, or an updater-owned modal workflow;
+- in-place replacement of files owned by DEB, RPM, or a machine-scope Windows
+  installer;
+- AppImage self-update, package-repository management, delta updates, or
+  automatic downgrade; and
+- treating completion of the macOS stage as completion of the cross-platform
+  initiative.
+
+## Decision gates
+
+Resolve every unchecked decision with the project owner before implementation:
+
+- [ ] Confirm that "automatic updates" means silent automatic checks followed
+  by separate user-initiated **Download Update** and **Restart & Apply** actions,
+  not silent download or forced restart.
+- [x] Deliver in stages beginning with macOS, while requiring supported
+  self-update distributions on macOS, Windows, and Linux before declaring the
+  initiative complete. DEB/RPM remain notification-only; portable Linux is a
+  required completion stage.
+- [ ] Confirm use of an Ed25519 signing key held in a protected CI secret, with
+  the public key embedded in the application.
+- [ ] Confirm availability or procurement of a Windows Authenticode certificate.
+  Windows remains notification-only until it is provisioned, and the initiative
+  cannot be declared complete in that state.
+- [ ] Confirm whether **Skip This Version** must survive application restarts.
+  The recommended default is yes, implemented as backend-owned update state
+  that is not part of portable settings export.
+- [ ] Confirm use of the separately deployed `luxury-yacht/site` repository for
+  fixed channel manifests. That cross-repository publication step and its
+  server cache policy must be implemented before enabling production checks.
+  The existing release job already invokes a site update with a repository
+  token (`cmd/project/site.go:11-32`;
+  `.github/workflows/release.yml:196-212`).
 
 ## Current state
 
@@ -141,8 +165,8 @@ Automatic work is process-scoped, not window-scoped or cluster-scoped:
 4. Suppress automatic checks for development builds, server builds, and builds
    without a valid release version or supported distribution identity.
 5. Cancel the scheduler during service shutdown.
-6. Allow only one check/download/install flow at a time. A manual check should
-   join, focus, or report the existing flow rather than start a competing state
+6. Allow only one check/download/install flow at a time. A manual check joins,
+   focuses, or reports the existing flow rather than starting a competing state
    machine.
 
 Do not configure Wails `CheckInterval` for this behavior. In the pinned module,
@@ -195,12 +219,75 @@ The shell action contract is:
    downloaded, verified, extracted, and staged.
 5. When staging reaches ready, the status chip and About expose
    **Restart & Apply**. Only that action may call `Updater.Restart`.
-6. Notification-only distributions expose **View Download Options**, which opens
-   the release/download page and never stages an artifact.
+6. Notification-only distributions expose the typed reason-specific recovery
+   action defined below, falling back to **View Download Options** only for an
+   unsupported distribution. Recovery actions open the release/download or
+   migration page and never stage an artifact.
+7. Any permitted About close path, including its close control, `Escape`, or
+   backdrop, closes only the presentation. It never cancels a process-owned
+   check, download, verification, or staging operation. The status chip keeps
+   showing the current state, and reopening About resumes from the same backend
+   snapshot. Only final-window application shutdown cancels in-process work.
 
 All labels and actions must be shared across the header, About, native menu, and
 command palette. Frontend state reads remain behind `appStateAccess`; updater
 commands use the explicit backend API allowlist.
+
+### Status and recovery presentation
+
+The coordinator exposes a typed semantic status, optional bounded progress,
+eligibility reason, and recovery target. React must not derive these from Wails
+event strings, filesystem paths, or platform checks. One frontend presentation
+mapping owns the following canonical About copy and primary actions:
+
+The coordinator maps Wails `StateChecking`, `StateUpToDate`, `StateAvailable`,
+`StateDownloading`, `StateVerifying`, `StateInstalling`, and `StateReady` to
+`checking`, `current`, `available`, `downloading`, `verifying`, `preparing`, and
+`ready`, respectively. Wails `StageCheck` errors map to `check-error`; download,
+verify, and install-stage errors map to `prepare-error`. `restart-error` and
+`apply-error` are coordinator-owned states around restart persistence and
+next-launch reconciliation. Wails `StateUnconfigured` and `StateIdle` do not
+produce a user-visible update surface (`pkg/updater/types.go:12-33,79-90`).
+
+| Semantic status | Canonical About copy | Primary action |
+| --- | --- | --- |
+| `checking` | **Checking for updates…** | None; About may close |
+| `current` | **Luxury Yacht is up to date.** | None |
+| `available` | **Luxury Yacht {version} is available.** | **Download Update** when eligible; otherwise the reason-specific recovery action below |
+| `downloading` | **Downloading update…** | None; About may close |
+| `verifying` | **Verifying update…** | None; About may close |
+| `preparing` | **Preparing update…** | None; About may close |
+| `ready` | **Luxury Yacht {version} is ready to install.** | **Restart & Apply** |
+| `check-error` | **Couldn’t check for updates.** | **Check Again** |
+| `prepare-error` | **Couldn’t prepare the update.** | **Retry Download** plus the installed distribution’s **View macOS Download**, **View Windows Download**, or **View Portable Download** action |
+| `restart-error` | **Couldn’t restart to apply the update.** | **Restart & Apply** |
+| `apply-error` | **The update couldn’t be applied. Luxury Yacht is still on {currentVersion}.** | Reason-specific manual recovery action |
+
+Wails reports written and total bytes. Expose a percentage only when total is
+positive and written is between zero and total; otherwise expose no percentage.
+Never invent progress during verification or preparation. Release notes remain
+visible for `available`, active preparation states, `ready`, and recoverable
+errors (`pkg/updater/types.go:79-84`).
+
+Eligibility is backend-owned, but user-facing copy and action labels live in
+the one frontend presentation mapping:
+
+| Eligibility reason | Canonical explanation | Recovery action |
+| --- | --- | --- |
+| `mac-not-installed-bundle` | **Move Luxury Yacht to Applications to enable automatic updates.** | **View macOS Download** |
+| `mac-read-only` or `mac-unwritable-parent` | **This copy of Luxury Yacht cannot replace itself in its current location.** | **View macOS Download** |
+| `windows-machine-scope` | **This copy was installed for all users. Switch to the per-user installation to enable automatic updates.** | **Switch to Per-User Installation** |
+| `windows-unverified-install` | **This Windows installation cannot be verified as a supported per-user installation.** | **View Windows Download** |
+| `linux-package-managed` | **This installation is managed by your system package manager. Update it with that package manager or download the latest package.** | **View Linux Packages** |
+| `linux-portable-ineligible` | **This portable installation cannot replace itself in its current location.** | **View Portable Download** |
+| `unsupported-distribution` | **Automatic updates are not available for this installation.** | **View Download Options** |
+
+Every recovery action opens the immutable release's platform-appropriate
+download or migration page and never starts Wails staging. The status chip uses
+compact state text and always opens About for the full explanation; it does not
+duplicate eligibility prose. `apply-error` selects **View macOS Download**,
+**View Windows Download**, or **View Portable Download** from the persisted
+attempt distribution rather than reusing an eligibility guess.
 
 ### Skip and dismiss
 
@@ -353,29 +440,15 @@ enclosing `.app` using the same contract as Wails
   replacement (`pkg/updater/helper.go:118-127`); and
 - the installation has not been explicitly classified as notification-only.
 
-Failure of any preflight rule projects a non-installable update with
-**View Download Options**. Treat the preflight as eligibility evidence, not a
-guarantee: the helper can still fail after process exit.
+Failure of any preflight rule projects `mac-not-installed-bundle`,
+`mac-read-only`, or `mac-unwritable-parent` with the corresponding **View macOS
+Download** action. Treat the preflight as eligibility evidence, not a guarantee:
+the helper can still fail after process exit.
 
-Before `Updater.Restart`, persist an `updateAttempt` record containing the
-canonical from/to versions, start time, platform target, and current process ID.
-Wails derives the helper log path from that parent process ID
-(`pkg/updater/updater.go:411-413`), so the next normal launch can inspect the
-exact `wails-update-<parent-pid>.log` rather than guessing among updater logs. On
-that launch:
-
-- if the running version is the target version, mark the attempt successful and
-  clear it;
-- if the running version is still the source version, mark the attempt failed,
-  ingest the exact helper log into application logs, and expose a recovery
-  message plus manual download action; and
-- if the expected helper log does not exist, report the failed attempt without
-  inventing a cause.
-
-This covers both restored-backup relaunches and failures that leave the old app
-closed until the user starts it manually. Helper logs are diagnostic input, not
-trusted state, and must be size-bounded and sanitized before application-log
-ingestion.
+The shared cross-platform `updateAttempt` reconciliation in the failure contract
+applies to macOS as well as Windows and portable Linux. macOS recovery copy uses
+the macOS download action when the running version proves the bundle swap did
+not complete.
 
 ### Windows
 
@@ -396,12 +469,30 @@ Do not enable full self-update until all of these are resolved:
    only the executable, so the marker survives updates. A missing, malformed,
    machine-scope, mismatched-product, or non-adjacent marker is notification-only.
    The uninstaller removes it with the installation directory.
-6. Define a one-time migration path for existing machine-scope installations.
-   Until migrated, those installs stay notification-only.
+6. Apply the one-time machine-scope migration experience defined below. Until
+   migrated, those installs stay notification-only.
 7. Reconcile per-user Apps & Features `DisplayVersion` after a successful
    update, because Wails replaces the application executable rather than
    rerunning NSIS. Keep uninstaller ownership and registry access limited to the
    known per-user installation contract.
+
+The machine-scope migration experience is part of the Windows stage:
+
+1. About explains why the current installation is notification-only and exposes
+   **Switch to Per-User Installation**.
+2. That action opens a versioned migration page with the signed per-user
+   installer and the required order: close Luxury Yacht, uninstall the existing
+   all-users copy through Windows Installed Apps, then run the per-user
+   installer and relaunch.
+3. The per-user installer detects the registered machine-scope product and
+   refuses a side-by-side installation. It offers **Open Installed Apps** and
+   **Exit** rather than installing a second copy.
+4. The machine-scope uninstaller and per-user installer preserve the existing
+   user-profile settings. Migration tests prove the first per-user launch sees
+   the prior settings before automatic updates become eligible.
+5. Until the adjacent per-user marker validates, every check remains
+   notification-only. The running application never initiates an elevated
+   uninstall or silently changes installation scope.
 
 Do not add a compile-time distribution stamp: the same signed executable is the
 input to both NSIS and the raw updater artifact (`build/windows/Taskfile.yml:85-102`).
@@ -415,11 +506,34 @@ DEB and RPM installations remain notification-only. Users update them through
 their package manager or download the new package from the release page. The app
 must not replace `/usr/local/bin/luxury-yacht` behind dpkg or rpm.
 
-A later phase may add a separately identified portable Linux distribution with
-a user-owned single binary or single-entry tar archive. That distribution must
-carry build metadata that explicitly opts into self-update; path writability
-alone is not an opt-in signal. AppImage behavior requires separate investigation
-and is not assumed to be compatible.
+New DEB and RPM packages write a package-owned, versioned installation marker at
+`/usr/share/luxury-yacht/install.json` containing `productIdentifier`, the exact
+`distribution: "deb"` or `distribution: "rpm"`, and `scope: "system"`. The
+package manager removes the marker on uninstall. Only that validated marker may
+produce `linux-package-managed`; an unmarked or malformed installation uses the
+generic `unsupported-distribution` recovery instead of guessing from its path.
+
+Full Linux self-update is a required completion stage through a separately
+identified portable distribution. For each release architecture:
+
+1. Build the same production binary used by the Linux packages.
+2. Publish a versioned bare binary or single-entry tar archive intended only for
+   Wails replacement; retain DEB and RPM for package-managed installation.
+3. Define a user-owned portable installation root and have its installer write
+   `luxury-yacht.install.json` adjacent to the executable with a versioned
+   schema containing `productIdentifier`, `distribution: "portable"`, and
+   `scope: "user"`.
+4. Offer **Download Update** only when that marker is valid and adjacent, the
+   executable and parent directory are user-writable, and the running target is
+   not owned by a package manager.
+5. Preserve the marker, desktop integration, icons, and documented GTK/WebKit
+   runtime dependency contract when the executable is replaced.
+6. Include only the portable payload, never DEB or RPM, in the Linux updater
+   manifest entries.
+
+Path writability alone is not an opt-in signal. A Linux build without the valid
+portable marker remains notification-only. AppImage behavior requires separate
+investigation and is not part of the completion definition.
 
 ## Signing and release publication
 
@@ -435,11 +549,11 @@ For each release, the release job must:
 
 1. Download all platform artifacts into a deterministic layout.
 2. Have a repository-owned `cmd/project` helper produce an explicit ordered file
-   list containing exactly one supported updater target for every enabled
-   platform and architecture. Pass those individual paths to
-   `wails3 updater manifest`; never pass a release directory or glob. The Wails
-   CLI's directory collection includes DMG, DEB, RPM, and EXE files and the
-   endpoint provider chooses the first matching manifest entry
+   list containing exactly one supported updater target for every platform and
+   architecture enabled in the current delivery stage. Pass those individual
+   paths to `wails3 updater manifest`; never pass a release directory or glob.
+   The Wails CLI's directory collection includes DMG, DEB, RPM, and EXE files
+   and the endpoint provider chooses the first matching manifest entry
    (`internal/commands/updater_tool.go:589-633,645-710`;
    `pkg/updater/providers/endpoint/endpoint.go:350-369`).
 3. Reject DMG, NSIS installer EXE, DEB, RPM, AppImage, MSI, PKG, checksum,
@@ -465,9 +579,11 @@ For each release, the release job must:
 
 The channel manifest is the rollout pointer. Publishing it last prevents a
 client from observing an update whose artifact is not available yet. A release
-job must fail if any supported platform/architecture artifact is absent,
-duplicated, ambiguously named, unsupported, unsigned, unverifiable, or served
-with stale channel contents.
+job must fail if any platform/architecture artifact required by the current
+delivery stage is absent, duplicated, ambiguously named, unsupported, unsigned,
+unverifiable, or served with stale channel contents. Final completion requires
+the manifests and release contract to cover macOS, Windows, and portable Linux
+for every release architecture.
 
 ### Key rotation
 
@@ -496,12 +612,41 @@ are blocked:
 - an automatic check failure remains non-modal and does not discard the running
   application;
 - a manual failure remains visible in About and is logged;
-- a failed macOS eligibility preflight never offers **Download Update**;
+- an ineligible installation never offers **Download Update** and always maps
+  to one typed eligibility reason and recovery target;
 - a helper-side failure detected from the persisted `updateAttempt` on the next
   launch is visible in About and application logs; and
 - application quit still flows through the existing `ShouldQuit` and backend
   persistence contract in `main.go:65-80` and
   `docs/architecture/application-lifecycle.md:102-113`.
+
+Before calling `Updater.Restart` on macOS, Windows, or portable Linux, persist a
+backend-owned `updateAttempt` containing the canonical source and target
+versions, start time, platform, architecture, distribution identity, and current
+process ID, plus the validated immutable recovery target for that release. If
+this persistence fails, do not quit or call `Restart`; return to `restart-error`
+with a visible retry action.
+
+Wails derives the helper log path from the parent process ID
+(`pkg/updater/updater.go:411-413`), so the next normal launch reads the exact
+`wails-update-<parent-pid>.log` rather than guessing among updater logs. Reconcile
+the record before starting a new automatic check:
+
+- if the running version equals the target version, mark the attempt successful,
+  clear it, and remove the helper log on a best-effort basis;
+- if the running version equals the source version, mark the attempt failed,
+  ingest the exact helper log into application logs when present, and expose
+  `apply-error` plus the platform-specific recovery action;
+- if the running version is different from both source and target, mark the
+  attempt superseded by a manual or newer installation, clear it, and do not
+  present a stale failure; and
+- if an expected helper log is absent, report the failed attempt without
+  inventing a cause.
+
+This contract covers restored-backup relaunches and failures that leave the old
+application closed until the user starts it manually on every self-updating
+platform. Helper logs are diagnostic input, not trusted state, and must be
+size-bounded and sanitized before application-log ingestion.
 
 The current backend quit preparation always returns `true`; it cannot veto
 restart, though it may wait up to two seconds for selection persistence
@@ -605,7 +750,12 @@ Add failing tests for:
   eligibility;
 - Windows valid per-user installer marker versus missing, malformed,
   mismatched-product, non-adjacent, and machine-scope identity;
-- Linux package-manager exclusion; and
+- Linux valid portable marker versus missing, malformed, mismatched-product,
+  non-adjacent, package-managed, and non-user-writable identity;
+- Linux valid DEB/RPM package marker versus missing, malformed, mismatched-
+  product, and wrong-scope identity, plus package-manager exclusion; and
+- every ineligible installation maps to exactly one typed eligibility reason and
+  platform recovery target; and
 - exactly one updater artifact for every enabled target, with directory and glob
   inputs rejected.
 
@@ -650,8 +800,10 @@ Add failing tests proving:
   hydrates and updates atomically if approved;
 - the intentional prerelease-to-stable SemVer behavior differs from the legacy
   numeric comparator; and
-- persisted `updateAttempt` state reports success, restored-old-version failure,
-  missing-log failure, and sanitized size-bounded helper-log diagnostics.
+- persisted `updateAttempt` state on macOS, Windows, and portable Linux reports
+  success, restored-old-version failure, missing-log failure, superseded-version
+  cleanup, persistence failure before quit, and sanitized size-bounded
+  helper-log diagnostics.
 
 Only after these pass, remove the custom GitHub release fetch and numeric
 version parser.
@@ -666,9 +818,19 @@ Add failing frontend and menu tests before changing the surfaces:
 - **Download Update** calls the Wails download/install operation only for an
   eligible pending release;
 - **Restart & Apply** calls restart only from ready;
-- notification-only installs open the release/download page;
-- About shows checking, current, available, progress, ready-to-restart,
-  unsupported, and error states, including release notes;
+- notification-only installs expose only their reason-specific recovery action
+  and open its validated release/download or migration target;
+- About renders the canonical copy and actions for checking, current, available,
+  downloading, verifying, preparing, ready, check-error, prepare-error,
+  restart-error, and apply-error, including release notes where required;
+- every typed eligibility reason renders its exact platform explanation and
+  recovery action without starting staging;
+- progress percentages render only for bounded backend progress;
+- every permitted About close path during active work closes the modal without
+  cancelling the process-owned operation, and reopening resumes from the shared
+  snapshot;
+- **Switch to Per-User Installation** opens the Windows migration target only
+  for machine-scope identity;
 - manual check labels and actions are aligned across native menu and command
   palette surfaces;
 - automatic failures remain non-modal; and
@@ -683,8 +845,9 @@ not theme, replace, or open the Wails built-in window in this implementation.
 Add failing `cmd/project` contract tests for updater artifact names, supported
 extensions, platform/architecture completeness, manifest URLs, channel
 selection and manifest labels, explicit-file-only input, duplicate rejection,
-macOS extracted-bundle validation, public-manifest readback, and publication
-ordering.
+macOS extracted-bundle validation, Windows raw-executable selection, Linux
+portable-payload selection, platform recovery targets, Windows migration-page
+availability, public-manifest readback, and publication ordering.
 
 Then update the platform tasks and release workflow to build, platform-sign,
 archive, validate the extracted payload, upload, manifest-sign, verify, publish
@@ -703,7 +866,8 @@ Retain the existing manual installation artifacts.
   workflow;
 - add the user-facing change to `docs/release/pending.md`; and
 - retire the completed updater checklist in
-  `docs/plans/wails-v3-follow-up-tracks.md`.
+  `docs/plans/wails-v3-follow-up-tracks.md` only after the macOS, Windows, and
+  portable Linux completion stages are all accepted.
 
 ## Validation and rollout
 
@@ -725,25 +889,38 @@ Retain the existing manual installation artifacts.
 
 ### Platform smoke tests
 
-For each enabled target, install an older signed build and update it through a
-local or prerelease manifest:
+For each target in the current delivery stage, install an older authenticated
+build and update it through a local or prerelease manifest. Before declaring the
+initiative complete, rerun the combined matrix across every target:
 
 - macOS arm64 and amd64: validate the signed/notarized source and Wails-extracted
   bundles, then verify installed-path eligibility, read-only-volume and
-  unwritable-parent rejection, complete bundle swap, `open -n` relaunch through
-  the single-instance lifecycle, version, settings, restored-backup reporting,
-  missing-helper-log reporting, and backup-creation and launch failures;
-- Windows amd64 and arm64, when enabled: verify per-user install identity,
+  unwritable-parent reason copy and recovery actions, complete bundle swap,
+  `open -n` relaunch through the single-instance lifecycle, version, settings,
+  restored-backup reporting, missing-helper-log reporting, and backup-creation
+  and launch failures;
+- Windows amd64 and arm64: verify per-user install identity,
   every invalid marker form, Authenticode, executable swap without elevation,
   Apps & Features version reconciliation, relaunch, uninstall, and machine-scope
-  notification-only fallback; and
+  reason copy, migration-page action, side-by-side installer refusal, settings
+  preservation, and notification-only fallback;
+- Linux amd64 and arm64 portable installs: verify valid installation identity,
+  invalid-marker and package-owned rejection, bare-binary or single-entry-tar
+  replacement without elevation, dependency diagnostics, relaunch, settings,
+  uninstall behavior, and portable-ineligibility reason copy and recovery
+  action; and
 - Linux DEB/RPM: verify notification-only behavior and confirm no staging or
-  swap attempt occurs.
+  swap attempt occurs, the package-owned marker is installed and removed by the
+  package manager, and the package-manager explanation and action render only
+  from a valid marker.
 
 Exercise offline, no-update, missing-artifact, wrong-architecture, bad digest,
 bad signature, extraction failure, unsupported artifact, stale public manifest,
 unwritable target, the bounded two-second quit flush, normalized skipped version,
-expired-beta manual recovery, successful restart, and failed relaunch states.
+expired-beta manual recovery, closing and reopening About during every active
+state, restart-attempt persistence failure, successful restart, restored-source
+failure, missing helper log, superseding manual installation, and failed
+relaunch states on every self-updating platform.
 
 Run multi-window smoke tests with two workspace peers: simultaneous manual
 checks, check during automatic check, download from either peer, non-last close
@@ -752,30 +929,48 @@ exactly one process scheduler, download, helper, persistence flush, and relaunch
 
 ### Rollout
 
-1. Land the complete app and release-pipeline contract without enabling a
-   platform whose install eligibility is unresolved.
-2. Publish an updater-capable beta containing its own signed artifacts and beta
-   manifest through the new static site path. Existing builds continue using the
-   notification-only updater; the new build exercises updates beginning with the
-   following beta.
-3. Prove beta-to-beta update and emergency channel rollback on every enabled
-   target.
-4. Publish a stable candidate that produces distinct `stable`-labelled and
-   `beta`-labelled manifests over the same stable artifacts, then prove both
-   stable-to-stable and beta-to-stable selection.
-5. Publish a stable release only after public-manifest readback, the platform
-   smoke matrix, and the full gate are green.
-6. Monitor updater errors, helper-attempt reconciliation, failed relaunch
-   reports, and manual-download fallback use before expanding Windows or Linux
-   eligibility.
+- [ ] **Stage 0 — shared foundation:** resolve the remaining decision gates;
+  implement the process-owned coordinator, shell actions, version/channel
+  identity, updater signing, explicit artifact selection, static manifests, and
+  notification-only eligibility fallback without enabling an unresolved
+  distribution.
+- [ ] **Stage 1 — macOS:** publish updater-capable arm64 and amd64 betas through
+  the static beta manifest, prove beta-to-beta update and emergency channel
+  rollback, then publish stable only after stable-to-stable, beta-to-stable,
+  public-manifest readback, the macOS smoke matrix, and the full gate are green.
+- [ ] **Stage 2 — Windows:** provision Authenticode signing, move the supported
+  installer to per-user identity, publish signed raw updater executables for
+  arm64 and amd64, publish the migration page, enforce installer side-by-side
+  refusal, prove settings-preserving migration and the Windows smoke matrix, and
+  advance both channels. Existing machine-scope installs remain
+  notification-only until migrated.
+- [ ] **Stage 3 — Linux:** publish the explicitly identified user-owned portable
+  distribution and updater payloads for arm64 and amd64, add package-owned
+  identity markers to DEB/RPM, prove portable update and rollback behavior, and
+  keep DEB/RPM notification-only.
+- [ ] **Stage 4 — cross-platform completion:** run public-manifest readback,
+  signature verification, channel rollback, stable-to-stable, beta-to-beta,
+  beta-to-stable, multi-window, and platform smoke tests across macOS, Windows,
+  and portable Linux in one release candidate. Do not mark the initiative
+  complete or retire this plan before this stage passes.
+- [ ] Monitor updater errors, helper-attempt reconciliation, failed relaunch
+  reports, and manual-download fallback use after each platform stage before
+  expanding the next stage.
 
 ## Acceptance criteria
 
+- The initiative is not complete until eligible macOS, per-user Windows, and
+  portable Linux installations all self-update on every release architecture.
 - Automatic checks never open a window when the app is current or the check
   fails.
 - **Check for Updates…** and status-chip activation never download an update.
 - No update downloads without **Download Update**, and no restart occurs without
   **Restart & Apply**.
+- About renders the canonical status copy and actions, shows only real bounded
+  progress, and may close and reopen during active work without cancelling or
+  duplicating the process-owned operation.
+- Every ineligible installation renders its exact platform explanation and
+  recovery action; no recovery action starts Wails staging.
 - Stable builds never receive a prerelease; beta builds receive newer beta or
   stable releases according to manifests that retain the requesting build's
   channel label.
@@ -787,10 +982,18 @@ exactly one process scheduler, download, helper, persistence flush, and relaunch
   package artifact can enter its explicit file list.
 - macOS offers self-update only for an eligible installed bundle, validates the
   exact extracted signed/notarized payload, and swaps the complete app bundle.
-- A macOS helper-side failure is reported from persisted attempt state on the
-  next manual or automatic launch, including when no matching helper log exists.
-- Windows self-update, if enabled, works without elevation from the approved
-  per-user installation marker and preserves correct uninstall metadata.
+- A helper-side failure on macOS, Windows, or portable Linux is reported from
+  persisted attempt state on the next launch, including when the exact helper
+  log is absent; a different manually installed version supersedes stale attempt
+  state without a false failure.
+- Windows self-update works without elevation from the approved per-user
+  installation marker and preserves correct uninstall metadata.
+- Machine-scope Windows users receive the defined per-user migration action;
+  the installer prevents side-by-side scope installations and preserves
+  user-profile settings through migration.
+- Portable Linux self-update works without elevation only from the approved
+  user-owned installation marker and preserves desktop integration and uninstall
+  behavior.
 - Linux package installations never mutate package-owned files.
 - Expired beta builds provide the manual release-page recovery action and never
   enter download, staging, or restart.
