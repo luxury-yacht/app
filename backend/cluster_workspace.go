@@ -431,36 +431,9 @@ func (a *App) ApplyClusterWorkspace(command ClusterWorkspaceCommand) ClusterWork
 	windowID := strings.TrimSpace(command.WindowID)
 	var state ClusterWorkspaceState
 	captured := false
-	runMutation := a.runSelectionMutation
-	if windowID != "" {
-		runMutation = a.runOrderedSelectionMutation
-	}
-	err := runMutation("apply-cluster-workspace", func(mutation *selectionMutation) error {
-		if command.UpdateSelectedKubeconfigs {
-			var err error
-			if windowID != "" {
-				err = a.applyWorkspaceSelections(mutation, windowID, command.SelectedKubeconfigs)
-			} else {
-				err = a.setSelectedKubeconfigs(mutation, command.SelectedKubeconfigs)
-			}
-			if err != nil {
-				return err
-			}
-		} else if windowID != "" {
-			a.ensureWorkspaceSelectionsLocked(windowID)
-		}
-		if err := mutation.context().Err(); err != nil {
+	err := a.runClusterWorkspaceMutation(windowID, func(mutation *selectionMutation) error {
+		if err := a.applyClusterWorkspaceMutation(mutation, windowID, command); err != nil {
 			return err
-		}
-		clusterID := strings.TrimSpace(command.VisibleClusterID)
-		if windowID != "" && command.UpdateSelectedKubeconfigs {
-			a.SetWindowVisibleCluster(windowID, clusterID)
-		} else if clusterID != "" {
-			if windowID != "" {
-				a.SetWindowVisibleCluster(windowID, clusterID)
-			} else {
-				a.SetVisibleCluster(clusterID)
-			}
 		}
 		state = a.captureClusterWorkspaceState(windowID)
 		captured = true
@@ -470,12 +443,77 @@ func (a *App) ApplyClusterWorkspace(command ClusterWorkspaceCommand) ClusterWork
 	// in that case; an applied mutation captures before releasing its serialized
 	// selection boundary.
 	if !captured {
-		if windowID != "" {
-			state = a.GetClusterWorkspaceStateForWindow(windowID)
-		} else {
-			state = a.GetClusterWorkspaceState()
-		}
+		state = a.latestClusterWorkspaceState(windowID)
 	}
+	return clusterWorkspaceResult(state, err)
+}
+
+func (a *App) runClusterWorkspaceMutation(
+	windowID string,
+	apply func(*selectionMutation) error,
+) error {
+	if windowID != "" {
+		return a.runOrderedSelectionMutation("apply-cluster-workspace", apply)
+	}
+	return a.runSelectionMutation("apply-cluster-workspace", apply)
+}
+
+func (a *App) applyClusterWorkspaceMutation(
+	mutation *selectionMutation,
+	windowID string,
+	command ClusterWorkspaceCommand,
+) error {
+	if err := a.updateClusterWorkspaceSelections(mutation, windowID, command); err != nil {
+		return err
+	}
+	if err := mutation.context().Err(); err != nil {
+		return err
+	}
+	a.updateClusterWorkspaceVisibility(windowID, command)
+	return nil
+}
+
+func (a *App) updateClusterWorkspaceSelections(
+	mutation *selectionMutation,
+	windowID string,
+	command ClusterWorkspaceCommand,
+) error {
+	if !command.UpdateSelectedKubeconfigs {
+		if windowID != "" {
+			a.ensureWorkspaceSelectionsLocked(windowID)
+		}
+		return nil
+	}
+	if windowID != "" {
+		return a.applyWorkspaceSelections(mutation, windowID, command.SelectedKubeconfigs)
+	}
+	return a.setSelectedKubeconfigs(mutation, command.SelectedKubeconfigs)
+}
+
+func (a *App) updateClusterWorkspaceVisibility(windowID string, command ClusterWorkspaceCommand) {
+	clusterID := strings.TrimSpace(command.VisibleClusterID)
+	if windowID != "" && command.UpdateSelectedKubeconfigs {
+		a.SetWindowVisibleCluster(windowID, clusterID)
+		return
+	}
+	if clusterID == "" {
+		return
+	}
+	if windowID != "" {
+		a.SetWindowVisibleCluster(windowID, clusterID)
+		return
+	}
+	a.SetVisibleCluster(clusterID)
+}
+
+func (a *App) latestClusterWorkspaceState(windowID string) ClusterWorkspaceState {
+	if windowID != "" {
+		return a.GetClusterWorkspaceStateForWindow(windowID)
+	}
+	return a.GetClusterWorkspaceState()
+}
+
+func clusterWorkspaceResult(state ClusterWorkspaceState, err error) ClusterWorkspaceResult {
 	result := ClusterWorkspaceResult{State: state}
 	if err != nil {
 		result.Error = err.Error()

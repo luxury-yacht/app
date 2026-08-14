@@ -69,32 +69,52 @@ func NewRegistry(
 func (r *Registry) Create(restoreGeometry bool) *application.WebviewWindow {
 	sourceName := r.lifecycle.MostRecent()
 	name := r.lifecycle.Add()
-	options := windowOptions(name, r.menu)
-	if !restoreGeometry && sourceName != "" {
-		if sourceGeometry, ok := r.windowGeometry(sourceName); ok {
-			options.Width = sourceGeometry.Width
-			options.Height = sourceGeometry.Height
-			if sourceGeometry.Screen != nil {
-				options.InitialPosition = application.WindowXY
-				options.X = cascadedCoordinate(
-					sourceGeometry.X,
-					sourceGeometry.Width,
-					sourceGeometry.Screen.WorkArea.Width,
-				)
-				options.Y = cascadedCoordinate(
-					sourceGeometry.Y,
-					sourceGeometry.Height,
-					sourceGeometry.Screen.WorkArea.Height,
-				)
-				options.Screen = sourceGeometry.Screen
-			}
-			if sourceGeometry.Maximised {
-				options.StartState = application.WindowStateMaximised
-			}
-		}
-	}
-	window := r.newWindow(options)
+	window := r.newWindow(r.optionsForPeer(name, sourceName, restoreGeometry))
+	r.registerLifecycleHooks(window, name, restoreGeometry)
+	return window
+}
 
+func (r *Registry) optionsForPeer(name, sourceName string, restoreGeometry bool) application.WebviewWindowOptions {
+	options := windowOptions(name, r.menu)
+	if restoreGeometry || sourceName == "" {
+		return options
+	}
+	sourceGeometry, ok := r.windowGeometry(sourceName)
+	if !ok {
+		return options
+	}
+	options.Width = sourceGeometry.Width
+	options.Height = sourceGeometry.Height
+	applyPeerPosition(&options, sourceGeometry)
+	if sourceGeometry.Maximised {
+		options.StartState = application.WindowStateMaximised
+	}
+	return options
+}
+
+func applyPeerPosition(options *application.WebviewWindowOptions, sourceGeometry geometry) {
+	if sourceGeometry.Screen == nil {
+		return
+	}
+	options.InitialPosition = application.WindowXY
+	options.X = cascadedCoordinate(
+		sourceGeometry.X,
+		sourceGeometry.Width,
+		sourceGeometry.Screen.WorkArea.Width,
+	)
+	options.Y = cascadedCoordinate(
+		sourceGeometry.Y,
+		sourceGeometry.Height,
+		sourceGeometry.Screen.WorkArea.Height,
+	)
+	options.Screen = sourceGeometry.Screen
+}
+
+func (r *Registry) registerLifecycleHooks(
+	window *application.WebviewWindow,
+	name string,
+	restoreGeometry bool,
+) {
 	window.OnWindowEvent(events.Common.WindowRuntimeReady, func(*application.WindowEvent) {
 		r.backend.WindowRuntimeReady(name, restoreGeometry)
 	})
@@ -102,20 +122,24 @@ func (r *Registry) Create(restoreGeometry bool) *application.WebviewWindow {
 		r.lifecycle.Focus(name)
 	})
 	window.RegisterHook(events.Common.WindowClosing, func(event *application.WindowEvent) {
-		remaining, tracked := r.lifecycle.BeginClose(name)
-		if !tracked {
-			return
-		}
-		if remaining == 0 {
-			if !r.backend.PrepareQuitFromWindow(name) {
-				r.lifecycle.CancelClose(name)
-				event.Cancel()
-			}
-			return
-		}
-		r.backend.ReleaseWorkspaceWindow(name)
+		r.handleClosing(event, name)
 	})
-	return window
+}
+
+func (r *Registry) handleClosing(event *application.WindowEvent, name string) {
+	remaining, tracked := r.lifecycle.BeginClose(name)
+	if !tracked {
+		return
+	}
+	if remaining > 0 {
+		r.backend.ReleaseWorkspaceWindow(name)
+		return
+	}
+	if r.backend.PrepareQuitFromWindow(name) {
+		return
+	}
+	r.lifecycle.CancelClose(name)
+	event.Cancel()
 }
 
 func cascadedCoordinate(position, size, limit int) int {

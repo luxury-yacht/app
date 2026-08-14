@@ -126,6 +126,22 @@ func TestRegistryKeepsCascadedPeersOnTheSourceScreen(t *testing.T) {
 	require.Equal(t, 124, createdOptions.Y)
 }
 
+func TestPeerOptionsInheritSizeWithoutPositionWhenTheSourceScreenIsUnavailable(t *testing.T) {
+	registry := &Registry{
+		windowGeometry: func(string) (geometry, bool) {
+			return geometry{Width: 1400, Height: 900}, true
+		},
+	}
+
+	options := registry.optionsForPeer("workspace-2", "workspace-1", false)
+
+	require.Equal(t, 1400, options.Width)
+	require.Equal(t, 900, options.Height)
+	require.Zero(t, options.InitialPosition)
+	require.Nil(t, options.Screen)
+	require.Zero(t, options.StartState)
+}
+
 func TestRegistryCreatesAndCountsPeersThroughTheWailsWindowManager(t *testing.T) {
 	wailsApp := application.New(application.Options{})
 	registry := NewRegistry(wailsApp, nil, nil)
