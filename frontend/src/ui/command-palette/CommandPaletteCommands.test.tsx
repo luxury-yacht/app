@@ -57,6 +57,9 @@ const { mocks } = vi.hoisted(() => ({
     appSettings: {
       UpdateAppPreferences: vi.fn(),
     },
+    desktopRuntime: {
+      closeWindow: vi.fn(),
+    },
     refreshOrchestrator: {
       triggerManualRefreshForContext: vi.fn(),
     },
@@ -107,6 +110,7 @@ vi.mock('@core/backend-api', () => ({
 }));
 
 vi.mock('@core/desktop-runtime', () => ({
+  closeWindow: (...args: unknown[]) => mocks.desktopRuntime.closeWindow(...args),
   desktopRuntimeAvailable: () => true,
 }));
 
@@ -192,6 +196,8 @@ describe('CommandPaletteCommands', () => {
     mocks.autoRefresh.toggle.mockReset();
     mocks.appSettings.UpdateAppPreferences.mockReset();
     mocks.appSettings.UpdateAppPreferences.mockResolvedValue({ settings: {}, changedKeys: [] });
+    mocks.desktopRuntime.closeWindow.mockReset();
+    mocks.desktopRuntime.closeWindow.mockResolvedValue(undefined);
     resetAppPreferencesCacheForTesting();
   });
 
@@ -487,6 +493,22 @@ describe('CommandPaletteCommands', () => {
     expect(mocks.kubeconfig.closeKubeconfig).toHaveBeenCalledWith('/kube/beta:prod');
     expect(mocks.kubeconfig.loadKubeconfigs).not.toHaveBeenCalled();
     expect(mocks.kubeconfig.setSelectedKubeconfigs).not.toHaveBeenCalled();
+    unmount();
+  });
+
+  it('closes the current window when the close command has no cluster tabs', async () => {
+    const { getCommands, unmount } = renderHook();
+    const command = getCommands().find((entry) => entry.id === 'close-cluster-tab');
+
+    expect(command?.label).toBe('Close window');
+
+    await act(async () => {
+      command?.action();
+      await Promise.resolve();
+    });
+
+    expect(mocks.desktopRuntime.closeWindow).toHaveBeenCalledOnce();
+    expect(mocks.kubeconfig.closeKubeconfig).not.toHaveBeenCalled();
     unmount();
   });
 

@@ -37,6 +37,7 @@ import {
 } from '@shared/components/icons/SharedIcons';
 import { clearAllGridTableState } from '@shared/components/tables/persistence/gridTablePersistenceReset';
 import { navigateToFavorite } from '@ui/favorites/navigateToFavorite';
+import { closeActiveClusterOrWindow } from '@ui/navigation/closeActiveClusterOrWindow';
 import { type ReactNode, useCallback, useMemo } from 'react';
 import { requestContextRefresh } from '@/core/data-access';
 import { eventBus } from '@/core/events';
@@ -226,15 +227,12 @@ export function useCommandPaletteCommands() {
     if (viewState.viewType === 'global') {
       return;
     }
-    const active = selectedKubeconfig;
-    if (!active) {
-      return;
-    }
-    if (!selectedKubeconfigs.includes(active)) {
-      return;
-    }
-    void closeKubeconfig(active).catch((err) => {
-      console.warn('Failed to close cluster:', err);
+    void closeActiveClusterOrWindow({
+      selectedKubeconfig,
+      selectedKubeconfigs,
+      closeKubeconfig,
+    }).catch((err) => {
+      console.warn('Failed to close cluster tab or window:', err);
     });
   }, [closeKubeconfig, selectedKubeconfig, selectedKubeconfigs, viewState.viewType]);
 
@@ -529,13 +527,16 @@ export function useCommandPaletteCommands() {
       // Navigation Commands
       {
         id: 'close-cluster-tab',
-        label: 'Close active cluster tab',
+        label: selectedKubeconfigs.length === 0 ? 'Close window' : 'Close active cluster tab',
         icon: <CloseIcon width={16} height={16} />,
-        description: 'Close the active cluster tab',
+        description:
+          selectedKubeconfigs.length === 0
+            ? 'Close the current window'
+            : 'Close the active cluster tab',
         category: 'Navigation',
         action: closeCurrentClusterTab,
         shortcut: closeTabShortcut,
-        keywords: ['cluster', 'tab', 'close', 'kubeconfig'],
+        keywords: ['cluster', 'tab', 'close', 'kubeconfig', 'window'],
       },
       {
         id: 'select-kubeconfig',

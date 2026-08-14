@@ -10,6 +10,7 @@ const runtimeMocks = vi.hoisted(() => ({
       handler: (event: { name: string; data: unknown; sender?: string }) => void
     ) => () => void
   >(() => () => undefined),
+  closeWindow: vi.fn(),
   openDevTools: vi.fn(),
   toggleMaximise: vi.fn(),
   windowName: vi.fn(),
@@ -21,6 +22,7 @@ vi.mock('@wailsio/runtime', () => ({
   Events: { On: runtimeMocks.eventsOn },
   System: { Environment: runtimeMocks.environment },
   Window: {
+    Close: runtimeMocks.closeWindow,
     Name: runtimeMocks.windowName,
     OpenDevTools: runtimeMocks.openDevTools,
     ToggleMaximise: runtimeMocks.toggleMaximise,
@@ -29,6 +31,7 @@ vi.mock('@wailsio/runtime', () => ({
 
 import * as desktopRuntime from './index';
 import {
+  closeWindow,
   desktopRuntimeAvailable,
   getEnvironment,
   getWindowIdentity,
@@ -82,12 +85,14 @@ describe('desktop runtime adapter', () => {
     runtimeMocks.environment.mockResolvedValue({ OS: 'darwin' });
 
     await openURL('https://luxury-yacht.app');
+    await closeWindow();
     await openDevTools();
     await toggleMaximise();
 
     await expect(readClipboardText()).resolves.toBe('clipboard');
     await expect(getEnvironment()).resolves.toEqual({ OS: 'darwin' });
     expect(runtimeMocks.browserOpenURL).toHaveBeenCalledWith('https://luxury-yacht.app');
+    expect(runtimeMocks.closeWindow).toHaveBeenCalledOnce();
     expect(runtimeMocks.openDevTools).toHaveBeenCalledOnce();
     expect(runtimeMocks.toggleMaximise).toHaveBeenCalledOnce();
   });

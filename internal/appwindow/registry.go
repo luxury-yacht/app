@@ -1,4 +1,4 @@
-package main
+package appwindow
 
 import (
 	"runtime"
@@ -8,16 +8,17 @@ import (
 	"github.com/wailsapp/wails/v3/pkg/events"
 )
 
-type workspaceWindowRegistry struct {
+// Registry owns the application's peer workspace windows and their lifecycle.
+type Registry struct {
 	application    *application.App
 	backend        *backend.App
 	menu           *application.Menu
-	lifecycle      *workspaceWindowLifecycle
+	lifecycle      *lifecycle
 	newWindow      func(application.WebviewWindowOptions) *application.WebviewWindow
-	windowGeometry func(string) (workspaceWindowGeometry, bool)
+	windowGeometry func(string) (geometry, bool)
 }
 
-type workspaceWindowGeometry struct {
+type geometry struct {
 	X         int
 	Y         int
 	Width     int
@@ -26,66 +27,68 @@ type workspaceWindowGeometry struct {
 	Screen    *application.Screen
 }
 
-const workspaceWindowCascadeOffset = 24
+const cascadeOffset = 24
 
-func newWorkspaceWindowRegistry(
+// NewRegistry creates the peer-window registry for a Wails application.
+func NewRegistry(
 	app *application.App,
 	backendApp *backend.App,
 	menu *application.Menu,
-) *workspaceWindowRegistry {
-	registry := &workspaceWindowRegistry{
+) *Registry {
+	registry := &Registry{
 		application: app,
 		backend:     backendApp,
 		menu:        menu,
-		lifecycle:   newWorkspaceWindowLifecycle(),
+		lifecycle:   newLifecycle(),
 	}
 	registry.newWindow = app.Window.NewWithOptions
-	registry.windowGeometry = func(name string) (workspaceWindowGeometry, bool) {
+	registry.windowGeometry = func(name string) (geometry, bool) {
 		window, ok := app.Window.GetByName(name)
 		if !ok {
-			return workspaceWindowGeometry{}, false
+			return geometry{}, false
 		}
 		width, height := window.Size()
 		if width <= 0 || height <= 0 {
-			return workspaceWindowGeometry{}, false
+			return geometry{}, false
 		}
-		geometry := workspaceWindowGeometry{
+		windowGeometry := geometry{
 			Width:     width,
 			Height:    height,
 			Maximised: window.IsMaximised(),
 		}
 		if screen, err := window.GetScreen(); err == nil && screen != nil {
-			geometry.X, geometry.Y = window.RelativePosition()
-			geometry.Screen = screen
+			windowGeometry.X, windowGeometry.Y = window.RelativePosition()
+			windowGeometry.Screen = screen
 		}
-		return geometry, true
+		return windowGeometry, true
 	}
 	return registry
 }
 
-func (r *workspaceWindowRegistry) Create(restoreGeometry bool) *application.WebviewWindow {
+// Create adds a peer window. Only the initial peer restores persisted geometry.
+func (r *Registry) Create(restoreGeometry bool) *application.WebviewWindow {
 	sourceName := r.lifecycle.MostRecent()
 	name := r.lifecycle.Add()
-	options := workspaceWindowOptions(name, r.menu)
+	options := windowOptions(name, r.menu)
 	if !restoreGeometry && sourceName != "" {
-		if geometry, ok := r.windowGeometry(sourceName); ok {
-			options.Width = geometry.Width
-			options.Height = geometry.Height
-			if geometry.Screen != nil {
+		if sourceGeometry, ok := r.windowGeometry(sourceName); ok {
+			options.Width = sourceGeometry.Width
+			options.Height = sourceGeometry.Height
+			if sourceGeometry.Screen != nil {
 				options.InitialPosition = application.WindowXY
-				options.X = cascadedWorkspaceWindowCoordinate(
-					geometry.X,
-					geometry.Width,
-					geometry.Screen.WorkArea.Width,
+				options.X = cascadedCoordinate(
+					sourceGeometry.X,
+					sourceGeometry.Width,
+					sourceGeometry.Screen.WorkArea.Width,
 				)
-				options.Y = cascadedWorkspaceWindowCoordinate(
-					geometry.Y,
-					geometry.Height,
-					geometry.Screen.WorkArea.Height,
+				options.Y = cascadedCoordinate(
+					sourceGeometry.Y,
+					sourceGeometry.Height,
+					sourceGeometry.Screen.WorkArea.Height,
 				)
-				options.Screen = geometry.Screen
+				options.Screen = sourceGeometry.Screen
 			}
-			if geometry.Maximised {
+			if sourceGeometry.Maximised {
 				options.StartState = application.WindowStateMaximised
 			}
 		}
@@ -115,16 +118,16 @@ func (r *workspaceWindowRegistry) Create(restoreGeometry bool) *application.Webv
 	return window
 }
 
-func cascadedWorkspaceWindowCoordinate(position, size, limit int) int {
+func cascadedCoordinate(position, size, limit int) int {
 	maxPosition := limit - size
 	if maxPosition < 0 {
 		maxPosition = 0
 	}
-	forward := position + workspaceWindowCascadeOffset
+	forward := position + cascadeOffset
 	if forward >= 0 && forward <= maxPosition {
 		return forward
 	}
-	backward := position - workspaceWindowCascadeOffset
+	backward := position - cascadeOffset
 	if backward >= 0 && backward <= maxPosition {
 		return backward
 	}
@@ -137,7 +140,8 @@ func cascadedWorkspaceWindowCoordinate(position, size, limit int) int {
 	return position
 }
 
-func (r *workspaceWindowRegistry) FocusMostRecent() {
+// FocusMostRecent shows and focuses the most recently active live peer.
+func (r *Registry) FocusMostRecent() {
 	name := r.lifecycle.MostRecent()
 	window, ok := r.application.Window.GetByName(name)
 	if !ok {
@@ -150,15 +154,21 @@ func (r *workspaceWindowRegistry) FocusMostRecent() {
 	window.Focus()
 }
 
-func (r *workspaceWindowRegistry) PrepareApplicationQuit() bool {
+// PrepareApplicationQuit performs the shared last-window quit preparation.
+func (r *Registry) PrepareApplicationQuit() bool {
 	return r == nil || r.backend == nil || r.backend.PrepareQuitFromWindow(r.lifecycle.MostRecent())
 }
 
-func workspaceWindowOptions(name string, nativeMenu *application.Menu) application.WebviewWindowOptions {
-	return workspaceWindowOptionsForPlatform(name, nativeMenu, runtime.GOOS)
+// Count returns the number of live peer windows tracked by the registry.
+func (r *Registry) Count() int {
+	return r.lifecycle.Count()
 }
 
-func workspaceWindowOptionsForPlatform(name string, nativeMenu *application.Menu, goos string) application.WebviewWindowOptions {
+func windowOptions(name string, nativeMenu *application.Menu) application.WebviewWindowOptions {
+	return windowOptionsForPlatform(name, nativeMenu, runtime.GOOS)
+}
+
+func windowOptionsForPlatform(name string, nativeMenu *application.Menu, goos string) application.WebviewWindowOptions {
 	return application.WebviewWindowOptions{
 		Name:             name,
 		Title:            "Luxury Yacht",

@@ -1,24 +1,24 @@
-package main
+package appwindow
 
 import (
 	"fmt"
 	"sync"
 )
 
-// workspaceWindowLifecycle tracks peer windows independently of Wails' native
-// window map so the last-close decision is explicit and unit-testable.
-type workspaceWindowLifecycle struct {
+// lifecycle tracks peer windows independently of Wails' native window map so
+// the last-close decision is explicit and unit-testable.
+type lifecycle struct {
 	mu      sync.Mutex
 	next    uint64
 	windows map[string]bool
 	recent  []string
 }
 
-func newWorkspaceWindowLifecycle() *workspaceWindowLifecycle {
-	return &workspaceWindowLifecycle{windows: make(map[string]bool)}
+func newLifecycle() *lifecycle {
+	return &lifecycle{windows: make(map[string]bool)}
 }
 
-func (l *workspaceWindowLifecycle) Add() string {
+func (l *lifecycle) Add() string {
 	l.mu.Lock()
 	defer l.mu.Unlock()
 
@@ -29,7 +29,7 @@ func (l *workspaceWindowLifecycle) Add() string {
 	return name
 }
 
-func (l *workspaceWindowLifecycle) Focus(name string) {
+func (l *lifecycle) Focus(name string) {
 	l.mu.Lock()
 	defer l.mu.Unlock()
 	if l.windows[name] {
@@ -37,7 +37,7 @@ func (l *workspaceWindowLifecycle) Focus(name string) {
 	}
 }
 
-func (l *workspaceWindowLifecycle) BeginClose(name string) (int, bool) {
+func (l *lifecycle) BeginClose(name string) (int, bool) {
 	l.mu.Lock()
 	defer l.mu.Unlock()
 	if !l.windows[name] {
@@ -47,7 +47,7 @@ func (l *workspaceWindowLifecycle) BeginClose(name string) (int, bool) {
 	return len(l.windows), true
 }
 
-func (l *workspaceWindowLifecycle) CancelClose(name string) {
+func (l *lifecycle) CancelClose(name string) {
 	l.mu.Lock()
 	defer l.mu.Unlock()
 	if l.windows[name] {
@@ -57,13 +57,13 @@ func (l *workspaceWindowLifecycle) CancelClose(name string) {
 	l.touchLocked(name)
 }
 
-func (l *workspaceWindowLifecycle) Count() int {
+func (l *lifecycle) Count() int {
 	l.mu.Lock()
 	defer l.mu.Unlock()
 	return len(l.windows)
 }
 
-func (l *workspaceWindowLifecycle) MostRecent() string {
+func (l *lifecycle) MostRecent() string {
 	l.mu.Lock()
 	defer l.mu.Unlock()
 	for i := len(l.recent) - 1; i >= 0; i-- {
@@ -74,7 +74,7 @@ func (l *workspaceWindowLifecycle) MostRecent() string {
 	return ""
 }
 
-func (l *workspaceWindowLifecycle) touchLocked(name string) {
+func (l *lifecycle) touchLocked(name string) {
 	for index, recentName := range l.recent {
 		if recentName == name {
 			l.recent = append(l.recent[:index], l.recent[index+1:]...)

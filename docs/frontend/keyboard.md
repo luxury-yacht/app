@@ -58,6 +58,10 @@ Surface kinds include:
   whole app.
 - Editors may own editor-specific keys; app-level `Escape` wins unless the
   editor has a documented transient UI reason.
+- The sender-targeted `Cmd/Ctrl+W` close command closes the active cluster tab
+  through `KubeconfigContext`. When the current peer has no cluster tabs, the
+  same command closes that Wails window instead; the native window-closing hook
+  still owns last-window application shutdown.
 
 ## Change Checklist
 

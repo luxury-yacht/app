@@ -241,7 +241,7 @@ func TestNewWindowUsesTheInProcessPeerRegistry(t *testing.T) {
 
 	menuSource := strings.ToLower(readTestFile(t, repositoryPath("backend", "menu.go")))
 	require.Contains(t, menuSource, `"new window", "cmdorctrl+n"`)
-	registrySource := readTestFile(t, repositoryPath("workspace_window_registry.go"))
+	registrySource := readTestFile(t, repositoryPath("internal", "appwindow", "registry.go"))
 	require.Contains(t, registrySource, "Window.NewWithOptions")
 	require.NotContains(t, strings.ToLower(registrySource), "spawnnewwindow")
 }
@@ -251,7 +251,7 @@ func TestWailsApplicationIsInjectedDirectlyWithoutDesktopAdapter(t *testing.T) {
 	require.Contains(t, mainSource, "backend.NewApp(wailsApp, reporter)")
 	require.NotContains(t, mainSource, "NewAdapter")
 
-	windowSource := readTestFile(t, repositoryPath("workspace_window_registry.go"))
+	windowSource := readTestFile(t, repositoryPath("internal", "appwindow", "registry.go"))
 	runtimeReadyHook := strings.Index(windowSource, "events.Common.WindowRuntimeReady")
 	closingHook := strings.Index(windowSource, "events.Common.WindowClosing")
 	runCall := strings.Index(mainSource, "composition.application.Run()")

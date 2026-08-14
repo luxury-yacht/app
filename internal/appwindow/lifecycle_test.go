@@ -1,4 +1,4 @@
-package main
+package appwindow
 
 import (
 	"testing"
@@ -6,8 +6,8 @@ import (
 	"github.com/stretchr/testify/require"
 )
 
-func TestWorkspaceWindowLifecycleTreatsEveryWindowAsAPeer(t *testing.T) {
-	lifecycle := newWorkspaceWindowLifecycle()
+func TestLifecycleTreatsEveryWindowAsAPeer(t *testing.T) {
+	lifecycle := newLifecycle()
 
 	first := lifecycle.Add()
 	second := lifecycle.Add()
@@ -34,8 +34,8 @@ func TestWorkspaceWindowLifecycleTreatsEveryWindowAsAPeer(t *testing.T) {
 	require.Zero(t, lifecycle.Count())
 }
 
-func TestWorkspaceWindowLifecycleRestoresACancelledLastClose(t *testing.T) {
-	lifecycle := newWorkspaceWindowLifecycle()
+func TestLifecycleRestoresACancelledLastClose(t *testing.T) {
+	lifecycle := newLifecycle()
 	windowName := lifecycle.Add()
 
 	remaining, ok := lifecycle.BeginClose(windowName)
@@ -47,8 +47,8 @@ func TestWorkspaceWindowLifecycleRestoresACancelledLastClose(t *testing.T) {
 	require.Equal(t, windowName, lifecycle.MostRecent())
 }
 
-func TestWorkspaceWindowLifecycleTracksTheMostRecentlyFocusedPeer(t *testing.T) {
-	lifecycle := newWorkspaceWindowLifecycle()
+func TestLifecycleTracksTheMostRecentlyFocusedPeer(t *testing.T) {
+	lifecycle := newLifecycle()
 	first := lifecycle.Add()
 	second := lifecycle.Add()
 
@@ -57,4 +57,21 @@ func TestWorkspaceWindowLifecycleTracksTheMostRecentlyFocusedPeer(t *testing.T) 
 
 	lifecycle.Focus(second)
 	require.Equal(t, second, lifecycle.MostRecent())
+}
+
+func TestLifecycleIgnoresUnknownAndDuplicateTransitions(t *testing.T) {
+	lifecycle := newLifecycle()
+	windowName := lifecycle.Add()
+
+	lifecycle.Focus("workspace-unknown")
+	lifecycle.CancelClose(windowName)
+	remaining, tracked := lifecycle.BeginClose("workspace-unknown")
+
+	require.False(t, tracked)
+	require.Equal(t, 1, remaining)
+	require.Equal(t, windowName, lifecycle.MostRecent())
+
+	_, tracked = lifecycle.BeginClose(windowName)
+	require.True(t, tracked)
+	require.Empty(t, lifecycle.MostRecent())
 }

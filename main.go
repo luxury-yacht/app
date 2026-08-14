@@ -6,6 +6,7 @@ import (
 	"time"
 
 	"github.com/luxury-yacht/app/backend"
+	"github.com/luxury-yacht/app/internal/appwindow"
 	"github.com/luxury-yacht/app/internal/sentry"
 	"github.com/wailsapp/wails/v3/pkg/application"
 )
@@ -50,7 +51,7 @@ func newSentryReporter(enabled bool, defaultDSN, version string) (sentryreportin
 type applicationComposition struct {
 	application *application.App
 	backend     *backend.App
-	windows     *workspaceWindowRegistry
+	windows     *appwindow.Registry
 	menu        *application.Menu
 }
 
@@ -60,7 +61,7 @@ type compositionOptions struct {
 
 func newApplicationComposition(reporter sentryreporting.Reporter, options compositionOptions) *applicationComposition {
 	var backendApp *backend.App
-	var windows *workspaceWindowRegistry
+	var windows *appwindow.Registry
 	applicationOptions := application.Options{
 		Name:        "Luxury Yacht",
 		Description: "Sail the seas of Kubernetes in style",
@@ -100,7 +101,7 @@ func newApplicationComposition(reporter sentryreporting.Reporter, options compos
 	nativeMenu := backend.CreateMenu(backendApp)
 	wailsApp.Menu.SetApplicationMenu(nativeMenu)
 
-	windows = newWorkspaceWindowRegistry(wailsApp, backendApp, nativeMenu)
+	windows = appwindow.NewRegistry(wailsApp, backendApp, nativeMenu)
 	backendApp.SetWorkspaceWindowCreator(func() { windows.Create(false) })
 	windows.Create(true)
 

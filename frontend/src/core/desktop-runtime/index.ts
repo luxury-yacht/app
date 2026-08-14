@@ -32,6 +32,8 @@ export const openURL = (url: string | URL): Promise<void> => Browser.OpenURL(url
 
 export const readClipboardText = (): Promise<string> => Clipboard.Text();
 
+export const closeWindow = (): Promise<void> => WailsWindow.Close();
+
 export const openDevTools = (): Promise<void> => WailsWindow.OpenDevTools();
 
 export const toggleMaximise = (): Promise<void> => WailsWindow.ToggleMaximise();

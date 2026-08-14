@@ -14,7 +14,7 @@ import { GlobalShortcuts } from './GlobalShortcuts';
 
 // Capture event handlers registered via onEvent so tests can invoke them.
 const wailsEventHandlers: Record<string, (...args: unknown[]) => void> = {};
-const QuitMock = vi.fn();
+const closeWindowMock = vi.fn();
 type ShortcutOptions = Parameters<typeof import('../hooks').useShortcut>[0];
 
 vi.mock('@core/desktop-runtime', () => ({
@@ -28,7 +28,7 @@ vi.mock('@core/desktop-runtime', () => ({
       }
     };
   },
-  Quit: (...args: unknown[]) => QuitMock(...args),
+  closeWindow: (...args: unknown[]) => closeWindowMock(...args),
 }));
 
 let latestHelpProps: { isOpen: boolean; onClose: () => void } | null = null;
@@ -149,7 +149,8 @@ describe('GlobalShortcuts', () => {
     loadKubeconfigsMock.mockResolvedValue(undefined);
     closeKubeconfigMock.mockClear();
     closeKubeconfigMock.mockResolvedValue(undefined);
-    QuitMock.mockClear();
+    closeWindowMock.mockClear();
+    closeWindowMock.mockResolvedValue(undefined);
     // Clear captured Wails event handlers
     for (const key of Object.keys(wailsEventHandlers)) {
       delete wailsEventHandlers[key];
@@ -391,7 +392,7 @@ describe('GlobalShortcuts', () => {
     expect(closeKubeconfigMock).toHaveBeenCalledWith('cluster-2');
     expect(loadKubeconfigsMock).not.toHaveBeenCalled();
     expect(setSelectedKubeconfigsMock).not.toHaveBeenCalled();
-    expect(QuitMock).not.toHaveBeenCalled();
+    expect(closeWindowMock).not.toHaveBeenCalled();
   });
 
   it('closes the last cluster tab on menu:close without quitting the app', async () => {
@@ -408,11 +409,11 @@ describe('GlobalShortcuts', () => {
     });
 
     expect(closeKubeconfigMock).toHaveBeenCalledWith('cluster-1');
-    expect(QuitMock).not.toHaveBeenCalled();
+    expect(closeWindowMock).not.toHaveBeenCalled();
     expect(setSelectedKubeconfigsMock).not.toHaveBeenCalled();
   });
 
-  it('does nothing on menu:close when no clusters are open', async () => {
+  it('closes the current window on menu:close when no clusters are open', async () => {
     kubeconfigState.selectedKubeconfig = '';
     kubeconfigState.selectedKubeconfigs = [];
 
@@ -420,12 +421,14 @@ describe('GlobalShortcuts', () => {
 
     expect(wailsEventHandlers['menu:close']).toBeDefined();
 
-    act(() => {
+    await act(async () => {
       wailsEventHandlers['menu:close']();
+      await Promise.resolve();
     });
 
     expect(closeKubeconfigMock).not.toHaveBeenCalled();
-    expect(QuitMock).not.toHaveBeenCalled();
+    expect(closeWindowMock).toHaveBeenCalledOnce();
+    expect(setSelectedKubeconfigsMock).not.toHaveBeenCalled();
   });
 
   it('switches to the previous cluster tab on Cmd+Alt+Left', async () => {
