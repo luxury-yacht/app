@@ -9,28 +9,88 @@ import (
 )
 
 type workspaceWindowRegistry struct {
-	application *application.App
-	backend     *backend.App
-	menu        *application.Menu
-	lifecycle   *workspaceWindowLifecycle
+	application    *application.App
+	backend        *backend.App
+	menu           *application.Menu
+	lifecycle      *workspaceWindowLifecycle
+	newWindow      func(application.WebviewWindowOptions) *application.WebviewWindow
+	windowGeometry func(string) (workspaceWindowGeometry, bool)
 }
+
+type workspaceWindowGeometry struct {
+	X         int
+	Y         int
+	Width     int
+	Height    int
+	Maximised bool
+	Screen    *application.Screen
+}
+
+const workspaceWindowCascadeOffset = 24
 
 func newWorkspaceWindowRegistry(
 	app *application.App,
 	backendApp *backend.App,
 	menu *application.Menu,
 ) *workspaceWindowRegistry {
-	return &workspaceWindowRegistry{
+	registry := &workspaceWindowRegistry{
 		application: app,
 		backend:     backendApp,
 		menu:        menu,
 		lifecycle:   newWorkspaceWindowLifecycle(),
 	}
+	registry.newWindow = app.Window.NewWithOptions
+	registry.windowGeometry = func(name string) (workspaceWindowGeometry, bool) {
+		window, ok := app.Window.GetByName(name)
+		if !ok {
+			return workspaceWindowGeometry{}, false
+		}
+		width, height := window.Size()
+		if width <= 0 || height <= 0 {
+			return workspaceWindowGeometry{}, false
+		}
+		geometry := workspaceWindowGeometry{
+			Width:     width,
+			Height:    height,
+			Maximised: window.IsMaximised(),
+		}
+		if screen, err := window.GetScreen(); err == nil && screen != nil {
+			geometry.X, geometry.Y = window.RelativePosition()
+			geometry.Screen = screen
+		}
+		return geometry, true
+	}
+	return registry
 }
 
 func (r *workspaceWindowRegistry) Create(restoreGeometry bool) *application.WebviewWindow {
+	sourceName := r.lifecycle.MostRecent()
 	name := r.lifecycle.Add()
-	window := r.application.Window.NewWithOptions(workspaceWindowOptions(name, r.menu))
+	options := workspaceWindowOptions(name, r.menu)
+	if !restoreGeometry && sourceName != "" {
+		if geometry, ok := r.windowGeometry(sourceName); ok {
+			options.Width = geometry.Width
+			options.Height = geometry.Height
+			if geometry.Screen != nil {
+				options.InitialPosition = application.WindowXY
+				options.X = cascadedWorkspaceWindowCoordinate(
+					geometry.X,
+					geometry.Width,
+					geometry.Screen.WorkArea.Width,
+				)
+				options.Y = cascadedWorkspaceWindowCoordinate(
+					geometry.Y,
+					geometry.Height,
+					geometry.Screen.WorkArea.Height,
+				)
+				options.Screen = geometry.Screen
+			}
+			if geometry.Maximised {
+				options.StartState = application.WindowStateMaximised
+			}
+		}
+	}
+	window := r.newWindow(options)
 
 	window.OnWindowEvent(events.Common.WindowRuntimeReady, func(*application.WindowEvent) {
 		r.backend.WindowRuntimeReady(name, restoreGeometry)
@@ -53,6 +113,28 @@ func (r *workspaceWindowRegistry) Create(restoreGeometry bool) *application.Webv
 		r.backend.ReleaseWorkspaceWindow(name)
 	})
 	return window
+}
+
+func cascadedWorkspaceWindowCoordinate(position, size, limit int) int {
+	maxPosition := limit - size
+	if maxPosition < 0 {
+		maxPosition = 0
+	}
+	forward := position + workspaceWindowCascadeOffset
+	if forward >= 0 && forward <= maxPosition {
+		return forward
+	}
+	backward := position - workspaceWindowCascadeOffset
+	if backward >= 0 && backward <= maxPosition {
+		return backward
+	}
+	if position < 0 {
+		return 0
+	}
+	if position > maxPosition {
+		return maxPosition
+	}
+	return position
 }
 
 func (r *workspaceWindowRegistry) FocusMostRecent() {

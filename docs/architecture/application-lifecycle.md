@@ -77,6 +77,13 @@ Clamp inaccessible or oversized geometry, and center on the primary work area
 when the saved monitor is gone. Do not persist screen IDs or physical-pixel
 coordinates.
 
+After startup, a new peer copies the live size and maximized state of the most
+recently focused peer. It targets that peer's current screen and cascades its
+screen-relative position by 24 logical pixels, reversing or clamping the offset
+when necessary to keep the new peer inside the work area. This is creation-only
+geometry inheritance; it does not make the source peer a lifecycle owner or
+persist per-window geometry.
+
 ## Process multiplicity
 
 Production composition enables Wails v3 single-instance handling with

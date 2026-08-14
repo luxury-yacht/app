@@ -163,6 +163,76 @@ func TestWorkspaceWindowOptionsPreserveTheSharedPeerContract(t *testing.T) {
 	}
 }
 
+func TestWorkspaceWindowRegistryCreatesPeersFromTheMostRecentWindowGeometry(t *testing.T) {
+	lifecycle := newWorkspaceWindowLifecycle()
+	sourceName := lifecycle.Add()
+	sourceScreen := &application.Screen{
+		ID:       "secondary",
+		WorkArea: application.Rect{X: 1920, Y: 0, Width: 1920, Height: 1040},
+	}
+	var createdOptions application.WebviewWindowOptions
+	registry := &workspaceWindowRegistry{
+		lifecycle: lifecycle,
+		newWindow: func(options application.WebviewWindowOptions) *application.WebviewWindow {
+			createdOptions = options
+			return application.NewWindow(options)
+		},
+		windowGeometry: func(name string) (workspaceWindowGeometry, bool) {
+			require.Equal(t, sourceName, name)
+			return workspaceWindowGeometry{
+				X:         140,
+				Y:         90,
+				Width:     1440,
+				Height:    900,
+				Maximised: true,
+				Screen:    sourceScreen,
+			}, true
+		},
+	}
+
+	created := registry.Create(false)
+
+	require.Equal(t, "workspace-2", created.Name())
+	require.Equal(t, 1440, createdOptions.Width)
+	require.Equal(t, 900, createdOptions.Height)
+	require.Equal(t, application.WindowXY, createdOptions.InitialPosition)
+	require.Equal(t, 164, createdOptions.X)
+	require.Equal(t, 114, createdOptions.Y)
+	require.Same(t, sourceScreen, createdOptions.Screen)
+	require.Equal(t, application.WindowStateMaximised, createdOptions.StartState)
+}
+
+func TestWorkspaceWindowRegistryKeepsCascadedPeersOnTheSourceScreen(t *testing.T) {
+	lifecycle := newWorkspaceWindowLifecycle()
+	lifecycle.Add()
+	sourceScreen := &application.Screen{
+		ID:       "primary",
+		WorkArea: application.Rect{Width: 1200, Height: 800},
+	}
+	var createdOptions application.WebviewWindowOptions
+	registry := &workspaceWindowRegistry{
+		lifecycle: lifecycle,
+		newWindow: func(options application.WebviewWindowOptions) *application.WebviewWindow {
+			createdOptions = options
+			return application.NewWindow(options)
+		},
+		windowGeometry: func(string) (workspaceWindowGeometry, bool) {
+			return workspaceWindowGeometry{
+				X:      80,
+				Y:      100,
+				Width:  1100,
+				Height: 600,
+				Screen: sourceScreen,
+			}, true
+		},
+	}
+
+	registry.Create(false)
+
+	require.Equal(t, 56, createdOptions.X)
+	require.Equal(t, 124, createdOptions.Y)
+}
+
 type startupFailureProbeService struct {
 	name               string
 	startupErr         error
