@@ -39,6 +39,7 @@ import { clearAllGridTableState } from '@shared/components/tables/persistence/gr
 import { navigateToFavorite } from '@ui/favorites/navigateToFavorite';
 import { closeActiveClusterOrWindow } from '@ui/navigation/closeActiveClusterOrWindow';
 import { type ReactNode, useCallback, useMemo } from 'react';
+import { CheckForUpdates } from '@/core/backend-api';
 import { requestContextRefresh } from '@/core/data-access';
 import { eventBus } from '@/core/events';
 import {
@@ -270,6 +271,23 @@ export function useCommandPaletteCommands() {
           viewState.setIsAboutOpen(true);
         },
         keywords: ['about', 'info', 'version'],
+      },
+      {
+        id: 'check-for-updates',
+        label: 'Check for Updates…',
+        icon: <InfoIcon width={16} height={16} />,
+        description: 'Open About and check for a new application version',
+        category: 'Application',
+        action: () => {
+          viewState.setIsAboutOpen(true);
+          void CheckForUpdates().catch((error) => {
+            reportOperationalError(error, {
+              source: 'CommandPalette',
+              action: 'checkForUpdates',
+            });
+          });
+        },
+        keywords: ['update', 'upgrade', 'version', 'release'],
       },
       {
         id: 'open-settings',

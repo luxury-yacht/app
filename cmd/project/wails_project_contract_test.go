@@ -208,7 +208,7 @@ func TestPlatformBuildManifestsUseCanonicalProjectMetadata(t *testing.T) {
 func TestWailsProjectUsesFrameworkSingleInstanceHandling(t *testing.T) {
 	mainSource := readTestFile(t, repositoryPath("main.go"))
 	require.Contains(t, mainSource, "&application.SingleInstanceOptions{")
-	require.Contains(t, mainSource, `applicationProductIdentifier = "app.luxury-yacht.desktop"`)
+	require.Contains(t, mainSource, "applicationProductIdentifier = updateidentity.ProductIdentifier")
 	require.Contains(t, mainSource, "windows.FocusMostRecent()")
 	require.NotContains(t, mainSource, "SecondLaunchCoordinator")
 
@@ -267,6 +267,32 @@ func TestWailsApplicationIsInjectedDirectlyWithoutDesktopAdapter(t *testing.T) {
 
 	_, err := os.Stat(repositoryPath("internal", "desktop"))
 	require.ErrorIs(t, err, os.ErrNotExist)
+}
+
+func TestUpdaterTempRootIsConfiguredBeforeAnyProcessDispatch(t *testing.T) {
+	mainSource := readTestFile(t, repositoryPath("main.go"))
+
+	tempSetup := strings.Index(mainSource, "updatetemp.ConfigureProcess()")
+	wrapperDispatch := strings.Index(mainSource, "backend.MaybeRunExecWrapper()")
+	reporterSetup := strings.Index(mainSource, "reporter, reporterErr := newSentryReporter(")
+	applicationSetup := strings.Index(mainSource, "composition := newApplicationComposition(")
+
+	require.Positive(t, tempSetup)
+	require.Positive(t, wrapperDispatch)
+	require.Positive(t, reporterSetup)
+	require.Positive(t, applicationSetup)
+	require.Less(t, tempSetup, wrapperDispatch)
+	require.Less(t, wrapperDispatch, reporterSetup)
+	require.Less(t, reporterSetup, applicationSetup)
+
+	backendConstruction := strings.Index(mainSource, "backendApp = backend.NewApp(wailsApp, reporter)")
+	updaterConstruction := strings.Index(mainSource, "backend.ConfigureApplicationUpdates(backendApp,")
+	serviceRegistration := strings.Index(mainSource, "wailsApp.RegisterService(")
+	require.Positive(t, backendConstruction)
+	require.Positive(t, updaterConstruction)
+	require.Positive(t, serviceRegistration)
+	require.Less(t, backendConstruction, updaterConstruction)
+	require.Less(t, updaterConstruction, serviceRegistration)
 }
 
 func TestWailsBuildPreparesProjectMetadataWithoutMage(t *testing.T) {

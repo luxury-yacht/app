@@ -4,6 +4,8 @@
  * Storybook stories for the AboutModal component.
  */
 
+import { Status } from '@bindings/github.com/luxury-yacht/app/backend/internal/appupdates/models';
+import { Distribution } from '@bindings/github.com/luxury-yacht/app/internal/updateidentity/models';
 import type { backend } from '@core/backend-api/models';
 import type { Meta, StoryObj } from '@storybook/react';
 import { partialModelFixture } from '@/test-utils/partialModelFixture';
@@ -36,10 +38,11 @@ export const Default: Story = {
           gitCommit: 'abc1234',
           isBeta: false,
           update: partialModelFixture<backend.UpdateInfo>({
+            status: Status.StatusCurrent,
             currentVersion: '1.3.13',
-            latestVersion: '1.3.13',
-            releaseUrl: '',
-            isUpdateAvailable: false,
+            canCheck: true,
+            canInstall: true,
+            distribution: Distribution.DistributionMacBundle,
           }),
         })
       );
@@ -59,10 +62,15 @@ export const UpdateAvailable: Story = {
           gitCommit: 'abc1234',
           isBeta: false,
           update: partialModelFixture<backend.UpdateInfo>({
+            status: Status.StatusAvailable,
             currentVersion: '1.3.13',
-            latestVersion: '2.0.0',
-            releaseUrl: 'https://github.com/luxury-yacht/app/releases/tag/v2.0.0',
-            isUpdateAvailable: true,
+            availableVersion: '2.0.0',
+            releaseName: 'Luxury Yacht 2.0.0',
+            publishedAt: '2026-08-14T12:30:00Z',
+            releaseNotes: 'Automatic updates are now available.',
+            canCheck: true,
+            canInstall: true,
+            distribution: Distribution.DistributionMacBundle,
           }),
         })
       );
@@ -83,10 +91,11 @@ export const BetaWithExpiry: Story = {
           isBeta: true,
           expiryDate: '2026-06-01T00:00:00Z',
           update: partialModelFixture<backend.UpdateInfo>({
+            status: Status.StatusCurrent,
             currentVersion: '2.0.0-beta.1',
-            latestVersion: '2.0.0-beta.1',
-            releaseUrl: '',
-            isUpdateAvailable: false,
+            canCheck: true,
+            canInstall: true,
+            distribution: Distribution.DistributionMacBundle,
           }),
         })
       );

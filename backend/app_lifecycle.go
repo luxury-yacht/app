@@ -60,7 +60,9 @@ func (a *App) WindowRuntimeReady(windowName string, restoreGeometry bool) bool {
 	if err := a.startKubeconfigWatcher(); err != nil {
 		a.logger.Warn(fmt.Sprintf("Kubeconfig directory watcher not available: %v", err), logsources.App)
 	}
-	a.startUpdateCheck()
+	if a.applicationUpdates != nil {
+		a.applicationUpdates.RuntimeReady()
+	}
 	a.scheduleInstallationMetricRegistration(a.CtxOrBackground())
 	return true
 }
@@ -255,6 +257,15 @@ func (a *App) prepareQuitFromWindow(windowName string) bool {
 // cancelled and does not access the frontend runtime.
 func (a *App) ServiceShutdown() error {
 	a.logger.Info("Application shutdown initiated", logsources.App)
+	if a.applicationUpdates != nil {
+		a.applicationUpdates.Stop()
+	}
+	for _, unsubscribe := range a.applicationUpdateEventUnsubscribers {
+		if unsubscribe != nil {
+			unsubscribe()
+		}
+	}
+	a.applicationUpdateEventUnsubscribers = nil
 
 	// Shutdown all per-cluster auth managers to stop any recovery goroutines.
 	a.clusterClientsMu.Lock()

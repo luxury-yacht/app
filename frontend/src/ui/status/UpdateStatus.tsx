@@ -8,6 +8,7 @@
  */
 
 import type { backend } from '@core/backend-api/models';
+import { useModalState } from '@core/contexts/ModalStateContext';
 import { onEvent, openURL } from '@core/desktop-runtime';
 import Tooltip from '@shared/components/Tooltip';
 import React, { useCallback, useEffect, useState } from 'react';
@@ -15,21 +16,8 @@ import { readAppInfo, requestAppState } from '@/core/app-state-access';
 import { toPlainReleaseNotes } from './releaseNotesText';
 import './UpdateStatus.css';
 
-interface UpdateInfo {
-  currentVersion: string;
-  latestVersion: string;
-  releaseUrl: string;
-  releaseName?: string;
-  publishedAt?: string;
-  currentPublishedAt?: string;
-  checkedAt?: string;
-  isUpdateAvailable: boolean;
-  releaseNotes?: string;
-  error?: string;
-}
-
 type AppInfoWithUpdate = backend.AppInfo & {
-  update?: UpdateInfo | null;
+  update?: backend.UpdateInfo | null;
 };
 
 // Full rendered release notes live on the version's GitHub release page.
@@ -53,7 +41,8 @@ const formatPublished = (iso?: string): string | null => {
 };
 
 const UpdateStatus: React.FC = () => {
-  const [updateInfo, setUpdateInfo] = useState<UpdateInfo | null>(null);
+  const [updateInfo, setUpdateInfo] = useState<backend.UpdateInfo | null>(null);
+  const { setIsAboutOpen } = useModalState();
 
   useEffect(() => {
     let active = true;
@@ -72,7 +61,7 @@ const UpdateStatus: React.FC = () => {
   }, []);
 
   useEffect(() => {
-    const handleUpdate = (payload?: UpdateInfo) => {
+    const handleUpdate = (payload?: backend.UpdateInfo) => {
       if (payload) {
         setUpdateInfo(payload);
       }
@@ -81,19 +70,18 @@ const UpdateStatus: React.FC = () => {
   }, []);
 
   const handleClick = useCallback(() => {
-    if (updateInfo?.releaseUrl) {
-      openURL(updateInfo.releaseUrl);
-    }
-  }, [updateInfo]);
+    setIsAboutOpen(true);
+  }, [setIsAboutOpen]);
 
-  if (!updateInfo?.isUpdateAvailable || !updateInfo.releaseUrl) {
+  const label = updateInfo ? statusChipLabel(updateInfo.status) : null;
+  if (!updateInfo || !label) {
     return null;
   }
 
   const newDate = formatPublished(updateInfo.publishedAt);
-  const currentDate = formatPublished(updateInfo.currentPublishedAt);
   const notes = toPlainReleaseNotes(updateInfo.releaseNotes ?? '');
-  const notesUrl = `${RELEASE_NOTES_TAG_BASE}${encodeURIComponent(updateInfo.latestVersion)}`;
+  const availableVersion = updateInfo.availableVersion ?? '';
+  const notesUrl = `${RELEASE_NOTES_TAG_BASE}${encodeURIComponent(availableVersion)}`;
   const openNotes = () => openURL(notesUrl);
   const renderVersion = (version: string, date: string | null) => (
     <span>
@@ -106,11 +94,11 @@ const UpdateStatus: React.FC = () => {
     <div className="update-status__tooltip">
       <div className="update-status__tooltip-rows">
         <span className="update-status__tooltip-label">New:</span>
-        {renderVersion(updateInfo.latestVersion, newDate)}
+        {availableVersion !== '' ? renderVersion(availableVersion, newDate) : <span>{label}</span>}
         {!!updateInfo.currentVersion && (
           <>
             <span className="update-status__tooltip-label">Current:</span>
-            {renderVersion(updateInfo.currentVersion, currentDate)}
+            {renderVersion(updateInfo.currentVersion, null)}
           </>
         )}
       </div>
@@ -122,14 +110,16 @@ const UpdateStatus: React.FC = () => {
           </div>
         </>
       )}
-      <button
-        type="button"
-        className="update-status__tooltip-link"
-        onClick={openNotes}
-        data-testid="update-status-notes-link"
-      >
-        Full release notes ↗
-      </button>
+      {availableVersion !== '' ? (
+        <button
+          type="button"
+          className="update-status__tooltip-link"
+          onClick={openNotes}
+          data-testid="update-status-notes-link"
+        >
+          Full release notes ↗
+        </button>
+      ) : null}
     </div>
   );
 
@@ -139,13 +129,35 @@ const UpdateStatus: React.FC = () => {
         type="button"
         className="update-chip"
         onClick={handleClick}
-        aria-label={`Version ${updateInfo.latestVersion} available — open release page`}
+        aria-label={`${label} — open About`}
         data-testid="update-status-chip"
       >
-        Update available
+        {label}
       </button>
     </Tooltip>
   );
+};
+
+const statusChipLabel = (status: backend.UpdateInfo['status']): string | null => {
+  switch (status) {
+    case 'available':
+      return 'Update available';
+    case 'downloading':
+      return 'Downloading update…';
+    case 'verifying':
+      return 'Verifying update…';
+    case 'preparing':
+      return 'Preparing update…';
+    case 'ready':
+      return 'Restart to update';
+    case 'check-error':
+    case 'prepare-error':
+    case 'restart-error':
+    case 'apply-error':
+      return 'Update needs attention';
+    default:
+      return null;
+  }
 };
 
 export default React.memo(UpdateStatus);

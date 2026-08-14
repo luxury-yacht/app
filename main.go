@@ -8,13 +8,15 @@ import (
 	"github.com/luxury-yacht/app/backend"
 	"github.com/luxury-yacht/app/internal/appwindow"
 	"github.com/luxury-yacht/app/internal/sentry"
+	"github.com/luxury-yacht/app/internal/updateidentity"
+	"github.com/luxury-yacht/app/internal/updatetemp"
 	"github.com/wailsapp/wails/v3/pkg/application"
 )
 
 //go:embed all:frontend/dist
 var assets embed.FS
 
-const applicationProductIdentifier = "app.luxury-yacht.desktop"
+const applicationProductIdentifier = updateidentity.ProductIdentifier
 
 func reportPanic(reporter sentryreporting.Reporter) {
 	if recovered := recover(); recovered != nil {
@@ -56,7 +58,9 @@ type applicationComposition struct {
 }
 
 type compositionOptions struct {
-	SingleInstance bool
+	SingleInstance       bool
+	UpdateTempRoot       string
+	UpdateTempSetupError error
 }
 
 func newApplicationComposition(reporter sentryreporting.Reporter, options compositionOptions) *applicationComposition {
@@ -93,6 +97,10 @@ func newApplicationComposition(reporter sentryreporting.Reporter, options compos
 	wailsApp := application.New(applicationOptions)
 
 	backendApp = backend.NewApp(wailsApp, reporter)
+	backend.ConfigureApplicationUpdates(backendApp, backend.ApplicationUpdateOptions{
+		TempRoot:       options.UpdateTempRoot,
+		TempSetupError: options.UpdateTempSetupError,
+	})
 	wailsApp.RegisterService(application.NewServiceWithOptions(
 		backendApp,
 		application.ServiceOptions{Route: "/api/v2"},
@@ -114,6 +122,10 @@ func newApplicationComposition(reporter sentryreporting.Reporter, options compos
 }
 
 func main() {
+	updateTempRoot, updateTempSetupError := updatetemp.ConfigureProcess()
+	if updateTempSetupError != nil {
+		println("Automatic update temp setup disabled:", updateTempSetupError.Error())
+	}
 	backend.MaybeRunExecWrapper()
 
 	reporter, reporterErr := newSentryReporter(
@@ -128,7 +140,11 @@ func main() {
 	defer func() { reporter.Shutdown(2 * time.Second) }()
 	defer reportPanic(reporter)
 
-	composition := newApplicationComposition(reporter, compositionOptions{SingleInstance: true})
+	composition := newApplicationComposition(reporter, compositionOptions{
+		SingleInstance:       true,
+		UpdateTempRoot:       updateTempRoot,
+		UpdateTempSetupError: updateTempSetupError,
+	})
 	if err := backend.InitializeErrorReporting(composition.backend); err != nil {
 		println("Sentry error reporting remains disabled:", err.Error())
 	}

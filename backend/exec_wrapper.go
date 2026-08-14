@@ -40,7 +40,7 @@ func parseExecWrapperArgs(args []string) (string, []string, bool) {
 
 // runExecWrapper executes the helper command while preserving stdio.
 func runExecWrapper(command string, args []string) int {
-	cmd := exec.Command(command, args...)
+	cmd := newExecWrapperCommand(command, args)
 	cmd.Stdin = os.Stdin
 	cmd.Stdout = os.Stdout
 	cmd.Stderr = os.Stderr
@@ -55,6 +55,10 @@ func runExecWrapper(command string, args []string) int {
 	}
 
 	return 0
+}
+
+func newExecWrapperCommand(command string, args []string) *exec.Cmd {
+	return exec.Command(command, args...)
 }
 
 // execDisplayCommand returns the kubeconfig exec credential command suitable for

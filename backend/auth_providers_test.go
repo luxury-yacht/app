@@ -1,9 +1,18 @@
 package backend
 
 import (
+	"context"
 	"os"
 	"testing"
+
+	"github.com/stretchr/testify/require"
 )
+
+func TestCredentialHelperCommandInheritsProcessEnvironment(t *testing.T) {
+	command := execCommandContext(context.Background(), "kubectl", "version")
+
+	require.Nil(t, command.Env)
+}
 
 func TestResolveHomeDirPrefersEnv(t *testing.T) {
 	original := os.Getenv("HOME")

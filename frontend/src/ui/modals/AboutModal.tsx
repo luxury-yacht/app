@@ -9,13 +9,22 @@ import React, { useEffect, useRef, useState } from 'react';
 import './AboutModal.css';
 import captainK8s from '@assets/captain-k8s-color.png';
 import logo from '@assets/luxury-yacht-logo.png';
+import {
+  CheckForUpdates,
+  DownloadApplicationUpdate,
+  RestartAndApplyApplicationUpdate,
+} from '@core/backend-api';
 import type { backend } from '@core/backend-api/models';
-import { openURL } from '@core/desktop-runtime';
+import { onEvent, openURL } from '@core/desktop-runtime';
+import { ErrorSurface } from '@shared/components/errors/ErrorSurface';
 import { InfoIcon } from '@shared/components/icons/SharedIcons';
 import ModalHeader from '@shared/components/modals/ModalHeader';
 import ModalSurface from '@shared/components/modals/ModalSurface';
 import { useModalFocusTrap } from '@shared/components/modals/useModalFocusTrap';
 import { readAppInfo, requestAppState } from '@/core/app-state-access';
+import { reportOperationalError } from '@/utils/errorHandler';
+import { toPlainReleaseNotes } from '../status/releaseNotesText';
+import { getUpdatePresentation, type UpdateAction } from '../status/updatePresentation';
 
 interface AboutModalProps {
   isOpen: boolean;
@@ -26,6 +35,7 @@ const AboutModal: React.FC<AboutModalProps> = React.memo(({ isOpen, onClose }) =
   const [isClosing, setIsClosing] = useState(false);
   const [shouldRender, setShouldRender] = useState(false);
   const [appInfo, setAppInfo] = useState<backend.AppInfo | null>(null);
+  const [updateAction, setUpdateAction] = useState<UpdateAction | null>(null);
 
   useEffect(() => {
     if (isOpen) {
@@ -53,6 +63,17 @@ const AboutModal: React.FC<AboutModalProps> = React.memo(({ isOpen, onClose }) =
   }, [isOpen, shouldRender]);
 
   useEffect(() => {
+    if (!isOpen) {
+      return;
+    }
+    return onEvent('app-update', (updateSnapshot?: backend.UpdateInfo) => {
+      if (updateSnapshot) {
+        setAppInfo((current) => (current ? { ...current, update: updateSnapshot } : current));
+      }
+    });
+  }, [isOpen]);
+
+  useEffect(() => {
     document.body.style.overflow = isOpen ? 'hidden' : '';
     return () => {
       document.body.style.overflow = '';
@@ -77,32 +98,55 @@ const AboutModal: React.FC<AboutModalProps> = React.memo(({ isOpen, onClose }) =
     return null;
   }
 
-  let updateStatus: React.ReactNode = null;
-  if (appInfo?.update?.isUpdateAvailable) {
-    updateStatus = (
-      <p className="about-update-available">
-        Update available:{' '}
-        <a
-          href={appInfo.update.releaseUrl}
-          onClick={(e) => {
-            e.preventDefault();
-            const releaseUrl = appInfo.update?.releaseUrl;
-            if (releaseUrl) {
-              openURL(releaseUrl);
-            }
-          }}
-        >
-          {appInfo.update.latestVersion}
-        </a>
-      </p>
-    );
-  } else if (appInfo?.update && !appInfo.update.error) {
-    updateStatus = (
-      <p className="about-up-to-date">
-        <span className="about-up-to-date-icon">&#x2714;</span> Up to date
-      </p>
-    );
-  }
+  const update = appInfo?.update ?? null;
+  const updatePresentation = update ? getUpdatePresentation(update) : null;
+  const runUpdateAction = async (action: UpdateAction, url?: string) => {
+    if (!update || updateAction) {
+      return;
+    }
+    if (action === 'recovery') {
+      if (url) {
+        openURL(url);
+      }
+      return;
+    }
+    setUpdateAction(action);
+    try {
+      let next: backend.UpdateInfo | null = null;
+      if (action === 'check') {
+        next = await CheckForUpdates();
+      } else if (action === 'download' && update.availableVersion) {
+        next = await DownloadApplicationUpdate(update.availableVersion);
+      } else if (action === 'restart') {
+        next = await RestartAndApplyApplicationUpdate();
+      }
+      if (next) {
+        setAppInfo((current) => (current ? { ...current, update: next } : current));
+      }
+    } catch (error) {
+      const actionName = {
+        check: 'checkApplicationUpdate',
+        download: 'downloadApplicationUpdate',
+        restart: 'restartAndApplyApplicationUpdate',
+        recovery: 'openApplicationUpdateRecovery',
+      }[action];
+      reportOperationalError(error, { source: 'AboutModal', action: actionName });
+    } finally {
+      setUpdateAction(null);
+    }
+  };
+
+  const renderAction = (action: NonNullable<typeof updatePresentation>['primary']) =>
+    action ? (
+      <button
+        type="button"
+        className="p-btn p-prim-col about-update-action"
+        disabled={updateAction !== null}
+        onClick={() => void runUpdateAction(action.kind, action.url)}
+      >
+        {action.label}
+      </button>
+    ) : null;
 
   return (
     <ModalSurface
@@ -132,7 +176,48 @@ const AboutModal: React.FC<AboutModalProps> = React.memo(({ isOpen, onClose }) =
             <p>
               <strong>Version {appInfo?.version || 'Loading...'}</strong>
             </p>
-            {updateStatus}
+            {updatePresentation ? (
+              <section className="about-update" aria-label="Application update">
+                <p className="about-update-message">{updatePresentation.message}</p>
+                {updatePresentation.explanation ? (
+                  <p className="about-update-explanation">{updatePresentation.explanation}</p>
+                ) : null}
+                {update?.progressPercent !== undefined && update.progressPercent !== null ? (
+                  <div className="about-update-progress">
+                    <progress value={update.progressPercent} max={100} />
+                    <span>{Math.round(update.progressPercent)}%</span>
+                  </div>
+                ) : null}
+                {update?.releaseNotes ? (
+                  <div className="about-update-notes">
+                    {toPlainReleaseNotes(update.releaseNotes)}
+                  </div>
+                ) : null}
+                <div className="about-update-actions">
+                  {renderAction(updatePresentation.primary)}
+                  {updatePresentation.secondary ? (
+                    <button
+                      type="button"
+                      className="p-btn about-update-action"
+                      disabled={updateAction !== null}
+                      onClick={() =>
+                        void runUpdateAction(
+                          updatePresentation.secondary?.kind ?? 'recovery',
+                          updatePresentation.secondary?.url
+                        )
+                      }
+                    >
+                      {updatePresentation.secondary.label}
+                    </button>
+                  ) : null}
+                </div>
+                {update?.error ? (
+                  <p className="about-update-error">
+                    <ErrorSurface kind="status" message={update.error} />
+                  </p>
+                ) : null}
+              </section>
+            ) : null}
             {appInfo?.isBeta && appInfo?.expiryDate ? (
               <p className="about-beta-expiry">
                 Beta expires: {new Date(appInfo.expiryDate).toLocaleDateString()}

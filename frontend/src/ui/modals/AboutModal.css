@@ -119,6 +119,61 @@
   font-size: 0.9em;
 }
 
+.about-update {
+  margin: 1rem 0;
+  padding: 1rem;
+  border: 1px solid var(--color-border);
+  border-radius: var(--border-radius);
+  background: var(--color-bg-secondary);
+  text-align: left;
+}
+
+.about-update-message {
+  margin: 0;
+  color: var(--color-text);
+  font-weight: var(--font-weight-semibold);
+}
+
+.about-update-explanation,
+.about-update-error {
+  margin: 0.5rem 0 0;
+}
+
+.about-update-error {
+  color: var(--color-error);
+}
+
+.about-update-progress {
+  display: flex;
+  align-items: center;
+  gap: 0.75rem;
+  margin-top: 0.75rem;
+}
+
+.about-update-progress progress {
+  flex: 1;
+}
+
+.about-update-notes {
+  max-height: 8rem;
+  margin-top: 0.75rem;
+  overflow: auto;
+  white-space: pre-wrap;
+  color: var(--color-text-secondary);
+  font-size: 0.85rem;
+}
+
+.about-update-actions {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.5rem;
+  margin-top: 0.75rem;
+}
+
+.about-update-action {
+  margin: 0;
+}
+
 /* ==========================================================================
    Footer Section
    ========================================================================== */

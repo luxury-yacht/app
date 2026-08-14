@@ -1,7 +1,10 @@
 # Automatic Application Updates
 
-Status: implementation-ready staged plan. The project owner has resolved every
-design decision gate below. Windows Authenticode certificate procurement is in
+Status: implementation in progress. Phases 1 and 2 (release identity,
+installation eligibility, process temp-root ownership, and the coordinator
+state machine) are implemented. Phase 3 recovery persistence and Phase 4 shell
+coverage remain in progress. The project owner has resolved every design
+decision gate below. Windows Authenticode certificate procurement is in
 progress; it does not block the shared foundation or macOS stage, but it remains
 a Windows enablement and overall-completion dependency.
 
@@ -916,6 +919,22 @@ fetcher, custom version parser, and obsolete tests in one affected-path change.
 
 Each behavior phase follows red, green, refactor. Do not implement the behavior
 before observing the new focused test fail for the expected reason.
+
+Implementation progress:
+
+- [x] Phase 1 — release identity and eligibility. The shared boundary, platform
+  probes, endpoint-channel adapter, and explicit updater artifact naming and
+  selection live in `internal/updateidentity`,
+  `backend/app_update_provider.go`, and `cmd/project`; their focused tests cover
+  the matrix below.
+- [x] Phase 2 — coordinator state machine. The process-owned coordinator,
+  runtime-ready scheduler, explicit consent transitions, semantic broadcasts,
+  owned temp-root setup/sweep primitives, and cancellation boundary live in
+  `backend/internal/appupdates`, `internal/updatetemp`, and root composition.
+- [ ] Phase 3 — app-state migration.
+- [ ] Phase 4 — shell actions.
+- [ ] Phase 5 — publishing pipeline.
+- [ ] Phase 6 — affected-path cleanup.
 
 ### Phase 1: release identity and eligibility
 

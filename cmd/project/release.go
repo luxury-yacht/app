@@ -120,6 +120,24 @@ func findReleaseAssets(cfg releaseConfig) ([]string, error) {
 	return assets, nil
 }
 
+func selectUpdaterArtifact(inputs []string) (string, error) {
+	if len(inputs) != 1 {
+		return "", fmt.Errorf("expected exactly one updater artifact, got %d", len(inputs))
+	}
+	path := strings.TrimSpace(inputs[0])
+	if strings.ContainsAny(path, "*?[") {
+		return "", fmt.Errorf("updater artifact path must not contain glob syntax: %s", path)
+	}
+	info, err := os.Lstat(path)
+	if err != nil {
+		return "", fmt.Errorf("stat updater artifact %s: %w", path, err)
+	}
+	if !info.Mode().IsRegular() {
+		return "", fmt.Errorf("updater artifact must be a regular file: %s", path)
+	}
+	return path, nil
+}
+
 func readPendingReleaseNotes(path string) (string, error) {
 	raw, err := os.ReadFile(path)
 	if err != nil {

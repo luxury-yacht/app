@@ -45,6 +45,7 @@ func createApplicationMenu(appMenu *application.Menu, app *App) {
 func addMacApplicationMenu(appMenu *application.Menu, app *App) {
 	appSubmenu := appMenu.AddSubmenu("Luxury Yacht")
 	addMenuText(appSubmenu, "About Luxury Yacht", "", menuCallback(app.ShowAbout))
+	addMenuText(appSubmenu, "Check for Updates…", "", menuCallback(app.showAboutAndCheckForUpdates))
 	appSubmenu.AddSeparator()
 	addMenuText(appSubmenu, "Settings...", "CmdOrCtrl+,", menuCallback(app.ShowSettings))
 	addMenuText(appSubmenu, "Hide Luxury Yacht", "CmdOrCtrl+h", hideApplicationCallback(app))
@@ -250,6 +251,11 @@ func createHelpMenu(appMenu *application.Menu, app *App) {
 	if runtime.GOOS == "darwin" {
 		return
 	}
+	addDesktopHelpMenu(appMenu, app)
+}
+
+func addDesktopHelpMenu(appMenu *application.Menu, app *App) {
 	helpMenu := appMenu.AddSubmenu("Help")
 	addMenuText(helpMenu, "About Luxury Yacht", "", menuCallback(app.ShowAbout))
+	addMenuText(helpMenu, "Check for Updates…", "", menuCallback(app.showAboutAndCheckForUpdates))
 }

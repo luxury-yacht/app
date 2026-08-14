@@ -175,6 +175,14 @@ export function CancelDrainNodeJob(clusterID: string, jobID: string): $Cancellab
 }
 
 /**
+ * CheckForUpdates performs only release discovery. Download and restart remain
+ * separate user-consent commands.
+ */
+export function CheckForUpdates(): $CancellablePromise<$models.UpdateInfo | null> {
+    return $Call.ByName("github.com/luxury-yacht/app/backend.App.CheckForUpdates");
+}
+
+/**
  * CheckObjectYamlOwnership reports which fields the edited YAML would take
  * ownership of from other field managers. It is advisory: the caller decides
  * whether to proceed, and the save itself never goes through server-side
@@ -270,6 +278,14 @@ export function DeleteTheme(id: string): $CancellablePromise<void> {
 
 export function DiscoverNodeLogs(clusterID: string, nodeName: string): $CancellablePromise<$models.NodeLogDiscoveryResponse> {
     return $Call.ByName("github.com/luxury-yacht/app/backend.App.DiscoverNodeLogs", clusterID, nodeName);
+}
+
+/**
+ * DownloadApplicationUpdate downloads, verifies, and prepares the exact
+ * release version the user approved.
+ */
+export function DownloadApplicationUpdate(version: string): $CancellablePromise<$models.UpdateInfo | null> {
+    return $Call.ByName("github.com/luxury-yacht/app/backend.App.DownloadApplicationUpdate", version);
 }
 
 export function ExportFavorites(): $CancellablePromise<$models.DataManagementResult> {
@@ -846,6 +862,14 @@ export function ReorderThemes(ids: string[] | null): $CancellablePromise<void> {
  */
 export function ResizeShellSession(sessionID: string, columns: number, rows: number): $CancellablePromise<void> {
     return $Call.ByName("github.com/luxury-yacht/app/backend.App.ResizeShellSession", sessionID, columns, rows);
+}
+
+/**
+ * RestartAndApplyApplicationUpdate starts the prepared updater helper only
+ * after explicit user consent.
+ */
+export function RestartAndApplyApplicationUpdate(): $CancellablePromise<$models.UpdateInfo | null> {
+    return $Call.ByName("github.com/luxury-yacht/app/backend.App.RestartAndApplyApplicationUpdate");
 }
 
 export function RestoreClusterAttentionFindingType(clusterID: string, findingType: string): $CancellablePromise<snapshot$0.AttentionIgnoreRules | null> {

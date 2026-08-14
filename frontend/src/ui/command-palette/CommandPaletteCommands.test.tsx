@@ -57,6 +57,9 @@ const { mocks } = vi.hoisted(() => ({
     appSettings: {
       UpdateAppPreferences: vi.fn(),
     },
+    appUpdates: {
+      CheckForUpdates: vi.fn(),
+    },
     desktopRuntime: {
       closeWindow: vi.fn(),
     },
@@ -107,6 +110,7 @@ vi.mock('@/core/refresh', () => ({
 
 vi.mock('@core/backend-api', () => ({
   UpdateAppPreferences: (...args: unknown[]) => mocks.appSettings.UpdateAppPreferences(...args),
+  CheckForUpdates: (...args: unknown[]) => mocks.appUpdates.CheckForUpdates(...args),
 }));
 
 vi.mock('@core/desktop-runtime', () => ({
@@ -186,6 +190,8 @@ describe('CommandPaletteCommands', () => {
     mocks.viewState.setIsAboutOpen.mockReset();
     mocks.viewState.setIsSettingsOpen.mockReset();
     mocks.viewState.setIsObjectDiffOpen.mockReset();
+    mocks.appUpdates.CheckForUpdates.mockReset();
+    mocks.appUpdates.CheckForUpdates.mockResolvedValue({ status: 'checking' });
     mocks.viewState.toggleSidebar.mockReset();
     mocks.viewState.navigateToNamespace.mockReset();
     mocks.viewState.setActiveNamespaceTab.mockReset();
@@ -548,6 +554,7 @@ describe('CommandPaletteCommands', () => {
 
     await act(async () => {
       commands.get('open-about')?.action();
+      commands.get('check-for-updates')?.action();
       commands.get('open-settings')?.action();
       commands.get('toggle-sidebar')?.action();
       commands.get('open-object-diff')?.action();
@@ -558,7 +565,10 @@ describe('CommandPaletteCommands', () => {
       await commands.get('mode-dark')?.action();
     });
 
-    expect(mocks.viewState.setIsAboutOpen).toHaveBeenCalledWith(true);
+    expect(mocks.viewState.setIsAboutOpen).toHaveBeenCalledTimes(2);
+    expect(mocks.viewState.setIsAboutOpen).toHaveBeenNthCalledWith(1, true);
+    expect(mocks.viewState.setIsAboutOpen).toHaveBeenNthCalledWith(2, true);
+    expect(mocks.appUpdates.CheckForUpdates).toHaveBeenCalledOnce();
     expect(mocks.viewState.setIsSettingsOpen).toHaveBeenCalledWith(true);
     expect(mocks.viewState.toggleSidebar).toHaveBeenCalledTimes(1);
     expect(mocks.viewState.setIsObjectDiffOpen).toHaveBeenCalledWith(true);

@@ -3,6 +3,8 @@
  * Works by setting an override used by the Storybook Wails v3 transport.
  */
 
+import { Status } from '@bindings/github.com/luxury-yacht/app/backend/internal/appupdates/models';
+import { Distribution } from '@bindings/github.com/luxury-yacht/app/internal/updateidentity/models';
 import type { backend } from '@core/backend-api/models';
 
 // Default app info returned when no override is set.
@@ -13,10 +15,11 @@ const defaultAppInfo: backend.AppInfo = {
   isBeta: false,
   expiryDate: undefined,
   update: {
+    status: Status.StatusCurrent,
     currentVersion: '1.3.13',
-    latestVersion: '1.3.13',
-    releaseUrl: '',
-    isUpdateAvailable: false,
+    canCheck: true,
+    canInstall: true,
+    distribution: Distribution.DistributionMacBundle,
   },
 };
 

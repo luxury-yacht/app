@@ -13,6 +13,12 @@ import (
 	"k8s.io/client-go/tools/clientcmd/api"
 )
 
+func TestExecWrapperCommandInheritsProcessEnvironment(t *testing.T) {
+	command := newExecWrapperCommand("kubectl", []string{"version"})
+
+	require.Nil(t, command.Env)
+}
+
 func TestParseExecWrapperArgs(t *testing.T) {
 	command, args, ok := parseExecWrapperArgs([]string{"app"})
 	if ok || command != "" || args != nil {

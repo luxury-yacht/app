@@ -11,6 +11,7 @@ import (
 	"time"
 
 	"github.com/joho/godotenv"
+	"github.com/luxury-yacht/app/internal/updateidentity"
 	"gopkg.in/yaml.v3"
 )
 
@@ -115,7 +116,8 @@ func deriveProjectFacts(metadata projectMetadata, now time.Time, commit string) 
 }
 
 func isBetaVersion(version string) bool {
-	return strings.Contains(strings.ToLower(version), "beta")
+	release, err := updateidentity.ParseReleaseVersion(version)
+	return err == nil && release.Channel == updateidentity.ChannelBeta
 }
 
 func writeProjectConfig(output io.Writer) error {
@@ -162,6 +164,9 @@ func releaseArtifactName(metadata projectMetadata, goos, goarch, format string) 
 	goos = strings.ToLower(strings.TrimSpace(goos))
 	goarch = strings.ToLower(strings.TrimSpace(goarch))
 	format = strings.ToLower(strings.TrimSpace(format))
+	if format == "updater" {
+		return updaterArtifactName(metadata, goos, goarch)
+	}
 
 	var artifactName string
 	switch goos {
@@ -206,4 +211,31 @@ func windowsReleaseArtifactName(name, version, goarch, format string) string {
 
 func isReleaseArchitecture(goarch string) bool {
 	return goarch == "amd64" || goarch == "arm64"
+}
+
+func updaterArtifactName(metadata projectMetadata, goos, goarch string) (string, error) {
+	name, err := projectBinaryName(metadata)
+	if err != nil {
+		return "", err
+	}
+	version := strings.TrimSpace(metadata.Info.Version)
+	if _, err := updateidentity.ParseReleaseVersion(version); err != nil {
+		return "", err
+	}
+	goos = strings.ToLower(strings.TrimSpace(goos))
+	goarch = strings.ToLower(strings.TrimSpace(goarch))
+	if !isReleaseArchitecture(goarch) {
+		return "", fmt.Errorf("unsupported updater artifact target %s/%s", goos, goarch)
+	}
+
+	switch goos {
+	case "darwin":
+		return fmt.Sprintf("%s-%s-darwin-%s.zip", name, version, goarch), nil
+	case "windows":
+		return fmt.Sprintf("%s-%s-windows-%s.exe", name, version, goarch), nil
+	case "linux":
+		return fmt.Sprintf("%s-%s-linux-%s.tar.gz", name, version, goarch), nil
+	default:
+		return "", fmt.Errorf("unsupported updater artifact target %s/%s", goos, goarch)
+	}
 }

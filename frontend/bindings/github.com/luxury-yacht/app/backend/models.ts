@@ -3,6 +3,9 @@
 
 // eslint-disable-next-line @typescript-eslint/ban-ts-comment
 // @ts-ignore: Unused imports
+import * as appupdates$0 from "./internal/appupdates/models.js";
+// eslint-disable-next-line @typescript-eslint/ban-ts-comment
+// @ts-ignore: Unused imports
 import * as telemetry$0 from "./refresh/telemetry/models.js";
 // eslint-disable-next-line @typescript-eslint/ban-ts-comment
 // @ts-ignore: Unused imports
@@ -16,6 +19,9 @@ import * as helm$0 from "./resources/helm/models.js";
 // eslint-disable-next-line @typescript-eslint/ban-ts-comment
 // @ts-ignore: Unused imports
 import * as types$0 from "./resources/types/models.js";
+// eslint-disable-next-line @typescript-eslint/ban-ts-comment
+// @ts-ignore: Unused imports
+import * as updateidentity$0 from "../internal/updateidentity/models.js";
 
 /**
  * AppInfo contains application version information
@@ -782,25 +788,18 @@ export type UpdateAppPreferencesRequest = types$0.UpdateAppPreferencesRequest;
 export type UpdateAppPreferencesResponse = types$0.UpdateAppPreferencesResponse;
 
 export interface UpdateInfo {
-    "currentVersion": string;
-    "latestVersion": string;
-    "releaseUrl": string;
+    "status": appupdates$0.Status;
+    "currentVersion"?: string;
+    "availableVersion"?: string;
     "releaseName"?: string;
     "publishedAt"?: string;
-
-    /**
-     * CurrentPublishedAt is the release date of the currently-installed version,
-     * fetched separately by tag (the latest-release response only covers New).
-     */
-    "currentPublishedAt"?: string;
-    "checkedAt"?: string;
-    "isUpdateAvailable": boolean;
-
-    /**
-     * ReleaseNotes is the raw release body (markdown) shown as a preview in the
-     * update chip's tooltip; the full rendered notes live at the release tag page.
-     */
     "releaseNotes"?: string;
+    "progressPercent"?: number | null;
+    "canCheck": boolean;
+    "canInstall": boolean;
+    "distribution"?: updateidentity$0.Distribution;
+    "eligibilityReason"?: updateidentity$0.EligibilityReason;
+    "recoveryTarget"?: updateidentity$0.RecoveryTarget;
     "error"?: string;
 }
 

@@ -138,6 +138,20 @@ func TestViewMenuOffersCommandPalette(t *testing.T) {
 	require.Contains(t, menuLabels(findSubmenu(t, menu, "View")), "Command Palette")
 }
 
+func TestMacApplicationMenuOffersCheckForUpdates(t *testing.T) {
+	menu := application.NewMenu()
+	addMacApplicationMenu(menu, &App{})
+
+	require.Contains(t, menuLabels(findSubmenu(t, menu, "Luxury Yacht")), "Check for Updates…")
+}
+
+func TestDesktopHelpMenuOffersCheckForUpdates(t *testing.T) {
+	menu := application.NewMenu()
+	addDesktopHelpMenu(menu, &App{})
+
+	require.Contains(t, menuLabels(findSubmenu(t, menu, "Help")), "Check for Updates…")
+}
+
 func TestDebugMenuEventsUseReadinessGuard(t *testing.T) {
 	app := &App{}
 	setTestAppRuntimeReady(t, app, context.Background())

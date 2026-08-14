@@ -1,3 +1,4 @@
+import { ModalStateProvider } from '@core/contexts/ModalStateContext';
 import { act } from 'react';
 import * as ReactDOM from 'react-dom/client';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
@@ -50,9 +51,17 @@ describe('AppHeader', () => {
     document.body.classList.remove('modal-surface-open');
   });
 
+  const renderHeader = () => {
+    root.render(
+      <ModalStateProvider>
+        <AppHeader />
+      </ModalStateProvider>
+    );
+  };
+
   it('renders header controls in the expected tab order', () => {
     act(() => {
-      root.render(<AppHeader />);
+      renderHeader();
     });
 
     const focusables = Array.from(
@@ -69,7 +78,7 @@ describe('AppHeader', () => {
   it('does not toggle maximise from the header while a modal is open', () => {
     document.body.classList.add('modal-surface-open');
     act(() => {
-      root.render(<AppHeader />);
+      renderHeader();
     });
 
     const header = container.querySelector('.app-header-drag-control') as HTMLButtonElement;
@@ -82,7 +91,7 @@ describe('AppHeader', () => {
 
   it('exposes the titlebar maximize gesture as a native keyboard control', () => {
     act(() => {
-      root.render(<AppHeader />);
+      renderHeader();
     });
 
     const dragControl = container.querySelector<HTMLButtonElement>('.app-header-drag-control');
@@ -93,7 +102,7 @@ describe('AppHeader', () => {
 
   it('does not toggle maximise when a control is double-clicked', () => {
     act(() => {
-      root.render(<AppHeader />);
+      renderHeader();
     });
 
     const commandPaletteButton = container.querySelector(

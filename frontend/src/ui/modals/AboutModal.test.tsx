@@ -13,21 +13,37 @@ import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 
 const appInfoMock = vi.hoisted(() => ({
   GetAppInfo: vi.fn(),
+  CheckForUpdates: vi.fn(),
+  DownloadApplicationUpdate: vi.fn(),
+  RestartAndApplyApplicationUpdate: vi.fn(),
 }));
 
 const runtimeMock = vi.hoisted(() => ({
-  eventsOn: vi.fn(() => () => undefined),
+  eventsOn: vi.fn(
+    (_name: string, _callback: (payload?: Record<string, unknown>) => void) => () => undefined
+  ),
   openURL: vi.fn(),
+}));
+
+const errorMock = vi.hoisted(() => ({
+  reportOperationalError: vi.fn(),
 }));
 
 vi.mock('@core/backend-api', () => ({
   GetAppInfo: appInfoMock.GetAppInfo,
+  CheckForUpdates: appInfoMock.CheckForUpdates,
+  DownloadApplicationUpdate: appInfoMock.DownloadApplicationUpdate,
+  RestartAndApplyApplicationUpdate: appInfoMock.RestartAndApplyApplicationUpdate,
 }));
 
 vi.mock('@core/desktop-runtime', () => ({
   desktopRuntimeAvailable: () => false,
   onEvent: runtimeMock.eventsOn,
   openURL: runtimeMock.openURL,
+}));
+
+vi.mock('@/utils/errorHandler', () => ({
+  reportOperationalError: errorMock.reportOperationalError,
 }));
 
 vi.mock('@assets/luxury-yacht-logo.png', () => ({ __esModule: true, default: 'logo.png' }));
@@ -77,7 +93,118 @@ describe('AboutModal', () => {
     runtimeMock.eventsOn.mockReset().mockReturnValue(() => undefined);
     runtimeMock.openURL.mockReset();
     appInfoMock.GetAppInfo.mockReset();
+    appInfoMock.CheckForUpdates.mockReset();
+    appInfoMock.DownloadApplicationUpdate.mockReset();
+    appInfoMock.RestartAndApplyApplicationUpdate.mockReset();
+    errorMock.reportOperationalError.mockReset();
     document.body.style.overflow = '';
+  });
+
+  it('reports a rejected update command without closing the About surface', async () => {
+    appInfoMock.GetAppInfo.mockResolvedValue({
+      version: '1.9.0',
+      update: {
+        status: 'check-error',
+        currentVersion: '1.9.0',
+        canCheck: true,
+        canInstall: true,
+        error: 'network unavailable',
+      },
+    });
+    appInfoMock.CheckForUpdates.mockRejectedValue(new Error('offline'));
+    const modal = await renderModal({ isOpen: true, onClose: vi.fn() });
+    await act(async () => Promise.resolve());
+
+    const check = Array.from(document.querySelectorAll('button')).find(
+      (button) => button.textContent === 'Check Again'
+    );
+    await act(async () => check?.click());
+
+    expect(errorMock.reportOperationalError).toHaveBeenCalledWith(expect.any(Error), {
+      source: 'AboutModal',
+      action: 'checkApplicationUpdate',
+    });
+    expect(document.body.textContent).toContain('Couldn’t check for updates.');
+    await modal.unmount();
+  });
+
+  it('requires separate download and restart consent while following live backend state', async () => {
+    let updateHandler: ((payload: Record<string, unknown>) => void) | undefined;
+    runtimeMock.eventsOn.mockImplementation((name: string, callback: typeof updateHandler) => {
+      if (name === 'app-update') {
+        updateHandler = callback;
+      }
+      return () => undefined;
+    });
+    appInfoMock.GetAppInfo.mockResolvedValue({
+      version: '1.9.0',
+      update: {
+        status: 'available',
+        currentVersion: '1.9.0',
+        availableVersion: '2.0.0',
+        releaseNotes: '## Safer updates',
+        canCheck: true,
+        canInstall: true,
+      },
+    });
+    appInfoMock.DownloadApplicationUpdate.mockResolvedValue({ status: 'downloading' });
+    appInfoMock.RestartAndApplyApplicationUpdate.mockResolvedValue({ status: 'ready' });
+    const modal = await renderModal({ isOpen: true, onClose: vi.fn() });
+    await act(async () => Promise.resolve());
+
+    expect(document.body.textContent).toContain('Luxury Yacht 2.0.0 is available.');
+    expect(document.body.textContent).toContain('Safer updates');
+    const download = Array.from(document.querySelectorAll('button')).find(
+      (button) => button.textContent === 'Download Update'
+    );
+    expect(download).toBeTruthy();
+    await act(async () => download?.click());
+    expect(appInfoMock.DownloadApplicationUpdate).toHaveBeenCalledWith('2.0.0');
+    expect(appInfoMock.RestartAndApplyApplicationUpdate).not.toHaveBeenCalled();
+
+    await act(async () => {
+      updateHandler?.({
+        status: 'ready',
+        currentVersion: '1.9.0',
+        availableVersion: '2.0.0',
+        canInstall: true,
+      });
+    });
+    expect(document.body.textContent).toContain('Luxury Yacht 2.0.0 is ready to install.');
+    const restart = Array.from(document.querySelectorAll('button')).find(
+      (button) => button.textContent === 'Restart & Apply'
+    );
+    expect(restart).toBeTruthy();
+    await act(async () => restart?.click());
+    expect(appInfoMock.RestartAndApplyApplicationUpdate).toHaveBeenCalledTimes(1);
+
+    await modal.unmount();
+  });
+
+  it('shows reason-specific notification-only recovery without staging', async () => {
+    appInfoMock.GetAppInfo.mockResolvedValue({
+      version: '2.0.0',
+      update: {
+        status: 'available',
+        currentVersion: '2.0.0',
+        availableVersion: '2.1.0',
+        canCheck: true,
+        canInstall: false,
+        eligibilityReason: 'linux-package-managed',
+        recoveryTarget: 'linux-packages',
+      },
+    });
+    const modal = await renderModal({ isOpen: true, onClose: vi.fn() });
+    await act(async () => Promise.resolve());
+
+    expect(document.body.textContent).toContain(
+      'This installation is managed by your system package manager.'
+    );
+    expect(document.body.textContent).toContain('View Linux Packages');
+    expect(document.body.textContent).not.toContain('Download Update');
+    expect(appInfoMock.DownloadApplicationUpdate).not.toHaveBeenCalled();
+
+    await modal.unmount();
   });
 
   afterEach(() => {

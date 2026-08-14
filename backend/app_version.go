@@ -94,10 +94,6 @@ func loadEmbeddedBuildInfo() *embeddedBuildInfo {
 
 // GetAppInfo returns the application version information
 func (a *App) GetAppInfo() (*AppInfo, error) {
-	if a != nil {
-		// Ensure the update check is started so callers can read cached results.
-		a.startUpdateCheck()
-	}
 	if info := loadEmbeddedBuildInfo(); info != nil && info.Version != "dev" {
 		return a.withUpdateInfo(&AppInfo{
 			Version:    info.Version,

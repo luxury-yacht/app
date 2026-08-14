@@ -76,3 +76,39 @@ func TestFindReleaseAssetsRejectsDuplicateBasenames(t *testing.T) {
 
 	require.ErrorContains(t, err, `duplicate release asset name "luxury-yacht.deb"`)
 }
+
+func TestSelectUpdaterArtifactRequiresOneExplicitRegularFile(t *testing.T) {
+	artifact := filepath.Join(t.TempDir(), "luxury-yacht-v2.0.0-darwin-arm64.zip")
+	require.NoError(t, os.WriteFile(artifact, []byte("artifact"), 0o600))
+
+	selected, err := selectUpdaterArtifact([]string{artifact})
+
+	require.NoError(t, err)
+	require.Equal(t, artifact, selected)
+}
+
+func TestSelectUpdaterArtifactRejectsAmbiguousOrUnsafeInputs(t *testing.T) {
+	directory := t.TempDir()
+	artifact := filepath.Join(directory, "luxury-yacht-v2.0.0-darwin-arm64.zip")
+	require.NoError(t, os.WriteFile(artifact, []byte("artifact"), 0o600))
+	second := filepath.Join(directory, "luxury-yacht-v2.0.0-darwin-amd64.zip")
+	require.NoError(t, os.WriteFile(second, []byte("artifact"), 0o600))
+
+	for _, test := range []struct {
+		name   string
+		inputs []string
+		want   string
+	}{
+		{name: "none", want: "exactly one updater artifact"},
+		{name: "multiple", inputs: []string{artifact, second}, want: "exactly one updater artifact"},
+		{name: "glob", inputs: []string{filepath.Join(directory, "*.zip")}, want: "must not contain glob syntax"},
+		{name: "directory", inputs: []string{directory}, want: "must be a regular file"},
+		{name: "missing", inputs: []string{filepath.Join(directory, "missing.zip")}, want: "stat updater artifact"},
+	} {
+		t.Run(test.name, func(t *testing.T) {
+			_, err := selectUpdaterArtifact(test.inputs)
+
+			require.ErrorContains(t, err, test.want)
+		})
+	}
+}

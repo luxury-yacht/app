@@ -96,6 +96,12 @@ func TestDeriveProjectFactsUsesOneMetadataSnapshot(t *testing.T) {
 	require.Equal(t, "2026-09-11T12:00:00Z", facts.betaExpiry)
 }
 
+func TestIsBetaVersionRequiresValidBetaReleaseIdentity(t *testing.T) {
+	require.True(t, isBetaVersion("v2.0.0-beta.3"))
+	require.False(t, isBetaVersion("v2.0.0"))
+	require.False(t, isBetaVersion("alphabetical-beta-build"))
+}
+
 func TestProjectBinaryNameUsesConfiguredProductName(t *testing.T) {
 	var metadata projectMetadata
 	metadata.Info.ProductName = " Luxury Yacht Pro "
@@ -130,6 +136,9 @@ func TestReleaseArtifactNamePreservesVersionPlatformAndArchitecture(t *testing.T
 		{goos: "linux", arch: "arm64", format: "rpm", want: "luxury-yacht-v2.0.0-linux-aarch64.rpm"},
 		{goos: "windows", arch: "amd64", format: "exe", want: "luxury-yacht-v2.0.0-windows-amd64-installer.exe"},
 		{goos: "windows", arch: "arm64", format: "exe", want: "luxury-yacht-v2.0.0-windows-arm64-installer.exe"},
+		{goos: "darwin", arch: "arm64", format: "updater", want: "luxury-yacht-v2.0.0-darwin-arm64.zip"},
+		{goos: "windows", arch: "amd64", format: "updater", want: "luxury-yacht-v2.0.0-windows-amd64.exe"},
+		{goos: "linux", arch: "arm64", format: "updater", want: "luxury-yacht-v2.0.0-linux-arm64.tar.gz"},
 	} {
 		t.Run(test.goos+"-"+test.arch+"-"+test.format, func(t *testing.T) {
 			name, err := releaseArtifactName(metadata, test.goos, test.arch, test.format)
@@ -164,5 +173,43 @@ func TestReleaseArtifactNameRejectsUnsupportedTargets(t *testing.T) {
 
 			require.ErrorContains(t, err, "unsupported release artifact target")
 		})
+	}
+}
+
+func TestUpdaterArtifactNameIsExplicitForEverySupportedTarget(t *testing.T) {
+	var metadata projectMetadata
+	metadata.Info.ProductName = "Luxury Yacht"
+	metadata.Info.Version = "v2.0.0-beta.3"
+
+	for _, test := range []struct {
+		goos string
+		arch string
+		want string
+	}{
+		{goos: "darwin", arch: "amd64", want: "luxury-yacht-v2.0.0-beta.3-darwin-amd64.zip"},
+		{goos: "darwin", arch: "arm64", want: "luxury-yacht-v2.0.0-beta.3-darwin-arm64.zip"},
+		{goos: "windows", arch: "amd64", want: "luxury-yacht-v2.0.0-beta.3-windows-amd64.exe"},
+		{goos: "windows", arch: "arm64", want: "luxury-yacht-v2.0.0-beta.3-windows-arm64.exe"},
+		{goos: "linux", arch: "amd64", want: "luxury-yacht-v2.0.0-beta.3-linux-amd64.tar.gz"},
+		{goos: "linux", arch: "arm64", want: "luxury-yacht-v2.0.0-beta.3-linux-arm64.tar.gz"},
+	} {
+		t.Run(test.goos+"-"+test.arch, func(t *testing.T) {
+			name, err := updaterArtifactName(metadata, test.goos, test.arch)
+
+			require.NoError(t, err)
+			require.Equal(t, test.want, name)
+		})
+	}
+}
+
+func TestUpdaterArtifactNameRejectsUnsupportedTargets(t *testing.T) {
+	var metadata projectMetadata
+	metadata.Info.ProductName = "Luxury Yacht"
+	metadata.Info.Version = "v2.0.0"
+
+	for _, target := range [][2]string{{"darwin", "386"}, {"windows", "386"}, {"linux", "386"}, {"freebsd", "amd64"}} {
+		_, err := updaterArtifactName(metadata, target[0], target[1])
+
+		require.ErrorContains(t, err, "unsupported updater artifact target")
 	}
 }

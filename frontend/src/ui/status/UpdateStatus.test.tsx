@@ -12,9 +12,10 @@ import { act } from 'react';
 import * as ReactDOM from 'react-dom/client';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 
-const { readAppInfoMock, browserOpenURLMock } = vi.hoisted(() => ({
+const { readAppInfoMock, browserOpenURLMock, setIsAboutOpenMock } = vi.hoisted(() => ({
   readAppInfoMock: vi.fn(),
   browserOpenURLMock: vi.fn(),
+  setIsAboutOpenMock: vi.fn(),
 }));
 
 vi.mock('@/core/app-state-access', () => ({
@@ -26,6 +27,10 @@ vi.mock('@core/desktop-runtime', () => ({
   desktopRuntimeAvailable: () => false,
   onEvent: vi.fn(() => () => undefined),
   openURL: (...args: unknown[]) => browserOpenURLMock(...args),
+}));
+
+vi.mock('@core/contexts/ModalStateContext', () => ({
+  useModalState: () => ({ setIsAboutOpen: setIsAboutOpenMock }),
 }));
 
 vi.mock('@core/backend-api/models', () => ({ backend: {} }));
@@ -52,6 +57,7 @@ describe('UpdateStatus', () => {
     root = ReactDOM.createRoot(container);
     readAppInfoMock.mockReset();
     browserOpenURLMock.mockReset();
+    setIsAboutOpenMock.mockReset();
   });
 
   afterEach(() => {
@@ -72,13 +78,12 @@ describe('UpdateStatus', () => {
   it('renders a clickable info chip with version + release notes, and links to the notes page', async () => {
     readAppInfoMock.mockResolvedValue({
       update: {
+        status: 'available',
         currentVersion: '1.10.0',
-        latestVersion: '1.10.1',
+        availableVersion: '1.10.1',
         publishedAt: '2026-07-05T12:00:00Z',
-        currentPublishedAt: '2026-06-20T12:00:00Z',
-        releaseUrl: 'https://example.com/releases/v1.10.1',
         releaseNotes: '- Fixed metrics permission notice\n- Moved the update chip to the header',
-        isUpdateAvailable: true,
+        canInstall: true,
       },
     });
 
@@ -98,17 +103,18 @@ describe('UpdateStatus', () => {
     expect(tooltip?.textContent).toContain('1.10.1');
     expect(tooltip?.textContent).toContain('1.10.0');
     expect(tooltip?.textContent).toContain('(2026-07-05)');
-    expect(tooltip?.textContent).toContain('(2026-06-20)');
     const notes = container.querySelector('[data-testid="update-status-notes"]');
     expect(notes?.textContent).toContain('Fixed metrics permission notice');
     // The markdown stripper is applied: bullets render as • (not raw "- ").
     expect(notes?.textContent).toContain('•');
 
-    // Clicking the chip opens the release/downloads page.
+    // Clicking the chip opens About; it never starts a download or bypasses
+    // the app-owned update workflow.
     act(() => {
       chip?.click();
     });
-    expect(browserOpenURLMock).toHaveBeenCalledWith('https://example.com/releases/v1.10.1');
+    expect(setIsAboutOpenMock).toHaveBeenCalledWith(true);
+    expect(browserOpenURLMock).not.toHaveBeenCalled();
 
     // The "Full release notes" link opens the version's tag page.
     const notesLink = container.querySelector(
@@ -123,20 +129,29 @@ describe('UpdateStatus', () => {
   });
 
   it('renders nothing when no update is available', async () => {
-    readAppInfoMock.mockResolvedValue({ update: { isUpdateAvailable: false } });
+    readAppInfoMock.mockResolvedValue({ update: { status: 'current' } });
 
     await renderAndSettle();
 
     expect(container.querySelector('[data-testid="update-status-chip"]')).toBeNull();
   });
 
-  it('renders nothing when the update has no release URL', async () => {
-    readAppInfoMock.mockResolvedValue({
-      update: { isUpdateAvailable: true, latestVersion: '1.10.1', releaseUrl: '' },
-    });
+  it.each([
+    ['downloading', 'Downloading update…'],
+    ['verifying', 'Verifying update…'],
+    ['preparing', 'Preparing update…'],
+    ['ready', 'Restart to update'],
+    ['check-error', 'Update needs attention'],
+    ['prepare-error', 'Update needs attention'],
+    ['restart-error', 'Update needs attention'],
+  ])('renders compact %s state and opens About', async (status, label) => {
+    readAppInfoMock.mockResolvedValue({ update: { status, availableVersion: '1.10.1' } });
 
     await renderAndSettle();
 
-    expect(container.querySelector('[data-testid="update-status-chip"]')).toBeNull();
+    const chip = container.querySelector('[data-testid="update-status-chip"]') as HTMLButtonElement;
+    expect(chip.textContent).toContain(label);
+    act(() => chip.click());
+    expect(setIsAboutOpenMock).toHaveBeenCalledWith(true);
   });
 });
