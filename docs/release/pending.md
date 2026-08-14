@@ -1,6 +1,7 @@
+### Migration to Wails v3
+
+Luxury Yacht v2.0.0 has migrated to the latest version of the Wails framework! Wails v3 includes many new features, both under-the-hood and user-facing.
+
 ### Added
 
-Finalizer handling
-
-- Objects that are being blocked from deletion by finalizers will now show up in the Attention view.
-- The Object Panel for a blocked object will now show which finalizers are blocking deletion, and give you an option to remove the blocking finalizer, with a warning and confirmation dialog.
+- **Real multi-window support.** Previous versions were single-window only, and faked multi-window support by launching a completely separate process. Wails v3 includes proper support for multiple app windows.
