@@ -28,6 +28,12 @@ jobs:
         with:
           install-linux-deps: "true"
 
+      - name: Validate release tag
+        if: ${{ github.event_name == 'push' || github.event.inputs.release == 'true' }}
+        env:
+          RELEASE_TAG: ${{ github.ref_type == 'tag' && github.ref_name || '' }}
+        run: go run ./cmd/project validate-release-tag
+
       - name: Run tests
         run: |
           echo "Run a build to ensure frontend/dist is generated"
@@ -168,6 +174,8 @@ jobs:
       contents: write
     env:
       GH_TOKEN: ${{ secrets.RELEASES_REPO_TOKEN }}
+      RELEASE_PRERELEASE: ${{ contains(github.ref_name, 'beta') }}
+      RELEASE_TAG: ${{ github.ref_type == 'tag' && github.ref_name || '' }}
     steps:
       - uses: actions/checkout@v7
 

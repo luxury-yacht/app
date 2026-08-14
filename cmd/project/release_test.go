@@ -14,6 +14,30 @@ func TestNewReleaseConfigUsesConfiguredVersionTag(t *testing.T) {
 	require.Equal(t, "v2.0.0", cfg.version)
 }
 
+func TestReleaseConfigHonorsExplicitPrerelease(t *testing.T) {
+	cfg, err := withExplicitPrerelease(
+		newReleaseConfig(projectFacts{version: "v2.0.0"}),
+		"true",
+	)
+
+	require.NoError(t, err)
+	require.True(t, cfg.isBeta)
+}
+
+func TestValidateReleaseTagRequiresExactConfiguredVersion(t *testing.T) {
+	require.NoError(t, validateReleaseTag("v2.0.0-beta.1", "v2.0.0-beta.1"))
+	require.EqualError(
+		t,
+		validateReleaseTag("v2.0.0-beta.1", ""),
+		"release tag is required",
+	)
+	require.EqualError(
+		t,
+		validateReleaseTag("v2.0.0-beta.1", "v2.0.0"),
+		`release tag "v2.0.0" does not exactly match configured version "v2.0.0-beta.1"`,
+	)
+}
+
 func TestFindReleaseAssetsUsesConfiguredDirectory(t *testing.T) {
 	artifactDir := filepath.Join(t.TempDir(), "downloaded")
 	for _, name := range []string{"luxury-yacht.dmg", "luxury-yacht.exe", "notes.txt"} {

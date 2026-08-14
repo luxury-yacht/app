@@ -45,9 +45,12 @@ func TestRenderProjectPlatformManifestsUsesConfigMetadata(t *testing.T) {
 }
 
 func TestRenderNFPMManifestUsesConfiguredMaintainer(t *testing.T) {
+	configPath := repositoryPath("build", "config.yml")
+	metadata, err := readProjectMetadata(configPath)
+	require.NoError(t, err)
 	outputPath := filepath.Join(t.TempDir(), "nfpm.yaml")
 	require.NoError(t, renderProjectPlatformManifests(
-		repositoryPath("build", "config.yml"),
+		configPath,
 		[]platformManifestSpec{{
 			sourcePath: repositoryPath("build", "linux", "nfpm", "nfpm.yaml"),
 			outputPath: outputPath,
@@ -55,7 +58,7 @@ func TestRenderNFPMManifestUsesConfiguredMaintainer(t *testing.T) {
 	))
 
 	manifest := readTestFile(t, outputPath)
-	require.Contains(t, manifest, `version: "v2.0.0"`)
+	require.Contains(t, manifest, `version: "`+metadata.Info.Version+`"`)
 	require.Contains(t, manifest, `maintainer: "Luxury Yacht <info@luxury-yacht.app>"`)
 	require.NotContains(t, manifest, appMaintainerPlaceholder)
 	require.NotContains(t, manifest, "GIT_COMMITTER")
