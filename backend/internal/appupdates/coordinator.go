@@ -663,27 +663,33 @@ func preservesPendingRelease(status Status) bool {
 	}
 }
 
-func (coordinator *Coordinator) Skip(_ context.Context, version string) (Snapshot, error) {
-	coordinator.mu.Lock()
+func (coordinator *Coordinator) rejectSkipMutationLocked(
+	unavailableMessage string,
+	runtimeNotReadyMessage string,
+) (Snapshot, error, bool) {
 	if coordinator.stopped {
-		snapshot := cloneSnapshot(coordinator.snapshot)
-		coordinator.mu.Unlock()
-		return snapshot, context.Canceled
+		return cloneSnapshot(coordinator.snapshot), context.Canceled, true
 	}
 	if coordinator.snapshot.Status == StatusDisabled || coordinator.snapshot.Status == StatusApplyError {
-		snapshot := cloneSnapshot(coordinator.snapshot)
-		coordinator.mu.Unlock()
-		return snapshot, fmt.Errorf("automatic update skipping is unavailable")
+		return cloneSnapshot(coordinator.snapshot), errors.New(unavailableMessage), true
 	}
 	if !coordinator.runtimeReady {
-		snapshot := cloneSnapshot(coordinator.snapshot)
-		coordinator.mu.Unlock()
-		return snapshot, fmt.Errorf("application update skip requires runtime readiness")
+		return cloneSnapshot(coordinator.snapshot), errors.New(runtimeNotReadyMessage), true
 	}
 	if coordinator.inFlight {
-		snapshot := cloneSnapshot(coordinator.snapshot)
+		return cloneSnapshot(coordinator.snapshot), nil, true
+	}
+	return Snapshot{}, nil, false
+}
+
+func (coordinator *Coordinator) Skip(_ context.Context, version string) (Snapshot, error) {
+	coordinator.mu.Lock()
+	if snapshot, err, rejected := coordinator.rejectSkipMutationLocked(
+		"automatic update skipping is unavailable",
+		"application update skip requires runtime readiness",
+	); rejected {
 		coordinator.mu.Unlock()
-		return snapshot, nil
+		return snapshot, err
 	}
 	if coordinator.updateState == nil || coordinator.pending == nil || coordinator.snapshot.Status != StatusAvailable {
 		snapshot := cloneSnapshot(coordinator.snapshot)
@@ -728,25 +734,12 @@ func (coordinator *Coordinator) Skip(_ context.Context, version string) (Snapsho
 
 func (coordinator *Coordinator) RemoveSkip(ctx context.Context) (Snapshot, error) {
 	coordinator.mu.Lock()
-	if coordinator.stopped {
-		snapshot := cloneSnapshot(coordinator.snapshot)
+	if snapshot, err, rejected := coordinator.rejectSkipMutationLocked(
+		"application update skip removal is unavailable",
+		"application update skip removal requires runtime readiness",
+	); rejected {
 		coordinator.mu.Unlock()
-		return snapshot, context.Canceled
-	}
-	if coordinator.snapshot.Status == StatusDisabled || coordinator.snapshot.Status == StatusApplyError {
-		snapshot := cloneSnapshot(coordinator.snapshot)
-		coordinator.mu.Unlock()
-		return snapshot, fmt.Errorf("application update skip removal is unavailable")
-	}
-	if !coordinator.runtimeReady {
-		snapshot := cloneSnapshot(coordinator.snapshot)
-		coordinator.mu.Unlock()
-		return snapshot, fmt.Errorf("application update skip removal requires runtime readiness")
-	}
-	if coordinator.inFlight {
-		snapshot := cloneSnapshot(coordinator.snapshot)
-		coordinator.mu.Unlock()
-		return snapshot, nil
+		return snapshot, err
 	}
 	if coordinator.updateState == nil || coordinator.skippedVersion == "" {
 		snapshot := cloneSnapshot(coordinator.snapshot)
