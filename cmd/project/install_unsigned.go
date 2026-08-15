@@ -45,7 +45,10 @@ func installUnsigned(config unsignedInstallConfig) error {
 	if err := validateUnsignedInstallPlatform(config.goos); err != nil {
 		return err
 	}
-	productName := strings.TrimSpace(config.metadata.Info.ProductName)
+	productName, err := projectProductName(config.metadata)
+	if err != nil {
+		return err
+	}
 	if err := validateInstallLeaf("product name", productName); err != nil {
 		return err
 	}
@@ -77,7 +80,7 @@ func validateUnsignedInstallPlatform(goos string) error {
 func installUnsignedForPlatform(config unsignedInstallConfig, productName, binaryName string) (string, error) {
 	switch config.goos {
 	case "darwin":
-		return installUnsignedMacOS(config, productName, binaryName)
+		return installUnsignedMacOS(config, productName)
 	case "linux":
 		return installUnsignedLinux(config, binaryName)
 	case "windows":
@@ -87,8 +90,8 @@ func installUnsignedForPlatform(config unsignedInstallConfig, productName, binar
 	}
 }
 
-func installUnsignedMacOS(config unsignedInstallConfig, productName, binaryName string) (string, error) {
-	source := filepath.Join(config.binDir, binaryName+".app")
+func installUnsignedMacOS(config unsignedInstallConfig, productName string) (string, error) {
+	source := filepath.Join(config.binDir, productName+".app")
 	info, err := os.Stat(source)
 	if err != nil {
 		return "", fmt.Errorf("macOS app bundle not found at %s: %w", source, err)

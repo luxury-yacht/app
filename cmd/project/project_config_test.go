@@ -117,6 +117,16 @@ func TestProjectBinaryNameRejectsMissingProductName(t *testing.T) {
 	require.ErrorContains(t, err, "has no info.productName")
 }
 
+func TestProjectProductNamePreservesConfiguredDisplayName(t *testing.T) {
+	var metadata projectMetadata
+	metadata.Info.ProductName = " Luxury Yacht Pro "
+
+	name, err := projectProductName(metadata)
+
+	require.NoError(t, err)
+	require.Equal(t, "Luxury Yacht Pro", name)
+}
+
 func TestReleaseArtifactNamePreservesVersionPlatformAndArchitecture(t *testing.T) {
 	var metadata projectMetadata
 	metadata.Info.ProductName = "Luxury Yacht"

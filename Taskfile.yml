@@ -9,6 +9,8 @@ includes:
 vars:
   APP_NAME:
     sh: go run ./cmd/project binary-name
+  APP_PRODUCT_NAME:
+    sh: go run ./cmd/project product-name
   BIN_DIR: "bin"
   PACKAGE_MANAGER: '{{.PACKAGE_MANAGER | default "npm"}}'
   VITE_PORT: '{{.WAILS_VITE_PORT | default 9245}}'

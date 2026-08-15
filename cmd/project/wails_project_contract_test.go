@@ -415,6 +415,25 @@ func TestReleaseWorkflowUsesConfiguredVVersionTags(t *testing.T) {
 	require.True(t, strings.HasPrefix(strings.ToLower(metadata.Info.Version), "v"))
 }
 
+func TestReleasePublishingJobsUseGoWithoutInstallingWails(t *testing.T) {
+	workflow := readTestFile(t, repositoryPath(".github", "workflows", "release.yml"))
+	require.Equal(t, 2, strings.Count(workflow, `install-wails: "false"`))
+	for _, command := range []string{
+		"go run ./cmd/project prepare-release-updater-manifest",
+		"go run ./cmd/project release-app",
+		"go run ./cmd/project release-site",
+	} {
+		require.Contains(t, workflow, command)
+	}
+	for _, command := range []string{
+		"wails3 task release:prepare-updater-manifest",
+		"wails3 task release:app",
+		"wails3 task release:site",
+	} {
+		require.NotContains(t, workflow, command)
+	}
+}
+
 func TestReleaseWorkflowValidatesTagBeforeTestsAndBuilds(t *testing.T) {
 	workflow := readTestFile(t, repositoryPath(".github", "workflows", "release.yml"))
 	require.NotContains(t, workflow, "  validate-release:\n")
@@ -450,7 +469,7 @@ func TestMacOSReleasePublishesAndValidatesTheWailsUpdaterPayload(t *testing.T) {
 	require.Contains(t, workflow, "bin/*-darwin-*.zip")
 	for _, architecture := range []string{"arm64", "amd64"} {
 		packageCall := "wails3 task darwin:package ARCH=" + architecture
-		signatureCheck := "codesign --verify --deep --strict bin/luxury-yacht.app"
+		signatureCheck := `codesign --verify --deep --strict "$APP_BUNDLE"`
 		archiveCall := "wails3 task darwin:create:updater-archive ARCH=" + architecture
 		conformanceCall := "GOARCH=" + architecture + " wails3 task release:validate-macos-updater"
 		require.Contains(t, workflow, packageCall)
@@ -460,8 +479,8 @@ func TestMacOSReleasePublishesAndValidatesTheWailsUpdaterPayload(t *testing.T) {
 		require.Less(t, strings.Index(workflow, signatureCheck), strings.Index(workflow, archiveCall))
 		require.Less(t, strings.Index(workflow, archiveCall), strings.Index(workflow, conformanceCall))
 	}
-	require.Contains(t, workflow, "spctl --assess --type execute bin/luxury-yacht.app")
-	require.Contains(t, workflow, "xcrun stapler validate bin/luxury-yacht.app")
+	require.Contains(t, workflow, `spctl --assess --type execute "$APP_BUNDLE"`)
+	require.Contains(t, workflow, `xcrun stapler validate "$APP_BUNDLE"`)
 
 	darwinTaskfile := readTestFile(t, repositoryPath("build", "darwin", "Taskfile.yml"))
 	require.Contains(t, darwinTaskfile, "create:updater-archive:")
@@ -473,11 +492,32 @@ func TestMacOSReleasePublishesAndValidatesTheWailsUpdaterPayload(t *testing.T) {
 	require.Contains(t, rootTaskfile, "go run ./cmd/project validate-macos-updater")
 }
 
+func TestMacOSBundlesUseTheConfiguredProductName(t *testing.T) {
+	rootTaskfile := readTestFile(t, repositoryPath("Taskfile.yml"))
+	require.Contains(t, rootTaskfile, "sh: go run ./cmd/project product-name")
+
+	darwinTaskfile := readTestFile(t, repositoryPath("build", "darwin", "Taskfile.yml"))
+	require.Contains(t, darwinTaskfile, `{{.APP_PRODUCT_NAME}}.app`)
+	require.NotContains(t, darwinTaskfile, `{{.APP_NAME}}.app`)
+	require.Contains(
+		t,
+		darwinTaskfile,
+		`cp "{{.BIN_DIR}}/{{.APP_NAME}}" "{{.BIN_DIR}}/{{.APP_PRODUCT_NAME}}.app/Contents/MacOS"`,
+	)
+	require.Contains(t, darwinTaskfile, `--name "{{.APP_PRODUCT_NAME}}"`)
+
+	workflow := readTestFile(t, repositoryPath(".github", "workflows", "release.yml"))
+	require.Contains(t, workflow, `APP_PRODUCT_NAME="$(go run ./cmd/project product-name)"`)
+	require.Contains(t, workflow, `APP_BUNDLE="bin/${APP_PRODUCT_NAME}.app"`)
+	require.Contains(t, workflow, `APP_DMG="bin/${APP_PRODUCT_NAME}.dmg"`)
+	require.NotContains(t, workflow, "bin/luxury-yacht.app")
+}
+
 func TestReleasePublishesSignedUpdaterManifestInsideTheGitHubRelease(t *testing.T) {
 	workflow := readTestFile(t, repositoryPath(".github", "workflows", "release.yml"))
 	materialize := strings.Index(workflow, "Materialize updater signing key")
-	prepare := strings.Index(workflow, "release:prepare-updater-manifest")
-	publishRelease := strings.Index(workflow, "release:app")
+	prepare := strings.Index(workflow, "go run ./cmd/project prepare-release-updater-manifest")
+	publishRelease := strings.Index(workflow, "go run ./cmd/project release-app")
 	cleanup := strings.Index(workflow, "Remove updater signing key")
 	require.GreaterOrEqual(t, materialize, 0)
 	require.Greater(t, prepare, materialize)

@@ -126,6 +126,10 @@ jobs:
           MACOS_APPLE_APP_PASSWORD: ${{ secrets.APPLE_APP_PASSWORD }}
           MACOS_APPLE_TEAM_ID: ${{ secrets.APPLE_TEAM_ID }}
         run: |
+          APP_PRODUCT_NAME="$(go run ./cmd/project product-name)"
+          APP_BUNDLE="bin/${APP_PRODUCT_NAME}.app"
+          APP_DMG="bin/${APP_PRODUCT_NAME}.dmg"
+
           xcrun notarytool store-credentials luxury-yacht-ci \
             --apple-id "$MACOS_APPLE_ID" \
             --team-id "$MACOS_APPLE_TEAM_ID" \
@@ -133,31 +137,31 @@ jobs:
 
           wails3 task darwin:package ARCH=arm64
           wails3 tool sign \
-            --input bin/luxury-yacht.app \
+            --input "$APP_BUNDLE" \
             --identity "$MACOS_SIGNING_IDENTITY" \
             --notarize \
             --keychain-profile luxury-yacht-ci
-          codesign --verify --deep --strict bin/luxury-yacht.app
-          spctl --assess --type execute bin/luxury-yacht.app
-          xcrun stapler validate bin/luxury-yacht.app
+          codesign --verify --deep --strict "$APP_BUNDLE"
+          spctl --assess --type execute "$APP_BUNDLE"
+          xcrun stapler validate "$APP_BUNDLE"
           wails3 task darwin:create:updater-archive ARCH=arm64
           UPDATER_ARTIFACT="bin/$(GOOS=darwin GOARCH=arm64 RELEASE_FORMAT=updater go run ./cmd/project release-artifact-name)" GOARCH=arm64 wails3 task release:validate-macos-updater
           wails3 task darwin:create:dmg
-          mv bin/luxury-yacht.dmg "bin/$(GOOS=darwin GOARCH=arm64 RELEASE_FORMAT=dmg go run ./cmd/project release-artifact-name)"
+          mv "$APP_DMG" "bin/$(GOOS=darwin GOARCH=arm64 RELEASE_FORMAT=dmg go run ./cmd/project release-artifact-name)"
 
           wails3 task darwin:package ARCH=amd64
           wails3 tool sign \
-            --input bin/luxury-yacht.app \
+            --input "$APP_BUNDLE" \
             --identity "$MACOS_SIGNING_IDENTITY" \
             --notarize \
             --keychain-profile luxury-yacht-ci
-          codesign --verify --deep --strict bin/luxury-yacht.app
-          spctl --assess --type execute bin/luxury-yacht.app
-          xcrun stapler validate bin/luxury-yacht.app
+          codesign --verify --deep --strict "$APP_BUNDLE"
+          spctl --assess --type execute "$APP_BUNDLE"
+          xcrun stapler validate "$APP_BUNDLE"
           wails3 task darwin:create:updater-archive ARCH=amd64
           UPDATER_ARTIFACT="bin/$(GOOS=darwin GOARCH=amd64 RELEASE_FORMAT=updater go run ./cmd/project release-artifact-name)" GOARCH=amd64 wails3 task release:validate-macos-updater
           wails3 task darwin:create:dmg
-          mv bin/luxury-yacht.dmg "bin/$(GOOS=darwin GOARCH=amd64 RELEASE_FORMAT=dmg go run ./cmd/project release-artifact-name)"
+          mv "$APP_DMG" "bin/$(GOOS=darwin GOARCH=amd64 RELEASE_FORMAT=dmg go run ./cmd/project release-artifact-name)"
 
       - name: Create package for Linux
         if: matrix.goos == 'linux'
@@ -197,6 +201,7 @@ jobs:
         uses: ./.github/actions/setup-toolchain
         with:
           setup-node: "false"
+          install-wails: "false"
 
       - name: Download all artifacts
         uses: actions/download-artifact@v8
@@ -218,7 +223,7 @@ jobs:
           UPDATER_TARGETS: darwin/arm64,darwin/amd64
           UPDATER_PRIVATE_KEY_PATH: ${{ runner.temp }}/updater.key
           UPDATER_PUBLIC_KEY: backend/updater_public_key.pem
-        run: wails3 task release:prepare-updater-manifest
+        run: go run ./cmd/project prepare-release-updater-manifest
 
       - name: Remove updater signing key
         if: ${{ always() }}
@@ -227,7 +232,7 @@ jobs:
       - name: Publish GitHub release
         run: |
           export GITHUB_RUN_NUMBER="${{ github.run_number }}"
-          wails3 task release:app
+          go run ./cmd/project release-app
 
   update-site:
     if: ${{ github.event.inputs.release == 'true' || github.event_name == 'push' }}
@@ -241,8 +246,9 @@ jobs:
         uses: ./.github/actions/setup-toolchain
         with:
           setup-node: "false"
+          install-wails: "false"
 
       - name: Update version on website
         env:
           GH_TOKEN: ${{ secrets.RELEASES_REPO_TOKEN }}
-        run: wails3 task release:site
+        run: go run ./cmd/project release-site

@@ -145,11 +145,19 @@ func writeProjectConfig(output io.Writer) error {
 }
 
 func projectBinaryName(metadata projectMetadata) (string, error) {
+	productName, err := projectProductName(metadata)
+	if err != nil {
+		return "", err
+	}
+	return strings.ToLower(strings.ReplaceAll(productName, " ", "-")), nil
+}
+
+func projectProductName(metadata projectMetadata) (string, error) {
 	productName := strings.TrimSpace(metadata.Info.ProductName)
 	if productName == "" {
 		return "", fmt.Errorf("wails config has no info.productName")
 	}
-	return strings.ToLower(strings.ReplaceAll(productName, " ", "-")), nil
+	return productName, nil
 }
 
 func releaseArtifactName(metadata projectMetadata, goos, goarch, format string) (string, error) {

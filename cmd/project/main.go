@@ -2,10 +2,11 @@ package main
 
 import (
 	"fmt"
+	"io"
 	"os"
 )
 
-const projectUsage = "usage: project <backend-coverage|binary-name|bindings|build-manifests|build-metadata|clean-all|clean-build|clean-frontend|config|fmt|go-mod-update|go-mod-update-check|install-unsigned|prepare-release-updater-manifest|release-app|release-artifact-name|release-site|reset|validate-macos-updater|validate-release-tag>"
+const projectUsage = "usage: project <backend-coverage|binary-name|bindings|build-manifests|build-metadata|clean-all|clean-build|clean-frontend|config|fmt|go-mod-update|go-mod-update-check|install-unsigned|prepare-release-updater-manifest|product-name|release-app|release-artifact-name|release-site|reset|validate-macos-updater|validate-release-tag>"
 
 var projectCommands = map[string]func() error{
 	"backend-coverage":                 runBackendCoverage,
@@ -22,6 +23,7 @@ var projectCommands = map[string]func() error{
 	"go-mod-update-check":              checkDirectGoModuleUpdates,
 	"install-unsigned":                 runUnsignedInstall,
 	"prepare-release-updater-manifest": runReleaseUpdaterManifestPreparation,
+	"product-name":                     func() error { return writeConfiguredProductName(os.Stdout) },
 	"release-app":                      publishConfiguredRelease,
 	"release-artifact-name":            writeConfiguredReleaseArtifactName,
 	"release-site":                     publishConfiguredSiteVersion,
@@ -76,6 +78,19 @@ func writeConfiguredBinaryName() error {
 		return fmt.Errorf("read app name: %w", err)
 	}
 	_, err = fmt.Fprintln(os.Stdout, name)
+	return err
+}
+
+func writeConfiguredProductName(output io.Writer) error {
+	metadata, err := readProjectMetadata(projectConfigPath)
+	if err != nil {
+		return fmt.Errorf("read product name: %w", err)
+	}
+	name, err := projectProductName(metadata)
+	if err != nil {
+		return fmt.Errorf("read product name: %w", err)
+	}
+	_, err = fmt.Fprintln(output, name)
 	return err
 }
 

@@ -77,7 +77,7 @@ func TestInstallUnsignedWindowsFallsBackToHomeDirectory(t *testing.T) {
 func TestInstallUnsignedMacOSReplacesApplicationsBundleWithSudo(t *testing.T) {
 	root := t.TempDir()
 	binDir := filepath.Join(root, "bin")
-	require.NoError(t, os.MkdirAll(filepath.Join(binDir, "luxury-yacht.app"), 0o755))
+	require.NoError(t, os.MkdirAll(filepath.Join(binDir, "Luxury Yacht.app"), 0o755))
 
 	var commands [][]string
 	err := installUnsigned(unsignedInstallConfig{
@@ -96,7 +96,7 @@ func TestInstallUnsignedMacOSReplacesApplicationsBundleWithSudo(t *testing.T) {
 	destination := filepath.Join("/Applications", "Luxury Yacht.app")
 	require.Equal(t, [][]string{
 		{"sudo", "rm", "-rf", destination},
-		{"sudo", "cp", "-R", filepath.Join(binDir, "luxury-yacht.app"), destination},
+		{"sudo", "cp", "-R", filepath.Join(binDir, "Luxury Yacht.app"), destination},
 	}, commands)
 }
 
@@ -126,7 +126,7 @@ func TestInstallUnsignedMacOSErrors(t *testing.T) {
 	newConfig := func(t *testing.T) unsignedInstallConfig {
 		root := t.TempDir()
 		binDir := filepath.Join(root, "bin")
-		require.NoError(t, os.MkdirAll(filepath.Join(binDir, "luxury-yacht.app"), 0o755))
+		require.NoError(t, os.MkdirAll(filepath.Join(binDir, "Luxury Yacht.app"), 0o755))
 		return unsignedInstallConfig{
 			applicationsDir: "/Applications",
 			binDir:          binDir,
@@ -145,8 +145,8 @@ func TestInstallUnsignedMacOSErrors(t *testing.T) {
 
 	t.Run("bundle is file", func(t *testing.T) {
 		config := newConfig(t)
-		require.NoError(t, os.RemoveAll(filepath.Join(config.binDir, "luxury-yacht.app")))
-		require.NoError(t, os.WriteFile(filepath.Join(config.binDir, "luxury-yacht.app"), []byte("file"), 0o644))
+		require.NoError(t, os.RemoveAll(filepath.Join(config.binDir, "Luxury Yacht.app")))
+		require.NoError(t, os.WriteFile(filepath.Join(config.binDir, "Luxury Yacht.app"), []byte("file"), 0o644))
 		err := installUnsigned(config)
 		require.ErrorContains(t, err, "is not a directory")
 	})
