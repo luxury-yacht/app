@@ -663,10 +663,7 @@ func preservesPendingRelease(status Status) bool {
 	}
 }
 
-func (coordinator *Coordinator) rejectSkipMutationLocked(
-	unavailableMessage string,
-	runtimeNotReadyMessage string,
-) (Snapshot, error, bool) {
+func (coordinator *Coordinator) rejectSkipMutationLocked(unavailableMessage, runtimeNotReadyMessage string) (Snapshot, error, bool) {
 	if coordinator.stopped {
 		return cloneSnapshot(coordinator.snapshot), context.Canceled, true
 	}

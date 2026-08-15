@@ -79,9 +79,6 @@
   flex-direction: column;
   gap: var(--spacing-md);
   padding: var(--spacing-lg);
-  /* border: 1px solid var(--color-border); */
-  /* border-radius: var(--border-radius-lg); */
-  /* background: var(--color-bg-secondary); */
   text-align: left;
 }
 
