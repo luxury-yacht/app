@@ -17,8 +17,8 @@ const (
 	ChannelBeta   Channel = "beta"
 )
 
-// ReleaseVersion is the normalized release identity supplied to Wails and to
-// channel-manifest publication.
+// ReleaseVersion is the normalized release identity supplied to Wails and
+// embedded in the signed metadata for one GitHub Release.
 type ReleaseVersion struct {
 	Version string
 	Channel Channel
@@ -55,17 +55,4 @@ func ParseReleaseVersion(value string) (ReleaseVersion, error) {
 	}
 
 	return ReleaseVersion{Version: normalized, Channel: ChannelBeta}, nil
-}
-
-// PublicationChannels returns each fixed channel pointer a release advances.
-// Stable releases are published once per requesting channel so beta clients
-// can converge without receiving a manifest whose channel is "stable".
-func PublicationChannels(release ReleaseVersion) []Channel {
-	if release.Channel == ChannelStable {
-		return []Channel{ChannelStable, ChannelBeta}
-	}
-	if release.Channel == ChannelBeta {
-		return []Channel{ChannelBeta}
-	}
-	return nil
 }

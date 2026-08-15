@@ -114,7 +114,7 @@ func TestConcurrentCheckReportsExistingFlowWithoutQueuingAnotherCheck(t *testing
 	t.Parallel()
 
 	client := &fakeUpdater{
-		release:      signedRelease("2.0.0", "beta", "darwin", "arm64"),
+		release:      signedRelease("2.0.0", "stable", "darwin", "arm64"),
 		checkStarted: make(chan struct{}),
 		allowCheck:   make(chan struct{}),
 	}
@@ -165,7 +165,7 @@ func TestCheckDuringDownloadReportsActiveFlowWithoutQueuingCheck(t *testing.T) {
 	t.Parallel()
 
 	client := &fakeUpdater{
-		release:         signedRelease("2.0.0", "beta", "darwin", "arm64"),
+		release:         signedRelease("2.0.0", "stable", "darwin", "arm64"),
 		downloadStarted: make(chan struct{}),
 		allowDownload:   make(chan struct{}),
 	}
@@ -337,6 +337,27 @@ func (fakeProvider) Download(context.Context, *updater.Release, io.Writer, func(
 	return nil
 }
 
+type staticReleaseProvider struct {
+	release *updater.Release
+}
+
+func (staticReleaseProvider) Name() string { return "static" }
+func (provider staticReleaseProvider) Check(context.Context, updater.CheckRequest) (*updater.Release, error) {
+	return provider.release, nil
+}
+func (staticReleaseProvider) Download(context.Context, *updater.Release, io.Writer, func(int64, int64)) error {
+	return nil
+}
+
+type headlessUpdaterHost struct{}
+
+func (headlessUpdaterHost) Emit(string, ...any) bool { return true }
+func (headlessUpdaterHost) OnEvent(string, func(any)) func() {
+	return func() {}
+}
+func (headlessUpdaterHost) OpenWindow(updater.WindowOptions) updater.WindowHandle { return nil }
+func (headlessUpdaterHost) Quit()                                                 {}
+
 type fakeScheduler struct {
 	startCalls int
 	stopCalls  int
@@ -381,7 +402,7 @@ func newTestCoordinator(
 func TestNewInitializesEligibleUpdaterOnceBeforeManualCheck(t *testing.T) {
 	t.Parallel()
 
-	client := &fakeUpdater{release: signedRelease("2.0.0", "beta", "darwin", "arm64")}
+	client := &fakeUpdater{release: signedRelease("2.0.0", "stable", "darwin", "arm64")}
 	coordinator := appupdates.New(appupdates.Dependencies{
 		Client: client, Provider: fakeProvider{}, Eligibility: enabledBuild(),
 		PublicKey: testPublicKey(), Platform: "darwin", Architecture: "arm64",
@@ -410,10 +431,63 @@ func TestNewInitializesEligibleUpdaterOnceBeforeManualCheck(t *testing.T) {
 	require.Equal(t, "2.0.0", snapshot.AvailableVersion)
 }
 
+func TestChannelGateLetsBetaConvergeToStableButRejectsPrereleaseForStableBuild(t *testing.T) {
+	t.Parallel()
+
+	betaClient := &fakeUpdater{release: signedRelease("2.0.0", "stable", "darwin", "arm64")}
+	betaCoordinator := newTestCoordinator(betaClient, enabledBuild(), "darwin", "arm64")
+	betaCoordinator.RuntimeReady()
+
+	betaSnapshot, err := betaCoordinator.Check(context.Background())
+	require.NoError(t, err)
+	require.Equal(t, appupdates.StatusAvailable, betaSnapshot.Status)
+
+	stableEligibility := enabledBuild()
+	stableEligibility.Release = updateidentity.ReleaseVersion{
+		Version: "1.9.0",
+		Channel: updateidentity.ChannelStable,
+	}
+	stableClient := &fakeUpdater{
+		release: signedRelease("2.0.0-beta.1", "beta", "darwin", "arm64"),
+	}
+	stableCoordinator := newTestCoordinator(stableClient, stableEligibility, "darwin", "arm64")
+	stableCoordinator.RuntimeReady()
+
+	stableSnapshot, err := stableCoordinator.Check(context.Background())
+	require.ErrorContains(t, err, "stable builds cannot install prerelease")
+	require.Equal(t, appupdates.StatusCheckError, stableSnapshot.Status)
+}
+
+func TestBetaToStableReleasePassesThroughWailsUpdaterAndCoordinator(t *testing.T) {
+	t.Parallel()
+
+	release := signedRelease("2.0.0", "stable", "darwin", "arm64")
+	coordinator := appupdates.New(appupdates.Dependencies{
+		Client: updater.New(headlessUpdaterHost{}),
+		Provider: staticReleaseProvider{
+			release: release,
+		},
+		Eligibility:  enabledBuild(),
+		PublicKey:    testPublicKey(),
+		Platform:     "darwin",
+		Architecture: "arm64",
+		TempRoot:     "/owned/temp/root",
+		UpdateState:  &fakeUpdateState{},
+		Scheduler:    &fakeScheduler{},
+	})
+	coordinator.RuntimeReady()
+
+	snapshot, err := coordinator.Check(context.Background())
+
+	require.NoError(t, err)
+	require.Equal(t, appupdates.StatusAvailable, snapshot.Status)
+	require.Equal(t, "2.0.0", snapshot.AvailableVersion)
+}
+
 func TestMissingDurableStateKeepsChecksButDisablesInstallation(t *testing.T) {
 	t.Parallel()
 
-	client := &fakeUpdater{release: signedRelease("2.0.0", "beta", "darwin", "arm64")}
+	client := &fakeUpdater{release: signedRelease("2.0.0", "stable", "darwin", "arm64")}
 	coordinator := appupdates.New(appupdates.Dependencies{
 		Client: client, Provider: fakeProvider{}, Eligibility: enabledBuild(),
 		PublicKey: testPublicKey(), Platform: "darwin", Architecture: "arm64",
@@ -435,7 +509,7 @@ func TestMissingDurableStateKeepsChecksButDisablesInstallation(t *testing.T) {
 func TestSkippedVersionHydratesBeforeFirstCheckAndPersistsBeforeHidingRelease(t *testing.T) {
 	t.Parallel()
 
-	client := &fakeUpdater{release: signedRelease("2.0.0", "beta", "darwin", "arm64")}
+	client := &fakeUpdater{release: signedRelease("2.0.0", "stable", "darwin", "arm64")}
 	state := &fakeUpdateState{}
 	coordinator := appupdates.New(appupdates.Dependencies{
 		Client: client, Provider: fakeProvider{}, Eligibility: enabledBuild(),
@@ -462,7 +536,7 @@ func TestSkippedVersionHydratesBeforeFirstCheckAndPersistsBeforeHidingRelease(t 
 func TestSkippedVersionPersistenceFailureLeavesReleaseAvailable(t *testing.T) {
 	t.Parallel()
 
-	client := &fakeUpdater{release: signedRelease("2.0.0", "beta", "darwin", "arm64")}
+	client := &fakeUpdater{release: signedRelease("2.0.0", "stable", "darwin", "arm64")}
 	state := &fakeUpdateState{skipErr: errors.New("state disk unavailable")}
 	coordinator := appupdates.New(appupdates.Dependencies{
 		Client: client, Provider: fakeProvider{}, Eligibility: enabledBuild(),
@@ -570,7 +644,7 @@ func TestDisabledBuildNeverCallsUpdater(t *testing.T) {
 func TestDownloadAndRestartRequireExplicitValidTransitions(t *testing.T) {
 	t.Parallel()
 
-	client := &fakeUpdater{release: signedRelease("2.0.0", "beta", "darwin", "arm64")}
+	client := &fakeUpdater{release: signedRelease("2.0.0", "stable", "darwin", "arm64")}
 	coordinator := appupdates.New(appupdates.Dependencies{
 		Client: client, Provider: fakeProvider{}, Eligibility: enabledBuild(),
 		PublicKey: testPublicKey(), Platform: "darwin", Architecture: "arm64",
@@ -607,7 +681,7 @@ func TestConcurrentRestartStartsOneHelperFlow(t *testing.T) {
 	t.Parallel()
 
 	client := &fakeUpdater{
-		release:        signedRelease("2.0.0", "beta", "darwin", "arm64"),
+		release:        signedRelease("2.0.0", "stable", "darwin", "arm64"),
 		restartStarted: make(chan struct{}),
 		allowRestart:   make(chan struct{}),
 	}
@@ -675,7 +749,7 @@ func TestOperationFailuresMapToRetryableSemanticStates(t *testing.T) {
 
 	t.Run("download", func(t *testing.T) {
 		client := &fakeUpdater{
-			release:     signedRelease("2.0.0", "beta", "darwin", "arm64"),
+			release:     signedRelease("2.0.0", "stable", "darwin", "arm64"),
 			downloadErr: errors.New("signature rejected"),
 		}
 		coordinator := newTestCoordinator(client, enabledBuild(), "darwin", "arm64")
@@ -699,7 +773,7 @@ func TestOperationFailuresMapToRetryableSemanticStates(t *testing.T) {
 
 	t.Run("restart can retry", func(t *testing.T) {
 		client := &fakeUpdater{
-			release:    signedRelease("2.0.0", "beta", "darwin", "arm64"),
+			release:    signedRelease("2.0.0", "stable", "darwin", "arm64"),
 			restartErr: errors.New("helper did not start"),
 		}
 		coordinator := newTestCoordinator(client, enabledBuild(), "darwin", "arm64")
@@ -726,7 +800,7 @@ func TestReadyRequiresPersistedPreparedOwnership(t *testing.T) {
 	t.Parallel()
 
 	client := &fakeUpdater{
-		release:        signedRelease("2.0.0", "beta", "darwin", "arm64"),
+		release:        signedRelease("2.0.0", "stable", "darwin", "arm64"),
 		downloadedPath: "/owned/temp/root/wails-update-owned/Luxury Yacht.app",
 	}
 	state := &fakeUpdateState{}
@@ -754,7 +828,7 @@ func TestPreparedPersistenceFailureBlocksReadyAndDiscardsExactStaging(t *testing
 	t.Parallel()
 
 	client := &fakeUpdater{
-		release:        signedRelease("2.0.0", "beta", "darwin", "arm64"),
+		release:        signedRelease("2.0.0", "stable", "darwin", "arm64"),
 		downloadedPath: "/owned/temp/root/wails-update-unrecorded/Luxury Yacht.app",
 	}
 	state := &fakeUpdateState{recordErr: errors.New("state disk unavailable")}
@@ -779,7 +853,7 @@ func TestRestartPersistsAttemptBeforeWailsAndRestoresPreparedOnSpawnFailure(t *t
 
 	var operationOrder []string
 	client := &fakeUpdater{
-		release:    signedRelease("2.0.0", "beta", "darwin", "arm64"),
+		release:    signedRelease("2.0.0", "stable", "darwin", "arm64"),
 		restartErr: errors.New("helper did not start"), operationOrder: &operationOrder,
 	}
 	state := &fakeUpdateState{operationOrder: &operationOrder}
@@ -806,7 +880,7 @@ func TestRestartPersistsAttemptBeforeWailsAndRestoresPreparedOnSpawnFailure(t *t
 func TestRestartPersistenceFailureNeverStartsWailsHelper(t *testing.T) {
 	t.Parallel()
 
-	client := &fakeUpdater{release: signedRelease("2.0.0", "beta", "darwin", "arm64")}
+	client := &fakeUpdater{release: signedRelease("2.0.0", "stable", "darwin", "arm64")}
 	state := &fakeUpdateState{beginErr: errors.New("state disk unavailable")}
 	coordinator := appupdates.New(appupdates.Dependencies{
 		Client: client, Provider: fakeProvider{}, Eligibility: enabledBuild(),
@@ -830,7 +904,7 @@ func TestStopCleansPreparedDownloadUnlessRestartTransferredOwnership(t *testing.
 	t.Parallel()
 
 	t.Run("normal shutdown", func(t *testing.T) {
-		client := &fakeUpdater{release: signedRelease("2.0.0", "beta", "darwin", "arm64")}
+		client := &fakeUpdater{release: signedRelease("2.0.0", "stable", "darwin", "arm64")}
 		state := &fakeUpdateState{}
 		coordinator := appupdates.New(appupdates.Dependencies{
 			Client: client, Provider: fakeProvider{}, Eligibility: enabledBuild(),
@@ -850,7 +924,7 @@ func TestStopCleansPreparedDownloadUnlessRestartTransferredOwnership(t *testing.
 	})
 
 	t.Run("restart handoff", func(t *testing.T) {
-		client := &fakeUpdater{release: signedRelease("2.0.0", "beta", "darwin", "arm64")}
+		client := &fakeUpdater{release: signedRelease("2.0.0", "stable", "darwin", "arm64")}
 		state := &fakeUpdateState{}
 		coordinator := appupdates.New(appupdates.Dependencies{
 			Client: client, Provider: fakeProvider{}, Eligibility: enabledBuild(),
@@ -876,7 +950,7 @@ func TestStopCleansPreparedStateRecordedAfterTheInitialShutdownCleanup(t *testin
 	t.Parallel()
 
 	client := &fakeUpdater{
-		release:         signedRelease("2.0.0", "beta", "darwin", "arm64"),
+		release:         signedRelease("2.0.0", "stable", "darwin", "arm64"),
 		downloadStarted: make(chan struct{}),
 		allowDownload:   make(chan struct{}),
 	}
@@ -908,7 +982,7 @@ func TestStopCleansPreparedStateRecordedAfterTheInitialShutdownCleanup(t *testin
 func TestCheckPreservesPendingAndReadyRelease(t *testing.T) {
 	t.Parallel()
 
-	client := &fakeUpdater{release: signedRelease("2.0.0", "beta", "darwin", "arm64")}
+	client := &fakeUpdater{release: signedRelease("2.0.0", "stable", "darwin", "arm64")}
 	coordinator := newTestCoordinator(client, enabledBuild(), "darwin", "arm64")
 	coordinator.RuntimeReady()
 
@@ -962,7 +1036,7 @@ func TestCheckRejectsReleaseWithoutRequiredPinnedSignature(t *testing.T) {
 	} {
 		t.Run(test.name, func(t *testing.T) {
 			client := &fakeUpdater{release: &updater.Release{
-				Version: "2.0.0", Channel: "beta",
+				Version: "2.0.0", Channel: "stable",
 				Artifact:     updater.Artifact{Platform: "darwin", Arch: "arm64"},
 				Verification: test.verification,
 			}}
@@ -978,7 +1052,7 @@ func TestCheckRejectsReleaseWithoutRequiredPinnedSignature(t *testing.T) {
 	}
 
 	client := &fakeUpdater{release: &updater.Release{
-		Version: "2.0.0", Channel: "beta",
+		Version: "2.0.0", Channel: "stable",
 		Artifact:     updater.Artifact{Platform: "darwin", Arch: "arm64"},
 		Verification: &validVerification,
 	}}
@@ -998,7 +1072,7 @@ func TestNotificationOnlyDistributionCanCheckButCannotDownload(t *testing.T) {
 		Reason: updateidentity.ReasonLinuxPackageManaged, Recovery: updateidentity.RecoveryLinuxPackages,
 	}
 	eligibility.CanInstall = false
-	client := &fakeUpdater{release: signedRelease("2.0.0", "beta", "linux", "amd64")}
+	client := &fakeUpdater{release: signedRelease("2.0.0", "stable", "linux", "amd64")}
 	coordinator := appupdates.New(appupdates.Dependencies{
 		Client: client, Provider: fakeProvider{}, Eligibility: eligibility,
 		PublicKey: testPublicKey(), Platform: "linux", Architecture: "amd64",

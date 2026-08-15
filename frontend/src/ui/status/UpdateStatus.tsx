@@ -1,8 +1,8 @@
 /**
  * frontend/src/ui/status/UpdateStatus.tsx
  *
- * Header info chip shown when a newer app release is available. Clickable to open
- * the release page; hover reveals version + release details via the shared
+ * Header info chip shown when an application update needs attention. Clicking
+ * opens About; hover reveals version and release details via the shared
  * Tooltip. Owns the app-info fetch and the `app-update` runtime event (previously
  * embedded in ClusterOverview).
  */

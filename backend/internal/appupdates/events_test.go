@@ -25,7 +25,7 @@ func TestWailsEventsPublishCompleteApplicationSnapshot(t *testing.T) {
 		},
 	})
 	publishedAt := time.Date(2026, time.August, 14, 12, 30, 0, 0, time.UTC)
-	release := signedRelease("2.0.0", "beta", "darwin", "arm64")
+	release := signedRelease("2.0.0", "stable", "darwin", "arm64")
 	release.Name = "Luxury Yacht 2.0.0"
 	release.Notes = "## Safer updates"
 	release.PublishedAt = publishedAt
@@ -55,7 +55,7 @@ func TestWailsEventsPublishCompleteApplicationSnapshot(t *testing.T) {
 func TestCoordinatorOperationsPublishCommandOwnedTransitions(t *testing.T) {
 	t.Parallel()
 
-	client := &fakeUpdater{release: signedRelease("2.0.0", "beta", "darwin", "arm64")}
+	client := &fakeUpdater{release: signedRelease("2.0.0", "stable", "darwin", "arm64")}
 	var published []appupdates.Snapshot
 	coordinator := appupdates.New(appupdates.Dependencies{
 		Client: client, Provider: fakeProvider{}, Eligibility: enabledBuild(),

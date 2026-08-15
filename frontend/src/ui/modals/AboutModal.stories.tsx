@@ -51,7 +51,7 @@ export const Default: Story = {
   ],
 };
 
-/** Shows "Update available" with a link to the release page. */
+/** Shows an authenticated update awaiting explicit download consent. */
 export const UpdateAvailable: Story = {
   decorators: [
     (Story) => {

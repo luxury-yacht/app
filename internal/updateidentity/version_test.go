@@ -62,21 +62,3 @@ func TestParseReleaseVersionRejectsNonReleaseIdentity(t *testing.T) {
 		})
 	}
 }
-
-func TestPublicationChannelsKeepStableReleaseOnRequestingChannel(t *testing.T) {
-	t.Parallel()
-
-	stable, err := updateidentity.ParseReleaseVersion("v2.0.0")
-	require.NoError(t, err)
-	beta, err := updateidentity.ParseReleaseVersion("v2.0.0-beta.3")
-	require.NoError(t, err)
-
-	require.Equal(t,
-		[]updateidentity.Channel{updateidentity.ChannelStable, updateidentity.ChannelBeta},
-		updateidentity.PublicationChannels(stable),
-	)
-	require.Equal(t,
-		[]updateidentity.Channel{updateidentity.ChannelBeta},
-		updateidentity.PublicationChannels(beta),
-	)
-}

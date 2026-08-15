@@ -19,6 +19,13 @@ still handles its own readiness event and becomes visible independently. Only
 the initial window restores saved geometry. Keep native hooks registered before
 `application.Run`.
 
+Application-update staging requires a process-owned temp root. Configure that
+root before exec-wrapper dispatch, Wails composition, or any child process so
+Wails staging, helper logs, and inherited children resolve the same root. The
+single process update coordinator is composed before `application.Run`; only
+the first runtime-ready window starts reconciliation, the initial silent check,
+and the six-hour scheduler. Peer windows project and act on the same state.
+
 ## Service and runtime boundaries
 
 Production registers one `backend.App` Wails service. Generated bindings are
@@ -43,6 +50,7 @@ callback, or frontend owner and must not gain a second event subscription.
 | --- | --- | --- | --- | --- |
 | Process startup | `backend.App.ServiceStartup` through the registered Wails service | By returning an error | Runs synchronously before pending windows; UI operations and event emission remain gated | Process-scoped. Wails cancels the service context and shuts down already-started services if startup aborts. Repository contract: `backend/app_lifecycle.go`; framework contract: `pkg/application/services.go`. |
 | Interactive startup | Every peer's `events.Common.WindowRuntimeReady` listener calls `backend.App.WindowRuntimeReady(name, restoreGeometry)` | No | Registered when the window is created; the first delivery enables desktop operations and starts interactive process work, while every delivery shows that peer | Names are monotonic `workspace-N`; only process startup is ignored after `markRuntimeReady`. Proof: `internal/appwindow/registry.go`, `backend/app_lifecycle.go`, and `internal/appwindow/lifecycle_test.go`. |
+| Application updates | One `appupdates.Coordinator`, surfaced through the backend service and the process-wide `app-update` event | Checks/downloads are cancellable; restart becomes a quit handoff | First runtime-ready starts one scheduler. Automatic and manual checks never download; download and restart each require a separate user action. | State is process-scoped across all peers. Eligibility comes from the installed distribution; prepared and attempted helper state is durable. Proof: `backend/app_updates_config.go`, `backend/internal/appupdates/coordinator.go`, and `internal/updateidentity/eligibility.go`. |
 | Subsequent process launch and focus | `application.SingleInstanceOptions.OnSecondInstanceLaunch` | No | May arrive before the webview is ready; it does not start a second backend lifecycle | Shows, restores when minimized, and focuses the most recently focused live peer; ignores launch arguments and additional data. Proof: `main.go`, `internal/appwindow/registry.go`, and `cmd/project/wails_project_contract_test.go`. |
 | Ordinary focus changes | Peer `events.Common.WindowFocus` listener | No | Updates only the registry's most-recent ordering | Focus does not trigger refresh or cluster selection. It chooses the peer used by subsequent-launch focus and explicit application-quit geometry persistence. |
 | System appearance changes | Browser `matchMedia('(prefers-color-scheme: dark)')`; persisted preference changes use the backend `appearance-mode-changed` custom event | No | Frontend subscription exists only after the runtime mounts; system changes apply only while the preference is `system` | Process preference, not cluster data. The React effect removes the media-query and Wails subscriptions on unmount. Proof: `frontend/src/core/contexts/AppearanceModeContext.tsx:67-109`. |
@@ -111,6 +119,13 @@ Wails service route `/api/v2`. Resource doorbells and container logs use named
 Wails JSON streams. Backend teardown unpublishes the service handler and stops
 the current per-cluster stream generation before releasing its producers.
 
+`ServiceShutdown` also stops the update coordinator, cancels an in-flight
+check or download, and removes prepared staging that has not entered a helper
+attempt. An explicit update restart first persists the attempt handoff, then
+invokes Wails restart so the detached helper owns replacement and relaunch.
+The next process reconciles the recorded source/target version and helper log;
+it reports success, restored-source failure, or a superseding manual install.
+
 ## Starting points
 
 - Composition and process hooks: `main.go`
@@ -118,4 +133,5 @@ the current per-cluster stream generation before releasing its producers.
 - Native operations and named-window resolution: `backend/app_runtime.go`
 - Backend lifecycle: `backend/app_lifecycle.go`, `backend/app_runtime.go`
 - Geometry validation: `backend/window_restore.go`
-- Build identity: `build/config.yml`
+- Build and update identity: `build/config.yml`, `internal/updateidentity`
+- Update composition and durable handoff: `backend/app_updates_config.go`, `backend/internal/appupdates`, `internal/updatestate`, `internal/updatetemp`

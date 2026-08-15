@@ -57,6 +57,7 @@ completed phase plans, or test lists that can be discovered with `rg`.
 | How does the object map work? | [workflows/object-map.md](workflows/object-map.md) |
 | How are live operations tracked and cleaned up? | [workflows/operation-lifecycle.md](workflows/operation-lifecycle.md) |
 | How do shell exec and debug containers work? | [workflows/shell-debug.md](workflows/shell-debug.md) |
+| How are application updates discovered, authenticated, published, applied, and recovered? | [workflows/application-updates.md](workflows/application-updates.md) |
 | Which logs doc applies? | [workflows/logs/overview.md](workflows/logs/overview.md) |
 | How do I diagnose a wedged backend (views stuck loading, suspected deadlock)? | [workflows/goroutine-dump.md](workflows/goroutine-dump.md) |
 

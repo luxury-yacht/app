@@ -763,8 +763,12 @@ func (coordinator *Coordinator) validateRelease(release *updater.Release) error 
 		releaseIdentity.Channel != updateidentity.ChannelStable {
 		return fmt.Errorf("stable builds cannot install prerelease version %q", release.Version)
 	}
-	if release.Channel != string(coordinator.eligibility.Release.Channel) {
-		return fmt.Errorf("update release channel %q does not match build channel %q", release.Channel, coordinator.eligibility.Release.Channel)
+	if release.Channel != string(releaseIdentity.Channel) {
+		return fmt.Errorf(
+			"update release channel %q does not match version channel %q",
+			release.Channel,
+			releaseIdentity.Channel,
+		)
 	}
 	if release.Artifact.Platform != coordinator.platform || release.Artifact.Arch != coordinator.architecture {
 		return fmt.Errorf(

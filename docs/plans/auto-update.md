@@ -6,9 +6,11 @@ signed `updater.json`, uploads it beside the ordinary release assets, and keeps
 the GitHub Release in draft state until every upload succeeds. The application
 discovers releases through GitHub and loads that release's `updater.json` before
 accepting an update. Before Stage 1 rollout, the macOS beta smoke and recovery
-matrix must pass. The remaining Phase 6 durable documentation/release cleanup is
-pending. Windows Authenticode certificate procurement is in progress; it does
-not block the macOS stage, but it remains a Windows enablement and overall-
+matrix must pass. The Phase 6 durable lifecycle, workflow, and release
+documentation is complete; follow-up-plan retirement remains gated on cross-
+platform acceptance. Windows Authenticode certificate procurement is in
+progress. It does not block the macOS stage, but it remains a Windows
+enablement and overall-
 completion dependency (`backend/app_update_provider.go`;
 `cmd/project/updater_release.go`; `cmd/project/release.go`;
 `.github/workflows/release.yml`).
@@ -1089,9 +1091,9 @@ artifacts.
 - [x] delete or rewrite tests that assert the retired release-page-only
   behavior;
 - [x] remove obsolete DTO fields after all frontend consumers move;
-- [ ] update `docs/architecture/application-lifecycle.md` with the durable process
+- [x] update `docs/architecture/application-lifecycle.md` with the durable process
   lifecycle contract;
-- [ ] create `docs/workflows/application-updates.md` for the durable publishing,
+- [x] create `docs/workflows/application-updates.md` for the durable publishing,
   platform eligibility, helper-failure recovery, rollback, and key-handling
   workflow;
 - [x] add the user-facing change to `docs/release/pending.md`; and
