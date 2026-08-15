@@ -159,7 +159,7 @@ func (a *App) performClusterScopeRebuild(clusterID string) {
 	a.teardownClusterSubsystem(clusterID)
 	a.rebuildClusterSubsystem(clusterID)
 	a.incrementClusterScopeRevision(clusterID)
-	a.emitEvent("cluster:scope:changed", map[string]any{"clusterId": clusterID})
+	a.emitEvent(clusterScopeChangedEventName, ClusterScopeChangedEvent{ClusterID: clusterID})
 }
 
 // normalizeAllowedNamespaces trims entries, drops empties, dedupes while

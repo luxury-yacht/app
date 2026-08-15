@@ -56,7 +56,7 @@ type clusterAuthStateCommand struct {
 	state        authstate.State
 	diagnostic   authstate.FailureDiagnostic
 	eventName    string
-	eventPayload map[string]any
+	eventPayload ClusterAuthEvent
 	mutation     clusterAuthMutation
 }
 
@@ -82,15 +82,15 @@ func newClusterAuthStateCommand(
 	}
 	switch state {
 	case authstate.StateValid:
-		command.eventName = "cluster:auth:recovered"
-		command.eventPayload = map[string]any{"clusterId": clusterID, "clusterName": clusterName}
+		command.eventName = clusterAuthRecoveredEventName
+		command.eventPayload = authEventPayload(clusterID, clusterName, diag)
 		command.mutation = clusterAuthMutationRebuild
 	case authstate.StateRecovering:
-		command.eventName = "cluster:auth:recovering"
+		command.eventName = clusterAuthRecoveringEventName
 		command.eventPayload = authEventPayload(clusterID, clusterName, diag)
 		command.mutation = clusterAuthMutationTeardown
 	case authstate.StateInvalid:
-		command.eventName = "cluster:auth:failed"
+		command.eventName = clusterAuthFailedEventName
 		command.eventPayload = authEventPayload(clusterID, clusterName, diag)
 		command.mutation = clusterAuthMutationNone
 	default:
@@ -152,15 +152,15 @@ func (a *App) executeClusterAuthMutation(ctx context.Context, command clusterAut
 // authEventPayload builds an auth event payload carrying the per-cluster identity
 // plus the typed credential diagnostic. Every diagnostic field is always present
 // (empty string when unknown) so the frontend can rely on the payload shape.
-func authEventPayload(clusterID, clusterName string, diag authstate.FailureDiagnostic) map[string]any {
-	return map[string]any{
-		"clusterId":   clusterID,
-		"clusterName": clusterName,
-		"reason":      diag.Reason,
-		"class":       diag.Class,
-		"kind":        diag.Kind,
-		"summary":     diag.Summary,
-		"execCommand": diag.ExecCommand,
+func authEventPayload(clusterID, clusterName string, diag authstate.FailureDiagnostic) ClusterAuthEvent {
+	return ClusterAuthEvent{
+		ClusterID:   clusterID,
+		ClusterName: clusterName,
+		Reason:      diag.Reason,
+		Class:       diag.Class,
+		Kind:        diag.Kind,
+		Summary:     diag.Summary,
+		ExecCommand: diag.ExecCommand,
 	}
 }
 
@@ -473,6 +473,8 @@ func (a *App) RetryClusterAuth(clusterID string) {
 }
 
 // GetClusterAuthState returns the current auth state for a specific cluster.
+//
+//wails:ignore
 func (a *App) GetClusterAuthState(clusterID string) (string, string) {
 	if a == nil || clusterID == "" {
 		return "unknown", ""
@@ -512,7 +514,15 @@ func (a *App) handleClusterAuthRecoveryProgress(clusterID string, progress auths
 	// The typed diagnostic fields let a late-subscribing UI render exec-helper
 	// copy without having seen the failed/recovering event.
 	payload := authEventPayload(clusterID, clusterName, diag)
-	payload["secondsUntilRetry"] = progress.SecondsUntilRetry
-	payload["errorClass"] = string(progress.ErrorClass)
-	a.emitEvent("cluster:auth:progress", payload)
+	a.emitEvent(clusterAuthProgressEventName, ClusterAuthProgressEvent{
+		ClusterID:         payload.ClusterID,
+		ClusterName:       payload.ClusterName,
+		Reason:            payload.Reason,
+		Class:             payload.Class,
+		Kind:              payload.Kind,
+		Summary:           payload.Summary,
+		ExecCommand:       payload.ExecCommand,
+		SecondsUntilRetry: progress.SecondsUntilRetry,
+		ErrorClass:        string(progress.ErrorClass),
+	})
 }

@@ -14,6 +14,7 @@ import (
 	"github.com/luxury-yacht/app/backend/resources/apiextensions"
 )
 
+//wails:ignore
 func (a *App) GetCustomResourceDefinition(clusterID, name string) (*CustomResourceDefinitionDetails, error) {
 	deps, selectionKey, err := a.resolveClusterDependencies(clusterID)
 	if err != nil {

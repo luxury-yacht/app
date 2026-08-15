@@ -294,7 +294,7 @@ const AboutModal: React.FC<AboutModalProps> = React.memo(({ isOpen, onClose }) =
     if (!isOpen) {
       return;
     }
-    return onEvent('app-update', (updateSnapshot?: backend.UpdateInfo) => {
+    return onEvent('app-update', (updateSnapshot) => {
       if (updateSnapshot) {
         setAppInfo((current) => withUpdate(current, updateSnapshot));
       }

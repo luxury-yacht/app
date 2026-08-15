@@ -53,6 +53,8 @@ func (a *App) ServiceStartup(ctx context.Context, _ application.ServiceOptions) 
 
 // WindowRuntimeReady runs interactive initialization once the webview runtime
 // can receive events and JavaScript without dropping or merely queueing them.
+//
+//wails:ignore
 func (a *App) WindowRuntimeReady(windowName string, restoreGeometry bool) bool {
 	firstReadyWindow := a.markRuntimeReady()
 	if firstReadyWindow && !a.checkStartupBetaExpiry(windowName) {
@@ -81,13 +83,11 @@ func (a *App) WindowRuntimeReady(windowName string, restoreGeometry bool) bool {
 
 func (a *App) initializeClusterLifecycle() {
 	lifecycle := newClusterLifecycle(func(clusterID string, state, previousState ClusterLifecycleState) {
-		// The wire payload is stringly (Wails flattens defined string types);
-		// the frontend re-closes the union at its ingestion boundary. An empty
-		// previousState means "no previous state" (first transition).
-		a.emitEvent("cluster:lifecycle", map[string]string{
-			"clusterId":     clusterID,
-			"state":         string(state),
-			"previousState": string(previousState),
+		// An empty previousState means "no previous state" (first transition).
+		a.emitEvent(clusterLifecycleEventName, ClusterLifecycleEvent{
+			ClusterID:     clusterID,
+			State:         state,
+			PreviousState: string(previousState),
 		})
 	})
 	lifecycle.setSnapshotChangeObserver(a.markClusterWorkspaceChanged)
@@ -104,10 +104,10 @@ func (a *App) configureStartupErrorCapture() {
 		// 401 responses, which DO have cluster context.
 		// clusterId is empty here because stderr errors are not associated with
 		// a specific cluster.
-		a.emitEvent("backend-error", map[string]any{
-			"clusterId": "",
-			"message":   strings.TrimSpace(message),
-			"source":    "stderr",
+		a.emitEvent(backendErrorEventName, BackendErrorEvent{
+			ClusterID: "",
+			Message:   strings.TrimSpace(message),
+			Source:    "stderr",
 		})
 	})
 	errorcapture.SetLogSink(func(level, message string) {
@@ -261,12 +261,16 @@ func (b *stdLogBridge) Write(p []byte) (int, error) {
 
 // PrepareQuit flushes process state after the last peer window has agreed to
 // close. Window geometry is saved separately while the chosen window exists.
+//
+//wails:ignore
 func (a *App) PrepareQuit() bool {
 	return a.prepareQuitFromWindow("")
 }
 
 // PrepareQuitFromWindow persists the geometry of the peer chosen by the
 // window registry and then performs the once-only process shutdown flush.
+//
+//wails:ignore
 func (a *App) PrepareQuitFromWindow(windowName string) bool {
 	return a.prepareQuitFromWindow(strings.TrimSpace(windowName))
 }

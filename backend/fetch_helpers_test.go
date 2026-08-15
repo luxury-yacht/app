@@ -21,12 +21,12 @@ import (
 
 func TestFetchResourceErrorEmits(t *testing.T) {
 	app := newTestAppWithDefaults(t)
-	var emitted map[string]any
+	var emitted *BackendErrorEvent
 	setTestAppRuntimeReady(t, app, context.Background())
 	app.eventEmitter = func(_ context.Context, name string, args ...interface{}) {
 		if name == "backend-error" && len(args) > 0 {
-			if payload, ok := args[0].(map[string]any); ok {
-				emitted = payload
+			if payload, ok := args[0].(BackendErrorEvent); ok {
+				emitted = &payload
 			}
 		}
 	}
@@ -38,9 +38,9 @@ func TestFetchResourceErrorEmits(t *testing.T) {
 	require.Empty(t, value)
 	require.Error(t, err)
 	require.NotNil(t, emitted)
-	require.Equal(t, "", emitted["clusterId"])
-	require.Equal(t, "Widget", emitted["resourceKind"])
-	require.Equal(t, "default/foo", emitted["identifier"])
+	require.Empty(t, emitted.ClusterID)
+	require.Equal(t, "Widget", emitted.ResourceKind)
+	require.Equal(t, "default/foo", emitted.Identifier)
 }
 
 func TestFetchResourceSuccess(t *testing.T) {
@@ -102,10 +102,11 @@ func TestFetchResourceSkipsCacheWhenKeyEmpty(t *testing.T) {
 func TestFetchResourceListErrorEmits(t *testing.T) {
 	app := newTestAppWithDefaults(t)
 	setTestAppRuntimeReady(t, app, context.Background())
-	var emitted map[string]any
+	var emitted *BackendErrorEvent
 	app.eventEmitter = func(_ context.Context, name string, args ...interface{}) {
 		if name == "backend-error" && len(args) > 0 {
-			emitted = args[0].(map[string]any)
+			payload := args[0].(BackendErrorEvent)
+			emitted = &payload
 		}
 	}
 
@@ -115,9 +116,9 @@ func TestFetchResourceListErrorEmits(t *testing.T) {
 
 	require.Error(t, err)
 	require.NotNil(t, emitted)
-	require.Equal(t, "test-cluster", emitted["clusterId"])
-	require.Equal(t, "Widget", emitted["resourceKind"])
-	require.Contains(t, emitted["scope"], "namespace default")
+	require.Equal(t, "test-cluster", emitted.ClusterID)
+	require.Equal(t, "Widget", emitted.ResourceKind)
+	require.Contains(t, emitted.Identifier, "namespace default")
 }
 
 func TestFetchNamespacedResourceRequiresObjectIdentity(t *testing.T) {
@@ -200,10 +201,11 @@ func TestFetchResourceExhaustsRetriesAndEmits(t *testing.T) {
 	app.telemetryRecorder = telemetry.NewRecorder()
 	app.logger = NewLogger(100)
 	setTestAppRuntimeReady(t, app, context.Background())
-	var emitted map[string]any
+	var emitted *BackendErrorEvent
 	app.eventEmitter = func(_ context.Context, name string, args ...interface{}) {
 		if name == "backend-error" && len(args) > 0 {
-			emitted = args[0].(map[string]any)
+			payload := args[0].(BackendErrorEvent)
+			emitted = &payload
 		}
 	}
 
@@ -226,9 +228,9 @@ func TestFetchResourceExhaustsRetriesAndEmits(t *testing.T) {
 	require.Equal(t, uint64(config.ResourceFetchMaxAttempts-1), summary.Connection.RetryAttempts)
 	require.Equal(t, uint64(0), summary.Connection.RetrySuccesses)
 	require.Equal(t, uint64(1), summary.Connection.RetryExhausted)
-	require.Equal(t, "", emitted["clusterId"])
-	require.Equal(t, "Widget", emitted["resourceKind"])
-	require.Equal(t, "default/foo", emitted["identifier"])
+	require.Empty(t, emitted.ClusterID)
+	require.Equal(t, "Widget", emitted.ResourceKind)
+	require.Equal(t, "default/foo", emitted.Identifier)
 }
 
 func TestExecuteWithRetryValidatesInputs(t *testing.T) {

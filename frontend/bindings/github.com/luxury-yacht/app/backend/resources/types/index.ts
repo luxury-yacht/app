@@ -6,7 +6,6 @@ export type {
     AppPreferenceSchema,
     AppSettings,
     AppSettingsSchema,
-    AppearanceModeInfo,
     ConditionState,
     ConditionsSummary,
     ContainerLogsEntry,
@@ -38,14 +37,15 @@ export type {
     RoleRef,
     RouteDetails,
     RouteRuleDetails,
+    ShellOutputEvent,
     ShellSession,
     ShellSessionInfo,
     ShellSessionRequest,
+    ShellStatusEvent,
     Subject,
     TLSRouteDetails,
     Theme,
     ThemeClusterPatternValidationResult,
     UpdateAppPreferencesRequest,
-    UpdateAppPreferencesResponse,
-    WindowSettings
+    UpdateAppPreferencesResponse
 } from "./models.js";

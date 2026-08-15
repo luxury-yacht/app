@@ -135,7 +135,7 @@ func (l *Logger) recordLogEntry(level LogLevel, message string, source []string)
 
 func (dispatch logDispatch) emitAddedEvent() {
 	if dispatch.emit != nil {
-		dispatch.emit("app-logs:added", AppLogsAddedEvent{Sequence: dispatch.entry.Sequence})
+		dispatch.emit(appLogsAddedEventName, AppLogsAddedEvent{Sequence: dispatch.entry.Sequence})
 	}
 }
 

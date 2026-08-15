@@ -67,11 +67,12 @@ func addFileMenu(appMenu *application.Menu, app *App) {
 	}
 }
 
-// SetWorkspaceWindowCreator connects the native New Window command to the
-// process-owned peer window registry.
-func (a *App) SetWorkspaceWindowCreator(create func()) {
-	if a != nil {
-		a.createWorkspaceWindow = create
+// ConfigureWorkspaceWindowCreator connects the native New Window command to
+// the process-owned peer window registry without exposing composition wiring as
+// a frontend service method.
+func ConfigureWorkspaceWindowCreator(app *App, create func()) {
+	if app != nil {
+		app.createWorkspaceWindow = create
 	}
 }
 

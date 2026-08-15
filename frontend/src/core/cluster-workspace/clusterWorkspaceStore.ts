@@ -1,7 +1,11 @@
 import { GetClusterWorkspaceStateForWindow } from '@/core/backend-api';
 import type { ClusterLifecycleState } from '@/core/contexts/clusterLifecycleState';
 import { parseClusterLifecycleState } from '@/core/contexts/clusterLifecycleState';
-import { onEvent } from '@/core/desktop-runtime';
+import {
+  type DesktopEventHandler,
+  type DesktopEventPayload,
+  onEvent,
+} from '@/core/desktop-runtime';
 import { eventBus } from '@/core/events';
 import { logAppLogsInfo } from '@/core/logging/appLogsClient';
 import { getWindowIdentity } from '@/core/window-identity';
@@ -34,19 +38,8 @@ export const DEFAULT_CLUSTER_AUTH_STATE: ClusterAuthState = {
   diagnosticSummary: '',
 };
 
-export interface AuthEventPayload {
-  clusterId?: string;
-  clusterName?: string;
-  reason?: string;
-  kind?: string;
-  summary?: string;
-  execCommand?: string;
-}
-
-export interface AuthProgressPayload extends AuthEventPayload {
-  secondsUntilRetry?: number;
-  errorClass?: string;
-}
+export type AuthEventPayload = Partial<DesktopEventPayload<'cluster:auth:failed'>>;
+export type AuthProgressPayload = Partial<DesktopEventPayload<'cluster:auth:progress'>>;
 
 const normalizeAuthErrorClass = (value: unknown): AuthErrorClass =>
   value === 'auth' || value === 'connectivity' ? value : '';
@@ -170,9 +163,24 @@ export interface ClusterWorkspaceSnapshot {
   clusters: ReadonlyMap<string, ClusterWorkspaceClusterState>;
 }
 
+type ClusterWorkspaceEventName =
+  | 'cluster:lifecycle'
+  | 'cluster:auth:failed'
+  | 'cluster:auth:recovering'
+  | 'cluster:auth:recovered'
+  | 'cluster:auth:progress'
+  | 'cluster:health:healthy'
+  | 'cluster:health:degraded'
+  | 'cluster:scope:changed';
+
+type ClusterWorkspaceEventSubscriber = <E extends ClusterWorkspaceEventName>(
+  event: E,
+  handler: DesktopEventHandler<E>
+) => () => void;
+
 interface ClusterWorkspaceStoreOptions {
   read: () => Promise<ClusterWorkspaceWireState>;
-  onEvent: (event: string, handler: (payload: unknown) => void) => () => void;
+  onEvent: ClusterWorkspaceEventSubscriber;
 }
 
 const emptySnapshot = (): ClusterWorkspaceSnapshot => ({
@@ -432,7 +440,7 @@ export class ClusterWorkspaceStore {
   private start(): void {
     this.generation++;
     this.pendingHydrationFields.clear();
-    const on = (event: string, handler: (...args: unknown[]) => void) => {
+    const on = <E extends ClusterWorkspaceEventName>(event: E, handler: DesktopEventHandler<E>) => {
       try {
         this.disposers.push(this.options.onEvent(event, handler));
       } catch (error) {
@@ -500,8 +508,7 @@ export class ClusterWorkspaceStore {
     this.publish({ ...this.snapshot, clusters });
   }
 
-  private handleLifecycle(raw: unknown): void {
-    const payload = raw as { clusterId?: string; state?: string } | undefined;
+  private handleLifecycle(payload: DesktopEventPayload<'cluster:lifecycle'>): void {
     const lifecycle = parseClusterLifecycleState(payload?.state);
     if (!payload?.clusterId || !lifecycle) {
       return;
@@ -527,8 +534,7 @@ export class ClusterWorkspaceStore {
     }
   }
 
-  private handleAuthFailed(raw: unknown): void {
-    const payload = raw as AuthEventPayload | undefined;
+  private handleAuthFailed(payload: DesktopEventPayload<'cluster:auth:failed'>): void {
     if (!payload?.clusterId) {
       console.warn('[AuthErrorContext] Received auth:failed without clusterId');
       return;
@@ -540,8 +546,7 @@ export class ClusterWorkspaceStore {
     eventBus.emit('cluster:auth:failed', { clusterId: payload.clusterId });
   }
 
-  private handleAuthRecovering(raw: unknown): void {
-    const payload = raw as AuthEventPayload | undefined;
+  private handleAuthRecovering(payload: DesktopEventPayload<'cluster:auth:recovering'>): void {
     if (!payload?.clusterId) {
       console.warn('[AuthErrorContext] Received auth:recovering without clusterId');
       return;
@@ -552,8 +557,7 @@ export class ClusterWorkspaceStore {
     }));
   }
 
-  private handleAuthProgress(raw: unknown): void {
-    const payload = raw as AuthProgressPayload | undefined;
+  private handleAuthProgress(payload: DesktopEventPayload<'cluster:auth:progress'>): void {
     if (!payload?.clusterId) {
       return;
     }
@@ -563,8 +567,7 @@ export class ClusterWorkspaceStore {
     });
   }
 
-  private handleAuthRecovered(raw: unknown): void {
-    const payload = raw as AuthEventPayload | undefined;
+  private handleAuthRecovered(payload: DesktopEventPayload<'cluster:auth:recovered'>): void {
     if (!payload?.clusterId) {
       console.warn('[AuthErrorContext] Received auth:recovered without clusterId');
       return;
@@ -576,8 +579,10 @@ export class ClusterWorkspaceStore {
     eventBus.emit('cluster:auth:recovered', { clusterId: payload.clusterId });
   }
 
-  private handleHealth(raw: unknown, health: ClusterHealthStatus): void {
-    const payload = raw as { clusterId?: string } | undefined;
+  private handleHealth(
+    payload: DesktopEventPayload<'cluster:health:healthy'>,
+    health: ClusterHealthStatus
+  ): void {
     if (!payload?.clusterId) {
       console.warn(`[ClusterHealthListener] Received health:${health} without clusterId`);
       return;
@@ -587,8 +592,7 @@ export class ClusterWorkspaceStore {
     );
   }
 
-  private handleScopeChanged(raw: unknown): void {
-    const payload = raw as { clusterId?: string } | undefined;
+  private handleScopeChanged(payload: DesktopEventPayload<'cluster:scope:changed'>): void {
     const clusterId = payload?.clusterId ?? '';
     logAppLogsInfo(`namespace-scope: cluster:scope:changed received for "${clusterId}"`);
     if (!clusterId) {

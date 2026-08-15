@@ -44,6 +44,58 @@ import (
 	"github.com/luxury-yacht/app/backend/resources/types"
 )
 
+// BindingModelAnchor keeps object-detail DTOs reachable by the Wails generator
+// without exporting the backend-only Get<Kind> wrappers to TypeScript.
+//
+//wails:internal
+type BindingModelAnchor struct {
+	BackendTLSPolicy               *backendtlspolicy.BackendTLSPolicyDetails
+	ClusterRole                    *clusterrole.ClusterRoleDetails
+	ClusterRoleBinding             *clusterrolebinding.ClusterRoleBindingDetails
+	ConfigMap                      *configmap.ConfigMapDetails
+	CronJob                        *cronjob.CronJobDetails
+	DaemonSet                      *daemonset.DaemonSetDetails
+	Deployment                     *deployment.DeploymentDetails
+	EndpointSlice                  *endpointslice.EndpointSliceDetails
+	Event                          *events.EventDetails
+	GRPCRoute                      *types.GRPCRouteDetails
+	Gateway                        *gateway.GatewayDetails
+	GatewayClass                   *gatewayclass.GatewayClassDetails
+	HTTPRoute                      *types.HTTPRouteDetails
+	HorizontalPodAutoscaler        *hpa.HorizontalPodAutoscalerDetails
+	Ingress                        *ingress.IngressDetails
+	IngressClass                   *ingressclass.IngressClassDetails
+	Job                            *job.JobDetails
+	LimitRange                     *limitrange.LimitRangeDetails
+	ListenerSet                    *listenerset.ListenerSetDetails
+	MutatingWebhookConfiguration   *admission.MutatingWebhookConfigurationDetails
+	Namespace                      *namespaces.NamespaceDetails
+	NetworkPolicy                  *networkpolicy.NetworkPolicyDetails
+	Node                           *nodes.NodeDetails
+	PersistentVolume               *persistentvolume.PersistentVolumeDetails
+	PersistentVolumeClaim          *persistentvolumeclaim.PersistentVolumeClaimDetails
+	PodDisruptionBudget            *poddisruptionbudget.PodDisruptionBudgetDetails
+	ReferenceGrant                 *referencegrant.ReferenceGrantDetails
+	ReplicaSet                     *replicaset.ReplicaSetDetails
+	ResourceQuota                  *resourcequota.ResourceQuotaDetails
+	Role                           *role.RoleDetails
+	RoleBinding                    *rolebinding.RoleBindingDetails
+	Secret                         *secret.SecretDetails
+	Service                        *service.ServiceDetails
+	ServiceAccount                 *serviceaccount.ServiceAccountDetails
+	StatefulSet                    *statefulset.StatefulSetDetails
+	StorageClass                   *storageclass.StorageClassDetails
+	TLSRoute                       *types.TLSRouteDetails
+	ValidatingWebhookConfiguration *admission.ValidatingWebhookConfigurationDetails
+	CustomResourceDefinition       *CustomResourceDefinitionDetails
+	HelmRelease                    *HelmReleaseDetails
+	Pod                            *PodDetailInfo
+}
+
+//wails:internal
+func (a *App) BindingModelAnchor() BindingModelAnchor { return BindingModelAnchor{} }
+
+//wails:ignore
 func (a *App) GetBackendTLSPolicy(clusterID, namespace, name string) (*backendtlspolicy.BackendTLSPolicyDetails, error) {
 	deps, selectionKey, err := a.resolveClusterDependencies(clusterID)
 	if err != nil {
@@ -54,6 +106,7 @@ func (a *App) GetBackendTLSPolicy(clusterID, namespace, name string) (*backendtl
 	})
 }
 
+//wails:ignore
 func (a *App) GetClusterRole(clusterID, name string) (*clusterrole.ClusterRoleDetails, error) {
 	deps, selectionKey, err := a.resolveClusterDependencies(clusterID)
 	if err != nil {
@@ -64,6 +117,7 @@ func (a *App) GetClusterRole(clusterID, name string) (*clusterrole.ClusterRoleDe
 	})
 }
 
+//wails:ignore
 func (a *App) GetClusterRoleBinding(clusterID, name string) (*clusterrolebinding.ClusterRoleBindingDetails, error) {
 	deps, selectionKey, err := a.resolveClusterDependencies(clusterID)
 	if err != nil {
@@ -74,6 +128,7 @@ func (a *App) GetClusterRoleBinding(clusterID, name string) (*clusterrolebinding
 	})
 }
 
+//wails:ignore
 func (a *App) GetConfigMap(clusterID, namespace, name string) (*configmap.ConfigMapDetails, error) {
 	deps, selectionKey, err := a.resolveClusterDependencies(clusterID)
 	if err != nil {
@@ -84,6 +139,7 @@ func (a *App) GetConfigMap(clusterID, namespace, name string) (*configmap.Config
 	})
 }
 
+//wails:ignore
 func (a *App) GetCronJob(clusterID, namespace, name string) (*cronjob.CronJobDetails, error) {
 	deps, selectionKey, err := a.resolveClusterDependencies(clusterID)
 	if err != nil {
@@ -94,6 +150,7 @@ func (a *App) GetCronJob(clusterID, namespace, name string) (*cronjob.CronJobDet
 	})
 }
 
+//wails:ignore
 func (a *App) GetDaemonSet(clusterID, namespace, name string) (*daemonset.DaemonSetDetails, error) {
 	deps, selectionKey, err := a.resolveClusterDependencies(clusterID)
 	if err != nil {
@@ -104,6 +161,7 @@ func (a *App) GetDaemonSet(clusterID, namespace, name string) (*daemonset.Daemon
 	})
 }
 
+//wails:ignore
 func (a *App) GetDeployment(clusterID, namespace, name string) (*deployment.DeploymentDetails, error) {
 	deps, selectionKey, err := a.resolveClusterDependencies(clusterID)
 	if err != nil {
@@ -114,6 +172,7 @@ func (a *App) GetDeployment(clusterID, namespace, name string) (*deployment.Depl
 	})
 }
 
+//wails:ignore
 func (a *App) GetEndpointSlice(clusterID, namespace, name string) (*endpointslice.EndpointSliceDetails, error) {
 	deps, selectionKey, err := a.resolveClusterDependencies(clusterID)
 	if err != nil {
@@ -124,6 +183,7 @@ func (a *App) GetEndpointSlice(clusterID, namespace, name string) (*endpointslic
 	})
 }
 
+//wails:ignore
 func (a *App) GetEvent(clusterID, namespace, name string) (*events.EventDetails, error) {
 	deps, selectionKey, err := a.resolveClusterDependencies(clusterID)
 	if err != nil {
@@ -134,6 +194,7 @@ func (a *App) GetEvent(clusterID, namespace, name string) (*events.EventDetails,
 	})
 }
 
+//wails:ignore
 func (a *App) GetGRPCRoute(clusterID, namespace, name string) (*types.GRPCRouteDetails, error) {
 	deps, selectionKey, err := a.resolveClusterDependencies(clusterID)
 	if err != nil {
@@ -144,6 +205,7 @@ func (a *App) GetGRPCRoute(clusterID, namespace, name string) (*types.GRPCRouteD
 	})
 }
 
+//wails:ignore
 func (a *App) GetGateway(clusterID, namespace, name string) (*gateway.GatewayDetails, error) {
 	deps, selectionKey, err := a.resolveClusterDependencies(clusterID)
 	if err != nil {
@@ -154,6 +216,7 @@ func (a *App) GetGateway(clusterID, namespace, name string) (*gateway.GatewayDet
 	})
 }
 
+//wails:ignore
 func (a *App) GetGatewayClass(clusterID, name string) (*gatewayclass.GatewayClassDetails, error) {
 	deps, selectionKey, err := a.resolveClusterDependencies(clusterID)
 	if err != nil {
@@ -164,6 +227,7 @@ func (a *App) GetGatewayClass(clusterID, name string) (*gatewayclass.GatewayClas
 	})
 }
 
+//wails:ignore
 func (a *App) GetHTTPRoute(clusterID, namespace, name string) (*types.HTTPRouteDetails, error) {
 	deps, selectionKey, err := a.resolveClusterDependencies(clusterID)
 	if err != nil {
@@ -174,6 +238,7 @@ func (a *App) GetHTTPRoute(clusterID, namespace, name string) (*types.HTTPRouteD
 	})
 }
 
+//wails:ignore
 func (a *App) GetHorizontalPodAutoscaler(clusterID, namespace, name string) (*hpa.HorizontalPodAutoscalerDetails, error) {
 	deps, selectionKey, err := a.resolveClusterDependencies(clusterID)
 	if err != nil {
@@ -184,6 +249,7 @@ func (a *App) GetHorizontalPodAutoscaler(clusterID, namespace, name string) (*hp
 	})
 }
 
+//wails:ignore
 func (a *App) GetIngress(clusterID, namespace, name string) (*ingress.IngressDetails, error) {
 	deps, selectionKey, err := a.resolveClusterDependencies(clusterID)
 	if err != nil {
@@ -194,6 +260,7 @@ func (a *App) GetIngress(clusterID, namespace, name string) (*ingress.IngressDet
 	})
 }
 
+//wails:ignore
 func (a *App) GetIngressClass(clusterID, name string) (*ingressclass.IngressClassDetails, error) {
 	deps, selectionKey, err := a.resolveClusterDependencies(clusterID)
 	if err != nil {
@@ -204,6 +271,7 @@ func (a *App) GetIngressClass(clusterID, name string) (*ingressclass.IngressClas
 	})
 }
 
+//wails:ignore
 func (a *App) GetJob(clusterID, namespace, name string) (*job.JobDetails, error) {
 	deps, selectionKey, err := a.resolveClusterDependencies(clusterID)
 	if err != nil {
@@ -214,6 +282,7 @@ func (a *App) GetJob(clusterID, namespace, name string) (*job.JobDetails, error)
 	})
 }
 
+//wails:ignore
 func (a *App) GetLimitRange(clusterID, namespace, name string) (*limitrange.LimitRangeDetails, error) {
 	deps, selectionKey, err := a.resolveClusterDependencies(clusterID)
 	if err != nil {
@@ -224,6 +293,7 @@ func (a *App) GetLimitRange(clusterID, namespace, name string) (*limitrange.Limi
 	})
 }
 
+//wails:ignore
 func (a *App) GetListenerSet(clusterID, namespace, name string) (*listenerset.ListenerSetDetails, error) {
 	deps, selectionKey, err := a.resolveClusterDependencies(clusterID)
 	if err != nil {
@@ -234,6 +304,7 @@ func (a *App) GetListenerSet(clusterID, namespace, name string) (*listenerset.Li
 	})
 }
 
+//wails:ignore
 func (a *App) GetMutatingWebhookConfiguration(clusterID, name string) (*admission.MutatingWebhookConfigurationDetails, error) {
 	deps, selectionKey, err := a.resolveClusterDependencies(clusterID)
 	if err != nil {
@@ -244,6 +315,7 @@ func (a *App) GetMutatingWebhookConfiguration(clusterID, name string) (*admissio
 	})
 }
 
+//wails:ignore
 func (a *App) GetNamespace(clusterID, name string) (*namespaces.NamespaceDetails, error) {
 	deps, selectionKey, err := a.resolveClusterDependencies(clusterID)
 	if err != nil {
@@ -254,6 +326,7 @@ func (a *App) GetNamespace(clusterID, name string) (*namespaces.NamespaceDetails
 	})
 }
 
+//wails:ignore
 func (a *App) GetNetworkPolicy(clusterID, namespace, name string) (*networkpolicy.NetworkPolicyDetails, error) {
 	deps, selectionKey, err := a.resolveClusterDependencies(clusterID)
 	if err != nil {
@@ -264,6 +337,7 @@ func (a *App) GetNetworkPolicy(clusterID, namespace, name string) (*networkpolic
 	})
 }
 
+//wails:ignore
 func (a *App) GetNode(clusterID, name string) (*nodes.NodeDetails, error) {
 	deps, selectionKey, err := a.resolveClusterDependencies(clusterID)
 	if err != nil {
@@ -274,6 +348,7 @@ func (a *App) GetNode(clusterID, name string) (*nodes.NodeDetails, error) {
 	})
 }
 
+//wails:ignore
 func (a *App) GetPersistentVolume(clusterID, name string) (*persistentvolume.PersistentVolumeDetails, error) {
 	deps, selectionKey, err := a.resolveClusterDependencies(clusterID)
 	if err != nil {
@@ -284,6 +359,7 @@ func (a *App) GetPersistentVolume(clusterID, name string) (*persistentvolume.Per
 	})
 }
 
+//wails:ignore
 func (a *App) GetPersistentVolumeClaim(clusterID, namespace, name string) (*persistentvolumeclaim.PersistentVolumeClaimDetails, error) {
 	deps, selectionKey, err := a.resolveClusterDependencies(clusterID)
 	if err != nil {
@@ -294,6 +370,7 @@ func (a *App) GetPersistentVolumeClaim(clusterID, namespace, name string) (*pers
 	})
 }
 
+//wails:ignore
 func (a *App) GetPodDisruptionBudget(clusterID, namespace, name string) (*poddisruptionbudget.PodDisruptionBudgetDetails, error) {
 	deps, selectionKey, err := a.resolveClusterDependencies(clusterID)
 	if err != nil {
@@ -304,6 +381,7 @@ func (a *App) GetPodDisruptionBudget(clusterID, namespace, name string) (*poddis
 	})
 }
 
+//wails:ignore
 func (a *App) GetReferenceGrant(clusterID, namespace, name string) (*referencegrant.ReferenceGrantDetails, error) {
 	deps, selectionKey, err := a.resolveClusterDependencies(clusterID)
 	if err != nil {
@@ -314,6 +392,7 @@ func (a *App) GetReferenceGrant(clusterID, namespace, name string) (*referencegr
 	})
 }
 
+//wails:ignore
 func (a *App) GetReplicaSet(clusterID, namespace, name string) (*replicaset.ReplicaSetDetails, error) {
 	deps, selectionKey, err := a.resolveClusterDependencies(clusterID)
 	if err != nil {
@@ -324,6 +403,7 @@ func (a *App) GetReplicaSet(clusterID, namespace, name string) (*replicaset.Repl
 	})
 }
 
+//wails:ignore
 func (a *App) GetResourceQuota(clusterID, namespace, name string) (*resourcequota.ResourceQuotaDetails, error) {
 	deps, selectionKey, err := a.resolveClusterDependencies(clusterID)
 	if err != nil {
@@ -334,6 +414,7 @@ func (a *App) GetResourceQuota(clusterID, namespace, name string) (*resourcequot
 	})
 }
 
+//wails:ignore
 func (a *App) GetRole(clusterID, namespace, name string) (*role.RoleDetails, error) {
 	deps, selectionKey, err := a.resolveClusterDependencies(clusterID)
 	if err != nil {
@@ -344,6 +425,7 @@ func (a *App) GetRole(clusterID, namespace, name string) (*role.RoleDetails, err
 	})
 }
 
+//wails:ignore
 func (a *App) GetRoleBinding(clusterID, namespace, name string) (*rolebinding.RoleBindingDetails, error) {
 	deps, selectionKey, err := a.resolveClusterDependencies(clusterID)
 	if err != nil {
@@ -354,6 +436,7 @@ func (a *App) GetRoleBinding(clusterID, namespace, name string) (*rolebinding.Ro
 	})
 }
 
+//wails:ignore
 func (a *App) GetSecret(clusterID, namespace, name string) (*secret.SecretDetails, error) {
 	deps, selectionKey, err := a.resolveClusterDependencies(clusterID)
 	if err != nil {
@@ -364,6 +447,7 @@ func (a *App) GetSecret(clusterID, namespace, name string) (*secret.SecretDetail
 	})
 }
 
+//wails:ignore
 func (a *App) GetService(clusterID, namespace, name string) (*service.ServiceDetails, error) {
 	deps, selectionKey, err := a.resolveClusterDependencies(clusterID)
 	if err != nil {
@@ -374,6 +458,7 @@ func (a *App) GetService(clusterID, namespace, name string) (*service.ServiceDet
 	})
 }
 
+//wails:ignore
 func (a *App) GetServiceAccount(clusterID, namespace, name string) (*serviceaccount.ServiceAccountDetails, error) {
 	deps, selectionKey, err := a.resolveClusterDependencies(clusterID)
 	if err != nil {
@@ -384,6 +469,7 @@ func (a *App) GetServiceAccount(clusterID, namespace, name string) (*serviceacco
 	})
 }
 
+//wails:ignore
 func (a *App) GetStatefulSet(clusterID, namespace, name string) (*statefulset.StatefulSetDetails, error) {
 	deps, selectionKey, err := a.resolveClusterDependencies(clusterID)
 	if err != nil {
@@ -394,6 +480,7 @@ func (a *App) GetStatefulSet(clusterID, namespace, name string) (*statefulset.St
 	})
 }
 
+//wails:ignore
 func (a *App) GetStorageClass(clusterID, name string) (*storageclass.StorageClassDetails, error) {
 	deps, selectionKey, err := a.resolveClusterDependencies(clusterID)
 	if err != nil {
@@ -404,6 +491,7 @@ func (a *App) GetStorageClass(clusterID, name string) (*storageclass.StorageClas
 	})
 }
 
+//wails:ignore
 func (a *App) GetTLSRoute(clusterID, namespace, name string) (*types.TLSRouteDetails, error) {
 	deps, selectionKey, err := a.resolveClusterDependencies(clusterID)
 	if err != nil {
@@ -414,6 +502,7 @@ func (a *App) GetTLSRoute(clusterID, namespace, name string) (*types.TLSRouteDet
 	})
 }
 
+//wails:ignore
 func (a *App) GetValidatingWebhookConfiguration(clusterID, name string) (*admission.ValidatingWebhookConfigurationDetails, error) {
 	deps, selectionKey, err := a.resolveClusterDependencies(clusterID)
 	if err != nil {

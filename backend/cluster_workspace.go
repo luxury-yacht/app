@@ -181,6 +181,8 @@ func readConsistentClusterWorkspaceState(
 // GetClusterWorkspaceState returns one revision-consistent snapshot of the
 // cluster-indexed state used by selection, lifecycle, auth, health, and
 // namespace-scope consumers.
+//
+//wails:ignore
 func (a *App) GetClusterWorkspaceState() ClusterWorkspaceState {
 	if a == nil {
 		return ClusterWorkspaceState{Clusters: make(map[string]ClusterWorkspaceClusterState)}
@@ -400,6 +402,8 @@ func (a *App) applyWorkspaceSelections(
 // ReleaseWorkspaceWindow relinquishes both foreground demand and every cluster
 // tab owned by a closed peer. Shared cluster runtime state survives while any
 // other peer still owns the same selection.
+//
+//wails:ignore
 func (a *App) ReleaseWorkspaceWindow(windowID string) {
 	windowID = strings.TrimSpace(windowID)
 	if a == nil || windowID == "" {

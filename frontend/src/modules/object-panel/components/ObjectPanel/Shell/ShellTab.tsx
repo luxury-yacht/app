@@ -14,7 +14,7 @@ import {
 import { readPodContainers, requestData } from '@/core/data-access';
 import '@xterm/xterm/css/xterm.css';
 import type { types } from '@core/backend-api/models';
-import { onEvent } from '@core/desktop-runtime';
+import { type DesktopEventPayload, onEvent } from '@core/desktop-runtime';
 import {
   buildObjectActionTarget,
   runCreateDebugContainer,
@@ -50,17 +50,7 @@ interface ShellTabProps {
 
 type ShellStatus = 'idle' | 'connecting' | 'open' | 'closed' | 'error';
 
-interface ShellOutputEvent {
-  sessionId: string;
-  stream: 'stdout' | 'stderr';
-  data: string;
-}
-
-interface ShellStatusEvent {
-  sessionId: string;
-  status: string;
-  reason?: string;
-}
+type ShellOutputEvent = DesktopEventPayload<'object-shell:output'>;
 
 interface PendingReplayState {
   sessionId: string;
@@ -624,7 +614,7 @@ const ShellTab: React.FC<ShellTabProps> = ({
   ]);
 
   useEffect(() => {
-    const offOutput = onEvent('object-shell:output', (evt: ShellOutputEvent) => {
+    const offOutput = onEvent('object-shell:output', (evt) => {
       if (!evt || !sessionIdRef.current || evt.sessionId !== sessionIdRef.current) {
         return;
       }
@@ -637,7 +627,7 @@ const ShellTab: React.FC<ShellTabProps> = ({
       appendOutput(evt);
     });
 
-    const offStatus = onEvent('object-shell:status', (evt: ShellStatusEvent) => {
+    const offStatus = onEvent('object-shell:status', (evt) => {
       if (!evt || !sessionIdRef.current || evt.sessionId !== sessionIdRef.current) {
         return;
       }

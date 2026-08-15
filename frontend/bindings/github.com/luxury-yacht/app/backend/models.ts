@@ -6,16 +6,115 @@
 import * as appupdates$0 from "./internal/appupdates/models.js";
 // eslint-disable-next-line @typescript-eslint/ban-ts-comment
 // @ts-ignore: Unused imports
-import * as telemetry$0 from "./refresh/telemetry/models.js";
+import * as resourcemodel$0 from "./resourcemodel/models.js";
 // eslint-disable-next-line @typescript-eslint/ban-ts-comment
 // @ts-ignore: Unused imports
-import * as resourcemodel$0 from "./resourcemodel/models.js";
+import * as admission$0 from "./resources/admission/models.js";
 // eslint-disable-next-line @typescript-eslint/ban-ts-comment
 // @ts-ignore: Unused imports
 import * as apiextensions$0 from "./resources/apiextensions/models.js";
 // eslint-disable-next-line @typescript-eslint/ban-ts-comment
 // @ts-ignore: Unused imports
+import * as backendtlspolicy$0 from "./resources/backendtlspolicy/models.js";
+// eslint-disable-next-line @typescript-eslint/ban-ts-comment
+// @ts-ignore: Unused imports
+import * as clusterrole$0 from "./resources/clusterrole/models.js";
+// eslint-disable-next-line @typescript-eslint/ban-ts-comment
+// @ts-ignore: Unused imports
+import * as clusterrolebinding$0 from "./resources/clusterrolebinding/models.js";
+// eslint-disable-next-line @typescript-eslint/ban-ts-comment
+// @ts-ignore: Unused imports
+import * as configmap$0 from "./resources/configmap/models.js";
+// eslint-disable-next-line @typescript-eslint/ban-ts-comment
+// @ts-ignore: Unused imports
+import * as cronjob$0 from "./resources/cronjob/models.js";
+// eslint-disable-next-line @typescript-eslint/ban-ts-comment
+// @ts-ignore: Unused imports
+import * as daemonset$0 from "./resources/daemonset/models.js";
+// eslint-disable-next-line @typescript-eslint/ban-ts-comment
+// @ts-ignore: Unused imports
+import * as deployment$0 from "./resources/deployment/models.js";
+// eslint-disable-next-line @typescript-eslint/ban-ts-comment
+// @ts-ignore: Unused imports
+import * as endpointslice$0 from "./resources/endpointslice/models.js";
+// eslint-disable-next-line @typescript-eslint/ban-ts-comment
+// @ts-ignore: Unused imports
+import * as events$0 from "./resources/events/models.js";
+// eslint-disable-next-line @typescript-eslint/ban-ts-comment
+// @ts-ignore: Unused imports
+import * as gateway$0 from "./resources/gateway/models.js";
+// eslint-disable-next-line @typescript-eslint/ban-ts-comment
+// @ts-ignore: Unused imports
+import * as gatewayclass$0 from "./resources/gatewayclass/models.js";
+// eslint-disable-next-line @typescript-eslint/ban-ts-comment
+// @ts-ignore: Unused imports
 import * as helm$0 from "./resources/helm/models.js";
+// eslint-disable-next-line @typescript-eslint/ban-ts-comment
+// @ts-ignore: Unused imports
+import * as hpa$0 from "./resources/hpa/models.js";
+// eslint-disable-next-line @typescript-eslint/ban-ts-comment
+// @ts-ignore: Unused imports
+import * as ingress$0 from "./resources/ingress/models.js";
+// eslint-disable-next-line @typescript-eslint/ban-ts-comment
+// @ts-ignore: Unused imports
+import * as ingressclass$0 from "./resources/ingressclass/models.js";
+// eslint-disable-next-line @typescript-eslint/ban-ts-comment
+// @ts-ignore: Unused imports
+import * as job$0 from "./resources/job/models.js";
+// eslint-disable-next-line @typescript-eslint/ban-ts-comment
+// @ts-ignore: Unused imports
+import * as limitrange$0 from "./resources/limitrange/models.js";
+// eslint-disable-next-line @typescript-eslint/ban-ts-comment
+// @ts-ignore: Unused imports
+import * as listenerset$0 from "./resources/listenerset/models.js";
+// eslint-disable-next-line @typescript-eslint/ban-ts-comment
+// @ts-ignore: Unused imports
+import * as namespaces$0 from "./resources/namespaces/models.js";
+// eslint-disable-next-line @typescript-eslint/ban-ts-comment
+// @ts-ignore: Unused imports
+import * as networkpolicy$0 from "./resources/networkpolicy/models.js";
+// eslint-disable-next-line @typescript-eslint/ban-ts-comment
+// @ts-ignore: Unused imports
+import * as nodes$0 from "./resources/nodes/models.js";
+// eslint-disable-next-line @typescript-eslint/ban-ts-comment
+// @ts-ignore: Unused imports
+import * as persistentvolume$0 from "./resources/persistentvolume/models.js";
+// eslint-disable-next-line @typescript-eslint/ban-ts-comment
+// @ts-ignore: Unused imports
+import * as persistentvolumeclaim$0 from "./resources/persistentvolumeclaim/models.js";
+// eslint-disable-next-line @typescript-eslint/ban-ts-comment
+// @ts-ignore: Unused imports
+import * as poddisruptionbudget$0 from "./resources/poddisruptionbudget/models.js";
+// eslint-disable-next-line @typescript-eslint/ban-ts-comment
+// @ts-ignore: Unused imports
+import * as referencegrant$0 from "./resources/referencegrant/models.js";
+// eslint-disable-next-line @typescript-eslint/ban-ts-comment
+// @ts-ignore: Unused imports
+import * as replicaset$0 from "./resources/replicaset/models.js";
+// eslint-disable-next-line @typescript-eslint/ban-ts-comment
+// @ts-ignore: Unused imports
+import * as resourcequota$0 from "./resources/resourcequota/models.js";
+// eslint-disable-next-line @typescript-eslint/ban-ts-comment
+// @ts-ignore: Unused imports
+import * as role$0 from "./resources/role/models.js";
+// eslint-disable-next-line @typescript-eslint/ban-ts-comment
+// @ts-ignore: Unused imports
+import * as rolebinding$0 from "./resources/rolebinding/models.js";
+// eslint-disable-next-line @typescript-eslint/ban-ts-comment
+// @ts-ignore: Unused imports
+import * as secret$0 from "./resources/secret/models.js";
+// eslint-disable-next-line @typescript-eslint/ban-ts-comment
+// @ts-ignore: Unused imports
+import * as service$0 from "./resources/service/models.js";
+// eslint-disable-next-line @typescript-eslint/ban-ts-comment
+// @ts-ignore: Unused imports
+import * as serviceaccount$0 from "./resources/serviceaccount/models.js";
+// eslint-disable-next-line @typescript-eslint/ban-ts-comment
+// @ts-ignore: Unused imports
+import * as statefulset$0 from "./resources/statefulset/models.js";
+// eslint-disable-next-line @typescript-eslint/ban-ts-comment
+// @ts-ignore: Unused imports
+import * as storageclass$0 from "./resources/storageclass/models.js";
 // eslint-disable-next-line @typescript-eslint/ban-ts-comment
 // @ts-ignore: Unused imports
 import * as types$0 from "./resources/types/models.js";
@@ -33,6 +132,10 @@ export interface AppInfo {
     "isBeta": boolean;
     "expiryDate"?: string;
     "update"?: UpdateInfo | null;
+}
+
+export interface AppLogsAddedEvent {
+    "sequence": number;
 }
 
 /**
@@ -61,70 +164,13 @@ export type AppSettings = types$0.AppSettings;
  */
 export type AppSettingsSchema = types$0.AppSettingsSchema;
 
-/**
- * Per-kind detail DTOs are no longer re-exported here. The generated
- * App.Get<Kind> wrappers (resource_details_generated.go) reference each kind's DTO by
- * its own package (e.g. deployment.DeploymentDetails), and Wails reaches every
- * nested sub-type through those parent structs — so no package-backend alias is
- * needed for any kind DTO or its sub-types. What remains is app-level and shared
- * types (settings, logs, shell, cluster-tab infos, common ref/condition/route
- * sub-types in resources/types) plus the three DTOs whose App.Get binding is
- * hand-written and therefore still named in package backend (HelmReleaseDetails,
- * PodDetailInfo, CustomResourceDefinitionDetails).
- */
-export type AppearanceModeInfo = types$0.AppearanceModeInfo;
-
-/**
- * CatalogDiagnostics summarizes the catalog feature state for manual inspection.
- */
-export interface CatalogDiagnostics {
-    "enabled": boolean;
-    "itemCount": number;
-    "resourceCount": number;
-    "lastSyncMs": number;
-    "lastUpdated": number;
-    "lastError"?: string;
-    "lastSuccessMs"?: number;
-    "status"?: string;
-    "consecutiveFailures"?: number;
-    "stale"?: boolean;
-    "failedResources"?: number;
-    "fallbackCount"?: number;
-    "hydrationCount"?: number;
-    "health"?: CatalogHealth | null;
-    "domains"?: CatalogDomainDiagnostics[] | null;
-}
-
-/**
- * CatalogDomainDiagnostics captures per-domain telemetry details.
- */
-export interface CatalogDomainDiagnostics {
-    "domain": string;
-    "scope"?: string;
-    "lastStatus": telemetry$0.SnapshotLastStatus;
-    "lastError"?: string;
-    "lastWarning"?: string;
-    "lastDurationMs": number;
-    "averageDurationMs"?: number;
-    "successCount"?: number;
-    "failureCount"?: number;
-    "totalItems"?: number;
-    "truncated"?: boolean;
-    "fallbackCount"?: number;
-    "hydrationCount"?: number;
-}
-
-/**
- * CatalogHealth summarises the live health of the catalog service.
- */
-export interface CatalogHealth {
-    "status": string;
-    "consecutiveFailures": number;
-    "lastSyncMs": number;
-    "lastSuccessMs"?: number;
-    "lastError"?: string;
-    "stale": boolean;
-    "failedResources"?: number;
+export interface BackendErrorEvent {
+    "clusterId": string;
+    "resourceKind"?: string;
+    "identifier"?: string;
+    "message": string;
+    "error"?: string;
+    "source"?: string;
 }
 
 /**
@@ -133,6 +179,34 @@ export interface CatalogHealth {
 export interface CatalogQueryCSVExport {
     "path": string;
     "bytes": number;
+}
+
+export interface ClusterAuthEvent {
+    "clusterId": string;
+    "clusterName": string;
+    "reason": string;
+    "class": string;
+    "kind": string;
+    "summary": string;
+    "execCommand": string;
+}
+
+export interface ClusterAuthProgressEvent {
+    "clusterId": string;
+    "clusterName": string;
+    "reason": string;
+    "class": string;
+    "kind": string;
+    "summary": string;
+    "execCommand": string;
+    "secondsUntilRetry": number;
+    "errorClass": string;
+}
+
+export interface ClusterHealthEvent {
+    "clusterId": string;
+    "clusterName": string;
+    "reason"?: string;
 }
 
 export enum ClusterHealthState {
@@ -145,6 +219,12 @@ export enum ClusterHealthState {
     ClusterHealthHealthy = "healthy",
     ClusterHealthDegraded = "degraded",
 };
+
+export interface ClusterLifecycleEvent {
+    "clusterId": string;
+    "state": ClusterLifecycleState;
+    "previousState": string;
+}
 
 /**
  * ClusterLifecycleState represents the current lifecycle phase of a cluster connection.
@@ -164,6 +244,10 @@ export enum ClusterLifecycleState {
     ClusterStateDisconnected = "disconnected",
     ClusterStateReconnecting = "reconnecting",
 };
+
+export interface ClusterScopeChangedEvent {
+    "clusterId": string;
+}
 
 export interface ClusterWorkspaceAuthState {
     "state": string;
@@ -608,6 +692,18 @@ export enum PortForwardStatus {
 };
 
 /**
+ * PortForwardStatusEvent is emitted on status changes.
+ */
+export interface PortForwardStatusEvent {
+    "sessionId": string;
+    "clusterId": string;
+    "status": PortForwardStatus;
+    "statusReason"?: string;
+    "localPort"?: number;
+    "podName"?: string;
+}
+
+/**
  * RevisionEntry describes a single historical revision of a workload rollout.
  */
 export interface RevisionEntry {
@@ -707,6 +803,19 @@ export interface SelectionDiagnostics {
  * hand-written and therefore still named in package backend (HelmReleaseDetails,
  * PodDetailInfo, CustomResourceDefinitionDetails).
  */
+export type ShellOutputEvent = types$0.ShellOutputEvent;
+
+/**
+ * Per-kind detail DTOs are no longer re-exported here. The generated
+ * App.Get<Kind> wrappers (resource_details_generated.go) reference each kind's DTO by
+ * its own package (e.g. deployment.DeploymentDetails), and Wails reaches every
+ * nested sub-type through those parent structs — so no package-backend alias is
+ * needed for any kind DTO or its sub-types. What remains is app-level and shared
+ * types (settings, logs, shell, cluster-tab infos, common ref/condition/route
+ * sub-types in resources/types) plus the three DTOs whose App.Get binding is
+ * hand-written and therefore still named in package backend (HelmReleaseDetails,
+ * PodDetailInfo, CustomResourceDefinitionDetails).
+ */
 export type ShellSession = types$0.ShellSession;
 
 /**
@@ -734,6 +843,19 @@ export type ShellSessionInfo = types$0.ShellSessionInfo;
  * PodDetailInfo, CustomResourceDefinitionDetails).
  */
 export type ShellSessionRequest = types$0.ShellSessionRequest;
+
+/**
+ * Per-kind detail DTOs are no longer re-exported here. The generated
+ * App.Get<Kind> wrappers (resource_details_generated.go) reference each kind's DTO by
+ * its own package (e.g. deployment.DeploymentDetails), and Wails reaches every
+ * nested sub-type through those parent structs — so no package-backend alias is
+ * needed for any kind DTO or its sub-types. What remains is app-level and shared
+ * types (settings, logs, shell, cluster-tab infos, common ref/condition/route
+ * sub-types in resources/types) plus the three DTOs whose App.Get binding is
+ * hand-written and therefore still named in package backend (HelmReleaseDetails,
+ * PodDetailInfo, CustomResourceDefinitionDetails).
+ */
+export type ShellStatusEvent = types$0.ShellStatusEvent;
 
 /**
  * Per-kind detail DTOs are no longer re-exported here. The generated
@@ -804,14 +926,49 @@ export interface UpdateInfo {
 }
 
 /**
- * Per-kind detail DTOs are no longer re-exported here. The generated
- * App.Get<Kind> wrappers (resource_details_generated.go) reference each kind's DTO by
- * its own package (e.g. deployment.DeploymentDetails), and Wails reaches every
- * nested sub-type through those parent structs — so no package-backend alias is
- * needed for any kind DTO or its sub-types. What remains is app-level and shared
- * types (settings, logs, shell, cluster-tab infos, common ref/condition/route
- * sub-types in resources/types) plus the three DTOs whose App.Get binding is
- * hand-written and therefore still named in package backend (HelmReleaseDetails,
- * PodDetailInfo, CustomResourceDefinitionDetails).
+ * BindingModelAnchor keeps object-detail DTOs reachable by the Wails generator
+ * without exporting the backend-only Get<Kind> wrappers to TypeScript.
  */
-export type WindowSettings = types$0.WindowSettings;
+export interface BindingModelAnchor {
+    "BackendTLSPolicy": backendtlspolicy$0.BackendTLSPolicyDetails | null;
+    "ClusterRole": clusterrole$0.ClusterRoleDetails | null;
+    "ClusterRoleBinding": clusterrolebinding$0.ClusterRoleBindingDetails | null;
+    "ConfigMap": configmap$0.ConfigMapDetails | null;
+    "CronJob": cronjob$0.CronJobDetails | null;
+    "DaemonSet": daemonset$0.DaemonSetDetails | null;
+    "Deployment": deployment$0.DeploymentDetails | null;
+    "EndpointSlice": endpointslice$0.EndpointSliceDetails | null;
+    "Event": events$0.EventDetails | null;
+    "GRPCRoute": types$0.GRPCRouteDetails | null;
+    "Gateway": gateway$0.GatewayDetails | null;
+    "GatewayClass": gatewayclass$0.GatewayClassDetails | null;
+    "HTTPRoute": types$0.HTTPRouteDetails | null;
+    "HorizontalPodAutoscaler": hpa$0.HorizontalPodAutoscalerDetails | null;
+    "Ingress": ingress$0.IngressDetails | null;
+    "IngressClass": ingressclass$0.IngressClassDetails | null;
+    "Job": job$0.JobDetails | null;
+    "LimitRange": limitrange$0.LimitRangeDetails | null;
+    "ListenerSet": listenerset$0.ListenerSetDetails | null;
+    "MutatingWebhookConfiguration": admission$0.MutatingWebhookConfigurationDetails | null;
+    "Namespace": namespaces$0.NamespaceDetails | null;
+    "NetworkPolicy": networkpolicy$0.NetworkPolicyDetails | null;
+    "Node": nodes$0.NodeDetails | null;
+    "PersistentVolume": persistentvolume$0.PersistentVolumeDetails | null;
+    "PersistentVolumeClaim": persistentvolumeclaim$0.PersistentVolumeClaimDetails | null;
+    "PodDisruptionBudget": poddisruptionbudget$0.PodDisruptionBudgetDetails | null;
+    "ReferenceGrant": referencegrant$0.ReferenceGrantDetails | null;
+    "ReplicaSet": replicaset$0.ReplicaSetDetails | null;
+    "ResourceQuota": resourcequota$0.ResourceQuotaDetails | null;
+    "Role": role$0.RoleDetails | null;
+    "RoleBinding": rolebinding$0.RoleBindingDetails | null;
+    "Secret": secret$0.SecretDetails | null;
+    "Service": service$0.ServiceDetails | null;
+    "ServiceAccount": serviceaccount$0.ServiceAccountDetails | null;
+    "StatefulSet": statefulset$0.StatefulSetDetails | null;
+    "StorageClass": storageclass$0.StorageClassDetails | null;
+    "TLSRoute": types$0.TLSRouteDetails | null;
+    "ValidatingWebhookConfiguration": admission$0.ValidatingWebhookConfigurationDetails | null;
+    "CustomResourceDefinition": CustomResourceDefinitionDetails | null;
+    "HelmRelease": HelmReleaseDetails | null;
+    "Pod": PodDetailInfo | null;
+}

@@ -59,22 +59,22 @@ func (a *App) runHeartbeatIteration() {
 		status := a.checkClusterHealth(cc)
 
 		// Build event data with cluster info
-		eventData := map[string]any{
-			"clusterId":   clusterID,
-			"clusterName": cc.meta.Name,
+		eventData := ClusterHealthEvent{
+			ClusterID:   clusterID,
+			ClusterName: cc.meta.Name,
 		}
 
 		switch status {
 		case healthOK:
 			a.setClusterHealth(clusterID, ClusterHealthHealthy)
-			a.emitEvent("cluster:health:healthy", eventData)
+			a.emitEvent(clusterHealthHealthyEventName, eventData)
 
 			a.logger.Debug("Heartbeat healthy for cluster "+cc.meta.Name, logsources.Heartbeat, clusterID, cc.meta.Name)
 
 		case healthAuthFailure:
 			a.setClusterHealth(clusterID, ClusterHealthDegraded)
-			eventData["reason"] = "auth"
-			a.emitEvent("cluster:health:degraded", eventData)
+			eventData.Reason = "auth"
+			a.emitEvent(clusterHealthDegradedEventName, eventData)
 
 			a.logger.Warn("Heartbeat auth failure for cluster "+cc.meta.Name, logsources.Heartbeat, clusterID, cc.meta.Name)
 
@@ -85,8 +85,8 @@ func (a *App) runHeartbeatIteration() {
 
 		case healthConnectivityFailure:
 			a.setClusterHealth(clusterID, ClusterHealthDegraded)
-			eventData["reason"] = "connectivity"
-			a.emitEvent("cluster:health:degraded", eventData)
+			eventData.Reason = "connectivity"
+			a.emitEvent(clusterHealthDegradedEventName, eventData)
 
 			a.logger.Warn("Heartbeat connectivity failure for cluster "+cc.meta.Name, logsources.Heartbeat, clusterID, cc.meta.Name)
 			// Do NOT report to auth manager — this is a network issue, not an auth issue.

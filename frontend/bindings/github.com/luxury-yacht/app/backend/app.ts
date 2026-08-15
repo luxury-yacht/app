@@ -12,9 +12,6 @@ import { Call as $Call, CancellablePromise as $CancellablePromise } from "@wails
 
 // eslint-disable-next-line @typescript-eslint/ban-ts-comment
 // @ts-ignore: Unused imports
-import * as context$0 from "../../../../context/models.js";
-// eslint-disable-next-line @typescript-eslint/ban-ts-comment
-// @ts-ignore: Unused imports
 import * as json$0 from "../../../../encoding/json/models.js";
 // eslint-disable-next-line @typescript-eslint/ban-ts-comment
 // @ts-ignore: Unused imports
@@ -28,111 +25,6 @@ import * as snapshot$0 from "./refresh/snapshot/models.js";
 // eslint-disable-next-line @typescript-eslint/ban-ts-comment
 // @ts-ignore: Unused imports
 import * as resourcemodel$0 from "./resourcemodel/models.js";
-// eslint-disable-next-line @typescript-eslint/ban-ts-comment
-// @ts-ignore: Unused imports
-import * as admission$0 from "./resources/admission/models.js";
-// eslint-disable-next-line @typescript-eslint/ban-ts-comment
-// @ts-ignore: Unused imports
-import * as backendtlspolicy$0 from "./resources/backendtlspolicy/models.js";
-// eslint-disable-next-line @typescript-eslint/ban-ts-comment
-// @ts-ignore: Unused imports
-import * as clusterrole$0 from "./resources/clusterrole/models.js";
-// eslint-disable-next-line @typescript-eslint/ban-ts-comment
-// @ts-ignore: Unused imports
-import * as clusterrolebinding$0 from "./resources/clusterrolebinding/models.js";
-// eslint-disable-next-line @typescript-eslint/ban-ts-comment
-// @ts-ignore: Unused imports
-import * as configmap$0 from "./resources/configmap/models.js";
-// eslint-disable-next-line @typescript-eslint/ban-ts-comment
-// @ts-ignore: Unused imports
-import * as cronjob$0 from "./resources/cronjob/models.js";
-// eslint-disable-next-line @typescript-eslint/ban-ts-comment
-// @ts-ignore: Unused imports
-import * as daemonset$0 from "./resources/daemonset/models.js";
-// eslint-disable-next-line @typescript-eslint/ban-ts-comment
-// @ts-ignore: Unused imports
-import * as deployment$0 from "./resources/deployment/models.js";
-// eslint-disable-next-line @typescript-eslint/ban-ts-comment
-// @ts-ignore: Unused imports
-import * as endpointslice$0 from "./resources/endpointslice/models.js";
-// eslint-disable-next-line @typescript-eslint/ban-ts-comment
-// @ts-ignore: Unused imports
-import * as events$0 from "./resources/events/models.js";
-// eslint-disable-next-line @typescript-eslint/ban-ts-comment
-// @ts-ignore: Unused imports
-import * as gateway$0 from "./resources/gateway/models.js";
-// eslint-disable-next-line @typescript-eslint/ban-ts-comment
-// @ts-ignore: Unused imports
-import * as gatewayclass$0 from "./resources/gatewayclass/models.js";
-// eslint-disable-next-line @typescript-eslint/ban-ts-comment
-// @ts-ignore: Unused imports
-import * as hpa$0 from "./resources/hpa/models.js";
-// eslint-disable-next-line @typescript-eslint/ban-ts-comment
-// @ts-ignore: Unused imports
-import * as ingress$0 from "./resources/ingress/models.js";
-// eslint-disable-next-line @typescript-eslint/ban-ts-comment
-// @ts-ignore: Unused imports
-import * as ingressclass$0 from "./resources/ingressclass/models.js";
-// eslint-disable-next-line @typescript-eslint/ban-ts-comment
-// @ts-ignore: Unused imports
-import * as job$0 from "./resources/job/models.js";
-// eslint-disable-next-line @typescript-eslint/ban-ts-comment
-// @ts-ignore: Unused imports
-import * as limitrange$0 from "./resources/limitrange/models.js";
-// eslint-disable-next-line @typescript-eslint/ban-ts-comment
-// @ts-ignore: Unused imports
-import * as listenerset$0 from "./resources/listenerset/models.js";
-// eslint-disable-next-line @typescript-eslint/ban-ts-comment
-// @ts-ignore: Unused imports
-import * as namespaces$0 from "./resources/namespaces/models.js";
-// eslint-disable-next-line @typescript-eslint/ban-ts-comment
-// @ts-ignore: Unused imports
-import * as networkpolicy$0 from "./resources/networkpolicy/models.js";
-// eslint-disable-next-line @typescript-eslint/ban-ts-comment
-// @ts-ignore: Unused imports
-import * as nodes$0 from "./resources/nodes/models.js";
-// eslint-disable-next-line @typescript-eslint/ban-ts-comment
-// @ts-ignore: Unused imports
-import * as persistentvolume$0 from "./resources/persistentvolume/models.js";
-// eslint-disable-next-line @typescript-eslint/ban-ts-comment
-// @ts-ignore: Unused imports
-import * as persistentvolumeclaim$0 from "./resources/persistentvolumeclaim/models.js";
-// eslint-disable-next-line @typescript-eslint/ban-ts-comment
-// @ts-ignore: Unused imports
-import * as poddisruptionbudget$0 from "./resources/poddisruptionbudget/models.js";
-// eslint-disable-next-line @typescript-eslint/ban-ts-comment
-// @ts-ignore: Unused imports
-import * as referencegrant$0 from "./resources/referencegrant/models.js";
-// eslint-disable-next-line @typescript-eslint/ban-ts-comment
-// @ts-ignore: Unused imports
-import * as replicaset$0 from "./resources/replicaset/models.js";
-// eslint-disable-next-line @typescript-eslint/ban-ts-comment
-// @ts-ignore: Unused imports
-import * as resourcequota$0 from "./resources/resourcequota/models.js";
-// eslint-disable-next-line @typescript-eslint/ban-ts-comment
-// @ts-ignore: Unused imports
-import * as role$0 from "./resources/role/models.js";
-// eslint-disable-next-line @typescript-eslint/ban-ts-comment
-// @ts-ignore: Unused imports
-import * as rolebinding$0 from "./resources/rolebinding/models.js";
-// eslint-disable-next-line @typescript-eslint/ban-ts-comment
-// @ts-ignore: Unused imports
-import * as secret$0 from "./resources/secret/models.js";
-// eslint-disable-next-line @typescript-eslint/ban-ts-comment
-// @ts-ignore: Unused imports
-import * as service$0 from "./resources/service/models.js";
-// eslint-disable-next-line @typescript-eslint/ban-ts-comment
-// @ts-ignore: Unused imports
-import * as serviceaccount$0 from "./resources/serviceaccount/models.js";
-// eslint-disable-next-line @typescript-eslint/ban-ts-comment
-// @ts-ignore: Unused imports
-import * as statefulset$0 from "./resources/statefulset/models.js";
-// eslint-disable-next-line @typescript-eslint/ban-ts-comment
-// @ts-ignore: Unused imports
-import * as storageclass$0 from "./resources/storageclass/models.js";
-// eslint-disable-next-line @typescript-eslint/ban-ts-comment
-// @ts-ignore: Unused imports
-import * as types$0 from "./resources/types/models.js";
 
 // eslint-disable-next-line @typescript-eslint/ban-ts-comment
 // @ts-ignore: Unused imports
@@ -170,6 +62,10 @@ export function ApplyTheme(id: string): $CancellablePromise<void> {
     return $Call.ByName("github.com/luxury-yacht/app/backend.App.ApplyTheme", id);
 }
 
+function BindingModelAnchor(): $CancellablePromise<$models.BindingModelAnchor> {
+    return $Call.ByName("github.com/luxury-yacht/app/backend.App.BindingModelAnchor");
+}
+
 export function CancelDrainNodeJob(clusterID: string, jobID: string): $CancellablePromise<void> {
     return $Call.ByName("github.com/luxury-yacht/app/backend.App.CancelDrainNodeJob", clusterID, jobID);
 }
@@ -192,13 +88,6 @@ export function CheckObjectYamlOwnership(clusterID: string, req: $models.ObjectY
     return $Call.ByName("github.com/luxury-yacht/app/backend.App.CheckObjectYamlOwnership", clusterID, req);
 }
 
-/**
- * ClearAllSSRRCaches removes all cached SSRR rules for every cluster.
- */
-export function ClearAllSSRRCaches(): $CancellablePromise<void> {
-    return $Call.ByName("github.com/luxury-yacht/app/backend.App.ClearAllSSRRCaches");
-}
-
 export function ClearAppLogs(): $CancellablePromise<void> {
     return $Call.ByName("github.com/luxury-yacht/app/backend.App.ClearAppLogs");
 }
@@ -218,34 +107,10 @@ export function ClearGridTablePersistence(): $CancellablePromise<number> {
 }
 
 /**
- * ClearSSRRCache removes the cached SSRR rules for a specific cluster.
- */
-export function ClearSSRRCache(clusterID: string): $CancellablePromise<void> {
-    return $Call.ByName("github.com/luxury-yacht/app/backend.App.ClearSSRRCache", clusterID);
-}
-
-/**
- * CloseCluster atomically tears down runtime operations for a selected cluster
- * and removes that cluster from the selected kubeconfig set.
- */
-export function CloseCluster(selectionOrClusterID: string): $CancellablePromise<void> {
-    return $Call.ByName("github.com/luxury-yacht/app/backend.App.CloseCluster", selectionOrClusterID);
-}
-
-/**
  * CloseShellSession terminates an active shell session.
  */
 export function CloseShellSession(sessionID: string): $CancellablePromise<void> {
     return $Call.ByName("github.com/luxury-yacht/app/backend.App.CloseShellSession", sessionID);
-}
-
-/**
- * CtxOrBackground returns a context derived only from the application
- * cancellation signal, so framework-owned context values do not leak into
- * backend operations.
- */
-export function CtxOrBackground(): $CancellablePromise<context$0.Context> {
-    return $Call.ByName("github.com/luxury-yacht/app/backend.App.CtxOrBackground");
 }
 
 /**
@@ -343,64 +208,12 @@ export function GetAppSettingsSchema(): $CancellablePromise<$models.AppSettingsS
     return $Call.ByName("github.com/luxury-yacht/app/backend.App.GetAppSettingsSchema");
 }
 
-export function GetAppearanceModeInfo(): $CancellablePromise<$models.AppearanceModeInfo | null> {
-    return $Call.ByName("github.com/luxury-yacht/app/backend.App.GetAppearanceModeInfo");
-}
-
-export function GetBackendTLSPolicy(clusterID: string, $namespace: string, name: string): $CancellablePromise<backendtlspolicy$0.BackendTLSPolicyDetails | null> {
-    return $Call.ByName("github.com/luxury-yacht/app/backend.App.GetBackendTLSPolicy", clusterID, $namespace, name);
-}
-
-/**
- * GetCatalogDiagnostics returns the latest catalog telemetry snapshot for diagnostics tools.
- */
-export function GetCatalogDiagnostics(): $CancellablePromise<$models.CatalogDiagnostics | null> {
-    return $Call.ByName("github.com/luxury-yacht/app/backend.App.GetCatalogDiagnostics");
-}
-
 /**
  * GetClusterAllowedNamespaces returns the persisted namespace scope for the
  * cluster in the order the user saved it. Empty means no scope.
  */
 export function GetClusterAllowedNamespaces(clusterID: string): $CancellablePromise<string[] | null> {
     return $Call.ByName("github.com/luxury-yacht/app/backend.App.GetClusterAllowedNamespaces", clusterID);
-}
-
-/**
- * GetClusterAttentionIgnoreRules returns the effective suppression rules for
- * exactly one cluster, including rules that apply to every cluster.
- */
-export function GetClusterAttentionIgnoreRules(clusterID: string): $CancellablePromise<snapshot$0.AttentionIgnoreRules | null> {
-    return $Call.ByName("github.com/luxury-yacht/app/backend.App.GetClusterAttentionIgnoreRules", clusterID);
-}
-
-/**
- * GetClusterAuthState returns the current auth state for a specific cluster.
- */
-export function GetClusterAuthState(clusterID: string): $CancellablePromise<[string, string]> {
-    return $Call.ByName("github.com/luxury-yacht/app/backend.App.GetClusterAuthState", clusterID);
-}
-
-/**
- * GetClusterPortForwardCount returns the number of active port forwards for a cluster.
- */
-export function GetClusterPortForwardCount(clusterID: string): $CancellablePromise<number> {
-    return $Call.ByName("github.com/luxury-yacht/app/backend.App.GetClusterPortForwardCount", clusterID);
-}
-
-export function GetClusterRole(clusterID: string, name: string): $CancellablePromise<clusterrole$0.ClusterRoleDetails | null> {
-    return $Call.ByName("github.com/luxury-yacht/app/backend.App.GetClusterRole", clusterID, name);
-}
-
-export function GetClusterRoleBinding(clusterID: string, name: string): $CancellablePromise<clusterrolebinding$0.ClusterRoleBindingDetails | null> {
-    return $Call.ByName("github.com/luxury-yacht/app/backend.App.GetClusterRoleBinding", clusterID, name);
-}
-
-/**
- * GetClusterShellSessionCount returns the number of active shell sessions for a cluster.
- */
-export function GetClusterShellSessionCount(clusterID: string): $CancellablePromise<number> {
-    return $Call.ByName("github.com/luxury-yacht/app/backend.App.GetClusterShellSessionCount", clusterID);
 }
 
 /**
@@ -411,15 +224,6 @@ export function GetClusterTabOrder(): $CancellablePromise<string[] | null> {
 }
 
 /**
- * GetClusterWorkspaceState returns one revision-consistent snapshot of the
- * cluster-indexed state used by selection, lifecycle, auth, health, and
- * namespace-scope consumers.
- */
-export function GetClusterWorkspaceState(): $CancellablePromise<$models.ClusterWorkspaceState> {
-    return $Call.ByName("github.com/luxury-yacht/app/backend.App.GetClusterWorkspaceState");
-}
-
-/**
  * GetClusterWorkspaceStateForWindow projects process-wide cluster state with
  * the visible cluster belonging to the requesting peer window.
  */
@@ -427,36 +231,8 @@ export function GetClusterWorkspaceStateForWindow(windowID: string): $Cancellabl
     return $Call.ByName("github.com/luxury-yacht/app/backend.App.GetClusterWorkspaceStateForWindow", windowID);
 }
 
-export function GetConfigMap(clusterID: string, $namespace: string, name: string): $CancellablePromise<configmap$0.ConfigMapDetails | null> {
-    return $Call.ByName("github.com/luxury-yacht/app/backend.App.GetConfigMap", clusterID, $namespace, name);
-}
-
 export function GetContainerLogsScopeContainers(clusterID: string, scope: string): $CancellablePromise<string[] | null> {
     return $Call.ByName("github.com/luxury-yacht/app/backend.App.GetContainerLogsScopeContainers", clusterID, scope);
-}
-
-export function GetCronJob(clusterID: string, $namespace: string, name: string): $CancellablePromise<cronjob$0.CronJobDetails | null> {
-    return $Call.ByName("github.com/luxury-yacht/app/backend.App.GetCronJob", clusterID, $namespace, name);
-}
-
-export function GetCustomResourceDefinition(clusterID: string, name: string): $CancellablePromise<$models.CustomResourceDefinitionDetails | null> {
-    return $Call.ByName("github.com/luxury-yacht/app/backend.App.GetCustomResourceDefinition", clusterID, name);
-}
-
-export function GetDaemonSet(clusterID: string, $namespace: string, name: string): $CancellablePromise<daemonset$0.DaemonSetDetails | null> {
-    return $Call.ByName("github.com/luxury-yacht/app/backend.App.GetDaemonSet", clusterID, $namespace, name);
-}
-
-export function GetDeployment(clusterID: string, $namespace: string, name: string): $CancellablePromise<deployment$0.DeploymentDetails | null> {
-    return $Call.ByName("github.com/luxury-yacht/app/backend.App.GetDeployment", clusterID, $namespace, name);
-}
-
-export function GetEndpointSlice(clusterID: string, $namespace: string, name: string): $CancellablePromise<endpointslice$0.EndpointSliceDetails | null> {
-    return $Call.ByName("github.com/luxury-yacht/app/backend.App.GetEndpointSlice", clusterID, $namespace, name);
-}
-
-export function GetEvent(clusterID: string, $namespace: string, name: string): $CancellablePromise<events$0.EventDetails | null> {
-    return $Call.ByName("github.com/luxury-yacht/app/backend.App.GetEvent", clusterID, $namespace, name);
 }
 
 /**
@@ -466,55 +242,11 @@ export function GetFavorites(): $CancellablePromise<$models.Favorite[] | null> {
     return $Call.ByName("github.com/luxury-yacht/app/backend.App.GetFavorites");
 }
 
-export function GetGRPCRoute(clusterID: string, $namespace: string, name: string): $CancellablePromise<types$0.GRPCRouteDetails | null> {
-    return $Call.ByName("github.com/luxury-yacht/app/backend.App.GetGRPCRoute", clusterID, $namespace, name);
-}
-
-export function GetGateway(clusterID: string, $namespace: string, name: string): $CancellablePromise<gateway$0.GatewayDetails | null> {
-    return $Call.ByName("github.com/luxury-yacht/app/backend.App.GetGateway", clusterID, $namespace, name);
-}
-
-export function GetGatewayClass(clusterID: string, name: string): $CancellablePromise<gatewayclass$0.GatewayClassDetails | null> {
-    return $Call.ByName("github.com/luxury-yacht/app/backend.App.GetGatewayClass", clusterID, name);
-}
-
 /**
  * GetGridTablePersistence returns all persisted GridTable entries for v1.
  */
 export function GetGridTablePersistence(): $CancellablePromise<{ [_ in string]?: json$0.RawMessage } | null> {
     return $Call.ByName("github.com/luxury-yacht/app/backend.App.GetGridTablePersistence");
-}
-
-export function GetHTTPRoute(clusterID: string, $namespace: string, name: string): $CancellablePromise<types$0.HTTPRouteDetails | null> {
-    return $Call.ByName("github.com/luxury-yacht/app/backend.App.GetHTTPRoute", clusterID, $namespace, name);
-}
-
-export function GetHelmManifest(clusterID: string, $namespace: string, name: string): $CancellablePromise<string> {
-    return $Call.ByName("github.com/luxury-yacht/app/backend.App.GetHelmManifest", clusterID, $namespace, name);
-}
-
-export function GetHelmReleaseDetails(clusterID: string, $namespace: string, name: string): $CancellablePromise<$models.HelmReleaseDetails | null> {
-    return $Call.ByName("github.com/luxury-yacht/app/backend.App.GetHelmReleaseDetails", clusterID, $namespace, name);
-}
-
-export function GetHelmValues(clusterID: string, $namespace: string, name: string): $CancellablePromise<{ [_ in string]?: any } | null> {
-    return $Call.ByName("github.com/luxury-yacht/app/backend.App.GetHelmValues", clusterID, $namespace, name);
-}
-
-export function GetHorizontalPodAutoscaler(clusterID: string, $namespace: string, name: string): $CancellablePromise<hpa$0.HorizontalPodAutoscalerDetails | null> {
-    return $Call.ByName("github.com/luxury-yacht/app/backend.App.GetHorizontalPodAutoscaler", clusterID, $namespace, name);
-}
-
-export function GetIngress(clusterID: string, $namespace: string, name: string): $CancellablePromise<ingress$0.IngressDetails | null> {
-    return $Call.ByName("github.com/luxury-yacht/app/backend.App.GetIngress", clusterID, $namespace, name);
-}
-
-export function GetIngressClass(clusterID: string, name: string): $CancellablePromise<ingressclass$0.IngressClassDetails | null> {
-    return $Call.ByName("github.com/luxury-yacht/app/backend.App.GetIngressClass", clusterID, name);
-}
-
-export function GetJob(clusterID: string, $namespace: string, name: string): $CancellablePromise<job$0.JobDetails | null> {
-    return $Call.ByName("github.com/luxury-yacht/app/backend.App.GetJob", clusterID, $namespace, name);
 }
 
 /**
@@ -538,30 +270,6 @@ export function GetKubernetesAPIClientDiagnostics(): $CancellablePromise<$models
     return $Call.ByName("github.com/luxury-yacht/app/backend.App.GetKubernetesAPIClientDiagnostics");
 }
 
-export function GetLimitRange(clusterID: string, $namespace: string, name: string): $CancellablePromise<limitrange$0.LimitRangeDetails | null> {
-    return $Call.ByName("github.com/luxury-yacht/app/backend.App.GetLimitRange", clusterID, $namespace, name);
-}
-
-export function GetListenerSet(clusterID: string, $namespace: string, name: string): $CancellablePromise<listenerset$0.ListenerSetDetails | null> {
-    return $Call.ByName("github.com/luxury-yacht/app/backend.App.GetListenerSet", clusterID, $namespace, name);
-}
-
-export function GetMutatingWebhookConfiguration(clusterID: string, name: string): $CancellablePromise<admission$0.MutatingWebhookConfigurationDetails | null> {
-    return $Call.ByName("github.com/luxury-yacht/app/backend.App.GetMutatingWebhookConfiguration", clusterID, name);
-}
-
-export function GetNamespace(clusterID: string, name: string): $CancellablePromise<namespaces$0.NamespaceDetails | null> {
-    return $Call.ByName("github.com/luxury-yacht/app/backend.App.GetNamespace", clusterID, name);
-}
-
-export function GetNetworkPolicy(clusterID: string, $namespace: string, name: string): $CancellablePromise<networkpolicy$0.NetworkPolicyDetails | null> {
-    return $Call.ByName("github.com/luxury-yacht/app/backend.App.GetNetworkPolicy", clusterID, $namespace, name);
-}
-
-export function GetNode(clusterID: string, name: string): $CancellablePromise<nodes$0.NodeDetails | null> {
-    return $Call.ByName("github.com/luxury-yacht/app/backend.App.GetNode", clusterID, name);
-}
-
 /**
  * GetObjectYAMLByGVK fetches a Kubernetes object by its fully-qualified
  * apiVersion + kind and returns its YAML representation. apiVersion must
@@ -578,36 +286,8 @@ export function GetObjectYAMLByGVK(clusterID: string, apiVersion: string, kind: 
     return $Call.ByName("github.com/luxury-yacht/app/backend.App.GetObjectYAMLByGVK", clusterID, apiVersion, kind, $namespace, name);
 }
 
-export function GetPersistentVolume(clusterID: string, name: string): $CancellablePromise<persistentvolume$0.PersistentVolumeDetails | null> {
-    return $Call.ByName("github.com/luxury-yacht/app/backend.App.GetPersistentVolume", clusterID, name);
-}
-
-export function GetPersistentVolumeClaim(clusterID: string, $namespace: string, name: string): $CancellablePromise<persistentvolumeclaim$0.PersistentVolumeClaimDetails | null> {
-    return $Call.ByName("github.com/luxury-yacht/app/backend.App.GetPersistentVolumeClaim", clusterID, $namespace, name);
-}
-
-export function GetPod(clusterID: string, $namespace: string, name: string, detailed: boolean): $CancellablePromise<$models.PodDetailInfo | null> {
-    return $Call.ByName("github.com/luxury-yacht/app/backend.App.GetPod", clusterID, $namespace, name, detailed);
-}
-
 export function GetPodContainers(clusterID: string, $namespace: string, podName: string): $CancellablePromise<string[] | null> {
     return $Call.ByName("github.com/luxury-yacht/app/backend.App.GetPodContainers", clusterID, $namespace, podName);
-}
-
-export function GetPodDisruptionBudget(clusterID: string, $namespace: string, name: string): $CancellablePromise<poddisruptionbudget$0.PodDisruptionBudgetDetails | null> {
-    return $Call.ByName("github.com/luxury-yacht/app/backend.App.GetPodDisruptionBudget", clusterID, $namespace, name);
-}
-
-export function GetReferenceGrant(clusterID: string, $namespace: string, name: string): $CancellablePromise<referencegrant$0.ReferenceGrantDetails | null> {
-    return $Call.ByName("github.com/luxury-yacht/app/backend.App.GetReferenceGrant", clusterID, $namespace, name);
-}
-
-export function GetReplicaSet(clusterID: string, $namespace: string, name: string): $CancellablePromise<replicaset$0.ReplicaSetDetails | null> {
-    return $Call.ByName("github.com/luxury-yacht/app/backend.App.GetReplicaSet", clusterID, $namespace, name);
-}
-
-export function GetResourceQuota(clusterID: string, $namespace: string, name: string): $CancellablePromise<resourcequota$0.ResourceQuotaDetails | null> {
-    return $Call.ByName("github.com/luxury-yacht/app/backend.App.GetResourceQuota", clusterID, $namespace, name);
 }
 
 /**
@@ -622,25 +302,6 @@ export function GetRevisionHistory(clusterID: string, $namespace: string, group:
     return $Call.ByName("github.com/luxury-yacht/app/backend.App.GetRevisionHistory", clusterID, $namespace, group, version, workloadKind, name);
 }
 
-export function GetRole(clusterID: string, $namespace: string, name: string): $CancellablePromise<role$0.RoleDetails | null> {
-    return $Call.ByName("github.com/luxury-yacht/app/backend.App.GetRole", clusterID, $namespace, name);
-}
-
-export function GetRoleBinding(clusterID: string, $namespace: string, name: string): $CancellablePromise<rolebinding$0.RoleBindingDetails | null> {
-    return $Call.ByName("github.com/luxury-yacht/app/backend.App.GetRoleBinding", clusterID, $namespace, name);
-}
-
-export function GetSecret(clusterID: string, $namespace: string, name: string): $CancellablePromise<secret$0.SecretDetails | null> {
-    return $Call.ByName("github.com/luxury-yacht/app/backend.App.GetSecret", clusterID, $namespace, name);
-}
-
-/**
- * GetSelectedKubeconfigs returns the active kubeconfig selections for multi-cluster support.
- */
-export function GetSelectedKubeconfigs(): $CancellablePromise<string[] | null> {
-    return $Call.ByName("github.com/luxury-yacht/app/backend.App.GetSelectedKubeconfigs");
-}
-
 /**
  * GetSelectionDiagnostics returns rolling selection mutation timing and outcome stats.
  */
@@ -648,31 +309,11 @@ export function GetSelectionDiagnostics(): $CancellablePromise<$models.Selection
     return $Call.ByName("github.com/luxury-yacht/app/backend.App.GetSelectionDiagnostics");
 }
 
-export function GetService(clusterID: string, $namespace: string, name: string): $CancellablePromise<service$0.ServiceDetails | null> {
-    return $Call.ByName("github.com/luxury-yacht/app/backend.App.GetService", clusterID, $namespace, name);
-}
-
-export function GetServiceAccount(clusterID: string, $namespace: string, name: string): $CancellablePromise<serviceaccount$0.ServiceAccountDetails | null> {
-    return $Call.ByName("github.com/luxury-yacht/app/backend.App.GetServiceAccount", clusterID, $namespace, name);
-}
-
 /**
  * GetShellSessionBacklog returns buffered shell output for replaying on reattach.
  */
 export function GetShellSessionBacklog(sessionID: string): $CancellablePromise<string> {
     return $Call.ByName("github.com/luxury-yacht/app/backend.App.GetShellSessionBacklog", sessionID);
-}
-
-export function GetStatefulSet(clusterID: string, $namespace: string, name: string): $CancellablePromise<statefulset$0.StatefulSetDetails | null> {
-    return $Call.ByName("github.com/luxury-yacht/app/backend.App.GetStatefulSet", clusterID, $namespace, name);
-}
-
-export function GetStorageClass(clusterID: string, name: string): $CancellablePromise<storageclass$0.StorageClassDetails | null> {
-    return $Call.ByName("github.com/luxury-yacht/app/backend.App.GetStorageClass", clusterID, name);
-}
-
-export function GetTLSRoute(clusterID: string, $namespace: string, name: string): $CancellablePromise<types$0.TLSRouteDetails | null> {
-    return $Call.ByName("github.com/luxury-yacht/app/backend.App.GetTLSRoute", clusterID, $namespace, name);
 }
 
 /**
@@ -687,10 +328,6 @@ export function GetTargetPorts(clusterID: string, $namespace: string, targetKind
  */
 export function GetThemes(): $CancellablePromise<$models.Theme[] | null> {
     return $Call.ByName("github.com/luxury-yacht/app/backend.App.GetThemes");
-}
-
-export function GetValidatingWebhookConfiguration(clusterID: string, name: string): $CancellablePromise<admission$0.ValidatingWebhookConfigurationDetails | null> {
-    return $Call.ByName("github.com/luxury-yacht/app/backend.App.GetValidatingWebhookConfiguration", clusterID, name);
 }
 
 /**
@@ -730,18 +367,6 @@ export function ImportSettings(): $CancellablePromise<$models.DataManagementResu
     return $Call.ByName("github.com/luxury-yacht/app/backend.App.ImportSettings");
 }
 
-export function IsAppLogsPanelVisible(): $CancellablePromise<boolean> {
-    return $Call.ByName("github.com/luxury-yacht/app/backend.App.IsAppLogsPanelVisible");
-}
-
-export function IsDiagnosticsPanelVisible(): $CancellablePromise<boolean> {
-    return $Call.ByName("github.com/luxury-yacht/app/backend.App.IsDiagnosticsPanelVisible");
-}
-
-export function IsSidebarVisible(): $CancellablePromise<boolean> {
-    return $Call.ByName("github.com/luxury-yacht/app/backend.App.IsSidebarVisible");
-}
-
 /**
  * IsWorkloadHPAManaged checks whether any HorizontalPodAutoscaler in the given
  * namespace targets the specified workload GVK + name. Used by the object panel
@@ -768,10 +393,6 @@ export function ListRuntimeOperations(): $CancellablePromise<$models.RuntimeOper
  */
 export function ListShellSessions(): $CancellablePromise<$models.ShellSessionInfo[] | null> {
     return $Call.ByName("github.com/luxury-yacht/app/backend.App.ListShellSessions");
-}
-
-export function LoadWindowSettings(): $CancellablePromise<$models.WindowSettings | null> {
-    return $Call.ByName("github.com/luxury-yacht/app/backend.App.LoadWindowSettings");
 }
 
 /**
@@ -817,36 +438,11 @@ export function OpenKubeconfigSearchPathDialog(): $CancellablePromise<string> {
 }
 
 /**
- * PrepareQuit flushes process state after the last peer window has agreed to
- * close. Window geometry is saved separately while the chosen window exists.
- */
-export function PrepareQuit(): $CancellablePromise<boolean> {
-    return $Call.ByName("github.com/luxury-yacht/app/backend.App.PrepareQuit");
-}
-
-/**
- * PrepareQuitFromWindow persists the geometry of the peer chosen by the
- * window registry and then performs the once-only process shutdown flush.
- */
-export function PrepareQuitFromWindow(windowName: string): $CancellablePromise<boolean> {
-    return $Call.ByName("github.com/luxury-yacht/app/backend.App.PrepareQuitFromWindow", windowName);
-}
-
-/**
  * QueryPermissions evaluates a batch of permission queries using SSRR caching
  * with SSAR fallback. All errors are per-item; the top-level error is always nil.
  */
 export function QueryPermissions(queries: capabilities$0.PermissionQuery[] | null): $CancellablePromise<capabilities$0.QueryPermissionsResponse | null> {
     return $Call.ByName("github.com/luxury-yacht/app/backend.App.QueryPermissions", queries);
-}
-
-/**
- * ReleaseWorkspaceWindow relinquishes both foreground demand and every cluster
- * tab owned by a closed peer. Shared cluster runtime state survives while any
- * other peer still owns the same selection.
- */
-export function ReleaseWorkspaceWindow(windowID: string): $CancellablePromise<void> {
-    return $Call.ByName("github.com/luxury-yacht/app/backend.App.ReleaseWorkspaceWindow", windowID);
 }
 
 /**
@@ -893,15 +489,6 @@ export function RestoreGlobalAttentionFindingType(clusterID: string, findingType
 }
 
 /**
- * RetryAuth triggers a manual authentication recovery attempt for ALL clusters.
- * Called when user clicks "Retry" after re-authenticating externally.
- * For per-cluster retry, use RetryClusterAuth instead.
- */
-export function RetryAuth(): $CancellablePromise<void> {
-    return $Call.ByName("github.com/luxury-yacht/app/backend.App.RetryAuth");
-}
-
-/**
  * RetryClusterAuth triggers a manual authentication recovery attempt for a specific cluster.
  * Called when user clicks "Retry" for a specific cluster after re-authenticating externally.
  */
@@ -936,18 +523,6 @@ export function SaveTheme(theme: $models.Theme): $CancellablePromise<void> {
     return $Call.ByName("github.com/luxury-yacht/app/backend.App.SaveTheme", theme);
 }
 
-export function SaveWindowSettings(): $CancellablePromise<void> {
-    return $Call.ByName("github.com/luxury-yacht/app/backend.App.SaveWindowSettings");
-}
-
-/**
- * SaveWindowSettingsForWindow persists the geometry of a named peer as the
- * next session's initial geometry.
- */
-export function SaveWindowSettingsForWindow(windowName: string): $CancellablePromise<void> {
-    return $Call.ByName("github.com/luxury-yacht/app/backend.App.SaveWindowSettingsForWindow", windowName);
-}
-
 /**
  * SendShellInput writes stdin data to an active exec session.
  */
@@ -955,34 +530,8 @@ export function SendShellInput(sessionID: string, data: string): $CancellablePro
     return $Call.ByName("github.com/luxury-yacht/app/backend.App.SendShellInput", sessionID, data);
 }
 
-/**
- * SetAccentColor persists a custom accent color for the specified resolved appearance mode ("light" or "dark").
- * The color must be a 7-char hex string (#rrggbb) or an empty string to reset to default.
- */
-export function SetAccentColor(mode: string, color: string): $CancellablePromise<void> {
-    return $Call.ByName("github.com/luxury-yacht/app/backend.App.SetAccentColor", mode, color);
-}
-
 export function SetAppLogsPanelVisible(visible: boolean): $CancellablePromise<void> {
     return $Call.ByName("github.com/luxury-yacht/app/backend.App.SetAppLogsPanelVisible", visible);
-}
-
-export function SetAppearanceMode(mode: string): $CancellablePromise<void> {
-    return $Call.ByName("github.com/luxury-yacht/app/backend.App.SetAppearanceMode", mode);
-}
-
-/**
- * SetAutoRefreshEnabled persists the auto-refresh preference.
- */
-export function SetAutoRefreshEnabled(enabled: boolean): $CancellablePromise<void> {
-    return $Call.ByName("github.com/luxury-yacht/app/backend.App.SetAutoRefreshEnabled", enabled);
-}
-
-/**
- * SetBackgroundRefreshEnabled persists the background refresh preference.
- */
-export function SetBackgroundRefreshEnabled(enabled: boolean): $CancellablePromise<void> {
-    return $Call.ByName("github.com/luxury-yacht/app/backend.App.SetBackgroundRefreshEnabled", enabled);
 }
 
 /**
@@ -1005,21 +554,6 @@ export function SetClusterTabOrder(order: string[] | null): $CancellablePromise<
 }
 
 /**
- * SetDefaultObjectPanelPosition persists the default object panel position.
- */
-export function SetDefaultObjectPanelPosition(position: string): $CancellablePromise<void> {
-    return $Call.ByName("github.com/luxury-yacht/app/backend.App.SetDefaultObjectPanelPosition", position);
-}
-
-export function SetDimInactiveNamespaces(enabled: boolean): $CancellablePromise<void> {
-    return $Call.ByName("github.com/luxury-yacht/app/backend.App.SetDimInactiveNamespaces", enabled);
-}
-
-export function SetExclusiveNamespaces(enabled: boolean): $CancellablePromise<void> {
-    return $Call.ByName("github.com/luxury-yacht/app/backend.App.SetExclusiveNamespaces", enabled);
-}
-
-/**
  * SetFavoriteOrder reorders favorites according to the given ID list.
  * Any favorites not in the list are appended in their existing relative order.
  */
@@ -1035,143 +569,14 @@ export function SetGridTablePersistence(key: string, payload: json$0.RawMessage)
 }
 
 /**
- * SetGridTablePersistenceMode persists the grid table persistence mode.
- */
-export function SetGridTablePersistenceMode(mode: string): $CancellablePromise<void> {
-    return $Call.ByName("github.com/luxury-yacht/app/backend.App.SetGridTablePersistenceMode", mode);
-}
-
-/**
- * SetKubeconfig switches to a different kubeconfig file and context
- * The parameter should be in the format "path:context"
- */
-export function SetKubeconfig(selection: string): $CancellablePromise<void> {
-    return $Call.ByName("github.com/luxury-yacht/app/backend.App.SetKubeconfig", selection);
-}
-
-/**
  * SetKubeconfigSearchPaths persists the search paths and refreshes kubeconfig discovery.
  */
 export function SetKubeconfigSearchPaths(paths: string[] | null): $CancellablePromise<void> {
     return $Call.ByName("github.com/luxury-yacht/app/backend.App.SetKubeconfigSearchPaths", paths);
 }
 
-export function SetKubernetesClientBurst(burst: number): $CancellablePromise<void> {
-    return $Call.ByName("github.com/luxury-yacht/app/backend.App.SetKubernetesClientBurst", burst);
-}
-
-export function SetKubernetesClientQPS(qps: number): $CancellablePromise<void> {
-    return $Call.ByName("github.com/luxury-yacht/app/backend.App.SetKubernetesClientQPS", qps);
-}
-
-/**
- * SetLinkColor persists a custom link color for the specified resolved appearance mode ("light" or "dark").
- * The color must be a 7-char hex string (#rrggbb) or an empty string to reset to default.
- */
-export function SetLinkColor(mode: string, color: string): $CancellablePromise<void> {
-    return $Call.ByName("github.com/luxury-yacht/app/backend.App.SetLinkColor", mode, color);
-}
-
-export function SetObjPanelLogsAPITimestampFormat(format: string): $CancellablePromise<void> {
-    return $Call.ByName("github.com/luxury-yacht/app/backend.App.SetObjPanelLogsAPITimestampFormat", format);
-}
-
-export function SetObjPanelLogsAPITimestampUseLocalTimeZone(enabled: boolean): $CancellablePromise<void> {
-    return $Call.ByName("github.com/luxury-yacht/app/backend.App.SetObjPanelLogsAPITimestampUseLocalTimeZone", enabled);
-}
-
-/**
- * SetObjPanelLogsBufferMaxSize persists the max container log entries each
- * Object Panel Logs Tab keeps in memory.
- * Values are clamped to [minObjPanelLogsBufferMaxSize, maxObjPanelLogsBufferMaxSize].
- */
-export function SetObjPanelLogsBufferMaxSize(size: number): $CancellablePromise<void> {
-    return $Call.ByName("github.com/luxury-yacht/app/backend.App.SetObjPanelLogsBufferMaxSize", size);
-}
-
-export function SetObjPanelLogsTargetGlobalLimit(limit: number): $CancellablePromise<void> {
-    return $Call.ByName("github.com/luxury-yacht/app/backend.App.SetObjPanelLogsTargetGlobalLimit", limit);
-}
-
-export function SetObjPanelLogsTargetPerScopeLimit(limit: number): $CancellablePromise<void> {
-    return $Call.ByName("github.com/luxury-yacht/app/backend.App.SetObjPanelLogsTargetPerScopeLimit", limit);
-}
-
-/**
- * SetObjectPanelLayout persists the default object panel dimensions and floating position.
- */
-export function SetObjectPanelLayout(dockedRightWidth: number, dockedBottomHeight: number, floatingWidth: number, floatingHeight: number, floatingX: number, floatingY: number): $CancellablePromise<void> {
-    return $Call.ByName("github.com/luxury-yacht/app/backend.App.SetObjectPanelLayout", dockedRightWidth, dockedBottomHeight, floatingWidth, floatingHeight, floatingX, floatingY);
-}
-
-/**
- * SetPaletteTint persists the palette hue (0-360), saturation (0-100), and brightness (-50 to +50) preferences
- * for the specified resolved appearance mode ("light" or "dark"). Values are clamped to their valid ranges.
- */
-export function SetPaletteTint(mode: string, hue: number, saturation: number, brightness: number): $CancellablePromise<void> {
-    return $Call.ByName("github.com/luxury-yacht/app/backend.App.SetPaletteTint", mode, hue, saturation, brightness);
-}
-
-export function SetPermissionSSRRFetchConcurrency(limit: number): $CancellablePromise<void> {
-    return $Call.ByName("github.com/luxury-yacht/app/backend.App.SetPermissionSSRRFetchConcurrency", limit);
-}
-
-/**
- * SetSelectedKubeconfigs updates the active kubeconfig selection set for multi-cluster support.
- * 
- * This function is the primary entry point for changing which Kubernetes clusters the application
- * is connected to. It's called by the frontend when the user selects one or more clusters from the UI.
- * 
- * The function performs several critical operations in sequence:
- *  1. Validates and normalizes the incoming selection strings
- *  2. Persists the selection to disk so it survives app restarts
- *  3. Creates/updates Kubernetes API clients for each selected cluster
- *  4. Initializes or updates the refresh subsystem (the HTTP server that serves data to the frontend)
- *  5. Starts the object catalog service (required for the Browse/All Objects views)
- * 
- * IMPORTANT: This function is called at runtime when the user changes their cluster selection,
- * which is different from app startup where initKubernetesClient() handles the initial setup.
- * Both code paths must perform the same initialization steps to ensure consistent behavior.
- */
-export function SetSelectedKubeconfigs(selections: string[] | null): $CancellablePromise<void> {
-    return $Call.ByName("github.com/luxury-yacht/app/backend.App.SetSelectedKubeconfigs", selections);
-}
-
 export function SetSidebarVisible(visible: boolean): $CancellablePromise<void> {
     return $Call.ByName("github.com/luxury-yacht/app/backend.App.SetSidebarVisible", visible);
-}
-
-export function SetUseShortResourceNames(useShort: boolean): $CancellablePromise<void> {
-    return $Call.ByName("github.com/luxury-yacht/app/backend.App.SetUseShortResourceNames", useShort);
-}
-
-/**
- * SetVisibleCluster records the cluster the user is currently viewing and
- * re-tiers the open clusters accordingly. It is Wails-bound so the frontend
- * calls it whenever the active cluster tab changes.
- * 
- * Moving the cluster to the front of the MRU keeps the most-recently-viewed
- * clusters warm; the governor policy then decides which stay Background and
- * which go Cold.
- */
-export function SetVisibleCluster(clusterID: string): $CancellablePromise<void> {
-    return $Call.ByName("github.com/luxury-yacht/app/backend.App.SetVisibleCluster", clusterID);
-}
-
-/**
- * SetWindowVisibleCluster records one peer window's foreground demand. Multiple
- * windows may therefore keep different clusters in the Foreground tier.
- */
-export function SetWindowVisibleCluster(windowID: string, clusterID: string): $CancellablePromise<void> {
-    return $Call.ByName("github.com/luxury-yacht/app/backend.App.SetWindowVisibleCluster", windowID, clusterID);
-}
-
-/**
- * SetWorkspaceWindowCreator connects the native New Window command to the
- * process-owned peer window registry.
- */
-export function SetWorkspaceWindowCreator(create: any): $CancellablePromise<void> {
-    return $Call.ByName("github.com/luxury-yacht/app/backend.App.SetWorkspaceWindowCreator", create);
 }
 
 /**
@@ -1179,14 +584,6 @@ export function SetWorkspaceWindowCreator(create: any): $CancellablePromise<void
  */
 export function SetZoomLevel(level: number): $CancellablePromise<void> {
     return $Call.ByName("github.com/luxury-yacht/app/backend.App.SetZoomLevel", level);
-}
-
-export function ShowAbout(): $CancellablePromise<void> {
-    return $Call.ByName("github.com/luxury-yacht/app/backend.App.ShowAbout");
-}
-
-export function ShowSettings(): $CancellablePromise<void> {
-    return $Call.ByName("github.com/luxury-yacht/app/backend.App.ShowSettings");
 }
 
 /**
@@ -1205,44 +602,10 @@ export function StartShellSession(clusterID: string, req: $models.ShellSessionRe
 }
 
 /**
- * StopClusterPortForwards terminates all port forwards for a specific cluster.
- * Called when a cluster is disconnected to clean up resources.
- */
-export function StopClusterPortForwards(clusterID: string): $CancellablePromise<void> {
-    return $Call.ByName("github.com/luxury-yacht/app/backend.App.StopClusterPortForwards", clusterID);
-}
-
-/**
- * StopClusterShellSessions terminates all shell sessions for a specific cluster.
- */
-export function StopClusterShellSessions(clusterID: string): $CancellablePromise<void> {
-    return $Call.ByName("github.com/luxury-yacht/app/backend.App.StopClusterShellSessions", clusterID);
-}
-
-/**
  * StopPortForward terminates a specific port forwarding session.
  */
 export function StopPortForward(sessionID: string): $CancellablePromise<void> {
     return $Call.ByName("github.com/luxury-yacht/app/backend.App.StopPortForward", sessionID);
-}
-
-export function ToggleAppLogsPanel(): $CancellablePromise<void> {
-    return $Call.ByName("github.com/luxury-yacht/app/backend.App.ToggleAppLogsPanel");
-}
-
-export function ToggleDiagnosticsPanel(): $CancellablePromise<void> {
-    return $Call.ByName("github.com/luxury-yacht/app/backend.App.ToggleDiagnosticsPanel");
-}
-
-/**
- * ToggleObjectDiff emits an event that opens or closes the object diff modal.
- */
-export function ToggleObjectDiff(): $CancellablePromise<void> {
-    return $Call.ByName("github.com/luxury-yacht/app/backend.App.ToggleObjectDiff");
-}
-
-export function ToggleSidebar(): $CancellablePromise<void> {
-    return $Call.ByName("github.com/luxury-yacht/app/backend.App.ToggleSidebar");
 }
 
 export function UpdateAppPreferences(request: $models.UpdateAppPreferencesRequest): $CancellablePromise<$models.UpdateAppPreferencesResponse | null> {
@@ -1256,25 +619,6 @@ export function UpdateFavorite(fav: $models.Favorite): $CancellablePromise<void>
     return $Call.ByName("github.com/luxury-yacht/app/backend.App.UpdateFavorite", fav);
 }
 
-export function UpdateMenu(): $CancellablePromise<void> {
-    return $Call.ByName("github.com/luxury-yacht/app/backend.App.UpdateMenu");
-}
-
-/**
- * ValidateObjectYaml performs a dry-run kubectl-edit-style patch to ensure the YAML is valid and safe to apply.
- */
-export function ValidateObjectYaml(clusterID: string, req: $models.ObjectYAMLMutationRequest): $CancellablePromise<$models.ObjectYAMLMutationResponse | null> {
-    return $Call.ByName("github.com/luxury-yacht/app/backend.App.ValidateObjectYaml", clusterID, req);
-}
-
-/**
- * ValidatePortForwardURL checks if a URL string is valid and safe for port forwarding.
- * This is a utility function for the frontend to validate URLs.
- */
-export function ValidatePortForwardURL(urlStr: string): $CancellablePromise<[boolean, string]> {
-    return $Call.ByName("github.com/luxury-yacht/app/backend.App.ValidatePortForwardURL", urlStr);
-}
-
 /**
  * ValidateThemeClusterPattern checks whether a theme cluster pattern can be
  * parsed by the app glob matcher without mutating saved settings.
@@ -1283,10 +627,4 @@ export function ValidateThemeClusterPattern(pattern: string): $CancellablePromis
     return $Call.ByName("github.com/luxury-yacht/app/backend.App.ValidateThemeClusterPattern", pattern);
 }
 
-/**
- * WindowRuntimeReady runs interactive initialization once the webview runtime
- * can receive events and JavaScript without dropping or merely queueing them.
- */
-export function WindowRuntimeReady(windowName: string, restoreGeometry: boolean): $CancellablePromise<boolean> {
-    return $Call.ByName("github.com/luxury-yacht/app/backend.App.WindowRuntimeReady", windowName, restoreGeometry);
-}
+void BindingModelAnchor;

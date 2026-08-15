@@ -56,17 +56,15 @@ export function useWailsRuntimeEvents(handlers: WailsRuntimeEventHandlers): void
   } = handlers;
 
   useEffect(() => {
-    const eventHandlers: Array<[string, () => void]> = [
-      ['open-settings', onOpenSettings],
-      ['open-about', onOpenAbout],
-      ['open-cluster', onOpenCluster],
-      ['toggle-sidebar', onToggleSidebar],
-      ['toggle-app-logs-panel', onToggleAppLogsPanel],
-      ['toggle-diagnostics', onToggleDiagnostics],
-      ['toggle-object-diff', onToggleObjectDiff],
+    const disposers = [
+      onEvent('open-settings', onOpenSettings),
+      onEvent('open-about', onOpenAbout),
+      onEvent('open-cluster', onOpenCluster),
+      onEvent('toggle-sidebar', onToggleSidebar),
+      onEvent('toggle-app-logs-panel', onToggleAppLogsPanel),
+      onEvent('toggle-diagnostics', onToggleDiagnostics),
+      onEvent('toggle-object-diff', onToggleObjectDiff),
     ];
-
-    const disposers = eventHandlers.map(([event, handler]) => onEvent(event, handler));
 
     return () => {
       disposers.forEach((dispose) => {

@@ -1,54 +1,7 @@
-/**
- * Backend Event Type Definitions
- *
- * This file documents the contract between the Go backend and the frontend
- * for events emitted via the Wails runtime.
- *
- * Backend source locations:
- * - fetch_helpers.go: FetchResource, FetchResourceList error events
- * - app_lifecycle.go: stderr capture events
- */
+import type { DesktopEventPayload } from '@/core/desktop-runtime';
 
-/**
- * Backend error event payload for single resource fetch failures.
- * Emitted from: backend/fetch_helpers.go FetchResource()
- */
-export interface BackendResourceError {
-  resourceKind: string;
-  identifier: string;
-  message: string;
-  error: string;
-}
-
-/**
- * Backend error event payload for resource list fetch failures.
- * Emitted from: backend/fetch_helpers.go FetchResourceList()
- */
-export interface BackendResourceListError {
-  resourceKind: string;
-  scope: string;
-  message: string;
-  error: string;
-}
-
-/**
- * Backend error event payload for stderr capture.
- * Emitted from: backend/app_lifecycle.go errorcapture.SetEventEmitter()
- */
-export interface BackendStderrError {
-  message: string;
-  source: 'stderr';
-}
-
-/**
- * Union type for all possible backend-error event payloads.
- * The frontend must handle all variants since the payload shape
- * depends on the error source.
- */
-export type BackendErrorPayload =
-  | BackendResourceError
-  | BackendResourceListError
-  | BackendStderrError;
+/** The backend-error contract generated from backend/events.go. */
+export type BackendErrorPayload = DesktopEventPayload<'backend-error'>;
 
 /**
  * Type guard to check if a value is a valid BackendErrorPayload.
@@ -74,7 +27,7 @@ export function isBackendErrorPayload(value: unknown): value is BackendErrorPayl
  * Handles all payload variants with appropriate fallbacks.
  */
 export function getBackendErrorMessage(payload: BackendErrorPayload): string {
-  return payload.message || ('error' in payload ? String(payload.error) : 'Unknown backend error');
+  return payload.message || payload.error || 'Unknown backend error';
 }
 
 /**
@@ -82,19 +35,8 @@ export function getBackendErrorMessage(payload: BackendErrorPayload): string {
  * Used to prevent showing duplicate error notifications.
  */
 export function getBackendErrorKey(payload: BackendErrorPayload): string {
-  const resourceKind = 'resourceKind' in payload ? payload.resourceKind : 'unknown';
-  let identifier: string;
-
-  if ('identifier' in payload) {
-    identifier = payload.identifier;
-  } else if ('scope' in payload) {
-    identifier = payload.scope;
-  } else if ('source' in payload) {
-    identifier = payload.source;
-  } else {
-    identifier = 'global';
-  }
-
+  const resourceKind = payload.resourceKind || 'unknown';
+  const identifier = payload.identifier || payload.source || 'global';
   const message = getBackendErrorMessage(payload);
 
   return `${resourceKind}:${identifier}:${message}`;

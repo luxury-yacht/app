@@ -3,9 +3,115 @@ package main
 import (
 	"os"
 	"path/filepath"
+	"slices"
 	"strings"
 	"testing"
 )
+
+func TestGeneratedWailsAppExportsMatchFrontendBoundary(t *testing.T) {
+	generated := exportedFunctions(readTestFile(t, repositoryPath(
+		"frontend", "bindings", "github.com", "luxury-yacht", "app", "backend", "app.ts",
+	)))
+	boundary := explicitBackendAPIExports(readTestFile(t, repositoryPath(
+		"frontend", "src", "core", "backend-api", "index.ts",
+	)))
+
+	if !slices.Equal(generated, boundary) {
+		t.Fatalf("generated Wails exports must match frontend boundary\ngenerated: %v\nboundary: %v", generated, boundary)
+	}
+}
+
+func TestGeneratedWailsEventsCoverBackendBoundary(t *testing.T) {
+	generated := readTestFile(t, repositoryPath(
+		"frontend", "bindings", "github.com", "wailsapp", "wails", "v3", "internal", "eventdata.d.ts",
+	))
+	expected := []string{
+		"app-logs:added",
+		"app-update",
+		"backend-error",
+		"cluster:auth:failed",
+		"cluster:auth:progress",
+		"cluster:auth:recovered",
+		"cluster:auth:recovering",
+		"cluster:health:degraded",
+		"cluster:health:healthy",
+		"cluster:lifecycle",
+		"cluster:scope:changed",
+		"debug:open-inspector",
+		"debug:toggle-error-overlay",
+		"debug:toggle-focus-overlay",
+		"debug:toggle-icon-overlay",
+		"debug:toggle-map-overlay",
+		"debug:toggle-panel-overlay",
+		"kubeconfig:available-changed",
+		"menu:close",
+		"menu:copy",
+		"menu:cut",
+		"menu:paste",
+		"menu:selectAll",
+		"object-shell:list",
+		"object-shell:output",
+		"object-shell:status",
+		"open-about",
+		"open-cluster",
+		"open-command-palette",
+		"open-settings",
+		"portforward:list",
+		"portforward:status",
+		"runtime-operations:list",
+		"toggle-app-logs-panel",
+		"toggle-diagnostics",
+		"toggle-object-diff",
+		"toggle-sidebar",
+		"zoom-in",
+		"zoom-out",
+		"zoom-reset",
+	}
+
+	for _, eventName := range expected {
+		if !strings.Contains(generated, `"`+eventName+`":`) {
+			t.Errorf("generated Wails event boundary is missing %q", eventName)
+		}
+	}
+}
+
+func exportedFunctions(source string) []string {
+	result := []string{}
+	for line := range strings.Lines(source) {
+		line = strings.TrimSpace(line)
+		const prefix = "export function "
+		if !strings.HasPrefix(line, prefix) {
+			continue
+		}
+		name, _, _ := strings.Cut(strings.TrimPrefix(line, prefix), "(")
+		result = append(result, name)
+	}
+	slices.Sort(result)
+	return result
+}
+
+func explicitBackendAPIExports(source string) []string {
+	result := []string{}
+	inExportBlock := false
+	for line := range strings.Lines(source) {
+		line = strings.TrimSpace(line)
+		if line == "export {" {
+			inExportBlock = true
+			continue
+		}
+		if !inExportBlock {
+			continue
+		}
+		if strings.HasPrefix(line, "} from ") {
+			break
+		}
+		if name := strings.TrimSuffix(line, ","); name != "" {
+			result = append(result, name)
+		}
+	}
+	slices.Sort(result)
+	return result
+}
 
 func TestCompareDirectoryTrees(t *testing.T) {
 	t.Run("matching trees", func(t *testing.T) {

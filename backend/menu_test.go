@@ -196,3 +196,20 @@ func TestFileMenuOffersNewWindowAccelerator(t *testing.T) {
 	}
 	t.Fatal("New Window menu item not found")
 }
+
+func TestConfigureWorkspaceWindowCreatorStoresProcessCompositionCallback(t *testing.T) {
+	app := &App{}
+	called := false
+
+	ConfigureWorkspaceWindowCreator(app, func() {
+		called = true
+	})
+
+	require.NotNil(t, app.createWorkspaceWindow)
+	app.createWorkspaceWindow()
+	require.True(t, called)
+
+	ConfigureWorkspaceWindowCreator(nil, func() {
+		t.Fatal("nil app must not retain or invoke the callback")
+	})
+}

@@ -7,6 +7,7 @@ import (
 	"github.com/luxury-yacht/app/backend/internal/logsources"
 )
 
+//wails:ignore
 func (a *App) ToggleDiagnosticsPanel() error {
 	if !a.runtimeAvailable() {
 		return fmt.Errorf("application context not available")
@@ -19,6 +20,7 @@ func (a *App) ToggleDiagnosticsPanel() error {
 	return nil
 }
 
+//wails:ignore
 func (a *App) ToggleAppLogsPanel() error {
 	if !a.runtimeAvailable() {
 		return fmt.Errorf("application context not available")
@@ -31,6 +33,7 @@ func (a *App) ToggleAppLogsPanel() error {
 	return nil
 }
 
+//wails:ignore
 func (a *App) ToggleSidebar() error {
 	if !a.runtimeAvailable() {
 		return fmt.Errorf("application context not available")
@@ -43,6 +46,8 @@ func (a *App) ToggleSidebar() error {
 }
 
 // ToggleObjectDiff emits an event that opens or closes the object diff modal.
+//
+//wails:ignore
 func (a *App) ToggleObjectDiff() error {
 	if !a.runtimeAvailable() {
 		return fmt.Errorf("application context not available")
@@ -52,6 +57,7 @@ func (a *App) ToggleObjectDiff() error {
 	return nil
 }
 
+//wails:ignore
 func (a *App) UpdateMenu() {
 	if a == nil || !a.runtimeAvailable() || a.menu == nil {
 		return
@@ -88,14 +94,17 @@ func applyNativeMenuRefresh(goos string, updateMenu, setApplicationMenu, setWind
 	}
 }
 
+//wails:ignore
 func (a *App) IsSidebarVisible() bool {
 	return a.sidebarVisible
 }
 
+//wails:ignore
 func (a *App) IsDiagnosticsPanelVisible() bool {
 	return a.diagnosticsPanelVisible
 }
 
+//wails:ignore
 func (a *App) IsAppLogsPanelVisible() bool {
 	return a.appLogsPanelVisible
 }

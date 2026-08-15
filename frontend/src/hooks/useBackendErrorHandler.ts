@@ -10,6 +10,7 @@ import { errorHandler } from '@utils/errorHandler';
 import { useEffect, useRef } from 'react';
 import { onEvent } from '@/core/desktop-runtime';
 import {
+  type BackendErrorPayload,
   getBackendErrorKey,
   getBackendErrorMessage,
   isBackendErrorPayload,
@@ -23,7 +24,7 @@ export function useBackendErrorHandler(): void {
   const processedErrorsRef = useRef<Set<string>>(new Set());
 
   useEffect(() => {
-    const handleBackendError = (payload: unknown) => {
+    const handleBackendError = (payload: BackendErrorPayload) => {
       if (!isBackendErrorPayload(payload)) {
         return;
       }
@@ -56,9 +57,8 @@ export function useBackendErrorHandler(): void {
 
       errorHandler.handle(new Error(message), {
         source: 'backend-fetch',
-        resourceKind: 'resourceKind' in payload ? payload.resourceKind : undefined,
-        identifier: 'identifier' in payload ? payload.identifier : undefined,
-        scope: 'scope' in payload ? payload.scope : undefined,
+        resourceKind: payload.resourceKind,
+        identifier: payload.identifier,
       });
     };
 

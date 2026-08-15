@@ -55,7 +55,7 @@ export interface ShellSessionInfo {
   namespace: string;
   podName: string;
   container: string;
-  command?: string[];
+  command?: string[] | null;
   status?: string;
   startedAt?: string | { time?: string };
 }

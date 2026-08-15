@@ -110,7 +110,7 @@ func newApplicationComposition(reporter sentryreporting.Reporter, options compos
 	wailsApp.Menu.SetApplicationMenu(nativeMenu)
 
 	windows = appwindow.NewRegistry(wailsApp, backendApp, nativeMenu)
-	backendApp.SetWorkspaceWindowCreator(func() { windows.Create(false) })
+	backend.ConfigureWorkspaceWindowCreator(backendApp, func() { windows.Create(false) })
 	windows.Create(true)
 
 	return &applicationComposition{

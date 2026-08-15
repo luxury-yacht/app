@@ -25,21 +25,21 @@ func TestHandleClusterAuthStateChange_InvalidEmitsAuthFailed(t *testing.T) {
 	// Capture emitted events.
 	var emittedEvents []struct {
 		name string
-		data map[string]any
+		data ClusterAuthEvent
 	}
 	var mu sync.Mutex
 	app.eventEmitter = func(_ context.Context, name string, args ...interface{}) {
 		mu.Lock()
 		defer mu.Unlock()
-		var data map[string]any
+		var data ClusterAuthEvent
 		if len(args) > 0 {
-			if d, ok := args[0].(map[string]any); ok {
+			if d, ok := args[0].(ClusterAuthEvent); ok {
 				data = d
 			}
 		}
 		emittedEvents = append(emittedEvents, struct {
 			name string
-			data map[string]any
+			data ClusterAuthEvent
 		}{name: name, data: data})
 	}
 
@@ -65,7 +65,7 @@ func TestHandleClusterAuthStateChange_InvalidEmitsAuthFailed(t *testing.T) {
 	mu.Lock()
 	defer mu.Unlock()
 
-	var authFailedEvents []map[string]any
+	var authFailedEvents []ClusterAuthEvent
 	for _, evt := range emittedEvents {
 		if evt.name == "cluster:auth:failed" {
 			authFailedEvents = append(authFailedEvents, evt.data)
@@ -73,12 +73,12 @@ func TestHandleClusterAuthStateChange_InvalidEmitsAuthFailed(t *testing.T) {
 	}
 
 	require.Len(t, authFailedEvents, 1, "should emit exactly one cluster:auth:failed event")
-	require.Equal(t, "test-cluster", authFailedEvents[0]["clusterId"])
-	require.Equal(t, "Test Cluster", authFailedEvents[0]["clusterName"])
-	require.Equal(t, "token expired", authFailedEvents[0]["reason"])
-	require.Equal(t, "missing-helper", authFailedEvents[0]["kind"])
-	require.Equal(t, "gke-gcloud-auth-plugin", authFailedEvents[0]["execCommand"])
-	require.Equal(t, "The kubeconfig's credential helper could not be found.", authFailedEvents[0]["summary"])
+	require.Equal(t, "test-cluster", authFailedEvents[0].ClusterID)
+	require.Equal(t, "Test Cluster", authFailedEvents[0].ClusterName)
+	require.Equal(t, "token expired", authFailedEvents[0].Reason)
+	require.Equal(t, "missing-helper", authFailedEvents[0].Kind)
+	require.Equal(t, "gke-gcloud-auth-plugin", authFailedEvents[0].ExecCommand)
+	require.Equal(t, "The kubeconfig's credential helper could not be found.", authFailedEvents[0].Summary)
 	entries := app.logger.GetEntries()
 	require.Len(t, entries, 1)
 	require.Equal(t, "WARN", entries[0].Level)
@@ -99,21 +99,21 @@ func TestHandleClusterAuthStateChange_RecoveringEmitsEvent(t *testing.T) {
 
 	var emittedEvents []struct {
 		name string
-		data map[string]any
+		data ClusterAuthEvent
 	}
 	var mu sync.Mutex
 	app.eventEmitter = func(_ context.Context, name string, args ...interface{}) {
 		mu.Lock()
 		defer mu.Unlock()
-		var data map[string]any
+		var data ClusterAuthEvent
 		if len(args) > 0 {
-			if d, ok := args[0].(map[string]any); ok {
+			if d, ok := args[0].(ClusterAuthEvent); ok {
 				data = d
 			}
 		}
 		emittedEvents = append(emittedEvents, struct {
 			name string
-			data map[string]any
+			data ClusterAuthEvent
 		}{name: name, data: data})
 	}
 
@@ -134,7 +134,7 @@ func TestHandleClusterAuthStateChange_RecoveringEmitsEvent(t *testing.T) {
 	mu.Lock()
 	defer mu.Unlock()
 
-	var recoveringEvents []map[string]any
+	var recoveringEvents []ClusterAuthEvent
 	for _, evt := range emittedEvents {
 		if evt.name == "cluster:auth:recovering" {
 			recoveringEvents = append(recoveringEvents, evt.data)
@@ -142,10 +142,10 @@ func TestHandleClusterAuthStateChange_RecoveringEmitsEvent(t *testing.T) {
 	}
 
 	require.Len(t, recoveringEvents, 1, "should emit exactly one cluster:auth:recovering event")
-	require.Equal(t, "cluster-r", recoveringEvents[0]["clusterId"])
-	require.Equal(t, "Recovering Cluster", recoveringEvents[0]["clusterName"])
-	require.Equal(t, "401 unauthorized", recoveringEvents[0]["reason"])
-	require.Equal(t, "aws", recoveringEvents[0]["execCommand"])
+	require.Equal(t, "cluster-r", recoveringEvents[0].ClusterID)
+	require.Equal(t, "Recovering Cluster", recoveringEvents[0].ClusterName)
+	require.Equal(t, "401 unauthorized", recoveringEvents[0].Reason)
+	require.Equal(t, "aws", recoveringEvents[0].ExecCommand)
 }
 
 // TestHandleClusterAuthStateChange_ValidEmitsRecoveredEvent verifies that
@@ -159,21 +159,21 @@ func TestHandleClusterAuthStateChange_ValidEmitsRecoveredEvent(t *testing.T) {
 
 	var emittedEvents []struct {
 		name string
-		data map[string]any
+		data ClusterAuthEvent
 	}
 	var mu sync.Mutex
 	app.eventEmitter = func(_ context.Context, name string, args ...interface{}) {
 		mu.Lock()
 		defer mu.Unlock()
-		var data map[string]any
+		var data ClusterAuthEvent
 		if len(args) > 0 {
-			if d, ok := args[0].(map[string]any); ok {
+			if d, ok := args[0].(ClusterAuthEvent); ok {
 				data = d
 			}
 		}
 		emittedEvents = append(emittedEvents, struct {
 			name string
-			data map[string]any
+			data ClusterAuthEvent
 		}{name: name, data: data})
 	}
 
@@ -191,7 +191,7 @@ func TestHandleClusterAuthStateChange_ValidEmitsRecoveredEvent(t *testing.T) {
 	mu.Lock()
 	defer mu.Unlock()
 
-	var recoveredEvents []map[string]any
+	var recoveredEvents []ClusterAuthEvent
 	for _, evt := range emittedEvents {
 		if evt.name == "cluster:auth:recovered" {
 			recoveredEvents = append(recoveredEvents, evt.data)
@@ -199,8 +199,8 @@ func TestHandleClusterAuthStateChange_ValidEmitsRecoveredEvent(t *testing.T) {
 	}
 
 	require.Len(t, recoveredEvents, 1, "should emit exactly one cluster:auth:recovered event")
-	require.Equal(t, "cluster-v", recoveredEvents[0]["clusterId"])
-	require.Equal(t, "Valid Cluster", recoveredEvents[0]["clusterName"])
+	require.Equal(t, "cluster-v", recoveredEvents[0].ClusterID)
+	require.Equal(t, "Valid Cluster", recoveredEvents[0].ClusterName)
 }
 
 func TestHandleClusterAuthStateChange_InvalidWithoutCauseIsolatesBackgroundCluster(t *testing.T) {
@@ -217,10 +217,10 @@ func TestHandleClusterAuthStateChange_InvalidWithoutCauseIsolatesBackgroundClust
 		"cluster-background": {meta: ClusterMeta{ID: "cluster-background", Name: "Background"}},
 	}
 
-	var failedPayload map[string]any
+	var failedPayload ClusterAuthEvent
 	app.eventEmitter = func(_ context.Context, name string, args ...interface{}) {
 		if name == "cluster:auth:failed" && len(args) == 1 {
-			failedPayload, _ = args[0].(map[string]any)
+			failedPayload, _ = args[0].(ClusterAuthEvent)
 		}
 	}
 
@@ -231,13 +231,13 @@ func TestHandleClusterAuthStateChange_InvalidWithoutCauseIsolatesBackgroundClust
 		Summary: "The cluster rejected these credentials.",
 	})
 
-	require.Equal(t, "cluster-background", failedPayload["clusterId"])
-	require.Equal(t, "Background", failedPayload["clusterName"])
-	require.Equal(t, "credentials rejected", failedPayload["reason"])
-	require.Equal(t, "auth", failedPayload["class"])
-	require.Equal(t, "unauthorized", failedPayload["kind"])
-	require.Equal(t, "The cluster rejected these credentials.", failedPayload["summary"])
-	require.Equal(t, "", failedPayload["execCommand"])
+	require.Equal(t, "cluster-background", failedPayload.ClusterID)
+	require.Equal(t, "Background", failedPayload.ClusterName)
+	require.Equal(t, "credentials rejected", failedPayload.Reason)
+	require.Equal(t, "auth", failedPayload.Class)
+	require.Equal(t, "unauthorized", failedPayload.Kind)
+	require.Equal(t, "The cluster rejected these credentials.", failedPayload.Summary)
+	require.Empty(t, failedPayload.ExecCommand)
 	require.Equal(t, ClusterStateReady, app.clusterLifecycle.GetState("cluster-foreground"))
 	require.Equal(t, ClusterStateAuthFailed, app.clusterLifecycle.GetState("cluster-background"))
 
@@ -354,13 +354,13 @@ func TestHandleClusterAuthRecoveryProgress_CarriesErrorClass(t *testing.T) {
 	defer cancel()
 	setTestAppRuntimeReady(t, app, ctx)
 
-	var progressEvents []map[string]any
+	var progressEvents []ClusterAuthProgressEvent
 	var mu sync.Mutex
 	app.eventEmitter = func(_ context.Context, name string, args ...interface{}) {
 		if name != "cluster:auth:progress" || len(args) == 0 {
 			return
 		}
-		data, ok := args[0].(map[string]any)
+		data, ok := args[0].(ClusterAuthProgressEvent)
 		if !ok {
 			return
 		}
@@ -377,7 +377,7 @@ func TestHandleClusterAuthRecoveryProgress_CarriesErrorClass(t *testing.T) {
 	mu.Lock()
 	defer mu.Unlock()
 	require.Len(t, progressEvents, 1)
-	require.Equal(t, "connectivity", progressEvents[0]["errorClass"])
+	require.Equal(t, "connectivity", progressEvents[0].ErrorClass)
 }
 
 // TestHandleClusterAuthRecoveryProgress_CarriesExecCommand verifies that the
@@ -403,13 +403,13 @@ func TestHandleClusterAuthRecoveryProgress_CarriesExecCommand(t *testing.T) {
 	}
 	app.clusterClientsMu.Unlock()
 
-	var progressEvents []map[string]any
+	var progressEvents []ClusterAuthProgressEvent
 	var mu sync.Mutex
 	app.eventEmitter = func(_ context.Context, name string, args ...interface{}) {
 		if name != "cluster:auth:progress" || len(args) == 0 {
 			return
 		}
-		if data, ok := args[0].(map[string]any); ok {
+		if data, ok := args[0].(ClusterAuthProgressEvent); ok {
 			mu.Lock()
 			progressEvents = append(progressEvents, data)
 			mu.Unlock()
@@ -424,9 +424,9 @@ func TestHandleClusterAuthRecoveryProgress_CarriesExecCommand(t *testing.T) {
 	mu.Lock()
 	defer mu.Unlock()
 	require.Len(t, progressEvents, 1)
-	require.Equal(t, "gke-gcloud-auth-plugin", progressEvents[0]["execCommand"])
-	require.Equal(t, "missing-helper", progressEvents[0]["kind"])
-	require.Equal(t, 5, progressEvents[0]["secondsUntilRetry"])
+	require.Equal(t, "gke-gcloud-auth-plugin", progressEvents[0].ExecCommand)
+	require.Equal(t, "missing-helper", progressEvents[0].Kind)
+	require.Equal(t, 5, progressEvents[0].SecondsUntilRetry)
 }
 
 func TestClusterWorkspaceStateIncludesExecCommand(t *testing.T) {

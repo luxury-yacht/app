@@ -530,6 +530,8 @@ func (a *App) getOrCreateSSRRCache(clusterID string) *capabilities.SSRRCache {
 }
 
 // ClearSSRRCache removes the cached SSRR rules for a specific cluster.
+//
+//wails:ignore
 func (a *App) ClearSSRRCache(clusterID string) {
 	a.ssrrCachesMu.Lock()
 	defer a.ssrrCachesMu.Unlock()
@@ -541,6 +543,8 @@ func (a *App) ClearSSRRCache(clusterID string) {
 }
 
 // ClearAllSSRRCaches removes all cached SSRR rules for every cluster.
+//
+//wails:ignore
 func (a *App) ClearAllSSRRCaches() {
 	a.ssrrCachesMu.Lock()
 	defer a.ssrrCachesMu.Unlock()

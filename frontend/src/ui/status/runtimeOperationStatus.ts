@@ -16,11 +16,7 @@ import {
   initialRuntimeOperationStatusState,
   normalizePortForwardSession,
   normalizePortForwardStatusEvent,
-  type RawPortForwardSession,
-  type RawPortForwardStatusEvent,
-  type RuntimeOperation,
   runtimeOperationStatusReducer,
-  type ShellSessionInfo,
   selectRuntimeOperationRows,
 } from './runtimeOperationStatusAdapter';
 
@@ -110,37 +106,30 @@ export function useRuntimeOperationStatus(
   }, [onInitialReadError, readInitialState]);
 
   useEffect(() => {
-    const cancelShellList = onEvent('object-shell:list', (sessions?: ShellSessionInfo[]) =>
-      dispatch({ type: 'object-shell:list', sessions: sessions || [] })
+    const cancelShellList = onEvent('object-shell:list', (sessions) =>
+      dispatch({ type: 'object-shell:list', sessions: sessions ?? [] })
     );
 
-    const cancelPortForwardList = onEvent(
-      'portforward:list',
-      (sessions?: RawPortForwardSession[]) =>
-        dispatch({
-          type: 'portforward:list',
-          sessions: (sessions || []).map(normalizePortForwardSession),
-        })
+    const cancelPortForwardList = onEvent('portforward:list', (sessions) =>
+      dispatch({
+        type: 'portforward:list',
+        sessions: (sessions ?? []).map(normalizePortForwardSession),
+      })
     );
 
-    const cancelRuntimeOperationsList = onEvent(
-      'runtime-operations:list',
-      (operations?: RuntimeOperation[]) =>
-        dispatch({
-          type: 'runtime-operations:list',
-          operations: operations || [],
-        })
+    const cancelRuntimeOperationsList = onEvent('runtime-operations:list', (operations) =>
+      dispatch({
+        type: 'runtime-operations:list',
+        operations: operations ?? [],
+      })
     );
 
-    const cancelPortForwardStatus = onEvent(
-      'portforward:status',
-      (raw?: RawPortForwardStatusEvent) => {
-        if (!raw?.sessionId) {
-          return;
-        }
-        dispatch({ type: 'portforward:status', event: normalizePortForwardStatusEvent(raw) });
+    const cancelPortForwardStatus = onEvent('portforward:status', (raw) => {
+      if (!raw?.sessionId) {
+        return;
       }
-    );
+      dispatch({ type: 'portforward:status', event: normalizePortForwardStatusEvent(raw) });
+    });
 
     return () => {
       cancelShellList();

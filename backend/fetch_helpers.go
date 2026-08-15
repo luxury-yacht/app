@@ -87,12 +87,12 @@ func FetchResourceWithSelection[T any](
 		// Include clusterId in error payload so frontend can identify which cluster
 		// the error belongs to. selectionKey is the clusterID when set by callers
 		// like FetchNamespacedResource and FetchClusterResource.
-		a.emitEvent("backend-error", map[string]any{
-			"clusterId":    selectionKey,
-			"resourceKind": resourceKind,
-			"identifier":   identifier,
-			"message":      err.Error(),
-			"error":        fmt.Sprintf("%v", err),
+		a.emitEvent(backendErrorEventName, BackendErrorEvent{
+			ClusterID:    selectionKey,
+			ResourceKind: resourceKind,
+			Identifier:   identifier,
+			Message:      err.Error(),
+			Error:        fmt.Sprintf("%v", err),
 		})
 		return zero, errorcapture.Enhance(err)
 	}

@@ -408,6 +408,8 @@ func (a *App) GetKubeconfigs() (KubeconfigDiscoveryResult, error) {
 }
 
 // GetSelectedKubeconfigs returns the active kubeconfig selections for multi-cluster support.
+//
+//wails:ignore
 func (a *App) GetSelectedKubeconfigs() []string {
 	a.kubeconfigsMu.RLock()
 	defer a.kubeconfigsMu.RUnlock()
@@ -426,6 +428,8 @@ func (a *App) setSelectedKubeconfigsLocked(selections []string) {
 
 // SetKubeconfig switches to a different kubeconfig file and context
 // The parameter should be in the format "path:context"
+//
+//wails:ignore
 func (a *App) SetKubeconfig(selection string) error {
 	a.logger.Info(fmt.Sprintf("Switching kubeconfig to: %s", selection), logsources.KubeconfigManager)
 
@@ -469,6 +473,8 @@ type selectionChangeIntent struct {
 // IMPORTANT: This function is called at runtime when the user changes their cluster selection,
 // which is different from app startup where initKubernetesClient() handles the initial setup.
 // Both code paths must perform the same initialization steps to ensure consistent behavior.
+//
+//wails:ignore
 func (a *App) SetSelectedKubeconfigs(selections []string) error {
 	return a.runSelectionMutation("set-selected-kubeconfigs", func(mutation *selectionMutation) error {
 		return a.setSelectedKubeconfigs(mutation, selections)
@@ -495,6 +501,8 @@ func (a *App) setSelectedKubeconfigs(mutation *selectionMutation, selections []s
 
 // CloseCluster atomically tears down runtime operations for a selected cluster
 // and removes that cluster from the selected kubeconfig set.
+//
+//wails:ignore
 func (a *App) CloseCluster(selectionOrClusterID string) error {
 	target := strings.TrimSpace(selectionOrClusterID)
 	if target == "" {
@@ -842,7 +850,7 @@ func (a *App) handleKubeconfigChangeLocked(changedPaths []string, generation uin
 		}
 		a.reconnectChangedKubeconfigClusters(toRebuild)
 	}
-	a.emitEvent("kubeconfig:available-changed")
+	a.emitEvent(kubeconfigAvailableChangedEventName)
 }
 
 type kubeconfigSelectionKey struct {

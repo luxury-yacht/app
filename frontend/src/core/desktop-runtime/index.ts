@@ -3,7 +3,11 @@ import { getWindowIdentity, setWindowIdentity } from '@/core/window-identity';
 
 export { getWindowIdentity } from '@/core/window-identity';
 
-export type DesktopEventHandler<T = unknown> = (payload: T) => void;
+export type DesktopEventName = Events.WailsEventName;
+export type DesktopEventPayload<E extends DesktopEventName> = Events.WailsEventData<E>;
+export type DesktopEventHandler<E extends DesktopEventName> = (
+  payload: DesktopEventPayload<E>
+) => void;
 
 export const initializeWindowIdentity = async (): Promise<string> => {
   try {
@@ -17,15 +21,15 @@ export const initializeWindowIdentity = async (): Promise<string> => {
   return getWindowIdentity();
 };
 
-export const onEvent = <T = unknown>(
-  eventName: string,
-  handler: DesktopEventHandler<T>
+export const onEvent = <E extends DesktopEventName>(
+  eventName: E,
+  handler: DesktopEventHandler<E>
 ): (() => void) =>
   Events.On(eventName, (event) => {
     if (event.sender && event.sender !== getWindowIdentity()) {
       return;
     }
-    handler(event.data as T);
+    handler(event.data);
   });
 
 export const openURL = (url: string | URL): Promise<void> => Browser.OpenURL(url);

@@ -24,6 +24,8 @@ const (
 )
 
 // App provides the backend façade exposed to Wails.
+//
+//wails:inject t*:void BindingModelAnchor;
 type App struct {
 	appDone                  <-chan struct{}
 	runtimeReady             atomic.Bool
@@ -291,6 +293,8 @@ func (a *App) initAuthManager() {
 // RetryAuth triggers a manual authentication recovery attempt for ALL clusters.
 // Called when user clicks "Retry" after re-authenticating externally.
 // For per-cluster retry, use RetryClusterAuth instead.
+//
+//wails:ignore
 func (a *App) RetryAuth() {
 	a.clusterClientsMu.Lock()
 	defer a.clusterClientsMu.Unlock()

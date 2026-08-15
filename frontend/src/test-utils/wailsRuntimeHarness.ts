@@ -1,7 +1,12 @@
+import type { DesktopEventHandler, DesktopEventName } from '@/core/desktop-runtime';
+
 type WailsEventHandler = (...args: unknown[]) => void;
 
 export interface WailsRuntimeHarness {
-  onEvent: (eventName: string, callback: WailsEventHandler) => () => void;
+  onEvent: <E extends DesktopEventName>(
+    eventName: E,
+    callback: DesktopEventHandler<E>
+  ) => () => void;
   disposerCalls: string[];
   emit: (eventName: string, ...args: unknown[]) => void;
   listenerCount: (eventName: string) => number;
@@ -11,9 +16,10 @@ export const createWailsRuntimeHarness = (): WailsRuntimeHarness => {
   const listeners = new Map<string, WailsEventHandler[]>();
   const disposerCalls: string[] = [];
 
-  const onEvent = (eventName: string, callback: WailsEventHandler) => {
+  const onEvent: WailsRuntimeHarness['onEvent'] = (eventName, callback) => {
     const eventListeners = listeners.get(eventName) ?? [];
-    eventListeners.push(callback);
+    const untypedCallback = callback as WailsEventHandler;
+    eventListeners.push(untypedCallback);
     listeners.set(eventName, eventListeners);
     return () => {
       disposerCalls.push(eventName);
@@ -21,7 +27,7 @@ export const createWailsRuntimeHarness = (): WailsRuntimeHarness => {
       if (!currentListeners) {
         return;
       }
-      const index = currentListeners.indexOf(callback);
+      const index = currentListeners.indexOf(untypedCallback);
       if (index >= 0) {
         currentListeners.splice(index, 1);
       }

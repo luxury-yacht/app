@@ -26,15 +26,14 @@ export const useAppDebugShortcuts = ({
   onToggleIconDebug,
 }: AppDebugShortcutHandlers) => {
   useEffect(() => {
-    const eventHandlers: Array<[string, () => void]> = [
-      ['debug:open-inspector', openWailsInspector],
-      ['debug:toggle-panel-overlay', onTogglePanelDebug],
-      ['debug:toggle-focus-overlay', onToggleFocusDebug],
-      ['debug:toggle-error-overlay', onToggleErrorDebug],
-      ['debug:toggle-map-overlay', onToggleMapDebug],
-      ['debug:toggle-icon-overlay', onToggleIconDebug],
+    const disposers = [
+      onEvent('debug:open-inspector', openWailsInspector),
+      onEvent('debug:toggle-panel-overlay', onTogglePanelDebug),
+      onEvent('debug:toggle-focus-overlay', onToggleFocusDebug),
+      onEvent('debug:toggle-error-overlay', onToggleErrorDebug),
+      onEvent('debug:toggle-map-overlay', onToggleMapDebug),
+      onEvent('debug:toggle-icon-overlay', onToggleIconDebug),
     ];
-    const disposers = eventHandlers.map(([event, handler]) => onEvent(event, handler));
 
     return () => {
       disposers.forEach((dispose) => {

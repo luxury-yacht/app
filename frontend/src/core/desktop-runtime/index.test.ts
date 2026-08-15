@@ -1,4 +1,4 @@
-import { afterEach, describe, expect, it, vi } from 'vitest';
+import { afterEach, describe, expect, expectTypeOf, it, vi } from 'vitest';
 
 const runtimeMocks = vi.hoisted(() => ({
   browserOpenURL: vi.fn(),
@@ -32,6 +32,7 @@ vi.mock('@wailsio/runtime', () => ({
 import * as desktopRuntime from './index';
 import {
   closeWindow,
+  type DesktopEventPayload,
   desktopRuntimeAvailable,
   getEnvironment,
   getWindowIdentity,
@@ -58,9 +59,12 @@ describe('desktop runtime adapter', () => {
     runtimeMocks.eventsOn.mockReturnValue(dispose);
     const handler = vi.fn();
 
-    const unsubscribe = onEvent('cluster:changed', handler);
+    const unsubscribe = onEvent('cluster:scope:changed', (payload) => {
+      expectTypeOf(payload).toEqualTypeOf<DesktopEventPayload<'cluster:scope:changed'>>();
+      handler(payload);
+    });
     const runtimeHandler = runtimeMocks.eventsOn.mock.calls[0]?.[1];
-    runtimeHandler?.({ name: 'cluster:changed', data: { clusterId: 'cluster-a' } });
+    runtimeHandler?.({ name: 'cluster:scope:changed', data: { clusterId: 'cluster-a' } });
     unsubscribe();
 
     expect(handler).toHaveBeenCalledWith({ clusterId: 'cluster-a' });

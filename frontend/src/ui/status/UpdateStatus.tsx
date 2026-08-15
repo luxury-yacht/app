@@ -40,7 +40,7 @@ const UpdateStatus: React.FC = () => {
   }, []);
 
   useEffect(() => {
-    const handleUpdate = (payload?: backend.UpdateInfo) => {
+    const handleUpdate = (payload: backend.UpdateInfo | null) => {
       if (payload) {
         setUpdateInfo(payload);
       }

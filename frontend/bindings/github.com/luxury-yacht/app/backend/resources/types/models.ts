@@ -235,21 +235,6 @@ export interface AppSettingsSchema {
     "preferences": AppPreferenceSchema[] | null;
 }
 
-/**
- * AppearanceModeInfo represents the appearance mode payload sent to the frontend.
- */
-export interface AppearanceModeInfo {
-    /**
-     * Stored appearance mode: "light", "dark", or "system"
-     */
-    "currentMode": string;
-
-    /**
-     * Stored appearance mode: "light", "dark", or "system"
-     */
-    "userMode": string;
-}
-
 export interface ConditionState {
     "type"?: string;
     "status": string;
@@ -720,6 +705,16 @@ export interface RouteRuleDetails {
 }
 
 /**
+ * ShellOutputEvent is emitted whenever stdout/stderr data is available.
+ */
+export interface ShellOutputEvent {
+    "sessionId": string;
+    "clusterId": string;
+    "stream": string;
+    "data": string;
+}
+
+/**
  * ShellSession contains details about an active exec session.
  */
 export interface ShellSession {
@@ -753,6 +748,16 @@ export interface ShellSessionRequest {
     "podName": string;
     "container"?: string;
     "command"?: string[] | null;
+}
+
+/**
+ * ShellStatusEvent reports lifecycle changes for a shell session.
+ */
+export interface ShellStatusEvent {
+    "sessionId": string;
+    "clusterId": string;
+    "status": string;
+    "reason"?: string;
 }
 
 export interface Subject {
@@ -857,15 +862,4 @@ export interface UpdateAppPreferencesRequest {
 export interface UpdateAppPreferencesResponse {
     "settings": AppSettings | null;
     "changedKeys": string[] | null;
-}
-
-/**
- * WindowSettings represents the window position and size
- */
-export interface WindowSettings {
-    "x": number;
-    "y": number;
-    "width": number;
-    "height": number;
-    "maximized": boolean;
 }

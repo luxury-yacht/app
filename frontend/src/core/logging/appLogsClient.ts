@@ -5,7 +5,7 @@
  */
 
 import { LogAppLogsFromFrontend, LogAppLogsFromFrontendWithCluster } from '@/core/backend-api';
-import { desktopRuntimeAvailable, onEvent } from '@/core/desktop-runtime';
+import { type DesktopEventPayload, desktopRuntimeAvailable, onEvent } from '@/core/desktop-runtime';
 
 type AppLogsLevel = 'debug' | 'info' | 'warn' | 'error';
 
@@ -23,9 +23,7 @@ export const APP_LOG_SOURCES = {
   ResourceStream: 'ResourceStream',
 } as const;
 
-export interface AppLogsAddedEvent {
-  sequence?: number;
-}
+export type AppLogsAddedEvent = DesktopEventPayload<'app-logs:added'>;
 
 export type AppLogsAddedHandler = (event?: AppLogsAddedEvent) => void;
 
@@ -106,8 +104,8 @@ export const subscribeAppLogsAdded = (handler: AppLogsAddedHandler): (() => void
     return () => undefined;
   }
 
-  const eventHandler = (event?: unknown) => {
-    handler(typeof event === 'object' && event !== null ? (event as AppLogsAddedEvent) : undefined);
+  const eventHandler = (event: AppLogsAddedEvent) => {
+    handler(typeof event === 'object' && event !== null ? event : undefined);
   };
 
   return onEvent('app-logs:added', eventHandler);

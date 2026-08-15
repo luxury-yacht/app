@@ -10,6 +10,7 @@ package backend
 
 import "github.com/luxury-yacht/app/backend/resources/pods"
 
+//wails:ignore
 func (a *App) GetPod(clusterID, namespace, name string, detailed bool) (*PodDetailInfo, error) {
 	if err := requirePodObject(namespace, name); err != nil {
 		return nil, err

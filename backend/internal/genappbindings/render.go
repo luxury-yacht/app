@@ -170,6 +170,19 @@ func Render() ([]byte, error) {
 		fmt.Fprintf(&b, "\t%q\n", imp)
 	}
 	b.WriteString(")\n\n")
+	b.WriteString("// BindingModelAnchor keeps object-detail DTOs reachable by the Wails generator\n")
+	b.WriteString("// without exporting the backend-only Get<Kind> wrappers to TypeScript.\n")
+	b.WriteString("//wails:internal\n")
+	b.WriteString("type BindingModelAnchor struct {\n")
+	for _, r := range rows {
+		fmt.Fprintf(&b, "\t%s *%s\n", r.Name, r.dtoType())
+	}
+	b.WriteString("\tCustomResourceDefinition *CustomResourceDefinitionDetails\n")
+	b.WriteString("\tHelmRelease *HelmReleaseDetails\n")
+	b.WriteString("\tPod *PodDetailInfo\n")
+	b.WriteString("}\n\n")
+	b.WriteString("//wails:internal\n")
+	b.WriteString("func (a *App) BindingModelAnchor() BindingModelAnchor { return BindingModelAnchor{} }\n\n")
 	for _, r := range rows {
 		writeBinding(&b, r)
 	}
@@ -223,7 +236,8 @@ func RenderDetailFetchers() ([]byte, error) {
 func writeBinding(b *bytes.Buffer, r binding) {
 	dto := r.dtoType()
 	if r.Namespaced {
-		fmt.Fprintf(b, `func (a *App) Get%[1]s(clusterID, namespace, name string) (*%[2]s, error) {
+		fmt.Fprintf(b, `//wails:ignore
+func (a *App) Get%[1]s(clusterID, namespace, name string) (*%[2]s, error) {
 	deps, selectionKey, err := a.resolveClusterDependencies(clusterID)
 	if err != nil {
 		return nil, err
@@ -236,7 +250,8 @@ func writeBinding(b *bytes.Buffer, r binding) {
 `, r.Name, dto, r.key(), r.Service, r.method())
 		return
 	}
-	fmt.Fprintf(b, `func (a *App) Get%[1]s(clusterID, name string) (*%[2]s, error) {
+	fmt.Fprintf(b, `//wails:ignore
+func (a *App) Get%[1]s(clusterID, name string) (*%[2]s, error) {
 	deps, selectionKey, err := a.resolveClusterDependencies(clusterID)
 	if err != nil {
 		return nil, err

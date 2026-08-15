@@ -376,12 +376,12 @@ func FetchResourceList[T any](
 		a.logger.Error(fmt.Sprintf("Failed to list %s in %s: %v", resourceKind, scope, err), logsources.ResourceLoader, clusterID, a.clusterNameForID(clusterID))
 		// Include clusterId in error payload so frontend can identify which cluster
 		// the error belongs to.
-		a.emitEvent("backend-error", map[string]any{
-			"clusterId":    clusterID,
-			"resourceKind": resourceKind,
-			"scope":        scope,
-			"message":      err.Error(),
-			"error":        fmt.Sprintf("%v", err),
+		a.emitEvent(backendErrorEventName, BackendErrorEvent{
+			ClusterID:    clusterID,
+			ResourceKind: resourceKind,
+			Identifier:   scope,
+			Message:      err.Error(),
+			Error:        fmt.Sprintf("%v", err),
 		})
 		return zero, errorcapture.Enhance(err)
 	}

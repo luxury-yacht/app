@@ -84,7 +84,7 @@ func (a *App) storeApplicationUpdateSnapshot(snapshot appupdates.Snapshot) {
 		return
 	}
 	info := updateInfoFromSnapshot(snapshot)
-	a.emitEvent("app-update", info)
+	a.emitEvent(appUpdateEventName, info)
 }
 
 func (a *App) getUpdateInfo() *UpdateInfo {

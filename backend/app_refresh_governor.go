@@ -98,6 +98,8 @@ func (a *App) setGovernorVisibleLocked(clusterID string) {
 // Moving the cluster to the front of the MRU keeps the most-recently-viewed
 // clusters warm; the governor policy then decides which stay Background and
 // which go Cold.
+//
+//wails:ignore
 func (a *App) SetVisibleCluster(clusterID string) {
 	if a == nil || clusterID == "" {
 		return
@@ -116,6 +118,8 @@ func (a *App) SetVisibleCluster(clusterID string) {
 
 // SetWindowVisibleCluster records one peer window's foreground demand. Multiple
 // windows may therefore keep different clusters in the Foreground tier.
+//
+//wails:ignore
 func (a *App) SetWindowVisibleCluster(windowID, clusterID string) {
 	windowID = strings.TrimSpace(windowID)
 	clusterID = strings.TrimSpace(clusterID)

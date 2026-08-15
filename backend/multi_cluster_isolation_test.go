@@ -141,13 +141,13 @@ func TestIsolation_HeartbeatRunsIndependently(t *testing.T) {
 	setTestAppRuntimeReady(t, app, ctx)
 
 	// Track emitted events
-	emittedEvents := make(map[string][]map[string]any)
+	emittedEvents := make(map[string][]ClusterHealthEvent)
 	var eventsMu sync.Mutex
 	app.eventEmitter = func(_ context.Context, name string, args ...interface{}) {
 		eventsMu.Lock()
 		defer eventsMu.Unlock()
 		if len(args) > 0 {
-			if data, ok := args[0].(map[string]any); ok {
+			if data, ok := args[0].(ClusterHealthEvent); ok {
 				emittedEvents[name] = append(emittedEvents[name], data)
 			}
 		}
@@ -183,12 +183,12 @@ func TestIsolation_HeartbeatRunsIndependently(t *testing.T) {
 	require.Len(t, degradedEvents, 1, "should have exactly 1 degraded event")
 
 	// Verify the healthy event is for the right cluster
-	require.Equal(t, "cluster-healthy", healthyEvents[0]["clusterId"])
-	require.Equal(t, "Healthy Cluster", healthyEvents[0]["clusterName"])
+	require.Equal(t, "cluster-healthy", healthyEvents[0].ClusterID)
+	require.Equal(t, "Healthy Cluster", healthyEvents[0].ClusterName)
 
 	// Verify the degraded event is for the right cluster
-	require.Equal(t, "cluster-degraded", degradedEvents[0]["clusterId"])
-	require.Equal(t, "Degraded Cluster", degradedEvents[0]["clusterName"])
+	require.Equal(t, "cluster-degraded", degradedEvents[0].ClusterID)
+	require.Equal(t, "Degraded Cluster", degradedEvents[0].ClusterName)
 }
 
 // TestIsolation_RecoveryOnlyAffectsOneCluster verifies that cluster subsystem
@@ -449,13 +449,13 @@ func TestIsolation_HeartbeatSkipsInvalidAuthClusters(t *testing.T) {
 	setTestAppRuntimeReady(t, app, ctx)
 
 	// Track emitted events
-	emittedEvents := make(map[string][]map[string]any)
+	emittedEvents := make(map[string][]ClusterHealthEvent)
 	var eventsMu sync.Mutex
 	app.eventEmitter = func(_ context.Context, name string, args ...interface{}) {
 		eventsMu.Lock()
 		defer eventsMu.Unlock()
 		if len(args) > 0 {
-			if data, ok := args[0].(map[string]any); ok {
+			if data, ok := args[0].(ClusterHealthEvent); ok {
 				emittedEvents[name] = append(emittedEvents[name], data)
 			}
 		}
@@ -493,7 +493,7 @@ func TestIsolation_HeartbeatSkipsInvalidAuthClusters(t *testing.T) {
 	// Should only have 1 healthy event for cluster-healthy
 	// cluster-invalid-auth should be skipped entirely
 	require.Len(t, healthyEvents, 1, "should have 1 healthy event")
-	require.Equal(t, "cluster-healthy", healthyEvents[0]["clusterId"])
+	require.Equal(t, "cluster-healthy", healthyEvents[0].ClusterID)
 
 	// No degraded events should exist - the invalid auth cluster was skipped
 	require.Len(t, degradedEvents, 0, "should have no degraded events")

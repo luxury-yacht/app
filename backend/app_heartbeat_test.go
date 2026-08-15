@@ -57,13 +57,13 @@ func TestPerClusterHeartbeat(t *testing.T) {
 	setTestAppRuntimeReady(t, app, ctx)
 
 	// Track emitted events
-	emittedEvents := make(map[string][]map[string]any)
+	emittedEvents := make(map[string][]ClusterHealthEvent)
 	var eventsMu sync.Mutex
 	app.eventEmitter = func(_ context.Context, name string, args ...interface{}) {
 		eventsMu.Lock()
 		defer eventsMu.Unlock()
 		if len(args) > 0 {
-			if data, ok := args[0].(map[string]any); ok {
+			if data, ok := args[0].(ClusterHealthEvent); ok {
 				emittedEvents[name] = append(emittedEvents[name], data)
 			}
 		}
@@ -130,15 +130,15 @@ func TestPerClusterHeartbeat(t *testing.T) {
 
 	// Verify the healthy event contains correct cluster info
 	if len(healthyEvents) > 0 {
-		if healthyEvents[0]["clusterId"] != "cluster-healthy" {
-			t.Errorf("expected healthy event for cluster-healthy, got %v", healthyEvents[0]["clusterId"])
+		if healthyEvents[0].ClusterID != "cluster-healthy" {
+			t.Errorf("expected healthy event for cluster-healthy, got %v", healthyEvents[0].ClusterID)
 		}
 	}
 
 	// Verify the degraded event contains correct cluster info
 	if len(degradedEvents) > 0 {
-		if degradedEvents[0]["clusterId"] != "cluster-unhealthy" {
-			t.Errorf("expected degraded event for cluster-unhealthy, got %v", degradedEvents[0]["clusterId"])
+		if degradedEvents[0].ClusterID != "cluster-unhealthy" {
+			t.Errorf("expected degraded event for cluster-unhealthy, got %v", degradedEvents[0].ClusterID)
 		}
 	}
 }
@@ -152,13 +152,13 @@ func TestPerClusterHeartbeatSkipsInvalidAuth(t *testing.T) {
 	setTestAppRuntimeReady(t, app, ctx)
 
 	// Track emitted events
-	emittedEvents := make(map[string][]map[string]any)
+	emittedEvents := make(map[string][]ClusterHealthEvent)
 	var eventsMu sync.Mutex
 	app.eventEmitter = func(_ context.Context, name string, args ...interface{}) {
 		eventsMu.Lock()
 		defer eventsMu.Unlock()
 		if len(args) > 0 {
-			if data, ok := args[0].(map[string]any); ok {
+			if data, ok := args[0].(ClusterHealthEvent); ok {
 				emittedEvents[name] = append(emittedEvents[name], data)
 			}
 		}
@@ -215,8 +215,8 @@ func TestPerClusterHeartbeatSkipsInvalidAuth(t *testing.T) {
 		t.Errorf("expected 1 healthy event, got %d", len(healthyEvents))
 	}
 
-	if len(healthyEvents) > 0 && healthyEvents[0]["clusterId"] != "cluster-healthy" {
-		t.Errorf("expected healthy event for cluster-healthy, got %v", healthyEvents[0]["clusterId"])
+	if len(healthyEvents) > 0 && healthyEvents[0].ClusterID != "cluster-healthy" {
+		t.Errorf("expected healthy event for cluster-healthy, got %v", healthyEvents[0].ClusterID)
 	}
 
 	// No degraded events should be emitted for the invalid auth cluster
@@ -348,13 +348,13 @@ func TestPerClusterHeartbeatEmitsDegradedEvent(t *testing.T) {
 	setTestAppRuntimeReady(t, app, ctx)
 
 	// Track emitted events
-	emittedEvents := make(map[string][]map[string]any)
+	emittedEvents := make(map[string][]ClusterHealthEvent)
 	var eventsMu sync.Mutex
 	app.eventEmitter = func(_ context.Context, name string, args ...interface{}) {
 		eventsMu.Lock()
 		defer eventsMu.Unlock()
 		if len(args) > 0 {
-			if data, ok := args[0].(map[string]any); ok {
+			if data, ok := args[0].(ClusterHealthEvent); ok {
 				emittedEvents[name] = append(emittedEvents[name], data)
 			}
 		}
@@ -394,8 +394,8 @@ func TestPerClusterHeartbeatEmitsDegradedEvent(t *testing.T) {
 	if len(degradedEvents) != 1 {
 		t.Errorf("expected 1 degraded event, got %d", len(degradedEvents))
 	}
-	if len(degradedEvents) > 0 && degradedEvents[0]["clusterId"] != "cluster-failing" {
-		t.Errorf("expected degraded event for cluster-failing, got %v", degradedEvents[0]["clusterId"])
+	if len(degradedEvents) > 0 && degradedEvents[0].ClusterID != "cluster-failing" {
+		t.Errorf("expected degraded event for cluster-failing, got %v", degradedEvents[0].ClusterID)
 	}
 }
 

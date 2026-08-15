@@ -500,6 +500,8 @@ func waitForAPIExtensionsFactorySync(ctx context.Context, factory apiextinformer
 }
 
 // GetCatalogDiagnostics returns the latest catalog telemetry snapshot for diagnostics tools.
+//
+//wails:ignore
 func (a *App) GetCatalogDiagnostics() (*CatalogDiagnostics, error) {
 	entries := a.snapshotObjectCatalogEntries()
 	diag := &CatalogDiagnostics{Enabled: len(entries) > 0}
