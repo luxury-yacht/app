@@ -8,9 +8,37 @@ import (
 	"path/filepath"
 	"slices"
 	"testing"
+	"testing/iotest"
 
 	"github.com/stretchr/testify/require"
 )
+
+type closeErrorWriter struct {
+	err error
+}
+
+func (*closeErrorWriter) Write(buffer []byte) (int, error) {
+	return len(buffer), nil
+}
+
+func (writer *closeErrorWriter) Close() error {
+	return writer.err
+}
+
+func TestCopyUpdaterArtifactPreservesCopyAndCloseFailures(t *testing.T) {
+	copyErr := errors.New("copy failed")
+	closeErr := errors.New("close failed")
+
+	err := copyAndCloseUpdaterArtifact(
+		iotest.ErrReader(copyErr),
+		&closeErrorWriter{err: closeErr},
+		"source-artifact",
+		"staged-artifact",
+	)
+
+	require.ErrorIs(t, err, copyErr)
+	require.ErrorIs(t, err, closeErr)
+}
 
 func TestCollectUpdaterArtifactsRequiresOneExactFilePerOrderedTarget(t *testing.T) {
 	metadata := testProjectMetadata("v2.0.0-beta.4")

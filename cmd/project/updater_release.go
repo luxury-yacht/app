@@ -2,6 +2,7 @@ package main
 
 import (
 	"context"
+	"errors"
 	"fmt"
 	"io"
 	"os"
@@ -310,12 +311,21 @@ func copyUpdaterArtifact(source, target string) error {
 	if err != nil {
 		return fmt.Errorf("create staged updater artifact %s: %w", target, err)
 	}
-	if _, err := io.Copy(output, input); err != nil {
-		output.Close()
-		return fmt.Errorf("copy updater artifact %s: %w", source, err)
+	return copyAndCloseUpdaterArtifact(input, output, source, target)
+}
+
+func copyAndCloseUpdaterArtifact(input io.Reader, output io.WriteCloser, source, target string) error {
+	_, copyErr := io.Copy(output, input)
+	closeErr := output.Close()
+	if copyErr != nil {
+		copyErr = fmt.Errorf("copy updater artifact %s: %w", source, copyErr)
+		if closeErr != nil {
+			return errors.Join(copyErr, fmt.Errorf("close staged updater artifact %s: %w", target, closeErr))
+		}
+		return copyErr
 	}
-	if err := output.Close(); err != nil {
-		return fmt.Errorf("close staged updater artifact %s: %w", target, err)
+	if closeErr != nil {
+		return fmt.Errorf("close staged updater artifact %s: %w", target, closeErr)
 	}
 	return nil
 }
