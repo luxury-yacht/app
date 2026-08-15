@@ -224,8 +224,8 @@ const ApplicationUpdateSection: React.FC<ApplicationUpdateSectionProps> = ({
         </p>
       ) : null}
 
-      <ReleaseNotes presentation={presentation} />
-
+      {/* Actions before the notes: what the user can do outranks the preview of
+          what changed, in reading order and in tab order. */}
       {presentation.primary || presentation.secondary || presentation.releaseNotesURL ? (
         <div className="about-update-actions">
           <UpdateActionButton
@@ -250,6 +250,8 @@ const ApplicationUpdateSection: React.FC<ApplicationUpdateSectionProps> = ({
           ) : null}
         </div>
       ) : null}
+
+      <ReleaseNotes presentation={presentation} />
     </section>
   );
 };

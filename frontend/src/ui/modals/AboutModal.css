@@ -80,9 +80,9 @@
   flex-direction: column;
   gap: var(--spacing-md);
   padding: var(--spacing-lg);
-  border: 1px solid var(--color-border);
-  border-radius: var(--border-radius-lg);
-  background: var(--color-bg-secondary);
+  /* border: 1px solid var(--color-border); */
+  /* border-radius: var(--border-radius-lg); */
+  /* background: var(--color-bg-secondary); */
   text-align: left;
 }
 
@@ -131,18 +131,22 @@
   font-variant-numeric: tabular-nums;
 }
 
-/* Release notes: the block that used to be the header tooltip. Capped so a long
-   release scrolls inside the card instead of pushing the actions out of reach. */
+/* Release notes: the block that used to be the header tooltip. It sits last in
+   the card, below the actions — the preview matters less than what the user can
+   do — and its border-top is the divider between the two. */
 .about-release {
   display: flex;
   flex-direction: column;
   gap: var(--spacing-xs);
-  padding-top: var(--spacing-md);
-  border-top: 1px solid var(--color-border);
+  padding: var(--spacing-md);
+  border: 1px solid var(--color-border);
 }
 
 .about-release-header {
   display: flex;
+  padding-bottom: 0.5rem;
+  margin-bottom: 0.5rem;
+  border-bottom: 1px solid var(--color-border);
   align-items: baseline;
   justify-content: space-between;
   gap: var(--spacing-sm);
@@ -169,7 +173,7 @@
 }
 
 /* Capped at a whole number of lines so a long release scrolls cleanly instead of
-   slicing the last line in half; the actions below stay reachable either way. */
+   slicing the last line in half, and so the card stays a readable height. */
 .about-release-notes {
   --about-release-notes-line-height: 1.5;
   --about-release-notes-lines: 9;

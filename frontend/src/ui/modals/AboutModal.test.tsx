@@ -338,6 +338,17 @@ describe('AboutModal', () => {
     expect(document.body.textContent).toContain('Luxury Yacht 1.10.1');
     expect(document.body.textContent).toContain('2026-07-05');
 
+    // The actions and the notes link outrank the notes preview, so they come
+    // first in the card — and therefore first in tab order too.
+    const cardBlocks = Array.from(document.querySelector('.about-update')?.children ?? []).map(
+      (child) => child.className
+    );
+    expect(cardBlocks).toContain('about-update-actions');
+    expect(cardBlocks).toContain('about-release');
+    expect(cardBlocks.indexOf('about-update-actions')).toBeLessThan(
+      cardBlocks.indexOf('about-release')
+    );
+
     const notesLink = document.querySelector(
       '[data-testid="about-release-notes-link"]'
     ) as HTMLAnchorElement | null;
