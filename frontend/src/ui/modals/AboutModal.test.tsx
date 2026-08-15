@@ -379,7 +379,7 @@ describe('AboutModal', () => {
     await modal.unmount();
   });
 
-  it('labels the update card with the shared status chip', async () => {
+  it('states the update status as a sentence, with no status pill', async () => {
     appInfoMock.GetAppInfo.mockResolvedValue({
       version: '1.10.0',
       update: {
@@ -393,9 +393,12 @@ describe('AboutModal', () => {
     const modal = await renderModal({ isOpen: true, onClose: vi.fn() });
     await act(async () => Promise.resolve());
 
-    const chip = document.querySelector('.about-update .status-chip');
-    expect(chip?.textContent).toBe('Restart to update');
-    expect(chip?.className).toContain('status-chip--healthy');
+    // The message is the status; a pill above it only repeated the sentence.
+    expect(document.querySelector('.about-update-message')?.textContent).toBe(
+      'Luxury Yacht 1.10.1 is ready to install.'
+    );
+    expect(document.querySelector('.about-update .status-chip')).toBeNull();
+    expect(document.body.textContent).not.toContain('Restart to update');
 
     await modal.unmount();
   });

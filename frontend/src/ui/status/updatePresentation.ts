@@ -3,9 +3,6 @@ import { toPlainReleaseNotes } from './releaseNotesText';
 
 export type UpdateAction = 'check' | 'download' | 'restart' | 'skip' | 'recovery';
 
-/** Visual treatment for the update surface; maps to a StatusChip variant. */
-export type UpdateTone = 'info' | 'progress' | 'ready' | 'error';
-
 export interface UpdatePresentationAction {
   kind: UpdateAction;
   label: string;
@@ -24,7 +21,6 @@ export interface UpdatePresentation {
    * not surface a chip in the header.
    */
   badge?: string;
-  tone?: UpdateTone;
   /**
    * Quiet line shown under the app version instead of a card. Set only for the
    * up-to-date state, which has nothing to act on and does not earn a section of
@@ -48,25 +44,23 @@ const releaseURL = (update: backend.UpdateInfo): string =>
     ? `https://github.com/luxury-yacht/app/releases/tag/v${encodeURIComponent(update.availableVersion)}`
     : DOWNLOADS_URL;
 
-const badgeForStatus = (
-  status: backend.UpdateInfo['status']
-): { badge: string; tone: UpdateTone } | null => {
+const badgeForStatus = (status: backend.UpdateInfo['status']): { badge: string } | null => {
   switch (status) {
     case 'available':
-      return { badge: 'Update available', tone: 'info' };
+      return { badge: 'Update available' };
     case 'downloading':
-      return { badge: 'Downloading update…', tone: 'progress' };
+      return { badge: 'Downloading update…' };
     case 'verifying':
-      return { badge: 'Verifying update…', tone: 'progress' };
+      return { badge: 'Verifying update…' };
     case 'preparing':
-      return { badge: 'Preparing update…', tone: 'progress' };
+      return { badge: 'Preparing update…' };
     case 'ready':
-      return { badge: 'Restart to update', tone: 'ready' };
+      return { badge: 'Restart to update' };
     case 'check-error':
     case 'prepare-error':
     case 'restart-error':
     case 'apply-error':
-      return { badge: 'Update needs attention', tone: 'error' };
+      return { badge: 'Update needs attention' };
     default:
       return null;
   }

@@ -106,19 +106,17 @@ describe('getUpdatePresentation', () => {
   });
 
   it.each([
-    [appupdates.Status.StatusAvailable, 'Update available', 'info'],
-    [appupdates.Status.StatusDownloading, 'Downloading update…', 'progress'],
-    [appupdates.Status.StatusVerifying, 'Verifying update…', 'progress'],
-    [appupdates.Status.StatusPreparing, 'Preparing update…', 'progress'],
-    [appupdates.Status.StatusReady, 'Restart to update', 'ready'],
-    [appupdates.Status.StatusCheckError, 'Update needs attention', 'error'],
-    [appupdates.Status.StatusPrepareError, 'Update needs attention', 'error'],
-    [appupdates.Status.StatusRestartError, 'Update needs attention', 'error'],
-    [appupdates.Status.StatusApplyError, 'Update needs attention', 'error'],
-  ] as const)('badges %s for the header chip', (status, badge, tone) => {
-    const presentation = getUpdatePresentation(update({ status }));
-    expect(presentation?.badge).toBe(badge);
-    expect(presentation?.tone).toBe(tone);
+    [appupdates.Status.StatusAvailable, 'Update available'],
+    [appupdates.Status.StatusDownloading, 'Downloading update…'],
+    [appupdates.Status.StatusVerifying, 'Verifying update…'],
+    [appupdates.Status.StatusPreparing, 'Preparing update…'],
+    [appupdates.Status.StatusReady, 'Restart to update'],
+    [appupdates.Status.StatusCheckError, 'Update needs attention'],
+    [appupdates.Status.StatusPrepareError, 'Update needs attention'],
+    [appupdates.Status.StatusRestartError, 'Update needs attention'],
+    [appupdates.Status.StatusApplyError, 'Update needs attention'],
+  ] as const)('badges %s for the header chip', (status, badge) => {
+    expect(getUpdatePresentation(update({ status }))?.badge).toBe(badge);
   });
 
   it.each([
@@ -133,7 +131,7 @@ describe('getUpdatePresentation', () => {
 
   it('surfaces the up-to-date state as a version note instead of a card', () => {
     const presentation = getUpdatePresentation(update({ status: appupdates.Status.StatusCurrent }));
-    expect(presentation?.versionNote).toBe('You’re on the latest version ❤️');
+    expect(presentation?.versionNote).toBe('no newer version is available');
   });
 
   it.each([

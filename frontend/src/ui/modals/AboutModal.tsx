@@ -23,7 +23,6 @@ import { InfoIcon } from '@shared/components/icons/SharedIcons';
 import ModalHeader from '@shared/components/modals/ModalHeader';
 import ModalSurface from '@shared/components/modals/ModalSurface';
 import { useModalFocusTrap } from '@shared/components/modals/useModalFocusTrap';
-import { StatusChip, type StatusChipVariant } from '@shared/components/StatusChip';
 import { readAppInfo, requestAppState } from '@/core/app-state-access';
 import { reportOperationalError } from '@/utils/errorHandler';
 import {
@@ -31,7 +30,6 @@ import {
   type UpdateAction,
   type UpdatePresentation,
   type UpdatePresentationAction,
-  type UpdateTone,
 } from '../status/updatePresentation';
 
 interface AboutModalProps {
@@ -49,13 +47,6 @@ const updateActionNames: Record<UpdateAction, string> = {
   restart: 'restartAndApplyApplicationUpdate',
   skip: 'skipApplicationUpdate',
   recovery: 'openApplicationUpdateRecovery',
-};
-
-const toneVariants: Record<UpdateTone, StatusChipVariant> = {
-  info: 'info',
-  progress: 'info',
-  ready: 'healthy',
-  error: 'unhealthy',
 };
 
 const withUpdate = (
@@ -209,13 +200,11 @@ const ApplicationUpdateSection: React.FC<ApplicationUpdateSectionProps> = ({
   onAction,
 }) => {
   const progressPercent = progressPercentFor(update);
-  const tone = presentation.tone;
   return (
     <section className="about-update" aria-label="Application update">
       <div className="about-update-summary">
-        {presentation.badge && tone ? (
-          <StatusChip variant={toneVariants[tone]}>{presentation.badge}</StatusChip>
-        ) : null}
+        {/* The message is the status. A pill above it only repeated the sentence
+            — verbatim, for the downloading/verifying/preparing states. */}
         <p className="about-update-message">{presentation.message}</p>
         {presentation.explanation ? (
           <p className="about-update-explanation">{presentation.explanation}</p>
