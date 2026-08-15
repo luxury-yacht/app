@@ -2,19 +2,41 @@ package backend
 
 import (
 	"context"
+	"crypto/ed25519"
+	"crypto/sha256"
+	"crypto/x509"
+	"encoding/hex"
+	"encoding/pem"
 	"errors"
 	"io"
 	"os"
 	"path/filepath"
+	"runtime"
+	"strings"
 	"testing"
 	"time"
 
 	"github.com/luxury-yacht/app/backend/internal/appupdates"
 	"github.com/luxury-yacht/app/internal/updateidentity"
+	"github.com/luxury-yacht/app/internal/updatestate"
 	"github.com/stretchr/testify/require"
 	"github.com/wailsapp/wails/v3/pkg/application"
 	"github.com/wailsapp/wails/v3/pkg/updater"
 )
+
+func TestEmbeddedApplicationUpdatePublicKeyMatchesApprovedTrustRoot(t *testing.T) {
+	block, rest := pem.Decode(applicationUpdatePublicKey)
+	require.NotNil(t, block)
+	require.Empty(t, rest)
+	require.Equal(t, "PUBLIC KEY", block.Type)
+	parsed, err := x509.ParsePKIXPublicKey(block.Bytes)
+	require.NoError(t, err)
+	publicKey, ok := parsed.(ed25519.PublicKey)
+	require.True(t, ok)
+	fingerprint := sha256.Sum256(block.Bytes)
+	require.Equal(t, "5fb9230f10b42312008e6caa8c782e195a170970334b41d89b1c90e43820f15b", hex.EncodeToString(fingerprint[:]))
+	require.Len(t, publicKey, ed25519.PublicKeySize)
+}
 
 type fakeApplicationUpdateCoordinator struct {
 	snapshot          appupdates.Snapshot
@@ -23,6 +45,8 @@ type fakeApplicationUpdateCoordinator struct {
 	downloadCalls     int
 	restartCalls      int
 	downloadVersion   string
+	skipCalls         int
+	skipVersion       string
 	runtimeReadyCalls int
 	stopCalls         int
 }
@@ -44,6 +68,8 @@ func (*fakeUpdaterClient) Check(context.Context) (*updater.Release, error) { ret
 func (*fakeUpdaterClient) DownloadAndInstall(context.Context) error        { return nil }
 func (*fakeUpdaterClient) Restart(context.Context) error                   { return nil }
 func (client *fakeUpdaterClient) State() updater.State                     { return client.state }
+func (*fakeUpdaterClient) DownloadedPath() string                          { return "" }
+func (*fakeUpdaterClient) SkipVersion(string)                              {}
 
 type fakeUpdaterProvider struct{}
 
@@ -104,6 +130,12 @@ func (coordinator *fakeApplicationUpdateCoordinator) Download(_ context.Context,
 
 func (coordinator *fakeApplicationUpdateCoordinator) Restart(context.Context) (appupdates.Snapshot, error) {
 	coordinator.restartCalls++
+	return coordinator.snapshot, nil
+}
+
+func (coordinator *fakeApplicationUpdateCoordinator) Skip(_ context.Context, version string) (appupdates.Snapshot, error) {
+	coordinator.skipCalls++
+	coordinator.skipVersion = version
 	return coordinator.snapshot, nil
 }
 
@@ -168,6 +200,12 @@ func TestApplicationUpdateCommandsDelegateToOneProcessCoordinator(t *testing.T) 
 	require.NoError(t, err)
 	require.Equal(t, appupdates.StatusAvailable, restarted.Status)
 	require.Equal(t, 1, coordinator.restartCalls)
+
+	skipped, err := app.SkipApplicationUpdate("2.0.0")
+	require.NoError(t, err)
+	require.Equal(t, appupdates.StatusAvailable, skipped.Status)
+	require.Equal(t, "2.0.0", coordinator.skipVersion)
+	require.Equal(t, 1, coordinator.skipCalls)
 }
 
 func TestDisabledCheckCommandReturnsApplicationSnapshot(t *testing.T) {
@@ -287,6 +325,129 @@ func TestConfigureApplicationUpdatesDisablesOnTempSetupFailure(t *testing.T) {
 	require.NotNil(t, app.applicationUpdates)
 	require.Equal(t, appupdates.StatusDisabled, app.applicationUpdates.Snapshot().Status)
 	require.False(t, app.applicationUpdates.Snapshot().CanInstall)
+}
+
+func TestPrepareApplicationUpdateStateReconcilesBeforeSweepingOrphans(t *testing.T) {
+	base := t.TempDir()
+	root := filepath.Join(base, "owned-temp")
+	statePath := filepath.Join(base, "config", "application-update.json")
+	require.NoError(t, os.Mkdir(root, 0o700))
+	store, err := updatestate.New(updatestate.Config{
+		StatePath: statePath,
+		TempRoot:  root,
+		PID:       func() int { return 4242 },
+	})
+	require.NoError(t, err)
+	require.NoError(t, store.SetSkippedVersion("1.9.0"))
+	staging := filepath.Join(root, "wails-update-active")
+	require.NoError(t, os.Mkdir(staging, 0o700))
+	require.NoError(t, store.RecordPrepared(updatestate.PreparedUpdate{
+		TargetVersion:  "2.0.0",
+		StagingDir:     staging,
+		RecoveryTarget: updateidentity.RecoveryMacDownload,
+	}))
+	_, err = store.BeginAttempt(updatestate.AttemptMetadata{
+		SourceVersion: "2.0.0-beta.3",
+		Platform:      "darwin",
+		Architecture:  "arm64",
+		Distribution:  updateidentity.DistributionMacBundle,
+	})
+	require.NoError(t, err)
+	require.NoError(t, os.WriteFile(
+		filepath.Join(root, "wails-update-4242.log"),
+		[]byte("bundle replacement failed"),
+		0o600,
+	))
+	orphan := filepath.Join(root, "wails-update-orphan")
+	require.NoError(t, os.Mkdir(orphan, 0o700))
+
+	setup, err := prepareApplicationUpdateState(
+		ApplicationUpdateOptions{TempRoot: root, StatePath: statePath},
+		enabledApplicationUpdateBuild(),
+	)
+
+	require.NoError(t, err)
+	require.NotNil(t, setup.Store)
+	require.Equal(t, updatestate.OutcomeFailed, setup.Reconciled.Outcome)
+	require.Equal(t, "bundle replacement failed", setup.Reconciled.HelperDiagnostic)
+	require.Equal(t, "1.9.0", setup.SkippedVersion)
+	require.NoDirExists(t, staging)
+	require.NoDirExists(t, orphan)
+	document, err := setup.Store.Load()
+	require.NoError(t, err)
+	require.Empty(t, document.ProtectedPaths())
+}
+
+func TestConfigureApplicationUpdatesProjectsAndLogsFailedApply(t *testing.T) {
+	if runtime.GOARCH != "amd64" && runtime.GOARCH != "arm64" {
+		t.Skip("updater supports amd64 and arm64")
+	}
+	distribution := updateidentity.DistributionLinuxPortable
+	recovery := updateidentity.RecoveryLinuxPortableDownload
+	switch runtime.GOOS {
+	case "darwin":
+		distribution = updateidentity.DistributionMacBundle
+		recovery = updateidentity.RecoveryMacDownload
+	case "windows":
+		distribution = updateidentity.DistributionWindowsNSIS
+		recovery = updateidentity.RecoveryWindowsDownload
+	case "linux":
+	default:
+		t.Skip("updater is not supported on this platform")
+	}
+
+	originalVersion := Version
+	originalBetaExpiry := BetaExpiry
+	Version = "2.0.0-beta.3"
+	BetaExpiry = ""
+	t.Cleanup(func() {
+		Version = originalVersion
+		BetaExpiry = originalBetaExpiry
+	})
+	base := t.TempDir()
+	root := filepath.Join(base, "owned-temp")
+	statePath := filepath.Join(base, "config", "application-update.json")
+	require.NoError(t, os.Mkdir(root, 0o700))
+	store, err := updatestate.New(updatestate.Config{
+		StatePath: statePath,
+		TempRoot:  root,
+		PID:       func() int { return 4242 },
+	})
+	require.NoError(t, err)
+	staging := filepath.Join(root, "wails-update-failed")
+	require.NoError(t, os.Mkdir(staging, 0o700))
+	require.NoError(t, store.RecordPrepared(updatestate.PreparedUpdate{
+		TargetVersion: "2.0.0", StagingDir: staging, RecoveryTarget: recovery,
+	}))
+	_, err = store.BeginAttempt(updatestate.AttemptMetadata{
+		SourceVersion: Version, Platform: runtime.GOOS, Architecture: runtime.GOARCH,
+		Distribution: distribution,
+	})
+	require.NoError(t, err)
+	require.NoError(t, os.WriteFile(
+		filepath.Join(root, "wails-update-4242.log"),
+		[]byte("replacement failed safely"),
+		0o600,
+	))
+	app := NewApp(nil)
+
+	app.configureApplicationUpdates(ApplicationUpdateOptions{
+		TempRoot: root, StatePath: statePath,
+	})
+
+	snapshot := app.applicationUpdates.Snapshot()
+	require.Equal(t, appupdates.StatusApplyError, snapshot.Status)
+	require.Equal(t, "2.0.0", snapshot.AvailableVersion)
+	require.Equal(t, distribution, snapshot.Distribution)
+	require.Equal(t, recovery, snapshot.RecoveryTarget)
+	require.Condition(t, func() bool {
+		for _, entry := range app.logger.GetEntries() {
+			if strings.Contains(entry.Message, "replacement failed safely") {
+				return true
+			}
+		}
+		return false
+	})
 }
 
 func TestApplicationUpdateCoordinatorFollowsProcessRuntimeLifecycle(t *testing.T) {

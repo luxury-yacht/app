@@ -16,6 +16,7 @@ const appInfoMock = vi.hoisted(() => ({
   CheckForUpdates: vi.fn(),
   DownloadApplicationUpdate: vi.fn(),
   RestartAndApplyApplicationUpdate: vi.fn(),
+  SkipApplicationUpdate: vi.fn(),
 }));
 
 const runtimeMock = vi.hoisted(() => ({
@@ -34,6 +35,7 @@ vi.mock('@core/backend-api', () => ({
   CheckForUpdates: appInfoMock.CheckForUpdates,
   DownloadApplicationUpdate: appInfoMock.DownloadApplicationUpdate,
   RestartAndApplyApplicationUpdate: appInfoMock.RestartAndApplyApplicationUpdate,
+  SkipApplicationUpdate: appInfoMock.SkipApplicationUpdate,
 }));
 
 vi.mock('@core/desktop-runtime', () => ({
@@ -96,6 +98,7 @@ describe('AboutModal', () => {
     appInfoMock.CheckForUpdates.mockReset();
     appInfoMock.DownloadApplicationUpdate.mockReset();
     appInfoMock.RestartAndApplyApplicationUpdate.mockReset();
+    appInfoMock.SkipApplicationUpdate.mockReset();
     errorMock.reportOperationalError.mockReset();
     document.body.style.overflow = '';
   });
@@ -181,6 +184,39 @@ describe('AboutModal', () => {
     await modal.unmount();
   });
 
+  it('persists the exact offered version before dismissing it', async () => {
+    appInfoMock.GetAppInfo.mockResolvedValue({
+      version: '1.9.0',
+      update: {
+        status: 'available',
+        currentVersion: '1.9.0',
+        availableVersion: '2.0.0',
+        canCheck: true,
+        canInstall: true,
+      },
+    });
+    appInfoMock.SkipApplicationUpdate.mockResolvedValue({
+      status: 'current',
+      currentVersion: '1.9.0',
+      canCheck: true,
+      canInstall: true,
+    });
+    const modal = await renderModal({ isOpen: true, onClose: vi.fn() });
+    await act(async () => Promise.resolve());
+
+    const skip = Array.from(document.querySelectorAll('button')).find(
+      (button) => button.textContent === 'Skip This Version'
+    );
+    expect(skip).toBeTruthy();
+    await act(async () => skip?.click());
+
+    expect(appInfoMock.SkipApplicationUpdate).toHaveBeenCalledWith('2.0.0');
+    expect(appInfoMock.DownloadApplicationUpdate).not.toHaveBeenCalled();
+    expect(document.body.textContent).not.toContain('Luxury Yacht 2.0.0 is available.');
+
+    await modal.unmount();
+  });
+
   it('shows reason-specific notification-only recovery without staging', async () => {
     appInfoMock.GetAppInfo.mockResolvedValue({
       version: '2.0.0',
@@ -203,6 +239,52 @@ describe('AboutModal', () => {
     expect(document.body.textContent).toContain('View Linux Packages');
     expect(document.body.textContent).not.toContain('Download Update');
     expect(appInfoMock.DownloadApplicationUpdate).not.toHaveBeenCalled();
+
+    await modal.unmount();
+  });
+
+  it('uses the persisted attempt recovery target after an apply failure', async () => {
+    appInfoMock.GetAppInfo.mockResolvedValue({
+      version: '1.9.0',
+      update: {
+        status: 'apply-error',
+        currentVersion: '1.9.0',
+        availableVersion: '2.0.0',
+        canCheck: false,
+        canInstall: false,
+        eligibilityReason: 'linux-package-managed',
+        recoveryTarget: 'mac-download',
+      },
+    });
+    const modal = await renderModal({ isOpen: true, onClose: vi.fn() });
+    await act(async () => Promise.resolve());
+
+    expect(document.body.textContent).toContain(
+      'The update couldn’t be applied. Luxury Yacht is still on 1.9.0.'
+    );
+    expect(document.body.textContent).toContain('View macOS Download');
+    expect(document.body.textContent).not.toContain('View Linux Packages');
+
+    await modal.unmount();
+  });
+
+  it('does not render an out-of-range progress value', async () => {
+    appInfoMock.GetAppInfo.mockResolvedValue({
+      version: '1.9.0',
+      update: {
+        status: 'downloading',
+        currentVersion: '1.9.0',
+        availableVersion: '2.0.0',
+        canCheck: true,
+        canInstall: true,
+        progressPercent: 150,
+      },
+    });
+    const modal = await renderModal({ isOpen: true, onClose: vi.fn() });
+    await act(async () => Promise.resolve());
+
+    expect(document.querySelector('progress')).toBeNull();
+    expect(document.body.textContent).not.toContain('150%');
 
     await modal.unmount();
   });

@@ -1,8 +1,10 @@
 package backend
 
 import (
+	_ "embed"
 	"fmt"
 	"os"
+	"path/filepath"
 	"runtime"
 	"strings"
 	"time"
@@ -10,16 +12,18 @@ import (
 	"github.com/luxury-yacht/app/backend/internal/appupdates"
 	"github.com/luxury-yacht/app/backend/internal/logsources"
 	"github.com/luxury-yacht/app/internal/updateidentity"
+	"github.com/luxury-yacht/app/internal/updatestate"
+	"github.com/luxury-yacht/app/internal/updatetemp"
 	"github.com/wailsapp/wails/v3/pkg/updater"
 )
 
-// applicationUpdatePublicKey remains empty until the one-time updater signing
-// key is provisioned. Released builds fail closed while no trust root exists.
+//go:embed updater_public_key.pem
 var applicationUpdatePublicKey []byte
 
 type ApplicationUpdateOptions struct {
 	TempRoot       string
 	TempSetupError error
+	StatePath      string
 }
 
 type applicationUpdateRuntime struct {
@@ -56,12 +60,32 @@ func (a *App) configureApplicationUpdates(options ApplicationUpdateOptions) {
 		a.logger.Warn(fmt.Sprintf("Automatic updates disabled: %v", options.TempSetupError), logsources.UpdateCheck)
 	}
 
+	var updateState *updatestate.Store
+	var reconciled *updatestate.ReconcileResult
+	var skippedVersion string
+	if options.TempSetupError == nil && options.TempRoot != "" && eligibility.Release.Version != "" {
+		setup, err := prepareApplicationUpdateState(options, eligibility)
+		if err != nil {
+			a.logger.Warn(fmt.Sprintf("Automatic update recovery state unavailable: %v", err), logsources.UpdateCheck)
+			eligibility.CanInstall = false
+			eligibility.Installation.CanInstall = false
+		} else {
+			updateState = setup.Store
+			reconciled = &setup.Reconciled
+			skippedVersion = setup.SkippedVersion
+			a.logApplicationUpdateReconciliation(setup.Reconciled)
+		}
+	}
+
 	publicKey := applicationUpdatePublicKey
 	var provider updater.Provider
 	clientAvailable := a.wailsApplication != nil && a.wailsApplication.Updater != nil
 	if eligibility.CanInitialize && options.TempSetupError == nil && options.TempRoot != "" &&
 		len(publicKey) > 0 && clientAvailable {
-		configuredProvider, err := newEndpointUpdateProvider(updateManifestURL, eligibility.Release, nil)
+		configuredProvider, err := newGitHubManifestUpdateProvider(gitHubManifestUpdateProviderConfig{
+			Repository: updateRepository,
+			Current:    eligibility.Release,
+		})
 		if err != nil {
 			a.logger.Warn(fmt.Sprintf("Automatic updates disabled: %v", err), logsources.UpdateCheck)
 			eligibility = disableApplicationUpdateInstallation(eligibility)
@@ -79,13 +103,81 @@ func (a *App) configureApplicationUpdates(options ApplicationUpdateOptions) {
 	coordinator := appupdates.New(appupdates.Dependencies{
 		Client: client, Provider: provider, Eligibility: eligibility,
 		PublicKey: publicKey, Platform: runtime.GOOS, Architecture: runtime.GOARCH,
-		TempRoot: options.TempRoot, OnChange: a.storeApplicationUpdateSnapshot,
+		TempRoot: options.TempRoot, UpdateState: updateState, Reconciled: reconciled,
+		SkippedVersion: skippedVersion,
+		OnChange:       a.storeApplicationUpdateSnapshot,
 	})
 	a.applicationUpdates = coordinator
 	if a.wailsApplication != nil {
 		a.applicationUpdateEventUnsubscribers = subscribeApplicationUpdateEvents(
 			a.wailsApplication.Event,
 			coordinator,
+		)
+	}
+}
+
+type applicationUpdateStateSetup struct {
+	Store          *updatestate.Store
+	Reconciled     updatestate.ReconcileResult
+	SkippedVersion string
+}
+
+func prepareApplicationUpdateState(
+	options ApplicationUpdateOptions,
+	eligibility updateidentity.BuildEligibility,
+) (applicationUpdateStateSetup, error) {
+	statePath := strings.TrimSpace(options.StatePath)
+	if statePath == "" {
+		configDirectory, err := os.UserConfigDir()
+		if err != nil {
+			return applicationUpdateStateSetup{}, fmt.Errorf("resolve application update config directory: %w", err)
+		}
+		statePath = filepath.Join(configDirectory, "luxury-yacht", "application-update.json")
+	}
+	store, err := updatestate.New(updatestate.Config{
+		StatePath: statePath,
+		TempRoot:  options.TempRoot,
+	})
+	if err != nil {
+		return applicationUpdateStateSetup{}, err
+	}
+	reconciled, err := store.Reconcile(eligibility.Release.Version)
+	if err != nil {
+		return applicationUpdateStateSetup{}, fmt.Errorf("reconcile application update state: %w", err)
+	}
+	document, err := store.Load()
+	if err != nil {
+		return applicationUpdateStateSetup{}, fmt.Errorf("load reconciled application update state: %w", err)
+	}
+	if _, err := updatetemp.SweepOrphans(options.TempRoot, document.ProtectedPaths()); err != nil {
+		return applicationUpdateStateSetup{}, fmt.Errorf("sweep orphaned application update staging: %w", err)
+	}
+	return applicationUpdateStateSetup{
+		Store: store, Reconciled: reconciled, SkippedVersion: document.SkippedVersion,
+	}, nil
+}
+
+func (a *App) logApplicationUpdateReconciliation(result updatestate.ReconcileResult) {
+	switch result.Outcome {
+	case updatestate.OutcomeSucceeded:
+		a.logger.Info(
+			fmt.Sprintf("Automatic update to %s applied successfully", result.TargetVersion),
+			logsources.UpdateCheck,
+		)
+	case updatestate.OutcomeFailed:
+		message := fmt.Sprintf(
+			"Automatic update from %s to %s was not applied",
+			result.SourceVersion,
+			result.TargetVersion,
+		)
+		if result.HelperDiagnostic != "" {
+			message += ": " + result.HelperDiagnostic
+		}
+		a.logger.Error(message, logsources.UpdateCheck)
+	case updatestate.OutcomeSuperseded:
+		a.logger.Info(
+			fmt.Sprintf("Automatic update attempt to %s was superseded by version %s", result.TargetVersion, Version),
+			logsources.UpdateCheck,
 		)
 	}
 }

@@ -5,27 +5,29 @@ import (
 	"os"
 )
 
-const projectUsage = "usage: project <backend-coverage|binary-name|bindings|build-manifests|build-metadata|clean-all|clean-build|clean-frontend|config|fmt|go-mod-update|go-mod-update-check|install-unsigned|release-app|release-artifact-name|release-site|reset|validate-release-tag>"
+const projectUsage = "usage: project <backend-coverage|binary-name|bindings|build-manifests|build-metadata|clean-all|clean-build|clean-frontend|config|fmt|go-mod-update|go-mod-update-check|install-unsigned|prepare-release-updater-manifest|release-app|release-artifact-name|release-site|reset|validate-macos-updater|validate-release-tag>"
 
 var projectCommands = map[string]func() error{
-	"backend-coverage":      runBackendCoverage,
-	"binary-name":           writeConfiguredBinaryName,
-	"bindings":              checkWailsBindings,
-	"build-manifests":       func() error { return renderProjectPlatformManifests(projectConfigPath, projectPlatformManifestSpecs) },
-	"build-metadata":        generateConfiguredBuildMetadata,
-	"clean-all":             func() error { return cleanAllOutputs(defaultCleanConfig()) },
-	"clean-build":           func() error { return cleanBuildOutputs(defaultCleanConfig()) },
-	"clean-frontend":        func() error { return cleanFrontendOutputs(defaultCleanConfig()) },
-	"config":                func() error { return writeProjectConfig(os.Stdout) },
-	"fmt":                   checkGoFormatting,
-	"go-mod-update":         updateDirectGoModules,
-	"go-mod-update-check":   checkDirectGoModuleUpdates,
-	"install-unsigned":      runUnsignedInstall,
-	"release-app":           publishConfiguredRelease,
-	"release-artifact-name": writeConfiguredReleaseArtifactName,
-	"release-site":          publishConfiguredSiteVersion,
-	"reset":                 resetConfiguredAppState,
-	"validate-release-tag":  validateConfiguredReleaseTag,
+	"backend-coverage":                 runBackendCoverage,
+	"binary-name":                      writeConfiguredBinaryName,
+	"bindings":                         checkWailsBindings,
+	"build-manifests":                  func() error { return renderProjectPlatformManifests(projectConfigPath, projectPlatformManifestSpecs) },
+	"build-metadata":                   generateConfiguredBuildMetadata,
+	"clean-all":                        func() error { return cleanAllOutputs(defaultCleanConfig()) },
+	"clean-build":                      func() error { return cleanBuildOutputs(defaultCleanConfig()) },
+	"clean-frontend":                   func() error { return cleanFrontendOutputs(defaultCleanConfig()) },
+	"config":                           func() error { return writeProjectConfig(os.Stdout) },
+	"fmt":                              checkGoFormatting,
+	"go-mod-update":                    updateDirectGoModules,
+	"go-mod-update-check":              checkDirectGoModuleUpdates,
+	"install-unsigned":                 runUnsignedInstall,
+	"prepare-release-updater-manifest": runReleaseUpdaterManifestPreparation,
+	"release-app":                      publishConfiguredRelease,
+	"release-artifact-name":            writeConfiguredReleaseArtifactName,
+	"release-site":                     publishConfiguredSiteVersion,
+	"reset":                            resetConfiguredAppState,
+	"validate-macos-updater":           runMacOSUpdaterArchiveValidation,
+	"validate-release-tag":             validateConfiguredReleaseTag,
 }
 
 func writeConfiguredReleaseArtifactName() error {

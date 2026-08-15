@@ -8,11 +8,13 @@ import (
 	"crypto/sha512"
 	"crypto/x509"
 	"encoding/pem"
+	"errors"
 	"fmt"
 	"sync"
 	"time"
 
 	"github.com/luxury-yacht/app/internal/updateidentity"
+	"github.com/luxury-yacht/app/internal/updatestate"
 	"github.com/wailsapp/wails/v3/pkg/updater"
 )
 
@@ -40,18 +42,33 @@ type Client interface {
 	DownloadAndInstall(context.Context) error
 	Restart(context.Context) error
 	State() updater.State
+	DownloadedPath() string
+	SkipVersion(string)
+}
+
+type UpdateState interface {
+	ResolveStagingDirectory(string) (string, error)
+	RecordPrepared(updatestate.PreparedUpdate) error
+	BeginAttempt(updatestate.AttemptMetadata) (updatestate.UpdateAttempt, error)
+	RestorePrepared() error
+	CleanupPrepared() error
+	DiscardStaging(string) error
+	SetSkippedVersion(string) error
 }
 
 type Dependencies struct {
-	Client       Client
-	Provider     updater.Provider
-	Eligibility  updateidentity.BuildEligibility
-	PublicKey    []byte
-	Platform     string
-	Architecture string
-	TempRoot     string
-	Scheduler    Scheduler
-	OnChange     func(Snapshot)
+	Client         Client
+	Provider       updater.Provider
+	Eligibility    updateidentity.BuildEligibility
+	PublicKey      []byte
+	Platform       string
+	Architecture   string
+	TempRoot       string
+	UpdateState    UpdateState
+	Reconciled     *updatestate.ReconcileResult
+	SkippedVersion string
+	Scheduler      Scheduler
+	OnChange       func(Snapshot)
 }
 
 type Snapshot struct {
@@ -76,10 +93,13 @@ type Coordinator struct {
 	eligibility      updateidentity.BuildEligibility
 	platform         string
 	architecture     string
+	updateState      UpdateState
 	runtimeReady     bool
 	started          bool
+	stopped          bool
 	inFlight         bool
 	restartRequested bool
+	preparedOwned    bool
 	pending          *updater.Release
 	snapshot         Snapshot
 	scheduler        Scheduler
@@ -89,16 +109,23 @@ type Coordinator struct {
 }
 
 func New(dependencies Dependencies) *Coordinator {
+	eligibility := dependencies.Eligibility
+	if eligibility.CanInstall && dependencies.UpdateState == nil {
+		eligibility.CanInstall = false
+		eligibility.Installation.CanInstall = false
+	}
 	coordinator := &Coordinator{
 		client:        dependencies.Client,
-		eligibility:   dependencies.Eligibility,
+		eligibility:   eligibility,
 		platform:      dependencies.Platform,
 		architecture:  dependencies.Architecture,
+		updateState:   dependencies.UpdateState,
 		scheduler:     dependencies.Scheduler,
 		onChange:      dependencies.OnChange,
 		lifecycleDone: make(chan struct{}),
 	}
 	coordinator.snapshot = coordinator.baseSnapshot(StatusDisabled)
+	coordinator.applyReconciliation(dependencies.Reconciled)
 	if coordinator.scheduler == nil {
 		coordinator.scheduler = newIntervalScheduler()
 	}
@@ -126,8 +153,25 @@ func New(dependencies Dependencies) *Coordinator {
 		coordinator.snapshot.Error = err.Error()
 		return coordinator
 	}
-	coordinator.snapshot = coordinator.baseSnapshot(StatusIdle)
+	if dependencies.SkippedVersion != "" {
+		dependencies.Client.SkipVersion(dependencies.SkippedVersion)
+	}
+	if coordinator.snapshot.Status != StatusApplyError {
+		coordinator.snapshot = coordinator.baseSnapshot(StatusIdle)
+	}
 	return coordinator
+}
+
+func (coordinator *Coordinator) applyReconciliation(result *updatestate.ReconcileResult) {
+	if result == nil || result.Outcome != updatestate.OutcomeFailed {
+		return
+	}
+	coordinator.snapshot = coordinator.baseSnapshot(StatusApplyError)
+	coordinator.snapshot.AvailableVersion = result.TargetVersion
+	coordinator.snapshot.Distribution = result.Distribution
+	coordinator.snapshot.RecoveryTarget = result.RecoveryTarget
+	coordinator.snapshot.CanCheck = false
+	coordinator.snapshot.CanInstall = false
 }
 
 func (coordinator *Coordinator) disableCapabilities() {
@@ -161,12 +205,12 @@ func (coordinator *Coordinator) Snapshot() Snapshot {
 
 func (coordinator *Coordinator) RuntimeReady() {
 	coordinator.mu.Lock()
-	if coordinator.runtimeReady {
+	if coordinator.runtimeReady || coordinator.stopped {
 		coordinator.mu.Unlock()
 		return
 	}
 	coordinator.runtimeReady = true
-	if coordinator.snapshot.Status == StatusDisabled {
+	if coordinator.snapshot.Status == StatusDisabled || coordinator.snapshot.Status == StatusApplyError {
 		coordinator.mu.Unlock()
 		return
 	}
@@ -180,14 +224,22 @@ func (coordinator *Coordinator) RuntimeReady() {
 
 func (coordinator *Coordinator) Stop() {
 	coordinator.mu.Lock()
+	coordinator.stopped = true
 	started := coordinator.started
 	coordinator.started = false
 	scheduler := coordinator.scheduler
+	updateState := coordinator.updateState
+	preserveAttempt := coordinator.restartRequested
 	coordinator.mu.Unlock()
-	coordinator.stopOnce.Do(func() { close(coordinator.lifecycleDone) })
-	if started {
-		scheduler.Stop()
-	}
+	coordinator.stopOnce.Do(func() {
+		close(coordinator.lifecycleDone)
+		if started {
+			scheduler.Stop()
+		}
+		if updateState != nil && !preserveAttempt {
+			_ = updateState.CleanupPrepared()
+		}
+	})
 }
 
 // HandleWailsEvent projects Wails updater lifecycle events into the semantic
@@ -201,6 +253,7 @@ func (coordinator *Coordinator) HandleWailsEvent(name string, payload any) Snaps
 		coordinator.snapshot = coordinator.baseSnapshot(StatusChecking)
 	case updater.EventNoUpdate:
 		coordinator.pending = nil
+		coordinator.preparedOwned = false
 		coordinator.snapshot = coordinator.baseSnapshot(StatusCurrent)
 	case updater.EventUpdateAvailable:
 		if release, ok := releasePayload(payload); ok {
@@ -225,7 +278,11 @@ func (coordinator *Coordinator) HandleWailsEvent(name string, payload any) Snaps
 		coordinator.snapshot.Status = StatusPreparing
 		coordinator.snapshot.ProgressPercent = nil
 	case updater.EventUpdateReady:
-		coordinator.snapshot.Status = StatusReady
+		if coordinator.preparedOwned {
+			coordinator.snapshot.Status = StatusReady
+		} else {
+			coordinator.snapshot.Status = StatusPreparing
+		}
 		coordinator.snapshot.ProgressPercent = nil
 		coordinator.snapshot.Error = ""
 	case updater.EventError:
@@ -357,7 +414,12 @@ func (coordinator *Coordinator) snapshotForRelease(status Status, release *updat
 
 func (coordinator *Coordinator) Check(ctx context.Context) (Snapshot, error) {
 	coordinator.mu.Lock()
-	if coordinator.snapshot.Status == StatusDisabled {
+	if coordinator.stopped {
+		snapshot := cloneSnapshot(coordinator.snapshot)
+		coordinator.mu.Unlock()
+		return snapshot, context.Canceled
+	}
+	if coordinator.snapshot.Status == StatusDisabled || coordinator.snapshot.Status == StatusApplyError {
 		snapshot := cloneSnapshot(coordinator.snapshot)
 		coordinator.mu.Unlock()
 		return snapshot, nil
@@ -419,6 +481,11 @@ func (coordinator *Coordinator) Check(ctx context.Context) (Snapshot, error) {
 
 func (coordinator *Coordinator) Download(ctx context.Context, version string) (Snapshot, error) {
 	coordinator.mu.Lock()
+	if coordinator.stopped {
+		snapshot := cloneSnapshot(coordinator.snapshot)
+		coordinator.mu.Unlock()
+		return snapshot, context.Canceled
+	}
 	if coordinator.snapshot.Status == StatusDisabled {
 		snapshot := coordinator.snapshot
 		coordinator.mu.Unlock()
@@ -456,6 +523,8 @@ func (coordinator *Coordinator) Download(ctx context.Context, version string) (S
 	}
 
 	coordinator.inFlight = true
+	coordinator.preparedOwned = false
+	pending := *coordinator.pending
 	previous := cloneSnapshot(coordinator.snapshot)
 	coordinator.snapshot.Status = StatusDownloading
 	coordinator.snapshot.ProgressPercent = nil
@@ -467,6 +536,32 @@ func (coordinator *Coordinator) Download(ctx context.Context, version string) (S
 	operationCtx, operationDone := coordinator.operationContext(ctx)
 	err := coordinator.client.DownloadAndInstall(operationCtx)
 	operationDone()
+	if err == nil && coordinator.client.State() != updater.StateReady {
+		err = fmt.Errorf("updater completed download without reaching ready state")
+	}
+	if err == nil {
+		stagingDir, resolveErr := coordinator.updateState.ResolveStagingDirectory(coordinator.client.DownloadedPath())
+		if resolveErr != nil {
+			err = resolveErr
+		} else {
+			prepared := updatestate.PreparedUpdate{
+				TargetVersion:  pending.Version,
+				StagingDir:     stagingDir,
+				RecoveryTarget: updateidentity.RecoveryForDistribution(coordinator.eligibility.Installation.Distribution),
+			}
+			if recordErr := coordinator.updateState.RecordPrepared(prepared); recordErr != nil {
+				err = errors.Join(recordErr, coordinator.updateState.DiscardStaging(stagingDir))
+			}
+		}
+	}
+	if err == nil {
+		coordinator.mu.Lock()
+		stopped := coordinator.stopped
+		coordinator.mu.Unlock()
+		if stopped {
+			err = errors.Join(context.Canceled, coordinator.updateState.CleanupPrepared())
+		}
+	}
 
 	coordinator.mu.Lock()
 	previous = cloneSnapshot(coordinator.snapshot)
@@ -476,15 +571,8 @@ func (coordinator *Coordinator) Download(ctx context.Context, version string) (S
 		coordinator.snapshot.Status = StatusPrepareError
 		coordinator.snapshot.Error = err.Error()
 		result = cloneSnapshot(coordinator.snapshot)
-	} else if coordinator.client.State() != updater.StateReady {
-		err := fmt.Errorf("updater completed download without reaching ready state")
-		coordinator.snapshot.Status = StatusPrepareError
-		coordinator.snapshot.Error = err.Error()
-		result = cloneSnapshot(coordinator.snapshot)
-		coordinator.mu.Unlock()
-		coordinator.publishIfChanged(previous, result)
-		return result, err
 	} else {
+		coordinator.preparedOwned = true
 		coordinator.snapshot.Status = StatusReady
 		coordinator.snapshot.Error = ""
 		result = cloneSnapshot(coordinator.snapshot)
@@ -503,8 +591,76 @@ func preservesPendingRelease(status Status) bool {
 	}
 }
 
+func (coordinator *Coordinator) Skip(_ context.Context, version string) (Snapshot, error) {
+	coordinator.mu.Lock()
+	if coordinator.stopped {
+		snapshot := cloneSnapshot(coordinator.snapshot)
+		coordinator.mu.Unlock()
+		return snapshot, context.Canceled
+	}
+	if coordinator.snapshot.Status == StatusDisabled || coordinator.snapshot.Status == StatusApplyError {
+		snapshot := cloneSnapshot(coordinator.snapshot)
+		coordinator.mu.Unlock()
+		return snapshot, fmt.Errorf("automatic update skipping is unavailable")
+	}
+	if !coordinator.runtimeReady {
+		snapshot := cloneSnapshot(coordinator.snapshot)
+		coordinator.mu.Unlock()
+		return snapshot, fmt.Errorf("application update skip requires runtime readiness")
+	}
+	if coordinator.inFlight {
+		snapshot := cloneSnapshot(coordinator.snapshot)
+		coordinator.mu.Unlock()
+		return snapshot, nil
+	}
+	if coordinator.updateState == nil || coordinator.pending == nil || coordinator.snapshot.Status != StatusAvailable {
+		snapshot := cloneSnapshot(coordinator.snapshot)
+		coordinator.mu.Unlock()
+		return snapshot, fmt.Errorf("application update skip requires a pending release")
+	}
+	if version != coordinator.pending.Version {
+		snapshot := cloneSnapshot(coordinator.snapshot)
+		coordinator.mu.Unlock()
+		return snapshot, fmt.Errorf(
+			"requested version %q does not match pending release %q",
+			version,
+			coordinator.pending.Version,
+		)
+	}
+	coordinator.inFlight = true
+	coordinator.mu.Unlock()
+
+	if err := coordinator.updateState.SetSkippedVersion(version); err != nil {
+		coordinator.mu.Lock()
+		previous := cloneSnapshot(coordinator.snapshot)
+		coordinator.inFlight = false
+		coordinator.snapshot.Error = err.Error()
+		result := cloneSnapshot(coordinator.snapshot)
+		coordinator.mu.Unlock()
+		coordinator.publishIfChanged(previous, result)
+		return result, err
+	}
+	coordinator.client.SkipVersion(version)
+
+	coordinator.mu.Lock()
+	previous := cloneSnapshot(coordinator.snapshot)
+	coordinator.inFlight = false
+	coordinator.pending = nil
+	coordinator.preparedOwned = false
+	coordinator.snapshot = coordinator.baseSnapshot(StatusCurrent)
+	result := cloneSnapshot(coordinator.snapshot)
+	coordinator.mu.Unlock()
+	coordinator.publishIfChanged(previous, result)
+	return result, nil
+}
+
 func (coordinator *Coordinator) Restart(ctx context.Context) (Snapshot, error) {
 	coordinator.mu.Lock()
+	if coordinator.stopped {
+		snapshot := cloneSnapshot(coordinator.snapshot)
+		coordinator.mu.Unlock()
+		return snapshot, context.Canceled
+	}
 	if coordinator.inFlight || coordinator.restartRequested {
 		snapshot := coordinator.snapshot
 		coordinator.mu.Unlock()
@@ -517,12 +673,34 @@ func (coordinator *Coordinator) Restart(ctx context.Context) (Snapshot, error) {
 		return snapshot, fmt.Errorf("application update restart requires a ready update")
 	}
 	coordinator.inFlight = true
+	coordinator.mu.Unlock()
+
+	_, err := coordinator.updateState.BeginAttempt(updatestate.AttemptMetadata{
+		SourceVersion: coordinator.eligibility.Release.Version,
+		Platform:      coordinator.platform,
+		Architecture:  coordinator.architecture,
+		Distribution:  coordinator.eligibility.Installation.Distribution,
+	})
+	if err != nil {
+		return coordinator.finishRestartError(err)
+	}
+
+	coordinator.mu.Lock()
+	if coordinator.stopped {
+		coordinator.mu.Unlock()
+		err = errors.Join(context.Canceled, coordinator.updateState.RestorePrepared())
+		err = errors.Join(err, coordinator.updateState.CleanupPrepared())
+		return coordinator.finishRestartError(err)
+	}
 	coordinator.restartRequested = true
 	coordinator.mu.Unlock()
 
 	operationCtx, operationDone := coordinator.operationContext(ctx)
-	err := coordinator.client.Restart(operationCtx)
+	err = coordinator.client.Restart(operationCtx)
 	operationDone()
+	if err != nil {
+		err = errors.Join(err, coordinator.updateState.RestorePrepared())
+	}
 
 	coordinator.mu.Lock()
 	previous := cloneSnapshot(coordinator.snapshot)
@@ -535,6 +713,19 @@ func (coordinator *Coordinator) Restart(ctx context.Context) (Snapshot, error) {
 		coordinator.snapshot.Status = StatusReady
 		coordinator.snapshot.Error = ""
 	}
+	result := cloneSnapshot(coordinator.snapshot)
+	coordinator.mu.Unlock()
+	coordinator.publishIfChanged(previous, result)
+	return result, err
+}
+
+func (coordinator *Coordinator) finishRestartError(err error) (Snapshot, error) {
+	coordinator.mu.Lock()
+	previous := cloneSnapshot(coordinator.snapshot)
+	coordinator.inFlight = false
+	coordinator.restartRequested = false
+	coordinator.snapshot.Status = StatusRestartError
+	coordinator.snapshot.Error = err.Error()
 	result := cloneSnapshot(coordinator.snapshot)
 	coordinator.mu.Unlock()
 	coordinator.publishIfChanged(previous, result)

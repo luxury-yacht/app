@@ -4,12 +4,14 @@ import (
 	"context"
 	"errors"
 	"io"
+	"path/filepath"
 	"sync"
 	"testing"
 	"time"
 
 	"github.com/luxury-yacht/app/backend/internal/appupdates"
 	"github.com/luxury-yacht/app/internal/updateidentity"
+	"github.com/luxury-yacht/app/internal/updatestate"
 	"github.com/stretchr/testify/require"
 	"github.com/wailsapp/wails/v3/pkg/updater"
 )
@@ -35,6 +37,24 @@ type fakeUpdater struct {
 	checkErr                 error
 	downloadErr              error
 	restartErr               error
+	downloadedPath           string
+	skippedVersions          []string
+	operationOrder           *[]string
+}
+
+type fakeUpdateState struct {
+	prepared       *updatestate.PreparedUpdate
+	attempt        *updatestate.UpdateAttempt
+	recordErr      error
+	beginErr       error
+	restoreErr     error
+	cleanupErr     error
+	discardErr     error
+	discarded      []string
+	skipped        string
+	skipErr        error
+	cleanupCalls   int
+	operationOrder *[]string
 }
 
 func signedRelease(version, channel, platform, architecture string) *updater.Release {
@@ -101,7 +121,7 @@ func TestConcurrentCheckReportsExistingFlowWithoutQueuingAnotherCheck(t *testing
 	coordinator := appupdates.New(appupdates.Dependencies{
 		Client: client, Provider: fakeProvider{}, Eligibility: enabledBuild(),
 		PublicKey: testPublicKey(), Platform: "darwin", Architecture: "arm64",
-		TempRoot: "/owned/temp/root", Scheduler: &fakeScheduler{},
+		TempRoot: "/owned/temp/root", Scheduler: &fakeScheduler{}, UpdateState: &fakeUpdateState{},
 	})
 	coordinator.RuntimeReady()
 
@@ -152,7 +172,7 @@ func TestCheckDuringDownloadReportsActiveFlowWithoutQueuingCheck(t *testing.T) {
 	coordinator := appupdates.New(appupdates.Dependencies{
 		Client: client, Provider: fakeProvider{}, Eligibility: enabledBuild(),
 		PublicKey: testPublicKey(), Platform: "darwin", Architecture: "arm64",
-		TempRoot: "/owned/temp/root", Scheduler: &fakeScheduler{},
+		TempRoot: "/owned/temp/root", Scheduler: &fakeScheduler{}, UpdateState: &fakeUpdateState{},
 	})
 	coordinator.RuntimeReady()
 	_, err := coordinator.Check(context.Background())
@@ -213,6 +233,9 @@ func (client *fakeUpdater) DownloadAndInstall(context.Context) error {
 
 func (client *fakeUpdater) Restart(context.Context) error {
 	client.restartCalls++
+	if client.operationOrder != nil {
+		*client.operationOrder = append(*client.operationOrder, "wails-restart")
+	}
 	if client.restartStarted != nil {
 		client.restartStartOnce.Do(func() { close(client.restartStarted) })
 	}
@@ -223,6 +246,86 @@ func (client *fakeUpdater) Restart(context.Context) error {
 }
 
 func (client *fakeUpdater) State() updater.State { return client.state }
+
+func (client *fakeUpdater) DownloadedPath() string {
+	if client.downloadedPath != "" {
+		return client.downloadedPath
+	}
+	return "/owned/temp/root/wails-update-test/payload"
+}
+
+func (client *fakeUpdater) SkipVersion(version string) {
+	client.skippedVersions = append(client.skippedVersions, version)
+}
+
+func (state *fakeUpdateState) ResolveStagingDirectory(path string) (string, error) {
+	return filepath.Dir(path), nil
+}
+
+func (state *fakeUpdateState) RecordPrepared(prepared updatestate.PreparedUpdate) error {
+	if state.recordErr != nil {
+		return state.recordErr
+	}
+	copy := prepared
+	state.prepared = &copy
+	return nil
+}
+
+func (state *fakeUpdateState) BeginAttempt(metadata updatestate.AttemptMetadata) (updatestate.UpdateAttempt, error) {
+	if state.operationOrder != nil {
+		*state.operationOrder = append(*state.operationOrder, "persist-attempt")
+	}
+	if state.beginErr != nil {
+		return updatestate.UpdateAttempt{}, state.beginErr
+	}
+	if state.prepared == nil {
+		return updatestate.UpdateAttempt{}, errors.New("missing prepared update")
+	}
+	attempt := updatestate.UpdateAttempt{
+		SourceVersion: metadata.SourceVersion, TargetVersion: state.prepared.TargetVersion,
+		Platform: metadata.Platform, Architecture: metadata.Architecture,
+		Distribution: metadata.Distribution, StagingDir: state.prepared.StagingDir,
+		RecoveryTarget: state.prepared.RecoveryTarget,
+	}
+	state.prepared = nil
+	state.attempt = &attempt
+	return attempt, nil
+}
+
+func (state *fakeUpdateState) RestorePrepared() error {
+	if state.restoreErr != nil {
+		return state.restoreErr
+	}
+	if state.attempt == nil {
+		return errors.New("missing attempt")
+	}
+	state.prepared = &updatestate.PreparedUpdate{
+		TargetVersion:  state.attempt.TargetVersion,
+		StagingDir:     state.attempt.StagingDir,
+		RecoveryTarget: state.attempt.RecoveryTarget,
+	}
+	state.attempt = nil
+	return nil
+}
+
+func (state *fakeUpdateState) CleanupPrepared() error {
+	state.cleanupCalls++
+	state.prepared = nil
+	return state.cleanupErr
+}
+
+func (state *fakeUpdateState) DiscardStaging(path string) error {
+	state.discarded = append(state.discarded, path)
+	return state.discardErr
+}
+
+func (state *fakeUpdateState) SetSkippedVersion(version string) error {
+	if state.skipErr != nil {
+		return state.skipErr
+	}
+	state.skipped = version
+	return nil
+}
 
 type fakeProvider struct{}
 
@@ -271,7 +374,7 @@ func newTestCoordinator(
 	return appupdates.New(appupdates.Dependencies{
 		Client: client, Provider: fakeProvider{}, Eligibility: eligibility,
 		PublicKey: testPublicKey(), Platform: platform, Architecture: architecture,
-		TempRoot: "/owned/temp/root", Scheduler: &fakeScheduler{},
+		TempRoot: "/owned/temp/root", Scheduler: &fakeScheduler{}, UpdateState: &fakeUpdateState{},
 	})
 }
 
@@ -282,7 +385,7 @@ func TestNewInitializesEligibleUpdaterOnceBeforeManualCheck(t *testing.T) {
 	coordinator := appupdates.New(appupdates.Dependencies{
 		Client: client, Provider: fakeProvider{}, Eligibility: enabledBuild(),
 		PublicKey: testPublicKey(), Platform: "darwin", Architecture: "arm64",
-		TempRoot: "/owned/temp/root", Scheduler: &fakeScheduler{},
+		TempRoot: "/owned/temp/root", Scheduler: &fakeScheduler{}, UpdateState: &fakeUpdateState{},
 	})
 
 	require.Len(t, client.initConfigs, 1)
@@ -305,6 +408,111 @@ func TestNewInitializesEligibleUpdaterOnceBeforeManualCheck(t *testing.T) {
 	require.Zero(t, client.downloadCalls)
 	require.Equal(t, appupdates.StatusAvailable, snapshot.Status)
 	require.Equal(t, "2.0.0", snapshot.AvailableVersion)
+}
+
+func TestMissingDurableStateKeepsChecksButDisablesInstallation(t *testing.T) {
+	t.Parallel()
+
+	client := &fakeUpdater{release: signedRelease("2.0.0", "beta", "darwin", "arm64")}
+	coordinator := appupdates.New(appupdates.Dependencies{
+		Client: client, Provider: fakeProvider{}, Eligibility: enabledBuild(),
+		PublicKey: testPublicKey(), Platform: "darwin", Architecture: "arm64",
+		TempRoot: "/owned/temp/root", Scheduler: &fakeScheduler{},
+	})
+	coordinator.RuntimeReady()
+
+	snapshot, err := coordinator.Check(context.Background())
+	require.NoError(t, err)
+	require.Equal(t, appupdates.StatusAvailable, snapshot.Status)
+	require.True(t, snapshot.CanCheck)
+	require.False(t, snapshot.CanInstall)
+
+	_, err = coordinator.Download(context.Background(), "2.0.0")
+	require.ErrorContains(t, err, "not eligible for automatic installation")
+	require.Zero(t, client.downloadCalls)
+}
+
+func TestSkippedVersionHydratesBeforeFirstCheckAndPersistsBeforeHidingRelease(t *testing.T) {
+	t.Parallel()
+
+	client := &fakeUpdater{release: signedRelease("2.0.0", "beta", "darwin", "arm64")}
+	state := &fakeUpdateState{}
+	coordinator := appupdates.New(appupdates.Dependencies{
+		Client: client, Provider: fakeProvider{}, Eligibility: enabledBuild(),
+		PublicKey: testPublicKey(), Platform: "darwin", Architecture: "arm64",
+		TempRoot: "/owned/temp/root", Scheduler: &fakeScheduler{}, UpdateState: state,
+		SkippedVersion: "1.9.0",
+	})
+	require.Equal(t, []string{"1.9.0"}, client.skippedVersions)
+	coordinator.RuntimeReady()
+	_, err := coordinator.Check(context.Background())
+	require.NoError(t, err)
+
+	snapshot, err := coordinator.Skip(context.Background(), "2.0.0")
+
+	require.NoError(t, err)
+	require.Equal(t, "2.0.0", state.skipped)
+	require.Equal(t, []string{"1.9.0", "2.0.0"}, client.skippedVersions)
+	require.Equal(t, appupdates.StatusCurrent, snapshot.Status)
+	require.Empty(t, snapshot.AvailableVersion)
+	_, err = coordinator.Download(context.Background(), "2.0.0")
+	require.ErrorContains(t, err, "pending release")
+}
+
+func TestSkippedVersionPersistenceFailureLeavesReleaseAvailable(t *testing.T) {
+	t.Parallel()
+
+	client := &fakeUpdater{release: signedRelease("2.0.0", "beta", "darwin", "arm64")}
+	state := &fakeUpdateState{skipErr: errors.New("state disk unavailable")}
+	coordinator := appupdates.New(appupdates.Dependencies{
+		Client: client, Provider: fakeProvider{}, Eligibility: enabledBuild(),
+		PublicKey: testPublicKey(), Platform: "darwin", Architecture: "arm64",
+		TempRoot: "/owned/temp/root", Scheduler: &fakeScheduler{}, UpdateState: state,
+	})
+	coordinator.RuntimeReady()
+	_, err := coordinator.Check(context.Background())
+	require.NoError(t, err)
+
+	snapshot, err := coordinator.Skip(context.Background(), "2.0.0")
+
+	require.ErrorContains(t, err, "state disk unavailable")
+	require.Equal(t, appupdates.StatusAvailable, snapshot.Status)
+	require.Equal(t, "state disk unavailable", snapshot.Error)
+	require.Empty(t, client.skippedVersions)
+}
+
+func TestFailedStartupReconciliationBlocksChecksAndUsesPersistedRecoveryIdentity(t *testing.T) {
+	t.Parallel()
+
+	client := &fakeUpdater{}
+	scheduler := &fakeScheduler{}
+	reconciled := updatestate.ReconcileResult{
+		Outcome:        updatestate.OutcomeFailed,
+		SourceVersion:  "2.0.0-beta.3",
+		TargetVersion:  "2.0.0",
+		Distribution:   updateidentity.DistributionMacBundle,
+		RecoveryTarget: updateidentity.RecoveryMacDownload,
+	}
+	coordinator := appupdates.New(appupdates.Dependencies{
+		Client: client, Provider: fakeProvider{}, Eligibility: enabledBuild(),
+		PublicKey: testPublicKey(), Platform: "darwin", Architecture: "arm64",
+		TempRoot: "/owned/temp/root", Scheduler: scheduler,
+		UpdateState: &fakeUpdateState{}, Reconciled: &reconciled,
+	})
+	coordinator.RuntimeReady()
+
+	snapshot, err := coordinator.Check(context.Background())
+
+	require.NoError(t, err)
+	require.Equal(t, appupdates.StatusApplyError, snapshot.Status)
+	require.Equal(t, "2.0.0-beta.3", snapshot.CurrentVersion)
+	require.Equal(t, "2.0.0", snapshot.AvailableVersion)
+	require.Equal(t, updateidentity.DistributionMacBundle, snapshot.Distribution)
+	require.Equal(t, updateidentity.RecoveryMacDownload, snapshot.RecoveryTarget)
+	require.False(t, snapshot.CanCheck)
+	require.False(t, snapshot.CanInstall)
+	require.Zero(t, client.checkCalls)
+	require.Zero(t, scheduler.startCalls)
 }
 
 func TestNewRejectsMalformedPublicKeyBeforeInitializingWails(t *testing.T) {
@@ -366,7 +574,7 @@ func TestDownloadAndRestartRequireExplicitValidTransitions(t *testing.T) {
 	coordinator := appupdates.New(appupdates.Dependencies{
 		Client: client, Provider: fakeProvider{}, Eligibility: enabledBuild(),
 		PublicKey: testPublicKey(), Platform: "darwin", Architecture: "arm64",
-		TempRoot: "/owned/temp/root", Scheduler: &fakeScheduler{},
+		TempRoot: "/owned/temp/root", Scheduler: &fakeScheduler{}, UpdateState: &fakeUpdateState{},
 	})
 	coordinator.RuntimeReady()
 
@@ -406,7 +614,7 @@ func TestConcurrentRestartStartsOneHelperFlow(t *testing.T) {
 	coordinator := appupdates.New(appupdates.Dependencies{
 		Client: client, Provider: fakeProvider{}, Eligibility: enabledBuild(),
 		PublicKey: testPublicKey(), Platform: "darwin", Architecture: "arm64",
-		TempRoot: "/owned/temp/root", Scheduler: &fakeScheduler{},
+		TempRoot: "/owned/temp/root", Scheduler: &fakeScheduler{}, UpdateState: &fakeUpdateState{},
 	})
 	coordinator.RuntimeReady()
 	_, err := coordinator.Check(context.Background())
@@ -512,6 +720,189 @@ func TestOperationFailuresMapToRetryableSemanticStates(t *testing.T) {
 		require.Empty(t, snapshot.Error)
 		require.Equal(t, 2, client.restartCalls)
 	})
+}
+
+func TestReadyRequiresPersistedPreparedOwnership(t *testing.T) {
+	t.Parallel()
+
+	client := &fakeUpdater{
+		release:        signedRelease("2.0.0", "beta", "darwin", "arm64"),
+		downloadedPath: "/owned/temp/root/wails-update-owned/Luxury Yacht.app",
+	}
+	state := &fakeUpdateState{}
+	coordinator := appupdates.New(appupdates.Dependencies{
+		Client: client, Provider: fakeProvider{}, Eligibility: enabledBuild(),
+		PublicKey: testPublicKey(), Platform: "darwin", Architecture: "arm64",
+		TempRoot: "/owned/temp/root", Scheduler: &fakeScheduler{}, UpdateState: state,
+	})
+	coordinator.RuntimeReady()
+	_, err := coordinator.Check(context.Background())
+	require.NoError(t, err)
+
+	snapshot, err := coordinator.Download(context.Background(), "2.0.0")
+
+	require.NoError(t, err)
+	require.Equal(t, appupdates.StatusReady, snapshot.Status)
+	require.Equal(t, &updatestate.PreparedUpdate{
+		TargetVersion:  "2.0.0",
+		StagingDir:     "/owned/temp/root/wails-update-owned",
+		RecoveryTarget: updateidentity.RecoveryMacDownload,
+	}, state.prepared)
+}
+
+func TestPreparedPersistenceFailureBlocksReadyAndDiscardsExactStaging(t *testing.T) {
+	t.Parallel()
+
+	client := &fakeUpdater{
+		release:        signedRelease("2.0.0", "beta", "darwin", "arm64"),
+		downloadedPath: "/owned/temp/root/wails-update-unrecorded/Luxury Yacht.app",
+	}
+	state := &fakeUpdateState{recordErr: errors.New("state disk unavailable")}
+	coordinator := appupdates.New(appupdates.Dependencies{
+		Client: client, Provider: fakeProvider{}, Eligibility: enabledBuild(),
+		PublicKey: testPublicKey(), Platform: "darwin", Architecture: "arm64",
+		TempRoot: "/owned/temp/root", Scheduler: &fakeScheduler{}, UpdateState: state,
+	})
+	coordinator.RuntimeReady()
+	_, err := coordinator.Check(context.Background())
+	require.NoError(t, err)
+
+	snapshot, err := coordinator.Download(context.Background(), "2.0.0")
+
+	require.ErrorContains(t, err, "state disk unavailable")
+	require.Equal(t, appupdates.StatusPrepareError, snapshot.Status)
+	require.Equal(t, []string{"/owned/temp/root/wails-update-unrecorded"}, state.discarded)
+}
+
+func TestRestartPersistsAttemptBeforeWailsAndRestoresPreparedOnSpawnFailure(t *testing.T) {
+	t.Parallel()
+
+	var operationOrder []string
+	client := &fakeUpdater{
+		release:    signedRelease("2.0.0", "beta", "darwin", "arm64"),
+		restartErr: errors.New("helper did not start"), operationOrder: &operationOrder,
+	}
+	state := &fakeUpdateState{operationOrder: &operationOrder}
+	coordinator := appupdates.New(appupdates.Dependencies{
+		Client: client, Provider: fakeProvider{}, Eligibility: enabledBuild(),
+		PublicKey: testPublicKey(), Platform: "darwin", Architecture: "arm64",
+		TempRoot: "/owned/temp/root", Scheduler: &fakeScheduler{}, UpdateState: state,
+	})
+	coordinator.RuntimeReady()
+	_, err := coordinator.Check(context.Background())
+	require.NoError(t, err)
+	_, err = coordinator.Download(context.Background(), "2.0.0")
+	require.NoError(t, err)
+
+	snapshot, err := coordinator.Restart(context.Background())
+
+	require.EqualError(t, err, "helper did not start")
+	require.Equal(t, []string{"persist-attempt", "wails-restart"}, operationOrder)
+	require.Equal(t, appupdates.StatusRestartError, snapshot.Status)
+	require.NotNil(t, state.prepared)
+	require.Nil(t, state.attempt)
+}
+
+func TestRestartPersistenceFailureNeverStartsWailsHelper(t *testing.T) {
+	t.Parallel()
+
+	client := &fakeUpdater{release: signedRelease("2.0.0", "beta", "darwin", "arm64")}
+	state := &fakeUpdateState{beginErr: errors.New("state disk unavailable")}
+	coordinator := appupdates.New(appupdates.Dependencies{
+		Client: client, Provider: fakeProvider{}, Eligibility: enabledBuild(),
+		PublicKey: testPublicKey(), Platform: "darwin", Architecture: "arm64",
+		TempRoot: "/owned/temp/root", Scheduler: &fakeScheduler{}, UpdateState: state,
+	})
+	coordinator.RuntimeReady()
+	_, err := coordinator.Check(context.Background())
+	require.NoError(t, err)
+	_, err = coordinator.Download(context.Background(), "2.0.0")
+	require.NoError(t, err)
+
+	snapshot, err := coordinator.Restart(context.Background())
+
+	require.ErrorContains(t, err, "state disk unavailable")
+	require.Equal(t, appupdates.StatusRestartError, snapshot.Status)
+	require.Zero(t, client.restartCalls)
+}
+
+func TestStopCleansPreparedDownloadUnlessRestartTransferredOwnership(t *testing.T) {
+	t.Parallel()
+
+	t.Run("normal shutdown", func(t *testing.T) {
+		client := &fakeUpdater{release: signedRelease("2.0.0", "beta", "darwin", "arm64")}
+		state := &fakeUpdateState{}
+		coordinator := appupdates.New(appupdates.Dependencies{
+			Client: client, Provider: fakeProvider{}, Eligibility: enabledBuild(),
+			PublicKey: testPublicKey(), Platform: "darwin", Architecture: "arm64",
+			TempRoot: "/owned/temp/root", Scheduler: &fakeScheduler{}, UpdateState: state,
+		})
+		coordinator.RuntimeReady()
+		_, err := coordinator.Check(context.Background())
+		require.NoError(t, err)
+		_, err = coordinator.Download(context.Background(), "2.0.0")
+		require.NoError(t, err)
+
+		coordinator.Stop()
+
+		require.Equal(t, 1, state.cleanupCalls)
+		require.Nil(t, state.prepared)
+	})
+
+	t.Run("restart handoff", func(t *testing.T) {
+		client := &fakeUpdater{release: signedRelease("2.0.0", "beta", "darwin", "arm64")}
+		state := &fakeUpdateState{}
+		coordinator := appupdates.New(appupdates.Dependencies{
+			Client: client, Provider: fakeProvider{}, Eligibility: enabledBuild(),
+			PublicKey: testPublicKey(), Platform: "darwin", Architecture: "arm64",
+			TempRoot: "/owned/temp/root", Scheduler: &fakeScheduler{}, UpdateState: state,
+		})
+		coordinator.RuntimeReady()
+		_, err := coordinator.Check(context.Background())
+		require.NoError(t, err)
+		_, err = coordinator.Download(context.Background(), "2.0.0")
+		require.NoError(t, err)
+		_, err = coordinator.Restart(context.Background())
+		require.NoError(t, err)
+
+		coordinator.Stop()
+
+		require.Zero(t, state.cleanupCalls)
+		require.NotNil(t, state.attempt)
+	})
+}
+
+func TestStopCleansPreparedStateRecordedAfterTheInitialShutdownCleanup(t *testing.T) {
+	t.Parallel()
+
+	client := &fakeUpdater{
+		release:         signedRelease("2.0.0", "beta", "darwin", "arm64"),
+		downloadStarted: make(chan struct{}),
+		allowDownload:   make(chan struct{}),
+	}
+	state := &fakeUpdateState{}
+	coordinator := appupdates.New(appupdates.Dependencies{
+		Client: client, Provider: fakeProvider{}, Eligibility: enabledBuild(),
+		PublicKey: testPublicKey(), Platform: "darwin", Architecture: "arm64",
+		TempRoot: "/owned/temp/root", Scheduler: &fakeScheduler{}, UpdateState: state,
+	})
+	coordinator.RuntimeReady()
+	_, err := coordinator.Check(context.Background())
+	require.NoError(t, err)
+
+	downloadDone := make(chan error, 1)
+	go func() {
+		_, downloadErr := coordinator.Download(context.Background(), "2.0.0")
+		downloadDone <- downloadErr
+	}()
+	<-client.downloadStarted
+
+	coordinator.Stop()
+	close(client.allowDownload)
+	<-downloadDone
+
+	require.Nil(t, state.prepared)
+	require.Equal(t, 2, state.cleanupCalls)
 }
 
 func TestCheckPreservesPendingAndReadyRelease(t *testing.T) {

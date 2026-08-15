@@ -21,6 +21,18 @@ import (
 	"github.com/wailsapp/wails/v3/pkg/application"
 )
 
+const applicationDownloadsURL = "https://luxury-yacht.app/#downloads"
+
+type expiredBetaPrompt struct {
+	Title         string
+	Message       string
+	WindowName    string
+	DownloadLabel string
+	QuitLabel     string
+	OnDownload    func()
+	OnQuit        func()
+}
+
 var newRefreshSubsystemWithServices = system.NewSubsystemWithServices
 
 const beforeCloseSelectionFlushTimeout = 2 * time.Second
@@ -127,17 +139,43 @@ func (a *App) configureStartupErrorCapture() {
 func (a *App) checkStartupBetaExpiry(windowName string) bool {
 	if err := a.checkBetaExpiry(); err != nil {
 		applog.ReportError(a.logger, err, "Beta version expired", logsources.App)
-		if a.wailsApplication != nil {
-			dialog := a.wailsApplication.Dialog.Error().SetTitle("Beta Version Expired").SetMessage(err.Error())
-			if window, windowErr := a.workspaceWindow(windowName); windowErr == nil {
-				dialog.AttachToWindow(window)
-			}
-			dialog.Show()
-			a.wailsApplication.Quit()
+		if a.showExpiredBetaPrompt != nil {
+			a.showExpiredBetaPrompt(expiredBetaPrompt{
+				Title:         "Beta Version Expired",
+				Message:       err.Error(),
+				WindowName:    windowName,
+				DownloadLabel: "Download Latest Version",
+				QuitLabel:     "Quit",
+				OnDownload: func() {
+					if a.openApplicationURL != nil {
+						if openErr := a.openApplicationURL(applicationDownloadsURL); openErr != nil {
+							a.logger.Warn(fmt.Sprintf("Could not open the latest-version download page: %v", openErr), logsources.App)
+						}
+					}
+					if a.quitApplication != nil {
+						a.quitApplication()
+					}
+				},
+				OnQuit: a.quitApplication,
+			})
 		}
 		return false
 	}
 	return true
+}
+
+func (a *App) presentExpiredBetaPrompt(prompt expiredBetaPrompt) {
+	if a == nil || a.wailsApplication == nil {
+		return
+	}
+	dialog := a.wailsApplication.Dialog.Question().SetTitle(prompt.Title).SetMessage(prompt.Message)
+	download := dialog.AddButton(prompt.DownloadLabel).SetAsDefault().OnClick(prompt.OnDownload)
+	quit := dialog.AddButton(prompt.QuitLabel).SetAsCancel().OnClick(prompt.OnQuit)
+	dialog.SetDefaultButton(download).SetCancelButton(quit)
+	if window, err := a.workspaceWindow(prompt.WindowName); err == nil {
+		dialog.AttachToWindow(window)
+	}
+	dialog.Show()
 }
 
 func (a *App) configureStartupLogging() {

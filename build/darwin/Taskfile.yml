@@ -127,6 +127,20 @@ tasks:
       DMG_WINDOW_HEIGHT: '{{.DMG_WINDOW_HEIGHT | default "380"}}'
       DMG_FILES: '{{.DMG_FILES | default ""}}'
 
+  create:updater-archive:
+    summary: Archives the already-signed app bundle for the Wails updater
+    platforms: [darwin]
+    preconditions:
+      - sh: 'test -d "{{.BIN_DIR}}/{{.APP_NAME}}.app"'
+        msg: "The signed app bundle must exist before creating an updater archive."
+    cmds:
+      - >-
+        ditto -c -k --keepParent
+        "{{.BIN_DIR}}/{{.APP_NAME}}.app"
+        "{{.BIN_DIR}}/$(GOOS=darwin GOARCH={{.ARCH}} RELEASE_FORMAT=updater go run ./cmd/project release-artifact-name)"
+    vars:
+      ARCH: '{{.ARCH | default ARCH}}'
+
 
   create:app:bundle:
     summary: Creates an `.app` bundle

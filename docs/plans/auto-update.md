@@ -1,12 +1,20 @@
 # Automatic Application Updates
 
-Status: implementation in progress. Phases 1 and 2 (release identity,
-installation eligibility, process temp-root ownership, and the coordinator
-state machine) are implemented. Phase 3 recovery persistence and Phase 4 shell
-coverage remain in progress. The project owner has resolved every design
-decision gate below. Windows Authenticode certificate procurement is in
-progress; it does not block the shared foundation or macOS stage, but it remains
-a Windows enablement and overall-completion dependency.
+Status: implementation in progress. Phases 1 through 4 are implemented. The
+Phase 5 macOS pipeline embeds the approved public key, produces and verifies one
+signed `updater.json`, uploads it beside the ordinary release assets, and keeps
+the GitHub Release in draft state until every upload succeeds. The application
+discovers releases through GitHub and loads that release's `updater.json` before
+accepting an update. Before Stage 1 rollout, the macOS beta smoke and recovery
+matrix must pass. The remaining Phase 6 durable documentation/release cleanup is
+pending. Windows Authenticode certificate procurement is in progress; it does
+not block the macOS stage, but it remains a Windows enablement and overall-
+completion dependency (`backend/app_update_provider.go`;
+`cmd/project/updater_release.go`; `cmd/project/release.go`;
+`.github/workflows/release.yml`).
+
+Local validation: `mise exec -- wails3 task qc:prerelease` passed on 2026-08-14.
+The live installed-app smoke matrix remains rollout evidence, not a local test.
 
 This plan supersedes the notification-only decision in
 `docs/plans/wails-v3-follow-up-tracks.md:3-23` for staged implementation. The
@@ -89,20 +97,13 @@ Owner decisions recorded before implementation:
   initiative cannot be declared complete in that state.
 - [x] **Skip This Version** survives application restarts as backend-owned update
   state that is not part of portable settings export.
-- [x] Use the separately deployed `luxury-yacht/site` repository for
-  fixed channel manifests. That cross-repository publication step and its
-  server cache policy must be implemented before enabling production checks.
-  The site-update job must prove that `RELEASES_REPO_TOKEN` has Contents write
-  and Actions read access to the private site repository before its first
-  candidate commit. GitHub requires Actions read
-  permission to list private-repository workflow runs; see
-  [workflow-run API permissions](https://docs.github.com/en/rest/actions/workflow-runs).
-  The existing release job invokes a marketing-site version update with a
-  repository token, but that helper intentionally returns without publishing
-  beta versions. Channel-manifest publication must therefore be a separate
-  release helper that handles both stable and beta; it must not reuse or inherit
-  the beta no-op from `publishSiteVersion` (`cmd/project/site.go:11-32`;
-  `.github/workflows/release.yml:196-212`).
+- [x] Publish exactly one signed `updater.json` as an asset of each GitHub
+  Release, beside the artifacts it authenticates. GitHub Release discovery is
+  the channel pointer: stable releases are ordinary releases and beta releases
+  are prereleases. Build the release as a draft, upload all assets, then publish
+  it as the final rollout step. Do not add a site, Pages, raw-branch, or separate
+  mutable-manifest dependency (`backend/app_update_provider.go`;
+  `cmd/project/release.go`; `.github/workflows/release.yml`).
 
 ## Current state
 
@@ -116,36 +117,50 @@ temporary-directory flow (`go.mod:15`; pinned dependency sources
 `internal/commands/updater_tool.go`, `pkg/updater/window.go`, and
 `pkg/updater/helper.go`).
 
-The existing application updater is notification-only:
+The application-side updater foundation is implemented:
 
-- `backend/app_update.go:22-178` calls the GitHub latest-release API, performs a
-  custom version comparison, caches `UpdateInfo`, and emits `app-update`;
-- `backend/app_version.go:60-170` attaches that cached state to `GetAppInfo`;
-- `backend/app_lifecycle.go:42-65` starts one update check after the first
-  runtime-ready workspace window;
-- `frontend/src/ui/status/UpdateStatus.tsx:55-149` reads app info, subscribes to
-  `app-update`, and opens the downloads page from the header chip; and
-- `frontend/src/ui/modals/AboutModal.tsx:80-105` renders the same availability
-  state in About.
+- `backend/app_update_provider.go` wraps Wails' GitHub provider with exact
+  updater-payload matching, fetches the selected release's sibling
+  `updater.json`, and attaches its signed verification material only after the
+  manifest matches the selected GitHub asset;
+- `backend/app_updates_config.go:47-113` resolves installation eligibility,
+  reconciles application-owned update state, and composes the Wails updater
+  before the application starts;
+- `backend/internal/appupdates/coordinator.go:21-179` owns typed status,
+  capability gates, persisted skip hydration, and fail-closed initialization;
+- `internal/updatestate/state.go:123-230,368-598` owns validated durable
+  prepared, attempt, cleanup, and next-launch reconciliation state; and
+- `frontend/src/ui/status/UpdateStatus.tsx:63-159` and
+  `frontend/src/ui/modals/AboutModal.tsx:100-224` project that shared state into
+  the header chip and About actions.
 
-The current client calls GitHub's unauthenticated `/releases/latest` endpoint
-(`backend/app_update.go:22-24,177-214`). GitHub documents a 60-request-per-hour,
-per-originating-IP limit for unauthenticated REST requests; see
-[GitHub REST API rate limits](https://docs.github.com/en/rest/using-the-rest-api/rate-limits-for-the-rest-api#primary-rate-limit-for-unauthenticated-users).
-The static endpoint provider removes that GitHub API dependency from client
-checks.
+The legacy unauthenticated GitHub latest-release client and custom numeric
+version comparator have been removed. The approved Ed25519 public key is
+embedded from `backend/updater_public_key.pem`; its SHA-256 DER fingerprint is
+`5fb9230f10b42312008e6caa8c782e195a170970334b41d89b1c90e43820f15b`
+(`backend/app_updates_config.go:20-21`; `backend/app_updates_test.go:26-39`).
+The private key remains outside the repository in the protected
+`UPDATER_PRIVATE_KEY_PEM` Actions secret. The release helper uploads assets to a
+draft and publishes the release only after `gh release create` has returned
+success for the complete asset set (`cmd/project/release.go`).
 
-The current release workflow publishes installer or package artifacts, not the
-single replaceable targets accepted by the Wails updater:
+The macOS release build now emits and publishes the first single replaceable
+updater target:
 
-- macOS publishes signed and notarized DMGs
-  (`.github/workflows/release.yml:104-145`);
+- macOS publishes the existing DMGs plus per-architecture signed/notarized app
+  ZIPs, validates the source bundle, then validates the Wails-extracted bundle
+  through the same code-signing, Gatekeeper, and stapler checks
+  (`.github/workflows/release.yml:62-68,118-157`;
+  `build/darwin/Taskfile.yml:130-142`);
 - Windows publishes unsigned NSIS installers
-  (`.github/workflows/release.yml:156-159`);
+  (`.github/workflows/release.yml:168-171`);
 - Linux publishes DEB and RPM packages
-  (`.github/workflows/release.yml:147-154`); and
-- the release artifact naming contract encodes those formats in
-  `cmd/project/project_config.go:153-208`.
+  (`.github/workflows/release.yml:159-166`); and
+- the release helper selects an explicit ordered target set, signs and verifies
+  one release-scoped `updater.json`, materializes and removes the protected key
+  in a scoped CI step, and publishes it with the installers and updater payloads
+  in one draft-then-public GitHub Release (`cmd/project/updater_release.go`;
+  `cmd/project/release.go`; `.github/workflows/release.yml`).
 
 Wails accepts a single binary, a ZIP with exactly one top-level entry, or a
 single-entry tar archive. It does not install DMG, PKG, MSI, DEB, RPM, or NSIS
@@ -329,14 +344,13 @@ attempt distribution rather than reusing an eligibility guess.
 ### Skip and dismiss
 
 The pinned updater keeps `SkipVersion` only in process memory
-(`pkg/updater/window_lifecycle.go:153-186`). If restart-persistent skipping is
-approved:
+(`pkg/updater/window_lifecycle.go:153-186`). The implemented restart-persistent
+contract is:
 
 - persist one canonical, unprefixed `skippedVersion` value as backend-owned
   application update state. It must use the exact normalized form returned as
-  endpoint `Release.Version` because Wails skip matching is string equality
-  (`pkg/updater/providers/endpoint/endpoint.go:177-179`;
-  `pkg/updater/window_lifecycle.go:178-186`);
+  GitHub provider `Release.Version` because Wails skip matching is string
+  equality (`pkg/updater/window_lifecycle.go:178-186`);
 - hydrate Wails with that value before the first check;
 - expose **Skip This Version** in About and update persistence before closing
   the update section;
@@ -371,57 +385,79 @@ or restart states and that the manual recovery action remains available.
 
 ## Provider, channels, and version identity
 
-Use `github.com/wailsapp/wails/v3/pkg/updater/providers/endpoint`, not the
-GitHub Releases provider, for production installation. The GitHub provider's
-`ChecksumAsset` supplies digest integrity but no application-pinned signature,
-and its beta.8 default asset matcher requires the runtime platform string
-`darwin` while the current macOS assets are named with `macos`
-(`pkg/updater/providers/github/github.go:391-421`;
-`cmd/project/project_config.go:182-187`). The endpoint manifest carries the
-per-artifact digest and `ed25519ph` signature authenticated by the public key
-embedded in the application. See
+Use an application-owned adapter around
+`github.com/wailsapp/wails/v3/pkg/updater/providers/github`. The Wails provider
+owns public GitHub release discovery and artifact download. The adapter supplies
+the two contracts beta.8's provider does not combine: exact Luxury Yacht updater
+payload selection and application-pinned Ed25519 verification
+(`backend/app_update_provider.go`; pinned
+`pkg/updater/providers/github/github.go`).
+
+Every GitHub Release contains exactly one asset named `updater.json`. It is a
+normal Wails Update Manifest containing the release version and channel plus one
+entry per enabled platform/architecture. Each entry names that release's exact
+updater payload URL, filename, size, SHA-512 digest, and `ed25519ph` signature.
+The same release also contains the payloads and the ordinary manual installers
+(`cmd/project/updater_release.go`; `cmd/project/release.go`).
+
+For example, a macOS-only stage publishes one file shaped like this (digest and
+signature shortened here only for readability):
+
+```json
+{
+  "schemaVersion": 1,
+  "version": "2.0.0-beta.4",
+  "channel": "beta",
+  "artifacts": [
+    {
+      "url": "https://github.com/luxury-yacht/app/releases/download/v2.0.0-beta.4/luxury-yacht-v2.0.0-beta.4-darwin-arm64.zip",
+      "filename": "luxury-yacht-v2.0.0-beta.4-darwin-arm64.zip",
+      "filetype": "zip",
+      "size": 48123904,
+      "platform": "darwin",
+      "arch": "arm64",
+      "digestAlgo": "sha512",
+      "digest": "<base64 SHA-512 digest>",
+      "signatureAlgo": "ed25519ph",
+      "signature": "<base64 Ed25519 signature>"
+    }
+  ]
+}
+```
+
+The production macOS manifest has both `arm64` and `amd64` entries. Windows and
+portable Linux entries join the same array when those rollout stages are enabled.
+
+For a check, the adapter:
+
+1. asks the Wails GitHub provider for the applicable published release;
+2. uses an exact filename matcher that accepts only the replaceable payload
+   format for the requesting platform and architecture;
+3. derives the sibling `updater.json` URL from the selected asset URL;
+4. requires schema version 1, the exact GitHub release version and channel, and
+   exactly one entry for the requesting platform and architecture;
+5. requires that entry's URL, filename, and size to match the selected GitHub
+   asset and its algorithms to be `sha512` and `ed25519ph`; and
+6. attaches the decoded digest and signature to the Wails release so the normal
+   Wails download/install path authenticates the downloaded bytes against the
+   embedded public key.
+
+Any absent, oversized, malformed, ambiguous, mismatched, or unverifiable
+manifest fails the check closed. The adapter never treats a DMG, NSIS installer,
+DEB, or RPM as a replaceable updater payload
+(`backend/app_update_provider.go`; `backend/app_update_provider_test.go`). See
 [cryptographic verification](https://v3.wails.io/guides/updater/#cryptographic-verification).
-
-Create two fixed manifests through that existing `luxury-yacht/site` deployment:
-
-- `https://luxury-yacht.app/updates/stable.json`
-- `https://luxury-yacht.app/updates/beta.json`
-
-Two-phase publication first writes the immutable candidate URL
-`https://luxury-yacht.app/updates/candidates/{channel}/{version}.json`; clients
-continue to read only the fixed channel URLs. Candidate files are retained for
-audit and rollback evidence and never act as client rollout pointers.
-
-Configure one endpoint URL,
-`https://luxury-yacht.app/updates/{{channel}}.json`, and set
-`endpoint.Config.Channel` to the build's normalized `stable` or `beta` channel.
-Do not rely on `updater.Config.Channel`: beta.8 does not add it to
-`CheckRequest`, while the endpoint provider owns placeholder substitution and
-client-side channel enforcement (`pkg/updater/updater.go:212-216`;
-`pkg/updater/types.go:94-101`;
-`pkg/updater/providers/endpoint/endpoint.go:38-55,148-150,270-309`).
-
-The site implementation must add the static update files to its build output.
-Serve the fixed `stable.json` and `beta.json` pointers with
-`Cache-Control: no-store`; their bare URLs are the client contract and must not
-depend on request cache directives or query-string cache busting. Versioned
-candidate manifests may use `Cache-Control: public, max-age=31536000, immutable`.
-The exact URLs and response headers are release-contract constants covered by
-tests. Versioned update artifacts remain assets of their ordinary immutable
-GitHub release tag; each manifest contains absolute URLs to those versioned
-artifacts.
 
 Channel rules:
 
-- stable builds read only the stable manifest;
-- beta builds read the beta manifest;
-- a beta release advances only the beta manifest;
-- a stable release generates two manifests over the same stable version and
-  artifacts: one declaring channel `stable` for `stable.json`, and one declaring
-  channel `beta` for `beta.json`, so beta users can converge without failing the
-  endpoint provider's channel filter; and
-- neither channel pointer moves until the versioned release and every updater
-  artifact have been published and verified.
+- stable builds use GitHub's latest ordinary release endpoint, which excludes
+  prereleases;
+- beta builds use GitHub's release-list endpoint, which includes ordinary and
+  prerelease releases, so a newer stable release can supersede a beta;
+- the manifest channel must match the GitHub release's prerelease flag: `beta`
+  for a prerelease and `stable` otherwise; and
+- publishing the complete GitHub Release is the only rollout pointer. There is
+  no separately mutable channel document.
 
 `build/config.yml:15` currently stores a `v`-prefixed version. Add one shared,
 tested normalization boundary that passes Wails the same semantic version
@@ -429,14 +465,14 @@ without the leading `v`. `cmd/project/build_metadata.go:57-68` copies the
 configured version verbatim into the embedded manifest, and
 `backend/app_version.go:42-58` copies that value into `backend.Version`; the new
 boundary normalizes that authoritative value exactly once for updater config,
-channel manifests, skip persistence, and comparisons. Do not add a second
+release manifests, skip persistence, and comparisons. Do not add a second
 version source or restore ldflag version injection.
 
 Name and test the intentional comparison change: the legacy comparator drops
 prerelease suffixes at `backend/app_update.go:253-263`, so
-`2.0.0-beta.1` and `2.0.0` compare equal. The endpoint provider delegates its
+`2.0.0-beta.1` and `2.0.0` compare equal. The GitHub provider delegates its
 newer-version decision to Wails' SemVer wrapper
-(`pkg/updater/providers/endpoint/endpoint.go:148-152`;
+(`pkg/updater/providers/github/github.go`;
 `pkg/updater/internal/semver/semver.go:35-49`) and must offer the stable release
 as newer. Consumer-parity tests must lock that behavior before the legacy
 comparator is removed.
@@ -603,104 +639,52 @@ For each release, the release job must:
    list containing exactly one supported updater target for every platform and
    architecture enabled in the current delivery stage. Pass those individual
    paths to `wails3 updater manifest`; never pass a release directory or glob.
-   The Wails CLI's directory collection includes DMG, DEB, RPM, and EXE files
-   and the endpoint provider chooses the first matching manifest entry
-   (`internal/commands/updater_tool.go:589-633,645-710`;
-   `pkg/updater/providers/endpoint/endpoint.go:350-369`).
+   The Wails CLI's directory collection accepts multiple installer/package
+   formats that are not valid targets for this application's replacement policy
+   (`internal/commands/updater_tool.go:589-633,645-710`).
 3. Reject DMG, NSIS installer EXE, DEB, RPM, AppImage, MSI, PKG, checksum,
-   signature-sidecar, key, documentation, and unknown extensions as updater
+   detached-signature, key, documentation, and unknown extensions as updater
    install targets. Assert that every accepted target is a ZIP, tar archive, or
    bare executable intended for Wails replacement.
-4. Run `wails3 updater manifest` with the canonical release version, the channel
-   being served, notes, private key, absolute immutable versioned-release URL
-   prefix, and the explicit updater file list. A stable release runs this step
-   once with channel `stable` and once with channel `beta`.
+4. Run `wails3 updater manifest` once with the canonical release version,
+   channel derived from that version, notes, private key, the absolute
+   versioned GitHub Release URL prefix, and the explicit updater file list. The
+   output name is exactly `updater.json`.
 5. Run `wails3 updater verify` with the embedded public key against every local
-   artifact in each generated manifest.
-6. Publish the ordinary immutable versioned GitHub release and all of its assets.
-   Never clobber or re-upload an artifact URL already referenced by a published
-   channel manifest.
-7. Download every versioned artifact URL and confirm its bytes match the local
-   file that passed verification.
-8. Before writing the site repository, use `RELEASES_REPO_TOKEN` to query its
-   metadata, require `permissions.push: true`, and list runs for its deployment
-   workflow. Fail before the first candidate commit unless the same token proves
-   Contents write and Actions read access. Then use a dedicated
-   `publishChannelManifest` helper to commit a versioned candidate manifest to
-   `luxury-yacht/site` without changing the fixed live-channel file. The
-   marketing-only `publishSiteVersion` remains separate and may continue to
-   skip beta versions (`cmd/project/site.go:22-26`). Capture the exact site
-   commit SHA.
-9. Wait for the site deployment workflow for that exact candidate commit to
-   appear and complete successfully, polling every 10 seconds for at most 10
-   minutes. Then poll the candidate's immutable, query-free public URL every 5
-   seconds for at most 5 minutes. Assert the exact canonical version and channel,
-   the candidate cache policy, and every referenced artifact with the embedded
-   public key. A failed or timed-out candidate deploy/readback fails publication
-   while leaving the live-channel file unchanged.
-10. In a second site commit, change the fixed live-channel file to the verified
-    candidate. Wait for deployment of that exact commit using the same bounded
-    polling, then poll the bare fixed URL without query parameters every 5
-    seconds for at most 5 minutes. Report `advanced` only when that client URL
-    serves the expected version and channel with `Cache-Control: no-store` and
-    no positive `Age` value.
-11. If live readback fails or times out, conditionally restore the preceding
-    signed manifest only when the live file still names this job's candidate,
-    then wait for the rollback commit's exact deployment and poll the same bare
-    fixed URL and response headers. Report the final outcome as `advanced` only
-    when the new manifest is publicly verified, `rolled back` only when the
-    prior manifest is publicly verified, or `indeterminate` otherwise. Both
-    rollback and indeterminate outcomes fail the release workflow;
-    `indeterminate` additionally blocks later channel publication until an
-    operator reconciles the public pointer.
+   artifact in `updater.json`.
+6. Pass `updater.json`, every updater payload, and every manual installer to
+   `gh release create --draft`. The command must return success before the
+   release may become public.
+7. Publish that completed draft with `gh release edit <tag> --draft=false` as
+   the final rollout operation. If draft creation or asset upload fails, leave
+   the release non-public. If the final edit fails, leave the complete draft for
+   inspection and recovery. A rerun must not silently publish or overwrite an
+   existing release; the operator inspects and removes a failed draft before
+   retrying (`cmd/project/release.go`; `cmd/project/release_test.go`).
 
-The channel manifest is the rollout pointer. Publishing it last prevents a
-client from observing an update whose artifact is not available yet. A release
-job must fail if any platform/architecture artifact required by the current
-delivery stage is absent, duplicated, ambiguously named, unsupported, unsigned,
-unverifiable, or served with stale channel contents. Final completion requires
-the manifests and release contract to cover macOS, Windows, and portable Linux
-for every release architecture.
+The GitHub Release is the sole rollout unit. A release job fails before public
+visibility if any platform/architecture artifact required by the current stage
+is absent, duplicated, ambiguously named, unsupported, unsigned, or locally
+unverifiable. The client performs the same digest/signature verification after
+download, so a bad or replaced remote payload fails closed. Final completion
+requires each release's `updater.json` and asset set to cover macOS, Windows,
+and portable Linux for every release architecture.
 
-Channel publication is a single-writer operation. The site-update job owns
-candidate publication, exact-commit deployment waiting, live-pointer
-advancement, readback, and conditional rollback. Put that job, not the preceding
-release job or entire workflow, in one global `update-publication` concurrency
-group with `cancel-in-progress: false`; this prevents beta releases and stable
-releases that also advance beta from racing while allowing the immutable GitHub
-release to publish first.
-
-GitHub's default concurrency queue retains only the newest pending job, so an
-older site-update job cancelled before it starts is recorded as
-`superseded/not-attempted`: its GitHub release remains published, but that job
-made no channel mutation. It is not reported as `rolled back` or
-`indeterminate`. See
-[GitHub Actions concurrency](https://docs.github.com/en/actions/how-tos/write-workflows/choose-when-workflows-run/control-workflow-concurrency).
-
-The ordinary GitHub release may already be public when this job fails, so
-workflow status must distinguish release publication from channel rollout
-instead of claiming that a timeout means clients could not have observed the
-new pointer. The current app workflow already places site work in a separate
-post-release job
-(`.github/workflows/release.yml:167-212`), while `release:site` currently stops
-after pushing the site repository (`cmd/project/site.go:69-72`).
-
-The current site deployment mechanism is GitHub Actions, not an external hosting
-provider: a push to `main` runs the site's `Deploy` workflow, builds the static
-site, and uses `rsync --delete` to publish it. Workflow runs expose the pushed
-commit as `head_sha`, which is the identity polled above. See the site
-[deployment workflow](https://github.com/luxury-yacht/site/blob/main/.github/workflows/deploy.yaml).
+The existing `update-site` job remains a marketing-version update for stable
+releases only. It runs after the GitHub Release and is not read by updater
+clients; its failure cannot expose an incomplete updater asset set
+(`cmd/project/site.go`; `.github/workflows/release.yml`).
 
 ### Key rotation
 
 Wails `updater.Config` accepts one active public key. Normal rotation therefore
 requires a transition release signed by the old key that embeds the new public
-key, followed by a deliberate adoption window before CI begins signing channel
+key, followed by a deliberate adoption window before CI begins signing release
 manifests with the new key. Clients that miss the transition cannot trust the
 new key and need a manual installer recovery path.
 
-If the private key is suspected compromised, stop advancing both channel
-manifests immediately. Do not attempt an in-band rotation signed only by the
+If the private key is suspected compromised, stop publishing updater releases
+immediately. Do not attempt an in-band rotation signed only by the
 suspect key. Publish incident guidance and require a manually authenticated
 installer unless a previously shipped independent recovery trust path exists.
 
@@ -829,15 +813,14 @@ both outcomes. This is startup rollback, not general product rollback.
 
 Release rollback rules:
 
-- before client installation, use the publication protocol's conditional
-  rollback to restore the channel pointer to the prior signed manifest and
-  confirm it by exact-commit deployment plus public readback;
-- never describe a failed or timed-out readback as proof that rollout did not
-  advance; record `indeterminate` and block later publication until the public
-  pointer is reconciled;
+- before publication, delete or repair a failed draft and rerun the complete
+  build/sign/verify/upload sequence; drafts are not updater-visible;
+- after publication, do not replace `updater.json` or any payload in place and
+  do not delete the bad release as a substitute for a corrective rollout;
 - never use the updater to downgrade a client that already installed the bad
   version;
-- ship a higher corrective version for post-launch defects; and
+- mark a defective release clearly, stop promoting it manually if necessary,
+  and ship a higher signed corrective version; and
 - keep manual installers available for trust-root, permission, or platform-
   signing recovery.
 
@@ -847,10 +830,11 @@ Release rollback rules:
 
 The producer is the release pipeline plus the `cmd/project` release-contract
 helpers. It owns versioned updater artifact names, platform/architecture
-coverage, signatures, manifest contents, channel publication, and publication
-ordering.
+coverage, signatures, release-scoped manifest contents, draft creation, and
+final release publication.
 
-The Wails endpoint provider consumes the manifest. A process-owned backend
+The application-owned GitHub provider adapter consumes the release and its
+manifest. A process-owned backend
 coordinator consumes Wails updater events and owns the application update
 snapshot. `GetAppInfo`, the `app-update` event, header status, About, native
 menus, and any command-palette entry consume that snapshot or its commands.
@@ -923,7 +907,7 @@ before observing the new focused test fail for the expected reason.
 Implementation progress:
 
 - [x] Phase 1 — release identity and eligibility. The shared boundary, platform
-  probes, endpoint-channel adapter, and explicit updater artifact naming and
+  probes, GitHub release-manifest adapter, and explicit updater artifact naming and
   selection live in `internal/updateidentity`,
   `backend/app_update_provider.go`, and `cmd/project`; their focused tests cover
   the matrix below.
@@ -931,9 +915,20 @@ Implementation progress:
   runtime-ready scheduler, explicit consent transitions, semantic broadcasts,
   owned temp-root setup/sweep primitives, and cancellation boundary live in
   `backend/internal/appupdates`, `internal/updatetemp`, and root composition.
-- [ ] Phase 3 — app-state migration.
-- [ ] Phase 4 — shell actions.
-- [ ] Phase 5 — publishing pipeline.
+- [x] Phase 3 — app-state migration. The semantic DTO, generated bindings,
+  durable skip/prepared/attempt state, bounded helper diagnostics, startup
+  reconciliation, and exact-path cleanup are implemented in `backend`,
+  `backend/internal/appupdates`, and `internal/updatestate`.
+- [x] Phase 4 — shell actions. Header/About/menu/command-palette actions remain
+  presentation over the process coordinator; About now includes persisted
+  **Skip This Version**, bounded progress, apply-failure recovery, and the
+  expired-beta native download-or-quit prompt.
+- [ ] Phase 5 — publishing pipeline. The macOS signed/notarized updater ZIP,
+  Wails extraction conformance check, explicit ordered artifact selector, local
+  Wails manifest sign/verify helper, public-key embedding, scoped CI key
+  materialization, release-scoped `updater.json`, and draft-then-publish GitHub
+  Release boundary are implemented. The live macOS rollout evidence remains
+  pending.
 - [ ] Phase 6 — affected-path cleanup.
 
 ### Phase 1: release identity and eligibility
@@ -941,8 +936,8 @@ Implementation progress:
 Add failing tests for:
 
 - canonical version normalization;
-- `endpoint.Config.Channel` selection and stable/beta manifest labelling,
-  including a stable version served by a manifest declaring channel `beta`;
+- stable/prerelease GitHub discovery and manifest labelling, including beta
+  builds converging to a newer stable release;
 - dev and server suppression;
 - expired-beta notification-only recovery;
 - supported platform/architecture/distribution combinations;
@@ -996,7 +991,7 @@ Add failing tests for:
 - no-update, available, downloading, verifying, installing, ready, and error
   projection;
 - invalid early download/restart rejection; and
-- allowed check/download/restart transitions that reach ready state.
+- allowed check/download/skip/restart transitions that reach ready state.
 
 ### Phase 3: app-state migration
 
@@ -1010,7 +1005,7 @@ Add failing tests proving:
 - release notes, version, publication time, progress, eligibility, and errors
   map correctly;
 - dev and unsupported builds report a non-installable state without errors;
-- skipped-version persistence uses the endpoint's canonical unprefixed form and
+- skipped-version persistence uses the provider's canonical unprefixed form and
   hydrates and updates atomically if approved;
 - the intentional prerelease-to-stable SemVer behavior differs from the legacy
   numeric comparator; and
@@ -1027,8 +1022,8 @@ Add failing tests proving:
   paths are never recursively deleted, and updater-prefixed paths in the shared
   operating-system temp directory remain untouched.
 
-Only after these pass, remove the custom GitHub release fetch and numeric
-version parser.
+These tests now pass, and the custom GitHub release fetch and numeric version
+parser have been removed.
 
 ### Phase 4: shell actions
 
@@ -1067,46 +1062,40 @@ not theme, replace, or open the Wails built-in window in this implementation.
 ### Phase 5: publishing pipeline
 
 Add failing `cmd/project` contract tests for updater artifact names, supported
-extensions, platform/architecture completeness, manifest URLs, channel
-selection and manifest labels, explicit-file-only input, duplicate rejection,
-macOS extracted-bundle validation, Windows raw-executable selection, Linux
-portable-payload selection, platform recovery targets, Windows migration-page
-availability, public-manifest readback, and publication ordering. The macOS
+extensions, platform/architecture completeness, release-scoped manifest URLs,
+stable/prerelease selection and manifest labels, explicit-file-only input,
+duplicate rejection, macOS extracted-bundle validation, Windows raw-executable
+selection, Linux portable-payload selection, platform recovery targets, Windows
+migration-page availability, and draft-before-publication ordering. The macOS
 test must enter extraction through `updater.New`, `Check`, and
 `DownloadAndInstall` and validate `DownloadedPath`, not invoke a second archive
 extractor directly.
 
-Add workflow/helper tests proving that beta publication does not pass through
-the marketing helper's beta no-op; candidate publication leaves the fixed live
-file unchanged; the exact candidate and live site commit deployments are
-awaited; the same site token proves `permissions.push` and can list deployment
-runs before any write; candidate reads use their immutable query-free URLs; live
-and rollback reads use the bare fixed URLs and enforce `Cache-Control: no-store`
-plus no positive `Age`; all polling is bounded; manifest publication is globally
-serialized; a cancelled pending job is `superseded/not-attempted`; rollback is
-conditional on the expected live candidate; and every post-mutation
-timeout/failure resolves to `rolled back` or `indeterminate` rather than making
-an unsupported no-rollout claim.
+Add provider/helper tests proving exact updater-payload selection, same-release
+`updater.json` resolution, strict version/channel/URL/filename/size matching,
+base64 digest/signature length checks, local Wails verification, one manifest
+asset in the release set, draft creation before public visibility, and a failed
+final publish leaving the draft non-public.
 
-Then update the platform tasks and release workflow to build, platform-sign,
-archive, validate the extracted payload, upload, manifest-sign, verify, publish
-candidate then live channel metadata through `luxury-yacht/site`, wait for each
-exact deployment, read the public result back, and conditionally roll back when
-advancement cannot be verified. Retain the existing manual installation
+Then update each platform task and the release workflow to build,
+platform-sign, archive, validate the extracted payload, manifest-sign, verify,
+upload all manual and updater assets to a draft GitHub Release, and publish the
+complete draft in one final step. Retain the existing manual installation
 artifacts.
 
 ### Phase 6: affected-path cleanup
 
-- delete the legacy GitHub update client and custom comparison helpers;
-- delete or rewrite tests that assert the retired release-page-only behavior;
-- remove obsolete DTO fields only after all frontend consumers move;
-- update `docs/architecture/application-lifecycle.md` with the durable process
+- [x] delete the legacy GitHub update client and custom comparison helpers;
+- [x] delete or rewrite tests that assert the retired release-page-only
+  behavior;
+- [x] remove obsolete DTO fields after all frontend consumers move;
+- [ ] update `docs/architecture/application-lifecycle.md` with the durable process
   lifecycle contract;
-- create `docs/workflows/application-updates.md` for the durable publishing,
+- [ ] create `docs/workflows/application-updates.md` for the durable publishing,
   platform eligibility, helper-failure recovery, rollback, and key-handling
   workflow;
-- add the user-facing change to `docs/release/pending.md`; and
-- retire the completed updater checklist in
+- [x] add the user-facing change to `docs/release/pending.md`; and
+- [ ] retire the completed updater checklist in
   `docs/plans/wails-v3-follow-up-tracks.md` only after the macOS, Windows, and
   portable Linux completion stages are all accepted.
 
@@ -1127,14 +1116,11 @@ artifacts.
   environments, and refusal to scan shared-temp or non-updater paths.
 - Run `wails3 updater verify` against a tampered artifact and wrong public key
   and prove both fail closed.
-- With the same site token used for publication, prove Contents write and
-  Actions read before mutation. For both channels, wait for the exact candidate
-  and live site commit deployments, read candidates through their immutable
-  query-free URLs, and read live/rollback state through the same bare fixed URLs
-  clients use. Verify version, channel, required cache headers, and every
-  downloaded artifact. Exercise successful rollback, a superseded pending job,
-  and an indeterminate deployment/readback result without allowing a later
-  publication to race it.
+- Generate a local release set, prove `updater.json` and every required payload
+  are selected, verify the manifest locally with the embedded public key, and
+  inspect the captured GitHub CLI calls to prove draft creation precedes the
+  final publish edit. Exercise upload and final-publish failure without making
+  an incomplete release public.
 - Run the full `mise exec -- wails3 task qc:prerelease` gate on the latest
   worktree, then inspect formatting changes.
 
@@ -1169,7 +1155,7 @@ initiative complete, rerun the combined matrix across every target:
   from a valid marker.
 
 Exercise offline, no-update, missing-artifact, wrong-architecture, bad digest,
-bad signature, extraction failure, unsupported artifact, stale public manifest,
+bad signature, extraction failure, unsupported artifact, mismatched release manifest,
 unwritable target, the bounded two-second quit flush, normalized skipped version,
 expired-beta manual recovery, closing and reopening About during every active
 state, restart-attempt persistence failure, successful restart, restored-source
@@ -1183,28 +1169,29 @@ exactly one process scheduler, download, helper, persistence flush, and relaunch
 
 ### Rollout
 
-- [ ] **Stage 0 — shared foundation:** with the owner decisions resolved,
+- [x] **Stage 0 — shared foundation:** with the owner decisions resolved,
   implement the process-owned coordinator, shell actions, version/channel
   identity, updater signing, explicit artifact selection, the inherited
-  application-owned process temp root and abrupt-orphan cleanup, two-phase
-  static-manifest publication, and notification-only eligibility fallback
+  application-owned process temp root and abrupt-orphan cleanup, release-scoped
+  manifest publication, and notification-only eligibility fallback
   without enabling an unresolved distribution.
 - [ ] **Stage 1 — macOS:** publish updater-capable arm64 and amd64 betas through
-  the static beta manifest, prove beta-to-beta update and emergency channel
-  rollback, then publish stable only after stable-to-stable, beta-to-stable,
-  public-manifest readback, the macOS smoke matrix, and the full gate are green.
+  draft-then-public prereleases, prove beta-to-beta update and failed-draft
+  recovery, then publish stable only after stable-to-stable, beta-to-stable,
+  same-release manifest validation, the macOS smoke matrix, and the full gate
+  are green.
 - [ ] **Stage 2 — Windows:** provision Authenticode signing, move the supported
   installer to per-user identity, publish signed raw updater executables for
   arm64 and amd64, publish the migration page, enforce installer side-by-side
-  refusal, prove settings-preserving migration and the Windows smoke matrix, and
-  advance both channels. Existing machine-scope installs remain
+  refusal, prove settings-preserving migration and the Windows smoke matrix in
+  prerelease and ordinary releases. Existing machine-scope installs remain
   notification-only until migrated.
 - [ ] **Stage 3 — Linux:** publish the explicitly identified user-owned portable
   distribution and updater payloads for arm64 and amd64, add package-owned
   identity markers to DEB/RPM, prove portable update and rollback behavior, and
   keep DEB/RPM notification-only.
-- [ ] **Stage 4 — cross-platform completion:** run public-manifest readback,
-  signature verification, channel rollback, stable-to-stable, beta-to-beta,
+- [ ] **Stage 4 — cross-platform completion:** run release-manifest readback,
+  signature verification, failed-draft recovery, stable-to-stable, beta-to-beta,
   beta-to-stable, multi-window, and platform smoke tests across macOS, Windows,
   and portable Linux in one release candidate. Do not mark the initiative
   complete or retire this plan before this stage passes.
@@ -1243,8 +1230,8 @@ exactly one process scheduler, download, helper, persistence flush, and relaunch
 - Every ineligible installation renders its exact platform explanation and
   recovery action; no recovery action starts Wails staging.
 - Stable builds never receive a prerelease; beta builds receive newer beta or
-  stable releases according to manifests that retain the requesting build's
-  channel label.
+  stable releases according to GitHub release discovery, and every manifest's
+  channel matches the selected release's prerelease flag.
 - Every installed artifact is matched to the exact platform, architecture,
   channel, and eligible distribution.
 - Every installed artifact passes both the manifest digest and the Wails CLI's
@@ -1280,18 +1267,14 @@ exactly one process scheduler, download, helper, persistence flush, and relaunch
   path and never opens About in every workspace peer.
 - The legacy GitHub release client and custom version comparator are removed
   after consumer parity is proven.
-- The dedicated manifest publisher handles stable and beta independently of the
-  marketing version helper, and the site-update job cannot report a channel
-  advanced with missing, ambiguous, unsupported, unsigned, unverifiable, or
-  stale publicly served artifacts or manifest contents.
-- Before its first site write, the publication token proves Contents write and
-  Actions read access to the private site repository.
-- Channel publication waits for exact site commits, advances candidate then
-  live, serializes all manifest writers, and verifies live/rollback state through
-  the same bare fixed URL clients use with the required no-store policy. It
-  reports only publicly proven `advanced` or `rolled back` outcomes; an unproven
-  result is `indeterminate` and blocks later publication until reconciled. A
-  pending site job cancelled before execution is explicitly
-  `superseded/not-attempted`, not a failed rollout.
+- Every release has exactly one `updater.json` beside its payloads and manual
+  installers. It exactly matches the selected release version, prerelease
+  channel, artifact URL, filename, size, platform, and architecture.
+- Release tooling creates a draft with the complete verified asset set and
+  publishes only after upload succeeds. Upload or final-publish failure never
+  silently reports a new public updater release, and an existing draft or
+  release is never overwritten by a rerun.
+- Update availability has no runtime dependency on the marketing site, GitHub
+  Pages, a raw branch, or a separately mutable channel manifest.
 - No private signing material is committed, logged, embedded, or persisted by
   the application.

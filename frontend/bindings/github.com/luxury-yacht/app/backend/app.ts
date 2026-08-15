@@ -1182,6 +1182,14 @@ export function ShowSettings(): $CancellablePromise<void> {
 }
 
 /**
+ * SkipApplicationUpdate durably suppresses the exact offered version before
+ * hiding it from the current process.
+ */
+export function SkipApplicationUpdate(version: string): $CancellablePromise<$models.UpdateInfo | null> {
+    return $Call.ByName("github.com/luxury-yacht/app/backend.App.SkipApplicationUpdate", version);
+}
+
+/**
  * StartShellSession launches a kubectl exec session and begins streaming data back to the frontend.
  */
 export function StartShellSession(clusterID: string, req: $models.ShellSessionRequest): $CancellablePromise<$models.ShellSession | null> {

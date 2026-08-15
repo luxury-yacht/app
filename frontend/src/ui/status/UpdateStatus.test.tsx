@@ -144,6 +144,7 @@ describe('UpdateStatus', () => {
     ['check-error', 'Update needs attention'],
     ['prepare-error', 'Update needs attention'],
     ['restart-error', 'Update needs attention'],
+    ['apply-error', 'Update needs attention'],
   ])('renders compact %s state and opens About', async (status, label) => {
     readAppInfoMock.mockResolvedValue({ update: { status, availableVersion: '1.10.1' } });
 

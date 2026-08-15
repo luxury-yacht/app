@@ -84,6 +84,7 @@ export {
   SetKubeconfigSearchPaths,
   SetSidebarVisible,
   SetZoomLevel,
+  SkipApplicationUpdate,
   StartShellSession,
   StopPortForward,
   UpdateAppPreferences,

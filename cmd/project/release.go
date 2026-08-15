@@ -33,6 +33,8 @@ type releaseConfig struct {
 	version       string
 }
 
+type releaseCommandRunner func(string, ...string) error
+
 func newReleaseConfig(facts projectFacts) releaseConfig {
 	return releaseConfig{
 		artifactsDir:  projectArtifactsDir,
@@ -81,6 +83,16 @@ func releaseExists(repo, tag string) (bool, error) {
 	return true, nil
 }
 
+func validateReleaseDoesNotAlreadyExist(exists bool, version string) error {
+	if !exists {
+		return nil
+	}
+	return fmt.Errorf(
+		"release %s already exists; inspect it and remove any failed draft before retrying",
+		version,
+	)
+}
+
 // Scans for releaseable assets in the artifacts directory.
 func findReleaseAssets(cfg releaseConfig) ([]string, error) {
 	var assets []string
@@ -93,16 +105,19 @@ func findReleaseAssets(cfg releaseConfig) ([]string, error) {
 		if d.IsDir() {
 			return nil
 		}
-		// Check if the file has a valid release asset extension
-		for _, ext := range cfg.releaseAssets {
-			if strings.HasSuffix(d.Name(), ext) {
-				if previousPath, exists := assetPathsByName[d.Name()]; exists {
-					return fmt.Errorf("duplicate release asset name %q: %s and %s", d.Name(), previousPath, path)
-				}
-				assetPathsByName[d.Name()] = path
-				assets = append(assets, path)
+		releaseable := d.Name() == updateManifestAssetName
+		for _, extension := range cfg.releaseAssets {
+			if strings.HasSuffix(d.Name(), extension) {
+				releaseable = true
 				break
 			}
+		}
+		if releaseable {
+			if previousPath, exists := assetPathsByName[d.Name()]; exists {
+				return fmt.Errorf("duplicate release asset name %q: %s and %s", d.Name(), previousPath, path)
+			}
+			assetPathsByName[d.Name()] = path
+			assets = append(assets, path)
 		}
 		return nil
 	})
@@ -198,13 +213,20 @@ func writeReleaseNotes(cfg releaseConfig, runNumber string) (string, error) {
 	return tmpFile.Name(), nil
 }
 
-// Create the release.
-func createRelease(cfg releaseConfig, notesFile string, assets []string) error {
+// Create the release as a draft so none of its assets are discoverable by the
+// updater until every upload has succeeded, then publish it in one final edit.
+func createRelease(
+	cfg releaseConfig,
+	notesFile string,
+	assets []string,
+	run releaseCommandRunner,
+) error {
 	args := []string{
 		"release", "create", cfg.version,
 		"--title", cfg.version,
 		"--notes-file", notesFile,
 		"--repo", cfg.releaseRepo,
+		"--draft",
 	}
 	if cfg.isBeta {
 		args = append(args, "--prerelease")
@@ -213,8 +235,18 @@ func createRelease(cfg releaseConfig, notesFile string, assets []string) error {
 
 	fmt.Printf("\n🎯 Creating release %s\n", cfg.version)
 
-	if err := runCommand("gh", args...); err != nil {
-		return fmt.Errorf("failed to create release %s: %w", cfg.version, err)
+	if err := run("gh", args...); err != nil {
+		return fmt.Errorf("failed to create draft release %s: %w", cfg.version, err)
+	}
+
+	fmt.Printf("\n🚀 Publishing release %s\n", cfg.version)
+	if err := run(
+		"gh",
+		"release", "edit", cfg.version,
+		"--draft=false",
+		"--repo", cfg.releaseRepo,
+	); err != nil {
+		return fmt.Errorf("failed to publish draft release %s: %w", cfg.version, err)
 	}
 
 	return nil
@@ -225,14 +257,14 @@ func publishRelease(cfg releaseConfig) error {
 	if err := checkGhCli(); err != nil {
 		return err
 	}
-	// Check if the release already exists. If it does, bail out.
+	// Never overwrite or publish an existing release. A previous failed run may
+	// have left a partial draft that requires explicit operator inspection.
 	release, err := releaseExists(cfg.releaseRepo, cfg.version)
 	if err != nil {
 		return err
 	}
-	if release {
-		fmt.Println("- Release already exists. Exiting.")
-		return nil
+	if err := validateReleaseDoesNotAlreadyExist(release, cfg.version); err != nil {
+		return err
 	}
 	fmt.Println("- Release does not exist. Proceeding.")
 
@@ -259,7 +291,7 @@ func publishRelease(cfg releaseConfig) error {
 	defer os.Remove(notesFile)
 
 	// Create the release.
-	if err := createRelease(cfg, notesFile, assets); err != nil {
+	if err := createRelease(cfg, notesFile, assets, runCommand); err != nil {
 		return err
 	}
 

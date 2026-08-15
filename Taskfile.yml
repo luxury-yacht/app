@@ -199,6 +199,16 @@ tasks:
     cmds:
       - go run ./cmd/project release-app
 
+  release:prepare-updater-manifest:
+    desc: Builds and verifies the signed updater.json GitHub Release asset
+    cmds:
+      - go run ./cmd/project prepare-release-updater-manifest
+
+  release:validate-macos-updater:
+    desc: Validates a signed macOS updater archive through Wails extraction
+    cmds:
+      - go run ./cmd/project validate-macos-updater
+
   release:site:
     desc: Updates the version displayed on the website
     cmds:

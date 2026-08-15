@@ -150,3 +150,14 @@ func (a *App) RestartAndApplyApplicationUpdate() (*UpdateInfo, error) {
 	snapshot, err := a.applicationUpdates.Restart(a.CtxOrBackground())
 	return updateInfoFromSnapshot(snapshot), err
 }
+
+// SkipApplicationUpdate durably suppresses the exact offered version before
+// hiding it from the current process.
+func (a *App) SkipApplicationUpdate(version string) (*UpdateInfo, error) {
+	if a == nil || a.applicationUpdates == nil {
+		return updateInfoFromSnapshot(appupdates.Snapshot{Status: appupdates.StatusDisabled}),
+			fmt.Errorf("automatic updates are disabled")
+	}
+	snapshot, err := a.applicationUpdates.Skip(a.CtxOrBackground(), version)
+	return updateInfoFromSnapshot(snapshot), err
+}

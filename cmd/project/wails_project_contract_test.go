@@ -429,7 +429,7 @@ func TestReleaseWorkflowValidatesTagBeforeTestsAndBuilds(t *testing.T) {
 
 func TestReleaseArtifactsPreserveVersionPlatformAndArchitectureIdentity(t *testing.T) {
 	workflow := readTestFile(t, repositoryPath(".github", "workflows", "release.yml"))
-	require.Contains(t, workflow, "artifact_path: bin/*-macos-*.dmg")
+	require.Contains(t, workflow, "bin/*-macos-*.dmg")
 	require.Contains(t, workflow, "GOOS=darwin GOARCH=arm64 RELEASE_FORMAT=dmg go run ./cmd/project release-artifact-name")
 	require.Contains(t, workflow, "GOOS=darwin GOARCH=amd64 RELEASE_FORMAT=dmg go run ./cmd/project release-artifact-name")
 	require.Contains(t, workflow, "linux:generate:deb ARCH=${{ matrix.arch }}")
@@ -443,6 +443,57 @@ func TestReleaseArtifactsPreserveVersionPlatformAndArchitectureIdentity(t *testi
 
 	windowsTaskfile := readTestFile(t, repositoryPath("build", "windows", "Taskfile.yml"))
 	require.Contains(t, windowsTaskfile, `{{.APP_NAME}}-*-windows-{{.ARCH}}-installer.exe`)
+}
+
+func TestMacOSReleasePublishesAndValidatesTheWailsUpdaterPayload(t *testing.T) {
+	workflow := readTestFile(t, repositoryPath(".github", "workflows", "release.yml"))
+	require.Contains(t, workflow, "bin/*-darwin-*.zip")
+	for _, architecture := range []string{"arm64", "amd64"} {
+		packageCall := "wails3 task darwin:package ARCH=" + architecture
+		signatureCheck := "codesign --verify --deep --strict bin/luxury-yacht.app"
+		archiveCall := "wails3 task darwin:create:updater-archive ARCH=" + architecture
+		conformanceCall := "GOARCH=" + architecture + " wails3 task release:validate-macos-updater"
+		require.Contains(t, workflow, packageCall)
+		require.Contains(t, workflow, archiveCall)
+		require.Contains(t, workflow, conformanceCall)
+		require.Less(t, strings.Index(workflow, packageCall), strings.Index(workflow, archiveCall))
+		require.Less(t, strings.Index(workflow, signatureCheck), strings.Index(workflow, archiveCall))
+		require.Less(t, strings.Index(workflow, archiveCall), strings.Index(workflow, conformanceCall))
+	}
+	require.Contains(t, workflow, "spctl --assess --type execute bin/luxury-yacht.app")
+	require.Contains(t, workflow, "xcrun stapler validate bin/luxury-yacht.app")
+
+	darwinTaskfile := readTestFile(t, repositoryPath("build", "darwin", "Taskfile.yml"))
+	require.Contains(t, darwinTaskfile, "create:updater-archive:")
+	require.Contains(t, darwinTaskfile, "ditto -c -k --keepParent")
+	require.NotContains(t, darwinTaskfile, "--sequesterRsrc")
+
+	rootTaskfile := readTestFile(t, repositoryPath("Taskfile.yml"))
+	require.Contains(t, rootTaskfile, "release:validate-macos-updater:")
+	require.Contains(t, rootTaskfile, "go run ./cmd/project validate-macos-updater")
+}
+
+func TestReleasePublishesSignedUpdaterManifestInsideTheGitHubRelease(t *testing.T) {
+	workflow := readTestFile(t, repositoryPath(".github", "workflows", "release.yml"))
+	materialize := strings.Index(workflow, "Materialize updater signing key")
+	prepare := strings.Index(workflow, "release:prepare-updater-manifest")
+	publishRelease := strings.Index(workflow, "release:app")
+	cleanup := strings.Index(workflow, "Remove updater signing key")
+	require.GreaterOrEqual(t, materialize, 0)
+	require.Greater(t, prepare, materialize)
+	require.Greater(t, publishRelease, prepare)
+	require.Greater(t, cleanup, prepare)
+	require.Contains(t, workflow, "UPDATER_PRIVATE_KEY_PEM: ${{ secrets.UPDATER_PRIVATE_KEY_PEM }}")
+	require.Contains(t, workflow, `if: ${{ always() }}`)
+	require.Contains(t, workflow, "UPDATER_TARGETS: darwin/arm64,darwin/amd64")
+	require.Contains(t, workflow, "UPDATER_ARTIFACTS_DIR: ./artifacts")
+	require.NotContains(t, workflow, "updater-manifests")
+	require.NotContains(t, workflow, "release:publish-updater-channels")
+	require.NotContains(t, workflow, "update-publication")
+
+	rootTaskfile := readTestFile(t, repositoryPath("Taskfile.yml"))
+	require.Contains(t, rootTaskfile, "release:prepare-updater-manifest:")
+	require.NotContains(t, rootTaskfile, "release:publish-updater-channels:")
 }
 
 func TestRefreshTransportUsesOnlyWailsServiceAndNamedStreams(t *testing.T) {
@@ -494,6 +545,7 @@ func TestProjectCommandOwnsItsImplementation(t *testing.T) {
 		"project_config.go",
 		"quality.go",
 		"release.go",
+		"updater_release.go",
 		"wails_bindings.go",
 		"windows_version.go",
 	} {

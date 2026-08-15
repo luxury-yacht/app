@@ -1,6 +1,6 @@
 import type { backend } from '@core/backend-api/models';
 
-export type UpdateAction = 'check' | 'download' | 'restart' | 'recovery';
+export type UpdateAction = 'check' | 'download' | 'restart' | 'skip' | 'recovery';
 
 export interface UpdatePresentationAction {
   kind: UpdateAction;
@@ -17,52 +17,91 @@ export interface UpdatePresentation {
 
 const DOWNLOADS_URL = 'https://luxury-yacht.app/#downloads';
 
+const releaseURL = (update: backend.UpdateInfo): string =>
+  update.availableVersion
+    ? `https://github.com/luxury-yacht/app/releases/tag/v${encodeURIComponent(update.availableVersion)}`
+    : DOWNLOADS_URL;
+
+const recoveryActionForTarget = (
+  update: backend.UpdateInfo
+): UpdatePresentationAction | undefined => {
+  switch (update.recoveryTarget) {
+    case 'mac-download':
+      return { kind: 'recovery', label: 'View macOS Download', url: releaseURL(update) };
+    case 'windows-download':
+      return { kind: 'recovery', label: 'View Windows Download', url: releaseURL(update) };
+    case 'windows-per-user-migration':
+      return { kind: 'recovery', label: 'Switch to Per-User Installation', url: DOWNLOADS_URL };
+    case 'linux-packages':
+      return { kind: 'recovery', label: 'View Linux Packages', url: DOWNLOADS_URL };
+    case 'linux-portable-download':
+      return { kind: 'recovery', label: 'View Portable Download', url: releaseURL(update) };
+    case 'download-options':
+      return { kind: 'recovery', label: 'View Download Options', url: DOWNLOADS_URL };
+    default:
+      return undefined;
+  }
+};
+
 const recoveryPresentation = (
   update: backend.UpdateInfo
 ): { explanation?: string; action: UpdatePresentationAction } => {
-  const releaseURL = update.availableVersion
-    ? `https://github.com/luxury-yacht/app/releases/tag/v${encodeURIComponent(update.availableVersion)}`
-    : DOWNLOADS_URL;
+  const targetAction = recoveryActionForTarget(update);
+
+  const action = (fallback: UpdatePresentationAction): UpdatePresentationAction =>
+    targetAction ?? fallback;
 
   switch (update.eligibilityReason) {
     case 'mac-not-installed-bundle':
       return {
         explanation: 'Move Luxury Yacht to Applications to enable automatic updates.',
-        action: { kind: 'recovery', label: 'View macOS Download', url: releaseURL },
+        action: action({ kind: 'recovery', label: 'View macOS Download', url: releaseURL(update) }),
       };
     case 'mac-read-only':
     case 'mac-unwritable-parent':
       return {
         explanation: 'This copy of Luxury Yacht cannot replace itself in its current location.',
-        action: { kind: 'recovery', label: 'View macOS Download', url: releaseURL },
+        action: action({ kind: 'recovery', label: 'View macOS Download', url: releaseURL(update) }),
       };
     case 'windows-machine-scope':
       return {
         explanation:
           'This copy was installed for all users. Switch to the per-user installation to enable automatic updates.',
-        action: { kind: 'recovery', label: 'Switch to Per-User Installation', url: DOWNLOADS_URL },
+        action: action({
+          kind: 'recovery',
+          label: 'Switch to Per-User Installation',
+          url: DOWNLOADS_URL,
+        }),
       };
     case 'windows-unverified-install':
       return {
         explanation:
           'This Windows installation cannot be verified as a supported per-user installation.',
-        action: { kind: 'recovery', label: 'View Windows Download', url: releaseURL },
+        action: action({
+          kind: 'recovery',
+          label: 'View Windows Download',
+          url: releaseURL(update),
+        }),
       };
     case 'linux-package-managed':
       return {
         explanation:
           'This installation is managed by your system package manager. Update it with that package manager or download the latest package.',
-        action: { kind: 'recovery', label: 'View Linux Packages', url: DOWNLOADS_URL },
+        action: action({ kind: 'recovery', label: 'View Linux Packages', url: DOWNLOADS_URL }),
       };
     case 'linux-portable-ineligible':
       return {
         explanation: 'This portable installation cannot replace itself in its current location.',
-        action: { kind: 'recovery', label: 'View Portable Download', url: releaseURL },
+        action: action({
+          kind: 'recovery',
+          label: 'View Portable Download',
+          url: releaseURL(update),
+        }),
       };
     default:
       return {
         explanation: 'Automatic updates are not available for this installation.',
-        action: { kind: 'recovery', label: 'View Download Options', url: DOWNLOADS_URL },
+        action: action({ kind: 'recovery', label: 'View Download Options', url: DOWNLOADS_URL }),
       };
   }
 };
@@ -85,11 +124,13 @@ export const getUpdatePresentation = (update: backend.UpdateInfo): UpdatePresent
         ? {
             message: `Luxury Yacht ${version} is available.`,
             primary: { kind: 'download', label: 'Download Update' },
+            secondary: { kind: 'skip', label: 'Skip This Version' },
           }
         : {
             message: `Luxury Yacht ${version} is available.`,
             explanation: recovery.explanation,
             primary: recovery.action,
+            secondary: { kind: 'skip', label: 'Skip This Version' },
           };
     case 'downloading':
       return { message: 'Downloading update…' };
@@ -121,8 +162,7 @@ export const getUpdatePresentation = (update: backend.UpdateInfo): UpdatePresent
     case 'apply-error':
       return {
         message: `The update couldn’t be applied. Luxury Yacht is still on ${update.currentVersion}.`,
-        explanation: recovery.explanation,
-        primary: recovery.action,
+        primary: recoveryActionForTarget(update) ?? recovery.action,
       };
     default:
       return null;

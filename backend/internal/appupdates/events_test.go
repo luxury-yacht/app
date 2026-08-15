@@ -19,7 +19,7 @@ func TestWailsEventsPublishCompleteApplicationSnapshot(t *testing.T) {
 	coordinator := appupdates.New(appupdates.Dependencies{
 		Client: &fakeUpdater{}, Provider: fakeProvider{}, Eligibility: enabledBuild(),
 		PublicKey: testPublicKey(), Platform: "darwin", Architecture: "arm64",
-		TempRoot: "/owned/temp/root", Scheduler: &fakeScheduler{},
+		TempRoot: "/owned/temp/root", Scheduler: &fakeScheduler{}, UpdateState: &fakeUpdateState{},
 		OnChange: func(snapshot appupdates.Snapshot) {
 			published = append(published, snapshot)
 		},
@@ -60,7 +60,7 @@ func TestCoordinatorOperationsPublishCommandOwnedTransitions(t *testing.T) {
 	coordinator := appupdates.New(appupdates.Dependencies{
 		Client: client, Provider: fakeProvider{}, Eligibility: enabledBuild(),
 		PublicKey: testPublicKey(), Platform: "darwin", Architecture: "arm64",
-		TempRoot: "/owned/temp/root", Scheduler: &fakeScheduler{},
+		TempRoot: "/owned/temp/root", Scheduler: &fakeScheduler{}, UpdateState: &fakeUpdateState{},
 		OnChange: func(snapshot appupdates.Snapshot) {
 			published = append(published, snapshot)
 		},
@@ -114,7 +114,7 @@ func TestUnrecognizedOrMalformedWailsEventsDoNotPublishUnchangedState(t *testing
 	coordinator := appupdates.New(appupdates.Dependencies{
 		Client: &fakeUpdater{}, Provider: fakeProvider{}, Eligibility: enabledBuild(),
 		PublicKey: testPublicKey(), Platform: "darwin", Architecture: "arm64",
-		TempRoot: "/owned/temp/root", Scheduler: &fakeScheduler{},
+		TempRoot: "/owned/temp/root", Scheduler: &fakeScheduler{}, UpdateState: &fakeUpdateState{},
 		OnChange: func(snapshot appupdates.Snapshot) {
 			published = append(published, snapshot)
 		},
@@ -152,7 +152,7 @@ func TestHandleWailsEventProjectsSemanticStateAndBoundedProgress(t *testing.T) {
 	snapshot = coordinator.HandleWailsEvent(updater.EventInstalling, nil)
 	require.Equal(t, appupdates.StatusPreparing, snapshot.Status)
 	snapshot = coordinator.HandleWailsEvent(updater.EventUpdateReady, nil)
-	require.Equal(t, appupdates.StatusReady, snapshot.Status)
+	require.Equal(t, appupdates.StatusPreparing, snapshot.Status)
 }
 
 func TestHandleWailsEventClassifiesFailureStage(t *testing.T) {

@@ -63,7 +63,9 @@ jobs:
             goos: darwin
             arch: arm64-and-amd64
             artifact_name: artifacts-darwin
-            artifact_path: bin/*-macos-*.dmg
+            artifact_path: |
+              bin/*-macos-*.dmg
+              bin/*-darwin-*.zip
           - runner: windows-latest
             goos: windows
             arch: amd64
@@ -132,6 +134,11 @@ jobs:
             --identity "$MACOS_SIGNING_IDENTITY" \
             --notarize \
             --keychain-profile luxury-yacht-ci
+          codesign --verify --deep --strict bin/luxury-yacht.app
+          spctl --assess --type execute bin/luxury-yacht.app
+          xcrun stapler validate bin/luxury-yacht.app
+          wails3 task darwin:create:updater-archive ARCH=arm64
+          UPDATER_ARTIFACT="bin/$(GOOS=darwin GOARCH=arm64 RELEASE_FORMAT=updater go run ./cmd/project release-artifact-name)" GOARCH=arm64 wails3 task release:validate-macos-updater
           wails3 task darwin:create:dmg
           mv bin/luxury-yacht.dmg "bin/$(GOOS=darwin GOARCH=arm64 RELEASE_FORMAT=dmg go run ./cmd/project release-artifact-name)"
 
@@ -141,6 +148,11 @@ jobs:
             --identity "$MACOS_SIGNING_IDENTITY" \
             --notarize \
             --keychain-profile luxury-yacht-ci
+          codesign --verify --deep --strict bin/luxury-yacht.app
+          spctl --assess --type execute bin/luxury-yacht.app
+          xcrun stapler validate bin/luxury-yacht.app
+          wails3 task darwin:create:updater-archive ARCH=amd64
+          UPDATER_ARTIFACT="bin/$(GOOS=darwin GOARCH=amd64 RELEASE_FORMAT=updater go run ./cmd/project release-artifact-name)" GOARCH=amd64 wails3 task release:validate-macos-updater
           wails3 task darwin:create:dmg
           mv bin/luxury-yacht.dmg "bin/$(GOOS=darwin GOARCH=amd64 RELEASE_FORMAT=dmg go run ./cmd/project release-artifact-name)"
 
@@ -187,6 +199,27 @@ jobs:
         uses: actions/download-artifact@v8
         with:
           path: ./artifacts
+
+      - name: Materialize updater signing key
+        env:
+          UPDATER_PRIVATE_KEY_PEM: ${{ secrets.UPDATER_PRIVATE_KEY_PEM }}
+        run: |
+          set -euo pipefail
+          test -n "$UPDATER_PRIVATE_KEY_PEM"
+          umask 077
+          printf '%s\n' "$UPDATER_PRIVATE_KEY_PEM" > "$RUNNER_TEMP/updater.key"
+
+      - name: Prepare signed updater manifest release asset
+        env:
+          UPDATER_ARTIFACTS_DIR: ./artifacts
+          UPDATER_TARGETS: darwin/arm64,darwin/amd64
+          UPDATER_PRIVATE_KEY_PATH: ${{ runner.temp }}/updater.key
+          UPDATER_PUBLIC_KEY: backend/updater_public_key.pem
+        run: wails3 task release:prepare-updater-manifest
+
+      - name: Remove updater signing key
+        if: ${{ always() }}
+        run: rm -f "$RUNNER_TEMP/updater.key"
 
       - name: Publish GitHub release
         run: |

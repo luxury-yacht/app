@@ -13,6 +13,7 @@ import {
   CheckForUpdates,
   DownloadApplicationUpdate,
   RestartAndApplyApplicationUpdate,
+  SkipApplicationUpdate,
 } from '@core/backend-api';
 import type { backend } from '@core/backend-api/models';
 import { onEvent, openURL } from '@core/desktop-runtime';
@@ -100,6 +101,13 @@ const AboutModal: React.FC<AboutModalProps> = React.memo(({ isOpen, onClose }) =
 
   const update = appInfo?.update ?? null;
   const updatePresentation = update ? getUpdatePresentation(update) : null;
+  const progressPercent =
+    typeof update?.progressPercent === 'number' &&
+    Number.isFinite(update.progressPercent) &&
+    update.progressPercent >= 0 &&
+    update.progressPercent <= 100
+      ? update.progressPercent
+      : null;
   const runUpdateAction = async (action: UpdateAction, url?: string) => {
     if (!update || updateAction) {
       return;
@@ -119,6 +127,8 @@ const AboutModal: React.FC<AboutModalProps> = React.memo(({ isOpen, onClose }) =
         next = await DownloadApplicationUpdate(update.availableVersion);
       } else if (action === 'restart') {
         next = await RestartAndApplyApplicationUpdate();
+      } else if (action === 'skip' && update.availableVersion) {
+        next = await SkipApplicationUpdate(update.availableVersion);
       }
       if (next) {
         setAppInfo((current) => (current ? { ...current, update: next } : current));
@@ -128,6 +138,7 @@ const AboutModal: React.FC<AboutModalProps> = React.memo(({ isOpen, onClose }) =
         check: 'checkApplicationUpdate',
         download: 'downloadApplicationUpdate',
         restart: 'restartAndApplyApplicationUpdate',
+        skip: 'skipApplicationUpdate',
         recovery: 'openApplicationUpdateRecovery',
       }[action];
       reportOperationalError(error, { source: 'AboutModal', action: actionName });
@@ -182,10 +193,10 @@ const AboutModal: React.FC<AboutModalProps> = React.memo(({ isOpen, onClose }) =
                 {updatePresentation.explanation ? (
                   <p className="about-update-explanation">{updatePresentation.explanation}</p>
                 ) : null}
-                {update?.progressPercent !== undefined && update.progressPercent !== null ? (
+                {progressPercent !== null ? (
                   <div className="about-update-progress">
-                    <progress value={update.progressPercent} max={100} />
-                    <span>{Math.round(update.progressPercent)}%</span>
+                    <progress value={progressPercent} max={100} />
+                    <span>{Math.round(progressPercent)}%</span>
                   </div>
                 ) : null}
                 {update?.releaseNotes ? (

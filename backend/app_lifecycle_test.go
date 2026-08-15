@@ -535,8 +535,19 @@ func TestStartupBetaExpiryReportsAndStopsInteractiveStartup(t *testing.T) {
 	t.Setenv("HOME", t.TempDir())
 
 	app := newTestAppWithDefaults(t)
+	updates := &fakeApplicationUpdateCoordinator{}
+	app.applicationUpdates = updates
 	reporter := &recordingErrorReporter{}
 	app.logger = NewLogger(100, reporter)
+	var prompt expiredBetaPrompt
+	app.showExpiredBetaPrompt = func(value expiredBetaPrompt) { prompt = value }
+	var openedURL string
+	app.openApplicationURL = func(value string) error {
+		openedURL = value
+		return nil
+	}
+	quitCalls := 0
+	app.quitApplication = func() { quitCalls++ }
 	ctx := context.Background()
 
 	require.NoError(t, app.ServiceStartup(ctx, application.ServiceOptions{}))
@@ -547,4 +558,15 @@ func TestStartupBetaExpiryReportsAndStopsInteractiveStartup(t *testing.T) {
 	require.Contains(t, reporter.exceptions[0].err.Error(), "expired")
 	require.Equal(t, sentryreporting.Operation{}, reporter.exceptions[0].context.Operation)
 	reporter.mu.Unlock()
+	require.Equal(t, "Beta Version Expired", prompt.Title)
+	require.Equal(t, "Download Latest Version", prompt.DownloadLabel)
+	require.Equal(t, "Quit", prompt.QuitLabel)
+	require.NotNil(t, prompt.OnDownload)
+	require.NotNil(t, prompt.OnQuit)
+	prompt.OnDownload()
+	require.Equal(t, applicationDownloadsURL, openedURL)
+	require.Equal(t, 1, quitCalls)
+	require.Zero(t, updates.runtimeReadyCalls)
+	require.Zero(t, updates.downloadCalls)
+	require.Zero(t, updates.restartCalls)
 }

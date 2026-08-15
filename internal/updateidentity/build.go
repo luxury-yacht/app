@@ -54,7 +54,7 @@ func ResolveBuild(probe BuildProbe) BuildEligibility {
 
 	if release.Channel == ChannelBeta && !probe.BetaExpiry.IsZero() && !probe.Now.Before(probe.BetaExpiry) {
 		result.Status = BuildExpiredBeta
-		result.Recovery = recoveryForDistribution(probe.Installation.Distribution)
+		result.Recovery = RecoveryForDistribution(probe.Installation.Distribution)
 		return result
 	}
 	if !probe.Installation.CanCheck {
@@ -74,7 +74,7 @@ func isDevelopmentVersion(value string) bool {
 	return normalized == "" || normalized == "dev" || strings.HasSuffix(normalized, " (dev)")
 }
 
-func recoveryForDistribution(distribution Distribution) RecoveryTarget {
+func RecoveryForDistribution(distribution Distribution) RecoveryTarget {
 	switch distribution {
 	case DistributionMacBundle:
 		return RecoveryMacDownload
