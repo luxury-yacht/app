@@ -268,6 +268,113 @@ describe('AboutModal', () => {
     await modal.unmount();
   });
 
+  it('presents the release detail that used to live in the header tooltip', async () => {
+    appInfoMock.GetAppInfo.mockResolvedValue({
+      version: '1.10.0',
+      update: {
+        status: 'available',
+        currentVersion: '1.10.0',
+        availableVersion: '1.10.1',
+        releaseName: 'Luxury Yacht 1.10.1',
+        publishedAt: '2026-07-05T12:00:00Z',
+        releaseNotes: '## Highlights\n\n- Fixed **metrics** permission notice',
+        canCheck: true,
+        canInstall: true,
+      },
+    });
+    const modal = await renderModal({ isOpen: true, onClose: vi.fn() });
+    await act(async () => Promise.resolve());
+
+    const notes = document.querySelector('[data-testid="about-release-notes"]');
+    expect(notes?.textContent).toContain('Highlights');
+    // The markdown stripper is applied: bullets render as • (not raw "- ").
+    expect(notes?.textContent).toContain('• Fixed metrics permission notice');
+    expect(document.body.textContent).toContain('Luxury Yacht 1.10.1');
+    expect(document.body.textContent).toContain('2026-07-05');
+
+    const notesLink = document.querySelector(
+      '[data-testid="about-release-notes-link"]'
+    ) as HTMLAnchorElement | null;
+    expect(notesLink).toBeTruthy();
+    await act(async () => notesLink?.click());
+    // Release tags carry the conventional `v` prefix; availableVersion does not.
+    expect(runtimeMock.openURL).toHaveBeenCalledWith(
+      'https://github.com/luxury-yacht/app/releases/tag/v1.10.1'
+    );
+
+    await modal.unmount();
+  });
+
+  it('styles update actions with the shared button vocabulary', async () => {
+    appInfoMock.GetAppInfo.mockResolvedValue({
+      version: '1.10.0',
+      update: {
+        status: 'available',
+        currentVersion: '1.10.0',
+        availableVersion: '1.10.1',
+        canCheck: true,
+        canInstall: true,
+      },
+    });
+    const modal = await renderModal({ isOpen: true, onClose: vi.fn() });
+    await act(async () => Promise.resolve());
+
+    const buttons = Array.from(document.querySelectorAll('.about-update-actions button'));
+    expect(buttons.map((button) => button.textContent)).toEqual([
+      'Download Update',
+      'Skip This Version',
+    ]);
+    expect(buttons[0]?.className).toContain('button save');
+    expect(buttons[1]?.className).toContain('button generic');
+    // The undefined `p-btn` / `p-prim-col` classes are not part of this app's
+    // vocabulary and left the actions unstyled.
+    expect(document.querySelector('[class*="p-btn"]')).toBeNull();
+
+    await modal.unmount();
+  });
+
+  it('labels the update card with the shared status chip', async () => {
+    appInfoMock.GetAppInfo.mockResolvedValue({
+      version: '1.10.0',
+      update: {
+        status: 'ready',
+        currentVersion: '1.10.0',
+        availableVersion: '1.10.1',
+        canCheck: true,
+        canInstall: true,
+      },
+    });
+    const modal = await renderModal({ isOpen: true, onClose: vi.fn() });
+    await act(async () => Promise.resolve());
+
+    const chip = document.querySelector('.about-update .status-chip');
+    expect(chip?.textContent).toBe('Restart to update');
+    expect(chip?.className).toContain('status-chip--healthy');
+
+    await modal.unmount();
+  });
+
+  it('omits the release block when the check found no release', async () => {
+    appInfoMock.GetAppInfo.mockResolvedValue({
+      version: '1.10.0',
+      update: {
+        status: 'check-error',
+        currentVersion: '1.10.0',
+        canCheck: true,
+        canInstall: true,
+        error: 'network unavailable',
+      },
+    });
+    const modal = await renderModal({ isOpen: true, onClose: vi.fn() });
+    await act(async () => Promise.resolve());
+
+    expect(document.querySelector('[data-testid="about-release-notes"]')).toBeNull();
+    expect(document.querySelector('[data-testid="about-release-notes-link"]')).toBeNull();
+    expect(document.body.textContent).toContain('Couldn’t check for updates.');
+
+    await modal.unmount();
+  });
+
   it('does not render an out-of-range progress value', async () => {
     appInfoMock.GetAppInfo.mockResolvedValue({
       version: '1.9.0',

@@ -1,8 +1,9 @@
 /**
- * frontend/src/components/modals/AboutModal.tsx
+ * frontend/src/ui/modals/AboutModal.tsx
  *
- * UI component for AboutModal.
- * Handles rendering and interactions for the shared components.
+ * The About dialog. It is also the single surface for the application update
+ * workflow: the header chip only opens this modal, so availability, release
+ * notes, progress, failures, and recovery actions all present here.
  */
 
 import React, { useEffect, useRef, useState } from 'react';
@@ -22,14 +23,15 @@ import { InfoIcon } from '@shared/components/icons/SharedIcons';
 import ModalHeader from '@shared/components/modals/ModalHeader';
 import ModalSurface from '@shared/components/modals/ModalSurface';
 import { useModalFocusTrap } from '@shared/components/modals/useModalFocusTrap';
+import { StatusChip, type StatusChipVariant } from '@shared/components/StatusChip';
 import { readAppInfo, requestAppState } from '@/core/app-state-access';
 import { reportOperationalError } from '@/utils/errorHandler';
-import { toPlainReleaseNotes } from '../status/releaseNotesText';
 import {
   getUpdatePresentation,
   type UpdateAction,
   type UpdatePresentation,
   type UpdatePresentationAction,
+  type UpdateTone,
 } from '../status/updatePresentation';
 
 interface AboutModalProps {
@@ -37,12 +39,23 @@ interface AboutModalProps {
   onClose: () => void;
 }
 
+const HOMEPAGE_URL = 'https://luxury-yacht.app';
+const WAILS_URL = 'https://v3.wails.io';
+const LICENSE_URL = 'https://www.gnu.org/licenses/gpl-3.0.html';
+
 const updateActionNames: Record<UpdateAction, string> = {
   check: 'checkApplicationUpdate',
   download: 'downloadApplicationUpdate',
   restart: 'restartAndApplyApplicationUpdate',
   skip: 'skipApplicationUpdate',
   recovery: 'openApplicationUpdateRecovery',
+};
+
+const toneVariants: Record<UpdateTone, StatusChipVariant> = {
+  info: 'info',
+  progress: 'info',
+  ready: 'healthy',
+  error: 'unhealthy',
 };
 
 const withUpdate = (
@@ -59,6 +72,26 @@ const progressPercentFor = (update: backend.UpdateInfo): number | null => {
     ? progress
     : null;
 };
+
+/** Desktop links open in the user's browser, never in the app window. */
+const ExternalLink: React.FC<{
+  href: string;
+  className?: string;
+  children: React.ReactNode;
+  testId?: string;
+}> = ({ href, className, children, testId }) => (
+  <a
+    href={href}
+    className={className}
+    data-testid={testId}
+    onClick={(event) => {
+      event.preventDefault();
+      openURL(href);
+    }}
+  >
+    {children}
+  </a>
+);
 
 const performUpdateAction = async (
   action: UpdateAction,
@@ -134,12 +167,31 @@ const UpdateActionButton: React.FC<UpdateActionButtonProps> = ({
   return (
     <button
       type="button"
-      className={primary ? 'p-btn p-prim-col about-update-action' : 'p-btn about-update-action'}
+      className={primary ? 'button save' : 'button generic'}
       disabled={busy}
       onClick={() => void onAction(action.kind, action.url)}
     >
       {action.label}
     </button>
+  );
+};
+
+const ReleaseNotes: React.FC<{ presentation: UpdatePresentation }> = ({ presentation }) => {
+  if (!presentation.notes) {
+    return null;
+  }
+  return (
+    <div className="about-release">
+      <div className="about-release-header">
+        <h3>{presentation.releaseTitle}</h3>
+        {presentation.published ? (
+          <span className="about-release-date">{presentation.published}</span>
+        ) : null}
+      </div>
+      <div className="about-release-notes" data-testid="about-release-notes">
+        {presentation.notes}
+      </div>
+    </div>
   );
 };
 
@@ -157,38 +209,57 @@ const ApplicationUpdateSection: React.FC<ApplicationUpdateSectionProps> = ({
   onAction,
 }) => {
   const progressPercent = progressPercentFor(update);
+  const tone = presentation.tone;
   return (
     <section className="about-update" aria-label="Application update">
-      <p className="about-update-message">{presentation.message}</p>
-      {presentation.explanation ? (
-        <p className="about-update-explanation">{presentation.explanation}</p>
-      ) : null}
+      <div className="about-update-summary">
+        {presentation.badge && tone ? (
+          <StatusChip variant={toneVariants[tone]}>{presentation.badge}</StatusChip>
+        ) : null}
+        <p className="about-update-message">{presentation.message}</p>
+        {presentation.explanation ? (
+          <p className="about-update-explanation">{presentation.explanation}</p>
+        ) : null}
+      </div>
+
       {progressPercent !== null ? (
         <div className="about-update-progress">
           <progress value={progressPercent} max={100} />
           <span>{Math.round(progressPercent)}%</span>
         </div>
       ) : null}
-      {update.releaseNotes ? (
-        <div className="about-update-notes">{toPlainReleaseNotes(update.releaseNotes)}</div>
-      ) : null}
-      <div className="about-update-actions">
-        <UpdateActionButton
-          action={presentation.primary}
-          primary={true}
-          busy={updateAction !== null}
-          onAction={onAction}
-        />
-        <UpdateActionButton
-          action={presentation.secondary}
-          busy={updateAction !== null}
-          onAction={onAction}
-        />
-      </div>
+
       {update.error ? (
         <p className="about-update-error">
           <ErrorSurface kind="status" message={update.error} />
         </p>
+      ) : null}
+
+      <ReleaseNotes presentation={presentation} />
+
+      {presentation.primary || presentation.secondary || presentation.releaseNotesURL ? (
+        <div className="about-update-actions">
+          <UpdateActionButton
+            action={presentation.primary}
+            primary={true}
+            busy={updateAction !== null}
+            onAction={onAction}
+          />
+          <UpdateActionButton
+            action={presentation.secondary}
+            busy={updateAction !== null}
+            onAction={onAction}
+          />
+          {presentation.releaseNotesURL ? (
+            <ExternalLink
+              href={presentation.releaseNotesURL}
+              className="about-release-link"
+              testId="about-release-notes-link"
+            >
+              Full release notes ↗
+            </ExternalLink>
+          ) : null}
+        </div>
       ) : null}
     </section>
   );
@@ -276,79 +347,60 @@ const AboutModal: React.FC<AboutModalProps> = React.memo(({ isOpen, onClose }) =
     >
       <ModalHeader title="About" titleId="about-modal-title" icon={InfoIcon} onClose={onClose} />
 
-      <div className="modal-content">
-        <div className="about-logo-section">
-          <img
-            src={captainK8s}
-            alt="Captain K8s"
-            className="about-captain-k8s"
-            width={1024}
-            height={1024}
+      <div className="modal-content about-modal-content">
+        <div className="about-hero">
+          <div className="about-logo-section">
+            <img
+              src={captainK8s}
+              alt="Captain K8s"
+              className="about-captain-k8s"
+              width={1024}
+              height={1024}
+            />
+            <img
+              src={logo}
+              alt="Luxury Yacht Logo"
+              className="about-logo"
+              width={827}
+              height={500}
+            />
+          </div>
+          <p className="about-version">Version {appInfo?.version || 'Loading...'}</p>
+          {appInfo?.isBeta && appInfo?.expiryDate ? (
+            <p className="about-beta-expiry">
+              Beta expires {new Date(appInfo.expiryDate).toLocaleDateString()}
+            </p>
+          ) : null}
+        </div>
+
+        {update && updatePresentation ? (
+          <ApplicationUpdateSection
+            update={update}
+            presentation={updatePresentation}
+            updateAction={updateAction}
+            onAction={runUpdateAction}
           />
-          <img src={logo} alt="Luxury Yacht Logo" className="about-logo" width={827} height={500} />
-        </div>
+        ) : null}
 
-        <div className="about-info">
-          <div className="about-description">
-            <p>
-              <strong>Version {appInfo?.version || 'Loading...'}</strong>
-            </p>
-            {update && updatePresentation ? (
-              <ApplicationUpdateSection
-                update={update}
-                presentation={updatePresentation}
-                updateAction={updateAction}
-                onAction={runUpdateAction}
-              />
-            ) : null}
-            {appInfo?.isBeta && appInfo?.expiryDate ? (
-              <p className="about-beta-expiry">
-                Beta expires: {new Date(appInfo.expiryDate).toLocaleDateString()}
-              </p>
-            ) : null}
-            <p className="about-link-row">
-              <a
-                href="https://luxury-yacht.app"
-                onClick={(e) => {
-                  e.preventDefault();
-                  openURL('https://luxury-yacht.app');
-                }}
-              >
-                luxury-yacht.app
-              </a>
-            </p>
-            <p className="about-link-row">
-              Built with{' '}
-              <a
-                href="https://wails.io/"
-                onClick={(e) => {
-                  e.preventDefault();
-                  openURL('https://wails.io/');
-                }}
-              >
-                Wails
-              </a>
-            </p>
-          </div>
+        <p className="about-links">
+          <ExternalLink href={HOMEPAGE_URL}>luxury-yacht.app</ExternalLink>
+          <span className="about-links-separator" aria-hidden="true">
+            ·
+          </span>
+          <span>
+            Built with <ExternalLink href={WAILS_URL}>Wails</ExternalLink>
+          </span>
+        </p>
+      </div>
 
-          <div className="about-footer">
-            <p className="about-license">
-              This application is licensed under the GNU General Public License, version 3 (GPLv3).
-              This application is distributed WITHOUT ANY WARRANTY, explicit or implied. See the{' '}
-              <a
-                href="https://www.gnu.org/licenses/gpl-3.0.html"
-                onClick={(e) => {
-                  e.preventDefault();
-                  openURL('https://www.gnu.org/licenses/gpl-3.0.html');
-                }}
-              >
-                GNU General Public License
-              </a>{' '}
-              for more details.
-            </p>
-            <p className="about-copyright">Copyright © 2025-2026 Luxury Yacht</p>
-          </div>
-        </div>
+      <div className="about-footer">
+        <p className="about-license">
+          Licensed under the GNU General Public License, version 3 (GPLv3), and distributed WITHOUT
+          ANY WARRANTY, explicit or implied. See the{' '}
+          <ExternalLink href={LICENSE_URL}>GNU General Public License</ExternalLink> for more
+          details.
+        </p>
+        <p className="about-copyright">Copyright © 2025-2026 Luxury Yacht</p>
       </div>
     </ModalSurface>
   );

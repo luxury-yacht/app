@@ -1,6 +1,10 @@
 import type { backend } from '@core/backend-api/models';
+import { toPlainReleaseNotes } from './releaseNotesText';
 
 export type UpdateAction = 'check' | 'download' | 'restart' | 'skip' | 'recovery';
+
+/** Visual treatment for the update surface; maps to a StatusChip variant. */
+export type UpdateTone = 'info' | 'progress' | 'ready' | 'error';
 
 export interface UpdatePresentationAction {
   kind: UpdateAction;
@@ -13,14 +17,86 @@ export interface UpdatePresentation {
   explanation?: string;
   primary?: UpdatePresentationAction;
   secondary?: UpdatePresentationAction;
+  /**
+   * Short label for the header chip and the About card's status pill. Present
+   * only for the states that need the user's attention — the quiet states
+   * (disabled, checking, up to date) still have a `message` for About but must
+   * not surface a chip in the header.
+   */
+  badge?: string;
+  tone?: UpdateTone;
+  /** Release identity, present only once a release has actually been discovered. */
+  releaseTitle?: string;
+  published?: string;
+  notes?: string;
+  releaseNotesURL?: string;
 }
 
 const DOWNLOADS_URL = 'https://luxury-yacht.app/#downloads';
 
+// Release tags carry the conventional `v` prefix; the backend normalizes it off
+// the version it reports (internal/updateidentity ParseReleaseVersion), so it is
+// re-added here rather than assumed present.
 const releaseURL = (update: backend.UpdateInfo): string =>
   update.availableVersion
     ? `https://github.com/luxury-yacht/app/releases/tag/v${encodeURIComponent(update.availableVersion)}`
     : DOWNLOADS_URL;
+
+const badgeForStatus = (
+  status: backend.UpdateInfo['status']
+): { badge: string; tone: UpdateTone } | null => {
+  switch (status) {
+    case 'available':
+      return { badge: 'Update available', tone: 'info' };
+    case 'downloading':
+      return { badge: 'Downloading update…', tone: 'progress' };
+    case 'verifying':
+      return { badge: 'Verifying update…', tone: 'progress' };
+    case 'preparing':
+      return { badge: 'Preparing update…', tone: 'progress' };
+    case 'ready':
+      return { badge: 'Restart to update', tone: 'ready' };
+    case 'check-error':
+    case 'prepare-error':
+    case 'restart-error':
+    case 'apply-error':
+      return { badge: 'Update needs attention', tone: 'error' };
+    default:
+      return null;
+  }
+};
+
+// Render the ISO publish date as YYYY-MM-DD from its UTC components (matches
+// GitHub's UTC published_at and is timezone-stable); undefined when absent or
+// unparseable so the surface simply omits the date.
+const formatPublished = (iso?: string): string | undefined => {
+  if (!iso) {
+    return undefined;
+  }
+  const date = new Date(iso);
+  if (Number.isNaN(date.getTime())) {
+    return undefined;
+  }
+  const year = date.getUTCFullYear();
+  const month = String(date.getUTCMonth() + 1).padStart(2, '0');
+  const day = String(date.getUTCDate()).padStart(2, '0');
+  return `${year}-${month}-${day}`;
+};
+
+// Release identity only exists once a release has been discovered; without a
+// version there is no tag page to link and no release to title.
+const releaseDetails = (update: backend.UpdateInfo): Partial<UpdatePresentation> => {
+  if (!update.availableVersion) {
+    return {};
+  }
+  const notes = toPlainReleaseNotes(update.releaseNotes ?? '');
+  return {
+    releaseTitle: update.releaseName || `Luxury Yacht ${update.availableVersion}`,
+    published: formatPublished(update.publishedAt),
+    notes: notes || undefined,
+    releaseNotesURL: releaseURL(update),
+  };
+};
 
 const recoveryActionForTarget = (
   update: backend.UpdateInfo
@@ -107,6 +183,14 @@ const recoveryPresentation = (
 };
 
 export const getUpdatePresentation = (update: backend.UpdateInfo): UpdatePresentation | null => {
+  const core = getUpdateCopy(update);
+  if (!core) {
+    return null;
+  }
+  return { ...core, ...badgeForStatus(update.status), ...releaseDetails(update) };
+};
+
+const getUpdateCopy = (update: backend.UpdateInfo): UpdatePresentation | null => {
   const version = update.availableVersion || 'the latest version';
   const recovery = recoveryPresentation(update);
 

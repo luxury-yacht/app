@@ -104,4 +104,73 @@ describe('getUpdatePresentation', () => {
   it('renders no update surface for idle state', () => {
     expect(getUpdatePresentation(update({ status: appupdates.Status.StatusIdle }))).toBeNull();
   });
+
+  it.each([
+    [appupdates.Status.StatusAvailable, 'Update available', 'info'],
+    [appupdates.Status.StatusDownloading, 'Downloading update…', 'progress'],
+    [appupdates.Status.StatusVerifying, 'Verifying update…', 'progress'],
+    [appupdates.Status.StatusPreparing, 'Preparing update…', 'progress'],
+    [appupdates.Status.StatusReady, 'Restart to update', 'ready'],
+    [appupdates.Status.StatusCheckError, 'Update needs attention', 'error'],
+    [appupdates.Status.StatusPrepareError, 'Update needs attention', 'error'],
+    [appupdates.Status.StatusRestartError, 'Update needs attention', 'error'],
+    [appupdates.Status.StatusApplyError, 'Update needs attention', 'error'],
+  ] as const)('badges %s for the header chip', (status, badge, tone) => {
+    const presentation = getUpdatePresentation(update({ status }));
+    expect(presentation?.badge).toBe(badge);
+    expect(presentation?.tone).toBe(tone);
+  });
+
+  it.each([
+    appupdates.Status.StatusDisabled,
+    appupdates.Status.StatusChecking,
+    appupdates.Status.StatusCurrent,
+  ] as const)('withholds a header badge for %s', (status) => {
+    const presentation = getUpdatePresentation(update({ status }));
+    expect(presentation).not.toBeNull();
+    expect(presentation?.badge).toBeUndefined();
+  });
+
+  it('carries the release identity, plain-text notes, and tag URL', () => {
+    const presentation = getUpdatePresentation(
+      update({
+        status: appupdates.Status.StatusAvailable,
+        releaseName: 'Luxury Yacht 2.0.0',
+        publishedAt: '2026-07-05T12:00:00Z',
+        releaseNotes: '## Highlights\n\n- Fixed the **metrics** notice',
+      })
+    );
+
+    expect(presentation?.releaseTitle).toBe('Luxury Yacht 2.0.0');
+    expect(presentation?.published).toBe('2026-07-05');
+    expect(presentation?.notes).toBe('Highlights\n\n• Fixed the metrics notice');
+    // Release tags carry the conventional `v` prefix; availableVersion does not.
+    expect(presentation?.releaseNotesURL).toBe(
+      'https://github.com/luxury-yacht/app/releases/tag/v2.0.0'
+    );
+  });
+
+  it('falls back to the available version when the release is unnamed', () => {
+    const presentation = getUpdatePresentation(
+      update({ status: appupdates.Status.StatusAvailable, releaseNotes: 'notes' })
+    );
+    expect(presentation?.releaseTitle).toBe('Luxury Yacht 2.0.0');
+    expect(presentation?.published).toBeUndefined();
+  });
+
+  it('omits release identity when no version was discovered', () => {
+    const presentation = getUpdatePresentation(
+      update({
+        status: appupdates.Status.StatusCheckError,
+        availableVersion: undefined,
+        publishedAt: 'not-a-date',
+        releaseNotes: '',
+      })
+    );
+
+    expect(presentation?.releaseTitle).toBeUndefined();
+    expect(presentation?.releaseNotesURL).toBeUndefined();
+    expect(presentation?.published).toBeUndefined();
+    expect(presentation?.notes).toBeUndefined();
+  });
 });

@@ -13,9 +13,12 @@ every six hours. Every window reads the same backend snapshot and receives the
 same `app-update` event.
 
 An automatic or manual check only discovers an update. The header status
-control and About dialog show availability, release notes, progress, failures,
-and recovery actions. **Download Update** is explicit consent to download and
-stage one known version. **Restart to Update** is separate consent to persist
+control is a label and an entry point: it announces availability and opens the
+About dialog, which is the single surface for release notes, progress,
+failures, and recovery actions. Status copy, badge, tone, and release identity
+come from one shared presentation (`frontend/src/ui/status/updatePresentation.ts`)
+so the header and About can never disagree. **Download Update** is explicit
+consent to download and stage one known version. **Restart to Update** is separate consent to persist
 the handoff, quit all workspace peers through the normal lifecycle, replace
 the application, and relaunch. There is no updater-owned window, background
 download, or forced restart.

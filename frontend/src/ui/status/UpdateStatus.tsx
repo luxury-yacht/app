@@ -1,43 +1,22 @@
 /**
  * frontend/src/ui/status/UpdateStatus.tsx
  *
- * Header info chip shown when an application update needs attention. Clicking
- * opens About; hover reveals version and release details via the shared
- * Tooltip. Owns the app-info fetch and the `app-update` runtime event (previously
- * embedded in ClusterOverview).
+ * Header info chip shown when an application update needs attention. It is a
+ * label and nothing more: clicking opens the About dialog, which owns the whole
+ * update workflow — versions, release notes, progress, failures, and recovery.
+ * Owns the app-info fetch and the `app-update` runtime event.
  */
 
 import type { backend } from '@core/backend-api/models';
 import { useModalState } from '@core/contexts/ModalStateContext';
-import { onEvent, openURL } from '@core/desktop-runtime';
-import Tooltip from '@shared/components/Tooltip';
+import { onEvent } from '@core/desktop-runtime';
 import React, { useCallback, useEffect, useState } from 'react';
 import { readAppInfo, requestAppState } from '@/core/app-state-access';
-import { toPlainReleaseNotes } from './releaseNotesText';
+import { getUpdatePresentation } from './updatePresentation';
 import './UpdateStatus.css';
 
 type AppInfoWithUpdate = backend.AppInfo & {
   update?: backend.UpdateInfo | null;
-};
-
-// Full rendered release notes live on the version's GitHub release page.
-const RELEASE_NOTES_TAG_BASE = 'https://github.com/luxury-yacht/app/releases/tag/';
-
-// Render the ISO publish date as YYYY-MM-DD from its UTC components (matches
-// GitHub's UTC published_at and is timezone-stable); null when absent or
-// unparseable so the tooltip simply omits the date.
-const formatPublished = (iso?: string): string | null => {
-  if (!iso) {
-    return null;
-  }
-  const date = new Date(iso);
-  if (Number.isNaN(date.getTime())) {
-    return null;
-  }
-  const year = date.getUTCFullYear();
-  const month = String(date.getUTCMonth() + 1).padStart(2, '0');
-  const day = String(date.getUTCDate()).padStart(2, '0');
-  return `${year}-${month}-${day}`;
 };
 
 const UpdateStatus: React.FC = () => {
@@ -73,91 +52,24 @@ const UpdateStatus: React.FC = () => {
     setIsAboutOpen(true);
   }, [setIsAboutOpen]);
 
-  const label = updateInfo ? statusChipLabel(updateInfo.status) : null;
-  if (!updateInfo || !label) {
+  // The shared presentation decides which states are worth a header chip; quiet
+  // states (disabled, checking, up to date) still have About copy but no badge.
+  const badge = updateInfo ? getUpdatePresentation(updateInfo)?.badge : undefined;
+  if (!badge) {
     return null;
   }
 
-  const newDate = formatPublished(updateInfo.publishedAt);
-  const notes = toPlainReleaseNotes(updateInfo.releaseNotes ?? '');
-  const availableVersion = updateInfo.availableVersion ?? '';
-  const notesUrl = `${RELEASE_NOTES_TAG_BASE}${encodeURIComponent(availableVersion)}`;
-  const openNotes = () => openURL(notesUrl);
-  const renderVersion = (version: string, date: string | null) => (
-    <span>
-      {version}
-      {!!date && <span className="update-status__tooltip-date"> ({date})</span>}
-    </span>
-  );
-
-  const tooltip = (
-    <div className="update-status__tooltip">
-      <div className="update-status__tooltip-rows">
-        <span className="update-status__tooltip-label">New:</span>
-        {availableVersion !== '' ? renderVersion(availableVersion, newDate) : <span>{label}</span>}
-        {!!updateInfo.currentVersion && (
-          <>
-            <span className="update-status__tooltip-label">Current:</span>
-            {renderVersion(updateInfo.currentVersion, null)}
-          </>
-        )}
-      </div>
-      {notes && (
-        <>
-          <div className="update-status__tooltip-divider" />
-          <div className="update-status__tooltip-notes" data-testid="update-status-notes">
-            {notes}
-          </div>
-        </>
-      )}
-      {availableVersion !== '' ? (
-        <button
-          type="button"
-          className="update-status__tooltip-link"
-          onClick={openNotes}
-          data-testid="update-status-notes-link"
-        >
-          Full release notes ↗
-        </button>
-      ) : null}
-    </div>
-  );
-
   return (
-    <Tooltip content={tooltip} className="update-status-tooltip" interactive maxWidth={360}>
-      <button
-        type="button"
-        className="update-chip"
-        onClick={handleClick}
-        aria-label={`${label} — open About`}
-        data-testid="update-status-chip"
-      >
-        {label}
-      </button>
-    </Tooltip>
+    <button
+      type="button"
+      className="update-chip"
+      onClick={handleClick}
+      aria-label={`${badge} — open About`}
+      data-testid="update-status-chip"
+    >
+      {badge}
+    </button>
   );
-};
-
-const statusChipLabel = (status: backend.UpdateInfo['status']): string | null => {
-  switch (status) {
-    case 'available':
-      return 'Update available';
-    case 'downloading':
-      return 'Downloading update…';
-    case 'verifying':
-      return 'Verifying update…';
-    case 'preparing':
-      return 'Preparing update…';
-    case 'ready':
-      return 'Restart to update';
-    case 'check-error':
-    case 'prepare-error':
-    case 'restart-error':
-    case 'apply-error':
-      return 'Update needs attention';
-    default:
-      return null;
-  }
 };
 
 export default React.memo(UpdateStatus);

@@ -1,13 +1,12 @@
 /**
  * frontend/src/ui/status/UpdateStatus.test.tsx
  *
- * Covers the header update chip: it appears only when an update is available,
- * opens the release URL on click, and wires version/release details into the
- * hover tooltip. The shared Tooltip is mocked to expose its `content` so the
- * test asserts THIS component's wiring, not Tooltip's hover/portal internals.
+ * Covers the header update chip: it appears only for the states that need the
+ * user's attention, carries no hover surface of its own, and opens About on
+ * click. Release detail (versions, notes, links) belongs to the About modal, so
+ * the chip must not render or fetch any of it.
  */
 
-import type { ReactNode } from 'react';
 import { act } from 'react';
 import * as ReactDOM from 'react-dom/client';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
@@ -31,18 +30,6 @@ vi.mock('@core/desktop-runtime', () => ({
 
 vi.mock('@core/contexts/ModalStateContext', () => ({
   useModalState: () => ({ setIsAboutOpen: setIsAboutOpenMock }),
-}));
-
-vi.mock('@core/backend-api/models', () => ({ backend: {} }));
-
-vi.mock('@shared/components/Tooltip', () => ({
-  __esModule: true,
-  default: ({ content, children }: { content: ReactNode; children: ReactNode }) => (
-    <span data-testid="tooltip">
-      {children}
-      <span data-testid="tooltip-content">{content}</span>
-    </span>
-  ),
 }));
 
 import UpdateStatus from './UpdateStatus';
@@ -75,7 +62,7 @@ describe('UpdateStatus', () => {
     });
   };
 
-  it('renders a clickable info chip with version + release notes, and links to the notes page', async () => {
+  it('renders a bare clickable chip that opens About and carries no hover surface', async () => {
     readAppInfoMock.mockResolvedValue({
       update: {
         status: 'available',
@@ -95,37 +82,22 @@ describe('UpdateStatus', () => {
     expect(chip).not.toBeNull();
     expect(chip?.textContent).toContain('Update available');
 
-    // Tooltip shows New/Current rows, each "<version> (YYYY-MM-DD)", plus the
-    // release notes preview. Dates format from UTC, so they're timezone-stable.
-    const tooltip = container.querySelector('[data-testid="tooltip-content"]');
-    expect(tooltip?.textContent).toContain('New');
-    expect(tooltip?.textContent).toContain('Current');
-    expect(tooltip?.textContent).toContain('1.10.1');
-    expect(tooltip?.textContent).toContain('1.10.0');
-    expect(tooltip?.textContent).toContain('(2026-07-05)');
-    const notes = container.querySelector('[data-testid="update-status-notes"]');
-    expect(notes?.textContent).toContain('Fixed metrics permission notice');
-    // The markdown stripper is applied: bullets render as • (not raw "- ").
-    expect(notes?.textContent).toContain('•');
+    // The chip is the whole surface: no tooltip wrapper, and none of the release
+    // detail that used to hang off it. That detail now lives in the About modal.
+    expect(container.querySelector('.tooltip-wrapper')).toBeNull();
+    expect(container.querySelector('[class*="tooltip"]')).toBeNull();
+    expect(container.textContent).not.toContain('1.10.1');
+    expect(container.textContent).not.toContain('2026-07-05');
+    expect(container.textContent).not.toContain('Fixed metrics permission notice');
+    expect(container.textContent).not.toContain('Full release notes');
 
-    // Clicking the chip opens About; it never starts a download or bypasses
-    // the app-owned update workflow.
+    // Clicking opens About; it never starts a download, opens a URL, or
+    // otherwise bypasses the app-owned update workflow.
     act(() => {
       chip?.click();
     });
     expect(setIsAboutOpenMock).toHaveBeenCalledWith(true);
     expect(browserOpenURLMock).not.toHaveBeenCalled();
-
-    // The "Full release notes" link opens the version's tag page.
-    const notesLink = container.querySelector(
-      '[data-testid="update-status-notes-link"]'
-    ) as HTMLButtonElement | null;
-    act(() => {
-      notesLink?.click();
-    });
-    expect(browserOpenURLMock).toHaveBeenCalledWith(
-      'https://github.com/luxury-yacht/app/releases/tag/1.10.1'
-    );
   });
 
   it('renders nothing when no update is available', async () => {
@@ -154,5 +126,13 @@ describe('UpdateStatus', () => {
     expect(chip.textContent).toContain(label);
     act(() => chip.click());
     expect(setIsAboutOpenMock).toHaveBeenCalledWith(true);
+  });
+
+  it.each(['disabled', 'idle', 'checking'])('stays out of the header for %s', async (status) => {
+    readAppInfoMock.mockResolvedValue({ update: { status } });
+
+    await renderAndSettle();
+
+    expect(container.querySelector('[data-testid="update-status-chip"]')).toBeNull();
   });
 });

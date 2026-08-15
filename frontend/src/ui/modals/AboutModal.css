@@ -1,208 +1,256 @@
 /* ==========================================================================
-   About Modal Specific Styles
+   About Modal
+   --------------------------------------------------------------------------
+   Three stacked bands inside the shared modal surface: a centered hero, the
+   update/release card, and a pinned license footer. Everything below reuses the
+   shared tokens and the standard `.button` / `.status-chip` vocabulary.
    ========================================================================== */
 
-/* Modal Sizing */
 .about-modal {
-  max-width: 500px;
+  max-width: var(--modal-width-md);
 }
 
-/* Center content */
-.about-modal .modal-content {
-  text-align: center;
+.about-modal-content {
+  display: flex;
+  flex-direction: column;
+  gap: var(--spacing-lg);
+  padding: var(--spacing-xl) var(--spacing-xl) var(--spacing-lg);
 }
 
 /* ==========================================================================
-   Logo Section
+   Hero
    ========================================================================== */
+
+.about-hero {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: var(--spacing-xs);
+  text-align: center;
+}
 
 .about-logo-section {
   display: inline-flex;
   align-items: center;
   justify-content: center;
-  gap: 1.5rem;
-  margin-bottom: 1.5rem;
+  gap: var(--spacing-xl);
+  margin-bottom: var(--spacing-sm);
 }
 
 .about-captain-k8s {
-  width: 150px;
+  width: 110px;
   height: auto;
 }
 
 .about-logo {
-  width: 250px;
+  width: 200px;
   height: auto;
 }
 
-/* ==========================================================================
-   About Info Section
-   ========================================================================== */
-
-.about-info h3 {
-  font-size: 1.5rem;
-  margin: 0 0 0.5rem 0;
-  color: var(--color-accent);
-}
-
-.about-tagline {
-  font-style: italic;
-  color: var(--color-text-tertiary);
-  margin-bottom: 2rem;
-  font-size: 1rem;
-}
-
-/* ==========================================================================
-   Details Section
-   ========================================================================== */
-
-.about-details {
-  background-color: var(--color-bg-secondary);
-  border-radius: var(--border-radius);
-  padding: 1rem;
-  margin-bottom: 1.5rem;
-  text-align: left;
-}
-
-.about-field {
-  display: flex;
-  justify-content: space-between;
-  margin-bottom: 0.75rem;
-  font-size: 0.9rem;
-}
-
-.about-field:last-child {
-  margin-bottom: 0;
-}
-
-.about-label {
-  font-weight: var(--font-weight-semibold);
-  color: var(--color-text-tertiary);
-}
-
-.about-value {
+.about-version {
+  margin: 0;
   color: var(--color-text);
+  font-size: var(--font-size-md);
+  font-weight: var(--font-weight-bold);
 }
-
-/* ==========================================================================
-   Description Section
-   ========================================================================== */
-
-.about-description {
-  margin-bottom: 1.5rem;
-}
-
-.about-description p {
-  line-height: 1.6;
-  color: var(--color-text-secondary);
-  font-size: 0.95rem;
-}
-
-.about-link-row {
-  margin-top: 1em;
-}
-
-.about-description a {
-  color: var(--color-accent);
-  text-decoration: none;
-  transition: opacity 150ms ease;
-}
-
-.about-description a:hover {
-  text-decoration: underline;
-  opacity: 0.8;
-}
-
-/* Version status indicators */
 
 .about-beta-expiry {
+  margin: 0;
   color: var(--color-warning);
-  font-size: 0.9em;
+  font-size: var(--font-size-normal);
 }
 
+/* ==========================================================================
+   Update / release card
+   ========================================================================== */
+
 .about-update {
-  margin: 1rem 0;
-  padding: 1rem;
+  display: flex;
+  flex-direction: column;
+  gap: var(--spacing-md);
+  padding: var(--spacing-lg);
   border: 1px solid var(--color-border);
-  border-radius: var(--border-radius);
+  border-radius: var(--border-radius-lg);
   background: var(--color-bg-secondary);
   text-align: left;
+}
+
+.about-update-summary {
+  display: flex;
+  flex-direction: column;
+  align-items: flex-start;
+  gap: var(--spacing-sm);
 }
 
 .about-update-message {
   margin: 0;
   color: var(--color-text);
-  font-weight: var(--font-weight-semibold);
+  font-size: var(--font-size-md);
+  font-weight: var(--font-weight-bold);
+  line-height: 1.4;
 }
 
-.about-update-explanation,
-.about-update-error {
-  margin: 0.5rem 0 0;
+.about-update-explanation {
+  margin: 0;
+  color: var(--color-text-secondary);
+  font-size: var(--font-size-normal);
+  line-height: 1.5;
 }
 
 .about-update-error {
+  margin: 0;
   color: var(--color-error);
+  font-size: var(--font-size-normal);
+  line-height: 1.5;
 }
 
 .about-update-progress {
   display: flex;
   align-items: center;
-  gap: 0.75rem;
-  margin-top: 0.75rem;
+  gap: var(--spacing-md);
 }
 
 .about-update-progress progress {
   flex: 1;
+  min-width: 0;
 }
 
-.about-update-notes {
-  max-height: 8rem;
-  margin-top: 0.75rem;
-  overflow: auto;
-  white-space: pre-wrap;
+.about-update-progress span {
   color: var(--color-text-secondary);
-  font-size: 0.85rem;
+  font-size: var(--font-size-normal);
+  font-variant-numeric: tabular-nums;
+}
+
+/* Release notes: the block that used to be the header tooltip. Capped so a long
+   release scrolls inside the card instead of pushing the actions out of reach. */
+.about-release {
+  display: flex;
+  flex-direction: column;
+  gap: var(--spacing-xs);
+  padding-top: var(--spacing-md);
+  border-top: 1px solid var(--color-border);
+}
+
+.about-release-header {
+  display: flex;
+  align-items: baseline;
+  justify-content: space-between;
+  gap: var(--spacing-sm);
+}
+
+.about-release-header h3 {
+  margin: 0;
+  min-width: 0;
+  overflow: hidden;
+  color: var(--color-text-tertiary);
+  font-size: var(--font-size-sm);
+  font-weight: var(--font-weight-bold);
+  letter-spacing: 0.08em;
+  text-overflow: ellipsis;
+  text-transform: uppercase;
+  white-space: nowrap;
+}
+
+.about-release-date {
+  flex-shrink: 0;
+  color: var(--color-text-tertiary);
+  font-size: var(--font-size-sm);
+  font-variant-numeric: tabular-nums;
+}
+
+/* Capped at a whole number of lines so a long release scrolls cleanly instead of
+   slicing the last line in half; the actions below stay reachable either way. */
+.about-release-notes {
+  --about-release-notes-line-height: 1.5;
+  --about-release-notes-lines: 9;
+  max-height: calc(
+    var(--font-size-normal) *
+    var(--about-release-notes-line-height) *
+    var(--about-release-notes-lines)
+  );
+  overflow-y: auto;
+  color: var(--color-text-secondary);
+  font-size: var(--font-size-normal);
+  line-height: var(--about-release-notes-line-height);
+  white-space: pre-wrap;
 }
 
 .about-update-actions {
   display: flex;
   flex-wrap: wrap;
-  gap: 0.5rem;
-  margin-top: 0.75rem;
+  align-items: center;
+  gap: var(--spacing-sm);
 }
 
-.about-update-action {
-  margin: 0;
+/* Pushes the release-notes link to the trailing edge, away from the buttons. */
+.about-release-link {
+  margin-left: auto;
+  color: var(--color-accent);
+  font-size: var(--font-size-normal);
+  text-decoration: none;
+  white-space: nowrap;
 }
 
 /* ==========================================================================
-   Footer Section
+   Links
+   ========================================================================== */
+
+.about-links {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  justify-content: center;
+  gap: var(--spacing-sm);
+  margin: 0;
+  color: var(--color-text-secondary);
+  font-size: var(--font-size-normal);
+}
+
+.about-links-separator {
+  color: var(--color-text-tertiary);
+}
+
+/* ==========================================================================
+   Footer
    ========================================================================== */
 
 .about-footer {
-  padding-top: 1rem;
+  flex-shrink: 0;
+  padding: var(--spacing-md) var(--spacing-xl);
   border-top: 1px solid var(--color-border);
+  background: var(--modal-footer-bg);
+  text-align: center;
 }
 
-.about-license {
-  color: var(--color-text-secondary);
-  font-size: 0.75rem;
+.about-license,
+.about-copyright {
   margin: 0;
+  color: var(--color-text-tertiary);
+  font-size: var(--font-size-sm);
+  line-height: 1.5;
 }
 
-.about-license a {
+.about-copyright {
+  padding-top: var(--spacing-sm);
+}
+
+/* ==========================================================================
+   Shared link treatment
+   ========================================================================== */
+
+.about-modal a {
   color: var(--color-accent);
   text-decoration: none;
-  transition: opacity 150ms ease;
+  transition: opacity var(--transition-fast);
 }
 
-.about-license a:hover {
+.about-modal a:hover {
   text-decoration: underline;
   opacity: 0.8;
 }
 
-.about-copyright {
-  color: var(--color-text-secondary);
-  font-size: 0.75rem;
-  margin: 0;
-  padding-top: 1rem;
+.about-modal a:focus-visible {
+  outline: 2px solid var(--color-accent);
+  outline-offset: 2px;
+  border-radius: var(--border-radius-xs);
 }
