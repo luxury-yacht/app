@@ -25,18 +25,179 @@ import { useModalFocusTrap } from '@shared/components/modals/useModalFocusTrap';
 import { readAppInfo, requestAppState } from '@/core/app-state-access';
 import { reportOperationalError } from '@/utils/errorHandler';
 import { toPlainReleaseNotes } from '../status/releaseNotesText';
-import { getUpdatePresentation, type UpdateAction } from '../status/updatePresentation';
+import {
+  getUpdatePresentation,
+  type UpdateAction,
+  type UpdatePresentation,
+  type UpdatePresentationAction,
+} from '../status/updatePresentation';
 
 interface AboutModalProps {
   isOpen: boolean;
   onClose: () => void;
 }
 
+const updateActionNames: Record<UpdateAction, string> = {
+  check: 'checkApplicationUpdate',
+  download: 'downloadApplicationUpdate',
+  restart: 'restartAndApplyApplicationUpdate',
+  skip: 'skipApplicationUpdate',
+  recovery: 'openApplicationUpdateRecovery',
+};
+
+const withUpdate = (
+  current: backend.AppInfo | null,
+  update: backend.UpdateInfo
+): backend.AppInfo | null => (current ? { ...current, update } : current);
+
+const progressPercentFor = (update: backend.UpdateInfo): number | null => {
+  const progress = update.progressPercent;
+  return typeof progress === 'number' &&
+    Number.isFinite(progress) &&
+    progress >= 0 &&
+    progress <= 100
+    ? progress
+    : null;
+};
+
+const performUpdateAction = async (
+  action: UpdateAction,
+  update: backend.UpdateInfo,
+  url?: string
+): Promise<backend.UpdateInfo | null> => {
+  switch (action) {
+    case 'recovery':
+      if (url) {
+        openURL(url);
+      }
+      return null;
+    case 'check':
+      return CheckForUpdates();
+    case 'download':
+      return update.availableVersion ? DownloadApplicationUpdate(update.availableVersion) : null;
+    case 'restart':
+      return RestartAndApplyApplicationUpdate();
+    case 'skip':
+      return update.availableVersion ? SkipApplicationUpdate(update.availableVersion) : null;
+  }
+};
+
+const useApplicationUpdateAction = (
+  update: backend.UpdateInfo | null,
+  setAppInfo: React.Dispatch<React.SetStateAction<backend.AppInfo | null>>
+) => {
+  const [updateAction, setUpdateAction] = useState<UpdateAction | null>(null);
+
+  const runUpdateAction = async (action: UpdateAction, url?: string) => {
+    if (!update || updateAction) {
+      return;
+    }
+    if (action === 'recovery') {
+      await performUpdateAction(action, update, url);
+      return;
+    }
+    setUpdateAction(action);
+    try {
+      const next = await performUpdateAction(action, update, url);
+      if (next) {
+        setAppInfo((current) => withUpdate(current, next));
+      }
+    } catch (error) {
+      reportOperationalError(error, {
+        source: 'AboutModal',
+        action: updateActionNames[action],
+      });
+    } finally {
+      setUpdateAction(null);
+    }
+  };
+
+  return { updateAction, runUpdateAction };
+};
+
+interface UpdateActionButtonProps {
+  action?: UpdatePresentationAction;
+  primary?: boolean;
+  busy: boolean;
+  onAction: (action: UpdateAction, url?: string) => Promise<void>;
+}
+
+const UpdateActionButton: React.FC<UpdateActionButtonProps> = ({
+  action,
+  primary = false,
+  busy,
+  onAction,
+}) => {
+  if (!action) {
+    return null;
+  }
+  return (
+    <button
+      type="button"
+      className={primary ? 'p-btn p-prim-col about-update-action' : 'p-btn about-update-action'}
+      disabled={busy}
+      onClick={() => void onAction(action.kind, action.url)}
+    >
+      {action.label}
+    </button>
+  );
+};
+
+interface ApplicationUpdateSectionProps {
+  update: backend.UpdateInfo;
+  presentation: UpdatePresentation;
+  updateAction: UpdateAction | null;
+  onAction: (action: UpdateAction, url?: string) => Promise<void>;
+}
+
+const ApplicationUpdateSection: React.FC<ApplicationUpdateSectionProps> = ({
+  update,
+  presentation,
+  updateAction,
+  onAction,
+}) => {
+  const progressPercent = progressPercentFor(update);
+  return (
+    <section className="about-update" aria-label="Application update">
+      <p className="about-update-message">{presentation.message}</p>
+      {presentation.explanation ? (
+        <p className="about-update-explanation">{presentation.explanation}</p>
+      ) : null}
+      {progressPercent !== null ? (
+        <div className="about-update-progress">
+          <progress value={progressPercent} max={100} />
+          <span>{Math.round(progressPercent)}%</span>
+        </div>
+      ) : null}
+      {update.releaseNotes ? (
+        <div className="about-update-notes">{toPlainReleaseNotes(update.releaseNotes)}</div>
+      ) : null}
+      <div className="about-update-actions">
+        <UpdateActionButton
+          action={presentation.primary}
+          primary={true}
+          busy={updateAction !== null}
+          onAction={onAction}
+        />
+        <UpdateActionButton
+          action={presentation.secondary}
+          busy={updateAction !== null}
+          onAction={onAction}
+        />
+      </div>
+      {update.error ? (
+        <p className="about-update-error">
+          <ErrorSurface kind="status" message={update.error} />
+        </p>
+      ) : null}
+    </section>
+  );
+};
+
 const AboutModal: React.FC<AboutModalProps> = React.memo(({ isOpen, onClose }) => {
   const [isClosing, setIsClosing] = useState(false);
   const [shouldRender, setShouldRender] = useState(false);
   const [appInfo, setAppInfo] = useState<backend.AppInfo | null>(null);
-  const [updateAction, setUpdateAction] = useState<UpdateAction | null>(null);
 
   useEffect(() => {
     if (isOpen) {
@@ -69,7 +230,7 @@ const AboutModal: React.FC<AboutModalProps> = React.memo(({ isOpen, onClose }) =
     }
     return onEvent('app-update', (updateSnapshot?: backend.UpdateInfo) => {
       if (updateSnapshot) {
-        setAppInfo((current) => (current ? { ...current, update: updateSnapshot } : current));
+        setAppInfo((current) => withUpdate(current, updateSnapshot));
       }
     });
   }, [isOpen]);
@@ -95,69 +256,14 @@ const AboutModal: React.FC<AboutModalProps> = React.memo(({ isOpen, onClose }) =
     },
   });
 
+  const update = appInfo?.update ?? null;
+  const { updateAction, runUpdateAction } = useApplicationUpdateAction(update, setAppInfo);
+
   if (!shouldRender) {
     return null;
   }
 
-  const update = appInfo?.update ?? null;
   const updatePresentation = update ? getUpdatePresentation(update) : null;
-  const progressPercent =
-    typeof update?.progressPercent === 'number' &&
-    Number.isFinite(update.progressPercent) &&
-    update.progressPercent >= 0 &&
-    update.progressPercent <= 100
-      ? update.progressPercent
-      : null;
-  const runUpdateAction = async (action: UpdateAction, url?: string) => {
-    if (!update || updateAction) {
-      return;
-    }
-    if (action === 'recovery') {
-      if (url) {
-        openURL(url);
-      }
-      return;
-    }
-    setUpdateAction(action);
-    try {
-      let next: backend.UpdateInfo | null = null;
-      if (action === 'check') {
-        next = await CheckForUpdates();
-      } else if (action === 'download' && update.availableVersion) {
-        next = await DownloadApplicationUpdate(update.availableVersion);
-      } else if (action === 'restart') {
-        next = await RestartAndApplyApplicationUpdate();
-      } else if (action === 'skip' && update.availableVersion) {
-        next = await SkipApplicationUpdate(update.availableVersion);
-      }
-      if (next) {
-        setAppInfo((current) => (current ? { ...current, update: next } : current));
-      }
-    } catch (error) {
-      const actionName = {
-        check: 'checkApplicationUpdate',
-        download: 'downloadApplicationUpdate',
-        restart: 'restartAndApplyApplicationUpdate',
-        skip: 'skipApplicationUpdate',
-        recovery: 'openApplicationUpdateRecovery',
-      }[action];
-      reportOperationalError(error, { source: 'AboutModal', action: actionName });
-    } finally {
-      setUpdateAction(null);
-    }
-  };
-
-  const renderAction = (action: NonNullable<typeof updatePresentation>['primary']) =>
-    action ? (
-      <button
-        type="button"
-        className="p-btn p-prim-col about-update-action"
-        disabled={updateAction !== null}
-        onClick={() => void runUpdateAction(action.kind, action.url)}
-      >
-        {action.label}
-      </button>
-    ) : null;
 
   return (
     <ModalSurface
@@ -187,47 +293,13 @@ const AboutModal: React.FC<AboutModalProps> = React.memo(({ isOpen, onClose }) =
             <p>
               <strong>Version {appInfo?.version || 'Loading...'}</strong>
             </p>
-            {updatePresentation ? (
-              <section className="about-update" aria-label="Application update">
-                <p className="about-update-message">{updatePresentation.message}</p>
-                {updatePresentation.explanation ? (
-                  <p className="about-update-explanation">{updatePresentation.explanation}</p>
-                ) : null}
-                {progressPercent !== null ? (
-                  <div className="about-update-progress">
-                    <progress value={progressPercent} max={100} />
-                    <span>{Math.round(progressPercent)}%</span>
-                  </div>
-                ) : null}
-                {update?.releaseNotes ? (
-                  <div className="about-update-notes">
-                    {toPlainReleaseNotes(update.releaseNotes)}
-                  </div>
-                ) : null}
-                <div className="about-update-actions">
-                  {renderAction(updatePresentation.primary)}
-                  {updatePresentation.secondary ? (
-                    <button
-                      type="button"
-                      className="p-btn about-update-action"
-                      disabled={updateAction !== null}
-                      onClick={() =>
-                        void runUpdateAction(
-                          updatePresentation.secondary?.kind ?? 'recovery',
-                          updatePresentation.secondary?.url
-                        )
-                      }
-                    >
-                      {updatePresentation.secondary.label}
-                    </button>
-                  ) : null}
-                </div>
-                {update?.error ? (
-                  <p className="about-update-error">
-                    <ErrorSurface kind="status" message={update.error} />
-                  </p>
-                ) : null}
-              </section>
+            {update && updatePresentation ? (
+              <ApplicationUpdateSection
+                update={update}
+                presentation={updatePresentation}
+                updateAction={updateAction}
+                onAction={runUpdateAction}
+              />
             ) : null}
             {appInfo?.isBeta && appInfo?.expiryDate ? (
               <p className="about-beta-expiry">

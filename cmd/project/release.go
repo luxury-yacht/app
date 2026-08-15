@@ -12,6 +12,8 @@ import (
 	"text/template"
 )
 
+const gitHubRepositoryFlag = "--repo"
+
 type releaseNotesData struct {
 	Version          string
 	BuildLabel       string
@@ -77,7 +79,7 @@ func checkGhCli() error {
 // Check if the release already exists.
 func releaseExists(repo, tag string) (bool, error) {
 	fmt.Printf("\n🔎 Checking if release %s exists in repo %s\n", tag, repo)
-	if runCommand("gh", "release", "view", tag, "--repo", repo) != nil {
+	if runCommand("gh", "release", "view", tag, gitHubRepositoryFlag, repo) != nil {
 		return false, nil
 	}
 	return true, nil
@@ -225,7 +227,7 @@ func createRelease(
 		"release", "create", cfg.version,
 		"--title", cfg.version,
 		"--notes-file", notesFile,
-		"--repo", cfg.releaseRepo,
+		gitHubRepositoryFlag, cfg.releaseRepo,
 		"--draft",
 	}
 	if cfg.isBeta {
@@ -244,7 +246,7 @@ func createRelease(
 		"gh",
 		"release", "edit", cfg.version,
 		"--draft=false",
-		"--repo", cfg.releaseRepo,
+		gitHubRepositoryFlag, cfg.releaseRepo,
 	); err != nil {
 		return fmt.Errorf("failed to publish draft release %s: %w", cfg.version, err)
 	}

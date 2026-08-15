@@ -215,14 +215,43 @@ func validateReleaseUpdateManifest(
 	request updater.CheckRequest,
 	selectedURL string,
 ) (updater.Artifact, *updater.Verification, string, error) {
+	channel, err := validateReleaseUpdateManifestIdentity(manifest, release)
+	if err != nil {
+		return updater.Artifact{}, nil, "", err
+	}
+	match, err := selectReleaseUpdateManifestArtifact(manifest.Artifacts, request)
+	if err != nil {
+		return updater.Artifact{}, nil, "", err
+	}
+	filename, err := validateReleaseUpdateManifestArtifact(match, release, selectedURL)
+	if err != nil {
+		return updater.Artifact{}, nil, "", err
+	}
+	verification, err := releaseUpdateManifestVerification(match)
+	if err != nil {
+		return updater.Artifact{}, nil, "", err
+	}
+	return updater.Artifact{
+		Filename: filename,
+		Filetype: match.Filetype,
+		Size:     match.Size,
+		Platform: match.Platform,
+		Arch:     match.Arch,
+	}, verification, channel, nil
+}
+
+func validateReleaseUpdateManifestIdentity(
+	manifest releaseUpdateManifest,
+	release *updater.Release,
+) (string, error) {
 	if manifest.SchemaVersion != 1 {
-		return updater.Artifact{}, nil, "", fmt.Errorf(
+		return "", fmt.Errorf(
 			"updater manifest schemaVersion %d is not supported",
 			manifest.SchemaVersion,
 		)
 	}
 	if manifest.Version != release.Version {
-		return updater.Artifact{}, nil, "", fmt.Errorf(
+		return "", fmt.Errorf(
 			"updater manifest version %q does not match GitHub release %q",
 			manifest.Version,
 			release.Version,
@@ -233,65 +262,86 @@ func validateReleaseUpdateManifest(
 		channel = string(updateidentity.ChannelBeta)
 	}
 	if manifest.Channel != channel {
-		return updater.Artifact{}, nil, "", fmt.Errorf(
+		return "", fmt.Errorf(
 			"updater manifest channel %q does not match GitHub release channel %q",
 			manifest.Channel,
 			channel,
 		)
 	}
+	return channel, nil
+}
+
+func selectReleaseUpdateManifestArtifact(
+	artifacts []releaseUpdateManifestArtifact,
+	request updater.CheckRequest,
+) (releaseUpdateManifestArtifact, error) {
 	var matches []releaseUpdateManifestArtifact
-	for _, artifact := range manifest.Artifacts {
+	for _, artifact := range artifacts {
 		if artifact.Platform == request.Platform && artifact.Arch == request.Arch {
 			matches = append(matches, artifact)
 		}
 	}
 	if len(matches) != 1 {
-		return updater.Artifact{}, nil, "", fmt.Errorf(
+		return releaseUpdateManifestArtifact{}, fmt.Errorf(
 			"updater manifest requires exactly one artifact for %s/%s, found %d",
 			request.Platform,
 			request.Arch,
 			len(matches),
 		)
 	}
-	match := matches[0]
+	return matches[0], nil
+}
+
+func validateReleaseUpdateManifestArtifact(
+	match releaseUpdateManifestArtifact,
+	release *updater.Release,
+	selectedURL string,
+) (string, error) {
 	if match.URL != selectedURL {
-		return updater.Artifact{}, nil, "", fmt.Errorf("updater manifest artifact URL does not match the selected GitHub release asset")
+		return "", fmt.Errorf("updater manifest artifact URL does not match the selected GitHub release asset")
 	}
-	filename := match.Filename
-	if filename == "" {
-		parsed, err := url.Parse(match.URL)
-		if err != nil {
-			return updater.Artifact{}, nil, "", fmt.Errorf("parse updater manifest artifact URL: %w", err)
-		}
-		filename = path.Base(parsed.Path)
+	filename, err := releaseUpdateManifestArtifactFilename(match)
+	if err != nil {
+		return "", err
 	}
 	if filename != release.Artifact.Filename {
-		return updater.Artifact{}, nil, "", fmt.Errorf("updater manifest filename does not match the selected GitHub release asset")
+		return "", fmt.Errorf("updater manifest filename does not match the selected GitHub release asset")
 	}
 	if match.Size <= 0 || match.Size != release.Artifact.Size {
-		return updater.Artifact{}, nil, "", fmt.Errorf("updater manifest size does not match the selected GitHub release asset")
+		return "", fmt.Errorf("updater manifest size does not match the selected GitHub release asset")
 	}
+	return filename, nil
+}
+
+func releaseUpdateManifestArtifactFilename(match releaseUpdateManifestArtifact) (string, error) {
+	if match.Filename != "" {
+		return match.Filename, nil
+	}
+	parsed, err := url.Parse(match.URL)
+	if err != nil {
+		return "", fmt.Errorf("parse updater manifest artifact URL: %w", err)
+	}
+	return path.Base(parsed.Path), nil
+}
+
+func releaseUpdateManifestVerification(
+	match releaseUpdateManifestArtifact,
+) (*updater.Verification, error) {
 	if match.DigestAlgo != "sha512" || match.SignatureAlgo != "ed25519ph" {
-		return updater.Artifact{}, nil, "", fmt.Errorf("updater manifest requires sha512 and ed25519ph verification")
+		return nil, fmt.Errorf("updater manifest requires sha512 and ed25519ph verification")
 	}
 	digest, err := base64.StdEncoding.DecodeString(match.Digest)
 	if err != nil || len(digest) != sha512.Size {
-		return updater.Artifact{}, nil, "", fmt.Errorf("updater manifest digest must be a base64 SHA-512 digest")
+		return nil, fmt.Errorf("updater manifest digest must be a base64 SHA-512 digest")
 	}
 	signature, err := base64.StdEncoding.DecodeString(match.Signature)
 	if err != nil || len(signature) != ed25519.SignatureSize {
-		return updater.Artifact{}, nil, "", fmt.Errorf("updater manifest signature must be a base64 Ed25519 signature")
+		return nil, fmt.Errorf("updater manifest signature must be a base64 Ed25519 signature")
 	}
-	return updater.Artifact{
-			Filename: filename,
-			Filetype: match.Filetype,
-			Size:     match.Size,
-			Platform: match.Platform,
-			Arch:     match.Arch,
-		}, &updater.Verification{
-			DigestAlgo:    match.DigestAlgo,
-			Digest:        digest,
-			SignatureAlgo: match.SignatureAlgo,
-			Signature:     signature,
-		}, channel, nil
+	return &updater.Verification{
+		DigestAlgo:    match.DigestAlgo,
+		Digest:        digest,
+		SignatureAlgo: match.SignatureAlgo,
+		Signature:     signature,
+	}, nil
 }

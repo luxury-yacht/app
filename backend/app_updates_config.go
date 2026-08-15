@@ -1,7 +1,7 @@
 package backend
 
 import (
-	_ "embed"
+	_ "embed" // Enables go:embed for the pinned updater public key.
 	"fmt"
 	"os"
 	"path/filepath"
@@ -48,72 +48,114 @@ func (a *App) configureApplicationUpdates(options ApplicationUpdateOptions) {
 	if a == nil {
 		return
 	}
-	eligibility := disabledApplicationUpdateEligibility()
-	if options.TempSetupError == nil {
-		resolved, err := currentApplicationUpdateEligibility(time.Now())
-		if err != nil {
-			a.logger.Warn(fmt.Sprintf("Automatic updates disabled: %v", err), logsources.UpdateCheck)
-		} else {
-			eligibility = resolved
-		}
-	} else {
-		a.logger.Warn(fmt.Sprintf("Automatic updates disabled: %v", options.TempSetupError), logsources.UpdateCheck)
-	}
-
-	var updateState *updatestate.Store
-	var reconciled *updatestate.ReconcileResult
-	var skippedVersion string
-	if options.TempSetupError == nil && options.TempRoot != "" && eligibility.Release.Version != "" {
-		setup, err := prepareApplicationUpdateState(options, eligibility)
-		if err != nil {
-			a.logger.Warn(fmt.Sprintf("Automatic update recovery state unavailable: %v", err), logsources.UpdateCheck)
-			eligibility.CanInstall = false
-			eligibility.Installation.CanInstall = false
-		} else {
-			updateState = setup.Store
-			reconciled = &setup.Reconciled
-			skippedVersion = setup.SkippedVersion
-			a.logApplicationUpdateReconciliation(setup.Reconciled)
-		}
-	}
-
-	publicKey := applicationUpdatePublicKey
-	var provider updater.Provider
-	clientAvailable := a.wailsApplication != nil && a.wailsApplication.Updater != nil
-	if eligibility.CanInitialize && options.TempSetupError == nil && options.TempRoot != "" &&
-		len(publicKey) > 0 && clientAvailable {
-		configuredProvider, err := newGitHubManifestUpdateProvider(gitHubManifestUpdateProviderConfig{
-			Repository: updateRepository,
-			Current:    eligibility.Release,
-		})
-		if err != nil {
-			a.logger.Warn(fmt.Sprintf("Automatic updates disabled: %v", err), logsources.UpdateCheck)
-			eligibility = disableApplicationUpdateInstallation(eligibility)
-		} else {
-			provider = configuredProvider
-		}
-	} else if eligibility.CanInitialize {
-		eligibility = disableApplicationUpdateInstallation(eligibility)
-	}
-
-	var client appupdates.Client
-	if clientAvailable {
-		client = a.wailsApplication.Updater
-	}
+	configuration := a.prepareApplicationUpdateConfiguration(options)
 	coordinator := appupdates.New(appupdates.Dependencies{
-		Client: client, Provider: provider, Eligibility: eligibility,
-		PublicKey: publicKey, Platform: runtime.GOOS, Architecture: runtime.GOARCH,
-		TempRoot: options.TempRoot, UpdateState: updateState, Reconciled: reconciled,
-		SkippedVersion: skippedVersion,
-		OnChange:       a.storeApplicationUpdateSnapshot,
+		Client: configuration.client, Provider: configuration.provider,
+		Eligibility: configuration.eligibility, PublicKey: applicationUpdatePublicKey,
+		Platform: runtime.GOOS, Architecture: runtime.GOARCH,
+		TempRoot: options.TempRoot, UpdateState: configuration.updateState,
+		Reconciled: configuration.reconciled, SkippedVersion: configuration.skippedVersion,
+		OnChange: a.storeApplicationUpdateSnapshot,
 	})
 	a.applicationUpdates = coordinator
 	if a.wailsApplication != nil {
 		a.applicationUpdateEventUnsubscribers = subscribeApplicationUpdateEvents(
-			a.wailsApplication.Event,
+			wailsApplicationUpdateEventSubscriber{events: a.wailsApplication.Event},
 			coordinator,
 		)
 	}
+}
+
+type applicationUpdateConfiguration struct {
+	client         appupdates.Client
+	provider       updater.Provider
+	eligibility    updateidentity.BuildEligibility
+	updateState    *updatestate.Store
+	reconciled     *updatestate.ReconcileResult
+	skippedVersion string
+}
+
+func (a *App) prepareApplicationUpdateConfiguration(
+	options ApplicationUpdateOptions,
+) applicationUpdateConfiguration {
+	eligibility := a.resolveApplicationUpdateEligibility(options)
+	setup, eligibility := a.resolveApplicationUpdateState(options, eligibility)
+	client := a.applicationUpdateClient()
+	provider, eligibility := a.resolveApplicationUpdateProvider(options, client, eligibility)
+	configuration := applicationUpdateConfiguration{
+		client: client, provider: provider, eligibility: eligibility,
+	}
+	if setup != nil {
+		configuration.updateState = setup.Store
+		configuration.reconciled = &setup.Reconciled
+		configuration.skippedVersion = setup.SkippedVersion
+	}
+	return configuration
+}
+
+func (a *App) resolveApplicationUpdateEligibility(
+	options ApplicationUpdateOptions,
+) updateidentity.BuildEligibility {
+	eligibility := disabledApplicationUpdateEligibility()
+	if options.TempSetupError != nil {
+		a.logger.Warn(fmt.Sprintf("Automatic updates disabled: %v", options.TempSetupError), logsources.UpdateCheck)
+		return eligibility
+	}
+	resolved, err := currentApplicationUpdateEligibility(time.Now())
+	if err != nil {
+		a.logger.Warn(fmt.Sprintf("Automatic updates disabled: %v", err), logsources.UpdateCheck)
+		return eligibility
+	}
+	return resolved
+}
+
+func (a *App) resolveApplicationUpdateState(
+	options ApplicationUpdateOptions,
+	eligibility updateidentity.BuildEligibility,
+) (*applicationUpdateStateSetup, updateidentity.BuildEligibility) {
+	if options.TempSetupError != nil || options.TempRoot == "" || eligibility.Release.Version == "" {
+		return nil, eligibility
+	}
+	setup, err := prepareApplicationUpdateState(options, eligibility)
+	if err != nil {
+		a.logger.Warn(fmt.Sprintf("Automatic update recovery state unavailable: %v", err), logsources.UpdateCheck)
+		eligibility.CanInstall = false
+		eligibility.Installation.CanInstall = false
+		return nil, eligibility
+	}
+	a.logApplicationUpdateReconciliation(setup.Reconciled)
+	return &setup, eligibility
+}
+
+func (a *App) applicationUpdateClient() appupdates.Client {
+	if a.wailsApplication == nil || a.wailsApplication.Updater == nil {
+		return nil
+	}
+	return a.wailsApplication.Updater
+}
+
+func (a *App) resolveApplicationUpdateProvider(
+	options ApplicationUpdateOptions,
+	client appupdates.Client,
+	eligibility updateidentity.BuildEligibility,
+) (updater.Provider, updateidentity.BuildEligibility) {
+	canConfigure := eligibility.CanInitialize && options.TempSetupError == nil && options.TempRoot != "" &&
+		len(applicationUpdatePublicKey) > 0 && client != nil
+	if !canConfigure {
+		if eligibility.CanInitialize {
+			eligibility = disableApplicationUpdateInstallation(eligibility)
+		}
+		return nil, eligibility
+	}
+	provider, err := newGitHubManifestUpdateProvider(gitHubManifestUpdateProviderConfig{
+		Repository: updateRepository,
+		Current:    eligibility.Release,
+	})
+	if err != nil {
+		a.logger.Warn(fmt.Sprintf("Automatic updates disabled: %v", err), logsources.UpdateCheck)
+		return nil, disableApplicationUpdateInstallation(eligibility)
+	}
+	return provider, eligibility
 }
 
 type applicationUpdateStateSetup struct {

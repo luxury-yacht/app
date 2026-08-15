@@ -110,18 +110,28 @@ func ValidateMacOSArchive(
 
 type localUpdaterHost struct{}
 
-func (localUpdaterHost) Emit(string, ...any) bool         { return false }
-func (localUpdaterHost) OnEvent(string, func(any)) func() { return func() {} }
+func (localUpdaterHost) Emit(string, ...any) bool { return false }
+func (localUpdaterHost) OnEvent(string, func(any)) func() {
+	return func() {
+		// Local conformance registers no host listeners, so there is nothing to remove.
+	}
+}
 func (localUpdaterHost) OpenWindow(updater.WindowOptions) updater.WindowHandle {
 	return localUpdaterWindow{}
 }
-func (localUpdaterHost) Quit() {}
+func (localUpdaterHost) Quit() {
+	// Local conformance never launches an application process that needs to quit.
+}
 
 type localUpdaterWindow struct{}
 
 func (localUpdaterWindow) EmitEvent(string, ...any) bool { return false }
-func (localUpdaterWindow) Show()                         {}
-func (localUpdaterWindow) Close()                        {}
+func (localUpdaterWindow) Show() {
+	// Windowless conformance has no updater window to show.
+}
+func (localUpdaterWindow) Close() {
+	// Windowless conformance has no updater window to close.
+}
 
 type localArtifactProvider struct {
 	path    string

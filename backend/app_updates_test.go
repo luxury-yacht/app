@@ -94,7 +94,7 @@ func enabledApplicationUpdateBuild() updateidentity.BuildEligibility {
 	}
 }
 
-func (registrar *fakeUpdateEventRegistrar) On(name string, callback func(*application.CustomEvent)) func() {
+func (registrar *fakeUpdateEventRegistrar) Subscribe(name string, callback func(*application.CustomEvent)) func() {
 	if registrar.callbacks == nil {
 		registrar.callbacks = make(map[string]func(*application.CustomEvent))
 	}

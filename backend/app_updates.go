@@ -38,8 +38,19 @@ var applicationUpdateEventNames = []string{
 	updater.EventError,
 }
 
-type applicationUpdateEventRegistrar interface {
-	On(string, func(*application.CustomEvent)) func()
+type applicationUpdateEventSubscriber interface {
+	Subscribe(string, func(*application.CustomEvent)) func()
+}
+
+type wailsApplicationUpdateEventSubscriber struct {
+	events *application.EventManager
+}
+
+func (subscriber wailsApplicationUpdateEventSubscriber) Subscribe(
+	name string,
+	callback func(*application.CustomEvent),
+) func() {
+	return subscriber.events.On(name, callback)
 }
 
 type applicationUpdateEventProjector interface {
@@ -47,16 +58,16 @@ type applicationUpdateEventProjector interface {
 }
 
 func subscribeApplicationUpdateEvents(
-	registrar applicationUpdateEventRegistrar,
+	subscriber applicationUpdateEventSubscriber,
 	projector applicationUpdateEventProjector,
 ) []func() {
-	if registrar == nil || projector == nil {
+	if subscriber == nil || projector == nil {
 		return nil
 	}
 	unsubscribers := make([]func(), 0, len(applicationUpdateEventNames))
 	for _, eventName := range applicationUpdateEventNames {
 		name := eventName
-		unsubscribe := registrar.On(name, func(event *application.CustomEvent) {
+		unsubscribe := subscriber.Subscribe(name, func(event *application.CustomEvent) {
 			var payload any
 			if event != nil {
 				payload = event.Data

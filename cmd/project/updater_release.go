@@ -81,46 +81,84 @@ func collectUpdaterArtifactsForTargets(
 	if err != nil {
 		return nil, err
 	}
-	expected := make(map[string]updaterTarget, len(ordered))
-	for _, target := range ordered {
+	expected, err := expectedUpdaterArtifacts(metadata, ordered)
+	if err != nil {
+		return nil, err
+	}
+	found, err := findUpdaterArtifacts(root, expected)
+	if err != nil {
+		return nil, err
+	}
+	return requireUpdaterArtifacts(metadata, ordered, found)
+}
+
+func expectedUpdaterArtifacts(
+	metadata projectMetadata,
+	targets []updaterTarget,
+) (map[string]updaterTarget, error) {
+	expected := make(map[string]updaterTarget, len(targets))
+	for _, target := range targets {
 		name, nameErr := updaterArtifactName(metadata, target.Platform, target.Architecture)
 		if nameErr != nil {
 			return nil, nameErr
 		}
 		expected[name] = target
 	}
+	return expected, nil
+}
+
+func findUpdaterArtifacts(
+	root string,
+	expected map[string]updaterTarget,
+) (map[string]string, error) {
 	found := make(map[string]string, len(expected))
-	err = filepath.WalkDir(root, func(path string, entry os.DirEntry, walkErr error) error {
-		if walkErr != nil {
-			return walkErr
-		}
-		if path == root {
-			return nil
-		}
-		if entry.IsDir() {
-			return nil
-		}
-		if _, required := expected[entry.Name()]; !required {
-			return nil
-		}
-		info, infoErr := os.Lstat(path)
-		if infoErr != nil {
-			return infoErr
-		}
-		if info.Mode()&os.ModeSymlink != 0 || !info.Mode().IsRegular() {
-			return fmt.Errorf("updater artifact must be a regular non-symlink file: %s", path)
-		}
-		if previous, duplicate := found[entry.Name()]; duplicate {
-			return fmt.Errorf("duplicate updater artifact %q: %s and %s", entry.Name(), previous, path)
-		}
-		found[entry.Name()] = path
-		return nil
+	err := filepath.WalkDir(root, func(path string, entry os.DirEntry, walkErr error) error {
+		return collectUpdaterArtifact(path, root, entry, walkErr, expected, found)
 	})
 	if err != nil {
 		return nil, fmt.Errorf("collect updater artifacts: %w", err)
 	}
-	artifacts := make([]string, 0, len(ordered))
-	for _, target := range ordered {
+	return found, nil
+}
+
+func collectUpdaterArtifact(
+	path string,
+	root string,
+	entry os.DirEntry,
+	walkErr error,
+	expected map[string]updaterTarget,
+	found map[string]string,
+) error {
+	if walkErr != nil {
+		return walkErr
+	}
+	if path == root || entry.IsDir() {
+		return nil
+	}
+	if _, required := expected[entry.Name()]; !required {
+		return nil
+	}
+	info, err := os.Lstat(path)
+	if err != nil {
+		return err
+	}
+	if info.Mode()&os.ModeSymlink != 0 || !info.Mode().IsRegular() {
+		return fmt.Errorf("updater artifact must be a regular non-symlink file: %s", path)
+	}
+	if previous, duplicate := found[entry.Name()]; duplicate {
+		return fmt.Errorf("duplicate updater artifact %q: %s and %s", entry.Name(), previous, path)
+	}
+	found[entry.Name()] = path
+	return nil
+}
+
+func requireUpdaterArtifacts(
+	metadata projectMetadata,
+	targets []updaterTarget,
+	found map[string]string,
+) ([]string, error) {
+	artifacts := make([]string, 0, len(targets))
+	for _, target := range targets {
 		name, _ := updaterArtifactName(metadata, target.Platform, target.Architecture)
 		path := found[name]
 		if path == "" {
