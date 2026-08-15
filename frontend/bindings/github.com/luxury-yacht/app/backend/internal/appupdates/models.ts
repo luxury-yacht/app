@@ -11,6 +11,7 @@ export enum Status {
     StatusIdle = "idle",
     StatusChecking = "checking",
     StatusCurrent = "current",
+    StatusSkipped = "skipped",
     StatusAvailable = "available",
     StatusDownloading = "downloading",
     StatusVerifying = "verifying",

@@ -214,6 +214,7 @@ type applicationUpdateCoordinator interface {
 	Download(context.Context, string) (appupdates.Snapshot, error)
 	Restart(context.Context) (appupdates.Snapshot, error)
 	Skip(context.Context, string) (appupdates.Snapshot, error)
+	RemoveSkip(context.Context) (appupdates.Snapshot, error)
 }
 
 // NewApp constructs a backend App with its Wails application and sane defaults.

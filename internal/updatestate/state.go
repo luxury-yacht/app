@@ -393,8 +393,10 @@ func (store *Store) RecordPrepared(prepared PreparedUpdate) error {
 func (store *Store) SetSkippedVersion(version string) error {
 	store.mu.Lock()
 	defer store.mu.Unlock()
-	if err := requireCanonicalVersion(version); err != nil {
-		return fmt.Errorf("skipped version: %w", err)
+	if version != "" {
+		if err := requireCanonicalVersion(version); err != nil {
+			return fmt.Errorf("skipped version: %w", err)
+		}
 	}
 	document, err := store.loadLocked()
 	if err != nil {

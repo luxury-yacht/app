@@ -65,6 +65,7 @@ export {
   MergeObjectYamlWithLatest,
   OpenKubeconfigSearchPathDialog,
   QueryPermissions,
+  RemoveApplicationUpdateSkip,
   ReorderThemes,
   ResizeShellSession,
   RestartAndApplyApplicationUpdate,

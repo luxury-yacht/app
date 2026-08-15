@@ -145,6 +145,11 @@ func TestSkippedVersionPersistsInCanonicalReleaseForm(t *testing.T) {
 	document, err = reopened.Load()
 	require.NoError(t, err)
 	require.Equal(t, "2.0.0-beta.4", document.SkippedVersion)
+
+	require.NoError(t, reopened.SetSkippedVersion(""))
+	document, err = reopened.Load()
+	require.NoError(t, err)
+	require.Empty(t, document.SkippedVersion)
 }
 
 func TestLoadRejectsUnknownFieldsAndMultipleJSONValues(t *testing.T) {

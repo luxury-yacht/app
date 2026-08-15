@@ -850,6 +850,14 @@ export function ReleaseWorkspaceWindow(windowID: string): $CancellablePromise<vo
 }
 
 /**
+ * RemoveApplicationUpdateSkip clears the durable version skip and offers the
+ * release again when it remains available.
+ */
+export function RemoveApplicationUpdateSkip(): $CancellablePromise<$models.UpdateInfo | null> {
+    return $Call.ByName("github.com/luxury-yacht/app/backend.App.RemoveApplicationUpdateSkip");
+}
+
+/**
  * ReorderThemes sets the theme ordering. The ids slice must contain exactly the
  * same IDs as the current theme list (first-match priority depends on order).
  */

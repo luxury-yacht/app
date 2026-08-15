@@ -54,10 +54,9 @@
   font-weight: var(--font-weight-bold);
 }
 
-/* The up-to-date state has nothing to act on, so it sits under the version
-   rather than earning a card. Quieter than the version it annotates; the
-   font-size is restated because this is a sibling of `.about-version`, not a
-   child, so it would otherwise inherit the root size. */
+/* Quiet update state beneath the version (up to date, or an exact skipped
+   release). The font-size is restated because this is a sibling of
+   `.about-version`, not a child, so it would otherwise inherit the root size. */
 .about-version-note {
   margin: 0;
   color: var(--color-text-tertiary);

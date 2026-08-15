@@ -13,6 +13,7 @@ import logo from '@assets/luxury-yacht-logo.png';
 import {
   CheckForUpdates,
   DownloadApplicationUpdate,
+  RemoveApplicationUpdateSkip,
   RestartAndApplyApplicationUpdate,
   SkipApplicationUpdate,
 } from '@core/backend-api';
@@ -46,6 +47,7 @@ const updateActionNames: Record<UpdateAction, string> = {
   download: 'downloadApplicationUpdate',
   restart: 'restartAndApplyApplicationUpdate',
   skip: 'skipApplicationUpdate',
+  'remove-skip': 'removeApplicationUpdateSkip',
   recovery: 'openApplicationUpdateRecovery',
 };
 
@@ -103,6 +105,8 @@ const performUpdateAction = async (
       return RestartAndApplyApplicationUpdate();
     case 'skip':
       return update.availableVersion ? SkipApplicationUpdate(update.availableVersion) : null;
+    case 'remove-skip':
+      return RemoveApplicationUpdateSkip();
   }
 };
 
@@ -359,6 +363,13 @@ const AboutModal: React.FC<AboutModalProps> = React.memo(({ isOpen, onClose }) =
           <p className="about-version">Version {appInfo?.version || 'Loading...'}</p>
           {updatePresentation?.versionNote ? (
             <p className="about-version-note">{updatePresentation.versionNote}</p>
+          ) : null}
+          {updatePresentation?.versionNote && updatePresentation.primary ? (
+            <UpdateActionButton
+              action={updatePresentation.primary}
+              busy={updateAction !== null}
+              onAction={runUpdateAction}
+            />
           ) : null}
           {appInfo?.isBeta && appInfo?.expiryDate ? (
             <p className="about-beta-expiry">

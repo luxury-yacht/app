@@ -128,11 +128,14 @@ describe('UpdateStatus', () => {
     expect(setIsAboutOpenMock).toHaveBeenCalledWith(true);
   });
 
-  it.each(['disabled', 'idle', 'checking'])('stays out of the header for %s', async (status) => {
-    readAppInfoMock.mockResolvedValue({ update: { status } });
+  it.each(['disabled', 'idle', 'checking', 'skipped'])(
+    'stays out of the header for %s',
+    async (status) => {
+      readAppInfoMock.mockResolvedValue({ update: { status } });
 
-    await renderAndSettle();
+      await renderAndSettle();
 
-    expect(container.querySelector('[data-testid="update-status-chip"]')).toBeNull();
-  });
+      expect(container.querySelector('[data-testid="update-status-chip"]')).toBeNull();
+    }
+  );
 });

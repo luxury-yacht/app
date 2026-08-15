@@ -172,3 +172,14 @@ func (a *App) SkipApplicationUpdate(version string) (*UpdateInfo, error) {
 	snapshot, err := a.applicationUpdates.Skip(a.CtxOrBackground(), version)
 	return updateInfoFromSnapshot(snapshot), err
 }
+
+// RemoveApplicationUpdateSkip clears the durable version skip and offers the
+// release again when it remains available.
+func (a *App) RemoveApplicationUpdateSkip() (*UpdateInfo, error) {
+	if a == nil || a.applicationUpdates == nil {
+		return updateInfoFromSnapshot(appupdates.Snapshot{Status: appupdates.StatusDisabled}),
+			fmt.Errorf("automatic updates are disabled")
+	}
+	snapshot, err := a.applicationUpdates.RemoveSkip(a.CtxOrBackground())
+	return updateInfoFromSnapshot(snapshot), err
+}

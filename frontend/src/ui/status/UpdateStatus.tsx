@@ -53,7 +53,7 @@ const UpdateStatus: React.FC = () => {
   }, [setIsAboutOpen]);
 
   // The shared presentation decides which states are worth a header chip; quiet
-  // states (disabled, checking, up to date) still have About copy but no badge.
+  // states (disabled, checking, up to date, skipped) still have About copy but no badge.
   const badge = updateInfo ? getUpdatePresentation(updateInfo)?.badge : undefined;
   if (!badge) {
     return null;

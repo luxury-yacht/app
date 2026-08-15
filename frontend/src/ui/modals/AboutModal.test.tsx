@@ -17,6 +17,7 @@ const appInfoMock = vi.hoisted(() => ({
   DownloadApplicationUpdate: vi.fn(),
   RestartAndApplyApplicationUpdate: vi.fn(),
   SkipApplicationUpdate: vi.fn(),
+  RemoveApplicationUpdateSkip: vi.fn(),
 }));
 
 const runtimeMock = vi.hoisted(() => ({
@@ -36,6 +37,7 @@ vi.mock('@core/backend-api', () => ({
   DownloadApplicationUpdate: appInfoMock.DownloadApplicationUpdate,
   RestartAndApplyApplicationUpdate: appInfoMock.RestartAndApplyApplicationUpdate,
   SkipApplicationUpdate: appInfoMock.SkipApplicationUpdate,
+  RemoveApplicationUpdateSkip: appInfoMock.RemoveApplicationUpdateSkip,
 }));
 
 vi.mock('@core/desktop-runtime', () => ({
@@ -99,6 +101,7 @@ describe('AboutModal', () => {
     appInfoMock.DownloadApplicationUpdate.mockReset();
     appInfoMock.RestartAndApplyApplicationUpdate.mockReset();
     appInfoMock.SkipApplicationUpdate.mockReset();
+    appInfoMock.RemoveApplicationUpdateSkip.mockReset();
     errorMock.reportOperationalError.mockReset();
     document.body.style.overflow = '';
   });
@@ -184,7 +187,7 @@ describe('AboutModal', () => {
     await modal.unmount();
   });
 
-  it('persists the exact offered version before dismissing it', async () => {
+  it('shows the skipped version and lets the user remove its skip', async () => {
     appInfoMock.GetAppInfo.mockResolvedValue({
       version: '1.9.0',
       update: {
@@ -196,8 +199,16 @@ describe('AboutModal', () => {
       },
     });
     appInfoMock.SkipApplicationUpdate.mockResolvedValue({
-      status: 'current',
+      status: 'skipped',
       currentVersion: '1.9.0',
+      availableVersion: '2.0.0',
+      canCheck: true,
+      canInstall: true,
+    });
+    appInfoMock.RemoveApplicationUpdateSkip.mockResolvedValue({
+      status: 'available',
+      currentVersion: '1.9.0',
+      availableVersion: '2.0.0',
       canCheck: true,
       canInstall: true,
     });
@@ -212,7 +223,19 @@ describe('AboutModal', () => {
 
     expect(appInfoMock.SkipApplicationUpdate).toHaveBeenCalledWith('2.0.0');
     expect(appInfoMock.DownloadApplicationUpdate).not.toHaveBeenCalled();
-    expect(document.body.textContent).not.toContain('Luxury Yacht 2.0.0 is available.');
+    expect(document.querySelector('.about-version-note')?.textContent).toBe(
+      '2.0.0 is available, but has been skipped'
+    );
+    expect(document.body.textContent).not.toContain('no newer version is available');
+
+    const removeSkip = Array.from(document.querySelectorAll('button')).find(
+      (button) => button.textContent === 'Undo Skip'
+    );
+    expect(removeSkip).toBeTruthy();
+    await act(async () => removeSkip?.click());
+
+    expect(appInfoMock.RemoveApplicationUpdateSkip).toHaveBeenCalledTimes(1);
+    expect(document.body.textContent).toContain('Luxury Yacht 2.0.0 is available.');
 
     await modal.unmount();
   });

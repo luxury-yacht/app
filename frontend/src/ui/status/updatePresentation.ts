@@ -1,7 +1,7 @@
 import type { backend } from '@core/backend-api/models';
 import { toPlainReleaseNotes } from './releaseNotesText';
 
-export type UpdateAction = 'check' | 'download' | 'restart' | 'skip' | 'recovery';
+export type UpdateAction = 'check' | 'download' | 'restart' | 'skip' | 'remove-skip' | 'recovery';
 
 export interface UpdatePresentationAction {
   kind: UpdateAction;
@@ -17,14 +17,13 @@ export interface UpdatePresentation {
   /**
    * Short label for the header chip and the About card's status pill. Present
    * only for the states that need the user's attention — the quiet states
-   * (disabled, checking, up to date) still have a `message` for About but must
-   * not surface a chip in the header.
+   * (disabled, checking, up to date, skipped) still have a `message` for About
+   * but must not surface a chip in the header.
    */
   badge?: string;
   /**
-   * Quiet line shown under the app version instead of a card. Set only for the
-   * up-to-date state, which has nothing to act on and does not earn a section of
-   * its own.
+   * Quiet line shown under the app version instead of a card. Used for the
+   * up-to-date state and for a skipped release's compact remove-skip action.
    */
   versionNote?: string;
   /** Release identity, present only once a release has actually been discovered. */
@@ -205,6 +204,12 @@ const getUpdateCopy = (update: backend.UpdateInfo): UpdatePresentation | null =>
       return {
         message: 'Luxury Yacht is up to date.',
         versionNote: 'no newer version is available',
+      };
+    case 'skipped':
+      return {
+        message: `${version} is available, but has been skipped`,
+        versionNote: `${version} is available, but has been skipped`,
+        primary: { kind: 'remove-skip', label: 'Undo Skip' },
       };
     case 'available':
       return update.canInstall

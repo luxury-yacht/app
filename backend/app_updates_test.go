@@ -47,6 +47,7 @@ type fakeApplicationUpdateCoordinator struct {
 	downloadVersion   string
 	skipCalls         int
 	skipVersion       string
+	removeSkipCalls   int
 	runtimeReadyCalls int
 	stopCalls         int
 }
@@ -139,6 +140,11 @@ func (coordinator *fakeApplicationUpdateCoordinator) Skip(_ context.Context, ver
 	return coordinator.snapshot, nil
 }
 
+func (coordinator *fakeApplicationUpdateCoordinator) RemoveSkip(context.Context) (appupdates.Snapshot, error) {
+	coordinator.removeSkipCalls++
+	return coordinator.snapshot, nil
+}
+
 func TestGetAppInfoReadsCoordinatorSnapshotWithoutStartingCheck(t *testing.T) {
 	coordinator := &fakeApplicationUpdateCoordinator{snapshot: appupdates.Snapshot{
 		Status:            appupdates.StatusAvailable,
@@ -206,6 +212,20 @@ func TestApplicationUpdateCommandsDelegateToOneProcessCoordinator(t *testing.T) 
 	require.Equal(t, appupdates.StatusAvailable, skipped.Status)
 	require.Equal(t, "2.0.0", coordinator.skipVersion)
 	require.Equal(t, 1, coordinator.skipCalls)
+}
+
+func TestRemoveApplicationUpdateSkipDelegatesToTheProcessCoordinator(t *testing.T) {
+	coordinator := &fakeApplicationUpdateCoordinator{snapshot: appupdates.Snapshot{
+		Status: appupdates.StatusAvailable, AvailableVersion: "2.0.0",
+	}}
+	app := NewApp(nil)
+	app.applicationUpdates = coordinator
+
+	snapshot, err := app.RemoveApplicationUpdateSkip()
+
+	require.NoError(t, err)
+	require.Equal(t, appupdates.StatusAvailable, snapshot.Status)
+	require.Equal(t, 1, coordinator.removeSkipCalls)
 }
 
 func TestDisabledCheckCommandReturnsApplicationSnapshot(t *testing.T) {

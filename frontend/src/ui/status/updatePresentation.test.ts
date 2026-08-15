@@ -16,6 +16,7 @@ describe('getUpdatePresentation', () => {
     [appupdates.Status.StatusDisabled, 'Automatic updates are unavailable in this build.'],
     [appupdates.Status.StatusChecking, 'Checking for updates…'],
     [appupdates.Status.StatusCurrent, 'Luxury Yacht is up to date.'],
+    [appupdates.Status.StatusSkipped, '2.0.0 is available, but has been skipped'],
     [appupdates.Status.StatusDownloading, 'Downloading update…'],
     [appupdates.Status.StatusVerifying, 'Verifying update…'],
     [appupdates.Status.StatusPreparing, 'Preparing update…'],
@@ -41,6 +42,13 @@ describe('getUpdatePresentation', () => {
       kind: 'restart',
       label: 'Restart & Apply',
     });
+  });
+
+  it('offers only skip removal for a skipped release', () => {
+    const skipped = getUpdatePresentation(update({ status: appupdates.Status.StatusSkipped }));
+
+    expect(skipped?.primary).toEqual({ kind: 'remove-skip', label: 'Undo Skip' });
+    expect(skipped?.secondary).toBeUndefined();
   });
 
   it.each([
@@ -123,6 +131,7 @@ describe('getUpdatePresentation', () => {
     appupdates.Status.StatusDisabled,
     appupdates.Status.StatusChecking,
     appupdates.Status.StatusCurrent,
+    appupdates.Status.StatusSkipped,
   ] as const)('withholds a header badge for %s', (status) => {
     const presentation = getUpdatePresentation(update({ status }));
     expect(presentation).not.toBeNull();
@@ -132,6 +141,14 @@ describe('getUpdatePresentation', () => {
   it('surfaces the up-to-date state as a version note instead of a card', () => {
     const presentation = getUpdatePresentation(update({ status: appupdates.Status.StatusCurrent }));
     expect(presentation?.versionNote).toBe('no newer version is available');
+  });
+
+  it('surfaces a skipped release and its exact version as a version note', () => {
+    const presentation = getUpdatePresentation(
+      update({ status: appupdates.Status.StatusSkipped, availableVersion: '2.0.0' })
+    );
+
+    expect(presentation?.versionNote).toBe('2.0.0 is available, but has been skipped');
   });
 
   it.each([

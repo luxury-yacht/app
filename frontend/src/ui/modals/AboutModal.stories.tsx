@@ -68,8 +68,13 @@ const RELEASE_NOTES = [
   '- Pods tab no longer renders empty on first visit.',
 ].join('\n');
 
-const withUpdate = (update: Partial<backend.UpdateInfo>) => [
+const withUpdate = (
+  update: Partial<backend.UpdateInfo>,
+  backendOverrides: Record<string, (...args: unknown[]) => unknown> = {}
+) => [
   (Story: React.ComponentType) => {
+    window.__storybookBackendOverrides ||= {};
+    Object.assign(window.__storybookBackendOverrides, backendOverrides);
     setMockAppInfo(
       partialModelFixture<backend.AppInfo>({
         version: '1.3.13',
@@ -98,6 +103,29 @@ export const UpdateAvailable: Story = {
     publishedAt: '2026-08-14T12:30:00Z',
     releaseNotes: RELEASE_NOTES,
   }),
+};
+
+/** A release suppressed from automatic prompts, with an explicit way to remove the skip. */
+export const VersionSkipped: Story = {
+  decorators: withUpdate(
+    {
+      status: Status.StatusSkipped,
+      availableVersion: '2.0.0',
+    },
+    {
+      RemoveApplicationUpdateSkip: () =>
+        Promise.resolve(
+          partialModelFixture<backend.UpdateInfo>({
+            status: Status.StatusAvailable,
+            currentVersion: '1.3.13',
+            availableVersion: '2.0.0',
+            canCheck: true,
+            canInstall: true,
+            distribution: Distribution.DistributionMacBundle,
+          })
+        ),
+    }
+  ),
 };
 
 /** Download in flight, with the notes still readable beside the progress bar. */

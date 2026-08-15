@@ -508,14 +508,50 @@ func TestManualCheckReoffersSkippedVersionWhileAutomaticCheckKeepsItHidden(t *te
 	require.NotNil(t, scheduler.run)
 	scheduler.run(context.Background())
 	automaticSnapshot := coordinator.Snapshot()
-	require.Equal(t, appupdates.StatusCurrent, automaticSnapshot.Status)
-	require.Empty(t, automaticSnapshot.AvailableVersion)
+	require.Equal(t, appupdates.StatusSkipped, automaticSnapshot.Status)
+	require.Equal(t, skippedVersion, automaticSnapshot.AvailableVersion)
 
 	manualSnapshot, err := coordinator.Check(context.Background())
 
 	require.NoError(t, err)
 	require.Equal(t, appupdates.StatusAvailable, manualSnapshot.Status)
 	require.Equal(t, skippedVersion, manualSnapshot.AvailableVersion)
+}
+
+func TestNoUpdateEventProjectsTheDurableSkippedVersion(t *testing.T) {
+	t.Parallel()
+
+	coordinator := appupdates.New(appupdates.Dependencies{
+		Client: &fakeUpdater{}, Provider: fakeProvider{}, Eligibility: enabledBuild(),
+		PublicKey: testPublicKey(), Platform: "darwin", Architecture: "arm64",
+		TempRoot: "/owned/temp/root", Scheduler: &fakeScheduler{}, UpdateState: &fakeUpdateState{},
+		SkippedVersion: "2.0.0-beta.4",
+	})
+
+	snapshot := coordinator.HandleWailsEvent(updater.EventNoUpdate, nil)
+
+	require.Equal(t, appupdates.StatusSkipped, snapshot.Status)
+	require.Equal(t, "2.0.0-beta.4", snapshot.AvailableVersion)
+}
+
+func TestSkippedVersionAtOrBelowTheRunningVersionIsNotPresentedAsAvailable(t *testing.T) {
+	t.Parallel()
+
+	scheduler := &fakeScheduler{}
+	coordinator := appupdates.New(appupdates.Dependencies{
+		Client: &fakeUpdater{}, Provider: fakeProvider{}, Eligibility: enabledBuild(),
+		PublicKey: testPublicKey(), Platform: "darwin", Architecture: "arm64",
+		TempRoot: "/owned/temp/root", Scheduler: scheduler, UpdateState: &fakeUpdateState{},
+		SkippedVersion: "2.0.0-beta.3",
+	})
+	coordinator.RuntimeReady()
+
+	require.NotNil(t, scheduler.run)
+	scheduler.run(context.Background())
+	snapshot := coordinator.Snapshot()
+
+	require.Equal(t, appupdates.StatusCurrent, snapshot.Status)
+	require.Empty(t, snapshot.AvailableVersion)
 }
 
 func TestMissingDurableStateKeepsChecksButDisablesInstallation(t *testing.T) {
@@ -540,7 +576,27 @@ func TestMissingDurableStateKeepsChecksButDisablesInstallation(t *testing.T) {
 	require.Zero(t, client.downloadCalls)
 }
 
-func TestSkippedVersionHydratesBeforeFirstCheckAndPersistsBeforeHidingRelease(t *testing.T) {
+func TestSkipKeepsTheExactReleaseVisibleAsSkipped(t *testing.T) {
+	t.Parallel()
+
+	client := &fakeUpdater{release: signedRelease("2.0.0", "stable", "darwin", "arm64")}
+	coordinator := appupdates.New(appupdates.Dependencies{
+		Client: client, Provider: fakeProvider{}, Eligibility: enabledBuild(),
+		PublicKey: testPublicKey(), Platform: "darwin", Architecture: "arm64",
+		TempRoot: "/owned/temp/root", Scheduler: &fakeScheduler{}, UpdateState: &fakeUpdateState{},
+	})
+	coordinator.RuntimeReady()
+	_, err := coordinator.Check(context.Background())
+	require.NoError(t, err)
+
+	snapshot, err := coordinator.Skip(context.Background(), "2.0.0")
+
+	require.NoError(t, err)
+	require.Equal(t, appupdates.StatusSkipped, snapshot.Status)
+	require.Equal(t, "2.0.0", snapshot.AvailableVersion)
+}
+
+func TestRemoveSkipReoffersTheRetainedRelease(t *testing.T) {
 	t.Parallel()
 
 	client := &fakeUpdater{release: signedRelease("2.0.0", "stable", "darwin", "arm64")}
@@ -549,9 +605,91 @@ func TestSkippedVersionHydratesBeforeFirstCheckAndPersistsBeforeHidingRelease(t 
 		Client: client, Provider: fakeProvider{}, Eligibility: enabledBuild(),
 		PublicKey: testPublicKey(), Platform: "darwin", Architecture: "arm64",
 		TempRoot: "/owned/temp/root", Scheduler: &fakeScheduler{}, UpdateState: state,
-		SkippedVersion: "1.9.0",
 	})
-	require.Equal(t, []string{"1.9.0"}, client.skippedVersions)
+	coordinator.RuntimeReady()
+	_, err := coordinator.Check(context.Background())
+	require.NoError(t, err)
+	_, err = coordinator.Skip(context.Background(), "2.0.0")
+	require.NoError(t, err)
+
+	snapshot, err := coordinator.RemoveSkip(context.Background())
+
+	require.NoError(t, err)
+	require.Equal(t, appupdates.StatusAvailable, snapshot.Status)
+	require.Equal(t, "2.0.0", snapshot.AvailableVersion)
+	require.Empty(t, state.skipped)
+	require.Equal(t, "", client.skippedVersions[len(client.skippedVersions)-1])
+}
+
+func TestRemoveSkipChecksAgainWhenOnlyDurableSkippedVersionWasRestored(t *testing.T) {
+	t.Parallel()
+
+	const skippedVersion = "2.0.0-beta.4"
+	scheduler := &fakeScheduler{}
+	coordinator := appupdates.New(appupdates.Dependencies{
+		Client: updater.New(headlessUpdaterHost{}),
+		Provider: staticReleaseProvider{
+			release: signedRelease(skippedVersion, "beta", "darwin", "arm64"),
+		},
+		Eligibility:    enabledBuild(),
+		PublicKey:      testPublicKey(),
+		Platform:       "darwin",
+		Architecture:   "arm64",
+		TempRoot:       "/owned/temp/root",
+		UpdateState:    &fakeUpdateState{skipped: skippedVersion},
+		SkippedVersion: skippedVersion,
+		Scheduler:      scheduler,
+	})
+	coordinator.RuntimeReady()
+	require.NotNil(t, scheduler.run)
+	scheduler.run(context.Background())
+	require.Equal(t, appupdates.StatusSkipped, coordinator.Snapshot().Status)
+
+	snapshot, err := coordinator.RemoveSkip(context.Background())
+
+	require.NoError(t, err)
+	require.Equal(t, appupdates.StatusAvailable, snapshot.Status)
+	require.Equal(t, skippedVersion, snapshot.AvailableVersion)
+}
+
+func TestRemoveSkipPersistenceFailureKeepsTheVersionSkipped(t *testing.T) {
+	t.Parallel()
+
+	const skippedVersion = "2.0.0-beta.4"
+	client := &fakeUpdater{}
+	state := &fakeUpdateState{}
+	scheduler := &fakeScheduler{}
+	coordinator := appupdates.New(appupdates.Dependencies{
+		Client: client, Provider: fakeProvider{}, Eligibility: enabledBuild(),
+		PublicKey: testPublicKey(), Platform: "darwin", Architecture: "arm64",
+		TempRoot: "/owned/temp/root", Scheduler: scheduler, UpdateState: state,
+		SkippedVersion: skippedVersion,
+	})
+	coordinator.RuntimeReady()
+	require.NotNil(t, scheduler.run)
+	scheduler.run(context.Background())
+	state.skipErr = errors.New("state disk unavailable")
+
+	snapshot, err := coordinator.RemoveSkip(context.Background())
+
+	require.ErrorContains(t, err, "state disk unavailable")
+	require.Equal(t, appupdates.StatusSkipped, snapshot.Status)
+	require.Equal(t, skippedVersion, snapshot.AvailableVersion)
+	require.Equal(t, []string{skippedVersion}, client.skippedVersions)
+}
+
+func TestSkippedVersionHydratesBeforeFirstCheckAndPersistsBeforePresentingSkippedRelease(t *testing.T) {
+	t.Parallel()
+
+	client := &fakeUpdater{release: signedRelease("2.0.0", "stable", "darwin", "arm64")}
+	state := &fakeUpdateState{}
+	coordinator := appupdates.New(appupdates.Dependencies{
+		Client: client, Provider: fakeProvider{}, Eligibility: enabledBuild(),
+		PublicKey: testPublicKey(), Platform: "darwin", Architecture: "arm64",
+		TempRoot: "/owned/temp/root", Scheduler: &fakeScheduler{}, UpdateState: state,
+		SkippedVersion: "2.0.0-beta.4",
+	})
+	require.Equal(t, []string{"2.0.0-beta.4"}, client.skippedVersions)
 	coordinator.RuntimeReady()
 	_, err := coordinator.Check(context.Background())
 	require.NoError(t, err)
@@ -560,9 +698,9 @@ func TestSkippedVersionHydratesBeforeFirstCheckAndPersistsBeforeHidingRelease(t 
 
 	require.NoError(t, err)
 	require.Equal(t, "2.0.0", state.skipped)
-	require.Equal(t, []string{"1.9.0", "", "1.9.0", "2.0.0"}, client.skippedVersions)
-	require.Equal(t, appupdates.StatusCurrent, snapshot.Status)
-	require.Empty(t, snapshot.AvailableVersion)
+	require.Equal(t, []string{"2.0.0-beta.4", "", "2.0.0-beta.4", "2.0.0"}, client.skippedVersions)
+	require.Equal(t, appupdates.StatusSkipped, snapshot.Status)
+	require.Equal(t, "2.0.0", snapshot.AvailableVersion)
 	_, err = coordinator.Download(context.Background(), "2.0.0")
 	require.ErrorContains(t, err, "pending release")
 }
