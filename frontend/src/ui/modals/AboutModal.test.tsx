@@ -268,6 +268,52 @@ describe('AboutModal', () => {
     await modal.unmount();
   });
 
+  it('notes an up-to-date app beside the version and drops the update section', async () => {
+    appInfoMock.GetAppInfo.mockResolvedValue({
+      version: '2.0.0-beta.2',
+      update: {
+        status: 'current',
+        currentVersion: '2.0.0-beta.2',
+        canCheck: true,
+        canInstall: true,
+      },
+    });
+    const modal = await renderModal({ isOpen: true, onClose: vi.fn() });
+    await act(async () => Promise.resolve());
+
+    // The note owns its own line: the version stays bare, and the note is a
+    // sibling element rather than a parenthetical inside it.
+    expect(document.querySelector('.about-version')?.textContent).toBe('Version 2.0.0-beta.2');
+    expect(document.querySelector('.about-version-note')?.textContent).toBe(
+      'no newer version is available'
+    );
+    expect(document.querySelector('.about-update')).toBeNull();
+    expect(document.body.textContent).not.toContain('Luxury Yacht is up to date.');
+    expect(document.querySelector('.about-hero')?.textContent).not.toContain('(');
+
+    await modal.unmount();
+  });
+
+  it('keeps the version line bare while an update is pending', async () => {
+    appInfoMock.GetAppInfo.mockResolvedValue({
+      version: '1.10.0',
+      update: {
+        status: 'available',
+        currentVersion: '1.10.0',
+        availableVersion: '1.10.1',
+        canCheck: true,
+        canInstall: true,
+      },
+    });
+    const modal = await renderModal({ isOpen: true, onClose: vi.fn() });
+    await act(async () => Promise.resolve());
+
+    expect(document.querySelector('.about-version')?.textContent).toBe('Version 1.10.0');
+    expect(document.querySelector('.about-update')).not.toBeNull();
+
+    await modal.unmount();
+  });
+
   it('presents the release detail that used to live in the header tooltip', async () => {
     appInfoMock.GetAppInfo.mockResolvedValue({
       version: '1.10.0',
@@ -433,7 +479,7 @@ describe('AboutModal', () => {
       wailsLink?.click();
     });
 
-    expect(runtimeMock.openURL).toHaveBeenCalledWith('https://wails.io/');
+    expect(runtimeMock.openURL).toHaveBeenCalledWith('https://v3.wails.io');
 
     await unmount();
   });

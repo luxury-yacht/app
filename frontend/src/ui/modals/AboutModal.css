@@ -54,6 +54,17 @@
   font-weight: var(--font-weight-bold);
 }
 
+/* The up-to-date state has nothing to act on, so it sits under the version
+   rather than earning a card. Quieter than the version it annotates; the
+   font-size is restated because this is a sibling of `.about-version`, not a
+   child, so it would otherwise inherit the root size. */
+.about-version-note {
+  margin: 0;
+  color: var(--color-text-tertiary);
+  font-size: var(--font-size-md);
+  font-weight: var(--font-weight-normal);
+}
+
 .about-beta-expiry {
   margin: 0;
   color: var(--color-warning);

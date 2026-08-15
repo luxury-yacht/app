@@ -131,6 +131,22 @@ describe('getUpdatePresentation', () => {
     expect(presentation?.badge).toBeUndefined();
   });
 
+  it('surfaces the up-to-date state as a version note instead of a card', () => {
+    const presentation = getUpdatePresentation(update({ status: appupdates.Status.StatusCurrent }));
+    expect(presentation?.versionNote).toBe('You’re on the latest version ❤️');
+  });
+
+  it.each([
+    appupdates.Status.StatusDisabled,
+    appupdates.Status.StatusChecking,
+    appupdates.Status.StatusAvailable,
+    appupdates.Status.StatusDownloading,
+    appupdates.Status.StatusReady,
+    appupdates.Status.StatusCheckError,
+  ] as const)('keeps %s on the card, not on the version line', (status) => {
+    expect(getUpdatePresentation(update({ status }))?.versionNote).toBeUndefined();
+  });
+
   it('carries the release identity, plain-text notes, and tag URL', () => {
     const presentation = getUpdatePresentation(
       update({

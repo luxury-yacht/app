@@ -25,6 +25,12 @@ export interface UpdatePresentation {
    */
   badge?: string;
   tone?: UpdateTone;
+  /**
+   * Quiet line shown under the app version instead of a card. Set only for the
+   * up-to-date state, which has nothing to act on and does not earn a section of
+   * its own.
+   */
+  versionNote?: string;
   /** Release identity, present only once a release has actually been discovered. */
   releaseTitle?: string;
   published?: string;
@@ -202,7 +208,10 @@ const getUpdateCopy = (update: backend.UpdateInfo): UpdatePresentation | null =>
     case 'checking':
       return { message: 'Checking for updates…' };
     case 'current':
-      return { message: 'Luxury Yacht is up to date.' };
+      return {
+        message: 'Luxury Yacht is up to date.',
+        versionNote: 'no newer version is available',
+      };
     case 'available':
       return update.canInstall
         ? {

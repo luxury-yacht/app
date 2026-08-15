@@ -366,6 +366,9 @@ const AboutModal: React.FC<AboutModalProps> = React.memo(({ isOpen, onClose }) =
             />
           </div>
           <p className="about-version">Version {appInfo?.version || 'Loading...'}</p>
+          {updatePresentation?.versionNote ? (
+            <p className="about-version-note">{updatePresentation.versionNote}</p>
+          ) : null}
           {appInfo?.isBeta && appInfo?.expiryDate ? (
             <p className="about-beta-expiry">
               Beta expires {new Date(appInfo.expiryDate).toLocaleDateString()}
@@ -373,7 +376,7 @@ const AboutModal: React.FC<AboutModalProps> = React.memo(({ isOpen, onClose }) =
           ) : null}
         </div>
 
-        {update && updatePresentation ? (
+        {update && updatePresentation && !updatePresentation.versionNote ? (
           <ApplicationUpdateSection
             update={update}
             presentation={updatePresentation}
