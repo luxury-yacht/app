@@ -484,6 +484,40 @@ func TestBetaToStableReleasePassesThroughWailsUpdaterAndCoordinator(t *testing.T
 	require.Equal(t, "2.0.0", snapshot.AvailableVersion)
 }
 
+func TestManualCheckReoffersSkippedVersionWhileAutomaticCheckKeepsItHidden(t *testing.T) {
+	t.Parallel()
+
+	const skippedVersion = "2.0.0-beta.4"
+	scheduler := &fakeScheduler{}
+	coordinator := appupdates.New(appupdates.Dependencies{
+		Client: updater.New(headlessUpdaterHost{}),
+		Provider: staticReleaseProvider{
+			release: signedRelease(skippedVersion, "beta", "darwin", "arm64"),
+		},
+		Eligibility:    enabledBuild(),
+		PublicKey:      testPublicKey(),
+		Platform:       "darwin",
+		Architecture:   "arm64",
+		TempRoot:       "/owned/temp/root",
+		UpdateState:    &fakeUpdateState{},
+		SkippedVersion: skippedVersion,
+		Scheduler:      scheduler,
+	})
+	coordinator.RuntimeReady()
+
+	require.NotNil(t, scheduler.run)
+	scheduler.run(context.Background())
+	automaticSnapshot := coordinator.Snapshot()
+	require.Equal(t, appupdates.StatusCurrent, automaticSnapshot.Status)
+	require.Empty(t, automaticSnapshot.AvailableVersion)
+
+	manualSnapshot, err := coordinator.Check(context.Background())
+
+	require.NoError(t, err)
+	require.Equal(t, appupdates.StatusAvailable, manualSnapshot.Status)
+	require.Equal(t, skippedVersion, manualSnapshot.AvailableVersion)
+}
+
 func TestMissingDurableStateKeepsChecksButDisablesInstallation(t *testing.T) {
 	t.Parallel()
 
@@ -526,7 +560,7 @@ func TestSkippedVersionHydratesBeforeFirstCheckAndPersistsBeforeHidingRelease(t 
 
 	require.NoError(t, err)
 	require.Equal(t, "2.0.0", state.skipped)
-	require.Equal(t, []string{"1.9.0", "2.0.0"}, client.skippedVersions)
+	require.Equal(t, []string{"1.9.0", "", "1.9.0", "2.0.0"}, client.skippedVersions)
 	require.Equal(t, appupdates.StatusCurrent, snapshot.Status)
 	require.Empty(t, snapshot.AvailableVersion)
 	_, err = coordinator.Download(context.Background(), "2.0.0")

@@ -100,6 +100,7 @@ type Coordinator struct {
 	inFlight         bool
 	restartRequested bool
 	preparedOwned    bool
+	skippedVersion   string
 	pending          *updater.Release
 	snapshot         Snapshot
 	scheduler        Scheduler
@@ -115,14 +116,15 @@ func New(dependencies Dependencies) *Coordinator {
 		eligibility.Installation.CanInstall = false
 	}
 	coordinator := &Coordinator{
-		client:        dependencies.Client,
-		eligibility:   eligibility,
-		platform:      dependencies.Platform,
-		architecture:  dependencies.Architecture,
-		updateState:   dependencies.UpdateState,
-		scheduler:     dependencies.Scheduler,
-		onChange:      dependencies.OnChange,
-		lifecycleDone: make(chan struct{}),
+		client:         dependencies.Client,
+		eligibility:    eligibility,
+		platform:       dependencies.Platform,
+		architecture:   dependencies.Architecture,
+		updateState:    dependencies.UpdateState,
+		skippedVersion: dependencies.SkippedVersion,
+		scheduler:      dependencies.Scheduler,
+		onChange:       dependencies.OnChange,
+		lifecycleDone:  make(chan struct{}),
 	}
 	coordinator.snapshot = coordinator.baseSnapshot(StatusDisabled)
 	coordinator.applyReconciliation(dependencies.Reconciled)
@@ -218,7 +220,7 @@ func (coordinator *Coordinator) RuntimeReady() {
 	scheduler := coordinator.scheduler
 	coordinator.mu.Unlock()
 	scheduler.Start(6*time.Hour, func(ctx context.Context) {
-		_, _ = coordinator.Check(ctx)
+		_, _ = coordinator.check(ctx, false)
 	})
 }
 
@@ -428,7 +430,13 @@ func (coordinator *Coordinator) snapshotForRelease(status Status, release *updat
 	return snapshot
 }
 
+// Check performs a user-requested check, including a release the user
+// previously skipped. Automatic checks continue to honor that skipped release.
 func (coordinator *Coordinator) Check(ctx context.Context) (Snapshot, error) {
+	return coordinator.check(ctx, true)
+}
+
+func (coordinator *Coordinator) check(ctx context.Context, includeSkippedVersion bool) (Snapshot, error) {
 	coordinator.mu.Lock()
 	if coordinator.stopped {
 		snapshot := cloneSnapshot(coordinator.snapshot)
@@ -456,13 +464,14 @@ func (coordinator *Coordinator) Check(ctx context.Context) (Snapshot, error) {
 		return snapshot, nil
 	}
 	coordinator.inFlight = true
+	skippedVersion := coordinator.skippedVersion
 	previous := cloneSnapshot(coordinator.snapshot)
 	coordinator.snapshot = coordinator.baseSnapshot(StatusChecking)
 	checking := cloneSnapshot(coordinator.snapshot)
 	coordinator.mu.Unlock()
 	coordinator.publishIfChanged(previous, checking)
 
-	release, err := runCoordinatorOperation(coordinator, ctx, coordinator.client.Check)
+	release, err := coordinator.checkClient(ctx, includeSkippedVersion, skippedVersion)
 
 	coordinator.mu.Lock()
 	previous = cloneSnapshot(coordinator.snapshot)
@@ -491,6 +500,19 @@ func (coordinator *Coordinator) Check(ctx context.Context) (Snapshot, error) {
 	coordinator.mu.Unlock()
 	coordinator.publishIfChanged(previous, result)
 	return result, err
+}
+
+func (coordinator *Coordinator) checkClient(
+	ctx context.Context,
+	includeSkippedVersion bool,
+	skippedVersion string,
+) (*updater.Release, error) {
+	if !includeSkippedVersion || skippedVersion == "" {
+		return runCoordinatorOperation(coordinator, ctx, coordinator.client.Check)
+	}
+	coordinator.client.SkipVersion("")
+	defer coordinator.client.SkipVersion(skippedVersion)
+	return runCoordinatorOperation(coordinator, ctx, coordinator.client.Check)
 }
 
 func (coordinator *Coordinator) Download(ctx context.Context, version string) (Snapshot, error) {
@@ -665,6 +687,7 @@ func (coordinator *Coordinator) Skip(_ context.Context, version string) (Snapsho
 	coordinator.mu.Lock()
 	previous := cloneSnapshot(coordinator.snapshot)
 	coordinator.inFlight = false
+	coordinator.skippedVersion = version
 	coordinator.pending = nil
 	coordinator.preparedOwned = false
 	coordinator.snapshot = coordinator.baseSnapshot(StatusCurrent)
