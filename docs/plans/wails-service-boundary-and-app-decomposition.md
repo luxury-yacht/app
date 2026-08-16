@@ -101,6 +101,7 @@ ApplicationRuntime             unbound composition root; component references on
   |-- ClusterAttentionService
   |-- ErrorReportingService
   |-- ContainerLogsSelectionPolicy
+  |-- PermissionFetchPolicy
   |-- ClusterWorkspaceProjection
   |-- WorkspaceCoordinator
   |     |-- ClusterRuntimeManager
@@ -173,20 +174,21 @@ generator.
 | `DesktopService` | Wails method signatures, service hooks, refresh route delegation, generated-model reachability | Domain state, caches, locks, Kubernetes clients, workflow logic |
 | `ApplicationLifecycle` | application context, runtime readiness, startup sequence, once-only quit preparation, ordered shutdown | Cluster or operation implementation state |
 | `DesktopShell` | Wails native app/window/dialog/clipboard/menu access, targeted native events, and the process-wide ephemeral `sidebarVisible`, `diagnosticsPanelVisible`, and `appLogsPanelVisible` shell state | Persisted grid/tab state, Kubernetes data, or process-wide cluster selection |
-| `PreferencesService` | settings schema and mutation, themes, window settings, physical settings-file locking/persistence, coalesced lazy-load readiness and explicit startup-default installation, narrow repositories for persisted Attention and namespace-scope sections, and post-commit settings-effect detection/dispatch | Favorites, grid state, native UI calls, Attention live application, namespace-scope rebuild orchestration, or any runtime effect target; callers never lock its state or perform raw settings loads, and effects use owner-shaped write-only sinks |
+| `PreferencesService` | settings schema and mutation, themes, window settings, physical settings-file locking/persistence, coalesced lazy-load readiness and atomic startup fallback, narrow repositories for persisted Attention, namespace-scope, and kubeconfig-search-path sections, and post-commit settings-effect detection/dispatch | Favorites, grid state, native UI calls, Attention live application, namespace-scope/search-path orchestration, or any runtime effect target; callers never lock its state or perform raw settings loads, and effects use owner-shaped write-only sinks |
 | `FavoritesService` | favorites validation, migration, ordering, independent favorites-file locking and persistence | Settings or grid persistence |
 | `UIStateStore` | cluster-tab order, grid persistence, independent persistence-file locking and persistence | Ephemeral shell visibility, live workspace selection, or frontend table data |
-| `DataManagementCoordinator` | portable settings/favorites import and export across their real owners | A duplicate persistence model or native dialog implementation |
+| `DataManagementCoordinator` | portable settings/favorites import and export across their real owners, plus total in-app Factory Reset orchestration through owner-specific reset/cleanup operations | A duplicate persistence model, raw deletion of live owners' files, or native dialog implementation |
 | `ClusterAttentionService` | effective cluster/global ignore-rule domain, `attentionRulesMu`, the six Ignore/Restore commands, persisted-rule transactions through `PreferencesService`, and registered live Attention-index targets | The physical settings-file lock, refresh subsystem ownership, or catalog identity |
 | `ErrorReportingService` | error reporter configuration/lifecycle, startup enablement, installation-registration telemetry and `installationTelemetryMu`, and the reporter side of preference effects | Application log buffering, settings persistence, or refresh-domain telemetry |
 | `ContainerLogsSelectionPolicy` | the process-wide per-scope container target cap, its default/clamping, and the selection/warning policy shared by direct pod-log reads and live streams | Settings persistence, stream/subsystem lifecycle, or global concurrent-target allocation |
-| `ClusterRuntimeManager` | kubeconfig discovery, cluster clients, auth state/recovery, cluster lifecycle, dependency resolution, live and future-client Kubernetes QPS/burst application, heartbeat scheduling/probing, and typed health-event publication | Refresh subsystem state, replayable workspace projection state, peer-window ownership, or frontend view state |
+| `PermissionFetchPolicy` | the process-wide SSRR fetch-concurrency value, its default/clamping, and the read-only policy consumed by permission fan-out | Settings persistence, permission-cache contents, or permission decisions |
+| `ClusterRuntimeManager` | kubeconfig discovery and watcher-path retargeting, cluster clients, auth state/recovery, cluster lifecycle, dependency resolution, live and future-client Kubernetes QPS/burst application, heartbeat scheduling/probing, typed health-event publication, and the typed owner-local `ClusterRuntimeIntent` queue for asynchronous cross-owner work | Kubeconfig-search-path persistence or cross-owner selection pruning, refresh subsystem state, replayable workspace projection state, peer-window ownership, a `WorkspaceCoordinator` callback/back-pointer, or frontend view state |
 | `RefreshCoordinator` | refresh manager, service handler publication, subsystems, streams, governor, spill state, catalog runtime, live and future-subsystem metrics cadence, refresh-domain `telemetryRecorder` publication, and the process-wide `containerLogsTargetLimiter` plus its lazy-init mutex | Settings reads/persistence, kubeconfig persistence, error-reporting configuration, per-scope container-log selection policy, or live-operation state |
 | `ClusterWorkspaceProjection` | `clusterWorkspaceMu`, aggregate revision consistency, replayable cluster health and scope-revision maps, and narrow change/cleanup sinks used by cluster, refresh, and workspace owners | Cluster clients, selection workflows, persistence, heartbeat scheduling, or subsystem lifecycle |
-| `WorkspaceCoordinator` | peer selection ownership, serialized selection commands, generation/supersession, foreground intent, selection diagnostics, aggregate workspace-state assembly from owner snapshots, namespace-scope commands and rebuild coalescing, and ordering between cluster and refresh owners | Duplicate clients, projection state, subsystems, settings-file locking, or component-owned domain state |
-| `ResourceGateway` | complete-object-identity validation, catalog resolution, permission-aware dependencies, detail/YAML/action orchestration, response cache | Cluster selection guesses or refresh-domain list ownership |
+| `WorkspaceCoordinator` | peer selection ownership, serialized selection commands, generation/supersession, foreground intent, selection diagnostics, aggregate workspace-state assembly from owner snapshots, namespace-scope commands/rebuild coalescing, kubeconfig-search-path change/import orchestration and resulting selection pruning, consumption of `ClusterRuntimeIntent`, and ordering between cluster and refresh owners | Duplicate clients, projection state, subsystems, settings-file locking, kubeconfig discovery implementation, or component-owned domain state |
+| `ResourceGateway` | complete-object-identity validation, catalog resolution, permission-aware dependencies, detail/YAML/action orchestration, response cache, and consumption of the read-only `PermissionFetchPolicy` | Cluster selection guesses, preference reads, or refresh-domain list ownership |
 | `OperationsCoordinator` | runtime-operation registry, shell sessions, port forwards, drain-operation registration and cluster-scoped cleanup | Cluster client ownership or stale snapshot authority |
-| `UpdateCoordinator` | update discovery, staging, durable update state, scheduler, projection events | Window or settings persistence |
+| `UpdateCoordinator` | update discovery, staging, durable update state, scheduler, projection events, and owner-validated reset of skipped/pending/prepared/attempt/cleanup state plus dynamic staging/log artifacts under the configured update roots | Window or settings persistence, raw deletion of unvalidated dynamic paths, or the static app-state manifest |
 | `AppLogService` | log buffer, frontend log ingestion, typed log events | General event routing or error-reporting configuration ownership |
 
 This table is a provisional target-owner set until the Phase 0 ledger accounts
@@ -222,6 +224,20 @@ Existing in-package seams are promoted rather than replaced:
   through a general-purpose back-pointer.
 - Cross-component operations live in a named coordinator whose dependencies
   point one way. Components do not call back into their coordinator.
+- Cluster-originated work that must enter workspace serialization crosses one
+  typed, owner-local `ClusterRuntimeIntent` queue exposed by
+  `ClusterRuntimeManager`; it is not a callback to `WorkspaceCoordinator` or a
+  generic application event bus. Its closed intent set covers kubeconfig-source
+  changes with the changed paths, auth rebuild/teardown requests with
+  `clusterId` and applicable generation/diagnostic data, and transport rebuild
+  requests with `clusterId` and cause. Publication is non-blocking even from an
+  auth-manager-held lock: owner-held pending state coalesces by cluster/intent
+  kind and preserves the newest generation, while a bounded wake channel merely
+  prompts the consumer to drain it. Shutdown cancels the stream and clears
+  pending work. The current `App` consumes it until Phase 5C;
+  `WorkspaceCoordinator` then becomes the sole consumer, rejects stale
+  generations, and runs the resulting mutation through its normal serialized
+  cluster/refresh workflow.
 - Physical persistence ownership and domain ownership are distinct but
   explicit: `PreferencesService` serializes the shared settings file, while
   `ClusterAttentionService` owns Attention transactions and
@@ -238,32 +254,47 @@ Existing in-package seams are promoted rather than replaced:
   `PreferencesService`, then sequences the cluster/refresh rebuild, advances
   the scope revision through `ClusterWorkspaceProjection`, and emits the typed
   convergence event.
+- `WorkspaceCoordinator` also owns the kubeconfig-search-path change workflow.
+  It serializes against selection mutations, persists normalized paths through
+  `PreferencesService`, asks `ClusterRuntimeManager` to rediscover kubeconfigs
+  and retarget the watcher, classifies invalid selections, and then sequences
+  refresh reconciliation/teardown, selection commit, client/auth removal,
+  operation cleanup, projection cleanup, and remaining-selection persistence in
+  the current order. `DataManagementCoordinator` invokes this same workflow
+  after settings import instead of duplicating its post-commit behavior.
 - `ErrorReportingService` owns reporter configuration and installation
   registration. `AppLogService` may emit through an injected reporter sink but
   cannot enable, disable, or otherwise configure it.
 - `PreferencesService` has one complete `SettingsEffectDispatcher` seam for the
-  five current `settingsSideEffects` flags. The stateless dispatcher fans them
-  out through owner-shaped write-only sinks: error-reporting enablement to
+  five current `settingsSideEffects` flags plus the current direct
+  `PermissionSSRRFetchConcurrency` read, which becomes an explicit sixth route
+  during extraction. The stateless dispatcher fans values out through
+  owner-shaped write-only sinks: error-reporting enablement to
   `ErrorReportingService`; Kubernetes client QPS/burst to
-  `ClusterRuntimeManager`; the per-scope container target cap to
-  `ContainerLogsSelectionPolicy`; and the global container target cap plus
-  metrics cadence to `RefreshCoordinator`. The dispatcher is not a new state
-  owner, and no target implements a broad settings or App interface.
-- `PreferencesService.EnsureLoaded()` is the sole lazy settings initializer.
-  It owns its synchronization, coalesces concurrent first callers, retries after
-  an ordinary load failure, and returns an immutable snapshot only after the
-  successful load's post-unlock container-log pushes have completed. No caller
-  may acquire the preferences lock, call a raw loader, install `appSettings`, or
-  observe a loaded-but-not-effect-ready snapshot.
+  `ClusterRuntimeManager`; SSRR fetch concurrency to `PermissionFetchPolicy`;
+  the per-scope container target cap to `ContainerLogsSelectionPolicy`; and the
+  global container target cap plus metrics cadence to `RefreshCoordinator`.
+  The dispatcher is not a new state owner, and no target implements a broad
+  settings or App interface.
+- `PreferencesService` owns one lazy settings state machine exposed through
+  `EnsureLoaded()` and the startup-policy wrapper `EnsureLoadedForStartup()`.
+  That state machine owns its synchronization, coalesces concurrent first
+  callers, retries after an ordinary load failure, and returns an immutable
+  snapshot only after the successful load's post-unlock container-log and
+  permission-policy pushes have completed. No caller may acquire the preferences
+  lock, call a raw loader, install `appSettings`, or observe a loaded-but-not-
+  effect-ready snapshot.
 - Ordinary `EnsureLoaded()` failure installs no snapshot and dispatches no load
   effects: settings reads and updates return the error, and error-reporting
-  startup remains disabled. Startup cluster restoration alone may select the
-  existing fallback policy by calling a separate Preferences-owned
-  `InstallStartupDefaultsAfterLoadFailure()` operation. That operation installs
-  one immutable default snapshot only when no ready snapshot exists and the
-  immediately preceding coalesced load failed; it never overwrites a successful
-  load. After releasing the preferences lock, it pushes both default container-
-  log limits before workspace restoration uses the snapshot.
+  startup remains disabled. Startup cluster restoration alone calls the
+  Preferences-owned atomic `EnsureLoadedForStartup()` operation. It participates
+  in the same coalesced load state machine as `EnsureLoaded`; after the load
+  attempt fails, it installs one immutable default snapshot only if no ready
+  snapshot exists and no retry is in flight. A concurrent successful load wins,
+  and no caller can separately apply fallback using stale failure state. After
+  releasing the preferences lock, it pushes both default container-log limits
+  and the default permission-fetch concurrency before workspace restoration
+  uses the snapshot.
 - Immutable settings snapshots carry load provenance that distinguishes a
   successful file/default-file load from startup defaults installed after a
   load error. Error reporting may enable only from successful-load provenance;
@@ -275,17 +306,61 @@ Existing in-package seams are promoted rather than replaced:
   never stores or calls Preferences. This preserves the one-way live-effect
   dependency `PreferencesService` → `ErrorReportingService` instead of creating
   a startup callback cycle.
-- Factory Reset invalidates the snapshot, provenance, and lazy-load readiness
-  through a Preferences-owned reset operation after persisted settings are
-  removed. The next `EnsureLoaded()` performs a new coalesced load and its two
-  post-unlock pushes; callers do not reset readiness by assigning a nil field.
-  Preserve the existing installation-registration-before-preferences lock and
-  deletion order.
-- The workspace startup path calls `EnsureLoaded()` and, if needed, installs the
-  explicit fallback before entering its selection mutation. Only restoration of
-  the returned selected-kubeconfig snapshot and subsequent client work run
-  under the selection coordinator; lazy-load dispatch never runs while a
-  caller-owned selection lock is held.
+- `DataManagementCoordinator` owns the total in-app Factory Reset workflow. It
+  first routes cluster/refresh/operation/projection cleanup through
+  `WorkspaceCoordinator`, waits for installation registration through
+  `ErrorReportingService`, and then invokes owner-specific reset operations for
+  Preferences, Favorites, UI persistence, update state, and cache/spill state.
+  `PreferencesService` removes its persisted settings and invalidates snapshot,
+  provenance, and lazy-load readiness atomically. After releasing its lock, the
+  coordinator dispatches the default values through all six runtime setting
+  sinks, including disabling error reporting and resetting both container-log
+  policies and permission concurrency; `ClusterAttentionService` clears its
+  in-memory persisted-rule projection. The next `EnsureLoaded()` performs a new
+  coalesced load and all load-time post-unlock policy pushes. Live reset never
+  deletes another owner's file directly or relies on process restart to clear
+  in-memory state. It attempts every independent owner reset, aggregates errors,
+  and reports success only when the full contract completed; the frontend does
+  not reload after a partial failure. Preserve the existing installation-
+  registration-before-preferences lock/deletion order and make repeated reset
+  safe.
+- Every owner of durable or settings-derived mutable state exposes only its own
+  idempotent reset/default operation. Reset is not a general filesystem or
+  lifecycle interface: Preferences removes settings/readiness, Favorites removes
+  favorites, UI state removes its persistence, Update quiesces and removes update
+  state, Attention clears its rule projection, Refresh tears down producers and
+  removes cache/spill state, Workspace sequences runtime cleanup, and the six
+  settings sinks accept default values. No leaf owner calls the coordinator or
+  resets another owner.
+- `UpdateCoordinator.Reset` covers the complete configured updater state, not
+  only skipped or pending versions. It rejects reset while an application/
+  restart attempt must remain recoverable; otherwise it cancels and quiesces
+  checks/downloads, resolves the actual configured `StatePath` and `TempRoot`,
+  validates every prepared/attempt/cleanup staging path through the updater
+  state package, attempts all recorded cleanup entries and updater log/staging
+  artifacts under that root, aggregates cleanup failures, and only then clears
+  durable and in-memory state. It never follows an unvalidated path from the
+  state document or silently substitutes default roots for configured ones.
+- The offline `cmd/project` reset task and the live coordinator share one
+  manifest of statically located Go-owned config/cache artifacts, implemented
+  as a stateless path/owner inventory under `internal/appstate`. Dynamic
+  updater artifacts remain owner-resolved because their locations come from
+  configured roots and durable updater state; the manifest names that owner and
+  reset contract instead of accepting raw dynamic paths. Path resolution is
+  side-effect-free: resolving settings, favorites, UI-state, updater, cache, or
+  spill locations never creates their parent directories; write paths perform
+  directory creation separately. The manifest performs no live deletion. The
+  offline task may remove the app directories only under an explicit documented
+  app-stopped precondition because no owners may be running; the live path must
+  use the owner-directed workflow above. The frontend clears its own web storage
+  and may reload only after backend success; the reset contract must already be
+  complete before that reload. Update copy that claims a native application
+  restart unless implementation adds an actual relaunch operation.
+- The workspace startup path calls `EnsureLoadedForStartup()` before entering
+  its selection mutation. Only restoration of the returned selected-kubeconfig
+  snapshot and subsequent client work run under the selection coordinator;
+  lazy-load/fallback dispatch never runs while a caller-owned selection lock is
+  held.
 - Settings mutation/import captures the committed snapshot and effect flags
   under the preferences lock, persists successfully, releases that lock, and
   only then dispatches effects. A failed persistence dispatches none. Each sink
@@ -298,10 +373,12 @@ Existing in-package seams are promoted rather than replaced:
   `defaultObjPanelLogsTargetPerScopeLimit`, and the refresh owner constructs the
   global limiter with `defaultObjPanelLogsTargetGlobalLimit` when first needed;
   after a successful load, preferences pushes both configured limits after
-  releasing its lock. Applicable preference updates and settings import use the
-  same dispatcher. Error-reporting startup remains fail-closed, while initial
-  Kubernetes rate limits and metrics cadence are supplied to future owner
-  construction separately from their live-update sinks.
+  releasing its lock. `PermissionFetchPolicy` likewise starts at
+  `defaultPermissionSSRRFetchConcurrency`, and successful load, startup fallback,
+  preference update, and settings import push the selected concurrency through
+  the same dispatcher. Error-reporting startup remains fail-closed, while
+  initial Kubernetes rate limits and metrics cadence are supplied to future
+  owner construction separately from their live-update sinks.
 - `containerLogsTargetLimiterMu` remains a leaf init lock: its accessor and
   global-limit sink never read preferences, call another owner, or acquire a
   refresh/subsystem lock while it is held. The metrics-cadence sink snapshots
@@ -346,7 +423,8 @@ Existing in-package seams are promoted rather than replaced:
 ## Non-goals
 
 - Changing frontend behavior, visual design, command names, event names, or
-  persisted formats.
+  persisted formats, except correcting the Factory Reset completeness and
+  reload/restart copy contract identified by this ownership audit.
 - Rewriting the refresh subsystem, object catalog, per-kind resource services,
   update coordinator, or operation registry.
 - Introducing dependency-injection frameworks, a global service locator, or a
@@ -370,11 +448,11 @@ migration branch merely because the final composition root still exists.
 | Phase 0 | Enforced baseline, complete coupling/test ledger, and executable migration contracts |
 | Phase 1 | Wails exposure is structurally defined by `DesktopService` while runtime behavior stays unchanged |
 | Phase 2 | Live-operation state and cleanup have one owner |
-| Phase 3 | Process leaf state, persistence, coalesced settings readiness/fallback, the complete settings-effect seam, shared container-log selection policy, Attention, error reporting, native shell work, updates, and logs have focused owners |
-| Phase 4 | Resource reads/mutations/cache have one request-shaped owner with refresh-to-cache invalidation |
-| Phase 5A | Cluster clients/auth/lifecycle/metrics/heartbeat, live rate-limit effects, and the replay projection have focused owners |
+| Phase 3 | Process leaf state, persistence, atomic settings readiness/startup fallback, the complete six-route settings-effect seam, shared container-log and permission-fetch policies, total Factory Reset, Attention, error reporting, native shell work, updates, and logs have focused owners |
+| Phase 4 | Resource reads/mutations/cache have one request-shaped owner with refresh-to-cache invalidation and an explicit permission-fetch policy |
+| Phase 5A | Cluster clients/auth/lifecycle/metrics/heartbeat, live rate-limit effects, the typed cluster-runtime intent producer, all non-refresh cluster collaborators, and the replay projection have focused owners |
 | Phase 5B | Refresh, catalog runtime, streams, governor, handler, telemetry, metrics-cadence effects, global container-log limiting, and Attention-target publication have one owner |
-| Phase 5C | Peer selection, diagnostics, namespace-scope orchestration, aggregate replay assembly, and cross-owner sequencing have one owner |
+| Phase 5C | Peer selection, diagnostics, namespace-scope and kubeconfig-search-path orchestration, aggregate replay assembly, and cross-owner sequencing have one owner |
 | Phase 6 | The god object is gone; only composition remains |
 | Phase 7 | Final durability audit is complete and this temporary plan is removed |
 
@@ -388,10 +466,19 @@ Never stop or ship with:
   the explicitly temporary owner-shaped interfaces;
 - an extracted owner whose `DesktopService` collaborator is still implemented
   by `App` rather than that owner;
-- Phase 3 with fewer than all five settings effects behind the dispatcher or an
-  unowned package-global effect target, any external/raw settings-load caller,
-  or a ready settings snapshot published before load effects complete;
-- Phase 5A with an App-backed Kubernetes client rate-limit sink;
+- Phase 3 with fewer than all six runtime setting routes behind the dispatcher,
+  an unowned package-global effect target, a direct permission-to-preferences
+  read, any external/raw settings-load caller, a two-call startup-fallback
+  protocol, or a ready settings snapshot published before load effects complete;
+- Phase 3 with Factory Reset omitting an app-owned durable artifact, deleting a
+  live owner's file directly, retaining in-memory state until a frontend reload,
+  resolving artifact paths by creating directories, leaving configured updater
+  staging/log/cleanup state behind, or claiming a native restart that it does
+  not perform;
+- Phase 5A with an App-backed Kubernetes client rate-limit sink, an App-backed
+  cluster-runtime collaborator outside the explicitly deferred current
+  App-owned workspace/refresh orchestration, a cluster owner calling back into
+  workspace, or a blocking/unbounded cluster-runtime intent handoff;
 - Phase 5B with either App-backed refresh settings sink, more than one global
   limiter instance, or any settings pull from the refresh owner;
 - an old and new Wails command path for the same operation; or
@@ -427,14 +514,17 @@ tests construct `ApplicationRuntime` explicitly.
 
 - [ ] Record every `App` field in a migration ledger with its current readers,
   writers, mutex, startup path, shutdown path, tests, and target owner.
-- [ ] Extend the ledger beyond `App` fields to every mutable package-global or
-  singleton targeted by settings. At minimum, record all five
-  `settingsSideEffects` flags and appliers, their update/import/load producers,
-  their runtime targets and consumers, and their replacement sinks. This must
-  include `backend/internal/containerlogs.currentPerScopeTargetLimit`, which is
-  currently written by settings load/update and read by both
+- [ ] Extend the ledger beyond `App` fields to every mutable package-global,
+  singleton, or direct cross-owner settings reader. At minimum, record all five
+  current `settingsSideEffects` flags and appliers plus the live
+  `PermissionSSRRFetchConcurrency` read, their update/import/load producers,
+  runtime targets and consumers, and replacement sinks. This must include
+  `backend/internal/containerlogs.currentPerScopeTargetLimit`, which is currently
+  written by settings load/update and read by both
   `backend/resources/pods/logs.go` and
-  `backend/refresh/containerlogsstream/streamer.go`.
+  `backend/refresh/containerlogsstream/streamer.go`, and
+  `permissionSSRRFetchConcurrency()`, which is currently read by
+  `fetchSSRRRulesForNamespaces` for each permission fan-out.
 - [ ] Close the provisional ownership table against that ledger. Add a focused
   row for any newly discovered cohesive responsibility instead of assigning
   otherwise-unrelated fields to an owner by code proximity.
@@ -449,27 +539,31 @@ tests construct `ApplicationRuntime` explicitly.
   `sidebarVisible`, `diagnosticsPanelVisible`, and `appLogsPanelVisible` fields.
 - [ ] Close the settings-effect sub-ledger explicitly: error reporting belongs
   to `ErrorReportingService`; live/future-client QPS and burst belong to
-  `ClusterRuntimeManager`; the per-scope container target cap belongs to
+  `ClusterRuntimeManager`; SSRR fetch concurrency belongs to
+  `PermissionFetchPolicy`; the per-scope container target cap belongs to
   `ContainerLogsSelectionPolicy`; and the global container target limiter plus
-  live/future-subsystem metrics cadence belong to `RefreshCoordinator`.
+  live/future-subsystem metrics cadence belong to `RefreshCoordinator`. Record
+  the current five flags and the sixth route that replaces the direct settings
+  read without misreporting the baseline.
 - [ ] Ledger all four production `loadAppSettings` call sites and their distinct
   failure policies: `GetAppSettings` and `prepareAppPreferenceUpdate` belong to
   `PreferencesService`; `InitializeErrorReporting` belongs to
   `ErrorReportingService` and fails closed; and
   `initializeSelectedClustersAtStartup` belongs eventually to
-  `WorkspaceCoordinator` and continues with an explicitly installed default
-  snapshot. Record the lock idiom at each current caller and the Phase 3 rule
-  that none survives as an external/raw loader call.
+  `WorkspaceCoordinator` and continues through atomic
+  `EnsureLoadedForStartup()`. Record the lock idiom at each current caller and
+  the Phase 3 rule that none survives as an external/raw loader call or a
+  separate stale-failure fallback call.
 - [ ] Inventory the 24 direct `loadAppSettings` test calls across
   `backend/app_settings_test.go`, `backend/app_cluster_settings_test.go`, and
   `backend/app_data_management_test.go`. Classify each as a public
-  `EnsureLoaded` contract test, a lower-level persistence codec/repository test,
-  or a caller-specific failure-policy test instead of retaining a backdoor lazy
-  initializer.
+  `EnsureLoaded`/`EnsureLoadedForStartup` contract test, a lower-level
+  persistence codec/repository test, or a caller-specific failure-policy test
+  instead of retaining a backdoor lazy initializer.
 - [ ] Record the limiter's lock-order proof and startup/update contract in the
   ledger: no settings read or other lock acquisition under
   `containerLogsTargetLimiterMu`; construction uses the default; successful
-  `EnsureLoaded`, explicit startup fallback, and global-limit updates immediately
+  `EnsureLoaded`, atomic startup fallback, and global-limit updates immediately
   push the selected configured/default value through `SetLimit`; every subsystem
   receives the same process-wide limiter instance.
   Preserve the source contract documented at
@@ -481,6 +575,46 @@ tests construct `ApplicationRuntime` explicitly.
   `WorkspaceCoordinator` collaborator; assign health events to
   `ClusterRuntimeManager`, the scope-changed event to `WorkspaceCoordinator`,
   and their replay state to `ClusterWorkspaceProjection`.
+- [ ] Ledger `GetKubeconfigSearchPaths`, `SetKubeconfigSearchPaths`, settings
+  import, and kubeconfig-watcher changes as one search-path/selection workflow.
+  Assign physical search-path persistence to `PreferencesService`, discovery and
+  watcher retargeting to `ClusterRuntimeManager`, and serialized post-persist
+  rediscovery/pruning/cleanup to `WorkspaceCoordinator`; make
+  `DataManagementCoordinator` invoke that same workflow after import.
+- [ ] Ledger the three asynchronous cluster-originated paths that currently
+  re-enter selection orchestration: kubeconfig watcher changes, auth rebuild/
+  teardown requests, and transport-failure rebuild requests. Record the current
+  producer lock/callback context, payload identity and generation data, current
+  App consumer, serialization entry point, cancellation/teardown behavior, and
+  the Phase 5A `ClusterRuntimeIntent` producer plus Phase 5C workspace consumer.
+  The replacement must be non-blocking while the auth-manager mutex is held and
+  must have explicit bounded/coalesced backpressure rather than an unbounded
+  goroutine or generic event bus.
+- [ ] Classify every consumer of cluster-runtime behavior, not only Wails
+  commands or `DesktopService`: include `OperationsCoordinator` dependency/
+  retry seams, `ResourceGateway` dependency resolution and transport-health
+  recording, current workspace selection/search-path orchestration, refresh
+  construction/readiness, and every other consumer found by the ledger. Name
+  the owner-shaped interface and the exact subphase that replaces its App-backed
+  implementation; refresh-owned consumers may be deferred only to Phase 5B.
+- [ ] Inventory Factory Reset as a total cross-owner workflow, not only a
+  preferences-readiness operation. Record the in-app `ClearAppState` command,
+  the offline `cmd/project` reset task, every app-owned config/cache artifact
+  including `favorites.json` and `application-update.json`, every in-memory
+  owner that must reset before frontend reload, the existing cluster/refresh/
+  operation/projection cleanup, and installation-registration ordering. For the
+  updater, include configured `StatePath`/`TempRoot`, skipped, prepared, attempt,
+  and cleanup document entries, protected/staging directories, and updater logs;
+  distinguish an active check/download that can be quiesced from an active
+  application/restart attempt that must make reset fail without deleting its
+  recovery state. Define one shared static artifact manifest plus owner-resolved
+  dynamic artifacts while keeping live owner-directed cleanup separate from
+  offline directory removal.
+- [ ] Inventory every filesystem path resolver used by Factory Reset. Split
+  resolution from parent-directory creation wherever a getter currently calls
+  `MkdirAll`, so live/offline inventory and missing-path reset checks have no
+  filesystem side effects; retain directory creation only in the corresponding
+  write/open operation.
 - [ ] Record `InitializeErrorReporting` and its `main.go` call as a non-command
   composition entry point sequencing `PreferencesService` into the behavior
   owned by `ErrorReportingService`. Preserve the
@@ -490,8 +624,8 @@ tests construct `ApplicationRuntime` explicitly.
 - [ ] Pin the composition ordering that initializes error reporting after
   backend/preferences construction and before `application.Run`. Combined with
   snapshot provenance, this preserves fail-closed behavior both in the normal
-  startup order and if a later internal caller has already installed fallback
-  defaults.
+  startup order and if a later internal caller has already completed atomic
+  startup fallback.
 - [ ] Record all 11 production structs with `*App` fields and all 38
   production-file package-level functions with exact `*App` parameters,
   including the 23 menu functions and five test-support helpers in
@@ -522,14 +656,19 @@ tests construct `ApplicationRuntime` explicitly.
   port-forward cleanup.
 
 Exit criterion: the provisional ownership table is closed; every current field,
-lock, mutable package-global settings target, command, event, back-pointer,
-App-parameter function, test seam, and boundary entry point has exactly one
-target owner and removal phase; all five settings effects have a producer,
-owner-shaped sink, target, startup/update rule, and validation case; no ledger
-row is marked miscellaneous or assigned only by proximity; both project
-contract-test files fail for the intended boundary/composition drift; and the
-tests characterize the behavior later phases must preserve. Phase 0 is an
-independently shippable test-and-inventory checkpoint.
+lock, mutable package-global settings target, direct cross-owner settings read,
+command, event, back-pointer, App-parameter function, test seam, and boundary
+entry point has exactly one target owner and removal phase; all six runtime
+setting routes have a producer, owner-shaped sink, target, startup/update rule,
+and validation case; every cluster-runtime consumer and asynchronous
+cluster-originated workflow has a named producer, typed handoff, consumer, and
+replacement phase; search-path change/import and total Factory Reset have named
+coordinators and complete static/dynamic owner/artifact inventories; no ledger row is
+marked miscellaneous or assigned only by proximity; both project contract-test
+files pass normally and are proven to fail against intentional fixture mutations
+that violate their boundary/composition decisions; and the tests characterize
+the behavior later phases must preserve. Phase 0 is an independently shippable
+green test-and-inventory checkpoint.
 
 ## Phase 1 — Establish the structural Wails boundary
 
@@ -628,7 +767,9 @@ enforce the preserved decisions. The backend contains no unproved
   `App` into that owner without changing session or event DTOs.
 - [ ] Inject narrow cluster dependency resolution, permission checking, event
   emission, logging, and context dependencies; do not inject the composition
-  root.
+  root. Record the cluster dependency/retry collaborator as temporarily
+  App-backed and require Phase 5A to replace its implementation with
+  `ClusterRuntimeManager` without changing the operations owner.
 - [ ] Route the relevant `DesktopService` commands directly to the new owner.
   Replace the App-backed `OperationsCoordinator` collaborator as one unit.
 - [ ] Route cluster removal and application shutdown through one idempotent
@@ -656,7 +797,15 @@ Phase 2 is independently shippable.
 
 - [ ] Compose the existing application-update coordinator directly behind a
   narrow `UpdateCoordinator` boundary and move its event subscriptions and
-  shutdown ownership out of `App`.
+  shutdown ownership out of `App`. Add an owner-specific reset operation that
+  covers the full updater state machine: skipped version, pending projection,
+  prepared update, application attempt, cleanup entries, protected/staging
+  directories, updater logs, and the corresponding in-memory state. Resolve the
+  actual configured `StatePath` and `TempRoot`, validate dynamic paths with
+  `updatestate`, and attempt/aggregate all cleanup work. Cancel and quiesce an
+  active check/download before cleanup; reject reset without deleting recovery
+  state when an application/restart attempt is active. Factory Reset must never
+  delete updater state beneath live work or raw-delete a document-supplied path.
 - [ ] Extract `AppLogService`, including the buffer, frontend ingestion,
   sequence reads, and typed log event projection.
 - [ ] Extract `PreferencesService`, `FavoritesService`, and `UIStateStore` with
@@ -664,37 +813,45 @@ Phase 2 is independently shippable.
   rule that favorites I/O does not block grid persistence; share only stateless
   atomic-file helpers where appropriate.
 - [ ] Give `PreferencesService` narrow, atomic repositories for the persisted
-  Attention and per-cluster namespace-scope sections. It owns the physical
-  settings-file lock and schema; the Attention and workspace owners retain
-  their domain validation, commands, ordering, and live effects.
-- [ ] Replace the raw `loadAppSettings` lazy initializer with
-  `PreferencesService.EnsureLoaded()`. Route all four production paths through
-  it: `GetAppSettings`, preference-update preparation, error-reporting startup,
-  and selected-cluster startup. Callers receive an immutable snapshot carrying
-  successful-load versus load-error-fallback provenance and never hold or
-  manipulate the preferences mutex. Coalesce concurrent first callers, and do
-  not return a successful/ready snapshot to any waiter until both post-unlock
-  container-log initialization pushes finish.
+  Attention, per-cluster namespace-scope, and kubeconfig-search-path sections.
+  It owns the physical settings-file lock and schema; the Attention and
+  workspace owners retain their domain validation, commands, ordering, and live
+  effects. Route `GetKubeconfigSearchPaths` to this repository, but keep
+  `SetKubeconfigSearchPaths` behind a separate workspace workflow collaborator.
+- [ ] Replace the raw `loadAppSettings` lazy initializer with one Preferences-
+  owned coalesced load state machine. Route `GetAppSettings`, preference-update
+  preparation, and error-reporting startup through `EnsureLoaded()`; route
+  selected-cluster startup through `EnsureLoadedForStartup()`, which shares that
+  state machine and adds only its atomic fallback policy. Callers receive an
+  immutable snapshot carrying successful-load versus load-error-fallback
+  provenance and never hold or manipulate the preferences mutex. Do not return
+  a successful/ready snapshot to any waiter until both post-unlock container-log
+  initialization pushes and the permission-fetch-policy push finish.
 - [ ] Preserve each caller's failure contract. A normal `EnsureLoaded` failure
   installs nothing and dispatches nothing, so reads/updates surface the error
-  and `ErrorReportingService` remains disabled. Selected-cluster startup logs
-  the load error and calls the Preferences-owned
-  `InstallStartupDefaultsAfterLoadFailure()` operation; that operation installs
-  the default snapshot only after a failed load and only if no successful
-  snapshot won the race, then pushes both default container-log limits after
-  unlocking. Error reporting treats that snapshot's fallback provenance as
-  disabled. Invoke these preference operations before entering
+  and `ErrorReportingService` remains disabled. Selected-cluster startup uses a
+  single Preferences-owned `EnsureLoadedForStartup()` call that performs the
+  coalesced attempt and permitted fallback atomically. It logs the load failure,
+  installs defaults only if no successful snapshot exists and no retry is in
+  flight, and pushes both default container-log limits plus default permission
+  concurrency after unlocking. Error reporting treats that snapshot's fallback
+  provenance as disabled. Invoke this operation before entering
   `runSelectionMutation`, then restore only the returned selected-kubeconfig
-  snapshot inside the serialized workspace mutation.
+  snapshot inside the serialized workspace mutation. Do not expose a separate
+  no-argument fallback method whose decision can race a newer load attempt.
 - [ ] Replace `applySettingsSideEffects` with one complete, stateless
   `SettingsEffectDispatcher` owned at the `PreferencesService` boundary. Cover
-  all five current flags through owner-shaped write-only sinks: error-reporting
-  enablement to `ErrorReportingService`; Kubernetes client QPS/burst to the
-  current App cluster-runtime implementation; the per-scope container target
-  cap to `ContainerLogsSelectionPolicy`; and the global container target cap
-  plus metrics cadence to the current App refresh-runtime implementation. Phase
-  5A swaps the cluster sink and Phase 5B swaps the two refresh sinks; neither
-  phase changes preference semantics.
+  the five current flags plus the current direct permission-concurrency read as
+  six owner-shaped write-only routes: error-reporting enablement to
+  `ErrorReportingService`; Kubernetes client QPS/burst to the current App
+  cluster-runtime implementation; SSRR fetch concurrency to
+  `PermissionFetchPolicy`; the per-scope container target cap to
+  `ContainerLogsSelectionPolicy`; and the global container target cap plus
+  metrics cadence to the current App refresh-runtime implementation. Phase 5A
+  swaps the cluster sink and Phase 5B swaps the two refresh sinks; neither phase
+  changes preference semantics. Change the
+  `appPreferencePermissionSSRRFetchConcurrency` descriptor from its current no-
+  effect form so update/import sets the sixth dispatch flag.
 - [ ] Extract `ContainerLogsSelectionPolicy` from the package-global
   `backend/internal/containerlogs.currentPerScopeTargetLimit`. Give direct pod-
   log reads and live streams the same read-only policy collaborator (or an
@@ -703,6 +860,14 @@ Phase 2 is independently shippable.
   `defaultObjPanelLogsTargetPerScopeLimit`; successful `EnsureLoaded`,
   applicable updates, and settings import push the configured value through its
   sink.
+- [ ] Extract `PermissionFetchPolicy` from the direct
+  `permissionSSRRFetchConcurrency()` settings read. Give permission fan-out a
+  read-only policy collaborator and make the policy start at
+  `defaultPermissionSSRRFetchConcurrency`; successful `EnsureLoaded`, atomic
+  startup fallback, applicable updates, and settings import push the selected
+  value through its write-only sink. Replace the current App permission fan-out
+  read with that policy and delete `permissionSSRRFetchConcurrency()` in this
+  phase; Phase 4 carries the same collaborator into `ResourceGateway`.
 - [ ] Preserve transactional and lock direction for the whole effect seam.
   Capture flags and an immutable settings snapshot under the preferences lock,
   persist, release the lock, and then dispatch; persistence failure dispatches
@@ -712,13 +877,14 @@ Phase 2 is independently shippable.
   sink: no preferences, refresh, or subsystem lock is acquired under
   `containerLogsTargetLimiterMu`.
 - [ ] Preserve the distinct startup rules while consolidating dispatch. Every
-  successful `EnsureLoaded` pushes both configured container-log limits after
-  releasing the preferences lock; explicit startup fallback pushes both default
-  limits; `ErrorReportingService` applies its fail-closed startup value; new
-  cluster clients and refresh subsystems receive the loaded QPS/burst and
-  metrics interval during construction; and applicable updates/imports retarget
-  existing owners live. Preserve best-effort independent dispatch so an error-
-  reporting failure is logged without suppressing the other enabled effects.
+  successful `EnsureLoaded` pushes both configured container-log limits and
+  configured permission concurrency after releasing the preferences lock;
+  atomic startup fallback pushes all three defaults; `ErrorReportingService`
+  applies its fail-closed startup value; new cluster clients and refresh
+  subsystems receive the loaded QPS/burst and metrics interval during
+  construction; and applicable updates/imports retarget existing owners live.
+  Preserve best-effort independent dispatch so an error-reporting failure is
+  logged without suppressing the other enabled effects.
 - [ ] Extract `ClusterAttentionService` with `attentionRulesMu`, effective
   cluster/global rule calculation, persistence transactions through the
   preferences repository, the six Ignore/Restore commands, object-pruning, and
@@ -739,13 +905,42 @@ Phase 2 is independently shippable.
 - [ ] Preserve `UpdateAppPreferences` as the only general preference mutation
   contract, and keep theme/window-settings writes aligned with their settings
   document owner.
-- [ ] Extract `DataManagementCoordinator` over the real preference and favorite
-  owners; do not create a second portable-state store. Route Factory Reset
-  through a Preferences-owned readiness reset after settings-file deletion so
-  the next `EnsureLoaded` performs a real load and post-unlock pushes; preserve
-  installation-registration completion before that reset/deletion sequence.
+- [ ] Route kubeconfig search-path changes through one narrow workspace workflow
+  collaborator used by both `SetKubeconfigSearchPaths` and settings import. In
+  this phase the current App implements the collaborator without being stored as
+  `*App`; Phase 5C swaps it to `WorkspaceCoordinator`. Preserve serialized
+  persist-before-rediscovery, watcher retargeting, selection pruning, refresh/
+  client/operation/projection cleanup, and remaining-selection persistence.
+- [ ] Extract `DataManagementCoordinator` over the real preference, favorite,
+  UI-state, update, workspace, refresh/cache, operation, projection, and error-
+  reporting, settings-policy, and Attention owners; do not create a second
+  portable-state store. Its Factory Reset operation must finish live owner
+  cleanup, wait for installation registration, remove/reset every app-owned
+  durable and in-memory state through owner-shaped collaborators, and invalidate
+  Preferences readiness only as part of the Preferences reset. After persistence
+  locks are released, dispatch defaults through all six runtime setting sinks and
+  clear Attention's in-memory rule projection before frontend reload. Include
+  `favorites.json`, `application-update.json`, and Update-owned configured/dynamic
+  staging, cleanup, and log artifacts; preserve repeated-reset safety and
+  existing cleanup order, and make the next `EnsureLoaded` perform a real load
+  and all load-time post-unlock pushes. Current App-backed workspace/refresh reset
+  collaborators are temporary and are replaced in Phases 5B/5C. Attempt
+  every independent owner reset, aggregate failures, and return success only for
+  a complete reset so the frontend never reloads after partial cleanup.
+- [ ] Define one app-state artifact manifest shared with the offline
+  `cmd/project` reset task as a stateless `internal/appstate` path/owner inventory
+  for static Go-owned roots with no live deletion behavior. Make every shared
+  path resolver side-effect-free and move parent-directory creation into write/
+  open paths, so merely inventorying or resetting a missing artifact creates no
+  directories. Represent configured/durable updater staging and logs as
+  `UpdateCoordinator`-resolved dynamic artifacts, not raw paths for the generic
+  manifest to delete. Keep offline whole-directory removal separate from live
+  owner-directed reset, and change Factory Reset UI copy from “restarts the app”
+  to “reloads the app” unless this phase implements and tests an actual native
+  relaunch. Frontend storage clearing/reload happens only after the backend reset
+  has completed and is not a substitute for backend cleanup.
 - [ ] Keep the settings-effect dispatcher dependency-complete but not broad: it
-  knows the five effect values and their typed sinks, not `App`,
+  knows the six runtime setting values and their typed sinks, not `App`,
   `ApplicationRuntime`, arbitrary preferences, or owner internals. Adding a
   future effect requires an explicit ledger row, target owner, sink, startup
   rule, and failure/ordering test.
@@ -764,15 +959,18 @@ Phase 2 is independently shippable.
 - [ ] Move affected direct-App tests and test-only entry points to focused leaf
   service or concrete shell fixtures, and record the remaining counts. Replace
   the 24 direct test calls to `loadAppSettings` with public `EnsureLoaded`,
-  persistence-repository, explicit-startup-fallback, or caller-failure tests as
-  appropriate; do not retain a raw-loader test escape hatch.
+  `EnsureLoadedForStartup`, persistence-repository, or caller-failure tests as
+  appropriate; do not retain a raw-loader or separate fallback test escape
+  hatch.
 - [ ] Update `docs/architecture/application-lifecycle.md` with concrete
   `DesktopShell`, process-wide ephemeral shell visibility, settings-effect
-  dispatch ordering, `EnsureLoaded` readiness, workspace default fallback, the
-  non-Wails error-reporting startup path, update/log lifecycle ownership, and
-  leaf service shutdown ordering; update
-  `docs/architecture/data-access.md` with the complete five-effect seam,
-  lazy-load/failure contracts, post-commit dispatch, and owner-shaped sink rule;
+  dispatch ordering, `EnsureLoaded`/`EnsureLoadedForStartup` readiness, total
+  Factory Reset and frontend-reload contract, the non-Wails error-reporting
+  startup path, update/log lifecycle ownership, and leaf service shutdown
+  ordering; update `docs/architecture/data-access.md` with the complete six-route
+  effect seam, lazy-load/failure contracts, post-commit dispatch, and owner-
+  shaped sink rule; update `docs/architecture/permissions.md` with
+  `PermissionFetchPolicy` ownership and its settings-to-policy direction;
   update
   `docs/architecture/error-reporting.md` with `ErrorReportingService`, update
   `docs/architecture/multi-cluster.md` with `ClusterAttentionService`, and
@@ -784,16 +982,25 @@ Phase 2 is independently shippable.
   `docs/frontend/navigation.md` for a
   backend-only Attention owner rename because its routing/facet contract is
   unchanged; update it only if implementation changes that frontend behavior;
-  update `docs/workflows/application-updates.md` and
+  update `docs/workflows/application-updates.md`, including the complete updater-
+  state reset, configured-root and path-validation rules, active-work rejection/
+  quiescence, and dynamic-artifact ownership, and
   `docs/workflows/logs/application-logs.md` with their extracted owners.
 - [ ] Prove atomic preference batches, rollback on persistence failure,
   coalesced first-load readiness, first-paint settings reads, theme/favorite
   round trips, window-specific geometry, process-wide shell visibility/menu
   projection, Attention
   mutation/persistence/live application, error-reporting opt-in/out,
-  installation-registration/reset serialization, all five effect routes for
-  preference updates and settings import, no effects on persistence failure,
-  both container-log configured/default load pushes, caller-specific load-error
+  installation-registration/reset serialization, all six runtime setting routes
+  for preference updates and settings import, no effects on persistence failure,
+  both container-log and permission-policy configured/default load pushes,
+  concurrent load/retry/startup-fallback behavior, total and repeated Factory
+  Reset including favorites/updater state, Attention rules, default dispatch to
+  all six runtime sinks, and other live in-memory owners, shared offline/live
+  static artifact-manifest coverage, side-effect-free path resolution, updater
+  reset of prepared/attempt/cleanup state and configured staging/log roots,
+  updater reset versus active work, partial-reset
+  error aggregation without frontend reload, caller-specific load-error
   behavior, absence of the error-reporting initializer from generated bindings,
   live QPS/burst and metrics retiming, update scheduler uniqueness, and app-log
   sequence/event behavior.
@@ -802,12 +1009,16 @@ Exit criterion: process-owned leaf state has explicit owners, and persistence
 and native desktop side effects meet through narrow interfaces rather than an
 `App` back-pointer. Attention and error-reporting state, locks, commands, and
 lifecycle have their named owners; shell visibility has an explicit
-process-wide owner; and preferences drive all five runtime effects only through
-the complete post-commit effect seam. The package-global per-scope limit is gone,
-and the remaining App-backed cluster/refresh effect sinks are explicitly
-temporary until Phases 5A/5B. Native access remains concrete and direct. Phase
-3 is independently shippable only when no owner outside `PreferencesService`
-can lock preference state or trigger a raw load.
+process-wide owner; and preferences drive all six runtime setting routes only
+through the complete post-commit effect seam. The package-global per-scope limit
+and direct permission-to-preferences read are gone, Factory Reset is total before
+frontend reload, static path inventory is side-effect-free, dynamic updater
+artifacts are validated and owner-resolved, and the remaining App-backed cluster/
+refresh and workspace-reset/search-path collaborators are explicitly temporary
+until Phases 5A–5C.
+Native access remains concrete and direct. Phase 3 is independently shippable
+only when no owner outside `PreferencesService` can lock preference state,
+trigger a raw load, or separately install startup fallback.
 
 ## Phase 4 — Extract the resource boundary
 
@@ -817,6 +1028,12 @@ can lock preference state or trigger a raw load.
   `genappbindings` emits its generated receiver methods there.
 - [ ] Move response-cache ownership and permission-aware cache validation into
   that boundary.
+- [ ] Inject the Phase 3 read-only `PermissionFetchPolicy` into
+  `ResourceGateway` and make every SSRR namespace fan-out obtain its bounded
+  concurrency from that policy. Preserve the Phase 3 removal of
+  `permissionSSRRFetchConcurrency()` and any direct resource/permission
+  dependency on `PreferencesService`; settings continue to push updates one way
+  into the policy.
 - [ ] Introduce a narrow cache-invalidation collaborator owned by
   `ResourceGateway`. Register it with the current refresh construction in this
   phase; Phase 5B changes only the caller to `RefreshCoordinator`. The
@@ -826,7 +1043,10 @@ can lock preference state or trigger a raw load.
   currently receives a refresh `*system.Subsystem` without creating a callback
   into the composition root.
 - [ ] Replace helper signatures that accept `*App` with narrow context,
-  dependency-resolver, lifecycle, logging, event, and cache interfaces.
+  dependency-resolver, transport-health, lifecycle, logging, event, and cache
+  interfaces. Record the cluster resolver/transport-health implementations as
+  temporarily App-backed and require Phase 5A to replace them with
+  `ClusterRuntimeManager`.
 - [ ] Inject the read-only `ContainerLogsSelectionPolicy` into the pod-log
   resource service. Direct/fallback fetch and live refresh streaming must use
   the same per-scope limit value and warning semantics without
@@ -845,16 +1065,19 @@ can lock preference state or trigger a raw load.
   `ResourceGateway` fixture, and record the remaining counts.
 - [ ] Update `docs/architecture/data-access.md` with `ResourceGateway`, catalog
   and permission dependency direction, generated receiver placement, and
-  refresh-to-cache invalidation ownership, plus its read-only dependency on the
-  shared container-log selection policy.
+  refresh-to-cache invalidation ownership, plus its read-only dependencies on
+  the shared container-log selection and permission-fetch policies. Update
+  `docs/architecture/permissions.md` with the ResourceGateway-to-policy read
+  direction and absence of preference reads.
 - [ ] Prove complete identity, cluster-scoped dependency resolution, permission
-  denial, auth retry, cache invalidation, YAML ownership/apply, and object-action
-  behavior.
+  denial, configured/default/live-updated SSRR concurrency, auth retry, cache
+  invalidation, YAML ownership/apply, and object-action behavior.
 
 Exit criterion: resource reads and mutations no longer depend on `App`, guess a
-cluster, or duplicate catalog and permission behavior. The cache and all
-invalidation entry points have one owner, with current refresh construction
-depending one-way on its invalidator so this phase does not wait for Phase 5.
+cluster, read Preferences directly, or duplicate catalog and permission
+behavior. The cache and all invalidation entry points have one owner, current
+refresh construction depends one-way on its invalidator, and permission fan-out
+depends only on the read-only policy, so this phase does not wait for Phase 5.
 Phase 4 is independently shippable.
 
 ## Phase 5 — Extract cluster, refresh, and workspace ownership
@@ -867,11 +1090,11 @@ inside a subphase with split ownership.
 ### Phase 5A — Cluster runtime
 
 - [ ] Introduce `ClusterRuntimeManager` as the sole owner of kubeconfig
-  discovery, cluster clients, auth state/recovery, cluster lifecycle, transport
-  failure state, API metrics, cluster dependency resolution, heartbeat
-  scheduling/probing, and typed health-event publication. It writes health
-  changes through a projection sink and does not own replayable projection
-  state.
+  discovery and watcher-path retargeting, cluster clients, auth state/recovery,
+  cluster lifecycle, transport failure state, API metrics, cluster dependency
+  resolution, heartbeat scheduling/probing, and typed health-event publication.
+  It writes health changes through a projection sink and does not own replayable
+  projection state.
 - [ ] Extract `ClusterWorkspaceProjection` as the leaf owner of
   `clusterWorkspaceMu`, `clusterWorkspaceRevision`, `clusterHealth`, and
   `clusterScopeRevisions`. Give current cluster, selection, governor, lifecycle,
@@ -880,6 +1103,17 @@ inside a subphase with split ownership.
 - [ ] Promote the existing `clusterLifecycle` and
   `kubernetesAPIMetricsRegistry` into that owner rather than duplicating their
   state machines or registries.
+- [ ] Replace the watcher/auth/transport callbacks that re-enter workspace
+  selection with the owner-local typed `ClusterRuntimeIntent` queue. Emit the
+  three ledgered intent kinds with complete cluster identity, generation, paths,
+  and cause/diagnostic data as applicable. Publication must remain non-blocking
+  when invoked under the auth-manager mutex and semantically lossless through
+  bounded wakeup plus owner-held latest-pending coalescing; do not spawn an
+  unbounded goroutine per signal. Give the queue explicit startup, cancellation,
+  drain, and shutdown ownership. The current `App` consumes it through its
+  existing serialized selection workflow in this phase; the cluster owner
+  stores no App/workspace callback or back-pointer, and Phase 5C swaps only the
+  consumer.
 - [ ] Replace the Phase 3 App-backed Kubernetes client rate-limit sink with
   `ClusterRuntimeManager`. Supply the loaded QPS/burst as construction input for
   future clients and apply later settings-effect pushes to every existing
@@ -888,10 +1122,23 @@ inside a subphase with split ownership.
 - [ ] Keep `clusterOperationCoordinator` as an independent per-cluster
   serialization primitive injected into the workflows that require it; do not
   turn it into a composition-root or owner back-pointer.
+- [ ] Expose one narrow rediscover-and-retarget operation for the current App
+  search-path workflow. It reports discovery/watcher outcomes without pruning
+  workspace selections or calling refresh/operations/projection owners; Phase
+  5C makes `WorkspaceCoordinator` its final caller.
 - [ ] Let the current `App` orchestrate the extracted cluster owner until Phase
   5C, but delete every displaced cluster field, lock, and implementation method
   from `App` in this subphase. Delete the displaced projection fields and lock
   too; no client, auth, health, or scope-revision state may be mirrored.
+- [ ] Replace every App-backed cluster-runtime collaborator already held by an
+  extracted component, not only the settings sink or `DesktopService`: rewire
+  `OperationsCoordinator` dependency resolution/retry, `ResourceGateway`
+  dependency resolution and transport-health recording, and every additional
+  non-refresh consumer in the Phase 0 ledger directly to narrow
+  `ClusterRuntimeManager` interfaces. Rewire current App workspace orchestration
+  to call those same manager interfaces rather than implementing cluster
+  behavior itself. Refresh construction/readiness is the only permitted
+  cluster-runtime consumer deferred to Phase 5B.
 - [ ] Replace every App-backed `DesktopService` collaborator assigned to
   `ClusterRuntimeManager` in the Phase 0 command ledger; record an explicit
   empty set if no frontend command belongs directly to this owner.
@@ -906,20 +1153,28 @@ inside a subphase with split ownership.
 - [ ] Update `docs/architecture/multi-cluster.md` with
   `ClusterRuntimeManager` and `ClusterWorkspaceProjection` ownership,
   dependency readiness, auth recovery, lifecycle/metrics/heartbeat ownership,
-  initial/live client rate-limit application, replay-state sinks, and their
-  one-way collaborators. Update
+  kubeconfig discovery/watcher retargeting, initial/live client rate-limit
+  application, the typed non-blocking/coalesced cluster-runtime intent producer,
+  its temporary App consumer, replay-state sinks, and their one-way
+  collaborators. Update
   `docs/architecture/application-lifecycle.md` with heartbeat/projection startup
   and teardown ordering.
 - [ ] Prove discovery, no-selection startup, dependency readiness, transport
   failure, health classification/events/replay, aggregate revision consistency,
-  auth failure/recovery, per-cluster projection cleanup, and repeated teardown
-  under race tests.
+  auth failure/recovery, non-blocking publication while the auth-manager lock is
+  held, bounded/coalesced intent delivery, cancellation, stale-generation input,
+  every non-refresh cluster-runtime consumer wired to the manager, per-cluster
+  projection cleanup, and repeated teardown under race tests.
 
 Exit criterion: all cluster clients, auth/lifecycle state, transport failure
 state, dependency resolution, API metrics, and heartbeat lifecycle have one
-owner; replayable health/scope state has a separate leaf owner; and `App` is
-only a caller for later cross-owner workflows. Phase 5A is independently
-shippable.
+owner; discovery/watcher retargeting is exposed without absorbing workspace
+pruning; watcher/auth/transport producers publish through the typed owner-local
+intent queue without calling workspace; replayable health/scope state has a
+separate leaf owner; every non-refresh cluster-runtime collaborator points to
+`ClusterRuntimeManager`; and `App` is only the explicitly temporary intent
+consumer/caller for later workspace orchestration, not an implementation of
+cluster dependencies. Phase 5A is independently shippable.
 
 ### Phase 5B — Refresh runtime
 
@@ -931,7 +1186,9 @@ shippable.
 - [ ] Promote the existing `refreshServiceHandler` into that owner rather than
   adding a second handler-publication mechanism.
 - [ ] Inject narrow cluster-runtime dependencies from
-  `ClusterRuntimeManager` and the cache invalidator from `ResourceGateway`.
+  `ClusterRuntimeManager`, replacing every refresh construction/readiness
+  collaborator explicitly deferred by Phase 5A, and inject the cache invalidator
+  from `ResourceGateway`.
   Preserve the one-way flow `RefreshCoordinator` → `ResourceGateway`
   invalidation; `ResourceGateway` must not call back into refresh.
 - [ ] Inject the read-only `ContainerLogsSelectionPolicy` used by both pod-log
@@ -952,11 +1209,15 @@ shippable.
   shared limiter, while metrics-interval updates retime every connected
   subsystem. Supply the loaded metrics interval during future subsystem
   construction; neither sink reads or calls back into `PreferencesService`.
+- [ ] Replace the Phase 3 App-backed refresh/cache reset collaborator used by
+  `DataManagementCoordinator`. It must stop/unpublish refresh producers before
+  clearing refresh-owned spill/cache state, remain safe when called repeatedly,
+  and expose no general refresh or filesystem interface.
 - [ ] Move `sharedContainerLogsTargetLimiter` with the limiter fields. Every
   subsystem receives the same process-wide instance; lazy construction starts
   at `defaultObjPanelLogsTargetGlobalLimit`; and the Phase 3 preferences sink
   immediately pushes the selected configured/default value after
-  `EnsureLoaded`, explicit startup fallback, or update whether that happens
+  `EnsureLoaded`, atomic startup fallback, or update whether that happens
   before or after the first subsystem build.
 - [ ] Keep `containerLogsTargetLimiterMu` a leaf init lock. The accessor and
   `SetLimit` sink must not read settings, call `PreferencesService`, or acquire
@@ -988,7 +1249,9 @@ shippable.
   `ResourceGateway` invalidation direction; update
   `docs/architecture/data-layer.md` and
   `docs/architecture/data-freshness.md` where catalog-runtime, telemetry, or
-  Attention publication ownership changes. Update
+  Attention publication ownership changes. Document the owner-directed Factory
+  Reset teardown/cache-clearing operation and its unpublish-before-delete order.
+  Update
   `docs/workflows/logs/container-logs.md` with the final global-limiter owner,
   the independent selection-policy dependency, shared instance,
   default-then-push startup, and lock-order contract.
@@ -996,15 +1259,17 @@ shippable.
   recovery, cache invalidation, telemetry replacement, Attention target
   registration/removal, one shared limiter under concurrent subsystem builds,
   settings-load/update limit propagation in both startup orders, live and
-  future-subsystem metrics retiming, shared per-scope policy use, deadlock-free
-  lock ordering, unpublication, and repeated teardown under race tests.
+  future-subsystem metrics retiming, shared per-scope policy use, Factory Reset
+  unpublish-before-cache-clear, deadlock-free lock ordering, unpublication, and
+  repeated teardown under race tests.
 
 Exit criterion: refresh, catalog-runtime, stream, governor, spill, and handler
 publication/telemetry/limiter state have one owner; Attention targets follow the
 same subsystem lifecycle; the limiter remains default-then-push and leaf-locked;
-both refresh settings sinks have replaced their App-backed implementations; and
-the preferences, selection-policy, cluster, Attention, and resource dependency
-arrows are explicit and acyclic. Phase 5B is independently shippable.
+both refresh settings sinks and the refresh/cache reset collaborator have
+replaced their App-backed implementations; and the preferences, selection-
+policy, cluster, Attention, data-management, and resource dependency arrows are
+explicit and acyclic. Phase 5B is independently shippable.
 
 ### Phase 5C — Workspace orchestration
 
@@ -1015,22 +1280,45 @@ arrows are explicit and acyclic. Phase 5B is independently shippable.
   refresh, selection, foreground, and `ClusterWorkspaceProjection` snapshots
   without copying their state into the coordinator.
 - [ ] Assign `GetSelectionDiagnostics`, `GetClusterAllowedNamespaces`, and
-  `SetClusterAllowedNamespaces` to the `WorkspaceCoordinator` command
-  collaborator. Namespace-scope reads/writes use the narrow repository owned by
-  `PreferencesService`; the coordinator owns the cross-owner mutation contract.
+  `SetClusterAllowedNamespaces`, and `SetKubeconfigSearchPaths` to the
+  `WorkspaceCoordinator` command collaborator. Namespace-scope and search-path
+  reads/writes use narrow repositories owned by `PreferencesService`; the
+  coordinator owns their cross-owner mutation contracts.
 - [ ] Move `requestClusterScopeRebuildFn` and `scopeRebuildQueued` into the
   workspace scope-change workflow. Preserve persist-before-rebuild, rapid-edit
   coalescing, serialized cluster operations, refresh teardown/rebuild, scope
   revision advancement through `ClusterWorkspaceProjection`, and final
   `cluster:scope:changed` emission in that order.
+- [ ] Replace the Phase 3 App-backed search-path workflow used by both
+  `SetKubeconfigSearchPaths` and settings import. Preserve serialized validation
+  and persist-before-rediscovery, ask `ClusterRuntimeManager` to rediscover and
+  retarget the watcher, classify removed selections, and then sequence refresh
+  reconciliation/teardown, selection commit, client/auth removal, operation and
+  projection cleanup, and remaining-selection persistence in the current order.
+  Neither `PreferencesService`, `ClusterRuntimeManager`, nor
+  `DataManagementCoordinator` may duplicate that sequence or call back into the
+  workspace owner.
 - [ ] Make `WorkspaceCoordinator` call `ClusterRuntimeManager` and
   `RefreshCoordinator` in the documented order. Neither owner may call back
   into the coordinator or store a pointer to the other.
+- [ ] Replace the Phase 5A App intent consumer with `WorkspaceCoordinator` as the
+  sole consumer of `ClusterRuntimeIntent`. Drain/coalesce kubeconfig-source,
+  auth rebuild/teardown, and transport rebuild requests into the same serialized
+  selection-mutation path used by commands; reject stale generations before
+  side effects, retain `clusterId` through cleanup, and stop consumption before
+  cluster-runtime shutdown. Do not replace the typed owner-local queue with a
+  generic event bus or a callback stored by `ClusterRuntimeManager`.
 - [ ] Move selected-cluster startup onto the Phase 3 Preferences contract, not
-  the old raw loader: call `EnsureLoaded()` and the explicit startup-default
-  fallback before acquiring the selection-mutation lock, then restore the
-  immutable selected-kubeconfig snapshot inside the serialized mutation. Do not
-  reintroduce preference locking or load-effect dispatch inside Workspace.
+  the old raw loader: call atomic `EnsureLoadedForStartup()` before acquiring the
+  selection-mutation lock, then restore the immutable selected-kubeconfig
+  snapshot inside the serialized mutation. Do not reintroduce preference
+  locking, a two-call fallback protocol, or load-effect dispatch inside
+  Workspace.
+- [ ] Replace the Phase 3 App-backed workspace reset collaborator used by
+  `DataManagementCoordinator`. The workspace reset operation serializes against
+  selection changes and sequences cluster, refresh, operation, and projection
+  cleanup before durable owner reset begins; it does not delete persistence
+  files itself.
 - [ ] Preserve per-window foreground demand and cluster-tab ownership; a shared
   cluster remains alive until its final peer releases it.
 - [ ] Preserve lock ordering and ensure no callbacks, client construction,
@@ -1050,21 +1338,29 @@ arrows are explicit and acyclic. Phase 5B is independently shippable.
 - [ ] Update `docs/architecture/application-lifecycle.md` and
   `docs/architecture/multi-cluster.md` with `WorkspaceCoordinator` ownership,
   peer release, selection diagnostics, aggregate projection reads, selection
-  ordering, settings-load/default-fallback ordering, readiness, and
-  application-shutdown sequencing. Update
+  ordering, kubeconfig-search-path persist/rediscover/prune ordering, atomic
+  settings-load/default-fallback ordering, typed cluster-runtime intent
+  consumption/coalescing/stale-generation rejection, Factory Reset workspace
+  cleanup, readiness, and application-shutdown sequencing. Update
   `docs/architecture/namespace-scope.md` with the preferences repository,
   workspace rebuild/coalescing owner, and unchanged convergence ordering.
 - [ ] Prove concurrent peer selection, superseded selection, foreground demand,
   selection diagnostics, namespace-scope persist/rebuild/event convergence,
-  rapid-edit coalescing, configured/default startup settings before selection,
-  aggregate health/scope replay, shared-cluster peer close, application quit,
-  and repeated teardown under race tests.
+  rapid-edit coalescing, search-path update/import discovery/watcher/pruning
+  convergence, configured/default startup settings before selection, total-reset
+  workspace cleanup, kubeconfig/auth/transport intent convergence through the
+  one serialized consumer, stale-generation rejection, bounded/coalesced burst
+  handling, cancellation, aggregate health/scope replay, shared-cluster peer
+  close, application quit, and repeated teardown under race tests.
 
 Exit criterion: workspace selection has one owner; cluster and refresh owners
-are invoked in one explicit direction; scope commands/rebuild, selection
-diagnostics, and aggregate replay assembly have moved together without absorbing
-the leaf projection; and startup, peer release, and shutdown have no duplicate
-path. Phase 5C is independently shippable.
+are invoked in one explicit direction; scope commands/rebuild, kubeconfig-
+search-path changes/import, total-reset cleanup, selection diagnostics, and
+aggregate replay assembly have moved together without absorbing the leaf
+projection; the App intent consumer is gone and cluster-originated work reaches
+the same serialized mutation path without a reverse owner dependency; and
+startup, peer release, and shutdown have no duplicate path. Phase 5C is
+independently shippable.
 
 ## Phase 6 — Retire the god object
 
@@ -1118,23 +1414,29 @@ it is not the first time durable contracts are written.
   shutdown contracts already introduced by Phases 1, 3, 5A, 5C, and 6; fix any
   drift found by the audit.
 - [ ] Audit `docs/architecture/data-access.md` for the generated service module,
-  owner-shaped collaborators, `EnsureLoaded` readiness/failure/fallback,
-  complete settings-effect seam, `ContainerLogsSelectionPolicy`,
-  `ResourceGateway`, cache invalidation, and stable frontend adapter boundary
-  already introduced by Phases 1, 3, 4, and 6.
+  owner-shaped collaborators, `EnsureLoaded`/`EnsureLoadedForStartup` readiness
+  and failure/fallback, complete six-route settings-effect seam,
+  `ContainerLogsSelectionPolicy`, `PermissionFetchPolicy`, `ResourceGateway`,
+  cache invalidation, and stable frontend adapter boundary already introduced by
+  Phases 1, 3, 4, and 6. Audit `docs/architecture/permissions.md` for the
+  settings-to-policy-to-resource direction.
 - [ ] Audit `docs/architecture/multi-cluster.md`,
   `docs/architecture/refresh-system.md`, and
   `docs/architecture/data-layer.md` for the
   Attention/cluster/workspace/projection/refresh owner names, live rate/metrics
-  settings sinks, and ordering introduced by Phases 3 and 5A–5C.
+  settings sinks, kubeconfig-search-path orchestration, the typed cluster-runtime
+  intent producer/consumer and backpressure contract, total-reset cleanup, and
+  ordering introduced by Phases 3 and 5A–5C.
 - [ ] Audit `docs/architecture/namespace-scope.md`,
   `docs/architecture/data-freshness.md`, and
   `docs/architecture/error-reporting.md` respectively for scope orchestration,
   Attention-clock/target publication and refresh telemetry, and error-reporting
   ownership introduced by Phases 3 and 5A–5C.
 - [ ] Audit `docs/workflows/operation-lifecycle.md`, application-update docs,
-  and log docs for the component owners, shared container-log selection policy,
-  and settings-to-runtime effect direction introduced by Phases 2, 3, and 5B.
+  and log docs for the component owners, complete updater-state reset under
+  configured roots with validated dynamic artifacts, shared container-log
+  selection policy, and settings-to-runtime effect direction introduced by
+  Phases 2, 3, and 5B.
 - [ ] Reconcile backend/frontend `AGENTS.md` starting points and the affected
   app-shell, operations, cluster-auth-lifecycle, refresh-subsystem,
   permissions-capabilities, and shared-resource-model skills where routing or
@@ -1199,30 +1501,58 @@ Focused validation by affected phase must include:
   owner removes its App-backed implementation;
 - a Phase 0 ledger-coverage check accounting for all 98 current `App` field
   declarations and all 87 frontend commands exactly once, including the six
-  Attention commands, two namespace-scope commands, and selection diagnostics,
-  plus every mutable package-global settings target including the current
-  per-scope container-log atomic;
-- a settings-effect contract proving the five current flags map exactly once to
-  their four target owners, updates and imports dispatch only after successful
-  persistence and lock release, persistence failure dispatches none, one target
-  failure does not suppress independent effects, and a newly added flag cannot
-  omit its owner, sink, startup rule, or test;
-- `PreferencesService.EnsureLoaded` tests proving the four production caller
-  paths use the same initializer, concurrent first callers cause one successful
-  disk load and one pair of post-unlock container-log pushes, no caller observes
-  ready state before those pushes complete, and ordinary failure remains
-  retryable without installing a snapshot or dispatching effects;
+  Attention commands, two namespace-scope commands, both kubeconfig-search-path
+  commands, selection diagnostics, and Factory Reset, plus every mutable
+  package-global settings target including the current per-scope container-log
+  atomic and every direct cross-owner settings read including permission SSRR
+  concurrency; every cluster-runtime consumer in Operations, Resource,
+  workspace, refresh, lifecycle, and transport-health paths; and every
+  watcher/auth/transport producer that asynchronously re-enters selection;
+- a cluster-runtime collaborator composition contract enumerating every Phase 0
+  consumer and proving Phase 5A points each non-refresh resolver, retry, rate-
+  limit, and transport-health seam to `ClusterRuntimeManager`, with only the
+  named refresh consumers deferred to Phase 5B;
+- a settings-effect contract proving the five current flags plus the converted
+  permission-concurrency read map exactly once as six routes to their five target
+  owners, updates and imports dispatch only after successful persistence and lock
+  release, persistence failure dispatches none, one target failure does not
+  suppress independent effects, and a newly added runtime setting cannot omit
+  its owner, sink, startup rule, or test;
+- `PreferencesService.EnsureLoaded`/`EnsureLoadedForStartup` tests proving the
+  four production caller paths share one coalesced state machine, concurrent
+  first callers cause one successful disk load and one set of post-unlock
+  container-log/permission-policy pushes, no caller observes ready state before
+  those pushes complete, and ordinary failure remains retryable without
+  installing a snapshot or dispatching effects;
+- a bounded concurrency test in which an ordinary load fails while another
+  caller retries, proving startup fallback either joins/waits for the in-flight
+  retry or installs defaults atomically before a retry begins, never uses stale
+  failure state, and never overwrites a successful snapshot;
 - caller-policy tests proving settings reads/updates surface load failure,
   error-reporting startup runs before `application.Run`, remains disabled for
   load-error-fallback provenance, is non-Wails-bound, and passes a snapshot from
   composition without an ErrorReporting-to-Preferences dependency; selected-
-  cluster startup explicitly installs defaults without overwriting a successful
-  load, pushes both default log limits, then enters the selection mutation using
-  the returned immutable snapshot;
-- a Factory Reset test proving settings-file deletion invalidates snapshot
-  provenance/readiness only through `PreferencesService`, waits for installation
-  registration in the preserved order, and causes the next `EnsureLoaded` to
-  perform a fresh load and both post-unlock pushes;
+  cluster startup uses atomic `EnsureLoadedForStartup`, pushes both default log
+  limits and default permission concurrency when fallback is required, then
+  enters the selection mutation using the returned immutable snapshot;
+- Factory Reset tests proving workspace/cluster/refresh/operation/projection
+  cleanup completes before durable reset; installation registration finishes in
+  the preserved order; settings, favorites, UI persistence, updater state, and
+  cache/spill artifacts plus their in-memory owners are reset; repeated reset is
+  safe; Attention's persisted-rule projection is cleared; Preferences readiness
+  is invalidated only through its owner; all six runtime setting targets receive
+  defaults after lock release; the next `EnsureLoaded` performs a fresh load and
+  all load-time post-unlock pushes; frontend reload occurs only after backend
+  completion; partial failures are aggregated after every independent owner is
+  attempted and suppress reload; active updater work is quiesced or rejects the
+  reset before durable deletion; prepared staging is removed; configured
+  `StatePath` and `TempRoot` are honored; cleanup entries and updater logs are
+  attempted with errors aggregated; an active application/restart attempt
+  rejects reset without deleting recovery state; updater document paths are
+  validated before deletion; resolving missing settings/favorites/UI/update/
+  cache artifacts creates no directories; and live/offline reset cover the same
+  static manifest plus the same owner-resolved dynamic-artifact contract without
+  live raw-directory deletion;
 - a Phase 1 architecture check proving the two generator-template directives,
   38 regenerated directives, and 63 hand-written directives are gone and
   `rg '//wails:ignore' backend` is empty unless a tested exception is listed;
@@ -1230,6 +1560,17 @@ Focused validation by affected phase must include:
   target registration/removal tests;
 - namespace-scope persist-before-rebuild, coalescing, revision, event, and
   `docs/architecture/namespace-scope.md` contract tests;
+- kubeconfig-search-path tests proving normalized persist-before-rediscovery,
+  watcher retargeting, selection pruning, refresh/client/operation/projection
+  cleanup and remaining-selection persistence for both the direct command and
+  settings import through one workspace workflow;
+- cluster-runtime intent tests proving watcher, auth, and transport producers
+  publish the exact typed payload; auth publication cannot block while its
+  manager lock is held; wakeup is bounded while pending state coalesces by
+  cluster/intent kind and newest generation; cancellation/drain/shutdown are
+  deterministic; the Phase 5A App consumer and final Phase 5C workspace consumer
+  both enter the same serialized mutation contract; stale generations cause no
+  side effects; and no cluster owner stores/calls a workspace callback;
 - heartbeat classification/event tests and revision-consistent
   `ClusterWorkspaceProjection` replay/cleanup tests;
 - error-reporting startup/preference tests, installation-registration/reset
@@ -1242,6 +1583,9 @@ Focused validation by affected phase must include:
   execution;
 - Kubernetes client rate-limit and refresh metrics-interval tests covering both
   already-running targets and targets constructed after settings load/update;
+- permission-fetch-policy tests covering default-before-settings, configured
+  load, atomic startup fallback, live update/import, bounded SSRR fan-out, and no
+  direct ResourceGateway/permission read from `PreferencesService`;
 - shell tests proving sidebar, diagnostics-panel, and app-logs-panel visibility
   remain process-wide and ephemeral while native menu/current-window event
   projection moves to `DesktopShell`;
@@ -1277,7 +1621,14 @@ Final completion additionally requires:
 - checked-in generated resource details matching
   `backend/internal/genappbindings.Render()`;
 - no unowned or duplicate mutable state in the migration ledger, including
-  mutable package globals and singleton settings targets;
+  mutable package globals, singleton settings targets, and direct cross-owner
+  settings readers;
+- one complete static Go-owned app-state artifact manifest shared by live owner-
+  directed Factory Reset and offline reset, plus explicit owner resolution and
+  updater-state validation for every dynamic staging/log/cleanup artifact under
+  the configured roots, with side-effect-free path resolution, frontend-owned
+  web storage covered by the post-backend-success UI path, and no durable or in-
+  memory owner omitted;
 - the final ownership table matching the closed ledger, with no provisional,
   miscellaneous, or proximity-only assignment;
 - no production/test struct retaining `*App`, package function accepting
@@ -1286,6 +1637,8 @@ Final completion additionally requires:
   `DesktopShell`, with no generic desktop adapter layer;
 - no App-backed `DesktopService` collaborator and no single interface combining
   the complete frontend command surface;
+- no App-backed cluster-runtime collaborator, no cluster owner callback to
+  workspace, and exactly one typed cluster-runtime intent consumer;
 - no compatibility command path or dual lifecycle owner;
 - durable documentation and skill routing updated to the final owner names; and
 - `git diff --check` passing on the final worktree.
