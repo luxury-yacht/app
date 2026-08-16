@@ -25,16 +25,17 @@ func (a *App) resourceDependenciesForSelection(selection kubeconfigSelection, cl
 	}
 
 	deps := common.Dependencies{
-		Logger:              a.logger,
-		KubernetesClient:    nil,
-		MetricsClient:       metricsClient,
-		DynamicClient:       nil,
-		APIExtensionsClient: nil,
-		RestConfig:          nil,
-		ResourceResolver:    appResourceResolver{app: a, clusterID: clusterID},
-		SelectedKubeconfig:  selection.Path,
-		SelectedContext:     selection.Context,
-		ClusterID:           clusterID,
+		Logger:                           a.appLogs.Logger(),
+		KubernetesClient:                 nil,
+		MetricsClient:                    metricsClient,
+		DynamicClient:                    nil,
+		APIExtensionsClient:              nil,
+		RestConfig:                       nil,
+		ResourceResolver:                 appResourceResolver{app: a, clusterID: clusterID},
+		SelectedKubeconfig:               selection.Path,
+		SelectedContext:                  selection.Context,
+		ClusterID:                        clusterID,
+		ContainerLogsPerScopeTargetLimit: a.containerLogsPolicy.Limit(),
 	}
 
 	if clients == nil {

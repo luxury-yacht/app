@@ -86,6 +86,15 @@ func (c *responseCache) delete(key string) {
 	c.mu.Unlock()
 }
 
+func (c *responseCache) clear() {
+	if c == nil {
+		return
+	}
+	c.mu.Lock()
+	c.entries = make(map[string]responseCacheEntry)
+	c.mu.Unlock()
+}
+
 // responseCacheKey scopes cache keys by cluster selection to avoid cross-cluster reuse.
 func (a *App) responseCacheKey(selectionKey, cacheKey string) string {
 	cacheKey = strings.TrimSpace(cacheKey)

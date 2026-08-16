@@ -27,8 +27,10 @@ import (
 func InitializeForTesting(a *App, ctx context.Context, client kubernetes.Interface) {
 	a.setApplicationContext(ctx)
 	a.markRuntimeReady()
-	if a.logger == nil {
-		a.logger = NewLogger(1000)
+	if a.appLogs == nil {
+		a.appLogs = NewAppLogService(NewLogger(1000))
+	} else if a.appLogs.logger == nil {
+		a.appLogs.logger = NewLogger(1000)
 	}
 	if client != nil {
 		// Seed a deterministic test selection so refresh wiring stays cluster-scoped.
@@ -55,7 +57,7 @@ func InitializeForTesting(a *App, ctx context.Context, client kubernetes.Interfa
 		a.clusterClientsMu.Unlock()
 
 		if err := a.setupRefreshSubsystem(); err != nil {
-			a.logger.Warn(fmt.Sprintf("Failed to initialize refresh subsystem in tests: %v", err), logsources.Refresh)
+			a.appLogs.logger.Warn(fmt.Sprintf("Failed to initialize refresh subsystem in tests: %v", err), logsources.Refresh)
 		} else {
 			a.startObjectCatalog()
 		}

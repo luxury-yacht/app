@@ -259,7 +259,7 @@ function AdvancedSection() {
 
       <SettingRow
         title="Factory Reset"
-        help="Deletes all preferences and saved state, then restarts the app."
+        help="Deletes all preferences and saved state, then reloads the app."
       >
         <div className="setting-item setting-actions">
           <button

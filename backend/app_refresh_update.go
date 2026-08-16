@@ -147,15 +147,15 @@ func (a *App) ensureClusterClients(id string, selections []kubeconfigSelection) 
 
 func (a *App) canBuildRefreshSubsystem(id string, meta ClusterMeta, clients *clusterClients) bool {
 	if clients.authFailedOnInit {
-		a.logger.Warn(fmt.Sprintf("Skipping subsystem for cluster %s: auth failed during initialization", meta.Name), logsources.Refresh, id, meta.Name)
+		a.appLogs.logger.Warn(fmt.Sprintf("Skipping subsystem for cluster %s: auth failed during initialization", meta.Name), logsources.Refresh, id, meta.Name)
 		return false
 	}
 	if clients.authManager == nil || clients.authManager.IsValid() {
 		return true
 	}
-	if a.logger != nil {
+	if a.appLogs.logger != nil {
 		state, _ := clients.authManager.State()
-		a.logger.Warn(fmt.Sprintf("Skipping subsystem for cluster %s: auth not valid (state=%s)", meta.Name, state.String()), logsources.Refresh, id, meta.Name)
+		a.appLogs.logger.Warn(fmt.Sprintf("Skipping subsystem for cluster %s: auth not valid (state=%s)", meta.Name, state.String()), logsources.Refresh, id, meta.Name)
 	}
 	return false
 }
@@ -180,7 +180,7 @@ func (a *App) startNewObjectCatalogs(plan refreshSelectionPlan, subsystems map[s
 	for id := range subsystems {
 		target := catalogTarget{selection: plan.desired[id], meta: plan.metaByID[id]}
 		if err := a.startObjectCatalogForTarget(target); err != nil {
-			a.logger.Warn(fmt.Sprintf("Object catalog skipped for %s: %v", id, err), logsources.ObjectCatalog, id, plan.metaByID[id].Name)
+			a.appLogs.logger.Warn(fmt.Sprintf("Object catalog skipped for %s: %v", id, err), logsources.ObjectCatalog, id, plan.metaByID[id].Name)
 		}
 	}
 }
@@ -216,7 +216,7 @@ func (a *App) stopRefreshSubsystem(subsystem *system.Subsystem) {
 	ctx, cancel := context.WithTimeout(context.Background(), config.RefreshShutdownTimeout)
 	defer cancel()
 	if err := subsystem.Manager.Shutdown(ctx); err != nil {
-		a.logger.Warn(fmt.Sprintf("Failed to shutdown refresh manager: %v", err), logsources.Refresh, subsystem.ClusterMeta.ClusterID, subsystem.ClusterMeta.ClusterName)
+		a.appLogs.logger.Warn(fmt.Sprintf("Failed to shutdown refresh manager: %v", err), logsources.Refresh, subsystem.ClusterMeta.ClusterID, subsystem.ClusterMeta.ClusterName)
 	}
 }
 

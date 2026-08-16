@@ -26,7 +26,7 @@ func (a *App) spillRootDir() (string, error) {
 	if a.spillRoot != "" {
 		return a.spillRoot, nil
 	}
-	base, err := a.cacheDirPath()
+	base, err := a.preferences.cacheDirPath()
 	if err != nil {
 		return "", err
 	}
@@ -127,8 +127,8 @@ func (a *App) spillClusterStores(clusterID string, reg *domain.Registry) {
 	if err != nil {
 		return
 	}
-	if err := reg.SpillMaintainedStores(dir); err != nil && a.logger != nil {
-		a.logger.Warn(fmt.Sprintf("spill maintained stores for cluster %s: %v", clusterID, err), logsources.Refresh, clusterID, a.clusterNameForID(clusterID))
+	if err := reg.SpillMaintainedStores(dir); err != nil && a.appLogs.logger != nil {
+		a.appLogs.logger.Warn(fmt.Sprintf("spill maintained stores for cluster %s: %v", clusterID, err), logsources.Refresh, clusterID, a.clusterNameForID(clusterID))
 	}
 }
 
@@ -145,8 +145,8 @@ func (a *App) restoreClusterStores(clusterID string, reg *domain.Registry) {
 	if err != nil {
 		return
 	}
-	if err := reg.RestoreMaintainedStores(dir); err != nil && a.logger != nil {
-		a.logger.Warn(fmt.Sprintf("restore maintained stores for cluster %s: %v", clusterID, err), logsources.Refresh, clusterID, a.clusterNameForID(clusterID))
+	if err := reg.RestoreMaintainedStores(dir); err != nil && a.appLogs.logger != nil {
+		a.appLogs.logger.Warn(fmt.Sprintf("restore maintained stores for cluster %s: %v", clusterID, err), logsources.Refresh, clusterID, a.clusterNameForID(clusterID))
 	}
 }
 
@@ -161,8 +161,8 @@ func (a *App) spillClusterIngestStores(clusterID string, im *ingest.IngestManage
 	if err != nil {
 		return
 	}
-	if err := im.SpillStores(dir); err != nil && a.logger != nil {
-		a.logger.Warn(fmt.Sprintf("spill ingest stores for cluster %s: %v", clusterID, err), logsources.Refresh, clusterID, a.clusterNameForID(clusterID))
+	if err := im.SpillStores(dir); err != nil && a.appLogs.logger != nil {
+		a.appLogs.logger.Warn(fmt.Sprintf("spill ingest stores for cluster %s: %v", clusterID, err), logsources.Refresh, clusterID, a.clusterNameForID(clusterID))
 	}
 }
 
@@ -230,8 +230,8 @@ func (a *App) closeCooledClosers(clusterID string) {
 		if closer == nil {
 			continue
 		}
-		if err := closer(); err != nil && a.logger != nil {
-			a.logger.Warn(fmt.Sprintf("close cooled mmap for cluster %s: %v", clusterID, err), logsources.Refresh, clusterID, a.clusterNameForID(clusterID))
+		if err := closer(); err != nil && a.appLogs.logger != nil {
+			a.appLogs.logger.Warn(fmt.Sprintf("close cooled mmap for cluster %s: %v", clusterID, err), logsources.Refresh, clusterID, a.clusterNameForID(clusterID))
 		}
 	}
 }

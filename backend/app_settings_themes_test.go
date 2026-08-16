@@ -13,7 +13,7 @@ func TestGetThemes_Default(t *testing.T) {
 	setTestConfigEnv(t)
 	app := newTestAppWithDefaults(t)
 
-	themes, err := app.GetThemes()
+	themes, err := app.preferences.GetThemes()
 	require.NoError(t, err)
 	require.Len(t, themes, 1)
 	assert.Equal(t, "default", themes[0].ID)
@@ -28,7 +28,7 @@ func TestLoadSettingsFileSeedsDefaultThemeFromActivePreferences(t *testing.T) {
 	setTestConfigEnv(t)
 	app := newTestAppWithDefaults(t)
 
-	configPath, err := app.getSettingsFilePath()
+	configPath, err := app.preferences.getSettingsFilePath()
 	require.NoError(t, err)
 	writeTestFileWithParents(t, configPath, []byte(`{
 		"schemaVersion": 1,
@@ -47,7 +47,7 @@ func TestLoadSettingsFileSeedsDefaultThemeFromActivePreferences(t *testing.T) {
 		}
 	}`), 0o644)
 
-	themes, err := app.GetThemes()
+	themes, err := app.preferences.GetThemes()
 	require.NoError(t, err)
 	require.Len(t, themes, 1)
 	defaultTheme := themes[0]
@@ -63,8 +63,8 @@ func TestLoadSettingsFileSeedsDefaultThemeFromActivePreferences(t *testing.T) {
 	assert.Equal(t, "#654321", defaultTheme.LinkColorLight)
 	assert.Equal(t, "#fedcba", defaultTheme.LinkColorDark)
 
-	require.NoError(t, app.ApplyTheme("default"))
-	settings, err := app.loadSettingsFile()
+	require.NoError(t, app.preferences.ApplyTheme("default"))
+	settings, err := app.preferences.loadSettingsFile()
 	require.NoError(t, err)
 	assert.Equal(t, 18, settings.Preferences.PaletteHueLight)
 	assert.Equal(t, 210, settings.Preferences.PaletteHueDark)
@@ -85,9 +85,9 @@ func TestSaveTheme_Create(t *testing.T) {
 		PaletteHueLight: 0,
 	}
 
-	require.NoError(t, app.SaveTheme(theme))
+	require.NoError(t, app.preferences.SaveTheme(theme))
 
-	themes, err := app.GetThemes()
+	themes, err := app.preferences.GetThemes()
 	require.NoError(t, err)
 	require.Len(t, themes, 2)
 	assert.Equal(t, "t-1", themes[0].ID)
@@ -103,13 +103,13 @@ func TestSaveTheme_Update(t *testing.T) {
 	app := newTestAppWithDefaults(t)
 
 	// Create two themes.
-	require.NoError(t, app.SaveTheme(Theme{ID: "t-1", Name: "Red"}))
-	require.NoError(t, app.SaveTheme(Theme{ID: "t-2", Name: "Blue"}))
+	require.NoError(t, app.preferences.SaveTheme(Theme{ID: "t-1", Name: "Red"}))
+	require.NoError(t, app.preferences.SaveTheme(Theme{ID: "t-2", Name: "Blue"}))
 
 	// Update the first theme.
-	require.NoError(t, app.SaveTheme(Theme{ID: "t-1", Name: "Updated Red", ClusterPattern: "staging*"}))
+	require.NoError(t, app.preferences.SaveTheme(Theme{ID: "t-1", Name: "Updated Red", ClusterPattern: "staging*"}))
 
-	themes, err := app.GetThemes()
+	themes, err := app.preferences.GetThemes()
 	require.NoError(t, err)
 	require.Len(t, themes, 3)
 	// Order is preserved; the first theme should be the updated one.
@@ -129,17 +129,17 @@ func TestSaveTheme_Validation(t *testing.T) {
 	app := newTestAppWithDefaults(t)
 
 	// Missing ID.
-	err := app.SaveTheme(Theme{Name: "No ID"})
+	err := app.preferences.SaveTheme(Theme{Name: "No ID"})
 	require.Error(t, err)
 	assert.Contains(t, err.Error(), "theme ID is required")
 
 	// Missing name.
-	err = app.SaveTheme(Theme{ID: "t-1"})
+	err = app.preferences.SaveTheme(Theme{ID: "t-1"})
 	require.Error(t, err)
 	assert.Contains(t, err.Error(), "theme name is required")
 
 	// Invalid cluster pattern.
-	err = app.SaveTheme(Theme{ID: "t-1", Name: "Bad Pattern", ClusterPattern: "prod-["})
+	err = app.preferences.SaveTheme(Theme{ID: "t-1", Name: "Bad Pattern", ClusterPattern: "prod-["})
 	require.Error(t, err)
 	assert.Contains(t, err.Error(), "invalid cluster pattern")
 	assert.Contains(t, err.Error(), "missing closing bracket")
@@ -149,15 +149,15 @@ func TestAppValidateThemeClusterPattern(t *testing.T) {
 	setTestConfigEnv(t)
 	app := newTestAppWithDefaults(t)
 
-	result := app.ValidateThemeClusterPattern("prod-[a-z]*")
+	result := app.preferences.ValidateThemeClusterPattern("prod-[a-z]*")
 	require.True(t, result.Valid)
 	assert.Empty(t, result.Message)
 
-	result = app.ValidateThemeClusterPattern("prod-[")
+	result = app.preferences.ValidateThemeClusterPattern("prod-[")
 	require.False(t, result.Valid)
 	assert.Equal(t, "Invalid cluster pattern: missing closing bracket.", result.Message)
 
-	result = app.ValidateThemeClusterPattern(`prod-\`)
+	result = app.preferences.ValidateThemeClusterPattern(`prod-\`)
 	require.False(t, result.Valid)
 	assert.Equal(t, "Invalid cluster pattern: trailing escape.", result.Message)
 }
@@ -168,7 +168,7 @@ func TestSaveTheme_DefaultProtectedFields(t *testing.T) {
 	setTestConfigEnv(t)
 	app := newTestAppWithDefaults(t)
 
-	require.NoError(t, app.SaveTheme(Theme{
+	require.NoError(t, app.preferences.SaveTheme(Theme{
 		ID:                     "default",
 		ClusterPattern:         "prod-*",
 		PaletteHueLight:        25,
@@ -176,7 +176,7 @@ func TestSaveTheme_DefaultProtectedFields(t *testing.T) {
 		PaletteBrightnessLight: 10,
 	}))
 
-	themes, err := app.GetThemes()
+	themes, err := app.preferences.GetThemes()
 	require.NoError(t, err)
 	require.Len(t, themes, 1)
 	assert.Equal(t, "default", themes[0].ID)
@@ -193,13 +193,13 @@ func TestDeleteTheme(t *testing.T) {
 	app := newTestAppWithDefaults(t)
 
 	// Seed two themes.
-	require.NoError(t, app.SaveTheme(Theme{ID: "t-1", Name: "Red"}))
-	require.NoError(t, app.SaveTheme(Theme{ID: "t-2", Name: "Blue"}))
+	require.NoError(t, app.preferences.SaveTheme(Theme{ID: "t-1", Name: "Red"}))
+	require.NoError(t, app.preferences.SaveTheme(Theme{ID: "t-2", Name: "Blue"}))
 
 	// Delete the first.
-	require.NoError(t, app.DeleteTheme("t-1"))
+	require.NoError(t, app.preferences.DeleteTheme("t-1"))
 
-	themes, err := app.GetThemes()
+	themes, err := app.preferences.GetThemes()
 	require.NoError(t, err)
 	require.Len(t, themes, 2)
 	assert.Equal(t, "t-2", themes[0].ID)
@@ -212,7 +212,7 @@ func TestDeleteTheme_NotFound(t *testing.T) {
 	setTestConfigEnv(t)
 	app := newTestAppWithDefaults(t)
 
-	err := app.DeleteTheme("non-existent")
+	err := app.preferences.DeleteTheme("non-existent")
 	require.Error(t, err)
 	assert.Contains(t, err.Error(), "theme not found: non-existent")
 }
@@ -223,7 +223,7 @@ func TestDeleteTheme_DefaultProtected(t *testing.T) {
 	setTestConfigEnv(t)
 	app := newTestAppWithDefaults(t)
 
-	err := app.DeleteTheme("default")
+	err := app.preferences.DeleteTheme("default")
 	require.Error(t, err)
 	assert.Contains(t, err.Error(), "default theme cannot be deleted")
 }
@@ -235,14 +235,14 @@ func TestReorderThemes(t *testing.T) {
 	app := newTestAppWithDefaults(t)
 
 	// Seed three themes in order.
-	require.NoError(t, app.SaveTheme(Theme{ID: "t-1", Name: "Red"}))
-	require.NoError(t, app.SaveTheme(Theme{ID: "t-2", Name: "Blue"}))
-	require.NoError(t, app.SaveTheme(Theme{ID: "t-3", Name: "Green"}))
+	require.NoError(t, app.preferences.SaveTheme(Theme{ID: "t-1", Name: "Red"}))
+	require.NoError(t, app.preferences.SaveTheme(Theme{ID: "t-2", Name: "Blue"}))
+	require.NoError(t, app.preferences.SaveTheme(Theme{ID: "t-3", Name: "Green"}))
 
 	// Reorder: reverse the list.
-	require.NoError(t, app.ReorderThemes([]string{"t-3", "t-2", "t-1", "default"}))
+	require.NoError(t, app.preferences.ReorderThemes([]string{"t-3", "t-2", "t-1", "default"}))
 
-	themes, err := app.GetThemes()
+	themes, err := app.preferences.GetThemes()
 	require.NoError(t, err)
 	require.Len(t, themes, 4)
 	assert.Equal(t, "t-3", themes[0].ID)
@@ -261,26 +261,26 @@ func TestReorderThemes_InvalidIDs(t *testing.T) {
 	setTestConfigEnv(t)
 	app := newTestAppWithDefaults(t)
 
-	require.NoError(t, app.SaveTheme(Theme{ID: "t-1", Name: "Red"}))
-	require.NoError(t, app.SaveTheme(Theme{ID: "t-2", Name: "Blue"}))
+	require.NoError(t, app.preferences.SaveTheme(Theme{ID: "t-1", Name: "Red"}))
+	require.NoError(t, app.preferences.SaveTheme(Theme{ID: "t-2", Name: "Blue"}))
 
 	// Wrong count (too few IDs).
-	err := app.ReorderThemes([]string{"t-1", "default"})
+	err := app.preferences.ReorderThemes([]string{"t-1", "default"})
 	require.Error(t, err)
 	assert.Contains(t, err.Error(), "id count mismatch")
 
 	// Wrong count (too many IDs).
-	err = app.ReorderThemes([]string{"t-1", "t-2", "t-3", "default"})
+	err = app.preferences.ReorderThemes([]string{"t-1", "t-2", "t-3", "default"})
 	require.Error(t, err)
 	assert.Contains(t, err.Error(), "id count mismatch")
 
 	// Correct count but unknown ID.
-	err = app.ReorderThemes([]string{"t-1", "unknown", "default"})
+	err = app.preferences.ReorderThemes([]string{"t-1", "unknown", "default"})
 	require.Error(t, err)
 	assert.Contains(t, err.Error(), "unknown theme ID: unknown")
 
 	// Correct IDs but default moved away from the bottom.
-	err = app.ReorderThemes([]string{"default", "t-2", "t-1"})
+	err = app.preferences.ReorderThemes([]string{"default", "t-2", "t-1"})
 	require.Error(t, err)
 	assert.Contains(t, err.Error(), "default theme must remain last")
 }
@@ -305,13 +305,13 @@ func TestApplyTheme(t *testing.T) {
 		AccentColorLight:       "#0077cc",
 		AccentColorDark:        "#3399ff",
 	}
-	require.NoError(t, app.SaveTheme(theme))
+	require.NoError(t, app.preferences.SaveTheme(theme))
 
 	// Apply the theme.
-	require.NoError(t, app.ApplyTheme("t-apply"))
+	require.NoError(t, app.preferences.ApplyTheme("t-apply"))
 
 	// Verify the active palette fields in settings match the theme's values.
-	settings, err := app.loadSettingsFile()
+	settings, err := app.preferences.loadSettingsFile()
 	require.NoError(t, err)
 	assert.Equal(t, 210, settings.Preferences.PaletteHueLight)
 	assert.Equal(t, 80, settings.Preferences.PaletteSaturationLight)
@@ -329,7 +329,7 @@ func TestApplyTheme_NotFound(t *testing.T) {
 	setTestConfigEnv(t)
 	app := newTestAppWithDefaults(t)
 
-	err := app.ApplyTheme("non-existent")
+	err := app.preferences.ApplyTheme("non-existent")
 	require.Error(t, err)
 	assert.Contains(t, err.Error(), "theme not found: non-existent")
 }
@@ -341,18 +341,18 @@ func TestMatchThemeForCluster_Match(t *testing.T) {
 	app := newTestAppWithDefaults(t)
 
 	// Save themes with patterns.
-	require.NoError(t, app.SaveTheme(Theme{ID: "t-dev", Name: "Dev Green", ClusterPattern: "dev-*"}))
-	require.NoError(t, app.SaveTheme(Theme{ID: "t-prod", Name: "Prod Red", ClusterPattern: "prod-*"}))
+	require.NoError(t, app.preferences.SaveTheme(Theme{ID: "t-dev", Name: "Dev Green", ClusterPattern: "dev-*"}))
+	require.NoError(t, app.preferences.SaveTheme(Theme{ID: "t-prod", Name: "Prod Red", ClusterPattern: "prod-*"}))
 
 	// Match a dev context.
-	matched, err := app.MatchThemeForCluster("dev-us-east-1")
+	matched, err := app.preferences.MatchThemeForCluster("dev-us-east-1")
 	require.NoError(t, err)
 	require.NotNil(t, matched)
 	assert.Equal(t, "t-dev", matched.ID)
 	assert.Equal(t, "Dev Green", matched.Name)
 
 	// Match a prod context.
-	matched, err = app.MatchThemeForCluster("prod-eu-west-1")
+	matched, err = app.preferences.MatchThemeForCluster("prod-eu-west-1")
 	require.NoError(t, err)
 	require.NotNil(t, matched)
 	assert.Equal(t, "t-prod", matched.ID)
@@ -365,9 +365,9 @@ func TestMatchThemeForCluster_DefaultFallback(t *testing.T) {
 	setTestConfigEnv(t)
 	app := newTestAppWithDefaults(t)
 
-	require.NoError(t, app.SaveTheme(Theme{ID: "t-prod", Name: "Prod Red", ClusterPattern: "prod-*"}))
+	require.NoError(t, app.preferences.SaveTheme(Theme{ID: "t-prod", Name: "Prod Red", ClusterPattern: "prod-*"}))
 
-	matched, err := app.MatchThemeForCluster("staging-us-east-1")
+	matched, err := app.preferences.MatchThemeForCluster("staging-us-east-1")
 	require.NoError(t, err)
 	require.NotNil(t, matched)
 	assert.Equal(t, "default", matched.ID)
@@ -380,10 +380,10 @@ func TestMatchThemeForCluster_FirstMatchWins(t *testing.T) {
 	app := newTestAppWithDefaults(t)
 
 	// Both patterns match "dev-cluster".
-	require.NoError(t, app.SaveTheme(Theme{ID: "t-first", Name: "First Match", ClusterPattern: "dev-*"}))
-	require.NoError(t, app.SaveTheme(Theme{ID: "t-second", Name: "Second Match", ClusterPattern: "dev-cluster"}))
+	require.NoError(t, app.preferences.SaveTheme(Theme{ID: "t-first", Name: "First Match", ClusterPattern: "dev-*"}))
+	require.NoError(t, app.preferences.SaveTheme(Theme{ID: "t-second", Name: "Second Match", ClusterPattern: "dev-cluster"}))
 
-	matched, err := app.MatchThemeForCluster("dev-cluster")
+	matched, err := app.preferences.MatchThemeForCluster("dev-cluster")
 	require.NoError(t, err)
 	require.NotNil(t, matched)
 	assert.Equal(t, "t-first", matched.ID, "expected the first matching theme in list order")
@@ -396,16 +396,16 @@ func TestMatchThemeForCluster_EmptyPattern(t *testing.T) {
 	app := newTestAppWithDefaults(t)
 
 	// First theme has no pattern, so it behaves like "*".
-	require.NoError(t, app.SaveTheme(Theme{ID: "t-catchall", Name: "Catch All", ClusterPattern: ""}))
-	require.NoError(t, app.SaveTheme(Theme{ID: "t-dev", Name: "Dev", ClusterPattern: "dev-*"}))
+	require.NoError(t, app.preferences.SaveTheme(Theme{ID: "t-catchall", Name: "Catch All", ClusterPattern: ""}))
+	require.NoError(t, app.preferences.SaveTheme(Theme{ID: "t-dev", Name: "Dev", ClusterPattern: "dev-*"}))
 
-	matched, err := app.MatchThemeForCluster("dev-cluster")
+	matched, err := app.preferences.MatchThemeForCluster("dev-cluster")
 	require.NoError(t, err)
 	require.NotNil(t, matched)
 	assert.Equal(t, "t-catchall", matched.ID, "empty pattern should match and preserve first-match ordering")
 
 	// Empty pattern also matches a context name no explicit pattern covers.
-	matched, err = app.MatchThemeForCluster("random-cluster")
+	matched, err = app.preferences.MatchThemeForCluster("random-cluster")
 	require.NoError(t, err)
 	require.NotNil(t, matched)
 	assert.Equal(t, "t-catchall", matched.ID)
@@ -418,9 +418,9 @@ func TestMatchThemeForCluster_Wildcards(t *testing.T) {
 	app := newTestAppWithDefaults(t)
 
 	// Save themes with different wildcard patterns.
-	require.NoError(t, app.SaveTheme(Theme{ID: "t-star", Name: "Star", ClusterPattern: "*dev*"}))
-	require.NoError(t, app.SaveTheme(Theme{ID: "t-question", Name: "Question", ClusterPattern: "stg-?"}))
-	require.NoError(t, app.SaveTheme(Theme{ID: "t-prefix", Name: "Prefix", ClusterPattern: "prod*"}))
+	require.NoError(t, app.preferences.SaveTheme(Theme{ID: "t-star", Name: "Star", ClusterPattern: "*dev*"}))
+	require.NoError(t, app.preferences.SaveTheme(Theme{ID: "t-question", Name: "Question", ClusterPattern: "stg-?"}))
+	require.NoError(t, app.preferences.SaveTheme(Theme{ID: "t-prefix", Name: "Prefix", ClusterPattern: "prod*"}))
 
 	tests := []struct {
 		contextName string
@@ -449,7 +449,7 @@ func TestMatchThemeForCluster_Wildcards(t *testing.T) {
 
 	for _, tc := range tests {
 		t.Run(tc.contextName, func(t *testing.T) {
-			matched, err := app.MatchThemeForCluster(tc.contextName)
+			matched, err := app.preferences.MatchThemeForCluster(tc.contextName)
 			require.NoError(t, err)
 			if tc.expectNil {
 				assert.Nil(t, matched, "expected no match for %q", tc.contextName)

@@ -29,16 +29,16 @@ func sanitizeCsvFilename(name string) string {
 // is produced client-side from the table's displayed columns, so the exported CSV
 // matches the on-screen table exactly; this keeps only the file IO (and the
 // potentially large byte payload) on the Go side. Returns the chosen path and size.
-func (a *App) SaveCsvFile(defaultFilename, content string) (CatalogQueryCSVExport, error) {
+func (s *DesktopShell) SaveCsvFile(defaultFilename, content string) (CatalogQueryCSVExport, error) {
 	var empty CatalogQueryCSVExport
-	if a == nil {
-		return empty, fmt.Errorf("app is not initialised")
+	if s == nil {
+		return empty, fmt.Errorf("desktop shell is not initialised")
 	}
-	if !a.runtimeAvailable() {
+	if !s.runtimeAvailable() {
 		return empty, fmt.Errorf("application context is not available")
 	}
 
-	path, err := a.promptForSaveFile(&application.SaveFileDialogOptions{
+	path, err := s.promptForSaveFile(&application.SaveFileDialogOptions{
 		Title:                "Export CSV",
 		Filename:             sanitizeCsvFilename(defaultFilename),
 		Filters:              []application.FileFilter{{DisplayName: "CSV files (*.csv)", Pattern: "*.csv"}},

@@ -138,6 +138,9 @@ type Dependencies struct {
 	ClusterID string
 	// ClusterName is the human-readable name for the cluster.
 	ClusterName string
+	// ContainerLogsPerScopeTargetLimit is captured from the process policy for
+	// direct pod/workload log selection.
+	ContainerLogsPerScopeTargetLimit int
 }
 
 // WithOperationContext returns a shallow copy with operation-scoped logging.

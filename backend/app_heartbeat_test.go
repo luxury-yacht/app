@@ -51,7 +51,7 @@ func (h *heartbeatClientSet) Discovery() discovery.DiscoveryInterface {
 // TestPerClusterHeartbeat tests that the heartbeat iterates all clusters independently.
 func TestPerClusterHeartbeat(t *testing.T) {
 	app := NewApp(nil)
-	app.logger = NewLogger(10)
+	app.appLogs = NewAppLogService(NewLogger(10))
 	ctx, cancel := context.WithCancel(context.Background())
 	defer cancel()
 	setTestAppRuntimeReady(t, app, ctx)
@@ -146,7 +146,7 @@ func TestPerClusterHeartbeat(t *testing.T) {
 // TestPerClusterHeartbeatSkipsInvalidAuth tests that clusters with invalid auth are skipped.
 func TestPerClusterHeartbeatSkipsInvalidAuth(t *testing.T) {
 	app := NewApp(nil)
-	app.logger = NewLogger(10)
+	app.appLogs = NewAppLogService(NewLogger(10))
 	ctx, cancel := context.WithCancel(context.Background())
 	defer cancel()
 	setTestAppRuntimeReady(t, app, ctx)
@@ -229,7 +229,7 @@ func TestPerClusterHeartbeatSkipsInvalidAuth(t *testing.T) {
 // to the cluster's auth manager, not global state.
 func TestPerClusterHeartbeatReportsToAuthManager(t *testing.T) {
 	app := NewApp(nil)
-	app.logger = NewLogger(10)
+	app.appLogs = NewAppLogService(NewLogger(10))
 	ctx, cancel := context.WithCancel(context.Background())
 	defer cancel()
 	setTestAppRuntimeReady(t, app, ctx)
@@ -293,7 +293,7 @@ func TestPerClusterHeartbeatReportsToAuthManager(t *testing.T) {
 // failures (connection refused, timeout) do NOT report to the auth manager.
 func TestPerClusterHeartbeatConnectivityDoesNotAffectAuth(t *testing.T) {
 	app := NewApp(nil)
-	app.logger = NewLogger(10)
+	app.appLogs = NewAppLogService(NewLogger(10))
 	ctx, cancel := context.WithCancel(context.Background())
 	defer cancel()
 	setTestAppRuntimeReady(t, app, ctx)
@@ -342,7 +342,7 @@ func TestPerClusterHeartbeatConnectivityDoesNotAffectAuth(t *testing.T) {
 // verify per-cluster events are emitted correctly.
 func TestPerClusterHeartbeatEmitsDegradedEvent(t *testing.T) {
 	app := NewApp(nil)
-	app.logger = NewLogger(10)
+	app.appLogs = NewAppLogService(NewLogger(10))
 	ctx, cancel := context.WithCancel(context.Background())
 	defer cancel()
 	setTestAppRuntimeReady(t, app, ctx)
@@ -402,7 +402,7 @@ func TestPerClusterHeartbeatEmitsDegradedEvent(t *testing.T) {
 // TestCheckClusterHealth tests the health check function for a cluster.
 func TestCheckClusterHealth(t *testing.T) {
 	app := NewApp(nil)
-	app.logger = NewLogger(10)
+	app.appLogs = NewAppLogService(NewLogger(10))
 	ctx, cancel := context.WithCancel(context.Background())
 	defer cancel()
 	setTestAppRuntimeReady(t, app, ctx)
@@ -547,7 +547,7 @@ func TestCheckClusterHealth(t *testing.T) {
 // TestCheckClusterHealthUsesReadyz verifies that checkClusterHealth calls /readyz (not /healthz).
 func TestCheckClusterHealthUsesReadyz(t *testing.T) {
 	app := NewApp(nil)
-	app.logger = NewLogger(10)
+	app.appLogs = NewAppLogService(NewLogger(10))
 	ctx, cancel := context.WithCancel(context.Background())
 	defer cancel()
 	setTestAppRuntimeReady(t, app, ctx)
@@ -584,7 +584,7 @@ func TestCheckClusterHealthUsesReadyz(t *testing.T) {
 // TestStartHeartbeatLoopStopsOnContextCancel verifies the loop exits when the context is cancelled.
 func TestStartHeartbeatLoopStopsOnContextCancel(t *testing.T) {
 	app := NewApp(nil)
-	app.logger = NewLogger(10)
+	app.appLogs = NewAppLogService(NewLogger(10))
 	bgCtx, bgCancel := context.WithCancel(context.Background())
 	defer bgCancel()
 	setTestAppRuntimeReady(t, app, bgCtx)
@@ -618,7 +618,7 @@ func TestStartHeartbeatLoopStopsOnContextCancel(t *testing.T) {
 // right away without waiting for the first ticker tick.
 func TestStartHeartbeatLoopRunsImmediately(t *testing.T) {
 	app := NewApp(nil)
-	app.logger = NewLogger(10)
+	app.appLogs = NewAppLogService(NewLogger(10))
 	bgCtx, bgCancel := context.WithCancel(context.Background())
 	defer bgCancel()
 	setTestAppRuntimeReady(t, app, bgCtx)

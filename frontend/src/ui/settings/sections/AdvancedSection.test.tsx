@@ -136,6 +136,7 @@ describe('AdvancedSection', () => {
     expect(text).toContain('Refresh');
     expect(text).toContain('Kubernetes API');
     expect(text).toContain('Persistence');
+    expect(text).toContain('Deletes all preferences and saved state, then reloads the app.');
     expect(text).not.toContain('Data Management');
     expect(text).not.toContain('Export Settings');
     expect(text).not.toContain('Error Reporting');

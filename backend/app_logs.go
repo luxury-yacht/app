@@ -15,41 +15,41 @@ type AppLogsAddedEvent struct {
 	Sequence uint64 `json:"sequence"`
 }
 
-func (a *App) GetAppLogs() []LogEntry {
-	if a.logger == nil {
+func (s *AppLogService) GetAppLogs() []LogEntry {
+	if s.logger == nil {
 		return []LogEntry{}
 	}
-	return a.logger.GetEntries()
+	return s.logger.GetEntries()
 }
 
-func (a *App) GetAppLogsSince(sequence uint64) []LogEntry {
-	if a.logger == nil {
+func (s *AppLogService) GetAppLogsSince(sequence uint64) []LogEntry {
+	if s.logger == nil {
 		return []LogEntry{}
 	}
-	return a.logger.GetEntriesSince(sequence)
+	return s.logger.GetEntriesSince(sequence)
 }
 
-func (a *App) ClearAppLogs() error {
-	if a.logger == nil {
+func (s *AppLogService) ClearAppLogs() error {
+	if s.logger == nil {
 		return fmt.Errorf("logger not initialized")
 	}
 
-	a.logger.Clear()
+	s.logger.Clear()
 	return nil
 }
 
 // LogAppLogsFromFrontend appends a log entry originating from the frontend to the application log store.
-func (a *App) LogAppLogsFromFrontend(level, message, source string) error {
-	return a.logAppLogsFromFrontend(level, message, source, "", "")
+func (s *AppLogService) LogAppLogsFromFrontend(level, message, source string) error {
+	return s.logAppLogsFromFrontend(level, message, source, "", "")
 }
 
 // LogAppLogsFromFrontendWithCluster appends a frontend log entry with structured cluster metadata.
-func (a *App) LogAppLogsFromFrontendWithCluster(level, message, source, clusterID, clusterName string) error {
-	return a.logAppLogsFromFrontend(level, message, source, clusterID, clusterName)
+func (s *AppLogService) LogAppLogsFromFrontendWithCluster(level, message, source, clusterID, clusterName string) error {
+	return s.logAppLogsFromFrontend(level, message, source, clusterID, clusterName)
 }
 
-func (a *App) logAppLogsFromFrontend(level, message, source, clusterID, clusterName string) error {
-	if a.logger == nil {
+func (s *AppLogService) logAppLogsFromFrontend(level, message, source, clusterID, clusterName string) error {
+	if s.logger == nil {
 		return fmt.Errorf("logger not initialized")
 	}
 	trimmed := strings.TrimSpace(message)
@@ -64,13 +64,13 @@ func (a *App) logAppLogsFromFrontend(level, message, source, clusterID, clusterN
 
 	switch strings.ToLower(strings.TrimSpace(level)) {
 	case "debug":
-		a.logger.Debug(trimmed, clusterMeta...)
+		s.logger.Debug(trimmed, clusterMeta...)
 	case "warn", "warning":
-		a.logger.Warn(trimmed, clusterMeta...)
+		s.logger.Warn(trimmed, clusterMeta...)
 	case "error":
-		a.logger.Error(trimmed, clusterMeta...)
+		s.logger.Error(trimmed, clusterMeta...)
 	default:
-		a.logger.Info(trimmed, clusterMeta...)
+		s.logger.Info(trimmed, clusterMeta...)
 	}
 
 	return nil

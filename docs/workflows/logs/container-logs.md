@@ -30,10 +30,23 @@ Panel. They are not Application Logs and they are not Node Logs.
 
 - Backend pod log helpers: `backend/resources/pods/logs.go`
 - Container log stream: `backend/refresh/containerlogsstream`
+- Per-scope selection policy: `backend.ContainerLogsSelectionPolicy`. Direct
+  reads and live streams receive its current value explicitly; no package-global
+  target limit is consulted.
+- Global target limiter: refresh-runtime state behind the write-only settings
+  sink in `backend/settings_effect_dispatcher.go`.
 - Object-panel log viewer and controls:
   `frontend/src/modules/object-panel/components/ObjectPanel/Logs`
 - Refresh/log scopes: `frontend/src/core/refresh`
 - Data access: [../../architecture/data-access.md](../../architecture/data-access.md)
+
+The per-scope and global limits both start at backend defaults. Every successful
+settings load, startup-default fallback, applicable preference update, and
+settings import pushes the selected values after the Preferences lock is
+released. The global limiter mutex is a leaf lock: code under it must not read
+Preferences or acquire refresh/subsystem locks. Settings load/update therefore
+captures values first and pushes only after unlocking. This preserves the
+default-then-push startup rule without allowing a settings/limiter ABBA cycle.
 
 ## Change Checklist
 

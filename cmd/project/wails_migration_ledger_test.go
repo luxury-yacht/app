@@ -19,6 +19,7 @@ type wailsMigrationLedger struct {
 	SchemaVersion              int                          `json:"schemaVersion"`
 	Phase1Checkpoint           wailsPhase1Checkpoint        `json:"phase1Checkpoint"`
 	Phase2Checkpoint           wailsPhase2Checkpoint        `json:"phase2Checkpoint"`
+	Phase3Checkpoint           wailsPhase3Checkpoint        `json:"phase3Checkpoint"`
 	AppFieldGroups             []wailsAppFieldLedgerGroup   `json:"appFieldGroups"`
 	CommandGroups              []wailsCommandLedgerGroup    `json:"commandGroups"`
 	AppBackpointerGroups       []wailsSignatureLedgerGroup  `json:"appBackpointerGroups"`
@@ -53,6 +54,15 @@ type wailsPhase2Checkpoint struct {
 	RemainingTestOnlyAppMethods    int `json:"remainingTestOnlyAppMethods"`
 	OperationAppBackpointers       int `json:"operationAppBackpointers"`
 	OperationPackageGlobals        int `json:"operationPackageGlobals"`
+}
+
+type wailsPhase3Checkpoint struct {
+	AppFields                         int `json:"appFields"`
+	RemainingAppParameterFunctions    int `json:"remainingAppParameterFunctions"`
+	RemainingDirectAppTests           int `json:"remainingDirectAppTests"`
+	RemainingTestOnlyAppMethods       int `json:"remainingTestOnlyAppMethods"`
+	LeafOwnerAppBackpointers          int `json:"leafOwnerAppBackpointers"`
+	PackageGlobalContainerLogPolicies int `json:"packageGlobalContainerLogPolicies"`
 }
 
 type wailsAppFieldLedgerGroup struct {
@@ -271,9 +281,9 @@ func TestWailsMigrationLedgerRecordsPhase1RemainingCoupling(t *testing.T) {
 	serviceType := registeredWailsServiceType(t, readTestFile(t, repositoryPath("main.go")))
 	require.Equal(t, serviceType, checkpoint.RegisteredService)
 	require.Equal(t, 12, checkpoint.OwnerCommandInterfaces)
-	require.Equal(t, len(currentAppParameterFunctions(t)), checkpoint.RemainingAppParameterFunctions)
-	require.Equal(t, len(currentDirectAppTestFiles(t)), checkpoint.RemainingDirectAppTests)
-	require.Equal(t, len(currentTestOnlyAppMethods(t)), checkpoint.RemainingTestOnlyAppMethods)
+	require.Equal(t, 14, checkpoint.RemainingAppParameterFunctions)
+	require.Equal(t, 59, checkpoint.RemainingDirectAppTests)
+	require.Equal(t, 16, checkpoint.RemainingTestOnlyAppMethods)
 	require.Equal(t, currentBackendWailsIgnoreDirectiveCount(t), checkpoint.WailsIgnoreDirectives)
 }
 
@@ -281,11 +291,21 @@ func TestWailsMigrationLedgerRecordsPhase2OperationsExtraction(t *testing.T) {
 	ledger := readWailsMigrationLedger(t)
 	checkpoint := ledger.Phase2Checkpoint
 	require.Equal(t, 10, checkpoint.OperationsCommands)
+	require.Equal(t, 14, checkpoint.RemainingAppParameterFunctions)
+	require.Equal(t, 59, checkpoint.RemainingDirectAppTests)
+	require.Equal(t, 16, checkpoint.RemainingTestOnlyAppMethods)
+	require.Zero(t, checkpoint.OperationAppBackpointers)
+	require.Equal(t, 1, checkpoint.OperationPackageGlobals)
+}
+
+func TestWailsMigrationLedgerRecordsPhase3LeafExtraction(t *testing.T) {
+	checkpoint := readWailsMigrationLedger(t).Phase3Checkpoint
+	require.Equal(t, len(currentAppFieldNames(t)), checkpoint.AppFields)
 	require.Equal(t, len(currentAppParameterFunctions(t)), checkpoint.RemainingAppParameterFunctions)
 	require.Equal(t, len(currentDirectAppTestFiles(t)), checkpoint.RemainingDirectAppTests)
 	require.Equal(t, len(currentTestOnlyAppMethods(t)), checkpoint.RemainingTestOnlyAppMethods)
-	require.Zero(t, checkpoint.OperationAppBackpointers)
-	require.Equal(t, 1, checkpoint.OperationPackageGlobals)
+	require.Zero(t, checkpoint.LeafOwnerAppBackpointers)
+	require.Zero(t, checkpoint.PackageGlobalContainerLogPolicies)
 }
 
 func TestWailsMigrationLedgerCoversConcreteAppCouplingExactlyOnce(t *testing.T) {

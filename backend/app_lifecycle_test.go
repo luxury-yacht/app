@@ -194,7 +194,7 @@ func TestRestoreKubeconfigSelectionUsesSelectedKubeconfigs(t *testing.T) {
 		{Path: "/other/config", Context: "other"},
 		{Path: "/saved/config", Context: "saved"},
 	}
-	app.appSettings = &AppSettings{
+	app.preferences.appSettings = &AppSettings{
 		SelectedKubeconfigs: []string{"/saved/config:saved", "/other/config:other"},
 	}
 
@@ -218,7 +218,7 @@ func TestRestoreKubeconfigSelectionNoSettingsLeavesEmpty(t *testing.T) {
 
 	t.Run("empty settings returns empty", func(t *testing.T) {
 		app := newTestAppWithDefaults(t)
-		app.appSettings = &AppSettings{}
+		app.preferences.appSettings = &AppSettings{}
 		app.availableKubeconfigs = []KubeconfigInfo{
 			{Path: "/first/config", Context: "first"},
 			{Path: "/second/config", Context: "second"},
@@ -232,14 +232,14 @@ func TestRestoreKubeconfigSelectionNoSettingsLeavesEmpty(t *testing.T) {
 
 func TestStdLogBridgeWritesToLogger(t *testing.T) {
 	app := newTestAppWithDefaults(t)
-	bridge := &stdLogBridge{logger: app.logger}
+	bridge := &stdLogBridge{logger: app.appLogs.logger}
 
 	input := "error: failure\nwarning: heads up\nrequest failed while listing pods\nExternal secrets cache ready\nI0102 info klog\n"
 	n, err := bridge.Write([]byte(input))
 	require.NoError(t, err)
 	require.Equal(t, len(input), n)
 
-	entries := app.logger.GetEntries()
+	entries := app.appLogs.logger.GetEntries()
 	require.Len(t, entries, 5)
 	require.Equal(t, "ERROR", entries[0].Level)
 	require.Equal(t, "WARN", entries[1].Level)
@@ -328,7 +328,7 @@ func TestStartupLoadsWindowSettingsOnlyAfterRuntimeReady(t *testing.T) {
 	app := newTestAppWithDefaults(t)
 	ctx, cancel := context.WithCancel(context.Background())
 
-	settingsPath, err := app.getSettingsFilePath()
+	settingsPath, err := app.preferences.getSettingsFilePath()
 	require.NoError(t, err)
 	settings := &settingsFile{
 		SchemaVersion: settingsSchemaVersion,
@@ -346,12 +346,12 @@ func TestStartupLoadsWindowSettingsOnlyAfterRuntimeReady(t *testing.T) {
 	writeTestFileWithParents(t, settingsPath, bytes, 0o644)
 
 	require.NoError(t, app.ServiceStartup(ctx, application.ServiceOptions{}))
-	require.Nil(t, app.windowSettings, "service startup must not load interactive window state")
+	require.Nil(t, app.preferences.windowSettings, "service startup must not load interactive window state")
 	require.True(t, app.WindowRuntimeReady("workspace-1", true))
 	cancel()
 	time.Sleep(50 * time.Millisecond)
 
-	require.Equal(t, &settings.UI.Window, app.windowSettings)
+	require.Equal(t, &settings.UI.Window, app.preferences.windowSettings)
 }
 
 func TestEveryPeerHandlesRuntimeReadyWhileProcessStartupRunsOnce(t *testing.T) {
@@ -369,14 +369,14 @@ func TestEveryPeerHandlesRuntimeReadyWhileProcessStartupRunsOnce(t *testing.T) {
 func TestBeforeClosePersistsWindowSettings(t *testing.T) {
 	t.Setenv("HOME", t.TempDir())
 	app := newTestAppWithDefaults(t)
-	app.windowGeometry = func() (WindowGeometry, error) {
+	app.desktopShell.windowGeometry = func() (WindowGeometry, error) {
 		return WindowGeometry{X: 11, Y: 22, Width: 800, Height: 600, Maximised: true}, nil
 	}
 	setTestAppRuntimeReady(t, app, context.Background())
 
 	require.True(t, app.PrepareQuitFromWindow("workspace-1"), "expected the application quit to proceed")
 
-	settings, err := app.LoadWindowSettings()
+	settings, err := app.preferences.LoadWindowSettings()
 	require.NoError(t, err)
 	require.Equal(t, 11, settings.X)
 	require.Equal(t, 22, settings.Y)
@@ -392,7 +392,7 @@ func TestBeforeCloseWaitsForSelectionMutationBeforeSavingWindowSettings(t *testi
 
 	saveStarted := make(chan struct{})
 	var saveStartedOnce sync.Once
-	app.windowGeometry = func() (WindowGeometry, error) {
+	app.desktopShell.windowGeometry = func() (WindowGeometry, error) {
 		saveStartedOnce.Do(func() { close(saveStarted) })
 		return WindowGeometry{X: 11, Y: 22, Width: 800, Height: 600}, nil
 	}
@@ -449,7 +449,7 @@ func TestPrepareQuitWithoutRuntimeSkipsWindowReadAndRemainsIdempotent(t *testing
 	t.Setenv("HOME", t.TempDir())
 	app := newTestAppWithDefaults(t)
 	geometryReads := 0
-	app.windowGeometry = func() (WindowGeometry, error) {
+	app.desktopShell.windowGeometry = func() (WindowGeometry, error) {
 		geometryReads++
 		return WindowGeometry{}, nil
 	}
@@ -459,7 +459,7 @@ func TestPrepareQuitWithoutRuntimeSkipsWindowReadAndRemainsIdempotent(t *testing
 
 	require.Zero(t, geometryReads)
 	failureLogs := 0
-	for _, entry := range app.logger.GetEntries() {
+	for _, entry := range app.appLogs.logger.GetEntries() {
 		if strings.Contains(entry.Message, "Failed to save window settings: application context is not available") {
 			failureLogs++
 		}
@@ -472,14 +472,14 @@ func TestPrepareQuitLogsWindowGeometryReadFailure(t *testing.T) {
 	app := newTestAppWithDefaults(t)
 	setTestAppRuntimeReady(t, app, context.Background())
 	readFailure := errors.New("geometry unavailable")
-	app.windowGeometry = func() (WindowGeometry, error) {
+	app.desktopShell.windowGeometry = func() (WindowGeometry, error) {
 		return WindowGeometry{}, readFailure
 	}
 
 	require.True(t, app.PrepareQuitFromWindow("workspace-1"))
 
-	require.Nil(t, app.windowSettings)
-	entries := app.logger.GetEntries()
+	require.Nil(t, app.preferences.windowSettings)
+	entries := app.appLogs.logger.GetEntries()
 	require.NotEmpty(t, entries)
 	require.Contains(t, entries[len(entries)-1].Message, `read window "workspace-1" geometry: geometry unavailable`)
 }
@@ -489,7 +489,7 @@ func TestPrepareQuitPersistsWindowGeometryOnlyOnceAcrossQuitPaths(t *testing.T) 
 	app := newTestAppWithDefaults(t)
 	setTestAppRuntimeReady(t, app, context.Background())
 	geometryReads := 0
-	app.windowGeometry = func() (WindowGeometry, error) {
+	app.desktopShell.windowGeometry = func() (WindowGeometry, error) {
 		geometryReads++
 		return WindowGeometry{X: 7, Y: 9, Width: 1000, Height: 700}, nil
 	}
@@ -498,7 +498,7 @@ func TestPrepareQuitPersistsWindowGeometryOnlyOnceAcrossQuitPaths(t *testing.T) 
 	require.True(t, app.PrepareQuitFromWindow("workspace-1"))
 
 	require.Equal(t, 1, geometryReads)
-	settings, err := app.LoadWindowSettings()
+	settings, err := app.preferences.LoadWindowSettings()
 	require.NoError(t, err)
 	require.Equal(t, &WindowSettings{X: 7, Y: 9, Width: 1000, Height: 700}, settings)
 }
@@ -536,18 +536,18 @@ func TestStartupBetaExpiryReportsAndStopsInteractiveStartup(t *testing.T) {
 
 	app := newTestAppWithDefaults(t)
 	updates := &fakeApplicationUpdateCoordinator{}
-	app.applicationUpdates = updates
+	app.updates.coordinator = updates
 	reporter := &recordingErrorReporter{}
-	app.logger = NewLogger(100, reporter)
+	app.appLogs = NewAppLogService(NewLogger(100, reporter))
 	var prompt expiredBetaPrompt
-	app.showExpiredBetaPrompt = func(value expiredBetaPrompt) { prompt = value }
+	app.desktopShell.showExpiredBetaPrompt = func(value expiredBetaPrompt) { prompt = value }
 	var openedURL string
-	app.openApplicationURL = func(value string) error {
+	app.desktopShell.openApplicationURL = func(value string) error {
 		openedURL = value
 		return nil
 	}
 	quitCalls := 0
-	app.quitApplication = func() { quitCalls++ }
+	app.desktopShell.quitApplication = func() { quitCalls++ }
 	ctx := context.Background()
 
 	require.NoError(t, app.ServiceStartup(ctx, application.ServiceOptions{}))

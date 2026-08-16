@@ -734,7 +734,7 @@ func TestSustainedMemoryPressureForcesFullTeardownAfterColdPreparationGrace(t *t
 	_, err = os.Stat(filepath.Join(spillDir, "cluster-overview.spill"))
 	require.NoError(t, err, "forced teardown must preserve the normal spill path")
 
-	entries := app.logger.GetEntries()
+	entries := app.appLogs.logger.GetEntries()
 	forcedLogs := 0
 	for _, entry := range entries {
 		if entry.ClusterID == clusterID &&

@@ -49,11 +49,11 @@ func TestBackendResolvesAnyNamedWorkspaceWindowFromWails(t *testing.T) {
 	wailsApp := application.New(application.Options{})
 	app := NewApp(wailsApp)
 
-	_, err := app.workspaceWindow("workspace-2")
+	_, err := app.desktopShell.workspaceWindow("workspace-2")
 	require.ErrorContains(t, err, `window "workspace-2" is not available`)
 
 	want := wailsApp.Window.NewWithOptions(application.WebviewWindowOptions{Name: "workspace-2"})
-	got, err := app.workspaceWindow("workspace-2")
+	got, err := app.desktopShell.workspaceWindow("workspace-2")
 	require.NoError(t, err)
 	require.Same(t, want, got)
 }
@@ -64,13 +64,13 @@ func TestNamedWorkspaceGeometryRequiresRuntimeReadiness(t *testing.T) {
 	app := NewApp(wailsApp)
 	app.setApplicationContext(context.Background())
 
-	_, err := app.workspaceWindowWhenReady("workspace-2")
+	_, err := app.desktopShell.workspaceWindowWhenReady("workspace-2")
 	require.ErrorContains(t, err, "desktop runtime is not available")
-	_, err = app.clipboardText()
+	_, err = app.desktopShell.clipboardText()
 	require.ErrorContains(t, err, "desktop runtime is not available")
 
 	app.markRuntimeReady()
-	geometry, err := app.readWindowGeometry("workspace-2")
+	geometry, err := app.desktopShell.readWindowGeometry("workspace-2")
 	require.NoError(t, err)
 	require.Equal(t, WindowGeometry{}, geometry)
 }
@@ -89,8 +89,8 @@ func TestWorkspaceWindowWorkAreasComeFromWailsScreenManager(t *testing.T) {
 		},
 	}))
 
-	require.Equal(t, []WindowWorkArea{{Width: 1920, Height: 1040, Primary: true}}, NewApp(wailsApp).windowWorkAreas())
-	require.Nil(t, NewApp(nil).windowWorkAreas())
+	require.Equal(t, []WindowWorkArea{{Width: 1920, Height: 1040, Primary: true}}, NewApp(wailsApp).desktopShell.windowWorkAreas())
+	require.Nil(t, NewApp(nil).desktopShell.windowWorkAreas())
 }
 
 func TestBackendLifecycleContextTracksApplicationCancellationWithoutRetainingValues(t *testing.T) {
@@ -138,4 +138,20 @@ func TestEmitEventDoesNotAllocateLifecycleContext(t *testing.T) {
 		app.emitEvent("test:event")
 	})
 	require.Zero(t, allocations)
+}
+
+func TestEmitEventRequiresRuntimeReadiness(t *testing.T) {
+	app := NewApp(nil)
+	called := false
+	app.eventEmitter = func(context.Context, string, ...interface{}) {
+		called = true
+	}
+
+	app.emitEvent("something")
+	require.False(t, called)
+
+	app.setApplicationContext(context.Background())
+	require.True(t, app.markRuntimeReady())
+	app.emitEvent("something")
+	require.True(t, called)
 }

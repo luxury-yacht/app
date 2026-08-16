@@ -27,22 +27,21 @@ const (
 type App struct {
 	appDone                  <-chan struct{}
 	runtimeReady             atomic.Bool
-	wailsApplication         *application.App
-	menu                     *application.Menu
-	createWorkspaceWindow    func()
+	desktopShell             *DesktopShell
 	selectedKubeconfigs      []string
 	availableKubeconfigs     []KubeconfigInfo
-	kubeconfigSearchPaths    []string
 	kubeconfigDiscoveryState KubeconfigDiscoveryState
-	windowSettings           *WindowSettings
-	appSettings              *AppSettings
-	logger                   *Logger
-	errorReporter            sentryreporting.Reporter
+	appLogs                  *AppLogService
+	favorites                *FavoritesService
+	uiState                  *UIStateStore
+	preferences              *PreferencesService
+	errorReporting           *ErrorReportingService
+	containerLogsPolicy      *ContainerLogsSelectionPolicy
+	permissionFetchPolicy    *PermissionFetchPolicy
+	dataManagement           *DataManagementCoordinator
+	attention                *ClusterAttentionService
 	// responseCache stores short-lived detail/YAML/helm GET responses.
-	responseCache           *responseCache
-	sidebarVisible          bool
-	diagnosticsPanelVisible bool
-	appLogsPanelVisible     bool
+	responseCache *responseCache
 
 	refreshManager *refresh.Manager
 	refreshService atomic.Pointer[refreshServiceHandler]
@@ -104,9 +103,6 @@ type App struct {
 	objectCatalogMu      sync.Mutex
 	objectCatalogEntries map[string]*objectCatalogEntry
 
-	// persistenceMu guards persistence.json read/write operations.
-	persistenceMu sync.Mutex
-
 	// kubeconfigsMu guards kubeconfig discovery data and selected kubeconfig reads/writes.
 	kubeconfigsMu sync.RWMutex
 	// selectionMutationMu serializes coordinated cluster runtime mutations.
@@ -137,16 +133,6 @@ type App struct {
 	selectionGenCtxMu   sync.Mutex
 	selectionGenCancel  context.CancelFunc
 	selectionDiag       selectionDiagnosticsState
-	// settingsMu guards appSettings access in runtime watcher/selection/settings flows.
-	settingsMu sync.Mutex
-	// installationTelemetryMu serializes the installation-registration metric and its durable
-	// acknowledgement so startup and a live preference change cannot send it concurrently.
-	// Factory Reset takes it before settingsMu and file deletion; keep that lock order.
-	installationTelemetryMu sync.Mutex
-	// attentionRulesMu serializes persisted Attention mutations with their live
-	// index updates so cluster-scoped and global rules cannot be applied out of
-	// order across multiple cluster runtimes.
-	attentionRulesMu sync.Mutex
 	// requestClusterScopeRebuildFn overrides the per-cluster rebuild request
 	// issued when a cluster's allowed-namespaces scope changes (tests inject a
 	// recorder). Nil selects the production teardown+rebuild path.
@@ -164,11 +150,7 @@ type App struct {
 
 	operations *OperationsCoordinator
 
-	applicationUpdates                  applicationUpdateCoordinator
-	applicationUpdateEventUnsubscribers []func()
-	showExpiredBetaPrompt               func(expiredBetaPrompt)
-	openApplicationURL                  func(string) error
-	quitApplication                     func()
+	updates *UpdateCoordinator
 
 	// Per-cluster auth recovery scheduling.
 	// Tracks auth recovery scheduling per-cluster, allowing isolated
@@ -193,9 +175,6 @@ type App struct {
 	kubeconfigWatcher *kubeconfigWatcher
 
 	eventEmitter          func(context.Context, string, ...interface{})
-	openFileDialog        func(*application.OpenFileDialogOptions) (string, error)
-	saveFileDialog        func(*application.SaveFileDialogOptions) (string, error)
-	windowGeometry        func() (WindowGeometry, error)
 	kubeClientInitializer func() error
 }
 
@@ -217,12 +196,12 @@ func NewApp(wailsApplication *application.App, reporters ...sentryreporting.Repo
 		reporter = reporters[0]
 	}
 	app := &App{
-		wailsApplication:         wailsApplication,
-		logger:                   NewLogger(1000, reporters...),
-		errorReporter:            reporter,
+		appLogs:                  NewAppLogService(NewLogger(1000, reporters...)),
+		favorites:                NewFavoritesService(),
+		uiState:                  NewUIStateStore(),
+		containerLogsPolicy:      NewContainerLogsSelectionPolicy(defaultObjPanelLogsTargetPerScopeLimit),
+		permissionFetchPolicy:    NewPermissionFetchPolicy(defaultPermissionSSRRFetchConcurrency),
 		responseCache:            newDefaultResponseCache(),
-		sidebarVisible:           true,
-		appLogsPanelVisible:      false,
 		refreshSubsystems:        make(map[string]*system.Subsystem),
 		refreshPermissionCancels: make(map[string]context.CancelFunc),
 		clusterClients:           make(map[string]*clusterClients),
@@ -238,27 +217,65 @@ func NewApp(wailsApplication *application.App, reporters ...sentryreporting.Repo
 		clusterScopeRevisions: make(map[string]uint64),
 		workspaceSelections:   make(map[string][]string),
 	}
+	app.desktopShell = NewDesktopShell(wailsApplication, app.runtimeAvailable, app.emitEvent, app.appLogs.Logger())
+	app.updates = NewUpdateCoordinator(app.desktopShell, app.CtxOrBackground, app.emitEvent, app.appLogs.Logger())
+	app.desktopShell.ConfigureUpdateCheck(func() error {
+		_, err := app.updates.CheckForUpdates()
+		return err
+	})
+	app.errorReporting = NewErrorReportingService(reporter, app.CtxOrBackground, app.appLogs.Logger())
+	app.preferences = NewPreferencesService(
+		app.desktopShell,
+		NewSettingsEffectDispatcher(app.errorReporting, app, app.permissionFetchPolicy, app.containerLogsPolicy, app, app.appLogs.Logger()),
+		app.appLogs.Logger(),
+	)
+	app.desktopShell.ConfigureKubeconfigSearchPaths(app.preferences.KubeconfigSearchPaths)
+	app.attention = NewClusterAttentionService(app.preferences, app.appLogs.Logger())
+	app.errorReporting.ConfigureInstallationTelemetry(app.preferences)
+	app.dataManagement = NewDataManagementCoordinator(DataManagementDependencies{
+		Preferences: app.preferences, Favorites: app.favorites, UIState: app.uiState,
+		Updates: app.updates, Attention: app.attention, ErrorReporting: app.errorReporting,
+		AppLogs: app.appLogs, DesktopShell: app.desktopShell,
+		RuntimeAvailable: app.runtimeAvailable, Context: app.CtxOrBackground,
+		WorkspaceMutation: func(name string, action func() error) error {
+			return app.runSelectionMutation(name, func(_ *selectionMutation) error { return action() })
+		},
+		ResetRuntime: func() error {
+			if err := app.clearKubeconfigSelection(); err != nil {
+				return err
+			}
+			app.responseCache.clear()
+			return nil
+		},
+		SearchPathsChanged: app.refreshKubeconfigDiscoveryAfterSearchPathChange,
+	})
 	app.kubeClientInitializer = func() error {
 		return app.initKubernetesClient()
 	}
-	app.openApplicationURL = func(url string) error {
-		if wailsApplication == nil || wailsApplication.Browser == nil {
-			return nil
-		}
-		return wailsApplication.Browser.OpenURL(url)
-	}
-	app.quitApplication = func() {
-		if wailsApplication != nil {
-			wailsApplication.Quit()
-		}
-	}
-	app.showExpiredBetaPrompt = app.presentExpiredBetaPrompt
 	app.setupEnvironment()
 	app.initAuthManager()
 	app.initGovernor()
 	app.initializeOperationsCoordinator()
 	return app
 }
+
+func (a *App) FavoritesService() *FavoritesService { return a.favorites }
+
+func (a *App) UIStateStore() *UIStateStore { return a.uiState }
+
+func (a *App) AppLogService() *AppLogService { return a.appLogs }
+
+func (a *App) DesktopShell() *DesktopShell { return a.desktopShell }
+
+func (a *App) PreferencesService() *PreferencesService { return a.preferences }
+
+func (a *App) ErrorReportingService() *ErrorReportingService { return a.errorReporting }
+
+func (a *App) DataManagementCoordinator() *DataManagementCoordinator { return a.dataManagement }
+
+func (a *App) ClusterAttentionService() *ClusterAttentionService { return a.attention }
+
+func (a *App) UpdateCoordinator() *UpdateCoordinator { return a.updates }
 
 func (a *App) emitEvent(name string, args ...interface{}) {
 	if a == nil || a.eventEmitter == nil || !a.runtimeAvailable() {

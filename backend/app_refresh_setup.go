@@ -21,10 +21,7 @@ import (
 )
 
 func (a *App) resolveMetricsInterval() time.Duration {
-	if a.appSettings != nil && a.appSettings.MetricsRefreshIntervalMs > 0 {
-		return time.Duration(a.appSettings.MetricsRefreshIntervalMs) * time.Millisecond
-	}
-	return config.RefreshMetricsInterval
+	return time.Duration(a.preferences.MetricsRefreshIntervalMs()) * time.Millisecond
 }
 
 func (a *App) setupRefreshSubsystem() error {
@@ -45,7 +42,7 @@ func (a *App) setupRefreshSubsystem() error {
 
 	// Handle case where no subsystems were created (all auth failed).
 	if len(subsystems) == 0 {
-		a.logger.Warn("No refresh subsystems created (all clusters may have auth failures)", logsources.Refresh)
+		a.appLogs.logger.Warn("No refresh subsystems created (all clusters may have auth failures)", logsources.Refresh)
 		// Initialize empty state but don't fail - clusters may recover later.
 		a.replaceRefreshSubsystems(nil)
 		return nil
@@ -259,18 +256,18 @@ func (a *App) buildRefreshSubsystemOutcome(selection kubeconfigSelection) (subsy
 
 func (a *App) clusterClientsAllowRefresh(clients *clusterClients, meta ClusterMeta) bool {
 	if clients.authFailedOnInit {
-		a.logger.Warn(fmt.Sprintf("Skipping subsystem for cluster %s: auth failed during initialization", meta.Name), logsources.Refresh, meta.ID, meta.Name)
+		a.appLogs.logger.Warn(fmt.Sprintf("Skipping subsystem for cluster %s: auth failed during initialization", meta.Name), logsources.Refresh, meta.ID, meta.Name)
 		return false
 	}
 	if clients.authManager == nil {
 		return true
 	}
 	state, reason := clients.authManager.State()
-	a.logger.Info(fmt.Sprintf("Auth state for cluster %s: %s (reason: %s)", meta.Name, state.String(), reason), logsources.Refresh, meta.ID, meta.Name)
+	a.appLogs.logger.Info(fmt.Sprintf("Auth state for cluster %s: %s (reason: %s)", meta.Name, state.String(), reason), logsources.Refresh, meta.ID, meta.Name)
 	if clients.authManager.IsValid() {
 		return true
 	}
-	a.logger.Warn(fmt.Sprintf("Skipping subsystem for cluster %s: auth not valid (state=%s)", meta.Name, state.String()), logsources.Refresh, meta.ID, meta.Name)
+	a.appLogs.logger.Warn(fmt.Sprintf("Skipping subsystem for cluster %s: auth not valid (state=%s)", meta.Name, state.String()), logsources.Refresh, meta.ID, meta.Name)
 	return false
 }
 
@@ -291,15 +288,16 @@ func (a *App) buildRefreshSubsystemForSelection(
 		GatewayAPIPresence:         clients.gatewayAPIPresence,
 		DynamicClient:              clients.dynamicClient,
 		ObjectDetailsProvider:      a.objectDetailProvider(),
-		Logger:                     a.logger,
+		Logger:                     a.appLogs.logger,
 		ContainerLogsTargetLimiter: a.sharedContainerLogsTargetLimiter(),
+		ContainerLogsPerScopeLimit: a.containerLogsPolicy.Limit(),
 		ClusterID:                  clusterMeta.ID,
 		ClusterName:                clusterMeta.Name,
 		AllowedNamespaces:          a.allowedNamespacesForCluster(clusterMeta.ID),
-		AttentionIgnoreRules:       a.attentionIgnoreRulesForCluster(clusterMeta.ID),
+		AttentionIgnoreRules:       a.attention.attentionIgnoreRulesForCluster(clusterMeta.ID),
 		AttentionIgnoredObjectPruner: func(ref resourcemodel.ResourceRef) {
-			if err := a.pruneClusterAttentionIgnoredObject(clusterMeta.ID, ref); err != nil {
-				a.logger.Warn(fmt.Sprintf("Could not prune obsolete Attention ignore for cluster %s: %v", clusterMeta.ID, err), logsources.Settings, clusterMeta.ID, clusterMeta.ID)
+			if err := a.attention.pruneClusterAttentionIgnoredObject(clusterMeta.ID, ref); err != nil {
+				a.appLogs.logger.Warn(fmt.Sprintf("Could not prune obsolete Attention ignore for cluster %s: %v", clusterMeta.ID, err), logsources.Settings, clusterMeta.ID, clusterMeta.ID)
 			}
 		},
 	}
@@ -351,7 +349,7 @@ func (a *App) startRefreshSubsystems(ctx context.Context, subsystems map[string]
 		registry := subsystem.Registry
 		go func(mgr *refresh.Manager, registry *domain.Registry, clusterID, clusterName string) {
 			if err := mgr.Start(ctx); err != nil && !errors.Is(err, context.Canceled) {
-				a.logger.Warn(fmt.Sprintf("refresh manager stopped: %v", err), logsources.Refresh, clusterID, clusterName)
+				a.appLogs.logger.Warn(fmt.Sprintf("refresh manager stopped: %v", err), logsources.Refresh, clusterID, clusterName)
 				return
 			}
 			// Start blocks until the factory-backed informer caches have synced. Reconcile
@@ -384,13 +382,11 @@ func (a *App) storeRefreshPermissionCancel(clusterID string, cancel context.Canc
 
 // sharedContainerLogsTargetLimiter lazily creates the process-wide container-logs
 // target limiter. containerLogsTargetLimiterMu is a LEAF lock: nothing else may be
-// locked or loaded while it is held. The settings paths (loadAppSettings,
-// GetAppSettings, UpdateAppPreferences) call back into this accessor — some while
-// holding settingsMu — so reading settings here would re-enter settingsMu on the same
-// goroutine (self-deadlock), and a settingsMu-inside-limiterMu nesting would invert
-// their settingsMu→limiterMu order (cross-goroutine ABBA). The limiter therefore
-// starts at the default limit; every settings load/update pushes the configured value
-// via SetLimit immediately afterwards.
+// locked or loaded while it is held. Preferences dispatches the configured value to
+// this owner only after releasing settingsMu, so reading settings here would reverse
+// that settingsMu-to-limiter direction and permit a cross-goroutine ABBA deadlock.
+// The limiter therefore starts at the default limit; successful settings load/update
+// pushes the configured value through SetLimit afterwards.
 func (a *App) sharedContainerLogsTargetLimiter() *containerlogsstream.GlobalTargetLimiter {
 	if a == nil {
 		return nil
@@ -440,7 +436,7 @@ func (a *App) buildRefreshMux(
 	}
 	aggregateQueue := newAggregateManualQueue(clusterOrder, subsystems)
 	aggregateContainerLogs := newAggregateContainerLogsStreamHandler(subsystems)
-	aggregateResources, err := newAggregateResourceStreamHandler(subsystems, a.logger, sharedTelemetry)
+	aggregateResources, err := newAggregateResourceStreamHandler(subsystems, a.appLogs.logger, sharedTelemetry)
 	if err != nil {
 		return nil, nil, err
 	}

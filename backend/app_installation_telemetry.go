@@ -57,48 +57,50 @@ func ensureAnonymizedID(settings *settingsFile) (bool, error) {
 	return true, nil
 }
 
-func (a *App) scheduleInstallationMetricRegistration(ctx context.Context) {
-	if a == nil || ctx == nil {
+func (s *ErrorReportingService) scheduleInstallationMetricRegistration(ctx context.Context) {
+	if s == nil || ctx == nil || s.suppressTelemetrySchedule.Load() {
 		return
 	}
-	go a.reportInstallationMetricIfNeeded(ctx)
+	generation := s.telemetryResetGeneration.Load()
+	go s.reportInstallationMetricForGeneration(ctx, generation)
 }
 
-func (a *App) reportInstallationMetricIfNeeded(ctx context.Context) {
+func (s *ErrorReportingService) reportInstallationMetricIfNeeded(ctx context.Context) {
+	if s == nil {
+		return
+	}
+	s.reportInstallationMetricForGeneration(ctx, s.telemetryResetGeneration.Load())
+}
+
+func (s *ErrorReportingService) reportInstallationMetricForGeneration(ctx context.Context, generation uint64) {
 	if ctx == nil || ctx.Err() != nil {
 		return
 	}
-	metricReporter, ok := a.errorReporter.(sentryreporting.MetricReporter)
-	if !ok || !a.errorReporter.Enabled() {
+	if s == nil || s.reporter == nil || s.telemetryRepository == nil {
+		return
+	}
+	metricReporter, ok := s.reporter.(sentryreporting.MetricReporter)
+	if !ok || !s.reporter.Enabled() {
 		return
 	}
 
-	a.installationTelemetryMu.Lock()
-	defer a.installationTelemetryMu.Unlock()
-	if !a.errorReporter.Enabled() {
+	s.installationTelemetryMu.Lock()
+	defer s.installationTelemetryMu.Unlock()
+	if s.suppressTelemetrySchedule.Load() || s.telemetryResetGeneration.Load() != generation {
+		return
+	}
+	if !s.reporter.Enabled() {
 		return
 	}
 
-	a.settingsMu.Lock()
-	settings, err := a.loadSettingsFile()
-	if err == nil {
-		var created bool
-		created, err = ensureAnonymizedID(settings)
-		if err == nil && created {
-			err = a.saveSettingsFile(settings)
-		}
-	}
+	anonymizedId, reported, err := s.telemetryRepository.prepareInstallationTelemetry()
 	if err != nil {
-		a.settingsMu.Unlock()
-		a.warnInstallationTelemetry("Could not prepare installation telemetry", err)
+		s.warnInstallationTelemetry("Could not prepare installation telemetry", err)
 		return
 	}
-	if settings.Telemetry.InstallationMetricReported {
-		a.settingsMu.Unlock()
+	if reported {
 		return
 	}
-	anonymizedId := settings.Telemetry.AnonymizedID
-	a.settingsMu.Unlock()
 
 	metricCtx, cancel := context.WithTimeout(ctx, installationMetricFlushTimeout)
 	defer cancel()
@@ -116,20 +118,14 @@ func (a *App) reportInstallationMetricIfNeeded(ctx context.Context) {
 		return
 	}
 
-	a.settingsMu.Lock()
-	settings, err = a.loadSettingsFile()
-	if err == nil && settings.Telemetry.AnonymizedID == anonymizedId {
-		settings.Telemetry.InstallationMetricReported = true
-		err = a.saveSettingsFile(settings)
-	}
-	a.settingsMu.Unlock()
+	err = s.telemetryRepository.acknowledgeInstallationTelemetry(anonymizedId)
 	if err != nil {
-		a.warnInstallationTelemetry("Could not save installation telemetry acknowledgement", err)
+		s.warnInstallationTelemetry("Could not save installation telemetry acknowledgement", err)
 	}
 }
 
-func (a *App) warnInstallationTelemetry(message string, err error) {
-	if a.logger != nil {
-		a.logger.Warn(fmt.Sprintf("%s: %v", message, err), logsources.Settings)
+func (s *ErrorReportingService) warnInstallationTelemetry(message string, err error) {
+	if s.logger != nil {
+		s.logger.Warn(fmt.Sprintf("%s: %v", message, err), logsources.Settings)
 	}
 }

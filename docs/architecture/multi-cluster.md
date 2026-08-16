@@ -49,6 +49,12 @@ validation errors. Frontend refresh code should not produce them.
   `backend/kubeconfig_selection.go`
 - Backend cluster-workspace snapshot and combined selection/visibility command:
   `backend/cluster_workspace.go`
+- Cluster Attention rules, persistence transactions, six Ignore/Restore
+  commands, and the cluster-indexed live target registry:
+  `backend.ClusterAttentionService` in `backend/cluster_attention_service.go`
+  and `backend/app_cluster_attention.go`. The service owns the Attention lock;
+  it uses a narrow `PreferencesService` repository for persistence and never
+  reaches through the refresh owner.
 - Cluster lifecycle and refresh subsystem setup: `backend/app_refresh_*.go`
 - Object catalog lifecycle: `backend/app_object_catalog.go`
 - Frontend cluster-workspace state and runtime-event reconciliation:

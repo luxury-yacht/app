@@ -18,6 +18,7 @@ import (
 	"unicode/utf8"
 
 	"github.com/luxury-yacht/app/internal/updateidentity"
+	"github.com/luxury-yacht/app/internal/updatetemp"
 )
 
 const (
@@ -498,6 +499,62 @@ func (store *Store) RetryCleanup() error {
 		return err
 	}
 	return store.retryCleanupLocked(document)
+}
+
+// Reset removes updater-owned durable state and dynamic artifacts. An active
+// application attempt is recovery state for another process and is never
+// deleted by reset.
+func (store *Store) Reset() error {
+	store.mu.Lock()
+	defer store.mu.Unlock()
+
+	document, err := store.loadLocked()
+	if err != nil {
+		return err
+	}
+	if document.Attempt != nil {
+		return fmt.Errorf("refuse application update reset during an active application attempt")
+	}
+
+	owned := append([]string(nil), document.Cleanup...)
+	if document.Prepared != nil {
+		owned = appendCleanup(owned, document.Prepared.StagingDir)
+	}
+	remaining := make([]string, 0, len(owned))
+	var failures []error
+	for _, path := range owned {
+		if removeErr := store.removeStaging(path); removeErr != nil {
+			remaining = append(remaining, path)
+			failures = append(failures, removeErr)
+		}
+	}
+	if _, sweepErr := updatetemp.SweepOrphans(store.tempRoot, remaining); sweepErr != nil {
+		failures = append(failures, sweepErr)
+	}
+	if len(failures) > 0 {
+		document.SkippedVersion = ""
+		document.Prepared = nil
+		document.Cleanup = remaining
+		if saveErr := store.saveLocked(document); saveErr != nil {
+			failures = append(failures, saveErr)
+		}
+		return errors.Join(failures...)
+	}
+
+	info, statErr := os.Lstat(store.statePath)
+	if statErr != nil {
+		if os.IsNotExist(statErr) {
+			return nil
+		}
+		return fmt.Errorf("inspect application update state before reset: %w", statErr)
+	}
+	if info.Mode()&os.ModeSymlink != 0 || !info.Mode().IsRegular() {
+		return invalidDocument(fmt.Errorf("application update state must be a regular non-symlink file"))
+	}
+	if removeErr := os.Remove(store.statePath); removeErr != nil {
+		return fmt.Errorf("remove application update state: %w", removeErr)
+	}
+	return nil
 }
 
 func (store *Store) retryCleanupLocked(document Document) error {

@@ -480,7 +480,7 @@ func (a *App) buildClusterClientDependencies(
 func (a *App) buildMetricsClient(config *rest.Config, meta ClusterMeta) *metricsclient.Clientset {
 	client, err := metricsclient.NewForConfig(config)
 	if err != nil {
-		a.logger.Info(fmt.Sprintf("Metrics client not available for cluster %s: %v", meta.ID, err), logsources.KubernetesClient, meta.ID, meta.Name)
+		a.appLogs.logger.Info(fmt.Sprintf("Metrics client not available for cluster %s: %v", meta.ID, err), logsources.KubernetesClient, meta.ID, meta.Name)
 		return nil
 	}
 	return client
@@ -494,7 +494,7 @@ func (a *App) buildGatewayClients(
 ) (*gatewayapi.Presence, gatewayversioned.Interface, gatewayinformers.SharedInformerFactory, error) {
 	presence, discoverErr := gatewayapi.DiscoverViaDiscovery(ctx, clientset.Discovery())
 	if discoverErr != nil {
-		a.logger.Warn(fmt.Sprintf("Gateway API discovery failed for cluster %s: %v", meta.Name, discoverErr), logsources.KubernetesClient, meta.ID, meta.Name)
+		a.appLogs.logger.Warn(fmt.Sprintf("Gateway API discovery failed for cluster %s: %v", meta.Name, discoverErr), logsources.KubernetesClient, meta.ID, meta.Name)
 	}
 	if !presence.AnyPresent() {
 		return presence, nil, nil, nil
@@ -547,17 +547,17 @@ func (a *App) clusterAuthFailedOnPreflight(
 ) bool {
 	err := a.preflightClusterClientWithContext(ctx, client)
 	if err == nil {
-		a.logger.Info(fmt.Sprintf("Pre-flight check passed for cluster %s", meta.Name), logsources.Auth, meta.ID, meta.Name)
+		a.appLogs.logger.Info(fmt.Sprintf("Pre-flight check passed for cluster %s", meta.Name), logsources.Auth, meta.ID, meta.Name)
 		return false
 	}
 
-	a.logger.Warn(fmt.Sprintf("Pre-flight check failed for cluster %s: %v", meta.Name, err), logsources.Auth, meta.ID, meta.Name)
+	a.appLogs.logger.Warn(fmt.Sprintf("Pre-flight check failed for cluster %s: %v", meta.Name, err), logsources.Auth, meta.ID, meta.Name)
 	diagnostic := credentialerrors.Classify(err, credentialerrors.Context{ExecCommand: execDisplayCommand(config)})
 	if !diagnostic.IsAuth() {
 		return false
 	}
 
-	a.logger.Warn(fmt.Sprintf("Detected credential error for cluster %s, reporting auth failure", meta.Name), logsources.Auth, meta.ID, meta.Name)
+	a.appLogs.logger.Warn(fmt.Sprintf("Detected credential error for cluster %s, reporting auth failure", meta.Name), logsources.Auth, meta.ID, meta.Name)
 	manager.ReportFailureDiagnostic(authstate.NewFailureDiagnostic(err, diagnostic))
 	return true
 }
@@ -655,7 +655,7 @@ func (a *App) buildRestConfigForSelection(selection kubeconfigSelection, meta Cl
 		wrapExecProviderForWindows(config)
 	}
 
-	qps, burst := a.kubernetesClientRateLimits()
+	qps, burst := a.preferences.kubernetesClientRateLimits()
 	config.QPS = float32(qps)
 	config.Burst = burst
 	config.RateLimiter = newMutableKubernetesRateLimiter(qps, burst)

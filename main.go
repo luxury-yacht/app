@@ -55,6 +55,8 @@ type applicationComposition struct {
 	backend     *backend.App
 	service     *backend.DesktopService
 	operations  *backend.OperationsCoordinator
+	preferences *backend.PreferencesService
+	reporting   *backend.ErrorReportingService
 	windows     *appwindow.Registry
 	menu        *application.Menu
 }
@@ -101,23 +103,24 @@ func newApplicationComposition(reporter sentryreporting.Reporter, options compos
 
 	backendApp = backend.NewApp(wailsApp, reporter)
 	operationsCoordinator := backendApp.OperationsCoordinator()
-	backend.ConfigureApplicationUpdates(backendApp, backend.ApplicationUpdateOptions{
+	desktopShell := backendApp.DesktopShell()
+	backend.ConfigureApplicationUpdates(backendApp.UpdateCoordinator(), backend.ApplicationUpdateOptions{
 		TempRoot:       options.UpdateTempRoot,
 		TempSetupError: options.UpdateTempSetupError,
 	})
 	desktopService = backend.NewDesktopService(backend.DesktopServiceDependencies{
-		Favorites:      backendApp,
-		UIState:        backendApp,
-		Preferences:    backendApp,
-		DataManagement: backendApp,
-		Attention:      backendApp,
+		Favorites:      backendApp.FavoritesService(),
+		UIState:        backendApp.UIStateStore(),
+		Preferences:    backendApp.PreferencesService(),
+		DataManagement: backendApp.DataManagementCoordinator(),
+		Attention:      backendApp.ClusterAttentionService(),
 		Workspace:      backendApp,
 		ClusterRuntime: backendApp,
 		Resources:      backendApp,
 		Operations:     operationsCoordinator,
-		Updates:        backendApp,
-		Logs:           backendApp,
-		DesktopShell:   backendApp,
+		Updates:        backendApp.UpdateCoordinator(),
+		Logs:           backendApp.AppLogService(),
+		DesktopShell:   desktopShell,
 		Lifecycle:      backendApp,
 		HTTP:           backendApp,
 	})
@@ -128,11 +131,11 @@ func newApplicationComposition(reporter sentryreporting.Reporter, options compos
 		application.ServiceOptions{Route: "/api/v2"},
 	))
 
-	nativeMenu := backend.CreateMenu(backendApp)
+	nativeMenu := backend.CreateMenu(desktopShell)
 	wailsApp.Menu.SetApplicationMenu(nativeMenu)
 
 	windows = appwindow.NewRegistry(wailsApp, backendApp, nativeMenu)
-	backend.ConfigureWorkspaceWindowCreator(backendApp, func() { windows.Create(false) })
+	backend.ConfigureWorkspaceWindowCreator(desktopShell, func() { windows.Create(false) })
 	windows.Create(true)
 
 	return &applicationComposition{
@@ -140,6 +143,8 @@ func newApplicationComposition(reporter sentryreporting.Reporter, options compos
 		backend:     backendApp,
 		service:     desktopService,
 		operations:  operationsCoordinator,
+		preferences: backendApp.PreferencesService(),
+		reporting:   backendApp.ErrorReportingService(),
 		windows:     windows,
 		menu:        nativeMenu,
 	}
@@ -169,7 +174,7 @@ func main() {
 		UpdateTempRoot:       updateTempRoot,
 		UpdateTempSetupError: updateTempSetupError,
 	})
-	if err := backend.InitializeErrorReporting(composition.backend); err != nil {
+	if err := backend.InitializeErrorReporting(composition.preferences, composition.reporting); err != nil {
 		println("Sentry error reporting remains disabled:", err.Error())
 	}
 	if err := composition.application.Run(); err != nil {

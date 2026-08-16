@@ -361,8 +361,8 @@ func (e *appGovernorExecutor) ensureRunning(clusterID string) bool {
 		return false
 	}
 	if err := a.ensureObjectCatalogForCluster(clusterID); err != nil {
-		if a.logger != nil {
-			a.logger.Warn(fmt.Sprintf("Governor could not complete live tier for cluster %s: %v", clusterID, err), logsources.Refresh, clusterID, a.clusterNameForID(clusterID))
+		if a.appLogs.logger != nil {
+			a.appLogs.logger.Warn(fmt.Sprintf("Governor could not complete live tier for cluster %s: %v", clusterID, err), logsources.Refresh, clusterID, a.clusterNameForID(clusterID))
 		}
 		return false
 	}
@@ -387,8 +387,8 @@ func (a *App) rewarmCooledClusterSubsystem(clusterID string) {
 	}
 	// (1) unroute the cooled subsystem so no new Build can reach its mmap stores.
 	a.takeRefreshSubsystem(clusterID)
-	if a.logger != nil {
-		a.logger.Info(fmt.Sprintf("Governor re-warming cooled cluster %s", clusterID), logsources.Refresh, clusterID, a.clusterNameForID(clusterID))
+	if a.appLogs.logger != nil {
+		a.appLogs.logger.Info(fmt.Sprintf("Governor re-warming cooled cluster %s", clusterID), logsources.Refresh, clusterID, a.clusterNameForID(clusterID))
 	}
 	// (2) build + start a fresh live subsystem and re-point the aggregate router at it.
 	a.rebuildClusterSubsystem(clusterID)
@@ -414,8 +414,8 @@ func (e *appGovernorExecutor) teardown(clusterID string) bool {
 	if !subsystem.ColdServingReady() {
 		a.startColdPreparation(clusterID, subsystem)
 		if pendingFor, heapInuse, force := a.shouldForceColdTeardown(subsystem); force {
-			if a.logger != nil {
-				a.logger.Warn(fmt.Sprintf(
+			if a.appLogs.logger != nil {
+				a.appLogs.logger.Warn(fmt.Sprintf(
 					"Governor cold preparation for cluster %s remained unsettled for %s under sustained memory pressure; forcing full teardown (heap in use: %d bytes)",
 					clusterID,
 					pendingFor.Round(time.Second),
@@ -586,15 +586,15 @@ func (a *App) coolClusterToMmapServing(clusterID string) {
 		// Cooling failed at some step (mkdir or a store swap). CoolMaintainedStoresToMmap already
 		// closed any mapping it opened, so nothing is left half-mapped. Fall back to a full
 		// teardown: the subsystem is discarded and its heap fully reclaimed.
-		if a.logger != nil {
-			a.logger.Warn(fmt.Sprintf("Governor cool failed for cluster %s, falling back to full teardown: %v", clusterID, err), logsources.Refresh, clusterID, a.clusterNameForID(clusterID))
+		if a.appLogs.logger != nil {
+			a.appLogs.logger.Warn(fmt.Sprintf("Governor cool failed for cluster %s, falling back to full teardown: %v", clusterID, err), logsources.Refresh, clusterID, a.clusterNameForID(clusterID))
 		}
 		a.teardownClusterSubsystem(clusterID)
 		a.stopObjectCatalogForCluster(clusterID)
 		runtime.GC()
 		debug.FreeOSMemory()
-		if a.logger != nil {
-			a.logger.Info(fmt.Sprintf("Governor cooled cluster %s (heap reclaimed)", clusterID), logsources.Refresh, clusterID, a.clusterNameForID(clusterID))
+		if a.appLogs.logger != nil {
+			a.appLogs.logger.Info(fmt.Sprintf("Governor cooled cluster %s (heap reclaimed)", clusterID), logsources.Refresh, clusterID, a.clusterNameForID(clusterID))
 		}
 		return
 	}
@@ -604,8 +604,8 @@ func (a *App) coolClusterToMmapServing(clusterID string) {
 	a.stopObjectCatalogForCluster(clusterID)
 	runtime.GC()
 	debug.FreeOSMemory()
-	if a.logger != nil {
-		a.logger.Info(fmt.Sprintf("Governor cooled cluster %s (serving from mmap, heap reclaimed)", clusterID), logsources.Refresh, clusterID, a.clusterNameForID(clusterID))
+	if a.appLogs.logger != nil {
+		a.appLogs.logger.Info(fmt.Sprintf("Governor cooled cluster %s (serving from mmap, heap reclaimed)", clusterID), logsources.Refresh, clusterID, a.clusterNameForID(clusterID))
 	}
 }
 

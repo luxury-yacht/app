@@ -31,17 +31,22 @@ import (
 
 // Streamer manages Kubernetes container logs streaming sessions.
 type Streamer struct {
-	client    kubernetes.Interface
-	logger    Logger
-	telemetry *telemetry.Recorder
+	client        kubernetes.Interface
+	logger        Logger
+	telemetry     *telemetry.Recorder
+	perScopeLimit int
 }
 
 // NewStreamer constructs a Streamer.
-func NewStreamer(client kubernetes.Interface, logger Logger, recorder *telemetry.Recorder) *Streamer {
+func NewStreamer(client kubernetes.Interface, logger Logger, recorder *telemetry.Recorder, limits ...int) *Streamer {
 	if logger == nil {
 		logger = applog.Noop
 	}
-	return &Streamer{client: client, logger: logger, telemetry: recorder}
+	limit := containerlogs.DefaultPerScopeTargetLimit
+	if len(limits) > 0 {
+		limit = containerlogs.ClampPerScopeTargetLimit(limits[0])
+	}
+	return &Streamer{client: client, logger: logger, telemetry: recorder, perScopeLimit: limit}
 }
 
 type containerTarget struct {
@@ -72,7 +77,7 @@ func (s *Streamer) tail(ctx context.Context, opts Options, limiterSession *Targe
 	if err != nil {
 		return nil, nil, nil, "", nil, 0, "", fmt.Errorf("containerlogsstream: tail %s/%s: %w", opts.Namespace, opts.Name, err)
 	}
-	selection := selectInitialLogTargets(pods, opts, limiterSession)
+	selection := selectInitialLogTargets(pods, opts, limiterSession, s.perScopeLimit)
 	entries, states := s.collectInitialLogEntries(ctx, selection.targets, opts)
 	sortInitialLogEntries(entries)
 	return entries, states, pods, selector, selection.warnings, selection.skipped, selection.skipReason, nil
@@ -85,10 +90,10 @@ type initialLogTargetSelection struct {
 	skipReason string
 }
 
-func selectInitialLogTargets(pods []*corev1.Pod, opts Options, limiterSession *TargetSession) initialLogTargetSelection {
-	targets, total := selectRuntimeTargets(pods, containerSelectionOptions(opts), containerlogs.GetPerScopeTargetLimit())
+func selectInitialLogTargets(pods []*corev1.Pod, opts Options, limiterSession *TargetSession, limit int) initialLogTargetSelection {
+	targets, total := selectRuntimeTargets(pods, containerSelectionOptions(opts), limit)
 	selection := initialLogTargetSelection{
-		targets: targets, warnings: containerlogs.BuildTargetLimitWarnings(len(targets), total),
+		targets: targets, warnings: containerlogs.BuildTargetLimitWarnings(len(targets), total, limit),
 		skipped: total - len(targets),
 	}
 	if selection.skipped > 0 {
@@ -312,7 +317,7 @@ func (r *containerLogRun) stopTarget(key string) {
 
 func (r *containerLogRun) reconcileTargets(ctx context.Context) {
 	pods, activeKeys := r.snapshotInventory()
-	selectedTargets, warnings := selectActiveLogTargets(pods, r.opts, r.limiterSession)
+	selectedTargets, warnings := selectActiveLogTargets(pods, r.opts, r.limiterSession, r.streamer.perScopeLimit)
 	desiredTargets := indexLogTargets(selectedTargets)
 	emitWarningsIfChanged(r.warningsCh, &r.currentWarnings, warnings)
 	r.stopUndesiredTargets(activeKeys, desiredTargets)
@@ -333,11 +338,11 @@ func (r *containerLogRun) snapshotInventory() ([]*corev1.Pod, map[string]struct{
 	return pods, activeKeys
 }
 
-func selectActiveLogTargets(pods []*corev1.Pod, opts Options, limiterSession *TargetSession) ([]containerTarget, []string) {
+func selectActiveLogTargets(pods []*corev1.Pod, opts Options, limiterSession *TargetSession, limit int) ([]containerTarget, []string) {
 	selectionOpts := containerSelectionOptions(opts)
-	selectedTargets, totalTargets := selectRuntimeTargets(pods, selectionOpts, containerlogs.GetPerScopeTargetLimit())
+	selectedTargets, totalTargets := selectRuntimeTargets(pods, selectionOpts, limit)
 	perScopeCount := len(selectedTargets)
-	warnings := containerlogs.BuildTargetLimitWarnings(perScopeCount, totalTargets)
+	warnings := containerlogs.BuildTargetLimitWarnings(perScopeCount, totalTargets, limit)
 	if limiterSession == nil {
 		return selectedTargets, warnings
 	}

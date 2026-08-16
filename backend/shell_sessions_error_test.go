@@ -13,7 +13,7 @@ func TestStartShellSessionRequiresClient(t *testing.T) {
 	fixture := newOperationsCoordinatorFixture(t)
 	app := fixture.runtime
 	operations := fixture.coordinator
-	app.logger = NewLogger(10)
+	app.appLogs = NewAppLogService(NewLogger(10))
 	// Per-cluster clients are stored in clusterClients, not in global fields.
 	// Create a cluster entry WITHOUT a client to test the error path.
 	app.clusterClients = map[string]*clusterClients{
@@ -35,7 +35,7 @@ func TestStartShellSessionRequiresRestConfig(t *testing.T) {
 	fixture := newOperationsCoordinatorFixture(t)
 	app := fixture.runtime
 	operations := fixture.coordinator
-	app.logger = NewLogger(10)
+	app.appLogs = NewAppLogService(NewLogger(10))
 	// Per-cluster clients are stored in clusterClients, not in global fields.
 	fakeClient := fake.NewClientset()
 	app.clusterClients = map[string]*clusterClients{
@@ -58,7 +58,7 @@ func TestStartShellSessionRequiresNamespace(t *testing.T) {
 	fixture := newOperationsCoordinatorFixture(t)
 	app := fixture.runtime
 	operations := fixture.coordinator
-	app.logger = NewLogger(10)
+	app.appLogs = NewAppLogService(NewLogger(10))
 	// Per-cluster clients are stored in clusterClients, not in global fields.
 	fakeClient := fake.NewClientset()
 	restConfig := &rest.Config{}
@@ -82,7 +82,7 @@ func TestStartShellSessionRequiresPodName(t *testing.T) {
 	fixture := newOperationsCoordinatorFixture(t)
 	app := fixture.runtime
 	operations := fixture.coordinator
-	app.logger = NewLogger(10)
+	app.appLogs = NewAppLogService(NewLogger(10))
 	// Per-cluster clients are stored in clusterClients, not in global fields.
 	fakeClient := fake.NewClientset()
 	restConfig := &rest.Config{}

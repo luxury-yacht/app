@@ -13,6 +13,7 @@ import (
 	"github.com/luxury-yacht/app/backend/internal/logsources"
 	"github.com/luxury-yacht/app/backend/refresh/snapshot"
 	"github.com/luxury-yacht/app/backend/refresh/system"
+	"github.com/luxury-yacht/app/internal/appstate"
 )
 
 const settingsSchemaVersion = 1
@@ -510,13 +511,12 @@ func defaultKubeconfigSearchPaths() []string {
 }
 
 // getSettingsFilePath returns the path to the new settings.json location.
-func (a *App) getSettingsFilePath() (string, error) {
-	configDir, err := os.UserConfigDir()
+func (p *PreferencesService) getSettingsFilePath() (string, error) {
+	manifest, err := appstate.Resolve("luxury-yacht")
 	if err != nil {
 		return "", fmt.Errorf("could not find config directory: %w", err)
 	}
-	configDir = filepath.Join(configDir, "luxury-yacht")
-	return filepath.Join(configDir, "settings.json"), nil
+	return manifest.SettingsPath(), nil
 }
 
 // cacheDirPath returns the app's cache directory (<UserCacheDir>/luxury-yacht):
@@ -524,17 +524,17 @@ func (a *App) getSettingsFilePath() (string, error) {
 // spill, diagnostic dumps). It is the cache-tier sibling of the config dir and
 // the one place that defines the cache base, so Factory Reset can clear the
 // whole subtree in one call.
-func (a *App) cacheDirPath() (string, error) {
-	cacheDir, err := os.UserCacheDir()
+func (p *PreferencesService) cacheDirPath() (string, error) {
+	manifest, err := appstate.Resolve("luxury-yacht")
 	if err != nil {
 		return "", fmt.Errorf("could not find cache directory: %w", err)
 	}
-	return filepath.Join(cacheDir, "luxury-yacht"), nil
+	return manifest.CacheRoot, nil
 }
 
 // loadSettingsFile reads settings.json or returns defaults when missing.
-func (a *App) loadSettingsFile() (*settingsFile, error) {
-	configFile, err := a.getSettingsFilePath()
+func (p *PreferencesService) loadSettingsFile() (*settingsFile, error) {
+	configFile, err := p.getSettingsFilePath()
 	if err != nil {
 		return nil, err
 	}
@@ -557,7 +557,7 @@ func (a *App) loadSettingsFile() (*settingsFile, error) {
 }
 
 // saveSettingsFile writes settings.json with an updated timestamp.
-func (a *App) saveSettingsFile(settings *settingsFile) error {
+func (p *PreferencesService) saveSettingsFile(settings *settingsFile) error {
 	if settings == nil {
 		return fmt.Errorf("no settings to save")
 	}
@@ -566,7 +566,7 @@ func (a *App) saveSettingsFile(settings *settingsFile) error {
 	if _, err := ensureAnonymizedID(settings); err != nil {
 		return err
 	}
-	configFile, err := a.getSettingsFilePath()
+	configFile, err := p.getSettingsFilePath()
 	if err != nil {
 		return err
 	}
@@ -629,28 +629,28 @@ func writeFileAtomicWithReplace(
 	return replaceFile(tempFile.Name(), path)
 }
 
-func (a *App) SaveWindowSettings() error {
-	if a != nil && a.windowGeometry != nil {
-		return a.SaveWindowSettingsForWindow("")
+func (p *PreferencesService) SaveWindowSettings() error {
+	if p != nil && p.shell != nil && p.shell.windowGeometry != nil {
+		return p.SaveWindowSettingsForWindow("")
 	}
-	window, err := a.currentWindowWhenReady()
+	window, err := p.shell.currentWindowWhenReady()
 	if err != nil {
 		return err
 	}
-	return a.SaveWindowSettingsForWindow(window.Name())
+	return p.SaveWindowSettingsForWindow(window.Name())
 }
 
 // SaveWindowSettingsForWindow persists the geometry of a named peer as the
 // next session's initial geometry.
-func (a *App) SaveWindowSettingsForWindow(windowName string) error {
-	if !a.runtimeAvailable() {
+func (p *PreferencesService) SaveWindowSettingsForWindow(windowName string) error {
+	if p == nil || p.shell == nil || !p.shell.runtimeAvailable() {
 		return fmt.Errorf("application context is not available")
 	}
-	geometry, err := a.readWindowGeometry(windowName)
+	geometry, err := p.shell.readWindowGeometry(windowName)
 	if err != nil {
 		return fmt.Errorf("read window %q geometry: %w", windowName, err)
 	}
-	a.windowSettings = &WindowSettings{
+	p.windowSettings = &WindowSettings{
 		X:         geometry.X,
 		Y:         geometry.Y,
 		Width:     geometry.Width,
@@ -658,23 +658,23 @@ func (a *App) SaveWindowSettingsForWindow(windowName string) error {
 		Maximized: geometry.Maximised,
 	}
 
-	a.settingsMu.Lock()
-	defer a.settingsMu.Unlock()
+	p.settingsMu.Lock()
+	defer p.settingsMu.Unlock()
 
-	settings, err := a.loadSettingsFile()
+	settings, err := p.loadSettingsFile()
 	if err != nil {
 		return err
 	}
 
-	settings.UI.Window = *a.windowSettings
-	if a.appSettings != nil {
-		settings.Kubeconfig.Selected = append([]string(nil), a.appSettings.SelectedKubeconfigs...)
+	settings.UI.Window = *p.windowSettings
+	if p.appSettings != nil {
+		settings.Kubeconfig.Selected = append([]string(nil), p.appSettings.SelectedKubeconfigs...)
 	}
-	return a.saveSettingsFile(settings)
+	return p.saveSettingsFile(settings)
 }
 
-func (a *App) LoadWindowSettings() (*WindowSettings, error) {
-	settings, err := a.loadSettingsFile()
+func (p *PreferencesService) LoadWindowSettings() (*WindowSettings, error) {
+	settings, err := p.loadSettingsFile()
 	if err != nil {
 		return nil, err
 	}
@@ -685,7 +685,7 @@ func (a *App) LoadWindowSettings() (*WindowSettings, error) {
 		window.Height = 800
 	}
 
-	a.windowSettings = &window
+	p.windowSettings = &window
 	return &window, nil
 }
 
@@ -721,31 +721,21 @@ func getDefaultAppSettings() *AppSettings {
 	}
 }
 
-func (a *App) loadAppSettings() error {
-	settings, err := a.loadSettingsFile()
+func (p *PreferencesService) loadAppSettingsSnapshot() (*AppSettings, error) {
+	settings, err := p.loadSettingsFile()
 	if err != nil {
-		return err
+		return nil, err
 	}
 	created, err := ensureAnonymizedID(settings)
 	if err != nil {
-		return err
+		return nil, err
 	}
 	if created {
-		if err := a.saveSettingsFile(settings); err != nil {
-			return err
+		if err := p.saveSettingsFile(settings); err != nil {
+			return nil, err
 		}
 	}
-	a.appSettings = appSettingsFromFile(settings)
-
-	logSettings := resolveObjPanelLogSettings(settings.Preferences.ObjPanelLogs)
-	containerlogs.SetPerScopeTargetLimit(logSettings.targetPerScopeLimit)
-	// The accessor guards the lazy init (subsystem builds run concurrently); creating
-	// on demand here is correct — the limit then applies to the limiter every
-	// subsystem receives.
-	if limiter := a.sharedContainerLogsTargetLimiter(); limiter != nil {
-		limiter.SetLimit(logSettings.targetGlobalLimit)
-	}
-	return nil
+	return appSettingsFromFile(settings), nil
 }
 
 func appSettingsFromFile(settings *settingsFile) *AppSettings {
@@ -863,99 +853,70 @@ func boolPreferenceOrDefault(value *bool, fallback bool) bool {
 	return *value
 }
 
-func (a *App) saveAppSettings() error {
-	if a.appSettings == nil {
+func (p *PreferencesService) saveAppSettings() error {
+	if p.appSettings == nil {
 		return fmt.Errorf("no app settings to save")
 	}
 
-	settings, err := a.loadSettingsFile()
+	settings, err := p.loadSettingsFile()
 	if err != nil {
 		return err
 	}
 
-	settings.Preferences.AppearanceMode = a.appSettings.AppearanceMode
-	settings.Preferences.UseShortResourceNames = a.appSettings.UseShortResourceNames
-	settings.Preferences.DimInactiveNamespaces = boolPtr(a.appSettings.DimInactiveNamespaces)
-	settings.Preferences.ExclusiveNamespaces = boolPtr(a.appSettings.ExclusiveNamespaces)
-	settings.Preferences.ErrorReportingEnabled = boolPtr(a.appSettings.ErrorReportingEnabled)
+	settings.Preferences.AppearanceMode = p.appSettings.AppearanceMode
+	settings.Preferences.UseShortResourceNames = p.appSettings.UseShortResourceNames
+	settings.Preferences.DimInactiveNamespaces = boolPtr(p.appSettings.DimInactiveNamespaces)
+	settings.Preferences.ExclusiveNamespaces = boolPtr(p.appSettings.ExclusiveNamespaces)
+	settings.Preferences.ErrorReportingEnabled = boolPtr(p.appSettings.ErrorReportingEnabled)
 	if settings.Preferences.Refresh == nil {
 		settings.Preferences.Refresh = &settingsRefresh{}
 	}
-	settings.Preferences.Refresh.Auto = a.appSettings.AutoRefreshEnabled
-	settings.Preferences.Refresh.Background = a.appSettings.RefreshBackgroundClustersEnabled
-	settings.Preferences.Refresh.MetricsIntervalMs = a.appSettings.MetricsRefreshIntervalMs
+	settings.Preferences.Refresh.Auto = p.appSettings.AutoRefreshEnabled
+	settings.Preferences.Refresh.Background = p.appSettings.RefreshBackgroundClustersEnabled
+	settings.Preferences.Refresh.MetricsIntervalMs = p.appSettings.MetricsRefreshIntervalMs
 	if settings.Preferences.KubernetesAPI == nil {
 		settings.Preferences.KubernetesAPI = &settingsKubernetesAPI{}
 	}
-	settings.Preferences.KubernetesAPI.ClientQPS = clampKubernetesClientQPS(a.appSettings.KubernetesClientQPS)
-	settings.Preferences.KubernetesAPI.ClientBurst = clampKubernetesClientBurst(a.appSettings.KubernetesClientBurst)
-	settings.Preferences.KubernetesAPI.PermissionSSRRFetchConcurrency = clampPermissionSSRRFetchConcurrency(a.appSettings.PermissionSSRRFetchConcurrency)
+	settings.Preferences.KubernetesAPI.ClientQPS = clampKubernetesClientQPS(p.appSettings.KubernetesClientQPS)
+	settings.Preferences.KubernetesAPI.ClientBurst = clampKubernetesClientBurst(p.appSettings.KubernetesClientBurst)
+	settings.Preferences.KubernetesAPI.PermissionSSRRFetchConcurrency = clampPermissionSSRRFetchConcurrency(p.appSettings.PermissionSSRRFetchConcurrency)
 	if settings.Preferences.ObjPanelLogs == nil {
 		settings.Preferences.ObjPanelLogs = &settingsObjPanelLogs{}
 	}
-	settings.Preferences.ObjPanelLogs.BufferMaxSize = clampObjPanelLogsBufferMaxSize(a.appSettings.ObjPanelLogsBufferMaxSize)
-	settings.Preferences.ObjPanelLogs.TargetPerScopeLimit = clampObjPanelLogsTargetPerScopeLimit(a.appSettings.ObjPanelLogsTargetPerScopeLimit)
-	settings.Preferences.ObjPanelLogs.TargetGlobalLimit = clampObjPanelLogsTargetGlobalLimit(a.appSettings.ObjPanelLogsTargetGlobalLimit)
-	if a.appSettings.ObjPanelLogsAPITimestampFormat == "" {
+	settings.Preferences.ObjPanelLogs.BufferMaxSize = clampObjPanelLogsBufferMaxSize(p.appSettings.ObjPanelLogsBufferMaxSize)
+	settings.Preferences.ObjPanelLogs.TargetPerScopeLimit = clampObjPanelLogsTargetPerScopeLimit(p.appSettings.ObjPanelLogsTargetPerScopeLimit)
+	settings.Preferences.ObjPanelLogs.TargetGlobalLimit = clampObjPanelLogsTargetGlobalLimit(p.appSettings.ObjPanelLogsTargetGlobalLimit)
+	if p.appSettings.ObjPanelLogsAPITimestampFormat == "" {
 		settings.Preferences.ObjPanelLogs.APITimestampFormat = defaultObjPanelLogsAPITimestampFormat
 	} else {
-		settings.Preferences.ObjPanelLogs.APITimestampFormat = a.appSettings.ObjPanelLogsAPITimestampFormat
+		settings.Preferences.ObjPanelLogs.APITimestampFormat = p.appSettings.ObjPanelLogsAPITimestampFormat
 	}
-	settings.Preferences.ObjPanelLogs.UseLocalTimeZone = a.appSettings.ObjPanelLogsAPITimestampUseLocalTimeZone
-	settings.Preferences.GridTablePersistenceMode = a.appSettings.GridTablePersistenceMode
-	settings.Preferences.DefaultTablePageSize = a.appSettings.DefaultTablePageSize
-	settings.Preferences.DefaultObjectPanelPosition = a.appSettings.DefaultObjectPanelPosition
-	settings.Preferences.ObjectPanelDockedRightWidth = a.appSettings.ObjectPanelDockedRightWidth
-	settings.Preferences.ObjectPanelDockedBottomHeight = a.appSettings.ObjectPanelDockedBottomHeight
-	settings.Preferences.ObjectPanelFloatingWidth = a.appSettings.ObjectPanelFloatingWidth
-	settings.Preferences.ObjectPanelFloatingHeight = a.appSettings.ObjectPanelFloatingHeight
-	settings.Preferences.ObjectPanelFloatingX = a.appSettings.ObjectPanelFloatingX
-	settings.Preferences.ObjectPanelFloatingY = a.appSettings.ObjectPanelFloatingY
+	settings.Preferences.ObjPanelLogs.UseLocalTimeZone = p.appSettings.ObjPanelLogsAPITimestampUseLocalTimeZone
+	settings.Preferences.GridTablePersistenceMode = p.appSettings.GridTablePersistenceMode
+	settings.Preferences.DefaultTablePageSize = p.appSettings.DefaultTablePageSize
+	settings.Preferences.DefaultObjectPanelPosition = p.appSettings.DefaultObjectPanelPosition
+	settings.Preferences.ObjectPanelDockedRightWidth = p.appSettings.ObjectPanelDockedRightWidth
+	settings.Preferences.ObjectPanelDockedBottomHeight = p.appSettings.ObjectPanelDockedBottomHeight
+	settings.Preferences.ObjectPanelFloatingWidth = p.appSettings.ObjectPanelFloatingWidth
+	settings.Preferences.ObjectPanelFloatingHeight = p.appSettings.ObjectPanelFloatingHeight
+	settings.Preferences.ObjectPanelFloatingX = p.appSettings.ObjectPanelFloatingX
+	settings.Preferences.ObjectPanelFloatingY = p.appSettings.ObjectPanelFloatingY
 	// Write per-mode palette fields; leave old fields zeroed so omitempty drops them.
-	settings.Preferences.PaletteHueLight = a.appSettings.PaletteHueLight
-	settings.Preferences.PaletteSaturationLight = a.appSettings.PaletteSaturationLight
-	settings.Preferences.PaletteBrightnessLight = a.appSettings.PaletteBrightnessLight
-	settings.Preferences.PaletteHueDark = a.appSettings.PaletteHueDark
-	settings.Preferences.PaletteSaturationDark = a.appSettings.PaletteSaturationDark
-	settings.Preferences.PaletteBrightnessDark = a.appSettings.PaletteBrightnessDark
-	settings.Preferences.AccentColorLight = a.appSettings.AccentColorLight
-	settings.Preferences.AccentColorDark = a.appSettings.AccentColorDark
-	settings.Preferences.LinkColorLight = a.appSettings.LinkColorLight
-	settings.Preferences.LinkColorDark = a.appSettings.LinkColorDark
-	settings.Preferences.Themes = a.appSettings.Themes
+	settings.Preferences.PaletteHueLight = p.appSettings.PaletteHueLight
+	settings.Preferences.PaletteSaturationLight = p.appSettings.PaletteSaturationLight
+	settings.Preferences.PaletteBrightnessLight = p.appSettings.PaletteBrightnessLight
+	settings.Preferences.PaletteHueDark = p.appSettings.PaletteHueDark
+	settings.Preferences.PaletteSaturationDark = p.appSettings.PaletteSaturationDark
+	settings.Preferences.PaletteBrightnessDark = p.appSettings.PaletteBrightnessDark
+	settings.Preferences.AccentColorLight = p.appSettings.AccentColorLight
+	settings.Preferences.AccentColorDark = p.appSettings.AccentColorDark
+	settings.Preferences.LinkColorLight = p.appSettings.LinkColorLight
+	settings.Preferences.LinkColorDark = p.appSettings.LinkColorDark
+	settings.Preferences.Themes = p.appSettings.Themes
 
-	settings.Kubeconfig.Selected = append([]string(nil), a.appSettings.SelectedKubeconfigs...)
+	settings.Kubeconfig.Selected = append([]string(nil), p.appSettings.SelectedKubeconfigs...)
 
-	return a.saveSettingsFile(settings)
-}
-
-// ClearAppState deletes persisted state files and resets in-memory caches for a clean restart.
-func (a *App) ClearAppState() error {
-	return a.runSelectionMutation("clear-app-state", func(_ *selectionMutation) error {
-		if err := a.clearKubeconfigSelection(); err != nil {
-			return err
-		}
-		// Registration holds this mutex through both the metric send and its
-		// acknowledgement write. Waiting here makes that worker finish before
-		// persisted settings are removed, so it cannot recreate a pre-reset ID.
-		a.installationTelemetryMu.Lock()
-		defer a.installationTelemetryMu.Unlock()
-		errs := a.clearPersistedAppState()
-		a.resetInMemoryAppState()
-		if len(errs) > 0 {
-			return fmt.Errorf("clear app state: %w", errs[0])
-		}
-		return nil
-	})
-}
-
-func (a *App) clearPersistedAppState() []error {
-	var errs []error
-	errs = appendPathRemovalError(errs, a.getSettingsFilePath, removeFileIfExists)
-	errs = appendPathRemovalError(errs, a.getPersistenceFilePath, removeFileIfExists)
-	// clearKubeconfigSelection has already stopped cache writers before this removal.
-	errs = appendPathRemovalError(errs, a.cacheDirPath, os.RemoveAll)
-	return errs
+	return p.saveSettingsFile(settings)
 }
 
 func appendPathRemovalError(errs []error, resolve func() (string, error), remove func(string) error) []error {
@@ -969,13 +930,6 @@ func appendPathRemovalError(errs []error, resolve func() (string, error), remove
 	return errs
 }
 
-func (a *App) resetInMemoryAppState() {
-	a.settingsMu.Lock()
-	a.appSettings = nil
-	a.settingsMu.Unlock()
-	a.windowSettings = nil
-}
-
 // removeFileIfExists ignores missing files so reset can be re-run safely.
 func removeFileIfExists(path string) error {
 	if err := os.Remove(path); err != nil && !os.IsNotExist(err) {
@@ -984,53 +938,33 @@ func removeFileIfExists(path string) error {
 	return nil
 }
 
-func (a *App) GetAppSettings() (*AppSettings, error) {
-	a.settingsMu.Lock()
-	defer a.settingsMu.Unlock()
-
-	if a.appSettings == nil {
-		if err := a.loadAppSettings(); err != nil {
-			return nil, err
-		}
-	}
-
-	cp := *a.appSettings
-	cp.SelectedKubeconfigs = append([]string(nil), a.appSettings.SelectedKubeconfigs...)
-	cp.Themes = append([]Theme(nil), a.appSettings.Themes...)
-	return &cp, nil
+func (p *PreferencesService) GetAppSettings() (*AppSettings, error) {
+	snapshot, err := p.EnsureLoaded()
+	return snapshot.Settings, err
 }
 
 // InitializeErrorReporting applies the persisted preference before application
 // startup can produce reportable errors. A settings read failure keeps the
 // reporter disabled. This is a package-level startup function so Wails does not
 // expose it as a frontend-callable App method.
-func InitializeErrorReporting(a *App) error {
-	if a == nil || a.errorReporter == nil {
+func InitializeErrorReporting(preferences *PreferencesService, reporting *ErrorReportingService) error {
+	if preferences == nil || reporting == nil {
 		return nil
 	}
-
-	a.settingsMu.Lock()
-	if a.appSettings == nil {
-		if err := a.loadAppSettings(); err != nil {
-			a.settingsMu.Unlock()
-			_ = a.errorReporter.SetEnabled(false)
-			return err
-		}
-	}
-	enabled := a.appSettings.ErrorReportingEnabled
-	a.settingsMu.Unlock()
-	if err := a.errorReporter.SetEnabled(enabled); err != nil {
+	snapshot, err := preferences.EnsureLoaded()
+	if err != nil || snapshot.Provenance != PreferencesLoaded || snapshot.Settings == nil {
+		_ = reporting.SetErrorReportingEnabled(false)
 		return err
 	}
-	return nil
+	return reporting.SetErrorReportingEnabled(snapshot.Settings.ErrorReportingEnabled)
 }
 
 func intPtr(v int) *int {
 	return &v
 }
 
-func (a *App) GetAppSettingsSchema() (*AppSettingsSchema, error) {
-	settings, err := a.GetAppSettings()
+func (p *PreferencesService) GetAppSettingsSchema() (*AppSettingsSchema, error) {
+	settings, err := p.GetAppSettings()
 	if err != nil {
 		return nil, err
 	}
@@ -1092,6 +1026,7 @@ func intPreferenceValue(value any) (int, error) {
 type settingsSideEffects struct {
 	errorReporting             bool
 	kubernetesClientRateLimits bool
+	permissionFetchConcurrency bool
 	containerLogsPerScopeLimit bool
 	containerLogsGlobalLimit   bool
 	metricsInterval            bool
@@ -1113,27 +1048,26 @@ func clampInt(value, minValue, maxValue int) int {
 	return value
 }
 
-func (a *App) UpdateAppPreferences(request UpdateAppPreferencesRequest) (*UpdateAppPreferencesResponse, error) {
-	update, err := a.prepareAppPreferenceUpdate(request)
+func (p *PreferencesService) UpdateAppPreferences(request UpdateAppPreferencesRequest) (*UpdateAppPreferencesResponse, error) {
+	update, err := p.prepareAppPreferenceUpdate(request)
 	if err != nil {
 		return nil, err
 	}
-	a.applySettingsSideEffects(update)
+	if p.effects != nil {
+		p.effects.Dispatch(update.settings, update.effects)
+	}
 	return &UpdateAppPreferencesResponse{Settings: update.settings, ChangedKeys: update.changedKeys}, nil
 }
 
-func (a *App) prepareAppPreferenceUpdate(request UpdateAppPreferencesRequest) (*preparedPreferenceUpdate, error) {
-	a.settingsMu.Lock()
-	defer a.settingsMu.Unlock()
-
-	if a.appSettings == nil {
-		if err := a.loadAppSettings(); err != nil {
-			return nil, err
-		}
+func (p *PreferencesService) prepareAppPreferenceUpdate(request UpdateAppPreferencesRequest) (*preparedPreferenceUpdate, error) {
+	if _, err := p.EnsureLoaded(); err != nil {
+		return nil, err
 	}
+	p.settingsMu.Lock()
+	defer p.settingsMu.Unlock()
 
-	previous := copyAppSettings(a.appSettings)
-	next := copyAppSettings(a.appSettings)
+	previous := copyAppSettings(p.appSettings)
+	next := copyAppSettings(p.appSettings)
 	effects := settingsSideEffects{}
 	changedKeys := make([]string, 0, len(request.Changes))
 	seen := make(map[string]struct{}, len(request.Changes))
@@ -1148,72 +1082,17 @@ func (a *App) prepareAppPreferenceUpdate(request UpdateAppPreferencesRequest) (*
 		}
 	}
 
-	a.appSettings = next
-	if err := a.saveAppSettings(); err != nil {
-		a.appSettings = previous
+	p.appSettings = next
+	if err := p.saveAppSettings(); err != nil {
+		p.appSettings = previous
 		return nil, err
 	}
 
 	for _, key := range changedKeys {
-		logPreferenceChange(a.logger, key, preferenceValueForLog(next, key))
+		logPreferenceChange(p.logger, key, preferenceValueForLog(next, key))
 	}
 
 	return &preparedPreferenceUpdate{settings: copyAppSettings(next), changedKeys: changedKeys, effects: effects}, nil
-}
-
-func (a *App) applySettingsSideEffects(update *preparedPreferenceUpdate) {
-	settings, effects := update.settings, update.effects
-	a.applyErrorReportingSideEffect(effects.errorReporting, settings.ErrorReportingEnabled)
-	a.applyKubernetesClientRateLimitsSideEffect(
-		effects.kubernetesClientRateLimits,
-		settings.KubernetesClientQPS,
-		settings.KubernetesClientBurst,
-	)
-	applyContainerLogsPerScopeLimitSideEffect(
-		effects.containerLogsPerScopeLimit,
-		settings.ObjPanelLogsTargetPerScopeLimit,
-	)
-	a.applyContainerLogsGlobalLimitSideEffect(
-		effects.containerLogsGlobalLimit,
-		settings.ObjPanelLogsTargetGlobalLimit,
-	)
-	a.applyMetricsIntervalSideEffect(effects.metricsInterval, settings.MetricsRefreshIntervalMs)
-}
-
-func (a *App) applyErrorReportingSideEffect(apply, enabled bool) {
-	if !apply || a.errorReporter == nil {
-		return
-	}
-	if err := a.errorReporter.SetEnabled(enabled); err != nil {
-		a.logger.Warn(fmt.Sprintf("Could not update error reporting: %v", err), logsources.Settings)
-		return
-	}
-	if enabled {
-		a.scheduleInstallationMetricRegistration(a.CtxOrBackground())
-	}
-}
-
-func (a *App) applyKubernetesClientRateLimitsSideEffect(apply bool, qps int, burst int) {
-	if !apply {
-		return
-	}
-	a.applyKubernetesClientRateLimits(qps, burst)
-}
-
-func applyContainerLogsPerScopeLimitSideEffect(apply bool, limit int) {
-	if !apply {
-		return
-	}
-	containerlogs.SetPerScopeTargetLimit(limit)
-}
-
-func (a *App) applyContainerLogsGlobalLimitSideEffect(apply bool, limit int) {
-	if !apply {
-		return
-	}
-	if limiter := a.sharedContainerLogsTargetLimiter(); limiter != nil {
-		limiter.SetLimit(limit)
-	}
 }
 
 func setSubsystemMetricsInterval(subsystem *system.Subsystem, interval time.Duration) {
@@ -1223,141 +1102,116 @@ func setSubsystemMetricsInterval(subsystem *system.Subsystem, interval time.Dura
 	subsystem.Manager.SetMetricsInterval(interval)
 }
 
-func (a *App) applyMetricsIntervalSideEffect(apply bool, intervalMs int) {
-	if !apply {
-		return
-	}
-	// The metric cadence is server-owned (the doorbell rides collections):
-	// retime every connected cluster's running poller live. Clusters that
-	// connect later read the same setting at subsystem build.
-	interval := time.Duration(intervalMs) * time.Millisecond
-	for _, subsystem := range a.snapshotRefreshSubsystems() {
-		setSubsystemMetricsInterval(subsystem, interval)
-	}
-}
-
-func (a *App) kubernetesClientRateLimits() (qps int, burst int) {
-	if a == nil {
+func (p *PreferencesService) kubernetesClientRateLimits() (qps int, burst int) {
+	if p == nil {
 		return defaultKubernetesClientQPS, defaultKubernetesClientBurst
 	}
-	a.settingsMu.Lock()
-	defer a.settingsMu.Unlock()
-	if a.appSettings == nil {
+	p.settingsMu.Lock()
+	defer p.settingsMu.Unlock()
+	if p.appSettings == nil {
 		return defaultKubernetesClientQPS, defaultKubernetesClientBurst
 	}
-	qps = a.appSettings.KubernetesClientQPS
+	qps = p.appSettings.KubernetesClientQPS
 	if qps <= 0 {
 		qps = defaultKubernetesClientQPS
 	}
-	burst = a.appSettings.KubernetesClientBurst
+	burst = p.appSettings.KubernetesClientBurst
 	if burst <= 0 {
 		burst = defaultKubernetesClientBurst
 	}
 	return clampKubernetesClientQPS(qps), clampKubernetesClientBurst(burst)
 }
 
-func (a *App) permissionSSRRFetchConcurrency() int {
-	if a == nil {
-		return defaultPermissionSSRRFetchConcurrency
-	}
-	a.settingsMu.Lock()
-	defer a.settingsMu.Unlock()
-	if a.appSettings == nil || a.appSettings.PermissionSSRRFetchConcurrency <= 0 {
-		return defaultPermissionSSRRFetchConcurrency
-	}
-	return clampPermissionSSRRFetchConcurrency(a.appSettings.PermissionSSRRFetchConcurrency)
-}
-
-func (a *App) SetAppearanceMode(mode string) error {
-	_, err := a.UpdateAppPreferences(UpdateAppPreferencesRequest{Changes: []AppPreferenceChange{{Key: appPreferenceAppearanceMode, Value: mode}}})
+func (p *PreferencesService) SetAppearanceMode(mode string) error {
+	_, err := p.UpdateAppPreferences(UpdateAppPreferencesRequest{Changes: []AppPreferenceChange{{Key: appPreferenceAppearanceMode, Value: mode}}})
 	return err
 }
 
-func (a *App) SetUseShortResourceNames(useShort bool) error {
-	_, err := a.UpdateAppPreferences(UpdateAppPreferencesRequest{Changes: []AppPreferenceChange{{Key: appPreferenceUseShortResourceNames, Value: useShort}}})
+func (p *PreferencesService) SetUseShortResourceNames(useShort bool) error {
+	_, err := p.UpdateAppPreferences(UpdateAppPreferencesRequest{Changes: []AppPreferenceChange{{Key: appPreferenceUseShortResourceNames, Value: useShort}}})
 	return err
 }
 
-func (a *App) SetDimInactiveNamespaces(enabled bool) error {
-	_, err := a.UpdateAppPreferences(UpdateAppPreferencesRequest{Changes: []AppPreferenceChange{{Key: appPreferenceDimInactiveNamespaces, Value: enabled}}})
+func (p *PreferencesService) SetDimInactiveNamespaces(enabled bool) error {
+	_, err := p.UpdateAppPreferences(UpdateAppPreferencesRequest{Changes: []AppPreferenceChange{{Key: appPreferenceDimInactiveNamespaces, Value: enabled}}})
 	return err
 }
 
-func (a *App) SetExclusiveNamespaces(enabled bool) error {
-	_, err := a.UpdateAppPreferences(UpdateAppPreferencesRequest{Changes: []AppPreferenceChange{{Key: appPreferenceExclusiveNamespaces, Value: enabled}}})
+func (p *PreferencesService) SetExclusiveNamespaces(enabled bool) error {
+	_, err := p.UpdateAppPreferences(UpdateAppPreferencesRequest{Changes: []AppPreferenceChange{{Key: appPreferenceExclusiveNamespaces, Value: enabled}}})
 	return err
 }
 
 // SetAutoRefreshEnabled persists the auto-refresh preference.
-func (a *App) SetAutoRefreshEnabled(enabled bool) error {
-	_, err := a.UpdateAppPreferences(UpdateAppPreferencesRequest{Changes: []AppPreferenceChange{{Key: appPreferenceAutoRefreshEnabled, Value: enabled}}})
+func (p *PreferencesService) SetAutoRefreshEnabled(enabled bool) error {
+	_, err := p.UpdateAppPreferences(UpdateAppPreferencesRequest{Changes: []AppPreferenceChange{{Key: appPreferenceAutoRefreshEnabled, Value: enabled}}})
 	return err
 }
 
 // SetBackgroundRefreshEnabled persists the background refresh preference.
-func (a *App) SetBackgroundRefreshEnabled(enabled bool) error {
-	_, err := a.UpdateAppPreferences(UpdateAppPreferencesRequest{Changes: []AppPreferenceChange{{Key: appPreferenceRefreshBackgroundClustersEnabled, Value: enabled}}})
+func (p *PreferencesService) SetBackgroundRefreshEnabled(enabled bool) error {
+	_, err := p.UpdateAppPreferences(UpdateAppPreferencesRequest{Changes: []AppPreferenceChange{{Key: appPreferenceRefreshBackgroundClustersEnabled, Value: enabled}}})
 	return err
 }
 
-func (a *App) SetKubernetesClientQPS(qps int) error {
-	_, err := a.UpdateAppPreferences(UpdateAppPreferencesRequest{Changes: []AppPreferenceChange{{Key: appPreferenceKubernetesClientQPS, Value: qps}}})
+func (p *PreferencesService) SetKubernetesClientQPS(qps int) error {
+	_, err := p.UpdateAppPreferences(UpdateAppPreferencesRequest{Changes: []AppPreferenceChange{{Key: appPreferenceKubernetesClientQPS, Value: qps}}})
 	return err
 }
 
-func (a *App) SetKubernetesClientBurst(burst int) error {
-	_, err := a.UpdateAppPreferences(UpdateAppPreferencesRequest{Changes: []AppPreferenceChange{{Key: appPreferenceKubernetesClientBurst, Value: burst}}})
+func (p *PreferencesService) SetKubernetesClientBurst(burst int) error {
+	_, err := p.UpdateAppPreferences(UpdateAppPreferencesRequest{Changes: []AppPreferenceChange{{Key: appPreferenceKubernetesClientBurst, Value: burst}}})
 	return err
 }
 
-func (a *App) SetPermissionSSRRFetchConcurrency(limit int) error {
-	_, err := a.UpdateAppPreferences(UpdateAppPreferencesRequest{Changes: []AppPreferenceChange{{Key: appPreferencePermissionSSRRFetchConcurrency, Value: limit}}})
+func (p *PreferencesService) SetPermissionSSRRFetchConcurrency(limit int) error {
+	_, err := p.UpdateAppPreferences(UpdateAppPreferencesRequest{Changes: []AppPreferenceChange{{Key: appPreferencePermissionSSRRFetchConcurrency, Value: limit}}})
 	return err
 }
 
 // SetObjPanelLogsBufferMaxSize persists the max container log entries each
 // Object Panel Logs Tab keeps in memory.
 // Values are clamped to [minObjPanelLogsBufferMaxSize, maxObjPanelLogsBufferMaxSize].
-func (a *App) SetObjPanelLogsBufferMaxSize(size int) error {
-	_, err := a.UpdateAppPreferences(UpdateAppPreferencesRequest{Changes: []AppPreferenceChange{{Key: appPreferenceObjPanelLogsBufferMaxSize, Value: size}}})
+func (p *PreferencesService) SetObjPanelLogsBufferMaxSize(size int) error {
+	_, err := p.UpdateAppPreferences(UpdateAppPreferencesRequest{Changes: []AppPreferenceChange{{Key: appPreferenceObjPanelLogsBufferMaxSize, Value: size}}})
 	return err
 }
 
-func (a *App) SetObjPanelLogsTargetPerScopeLimit(limit int) error {
-	_, err := a.UpdateAppPreferences(UpdateAppPreferencesRequest{Changes: []AppPreferenceChange{{Key: appPreferenceObjPanelLogsTargetPerScopeLimit, Value: limit}}})
+func (p *PreferencesService) SetObjPanelLogsTargetPerScopeLimit(limit int) error {
+	_, err := p.UpdateAppPreferences(UpdateAppPreferencesRequest{Changes: []AppPreferenceChange{{Key: appPreferenceObjPanelLogsTargetPerScopeLimit, Value: limit}}})
 	return err
 }
 
-func (a *App) SetObjPanelLogsTargetGlobalLimit(limit int) error {
-	_, err := a.UpdateAppPreferences(UpdateAppPreferencesRequest{Changes: []AppPreferenceChange{{Key: appPreferenceObjPanelLogsTargetGlobalLimit, Value: limit}}})
+func (p *PreferencesService) SetObjPanelLogsTargetGlobalLimit(limit int) error {
+	_, err := p.UpdateAppPreferences(UpdateAppPreferencesRequest{Changes: []AppPreferenceChange{{Key: appPreferenceObjPanelLogsTargetGlobalLimit, Value: limit}}})
 	return err
 }
 
-func (a *App) SetObjPanelLogsAPITimestampFormat(format string) error {
-	_, err := a.UpdateAppPreferences(UpdateAppPreferencesRequest{Changes: []AppPreferenceChange{{Key: appPreferenceObjPanelLogsAPITimestampFormat, Value: format}}})
+func (p *PreferencesService) SetObjPanelLogsAPITimestampFormat(format string) error {
+	_, err := p.UpdateAppPreferences(UpdateAppPreferencesRequest{Changes: []AppPreferenceChange{{Key: appPreferenceObjPanelLogsAPITimestampFormat, Value: format}}})
 	return err
 }
 
-func (a *App) SetObjPanelLogsAPITimestampUseLocalTimeZone(enabled bool) error {
-	_, err := a.UpdateAppPreferences(UpdateAppPreferencesRequest{Changes: []AppPreferenceChange{{Key: appPreferenceObjPanelLogsAPITimestampUseLocalTimeZone, Value: enabled}}})
+func (p *PreferencesService) SetObjPanelLogsAPITimestampUseLocalTimeZone(enabled bool) error {
+	_, err := p.UpdateAppPreferences(UpdateAppPreferencesRequest{Changes: []AppPreferenceChange{{Key: appPreferenceObjPanelLogsAPITimestampUseLocalTimeZone, Value: enabled}}})
 	return err
 }
 
 // SetGridTablePersistenceMode persists the grid table persistence mode.
-func (a *App) SetGridTablePersistenceMode(mode string) error {
-	_, err := a.UpdateAppPreferences(UpdateAppPreferencesRequest{Changes: []AppPreferenceChange{{Key: appPreferenceGridTablePersistenceMode, Value: mode}}})
+func (p *PreferencesService) SetGridTablePersistenceMode(mode string) error {
+	_, err := p.UpdateAppPreferences(UpdateAppPreferencesRequest{Changes: []AppPreferenceChange{{Key: appPreferenceGridTablePersistenceMode, Value: mode}}})
 	return err
 }
 
 // SetDefaultObjectPanelPosition persists the default object panel position.
-func (a *App) SetDefaultObjectPanelPosition(position string) error {
-	_, err := a.UpdateAppPreferences(UpdateAppPreferencesRequest{Changes: []AppPreferenceChange{{Key: appPreferenceDefaultObjectPanelPosition, Value: position}}})
+func (p *PreferencesService) SetDefaultObjectPanelPosition(position string) error {
+	_, err := p.UpdateAppPreferences(UpdateAppPreferencesRequest{Changes: []AppPreferenceChange{{Key: appPreferenceDefaultObjectPanelPosition, Value: position}}})
 	return err
 }
 
 // SetObjectPanelLayout persists the default object panel dimensions and floating position.
-func (a *App) SetObjectPanelLayout(dockedRightWidth, dockedBottomHeight, floatingWidth, floatingHeight, floatingX, floatingY int) error {
-	_, err := a.UpdateAppPreferences(UpdateAppPreferencesRequest{Changes: []AppPreferenceChange{
+func (p *PreferencesService) SetObjectPanelLayout(dockedRightWidth, dockedBottomHeight, floatingWidth, floatingHeight, floatingX, floatingY int) error {
+	_, err := p.UpdateAppPreferences(UpdateAppPreferencesRequest{Changes: []AppPreferenceChange{
 		{Key: appPreferenceObjectPanelDockedRightWidth, Value: dockedRightWidth},
 		{Key: appPreferenceObjectPanelDockedBottomHeight, Value: dockedBottomHeight},
 		{Key: appPreferenceObjectPanelFloatingWidth, Value: floatingWidth},
@@ -1368,8 +1222,8 @@ func (a *App) SetObjectPanelLayout(dockedRightWidth, dockedBottomHeight, floatin
 	return err
 }
 
-func (a *App) GetAppearanceModeInfo() (*AppearanceModeInfo, error) {
-	settings, err := a.GetAppSettings()
+func (p *PreferencesService) GetAppearanceModeInfo() (*AppearanceModeInfo, error) {
+	settings, err := p.GetAppSettings()
 	if err != nil {
 		return nil, err
 	}
@@ -1380,39 +1234,9 @@ func (a *App) GetAppearanceModeInfo() (*AppearanceModeInfo, error) {
 	}, nil
 }
 
-func (a *App) ShowSettings() {
-	maxRetries := config.AppMenuTriggerMaxRetries
-	for i := 0; i < maxRetries; i++ {
-		if a.runtimeAvailable() {
-			a.logger.Debug("Settings menu triggered", logsources.App)
-			a.emitCurrentWindowEvent("open-settings")
-			return
-		}
-		if i < maxRetries-1 {
-			time.Sleep(config.AppMenuTriggerRetryDelay)
-		}
-	}
-	a.logger.Warn("Cannot show settings: application context is nil after retries", logsources.App)
-}
-
-func (a *App) ShowAbout() {
-	maxRetries := config.AppMenuTriggerMaxRetries
-	for i := 0; i < maxRetries; i++ {
-		if a.runtimeAvailable() {
-			a.logger.Debug("About menu triggered", logsources.App)
-			a.emitCurrentWindowEvent("open-about")
-			return
-		}
-		if i < maxRetries-1 {
-			time.Sleep(config.AppMenuTriggerRetryDelay)
-		}
-	}
-	a.logger.Warn("Cannot show about: application context is nil after retries", logsources.App)
-}
-
 // GetZoomLevel returns the persisted zoom level (50-200), defaulting to 100.
-func (a *App) GetZoomLevel() int {
-	settings, err := a.loadSettingsFile()
+func (p *PreferencesService) GetZoomLevel() int {
+	settings, err := p.loadSettingsFile()
 	if err != nil {
 		return 100
 	}
@@ -1425,7 +1249,7 @@ func (a *App) GetZoomLevel() int {
 }
 
 // SetZoomLevel persists the zoom level (clamped to 50-200).
-func (a *App) SetZoomLevel(level int) error {
+func (p *PreferencesService) SetZoomLevel(level int) error {
 	// Clamp to valid range
 	if level < 50 {
 		level = 50
@@ -1434,18 +1258,18 @@ func (a *App) SetZoomLevel(level int) error {
 		level = 200
 	}
 
-	settings, err := a.loadSettingsFile()
+	settings, err := p.loadSettingsFile()
 	if err != nil {
 		return err
 	}
 
 	settings.UI.ZoomLevel = level
-	return a.saveSettingsFile(settings)
+	return p.saveSettingsFile(settings)
 }
 
 // SetPaletteTint persists the palette hue (0-360), saturation (0-100), and brightness (-50 to +50) preferences
 // for the specified resolved appearance mode ("light" or "dark"). Values are clamped to their valid ranges.
-func (a *App) SetPaletteTint(mode string, hue, saturation, brightness int) error {
+func (p *PreferencesService) SetPaletteTint(mode string, hue, saturation, brightness int) error {
 	if mode != "light" && mode != "dark" {
 		return fmt.Errorf("invalid palette mode: %s", mode)
 	}
@@ -1457,13 +1281,13 @@ func (a *App) SetPaletteTint(mode string, hue, saturation, brightness int) error
 		saturationKey = appPreferencePaletteSaturationLight
 		brightnessKey = appPreferencePaletteBrightnessLight
 	}
-	_, err := a.UpdateAppPreferences(UpdateAppPreferencesRequest{Changes: []AppPreferenceChange{
+	_, err := p.UpdateAppPreferences(UpdateAppPreferencesRequest{Changes: []AppPreferenceChange{
 		{Key: hueKey, Value: hue},
 		{Key: saturationKey, Value: saturation},
 		{Key: brightnessKey, Value: brightness},
 	}})
 	if err == nil {
-		a.logger.Info(
+		p.logger.Info(
 			fmt.Sprintf(
 				"Palette tint (%s) changed to hue=%d saturation=%d brightness=%d",
 				mode,
@@ -1482,7 +1306,7 @@ var validHexColorRe = regexp.MustCompile(`^#[0-9a-fA-F]{6}$`)
 
 // SetLinkColor persists a custom link color for the specified resolved appearance mode ("light" or "dark").
 // The color must be a 7-char hex string (#rrggbb) or an empty string to reset to default.
-func (a *App) SetLinkColor(mode, color string) error {
+func (p *PreferencesService) SetLinkColor(mode, color string) error {
 	if mode != "light" && mode != "dark" {
 		return fmt.Errorf("invalid link color mode: %s", mode)
 	}
@@ -1490,19 +1314,19 @@ func (a *App) SetLinkColor(mode, color string) error {
 	if mode == "light" {
 		key = appPreferenceLinkColorLight
 	}
-	_, err := a.UpdateAppPreferences(UpdateAppPreferencesRequest{Changes: []AppPreferenceChange{{Key: key, Value: color}}})
+	_, err := p.UpdateAppPreferences(UpdateAppPreferencesRequest{Changes: []AppPreferenceChange{{Key: key, Value: color}}})
 	if err != nil && color != "" && !validHexColorRe.MatchString(color) {
 		return fmt.Errorf("invalid link color format: %s (expected #rrggbb)", color)
 	}
 	if err == nil {
-		a.logger.Info(fmt.Sprintf("Link color (%s) changed to: %s", mode, color), logsources.Settings)
+		p.logger.Info(fmt.Sprintf("Link color (%s) changed to: %s", mode, color), logsources.Settings)
 	}
 	return err
 }
 
 // SetAccentColor persists a custom accent color for the specified resolved appearance mode ("light" or "dark").
 // The color must be a 7-char hex string (#rrggbb) or an empty string to reset to default.
-func (a *App) SetAccentColor(mode, color string) error {
+func (p *PreferencesService) SetAccentColor(mode, color string) error {
 	if mode != "light" && mode != "dark" {
 		return fmt.Errorf("invalid accent color mode: %s", mode)
 	}
@@ -1510,12 +1334,12 @@ func (a *App) SetAccentColor(mode, color string) error {
 	if mode == "light" {
 		key = appPreferenceAccentColorLight
 	}
-	_, err := a.UpdateAppPreferences(UpdateAppPreferencesRequest{Changes: []AppPreferenceChange{{Key: key, Value: color}}})
+	_, err := p.UpdateAppPreferences(UpdateAppPreferencesRequest{Changes: []AppPreferenceChange{{Key: key, Value: color}}})
 	if err != nil && color != "" && !validHexColorRe.MatchString(color) {
 		return fmt.Errorf("invalid accent color format: %s (expected #rrggbb)", color)
 	}
 	if err == nil {
-		a.logger.Info(fmt.Sprintf("Accent color (%s) changed to: %s", mode, color), logsources.Settings)
+		p.logger.Info(fmt.Sprintf("Accent color (%s) changed to: %s", mode, color), logsources.Settings)
 	}
 	return err
 }
@@ -1523,15 +1347,15 @@ func (a *App) SetAccentColor(mode, color string) error {
 // syncThemesCacheLocked updates the in-memory appSettings cache with the current
 // themes list so that saveAppSettings (used by SetPaletteTint, SetAccentColor,
 // etc.) does not overwrite disk-persisted themes with stale cached data.
-func (a *App) syncThemesCacheLocked(themes []Theme) {
-	if a.appSettings != nil {
-		a.appSettings.Themes = append([]Theme(nil), themes...)
+func (p *PreferencesService) syncThemesCacheLocked(themes []Theme) {
+	if p.appSettings != nil {
+		p.appSettings.Themes = append([]Theme(nil), themes...)
 	}
 }
 
 // GetThemes returns the saved theme library.
-func (a *App) GetThemes() ([]Theme, error) {
-	settings, err := a.loadSettingsFile()
+func (p *PreferencesService) GetThemes() ([]Theme, error) {
+	settings, err := p.loadSettingsFile()
 	if err != nil {
 		return nil, fmt.Errorf("loading settings: %w", err)
 	}
@@ -1540,7 +1364,7 @@ func (a *App) GetThemes() ([]Theme, error) {
 
 // ValidateThemeClusterPattern checks whether a theme cluster pattern can be
 // parsed by the app glob matcher without mutating saved settings.
-func (a *App) ValidateThemeClusterPattern(pattern string) ThemeClusterPatternValidationResult {
+func (p *PreferencesService) ValidateThemeClusterPattern(pattern string) ThemeClusterPatternValidationResult {
 	if err := validateThemeClusterPattern(pattern); err != nil {
 		return ThemeClusterPatternValidationResult{
 			Valid:   false,
@@ -1552,7 +1376,7 @@ func (a *App) ValidateThemeClusterPattern(pattern string) ThemeClusterPatternVal
 
 // SaveTheme creates or updates a theme in the library. If a theme with the
 // same ID exists it is updated in place; otherwise the theme is appended.
-func (a *App) SaveTheme(theme Theme) error {
+func (p *PreferencesService) SaveTheme(theme Theme) error {
 	if theme.ID == "" {
 		return fmt.Errorf("theme ID is required")
 	}
@@ -1569,10 +1393,10 @@ func (a *App) SaveTheme(theme Theme) error {
 		}
 	}
 
-	a.settingsMu.Lock()
-	defer a.settingsMu.Unlock()
+	p.settingsMu.Lock()
+	defer p.settingsMu.Unlock()
 
-	settings, err := a.loadSettingsFile()
+	settings, err := p.loadSettingsFile()
 	if err != nil {
 		return fmt.Errorf("loading settings: %w", err)
 	}
@@ -1598,23 +1422,23 @@ func (a *App) SaveTheme(theme Theme) error {
 	}
 	settings.Preferences.Themes = normalizeThemes(settings.Preferences.Themes, defaultTheme())
 
-	if err := a.saveSettingsFile(settings); err != nil {
+	if err := p.saveSettingsFile(settings); err != nil {
 		return err
 	}
-	a.syncThemesCacheLocked(settings.Preferences.Themes)
+	p.syncThemesCacheLocked(settings.Preferences.Themes)
 	return nil
 }
 
 // DeleteTheme removes a theme from the library by ID.
-func (a *App) DeleteTheme(id string) error {
+func (p *PreferencesService) DeleteTheme(id string) error {
 	if id == defaultThemeID {
 		return fmt.Errorf("default theme cannot be deleted")
 	}
 
-	a.settingsMu.Lock()
-	defer a.settingsMu.Unlock()
+	p.settingsMu.Lock()
+	defer p.settingsMu.Unlock()
 
-	settings, err := a.loadSettingsFile()
+	settings, err := p.loadSettingsFile()
 	if err != nil {
 		return fmt.Errorf("loading settings: %w", err)
 	}
@@ -1636,20 +1460,20 @@ func (a *App) DeleteTheme(id string) error {
 	)
 	settings.Preferences.Themes = normalizeThemes(settings.Preferences.Themes, defaultTheme())
 
-	if err := a.saveSettingsFile(settings); err != nil {
+	if err := p.saveSettingsFile(settings); err != nil {
 		return err
 	}
-	a.syncThemesCacheLocked(settings.Preferences.Themes)
+	p.syncThemesCacheLocked(settings.Preferences.Themes)
 	return nil
 }
 
 // ReorderThemes sets the theme ordering. The ids slice must contain exactly the
 // same IDs as the current theme list (first-match priority depends on order).
-func (a *App) ReorderThemes(ids []string) error {
-	a.settingsMu.Lock()
-	defer a.settingsMu.Unlock()
+func (p *PreferencesService) ReorderThemes(ids []string) error {
+	p.settingsMu.Lock()
+	defer p.settingsMu.Unlock()
 
-	settings, err := a.loadSettingsFile()
+	settings, err := p.loadSettingsFile()
 	if err != nil {
 		return fmt.Errorf("loading settings: %w", err)
 	}
@@ -1676,21 +1500,21 @@ func (a *App) ReorderThemes(ids []string) error {
 	}
 
 	settings.Preferences.Themes = normalizeThemes(reordered, defaultTheme())
-	if err := a.saveSettingsFile(settings); err != nil {
+	if err := p.saveSettingsFile(settings); err != nil {
 		return err
 	}
-	a.syncThemesCacheLocked(settings.Preferences.Themes)
+	p.syncThemesCacheLocked(settings.Preferences.Themes)
 	return nil
 }
 
 // ApplyTheme loads a saved theme by ID and copies its palette values into the
 // active settings fields, then persists. The frontend re-reads settings to
 // pick up the changes.
-func (a *App) ApplyTheme(id string) error {
-	a.settingsMu.Lock()
-	defer a.settingsMu.Unlock()
+func (p *PreferencesService) ApplyTheme(id string) error {
+	p.settingsMu.Lock()
+	defer p.settingsMu.Unlock()
 
-	settings, err := a.loadSettingsFile()
+	settings, err := p.loadSettingsFile()
 	if err != nil {
 		return fmt.Errorf("loading settings: %w", err)
 	}
@@ -1718,23 +1542,23 @@ func (a *App) ApplyTheme(id string) error {
 	settings.Preferences.LinkColorLight = theme.LinkColorLight
 	settings.Preferences.LinkColorDark = theme.LinkColorDark
 
-	if err := a.saveSettingsFile(settings); err != nil {
+	if err := p.saveSettingsFile(settings); err != nil {
 		return err
 	}
 
 	// Sync the in-memory cache so saveAppSettings doesn't overwrite with stale data.
-	if a.appSettings != nil {
-		a.appSettings.PaletteHueLight = theme.PaletteHueLight
-		a.appSettings.PaletteSaturationLight = theme.PaletteSaturationLight
-		a.appSettings.PaletteBrightnessLight = theme.PaletteBrightnessLight
-		a.appSettings.PaletteHueDark = theme.PaletteHueDark
-		a.appSettings.PaletteSaturationDark = theme.PaletteSaturationDark
-		a.appSettings.PaletteBrightnessDark = theme.PaletteBrightnessDark
-		a.appSettings.AccentColorLight = theme.AccentColorLight
-		a.appSettings.AccentColorDark = theme.AccentColorDark
-		a.appSettings.LinkColorLight = theme.LinkColorLight
-		a.appSettings.LinkColorDark = theme.LinkColorDark
-		a.appSettings.Themes = append([]Theme(nil), settings.Preferences.Themes...)
+	if p.appSettings != nil {
+		p.appSettings.PaletteHueLight = theme.PaletteHueLight
+		p.appSettings.PaletteSaturationLight = theme.PaletteSaturationLight
+		p.appSettings.PaletteBrightnessLight = theme.PaletteBrightnessLight
+		p.appSettings.PaletteHueDark = theme.PaletteHueDark
+		p.appSettings.PaletteSaturationDark = theme.PaletteSaturationDark
+		p.appSettings.PaletteBrightnessDark = theme.PaletteBrightnessDark
+		p.appSettings.AccentColorLight = theme.AccentColorLight
+		p.appSettings.AccentColorDark = theme.AccentColorDark
+		p.appSettings.LinkColorLight = theme.LinkColorLight
+		p.appSettings.LinkColorDark = theme.LinkColorDark
+		p.appSettings.Themes = append([]Theme(nil), settings.Preferences.Themes...)
 	}
 	return nil
 }
@@ -1744,8 +1568,8 @@ func (a *App) ApplyTheme(id string) error {
 // ? matches any single character, and character classes such as [a-z] are
 // supported. An empty ClusterPattern is treated as "*" and matches every
 // context name. Returns nil if no theme matches.
-func (a *App) MatchThemeForCluster(contextName string) (*Theme, error) {
-	settings, err := a.loadSettingsFile()
+func (p *PreferencesService) MatchThemeForCluster(contextName string) (*Theme, error) {
+	settings, err := p.loadSettingsFile()
 	if err != nil {
 		return nil, fmt.Errorf("loading settings: %w", err)
 	}

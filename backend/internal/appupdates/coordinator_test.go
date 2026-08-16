@@ -17,29 +17,31 @@ import (
 )
 
 type fakeUpdater struct {
-	initConfigs              []updater.Config
-	checkCalls               int
-	downloadCalls            int
-	restartCalls             int
-	release                  *updater.Release
-	state                    updater.State
-	checkStarted             chan struct{}
-	allowCheck               chan struct{}
-	checkStartOnce           sync.Once
-	waitForCheckCancellation bool
-	checkCanceled            chan struct{}
-	downloadStarted          chan struct{}
-	allowDownload            chan struct{}
-	downloadStartOnce        sync.Once
-	restartStarted           chan struct{}
-	allowRestart             chan struct{}
-	restartStartOnce         sync.Once
-	checkErr                 error
-	downloadErr              error
-	restartErr               error
-	downloadedPath           string
-	skippedVersions          []string
-	operationOrder           *[]string
+	initConfigs                 []updater.Config
+	checkCalls                  int
+	downloadCalls               int
+	restartCalls                int
+	release                     *updater.Release
+	state                       updater.State
+	checkStarted                chan struct{}
+	allowCheck                  chan struct{}
+	checkStartOnce              sync.Once
+	waitForCheckCancellation    bool
+	checkCanceled               chan struct{}
+	downloadStarted             chan struct{}
+	allowDownload               chan struct{}
+	downloadStartOnce           sync.Once
+	waitForDownloadCancellation bool
+	downloadCanceled            chan struct{}
+	restartStarted              chan struct{}
+	allowRestart                chan struct{}
+	restartStartOnce            sync.Once
+	checkErr                    error
+	downloadErr                 error
+	restartErr                  error
+	downloadedPath              string
+	skippedVersions             []string
+	operationOrder              *[]string
 }
 
 type fakeUpdateState struct {
@@ -55,6 +57,21 @@ type fakeUpdateState struct {
 	skipErr        error
 	cleanupCalls   int
 	operationOrder *[]string
+	resetErr       error
+	resetCalls     int
+}
+
+func (state *fakeUpdateState) Reset() error {
+	state.resetCalls++
+	if state.resetErr != nil {
+		return state.resetErr
+	}
+	if state.attempt != nil {
+		return errors.New("active application attempt")
+	}
+	state.prepared = nil
+	state.skipped = ""
+	return nil
 }
 
 func signedRelease(version, channel, platform, architecture string) *updater.Release {
@@ -161,6 +178,108 @@ func TestConcurrentCheckReportsExistingFlowWithoutQueuingAnotherCheck(t *testing
 	require.Equal(t, 1, client.checkCalls)
 }
 
+func TestResetCancelsAndQuiescesActiveCheckBeforeClearingState(t *testing.T) {
+	t.Parallel()
+
+	client := &fakeUpdater{
+		release:                  signedRelease("2.0.0", "stable", "darwin", "arm64"),
+		checkStarted:             make(chan struct{}),
+		allowCheck:               make(chan struct{}),
+		waitForCheckCancellation: true,
+		checkCanceled:            make(chan struct{}),
+	}
+	state := &fakeUpdateState{skipped: "2.0.0"}
+	coordinator := appupdates.New(appupdates.Dependencies{
+		Client: client, Provider: fakeProvider{}, Eligibility: enabledBuild(),
+		PublicKey: testPublicKey(), Platform: "darwin", Architecture: "arm64",
+		TempRoot: "/owned/temp/root", Scheduler: &fakeScheduler{}, UpdateState: state,
+		SkippedVersion: "2.0.0",
+	})
+	coordinator.RuntimeReady()
+	checkDone := make(chan error, 1)
+	go func() {
+		_, err := coordinator.Check(context.Background())
+		checkDone <- err
+	}()
+	<-client.checkStarted
+
+	require.NoError(t, coordinator.Reset(context.Background()))
+	require.ErrorIs(t, <-checkDone, context.Canceled)
+	<-client.checkCanceled
+	require.Equal(t, 1, state.resetCalls)
+	require.Empty(t, state.skipped)
+	require.Equal(t, appupdates.StatusIdle, coordinator.Snapshot().Status)
+}
+
+func TestResetRejectsActiveRestartWithoutDeletingRecoveryState(t *testing.T) {
+	t.Parallel()
+
+	client := &fakeUpdater{
+		release:        signedRelease("2.0.0", "stable", "darwin", "arm64"),
+		restartStarted: make(chan struct{}),
+		allowRestart:   make(chan struct{}),
+	}
+	state := &fakeUpdateState{}
+	coordinator := appupdates.New(appupdates.Dependencies{
+		Client: client, Provider: fakeProvider{}, Eligibility: enabledBuild(),
+		PublicKey: testPublicKey(), Platform: "darwin", Architecture: "arm64",
+		TempRoot: "/owned/temp/root", Scheduler: &fakeScheduler{}, UpdateState: state,
+	})
+	coordinator.RuntimeReady()
+	_, err := coordinator.Check(context.Background())
+	require.NoError(t, err)
+	_, err = coordinator.Download(context.Background(), "2.0.0")
+	require.NoError(t, err)
+	restartDone := make(chan error, 1)
+	go func() {
+		_, restartErr := coordinator.Restart(context.Background())
+		restartDone <- restartErr
+	}()
+	<-client.restartStarted
+
+	err = coordinator.Reset(context.Background())
+	require.ErrorContains(t, err, "application/restart attempt")
+	require.Zero(t, state.resetCalls)
+	require.NotNil(t, state.attempt)
+
+	close(client.allowRestart)
+	require.NoError(t, <-restartDone)
+}
+
+func TestResetCancelsAndQuiescesActiveDownloadBeforeClearingState(t *testing.T) {
+	t.Parallel()
+
+	client := &fakeUpdater{
+		release:                     signedRelease("2.0.0", "stable", "darwin", "arm64"),
+		downloadStarted:             make(chan struct{}),
+		allowDownload:               make(chan struct{}),
+		waitForDownloadCancellation: true,
+		downloadCanceled:            make(chan struct{}),
+	}
+	state := &fakeUpdateState{}
+	coordinator := appupdates.New(appupdates.Dependencies{
+		Client: client, Provider: fakeProvider{}, Eligibility: enabledBuild(),
+		PublicKey: testPublicKey(), Platform: "darwin", Architecture: "arm64",
+		TempRoot: "/owned/temp/root", Scheduler: &fakeScheduler{}, UpdateState: state,
+	})
+	coordinator.RuntimeReady()
+	_, err := coordinator.Check(context.Background())
+	require.NoError(t, err)
+	downloadDone := make(chan error, 1)
+	go func() {
+		_, downloadErr := coordinator.Download(context.Background(), "2.0.0")
+		downloadDone <- downloadErr
+	}()
+	<-client.downloadStarted
+
+	require.NoError(t, coordinator.Reset(context.Background()))
+	require.ErrorIs(t, <-downloadDone, context.Canceled)
+	<-client.downloadCanceled
+	require.Equal(t, 1, state.resetCalls)
+	require.Nil(t, state.prepared)
+	require.Equal(t, appupdates.StatusIdle, coordinator.Snapshot().Status)
+}
+
 func TestCheckDuringDownloadReportsActiveFlowWithoutQueuingCheck(t *testing.T) {
 	t.Parallel()
 
@@ -215,13 +334,24 @@ func TestCheckDuringDownloadReportsActiveFlowWithoutQueuingCheck(t *testing.T) {
 	require.Equal(t, 1, client.downloadCalls)
 }
 
-func (client *fakeUpdater) DownloadAndInstall(context.Context) error {
+func (client *fakeUpdater) DownloadAndInstall(ctx context.Context) error {
 	client.downloadCalls++
 	if client.downloadStarted != nil {
 		client.downloadStartOnce.Do(func() { close(client.downloadStarted) })
 	}
 	if client.allowDownload != nil {
-		<-client.allowDownload
+		if client.waitForDownloadCancellation {
+			select {
+			case <-ctx.Done():
+				if client.downloadCanceled != nil {
+					close(client.downloadCanceled)
+				}
+				return ctx.Err()
+			case <-client.allowDownload:
+			}
+		} else {
+			<-client.allowDownload
+		}
 	}
 	if client.downloadErr != nil {
 		client.state = updater.StateError

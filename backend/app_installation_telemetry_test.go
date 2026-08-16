@@ -103,20 +103,20 @@ func TestAppCreatesAndPersistsAnonymizedID(t *testing.T) {
 	setTestConfigEnv(t)
 	app := newTestAppWithDefaults(t)
 
-	settings, err := app.GetAppSettings()
+	settings, err := app.preferences.GetAppSettings()
 	require.NoError(t, err)
 	require.Regexp(t, regexp.MustCompile(`^[0-9a-f]{8}-[0-9a-f]{4}-4[0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$`), settings.AnonymizedID)
 
-	saved, err := app.loadSettingsFile()
+	saved, err := app.preferences.loadSettingsFile()
 	require.NoError(t, err)
 	require.Equal(t, settings.AnonymizedID, saved.Telemetry.AnonymizedID)
 
 	freshApp := newTestAppWithDefaults(t)
-	freshSettings, err := freshApp.GetAppSettings()
+	freshSettings, err := freshApp.preferences.GetAppSettings()
 	require.NoError(t, err)
 	require.Equal(t, settings.AnonymizedID, freshSettings.AnonymizedID)
 
-	schema, err := freshApp.GetAppSettingsSchema()
+	schema, err := freshApp.preferences.GetAppSettingsSchema()
 	require.NoError(t, err)
 	require.Equal(t, settings.AnonymizedID, schema.AnonymizedID)
 }
@@ -152,14 +152,14 @@ func TestInitializeErrorReportingDoesNotSynchronouslyEmitInstallationMetric(t *t
 	reporter := newRecordingInstallationReporter(true)
 	app := NewApp(nil, reporter)
 
-	require.NoError(t, InitializeErrorReporting(app))
-	require.NoError(t, InitializeErrorReporting(app))
+	require.NoError(t, InitializeErrorReporting(app.preferences, app.errorReporting))
+	require.NoError(t, InitializeErrorReporting(app.preferences, app.errorReporting))
 
 	reporter.metricMu.Lock()
 	require.Empty(t, reporter.metrics)
 	reporter.metricMu.Unlock()
 
-	saved, err := app.loadSettingsFile()
+	saved, err := app.preferences.loadSettingsFile()
 	require.NoError(t, err)
 	require.False(t, saved.Telemetry.InstallationMetricReported)
 }
@@ -168,10 +168,10 @@ func TestPostStartupInstallationRegistrationEmitsMetricOnce(t *testing.T) {
 	setTestConfigEnv(t)
 	reporter := newRecordingInstallationReporter(true)
 	app := NewApp(nil, reporter)
-	require.NoError(t, InitializeErrorReporting(app))
+	require.NoError(t, InitializeErrorReporting(app.preferences, app.errorReporting))
 
-	app.reportInstallationMetricIfNeeded(context.Background())
-	app.reportInstallationMetricIfNeeded(context.Background())
+	app.errorReporting.reportInstallationMetricIfNeeded(context.Background())
+	app.errorReporting.reportInstallationMetricIfNeeded(context.Background())
 
 	reporter.metricMu.Lock()
 	require.Equal(t, []recordedCountMetric{{
@@ -186,7 +186,7 @@ func TestPostStartupInstallationRegistrationEmitsMetricOnce(t *testing.T) {
 	}}, reporter.metrics)
 	reporter.metricMu.Unlock()
 
-	saved, err := app.loadSettingsFile()
+	saved, err := app.preferences.loadSettingsFile()
 	require.NoError(t, err)
 	require.True(t, saved.Telemetry.InstallationMetricReported)
 }
@@ -195,18 +195,18 @@ func TestInstallationMetricStaysPendingWhileReportingIsDisabled(t *testing.T) {
 	setTestConfigEnv(t)
 	reporter := newRecordingInstallationReporter(true)
 	app := NewApp(nil, reporter)
-	app.appSettings = getDefaultAppSettings()
-	app.appSettings.ErrorReportingEnabled = false
-	require.NoError(t, app.saveAppSettings())
-	app.appSettings = nil
+	app.preferences.appSettings = getDefaultAppSettings()
+	app.preferences.appSettings.ErrorReportingEnabled = false
+	require.NoError(t, app.preferences.saveAppSettings())
+	app.preferences.appSettings = nil
 
-	require.NoError(t, InitializeErrorReporting(app))
-	app.reportInstallationMetricIfNeeded(context.Background())
+	require.NoError(t, InitializeErrorReporting(app.preferences, app.errorReporting))
+	app.errorReporting.reportInstallationMetricIfNeeded(context.Background())
 
 	reporter.metricMu.Lock()
 	require.Empty(t, reporter.metrics)
 	reporter.metricMu.Unlock()
-	saved, err := app.loadSettingsFile()
+	saved, err := app.preferences.loadSettingsFile()
 	require.NoError(t, err)
 	require.False(t, saved.Telemetry.InstallationMetricReported)
 }
@@ -216,14 +216,14 @@ func TestInstallationMetricRetriesAfterFlushFailure(t *testing.T) {
 	reporter := newRecordingInstallationReporter(false, true)
 	app := NewApp(nil, reporter)
 
-	require.NoError(t, InitializeErrorReporting(app))
-	app.reportInstallationMetricIfNeeded(context.Background())
-	failed, err := app.loadSettingsFile()
+	require.NoError(t, InitializeErrorReporting(app.preferences, app.errorReporting))
+	app.errorReporting.reportInstallationMetricIfNeeded(context.Background())
+	failed, err := app.preferences.loadSettingsFile()
 	require.NoError(t, err)
 	require.False(t, failed.Telemetry.InstallationMetricReported)
 
-	app.reportInstallationMetricIfNeeded(context.Background())
-	succeeded, err := app.loadSettingsFile()
+	app.errorReporting.reportInstallationMetricIfNeeded(context.Background())
+	succeeded, err := app.preferences.loadSettingsFile()
 	require.NoError(t, err)
 	require.True(t, succeeded.Telemetry.InstallationMetricReported)
 
@@ -236,14 +236,14 @@ func TestEnablingErrorReportingEmitsPendingInstallationMetric(t *testing.T) {
 	setTestConfigEnv(t)
 	reporter := newRecordingInstallationReporter(true)
 	app := NewApp(nil, reporter)
-	app.appSettings = getDefaultAppSettings()
-	app.appSettings.ErrorReportingEnabled = false
-	require.NoError(t, app.saveAppSettings())
-	app.appSettings = nil
-	require.NoError(t, InitializeErrorReporting(app))
+	app.preferences.appSettings = getDefaultAppSettings()
+	app.preferences.appSettings.ErrorReportingEnabled = false
+	require.NoError(t, app.preferences.saveAppSettings())
+	app.preferences.appSettings = nil
+	require.NoError(t, InitializeErrorReporting(app.preferences, app.errorReporting))
 	setTestAppRuntimeReady(t, app, context.Background())
 
-	_, err := app.UpdateAppPreferences(UpdateAppPreferencesRequest{Changes: []AppPreferenceChange{{
+	_, err := app.preferences.UpdateAppPreferences(UpdateAppPreferencesRequest{Changes: []AppPreferenceChange{{
 		Key:   appPreferenceErrorReportingEnabled,
 		Value: true,
 	}}})
@@ -264,11 +264,11 @@ func TestScheduledInstallationRegistrationDoesNotBlockAndStopsWithContext(t *tes
 		finished:               make(chan struct{}),
 	}
 	app := NewApp(nil, reporter)
-	require.NoError(t, InitializeErrorReporting(app))
+	require.NoError(t, reporter.SetEnabled(true))
 	ctx, cancel := context.WithCancel(context.Background())
 	returned := make(chan struct{})
 	go func() {
-		app.scheduleInstallationMetricRegistration(ctx)
+		app.errorReporting.scheduleInstallationMetricRegistration(ctx)
 		close(returned)
 	}()
 
@@ -301,13 +301,15 @@ func TestClearAppStateWaitsForInstallationRegistrationBeforeDeletingSettings(t *
 		finished:               make(chan struct{}),
 	}
 	app := NewApp(nil, reporter)
-	require.NoError(t, InitializeErrorReporting(app))
-	settingsPath, err := app.getSettingsFilePath()
+	setTestAppRuntimeReady(t, app, context.Background())
+	require.NoError(t, reporter.SetEnabled(true))
+	ensurePreferencesLoaded(t, app)
+	settingsPath, err := app.preferences.getSettingsFilePath()
 	require.NoError(t, err)
 
 	registrationDone := make(chan struct{})
 	go func() {
-		app.reportInstallationMetricIfNeeded(context.Background())
+		app.errorReporting.reportInstallationMetricIfNeeded(context.Background())
 		close(registrationDone)
 	}()
 	select {
@@ -318,7 +320,7 @@ func TestClearAppStateWaitsForInstallationRegistrationBeforeDeletingSettings(t *
 
 	clearDone := make(chan error, 1)
 	go func() {
-		clearDone <- app.ClearAppState()
+		clearDone <- app.dataManagement.ClearAppState()
 	}()
 	returnedBeforeRegistration := false
 	select {
@@ -354,15 +356,15 @@ func TestClearAppStateWaitsForInstallationRegistrationBeforeDeletingSettings(t *
 
 func TestInstallationTelemetryWarningIsLocalOnly(t *testing.T) {
 	app := newTestAppWithDefaults(t)
-	app.warnInstallationTelemetry("Could not save acknowledgement", errors.New("disk full"))
+	app.errorReporting.warnInstallationTelemetry("Could not save acknowledgement", errors.New("disk full"))
 
-	entries := app.logger.GetEntries()
+	entries := app.appLogs.logger.GetEntries()
 	require.Len(t, entries, 1)
 	require.Equal(t, "WARN", entries[0].Level)
 	require.Equal(t, "Settings", entries[0].Source)
 	require.Equal(t, "Could not save acknowledgement: disk full", entries[0].Message)
 
-	(&App{}).warnInstallationTelemetry("ignored", errors.New("no logger"))
+	(&ErrorReportingService{}).warnInstallationTelemetry("ignored", errors.New("no logger"))
 }
 
 var _ sentryreporting.MetricReporter = (*recordingInstallationReporter)(nil)

@@ -3,7 +3,6 @@ package backend
 import (
 	"context"
 	"fmt"
-	"slices"
 	"strings"
 
 	"k8s.io/apimachinery/pkg/util/validation"
@@ -23,13 +22,7 @@ func (a *App) GetClusterAllowedNamespaces(clusterID string) ([]string, error) {
 	if clusterID == "" {
 		return nil, fmt.Errorf("clusterID is required")
 	}
-	a.settingsMu.Lock()
-	defer a.settingsMu.Unlock()
-	settings, err := a.loadSettingsFile()
-	if err != nil {
-		return nil, err
-	}
-	return append([]string(nil), settings.Clusters[clusterID].AllowedNamespaces...), nil
+	return a.preferences.clusterAllowedNamespaces(clusterID)
 }
 
 // SetClusterAllowedNamespaces validates, normalizes, and persists the
@@ -47,31 +40,11 @@ func (a *App) SetClusterAllowedNamespaces(clusterID string, namespaces []string)
 		return nil, err
 	}
 
-	a.settingsMu.Lock()
-	settings, err := a.loadSettingsFile()
+	previous, err := a.preferences.saveClusterAllowedNamespaces(clusterID, normalized)
 	if err != nil {
-		a.settingsMu.Unlock()
 		return nil, err
 	}
-	previous := settings.Clusters[clusterID].AllowedNamespaces
-	section := settings.Clusters[clusterID]
 	scopeChanged := !equalStringSets(previous, normalized)
-	if !slices.Equal(previous, normalized) {
-		section.AllowedNamespaces = normalized
-		if clusterSettingsSectionEmpty(section) {
-			delete(settings.Clusters, clusterID)
-		} else {
-			if settings.Clusters == nil {
-				settings.Clusters = map[string]settingsClusterSection{}
-			}
-			settings.Clusters[clusterID] = section
-		}
-		if err := a.saveSettingsFile(settings); err != nil {
-			a.settingsMu.Unlock()
-			return nil, err
-		}
-	}
-	a.settingsMu.Unlock()
 
 	// Persist BEFORE rebuilding so the rebuilt subsystem reads the new scope.
 	if scopeChanged {
@@ -93,7 +66,7 @@ func clusterSettingsSectionEmpty(section settingsClusterSection) bool {
 func (a *App) allowedNamespacesForCluster(clusterID string) []string {
 	namespaces, err := a.GetClusterAllowedNamespaces(clusterID)
 	if err != nil {
-		a.logger.Warn(
+		a.appLogs.logger.Warn(
 			fmt.Sprintf("Could not read allowed namespaces for cluster %s (running cluster-wide): %v", clusterID, err),
 			logsources.Settings, clusterID, clusterID,
 		)

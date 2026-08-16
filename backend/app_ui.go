@@ -7,70 +7,70 @@ import (
 	"github.com/luxury-yacht/app/backend/internal/logsources"
 )
 
-func (a *App) ToggleDiagnosticsPanel() error {
-	if !a.runtimeAvailable() {
+func (s *DesktopShell) ToggleDiagnosticsPanel() error {
+	if !s.runtimeAvailable() {
 		return fmt.Errorf("application context not available")
 	}
 
-	a.diagnosticsPanelVisible = !a.diagnosticsPanelVisible
-	a.logger.Info("Diagnostics panel toggled", logsources.App)
-	a.emitCurrentWindowEvent("toggle-diagnostics")
-	a.UpdateMenu()
+	s.diagnosticsPanelVisible = !s.diagnosticsPanelVisible
+	s.logger.Info("Diagnostics panel toggled", logsources.App)
+	s.emitCurrentWindowEvent("toggle-diagnostics")
+	s.UpdateMenu()
 	return nil
 }
 
-func (a *App) ToggleAppLogsPanel() error {
-	if !a.runtimeAvailable() {
+func (s *DesktopShell) ToggleAppLogsPanel() error {
+	if !s.runtimeAvailable() {
 		return fmt.Errorf("application context not available")
 	}
 
-	a.appLogsPanelVisible = !a.appLogsPanelVisible
-	a.logger.Info("Application Logs Panel toggled", logsources.App)
-	a.emitCurrentWindowEvent("toggle-app-logs-panel")
-	a.UpdateMenu()
+	s.appLogsPanelVisible = !s.appLogsPanelVisible
+	s.logger.Info("Application Logs Panel toggled", logsources.App)
+	s.emitCurrentWindowEvent("toggle-app-logs-panel")
+	s.UpdateMenu()
 	return nil
 }
 
-func (a *App) ToggleSidebar() error {
-	if !a.runtimeAvailable() {
+func (s *DesktopShell) ToggleSidebar() error {
+	if !s.runtimeAvailable() {
 		return fmt.Errorf("application context not available")
 	}
 
-	a.sidebarVisible = !a.sidebarVisible
-	a.emitCurrentWindowEvent("toggle-sidebar")
-	a.UpdateMenu()
+	s.sidebarVisible = !s.sidebarVisible
+	s.emitCurrentWindowEvent("toggle-sidebar")
+	s.UpdateMenu()
 	return nil
 }
 
 // ToggleObjectDiff emits an event that opens or closes the object diff modal.
-func (a *App) ToggleObjectDiff() error {
-	if !a.runtimeAvailable() {
+func (s *DesktopShell) ToggleObjectDiff() error {
+	if !s.runtimeAvailable() {
 		return fmt.Errorf("application context not available")
 	}
 
-	a.emitCurrentWindowEvent("toggle-object-diff")
+	s.emitCurrentWindowEvent("toggle-object-diff")
 	return nil
 }
 
-func (a *App) UpdateMenu() {
-	if a == nil || !a.runtimeAvailable() || a.menu == nil {
+func (s *DesktopShell) UpdateMenu() {
+	if s == nil || !s.runtimeAvailable() || s.menu == nil {
 		return
 	}
-	a.menu.Clear()
-	populateMenu(a.menu, a)
+	s.menu.Clear()
+	populateMenu(s.menu, s)
 
 	applyNativeMenuRefresh(
 		runtime.GOOS,
-		func() { a.menu.Update() },
+		func() { s.menu.Update() },
 		func() {
-			if a.wailsApplication != nil {
-				a.wailsApplication.Menu.SetApplicationMenu(a.menu)
+			if s.application != nil {
+				s.application.Menu.SetApplicationMenu(s.menu)
 			}
 		},
 		func() {
-			if a.wailsApplication != nil {
-				for _, window := range a.wailsApplication.Window.GetAll() {
-					window.SetMenu(a.menu)
+			if s.application != nil {
+				for _, window := range s.application.Window.GetAll() {
+					window.SetMenu(s.menu)
 				}
 			}
 		},
@@ -88,28 +88,28 @@ func applyNativeMenuRefresh(goos string, updateMenu, setApplicationMenu, setWind
 	}
 }
 
-func (a *App) IsSidebarVisible() bool {
-	return a.sidebarVisible
+func (s *DesktopShell) IsSidebarVisible() bool {
+	return s.sidebarVisible
 }
 
-func (a *App) IsDiagnosticsPanelVisible() bool {
-	return a.diagnosticsPanelVisible
+func (s *DesktopShell) IsDiagnosticsPanelVisible() bool {
+	return s.diagnosticsPanelVisible
 }
 
-func (a *App) IsAppLogsPanelVisible() bool {
-	return a.appLogsPanelVisible
+func (s *DesktopShell) IsAppLogsPanelVisible() bool {
+	return s.appLogsPanelVisible
 }
 
-func (a *App) SetSidebarVisible(visible bool) {
-	if a.sidebarVisible != visible {
-		a.sidebarVisible = visible
-		a.UpdateMenu()
+func (s *DesktopShell) SetSidebarVisible(visible bool) {
+	if s.sidebarVisible != visible {
+		s.sidebarVisible = visible
+		s.UpdateMenu()
 	}
 }
 
-func (a *App) SetAppLogsPanelVisible(visible bool) {
-	if a.appLogsPanelVisible != visible {
-		a.appLogsPanelVisible = visible
-		a.UpdateMenu()
+func (s *DesktopShell) SetAppLogsPanelVisible(visible bool) {
+	if s.appLogsPanelVisible != visible {
+		s.appLogsPanelVisible = visible
+		s.UpdateMenu()
 	}
 }

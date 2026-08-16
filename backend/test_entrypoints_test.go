@@ -370,7 +370,7 @@ func FetchResourceList[T any](
 		return fetchFunc()
 	})
 	if err != nil {
-		a.logger.Error(fmt.Sprintf("Failed to list %s in %s: %v", resourceKind, scope, err), logsources.ResourceLoader, clusterID, a.clusterNameForID(clusterID))
+		a.appLogs.logger.Error(fmt.Sprintf("Failed to list %s in %s: %v", resourceKind, scope, err), logsources.ResourceLoader, clusterID, a.clusterNameForID(clusterID))
 		// Include clusterId in error payload so frontend can identify which cluster
 		// the error belongs to.
 		a.emitEvent(backendErrorEventName, BackendErrorEvent{

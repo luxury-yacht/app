@@ -11,7 +11,7 @@ import (
 func TestInitializeSelectedClustersAtStartupUsesSelectionMutationCoordinator(t *testing.T) {
 	t.Setenv("HOME", t.TempDir())
 	app := NewApp(nil)
-	app.logger = NewLogger(10)
+	app.appLogs = NewAppLogService(NewLogger(10))
 	selection := "/tmp/config:cluster-a"
 	app.availableKubeconfigs = []KubeconfigInfo{{
 		Name:    "config",
@@ -20,7 +20,7 @@ func TestInitializeSelectedClustersAtStartupUsesSelectionMutationCoordinator(t *
 	}}
 	settings := defaultSettingsFile()
 	settings.Kubeconfig.Selected = []string{selection}
-	require.NoError(t, app.saveSettingsFile(settings))
+	require.NoError(t, app.preferences.saveSettingsFile(settings))
 
 	initializerCalled := make(chan struct{})
 	app.kubeClientInitializer = func() error {

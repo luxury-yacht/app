@@ -1,7 +1,6 @@
 package backend
 
 import (
-	"context"
 	"runtime"
 	"testing"
 
@@ -41,13 +40,13 @@ func menuLabels(menu *application.Menu) []string {
 }
 
 func TestCreateMenuBuildsEntries(t *testing.T) {
-	menu := CreateMenu(&App{})
+	menu := CreateMenu(&DesktopShell{sidebarVisible: true})
 	require.NotNil(t, menu)
 	require.NotEmpty(t, menuItems(menu))
 }
 
 func TestCreateMenuTopLevelLabels(t *testing.T) {
-	menu := CreateMenu(&App{})
+	menu := CreateMenu(&DesktopShell{sidebarVisible: true})
 
 	var expected []string
 	switch runtime.GOOS {
@@ -79,7 +78,7 @@ func TestAddMenuTextPreservesAccelerator(t *testing.T) {
 
 func TestCreateDebugMenuBuildsDebugOverlayEntries(t *testing.T) {
 	menu := application.NewMenu()
-	createDebugMenu(menu, &App{})
+	createDebugMenu(menu, &DesktopShell{sidebarVisible: true})
 
 	require.Equal(t, []string{
 		"Open Inspector",
@@ -94,30 +93,29 @@ func TestCreateDebugMenuBuildsDebugOverlayEntries(t *testing.T) {
 
 func TestEditMenuOffersStandardClipboardCommands(t *testing.T) {
 	menu := application.NewMenu()
-	createEditMenu(menu, &App{})
+	createEditMenu(menu, &DesktopShell{sidebarVisible: true})
 	require.Equal(t, []string{"Cut", "Copy", "Paste", "Select All"}, menuLabels(findSubmenu(t, menu, "Edit")))
 }
 
 func TestMenuEventCallbacksRequireRuntimeReadiness(t *testing.T) {
-	app := &App{}
+	ready := false
 	events := []string{}
-	app.eventEmitter = func(_ context.Context, name string, _ ...interface{}) {
+	app := NewDesktopShell(nil, func() bool { return ready }, func(name string, _ ...interface{}) {
 		events = append(events, name)
-	}
-	app.setApplicationContext(context.Background())
+	}, NewLogger(10))
 	callback := emitMenuEventWhenReady(app, "open-cluster")
 
 	callback()
 	require.Empty(t, events)
 
-	app.markRuntimeReady()
+	ready = true
 	callback()
 	require.Equal(t, []string{"open-cluster"}, events)
 }
 
 func TestViewMenuKeepsApplicationLogsAndDiagnosticsEntries(t *testing.T) {
 	menu := application.NewMenu()
-	createViewMenu(menu, &App{})
+	createViewMenu(menu, &DesktopShell{sidebarVisible: true})
 
 	labels := menuLabels(findSubmenu(t, menu, "View"))
 	require.Contains(t, labels, "Show Application Logs")
@@ -126,7 +124,7 @@ func TestViewMenuKeepsApplicationLogsAndDiagnosticsEntries(t *testing.T) {
 
 func TestFileMenuOffersOpenCluster(t *testing.T) {
 	menu := application.NewMenu()
-	createApplicationMenu(menu, &App{})
+	createApplicationMenu(menu, &DesktopShell{sidebarVisible: true})
 	labels := menuLabels(findSubmenu(t, menu, "File"))
 	require.Contains(t, labels, "New Window")
 	require.Contains(t, labels, "Open Cluster")
@@ -134,31 +132,29 @@ func TestFileMenuOffersOpenCluster(t *testing.T) {
 
 func TestViewMenuOffersCommandPalette(t *testing.T) {
 	menu := application.NewMenu()
-	createViewMenu(menu, &App{})
+	createViewMenu(menu, &DesktopShell{sidebarVisible: true})
 	require.Contains(t, menuLabels(findSubmenu(t, menu, "View")), "Command Palette")
 }
 
 func TestMacApplicationMenuOffersCheckForUpdates(t *testing.T) {
 	menu := application.NewMenu()
-	addMacApplicationMenu(menu, &App{})
+	addMacApplicationMenu(menu, &DesktopShell{sidebarVisible: true})
 
 	require.Contains(t, menuLabels(findSubmenu(t, menu, "Luxury Yacht")), "Check for Updates…")
 }
 
 func TestDesktopHelpMenuOffersCheckForUpdates(t *testing.T) {
 	menu := application.NewMenu()
-	addDesktopHelpMenu(menu, &App{})
+	addDesktopHelpMenu(menu, &DesktopShell{sidebarVisible: true})
 
 	require.Contains(t, menuLabels(findSubmenu(t, menu, "Help")), "Check for Updates…")
 }
 
 func TestDebugMenuEventsUseReadinessGuard(t *testing.T) {
-	app := &App{}
-	setTestAppRuntimeReady(t, app, context.Background())
 	events := []string{}
-	app.eventEmitter = func(_ context.Context, name string, _ ...interface{}) {
+	app := NewDesktopShell(nil, func() bool { return true }, func(name string, _ ...interface{}) {
 		events = append(events, name)
-	}
+	}, NewLogger(10))
 
 	for _, event := range []string{
 		"debug:open-inspector",
@@ -182,7 +178,7 @@ func TestDebugMenuEventsUseReadinessGuard(t *testing.T) {
 }
 
 func TestFileMenuOffersNewWindowAccelerator(t *testing.T) {
-	fileMenu := findSubmenu(t, CreateMenu(&App{}), "File")
+	fileMenu := findSubmenu(t, CreateMenu(&DesktopShell{sidebarVisible: true}), "File")
 	for _, item := range menuItems(fileMenu) {
 		if item.Label() != "New Window" {
 			continue
@@ -198,7 +194,7 @@ func TestFileMenuOffersNewWindowAccelerator(t *testing.T) {
 }
 
 func TestConfigureWorkspaceWindowCreatorStoresProcessCompositionCallback(t *testing.T) {
-	app := &App{}
+	app := &DesktopShell{sidebarVisible: true}
 	called := false
 
 	ConfigureWorkspaceWindowCreator(app, func() {

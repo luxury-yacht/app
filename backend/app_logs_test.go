@@ -7,31 +7,35 @@ import (
 	"github.com/stretchr/testify/require"
 )
 
-func TestGetAppLogsHandlesNilLogger(t *testing.T) {
-	app := newTestAppWithDefaults(t)
-	app.logger = nil
+func newTestAppLogService() *AppLogService {
+	return NewAppLogService(NewLogger(100))
+}
 
-	logs := app.GetAppLogs()
+func TestGetAppLogsHandlesNilLogger(t *testing.T) {
+	logsService := newTestAppLogService()
+	logsService.logger = nil
+
+	logs := logsService.GetAppLogs()
 	require.Empty(t, logs)
 }
 
 func TestGetAppLogsReturnsEntries(t *testing.T) {
-	app := newTestAppWithDefaults(t)
-	app.logger.Info("hello")
+	logsService := newTestAppLogService()
+	logsService.logger.Info("hello")
 
-	logs := app.GetAppLogs()
+	logs := logsService.GetAppLogs()
 	require.Len(t, logs, 1)
 	require.Equal(t, uint64(1), logs[0].Sequence)
 	require.Equal(t, "hello", logs[0].Message)
 }
 
 func TestGetAppLogsSinceReturnsEntriesAfterSequence(t *testing.T) {
-	app := newTestAppWithDefaults(t)
-	app.logger.Info("first")
-	app.logger.Warn("second")
-	app.logger.Error("third")
+	logsService := newTestAppLogService()
+	logsService.logger.Info("first")
+	logsService.logger.Warn("second")
+	logsService.logger.Error("third")
 
-	logs := app.GetAppLogsSince(1)
+	logs := logsService.GetAppLogsSince(1)
 	require.Len(t, logs, 2)
 	require.Equal(t, uint64(2), logs[0].Sequence)
 	require.Equal(t, "second", logs[0].Message)
@@ -40,13 +44,12 @@ func TestGetAppLogsSinceReturnsEntriesAfterSequence(t *testing.T) {
 }
 
 func TestGetAppLogsSinceHandlesTrimmedBuffer(t *testing.T) {
-	app := newTestAppWithDefaults(t)
-	app.logger = NewLogger(2)
-	app.logger.Info("first")
-	app.logger.Warn("second")
-	app.logger.Error("third")
+	logsService := NewAppLogService(NewLogger(2))
+	logsService.logger.Info("first")
+	logsService.logger.Warn("second")
+	logsService.logger.Error("third")
 
-	logs := app.GetAppLogsSince(0)
+	logs := logsService.GetAppLogsSince(0)
 	require.Len(t, logs, 2)
 	require.Equal(t, uint64(2), logs[0].Sequence)
 	require.Equal(t, "second", logs[0].Message)
@@ -55,10 +58,10 @@ func TestGetAppLogsSinceHandlesTrimmedBuffer(t *testing.T) {
 }
 
 func TestAppLogsAddedEventIncludesSequence(t *testing.T) {
-	app := newTestAppWithDefaults(t)
+	logsService := newTestAppLogService()
 	var eventName string
 	var eventPayload AppLogsAddedEvent
-	app.logger.SetEventEmitter(func(name string, args ...interface{}) {
+	logsService.logger.SetEventEmitter(func(name string, args ...interface{}) {
 		eventName = name
 		require.Len(t, args, 1)
 		var ok bool
@@ -66,53 +69,53 @@ func TestAppLogsAddedEventIncludesSequence(t *testing.T) {
 		require.True(t, ok)
 	})
 
-	app.logger.Info("hello")
+	logsService.logger.Info("hello")
 
 	require.Equal(t, "app-logs:added", eventName)
 	require.Equal(t, uint64(1), eventPayload.Sequence)
 }
 
 func TestGetAppLogsReturnsClusterMetadata(t *testing.T) {
-	app := newTestAppWithDefaults(t)
-	app.logger.Warn("cluster warning", logsources.Auth, "cluster-a", "alpha")
+	logsService := newTestAppLogService()
+	logsService.logger.Warn("cluster warning", logsources.Auth, "cluster-a", "alpha")
 
-	logs := app.GetAppLogs()
+	logs := logsService.GetAppLogs()
 	require.Len(t, logs, 1)
 	require.Equal(t, "cluster-a", logs[0].ClusterID)
 	require.Equal(t, "alpha", logs[0].ClusterName)
 }
 
 func TestClearAppLogs(t *testing.T) {
-	app := newTestAppWithDefaults(t)
-	app.logger.Info("hello")
+	logsService := newTestAppLogService()
+	logsService.logger.Info("hello")
 
-	err := app.ClearAppLogs()
+	err := logsService.ClearAppLogs()
 	require.NoError(t, err)
 
-	logs := app.GetAppLogs()
+	logs := logsService.GetAppLogs()
 	require.Empty(t, logs)
 
-	app.logger.Info("after clear")
-	logs = app.GetAppLogs()
+	logsService.logger.Info("after clear")
+	logs = logsService.GetAppLogs()
 	require.Len(t, logs, 1)
 	require.Equal(t, uint64(2), logs[0].Sequence)
 }
 
 func TestClearAppLogsWhenNil(t *testing.T) {
-	app := newTestAppWithDefaults(t)
-	app.logger = nil
+	logsService := newTestAppLogService()
+	logsService.logger = nil
 
-	err := app.ClearAppLogs()
+	err := logsService.ClearAppLogs()
 	require.Error(t, err)
 }
 
 func TestLogAppLogsFromFrontendNormalizesLevelAndSource(t *testing.T) {
-	app := newTestAppWithDefaults(t)
+	logsService := newTestAppLogService()
 
-	err := app.LogAppLogsFromFrontend("warning", "  frontend warning  ", "  UI  ")
+	err := logsService.LogAppLogsFromFrontend("warning", "  frontend warning  ", "  UI  ")
 	require.NoError(t, err)
 
-	logs := app.GetAppLogs()
+	logs := logsService.GetAppLogs()
 	require.Len(t, logs, 1)
 	require.Equal(t, "WARN", logs[0].Level)
 	require.Equal(t, "frontend warning", logs[0].Message)
@@ -120,12 +123,12 @@ func TestLogAppLogsFromFrontendNormalizesLevelAndSource(t *testing.T) {
 }
 
 func TestLogAppLogsFromFrontendWithClusterAddsMetadata(t *testing.T) {
-	app := newTestAppWithDefaults(t)
+	logsService := newTestAppLogService()
 
-	err := app.LogAppLogsFromFrontendWithCluster("error", " cluster issue ", " RefreshOrchestrator ", " cluster-a ", " Alpha ")
+	err := logsService.LogAppLogsFromFrontendWithCluster("error", " cluster issue ", " RefreshOrchestrator ", " cluster-a ", " Alpha ")
 	require.NoError(t, err)
 
-	logs := app.GetAppLogs()
+	logs := logsService.GetAppLogs()
 	require.Len(t, logs, 1)
 	require.Equal(t, "ERROR", logs[0].Level)
 	require.Equal(t, "cluster issue", logs[0].Message)

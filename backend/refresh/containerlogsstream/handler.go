@@ -63,6 +63,10 @@ func (e permissionDeniedError) PermissionDeniedDetails() refresh.PermissionDenie
 
 // NewHandler constructs a container logs stream handler.
 func NewHandler(client kubernetes.Interface, logger Logger, recorder *telemetry.Recorder, limiters ...*GlobalTargetLimiter) (*Handler, error) {
+	return NewHandlerWithLimits(client, logger, recorder, containerlogs.DefaultPerScopeTargetLimit, limiters...)
+}
+
+func NewHandlerWithLimits(client kubernetes.Interface, logger Logger, recorder *telemetry.Recorder, perScopeLimit int, limiters ...*GlobalTargetLimiter) (*Handler, error) {
 	if client == nil {
 		return nil, errors.New("containerlogsstream: kubernetes client is required")
 	}
@@ -71,7 +75,7 @@ func NewHandler(client kubernetes.Interface, logger Logger, recorder *telemetry.
 		limiter = limiters[0]
 	}
 	return &Handler{
-		streamer: NewStreamer(client, logger, recorder), telemetry: recorder, limiter: limiter,
+		streamer: NewStreamer(client, logger, recorder, perScopeLimit), telemetry: recorder, limiter: limiter,
 		sessions: make(map[uint64]context.CancelFunc),
 	}, nil
 }

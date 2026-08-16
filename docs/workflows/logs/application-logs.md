@@ -22,11 +22,18 @@ Kubernetes container logs or node logs.
 
 ## Ownership
 
-- Backend logger and Wails methods: `backend/logger.go`, `backend/app_logs.go`
+- Process buffer, logger, frontend ingestion, sequence reads, clear operation,
+  and typed event projection: `backend.AppLogService` in
+  `backend/app_log_service.go` and `backend/app_logs.go`
 - Error capture bridge: `backend/internal/errorcapture`
 - Frontend app log client: `frontend/src/core/logging/appLogsClient.ts`
 - Application Logs panel: `frontend/src/ui/panels/app-logs`
 - App-state reads: `frontend/src/core/app-state-access`
+
+`AppLogService` is composed once and remains alive until process teardown so
+other owners can log through startup, update shutdown, cluster/runtime cleanup,
+and refresh teardown. Factory Reset clears it after the other owner resets have
+finished; the buffer is not recreated as cluster-scoped refresh state.
 
 ## Change Checklist
 

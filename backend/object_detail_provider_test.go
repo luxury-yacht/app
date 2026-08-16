@@ -530,7 +530,7 @@ func testObjectDetailGVK(kind string) schema.GroupVersionKind {
 func TestObjectDetailProviderFetchObjectYAMLRejectsKindOnly(t *testing.T) {
 	app := NewApp(nil)
 	setTestAppRuntimeReady(t, app, context.Background())
-	app.logger = NewLogger(10)
+	app.appLogs = NewAppLogService(NewLogger(10))
 
 	clusterID := "config:ctx"
 	app.clusterClients = map[string]*clusterClients{
@@ -611,7 +611,7 @@ func TestObjectDetailProviderFetchObjectYAMLByGVKDisambiguates(t *testing.T) {
 
 func TestObjectDetailProviderHelmErrorsWhenClientMissing(t *testing.T) {
 	app := NewApp(nil)
-	app.logger = NewLogger(10)
+	app.appLogs = NewAppLogService(NewLogger(10))
 	// Bind the test client to a concrete cluster scope for Helm detail fetches.
 	clusterID := "config:ctx"
 	app.clusterClients = map[string]*clusterClients{

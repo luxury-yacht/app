@@ -56,6 +56,10 @@ shape, failure behavior, and diagnostics differ.
 ## UI Permission Rules
 
 - `QueryPermissions` is the backend query surface for UI permissions.
+- `PermissionFetchPolicy` owns the process-wide SSRR fan-out concurrency. It
+  starts at the backend default and receives one-way pushes from successful
+  preference load, startup fallback, update, and import. Permission code reads
+  the policy and never reaches back into `PreferencesService`.
 - Frontend permission specs and feature labels live under
   `frontend/src/core/capabilities`.
 - Visible object action wiring lives in
@@ -84,6 +88,7 @@ shape, failure behavior, and diagnostics differ.
 - Refresh runtime policies: `backend/refresh/domainpermissions`
 - Refresh registration gates: `backend/refresh/system/registrations.go`
 - UI permission endpoint: `backend/app_permissions.go`
+- UI permission fan-out policy: `backend/runtime_setting_policies.go`
 - Capability query types and rule matching: `backend/capabilities`
 - Frontend permission store/specs/hooks: `frontend/src/core/capabilities`
 - Object-action catalog: `backend/objectaction`

@@ -58,8 +58,12 @@ func (s *Service) FetchContainerLogs(ctx context.Context, req types.ContainerLog
 	if err != nil {
 		return types.ContainerLogsFetchResponse{Error: err.Error()}
 	}
-	targets, totalTargets := selectContainerLogTargets(pods, req, plan)
-	warnings := containerlogs.BuildTargetLimitWarnings(len(targets), totalTargets)
+	limit := s.deps.ContainerLogsPerScopeTargetLimit
+	if limit <= 0 {
+		limit = containerlogs.DefaultPerScopeTargetLimit
+	}
+	targets, totalTargets := selectContainerLogTargets(pods, req, plan, limit)
+	warnings := containerlogs.BuildTargetLimitWarnings(len(targets), totalTargets, limit)
 	allEntries, podErrors := s.fetchSelectedContainerLogs(ctx, targets, req, plan.lineFilter)
 
 	if len(allEntries) == 0 && len(podErrors) > 0 {
@@ -91,12 +95,12 @@ func prepareContainerLogFetch(req *types.ContainerLogsFetchRequest) (containerLo
 	}, nil
 }
 
-func selectContainerLogTargets(pods []*corev1.Pod, req types.ContainerLogsFetchRequest, plan containerLogFetchPlan) ([]containerlogs.SelectedTarget, int) {
+func selectContainerLogTargets(pods []*corev1.Pod, req types.ContainerLogsFetchRequest, plan containerLogFetchPlan, limit int) ([]containerlogs.SelectedTarget, int) {
 	return containerlogs.SelectTargets(pods, containerlogs.ContainerSelectionOptions{
 		Filter: req.Container, IncludeInit: boolValueOrDefault(req.IncludeInit, true),
 		IncludeEphemeral: boolValueOrDefault(req.IncludeEphemeral, true),
 		StateFilter:      plan.containerState, Selection: plan.selection,
-	}, containerlogs.GetPerScopeTargetLimit())
+	}, limit)
 }
 
 func (s *Service) fetchSelectedContainerLogs(

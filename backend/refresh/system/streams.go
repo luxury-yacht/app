@@ -28,10 +28,11 @@ type streamDeps struct {
 // process-wide Wails named streams.
 func registerStreamHandlers(deps streamDeps) (*containerlogsstream.Handler, *eventstream.Manager, *resourcestream.Manager, error) {
 	logger := applog.ClusterScoped(deps.cfg.Logger, deps.clusterMeta.ClusterID, deps.clusterMeta.ClusterName)
-	logHandler, err := containerlogsstream.NewHandler(
+	logHandler, err := containerlogsstream.NewHandlerWithLimits(
 		deps.cfg.KubernetesClient,
 		logger,
 		deps.telemetry,
+		deps.cfg.ContainerLogsPerScopeLimit,
 		deps.cfg.ContainerLogsTargetLimiter,
 	)
 	if err != nil {

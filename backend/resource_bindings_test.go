@@ -39,7 +39,7 @@ func wrapperTestApp(t *testing.T) *App {
 	t.Helper()
 	app := newTestAppWithDefaults(t)
 	setTestAppRuntimeReady(t, app, context.Background())
-	app.logger = NewLogger(5)
+	app.appLogs = NewAppLogService(NewLogger(5))
 	return app
 }
 

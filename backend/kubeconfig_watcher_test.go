@@ -128,7 +128,7 @@ func TestApp_HandleKubeconfigChange_ContextRemovedDeselectsOnlyAffectedFromSameF
 	app.refreshAggregates.Store(&refreshAggregateHandlers{})
 	setRefreshServiceReadyForTest(app)
 	setRefreshRuntimeContextForTest(app, context.Background())
-	app.appSettings = getDefaultAppSettings()
+	app.preferences.appSettings = getDefaultAppSettings()
 
 	baseDir := t.TempDir()
 	configPath := filepath.Join(baseDir, "shared-config")
@@ -138,7 +138,7 @@ func TestApp_HandleKubeconfigChange_ContextRemovedDeselectsOnlyAffectedFromSameF
 	app.kubeconfigsMu.Lock()
 	app.selectedKubeconfigs = []string{configPath + ":ctx-keep", configPath + ":ctx-remove"}
 	app.kubeconfigsMu.Unlock()
-	app.appSettings.SelectedKubeconfigs = []string{configPath + ":ctx-keep", configPath + ":ctx-remove"}
+	app.preferences.appSettings.SelectedKubeconfigs = []string{configPath + ":ctx-keep", configPath + ":ctx-remove"}
 
 	keepMeta := app.clusterMetaForSelection(kubeconfigSelection{Path: configPath, Context: "ctx-keep"})
 	removeMeta := app.clusterMetaForSelection(kubeconfigSelection{Path: configPath, Context: "ctx-remove"})
@@ -178,7 +178,7 @@ func TestApp_HandleKubeconfigChange_TransientInvalidWriteDoesNotDeselect(t *test
 	app.clusterClients = make(map[string]*clusterClients)
 	app.refreshSubsystems = make(map[string]*system.Subsystem)
 	app.objectCatalogEntries = make(map[string]*objectCatalogEntry)
-	app.appSettings = getDefaultAppSettings()
+	app.preferences.appSettings = getDefaultAppSettings()
 
 	baseDir := t.TempDir()
 	configDir := filepath.Join(baseDir, "configs")
@@ -190,7 +190,7 @@ func TestApp_HandleKubeconfigChange_TransientInvalidWriteDoesNotDeselect(t *test
 	app.kubeconfigsMu.Lock()
 	app.selectedKubeconfigs = []string{configPath + ":ctx"}
 	app.kubeconfigsMu.Unlock()
-	app.appSettings.SelectedKubeconfigs = []string{configPath + ":ctx"}
+	app.preferences.appSettings.SelectedKubeconfigs = []string{configPath + ":ctx"}
 
 	meta := app.clusterMetaForSelection(kubeconfigSelection{Path: configPath, Context: "ctx"})
 	app.clusterClients[meta.ID] = &clusterClients{
@@ -281,7 +281,7 @@ func TestDeselectClusters_AbortsOnReconciliationFailure(t *testing.T) {
 		kubeconfigPath:    "/path/b",
 		kubeconfigContext: "ctx-b",
 	}
-	app.appSettings = &AppSettings{SelectedKubeconfigs: []string{"/path/a:ctx-a", "/path/b:ctx-b"}}
+	app.preferences.appSettings = &AppSettings{SelectedKubeconfigs: []string{"/path/a:ctx-a", "/path/b:ctx-b"}}
 
 	// Force updateRefreshSubsystemSelections to take the setupRefreshSubsystem path and fail.
 	app.refreshAggregates.Store(nil)
@@ -297,5 +297,5 @@ func TestDeselectClusters_AbortsOnReconciliationFailure(t *testing.T) {
 	_, bOK := app.clusterClients["b:ctx-b"]
 	assert.True(t, aOK)
 	assert.True(t, bOK)
-	require.Len(t, app.appSettings.SelectedKubeconfigs, 2)
+	require.Len(t, app.preferences.appSettings.SelectedKubeconfigs, 2)
 }

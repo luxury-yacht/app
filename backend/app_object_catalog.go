@@ -147,7 +147,7 @@ func (a *App) startObjectCatalog() {
 
 	for _, target := range targets {
 		if err := a.startObjectCatalogForTarget(target); err != nil {
-			a.logger.Warn(fmt.Sprintf("Object catalog skipped for %s: %v", target.meta.ID, err), logsources.ObjectCatalog, target.meta.ID, target.meta.Name)
+			a.appLogs.logger.Warn(fmt.Sprintf("Object catalog skipped for %s: %v", target.meta.ID, err), logsources.ObjectCatalog, target.meta.ID, target.meta.Name)
 			continue
 		}
 	}
@@ -209,7 +209,7 @@ func (a *App) startObjectCatalogForTarget(target catalogTarget) error {
 
 	deps := objectcatalog.Dependencies{
 		Common:                       commonDeps,
-		Logger:                       applog.ClusterScoped(a.logger, target.meta.ID, target.meta.Name),
+		Logger:                       applog.ClusterScoped(a.appLogs.logger, target.meta.ID, target.meta.Name),
 		Telemetry:                    telemetryRecorder,
 		InformerFactory:              subsystem.InformerFactory.SharedInformerFactory(),
 		APIExtensionsInformerFactory: subsystem.InformerFactory.APIExtensionsInformerFactory(),
@@ -272,7 +272,7 @@ func (a *App) startObjectCatalogForTarget(target catalogTarget) error {
 		// RBAC preflight overlap the informer factory's initial sync; sync() itself
 		// waits for caches just before the collect (deps.WaitForCaches above).
 		if err := svc.Run(ctx); err != nil && !errors.Is(err, context.Canceled) {
-			a.logger.Warn(fmt.Sprintf("Object catalog terminated unexpectedly: %v", err), logsources.ObjectCatalog, target.meta.ID, target.meta.Name)
+			a.appLogs.logger.Warn(fmt.Sprintf("Object catalog terminated unexpectedly: %v", err), logsources.ObjectCatalog, target.meta.ID, target.meta.Name)
 		}
 	}()
 
@@ -411,8 +411,8 @@ func (a *App) waitForObjectCatalogDone(entry *objectCatalogEntry) {
 	select {
 	case <-entry.done:
 	case <-timer.C:
-		if a != nil && a.logger != nil {
-			a.logger.Warn("Timed out waiting for object catalog shutdown", logsources.ObjectCatalog, entry.meta.ID, entry.meta.Name)
+		if a != nil && a.appLogs.logger != nil {
+			a.appLogs.logger.Warn("Timed out waiting for object catalog shutdown", logsources.ObjectCatalog, entry.meta.ID, entry.meta.Name)
 		}
 	}
 }

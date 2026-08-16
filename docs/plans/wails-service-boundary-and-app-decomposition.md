@@ -799,7 +799,7 @@ Phase 2 is independently shippable.
 
 ## Phase 3 — Extract process-owned leaf services and persisted app state
 
-- [ ] Compose the existing application-update coordinator directly behind a
+- [x] Compose the existing application-update coordinator directly behind a
   narrow `UpdateCoordinator` boundary and move its event subscriptions and
   shutdown ownership out of `App`. Add an owner-specific reset operation that
   covers the full updater state machine: skipped version, pending projection,
@@ -810,19 +810,19 @@ Phase 2 is independently shippable.
   active check/download before cleanup; reject reset without deleting recovery
   state when an application/restart attempt is active. Factory Reset must never
   delete updater state beneath live work or raw-delete a document-supplied path.
-- [ ] Extract `AppLogService`, including the buffer, frontend ingestion,
+- [x] Extract `AppLogService`, including the buffer, frontend ingestion,
   sequence reads, and typed log event projection.
-- [ ] Extract `PreferencesService`, `FavoritesService`, and `UIStateStore` with
+- [x] Extract `PreferencesService`, `FavoritesService`, and `UIStateStore` with
   their current independent files, schemas, and locks. Preserve the current
   rule that favorites I/O does not block grid persistence; share only stateless
   atomic-file helpers where appropriate.
-- [ ] Give `PreferencesService` narrow, atomic repositories for the persisted
+- [x] Give `PreferencesService` narrow, atomic repositories for the persisted
   Attention, per-cluster namespace-scope, and kubeconfig-search-path sections.
   It owns the physical settings-file lock and schema; the Attention and
   workspace owners retain their domain validation, commands, ordering, and live
   effects. Route `GetKubeconfigSearchPaths` to this repository, but keep
   `SetKubeconfigSearchPaths` behind a separate workspace workflow collaborator.
-- [ ] Replace the raw `loadAppSettings` lazy initializer with one Preferences-
+- [x] Replace the raw `loadAppSettings` lazy initializer with one Preferences-
   owned coalesced load state machine. Route `GetAppSettings`, preference-update
   preparation, and error-reporting startup through `EnsureLoaded()`; route
   selected-cluster startup through `EnsureLoadedForStartup()`, which shares that
@@ -831,7 +831,7 @@ Phase 2 is independently shippable.
   provenance and never hold or manipulate the preferences mutex. Do not return
   a successful/ready snapshot to any waiter until both post-unlock container-log
   initialization pushes and the permission-fetch-policy push finish.
-- [ ] Preserve each caller's failure contract. A normal `EnsureLoaded` failure
+- [x] Preserve each caller's failure contract. A normal `EnsureLoaded` failure
   installs nothing and dispatches nothing, so reads/updates surface the error
   and `ErrorReportingService` remains disabled. Selected-cluster startup uses a
   single Preferences-owned `EnsureLoadedForStartup()` call that performs the
@@ -843,7 +843,7 @@ Phase 2 is independently shippable.
   `runSelectionMutation`, then restore only the returned selected-kubeconfig
   snapshot inside the serialized workspace mutation. Do not expose a separate
   no-argument fallback method whose decision can race a newer load attempt.
-- [ ] Replace `applySettingsSideEffects` with one complete, stateless
+- [x] Replace `applySettingsSideEffects` with one complete, stateless
   `SettingsEffectDispatcher` owned at the `PreferencesService` boundary. Cover
   the five current flags plus the current direct permission-concurrency read as
   six owner-shaped write-only routes: error-reporting enablement to
@@ -856,7 +856,7 @@ Phase 2 is independently shippable.
   changes preference semantics. Change the
   `appPreferencePermissionSSRRFetchConcurrency` descriptor from its current no-
   effect form so update/import sets the sixth dispatch flag.
-- [ ] Extract `ContainerLogsSelectionPolicy` from the package-global
+- [x] Extract `ContainerLogsSelectionPolicy` from the package-global
   `backend/internal/containerlogs.currentPerScopeTargetLimit`. Give direct pod-
   log reads and live streams the same read-only policy collaborator (or an
   explicit captured limit) and make selection/warning helpers receive that
@@ -864,7 +864,7 @@ Phase 2 is independently shippable.
   `defaultObjPanelLogsTargetPerScopeLimit`; successful `EnsureLoaded`,
   applicable updates, and settings import push the configured value through its
   sink.
-- [ ] Extract `PermissionFetchPolicy` from the direct
+- [x] Extract `PermissionFetchPolicy` from the direct
   `permissionSSRRFetchConcurrency()` settings read. Give permission fan-out a
   read-only policy collaborator and make the policy start at
   `defaultPermissionSSRRFetchConcurrency`; successful `EnsureLoaded`, atomic
@@ -872,7 +872,7 @@ Phase 2 is independently shippable.
   value through its write-only sink. Replace the current App permission fan-out
   read with that policy and delete `permissionSSRRFetchConcurrency()` in this
   phase; Phase 4 carries the same collaborator into `ResourceGateway`.
-- [ ] Preserve transactional and lock direction for the whole effect seam.
+- [x] Preserve transactional and lock direction for the whole effect seam.
   Capture flags and an immutable settings snapshot under the preferences lock,
   persist, release the lock, and then dispatch; persistence failure dispatches
   nothing. Sinks never read/call back into `PreferencesService` or call another
@@ -880,7 +880,7 @@ Phase 2 is independently shippable.
   default-then-push behavior and leaf init lock while the App implements that
   sink: no preferences, refresh, or subsystem lock is acquired under
   `containerLogsTargetLimiterMu`.
-- [ ] Preserve the distinct startup rules while consolidating dispatch. Every
+- [x] Preserve the distinct startup rules while consolidating dispatch. Every
   successful `EnsureLoaded` pushes both configured container-log limits and
   configured permission concurrency after releasing the preferences lock;
   atomic startup fallback pushes all three defaults; `ErrorReportingService`
@@ -889,14 +889,14 @@ Phase 2 is independently shippable.
   construction; and applicable updates/imports retarget existing owners live.
   Preserve best-effort independent dispatch so an error-reporting failure is
   logged without suppressing the other enabled effects.
-- [ ] Extract `ClusterAttentionService` with `attentionRulesMu`, effective
+- [x] Extract `ClusterAttentionService` with `attentionRulesMu`, effective
   cluster/global rule calculation, persistence transactions through the
   preferences repository, the six Ignore/Restore commands, object-pruning, and
   a cluster-indexed registry of live Attention-index targets. Move all 15
   current App-receiver methods in `backend/app_cluster_attention.go`. Current
   refresh construction registers/unregisters those targets in this phase;
   Phase 5B changes the registrar, not the service direction.
-- [ ] Extract `ErrorReportingService` with `errorReporter`, startup preference
+- [x] Extract `ErrorReportingService` with `errorReporter`, startup preference
   application, live enable/disable effects, installation-registration
   telemetry, and `installationTelemetryMu`. Replace
   `InitializeErrorReporting(*App)` with an unbound composition call from
@@ -906,16 +906,16 @@ Phase 2 is independently shippable.
   provenance. Keep the initializer absent from `DesktopService` and the
   generated command surface, and preserve the rule that reset waits for
   registration before deleting durable state.
-- [ ] Preserve `UpdateAppPreferences` as the only general preference mutation
+- [x] Preserve `UpdateAppPreferences` as the only general preference mutation
   contract, and keep theme/window-settings writes aligned with their settings
   document owner.
-- [ ] Route kubeconfig search-path changes through one narrow workspace workflow
+- [x] Route kubeconfig search-path changes through one narrow workspace workflow
   collaborator used by both `SetKubeconfigSearchPaths` and settings import. In
   this phase the current App implements the collaborator without being stored as
   `*App`; Phase 5C swaps it to `WorkspaceCoordinator`. Preserve serialized
   persist-before-rediscovery, watcher retargeting, selection pruning, refresh/
   client/operation/projection cleanup, and remaining-selection persistence.
-- [ ] Extract `DataManagementCoordinator` over the real preference, favorite,
+- [x] Extract `DataManagementCoordinator` over the real preference, favorite,
   UI-state, update, workspace, refresh/cache, operation, projection, and error-
   reporting, settings-policy, and Attention owners; do not create a second
   portable-state store. Its Factory Reset operation must finish live owner
@@ -931,7 +931,7 @@ Phase 2 is independently shippable.
   collaborators are temporary and are replaced in Phases 5B/5C. Attempt
   every independent owner reset, aggregate failures, and return success only for
   a complete reset so the frontend never reloads after partial cleanup.
-- [ ] Define one app-state artifact manifest shared with the offline
+- [x] Define one app-state artifact manifest shared with the offline
   `cmd/project` reset task as a stateless `internal/appstate` path/owner inventory
   for static Go-owned roots with no live deletion behavior. Make every shared
   path resolver side-effect-free and move parent-directory creation into write/
@@ -943,30 +943,30 @@ Phase 2 is independently shippable.
   to “reloads the app” unless this phase implements and tests an actual native
   relaunch. Frontend storage clearing/reload happens only after the backend reset
   has completed and is not a substitute for backend cleanup.
-- [ ] Keep the settings-effect dispatcher dependency-complete but not broad: it
+- [x] Keep the settings-effect dispatcher dependency-complete but not broad: it
   knows the six runtime setting values and their typed sinks, not `App`,
   `ApplicationRuntime`, arbitrary preferences, or owner internals. Adding a
   future effect requires an explicit ledger row, target owner, sink, startup
   rule, and failure/ordering test.
-- [ ] Extract native file dialogs, window geometry, appearance/menu projection,
+- [x] Extract native file dialogs, window geometry, appearance/menu projection,
   targeted peer events, and the process-wide ephemeral `sidebarVisible`,
   `diagnosticsPanelVisible`, and `appLogsPanelVisible` state into a concrete
   `DesktopShell` that receives `application.App` directly. Preserve the existing
   menu/current-window event projection without moving these fields into
   persisted `UIStateStore`. Do not introduce a generic `Desktop` interface,
   `MenuModel`, `NewAdapter`, or `internal/desktop` package.
-- [ ] Route the corresponding Wails commands through these owners and remove
+- [x] Route the corresponding Wails commands through these owners and remove
   their displaced `App` fields and methods. Replace each affected App-backed
   leaf-service collaborator as its complete owner moves.
-- [ ] Update the direct-Wails project contract test for the concrete
+- [x] Update the direct-Wails project contract test for the concrete
   `DesktopShell` owner without weakening its prohibited-adapter assertions.
-- [ ] Move affected direct-App tests and test-only entry points to focused leaf
+- [x] Move affected direct-App tests and test-only entry points to focused leaf
   service or concrete shell fixtures, and record the remaining counts. Replace
   the 24 direct test calls to `loadAppSettings` with public `EnsureLoaded`,
   `EnsureLoadedForStartup`, persistence-repository, or caller-failure tests as
   appropriate; do not retain a raw-loader or separate fallback test escape
   hatch.
-- [ ] Update `docs/architecture/application-lifecycle.md` with concrete
+- [x] Update `docs/architecture/application-lifecycle.md` with concrete
   `DesktopShell`, process-wide ephemeral shell visibility, settings-effect
   dispatch ordering, `EnsureLoaded`/`EnsureLoadedForStartup` readiness, total
   Factory Reset and frontend-reload contract, the non-Wails error-reporting
@@ -990,7 +990,7 @@ Phase 2 is independently shippable.
   state reset, configured-root and path-validation rules, active-work rejection/
   quiescence, and dynamic-artifact ownership, and
   `docs/workflows/logs/application-logs.md` with their extracted owners.
-- [ ] Prove atomic preference batches, rollback on persistence failure,
+- [x] Prove atomic preference batches, rollback on persistence failure,
   coalesced first-load readiness, first-paint settings reads, theme/favorite
   round trips, window-specific geometry, process-wide shell visibility/menu
   projection, Attention

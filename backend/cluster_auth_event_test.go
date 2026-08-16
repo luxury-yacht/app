@@ -17,7 +17,7 @@ import (
 func TestHandleClusterAuthStateChange_InvalidEmitsAuthFailed(t *testing.T) {
 	app := newTestAppWithDefaults(t)
 	reporter := &recordingErrorReporter{}
-	app.logger = NewLogger(100, reporter)
+	app.appLogs = NewAppLogService(NewLogger(100, reporter))
 	ctx, cancel := context.WithCancel(context.Background())
 	defer cancel()
 	setTestAppRuntimeReady(t, app, ctx)
@@ -79,7 +79,7 @@ func TestHandleClusterAuthStateChange_InvalidEmitsAuthFailed(t *testing.T) {
 	require.Equal(t, "missing-helper", authFailedEvents[0].Kind)
 	require.Equal(t, "gke-gcloud-auth-plugin", authFailedEvents[0].ExecCommand)
 	require.Equal(t, "The kubeconfig's credential helper could not be found.", authFailedEvents[0].Summary)
-	entries := app.logger.GetEntries()
+	entries := app.appLogs.logger.GetEntries()
 	require.Len(t, entries, 1)
 	require.Equal(t, "WARN", entries[0].Level)
 	require.Equal(t, "Cluster Test Cluster: auth failed - token expired", entries[0].Message)
@@ -206,7 +206,7 @@ func TestHandleClusterAuthStateChange_ValidEmitsRecoveredEvent(t *testing.T) {
 func TestHandleClusterAuthStateChange_InvalidWithoutCauseIsolatesBackgroundCluster(t *testing.T) {
 	app := newTestAppWithDefaults(t)
 	reporter := &recordingErrorReporter{}
-	app.logger = NewLogger(100, reporter)
+	app.appLogs = NewAppLogService(NewLogger(100, reporter))
 	setTestAppRuntimeReady(t, app, context.Background())
 	app.governorVisible = "cluster-foreground"
 	app.clusterLifecycle = newClusterLifecycle(nil)
@@ -241,7 +241,7 @@ func TestHandleClusterAuthStateChange_InvalidWithoutCauseIsolatesBackgroundClust
 	require.Equal(t, ClusterStateReady, app.clusterLifecycle.GetState("cluster-foreground"))
 	require.Equal(t, ClusterStateAuthFailed, app.clusterLifecycle.GetState("cluster-background"))
 
-	entries := app.logger.GetEntries()
+	entries := app.appLogs.logger.GetEntries()
 	require.Len(t, entries, 1)
 	require.Equal(t, "WARN", entries[0].Level)
 	require.Equal(t, "Cluster Background: auth failed - credentials rejected", entries[0].Message)
@@ -305,7 +305,7 @@ func TestHandleClusterAuthStateChange_UnknownStateNoOp(t *testing.T) {
 
 	app.handleClusterAuthStateChange("cluster-a", authstate.State(99), authstate.FailureDiagnostic{})
 
-	require.Empty(t, app.logger.GetEntries())
+	require.Empty(t, app.appLogs.logger.GetEntries())
 	require.Zero(t, app.selectionGeneration.Load())
 }
 

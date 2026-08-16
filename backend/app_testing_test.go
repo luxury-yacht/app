@@ -21,7 +21,7 @@ func TestInitializeForTestingSetsContextAndLogger(t *testing.T) {
 
 	require.True(t, app.runtimeAvailable())
 	require.NoError(t, app.CtxOrBackground().Err())
-	require.NotNil(t, app.logger)
+	require.NotNil(t, app.appLogs.logger)
 }
 
 // TestAppTestingSettersUpdateClusterClients verifies that the setter methods

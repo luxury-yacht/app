@@ -333,6 +333,63 @@ func TestOperationsCoordinatorOwnsLiveOperationStateWithoutAnAppBackpointer(t *t
 	require.Contains(t, mainSource, "Operations:     operationsCoordinator,")
 }
 
+func TestPhaseThreeLeafOwnersReplaceProcessStateOnApp(t *testing.T) {
+	appSource := strings.Join(strings.Fields(readTestFile(t, repositoryPath("backend", "app.go"))), " ")
+	for _, displaced := range []string{
+		"menu *application.Menu",
+		"kubeconfigSearchPaths []string",
+		"windowSettings *WindowSettings",
+		"appSettings *AppSettings",
+		"logger *Logger",
+		"errorReporter sentryreporting.Reporter",
+		"persistenceMu sync.Mutex",
+		"settingsMu sync.Mutex",
+		"installationTelemetryMu sync.Mutex",
+		"attentionRulesMu sync.Mutex",
+		"applicationUpdates applicationUpdateCoordinator",
+		"applicationUpdateEventUnsubscribers []func()",
+	} {
+		require.NotContains(t, appSource, displaced)
+	}
+
+	for _, owner := range []string{
+		"desktopShell *DesktopShell",
+		"preferences *PreferencesService",
+		"favorites *FavoritesService",
+		"uiState *UIStateStore",
+		"appLogs *AppLogService",
+		"errorReporting *ErrorReportingService",
+		"attention *ClusterAttentionService",
+		"updates *UpdateCoordinator",
+		"dataManagement *DataManagementCoordinator",
+	} {
+		require.Contains(t, appSource, owner)
+	}
+
+	mainSource := readTestFile(t, repositoryPath("main.go"))
+	require.Contains(t, mainSource, "backend.NewApp(wailsApp, reporter)")
+	require.Contains(t, mainSource, "desktopShell := backendApp.DesktopShell()")
+	require.Contains(t, mainSource, "Preferences:    backendApp.PreferencesService(),")
+	require.Contains(t, mainSource, "Updates:        backendApp.UpdateCoordinator(),")
+	require.Contains(t, mainSource, "DesktopShell:   desktopShell,")
+	require.Contains(t, mainSource, "backend.InitializeErrorReporting(composition.preferences, composition.reporting)")
+
+	for _, path := range []string{
+		"desktop_shell.go",
+		"preferences_service.go",
+		"favorites_service.go",
+		"ui_state_store.go",
+		"app_log_service.go",
+		"error_reporting_service.go",
+		"cluster_attention_service.go",
+		"update_coordinator.go",
+		"data_management_coordinator.go",
+	} {
+		source := readTestFile(t, repositoryPath("backend", path))
+		require.NotRegexpf(t, `\*App(?:\s|,|\))`, source, "%s must not retain an App back-pointer", path)
+	}
+}
+
 func TestDirectWailsCompositionContractRejectsBoundaryRegressions(t *testing.T) {
 	mainSource := readTestFile(t, repositoryPath("main.go"))
 	windowSource := readTestFile(t, repositoryPath("internal", "appwindow", "registry.go"))
@@ -396,10 +453,10 @@ func TestCompositionOrderingContractRejectsReorderedFixtures(t *testing.T) {
 		{"updatetemp.ConfigureProcess()", "backend.MaybeRunExecWrapper()"},
 		{"backend.MaybeRunExecWrapper()", "reporter, reporterErr := newSentryReporter("},
 		{"reporter, reporterErr := newSentryReporter(", "composition := newApplicationComposition("},
-		{"composition := newApplicationComposition(", "backend.InitializeErrorReporting(composition.backend)"},
-		{"backend.InitializeErrorReporting(composition.backend)", "composition.application.Run()"},
-		{"backendApp = backend.NewApp(wailsApp, reporter)", "backend.ConfigureApplicationUpdates(backendApp,"},
-		{"backend.ConfigureApplicationUpdates(backendApp,", "desktopService = backend.NewDesktopService("},
+		{"composition := newApplicationComposition(", "backend.InitializeErrorReporting(composition.preferences, composition.reporting)"},
+		{"backend.InitializeErrorReporting(composition.preferences, composition.reporting)", "composition.application.Run()"},
+		{"backendApp = backend.NewApp(wailsApp, reporter)", "backend.ConfigureApplicationUpdates(backendApp.UpdateCoordinator(),"},
+		{"backend.ConfigureApplicationUpdates(backendApp.UpdateCoordinator(),", "desktopService = backend.NewDesktopService("},
 		{"desktopService = backend.NewDesktopService(", "wailsApp.HandleStream(backend.RefreshResourceStreamName"},
 		{"wailsApp.HandleStream(backend.RefreshResourceStreamName", "wailsApp.HandleStream(backend.RefreshContainerLogsStreamName"},
 		{"wailsApp.HandleStream(backend.RefreshContainerLogsStreamName", "wailsApp.RegisterService("},
@@ -525,12 +582,12 @@ func validateCompositionOrdering(mainSource string) error {
 			"backend.MaybeRunExecWrapper()",
 			"reporter, reporterErr := newSentryReporter(",
 			"composition := newApplicationComposition(",
-			"backend.InitializeErrorReporting(composition.backend)",
+			"backend.InitializeErrorReporting(composition.preferences, composition.reporting)",
 			"composition.application.Run()",
 		},
 		{
 			"backendApp = backend.NewApp(wailsApp, reporter)",
-			"backend.ConfigureApplicationUpdates(backendApp,",
+			"backend.ConfigureApplicationUpdates(backendApp.UpdateCoordinator(),",
 			"desktopService = backend.NewDesktopService(",
 			"wailsApp.HandleStream(backend.RefreshResourceStreamName",
 			"wailsApp.HandleStream(backend.RefreshContainerLogsStreamName",

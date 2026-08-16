@@ -246,7 +246,7 @@ func (a *App) initializeOperationsCoordinator() {
 		Permissions: defaultOperationsPermissionChecker{},
 		Context:     a.CtxOrBackground,
 		EmitEvent:   a.emitEvent,
-		Logger:      a.logger,
+		Logger:      a.appLogs.logger,
 		DrainStore:  nodemaintenance.GlobalStore(),
 	})
 }

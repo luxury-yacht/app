@@ -32,7 +32,9 @@ func (a *App) setRefreshSubsystem(clusterID string, subsystem *system.Subsystem)
 	}
 	a.refreshSubsystems[clusterID] = subsystem
 	a.refreshSubsystemsMu.Unlock()
-	a.syncAttentionIgnoreRulesForSubsystem(clusterID, subsystem)
+	if a.attention != nil && subsystem != nil {
+		a.attention.RegisterTarget(clusterID, subsystem.AttentionIndex)
+	}
 }
 
 // swapRefreshSubsystem stores next as clusterID's subsystem and stops the
@@ -58,6 +60,9 @@ func (a *App) takeRefreshSubsystem(clusterID string) *system.Subsystem {
 	defer a.refreshSubsystemsMu.Unlock()
 	subsystem := a.refreshSubsystems[clusterID]
 	delete(a.refreshSubsystems, clusterID)
+	if a.attention != nil && subsystem != nil {
+		a.attention.UnregisterTarget(clusterID, subsystem.AttentionIndex)
+	}
 	return subsystem
 }
 
@@ -78,8 +83,17 @@ func (a *App) replaceRefreshSubsystems(next map[string]*system.Subsystem) map[st
 	previous := copyRefreshSubsystems(a.refreshSubsystems)
 	a.refreshSubsystems = copyRefreshSubsystems(next)
 	a.refreshSubsystemsMu.Unlock()
+	if a.attention != nil {
+		for clusterID, subsystem := range previous {
+			if subsystem != nil {
+				a.attention.UnregisterTarget(clusterID, subsystem.AttentionIndex)
+			}
+		}
+	}
 	for clusterID, subsystem := range next {
-		a.syncAttentionIgnoreRulesForSubsystem(clusterID, subsystem)
+		if a.attention != nil && subsystem != nil {
+			a.attention.RegisterTarget(clusterID, subsystem.AttentionIndex)
+		}
 	}
 	return previous
 }

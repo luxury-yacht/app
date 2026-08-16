@@ -50,7 +50,7 @@ users:
 	require.Equal(t, appconfig.KubernetesClientQPS, limiterQPS)
 	require.Equal(t, appconfig.KubernetesClientBurst, limiterBurst)
 
-	app.appSettings = &AppSettings{
+	app.preferences.appSettings = &AppSettings{
 		KubernetesClientQPS:   250,
 		KubernetesClientBurst: 500,
 	}

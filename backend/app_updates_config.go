@@ -4,13 +4,13 @@ import (
 	_ "embed" // Enables go:embed for the pinned updater public key.
 	"fmt"
 	"os"
-	"path/filepath"
 	"runtime"
 	"strings"
 	"time"
 
 	"github.com/luxury-yacht/app/backend/internal/appupdates"
 	"github.com/luxury-yacht/app/backend/internal/logsources"
+	"github.com/luxury-yacht/app/internal/appstate"
 	"github.com/luxury-yacht/app/internal/updateidentity"
 	"github.com/luxury-yacht/app/internal/updatestate"
 	"github.com/luxury-yacht/app/internal/updatetemp"
@@ -40,27 +40,28 @@ type applicationUpdateRuntime struct {
 
 // ConfigureApplicationUpdates constructs the one process-owned update
 // coordinator before application.Run without adding a frontend service method.
-func ConfigureApplicationUpdates(app *App, options ApplicationUpdateOptions) {
-	app.configureApplicationUpdates(options)
+func ConfigureApplicationUpdates(coordinator *UpdateCoordinator, options ApplicationUpdateOptions) {
+	coordinator.configureApplicationUpdates(options)
 }
 
-func (a *App) configureApplicationUpdates(options ApplicationUpdateOptions) {
-	if a == nil {
+func (u *UpdateCoordinator) configureApplicationUpdates(options ApplicationUpdateOptions) {
+	if u == nil {
 		return
 	}
-	configuration := a.prepareApplicationUpdateConfiguration(options)
+	u.resetState, u.resetStateErr = newApplicationUpdateStateStore(options)
+	configuration := u.prepareApplicationUpdateConfiguration(options)
 	coordinator := appupdates.New(appupdates.Dependencies{
 		Client: configuration.client, Provider: configuration.provider,
 		Eligibility: configuration.eligibility, PublicKey: applicationUpdatePublicKey,
 		Platform: runtime.GOOS, Architecture: runtime.GOARCH,
 		TempRoot: options.TempRoot, UpdateState: configuration.updateState,
 		Reconciled: configuration.reconciled, SkippedVersion: configuration.skippedVersion,
-		OnChange: a.storeApplicationUpdateSnapshot,
+		OnChange: u.storeApplicationUpdateSnapshot,
 	})
-	a.applicationUpdates = coordinator
-	if a.wailsApplication != nil {
-		a.applicationUpdateEventUnsubscribers = subscribeApplicationUpdateEvents(
-			wailsApplicationUpdateEventSubscriber{events: a.wailsApplication.Event},
+	u.coordinator = coordinator
+	if u.shell != nil && u.shell.Application() != nil {
+		u.unsubscribers = subscribeApplicationUpdateEvents(
+			wailsApplicationUpdateEventSubscriber{events: u.shell.Application().Event},
 			coordinator,
 		)
 	}
@@ -75,13 +76,13 @@ type applicationUpdateConfiguration struct {
 	skippedVersion string
 }
 
-func (a *App) prepareApplicationUpdateConfiguration(
+func (u *UpdateCoordinator) prepareApplicationUpdateConfiguration(
 	options ApplicationUpdateOptions,
 ) applicationUpdateConfiguration {
-	eligibility := a.resolveApplicationUpdateEligibility(options)
-	setup, eligibility := a.resolveApplicationUpdateState(options, eligibility)
-	client := a.applicationUpdateClient()
-	provider, eligibility := a.resolveApplicationUpdateProvider(options, client, eligibility)
+	eligibility := u.resolveApplicationUpdateEligibility(options)
+	setup, eligibility := u.resolveApplicationUpdateState(options, eligibility)
+	client := u.applicationUpdateClient()
+	provider, eligibility := u.resolveApplicationUpdateProvider(options, client, eligibility)
 	configuration := applicationUpdateConfiguration{
 		client: client, provider: provider, eligibility: eligibility,
 	}
@@ -93,23 +94,23 @@ func (a *App) prepareApplicationUpdateConfiguration(
 	return configuration
 }
 
-func (a *App) resolveApplicationUpdateEligibility(
+func (u *UpdateCoordinator) resolveApplicationUpdateEligibility(
 	options ApplicationUpdateOptions,
 ) updateidentity.BuildEligibility {
 	eligibility := disabledApplicationUpdateEligibility()
 	if options.TempSetupError != nil {
-		a.logger.Warn(fmt.Sprintf("Automatic updates disabled: %v", options.TempSetupError), logsources.UpdateCheck)
+		u.logger.Warn(fmt.Sprintf("Automatic updates disabled: %v", options.TempSetupError), logsources.UpdateCheck)
 		return eligibility
 	}
 	resolved, err := currentApplicationUpdateEligibility(time.Now())
 	if err != nil {
-		a.logger.Warn(fmt.Sprintf("Automatic updates disabled: %v", err), logsources.UpdateCheck)
+		u.logger.Warn(fmt.Sprintf("Automatic updates disabled: %v", err), logsources.UpdateCheck)
 		return eligibility
 	}
 	return resolved
 }
 
-func (a *App) resolveApplicationUpdateState(
+func (u *UpdateCoordinator) resolveApplicationUpdateState(
 	options ApplicationUpdateOptions,
 	eligibility updateidentity.BuildEligibility,
 ) (*applicationUpdateStateSetup, updateidentity.BuildEligibility) {
@@ -118,23 +119,23 @@ func (a *App) resolveApplicationUpdateState(
 	}
 	setup, err := prepareApplicationUpdateState(options, eligibility)
 	if err != nil {
-		a.logger.Warn(fmt.Sprintf("Automatic update recovery state unavailable: %v", err), logsources.UpdateCheck)
+		u.logger.Warn(fmt.Sprintf("Automatic update recovery state unavailable: %v", err), logsources.UpdateCheck)
 		eligibility.CanInstall = false
 		eligibility.Installation.CanInstall = false
 		return nil, eligibility
 	}
-	a.logApplicationUpdateReconciliation(setup.Reconciled)
+	u.logApplicationUpdateReconciliation(setup.Reconciled)
 	return &setup, eligibility
 }
 
-func (a *App) applicationUpdateClient() appupdates.Client {
-	if a.wailsApplication == nil || a.wailsApplication.Updater == nil {
+func (u *UpdateCoordinator) applicationUpdateClient() appupdates.Client {
+	if u.shell == nil {
 		return nil
 	}
-	return a.wailsApplication.Updater
+	return u.shell.UpdateClient()
 }
 
-func (a *App) resolveApplicationUpdateProvider(
+func (u *UpdateCoordinator) resolveApplicationUpdateProvider(
 	options ApplicationUpdateOptions,
 	client appupdates.Client,
 	eligibility updateidentity.BuildEligibility,
@@ -152,7 +153,7 @@ func (a *App) resolveApplicationUpdateProvider(
 		Current:    eligibility.Release,
 	})
 	if err != nil {
-		a.logger.Warn(fmt.Sprintf("Automatic updates disabled: %v", err), logsources.UpdateCheck)
+		u.logger.Warn(fmt.Sprintf("Automatic updates disabled: %v", err), logsources.UpdateCheck)
 		return nil, disableApplicationUpdateInstallation(eligibility)
 	}
 	return provider, eligibility
@@ -168,18 +169,7 @@ func prepareApplicationUpdateState(
 	options ApplicationUpdateOptions,
 	eligibility updateidentity.BuildEligibility,
 ) (applicationUpdateStateSetup, error) {
-	statePath := strings.TrimSpace(options.StatePath)
-	if statePath == "" {
-		configDirectory, err := os.UserConfigDir()
-		if err != nil {
-			return applicationUpdateStateSetup{}, fmt.Errorf("resolve application update config directory: %w", err)
-		}
-		statePath = filepath.Join(configDirectory, "luxury-yacht", "application-update.json")
-	}
-	store, err := updatestate.New(updatestate.Config{
-		StatePath: statePath,
-		TempRoot:  options.TempRoot,
-	})
+	store, err := newApplicationUpdateStateStore(options)
 	if err != nil {
 		return applicationUpdateStateSetup{}, err
 	}
@@ -199,10 +189,31 @@ func prepareApplicationUpdateState(
 	}, nil
 }
 
-func (a *App) logApplicationUpdateReconciliation(result updatestate.ReconcileResult) {
+func newApplicationUpdateStateStore(options ApplicationUpdateOptions) (*updatestate.Store, error) {
+	if options.TempSetupError != nil {
+		return nil, options.TempSetupError
+	}
+	if strings.TrimSpace(options.TempRoot) == "" {
+		return nil, nil
+	}
+	statePath := strings.TrimSpace(options.StatePath)
+	if statePath == "" {
+		manifest, err := appstate.Resolve("luxury-yacht")
+		if err != nil {
+			return nil, fmt.Errorf("resolve application update config directory: %w", err)
+		}
+		statePath = manifest.UpdateStatePath()
+	}
+	return updatestate.New(updatestate.Config{
+		StatePath: statePath,
+		TempRoot:  options.TempRoot,
+	})
+}
+
+func (u *UpdateCoordinator) logApplicationUpdateReconciliation(result updatestate.ReconcileResult) {
 	switch result.Outcome {
 	case updatestate.OutcomeSucceeded:
-		a.logger.Info(
+		u.logger.Info(
 			fmt.Sprintf("Automatic update to %s applied successfully", result.TargetVersion),
 			logsources.UpdateCheck,
 		)
@@ -215,9 +226,9 @@ func (a *App) logApplicationUpdateReconciliation(result updatestate.ReconcileRes
 		if result.HelperDiagnostic != "" {
 			message += ": " + result.HelperDiagnostic
 		}
-		a.logger.Error(message, logsources.UpdateCheck)
+		u.logger.Error(message, logsources.UpdateCheck)
 	case updatestate.OutcomeSuperseded:
-		a.logger.Info(
+		u.logger.Info(
 			fmt.Sprintf("Automatic update attempt to %s was superseded by version %s", result.TargetVersion, Version),
 			logsources.UpdateCheck,
 		)

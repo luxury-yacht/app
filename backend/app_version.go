@@ -93,9 +93,9 @@ func loadEmbeddedBuildInfo() *embeddedBuildInfo {
 }
 
 // GetAppInfo returns the application version information
-func (a *App) GetAppInfo() (*AppInfo, error) {
+func (u *UpdateCoordinator) GetAppInfo() (*AppInfo, error) {
 	if info := loadEmbeddedBuildInfo(); info != nil && info.Version != "dev" {
-		return a.withUpdateInfo(&AppInfo{
+		return u.withUpdateInfo(&AppInfo{
 			Version:    info.Version,
 			BuildTime:  info.BuildTime,
 			GitCommit:  info.GitCommit,
@@ -105,7 +105,7 @@ func (a *App) GetAppInfo() (*AppInfo, error) {
 	}
 
 	if info := loadDevAppInfo(); info != nil {
-		return a.withUpdateInfo(info), nil
+		return u.withUpdateInfo(info), nil
 	}
 
 	// Build app info
@@ -121,7 +121,7 @@ func (a *App) GetAppInfo() (*AppInfo, error) {
 		info.ExpiryDate = BetaExpiry
 	}
 
-	return a.withUpdateInfo(info), nil
+	return u.withUpdateInfo(info), nil
 }
 
 func loadDevAppInfo() *AppInfo {
@@ -158,11 +158,11 @@ func loadDevAppInfo() *AppInfo {
 	return nil
 }
 
-func (a *App) withUpdateInfo(info *AppInfo) *AppInfo {
-	if a == nil || info == nil {
+func (u *UpdateCoordinator) withUpdateInfo(info *AppInfo) *AppInfo {
+	if u == nil || info == nil {
 		return info
 	}
-	info.Update = a.getUpdateInfo()
+	info.Update = u.getUpdateInfo()
 	return info
 }
 
@@ -194,10 +194,10 @@ func (a *App) checkBetaExpiry() error {
 
 	// Calculate days until expiry for logging
 	daysLeft := int(time.Until(expiryTime).Hours() / 24)
-	if daysLeft <= 7 && a != nil && a.logger != nil {
+	if daysLeft <= 7 && a != nil && a.appLogs.logger != nil {
 		// Warning if expiring soon
 		message := fmt.Sprintf("Beta build expires in %d day(s) on %s", daysLeft, expiryTime.Format("January 2, 2006"))
-		a.logger.Warn(message, logsources.App)
+		a.appLogs.logger.Warn(message, logsources.App)
 	}
 
 	return nil

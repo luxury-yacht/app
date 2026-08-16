@@ -79,19 +79,19 @@ func subscribeApplicationUpdateEvents(
 	return unsubscribers
 }
 
-func (a *App) storeApplicationUpdateSnapshot(snapshot appupdates.Snapshot) {
-	if a == nil {
+func (u *UpdateCoordinator) storeApplicationUpdateSnapshot(snapshot appupdates.Snapshot) {
+	if u == nil {
 		return
 	}
 	info := updateInfoFromSnapshot(snapshot)
-	a.emitEvent(appUpdateEventName, info)
+	u.emit(appUpdateEventName, info)
 }
 
-func (a *App) getUpdateInfo() *UpdateInfo {
-	if a == nil || a.applicationUpdates == nil {
+func (u *UpdateCoordinator) getUpdateInfo() *UpdateInfo {
+	if u == nil || u.coordinator == nil {
 		return nil
 	}
-	return updateInfoFromSnapshot(a.applicationUpdates.Snapshot())
+	return updateInfoFromSnapshot(u.coordinator.Snapshot())
 }
 
 func updateInfoFromSnapshot(snapshot appupdates.Snapshot) *UpdateInfo {
@@ -118,68 +118,68 @@ func updateInfoFromSnapshot(snapshot appupdates.Snapshot) *UpdateInfo {
 
 // CheckForUpdates performs only release discovery. Download and restart remain
 // separate user-consent commands.
-func (a *App) CheckForUpdates() (*UpdateInfo, error) {
-	if a == nil || a.applicationUpdates == nil {
+func (u *UpdateCoordinator) CheckForUpdates() (*UpdateInfo, error) {
+	if u == nil || u.coordinator == nil {
 		return updateInfoFromSnapshot(appupdates.Snapshot{Status: appupdates.StatusDisabled}), nil
 	}
-	snapshot, err := a.applicationUpdates.Check(a.CtxOrBackground())
+	snapshot, err := u.coordinator.Check(u.operationContext())
 	return updateInfoFromSnapshot(snapshot), err
 }
 
 // showAboutAndCheckForUpdates gives native menu users immediate feedback while
 // keeping the provider request off the platform menu callback.
-func (a *App) showAboutAndCheckForUpdates() {
-	if a == nil {
+func (u *UpdateCoordinator) showAboutAndCheckForUpdates() {
+	if u == nil {
 		return
 	}
-	a.ShowAbout()
+	u.shell.ShowAbout()
 	go func() {
-		if _, err := a.CheckForUpdates(); err != nil && a.logger != nil {
-			a.logger.Warn(fmt.Sprintf("Application update check failed: %v", err), logsources.App)
+		if _, err := u.CheckForUpdates(); err != nil && u.logger != nil {
+			u.logger.Warn(fmt.Sprintf("Application update check failed: %v", err), logsources.App)
 		}
 	}()
 }
 
 // DownloadApplicationUpdate downloads, verifies, and prepares the exact
 // release version the user approved.
-func (a *App) DownloadApplicationUpdate(version string) (*UpdateInfo, error) {
-	if a == nil || a.applicationUpdates == nil {
+func (u *UpdateCoordinator) DownloadApplicationUpdate(version string) (*UpdateInfo, error) {
+	if u == nil || u.coordinator == nil {
 		return updateInfoFromSnapshot(appupdates.Snapshot{Status: appupdates.StatusDisabled}),
 			fmt.Errorf("automatic updates are disabled")
 	}
-	snapshot, err := a.applicationUpdates.Download(a.CtxOrBackground(), version)
+	snapshot, err := u.coordinator.Download(u.operationContext(), version)
 	return updateInfoFromSnapshot(snapshot), err
 }
 
 // RestartAndApplyApplicationUpdate starts the prepared updater helper only
 // after explicit user consent.
-func (a *App) RestartAndApplyApplicationUpdate() (*UpdateInfo, error) {
-	if a == nil || a.applicationUpdates == nil {
+func (u *UpdateCoordinator) RestartAndApplyApplicationUpdate() (*UpdateInfo, error) {
+	if u == nil || u.coordinator == nil {
 		return updateInfoFromSnapshot(appupdates.Snapshot{Status: appupdates.StatusDisabled}),
 			fmt.Errorf("automatic updates are disabled")
 	}
-	snapshot, err := a.applicationUpdates.Restart(a.CtxOrBackground())
+	snapshot, err := u.coordinator.Restart(u.operationContext())
 	return updateInfoFromSnapshot(snapshot), err
 }
 
 // SkipApplicationUpdate durably suppresses the exact offered version before
 // hiding it from the current process.
-func (a *App) SkipApplicationUpdate(version string) (*UpdateInfo, error) {
-	if a == nil || a.applicationUpdates == nil {
+func (u *UpdateCoordinator) SkipApplicationUpdate(version string) (*UpdateInfo, error) {
+	if u == nil || u.coordinator == nil {
 		return updateInfoFromSnapshot(appupdates.Snapshot{Status: appupdates.StatusDisabled}),
 			fmt.Errorf("automatic updates are disabled")
 	}
-	snapshot, err := a.applicationUpdates.Skip(a.CtxOrBackground(), version)
+	snapshot, err := u.coordinator.Skip(u.operationContext(), version)
 	return updateInfoFromSnapshot(snapshot), err
 }
 
 // RemoveApplicationUpdateSkip clears the durable version skip and offers the
 // release again when it remains available.
-func (a *App) RemoveApplicationUpdateSkip() (*UpdateInfo, error) {
-	if a == nil || a.applicationUpdates == nil {
+func (u *UpdateCoordinator) RemoveApplicationUpdateSkip() (*UpdateInfo, error) {
+	if u == nil || u.coordinator == nil {
 		return updateInfoFromSnapshot(appupdates.Snapshot{Status: appupdates.StatusDisabled}),
 			fmt.Errorf("automatic updates are disabled")
 	}
-	snapshot, err := a.applicationUpdates.RemoveSkip(a.CtxOrBackground())
+	snapshot, err := u.coordinator.RemoveSkip(u.operationContext())
 	return updateInfoFromSnapshot(snapshot), err
 }

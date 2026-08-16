@@ -170,7 +170,7 @@ func TestFetchClusterResourceRequiresObjectName(t *testing.T) {
 func TestFetchResourceRetriesOnTransientError(t *testing.T) {
 	app := newTestAppWithDefaults(t)
 	app.telemetryRecorder = telemetry.NewRecorder()
-	app.logger = NewLogger(100)
+	app.appLogs = NewAppLogService(NewLogger(100))
 	setTestAppRuntimeReady(t, app, context.Background())
 
 	originalSleep := fetchRetrySleep
@@ -199,7 +199,7 @@ func TestFetchResourceRetriesOnTransientError(t *testing.T) {
 func TestFetchResourceExhaustsRetriesAndEmits(t *testing.T) {
 	app := newTestAppWithDefaults(t)
 	app.telemetryRecorder = telemetry.NewRecorder()
-	app.logger = NewLogger(100)
+	app.appLogs = NewAppLogService(NewLogger(100))
 	setTestAppRuntimeReady(t, app, context.Background())
 	var emitted *BackendErrorEvent
 	app.eventEmitter = func(_ context.Context, name string, args ...interface{}) {

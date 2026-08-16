@@ -3,6 +3,7 @@ package backend
 import (
 	"context"
 	"encoding/json"
+	"errors"
 	"os"
 	"path/filepath"
 	"testing"
@@ -28,11 +29,11 @@ func installDataManagementDialogs(t *testing.T, app *App, savePath, openPath str
 	t.Helper()
 	saveOptions := &application.SaveFileDialogOptions{}
 	openOptions := &application.OpenFileDialogOptions{}
-	app.saveFileDialog = func(options *application.SaveFileDialogOptions) (string, error) {
+	app.desktopShell.saveFileDialog = func(options *application.SaveFileDialogOptions) (string, error) {
 		*saveOptions = *options
 		return savePath, nil
 	}
-	app.openFileDialog = func(options *application.OpenFileDialogOptions) (string, error) {
+	app.desktopShell.openFileDialog = func(options *application.OpenFileDialogOptions) (string, error) {
 		*openOptions = *options
 		return openPath, nil
 	}
@@ -50,9 +51,9 @@ func TestDataManagementDialogsDefaultToUserHomeDirectory(t *testing.T) {
 	exportPath := filepath.Join(t.TempDir(), "export.json")
 	saveOptions, openOptions := installDataManagementDialogs(t, app, exportPath, "")
 
-	_, err = app.exportDataFile("Export Data", "export.json", map[string]string{"data": "value"})
+	_, err = app.dataManagement.exportDataFile("Export Data", "export.json", map[string]string{"data": "value"})
 	require.NoError(t, err)
-	_, _, err = app.chooseDataImportFile("Import Data")
+	_, _, err = app.dataManagement.chooseDataImportFile("Import Data")
 	require.NoError(t, err)
 
 	require.Equal(t, home, saveOptions.Directory)
@@ -74,12 +75,12 @@ func TestExportSettingsExportsPreferencesAndSearchPathsOnly(t *testing.T) {
 	settings.Clusters = map[string]settingsClusterSection{
 		"cluster-a": {AllowedNamespaces: []string{"team-a"}},
 	}
-	require.NoError(t, app.saveSettingsFile(settings))
+	require.NoError(t, app.preferences.saveSettingsFile(settings))
 
 	exportPath := filepath.Join(t.TempDir(), "settings-export.json")
 	installDataManagementDialogs(t, app, exportPath, "")
 
-	result, err := app.ExportSettings()
+	result, err := app.dataManagement.ExportSettings()
 	require.NoError(t, err)
 	require.False(t, result.Canceled)
 	require.Equal(t, exportPath, result.Path)
@@ -120,10 +121,10 @@ func TestImportSettingsReplacesPortableSettingsAndPreservesSessionState(t *testi
 		"cluster-a": {AllowedNamespaces: []string{"team-a"}},
 	}
 	current.Attention = &settingsGlobalAttentionRules{FindingTypes: []string{"pod-restarts"}}
-	require.NoError(t, app.saveSettingsFile(current))
-	require.NoError(t, app.loadAppSettings())
+	require.NoError(t, app.preferences.saveSettingsFile(current))
+	ensurePreferencesLoaded(t, app)
 
-	persistencePath, err := app.getPersistenceFilePath()
+	persistencePath, err := app.uiState.getPersistenceFilePath()
 	require.NoError(t, err)
 	persistenceBefore := []byte(`{"schemaVersion":1,"updatedAt":"2026-01-01T00:00:00Z","clusterTabs":{"order":["cluster-a"]},"tables":{"gridtable":{"v1":{"pods":{"sort":"name"}}}}}`)
 	require.NoError(t, os.WriteFile(persistencePath, persistenceBefore, 0o644))
@@ -149,12 +150,12 @@ func TestImportSettingsReplacesPortableSettingsAndPreservesSessionState(t *testi
 	require.NoError(t, os.WriteFile(importPath, importData, 0o600))
 	installDataManagementDialogs(t, app, "", importPath)
 
-	result, err := app.ImportSettings()
+	result, err := app.dataManagement.ImportSettings()
 	require.NoError(t, err)
 	require.False(t, result.Canceled)
 	require.Equal(t, importPath, result.Path)
 
-	saved, err := app.loadSettingsFile()
+	saved, err := app.preferences.loadSettingsFile()
 	require.NoError(t, err)
 	require.Equal(t, "light", saved.Preferences.AppearanceMode)
 	require.True(t, saved.Preferences.UseShortResourceNames)
@@ -172,7 +173,7 @@ func TestImportSettingsReplacesPortableSettingsAndPreservesSessionState(t *testi
 	require.Equal(t, current.Attention, saved.Attention)
 	require.Equal(t, current.Telemetry, saved.Telemetry)
 
-	inMemory, err := app.GetAppSettings()
+	inMemory, err := app.preferences.GetAppSettings()
 	require.NoError(t, err)
 	require.Equal(t, "light", inMemory.AppearanceMode)
 	require.True(t, inMemory.UseShortResourceNames)
@@ -189,8 +190,8 @@ func TestImportSettingsRejectsWrongFormatWithoutChangingSettings(t *testing.T) {
 	setTestAppRuntimeReady(t, app, context.Background())
 	current := defaultSettingsFile()
 	current.Preferences.AppearanceMode = "dark"
-	require.NoError(t, app.saveSettingsFile(current))
-	settingsPath, err := app.getSettingsFilePath()
+	require.NoError(t, app.preferences.saveSettingsFile(current))
+	settingsPath, err := app.preferences.getSettingsFilePath()
 	require.NoError(t, err)
 	before, err := os.ReadFile(settingsPath)
 	require.NoError(t, err)
@@ -199,7 +200,7 @@ func TestImportSettingsRejectsWrongFormatWithoutChangingSettings(t *testing.T) {
 	require.NoError(t, os.WriteFile(importPath, []byte(`{"format":"luxury-yacht-favorites","schemaVersion":1,"favorites":[]}`), 0o600))
 	installDataManagementDialogs(t, app, "", importPath)
 
-	_, err = app.ImportSettings()
+	_, err = app.dataManagement.ImportSettings()
 	require.ErrorContains(t, err, "not a Luxury Yacht settings export")
 	after, readErr := os.ReadFile(settingsPath)
 	require.NoError(t, readErr)
@@ -217,11 +218,11 @@ func TestFavoritesExportImportRoundTripReplacesLibrary(t *testing.T) {
 			dataManagementFavorite("favorite-b", "Favorite B"),
 		},
 	}
-	require.NoError(t, app.saveFavoritesFile(original))
+	require.NoError(t, app.favorites.saveFavoritesFile(original))
 
 	exportPath := filepath.Join(t.TempDir(), "favorites-export.json")
 	installDataManagementDialogs(t, app, exportPath, exportPath)
-	exportResult, err := app.ExportFavorites()
+	exportResult, err := app.dataManagement.ExportFavorites()
 	require.NoError(t, err)
 	require.False(t, exportResult.Canceled)
 
@@ -232,16 +233,16 @@ func TestFavoritesExportImportRoundTripReplacesLibrary(t *testing.T) {
 	require.Equal(t, favoritesDataFormat, exported.Format)
 	require.Equal(t, []string{"favorite-a", "favorite-b"}, []string{exported.Favorites[0].ID, exported.Favorites[1].ID})
 
-	require.NoError(t, app.saveFavoritesFile(&favoritesFile{
+	require.NoError(t, app.favorites.saveFavoritesFile(&favoritesFile{
 		Favorites: []Favorite{dataManagementFavorite("replace-me", "Replace Me")},
 	}))
 
-	importResult, err := app.ImportFavorites()
+	importResult, err := app.dataManagement.ImportFavorites()
 	require.NoError(t, err)
 	require.False(t, importResult.Canceled)
 	require.Equal(t, 2, importResult.Imported)
 
-	got, err := app.GetFavorites()
+	got, err := app.favorites.GetFavorites()
 	require.NoError(t, err)
 	require.Equal(t, []string{"favorite-a", "favorite-b"}, []string{got[0].ID, got[1].ID})
 	require.Equal(t, []int{0, 1}, []int{got[0].Order, got[1].Order})
@@ -252,7 +253,7 @@ func TestImportFavoritesRejectsDuplicateIDsWithoutChangingLibrary(t *testing.T) 
 	app := newTestAppWithDefaults(t)
 	setTestAppRuntimeReady(t, app, context.Background())
 	beforeFavorite := dataManagementFavorite("existing", "Existing")
-	require.NoError(t, app.saveFavoritesFile(&favoritesFile{Favorites: []Favorite{beforeFavorite}}))
+	require.NoError(t, app.favorites.saveFavoritesFile(&favoritesFile{Favorites: []Favorite{beforeFavorite}}))
 
 	duplicate := dataManagementFavorite("duplicate", "First")
 	data, err := json.Marshal(favoritesDataFile{
@@ -268,9 +269,9 @@ func TestImportFavoritesRejectsDuplicateIDsWithoutChangingLibrary(t *testing.T) 
 	require.NoError(t, os.WriteFile(importPath, data, 0o600))
 	installDataManagementDialogs(t, app, "", importPath)
 
-	_, err = app.ImportFavorites()
+	_, err = app.dataManagement.ImportFavorites()
 	require.ErrorContains(t, err, `duplicate favorite ID "duplicate"`)
-	got, readErr := app.GetFavorites()
+	got, readErr := app.favorites.GetFavorites()
 	require.NoError(t, readErr)
 	require.Equal(t, []Favorite{beforeFavorite}, got)
 }
@@ -282,10 +283,10 @@ func TestDataManagementDialogsTreatCancelAsSuccess(t *testing.T) {
 	installDataManagementDialogs(t, app, "", "")
 
 	for _, action := range []func() (DataManagementResult, error){
-		app.ExportSettings,
-		app.ImportSettings,
-		app.ExportFavorites,
-		app.ImportFavorites,
+		app.dataManagement.ExportSettings,
+		app.dataManagement.ImportSettings,
+		app.dataManagement.ExportFavorites,
+		app.dataManagement.ImportFavorites,
 	} {
 		result, err := action()
 		require.NoError(t, err)
@@ -295,13 +296,72 @@ func TestDataManagementDialogsTreatCancelAsSuccess(t *testing.T) {
 }
 
 func TestDataManagementRequiresAnInitializedAppContext(t *testing.T) {
-	var nilApp *App
-	_, err := nilApp.ExportSettings()
-	require.ErrorContains(t, err, "app is not initialised")
+	var nilCoordinator *DataManagementCoordinator
+	_, err := nilCoordinator.ExportSettings()
+	require.ErrorContains(t, err, "not initialised")
 
 	app := newTestAppWithDefaults(t)
-	_, err = app.ExportSettings()
+	_, err = app.dataManagement.ExportSettings()
 	require.ErrorContains(t, err, "application context is not available")
+}
+
+func TestFactoryResetClearsEveryLeafArtifactAndRestoresRuntimePolicyDefaults(t *testing.T) {
+	setTestConfigEnv(t)
+	app := newTestAppWithDefaults(t)
+	setTestAppRuntimeReady(t, app, context.Background())
+	updateState := &fakeApplicationUpdateCoordinator{}
+	app.updates.coordinator = updateState
+
+	require.NoError(t, app.preferences.saveSettingsFile(defaultSettingsFile()))
+	require.NoError(t, app.favorites.saveFavoritesFile(&favoritesFile{
+		Favorites: []Favorite{dataManagementFavorite("favorite", "Favorite")},
+	}))
+	require.NoError(t, app.uiState.SetClusterTabOrder([]string{"cluster-a"}))
+	cachePath, err := app.preferences.cacheDirPath()
+	require.NoError(t, err)
+	require.NoError(t, os.MkdirAll(cachePath, 0o700))
+	require.NoError(t, os.WriteFile(filepath.Join(cachePath, "cached"), []byte("x"), 0o600))
+	app.permissionFetchPolicy.SetPermissionFetchConcurrency(1)
+	app.containerLogsPolicy.SetContainerLogsPerScopeLimit(1)
+	searchPathResets := 0
+	app.dataManagement.searchPathsChanged = func() { searchPathResets++ }
+
+	require.NoError(t, app.dataManagement.ClearAppState())
+	require.NoError(t, app.dataManagement.ClearAppState(), "Factory Reset must be repeatable")
+
+	settingsPath, err := app.preferences.getSettingsFilePath()
+	require.NoError(t, err)
+	favoritesPath, err := app.favorites.getFavoritesFilePath()
+	require.NoError(t, err)
+	uiStatePath, err := app.uiState.getPersistenceFilePath()
+	require.NoError(t, err)
+	for _, path := range []string{settingsPath, favoritesPath, uiStatePath, cachePath} {
+		_, statErr := os.Lstat(path)
+		require.ErrorIs(t, statErr, os.ErrNotExist, path)
+	}
+	require.Nil(t, app.preferences.appSettings)
+	require.Equal(t, defaultPermissionSSRRFetchConcurrency, app.permissionFetchPolicy.Concurrency())
+	require.Equal(t, defaultObjPanelLogsTargetPerScopeLimit, app.containerLogsPolicy.Limit())
+	require.Equal(t, 2, updateState.resetCalls)
+	require.Equal(t, 2, searchPathResets)
+}
+
+func TestFactoryResetAttemptsIndependentOwnersAndReturnsPartialFailure(t *testing.T) {
+	setTestConfigEnv(t)
+	app := newTestAppWithDefaults(t)
+	setTestAppRuntimeReady(t, app, context.Background())
+	app.updates.coordinator = &fakeApplicationUpdateCoordinator{resetErr: errors.New("updater busy")}
+	require.NoError(t, app.favorites.saveFavoritesFile(&favoritesFile{
+		Favorites: []Favorite{dataManagementFavorite("favorite", "Favorite")},
+	}))
+	favoritesPath, err := app.favorites.getFavoritesFilePath()
+	require.NoError(t, err)
+
+	err = app.dataManagement.ClearAppState()
+
+	require.ErrorContains(t, err, "updater busy")
+	_, statErr := os.Lstat(favoritesPath)
+	require.ErrorIs(t, statErr, os.ErrNotExist, "favorites reset must still run after updater failure")
 }
 
 func TestReadDataImportFileRejectsOversizedFiles(t *testing.T) {
@@ -360,6 +420,21 @@ func TestDecodeSettingsDataFileRejectsInvalidPortableSettings(t *testing.T) {
 		_, _, err = decodeSettingsDataFile(data)
 		require.ErrorContains(t, err, "theme name is required")
 	})
+}
+
+func TestDecodeSettingsImportRequestsAllSixRuntimeEffectRoutes(t *testing.T) {
+	document := settingsDataFile{
+		Format:                settingsDataFormat,
+		SchemaVersion:         settingsDataSchemaVersion,
+		Preferences:           defaultSettingsFile().Preferences,
+		KubeconfigSearchPaths: []string{"/portable/kubeconfigs"},
+	}
+	data, err := json.Marshal(document)
+	require.NoError(t, err)
+
+	_, effects, err := decodeSettingsDataFile(data)
+	require.NoError(t, err)
+	require.Equal(t, allSettingsSideEffects(), effects)
 }
 
 func TestDecodeFavoritesDataFileRejectsInvalidFavorites(t *testing.T) {

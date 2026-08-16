@@ -1,7 +1,6 @@
 package backend
 
 import (
-	"context"
 	"os"
 	"path/filepath"
 	"runtime"
@@ -13,15 +12,15 @@ import (
 
 func TestSaveCSVFileUsesWailsDialogOptionsAndWritesSelection(t *testing.T) {
 	path := filepath.Join(t.TempDir(), "pods.csv")
-	app := NewApp(nil)
-	setTestAppRuntimeReady(t, app, context.Background())
+	ready := true
+	shell := NewDesktopShell(nil, func() bool { return ready }, nil, NewLogger(10))
 	var options application.SaveFileDialogOptions
-	app.saveFileDialog = func(input *application.SaveFileDialogOptions) (string, error) {
+	shell.saveFileDialog = func(input *application.SaveFileDialogOptions) (string, error) {
 		options = *input
 		return path, nil
 	}
 
-	result, err := app.SaveCsvFile("pods", "name\npod-a\n")
+	result, err := shell.SaveCsvFile("pods", "name\npod-a\n")
 
 	require.NoError(t, err)
 	require.Equal(t, "Export CSV", options.Title)

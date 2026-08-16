@@ -4,12 +4,11 @@ import (
 	"encoding/json"
 	"fmt"
 	"os"
-	"path/filepath"
 	"strings"
-	"sync"
 	"time"
 
 	"github.com/google/uuid"
+	"github.com/luxury-yacht/app/internal/appstate"
 )
 
 // Favorite represents a user-saved view bookmark.
@@ -295,21 +294,16 @@ func validateFavoritePanes(panes map[string]FavoritePaneState) error {
 	return nil
 }
 
-// favoritesMu guards favorites.json read/write operations.
-// Separate from persistenceMu so favorites IO doesn't block grid table persistence.
-var favoritesMu sync.Mutex
-
-func (a *App) getFavoritesFilePath() (string, error) {
-	configDir, err := os.UserConfigDir()
+func (s *FavoritesService) getFavoritesFilePath() (string, error) {
+	manifest, err := appstate.Resolve("luxury-yacht")
 	if err != nil {
 		return "", fmt.Errorf("could not find config directory: %w", err)
 	}
-	configDir = filepath.Join(configDir, "luxury-yacht")
-	return filepath.Join(configDir, "favorites.json"), nil
+	return manifest.FavoritesPath(), nil
 }
 
-func (a *App) loadFavoritesFile() (*favoritesFile, error) {
-	path, err := a.getFavoritesFilePath()
+func (s *FavoritesService) loadFavoritesFile() (*favoritesFile, error) {
+	path, err := s.getFavoritesFilePath()
 	if err != nil {
 		return nil, err
 	}
@@ -335,7 +329,7 @@ func (a *App) loadFavoritesFile() (*favoritesFile, error) {
 	}
 	if migrate != nil {
 		state := migrateFlatFavoritesFile(data, migrate)
-		if err := a.saveFavoritesFile(state); err != nil {
+		if err := s.saveFavoritesFile(state); err != nil {
 			return nil, fmt.Errorf("failed to save migrated favorites file: %w", err)
 		}
 		return state, nil
@@ -357,11 +351,11 @@ func (a *App) loadFavoritesFile() (*favoritesFile, error) {
 	return state, nil
 }
 
-func (a *App) saveFavoritesFile(state *favoritesFile) error {
+func (s *FavoritesService) saveFavoritesFile(state *favoritesFile) error {
 	if state == nil {
 		return fmt.Errorf("no favorites state to save")
 	}
-	path, err := a.getFavoritesFilePath()
+	path, err := s.getFavoritesFilePath()
 	if err != nil {
 		return err
 	}
@@ -378,11 +372,11 @@ func (a *App) saveFavoritesFile(state *favoritesFile) error {
 }
 
 // GetFavorites returns all saved favorites.
-func (a *App) GetFavorites() ([]Favorite, error) {
-	favoritesMu.Lock()
-	defer favoritesMu.Unlock()
+func (s *FavoritesService) GetFavorites() ([]Favorite, error) {
+	s.mu.Lock()
+	defer s.mu.Unlock()
 
-	state, err := a.loadFavoritesFile()
+	state, err := s.loadFavoritesFile()
 	if err != nil {
 		return nil, err
 	}
@@ -392,38 +386,38 @@ func (a *App) GetFavorites() ([]Favorite, error) {
 }
 
 // AddFavorite generates an ID, assigns Order, appends the favorite, and persists.
-func (a *App) AddFavorite(fav Favorite) (Favorite, error) {
+func (s *FavoritesService) AddFavorite(fav Favorite) (Favorite, error) {
 	if err := validateFavoritePanes(fav.Panes); err != nil {
 		return Favorite{}, err
 	}
 	fav.ID = uuid.New().String()
 	normalizeFavoritePanes(fav.Panes)
 
-	favoritesMu.Lock()
-	defer favoritesMu.Unlock()
+	s.mu.Lock()
+	defer s.mu.Unlock()
 
-	state, err := a.loadFavoritesFile()
+	state, err := s.loadFavoritesFile()
 	if err != nil {
 		return Favorite{}, err
 	}
 	fav.Order = len(state.Favorites)
 	state.Favorites = append(state.Favorites, fav)
-	if err := a.saveFavoritesFile(state); err != nil {
+	if err := s.saveFavoritesFile(state); err != nil {
 		return Favorite{}, err
 	}
 	return fav, nil
 }
 
 // UpdateFavorite replaces a favorite by ID, preserving its Order. Returns an error if not found.
-func (a *App) UpdateFavorite(fav Favorite) error {
+func (s *FavoritesService) UpdateFavorite(fav Favorite) error {
 	if err := validateFavoritePanes(fav.Panes); err != nil {
 		return err
 	}
 	normalizeFavoritePanes(fav.Panes)
-	favoritesMu.Lock()
-	defer favoritesMu.Unlock()
+	s.mu.Lock()
+	defer s.mu.Unlock()
 
-	state, err := a.loadFavoritesFile()
+	state, err := s.loadFavoritesFile()
 	if err != nil {
 		return err
 	}
@@ -431,18 +425,18 @@ func (a *App) UpdateFavorite(fav Favorite) error {
 		if existing.ID == fav.ID {
 			fav.Order = existing.Order
 			state.Favorites[i] = fav
-			return a.saveFavoritesFile(state)
+			return s.saveFavoritesFile(state)
 		}
 	}
 	return fmt.Errorf("favorite %q not found", fav.ID)
 }
 
 // DeleteFavorite removes a favorite by ID and re-indexes Order. Returns an error if not found.
-func (a *App) DeleteFavorite(id string) error {
-	favoritesMu.Lock()
-	defer favoritesMu.Unlock()
+func (s *FavoritesService) DeleteFavorite(id string) error {
+	s.mu.Lock()
+	defer s.mu.Unlock()
 
-	state, err := a.loadFavoritesFile()
+	state, err := s.loadFavoritesFile()
 	if err != nil {
 		return err
 	}
@@ -460,16 +454,16 @@ func (a *App) DeleteFavorite(id string) error {
 	for i := range state.Favorites {
 		state.Favorites[i].Order = i
 	}
-	return a.saveFavoritesFile(state)
+	return s.saveFavoritesFile(state)
 }
 
 // SetFavoriteOrder reorders favorites according to the given ID list.
 // Any favorites not in the list are appended in their existing relative order.
-func (a *App) SetFavoriteOrder(ids []string) error {
-	favoritesMu.Lock()
-	defer favoritesMu.Unlock()
+func (s *FavoritesService) SetFavoriteOrder(ids []string) error {
+	s.mu.Lock()
+	defer s.mu.Unlock()
 
-	state, err := a.loadFavoritesFile()
+	state, err := s.loadFavoritesFile()
 	if err != nil {
 		return err
 	}
@@ -496,5 +490,5 @@ func (a *App) SetFavoriteOrder(ids []string) error {
 		reordered[i].Order = i
 	}
 	state.Favorites = reordered
-	return a.saveFavoritesFile(state)
+	return s.saveFavoritesFile(state)
 }

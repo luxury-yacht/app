@@ -409,6 +409,46 @@ func TestFailedCleanupRemainsBoundedAndRetryable(t *testing.T) {
 	require.Empty(t, document.Cleanup)
 }
 
+func TestResetRemovesAllUpdaterOwnedStateAndArtifacts(t *testing.T) {
+	store, root, statePath := newStore(t)
+	prepared, _ := createStagedPayload(t, root, "wails-update-prepared-reset")
+	orphan, _ := createStagedPayload(t, root, "wails-update-orphan-reset")
+	helpLog := filepath.Join(root, "wails-update-4242.log")
+	require.NoError(t, os.WriteFile(helpLog, []byte("diagnostic"), 0o600))
+	require.NoError(t, store.SetSkippedVersion("2.0.0"))
+	require.NoError(t, store.RecordPrepared(preparedRecord(prepared)))
+
+	require.NoError(t, store.Reset())
+
+	_, err := os.Lstat(statePath)
+	require.ErrorIs(t, err, os.ErrNotExist)
+	for _, path := range []string{prepared, orphan, helpLog} {
+		_, err = os.Lstat(path)
+		require.ErrorIs(t, err, os.ErrNotExist, path)
+	}
+	require.NoError(t, store.Reset(), "reset must be repeatable")
+	require.NoError(t, os.Remove(filepath.Dir(statePath)))
+	require.NoError(t, store.Reset(), "reset of missing state must not recreate its parent")
+	require.NoDirExists(t, filepath.Dir(statePath))
+}
+
+func TestResetRejectsActiveApplicationAttemptWithoutDeletingRecoveryState(t *testing.T) {
+	store, root, statePath := newStore(t)
+	staging, _ := createStagedPayload(t, root, "wails-update-active-attempt")
+	require.NoError(t, store.RecordPrepared(preparedRecord(staging)))
+	_, err := store.BeginAttempt(attemptMetadata())
+	require.NoError(t, err)
+
+	err = store.Reset()
+
+	require.ErrorContains(t, err, "active application attempt")
+	require.FileExists(t, statePath)
+	require.DirExists(t, staging)
+	document, loadErr := store.Load()
+	require.NoError(t, loadErr)
+	require.NotNil(t, document.Attempt)
+}
+
 func TestMalformedOrEscapingRecordsNeverDeletePaths(t *testing.T) {
 	store, root, statePath := newStore(t)
 	external := t.TempDir()

@@ -301,8 +301,8 @@ func TestStartupSelectionRestoreUpdatesAnAlreadyRegisteredWorkspaceWindow(t *tes
 	configPath := createTempKubeconfig(t, t.TempDir(), "config", "prod")
 	selection := kubeconfigSelection{Path: configPath, Context: "prod"}.String()
 	app.availableKubeconfigs = []KubeconfigInfo{{Path: configPath, Context: "prod"}}
-	app.appSettings = getDefaultAppSettings()
-	app.appSettings.SelectedKubeconfigs = []string{selection}
+	app.preferences.appSettings = getDefaultAppSettings()
+	app.preferences.appSettings.SelectedKubeconfigs = []string{selection}
 	require.Empty(t, app.GetClusterWorkspaceStateForWindow("workspace-1").SelectedKubeconfigs)
 
 	app.selectionMutationMu.Lock()

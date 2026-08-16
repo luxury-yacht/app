@@ -42,17 +42,15 @@ type favoritesDataFile struct {
 	Favorites     []Favorite `json:"favorites"`
 }
 
-func (a *App) ExportSettings() (DataManagementResult, error) {
-	if err := a.requireDataManagementContext(); err != nil {
+func (c *DataManagementCoordinator) ExportSettings() (DataManagementResult, error) {
+	if err := c.requireDataManagementContext(); err != nil {
 		return DataManagementResult{}, err
 	}
 
-	a.settingsMu.Lock()
-	settings, err := a.loadSettingsFile()
+	settings, err := c.preferences.exportSettingsDocument()
 	if err == nil {
 		settings = normalizeSettingsFile(settings)
 	}
-	a.settingsMu.Unlock()
 	if err != nil {
 		return DataManagementResult{}, fmt.Errorf("load settings for export: %w", err)
 	}
@@ -64,14 +62,14 @@ func (a *App) ExportSettings() (DataManagementResult, error) {
 		Preferences:           settings.Preferences,
 		KubeconfigSearchPaths: append([]string(nil), settings.Kubeconfig.SearchPaths...),
 	}
-	return a.exportDataFile("Export Settings", settingsDataDefaultFilename, document)
+	return c.exportDataFile("Export Settings", settingsDataDefaultFilename, document)
 }
 
-func (a *App) ImportSettings() (DataManagementResult, error) {
-	if err := a.requireDataManagementContext(); err != nil {
+func (c *DataManagementCoordinator) ImportSettings() (DataManagementResult, error) {
+	if err := c.requireDataManagementContext(); err != nil {
 		return DataManagementResult{}, err
 	}
-	path, canceled, err := a.chooseDataImportFile("Import Settings")
+	path, canceled, err := c.chooseDataImportFile("Import Settings")
 	if err != nil || canceled {
 		return DataManagementResult{Canceled: canceled}, err
 	}
@@ -83,24 +81,25 @@ func (a *App) ImportSettings() (DataManagementResult, error) {
 	if err != nil {
 		return DataManagementResult{}, err
 	}
-	if err := a.runSelectionMutation("import-settings", func(_ *selectionMutation) error {
-		return a.applySettingsDataFile(document, effects)
+	if err := c.runWorkspaceMutation("import-settings", func() error {
+		if err := c.preferences.importSettingsDocument(document, effects); err != nil {
+			return fmt.Errorf("save imported settings: %w", err)
+		}
+		if c.searchPathsChanged != nil {
+			c.searchPathsChanged()
+		}
+		return nil
 	}); err != nil {
 		return DataManagementResult{}, err
 	}
 	return DataManagementResult{Path: path, Imported: 1}, nil
 }
 
-func (a *App) ExportFavorites() (DataManagementResult, error) {
-	if err := a.requireDataManagementContext(); err != nil {
+func (c *DataManagementCoordinator) ExportFavorites() (DataManagementResult, error) {
+	if err := c.requireDataManagementContext(); err != nil {
 		return DataManagementResult{}, err
 	}
-	favoritesMu.Lock()
-	state, err := a.loadFavoritesFile()
-	if err == nil {
-		state.Favorites = cloneFavorites(state.Favorites)
-	}
-	favoritesMu.Unlock()
+	favorites, err := c.favorites.exportSnapshot()
 	if err != nil {
 		return DataManagementResult{}, fmt.Errorf("load favorites for export: %w", err)
 	}
@@ -108,16 +107,16 @@ func (a *App) ExportFavorites() (DataManagementResult, error) {
 		Format:        favoritesDataFormat,
 		SchemaVersion: favoritesDataSchemaVersion,
 		ExportedAt:    time.Now().UTC(),
-		Favorites:     state.Favorites,
+		Favorites:     favorites,
 	}
-	return a.exportDataFile("Export Favorites", favoritesDataDefaultFilename, document)
+	return c.exportDataFile("Export Favorites", favoritesDataDefaultFilename, document)
 }
 
-func (a *App) ImportFavorites() (DataManagementResult, error) {
-	if err := a.requireDataManagementContext(); err != nil {
+func (c *DataManagementCoordinator) ImportFavorites() (DataManagementResult, error) {
+	if err := c.requireDataManagementContext(); err != nil {
 		return DataManagementResult{}, err
 	}
-	path, canceled, err := a.chooseDataImportFile("Import Favorites")
+	path, canceled, err := c.chooseDataImportFile("Import Favorites")
 	if err != nil || canceled {
 		return DataManagementResult{Canceled: canceled}, err
 	}
@@ -130,27 +129,15 @@ func (a *App) ImportFavorites() (DataManagementResult, error) {
 		return DataManagementResult{}, err
 	}
 
-	favoritesMu.Lock()
-	err = a.saveFavoritesFile(&favoritesFile{Favorites: document.Favorites})
-	favoritesMu.Unlock()
+	err = c.favorites.importSnapshot(document.Favorites)
 	if err != nil {
 		return DataManagementResult{}, fmt.Errorf("save imported favorites: %w", err)
 	}
 	return DataManagementResult{Path: path, Imported: len(document.Favorites)}, nil
 }
 
-func (a *App) requireDataManagementContext() error {
-	if a == nil {
-		return fmt.Errorf("app is not initialised")
-	}
-	if !a.runtimeAvailable() {
-		return fmt.Errorf("application context is not available")
-	}
-	return nil
-}
-
-func (a *App) exportDataFile(title, defaultFilename string, document any) (DataManagementResult, error) {
-	path, err := a.promptForSaveFile(&application.SaveFileDialogOptions{
+func (c *DataManagementCoordinator) exportDataFile(title, defaultFilename string, document any) (DataManagementResult, error) {
+	path, err := c.desktopShell.promptForSaveFile(&application.SaveFileDialogOptions{
 		Title:                title,
 		Directory:            dataManagementDefaultDirectory(),
 		Filename:             defaultFilename,
@@ -176,8 +163,8 @@ func (a *App) exportDataFile(title, defaultFilename string, document any) (DataM
 	return DataManagementResult{Path: path}, nil
 }
 
-func (a *App) chooseDataImportFile(title string) (path string, canceled bool, err error) {
-	path, err = a.promptForOpenFile(&application.OpenFileDialogOptions{
+func (c *DataManagementCoordinator) chooseDataImportFile(title string) (path string, canceled bool, err error) {
+	path, err = c.desktopShell.promptForOpenFile(&application.OpenFileDialogOptions{
 		CanChooseFiles: true,
 		Title:          title,
 		Directory:      dataManagementDefaultDirectory(),
@@ -269,30 +256,6 @@ func validateImportedThemes(themes []Theme) error {
 			}
 		}
 	}
-	return nil
-}
-
-func (a *App) applySettingsDataFile(document *settingsDataFile, effects settingsSideEffects) error {
-	a.settingsMu.Lock()
-	current, err := a.loadSettingsFile()
-	if err != nil {
-		a.settingsMu.Unlock()
-		return fmt.Errorf("load current settings: %w", err)
-	}
-	previousAppSettings := copyAppSettings(a.appSettings)
-	current.Preferences = document.Preferences
-	current.Kubeconfig.SearchPaths = append([]string(nil), document.KubeconfigSearchPaths...)
-	nextAppSettings := appSettingsFromFile(current)
-	a.appSettings = nextAppSettings
-	if err := a.saveSettingsFile(current); err != nil {
-		a.appSettings = previousAppSettings
-		a.settingsMu.Unlock()
-		return fmt.Errorf("save imported settings: %w", err)
-	}
-	a.settingsMu.Unlock()
-
-	a.applySettingsSideEffects(&preparedPreferenceUpdate{settings: nextAppSettings, effects: effects})
-	a.refreshKubeconfigDiscoveryAfterSearchPathChange()
 	return nil
 }
 

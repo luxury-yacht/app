@@ -101,6 +101,22 @@ A helper relaunch failure can restore the previous application. A defect found
 after a successful launch is corrected with a higher signed version or a
 manual authenticated installer, never an updater-driven downgrade.
 
+## Factory Reset
+
+`backend.UpdateCoordinator` owns live and durable updater reset. It resolves the
+configured `StatePath` and private `TempRoot`; dynamic prepared, attempt,
+cleanup, staging, protected, and helper-log paths are validated by
+`internal/updatestate`/`internal/updatetemp` before deletion. They are not raw
+paths exposed to the generic static app-state manifest.
+
+Reset cancels and waits for an active check or download before clearing the
+pending/prepared/skipped projections and durable state. It rejects reset while
+restart/application handoff or another non-cancellable durable mutation is in
+flight, leaving recovery state intact. Cleanup attempts every validated owned
+artifact, preserves failed entries for retry, aggregates errors, and removes
+the state file only after validated cleanup. Missing state and a repeated reset
+are valid; merely resolving paths must not create their parent directories.
+
 ## Signing-key handling
 
 Commit only the public key. Keep the unencrypted CI private key PEM in the

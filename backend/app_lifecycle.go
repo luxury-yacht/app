@@ -42,12 +42,12 @@ const beforeCloseSelectionFlushTimeout = 2 * time.Second
 func (a *App) ServiceStartup(ctx context.Context, _ application.ServiceOptions) error {
 	a.setApplicationContext(ctx)
 	a.initializeClusterLifecycle()
-	a.logger.Info("Application startup initiated", logsources.App)
+	a.appLogs.logger.Info("Application startup initiated", logsources.App)
 	a.startDiagnosticDumpHandler(ctx)
 	a.configureStartupErrorCapture()
 	a.configureStartupLogging()
 	a.setupEnvironment()
-	a.logger.Debug("Environment setup completed", logsources.App)
+	a.appLogs.logger.Debug("Environment setup completed", logsources.App)
 	return nil
 }
 
@@ -61,21 +61,21 @@ func (a *App) WindowRuntimeReady(windowName string, restoreGeometry bool) bool {
 	if restoreGeometry {
 		a.restoreStartupWindow(windowName)
 	}
-	if window, err := a.workspaceWindow(windowName); err == nil {
+	if window, err := a.desktopShell.workspaceWindow(windowName); err == nil {
 		window.Show()
 	}
 	if !firstReadyWindow {
 		return false
 	}
-	a.logger.Info("Luxury Yacht - Sail the Seas of Kubernetes In Style", logsources.App)
+	a.appLogs.logger.Info("Luxury Yacht - Sail the Seas of Kubernetes In Style", logsources.App)
 	a.initializeStartupClusters()
 	if err := a.startKubeconfigWatcher(); err != nil {
-		a.logger.Warn(fmt.Sprintf("Kubeconfig directory watcher not available: %v", err), logsources.App)
+		a.appLogs.logger.Warn(fmt.Sprintf("Kubeconfig directory watcher not available: %v", err), logsources.App)
 	}
-	if a.applicationUpdates != nil {
-		a.applicationUpdates.RuntimeReady()
+	if a.updates != nil {
+		a.updates.RuntimeReady()
 	}
-	a.scheduleInstallationMetricRegistration(a.CtxOrBackground())
+	a.errorReporting.scheduleInstallationMetricRegistration(a.CtxOrBackground())
 	return true
 }
 
@@ -123,38 +123,38 @@ func (a *App) configureStartupErrorCapture() {
 		}
 		switch level {
 		case logclassify.LevelError:
-			a.logger.Error(message, logsources.ErrorCapture)
+			a.appLogs.logger.Error(message, logsources.ErrorCapture)
 		case logclassify.LevelWarn:
-			a.logger.Warn(message, logsources.ErrorCapture)
+			a.appLogs.logger.Warn(message, logsources.ErrorCapture)
 		case logclassify.LevelDebug:
-			a.logger.Debug(message, logsources.ErrorCapture)
+			a.appLogs.logger.Debug(message, logsources.ErrorCapture)
 		default:
-			a.logger.Info(message, logsources.ErrorCapture)
+			a.appLogs.logger.Info(message, logsources.ErrorCapture)
 		}
 	})
 }
 
 func (a *App) checkStartupBetaExpiry(windowName string) bool {
 	if err := a.checkBetaExpiry(); err != nil {
-		applog.ReportError(a.logger, err, "Beta version expired", logsources.App)
-		if a.showExpiredBetaPrompt != nil {
-			a.showExpiredBetaPrompt(expiredBetaPrompt{
+		applog.ReportError(a.appLogs.logger, err, "Beta version expired", logsources.App)
+		if a.desktopShell != nil && a.desktopShell.showExpiredBetaPrompt != nil {
+			a.desktopShell.showExpiredBetaPrompt(expiredBetaPrompt{
 				Title:         "Beta Version Expired",
 				Message:       err.Error(),
 				WindowName:    windowName,
 				DownloadLabel: "Download Latest Version",
 				QuitLabel:     "Quit",
 				OnDownload: func() {
-					if a.openApplicationURL != nil {
-						if openErr := a.openApplicationURL(applicationDownloadsURL); openErr != nil {
-							a.logger.Warn(fmt.Sprintf("Could not open the latest-version download page: %v", openErr), logsources.App)
+					if a.desktopShell.openApplicationURL != nil {
+						if openErr := a.desktopShell.openApplicationURL(applicationDownloadsURL); openErr != nil {
+							a.appLogs.logger.Warn(fmt.Sprintf("Could not open the latest-version download page: %v", openErr), logsources.App)
 						}
 					}
-					if a.quitApplication != nil {
-						a.quitApplication()
+					if a.desktopShell.quitApplication != nil {
+						a.desktopShell.quitApplication()
 					}
 				},
-				OnQuit: a.quitApplication,
+				OnQuit: a.desktopShell.quitApplication,
 			})
 		}
 		return false
@@ -162,38 +162,38 @@ func (a *App) checkStartupBetaExpiry(windowName string) bool {
 	return true
 }
 
-func (a *App) presentExpiredBetaPrompt(prompt expiredBetaPrompt) {
-	if a == nil || a.wailsApplication == nil {
+func (s *DesktopShell) presentExpiredBetaPrompt(prompt expiredBetaPrompt) {
+	if s == nil || s.application == nil {
 		return
 	}
-	dialog := a.wailsApplication.Dialog.Question().SetTitle(prompt.Title).SetMessage(prompt.Message)
+	dialog := s.application.Dialog.Question().SetTitle(prompt.Title).SetMessage(prompt.Message)
 	download := dialog.AddButton(prompt.DownloadLabel).SetAsDefault().OnClick(prompt.OnDownload)
 	quit := dialog.AddButton(prompt.QuitLabel).SetAsCancel().OnClick(prompt.OnQuit)
 	dialog.SetDefaultButton(download).SetCancelButton(quit)
-	if window, err := a.workspaceWindow(prompt.WindowName); err == nil {
+	if window, err := s.workspaceWindow(prompt.WindowName); err == nil {
 		dialog.AttachToWindow(window)
 	}
 	dialog.Show()
 }
 
 func (a *App) configureStartupLogging() {
-	a.logger.SetEventEmitter(func(eventName string, args ...interface{}) {
+	a.appLogs.logger.SetEventEmitter(func(eventName string, args ...interface{}) {
 		a.emitEvent(eventName, args...)
 	})
 
 	log.SetFlags(0)
-	log.SetOutput(&stdLogBridge{logger: a.logger})
+	log.SetOutput(&stdLogBridge{logger: a.appLogs.logger})
 }
 
 func (a *App) restoreStartupWindow(windowName string) {
-	if settings, err := a.LoadWindowSettings(); err != nil {
-		a.logger.Warn(fmt.Sprintf("Failed to load window settings: %v", err), logsources.App)
+	if settings, err := a.preferences.LoadWindowSettings(); err != nil {
+		a.appLogs.logger.Warn(fmt.Sprintf("Failed to load window settings: %v", err), logsources.App)
 	} else if settings != nil {
-		window, windowErr := a.workspaceWindow(windowName)
+		window, windowErr := a.desktopShell.workspaceWindow(windowName)
 		if windowErr != nil {
 			return
 		}
-		geometry, restorePosition := resolveWindowRestore(*settings, a.windowWorkAreas())
+		geometry, restorePosition := resolveWindowRestore(*settings, a.desktopShell.windowWorkAreas())
 		window.SetSize(geometry.Width, geometry.Height)
 		if restorePosition {
 			window.SetPosition(geometry.X, geometry.Y)
@@ -205,11 +205,11 @@ func (a *App) restoreStartupWindow(windowName string) {
 }
 
 func (a *App) initializeStartupClusters() {
-	a.logger.Info("Discovering kubeconfig files...", logsources.App)
+	a.appLogs.logger.Info("Discovering kubeconfig files...", logsources.App)
 	if err := a.discoverKubeconfigs(); err != nil {
-		a.logger.ErrorWithCause(err, "Failed to discover kubeconfigs", logsources.App)
+		a.appLogs.logger.ErrorWithCause(err, "Failed to discover kubeconfigs", logsources.App)
 	} else {
-		a.logger.Info(fmt.Sprintf("Found %d kubeconfig file(s)", len(a.availableKubeconfigs)), logsources.App)
+		a.appLogs.logger.Info(fmt.Sprintf("Found %d kubeconfig file(s)", len(a.availableKubeconfigs)), logsources.App)
 	}
 
 	// The window is already visible, so settings restore and client initialization
@@ -217,12 +217,12 @@ func (a *App) initializeStartupClusters() {
 	selectedCount, err := a.initializeSelectedClustersAtStartup()
 	if selectedCount > 0 {
 		if err != nil {
-			a.logger.ErrorWithCause(err, "Failed to connect to cluster(s)", logsources.App)
+			a.appLogs.logger.ErrorWithCause(err, "Failed to connect to cluster(s)", logsources.App)
 		} else {
-			a.logger.Info("Successfully connected to Kubernetes cluster(s)", logsources.App)
+			a.appLogs.logger.Info("Successfully connected to Kubernetes cluster(s)", logsources.App)
 		}
 	} else {
-		a.logger.Warn("No kubeconfig selections found - please select a cluster", logsources.App)
+		a.appLogs.logger.Warn("No kubeconfig selections found - please select a cluster", logsources.App)
 	}
 }
 
@@ -274,15 +274,15 @@ func (a *App) prepareQuitFromWindow(windowName string) bool {
 		return true
 	}
 	a.preQuitOnce.Do(func() {
-		a.logger.Info("Application close requested", logsources.App)
+		a.appLogs.logger.Info("Application close requested", logsources.App)
 		if !a.waitForSelectionMutationIdle(beforeCloseSelectionFlushTimeout) {
-			a.logger.Warn("Timed out waiting for cluster selection persistence before close", logsources.App)
+			a.appLogs.logger.Warn("Timed out waiting for cluster selection persistence before close", logsources.App)
 		}
 		if windowName != "" {
-			if err := a.SaveWindowSettingsForWindow(windowName); err != nil {
-				a.logger.Warn(fmt.Sprintf("Failed to save window settings: %v", err), logsources.App)
+			if err := a.preferences.SaveWindowSettingsForWindow(windowName); err != nil {
+				a.appLogs.logger.Warn(fmt.Sprintf("Failed to save window settings: %v", err), logsources.App)
 			} else {
-				a.logger.Debug("Window settings saved successfully", logsources.App)
+				a.appLogs.logger.Debug("Window settings saved successfully", logsources.App)
 			}
 		}
 	})
@@ -292,16 +292,10 @@ func (a *App) prepareQuitFromWindow(windowName string) bool {
 // ServiceShutdown tears down process resources after the application context is
 // cancelled and does not access the frontend runtime.
 func (a *App) ServiceShutdown() error {
-	a.logger.Info("Application shutdown initiated", logsources.App)
-	if a.applicationUpdates != nil {
-		a.applicationUpdates.Stop()
+	a.appLogs.logger.Info("Application shutdown initiated", logsources.App)
+	if a.updates != nil {
+		a.updates.Stop()
 	}
-	for _, unsubscribe := range a.applicationUpdateEventUnsubscribers {
-		if unsubscribe != nil {
-			unsubscribe()
-		}
-	}
-	a.applicationUpdateEventUnsubscribers = nil
 
 	// Shutdown all per-cluster auth managers to stop any recovery goroutines.
 	a.clusterClientsMu.Lock()
@@ -321,7 +315,7 @@ func (a *App) ServiceShutdown() error {
 
 	a.teardownRefreshSubsystem()
 
-	a.logger.Info("Application shutdown completed", logsources.App)
+	a.appLogs.logger.Info("Application shutdown completed", logsources.App)
 	a.clearApplicationContext()
 	return nil
 }

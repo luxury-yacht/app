@@ -1,21 +1,29 @@
 package backend
 
 import (
-	"context"
 	"testing"
 
 	"github.com/stretchr/testify/require"
 	"github.com/wailsapp/wails/v3/pkg/application"
 )
 
-func newUIApp(t *testing.T) *App {
-	t.Helper()
-	return newTestAppWithDefaults(t)
+type uiShellFixture struct {
+	shell  *DesktopShell
+	ready  bool
+	events []string
 }
 
-func viewMenuItem(t *testing.T, app *App, label string) *application.MenuItem {
+func newUIShellFixture() *uiShellFixture {
+	fixture := &uiShellFixture{}
+	fixture.shell = NewDesktopShell(nil, func() bool { return fixture.ready }, func(name string, _ ...interface{}) {
+		fixture.events = append(fixture.events, name)
+	}, NewLogger(100))
+	return fixture
+}
+
+func viewMenuItem(t *testing.T, shell *DesktopShell, label string) *application.MenuItem {
 	t.Helper()
-	view := findSubmenu(t, app.menu, "View")
+	view := findSubmenu(t, shell.menu, "View")
 	for index := 0; ; index++ {
 		item := view.ItemAt(index)
 		if item == nil {
@@ -28,100 +36,88 @@ func viewMenuItem(t *testing.T, app *App, label string) *application.MenuItem {
 }
 
 func TestToggleAppLogsPanelRequiresContext(t *testing.T) {
-	app := newUIApp(t)
+	fixture := newUIShellFixture()
 
-	err := app.ToggleAppLogsPanel()
+	err := fixture.shell.ToggleAppLogsPanel()
 	require.Error(t, err)
-	require.False(t, app.IsAppLogsPanelVisible())
+	require.False(t, fixture.shell.IsAppLogsPanelVisible())
 }
 
 func TestToggleDiagnosticsPanelRequiresContext(t *testing.T) {
-	app := newUIApp(t)
+	fixture := newUIShellFixture()
 
-	err := app.ToggleDiagnosticsPanel()
+	err := fixture.shell.ToggleDiagnosticsPanel()
 	require.Error(t, err)
-	require.False(t, app.IsDiagnosticsPanelVisible())
+	require.False(t, fixture.shell.IsDiagnosticsPanelVisible())
 }
 
 func TestToggleAppLogsPanelTogglesAndEmits(t *testing.T) {
-	app := newUIApp(t)
-	events := []string{}
-	CreateMenu(app)
-	app.eventEmitter = func(_ context.Context, name string, _ ...interface{}) {
-		events = append(events, name)
-	}
-	setTestAppRuntimeReady(t, app, context.Background())
+	fixture := newUIShellFixture()
+	CreateMenu(fixture.shell)
+	fixture.ready = true
 
-	err := app.ToggleAppLogsPanel()
+	err := fixture.shell.ToggleAppLogsPanel()
 	require.NoError(t, err)
-	require.True(t, app.IsAppLogsPanelVisible())
-	require.Equal(t, []string{"toggle-app-logs-panel"}, events)
-	require.NotNil(t, viewMenuItem(t, app, "Hide Application Logs"))
+	require.True(t, fixture.shell.IsAppLogsPanelVisible())
+	require.Equal(t, []string{"toggle-app-logs-panel"}, fixture.events)
+	require.NotNil(t, viewMenuItem(t, fixture.shell, "Hide Application Logs"))
 }
 
 func TestToggleSidebarRequiresContext(t *testing.T) {
-	app := newUIApp(t)
+	fixture := newUIShellFixture()
 
-	err := app.ToggleSidebar()
+	err := fixture.shell.ToggleSidebar()
 	require.Error(t, err)
-	require.True(t, app.IsSidebarVisible())
+	require.True(t, fixture.shell.IsSidebarVisible())
 }
 
 func TestToggleSidebarTogglesAndEmits(t *testing.T) {
-	app := newUIApp(t)
-	events := []string{}
-	CreateMenu(app)
-	app.eventEmitter = func(_ context.Context, name string, _ ...interface{}) {
-		events = append(events, name)
-	}
-	setTestAppRuntimeReady(t, app, context.Background())
+	fixture := newUIShellFixture()
+	CreateMenu(fixture.shell)
+	fixture.ready = true
 
-	err := app.ToggleSidebar()
+	err := fixture.shell.ToggleSidebar()
 	require.NoError(t, err)
-	require.False(t, app.IsSidebarVisible())
-	require.Equal(t, []string{"toggle-sidebar"}, events)
-	require.NotNil(t, viewMenuItem(t, app, "Show Sidebar"))
+	require.False(t, fixture.shell.IsSidebarVisible())
+	require.Equal(t, []string{"toggle-sidebar"}, fixture.events)
+	require.NotNil(t, viewMenuItem(t, fixture.shell, "Show Sidebar"))
 }
 
 func TestToggleObjectDiffRequiresContext(t *testing.T) {
-	app := newUIApp(t)
+	fixture := newUIShellFixture()
 
-	err := app.ToggleObjectDiff()
+	err := fixture.shell.ToggleObjectDiff()
 	require.Error(t, err)
 }
 
 func TestToggleObjectDiffEmits(t *testing.T) {
-	app := newUIApp(t)
-	events := []string{}
-	app.eventEmitter = func(_ context.Context, name string, _ ...interface{}) {
-		events = append(events, name)
-	}
-	setTestAppRuntimeReady(t, app, context.Background())
+	fixture := newUIShellFixture()
+	fixture.ready = true
 
-	err := app.ToggleObjectDiff()
+	err := fixture.shell.ToggleObjectDiff()
 	require.NoError(t, err)
-	require.Equal(t, []string{"toggle-object-diff"}, events)
+	require.Equal(t, []string{"toggle-object-diff"}, fixture.events)
 }
 
 func TestUpdateMenuNoContext(t *testing.T) {
-	app := newUIApp(t)
-	CreateMenu(app)
-	before := viewMenuItem(t, app, "Hide Sidebar")
-	app.sidebarVisible = false
+	fixture := newUIShellFixture()
+	CreateMenu(fixture.shell)
+	before := viewMenuItem(t, fixture.shell, "Hide Sidebar")
+	fixture.shell.sidebarVisible = false
 
-	app.UpdateMenu()
-	require.Same(t, before, viewMenuItem(t, app, "Hide Sidebar"))
+	fixture.shell.UpdateMenu()
+	require.Same(t, before, viewMenuItem(t, fixture.shell, "Hide Sidebar"))
 }
 
 func TestUpdateMenuRefreshesPersistentNativeMenu(t *testing.T) {
-	app := newUIApp(t)
-	CreateMenu(app)
-	before := viewMenuItem(t, app, "Hide Sidebar")
-	setTestAppRuntimeReady(t, app, context.Background())
-	app.sidebarVisible = false
+	fixture := newUIShellFixture()
+	CreateMenu(fixture.shell)
+	before := viewMenuItem(t, fixture.shell, "Hide Sidebar")
+	fixture.ready = true
+	fixture.shell.sidebarVisible = false
 
-	app.UpdateMenu()
-	after := viewMenuItem(t, app, "Show Sidebar")
+	fixture.shell.UpdateMenu()
+	after := viewMenuItem(t, fixture.shell, "Show Sidebar")
 	require.NotSame(t, before, after)
 }
 
@@ -151,69 +147,49 @@ func TestNativeMenuRefreshUsesPlatformOwner(t *testing.T) {
 }
 
 func TestSetSidebarVisibleOnlyWhenChanged(t *testing.T) {
-	app := newUIApp(t)
-	CreateMenu(app)
-	setTestAppRuntimeReady(t, app, context.Background())
-	before := viewMenuItem(t, app, "Hide Sidebar")
+	fixture := newUIShellFixture()
+	CreateMenu(fixture.shell)
+	fixture.ready = true
+	before := viewMenuItem(t, fixture.shell, "Hide Sidebar")
 
-	app.SetSidebarVisible(true)
-	require.Same(t, before, viewMenuItem(t, app, "Hide Sidebar"))
+	fixture.shell.SetSidebarVisible(true)
+	require.Same(t, before, viewMenuItem(t, fixture.shell, "Hide Sidebar"))
 
-	app.SetSidebarVisible(false)
-	after := viewMenuItem(t, app, "Show Sidebar")
+	fixture.shell.SetSidebarVisible(false)
+	after := viewMenuItem(t, fixture.shell, "Show Sidebar")
 	require.NotSame(t, before, after)
-	require.False(t, app.IsSidebarVisible())
+	require.False(t, fixture.shell.IsSidebarVisible())
 
-	app.SetSidebarVisible(false)
-	require.Same(t, after, viewMenuItem(t, app, "Show Sidebar"))
+	fixture.shell.SetSidebarVisible(false)
+	require.Same(t, after, viewMenuItem(t, fixture.shell, "Show Sidebar"))
 }
 
 func TestSetAppLogsPanelVisibleOnlyWhenChanged(t *testing.T) {
-	app := newUIApp(t)
-	CreateMenu(app)
-	setTestAppRuntimeReady(t, app, context.Background())
-	before := viewMenuItem(t, app, "Show Application Logs")
+	fixture := newUIShellFixture()
+	CreateMenu(fixture.shell)
+	fixture.ready = true
+	before := viewMenuItem(t, fixture.shell, "Show Application Logs")
 
-	app.SetAppLogsPanelVisible(false)
-	require.Same(t, before, viewMenuItem(t, app, "Show Application Logs"))
+	fixture.shell.SetAppLogsPanelVisible(false)
+	require.Same(t, before, viewMenuItem(t, fixture.shell, "Show Application Logs"))
 
-	app.SetAppLogsPanelVisible(true)
-	after := viewMenuItem(t, app, "Hide Application Logs")
+	fixture.shell.SetAppLogsPanelVisible(true)
+	after := viewMenuItem(t, fixture.shell, "Hide Application Logs")
 	require.NotSame(t, before, after)
-	require.True(t, app.IsAppLogsPanelVisible())
+	require.True(t, fixture.shell.IsAppLogsPanelVisible())
 
-	app.SetAppLogsPanelVisible(true)
-	require.Same(t, after, viewMenuItem(t, app, "Hide Application Logs"))
+	fixture.shell.SetAppLogsPanelVisible(true)
+	require.Same(t, after, viewMenuItem(t, fixture.shell, "Hide Application Logs"))
 }
 
 func TestToggleDiagnosticsPanelTogglesAndEmits(t *testing.T) {
-	app := newUIApp(t)
-	events := []string{}
-	CreateMenu(app)
-	app.eventEmitter = func(_ context.Context, name string, _ ...interface{}) {
-		events = append(events, name)
-	}
-	setTestAppRuntimeReady(t, app, context.Background())
+	fixture := newUIShellFixture()
+	CreateMenu(fixture.shell)
+	fixture.ready = true
 
-	err := app.ToggleDiagnosticsPanel()
+	err := fixture.shell.ToggleDiagnosticsPanel()
 	require.NoError(t, err)
-	require.True(t, app.IsDiagnosticsPanelVisible())
-	require.Equal(t, []string{"toggle-diagnostics"}, events)
-	require.NotNil(t, viewMenuItem(t, app, "Hide Diagnostics Panel"))
-}
-
-// Legacy permission cache behavior retained for compatibility.
-func TestEmitEventNoContext(t *testing.T) {
-	app := newUIApp(t)
-	called := false
-	app.eventEmitter = func(context.Context, string, ...interface{}) {
-		called = true
-	}
-
-	app.emitEvent("something")
-	require.False(t, called)
-
-	setTestAppRuntimeReady(t, app, context.Background())
-	app.emitEvent("something")
-	require.True(t, called)
+	require.True(t, fixture.shell.IsDiagnosticsPanelVisible())
+	require.Equal(t, []string{"toggle-diagnostics"}, fixture.events)
+	require.NotNil(t, viewMenuItem(t, fixture.shell, "Hide Diagnostics Panel"))
 }

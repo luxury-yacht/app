@@ -4,7 +4,8 @@ import (
 	"errors"
 	"fmt"
 	"os"
-	"path/filepath"
+
+	"github.com/luxury-yacht/app/internal/appstate"
 )
 
 // appStateDirs returns the directories the installed app persists state in:
@@ -17,23 +18,11 @@ import (
 // per platform (~/Library/... on macOS, ~/.config and ~/.cache on Linux), so a
 // hardcoded path resets nothing on the platforms it does not match.
 func appStateDirs(appShortName string) ([]string, error) {
-	if appShortName == "" {
-		// An empty name joins to the bare base directory, which would put every
-		// application's state under a subsequent removal.
-		return nil, errors.New("resolve app state dirs: empty app name")
-	}
-	configBase, err := os.UserConfigDir()
+	manifest, err := appstate.Resolve(appShortName)
 	if err != nil {
-		return nil, fmt.Errorf("resolve user config dir: %w", err)
+		return nil, err
 	}
-	cacheBase, err := os.UserCacheDir()
-	if err != nil {
-		return nil, fmt.Errorf("resolve user cache dir: %w", err)
-	}
-	return []string{
-		filepath.Join(configBase, appShortName),
-		filepath.Join(cacheBase, appShortName),
-	}, nil
+	return manifest.StaticRoots(), nil
 }
 
 // resetAppState removes every app state directory and returns the paths it

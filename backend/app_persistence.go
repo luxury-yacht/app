@@ -4,9 +4,10 @@ import (
 	"encoding/json"
 	"fmt"
 	"os"
-	"path/filepath"
 	"strings"
 	"time"
+
+	"github.com/luxury-yacht/app/internal/appstate"
 )
 
 const persistenceSchemaVersion = 1
@@ -59,18 +60,17 @@ func normalizePersistenceFile(state *persistenceFile) *persistenceFile {
 }
 
 // getPersistenceFilePath returns the path to the new persistence.json location.
-func (a *App) getPersistenceFilePath() (string, error) {
-	configDir, err := os.UserConfigDir()
+func (s *UIStateStore) getPersistenceFilePath() (string, error) {
+	manifest, err := appstate.Resolve("luxury-yacht")
 	if err != nil {
 		return "", fmt.Errorf("could not find config directory: %w", err)
 	}
-	configDir = filepath.Join(configDir, "luxury-yacht")
-	return filepath.Join(configDir, "persistence.json"), nil
+	return manifest.UIStatePath(), nil
 }
 
 // loadPersistenceFile reads persistence.json or returns defaults when missing.
-func (a *App) loadPersistenceFile() (*persistenceFile, error) {
-	configFile, err := a.getPersistenceFilePath()
+func (s *UIStateStore) loadPersistenceFile() (*persistenceFile, error) {
+	configFile, err := s.getPersistenceFilePath()
 	if err != nil {
 		return nil, err
 	}
@@ -93,12 +93,12 @@ func (a *App) loadPersistenceFile() (*persistenceFile, error) {
 }
 
 // savePersistenceFile writes persistence.json with an updated timestamp.
-func (a *App) savePersistenceFile(state *persistenceFile) error {
+func (s *UIStateStore) savePersistenceFile(state *persistenceFile) error {
 	if state == nil {
 		return fmt.Errorf("no persistence state to save")
 	}
 
-	configFile, err := a.getPersistenceFilePath()
+	configFile, err := s.getPersistenceFilePath()
 	if err != nil {
 		return err
 	}
@@ -136,8 +136,8 @@ func normalizeClusterTabOrder(order []string) []string {
 }
 
 // persistenceFileExists reports whether persistence.json exists on disk.
-func (a *App) persistenceFileExists() (string, bool, error) {
-	path, err := a.getPersistenceFilePath()
+func (s *UIStateStore) persistenceFileExists() (string, bool, error) {
+	path, err := s.getPersistenceFilePath()
 	if err != nil {
 		return "", false, err
 	}
@@ -160,11 +160,11 @@ func cloneRawMessageMap(entries map[string]json.RawMessage) map[string]json.RawM
 }
 
 // GetClusterTabOrder returns the persisted cluster tab order.
-func (a *App) GetClusterTabOrder() ([]string, error) {
-	a.persistenceMu.Lock()
-	defer a.persistenceMu.Unlock()
+func (s *UIStateStore) GetClusterTabOrder() ([]string, error) {
+	s.mu.Lock()
+	defer s.mu.Unlock()
 
-	state, err := a.loadPersistenceFile()
+	state, err := s.loadPersistenceFile()
 	if err != nil {
 		return nil, err
 	}
@@ -172,26 +172,26 @@ func (a *App) GetClusterTabOrder() ([]string, error) {
 }
 
 // SetClusterTabOrder stores the persisted cluster tab order.
-func (a *App) SetClusterTabOrder(order []string) error {
+func (s *UIStateStore) SetClusterTabOrder(order []string) error {
 	normalized := normalizeClusterTabOrder(order)
 
-	a.persistenceMu.Lock()
-	defer a.persistenceMu.Unlock()
+	s.mu.Lock()
+	defer s.mu.Unlock()
 
-	state, err := a.loadPersistenceFile()
+	state, err := s.loadPersistenceFile()
 	if err != nil {
 		return err
 	}
 	state.ClusterTabs.Order = normalized
-	return a.savePersistenceFile(state)
+	return s.savePersistenceFile(state)
 }
 
 // GetGridTablePersistence returns all persisted GridTable entries for v1.
-func (a *App) GetGridTablePersistence() (map[string]json.RawMessage, error) {
-	a.persistenceMu.Lock()
-	defer a.persistenceMu.Unlock()
+func (s *UIStateStore) GetGridTablePersistence() (map[string]json.RawMessage, error) {
+	s.mu.Lock()
+	defer s.mu.Unlock()
 
-	state, err := a.loadPersistenceFile()
+	state, err := s.loadPersistenceFile()
 	if err != nil {
 		return nil, err
 	}
@@ -203,7 +203,7 @@ func (a *App) GetGridTablePersistence() (map[string]json.RawMessage, error) {
 }
 
 // SetGridTablePersistence stores a GridTable persistence payload by key.
-func (a *App) SetGridTablePersistence(key string, payload json.RawMessage) error {
+func (s *UIStateStore) SetGridTablePersistence(key string, payload json.RawMessage) error {
 	trimmed := strings.TrimSpace(key)
 	if trimmed == "" {
 		return fmt.Errorf("grid table persistence key is required")
@@ -212,10 +212,10 @@ func (a *App) SetGridTablePersistence(key string, payload json.RawMessage) error
 		return fmt.Errorf("grid table persistence payload is required")
 	}
 
-	a.persistenceMu.Lock()
-	defer a.persistenceMu.Unlock()
+	s.mu.Lock()
+	defer s.mu.Unlock()
 
-	state, err := a.loadPersistenceFile()
+	state, err := s.loadPersistenceFile()
 	if err != nil {
 		return err
 	}
@@ -225,25 +225,25 @@ func (a *App) SetGridTablePersistence(key string, payload json.RawMessage) error
 		state.Tables.GridTable[gridTablePersistenceVersionKey] = entries
 	}
 	entries[trimmed] = payload
-	return a.savePersistenceFile(state)
+	return s.savePersistenceFile(state)
 }
 
 // DeleteGridTablePersistence removes a single GridTable persistence entry.
-func (a *App) DeleteGridTablePersistence(key string) error {
+func (s *UIStateStore) DeleteGridTablePersistence(key string) error {
 	trimmed := strings.TrimSpace(key)
 	if trimmed == "" {
 		return nil
 	}
 
-	a.persistenceMu.Lock()
-	defer a.persistenceMu.Unlock()
+	s.mu.Lock()
+	defer s.mu.Unlock()
 
-	_, exists, err := a.persistenceFileExists()
+	_, exists, err := s.persistenceFileExists()
 	if err != nil || !exists {
 		return err
 	}
 
-	state, err := a.loadPersistenceFile()
+	state, err := s.loadPersistenceFile()
 	if err != nil {
 		return err
 	}
@@ -252,24 +252,24 @@ func (a *App) DeleteGridTablePersistence(key string) error {
 		return nil
 	}
 	delete(entries, trimmed)
-	return a.savePersistenceFile(state)
+	return s.savePersistenceFile(state)
 }
 
 // DeleteGridTablePersistenceEntries removes multiple GridTable persistence entries at once.
-func (a *App) DeleteGridTablePersistenceEntries(keys []string) error {
+func (s *UIStateStore) DeleteGridTablePersistenceEntries(keys []string) error {
 	if len(keys) == 0 {
 		return nil
 	}
 
-	a.persistenceMu.Lock()
-	defer a.persistenceMu.Unlock()
+	s.mu.Lock()
+	defer s.mu.Unlock()
 
-	_, exists, err := a.persistenceFileExists()
+	_, exists, err := s.persistenceFileExists()
 	if err != nil || !exists {
 		return err
 	}
 
-	state, err := a.loadPersistenceFile()
+	state, err := s.loadPersistenceFile()
 	if err != nil {
 		return err
 	}
@@ -286,27 +286,27 @@ func (a *App) DeleteGridTablePersistenceEntries(keys []string) error {
 		delete(entries, trimmed)
 	}
 
-	return a.savePersistenceFile(state)
+	return s.savePersistenceFile(state)
 }
 
 // ClearGridTablePersistence removes all GridTable persistence entries for v1.
-func (a *App) ClearGridTablePersistence() (int, error) {
-	a.persistenceMu.Lock()
-	defer a.persistenceMu.Unlock()
+func (s *UIStateStore) ClearGridTablePersistence() (int, error) {
+	s.mu.Lock()
+	defer s.mu.Unlock()
 
-	_, exists, err := a.persistenceFileExists()
+	_, exists, err := s.persistenceFileExists()
 	if err != nil || !exists {
 		return 0, err
 	}
 
-	state, err := a.loadPersistenceFile()
+	state, err := s.loadPersistenceFile()
 	if err != nil {
 		return 0, err
 	}
 	entries := state.Tables.GridTable[gridTablePersistenceVersionKey]
 	removed := len(entries)
 	state.Tables.GridTable[gridTablePersistenceVersionKey] = make(map[string]json.RawMessage)
-	if err := a.savePersistenceFile(state); err != nil {
+	if err := s.savePersistenceFile(state); err != nil {
 		return 0, err
 	}
 	return removed, nil

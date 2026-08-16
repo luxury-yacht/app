@@ -319,7 +319,7 @@ func (a *App) fetchSSRRRulesForNamespaces(
 	}
 
 	results := make([]ssrrNamespaceResult, len(fetches))
-	_ = parallel.ForEach(ctx, fetches, a.permissionSSRRFetchConcurrency(), func(ctx context.Context, fetch ssrrNamespaceFetch) error {
+	_ = parallel.ForEach(ctx, fetches, a.permissionFetchPolicy.Concurrency(), func(ctx context.Context, fetch ssrrNamespaceFetch) error {
 		cache := a.getOrCreateSSRRCache(fetch.key.clusterID)
 		if cache == nil {
 			results[fetch.index] = ssrrNamespaceResult{
@@ -366,11 +366,11 @@ func countSSARItems(itemsByCluster map[string][]ssarItem) int {
 }
 
 func (a *App) logQueryPermissionsBatch(batch queryPermissionsBatchLog) {
-	if a == nil {
+	if a == nil || a.appLogs == nil {
 		return
 	}
 	applog.Debug(
-		a.logger,
+		a.appLogs.logger,
 		fmt.Sprintf(
 			"QueryPermissions batch checks=%d uniqueGVKs=%d namespaces=%d ssarFallbacks=%d diagnostics=%d total=%s resolve=%s ssrr=%s ssar=%s",
 			batch.checkCount,

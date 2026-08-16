@@ -212,8 +212,9 @@ func appPreferenceDescriptors() []preferenceDescriptor {
 			"Kubernetes client burst changed to", clampKubernetesClientBurst, rateLimitEffect,
 			func(s *AppSettings) *int { return &s.KubernetesClientBurst }),
 
-		intPreference(appPreferencePermissionSSRRFetchConcurrency, intPreferenceLimits{defaultValue: defaultPermissionSSRRFetchConcurrency, minValue: intPtr(minPermissionSSRRFetchConcurrency), maxValue: intPtr(maxPermissionSSRRFetchConcurrency)}, false,
-			"Permission SSRR fetch concurrency changed to", clampPermissionSSRRFetchConcurrency, nil,
+		intPreference(appPreferencePermissionSSRRFetchConcurrency, intPreferenceLimits{defaultValue: defaultPermissionSSRRFetchConcurrency, minValue: intPtr(minPermissionSSRRFetchConcurrency), maxValue: intPtr(maxPermissionSSRRFetchConcurrency)}, true,
+			"Permission SSRR fetch concurrency changed to", clampPermissionSSRRFetchConcurrency,
+			func(e *settingsSideEffects) { e.permissionFetchConcurrency = true },
 			func(s *AppSettings) *int { return &s.PermissionSSRRFetchConcurrency }),
 
 		intPreference(appPreferenceObjPanelLogsBufferMaxSize, intPreferenceLimits{defaultValue: defaultObjPanelLogsBufferMaxSize, minValue: intPtr(minObjPanelLogsBufferMaxSize), maxValue: intPtr(maxObjPanelLogsBufferMaxSize)}, false,

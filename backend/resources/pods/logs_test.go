@@ -742,14 +742,9 @@ func TestFetchContainerLogsUsesSharedCappedTargetSelection(t *testing.T) {
 }
 
 func TestFetchContainerLogsAppliesSelectedFiltersBeforeTargetLimit(t *testing.T) {
-	defer func(orig int) {
-		containerlogs.SetPerScopeTargetLimit(orig)
-	}(containerlogs.GetPerScopeTargetLimit())
 	defer func(orig func(corev1client.PodInterface, context.Context, string, *corev1.PodLogOptions) (io.ReadCloser, error)) {
 		containerLogsStreamFunc = orig
 	}(containerLogsStreamFunc)
-
-	containerlogs.SetPerScopeTargetLimit(1)
 
 	deployment := &appsv1.Deployment{
 		ObjectMeta: metav1.ObjectMeta{Name: "web", Namespace: "default"},
@@ -784,8 +779,9 @@ func TestFetchContainerLogsAppliesSelectedFiltersBeforeTargetLimit(t *testing.T)
 	}
 
 	service := NewService(common.Dependencies{
-		Logger:           applog.Noop,
-		KubernetesClient: client,
+		Logger:                           applog.Noop,
+		KubernetesClient:                 client,
+		ContainerLogsPerScopeTargetLimit: 1,
 	})
 
 	resp := service.FetchContainerLogs(context.Background(), types.ContainerLogsFetchRequest{

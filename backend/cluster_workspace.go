@@ -417,8 +417,8 @@ func (a *App) ReleaseWorkspaceWindow(windowID string) {
 			return nil
 		}
 		return a.setSelectedKubeconfigs(mutation, union)
-	}); err != nil && a.logger != nil {
-		a.logger.Warn(
+	}); err != nil && a.appLogs.logger != nil {
+		a.appLogs.logger.Warn(
 			fmt.Sprintf("Failed to release cluster tabs for workspace window %s: %v", windowID, err),
 			"KubeconfigManager",
 		)

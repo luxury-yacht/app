@@ -74,6 +74,7 @@ type Config struct {
 	ObjectCatalogService         func() *objectcatalog.Service            // Function to get the object catalog service.
 	ObjectCatalogNamespaces      func() []snapshot.CatalogNamespaceGroup  // Function to get the object catalog namespaces.
 	ContainerLogsTargetLimiter   *containerlogsstream.GlobalTargetLimiter // Shared global limiter for container logs stream targets.
+	ContainerLogsPerScopeLimit   int                                      // Captured per-scope target cap for direct and streaming log selection.
 	ClusterID                    string                                   // stable identifier for cluster-scoped keys
 	ClusterName                  string                                   // display name for cluster in payloads
 	AttentionIgnoreRules         snapshot.AttentionIgnoreRules

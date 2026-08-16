@@ -17,6 +17,13 @@ exactly that cluster's subsystem — the rebuild recreates the permission
 checker, so the SSAR cache resets with it
 (`backend/refresh/system/manager.go` `NewSubsystemWithServices`).
 
+`PreferencesService` is the physical repository owner for each cluster's
+`allowedNamespaces` section: it owns the shared settings document, file lock,
+and atomic persistence. Namespace validation, `Get/SetClusterAllowedNamespaces`,
+scope revision/health replay, coalescing, and the persist-before-rebuild
+workflow remain workspace/refresh responsibilities. Repository ownership must
+not turn Preferences into the namespace-scope orchestrator.
+
 ## The source-scope rule
 
 **A permission check's scope must always match its data source's scope.**

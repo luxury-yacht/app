@@ -242,7 +242,7 @@ func TestGovernorEnsureRunningStartsMissingCatalogForLiveCluster(t *testing.T) {
 
 func TestStopObjectCatalogCancelsAndResets(t *testing.T) {
 	app := NewApp(nil)
-	app.logger = NewLogger(10)
+	app.appLogs = NewAppLogService(NewLogger(10))
 
 	cancelCalled := 0
 	done := make(chan struct{}, 1)
@@ -271,7 +271,7 @@ func TestStopObjectCatalogCancelsAndResets(t *testing.T) {
 
 func TestStopObjectCatalogDoesNotBlockForeverWaitingForDone(t *testing.T) {
 	app := NewApp(nil)
-	app.logger = NewLogger(10)
+	app.appLogs = NewAppLogService(NewLogger(10))
 
 	cancelCalled := make(chan struct{})
 	app.storeObjectCatalogEntry("cluster-a", &objectCatalogEntry{
@@ -346,7 +346,7 @@ func TestCatalogDoorbellBridgeBroadcastsCatalogSource(t *testing.T) {
 
 func TestGetCatalogDiagnosticsCombinesTelemetryAndServiceState(t *testing.T) {
 	app := NewApp(nil)
-	app.logger = NewLogger(10)
+	app.appLogs = NewAppLogService(NewLogger(10))
 	app.storeObjectCatalogEntry("cluster-a", &objectCatalogEntry{
 		service: &objectcatalog.Service{},
 	})

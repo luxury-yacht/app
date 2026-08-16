@@ -107,6 +107,14 @@ data-collection defaults with an application-owned privacy boundary:
   application-owned consent/privacy boundary from the upstream Sentry SDK and
   preserves existing exception type names such as
   `sentryreporting.LoggedError` for stable issue grouping.
+- `backend.ErrorReportingService` owns the reporter, live enable/disable
+  application, installation registration, and the mutex that serializes that
+  registration with Factory Reset. The owner does not retain Preferences.
+  `main.go` invokes the package-level, non-Wails `InitializeErrorReporting`
+  composition function with the immutable result of
+  `PreferencesService.EnsureLoaded`; only `loaded` provenance may enable the
+  reporter. The initializer is deliberately absent from `DesktopService` and
+  generated frontend bindings.
 - `backend/logger.go` keeps local log messages human-readable while forwarding
   structured failures separately. `ErrorWithCause` sends the original Go error
   through `CaptureException`, and `Panic` sends the recovered value through
@@ -165,7 +173,8 @@ data-collection defaults with an application-owned privacy boundary:
   by scope type rather than namespace value. The final backend scrubber protects
   only that producer-owned capability-shape grammar before applying generic
   hostname and Kubernetes-object redaction to the surrounding failure text.
-- `backend/app_settings.go` persists `errorReportingEnabled` and switches the
+- `backend/app_settings.go` persists `errorReportingEnabled`, and the
+  post-commit settings dispatcher asks `ErrorReportingService` to switch the
   backend reporter only after the setting write succeeds. Missing settings use
   the documented default-on preference, but malformed/unreadable settings are
   returned as RPC errors rather than converted into defaults. Backend startup

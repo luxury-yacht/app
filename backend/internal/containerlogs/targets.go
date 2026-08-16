@@ -3,7 +3,6 @@ package containerlogs
 import (
 	"fmt"
 	"sort"
-	"sync/atomic"
 
 	corev1 "k8s.io/api/core/v1"
 )
@@ -14,13 +13,7 @@ const (
 	MaxPerScopeTargetLimit = 1000
 )
 
-var currentPerScopeTargetLimit atomic.Int64
-
-func init() {
-	currentPerScopeTargetLimit.Store(DefaultPerScopeTargetLimit)
-}
-
-func clampPerScopeTargetLimit(limit int) int {
+func ClampPerScopeTargetLimit(limit int) int {
 	if limit < MinPerScopeTargetLimit {
 		return MinPerScopeTargetLimit
 	}
@@ -28,16 +21,6 @@ func clampPerScopeTargetLimit(limit int) int {
 		return MaxPerScopeTargetLimit
 	}
 	return limit
-}
-
-func GetPerScopeTargetLimit() int {
-	return clampPerScopeTargetLimit(int(currentPerScopeTargetLimit.Load()))
-}
-
-func SetPerScopeTargetLimit(limit int) int {
-	clamped := clampPerScopeTargetLimit(limit)
-	currentPerScopeTargetLimit.Store(int64(clamped))
-	return clamped
 }
 
 type SelectedTarget struct {
@@ -60,8 +43,9 @@ func SelectTargets(
 	}
 
 	if limit <= 0 {
-		limit = GetPerScopeTargetLimit()
+		limit = DefaultPerScopeTargetLimit
 	}
+	limit = ClampPerScopeTargetLimit(limit)
 
 	type rankedTarget struct {
 		target SelectedTarget
@@ -111,11 +95,11 @@ func SelectTargets(
 	return selected, total
 }
 
-func BuildTargetLimitWarnings(selectedCount, totalCount int) []string {
+func BuildTargetLimitWarnings(selectedCount, totalCount, limit int) []string {
 	if totalCount <= selectedCount || selectedCount <= 0 {
 		return nil
 	}
-	limit := GetPerScopeTargetLimit()
+	limit = ClampPerScopeTargetLimit(limit)
 	hiddenCount := totalCount - selectedCount
 	return []string{
 		fmt.Sprintf(

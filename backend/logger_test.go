@@ -568,7 +568,7 @@ func TestNewAppPassesErrorReporterToApplicationLogger(t *testing.T) {
 	reporter := &recordingErrorReporter{}
 	app := NewApp(nil, reporter)
 
-	app.logger.Error("startup failed", "App")
+	app.appLogs.logger.Error("startup failed", "App")
 
 	reporter.mu.Lock()
 	defer reporter.mu.Unlock()

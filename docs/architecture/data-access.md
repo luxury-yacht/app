@@ -103,6 +103,21 @@ Persisted preference mutations should batch through `UpdateAppPreferences` so
 validation, persistence, side effects, normalized return values, and optimistic
 rollback stay aligned.
 
+`PreferencesService` owns one coalesced lazy-load attempt. `EnsureLoaded`
+surfaces a load error without installing state or dispatching effects;
+`EnsureLoadedForStartup` joins that same attempt and may atomically install a
+snapshot marked `startup-default`. Callers receive copied snapshots and never
+hold the preferences mutex or invoke a raw settings loader.
+
+Runtime effects cross one stateless six-route dispatcher: error-reporting
+enablement, Kubernetes client QPS/burst, SSRR fetch concurrency, per-scope
+container-log target limit, global container-log target limit, and metrics
+refresh interval. A mutation captures its immutable snapshot and effect flags,
+persists under the preferences lock, releases the lock, then dispatches to
+owner-shaped write-only sinks. Persistence failure dispatches nothing. Sinks
+must not read preferences, call another effect owner, or acquire a refresh lock
+while holding a leaf-policy lock.
+
 ## Scope Rules
 
 All cluster/resource reads preserve identity:

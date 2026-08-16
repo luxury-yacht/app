@@ -17,7 +17,7 @@ import (
 // buildRevisionHistoryApp creates an App with a fake Kubernetes client pre-populated with the given objects.
 func buildRevisionHistoryApp(client *cgofake.Clientset) *App {
 	allowSelfSubjectAccessReviews(client)
-	app := &App{logger: NewLogger(100)}
+	app := &App{appLogs: NewAppLogService(NewLogger(100))}
 	app.clusterClients = map[string]*clusterClients{
 		"config:ctx": {
 			meta:              ClusterMeta{ID: "config:ctx", Name: "ctx"},
@@ -203,7 +203,7 @@ func TestGetRevisionHistoryNilClient(t *testing.T) {
 	t.Helper()
 
 	// clusterClients entry exists but has no kubernetes client set.
-	app := &App{logger: NewLogger(10)}
+	app := &App{appLogs: NewAppLogService(NewLogger(10))}
 	app.clusterClients = map[string]*clusterClients{
 		"config:ctx": {
 			meta:              ClusterMeta{ID: "config:ctx", Name: "ctx"},

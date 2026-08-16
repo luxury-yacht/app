@@ -271,37 +271,37 @@ func addDesktopHelpMenu(appMenu *application.Menu, app menuController) {
 	addMenuText(helpMenu, "Check for Updates…", "", menuCallback(app.showAboutAndCheckForUpdates))
 }
 
-func (a *App) setApplicationMenu(menu *application.Menu) {
-	a.menu = menu
+func (s *DesktopShell) setApplicationMenu(menu *application.Menu) {
+	s.menu = menu
 }
 
-func (a *App) configureWorkspaceWindowCreator(create func()) {
-	a.createWorkspaceWindow = create
+func (s *DesktopShell) configureWorkspaceWindowCreator(create func()) {
+	s.createWorkspaceWindow = create
 }
 
-func (a *App) createWorkspaceWindowFromMenu() {
-	if a != nil && a.createWorkspaceWindow != nil {
-		a.createWorkspaceWindow()
+func (s *DesktopShell) createWorkspaceWindowFromMenu() {
+	if s != nil && s.createWorkspaceWindow != nil {
+		s.createWorkspaceWindow()
 	}
 }
 
-func (a *App) hideApplicationFromMenu() {
-	if a != nil && a.runtimeAvailable() && a.wailsApplication != nil {
-		a.wailsApplication.Hide()
+func (s *DesktopShell) hideApplicationFromMenu() {
+	if s != nil && s.runtimeAvailable() && s.application != nil {
+		s.application.Hide()
 	}
 }
 
-func (a *App) quitApplicationFromMenu() {
-	if a != nil && a.runtimeAvailable() && a.wailsApplication != nil {
-		a.wailsApplication.Quit()
+func (s *DesktopShell) quitApplicationFromMenu() {
+	if s != nil && s.runtimeAvailable() && s.application != nil {
+		s.application.Quit()
 	}
 }
 
-func (a *App) bringAllWindowsToFront() {
-	if a == nil || !a.runtimeAvailable() || a.wailsApplication == nil {
+func (s *DesktopShell) bringAllWindowsToFront() {
+	if s == nil || !s.runtimeAvailable() || s.application == nil {
 		return
 	}
-	for _, window := range a.wailsApplication.Window.GetAll() {
+	for _, window := range s.application.Window.GetAll() {
 		window.Show()
 		if window.IsMinimised() {
 			window.Restore()

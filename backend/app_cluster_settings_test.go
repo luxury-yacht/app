@@ -34,7 +34,7 @@ func TestSetClusterAllowedNamespacesPersistsPerCluster(t *testing.T) {
 	require.Equal(t, []string{"dev"}, beta)
 
 	// The section must be on disk, not only in memory: a fresh load sees it.
-	file, err := app.loadSettingsFile()
+	file, err := app.preferences.loadSettingsFile()
 	require.NoError(t, err)
 	require.Equal(t, []string{"prod", "staging"}, file.Clusters["kc:alpha"].AllowedNamespaces)
 	require.Equal(t, []string{"dev"}, file.Clusters["kc:beta"].AllowedNamespaces)
@@ -87,7 +87,7 @@ func TestSetClusterAllowedNamespacesClearsEntryWhenEmpty(t *testing.T) {
 	require.NoError(t, err)
 	require.Empty(t, stored)
 
-	file, err := app.loadSettingsFile()
+	file, err := app.preferences.loadSettingsFile()
 	require.NoError(t, err)
 	_, exists := file.Clusters["kc:ctx"]
 	require.False(t, exists, "cleared cluster entry must be removed from settings.json")
@@ -102,8 +102,8 @@ func TestClusterAllowedNamespacesSurviveSaveAppSettings(t *testing.T) {
 
 	// A global-preferences save (load-mutate-save) must not drop the
 	// per-cluster section.
-	require.NoError(t, app.loadAppSettings())
-	require.NoError(t, app.saveAppSettings())
+	ensurePreferencesLoaded(t, app)
+	require.NoError(t, app.preferences.saveAppSettings())
 
 	stored, err := app.GetClusterAllowedNamespaces("kc:ctx")
 	require.NoError(t, err)

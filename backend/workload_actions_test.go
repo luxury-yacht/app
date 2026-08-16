@@ -125,7 +125,7 @@ func TestRestartWorkloadAddsRestartAnnotation(t *testing.T) {
 
 			// Per-cluster clients are stored in clusterClients, not in global fields.
 			app := &App{
-				logger:        NewLogger(100),
+				appLogs:       NewAppLogService(NewLogger(100)),
 				responseCache: newResponseCache(time.Minute, 10),
 			}
 			app.clusterClients = map[string]*clusterClients{
@@ -164,7 +164,7 @@ func TestRestartWorkloadErrors(t *testing.T) {
 	fakeClient := cgofake.NewClientset()
 	allowSelfSubjectAccessReviews(fakeClient)
 	app := &App{
-		logger: NewLogger(10),
+		appLogs: NewAppLogService(NewLogger(10)),
 	}
 	app.clusterClients = map[string]*clusterClients{
 		workloadClusterID: {
@@ -267,7 +267,7 @@ func TestScaleWorkloadUpdatesScaleSubresource(t *testing.T) {
 
 			// Per-cluster clients are stored in clusterClients, not in global fields.
 			app := &App{
-				logger:        NewLogger(100),
+				appLogs:       NewAppLogService(NewLogger(100)),
 				responseCache: newResponseCache(time.Minute, 10),
 			}
 			app.clusterClients = map[string]*clusterClients{
@@ -361,7 +361,7 @@ func TestScaleWorkloadRestrictsHPAManagedWorkloads(t *testing.T) {
 				return true, scale, nil
 			})
 
-			app := &App{logger: NewLogger(100)}
+			app := &App{appLogs: NewAppLogService(NewLogger(100))}
 			app.clusterClients = map[string]*clusterClients{
 				workloadClusterID: {
 					meta:              ClusterMeta{ID: workloadClusterID, Name: "ctx"},
@@ -390,7 +390,7 @@ func TestScaleWorkloadErrors(t *testing.T) {
 	client := cgofake.NewClientset()
 	allowSelfSubjectAccessReviews(client)
 	app := &App{
-		logger: NewLogger(10),
+		appLogs: NewAppLogService(NewLogger(10)),
 	}
 	app.clusterClients = map[string]*clusterClients{
 		workloadClusterID: {
@@ -456,7 +456,7 @@ func TestTriggerCronJobCreatesJob(t *testing.T) {
 	client := cgofake.NewClientset(cronJob)
 	allowSelfSubjectAccessReviews(client)
 	app := &App{
-		logger:        NewLogger(100),
+		appLogs:       NewAppLogService(NewLogger(100)),
 		responseCache: newResponseCache(time.Minute, 10),
 	}
 	app.clusterClients = map[string]*clusterClients{
@@ -518,7 +518,7 @@ func TestTriggerCronJobRejectsSuspendedCronJob(t *testing.T) {
 
 	client := cgofake.NewClientset(cronJob)
 	allowSelfSubjectAccessReviews(client)
-	app := &App{logger: NewLogger(10)}
+	app := &App{appLogs: NewAppLogService(NewLogger(10))}
 	app.clusterClients = map[string]*clusterClients{
 		workloadClusterID: {
 			meta:              ClusterMeta{ID: workloadClusterID, Name: "ctx"},
@@ -542,7 +542,7 @@ func TestTriggerCronJobErrors(t *testing.T) {
 	client := cgofake.NewClientset()
 	allowSelfSubjectAccessReviews(client)
 	app := &App{
-		logger: NewLogger(10),
+		appLogs: NewAppLogService(NewLogger(10)),
 	}
 	app.clusterClients = map[string]*clusterClients{
 		workloadClusterID: {
@@ -611,7 +611,7 @@ func TestSuspendCronJobTogglesSuspendField(t *testing.T) {
 			client := cgofake.NewClientset(cronJob)
 			allowSelfSubjectAccessReviews(client)
 			app := &App{
-				logger:        NewLogger(100),
+				appLogs:       NewAppLogService(NewLogger(100)),
 				responseCache: newResponseCache(time.Minute, 10),
 			}
 			app.clusterClients = map[string]*clusterClients{
@@ -646,7 +646,7 @@ func TestSuspendCronJobErrors(t *testing.T) {
 	client := cgofake.NewClientset()
 	allowSelfSubjectAccessReviews(client)
 	app := &App{
-		logger: NewLogger(10),
+		appLogs: NewAppLogService(NewLogger(10)),
 	}
 	app.clusterClients = map[string]*clusterClients{
 		workloadClusterID: {

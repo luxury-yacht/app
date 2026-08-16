@@ -18,12 +18,12 @@ func TestOpenKubeconfigSearchPathDialogUsesWailsDirectoryOptions(t *testing.T) {
 	app := newTestAppWithDefaults(t)
 	setTestAppRuntimeReady(t, app, context.Background())
 	var options application.OpenFileDialogOptions
-	app.openFileDialog = func(input *application.OpenFileDialogOptions) (string, error) {
+	app.desktopShell.openFileDialog = func(input *application.OpenFileDialogOptions) (string, error) {
 		options = *input
 		return "/selected", nil
 	}
 
-	selected, err := app.OpenKubeconfigSearchPathDialog()
+	selected, err := app.desktopShell.OpenKubeconfigSearchPathDialog()
 
 	require.NoError(t, err)
 	require.Equal(t, "/selected", selected)
@@ -297,10 +297,10 @@ func TestApp_GetKubeconfigsReportsMissingSearchPathsAsEmptyState(t *testing.T) {
 func TestApp_GetKubeconfigsReportsNoConfiguredSearchPathsAsEmptyState(t *testing.T) {
 	setTestConfigEnv(t)
 	app := NewApp(nil)
-	settings, err := app.loadSettingsFile()
+	settings, err := app.preferences.loadSettingsFile()
 	require.NoError(t, err)
 	settings.Kubeconfig.SearchPaths = []string{}
-	require.NoError(t, app.saveSettingsFile(settings))
+	require.NoError(t, app.preferences.saveSettingsFile(settings))
 
 	result, err := app.GetKubeconfigs()
 
@@ -386,7 +386,7 @@ func TestApp_GetKubeconfigSearchPathsDefaults(t *testing.T) {
 	setTestConfigEnv(t)
 	app := NewApp(nil)
 
-	paths, err := app.GetKubeconfigSearchPaths()
+	paths, err := app.preferences.GetKubeconfigSearchPaths()
 	require.NoError(t, err)
 	require.Equal(t, defaultKubeconfigSearchPaths(), paths)
 }
@@ -407,7 +407,7 @@ func TestApp_SetKubeconfigSearchPathsPersistsAndDiscovers(t *testing.T) {
 	paths := []string{dirPath, "  ", fileOnlyPath, dirPath}
 	require.NoError(t, app.SetKubeconfigSearchPaths(paths))
 
-	settings, err := app.loadSettingsFile()
+	settings, err := app.preferences.loadSettingsFile()
 	require.NoError(t, err)
 	require.Equal(t, []string{dirPath, fileOnlyPath}, settings.Kubeconfig.SearchPaths)
 
@@ -420,7 +420,7 @@ func TestApp_SetKubeconfigSearchPathsPrunesSelectionsFromRemovedPaths(t *testing
 	setTestConfigEnv(t)
 	app := NewApp(nil)
 	setTestAppRuntimeReady(t, app, context.Background())
-	app.appSettings = getDefaultAppSettings()
+	app.preferences.appSettings = getDefaultAppSettings()
 	app.refreshAggregates.Store(&refreshAggregateHandlers{})
 	setRefreshServiceReadyForTest(app)
 	setRefreshRuntimeContextForTest(app, context.Background())
@@ -441,7 +441,7 @@ func TestApp_SetKubeconfigSearchPathsPrunesSelectionsFromRemovedPaths(t *testing
 	app.kubeconfigsMu.Lock()
 	app.selectedKubeconfigs = []string{selectionA, selectionB}
 	app.kubeconfigsMu.Unlock()
-	app.appSettings.SelectedKubeconfigs = []string{selectionA, selectionB}
+	app.preferences.appSettings.SelectedKubeconfigs = []string{selectionA, selectionB}
 
 	metaA := app.clusterMetaForSelection(kubeconfigSelection{Path: configA, Context: "ctx-a"})
 	metaB := app.clusterMetaForSelection(kubeconfigSelection{Path: configB, Context: "ctx-b"})
@@ -462,15 +462,15 @@ func TestApp_SetKubeconfigSearchPathsPrunesSelectionsFromRemovedPaths(t *testing
 	require.NoError(t, app.SetKubeconfigSearchPaths([]string{dirA}))
 
 	assert.Equal(t, []string{selectionA}, app.GetSelectedKubeconfigs())
-	require.NotNil(t, app.appSettings)
-	assert.Equal(t, []string{selectionA}, app.appSettings.SelectedKubeconfigs)
+	require.NotNil(t, app.preferences.appSettings)
+	assert.Equal(t, []string{selectionA}, app.preferences.appSettings.SelectedKubeconfigs)
 
 	_, kept := app.clusterClients[metaA.ID]
 	assert.True(t, kept)
 	_, removed := app.clusterClients[metaB.ID]
 	assert.False(t, removed)
 
-	settings, err := app.loadSettingsFile()
+	settings, err := app.preferences.loadSettingsFile()
 	require.NoError(t, err)
 	assert.Equal(t, []string{dirA}, settings.Kubeconfig.SearchPaths)
 }
@@ -483,7 +483,7 @@ func TestApp_SetKubeconfigSearchPathsRejectsEmptyList(t *testing.T) {
 	require.Error(t, err)
 	assert.Contains(t, err.Error(), "at least one kubeconfig search path is required")
 
-	settings, loadErr := app.loadSettingsFile()
+	settings, loadErr := app.preferences.loadSettingsFile()
 	require.NoError(t, loadErr)
 	assert.Equal(t, defaultKubeconfigSearchPaths(), settings.Kubeconfig.SearchPaths)
 }
@@ -601,8 +601,8 @@ func TestApp_SetSelectedKubeconfigs(t *testing.T) {
 
 	assert.Equal(t, selections, app.selectedKubeconfigs)
 	assert.GreaterOrEqual(t, app.selectionGeneration.Load(), uint64(1))
-	require.NotNil(t, app.appSettings)
-	assert.Equal(t, selections, app.appSettings.SelectedKubeconfigs)
+	require.NotNil(t, app.preferences.appSettings)
+	assert.Equal(t, selections, app.preferences.appSettings.SelectedKubeconfigs)
 	// Serialize teardown with auth/watcher mutation paths under race mode.
 	app.selectionMutationMu.Lock()
 	app.teardownRefreshSubsystem()
@@ -666,8 +666,8 @@ func TestApp_SetSelectedKubeconfigsClearsSelection(t *testing.T) {
 
 	require.NoError(t, app.SetSelectedKubeconfigs(nil))
 	assert.Empty(t, app.selectedKubeconfigs)
-	require.NotNil(t, app.appSettings)
-	assert.Empty(t, app.appSettings.SelectedKubeconfigs)
+	require.NotNil(t, app.preferences.appSettings)
+	assert.Empty(t, app.preferences.appSettings.SelectedKubeconfigs)
 }
 
 func TestApp_discoverKubeconfigs_noAutoSelection(t *testing.T) {

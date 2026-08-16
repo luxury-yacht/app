@@ -13,7 +13,7 @@ import (
 
 func TestInitKubernetesClientUsesExistingClusterClients(t *testing.T) {
 	app := NewApp(nil)
-	app.logger = NewLogger(10)
+	app.appLogs = NewAppLogService(NewLogger(10))
 	setTestAppRuntimeReady(t, app, context.Background())
 
 	// Seed a selection and client pool so init uses the existing cluster client.
@@ -45,7 +45,7 @@ func TestInitKubernetesClientErrorsWithoutKubeconfig(t *testing.T) {
 	t.Setenv("HOME", "")
 
 	app := NewApp(nil)
-	app.logger = NewLogger(10)
+	app.appLogs = NewAppLogService(NewLogger(10))
 
 	err := app.initKubernetesClient()
 	if err == nil {
@@ -84,7 +84,7 @@ users:
 	}
 
 	app := NewApp(nil)
-	app.logger = NewLogger(10)
+	app.appLogs = NewAppLogService(NewLogger(10))
 	setTestAppRuntimeReady(t, app, context.Background())
 	app.availableKubeconfigs = []KubeconfigInfo{{
 		Name:    "config",

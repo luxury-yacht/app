@@ -129,7 +129,7 @@ func TestQueryPermissions_UsesConfiguredSSRRFetchConcurrency(t *testing.T) {
 
 	app := NewApp(nil)
 	setTestAppRuntimeReady(t, app, context.Background())
-	app.appSettings = &AppSettings{PermissionSSRRFetchConcurrency: 1}
+	app.permissionFetchPolicy.SetPermissionFetchConcurrency(1)
 	app.clusterClients = map[string]*clusterClients{
 		clusterID: {
 			meta:              ClusterMeta{ID: clusterID, Name: "Serial"},

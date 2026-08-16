@@ -48,7 +48,7 @@ func TestGetAppInfoDevReadsWails(t *testing.T) {
 	Version, BuildTime, GitCommit = "dev", "dev", "dev"
 
 	app := &App{}
-	info, err := app.GetAppInfo()
+	info, err := app.updates.GetAppInfo()
 	if err != nil {
 		t.Fatalf("GetAppInfo error: %v", err)
 	}
@@ -79,7 +79,7 @@ func TestGetAppInfoNonDevUsesLdflags(t *testing.T) {
 	IsBetaBuild = "false"
 
 	app := &App{}
-	info, err := app.GetAppInfo()
+	info, err := app.updates.GetAppInfo()
 	if err != nil {
 		t.Fatalf("GetAppInfo error: %v", err)
 	}
@@ -107,7 +107,7 @@ func TestGetAppInfoIncludesBetaMetadata(t *testing.T) {
 	BetaExpiry = "2025-01-01T00:00:00Z"
 
 	app := &App{}
-	info, err := app.GetAppInfo()
+	info, err := app.updates.GetAppInfo()
 	if err != nil {
 		t.Fatalf("GetAppInfo error: %v", err)
 	}
@@ -135,7 +135,7 @@ func TestCheckBetaExpiryValidations(t *testing.T) {
 	t.Cleanup(func() {
 		Version, BetaExpiry, IsBetaBuild = origVersion, origBeta, origIsBeta
 	})
-	app := &App{logger: NewLogger(5)}
+	app := &App{appLogs: NewAppLogService(NewLogger(5))}
 
 	// invalid format
 	BetaExpiry = "not-a-time"

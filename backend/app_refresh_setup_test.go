@@ -71,10 +71,10 @@ func TestBuildSubsystemsInSelectionOrderRunsConcurrentlyAndPreservesOrder(t *tes
 
 // TestSharedContainerLogsTargetLimiterDoesNotDeadlockBeforeSettingsLoad is the
 // regression for the startup self-deadlock: the accessor held
-// containerLogsTargetLimiterMu (and settingsMu) while calling loadAppSettings, whose
+// containerLogsTargetLimiterMu (and settingsMu) while loading settings, whose
 // tail re-entered the accessor and blocked forever on the same non-reentrant mutex
 // (stack: buildRefreshSubsystemForSelection → sharedContainerLogsTargetLimiter →
-// loadAppSettings → sharedContainerLogsTargetLimiter). The accessor must return a
+// settings load → sharedContainerLogsTargetLimiter). The accessor must return a
 // limiter without ever calling back into settings loading — containerLogsTargetLimiterMu
 // is a LEAF lock; the settings paths push the configured limit via SetLimit after load.
 func TestSharedContainerLogsTargetLimiterDoesNotDeadlockBeforeSettingsLoad(t *testing.T) {

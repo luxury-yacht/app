@@ -7,28 +7,24 @@ import (
 
 	"github.com/luxury-yacht/app/backend/internal/logsources"
 	"github.com/luxury-yacht/app/backend/refresh/snapshot"
-	"github.com/luxury-yacht/app/backend/refresh/system"
 	"github.com/luxury-yacht/app/backend/resourcemodel"
 )
 
 // GetClusterAttentionIgnoreRules returns the effective suppression rules for
 // exactly one cluster, including rules that apply to every cluster.
-func (a *App) GetClusterAttentionIgnoreRules(clusterID string) (*snapshot.AttentionIgnoreRules, error) {
+func (s *ClusterAttentionService) GetClusterAttentionIgnoreRules(clusterID string) (*snapshot.AttentionIgnoreRules, error) {
 	clusterID = strings.TrimSpace(clusterID)
 	if clusterID == "" {
 		return nil, fmt.Errorf("clusterID is required")
 	}
-	a.settingsMu.Lock()
-	defer a.settingsMu.Unlock()
-	settings, err := a.loadSettingsFile()
+	rules, err := s.preferences.readAttentionRules(clusterID)
 	if err != nil {
 		return nil, err
 	}
-	rules := effectiveAttentionIgnoreRules(settings.Clusters[clusterID], settings.Attention)
 	return &rules, nil
 }
 
-func (a *App) IgnoreClusterAttentionObjectFinding(clusterID string, ref resourcemodel.ResourceRef, findingType string) (*snapshot.AttentionIgnoreRules, error) {
+func (s *ClusterAttentionService) IgnoreClusterAttentionObjectFinding(clusterID string, ref resourcemodel.ResourceRef, findingType string) (*snapshot.AttentionIgnoreRules, error) {
 	if err := validateAttentionIgnoredObject(clusterID, ref); err != nil {
 		return nil, err
 	}
@@ -37,14 +33,14 @@ func (a *App) IgnoreClusterAttentionObjectFinding(clusterID string, ref resource
 	}
 	findingType = strings.TrimSpace(findingType)
 	ignore := snapshot.AttentionObjectFindingIgnore{Ref: ref, FindingType: findingType}
-	return a.mutateClusterAttentionIgnoreRules(clusterID, func(rules *settingsClusterAttentionRules) {
+	return s.mutateClusterAttentionIgnoreRules(clusterID, func(rules *settingsClusterAttentionRules) {
 		if !slices.Contains(rules.ObjectFindings, ignore) {
 			rules.ObjectFindings = append(rules.ObjectFindings, ignore)
 		}
 	})
 }
 
-func (a *App) RestoreClusterAttentionObjectFinding(clusterID string, ref resourcemodel.ResourceRef, findingType string) (*snapshot.AttentionIgnoreRules, error) {
+func (s *ClusterAttentionService) RestoreClusterAttentionObjectFinding(clusterID string, ref resourcemodel.ResourceRef, findingType string) (*snapshot.AttentionIgnoreRules, error) {
 	if err := validateAttentionIgnoredObject(clusterID, ref); err != nil {
 		return nil, err
 	}
@@ -52,26 +48,26 @@ func (a *App) RestoreClusterAttentionObjectFinding(clusterID string, ref resourc
 		return nil, fmt.Errorf("attention finding type is required")
 	}
 	findingType = strings.TrimSpace(findingType)
-	return a.mutateClusterAttentionIgnoreRules(clusterID, func(rules *settingsClusterAttentionRules) {
+	return s.mutateClusterAttentionIgnoreRules(clusterID, func(rules *settingsClusterAttentionRules) {
 		rules.ObjectFindings = slices.DeleteFunc(rules.ObjectFindings, func(candidate snapshot.AttentionObjectFindingIgnore) bool {
 			return candidate.Ref == ref && candidate.FindingType == findingType
 		})
 	})
 }
 
-func (a *App) IgnoreClusterAttentionFindingType(clusterID, findingType string) (*snapshot.AttentionIgnoreRules, error) {
+func (s *ClusterAttentionService) IgnoreClusterAttentionFindingType(clusterID, findingType string) (*snapshot.AttentionIgnoreRules, error) {
 	if err := validateAttentionFindingType(clusterID, findingType); err != nil {
 		return nil, err
 	}
 	findingType = strings.TrimSpace(findingType)
-	return a.mutateClusterAttentionIgnoreRules(clusterID, func(rules *settingsClusterAttentionRules) {
+	return s.mutateClusterAttentionIgnoreRules(clusterID, func(rules *settingsClusterAttentionRules) {
 		if !slices.Contains(rules.FindingTypes, findingType) {
 			rules.FindingTypes = append(rules.FindingTypes, findingType)
 		}
 	})
 }
 
-func (a *App) RestoreClusterAttentionFindingType(clusterID, findingType string) (*snapshot.AttentionIgnoreRules, error) {
+func (s *ClusterAttentionService) RestoreClusterAttentionFindingType(clusterID, findingType string) (*snapshot.AttentionIgnoreRules, error) {
 	if strings.TrimSpace(clusterID) == "" {
 		return nil, fmt.Errorf("clusterID is required")
 	}
@@ -79,26 +75,26 @@ func (a *App) RestoreClusterAttentionFindingType(clusterID, findingType string) 
 		return nil, fmt.Errorf("attention finding type is required")
 	}
 	findingType = strings.TrimSpace(findingType)
-	return a.mutateClusterAttentionIgnoreRules(clusterID, func(rules *settingsClusterAttentionRules) {
+	return s.mutateClusterAttentionIgnoreRules(clusterID, func(rules *settingsClusterAttentionRules) {
 		rules.FindingTypes = slices.DeleteFunc(rules.FindingTypes, func(candidate string) bool {
 			return candidate == findingType
 		})
 	})
 }
 
-func (a *App) IgnoreGlobalAttentionFindingType(clusterID, findingType string) (*snapshot.AttentionIgnoreRules, error) {
+func (s *ClusterAttentionService) IgnoreGlobalAttentionFindingType(clusterID, findingType string) (*snapshot.AttentionIgnoreRules, error) {
 	if err := validateAttentionFindingType(clusterID, findingType); err != nil {
 		return nil, err
 	}
 	findingType = strings.TrimSpace(findingType)
-	return a.mutateGlobalAttentionIgnoreRules(clusterID, func(rules *settingsGlobalAttentionRules) {
+	return s.mutateGlobalAttentionIgnoreRules(clusterID, func(rules *settingsGlobalAttentionRules) {
 		if !slices.Contains(rules.FindingTypes, findingType) {
 			rules.FindingTypes = append(rules.FindingTypes, findingType)
 		}
 	})
 }
 
-func (a *App) RestoreGlobalAttentionFindingType(clusterID, findingType string) (*snapshot.AttentionIgnoreRules, error) {
+func (s *ClusterAttentionService) RestoreGlobalAttentionFindingType(clusterID, findingType string) (*snapshot.AttentionIgnoreRules, error) {
 	if strings.TrimSpace(clusterID) == "" {
 		return nil, fmt.Errorf("clusterID is required")
 	}
@@ -106,21 +102,21 @@ func (a *App) RestoreGlobalAttentionFindingType(clusterID, findingType string) (
 		return nil, fmt.Errorf("attention finding type is required")
 	}
 	findingType = strings.TrimSpace(findingType)
-	return a.mutateGlobalAttentionIgnoreRules(clusterID, func(rules *settingsGlobalAttentionRules) {
+	return s.mutateGlobalAttentionIgnoreRules(clusterID, func(rules *settingsGlobalAttentionRules) {
 		rules.FindingTypes = slices.DeleteFunc(rules.FindingTypes, func(candidate string) bool {
 			return candidate == findingType
 		})
 	})
 }
 
-func (a *App) mutateClusterAttentionIgnoreRules(
+func (s *ClusterAttentionService) mutateClusterAttentionIgnoreRules(
 	clusterID string,
 	mutate func(*settingsClusterAttentionRules),
 ) (*snapshot.AttentionIgnoreRules, error) {
-	return a.persistClusterAttentionIgnoreRules(clusterID, mutate, true)
+	return s.persistClusterAttentionIgnoreRules(clusterID, mutate, true)
 }
 
-func (a *App) persistClusterAttentionIgnoreRules(
+func (s *ClusterAttentionService) persistClusterAttentionIgnoreRules(
 	clusterID string,
 	mutate func(*settingsClusterAttentionRules),
 	applyLive bool,
@@ -129,46 +125,21 @@ func (a *App) persistClusterAttentionIgnoreRules(
 	if clusterID == "" {
 		return nil, fmt.Errorf("clusterID is required")
 	}
-	a.attentionRulesMu.Lock()
-	defer a.attentionRulesMu.Unlock()
-	a.settingsMu.Lock()
-	settings, err := a.loadSettingsFile()
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	effective, err := s.preferences.updateClusterAttentionRules(clusterID, mutate)
 	if err != nil {
-		a.settingsMu.Unlock()
 		return nil, err
 	}
-	section := settings.Clusters[clusterID]
-	rules := clusterAttentionIgnoreRulesFromSection(section)
-	mutate(&rules)
-	if clusterAttentionIgnoreRulesEmpty(rules) {
-		section.Attention = nil
-	} else {
-		copy := cloneClusterAttentionIgnoreRules(rules)
-		section.Attention = &copy
-	}
-	if settings.Clusters == nil {
-		settings.Clusters = make(map[string]settingsClusterSection)
-	}
-	if clusterSettingsSectionEmpty(section) {
-		delete(settings.Clusters, clusterID)
-	} else {
-		settings.Clusters[clusterID] = section
-	}
-	if err := a.saveSettingsFile(settings); err != nil {
-		a.settingsMu.Unlock()
-		return nil, err
-	}
-	effective := effectiveAttentionIgnoreRules(section, settings.Attention)
-	a.settingsMu.Unlock()
 
 	if applyLive {
-		a.applyClusterAttentionIgnoreRules(clusterID, effective)
+		s.applyAttentionIgnoreRulesToTarget(s.targets[clusterID], effective)
 	}
 	result := cloneAttentionIgnoreRules(effective)
 	return &result, nil
 }
 
-func (a *App) mutateGlobalAttentionIgnoreRules(
+func (s *ClusterAttentionService) mutateGlobalAttentionIgnoreRules(
 	resultClusterID string,
 	mutate func(*settingsGlobalAttentionRules),
 ) (*snapshot.AttentionIgnoreRules, error) {
@@ -176,70 +147,45 @@ func (a *App) mutateGlobalAttentionIgnoreRules(
 	if resultClusterID == "" {
 		return nil, fmt.Errorf("clusterID is required")
 	}
-	a.attentionRulesMu.Lock()
-	defer a.attentionRulesMu.Unlock()
-	a.settingsMu.Lock()
-	settings, err := a.loadSettingsFile()
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	clusterIDs := make([]string, 0, len(s.targets))
+	for clusterID := range s.targets {
+		clusterIDs = append(clusterIDs, clusterID)
+	}
+	result, effectiveByCluster, err := s.preferences.updateGlobalAttentionRules(resultClusterID, clusterIDs, mutate)
 	if err != nil {
-		a.settingsMu.Unlock()
 		return nil, err
 	}
-	globalRules := globalAttentionIgnoreRulesFromSettings(settings.Attention)
-	mutate(&globalRules)
-	if len(globalRules.FindingTypes) == 0 {
-		settings.Attention = nil
-	} else {
-		copy := cloneGlobalAttentionIgnoreRules(globalRules)
-		settings.Attention = &copy
-	}
-	if err := a.saveSettingsFile(settings); err != nil {
-		a.settingsMu.Unlock()
-		return nil, err
-	}
-	result := effectiveAttentionIgnoreRules(settings.Clusters[resultClusterID], settings.Attention)
-	a.settingsMu.Unlock()
-
-	effectiveByCluster := make(map[string]snapshot.AttentionIgnoreRules)
-	for clusterID := range a.snapshotRefreshSubsystems() {
-		effectiveByCluster[clusterID] = effectiveAttentionIgnoreRules(settings.Clusters[clusterID], settings.Attention)
-	}
-
 	for clusterID, rules := range effectiveByCluster {
-		a.applyClusterAttentionIgnoreRules(clusterID, rules)
+		s.applyAttentionIgnoreRulesToTarget(s.targets[clusterID], rules)
 	}
 	cloned := cloneAttentionIgnoreRules(result)
 	return &cloned, nil
 }
 
-func (a *App) applyClusterAttentionIgnoreRules(clusterID string, rules snapshot.AttentionIgnoreRules) {
-	a.applyAttentionIgnoreRulesToSubsystem(a.getRefreshSubsystem(clusterID), rules)
-}
-
-func (a *App) applyAttentionIgnoreRulesToSubsystem(subsystem *system.Subsystem, rules snapshot.AttentionIgnoreRules) {
-	if subsystem != nil && subsystem.AttentionIndex != nil {
-		subsystem.AttentionIndex.SetIgnoreRules(rules)
+func (s *ClusterAttentionService) applyAttentionIgnoreRulesToTarget(target attentionIndexTarget, rules snapshot.AttentionIgnoreRules) {
+	if target != nil {
+		target.SetIgnoreRules(rules)
 	}
 }
 
-func (a *App) syncAttentionIgnoreRulesForSubsystem(clusterID string, subsystem *system.Subsystem) {
-	if subsystem == nil || subsystem.AttentionIndex == nil {
-		return
-	}
-	a.attentionRulesMu.Lock()
-	defer a.attentionRulesMu.Unlock()
-	rules, err := a.GetClusterAttentionIgnoreRules(clusterID)
+func (s *ClusterAttentionService) syncTarget(clusterID string, target attentionIndexTarget) {
+	rules, err := s.GetClusterAttentionIgnoreRules(clusterID)
 	if err != nil {
-		a.logger.Warn(fmt.Sprintf("Could not read Attention ignores for cluster %s: %v", clusterID, err), logsources.Settings, clusterID, clusterID)
+		if s.logger != nil {
+			s.logger.Warn(fmt.Sprintf("Could not read Attention ignores for cluster %s: %v", clusterID, err), logsources.Settings, clusterID, clusterID)
+		}
 		return
 	}
-	a.applyAttentionIgnoreRulesToSubsystem(subsystem, *rules)
+	s.applyAttentionIgnoreRulesToTarget(target, *rules)
 }
 
-func (a *App) pruneClusterAttentionIgnoredObject(clusterID string, ref resourcemodel.ResourceRef) error {
+func (s *ClusterAttentionService) pruneClusterAttentionIgnoredObject(clusterID string, ref resourcemodel.ResourceRef) error {
 	if err := validateAttentionIgnoredObject(clusterID, ref); err != nil {
 		return err
 	}
-	_, err := a.persistClusterAttentionIgnoreRules(clusterID, func(rules *settingsClusterAttentionRules) {
+	_, err := s.persistClusterAttentionIgnoreRules(clusterID, func(rules *settingsClusterAttentionRules) {
 		rules.ObjectFindings = slices.DeleteFunc(rules.ObjectFindings, func(candidate snapshot.AttentionObjectFindingIgnore) bool {
 			return candidate.Ref == ref
 		})
@@ -247,10 +193,12 @@ func (a *App) pruneClusterAttentionIgnoredObject(clusterID string, ref resourcem
 	return err
 }
 
-func (a *App) attentionIgnoreRulesForCluster(clusterID string) snapshot.AttentionIgnoreRules {
-	rules, err := a.GetClusterAttentionIgnoreRules(clusterID)
+func (s *ClusterAttentionService) attentionIgnoreRulesForCluster(clusterID string) snapshot.AttentionIgnoreRules {
+	rules, err := s.GetClusterAttentionIgnoreRules(clusterID)
 	if err != nil {
-		a.logger.Warn(fmt.Sprintf("Could not read Attention ignores for cluster %s: %v", clusterID, err), logsources.Settings, clusterID, clusterID)
+		if s.logger != nil {
+			s.logger.Warn(fmt.Sprintf("Could not read Attention ignores for cluster %s: %v", clusterID, err), logsources.Settings, clusterID, clusterID)
+		}
 		return snapshot.AttentionIgnoreRules{}
 	}
 	return *rules

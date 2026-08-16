@@ -50,6 +50,13 @@ type fakeApplicationUpdateCoordinator struct {
 	removeSkipCalls   int
 	runtimeReadyCalls int
 	stopCalls         int
+	resetCalls        int
+	resetErr          error
+}
+
+func (coordinator *fakeApplicationUpdateCoordinator) Reset(context.Context) error {
+	coordinator.resetCalls++
+	return coordinator.resetErr
 }
 
 type fakeUpdateEventRegistrar struct {
@@ -160,9 +167,9 @@ func TestGetAppInfoReadsCoordinatorSnapshotWithoutStartingCheck(t *testing.T) {
 		RecoveryTarget:    "",
 	}}
 	app := NewApp(nil)
-	app.applicationUpdates = coordinator
+	app.updates.coordinator = coordinator
 
-	info, err := app.GetAppInfo()
+	info, err := app.updates.GetAppInfo()
 
 	require.NoError(t, err)
 	require.NotNil(t, info.Update)
@@ -187,27 +194,27 @@ func TestApplicationUpdateCommandsDelegateToOneProcessCoordinator(t *testing.T) 
 		Status: appupdates.StatusAvailable, AvailableVersion: "2.0.0",
 	}}
 	app := NewApp(nil)
-	app.applicationUpdates = coordinator
+	app.updates.coordinator = coordinator
 
-	checked, err := app.CheckForUpdates()
+	checked, err := app.updates.CheckForUpdates()
 	require.NoError(t, err)
 	require.Equal(t, appupdates.StatusAvailable, checked.Status)
 	require.Equal(t, 1, coordinator.checkCalls)
 	require.Zero(t, coordinator.downloadCalls)
 
-	downloaded, err := app.DownloadApplicationUpdate("2.0.0")
+	downloaded, err := app.updates.DownloadApplicationUpdate("2.0.0")
 	require.NoError(t, err)
 	require.Equal(t, "2.0.0", coordinator.downloadVersion)
 	require.Equal(t, appupdates.StatusAvailable, downloaded.Status)
 	require.Equal(t, 1, coordinator.downloadCalls)
 	require.Zero(t, coordinator.restartCalls)
 
-	restarted, err := app.RestartAndApplyApplicationUpdate()
+	restarted, err := app.updates.RestartAndApplyApplicationUpdate()
 	require.NoError(t, err)
 	require.Equal(t, appupdates.StatusAvailable, restarted.Status)
 	require.Equal(t, 1, coordinator.restartCalls)
 
-	skipped, err := app.SkipApplicationUpdate("2.0.0")
+	skipped, err := app.updates.SkipApplicationUpdate("2.0.0")
 	require.NoError(t, err)
 	require.Equal(t, appupdates.StatusAvailable, skipped.Status)
 	require.Equal(t, "2.0.0", coordinator.skipVersion)
@@ -219,9 +226,9 @@ func TestRemoveApplicationUpdateSkipDelegatesToTheProcessCoordinator(t *testing.
 		Status: appupdates.StatusAvailable, AvailableVersion: "2.0.0",
 	}}
 	app := NewApp(nil)
-	app.applicationUpdates = coordinator
+	app.updates.coordinator = coordinator
 
-	snapshot, err := app.RemoveApplicationUpdateSkip()
+	snapshot, err := app.updates.RemoveApplicationUpdateSkip()
 
 	require.NoError(t, err)
 	require.Equal(t, appupdates.StatusAvailable, snapshot.Status)
@@ -231,7 +238,7 @@ func TestRemoveApplicationUpdateSkipDelegatesToTheProcessCoordinator(t *testing.
 func TestDisabledCheckCommandReturnsApplicationSnapshot(t *testing.T) {
 	app := NewApp(nil)
 
-	snapshot, err := app.CheckForUpdates()
+	snapshot, err := app.updates.CheckForUpdates()
 
 	require.NoError(t, err)
 	require.Equal(t, appupdates.StatusDisabled, snapshot.Status)
@@ -244,13 +251,13 @@ func TestCheckForUpdatesFromMenuOpensAboutBeforeStartingCheck(t *testing.T) {
 	}
 	app := NewApp(nil)
 	setTestAppRuntimeReady(t, app, context.Background())
-	app.applicationUpdates = coordinator
+	app.updates.coordinator = coordinator
 	events := make(chan string, 1)
 	app.eventEmitter = func(_ context.Context, name string, _ ...interface{}) {
 		events <- name
 	}
 
-	app.showAboutAndCheckForUpdates()
+	app.updates.showAboutAndCheckForUpdates()
 
 	select {
 	case event := <-events:
@@ -281,9 +288,9 @@ func TestWailsUpdateEventsProjectToOneApplicationBroadcast(t *testing.T) {
 		Client: &fakeUpdaterClient{}, Provider: fakeUpdaterProvider{},
 		Eligibility: enabledApplicationUpdateBuild(), PublicKey: make([]byte, 32),
 		Platform: "darwin", Architecture: "arm64", TempRoot: "/owned/temp/root",
-		OnChange: app.storeApplicationUpdateSnapshot,
+		OnChange: app.updates.storeApplicationUpdateSnapshot,
 	})
-	app.applicationUpdates = coordinator
+	app.updates.coordinator = coordinator
 	registrar := &fakeUpdateEventRegistrar{}
 
 	unsubscribers := subscribeApplicationUpdateEvents(registrar, coordinator)
@@ -294,7 +301,7 @@ func TestWailsUpdateEventsProjectToOneApplicationBroadcast(t *testing.T) {
 		Data: updater.Progress{Written: 25, Total: 100},
 	})
 
-	info := app.getUpdateInfo()
+	info := app.updates.getUpdateInfo()
 	require.Equal(t, appupdates.StatusDownloading, info.Status)
 	require.NotNil(t, info.ProgressPercent)
 	require.Equal(t, float64(25), *info.ProgressPercent)
@@ -338,13 +345,13 @@ func TestResolveApplicationUpdateEligibilityUsesReleaseAndInstallIdentity(t *tes
 func TestConfigureApplicationUpdatesDisablesOnTempSetupFailure(t *testing.T) {
 	app := NewApp(nil)
 
-	app.configureApplicationUpdates(ApplicationUpdateOptions{
+	app.updates.configureApplicationUpdates(ApplicationUpdateOptions{
 		TempSetupError: errors.New("owned temp root unavailable"),
 	})
 
-	require.NotNil(t, app.applicationUpdates)
-	require.Equal(t, appupdates.StatusDisabled, app.applicationUpdates.Snapshot().Status)
-	require.False(t, app.applicationUpdates.Snapshot().CanInstall)
+	require.NotNil(t, app.updates.coordinator)
+	require.Equal(t, appupdates.StatusDisabled, app.updates.coordinator.Snapshot().Status)
+	require.False(t, app.updates.coordinator.Snapshot().CanInstall)
 }
 
 func TestPrepareApplicationUpdateStateReconcilesBeforeSweepingOrphans(t *testing.T) {
@@ -451,17 +458,17 @@ func TestConfigureApplicationUpdatesProjectsAndLogsFailedApply(t *testing.T) {
 	))
 	app := NewApp(nil)
 
-	app.configureApplicationUpdates(ApplicationUpdateOptions{
+	app.updates.configureApplicationUpdates(ApplicationUpdateOptions{
 		TempRoot: root, StatePath: statePath,
 	})
 
-	snapshot := app.applicationUpdates.Snapshot()
+	snapshot := app.updates.coordinator.Snapshot()
 	require.Equal(t, appupdates.StatusApplyError, snapshot.Status)
 	require.Equal(t, "2.0.0", snapshot.AvailableVersion)
 	require.Equal(t, distribution, snapshot.Distribution)
 	require.Equal(t, recovery, snapshot.RecoveryTarget)
 	require.Condition(t, func() bool {
-		for _, entry := range app.logger.GetEntries() {
+		for _, entry := range app.appLogs.logger.GetEntries() {
 			if strings.Contains(entry.Message, "replacement failed safely") {
 				return true
 			}
@@ -476,7 +483,7 @@ func TestApplicationUpdateCoordinatorFollowsProcessRuntimeLifecycle(t *testing.T
 		snapshot: appupdates.Snapshot{Status: appupdates.StatusIdle},
 	}
 	app := newTestAppWithDefaults(t)
-	app.applicationUpdates = coordinator
+	app.updates.coordinator = coordinator
 	ctx, cancel := context.WithCancel(context.Background())
 	t.Cleanup(cancel)
 
