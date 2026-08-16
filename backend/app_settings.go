@@ -629,7 +629,6 @@ func writeFileAtomicWithReplace(
 	return replaceFile(tempFile.Name(), path)
 }
 
-//wails:ignore
 func (a *App) SaveWindowSettings() error {
 	if a != nil && a.windowGeometry != nil {
 		return a.SaveWindowSettingsForWindow("")
@@ -643,8 +642,6 @@ func (a *App) SaveWindowSettings() error {
 
 // SaveWindowSettingsForWindow persists the geometry of a named peer as the
 // next session's initial geometry.
-//
-//wails:ignore
 func (a *App) SaveWindowSettingsForWindow(windowName string) error {
 	if !a.runtimeAvailable() {
 		return fmt.Errorf("application context is not available")
@@ -676,7 +673,6 @@ func (a *App) SaveWindowSettingsForWindow(windowName string) error {
 	return a.saveSettingsFile(settings)
 }
 
-//wails:ignore
 func (a *App) LoadWindowSettings() (*WindowSettings, error) {
 	settings, err := a.loadSettingsFile()
 	if err != nil {
@@ -1272,59 +1268,48 @@ func (a *App) permissionSSRRFetchConcurrency() int {
 	return clampPermissionSSRRFetchConcurrency(a.appSettings.PermissionSSRRFetchConcurrency)
 }
 
-//wails:ignore
 func (a *App) SetAppearanceMode(mode string) error {
 	_, err := a.UpdateAppPreferences(UpdateAppPreferencesRequest{Changes: []AppPreferenceChange{{Key: appPreferenceAppearanceMode, Value: mode}}})
 	return err
 }
 
-//wails:ignore
 func (a *App) SetUseShortResourceNames(useShort bool) error {
 	_, err := a.UpdateAppPreferences(UpdateAppPreferencesRequest{Changes: []AppPreferenceChange{{Key: appPreferenceUseShortResourceNames, Value: useShort}}})
 	return err
 }
 
-//wails:ignore
 func (a *App) SetDimInactiveNamespaces(enabled bool) error {
 	_, err := a.UpdateAppPreferences(UpdateAppPreferencesRequest{Changes: []AppPreferenceChange{{Key: appPreferenceDimInactiveNamespaces, Value: enabled}}})
 	return err
 }
 
-//wails:ignore
 func (a *App) SetExclusiveNamespaces(enabled bool) error {
 	_, err := a.UpdateAppPreferences(UpdateAppPreferencesRequest{Changes: []AppPreferenceChange{{Key: appPreferenceExclusiveNamespaces, Value: enabled}}})
 	return err
 }
 
 // SetAutoRefreshEnabled persists the auto-refresh preference.
-//
-//wails:ignore
 func (a *App) SetAutoRefreshEnabled(enabled bool) error {
 	_, err := a.UpdateAppPreferences(UpdateAppPreferencesRequest{Changes: []AppPreferenceChange{{Key: appPreferenceAutoRefreshEnabled, Value: enabled}}})
 	return err
 }
 
 // SetBackgroundRefreshEnabled persists the background refresh preference.
-//
-//wails:ignore
 func (a *App) SetBackgroundRefreshEnabled(enabled bool) error {
 	_, err := a.UpdateAppPreferences(UpdateAppPreferencesRequest{Changes: []AppPreferenceChange{{Key: appPreferenceRefreshBackgroundClustersEnabled, Value: enabled}}})
 	return err
 }
 
-//wails:ignore
 func (a *App) SetKubernetesClientQPS(qps int) error {
 	_, err := a.UpdateAppPreferences(UpdateAppPreferencesRequest{Changes: []AppPreferenceChange{{Key: appPreferenceKubernetesClientQPS, Value: qps}}})
 	return err
 }
 
-//wails:ignore
 func (a *App) SetKubernetesClientBurst(burst int) error {
 	_, err := a.UpdateAppPreferences(UpdateAppPreferencesRequest{Changes: []AppPreferenceChange{{Key: appPreferenceKubernetesClientBurst, Value: burst}}})
 	return err
 }
 
-//wails:ignore
 func (a *App) SetPermissionSSRRFetchConcurrency(limit int) error {
 	_, err := a.UpdateAppPreferences(UpdateAppPreferencesRequest{Changes: []AppPreferenceChange{{Key: appPreferencePermissionSSRRFetchConcurrency, Value: limit}}})
 	return err
@@ -1333,56 +1318,44 @@ func (a *App) SetPermissionSSRRFetchConcurrency(limit int) error {
 // SetObjPanelLogsBufferMaxSize persists the max container log entries each
 // Object Panel Logs Tab keeps in memory.
 // Values are clamped to [minObjPanelLogsBufferMaxSize, maxObjPanelLogsBufferMaxSize].
-//
-//wails:ignore
 func (a *App) SetObjPanelLogsBufferMaxSize(size int) error {
 	_, err := a.UpdateAppPreferences(UpdateAppPreferencesRequest{Changes: []AppPreferenceChange{{Key: appPreferenceObjPanelLogsBufferMaxSize, Value: size}}})
 	return err
 }
 
-//wails:ignore
 func (a *App) SetObjPanelLogsTargetPerScopeLimit(limit int) error {
 	_, err := a.UpdateAppPreferences(UpdateAppPreferencesRequest{Changes: []AppPreferenceChange{{Key: appPreferenceObjPanelLogsTargetPerScopeLimit, Value: limit}}})
 	return err
 }
 
-//wails:ignore
 func (a *App) SetObjPanelLogsTargetGlobalLimit(limit int) error {
 	_, err := a.UpdateAppPreferences(UpdateAppPreferencesRequest{Changes: []AppPreferenceChange{{Key: appPreferenceObjPanelLogsTargetGlobalLimit, Value: limit}}})
 	return err
 }
 
-//wails:ignore
 func (a *App) SetObjPanelLogsAPITimestampFormat(format string) error {
 	_, err := a.UpdateAppPreferences(UpdateAppPreferencesRequest{Changes: []AppPreferenceChange{{Key: appPreferenceObjPanelLogsAPITimestampFormat, Value: format}}})
 	return err
 }
 
-//wails:ignore
 func (a *App) SetObjPanelLogsAPITimestampUseLocalTimeZone(enabled bool) error {
 	_, err := a.UpdateAppPreferences(UpdateAppPreferencesRequest{Changes: []AppPreferenceChange{{Key: appPreferenceObjPanelLogsAPITimestampUseLocalTimeZone, Value: enabled}}})
 	return err
 }
 
 // SetGridTablePersistenceMode persists the grid table persistence mode.
-//
-//wails:ignore
 func (a *App) SetGridTablePersistenceMode(mode string) error {
 	_, err := a.UpdateAppPreferences(UpdateAppPreferencesRequest{Changes: []AppPreferenceChange{{Key: appPreferenceGridTablePersistenceMode, Value: mode}}})
 	return err
 }
 
 // SetDefaultObjectPanelPosition persists the default object panel position.
-//
-//wails:ignore
 func (a *App) SetDefaultObjectPanelPosition(position string) error {
 	_, err := a.UpdateAppPreferences(UpdateAppPreferencesRequest{Changes: []AppPreferenceChange{{Key: appPreferenceDefaultObjectPanelPosition, Value: position}}})
 	return err
 }
 
 // SetObjectPanelLayout persists the default object panel dimensions and floating position.
-//
-//wails:ignore
 func (a *App) SetObjectPanelLayout(dockedRightWidth, dockedBottomHeight, floatingWidth, floatingHeight, floatingX, floatingY int) error {
 	_, err := a.UpdateAppPreferences(UpdateAppPreferencesRequest{Changes: []AppPreferenceChange{
 		{Key: appPreferenceObjectPanelDockedRightWidth, Value: dockedRightWidth},
@@ -1395,7 +1368,6 @@ func (a *App) SetObjectPanelLayout(dockedRightWidth, dockedBottomHeight, floatin
 	return err
 }
 
-//wails:ignore
 func (a *App) GetAppearanceModeInfo() (*AppearanceModeInfo, error) {
 	settings, err := a.GetAppSettings()
 	if err != nil {
@@ -1408,7 +1380,6 @@ func (a *App) GetAppearanceModeInfo() (*AppearanceModeInfo, error) {
 	}, nil
 }
 
-//wails:ignore
 func (a *App) ShowSettings() {
 	maxRetries := config.AppMenuTriggerMaxRetries
 	for i := 0; i < maxRetries; i++ {
@@ -1424,7 +1395,6 @@ func (a *App) ShowSettings() {
 	a.logger.Warn("Cannot show settings: application context is nil after retries", logsources.App)
 }
 
-//wails:ignore
 func (a *App) ShowAbout() {
 	maxRetries := config.AppMenuTriggerMaxRetries
 	for i := 0; i < maxRetries; i++ {
@@ -1475,8 +1445,6 @@ func (a *App) SetZoomLevel(level int) error {
 
 // SetPaletteTint persists the palette hue (0-360), saturation (0-100), and brightness (-50 to +50) preferences
 // for the specified resolved appearance mode ("light" or "dark"). Values are clamped to their valid ranges.
-//
-//wails:ignore
 func (a *App) SetPaletteTint(mode string, hue, saturation, brightness int) error {
 	if mode != "light" && mode != "dark" {
 		return fmt.Errorf("invalid palette mode: %s", mode)
@@ -1514,8 +1482,6 @@ var validHexColorRe = regexp.MustCompile(`^#[0-9a-fA-F]{6}$`)
 
 // SetLinkColor persists a custom link color for the specified resolved appearance mode ("light" or "dark").
 // The color must be a 7-char hex string (#rrggbb) or an empty string to reset to default.
-//
-//wails:ignore
 func (a *App) SetLinkColor(mode, color string) error {
 	if mode != "light" && mode != "dark" {
 		return fmt.Errorf("invalid link color mode: %s", mode)
@@ -1536,8 +1502,6 @@ func (a *App) SetLinkColor(mode, color string) error {
 
 // SetAccentColor persists a custom accent color for the specified resolved appearance mode ("light" or "dark").
 // The color must be a 7-char hex string (#rrggbb) or an empty string to reset to default.
-//
-//wails:ignore
 func (a *App) SetAccentColor(mode, color string) error {
 	if mode != "light" && mode != "dark" {
 		return fmt.Errorf("invalid accent color mode: %s", mode)

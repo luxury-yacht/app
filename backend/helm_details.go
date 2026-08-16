@@ -13,7 +13,6 @@ import (
 	"github.com/luxury-yacht/app/backend/resources/helm"
 )
 
-//wails:ignore
 func (a *App) GetHelmReleaseDetails(clusterID, namespace, name string) (*HelmReleaseDetails, error) {
 	deps, selectionKey, err := a.resolveClusterDependencies(clusterID)
 	if err != nil {
@@ -25,7 +24,6 @@ func (a *App) GetHelmReleaseDetails(clusterID, namespace, name string) (*HelmRel
 	})
 }
 
-//wails:ignore
 func (a *App) GetHelmManifest(clusterID, namespace, name string) (string, error) {
 	deps, selectionKey, err := a.resolveClusterDependencies(clusterID)
 	if err != nil {
@@ -37,7 +35,6 @@ func (a *App) GetHelmManifest(clusterID, namespace, name string) (string, error)
 	})
 }
 
-//wails:ignore
 func (a *App) GetHelmValues(clusterID, namespace, name string) (map[string]interface{}, error) {
 	deps, selectionKey, err := a.resolveClusterDependencies(clusterID)
 	if err != nil {

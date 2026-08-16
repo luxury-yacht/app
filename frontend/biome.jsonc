@@ -158,12 +158,12 @@
             // Both the configured alias and relative-path variants must cross the maintained
             // backend API facade instead of binding application code to generated Wails modules.
             "paths": {
-              "@bindings/github.com/luxury-yacht/app/backend/app": "Import generated backend bindings only through @/core/backend-api.",
+              "@bindings/github.com/luxury-yacht/app/backend/desktopservice": "Import generated backend bindings only through @/core/backend-api.",
               "@sentry/react": "Import Sentry only through @/core/telemetry/sentry so consent, redaction, and breadcrumb policy cannot be bypassed."
             },
             "patterns": [
               {
-                "group": ["**/bindings/github.com/luxury-yacht/app/backend/app"],
+                "group": ["**/bindings/github.com/luxury-yacht/app/backend/desktopservice"],
                 "message": "Import generated backend bindings only through @/core/backend-api."
               }
             ]

@@ -6,6 +6,35 @@ import (
 	"github.com/wailsapp/wails/v3/pkg/application"
 )
 
+type menuController interface {
+	ShowAbout()
+	showAboutAndCheckForUpdates()
+	ShowSettings()
+	runtimeAvailable() bool
+	emitCurrentWindowEvent(string, ...interface{})
+	clipboardText() (string, error)
+	ToggleSidebar() error
+	ToggleObjectDiff() error
+	ToggleAppLogsPanel() error
+	ToggleDiagnosticsPanel() error
+	IsSidebarVisible() bool
+	IsAppLogsPanelVisible() bool
+	IsDiagnosticsPanelVisible() bool
+	minimiseCurrentWindow() error
+	maximiseCurrentWindow() error
+	restoreCurrentWindow() error
+	toggleCurrentWindowMaximise() error
+	setApplicationMenu(*application.Menu)
+	createWorkspaceWindowFromMenu()
+	hideApplicationFromMenu()
+	quitApplicationFromMenu()
+	bringAllWindowsToFront()
+}
+
+type workspaceWindowCreatorTarget interface {
+	configureWorkspaceWindowCreator(func())
+}
+
 func addMenuText(menu *application.Menu, label, accelerator string, click func()) {
 	item := menu.Add(label)
 	if accelerator != "" {
@@ -17,14 +46,14 @@ func addMenuText(menu *application.Menu, label, accelerator string, click func()
 }
 
 // CreateMenu creates the application menu with OS-specific adjustments.
-func CreateMenu(app *App) *application.Menu {
+func CreateMenu(app menuController) *application.Menu {
 	appMenu := application.NewMenu()
-	app.menu = appMenu
+	app.setApplicationMenu(appMenu)
 	populateMenu(appMenu, app)
 	return appMenu
 }
 
-func populateMenu(appMenu *application.Menu, app *App) {
+func populateMenu(appMenu *application.Menu, app menuController) {
 	createApplicationMenu(appMenu, app)
 	createEditMenu(appMenu, app)
 	createViewMenu(appMenu, app)
@@ -35,14 +64,14 @@ func populateMenu(appMenu *application.Menu, app *App) {
 	createHelpMenu(appMenu, app)
 }
 
-func createApplicationMenu(appMenu *application.Menu, app *App) {
+func createApplicationMenu(appMenu *application.Menu, app menuController) {
 	if runtime.GOOS == "darwin" {
 		addMacApplicationMenu(appMenu, app)
 	}
 	addFileMenu(appMenu, app)
 }
 
-func addMacApplicationMenu(appMenu *application.Menu, app *App) {
+func addMacApplicationMenu(appMenu *application.Menu, app menuController) {
 	appSubmenu := appMenu.AddSubmenu("Luxury Yacht")
 	addMenuText(appSubmenu, "About Luxury Yacht", "", menuCallback(app.ShowAbout))
 	addMenuText(appSubmenu, "Check for Updates…", "", menuCallback(app.showAboutAndCheckForUpdates))
@@ -52,13 +81,9 @@ func addMacApplicationMenu(appMenu *application.Menu, app *App) {
 	addMenuText(appSubmenu, "Quit", "CmdOrCtrl+q", quitApplicationCallback(app))
 }
 
-func addFileMenu(appMenu *application.Menu, app *App) {
+func addFileMenu(appMenu *application.Menu, app menuController) {
 	fileMenu := appMenu.AddSubmenu("File")
-	addMenuText(fileMenu, "New Window", "CmdOrCtrl+n", func() {
-		if app != nil && app.createWorkspaceWindow != nil {
-			app.createWorkspaceWindow()
-		}
-	})
+	addMenuText(fileMenu, "New Window", "CmdOrCtrl+n", app.createWorkspaceWindowFromMenu)
 	fileMenu.AddSeparator()
 	addMenuText(fileMenu, "Open Cluster", "CmdOrCtrl+o", emitMenuEventWhenReady(app, "open-cluster"))
 	addMenuText(fileMenu, "Close Cluster", "CmdOrCtrl+w", emitMenuEventWhenReady(app, "menu:close"))
@@ -70,13 +95,13 @@ func addFileMenu(appMenu *application.Menu, app *App) {
 // ConfigureWorkspaceWindowCreator connects the native New Window command to
 // the process-owned peer window registry without exposing composition wiring as
 // a frontend service method.
-func ConfigureWorkspaceWindowCreator(app *App, create func()) {
-	if app != nil {
-		app.createWorkspaceWindow = create
+func ConfigureWorkspaceWindowCreator(target workspaceWindowCreatorTarget, create func()) {
+	if target != nil {
+		target.configureWorkspaceWindowCreator(create)
 	}
 }
 
-func addDesktopFileMenuItems(fileMenu *application.Menu, app *App) {
+func addDesktopFileMenuItems(fileMenu *application.Menu, app menuController) {
 	fileMenu.AddSeparator()
 	addMenuText(fileMenu, "Settings...", "CmdOrCtrl+,", menuCallback(app.ShowSettings))
 	fileMenu.AddSeparator()
@@ -91,25 +116,19 @@ func menuCallback(action func()) func() {
 	return action
 }
 
-func hideApplicationCallback(app *App) func() {
+func hideApplicationCallback(app menuController) func() {
 	return func() {
-		go func() {
-			if app.runtimeAvailable() && app.wailsApplication != nil {
-				app.wailsApplication.Hide()
-			}
-		}()
+		go app.hideApplicationFromMenu()
 	}
 }
 
-func quitApplicationCallback(app *App) func() {
+func quitApplicationCallback(app menuController) func() {
 	return func() {
-		if app.runtimeAvailable() && app.wailsApplication != nil {
-			app.wailsApplication.Quit()
-		}
+		app.quitApplicationFromMenu()
 	}
 }
 
-func emitMenuEventWhenReady(app *App, event string) func() {
+func emitMenuEventWhenReady(app menuController, event string) func() {
 	return func() {
 		if app.runtimeAvailable() {
 			app.emitCurrentWindowEvent(event)
@@ -117,7 +136,7 @@ func emitMenuEventWhenReady(app *App, event string) func() {
 	}
 }
 
-func createEditMenu(appMenu *application.Menu, app *App) {
+func createEditMenu(appMenu *application.Menu, app menuController) {
 	editMenu := appMenu.AddSubmenu("Edit")
 	addMenuText(editMenu, "Cut", "CmdOrCtrl+x", emitMenuEventWhenReady(app, "menu:cut"))
 	addMenuText(editMenu, "Copy", "CmdOrCtrl+c", emitMenuEventWhenReady(app, "menu:copy"))
@@ -130,7 +149,7 @@ func createEditMenu(appMenu *application.Menu, app *App) {
 	addMenuText(editMenu, "Select All", "CmdOrCtrl+a", emitMenuEventWhenReady(app, "menu:selectAll"))
 }
 
-func createViewMenu(appMenu *application.Menu, app *App) {
+func createViewMenu(appMenu *application.Menu, app menuController) {
 	viewMenu := appMenu.AddSubmenu("View")
 	addMenuText(viewMenu, "Command Palette", "CmdOrCtrl+Shift+p", emitMenuEvent(app, "open-command-palette"))
 	viewMenu.AddSeparator()
@@ -142,7 +161,7 @@ func createViewMenu(appMenu *application.Menu, app *App) {
 	}
 }
 
-func addZoomMenuItems(viewMenu *application.Menu, app *App) {
+func addZoomMenuItems(viewMenu *application.Menu, app menuController) {
 	zoomInLabel := "Zoom In"
 	zoomOutLabel := "Zoom Out"
 	resetZoomLabel := "Reset Zoom"
@@ -162,7 +181,7 @@ func addZoomMenuItems(viewMenu *application.Menu, app *App) {
 	addMenuText(viewMenu, resetZoomLabel, resetZoomAccelerator, menuCallback(func() { app.emitCurrentWindowEvent("zoom-reset") }))
 }
 
-func addViewToggleMenuItems(viewMenu *application.Menu, app *App) {
+func addViewToggleMenuItems(viewMenu *application.Menu, app menuController) {
 	sidebarText := "Hide Sidebar"
 	if !app.IsSidebarVisible() {
 		sidebarText = "Show Sidebar"
@@ -183,7 +202,7 @@ func addViewToggleMenuItems(viewMenu *application.Menu, app *App) {
 	addMenuText(viewMenu, diagnosticsText, "Ctrl+Shift+d", errorMenuCallback("Failed to toggle diagnostics panel:", app.ToggleDiagnosticsPanel))
 }
 
-func emitMenuEvent(app *App, event string) func() {
+func emitMenuEvent(app menuController, event string) func() {
 	return func() { app.emitCurrentWindowEvent(event) }
 }
 
@@ -195,7 +214,7 @@ func errorMenuCallback(prefix string, action func() error) func() {
 	}
 }
 
-func createDebugMenu(appMenu *application.Menu, app *App) {
+func createDebugMenu(appMenu *application.Menu, app menuController) {
 	debugMenu := appMenu.AddSubmenu("Debug")
 	addMenuText(debugMenu, "Open Inspector", "CmdOrCtrl+Shift+f12", emitMenuEventWhenReady(app, "debug:open-inspector"))
 	debugMenu.AddSeparator()
@@ -206,57 +225,87 @@ func createDebugMenu(appMenu *application.Menu, app *App) {
 	addDebugOverlayMenuItem(debugMenu, app, "Error Boundary Tests", "e", "debug:toggle-error-overlay")
 }
 
-func addDebugOverlayMenuItem(debugMenu *application.Menu, app *App, label, key, event string) {
+func addDebugOverlayMenuItem(debugMenu *application.Menu, app menuController, label, key, event string) {
 	addMenuText(debugMenu, label, "Ctrl+OptionOrAlt+"+key, emitMenuEventWhenReady(app, event))
 }
 
-func createWindowMenu(appMenu *application.Menu, app *App) {
+func createWindowMenu(appMenu *application.Menu, app menuController) {
 	windowMenu := appMenu.AddSubmenu("Window")
-	addWindowMenuAction(windowMenu, app, "Minimize", "CmdOrCtrl+m", app.minimiseCurrentWindow)
+	addWindowMenuAction(windowMenu, "Minimize", "CmdOrCtrl+m", app.minimiseCurrentWindow)
 	switch runtime.GOOS {
 	case "darwin":
 		addDarwinWindowMenu(windowMenu, app)
 	case "windows":
-		addWindowMenuAction(windowMenu, app, "Maximize", "", app.maximiseCurrentWindow)
-		addWindowMenuAction(windowMenu, app, "Restore", "", app.restoreCurrentWindow)
+		addWindowMenuAction(windowMenu, "Maximize", "", app.maximiseCurrentWindow)
+		addWindowMenuAction(windowMenu, "Restore", "", app.restoreCurrentWindow)
 	default:
-		addWindowMenuAction(windowMenu, app, "Maximize", "", app.toggleCurrentWindowMaximise)
+		addWindowMenuAction(windowMenu, "Maximize", "", app.toggleCurrentWindowMaximise)
 	}
 }
 
-func addWindowMenuAction(windowMenu *application.Menu, _ *App, label, accelerator string, action func() error) {
+func addWindowMenuAction(windowMenu *application.Menu, label, accelerator string, action func() error) {
 	addMenuText(windowMenu, label, accelerator, func() { _ = action() })
 }
 
-func addDarwinWindowMenu(windowMenu *application.Menu, app *App) {
-	addWindowMenuAction(windowMenu, app, "Zoom", "", app.toggleCurrentWindowMaximise)
+func addDarwinWindowMenu(windowMenu *application.Menu, app menuController) {
+	addWindowMenuAction(windowMenu, "Zoom", "", app.toggleCurrentWindowMaximise)
 	windowMenu.AddSeparator()
 	addMenuText(windowMenu, "Bring All to Front", "", func() { go bringAllWindowsToFront(app) })
 	windowMenu.AddSeparator()
 }
 
-func bringAllWindowsToFront(app *App) {
-	if app == nil || !app.runtimeAvailable() || app.wailsApplication == nil {
-		return
-	}
-	for _, window := range app.wailsApplication.Window.GetAll() {
-		window.Show()
-		if window.IsMinimised() {
-			window.Restore()
-		}
-		window.Focus()
-	}
+func bringAllWindowsToFront(app menuController) {
+	app.bringAllWindowsToFront()
 }
 
-func createHelpMenu(appMenu *application.Menu, app *App) {
+func createHelpMenu(appMenu *application.Menu, app menuController) {
 	if runtime.GOOS == "darwin" {
 		return
 	}
 	addDesktopHelpMenu(appMenu, app)
 }
 
-func addDesktopHelpMenu(appMenu *application.Menu, app *App) {
+func addDesktopHelpMenu(appMenu *application.Menu, app menuController) {
 	helpMenu := appMenu.AddSubmenu("Help")
 	addMenuText(helpMenu, "About Luxury Yacht", "", menuCallback(app.ShowAbout))
 	addMenuText(helpMenu, "Check for Updates…", "", menuCallback(app.showAboutAndCheckForUpdates))
+}
+
+func (a *App) setApplicationMenu(menu *application.Menu) {
+	a.menu = menu
+}
+
+func (a *App) configureWorkspaceWindowCreator(create func()) {
+	a.createWorkspaceWindow = create
+}
+
+func (a *App) createWorkspaceWindowFromMenu() {
+	if a != nil && a.createWorkspaceWindow != nil {
+		a.createWorkspaceWindow()
+	}
+}
+
+func (a *App) hideApplicationFromMenu() {
+	if a != nil && a.runtimeAvailable() && a.wailsApplication != nil {
+		a.wailsApplication.Hide()
+	}
+}
+
+func (a *App) quitApplicationFromMenu() {
+	if a != nil && a.runtimeAvailable() && a.wailsApplication != nil {
+		a.wailsApplication.Quit()
+	}
+}
+
+func (a *App) bringAllWindowsToFront() {
+	if a == nil || !a.runtimeAvailable() || a.wailsApplication == nil {
+		return
+	}
+	for _, window := range a.wailsApplication.Window.GetAll() {
+		window.Show()
+		if window.IsMinimised() {
+			window.Restore()
+		}
+		window.Focus()
+	}
 }

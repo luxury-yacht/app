@@ -675,11 +675,11 @@ green test-and-inventory checkpoint.
 
 ## Phase 1 — Establish the structural Wails boundary
 
-- [ ] Add `DesktopService` in package `backend` as the sole registered backend
+- [x] Add `DesktopService` in package `backend` as the sole registered backend
   service and keep the existing `/api/v2` route. Preserve direct
   `application.App` injection into backend composition; this service is not a
   native desktop adapter.
-- [ ] Give `DesktopService` explicit typed methods for the current frontend
+- [x] Give `DesktopService` explicit typed methods for the current frontend
   command allowlist. Group its collaborators by the target owners in the
   ownership table—one owner-shaped interface per command-owning component,
   plus separate lifecycle and HTTP seams—not as one 87-method backend
@@ -687,28 +687,28 @@ green test-and-inventory checkpoint.
   transport interfaces. Initially the same `*App` value may satisfy each
   separate interface, but `DesktopService` has no `*App`-typed field, general
   App collaborator, or `*ApplicationRuntime` reference.
-- [ ] Assign every command to exactly one owner-shaped collaborator in the
+- [x] Assign every command to exactly one owner-shaped collaborator in the
   Phase 0 ledger. In each later extraction phase, replace that collaborator's
   App-backed implementation with the new owner and delete the corresponding
   `App` methods in the same checkpoint; do not move commands between seams
   without updating the ledger and binding tests.
-- [ ] Keep `InitializeErrorReporting` as a package-level composition entry point
+- [x] Keep `InitializeErrorReporting` as a package-level composition entry point
   during this phase, outside `DesktopService` and its command collaborators.
   Add a negative binding assertion and a composition-order assertion that it
   runs before `application.Run`, so the Phase 3 rewrite to an unbound
   `ErrorReportingService` initializer cannot accidentally make startup
   configuration frontend-callable or move it behind application startup.
-- [ ] Move `ServiceStartup`, `ServiceShutdown`, and `ServeHTTP` onto the service
+- [x] Move `ServiceStartup`, `ServiceShutdown`, and `ServeHTTP` onto the service
   boundary and delegate them to explicit lifecycle and refresh-handler
   collaborators.
-- [ ] Move named-stream registration out of `NewApp` and into explicit
+- [x] Move named-stream registration out of `NewApp` and into explicit
   application composition before window creation.
-- [ ] Replace `appwindow.Registry`'s concrete `*backend.App` dependency with a
+- [x] Replace `appwindow.Registry`'s concrete `*backend.App` dependency with a
   consumer-owned interface covering runtime-ready, peer release, and quit
   preparation.
-- [ ] Replace menu and workspace-window creation dependencies on concrete
+- [x] Replace menu and workspace-window creation dependencies on concrete
   `*App` with narrow command/lifecycle interfaces or callbacks.
-- [ ] Treat model reachability as the phase's highest-risk migration item. The
+- [x] Treat model reachability as the phase's highest-risk migration item. The
   pinned Wails beta has no model-only registration directive (`go.mod:15`; its
   collector recognizes `inject`, `include`, `internal`, `ignore`, and `id`, and
   discovers models through service signature types in the Wails module's
@@ -719,34 +719,35 @@ green test-and-inventory checkpoint.
   type-level `//wails:inject t*:void BindingModelAnchor;` directive from `App`
   to `DesktopService`. Add a generator/binding contract proving every detail
   DTO remains reachable in generated `models.ts`.
-- [ ] Change the resource-detail generator template, not the checked-in output,
+- [x] Change the resource-detail generator template, not the checked-in output,
   so its still-unbound implementation wrappers no longer emit
   `//wails:ignore`. Removing the two template directives and running
   `go generate ./backend` removes all 38 generated directives in the same
   change—40 source/generated occurrences total—and keeps
   `TestAppBindingsGeneratedInSync` green.
-- [ ] Regenerate bindings and atomically update the hard-coded generated path
-  in `cmd/project/wails_bindings_test.go` from the `backend/app.ts` module to
-  the `DesktopService` module. Update only the central frontend backend-API
-  adapter for that module-path change and preserve all higher-level imports.
-- [ ] Update `cmd/project/wails_project_contract_test.go` to assert that
+- [x] Regenerate bindings and update only the central frontend backend-API
+  adapter from the removed `backend/app.ts` module to the generated
+  `DesktopService` module, preserving all higher-level imports. Keep the Phase 0
+  binding test's registered-service discovery dynamic rather than restoring a
+  hard-coded generated filename.
+- [x] Update `cmd/project/wails_project_contract_test.go` to assert that
   `DesktopService` alone is registered while retaining the direct-Wails
   injection decision and its checks against `NewAdapter`, a generic `Desktop`
   interface, `MenuModel`, and `internal/desktop`.
-- [ ] Update the composition-order assertions in
+- [x] Update the composition-order assertions in
   `TestUpdaterTempRootIsConfiguredBeforeAnyProcessDispatch` for any new service
   construction/registration literals without weakening the required temp,
   dispatch, reporter, backend, update, and registration ordering.
-- [ ] Remove the remaining 63 hand-written `//wails:ignore` directives from the
+- [x] Remove the remaining 63 hand-written `//wails:ignore` directives from the
   now-unregistered implementation type. Require `rg '//wails:ignore' backend`
   to be empty at this checkpoint, except for a framework exception documented
   adjacent to the directive and proved by an executable binding test.
-- [ ] Update binding tests so the generated `DesktopService` exports exactly
+- [x] Update binding tests so the generated `DesktopService` exports exactly
   the frontend allowlist and no internal component receives generated callable
   bindings.
-- [ ] Migrate the Phase 1-affected test fixtures and test-only entry points to
+- [x] Migrate the Phase 1-affected test fixtures and test-only entry points to
   the service collaborators, and record the remaining direct-App counts.
-- [ ] Update `docs/architecture/application-lifecycle.md` with service
+- [x] Update `docs/architecture/application-lifecycle.md` with service
   registration, lifecycle/HTTP delegation, and direct-Wails composition; update
   `docs/architecture/data-access.md` with the generated `DesktopService` module,
   owner-shaped collaborator boundary, model-anchor reachability, and the

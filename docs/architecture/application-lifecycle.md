@@ -3,15 +3,20 @@
 Wails v3 application composition owns the native application, a registry of
 named peer workspace windows, its persistent menu, service registration, and
 process-level hooks.
-The Wails application is injected directly into `backend.App`, following the v3
-service-injection model. Backend native operations use its window, menu, dialog,
-clipboard, event, and screen managers directly.
+The Wails application is injected directly into the composed `backend.App`
+implementation. Production registers only `backend.DesktopService` with Wails;
+that transport service delegates commands, lifecycle, and HTTP behavior through
+owner-shaped interfaces and never retains `*App` or `*ApplicationRuntime`.
+This preserves direct Wails native access without introducing a desktop adapter.
+Backend native operations currently use the injected application's window, menu,
+dialog, clipboard, event, and screen managers directly.
 
 ## Startup and readiness
 
-`backend.App.ServiceStartup` runs synchronously before Wails creates a native
-window. It may initialize process services and return an error to abort startup,
-but it must not access the window or emit runtime events.
+`backend.DesktopService.ServiceStartup` runs synchronously before Wails creates
+a native window and delegates to the application-lifecycle collaborator
+(currently `backend.App`). It may initialize process services and return an
+error to abort startup, but it must not access the window or emit runtime events.
 
 Interactive initialization starts from the first workspace window's
 `WindowRuntimeReady` event. Process initialization is once-only; every peer
@@ -28,11 +33,21 @@ and the six-hour scheduler. Peer windows project and act on the same state.
 
 ## Service and runtime boundaries
 
-Production registers one `backend.App` Wails service. Generated bindings are
-transport output, not a frontend permission surface: application code imports
-backend methods only through the explicit allowlist in
-`frontend/src/core/backend-api`. Adding a generated method does not make it an
-approved frontend dependency.
+Production registers one `backend.DesktopService` at `/api/v2`. Its twelve
+command interfaces match the target-owner table one-for-one; lifecycle and HTTP
+are separate collaborators. During staged extraction the same `*backend.App`
+value may satisfy several interfaces, but the service has no general backend
+interface or implementation back-pointer.
+
+Generated bindings are transport output, not a frontend permission surface:
+application code imports DesktopService methods only through the explicit
+allowlist in `frontend/src/core/backend-api`. `InitializeErrorReporting` remains
+a package-level composition call before `application.Run` and is not a generated
+frontend command.
+
+Named refresh streams are registered explicitly in `main.go` after backend,
+update, and service construction and before service registration/window
+creation. `backend.NewApp` does not mutate the Wails stream registry.
 
 Native browser, clipboard, event, environment, and window calls go through
 `frontend/src/core/desktop-runtime`. The refresh stream managers under
@@ -47,7 +62,7 @@ callback, or frontend owner and must not gain a second event subscription.
 
 | Behavior | Owner and Wails v3 surface | Cancellable | Readiness and ordering | Identity, cleanup, and proof |
 | --- | --- | --- | --- | --- |
-| Process startup | `backend.App.ServiceStartup` through the registered Wails service | By returning an error | Runs synchronously before pending windows; UI operations and event emission remain gated | Process-scoped. Wails cancels the service context and shuts down already-started services if startup aborts. Repository contract: `backend/app_lifecycle.go`; framework contract: `pkg/application/services.go`. |
+| Process startup | `backend.DesktopService.ServiceStartup` delegates to the application-lifecycle collaborator | By returning an error | Runs synchronously before pending windows; UI operations and event emission remain gated | Process-scoped. Wails cancels the service context and shuts down already-started services if startup aborts. Repository contract: `backend/desktop_service.go`, `backend/app_lifecycle.go`; framework contract: `pkg/application/services.go`. |
 | Interactive startup | Every peer's `events.Common.WindowRuntimeReady` listener calls `backend.App.WindowRuntimeReady(name, restoreGeometry)` | No | Registered when the window is created; the first delivery enables desktop operations and starts interactive process work, while every delivery shows that peer | Names are monotonic `workspace-N`; only process startup is ignored after `markRuntimeReady`. Proof: `internal/appwindow/registry.go`, `backend/app_lifecycle.go`, and `internal/appwindow/lifecycle_test.go`. |
 | Application updates | One `appupdates.Coordinator`, surfaced through the backend service and the process-wide `app-update` event | Checks/downloads are cancellable; restart becomes a quit handoff | First runtime-ready starts one scheduler. Automatic and manual checks never download; download and restart each require a separate user action. | State is process-scoped across all peers. Eligibility comes from the installed distribution; prepared and attempted helper state is durable. Proof: `backend/app_updates_config.go`, `backend/internal/appupdates/coordinator.go`, and `internal/updateidentity/eligibility.go`. |
 | Subsequent process launch and focus | `application.SingleInstanceOptions.OnSecondInstanceLaunch` | No | May arrive before the webview is ready; it does not start a second backend lifecycle | Shows, restores when minimized, and focuses the most recently focused live peer; ignores launch arguments and additional data. Proof: `main.go`, `internal/appwindow/registry.go`, and `cmd/project/wails_project_contract_test.go`. |
@@ -56,7 +71,7 @@ callback, or frontend owner and must not gain a second event subscription.
 | Dynamic menu labels | `backend.App.UpdateMenu`; no Wails application event | No | Runs only after runtime-ready state changes such as sidebar or panel visibility | Mutates the persistent menu. Linux updates it in place, macOS resets the application menu, and Windows reinstalls it on every peer. Proof: `backend/app_ui.go` and `backend/app_ui_test.go`. |
 | Peer-window close | Every peer's `events.Common.WindowClosing` cancellable hook decrements the workspace-window lifecycle | Yes | Non-last closes release that window's foreground demand and cluster-tab ownership; shared cluster teardown occurs only when no remaining peer owns the selection. Zero remaining windows enter the process quit flush while the closing peer remains queryable | There is no privileged close hook or main window. The last peer keeps its tab union for next-start persistence; a cancelled last-close restores the peer to the registry. Proof: `internal/appwindow/registry.go`, `backend/cluster_workspace.go`, `backend/cluster_workspace_test.go`, and `internal/appwindow/lifecycle_test.go`. |
 | Application quit | `application.Options.ShouldQuit` asks the peer registry to prepare application quit | Yes | Covers menu, shortcut, programmatic, and OS quit requests without creating a second persistence path | The most recently focused live peer supplies geometry. The backend flush shares the same `sync.Once` as last-window close. Proof: `main.go`, `internal/appwindow/registry.go`, and `backend/app_lifecycle.go`. |
-| Service cancellation and shutdown | Wails cancels the service context, then calls `backend.App.ServiceShutdown` | No | Occurs after quit is accepted and after pre-quit persistence | Process-scoped teardown stops auth recovery, runtime operations, kubeconfig watching, and refresh before clearing the application context. Proof: `backend/app_lifecycle.go` and the pinned framework's `pkg/application/application.go`. |
+| Service cancellation and shutdown | Wails cancels the service context, then calls `backend.DesktopService.ServiceShutdown`, which delegates to the lifecycle owner | No | Occurs after quit is accepted and after pre-quit persistence | Process-scoped teardown stops auth recovery, runtime operations, kubeconfig watching, and refresh before clearing the application context. Proof: `backend/desktop_service.go`, `backend/app_lifecycle.go`, and the pinned framework's `pkg/application/application.go`. |
 | Initial hidden-window workaround | `windowOptionsForPlatform`; no event | No | macOS/Windows peers start hidden until runtime ready; Linux starts visible because its native window/menu construction differs | Applies equally to every `workspace-N` peer. Option mapping proof: `internal/appwindow/registry.go` and `internal/appwindow/registry_test.go`. |
 | Native menu ownership workarounds | `backend.App.UpdateMenu`; no event | No | The persistent menu is created and attached before the window, then refreshed through the platform owner | Linux retains the same menu, macOS owns the application menu, Windows installs the menu on every peer. Proof: `main.go`, `internal/appwindow/registry.go`, and `backend/app_ui.go`. |
 | Windows zoom accelerators | Menu construction uses explicit labels instead of native accelerators on Windows; no event | No | The frontend zoom custom events remain the action owner | Commands target the current peer and carry Wails sender identity; no shutdown work. Proof: `backend/menu.go` and `frontend/src/core/desktop-runtime/index.ts`. |
@@ -113,10 +128,11 @@ share the once-only quit flush, preserve the last peer's selection for restart,
 persist geometry from a named live/closing peer, and then allow Wails to cancel
 the application context and call `ServiceShutdown`.
 
-The request/response refresh surface is published atomically at the same-origin
-Wails service route `/api/v2`. Resource doorbells and container logs use named
-Wails JSON streams. Backend teardown unpublishes the service handler and stops
-the current per-cluster stream generation before releasing its producers.
+The request/response refresh surface is published atomically through
+`DesktopService.ServeHTTP` at the same-origin Wails service route `/api/v2`.
+Resource doorbells and container logs use named Wails JSON streams registered by
+application composition. Backend teardown unpublishes the service handler and
+stops the current per-cluster stream generation before releasing its producers.
 
 `ServiceShutdown` also stops the update coordinator, cancels an in-flight
 check or download, and removes prepared staging that has not entered a helper
@@ -127,7 +143,8 @@ it reports success, restored-source failure, or a superseding manual install.
 
 ## Starting points
 
-- Composition and process hooks: `main.go`
+- Composition, service/stream registration, and process hooks: `main.go`
+- Wails command/lifecycle/HTTP boundary: `backend/desktop_service.go`
 - Peer creation and close accounting: `internal/appwindow/registry.go`, `internal/appwindow/lifecycle.go`
 - Native operations and named-window resolution: `backend/app_runtime.go`
 - Backend lifecycle: `backend/app_lifecycle.go`, `backend/app_runtime.go`

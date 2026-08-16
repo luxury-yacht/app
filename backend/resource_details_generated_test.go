@@ -36,6 +36,20 @@ func TestAppBindingsGeneratedInSync(t *testing.T) {
 	}
 }
 
+func TestGeneratedBindingModelAnchorBelongsToDesktopServiceWithoutIgnoreDirectives(t *testing.T) {
+	generated, err := genappbindings.Render()
+	if err != nil {
+		t.Fatalf("render: %v", err)
+	}
+	source := string(generated)
+	if !strings.Contains(source, "func (s *DesktopService) BindingModelAnchor() BindingModelAnchor") {
+		t.Fatal("BindingModelAnchor must be received by DesktopService")
+	}
+	if strings.Contains(source, "//wails:"+"ignore") {
+		t.Fatal("unregistered resource implementation wrappers must not emit wails:ignore")
+	}
+}
+
 // TestObjectDetailFetchersGeneratedInSync fails if object_detail_fetchers_generated.go
 // drifts from what the generator produces — i.e. it was hand-edited, or the binding
 // table / detailExtras changed without running `go generate ./backend`.

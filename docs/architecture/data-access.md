@@ -64,7 +64,33 @@ loading spinners.
 - App-state broker: `frontend/src/core/app-state-access`
 - Refresh HTTP client: `frontend/src/core/refresh/client.ts`
 - Settings metadata cache: `frontend/src/core/settings/appPreferences.ts`
-- Wails DTOs and generated bindings: `frontend/bindings`
+- Wails DTOs and generated bindings: `frontend/bindings`; the only callable
+  backend module is `github.com/luxury-yacht/app/backend/desktopservice`
+
+## Wails command boundary
+
+`backend.DesktopService` is the sole registered backend service. It declares
+the stable frontend command signatures and delegates each command to exactly
+one owner-shaped interface: Favorites, UI state, Preferences, Data Management,
+Cluster Attention, Workspace, Cluster Runtime, Resources, Operations, Updates,
+App Logs, or Desktop Shell. Lifecycle and `/api/v2` HTTP handling are separate
+collaborators. Do not replace these seams with one interface containing every
+command, and do not give `DesktopService` an `*App` back-pointer.
+
+Frontend code imports generated commands only through
+`frontend/src/core/backend-api/index.ts`. Higher-level consumers must not import
+`desktopservice.ts` directly. The implementation type `backend.App` is not a
+registered service, so its exported implementation and test methods need no
+`//wails:ignore` directives.
+
+The generated internal `BindingModelAnchor` method belongs to
+`*DesktopService`. Its type-level `wails:inject` directive keeps every resource
+detail DTO reachable even though the implementation-only `App.Get<Kind>`
+wrappers are not commands. Both `DesktopService` and the generated anchor must
+remain in package `backend`: `genappbindings.Render` currently emits
+`package backend`, and Go cannot attach a generated method to a type declared in
+another package. Moving the service requires first adding and testing a target-
+package option in that generator.
 
 ## Settings Rule
 

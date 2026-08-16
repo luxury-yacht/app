@@ -19,13 +19,11 @@ import (
 )
 
 const (
-	refreshResourceStreamName      = "refresh-resources"
-	refreshContainerLogsStreamName = "refresh-container-logs"
+	RefreshResourceStreamName      = "refresh-resources"
+	RefreshContainerLogsStreamName = "refresh-container-logs"
 )
 
-// App provides the backend façade exposed to Wails.
-//
-//wails:inject t*:void BindingModelAnchor;
+// App provides the backend implementation composed behind DesktopService.
 type App struct {
 	appDone                  <-chan struct{}
 	runtimeReady             atomic.Bool
@@ -265,10 +263,6 @@ func NewApp(wailsApplication *application.App, reporters ...sentryreporting.Repo
 		}
 	}
 	app.showExpiredBetaPrompt = app.presentExpiredBetaPrompt
-	if wailsApplication != nil {
-		wailsApplication.HandleStream(refreshResourceStreamName, app.handleResourceStream)
-		wailsApplication.HandleStream(refreshContainerLogsStreamName, app.handleContainerLogsStream)
-	}
 	app.setupEnvironment()
 	app.initAuthManager()
 	app.initGovernor()
@@ -293,8 +287,6 @@ func (a *App) initAuthManager() {
 // RetryAuth triggers a manual authentication recovery attempt for ALL clusters.
 // Called when user clicks "Retry" after re-authenticating externally.
 // For per-cluster retry, use RetryClusterAuth instead.
-//
-//wails:ignore
 func (a *App) RetryAuth() {
 	a.clusterClientsMu.Lock()
 	defer a.clusterClientsMu.Unlock()

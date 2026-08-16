@@ -1,5 +1,13 @@
 {
   "schemaVersion": 1,
+  "phase1Checkpoint": {
+    "registeredService": "DesktopService",
+    "ownerCommandInterfaces": 12,
+    "remainingAppParameterFunctions": 15,
+    "remainingDirectAppTests": 62,
+    "remainingTestOnlyAppMethods": 19,
+    "wailsIgnoreDirectives": 0
+  },
   "appFieldGroups": [
     {
       "id": "application-lifecycle-state",
@@ -432,12 +440,6 @@
       "entries": ["fetch_helpers.go:FetchClusterResource:a", "fetch_helpers.go:FetchNamespacedResource:a", "fetch_helpers.go:FetchResourceWithSelection:a", "fetch_helpers.go:ensureDependenciesInitialized:a", "fetch_helpers.go:executeWithRetry:a"],
       "replacement": "ResourceGateway methods and narrow client/readiness collaborators",
       "phase": "4"
-    },
-    {
-      "id": "desktop-shell-app-parameters",
-      "entries": ["menu.go:ConfigureWorkspaceWindowCreator:app", "menu.go:CreateMenu:app", "menu.go:addDarwinWindowMenu:app", "menu.go:addDebugOverlayMenuItem:app", "menu.go:addDesktopFileMenuItems:app", "menu.go:addDesktopHelpMenu:app", "menu.go:addFileMenu:app", "menu.go:addMacApplicationMenu:app", "menu.go:addViewToggleMenuItems:app", "menu.go:addWindowMenuAction:_", "menu.go:addZoomMenuItems:app", "menu.go:bringAllWindowsToFront:app", "menu.go:createApplicationMenu:app", "menu.go:createDebugMenu:app", "menu.go:createEditMenu:app", "menu.go:createHelpMenu:app", "menu.go:createViewMenu:app", "menu.go:createWindowMenu:app", "menu.go:emitMenuEvent:app", "menu.go:emitMenuEventWhenReady:app", "menu.go:hideApplicationCallback:app", "menu.go:populateMenu:app", "menu.go:quitApplicationCallback:app"],
-      "replacement": "DesktopShell methods and narrow menu/window/event collaborators",
-      "phase": "3"
     },
     {
       "id": "operation-app-parameters",
@@ -1044,7 +1046,7 @@
   "nonCommandEntryPointGroups": [
     {
       "id": "main-composition",
-      "entries": ["backend.NewApp", "backend.ConfigureApplicationUpdates", "backend.CreateMenu", "backend.ConfigureWorkspaceWindowCreator", "backend.MaybeRunExecWrapper", "backend.InitializeErrorReporting"],
+      "entries": ["backend.NewApp", "backend.ConfigureApplicationUpdates", "backend.NewDesktopService", "application.App.HandleStream resource registration", "application.App.HandleStream container-logs registration", "backend.CreateMenu", "backend.ConfigureWorkspaceWindowCreator", "backend.MaybeRunExecWrapper", "backend.InitializeErrorReporting"],
       "caller": "main.go",
       "replacement": "ApplicationRuntime composition plus owner-specific constructors; InitializeErrorReporting remains an unbound non-Wails startup composition call",
       "owner": "ApplicationRuntime",
@@ -1052,7 +1054,7 @@
     },
     {
       "id": "wails-service-lifecycle-and-transport",
-      "entries": ["App.ServiceStartup", "App.ServiceShutdown", "App.ServeHTTP", "App.handleResourceStream", "App.handleContainerLogsStream"],
+      "entries": ["DesktopService.ServiceStartup", "DesktopService.ServiceShutdown", "DesktopService.ServeHTTP", "App.HandleResourceStream", "App.HandleContainerLogsStream"],
       "caller": "Wails service lifecycle, /api/v2 handler and named stream registrations",
       "replacement": "DesktopService delegates lifecycle to ApplicationLifecycle and transport/streams to RefreshCoordinator without holding the composition root",
       "owner": "DesktopService boundary with ApplicationLifecycle and RefreshCoordinator behavior",
@@ -1068,7 +1070,7 @@
     },
     {
       "id": "menu-and-window-callbacks",
-      "entries": ["23 menu.go functions accepting *App", "ConfigureWorkspaceWindowCreator callback", "native menu event callbacks"],
+      "entries": ["menuController consumer-owned interface", "ConfigureWorkspaceWindowCreator narrow callback target", "native menu event callbacks"],
       "caller": "main.go and Wails native menu callbacks",
       "replacement": "DesktopShell owns concrete Wails menu/window/event access through narrow owner collaborators; no Desktop interface or internal/desktop package",
       "owner": "DesktopShell",
@@ -1076,7 +1078,7 @@
     },
     {
       "id": "generator-model-anchor",
-      "entries": ["App.BindingModelAnchor", "38 generated Get<Kind> detail wrappers", "genappbindings.Render backend receiver template"],
+      "entries": ["DesktopService.BindingModelAnchor", "38 generated Get<Kind> detail wrappers", "genappbindings.Render backend receiver template"],
       "caller": "Wails binding generator and generated TypeScript model reachability",
       "replacement": "BindingModelAnchor moves to DesktopService in Phase 1; generated Get<Kind> receivers move to ResourceGateway in Phase 4 by editing render.go and regenerating",
       "owner": "DesktopService then ResourceGateway",

@@ -1,5 +1,5 @@
 /**
- * The only frontend module allowed to import generated Wails App bindings.
+ * The only frontend module allowed to import generated Wails DesktopService bindings.
  * Keep this export list explicit so new backend methods require an intentional
  * frontend boundary decision before application code can call them.
  */
@@ -91,4 +91,4 @@ export {
   UpdateAppPreferences,
   UpdateFavorite,
   ValidateThemeClusterPattern,
-} from '@bindings/github.com/luxury-yacht/app/backend/app';
+} from '@bindings/github.com/luxury-yacht/app/backend/desktopservice';

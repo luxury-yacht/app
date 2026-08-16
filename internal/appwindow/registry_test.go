@@ -7,6 +7,23 @@ import (
 	"github.com/wailsapp/wails/v3/pkg/application"
 )
 
+type recordingLifecycleBackend struct {
+	releasedWindow string
+	preparedWindow string
+	allowQuit      bool
+}
+
+func (*recordingLifecycleBackend) WindowRuntimeReady(string, bool) bool { return true }
+
+func (b *recordingLifecycleBackend) ReleaseWorkspaceWindow(windowID string) {
+	b.releasedWindow = windowID
+}
+
+func (b *recordingLifecycleBackend) PrepareQuitFromWindow(windowName string) bool {
+	b.preparedWindow = windowName
+	return b.allowQuit
+}
+
 func TestVisibilityPreservesPlatformStartupContract(t *testing.T) {
 	for _, test := range []struct {
 		goos       string
@@ -160,6 +177,21 @@ func TestPrepareApplicationQuitAllowsAnUnconfiguredRegistry(t *testing.T) {
 
 	require.True(t, missing.PrepareApplicationQuit())
 	require.True(t, (&Registry{}).PrepareApplicationQuit())
+}
+
+func TestRegistryUsesItsLifecycleConsumerWithoutConcreteBackendOwnership(t *testing.T) {
+	lifecycle := newLifecycle()
+	first := lifecycle.Add()
+	second := lifecycle.Add()
+	backend := &recordingLifecycleBackend{allowQuit: true}
+	registry := &Registry{backend: backend, lifecycle: lifecycle}
+
+	registry.handleClosing(nil, first)
+	require.Equal(t, first, backend.releasedWindow)
+	require.Equal(t, second, lifecycle.MostRecent())
+
+	require.True(t, registry.PrepareApplicationQuit())
+	require.Equal(t, second, backend.preparedWindow)
 }
 
 func TestFocusMostRecentIgnoresAnEmptyRegistry(t *testing.T) {

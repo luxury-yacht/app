@@ -457,15 +457,11 @@ func (a *App) ListShellSessions() []ShellSessionInfo {
 }
 
 // GetClusterShellSessionCount returns the number of active shell sessions for a cluster.
-//
-//wails:ignore
 func (a *App) GetClusterShellSessionCount(clusterID string) int {
 	return a.shellSessionLifecycle().countCluster(clusterID)
 }
 
 // StopClusterShellSessions terminates all shell sessions for a specific cluster.
-//
-//wails:ignore
 func (a *App) StopClusterShellSessions(clusterID string) error {
 	a.shellSessionLifecycle().stopCluster(clusterID)
 	return nil

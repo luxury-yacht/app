@@ -182,7 +182,7 @@ func Render() ([]byte, error) {
 	b.WriteString("\tPod *PodDetailInfo\n")
 	b.WriteString("}\n\n")
 	b.WriteString("//wails:internal\n")
-	b.WriteString("func (a *App) BindingModelAnchor() BindingModelAnchor { return BindingModelAnchor{} }\n\n")
+	b.WriteString("func (s *DesktopService) BindingModelAnchor() BindingModelAnchor { return BindingModelAnchor{} }\n\n")
 	for _, r := range rows {
 		writeBinding(&b, r)
 	}
@@ -236,8 +236,7 @@ func RenderDetailFetchers() ([]byte, error) {
 func writeBinding(b *bytes.Buffer, r binding) {
 	dto := r.dtoType()
 	if r.Namespaced {
-		fmt.Fprintf(b, `//wails:ignore
-func (a *App) Get%[1]s(clusterID, namespace, name string) (*%[2]s, error) {
+		fmt.Fprintf(b, `func (a *App) Get%[1]s(clusterID, namespace, name string) (*%[2]s, error) {
 	deps, selectionKey, err := a.resolveClusterDependencies(clusterID)
 	if err != nil {
 		return nil, err
@@ -250,8 +249,7 @@ func (a *App) Get%[1]s(clusterID, namespace, name string) (*%[2]s, error) {
 `, r.Name, dto, r.key(), r.Service, r.method())
 		return
 	}
-	fmt.Fprintf(b, `//wails:ignore
-func (a *App) Get%[1]s(clusterID, name string) (*%[2]s, error) {
+	fmt.Fprintf(b, `func (a *App) Get%[1]s(clusterID, name string) (*%[2]s, error) {
 	deps, selectionKey, err := a.resolveClusterDependencies(clusterID)
 	if err != nil {
 		return nil, err

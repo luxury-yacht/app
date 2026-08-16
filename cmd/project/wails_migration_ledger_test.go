@@ -17,6 +17,7 @@ import (
 
 type wailsMigrationLedger struct {
 	SchemaVersion              int                          `json:"schemaVersion"`
+	Phase1Checkpoint           wailsPhase1Checkpoint        `json:"phase1Checkpoint"`
 	AppFieldGroups             []wailsAppFieldLedgerGroup   `json:"appFieldGroups"`
 	CommandGroups              []wailsCommandLedgerGroup    `json:"commandGroups"`
 	AppBackpointerGroups       []wailsSignatureLedgerGroup  `json:"appBackpointerGroups"`
@@ -33,6 +34,15 @@ type wailsMigrationLedger struct {
 	ClusterRuntimeConsumers    []wailsConsumerContract      `json:"clusterRuntimeConsumers"`
 	ResetArtifacts             []wailsArtifactContract      `json:"resetArtifacts"`
 	NonCommandEntryPointGroups []wailsEntryPointGroup       `json:"nonCommandEntryPointGroups"`
+}
+
+type wailsPhase1Checkpoint struct {
+	RegisteredService              string `json:"registeredService"`
+	OwnerCommandInterfaces         int    `json:"ownerCommandInterfaces"`
+	RemainingAppParameterFunctions int    `json:"remainingAppParameterFunctions"`
+	RemainingDirectAppTests        int    `json:"remainingDirectAppTests"`
+	RemainingTestOnlyAppMethods    int    `json:"remainingTestOnlyAppMethods"`
+	WailsIgnoreDirectives          int    `json:"wailsIgnoreDirectives"`
 }
 
 type wailsAppFieldLedgerGroup struct {
@@ -189,6 +199,72 @@ func TestWailsMigrationLedgerCoversAppFieldsAndCommandsExactlyOnce(t *testing.T)
 		return group.ID, group.Commands
 	})
 	require.Equal(t, currentGeneratedWailsCommands(t), ledgerCommands)
+}
+
+func TestDesktopServiceCollaboratorsMatchCommandOwnershipLedger(t *testing.T) {
+	ledger := readWailsMigrationLedger(t)
+	interfaceByOwner := map[string]string{
+		"FavoritesService":          "FavoritesCommands",
+		"UIStateStore":              "UIStateCommands",
+		"PreferencesService":        "PreferencesCommands",
+		"DataManagementCoordinator": "DataManagementCommands",
+		"ClusterAttentionService":   "ClusterAttentionCommands",
+		"WorkspaceCoordinator":      "WorkspaceCommands",
+		"ClusterRuntimeManager":     "ClusterRuntimeCommands",
+		"ResourceGateway":           "ResourceCommands",
+		"OperationsCoordinator":     "OperationsCommands",
+		"UpdateCoordinator":         "UpdateCommands",
+		"AppLogService":             "AppLogCommands",
+		"DesktopShell":              "DesktopShellCommands",
+	}
+	fieldByOwner := map[string]string{
+		"FavoritesService":          "favorites",
+		"UIStateStore":              "uiState",
+		"PreferencesService":        "preferences",
+		"DataManagementCoordinator": "dataManagement",
+		"ClusterAttentionService":   "attention",
+		"WorkspaceCoordinator":      "workspace",
+		"ClusterRuntimeManager":     "clusterRuntime",
+		"ResourceGateway":           "resources",
+		"OperationsCoordinator":     "operations",
+		"UpdateCoordinator":         "updates",
+		"AppLogService":             "logs",
+		"DesktopShell":              "desktopShell",
+	}
+	interfaceMethods, delegations := currentDesktopServiceContract(t)
+	require.Len(t, interfaceMethods, len(interfaceByOwner)+1, "command interfaces plus lifecycle")
+
+	allCommands := make([]string, 0)
+	for _, group := range ledger.CommandGroups {
+		interfaceName, ok := interfaceByOwner[group.Owner]
+		require.True(t, ok, "command owner %q has no DesktopService interface", group.Owner)
+		expected := slices.Clone(group.Commands)
+		slices.Sort(expected)
+		require.Equal(t, expected, interfaceMethods[interfaceName], group.Owner)
+		for _, command := range group.Commands {
+			require.Equal(t, fieldByOwner[group.Owner]+"."+command, delegations[command], command)
+		}
+		allCommands = append(allCommands, group.Commands...)
+	}
+	slices.Sort(allCommands)
+	actualCommands := make([]string, 0, len(delegations))
+	for command := range delegations {
+		actualCommands = append(actualCommands, command)
+	}
+	slices.Sort(actualCommands)
+	require.Equal(t, allCommands, actualCommands)
+}
+
+func TestWailsMigrationLedgerRecordsPhase1RemainingCoupling(t *testing.T) {
+	ledger := readWailsMigrationLedger(t)
+	checkpoint := ledger.Phase1Checkpoint
+	serviceType := registeredWailsServiceType(t, readTestFile(t, repositoryPath("main.go")))
+	require.Equal(t, serviceType, checkpoint.RegisteredService)
+	require.Equal(t, 12, checkpoint.OwnerCommandInterfaces)
+	require.Equal(t, len(currentAppParameterFunctions(t)), checkpoint.RemainingAppParameterFunctions)
+	require.Equal(t, len(currentDirectAppTestFiles(t)), checkpoint.RemainingDirectAppTests)
+	require.Equal(t, len(currentTestOnlyAppMethods(t)), checkpoint.RemainingTestOnlyAppMethods)
+	require.Equal(t, currentBackendWailsIgnoreDirectiveCount(t), checkpoint.WailsIgnoreDirectives)
 }
 
 func TestWailsMigrationLedgerCoversConcreteAppCouplingExactlyOnce(t *testing.T) {
@@ -718,6 +794,110 @@ func currentBackendPackageGlobals(t *testing.T) []string {
 	}
 	slices.Sort(result)
 	return result
+}
+
+func currentDesktopServiceContract(t *testing.T) (map[string][]string, map[string]string) {
+	t.Helper()
+	path := repositoryPath("backend", "desktop_service.go")
+	parsed, err := parser.ParseFile(token.NewFileSet(), path, nil, 0)
+	require.NoError(t, err)
+
+	interfaces := make(map[string][]string)
+	delegations := make(map[string]string)
+	frameworkMethods := map[string]struct{}{
+		"ServiceStartup":  {},
+		"ServiceShutdown": {},
+		"ServeHTTP":       {},
+	}
+	for _, declaration := range parsed.Decls {
+		switch declaration := declaration.(type) {
+		case *ast.GenDecl:
+			if declaration.Tok != token.TYPE {
+				continue
+			}
+			for _, specification := range declaration.Specs {
+				typeSpec, ok := specification.(*ast.TypeSpec)
+				if !ok {
+					continue
+				}
+				contract, ok := typeSpec.Type.(*ast.InterfaceType)
+				if !ok {
+					continue
+				}
+				methods := make([]string, 0, len(contract.Methods.List))
+				for _, method := range contract.Methods.List {
+					for _, name := range method.Names {
+						methods = append(methods, name.Name)
+					}
+				}
+				slices.Sort(methods)
+				interfaces[typeSpec.Name.Name] = methods
+			}
+		case *ast.FuncDecl:
+			if declaration.Recv == nil || len(declaration.Recv.List) != 1 || !isPointerToNamedType(declaration.Recv.List[0].Type, "DesktopService") {
+				continue
+			}
+			if _, framework := frameworkMethods[declaration.Name.Name]; framework {
+				continue
+			}
+			delegation := ""
+			ast.Inspect(declaration.Body, func(node ast.Node) bool {
+				call, ok := node.(*ast.CallExpr)
+				if !ok {
+					return true
+				}
+				method, ok := call.Fun.(*ast.SelectorExpr)
+				if !ok {
+					return true
+				}
+				owner, ok := method.X.(*ast.SelectorExpr)
+				if !ok {
+					return true
+				}
+				receiver, ok := owner.X.(*ast.Ident)
+				if !ok || receiver.Name != "s" {
+					return true
+				}
+				delegation = owner.Sel.Name + "." + method.Sel.Name
+				return false
+			})
+			require.NotEmpty(t, delegation, declaration.Name.Name)
+			delegations[declaration.Name.Name] = delegation
+		}
+	}
+	return interfaces, delegations
+}
+
+func currentBackendWailsIgnoreDirectiveCount(t *testing.T) int {
+	t.Helper()
+	count := 0
+	err := filepath.Walk(repositoryPath("backend"), func(path string, info os.FileInfo, walkErr error) error {
+		require.NoError(t, walkErr)
+		if info.IsDir() || filepath.Ext(path) != ".go" {
+			return nil
+		}
+		parsed, err := parser.ParseFile(token.NewFileSet(), path, nil, parser.ParseComments)
+		require.NoError(t, err)
+		for _, group := range parsed.Comments {
+			for _, comment := range group.List {
+				if strings.TrimSpace(comment.Text) == "//wails:"+"ignore" {
+					count++
+				}
+			}
+		}
+		return nil
+	})
+	require.NoError(t, err)
+	return count
+}
+
+func isPointerToNamedType(expression ast.Expr, name string) bool {
+	pointer, ok := expression.(*ast.StarExpr)
+	if !ok {
+		return false
+	}
+	identifier, ok := pointer.X.(*ast.Ident)
+	return ok && identifier.Name == name
 }
 
 func requireGoTestExists(t *testing.T, entry string) {

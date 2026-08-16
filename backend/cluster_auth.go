@@ -473,8 +473,6 @@ func (a *App) RetryClusterAuth(clusterID string) {
 }
 
 // GetClusterAuthState returns the current auth state for a specific cluster.
-//
-//wails:ignore
 func (a *App) GetClusterAuthState(clusterID string) (string, string) {
 	if a == nil || clusterID == "" {
 		return "unknown", ""

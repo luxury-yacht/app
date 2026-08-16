@@ -216,8 +216,6 @@ func (a *App) runtimeAvailable() bool {
 // CtxOrBackground returns a context derived only from the application
 // cancellation signal, so framework-owned context values do not leak into
 // backend operations.
-//
-//wails:ignore
 func (a *App) CtxOrBackground() context.Context {
 	if a == nil {
 		return context.Background()

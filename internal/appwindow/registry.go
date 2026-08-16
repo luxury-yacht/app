@@ -3,15 +3,20 @@ package appwindow
 import (
 	"runtime"
 
-	"github.com/luxury-yacht/app/backend"
 	"github.com/wailsapp/wails/v3/pkg/application"
 	"github.com/wailsapp/wails/v3/pkg/events"
 )
 
+type lifecycleBackend interface {
+	WindowRuntimeReady(windowName string, restoreGeometry bool) bool
+	ReleaseWorkspaceWindow(windowID string)
+	PrepareQuitFromWindow(windowName string) bool
+}
+
 // Registry owns the application's peer workspace windows and their lifecycle.
 type Registry struct {
 	application    *application.App
-	backend        *backend.App
+	backend        lifecycleBackend
 	menu           *application.Menu
 	lifecycle      *lifecycle
 	newWindow      func(application.WebviewWindowOptions) *application.WebviewWindow
@@ -32,12 +37,12 @@ const cascadeOffset = 24
 // NewRegistry creates the peer-window registry for a Wails application.
 func NewRegistry(
 	app *application.App,
-	backendApp *backend.App,
+	backend lifecycleBackend,
 	menu *application.Menu,
 ) *Registry {
 	registry := &Registry{
 		application: app,
-		backend:     backendApp,
+		backend:     backend,
 		menu:        menu,
 		lifecycle:   newLifecycle(),
 	}

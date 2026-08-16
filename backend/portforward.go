@@ -128,8 +128,6 @@ func (a *App) StopPortForward(sessionID string) error {
 
 // StopClusterPortForwards terminates all port forwards for a specific cluster.
 // Called when a cluster is disconnected to clean up resources.
-//
-//wails:ignore
 func (a *App) StopClusterPortForwards(clusterID string) error {
 	a.portForwardLifecycle().stopCluster(clusterID)
 	return nil
@@ -141,8 +139,6 @@ func (a *App) ListPortForwards() []PortForwardSession {
 }
 
 // GetClusterPortForwardCount returns the number of active port forwards for a cluster.
-//
-//wails:ignore
 func (a *App) GetClusterPortForwardCount(clusterID string) int {
 	return a.portForwardLifecycle().countCluster(clusterID)
 }
@@ -418,8 +414,6 @@ func runtimeOperationFromPortForward(session *portForwardSessionInternal) Runtim
 
 // ValidatePortForwardURL checks if a URL string is valid and safe for port forwarding.
 // This is a utility function for the frontend to validate URLs.
-//
-//wails:ignore
 func (a *App) ValidatePortForwardURL(urlStr string) (bool, string) {
 	if urlStr == "" {
 		return false, "URL is required"

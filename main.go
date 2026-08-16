@@ -53,6 +53,7 @@ func newSentryReporter(enabled bool, defaultDSN, version string) (sentryreportin
 type applicationComposition struct {
 	application *application.App
 	backend     *backend.App
+	service     *backend.DesktopService
 	windows     *appwindow.Registry
 	menu        *application.Menu
 }
@@ -65,6 +66,7 @@ type compositionOptions struct {
 
 func newApplicationComposition(reporter sentryreporting.Reporter, options compositionOptions) *applicationComposition {
 	var backendApp *backend.App
+	var desktopService *backend.DesktopService
 	var windows *appwindow.Registry
 	applicationOptions := application.Options{
 		Name:        "Luxury Yacht",
@@ -101,8 +103,26 @@ func newApplicationComposition(reporter sentryreporting.Reporter, options compos
 		TempRoot:       options.UpdateTempRoot,
 		TempSetupError: options.UpdateTempSetupError,
 	})
+	desktopService = backend.NewDesktopService(backend.DesktopServiceDependencies{
+		Favorites:      backendApp,
+		UIState:        backendApp,
+		Preferences:    backendApp,
+		DataManagement: backendApp,
+		Attention:      backendApp,
+		Workspace:      backendApp,
+		ClusterRuntime: backendApp,
+		Resources:      backendApp,
+		Operations:     backendApp,
+		Updates:        backendApp,
+		Logs:           backendApp,
+		DesktopShell:   backendApp,
+		Lifecycle:      backendApp,
+		HTTP:           backendApp,
+	})
+	wailsApp.HandleStream(backend.RefreshResourceStreamName, backendApp.HandleResourceStream)
+	wailsApp.HandleStream(backend.RefreshContainerLogsStreamName, backendApp.HandleContainerLogsStream)
 	wailsApp.RegisterService(application.NewServiceWithOptions(
-		backendApp,
+		desktopService,
 		application.ServiceOptions{Route: "/api/v2"},
 	))
 
@@ -116,6 +136,7 @@ func newApplicationComposition(reporter sentryreporting.Reporter, options compos
 	return &applicationComposition{
 		application: wailsApp,
 		backend:     backendApp,
+		service:     desktopService,
 		windows:     windows,
 		menu:        nativeMenu,
 	}

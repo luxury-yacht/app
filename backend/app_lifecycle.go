@@ -53,8 +53,6 @@ func (a *App) ServiceStartup(ctx context.Context, _ application.ServiceOptions) 
 
 // WindowRuntimeReady runs interactive initialization once the webview runtime
 // can receive events and JavaScript without dropping or merely queueing them.
-//
-//wails:ignore
 func (a *App) WindowRuntimeReady(windowName string, restoreGeometry bool) bool {
 	firstReadyWindow := a.markRuntimeReady()
 	if firstReadyWindow && !a.checkStartupBetaExpiry(windowName) {
@@ -261,16 +259,12 @@ func (b *stdLogBridge) Write(p []byte) (int, error) {
 
 // PrepareQuit flushes process state after the last peer window has agreed to
 // close. Window geometry is saved separately while the chosen window exists.
-//
-//wails:ignore
 func (a *App) PrepareQuit() bool {
 	return a.prepareQuitFromWindow("")
 }
 
 // PrepareQuitFromWindow persists the geometry of the peer chosen by the
 // window registry and then performs the once-only process shutdown flush.
-//
-//wails:ignore
 func (a *App) PrepareQuitFromWindow(windowName string) bool {
 	return a.prepareQuitFromWindow(strings.TrimSpace(windowName))
 }

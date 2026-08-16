@@ -96,8 +96,6 @@ func (a *App) mutationContext() (context.Context, context.CancelFunc) {
 }
 
 // ValidateObjectYaml performs a dry-run kubectl-edit-style patch to ensure the YAML is valid and safe to apply.
-//
-//wails:ignore
 func (a *App) ValidateObjectYaml(clusterID string, req ObjectYAMLMutationRequest) (*ObjectYAMLMutationResponse, error) {
 	deps, selectionKey, err := a.resolveClusterDependencies(clusterID)
 	if err != nil {

@@ -8,6 +8,7 @@ import (
 	"os"
 	"path/filepath"
 	"slices"
+	"strconv"
 	"strings"
 	"testing"
 )
@@ -25,28 +26,145 @@ func TestGeneratedWailsServiceExportsMatchFrontendBoundary(t *testing.T) {
 	}
 }
 
+func TestDesktopServiceIsTheOnlyGeneratedCallableBackendModule(t *testing.T) {
+	root := repositoryPath("frontend", "bindings", "github.com", "luxury-yacht", "app", "backend")
+	modules := make([]string, 0)
+	err := filepath.Walk(root, func(path string, info os.FileInfo, walkErr error) error {
+		if walkErr != nil {
+			return walkErr
+		}
+		if info.IsDir() || filepath.Ext(path) != ".ts" {
+			return nil
+		}
+		source, err := os.ReadFile(path)
+		if err != nil {
+			return err
+		}
+		if strings.Contains(string(source), "$Call.ByName") {
+			relative, err := filepath.Rel(root, path)
+			if err != nil {
+				return err
+			}
+			modules = append(modules, filepath.ToSlash(relative))
+		}
+		return nil
+	})
+	if err != nil {
+		t.Fatal(err)
+	}
+	slices.Sort(modules)
+	if !slices.Equal(modules, []string{"desktopservice.ts"}) {
+		t.Fatalf("generated callable backend modules = %v, want only desktopservice.ts", modules)
+	}
+}
+
+func TestBindingModelAnchorKeepsEveryDetailDTOReachable(t *testing.T) {
+	path := repositoryPath("backend", "resource_details_generated.go")
+	parsed, err := parser.ParseFile(token.NewFileSet(), path, nil, 0)
+	if err != nil {
+		t.Fatal(err)
+	}
+	imports := make(map[string]string)
+	for _, specification := range parsed.Imports {
+		importPath, err := strconv.Unquote(specification.Path.Value)
+		if err != nil {
+			t.Fatal(err)
+		}
+		alias := filepath.Base(importPath)
+		if specification.Name != nil {
+			alias = specification.Name.Name
+		}
+		imports[alias] = importPath
+	}
+
+	foundAnchor := false
+	for _, declaration := range parsed.Decls {
+		general, ok := declaration.(*ast.GenDecl)
+		if !ok || general.Tok != token.TYPE {
+			continue
+		}
+		for _, specification := range general.Specs {
+			typeSpec, ok := specification.(*ast.TypeSpec)
+			if !ok || typeSpec.Name.Name != "BindingModelAnchor" {
+				continue
+			}
+			foundAnchor = true
+			anchor, ok := typeSpec.Type.(*ast.StructType)
+			if !ok {
+				t.Fatal("BindingModelAnchor must be a struct")
+			}
+			for _, field := range anchor.Fields.List {
+				pointer, ok := field.Type.(*ast.StarExpr)
+				if !ok {
+					t.Fatalf("BindingModelAnchor field must be a pointer: %#v", field.Type)
+				}
+				modelPath := repositoryPath("frontend", "bindings", "github.com", "luxury-yacht", "app", "backend", "models.ts")
+				modelName := ""
+				switch modelType := pointer.X.(type) {
+				case *ast.Ident:
+					modelName = modelType.Name
+				case *ast.SelectorExpr:
+					packageName, ok := modelType.X.(*ast.Ident)
+					if !ok {
+						t.Fatalf("unsupported anchor selector %#v", modelType.X)
+					}
+					importPath, ok := imports[packageName.Name]
+					if !ok {
+						t.Fatalf("anchor package %q has no import", packageName.Name)
+					}
+					const backendPrefix = "github.com/luxury-yacht/app/backend/"
+					relativePackage := strings.TrimPrefix(importPath, backendPrefix)
+					if relativePackage == importPath {
+						t.Fatalf("anchor import %q is outside backend bindings", importPath)
+					}
+					modelPath = repositoryPath("frontend", "bindings", "github.com", "luxury-yacht", "app", "backend", relativePackage, "models.ts")
+					modelName = modelType.Sel.Name
+				default:
+					t.Fatalf("unsupported anchor type %#v", pointer.X)
+				}
+				modelSource := readTestFile(t, modelPath)
+				if !generatedModelsDeclare(modelSource, modelName) {
+					t.Fatalf("%s does not declare anchored DTO %s", modelPath, modelName)
+				}
+			}
+		}
+	}
+	if !foundAnchor {
+		t.Fatal("BindingModelAnchor was not generated")
+	}
+}
+
+func generatedModelsDeclare(source, name string) bool {
+	for _, declaration := range []string{"export interface ", "export type ", "export class ", "export enum "} {
+		if strings.Contains(source, declaration+name) {
+			return true
+		}
+	}
+	return false
+}
+
 func TestWailsBoundaryContractRejectsCompositionAndExportMutations(t *testing.T) {
 	mainSource := readTestFile(t, repositoryPath("main.go"))
 	serviceType, err := resolveRegisteredWailsServiceType(mainSource)
 	if err != nil {
 		t.Fatal(err)
 	}
-	if serviceType != "App" {
-		t.Fatalf("current registered service type = %q, want App", serviceType)
+	if serviceType != "DesktopService" {
+		t.Fatalf("current registered service type = %q, want DesktopService", serviceType)
 	}
 
 	compositionMutations := map[string]string{
 		"missing service registration": strings.Replace(mainSource, "RegisterService", "RegisterBackend", 1),
 		"unnamed service expression": strings.Replace(
 			mainSource,
-			"application.NewServiceWithOptions(\n\t\tbackendApp,",
+			"application.NewServiceWithOptions(\n\t\tdesktopService,",
 			"application.NewServiceWithOptions(\n\t\tbackend.NewApp(nil, reporter),",
 			1,
 		),
 		"service without concrete declared type": strings.Replace(
-			strings.Replace(mainSource, "\tvar backendApp *backend.App\n", "", 1),
-			"\tbackendApp = backend.NewApp(wailsApp, reporter)",
-			"\tbackendApp := backend.NewApp(wailsApp, reporter)",
+			strings.Replace(mainSource, "\tvar desktopService *backend.DesktopService\n", "", 1),
+			"\tdesktopService = backend.NewDesktopService(",
+			"\tdesktopService := backend.NewDesktopService(",
 			1,
 		),
 		"multiple service registrations": strings.Replace(
@@ -73,6 +191,12 @@ func TestWailsBoundaryContractRejectsCompositionAndExportMutations(t *testing.T)
 	_, generatedSource := generatedWailsServiceModule(t, serviceType)
 	generated := exportedFunctions(generatedSource)
 	boundary := explicitBackendAPIExports(readTestFile(t, repositoryPath("frontend", "src", "core", "backend-api", "index.ts")))
+	if slices.Contains(generated, "InitializeErrorReporting") {
+		t.Fatal("InitializeErrorReporting must not be generated as a frontend command")
+	}
+	if slices.Contains(boundary, "InitializeErrorReporting") {
+		t.Fatal("InitializeErrorReporting must remain a composition-only entry point")
+	}
 	if err := validateWailsBoundaryParity(generated, boundary); err != nil {
 		t.Fatal(err)
 	}

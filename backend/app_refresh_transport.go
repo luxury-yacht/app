@@ -51,7 +51,9 @@ func (a *App) publishRefreshService(handler http.Handler, subsystems map[string]
 	a.refreshService.Store(&refreshServiceHandler{handler: handler})
 }
 
-func (a *App) handleResourceStream(conn *application.StreamConn) {
+// HandleResourceStream serves the refresh-resource named stream registered by
+// application composition.
+func (a *App) HandleResourceStream(conn *application.StreamConn) {
 	aggregates := a.refreshAggregates.Load()
 	if aggregates == nil || aggregates.resources == nil {
 		_ = conn.SendJSON(streammux.ServerMessage{
@@ -62,7 +64,9 @@ func (a *App) handleResourceStream(conn *application.StreamConn) {
 	aggregates.resources.Handle(conn.Context(), conn)
 }
 
-func (a *App) handleContainerLogsStream(conn *application.StreamConn) {
+// HandleContainerLogsStream serves the container-logs named stream registered
+// by application composition.
+func (a *App) HandleContainerLogsStream(conn *application.StreamConn) {
 	var request containerlogsstream.Request
 	if err := conn.ReceiveJSON(&request); err != nil {
 		sendContainerLogsStreamError(conn, request.Scope, fmt.Sprintf("invalid container logs stream request: %v", err))

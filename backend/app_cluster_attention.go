@@ -13,8 +13,6 @@ import (
 
 // GetClusterAttentionIgnoreRules returns the effective suppression rules for
 // exactly one cluster, including rules that apply to every cluster.
-//
-//wails:ignore
 func (a *App) GetClusterAttentionIgnoreRules(clusterID string) (*snapshot.AttentionIgnoreRules, error) {
 	clusterID = strings.TrimSpace(clusterID)
 	if clusterID == "" {

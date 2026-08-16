@@ -257,6 +257,36 @@ func TestWailsApplicationIsInjectedDirectlyWithoutDesktopAdapter(t *testing.T) {
 	require.NoError(t, validateDirectWailsComposition(mainSource, windowSource, runtimeSource, menuSource, desktopErr == nil))
 }
 
+func TestDesktopServiceOwnsTheWailsBoundaryWithoutAnAppBackpointer(t *testing.T) {
+	source := readTestFile(t, repositoryPath("backend", "desktop_service.go"))
+	parsed, err := parser.ParseFile(token.NewFileSet(), "desktop_service.go", source, parser.ParseComments)
+	require.NoError(t, err)
+
+	foundService := false
+	for _, declaration := range parsed.Decls {
+		general, ok := declaration.(*ast.GenDecl)
+		if !ok || general.Tok != token.TYPE {
+			continue
+		}
+		for _, specification := range general.Specs {
+			typeSpec, ok := specification.(*ast.TypeSpec)
+			if !ok || typeSpec.Name.Name != "DesktopService" {
+				continue
+			}
+			foundService = true
+			serviceStruct, ok := typeSpec.Type.(*ast.StructType)
+			require.True(t, ok)
+			for _, field := range serviceStruct.Fields.List {
+				require.False(t, isNamedPointer(field.Type, "App"), "DesktopService must not retain *App")
+				require.False(t, isNamedPointer(field.Type, "ApplicationRuntime"), "DesktopService must not retain *ApplicationRuntime")
+			}
+		}
+	}
+	require.True(t, foundService)
+	require.Contains(t, source, "//wails:inject t*:void BindingModelAnchor;")
+	require.NotContains(t, readTestFile(t, repositoryPath("backend", "app.go")), "//wails:inject")
+}
+
 func TestDirectWailsCompositionContractRejectsBoundaryRegressions(t *testing.T) {
 	mainSource := readTestFile(t, repositoryPath("main.go"))
 	windowSource := readTestFile(t, repositoryPath("internal", "appwindow", "registry.go"))
@@ -278,6 +308,12 @@ func TestDirectWailsCompositionContractRejectsBoundaryRegressions(t *testing.T) 
 		},
 		"missing generated service registration": {
 			main: strings.Replace(mainSource, "wailsApp.RegisterService(", "wailsApp.RegisterBackend(", 1), window: windowSource, runtime: runtimeSource, menu: menuSource,
+		},
+		"missing desktop service construction": {
+			main: strings.Replace(mainSource, "backend.NewDesktopService(", "backend.NewBackendService(", 1), window: windowSource, runtime: runtimeSource, menu: menuSource,
+		},
+		"implementation registered directly": {
+			main: strings.Replace(mainSource, "\t\tdesktopService,", "\t\tbackendApp,", 1), window: windowSource, runtime: runtimeSource, menu: menuSource,
 		},
 		"desktop interface": {
 			main: mainSource, window: windowSource, runtime: runtimeSource + "\ntype Desktop interface{}\n", menu: menuSource,
@@ -317,7 +353,11 @@ func TestCompositionOrderingContractRejectsReorderedFixtures(t *testing.T) {
 		{"composition := newApplicationComposition(", "backend.InitializeErrorReporting(composition.backend)"},
 		{"backend.InitializeErrorReporting(composition.backend)", "composition.application.Run()"},
 		{"backendApp = backend.NewApp(wailsApp, reporter)", "backend.ConfigureApplicationUpdates(backendApp,"},
-		{"backend.ConfigureApplicationUpdates(backendApp,", "wailsApp.RegisterService("},
+		{"backend.ConfigureApplicationUpdates(backendApp,", "desktopService = backend.NewDesktopService("},
+		{"desktopService = backend.NewDesktopService(", "wailsApp.HandleStream(backend.RefreshResourceStreamName"},
+		{"wailsApp.HandleStream(backend.RefreshResourceStreamName", "wailsApp.HandleStream(backend.RefreshContainerLogsStreamName"},
+		{"wailsApp.HandleStream(backend.RefreshContainerLogsStreamName", "wailsApp.RegisterService("},
+		{"wailsApp.RegisterService(", "windows = appwindow.NewRegistry("},
 	} {
 		before, after := markers[0], markers[1]
 		t.Run(before+" before "+after, func(t *testing.T) {
@@ -336,12 +376,12 @@ func TestWailsTransportEventsAndPeerHooksHaveOneCompositionOwner(t *testing.T) {
 			owners: []string{"main.go"},
 		},
 		"resource named stream": {
-			marker: "wailsApplication.HandleStream(refreshResourceStreamName",
-			owners: []string{"backend/app.go"},
+			marker: "wailsApp.HandleStream(backend.RefreshResourceStreamName",
+			owners: []string{"main.go"},
 		},
 		"container logs named stream": {
-			marker: "wailsApplication.HandleStream(refreshContainerLogsStreamName",
-			owners: []string{"backend/app.go"},
+			marker: "wailsApp.HandleStream(backend.RefreshContainerLogsStreamName",
+			owners: []string{"main.go"},
 		},
 		"typed custom event registry": {
 			marker: "application.RegisterEvent[",
@@ -391,7 +431,8 @@ func TestWailsTransportEventsAndPeerHooksHaveOneCompositionOwner(t *testing.T) {
 func validateDirectWailsComposition(mainSource, windowSource, runtimeSource, menuSource string, desktopExists bool) error {
 	for description, required := range map[string]string{
 		"direct application.App injection": "backend.NewApp(wailsApp, reporter)",
-		"generated service registration":   "wailsApp.RegisterService(",
+		"desktop service construction":     "desktopService = backend.NewDesktopService(",
+		"generated service registration":   "wailsApp.RegisterService(application.NewServiceWithOptions(\n\t\tdesktopService,",
 		"runtime-ready peer-window hook":   "events.Common.WindowRuntimeReady",
 		"closing peer-window hook":         "events.Common.WindowClosing",
 		"application run call":             "composition.application.Run()",
@@ -407,6 +448,9 @@ func validateDirectWailsComposition(mainSource, windowSource, runtimeSource, men
 	if strings.Contains(mainSource, "NewAdapter") {
 		return fmt.Errorf("native desktop adapter is prohibited")
 	}
+	if strings.Contains(mainSource, "application.NewServiceWithOptions(\n\t\tbackendApp,") {
+		return fmt.Errorf("backend implementation must not be registered directly")
+	}
 	if strings.Contains(runtimeSource, "type Desktop interface") {
 		return fmt.Errorf("native desktop interface is prohibited")
 	}
@@ -417,6 +461,15 @@ func validateDirectWailsComposition(mainSource, windowSource, runtimeSource, men
 		return fmt.Errorf("internal/desktop package is prohibited")
 	}
 	return nil
+}
+
+func isNamedPointer(expression ast.Expr, name string) bool {
+	pointer, ok := expression.(*ast.StarExpr)
+	if !ok {
+		return false
+	}
+	identifier, ok := pointer.X.(*ast.Ident)
+	return ok && identifier.Name == name
 }
 
 func validateCompositionOrdering(mainSource string) error {
@@ -432,7 +485,11 @@ func validateCompositionOrdering(mainSource string) error {
 		{
 			"backendApp = backend.NewApp(wailsApp, reporter)",
 			"backend.ConfigureApplicationUpdates(backendApp,",
+			"desktopService = backend.NewDesktopService(",
+			"wailsApp.HandleStream(backend.RefreshResourceStreamName",
+			"wailsApp.HandleStream(backend.RefreshContainerLogsStreamName",
 			"wailsApp.RegisterService(",
+			"windows = appwindow.NewRegistry(",
 		},
 	} {
 		previousOffset := -1
@@ -748,10 +805,11 @@ func TestReleasePublishesSignedUpdaterManifestInsideTheGitHubRelease(t *testing.
 func TestRefreshTransportUsesOnlyWailsServiceAndNamedStreams(t *testing.T) {
 	mainSource := readTestFile(t, repositoryPath("main.go"))
 	require.Contains(t, mainSource, `application.ServiceOptions{Route: "/api/v2"}`)
+	require.Contains(t, mainSource, `wailsApp.HandleStream(backend.RefreshResourceStreamName`)
+	require.Contains(t, mainSource, `wailsApp.HandleStream(backend.RefreshContainerLogsStreamName`)
 
 	appSource := readTestFile(t, repositoryPath("backend", "app.go"))
-	require.Contains(t, appSource, `HandleStream(refreshResourceStreamName`)
-	require.Contains(t, appSource, `HandleStream(refreshContainerLogsStreamName`)
+	require.NotContains(t, appSource, `HandleStream(`)
 	require.NotContains(t, appSource, "net.Listen")
 	require.NotContains(t, appSource, "refreshHTTPServer")
 	require.NotContains(t, appSource, "refreshListener")
