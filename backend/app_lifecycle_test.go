@@ -343,7 +343,7 @@ func TestStartupLoadsWindowSettingsOnlyAfterRuntimeReady(t *testing.T) {
 	}
 	bytes, err := json.Marshal(settings)
 	require.NoError(t, err)
-	require.NoError(t, os.WriteFile(settingsPath, bytes, 0o644))
+	writeTestFileWithParents(t, settingsPath, bytes, 0o644)
 
 	require.NoError(t, app.ServiceStartup(ctx, application.ServiceOptions{}))
 	require.Nil(t, app.windowSettings, "service startup must not load interactive window state")

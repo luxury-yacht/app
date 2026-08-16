@@ -191,12 +191,12 @@ generator.
 | `UpdateCoordinator` | update discovery, staging, durable update state, scheduler, projection events, and owner-validated reset of skipped/pending/prepared/attempt/cleanup state plus dynamic staging/log artifacts under the configured update roots | Window or settings persistence, raw deletion of unvalidated dynamic paths, or the static app-state manifest |
 | `AppLogService` | log buffer, frontend log ingestion, typed log events | General event routing or error-reporting configuration ownership |
 
-This table is a provisional target-owner set until the Phase 0 ledger accounts
-for every current field, lock, command, event, lifecycle hook, and package-level
-entry point. Phase 0 may add a focused owner row when it finds another cohesive
-unassigned area; it must not assign a leftover to the nearest existing
-component merely to close the ledger. The table becomes authoritative only
-when every ledger row has exactly one owner and removal phase.
+This table is the authoritative target-owner set. The completed Phase 0 ledger
+accounts for every current field, lock, command, event, lifecycle hook, mutable
+package-global in scope, and package-level entry point with exactly one owner
+and removal phase. A later discovery of another cohesive responsibility must
+add a focused owner row and update the machine-checked ledger; it must not
+assign a leftover to the nearest existing component by proximity.
 
 Existing package owners remain authoritative. For example,
 `backend/refresh/system`, `backend/objectcatalog`, `backend/resources`, and
@@ -512,9 +512,12 @@ tests construct `ApplicationRuntime` explicitly.
 
 ## Phase 0 — Freeze the contracts and complete the ownership ledger
 
-- [ ] Record every `App` field in a migration ledger with its current readers,
+The machine-checked inventory for this checkpoint is
+[`wails-service-boundary-and-app-decomposition-ledger.json`](wails-service-boundary-and-app-decomposition-ledger.json).
+
+- [x] Record every `App` field in a migration ledger with its current readers,
   writers, mutex, startup path, shutdown path, tests, and target owner.
-- [ ] Extend the ledger beyond `App` fields to every mutable package-global,
+- [x] Extend the ledger beyond `App` fields to every mutable package-global,
   singleton, or direct cross-owner settings reader. At minimum, record all five
   current `settingsSideEffects` flags and appliers plus the live
   `PermissionSSRRFetchConcurrency` read, their update/import/load producers,
@@ -525,10 +528,10 @@ tests construct `ApplicationRuntime` explicitly.
   `backend/refresh/containerlogsstream/streamer.go`, and
   `permissionSSRRFetchConcurrency()`, which is currently read by
   `fetchSSRRRulesForNamespaces` for each permission fan-out.
-- [ ] Close the provisional ownership table against that ledger. Add a focused
+- [x] Close the provisional ownership table against that ledger. Add a focused
   row for any newly discovered cohesive responsibility instead of assigning
   otherwise-unrelated fields to an owner by code proximity.
-- [ ] Explicitly ledger the currently omitted surfaces: `attentionRulesMu` and
+- [x] Explicitly ledger the currently omitted surfaces: `attentionRulesMu` and
   all Attention rule methods; `requestClusterScopeRebuildFn`,
   `scopeRebuildQueued`, `clusterWorkspaceMu`, `clusterWorkspaceRevision`,
   `clusterHealth`, and `clusterScopeRevisions`; `errorReporter` and
@@ -537,7 +540,7 @@ tests construct `ApplicationRuntime` explicitly.
   accessor callers (`backend/app_settings.go:751,1220` and
   `backend/app_refresh_setup.go:295`); `selectionDiag`; and the process-wide
   `sidebarVisible`, `diagnosticsPanelVisible`, and `appLogsPanelVisible` fields.
-- [ ] Close the settings-effect sub-ledger explicitly: error reporting belongs
+- [x] Close the settings-effect sub-ledger explicitly: error reporting belongs
   to `ErrorReportingService`; live/future-client QPS and burst belong to
   `ClusterRuntimeManager`; SSRR fetch concurrency belongs to
   `PermissionFetchPolicy`; the per-scope container target cap belongs to
@@ -545,7 +548,7 @@ tests construct `ApplicationRuntime` explicitly.
   live/future-subsystem metrics cadence belong to `RefreshCoordinator`. Record
   the current five flags and the sixth route that replaces the direct settings
   read without misreporting the baseline.
-- [ ] Ledger all four production `loadAppSettings` call sites and their distinct
+- [x] Ledger all four production `loadAppSettings` call sites and their distinct
   failure policies: `GetAppSettings` and `prepareAppPreferenceUpdate` belong to
   `PreferencesService`; `InitializeErrorReporting` belongs to
   `ErrorReportingService` and fails closed; and
@@ -554,13 +557,13 @@ tests construct `ApplicationRuntime` explicitly.
   `EnsureLoadedForStartup()`. Record the lock idiom at each current caller and
   the Phase 3 rule that none survives as an external/raw loader call or a
   separate stale-failure fallback call.
-- [ ] Inventory the 24 direct `loadAppSettings` test calls across
+- [x] Inventory the 24 direct `loadAppSettings` test calls across
   `backend/app_settings_test.go`, `backend/app_cluster_settings_test.go`, and
   `backend/app_data_management_test.go`. Classify each as a public
   `EnsureLoaded`/`EnsureLoadedForStartup` contract test, a lower-level
   persistence codec/repository test, or a caller-specific failure-policy test
   instead of retaining a backdoor lazy initializer.
-- [ ] Record the limiter's lock-order proof and startup/update contract in the
+- [x] Record the limiter's lock-order proof and startup/update contract in the
   ledger: no settings read or other lock acquisition under
   `containerLogsTargetLimiterMu`; construction uses the default; successful
   `EnsureLoaded`, atomic startup fallback, and global-limit updates immediately
@@ -569,19 +572,19 @@ tests construct `ApplicationRuntime` explicitly.
   Preserve the source contract documented at
   `backend/app_refresh_setup.go:385-393` as an executable lock/order test, not
   only as a comment.
-- [ ] Assign the six Attention Ignore/Restore commands to
+- [x] Assign the six Attention Ignore/Restore commands to
   `ClusterAttentionService`; assign `GetClusterAllowedNamespaces`,
   `SetClusterAllowedNamespaces`, and `GetSelectionDiagnostics` to the
   `WorkspaceCoordinator` collaborator; assign health events to
   `ClusterRuntimeManager`, the scope-changed event to `WorkspaceCoordinator`,
   and their replay state to `ClusterWorkspaceProjection`.
-- [ ] Ledger `GetKubeconfigSearchPaths`, `SetKubeconfigSearchPaths`, settings
+- [x] Ledger `GetKubeconfigSearchPaths`, `SetKubeconfigSearchPaths`, settings
   import, and kubeconfig-watcher changes as one search-path/selection workflow.
   Assign physical search-path persistence to `PreferencesService`, discovery and
   watcher retargeting to `ClusterRuntimeManager`, and serialized post-persist
   rediscovery/pruning/cleanup to `WorkspaceCoordinator`; make
   `DataManagementCoordinator` invoke that same workflow after import.
-- [ ] Ledger the three asynchronous cluster-originated paths that currently
+- [x] Ledger the three asynchronous cluster-originated paths that currently
   re-enter selection orchestration: kubeconfig watcher changes, auth rebuild/
   teardown requests, and transport-failure rebuild requests. Record the current
   producer lock/callback context, payload identity and generation data, current
@@ -590,14 +593,14 @@ tests construct `ApplicationRuntime` explicitly.
   The replacement must be non-blocking while the auth-manager mutex is held and
   must have explicit bounded/coalesced backpressure rather than an unbounded
   goroutine or generic event bus.
-- [ ] Classify every consumer of cluster-runtime behavior, not only Wails
+- [x] Classify every consumer of cluster-runtime behavior, not only Wails
   commands or `DesktopService`: include `OperationsCoordinator` dependency/
   retry seams, `ResourceGateway` dependency resolution and transport-health
   recording, current workspace selection/search-path orchestration, refresh
   construction/readiness, and every other consumer found by the ledger. Name
   the owner-shaped interface and the exact subphase that replaces its App-backed
   implementation; refresh-owned consumers may be deferred only to Phase 5B.
-- [ ] Inventory Factory Reset as a total cross-owner workflow, not only a
+- [x] Inventory Factory Reset as a total cross-owner workflow, not only a
   preferences-readiness operation. Record the in-app `ClearAppState` command,
   the offline `cmd/project` reset task, every app-owned config/cache artifact
   including `favorites.json` and `application-update.json`, every in-memory
@@ -610,48 +613,48 @@ tests construct `ApplicationRuntime` explicitly.
   recovery state. Define one shared static artifact manifest plus owner-resolved
   dynamic artifacts while keeping live owner-directed cleanup separate from
   offline directory removal.
-- [ ] Inventory every filesystem path resolver used by Factory Reset. Split
+- [x] Inventory every filesystem path resolver used by Factory Reset. Split
   resolution from parent-directory creation wherever a getter currently calls
   `MkdirAll`, so live/offline inventory and missing-path reset checks have no
   filesystem side effects; retain directory creation only in the corresponding
   write/open operation.
-- [ ] Record `InitializeErrorReporting` and its `main.go` call as a non-command
+- [x] Record `InitializeErrorReporting` and its `main.go` call as a non-command
   composition entry point sequencing `PreferencesService` into the behavior
   owned by `ErrorReportingService`. Preserve the
   current reason for its package-level shape through Phase 1: it must not appear
   in the `DesktopService` allowlist or generated frontend bindings. Phase 3 may
   replace it with an unbound service/composition call, never a Wails command.
-- [ ] Pin the composition ordering that initializes error reporting after
+- [x] Pin the composition ordering that initializes error reporting after
   backend/preferences construction and before `application.Run`. Combined with
   snapshot provenance, this preserves fail-closed behavior both in the normal
   startup order and if a later internal caller has already completed atomic
   startup fallback.
-- [ ] Record all 11 production structs with `*App` fields and all 38
+- [x] Record all 11 production structs with `*App` fields and all 38
   production-file package-level functions with exact `*App` parameters,
   including the 23 menu functions and five test-support helpers in
   `backend/app_testing.go`. For each, name the replacement collaborator,
   callback, or owner and the phase that removes the signature.
-- [ ] Record every intentional Wails command with its frontend broker/consumer,
+- [x] Record every intentional Wails command with its frontend broker/consumer,
   target component, cluster/object identity requirements, and error contract.
-- [ ] Record every non-command `App` entry point used by `main.go`,
+- [x] Record every non-command `App` entry point used by `main.go`,
   `appwindow.Registry`, menus, refresh handlers, generators, and test support.
-- [ ] Inventory the 62 direct/full-App backend test files and 19 App test-only
+- [x] Inventory the 62 direct/full-App backend test files and 19 App test-only
   methods using the cross-phase test-support classification and target owner.
-- [ ] Extend `cmd/project/wails_bindings_test.go` to identify the registered
+- [x] Extend `cmd/project/wails_bindings_test.go` to identify the registered
   service type and exact command parity without assuming that the generated
   file is permanently named `backend/app.ts`.
-- [ ] Extend `cmd/project/wails_project_contract_test.go` to distinguish the
+- [x] Extend `cmd/project/wails_project_contract_test.go` to distinguish the
   generated Wails service boundary from the prohibited native desktop-adapter
   pattern while preserving direct `application.App` injection.
-- [ ] Record the composition-order literals enforced by
+- [x] Record the composition-order literals enforced by
   `TestUpdaterTempRootIsConfiguredBeforeAnyProcessDispatch`; constructor and
   service names may change, but the required ordering may not.
-- [ ] Add composition tests proving `/api/v2`, both named streams, typed custom
+- [x] Add composition tests proving `/api/v2`, both named streams, typed custom
   events, and peer-window hooks still have exactly one owner.
-- [ ] Add or identify lifecycle tests proving both sides of every readiness
+- [x] Add or identify lifecycle tests proving both sides of every readiness
   gate: invalid early native/event work is blocked, while the operation needed
   to reach ready state remains allowed.
-- [ ] Capture focused race-test baselines for workspace selection, auth
+- [x] Capture focused race-test baselines for workspace selection, auth
   recovery, refresh replacement, application shutdown, shell cleanup, and
   port-forward cleanup.
 

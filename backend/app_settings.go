@@ -515,12 +515,7 @@ func (a *App) getSettingsFilePath() (string, error) {
 	if err != nil {
 		return "", fmt.Errorf("could not find config directory: %w", err)
 	}
-
 	configDir = filepath.Join(configDir, "luxury-yacht")
-	if err := os.MkdirAll(configDir, 0o755); err != nil {
-		return "", fmt.Errorf("failed to create config directory: %w", err)
-	}
-
 	return filepath.Join(configDir, "settings.json"), nil
 }
 
@@ -594,6 +589,9 @@ var writeSettingsFileAtomic = writeFileAtomic
 
 // writeFileAtomic persists data with a temp file + rename sequence.
 func writeFileAtomic(path string, data []byte, perm os.FileMode) error {
+	if err := os.MkdirAll(filepath.Dir(path), 0o755); err != nil {
+		return fmt.Errorf("create parent directory: %w", err)
+	}
 	return writeFileAtomicWithReplace(path, data, perm, os.Rename)
 }
 

@@ -1,0 +1,1094 @@
+{
+  "schemaVersion": 1,
+  "appFieldGroups": [
+    {
+      "id": "application-lifecycle-state",
+      "fields": ["appDone", "runtimeReady", "preQuitOnce", "eventEmitter"],
+      "readers": ["backend/app_runtime.go runtimeAvailable/CtxOrBackground", "backend/app.go emitEvent", "backend/app_lifecycle.go PrepareQuit"],
+      "writers": ["backend/app_runtime.go setApplicationContext/markRuntimeReady/clearApplicationContext", "backend/app_lifecycle.go ServiceStartup/WindowRuntimeReady/prepareQuitFromWindow/ServiceShutdown"],
+      "mutex": "runtimeReady is atomic; preQuitOnce is sync.Once; appDone and eventEmitter are lifecycle-composition state",
+      "startup": "ServiceStartup installs appDone; WindowRuntimeReady opens the event/native gate",
+      "shutdown": "PrepareQuit flushes once; ServiceShutdown clears context after owner teardown",
+      "tests": ["backend/app_lifecycle_test.go", "backend/app_runtime_test.go"],
+      "owner": "ApplicationLifecycle",
+      "phase": "5C"
+    },
+    {
+      "id": "desktop-shell",
+      "fields": ["wailsApplication", "menu", "createWorkspaceWindow", "sidebarVisible", "diagnosticsPanelVisible", "appLogsPanelVisible", "showExpiredBetaPrompt", "openApplicationURL", "quitApplication", "openFileDialog", "saveFileDialog", "windowGeometry"],
+      "readers": ["backend/app_runtime.go", "backend/app_lifecycle.go", "backend/app_ui.go", "backend/menu.go", "backend/app_data_management.go", "backend/app_csv_export.go"],
+      "writers": ["backend/app.go NewApp", "backend/app_ui.go visibility setters", "backend/app_runtime.go native callback setters"],
+      "mutex": "runtime readiness gates native access; visibility is process-wide and intentionally unpersisted",
+      "startup": "NewApp installs direct concrete Wails callbacks and menu/window hooks",
+      "shutdown": "native access stops before application context is cleared",
+      "tests": ["backend/app_runtime_test.go", "backend/app_lifecycle_test.go", "backend/app_ui_test.go", "cmd/project/wails_project_contract_test.go"],
+      "owner": "DesktopShell",
+      "phase": "3"
+    },
+    {
+      "id": "preferences-state",
+      "fields": ["kubeconfigSearchPaths", "windowSettings", "appSettings", "settingsMu"],
+      "readers": ["backend/app_settings.go", "backend/app_cluster_settings.go", "backend/kubeconfigs.go", "backend/app_lifecycle.go"],
+      "writers": ["backend/app_settings.go load/update/import/reset paths", "backend/kubeconfigs.go search-path persistence"],
+      "mutex": "settingsMu owns the physical settings document and cached snapshot",
+      "startup": "lazy load from settings.json with caller-specific failure policy",
+      "shutdown": "window settings persist during pre-quit; Factory Reset invalidates persisted and cached state",
+      "tests": ["backend/app_settings_test.go", "backend/app_cluster_settings_test.go", "backend/app_data_management_test.go", "backend/app_lifecycle_test.go"],
+      "owner": "PreferencesService",
+      "phase": "3"
+    },
+    {
+      "id": "ui-persistence",
+      "fields": ["persistenceMu"],
+      "readers": ["backend/app_persistence.go grid and tab reads"],
+      "writers": ["backend/app_persistence.go grid and tab writes/clear"],
+      "mutex": "persistenceMu owns persistence.json operations",
+      "startup": "lazy file reads",
+      "shutdown": "no process teardown; Factory Reset removes persistence through owner",
+      "tests": ["backend/app_persistence_test.go"],
+      "owner": "UIStateStore",
+      "phase": "3"
+    },
+    {
+      "id": "application-log-state",
+      "fields": ["logger"],
+      "readers": ["backend production methods through Logger and applog interfaces"],
+      "writers": ["backend/app.go NewApp", "backend/app_logs.go frontend ingestion and clear"],
+      "mutex": "Logger owns its internal buffer synchronization",
+      "startup": "NewApp constructs logger; ServiceStartup installs standard-log/event bridges",
+      "shutdown": "final lifecycle messages are written before context clear",
+      "tests": ["backend/logger_test.go", "backend/app_logs_test.go", "backend/app_lifecycle_test.go"],
+      "owner": "AppLogService",
+      "phase": "3"
+    },
+    {
+      "id": "error-reporting-state",
+      "fields": ["errorReporter", "installationTelemetryMu"],
+      "readers": ["backend/app_settings.go error-reporting initialization/effects", "backend/app_installation_telemetry.go", "backend/logger.go"],
+      "writers": ["backend/app.go NewApp", "backend/app_settings.go InitializeErrorReporting", "backend/app_installation_telemetry.go registration acknowledgement"],
+      "mutex": "installationTelemetryMu precedes settingsMu during reset",
+      "startup": "main.go initializes reporter after backend composition and before application.Run",
+      "shutdown": "Factory Reset waits for installation registration before settings deletion",
+      "tests": ["backend/app_settings_test.go", "backend/app_installation_telemetry_test.go", "cmd/project/wails_project_contract_test.go"],
+      "owner": "ErrorReportingService",
+      "phase": "3"
+    },
+    {
+      "id": "resource-cache-and-permissions",
+      "fields": ["responseCache", "ssrrCachesMu", "ssrrCaches"],
+      "readers": ["backend/fetch_helpers.go", "backend/app_permissions.go", "backend/response_cache_invalidation.go"],
+      "writers": ["backend/app.go NewApp", "backend/fetch_helpers.go cache ingest", "backend/app_permissions.go SSRR cache creation/refresh", "backend/response_cache_invalidation.go"],
+      "mutex": "responseCache owns its lock; ssrrCachesMu guards the per-cluster SSRR cache map",
+      "startup": "NewApp constructs response cache and SSRR map lazily populates",
+      "shutdown": "cluster cleanup and Factory Reset invalidate caches",
+      "tests": ["backend/response_cache_test.go", "backend/app_permissions_test.go", "backend/response_cache_invalidation_test.go"],
+      "owner": "ResourceGateway",
+      "phase": "4"
+    },
+    {
+      "id": "refresh-runtime",
+      "fields": ["refreshManager", "refreshService", "refreshRuntimeMu", "refreshDone", "refreshCancel", "refreshRuntimeStopped", "telemetryRecorder", "sharedInformerFactory", "apiExtensionsInformerFactory", "refreshSubsystemsMu", "refreshSubsystems", "refreshAggregates", "refreshPermissionCancels"],
+      "readers": ["backend/app_refresh_setup.go", "backend/app_refresh_transport.go", "backend/app_refresh_subsystems.go", "backend/app_refresh_update.go", "backend/app_refresh_recovery.go"],
+      "writers": ["backend/app_refresh_setup.go setup/publication", "backend/app_refresh_subsystems.go replacement", "backend/app_refresh_recovery.go teardown/rebuild"],
+      "mutex": "refreshRuntimeMu owns process refresh cancellation; refreshSubsystemsMu owns subsystem topology; atomic pointers publish handler/aggregates",
+      "startup": "cluster selection builds and publishes refresh runtime after readiness",
+      "shutdown": "unpublish and cancel before stopping subsystem producers",
+      "tests": ["backend/app_refresh_setup_test.go", "backend/app_refresh_service_test.go", "backend/app_refresh_subsystems_swap_test.go", "backend/app_refresh_recovery_test.go"],
+      "owner": "RefreshCoordinator",
+      "phase": "5B"
+    },
+    {
+      "id": "refresh-global-container-log-limiter",
+      "fields": ["containerLogsTargetLimiterMu", "containerLogsTargetLimiter"],
+      "readers": ["backend/app_refresh_setup.go sharedContainerLogsTargetLimiter", "backend/app_settings.go settings side effects"],
+      "writers": ["backend/app_refresh_setup.go lazy construction", "backend/app_settings.go load/update SetLimit"],
+      "mutex": "containerLogsTargetLimiterMu is a leaf initialization lock and may not nest settings or subsystem locks",
+      "startup": "construct at default, then push configured/default settings value",
+      "shutdown": "released with refresh owner; no independent lifecycle",
+      "tests": ["backend/app_settings_test.go", "backend/app_refresh_setup_test.go"],
+      "owner": "RefreshCoordinator",
+      "phase": "5B"
+    },
+    {
+      "id": "refresh-governor",
+      "fields": ["governorReconcileMu", "governorMu", "governorPolicy", "governorMRU", "governorVisible", "governorWindows", "governorPlanned", "governorApplied", "governorPressure", "governorHeapInuse", "governorBudget", "governorNow"],
+      "readers": ["backend/app_refresh_governor.go planning/diagnostics"],
+      "writers": ["backend/app_refresh_governor.go demand, pressure, reconciliation, reset"],
+      "mutex": "governorMu owns intent/state; governorReconcileMu serializes slow tier application",
+      "startup": "NewApp initializes policy/maps and refresh startup seeds selected clusters",
+      "shutdown": "refresh context cancellation stops pressure loop and teardown releases tiers",
+      "tests": ["backend/app_refresh_governor_test.go"],
+      "owner": "RefreshCoordinator",
+      "phase": "5B"
+    },
+    {
+      "id": "refresh-spill-and-cooled-state",
+      "fields": ["spillRoot", "spillFormat", "cooledMu", "cooledMmapClosers"],
+      "readers": ["backend/app_refresh_spill.go", "backend/app_refresh_governor.go"],
+      "writers": ["backend/app_refresh_spill.go spill/rewarm/cleanup", "backend/app_refresh_governor.go cooled transitions"],
+      "mutex": "cooledMu guards per-cluster mmap closers independently of governorMu",
+      "startup": "roots/formats resolve when maintained stores spill or rewarm",
+      "shutdown": "unroute readers before taking and closing mmap mappings; Factory Reset clears spill artifacts after teardown",
+      "tests": ["backend/app_refresh_spill_test.go", "backend/app_refresh_governor_test.go"],
+      "owner": "RefreshCoordinator",
+      "phase": "5B"
+    },
+    {
+      "id": "catalog-runtime",
+      "fields": ["objectCatalogMu", "objectCatalogEntries"],
+      "readers": ["backend/app_object_catalog.go", "backend/app_refresh_setup.go catalog wiring"],
+      "writers": ["backend/app_object_catalog.go create/start/stop/cleanup"],
+      "mutex": "objectCatalogMu guards per-cluster catalog runtime entries",
+      "startup": "built with cluster refresh runtime after client readiness",
+      "shutdown": "cluster and process teardown stop catalog producers",
+      "tests": ["backend/app_object_catalog_test.go"],
+      "owner": "RefreshCoordinator",
+      "phase": "5B"
+    },
+    {
+      "id": "cluster-discovery",
+      "fields": ["availableKubeconfigs", "kubeconfigDiscoveryState", "kubeconfigWatcher"],
+      "readers": ["backend/kubeconfigs.go discovery queries", "backend/kubeconfig_watcher.go"],
+      "writers": ["backend/kubeconfigs.go discover/rediscover", "backend/kubeconfig_watcher.go start/retarget/stop"],
+      "mutex": "currently shares kubeconfigsMu; extraction introduces cluster-runtime-owned discovery synchronization",
+      "startup": "first runtime-ready window discovers kubeconfigs and starts watcher",
+      "shutdown": "watcher stops before cluster teardown",
+      "tests": ["backend/kubeconfigs_test.go", "backend/kubeconfig_watcher_test.go"],
+      "owner": "ClusterRuntimeManager",
+      "phase": "5A"
+    },
+    {
+      "id": "workspace-selection",
+      "fields": ["selectedKubeconfigs", "kubeconfigsMu", "selectionMutationMu", "workspaceSelections", "selectionMutationDrainMu", "selectionMutationDrainCond", "selectionMutationPending", "kubeconfigChangeMu", "selectionGeneration", "selectionGenCtxMu", "selectionGenCancel", "selectionDiag", "requestClusterScopeRebuildFn", "scopeRebuildQueued"],
+      "readers": ["backend/kubeconfigs.go", "backend/kubeconfig_selection_coordinator.go", "backend/cluster_workspace.go", "backend/app_selection_diagnostics.go", "backend/app_cluster_settings.go"],
+      "writers": ["backend/kubeconfigs.go selection commits", "backend/kubeconfig_selection_coordinator.go generation/drain", "backend/cluster_workspace.go peer changes", "backend/app_cluster_settings.go scope rebuild queue"],
+      "mutex": "selectionMutationMu serializes workflows; kubeconfigChangeMu and selection generation locks preserve documented order; kubeconfigsMu is narrowed after discovery moves",
+      "startup": "preferences-backed selected clusters restore through serialized mutation",
+      "shutdown": "pre-quit waits for mutation drain; peer/process shutdown releases selections and cancels active generation",
+      "tests": ["backend/kubeconfig_selection_coordinator_test.go", "backend/cluster_workspace_test.go", "backend/app_selection_diagnostics_test.go", "backend/app_cluster_settings_test.go"],
+      "owner": "WorkspaceCoordinator",
+      "phase": "5C"
+    },
+    {
+      "id": "cluster-runtime",
+      "fields": ["clusterClientsMu", "clusterClients", "clusterOps", "clusterLifecycle", "kubeAPIMetrics", "transportStatesMu", "transportStates", "kubeClientInitializer"],
+      "readers": ["backend/cluster_clients.go", "backend/cluster_auth.go", "backend/app_refresh_recovery.go", "backend/fetch_helpers.go", "backend/shell_sessions.go", "backend/portforward_ports.go"],
+      "writers": ["backend/cluster_clients.go build/remove", "backend/cluster_auth.go recovery", "backend/app_refresh_recovery.go transport state", "backend/app_lifecycle.go initialization/shutdown"],
+      "mutex": "clusterClientsMu owns client map; transportStatesMu owns per-cluster failure trackers; clusterOps serializes cluster work",
+      "startup": "selection creates clients/lifecycle/metrics and dependency readiness",
+      "shutdown": "auth managers stop, operations clean up, clients are removed after refresh teardown",
+      "tests": ["backend/cluster_clients_test.go", "backend/cluster_auth_event_test.go", "backend/app_refresh_recovery_test.go", "backend/cluster_lifecycle_test.go"],
+      "owner": "ClusterRuntimeManager",
+      "phase": "5A"
+    },
+    {
+      "id": "cluster-workspace-projection",
+      "fields": ["clusterWorkspaceMu", "clusterWorkspaceRevision", "clusterHealth", "clusterScopeRevisions"],
+      "readers": ["backend/cluster_workspace.go aggregate replay"],
+      "writers": ["backend/app_heartbeat.go health", "backend/app_cluster_settings.go scope revision", "backend/cluster_workspace.go cleanup"],
+      "mutex": "clusterWorkspaceMu plus atomic aggregate revision provide one consistent replay snapshot",
+      "startup": "empty projection initialized in NewApp and populated by cluster/scope owners",
+      "shutdown": "per-cluster cleanup removes projection state before final replay",
+      "tests": ["backend/cluster_workspace_test.go", "backend/app_heartbeat_test.go", "backend/app_cluster_settings_test.go"],
+      "owner": "ClusterWorkspaceProjection",
+      "phase": "5A"
+    },
+    {
+      "id": "cluster-attention",
+      "fields": ["attentionRulesMu"],
+      "readers": ["backend/app_cluster_attention.go effective rules"],
+      "writers": ["backend/app_cluster_attention.go ignore/restore transactions and live target application"],
+      "mutex": "attentionRulesMu serializes persisted rule changes with live index updates",
+      "startup": "persisted rules apply as refresh Attention targets register",
+      "shutdown": "targets unregister with refresh; Factory Reset clears persisted-rule projection",
+      "tests": ["backend/app_cluster_attention_test.go"],
+      "owner": "ClusterAttentionService",
+      "phase": "3"
+    },
+    {
+      "id": "shell-operations",
+      "fields": ["shellSessions", "shellSessionsMu"],
+      "readers": ["backend/shell_sessions.go", "backend/shell_sessions_lifecycle.go"],
+      "writers": ["backend/shell_sessions.go start/input/resize/close", "backend/shell_sessions_lifecycle.go cleanup"],
+      "mutex": "shellSessionsMu guards the session map; each session owns its own I/O synchronization",
+      "startup": "lazy per command",
+      "shutdown": "cluster and process cleanup close sessions and publish terminal state",
+      "tests": ["backend/shell_sessions_test.go"],
+      "owner": "OperationsCoordinator",
+      "phase": "2"
+    },
+    {
+      "id": "port-forward-operations",
+      "fields": ["portForwardSessions", "portForwardSessionsMu"],
+      "readers": ["backend/portforward.go", "backend/portforward_lifecycle.go"],
+      "writers": ["backend/portforward.go start/stop", "backend/portforward_lifecycle.go cleanup"],
+      "mutex": "portForwardSessionsMu guards the session map; session cancellation is owned per entry",
+      "startup": "lazy per object action",
+      "shutdown": "cluster and process cleanup stop forwarding and publish status",
+      "tests": ["backend/portforward_test.go"],
+      "owner": "OperationsCoordinator",
+      "phase": "2"
+    },
+    {
+      "id": "runtime-operation-registry",
+      "fields": ["runtimeOperations", "runtimeOperationsMu"],
+      "readers": ["backend/runtime_operations.go listing and lifecycle lookup"],
+      "writers": ["backend/runtime_operations.go registration/unregistration/cleanup", "backend/node_actions.go drain registration"],
+      "mutex": "runtimeOperationsMu protects registry initialization while registry owns active entries",
+      "startup": "NewApp creates the process registry",
+      "shutdown": "cluster/process cleanup cancels active operations idempotently",
+      "tests": ["backend/runtime_operations_test.go", "backend/workload_actions_test.go"],
+      "owner": "OperationsCoordinator",
+      "phase": "2"
+    },
+    {
+      "id": "application-updates",
+      "fields": ["applicationUpdates", "applicationUpdateEventUnsubscribers"],
+      "readers": ["backend/app_updates.go commands/snapshots", "backend/app_lifecycle.go runtime-ready/shutdown"],
+      "writers": ["backend/app_updates_config.go composition", "backend/app_updates.go subscriptions", "backend/app_lifecycle.go unsubscribe/stop"],
+      "mutex": "backend/internal/appupdates.Coordinator owns its internal synchronization",
+      "startup": "main.go configures temp root/state before service registration; first runtime-ready window starts scheduler",
+      "shutdown": "Stop quiesces update work and event subscriptions are removed",
+      "tests": ["backend/app_updates_test.go", "backend/internal/appupdates/coordinator_test.go", "cmd/project/wails_project_contract_test.go"],
+      "owner": "UpdateCoordinator",
+      "phase": "3"
+    }
+  ],
+  "commandGroups": [
+    {
+      "id": "favorites-commands",
+      "commands": ["AddFavorite", "DeleteFavorite", "GetFavorites", "SetFavoriteOrder", "UpdateFavorite"],
+      "frontendBroker": "frontend/src/core/backend-api/index.ts",
+      "consumers": ["frontend favorite hooks, command palette, sidebar and object actions"],
+      "identity": "favorite IDs; embedded object references retain complete cluster/GVK/namespace/name identity",
+      "errorContract": "validation and persistence failures reject without partial mutation",
+      "owner": "FavoritesService",
+      "phase": "3"
+    },
+    {
+      "id": "ui-state-commands",
+      "commands": ["ClearGridTablePersistence", "DeleteGridTablePersistence", "DeleteGridTablePersistenceEntries", "GetClusterTabOrder", "GetGridTablePersistence", "SetClusterTabOrder", "SetGridTablePersistence"],
+      "frontendBroker": "frontend/src/core/backend-api/index.ts",
+      "consumers": ["frontend grid persistence and cluster-tab ordering"],
+      "identity": "clusterId remains in cluster-scoped persistence keys; table/view keys remain explicit",
+      "errorContract": "invalid keys or I/O failures return errors without corrupting the persistence document",
+      "owner": "UIStateStore",
+      "phase": "3"
+    },
+    {
+      "id": "preferences-commands",
+      "commands": ["ApplyTheme", "DeleteTheme", "GetAppSettings", "GetAppSettingsSchema", "GetKubeconfigSearchPaths", "GetThemes", "GetZoomLevel", "MatchThemeForCluster", "ReorderThemes", "SaveTheme", "SetZoomLevel", "UpdateAppPreferences", "ValidateThemeClusterPattern"],
+      "frontendBroker": "frontend/src/core/backend-api/index.ts",
+      "consumers": ["frontend settings, theme, appearance and startup hydration"],
+      "identity": "process settings; cluster-pattern matching receives explicit cluster identity text",
+      "errorContract": "whole-batch validation/persistence is atomic; reads surface lazy-load failure",
+      "owner": "PreferencesService",
+      "phase": "3"
+    },
+    {
+      "id": "data-management-commands",
+      "commands": ["ClearAppState", "ExportFavorites", "ExportSettings", "ImportFavorites", "ImportSettings"],
+      "frontendBroker": "frontend/src/core/backend-api/index.ts",
+      "consumers": ["frontend data-management settings surface"],
+      "identity": "portable records preserve cluster/object identity; Factory Reset is process-wide",
+      "errorContract": "imports validate before owner commits; reset attempts every owner, aggregates failures and reloads only after complete success",
+      "owner": "DataManagementCoordinator",
+      "phase": "3"
+    },
+    {
+      "id": "attention-commands",
+      "commands": ["IgnoreClusterAttentionFindingType", "IgnoreClusterAttentionObjectFinding", "IgnoreGlobalAttentionFindingType", "RestoreClusterAttentionFindingType", "RestoreClusterAttentionObjectFinding", "RestoreGlobalAttentionFindingType"],
+      "frontendBroker": "frontend/src/core/backend-api/index.ts",
+      "consumers": ["frontend Cluster Attention facets and object findings"],
+      "identity": "cluster-scoped commands require clusterId; object findings retain finding type plus complete object identity",
+      "errorContract": "persistence and live-index update form one serialized transaction",
+      "owner": "ClusterAttentionService",
+      "phase": "3"
+    },
+    {
+      "id": "workspace-commands",
+      "commands": ["ApplyClusterWorkspace", "GetClusterAllowedNamespaces", "GetClusterWorkspaceStateForWindow", "GetSelectionDiagnostics", "SetClusterAllowedNamespaces", "SetKubeconfigSearchPaths"],
+      "frontendBroker": "frontend/src/core/backend-api/index.ts",
+      "consumers": ["frontend peer workspace, namespace scope, kubeconfig settings and diagnostics"],
+      "identity": "window name and clusterId are explicit; selected kubeconfigs remain path/context pairs",
+      "errorContract": "mutations serialize, persist intent before runtime convergence and reject superseded generations without partial commit",
+      "owner": "WorkspaceCoordinator",
+      "phase": "5C"
+    },
+    {
+      "id": "cluster-runtime-commands",
+      "commands": ["GetKubeconfigs", "GetKubernetesAPIClientDiagnostics", "RetryClusterAuth"],
+      "frontendBroker": "frontend/src/core/backend-api/index.ts",
+      "consumers": ["frontend cluster selection, auth recovery and diagnostics"],
+      "identity": "kubeconfig entries retain path/context identity; diagnostics and retries require clusterId",
+      "errorContract": "not-ready and auth failures are explicit; retry remains available to reach readiness",
+      "owner": "ClusterRuntimeManager",
+      "phase": "5A"
+    },
+    {
+      "id": "resource-commands",
+      "commands": ["ApplyObjectYaml", "CheckObjectYamlOwnership", "DiscoverNodeLogs", "FetchContainerLogs", "FetchNodeLogs", "FindCatalogObjectByUID", "FindCatalogObjectMatch", "GetContainerLogsScopeContainers", "GetObjectYAMLByGVK", "GetPodContainers", "GetRevisionHistory", "GetTargetPorts", "HydrateCatalogCustomRows", "IsWorkloadHPAManaged", "MergeObjectYamlWithLatest", "QueryPermissions", "RunObjectAction"],
+      "frontendBroker": "frontend/src/core/backend-api/index.ts",
+      "consumers": ["frontend Browse, object panel, YAML editor, logs, permissions and object actions"],
+      "identity": "clusterId/group/version/kind are mandatory at the boundary; concrete objects also require namespace/name",
+      "errorContract": "invalid identity, unavailable catalog/client, RBAC denial, conflicts and Kubernetes failures remain typed/explicit",
+      "owner": "ResourceGateway",
+      "phase": "4"
+    },
+    {
+      "id": "operations-commands",
+      "commands": ["CancelDrainNodeJob", "CloseShellSession", "GetShellSessionBacklog", "ListPortForwards", "ListRuntimeOperations", "ListShellSessions", "ResizeShellSession", "SendShellInput", "StartShellSession", "StopPortForward"],
+      "frontendBroker": "frontend/src/core/backend-api/index.ts",
+      "consumers": ["frontend shell/debug, port-forward, node maintenance and runtime-operation panels"],
+      "identity": "clusterId plus session/forward/job IDs; shell targets retain complete object identity",
+      "errorContract": "unknown/mismatched cluster operation IDs fail explicitly; cancellation and cleanup are idempotent",
+      "owner": "OperationsCoordinator",
+      "phase": "2"
+    },
+    {
+      "id": "update-commands",
+      "commands": ["CheckForUpdates", "DownloadApplicationUpdate", "GetAppInfo", "RemoveApplicationUpdateSkip", "RestartAndApplyApplicationUpdate", "SkipApplicationUpdate"],
+      "frontendBroker": "frontend/src/core/backend-api/index.ts",
+      "consumers": ["frontend about and application-update surfaces"],
+      "identity": "application version identity; no cluster identity",
+      "errorContract": "invalid update transitions, unavailable builds, download/apply failures and recovery state remain explicit",
+      "owner": "UpdateCoordinator",
+      "phase": "3"
+    },
+    {
+      "id": "application-log-commands",
+      "commands": ["ClearAppLogs", "GetAppLogs", "GetAppLogsSince", "LogAppLogsFromFrontend", "LogAppLogsFromFrontendWithCluster"],
+      "frontendBroker": "frontend/src/core/backend-api/index.ts",
+      "consumers": ["frontend application-log panel and frontend log bridge"],
+      "identity": "sequence cursor plus optional explicit clusterId/clusterName",
+      "errorContract": "sequence reads are monotonic; malformed frontend entries are rejected without corrupting the buffer",
+      "owner": "AppLogService",
+      "phase": "3"
+    },
+    {
+      "id": "desktop-shell-commands",
+      "commands": ["OpenKubeconfigSearchPathDialog", "SaveCsvFile", "SetAppLogsPanelVisible", "SetSidebarVisible"],
+      "frontendBroker": "frontend/src/core/backend-api/index.ts",
+      "consumers": ["frontend dialogs, CSV export and process shell visibility"],
+      "identity": "current window/process UI state; no inferred cluster identity",
+      "errorContract": "native-runtime unavailability and file-dialog/write failures are returned explicitly",
+      "owner": "DesktopShell",
+      "phase": "3"
+    }
+  ],
+  "appBackpointerGroups": [
+    {
+      "id": "refresh-backpointers",
+      "entries": ["app_refresh_governor.go:appGovernorExecutor.app"],
+      "replacement": "RefreshCoordinator-owned executor state",
+      "phase": "5B"
+    },
+    {
+      "id": "cluster-runtime-backpointers",
+      "entries": ["cluster_auth.go:clusterSubsystemRebuild.app", "kubeconfig_watcher.go:kubeconfigWatcher.app"],
+      "replacement": "ClusterRuntimeManager collaborators for subsystem rebuild and discovery",
+      "phase": "5A"
+    },
+    {
+      "id": "resource-backpointers",
+      "entries": ["cluster_dependencies.go:appResourceResolver.app", "fetch_helpers.go:fetchRetryOperation.app", "object_actions.go:objectActionInvocation.app", "object_detail_provider.go:objectDetailProvider.app", "response_cache_invalidation.go:ingestResponseCacheSink.app"],
+      "replacement": "ResourceGateway-owned clients, cache, permissions and invalidation collaborators",
+      "phase": "4"
+    },
+    {
+      "id": "operation-backpointers",
+      "entries": ["portforward_lifecycle.go:portForwardLifecycle.app", "shell_sessions.go:shellEventWriter.app", "shell_sessions_lifecycle.go:shellSessionLifecycle.app"],
+      "replacement": "OperationsCoordinator-owned lifecycle and event collaborators",
+      "phase": "2"
+    }
+  ],
+  "appParameterFunctionGroups": [
+    {
+      "id": "error-reporting-app-parameters",
+      "entries": ["app_settings.go:InitializeErrorReporting:a"],
+      "replacement": "package-level non-Wails entry point accepting ErrorReportingService and PreferencesService collaborators",
+      "phase": "3"
+    },
+    {
+      "id": "test-support-app-parameters",
+      "entries": ["app_testing.go:InitializeForTesting:a", "app_testing.go:SetApiExtensionsClientForTest:a", "app_testing.go:SetDynamicClientForTest:a", "app_testing.go:SetMetricsClientForTest:a", "app_testing.go:SetRestConfigForTest:a"],
+      "replacement": "component-specific test builders and options",
+      "phase": "6"
+    },
+    {
+      "id": "update-app-parameters",
+      "entries": ["app_updates_config.go:ConfigureApplicationUpdates:app"],
+      "replacement": "UpdateCoordinator composition input",
+      "phase": "3"
+    },
+    {
+      "id": "cluster-runtime-app-parameters",
+      "entries": ["cluster_clients.go:validateClusterClientSync:a", "kubeconfig_watcher.go:newKubeconfigWatcher:app"],
+      "replacement": "ClusterRuntimeManager state and narrow discovery collaborators",
+      "phase": "5A"
+    },
+    {
+      "id": "resource-app-parameters",
+      "entries": ["fetch_helpers.go:FetchClusterResource:a", "fetch_helpers.go:FetchNamespacedResource:a", "fetch_helpers.go:FetchResourceWithSelection:a", "fetch_helpers.go:ensureDependenciesInitialized:a", "fetch_helpers.go:executeWithRetry:a"],
+      "replacement": "ResourceGateway methods and narrow client/readiness collaborators",
+      "phase": "4"
+    },
+    {
+      "id": "desktop-shell-app-parameters",
+      "entries": ["menu.go:ConfigureWorkspaceWindowCreator:app", "menu.go:CreateMenu:app", "menu.go:addDarwinWindowMenu:app", "menu.go:addDebugOverlayMenuItem:app", "menu.go:addDesktopFileMenuItems:app", "menu.go:addDesktopHelpMenu:app", "menu.go:addFileMenu:app", "menu.go:addMacApplicationMenu:app", "menu.go:addViewToggleMenuItems:app", "menu.go:addWindowMenuAction:_", "menu.go:addZoomMenuItems:app", "menu.go:bringAllWindowsToFront:app", "menu.go:createApplicationMenu:app", "menu.go:createDebugMenu:app", "menu.go:createEditMenu:app", "menu.go:createHelpMenu:app", "menu.go:createViewMenu:app", "menu.go:createWindowMenu:app", "menu.go:emitMenuEvent:app", "menu.go:emitMenuEventWhenReady:app", "menu.go:hideApplicationCallback:app", "menu.go:populateMenu:app", "menu.go:quitApplicationCallback:app"],
+      "replacement": "DesktopShell methods and narrow menu/window/event collaborators",
+      "phase": "3"
+    },
+    {
+      "id": "operation-app-parameters",
+      "entries": ["shell_sessions.go:startShellSessionStream:app"],
+      "replacement": "OperationsCoordinator stream publisher collaborator",
+      "phase": "2"
+    }
+  ],
+  "directAppTestGroups": [
+    {
+      "id": "attention-component-tests",
+      "files": ["app_cluster_attention_test.go"],
+      "classification": "component",
+      "owner": "ClusterAttentionService",
+      "phase": "3"
+    },
+    {
+      "id": "preferences-component-tests",
+      "files": ["app_settings_test.go", "app_settings_themes_test.go"],
+      "classification": "component",
+      "owner": "PreferencesService",
+      "phase": "3"
+    },
+    {
+      "id": "desktop-shell-component-tests",
+      "files": ["app_csv_export_test.go", "app_ui_test.go", "menu_test.go"],
+      "classification": "component",
+      "owner": "DesktopShell",
+      "phase": "3"
+    },
+    {
+      "id": "application-log-component-tests",
+      "files": ["app_logs_test.go", "logger_test.go"],
+      "classification": "component",
+      "owner": "AppLogService",
+      "phase": "3"
+    },
+    {
+      "id": "ui-state-component-tests",
+      "files": ["app_persistence_test.go"],
+      "classification": "component",
+      "owner": "UIStateStore",
+      "phase": "3"
+    },
+    {
+      "id": "update-component-tests",
+      "files": ["app_updates_test.go", "app_version_test.go"],
+      "classification": "component",
+      "owner": "UpdateCoordinator",
+      "phase": "3"
+    },
+    {
+      "id": "refresh-component-tests",
+      "files": ["app_object_catalog_test.go", "app_refresh_governor_test.go", "app_refresh_service_test.go", "app_refresh_setup_test.go", "app_refresh_spill_test.go", "app_refresh_subsystems_swap_test.go", "refresh_aggregate_snapshot_test.go"],
+      "classification": "component",
+      "owner": "RefreshCoordinator",
+      "phase": "5B"
+    },
+    {
+      "id": "cluster-runtime-component-tests",
+      "files": ["app_kubernetes_client_test.go", "cluster_auth_test.go", "cluster_clients_test.go", "cluster_dependencies_test.go", "cluster_lifecycle_test.go", "cluster_operation_coordinator_test.go", "kubeconfig_watcher_test.go"],
+      "classification": "component",
+      "owner": "ClusterRuntimeManager",
+      "phase": "5A"
+    },
+    {
+      "id": "workspace-component-tests",
+      "files": ["app_selection_diagnostics_test.go", "cluster_workspace_test.go", "kubeconfig_selection_coordinator_test.go", "kubeconfigs_test.go"],
+      "classification": "component",
+      "owner": "WorkspaceCoordinator",
+      "phase": "5C"
+    },
+    {
+      "id": "resource-component-tests",
+      "files": ["app_permissions_test.go", "autoscaling_details_test.go", "fetch_helpers_test.go", "object_actions_test.go", "object_detail_provider_test.go", "object_finalizer_actions_test.go", "object_yaml_collision_test.go", "object_yaml_mutation_test.go", "resource_bindings_test.go", "resource_permission_test.go", "response_cache_permissions_test.go", "response_cache_test.go", "workload_actions_test.go", "workload_rollback_test.go"],
+      "classification": "component",
+      "owner": "ResourceGateway",
+      "phase": "4"
+    },
+    {
+      "id": "operations-component-tests",
+      "files": ["portforward_ports_test.go", "portforward_test.go", "runtime_operations_test.go", "shell_sessions_error_test.go", "shell_sessions_test.go"],
+      "classification": "component",
+      "owner": "OperationsCoordinator",
+      "phase": "2"
+    },
+    {
+      "id": "test-support-component-tests",
+      "files": ["app_testing_test.go"],
+      "classification": "component",
+      "owner": "ComponentTestSupport",
+      "phase": "6"
+    },
+    {
+      "id": "cluster-scope-workflow-tests",
+      "files": ["app_cluster_settings_test.go"],
+      "classification": "cross-component-workflow",
+      "owner": "WorkspaceCoordinator",
+      "phase": "5C"
+    },
+    {
+      "id": "data-management-workflow-tests",
+      "files": ["app_data_management_test.go", "app_installation_telemetry_test.go"],
+      "classification": "cross-component-workflow",
+      "owner": "DataManagementCoordinator",
+      "phase": "3"
+    },
+    {
+      "id": "cluster-health-workflow-tests",
+      "files": ["app_heartbeat_test.go", "cluster_auth_event_test.go"],
+      "classification": "cross-component-workflow",
+      "owner": "ClusterWorkspaceProjection",
+      "phase": "5A"
+    },
+    {
+      "id": "refresh-replacement-workflow-tests",
+      "files": ["app_refresh_recovery_test.go", "app_refresh_update_test.go", "response_cache_invalidation_test.go"],
+      "classification": "cross-component-workflow",
+      "owner": "RefreshCoordinator",
+      "phase": "5B"
+    },
+    {
+      "id": "cluster-removal-workflow-tests",
+      "files": ["cluster_clients_sync_test.go"],
+      "classification": "cross-component-workflow",
+      "owner": "ClusterRuntimeManager",
+      "phase": "5A"
+    },
+    {
+      "id": "multi-cluster-workflow-tests",
+      "files": ["multi_cluster_isolation_test.go"],
+      "classification": "cross-component-workflow",
+      "owner": "ApplicationRuntime",
+      "phase": "6"
+    },
+    {
+      "id": "full-composition-lifecycle-tests",
+      "files": ["app_lifecycle_init_test.go", "app_lifecycle_test.go", "app_runtime_test.go"],
+      "classification": "full-composition-lifecycle",
+      "owner": "ApplicationRuntime",
+      "phase": "6"
+    }
+  ],
+  "testOnlyAppMethodGroups": [
+    {
+      "id": "resource-test-entrypoints",
+      "entries": ["test_entrypoints_test.go:App.cordonNode", "test_entrypoints_test.go:App.createDebugContainer", "test_entrypoints_test.go:App.deleteHelmRelease", "test_entrypoints_test.go:App.deleteNode", "test_entrypoints_test.go:App.deletePod", "test_entrypoints_test.go:App.deleteResourceByGVK", "test_entrypoints_test.go:App.drainNode", "test_entrypoints_test.go:App.forceDeleteNode", "test_entrypoints_test.go:App.getGVRForGVK", "test_entrypoints_test.go:App.invalidateResponseCacheForObject", "test_entrypoints_test.go:App.restartWorkload", "test_entrypoints_test.go:App.rollbackWorkload", "test_entrypoints_test.go:App.scaleWorkload", "test_entrypoints_test.go:App.suspendCronJob", "test_entrypoints_test.go:App.triggerCronJob", "test_entrypoints_test.go:App.uncordonNode"],
+      "replacement": "ResourceGateway test helpers against focused resource collaborators",
+      "phase": "4"
+    },
+    {
+      "id": "operations-test-entrypoints",
+      "entries": ["test_entrypoints_test.go:App.closeShellSessionForRuntime", "test_entrypoints_test.go:App.startPortForward", "test_entrypoints_test.go:App.stopPortForwardForRuntime"],
+      "replacement": "OperationsCoordinator test helpers against focused operation registries",
+      "phase": "2"
+    }
+  ],
+  "settingsEffectRoutes": [
+    {
+      "route": "errorReporting",
+      "baseline": "one of the five current settingsSideEffects flags, applied by App.applyErrorReportingSideEffect",
+      "producers": ["UpdateAppPreferences", "ImportSettings", "InitializeErrorReporting startup composition"],
+      "owner": "ErrorReportingService",
+      "sink": "ErrorReportingEnabledSink.SetEnabled",
+      "target": "sentryreporting.Reporter plus installation-registration scheduling",
+      "startup": "unbound startup composition calls PreferencesService.EnsureLoaded and remains disabled on load error or startup-default provenance",
+      "update": "successful update/import dispatches after the preferences lock is released; reset dispatches disabled",
+      "validation": ["backend/app_settings_test.go error-reporting failure and persistence tests", "cmd/project composition-order contract"]
+    },
+    {
+      "route": "kubernetesClientRateLimits",
+      "baseline": "one of the five current settingsSideEffects flags, applied by App.applyKubernetesClientRateLimitsSideEffect",
+      "producers": ["UpdateAppPreferences", "ImportSettings"],
+      "owner": "ClusterRuntimeManager",
+      "sink": "KubernetesClientRateLimitSink.SetRateLimits",
+      "target": "existing cluster clients and construction defaults for future clients",
+      "startup": "future clients receive the immutable loaded/default snapshot during ClusterRuntimeManager construction rather than a load-time callback",
+      "update": "successful update/import retimes existing clients after preferences unlock; reset dispatches defaults",
+      "validation": ["backend/app_settings_test.go rate-limit update tests", "backend/cluster_clients_sync_test.go client construction tests"]
+    },
+    {
+      "route": "containerLogsPerScopeLimit",
+      "baseline": "one of the five current settingsSideEffects flags; load and update write backend/internal/containerlogs.currentPerScopeTargetLimit",
+      "producers": ["loadAppSettings", "UpdateAppPreferences", "ImportSettings"],
+      "owner": "ContainerLogsSelectionPolicy",
+      "sink": "ContainerLogsPerScopeLimitSink.SetLimit",
+      "target": "containerlogs currentPerScopeTargetLimit read by pod log discovery and container-logs streamer selection",
+      "startup": "policy starts at default and successful EnsureLoaded or atomic startup fallback pushes configured/default value after preferences unlock",
+      "update": "successful update/import pushes the committed value; reset pushes default",
+      "validation": ["backend/app_settings_test.go per-scope clamp/effect tests", "backend/internal/containerlogs/targets_test.go"]
+    },
+    {
+      "route": "containerLogsGlobalLimit",
+      "baseline": "one of the five current settingsSideEffects flags; load/update call the App-owned process limiter",
+      "producers": ["loadAppSettings", "UpdateAppPreferences", "ImportSettings"],
+      "owner": "RefreshCoordinator",
+      "sink": "ContainerLogsGlobalLimitSink.SetLimit",
+      "target": "the one process-wide target limiter shared by every container-logs subsystem",
+      "startup": "construct limiter at default, then successful EnsureLoaded or atomic startup fallback pushes configured/default value after preferences unlock",
+      "update": "successful update/import immediately pushes committed value; reset pushes default without reading preferences under the limiter leaf lock",
+      "validation": ["backend/app_settings_test.go global-limit and settings-lock regression tests", "backend/app_refresh_setup_test.go shared-limiter leaf-lock regression test"]
+    },
+    {
+      "route": "metricsInterval",
+      "baseline": "one of the five current settingsSideEffects flags; App snapshots refresh subsystems and retimes every manager",
+      "producers": ["UpdateAppPreferences", "ImportSettings"],
+      "owner": "RefreshCoordinator",
+      "sink": "MetricsCadenceSink.SetInterval",
+      "target": "existing subsystem managers plus construction defaults for future subsystems",
+      "startup": "future subsystems receive cadence from the immutable snapshot during refresh construction",
+      "update": "successful update/import snapshots subsystem pointers under the registry lock, releases it, then retimes managers; reset dispatches default",
+      "validation": ["backend/app_settings_test.go metrics cadence tests", "backend/app_refresh_update_test.go subsystem update tests"]
+    },
+    {
+      "route": "permissionSSRRFetchConcurrency",
+      "baseline": "sixth route replacing the current direct App.permissionSSRRFetchConcurrency settings read; it is not a settingsSideEffects flag today",
+      "producers": ["successful settings load", "atomic startup fallback", "UpdateAppPreferences", "ImportSettings", "Factory Reset"],
+      "owner": "PermissionFetchPolicy",
+      "sink": "PermissionFetchConcurrencySink.SetLimit",
+      "target": "fetchSSRRRulesForNamespaces permission fan-out concurrency",
+      "startup": "policy starts at default and successful EnsureLoaded or atomic startup fallback pushes configured/default value before settings readiness is returned",
+      "update": "successful update/import pushes committed value after preferences unlock; reset pushes default",
+      "validation": ["backend/app_permissions_test.go SSRR concurrency tests", "backend/app_settings_test.go permission preference clamp tests"]
+    }
+  ],
+  "settingsLoadCallers": [
+    {
+      "entry": "app_kubernetes_client.go:App.initializeSelectedClustersAtStartup",
+      "currentLock": "runSelectionMutation encloses an explicit settingsMu Lock/Unlock around loadAppSettings",
+      "failurePolicy": "install defaults, log the load failure and continue restoring selected clusters",
+      "replacement": "call PreferencesService.EnsureLoadedForStartup before entering the selection mutation; restore only the returned immutable snapshot",
+      "phase": "3 then 5C"
+    },
+    {
+      "entry": "app_settings.go:App.GetAppSettings",
+      "currentLock": "settingsMu Lock with deferred Unlock",
+      "failurePolicy": "return the load error and install no snapshot",
+      "replacement": "PreferencesService.EnsureLoaded coalesces lazy load and completes post-unlock effects before returning the snapshot",
+      "phase": "3"
+    },
+    {
+      "entry": "app_settings.go:App.prepareAppPreferenceUpdate",
+      "currentLock": "settingsMu Lock with deferred Unlock",
+      "failurePolicy": "return the load error and perform no mutation or side effect",
+      "replacement": "PreferencesService.EnsureLoaded followed by a locked copy/validate/persist commit and post-unlock effect dispatch",
+      "phase": "3"
+    },
+    {
+      "entry": "app_settings.go:InitializeErrorReporting",
+      "currentLock": "explicit settingsMu Lock with Unlock on success and load-error paths",
+      "failurePolicy": "disable reporting and return the error",
+      "replacement": "unbound startup composition sequences PreferencesService.EnsureLoaded into ErrorReportingService without exposing a Wails command",
+      "phase": "3"
+    }
+  ],
+  "directSettingsLoadTestGroups": [
+    {
+      "id": "settings-persistence-codec-repository-calls",
+      "entries": ["app_cluster_settings_test.go:TestClusterAllowedNamespacesSurviveSaveAppSettings#1", "app_settings_test.go:TestAppPaletteTintMigration#1", "app_settings_test.go:TestAppRetiredTableRowCapPreferenceIsRejected#1", "app_settings_test.go:TestAppSaveAndLoadAppSettingsRoundTrip#1", "app_settings_test.go:TestAppSetAccentColorPersists#1", "app_settings_test.go:TestAppSetAppearanceModePersistsAndLogs#1", "app_settings_test.go:TestAppSetAutoRefreshEnabledPersists#1", "app_settings_test.go:TestAppSetBackgroundRefreshEnabledPersists#1", "app_settings_test.go:TestAppSetDefaultObjectPanelPositionPersists#1", "app_settings_test.go:TestAppSetDimInactiveNamespacesPersists#1", "app_settings_test.go:TestAppSetExclusiveNamespacesPersists#1", "app_settings_test.go:TestAppSetGridTablePersistenceModePersists#1", "app_settings_test.go:TestAppSetKubernetesAPISettingsPersistAndClamp#1", "app_settings_test.go:TestAppSetObjPanelLogsAPITimestampFormatPersists#1", "app_settings_test.go:TestAppSetObjPanelLogsAPITimestampUseLocalTimeZonePersists#1", "app_settings_test.go:TestAppSetObjPanelLogsBufferMaxSizePersistsAndClamps#1", "app_settings_test.go:TestAppSetObjPanelLogsTargetGlobalLimitPersistsAndClamps#1", "app_settings_test.go:TestAppSetObjPanelLogsTargetPerScopeLimitPersistsAndClamps#1", "app_settings_test.go:TestAppSetPaletteTintPersistsAndClamps#1", "app_settings_test.go:TestAppSetUseShortResourceNamesPersists#1", "app_settings_test.go:TestAppSettingsDefaultTablePageSize#1", "app_settings_test.go:TestAppUpdateAppPreferencesAppliesAtomicBatch#1", "app_settings_test.go:TestAppUpdateAppPreferencesRejectsInvalidBatchWithoutMutation#1"],
+      "classification": "persistence-codec-repository",
+      "replacement": "assert persisted documents through the Preferences repository/codec rather than the raw lazy initializer",
+      "phase": "3"
+    },
+    {
+      "id": "settings-import-ready-contract-call",
+      "entries": ["app_data_management_test.go:TestImportSettingsReplacesPortableSettingsAndPreservesSessionState#1"],
+      "classification": "ensure-loaded-contract",
+      "replacement": "assert that successful import invalidation is observed through PreferencesService.EnsureLoaded",
+      "phase": "3"
+    }
+  ],
+  "packageGlobalGroups": [
+    {
+      "id": "favorites-global-state",
+      "entries": ["app_favorites.go:favoritesMu"],
+      "mutation": "process-wide mutex currently serializes favorites.json access; move it with the file repository and do not retain a package-global lock",
+      "owner": "FavoritesService",
+      "phase": "3"
+    },
+    {
+      "id": "preferences-global-state",
+      "entries": ["app_installation_telemetry.go:anonymizedIDPattern", "app_settings.go:validHexColorRe", "app_settings.go:writeSettingsFileAtomic"],
+      "mutation": "compiled validators are immutable after initialization; the replaceable atomic-write function is a test seam that becomes a Preferences repository dependency",
+      "owner": "PreferencesService",
+      "phase": "3"
+    },
+    {
+      "id": "refresh-global-test-seams",
+      "entries": ["app_lifecycle.go:newRefreshSubsystemWithServices"],
+      "mutation": "replaceable constructor is test-only mutable state and becomes a RefreshCoordinator constructor dependency",
+      "owner": "RefreshCoordinator",
+      "phase": "5B"
+    },
+    {
+      "id": "update-and-build-global-state",
+      "entries": ["app_updates.go:applicationUpdateEventNames", "app_updates_config.go:applicationUpdatePublicKey", "app_version.go:BetaExpiry", "app_version.go:BuildTime", "app_version.go:GitCommit", "app_version.go:IsBetaBuild", "app_version.go:SentryDSN", "app_version.go:Version", "app_version.go:buildInfoFS"],
+      "mutation": "build variables and embedded data are set only by ldflags/init; update event names and public key are immutable after composition and become UpdateCoordinator configuration",
+      "owner": "UpdateCoordinator",
+      "phase": "3"
+    },
+    {
+      "id": "cluster-auth-environment-global-state",
+      "entries": ["auth_providers.go:defaultShellPaths", "auth_providers.go:envSetupOnce", "auth_providers.go:envSetupTimeout"],
+      "mutation": "one-time process PATH setup plus immutable timeout/path defaults move behind ClusterRuntimeManager environment initialization",
+      "owner": "ClusterRuntimeManager",
+      "phase": "5A"
+    },
+    {
+      "id": "resource-retry-global-state",
+      "entries": ["fetch_helpers.go:contextSleep", "fetch_helpers.go:fetchRetrySleep", "fetch_helpers.go:genericRetryTextReasons", "fetch_helpers.go:urlRetryTextReasons"],
+      "mutation": "retry reason tables remain immutable; replaceable sleep functions become ResourceGateway retry-policy dependencies",
+      "owner": "ResourceGateway",
+      "phase": "4"
+    },
+    {
+      "id": "container-log-selection-global-state",
+      "entries": ["internal/containerlogs/targets.go:currentPerScopeTargetLimit"],
+      "mutation": "atomic process-global setting is replaced by one injected ContainerLogsSelectionPolicy shared by direct reads and streams",
+      "owner": "ContainerLogsSelectionPolicy",
+      "phase": "3"
+    },
+    {
+      "id": "resource-registry-global-state",
+      "entries": ["object_actions.go:backendOnlyObjectActions", "object_actions.go:frontendObjectActions", "object_actions.go:objectActionHandlers", "object_detail_fetchers_generated.go:objectDetailFetchers", "object_detail_provider.go:detailFetcherVersionPins", "object_detail_provider.go:objectDetailFetcherGVKs", "object_yaml_ownership.go:objectYAMLOwnershipManagerPattern", "workload_actions.go:actionRestartableWorkloadKinds", "workload_actions.go:actionScalableWorkloadKinds", "workload_actions.go:workloadOperationsByKind", "workload_rollback.go:revisionHistoryWorkloadKinds", "workload_rollback.go:scalableWorkloadKinds"],
+      "mutation": "generated/derived action, detail and workload registries are immutable after package initialization and become ResourceGateway internals without runtime writers",
+      "owner": "ResourceGateway",
+      "phase": "4"
+    },
+    {
+      "id": "operations-global-state",
+      "entries": ["portforward_targets.go:portForwardTargetCapabilities", "shell_sessions.go:spdyExecutorFactory", "shell_sessions.go:websocketExecutorFactory"],
+      "mutation": "port target capabilities remain immutable; replaceable shell executor factories become OperationsCoordinator constructor dependencies",
+      "owner": "OperationsCoordinator",
+      "phase": "2"
+    }
+  ],
+  "readinessGates": [
+    {
+      "id": "event-publication-runtime-ready",
+      "tests": ["backend/app_runtime_test.go:TestDesktopRuntimeRequiresExplicitWindowReadiness"],
+      "contract": "event work before WindowRuntimeReady is dropped without allocating readiness; markRuntimeReady remains callable and later event work is delivered",
+      "owner": "ApplicationLifecycle",
+      "phase": "5C"
+    },
+    {
+      "id": "native-window-access-runtime-ready",
+      "tests": ["backend/app_runtime_test.go:TestNamedWorkspaceGeometryRequiresRuntimeReadiness"],
+      "contract": "geometry and clipboard access fail before runtime readiness; the readiness transition itself remains allowed and native access succeeds afterwards",
+      "owner": "DesktopShell",
+      "phase": "3"
+    },
+    {
+      "id": "interactive-startup-runtime-ready",
+      "tests": ["backend/app_lifecycle_test.go:TestStartupLoadsWindowSettingsOnlyAfterRuntimeReady", "backend/app_lifecycle_test.go:TestEveryPeerHandlesRuntimeReadyWhileProcessStartupRunsOnce"],
+      "contract": "ServiceStartup is allowed before window readiness but cannot perform interactive window work; the first peer readiness transition starts process interaction once and later peers still run peer-local hooks",
+      "owner": "ApplicationLifecycle",
+      "phase": "5C"
+    },
+    {
+      "id": "refresh-runtime-context-ready",
+      "tests": ["backend/app_lifecycle_test.go:TestEnsureRefreshRuntimeContextGuardsMissingContextAndReusesLiveRuntime", "backend/app_lifecycle_test.go:TestSetupRefreshSubsystemRequiresContext"],
+      "contract": "refresh context/setup is blocked before application readiness; installing readiness remains allowed and creates one reusable refresh runtime",
+      "owner": "RefreshCoordinator",
+      "phase": "5B"
+    }
+  ],
+  "raceBaselines": [
+    {
+      "id": "workspace-selection-race",
+      "tests": ["backend/kubeconfig_selection_coordinator_test.go:TestRunSelectionMutationSupersededGenerationCancelsPriorContext"],
+      "contract": "generation supersession and cancellation remain race-free",
+      "owner": "WorkspaceCoordinator",
+      "phase": "5C"
+    },
+    {
+      "id": "auth-recovery-race",
+      "tests": ["backend/cluster_auth_event_test.go:TestHandleClusterAuthStateChange_QueuesRecoveringMutationOutsideManagerLock"],
+      "contract": "auth-manager callbacks enqueue recovery outside the manager lock without a data race",
+      "owner": "ClusterRuntimeManager",
+      "phase": "5A"
+    },
+    {
+      "id": "refresh-replacement-race",
+      "tests": ["backend/app_refresh_update_test.go:TestSetSelectedKubeconfigsRapidChurnLeavesConsistentClusterState"],
+      "contract": "rapid selection churn leaves refresh and cluster state consistent without a race",
+      "owner": "RefreshCoordinator",
+      "phase": "5B"
+    },
+    {
+      "id": "application-shutdown-race",
+      "tests": ["backend/app_lifecycle_test.go:TestServiceLifecycleContextIsCancelledBeforeShutdownAndThenCleared"],
+      "contract": "shutdown cancellation and lifecycle context clearing preserve their order without a race",
+      "owner": "ApplicationLifecycle",
+      "phase": "5C"
+    },
+    {
+      "id": "shell-cleanup-race",
+      "tests": ["backend/shell_sessions_test.go:TestStopClusterShellSessions"],
+      "contract": "cluster shell cleanup closes and unregisters sessions without a race",
+      "owner": "OperationsCoordinator",
+      "phase": "2"
+    },
+    {
+      "id": "port-forward-cleanup-race",
+      "tests": ["backend/portforward_test.go:TestStopClusterPortForwards"],
+      "contract": "cluster port-forward cleanup stops and unregisters sessions without a race",
+      "owner": "OperationsCoordinator",
+      "phase": "2"
+    }
+  ],
+  "crossOwnerWorkflows": [
+    {
+      "id": "kubeconfig-search-path-change",
+      "producers": ["SetKubeconfigSearchPaths", "ImportSettings"],
+      "currentContext": "App persists physical paths under settingsMu, then directly discovers, retargets kubeconfigWatcher and prunes selections inside App-owned selection orchestration",
+      "payload": "normalized search paths plus current selected path/context identities and the initiating update/import result",
+      "consumer": "WorkspaceCoordinator sequences PreferencesService persistence, ClusterRuntimeManager discovery/watcher retarget, selection pruning, cluster/operation/projection cleanup and remaining-selection persistence",
+      "replacement": "one WorkspaceCoordinator.ChangeKubeconfigSearchPaths workflow used by both the command and DataManagementCoordinator import",
+      "backpressure": "serialized by the existing workspace selection-mutation boundary; a later superseding path change cancels stale generation work",
+      "cancellation": "generation cancellation stops stale client/refresh work without rolling back an already committed persisted path list; convergence uses the latest committed paths",
+      "owner": "WorkspaceCoordinator",
+      "phase": "3 persistence, 5A discovery, 5C orchestration",
+      "tests": ["backend/kubeconfigs_test.go:TestApp_SetKubeconfigSearchPathsPersistsAndDiscovers", "backend/kubeconfigs_test.go:TestApp_SetKubeconfigSearchPathsPrunesSelectionsFromRemovedPaths", "backend/app_data_management_test.go:TestImportSettingsReplacesPortableSettingsAndPreservesSessionState"]
+    },
+    {
+      "id": "kubeconfig-watcher-intent",
+      "producers": ["kubeconfigWatcher.eventLoop debounce flush through onChange"],
+      "currentContext": "fsnotify event loop holds no watcher mutex at callback time, then synchronously enters App.handleKubeconfigChange and the superseding selection-mutation boundary",
+      "payload": "deduplicated cleaned changed file paths; App later derives affected cluster IDs and the active selection generation",
+      "consumer": "WorkspaceCoordinator",
+      "replacement": "ClusterRuntimeManager emits a typed ClusterRuntimeIntent{Kind: KubeconfigSourceChanged, Paths, Generation}; WorkspaceCoordinator is the sole consumer",
+      "backpressure": "bounded owner-local queue coalesces changed paths and never blocks the watcher loop; no unbounded goroutine or generic event bus",
+      "cancellation": "watcher stop cancels production; workspace generation rejects stale work and teardown drains/coalesces pending intent",
+      "owner": "ClusterRuntimeManager producer and WorkspaceCoordinator consumer",
+      "phase": "5A producer, 5C consumer",
+      "tests": ["backend/kubeconfig_selection_coordinator_test.go:TestHandleKubeconfigChangeUsesSelectionMutationBoundary", "backend/kubeconfig_watcher_test.go:TestApp_HandleKubeconfigChange_ContextRemovedDeselectsOnlyAffectedFromSameFile"]
+    },
+    {
+      "id": "auth-state-intent",
+      "producers": ["ClusterRuntimeManager authstate callback via dispatchClusterAuthMutation"],
+      "currentContext": "auth callback constructs a clusterAuthStateCommand and runSelectionMutationAsync must return without blocking or re-entering the auth-manager mutex",
+      "payload": "clusterId, clusterName, auth state, typed failure diagnostic, event payload, rebuild/teardown kind and active generation",
+      "consumer": "WorkspaceCoordinator sequences the cluster operation and rebuild/teardown across ClusterRuntimeManager and RefreshCoordinator",
+      "replacement": "typed ClusterRuntimeIntent{Kind: AuthRebuild|AuthTeardown, ClusterID, Generation, Diagnostic} on the same owner-local queue",
+      "backpressure": "non-blocking bounded per-cluster coalescing keeps the newest auth intent and gives teardown precedence over rebuild while the auth-manager lock may be held",
+      "cancellation": "cluster removal and application shutdown cancel queued/in-flight intent; stale generation is rejected before cross-owner mutation",
+      "owner": "ClusterRuntimeManager producer and WorkspaceCoordinator consumer",
+      "phase": "5A producer, 5C consumer",
+      "tests": ["backend/cluster_auth_event_test.go:TestHandleClusterAuthStateChange_QueuesRecoveringMutationOutsideManagerLock", "backend/kubeconfig_selection_coordinator_test.go:TestHandleClusterAuthStateChangeUsesSelectionMutationBoundary"]
+    },
+    {
+      "id": "transport-failure-intent",
+      "producers": ["ResourceGateway transport-health recorder reaching the ClusterRuntimeManager per-cluster failure window/cooldown state"],
+      "currentContext": "recordClusterTransportFailure releases transportFailureState.mu before spawning a goroutine that enters App.runSelectionMutation and runClusterOperation",
+      "payload": "clusterId, failure reason, original cause, threshold/cooldown decision and active generation",
+      "consumer": "WorkspaceCoordinator sequences ClusterRuntimeManager client rebuild and RefreshCoordinator subsystem replacement",
+      "replacement": "typed ClusterRuntimeIntent{Kind: TransportRebuild, ClusterID, Generation, Reason, Cause} instead of go a.runClusterTransportRebuild",
+      "backpressure": "one bounded/coalesced rebuild intent per cluster; rebuildInProgress/cooldown state prevents duplicate unbounded goroutines",
+      "cancellation": "cluster removal/shutdown cancels queued and active rebuild; completion or cancellation resets per-cluster in-progress state without reviving a removed cluster",
+      "owner": "ClusterRuntimeManager producer and WorkspaceCoordinator consumer",
+      "phase": "4 recorder seam, 5A producer, 5C consumer",
+      "tests": ["backend/app_refresh_recovery_test.go:TestPerClusterTransportRebuildTriggersAtThreshold", "backend/kubeconfig_selection_coordinator_test.go:TestRunClusterTransportRebuildUsesSelectionMutationBoundary"]
+    },
+    {
+      "id": "factory-reset",
+      "producers": ["ClearAppState Wails command", "cmd/project reset-app-state offline task"],
+      "currentContext": "live reset runs inside the selection-mutation lock, clears selection, waits on installationTelemetryMu, removes settings/persistence/cache and clears only part of App memory; offline reset removes config/cache directories under an app-stopped precondition",
+      "payload": "owner reset request with no raw paths; updater owner resolves configured StatePath, TempRoot and validated dynamic records",
+      "consumer": "DataManagementCoordinator invokes Workspace, ErrorReporting, Preferences, Favorites, UIState, Update, Attention and Refresh owner reset operations and aggregates every independent failure",
+      "replacement": "shared static internal/appstate owner manifest plus owner-directed live reset; frontend clears web storage/reloads only after total backend success",
+      "backpressure": "one serialized live reset; reject concurrent owner mutations and an active updater application/restart attempt while allowing checks/downloads to quiesce",
+      "cancellation": "once destructive owner resets start, attempt every independent reset and return joined errors; repeated reset is idempotent and never deletes updater recovery state for an active attempt",
+      "owner": "DataManagementCoordinator live, cmd/project offline",
+      "phase": "3",
+      "tests": ["backend/app_installation_telemetry_test.go:TestClearAppStateWaitsForInstallationRegistrationBeforeDeletingSettings", "backend/app_settings_test.go:TestClearAppStateRemovesCacheDir", "cmd/project/app_state_test.go:TestResetAppStateRemovesStateDirs"]
+    }
+  ],
+  "clusterRuntimeConsumers": [
+    {
+      "id": "desktop-service",
+      "currentReach": "registered App exposes kubeconfig discovery, auth retry and Kubernetes API diagnostics commands directly",
+      "interface": "ClusterRuntimeCommands with only GetKubeconfigs, RetryClusterAuth and GetKubernetesAPIClientDiagnostics",
+      "implementation": "the same App value initially satisfies the DesktopService collaborator; the implementation swaps once in Phase 5A",
+      "replacementPhase": "5A",
+      "owner": "DesktopService"
+    },
+    {
+      "id": "operations-coordinator",
+      "currentReach": "shell, port-forward and runtime operations reach App cluster clients, REST config, dependency readiness, cluster operations and transport-health hooks",
+      "interface": "OperationsClusterAccess exposing cluster-scoped client/config resolution, readiness and serialized operation execution only",
+      "implementation": "App-backed adapter initially, then ClusterRuntimeManager",
+      "replacementPhase": "2 seam, 5A implementation",
+      "owner": "OperationsCoordinator"
+    },
+    {
+      "id": "resource-gateway",
+      "currentReach": "fetch helpers, object details/actions, YAML and permissions reach App client maps, dependency resolver and transport success/failure recording",
+      "interface": "ResourceClusterAccess exposing complete cluster-scoped clients, discovery/dependency readiness and TransportHealthRecorder",
+      "implementation": "App-backed adapter initially, then ClusterRuntimeManager; response cache remains ResourceGateway-owned",
+      "replacementPhase": "4 seam, 5A implementation",
+      "owner": "ResourceGateway"
+    },
+    {
+      "id": "workspace-coordinator",
+      "currentReach": "App selection/search-path code constructs/removes clients, invokes auth rebuilds and owns cluster-operation serialization",
+      "interface": "WorkspaceClusterRuntime exposing selection apply/remove, discovery snapshots, watcher retarget and typed ClusterRuntimeIntent consumption",
+      "implementation": "App-backed implementation until ClusterRuntimeManager extraction, with WorkspaceCoordinator remaining the cross-owner sequencer",
+      "replacementPhase": "5A producer/runtime, 5C orchestration",
+      "owner": "WorkspaceCoordinator"
+    },
+    {
+      "id": "refresh-coordinator",
+      "currentReach": "refresh subsystem construction reads App cluster clients, REST config, auth readiness, selection metadata and Kubernetes metrics registry",
+      "interface": "RefreshClusterAccess exposing immutable cluster connection snapshots and readiness without client-map mutation",
+      "implementation": "App-backed collaborator may remain through 5A and must swap to ClusterRuntimeManager before 5B exits",
+      "replacementPhase": "5B",
+      "owner": "RefreshCoordinator"
+    },
+    {
+      "id": "cluster-workspace-projection",
+      "currentReach": "heartbeat/auth paths mutate App clusterHealth and lifecycle state before typed event/replay publication",
+      "interface": "ClusterHealthProjectionSink accepting cluster-scoped health/lifecycle snapshots and cleanup",
+      "implementation": "ClusterRuntimeManager publishes to ClusterWorkspaceProjection without storing projection state",
+      "replacementPhase": "5A",
+      "owner": "ClusterWorkspaceProjection"
+    },
+    {
+      "id": "application-lifecycle",
+      "currentReach": "App startup/shutdown initializes auth/client lifecycle and directly orders client, watcher and cluster-operation teardown",
+      "interface": "ClusterRuntimeLifecycle with Start, Stop and readiness snapshot operations",
+      "implementation": "ApplicationLifecycle calls ClusterRuntimeManager; neither stores the ApplicationRuntime composition root",
+      "replacementPhase": "5A then 5C",
+      "owner": "ApplicationLifecycle"
+    }
+  ],
+  "resetArtifacts": [
+    {
+      "id": "preferences-state",
+      "artifacts": ["settings.json", "PreferencesService snapshot, provenance and lazy-load readiness", "six runtime settings policies reset to defaults"],
+      "currentResolver": "App.getSettingsFilePath calls os.UserConfigDir and joins luxury-yacht without creating it; Phase 0 moved parent creation to writeFileAtomic",
+      "resolution": "internal/appstate preserves side-effect-free static resolution; Preferences writes continue creating the parent through the shared atomic write path",
+      "liveReset": "PreferencesService removes settings, atomically invalidates snapshot/provenance/readiness, then DataManagementCoordinator dispatches all six defaults after unlock",
+      "offlineReset": "static manifest identifies the config directory under an explicit app-stopped precondition",
+      "owner": "PreferencesService",
+      "phase": "3",
+      "tests": ["backend/app_settings_test.go:TestAppStatePathResolversDoNotCreateDirectories", "backend/app_settings_test.go:TestClearAppStateRemovesCacheDir", "backend/app_installation_telemetry_test.go:TestClearAppStateWaitsForInstallationRegistrationBeforeDeletingSettings"]
+    },
+    {
+      "id": "favorites-state",
+      "artifacts": ["favorites.json", "favorites file synchronization state"],
+      "currentResolver": "App.getFavoritesFilePath is side-effect-free after Phase 0; live ClearAppState still omits the file",
+      "resolution": "static internal/appstate preserves side-effect-free resolution; FavoritesService writes create parents through the shared atomic write path",
+      "liveReset": "FavoritesService idempotently removes its file under its own synchronization",
+      "offlineReset": "static manifest places it in the stopped-app config directory removal",
+      "owner": "FavoritesService",
+      "phase": "3",
+      "tests": ["backend/app_settings_test.go:TestAppStatePathResolversDoNotCreateDirectories", "backend/app_persistence_test.go:TestAppFavoritesRoundTrip"]
+    },
+    {
+      "id": "ui-persistence-state",
+      "artifacts": ["persistence.json", "grid/table/tab persistence state"],
+      "currentResolver": "App.getPersistenceFilePath is side-effect-free after Phase 0",
+      "resolution": "static internal/appstate preserves side-effect-free resolution; UIStateStore writes create parents through the shared atomic write path",
+      "liveReset": "UIStateStore idempotently clears persistence under its own lock",
+      "offlineReset": "static manifest places it in the stopped-app config directory removal",
+      "owner": "UIStateStore",
+      "phase": "3",
+      "tests": ["backend/app_settings_test.go:TestAppStatePathResolversDoNotCreateDirectories", "backend/app_persistence_test.go:TestAppGridTablePersistenceCRUD"]
+    },
+    {
+      "id": "refresh-cache-state",
+      "artifacts": ["API discovery cache", "maintained-store spill/mmap files", "diagnostic dumps", "in-memory refresh/cache/catalog/cooled mappings"],
+      "currentResolver": "App.cacheDirPath is side-effect-free; App.clusterSpillRoot derives spill paths and creates directories only in spill/open operations",
+      "resolution": "static manifest names the cache root; RefreshCoordinator resolves/validates owned subpaths without creating them during inventory",
+      "liveReset": "Workspace/Refresh teardown unpublishes readers and closes producers/mappings before RefreshCoordinator removes cache/spill artifacts",
+      "offlineReset": "stopped-app task removes the static cache directory",
+      "owner": "RefreshCoordinator with ResourceGateway cache invalidation",
+      "phase": "4 then 5B",
+      "tests": ["backend/app_refresh_spill_test.go:TestAppResetSpillRootClearsLastSession", "cmd/project/app_state_test.go:TestResetAppStateRemovesStateDirs"]
+    },
+    {
+      "id": "application-update-state",
+      "artifacts": ["configured application-update.json StatePath", "skipped version", "prepared record", "attempt record", "cleanup entries"],
+      "currentResolver": "ConfigureApplicationUpdates accepts an explicit StatePath or defaults under UserConfigDir/luxury-yacht",
+      "resolution": "UpdateCoordinator retains the actual configured absolute StatePath; the static manifest names the owner instead of substituting a default path",
+      "liveReset": "UpdateCoordinator quiesces check/download, rejects active application/restart attempts, validates recorded paths, attempts cleanup and clears durable/in-memory state only after cleanup succeeds",
+      "offlineReset": "static config directory removal is allowed only while stopped; configured nondefault state remains an owner-resolved dynamic artifact",
+      "owner": "UpdateCoordinator",
+      "phase": "3",
+      "tests": ["backend/app_updates_test.go:TestPrepareApplicationUpdateStateReconcilesBeforeSweepingOrphans", "internal/updatestate/state_test.go:TestBeginAttemptDoesNotLosePreparedOwnershipWhenPersistenceFails"]
+    },
+    {
+      "id": "updater-dynamic-artifacts",
+      "artifacts": ["configured TempRoot", "validated prepared/attempt/cleanup staging directories", "wails-update-<pid>.log helper logs", "orphan updater staging directories"],
+      "currentResolver": "internal/updatestate validates canonical direct children of TempRoot and derives helper log paths; internal/updatetemp sweeps unprotected owned entries",
+      "resolution": "UpdateCoordinator uses configured TempRoot and updatestate validation for every dynamic path; no raw document path is deleted",
+      "liveReset": "quiesce allowed operations, preserve active attempt recovery, attempt every validated cleanup/log/staging removal and aggregate failures",
+      "offlineReset": "owner-resolved dynamic inventory supplements, but is never accepted as raw input to, the static stopped-app manifest",
+      "owner": "UpdateCoordinator",
+      "phase": "3",
+      "tests": ["internal/updatestate/state_test.go:TestResolveStagingDirectoryAcceptsOnlyPayloadInsideDirectUpdaterChild", "internal/updatetemp/root_test.go:TestSweepOrphansRemovesOnlyUnreferencedUpdaterArtifactsInsideOwnedRoot"]
+    }
+  ],
+  "nonCommandEntryPointGroups": [
+    {
+      "id": "main-composition",
+      "entries": ["backend.NewApp", "backend.ConfigureApplicationUpdates", "backend.CreateMenu", "backend.ConfigureWorkspaceWindowCreator", "backend.MaybeRunExecWrapper", "backend.InitializeErrorReporting"],
+      "caller": "main.go",
+      "replacement": "ApplicationRuntime composition plus owner-specific constructors; InitializeErrorReporting remains an unbound non-Wails startup composition call",
+      "owner": "ApplicationRuntime",
+      "phase": "1, 3 and 6"
+    },
+    {
+      "id": "wails-service-lifecycle-and-transport",
+      "entries": ["App.ServiceStartup", "App.ServiceShutdown", "App.ServeHTTP", "App.handleResourceStream", "App.handleContainerLogsStream"],
+      "caller": "Wails service lifecycle, /api/v2 handler and named stream registrations",
+      "replacement": "DesktopService delegates lifecycle to ApplicationLifecycle and transport/streams to RefreshCoordinator without holding the composition root",
+      "owner": "DesktopService boundary with ApplicationLifecycle and RefreshCoordinator behavior",
+      "phase": "1, 5B and 5C"
+    },
+    {
+      "id": "peer-window-lifecycle",
+      "entries": ["App.WindowRuntimeReady", "App.ReleaseWorkspaceWindow", "App.PrepareQuitFromWindow"],
+      "caller": "internal/appwindow.Registry peer hooks",
+      "replacement": "registry depends on a narrow ApplicationLifecycle/Workspace window collaborator instead of *backend.App",
+      "owner": "ApplicationLifecycle and WorkspaceCoordinator",
+      "phase": "5C"
+    },
+    {
+      "id": "menu-and-window-callbacks",
+      "entries": ["23 menu.go functions accepting *App", "ConfigureWorkspaceWindowCreator callback", "native menu event callbacks"],
+      "caller": "main.go and Wails native menu callbacks",
+      "replacement": "DesktopShell owns concrete Wails menu/window/event access through narrow owner collaborators; no Desktop interface or internal/desktop package",
+      "owner": "DesktopShell",
+      "phase": "3"
+    },
+    {
+      "id": "generator-model-anchor",
+      "entries": ["App.BindingModelAnchor", "38 generated Get<Kind> detail wrappers", "genappbindings.Render backend receiver template"],
+      "caller": "Wails binding generator and generated TypeScript model reachability",
+      "replacement": "BindingModelAnchor moves to DesktopService in Phase 1; generated Get<Kind> receivers move to ResourceGateway in Phase 4 by editing render.go and regenerating",
+      "owner": "DesktopService then ResourceGateway",
+      "phase": "1 and 4"
+    },
+    {
+      "id": "test-support",
+      "entries": ["five backend/app_testing.go functions accepting *App", "19 backend/test_entrypoints_test.go App methods", "newTestAppWithDefaults and full-App fixtures"],
+      "caller": "backend tests",
+      "replacement": "component-specific builders/seams in each owner phase; full ApplicationRuntime fixture only for composition/lifecycle/cross-owner tests",
+      "owner": "component test support",
+      "phase": "2 through 6"
+    }
+  ]
+}

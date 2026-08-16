@@ -56,6 +56,29 @@ func newTestAppWithDefaults(t *testing.T) *App {
 	}
 }
 
+func TestAppStatePathResolversDoNotCreateDirectories(t *testing.T) {
+	base := t.TempDir()
+	t.Setenv("HOME", filepath.Join(base, "home"))
+	t.Setenv("XDG_CONFIG_HOME", filepath.Join(base, "config"))
+	t.Setenv("XDG_CACHE_HOME", filepath.Join(base, "cache"))
+	t.Setenv("APPDATA", filepath.Join(base, "appdata"))
+	app := &App{}
+
+	settingsPath, err := app.getSettingsFilePath()
+	require.NoError(t, err)
+	persistencePath, err := app.getPersistenceFilePath()
+	require.NoError(t, err)
+	favoritesPath, err := app.getFavoritesFilePath()
+	require.NoError(t, err)
+	cachePath, err := app.cacheDirPath()
+	require.NoError(t, err)
+
+	require.NoDirExists(t, filepath.Dir(settingsPath))
+	require.Equal(t, filepath.Dir(settingsPath), filepath.Dir(persistencePath))
+	require.Equal(t, filepath.Dir(settingsPath), filepath.Dir(favoritesPath))
+	require.NoDirExists(t, cachePath)
+}
+
 func setTestConfigEnv(t *testing.T) {
 	t.Helper()
 	baseDir := t.TempDir()
@@ -63,6 +86,12 @@ func setTestConfigEnv(t *testing.T) {
 	t.Setenv("XDG_CONFIG_HOME", filepath.Join(baseDir, ".config"))
 	t.Setenv("XDG_CACHE_HOME", filepath.Join(baseDir, ".cache"))
 	t.Setenv("APPDATA", filepath.Join(baseDir, "AppData", "Roaming"))
+}
+
+func writeTestFileWithParents(t *testing.T, path string, data []byte, mode os.FileMode) {
+	t.Helper()
+	require.NoError(t, os.MkdirAll(filepath.Dir(path), 0o755))
+	require.NoError(t, os.WriteFile(path, data, mode))
 }
 
 func TestClearAppStateRemovesCacheDir(t *testing.T) {
@@ -127,7 +156,7 @@ func TestAppLoadWindowSettingsReadsExistingFile(t *testing.T) {
 	}
 	bytes, err := json.Marshal(settings)
 	require.NoError(t, err)
-	require.NoError(t, os.WriteFile(configPath, bytes, 0o644))
+	writeTestFileWithParents(t, configPath, bytes, 0o644)
 
 	got, err := app.LoadWindowSettings()
 	require.NoError(t, err)
@@ -255,7 +284,7 @@ func TestInitializeErrorReportingKeepsReporterDisabledWhenSettingsCannotLoad(t *
 	app := NewApp(nil, reporter)
 	configPath, err := app.getSettingsFilePath()
 	require.NoError(t, err)
-	require.NoError(t, os.WriteFile(configPath, []byte(`{"preferences":`), 0o644))
+	writeTestFileWithParents(t, configPath, []byte(`{"preferences":`), 0o644)
 
 	require.Error(t, InitializeErrorReporting(app))
 	require.False(t, reporter.Enabled())
@@ -270,7 +299,7 @@ func TestSettingsRPCsSurfaceCorruptSettingsInsteadOfReturningDefaultOnValues(t *
 	app := NewApp(nil, &recordingErrorReporter{})
 	configPath, err := app.getSettingsFilePath()
 	require.NoError(t, err)
-	require.NoError(t, os.WriteFile(configPath, []byte(`{"preferences":`), 0o644))
+	writeTestFileWithParents(t, configPath, []byte(`{"preferences":`), 0o644)
 
 	settings, settingsErr := app.GetAppSettings()
 	require.Error(t, settingsErr)
@@ -789,7 +818,7 @@ func TestLoadSettingsFileNormalizesDefaults(t *testing.T) {
 	configPath, err := app.getSettingsFilePath()
 	require.NoError(t, err)
 
-	require.NoError(t, os.WriteFile(configPath, []byte(`{"schemaVersion":0}`), 0o644))
+	writeTestFileWithParents(t, configPath, []byte(`{"schemaVersion":0}`), 0o644)
 
 	settings, err := app.loadSettingsFile()
 	require.NoError(t, err)
@@ -1196,7 +1225,7 @@ func TestLoadSettingsFileMigratesOldAppearanceModePreference(t *testing.T) {
 
 	configPath, err := app.getSettingsFilePath()
 	require.NoError(t, err)
-	require.NoError(t, os.WriteFile(configPath, []byte(`{"schemaVersion":1,"preferences":{"theme":"dark"}}`), 0o644))
+	writeTestFileWithParents(t, configPath, []byte(`{"schemaVersion":1,"preferences":{"theme":"dark"}}`), 0o644)
 
 	settings, err := app.loadSettingsFile()
 	require.NoError(t, err)
@@ -1338,7 +1367,7 @@ func TestAppPaletteTintMigration(t *testing.T) {
 	}
 	bytes, err := json.Marshal(oldSettings)
 	require.NoError(t, err)
-	require.NoError(t, os.WriteFile(configPath, bytes, 0o644))
+	writeTestFileWithParents(t, configPath, bytes, 0o644)
 
 	// Load and verify migration copies old values to both mode palettes.
 	require.NoError(t, app.loadAppSettings())
@@ -1410,7 +1439,7 @@ func TestAppSettingsDefaultTablePageSize(t *testing.T) {
 	// Defaults: a fresh settings file carries the backend-owned default.
 	configPath, err := app.getSettingsFilePath()
 	require.NoError(t, err)
-	require.NoError(t, os.WriteFile(configPath, []byte(`{"schemaVersion":0}`), 0o644))
+	writeTestFileWithParents(t, configPath, []byte(`{"schemaVersion":0}`), 0o644)
 	settings, err := app.loadSettingsFile()
 	require.NoError(t, err)
 	require.Equal(t, defaultTablePageSize, settings.Preferences.DefaultTablePageSize)

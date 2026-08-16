@@ -305,9 +305,6 @@ func (a *App) getFavoritesFilePath() (string, error) {
 		return "", fmt.Errorf("could not find config directory: %w", err)
 	}
 	configDir = filepath.Join(configDir, "luxury-yacht")
-	if err := os.MkdirAll(configDir, 0o755); err != nil {
-		return "", fmt.Errorf("failed to create config directory: %w", err)
-	}
 	return filepath.Join(configDir, "favorites.json"), nil
 }
 

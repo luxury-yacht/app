@@ -112,7 +112,7 @@ func TestLoadFavoritesFileMigratesV2FavoritesIndividually(t *testing.T) {
 	app := newTestAppWithDefaults(t)
 	path, err := app.getFavoritesFilePath()
 	require.NoError(t, err)
-	require.NoError(t, os.WriteFile(path, []byte(`{
+	writeTestFileWithParents(t, path, []byte(`{
 		"schemaVersion": 2,
 		"favorites": [
 			{
@@ -163,7 +163,7 @@ func TestLoadFavoritesFileMigratesV2FavoritesIndividually(t *testing.T) {
 				"order": 2
 			}
 		]
-	}`), 0o644))
+	}`), 0o644)
 
 	favorites, err := app.GetFavorites()
 	require.NoError(t, err)
@@ -193,7 +193,7 @@ func TestLoadFavoritesFileMigratesV2WorkloadsAndPodsIntoBothPanes(t *testing.T) 
 	app := newTestAppWithDefaults(t)
 	path, err := app.getFavoritesFilePath()
 	require.NoError(t, err)
-	require.NoError(t, os.WriteFile(path, []byte(`{
+	writeTestFileWithParents(t, path, []byte(`{
 		"schemaVersion": 2,
 		"favorites": [
 			{
@@ -207,7 +207,7 @@ func TestLoadFavoritesFileMigratesV2WorkloadsAndPodsIntoBothPanes(t *testing.T) 
 				"tableState":{"sortColumn":"node","sortDirection":"asc","columnVisibility":{"memory":false}},"order":1
 			}
 		]
-	}`), 0o644))
+	}`), 0o644)
 
 	state, err := app.loadFavoritesFile()
 	require.NoError(t, err)
@@ -244,7 +244,7 @@ func TestLoadFavoritesFileMigratesV1FavoritesLeftOnDiskByV2(t *testing.T) {
 	app := newTestAppWithDefaults(t)
 	path, err := app.getFavoritesFilePath()
 	require.NoError(t, err)
-	require.NoError(t, os.WriteFile(path, []byte(`{
+	writeTestFileWithParents(t, path, []byte(`{
 		"schemaVersion": 1,
 		"favorites": [
 			{
@@ -297,7 +297,7 @@ func TestLoadFavoritesFileMigratesV1FavoritesLeftOnDiskByV2(t *testing.T) {
 				"order": 2
 			}
 		]
-	}`), 0o644))
+	}`), 0o644)
 
 	state, err := app.loadFavoritesFile()
 	require.NoError(t, err)
@@ -332,7 +332,7 @@ func TestLoadFavoritesFileRejectsFutureSchema(t *testing.T) {
 	app := newTestAppWithDefaults(t)
 	path, err := app.getFavoritesFilePath()
 	require.NoError(t, err)
-	require.NoError(t, os.WriteFile(path, []byte(`{"schemaVersion":999,"favorites":[]}`), 0o644))
+	writeTestFileWithParents(t, path, []byte(`{"schemaVersion":999,"favorites":[]}`), 0o644)
 
 	_, err = app.loadFavoritesFile()
 	require.ErrorContains(t, err, "newer than supported")
@@ -431,7 +431,7 @@ func TestLoadPersistenceFileNormalizesDefaults(t *testing.T) {
 	configPath, err := app.getPersistenceFilePath()
 	require.NoError(t, err)
 
-	require.NoError(t, os.WriteFile(configPath, []byte(`{"schemaVersion":0}`), 0o644))
+	writeTestFileWithParents(t, configPath, []byte(`{"schemaVersion":0}`), 0o644)
 
 	state, err := app.loadPersistenceFile()
 	require.NoError(t, err)

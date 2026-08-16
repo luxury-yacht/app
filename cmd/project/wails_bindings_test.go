@@ -1,6 +1,10 @@
 package main
 
 import (
+	"fmt"
+	"go/ast"
+	"go/parser"
+	"go/token"
 	"os"
 	"path/filepath"
 	"slices"
@@ -8,17 +12,201 @@ import (
 	"testing"
 )
 
-func TestGeneratedWailsAppExportsMatchFrontendBoundary(t *testing.T) {
-	generated := exportedFunctions(readTestFile(t, repositoryPath(
-		"frontend", "bindings", "github.com", "luxury-yacht", "app", "backend", "app.ts",
-	)))
+func TestGeneratedWailsServiceExportsMatchFrontendBoundary(t *testing.T) {
+	serviceType := registeredWailsServiceType(t, readTestFile(t, repositoryPath("main.go")))
+	_, generatedSource := generatedWailsServiceModule(t, serviceType)
+	generated := exportedFunctions(generatedSource)
 	boundary := explicitBackendAPIExports(readTestFile(t, repositoryPath(
 		"frontend", "src", "core", "backend-api", "index.ts",
 	)))
 
-	if !slices.Equal(generated, boundary) {
-		t.Fatalf("generated Wails exports must match frontend boundary\ngenerated: %v\nboundary: %v", generated, boundary)
+	if err := validateWailsBoundaryParity(generated, boundary); err != nil {
+		t.Fatal(err)
 	}
+}
+
+func TestWailsBoundaryContractRejectsCompositionAndExportMutations(t *testing.T) {
+	mainSource := readTestFile(t, repositoryPath("main.go"))
+	serviceType, err := resolveRegisteredWailsServiceType(mainSource)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if serviceType != "App" {
+		t.Fatalf("current registered service type = %q, want App", serviceType)
+	}
+
+	compositionMutations := map[string]string{
+		"missing service registration": strings.Replace(mainSource, "RegisterService", "RegisterBackend", 1),
+		"unnamed service expression": strings.Replace(
+			mainSource,
+			"application.NewServiceWithOptions(\n\t\tbackendApp,",
+			"application.NewServiceWithOptions(\n\t\tbackend.NewApp(nil, reporter),",
+			1,
+		),
+		"service without concrete declared type": strings.Replace(
+			strings.Replace(mainSource, "\tvar backendApp *backend.App\n", "", 1),
+			"\tbackendApp = backend.NewApp(wailsApp, reporter)",
+			"\tbackendApp := backend.NewApp(wailsApp, reporter)",
+			1,
+		),
+		"multiple service registrations": strings.Replace(
+			mainSource,
+			"\twailsApp.RegisterService(application.NewServiceWithOptions(",
+			"\twailsApp.RegisterService(application.NewServiceWithOptions(backendApp))\n\twailsApp.RegisterService(application.NewServiceWithOptions(",
+			1,
+		),
+		"additional unnamed service registration": strings.Replace(
+			mainSource,
+			"\twailsApp.RegisterService(application.NewServiceWithOptions(",
+			"\twailsApp.RegisterService(application.NewServiceWithOptions(backend.NewApp(nil, reporter)))\n\twailsApp.RegisterService(application.NewServiceWithOptions(",
+			1,
+		),
+	}
+	for name, source := range compositionMutations {
+		t.Run(name, func(t *testing.T) {
+			if _, err := resolveRegisteredWailsServiceType(source); err == nil {
+				t.Fatal("mutated composition unexpectedly satisfied registered-service discovery")
+			}
+		})
+	}
+
+	_, generatedSource := generatedWailsServiceModule(t, serviceType)
+	generated := exportedFunctions(generatedSource)
+	boundary := explicitBackendAPIExports(readTestFile(t, repositoryPath("frontend", "src", "core", "backend-api", "index.ts")))
+	if err := validateWailsBoundaryParity(generated, boundary); err != nil {
+		t.Fatal(err)
+	}
+	for name, mutation := range map[string]struct {
+		generated []string
+		boundary  []string
+	}{
+		"unbrokered generated command":    {generated: append(slices.Clone(generated), "UnexpectedCommand"), boundary: boundary},
+		"frontend export without command": {generated: generated, boundary: append(slices.Clone(boundary), "MissingCommand")},
+	} {
+		t.Run(name, func(t *testing.T) {
+			slices.Sort(mutation.generated)
+			slices.Sort(mutation.boundary)
+			if err := validateWailsBoundaryParity(mutation.generated, mutation.boundary); err == nil {
+				t.Fatal("mutated export boundary unexpectedly satisfied command parity")
+			}
+		})
+	}
+}
+
+func registeredWailsServiceType(t *testing.T, source string) string {
+	t.Helper()
+	serviceType, err := resolveRegisteredWailsServiceType(source)
+	if err != nil {
+		t.Fatal(err)
+	}
+	return serviceType
+}
+
+func resolveRegisteredWailsServiceType(source string) (string, error) {
+	parsed, err := parser.ParseFile(token.NewFileSet(), "main.go", source, 0)
+	if err != nil {
+		return "", fmt.Errorf("parse main.go: %w", err)
+	}
+
+	serviceVariables := make([]string, 0)
+	serviceRegistrationCount := 0
+	ast.Inspect(parsed, func(node ast.Node) bool {
+		call, ok := node.(*ast.CallExpr)
+		if !ok {
+			return true
+		}
+		selector, ok := call.Fun.(*ast.SelectorExpr)
+		if !ok || selector.Sel.Name != "RegisterService" || len(call.Args) != 1 {
+			return true
+		}
+		serviceRegistrationCount++
+		constructor, ok := call.Args[0].(*ast.CallExpr)
+		if !ok || len(constructor.Args) == 0 {
+			return true
+		}
+		identifier, ok := constructor.Args[0].(*ast.Ident)
+		if ok {
+			serviceVariables = append(serviceVariables, identifier.Name)
+		}
+		return true
+	})
+	if serviceRegistrationCount != 1 || len(serviceVariables) != 1 {
+		return "", fmt.Errorf(
+			"main.go must register exactly one named Wails service; found %d registrations and %d named services",
+			serviceRegistrationCount,
+			len(serviceVariables),
+		)
+	}
+	serviceVariable := serviceVariables[0]
+
+	serviceType := ""
+	ast.Inspect(parsed, func(node ast.Node) bool {
+		if serviceType != "" {
+			return false
+		}
+		specification, ok := node.(*ast.ValueSpec)
+		if !ok || specification.Type == nil {
+			return true
+		}
+		matchesVariable := false
+		for _, name := range specification.Names {
+			matchesVariable = matchesVariable || name.Name == serviceVariable
+		}
+		if !matchesVariable {
+			return true
+		}
+		pointer, ok := specification.Type.(*ast.StarExpr)
+		if !ok {
+			return true
+		}
+		selector, ok := pointer.X.(*ast.SelectorExpr)
+		if ok && selector.Sel.Name != "" {
+			serviceType = selector.Sel.Name
+		}
+		return true
+	})
+	if serviceType == "" {
+		return "", fmt.Errorf("resolve concrete type of registered Wails service variable %q", serviceVariable)
+	}
+	return serviceType, nil
+}
+
+func validateWailsBoundaryParity(generated, boundary []string) error {
+	if slices.Equal(generated, boundary) {
+		return nil
+	}
+	return fmt.Errorf("generated Wails exports must match frontend boundary\ngenerated: %v\nboundary: %v", generated, boundary)
+}
+
+func generatedWailsServiceModule(t *testing.T, serviceType string) (string, string) {
+	t.Helper()
+	directory := repositoryPath("frontend", "bindings", "github.com", "luxury-yacht", "app", "backend")
+	entries, err := os.ReadDir(directory)
+	if err != nil {
+		t.Fatal(err)
+	}
+	callPrefix := `github.com/luxury-yacht/app/backend.` + serviceType + `.`
+	matchedPath := ""
+	matchedSource := ""
+	for _, entry := range entries {
+		if entry.IsDir() || filepath.Ext(entry.Name()) != ".ts" || entry.Name() == "index.ts" || entry.Name() == "models.ts" {
+			continue
+		}
+		path := filepath.Join(directory, entry.Name())
+		source := readTestFile(t, path)
+		if !strings.Contains(source, callPrefix) {
+			continue
+		}
+		if matchedPath != "" {
+			t.Fatalf("registered Wails service %s has multiple generated modules: %s and %s", serviceType, matchedPath, path)
+		}
+		matchedPath = path
+		matchedSource = source
+	}
+	if matchedPath == "" {
+		t.Fatalf("registered Wails service %s has no generated TypeScript module", serviceType)
+	}
+	return matchedPath, matchedSource
 }
 
 func TestGeneratedWailsEventsCoverBackendBoundary(t *testing.T) {

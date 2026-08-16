@@ -1,12 +1,14 @@
 package main
 
 import (
+	"fmt"
 	"go/ast"
 	"go/parser"
 	"go/token"
 	"os"
 	"path/filepath"
 	"regexp"
+	"slices"
 	"strings"
 	"testing"
 
@@ -248,51 +250,245 @@ func TestNewWindowUsesTheInProcessPeerRegistry(t *testing.T) {
 
 func TestWailsApplicationIsInjectedDirectlyWithoutDesktopAdapter(t *testing.T) {
 	mainSource := readTestFile(t, repositoryPath("main.go"))
-	require.Contains(t, mainSource, "backend.NewApp(wailsApp, reporter)")
-	require.NotContains(t, mainSource, "NewAdapter")
-
 	windowSource := readTestFile(t, repositoryPath("internal", "appwindow", "registry.go"))
-	runtimeReadyHook := strings.Index(windowSource, "events.Common.WindowRuntimeReady")
-	closingHook := strings.Index(windowSource, "events.Common.WindowClosing")
-	runCall := strings.Index(mainSource, "composition.application.Run()")
-	require.Positive(t, runtimeReadyHook)
-	require.Positive(t, closingHook)
-	require.Positive(t, runCall)
-
 	runtimeSource := readTestFile(t, repositoryPath("backend", "app_runtime.go"))
-	require.NotContains(t, runtimeSource, "type Desktop interface")
-
 	menuSource := readTestFile(t, repositoryPath("backend", "menu.go"))
-	require.NotContains(t, menuSource, "MenuModel")
+	_, desktopErr := os.Stat(repositoryPath("internal", "desktop"))
+	require.NoError(t, validateDirectWailsComposition(mainSource, windowSource, runtimeSource, menuSource, desktopErr == nil))
+}
 
-	_, err := os.Stat(repositoryPath("internal", "desktop"))
-	require.ErrorIs(t, err, os.ErrNotExist)
+func TestDirectWailsCompositionContractRejectsBoundaryRegressions(t *testing.T) {
+	mainSource := readTestFile(t, repositoryPath("main.go"))
+	windowSource := readTestFile(t, repositoryPath("internal", "appwindow", "registry.go"))
+	runtimeSource := readTestFile(t, repositoryPath("backend", "app_runtime.go"))
+	menuSource := readTestFile(t, repositoryPath("backend", "menu.go"))
+
+	tests := map[string]struct {
+		main          string
+		window        string
+		runtime       string
+		menu          string
+		desktopExists bool
+	}{
+		"missing direct application injection": {
+			main: strings.Replace(mainSource, "backend.NewApp(wailsApp, reporter)", "backend.NewApp(nil, reporter)", 1), window: windowSource, runtime: runtimeSource, menu: menuSource,
+		},
+		"native adapter": {
+			main: strings.Replace(mainSource, "backend.NewApp(wailsApp, reporter)", "backend.NewAdapter(wailsApp, reporter)", 1), window: windowSource, runtime: runtimeSource, menu: menuSource,
+		},
+		"missing generated service registration": {
+			main: strings.Replace(mainSource, "wailsApp.RegisterService(", "wailsApp.RegisterBackend(", 1), window: windowSource, runtime: runtimeSource, menu: menuSource,
+		},
+		"desktop interface": {
+			main: mainSource, window: windowSource, runtime: runtimeSource + "\ntype Desktop interface{}\n", menu: menuSource,
+		},
+		"menu model": {
+			main: mainSource, window: windowSource, runtime: runtimeSource, menu: menuSource + "\ntype MenuModel struct{}\n",
+		},
+		"desktop package": {
+			main: mainSource, window: windowSource, runtime: runtimeSource, menu: menuSource, desktopExists: true,
+		},
+		"missing runtime-ready hook": {
+			main: mainSource, window: strings.Replace(windowSource, "events.Common.WindowRuntimeReady", "events.Common.WindowOpened", 1), runtime: runtimeSource, menu: menuSource,
+		},
+		"missing closing hook": {
+			main: mainSource, window: strings.Replace(windowSource, "events.Common.WindowClosing", "events.Common.WindowClosed", 1), runtime: runtimeSource, menu: menuSource,
+		},
+	}
+
+	for name, test := range tests {
+		t.Run(name, func(t *testing.T) {
+			require.Error(t, validateDirectWailsComposition(test.main, test.window, test.runtime, test.menu, test.desktopExists))
+		})
+	}
 }
 
 func TestUpdaterTempRootIsConfiguredBeforeAnyProcessDispatch(t *testing.T) {
 	mainSource := readTestFile(t, repositoryPath("main.go"))
+	require.NoError(t, validateCompositionOrdering(mainSource))
+}
 
-	tempSetup := strings.Index(mainSource, "updatetemp.ConfigureProcess()")
-	wrapperDispatch := strings.Index(mainSource, "backend.MaybeRunExecWrapper()")
-	reporterSetup := strings.Index(mainSource, "reporter, reporterErr := newSentryReporter(")
-	applicationSetup := strings.Index(mainSource, "composition := newApplicationComposition(")
+func TestCompositionOrderingContractRejectsReorderedFixtures(t *testing.T) {
+	mainSource := readTestFile(t, repositoryPath("main.go"))
+	for _, markers := range [][2]string{
+		{"updatetemp.ConfigureProcess()", "backend.MaybeRunExecWrapper()"},
+		{"backend.MaybeRunExecWrapper()", "reporter, reporterErr := newSentryReporter("},
+		{"reporter, reporterErr := newSentryReporter(", "composition := newApplicationComposition("},
+		{"composition := newApplicationComposition(", "backend.InitializeErrorReporting(composition.backend)"},
+		{"backend.InitializeErrorReporting(composition.backend)", "composition.application.Run()"},
+		{"backendApp = backend.NewApp(wailsApp, reporter)", "backend.ConfigureApplicationUpdates(backendApp,"},
+		{"backend.ConfigureApplicationUpdates(backendApp,", "wailsApp.RegisterService("},
+	} {
+		before, after := markers[0], markers[1]
+		t.Run(before+" before "+after, func(t *testing.T) {
+			require.Error(t, validateCompositionOrdering(swapSourceMarkers(t, mainSource, before, after)))
+		})
+	}
+}
 
-	require.Positive(t, tempSetup)
-	require.Positive(t, wrapperDispatch)
-	require.Positive(t, reporterSetup)
-	require.Positive(t, applicationSetup)
-	require.Less(t, tempSetup, wrapperDispatch)
-	require.Less(t, wrapperDispatch, reporterSetup)
-	require.Less(t, reporterSetup, applicationSetup)
+func TestWailsTransportEventsAndPeerHooksHaveOneCompositionOwner(t *testing.T) {
+	tests := map[string]struct {
+		marker string
+		owners []string
+	}{
+		"api route": {
+			marker: `application.ServiceOptions{Route: "/api/v2"}`,
+			owners: []string{"main.go"},
+		},
+		"resource named stream": {
+			marker: "wailsApplication.HandleStream(refreshResourceStreamName",
+			owners: []string{"backend/app.go"},
+		},
+		"container logs named stream": {
+			marker: "wailsApplication.HandleStream(refreshContainerLogsStreamName",
+			owners: []string{"backend/app.go"},
+		},
+		"typed custom event registry": {
+			marker: "application.RegisterEvent[",
+			owners: []string{"backend/events.go"},
+		},
+		"degraded health event registration": {
+			marker: "application.RegisterEvent[ClusterHealthEvent](clusterHealthDegradedEventName)",
+			owners: []string{"backend/events.go"},
+		},
+		"healthy health event registration": {
+			marker: "application.RegisterEvent[ClusterHealthEvent](clusterHealthHealthyEventName)",
+			owners: []string{"backend/events.go"},
+		},
+		"scope event registration": {
+			marker: "application.RegisterEvent[ClusterScopeChangedEvent](clusterScopeChangedEventName)",
+			owners: []string{"backend/events.go"},
+		},
+		"degraded health event producer": {
+			marker: "a.emitEvent(clusterHealthDegradedEventName",
+			owners: []string{"backend/app_heartbeat.go"},
+		},
+		"healthy health event producer": {
+			marker: "a.emitEvent(clusterHealthHealthyEventName",
+			owners: []string{"backend/app_heartbeat.go"},
+		},
+		"scope event producer": {
+			marker: "a.emitEvent(clusterScopeChangedEventName",
+			owners: []string{"backend/app_cluster_settings.go"},
+		},
+		"peer runtime-ready hook": {
+			marker: "window.OnWindowEvent(events.Common.WindowRuntimeReady",
+			owners: []string{"internal/appwindow/registry.go"},
+		},
+		"peer closing hook": {
+			marker: "window.RegisterHook(events.Common.WindowClosing",
+			owners: []string{"internal/appwindow/registry.go"},
+		},
+	}
 
-	backendConstruction := strings.Index(mainSource, "backendApp = backend.NewApp(wailsApp, reporter)")
-	updaterConstruction := strings.Index(mainSource, "backend.ConfigureApplicationUpdates(backendApp,")
-	serviceRegistration := strings.Index(mainSource, "wailsApp.RegisterService(")
-	require.Positive(t, backendConstruction)
-	require.Positive(t, updaterConstruction)
-	require.Positive(t, serviceRegistration)
-	require.Less(t, backendConstruction, updaterConstruction)
-	require.Less(t, updaterConstruction, serviceRegistration)
+	for name, test := range tests {
+		t.Run(name, func(t *testing.T) {
+			require.Equal(t, test.owners, productionGoFilesContaining(t, test.marker))
+		})
+	}
+}
+
+func validateDirectWailsComposition(mainSource, windowSource, runtimeSource, menuSource string, desktopExists bool) error {
+	for description, required := range map[string]string{
+		"direct application.App injection": "backend.NewApp(wailsApp, reporter)",
+		"generated service registration":   "wailsApp.RegisterService(",
+		"runtime-ready peer-window hook":   "events.Common.WindowRuntimeReady",
+		"closing peer-window hook":         "events.Common.WindowClosing",
+		"application run call":             "composition.application.Run()",
+	} {
+		source := mainSource
+		if strings.Contains(description, "peer-window") {
+			source = windowSource
+		}
+		if !strings.Contains(source, required) {
+			return fmt.Errorf("missing %s marker %q", description, required)
+		}
+	}
+	if strings.Contains(mainSource, "NewAdapter") {
+		return fmt.Errorf("native desktop adapter is prohibited")
+	}
+	if strings.Contains(runtimeSource, "type Desktop interface") {
+		return fmt.Errorf("native desktop interface is prohibited")
+	}
+	if strings.Contains(menuSource, "MenuModel") {
+		return fmt.Errorf("parallel menu model is prohibited")
+	}
+	if desktopExists {
+		return fmt.Errorf("internal/desktop package is prohibited")
+	}
+	return nil
+}
+
+func validateCompositionOrdering(mainSource string) error {
+	for _, sequence := range [][]string{
+		{
+			"updatetemp.ConfigureProcess()",
+			"backend.MaybeRunExecWrapper()",
+			"reporter, reporterErr := newSentryReporter(",
+			"composition := newApplicationComposition(",
+			"backend.InitializeErrorReporting(composition.backend)",
+			"composition.application.Run()",
+		},
+		{
+			"backendApp = backend.NewApp(wailsApp, reporter)",
+			"backend.ConfigureApplicationUpdates(backendApp,",
+			"wailsApp.RegisterService(",
+		},
+	} {
+		previousOffset := -1
+		for _, marker := range sequence {
+			offset := strings.Index(mainSource, marker)
+			if offset < 0 {
+				return fmt.Errorf("missing composition marker %q", marker)
+			}
+			if offset <= previousOffset {
+				return fmt.Errorf("composition marker %q is out of order", marker)
+			}
+			previousOffset = offset
+		}
+	}
+	return nil
+}
+
+func swapSourceMarkers(t *testing.T, source, before, after string) string {
+	t.Helper()
+	require.Contains(t, source, before)
+	require.Contains(t, source, after)
+	const beforePlaceholder = "__WAILS_BEFORE_MARKER__"
+	const afterPlaceholder = "__WAILS_AFTER_MARKER__"
+	require.NotContains(t, source, beforePlaceholder)
+	require.NotContains(t, source, afterPlaceholder)
+	source = strings.Replace(source, before, beforePlaceholder, 1)
+	source = strings.Replace(source, after, afterPlaceholder, 1)
+	source = strings.Replace(source, beforePlaceholder, after, 1)
+	return strings.Replace(source, afterPlaceholder, before, 1)
+}
+
+func productionGoFilesContaining(t *testing.T, marker string) []string {
+	t.Helper()
+	root := repositoryPath()
+	result := make([]string, 0)
+	err := filepath.Walk(root, func(path string, info os.FileInfo, walkErr error) error {
+		require.NoError(t, walkErr)
+		if info.IsDir() {
+			if path != root && strings.HasPrefix(info.Name(), ".") {
+				return filepath.SkipDir
+			}
+			return nil
+		}
+		if filepath.Ext(path) != ".go" || strings.HasSuffix(path, "_test.go") {
+			return nil
+		}
+		if strings.Contains(readTestFile(t, path), marker) {
+			relative, err := filepath.Rel(root, path)
+			require.NoError(t, err)
+			result = append(result, filepath.ToSlash(relative))
+		}
+		return nil
+	})
+	require.NoError(t, err)
+	slices.Sort(result)
+	return result
 }
 
 func TestWailsBuildPreparesProjectMetadataWithoutMage(t *testing.T) {

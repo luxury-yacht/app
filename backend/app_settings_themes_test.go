@@ -1,7 +1,6 @@
 package backend
 
 import (
-	"os"
 	"testing"
 
 	"github.com/stretchr/testify/assert"
@@ -31,7 +30,7 @@ func TestLoadSettingsFileSeedsDefaultThemeFromActivePreferences(t *testing.T) {
 
 	configPath, err := app.getSettingsFilePath()
 	require.NoError(t, err)
-	require.NoError(t, os.WriteFile(configPath, []byte(`{
+	writeTestFileWithParents(t, configPath, []byte(`{
 		"schemaVersion": 1,
 		"preferences": {
 			"appearanceMode": "dark",
@@ -46,7 +45,7 @@ func TestLoadSettingsFileSeedsDefaultThemeFromActivePreferences(t *testing.T) {
 			"linkColorLight": "#654321",
 			"linkColorDark": "#fedcba"
 		}
-	}`), 0o644))
+	}`), 0o644)
 
 	themes, err := app.GetThemes()
 	require.NoError(t, err)
