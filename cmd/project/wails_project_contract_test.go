@@ -287,6 +287,52 @@ func TestDesktopServiceOwnsTheWailsBoundaryWithoutAnAppBackpointer(t *testing.T)
 	require.NotContains(t, readTestFile(t, repositoryPath("backend", "app.go")), "//wails:inject")
 }
 
+func TestOperationsCoordinatorOwnsLiveOperationStateWithoutAnAppBackpointer(t *testing.T) {
+	appSource := readTestFile(t, repositoryPath("backend", "app.go"))
+	coordinatorSource := readTestFile(t, repositoryPath("backend", "operations_coordinator.go"))
+	compactAppSource := strings.Join(strings.Fields(appSource), " ")
+	compactCoordinatorSource := strings.Join(strings.Fields(coordinatorSource), " ")
+	parsed, err := parser.ParseFile(token.NewFileSet(), "operations_coordinator.go", coordinatorSource, 0)
+	require.NoError(t, err)
+
+	for _, displaced := range []string{
+		"shellSessions map[string]*shellSession",
+		"shellSessionsMu sync.Mutex",
+		"portForwardSessions map[string]*portForwardSessionInternal",
+		"portForwardSessionsMu sync.Mutex",
+		"runtimeOperations *runtimeOperationRegistry",
+		"runtimeOperationsMu sync.Mutex",
+	} {
+		require.NotContains(t, compactAppSource, displaced)
+		require.Contains(t, compactCoordinatorSource, displaced)
+	}
+
+	foundCoordinator := false
+	for _, declaration := range parsed.Decls {
+		general, ok := declaration.(*ast.GenDecl)
+		if !ok || general.Tok != token.TYPE {
+			continue
+		}
+		for _, specification := range general.Specs {
+			typeSpec, ok := specification.(*ast.TypeSpec)
+			if !ok || typeSpec.Name.Name != "OperationsCoordinator" {
+				continue
+			}
+			foundCoordinator = true
+			structure, ok := typeSpec.Type.(*ast.StructType)
+			require.True(t, ok)
+			for _, field := range structure.Fields.List {
+				require.False(t, isNamedPointer(field.Type, "App"), "OperationsCoordinator must not retain *App")
+			}
+		}
+	}
+	require.True(t, foundCoordinator)
+
+	mainSource := readTestFile(t, repositoryPath("main.go"))
+	require.Contains(t, mainSource, "operationsCoordinator := backendApp.OperationsCoordinator()")
+	require.Contains(t, mainSource, "Operations:     operationsCoordinator,")
+}
+
 func TestDirectWailsCompositionContractRejectsBoundaryRegressions(t *testing.T) {
 	mainSource := readTestFile(t, repositoryPath("main.go"))
 	windowSource := readTestFile(t, repositoryPath("internal", "appwindow", "registry.go"))

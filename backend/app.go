@@ -162,14 +162,7 @@ type App struct {
 	clusterLifecycle *clusterLifecycle
 	kubeAPIMetrics   *kubernetesAPIMetricsRegistry
 
-	shellSessions   map[string]*shellSession
-	shellSessionsMu sync.Mutex
-
-	portForwardSessions   map[string]*portForwardSessionInternal
-	portForwardSessionsMu sync.Mutex
-
-	runtimeOperations   *runtimeOperationRegistry
-	runtimeOperationsMu sync.Mutex
+	operations *OperationsCoordinator
 
 	applicationUpdates                  applicationUpdateCoordinator
 	applicationUpdateEventUnsubscribers []func()
@@ -236,9 +229,6 @@ func NewApp(wailsApplication *application.App, reporters ...sentryreporting.Repo
 		clusterOps:               newClusterOperationCoordinator(),
 		kubeAPIMetrics:           newKubernetesAPIMetricsRegistry(),
 		objectCatalogEntries:     make(map[string]*objectCatalogEntry),
-		shellSessions:            make(map[string]*shellSession),
-		portForwardSessions:      make(map[string]*portForwardSessionInternal),
-		runtimeOperations:        newRuntimeOperationRegistry(),
 		eventEmitter: func(_ context.Context, name string, data ...interface{}) {
 			if wailsApplication != nil {
 				wailsApplication.Event.Emit(name, data...)
@@ -266,6 +256,7 @@ func NewApp(wailsApplication *application.App, reporters ...sentryreporting.Repo
 	app.setupEnvironment()
 	app.initAuthManager()
 	app.initGovernor()
+	app.initializeOperationsCoordinator()
 	return app
 }
 

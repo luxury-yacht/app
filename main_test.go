@@ -98,6 +98,7 @@ func TestApplicationCompositionOwnsPeerWindowRegistryMenuAndService(t *testing.T
 	require.NotNil(t, composition.application)
 	require.NotNil(t, composition.backend)
 	require.NotNil(t, composition.service)
+	require.NotNil(t, composition.operations)
 	require.NotNil(t, composition.menu)
 	require.Equal(t, composition.menu, composition.application.Menu.GetApplicationMenu())
 

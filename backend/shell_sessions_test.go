@@ -29,7 +29,9 @@ func TestTerminalSizeQueueBehavior(t *testing.T) {
 }
 
 func TestShellEventWriterEmits(t *testing.T) {
-	app := newTestAppWithDefaults(t)
+	fixture := newOperationsCoordinatorFixture(t)
+	app := fixture.runtime
+	operations := fixture.coordinator
 	setTestAppRuntimeReady(t, app, context.Background())
 	events := make([]ShellOutputEvent, 0, 1)
 	app.eventEmitter = func(_ context.Context, name string, args ...interface{}) {
@@ -42,7 +44,7 @@ func TestShellEventWriterEmits(t *testing.T) {
 
 	sess := &shellSession{}
 	writer := &shellEventWriter{
-		app: app, sessionID: "s1", clusterID: "cluster1", stream: "stdout", session: sess,
+		coordinator: operations, sessionID: "s1", clusterID: "cluster1", stream: "stdout", session: sess,
 	}
 	n, err := writer.Write([]byte("hello"))
 	if err != nil || n != len("hello") {
@@ -57,9 +59,11 @@ func TestShellEventWriterEmits(t *testing.T) {
 }
 
 func TestShellSessionLifecycleHelpers(t *testing.T) {
-	app := newTestAppWithDefaults(t)
+	fixture := newOperationsCoordinatorFixture(t)
+	app := fixture.runtime
+	operations := fixture.coordinator
 	setTestAppRuntimeReady(t, app, context.Background())
-	app.shellSessions = make(map[string]*shellSession)
+	operations.shellSessions = make(map[string]*shellSession)
 
 	stdinR, stdinW := io.Pipe()
 	sizeQueue := newTerminalSizeQueue()
@@ -71,7 +75,7 @@ func TestShellSessionLifecycleHelpers(t *testing.T) {
 		sizeQueue: sizeQueue,
 		cancel:    func() {},
 	}
-	app.shellSessions["sess"] = sess
+	operations.shellSessions["sess"] = sess
 
 	app.eventEmitter = func(context.Context, string, ...interface{}) {}
 
@@ -82,14 +86,14 @@ func TestShellSessionLifecycleHelpers(t *testing.T) {
 		readCh <- string(buf[:n])
 	}()
 
-	if err := app.SendShellInput("sess", "data"); err != nil {
+	if err := operations.SendShellInput("sess", "data"); err != nil {
 		t.Fatalf("SendShellInput error: %v", err)
 	}
 	if got := <-readCh; got != "data" {
 		t.Fatalf("stdin read mismatch: %q", got)
 	}
 
-	if err := app.ResizeShellSession("sess", 120, 50); err != nil {
+	if err := operations.ResizeShellSession("sess", 120, 50); err != nil {
 		t.Fatalf("ResizeShellSession error: %v", err)
 	}
 	s := sizeQueue.Next()
@@ -105,10 +109,10 @@ func TestShellSessionLifecycleHelpers(t *testing.T) {
 			}
 		}
 	}
-	if err := app.CloseShellSession("sess"); err != nil {
+	if err := operations.CloseShellSession("sess"); err != nil {
 		t.Fatalf("CloseShellSession error: %v", err)
 	}
-	if app.shellSessionLifecycle().get("sess") != nil {
+	if operations.shellSessionLifecycle().get("sess") != nil {
 		t.Fatalf("expected session to be removed")
 	}
 	if len(events) != 1 || events[0].Status != "closed" || events[0].ClusterID != "cluster1" {
@@ -117,9 +121,11 @@ func TestShellSessionLifecycleHelpers(t *testing.T) {
 }
 
 func TestTerminateShellWithReasonUnregistersRuntimeOperation(t *testing.T) {
-	app := newTestAppWithDefaults(t)
+	fixture := newOperationsCoordinatorFixture(t)
+	app := fixture.runtime
+	operations := fixture.coordinator
 	setTestAppRuntimeReady(t, app, context.Background())
-	app.shellSessions = make(map[string]*shellSession)
+	operations.shellSessions = make(map[string]*shellSession)
 
 	sess := &shellSession{
 		id:        "sess",
@@ -130,27 +136,29 @@ func TestTerminateShellWithReasonUnregistersRuntimeOperation(t *testing.T) {
 		command:   []string{"/bin/sh"},
 		startedAt: time.Now(),
 	}
-	app.shellSessions[sess.id] = sess
-	app.registerRuntimeOperation(runtimeOperationFromShellSession(sess), nil)
+	operations.shellSessions[sess.id] = sess
+	operations.registerRuntimeOperation(runtimeOperationFromShellSession(sess), nil)
 
-	if operations := app.ListRuntimeOperations(); len(operations) != 1 {
-		t.Fatalf("expected registered runtime operation, got %+v", operations)
+	if operationList := operations.ListRuntimeOperations(); len(operationList) != 1 {
+		t.Fatalf("expected registered runtime operation, got %+v", operationList)
 	}
 
-	app.terminateShellWithReason(sess.id, "timeout", "session idle timeout")
+	operations.terminateShellWithReason(sess.id, "timeout", "session idle timeout")
 
-	if app.shellSessionLifecycle().get(sess.id) != nil {
+	if operations.shellSessionLifecycle().get(sess.id) != nil {
 		t.Fatalf("expected session to be removed")
 	}
-	if operations := app.ListRuntimeOperations(); len(operations) != 0 {
-		t.Fatalf("expected runtime operation to be unregistered, got %+v", operations)
+	if operationList := operations.ListRuntimeOperations(); len(operationList) != 0 {
+		t.Fatalf("expected runtime operation to be unregistered, got %+v", operationList)
 	}
 }
 
 func TestShellSessionLifecycleFinishStreamIsIdempotent(t *testing.T) {
-	app := newTestAppWithDefaults(t)
+	fixture := newOperationsCoordinatorFixture(t)
+	app := fixture.runtime
+	operations := fixture.coordinator
 	setTestAppRuntimeReady(t, app, context.Background())
-	app.shellSessions = make(map[string]*shellSession)
+	operations.shellSessions = make(map[string]*shellSession)
 
 	var statusEvents []ShellStatusEvent
 	listEvents := 0
@@ -176,11 +184,11 @@ func TestShellSessionLifecycleFinishStreamIsIdempotent(t *testing.T) {
 		command:   []string{"/bin/sh"},
 		startedAt: time.Now(),
 	}
-	app.shellSessions[sess.id] = sess
-	app.registerRuntimeOperation(runtimeOperationFromShellSession(sess), nil)
+	operations.shellSessions[sess.id] = sess
+	operations.registerRuntimeOperation(runtimeOperationFromShellSession(sess), nil)
 	listEvents = 0
 
-	lifecycle := app.shellSessionLifecycle()
+	lifecycle := operations.shellSessionLifecycle()
 	if finished := lifecycle.finishStream(sess.id, "closed", ""); !finished {
 		t.Fatal("expected first stream finish to remove session")
 	}
@@ -191,8 +199,8 @@ func TestShellSessionLifecycleFinishStreamIsIdempotent(t *testing.T) {
 	if lifecycle.get(sess.id) != nil {
 		t.Fatal("expected stream finish to remove session")
 	}
-	if operations := app.ListRuntimeOperations(); len(operations) != 0 {
-		t.Fatalf("expected stream finish to unregister runtime operation, got %+v", operations)
+	if operationList := operations.ListRuntimeOperations(); len(operationList) != 0 {
+		t.Fatalf("expected stream finish to unregister runtime operation, got %+v", operationList)
 	}
 	if len(statusEvents) != 1 {
 		t.Fatalf("expected one status event, got %d", len(statusEvents))
@@ -206,9 +214,11 @@ func TestShellSessionLifecycleFinishStreamIsIdempotent(t *testing.T) {
 }
 
 func TestShellSessionLifecycleCloseForRuntimeIsIdempotent(t *testing.T) {
-	app := newTestAppWithDefaults(t)
+	fixture := newOperationsCoordinatorFixture(t)
+	app := fixture.runtime
+	operations := fixture.coordinator
 	setTestAppRuntimeReady(t, app, context.Background())
-	app.shellSessions = make(map[string]*shellSession)
+	operations.shellSessions = make(map[string]*shellSession)
 
 	var statusEvents []ShellStatusEvent
 	listEvents := 0
@@ -226,16 +236,16 @@ func TestShellSessionLifecycleCloseForRuntimeIsIdempotent(t *testing.T) {
 	}
 
 	sess := &shellSession{id: "sess-runtime", clusterID: "cluster1"}
-	app.shellSessions[sess.id] = sess
+	operations.shellSessions[sess.id] = sess
 
-	if err := app.closeShellSessionForRuntime(sess.id, "cluster disconnected"); err != nil {
+	if err := operations.closeShellSessionForRuntime(sess.id, "cluster disconnected"); err != nil {
 		t.Fatalf("unexpected cleanup error: %v", err)
 	}
-	if err := app.closeShellSessionForRuntime(sess.id, "cluster disconnected"); err != nil {
+	if err := operations.closeShellSessionForRuntime(sess.id, "cluster disconnected"); err != nil {
 		t.Fatalf("expected repeated runtime cleanup to be ignored, got %v", err)
 	}
 
-	if app.shellSessionLifecycle().get(sess.id) != nil {
+	if operations.shellSessionLifecycle().get(sess.id) != nil {
 		t.Fatal("expected runtime cleanup to remove session")
 	}
 	if len(statusEvents) != 1 {
@@ -244,45 +254,48 @@ func TestShellSessionLifecycleCloseForRuntimeIsIdempotent(t *testing.T) {
 	if statusEvents[0].Status != "closed" || statusEvents[0].Reason != "cluster disconnected" {
 		t.Fatalf("unexpected status event %+v", statusEvents[0])
 	}
-	if listEvents != 1 {
-		t.Fatalf("expected one list event, got %d", listEvents)
+	if listEvents != 0 {
+		t.Fatalf("expected runtime callback to defer list publication to StopCluster, got %d", listEvents)
 	}
 }
 
 func TestShellSessionMissingGuards(t *testing.T) {
-	app := newTestAppWithDefaults(t)
-	if err := app.SendShellInput("missing", "x"); err == nil {
+	fixture := newOperationsCoordinatorFixture(t)
+	operations := fixture.coordinator
+	if err := operations.SendShellInput("missing", "x"); err == nil {
 		t.Fatalf("expected error for missing session")
 	}
-	if err := app.ResizeShellSession("missing", -1, 0); err == nil {
+	if err := operations.ResizeShellSession("missing", -1, 0); err == nil {
 		t.Fatalf("expected error for invalid resize")
 	}
-	if err := app.CloseShellSession("missing"); err == nil {
+	if err := operations.CloseShellSession("missing"); err == nil {
 		t.Fatalf("expected error for missing session close")
 	}
 }
 
 func TestResizeShellSessionRejectsOverflowDimensions(t *testing.T) {
-	app := newTestAppWithDefaults(t)
-	app.shellSessions = map[string]*shellSession{
+	fixture := newOperationsCoordinatorFixture(t)
+	operations := fixture.coordinator
+	operations.shellSessions = map[string]*shellSession{
 		"sess": {
 			id:        "sess",
 			sizeQueue: newTerminalSizeQueue(),
 		},
 	}
 
-	if err := app.ResizeShellSession("sess", maxTerminalDimension+1, 24); err == nil {
+	if err := operations.ResizeShellSession("sess", maxTerminalDimension+1, 24); err == nil {
 		t.Fatalf("expected oversized columns to be rejected")
 	}
-	if err := app.ResizeShellSession("sess", 80, maxTerminalDimension+1); err == nil {
+	if err := operations.ResizeShellSession("sess", 80, maxTerminalDimension+1); err == nil {
 		t.Fatalf("expected oversized rows to be rejected")
 	}
 }
 
 func TestListShellSessionsAndClusterCount(t *testing.T) {
-	app := newTestAppWithDefaults(t)
+	fixture := newOperationsCoordinatorFixture(t)
+	operations := fixture.coordinator
 	now := time.Now()
-	app.shellSessions = map[string]*shellSession{
+	operations.shellSessions = map[string]*shellSession{
 		"s1": {
 			id:          "s1",
 			clusterID:   "cluster-a",
@@ -305,7 +318,7 @@ func TestListShellSessionsAndClusterCount(t *testing.T) {
 		},
 	}
 
-	sessions := app.ListShellSessions()
+	sessions := operations.ListShellSessions()
 	if len(sessions) != 2 {
 		t.Fatalf("expected 2 sessions, got %d", len(sessions))
 	}
@@ -315,18 +328,20 @@ func TestListShellSessionsAndClusterCount(t *testing.T) {
 	if sessions[0].ClusterName != "cluster-a-name" {
 		t.Fatalf("unexpected cluster name: %+v", sessions[0])
 	}
-	if count := app.GetClusterShellSessionCount("cluster-a"); count != 1 {
+	if count := operations.GetClusterShellSessionCount("cluster-a"); count != 1 {
 		t.Fatalf("expected cluster-a count 1, got %d", count)
 	}
-	if count := app.GetClusterShellSessionCount("cluster-b"); count != 1 {
+	if count := operations.GetClusterShellSessionCount("cluster-b"); count != 1 {
 		t.Fatalf("expected cluster-b count 1, got %d", count)
 	}
 }
 
-func TestStopClusterShellSessions(t *testing.T) {
-	app := newTestAppWithDefaults(t)
+func TestOperationsCoordinatorStopClusterCleansShellSessions(t *testing.T) {
+	fixture := newOperationsCoordinatorFixture(t)
+	app := fixture.runtime
+	operations := fixture.coordinator
 	setTestAppRuntimeReady(t, app, context.Background())
-	app.shellSessions = map[string]*shellSession{
+	operations.shellSessions = map[string]*shellSession{
 		"s1": {
 			id:        "s1",
 			clusterID: "cluster-a",
@@ -355,9 +370,12 @@ func TestStopClusterShellSessions(t *testing.T) {
 			startedAt: time.Now().Add(-1 * time.Minute),
 		},
 	}
-	app.registerRuntimeOperation(runtimeOperationFromShellSession(app.shellSessions["s1"]), nil)
-	app.registerRuntimeOperation(runtimeOperationFromShellSession(app.shellSessions["s2"]), nil)
-	app.registerRuntimeOperation(runtimeOperationFromShellSession(app.shellSessions["s3"]), nil)
+	for _, sessionID := range []string{"s1", "s2", "s3"} {
+		sessionID := sessionID
+		operations.registerRuntimeOperation(runtimeOperationFromShellSession(operations.shellSessions[sessionID]), func(reason string) error {
+			return operations.shellSessionLifecycle().closeForRuntime(sessionID, reason)
+		})
+	}
 
 	statusEvents := make([]ShellStatusEvent, 0)
 	listEvents := make([][]ShellSessionInfo, 0)
@@ -377,21 +395,19 @@ func TestStopClusterShellSessions(t *testing.T) {
 		}
 	}
 
-	if err := app.StopClusterShellSessions("cluster-a"); err != nil {
-		t.Fatalf("StopClusterShellSessions error: %v", err)
-	}
-	if app.shellSessionLifecycle().get("s1") != nil || app.shellSessionLifecycle().get("s2") != nil {
+	operations.StopCluster("cluster-a")
+	if operations.shellSessionLifecycle().get("s1") != nil || operations.shellSessionLifecycle().get("s2") != nil {
 		t.Fatalf("expected cluster-a sessions removed")
 	}
-	if app.shellSessionLifecycle().get("s3") == nil {
+	if operations.shellSessionLifecycle().get("s3") == nil {
 		t.Fatalf("expected cluster-b session to remain")
 	}
-	operations := app.ListRuntimeOperations()
-	if len(operations) != 1 {
-		t.Fatalf("expected one runtime operation to remain, got %+v", operations)
+	remainingOperations := operations.ListRuntimeOperations()
+	if len(remainingOperations) != 1 {
+		t.Fatalf("expected one runtime operation to remain, got %+v", remainingOperations)
 	}
-	if operations[0].ID != "s3" {
-		t.Fatalf("expected s3 runtime operation to remain, got %+v", operations)
+	if remainingOperations[0].ID != "s3" {
+		t.Fatalf("expected s3 runtime operation to remain, got %+v", remainingOperations)
 	}
 	if len(statusEvents) != 2 {
 		t.Fatalf("expected 2 status events, got %d", len(statusEvents))
@@ -436,7 +452,9 @@ func TestHasEphemeralContainer(t *testing.T) {
 }
 
 func TestEmitShellEventsGuards(t *testing.T) {
-	app := newTestAppWithDefaults(t)
+	fixture := newOperationsCoordinatorFixture(t)
+	app := fixture.runtime
+	operations := fixture.coordinator
 	setTestAppRuntimeReady(t, app, context.Background())
 
 	calls := 0
@@ -445,17 +463,17 @@ func TestEmitShellEventsGuards(t *testing.T) {
 	}
 
 	// guard cases
-	app.shellSessionLifecycle().emitOutput("", "cluster1", "stdout", "data")
-	app.shellSessionLifecycle().emitOutput("id", "cluster1", "stdout", "")
-	app.shellSessionLifecycle().emitStatus("", "cluster1", "open", "")
-	app.shellSessionLifecycle().emitStatus("id", "cluster1", "", "")
+	operations.shellSessionLifecycle().emitOutput("", "cluster1", "stdout", "data")
+	operations.shellSessionLifecycle().emitOutput("id", "cluster1", "stdout", "")
+	operations.shellSessionLifecycle().emitStatus("", "cluster1", "open", "")
+	operations.shellSessionLifecycle().emitStatus("id", "cluster1", "", "")
 	if calls != 0 {
 		t.Fatalf("expected no events for guarded inputs, got %d", calls)
 	}
 
 	// happy paths
-	app.shellSessionLifecycle().emitOutput("id", "cluster1", "stdout", "line")
-	app.shellSessionLifecycle().emitStatus("id", "cluster1", "open", "reason")
+	operations.shellSessionLifecycle().emitOutput("id", "cluster1", "stdout", "line")
+	operations.shellSessionLifecycle().emitStatus("id", "cluster1", "open", "reason")
 	if calls != 2 {
 		t.Fatalf("expected 2 events emitted, got %d", calls)
 	}
@@ -484,15 +502,16 @@ func TestShellSessionBacklogIsBounded(t *testing.T) {
 }
 
 func TestGetShellSessionBacklog(t *testing.T) {
-	app := newTestAppWithDefaults(t)
+	fixture := newOperationsCoordinatorFixture(t)
+	operations := fixture.coordinator
 	sess := &shellSession{id: "s1"}
 	sess.appendBacklog("line-1\n")
 	sess.appendBacklog("line-2\n")
-	app.shellSessions = map[string]*shellSession{
+	operations.shellSessions = map[string]*shellSession{
 		"s1": sess,
 	}
 
-	backlog, err := app.GetShellSessionBacklog("s1")
+	backlog, err := operations.GetShellSessionBacklog("s1")
 	if err != nil {
 		t.Fatalf("GetShellSessionBacklog error: %v", err)
 	}
@@ -500,13 +519,15 @@ func TestGetShellSessionBacklog(t *testing.T) {
 		t.Fatalf("unexpected backlog: %q", backlog)
 	}
 
-	if _, err := app.GetShellSessionBacklog("missing"); err == nil {
+	if _, err := operations.GetShellSessionBacklog("missing"); err == nil {
 		t.Fatalf("expected error for missing shell session")
 	}
 }
 
 func TestStartShellSessionValidation(t *testing.T) {
-	app := newTestAppWithDefaults(t)
+	fixture := newOperationsCoordinatorFixture(t)
+	app := fixture.runtime
+	operations := fixture.coordinator
 	setTestAppRuntimeReady(t, app, context.Background())
 	app.clusterClients = map[string]*clusterClients{
 		shellClusterID: {
@@ -517,7 +538,7 @@ func TestStartShellSessionValidation(t *testing.T) {
 	}
 
 	// missing client should fail fast
-	if _, err := app.StartShellSession(shellClusterID, ShellSessionRequest{}); err == nil {
+	if _, err := operations.StartShellSession(shellClusterID, ShellSessionRequest{}); err == nil {
 		t.Fatal("expected error when client is nil")
 	}
 
@@ -534,16 +555,18 @@ func TestStartShellSessionValidation(t *testing.T) {
 		},
 	}
 
-	if _, err := app.StartShellSession(shellClusterID, ShellSessionRequest{}); err == nil {
+	if _, err := operations.StartShellSession(shellClusterID, ShellSessionRequest{}); err == nil {
 		t.Fatal("expected namespace validation error")
 	}
-	if _, err := app.StartShellSession(shellClusterID, ShellSessionRequest{Namespace: "ns"}); err == nil {
+	if _, err := operations.StartShellSession(shellClusterID, ShellSessionRequest{Namespace: "ns"}); err == nil {
 		t.Fatal("expected pod name validation error")
 	}
 }
 
 func TestStartShellSessionPodValidation(t *testing.T) {
-	app := newTestAppWithDefaults(t)
+	fixture := newOperationsCoordinatorFixture(t)
+	app := fixture.runtime
+	operations := fixture.coordinator
 	setTestAppRuntimeReady(t, app, context.Background())
 
 	// Per-cluster clients are stored in clusterClients, not in global fields.
@@ -564,7 +587,7 @@ func TestStartShellSessionPodValidation(t *testing.T) {
 		},
 	}
 
-	_, err := app.StartShellSession(shellClusterID, ShellSessionRequest{Namespace: "default", PodName: "pod-1"})
+	_, err := operations.StartShellSession(shellClusterID, ShellSessionRequest{Namespace: "default", PodName: "pod-1"})
 	if err == nil {
 		t.Fatal("expected error when pod has no containers")
 	}
@@ -581,13 +604,15 @@ func TestStartShellSessionPodValidation(t *testing.T) {
 		},
 	}
 
-	if _, err := app.StartShellSession(shellClusterID, ShellSessionRequest{Namespace: "default", PodName: "pod-1", Container: "missing"}); err == nil {
+	if _, err := operations.StartShellSession(shellClusterID, ShellSessionRequest{Namespace: "default", PodName: "pod-1", Container: "missing"}); err == nil {
 		t.Fatal("expected error for missing container")
 	}
 }
 
 func TestStartShellSessionRequiresExecPermission(t *testing.T) {
-	app := newTestAppWithDefaults(t)
+	fixture := newOperationsCoordinatorFixture(t)
+	app := fixture.runtime
+	operations := fixture.coordinator
 	setTestAppRuntimeReady(t, app, context.Background())
 
 	pod := &corev1.Pod{
@@ -609,7 +634,7 @@ func TestStartShellSessionRequiresExecPermission(t *testing.T) {
 		},
 	}
 
-	_, err := app.StartShellSession(shellClusterID, ShellSessionRequest{
+	_, err := operations.StartShellSession(shellClusterID, ShellSessionRequest{
 		Namespace: "default",
 		PodName:   "pod-1",
 		Container: "main",
@@ -617,7 +642,7 @@ func TestStartShellSessionRequiresExecPermission(t *testing.T) {
 	if err == nil || !strings.Contains(err.Error(), "exec denied") {
 		t.Fatalf("expected exec permission denial, got %v", err)
 	}
-	if len(app.ListShellSessions()) != 0 {
+	if len(operations.ListShellSessions()) != 0 {
 		t.Fatalf("expected denied shell session not to be registered")
 	}
 }

@@ -390,11 +390,11 @@ func TestSetSelectedKubeconfigsRemovesClusterRuntimeStateOnChurn(t *testing.T) {
 		},
 	}
 
-	app.shellSessions = map[string]*shellSession{
+	app.operations.shellSessions = map[string]*shellSession{
 		"shell-a": {id: "shell-a", clusterID: clusterA},
 		"shell-b": {id: "shell-b", clusterID: clusterB},
 	}
-	app.portForwardSessions = map[string]*portForwardSessionInternal{
+	app.operations.portForwardSessions = map[string]*portForwardSessionInternal{
 		"pf-a": {
 			PortForwardSession: PortForwardSession{
 				ID:        "pf-a",
@@ -410,17 +410,17 @@ func TestSetSelectedKubeconfigsRemovesClusterRuntimeStateOnChurn(t *testing.T) {
 			stopChan: make(chan struct{}),
 		},
 	}
-	app.registerRuntimeOperation(runtimeOperationFromShellSession(app.shellSessions["shell-a"]), func(reason string) error {
-		return app.closeShellSessionForRuntime("shell-a", reason)
+	app.operations.registerRuntimeOperation(runtimeOperationFromShellSession(app.operations.shellSessions["shell-a"]), func(reason string) error {
+		return app.operations.closeShellSessionForRuntime("shell-a", reason)
 	})
-	app.registerRuntimeOperation(runtimeOperationFromShellSession(app.shellSessions["shell-b"]), func(reason string) error {
-		return app.closeShellSessionForRuntime("shell-b", reason)
+	app.operations.registerRuntimeOperation(runtimeOperationFromShellSession(app.operations.shellSessions["shell-b"]), func(reason string) error {
+		return app.operations.closeShellSessionForRuntime("shell-b", reason)
 	})
-	app.registerRuntimeOperation(runtimeOperationFromPortForward(app.portForwardSessions["pf-a"]), func(reason string) error {
-		return app.stopPortForwardForRuntime("pf-a", reason)
+	app.operations.registerRuntimeOperation(runtimeOperationFromPortForward(app.operations.portForwardSessions["pf-a"]), func(reason string) error {
+		return app.operations.stopPortForwardForRuntime("pf-a", reason)
 	})
-	app.registerRuntimeOperation(runtimeOperationFromPortForward(app.portForwardSessions["pf-b"]), func(reason string) error {
-		return app.stopPortForwardForRuntime("pf-b", reason)
+	app.operations.registerRuntimeOperation(runtimeOperationFromPortForward(app.operations.portForwardSessions["pf-b"]), func(reason string) error {
+		return app.operations.stopPortForwardForRuntime("pf-b", reason)
 	})
 
 	require.NoError(t, app.SetSelectedKubeconfigs([]string{selectionB.String()}))
@@ -448,12 +448,12 @@ func TestSetSelectedKubeconfigsRemovesClusterRuntimeStateOnChurn(t *testing.T) {
 	require.True(t, canceledA, "removed cluster object catalog should be canceled")
 	require.False(t, canceledB, "remaining cluster object catalog should not be canceled")
 
-	require.Equal(t, 0, app.GetClusterShellSessionCount(clusterA))
-	require.Equal(t, 1, app.GetClusterShellSessionCount(clusterB))
-	require.Equal(t, 0, app.GetClusterPortForwardCount(clusterA))
-	require.Equal(t, 1, app.GetClusterPortForwardCount(clusterB))
+	require.Equal(t, 0, app.operations.GetClusterShellSessionCount(clusterA))
+	require.Equal(t, 1, app.operations.GetClusterShellSessionCount(clusterB))
+	require.Equal(t, 0, app.operations.GetClusterPortForwardCount(clusterA))
+	require.Equal(t, 1, app.operations.GetClusterPortForwardCount(clusterB))
 
-	remainingOperations := app.ListRuntimeOperations()
+	remainingOperations := app.operations.ListRuntimeOperations()
 	require.Len(t, remainingOperations, 2)
 	for _, operation := range remainingOperations {
 		require.Equal(t, clusterB, operation.ClusterID, "runtime operation cleanup must stay cluster-scoped")
@@ -517,11 +517,11 @@ func TestSetSelectedKubeconfigsClearCleansRuntimeStateForAllClusters(t *testing.
 		},
 	}
 
-	app.shellSessions = map[string]*shellSession{
+	app.operations.shellSessions = map[string]*shellSession{
 		"shell-a": {id: "shell-a", clusterID: clusterA},
 		"shell-b": {id: "shell-b", clusterID: clusterB},
 	}
-	app.portForwardSessions = map[string]*portForwardSessionInternal{
+	app.operations.portForwardSessions = map[string]*portForwardSessionInternal{
 		"pf-a": {
 			PortForwardSession: PortForwardSession{
 				ID:        "pf-a",
@@ -537,17 +537,17 @@ func TestSetSelectedKubeconfigsClearCleansRuntimeStateForAllClusters(t *testing.
 			stopChan: make(chan struct{}),
 		},
 	}
-	app.registerRuntimeOperation(runtimeOperationFromShellSession(app.shellSessions["shell-a"]), func(reason string) error {
-		return app.closeShellSessionForRuntime("shell-a", reason)
+	app.operations.registerRuntimeOperation(runtimeOperationFromShellSession(app.operations.shellSessions["shell-a"]), func(reason string) error {
+		return app.operations.closeShellSessionForRuntime("shell-a", reason)
 	})
-	app.registerRuntimeOperation(runtimeOperationFromShellSession(app.shellSessions["shell-b"]), func(reason string) error {
-		return app.closeShellSessionForRuntime("shell-b", reason)
+	app.operations.registerRuntimeOperation(runtimeOperationFromShellSession(app.operations.shellSessions["shell-b"]), func(reason string) error {
+		return app.operations.closeShellSessionForRuntime("shell-b", reason)
 	})
-	app.registerRuntimeOperation(runtimeOperationFromPortForward(app.portForwardSessions["pf-a"]), func(reason string) error {
-		return app.stopPortForwardForRuntime("pf-a", reason)
+	app.operations.registerRuntimeOperation(runtimeOperationFromPortForward(app.operations.portForwardSessions["pf-a"]), func(reason string) error {
+		return app.operations.stopPortForwardForRuntime("pf-a", reason)
 	})
-	app.registerRuntimeOperation(runtimeOperationFromPortForward(app.portForwardSessions["pf-b"]), func(reason string) error {
-		return app.stopPortForwardForRuntime("pf-b", reason)
+	app.operations.registerRuntimeOperation(runtimeOperationFromPortForward(app.operations.portForwardSessions["pf-b"]), func(reason string) error {
+		return app.operations.stopPortForwardForRuntime("pf-b", reason)
 	})
 
 	require.NoError(t, app.SetSelectedKubeconfigs(nil))
@@ -566,11 +566,11 @@ func TestSetSelectedKubeconfigsClearCleansRuntimeStateForAllClusters(t *testing.
 	require.True(t, canceledA, "cluster A object catalog should be canceled")
 	require.True(t, canceledB, "cluster B object catalog should be canceled")
 
-	require.Equal(t, 0, app.GetClusterShellSessionCount(clusterA))
-	require.Equal(t, 0, app.GetClusterShellSessionCount(clusterB))
-	require.Equal(t, 0, app.GetClusterPortForwardCount(clusterA))
-	require.Equal(t, 0, app.GetClusterPortForwardCount(clusterB))
-	require.Empty(t, app.ListRuntimeOperations(), "clearing selection should remove all runtime operations")
+	require.Equal(t, 0, app.operations.GetClusterShellSessionCount(clusterA))
+	require.Equal(t, 0, app.operations.GetClusterShellSessionCount(clusterB))
+	require.Equal(t, 0, app.operations.GetClusterPortForwardCount(clusterA))
+	require.Equal(t, 0, app.operations.GetClusterPortForwardCount(clusterB))
+	require.Empty(t, app.operations.ListRuntimeOperations(), "clearing selection should remove all runtime operations")
 }
 
 func TestSetSelectedKubeconfigsKeepsResponseCacheClusterScopedDuringChurn(t *testing.T) {

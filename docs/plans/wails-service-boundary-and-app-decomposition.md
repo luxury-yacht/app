@@ -764,33 +764,33 @@ enforce the preserved decisions. The backend contains no unproved
 
 ## Phase 2 — Extract live operations
 
-- [ ] Promote the existing `runtimeOperationRegistry`, shell-session lifecycle,
+- [x] Promote the existing `runtimeOperationRegistry`, shell-session lifecycle,
   port-forward lifecycle, and drain registration into
   `OperationsCoordinator`; do not create parallel registries or cleanup paths.
-- [ ] Move the shell, port-forward, and runtime-operation fields and locks from
+- [x] Move the shell, port-forward, and runtime-operation fields and locks from
   `App` into that owner without changing session or event DTOs.
-- [ ] Inject narrow cluster dependency resolution, permission checking, event
+- [x] Inject narrow cluster dependency resolution, permission checking, event
   emission, logging, and context dependencies; do not inject the composition
   root. Record the cluster dependency/retry collaborator as temporarily
   App-backed and require Phase 5A to replace its implementation with
   `ClusterRuntimeManager` without changing the operations owner.
-- [ ] Route the relevant `DesktopService` commands directly to the new owner.
+- [x] Route the relevant `DesktopService` commands directly to the new owner.
   Replace the App-backed `OperationsCoordinator` collaborator as one unit.
-- [ ] Route cluster removal and application shutdown through one idempotent
+- [x] Route cluster removal and application shutdown through one idempotent
   `StopCluster(clusterId)` / `Shutdown()` lifecycle instead of type-specific
   cleanup from unrelated owners.
-- [ ] Preserve the runtime-operation registry as the active-operation envelope;
+- [x] Preserve the runtime-operation registry as the active-operation envelope;
   workflow detail events must not resurrect removed operations.
-- [ ] Delete the displaced `App` fields, methods, and test-only access paths in
+- [x] Delete the displaced `App` fields, methods, and test-only access paths in
   the same slice.
-- [ ] Move every affected direct-App test and test-only entry point to an
+- [x] Move every affected direct-App test and test-only entry point to an
   `OperationsCoordinator` fixture, retaining a full runtime only for lifecycle
   integration tests, and record the remaining direct-App counts.
-- [ ] Update `docs/workflows/operation-lifecycle.md` with
+- [x] Update `docs/workflows/operation-lifecycle.md` with
   `OperationsCoordinator` ownership, per-cluster cleanup, registry semantics,
   and shutdown ordering; update `docs/workflows/shell-debug.md` where the new
   owner changes shell-session routing.
-- [ ] Prove startup listing, live typed events, per-cluster cleanup, repeated
+- [x] Prove startup listing, live typed events, per-cluster cleanup, repeated
   cleanup, and process shutdown under race tests.
 
 Exit criterion: one component owns all live-operation state and cleanup, with

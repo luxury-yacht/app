@@ -227,7 +227,7 @@ func TestCancelDrainNodeJobRequiresNodeMaintenancePermission(t *testing.T) {
 		clusterID,
 		clusterID,
 	)
-	err := app.CancelDrainNodeJob(clusterID, job.ID)
+	err := app.operations.CancelDrainNodeJob(clusterID, job.ID)
 	if err == nil || !strings.Contains(err.Error(), "permission denied") {
 		t.Fatalf("expected permission denial, got %v", err)
 	}

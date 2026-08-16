@@ -25,14 +25,55 @@ be visible in the app shell and cleaned up when their cluster goes away.
 
 ## Ownership
 
-- Runtime registry and list event: `backend/runtime_operations.go`
-- Shell lifecycle and backlog: `backend/shell_sessions*.go`
-- Port-forward lifecycle and status: `backend/portforward*.go`
+- `backend.OperationsCoordinator` owns the runtime registry, shell-session map,
+  port-forward map, their locks, Wails command implementations, executor
+  factories, typed list/status publication, and all per-cluster/process cleanup.
+- `backend/runtime_operations.go` implements the coordinator's active-operation
+  envelope and the `runtime-operations:list` event.
+- `backend/shell_sessions*.go` implements coordinator-owned shell lifecycle and
+  backlog behavior.
+- `backend/portforward*.go` implements coordinator-owned forwarding lifecycle
+  and status behavior.
 - Node maintenance and drain state: `backend/nodemaintenance`,
   `backend/refresh/snapshot/node_maintenance.go`
 - Frontend status rows: `frontend/src/ui/status`
 - Cluster selection transition:
   [../architecture/multi-cluster.md](../architecture/multi-cluster.md)
+
+`DesktopService` delegates all ten live-operation commands directly to the
+coordinator. The coordinator has no `*App` back-pointer. It receives narrow
+cluster dependency/retry access, permission evaluation, event publication,
+logging, application context, drain-store, and shell-executor dependencies.
+The cluster-access implementation is temporarily App-backed; Phase 5A replaces
+that implementation with `ClusterRuntimeManager` without changing operation
+ownership or Wails commands.
+
+## Registry And Cleanup Ordering
+
+The runtime registry is authoritative for whether an operation is active.
+Shell and port-forward detail maps provide workflow state but cannot create an
+active operation on their own. Every live workflow registers one registry
+entry with its idempotent cleanup callback.
+
+`StopCluster(clusterId)` advances that cluster's operation epoch and removes
+its registry entries before invoking callbacks. It then publishes at most one
+final shell list, one final port-forward list, and one final runtime-operation
+list. A late shell start, port-forward activation, or drain registration from
+an older epoch is rejected, so detail activity cannot resurrect an operation
+after cluster removal. Repeating `StopCluster` is a no-op apart from the empty
+authoritative list publication.
+
+`Shutdown()` first closes registration for the process, then applies the same
+cleanup to every cluster still represented in the registry. Repeating shutdown
+does not run callbacks again, and work completing after shutdown cannot add a
+new entry. `ApplicationLifecycle.ServiceShutdown` stops auth managers first,
+calls `OperationsCoordinator.Shutdown`, then stops the kubeconfig watcher and
+refresh runtime. Frontend events are already gated once the application context
+is cancelled, but workflow resources are still closed.
+
+Cluster close, kubeconfig clear, selection pruning, and removed-client cleanup
+all call the same `StopCluster` entry point. They must not call shell-,
+port-forward-, or drain-specific cleanup paths.
 
 ## Drain Refresh Rule
 
@@ -54,6 +95,8 @@ When changing runtime operations:
 3. Confirm removed operations cannot reappear from stale workflow events.
 4. Confirm cluster close/clear/removal cleans only the affected cluster.
 5. Test startup read, live update, cleanup, and repeated cleanup.
+6. Preserve operation-epoch rejection for starts or activations racing with
+   cluster removal or process shutdown.
 
 ## Validation
 

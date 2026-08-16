@@ -7,39 +7,46 @@ import (
 )
 
 type portForwardLifecycle struct {
-	app *App
+	coordinator *OperationsCoordinator
 }
 
-func (a *App) portForwardLifecycle() portForwardLifecycle {
-	return portForwardLifecycle{app: a}
+func (o *OperationsCoordinator) portForwardLifecycle() portForwardLifecycle {
+	return portForwardLifecycle{coordinator: o}
 }
 
-func (l portForwardLifecycle) registerStarting(session *portForwardSessionInternal) {
-	if l.app == nil || session == nil {
-		return
+func (l portForwardLifecycle) registerStarting(session *portForwardSessionInternal) bool {
+	if l.coordinator == nil || session == nil {
+		return false
 	}
-	l.app.portForwardSessionsMu.Lock()
-	if l.app.portForwardSessions == nil {
-		l.app.portForwardSessions = make(map[string]*portForwardSessionInternal)
+	l.coordinator.portForwardSessionsMu.Lock()
+	if l.coordinator.portForwardSessions == nil {
+		l.coordinator.portForwardSessions = make(map[string]*portForwardSessionInternal)
 	}
-	l.app.portForwardSessions[session.ID] = session
-	l.app.portForwardSessionsMu.Unlock()
-	l.registerRuntimeOperation(session)
+	l.coordinator.portForwardSessions[session.ID] = session
+	l.coordinator.portForwardSessionsMu.Unlock()
+	if !l.registerRuntimeOperation(session) {
+		l.remove(session.ID)
+		return false
+	}
 	l.emitStatus(session)
+	return true
 }
 
-func (l portForwardLifecycle) registerRuntimeOperation(session *portForwardSessionInternal) {
-	if l.app == nil || session == nil {
-		return
+func (l portForwardLifecycle) registerRuntimeOperation(session *portForwardSessionInternal) bool {
+	if l.coordinator == nil || session == nil {
+		return false
 	}
 	sessionID := session.ID
-	l.app.registerRuntimeOperation(runtimeOperationFromPortForward(session), func(reason string) error {
+	return l.coordinator.registerRuntimeOperationAtEpoch(runtimeOperationFromPortForward(session), func(reason string) error {
 		return l.stopForRuntime(sessionID, reason)
-	})
+	}, session.operationEpoch)
 }
 
 func (l portForwardLifecycle) markActive(session *portForwardSessionInternal, localPort int) {
-	if l.app == nil || session == nil {
+	if l.coordinator == nil || session == nil {
+		return
+	}
+	if l.get(session.ID) != session {
 		return
 	}
 	session.mu.Lock()
@@ -49,34 +56,49 @@ func (l portForwardLifecycle) markActive(session *portForwardSessionInternal, lo
 	session.reconnectAttempt = 0
 	session.mu.Unlock()
 
-	l.registerRuntimeOperation(session)
+	if !l.registerRuntimeOperation(session) {
+		removed, _ := l.remove(session.ID)
+		if removed != nil {
+			removed.close()
+		}
+		return
+	}
 	l.emitStatus(session)
 	l.emitList()
 }
 
 func (l portForwardLifecycle) remove(sessionID string) (*portForwardSessionInternal, bool) {
-	if l.app == nil {
+	if l.coordinator == nil {
 		return nil, false
 	}
-	l.app.portForwardSessionsMu.Lock()
-	defer l.app.portForwardSessionsMu.Unlock()
+	l.coordinator.portForwardSessionsMu.Lock()
+	defer l.coordinator.portForwardSessionsMu.Unlock()
 
-	session, ok := l.app.portForwardSessions[sessionID]
+	session, ok := l.coordinator.portForwardSessions[sessionID]
 	if ok {
-		delete(l.app.portForwardSessions, sessionID)
+		delete(l.coordinator.portForwardSessions, sessionID)
 	}
 	return session, ok
 }
 
+func (l portForwardLifecycle) get(sessionID string) *portForwardSessionInternal {
+	if l.coordinator == nil {
+		return nil
+	}
+	l.coordinator.portForwardSessionsMu.Lock()
+	defer l.coordinator.portForwardSessionsMu.Unlock()
+	return l.coordinator.portForwardSessions[sessionID]
+}
+
 func (l portForwardLifecycle) finishTerminal(sessionID string) bool {
-	if l.app == nil {
+	if l.coordinator == nil {
 		return false
 	}
 	_, removed := l.remove(sessionID)
 	if !removed {
 		return false
 	}
-	l.app.unregisterRuntimeOperation(sessionID)
+	l.coordinator.unregisterRuntimeOperation(sessionID)
 	l.emitList()
 	return true
 }
@@ -91,13 +113,13 @@ func (l portForwardLifecycle) finishStartTimeout(sessionID string) bool {
 		return false
 	}
 	session.close()
-	l.app.unregisterRuntimeOperation(sessionID)
+	l.coordinator.unregisterRuntimeOperation(sessionID)
 	l.emitList()
 	return true
 }
 
 func (l portForwardLifecycle) stopByUser(sessionID string) error {
-	if err := l.stop(sessionID, "user stopped", true, true); err != nil {
+	if err := l.stop(sessionID, "user stopped", true, true, true); err != nil {
 		return err
 	}
 	return nil
@@ -108,36 +130,7 @@ func (l portForwardLifecycle) stopForRuntime(sessionID, reason string) error {
 	if reason == "" {
 		reason = "cluster disconnected"
 	}
-	return l.stop(sessionID, reason, false, false)
-}
-
-func (l portForwardLifecycle) stopCluster(clusterID string) int {
-	if l.app == nil {
-		return 0
-	}
-	l.app.portForwardSessionsMu.Lock()
-	var toRemove []*portForwardSessionInternal
-	for _, session := range l.app.portForwardSessions {
-		if session.ClusterID == clusterID {
-			toRemove = append(toRemove, session)
-		}
-	}
-	for _, session := range toRemove {
-		delete(l.app.portForwardSessions, session.ID)
-	}
-	l.app.portForwardSessionsMu.Unlock()
-
-	for _, session := range toRemove {
-		session.close()
-		l.setStopped(session, "cluster disconnected")
-		l.emitStatus(session)
-		l.app.unregisterRuntimeOperation(session.ID)
-	}
-
-	if len(toRemove) > 0 {
-		l.emitList()
-	}
-	return len(toRemove)
+	return l.stop(sessionID, reason, false, false, false)
 }
 
 func (l portForwardLifecycle) stop(
@@ -145,8 +138,9 @@ func (l portForwardLifecycle) stop(
 	reason string,
 	notFoundIsError bool,
 	unregisterRuntime bool,
+	emitList bool,
 ) error {
-	if l.app == nil {
+	if l.coordinator == nil {
 		return nil
 	}
 	session, removed := l.remove(sessionID)
@@ -159,9 +153,11 @@ func (l portForwardLifecycle) stop(
 	session.close()
 	l.setStopped(session, reason)
 	l.emitStatus(session)
-	l.emitList()
+	if emitList {
+		l.emitList()
+	}
 	if unregisterRuntime {
-		l.app.unregisterRuntimeOperation(sessionID)
+		l.coordinator.unregisterRuntimeOperation(sessionID)
 	}
 	return nil
 }
@@ -177,14 +173,14 @@ func (l portForwardLifecycle) setStopped(session *portForwardSessionInternal, re
 }
 
 func (l portForwardLifecycle) list() []PortForwardSession {
-	if l.app == nil {
+	if l.coordinator == nil {
 		return nil
 	}
-	l.app.portForwardSessionsMu.Lock()
-	defer l.app.portForwardSessionsMu.Unlock()
+	l.coordinator.portForwardSessionsMu.Lock()
+	defer l.coordinator.portForwardSessionsMu.Unlock()
 
-	sessions := make([]PortForwardSession, 0, len(l.app.portForwardSessions))
-	for _, session := range l.app.portForwardSessions {
+	sessions := make([]PortForwardSession, 0, len(l.coordinator.portForwardSessions))
+	for _, session := range l.coordinator.portForwardSessions {
 		session.mu.Lock()
 		sessions = append(sessions, session.PortForwardSession)
 		session.mu.Unlock()
@@ -198,14 +194,14 @@ func (l portForwardLifecycle) list() []PortForwardSession {
 }
 
 func (l portForwardLifecycle) countCluster(clusterID string) int {
-	if l.app == nil {
+	if l.coordinator == nil {
 		return 0
 	}
-	l.app.portForwardSessionsMu.Lock()
-	defer l.app.portForwardSessionsMu.Unlock()
+	l.coordinator.portForwardSessionsMu.Lock()
+	defer l.coordinator.portForwardSessionsMu.Unlock()
 
 	count := 0
-	for _, session := range l.app.portForwardSessions {
+	for _, session := range l.coordinator.portForwardSessions {
 		if session.ClusterID == clusterID {
 			count++
 		}
@@ -214,7 +210,7 @@ func (l portForwardLifecycle) countCluster(clusterID string) int {
 }
 
 func (l portForwardLifecycle) emitStatus(session *portForwardSessionInternal) {
-	if l.app == nil || session == nil {
+	if l.coordinator == nil || session == nil {
 		return
 	}
 
@@ -229,12 +225,12 @@ func (l portForwardLifecycle) emitStatus(session *portForwardSessionInternal) {
 	}
 	session.mu.Unlock()
 
-	l.app.emitEvent(portForwardStatusEventName, event)
+	l.coordinator.publishEvent(portForwardStatusEventName, event)
 }
 
 func (l portForwardLifecycle) emitList() {
-	if l.app == nil {
+	if l.coordinator == nil {
 		return
 	}
-	l.app.emitEvent(portForwardListEventName, l.list())
+	l.coordinator.publishEvent(portForwardListEventName, l.list())
 }

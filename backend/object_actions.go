@@ -290,7 +290,10 @@ func runStartPortForwardObjectAction(invocation objectActionInvocation) (ObjectA
 	if err := requireActionNamespacedTarget(invocation.target, invocation.action); err != nil {
 		return ObjectActionResponse{}, err
 	}
-	sessionID, err := invocation.app.startPortForwardAction(invocation.target, options)
+	if invocation.app.operations == nil {
+		return ObjectActionResponse{}, fmt.Errorf("operations coordinator not initialized")
+	}
+	sessionID, err := invocation.app.operations.startPortForwardAction(invocation.target, options)
 	return ObjectActionResponse{SessionID: sessionID}, err
 }
 

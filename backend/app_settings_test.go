@@ -49,11 +49,13 @@ func (r *failingSettingsReporter) SetEnabled(enabled bool) error {
 
 func newTestAppWithDefaults(t *testing.T) *App {
 	t.Helper()
-	return &App{
+	app := &App{
 		logger:         NewLogger(100),
 		eventEmitter:   func(context.Context, string, ...interface{}) {},
 		sidebarVisible: true,
 	}
+	app.initializeOperationsCoordinator()
+	return app
 }
 
 func TestAppStatePathResolversDoNotCreateDirectories(t *testing.T) {

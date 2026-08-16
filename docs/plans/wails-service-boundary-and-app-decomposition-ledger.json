@@ -3,10 +3,18 @@
   "phase1Checkpoint": {
     "registeredService": "DesktopService",
     "ownerCommandInterfaces": 12,
-    "remainingAppParameterFunctions": 15,
-    "remainingDirectAppTests": 62,
-    "remainingTestOnlyAppMethods": 19,
+    "remainingAppParameterFunctions": 14,
+    "remainingDirectAppTests": 59,
+    "remainingTestOnlyAppMethods": 16,
     "wailsIgnoreDirectives": 0
+  },
+  "phase2Checkpoint": {
+    "operationsCommands": 10,
+    "remainingAppParameterFunctions": 14,
+    "remainingDirectAppTests": 59,
+    "remainingTestOnlyAppMethods": 16,
+    "operationAppBackpointers": 0,
+    "operationPackageGlobals": 1
   },
   "appFieldGroups": [
     {
@@ -214,38 +222,14 @@
       "phase": "3"
     },
     {
-      "id": "shell-operations",
-      "fields": ["shellSessions", "shellSessionsMu"],
-      "readers": ["backend/shell_sessions.go", "backend/shell_sessions_lifecycle.go"],
-      "writers": ["backend/shell_sessions.go start/input/resize/close", "backend/shell_sessions_lifecycle.go cleanup"],
-      "mutex": "shellSessionsMu guards the session map; each session owns its own I/O synchronization",
-      "startup": "lazy per command",
-      "shutdown": "cluster and process cleanup close sessions and publish terminal state",
-      "tests": ["backend/shell_sessions_test.go"],
-      "owner": "OperationsCoordinator",
-      "phase": "2"
-    },
-    {
-      "id": "port-forward-operations",
-      "fields": ["portForwardSessions", "portForwardSessionsMu"],
-      "readers": ["backend/portforward.go", "backend/portforward_lifecycle.go"],
-      "writers": ["backend/portforward.go start/stop", "backend/portforward_lifecycle.go cleanup"],
-      "mutex": "portForwardSessionsMu guards the session map; session cancellation is owned per entry",
-      "startup": "lazy per object action",
-      "shutdown": "cluster and process cleanup stop forwarding and publish status",
-      "tests": ["backend/portforward_test.go"],
-      "owner": "OperationsCoordinator",
-      "phase": "2"
-    },
-    {
-      "id": "runtime-operation-registry",
-      "fields": ["runtimeOperations", "runtimeOperationsMu"],
-      "readers": ["backend/runtime_operations.go listing and lifecycle lookup"],
-      "writers": ["backend/runtime_operations.go registration/unregistration/cleanup", "backend/node_actions.go drain registration"],
-      "mutex": "runtimeOperationsMu protects registry initialization while registry owns active entries",
-      "startup": "NewApp creates the process registry",
-      "shutdown": "cluster/process cleanup cancels active operations idempotently",
-      "tests": ["backend/runtime_operations_test.go", "backend/workload_actions_test.go"],
+      "id": "operations-coordinator-reference",
+      "fields": ["operations"],
+      "readers": ["main.go DesktopService composition", "backend object-action and cluster/application lifecycle callers"],
+      "writers": ["backend/app.go initializeOperationsCoordinator composition"],
+      "mutex": "the App reference is immutable after construction; OperationsCoordinator owns the shell, port-forward and runtime-registry locks",
+      "startup": "NewApp composes the coordinator from narrow cluster-access, permission, event, logger, context, drain-store and executor dependencies",
+      "shutdown": "ApplicationLifecycle invokes OperationsCoordinator.Shutdown after auth-manager shutdown and before watcher/refresh teardown",
+      "tests": ["backend/operations_coordinator_test.go", "backend/runtime_operations_test.go", "cmd/project/wails_project_contract_test.go"],
       "owner": "OperationsCoordinator",
       "phase": "2"
     },
@@ -402,12 +386,6 @@
       "entries": ["cluster_dependencies.go:appResourceResolver.app", "fetch_helpers.go:fetchRetryOperation.app", "object_actions.go:objectActionInvocation.app", "object_detail_provider.go:objectDetailProvider.app", "response_cache_invalidation.go:ingestResponseCacheSink.app"],
       "replacement": "ResourceGateway-owned clients, cache, permissions and invalidation collaborators",
       "phase": "4"
-    },
-    {
-      "id": "operation-backpointers",
-      "entries": ["portforward_lifecycle.go:portForwardLifecycle.app", "shell_sessions.go:shellEventWriter.app", "shell_sessions_lifecycle.go:shellSessionLifecycle.app"],
-      "replacement": "OperationsCoordinator-owned lifecycle and event collaborators",
-      "phase": "2"
     }
   ],
   "appParameterFunctionGroups": [
@@ -440,12 +418,6 @@
       "entries": ["fetch_helpers.go:FetchClusterResource:a", "fetch_helpers.go:FetchNamespacedResource:a", "fetch_helpers.go:FetchResourceWithSelection:a", "fetch_helpers.go:ensureDependenciesInitialized:a", "fetch_helpers.go:executeWithRetry:a"],
       "replacement": "ResourceGateway methods and narrow client/readiness collaborators",
       "phase": "4"
-    },
-    {
-      "id": "operation-app-parameters",
-      "entries": ["shell_sessions.go:startShellSessionStream:app"],
-      "replacement": "OperationsCoordinator stream publisher collaborator",
-      "phase": "2"
     }
   ],
   "directAppTestGroups": [
@@ -514,14 +486,14 @@
     },
     {
       "id": "resource-component-tests",
-      "files": ["app_permissions_test.go", "autoscaling_details_test.go", "fetch_helpers_test.go", "object_actions_test.go", "object_detail_provider_test.go", "object_finalizer_actions_test.go", "object_yaml_collision_test.go", "object_yaml_mutation_test.go", "resource_bindings_test.go", "resource_permission_test.go", "response_cache_permissions_test.go", "response_cache_test.go", "workload_actions_test.go", "workload_rollback_test.go"],
+      "files": ["app_permissions_test.go", "autoscaling_details_test.go", "fetch_helpers_test.go", "object_actions_test.go", "object_detail_provider_test.go", "object_finalizer_actions_test.go", "object_yaml_collision_test.go", "object_yaml_mutation_test.go", "portforward_ports_test.go", "resource_bindings_test.go", "resource_permission_test.go", "response_cache_permissions_test.go", "response_cache_test.go", "workload_actions_test.go", "workload_rollback_test.go"],
       "classification": "component",
       "owner": "ResourceGateway",
       "phase": "4"
     },
     {
-      "id": "operations-component-tests",
-      "files": ["portforward_ports_test.go", "portforward_test.go", "runtime_operations_test.go", "shell_sessions_error_test.go", "shell_sessions_test.go"],
+      "id": "operations-coordinator-fixture-test",
+      "files": ["operations_coordinator_fixture_test.go"],
       "classification": "component",
       "owner": "OperationsCoordinator",
       "phase": "2"
@@ -589,12 +561,6 @@
       "entries": ["test_entrypoints_test.go:App.cordonNode", "test_entrypoints_test.go:App.createDebugContainer", "test_entrypoints_test.go:App.deleteHelmRelease", "test_entrypoints_test.go:App.deleteNode", "test_entrypoints_test.go:App.deletePod", "test_entrypoints_test.go:App.deleteResourceByGVK", "test_entrypoints_test.go:App.drainNode", "test_entrypoints_test.go:App.forceDeleteNode", "test_entrypoints_test.go:App.getGVRForGVK", "test_entrypoints_test.go:App.invalidateResponseCacheForObject", "test_entrypoints_test.go:App.restartWorkload", "test_entrypoints_test.go:App.rollbackWorkload", "test_entrypoints_test.go:App.scaleWorkload", "test_entrypoints_test.go:App.suspendCronJob", "test_entrypoints_test.go:App.triggerCronJob", "test_entrypoints_test.go:App.uncordonNode"],
       "replacement": "ResourceGateway test helpers against focused resource collaborators",
       "phase": "4"
-    },
-    {
-      "id": "operations-test-entrypoints",
-      "entries": ["test_entrypoints_test.go:App.closeShellSessionForRuntime", "test_entrypoints_test.go:App.startPortForward", "test_entrypoints_test.go:App.stopPortForwardForRuntime"],
-      "replacement": "OperationsCoordinator test helpers against focused operation registries",
-      "phase": "2"
     }
   ],
   "settingsEffectRoutes": [
@@ -770,8 +736,8 @@
     },
     {
       "id": "operations-global-state",
-      "entries": ["portforward_targets.go:portForwardTargetCapabilities", "shell_sessions.go:spdyExecutorFactory", "shell_sessions.go:websocketExecutorFactory"],
-      "mutation": "port target capabilities remain immutable; replaceable shell executor factories become OperationsCoordinator constructor dependencies",
+      "entries": ["portforward_targets.go:portForwardTargetCapabilities"],
+      "mutation": "the port target capability table remains immutable; replaceable shell executor factories are OperationsCoordinator constructor dependencies",
       "owner": "OperationsCoordinator",
       "phase": "2"
     }
@@ -837,14 +803,14 @@
     },
     {
       "id": "shell-cleanup-race",
-      "tests": ["backend/shell_sessions_test.go:TestStopClusterShellSessions"],
+      "tests": ["backend/shell_sessions_test.go:TestOperationsCoordinatorStopClusterCleansShellSessions"],
       "contract": "cluster shell cleanup closes and unregisters sessions without a race",
       "owner": "OperationsCoordinator",
       "phase": "2"
     },
     {
       "id": "port-forward-cleanup-race",
-      "tests": ["backend/portforward_test.go:TestStopClusterPortForwards"],
+      "tests": ["backend/portforward_test.go:TestOperationsCoordinatorStopClusterCleansPortForwards"],
       "contract": "cluster port-forward cleanup stops and unregisters sessions without a race",
       "owner": "OperationsCoordinator",
       "phase": "2"

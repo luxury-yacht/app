@@ -54,6 +54,7 @@ type applicationComposition struct {
 	application *application.App
 	backend     *backend.App
 	service     *backend.DesktopService
+	operations  *backend.OperationsCoordinator
 	windows     *appwindow.Registry
 	menu        *application.Menu
 }
@@ -99,6 +100,7 @@ func newApplicationComposition(reporter sentryreporting.Reporter, options compos
 	wailsApp := application.New(applicationOptions)
 
 	backendApp = backend.NewApp(wailsApp, reporter)
+	operationsCoordinator := backendApp.OperationsCoordinator()
 	backend.ConfigureApplicationUpdates(backendApp, backend.ApplicationUpdateOptions{
 		TempRoot:       options.UpdateTempRoot,
 		TempSetupError: options.UpdateTempSetupError,
@@ -112,7 +114,7 @@ func newApplicationComposition(reporter sentryreporting.Reporter, options compos
 		Workspace:      backendApp,
 		ClusterRuntime: backendApp,
 		Resources:      backendApp,
-		Operations:     backendApp,
+		Operations:     operationsCoordinator,
 		Updates:        backendApp,
 		Logs:           backendApp,
 		DesktopShell:   backendApp,
@@ -137,6 +139,7 @@ func newApplicationComposition(reporter sentryreporting.Reporter, options compos
 		application: wailsApp,
 		backend:     backendApp,
 		service:     desktopService,
+		operations:  operationsCoordinator,
 		windows:     windows,
 		menu:        nativeMenu,
 	}

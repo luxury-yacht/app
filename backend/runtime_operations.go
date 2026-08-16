@@ -153,76 +153,98 @@ func cloneRuntimeOperation(operation RuntimeOperation) RuntimeOperation {
 	return clone
 }
 
-func (a *App) ensureRuntimeOperationRegistry() *runtimeOperationRegistry {
-	if a == nil {
+func (o *OperationsCoordinator) ensureRuntimeOperationRegistry() *runtimeOperationRegistry {
+	if o == nil {
 		return nil
 	}
-	a.runtimeOperationsMu.Lock()
-	defer a.runtimeOperationsMu.Unlock()
-	if a.runtimeOperations == nil {
-		a.runtimeOperations = newRuntimeOperationRegistry()
+	o.runtimeOperationsMu.Lock()
+	defer o.runtimeOperationsMu.Unlock()
+	if o.runtimeOperations == nil {
+		o.runtimeOperations = newRuntimeOperationRegistry()
 	}
-	return a.runtimeOperations
+	return o.runtimeOperations
 }
 
-func (a *App) registerRuntimeOperation(operation RuntimeOperation, cleanup runtimeOperationCleanup) {
-	registry := a.ensureRuntimeOperationRegistry()
-	if registry == nil {
-		return
-	}
-	registry.upsert(operation, cleanup)
-	a.emitRuntimeOperationsList()
+func (o *OperationsCoordinator) registerRuntimeOperation(operation RuntimeOperation, cleanup runtimeOperationCleanup) {
+	o.registerRuntimeOperationAtEpoch(operation, cleanup, o.clusterOperationEpoch(operation.ClusterID))
 }
 
-func (a *App) unregisterRuntimeOperation(id string) {
-	registry := a.ensureRuntimeOperationRegistry()
+func (o *OperationsCoordinator) unregisterRuntimeOperation(id string) {
+	registry := o.ensureRuntimeOperationRegistry()
 	if registry == nil {
 		return
 	}
 	if registry.remove(id) {
-		a.emitRuntimeOperationsList()
+		o.emitRuntimeOperationsList()
 	}
 }
 
-func (a *App) ListRuntimeOperations() []RuntimeOperation {
-	registry := a.ensureRuntimeOperationRegistry()
+func (o *OperationsCoordinator) ListRuntimeOperations() []RuntimeOperation {
+	registry := o.ensureRuntimeOperationRegistry()
 	if registry == nil {
 		return nil
 	}
 	return registry.list()
 }
 
-func (a *App) emitRuntimeOperationsList() {
-	a.emitEvent(runtimeOperationsListEventName, a.ListRuntimeOperations())
+func (o *OperationsCoordinator) emitRuntimeOperationsList() {
+	o.publishEvent(runtimeOperationsListEventName, o.ListRuntimeOperations())
 }
 
-func (a *App) cleanupClusterRuntimeOperations(clusterID, reason string) {
+// StopCluster removes the registry envelope before invoking workflow cleanup so
+// detail events cannot resurrect an operation that the cluster lifecycle removed.
+func (o *OperationsCoordinator) StopCluster(clusterID string) {
+	o.stopCluster(clusterID, "cluster disconnected")
+}
+
+func (o *OperationsCoordinator) stopCluster(clusterID, reason string) {
 	trimmedClusterID := strings.TrimSpace(clusterID)
 	if trimmedClusterID == "" {
 		return
 	}
-	registry := a.ensureRuntimeOperationRegistry()
-	if registry == nil {
-		return
-	}
-
-	for _, entry := range registry.removeCluster(trimmedClusterID) {
+	removed := o.removeClusterRuntimeOperations(trimmedClusterID)
+	shellRemoved := false
+	portForwardRemoved := false
+	for _, entry := range removed {
+		shellRemoved = shellRemoved || entry.operation.Type == RuntimeOperationShell
+		portForwardRemoved = portForwardRemoved || entry.operation.Type == RuntimeOperationPortForward
 		if entry.cleanup == nil {
 			continue
 		}
 		if err := entry.cleanup(reason); err != nil {
-			a.logger.Warn(fmt.Sprintf("Failed to clean up %s operation %s for cluster %s: %v", entry.operation.Type, entry.operation.ID, trimmedClusterID, err), logsources.App)
+			if o.logger != nil {
+				o.logger.Warn(fmt.Sprintf("Failed to clean up %s operation %s for cluster %s: %v", entry.operation.Type, entry.operation.ID, trimmedClusterID, err), logsources.App)
+			}
 		}
 	}
+	if shellRemoved {
+		o.shellSessionLifecycle().emitList()
+	}
+	if portForwardRemoved {
+		o.portForwardLifecycle().emitList()
+	}
 
-	a.emitRuntimeOperationsList()
+	o.emitRuntimeOperationsList()
 }
 
-func (a *App) runtimeOperationClusterIDs() []string {
-	if registry := a.ensureRuntimeOperationRegistry(); registry != nil {
+func (o *OperationsCoordinator) runtimeOperationClusterIDs() []string {
+	if registry := o.ensureRuntimeOperationRegistry(); registry != nil {
 		return registry.clusterIDs()
 	}
 	return nil
+}
+
+// Shutdown idempotently stops every cluster represented by the active registry.
+func (o *OperationsCoordinator) Shutdown() {
+	if o == nil {
+		return
+	}
+	o.operationEpochsMu.Lock()
+	o.shuttingDown = true
+	o.operationEpochsMu.Unlock()
+	for _, clusterID := range o.runtimeOperationClusterIDs() {
+		o.stopCluster(clusterID, "app shutdown")
+	}
 }
 
 func runtimeOperationTarget(clusterID, group, version, kind, namespace, name string) *RuntimeOperationTargetRef {

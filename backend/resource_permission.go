@@ -22,14 +22,28 @@ type resourcePermissionCheck struct {
 }
 
 func (a *App) requireResourcePermission(ctx context.Context, deps common.Dependencies, check resourcePermissionCheck) error {
+	return requireResourcePermission(ctx, deps, check)
+}
+
+func requireResourcePermission(ctx context.Context, deps common.Dependencies, check resourcePermissionCheck) error {
 	gvr, isNamespaced, err := resolvePermissionGVR(ctx, deps, check)
 	if err != nil {
 		return err
 	}
-	return a.requireResolvedResourcePermission(ctx, deps, gvr, isNamespaced, check)
+	return requireResolvedResourcePermission(ctx, deps, gvr, isNamespaced, check)
 }
 
 func (a *App) requireResolvedResourcePermission(
+	ctx context.Context,
+	deps common.Dependencies,
+	gvr schema.GroupVersionResource,
+	isNamespaced bool,
+	check resourcePermissionCheck,
+) error {
+	return requireResolvedResourcePermission(ctx, deps, gvr, isNamespaced, check)
+}
+
+func requireResolvedResourcePermission(
 	ctx context.Context,
 	deps common.Dependencies,
 	gvr schema.GroupVersionResource,
@@ -92,9 +106,13 @@ func (a *App) requireResolvedResourcePermission(
 }
 
 func (a *App) requireAnyResourcePermission(ctx context.Context, deps common.Dependencies, checks ...resourcePermissionCheck) error {
+	return requireAnyResourcePermission(ctx, deps, checks...)
+}
+
+func requireAnyResourcePermission(ctx context.Context, deps common.Dependencies, checks ...resourcePermissionCheck) error {
 	var denial error
 	for _, check := range checks {
-		if err := a.requireResourcePermission(ctx, deps, check); err == nil {
+		if err := requireResourcePermission(ctx, deps, check); err == nil {
 			return nil
 		} else {
 			denial = err

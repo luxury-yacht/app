@@ -93,38 +93,73 @@ func (a *App) startDrainNodeAction(target ObjectActionTargetRef, options DrainNo
 	if err := a.requireDrainPodPermission(ctx, deps, options); err != nil {
 		return "", err
 	}
+	if a.operations == nil {
+		return "", fmt.Errorf("operations coordinator not initialized")
+	}
+	operationEpoch := a.operations.clusterOperationEpoch(target.ClusterID)
 	job, err := nodes.NewService(deps).StartDrainWithCompletion(ctx, target.Name, options, func(jobID string) {
 		a.clearNodeCaches(selectionKey, target.Name)
-		a.unregisterRuntimeOperation(jobID)
+		if a.operations != nil {
+			a.operations.unregisterRuntimeOperation(jobID)
+		}
 	})
 	if err != nil {
 		return "", err
 	}
-	a.registerRuntimeOperation(runtimeOperationFromDrainJob(job), func(reason string) error {
-		nodemaintenance.GlobalStore().CancelDrainForClusterLifecycle(job.ID, deps.ClusterID, reason)
-		return nil
-	})
+	if !a.operations.registerDrainOperation(job, operationEpoch) {
+		a.operations.drainStore.CancelDrainForClusterLifecycle(job.ID, job.ClusterID, "cluster disconnected")
+		return "", fmt.Errorf("cluster disconnected before drain operation registered")
+	}
+	if current, ok := a.operations.drainStore.JobForCluster(job.ID, job.ClusterID); ok && current.Status != nodemaintenance.DrainStatusRunning && current.Status != nodemaintenance.DrainStatusCanceling {
+		a.operations.unregisterRuntimeOperation(job.ID)
+	}
 	a.clearNodeCaches(selectionKey, target.Name)
 	return job.ID, nil
 }
-func (a *App) CancelDrainNodeJob(clusterID, jobID string) error {
+func (o *OperationsCoordinator) registerDrainOperation(job *nodemaintenance.DrainJob, operationEpoch uint64) bool {
+	if o == nil || job == nil {
+		return false
+	}
+	return o.registerRuntimeOperationAtEpoch(runtimeOperationFromDrainJob(job), func(reason string) error {
+		o.drainStore.CancelDrainForClusterLifecycle(job.ID, job.ClusterID, reason)
+		return nil
+	}, operationEpoch)
+}
+
+func (o *OperationsCoordinator) CancelDrainNodeJob(clusterID, jobID string) error {
 	trimmedJobID := strings.TrimSpace(jobID)
 	if trimmedJobID == "" {
 		return fmt.Errorf("job ID is required")
 	}
-	deps, _, err := a.resolveClusterDependencies(clusterID)
+	if o == nil || o.clusterAccess == nil {
+		return fmt.Errorf("cluster access not initialized")
+	}
+	deps, _, err := o.clusterAccess.ResolveClusterDependencies(clusterID)
 	if err != nil {
 		return err
 	}
-	store := nodemaintenance.GlobalStore()
-	job, ok := store.JobForCluster(trimmedJobID, deps.ClusterID)
+	job, ok := o.drainStore.JobForCluster(trimmedJobID, deps.ClusterID)
 	if !ok {
 		return fmt.Errorf("drain job %s not found for cluster %s", trimmedJobID, deps.ClusterID)
 	}
-	if err := a.requireNodeMaintenancePermission(a.CtxOrBackground(), deps, job.NodeName); err != nil {
+	ctx := o.operationContext()
+	if err := o.permissions.Require(ctx, deps, OperationsPermissionCheck{
+		Version: "v1",
+		Kind:    nodes.Identity.Kind,
+		Name:    job.NodeName,
+		Verb:    "get",
+	}); err != nil {
 		return err
 	}
-	return store.CancelDrainForCluster(trimmedJobID, deps.ClusterID)
+	if err := o.permissions.Require(ctx, deps, OperationsPermissionCheck{
+		Version: "v1",
+		Kind:    nodes.Identity.Kind,
+		Name:    job.NodeName,
+		Verb:    "patch",
+	}); err != nil {
+		return err
+	}
+	return o.drainStore.CancelDrainForCluster(trimmedJobID, deps.ClusterID)
 }
 func (a *App) deleteNodeAction(target ObjectActionTargetRef, force bool) error {
 	if err := requireNodeActionTarget(ObjectActionDelete, target); err != nil {

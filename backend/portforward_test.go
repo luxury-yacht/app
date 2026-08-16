@@ -15,28 +15,32 @@ import (
 const portForwardClusterID = "config:ctx"
 
 func TestStartPortForward_InvalidCluster(t *testing.T) {
-	app := newTestAppWithDefaults(t)
+	fixture := newOperationsCoordinatorFixture(t)
+	app := fixture.runtime
+	operations := fixture.coordinator
 	setTestAppRuntimeReady(t, app, context.Background())
-	app.portForwardSessions = make(map[string]*portForwardSessionInternal)
+	operations.portForwardSessions = make(map[string]*portForwardSessionInternal)
 	app.clusterClients = make(map[string]*clusterClients)
 
 	// Test with empty cluster ID.
-	_, err := app.startPortForward("", PortForwardRequest{})
+	_, err := operations.startPortForward("", PortForwardRequest{})
 	if err == nil {
 		t.Fatal("expected error for empty cluster ID")
 	}
 
 	// Test with nonexistent cluster.
-	_, err = app.startPortForward("nonexistent", PortForwardRequest{})
+	_, err = operations.startPortForward("nonexistent", PortForwardRequest{})
 	if err == nil {
 		t.Fatal("expected error for nonexistent cluster")
 	}
 }
 
 func TestStartPortForward_MissingClient(t *testing.T) {
-	app := newTestAppWithDefaults(t)
+	fixture := newOperationsCoordinatorFixture(t)
+	app := fixture.runtime
+	operations := fixture.coordinator
 	setTestAppRuntimeReady(t, app, context.Background())
-	app.portForwardSessions = make(map[string]*portForwardSessionInternal)
+	operations.portForwardSessions = make(map[string]*portForwardSessionInternal)
 
 	// Create a cluster entry WITHOUT a client to test the error path.
 	app.clusterClients = map[string]*clusterClients{
@@ -48,7 +52,7 @@ func TestStartPortForward_MissingClient(t *testing.T) {
 		},
 	}
 
-	_, err := app.startPortForward(portForwardClusterID, PortForwardRequest{
+	_, err := operations.startPortForward(portForwardClusterID, PortForwardRequest{
 		Namespace:     "default",
 		TargetKind:    "Pod",
 		TargetGroup:   "",
@@ -62,9 +66,11 @@ func TestStartPortForward_MissingClient(t *testing.T) {
 }
 
 func TestStartPortForward_MissingRestConfig(t *testing.T) {
-	app := newTestAppWithDefaults(t)
+	fixture := newOperationsCoordinatorFixture(t)
+	app := fixture.runtime
+	operations := fixture.coordinator
 	setTestAppRuntimeReady(t, app, context.Background())
-	app.portForwardSessions = make(map[string]*portForwardSessionInternal)
+	operations.portForwardSessions = make(map[string]*portForwardSessionInternal)
 
 	fakeClient := fake.NewClientset()
 	app.clusterClients = map[string]*clusterClients{
@@ -77,7 +83,7 @@ func TestStartPortForward_MissingRestConfig(t *testing.T) {
 		},
 	}
 
-	_, err := app.startPortForward(portForwardClusterID, PortForwardRequest{
+	_, err := operations.startPortForward(portForwardClusterID, PortForwardRequest{
 		Namespace:     "default",
 		TargetKind:    "Pod",
 		TargetGroup:   "",
@@ -91,9 +97,11 @@ func TestStartPortForward_MissingRestConfig(t *testing.T) {
 }
 
 func TestStartPortForward_ValidationErrors(t *testing.T) {
-	app := newTestAppWithDefaults(t)
+	fixture := newOperationsCoordinatorFixture(t)
+	app := fixture.runtime
+	operations := fixture.coordinator
 	setTestAppRuntimeReady(t, app, context.Background())
-	app.portForwardSessions = make(map[string]*portForwardSessionInternal)
+	operations.portForwardSessions = make(map[string]*portForwardSessionInternal)
 
 	fakeClient := fake.NewClientset()
 	restConfig := &rest.Config{}
@@ -108,7 +116,7 @@ func TestStartPortForward_ValidationErrors(t *testing.T) {
 	}
 
 	// Missing namespace.
-	_, err := app.startPortForward(portForwardClusterID, PortForwardRequest{
+	_, err := operations.startPortForward(portForwardClusterID, PortForwardRequest{
 		TargetKind:    "Pod",
 		TargetGroup:   "",
 		TargetVersion: "v1",
@@ -120,7 +128,7 @@ func TestStartPortForward_ValidationErrors(t *testing.T) {
 	}
 
 	// Missing target name.
-	_, err = app.startPortForward(portForwardClusterID, PortForwardRequest{
+	_, err = operations.startPortForward(portForwardClusterID, PortForwardRequest{
 		Namespace:     "default",
 		TargetKind:    "Pod",
 		TargetGroup:   "",
@@ -132,7 +140,7 @@ func TestStartPortForward_ValidationErrors(t *testing.T) {
 	}
 
 	// Invalid container port.
-	_, err = app.startPortForward(portForwardClusterID, PortForwardRequest{
+	_, err = operations.startPortForward(portForwardClusterID, PortForwardRequest{
 		Namespace:     "default",
 		TargetKind:    "Pod",
 		TargetGroup:   "",
@@ -146,9 +154,11 @@ func TestStartPortForward_ValidationErrors(t *testing.T) {
 }
 
 func TestStartPortForwardRequiresPortForwardPermission(t *testing.T) {
-	app := newTestAppWithDefaults(t)
+	fixture := newOperationsCoordinatorFixture(t)
+	app := fixture.runtime
+	operations := fixture.coordinator
 	setTestAppRuntimeReady(t, app, context.Background())
-	app.portForwardSessions = make(map[string]*portForwardSessionInternal)
+	operations.portForwardSessions = make(map[string]*portForwardSessionInternal)
 
 	pod := &corev1.Pod{
 		ObjectMeta: metav1.ObjectMeta{Namespace: "default", Name: "pod-1"},
@@ -175,7 +185,7 @@ func TestStartPortForwardRequiresPortForwardPermission(t *testing.T) {
 		},
 	}
 
-	_, err := app.startPortForward(portForwardClusterID, PortForwardRequest{
+	_, err := operations.startPortForward(portForwardClusterID, PortForwardRequest{
 		Namespace:     "default",
 		TargetKind:    "Pod",
 		TargetGroup:   "",
@@ -186,24 +196,26 @@ func TestStartPortForwardRequiresPortForwardPermission(t *testing.T) {
 	if err == nil || !strings.Contains(err.Error(), "portforward denied") {
 		t.Fatalf("expected port-forward permission denial, got %v", err)
 	}
-	if len(app.ListPortForwards()) != 0 {
+	if len(operations.ListPortForwards()) != 0 {
 		t.Fatalf("expected denied port forward not to be registered")
 	}
 }
 
 func TestListPortForwards_Empty(t *testing.T) {
-	app := newTestAppWithDefaults(t)
-	app.portForwardSessions = make(map[string]*portForwardSessionInternal)
+	fixture := newOperationsCoordinatorFixture(t)
+	operations := fixture.coordinator
+	operations.portForwardSessions = make(map[string]*portForwardSessionInternal)
 
-	sessions := app.ListPortForwards()
+	sessions := operations.ListPortForwards()
 	if len(sessions) != 0 {
 		t.Fatalf("expected empty list, got %d sessions", len(sessions))
 	}
 }
 
 func TestListPortForwards_ReturnsSessions(t *testing.T) {
-	app := newTestAppWithDefaults(t)
-	app.portForwardSessions = make(map[string]*portForwardSessionInternal)
+	fixture := newOperationsCoordinatorFixture(t)
+	operations := fixture.coordinator
+	operations.portForwardSessions = make(map[string]*portForwardSessionInternal)
 
 	// Add some test sessions.
 	now := time.Now()
@@ -240,10 +252,10 @@ func TestListPortForwards_ReturnsSessions(t *testing.T) {
 		stopChan: make(chan struct{}),
 	}
 
-	app.portForwardSessions["session-1"] = session1
-	app.portForwardSessions["session-2"] = session2
+	operations.portForwardSessions["session-1"] = session1
+	operations.portForwardSessions["session-2"] = session2
 
-	sessions := app.ListPortForwards()
+	sessions := operations.ListPortForwards()
 	if len(sessions) != 2 {
 		t.Fatalf("expected 2 sessions, got %d", len(sessions))
 	}
@@ -258,21 +270,25 @@ func TestListPortForwards_ReturnsSessions(t *testing.T) {
 }
 
 func TestStopPortForward_NotFound(t *testing.T) {
-	app := newTestAppWithDefaults(t)
+	fixture := newOperationsCoordinatorFixture(t)
+	app := fixture.runtime
+	operations := fixture.coordinator
 	setTestAppRuntimeReady(t, app, context.Background())
-	app.portForwardSessions = make(map[string]*portForwardSessionInternal)
+	operations.portForwardSessions = make(map[string]*portForwardSessionInternal)
 	app.eventEmitter = func(context.Context, string, ...interface{}) {}
 
-	err := app.StopPortForward("nonexistent-session")
+	err := operations.StopPortForward("nonexistent-session")
 	if err == nil {
 		t.Fatal("expected error for nonexistent session")
 	}
 }
 
 func TestStopPortForward_Success(t *testing.T) {
-	app := newTestAppWithDefaults(t)
+	fixture := newOperationsCoordinatorFixture(t)
+	app := fixture.runtime
+	operations := fixture.coordinator
 	setTestAppRuntimeReady(t, app, context.Background())
-	app.portForwardSessions = make(map[string]*portForwardSessionInternal)
+	operations.portForwardSessions = make(map[string]*portForwardSessionInternal)
 
 	var statusEvents []PortForwardStatusEvent
 	app.eventEmitter = func(_ context.Context, name string, args ...interface{}) {
@@ -299,15 +315,15 @@ func TestStopPortForward_Success(t *testing.T) {
 		},
 		stopChan: make(chan struct{}),
 	}
-	app.portForwardSessions["session-1"] = session
+	operations.portForwardSessions["session-1"] = session
 
-	err := app.StopPortForward("session-1")
+	err := operations.StopPortForward("session-1")
 	if err != nil {
 		t.Fatalf("unexpected error: %v", err)
 	}
 
 	// Verify session was removed.
-	if _, exists := app.portForwardSessions["session-1"]; exists {
+	if _, exists := operations.portForwardSessions["session-1"]; exists {
 		t.Fatal("expected session to be removed")
 	}
 
@@ -321,9 +337,11 @@ func TestStopPortForward_Success(t *testing.T) {
 }
 
 func TestPortForwardLifecycleFinishTerminalIsIdempotent(t *testing.T) {
-	app := newTestAppWithDefaults(t)
+	fixture := newOperationsCoordinatorFixture(t)
+	app := fixture.runtime
+	operations := fixture.coordinator
 	setTestAppRuntimeReady(t, app, context.Background())
-	app.portForwardSessions = make(map[string]*portForwardSessionInternal)
+	operations.portForwardSessions = make(map[string]*portForwardSessionInternal)
 
 	portForwardListEvents := 0
 	app.eventEmitter = func(_ context.Context, name string, _ ...interface{}) {
@@ -349,11 +367,11 @@ func TestPortForwardLifecycleFinishTerminalIsIdempotent(t *testing.T) {
 		},
 		stopChan: make(chan struct{}),
 	}
-	app.portForwardSessions[session.ID] = session
-	app.registerRuntimeOperation(runtimeOperationFromPortForward(session), nil)
+	operations.portForwardSessions[session.ID] = session
+	operations.registerRuntimeOperation(runtimeOperationFromPortForward(session), nil)
 	portForwardListEvents = 0
 
-	lifecycle := app.portForwardLifecycle()
+	lifecycle := operations.portForwardLifecycle()
 	if removed := lifecycle.finishTerminal(session.ID); !removed {
 		t.Fatal("expected first terminal cleanup to remove session")
 	}
@@ -364,8 +382,8 @@ func TestPortForwardLifecycleFinishTerminalIsIdempotent(t *testing.T) {
 	if got := lifecycle.get(session.ID); got != nil {
 		t.Fatal("expected terminal cleanup to remove session")
 	}
-	if operations := app.ListRuntimeOperations(); len(operations) != 0 {
-		t.Fatalf("expected terminal cleanup to unregister runtime operation, got %+v", operations)
+	if operationList := operations.ListRuntimeOperations(); len(operationList) != 0 {
+		t.Fatalf("expected terminal cleanup to unregister runtime operation, got %+v", operationList)
 	}
 	if portForwardListEvents != 1 {
 		t.Fatalf("expected one port-forward list event, got %d", portForwardListEvents)
@@ -373,9 +391,11 @@ func TestPortForwardLifecycleFinishTerminalIsIdempotent(t *testing.T) {
 }
 
 func TestPortForwardLifecycleStopForRuntimeIsIdempotent(t *testing.T) {
-	app := newTestAppWithDefaults(t)
+	fixture := newOperationsCoordinatorFixture(t)
+	app := fixture.runtime
+	operations := fixture.coordinator
 	setTestAppRuntimeReady(t, app, context.Background())
-	app.portForwardSessions = make(map[string]*portForwardSessionInternal)
+	operations.portForwardSessions = make(map[string]*portForwardSessionInternal)
 
 	var statusEvents []PortForwardStatusEvent
 	portForwardListEvents := 0
@@ -400,16 +420,16 @@ func TestPortForwardLifecycleStopForRuntimeIsIdempotent(t *testing.T) {
 		},
 		stopChan: make(chan struct{}),
 	}
-	app.portForwardSessions[session.ID] = session
+	operations.portForwardSessions[session.ID] = session
 
-	if err := app.stopPortForwardForRuntime(session.ID, "cluster disconnected"); err != nil {
+	if err := operations.stopPortForwardForRuntime(session.ID, "cluster disconnected"); err != nil {
 		t.Fatalf("unexpected cleanup error: %v", err)
 	}
-	if err := app.stopPortForwardForRuntime(session.ID, "cluster disconnected"); err != nil {
+	if err := operations.stopPortForwardForRuntime(session.ID, "cluster disconnected"); err != nil {
 		t.Fatalf("expected repeated runtime cleanup to be ignored, got %v", err)
 	}
 
-	if got := app.portForwardLifecycle().get(session.ID); got != nil {
+	if got := operations.portForwardLifecycle().get(session.ID); got != nil {
 		t.Fatal("expected runtime cleanup to remove session")
 	}
 	if len(statusEvents) != 1 {
@@ -421,15 +441,17 @@ func TestPortForwardLifecycleStopForRuntimeIsIdempotent(t *testing.T) {
 	if statusEvents[0].StatusReason != "cluster disconnected" {
 		t.Fatalf("expected cluster disconnected reason, got %q", statusEvents[0].StatusReason)
 	}
-	if portForwardListEvents != 1 {
-		t.Fatalf("expected one port-forward list event, got %d", portForwardListEvents)
+	if portForwardListEvents != 0 {
+		t.Fatalf("expected runtime callback to defer list publication to StopCluster, got %d", portForwardListEvents)
 	}
 }
 
 func TestRunPortForwarderUnregistersRuntimeOperationOnTerminalError(t *testing.T) {
-	app := newTestAppWithDefaults(t)
+	fixture := newOperationsCoordinatorFixture(t)
+	app := fixture.runtime
+	operations := fixture.coordinator
 	setTestAppRuntimeReady(t, app, context.Background())
-	app.portForwardSessions = make(map[string]*portForwardSessionInternal)
+	operations.portForwardSessions = make(map[string]*portForwardSessionInternal)
 	app.clusterClients = make(map[string]*clusterClients)
 	app.eventEmitter = func(context.Context, string, ...interface{}) {}
 
@@ -450,23 +472,25 @@ func TestRunPortForwarderUnregistersRuntimeOperationOnTerminalError(t *testing.T
 		stopChan:  make(chan struct{}),
 		readyChan: make(chan error, 1),
 	}
-	app.portForwardSessions[session.ID] = session
-	app.registerRuntimeOperation(runtimeOperationFromPortForward(session), nil)
+	operations.portForwardSessions[session.ID] = session
+	operations.registerRuntimeOperation(runtimeOperationFromPortForward(session), nil)
 
-	app.runPortForwarder(context.Background(), session)
+	operations.runPortForwarder(context.Background(), session)
 
-	if operations := app.ListRuntimeOperations(); len(operations) != 0 {
-		t.Fatalf("expected runtime operation to be removed, got %+v", operations)
+	if operationList := operations.ListRuntimeOperations(); len(operationList) != 0 {
+		t.Fatalf("expected runtime operation to be removed, got %+v", operationList)
 	}
-	if _, exists := app.portForwardSessions[session.ID]; exists {
+	if _, exists := operations.portForwardSessions[session.ID]; exists {
 		t.Fatal("expected terminal port forward session to be removed")
 	}
 }
 
-func TestStopClusterPortForwards(t *testing.T) {
-	app := newTestAppWithDefaults(t)
+func TestOperationsCoordinatorStopClusterCleansPortForwards(t *testing.T) {
+	fixture := newOperationsCoordinatorFixture(t)
+	app := fixture.runtime
+	operations := fixture.coordinator
 	setTestAppRuntimeReady(t, app, context.Background())
-	app.portForwardSessions = make(map[string]*portForwardSessionInternal)
+	operations.portForwardSessions = make(map[string]*portForwardSessionInternal)
 	app.eventEmitter = func(context.Context, string, ...interface{}) {}
 
 	// Add sessions for two clusters.
@@ -495,73 +519,75 @@ func TestStopClusterPortForwards(t *testing.T) {
 		stopChan: make(chan struct{}),
 	}
 
-	app.portForwardSessions["session-1"] = session1
-	app.portForwardSessions["session-2"] = session2
-	app.portForwardSessions["session-3"] = session3
-	app.registerRuntimeOperation(runtimeOperationFromPortForward(session1), nil)
-	app.registerRuntimeOperation(runtimeOperationFromPortForward(session2), nil)
-	app.registerRuntimeOperation(runtimeOperationFromPortForward(session3), nil)
+	operations.portForwardSessions["session-1"] = session1
+	operations.portForwardSessions["session-2"] = session2
+	operations.portForwardSessions["session-3"] = session3
+	for _, session := range []*portForwardSessionInternal{session1, session2, session3} {
+		sessionID := session.ID
+		operations.registerRuntimeOperation(runtimeOperationFromPortForward(session), func(reason string) error {
+			return operations.portForwardLifecycle().stopForRuntime(sessionID, reason)
+		})
+	}
 
 	// Stop all forwards for cluster-1.
-	err := app.StopClusterPortForwards("cluster-1")
-	if err != nil {
-		t.Fatalf("unexpected error: %v", err)
-	}
+	operations.StopCluster("cluster-1")
 
 	// Verify cluster-1 sessions were removed.
-	if _, exists := app.portForwardSessions["session-1"]; exists {
+	if _, exists := operations.portForwardSessions["session-1"]; exists {
 		t.Fatal("expected session-1 to be removed")
 	}
-	if _, exists := app.portForwardSessions["session-2"]; exists {
+	if _, exists := operations.portForwardSessions["session-2"]; exists {
 		t.Fatal("expected session-2 to be removed")
 	}
 
 	// Verify cluster-2 session remains.
-	if _, exists := app.portForwardSessions["session-3"]; !exists {
+	if _, exists := operations.portForwardSessions["session-3"]; !exists {
 		t.Fatal("expected session-3 to remain")
 	}
-	operations := app.ListRuntimeOperations()
-	if len(operations) != 1 {
-		t.Fatalf("expected one runtime operation to remain, got %+v", operations)
+	remainingOperations := operations.ListRuntimeOperations()
+	if len(remainingOperations) != 1 {
+		t.Fatalf("expected one runtime operation to remain, got %+v", remainingOperations)
 	}
-	if operations[0].ID != "session-3" {
-		t.Fatalf("expected session-3 runtime operation to remain, got %+v", operations)
+	if remainingOperations[0].ID != "session-3" {
+		t.Fatalf("expected session-3 runtime operation to remain, got %+v", remainingOperations)
 	}
 }
 
 func TestGetClusterPortForwardCount(t *testing.T) {
-	app := newTestAppWithDefaults(t)
-	app.portForwardSessions = make(map[string]*portForwardSessionInternal)
+	fixture := newOperationsCoordinatorFixture(t)
+	operations := fixture.coordinator
+	operations.portForwardSessions = make(map[string]*portForwardSessionInternal)
 
 	// Empty initially.
-	if count := app.GetClusterPortForwardCount("cluster-1"); count != 0 {
+	if count := operations.GetClusterPortForwardCount("cluster-1"); count != 0 {
 		t.Fatalf("expected 0, got %d", count)
 	}
 
 	// Add sessions.
-	app.portForwardSessions["session-1"] = &portForwardSessionInternal{
+	operations.portForwardSessions["session-1"] = &portForwardSessionInternal{
 		PortForwardSession: PortForwardSession{ClusterID: "cluster-1"},
 	}
-	app.portForwardSessions["session-2"] = &portForwardSessionInternal{
+	operations.portForwardSessions["session-2"] = &portForwardSessionInternal{
 		PortForwardSession: PortForwardSession{ClusterID: "cluster-1"},
 	}
-	app.portForwardSessions["session-3"] = &portForwardSessionInternal{
+	operations.portForwardSessions["session-3"] = &portForwardSessionInternal{
 		PortForwardSession: PortForwardSession{ClusterID: "cluster-2"},
 	}
 
-	if count := app.GetClusterPortForwardCount("cluster-1"); count != 2 {
+	if count := operations.GetClusterPortForwardCount("cluster-1"); count != 2 {
 		t.Fatalf("expected 2, got %d", count)
 	}
-	if count := app.GetClusterPortForwardCount("cluster-2"); count != 1 {
+	if count := operations.GetClusterPortForwardCount("cluster-2"); count != 1 {
 		t.Fatalf("expected 1, got %d", count)
 	}
-	if count := app.GetClusterPortForwardCount("cluster-3"); count != 0 {
+	if count := operations.GetClusterPortForwardCount("cluster-3"); count != 0 {
 		t.Fatalf("expected 0, got %d", count)
 	}
 }
 
 func TestCalculateBackoff(t *testing.T) {
-	app := newTestAppWithDefaults(t)
+	fixture := newOperationsCoordinatorFixture(t)
+	operations := fixture.coordinator
 
 	tests := []struct {
 		attempt  int
@@ -577,7 +603,7 @@ func TestCalculateBackoff(t *testing.T) {
 	}
 
 	for _, tc := range tests {
-		got := app.calculateBackoff(tc.attempt)
+		got := operations.calculateBackoff(tc.attempt)
 		if got != tc.expected {
 			t.Errorf("attempt %d: expected %v, got %v", tc.attempt, tc.expected, got)
 		}
@@ -585,7 +611,8 @@ func TestCalculateBackoff(t *testing.T) {
 }
 
 func TestShouldReconnect(t *testing.T) {
-	app := newTestAppWithDefaults(t)
+	fixture := newOperationsCoordinatorFixture(t)
+	operations := fixture.coordinator
 
 	tests := []struct {
 		targetKind string
@@ -605,7 +632,7 @@ func TestShouldReconnect(t *testing.T) {
 				TargetKind: tc.targetKind,
 			},
 		}
-		got := app.shouldReconnect(session)
+		got := operations.shouldReconnect(session)
 		if got != tc.expected {
 			t.Errorf("targetKind %s: expected %v, got %v", tc.targetKind, tc.expected, got)
 		}
@@ -640,7 +667,8 @@ func TestPortForwardSessionClose(t *testing.T) {
 }
 
 func TestValidatePortForwardURL(t *testing.T) {
-	app := newTestAppWithDefaults(t)
+	fixture := newOperationsCoordinatorFixture(t)
+	operations := fixture.coordinator
 
 	tests := []struct {
 		url    string
@@ -656,7 +684,7 @@ func TestValidatePortForwardURL(t *testing.T) {
 	}
 
 	for _, tc := range tests {
-		valid, errMsg := app.ValidatePortForwardURL(tc.url)
+		valid, errMsg := operations.ValidatePortForwardURL(tc.url)
 		if valid != tc.valid {
 			t.Errorf("url %q: expected valid=%v, got %v", tc.url, tc.valid, valid)
 		}
@@ -668,7 +696,9 @@ func TestValidatePortForwardURL(t *testing.T) {
 }
 
 func TestEmitPortForwardStatusGuards(t *testing.T) {
-	app := newTestAppWithDefaults(t)
+	fixture := newOperationsCoordinatorFixture(t)
+	app := fixture.runtime
+	operations := fixture.coordinator
 	setTestAppRuntimeReady(t, app, context.Background())
 
 	calls := 0
@@ -677,16 +707,17 @@ func TestEmitPortForwardStatusGuards(t *testing.T) {
 	}
 
 	// Nil session should not emit.
-	app.portForwardLifecycle().emitStatus(nil)
+	operations.portForwardLifecycle().emitStatus(nil)
 	if calls != 0 {
 		t.Fatalf("expected no events for nil session, got %d", calls)
 	}
 }
 
 func TestPortForwardLifecycleRemoveAndGetSession(t *testing.T) {
-	app := newTestAppWithDefaults(t)
-	app.portForwardSessions = make(map[string]*portForwardSessionInternal)
-	lifecycle := app.portForwardLifecycle()
+	fixture := newOperationsCoordinatorFixture(t)
+	operations := fixture.coordinator
+	operations.portForwardSessions = make(map[string]*portForwardSessionInternal)
+	lifecycle := operations.portForwardLifecycle()
 
 	session := &portForwardSessionInternal{
 		PortForwardSession: PortForwardSession{
@@ -694,7 +725,7 @@ func TestPortForwardLifecycleRemoveAndGetSession(t *testing.T) {
 			ClusterID: "cluster-1",
 		},
 	}
-	app.portForwardSessions["session-1"] = session
+	operations.portForwardSessions["session-1"] = session
 
 	// Get existing session.
 	got := lifecycle.get("session-1")

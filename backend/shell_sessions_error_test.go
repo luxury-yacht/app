@@ -10,7 +10,9 @@ import (
 const shellClusterID = "config:ctx"
 
 func TestStartShellSessionRequiresClient(t *testing.T) {
-	app := NewApp(nil)
+	fixture := newOperationsCoordinatorFixture(t)
+	app := fixture.runtime
+	operations := fixture.coordinator
 	app.logger = NewLogger(10)
 	// Per-cluster clients are stored in clusterClients, not in global fields.
 	// Create a cluster entry WITHOUT a client to test the error path.
@@ -23,14 +25,16 @@ func TestStartShellSessionRequiresClient(t *testing.T) {
 		},
 	}
 
-	_, err := app.StartShellSession(shellClusterID, ShellSessionRequest{Namespace: "default", PodName: "demo"})
+	_, err := operations.StartShellSession(shellClusterID, ShellSessionRequest{Namespace: "default", PodName: "demo"})
 	if err == nil {
 		t.Fatalf("expected error when client not initialized")
 	}
 }
 
 func TestStartShellSessionRequiresRestConfig(t *testing.T) {
-	app := NewApp(nil)
+	fixture := newOperationsCoordinatorFixture(t)
+	app := fixture.runtime
+	operations := fixture.coordinator
 	app.logger = NewLogger(10)
 	// Per-cluster clients are stored in clusterClients, not in global fields.
 	fakeClient := fake.NewClientset()
@@ -44,14 +48,16 @@ func TestStartShellSessionRequiresRestConfig(t *testing.T) {
 		},
 	}
 
-	_, err := app.StartShellSession(shellClusterID, ShellSessionRequest{Namespace: "default", PodName: "demo"})
+	_, err := operations.StartShellSession(shellClusterID, ShellSessionRequest{Namespace: "default", PodName: "demo"})
 	if err == nil {
 		t.Fatalf("expected rest config error when missing")
 	}
 }
 
 func TestStartShellSessionRequiresNamespace(t *testing.T) {
-	app := NewApp(nil)
+	fixture := newOperationsCoordinatorFixture(t)
+	app := fixture.runtime
+	operations := fixture.coordinator
 	app.logger = NewLogger(10)
 	// Per-cluster clients are stored in clusterClients, not in global fields.
 	fakeClient := fake.NewClientset()
@@ -66,14 +72,16 @@ func TestStartShellSessionRequiresNamespace(t *testing.T) {
 		},
 	}
 
-	_, err := app.StartShellSession(shellClusterID, ShellSessionRequest{PodName: "demo"})
+	_, err := operations.StartShellSession(shellClusterID, ShellSessionRequest{PodName: "demo"})
 	if err == nil {
 		t.Fatalf("expected namespace validation error")
 	}
 }
 
 func TestStartShellSessionRequiresPodName(t *testing.T) {
-	app := NewApp(nil)
+	fixture := newOperationsCoordinatorFixture(t)
+	app := fixture.runtime
+	operations := fixture.coordinator
 	app.logger = NewLogger(10)
 	// Per-cluster clients are stored in clusterClients, not in global fields.
 	fakeClient := fake.NewClientset()
@@ -88,7 +96,7 @@ func TestStartShellSessionRequiresPodName(t *testing.T) {
 		},
 	}
 
-	_, err := app.StartShellSession(shellClusterID, ShellSessionRequest{Namespace: "default"})
+	_, err := operations.StartShellSession(shellClusterID, ShellSessionRequest{Namespace: "default"})
 	if err == nil {
 		t.Fatalf("expected pod name validation error")
 	}

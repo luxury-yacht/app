@@ -81,8 +81,8 @@ func TestSyncClusterClientPool_CreatesClientsForNewSelections(t *testing.T) {
 	setTestAppRuntimeReady(t, app, context.Background())
 	app.clusterClients = make(map[string]*clusterClients)
 	app.clusterOps = newClusterOperationCoordinator()
-	app.shellSessions = make(map[string]*shellSession)
-	app.portForwardSessions = make(map[string]*portForwardSessionInternal)
+	app.operations.shellSessions = make(map[string]*shellSession)
+	app.operations.portForwardSessions = make(map[string]*portForwardSessionInternal)
 
 	// Set up available kubeconfigs so clusterMetaForSelection returns valid IDs.
 	app.availableKubeconfigs = []KubeconfigInfo{
@@ -132,8 +132,8 @@ func TestSyncClusterClientPool_RemovesStaleClients(t *testing.T) {
 	setTestAppRuntimeReady(t, app, context.Background())
 	app.clusterClients = make(map[string]*clusterClients)
 	app.clusterOps = newClusterOperationCoordinator()
-	app.shellSessions = make(map[string]*shellSession)
-	app.portForwardSessions = make(map[string]*portForwardSessionInternal)
+	app.operations.shellSessions = make(map[string]*shellSession)
+	app.operations.portForwardSessions = make(map[string]*portForwardSessionInternal)
 
 	app.availableKubeconfigs = []KubeconfigInfo{
 		{Name: "config", Path: "/tmp/config", Context: "cluster-a"},
@@ -178,8 +178,8 @@ func TestSyncClusterClientPool_IdempotentForExistingClients(t *testing.T) {
 	setTestAppRuntimeReady(t, app, context.Background())
 	app.clusterClients = make(map[string]*clusterClients)
 	app.clusterOps = newClusterOperationCoordinator()
-	app.shellSessions = make(map[string]*shellSession)
-	app.portForwardSessions = make(map[string]*portForwardSessionInternal)
+	app.operations.shellSessions = make(map[string]*shellSession)
+	app.operations.portForwardSessions = make(map[string]*portForwardSessionInternal)
 
 	app.availableKubeconfigs = []KubeconfigInfo{
 		{Name: "config", Path: "/tmp/config", Context: "ctx-1"},
@@ -224,8 +224,8 @@ func TestSyncClusterClientPool_EmptySelections(t *testing.T) {
 	setTestAppRuntimeReady(t, app, context.Background())
 	app.clusterClients = make(map[string]*clusterClients)
 	app.clusterOps = newClusterOperationCoordinator()
-	app.shellSessions = make(map[string]*shellSession)
-	app.portForwardSessions = make(map[string]*portForwardSessionInternal)
+	app.operations.shellSessions = make(map[string]*shellSession)
+	app.operations.portForwardSessions = make(map[string]*portForwardSessionInternal)
 
 	// Pre-populate a client to verify it gets cleaned up.
 	app.clusterClientsMu.Lock()
@@ -261,8 +261,8 @@ func TestSyncClusterClientPool_CancelledContextSkipsCreation(t *testing.T) {
 	setTestAppRuntimeReady(t, app, context.Background())
 	app.clusterClients = make(map[string]*clusterClients)
 	app.clusterOps = newClusterOperationCoordinator()
-	app.shellSessions = make(map[string]*shellSession)
-	app.portForwardSessions = make(map[string]*portForwardSessionInternal)
+	app.operations.shellSessions = make(map[string]*shellSession)
+	app.operations.portForwardSessions = make(map[string]*portForwardSessionInternal)
 
 	app.availableKubeconfigs = []KubeconfigInfo{
 		{Name: "config", Path: "/nonexistent/kubeconfig", Context: "ctx"},
@@ -291,8 +291,8 @@ func TestSyncClusterClientPool_RemovalCleansUpShellAndPortForward(t *testing.T) 
 	setTestAppRuntimeReady(t, app, context.Background())
 	app.clusterClients = make(map[string]*clusterClients)
 	app.clusterOps = newClusterOperationCoordinator()
-	app.shellSessions = make(map[string]*shellSession)
-	app.portForwardSessions = make(map[string]*portForwardSessionInternal)
+	app.operations.shellSessions = make(map[string]*shellSession)
+	app.operations.portForwardSessions = make(map[string]*portForwardSessionInternal)
 
 	clusterID := "removal-test-cluster"
 	app.clusterClientsMu.Lock()
@@ -303,14 +303,14 @@ func TestSyncClusterClientPool_RemovalCleansUpShellAndPortForward(t *testing.T) 
 	app.clusterClientsMu.Unlock()
 
 	// Add a port-forward session for this cluster.
-	app.portForwardSessionsMu.Lock()
-	app.portForwardSessions["pf-1"] = &portForwardSessionInternal{
+	app.operations.portForwardSessionsMu.Lock()
+	app.operations.portForwardSessions["pf-1"] = &portForwardSessionInternal{
 		PortForwardSession: PortForwardSession{ID: "pf-1", ClusterID: clusterID},
 		stopChan:           make(chan struct{}),
 	}
-	app.portForwardSessionsMu.Unlock()
-	app.registerRuntimeOperation(runtimeOperationFromPortForward(app.portForwardSessions["pf-1"]), func(reason string) error {
-		return app.stopPortForwardForRuntime("pf-1", reason)
+	app.operations.portForwardSessionsMu.Unlock()
+	app.operations.registerRuntimeOperation(runtimeOperationFromPortForward(app.operations.portForwardSessions["pf-1"]), func(reason string) error {
+		return app.operations.stopPortForwardForRuntime("pf-1", reason)
 	})
 
 	// Sync with empty selections to remove the cluster.
@@ -318,9 +318,9 @@ func TestSyncClusterClientPool_RemovalCleansUpShellAndPortForward(t *testing.T) 
 	require.NoError(t, err)
 
 	// Verify the port-forward session was cleaned up.
-	app.portForwardSessionsMu.Lock()
-	defer app.portForwardSessionsMu.Unlock()
-	require.Len(t, app.portForwardSessions, 0, "port-forward sessions for removed cluster should be cleaned up")
+	app.operations.portForwardSessionsMu.Lock()
+	defer app.operations.portForwardSessionsMu.Unlock()
+	require.Len(t, app.operations.portForwardSessions, 0, "port-forward sessions for removed cluster should be cleaned up")
 }
 
 // TestSyncClusterClientPool_RemovalShutsDownAuthManager verifies that removing
@@ -330,8 +330,8 @@ func TestSyncClusterClientPool_RemovalShutsDownAuthManager(t *testing.T) {
 	setTestAppRuntimeReady(t, app, context.Background())
 	app.clusterClients = make(map[string]*clusterClients)
 	app.clusterOps = newClusterOperationCoordinator()
-	app.shellSessions = make(map[string]*shellSession)
-	app.portForwardSessions = make(map[string]*portForwardSessionInternal)
+	app.operations.shellSessions = make(map[string]*shellSession)
+	app.operations.portForwardSessions = make(map[string]*portForwardSessionInternal)
 
 	authMgr := authstate.New(authstate.Config{MaxAttempts: 0})
 
@@ -359,8 +359,8 @@ func TestSyncClusterClientPool_ConcurrentAccess(t *testing.T) {
 	setTestAppRuntimeReady(t, app, context.Background())
 	app.clusterClients = make(map[string]*clusterClients)
 	app.clusterOps = newClusterOperationCoordinator()
-	app.shellSessions = make(map[string]*shellSession)
-	app.portForwardSessions = make(map[string]*portForwardSessionInternal)
+	app.operations.shellSessions = make(map[string]*shellSession)
+	app.operations.portForwardSessions = make(map[string]*portForwardSessionInternal)
 
 	app.availableKubeconfigs = []KubeconfigInfo{
 		{Name: "config", Path: "/tmp/config", Context: "ctx-1"},

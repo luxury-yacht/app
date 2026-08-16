@@ -294,31 +294,28 @@ func (a *App) getGVRForGVK(ctx context.Context, clusterID string, gvk schema.Gro
 // startPortForward initiates a new port forwarding session to a Kubernetes pod.
 // For workloads (Deployment, StatefulSet, DaemonSet) and Services, the session
 // will automatically reconnect if the underlying pod is replaced.
-func (a *App) startPortForward(clusterID string, req PortForwardRequest) (string, error) {
-	resp, err := a.RunObjectAction(ObjectActionRequest{
-		Action: ObjectActionStartPortForward,
-		Target: objectActionTarget(
+func (o *OperationsCoordinator) startPortForward(clusterID string, req PortForwardRequest) (string, error) {
+	return o.startPortForwardAction(
+		objectActionTarget(
 			clusterID,
 			req.TargetGroup,
 			req.TargetVersion,
 			req.TargetKind,
 			req.Namespace,
 			req.TargetName,
-		),
-		PortForward: &ObjectActionPortForwardOptions{
+		), ObjectActionPortForwardOptions{
 			ContainerPort: req.ContainerPort,
 			LocalPort:     req.LocalPort,
 		},
-	})
-	return resp.SessionID, err
+	)
 }
 
-func (a *App) stopPortForwardForRuntime(sessionID, reason string) error {
-	return a.portForwardLifecycle().stopForRuntime(sessionID, reason)
+func (o *OperationsCoordinator) stopPortForwardForRuntime(sessionID, reason string) error {
+	return o.portForwardLifecycle().stopForRuntime(sessionID, reason)
 }
 
-func (a *App) closeShellSessionForRuntime(sessionID, reason string) error {
-	return a.shellSessionLifecycle().closeForRuntime(sessionID, reason)
+func (o *OperationsCoordinator) closeShellSessionForRuntime(sessionID, reason string) error {
+	return o.shellSessionLifecycle().closeForRuntime(sessionID, reason)
 }
 
 // invalidateResponseCacheForObject clears cached detail/YAML/helm data for the given resource.
@@ -387,13 +384,4 @@ func FetchResourceList[T any](
 	}
 
 	return result, nil
-}
-
-func (l portForwardLifecycle) get(sessionID string) *portForwardSessionInternal {
-	if l.app == nil {
-		return nil
-	}
-	l.app.portForwardSessionsMu.Lock()
-	defer l.app.portForwardSessionsMu.Unlock()
-	return l.app.portForwardSessions[sessionID]
 }

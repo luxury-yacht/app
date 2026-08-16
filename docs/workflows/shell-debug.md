@@ -23,13 +23,23 @@ cluster-scoped runtime operations.
 
 ## Ownership
 
-- Backend shell sessions and lifecycle: `backend/shell_sessions*.go`
+- Backend shell sessions, lifecycle, backlog, executor factories, and cleanup:
+  `backend.OperationsCoordinator` implemented by `backend/shell_sessions*.go`
 - Debug container creation: `backend/resources/pods/debug.go`
-- Runtime operation registry: `backend/runtime_operations.go`
+- Runtime operation registry: `backend.OperationsCoordinator` implemented by
+  `backend/runtime_operations.go`
 - Object-panel shell/debug UI: `frontend/src/modules/object-panel`
 - Permission/action capability rules:
   [../architecture/permissions.md](../architecture/permissions.md)
 - Operation cleanup: [operation-lifecycle.md](operation-lifecycle.md)
+
+`DesktopService` routes shell commands directly to `OperationsCoordinator`.
+The coordinator resolves the caller's explicit `clusterId` through its narrow
+cluster-access collaborator, performs exec permission checks, registers the
+session in the runtime-operation envelope, and only then starts its stream.
+Cluster removal advances the operation epoch before closing the stream; a start
+that finishes against an older epoch is rejected instead of publishing a stale
+session.
 
 ## Change Checklist
 

@@ -26,7 +26,8 @@ import (
 	"k8s.io/client-go/transport/spdy"
 )
 
-func (a *App) startPortForwardAction(targetRef ObjectActionTargetRef, options ObjectActionPortForwardOptions) (string, error) {
+func (o *OperationsCoordinator) startPortForwardAction(targetRef ObjectActionTargetRef, options ObjectActionPortForwardOptions) (string, error) {
+	operationEpoch := o.clusterOperationEpoch(targetRef.ClusterID)
 	req := PortForwardRequest{
 		Namespace:     targetRef.Namespace,
 		TargetKind:    targetRef.Kind,
@@ -44,7 +45,10 @@ func (a *App) startPortForwardAction(targetRef ObjectActionTargetRef, options Ob
 		return "", fmt.Errorf("container port must be positive")
 	}
 
-	deps, _, err := a.resolveClusterDependencies(targetRef.ClusterID)
+	if o == nil || o.clusterAccess == nil {
+		return "", fmt.Errorf("cluster access not initialized")
+	}
+	deps, _, err := o.clusterAccess.ResolveClusterDependencies(targetRef.ClusterID)
 	if err != nil {
 		return "", err
 	}
@@ -56,7 +60,7 @@ func (a *App) startPortForwardAction(targetRef ObjectActionTargetRef, options Ob
 	}
 
 	// Resolve the target to a pod.
-	ctx, cancel := context.WithTimeout(context.Background(), config.PortForwardResolveTimeout)
+	ctx, cancel := context.WithTimeout(o.operationContext(), config.PortForwardResolveTimeout)
 	defer cancel()
 
 	resolved, err := resolvePortForwardDestination(ctx, deps.KubernetesClient, target, req.ContainerPort)
@@ -64,7 +68,7 @@ func (a *App) startPortForwardAction(targetRef ObjectActionTargetRef, options Ob
 		return "", fmt.Errorf("failed to resolve pod: %w", err)
 	}
 
-	if err := a.requireResourcePermission(ctx, deps, resourcePermissionCheck{
+	if err := o.permissions.Require(ctx, deps, OperationsPermissionCheck{
 		Version:     "v1",
 		Kind:        podspkg.Identity.Kind,
 		Namespace:   target.Namespace,
@@ -77,7 +81,7 @@ func (a *App) startPortForwardAction(targetRef ObjectActionTargetRef, options Ob
 
 	// Create session.
 	sessionID := uuid.NewString()
-	sessionCtx, sessionCancel := context.WithCancel(context.Background())
+	sessionCtx, sessionCancel := context.WithCancel(o.operationContext())
 
 	session := &portForwardSessionInternal{
 		PortForwardSession: PortForwardSession{
@@ -95,16 +99,20 @@ func (a *App) startPortForwardAction(targetRef ObjectActionTargetRef, options Ob
 			Status:        PortForwardStatusConnecting,
 			StartedAt:     time.Now().Format(time.RFC3339),
 		},
-		stopChan:  make(chan struct{}),
-		readyChan: make(chan error, 1),
-		cancel:    sessionCancel,
+		stopChan:       make(chan struct{}),
+		readyChan:      make(chan error, 1),
+		cancel:         sessionCancel,
+		operationEpoch: operationEpoch,
 	}
 
-	lifecycle := a.portForwardLifecycle()
-	lifecycle.registerStarting(session)
+	lifecycle := o.portForwardLifecycle()
+	if !lifecycle.registerStarting(session) {
+		session.close()
+		return "", fmt.Errorf("cluster disconnected before port forward started")
+	}
 
 	// Start the forwarder in a goroutine.
-	go a.runPortForwarder(sessionCtx, session)
+	go o.runPortForwarder(sessionCtx, session)
 
 	// Wait for initial connection to succeed or fail.
 	select {
@@ -122,31 +130,24 @@ func (a *App) startPortForwardAction(targetRef ObjectActionTargetRef, options Ob
 }
 
 // StopPortForward terminates a specific port forwarding session.
-func (a *App) StopPortForward(sessionID string) error {
-	return a.portForwardLifecycle().stopByUser(sessionID)
-}
-
-// StopClusterPortForwards terminates all port forwards for a specific cluster.
-// Called when a cluster is disconnected to clean up resources.
-func (a *App) StopClusterPortForwards(clusterID string) error {
-	a.portForwardLifecycle().stopCluster(clusterID)
-	return nil
+func (o *OperationsCoordinator) StopPortForward(sessionID string) error {
+	return o.portForwardLifecycle().stopByUser(sessionID)
 }
 
 // ListPortForwards returns all active port forwarding sessions.
-func (a *App) ListPortForwards() []PortForwardSession {
-	return a.portForwardLifecycle().list()
+func (o *OperationsCoordinator) ListPortForwards() []PortForwardSession {
+	return o.portForwardLifecycle().list()
 }
 
 // GetClusterPortForwardCount returns the number of active port forwards for a cluster.
-func (a *App) GetClusterPortForwardCount(clusterID string) int {
-	return a.portForwardLifecycle().countCluster(clusterID)
+func (o *OperationsCoordinator) GetClusterPortForwardCount(clusterID string) int {
+	return o.portForwardLifecycle().countCluster(clusterID)
 }
 
 // runPortForwarder manages the port forwarding connection and handles reconnection.
-func (a *App) runPortForwarder(ctx context.Context, session *portForwardSessionInternal) {
+func (o *OperationsCoordinator) runPortForwarder(ctx context.Context, session *portForwardSessionInternal) {
 	defer func() {
-		a.portForwardLifecycle().finishTerminal(session.ID)
+		o.portForwardLifecycle().finishTerminal(session.ID)
 	}()
 
 	isFirstAttempt := true
@@ -160,7 +161,7 @@ func (a *App) runPortForwarder(ctx context.Context, session *portForwardSessionI
 		default:
 		}
 
-		err := a.executePortForward(ctx, session)
+		err := o.executePortForward(ctx, session)
 
 		// Signal readyChan on first attempt (success or failure).
 		if isFirstAttempt {
@@ -181,12 +182,12 @@ func (a *App) runPortForwarder(ctx context.Context, session *portForwardSessionI
 		}
 
 		// Check if we should reconnect.
-		if !a.shouldReconnect(session) {
+		if !o.shouldReconnect(session) {
 			session.mu.Lock()
 			session.Status = PortForwardStatusError
 			session.StatusReason = err.Error()
 			session.mu.Unlock()
-			a.portForwardLifecycle().emitStatus(session)
+			o.portForwardLifecycle().emitStatus(session)
 			return
 		}
 
@@ -197,19 +198,19 @@ func (a *App) runPortForwarder(ctx context.Context, session *portForwardSessionI
 		session.Status = PortForwardStatusReconnecting
 		session.StatusReason = fmt.Sprintf("attempt %d/%d: %s", attempt, config.PortForwardMaxReconnectAttempts, err.Error())
 		session.mu.Unlock()
-		a.portForwardLifecycle().emitStatus(session)
+		o.portForwardLifecycle().emitStatus(session)
 
 		if attempt > config.PortForwardMaxReconnectAttempts {
 			session.mu.Lock()
 			session.Status = PortForwardStatusError
 			session.StatusReason = "max reconnect attempts exceeded"
 			session.mu.Unlock()
-			a.portForwardLifecycle().emitStatus(session)
+			o.portForwardLifecycle().emitStatus(session)
 			return
 		}
 
 		// Calculate backoff duration.
-		backoff := a.calculateBackoff(attempt)
+		backoff := o.calculateBackoff(attempt)
 
 		select {
 		case <-ctx.Done():
@@ -220,16 +221,21 @@ func (a *App) runPortForwarder(ctx context.Context, session *portForwardSessionI
 		}
 
 		// Re-resolve the pod (it may have changed for workloads/services).
-		if err := a.reresolvePod(ctx, session); err != nil {
-			a.logger.Warn(fmt.Sprintf("Failed to re-resolve pod for %s: %v", session.ID, err), logsources.PortForward)
+		if err := o.reresolvePod(ctx, session); err != nil {
+			if o.logger != nil {
+				o.logger.Warn(fmt.Sprintf("Failed to re-resolve pod for %s: %v", session.ID, err), logsources.PortForward)
+			}
 			continue
 		}
 	}
 }
 
 // executePortForward runs the actual port forward connection.
-func (a *App) executePortForward(ctx context.Context, session *portForwardSessionInternal) error {
-	deps, _, err := a.resolveClusterDependencies(session.ClusterID)
+func (o *OperationsCoordinator) executePortForward(ctx context.Context, session *portForwardSessionInternal) error {
+	if o == nil || o.clusterAccess == nil {
+		return fmt.Errorf("cluster access not initialized")
+	}
+	deps, _, err := o.clusterAccess.ResolveClusterDependencies(session.ClusterID)
 	if err != nil {
 		return fmt.Errorf("failed to resolve cluster: %w", err)
 	}
@@ -308,7 +314,7 @@ func (a *App) executePortForward(ctx context.Context, session *portForwardSessio
 
 	// Update session with actual local port.
 	if len(forwardedPorts) > 0 {
-		a.portForwardLifecycle().markActive(session, int(forwardedPorts[0].Local))
+		o.portForwardLifecycle().markActive(session, int(forwardedPorts[0].Local))
 
 		// Signal success on readyChan (non-blocking).
 		select {
@@ -331,7 +337,7 @@ func (a *App) executePortForward(ctx context.Context, session *portForwardSessio
 // shouldReconnect determines if the session should attempt auto-reconnection.
 // Only workloads and services support reconnection since the underlying pod may change.
 // Direct pod forwards do not reconnect because the specific pod is gone.
-func (a *App) shouldReconnect(session *portForwardSessionInternal) bool {
+func (o *OperationsCoordinator) shouldReconnect(session *portForwardSessionInternal) bool {
 	session.mu.Lock()
 	defer session.mu.Unlock()
 
@@ -341,7 +347,7 @@ func (a *App) shouldReconnect(session *portForwardSessionInternal) bool {
 
 // calculateBackoff returns the backoff duration for a reconnect attempt.
 // Uses exponential backoff: 1s, 2s, 4s, 8s, 16s, capped at 30s.
-func (a *App) calculateBackoff(attempt int) time.Duration {
+func (o *OperationsCoordinator) calculateBackoff(attempt int) time.Duration {
 	backoff := config.PortForwardInitialBackoff
 	for i := 1; i < attempt; i++ {
 		backoff *= 2
@@ -354,8 +360,11 @@ func (a *App) calculateBackoff(attempt int) time.Duration {
 }
 
 // reresolvePod attempts to find a new pod for the session's target.
-func (a *App) reresolvePod(ctx context.Context, session *portForwardSessionInternal) error {
-	deps, _, err := a.resolveClusterDependencies(session.ClusterID)
+func (o *OperationsCoordinator) reresolvePod(ctx context.Context, session *portForwardSessionInternal) error {
+	if o == nil || o.clusterAccess == nil {
+		return fmt.Errorf("cluster access not initialized")
+	}
+	deps, _, err := o.clusterAccess.ResolveClusterDependencies(session.ClusterID)
 	if err != nil {
 		return err
 	}
@@ -414,7 +423,7 @@ func runtimeOperationFromPortForward(session *portForwardSessionInternal) Runtim
 
 // ValidatePortForwardURL checks if a URL string is valid and safe for port forwarding.
 // This is a utility function for the frontend to validate URLs.
-func (a *App) ValidatePortForwardURL(urlStr string) (bool, string) {
+func (o *OperationsCoordinator) ValidatePortForwardURL(urlStr string) (bool, string) {
 	if urlStr == "" {
 		return false, "URL is required"
 	}

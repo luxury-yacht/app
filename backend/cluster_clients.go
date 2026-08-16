@@ -312,7 +312,9 @@ func (a *App) cleanupRemovedClusterClients(removed []removedClusterClient) {
 		}
 	}
 	for _, item := range removed {
-		a.cleanupClusterRuntimeOperations(item.clusterID, "cluster disconnected")
+		if a.operations != nil {
+			a.operations.StopCluster(item.clusterID)
+		}
 	}
 	for _, item := range removed {
 		a.ensureKubernetesAPIMetricsRegistry().remove(item.clusterID)

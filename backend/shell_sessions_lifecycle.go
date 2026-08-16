@@ -9,36 +9,40 @@ import (
 )
 
 type shellSessionLifecycle struct {
-	app *App
+	coordinator *OperationsCoordinator
 }
 
-func (a *App) shellSessionLifecycle() shellSessionLifecycle {
-	return shellSessionLifecycle{app: a}
+func (o *OperationsCoordinator) shellSessionLifecycle() shellSessionLifecycle {
+	return shellSessionLifecycle{coordinator: o}
 }
 
-func (l shellSessionLifecycle) register(sess *shellSession) {
-	if l.app == nil || sess == nil {
-		return
+func (l shellSessionLifecycle) register(sess *shellSession) bool {
+	if l.coordinator == nil || sess == nil {
+		return false
 	}
-	l.app.shellSessionsMu.Lock()
-	if l.app.shellSessions == nil {
-		l.app.shellSessions = make(map[string]*shellSession)
+	l.coordinator.shellSessionsMu.Lock()
+	if l.coordinator.shellSessions == nil {
+		l.coordinator.shellSessions = make(map[string]*shellSession)
 	}
-	l.app.shellSessions[sess.id] = sess
-	l.app.shellSessionsMu.Unlock()
+	l.coordinator.shellSessions[sess.id] = sess
+	l.coordinator.shellSessionsMu.Unlock()
 
-	l.registerRuntimeOperation(sess)
+	if !l.registerRuntimeOperation(sess) {
+		l.remove(sess.id)
+		return false
+	}
 	l.emitList()
+	return true
 }
 
-func (l shellSessionLifecycle) registerRuntimeOperation(sess *shellSession) {
-	if l.app == nil || sess == nil {
-		return
+func (l shellSessionLifecycle) registerRuntimeOperation(sess *shellSession) bool {
+	if l.coordinator == nil || sess == nil {
+		return false
 	}
 	sessionID := sess.id
-	l.app.registerRuntimeOperation(runtimeOperationFromShellSession(sess), func(reason string) error {
+	return l.coordinator.registerRuntimeOperationAtEpoch(runtimeOperationFromShellSession(sess), func(reason string) error {
 		return l.closeForRuntime(sessionID, reason)
-	})
+	}, sess.operationEpoch)
 }
 
 func (l shellSessionLifecycle) closeByUser(sessionID string) error {
@@ -53,7 +57,7 @@ func (l shellSessionLifecycle) closeForRuntime(sessionID, reason string) error {
 	if reason == "" {
 		reason = "cluster disconnected"
 	}
-	l.close(sessionID, "closed", reason, false, true, false)
+	l.close(sessionID, "closed", reason, false, false, false)
 	return nil
 }
 
@@ -62,7 +66,7 @@ func (l shellSessionLifecycle) terminate(sessionID, status, reason string) bool 
 }
 
 func (l shellSessionLifecycle) finishStream(sessionID, status, reason string) bool {
-	if l.app == nil {
+	if l.coordinator == nil {
 		return false
 	}
 	sess, removed := l.remove(sessionID)
@@ -73,29 +77,6 @@ func (l shellSessionLifecycle) finishStream(sessionID, status, reason string) bo
 	return true
 }
 
-func (l shellSessionLifecycle) stopCluster(clusterID string) int {
-	if l.app == nil {
-		return 0
-	}
-	l.app.shellSessionsMu.Lock()
-	toStop := make([]*shellSession, 0)
-	for _, sess := range l.app.shellSessions {
-		if sess.clusterID == clusterID {
-			toStop = append(toStop, sess)
-			delete(l.app.shellSessions, sess.id)
-		}
-	}
-	l.app.shellSessionsMu.Unlock()
-
-	for _, sess := range toStop {
-		l.closeRemoved(sess, "closed", "cluster disconnected", true, false)
-	}
-	if len(toStop) > 0 {
-		l.emitList()
-	}
-	return len(toStop)
-}
-
 func (l shellSessionLifecycle) close(
 	sessionID string,
 	status string,
@@ -104,7 +85,7 @@ func (l shellSessionLifecycle) close(
 	emitList bool,
 	notFoundIsError bool,
 ) bool {
-	if l.app == nil {
+	if l.coordinator == nil {
 		return false
 	}
 	sess, removed := l.remove(sessionID)
@@ -122,7 +103,7 @@ func (l shellSessionLifecycle) closeRemoved(
 	unregisterRuntime bool,
 	emitList bool,
 ) {
-	if l.app == nil || sess == nil {
+	if l.coordinator == nil || sess == nil {
 		return
 	}
 	sess.Close()
@@ -131,41 +112,41 @@ func (l shellSessionLifecycle) closeRemoved(
 		l.emitList()
 	}
 	if unregisterRuntime {
-		l.app.unregisterRuntimeOperation(sess.id)
+		l.coordinator.unregisterRuntimeOperation(sess.id)
 	}
 }
 
 func (l shellSessionLifecycle) get(sessionID string) *shellSession {
-	if l.app == nil {
+	if l.coordinator == nil {
 		return nil
 	}
-	l.app.shellSessionsMu.Lock()
-	defer l.app.shellSessionsMu.Unlock()
-	return l.app.shellSessions[sessionID]
+	l.coordinator.shellSessionsMu.Lock()
+	defer l.coordinator.shellSessionsMu.Unlock()
+	return l.coordinator.shellSessions[sessionID]
 }
 
 func (l shellSessionLifecycle) remove(sessionID string) (*shellSession, bool) {
-	if l.app == nil {
+	if l.coordinator == nil {
 		return nil, false
 	}
-	l.app.shellSessionsMu.Lock()
-	defer l.app.shellSessionsMu.Unlock()
-	sess, ok := l.app.shellSessions[sessionID]
+	l.coordinator.shellSessionsMu.Lock()
+	defer l.coordinator.shellSessionsMu.Unlock()
+	sess, ok := l.coordinator.shellSessions[sessionID]
 	if ok {
-		delete(l.app.shellSessions, sessionID)
+		delete(l.coordinator.shellSessions, sessionID)
 	}
 	return sess, ok
 }
 
 func (l shellSessionLifecycle) list() []ShellSessionInfo {
-	if l.app == nil {
+	if l.coordinator == nil {
 		return nil
 	}
-	l.app.shellSessionsMu.Lock()
-	defer l.app.shellSessionsMu.Unlock()
+	l.coordinator.shellSessionsMu.Lock()
+	defer l.coordinator.shellSessionsMu.Unlock()
 
-	sessions := make([]ShellSessionInfo, 0, len(l.app.shellSessions))
-	for _, sess := range l.app.shellSessions {
+	sessions := make([]ShellSessionInfo, 0, len(l.coordinator.shellSessions))
+	for _, sess := range l.coordinator.shellSessions {
 		sessions = append(sessions, ShellSessionInfo{
 			SessionID:   sess.id,
 			ClusterID:   sess.clusterID,
@@ -185,14 +166,14 @@ func (l shellSessionLifecycle) list() []ShellSessionInfo {
 }
 
 func (l shellSessionLifecycle) countCluster(clusterID string) int {
-	if l.app == nil {
+	if l.coordinator == nil {
 		return 0
 	}
-	l.app.shellSessionsMu.Lock()
-	defer l.app.shellSessionsMu.Unlock()
+	l.coordinator.shellSessionsMu.Lock()
+	defer l.coordinator.shellSessionsMu.Unlock()
 
 	count := 0
-	for _, sess := range l.app.shellSessions {
+	for _, sess := range l.coordinator.shellSessions {
 		if sess.clusterID == clusterID {
 			count++
 		}
@@ -201,10 +182,10 @@ func (l shellSessionLifecycle) countCluster(clusterID string) int {
 }
 
 func (l shellSessionLifecycle) emitOutput(sessionID, clusterID, stream, data string) {
-	if l.app == nil || sessionID == "" || data == "" {
+	if l.coordinator == nil || sessionID == "" || data == "" {
 		return
 	}
-	l.app.emitEvent(shellOutputEventName, ShellOutputEvent{
+	l.coordinator.publishEvent(shellOutputEventName, ShellOutputEvent{
 		SessionID: sessionID,
 		ClusterID: clusterID,
 		Stream:    stream,
@@ -213,10 +194,10 @@ func (l shellSessionLifecycle) emitOutput(sessionID, clusterID, stream, data str
 }
 
 func (l shellSessionLifecycle) emitStatus(sessionID, clusterID, status, reason string) {
-	if l.app == nil || sessionID == "" || status == "" {
+	if l.coordinator == nil || sessionID == "" || status == "" {
 		return
 	}
-	l.app.emitEvent(shellStatusEventName, ShellStatusEvent{
+	l.coordinator.publishEvent(shellStatusEventName, ShellStatusEvent{
 		SessionID: sessionID,
 		ClusterID: clusterID,
 		Status:    status,
@@ -225,8 +206,8 @@ func (l shellSessionLifecycle) emitStatus(sessionID, clusterID, status, reason s
 }
 
 func (l shellSessionLifecycle) emitList() {
-	if l.app == nil {
+	if l.coordinator == nil {
 		return
 	}
-	l.app.emitEvent(shellListEventName, l.list())
+	l.coordinator.publishEvent(shellListEventName, l.list())
 }
