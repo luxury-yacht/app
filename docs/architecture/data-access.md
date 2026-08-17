@@ -75,19 +75,42 @@ one owner-shaped interface: Favorites, UI state, Preferences, Data Management,
 Cluster Attention, Workspace, Cluster Runtime, Resources, Operations, Updates,
 App Logs, or Desktop Shell. Lifecycle and `/api/v2` HTTP handling are separate
 collaborators. Do not replace these seams with one interface containing every
-command, and do not give `DesktopService` an `*App` back-pointer.
+command, and do not give `DesktopService` a composition-root back-pointer.
 
 Frontend code imports generated commands only through
 `frontend/src/core/backend-api/index.ts`. Higher-level consumers must not import
-`desktopservice.ts` directly. The implementation type `backend.App` is not a
-registered service, so its exported implementation and test methods need no
-`//wails:ignore` directives.
+`desktopservice.ts` directly. `backend.ApplicationRuntime` is not a registered
+service and has no methods; only `DesktopService` supplies generated commands,
+so implementation owners need no `//wails:ignore` directives.
+
+The final command-to-owner map is:
+
+| Owner | Commands | Responsibility |
+| --- | ---: | --- |
+| `FavoritesService` | 5 | Favorites persistence |
+| `UIStateStore` | 7 | Grid and cluster-tab UI persistence |
+| `PreferencesService` | 13 | Settings, themes, zoom, and kubeconfig search-path reads |
+| `DataManagementCoordinator` | 5 | Import, export, and factory reset |
+| `ClusterAttentionService` | 6 | Attention ignore and restore rules |
+| `WorkspaceCoordinator` | 6 | Window selection, namespace scope, diagnostics, and search-path mutation |
+| `ClusterRuntimeManager` | 3 | Kubeconfig inventory, client diagnostics, and auth retry |
+| `ResourceGateway` | 17 | Resource reads, permissions, YAML, logs, and object actions |
+| `OperationsCoordinator` | 10 | Shell, port-forward, drain, and live-operation lifecycle |
+| `UpdateCoordinator` | 6 | Update checks, download, skip, and restart |
+| `AppLogService` | 5 | Process log reads, writes, and clear |
+| `DesktopShell` | 4 | Native dialogs, CSV save, and process UI visibility |
+
+Wails generates the callable module at
+`frontend/bindings/github.com/luxury-yacht/app/backend/desktopservice.ts` and
+shared backend DTOs at the adjacent `models.ts`. DTOs declared in nested Go
+packages remain in their corresponding generated subdirectories. Frontend
+application code consumes this layout only through the backend API allowlist.
 
 `ResourceGateway` owns request-shaped Kubernetes resource work: exact catalog
 resolution, capability queries, typed details, YAML, object actions, Helm and
 node-log operations, response caching, and permission-aware cache validation.
 It receives narrow cluster-client, context, transport-health, event, logging,
-catalog, and telemetry collaborators; it never stores `*App`. The current
+catalog, and telemetry collaborators; it never stores the composition root. The current
 cluster-client, dependency-resolution, and transport-health collaborators point
 directly to `ClusterRuntimeManager`. Catalog and refresh-telemetry reads use a
 shared leaf `refreshResourceProjection` that Refresh publishes into, so resource

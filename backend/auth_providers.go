@@ -34,7 +34,7 @@ var (
 // setupEnvironment merges PATH from a login shell (when available) with a few
 // known helper locations. The login shell probe runs with a short timeout so
 // bundled builds are never blocked by interactive shell configuration.
-func (a *App) setupEnvironment() {
+func (a *ApplicationLifecycle) setupEnvironment() {
 	if a == nil {
 		return
 	}

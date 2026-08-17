@@ -47,8 +47,8 @@ func TestGetAppInfoDevReadsWails(t *testing.T) {
 	})
 	Version, BuildTime, GitCommit = "dev", "dev", "dev"
 
-	app := &App{}
-	info, err := app.updates.GetAppInfo()
+	var updates *UpdateCoordinator
+	info, err := updates.GetAppInfo()
 	if err != nil {
 		t.Fatalf("GetAppInfo error: %v", err)
 	}
@@ -78,8 +78,8 @@ func TestGetAppInfoNonDevUsesLdflags(t *testing.T) {
 	GitCommit = "abc123"
 	IsBetaBuild = "false"
 
-	app := &App{}
-	info, err := app.updates.GetAppInfo()
+	var updates *UpdateCoordinator
+	info, err := updates.GetAppInfo()
 	if err != nil {
 		t.Fatalf("GetAppInfo error: %v", err)
 	}
@@ -106,8 +106,8 @@ func TestGetAppInfoIncludesBetaMetadata(t *testing.T) {
 	IsBetaBuild = "true"
 	BetaExpiry = "2025-01-01T00:00:00Z"
 
-	app := &App{}
-	info, err := app.updates.GetAppInfo()
+	var updates *UpdateCoordinator
+	info, err := updates.GetAppInfo()
 	if err != nil {
 		t.Fatalf("GetAppInfo error: %v", err)
 	}
@@ -135,13 +135,13 @@ func TestCheckBetaExpiryValidations(t *testing.T) {
 	t.Cleanup(func() {
 		Version, BetaExpiry, IsBetaBuild = origVersion, origBeta, origIsBeta
 	})
-	app := &App{appLogs: NewAppLogService(NewLogger(5))}
+	lifecycle := &ApplicationLifecycle{appLogs: NewAppLogService(NewLogger(5))}
 
 	// invalid format
 	BetaExpiry = "not-a-time"
 	Version = "1.2.3"
 	IsBetaBuild = "true"
-	err := app.checkBetaExpiry()
+	err := lifecycle.checkBetaExpiry()
 	if err == nil {
 		t.Fatalf("expected error for invalid beta expiry")
 	}
@@ -150,7 +150,7 @@ func TestCheckBetaExpiryValidations(t *testing.T) {
 	expired := time.Now().Add(-48 * time.Hour).UTC().Format(time.RFC3339)
 	BetaExpiry = expired
 	Version = "1.0.0"
-	err = app.checkBetaExpiry()
+	err = lifecycle.checkBetaExpiry()
 	if err == nil || err.Error() == "" {
 		t.Fatalf("expected expiry error, got %v", err)
 	}
@@ -158,7 +158,7 @@ func TestCheckBetaExpiryValidations(t *testing.T) {
 	// valid, near expiry should warn but not error
 	future := time.Now().Add(24 * time.Hour).UTC().Format(time.RFC3339)
 	BetaExpiry = future
-	err = app.checkBetaExpiry()
+	err = lifecycle.checkBetaExpiry()
 	if err != nil {
 		t.Fatalf("expected no error for future beta, got %v", err)
 	}
@@ -174,8 +174,8 @@ func TestCheckBetaExpirySkippedForNonBeta(t *testing.T) {
 	BetaExpiry = time.Now().Add(-24 * time.Hour).Format(time.RFC3339)
 	IsBetaBuild = "false"
 
-	app := &App{}
-	if err := app.checkBetaExpiry(); err != nil {
+	lifecycle := &ApplicationLifecycle{}
+	if err := lifecycle.checkBetaExpiry(); err != nil {
 		t.Fatalf("expected skip for non-beta builds, got %v", err)
 	}
 }

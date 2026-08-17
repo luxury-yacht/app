@@ -1,5 +1,5 @@
 {
-  "schemaVersion": 1,
+  "schemaVersion": 2,
   "phase1Checkpoint": {
     "registeredService": "DesktopService",
     "ownerCommandInterfaces": 12,
@@ -58,12 +58,12 @@
         "backend/app_csv_export.go"
       ],
       "writers": [
-        "backend/app.go NewApp",
+        "backend/app.go NewApplicationRuntime",
         "backend/app_ui.go visibility setters",
         "backend/app_runtime.go native callback setters"
       ],
       "mutex": "runtime readiness gates native access; visibility is process-wide and intentionally unpersisted",
-      "startup": "NewApp installs direct concrete Wails callbacks and menu/window hooks",
+      "startup": "NewApplicationRuntime installs direct concrete Wails callbacks and menu/window hooks",
       "shutdown": "native access stops before application context is cleared",
       "tests": [
         "backend/app_runtime_test.go",
@@ -130,11 +130,11 @@
         "backend production methods through Logger and applog interfaces"
       ],
       "writers": [
-        "backend/app.go NewApp",
+        "backend/app.go NewApplicationRuntime",
         "backend/app_logs.go frontend ingestion and clear"
       ],
       "mutex": "Logger owns its internal buffer synchronization",
-      "startup": "NewApp constructs logger; ServiceStartup installs standard-log/event bridges",
+      "startup": "NewApplicationRuntime constructs logger; ServiceStartup installs standard-log/event bridges",
       "shutdown": "final lifecycle messages are written before context clear",
       "tests": [
         "backend/logger_test.go",
@@ -155,7 +155,7 @@
         "backend/logger.go"
       ],
       "writers": [
-        "backend/app.go NewApp",
+        "backend/app.go NewApplicationRuntime",
         "backend/app_settings.go InitializeErrorReporting",
         "backend/app_installation_telemetry.go registration acknowledgement"
       ],
@@ -182,13 +182,13 @@
         "backend/response_cache_invalidation.go"
       ],
       "writers": [
-        "backend/app.go NewApp",
+        "backend/app.go NewApplicationRuntime",
         "backend/fetch_helpers.go cache ingest",
         "backend/app_permissions.go SSRR cache creation/refresh",
         "backend/response_cache_invalidation.go"
       ],
       "mutex": "ResourceGateway owns the response-cache lock and SSRR cache-map mutex internally",
-      "startup": "NewApp constructs ResourceGateway after cluster and operations collaborators are available",
+      "startup": "NewApplicationRuntime constructs ResourceGateway after cluster and operations collaborators are available",
       "shutdown": "cluster cleanup and Factory Reset invalidate caches",
       "tests": [
         "backend/response_cache_test.go",
@@ -207,7 +207,7 @@
         "backend/app_permissions.go ResourceGateway SSRR namespace fan-out"
       ],
       "writers": [
-        "backend/app.go NewApp",
+        "backend/app.go NewApplicationRuntime",
         "backend/settings_effect_dispatcher.go post-commit settings effects"
       ],
       "mutex": "PermissionFetchPolicy stores its clamped concurrency atomically",
@@ -230,7 +230,7 @@
         "backend/app_refresh_setup.go live stream construction"
       ],
       "writers": [
-        "backend/app.go NewApp",
+        "backend/app.go NewApplicationRuntime",
         "backend/settings_effect_dispatcher.go post-commit settings effects"
       ],
       "mutex": "ContainerLogsSelectionPolicy stores its clamped per-scope target limit atomically",
@@ -276,7 +276,7 @@
         "backend/app.go initializeOperationsCoordinator composition"
       ],
       "mutex": "the App reference is immutable after construction; OperationsCoordinator owns the shell, port-forward and runtime-registry locks",
-      "startup": "NewApp composes the coordinator from narrow cluster-access, permission, event, logger, context, drain-store and executor dependencies",
+      "startup": "NewApplicationRuntime composes the coordinator from narrow cluster-access, permission, event, logger, context, drain-store and executor dependencies",
       "shutdown": "ApplicationLifecycle invokes OperationsCoordinator.Shutdown after auth-manager shutdown and before watcher/refresh teardown",
       "tests": [
         "backend/operations_coordinator_test.go",
@@ -321,10 +321,10 @@
         "backend DataManagementCoordinator composition"
       ],
       "writers": [
-        "backend/app.go NewApp composition"
+        "backend/app.go NewApplicationRuntime composition"
       ],
       "mutex": "FavoritesService owns its independent file mutex; the App reference is immutable",
-      "startup": "NewApp constructs the owner before Wails registration",
+      "startup": "NewApplicationRuntime constructs the owner before Wails registration",
       "shutdown": "DataManagementCoordinator resets favorites through the owner",
       "tests": [
         "backend/app_persistence_test.go",
@@ -342,10 +342,10 @@
         "main.go DesktopService composition"
       ],
       "writers": [
-        "backend/app.go NewApp composition"
+        "backend/app.go NewApplicationRuntime composition"
       ],
       "mutex": "DataManagementCoordinator delegates to owner locks and retains no App back-pointer",
-      "startup": "NewApp composes leaf and temporary workflow collaborators",
+      "startup": "NewApplicationRuntime composes leaf and temporary workflow collaborators",
       "shutdown": "Factory Reset quiesces live owners before artifact removal",
       "tests": [
         "backend/app_data_management_test.go"
@@ -1370,7 +1370,7 @@
     {
       "id": "main-composition",
       "entries": [
-        "backend.NewApp",
+        "backend.NewApplicationRuntime",
         "backend.ConfigureApplicationUpdates",
         "backend.NewDesktopService",
         "application.App.HandleStream resource registration",
@@ -1469,5 +1469,18 @@
     "remainingDirectAppTests": 39,
     "remainingTestOnlyAppMethods": 0,
     "appBackpointers": 0
+  },
+  "phase6Checkpoint": {
+    "applicationRuntimeFields": 18,
+    "applicationRuntimeMethods": 0,
+    "remainingAppFields": 0,
+    "remainingAppParameterFunctions": 0,
+    "remainingDirectAppTests": 0,
+    "remainingTestOnlyAppMethods": 0,
+    "appBackpointers": 0,
+    "fullRuntimeIntegrationTests": 5,
+    "wailsIgnoreDirectives": 0,
+    "maxOwnerFields": 47,
+    "maxOwnerMethods": 140
   }
 }

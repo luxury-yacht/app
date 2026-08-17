@@ -15,7 +15,7 @@ import (
 )
 
 func TestBuildRestConfigForSelectionAppliesClientRateLimits(t *testing.T) {
-	app := newTestAppWithDefaults(t)
+	app := newWorkspaceCoordinatorTestFixture(t)
 	configPath := filepath.Join(t.TempDir(), "config")
 	kubeconfig := `apiVersion: v1
 clusters:
@@ -37,7 +37,7 @@ users:
 `
 	require.NoError(t, os.WriteFile(configPath, []byte(kubeconfig), 0o600))
 
-	cfg, err := app.buildRestConfigForSelection(kubeconfigSelection{
+	cfg, err := app.ClusterRuntime.buildRestConfigForSelection(kubeconfigSelection{
 		Path:    configPath,
 		Context: "test-context",
 	}, ClusterMeta{ID: "test-cluster", Name: "Test Cluster"}, nil)
@@ -50,12 +50,12 @@ users:
 	require.Equal(t, appconfig.KubernetesClientQPS, limiterQPS)
 	require.Equal(t, appconfig.KubernetesClientBurst, limiterBurst)
 
-	app.preferences.appSettings = &AppSettings{
+	app.Preferences.appSettings = &AppSettings{
 		KubernetesClientQPS:   250,
 		KubernetesClientBurst: 500,
 	}
-	app.ClusterRuntimeManager.SetKubernetesClientRateLimits(250, 500)
-	cfg, err = app.buildRestConfigForSelection(kubeconfigSelection{
+	app.ClusterRuntime.SetKubernetesClientRateLimits(250, 500)
+	cfg, err = app.ClusterRuntime.buildRestConfigForSelection(kubeconfigSelection{
 		Path:    configPath,
 		Context: "test-context",
 	}, ClusterMeta{ID: "test-cluster", Name: "Test Cluster"}, nil)
@@ -78,15 +78,15 @@ users:
 // built" path. The sync function skips building for IDs that already exist, so this
 // test verifies the bookkeeping around the desired-vs-existing set comparison.
 func TestSyncClusterClientPool_CreatesClientsForNewSelections(t *testing.T) {
-	app := newTestAppWithDefaults(t)
-	setTestAppRuntimeReady(t, app, context.Background())
-	app.clusterClients = make(map[string]*clusterClients)
-	app.clusterOps = newClusterOperationCoordinator()
-	app.operations.shellSessions = make(map[string]*shellSession)
-	app.operations.portForwardSessions = make(map[string]*portForwardSessionInternal)
+	app := newWorkspaceCoordinatorTestFixture(t)
+	setTestAppRuntimeReady(t, app.Lifecycle, context.Background())
+	app.ClusterRuntime.clusterClients = make(map[string]*clusterClients)
+	app.ClusterRuntime.clusterOps = newClusterOperationCoordinator()
+	app.Operations.shellSessions = make(map[string]*shellSession)
+	app.Operations.portForwardSessions = make(map[string]*portForwardSessionInternal)
 
 	// Set up available kubeconfigs so clusterMetaForSelection returns valid IDs.
-	app.availableKubeconfigs = []KubeconfigInfo{
+	app.ClusterRuntime.availableKubeconfigs = []KubeconfigInfo{
 		{Name: "config", Path: "/tmp/config", Context: "cluster-a"},
 		{Name: "config", Path: "/tmp/config", Context: "cluster-b"},
 	}
@@ -97,97 +97,97 @@ func TestSyncClusterClientPool_CreatesClientsForNewSelections(t *testing.T) {
 	}
 
 	// Derive the expected cluster IDs.
-	idA := app.clusterMetaForSelection(selections[0]).ID
-	idB := app.clusterMetaForSelection(selections[1]).ID
+	idA := app.ClusterRuntime.clusterMetaForSelection(selections[0]).ID
+	idB := app.ClusterRuntime.clusterMetaForSelection(selections[1]).ID
 	require.NotEmpty(t, idA)
 	require.NotEmpty(t, idB)
 
 	// Pre-populate the client map so sync does not attempt real kubeconfig IO.
-	app.clusterClientsMu.Lock()
-	app.clusterClients[idA] = &clusterClients{
+	app.ClusterRuntime.clusterClientsMu.Lock()
+	app.ClusterRuntime.clusterClients[idA] = &clusterClients{
 		meta:   ClusterMeta{ID: idA, Name: "cluster-a"},
 		client: createHealthyClient(),
 	}
-	app.clusterClients[idB] = &clusterClients{
+	app.ClusterRuntime.clusterClients[idB] = &clusterClients{
 		meta:   ClusterMeta{ID: idB, Name: "cluster-b"},
 		client: createHealthyClient(),
 	}
-	app.clusterClientsMu.Unlock()
+	app.ClusterRuntime.clusterClientsMu.Unlock()
 
 	// Call sync — both IDs already exist, so no build should happen.
-	err := app.syncClusterClientPoolWithContext(context.Background(), selections)
+	err := app.Workspace.syncClusterClientPoolWithContext(context.Background(), selections)
 	require.NoError(t, err)
 
 	// Both entries should still be present.
-	app.clusterClientsMu.Lock()
-	defer app.clusterClientsMu.Unlock()
-	require.Len(t, app.clusterClients, 2)
-	require.NotNil(t, app.clusterClients[idA])
-	require.NotNil(t, app.clusterClients[idB])
+	app.ClusterRuntime.clusterClientsMu.Lock()
+	defer app.ClusterRuntime.clusterClientsMu.Unlock()
+	require.Len(t, app.ClusterRuntime.clusterClients, 2)
+	require.NotNil(t, app.ClusterRuntime.clusterClients[idA])
+	require.NotNil(t, app.ClusterRuntime.clusterClients[idB])
 }
 
 // TestSyncClusterClientPool_RemovesStaleClients verifies that clients for clusters
 // no longer in the desired selection set are removed during sync.
 func TestSyncClusterClientPool_RemovesStaleClients(t *testing.T) {
-	app := newTestAppWithDefaults(t)
-	setTestAppRuntimeReady(t, app, context.Background())
-	app.clusterClients = make(map[string]*clusterClients)
-	app.clusterOps = newClusterOperationCoordinator()
-	app.operations.shellSessions = make(map[string]*shellSession)
-	app.operations.portForwardSessions = make(map[string]*portForwardSessionInternal)
+	app := newWorkspaceCoordinatorTestFixture(t)
+	setTestAppRuntimeReady(t, app.Lifecycle, context.Background())
+	app.ClusterRuntime.clusterClients = make(map[string]*clusterClients)
+	app.ClusterRuntime.clusterOps = newClusterOperationCoordinator()
+	app.Operations.shellSessions = make(map[string]*shellSession)
+	app.Operations.portForwardSessions = make(map[string]*portForwardSessionInternal)
 
-	app.availableKubeconfigs = []KubeconfigInfo{
+	app.ClusterRuntime.availableKubeconfigs = []KubeconfigInfo{
 		{Name: "config", Path: "/tmp/config", Context: "cluster-a"},
 		{Name: "config", Path: "/tmp/config", Context: "cluster-b"},
 	}
 
 	selA := kubeconfigSelection{Path: "/tmp/config", Context: "cluster-a"}
 	selB := kubeconfigSelection{Path: "/tmp/config", Context: "cluster-b"}
-	idA := app.clusterMetaForSelection(selA).ID
-	idB := app.clusterMetaForSelection(selB).ID
+	idA := app.ClusterRuntime.clusterMetaForSelection(selA).ID
+	idB := app.ClusterRuntime.clusterMetaForSelection(selB).ID
 
 	authMgrB := authstate.New(authstate.Config{MaxAttempts: 0})
 
 	// Pre-populate both clusters.
-	app.clusterClientsMu.Lock()
-	app.clusterClients[idA] = &clusterClients{
+	app.ClusterRuntime.clusterClientsMu.Lock()
+	app.ClusterRuntime.clusterClients[idA] = &clusterClients{
 		meta:   ClusterMeta{ID: idA, Name: "cluster-a"},
 		client: createHealthyClient(),
 	}
-	app.clusterClients[idB] = &clusterClients{
+	app.ClusterRuntime.clusterClients[idB] = &clusterClients{
 		meta:        ClusterMeta{ID: idB, Name: "cluster-b"},
 		client:      createHealthyClient(),
 		authManager: authMgrB,
 	}
-	app.clusterClientsMu.Unlock()
+	app.ClusterRuntime.clusterClientsMu.Unlock()
 
 	// Sync with only cluster-a — cluster-b should be removed.
-	err := app.syncClusterClientPoolWithContext(context.Background(), []kubeconfigSelection{selA})
+	err := app.Workspace.syncClusterClientPoolWithContext(context.Background(), []kubeconfigSelection{selA})
 	require.NoError(t, err)
 
-	app.clusterClientsMu.Lock()
-	defer app.clusterClientsMu.Unlock()
-	require.Len(t, app.clusterClients, 1)
-	require.NotNil(t, app.clusterClients[idA], "cluster-a should remain")
-	require.Nil(t, app.clusterClients[idB], "cluster-b should be removed")
+	app.ClusterRuntime.clusterClientsMu.Lock()
+	defer app.ClusterRuntime.clusterClientsMu.Unlock()
+	require.Len(t, app.ClusterRuntime.clusterClients, 1)
+	require.NotNil(t, app.ClusterRuntime.clusterClients[idA], "cluster-a should remain")
+	require.Nil(t, app.ClusterRuntime.clusterClients[idB], "cluster-b should be removed")
 }
 
 // TestSyncClusterClientPool_IdempotentForExistingClients verifies that calling sync
 // twice with the same selection set does not recreate or replace client entries.
 func TestSyncClusterClientPool_IdempotentForExistingClients(t *testing.T) {
-	app := newTestAppWithDefaults(t)
-	setTestAppRuntimeReady(t, app, context.Background())
-	app.clusterClients = make(map[string]*clusterClients)
-	app.clusterOps = newClusterOperationCoordinator()
-	app.operations.shellSessions = make(map[string]*shellSession)
-	app.operations.portForwardSessions = make(map[string]*portForwardSessionInternal)
+	app := newWorkspaceCoordinatorTestFixture(t)
+	setTestAppRuntimeReady(t, app.Lifecycle, context.Background())
+	app.ClusterRuntime.clusterClients = make(map[string]*clusterClients)
+	app.ClusterRuntime.clusterOps = newClusterOperationCoordinator()
+	app.Operations.shellSessions = make(map[string]*shellSession)
+	app.Operations.portForwardSessions = make(map[string]*portForwardSessionInternal)
 
-	app.availableKubeconfigs = []KubeconfigInfo{
+	app.ClusterRuntime.availableKubeconfigs = []KubeconfigInfo{
 		{Name: "config", Path: "/tmp/config", Context: "ctx-1"},
 	}
 
 	sel := kubeconfigSelection{Path: "/tmp/config", Context: "ctx-1"}
-	id := app.clusterMetaForSelection(sel).ID
+	id := app.ClusterRuntime.clusterMetaForSelection(sel).ID
 	require.NotEmpty(t, id)
 
 	original := &clusterClients{
@@ -195,53 +195,53 @@ func TestSyncClusterClientPool_IdempotentForExistingClients(t *testing.T) {
 		client: createHealthyClient(),
 	}
 
-	app.clusterClientsMu.Lock()
-	app.clusterClients[id] = original
-	app.clusterClientsMu.Unlock()
+	app.ClusterRuntime.clusterClientsMu.Lock()
+	app.ClusterRuntime.clusterClients[id] = original
+	app.ClusterRuntime.clusterClientsMu.Unlock()
 
 	// First sync — should be a no-op for the existing entry.
-	err := app.syncClusterClientPoolWithContext(context.Background(), []kubeconfigSelection{sel})
+	err := app.Workspace.syncClusterClientPoolWithContext(context.Background(), []kubeconfigSelection{sel})
 	require.NoError(t, err)
 
-	app.clusterClientsMu.Lock()
-	after1 := app.clusterClients[id]
-	app.clusterClientsMu.Unlock()
+	app.ClusterRuntime.clusterClientsMu.Lock()
+	after1 := app.ClusterRuntime.clusterClients[id]
+	app.ClusterRuntime.clusterClientsMu.Unlock()
 	require.Same(t, original, after1, "client pointer should be identical after first sync")
 
 	// Second sync — still the same pointer.
-	err = app.syncClusterClientPoolWithContext(context.Background(), []kubeconfigSelection{sel})
+	err = app.Workspace.syncClusterClientPoolWithContext(context.Background(), []kubeconfigSelection{sel})
 	require.NoError(t, err)
 
-	app.clusterClientsMu.Lock()
-	after2 := app.clusterClients[id]
-	app.clusterClientsMu.Unlock()
+	app.ClusterRuntime.clusterClientsMu.Lock()
+	after2 := app.ClusterRuntime.clusterClients[id]
+	app.ClusterRuntime.clusterClientsMu.Unlock()
 	require.Same(t, original, after2, "client pointer should be identical after second sync")
 }
 
 // TestSyncClusterClientPool_EmptySelections verifies that an empty selection list
 // results in no error and all existing clients being removed.
 func TestSyncClusterClientPool_EmptySelections(t *testing.T) {
-	app := newTestAppWithDefaults(t)
-	setTestAppRuntimeReady(t, app, context.Background())
-	app.clusterClients = make(map[string]*clusterClients)
-	app.clusterOps = newClusterOperationCoordinator()
-	app.operations.shellSessions = make(map[string]*shellSession)
-	app.operations.portForwardSessions = make(map[string]*portForwardSessionInternal)
+	app := newWorkspaceCoordinatorTestFixture(t)
+	setTestAppRuntimeReady(t, app.Lifecycle, context.Background())
+	app.ClusterRuntime.clusterClients = make(map[string]*clusterClients)
+	app.ClusterRuntime.clusterOps = newClusterOperationCoordinator()
+	app.Operations.shellSessions = make(map[string]*shellSession)
+	app.Operations.portForwardSessions = make(map[string]*portForwardSessionInternal)
 
 	// Pre-populate a client to verify it gets cleaned up.
-	app.clusterClientsMu.Lock()
-	app.clusterClients["stale-cluster"] = &clusterClients{
+	app.ClusterRuntime.clusterClientsMu.Lock()
+	app.ClusterRuntime.clusterClients["stale-cluster"] = &clusterClients{
 		meta:   ClusterMeta{ID: "stale-cluster", Name: "Stale"},
 		client: createHealthyClient(),
 	}
-	app.clusterClientsMu.Unlock()
+	app.ClusterRuntime.clusterClientsMu.Unlock()
 
-	err := app.syncClusterClientPoolWithContext(context.Background(), nil)
+	err := app.Workspace.syncClusterClientPoolWithContext(context.Background(), nil)
 	require.NoError(t, err)
 
-	app.clusterClientsMu.Lock()
-	defer app.clusterClientsMu.Unlock()
-	require.Len(t, app.clusterClients, 0, "all clients should be removed with empty selections")
+	app.ClusterRuntime.clusterClientsMu.Lock()
+	defer app.ClusterRuntime.clusterClientsMu.Unlock()
+	require.Len(t, app.ClusterRuntime.clusterClients, 0, "all clients should be removed with empty selections")
 }
 
 // TestSyncClusterClientPool_NilWorkspaceReturnsError verifies the nil-receiver guard.
@@ -258,14 +258,14 @@ func TestSyncClusterClientPool_NilWorkspaceReturnsError(t *testing.T) {
 // (treating cancellation as a clean abort), so syncClusterClientPoolWithContext
 // returns nil — but no clients are actually created.
 func TestSyncClusterClientPool_CancelledContextSkipsCreation(t *testing.T) {
-	app := newTestAppWithDefaults(t)
-	setTestAppRuntimeReady(t, app, context.Background())
-	app.clusterClients = make(map[string]*clusterClients)
-	app.clusterOps = newClusterOperationCoordinator()
-	app.operations.shellSessions = make(map[string]*shellSession)
-	app.operations.portForwardSessions = make(map[string]*portForwardSessionInternal)
+	app := newWorkspaceCoordinatorTestFixture(t)
+	setTestAppRuntimeReady(t, app.Lifecycle, context.Background())
+	app.ClusterRuntime.clusterClients = make(map[string]*clusterClients)
+	app.ClusterRuntime.clusterOps = newClusterOperationCoordinator()
+	app.Operations.shellSessions = make(map[string]*shellSession)
+	app.Operations.portForwardSessions = make(map[string]*portForwardSessionInternal)
 
-	app.availableKubeconfigs = []KubeconfigInfo{
+	app.ClusterRuntime.availableKubeconfigs = []KubeconfigInfo{
 		{Name: "config", Path: "/nonexistent/kubeconfig", Context: "ctx"},
 	}
 
@@ -276,137 +276,137 @@ func TestSyncClusterClientPool_CancelledContextSkipsCreation(t *testing.T) {
 
 	// runClusterOperation swallows context.Canceled, so sync returns nil even
 	// though no client was built.
-	err := app.syncClusterClientPoolWithContext(ctx, []kubeconfigSelection{sel})
+	err := app.Workspace.syncClusterClientPoolWithContext(ctx, []kubeconfigSelection{sel})
 	require.NoError(t, err, "cancelled context is treated as clean abort, not error")
 
-	app.clusterClientsMu.Lock()
-	defer app.clusterClientsMu.Unlock()
-	require.Len(t, app.clusterClients, 0, "no clients should be created when context is cancelled")
+	app.ClusterRuntime.clusterClientsMu.Lock()
+	defer app.ClusterRuntime.clusterClientsMu.Unlock()
+	require.Len(t, app.ClusterRuntime.clusterClients, 0, "no clients should be created when context is cancelled")
 }
 
 // TestSyncClusterClientPool_RemovalCleansUpShellAndPortForward verifies that
 // removing a stale cluster from the pool cleans up registered runtime
 // operations through their workflow cleanup hooks.
 func TestSyncClusterClientPool_RemovalCleansUpShellAndPortForward(t *testing.T) {
-	app := newTestAppWithDefaults(t)
-	setTestAppRuntimeReady(t, app, context.Background())
-	app.clusterClients = make(map[string]*clusterClients)
-	app.clusterOps = newClusterOperationCoordinator()
-	app.operations.shellSessions = make(map[string]*shellSession)
-	app.operations.portForwardSessions = make(map[string]*portForwardSessionInternal)
+	app := newWorkspaceCoordinatorTestFixture(t)
+	setTestAppRuntimeReady(t, app.Lifecycle, context.Background())
+	app.ClusterRuntime.clusterClients = make(map[string]*clusterClients)
+	app.ClusterRuntime.clusterOps = newClusterOperationCoordinator()
+	app.Operations.shellSessions = make(map[string]*shellSession)
+	app.Operations.portForwardSessions = make(map[string]*portForwardSessionInternal)
 
 	clusterID := "removal-test-cluster"
-	app.clusterClientsMu.Lock()
-	app.clusterClients[clusterID] = &clusterClients{
+	app.ClusterRuntime.clusterClientsMu.Lock()
+	app.ClusterRuntime.clusterClients[clusterID] = &clusterClients{
 		meta:   ClusterMeta{ID: clusterID, Name: "Removal Test"},
 		client: createHealthyClient(),
 	}
-	app.clusterClientsMu.Unlock()
+	app.ClusterRuntime.clusterClientsMu.Unlock()
 
 	// Add a port-forward session for this cluster.
-	app.operations.portForwardSessionsMu.Lock()
-	app.operations.portForwardSessions["pf-1"] = &portForwardSessionInternal{
+	app.Operations.portForwardSessionsMu.Lock()
+	app.Operations.portForwardSessions["pf-1"] = &portForwardSessionInternal{
 		PortForwardSession: PortForwardSession{ID: "pf-1", ClusterID: clusterID},
 		stopChan:           make(chan struct{}),
 	}
-	app.operations.portForwardSessionsMu.Unlock()
-	app.operations.registerRuntimeOperation(runtimeOperationFromPortForward(app.operations.portForwardSessions["pf-1"]), func(reason string) error {
-		return app.operations.stopPortForwardForRuntime("pf-1", reason)
+	app.Operations.portForwardSessionsMu.Unlock()
+	app.Operations.registerRuntimeOperation(runtimeOperationFromPortForward(app.Operations.portForwardSessions["pf-1"]), func(reason string) error {
+		return app.Operations.portForwardLifecycle().stopForRuntime("pf-1", reason)
 	})
 
 	// Sync with empty selections to remove the cluster.
-	err := app.syncClusterClientPoolWithContext(context.Background(), nil)
+	err := app.Workspace.syncClusterClientPoolWithContext(context.Background(), nil)
 	require.NoError(t, err)
 
 	// Verify the port-forward session was cleaned up.
-	app.operations.portForwardSessionsMu.Lock()
-	defer app.operations.portForwardSessionsMu.Unlock()
-	require.Len(t, app.operations.portForwardSessions, 0, "port-forward sessions for removed cluster should be cleaned up")
+	app.Operations.portForwardSessionsMu.Lock()
+	defer app.Operations.portForwardSessionsMu.Unlock()
+	require.Len(t, app.Operations.portForwardSessions, 0, "port-forward sessions for removed cluster should be cleaned up")
 }
 
 // TestSyncClusterClientPool_RemovalShutsDownAuthManager verifies that removing
 // a stale cluster shuts down its auth manager.
 func TestSyncClusterClientPool_RemovalShutsDownAuthManager(t *testing.T) {
-	app := newTestAppWithDefaults(t)
-	setTestAppRuntimeReady(t, app, context.Background())
-	app.clusterClients = make(map[string]*clusterClients)
-	app.clusterOps = newClusterOperationCoordinator()
-	app.operations.shellSessions = make(map[string]*shellSession)
-	app.operations.portForwardSessions = make(map[string]*portForwardSessionInternal)
+	app := newWorkspaceCoordinatorTestFixture(t)
+	setTestAppRuntimeReady(t, app.Lifecycle, context.Background())
+	app.ClusterRuntime.clusterClients = make(map[string]*clusterClients)
+	app.ClusterRuntime.clusterOps = newClusterOperationCoordinator()
+	app.Operations.shellSessions = make(map[string]*shellSession)
+	app.Operations.portForwardSessions = make(map[string]*portForwardSessionInternal)
 
 	authMgr := authstate.New(authstate.Config{MaxAttempts: 0})
 
-	app.clusterClientsMu.Lock()
-	app.clusterClients["auth-test"] = &clusterClients{
+	app.ClusterRuntime.clusterClientsMu.Lock()
+	app.ClusterRuntime.clusterClients["auth-test"] = &clusterClients{
 		meta:        ClusterMeta{ID: "auth-test", Name: "Auth Test"},
 		client:      createHealthyClient(),
 		authManager: authMgr,
 	}
-	app.clusterClientsMu.Unlock()
+	app.ClusterRuntime.clusterClientsMu.Unlock()
 
 	// Sync with empty to remove — auth manager Shutdown will be called.
-	err := app.syncClusterClientPoolWithContext(context.Background(), nil)
+	err := app.Workspace.syncClusterClientPoolWithContext(context.Background(), nil)
 	require.NoError(t, err)
 
-	app.clusterClientsMu.Lock()
-	defer app.clusterClientsMu.Unlock()
-	require.Len(t, app.clusterClients, 0)
+	app.ClusterRuntime.clusterClientsMu.Lock()
+	defer app.ClusterRuntime.clusterClientsMu.Unlock()
+	require.Len(t, app.ClusterRuntime.clusterClients, 0)
 }
 
 // TestSyncClusterClientPool_ConcurrentAccess verifies that sync is safe to call
 // from multiple goroutines (no data race on clusterClients map).
 func TestSyncClusterClientPool_ConcurrentAccess(t *testing.T) {
-	app := newTestAppWithDefaults(t)
-	setTestAppRuntimeReady(t, app, context.Background())
-	app.clusterClients = make(map[string]*clusterClients)
-	app.clusterOps = newClusterOperationCoordinator()
-	app.operations.shellSessions = make(map[string]*shellSession)
-	app.operations.portForwardSessions = make(map[string]*portForwardSessionInternal)
+	app := newWorkspaceCoordinatorTestFixture(t)
+	setTestAppRuntimeReady(t, app.Lifecycle, context.Background())
+	app.ClusterRuntime.clusterClients = make(map[string]*clusterClients)
+	app.ClusterRuntime.clusterOps = newClusterOperationCoordinator()
+	app.Operations.shellSessions = make(map[string]*shellSession)
+	app.Operations.portForwardSessions = make(map[string]*portForwardSessionInternal)
 
-	app.availableKubeconfigs = []KubeconfigInfo{
+	app.ClusterRuntime.availableKubeconfigs = []KubeconfigInfo{
 		{Name: "config", Path: "/tmp/config", Context: "ctx-1"},
 	}
 
 	sel := kubeconfigSelection{Path: "/tmp/config", Context: "ctx-1"}
-	id := app.clusterMetaForSelection(sel).ID
+	id := app.ClusterRuntime.clusterMetaForSelection(sel).ID
 
 	// Pre-populate so build is not attempted.
-	app.clusterClientsMu.Lock()
-	app.clusterClients[id] = &clusterClients{
+	app.ClusterRuntime.clusterClientsMu.Lock()
+	app.ClusterRuntime.clusterClients[id] = &clusterClients{
 		meta:   ClusterMeta{ID: id, Name: "ctx-1"},
 		client: createHealthyClient(),
 	}
-	app.clusterClientsMu.Unlock()
+	app.ClusterRuntime.clusterClientsMu.Unlock()
 
 	var wg sync.WaitGroup
 	for i := 0; i < 10; i++ {
 		wg.Add(1)
 		go func() {
 			defer wg.Done()
-			_ = app.syncClusterClientPoolWithContext(context.Background(), []kubeconfigSelection{sel})
+			_ = app.Workspace.syncClusterClientPoolWithContext(context.Background(), []kubeconfigSelection{sel})
 		}()
 	}
 	wg.Wait()
 
-	app.clusterClientsMu.Lock()
-	defer app.clusterClientsMu.Unlock()
-	require.Len(t, app.clusterClients, 1)
-	require.NotNil(t, app.clusterClients[id])
+	app.ClusterRuntime.clusterClientsMu.Lock()
+	defer app.ClusterRuntime.clusterClientsMu.Unlock()
+	require.Len(t, app.ClusterRuntime.clusterClients, 1)
+	require.NotNil(t, app.ClusterRuntime.clusterClients[id])
 }
 
 func TestSyncClusterClientPoolPublishesEachBuiltClientWithoutWaitingForSiblingBuilds(t *testing.T) {
-	app := newTestAppWithDefaults(t)
-	setTestAppRuntimeReady(t, app, context.Background())
-	app.clusterClients = make(map[string]*clusterClients)
-	app.clusterOps = newClusterOperationCoordinator()
+	app := newWorkspaceCoordinatorTestFixture(t)
+	setTestAppRuntimeReady(t, app.Lifecycle, context.Background())
+	app.ClusterRuntime.clusterClients = make(map[string]*clusterClients)
+	app.ClusterRuntime.clusterOps = newClusterOperationCoordinator()
 
 	selA := kubeconfigSelection{Path: "/tmp/config-a", Context: "ctx-a"}
 	selB := kubeconfigSelection{Path: "/tmp/config-b", Context: "ctx-b"}
-	app.availableKubeconfigs = []KubeconfigInfo{
+	app.ClusterRuntime.availableKubeconfigs = []KubeconfigInfo{
 		{Name: "config-a", Path: selA.Path, Context: selA.Context},
 		{Name: "config-b", Path: selB.Path, Context: selB.Context},
 	}
-	idA := app.clusterMetaForSelection(selA).ID
+	idA := app.ClusterRuntime.clusterMetaForSelection(selA).ID
 
 	aBuilt := make(chan struct{})
 	releaseB := make(chan struct{})
@@ -435,7 +435,7 @@ func TestSyncClusterClientPoolPublishesEachBuiltClientWithoutWaitingForSiblingBu
 
 	result := make(chan error, 1)
 	go func() {
-		result <- app.syncClusterClientPoolWithBuilder(context.Background(), []kubeconfigSelection{selA, selB}, build)
+		result <- app.Workspace.syncClusterClientPoolWithBuilder(context.Background(), []kubeconfigSelection{selA, selB}, build)
 	}()
 
 	select {
@@ -445,7 +445,7 @@ func TestSyncClusterClientPoolPublishesEachBuiltClientWithoutWaitingForSiblingBu
 	}
 
 	require.Eventually(t, func() bool {
-		return app.clusterClientsForID(idA) != nil
+		return app.ClusterRuntime.clusterClientsForID(idA) != nil
 	}, 250*time.Millisecond, 10*time.Millisecond, "one slow cluster must not delay publishing another cluster's completed client")
 
 	releaseBOnce.Do(func() { close(releaseB) })
@@ -453,16 +453,16 @@ func TestSyncClusterClientPoolPublishesEachBuiltClientWithoutWaitingForSiblingBu
 }
 
 func TestSyncClusterClientPoolValidatesBuilderAndSetsLifecycle(t *testing.T) {
-	app := newTestAppWithDefaults(t)
-	require.ErrorContains(t, app.syncClusterClientPoolWithBuilder(context.Background(), nil, nil), "builder is nil")
+	app := newWorkspaceCoordinatorTestFixture(t)
+	require.ErrorContains(t, app.Workspace.syncClusterClientPoolWithBuilder(context.Background(), nil, nil), "builder is nil")
 
-	app.clusterOps = newClusterOperationCoordinator()
-	app.clusterLifecycle = newClusterLifecycle(nil)
+	app.ClusterRuntime.clusterOps = newClusterOperationCoordinator()
+	app.ClusterRuntime.clusterLifecycle = newClusterLifecycle(nil)
 	selection := kubeconfigSelection{Path: "/tmp/config", Context: "ctx"}
-	app.availableKubeconfigs = []KubeconfigInfo{{Name: "config", Path: selection.Path, Context: selection.Context}}
-	meta := app.clusterMetaForSelection(selection)
+	app.ClusterRuntime.availableKubeconfigs = []KubeconfigInfo{{Name: "config", Path: selection.Path, Context: selection.Context}}
+	meta := app.ClusterRuntime.clusterMetaForSelection(selection)
 
-	err := app.syncClusterClientPoolWithBuilder(context.Background(), []kubeconfigSelection{selection}, func(
+	err := app.Workspace.syncClusterClientPoolWithBuilder(context.Background(), []kubeconfigSelection{selection}, func(
 		_ context.Context,
 		selection kubeconfigSelection,
 		meta ClusterMeta,
@@ -472,8 +472,8 @@ func TestSyncClusterClientPoolValidatesBuilderAndSetsLifecycle(t *testing.T) {
 		}, nil
 	})
 	require.NoError(t, err)
-	require.NotNil(t, app.clusterClientsForID(meta.ID))
-	require.Equal(t, ClusterStateConnected, app.clusterLifecycle.GetState(meta.ID))
+	require.NotNil(t, app.ClusterRuntime.clusterClientsForID(meta.ID))
+	require.Equal(t, ClusterStateConnected, app.ClusterRuntime.clusterLifecycle.GetState(meta.ID))
 }
 
 func TestBuildAndInstallClusterClientFailurePaths(t *testing.T) {
@@ -481,40 +481,40 @@ func TestBuildAndInstallClusterClientFailurePaths(t *testing.T) {
 	task := clusterClientCreateTask{selection: selection, meta: ClusterMeta{ID: "cluster-a", Name: "Cluster A"}}
 
 	t.Run("builder error", func(t *testing.T) {
-		app := newTestAppWithDefaults(t)
+		app := newWorkspaceCoordinatorTestFixture(t)
 		buildErr := errors.New("build failed")
-		err := app.buildAndInstallClusterClient(context.Background(), task, func(context.Context, kubeconfigSelection, ClusterMeta) (*clusterClients, error) {
+		err := app.ClusterRuntime.buildAndInstallClusterClient(context.Background(), task, func(context.Context, kubeconfigSelection, ClusterMeta) (*clusterClients, error) {
 			return nil, buildErr
 		})
 		require.ErrorIs(t, err, buildErr)
 	})
 
 	t.Run("nil clients", func(t *testing.T) {
-		app := newTestAppWithDefaults(t)
-		err := app.buildAndInstallClusterClient(context.Background(), task, func(context.Context, kubeconfigSelection, ClusterMeta) (*clusterClients, error) {
+		app := newWorkspaceCoordinatorTestFixture(t)
+		err := app.ClusterRuntime.buildAndInstallClusterClient(context.Background(), task, func(context.Context, kubeconfigSelection, ClusterMeta) (*clusterClients, error) {
 			return nil, nil
 		})
 		require.ErrorContains(t, err, "returned nil clients")
 	})
 
 	t.Run("context canceled after build", func(t *testing.T) {
-		app := newTestAppWithDefaults(t)
+		app := newWorkspaceCoordinatorTestFixture(t)
 		ctx, cancel := context.WithCancel(context.Background())
 		manager := authstate.New(authstate.Config{MaxAttempts: 0})
-		err := app.buildAndInstallClusterClient(ctx, task, func(context.Context, kubeconfigSelection, ClusterMeta) (*clusterClients, error) {
+		err := app.ClusterRuntime.buildAndInstallClusterClient(ctx, task, func(context.Context, kubeconfigSelection, ClusterMeta) (*clusterClients, error) {
 			cancel()
 			return &clusterClients{authManager: manager}, nil
 		})
 		require.ErrorIs(t, err, context.Canceled)
-		require.Nil(t, app.clusterClientsForID(task.meta.ID))
+		require.Nil(t, app.ClusterRuntime.clusterClientsForID(task.meta.ID))
 	})
 
 	t.Run("already installed", func(t *testing.T) {
-		app := newTestAppWithDefaults(t)
-		app.clusterClients = make(map[string]*clusterClients)
-		app.clusterClients[task.meta.ID] = &clusterClients{meta: task.meta}
+		app := newWorkspaceCoordinatorTestFixture(t)
+		app.ClusterRuntime.clusterClients = make(map[string]*clusterClients)
+		app.ClusterRuntime.clusterClients[task.meta.ID] = &clusterClients{meta: task.meta}
 		called := false
-		err := app.buildAndInstallClusterClient(context.Background(), task, func(context.Context, kubeconfigSelection, ClusterMeta) (*clusterClients, error) {
+		err := app.ClusterRuntime.buildAndInstallClusterClient(context.Background(), task, func(context.Context, kubeconfigSelection, ClusterMeta) (*clusterClients, error) {
 			called = true
 			return &clusterClients{}, nil
 		})

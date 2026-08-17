@@ -3,11 +3,14 @@
 Wails v3 application composition owns the native application, a registry of
 named peer workspace windows, its persistent menu, service registration, and
 process-level hooks.
-The Wails application is injected directly during `backend.NewApp` composition
-and retained by the concrete `backend.DesktopShell` owner. Production registers
-only `backend.DesktopService` with Wails;
-that transport service delegates commands, lifecycle, and HTTP behavior through
-owner-shaped interfaces and never retains `*App` or `*ApplicationRuntime`.
+The Wails application is injected directly during
+`backend.NewApplicationRuntime` composition and retained by the concrete
+`backend.DesktopShell` owner. `ApplicationRuntime` is a reference-only
+composition result: it exposes component pointers for `main.go` wiring but owns
+no mutable state or methods, and internal owners never retain it. Production
+registers only `backend.DesktopService` with Wails; that transport service
+delegates commands, lifecycle, and HTTP behavior through owner-shaped
+interfaces and never retains the composition root.
 This preserves direct Wails native access without introducing a desktop adapter.
 Native window, menu, dialog, clipboard, event, and screen work goes through that
 concrete shell; there is no generic desktop adapter.
@@ -15,8 +18,8 @@ concrete shell; there is no generic desktop adapter.
 ## Startup and readiness
 
 `backend.DesktopService.ServiceStartup` runs synchronously before Wails creates
-a native window and delegates to the application-lifecycle collaborator
-(`backend.App`, now only the lifecycle/composition shell). It installs the
+a native window and delegates to `backend.ApplicationLifecycle`. That owner
+installs the
 application cancellation signal, starts the single cluster-runtime intent
 consumer owned by `WorkspaceCoordinator`, and initializes
 `ClusterRuntimeManager` lifecycle projection hooks. The first selected refresh
@@ -57,8 +60,8 @@ Process-owned leaf state is split by responsibility: `PreferencesService` owns
 `UIStateStore` own their independent documents; `ClusterAttentionService` owns
 live Attention rules and targets; `ErrorReportingService` owns reporter and
 installation-registration state; `UpdateCoordinator` owns updater lifecycle;
-and `AppLogService` owns the process log buffer. None of these owners retains an
-`*App` back-pointer.
+and `AppLogService` owns the process log buffer. None of these owners retains
+the composition root.
 
 `PreferencesService.EnsureLoaded` coalesces concurrent normal callers. Startup
 selection uses the same attempt through `EnsureLoadedForStartup`, which alone
@@ -70,7 +73,8 @@ snapshot; startup-default provenance remains fail-closed.
 
 Named refresh streams are registered explicitly in `main.go` after backend,
 update, and service construction and before service registration/window
-creation. `backend.NewApp` does not mutate the Wails stream registry.
+creation. `backend.NewApplicationRuntime` does not mutate the Wails stream
+registry.
 
 Native browser, clipboard, event, environment, and window calls go through
 `frontend/src/core/desktop-runtime`. The refresh stream managers under
@@ -86,7 +90,7 @@ callback, or frontend owner and must not gain a second event subscription.
 | Behavior | Owner and Wails v3 surface | Cancellable | Readiness and ordering | Identity, cleanup, and proof |
 | --- | --- | --- | --- | --- |
 | Process startup | `backend.DesktopService.ServiceStartup` delegates to the application-lifecycle collaborator | By returning an error | Runs synchronously before pending windows; UI operations and event emission remain gated | Process-scoped. Wails cancels the service context and shuts down already-started services if startup aborts. Repository contract: `backend/desktop_service.go`, `backend/app_lifecycle.go`; framework contract: `pkg/application/services.go`. |
-| Interactive startup | Every peer's `events.Common.WindowRuntimeReady` listener calls `backend.App.WindowRuntimeReady(name, restoreGeometry)` | No | Registered when the window is created; the first delivery enables desktop operations and starts interactive process work, while every delivery shows that peer | Names are monotonic `workspace-N`; only process startup is ignored after `markRuntimeReady`. Proof: `internal/appwindow/registry.go`, `backend/app_lifecycle.go`, and `internal/appwindow/lifecycle_test.go`. |
+| Interactive startup | Every peer's `events.Common.WindowRuntimeReady` listener calls `backend.ApplicationLifecycle.WindowRuntimeReady(name, restoreGeometry)` | No | Registered when the window is created; the first delivery enables desktop operations and starts interactive process work, while every delivery shows that peer | Names are monotonic `workspace-N`; only process startup is ignored after `markRuntimeReady`. Proof: `internal/appwindow/registry.go`, `backend/app_lifecycle.go`, and `internal/appwindow/lifecycle_test.go`. |
 | Application updates | One `backend.UpdateCoordinator`, surfaced through the backend service and the process-wide `app-update` event | Checks/downloads are cancellable; restart becomes a quit handoff | First runtime-ready starts one scheduler. Automatic and manual checks never download; download and restart each require a separate user action. | State is process-scoped across all peers. Eligibility comes from the installed distribution; prepared and attempted helper state is durable. Proof: `backend/update_coordinator.go`, `backend/app_updates_config.go`, `backend/internal/appupdates/coordinator.go`, and `internal/updateidentity/eligibility.go`. |
 | Subsequent process launch and focus | `application.SingleInstanceOptions.OnSecondInstanceLaunch` | No | May arrive before the webview is ready; it does not start a second backend lifecycle | Shows, restores when minimized, and focuses the most recently focused live peer; ignores launch arguments and additional data. Proof: `main.go`, `internal/appwindow/registry.go`, and `cmd/project/wails_project_contract_test.go`. |
 | Ordinary focus changes | Peer `events.Common.WindowFocus` listener | No | Updates only the registry's most-recent ordering | Focus does not trigger refresh or cluster selection. It chooses the peer used by subsequent-launch focus and explicit application-quit geometry persistence. |

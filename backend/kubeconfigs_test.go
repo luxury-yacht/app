@@ -15,15 +15,15 @@ import (
 
 func TestOpenKubeconfigSearchPathDialogUsesWailsDirectoryOptions(t *testing.T) {
 	setTestConfigEnv(t)
-	app := newTestAppWithDefaults(t)
-	setTestAppRuntimeReady(t, app, context.Background())
+	app := newWorkspaceCoordinatorTestFixture(t)
+	setTestAppRuntimeReady(t, app.Lifecycle, context.Background())
 	var options application.OpenFileDialogOptions
-	app.desktopShell.openFileDialog = func(input *application.OpenFileDialogOptions) (string, error) {
+	app.DesktopShell.openFileDialog = func(input *application.OpenFileDialogOptions) (string, error) {
 		options = *input
 		return "/selected", nil
 	}
 
-	selected, err := app.desktopShell.OpenKubeconfigSearchPathDialog()
+	selected, err := app.DesktopShell.OpenKubeconfigSearchPathDialog()
 
 	require.NoError(t, err)
 	require.Equal(t, "/selected", selected)
@@ -111,15 +111,15 @@ users:
 	path := filepath.Join(dir, "multi-config")
 	require.NoError(t, os.WriteFile(path, []byte(content), 0o644))
 
-	app := newTestAppWithDefaults(t)
-	app.appendKubeconfigFromFile(path, "multi-config", "", false, map[string]struct{}{})
+	app := newWorkspaceCoordinatorTestFixture(t)
+	app.ClusterRuntime.appendKubeconfigFromFile(path, "multi-config", "", false, map[string]struct{}{})
 
-	valid := findKubeconfig(app.availableKubeconfigs, path, "valid-ctx")
+	valid := findKubeconfig(app.ClusterRuntime.availableKubeconfigs, path, "valid-ctx")
 	require.NotNil(t, valid, "expected valid-ctx to be discovered")
 	assert.False(t, valid.Invalid, "valid-ctx references an existing cluster and user")
 	assert.Empty(t, valid.InvalidReason)
 
-	broken := findKubeconfig(app.availableKubeconfigs, path, "broken-ctx")
+	broken := findKubeconfig(app.ClusterRuntime.availableKubeconfigs, path, "broken-ctx")
 	require.NotNil(t, broken, "expected broken-ctx to be discovered")
 	assert.True(t, broken.Invalid, "broken-ctx references a missing cluster")
 	assert.NotEmpty(t, broken.InvalidReason)
@@ -187,19 +187,19 @@ func TestApp_discoverKubeconfigs(t *testing.T) {
 			// Temporarily override home directory for kubeconfig expansion.
 			t.Setenv("HOME", homeDir)
 
-			app := NewApp(nil)
-			err := app.discoverKubeconfigs()
+			app := newWorkspaceCoordinatorTestFixture(t)
+			err := app.ClusterRuntime.discoverKubeconfigs()
 
 			if tt.expectError {
 				assert.Error(t, err)
 			} else {
 				assert.NoError(t, err)
-				assert.Len(t, app.availableKubeconfigs, tt.expectedLen)
+				assert.Len(t, app.ClusterRuntime.availableKubeconfigs, tt.expectedLen)
 
 				if tt.expectedLen > 0 {
 					// Check that default config is marked as default
 					foundDefault := false
-					for _, kc := range app.availableKubeconfigs {
+					for _, kc := range app.ClusterRuntime.availableKubeconfigs {
 						if kc.Name == "config" {
 							assert.True(t, kc.IsDefault)
 							foundDefault = true
@@ -246,10 +246,10 @@ users:
 	path := filepath.Join(dir, "exec-config")
 	require.NoError(t, os.WriteFile(path, []byte(content), 0o644))
 
-	app := newTestAppWithDefaults(t)
-	app.appendKubeconfigFromFile(path, "exec-config", "", false, map[string]struct{}{})
+	app := newWorkspaceCoordinatorTestFixture(t)
+	app.ClusterRuntime.appendKubeconfigFromFile(path, "exec-config", "", false, map[string]struct{}{})
 
-	require.True(t, hasKubeconfig(app.availableKubeconfigs, path, "exec-context"),
+	require.True(t, hasKubeconfig(app.ClusterRuntime.availableKubeconfigs, path, "exec-context"),
 		"discovery must accept a kubeconfig whose user.exec.command helper is missing")
 }
 
@@ -265,10 +265,10 @@ func TestApp_GetKubeconfigs(t *testing.T) {
 	// Override home directory for kubeconfig expansion.
 	t.Setenv("HOME", tempDir)
 
-	app := NewApp(nil)
+	app := newWorkspaceCoordinatorTestFixture(t)
 
 	// Test that GetKubeconfigs discovers configs if not already done
-	result, err := app.GetKubeconfigs()
+	result, err := app.ClusterRuntime.GetKubeconfigs()
 	assert.NoError(t, err)
 	configs := result.Kubeconfigs
 	assert.Len(t, configs, 1)
@@ -276,7 +276,7 @@ func TestApp_GetKubeconfigs(t *testing.T) {
 	assert.True(t, configs[0].IsDefault)
 
 	// Test that subsequent calls return cached results
-	result2, err := app.GetKubeconfigs()
+	result2, err := app.ClusterRuntime.GetKubeconfigs()
 	assert.NoError(t, err)
 	assert.Equal(t, result, result2)
 }
@@ -286,8 +286,8 @@ func TestApp_GetKubeconfigsReportsMissingSearchPathsAsEmptyState(t *testing.T) {
 	homeDir := t.TempDir()
 	t.Setenv("HOME", homeDir)
 
-	app := NewApp(nil)
-	result, err := app.GetKubeconfigs()
+	app := newWorkspaceCoordinatorTestFixture(t)
+	result, err := app.ClusterRuntime.GetKubeconfigs()
 
 	require.NoError(t, err)
 	assert.Empty(t, result.Kubeconfigs)
@@ -296,13 +296,13 @@ func TestApp_GetKubeconfigsReportsMissingSearchPathsAsEmptyState(t *testing.T) {
 
 func TestApp_GetKubeconfigsReportsNoConfiguredSearchPathsAsEmptyState(t *testing.T) {
 	setTestConfigEnv(t)
-	app := NewApp(nil)
-	settings, err := app.preferences.loadSettingsFile()
+	app := newWorkspaceCoordinatorTestFixture(t)
+	settings, err := app.Preferences.loadSettingsFile()
 	require.NoError(t, err)
 	settings.Kubeconfig.SearchPaths = []string{}
-	require.NoError(t, app.preferences.saveSettingsFile(settings))
+	require.NoError(t, app.Preferences.saveSettingsFile(settings))
 
-	result, err := app.GetKubeconfigs()
+	result, err := app.ClusterRuntime.GetKubeconfigs()
 
 	require.NoError(t, err)
 	assert.Empty(t, result.Kubeconfigs)
@@ -315,8 +315,8 @@ func TestApp_GetKubeconfigsReportsEmptySearchPathsAsNoKubeconfigs(t *testing.T) 
 	require.NoError(t, os.Mkdir(filepath.Join(homeDir, ".kube"), 0o755))
 	t.Setenv("HOME", homeDir)
 
-	app := NewApp(nil)
-	result, err := app.GetKubeconfigs()
+	app := newWorkspaceCoordinatorTestFixture(t)
+	result, err := app.ClusterRuntime.GetKubeconfigs()
 
 	require.NoError(t, err)
 	assert.Empty(t, result.Kubeconfigs)
@@ -384,16 +384,16 @@ func TestNormalizeKubeconfigSearchPathsMixedFilesAndDirs(t *testing.T) {
 
 func TestApp_GetKubeconfigSearchPathsDefaults(t *testing.T) {
 	setTestConfigEnv(t)
-	app := NewApp(nil)
+	app := newWorkspaceCoordinatorTestFixture(t)
 
-	paths, err := app.preferences.GetKubeconfigSearchPaths()
+	paths, err := app.Preferences.GetKubeconfigSearchPaths()
 	require.NoError(t, err)
 	require.Equal(t, defaultKubeconfigSearchPaths(), paths)
 }
 
 func TestApp_SetKubeconfigSearchPathsPersistsAndDiscovers(t *testing.T) {
 	setTestConfigEnv(t)
-	app := NewApp(nil)
+	app := newWorkspaceCoordinatorTestFixture(t)
 
 	baseDir := t.TempDir()
 	dirPath := filepath.Join(baseDir, "configs")
@@ -405,25 +405,25 @@ func TestApp_SetKubeconfigSearchPathsPersistsAndDiscovers(t *testing.T) {
 	fileOnlyPath := createTempKubeconfig(t, fileOnlyDir, "custom-config", "file-context")
 
 	paths := []string{dirPath, "  ", fileOnlyPath, dirPath}
-	require.NoError(t, app.SetKubeconfigSearchPaths(paths))
+	require.NoError(t, app.Workspace.SetKubeconfigSearchPaths(paths))
 
-	settings, err := app.preferences.loadSettingsFile()
+	settings, err := app.Preferences.loadSettingsFile()
 	require.NoError(t, err)
 	require.Equal(t, []string{dirPath, fileOnlyPath}, settings.Kubeconfig.SearchPaths)
 
-	require.NotEmpty(t, app.availableKubeconfigs)
-	assert.True(t, hasKubeconfig(app.availableKubeconfigs, dirConfigPath, "dir-context"))
-	assert.True(t, hasKubeconfig(app.availableKubeconfigs, fileOnlyPath, "file-context"))
+	require.NotEmpty(t, app.ClusterRuntime.availableKubeconfigs)
+	assert.True(t, hasKubeconfig(app.ClusterRuntime.availableKubeconfigs, dirConfigPath, "dir-context"))
+	assert.True(t, hasKubeconfig(app.ClusterRuntime.availableKubeconfigs, fileOnlyPath, "file-context"))
 }
 
 func TestApp_SetKubeconfigSearchPathsPrunesSelectionsFromRemovedPaths(t *testing.T) {
 	setTestConfigEnv(t)
-	app := NewApp(nil)
-	setTestAppRuntimeReady(t, app, context.Background())
-	app.preferences.appSettings = getDefaultAppSettings()
-	app.refreshAggregates.Store(&refreshAggregateHandlers{})
-	setRefreshServiceReadyForTest(app)
-	setRefreshRuntimeContextForTest(app, context.Background())
+	app := newWorkspaceCoordinatorTestFixture(t)
+	setTestAppRuntimeReady(t, app.Lifecycle, context.Background())
+	app.Preferences.appSettings = getDefaultAppSettings()
+	app.Refresh.refreshAggregates.Store(&refreshAggregateHandlers{})
+	setRefreshServiceReadyForTest(app.Refresh)
+	setRefreshRuntimeContextForTest(app.Refresh, context.Background())
 
 	baseDir := t.TempDir()
 	dirA := filepath.Join(baseDir, "configs-a")
@@ -434,67 +434,67 @@ func TestApp_SetKubeconfigSearchPathsPrunesSelectionsFromRemovedPaths(t *testing
 	configA := createTempKubeconfig(t, dirA, "cluster-a", "ctx-a")
 	configB := createTempKubeconfig(t, dirB, "cluster-b", "ctx-b")
 
-	require.NoError(t, app.SetKubeconfigSearchPaths([]string{dirA, dirB}))
+	require.NoError(t, app.Workspace.SetKubeconfigSearchPaths([]string{dirA, dirB}))
 
 	selectionA := configA + ":ctx-a"
 	selectionB := configB + ":ctx-b"
-	app.kubeconfigsMu.Lock()
-	app.selectedKubeconfigs = []string{selectionA, selectionB}
-	app.kubeconfigsMu.Unlock()
-	app.preferences.appSettings.SelectedKubeconfigs = []string{selectionA, selectionB}
+	app.Workspace.kubeconfigsMu.Lock()
+	app.Workspace.selectedKubeconfigs = []string{selectionA, selectionB}
+	app.Workspace.kubeconfigsMu.Unlock()
+	app.Preferences.appSettings.SelectedKubeconfigs = []string{selectionA, selectionB}
 
-	metaA := app.clusterMetaForSelection(kubeconfigSelection{Path: configA, Context: "ctx-a"})
-	metaB := app.clusterMetaForSelection(kubeconfigSelection{Path: configB, Context: "ctx-b"})
+	metaA := app.ClusterRuntime.clusterMetaForSelection(kubeconfigSelection{Path: configA, Context: "ctx-a"})
+	metaB := app.ClusterRuntime.clusterMetaForSelection(kubeconfigSelection{Path: configB, Context: "ctx-b"})
 
-	app.clusterClients[metaA.ID] = &clusterClients{
+	app.ClusterRuntime.clusterClients[metaA.ID] = &clusterClients{
 		meta:              metaA,
 		kubeconfigPath:    configA,
 		kubeconfigContext: "ctx-a",
 	}
-	app.clusterClients[metaB.ID] = &clusterClients{
+	app.ClusterRuntime.clusterClients[metaB.ID] = &clusterClients{
 		meta:              metaB,
 		kubeconfigPath:    configB,
 		kubeconfigContext: "ctx-b",
 	}
-	app.refreshSubsystems[metaA.ID] = &system.Subsystem{}
-	app.refreshSubsystems[metaB.ID] = &system.Subsystem{}
+	app.Refresh.refreshSubsystems[metaA.ID] = &system.Subsystem{}
+	app.Refresh.refreshSubsystems[metaB.ID] = &system.Subsystem{}
 
-	require.NoError(t, app.SetKubeconfigSearchPaths([]string{dirA}))
+	require.NoError(t, app.Workspace.SetKubeconfigSearchPaths([]string{dirA}))
 
-	assert.Equal(t, []string{selectionA}, app.GetSelectedKubeconfigs())
-	require.NotNil(t, app.preferences.appSettings)
-	assert.Equal(t, []string{selectionA}, app.preferences.appSettings.SelectedKubeconfigs)
+	assert.Equal(t, []string{selectionA}, app.Workspace.GetSelectedKubeconfigs())
+	require.NotNil(t, app.Preferences.appSettings)
+	assert.Equal(t, []string{selectionA}, app.Preferences.appSettings.SelectedKubeconfigs)
 
-	_, kept := app.clusterClients[metaA.ID]
+	_, kept := app.ClusterRuntime.clusterClients[metaA.ID]
 	assert.True(t, kept)
-	_, removed := app.clusterClients[metaB.ID]
+	_, removed := app.ClusterRuntime.clusterClients[metaB.ID]
 	assert.False(t, removed)
 
-	settings, err := app.preferences.loadSettingsFile()
+	settings, err := app.Preferences.loadSettingsFile()
 	require.NoError(t, err)
 	assert.Equal(t, []string{dirA}, settings.Kubeconfig.SearchPaths)
 }
 
 func TestApp_SetKubeconfigSearchPathsRejectsEmptyList(t *testing.T) {
 	setTestConfigEnv(t)
-	app := NewApp(nil)
+	app := newWorkspaceCoordinatorTestFixture(t)
 
-	err := app.SetKubeconfigSearchPaths([]string{" ", ""})
+	err := app.Workspace.SetKubeconfigSearchPaths([]string{" ", ""})
 	require.Error(t, err)
 	assert.Contains(t, err.Error(), "at least one kubeconfig search path is required")
 
-	settings, loadErr := app.preferences.loadSettingsFile()
+	settings, loadErr := app.Preferences.loadSettingsFile()
 	require.NoError(t, loadErr)
 	assert.Equal(t, defaultKubeconfigSearchPaths(), settings.Kubeconfig.SearchPaths)
 }
 
 func TestApp_GetSelectedKubeconfigs(t *testing.T) {
-	app := NewApp(nil)
+	app := newWorkspaceCoordinatorTestFixture(t)
 
-	assert.Empty(t, app.GetSelectedKubeconfigs())
+	assert.Empty(t, app.Workspace.GetSelectedKubeconfigs())
 
-	app.selectedKubeconfigs = []string{"/path/one:ctx", "/path/two:other"}
-	assert.Equal(t, []string{"/path/one:ctx", "/path/two:other"}, app.GetSelectedKubeconfigs())
+	app.Workspace.selectedKubeconfigs = []string{"/path/one:ctx", "/path/two:other"}
+	assert.Equal(t, []string{"/path/one:ctx", "/path/two:other"}, app.Workspace.GetSelectedKubeconfigs())
 }
 
 func TestApp_SetKubeconfig(t *testing.T) {
@@ -511,11 +511,11 @@ func TestApp_SetKubeconfig(t *testing.T) {
 	// Override home directory for kubeconfig expansion.
 	t.Setenv("HOME", tempDir)
 
-	app := NewApp(nil)
-	setTestAppRuntimeReady(t, app, context.Background())
+	app := newWorkspaceCoordinatorTestFixture(t)
+	setTestAppRuntimeReady(t, app.Lifecycle, context.Background())
 
 	// Discover kubeconfigs first
-	err = app.discoverKubeconfigs()
+	err = app.ClusterRuntime.discoverKubeconfigs()
 	require.NoError(t, err)
 
 	tests := []struct {
@@ -546,7 +546,7 @@ func TestApp_SetKubeconfig(t *testing.T) {
 				invalidPath := filepath.Join(kubeDir, "invalid")
 				os.WriteFile(invalidPath, []byte("invalid content"), 0644)
 				// Add to available configs to test validation
-				app.availableKubeconfigs = append(app.availableKubeconfigs, KubeconfigInfo{
+				app.ClusterRuntime.availableKubeconfigs = append(app.ClusterRuntime.availableKubeconfigs, KubeconfigInfo{
 					Name:    "invalid",
 					Path:    invalidPath,
 					Context: "invalid-context",
@@ -560,7 +560,7 @@ func TestApp_SetKubeconfig(t *testing.T) {
 
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
-			err := app.SetKubeconfig(tt.kubeconfigPath)
+			err := app.Workspace.SetKubeconfig(tt.kubeconfigPath)
 
 			if tt.expectError {
 				assert.Error(t, err)
@@ -569,12 +569,12 @@ func TestApp_SetKubeconfig(t *testing.T) {
 				}
 			} else {
 				assert.NoError(t, err)
-				assert.Equal(t, []string{tt.kubeconfigPath}, app.selectedKubeconfigs)
+				assert.Equal(t, []string{tt.kubeconfigPath}, app.Workspace.selectedKubeconfigs)
 			}
 			// Serialize teardown with auth/watcher mutation paths under race mode.
-			app.selectionMutationMu.Lock()
-			app.teardownRefreshSubsystem()
-			app.selectionMutationMu.Unlock()
+			app.Workspace.selectionMutationMu.Lock()
+			app.Refresh.teardownRefreshSubsystem()
+			app.Workspace.selectionMutationMu.Unlock()
 		})
 	}
 }
@@ -590,23 +590,23 @@ func TestApp_SetSelectedKubeconfigs(t *testing.T) {
 
 	t.Setenv("HOME", tempDir)
 
-	app := NewApp(nil)
-	setTestAppRuntimeReady(t, app, context.Background())
-	app.kubeClientInitializer = func() error { return nil }
+	app := newWorkspaceCoordinatorTestFixture(t)
+	setTestAppRuntimeReady(t, app.Lifecycle, context.Background())
+	app.Workspace.kubeClientInitializer = func() error { return nil }
 
-	require.NoError(t, app.discoverKubeconfigs())
+	require.NoError(t, app.ClusterRuntime.discoverKubeconfigs())
 
 	selections := []string{configPath + ":default-context", testConfigPath + ":test-context"}
-	require.NoError(t, app.SetSelectedKubeconfigs(selections))
+	require.NoError(t, app.Workspace.SetSelectedKubeconfigs(selections))
 
-	assert.Equal(t, selections, app.selectedKubeconfigs)
-	assert.GreaterOrEqual(t, app.selectionGeneration.Load(), uint64(1))
-	require.NotNil(t, app.preferences.appSettings)
-	assert.Equal(t, selections, app.preferences.appSettings.SelectedKubeconfigs)
+	assert.Equal(t, selections, app.Workspace.selectedKubeconfigs)
+	assert.GreaterOrEqual(t, app.Workspace.selectionGeneration.Load(), uint64(1))
+	require.NotNil(t, app.Preferences.appSettings)
+	assert.Equal(t, selections, app.Preferences.appSettings.SelectedKubeconfigs)
 	// Serialize teardown with auth/watcher mutation paths under race mode.
-	app.selectionMutationMu.Lock()
-	app.teardownRefreshSubsystem()
-	app.selectionMutationMu.Unlock()
+	app.Workspace.selectionMutationMu.Lock()
+	app.Refresh.teardownRefreshSubsystem()
+	app.Workspace.selectionMutationMu.Unlock()
 }
 
 func TestApp_SetSelectedKubeconfigsAllowsSameContextNameFromDifferentFiles(t *testing.T) {
@@ -620,15 +620,15 @@ func TestApp_SetSelectedKubeconfigsAllowsSameContextNameFromDifferentFiles(t *te
 
 	t.Setenv("HOME", tempDir)
 
-	app := NewApp(nil)
-	setTestAppRuntimeReady(t, app, context.Background())
-	app.kubeClientInitializer = func() error { return nil }
+	app := newWorkspaceCoordinatorTestFixture(t)
+	setTestAppRuntimeReady(t, app.Lifecycle, context.Background())
+	app.Workspace.kubeClientInitializer = func() error { return nil }
 
-	require.NoError(t, app.discoverKubeconfigs())
+	require.NoError(t, app.ClusterRuntime.discoverKubeconfigs())
 
 	// Same context name from different files should be allowed.
 	selections := []string{configPath + ":same-context", testConfigPath + ":same-context"}
-	err := app.SetSelectedKubeconfigs(selections)
+	err := app.Workspace.SetSelectedKubeconfigs(selections)
 	require.NoError(t, err)
 }
 
@@ -642,15 +642,15 @@ func TestApp_SetSelectedKubeconfigsRejectsDuplicateSelections(t *testing.T) {
 
 	t.Setenv("HOME", tempDir)
 
-	app := NewApp(nil)
-	setTestAppRuntimeReady(t, app, context.Background())
-	app.kubeClientInitializer = func() error { return nil }
+	app := newWorkspaceCoordinatorTestFixture(t)
+	setTestAppRuntimeReady(t, app.Lifecycle, context.Background())
+	app.Workspace.kubeClientInitializer = func() error { return nil }
 
-	require.NoError(t, app.discoverKubeconfigs())
+	require.NoError(t, app.ClusterRuntime.discoverKubeconfigs())
 
 	// Exact same selection twice should be rejected.
 	selections := []string{configPath + ":my-context", configPath + ":my-context"}
-	err := app.SetSelectedKubeconfigs(selections)
+	err := app.Workspace.SetSelectedKubeconfigs(selections)
 	require.Error(t, err)
 	assert.Contains(t, err.Error(), "duplicate selection")
 }
@@ -660,14 +660,14 @@ func TestApp_SetSelectedKubeconfigsClearsSelection(t *testing.T) {
 	tempDir := t.TempDir()
 	t.Setenv("HOME", tempDir)
 
-	app := NewApp(nil)
-	setTestAppRuntimeReady(t, app, context.Background())
-	app.selectedKubeconfigs = []string{"/path/to/config:ctx"}
+	app := newWorkspaceCoordinatorTestFixture(t)
+	setTestAppRuntimeReady(t, app.Lifecycle, context.Background())
+	app.Workspace.selectedKubeconfigs = []string{"/path/to/config:ctx"}
 
-	require.NoError(t, app.SetSelectedKubeconfigs(nil))
-	assert.Empty(t, app.selectedKubeconfigs)
-	require.NotNil(t, app.preferences.appSettings)
-	assert.Empty(t, app.preferences.appSettings.SelectedKubeconfigs)
+	require.NoError(t, app.Workspace.SetSelectedKubeconfigs(nil))
+	assert.Empty(t, app.Workspace.selectedKubeconfigs)
+	require.NotNil(t, app.Preferences.appSettings)
+	assert.Empty(t, app.Preferences.appSettings.SelectedKubeconfigs)
 }
 
 func TestApp_discoverKubeconfigs_noAutoSelection(t *testing.T) {
@@ -684,24 +684,24 @@ func TestApp_discoverKubeconfigs_noAutoSelection(t *testing.T) {
 	// Override home directory for kubeconfig expansion.
 	t.Setenv("HOME", tempDir)
 
-	app := NewApp(nil)
+	app := newWorkspaceCoordinatorTestFixture(t)
 	ctx := context.Background()
 
 	// Setup app state (avoid startup which has runtime calls)
-	setTestAppRuntimeReady(t, app, ctx)
-	app.setupEnvironment()
-	err = app.discoverKubeconfigs()
+	setTestAppRuntimeReady(t, app.Lifecycle, ctx)
+	app.Lifecycle.setupEnvironment()
+	err = app.ClusterRuntime.discoverKubeconfigs()
 	require.NoError(t, err)
 
 	// Verify kubeconfigs were discovered but not auto-selected
-	assert.True(t, app.runtimeAvailable())
-	assert.NoError(t, app.CtxOrBackground().Err())
-	assert.Len(t, app.availableKubeconfigs, 2)
-	assert.Empty(t, app.selectedKubeconfigs) // No auto-selection
+	assert.True(t, app.Lifecycle.runtimeAvailable())
+	assert.NoError(t, app.Lifecycle.CtxOrBackground().Err())
+	assert.Len(t, app.ClusterRuntime.availableKubeconfigs, 2)
+	assert.Empty(t, app.Workspace.selectedKubeconfigs) // No auto-selection
 
 	// Verify default config is marked correctly
 	foundDefault := false
-	for _, kc := range app.availableKubeconfigs {
+	for _, kc := range app.ClusterRuntime.availableKubeconfigs {
 		if kc.IsDefault {
 			foundDefault = true
 			assert.Equal(t, configPath, kc.Path)

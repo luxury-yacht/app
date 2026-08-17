@@ -23,7 +23,7 @@ import (
 // transports (observed live as duplicate namespaces-doorbell broadcasts to a
 // subscriber-less manager).
 func TestSwapRefreshSubsystemStopsPrevious(t *testing.T) {
-	app := newTestAppWithDefaults(t)
+	app := newRefreshCoordinatorTestFixture(t)
 
 	var mu sync.Mutex
 	broadcasts := 0
@@ -37,10 +37,10 @@ func TestSwapRefreshSubsystemStopsPrevious(t *testing.T) {
 	previous := &system.Subsystem{NamespaceNotifier: notifier}
 	next := &system.Subsystem{}
 
-	app.setRefreshSubsystem("cluster-1", previous)
-	app.swapRefreshSubsystem("cluster-1", next)
+	app.Refresh.setRefreshSubsystem("cluster-1", previous)
+	app.Refresh.swapRefreshSubsystem("cluster-1", next)
 
-	require.Same(t, next, app.getRefreshSubsystem("cluster-1"), "next subsystem must be stored")
+	require.Same(t, next, app.Refresh.getRefreshSubsystem("cluster-1"), "next subsystem must be stored")
 
 	// The previous subsystem's notifier must be silenced by the swap. The wait
 	// must exceed the notifier's 500ms debounce or an unstopped notifier would

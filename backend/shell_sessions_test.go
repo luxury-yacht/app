@@ -32,9 +32,9 @@ func TestShellEventWriterEmits(t *testing.T) {
 	fixture := newOperationsCoordinatorFixture(t)
 	app := fixture.runtime
 	operations := fixture.coordinator
-	setTestAppRuntimeReady(t, app, context.Background())
+	setTestAppRuntimeReady(t, app.Lifecycle, context.Background())
 	events := make([]ShellOutputEvent, 0, 1)
-	app.eventEmitter = func(_ context.Context, name string, args ...interface{}) {
+	app.Lifecycle.eventEmitter = func(_ context.Context, name string, args ...interface{}) {
 		if name == shellOutputEventName && len(args) == 1 {
 			if ev, ok := args[0].(ShellOutputEvent); ok {
 				events = append(events, ev)
@@ -62,7 +62,7 @@ func TestShellSessionLifecycleHelpers(t *testing.T) {
 	fixture := newOperationsCoordinatorFixture(t)
 	app := fixture.runtime
 	operations := fixture.coordinator
-	setTestAppRuntimeReady(t, app, context.Background())
+	setTestAppRuntimeReady(t, app.Lifecycle, context.Background())
 	operations.shellSessions = make(map[string]*shellSession)
 
 	stdinR, stdinW := io.Pipe()
@@ -77,7 +77,7 @@ func TestShellSessionLifecycleHelpers(t *testing.T) {
 	}
 	operations.shellSessions["sess"] = sess
 
-	app.eventEmitter = func(context.Context, string, ...interface{}) {}
+	app.Lifecycle.eventEmitter = func(context.Context, string, ...interface{}) {}
 
 	readCh := make(chan string, 1)
 	go func() {
@@ -102,7 +102,7 @@ func TestShellSessionLifecycleHelpers(t *testing.T) {
 	}
 
 	events := make([]ShellStatusEvent, 0, 1)
-	app.eventEmitter = func(_ context.Context, name string, args ...interface{}) {
+	app.Lifecycle.eventEmitter = func(_ context.Context, name string, args ...interface{}) {
 		if name == shellStatusEventName && len(args) == 1 {
 			if ev, ok := args[0].(ShellStatusEvent); ok {
 				events = append(events, ev)
@@ -124,7 +124,7 @@ func TestTerminateShellWithReasonUnregistersRuntimeOperation(t *testing.T) {
 	fixture := newOperationsCoordinatorFixture(t)
 	app := fixture.runtime
 	operations := fixture.coordinator
-	setTestAppRuntimeReady(t, app, context.Background())
+	setTestAppRuntimeReady(t, app.Lifecycle, context.Background())
 	operations.shellSessions = make(map[string]*shellSession)
 
 	sess := &shellSession{
@@ -157,12 +157,12 @@ func TestShellSessionLifecycleFinishStreamIsIdempotent(t *testing.T) {
 	fixture := newOperationsCoordinatorFixture(t)
 	app := fixture.runtime
 	operations := fixture.coordinator
-	setTestAppRuntimeReady(t, app, context.Background())
+	setTestAppRuntimeReady(t, app.Lifecycle, context.Background())
 	operations.shellSessions = make(map[string]*shellSession)
 
 	var statusEvents []ShellStatusEvent
 	listEvents := 0
-	app.eventEmitter = func(_ context.Context, name string, args ...interface{}) {
+	app.Lifecycle.eventEmitter = func(_ context.Context, name string, args ...interface{}) {
 		switch name {
 		case shellStatusEventName:
 			if len(args) == 1 {
@@ -217,12 +217,12 @@ func TestShellSessionLifecycleCloseForRuntimeIsIdempotent(t *testing.T) {
 	fixture := newOperationsCoordinatorFixture(t)
 	app := fixture.runtime
 	operations := fixture.coordinator
-	setTestAppRuntimeReady(t, app, context.Background())
+	setTestAppRuntimeReady(t, app.Lifecycle, context.Background())
 	operations.shellSessions = make(map[string]*shellSession)
 
 	var statusEvents []ShellStatusEvent
 	listEvents := 0
-	app.eventEmitter = func(_ context.Context, name string, args ...interface{}) {
+	app.Lifecycle.eventEmitter = func(_ context.Context, name string, args ...interface{}) {
 		switch name {
 		case shellStatusEventName:
 			if len(args) == 1 {
@@ -238,10 +238,10 @@ func TestShellSessionLifecycleCloseForRuntimeIsIdempotent(t *testing.T) {
 	sess := &shellSession{id: "sess-runtime", clusterID: "cluster1"}
 	operations.shellSessions[sess.id] = sess
 
-	if err := operations.closeShellSessionForRuntime(sess.id, "cluster disconnected"); err != nil {
+	if err := operations.shellSessionLifecycle().closeForRuntime(sess.id, "cluster disconnected"); err != nil {
 		t.Fatalf("unexpected cleanup error: %v", err)
 	}
-	if err := operations.closeShellSessionForRuntime(sess.id, "cluster disconnected"); err != nil {
+	if err := operations.shellSessionLifecycle().closeForRuntime(sess.id, "cluster disconnected"); err != nil {
 		t.Fatalf("expected repeated runtime cleanup to be ignored, got %v", err)
 	}
 
@@ -340,7 +340,7 @@ func TestOperationsCoordinatorStopClusterCleansShellSessions(t *testing.T) {
 	fixture := newOperationsCoordinatorFixture(t)
 	app := fixture.runtime
 	operations := fixture.coordinator
-	setTestAppRuntimeReady(t, app, context.Background())
+	setTestAppRuntimeReady(t, app.Lifecycle, context.Background())
 	operations.shellSessions = map[string]*shellSession{
 		"s1": {
 			id:        "s1",
@@ -379,7 +379,7 @@ func TestOperationsCoordinatorStopClusterCleansShellSessions(t *testing.T) {
 
 	statusEvents := make([]ShellStatusEvent, 0)
 	listEvents := make([][]ShellSessionInfo, 0)
-	app.eventEmitter = func(_ context.Context, name string, args ...interface{}) {
+	app.Lifecycle.eventEmitter = func(_ context.Context, name string, args ...interface{}) {
 		if len(args) != 1 {
 			return
 		}
@@ -455,10 +455,10 @@ func TestEmitShellEventsGuards(t *testing.T) {
 	fixture := newOperationsCoordinatorFixture(t)
 	app := fixture.runtime
 	operations := fixture.coordinator
-	setTestAppRuntimeReady(t, app, context.Background())
+	setTestAppRuntimeReady(t, app.Lifecycle, context.Background())
 
 	calls := 0
-	app.eventEmitter = func(_ context.Context, _ string, _ ...interface{}) {
+	app.Lifecycle.eventEmitter = func(_ context.Context, _ string, _ ...interface{}) {
 		calls++
 	}
 
@@ -528,8 +528,8 @@ func TestStartShellSessionValidation(t *testing.T) {
 	fixture := newOperationsCoordinatorFixture(t)
 	app := fixture.runtime
 	operations := fixture.coordinator
-	setTestAppRuntimeReady(t, app, context.Background())
-	app.clusterClients = map[string]*clusterClients{
+	setTestAppRuntimeReady(t, app.Lifecycle, context.Background())
+	app.ClusterRuntime.clusterClients = map[string]*clusterClients{
 		shellClusterID: {
 			meta:              ClusterMeta{ID: shellClusterID, Name: "ctx"},
 			kubeconfigPath:    "/path",
@@ -545,7 +545,7 @@ func TestStartShellSessionValidation(t *testing.T) {
 	// Per-cluster clients are stored in clusterClients, not in global fields.
 	fakeClient := fake.NewClientset()
 	restConfig := &rest.Config{}
-	app.clusterClients = map[string]*clusterClients{
+	app.ClusterRuntime.clusterClients = map[string]*clusterClients{
 		shellClusterID: {
 			meta:              ClusterMeta{ID: shellClusterID, Name: "ctx"},
 			kubeconfigPath:    "/path",
@@ -567,7 +567,7 @@ func TestStartShellSessionPodValidation(t *testing.T) {
 	fixture := newOperationsCoordinatorFixture(t)
 	app := fixture.runtime
 	operations := fixture.coordinator
-	setTestAppRuntimeReady(t, app, context.Background())
+	setTestAppRuntimeReady(t, app.Lifecycle, context.Background())
 
 	// Per-cluster clients are stored in clusterClients, not in global fields.
 	restConfig := &rest.Config{}
@@ -577,7 +577,7 @@ func TestStartShellSessionPodValidation(t *testing.T) {
 		Spec:       corev1.PodSpec{}, // no containers
 	}
 	fakeClient := fake.NewClientset(pod)
-	app.clusterClients = map[string]*clusterClients{
+	app.ClusterRuntime.clusterClients = map[string]*clusterClients{
 		shellClusterID: {
 			meta:              ClusterMeta{ID: shellClusterID, Name: "ctx"},
 			kubeconfigPath:    "/path",
@@ -594,7 +594,7 @@ func TestStartShellSessionPodValidation(t *testing.T) {
 
 	pod.Spec.Containers = []corev1.Container{{Name: "main"}}
 	fakeClient = fake.NewClientset(pod)
-	app.clusterClients = map[string]*clusterClients{
+	app.ClusterRuntime.clusterClients = map[string]*clusterClients{
 		shellClusterID: {
 			meta:              ClusterMeta{ID: shellClusterID, Name: "ctx"},
 			kubeconfigPath:    "/path",
@@ -613,7 +613,7 @@ func TestStartShellSessionRequiresExecPermission(t *testing.T) {
 	fixture := newOperationsCoordinatorFixture(t)
 	app := fixture.runtime
 	operations := fixture.coordinator
-	setTestAppRuntimeReady(t, app, context.Background())
+	setTestAppRuntimeReady(t, app.Lifecycle, context.Background())
 
 	pod := &corev1.Pod{
 		ObjectMeta: metav1.ObjectMeta{Namespace: "default", Name: "pod-1"},
@@ -624,7 +624,7 @@ func TestStartShellSessionRequiresExecPermission(t *testing.T) {
 	fakeClient := fake.NewClientset(pod)
 	denySelfSubjectAccessReviews(fakeClient, "exec denied")
 
-	app.clusterClients = map[string]*clusterClients{
+	app.ClusterRuntime.clusterClients = map[string]*clusterClients{
 		shellClusterID: {
 			meta:              ClusterMeta{ID: shellClusterID, Name: "ctx"},
 			kubeconfigPath:    "/path",

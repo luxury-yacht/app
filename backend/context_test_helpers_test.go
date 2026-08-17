@@ -5,27 +5,27 @@ import (
 	"testing"
 )
 
-func setTestAppRuntimeReady(t testing.TB, app *App, ctx context.Context) {
+func setTestAppRuntimeReady(t testing.TB, lifecycle *ApplicationLifecycle, ctx context.Context) {
 	t.Helper()
-	app.setApplicationContext(ctx)
-	if !app.markRuntimeReady() {
+	lifecycle.setApplicationContext(ctx)
+	if !lifecycle.markRuntimeReady() {
 		t.Fatal("expected app runtime to become ready")
 	}
 }
 
-func setRefreshRuntimeContextForTest(app *App, parent context.Context) {
-	app.refreshRuntimeMu.Lock()
-	defer app.refreshRuntimeMu.Unlock()
-	if app.refreshCancel != nil {
-		app.refreshCancel()
+func setRefreshRuntimeContextForTest(refreshCoordinator *RefreshCoordinator, parent context.Context) {
+	refreshCoordinator.refreshRuntimeMu.Lock()
+	defer refreshCoordinator.refreshRuntimeMu.Unlock()
+	if refreshCoordinator.refreshCancel != nil {
+		refreshCoordinator.refreshCancel()
 	}
 	if parent == nil {
-		app.refreshDone = nil
-		app.refreshCancel = nil
+		refreshCoordinator.refreshDone = nil
+		refreshCoordinator.refreshCancel = nil
 		return
 	}
 	ctx, cancel := context.WithCancel(parent)
-	app.refreshDone = ctx.Done()
-	app.refreshCancel = cancel
-	app.refreshRuntimeStopped = false
+	refreshCoordinator.refreshDone = ctx.Done()
+	refreshCoordinator.refreshCancel = cancel
+	refreshCoordinator.refreshRuntimeStopped = false
 }

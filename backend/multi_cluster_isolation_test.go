@@ -86,10 +86,10 @@ func createUnhealthyClient() *isolationClientSet {
 // TestIsolation_AuthFailureDoesNotAffectOtherClusters verifies that an auth failure
 // in one cluster does not affect the auth state of other clusters.
 func TestIsolation_AuthFailureDoesNotAffectOtherClusters(t *testing.T) {
-	app := newTestAppWithDefaults(t)
+	app := newWorkspaceCoordinatorTestFixture(t)
 	ctx, cancel := context.WithCancel(context.Background())
 	defer cancel()
-	setTestAppRuntimeReady(t, app, ctx)
+	setTestAppRuntimeReady(t, app.Lifecycle, ctx)
 
 	// Create auth managers for two clusters.
 	// MaxAttempts=0 means failures immediately transition to StateInvalid.
@@ -97,8 +97,8 @@ func TestIsolation_AuthFailureDoesNotAffectOtherClusters(t *testing.T) {
 	authMgrB := authstate.New(authstate.Config{MaxAttempts: 0})
 
 	// Set up two cluster clients with separate auth managers
-	app.clusterClientsMu.Lock()
-	app.clusterClients = map[string]*clusterClients{
+	app.ClusterRuntime.clusterClientsMu.Lock()
+	app.ClusterRuntime.clusterClients = map[string]*clusterClients{
 		"cluster-a": {
 			meta:        ClusterMeta{ID: "cluster-a", Name: "Cluster A"},
 			client:      createHealthyClient(),
@@ -110,7 +110,7 @@ func TestIsolation_AuthFailureDoesNotAffectOtherClusters(t *testing.T) {
 			authManager: authMgrB,
 		},
 	}
-	app.clusterClientsMu.Unlock()
+	app.ClusterRuntime.clusterClientsMu.Unlock()
 
 	// Verify both auth managers start valid
 	require.True(t, authMgrA.IsValid(), "cluster A auth should start valid")
@@ -135,15 +135,15 @@ func TestIsolation_AuthFailureDoesNotAffectOtherClusters(t *testing.T) {
 // TestIsolation_HeartbeatRunsIndependently verifies that heartbeat health checks
 // run independently for each cluster.
 func TestIsolation_HeartbeatRunsIndependently(t *testing.T) {
-	app := newTestAppWithDefaults(t)
+	app := newWorkspaceCoordinatorTestFixture(t)
 	ctx, cancel := context.WithCancel(context.Background())
 	defer cancel()
-	setTestAppRuntimeReady(t, app, ctx)
+	setTestAppRuntimeReady(t, app.Lifecycle, ctx)
 
 	// Track emitted events
 	emittedEvents := make(map[string][]ClusterHealthEvent)
 	var eventsMu sync.Mutex
-	app.eventEmitter = func(_ context.Context, name string, args ...interface{}) {
+	app.Lifecycle.eventEmitter = func(_ context.Context, name string, args ...interface{}) {
 		eventsMu.Lock()
 		defer eventsMu.Unlock()
 		if len(args) > 0 {
@@ -156,8 +156,8 @@ func TestIsolation_HeartbeatRunsIndependently(t *testing.T) {
 	// Set up clusters with different health states:
 	// - cluster-healthy: responds OK
 	// - cluster-degraded: returns error
-	app.clusterClientsMu.Lock()
-	app.clusterClients = map[string]*clusterClients{
+	app.ClusterRuntime.clusterClientsMu.Lock()
+	app.ClusterRuntime.clusterClients = map[string]*clusterClients{
 		"cluster-healthy": {
 			meta:   ClusterMeta{ID: "cluster-healthy", Name: "Healthy Cluster"},
 			client: createHealthyClient(),
@@ -167,10 +167,10 @@ func TestIsolation_HeartbeatRunsIndependently(t *testing.T) {
 			client: createUnhealthyClient(),
 		},
 	}
-	app.clusterClientsMu.Unlock()
+	app.ClusterRuntime.clusterClientsMu.Unlock()
 
 	// Run heartbeat iteration
-	app.runHeartbeatIteration()
+	app.ClusterRuntime.runHeartbeatIteration()
 
 	// Verify each cluster gets appropriate cluster:health:* event emitted
 	eventsMu.Lock()
@@ -194,60 +194,60 @@ func TestIsolation_HeartbeatRunsIndependently(t *testing.T) {
 // TestIsolation_RecoveryOnlyAffectsOneCluster verifies that cluster subsystem
 // rebuild only affects the target cluster.
 func TestIsolation_RecoveryOnlyAffectsOneCluster(t *testing.T) {
-	app := newTestAppWithDefaults(t)
+	app := newWorkspaceCoordinatorTestFixture(t)
 	ctx, cancel := context.WithCancel(context.Background())
 	defer cancel()
-	setTestAppRuntimeReady(t, app, ctx)
-	app.refreshSubsystems = make(map[string]*system.Subsystem)
+	setTestAppRuntimeReady(t, app.Lifecycle, ctx)
+	app.Refresh.refreshSubsystems = make(map[string]*system.Subsystem)
 
 	// Mock subsystems for two clusters
 	// We'll use empty subsystems to verify presence/absence
 	subsystemA := &system.Subsystem{}
 	subsystemB := &system.Subsystem{}
 
-	app.refreshSubsystems["cluster-a"] = subsystemA
-	app.refreshSubsystems["cluster-b"] = subsystemB
+	app.Refresh.refreshSubsystems["cluster-a"] = subsystemA
+	app.Refresh.refreshSubsystems["cluster-b"] = subsystemB
 
 	// Verify both subsystems exist
-	require.NotNil(t, app.refreshSubsystems["cluster-a"], "cluster A subsystem should exist")
-	require.NotNil(t, app.refreshSubsystems["cluster-b"], "cluster B subsystem should exist")
+	require.NotNil(t, app.Refresh.refreshSubsystems["cluster-a"], "cluster A subsystem should exist")
+	require.NotNil(t, app.Refresh.refreshSubsystems["cluster-b"], "cluster B subsystem should exist")
 
 	// Teardown subsystem for cluster A only
-	app.teardownClusterSubsystem("cluster-a")
+	app.Refresh.teardownClusterSubsystem("cluster-a")
 
 	// Verify cluster A's subsystem is removed
-	require.Nil(t, app.refreshSubsystems["cluster-a"], "cluster A subsystem should be removed")
+	require.Nil(t, app.Refresh.refreshSubsystems["cluster-a"], "cluster A subsystem should be removed")
 
 	// Verify cluster B's subsystem is still present and functional
-	require.NotNil(t, app.refreshSubsystems["cluster-b"], "cluster B subsystem should still exist")
-	require.Equal(t, subsystemB, app.refreshSubsystems["cluster-b"], "cluster B subsystem should be unchanged")
+	require.NotNil(t, app.Refresh.refreshSubsystems["cluster-b"], "cluster B subsystem should still exist")
+	require.Equal(t, subsystemB, app.Refresh.refreshSubsystems["cluster-b"], "cluster B subsystem should be unchanged")
 }
 
 // TestIsolation_TransportFailureOnlyAffectsOneCluster verifies that transport
 // failure tracking is isolated per cluster.
 func TestIsolation_TransportFailureOnlyAffectsOneCluster(t *testing.T) {
-	app := newTestAppWithDefaults(t)
+	app := newWorkspaceCoordinatorTestFixture(t)
 
 	// Record transport failures for cluster A (up to threshold)
-	app.recordClusterTransportFailure("cluster-a", "test failure 1", nil)
-	app.recordClusterTransportFailure("cluster-a", "test failure 2", nil)
+	app.ClusterRuntime.recordClusterTransportFailure("cluster-a", "test failure 1", nil)
+	app.ClusterRuntime.recordClusterTransportFailure("cluster-a", "test failure 2", nil)
 
 	// Verify cluster A has recorded failures
-	stateA := app.getTransportState("cluster-a")
+	stateA := app.ClusterRuntime.getTransportState("cluster-a")
 	stateA.mu.Lock()
 	countA := stateA.failureCount
 	stateA.mu.Unlock()
 	require.Equal(t, 2, countA, "cluster A should have 2 failures recorded")
 
 	// Verify cluster B's transport state shows no failures
-	stateB := app.getTransportState("cluster-b")
+	stateB := app.ClusterRuntime.getTransportState("cluster-b")
 	stateB.mu.Lock()
 	countB := stateB.failureCount
 	stateB.mu.Unlock()
 	require.Equal(t, 0, countB, "cluster B should have 0 failures (unaffected by cluster A)")
 
 	// Record a failure for cluster B
-	app.recordClusterTransportFailure("cluster-b", "cluster B failure", nil)
+	app.ClusterRuntime.recordClusterTransportFailure("cluster-b", "cluster B failure", nil)
 
 	// Verify cluster B now has 1 failure
 	stateB.mu.Lock()
@@ -308,18 +308,18 @@ func TestIsolation_DrainStoreByCluster(t *testing.T) {
 // have been removed and all clients are per-cluster.
 // This is primarily a compile-time check, but we verify runtime structure.
 func TestIsolation_NoGlobalClientFields(t *testing.T) {
-	app := NewApp(nil)
+	app := newWorkspaceCoordinatorTestFixture(t)
 
 	// Verify that App struct uses per-cluster client map
-	require.NotNil(t, app.clusterClients, "clusterClients map should be initialized")
+	require.NotNil(t, app.ClusterRuntime.clusterClients, "clusterClients map should be initialized")
 
 	// Verify there are no global client fields by checking that after
-	// NewApp(nil), only per-cluster structures exist
+	// newWorkspaceCoordinatorTestFixture(t), only per-cluster structures exist
 	// (The actual global fields have been removed from the struct)
 
 	// Create cluster clients for testing
-	app.clusterClientsMu.Lock()
-	app.clusterClients = map[string]*clusterClients{
+	app.ClusterRuntime.clusterClientsMu.Lock()
+	app.ClusterRuntime.clusterClients = map[string]*clusterClients{
 		"test-cluster": {
 			meta:              ClusterMeta{ID: "test-cluster", Name: "Test Cluster"},
 			kubeconfigPath:    "/test/kubeconfig",
@@ -327,33 +327,33 @@ func TestIsolation_NoGlobalClientFields(t *testing.T) {
 			client:            createHealthyClient(),
 		},
 	}
-	app.clusterClientsMu.Unlock()
+	app.ClusterRuntime.clusterClientsMu.Unlock()
 
 	// Verify clusterClientsForID returns the correct cluster
-	clients := app.clusterClientsForID("test-cluster")
+	clients := app.ClusterRuntime.clusterClientsForID("test-cluster")
 	require.NotNil(t, clients, "should find cluster by ID")
 	require.Equal(t, "Test Cluster", clients.meta.Name)
 
 	// Verify non-existent cluster returns nil
-	nonExistent := app.clusterClientsForID("non-existent")
+	nonExistent := app.ClusterRuntime.clusterClientsForID("non-existent")
 	require.Nil(t, nonExistent, "non-existent cluster should return nil")
 }
 
 // TestIsolation_MultiClusterAuthStateRetrieval verifies that auth state
 // can be retrieved independently for each cluster.
 func TestIsolation_MultiClusterAuthStateRetrieval(t *testing.T) {
-	app := newTestAppWithDefaults(t)
+	app := newWorkspaceCoordinatorTestFixture(t)
 	ctx, cancel := context.WithCancel(context.Background())
 	defer cancel()
-	setTestAppRuntimeReady(t, app, ctx)
+	setTestAppRuntimeReady(t, app.Lifecycle, ctx)
 
 	// Create auth managers with different states
 	authMgrValid := authstate.New(authstate.Config{MaxAttempts: 0})
 	authMgrInvalid := authstate.New(authstate.Config{MaxAttempts: 0})
 	authMgrInvalid.ReportFailure("expired token")
 
-	app.clusterClientsMu.Lock()
-	app.clusterClients = map[string]*clusterClients{
+	app.ClusterRuntime.clusterClientsMu.Lock()
+	app.ClusterRuntime.clusterClients = map[string]*clusterClients{
 		"cluster-valid": {
 			meta:        ClusterMeta{ID: "cluster-valid", Name: "Valid Cluster"},
 			client:      createHealthyClient(),
@@ -370,24 +370,24 @@ func TestIsolation_MultiClusterAuthStateRetrieval(t *testing.T) {
 			// No authManager
 		},
 	}
-	app.clusterClientsMu.Unlock()
+	app.ClusterRuntime.clusterClientsMu.Unlock()
 
 	// Test GetClusterAuthState for each cluster
-	stateValid, reasonValid := app.GetClusterAuthState("cluster-valid")
+	stateValid, reasonValid := app.ClusterRuntime.GetClusterAuthState("cluster-valid")
 	require.Equal(t, "valid", stateValid)
 	require.Empty(t, reasonValid)
 
-	stateInvalid, reasonInvalid := app.GetClusterAuthState("cluster-invalid")
+	stateInvalid, reasonInvalid := app.ClusterRuntime.GetClusterAuthState("cluster-invalid")
 	require.Equal(t, "invalid", stateInvalid)
 	require.Contains(t, reasonInvalid, "expired")
 
-	stateNoAuth, _ := app.GetClusterAuthState("cluster-no-auth")
+	stateNoAuth, _ := app.ClusterRuntime.GetClusterAuthState("cluster-no-auth")
 	require.Equal(t, "unknown", stateNoAuth)
 
-	stateNonExistent, _ := app.GetClusterAuthState("non-existent")
+	stateNonExistent, _ := app.ClusterRuntime.GetClusterAuthState("non-existent")
 	require.Equal(t, "unknown", stateNonExistent)
 
-	allStates := app.GetClusterWorkspaceState().Clusters
+	allStates := app.Workspace.GetClusterWorkspaceState().Clusters
 	require.Len(t, allStates, 3)
 	require.Equal(t, "valid", allStates["cluster-valid"].Auth.State)
 	require.Equal(t, "invalid", allStates["cluster-invalid"].Auth.State)
@@ -397,10 +397,10 @@ func TestIsolation_MultiClusterAuthStateRetrieval(t *testing.T) {
 // TestIsolation_RetryAuthPerCluster verifies that RetryClusterAuth only
 // affects the specified cluster.
 func TestIsolation_RetryAuthPerCluster(t *testing.T) {
-	app := newTestAppWithDefaults(t)
+	app := newWorkspaceCoordinatorTestFixture(t)
 	ctx, cancel := context.WithCancel(context.Background())
 	defer cancel()
-	setTestAppRuntimeReady(t, app, ctx)
+	setTestAppRuntimeReady(t, app.Lifecycle, ctx)
 
 	// Create auth managers - both in invalid state with MaxAttempts=0
 	authMgrA := authstate.New(authstate.Config{MaxAttempts: 0})
@@ -408,8 +408,8 @@ func TestIsolation_RetryAuthPerCluster(t *testing.T) {
 	authMgrA.ReportFailure("failure A")
 	authMgrB.ReportFailure("failure B")
 
-	app.clusterClientsMu.Lock()
-	app.clusterClients = map[string]*clusterClients{
+	app.ClusterRuntime.clusterClientsMu.Lock()
+	app.ClusterRuntime.clusterClients = map[string]*clusterClients{
 		"cluster-a": {
 			meta:        ClusterMeta{ID: "cluster-a", Name: "Cluster A"},
 			client:      createHealthyClient(),
@@ -421,7 +421,7 @@ func TestIsolation_RetryAuthPerCluster(t *testing.T) {
 			authManager: authMgrB,
 		},
 	}
-	app.clusterClientsMu.Unlock()
+	app.ClusterRuntime.clusterClientsMu.Unlock()
 
 	// Verify both start as invalid
 	require.False(t, authMgrA.IsValid())
@@ -430,7 +430,7 @@ func TestIsolation_RetryAuthPerCluster(t *testing.T) {
 	// RetryClusterAuth for cluster-a only
 	// Note: With MaxAttempts=0, TriggerRetry won't do anything since
 	// recovery is disabled. This test verifies the function routes correctly.
-	app.RetryClusterAuth("cluster-a")
+	app.ClusterRuntime.RetryClusterAuth("cluster-a")
 
 	// Both should still be invalid (since MaxAttempts=0 means no recovery)
 	// The important thing is that the call didn't panic or affect wrong cluster
@@ -443,15 +443,15 @@ func TestIsolation_RetryAuthPerCluster(t *testing.T) {
 // TestIsolation_HeartbeatSkipsInvalidAuthClusters verifies that heartbeat
 // correctly skips clusters with invalid auth and doesn't emit events for them.
 func TestIsolation_HeartbeatSkipsInvalidAuthClusters(t *testing.T) {
-	app := newTestAppWithDefaults(t)
+	app := newWorkspaceCoordinatorTestFixture(t)
 	ctx, cancel := context.WithCancel(context.Background())
 	defer cancel()
-	setTestAppRuntimeReady(t, app, ctx)
+	setTestAppRuntimeReady(t, app.Lifecycle, ctx)
 
 	// Track emitted events
 	emittedEvents := make(map[string][]ClusterHealthEvent)
 	var eventsMu sync.Mutex
-	app.eventEmitter = func(_ context.Context, name string, args ...interface{}) {
+	app.Lifecycle.eventEmitter = func(_ context.Context, name string, args ...interface{}) {
 		eventsMu.Lock()
 		defer eventsMu.Unlock()
 		if len(args) > 0 {
@@ -465,8 +465,8 @@ func TestIsolation_HeartbeatSkipsInvalidAuthClusters(t *testing.T) {
 	invalidAuthMgr := authstate.New(authstate.Config{MaxAttempts: 0})
 	invalidAuthMgr.ReportFailure("auth failure")
 
-	app.clusterClientsMu.Lock()
-	app.clusterClients = map[string]*clusterClients{
+	app.ClusterRuntime.clusterClientsMu.Lock()
+	app.ClusterRuntime.clusterClients = map[string]*clusterClients{
 		"cluster-healthy": {
 			meta:   ClusterMeta{ID: "cluster-healthy", Name: "Healthy Cluster"},
 			client: createHealthyClient(),
@@ -478,10 +478,10 @@ func TestIsolation_HeartbeatSkipsInvalidAuthClusters(t *testing.T) {
 			authManager: invalidAuthMgr,
 		},
 	}
-	app.clusterClientsMu.Unlock()
+	app.ClusterRuntime.clusterClientsMu.Unlock()
 
 	// Run heartbeat
-	app.runHeartbeatIteration()
+	app.ClusterRuntime.runHeartbeatIteration()
 
 	// Check events
 	eventsMu.Lock()

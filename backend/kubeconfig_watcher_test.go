@@ -33,10 +33,10 @@ func writeMultiContextKubeconfig(t *testing.T, path string, contexts []string) {
 
 func TestKubeconfigWatcher_DetectsFileCreation(t *testing.T) {
 	dir := t.TempDir()
-	app := newTestAppWithDefaults(t)
+	app := newWorkspaceCoordinatorTestFixture(t)
 
 	var called atomic.Int32
-	w, err := newKubeconfigWatcher(app.appLogs.Logger(), func(_ []string) {
+	w, err := newKubeconfigWatcher(app.AppLogs.Logger(), func(_ []string) {
 		called.Add(1)
 	})
 	require.NoError(t, err)
@@ -50,10 +50,10 @@ func TestKubeconfigWatcher_DetectsFileCreation(t *testing.T) {
 
 func TestKubeconfigWatcher_FilenameFilter(t *testing.T) {
 	dir := t.TempDir()
-	app := newTestAppWithDefaults(t)
+	app := newWorkspaceCoordinatorTestFixture(t)
 
 	changesCh := make(chan []string, 4)
-	w, err := newKubeconfigWatcher(app.appLogs.Logger(), func(paths []string) {
+	w, err := newKubeconfigWatcher(app.AppLogs.Logger(), func(paths []string) {
 		changesCh <- paths
 	})
 	require.NoError(t, err)
@@ -91,10 +91,10 @@ func TestKubeconfigWatcher_FilenameFilter(t *testing.T) {
 
 func TestKubeconfigWatcher_DebounceAccumulatesPaths(t *testing.T) {
 	dir := t.TempDir()
-	app := newTestAppWithDefaults(t)
+	app := newWorkspaceCoordinatorTestFixture(t)
 
 	changesCh := make(chan []string, 2)
-	w, err := newKubeconfigWatcher(app.appLogs.Logger(), func(paths []string) {
+	w, err := newKubeconfigWatcher(app.AppLogs.Logger(), func(paths []string) {
 		changesCh <- paths
 	})
 	require.NoError(t, err)
@@ -121,30 +121,30 @@ func TestKubeconfigWatcher_DebounceAccumulatesPaths(t *testing.T) {
 
 func TestApp_HandleKubeconfigChange_ContextRemovedDeselectsOnlyAffectedFromSameFile(t *testing.T) {
 	setTestConfigEnv(t)
-	app := newTestAppWithDefaults(t)
-	setTestAppRuntimeReady(t, app, context.Background())
-	app.clusterClients = make(map[string]*clusterClients)
-	app.refreshSubsystems = make(map[string]*system.Subsystem)
-	app.objectCatalogEntries = make(map[string]*objectCatalogEntry)
-	app.refreshAggregates.Store(&refreshAggregateHandlers{})
-	setRefreshServiceReadyForTest(app)
-	setRefreshRuntimeContextForTest(app, context.Background())
-	app.preferences.appSettings = getDefaultAppSettings()
+	app := newWorkspaceCoordinatorTestFixture(t)
+	setTestAppRuntimeReady(t, app.Lifecycle, context.Background())
+	app.ClusterRuntime.clusterClients = make(map[string]*clusterClients)
+	app.Refresh.refreshSubsystems = make(map[string]*system.Subsystem)
+	app.Refresh.objectCatalogEntries = make(map[string]*objectCatalogEntry)
+	app.Refresh.refreshAggregates.Store(&refreshAggregateHandlers{})
+	setRefreshServiceReadyForTest(app.Refresh)
+	setRefreshRuntimeContextForTest(app.Refresh, context.Background())
+	app.Preferences.appSettings = getDefaultAppSettings()
 
 	baseDir := t.TempDir()
 	configPath := filepath.Join(baseDir, "shared-config")
 	writeMultiContextKubeconfig(t, configPath, []string{"ctx-keep", "ctx-remove"})
-	require.NoError(t, app.SetKubeconfigSearchPaths([]string{configPath}))
+	require.NoError(t, app.Workspace.SetKubeconfigSearchPaths([]string{configPath}))
 
-	app.kubeconfigsMu.Lock()
-	app.selectedKubeconfigs = []string{configPath + ":ctx-keep", configPath + ":ctx-remove"}
-	app.kubeconfigsMu.Unlock()
-	app.preferences.appSettings.SelectedKubeconfigs = []string{configPath + ":ctx-keep", configPath + ":ctx-remove"}
+	app.Workspace.kubeconfigsMu.Lock()
+	app.Workspace.selectedKubeconfigs = []string{configPath + ":ctx-keep", configPath + ":ctx-remove"}
+	app.Workspace.kubeconfigsMu.Unlock()
+	app.Preferences.appSettings.SelectedKubeconfigs = []string{configPath + ":ctx-keep", configPath + ":ctx-remove"}
 
-	keepMeta := app.clusterMetaForSelection(kubeconfigSelection{Path: configPath, Context: "ctx-keep"})
-	removeMeta := app.clusterMetaForSelection(kubeconfigSelection{Path: configPath, Context: "ctx-remove"})
+	keepMeta := app.ClusterRuntime.clusterMetaForSelection(kubeconfigSelection{Path: configPath, Context: "ctx-keep"})
+	removeMeta := app.ClusterRuntime.clusterMetaForSelection(kubeconfigSelection{Path: configPath, Context: "ctx-remove"})
 
-	app.clusterClients[keepMeta.ID] = &clusterClients{
+	app.ClusterRuntime.clusterClients[keepMeta.ID] = &clusterClients{
 		meta: keepMeta,
 		// Use a different client path in this unit test so the "kept" cluster is not
 		// marked as affected and the watcher does not trigger a real rebuild/auth flow.
@@ -153,48 +153,48 @@ func TestApp_HandleKubeconfigChange_ContextRemovedDeselectsOnlyAffectedFromSameF
 		kubeconfigPath:    filepath.Join(baseDir, "other-config"),
 		kubeconfigContext: "ctx-keep",
 	}
-	app.clusterClients[removeMeta.ID] = &clusterClients{
+	app.ClusterRuntime.clusterClients[removeMeta.ID] = &clusterClients{
 		meta:              removeMeta,
 		kubeconfigPath:    configPath,
 		kubeconfigContext: "ctx-remove",
 	}
-	app.refreshSubsystems[keepMeta.ID] = &system.Subsystem{}
-	app.refreshSubsystems[removeMeta.ID] = &system.Subsystem{}
+	app.Refresh.refreshSubsystems[keepMeta.ID] = &system.Subsystem{}
+	app.Refresh.refreshSubsystems[removeMeta.ID] = &system.Subsystem{}
 
 	// Remove only one context from the shared file.
 	writeMultiContextKubeconfig(t, configPath, []string{"ctx-keep"})
-	app.handleKubeconfigChange([]string{configPath})
+	app.Workspace.handleKubeconfigChange([]string{configPath})
 
-	selected := app.GetSelectedKubeconfigs()
+	selected := app.Workspace.GetSelectedKubeconfigs()
 	assert.Equal(t, []string{configPath + ":ctx-keep"}, selected)
-	_, removedStillPresent := app.clusterClients[removeMeta.ID]
+	_, removedStillPresent := app.ClusterRuntime.clusterClients[removeMeta.ID]
 	assert.False(t, removedStillPresent)
-	_, keptStillPresent := app.clusterClients[keepMeta.ID]
+	_, keptStillPresent := app.ClusterRuntime.clusterClients[keepMeta.ID]
 	assert.True(t, keptStillPresent)
 }
 
 func TestApp_HandleKubeconfigChange_TransientInvalidWriteDoesNotDeselect(t *testing.T) {
 	setTestConfigEnv(t)
-	app := newTestAppWithDefaults(t)
-	app.clusterClients = make(map[string]*clusterClients)
-	app.refreshSubsystems = make(map[string]*system.Subsystem)
-	app.objectCatalogEntries = make(map[string]*objectCatalogEntry)
-	app.preferences.appSettings = getDefaultAppSettings()
+	app := newWorkspaceCoordinatorTestFixture(t)
+	app.ClusterRuntime.clusterClients = make(map[string]*clusterClients)
+	app.Refresh.refreshSubsystems = make(map[string]*system.Subsystem)
+	app.Refresh.objectCatalogEntries = make(map[string]*objectCatalogEntry)
+	app.Preferences.appSettings = getDefaultAppSettings()
 
 	baseDir := t.TempDir()
 	configDir := filepath.Join(baseDir, "configs")
 	require.NoError(t, os.MkdirAll(configDir, 0o755))
 	configPath := filepath.Join(configDir, "watched")
 	writeMultiContextKubeconfig(t, configPath, []string{"ctx"})
-	require.NoError(t, app.SetKubeconfigSearchPaths([]string{configPath}))
+	require.NoError(t, app.Workspace.SetKubeconfigSearchPaths([]string{configPath}))
 
-	app.kubeconfigsMu.Lock()
-	app.selectedKubeconfigs = []string{configPath + ":ctx"}
-	app.kubeconfigsMu.Unlock()
-	app.preferences.appSettings.SelectedKubeconfigs = []string{configPath + ":ctx"}
+	app.Workspace.kubeconfigsMu.Lock()
+	app.Workspace.selectedKubeconfigs = []string{configPath + ":ctx"}
+	app.Workspace.kubeconfigsMu.Unlock()
+	app.Preferences.appSettings.SelectedKubeconfigs = []string{configPath + ":ctx"}
 
-	meta := app.clusterMetaForSelection(kubeconfigSelection{Path: configPath, Context: "ctx"})
-	app.clusterClients[meta.ID] = &clusterClients{
+	meta := app.ClusterRuntime.clusterMetaForSelection(kubeconfigSelection{Path: configPath, Context: "ctx"})
+	app.ClusterRuntime.clusterClients[meta.ID] = &clusterClients{
 		meta:              meta,
 		kubeconfigPath:    configPath,
 		kubeconfigContext: "ctx",
@@ -202,10 +202,10 @@ func TestApp_HandleKubeconfigChange_TransientInvalidWriteDoesNotDeselect(t *test
 
 	// Simulate an editor intermediate write that leaves the file temporarily invalid.
 	require.NoError(t, os.WriteFile(configPath, []byte("not: valid: yaml: ["), 0o644))
-	app.handleKubeconfigChange([]string{configPath})
+	app.Workspace.handleKubeconfigChange([]string{configPath})
 
-	assert.Equal(t, []string{configPath + ":ctx"}, app.GetSelectedKubeconfigs())
-	_, stillPresent := app.clusterClients[meta.ID]
+	assert.Equal(t, []string{configPath + ":ctx"}, app.Workspace.GetSelectedKubeconfigs())
+	_, stillPresent := app.ClusterRuntime.clusterClients[meta.ID]
 	assert.True(t, stillPresent)
 }
 
@@ -236,72 +236,72 @@ func TestInspectKubeconfigFileClassifiesDiskState(t *testing.T) {
 }
 
 func TestClassifyChangedKubeconfigClusterCoversEveryDisposition(t *testing.T) {
-	app := newTestAppWithDefaults(t)
+	app := newWorkspaceCoordinatorTestFixture(t)
 	clients := &clusterClients{
 		meta:           ClusterMeta{ID: "cluster-a", Name: "Cluster A"},
 		kubeconfigPath: "/tmp/config", kubeconfigContext: "ctx-a",
 	}
-	app.clusterClients = map[string]*clusterClients{"cluster-a": clients}
+	app.ClusterRuntime.clusterClients = map[string]*clusterClients{"cluster-a": clients}
 	inspector := &kubeconfigFileInspector{cache: map[string]kubeconfigFileInspection{
 		kubeconfigPathKey(filepath.Clean(clients.kubeconfigPath)): {loadErr: os.ErrPermission},
 	}}
 
-	require.Equal(t, changedKubeconfigKeep, app.classifyChangedKubeconfigCluster("missing", nil, inspector))
-	require.Equal(t, changedKubeconfigRebuild, app.classifyChangedKubeconfigCluster(
+	require.Equal(t, changedKubeconfigKeep, app.Workspace.classifyChangedKubeconfigCluster("missing", nil, inspector))
+	require.Equal(t, changedKubeconfigRebuild, app.Workspace.classifyChangedKubeconfigCluster(
 		"cluster-a",
 		map[kubeconfigSelectionKey]struct{}{newKubeconfigSelectionKey(clients.kubeconfigPath, clients.kubeconfigContext): {}},
 		inspector,
 	))
-	require.Equal(t, changedKubeconfigKeep, app.classifyChangedKubeconfigCluster("cluster-a", nil, inspector))
-	require.Equal(t, changedKubeconfigDeselect, app.classifyInspectedKubeconfig(clients, kubeconfigFileInspection{missing: true}))
-	require.Equal(t, changedKubeconfigRebuild, app.classifyInspectedKubeconfig(clients, kubeconfigFileInspection{
+	require.Equal(t, changedKubeconfigKeep, app.Workspace.classifyChangedKubeconfigCluster("cluster-a", nil, inspector))
+	require.Equal(t, changedKubeconfigDeselect, app.Workspace.classifyInspectedKubeconfig(clients, kubeconfigFileInspection{missing: true}))
+	require.Equal(t, changedKubeconfigRebuild, app.Workspace.classifyInspectedKubeconfig(clients, kubeconfigFileInspection{
 		contexts: map[string]struct{}{"ctx-a": {}},
 	}))
-	require.Equal(t, changedKubeconfigDeselect, app.classifyInspectedKubeconfig(clients, kubeconfigFileInspection{
+	require.Equal(t, changedKubeconfigDeselect, app.Workspace.classifyInspectedKubeconfig(clients, kubeconfigFileInspection{
 		contexts: map[string]struct{}{"ctx-b": {}},
 	}))
 }
 
 func TestDeselectClusters_AbortsOnReconciliationFailure(t *testing.T) {
 	setTestConfigEnv(t)
-	app := newTestAppWithDefaults(t)
-	setTestAppRuntimeReady(t, app, context.Background())
-	app.clusterClients = make(map[string]*clusterClients)
+	app := newWorkspaceCoordinatorTestFixture(t)
+	setTestAppRuntimeReady(t, app.Lifecycle, context.Background())
+	app.ClusterRuntime.clusterClients = make(map[string]*clusterClients)
 
-	app.kubeconfigsMu.Lock()
-	app.selectedKubeconfigs = []string{"/path/a:ctx-a", "/path/b:ctx-b"}
-	app.kubeconfigsMu.Unlock()
+	app.Workspace.kubeconfigsMu.Lock()
+	app.Workspace.selectedKubeconfigs = []string{"/path/a:ctx-a", "/path/b:ctx-b"}
+	app.Workspace.kubeconfigsMu.Unlock()
 
-	app.clusterClients["a:ctx-a"] = &clusterClients{
+	app.ClusterRuntime.clusterClients["a:ctx-a"] = &clusterClients{
 		meta:              ClusterMeta{ID: "a:ctx-a", Name: "a"},
 		kubeconfigPath:    "/path/a",
 		kubeconfigContext: "ctx-a",
 	}
-	app.clusterClients["b:ctx-b"] = &clusterClients{
+	app.ClusterRuntime.clusterClients["b:ctx-b"] = &clusterClients{
 		meta:              ClusterMeta{ID: "b:ctx-b", Name: "b"},
 		kubeconfigPath:    "/path/b",
 		kubeconfigContext: "ctx-b",
 	}
-	app.preferences.appSettings = &AppSettings{SelectedKubeconfigs: []string{"/path/a:ctx-a", "/path/b:ctx-b"}}
+	app.Preferences.appSettings = &AppSettings{SelectedKubeconfigs: []string{"/path/a:ctx-a", "/path/b:ctx-b"}}
 
 	// Force updateRefreshSubsystemSelections to take the setupRefreshSubsystem path and fail.
-	app.refreshAggregates.Store(nil)
-	app.refreshService.Store(nil)
-	setRefreshRuntimeContextForTest(app, nil)
+	app.Refresh.refreshAggregates.Store(nil)
+	app.Refresh.refreshService.Store(nil)
+	setRefreshRuntimeContextForTest(app.Refresh, nil)
 	originalBuilder := newRefreshSubsystemWithServices
 	newRefreshSubsystemWithServices = func(system.Config) (*system.Subsystem, error) {
 		return nil, errors.New("forced refresh reconciliation failure")
 	}
 	t.Cleanup(func() { newRefreshSubsystemWithServices = originalBuilder })
 
-	app.selectionMutationMu.Lock()
-	app.deselectClusters([]string{"b:ctx-b"})
-	app.selectionMutationMu.Unlock()
+	app.Workspace.selectionMutationMu.Lock()
+	app.Workspace.deselectClusters([]string{"b:ctx-b"})
+	app.Workspace.selectionMutationMu.Unlock()
 
-	assert.Equal(t, []string{"/path/a:ctx-a", "/path/b:ctx-b"}, app.GetSelectedKubeconfigs())
-	_, aOK := app.clusterClients["a:ctx-a"]
-	_, bOK := app.clusterClients["b:ctx-b"]
+	assert.Equal(t, []string{"/path/a:ctx-a", "/path/b:ctx-b"}, app.Workspace.GetSelectedKubeconfigs())
+	_, aOK := app.ClusterRuntime.clusterClients["a:ctx-a"]
+	_, bOK := app.ClusterRuntime.clusterClients["b:ctx-b"]
 	assert.True(t, aOK)
 	assert.True(t, bOK)
-	require.Len(t, app.preferences.appSettings.SelectedKubeconfigs, 2)
+	require.Len(t, app.Preferences.appSettings.SelectedKubeconfigs, 2)
 }

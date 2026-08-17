@@ -115,16 +115,16 @@ func (s *coldPreparationSnapshotService) callsSnapshot() []string {
 	return append([]string(nil), s.calls...)
 }
 
-func keepGovernorForeground(app *App, clusterID string) {
-	app.governorVisible = clusterID
-	app.governorMRU = []string{clusterID}
-	app.governorApplied = map[string]system.ResourceTier{clusterID: system.TierForeground}
+func keepGovernorForeground(app *workspaceCoordinatorTestFixture, clusterID string) {
+	app.Refresh.governorVisible = clusterID
+	app.Refresh.governorMRU = []string{clusterID}
+	app.Refresh.governorApplied = map[string]system.ResourceTier{clusterID: system.TierForeground}
 }
 
-func governorAppliedTier(app *App, clusterID string) system.ResourceTier {
-	app.governorMu.Lock()
-	defer app.governorMu.Unlock()
-	return app.governorApplied[clusterID]
+func governorAppliedTier(app *workspaceCoordinatorTestFixture, clusterID string) system.ResourceTier {
+	app.Refresh.governorMu.Lock()
+	defer app.Refresh.governorMu.Unlock()
+	return app.Refresh.governorApplied[clusterID]
 }
 
 type blockingGovernorExecutor struct {
@@ -180,11 +180,11 @@ func (r *recordingGovernorExecutor) teardown(clusterID string) bool {
 
 // governorTestApp returns an app whose open-cluster set is exactly the supplied
 // live cluster runtimes, with the governor initialised and a known visible cluster.
-func governorTestApp(t *testing.T, selections []kubeconfigSelection, keepWarm int) (*App, []string) {
+func governorTestApp(t *testing.T, selections []kubeconfigSelection, keepWarm int) (*workspaceCoordinatorTestFixture, []string) {
 	t.Helper()
-	app := newTestAppWithDefaults(t)
-	app.initGovernor()
-	app.governorPolicy = system.GovernorPolicy{KeepWarm: keepWarm}
+	app := newWorkspaceCoordinatorTestFixture(t)
+	app.Refresh.initGovernor()
+	app.Refresh.governorPolicy = system.GovernorPolicy{KeepWarm: keepWarm}
 
 	// Register discovery metadata first so clusterMetaForSelection derives the same
 	// stable IDs as the runtime entries consumed by RefreshCoordinator.
@@ -196,19 +196,19 @@ func governorTestApp(t *testing.T, selections []kubeconfigSelection, keepWarm in
 		available = append(available, KubeconfigInfo{Name: sel.Context, Path: sel.Path, Context: sel.Context})
 		selStrings = append(selStrings, sel.String())
 	}
-	app.availableKubeconfigs = available
+	app.ClusterRuntime.availableKubeconfigs = available
 
 	clusterIDs := make([]string, 0, len(selections))
 	for _, sel := range selections {
-		meta := app.clusterMetaForSelection(sel)
+		meta := app.ClusterRuntime.clusterMetaForSelection(sel)
 		clusterIDs = append(clusterIDs, meta.ID)
-		app.clusterClients[meta.ID] = &clusterClients{
+		app.ClusterRuntime.clusterClients[meta.ID] = &clusterClients{
 			meta:              meta,
 			kubeconfigPath:    sel.Path,
 			kubeconfigContext: sel.Context,
 		}
 	}
-	app.selectedKubeconfigs = selStrings
+	app.Workspace.selectedKubeconfigs = selStrings
 	return app, clusterIDs
 }
 
@@ -222,11 +222,11 @@ func TestReconcileGovernorColdStartTiers(t *testing.T) {
 	a, b, c := ids[0], ids[1], ids[2]
 
 	// Visible = a, MRU = [a,b,c]. Nothing applied yet (cold start).
-	app.governorVisible = a
-	app.governorMRU = []string{a, b, c}
+	app.Refresh.governorVisible = a
+	app.Refresh.governorMRU = []string{a, b, c}
 
 	exec := newRecordingGovernorExecutor()
-	app.reconcileGovernorWith(exec)
+	app.Refresh.reconcileGovernorWith(exec)
 
 	// Foreground and Background stay running; Cold is torn down.
 	require.True(t, exec.ensured[a])
@@ -235,28 +235,28 @@ func TestReconcileGovernorColdStartTiers(t *testing.T) {
 	require.Equal(t, []string{c}, exec.tornDown, "cold cluster torn down")
 
 	// Applied tiers recorded for idempotency.
-	require.Equal(t, system.TierForeground, app.governorApplied[a])
-	require.Equal(t, system.TierBackground, app.governorApplied[b])
-	require.Equal(t, system.TierCold, app.governorApplied[c])
+	require.Equal(t, system.TierForeground, app.Refresh.governorApplied[a])
+	require.Equal(t, system.TierBackground, app.Refresh.governorApplied[b])
+	require.Equal(t, system.TierCold, app.Refresh.governorApplied[c])
 }
 
 func TestGovernorDoesNotCoolBeforeColdServingSnapshotsAreReady(t *testing.T) {
-	app := newTestAppWithDefaults(t)
+	app := newWorkspaceCoordinatorTestFixture(t)
 	ctx, cancel := context.WithCancel(context.Background())
 	t.Cleanup(cancel)
-	setRefreshRuntimeContextForTest(app, ctx)
-	app.spillRoot = t.TempDir()
-	app.clusterLifecycle = newClusterLifecycle(nil)
-	app.clusterLifecycle.SetState("cluster-a", ClusterStateLoading)
+	setRefreshRuntimeContextForTest(app.Refresh, ctx)
+	app.Refresh.spillRoot = t.TempDir()
+	app.ClusterRuntime.clusterLifecycle = newClusterLifecycle(nil)
+	app.ClusterRuntime.clusterLifecycle.SetState("cluster-a", ClusterStateLoading)
 
 	service := &coldPreparationSnapshotService{namespaceReady: false}
 	subsystem := &system.Subsystem{
 		Registry:        domain.New(),
 		SnapshotService: service,
 	}
-	app.setRefreshSubsystem("cluster-a", subsystem)
+	app.Refresh.setRefreshSubsystem("cluster-a", subsystem)
 
-	app.realGovernorExecutor().teardown("cluster-a")
+	app.Refresh.realGovernorExecutor().teardown("cluster-a")
 
 	require.False(t, subsystem.Cooled,
 		"a cluster without a settled retained baseline must remain live")
@@ -264,23 +264,23 @@ func TestGovernorDoesNotCoolBeforeColdServingSnapshotsAreReady(t *testing.T) {
 }
 
 func TestColdPreparationDoesNotPollSnapshotsWhileNamespaceLifecycleIsLoading(t *testing.T) {
-	app := newTestAppWithDefaults(t)
+	app := newWorkspaceCoordinatorTestFixture(t)
 	ctx, cancel := context.WithCancel(context.Background())
 	t.Cleanup(cancel)
-	setRefreshRuntimeContextForTest(app, ctx)
-	app.spillRoot = t.TempDir()
+	setRefreshRuntimeContextForTest(app.Refresh, ctx)
+	app.Refresh.spillRoot = t.TempDir()
 	keepGovernorForeground(app, "cluster-a")
-	app.clusterLifecycle = newClusterLifecycle(nil)
-	app.clusterLifecycle.SetState("cluster-a", ClusterStateLoading)
+	app.ClusterRuntime.clusterLifecycle = newClusterLifecycle(nil)
+	app.ClusterRuntime.clusterLifecycle.SetState("cluster-a", ClusterStateLoading)
 
 	service := &coldPreparationSnapshotService{namespaceReady: false}
 	subsystem := &system.Subsystem{
 		Registry:        domain.New(),
 		SnapshotService: service,
 	}
-	app.setRefreshSubsystem("cluster-a", subsystem)
+	app.Refresh.setRefreshSubsystem("cluster-a", subsystem)
 
-	app.realGovernorExecutor().teardown("cluster-a")
+	app.Refresh.realGovernorExecutor().teardown("cluster-a")
 	time.Sleep(2 * coldPreparationRetryInterval)
 
 	require.Empty(t, service.callsSnapshot(),
@@ -294,83 +294,83 @@ func TestReconcileGovernorDoesNotRecordDeferredColdTransitionAsApplied(t *testin
 	clusterID := ids[0]
 	ctx, cancel := context.WithCancel(context.Background())
 	t.Cleanup(cancel)
-	setRefreshRuntimeContextForTest(app, ctx)
-	app.spillRoot = t.TempDir()
-	app.governorMRU = []string{clusterID}
-	app.governorApplied[clusterID] = system.TierBackground
-	app.clusterLifecycle = newClusterLifecycle(nil)
-	app.clusterLifecycle.SetState(clusterID, ClusterStateLoading)
+	setRefreshRuntimeContextForTest(app.Refresh, ctx)
+	app.Refresh.spillRoot = t.TempDir()
+	app.Refresh.governorMRU = []string{clusterID}
+	app.Refresh.governorApplied[clusterID] = system.TierBackground
+	app.ClusterRuntime.clusterLifecycle = newClusterLifecycle(nil)
+	app.ClusterRuntime.clusterLifecycle.SetState(clusterID, ClusterStateLoading)
 
 	service := &coldPreparationSnapshotService{namespaceReady: false}
 	subsystem := &system.Subsystem{
 		Registry:        domain.New(),
 		SnapshotService: service,
 	}
-	app.setRefreshSubsystem(clusterID, subsystem)
+	app.Refresh.setRefreshSubsystem(clusterID, subsystem)
 
-	app.reconcileGovernorWith(app.realGovernorExecutor())
+	app.Refresh.reconcileGovernorWith(app.Refresh.realGovernorExecutor())
 
-	require.Equal(t, system.TierBackground, app.governorApplied[clusterID],
+	require.Equal(t, system.TierBackground, app.Refresh.governorApplied[clusterID],
 		"the applied tier must describe the still-live subsystem while cold preparation is pending")
 	require.False(t, subsystem.Cooled)
 }
 
 func TestColdPreparationUsesAggregateLifecycleBeforeCooling(t *testing.T) {
-	app := newTestAppWithDefaults(t)
+	app := newWorkspaceCoordinatorTestFixture(t)
 	ctx, cancel := context.WithCancel(context.Background())
 	t.Cleanup(cancel)
-	setRefreshRuntimeContextForTest(app, ctx)
-	app.spillRoot = t.TempDir()
+	setRefreshRuntimeContextForTest(app.Refresh, ctx)
+	app.Refresh.spillRoot = t.TempDir()
 	keepGovernorForeground(app, "cluster-a")
-	app.clusterLifecycle = newClusterLifecycle(nil)
-	app.clusterLifecycle.SetState("cluster-a", ClusterStateLoading)
+	app.ClusterRuntime.clusterLifecycle = newClusterLifecycle(nil)
+	app.ClusterRuntime.clusterLifecycle.SetState("cluster-a", ClusterStateLoading)
 
 	service := &coldPreparationSnapshotService{namespaceReady: true}
 	subsystem := &system.Subsystem{
 		Registry:        domain.New(),
 		SnapshotService: service,
 	}
-	app.setRefreshSubsystem("cluster-a", subsystem)
+	app.Refresh.setRefreshSubsystem("cluster-a", subsystem)
 	aggregate := newAggregateSnapshotService(
 		[]string{"cluster-a"},
 		map[string]*system.Subsystem{"cluster-a": subsystem},
 	)
 	aggregate.onNamespaceSnapshot = func(clusterID string) {
-		state := app.clusterLifecycle.GetState(clusterID)
+		state := app.ClusterRuntime.clusterLifecycle.GetState(clusterID)
 		if state == ClusterStateLoading || state == ClusterStateLoadingSlow {
-			app.clusterLifecycle.SetState(clusterID, ClusterStateReady)
+			app.ClusterRuntime.clusterLifecycle.SetState(clusterID, ClusterStateReady)
 		}
 	}
-	app.refreshAggregates.Store(&refreshAggregateHandlers{snapshot: aggregate})
+	app.Refresh.refreshAggregates.Store(&refreshAggregateHandlers{snapshot: aggregate})
 
-	app.realGovernorExecutor().teardown("cluster-a")
-	runNamespacesReadinessSelfBuild(app.clusterLifecycle, aggregate, "cluster-a")
+	app.Refresh.realGovernorExecutor().teardown("cluster-a")
+	runNamespacesReadinessSelfBuild(app.ClusterRuntime.clusterLifecycle, aggregate, "cluster-a")
 
 	require.Eventually(t, func() bool {
-		return app.clusterLifecycle.GetState("cluster-a") == ClusterStateReady
+		return app.ClusterRuntime.clusterLifecycle.GetState("cluster-a") == ClusterStateReady
 	}, time.Second, 10*time.Millisecond,
 		"cold preparation must cross the same server lifecycle gate as a normal namespace snapshot")
 	require.Eventually(t, subsystem.ColdServingReady, time.Second, 10*time.Millisecond)
 }
 
 func TestColdPreparationBuildsExactRetainedScopesBeforeCooling(t *testing.T) {
-	app := newTestAppWithDefaults(t)
+	app := newWorkspaceCoordinatorTestFixture(t)
 	ctx, cancel := context.WithCancel(context.Background())
 	t.Cleanup(cancel)
-	setRefreshRuntimeContextForTest(app, ctx)
-	app.spillRoot = t.TempDir()
+	setRefreshRuntimeContextForTest(app.Refresh, ctx)
+	app.Refresh.spillRoot = t.TempDir()
 	keepGovernorForeground(app, "cluster-a")
-	app.clusterLifecycle = newClusterLifecycle(nil)
-	app.clusterLifecycle.SetState("cluster-a", ClusterStateReady)
+	app.ClusterRuntime.clusterLifecycle = newClusterLifecycle(nil)
+	app.ClusterRuntime.clusterLifecycle.SetState("cluster-a", ClusterStateReady)
 
 	service := &coldPreparationSnapshotService{namespaceReady: true}
 	subsystem := &system.Subsystem{
 		Registry:        domain.New(),
 		SnapshotService: service,
 	}
-	app.setRefreshSubsystem("cluster-a", subsystem)
+	app.Refresh.setRefreshSubsystem("cluster-a", subsystem)
 
-	require.False(t, app.realGovernorExecutor().teardown("cluster-a"),
+	require.False(t, app.Refresh.realGovernorExecutor().teardown("cluster-a"),
 		"the first transition starts preparation instead of stopping producers")
 	require.Eventually(t, subsystem.ColdServingReady, time.Second, 10*time.Millisecond)
 	require.Equal(t, []string{
@@ -379,15 +379,15 @@ func TestColdPreparationBuildsExactRetainedScopesBeforeCooling(t *testing.T) {
 }
 
 func TestColdPreparationRequiresCurrentSubsystemWorkloadReadiness(t *testing.T) {
-	app := newTestAppWithDefaults(t)
+	app := newWorkspaceCoordinatorTestFixture(t)
 	ctx, cancel := context.WithCancel(context.Background())
 	t.Cleanup(cancel)
-	setRefreshRuntimeContextForTest(app, ctx)
-	app.spillRoot = t.TempDir()
+	setRefreshRuntimeContextForTest(app.Refresh, ctx)
+	app.Refresh.spillRoot = t.TempDir()
 	keepGovernorForeground(app, "cluster-a")
-	app.clusterLifecycle = newClusterLifecycle(nil)
+	app.ClusterRuntime.clusterLifecycle = newClusterLifecycle(nil)
 	// Ready may have been set by the subsystem this one replaced.
-	app.clusterLifecycle.SetState("cluster-a", ClusterStateReady)
+	app.ClusterRuntime.clusterLifecycle.SetState("cluster-a", ClusterStateReady)
 
 	service := &coldPreparationSnapshotService{namespaceReady: true}
 	source := &coldPreparationNamespaceSource{}
@@ -396,9 +396,9 @@ func TestColdPreparationRequiresCurrentSubsystemWorkloadReadiness(t *testing.T) 
 		SnapshotService:   service,
 		NamespaceNotifier: snapshot.NewNamespaceChangeNotifier(source, snapshot.NewNamespaceWorkloadTracker(source)),
 	}
-	app.setRefreshSubsystem("cluster-a", subsystem)
+	app.Refresh.setRefreshSubsystem("cluster-a", subsystem)
 
-	app.realGovernorExecutor().teardown("cluster-a")
+	app.Refresh.realGovernorExecutor().teardown("cluster-a")
 	time.Sleep(2 * coldPreparationRetryInterval)
 
 	require.Empty(t, service.callsSnapshot(),
@@ -412,56 +412,56 @@ func TestColdPreparationRequiresCurrentSubsystemWorkloadReadiness(t *testing.T) 
 }
 
 func TestColdPreparationContinuesWhenNamespaceSourcesBecomeReady(t *testing.T) {
-	app := newTestAppWithDefaults(t)
+	app := newWorkspaceCoordinatorTestFixture(t)
 	ctx, cancel := context.WithCancel(context.Background())
 	t.Cleanup(cancel)
-	setRefreshRuntimeContextForTest(app, ctx)
-	app.spillRoot = t.TempDir()
+	setRefreshRuntimeContextForTest(app.Refresh, ctx)
+	app.Refresh.spillRoot = t.TempDir()
 	keepGovernorForeground(app, "cluster-a")
-	app.clusterLifecycle = newClusterLifecycle(nil)
-	app.clusterLifecycle.SetState("cluster-a", ClusterStateLoading)
+	app.ClusterRuntime.clusterLifecycle = newClusterLifecycle(nil)
+	app.ClusterRuntime.clusterLifecycle.SetState("cluster-a", ClusterStateLoading)
 
 	service := &coldPreparationSnapshotService{namespaceReady: false}
 	subsystem := &system.Subsystem{
 		Registry:        domain.New(),
 		SnapshotService: service,
 	}
-	app.setRefreshSubsystem("cluster-a", subsystem)
+	app.Refresh.setRefreshSubsystem("cluster-a", subsystem)
 
-	app.realGovernorExecutor().teardown("cluster-a")
+	app.Refresh.realGovernorExecutor().teardown("cluster-a")
 	time.Sleep(2 * coldPreparationRetryInterval)
 	require.NotContains(t, service.callsSnapshot(), "cluster-overview@cluster-a|",
 		"overview must not be retained while namespace workload sources are unsettled")
 	require.False(t, subsystem.ColdServingReady())
 
-	app.clusterLifecycle.SetState("cluster-a", ClusterStateReady)
+	app.ClusterRuntime.clusterLifecycle.SetState("cluster-a", ClusterStateReady)
 	require.Eventually(t, subsystem.ColdServingReady, time.Second, 10*time.Millisecond,
 		"the same server-owned preparation must continue once sources settle")
 	require.Contains(t, service.callsSnapshot(), "cluster-overview@cluster-a|")
 }
 
 func TestReplacingSubsystemCancelsInFlightColdPreparationBuild(t *testing.T) {
-	app := newTestAppWithDefaults(t)
+	app := newWorkspaceCoordinatorTestFixture(t)
 	ctx, cancel := context.WithCancel(context.Background())
 	t.Cleanup(cancel)
-	setRefreshRuntimeContextForTest(app, ctx)
-	app.clusterLifecycle = newClusterLifecycle(nil)
-	app.clusterLifecycle.SetState("cluster-a", ClusterStateReady)
+	setRefreshRuntimeContextForTest(app.Refresh, ctx)
+	app.ClusterRuntime.clusterLifecycle = newClusterLifecycle(nil)
+	app.ClusterRuntime.clusterLifecycle.SetState("cluster-a", ClusterStateReady)
 
 	service := &blockingColdPreparationSnapshotService{
 		started:  make(chan struct{}),
 		canceled: make(chan struct{}),
 	}
 	previous := &system.Subsystem{SnapshotService: service}
-	app.setRefreshSubsystem("cluster-a", previous)
-	app.realGovernorExecutor().teardown("cluster-a")
+	app.Refresh.setRefreshSubsystem("cluster-a", previous)
+	app.Refresh.realGovernorExecutor().teardown("cluster-a")
 
 	select {
 	case <-service.started:
 	case <-time.After(time.Second):
 		t.Fatal("cold preparation build did not start")
 	}
-	app.swapRefreshSubsystem("cluster-a", &system.Subsystem{})
+	app.Refresh.swapRefreshSubsystem("cluster-a", &system.Subsystem{})
 
 	select {
 	case <-service.canceled:
@@ -471,17 +471,17 @@ func TestReplacingSubsystemCancelsInFlightColdPreparationBuild(t *testing.T) {
 }
 
 func TestColdPreparationRetryStopsWhenSubsystemIsNoLongerCurrent(t *testing.T) {
-	app := newTestAppWithDefaults(t)
+	app := newWorkspaceCoordinatorTestFixture(t)
 	ctx, cancel := context.WithCancel(context.Background())
 	t.Cleanup(cancel)
-	setRefreshRuntimeContextForTest(app, ctx)
-	app.clusterLifecycle = newClusterLifecycle(nil)
-	app.clusterLifecycle.SetState("cluster-a", ClusterStateReady)
+	setRefreshRuntimeContextForTest(app.Refresh, ctx)
+	app.ClusterRuntime.clusterLifecycle = newClusterLifecycle(nil)
+	app.ClusterRuntime.clusterLifecycle.SetState("cluster-a", ClusterStateReady)
 
 	service := &failingColdPreparationSnapshotService{calls: make(chan struct{}, 4)}
 	previous := &system.Subsystem{SnapshotService: service}
-	app.setRefreshSubsystem("cluster-a", previous)
-	app.realGovernorExecutor().teardown("cluster-a")
+	app.Refresh.setRefreshSubsystem("cluster-a", previous)
+	app.Refresh.realGovernorExecutor().teardown("cluster-a")
 
 	select {
 	case <-service.calls:
@@ -490,7 +490,7 @@ func TestColdPreparationRetryStopsWhenSubsystemIsNoLongerCurrent(t *testing.T) {
 	}
 	// Direct replacement deliberately bypasses swap cancellation so this test
 	// independently pins the retry loop's current-generation check.
-	app.setRefreshSubsystem("cluster-a", &system.Subsystem{})
+	app.Refresh.setRefreshSubsystem("cluster-a", &system.Subsystem{})
 
 	select {
 	case <-service.calls:
@@ -505,21 +505,21 @@ func TestReconcileGovernorAppliesColdAfterRetainedBaselineIsReady(t *testing.T) 
 	clusterID := ids[0]
 	ctx, cancel := context.WithCancel(context.Background())
 	t.Cleanup(cancel)
-	setRefreshRuntimeContextForTest(app, ctx)
-	app.spillRoot = t.TempDir()
-	app.governorMRU = []string{clusterID}
-	app.governorApplied[clusterID] = system.TierBackground
-	app.clusterLifecycle = newClusterLifecycle(nil)
-	app.clusterLifecycle.SetState(clusterID, ClusterStateReady)
+	setRefreshRuntimeContextForTest(app.Refresh, ctx)
+	app.Refresh.spillRoot = t.TempDir()
+	app.Refresh.governorMRU = []string{clusterID}
+	app.Refresh.governorApplied[clusterID] = system.TierBackground
+	app.ClusterRuntime.clusterLifecycle = newClusterLifecycle(nil)
+	app.ClusterRuntime.clusterLifecycle.SetState(clusterID, ClusterStateReady)
 
 	service := &coldPreparationSnapshotService{namespaceReady: true}
 	subsystem := &system.Subsystem{
 		Registry:        domain.New(),
 		SnapshotService: service,
 	}
-	app.setRefreshSubsystem(clusterID, subsystem)
+	app.Refresh.setRefreshSubsystem(clusterID, subsystem)
 
-	app.reconcileGovernorWith(app.realGovernorExecutor())
+	app.Refresh.reconcileGovernorWith(app.Refresh.realGovernorExecutor())
 	require.Equal(t, system.TierBackground, governorAppliedTier(app, clusterID))
 
 	require.Eventually(t, func() bool {
@@ -537,16 +537,16 @@ func TestReconcileGovernorIdempotentNoOp(t *testing.T) {
 	app, ids := governorTestApp(t, selections, 1)
 	a, b := ids[0], ids[1]
 
-	app.governorVisible = a
-	app.governorMRU = []string{a, b}
+	app.Refresh.governorVisible = a
+	app.Refresh.governorMRU = []string{a, b}
 	// Already at the tiers the policy would assign.
-	app.governorApplied = map[string]system.ResourceTier{
+	app.Refresh.governorApplied = map[string]system.ResourceTier{
 		a: system.TierForeground,
 		b: system.TierBackground,
 	}
 
 	exec := newRecordingGovernorExecutor()
-	app.reconcileGovernorWith(exec)
+	app.Refresh.reconcileGovernorWith(exec)
 
 	require.Empty(t, exec.ensureSeq, "no rebuilds when already at desired tier")
 	require.Empty(t, exec.tornDown, "no teardowns when already at desired tier")
@@ -558,27 +558,27 @@ func TestReconcileGovernorDoesNotPromoteClusterUntilItsInFlightCoolingFinishes(t
 	clusterID := ids[0]
 
 	// The cluster is open but not visible, so the first reconciliation cools it.
-	app.governorMRU = []string{clusterID}
-	app.governorApplied = map[string]system.ResourceTier{clusterID: system.TierBackground}
+	app.Refresh.governorMRU = []string{clusterID}
+	app.Refresh.governorApplied = map[string]system.ResourceTier{clusterID: system.TierBackground}
 
 	exec := newBlockingGovernorExecutor()
 	firstDone := make(chan struct{})
 	go func() {
-		app.reconcileGovernorWith(exec)
+		app.Refresh.reconcileGovernorWith(exec)
 		close(firstDone)
 	}()
 	<-exec.teardownStarted
 
 	// The user returns to the cluster while cooling is still between stopping the
 	// feeds and publishing the cooled state.
-	app.governorMu.Lock()
-	app.governorVisible = clusterID
-	app.governorMRU = moveToFront(app.governorMRU, clusterID)
-	app.governorMu.Unlock()
+	app.Refresh.governorMu.Lock()
+	app.Refresh.governorVisible = clusterID
+	app.Refresh.governorMRU = moveToFront(app.Refresh.governorMRU, clusterID)
+	app.Refresh.governorMu.Unlock()
 
 	secondDone := make(chan struct{})
 	go func() {
-		app.reconcileGovernorWith(exec)
+		app.Refresh.reconcileGovernorWith(exec)
 		close(secondDone)
 	}()
 
@@ -608,15 +608,15 @@ func TestReconcileGovernorPromotionKeepsBothWarmClustersRunning(t *testing.T) {
 	a, b := ids[0], ids[1]
 
 	// Switch visible from a to b. b was Background, a was Foreground.
-	app.governorVisible = b
-	app.governorMRU = []string{b, a}
-	app.governorApplied = map[string]system.ResourceTier{
+	app.Refresh.governorVisible = b
+	app.Refresh.governorMRU = []string{b, a}
+	app.Refresh.governorApplied = map[string]system.ResourceTier{
 		a: system.TierForeground,
 		b: system.TierBackground,
 	}
 
 	exec := newRecordingGovernorExecutor()
-	app.reconcileGovernorWith(exec)
+	app.Refresh.reconcileGovernorWith(exec)
 
 	// Promotion/demotion changes tiers without tying metrics demand to visibility.
 	require.True(t, exec.ensured[b], "new visible cluster stays running")
@@ -625,11 +625,11 @@ func TestReconcileGovernorPromotionKeepsBothWarmClustersRunning(t *testing.T) {
 }
 
 func TestGovernorTierTransitionDoesNotOverrideLeaseDrivenMetricsDemand(t *testing.T) {
-	app := newTestAppWithDefaults(t)
+	app := newWorkspaceCoordinatorTestFixture(t)
 	poller := &recordingMetricsPoller{}
-	app.setRefreshSubsystem("cluster-a", metricsSubsystem(poller))
+	app.Refresh.setRefreshSubsystem("cluster-a", metricsSubsystem(poller))
 
-	app.realGovernorExecutor().ensureRunning("cluster-a")
+	app.Refresh.realGovernorExecutor().ensureRunning("cluster-a")
 
 	require.Empty(t, poller.active, "governor visibility must not create metrics demand")
 }
@@ -643,19 +643,19 @@ func TestReconcileGovernorMemoryPressureCoolsNonVisible(t *testing.T) {
 	app, ids := governorTestApp(t, selections, 5) // generous warm budget...
 	a, b, c := ids[0], ids[1], ids[2]
 
-	app.governorVisible = a
-	app.governorMRU = []string{a, b, c}
-	app.governorApplied = map[string]system.ResourceTier{
+	app.Refresh.governorVisible = a
+	app.Refresh.governorMRU = []string{a, b, c}
+	app.Refresh.governorApplied = map[string]system.ResourceTier{
 		a: system.TierForeground,
 		b: system.TierBackground,
 		c: system.TierBackground,
 	}
-	app.governorPressure = true // ...collapsed to 0 under pressure
+	app.Refresh.governorPressure = true // ...collapsed to 0 under pressure
 
 	exec := newRecordingGovernorExecutor()
-	app.reconcileGovernorWith(exec)
+	app.Refresh.reconcileGovernorWith(exec)
 
-	require.True(t, app.governorPressure, "pressure flag preserved across reconcile")
+	require.True(t, app.Refresh.governorPressure, "pressure flag preserved across reconcile")
 	tornDown := append([]string(nil), exec.tornDown...)
 	sort.Strings(tornDown)
 	want := []string{b, c}
@@ -666,25 +666,25 @@ func TestReconcileGovernorMemoryPressureCoolsNonVisible(t *testing.T) {
 }
 
 func TestColdPreparationIsNotForcedWithoutMemoryPressure(t *testing.T) {
-	app := newTestAppWithDefaults(t)
+	app := newWorkspaceCoordinatorTestFixture(t)
 	ctx, cancel := context.WithCancel(context.Background())
 	t.Cleanup(cancel)
-	setRefreshRuntimeContextForTest(app, ctx)
-	app.clusterLifecycle = newClusterLifecycle(nil)
-	app.clusterLifecycle.SetState("cluster-a", ClusterStateLoading)
+	setRefreshRuntimeContextForTest(app.Refresh, ctx)
+	app.ClusterRuntime.clusterLifecycle = newClusterLifecycle(nil)
+	app.ClusterRuntime.clusterLifecycle.SetState("cluster-a", ClusterStateLoading)
 	now := time.Now()
-	app.governorNow = func() time.Time { return now }
+	app.Refresh.governorNow = func() time.Time { return now }
 
 	subsystem := &system.Subsystem{
 		Registry:        domain.New(),
 		SnapshotService: &coldPreparationSnapshotService{},
 	}
-	app.setRefreshSubsystem("cluster-a", subsystem)
-	require.False(t, app.realGovernorExecutor().teardown("cluster-a"))
+	app.Refresh.setRefreshSubsystem("cluster-a", subsystem)
+	require.False(t, app.Refresh.realGovernorExecutor().teardown("cluster-a"))
 
 	now = now.Add(coldPreparationPressureGrace + time.Second)
-	require.False(t, app.realGovernorExecutor().teardown("cluster-a"))
-	require.Same(t, subsystem, app.getRefreshSubsystem("cluster-a"),
+	require.False(t, app.Refresh.realGovernorExecutor().teardown("cluster-a"))
+	require.Same(t, subsystem, app.Refresh.getRefreshSubsystem("cluster-a"),
 		"elapsed preparation alone must not weaken the retained-baseline rule")
 }
 
@@ -694,15 +694,15 @@ func TestSustainedMemoryPressureForcesFullTeardownAfterColdPreparationGrace(t *t
 	clusterID := ids[0]
 	ctx, cancel := context.WithCancel(context.Background())
 	t.Cleanup(cancel)
-	setRefreshRuntimeContextForTest(app, ctx)
-	app.spillRoot = t.TempDir()
-	app.governorBudget = 1
-	app.governorMRU = []string{clusterID}
-	app.governorApplied[clusterID] = system.TierBackground
-	app.clusterLifecycle = newClusterLifecycle(nil)
-	app.clusterLifecycle.SetState(clusterID, ClusterStateLoading)
+	setRefreshRuntimeContextForTest(app.Refresh, ctx)
+	app.Refresh.spillRoot = t.TempDir()
+	app.Refresh.governorBudget = 1
+	app.Refresh.governorMRU = []string{clusterID}
+	app.Refresh.governorApplied[clusterID] = system.TierBackground
+	app.ClusterRuntime.clusterLifecycle = newClusterLifecycle(nil)
+	app.ClusterRuntime.clusterLifecycle.SetState(clusterID, ClusterStateLoading)
 	now := time.Now()
-	app.governorNow = func() time.Time { return now }
+	app.Refresh.governorNow = func() time.Time { return now }
 
 	reg := domain.New()
 	reg.RegisterMaintainedStore("cluster-overview", &spillFake{rows: []string{"retained"}})
@@ -710,36 +710,36 @@ func TestSustainedMemoryPressureForcesFullTeardownAfterColdPreparationGrace(t *t
 		Registry:        reg,
 		SnapshotService: &coldPreparationSnapshotService{},
 	}
-	app.setRefreshSubsystem(clusterID, subsystem)
+	app.Refresh.setRefreshSubsystem(clusterID, subsystem)
 	done := make(chan struct{}, 1)
 	done <- struct{}{}
-	app.storeObjectCatalogEntry(clusterID, &objectCatalogEntry{
+	app.Refresh.storeObjectCatalogEntry(clusterID, &objectCatalogEntry{
 		service: &objectcatalog.Service{},
 		cancel:  func() {},
 		done:    done,
 	})
 
-	app.handleGovernorPressureSample(2)
-	require.Same(t, subsystem, app.getRefreshSubsystem(clusterID),
+	app.Refresh.handleGovernorPressureSample(2)
+	require.Same(t, subsystem, app.Refresh.getRefreshSubsystem(clusterID),
 		"the first pressure sample starts preparation without discarding live data")
 
 	now = now.Add(coldPreparationPressureGrace - time.Second)
-	app.handleGovernorPressureSample(2)
-	require.Same(t, subsystem, app.getRefreshSubsystem(clusterID),
+	app.Refresh.handleGovernorPressureSample(2)
+	require.Same(t, subsystem, app.Refresh.getRefreshSubsystem(clusterID),
 		"sustained pressure must respect the bounded preparation grace")
 
 	now = now.Add(2 * time.Second)
-	app.handleGovernorPressureSample(2)
-	require.Nil(t, app.getRefreshSubsystem(clusterID),
+	app.Refresh.handleGovernorPressureSample(2)
+	require.Nil(t, app.Refresh.getRefreshSubsystem(clusterID),
 		"an unchanged pressure signal must re-drive and eventually force full teardown")
-	require.Nil(t, app.objectCatalogServiceForCluster(clusterID))
+	require.Nil(t, app.Refresh.objectCatalogServiceForCluster(clusterID))
 
-	spillDir, err := app.clusterSpillDir(clusterID)
+	spillDir, err := app.Refresh.clusterSpillDir(clusterID)
 	require.NoError(t, err)
 	_, err = os.Stat(filepath.Join(spillDir, "cluster-overview.spill"))
 	require.NoError(t, err, "forced teardown must preserve the normal spill path")
 
-	entries := app.appLogs.logger.GetEntries()
+	entries := app.AppLogs.logger.GetEntries()
 	forcedLogs := 0
 	for _, entry := range entries {
 		if entry.ClusterID == clusterID &&
@@ -768,23 +768,23 @@ func TestReconcileGovernorDropsClosedClusterTier(t *testing.T) {
 	}
 	app, ids := governorTestApp(t, selections, 2)
 	a, b := ids[0], ids[1]
-	closedC := app.clusterMetaForSelection(kubeconfigSelection{Path: "/p/c", Context: "c"}).ID
+	closedC := app.ClusterRuntime.clusterMetaForSelection(kubeconfigSelection{Path: "/p/c", Context: "c"}).ID
 
-	app.governorVisible = a
-	app.governorMRU = []string{a, b, closedC}
-	app.governorApplied = map[string]system.ResourceTier{
+	app.Refresh.governorVisible = a
+	app.Refresh.governorMRU = []string{a, b, closedC}
+	app.Refresh.governorApplied = map[string]system.ResourceTier{
 		a:       system.TierForeground,
 		b:       system.TierBackground,
 		closedC: system.TierBackground,
 	}
 
 	exec := newRecordingGovernorExecutor()
-	app.reconcileGovernorWith(exec)
+	app.Refresh.reconcileGovernorWith(exec)
 
 	// The closed cluster is removed from MRU and applied state; the governor does
 	// NOT tear it down (the connection lifecycle owns that).
-	require.NotContains(t, app.governorMRU, closedC)
-	_, stillApplied := app.governorApplied[closedC]
+	require.NotContains(t, app.Refresh.governorMRU, closedC)
+	_, stillApplied := app.Refresh.governorApplied[closedC]
 	require.False(t, stillApplied)
 	require.NotContains(t, exec.tornDown, closedC)
 }
@@ -805,12 +805,12 @@ func TestSetVisibleClusterMovesToFrontOfMRU(t *testing.T) {
 	}
 	app, ids := governorTestApp(t, selections, 2)
 	x, y := ids[0], ids[1]
-	app.governorMRU = []string{x, y}
+	app.Refresh.governorMRU = []string{x, y}
 
-	app.SetVisibleCluster(y)
+	app.Refresh.SetVisibleCluster(y)
 
-	require.Equal(t, y, app.governorVisible)
-	require.Equal(t, []string{y, x}, app.governorMRU)
+	require.Equal(t, y, app.Refresh.governorVisible)
+	require.Equal(t, []string{y, x}, app.Refresh.governorMRU)
 }
 
 func TestSetVisibleClusterReplaysCurrentLifecycleState(t *testing.T) {
@@ -824,19 +824,19 @@ func TestSetVisibleClusterReplaysCurrentLifecycleState(t *testing.T) {
 		previous  ClusterLifecycleState
 	}
 	var events []lifecycleEvent
-	app.clusterLifecycle = newClusterLifecycle(func(clusterID string, state, previous ClusterLifecycleState) {
+	app.ClusterRuntime.clusterLifecycle = newClusterLifecycle(func(clusterID string, state, previous ClusterLifecycleState) {
 		events = append(events, lifecycleEvent{clusterID: clusterID, state: state, previous: previous})
 	})
-	app.clusterLifecycle.SetState(clusterID, ClusterStateReady)
+	app.ClusterRuntime.clusterLifecycle.SetState(clusterID, ClusterStateReady)
 	events = nil
 
 	// The backend may already be ready while the frontend still holds an older
 	// connected event. Activating the tab is the deterministic convergence point:
 	// it must replay the current state even though no lifecycle transition occurs.
-	app.governorVisible = clusterID
-	app.governorMRU = []string{clusterID}
-	app.governorApplied[clusterID] = system.TierForeground
-	app.SetVisibleCluster(clusterID)
+	app.Refresh.governorVisible = clusterID
+	app.Refresh.governorMRU = []string{clusterID}
+	app.Refresh.governorApplied[clusterID] = system.TierForeground
+	app.Refresh.SetVisibleCluster(clusterID)
 
 	require.Equal(t, []lifecycleEvent{{
 		clusterID: clusterID,

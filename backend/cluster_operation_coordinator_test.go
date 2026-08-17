@@ -130,8 +130,8 @@ func TestClusterOperationCoordinatorDifferentClustersRunConcurrently(t *testing.
 }
 
 func TestAppRunClusterOperationSuppressesCancellation(t *testing.T) {
-	app := newTestAppWithDefaults(t)
-	app.clusterOps = newClusterOperationCoordinator()
+	app := newClusterRuntimeTestFixture(t)
+	app.ClusterRuntime.clusterOps = newClusterOperationCoordinator()
 
 	firstStarted := make(chan struct{})
 
@@ -142,7 +142,7 @@ func TestAppRunClusterOperationSuppressesCancellation(t *testing.T) {
 	wg.Add(1)
 	go func() {
 		defer wg.Done()
-		firstErr = app.runClusterOperation(context.Background(), "cluster-a", func(ctx context.Context) error {
+		firstErr = app.ClusterRuntime.runClusterOperation(context.Background(), "cluster-a", func(ctx context.Context) error {
 			close(firstStarted)
 			<-ctx.Done()
 			return ctx.Err()
@@ -153,7 +153,7 @@ func TestAppRunClusterOperationSuppressesCancellation(t *testing.T) {
 	wg.Add(1)
 	go func() {
 		defer wg.Done()
-		secondErr = app.runClusterOperation(context.Background(), "cluster-a", func(context.Context) error {
+		secondErr = app.ClusterRuntime.runClusterOperation(context.Background(), "cluster-a", func(context.Context) error {
 			return nil
 		})
 	}()

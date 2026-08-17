@@ -60,13 +60,13 @@ func TestBuildClusterClientsWithManagerWiresTransportToProvidedManager(t *testin
 	}))
 	defer server.Close()
 
-	app := newTestAppWithDefaults(t)
+	app := newClusterRuntimeTestFixture(t)
 	configPath := writeTestKubeconfig(t, server.URL)
 
 	mgr := authstate.New(authstate.Config{MaxAttempts: 0})
 	defer mgr.Shutdown()
 
-	clients, err := app.buildClusterClientsWithManager(
+	clients, err := app.ClusterRuntime.buildClusterClientsWithManager(
 		context.Background(),
 		kubeconfigSelection{Path: configPath, Context: "test-context"},
 		ClusterMeta{ID: "test-cluster", Name: "Test Cluster"},
@@ -90,7 +90,7 @@ func TestBuildClusterClientsWithManagerWiresTransportToProvidedManager(t *testin
 // error-path contract: a build failure must not shut down a manager it does
 // not own — the previous clients still reference it.
 func TestBuildClusterClientsWithManagerLeavesReusedManagerRunningOnError(t *testing.T) {
-	app := newTestAppWithDefaults(t)
+	app := newClusterRuntimeTestFixture(t)
 
 	mgr := authstate.New(authstate.Config{
 		MaxAttempts:     1,
@@ -99,7 +99,7 @@ func TestBuildClusterClientsWithManagerLeavesReusedManagerRunningOnError(t *test
 	})
 	defer mgr.Shutdown()
 
-	_, err := app.buildClusterClientsWithManager(
+	_, err := app.ClusterRuntime.buildClusterClientsWithManager(
 		context.Background(),
 		kubeconfigSelection{Path: filepath.Join(t.TempDir(), "missing"), Context: "nope"},
 		ClusterMeta{ID: "test-cluster", Name: "Test Cluster"},

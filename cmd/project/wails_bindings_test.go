@@ -158,7 +158,7 @@ func TestWailsBoundaryContractRejectsCompositionAndExportMutations(t *testing.T)
 		"unnamed service expression": strings.Replace(
 			mainSource,
 			"application.NewServiceWithOptions(\n\t\tdesktopService,",
-			"application.NewServiceWithOptions(\n\t\tbackend.NewApp(nil, reporter),",
+			"application.NewServiceWithOptions(\n\t\tbackend.NewApplicationRuntime(nil, reporter),",
 			1,
 		),
 		"service without concrete declared type": strings.Replace(
@@ -170,13 +170,13 @@ func TestWailsBoundaryContractRejectsCompositionAndExportMutations(t *testing.T)
 		"multiple service registrations": strings.Replace(
 			mainSource,
 			"\twailsApp.RegisterService(application.NewServiceWithOptions(",
-			"\twailsApp.RegisterService(application.NewServiceWithOptions(backendApp))\n\twailsApp.RegisterService(application.NewServiceWithOptions(",
+			"\twailsApp.RegisterService(application.NewServiceWithOptions(backendRuntime))\n\twailsApp.RegisterService(application.NewServiceWithOptions(",
 			1,
 		),
 		"additional unnamed service registration": strings.Replace(
 			mainSource,
 			"\twailsApp.RegisterService(application.NewServiceWithOptions(",
-			"\twailsApp.RegisterService(application.NewServiceWithOptions(backend.NewApp(nil, reporter)))\n\twailsApp.RegisterService(application.NewServiceWithOptions(",
+			"\twailsApp.RegisterService(application.NewServiceWithOptions(backend.NewApplicationRuntime(nil, reporter)))\n\twailsApp.RegisterService(application.NewServiceWithOptions(",
 			1,
 		),
 	}

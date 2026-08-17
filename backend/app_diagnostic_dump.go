@@ -107,7 +107,7 @@ func diagnosticsDumpDir() string {
 // lifetime, logging each dump's path to the app log so it is visible in the log viewer.
 // Opt-in per run: it arms only when ENABLE_GOROUTINE_DUMP is truthy (default off), so
 // the `goroutine dump armed` log line doubles as confirmation the opt-in took effect.
-func (a *App) startDiagnosticDumpHandler(ctx context.Context) {
+func (a *ApplicationLifecycle) startDiagnosticDumpHandler(ctx context.Context) {
 	if !goroutineDumpEnabled(os.Getenv(goroutineDumpEnvVar)) {
 		return
 	}

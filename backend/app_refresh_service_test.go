@@ -9,22 +9,22 @@ import (
 )
 
 func TestRefreshServiceBlocksEarlyRequestsUntilPublication(t *testing.T) {
-	app := NewApp(nil)
+	app := newRefreshCoordinatorTestFixture(t)
 	recorder := httptest.NewRecorder()
-	app.ServeHTTP(recorder, httptest.NewRequest(http.MethodGet, "/snapshots/pods", nil))
+	app.Refresh.ServeHTTP(recorder, httptest.NewRequest(http.MethodGet, "/snapshots/pods", nil))
 	require.Equal(t, http.StatusServiceUnavailable, recorder.Code)
 
 	mux := http.NewServeMux()
 	mux.HandleFunc("/snapshots/pods", func(w http.ResponseWriter, _ *http.Request) {
 		w.WriteHeader(http.StatusNoContent)
 	})
-	app.publishRefreshService(mux, nil)
+	app.Refresh.publishRefreshService(mux, nil)
 
 	recorder = httptest.NewRecorder()
-	app.ServeHTTP(recorder, httptest.NewRequest(http.MethodGet, "/snapshots/pods", nil))
+	app.Refresh.ServeHTTP(recorder, httptest.NewRequest(http.MethodGet, "/snapshots/pods", nil))
 	require.Equal(t, http.StatusNoContent, recorder.Code)
 }
 
-func setRefreshServiceReadyForTest(app *App) {
-	app.refreshService.Store(&refreshServiceHandler{handler: http.NotFoundHandler()})
+func setRefreshServiceReadyForTest(refreshCoordinator *RefreshCoordinator) {
+	refreshCoordinator.refreshService.Store(&refreshServiceHandler{handler: http.NotFoundHandler()})
 }

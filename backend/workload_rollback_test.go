@@ -526,7 +526,7 @@ func TestRollbackWorkloadDeployment(t *testing.T) {
 	detailKey := objectDetailCacheKey("Deployment", "default", "webapp")
 	app.responseCacheStore("config:ctx", detailKey, "stale")
 
-	err := app.rollbackWorkload("config:ctx", "default", "apps", "v1", "Deployment", "webapp", 1)
+	err := app.rollbackWorkloadInternal("config:ctx", "default", "apps", "v1", "Deployment", "webapp", 1)
 	require.NoError(t, err)
 	_, cached := app.responseCacheLookup("config:ctx", detailKey)
 	require.False(t, cached, "expected workload detail cache to be evicted after rollback")
@@ -621,7 +621,7 @@ func TestRollbackWorkloadStatefulSet(t *testing.T) {
 	client := cgofake.NewClientset(sts, cr1, cr2)
 	app := buildRevisionHistoryGateway(client)
 
-	err := app.rollbackWorkload("config:ctx", "default", "apps", "v1", "StatefulSet", "cache", 1)
+	err := app.rollbackWorkloadInternal("config:ctx", "default", "apps", "v1", "StatefulSet", "cache", 1)
 	require.NoError(t, err)
 
 	// Read the statefulset back and verify the container image changed.
@@ -688,7 +688,7 @@ func TestRollbackWorkloadRevisionNotFound(t *testing.T) {
 	app := buildRevisionHistoryGateway(client)
 
 	// Revision 99 does not exist — expect an error.
-	err := app.rollbackWorkload("config:ctx", "default", "apps", "v1", "Deployment", "api", 99)
+	err := app.rollbackWorkloadInternal("config:ctx", "default", "apps", "v1", "Deployment", "api", 99)
 	require.Error(t, err)
 	require.Contains(t, err.Error(), "revision 99 not found")
 }
@@ -701,7 +701,7 @@ func TestRollbackWorkloadUnsupportedKind(t *testing.T) {
 	client := cgofake.NewClientset()
 	app := buildRevisionHistoryGateway(client)
 
-	err := app.rollbackWorkload("config:ctx", "default", "apps", "v1", "ReplicaSet", "myset", 1)
+	err := app.rollbackWorkloadInternal("config:ctx", "default", "apps", "v1", "ReplicaSet", "myset", 1)
 	require.Error(t, err)
 	require.Contains(t, err.Error(), "ReplicaSet")
 }
@@ -710,11 +710,11 @@ func TestRollbackWorkloadRequiresNamespacedObjectIdentity(t *testing.T) {
 	gateway := newResourceGatewayFixture().gateway
 
 	require.EqualError(t,
-		gateway.rollbackWorkload("config:ctx", "", "apps", "v1", "Deployment", "webapp", 1),
+		gateway.rollbackWorkloadInternal("config:ctx", "", "apps", "v1", "Deployment", "webapp", 1),
 		"namespace is required",
 	)
 	require.EqualError(t,
-		gateway.rollbackWorkload("config:ctx", "default", "apps", "v1", "Deployment", "", 1),
+		gateway.rollbackWorkloadInternal("config:ctx", "default", "apps", "v1", "Deployment", "", 1),
 		"name is required",
 	)
 }

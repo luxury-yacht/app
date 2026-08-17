@@ -224,22 +224,13 @@ func (a operationsClusterAccessFuncs) FetchPodWithRetry(
 	return a.fetchPod(ctx, clusterID, target, fetch)
 }
 
-// OperationsCoordinator returns the live-operation owner composed for this App.
-func (a *App) OperationsCoordinator() *OperationsCoordinator {
-	if a == nil {
-		return nil
-	}
-	return a.operations
-}
-
-func (a *App) initializeOperationsCoordinator() {
-	if a == nil {
-		return
-	}
-	runtimeManager := a.ClusterRuntimeManager
-	refreshProjection := a.RefreshCoordinator.resourceProjection
-	logger := a.appLogs.logger
-	a.operations = NewOperationsCoordinator(OperationsCoordinatorDependencies{
+func newApplicationOperationsCoordinator(
+	runtimeManager *ClusterRuntimeManager,
+	refreshProjection *refreshResourceProjection,
+	lifecycle *ApplicationLifecycle,
+	logger *Logger,
+) *OperationsCoordinator {
+	return NewOperationsCoordinator(OperationsCoordinatorDependencies{
 		ClusterAccess: operationsClusterAccessFuncs{
 			resolve: runtimeManager.resolveClusterDependencies,
 			fetchPod: func(ctx context.Context, clusterID, target string, fetch func(context.Context) (*corev1.Pod, error)) (*corev1.Pod, error) {
@@ -253,9 +244,9 @@ func (a *App) initializeOperationsCoordinator() {
 			},
 		},
 		Permissions: defaultOperationsPermissionChecker{},
-		Context:     a.CtxOrBackground,
-		EmitEvent:   a.emitEvent,
-		Logger:      a.appLogs.logger,
+		Context:     lifecycle.CtxOrBackground,
+		EmitEvent:   lifecycle.emitEvent,
+		Logger:      logger,
 		DrainStore:  nodemaintenance.GlobalStore(),
 	})
 }

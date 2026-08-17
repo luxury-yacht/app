@@ -15,13 +15,13 @@ import (
 // event to be emitted with the correct cluster ID and reason. This is a safety
 // net for the code path that notifies the frontend of permanent auth failures.
 func TestHandleClusterAuthStateChange_InvalidEmitsAuthFailed(t *testing.T) {
-	app := newTestAppWithDefaults(t)
+	app := newWorkspaceCoordinatorTestFixture(t)
 	reporter := &recordingErrorReporter{}
-	app.appLogs = NewAppLogService(NewLogger(100, reporter))
-	app.ClusterRuntimeManager.logger = app.appLogs.Logger()
+	app.AppLogs = NewAppLogService(NewLogger(100, reporter))
+	app.ClusterRuntime.logger = app.AppLogs.Logger()
 	ctx, cancel := context.WithCancel(context.Background())
 	defer cancel()
-	setTestAppRuntimeReady(t, app, ctx)
+	setTestAppRuntimeReady(t, app.Lifecycle, ctx)
 
 	// Capture emitted events.
 	var emittedEvents []struct {
@@ -29,7 +29,7 @@ func TestHandleClusterAuthStateChange_InvalidEmitsAuthFailed(t *testing.T) {
 		data ClusterAuthEvent
 	}
 	var mu sync.Mutex
-	app.ClusterRuntimeManager.emitEvent = func(name string, args ...interface{}) {
+	app.ClusterRuntime.emitEvent = func(name string, args ...interface{}) {
 		mu.Lock()
 		defer mu.Unlock()
 		var data ClusterAuthEvent
@@ -45,17 +45,17 @@ func TestHandleClusterAuthStateChange_InvalidEmitsAuthFailed(t *testing.T) {
 	}
 
 	// Set up a cluster so the handler can look up the cluster name.
-	app.clusterClientsMu.Lock()
-	app.clusterClients = map[string]*clusterClients{
+	app.ClusterRuntime.clusterClientsMu.Lock()
+	app.ClusterRuntime.clusterClients = map[string]*clusterClients{
 		"test-cluster": {
 			meta:   ClusterMeta{ID: "test-cluster", Name: "Test Cluster"},
 			client: createHealthyClient(),
 		},
 	}
-	app.clusterClientsMu.Unlock()
+	app.ClusterRuntime.clusterClientsMu.Unlock()
 
 	// Trigger the StateInvalid handler with a typed diagnostic (missing exec helper).
-	app.handleClusterAuthStateChange("test-cluster", authstate.StateInvalid, authstate.FailureDiagnostic{
+	app.ClusterRuntime.handleClusterAuthStateChange("test-cluster", authstate.StateInvalid, authstate.FailureDiagnostic{
 		Reason:      "token expired",
 		Kind:        "missing-helper",
 		Summary:     "The kubeconfig's credential helper could not be found.",
@@ -80,7 +80,7 @@ func TestHandleClusterAuthStateChange_InvalidEmitsAuthFailed(t *testing.T) {
 	require.Equal(t, "missing-helper", authFailedEvents[0].Kind)
 	require.Equal(t, "gke-gcloud-auth-plugin", authFailedEvents[0].ExecCommand)
 	require.Equal(t, "The kubeconfig's credential helper could not be found.", authFailedEvents[0].Summary)
-	entries := app.appLogs.logger.GetEntries()
+	entries := app.AppLogs.logger.GetEntries()
 	require.Len(t, entries, 1)
 	require.Equal(t, "WARN", entries[0].Level)
 	require.Equal(t, "Cluster Test Cluster: auth failed - token expired", entries[0].Message)
@@ -93,17 +93,17 @@ func TestHandleClusterAuthStateChange_InvalidEmitsAuthFailed(t *testing.T) {
 // TestHandleClusterAuthStateChange_RecoveringEmitsEvent verifies that
 // handleClusterAuthStateChange with StateRecovering emits "cluster:auth:recovering".
 func TestHandleClusterAuthStateChange_RecoveringEmitsEvent(t *testing.T) {
-	app := newTestAppWithDefaults(t)
+	app := newWorkspaceCoordinatorTestFixture(t)
 	ctx, cancel := context.WithCancel(context.Background())
 	defer cancel()
-	setTestAppRuntimeReady(t, app, ctx)
+	setTestAppRuntimeReady(t, app.Lifecycle, ctx)
 
 	var emittedEvents []struct {
 		name string
 		data ClusterAuthEvent
 	}
 	var mu sync.Mutex
-	app.ClusterRuntimeManager.emitEvent = func(name string, args ...interface{}) {
+	app.ClusterRuntime.emitEvent = func(name string, args ...interface{}) {
 		mu.Lock()
 		defer mu.Unlock()
 		var data ClusterAuthEvent
@@ -118,16 +118,16 @@ func TestHandleClusterAuthStateChange_RecoveringEmitsEvent(t *testing.T) {
 		}{name: name, data: data})
 	}
 
-	app.clusterClientsMu.Lock()
-	app.clusterClients = map[string]*clusterClients{
+	app.ClusterRuntime.clusterClientsMu.Lock()
+	app.ClusterRuntime.clusterClients = map[string]*clusterClients{
 		"cluster-r": {
 			meta:   ClusterMeta{ID: "cluster-r", Name: "Recovering Cluster"},
 			client: createHealthyClient(),
 		},
 	}
-	app.clusterClientsMu.Unlock()
+	app.ClusterRuntime.clusterClientsMu.Unlock()
 
-	app.handleClusterAuthStateChange("cluster-r", authstate.StateRecovering, authstate.FailureDiagnostic{
+	app.ClusterRuntime.handleClusterAuthStateChange("cluster-r", authstate.StateRecovering, authstate.FailureDiagnostic{
 		Reason:      "401 unauthorized",
 		ExecCommand: "aws",
 	})
@@ -153,17 +153,17 @@ func TestHandleClusterAuthStateChange_RecoveringEmitsEvent(t *testing.T) {
 // handleClusterAuthStateChange with StateValid emits "cluster:auth:recovered".
 // The handler also triggers an async subsystem rebuild, but we only verify the event here.
 func TestHandleClusterAuthStateChange_ValidEmitsRecoveredEvent(t *testing.T) {
-	app := newTestAppWithDefaults(t)
+	app := newWorkspaceCoordinatorTestFixture(t)
 	ctx, cancel := context.WithCancel(context.Background())
 	defer cancel()
-	setTestAppRuntimeReady(t, app, ctx)
+	setTestAppRuntimeReady(t, app.Lifecycle, ctx)
 
 	var emittedEvents []struct {
 		name string
 		data ClusterAuthEvent
 	}
 	var mu sync.Mutex
-	app.ClusterRuntimeManager.emitEvent = func(name string, args ...interface{}) {
+	app.ClusterRuntime.emitEvent = func(name string, args ...interface{}) {
 		mu.Lock()
 		defer mu.Unlock()
 		var data ClusterAuthEvent
@@ -178,16 +178,16 @@ func TestHandleClusterAuthStateChange_ValidEmitsRecoveredEvent(t *testing.T) {
 		}{name: name, data: data})
 	}
 
-	app.clusterClientsMu.Lock()
-	app.clusterClients = map[string]*clusterClients{
+	app.ClusterRuntime.clusterClientsMu.Lock()
+	app.ClusterRuntime.clusterClients = map[string]*clusterClients{
 		"cluster-v": {
 			meta:   ClusterMeta{ID: "cluster-v", Name: "Valid Cluster"},
 			client: createHealthyClient(),
 		},
 	}
-	app.clusterClientsMu.Unlock()
+	app.ClusterRuntime.clusterClientsMu.Unlock()
 
-	app.handleClusterAuthStateChange("cluster-v", authstate.StateValid, authstate.FailureDiagnostic{})
+	app.ClusterRuntime.handleClusterAuthStateChange("cluster-v", authstate.StateValid, authstate.FailureDiagnostic{})
 
 	mu.Lock()
 	defer mu.Unlock()
@@ -205,28 +205,28 @@ func TestHandleClusterAuthStateChange_ValidEmitsRecoveredEvent(t *testing.T) {
 }
 
 func TestHandleClusterAuthStateChange_InvalidWithoutCauseIsolatesBackgroundCluster(t *testing.T) {
-	app := newTestAppWithDefaults(t)
+	app := newWorkspaceCoordinatorTestFixture(t)
 	reporter := &recordingErrorReporter{}
-	app.appLogs = NewAppLogService(NewLogger(100, reporter))
-	app.ClusterRuntimeManager.logger = app.appLogs.Logger()
-	setTestAppRuntimeReady(t, app, context.Background())
-	app.governorVisible = "cluster-foreground"
-	app.clusterLifecycle = newClusterLifecycle(nil)
-	app.clusterLifecycle.SetState("cluster-foreground", ClusterStateReady)
-	app.clusterLifecycle.SetState("cluster-background", ClusterStateReady)
-	app.clusterClients = map[string]*clusterClients{
+	app.AppLogs = NewAppLogService(NewLogger(100, reporter))
+	app.ClusterRuntime.logger = app.AppLogs.Logger()
+	setTestAppRuntimeReady(t, app.Lifecycle, context.Background())
+	app.Refresh.governorVisible = "cluster-foreground"
+	app.ClusterRuntime.clusterLifecycle = newClusterLifecycle(nil)
+	app.ClusterRuntime.clusterLifecycle.SetState("cluster-foreground", ClusterStateReady)
+	app.ClusterRuntime.clusterLifecycle.SetState("cluster-background", ClusterStateReady)
+	app.ClusterRuntime.clusterClients = map[string]*clusterClients{
 		"cluster-foreground": {meta: ClusterMeta{ID: "cluster-foreground", Name: "Foreground"}},
 		"cluster-background": {meta: ClusterMeta{ID: "cluster-background", Name: "Background"}},
 	}
 
 	var failedPayload ClusterAuthEvent
-	app.ClusterRuntimeManager.emitEvent = func(name string, args ...interface{}) {
+	app.ClusterRuntime.emitEvent = func(name string, args ...interface{}) {
 		if name == "cluster:auth:failed" && len(args) == 1 {
 			failedPayload, _ = args[0].(ClusterAuthEvent)
 		}
 	}
 
-	app.handleClusterAuthStateChange("cluster-background", authstate.StateInvalid, authstate.FailureDiagnostic{
+	app.ClusterRuntime.handleClusterAuthStateChange("cluster-background", authstate.StateInvalid, authstate.FailureDiagnostic{
 		Reason:  "credentials rejected",
 		Class:   "auth",
 		Kind:    "unauthorized",
@@ -240,10 +240,10 @@ func TestHandleClusterAuthStateChange_InvalidWithoutCauseIsolatesBackgroundClust
 	require.Equal(t, "unauthorized", failedPayload.Kind)
 	require.Equal(t, "The cluster rejected these credentials.", failedPayload.Summary)
 	require.Empty(t, failedPayload.ExecCommand)
-	require.Equal(t, ClusterStateReady, app.clusterLifecycle.GetState("cluster-foreground"))
-	require.Equal(t, ClusterStateAuthFailed, app.clusterLifecycle.GetState("cluster-background"))
+	require.Equal(t, ClusterStateReady, app.ClusterRuntime.clusterLifecycle.GetState("cluster-foreground"))
+	require.Equal(t, ClusterStateAuthFailed, app.ClusterRuntime.clusterLifecycle.GetState("cluster-background"))
 
-	entries := app.appLogs.logger.GetEntries()
+	entries := app.AppLogs.logger.GetEntries()
 	require.Len(t, entries, 1)
 	require.Equal(t, "WARN", entries[0].Level)
 	require.Equal(t, "Cluster Background: auth failed - credentials rejected", entries[0].Message)
@@ -256,16 +256,16 @@ func TestHandleClusterAuthStateChange_InvalidWithoutCauseIsolatesBackgroundClust
 }
 
 func TestHandleClusterAuthStateChange_QueuesRecoveringMutationOutsideManagerLock(t *testing.T) {
-	app := newTestAppWithDefaults(t)
-	setTestAppRuntimeReady(t, app, context.Background())
+	app := newWorkspaceCoordinatorTestFixture(t)
+	setTestAppRuntimeReady(t, app.Lifecycle, context.Background())
 	consumerCtx, cancelConsumer := context.WithCancel(context.Background())
 	t.Cleanup(cancelConsumer)
-	go app.ClusterRuntimeManager.intents.Consume(consumerCtx, app.WorkspaceCoordinator.consumeClusterRuntimeIntent)
-	app.selectionMutationMu.Lock()
+	go app.ClusterRuntime.intents.Consume(consumerCtx, app.Workspace.consumeClusterRuntimeIntent)
+	app.Workspace.selectionMutationMu.Lock()
 	selectionLocked := true
 	defer func() {
 		if selectionLocked {
-			app.selectionMutationMu.Unlock()
+			app.Workspace.selectionMutationMu.Unlock()
 		}
 	}()
 
@@ -273,7 +273,7 @@ func TestHandleClusterAuthStateChange_QueuesRecoveringMutationOutsideManagerLock
 		MaxAttempts:     1,
 		BackoffSchedule: []time.Duration{time.Hour},
 		OnStateChange: func(state authstate.State, diag authstate.FailureDiagnostic) {
-			app.handleClusterAuthStateChange("cluster-background", state, diag)
+			app.ClusterRuntime.handleClusterAuthStateChange("cluster-background", state, diag)
 		},
 	})
 	defer manager.Shutdown()
@@ -287,42 +287,42 @@ func TestHandleClusterAuthStateChange_QueuesRecoveringMutationOutsideManagerLock
 	select {
 	case <-reported:
 	case <-time.After(time.Second):
-		app.selectionMutationMu.Unlock()
+		app.Workspace.selectionMutationMu.Unlock()
 		selectionLocked = false
 		<-reported
 		require.FailNow(t, "auth state callback blocked on the coordinated mutation")
 	}
 
-	app.selectionMutationMu.Unlock()
+	app.Workspace.selectionMutationMu.Unlock()
 	selectionLocked = false
 	require.Eventually(t, func() bool {
-		return app.selectionGeneration.Load() > 0
+		return app.Workspace.selectionGeneration.Load() > 0
 	}, time.Second, 10*time.Millisecond)
-	require.True(t, app.waitForSelectionMutationIdle(time.Second))
+	require.True(t, app.Workspace.waitForSelectionMutationIdle(time.Second))
 }
 
 func TestHandleClusterAuthStateChange_UnknownStateNoOp(t *testing.T) {
-	app := newTestAppWithDefaults(t)
-	setTestAppRuntimeReady(t, app, context.Background())
-	app.ClusterRuntimeManager.emitEvent = func(string, ...interface{}) {
+	app := newWorkspaceCoordinatorTestFixture(t)
+	setTestAppRuntimeReady(t, app.Lifecycle, context.Background())
+	app.ClusterRuntime.emitEvent = func(string, ...interface{}) {
 		require.Fail(t, "unknown auth state emitted an event")
 	}
 
-	app.handleClusterAuthStateChange("cluster-a", authstate.State(99), authstate.FailureDiagnostic{})
+	app.ClusterRuntime.handleClusterAuthStateChange("cluster-a", authstate.State(99), authstate.FailureDiagnostic{})
 
-	require.Empty(t, app.appLogs.logger.GetEntries())
-	require.Zero(t, app.selectionGeneration.Load())
+	require.Empty(t, app.AppLogs.logger.GetEntries())
+	require.Zero(t, app.Workspace.selectionGeneration.Load())
 }
 
 func TestExecuteClusterAuthMutationRejectsCancelledAndUnknownCommands(t *testing.T) {
-	app := newTestAppWithDefaults(t)
+	app := newWorkspaceCoordinatorTestFixture(t)
 	cancelled, cancel := context.WithCancel(context.Background())
 	cancel()
 
-	err := app.executeClusterAuthMutation(cancelled, clusterAuthStateCommand{mutation: clusterAuthMutationRebuild})
+	err := app.Workspace.executeClusterAuthMutation(cancelled, clusterAuthStateCommand{mutation: clusterAuthMutationRebuild})
 	require.ErrorIs(t, err, context.Canceled)
 
-	err = app.executeClusterAuthMutation(context.Background(), clusterAuthStateCommand{})
+	err = app.Workspace.executeClusterAuthMutation(context.Background(), clusterAuthStateCommand{})
 	require.EqualError(t, err, `unsupported cluster auth mutation ""`)
 }
 
@@ -335,17 +335,17 @@ func TestHandleClusterAuthStateChange_NilAppNoOp(t *testing.T) {
 
 // TestHandleClusterAuthStateChange_EmptyClusterIDNoOp verifies the empty clusterID guard.
 func TestHandleClusterAuthStateChange_EmptyClusterIDNoOp(t *testing.T) {
-	app := newTestAppWithDefaults(t)
+	app := newWorkspaceCoordinatorTestFixture(t)
 	ctx, cancel := context.WithCancel(context.Background())
 	defer cancel()
-	setTestAppRuntimeReady(t, app, ctx)
+	setTestAppRuntimeReady(t, app.Lifecycle, ctx)
 
 	eventCalled := false
-	app.ClusterRuntimeManager.emitEvent = func(string, ...interface{}) {
+	app.ClusterRuntime.emitEvent = func(string, ...interface{}) {
 		eventCalled = true
 	}
 
-	app.handleClusterAuthStateChange("", authstate.StateInvalid, authstate.FailureDiagnostic{Reason: "reason"})
+	app.ClusterRuntime.handleClusterAuthStateChange("", authstate.StateInvalid, authstate.FailureDiagnostic{Reason: "reason"})
 	require.False(t, eventCalled, "no event should be emitted for empty clusterID")
 }
 
@@ -354,14 +354,14 @@ func TestHandleClusterAuthStateChange_EmptyClusterIDNoOp(t *testing.T) {
 // can distinguish "cluster unreachable, waiting" from a confirmed
 // credential failure.
 func TestHandleClusterAuthRecoveryProgress_CarriesErrorClass(t *testing.T) {
-	app := newTestAppWithDefaults(t)
+	app := newWorkspaceCoordinatorTestFixture(t)
 	ctx, cancel := context.WithCancel(context.Background())
 	defer cancel()
-	setTestAppRuntimeReady(t, app, ctx)
+	setTestAppRuntimeReady(t, app.Lifecycle, ctx)
 
 	var progressEvents []ClusterAuthProgressEvent
 	var mu sync.Mutex
-	app.eventEmitter = func(_ context.Context, name string, args ...interface{}) {
+	app.Lifecycle.eventEmitter = func(_ context.Context, name string, args ...interface{}) {
 		if name != "cluster:auth:progress" || len(args) == 0 {
 			return
 		}
@@ -374,7 +374,7 @@ func TestHandleClusterAuthRecoveryProgress_CarriesErrorClass(t *testing.T) {
 		mu.Unlock()
 	}
 
-	app.handleClusterAuthRecoveryProgress("cluster-p", authstate.RecoveryProgress{
+	app.ClusterRuntime.handleClusterAuthRecoveryProgress("cluster-p", authstate.RecoveryProgress{
 		SecondsUntilRetry: 10,
 		ErrorClass:        authstate.ErrorClassConnectivity,
 	})
@@ -389,10 +389,10 @@ func TestHandleClusterAuthRecoveryProgress_CarriesErrorClass(t *testing.T) {
 // progress event surfaces the stored credential diagnostic (read from the
 // manager) so a late-subscribing UI can render exec-helper copy.
 func TestHandleClusterAuthRecoveryProgress_CarriesExecCommand(t *testing.T) {
-	app := newTestAppWithDefaults(t)
+	app := newWorkspaceCoordinatorTestFixture(t)
 	ctx, cancel := context.WithCancel(context.Background())
 	defer cancel()
-	setTestAppRuntimeReady(t, app, ctx)
+	setTestAppRuntimeReady(t, app.Lifecycle, ctx)
 
 	mgr := authstate.New(authstate.Config{MaxAttempts: 0})
 	defer mgr.Shutdown()
@@ -402,15 +402,15 @@ func TestHandleClusterAuthRecoveryProgress_CarriesExecCommand(t *testing.T) {
 		ExecCommand: "gke-gcloud-auth-plugin",
 	})
 
-	app.clusterClientsMu.Lock()
-	app.clusterClients = map[string]*clusterClients{
+	app.ClusterRuntime.clusterClientsMu.Lock()
+	app.ClusterRuntime.clusterClients = map[string]*clusterClients{
 		"cluster-p": {meta: ClusterMeta{ID: "cluster-p", Name: "P"}, authManager: mgr},
 	}
-	app.clusterClientsMu.Unlock()
+	app.ClusterRuntime.clusterClientsMu.Unlock()
 
 	var progressEvents []ClusterAuthProgressEvent
 	var mu sync.Mutex
-	app.eventEmitter = func(_ context.Context, name string, args ...interface{}) {
+	app.Lifecycle.eventEmitter = func(_ context.Context, name string, args ...interface{}) {
 		if name != "cluster:auth:progress" || len(args) == 0 {
 			return
 		}
@@ -421,7 +421,7 @@ func TestHandleClusterAuthRecoveryProgress_CarriesExecCommand(t *testing.T) {
 		}
 	}
 
-	app.handleClusterAuthRecoveryProgress("cluster-p", authstate.RecoveryProgress{
+	app.ClusterRuntime.handleClusterAuthRecoveryProgress("cluster-p", authstate.RecoveryProgress{
 		SecondsUntilRetry: 5,
 		ErrorClass:        authstate.ErrorClassAuth,
 	})
@@ -435,7 +435,7 @@ func TestHandleClusterAuthRecoveryProgress_CarriesExecCommand(t *testing.T) {
 }
 
 func TestClusterWorkspaceStateIncludesExecCommand(t *testing.T) {
-	app := newTestAppWithDefaults(t)
+	app := newWorkspaceCoordinatorTestFixture(t)
 
 	mgr := authstate.New(authstate.Config{MaxAttempts: 0})
 	defer mgr.Shutdown()
@@ -445,23 +445,23 @@ func TestClusterWorkspaceStateIncludesExecCommand(t *testing.T) {
 		ExecCommand: "aws",
 	})
 
-	app.clusterClientsMu.Lock()
-	app.clusterClients = map[string]*clusterClients{
+	app.ClusterRuntime.clusterClientsMu.Lock()
+	app.ClusterRuntime.clusterClients = map[string]*clusterClients{
 		"cluster-x": {meta: ClusterMeta{ID: "cluster-x", Name: "X"}, authManager: mgr},
 	}
-	app.clusterClientsMu.Unlock()
+	app.ClusterRuntime.clusterClientsMu.Unlock()
 
-	state := app.GetClusterWorkspaceState().Clusters["cluster-x"].Auth
+	state := app.Workspace.GetClusterWorkspaceState().Clusters["cluster-x"].Auth
 	require.Equal(t, "invalid", state.State)
 	require.Equal(t, "aws", state.ExecCommand)
 	require.Equal(t, "missing-helper", state.DiagnosticKind)
 }
 
 func TestClusterWorkspaceStateIncludesErrorClass(t *testing.T) {
-	app := newTestAppWithDefaults(t)
+	app := newWorkspaceCoordinatorTestFixture(t)
 	ctx, cancel := context.WithCancel(context.Background())
 	defer cancel()
-	setTestAppRuntimeReady(t, app, ctx)
+	setTestAppRuntimeReady(t, app.Lifecycle, ctx)
 
 	gate := make(chan struct{})
 	probeStarted := make(chan struct{}, 8)
@@ -487,20 +487,20 @@ func TestClusterWorkspaceStateIncludesErrorClass(t *testing.T) {
 	defer mgr.Shutdown()
 	defer close(gate)
 
-	app.clusterClientsMu.Lock()
-	app.clusterClients = map[string]*clusterClients{
+	app.ClusterRuntime.clusterClientsMu.Lock()
+	app.ClusterRuntime.clusterClients = map[string]*clusterClients{
 		"cluster-s": {
 			meta:        ClusterMeta{ID: "cluster-s", Name: "Stuck Cluster"},
 			authManager: mgr,
 		},
 	}
-	app.clusterClientsMu.Unlock()
+	app.ClusterRuntime.clusterClientsMu.Unlock()
 
 	mgr.ReportFailure("401 Unauthorized")
 	<-probeStarted
 
 	require.Eventually(t, func() bool {
-		state, ok := app.GetClusterWorkspaceState().Clusters["cluster-s"]
+		state, ok := app.Workspace.GetClusterWorkspaceState().Clusters["cluster-s"]
 		if !ok {
 			return false
 		}

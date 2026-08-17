@@ -96,13 +96,13 @@ func TestCatalogFinalizerBridgeStopsForUnavailableInputs(t *testing.T) {
 	runCatalogFinalizerBridge(context.Background(), nil, nil, nil)
 }
 
-func catalogLifecycleTestApp(t *testing.T, tier system.ResourceTier, cooled bool) (*App, catalogTarget) {
+func catalogLifecycleTestApp(t *testing.T, tier system.ResourceTier, cooled bool) (*workspaceCoordinatorTestFixture, catalogTarget) {
 	t.Helper()
 	const clusterID = "cluster-a:context-a"
-	app := newTestAppWithDefaults(t)
-	setTestAppRuntimeReady(t, app, context.Background())
-	app.governorPlanned = map[string]system.ResourceTier{clusterID: tier}
-	app.governorApplied = map[string]system.ResourceTier{clusterID: tier}
+	app := newWorkspaceCoordinatorTestFixture(t)
+	setTestAppRuntimeReady(t, app.Lifecycle, context.Background())
+	app.Refresh.governorPlanned = map[string]system.ResourceTier{clusterID: tier}
+	app.Refresh.governorApplied = map[string]system.ResourceTier{clusterID: tier}
 
 	kubeClient := cgofake.NewClientset()
 	apiExtensionsClient := apiextensionsfake.NewSimpleClientset()
@@ -110,8 +110,8 @@ func catalogLifecycleTestApp(t *testing.T, tier system.ResourceTier, cooled bool
 		return true, nil
 	})
 	factory := refreshinformer.New(kubeClient, apiExtensionsClient, time.Minute, checker)
-	app.clusterClients = make(map[string]*clusterClients)
-	app.clusterClients[clusterID] = &clusterClients{
+	app.ClusterRuntime.clusterClients = make(map[string]*clusterClients)
+	app.ClusterRuntime.clusterClients[clusterID] = &clusterClients{
 		meta:                ClusterMeta{ID: clusterID, Name: "Cluster A"},
 		kubeconfigPath:      "/p/a",
 		kubeconfigContext:   "context-a",
@@ -119,7 +119,7 @@ func catalogLifecycleTestApp(t *testing.T, tier system.ResourceTier, cooled bool
 		apiextensionsClient: apiExtensionsClient,
 		dynamicClient:       fake.NewSimpleDynamicClient(runtime.NewScheme()),
 	}
-	app.setRefreshSubsystem(clusterID, &system.Subsystem{
+	app.Refresh.setRefreshSubsystem(clusterID, &system.Subsystem{
 		Cooled:          cooled,
 		InformerFactory: factory,
 		IngestManager: ingest.NewIngestManager(
@@ -129,13 +129,13 @@ func catalogLifecycleTestApp(t *testing.T, tier system.ResourceTier, cooled bool
 			nil,
 		),
 	})
-	app.availableKubeconfigs = []KubeconfigInfo{{
+	app.ClusterRuntime.availableKubeconfigs = []KubeconfigInfo{{
 		Name:    "cluster-a",
 		Path:    "/p/a",
 		Context: "context-a",
 	}}
-	app.selectedKubeconfigs = []string{(kubeconfigSelection{Path: "/p/a", Context: "context-a"}).String()}
-	t.Cleanup(func() { app.stopObjectCatalogForCluster(clusterID) })
+	app.Workspace.selectedKubeconfigs = []string{(kubeconfigSelection{Path: "/p/a", Context: "context-a"}).String()}
+	t.Cleanup(func() { app.Refresh.stopObjectCatalogForCluster(clusterID) })
 	return app, catalogTarget{
 		selection: kubeconfigSelection{Path: "/p/a", Context: "context-a"},
 		meta:      ClusterMeta{ID: clusterID, Name: "Cluster A"},
@@ -145,24 +145,24 @@ func catalogLifecycleTestApp(t *testing.T, tier system.ResourceTier, cooled bool
 func TestStartObjectCatalogForTargetSkipsCooledSubsystem(t *testing.T) {
 	app, target := catalogLifecycleTestApp(t, system.TierCold, true)
 
-	err := app.startObjectCatalogForTarget(target)
+	err := app.Refresh.startObjectCatalogForTarget(target)
 
 	require.NoError(t, err)
-	require.Nil(t, app.objectCatalogServiceForCluster(target.meta.ID), "a Cold cluster must not start catalog API work against stopped feeds")
+	require.Nil(t, app.Refresh.objectCatalogServiceForCluster(target.meta.ID), "a Cold cluster must not start catalog API work against stopped feeds")
 }
 
 func TestStartObjectCatalogForTargetStartsForForegroundSubsystem(t *testing.T) {
 	app, target := catalogLifecycleTestApp(t, system.TierForeground, false)
 
-	err := app.startObjectCatalogForTarget(target)
+	err := app.Refresh.startObjectCatalogForTarget(target)
 
 	require.NoError(t, err)
-	require.NotNil(t, app.objectCatalogServiceForCluster(target.meta.ID), "a live cluster must start its catalog")
+	require.NotNil(t, app.Refresh.objectCatalogServiceForCluster(target.meta.ID), "a live cluster must start its catalog")
 }
 
 func TestCatalogWaitsForRebuiltIngestStoreBeforeFirstCollection(t *testing.T) {
 	app, target := catalogLifecycleTestApp(t, system.TierForeground, false)
-	clients := app.clusterClientsForID(target.meta.ID)
+	clients := app.ClusterRuntime.clusterClientsForID(target.meta.ID)
 	kubeClient, ok := clients.client.(*cgofake.Clientset)
 	require.True(t, ok)
 	allowSelfSubjectAccessReviews(kubeClient)
@@ -173,15 +173,15 @@ func TestCatalogWaitsForRebuiltIngestStoreBeforeFirstCollection(t *testing.T) {
 		}},
 	}}
 
-	require.NoError(t, app.startObjectCatalogForTarget(target))
-	service := app.objectCatalogServiceForCluster(target.meta.ID)
+	require.NoError(t, app.Refresh.startObjectCatalogForTarget(target))
+	service := app.Refresh.objectCatalogServiceForCluster(target.meta.ID)
 	require.NotNil(t, service)
 	require.Never(t, func() bool {
 		return service.Health().Status != objectcatalog.HealthStateUnknown
 	}, 300*time.Millisecond, 10*time.Millisecond,
 		"catalog collection must wait for rebuilt ingest stores instead of publishing a partial sync")
 
-	subsystem := app.getRefreshSubsystem(target.meta.ID)
+	subsystem := app.Refresh.getRefreshSubsystem(target.meta.ID)
 	require.NotNil(t, subsystem)
 	configMapStore := subsystem.IngestManager.StoreFor(schema.GroupVersionResource{Version: "v1", Resource: "configmaps"})
 	require.NotNil(t, configMapStore)
@@ -193,90 +193,90 @@ func TestCatalogWaitsForRebuiltIngestStoreBeforeFirstCollection(t *testing.T) {
 }
 
 type catalogStartingGovernorExecutor struct {
-	app    *App
+	app    *workspaceCoordinatorTestFixture
 	target catalogTarget
 }
 
 func (e *catalogStartingGovernorExecutor) ensureRunning(string) bool {
-	return e.app.startObjectCatalogForTarget(e.target) == nil &&
-		e.app.objectCatalogServiceForCluster(e.target.meta.ID) != nil
+	return e.app.Refresh.startObjectCatalogForTarget(e.target) == nil &&
+		e.app.Refresh.objectCatalogServiceForCluster(e.target.meta.ID) != nil
 }
 
 func (e *catalogStartingGovernorExecutor) teardown(string) bool {
-	_ = e.app.startObjectCatalogForTarget(e.target)
-	return e.app.objectCatalogServiceForCluster(e.target.meta.ID) == nil
+	_ = e.app.Refresh.startObjectCatalogForTarget(e.target)
+	return e.app.Refresh.objectCatalogServiceForCluster(e.target.meta.ID) == nil
 }
 
 func TestReconcileGovernorPublishesForegroundPlanBeforeStartingCatalog(t *testing.T) {
 	app, target := catalogLifecycleTestApp(t, system.TierCold, false)
-	app.governorVisible = target.meta.ID
-	app.governorMRU = []string{target.meta.ID}
+	app.Refresh.governorVisible = target.meta.ID
+	app.Refresh.governorMRU = []string{target.meta.ID}
 
-	app.reconcileGovernorWith(&catalogStartingGovernorExecutor{app: app, target: target})
+	app.Refresh.reconcileGovernorWith(&catalogStartingGovernorExecutor{app: app, target: target})
 
-	require.NotNil(t, app.objectCatalogServiceForCluster(target.meta.ID),
+	require.NotNil(t, app.Refresh.objectCatalogServiceForCluster(target.meta.ID),
 		"the catalog start inside the re-warm executor must observe the planned live tier")
-	require.Equal(t, system.TierForeground, app.governorApplied[target.meta.ID])
+	require.Equal(t, system.TierForeground, app.Refresh.governorApplied[target.meta.ID])
 }
 
 func TestReconcileGovernorPublishesColdPlanBeforeTeardownStarts(t *testing.T) {
 	app, target := catalogLifecycleTestApp(t, system.TierBackground, false)
-	app.governorPolicy = system.GovernorPolicy{KeepWarm: 0}
-	app.governorMRU = []string{target.meta.ID}
+	app.Refresh.governorPolicy = system.GovernorPolicy{KeepWarm: 0}
+	app.Refresh.governorMRU = []string{target.meta.ID}
 
-	app.reconcileGovernorWith(&catalogStartingGovernorExecutor{app: app, target: target})
+	app.Refresh.reconcileGovernorWith(&catalogStartingGovernorExecutor{app: app, target: target})
 
-	require.Nil(t, app.objectCatalogServiceForCluster(target.meta.ID),
+	require.Nil(t, app.Refresh.objectCatalogServiceForCluster(target.meta.ID),
 		"catalog work started during teardown must observe the planned Cold tier")
-	require.Equal(t, system.TierCold, app.governorApplied[target.meta.ID])
+	require.Equal(t, system.TierCold, app.Refresh.governorApplied[target.meta.ID])
 }
 
 func TestGovernorEnsureRunningStartsMissingCatalogForLiveCluster(t *testing.T) {
 	app, target := catalogLifecycleTestApp(t, system.TierForeground, false)
-	require.Nil(t, app.objectCatalogServiceForCluster(target.meta.ID))
+	require.Nil(t, app.Refresh.objectCatalogServiceForCluster(target.meta.ID))
 
-	reachedLiveTier := app.realGovernorExecutor().ensureRunning(target.meta.ID)
+	reachedLiveTier := app.Refresh.realGovernorExecutor().ensureRunning(target.meta.ID)
 
 	require.True(t, reachedLiveTier)
-	require.NotNil(t, app.objectCatalogServiceForCluster(target.meta.ID),
+	require.NotNil(t, app.Refresh.objectCatalogServiceForCluster(target.meta.ID),
 		"a live tier is incomplete until the cluster object catalog is running")
 }
 
 func TestStopObjectCatalogCancelsAndResets(t *testing.T) {
-	app := NewApp(nil)
-	app.appLogs = NewAppLogService(NewLogger(10))
+	app := newWorkspaceCoordinatorTestFixture(t)
+	app.AppLogs = NewAppLogService(NewLogger(10))
 
 	cancelCalled := 0
 	done := make(chan struct{}, 1)
 	done <- struct{}{}
-	app.storeObjectCatalogEntry("cluster-a", &objectCatalogEntry{
+	app.Refresh.storeObjectCatalogEntry("cluster-a", &objectCatalogEntry{
 		service: &objectcatalog.Service{},
 		cancel:  func() { cancelCalled++ },
 		done:    done,
 	})
-	app.setTelemetryRecorder(telemetry.NewRecorder())
+	app.Refresh.setTelemetryRecorder(telemetry.NewRecorder())
 
-	app.stopObjectCatalog()
+	app.Refresh.stopObjectCatalog()
 
 	if cancelCalled != 1 {
 		t.Fatalf("expected cancel to be invoked once, got %d", cancelCalled)
 	}
-	if app.objectCatalogServiceForCluster("cluster-a") != nil {
+	if app.Refresh.objectCatalogServiceForCluster("cluster-a") != nil {
 		t.Fatalf("expected catalog references to be cleared")
 	}
 
-	summary := app.currentTelemetryRecorder().SnapshotSummary()
+	summary := app.Refresh.currentTelemetryRecorder().SnapshotSummary()
 	if summary.Catalog != nil && summary.Catalog.Enabled {
 		t.Fatalf("expected catalog telemetry to be disabled")
 	}
 }
 
 func TestStopObjectCatalogDoesNotBlockForeverWaitingForDone(t *testing.T) {
-	app := NewApp(nil)
-	app.appLogs = NewAppLogService(NewLogger(10))
+	app := newWorkspaceCoordinatorTestFixture(t)
+	app.AppLogs = NewAppLogService(NewLogger(10))
 
 	cancelCalled := make(chan struct{})
-	app.storeObjectCatalogEntry("cluster-a", &objectCatalogEntry{
+	app.Refresh.storeObjectCatalogEntry("cluster-a", &objectCatalogEntry{
 		service: &objectcatalog.Service{},
 		cancel:  func() { close(cancelCalled) },
 		done:    make(chan struct{}),
@@ -284,7 +284,7 @@ func TestStopObjectCatalogDoesNotBlockForeverWaitingForDone(t *testing.T) {
 
 	returned := make(chan struct{})
 	go func() {
-		app.stopObjectCatalog()
+		app.Refresh.stopObjectCatalog()
 		close(returned)
 	}()
 
@@ -347,16 +347,16 @@ func TestCatalogDoorbellBridgeBroadcastsCatalogSource(t *testing.T) {
 }
 
 func TestGetCatalogDiagnosticsCombinesTelemetryAndServiceState(t *testing.T) {
-	app := NewApp(nil)
-	app.appLogs = NewAppLogService(NewLogger(10))
-	app.storeObjectCatalogEntry("cluster-a", &objectCatalogEntry{
+	app := newWorkspaceCoordinatorTestFixture(t)
+	app.AppLogs = NewAppLogService(NewLogger(10))
+	app.Refresh.storeObjectCatalogEntry("cluster-a", &objectCatalogEntry{
 		service: &objectcatalog.Service{},
 	})
-	app.setTelemetryRecorder(telemetry.NewRecorder())
+	app.Refresh.setTelemetryRecorder(telemetry.NewRecorder())
 
-	app.currentTelemetryRecorder().RecordCatalog(true, 7, 3, 1500*time.Millisecond, nil)
+	app.Refresh.currentTelemetryRecorder().RecordCatalog(true, 7, 3, 1500*time.Millisecond, nil)
 
-	diag, err := app.resources.GetCatalogDiagnostics()
+	diag, err := app.Resources.GetCatalogDiagnostics()
 	if err != nil {
 		t.Fatalf("GetCatalogDiagnostics returned error: %v", err)
 	}
@@ -404,17 +404,17 @@ func TestMergeCatalogHealthFillsOnlyMissingTelemetry(t *testing.T) {
 }
 
 func TestSnapshotObjectCatalogEntriesSortsByClusterID(t *testing.T) {
-	app := NewApp(nil)
+	app := newWorkspaceCoordinatorTestFixture(t)
 	entryA := &objectCatalogEntry{meta: ClusterMeta{ID: "cluster-a"}}
 	entryB := &objectCatalogEntry{meta: ClusterMeta{ID: "cluster-b"}}
 
-	app.objectCatalogEntries = map[string]*objectCatalogEntry{
+	app.Refresh.objectCatalogEntries = map[string]*objectCatalogEntry{
 		"b":   entryB,
 		"a":   entryA,
 		"nil": nil,
 	}
 
-	entries := app.snapshotObjectCatalogEntries()
+	entries := app.Refresh.snapshotObjectCatalogEntries()
 	if len(entries) != 3 {
 		t.Fatalf("expected 3 entries, got %d", len(entries))
 	}
@@ -427,12 +427,12 @@ func TestSnapshotObjectCatalogEntriesSortsByClusterID(t *testing.T) {
 }
 
 func TestCatalogNamespaceGroupsFiltersAndMapsNamespaces(t *testing.T) {
-	app := NewApp(nil)
+	app := newWorkspaceCoordinatorTestFixture(t)
 
 	withNamespaces := objectcatalog.NewService(objectcatalog.Dependencies{}, nil)
 	setCatalogServiceNamespaces(t, withNamespaces, []string{"default", "kube-system"})
 
-	app.objectCatalogEntries = map[string]*objectCatalogEntry{
+	app.Refresh.objectCatalogEntries = map[string]*objectCatalogEntry{
 		"cluster-a": {
 			service: withNamespaces,
 			meta: ClusterMeta{
@@ -457,7 +457,7 @@ func TestCatalogNamespaceGroupsFiltersAndMapsNamespaces(t *testing.T) {
 		"cluster-d": nil,
 	}
 
-	groups := app.catalogNamespaceGroups()
+	groups := app.Refresh.catalogNamespaceGroups()
 	if len(groups) != 1 {
 		t.Fatalf("expected 1 namespace group, got %d", len(groups))
 	}
@@ -489,10 +489,10 @@ func TestGetCatalogDiagnosticsFromTelemetryRecorder(t *testing.T) {
 		Duration: 50 * time.Millisecond, TotalItems: 3, BatchIndex: 1, IsFinal: true, TimeToFirstBatchMs: 25,
 	})
 
-	app := NewApp(nil)
-	app.setTelemetryRecorder(recorder)
+	app := newWorkspaceCoordinatorTestFixture(t)
+	app.Refresh.setTelemetryRecorder(recorder)
 
-	diag, err := app.resources.GetCatalogDiagnostics()
+	diag, err := app.Resources.GetCatalogDiagnostics()
 	require.NoError(t, err)
 
 	require.True(t, diag.Enabled)
@@ -504,39 +504,39 @@ func TestGetCatalogDiagnosticsFromTelemetryRecorder(t *testing.T) {
 }
 
 func TestFindCatalogObjectMatchUsesExactCatalogIdentity(t *testing.T) {
-	app := NewApp(nil)
+	app := newWorkspaceCoordinatorTestFixture(t)
 	svc := objectcatalog.NewService(objectcatalog.Dependencies{}, nil)
 	setCatalogServiceItems(t, svc, map[string]objectcatalog.Summary{
 		"apps/v1, Resource=deployments/apps/alpha":        {Ref: resourcemodel.ResourceRef{ClusterID: "cluster-b", Group: "apps", Version: "v1", Kind: "Deployment", Resource: "deployments", Namespace: "apps", Name: "alpha", UID: "alpha-uid"}, Scope: objectcatalog.ScopeNamespace},
 		"apps/v1, Resource=deployments/apps/alpha-canary": {Ref: resourcemodel.ResourceRef{ClusterID: "cluster-b", Group: "apps", Version: "v1", Kind: "Deployment", Resource: "deployments", Namespace: "apps", Name: "alpha-canary", UID: "alpha-canary-uid"}, Scope: objectcatalog.ScopeNamespace},
 	})
-	app.storeObjectCatalogEntry("cluster-b", &objectCatalogEntry{service: svc})
+	app.Refresh.storeObjectCatalogEntry("cluster-b", &objectCatalogEntry{service: svc})
 
-	match, err := app.resources.FindCatalogObjectMatch("cluster-b", "apps", "apps", "v1", "Deployment", "alpha")
+	match, err := app.Resources.FindCatalogObjectMatch("cluster-b", "apps", "apps", "v1", "Deployment", "alpha")
 	require.NoError(t, err)
 	require.NotNil(t, match)
 	require.Equal(t, "alpha-uid", match.Ref.UID)
 
-	noMatch, err := app.resources.FindCatalogObjectMatch("cluster-b", "apps", "apps", "v1", "Deployment", "alp")
+	noMatch, err := app.Resources.FindCatalogObjectMatch("cluster-b", "apps", "apps", "v1", "Deployment", "alp")
 	require.NoError(t, err)
 	require.Nil(t, noMatch)
 }
 
 func TestFindCatalogObjectByUIDUsesCatalogIdentity(t *testing.T) {
-	app := NewApp(nil)
+	app := newWorkspaceCoordinatorTestFixture(t)
 	svc := objectcatalog.NewService(objectcatalog.Dependencies{}, nil)
 	setCatalogServiceItems(t, svc, map[string]objectcatalog.Summary{
 		"apps/v1, Resource=deployments/apps/alpha": {Ref: resourcemodel.ResourceRef{ClusterID: "cluster-b", Group: "apps", Version: "v1", Kind: "Deployment", Resource: "deployments", Namespace: "apps", Name: "alpha", UID: "alpha-uid"}, Scope: objectcatalog.ScopeNamespace},
 	})
-	app.storeObjectCatalogEntry("cluster-b", &objectCatalogEntry{service: svc})
+	app.Refresh.storeObjectCatalogEntry("cluster-b", &objectCatalogEntry{service: svc})
 
-	match, err := app.resources.FindCatalogObjectByUID("cluster-b", "alpha-uid")
+	match, err := app.Resources.FindCatalogObjectByUID("cluster-b", "alpha-uid")
 	require.NoError(t, err)
 	require.NotNil(t, match)
 	require.Equal(t, "Deployment", match.Ref.Kind)
 	require.Equal(t, "apps", match.Ref.Namespace)
 
-	noMatch, err := app.resources.FindCatalogObjectByUID("cluster-b", "missing-uid")
+	noMatch, err := app.Resources.FindCatalogObjectByUID("cluster-b", "missing-uid")
 	require.NoError(t, err)
 	require.Nil(t, noMatch)
 }
@@ -570,13 +570,13 @@ func TestHydrateCatalogCustomRowsFetchesOnlyCurrentPageRows(t *testing.T) {
 	gvrObject.SetLabels(map[string]string{"env": "prod"})
 	gvrObject.SetAnnotations(map[string]string{"owner": "platform"})
 
-	app := NewApp(nil)
-	app.clusterClients[clusterID] = &clusterClients{
+	app := newWorkspaceCoordinatorTestFixture(t)
+	app.ClusterRuntime.clusterClients[clusterID] = &clusterClients{
 		meta:          ClusterMeta{ID: clusterID, Name: "Cluster B"},
 		dynamicClient: fake.NewSimpleDynamicClient(runtime.NewScheme(), gvrObject),
 	}
 
-	rows, err := app.resources.HydrateCatalogCustomRows(clusterID, []snapshot.ResourceQueryRow{
+	rows, err := app.Resources.HydrateCatalogCustomRows(clusterID, []snapshot.ResourceQueryRow{
 		{
 			ClusterID: clusterID,
 			Group:     "example.com",
@@ -613,16 +613,16 @@ func TestHydrateCatalogCustomRowsFetchesOnlyCurrentPageRows(t *testing.T) {
 // (or empty) "complete" result.
 func TestHydrateCatalogCustomRowsReportsCanceledContext(t *testing.T) {
 	clusterID := "cluster-b"
-	app := NewApp(nil)
-	app.clusterClients[clusterID] = &clusterClients{
+	app := newWorkspaceCoordinatorTestFixture(t)
+	app.ClusterRuntime.clusterClients[clusterID] = &clusterClients{
 		meta:          ClusterMeta{ID: clusterID, Name: "Cluster B"},
 		dynamicClient: fake.NewSimpleDynamicClient(runtime.NewScheme()),
 	}
 	canceled, cancel := context.WithCancel(context.Background())
 	cancel()
-	setTestAppRuntimeReady(t, app, canceled)
+	setTestAppRuntimeReady(t, app.Lifecycle, canceled)
 
-	_, err := app.resources.HydrateCatalogCustomRows(clusterID, []snapshot.ResourceQueryRow{
+	_, err := app.Resources.HydrateCatalogCustomRows(clusterID, []snapshot.ResourceQueryRow{
 		{
 			ClusterID: clusterID,
 			Group:     "example.com",
@@ -665,14 +665,14 @@ func TestHydrateCatalogCustomRowsKeepsPageOnRowFailure(t *testing.T) {
 		)
 	})
 
-	app := NewApp(nil)
-	setTestAppRuntimeReady(t, app, context.Background())
-	app.clusterClients[clusterID] = &clusterClients{
+	app := newWorkspaceCoordinatorTestFixture(t)
+	setTestAppRuntimeReady(t, app.Lifecycle, context.Background())
+	app.ClusterRuntime.clusterClients[clusterID] = &clusterClients{
 		meta:          ClusterMeta{ID: clusterID, Name: "Cluster B"},
 		dynamicClient: dynamicClient,
 	}
 
-	rows, err := app.resources.HydrateCatalogCustomRows(clusterID, []snapshot.ResourceQueryRow{
+	rows, err := app.Resources.HydrateCatalogCustomRows(clusterID, []snapshot.ResourceQueryRow{
 		{
 			ClusterID: clusterID,
 			Group:     "example.com",
@@ -761,20 +761,20 @@ func TestCatalogNamespaceGroupsServesConfiguredScope(t *testing.T) {
 	// the catalog having discovered objects (a restricted identity may have
 	// nothing catalogued yet), and it must agree with the sidebar.
 	setTestConfigEnv(t)
-	app := NewApp(nil)
-	_, err := app.SetClusterAllowedNamespaces("cluster-a", []string{"prod", "dev"})
+	app := newWorkspaceCoordinatorTestFixture(t)
+	_, err := app.Workspace.SetClusterAllowedNamespaces("cluster-a", []string{"prod", "dev"})
 	if err != nil {
 		t.Fatalf("set scope: %v", err)
 	}
 
-	app.objectCatalogEntries = map[string]*objectCatalogEntry{
+	app.Refresh.objectCatalogEntries = map[string]*objectCatalogEntry{
 		"cluster-a": {
 			service: objectcatalog.NewService(objectcatalog.Dependencies{}, nil),
 			meta:    ClusterMeta{ID: "cluster-a", Name: "Cluster A"},
 		},
 	}
 
-	groups := app.catalogNamespaceGroups()
+	groups := app.Refresh.catalogNamespaceGroups()
 	if len(groups) != 1 {
 		t.Fatalf("expected 1 namespace group, got %d", len(groups))
 	}

@@ -187,7 +187,7 @@ func (s *DesktopShell) windowWorkAreas() []WindowWorkArea {
 // setApplicationContext retains only the cancellation signal supplied by the
 // desktop application lifecycle. It deliberately does not make UI operations
 // available; one peer window must complete its runtime-ready transition first.
-func (a *App) setApplicationContext(ctx context.Context) {
+func (a *ApplicationLifecycle) setApplicationContext(ctx context.Context) {
 	if a == nil {
 		return
 	}
@@ -195,7 +195,7 @@ func (a *App) setApplicationContext(ctx context.Context) {
 	a.appDone = ctx.Done()
 }
 
-func (a *App) clearApplicationContext() {
+func (a *ApplicationLifecycle) clearApplicationContext() {
 	if a == nil {
 		return
 	}
@@ -205,18 +205,18 @@ func (a *App) clearApplicationContext() {
 
 // markRuntimeReady enables desktop operations exactly once for the current
 // application lifecycle.
-func (a *App) markRuntimeReady() bool {
+func (a *ApplicationLifecycle) markRuntimeReady() bool {
 	return a != nil && a.runtimeReady.CompareAndSwap(false, true)
 }
 
-func (a *App) runtimeAvailable() bool {
+func (a *ApplicationLifecycle) runtimeAvailable() bool {
 	return a != nil && a.runtimeReady.Load()
 }
 
 // CtxOrBackground returns a context derived only from the application
 // cancellation signal, so framework-owned context values do not leak into
 // backend operations.
-func (a *App) CtxOrBackground() context.Context {
+func (a *ApplicationLifecycle) CtxOrBackground() context.Context {
 	if a == nil {
 		return context.Background()
 	}

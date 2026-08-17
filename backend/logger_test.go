@@ -410,7 +410,7 @@ func TestLoggerForwardsOperationIdentityToBreadcrumbsAndError(t *testing.T) {
 
 func TestFetchResourceReportsOriginalKubernetesError(t *testing.T) {
 	reporter := &recordingErrorReporter{}
-	app := NewApp(nil, reporter)
+	app := newWorkspaceCoordinatorTestFixture(t, reporter)
 	cause := apierrors.NewForbidden(
 		schema.GroupResource{Group: "apps", Resource: "deployments"},
 		"web",
@@ -418,7 +418,7 @@ func TestFetchResourceReportsOriginalKubernetesError(t *testing.T) {
 	)
 
 	_, err := FetchResourceWithSelection(
-		app.resources,
+		app.Resources,
 		"cluster-a",
 		"deployment/default/web",
 		"Deployment",
@@ -438,11 +438,11 @@ func TestFetchResourceReportsOriginalKubernetesError(t *testing.T) {
 
 func TestFetchResourceDoesNotReportTelemetryHandledErrorAgain(t *testing.T) {
 	reporter := &recordingErrorReporter{}
-	app := NewApp(nil, reporter)
+	app := newWorkspaceCoordinatorTestFixture(t, reporter)
 	cause := errors.New("already reported")
 
 	_, err := FetchResourceWithSelection(
-		app.resources,
+		app.Resources,
 		"cluster-a",
 		"deployment/default/web",
 		"Deployment",
@@ -566,9 +566,9 @@ func TestLoggerDoesNotReportScrapedThirdPartyOutput(t *testing.T) {
 
 func TestNewAppPassesErrorReporterToApplicationLogger(t *testing.T) {
 	reporter := &recordingErrorReporter{}
-	app := NewApp(nil, reporter)
+	app := newWorkspaceCoordinatorTestFixture(t, reporter)
 
-	app.appLogs.logger.Error("startup failed", "App")
+	app.AppLogs.logger.Error("startup failed", "App")
 
 	reporter.mu.Lock()
 	defer reporter.mu.Unlock()

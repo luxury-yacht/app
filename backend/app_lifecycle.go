@@ -11,6 +11,8 @@ import (
 	"fmt"
 	"log"
 	"strings"
+	"sync"
+	"sync/atomic"
 	"time"
 
 	"github.com/luxury-yacht/app/backend/internal/applog"
@@ -37,12 +39,32 @@ var newRefreshSubsystemWithServices = system.NewSubsystemWithServices
 
 const beforeCloseSelectionFlushTimeout = 2 * time.Second
 
+// ApplicationLifecycle owns only process/window lifecycle state and the
+// collaborators needed to order startup and shutdown. It is a focused owner,
+// not the application composition root.
+type ApplicationLifecycle struct {
+	appDone      <-chan struct{}
+	runtimeReady atomic.Bool
+	preQuitOnce  sync.Once
+	eventEmitter func(context.Context, string, ...interface{})
+
+	desktopShell   *DesktopShell
+	appLogs        *AppLogService
+	preferences    *PreferencesService
+	errorReporting *ErrorReportingService
+	clusterRuntime *ClusterRuntimeManager
+	refresh        *RefreshCoordinator
+	workspace      *WorkspaceCoordinator
+	operations     *OperationsCoordinator
+	updates        *UpdateCoordinator
+}
+
 // ServiceStartup performs bounded, non-UI process initialization before native
 // windows start. Interactive startup waits for WindowRuntimeReady.
-func (a *App) ServiceStartup(ctx context.Context, _ application.ServiceOptions) error {
+func (a *ApplicationLifecycle) ServiceStartup(ctx context.Context, _ application.ServiceOptions) error {
 	a.setApplicationContext(ctx)
-	go a.ClusterRuntimeManager.intents.Consume(ctx, a.WorkspaceCoordinator.consumeClusterRuntimeIntent)
-	a.ClusterRuntimeManager.initializeClusterLifecycle()
+	go a.clusterRuntime.intents.Consume(ctx, a.workspace.consumeClusterRuntimeIntent)
+	a.clusterRuntime.initializeClusterLifecycle()
 	a.appLogs.logger.Info("Application startup initiated", logsources.App)
 	a.startDiagnosticDumpHandler(ctx)
 	a.configureStartupErrorCapture()
@@ -70,7 +92,7 @@ func (a *WorkspaceCoordinator) consumeClusterRuntimeIntent(intent ClusterRuntime
 
 // WindowRuntimeReady runs interactive initialization once the webview runtime
 // can receive events and JavaScript without dropping or merely queueing them.
-func (a *App) WindowRuntimeReady(windowName string, restoreGeometry bool) bool {
+func (a *ApplicationLifecycle) WindowRuntimeReady(windowName string, restoreGeometry bool) bool {
 	firstReadyWindow := a.markRuntimeReady()
 	if firstReadyWindow && !a.checkStartupBetaExpiry(windowName) {
 		return true
@@ -86,7 +108,7 @@ func (a *App) WindowRuntimeReady(windowName string, restoreGeometry bool) bool {
 	}
 	a.appLogs.logger.Info("Luxury Yacht - Sail the Seas of Kubernetes In Style", logsources.App)
 	a.initializeStartupClusters()
-	if err := a.startKubeconfigWatcher(); err != nil {
+	if err := a.clusterRuntime.startKubeconfigWatcher(); err != nil {
 		a.appLogs.logger.Warn(fmt.Sprintf("Kubeconfig directory watcher not available: %v", err), logsources.App)
 	}
 	if a.updates != nil {
@@ -109,7 +131,7 @@ func (m *ClusterRuntimeManager) initializeClusterLifecycle() {
 	m.clusterLifecycle = lifecycle
 }
 
-func (a *App) configureStartupErrorCapture() {
+func (a *ApplicationLifecycle) configureStartupErrorCapture() {
 	errorcapture.Init()
 	errorcapture.InstallUnhandledErrorDedup()
 	errorcapture.SetEventEmitter(func(message string) {
@@ -128,7 +150,7 @@ func (a *App) configureStartupErrorCapture() {
 	errorcapture.SetLogSink(func(level, message string) {
 		// Suppress logging when ANY cluster has auth issues to prevent log spam.
 		// Auth-related errors are already being handled by the per-cluster auth managers.
-		if a.anyClusterAuthInvalid() {
+		if a.clusterRuntime.anyClusterAuthInvalid() {
 			return
 		}
 		// Also suppress auth-related messages that match known patterns.
@@ -151,7 +173,7 @@ func (a *App) configureStartupErrorCapture() {
 	})
 }
 
-func (a *App) checkStartupBetaExpiry(windowName string) bool {
+func (a *ApplicationLifecycle) checkStartupBetaExpiry(windowName string) bool {
 	if err := a.checkBetaExpiry(); err != nil {
 		applog.ReportError(a.appLogs.logger, err, "Beta version expired", logsources.App)
 		if a.desktopShell != nil && a.desktopShell.showExpiredBetaPrompt != nil {
@@ -193,7 +215,7 @@ func (s *DesktopShell) presentExpiredBetaPrompt(prompt expiredBetaPrompt) {
 	dialog.Show()
 }
 
-func (a *App) configureStartupLogging() {
+func (a *ApplicationLifecycle) configureStartupLogging() {
 	a.appLogs.logger.SetEventEmitter(func(eventName string, args ...interface{}) {
 		a.emitEvent(eventName, args...)
 	})
@@ -202,7 +224,7 @@ func (a *App) configureStartupLogging() {
 	log.SetOutput(&stdLogBridge{logger: a.appLogs.logger})
 }
 
-func (a *App) restoreStartupWindow(windowName string) {
+func (a *ApplicationLifecycle) restoreStartupWindow(windowName string) {
 	if settings, err := a.preferences.LoadWindowSettings(); err != nil {
 		a.appLogs.logger.Warn(fmt.Sprintf("Failed to load window settings: %v", err), logsources.App)
 	} else if settings != nil {
@@ -221,18 +243,18 @@ func (a *App) restoreStartupWindow(windowName string) {
 	}
 }
 
-func (a *App) initializeStartupClusters() {
+func (a *ApplicationLifecycle) initializeStartupClusters() {
 	a.appLogs.logger.Info("Discovering kubeconfig files...", logsources.App)
-	if err := a.discoverKubeconfigs(); err != nil {
+	if err := a.clusterRuntime.discoverKubeconfigs(); err != nil {
 		a.appLogs.logger.ErrorWithCause(err, "Failed to discover kubeconfigs", logsources.App)
 	} else {
-		result, _ := a.ClusterRuntimeManager.GetKubeconfigs()
+		result, _ := a.clusterRuntime.GetKubeconfigs()
 		a.appLogs.logger.Info(fmt.Sprintf("Found %d kubeconfig file(s)", len(result.Kubeconfigs)), logsources.App)
 	}
 
 	// The window is already visible, so settings restore and client initialization
 	// share the runtime selection coordinator with any frontend mutation.
-	selectedCount, err := a.initializeSelectedClustersAtStartup()
+	selectedCount, err := a.workspace.initializeSelectedClustersAtStartup()
 	if selectedCount > 0 {
 		if err != nil {
 			a.appLogs.logger.ErrorWithCause(err, "Failed to connect to cluster(s)", logsources.App)
@@ -277,23 +299,23 @@ func (b *stdLogBridge) Write(p []byte) (int, error) {
 
 // PrepareQuit flushes process state after the last peer window has agreed to
 // close. Window geometry is saved separately while the chosen window exists.
-func (a *App) PrepareQuit() bool {
+func (a *ApplicationLifecycle) PrepareQuit() bool {
 	return a.prepareQuitFromWindow("")
 }
 
 // PrepareQuitFromWindow persists the geometry of the peer chosen by the
 // window registry and then performs the once-only process shutdown flush.
-func (a *App) PrepareQuitFromWindow(windowName string) bool {
+func (a *ApplicationLifecycle) PrepareQuitFromWindow(windowName string) bool {
 	return a.prepareQuitFromWindow(strings.TrimSpace(windowName))
 }
 
-func (a *App) prepareQuitFromWindow(windowName string) bool {
+func (a *ApplicationLifecycle) prepareQuitFromWindow(windowName string) bool {
 	if a == nil {
 		return true
 	}
 	a.preQuitOnce.Do(func() {
 		a.appLogs.logger.Info("Application close requested", logsources.App)
-		if !a.waitForSelectionMutationIdle(beforeCloseSelectionFlushTimeout) {
+		if !a.workspace.waitForSelectionMutationIdle(beforeCloseSelectionFlushTimeout) {
 			a.appLogs.logger.Warn("Timed out waiting for cluster selection persistence before close", logsources.App)
 		}
 		if windowName != "" {
@@ -309,7 +331,7 @@ func (a *App) prepareQuitFromWindow(windowName string) bool {
 
 // ServiceShutdown tears down process resources after the application context is
 // cancelled and does not access the frontend runtime.
-func (a *App) ServiceShutdown() error {
+func (a *ApplicationLifecycle) ServiceShutdown() error {
 	a.appLogs.logger.Info("Application shutdown initiated", logsources.App)
 	if a.updates != nil {
 		a.updates.Stop()
@@ -317,21 +339,27 @@ func (a *App) ServiceShutdown() error {
 
 	// Stop cross-owner intent consumption before auth callbacks and watcher
 	// producers are shut down.
-	a.ClusterRuntimeManager.stopIntentConsumption()
-	a.ClusterRuntimeManager.stopAuthRecovery()
+	a.clusterRuntime.stopIntentConsumption()
+	a.clusterRuntime.stopAuthRecovery()
 
 	if a.operations != nil {
 		a.operations.Shutdown()
 	}
 
 	// Stop the kubeconfig directory watcher before tearing down cluster state.
-	a.ClusterRuntimeManager.stopKubeconfigWatcher()
+	a.clusterRuntime.stopKubeconfigWatcher()
 
-	a.RefreshCoordinator.teardownRefreshSubsystem()
+	a.refresh.teardownRefreshSubsystem()
 
 	a.appLogs.logger.Info("Application shutdown completed", logsources.App)
 	a.clearApplicationContext()
 	return nil
+}
+
+func (a *ApplicationLifecycle) ReleaseWorkspaceWindow(windowID string) {
+	if a != nil && a.workspace != nil {
+		a.workspace.ReleaseWorkspaceWindow(windowID)
+	}
 }
 
 // anyClusterAuthInvalid returns true if any cluster has an auth state that is not Valid.

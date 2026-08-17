@@ -168,7 +168,7 @@ func (u *UpdateCoordinator) withUpdateInfo(info *AppInfo) *AppInfo {
 
 // CheckBetaExpiry checks if this is a beta build and if it has expired
 // Returns an error if the beta has expired
-func (a *App) checkBetaExpiry() error {
+func (a *ApplicationLifecycle) checkBetaExpiry() error {
 	// Skip check for non-beta builds
 	if IsBetaBuild != "true" || BetaExpiry == "" {
 		return nil

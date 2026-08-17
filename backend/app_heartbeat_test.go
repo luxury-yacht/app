@@ -50,16 +50,16 @@ func (h *heartbeatClientSet) Discovery() discovery.DiscoveryInterface {
 
 // TestPerClusterHeartbeat tests that the heartbeat iterates all clusters independently.
 func TestPerClusterHeartbeat(t *testing.T) {
-	app := NewApp(nil)
-	app.appLogs = NewAppLogService(NewLogger(10))
+	app := newWorkspaceCoordinatorTestFixture(t)
+	app.AppLogs = NewAppLogService(NewLogger(10))
 	ctx, cancel := context.WithCancel(context.Background())
 	defer cancel()
-	setTestAppRuntimeReady(t, app, ctx)
+	setTestAppRuntimeReady(t, app.Lifecycle, ctx)
 
 	// Track emitted events
 	emittedEvents := make(map[string][]ClusterHealthEvent)
 	var eventsMu sync.Mutex
-	app.eventEmitter = func(_ context.Context, name string, args ...interface{}) {
+	app.Lifecycle.eventEmitter = func(_ context.Context, name string, args ...interface{}) {
 		eventsMu.Lock()
 		defer eventsMu.Unlock()
 		if len(args) > 0 {
@@ -98,8 +98,8 @@ func TestPerClusterHeartbeat(t *testing.T) {
 	unhealthyClient := &heartbeatClientSet{Clientset: cgofake.NewClientset(), disco: unhealthyDisco}
 
 	// Set up cluster clients
-	app.clusterClientsMu.Lock()
-	app.clusterClients = map[string]*clusterClients{
+	app.ClusterRuntime.clusterClientsMu.Lock()
+	app.ClusterRuntime.clusterClients = map[string]*clusterClients{
 		"cluster-healthy": {
 			meta:   ClusterMeta{ID: "cluster-healthy", Name: "Healthy Cluster"},
 			client: healthyClient,
@@ -109,10 +109,10 @@ func TestPerClusterHeartbeat(t *testing.T) {
 			client: unhealthyClient,
 		},
 	}
-	app.clusterClientsMu.Unlock()
+	app.ClusterRuntime.clusterClientsMu.Unlock()
 
 	// Run the heartbeat iteration
-	app.runHeartbeatIteration()
+	app.ClusterRuntime.runHeartbeatIteration()
 
 	// Check events were emitted for both clusters
 	eventsMu.Lock()
@@ -145,16 +145,16 @@ func TestPerClusterHeartbeat(t *testing.T) {
 
 // TestPerClusterHeartbeatSkipsInvalidAuth tests that clusters with invalid auth are skipped.
 func TestPerClusterHeartbeatSkipsInvalidAuth(t *testing.T) {
-	app := NewApp(nil)
-	app.appLogs = NewAppLogService(NewLogger(10))
+	app := newWorkspaceCoordinatorTestFixture(t)
+	app.AppLogs = NewAppLogService(NewLogger(10))
 	ctx, cancel := context.WithCancel(context.Background())
 	defer cancel()
-	setTestAppRuntimeReady(t, app, ctx)
+	setTestAppRuntimeReady(t, app.Lifecycle, ctx)
 
 	// Track emitted events
 	emittedEvents := make(map[string][]ClusterHealthEvent)
 	var eventsMu sync.Mutex
-	app.eventEmitter = func(_ context.Context, name string, args ...interface{}) {
+	app.Lifecycle.eventEmitter = func(_ context.Context, name string, args ...interface{}) {
 		eventsMu.Lock()
 		defer eventsMu.Unlock()
 		if len(args) > 0 {
@@ -185,8 +185,8 @@ func TestPerClusterHeartbeatSkipsInvalidAuth(t *testing.T) {
 	invalidAuthMgr.ReportFailure("token expired") // transitions to invalid since MaxAttempts=0
 
 	// Set up cluster clients
-	app.clusterClientsMu.Lock()
-	app.clusterClients = map[string]*clusterClients{
+	app.ClusterRuntime.clusterClientsMu.Lock()
+	app.ClusterRuntime.clusterClients = map[string]*clusterClients{
 		"cluster-healthy": {
 			meta:   ClusterMeta{ID: "cluster-healthy", Name: "Healthy Cluster"},
 			client: healthyClient,
@@ -197,10 +197,10 @@ func TestPerClusterHeartbeatSkipsInvalidAuth(t *testing.T) {
 			authManager: invalidAuthMgr,
 		},
 	}
-	app.clusterClientsMu.Unlock()
+	app.ClusterRuntime.clusterClientsMu.Unlock()
 
 	// Run the heartbeat iteration
-	app.runHeartbeatIteration()
+	app.ClusterRuntime.runHeartbeatIteration()
 
 	// Check events - should only see event for the healthy cluster
 	eventsMu.Lock()
@@ -228,14 +228,14 @@ func TestPerClusterHeartbeatSkipsInvalidAuth(t *testing.T) {
 // TestPerClusterHeartbeatReportsToAuthManager tests that auth failures (401) are reported
 // to the cluster's auth manager, not global state.
 func TestPerClusterHeartbeatReportsToAuthManager(t *testing.T) {
-	app := NewApp(nil)
-	app.appLogs = NewAppLogService(NewLogger(10))
+	app := newWorkspaceCoordinatorTestFixture(t)
+	app.AppLogs = NewAppLogService(NewLogger(10))
 	ctx, cancel := context.WithCancel(context.Background())
 	defer cancel()
-	setTestAppRuntimeReady(t, app, ctx)
+	setTestAppRuntimeReady(t, app.Lifecycle, ctx)
 
 	// Track emitted events (required by the heartbeat implementation)
-	app.eventEmitter = func(_ context.Context, _ string, _ ...interface{}) {}
+	app.Lifecycle.eventEmitter = func(_ context.Context, _ string, _ ...interface{}) {}
 
 	// Create a cluster that returns 401 Unauthorized
 	authFailDisco := &heartbeatDiscovery{
@@ -262,18 +262,18 @@ func TestPerClusterHeartbeatReportsToAuthManager(t *testing.T) {
 	}
 
 	// Set up cluster clients
-	app.clusterClientsMu.Lock()
-	app.clusterClients = map[string]*clusterClients{
+	app.ClusterRuntime.clusterClientsMu.Lock()
+	app.ClusterRuntime.clusterClients = map[string]*clusterClients{
 		"cluster-auth-fail": {
 			meta:        ClusterMeta{ID: "cluster-auth-fail", Name: "Auth Failing Cluster"},
 			client:      authFailClient,
 			authManager: authMgr,
 		},
 	}
-	app.clusterClientsMu.Unlock()
+	app.ClusterRuntime.clusterClientsMu.Unlock()
 
 	// Run the heartbeat iteration
-	app.runHeartbeatIteration()
+	app.ClusterRuntime.runHeartbeatIteration()
 
 	// Auth manager should have been notified of the auth failure
 	if authMgr.IsValid() {
@@ -292,13 +292,13 @@ func TestPerClusterHeartbeatReportsToAuthManager(t *testing.T) {
 // TestPerClusterHeartbeatConnectivityDoesNotAffectAuth tests that connectivity
 // failures (connection refused, timeout) do NOT report to the auth manager.
 func TestPerClusterHeartbeatConnectivityDoesNotAffectAuth(t *testing.T) {
-	app := NewApp(nil)
-	app.appLogs = NewAppLogService(NewLogger(10))
+	app := newWorkspaceCoordinatorTestFixture(t)
+	app.AppLogs = NewAppLogService(NewLogger(10))
 	ctx, cancel := context.WithCancel(context.Background())
 	defer cancel()
-	setTestAppRuntimeReady(t, app, ctx)
+	setTestAppRuntimeReady(t, app.Lifecycle, ctx)
 
-	app.eventEmitter = func(_ context.Context, _ string, _ ...interface{}) {}
+	app.Lifecycle.eventEmitter = func(_ context.Context, _ string, _ ...interface{}) {}
 
 	// Create a cluster with a connectivity failure (connection refused)
 	connFailDisco := &heartbeatDiscovery{
@@ -318,17 +318,17 @@ func TestPerClusterHeartbeatConnectivityDoesNotAffectAuth(t *testing.T) {
 		t.Fatal("auth manager should start as valid")
 	}
 
-	app.clusterClientsMu.Lock()
-	app.clusterClients = map[string]*clusterClients{
+	app.ClusterRuntime.clusterClientsMu.Lock()
+	app.ClusterRuntime.clusterClients = map[string]*clusterClients{
 		"cluster-conn-fail": {
 			meta:        ClusterMeta{ID: "cluster-conn-fail", Name: "Connectivity Failing Cluster"},
 			client:      connFailClient,
 			authManager: authMgr,
 		},
 	}
-	app.clusterClientsMu.Unlock()
+	app.ClusterRuntime.clusterClientsMu.Unlock()
 
-	app.runHeartbeatIteration()
+	app.ClusterRuntime.runHeartbeatIteration()
 
 	// Auth manager should still be valid — connectivity failures don't affect auth state
 	if !authMgr.IsValid() {
@@ -341,16 +341,16 @@ func TestPerClusterHeartbeatConnectivityDoesNotAffectAuth(t *testing.T) {
 // Note: Global connection status tracking has been removed, so we only
 // verify per-cluster events are emitted correctly.
 func TestPerClusterHeartbeatEmitsDegradedEvent(t *testing.T) {
-	app := NewApp(nil)
-	app.appLogs = NewAppLogService(NewLogger(10))
+	app := newWorkspaceCoordinatorTestFixture(t)
+	app.AppLogs = NewAppLogService(NewLogger(10))
 	ctx, cancel := context.WithCancel(context.Background())
 	defer cancel()
-	setTestAppRuntimeReady(t, app, ctx)
+	setTestAppRuntimeReady(t, app.Lifecycle, ctx)
 
 	// Track emitted events
 	emittedEvents := make(map[string][]ClusterHealthEvent)
 	var eventsMu sync.Mutex
-	app.eventEmitter = func(_ context.Context, name string, args ...interface{}) {
+	app.Lifecycle.eventEmitter = func(_ context.Context, name string, args ...interface{}) {
 		eventsMu.Lock()
 		defer eventsMu.Unlock()
 		if len(args) > 0 {
@@ -373,18 +373,18 @@ func TestPerClusterHeartbeatEmitsDegradedEvent(t *testing.T) {
 	unhealthyClient := &heartbeatClientSet{Clientset: cgofake.NewClientset(), disco: unhealthyDisco}
 
 	// Set up cluster clients (no authManager so no indirect status update)
-	app.clusterClientsMu.Lock()
-	app.clusterClients = map[string]*clusterClients{
+	app.ClusterRuntime.clusterClientsMu.Lock()
+	app.ClusterRuntime.clusterClients = map[string]*clusterClients{
 		"cluster-failing": {
 			meta:   ClusterMeta{ID: "cluster-failing", Name: "Failing Cluster"},
 			client: unhealthyClient,
 			// No authManager - so ReportFailure won't trigger OnStateChange callback
 		},
 	}
-	app.clusterClientsMu.Unlock()
+	app.ClusterRuntime.clusterClientsMu.Unlock()
 
 	// Run the heartbeat iteration
-	app.runHeartbeatIteration()
+	app.ClusterRuntime.runHeartbeatIteration()
 
 	// Check that a degraded event was emitted for the failing cluster
 	eventsMu.Lock()
@@ -401,11 +401,11 @@ func TestPerClusterHeartbeatEmitsDegradedEvent(t *testing.T) {
 
 // TestCheckClusterHealth tests the health check function for a cluster.
 func TestCheckClusterHealth(t *testing.T) {
-	app := NewApp(nil)
-	app.appLogs = NewAppLogService(NewLogger(10))
+	app := newWorkspaceCoordinatorTestFixture(t)
+	app.AppLogs = NewAppLogService(NewLogger(10))
 	ctx, cancel := context.WithCancel(context.Background())
 	defer cancel()
-	setTestAppRuntimeReady(t, app, ctx)
+	setTestAppRuntimeReady(t, app.Lifecycle, ctx)
 
 	t.Run("healthy cluster returns healthOK", func(t *testing.T) {
 		healthyDisco := &heartbeatDiscovery{
@@ -428,7 +428,7 @@ func TestCheckClusterHealth(t *testing.T) {
 			client: healthyClient,
 		}
 
-		if got := app.checkClusterHealth(cc); got != healthOK {
+		if got := app.ClusterRuntime.checkClusterHealth(cc); got != healthOK {
 			t.Errorf("expected healthOK, got %v", got)
 		}
 	})
@@ -450,7 +450,7 @@ func TestCheckClusterHealth(t *testing.T) {
 			client: unhealthyClient,
 		}
 
-		if got := app.checkClusterHealth(cc); got != healthConnectivityFailure {
+		if got := app.ClusterRuntime.checkClusterHealth(cc); got != healthConnectivityFailure {
 			t.Errorf("expected healthConnectivityFailure, got %v", got)
 		}
 	})
@@ -476,7 +476,7 @@ func TestCheckClusterHealth(t *testing.T) {
 			client: authClient,
 		}
 
-		if got := app.checkClusterHealth(cc); got != healthAuthFailure {
+		if got := app.ClusterRuntime.checkClusterHealth(cc); got != healthAuthFailure {
 			t.Errorf("expected healthAuthFailure, got %v", got)
 		}
 	})
@@ -498,7 +498,7 @@ func TestCheckClusterHealth(t *testing.T) {
 			client: execClient,
 		}
 
-		if got := app.checkClusterHealth(cc); got != healthAuthFailure {
+		if got := app.ClusterRuntime.checkClusterHealth(cc); got != healthAuthFailure {
 			t.Errorf("expected healthAuthFailure for exec credential failure, got %v", got)
 		}
 	})
@@ -524,7 +524,7 @@ func TestCheckClusterHealth(t *testing.T) {
 			client: expiredClient,
 		}
 
-		if got := app.checkClusterHealth(cc); got != healthAuthFailure {
+		if got := app.ClusterRuntime.checkClusterHealth(cc); got != healthAuthFailure {
 			t.Errorf("expected healthAuthFailure for expired credential, got %v", got)
 		}
 	})
@@ -535,7 +535,7 @@ func TestCheckClusterHealth(t *testing.T) {
 			client: nil,
 		}
 
-		if got := app.checkClusterHealth(cc); got != healthConnectivityFailure {
+		if got := app.ClusterRuntime.checkClusterHealth(cc); got != healthConnectivityFailure {
 			t.Errorf("expected healthConnectivityFailure, got %v", got)
 		}
 	})
@@ -546,11 +546,11 @@ func TestCheckClusterHealth(t *testing.T) {
 
 // TestCheckClusterHealthUsesReadyz verifies that checkClusterHealth calls /readyz (not /healthz).
 func TestCheckClusterHealthUsesReadyz(t *testing.T) {
-	app := NewApp(nil)
-	app.appLogs = NewAppLogService(NewLogger(10))
+	app := newWorkspaceCoordinatorTestFixture(t)
+	app.AppLogs = NewAppLogService(NewLogger(10))
 	ctx, cancel := context.WithCancel(context.Background())
 	defer cancel()
-	setTestAppRuntimeReady(t, app, ctx)
+	setTestAppRuntimeReady(t, app.Lifecycle, ctx)
 
 	var requestedPath string
 	disco := &heartbeatDiscovery{
@@ -574,7 +574,7 @@ func TestCheckClusterHealthUsesReadyz(t *testing.T) {
 		client: client,
 	}
 
-	app.checkClusterHealth(cc)
+	app.ClusterRuntime.checkClusterHealth(cc)
 
 	if requestedPath != "/readyz" {
 		t.Errorf("expected request to /readyz, got %q", requestedPath)
@@ -583,23 +583,23 @@ func TestCheckClusterHealthUsesReadyz(t *testing.T) {
 
 // TestStartHeartbeatLoopStopsOnContextCancel verifies the loop exits when the context is cancelled.
 func TestStartHeartbeatLoopStopsOnContextCancel(t *testing.T) {
-	app := NewApp(nil)
-	app.appLogs = NewAppLogService(NewLogger(10))
+	app := newWorkspaceCoordinatorTestFixture(t)
+	app.AppLogs = NewAppLogService(NewLogger(10))
 	bgCtx, bgCancel := context.WithCancel(context.Background())
 	defer bgCancel()
-	setTestAppRuntimeReady(t, app, bgCtx)
+	setTestAppRuntimeReady(t, app.Lifecycle, bgCtx)
 
 	// No-op event emitter
-	app.eventEmitter = func(_ context.Context, _ string, _ ...interface{}) {}
+	app.Lifecycle.eventEmitter = func(_ context.Context, _ string, _ ...interface{}) {}
 
 	// Empty cluster clients — runHeartbeatIteration will be a no-op.
-	app.clusterClients = map[string]*clusterClients{}
+	app.ClusterRuntime.clusterClients = map[string]*clusterClients{}
 
 	loopCtx, loopCancel := context.WithCancel(context.Background())
 
 	done := make(chan struct{})
 	go func() {
-		app.startHeartbeatLoop(loopCtx)
+		app.ClusterRuntime.startHeartbeatLoop(loopCtx)
 		close(done)
 	}()
 
@@ -617,16 +617,16 @@ func TestStartHeartbeatLoopStopsOnContextCancel(t *testing.T) {
 // TestStartHeartbeatLoopRunsImmediately verifies that the loop fires an iteration
 // right away without waiting for the first ticker tick.
 func TestStartHeartbeatLoopRunsImmediately(t *testing.T) {
-	app := NewApp(nil)
-	app.appLogs = NewAppLogService(NewLogger(10))
+	app := newWorkspaceCoordinatorTestFixture(t)
+	app.AppLogs = NewAppLogService(NewLogger(10))
 	bgCtx, bgCancel := context.WithCancel(context.Background())
 	defer bgCancel()
-	setTestAppRuntimeReady(t, app, bgCtx)
+	setTestAppRuntimeReady(t, app.Lifecycle, bgCtx)
 
 	// Track how many times runHeartbeatIteration executes by counting emitted events.
 	var iterationCount int
 	var mu sync.Mutex
-	app.eventEmitter = func(_ context.Context, _ string, _ ...interface{}) {
+	app.Lifecycle.eventEmitter = func(_ context.Context, _ string, _ ...interface{}) {
 		mu.Lock()
 		iterationCount++
 		mu.Unlock()
@@ -648,20 +648,20 @@ func TestStartHeartbeatLoopRunsImmediately(t *testing.T) {
 	}
 	healthyClient := &heartbeatClientSet{Clientset: cgofake.NewClientset(), disco: healthyDisco}
 
-	app.clusterClientsMu.Lock()
-	app.clusterClients = map[string]*clusterClients{
+	app.ClusterRuntime.clusterClientsMu.Lock()
+	app.ClusterRuntime.clusterClients = map[string]*clusterClients{
 		"test-cluster": {
 			meta:   ClusterMeta{ID: "test-cluster", Name: "Test Cluster"},
 			client: healthyClient,
 		},
 	}
-	app.clusterClientsMu.Unlock()
+	app.ClusterRuntime.clusterClientsMu.Unlock()
 
 	loopCtx, loopCancel := context.WithCancel(context.Background())
 
 	done := make(chan struct{})
 	go func() {
-		app.startHeartbeatLoop(loopCtx)
+		app.ClusterRuntime.startHeartbeatLoop(loopCtx)
 		close(done)
 	}()
 

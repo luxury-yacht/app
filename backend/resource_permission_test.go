@@ -42,7 +42,7 @@ func TestRestartWorkloadRequiresPatchPermission(t *testing.T) {
 
 	gateway := newResourcePermissionFixture("cluster-a", client, nil).gateway
 
-	err := gateway.restartWorkload("cluster-a", "default", "apps", "v1", "Deployment", "demo")
+	err := gateway.restartWorkloadInternal("cluster-a", "default", "apps", "v1", "Deployment", "demo")
 	if err == nil || !strings.Contains(err.Error(), "permission denied") {
 		t.Fatalf("expected permission denial, got %v", err)
 	}
@@ -60,7 +60,10 @@ func TestDeleteResourceByGVKRequiresDeletePermission(t *testing.T) {
 
 	gateway := newResourcePermissionFixture("cluster-a", client, dynamicClient).gateway
 
-	err := gateway.deleteResourceByGVK("cluster-a", "v1", "Pod", "default", "demo")
+	_, err := gateway.RunObjectAction(ObjectActionRequest{
+		Action: ObjectActionDelete,
+		Target: objectActionTarget("cluster-a", "", "v1", "Pod", "default", "demo"),
+	})
 	if err == nil || !strings.Contains(err.Error(), "permission denied") {
 		t.Fatalf("expected permission denial, got %v", err)
 	}
@@ -90,7 +93,7 @@ func TestTriggerCronJobRequiresJobCreatePermission(t *testing.T) {
 
 	gateway := newResourcePermissionFixture("cluster-a", client, nil).gateway
 
-	_, err := gateway.triggerCronJob("cluster-a", "default", "backup")
+	_, err := gateway.triggerCronJobInternal("cluster-a", "default", "backup")
 	if err == nil || !strings.Contains(err.Error(), "permission denied") {
 		t.Fatalf("expected permission denial, got %v", err)
 	}
@@ -109,7 +112,7 @@ func TestSuspendCronJobRequiresPatchPermission(t *testing.T) {
 
 	gateway := newResourcePermissionFixture("cluster-a", client, nil).gateway
 
-	err := gateway.suspendCronJob("cluster-a", "default", "backup", true)
+	err := gateway.suspendCronJobInternal("cluster-a", "default", "backup", true)
 	if err == nil || !strings.Contains(err.Error(), "permission denied") {
 		t.Fatalf("expected permission denial, got %v", err)
 	}

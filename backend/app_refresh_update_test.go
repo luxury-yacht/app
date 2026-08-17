@@ -25,11 +25,11 @@ func TestUpdateRefreshSubsystemSelectionsValidatesReceiverAndAllowsEmptySelectio
 }
 
 func TestApplyRefreshSelectionUpdateReportsClustersWhenRuntimeUnavailable(t *testing.T) {
-	app := newTestAppWithDefaults(t)
-	setTestAppRuntimeReady(t, app, context.Background())
-	app.stopRefreshRuntimeContext()
+	app := newWorkspaceCoordinatorTestFixture(t)
+	setTestAppRuntimeReady(t, app.Lifecycle, context.Background())
+	app.Refresh.stopRefreshRuntimeContext()
 
-	err := app.applyRefreshSelectionUpdate(refreshSelectionPlan{
+	err := app.Refresh.applyRefreshSelectionUpdate(refreshSelectionPlan{
 		clusterOrder: []string{"cluster-a", "cluster-b"},
 	}, refreshSelectionUpdate{})
 	require.EqualError(t, err,
@@ -38,25 +38,25 @@ func TestApplyRefreshSelectionUpdateReportsClustersWhenRuntimeUnavailable(t *tes
 
 func TestSetSelectedKubeconfigsKeepsRefreshServerOnSelectionChange(t *testing.T) {
 	setTestConfigEnv(t)
-	app := newTestAppWithDefaults(t)
-	setTestAppRuntimeReady(t, app, context.Background())
+	app := newWorkspaceCoordinatorTestFixture(t)
+	setTestAppRuntimeReady(t, app.Lifecycle, context.Background())
 
 	// Stub refresh wiring so selection updates exercise the in-place path.
-	setRefreshRuntimeContextForTest(app, context.Background())
-	setRefreshServiceReadyForTest(app)
-	app.refreshAggregates.Store(&refreshAggregateHandlers{})
+	setRefreshRuntimeContextForTest(app.Refresh, context.Background())
+	setRefreshServiceReadyForTest(app.Refresh)
+	app.Refresh.refreshAggregates.Store(&refreshAggregateHandlers{})
 
-	app.availableKubeconfigs = []KubeconfigInfo{
+	app.ClusterRuntime.availableKubeconfigs = []KubeconfigInfo{
 		{Name: "config-a", Path: "/path/a", Context: "ctx-a"},
 		{Name: "config-b", Path: "/path/b", Context: "ctx-b"},
 	}
 	selectionA := kubeconfigSelection{Path: "/path/a", Context: "ctx-a"}
 	selectionB := kubeconfigSelection{Path: "/path/b", Context: "ctx-b"}
-	clusterA := app.clusterMetaForSelection(selectionA).ID
-	clusterB := app.clusterMetaForSelection(selectionB).ID
+	clusterA := app.ClusterRuntime.clusterMetaForSelection(selectionA).ID
+	clusterB := app.ClusterRuntime.clusterMetaForSelection(selectionB).ID
 
-	app.selectedKubeconfigs = []string{selectionA.String()}
-	app.clusterClients = map[string]*clusterClients{
+	app.Workspace.selectedKubeconfigs = []string{selectionA.String()}
+	app.ClusterRuntime.clusterClients = map[string]*clusterClients{
 		clusterA: {
 			meta:              ClusterMeta{ID: clusterA, Name: "ctx-a"},
 			kubeconfigPath:    selectionA.Path,
@@ -71,9 +71,9 @@ func TestSetSelectedKubeconfigsKeepsRefreshServerOnSelectionChange(t *testing.T)
 		},
 	}
 
-	originalService := app.refreshService.Load()
+	originalService := app.Refresh.refreshService.Load()
 	existingSubsystem := &system.Subsystem{}
-	app.refreshSubsystems = map[string]*system.Subsystem{clusterA: existingSubsystem}
+	app.Refresh.refreshSubsystems = map[string]*system.Subsystem{clusterA: existingSubsystem}
 
 	originalBuilder := newRefreshSubsystemWithServices
 	newRefreshSubsystemWithServices = func(system.Config) (*system.Subsystem, error) {
@@ -81,16 +81,16 @@ func TestSetSelectedKubeconfigsKeepsRefreshServerOnSelectionChange(t *testing.T)
 	}
 	t.Cleanup(func() { newRefreshSubsystemWithServices = originalBuilder })
 
-	require.NoError(t, app.SetSelectedKubeconfigs([]string{selectionA.String(), selectionB.String()}))
-	require.Same(t, originalService, app.refreshService.Load())
-	require.Same(t, existingSubsystem, app.refreshSubsystems[clusterA])
-	require.NotNil(t, app.refreshSubsystems[clusterB])
+	require.NoError(t, app.Workspace.SetSelectedKubeconfigs([]string{selectionA.String(), selectionB.String()}))
+	require.Same(t, originalService, app.Refresh.refreshService.Load())
+	require.Same(t, existingSubsystem, app.Refresh.refreshSubsystems[clusterA])
+	require.NotNil(t, app.Refresh.refreshSubsystems[clusterB])
 
-	remainingSubsystem := app.refreshSubsystems[clusterB]
-	require.NoError(t, app.SetSelectedKubeconfigs([]string{selectionB.String()}))
-	require.Same(t, originalService, app.refreshService.Load())
-	require.Equal(t, 1, len(app.refreshSubsystems))
-	require.Same(t, remainingSubsystem, app.refreshSubsystems[clusterB])
+	remainingSubsystem := app.Refresh.refreshSubsystems[clusterB]
+	require.NoError(t, app.Workspace.SetSelectedKubeconfigs([]string{selectionB.String()}))
+	require.Same(t, originalService, app.Refresh.refreshService.Load())
+	require.Equal(t, 1, len(app.Refresh.refreshSubsystems))
+	require.Same(t, remainingSubsystem, app.Refresh.refreshSubsystems[clusterB])
 }
 
 // TestAuthFailedClusterDoesNotBlockNewClusterSelection verifies that when one cluster
@@ -99,22 +99,22 @@ func TestSetSelectedKubeconfigsKeepsRefreshServerOnSelectionChange(t *testing.T)
 // prevent the user from opening/adding other clusters.
 func TestAuthFailedClusterDoesNotBlockNewClusterSelection(t *testing.T) {
 	setTestConfigEnv(t)
-	app := newTestAppWithDefaults(t)
-	setTestAppRuntimeReady(t, app, context.Background())
+	app := newWorkspaceCoordinatorTestFixture(t)
+	setTestAppRuntimeReady(t, app.Lifecycle, context.Background())
 
 	// Stub refresh wiring so selection updates exercise the in-place path.
-	setRefreshRuntimeContextForTest(app, context.Background())
-	setRefreshServiceReadyForTest(app)
-	app.refreshAggregates.Store(&refreshAggregateHandlers{})
+	setRefreshRuntimeContextForTest(app.Refresh, context.Background())
+	setRefreshServiceReadyForTest(app.Refresh)
+	app.Refresh.refreshAggregates.Store(&refreshAggregateHandlers{})
 
-	app.availableKubeconfigs = []KubeconfigInfo{
+	app.ClusterRuntime.availableKubeconfigs = []KubeconfigInfo{
 		{Name: "config-a", Path: "/path/a", Context: "ctx-a"},
 		{Name: "config-b", Path: "/path/b", Context: "ctx-b"},
 	}
 	selectionA := kubeconfigSelection{Path: "/path/a", Context: "ctx-a"}
 	selectionB := kubeconfigSelection{Path: "/path/b", Context: "ctx-b"}
-	clusterA := app.clusterMetaForSelection(selectionA).ID
-	clusterB := app.clusterMetaForSelection(selectionB).ID
+	clusterA := app.ClusterRuntime.clusterMetaForSelection(selectionA).ID
+	clusterB := app.ClusterRuntime.clusterMetaForSelection(selectionB).ID
 
 	// Create an auth manager for cluster A that reports auth failure.
 	// Set MaxAttempts to 0 to disable automatic recovery, ensuring the auth manager
@@ -129,8 +129,8 @@ func TestAuthFailedClusterDoesNotBlockNewClusterSelection(t *testing.T) {
 
 	// Set up cluster A as having auth failure (no subsystem, auth manager in failed state).
 	// Set up cluster B as a healthy cluster that we're trying to add.
-	app.selectedKubeconfigs = []string{selectionA.String()}
-	app.clusterClients = map[string]*clusterClients{
+	app.Workspace.selectedKubeconfigs = []string{selectionA.String()}
+	app.ClusterRuntime.clusterClients = map[string]*clusterClients{
 		clusterA: {
 			meta:              ClusterMeta{ID: clusterA, Name: "ctx-a"},
 			kubeconfigPath:    selectionA.Path,
@@ -148,7 +148,7 @@ func TestAuthFailedClusterDoesNotBlockNewClusterSelection(t *testing.T) {
 	}
 
 	// Cluster A has NO subsystem because auth failed (mirrors real behavior).
-	app.refreshSubsystems = map[string]*system.Subsystem{}
+	app.Refresh.refreshSubsystems = map[string]*system.Subsystem{}
 
 	// Track whether the subsystem builder was called for each cluster.
 	builderCalls := make(map[string]bool)
@@ -161,7 +161,7 @@ func TestAuthFailedClusterDoesNotBlockNewClusterSelection(t *testing.T) {
 
 	// Add cluster B while cluster A has auth failure.
 	// This should NOT block - cluster B should be added successfully.
-	err := app.SetSelectedKubeconfigs([]string{selectionA.String(), selectionB.String()})
+	err := app.Workspace.SetSelectedKubeconfigs([]string{selectionA.String(), selectionB.String()})
 	require.NoError(t, err, "Adding healthy cluster B should succeed even when cluster A has auth failure")
 
 	// Verify cluster B got a subsystem created.
@@ -171,35 +171,35 @@ func TestAuthFailedClusterDoesNotBlockNewClusterSelection(t *testing.T) {
 	require.False(t, builderCalls[clusterA], "Subsystem builder should NOT be called for auth-failed cluster A")
 
 	// Verify cluster B has a subsystem but cluster A does not.
-	require.NotNil(t, app.refreshSubsystems[clusterB], "Cluster B should have a subsystem")
-	require.Nil(t, app.refreshSubsystems[clusterA], "Cluster A should NOT have a subsystem (auth failed)")
+	require.NotNil(t, app.Refresh.refreshSubsystems[clusterB], "Cluster B should have a subsystem")
+	require.Nil(t, app.Refresh.refreshSubsystems[clusterA], "Cluster A should NOT have a subsystem (auth failed)")
 }
 
 // TestAuthFailedOnInitClusterDoesNotBlockNewClusterSelection verifies that when one cluster
 // has authFailedOnInit=true, adding a new healthy cluster still succeeds.
 func TestAuthFailedOnInitClusterDoesNotBlockNewClusterSelection(t *testing.T) {
 	setTestConfigEnv(t)
-	app := newTestAppWithDefaults(t)
-	setTestAppRuntimeReady(t, app, context.Background())
+	app := newWorkspaceCoordinatorTestFixture(t)
+	setTestAppRuntimeReady(t, app.Lifecycle, context.Background())
 
 	// Stub refresh wiring so selection updates exercise the in-place path.
-	setRefreshRuntimeContextForTest(app, context.Background())
-	setRefreshServiceReadyForTest(app)
-	app.refreshAggregates.Store(&refreshAggregateHandlers{})
+	setRefreshRuntimeContextForTest(app.Refresh, context.Background())
+	setRefreshServiceReadyForTest(app.Refresh)
+	app.Refresh.refreshAggregates.Store(&refreshAggregateHandlers{})
 
-	app.availableKubeconfigs = []KubeconfigInfo{
+	app.ClusterRuntime.availableKubeconfigs = []KubeconfigInfo{
 		{Name: "config-a", Path: "/path/a", Context: "ctx-a"},
 		{Name: "config-b", Path: "/path/b", Context: "ctx-b"},
 	}
 	selectionA := kubeconfigSelection{Path: "/path/a", Context: "ctx-a"}
 	selectionB := kubeconfigSelection{Path: "/path/b", Context: "ctx-b"}
-	clusterA := app.clusterMetaForSelection(selectionA).ID
-	clusterB := app.clusterMetaForSelection(selectionB).ID
+	clusterA := app.ClusterRuntime.clusterMetaForSelection(selectionA).ID
+	clusterB := app.ClusterRuntime.clusterMetaForSelection(selectionB).ID
 
 	// Set up cluster A with authFailedOnInit=true (credential check failed during client init).
 	// Set up cluster B as a healthy cluster that we're trying to add.
-	app.selectedKubeconfigs = []string{selectionA.String()}
-	app.clusterClients = map[string]*clusterClients{
+	app.Workspace.selectedKubeconfigs = []string{selectionA.String()}
+	app.ClusterRuntime.clusterClients = map[string]*clusterClients{
 		clusterA: {
 			meta:              ClusterMeta{ID: clusterA, Name: "ctx-a"},
 			kubeconfigPath:    selectionA.Path,
@@ -216,7 +216,7 @@ func TestAuthFailedOnInitClusterDoesNotBlockNewClusterSelection(t *testing.T) {
 	}
 
 	// Cluster A has NO subsystem because auth failed on init.
-	app.refreshSubsystems = map[string]*system.Subsystem{}
+	app.Refresh.refreshSubsystems = map[string]*system.Subsystem{}
 
 	// Track whether the subsystem builder was called for each cluster.
 	builderCalls := make(map[string]bool)
@@ -228,7 +228,7 @@ func TestAuthFailedOnInitClusterDoesNotBlockNewClusterSelection(t *testing.T) {
 	t.Cleanup(func() { newRefreshSubsystemWithServices = originalBuilder })
 
 	// Add cluster B while cluster A has authFailedOnInit=true.
-	err := app.SetSelectedKubeconfigs([]string{selectionA.String(), selectionB.String()})
+	err := app.Workspace.SetSelectedKubeconfigs([]string{selectionA.String(), selectionB.String()})
 	require.NoError(t, err, "Adding healthy cluster B should succeed even when cluster A has authFailedOnInit")
 
 	// Verify cluster B got a subsystem created.
@@ -240,13 +240,13 @@ func TestAuthFailedOnInitClusterDoesNotBlockNewClusterSelection(t *testing.T) {
 
 func TestSetSelectedKubeconfigsRapidChurnLeavesConsistentClusterState(t *testing.T) {
 	setTestConfigEnv(t)
-	app := newTestAppWithDefaults(t)
-	setTestAppRuntimeReady(t, app, context.Background())
+	app := newWorkspaceCoordinatorTestFixture(t)
+	setTestAppRuntimeReady(t, app.Lifecycle, context.Background())
 
 	// Stub refresh wiring so selection updates exercise in-place updates only.
-	setRefreshRuntimeContextForTest(app, context.Background())
-	setRefreshServiceReadyForTest(app)
-	app.refreshAggregates.Store(&refreshAggregateHandlers{})
+	setRefreshRuntimeContextForTest(app.Refresh, context.Background())
+	setRefreshServiceReadyForTest(app.Refresh)
+	app.Refresh.refreshAggregates.Store(&refreshAggregateHandlers{})
 
 	tempDir := t.TempDir()
 	kubeDir := filepath.Join(tempDir, ".kube")
@@ -291,7 +291,7 @@ users:
 	configPathB := writeKubeconfig("config-b", "ctx-b")
 	configPathC := writeKubeconfig("config-c", "ctx-c")
 
-	app.availableKubeconfigs = []KubeconfigInfo{
+	app.ClusterRuntime.availableKubeconfigs = []KubeconfigInfo{
 		{Name: "config-a", Path: configPathA, Context: "ctx-a"},
 		{Name: "config-b", Path: configPathB, Context: "ctx-b"},
 		{Name: "config-c", Path: configPathC, Context: "ctx-c"},
@@ -299,10 +299,10 @@ users:
 	selectionA := kubeconfigSelection{Path: configPathA, Context: "ctx-a"}
 	selectionB := kubeconfigSelection{Path: configPathB, Context: "ctx-b"}
 	selectionC := kubeconfigSelection{Path: configPathC, Context: "ctx-c"}
-	clusterB := app.clusterMetaForSelection(selectionB).ID
-	clusterC := app.clusterMetaForSelection(selectionC).ID
+	clusterB := app.ClusterRuntime.clusterMetaForSelection(selectionB).ID
+	clusterC := app.ClusterRuntime.clusterMetaForSelection(selectionC).ID
 
-	app.refreshSubsystems = map[string]*system.Subsystem{}
+	app.Refresh.refreshSubsystems = map[string]*system.Subsystem{}
 
 	originalBuilder := newRefreshSubsystemWithServices
 	newRefreshSubsystemWithServices = func(system.Config) (*system.Subsystem, error) {
@@ -310,24 +310,24 @@ users:
 	}
 	t.Cleanup(func() { newRefreshSubsystemWithServices = originalBuilder })
 
-	require.NoError(t, app.SetSelectedKubeconfigs([]string{selectionA.String()}))
-	require.NoError(t, app.SetSelectedKubeconfigs([]string{selectionA.String(), selectionB.String()}))
-	require.NoError(t, app.SetSelectedKubeconfigs([]string{selectionB.String()}))
-	require.NoError(t, app.SetSelectedKubeconfigs([]string{selectionB.String(), selectionC.String()}))
+	require.NoError(t, app.Workspace.SetSelectedKubeconfigs([]string{selectionA.String()}))
+	require.NoError(t, app.Workspace.SetSelectedKubeconfigs([]string{selectionA.String(), selectionB.String()}))
+	require.NoError(t, app.Workspace.SetSelectedKubeconfigs([]string{selectionB.String()}))
+	require.NoError(t, app.Workspace.SetSelectedKubeconfigs([]string{selectionB.String(), selectionC.String()}))
 
-	require.Equal(t, []string{selectionB.String(), selectionC.String()}, app.GetSelectedKubeconfigs())
-	require.GreaterOrEqual(t, app.selectionGeneration.Load(), uint64(4))
+	require.Equal(t, []string{selectionB.String(), selectionC.String()}, app.Workspace.GetSelectedKubeconfigs())
+	require.GreaterOrEqual(t, app.Workspace.selectionGeneration.Load(), uint64(4))
 
-	app.clusterClientsMu.Lock()
-	clusterClientIDs := make([]string, 0, len(app.clusterClients))
-	for clusterID := range app.clusterClients {
+	app.ClusterRuntime.clusterClientsMu.Lock()
+	clusterClientIDs := make([]string, 0, len(app.ClusterRuntime.clusterClients))
+	for clusterID := range app.ClusterRuntime.clusterClients {
 		clusterClientIDs = append(clusterClientIDs, clusterID)
 	}
-	app.clusterClientsMu.Unlock()
+	app.ClusterRuntime.clusterClientsMu.Unlock()
 	require.ElementsMatch(t, []string{clusterB, clusterC}, clusterClientIDs)
 
-	refreshSubsystemIDs := make([]string, 0, len(app.refreshSubsystems))
-	for clusterID := range app.refreshSubsystems {
+	refreshSubsystemIDs := make([]string, 0, len(app.Refresh.refreshSubsystems))
+	for clusterID := range app.Refresh.refreshSubsystems {
 		refreshSubsystemIDs = append(refreshSubsystemIDs, clusterID)
 	}
 	require.ElementsMatch(t, []string{clusterB, clusterC}, refreshSubsystemIDs)
@@ -335,24 +335,24 @@ users:
 
 func TestSetSelectedKubeconfigsRemovesClusterRuntimeStateOnChurn(t *testing.T) {
 	setTestConfigEnv(t)
-	app := newTestAppWithDefaults(t)
+	app := newWorkspaceCoordinatorTestFixture(t)
 
 	// Keep selection updates on the in-place refresh reconciliation path.
-	setRefreshRuntimeContextForTest(app, context.Background())
-	setRefreshServiceReadyForTest(app)
-	app.refreshAggregates.Store(&refreshAggregateHandlers{})
+	setRefreshRuntimeContextForTest(app.Refresh, context.Background())
+	setRefreshServiceReadyForTest(app.Refresh)
+	app.Refresh.refreshAggregates.Store(&refreshAggregateHandlers{})
 
 	selectionA := kubeconfigSelection{Path: "/path/a", Context: "ctx-a"}
 	selectionB := kubeconfigSelection{Path: "/path/b", Context: "ctx-b"}
 
-	app.availableKubeconfigs = []KubeconfigInfo{
+	app.ClusterRuntime.availableKubeconfigs = []KubeconfigInfo{
 		{Name: "config-a", Path: selectionA.Path, Context: selectionA.Context},
 		{Name: "config-b", Path: selectionB.Path, Context: selectionB.Context},
 	}
-	clusterA := app.clusterMetaForSelection(selectionA).ID
-	clusterB := app.clusterMetaForSelection(selectionB).ID
-	app.selectedKubeconfigs = []string{selectionA.String(), selectionB.String()}
-	app.clusterClients = map[string]*clusterClients{
+	clusterA := app.ClusterRuntime.clusterMetaForSelection(selectionA).ID
+	clusterB := app.ClusterRuntime.clusterMetaForSelection(selectionB).ID
+	app.Workspace.selectedKubeconfigs = []string{selectionA.String(), selectionB.String()}
+	app.ClusterRuntime.clusterClients = map[string]*clusterClients{
 		clusterA: {
 			meta:              ClusterMeta{ID: clusterA, Name: "ctx-a"},
 			kubeconfigPath:    selectionA.Path,
@@ -366,7 +366,7 @@ func TestSetSelectedKubeconfigsRemovesClusterRuntimeStateOnChurn(t *testing.T) {
 			client:            cgofake.NewClientset(),
 		},
 	}
-	app.refreshSubsystems = map[string]*system.Subsystem{
+	app.Refresh.refreshSubsystems = map[string]*system.Subsystem{
 		clusterA: {},
 		clusterB: {},
 	}
@@ -377,7 +377,7 @@ func TestSetSelectedKubeconfigsRemovesClusterRuntimeStateOnChurn(t *testing.T) {
 	close(doneB)
 	canceledA := false
 	canceledB := false
-	app.objectCatalogEntries = map[string]*objectCatalogEntry{
+	app.Refresh.objectCatalogEntries = map[string]*objectCatalogEntry{
 		clusterA: {
 			done:   doneA,
 			cancel: func() { canceledA = true },
@@ -390,11 +390,11 @@ func TestSetSelectedKubeconfigsRemovesClusterRuntimeStateOnChurn(t *testing.T) {
 		},
 	}
 
-	app.operations.shellSessions = map[string]*shellSession{
+	app.Operations.shellSessions = map[string]*shellSession{
 		"shell-a": {id: "shell-a", clusterID: clusterA},
 		"shell-b": {id: "shell-b", clusterID: clusterB},
 	}
-	app.operations.portForwardSessions = map[string]*portForwardSessionInternal{
+	app.Operations.portForwardSessions = map[string]*portForwardSessionInternal{
 		"pf-a": {
 			PortForwardSession: PortForwardSession{
 				ID:        "pf-a",
@@ -410,50 +410,50 @@ func TestSetSelectedKubeconfigsRemovesClusterRuntimeStateOnChurn(t *testing.T) {
 			stopChan: make(chan struct{}),
 		},
 	}
-	app.operations.registerRuntimeOperation(runtimeOperationFromShellSession(app.operations.shellSessions["shell-a"]), func(reason string) error {
-		return app.operations.closeShellSessionForRuntime("shell-a", reason)
+	app.Operations.registerRuntimeOperation(runtimeOperationFromShellSession(app.Operations.shellSessions["shell-a"]), func(reason string) error {
+		return app.Operations.shellSessionLifecycle().closeForRuntime("shell-a", reason)
 	})
-	app.operations.registerRuntimeOperation(runtimeOperationFromShellSession(app.operations.shellSessions["shell-b"]), func(reason string) error {
-		return app.operations.closeShellSessionForRuntime("shell-b", reason)
+	app.Operations.registerRuntimeOperation(runtimeOperationFromShellSession(app.Operations.shellSessions["shell-b"]), func(reason string) error {
+		return app.Operations.shellSessionLifecycle().closeForRuntime("shell-b", reason)
 	})
-	app.operations.registerRuntimeOperation(runtimeOperationFromPortForward(app.operations.portForwardSessions["pf-a"]), func(reason string) error {
-		return app.operations.stopPortForwardForRuntime("pf-a", reason)
+	app.Operations.registerRuntimeOperation(runtimeOperationFromPortForward(app.Operations.portForwardSessions["pf-a"]), func(reason string) error {
+		return app.Operations.portForwardLifecycle().stopForRuntime("pf-a", reason)
 	})
-	app.operations.registerRuntimeOperation(runtimeOperationFromPortForward(app.operations.portForwardSessions["pf-b"]), func(reason string) error {
-		return app.operations.stopPortForwardForRuntime("pf-b", reason)
+	app.Operations.registerRuntimeOperation(runtimeOperationFromPortForward(app.Operations.portForwardSessions["pf-b"]), func(reason string) error {
+		return app.Operations.portForwardLifecycle().stopForRuntime("pf-b", reason)
 	})
 
-	require.NoError(t, app.SetSelectedKubeconfigs([]string{selectionB.String()}))
+	require.NoError(t, app.Workspace.SetSelectedKubeconfigs([]string{selectionB.String()}))
 
-	require.Equal(t, []string{selectionB.String()}, app.GetSelectedKubeconfigs())
+	require.Equal(t, []string{selectionB.String()}, app.Workspace.GetSelectedKubeconfigs())
 
-	app.clusterClientsMu.Lock()
-	_, hasAClients := app.clusterClients[clusterA]
-	_, hasBClients := app.clusterClients[clusterB]
-	app.clusterClientsMu.Unlock()
+	app.ClusterRuntime.clusterClientsMu.Lock()
+	_, hasAClients := app.ClusterRuntime.clusterClients[clusterA]
+	_, hasBClients := app.ClusterRuntime.clusterClients[clusterB]
+	app.ClusterRuntime.clusterClientsMu.Unlock()
 	require.False(t, hasAClients, "removed cluster clients should be dropped")
 	require.True(t, hasBClients, "remaining cluster clients should stay active")
 
-	_, hasASubsystem := app.refreshSubsystems[clusterA]
-	_, hasBSubsystem := app.refreshSubsystems[clusterB]
+	_, hasASubsystem := app.Refresh.refreshSubsystems[clusterA]
+	_, hasBSubsystem := app.Refresh.refreshSubsystems[clusterB]
 	require.False(t, hasASubsystem, "removed cluster refresh subsystem should be removed")
 	require.True(t, hasBSubsystem, "remaining cluster refresh subsystem should stay active")
 
-	app.objectCatalogMu.Lock()
-	_, hasACatalog := app.objectCatalogEntries[clusterA]
-	_, hasBCatalog := app.objectCatalogEntries[clusterB]
-	app.objectCatalogMu.Unlock()
+	app.Refresh.objectCatalogMu.Lock()
+	_, hasACatalog := app.Refresh.objectCatalogEntries[clusterA]
+	_, hasBCatalog := app.Refresh.objectCatalogEntries[clusterB]
+	app.Refresh.objectCatalogMu.Unlock()
 	require.False(t, hasACatalog, "removed cluster object catalog entry should be removed")
 	require.True(t, hasBCatalog, "remaining cluster object catalog entry should stay active")
 	require.True(t, canceledA, "removed cluster object catalog should be canceled")
 	require.False(t, canceledB, "remaining cluster object catalog should not be canceled")
 
-	require.Equal(t, 0, app.operations.GetClusterShellSessionCount(clusterA))
-	require.Equal(t, 1, app.operations.GetClusterShellSessionCount(clusterB))
-	require.Equal(t, 0, app.operations.GetClusterPortForwardCount(clusterA))
-	require.Equal(t, 1, app.operations.GetClusterPortForwardCount(clusterB))
+	require.Equal(t, 0, app.Operations.GetClusterShellSessionCount(clusterA))
+	require.Equal(t, 1, app.Operations.GetClusterShellSessionCount(clusterB))
+	require.Equal(t, 0, app.Operations.GetClusterPortForwardCount(clusterA))
+	require.Equal(t, 1, app.Operations.GetClusterPortForwardCount(clusterB))
 
-	remainingOperations := app.operations.ListRuntimeOperations()
+	remainingOperations := app.Operations.ListRuntimeOperations()
 	require.Len(t, remainingOperations, 2)
 	for _, operation := range remainingOperations {
 		require.Equal(t, clusterB, operation.ClusterID, "runtime operation cleanup must stay cluster-scoped")
@@ -462,24 +462,24 @@ func TestSetSelectedKubeconfigsRemovesClusterRuntimeStateOnChurn(t *testing.T) {
 
 func TestSetSelectedKubeconfigsClearCleansRuntimeStateForAllClusters(t *testing.T) {
 	setTestConfigEnv(t)
-	app := newTestAppWithDefaults(t)
+	app := newWorkspaceCoordinatorTestFixture(t)
 
 	// Keep selection updates on the in-place refresh reconciliation path.
-	setRefreshRuntimeContextForTest(app, context.Background())
-	setRefreshServiceReadyForTest(app)
-	app.refreshAggregates.Store(&refreshAggregateHandlers{})
+	setRefreshRuntimeContextForTest(app.Refresh, context.Background())
+	setRefreshServiceReadyForTest(app.Refresh)
+	app.Refresh.refreshAggregates.Store(&refreshAggregateHandlers{})
 
 	selectionA := kubeconfigSelection{Path: "/path/a", Context: "ctx-a"}
 	selectionB := kubeconfigSelection{Path: "/path/b", Context: "ctx-b"}
 
-	app.availableKubeconfigs = []KubeconfigInfo{
+	app.ClusterRuntime.availableKubeconfigs = []KubeconfigInfo{
 		{Name: "config-a", Path: selectionA.Path, Context: selectionA.Context},
 		{Name: "config-b", Path: selectionB.Path, Context: selectionB.Context},
 	}
-	clusterA := app.clusterMetaForSelection(selectionA).ID
-	clusterB := app.clusterMetaForSelection(selectionB).ID
-	app.selectedKubeconfigs = []string{selectionA.String(), selectionB.String()}
-	app.clusterClients = map[string]*clusterClients{
+	clusterA := app.ClusterRuntime.clusterMetaForSelection(selectionA).ID
+	clusterB := app.ClusterRuntime.clusterMetaForSelection(selectionB).ID
+	app.Workspace.selectedKubeconfigs = []string{selectionA.String(), selectionB.String()}
+	app.ClusterRuntime.clusterClients = map[string]*clusterClients{
 		clusterA: {
 			meta:              ClusterMeta{ID: clusterA, Name: "ctx-a"},
 			kubeconfigPath:    selectionA.Path,
@@ -493,7 +493,7 @@ func TestSetSelectedKubeconfigsClearCleansRuntimeStateForAllClusters(t *testing.
 			client:            cgofake.NewClientset(),
 		},
 	}
-	app.refreshSubsystems = map[string]*system.Subsystem{
+	app.Refresh.refreshSubsystems = map[string]*system.Subsystem{
 		clusterA: {},
 		clusterB: {},
 	}
@@ -504,7 +504,7 @@ func TestSetSelectedKubeconfigsClearCleansRuntimeStateForAllClusters(t *testing.
 	close(doneB)
 	canceledA := false
 	canceledB := false
-	app.objectCatalogEntries = map[string]*objectCatalogEntry{
+	app.Refresh.objectCatalogEntries = map[string]*objectCatalogEntry{
 		clusterA: {
 			done:   doneA,
 			cancel: func() { canceledA = true },
@@ -517,11 +517,11 @@ func TestSetSelectedKubeconfigsClearCleansRuntimeStateForAllClusters(t *testing.
 		},
 	}
 
-	app.operations.shellSessions = map[string]*shellSession{
+	app.Operations.shellSessions = map[string]*shellSession{
 		"shell-a": {id: "shell-a", clusterID: clusterA},
 		"shell-b": {id: "shell-b", clusterID: clusterB},
 	}
-	app.operations.portForwardSessions = map[string]*portForwardSessionInternal{
+	app.Operations.portForwardSessions = map[string]*portForwardSessionInternal{
 		"pf-a": {
 			PortForwardSession: PortForwardSession{
 				ID:        "pf-a",
@@ -537,63 +537,63 @@ func TestSetSelectedKubeconfigsClearCleansRuntimeStateForAllClusters(t *testing.
 			stopChan: make(chan struct{}),
 		},
 	}
-	app.operations.registerRuntimeOperation(runtimeOperationFromShellSession(app.operations.shellSessions["shell-a"]), func(reason string) error {
-		return app.operations.closeShellSessionForRuntime("shell-a", reason)
+	app.Operations.registerRuntimeOperation(runtimeOperationFromShellSession(app.Operations.shellSessions["shell-a"]), func(reason string) error {
+		return app.Operations.shellSessionLifecycle().closeForRuntime("shell-a", reason)
 	})
-	app.operations.registerRuntimeOperation(runtimeOperationFromShellSession(app.operations.shellSessions["shell-b"]), func(reason string) error {
-		return app.operations.closeShellSessionForRuntime("shell-b", reason)
+	app.Operations.registerRuntimeOperation(runtimeOperationFromShellSession(app.Operations.shellSessions["shell-b"]), func(reason string) error {
+		return app.Operations.shellSessionLifecycle().closeForRuntime("shell-b", reason)
 	})
-	app.operations.registerRuntimeOperation(runtimeOperationFromPortForward(app.operations.portForwardSessions["pf-a"]), func(reason string) error {
-		return app.operations.stopPortForwardForRuntime("pf-a", reason)
+	app.Operations.registerRuntimeOperation(runtimeOperationFromPortForward(app.Operations.portForwardSessions["pf-a"]), func(reason string) error {
+		return app.Operations.portForwardLifecycle().stopForRuntime("pf-a", reason)
 	})
-	app.operations.registerRuntimeOperation(runtimeOperationFromPortForward(app.operations.portForwardSessions["pf-b"]), func(reason string) error {
-		return app.operations.stopPortForwardForRuntime("pf-b", reason)
+	app.Operations.registerRuntimeOperation(runtimeOperationFromPortForward(app.Operations.portForwardSessions["pf-b"]), func(reason string) error {
+		return app.Operations.portForwardLifecycle().stopForRuntime("pf-b", reason)
 	})
 
-	require.NoError(t, app.SetSelectedKubeconfigs(nil))
+	require.NoError(t, app.Workspace.SetSelectedKubeconfigs(nil))
 
-	require.Empty(t, app.GetSelectedKubeconfigs())
+	require.Empty(t, app.Workspace.GetSelectedKubeconfigs())
 
-	app.clusterClientsMu.Lock()
-	require.Empty(t, app.clusterClients, "clearing selection should remove all cluster clients")
-	app.clusterClientsMu.Unlock()
+	app.ClusterRuntime.clusterClientsMu.Lock()
+	require.Empty(t, app.ClusterRuntime.clusterClients, "clearing selection should remove all cluster clients")
+	app.ClusterRuntime.clusterClientsMu.Unlock()
 
-	require.Empty(t, app.refreshSubsystems, "clearing selection should remove all refresh subsystems")
+	require.Empty(t, app.Refresh.refreshSubsystems, "clearing selection should remove all refresh subsystems")
 
-	app.objectCatalogMu.Lock()
-	require.Empty(t, app.objectCatalogEntries, "clearing selection should stop all object catalogs")
-	app.objectCatalogMu.Unlock()
+	app.Refresh.objectCatalogMu.Lock()
+	require.Empty(t, app.Refresh.objectCatalogEntries, "clearing selection should stop all object catalogs")
+	app.Refresh.objectCatalogMu.Unlock()
 	require.True(t, canceledA, "cluster A object catalog should be canceled")
 	require.True(t, canceledB, "cluster B object catalog should be canceled")
 
-	require.Equal(t, 0, app.operations.GetClusterShellSessionCount(clusterA))
-	require.Equal(t, 0, app.operations.GetClusterShellSessionCount(clusterB))
-	require.Equal(t, 0, app.operations.GetClusterPortForwardCount(clusterA))
-	require.Equal(t, 0, app.operations.GetClusterPortForwardCount(clusterB))
-	require.Empty(t, app.operations.ListRuntimeOperations(), "clearing selection should remove all runtime operations")
+	require.Equal(t, 0, app.Operations.GetClusterShellSessionCount(clusterA))
+	require.Equal(t, 0, app.Operations.GetClusterShellSessionCount(clusterB))
+	require.Equal(t, 0, app.Operations.GetClusterPortForwardCount(clusterA))
+	require.Equal(t, 0, app.Operations.GetClusterPortForwardCount(clusterB))
+	require.Empty(t, app.Operations.ListRuntimeOperations(), "clearing selection should remove all runtime operations")
 }
 
 func TestSetSelectedKubeconfigsKeepsResponseCacheClusterScopedDuringChurn(t *testing.T) {
 	setTestConfigEnv(t)
-	app := newTestAppWithDefaults(t)
+	app := newWorkspaceCoordinatorTestFixture(t)
 
 	// Keep selection updates on the in-place refresh reconciliation path.
-	setRefreshRuntimeContextForTest(app, context.Background())
-	setRefreshServiceReadyForTest(app)
-	app.refreshAggregates.Store(&refreshAggregateHandlers{})
-	app.resources.responseCache = newResponseCache(time.Minute, 64)
+	setRefreshRuntimeContextForTest(app.Refresh, context.Background())
+	setRefreshServiceReadyForTest(app.Refresh)
+	app.Refresh.refreshAggregates.Store(&refreshAggregateHandlers{})
+	app.Resources.responseCache = newResponseCache(time.Minute, 64)
 
 	selectionA := kubeconfigSelection{Path: "/path/a", Context: "ctx-a"}
 	selectionB := kubeconfigSelection{Path: "/path/b", Context: "ctx-b"}
 
-	app.availableKubeconfigs = []KubeconfigInfo{
+	app.ClusterRuntime.availableKubeconfigs = []KubeconfigInfo{
 		{Name: "config-a", Path: selectionA.Path, Context: selectionA.Context},
 		{Name: "config-b", Path: selectionB.Path, Context: selectionB.Context},
 	}
-	clusterA := app.clusterMetaForSelection(selectionA).ID
-	clusterB := app.clusterMetaForSelection(selectionB).ID
-	app.selectedKubeconfigs = []string{selectionA.String(), selectionB.String()}
-	app.clusterClients = map[string]*clusterClients{
+	clusterA := app.ClusterRuntime.clusterMetaForSelection(selectionA).ID
+	clusterB := app.ClusterRuntime.clusterMetaForSelection(selectionB).ID
+	app.Workspace.selectedKubeconfigs = []string{selectionA.String(), selectionB.String()}
+	app.ClusterRuntime.clusterClients = map[string]*clusterClients{
 		clusterA: {
 			meta:              ClusterMeta{ID: clusterA, Name: "ctx-a"},
 			kubeconfigPath:    selectionA.Path,
@@ -607,25 +607,25 @@ func TestSetSelectedKubeconfigsKeepsResponseCacheClusterScopedDuringChurn(t *tes
 			client:            cgofake.NewClientset(),
 		},
 	}
-	app.refreshSubsystems = map[string]*system.Subsystem{
+	app.Refresh.refreshSubsystems = map[string]*system.Subsystem{
 		clusterA: {},
 		clusterB: {},
 	}
 
 	const cacheKey = "pod-detailed:default:nginx"
-	app.resources.responseCacheStore(clusterA, cacheKey, "cluster-a-value")
-	app.resources.responseCacheStore(clusterB, cacheKey, "cluster-b-value")
+	app.Resources.responseCacheStore(clusterA, cacheKey, "cluster-a-value")
+	app.Resources.responseCacheStore(clusterB, cacheKey, "cluster-b-value")
 
-	require.NoError(t, app.SetSelectedKubeconfigs([]string{selectionB.String()}))
+	require.NoError(t, app.Workspace.SetSelectedKubeconfigs([]string{selectionB.String()}))
 
-	valueB, ok := app.resources.responseCacheLookup(clusterB, cacheKey)
+	valueB, ok := app.Resources.responseCacheLookup(clusterB, cacheKey)
 	require.True(t, ok, "remaining cluster cache entry should still be available")
 	require.Equal(t, "cluster-b-value", valueB)
 
-	valueA, ok := app.resources.responseCacheLookup(clusterA, cacheKey)
+	valueA, ok := app.Resources.responseCacheLookup(clusterA, cacheKey)
 	require.True(t, ok, "removed cluster cache entry should stay cluster-scoped")
 	require.Equal(t, "cluster-a-value", valueA)
 
-	_, ok = app.resources.responseCacheLookup("cluster-c", cacheKey)
+	_, ok = app.Resources.responseCacheLookup("cluster-c", cacheKey)
 	require.False(t, ok, "other clusters must not see cached values for different cluster IDs")
 }

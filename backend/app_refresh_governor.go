@@ -16,7 +16,7 @@ import (
 )
 
 // initGovernor seeds the process-wide resource governor with its default policy
-// and memory budget. Called once from NewApp.
+// and memory budget. Called once during ApplicationRuntime composition.
 func (a *RefreshCoordinator) initGovernor() {
 	if a == nil {
 		return

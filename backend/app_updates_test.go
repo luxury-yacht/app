@@ -166,10 +166,10 @@ func TestGetAppInfoReadsCoordinatorSnapshotWithoutStartingCheck(t *testing.T) {
 		EligibilityReason: "",
 		RecoveryTarget:    "",
 	}}
-	app := NewApp(nil)
-	app.updates.coordinator = coordinator
+	app := newUpdateCoordinatorTestFixture(t)
+	app.Updates.coordinator = coordinator
 
-	info, err := app.updates.GetAppInfo()
+	info, err := app.Updates.GetAppInfo()
 
 	require.NoError(t, err)
 	require.NotNil(t, info.Update)
@@ -193,28 +193,28 @@ func TestApplicationUpdateCommandsDelegateToOneProcessCoordinator(t *testing.T) 
 	coordinator := &fakeApplicationUpdateCoordinator{snapshot: appupdates.Snapshot{
 		Status: appupdates.StatusAvailable, AvailableVersion: "2.0.0",
 	}}
-	app := NewApp(nil)
-	app.updates.coordinator = coordinator
+	app := newUpdateCoordinatorTestFixture(t)
+	app.Updates.coordinator = coordinator
 
-	checked, err := app.updates.CheckForUpdates()
+	checked, err := app.Updates.CheckForUpdates()
 	require.NoError(t, err)
 	require.Equal(t, appupdates.StatusAvailable, checked.Status)
 	require.Equal(t, 1, coordinator.checkCalls)
 	require.Zero(t, coordinator.downloadCalls)
 
-	downloaded, err := app.updates.DownloadApplicationUpdate("2.0.0")
+	downloaded, err := app.Updates.DownloadApplicationUpdate("2.0.0")
 	require.NoError(t, err)
 	require.Equal(t, "2.0.0", coordinator.downloadVersion)
 	require.Equal(t, appupdates.StatusAvailable, downloaded.Status)
 	require.Equal(t, 1, coordinator.downloadCalls)
 	require.Zero(t, coordinator.restartCalls)
 
-	restarted, err := app.updates.RestartAndApplyApplicationUpdate()
+	restarted, err := app.Updates.RestartAndApplyApplicationUpdate()
 	require.NoError(t, err)
 	require.Equal(t, appupdates.StatusAvailable, restarted.Status)
 	require.Equal(t, 1, coordinator.restartCalls)
 
-	skipped, err := app.updates.SkipApplicationUpdate("2.0.0")
+	skipped, err := app.Updates.SkipApplicationUpdate("2.0.0")
 	require.NoError(t, err)
 	require.Equal(t, appupdates.StatusAvailable, skipped.Status)
 	require.Equal(t, "2.0.0", coordinator.skipVersion)
@@ -225,10 +225,10 @@ func TestRemoveApplicationUpdateSkipDelegatesToTheProcessCoordinator(t *testing.
 	coordinator := &fakeApplicationUpdateCoordinator{snapshot: appupdates.Snapshot{
 		Status: appupdates.StatusAvailable, AvailableVersion: "2.0.0",
 	}}
-	app := NewApp(nil)
-	app.updates.coordinator = coordinator
+	app := newUpdateCoordinatorTestFixture(t)
+	app.Updates.coordinator = coordinator
 
-	snapshot, err := app.updates.RemoveApplicationUpdateSkip()
+	snapshot, err := app.Updates.RemoveApplicationUpdateSkip()
 
 	require.NoError(t, err)
 	require.Equal(t, appupdates.StatusAvailable, snapshot.Status)
@@ -236,9 +236,9 @@ func TestRemoveApplicationUpdateSkipDelegatesToTheProcessCoordinator(t *testing.
 }
 
 func TestDisabledCheckCommandReturnsApplicationSnapshot(t *testing.T) {
-	app := NewApp(nil)
+	app := newUpdateCoordinatorTestFixture(t)
 
-	snapshot, err := app.updates.CheckForUpdates()
+	snapshot, err := app.Updates.CheckForUpdates()
 
 	require.NoError(t, err)
 	require.Equal(t, appupdates.StatusDisabled, snapshot.Status)
@@ -249,15 +249,15 @@ func TestCheckForUpdatesFromMenuOpensAboutBeforeStartingCheck(t *testing.T) {
 		snapshot:     appupdates.Snapshot{Status: appupdates.StatusIdle, CanCheck: true},
 		checkStarted: make(chan struct{}, 1),
 	}
-	app := NewApp(nil)
-	setTestAppRuntimeReady(t, app, context.Background())
-	app.updates.coordinator = coordinator
+	app := newUpdateCoordinatorTestFixture(t)
+	setTestAppRuntimeReady(t, app.Lifecycle, context.Background())
+	app.Updates.coordinator = coordinator
 	events := make(chan string, 1)
-	app.eventEmitter = func(_ context.Context, name string, _ ...interface{}) {
+	app.Lifecycle.eventEmitter = func(_ context.Context, name string, _ ...interface{}) {
 		events <- name
 	}
 
-	app.updates.showAboutAndCheckForUpdates()
+	app.Updates.showAboutAndCheckForUpdates()
 
 	select {
 	case event := <-events:
@@ -274,23 +274,23 @@ func TestCheckForUpdatesFromMenuOpensAboutBeforeStartingCheck(t *testing.T) {
 }
 
 func TestWailsUpdateEventsProjectToOneApplicationBroadcast(t *testing.T) {
-	app := NewApp(nil)
-	setTestAppRuntimeReady(t, app, context.Background())
+	app := newUpdateCoordinatorTestFixture(t)
+	setTestAppRuntimeReady(t, app.Lifecycle, context.Background())
 	type emittedEvent struct {
 		name string
 		data []interface{}
 	}
 	var emitted []emittedEvent
-	app.eventEmitter = func(_ context.Context, name string, data ...interface{}) {
+	app.Lifecycle.eventEmitter = func(_ context.Context, name string, data ...interface{}) {
 		emitted = append(emitted, emittedEvent{name: name, data: data})
 	}
 	coordinator := appupdates.New(appupdates.Dependencies{
 		Client: &fakeUpdaterClient{}, Provider: fakeUpdaterProvider{},
 		Eligibility: enabledApplicationUpdateBuild(), PublicKey: make([]byte, 32),
 		Platform: "darwin", Architecture: "arm64", TempRoot: "/owned/temp/root",
-		OnChange: app.updates.storeApplicationUpdateSnapshot,
+		OnChange: app.Updates.storeApplicationUpdateSnapshot,
 	})
-	app.updates.coordinator = coordinator
+	app.Updates.coordinator = coordinator
 	registrar := &fakeUpdateEventRegistrar{}
 
 	unsubscribers := subscribeApplicationUpdateEvents(registrar, coordinator)
@@ -301,7 +301,7 @@ func TestWailsUpdateEventsProjectToOneApplicationBroadcast(t *testing.T) {
 		Data: updater.Progress{Written: 25, Total: 100},
 	})
 
-	info := app.updates.getUpdateInfo()
+	info := app.Updates.getUpdateInfo()
 	require.Equal(t, appupdates.StatusDownloading, info.Status)
 	require.NotNil(t, info.ProgressPercent)
 	require.Equal(t, float64(25), *info.ProgressPercent)
@@ -343,15 +343,15 @@ func TestResolveApplicationUpdateEligibilityUsesReleaseAndInstallIdentity(t *tes
 }
 
 func TestConfigureApplicationUpdatesDisablesOnTempSetupFailure(t *testing.T) {
-	app := NewApp(nil)
+	app := newUpdateCoordinatorTestFixture(t)
 
-	app.updates.configureApplicationUpdates(ApplicationUpdateOptions{
+	app.Updates.configureApplicationUpdates(ApplicationUpdateOptions{
 		TempSetupError: errors.New("owned temp root unavailable"),
 	})
 
-	require.NotNil(t, app.updates.coordinator)
-	require.Equal(t, appupdates.StatusDisabled, app.updates.coordinator.Snapshot().Status)
-	require.False(t, app.updates.coordinator.Snapshot().CanInstall)
+	require.NotNil(t, app.Updates.coordinator)
+	require.Equal(t, appupdates.StatusDisabled, app.Updates.coordinator.Snapshot().Status)
+	require.False(t, app.Updates.coordinator.Snapshot().CanInstall)
 }
 
 func TestPrepareApplicationUpdateStateReconcilesBeforeSweepingOrphans(t *testing.T) {
@@ -456,44 +456,23 @@ func TestConfigureApplicationUpdatesProjectsAndLogsFailedApply(t *testing.T) {
 		[]byte("replacement failed safely"),
 		0o600,
 	))
-	app := NewApp(nil)
+	app := newUpdateCoordinatorTestFixture(t)
 
-	app.updates.configureApplicationUpdates(ApplicationUpdateOptions{
+	app.Updates.configureApplicationUpdates(ApplicationUpdateOptions{
 		TempRoot: root, StatePath: statePath,
 	})
 
-	snapshot := app.updates.coordinator.Snapshot()
+	snapshot := app.Updates.coordinator.Snapshot()
 	require.Equal(t, appupdates.StatusApplyError, snapshot.Status)
 	require.Equal(t, "2.0.0", snapshot.AvailableVersion)
 	require.Equal(t, distribution, snapshot.Distribution)
 	require.Equal(t, recovery, snapshot.RecoveryTarget)
 	require.Condition(t, func() bool {
-		for _, entry := range app.appLogs.logger.GetEntries() {
+		for _, entry := range app.AppLogs.logger.GetEntries() {
 			if strings.Contains(entry.Message, "replacement failed safely") {
 				return true
 			}
 		}
 		return false
 	})
-}
-
-func TestApplicationUpdateCoordinatorFollowsProcessRuntimeLifecycle(t *testing.T) {
-	t.Setenv("HOME", t.TempDir())
-	coordinator := &fakeApplicationUpdateCoordinator{
-		snapshot: appupdates.Snapshot{Status: appupdates.StatusIdle},
-	}
-	app := newTestAppWithDefaults(t)
-	app.updates.coordinator = coordinator
-	ctx, cancel := context.WithCancel(context.Background())
-	t.Cleanup(cancel)
-
-	require.NoError(t, app.ServiceStartup(ctx, application.ServiceOptions{}))
-	require.Zero(t, coordinator.runtimeReadyCalls)
-	require.True(t, app.WindowRuntimeReady("workspace-1", false))
-	require.Equal(t, 1, coordinator.runtimeReadyCalls)
-	require.False(t, app.WindowRuntimeReady("workspace-2", false))
-	require.Equal(t, 1, coordinator.runtimeReadyCalls)
-
-	require.NoError(t, app.ServiceShutdown())
-	require.Equal(t, 1, coordinator.stopCalls)
 }

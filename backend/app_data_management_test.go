@@ -25,15 +25,15 @@ func dataManagementFavorite(id, name string) Favorite {
 	}
 }
 
-func installDataManagementDialogs(t *testing.T, app *App, savePath, openPath string) (*application.SaveFileDialogOptions, *application.OpenFileDialogOptions) {
+func installDataManagementDialogs(t *testing.T, app *settingsEffectsTestFixture, savePath, openPath string) (*application.SaveFileDialogOptions, *application.OpenFileDialogOptions) {
 	t.Helper()
 	saveOptions := &application.SaveFileDialogOptions{}
 	openOptions := &application.OpenFileDialogOptions{}
-	app.desktopShell.saveFileDialog = func(options *application.SaveFileDialogOptions) (string, error) {
+	app.DesktopShell.saveFileDialog = func(options *application.SaveFileDialogOptions) (string, error) {
 		*saveOptions = *options
 		return savePath, nil
 	}
-	app.desktopShell.openFileDialog = func(options *application.OpenFileDialogOptions) (string, error) {
+	app.DesktopShell.openFileDialog = func(options *application.OpenFileDialogOptions) (string, error) {
 		*openOptions = *options
 		return openPath, nil
 	}
@@ -42,8 +42,8 @@ func installDataManagementDialogs(t *testing.T, app *App, savePath, openPath str
 
 func TestDataManagementDialogsDefaultToUserHomeDirectory(t *testing.T) {
 	setTestConfigEnv(t)
-	app := newTestAppWithDefaults(t)
-	setTestAppRuntimeReady(t, app, context.Background())
+	app := newSettingsEffectsTestFixture(t)
+	setTestAppRuntimeReady(t, app.Lifecycle, context.Background())
 	home, err := os.UserHomeDir()
 	require.NoError(t, err)
 	require.NotEmpty(t, home)
@@ -51,9 +51,9 @@ func TestDataManagementDialogsDefaultToUserHomeDirectory(t *testing.T) {
 	exportPath := filepath.Join(t.TempDir(), "export.json")
 	saveOptions, openOptions := installDataManagementDialogs(t, app, exportPath, "")
 
-	_, err = app.dataManagement.exportDataFile("Export Data", "export.json", map[string]string{"data": "value"})
+	_, err = app.DataManagement.exportDataFile("Export Data", "export.json", map[string]string{"data": "value"})
 	require.NoError(t, err)
-	_, _, err = app.dataManagement.chooseDataImportFile("Import Data")
+	_, _, err = app.DataManagement.chooseDataImportFile("Import Data")
 	require.NoError(t, err)
 
 	require.Equal(t, home, saveOptions.Directory)
@@ -62,8 +62,8 @@ func TestDataManagementDialogsDefaultToUserHomeDirectory(t *testing.T) {
 
 func TestExportSettingsExportsPreferencesAndSearchPathsOnly(t *testing.T) {
 	setTestConfigEnv(t)
-	app := newTestAppWithDefaults(t)
-	setTestAppRuntimeReady(t, app, context.Background())
+	app := newSettingsEffectsTestFixture(t)
+	setTestAppRuntimeReady(t, app.Lifecycle, context.Background())
 
 	settings := defaultSettingsFile()
 	settings.Preferences.AppearanceMode = "dark"
@@ -75,12 +75,12 @@ func TestExportSettingsExportsPreferencesAndSearchPathsOnly(t *testing.T) {
 	settings.Clusters = map[string]settingsClusterSection{
 		"cluster-a": {AllowedNamespaces: []string{"team-a"}},
 	}
-	require.NoError(t, app.preferences.saveSettingsFile(settings))
+	require.NoError(t, app.Preferences.saveSettingsFile(settings))
 
 	exportPath := filepath.Join(t.TempDir(), "settings-export.json")
 	installDataManagementDialogs(t, app, exportPath, "")
 
-	result, err := app.dataManagement.ExportSettings()
+	result, err := app.DataManagement.ExportSettings()
 	require.NoError(t, err)
 	require.False(t, result.Canceled)
 	require.Equal(t, exportPath, result.Path)
@@ -108,8 +108,8 @@ func TestExportSettingsExportsPreferencesAndSearchPathsOnly(t *testing.T) {
 
 func TestImportSettingsReplacesPortableSettingsAndPreservesSessionState(t *testing.T) {
 	setTestConfigEnv(t)
-	app := newTestAppWithDefaults(t)
-	setTestAppRuntimeReady(t, app, context.Background())
+	app := newSettingsEffectsTestFixture(t)
+	setTestAppRuntimeReady(t, app.Lifecycle, context.Background())
 
 	current := defaultSettingsFile()
 	current.Preferences.AppearanceMode = "dark"
@@ -121,10 +121,10 @@ func TestImportSettingsReplacesPortableSettingsAndPreservesSessionState(t *testi
 		"cluster-a": {AllowedNamespaces: []string{"team-a"}},
 	}
 	current.Attention = &settingsGlobalAttentionRules{FindingTypes: []string{"pod-restarts"}}
-	require.NoError(t, app.preferences.saveSettingsFile(current))
-	ensurePreferencesLoaded(t, app)
+	require.NoError(t, app.Preferences.saveSettingsFile(current))
+	ensurePreferencesLoaded(t, app.Preferences)
 
-	persistencePath, err := app.uiState.getPersistenceFilePath()
+	persistencePath, err := app.UIState.getPersistenceFilePath()
 	require.NoError(t, err)
 	persistenceBefore := []byte(`{"schemaVersion":1,"updatedAt":"2026-01-01T00:00:00Z","clusterTabs":{"order":["cluster-a"]},"tables":{"gridtable":{"v1":{"pods":{"sort":"name"}}}}}`)
 	require.NoError(t, os.WriteFile(persistencePath, persistenceBefore, 0o644))
@@ -150,12 +150,12 @@ func TestImportSettingsReplacesPortableSettingsAndPreservesSessionState(t *testi
 	require.NoError(t, os.WriteFile(importPath, importData, 0o600))
 	installDataManagementDialogs(t, app, "", importPath)
 
-	result, err := app.dataManagement.ImportSettings()
+	result, err := app.DataManagement.ImportSettings()
 	require.NoError(t, err)
 	require.False(t, result.Canceled)
 	require.Equal(t, importPath, result.Path)
 
-	saved, err := app.preferences.loadSettingsFile()
+	saved, err := app.Preferences.loadSettingsFile()
 	require.NoError(t, err)
 	require.Equal(t, "light", saved.Preferences.AppearanceMode)
 	require.True(t, saved.Preferences.UseShortResourceNames)
@@ -173,7 +173,7 @@ func TestImportSettingsReplacesPortableSettingsAndPreservesSessionState(t *testi
 	require.Equal(t, current.Attention, saved.Attention)
 	require.Equal(t, current.Telemetry, saved.Telemetry)
 
-	inMemory, err := app.preferences.GetAppSettings()
+	inMemory, err := app.Preferences.GetAppSettings()
 	require.NoError(t, err)
 	require.Equal(t, "light", inMemory.AppearanceMode)
 	require.True(t, inMemory.UseShortResourceNames)
@@ -186,12 +186,12 @@ func TestImportSettingsReplacesPortableSettingsAndPreservesSessionState(t *testi
 
 func TestImportSettingsRejectsWrongFormatWithoutChangingSettings(t *testing.T) {
 	setTestConfigEnv(t)
-	app := newTestAppWithDefaults(t)
-	setTestAppRuntimeReady(t, app, context.Background())
+	app := newSettingsEffectsTestFixture(t)
+	setTestAppRuntimeReady(t, app.Lifecycle, context.Background())
 	current := defaultSettingsFile()
 	current.Preferences.AppearanceMode = "dark"
-	require.NoError(t, app.preferences.saveSettingsFile(current))
-	settingsPath, err := app.preferences.getSettingsFilePath()
+	require.NoError(t, app.Preferences.saveSettingsFile(current))
+	settingsPath, err := app.Preferences.getSettingsFilePath()
 	require.NoError(t, err)
 	before, err := os.ReadFile(settingsPath)
 	require.NoError(t, err)
@@ -200,7 +200,7 @@ func TestImportSettingsRejectsWrongFormatWithoutChangingSettings(t *testing.T) {
 	require.NoError(t, os.WriteFile(importPath, []byte(`{"format":"luxury-yacht-favorites","schemaVersion":1,"favorites":[]}`), 0o600))
 	installDataManagementDialogs(t, app, "", importPath)
 
-	_, err = app.dataManagement.ImportSettings()
+	_, err = app.DataManagement.ImportSettings()
 	require.ErrorContains(t, err, "not a Luxury Yacht settings export")
 	after, readErr := os.ReadFile(settingsPath)
 	require.NoError(t, readErr)
@@ -209,8 +209,8 @@ func TestImportSettingsRejectsWrongFormatWithoutChangingSettings(t *testing.T) {
 
 func TestFavoritesExportImportRoundTripReplacesLibrary(t *testing.T) {
 	setTestConfigEnv(t)
-	app := newTestAppWithDefaults(t)
-	setTestAppRuntimeReady(t, app, context.Background())
+	app := newSettingsEffectsTestFixture(t)
+	setTestAppRuntimeReady(t, app.Lifecycle, context.Background())
 
 	original := &favoritesFile{
 		Favorites: []Favorite{
@@ -218,11 +218,11 @@ func TestFavoritesExportImportRoundTripReplacesLibrary(t *testing.T) {
 			dataManagementFavorite("favorite-b", "Favorite B"),
 		},
 	}
-	require.NoError(t, app.favorites.saveFavoritesFile(original))
+	require.NoError(t, app.Favorites.saveFavoritesFile(original))
 
 	exportPath := filepath.Join(t.TempDir(), "favorites-export.json")
 	installDataManagementDialogs(t, app, exportPath, exportPath)
-	exportResult, err := app.dataManagement.ExportFavorites()
+	exportResult, err := app.DataManagement.ExportFavorites()
 	require.NoError(t, err)
 	require.False(t, exportResult.Canceled)
 
@@ -233,16 +233,16 @@ func TestFavoritesExportImportRoundTripReplacesLibrary(t *testing.T) {
 	require.Equal(t, favoritesDataFormat, exported.Format)
 	require.Equal(t, []string{"favorite-a", "favorite-b"}, []string{exported.Favorites[0].ID, exported.Favorites[1].ID})
 
-	require.NoError(t, app.favorites.saveFavoritesFile(&favoritesFile{
+	require.NoError(t, app.Favorites.saveFavoritesFile(&favoritesFile{
 		Favorites: []Favorite{dataManagementFavorite("replace-me", "Replace Me")},
 	}))
 
-	importResult, err := app.dataManagement.ImportFavorites()
+	importResult, err := app.DataManagement.ImportFavorites()
 	require.NoError(t, err)
 	require.False(t, importResult.Canceled)
 	require.Equal(t, 2, importResult.Imported)
 
-	got, err := app.favorites.GetFavorites()
+	got, err := app.Favorites.GetFavorites()
 	require.NoError(t, err)
 	require.Equal(t, []string{"favorite-a", "favorite-b"}, []string{got[0].ID, got[1].ID})
 	require.Equal(t, []int{0, 1}, []int{got[0].Order, got[1].Order})
@@ -250,10 +250,10 @@ func TestFavoritesExportImportRoundTripReplacesLibrary(t *testing.T) {
 
 func TestImportFavoritesRejectsDuplicateIDsWithoutChangingLibrary(t *testing.T) {
 	setTestConfigEnv(t)
-	app := newTestAppWithDefaults(t)
-	setTestAppRuntimeReady(t, app, context.Background())
+	app := newSettingsEffectsTestFixture(t)
+	setTestAppRuntimeReady(t, app.Lifecycle, context.Background())
 	beforeFavorite := dataManagementFavorite("existing", "Existing")
-	require.NoError(t, app.favorites.saveFavoritesFile(&favoritesFile{Favorites: []Favorite{beforeFavorite}}))
+	require.NoError(t, app.Favorites.saveFavoritesFile(&favoritesFile{Favorites: []Favorite{beforeFavorite}}))
 
 	duplicate := dataManagementFavorite("duplicate", "First")
 	data, err := json.Marshal(favoritesDataFile{
@@ -269,24 +269,24 @@ func TestImportFavoritesRejectsDuplicateIDsWithoutChangingLibrary(t *testing.T) 
 	require.NoError(t, os.WriteFile(importPath, data, 0o600))
 	installDataManagementDialogs(t, app, "", importPath)
 
-	_, err = app.dataManagement.ImportFavorites()
+	_, err = app.DataManagement.ImportFavorites()
 	require.ErrorContains(t, err, `duplicate favorite ID "duplicate"`)
-	got, readErr := app.favorites.GetFavorites()
+	got, readErr := app.Favorites.GetFavorites()
 	require.NoError(t, readErr)
 	require.Equal(t, []Favorite{beforeFavorite}, got)
 }
 
 func TestDataManagementDialogsTreatCancelAsSuccess(t *testing.T) {
 	setTestConfigEnv(t)
-	app := newTestAppWithDefaults(t)
-	setTestAppRuntimeReady(t, app, context.Background())
+	app := newSettingsEffectsTestFixture(t)
+	setTestAppRuntimeReady(t, app.Lifecycle, context.Background())
 	installDataManagementDialogs(t, app, "", "")
 
 	for _, action := range []func() (DataManagementResult, error){
-		app.dataManagement.ExportSettings,
-		app.dataManagement.ImportSettings,
-		app.dataManagement.ExportFavorites,
-		app.dataManagement.ImportFavorites,
+		app.DataManagement.ExportSettings,
+		app.DataManagement.ImportSettings,
+		app.DataManagement.ExportFavorites,
+		app.DataManagement.ImportFavorites,
 	} {
 		result, err := action()
 		require.NoError(t, err)
@@ -300,64 +300,64 @@ func TestDataManagementRequiresAnInitializedAppContext(t *testing.T) {
 	_, err := nilCoordinator.ExportSettings()
 	require.ErrorContains(t, err, "not initialised")
 
-	app := newTestAppWithDefaults(t)
-	_, err = app.dataManagement.ExportSettings()
+	app := newSettingsEffectsTestFixture(t)
+	_, err = app.DataManagement.ExportSettings()
 	require.ErrorContains(t, err, "application context is not available")
 }
 
 func TestFactoryResetClearsEveryLeafArtifactAndRestoresRuntimePolicyDefaults(t *testing.T) {
 	setTestConfigEnv(t)
-	app := newTestAppWithDefaults(t)
-	setTestAppRuntimeReady(t, app, context.Background())
+	app := newSettingsEffectsTestFixture(t)
+	setTestAppRuntimeReady(t, app.Lifecycle, context.Background())
 	updateState := &fakeApplicationUpdateCoordinator{}
-	app.updates.coordinator = updateState
+	app.Updates.coordinator = updateState
 
-	require.NoError(t, app.preferences.saveSettingsFile(defaultSettingsFile()))
-	require.NoError(t, app.favorites.saveFavoritesFile(&favoritesFile{
+	require.NoError(t, app.Preferences.saveSettingsFile(defaultSettingsFile()))
+	require.NoError(t, app.Favorites.saveFavoritesFile(&favoritesFile{
 		Favorites: []Favorite{dataManagementFavorite("favorite", "Favorite")},
 	}))
-	require.NoError(t, app.uiState.SetClusterTabOrder([]string{"cluster-a"}))
-	cachePath, err := app.preferences.cacheDirPath()
+	require.NoError(t, app.UIState.SetClusterTabOrder([]string{"cluster-a"}))
+	cachePath, err := app.Preferences.cacheDirPath()
 	require.NoError(t, err)
 	require.NoError(t, os.MkdirAll(cachePath, 0o700))
 	require.NoError(t, os.WriteFile(filepath.Join(cachePath, "cached"), []byte("x"), 0o600))
-	app.permissionFetchPolicy.SetPermissionFetchConcurrency(1)
-	app.containerLogsPolicy.SetContainerLogsPerScopeLimit(1)
+	app.PermissionFetchPolicy.SetPermissionFetchConcurrency(1)
+	app.ContainerLogsPolicy.SetContainerLogsPerScopeLimit(1)
 	searchPathResets := 0
-	app.dataManagement.searchPathsChanged = func() { searchPathResets++ }
+	app.DataManagement.searchPathsChanged = func() { searchPathResets++ }
 
-	require.NoError(t, app.dataManagement.ClearAppState())
-	require.NoError(t, app.dataManagement.ClearAppState(), "Factory Reset must be repeatable")
+	require.NoError(t, app.DataManagement.ClearAppState())
+	require.NoError(t, app.DataManagement.ClearAppState(), "Factory Reset must be repeatable")
 
-	settingsPath, err := app.preferences.getSettingsFilePath()
+	settingsPath, err := app.Preferences.getSettingsFilePath()
 	require.NoError(t, err)
-	favoritesPath, err := app.favorites.getFavoritesFilePath()
+	favoritesPath, err := app.Favorites.getFavoritesFilePath()
 	require.NoError(t, err)
-	uiStatePath, err := app.uiState.getPersistenceFilePath()
+	uiStatePath, err := app.UIState.getPersistenceFilePath()
 	require.NoError(t, err)
 	for _, path := range []string{settingsPath, favoritesPath, uiStatePath, cachePath} {
 		_, statErr := os.Lstat(path)
 		require.ErrorIs(t, statErr, os.ErrNotExist, path)
 	}
-	require.Nil(t, app.preferences.appSettings)
-	require.Equal(t, defaultPermissionSSRRFetchConcurrency, app.permissionFetchPolicy.Concurrency())
-	require.Equal(t, defaultObjPanelLogsTargetPerScopeLimit, app.containerLogsPolicy.Limit())
+	require.Nil(t, app.Preferences.appSettings)
+	require.Equal(t, defaultPermissionSSRRFetchConcurrency, app.PermissionFetchPolicy.Concurrency())
+	require.Equal(t, defaultObjPanelLogsTargetPerScopeLimit, app.ContainerLogsPolicy.Limit())
 	require.Equal(t, 2, updateState.resetCalls)
 	require.Equal(t, 2, searchPathResets)
 }
 
 func TestFactoryResetAttemptsIndependentOwnersAndReturnsPartialFailure(t *testing.T) {
 	setTestConfigEnv(t)
-	app := newTestAppWithDefaults(t)
-	setTestAppRuntimeReady(t, app, context.Background())
-	app.updates.coordinator = &fakeApplicationUpdateCoordinator{resetErr: errors.New("updater busy")}
-	require.NoError(t, app.favorites.saveFavoritesFile(&favoritesFile{
+	app := newSettingsEffectsTestFixture(t)
+	setTestAppRuntimeReady(t, app.Lifecycle, context.Background())
+	app.Updates.coordinator = &fakeApplicationUpdateCoordinator{resetErr: errors.New("updater busy")}
+	require.NoError(t, app.Favorites.saveFavoritesFile(&favoritesFile{
 		Favorites: []Favorite{dataManagementFavorite("favorite", "Favorite")},
 	}))
-	favoritesPath, err := app.favorites.getFavoritesFilePath()
+	favoritesPath, err := app.Favorites.getFavoritesFilePath()
 	require.NoError(t, err)
 
-	err = app.dataManagement.ClearAppState()
+	err = app.DataManagement.ClearAppState()
 
 	require.ErrorContains(t, err, "updater busy")
 	_, statErr := os.Lstat(favoritesPath)

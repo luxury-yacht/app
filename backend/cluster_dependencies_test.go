@@ -9,9 +9,9 @@ import (
 )
 
 func TestAppResourceResolverReusesColdStartResolver(t *testing.T) {
-	app := NewApp(nil)
+	app := newRefreshCoordinatorTestFixture(t)
 	clusterID := "config:ctx"
-	app.clusterClients = map[string]*clusterClients{
+	app.ClusterRuntime.clusterClients = map[string]*clusterClients{
 		clusterID: {
 			meta:              ClusterMeta{ID: clusterID, Name: "ctx"},
 			kubeconfigPath:    "/path",
@@ -20,8 +20,8 @@ func TestAppResourceResolverReusesColdStartResolver(t *testing.T) {
 	}
 
 	resolver := clusterRuntimeResourceResolver{
-		runtime: app.ClusterRuntimeManager, clusterID: clusterID,
-		catalogService: app.RefreshCoordinator.objectCatalogServiceForCluster,
+		runtime: app.ClusterRuntime, clusterID: clusterID,
+		catalogService: app.Refresh.objectCatalogServiceForCluster,
 	}
 	gvk := schema.GroupVersionKind{Group: "apps", Version: "v1", Kind: "Deployment"}
 
@@ -33,9 +33,9 @@ func TestAppResourceResolverReusesColdStartResolver(t *testing.T) {
 		t.Fatalf("unexpected first resolution: ok=%v resolved=%+v", ok, firstResolved)
 	}
 
-	app.clusterClientsMu.Lock()
-	firstFallback := app.clusterClients[clusterID].fallbackResourceResolver
-	app.clusterClientsMu.Unlock()
+	app.ClusterRuntime.clusterClientsMu.Lock()
+	firstFallback := app.ClusterRuntime.clusterClients[clusterID].fallbackResourceResolver
+	app.ClusterRuntime.clusterClientsMu.Unlock()
 	if firstFallback == nil {
 		t.Fatal("expected cold-start fallback resolver to be cached")
 	}
@@ -48,25 +48,25 @@ func TestAppResourceResolverReusesColdStartResolver(t *testing.T) {
 		t.Fatalf("unexpected second resolution: ok=%v resolved=%+v", ok, secondResolved)
 	}
 
-	app.clusterClientsMu.Lock()
-	secondFallback := app.clusterClients[clusterID].fallbackResourceResolver
-	app.clusterClientsMu.Unlock()
+	app.ClusterRuntime.clusterClientsMu.Lock()
+	secondFallback := app.ClusterRuntime.clusterClients[clusterID].fallbackResourceResolver
+	app.ClusterRuntime.clusterClientsMu.Unlock()
 	if firstFallback != secondFallback {
 		t.Fatal("expected cold-start fallback resolver to be reused")
 	}
 }
 
 func TestAppResourceResolverUsesCatalogServiceWhenAvailable(t *testing.T) {
-	app := NewApp(nil)
+	app := newRefreshCoordinatorTestFixture(t)
 	clusterID := "config:ctx"
-	app.storeObjectCatalogEntry(clusterID, &objectCatalogEntry{
+	app.Refresh.storeObjectCatalogEntry(clusterID, &objectCatalogEntry{
 		service: objectcatalog.NewService(objectcatalog.Dependencies{}, nil),
 		meta:    ClusterMeta{ID: clusterID, Name: "ctx"},
 	})
 
 	resolver := clusterRuntimeResourceResolver{
-		runtime: app.ClusterRuntimeManager, clusterID: clusterID,
-		catalogService: app.RefreshCoordinator.objectCatalogServiceForCluster,
+		runtime: app.ClusterRuntime, clusterID: clusterID,
+		catalogService: app.Refresh.objectCatalogServiceForCluster,
 	}
 	resolved, ok, err := resolver.ResolveResourceForGVK(context.Background(), schema.GroupVersionKind{
 		Group:   "apps",

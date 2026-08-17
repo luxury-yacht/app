@@ -2,6 +2,7 @@ package main
 
 import (
 	"encoding/json"
+	"errors"
 	"fmt"
 	"go/ast"
 	"go/parser"
@@ -22,6 +23,7 @@ type wailsMigrationLedger struct {
 	Phase3Checkpoint           wailsPhase3Checkpoint        `json:"phase3Checkpoint"`
 	Phase4Checkpoint           wailsPhase4Checkpoint        `json:"phase4Checkpoint"`
 	Phase5Checkpoint           wailsPhase5Checkpoint        `json:"phase5Checkpoint"`
+	Phase6Checkpoint           wailsPhase6Checkpoint        `json:"phase6Checkpoint"`
 	AppFieldGroups             []wailsAppFieldLedgerGroup   `json:"appFieldGroups"`
 	CommandGroups              []wailsCommandLedgerGroup    `json:"commandGroups"`
 	AppBackpointerGroups       []wailsSignatureLedgerGroup  `json:"appBackpointerGroups"`
@@ -81,6 +83,20 @@ type wailsPhase5Checkpoint struct {
 	RemainingDirectAppTests        int `json:"remainingDirectAppTests"`
 	RemainingTestOnlyAppMethods    int `json:"remainingTestOnlyAppMethods"`
 	AppBackpointers                int `json:"appBackpointers"`
+}
+
+type wailsPhase6Checkpoint struct {
+	ApplicationRuntimeFields    int `json:"applicationRuntimeFields"`
+	ApplicationRuntimeMethods   int `json:"applicationRuntimeMethods"`
+	RemainingAppFields          int `json:"remainingAppFields"`
+	RemainingAppParameterFuncs  int `json:"remainingAppParameterFunctions"`
+	RemainingDirectAppTests     int `json:"remainingDirectAppTests"`
+	RemainingTestOnlyAppMethods int `json:"remainingTestOnlyAppMethods"`
+	AppBackpointers             int `json:"appBackpointers"`
+	FullRuntimeIntegrationTests int `json:"fullRuntimeIntegrationTests"`
+	WailsIgnoreDirectives       int `json:"wailsIgnoreDirectives"`
+	MaxOwnerFields              int `json:"maxOwnerFields"`
+	MaxOwnerMethods             int `json:"maxOwnerMethods"`
 }
 
 type wailsAppFieldLedgerGroup struct {
@@ -212,7 +228,7 @@ type wailsEntryPointGroup struct {
 
 func TestWailsMigrationLedgerCoversAppFieldsAndCommandsExactlyOnce(t *testing.T) {
 	ledger := readWailsMigrationLedger(t)
-	require.Equal(t, 1, ledger.SchemaVersion)
+	require.Equal(t, 2, ledger.SchemaVersion)
 
 	ledgerFields := flattenUniqueLedgerNames(t, "App field", ledger.AppFieldGroups, func(group wailsAppFieldLedgerGroup) (string, []string) {
 		require.NotEmpty(t, group.Readers, "%s readers", group.ID)
@@ -225,7 +241,8 @@ func TestWailsMigrationLedgerCoversAppFieldsAndCommandsExactlyOnce(t *testing.T)
 		require.NotEmpty(t, group.Phase, "%s phase", group.ID)
 		return group.ID, group.Fields
 	})
-	require.Equal(t, currentAppFieldNames(t), ledgerFields)
+	require.Len(t, ledgerFields, ledger.Phase5Checkpoint.AppFields, "the ledger preserves the last App field inventory through retirement")
+	require.Empty(t, currentAppFieldNames(t), "the retired App type must have no current fields")
 
 	ledgerCommands := flattenUniqueLedgerNames(t, "Wails command", ledger.CommandGroups, func(group wailsCommandLedgerGroup) (string, []string) {
 		require.NotEmpty(t, group.FrontendBroker, "%s frontend broker", group.ID)
@@ -337,11 +354,27 @@ func TestWailsMigrationLedgerRecordsPhase4ResourceExtraction(t *testing.T) {
 
 func TestWailsMigrationLedgerRecordsPhase5RuntimeOwnerExtraction(t *testing.T) {
 	checkpoint := readWailsMigrationLedger(t).Phase5Checkpoint
-	require.Equal(t, len(currentAppFieldNames(t)), checkpoint.AppFields)
-	require.Equal(t, len(currentAppParameterFunctions(t)), checkpoint.RemainingAppParameterFunctions)
+	require.Equal(t, 17, checkpoint.AppFields)
+	require.Equal(t, 5, checkpoint.RemainingAppParameterFunctions)
+	require.Equal(t, 39, checkpoint.RemainingDirectAppTests)
+	require.Zero(t, checkpoint.RemainingTestOnlyAppMethods)
+	require.Zero(t, checkpoint.AppBackpointers)
+}
+
+func TestWailsMigrationLedgerRecordsPhase6GodObjectRetirement(t *testing.T) {
+	checkpoint := readWailsMigrationLedger(t).Phase6Checkpoint
+	fields, methods := currentApplicationRuntimeShape(t)
+	require.Equal(t, fields, checkpoint.ApplicationRuntimeFields)
+	require.Equal(t, methods, checkpoint.ApplicationRuntimeMethods)
+	require.Equal(t, len(currentAppFieldNames(t)), checkpoint.RemainingAppFields)
+	require.Equal(t, len(currentAppParameterFunctions(t)), checkpoint.RemainingAppParameterFuncs)
 	require.Equal(t, len(currentDirectAppTestFiles(t)), checkpoint.RemainingDirectAppTests)
 	require.Equal(t, len(currentTestOnlyAppMethods(t)), checkpoint.RemainingTestOnlyAppMethods)
 	require.Equal(t, len(currentAppBackpointers(t)), checkpoint.AppBackpointers)
+	require.Equal(t, len(currentFullRuntimeTestFiles(t)), checkpoint.FullRuntimeIntegrationTests)
+	require.Equal(t, currentBackendWailsIgnoreDirectiveCount(t), checkpoint.WailsIgnoreDirectives)
+	require.Equal(t, 47, checkpoint.MaxOwnerFields)
+	require.Equal(t, 140, checkpoint.MaxOwnerMethods)
 }
 
 func TestWailsMigrationLedgerCoversConcreteAppCouplingExactlyOnce(t *testing.T) {
@@ -352,14 +385,16 @@ func TestWailsMigrationLedgerCoversConcreteAppCouplingExactlyOnce(t *testing.T) 
 		require.NotEmpty(t, group.Phase, "%s phase", group.ID)
 		return group.ID, group.Entries
 	})
-	require.Equal(t, currentAppBackpointers(t), backpointers)
+	require.Empty(t, currentAppBackpointers(t))
+	require.Empty(t, backpointers)
 
 	functions := flattenUniqueLedgerNames(t, "App-parameter function", ledger.AppParameterFunctionGroups, func(group wailsSignatureLedgerGroup) (string, []string) {
 		require.NotEmpty(t, group.Replacement, "%s replacement", group.ID)
 		require.NotEmpty(t, group.Phase, "%s phase", group.ID)
 		return group.ID, group.Entries
 	})
-	require.Equal(t, currentAppParameterFunctions(t), functions)
+	require.Empty(t, currentAppParameterFunctions(t))
+	require.Len(t, functions, 5, "the ledger preserves the five original test-support parameters retired in Phase 6")
 }
 
 func TestWailsMigrationLedgerCoversAppTestSupportExactlyOnce(t *testing.T) {
@@ -371,14 +406,16 @@ func TestWailsMigrationLedgerCoversAppTestSupportExactlyOnce(t *testing.T) {
 		require.NotEmpty(t, group.Phase, "%s phase", group.ID)
 		return group.ID, group.Files
 	})
-	require.Equal(t, currentDirectAppTestFiles(t), testFiles)
+	require.Empty(t, currentDirectAppTestFiles(t))
+	require.Len(t, testFiles, 39, "the ledger preserves the original direct-App test migration inventory")
 
 	testMethods := flattenUniqueLedgerNames(t, "test-only App method", ledger.TestOnlyAppMethodGroups, func(group wailsSignatureLedgerGroup) (string, []string) {
 		require.NotEmpty(t, group.Replacement, "%s replacement", group.ID)
 		require.NotEmpty(t, group.Phase, "%s phase", group.ID)
 		return group.ID, group.Entries
 	})
-	require.Equal(t, currentTestOnlyAppMethods(t), testMethods)
+	require.Empty(t, currentTestOnlyAppMethods(t))
+	require.Empty(t, testMethods)
 }
 
 func TestWailsMigrationLedgerCoversSettingsEffectsAndLazyLoadExactlyOnce(t *testing.T) {
@@ -630,9 +667,45 @@ func currentAppFieldNames(t *testing.T) []string {
 			}
 		}
 	}
-	require.NotEmpty(t, result)
 	slices.Sort(result)
 	return result
+}
+
+func currentApplicationRuntimeShape(t *testing.T) (int, int) {
+	t.Helper()
+	path := repositoryPath("backend", "app.go")
+	parsed, err := parser.ParseFile(token.NewFileSet(), path, nil, 0)
+	require.NoError(t, err)
+	fields := 0
+	methods := 0
+	for _, declaration := range parsed.Decls {
+		switch declaration := declaration.(type) {
+		case *ast.GenDecl:
+			for _, specification := range declaration.Specs {
+				typeSpec, ok := specification.(*ast.TypeSpec)
+				if !ok || typeSpec.Name.Name != "ApplicationRuntime" {
+					continue
+				}
+				structure, ok := typeSpec.Type.(*ast.StructType)
+				require.True(t, ok)
+				for _, field := range structure.Fields.List {
+					if len(field.Names) == 0 {
+						fields++
+					} else {
+						fields += len(field.Names)
+					}
+				}
+			}
+		case *ast.FuncDecl:
+			if declaration.Recv == nil || len(declaration.Recv.List) != 1 {
+				continue
+			}
+			if isNamedPointer(declaration.Recv.List[0].Type, "ApplicationRuntime") {
+				methods++
+			}
+		}
+	}
+	return fields, methods
 }
 
 func currentGeneratedWailsCommands(t *testing.T) []string {
@@ -728,9 +801,37 @@ func currentDirectAppTestFiles(t *testing.T) []string {
 	return result
 }
 
+func currentFullRuntimeTestFiles(t *testing.T) []string {
+	t.Helper()
+	paths, err := filepath.Glob(repositoryPath("backend", "*_test.go"))
+	require.NoError(t, err)
+	result := make([]string, 0)
+	for _, path := range paths {
+		parsed, err := parser.ParseFile(token.NewFileSet(), path, nil, 0)
+		require.NoError(t, err)
+		usesRuntime := false
+		ast.Inspect(parsed, func(node ast.Node) bool {
+			identifier, ok := node.(*ast.Ident)
+			if ok && (identifier.Name == "ApplicationRuntime" || identifier.Name == "NewApplicationRuntime") {
+				usesRuntime = true
+				return false
+			}
+			return !usesRuntime
+		})
+		if usesRuntime {
+			result = append(result, filepath.Base(path))
+		}
+	}
+	slices.Sort(result)
+	return result
+}
+
 func currentTestOnlyAppMethods(t *testing.T) []string {
 	t.Helper()
 	path := repositoryPath("backend", "test_entrypoints_test.go")
+	if _, err := os.Stat(path); errors.Is(err, os.ErrNotExist) {
+		return nil
+	}
 	parsed, err := parser.ParseFile(token.NewFileSet(), path, nil, 0)
 	require.NoError(t, err)
 	result := make([]string, 0)

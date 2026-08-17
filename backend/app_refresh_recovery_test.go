@@ -14,100 +14,100 @@ import (
 )
 
 func TestTeardownRefreshSubsystem(t *testing.T) {
-	app := newTestAppWithDefaults(t)
+	app := newWorkspaceCoordinatorTestFixture(t)
 
 	cancelled := false
-	app.refreshCancel = func() { cancelled = true }
+	app.Refresh.refreshCancel = func() { cancelled = true }
 
-	setRefreshServiceReadyForTest(app)
+	setRefreshServiceReadyForTest(app.Refresh)
 
-	app.teardownRefreshSubsystem()
+	app.Refresh.teardownRefreshSubsystem()
 
 	require.True(t, cancelled)
-	require.Nil(t, app.refreshService.Load())
+	require.Nil(t, app.Refresh.refreshService.Load())
 }
 
 func TestShutdownRefreshSubsystemCancelsPartialGenerationWithoutManager(t *testing.T) {
-	app := newTestAppWithDefaults(t)
+	app := newWorkspaceCoordinatorTestFixture(t)
 	subsystem := &system.Subsystem{}
 	preparationCtx, started := subsystem.BeginColdPreparation(context.Background(), time.Now())
 	require.True(t, started)
 
-	app.shutdownRefreshSubsystem(subsystem)
+	app.Refresh.shutdownRefreshSubsystem(subsystem)
 
 	require.ErrorIs(t, preparationCtx.Err(), context.Canceled,
 		"global teardown must cancel work owned by a partially built subsystem generation")
 }
 
 func TestTeardownRefreshSubsystemBlocksRuntimeResurrectionUntilSetup(t *testing.T) {
-	app := newTestAppWithDefaults(t)
-	setTestAppRuntimeReady(t, app, context.Background())
-	require.NotNil(t, app.ensureRefreshRuntimeContext())
+	app := newWorkspaceCoordinatorTestFixture(t)
+	setTestAppRuntimeReady(t, app.Lifecycle, context.Background())
+	require.NotNil(t, app.Refresh.ensureRefreshRuntimeContext())
 
-	app.teardownRefreshSubsystem()
-	require.Nil(t, app.ensureRefreshRuntimeContext(),
+	app.Refresh.teardownRefreshSubsystem()
+	require.Nil(t, app.Refresh.ensureRefreshRuntimeContext(),
 		"a late auth or governor rebuild must not resurrect the process refresh runtime after teardown")
 
-	require.NotNil(t, app.beginRefreshRuntimeContext(),
+	require.NotNil(t, app.Refresh.beginRefreshRuntimeContext(),
 		"a new selection setup must explicitly reopen the process refresh runtime")
-	require.NotNil(t, app.ensureRefreshRuntimeContext())
-	app.teardownRefreshSubsystem()
+	require.NotNil(t, app.Refresh.ensureRefreshRuntimeContext())
+	app.Refresh.teardownRefreshSubsystem()
 }
 
 func TestTeardownRefreshSubsystemCoordinatesWithConcurrentRuntimeEnsure(t *testing.T) {
-	app := newTestAppWithDefaults(t)
-	setTestAppRuntimeReady(t, app, context.Background())
-	require.NotNil(t, app.ensureRefreshRuntimeContext())
+	app := newWorkspaceCoordinatorTestFixture(t)
+	setTestAppRuntimeReady(t, app.Lifecycle, context.Background())
+	require.NotNil(t, app.Refresh.ensureRefreshRuntimeContext())
 
 	start := make(chan struct{})
 	var wg sync.WaitGroup
 	wg.Add(2)
 	go func() {
 		defer wg.Done()
-		app.selectionMutationMu.Lock()
-		defer app.selectionMutationMu.Unlock()
+		app.Workspace.selectionMutationMu.Lock()
+		defer app.Workspace.selectionMutationMu.Unlock()
 		<-start
-		app.teardownRefreshSubsystem()
+		app.Refresh.teardownRefreshSubsystem()
 	}()
 	go func() {
 		defer wg.Done()
-		app.governorReconcileMu.Lock()
-		defer app.governorReconcileMu.Unlock()
+		app.Refresh.governorReconcileMu.Lock()
+		defer app.Refresh.governorReconcileMu.Unlock()
 		<-start
-		app.ensureRefreshRuntimeContext()
+		app.Refresh.ensureRefreshRuntimeContext()
 	}()
 	close(start)
 	wg.Wait()
 
-	require.Nil(t, app.ensureRefreshRuntimeContext(),
+	require.Nil(t, app.Refresh.ensureRefreshRuntimeContext(),
 		"teardown must remain authoritative over a concurrent late runtime ensure")
 }
 
 func TestRefreshCoordinatorResetRuntimeStateUnpublishesAndClearsCache(t *testing.T) {
 	setTestConfigEnv(t)
-	app := newTestAppWithDefaults(t)
-	setRefreshServiceReadyForTest(app)
-	cacheRoot, err := app.preferences.cacheDirPath()
+	app := newWorkspaceCoordinatorTestFixture(t)
+	setRefreshServiceReadyForTest(app.Refresh)
+	cacheRoot, err := app.Preferences.cacheDirPath()
 	require.NoError(t, err)
 	require.NoError(t, os.MkdirAll(filepath.Join(cacheRoot, "spill"), 0o755))
 	require.NoError(t, os.WriteFile(filepath.Join(cacheRoot, "spill", "cached"), []byte("x"), 0o600))
 
-	require.NoError(t, app.RefreshCoordinator.ResetRuntimeState())
-	require.Nil(t, app.refreshService.Load())
+	require.NoError(t, app.Refresh.ResetRuntimeState())
+	require.Nil(t, app.Refresh.refreshService.Load())
 	require.NoDirExists(t, cacheRoot)
 
-	require.NoError(t, app.RefreshCoordinator.ResetRuntimeState(), "reset must be repeatable")
+	require.NoError(t, app.Refresh.ResetRuntimeState(), "reset must be repeatable")
 }
 
 // TestHandlePermissionIssuesLogsWarning verifies that permission issues are logged
 // without triggering global auth recovery (per-cluster recovery is now used).
 func TestHandlePermissionIssuesLogsWarning(t *testing.T) {
-	app := newTestAppWithDefaults(t)
+	app := newWorkspaceCoordinatorTestFixture(t)
 
 	issues := []system.PermissionIssue{{Domain: "namespace", Resource: "pods", Err: errors.New("forbidden")}}
-	app.handlePermissionIssues(issues)
+	app.Refresh.handlePermissionIssues(issues)
 
-	entries := app.appLogs.logger.GetEntries()
+	entries := app.AppLogs.logger.GetEntries()
 	require.NotEmpty(t, entries)
 	require.Contains(t, entries[len(entries)-1].Message, "Refresh domain namespace unavailable (pods)")
 }
@@ -115,27 +115,27 @@ func TestHandlePermissionIssuesLogsWarning(t *testing.T) {
 // TestHandlePermissionIssuesSkipsNilErrors verifies that permission issues
 // with nil errors are skipped without logging.
 func TestHandlePermissionIssuesSkipsNilErrors(t *testing.T) {
-	app := newTestAppWithDefaults(t)
+	app := newWorkspaceCoordinatorTestFixture(t)
 
 	issues := []system.PermissionIssue{{Domain: "namespace", Resource: "pods", Err: nil}}
-	app.handlePermissionIssues(issues)
+	app.Refresh.handlePermissionIssues(issues)
 
-	entries := app.appLogs.logger.GetEntries()
+	entries := app.AppLogs.logger.GetEntries()
 	require.Empty(t, entries)
 }
 
 // TestPerClusterTransportFailure verifies that transport failure tracking is
 // isolated per cluster. Failures in one cluster should not affect another.
 func TestPerClusterTransportFailure(t *testing.T) {
-	app := newTestAppWithDefaults(t)
+	app := newWorkspaceCoordinatorTestFixture(t)
 
 	// Record failures for cluster A
-	app.recordClusterTransportFailure("cluster-a", "test failure", nil)
-	app.recordClusterTransportFailure("cluster-a", "test failure", nil)
+	app.ClusterRuntime.recordClusterTransportFailure("cluster-a", "test failure", nil)
+	app.ClusterRuntime.recordClusterTransportFailure("cluster-a", "test failure", nil)
 
 	// Cluster B should be unaffected
-	stateA := app.getTransportState("cluster-a")
-	stateB := app.getTransportState("cluster-b")
+	stateA := app.ClusterRuntime.getTransportState("cluster-a")
+	stateB := app.ClusterRuntime.getTransportState("cluster-b")
 
 	require.Equal(t, 2, stateA.failureCount)
 	require.Equal(t, 0, stateB.failureCount)
@@ -144,18 +144,18 @@ func TestPerClusterTransportFailure(t *testing.T) {
 // TestPerClusterTransportSuccessResets verifies that recording a success for
 // one cluster resets its failure count without affecting other clusters.
 func TestPerClusterTransportSuccessResets(t *testing.T) {
-	app := newTestAppWithDefaults(t)
+	app := newWorkspaceCoordinatorTestFixture(t)
 
 	// Record failures for both clusters
-	app.recordClusterTransportFailure("cluster-a", "failure", nil)
-	app.recordClusterTransportFailure("cluster-a", "failure", nil)
-	app.recordClusterTransportFailure("cluster-b", "failure", nil)
+	app.ClusterRuntime.recordClusterTransportFailure("cluster-a", "failure", nil)
+	app.ClusterRuntime.recordClusterTransportFailure("cluster-a", "failure", nil)
+	app.ClusterRuntime.recordClusterTransportFailure("cluster-b", "failure", nil)
 
 	// Reset cluster A
-	app.recordClusterTransportSuccess("cluster-a")
+	app.ClusterRuntime.recordClusterTransportSuccess("cluster-a")
 
-	stateA := app.getTransportState("cluster-a")
-	stateB := app.getTransportState("cluster-b")
+	stateA := app.ClusterRuntime.getTransportState("cluster-a")
+	stateB := app.ClusterRuntime.getTransportState("cluster-b")
 
 	require.Equal(t, 0, stateA.failureCount)
 	require.Equal(t, 1, stateB.failureCount)
@@ -164,9 +164,9 @@ func TestPerClusterTransportSuccessResets(t *testing.T) {
 // TestPerClusterTransportStateInitialization verifies that getTransportState
 // lazily initializes state for new clusters.
 func TestPerClusterTransportStateInitialization(t *testing.T) {
-	app := newTestAppWithDefaults(t)
+	app := newWorkspaceCoordinatorTestFixture(t)
 
-	state := app.getTransportState("new-cluster")
+	state := app.ClusterRuntime.getTransportState("new-cluster")
 	require.NotNil(t, state)
 	require.Equal(t, 0, state.failureCount)
 	require.False(t, state.rebuildInProgress)
@@ -175,12 +175,12 @@ func TestPerClusterTransportStateInitialization(t *testing.T) {
 // TestPerClusterTransportWindowReset verifies that the failure window resets
 // after the window duration expires.
 func TestPerClusterTransportWindowReset(t *testing.T) {
-	app := newTestAppWithDefaults(t)
+	app := newWorkspaceCoordinatorTestFixture(t)
 
 	// Record a failure
-	app.recordClusterTransportFailure("cluster-a", "failure", nil)
+	app.ClusterRuntime.recordClusterTransportFailure("cluster-a", "failure", nil)
 
-	stateA := app.getTransportState("cluster-a")
+	stateA := app.ClusterRuntime.getTransportState("cluster-a")
 	require.Equal(t, 1, stateA.failureCount)
 
 	// Manually expire the window by setting windowStart in the past
@@ -189,7 +189,7 @@ func TestPerClusterTransportWindowReset(t *testing.T) {
 	stateA.mu.Unlock()
 
 	// Record another failure - should reset the count first
-	app.recordClusterTransportFailure("cluster-a", "failure", nil)
+	app.ClusterRuntime.recordClusterTransportFailure("cluster-a", "failure", nil)
 
 	stateA.mu.Lock()
 	count := stateA.failureCount
@@ -202,14 +202,14 @@ func TestPerClusterTransportWindowReset(t *testing.T) {
 // TestPerClusterTransportRebuildTriggersAtThreshold verifies that reaching
 // the failure threshold triggers a rebuild for that specific cluster.
 func TestPerClusterTransportRebuildTriggersAtThreshold(t *testing.T) {
-	app := newTestAppWithDefaults(t)
+	app := newWorkspaceCoordinatorTestFixture(t)
 
 	// Record 3 failures (threshold) for cluster A
-	app.recordClusterTransportFailure("cluster-a", "test", nil)
-	app.recordClusterTransportFailure("cluster-a", "test", nil)
-	app.recordClusterTransportFailure("cluster-a", "test", nil)
+	app.ClusterRuntime.recordClusterTransportFailure("cluster-a", "test", nil)
+	app.ClusterRuntime.recordClusterTransportFailure("cluster-a", "test", nil)
+	app.ClusterRuntime.recordClusterTransportFailure("cluster-a", "test", nil)
 
-	stateA := app.getTransportState("cluster-a")
+	stateA := app.ClusterRuntime.getTransportState("cluster-a")
 	stateA.mu.Lock()
 	inProgress := stateA.rebuildInProgress
 	stateA.mu.Unlock()
@@ -222,18 +222,18 @@ func TestPerClusterTransportRebuildTriggersAtThreshold(t *testing.T) {
 // TestPerClusterTransportRebuildCooldown verifies that the cooldown period
 // prevents rapid successive rebuilds for the same cluster.
 func TestPerClusterTransportRebuildCooldown(t *testing.T) {
-	app := newTestAppWithDefaults(t)
+	app := newWorkspaceCoordinatorTestFixture(t)
 
-	stateA := app.getTransportState("cluster-a")
+	stateA := app.ClusterRuntime.getTransportState("cluster-a")
 	// Simulate a recent rebuild
 	stateA.mu.Lock()
 	stateA.lastRebuild = time.Now()
 	stateA.mu.Unlock()
 
 	// Record 3 failures (threshold)
-	app.recordClusterTransportFailure("cluster-a", "test", nil)
-	app.recordClusterTransportFailure("cluster-a", "test", nil)
-	app.recordClusterTransportFailure("cluster-a", "test", nil)
+	app.ClusterRuntime.recordClusterTransportFailure("cluster-a", "test", nil)
+	app.ClusterRuntime.recordClusterTransportFailure("cluster-a", "test", nil)
+	app.ClusterRuntime.recordClusterTransportFailure("cluster-a", "test", nil)
 
 	stateA.mu.Lock()
 	inProgress := stateA.rebuildInProgress

@@ -1368,38 +1368,48 @@ independently shippable.
 
 ## Phase 6 — Retire the god object
 
-- [ ] Replace `App` with an `ApplicationRuntime` composition root containing
+- [x] Replace `App` with an `ApplicationRuntime` composition root containing
   component references and composition-time options only.
-- [ ] Remove all remaining domain state, mutexes, caches, and business methods
+- [x] Remove all remaining domain state, mutexes, caches, and business methods
   from the composition root.
-- [ ] Rename `backend.NewApp(wailsApp, reporter)` only after updating
+- [x] Rename `backend.NewApp(wailsApp, reporter)` only after updating
   `TestWailsApplicationIsInjectedDirectlyWithoutDesktopAdapter` to require the
   replacement composition literal and direct `application.App` argument while
   retaining every prohibited-adapter assertion.
-- [ ] Update `TestUpdaterTempRootIsConfiguredBeforeAnyProcessDispatch` for the
+- [x] Update `TestUpdaterTempRootIsConfiguredBeforeAnyProcessDispatch` for the
   replacement constructor literal while preserving its full required ordering.
-- [ ] Complete the cross-phase test-support audit: focused components are the
+- [x] Complete the cross-phase test-support audit: focused components are the
   default fixtures; the full runtime is used only for composition/lifecycle
   integration tests; no direct `App` construction remains; and all 19 original
   App-only test entry points have moved to owners or been deleted.
-- [ ] Prove that no `DesktopService` collaborator remains App-backed and every
+- [x] Prove that no `DesktopService` collaborator remains App-backed and every
   command delegates directly to its final owner-shaped interface.
-- [ ] Remove obsolete compatibility wrappers and remaining test entry points
+- [x] Remove obsolete compatibility wrappers and remaining test entry points
   rather than forwarding them indefinitely.
-- [ ] Add architecture tests proving that production registers only
+- [x] Add architecture tests proving that production registers only
   `DesktopService`, `appwindow` depends only on its lifecycle interface,
   internal components do not store the composition root, and generated
   commands match the frontend boundary.
-- [ ] Re-run the Phase 1 `rg '//wails:ignore' backend` architecture guard and
+- [x] Re-run the Phase 1 `rg '//wails:ignore' backend` architecture guard and
   prove it remains empty; Phase 6 must not defer removal of any of the original
   103 directives. If a later framework-required exception was introduced, it
   must already have an adjacent explanation and executable binding test.
-- [ ] Measure the resulting component method/field distribution. Treat a new
+- [x] Measure the resulting component method/field distribution. Treat a new
   god component as a failed migration even if `App` itself is small.
-- [ ] Update `docs/architecture/application-lifecycle.md` with the final
+- [x] Update `docs/architecture/application-lifecycle.md` with the final
   `ApplicationRuntime` composition root and removal of `App`; reconcile
   `docs/architecture/data-access.md` with the final service-to-owner command
   map and generated package layout.
+
+Phase 6 records the complete owner distribution in
+`TestBackendOwnerSizeDistributionRemainsReviewed`. The largest state owner is
+`RefreshCoordinator` at 47 fields; the largest method surface is
+`ResourceGateway` at 140 methods and 16 fields. The transport-only
+`DesktopService` has 91 delegating methods and 14 collaborator fields. These
+remain separate refresh, resource, transport, workspace, cluster-runtime,
+operation, preference, and lifecycle responsibilities rather than recreating
+the former 585-method implementation object. Any distribution change must
+update the executable review baseline and the Phase 6 ledger checkpoint.
 
 Exit criterion: the old `App` implementation object no longer exists as a
 state or behavior owner; no production or test struct, function, or method

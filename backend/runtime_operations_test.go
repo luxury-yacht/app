@@ -14,7 +14,7 @@ func TestCleanupClusterRuntimeOperationsStopsSessionsAndCancelsActiveDrains(t *t
 	fixture := newOperationsCoordinatorFixture(t)
 	app := fixture.runtime
 	operations := fixture.coordinator
-	setTestAppRuntimeReady(t, app, context.Background())
+	setTestAppRuntimeReady(t, app.Lifecycle, context.Background())
 	clusterID := fmt.Sprintf("cleanup-%s", t.Name())
 	otherClusterID := clusterID + "-other"
 
@@ -33,10 +33,10 @@ func TestCleanupClusterRuntimeOperationsStopsSessionsAndCancelsActiveDrains(t *t
 		},
 	}
 	operations.registerRuntimeOperation(runtimeOperationFromShellSession(operations.shellSessions["shell-a"]), func(reason string) error {
-		return operations.closeShellSessionForRuntime("shell-a", reason)
+		return operations.shellSessionLifecycle().closeForRuntime("shell-a", reason)
 	})
 	operations.registerRuntimeOperation(runtimeOperationFromPortForward(operations.portForwardSessions["pf-a"]), func(reason string) error {
-		return operations.stopPortForwardForRuntime("pf-a", reason)
+		return operations.portForwardLifecycle().stopForRuntime("pf-a", reason)
 	})
 
 	store := nodemaintenance.GlobalStore()
@@ -73,9 +73,9 @@ func TestShutdownCleansRuntimeOperationsForActiveClusters(t *testing.T) {
 	fixture := newOperationsCoordinatorFixture(t)
 	app := fixture.runtime
 	operations := fixture.coordinator
-	setTestAppRuntimeReady(t, app, context.Background())
+	setTestAppRuntimeReady(t, app.Lifecycle, context.Background())
 	clusterID := fmt.Sprintf("shutdown-%s", t.Name())
-	app.clusterClients = map[string]*clusterClients{
+	app.ClusterRuntime.clusterClients = map[string]*clusterClients{
 		clusterID: {meta: ClusterMeta{ID: clusterID, Name: "Cluster"}},
 	}
 	operations.shellSessions = map[string]*shellSession{
@@ -88,10 +88,10 @@ func TestShutdownCleansRuntimeOperationsForActiveClusters(t *testing.T) {
 		},
 	}
 	operations.registerRuntimeOperation(runtimeOperationFromShellSession(operations.shellSessions["shell-a"]), func(reason string) error {
-		return operations.closeShellSessionForRuntime("shell-a", reason)
+		return operations.shellSessionLifecycle().closeForRuntime("shell-a", reason)
 	})
 	operations.registerRuntimeOperation(runtimeOperationFromPortForward(operations.portForwardSessions["pf-a"]), func(reason string) error {
-		return operations.stopPortForwardForRuntime("pf-a", reason)
+		return operations.portForwardLifecycle().stopForRuntime("pf-a", reason)
 	})
 	store := nodemaintenance.GlobalStore()
 	activeDrain, err := store.StartDrainForClusterIfIdle("node-a-"+t.Name(), types.DrainNodeOptions{}, clusterID, "Cluster")
@@ -101,7 +101,7 @@ func TestShutdownCleansRuntimeOperationsForActiveClusters(t *testing.T) {
 		return nil
 	})
 
-	require.NoError(t, app.ServiceShutdown())
+	require.NoError(t, app.Lifecycle.ServiceShutdown())
 
 	require.Equal(t, 0, operations.GetClusterShellSessionCount(clusterID))
 	require.Equal(t, 0, operations.GetClusterPortForwardCount(clusterID))
@@ -115,17 +115,17 @@ func TestCloseClusterCleansRuntimeOperationsAndUpdatesSelection(t *testing.T) {
 	fixture := newOperationsCoordinatorFixture(t)
 	app := fixture.runtime
 	operations := fixture.coordinator
-	setTestAppRuntimeReady(t, app, context.Background())
+	setTestAppRuntimeReady(t, app.Lifecycle, context.Background())
 
 	selection := kubeconfigSelection{Path: "/path/config", Context: "ctx"}
-	app.availableKubeconfigs = []KubeconfigInfo{{
+	app.ClusterRuntime.availableKubeconfigs = []KubeconfigInfo{{
 		Name:    "config",
 		Path:    selection.Path,
 		Context: selection.Context,
 	}}
-	clusterID := app.clusterMetaForSelection(selection).ID
-	app.selectedKubeconfigs = []string{selection.String()}
-	app.clusterClients = map[string]*clusterClients{
+	clusterID := app.ClusterRuntime.clusterMetaForSelection(selection).ID
+	app.Workspace.selectedKubeconfigs = []string{selection.String()}
+	app.ClusterRuntime.clusterClients = map[string]*clusterClients{
 		clusterID: {
 			meta:              ClusterMeta{ID: clusterID, Name: "ctx"},
 			kubeconfigPath:    selection.Path,
@@ -142,15 +142,15 @@ func TestCloseClusterCleansRuntimeOperationsAndUpdatesSelection(t *testing.T) {
 		},
 	}
 	operations.registerRuntimeOperation(runtimeOperationFromShellSession(operations.shellSessions["shell-a"]), func(reason string) error {
-		return operations.closeShellSessionForRuntime("shell-a", reason)
+		return operations.shellSessionLifecycle().closeForRuntime("shell-a", reason)
 	})
 	operations.registerRuntimeOperation(runtimeOperationFromPortForward(operations.portForwardSessions["pf-a"]), func(reason string) error {
-		return operations.stopPortForwardForRuntime("pf-a", reason)
+		return operations.portForwardLifecycle().stopForRuntime("pf-a", reason)
 	})
 
-	require.NoError(t, app.CloseCluster(selection.String()))
+	require.NoError(t, app.Workspace.CloseCluster(selection.String()))
 
-	require.Empty(t, app.GetSelectedKubeconfigs())
+	require.Empty(t, app.Workspace.GetSelectedKubeconfigs())
 	require.Equal(t, 0, operations.GetClusterShellSessionCount(clusterID))
 	require.Equal(t, 0, operations.GetClusterPortForwardCount(clusterID))
 }

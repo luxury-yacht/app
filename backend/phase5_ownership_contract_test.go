@@ -8,13 +8,13 @@ import (
 )
 
 func TestPhase5RuntimeOwnersAreComposedWithoutDisplacedAppState(t *testing.T) {
-	app := NewApp(nil)
-	require.NotNil(t, app.ClusterRuntimeManager)
-	require.NotNil(t, app.ClusterWorkspaceProjection)
-	require.NotNil(t, app.RefreshCoordinator)
-	require.NotNil(t, app.WorkspaceCoordinator)
+	app := NewApplicationRuntime(nil)
+	require.NotNil(t, app.ClusterRuntime)
+	require.NotNil(t, app.ClusterWorkspace)
+	require.NotNil(t, app.Refresh)
+	require.NotNil(t, app.Workspace)
 
-	appType := reflect.TypeOf(App{})
+	appType := reflect.TypeOf(ApplicationRuntime{})
 	directFields := make(map[string]struct{}, appType.NumField())
 	for index := 0; index < appType.NumField(); index++ {
 		directFields[appType.Field(index).Name] = struct{}{}
@@ -42,7 +42,7 @@ func TestPhase5RuntimeOwnersAreComposedWithoutDisplacedAppState(t *testing.T) {
 		require.Falsef(t, found, "App still owns displaced Phase 5 field %s", field)
 	}
 
-	appPointer := reflect.TypeOf((*App)(nil))
+	appPointer := reflect.TypeOf((*ApplicationRuntime)(nil))
 	for _, owner := range []any{
 		ClusterRuntimeManager{}, ClusterWorkspaceProjection{}, RefreshCoordinator{}, WorkspaceCoordinator{},
 	} {

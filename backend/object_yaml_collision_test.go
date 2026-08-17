@@ -239,19 +239,9 @@ func TestGetGVRForGVKDisambiguatesCollidingDBInstanceCRDs(t *testing.T) {
 // path). The GVK-aware disambiguation is covered by
 // TestGetGVRForGVKDisambiguatesCollidingDBInstanceCRDs above.
 
-// TestGetObjectYAMLByGVKDisambiguatesCollidingDBInstances is the RED test
-// that drives step 3 of the kind-only-objects fix. It exercises the
-// not-yet-implemented GVK-aware entry point on *App via a temporary stub.
-//
-// Expected state right now:
-//   - The call compiles against the stub in object_yaml_by_gvk.go.
-//   - The stub returns an "not implemented" error, so the test fails.
-//
-// Expected state after the fix lands:
-//   - The stub is replaced with a real implementation that routes through
-//     getGVRForGVKWithDependencies and the dynamic client.
-//   - Each subtest returns the YAML bytes for its own colliding object,
-//     identifiable by the "source" field seeded on the fixture.
+// TestGetObjectYAMLByGVKDisambiguatesCollidingDBInstances exercises the
+// ResourceGateway GVK-aware path. Each subtest returns the YAML bytes for its
+// own colliding object, identifiable by the "source" field seeded below.
 //
 // The objects were seeded with distinct spec.source values ("ack-rds" and
 // "db-operator") specifically so the assertions below cannot pass if the
@@ -422,14 +412,13 @@ func TestQueryPermissionsDisambiguatesCollidingDBInstances(t *testing.T) {
 }
 
 // TestDeleteResourceByGVKDisambiguatesCollidingDBInstances is the
-// step-5 wrapper acceptance test. It exercises the *App-level internal
-// deleteResourceByGVK compatibility wrapper (not the lower-level
+// ResourceGateway acceptance test. It exercises the internal
+// deleteResourceByGVK path (not the lower-level
 // generic.Service.DeleteByGVK already covered by
 // TestServiceDeleteByGVKDisambiguatesCollidingDBInstances in the
 // generic package).
 //
-// The public Wails path now goes through RunObjectAction; this test keeps the
-// legacy wrapper honest for backend callers. It verifies the full path: the
+// The public Wails path goes through RunObjectAction. This verifies the full path: the
 // apiVersion string is parsed into a GVK, dependencies are resolved for the
 // cluster, and generic.Service's DeleteByGVK is invoked with the right GVK. The
 // net effect is that each colliding DBInstance object can be deleted
@@ -445,7 +434,11 @@ func TestDeleteResourceByGVKDisambiguatesCollidingDBInstances(t *testing.T) {
 		app.gateway.responseCacheStore(clusterID, ackCacheKey, "stale-ack")
 		app.gateway.responseCacheStore(clusterID, kindaCacheKey, "fresh-kinda")
 
-		if err := app.gateway.deleteResourceByGVK(clusterID, "rds.services.k8s.aws/v1alpha1", "DBInstance", "default", "my-db"); err != nil {
+		_, err := app.gateway.RunObjectAction(ObjectActionRequest{
+			Action: ObjectActionDelete,
+			Target: objectActionTarget(clusterID, "rds.services.k8s.aws", "v1alpha1", "DBInstance", "default", "my-db"),
+		})
+		if err != nil {
 			t.Fatalf("deleteResourceByGVK returned error for ACK: %v", err)
 		}
 		if _, ok := app.gateway.responseCacheLookup(clusterID, ackCacheKey); ok {
@@ -481,7 +474,11 @@ func TestDeleteResourceByGVKDisambiguatesCollidingDBInstances(t *testing.T) {
 		app.gateway.responseCacheStore(clusterID, ackCacheKey, "fresh-ack")
 		app.gateway.responseCacheStore(clusterID, kindaCacheKey, "stale-kinda")
 
-		if err := app.gateway.deleteResourceByGVK(clusterID, "kinda.rocks/v1beta1", "DbInstance", "default", "my-db"); err != nil {
+		_, err := app.gateway.RunObjectAction(ObjectActionRequest{
+			Action: ObjectActionDelete,
+			Target: objectActionTarget(clusterID, "kinda.rocks", "v1beta1", "DbInstance", "default", "my-db"),
+		})
+		if err != nil {
 			t.Fatalf("deleteResourceByGVK returned error for kinda.rocks: %v", err)
 		}
 		if _, ok := app.gateway.responseCacheLookup(clusterID, kindaCacheKey); ok {
@@ -507,16 +504,19 @@ func TestDeleteResourceByGVKDisambiguatesCollidingDBInstances(t *testing.T) {
 		}
 	})
 
-	t.Run("missing apiVersion returns error", func(t *testing.T) {
+	t.Run("missing version returns boundary error", func(t *testing.T) {
 		const clusterID = "collision-delete-missing-version"
 		app := newCollidingDBInstanceCluster(t, clusterID)
 
-		err := app.gateway.deleteResourceByGVK(clusterID, "", "DBInstance", "default", "my-db")
+		_, err := app.gateway.RunObjectAction(ObjectActionRequest{
+			Action: ObjectActionDelete,
+			Target: objectActionTarget(clusterID, "", "", "DBInstance", "default", "my-db"),
+		})
 		if err == nil {
-			t.Fatal("expected error when apiVersion is empty")
+			t.Fatal("expected error when version is empty")
 		}
-		if !strings.Contains(err.Error(), "apiVersion") {
-			t.Errorf("expected error to mention apiVersion, got %v", err)
+		if !strings.Contains(err.Error(), "missing version") {
+			t.Errorf("expected error to mention missing version, got %v", err)
 		}
 	})
 
@@ -524,11 +524,14 @@ func TestDeleteResourceByGVKDisambiguatesCollidingDBInstances(t *testing.T) {
 		const clusterID = "collision-delete-missing-name"
 		app := newCollidingDBInstanceCluster(t, clusterID)
 
-		err := app.gateway.deleteResourceByGVK(clusterID, "kinda.rocks/v1beta1", "DbInstance", "default", "")
+		_, err := app.gateway.RunObjectAction(ObjectActionRequest{
+			Action: ObjectActionDelete,
+			Target: objectActionTarget(clusterID, "kinda.rocks", "v1beta1", "DbInstance", "default", ""),
+		})
 		if err == nil {
 			t.Fatal("expected error when name is empty")
 		}
-		if !strings.Contains(err.Error(), "name is required") {
+		if !strings.Contains(err.Error(), "missing name") {
 			t.Errorf("expected error to mention missing name, got %v", err)
 		}
 	})

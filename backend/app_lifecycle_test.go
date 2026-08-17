@@ -12,6 +12,7 @@ import (
 	"testing"
 	"time"
 
+	"github.com/luxury-yacht/app/backend/internal/appupdates"
 	"github.com/luxury-yacht/app/backend/refresh"
 	"github.com/luxury-yacht/app/backend/refresh/system"
 	"github.com/luxury-yacht/app/backend/refresh/telemetry"
@@ -35,8 +36,8 @@ func TestSetupEnvironmentAddsHomeLocalBin(t *testing.T) {
 	require.NoError(t, os.MkdirAll(target, 0o755))
 
 	envSetupOnce = sync.Once{}
-	app := newTestAppWithDefaults(t)
-	app.setupEnvironment()
+	app := NewApplicationRuntime(nil)
+	app.Lifecycle.setupEnvironment()
 
 	pathVar := os.Getenv("PATH")
 	require.Contains(t, pathVar, target)
@@ -50,17 +51,17 @@ func TestContainsAuthPatternDoesNotTreatPermissionDenialAsAuthentication(t *test
 }
 
 func TestSetupRefreshSubsystemRequiresSelections(t *testing.T) {
-	app := newTestAppWithDefaults(t)
-	setTestAppRuntimeReady(t, app, context.Background())
+	app := NewApplicationRuntime(nil)
+	setTestAppRuntimeReady(t, app.Lifecycle, context.Background())
 
-	err := app.setupRefreshSubsystem()
+	err := app.Workspace.setupRefreshSubsystem()
 	require.Error(t, err)
 }
 
 func TestSetupRefreshSubsystemRequiresContext(t *testing.T) {
-	app := newTestAppWithDefaults(t)
+	app := NewApplicationRuntime(nil)
 
-	err := app.setupRefreshSubsystem()
+	err := app.Workspace.setupRefreshSubsystem()
 	require.Error(t, err)
 }
 
@@ -70,23 +71,23 @@ func TestEnsureRefreshRuntimeContextGuardsMissingContextAndReusesLiveRuntime(t *
 	require.Nil(t, nilRefresh.currentRefreshRuntimeContext())
 	nilRefresh.stopRefreshRuntimeContext()
 
-	app := newTestAppWithDefaults(t)
-	require.Nil(t, app.ensureRefreshRuntimeContext())
+	app := NewApplicationRuntime(nil)
+	require.Nil(t, app.Refresh.ensureRefreshRuntimeContext())
 
-	setTestAppRuntimeReady(t, app, context.Background())
-	first := app.ensureRefreshRuntimeContext()
+	setTestAppRuntimeReady(t, app.Lifecycle, context.Background())
+	first := app.Refresh.ensureRefreshRuntimeContext()
 	require.NotNil(t, first)
-	t.Cleanup(app.refreshCancel)
+	t.Cleanup(app.Refresh.refreshCancel)
 
-	second := app.ensureRefreshRuntimeContext()
+	second := app.Refresh.ensureRefreshRuntimeContext()
 	require.Equal(t, first.Done(), second.Done(), "an active refresh runtime must not be replaced")
 }
 
 func TestEnsureRefreshRuntimeContextSharesOneRuntimeAcrossLifecycleCallers(t *testing.T) {
 	parent, cancelParent := context.WithCancel(context.Background())
 	t.Cleanup(cancelParent)
-	app := newTestAppWithDefaults(t)
-	setTestAppRuntimeReady(t, app, parent)
+	app := NewApplicationRuntime(nil)
+	setTestAppRuntimeReady(t, app.Lifecycle, parent)
 
 	const callers = 32
 	contexts := make([]context.Context, callers)
@@ -97,14 +98,14 @@ func TestEnsureRefreshRuntimeContextSharesOneRuntimeAcrossLifecycleCallers(t *te
 		go func() {
 			defer wg.Done()
 			if index%2 == 0 {
-				app.selectionMutationMu.Lock()
-				defer app.selectionMutationMu.Unlock()
+				app.Workspace.selectionMutationMu.Lock()
+				defer app.Workspace.selectionMutationMu.Unlock()
 			} else {
-				app.governorReconcileMu.Lock()
-				defer app.governorReconcileMu.Unlock()
+				app.Refresh.governorReconcileMu.Lock()
+				defer app.Refresh.governorReconcileMu.Unlock()
 			}
 			<-start
-			contexts[index] = app.ensureRefreshRuntimeContext()
+			contexts[index] = app.Refresh.ensureRefreshRuntimeContext()
 		}()
 	}
 	close(start)
@@ -115,16 +116,16 @@ func TestEnsureRefreshRuntimeContextSharesOneRuntimeAcrossLifecycleCallers(t *te
 	for _, runtimeCtx := range contexts[1:] {
 		require.Equal(t, first.Done(), runtimeCtx.Done(), "all lifecycle paths must share one refresh runtime")
 	}
-	if app.refreshCancel != nil {
-		app.refreshCancel()
+	if app.Refresh.refreshCancel != nil {
+		app.Refresh.refreshCancel()
 	}
 }
 
 func TestSetupRefreshSubsystemDoesNotStorePermissionCache(t *testing.T) {
-	app := newTestAppWithDefaults(t)
+	app := NewApplicationRuntime(nil)
 	ctx, cancel := context.WithCancel(context.Background())
 	defer cancel()
-	setTestAppRuntimeReady(t, app, ctx)
+	setTestAppRuntimeReady(t, app.Lifecycle, ctx)
 
 	// Create per-cluster clients - there are no global client fields anymore.
 	fakeClient := cgofake.NewClientset()
@@ -133,14 +134,14 @@ func TestSetupRefreshSubsystemDoesNotStorePermissionCache(t *testing.T) {
 	dynamicClient := dynamicfake.NewSimpleDynamicClient(runtime.NewScheme())
 	apiExtensionsClient := &apiextensionsclientset.Clientset{}
 	// Seed a valid selection/cluster client entry so refresh setup skips real kubeconfig IO.
-	app.availableKubeconfigs = []KubeconfigInfo{{
+	app.ClusterRuntime.availableKubeconfigs = []KubeconfigInfo{{
 		Name:    "config",
 		Path:    "/tmp/config",
 		Context: "selection",
 	}}
-	app.selectedKubeconfigs = []string{"/tmp/config:selection"}
-	clusterID := app.clusterMetaForSelection(kubeconfigSelection{Path: "/tmp/config", Context: "selection"}).ID
-	app.clusterClients = map[string]*clusterClients{
+	app.Workspace.selectedKubeconfigs = []string{"/tmp/config:selection"}
+	clusterID := app.ClusterRuntime.clusterMetaForSelection(kubeconfigSelection{Path: "/tmp/config", Context: "selection"}).ID
+	app.ClusterRuntime.clusterClients = map[string]*clusterClients{
 		clusterID: {
 			meta:                ClusterMeta{ID: clusterID, Name: "selection"},
 			kubeconfigPath:      "/tmp/config",
@@ -167,14 +168,14 @@ func TestSetupRefreshSubsystemDoesNotStorePermissionCache(t *testing.T) {
 	}
 	defer func() { newRefreshSubsystemWithServices = original }()
 
-	err := app.setupRefreshSubsystem()
+	err := app.Workspace.setupRefreshSubsystem()
 	require.NoError(t, err)
-	defer app.teardownRefreshSubsystem()
+	defer app.Refresh.teardownRefreshSubsystem()
 
 	// Note: app.refreshManager is now nil by design - there is no global primary cluster.
 	// The manager is per-cluster, accessible via refreshSubsystems[clusterID].Manager.
-	require.NotNil(t, app.refreshService.Load())
-	require.NotNil(t, app.refreshCancel)
+	require.NotNil(t, app.Refresh.refreshService.Load())
+	require.NotNil(t, app.Refresh.refreshCancel)
 
 	require.Equal(t, fakeClient, capturedCfg.KubernetesClient)
 	require.Equal(t, metricsClient, capturedCfg.MetricsClient)
@@ -183,63 +184,63 @@ func TestSetupRefreshSubsystemDoesNotStorePermissionCache(t *testing.T) {
 	require.Equal(t, dynamicClient, capturedCfg.DynamicClient)
 	require.NotNil(t, capturedCfg.ObjectDetailsProvider)
 
-	require.NotNil(t, app.currentTelemetryRecorder())
-	summary := app.currentTelemetryRecorder().SnapshotSummary()
+	require.NotNil(t, app.Refresh.currentTelemetryRecorder())
+	summary := app.Refresh.currentTelemetryRecorder().SnapshotSummary()
 	require.Nil(t, summary.Catalog)
 }
 
 func TestRestoreKubeconfigSelectionUsesSelectedKubeconfigs(t *testing.T) {
-	app := newTestAppWithDefaults(t)
-	app.availableKubeconfigs = []KubeconfigInfo{
+	app := NewApplicationRuntime(nil)
+	app.ClusterRuntime.availableKubeconfigs = []KubeconfigInfo{
 		{Path: "/other/config", Context: "other"},
 		{Path: "/saved/config", Context: "saved"},
 	}
-	app.preferences.appSettings = &AppSettings{
+	app.Preferences.appSettings = &AppSettings{
 		SelectedKubeconfigs: []string{"/saved/config:saved", "/other/config:other"},
 	}
 
-	app.restoreKubeconfigSelection()
+	app.Workspace.restoreKubeconfigSelection()
 
-	require.Equal(t, []string{"/saved/config:saved", "/other/config:other"}, app.selectedKubeconfigs)
+	require.Equal(t, []string{"/saved/config:saved", "/other/config:other"}, app.Workspace.selectedKubeconfigs)
 }
 
 func TestRestoreKubeconfigSelectionNoSettingsLeavesEmpty(t *testing.T) {
 	t.Run("no saved selections returns empty", func(t *testing.T) {
-		app := newTestAppWithDefaults(t)
-		app.availableKubeconfigs = []KubeconfigInfo{
+		app := NewApplicationRuntime(nil)
+		app.ClusterRuntime.availableKubeconfigs = []KubeconfigInfo{
 			{Path: "/current/config", Context: "current", IsDefault: true, IsCurrentContext: true},
 			{Path: "/other/config", Context: "other"},
 		}
 
-		app.restoreKubeconfigSelection()
+		app.Workspace.restoreKubeconfigSelection()
 
-		require.Empty(t, app.selectedKubeconfigs)
+		require.Empty(t, app.Workspace.selectedKubeconfigs)
 	})
 
 	t.Run("empty settings returns empty", func(t *testing.T) {
-		app := newTestAppWithDefaults(t)
-		app.preferences.appSettings = &AppSettings{}
-		app.availableKubeconfigs = []KubeconfigInfo{
+		app := NewApplicationRuntime(nil)
+		app.Preferences.appSettings = &AppSettings{}
+		app.ClusterRuntime.availableKubeconfigs = []KubeconfigInfo{
 			{Path: "/first/config", Context: "first"},
 			{Path: "/second/config", Context: "second"},
 		}
 
-		app.restoreKubeconfigSelection()
+		app.Workspace.restoreKubeconfigSelection()
 
-		require.Empty(t, app.selectedKubeconfigs)
+		require.Empty(t, app.Workspace.selectedKubeconfigs)
 	})
 }
 
 func TestStdLogBridgeWritesToLogger(t *testing.T) {
-	app := newTestAppWithDefaults(t)
-	bridge := &stdLogBridge{logger: app.appLogs.logger}
+	app := NewApplicationRuntime(nil)
+	bridge := &stdLogBridge{logger: app.AppLogs.logger}
 
 	input := "error: failure\nwarning: heads up\nrequest failed while listing pods\nExternal secrets cache ready\nI0102 info klog\n"
 	n, err := bridge.Write([]byte(input))
 	require.NoError(t, err)
 	require.Equal(t, len(input), n)
 
-	entries := app.appLogs.logger.GetEntries()
+	entries := app.AppLogs.logger.GetEntries()
 	require.Len(t, entries, 5)
 	require.Equal(t, "ERROR", entries[0].Level)
 	require.Equal(t, "WARN", entries[1].Level)
@@ -249,19 +250,19 @@ func TestStdLogBridgeWritesToLogger(t *testing.T) {
 }
 
 func TestInitKubernetesClientRequiresSelections(t *testing.T) {
-	app := newTestAppWithDefaults(t)
-	setTestAppRuntimeReady(t, app, context.Background())
+	app := NewApplicationRuntime(nil)
+	setTestAppRuntimeReady(t, app.Lifecycle, context.Background())
 
-	err := app.initKubernetesClient()
+	err := app.Workspace.initKubernetesClient()
 	require.Error(t, err)
 	require.Contains(t, err.Error(), "no kubeconfig selections available")
 }
 
 func TestInitKubernetesClientFailsWhenRefreshSubsystemFails(t *testing.T) {
-	app := newTestAppWithDefaults(t)
+	app := NewApplicationRuntime(nil)
 	ctx, cancel := context.WithCancel(context.Background())
 	defer cancel()
-	setTestAppRuntimeReady(t, app, ctx)
+	setTestAppRuntimeReady(t, app.Lifecycle, ctx)
 
 	kubeconfig := `
 apiVersion: v1
@@ -285,14 +286,14 @@ users:
 	configPath := filepath.Join(configDir, "config")
 	require.NoError(t, os.WriteFile(configPath, []byte(kubeconfig), 0o600))
 	// Seed a valid selection/client pool so initKubernetesClient only exercises refresh setup.
-	app.availableKubeconfigs = []KubeconfigInfo{{
+	app.ClusterRuntime.availableKubeconfigs = []KubeconfigInfo{{
 		Name:    "config",
 		Path:    configPath,
 		Context: "test",
 	}}
-	app.selectedKubeconfigs = []string{configPath + ":test"}
-	clusterID := app.clusterMetaForSelection(kubeconfigSelection{Path: configPath, Context: "test"}).ID
-	app.clusterClients = map[string]*clusterClients{
+	app.Workspace.selectedKubeconfigs = []string{configPath + ":test"}
+	clusterID := app.ClusterRuntime.clusterMetaForSelection(kubeconfigSelection{Path: configPath, Context: "test"}).ID
+	app.ClusterRuntime.clusterClients = map[string]*clusterClients{
 		clusterID: {
 			meta:                ClusterMeta{ID: clusterID, Name: "test"},
 			kubeconfigPath:      configPath,
@@ -311,11 +312,11 @@ users:
 	}
 	defer func() { newRefreshSubsystemWithServices = original }()
 
-	err := app.initKubernetesClient()
+	err := app.Workspace.initKubernetesClient()
 	require.Error(t, err)
 	require.Contains(t, err.Error(), "failed to initialise refresh subsystem")
-	require.Nil(t, app.objectCatalogServiceForCluster(""))
-	require.Nil(t, app.currentTelemetryRecorder())
+	require.Nil(t, app.Refresh.objectCatalogServiceForCluster(""))
+	require.Nil(t, app.Refresh.currentTelemetryRecorder())
 	// Note: clusterClients were pre-seeded by this test and are not cleared on refresh failure.
 	// The test verifies that an error is returned and no object catalog is created.
 }
@@ -325,10 +326,10 @@ func TestStartupLoadsWindowSettingsOnlyAfterRuntimeReady(t *testing.T) {
 	t.Setenv("HOME", baseDir)
 	t.Setenv("XDG_CONFIG_HOME", filepath.Join(baseDir, ".config"))
 	t.Setenv("APPDATA", filepath.Join(baseDir, "AppData", "Roaming"))
-	app := newTestAppWithDefaults(t)
+	app := NewApplicationRuntime(nil)
 	ctx, cancel := context.WithCancel(context.Background())
 
-	settingsPath, err := app.preferences.getSettingsFilePath()
+	settingsPath, err := app.Preferences.getSettingsFilePath()
 	require.NoError(t, err)
 	settings := &settingsFile{
 		SchemaVersion: settingsSchemaVersion,
@@ -345,38 +346,38 @@ func TestStartupLoadsWindowSettingsOnlyAfterRuntimeReady(t *testing.T) {
 	require.NoError(t, err)
 	writeTestFileWithParents(t, settingsPath, bytes, 0o644)
 
-	require.NoError(t, app.ServiceStartup(ctx, application.ServiceOptions{}))
-	require.Nil(t, app.preferences.windowSettings, "service startup must not load interactive window state")
-	require.True(t, app.WindowRuntimeReady("workspace-1", true))
+	require.NoError(t, app.Lifecycle.ServiceStartup(ctx, application.ServiceOptions{}))
+	require.Nil(t, app.Preferences.windowSettings, "service startup must not load interactive window state")
+	require.True(t, app.Lifecycle.WindowRuntimeReady("workspace-1", true))
 	cancel()
 	time.Sleep(50 * time.Millisecond)
 
-	require.Equal(t, &settings.UI.Window, app.preferences.windowSettings)
+	require.Equal(t, &settings.UI.Window, app.Preferences.windowSettings)
 }
 
 func TestEveryPeerHandlesRuntimeReadyWhileProcessStartupRunsOnce(t *testing.T) {
 	t.Setenv("HOME", t.TempDir())
-	app := newTestAppWithDefaults(t)
+	app := NewApplicationRuntime(nil)
 	ctx, cancel := context.WithCancel(context.Background())
 	t.Cleanup(cancel)
 
-	require.NoError(t, app.ServiceStartup(ctx, application.ServiceOptions{}))
-	require.True(t, app.WindowRuntimeReady("workspace-1", true))
-	require.False(t, app.WindowRuntimeReady("workspace-2", false))
-	require.True(t, app.runtimeAvailable())
+	require.NoError(t, app.Lifecycle.ServiceStartup(ctx, application.ServiceOptions{}))
+	require.True(t, app.Lifecycle.WindowRuntimeReady("workspace-1", true))
+	require.False(t, app.Lifecycle.WindowRuntimeReady("workspace-2", false))
+	require.True(t, app.Lifecycle.runtimeAvailable())
 }
 
 func TestBeforeClosePersistsWindowSettings(t *testing.T) {
 	t.Setenv("HOME", t.TempDir())
-	app := newTestAppWithDefaults(t)
-	app.desktopShell.windowGeometry = func() (WindowGeometry, error) {
+	app := NewApplicationRuntime(nil)
+	app.DesktopShell.windowGeometry = func() (WindowGeometry, error) {
 		return WindowGeometry{X: 11, Y: 22, Width: 800, Height: 600, Maximised: true}, nil
 	}
-	setTestAppRuntimeReady(t, app, context.Background())
+	setTestAppRuntimeReady(t, app.Lifecycle, context.Background())
 
-	require.True(t, app.PrepareQuitFromWindow("workspace-1"), "expected the application quit to proceed")
+	require.True(t, app.Lifecycle.PrepareQuitFromWindow("workspace-1"), "expected the application quit to proceed")
 
-	settings, err := app.preferences.LoadWindowSettings()
+	settings, err := app.Preferences.LoadWindowSettings()
 	require.NoError(t, err)
 	require.Equal(t, 11, settings.X)
 	require.Equal(t, 22, settings.Y)
@@ -387,22 +388,22 @@ func TestBeforeClosePersistsWindowSettings(t *testing.T) {
 
 func TestBeforeCloseWaitsForSelectionMutationBeforeSavingWindowSettings(t *testing.T) {
 	t.Setenv("HOME", t.TempDir())
-	app := newTestAppWithDefaults(t)
-	setTestAppRuntimeReady(t, app, context.Background())
+	app := NewApplicationRuntime(nil)
+	setTestAppRuntimeReady(t, app.Lifecycle, context.Background())
 
 	saveStarted := make(chan struct{})
 	var saveStartedOnce sync.Once
-	app.desktopShell.windowGeometry = func() (WindowGeometry, error) {
+	app.DesktopShell.windowGeometry = func() (WindowGeometry, error) {
 		saveStartedOnce.Do(func() { close(saveStarted) })
 		return WindowGeometry{X: 11, Y: 22, Width: 800, Height: 600}, nil
 	}
 
-	app.selectionMutationMu.Lock()
+	app.Workspace.selectionMutationMu.Lock()
 	mutationStarted := make(chan struct{})
 	mutationRelease := make(chan struct{})
 	mutationDone := make(chan error, 1)
 	go func() {
-		mutationDone <- app.runSelectionMutation("queued-before-close", func(*selectionMutation) error {
+		mutationDone <- app.Workspace.runSelectionMutation("queued-before-close", func(*selectionMutation) error {
 			close(mutationStarted)
 			<-mutationRelease
 			return nil
@@ -410,14 +411,14 @@ func TestBeforeCloseWaitsForSelectionMutationBeforeSavingWindowSettings(t *testi
 	}()
 
 	require.Eventually(t, func() bool {
-		app.selectionMutationDrainMu.Lock()
-		defer app.selectionMutationDrainMu.Unlock()
-		return app.selectionMutationPending == 1
+		app.Workspace.selectionMutationDrainMu.Lock()
+		defer app.Workspace.selectionMutationDrainMu.Unlock()
+		return app.Workspace.selectionMutationPending == 1
 	}, time.Second, 10*time.Millisecond)
 
 	done := make(chan bool)
 	go func() {
-		done <- app.PrepareQuitFromWindow("workspace-1")
+		done <- app.Lifecycle.PrepareQuitFromWindow("workspace-1")
 	}()
 
 	select {
@@ -426,7 +427,7 @@ func TestBeforeCloseWaitsForSelectionMutationBeforeSavingWindowSettings(t *testi
 	case <-time.After(25 * time.Millisecond):
 	}
 
-	app.selectionMutationMu.Unlock()
+	app.Workspace.selectionMutationMu.Unlock()
 	<-mutationStarted
 	close(mutationRelease)
 	require.NoError(t, <-mutationDone)
@@ -447,19 +448,19 @@ func TestBeforeCloseWaitsForSelectionMutationBeforeSavingWindowSettings(t *testi
 
 func TestPrepareQuitWithoutRuntimeSkipsWindowReadAndRemainsIdempotent(t *testing.T) {
 	t.Setenv("HOME", t.TempDir())
-	app := newTestAppWithDefaults(t)
+	app := NewApplicationRuntime(nil)
 	geometryReads := 0
-	app.desktopShell.windowGeometry = func() (WindowGeometry, error) {
+	app.DesktopShell.windowGeometry = func() (WindowGeometry, error) {
 		geometryReads++
 		return WindowGeometry{}, nil
 	}
 
-	require.True(t, app.PrepareQuitFromWindow("workspace-1"))
-	require.True(t, app.PrepareQuitFromWindow("workspace-1"))
+	require.True(t, app.Lifecycle.PrepareQuitFromWindow("workspace-1"))
+	require.True(t, app.Lifecycle.PrepareQuitFromWindow("workspace-1"))
 
 	require.Zero(t, geometryReads)
 	failureLogs := 0
-	for _, entry := range app.appLogs.logger.GetEntries() {
+	for _, entry := range app.AppLogs.logger.GetEntries() {
 		if strings.Contains(entry.Message, "Failed to save window settings: application context is not available") {
 			failureLogs++
 		}
@@ -469,53 +470,53 @@ func TestPrepareQuitWithoutRuntimeSkipsWindowReadAndRemainsIdempotent(t *testing
 
 func TestPrepareQuitLogsWindowGeometryReadFailure(t *testing.T) {
 	t.Setenv("HOME", t.TempDir())
-	app := newTestAppWithDefaults(t)
-	setTestAppRuntimeReady(t, app, context.Background())
+	app := NewApplicationRuntime(nil)
+	setTestAppRuntimeReady(t, app.Lifecycle, context.Background())
 	readFailure := errors.New("geometry unavailable")
-	app.desktopShell.windowGeometry = func() (WindowGeometry, error) {
+	app.DesktopShell.windowGeometry = func() (WindowGeometry, error) {
 		return WindowGeometry{}, readFailure
 	}
 
-	require.True(t, app.PrepareQuitFromWindow("workspace-1"))
+	require.True(t, app.Lifecycle.PrepareQuitFromWindow("workspace-1"))
 
-	require.Nil(t, app.preferences.windowSettings)
-	entries := app.appLogs.logger.GetEntries()
+	require.Nil(t, app.Preferences.windowSettings)
+	entries := app.AppLogs.logger.GetEntries()
 	require.NotEmpty(t, entries)
 	require.Contains(t, entries[len(entries)-1].Message, `read window "workspace-1" geometry: geometry unavailable`)
 }
 
 func TestPrepareQuitPersistsWindowGeometryOnlyOnceAcrossQuitPaths(t *testing.T) {
 	t.Setenv("HOME", t.TempDir())
-	app := newTestAppWithDefaults(t)
-	setTestAppRuntimeReady(t, app, context.Background())
+	app := NewApplicationRuntime(nil)
+	setTestAppRuntimeReady(t, app.Lifecycle, context.Background())
 	geometryReads := 0
-	app.desktopShell.windowGeometry = func() (WindowGeometry, error) {
+	app.DesktopShell.windowGeometry = func() (WindowGeometry, error) {
 		geometryReads++
 		return WindowGeometry{X: 7, Y: 9, Width: 1000, Height: 700}, nil
 	}
 
-	require.True(t, app.PrepareQuitFromWindow("workspace-1"))
-	require.True(t, app.PrepareQuitFromWindow("workspace-1"))
+	require.True(t, app.Lifecycle.PrepareQuitFromWindow("workspace-1"))
+	require.True(t, app.Lifecycle.PrepareQuitFromWindow("workspace-1"))
 
 	require.Equal(t, 1, geometryReads)
-	settings, err := app.preferences.LoadWindowSettings()
+	settings, err := app.Preferences.LoadWindowSettings()
 	require.NoError(t, err)
 	require.Equal(t, &WindowSettings{X: 7, Y: 9, Width: 1000, Height: 700}, settings)
 }
 
 func TestServiceLifecycleContextIsCancelledBeforeShutdownAndThenCleared(t *testing.T) {
-	app := newTestAppWithDefaults(t)
+	app := NewApplicationRuntime(nil)
 	ctx, cancel := context.WithCancel(context.Background())
-	require.NoError(t, app.ServiceStartup(ctx, application.ServiceOptions{}))
-	require.False(t, app.runtimeAvailable())
+	require.NoError(t, app.Lifecycle.ServiceStartup(ctx, application.ServiceOptions{}))
+	require.False(t, app.Lifecycle.runtimeAvailable())
 
-	serviceContext := app.CtxOrBackground()
+	serviceContext := app.Lifecycle.CtxOrBackground()
 	cancel()
 	require.ErrorIs(t, serviceContext.Err(), context.Canceled)
 
-	require.NoError(t, app.ServiceShutdown())
-	require.False(t, app.runtimeAvailable())
-	require.NoError(t, app.CtxOrBackground().Err())
+	require.NoError(t, app.Lifecycle.ServiceShutdown())
+	require.False(t, app.Lifecycle.runtimeAvailable())
+	require.NoError(t, app.Lifecycle.CtxOrBackground().Err())
 }
 
 func TestStartupBetaExpiryReportsAndStopsInteractiveStartup(t *testing.T) {
@@ -534,24 +535,24 @@ func TestStartupBetaExpiryReportsAndStopsInteractiveStartup(t *testing.T) {
 
 	t.Setenv("HOME", t.TempDir())
 
-	app := newTestAppWithDefaults(t)
-	updates := &fakeApplicationUpdateCoordinator{}
-	app.updates.coordinator = updates
 	reporter := &recordingErrorReporter{}
-	app.appLogs = NewAppLogService(NewLogger(100, reporter))
+	app := NewApplicationRuntime(nil, reporter)
+	app.Lifecycle.eventEmitter = func(context.Context, string, ...interface{}) {}
+	updates := &fakeApplicationUpdateCoordinator{}
+	app.Updates.coordinator = updates
 	var prompt expiredBetaPrompt
-	app.desktopShell.showExpiredBetaPrompt = func(value expiredBetaPrompt) { prompt = value }
+	app.DesktopShell.showExpiredBetaPrompt = func(value expiredBetaPrompt) { prompt = value }
 	var openedURL string
-	app.desktopShell.openApplicationURL = func(value string) error {
+	app.DesktopShell.openApplicationURL = func(value string) error {
 		openedURL = value
 		return nil
 	}
 	quitCalls := 0
-	app.desktopShell.quitApplication = func() { quitCalls++ }
+	app.DesktopShell.quitApplication = func() { quitCalls++ }
 	ctx := context.Background()
 
-	require.NoError(t, app.ServiceStartup(ctx, application.ServiceOptions{}))
-	require.True(t, app.WindowRuntimeReady("workspace-1", true))
+	require.NoError(t, app.Lifecycle.ServiceStartup(ctx, application.ServiceOptions{}))
+	require.True(t, app.Lifecycle.WindowRuntimeReady("workspace-1", true))
 
 	reporter.mu.Lock()
 	require.Len(t, reporter.exceptions, 1)
@@ -569,4 +570,25 @@ func TestStartupBetaExpiryReportsAndStopsInteractiveStartup(t *testing.T) {
 	require.Zero(t, updates.runtimeReadyCalls)
 	require.Zero(t, updates.downloadCalls)
 	require.Zero(t, updates.restartCalls)
+}
+
+func TestApplicationUpdateCoordinatorFollowsProcessRuntimeLifecycle(t *testing.T) {
+	t.Setenv("HOME", t.TempDir())
+	coordinator := &fakeApplicationUpdateCoordinator{
+		snapshot: appupdates.Snapshot{Status: appupdates.StatusIdle},
+	}
+	app := NewApplicationRuntime(nil)
+	app.Updates.coordinator = coordinator
+	ctx, cancel := context.WithCancel(context.Background())
+	t.Cleanup(cancel)
+
+	require.NoError(t, app.Lifecycle.ServiceStartup(ctx, application.ServiceOptions{}))
+	require.Zero(t, coordinator.runtimeReadyCalls)
+	require.True(t, app.Lifecycle.WindowRuntimeReady("workspace-1", false))
+	require.Equal(t, 1, coordinator.runtimeReadyCalls)
+	require.False(t, app.Lifecycle.WindowRuntimeReady("workspace-2", false))
+	require.Equal(t, 1, coordinator.runtimeReadyCalls)
+
+	require.NoError(t, app.Lifecycle.ServiceShutdown())
+	require.Equal(t, 1, coordinator.stopCalls)
 }

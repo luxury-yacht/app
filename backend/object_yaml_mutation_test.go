@@ -930,7 +930,11 @@ func TestWrapKubernetesErrorUsesDefaultMessage(t *testing.T) {
 func TestGetGVRForGVKFallsBackToCache(t *testing.T) {
 	app, _, clusterID := setupYAMLTestApp(t)
 
-	gvr, namespaced, err := app.getGVRForGVK(context.Background(), clusterID, schema.GroupVersionKind{
+	dependencies, selectionKey, err := app.resolveClusterDependencies(clusterID)
+	if err != nil {
+		t.Fatalf("resolve cluster dependencies: %v", err)
+	}
+	gvr, namespaced, err := getGVRForGVKWithDependencies(context.Background(), dependencies, selectionKey, schema.GroupVersionKind{
 		Group:   "apps",
 		Version: "v1",
 		Kind:    "Deployment",
@@ -948,7 +952,10 @@ func TestGetGVRForGVKFallsBackToCache(t *testing.T) {
 
 func TestGetGVRForGVKWithoutClientFails(t *testing.T) {
 	app := newResourceGatewayFixture().gateway
-	_, _, err := app.getGVRForGVK(context.Background(), "missing", schema.GroupVersionKind{Kind: "Deployment"})
+	dependencies, selectionKey, err := app.resolveClusterDependencies("missing")
+	if err == nil {
+		_, _, err = getGVRForGVKWithDependencies(context.Background(), dependencies, selectionKey, schema.GroupVersionKind{Kind: "Deployment"})
+	}
 	if err == nil {
 		t.Fatalf("expected error for missing client")
 	}

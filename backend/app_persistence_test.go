@@ -10,10 +10,10 @@ import (
 
 func TestAppFavoritesRoundTrip(t *testing.T) {
 	setTestConfigEnv(t)
-	app := newTestAppWithDefaults(t)
+	app := newPersistenceTestFixture()
 
 	// Initially empty.
-	favs, err := app.favorites.GetFavorites()
+	favs, err := app.Favorites.GetFavorites()
 	require.NoError(t, err)
 	require.Empty(t, favs)
 
@@ -39,14 +39,14 @@ func TestAppFavoritesRoundTrip(t *testing.T) {
 			},
 		},
 	}
-	added, err := app.favorites.AddFavorite(fav)
+	added, err := app.Favorites.AddFavorite(fav)
 	require.NoError(t, err)
 	require.NotEmpty(t, added.ID)
 	require.Equal(t, "prod / default / Pods", added.Name)
 	require.Equal(t, 0, added.Order)
 
 	// Get should return it.
-	favs, err = app.favorites.GetFavorites()
+	favs, err = app.Favorites.GetFavorites()
 	require.NoError(t, err)
 	require.Len(t, favs, 1)
 	require.Equal(t, added.ID, favs[0].ID)
@@ -55,21 +55,21 @@ func TestAppFavoritesRoundTrip(t *testing.T) {
 
 	// Update the name.
 	added.Name = "Renamed"
-	require.NoError(t, app.favorites.UpdateFavorite(added))
-	favs, err = app.favorites.GetFavorites()
+	require.NoError(t, app.Favorites.UpdateFavorite(added))
+	favs, err = app.Favorites.GetFavorites()
 	require.NoError(t, err)
 	require.Equal(t, "Renamed", favs[0].Name)
 
 	// Delete.
-	require.NoError(t, app.favorites.DeleteFavorite(added.ID))
-	favs, err = app.favorites.GetFavorites()
+	require.NoError(t, app.Favorites.DeleteFavorite(added.ID))
+	favs, err = app.Favorites.GetFavorites()
 	require.NoError(t, err)
 	require.Empty(t, favs)
 }
 
 func TestAppFavoritesRoundTripNamedPanes(t *testing.T) {
 	setTestConfigEnv(t)
-	app := newTestAppWithDefaults(t)
+	app := newPersistenceTestFixture()
 	favorite := Favorite{
 		Name:      "Workloads and pods",
 		ViewType:  "namespace",
@@ -89,9 +89,9 @@ func TestAppFavoritesRoundTripNamedPanes(t *testing.T) {
 		},
 	}
 
-	_, err := app.favorites.AddFavorite(favorite)
+	_, err := app.Favorites.AddFavorite(favorite)
 	require.NoError(t, err)
-	loaded, err := app.favorites.GetFavorites()
+	loaded, err := app.Favorites.GetFavorites()
 	require.NoError(t, err)
 	require.Len(t, loaded, 1)
 	require.Equal(t, favorite.Panes["pods"].Filters.QueryFacets, loaded[0].Panes["pods"].Filters.QueryFacets)
@@ -100,17 +100,17 @@ func TestAppFavoritesRoundTripNamedPanes(t *testing.T) {
 
 func TestAppAddFavoriteRequiresNamedPane(t *testing.T) {
 	setTestConfigEnv(t)
-	app := newTestAppWithDefaults(t)
+	app := newPersistenceTestFixture()
 
-	_, err := app.favorites.AddFavorite(Favorite{Name: "Missing state", ViewType: "cluster", View: "nodes"})
+	_, err := app.Favorites.AddFavorite(Favorite{Name: "Missing state", ViewType: "cluster", View: "nodes"})
 
 	require.EqualError(t, err, "favorite must contain at least one named pane")
 }
 
 func TestLoadFavoritesFileMigratesV2FavoritesIndividually(t *testing.T) {
 	setTestConfigEnv(t)
-	app := newTestAppWithDefaults(t)
-	path, err := app.favorites.getFavoritesFilePath()
+	app := newPersistenceTestFixture()
+	path, err := app.Favorites.getFavoritesFilePath()
 	require.NoError(t, err)
 	writeTestFileWithParents(t, path, []byte(`{
 		"schemaVersion": 2,
@@ -165,7 +165,7 @@ func TestLoadFavoritesFileMigratesV2FavoritesIndividually(t *testing.T) {
 		]
 	}`), 0o644)
 
-	favorites, err := app.favorites.GetFavorites()
+	favorites, err := app.Favorites.GetFavorites()
 	require.NoError(t, err)
 	require.Len(t, favorites, 2)
 	require.Equal(t, []string{"first", "last"}, []string{favorites[0].ID, favorites[1].ID})
@@ -190,8 +190,8 @@ func TestLoadFavoritesFileMigratesV2FavoritesIndividually(t *testing.T) {
 
 func TestLoadFavoritesFileMigratesV2WorkloadsAndPodsIntoBothPanes(t *testing.T) {
 	setTestConfigEnv(t)
-	app := newTestAppWithDefaults(t)
-	path, err := app.favorites.getFavoritesFilePath()
+	app := newPersistenceTestFixture()
+	path, err := app.Favorites.getFavoritesFilePath()
 	require.NoError(t, err)
 	writeTestFileWithParents(t, path, []byte(`{
 		"schemaVersion": 2,
@@ -209,7 +209,7 @@ func TestLoadFavoritesFileMigratesV2WorkloadsAndPodsIntoBothPanes(t *testing.T) 
 		]
 	}`), 0o644)
 
-	state, err := app.favorites.loadFavoritesFile()
+	state, err := app.Favorites.loadFavoritesFile()
 	require.NoError(t, err)
 	require.Len(t, state.Favorites, 2)
 	defaultPane := FavoritePaneState{
@@ -241,8 +241,8 @@ func TestLoadFavoritesFileMigratesV2WorkloadsAndPodsIntoBothPanes(t *testing.T) 
 
 func TestLoadFavoritesFileMigratesV1FavoritesLeftOnDiskByV2(t *testing.T) {
 	setTestConfigEnv(t)
-	app := newTestAppWithDefaults(t)
-	path, err := app.favorites.getFavoritesFilePath()
+	app := newPersistenceTestFixture()
+	path, err := app.Favorites.getFavoritesFilePath()
 	require.NoError(t, err)
 	writeTestFileWithParents(t, path, []byte(`{
 		"schemaVersion": 1,
@@ -299,7 +299,7 @@ func TestLoadFavoritesFileMigratesV1FavoritesLeftOnDiskByV2(t *testing.T) {
 		]
 	}`), 0o644)
 
-	state, err := app.favorites.loadFavoritesFile()
+	state, err := app.Favorites.loadFavoritesFile()
 	require.NoError(t, err)
 	require.Equal(t, favoritesSchemaVersion, state.SchemaVersion)
 	require.Len(t, state.Favorites, 2)
@@ -329,28 +329,28 @@ func TestLoadFavoritesFileMigratesV1FavoritesLeftOnDiskByV2(t *testing.T) {
 
 func TestLoadFavoritesFileRejectsFutureSchema(t *testing.T) {
 	setTestConfigEnv(t)
-	app := newTestAppWithDefaults(t)
-	path, err := app.favorites.getFavoritesFilePath()
+	app := newPersistenceTestFixture()
+	path, err := app.Favorites.getFavoritesFilePath()
 	require.NoError(t, err)
 	writeTestFileWithParents(t, path, []byte(`{"schemaVersion":999,"favorites":[]}`), 0o644)
 
-	_, err = app.favorites.loadFavoritesFile()
+	_, err = app.Favorites.loadFavoritesFile()
 	require.ErrorContains(t, err, "newer than supported")
 }
 
 func TestAppFavoritesOrdering(t *testing.T) {
 	setTestConfigEnv(t)
-	app := newTestAppWithDefaults(t)
+	app := newPersistenceTestFixture()
 
 	pane := map[string]FavoritePaneState{"main": {}}
-	a, _ := app.favorites.AddFavorite(Favorite{Name: "A", ViewType: "cluster", View: "nodes", Panes: pane})
-	b, _ := app.favorites.AddFavorite(Favorite{Name: "B", ViewType: "cluster", View: "rbac", Panes: pane})
-	c, _ := app.favorites.AddFavorite(Favorite{Name: "C", ViewType: "namespace", View: "pods", Namespace: "default", Panes: pane})
+	a, _ := app.Favorites.AddFavorite(Favorite{Name: "A", ViewType: "cluster", View: "nodes", Panes: pane})
+	b, _ := app.Favorites.AddFavorite(Favorite{Name: "B", ViewType: "cluster", View: "rbac", Panes: pane})
+	c, _ := app.Favorites.AddFavorite(Favorite{Name: "C", ViewType: "namespace", View: "pods", Namespace: "default", Panes: pane})
 
 	// Reorder: C, A, B
-	require.NoError(t, app.favorites.SetFavoriteOrder([]string{c.ID, a.ID, b.ID}))
+	require.NoError(t, app.Favorites.SetFavoriteOrder([]string{c.ID, a.ID, b.ID}))
 
-	favs, _ := app.favorites.GetFavorites()
+	favs, _ := app.Favorites.GetFavorites()
 	require.Equal(t, "C", favs[0].Name)
 	require.Equal(t, 0, favs[0].Order)
 	require.Equal(t, "A", favs[1].Name)
@@ -361,64 +361,64 @@ func TestAppFavoritesOrdering(t *testing.T) {
 
 func TestAppDeleteFavoriteNotFound(t *testing.T) {
 	setTestConfigEnv(t)
-	app := newTestAppWithDefaults(t)
+	app := newPersistenceTestFixture()
 
-	err := app.favorites.DeleteFavorite("nonexistent")
+	err := app.Favorites.DeleteFavorite("nonexistent")
 	require.Error(t, err)
 }
 
 func TestAppUpdateFavoriteNotFound(t *testing.T) {
 	setTestConfigEnv(t)
-	app := newTestAppWithDefaults(t)
+	app := newPersistenceTestFixture()
 
-	err := app.favorites.UpdateFavorite(Favorite{ID: "nonexistent", Name: "X"})
+	err := app.Favorites.UpdateFavorite(Favorite{ID: "nonexistent", Name: "X"})
 	require.Error(t, err)
 }
 
 func TestAppClusterTabOrderRoundTrip(t *testing.T) {
 	setTestConfigEnv(t)
-	app := newTestAppWithDefaults(t)
+	app := newPersistenceTestFixture()
 
-	err := app.uiState.SetClusterTabOrder([]string{" /path/config:prod ", "/path/config:prod", "  ", "/path/other:dev"})
+	err := app.UIState.SetClusterTabOrder([]string{" /path/config:prod ", "/path/config:prod", "  ", "/path/other:dev"})
 	require.NoError(t, err)
 
-	order, err := app.uiState.GetClusterTabOrder()
+	order, err := app.UIState.GetClusterTabOrder()
 	require.NoError(t, err)
 	require.Equal(t, []string{"/path/config:prod", "/path/other:dev"}, order)
 }
 
 func TestAppGridTablePersistenceCRUD(t *testing.T) {
 	setTestConfigEnv(t)
-	app := newTestAppWithDefaults(t)
+	app := newPersistenceTestFixture()
 
 	key := "gridtable:v1:abc123:cluster-nodes"
 	payload := json.RawMessage(`{"version":1,"columnVisibility":{"name":false}}`)
 
-	require.NoError(t, app.uiState.SetGridTablePersistence(key, payload))
+	require.NoError(t, app.UIState.SetGridTablePersistence(key, payload))
 
-	entries, err := app.uiState.GetGridTablePersistence()
+	entries, err := app.UIState.GetGridTablePersistence()
 	require.NoError(t, err)
 	require.Contains(t, entries, key)
 	require.JSONEq(t, string(payload), string(entries[key]))
 
-	require.NoError(t, app.uiState.DeleteGridTablePersistence(key))
-	entries, err = app.uiState.GetGridTablePersistence()
+	require.NoError(t, app.UIState.DeleteGridTablePersistence(key))
+	entries, err = app.UIState.GetGridTablePersistence()
 	require.NoError(t, err)
 	require.NotContains(t, entries, key)
 
-	require.NoError(t, app.uiState.SetGridTablePersistence(key, payload))
-	require.NoError(t, app.uiState.SetGridTablePersistence(key+"-2", payload))
+	require.NoError(t, app.UIState.SetGridTablePersistence(key, payload))
+	require.NoError(t, app.UIState.SetGridTablePersistence(key+"-2", payload))
 
-	require.NoError(t, app.uiState.DeleteGridTablePersistenceEntries([]string{key}))
-	entries, err = app.uiState.GetGridTablePersistence()
+	require.NoError(t, app.UIState.DeleteGridTablePersistenceEntries([]string{key}))
+	entries, err = app.UIState.GetGridTablePersistence()
 	require.NoError(t, err)
 	require.NotContains(t, entries, key)
 	require.Contains(t, entries, key+"-2")
 
-	removed, err := app.uiState.ClearGridTablePersistence()
+	removed, err := app.UIState.ClearGridTablePersistence()
 	require.NoError(t, err)
 	require.Equal(t, 1, removed)
-	entries, err = app.uiState.GetGridTablePersistence()
+	entries, err = app.UIState.GetGridTablePersistence()
 	require.NoError(t, err)
 	require.Len(t, entries, 0)
 }
@@ -426,14 +426,14 @@ func TestAppGridTablePersistenceCRUD(t *testing.T) {
 func TestLoadPersistenceFileNormalizesDefaults(t *testing.T) {
 	// Ensure persistence file normalization restores required defaults.
 	setTestConfigEnv(t)
-	app := newTestAppWithDefaults(t)
+	app := newPersistenceTestFixture()
 
-	configPath, err := app.uiState.getPersistenceFilePath()
+	configPath, err := app.UIState.getPersistenceFilePath()
 	require.NoError(t, err)
 
 	writeTestFileWithParents(t, configPath, []byte(`{"schemaVersion":0}`), 0o644)
 
-	state, err := app.uiState.loadPersistenceFile()
+	state, err := app.UIState.loadPersistenceFile()
 	require.NoError(t, err)
 	require.Equal(t, persistenceSchemaVersion, state.SchemaVersion)
 	require.NotNil(t, state.Tables.GridTable)
@@ -443,16 +443,16 @@ func TestLoadPersistenceFileNormalizesDefaults(t *testing.T) {
 func TestSavePersistenceFileOverwritesExistingData(t *testing.T) {
 	// Verify persistence writes overwrite existing file contents.
 	setTestConfigEnv(t)
-	app := newTestAppWithDefaults(t)
+	app := newPersistenceTestFixture()
 
 	state := defaultPersistenceFile()
 	state.ClusterTabs.Order = []string{"alpha"}
-	require.NoError(t, app.uiState.savePersistenceFile(state))
+	require.NoError(t, app.UIState.savePersistenceFile(state))
 
 	state.ClusterTabs.Order = []string{"beta"}
-	require.NoError(t, app.uiState.savePersistenceFile(state))
+	require.NoError(t, app.UIState.savePersistenceFile(state))
 
-	loaded, err := app.uiState.loadPersistenceFile()
+	loaded, err := app.UIState.loadPersistenceFile()
 	require.NoError(t, err)
 	require.Equal(t, []string{"beta"}, loaded.ClusterTabs.Order)
 }

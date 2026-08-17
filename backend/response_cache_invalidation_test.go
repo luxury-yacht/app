@@ -38,7 +38,10 @@ func TestInvalidateResponseCacheForObjectEvictsDetailAndYAML(t *testing.T) {
 	detailKey := objectDetailCacheKey("ConfigMap", "default", "demo")
 	gateway.responseCacheStore(selectionKey, detailKey, "detail")
 
-	gateway.invalidateResponseCacheForObject(selectionKey, configMapCacheIdentity, configMap)
+	gateway.invalidateResponseCacheForObjectEvent(
+		selectionKey, configMapCacheIdentity, configMap,
+		responseCacheInvalidationUpdate, responseCacheInvalidationGuard{},
+	)
 
 	if _, ok := gateway.responseCacheLookup(selectionKey, detailKey); ok {
 		t.Fatalf("expected detail cache entry to be evicted")
@@ -94,7 +97,10 @@ func TestInvalidateResponseCacheForObjectEvictsHelmCaches(t *testing.T) {
 	gateway.responseCacheStore(selectionKey, manifestKey, "manifest")
 	gateway.responseCacheStore(selectionKey, valuesKey, "values")
 
-	gateway.invalidateResponseCacheForObject(selectionKey, secretCacheIdentity, secret)
+	gateway.invalidateResponseCacheForObjectEvent(
+		selectionKey, secretCacheIdentity, secret,
+		responseCacheInvalidationUpdate, responseCacheInvalidationGuard{},
+	)
 
 	if _, ok := gateway.responseCacheLookup(selectionKey, releaseKey); ok {
 		t.Fatalf("expected helm release cache entry to be evicted")

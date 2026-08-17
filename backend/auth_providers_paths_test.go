@@ -50,9 +50,9 @@ func TestMergePathListsDeduplicatesAndTrims(t *testing.T) {
 	}
 }
 
-func TestSetupEnvironmentHandlesNilApp(t *testing.T) {
-	var app *App
-	app.setupEnvironment()
+func TestSetupEnvironmentHandlesNilLifecycle(t *testing.T) {
+	var lifecycle *ApplicationLifecycle
+	lifecycle.setupEnvironment()
 }
 
 func TestResolveHomeDirUsesEnv(t *testing.T) {

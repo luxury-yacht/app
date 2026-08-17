@@ -52,7 +52,7 @@ func newSentryReporter(enabled bool, defaultDSN, version string) (sentryreportin
 
 type applicationComposition struct {
 	application *application.App
-	backend     *backend.App
+	backend     *backend.ApplicationRuntime
 	service     *backend.DesktopService
 	operations  *backend.OperationsCoordinator
 	preferences *backend.PreferencesService
@@ -68,7 +68,7 @@ type compositionOptions struct {
 }
 
 func newApplicationComposition(reporter sentryreporting.Reporter, options compositionOptions) *applicationComposition {
-	var backendApp *backend.App
+	var backendRuntime *backend.ApplicationRuntime
 	var desktopService *backend.DesktopService
 	var windows *appwindow.Registry
 	applicationOptions := application.Options{
@@ -101,31 +101,31 @@ func newApplicationComposition(reporter sentryreporting.Reporter, options compos
 	}
 	wailsApp := application.New(applicationOptions)
 
-	backendApp = backend.NewApp(wailsApp, reporter)
-	operationsCoordinator := backendApp.OperationsCoordinator()
-	desktopShell := backendApp.DesktopShell()
-	backend.ConfigureApplicationUpdates(backendApp.UpdateCoordinator(), backend.ApplicationUpdateOptions{
+	backendRuntime = backend.NewApplicationRuntime(wailsApp, reporter)
+	operationsCoordinator := backendRuntime.Operations
+	desktopShell := backendRuntime.DesktopShell
+	backend.ConfigureApplicationUpdates(backendRuntime.Updates, backend.ApplicationUpdateOptions{
 		TempRoot:       options.UpdateTempRoot,
 		TempSetupError: options.UpdateTempSetupError,
 	})
 	desktopService = backend.NewDesktopService(backend.DesktopServiceDependencies{
-		Favorites:      backendApp.FavoritesService(),
-		UIState:        backendApp.UIStateStore(),
-		Preferences:    backendApp.PreferencesService(),
-		DataManagement: backendApp.DataManagementCoordinator(),
-		Attention:      backendApp.ClusterAttentionService(),
-		Workspace:      backendApp.WorkspaceCoordinator,
-		ClusterRuntime: backendApp.ClusterRuntimeManager,
-		Resources:      backendApp.ResourceGateway(),
+		Favorites:      backendRuntime.Favorites,
+		UIState:        backendRuntime.UIState,
+		Preferences:    backendRuntime.Preferences,
+		DataManagement: backendRuntime.DataManagement,
+		Attention:      backendRuntime.Attention,
+		Workspace:      backendRuntime.Workspace,
+		ClusterRuntime: backendRuntime.ClusterRuntime,
+		Resources:      backendRuntime.Resources,
 		Operations:     operationsCoordinator,
-		Updates:        backendApp.UpdateCoordinator(),
-		Logs:           backendApp.AppLogService(),
+		Updates:        backendRuntime.Updates,
+		Logs:           backendRuntime.AppLogs,
 		DesktopShell:   desktopShell,
-		Lifecycle:      backendApp,
-		HTTP:           backendApp.RefreshCoordinator,
+		Lifecycle:      backendRuntime.Lifecycle,
+		HTTP:           backendRuntime.Refresh,
 	})
-	wailsApp.HandleStream(backend.RefreshResourceStreamName, backendApp.RefreshCoordinator.HandleResourceStream)
-	wailsApp.HandleStream(backend.RefreshContainerLogsStreamName, backendApp.RefreshCoordinator.HandleContainerLogsStream)
+	wailsApp.HandleStream(backend.RefreshResourceStreamName, backendRuntime.Refresh.HandleResourceStream)
+	wailsApp.HandleStream(backend.RefreshContainerLogsStreamName, backendRuntime.Refresh.HandleContainerLogsStream)
 	wailsApp.RegisterService(application.NewServiceWithOptions(
 		desktopService,
 		application.ServiceOptions{Route: "/api/v2"},
@@ -134,17 +134,17 @@ func newApplicationComposition(reporter sentryreporting.Reporter, options compos
 	nativeMenu := backend.CreateMenu(desktopShell)
 	wailsApp.Menu.SetApplicationMenu(nativeMenu)
 
-	windows = appwindow.NewRegistry(wailsApp, backendApp, nativeMenu)
+	windows = appwindow.NewRegistry(wailsApp, backendRuntime.Lifecycle, nativeMenu)
 	backend.ConfigureWorkspaceWindowCreator(desktopShell, func() { windows.Create(false) })
 	windows.Create(true)
 
 	return &applicationComposition{
 		application: wailsApp,
-		backend:     backendApp,
+		backend:     backendRuntime,
 		service:     desktopService,
 		operations:  operationsCoordinator,
-		preferences: backendApp.PreferencesService(),
-		reporting:   backendApp.ErrorReportingService(),
+		preferences: backendRuntime.Preferences,
+		reporting:   backendRuntime.ErrorReporting,
 		windows:     windows,
 		menu:        nativeMenu,
 	}

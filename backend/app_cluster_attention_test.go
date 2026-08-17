@@ -23,22 +23,22 @@ func attentionIgnoredRef(clusterID, uid string) resourcemodel.ResourceRef {
 
 func TestClusterAttentionIgnoresPersistPerCluster(t *testing.T) {
 	setTestConfigEnv(t)
-	app := newTestAppWithDefaults(t)
+	app := newWorkspaceCoordinatorTestFixture(t)
 	alpha := attentionIgnoredRef("cluster-a", "uid-a")
 	beta := attentionIgnoredRef("cluster-b", "uid-b")
 
-	_, err := app.attention.IgnoreClusterAttentionObjectFinding("cluster-a", alpha, "restarts")
+	_, err := app.Attention.IgnoreClusterAttentionObjectFinding("cluster-a", alpha, "restarts")
 	require.NoError(t, err)
-	_, err = app.attention.IgnoreClusterAttentionFindingType("cluster-a", "restarts")
+	_, err = app.Attention.IgnoreClusterAttentionFindingType("cluster-a", "restarts")
 	require.NoError(t, err)
-	_, err = app.attention.IgnoreClusterAttentionObjectFinding("cluster-b", beta, "restarts")
+	_, err = app.Attention.IgnoreClusterAttentionObjectFinding("cluster-b", beta, "restarts")
 	require.NoError(t, err)
 
-	alphaRules, err := app.attention.GetClusterAttentionIgnoreRules("cluster-a")
+	alphaRules, err := app.Attention.GetClusterAttentionIgnoreRules("cluster-a")
 	require.NoError(t, err)
 	require.Equal(t, []snapshot.AttentionObjectFindingIgnore{{Ref: alpha, FindingType: "restarts"}}, alphaRules.ObjectFindings)
 	require.Equal(t, []string{"restarts"}, alphaRules.ClusterFindingTypes)
-	betaRules, err := app.attention.GetClusterAttentionIgnoreRules("cluster-b")
+	betaRules, err := app.Attention.GetClusterAttentionIgnoreRules("cluster-b")
 	require.NoError(t, err)
 	require.Equal(t, []snapshot.AttentionObjectFindingIgnore{{Ref: beta, FindingType: "restarts"}}, betaRules.ObjectFindings)
 	require.Empty(t, betaRules.ClusterFindingTypes)
@@ -46,82 +46,82 @@ func TestClusterAttentionIgnoresPersistPerCluster(t *testing.T) {
 
 func TestClusterAttentionIgnoreObjectRequiresExactClusterIdentity(t *testing.T) {
 	setTestConfigEnv(t)
-	app := newTestAppWithDefaults(t)
+	app := newWorkspaceCoordinatorTestFixture(t)
 
-	_, err := app.attention.IgnoreClusterAttentionObjectFinding("cluster-a", attentionIgnoredRef("cluster-b", "uid-a"), "restarts")
+	_, err := app.Attention.IgnoreClusterAttentionObjectFinding("cluster-a", attentionIgnoredRef("cluster-b", "uid-a"), "restarts")
 	require.ErrorContains(t, err, "clusterId")
-	_, err = app.attention.IgnoreClusterAttentionObjectFinding("cluster-a", attentionIgnoredRef("cluster-a", ""), "restarts")
+	_, err = app.Attention.IgnoreClusterAttentionObjectFinding("cluster-a", attentionIgnoredRef("cluster-a", ""), "restarts")
 	require.ErrorContains(t, err, "uid")
 
-	rules, getErr := app.attention.GetClusterAttentionIgnoreRules("cluster-a")
+	rules, getErr := app.Attention.GetClusterAttentionIgnoreRules("cluster-a")
 	require.NoError(t, getErr)
 	require.Empty(t, rules.ObjectFindings)
 }
 
 func TestClusterAttentionIgnoreFindingTypeUsesCentralCatalog(t *testing.T) {
 	setTestConfigEnv(t)
-	app := newTestAppWithDefaults(t)
+	app := newWorkspaceCoordinatorTestFixture(t)
 
-	_, err := app.attention.IgnoreClusterAttentionFindingType("cluster-a", "not-a-finding-type")
+	_, err := app.Attention.IgnoreClusterAttentionFindingType("cluster-a", "not-a-finding-type")
 	require.ErrorContains(t, err, "unknown Attention finding type")
-	rules, getErr := app.attention.GetClusterAttentionIgnoreRules("cluster-a")
+	rules, getErr := app.Attention.GetClusterAttentionIgnoreRules("cluster-a")
 	require.NoError(t, getErr)
 	require.Empty(t, rules.ClusterFindingTypes)
 }
 
 func TestClusterAttentionCanRestoreATypeRemovedFromTheCatalog(t *testing.T) {
 	setTestConfigEnv(t)
-	app := newTestAppWithDefaults(t)
-	settings, err := app.preferences.loadSettingsFile()
+	app := newWorkspaceCoordinatorTestFixture(t)
+	settings, err := app.Preferences.loadSettingsFile()
 	require.NoError(t, err)
 	settings.Clusters = map[string]settingsClusterSection{
 		"cluster-a": {Attention: &settingsClusterAttentionRules{FindingTypes: []string{"removed-type"}}},
 	}
-	require.NoError(t, app.preferences.saveSettingsFile(settings))
+	require.NoError(t, app.Preferences.saveSettingsFile(settings))
 
-	_, err = app.attention.RestoreClusterAttentionFindingType("cluster-a", "removed-type")
+	_, err = app.Attention.RestoreClusterAttentionFindingType("cluster-a", "removed-type")
 	require.NoError(t, err)
-	rules, err := app.attention.GetClusterAttentionIgnoreRules("cluster-a")
+	rules, err := app.Attention.GetClusterAttentionIgnoreRules("cluster-a")
 	require.NoError(t, err)
 	require.Empty(t, rules.ClusterFindingTypes)
 }
 
 func TestClusterAttentionIgnoreMutationsPreserveNamespaceScope(t *testing.T) {
 	setTestConfigEnv(t)
-	app := newTestAppWithDefaults(t)
+	app := newWorkspaceCoordinatorTestFixture(t)
 	ref := attentionIgnoredRef("cluster-a", "uid-a")
 
-	_, err := app.SetClusterAllowedNamespaces("cluster-a", []string{"payments"})
+	_, err := app.Workspace.SetClusterAllowedNamespaces("cluster-a", []string{"payments"})
 	require.NoError(t, err)
-	_, err = app.attention.IgnoreClusterAttentionObjectFinding("cluster-a", ref, "restarts")
+	_, err = app.Attention.IgnoreClusterAttentionObjectFinding("cluster-a", ref, "restarts")
 	require.NoError(t, err)
-	_, err = app.SetClusterAllowedNamespaces("cluster-a", nil)
+	_, err = app.Workspace.SetClusterAllowedNamespaces("cluster-a", nil)
 	require.NoError(t, err)
 
-	rules, err := app.attention.GetClusterAttentionIgnoreRules("cluster-a")
+	rules, err := app.Attention.GetClusterAttentionIgnoreRules("cluster-a")
 	require.NoError(t, err)
 	require.Equal(t, []snapshot.AttentionObjectFindingIgnore{{Ref: ref, FindingType: "restarts"}}, rules.ObjectFindings)
-	file, err := app.preferences.loadSettingsFile()
+	file, err := app.Preferences.loadSettingsFile()
 	require.NoError(t, err)
 	require.Contains(t, file.Clusters, "cluster-a")
 }
 
 func TestPruneClusterAttentionIgnoredObjectRemovesOnlyObsoleteIdentity(t *testing.T) {
 	setTestConfigEnv(t)
-	app := newTestAppWithDefaults(t)
+	app := newWorkspaceCoordinatorTestFixture(t)
 	obsolete := attentionIgnoredRef("cluster-a", "uid-old")
 	current := attentionIgnoredRef("cluster-a", "uid-current")
 	current.Name = "current"
 
-	_, err := app.attention.IgnoreClusterAttentionObjectFinding("cluster-a", obsolete, "restarts")
+	_, err := app.Attention.IgnoreClusterAttentionObjectFinding("cluster-a", obsolete, "restarts")
 	require.NoError(t, err)
-	_, err = app.attention.IgnoreClusterAttentionObjectFinding("cluster-a", current, "replica-mismatch")
+	_, err = app.Attention.IgnoreClusterAttentionObjectFinding("cluster-a", current, "replica-mismatch")
 	require.NoError(t, err)
-	_, err = app.attention.IgnoreClusterAttentionFindingType("cluster-a", "restarts")
+	_, err = app.Attention.IgnoreClusterAttentionFindingType("cluster-a", "restarts")
 	require.NoError(t, err)
 
-	require.NoError(t, app.attention.pruneClusterAttentionIgnoredObject("cluster-a", obsolete))
-	rules, err := app.attention.GetClusterAttentionIgnoreRules("cluster-a")
+	require.NoError(t, app.Attention.pruneClusterAttentionIgnoredObject("cluster-a", obsolete))
+	rules, err := app.Attention.GetClusterAttentionIgnoreRules("cluster-a")
 	require.NoError(t, err)
 	require.Equal(t, []snapshot.AttentionObjectFindingIgnore{{Ref: current, FindingType: "replica-mismatch"}}, rules.ObjectFindings)
 	require.Equal(t, []string{"restarts"}, rules.ClusterFindingTypes)
@@ -129,43 +129,43 @@ func TestPruneClusterAttentionIgnoredObjectRemovesOnlyObsoleteIdentity(t *testin
 
 func TestClusterAttentionRestoreRemovesEmptyClusterSection(t *testing.T) {
 	setTestConfigEnv(t)
-	app := newTestAppWithDefaults(t)
+	app := newWorkspaceCoordinatorTestFixture(t)
 	ref := attentionIgnoredRef("cluster-a", "uid-a")
-	_, err := app.attention.IgnoreClusterAttentionObjectFinding("cluster-a", ref, "restarts")
+	_, err := app.Attention.IgnoreClusterAttentionObjectFinding("cluster-a", ref, "restarts")
 	require.NoError(t, err)
 
-	_, err = app.attention.RestoreClusterAttentionObjectFinding("cluster-a", ref, "restarts")
+	_, err = app.Attention.RestoreClusterAttentionObjectFinding("cluster-a", ref, "restarts")
 	require.NoError(t, err)
-	file, err := app.preferences.loadSettingsFile()
+	file, err := app.Preferences.loadSettingsFile()
 	require.NoError(t, err)
 	require.NotContains(t, file.Clusters, "cluster-a")
 }
 
 func TestAttentionIgnoreScopesPersistWithExactMeaning(t *testing.T) {
 	setTestConfigEnv(t)
-	app := newTestAppWithDefaults(t)
+	app := newWorkspaceCoordinatorTestFixture(t)
 	ref := attentionIgnoredRef("cluster-a", "uid-a")
 
-	_, err := app.attention.IgnoreClusterAttentionObjectFinding("cluster-a", ref, "restarts")
+	_, err := app.Attention.IgnoreClusterAttentionObjectFinding("cluster-a", ref, "restarts")
 	require.NoError(t, err)
-	_, err = app.attention.IgnoreClusterAttentionFindingType("cluster-a", "replica-mismatch")
+	_, err = app.Attention.IgnoreClusterAttentionFindingType("cluster-a", "replica-mismatch")
 	require.NoError(t, err)
-	_, err = app.attention.IgnoreGlobalAttentionFindingType("cluster-a", "warning-event")
+	_, err = app.Attention.IgnoreGlobalAttentionFindingType("cluster-a", "warning-event")
 	require.NoError(t, err)
 
-	alphaRules, err := app.attention.GetClusterAttentionIgnoreRules("cluster-a")
+	alphaRules, err := app.Attention.GetClusterAttentionIgnoreRules("cluster-a")
 	require.NoError(t, err)
 	require.Equal(t, []snapshot.AttentionObjectFindingIgnore{{Ref: ref, FindingType: "restarts"}}, alphaRules.ObjectFindings)
 	require.Equal(t, []string{"replica-mismatch"}, alphaRules.ClusterFindingTypes)
 	require.Equal(t, []string{"warning-event"}, alphaRules.GlobalFindingTypes)
 
-	betaRules, err := app.attention.GetClusterAttentionIgnoreRules("cluster-b")
+	betaRules, err := app.Attention.GetClusterAttentionIgnoreRules("cluster-b")
 	require.NoError(t, err)
 	require.Empty(t, betaRules.ObjectFindings)
 	require.Empty(t, betaRules.ClusterFindingTypes)
 	require.Equal(t, []string{"warning-event"}, betaRules.GlobalFindingTypes)
 
-	settings, err := app.preferences.loadSettingsFile()
+	settings, err := app.Preferences.loadSettingsFile()
 	require.NoError(t, err)
 	require.Equal(t, []string{"warning-event"}, settings.Attention.FindingTypes)
 	require.Equal(t, []string{"replica-mismatch"}, settings.Clusters["cluster-a"].Attention.FindingTypes)

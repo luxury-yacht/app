@@ -9,26 +9,26 @@ import (
 )
 
 func TestRunSelectionMutationIncrementsGeneration(t *testing.T) {
-	app := newTestAppWithDefaults(t)
-	before := app.selectionGeneration.Load()
+	app := newWorkspaceCoordinatorTestFixture(t)
+	before := app.Workspace.selectionGeneration.Load()
 
-	err := app.runSelectionMutation("unit-test", func(mutation *selectionMutation) error {
+	err := app.Workspace.runSelectionMutation("unit-test", func(mutation *selectionMutation) error {
 		require.Equal(t, before+1, mutation.generation)
 		return nil
 	})
 	require.NoError(t, err)
-	require.Equal(t, before+1, app.selectionGeneration.Load())
+	require.Equal(t, before+1, app.Workspace.selectionGeneration.Load())
 }
 
 func TestRunSelectionMutationDoesNotHoldKubeconfigChangeLockAcrossCallback(t *testing.T) {
-	app := newTestAppWithDefaults(t)
+	app := newWorkspaceCoordinatorTestFixture(t)
 
-	err := app.runSelectionMutation("unit-test", func(_ *selectionMutation) error {
+	err := app.Workspace.runSelectionMutation("unit-test", func(_ *selectionMutation) error {
 		acquired := make(chan struct{})
 		go func() {
-			app.kubeconfigChangeMu.Lock()
+			app.Workspace.kubeconfigChangeMu.Lock()
 			close(acquired)
-			app.kubeconfigChangeMu.Unlock()
+			app.Workspace.kubeconfigChangeMu.Unlock()
 		}()
 
 		select {
@@ -43,14 +43,14 @@ func TestRunSelectionMutationDoesNotHoldKubeconfigChangeLockAcrossCallback(t *te
 }
 
 func TestRunSelectionMutationSupersededGenerationCancelsPriorContext(t *testing.T) {
-	app := newTestAppWithDefaults(t)
+	app := newWorkspaceCoordinatorTestFixture(t)
 
 	firstStarted := make(chan struct{})
 	firstDone := make(chan struct{})
 	firstErrCh := make(chan error, 1)
 
 	go func() {
-		err := app.runSelectionMutation("first", func(mutation *selectionMutation) error {
+		err := app.Workspace.runSelectionMutation("first", func(mutation *selectionMutation) error {
 			close(firstStarted)
 			<-mutation.context().Done()
 			close(firstDone)
@@ -61,7 +61,7 @@ func TestRunSelectionMutationSupersededGenerationCancelsPriorContext(t *testing.
 
 	<-firstStarted
 
-	secondErr := app.runSelectionMutation("second", func(*selectionMutation) error {
+	secondErr := app.Workspace.runSelectionMutation("second", func(*selectionMutation) error {
 		return nil
 	})
 	require.NoError(t, secondErr)
@@ -80,33 +80,33 @@ func TestRunSelectionMutationSupersededGenerationCancelsPriorContext(t *testing.
 
 func TestHandleKubeconfigChangeUsesSelectionMutationBoundary(t *testing.T) {
 	setTestConfigEnv(t)
-	app := newTestAppWithDefaults(t)
-	before := app.selectionGeneration.Load()
+	app := newWorkspaceCoordinatorTestFixture(t)
+	before := app.Workspace.selectionGeneration.Load()
 
-	app.handleKubeconfigChange([]string{"/tmp/non-existent-kubeconfig"})
+	app.Workspace.handleKubeconfigChange([]string{"/tmp/non-existent-kubeconfig"})
 
-	require.Equal(t, before+1, app.selectionGeneration.Load())
+	require.Equal(t, before+1, app.Workspace.selectionGeneration.Load())
 }
 
 func TestRunClusterTransportRebuildUsesSelectionMutationBoundary(t *testing.T) {
-	app := newTestAppWithDefaults(t)
-	before := app.selectionGeneration.Load()
+	app := newWorkspaceCoordinatorTestFixture(t)
+	before := app.Workspace.selectionGeneration.Load()
 
-	app.runClusterTransportRebuild("cluster-a", "unit-test", nil)
+	app.Workspace.runClusterTransportRebuild("cluster-a", "unit-test", nil)
 
-	require.Equal(t, before+1, app.selectionGeneration.Load())
+	require.Equal(t, before+1, app.Workspace.selectionGeneration.Load())
 }
 
 func TestHandleClusterAuthStateChangeUsesSelectionMutationBoundary(t *testing.T) {
-	app := newTestAppWithDefaults(t)
-	before := app.selectionGeneration.Load()
+	app := newWorkspaceCoordinatorTestFixture(t)
+	before := app.Workspace.selectionGeneration.Load()
 
-	app.handleClusterAuthStateChange("cluster-a", authstate.StateRecovering, authstate.FailureDiagnostic{Reason: "unit-test"})
-	for _, intent := range app.ClusterRuntimeManager.intents.Drain() {
-		app.WorkspaceCoordinator.consumeClusterRuntimeIntent(intent)
+	app.ClusterRuntime.handleClusterAuthStateChange("cluster-a", authstate.StateRecovering, authstate.FailureDiagnostic{Reason: "unit-test"})
+	for _, intent := range app.ClusterRuntime.intents.Drain() {
+		app.Workspace.consumeClusterRuntimeIntent(intent)
 	}
 
 	require.Eventually(t, func() bool {
-		return app.selectionGeneration.Load() >= before+1
+		return app.Workspace.selectionGeneration.Load() >= before+1
 	}, time.Second, 10*time.Millisecond)
 }

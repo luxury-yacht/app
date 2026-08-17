@@ -13,10 +13,10 @@ func TestStartShellSessionRequiresClient(t *testing.T) {
 	fixture := newOperationsCoordinatorFixture(t)
 	app := fixture.runtime
 	operations := fixture.coordinator
-	app.appLogs = NewAppLogService(NewLogger(10))
+	app.AppLogs = NewAppLogService(NewLogger(10))
 	// Per-cluster clients are stored in clusterClients, not in global fields.
 	// Create a cluster entry WITHOUT a client to test the error path.
-	app.clusterClients = map[string]*clusterClients{
+	app.ClusterRuntime.clusterClients = map[string]*clusterClients{
 		shellClusterID: {
 			meta:              ClusterMeta{ID: shellClusterID, Name: "ctx"},
 			kubeconfigPath:    "/path",
@@ -35,10 +35,10 @@ func TestStartShellSessionRequiresRestConfig(t *testing.T) {
 	fixture := newOperationsCoordinatorFixture(t)
 	app := fixture.runtime
 	operations := fixture.coordinator
-	app.appLogs = NewAppLogService(NewLogger(10))
+	app.AppLogs = NewAppLogService(NewLogger(10))
 	// Per-cluster clients are stored in clusterClients, not in global fields.
 	fakeClient := fake.NewClientset()
-	app.clusterClients = map[string]*clusterClients{
+	app.ClusterRuntime.clusterClients = map[string]*clusterClients{
 		shellClusterID: {
 			meta:              ClusterMeta{ID: shellClusterID, Name: "ctx"},
 			kubeconfigPath:    "/path",
@@ -58,11 +58,11 @@ func TestStartShellSessionRequiresNamespace(t *testing.T) {
 	fixture := newOperationsCoordinatorFixture(t)
 	app := fixture.runtime
 	operations := fixture.coordinator
-	app.appLogs = NewAppLogService(NewLogger(10))
+	app.AppLogs = NewAppLogService(NewLogger(10))
 	// Per-cluster clients are stored in clusterClients, not in global fields.
 	fakeClient := fake.NewClientset()
 	restConfig := &rest.Config{}
-	app.clusterClients = map[string]*clusterClients{
+	app.ClusterRuntime.clusterClients = map[string]*clusterClients{
 		shellClusterID: {
 			meta:              ClusterMeta{ID: shellClusterID, Name: "ctx"},
 			kubeconfigPath:    "/path",
@@ -82,11 +82,11 @@ func TestStartShellSessionRequiresPodName(t *testing.T) {
 	fixture := newOperationsCoordinatorFixture(t)
 	app := fixture.runtime
 	operations := fixture.coordinator
-	app.appLogs = NewAppLogService(NewLogger(10))
+	app.AppLogs = NewAppLogService(NewLogger(10))
 	// Per-cluster clients are stored in clusterClients, not in global fields.
 	fakeClient := fake.NewClientset()
 	restConfig := &rest.Config{}
-	app.clusterClients = map[string]*clusterClients{
+	app.ClusterRuntime.clusterClients = map[string]*clusterClients{
 		shellClusterID: {
 			meta:              ClusterMeta{ID: shellClusterID, Name: "ctx"},
 			kubeconfigPath:    "/path",

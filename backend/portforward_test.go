@@ -18,18 +18,18 @@ func TestStartPortForward_InvalidCluster(t *testing.T) {
 	fixture := newOperationsCoordinatorFixture(t)
 	app := fixture.runtime
 	operations := fixture.coordinator
-	setTestAppRuntimeReady(t, app, context.Background())
+	setTestAppRuntimeReady(t, app.Lifecycle, context.Background())
 	operations.portForwardSessions = make(map[string]*portForwardSessionInternal)
-	app.clusterClients = make(map[string]*clusterClients)
+	app.ClusterRuntime.clusterClients = make(map[string]*clusterClients)
 
 	// Test with empty cluster ID.
-	_, err := operations.startPortForward("", PortForwardRequest{})
+	_, err := operations.startPortForwardAction(objectActionTarget("", "", "", "", "", ""), ObjectActionPortForwardOptions{})
 	if err == nil {
 		t.Fatal("expected error for empty cluster ID")
 	}
 
 	// Test with nonexistent cluster.
-	_, err = operations.startPortForward("nonexistent", PortForwardRequest{})
+	_, err = operations.startPortForwardAction(objectActionTarget("nonexistent", "", "", "", "", ""), ObjectActionPortForwardOptions{})
 	if err == nil {
 		t.Fatal("expected error for nonexistent cluster")
 	}
@@ -39,11 +39,11 @@ func TestStartPortForward_MissingClient(t *testing.T) {
 	fixture := newOperationsCoordinatorFixture(t)
 	app := fixture.runtime
 	operations := fixture.coordinator
-	setTestAppRuntimeReady(t, app, context.Background())
+	setTestAppRuntimeReady(t, app.Lifecycle, context.Background())
 	operations.portForwardSessions = make(map[string]*portForwardSessionInternal)
 
 	// Create a cluster entry WITHOUT a client to test the error path.
-	app.clusterClients = map[string]*clusterClients{
+	app.ClusterRuntime.clusterClients = map[string]*clusterClients{
 		portForwardClusterID: {
 			meta:              ClusterMeta{ID: portForwardClusterID, Name: "ctx"},
 			kubeconfigPath:    "/path",
@@ -52,14 +52,10 @@ func TestStartPortForward_MissingClient(t *testing.T) {
 		},
 	}
 
-	_, err := operations.startPortForward(portForwardClusterID, PortForwardRequest{
-		Namespace:     "default",
-		TargetKind:    "Pod",
-		TargetGroup:   "",
-		TargetVersion: "v1",
-		TargetName:    "test-pod",
-		ContainerPort: 8080,
-	})
+	_, err := operations.startPortForwardAction(
+		objectActionTarget(portForwardClusterID, "", "v1", "Pod", "default", "test-pod"),
+		ObjectActionPortForwardOptions{ContainerPort: 8080},
+	)
 	if err == nil {
 		t.Fatal("expected error when client is nil")
 	}
@@ -69,11 +65,11 @@ func TestStartPortForward_MissingRestConfig(t *testing.T) {
 	fixture := newOperationsCoordinatorFixture(t)
 	app := fixture.runtime
 	operations := fixture.coordinator
-	setTestAppRuntimeReady(t, app, context.Background())
+	setTestAppRuntimeReady(t, app.Lifecycle, context.Background())
 	operations.portForwardSessions = make(map[string]*portForwardSessionInternal)
 
 	fakeClient := fake.NewClientset()
-	app.clusterClients = map[string]*clusterClients{
+	app.ClusterRuntime.clusterClients = map[string]*clusterClients{
 		portForwardClusterID: {
 			meta:              ClusterMeta{ID: portForwardClusterID, Name: "ctx"},
 			kubeconfigPath:    "/path",
@@ -83,14 +79,10 @@ func TestStartPortForward_MissingRestConfig(t *testing.T) {
 		},
 	}
 
-	_, err := operations.startPortForward(portForwardClusterID, PortForwardRequest{
-		Namespace:     "default",
-		TargetKind:    "Pod",
-		TargetGroup:   "",
-		TargetVersion: "v1",
-		TargetName:    "test-pod",
-		ContainerPort: 8080,
-	})
+	_, err := operations.startPortForwardAction(
+		objectActionTarget(portForwardClusterID, "", "v1", "Pod", "default", "test-pod"),
+		ObjectActionPortForwardOptions{ContainerPort: 8080},
+	)
 	if err == nil {
 		t.Fatal("expected error when rest config is nil")
 	}
@@ -100,12 +92,12 @@ func TestStartPortForward_ValidationErrors(t *testing.T) {
 	fixture := newOperationsCoordinatorFixture(t)
 	app := fixture.runtime
 	operations := fixture.coordinator
-	setTestAppRuntimeReady(t, app, context.Background())
+	setTestAppRuntimeReady(t, app.Lifecycle, context.Background())
 	operations.portForwardSessions = make(map[string]*portForwardSessionInternal)
 
 	fakeClient := fake.NewClientset()
 	restConfig := &rest.Config{}
-	app.clusterClients = map[string]*clusterClients{
+	app.ClusterRuntime.clusterClients = map[string]*clusterClients{
 		portForwardClusterID: {
 			meta:              ClusterMeta{ID: portForwardClusterID, Name: "ctx"},
 			kubeconfigPath:    "/path",
@@ -116,38 +108,28 @@ func TestStartPortForward_ValidationErrors(t *testing.T) {
 	}
 
 	// Missing namespace.
-	_, err := operations.startPortForward(portForwardClusterID, PortForwardRequest{
-		TargetKind:    "Pod",
-		TargetGroup:   "",
-		TargetVersion: "v1",
-		TargetName:    "test-pod",
-		ContainerPort: 8080,
-	})
+	_, err := operations.startPortForwardAction(
+		objectActionTarget(portForwardClusterID, "", "v1", "Pod", "", "test-pod"),
+		ObjectActionPortForwardOptions{ContainerPort: 8080},
+	)
 	if err == nil {
 		t.Fatal("expected error for missing namespace")
 	}
 
 	// Missing target name.
-	_, err = operations.startPortForward(portForwardClusterID, PortForwardRequest{
-		Namespace:     "default",
-		TargetKind:    "Pod",
-		TargetGroup:   "",
-		TargetVersion: "v1",
-		ContainerPort: 8080,
-	})
+	_, err = operations.startPortForwardAction(
+		objectActionTarget(portForwardClusterID, "", "v1", "Pod", "default", ""),
+		ObjectActionPortForwardOptions{ContainerPort: 8080},
+	)
 	if err == nil {
 		t.Fatal("expected error for missing target name")
 	}
 
 	// Invalid container port.
-	_, err = operations.startPortForward(portForwardClusterID, PortForwardRequest{
-		Namespace:     "default",
-		TargetKind:    "Pod",
-		TargetGroup:   "",
-		TargetVersion: "v1",
-		TargetName:    "test-pod",
-		ContainerPort: 0,
-	})
+	_, err = operations.startPortForwardAction(
+		objectActionTarget(portForwardClusterID, "", "v1", "Pod", "default", "test-pod"),
+		ObjectActionPortForwardOptions{},
+	)
 	if err == nil {
 		t.Fatal("expected error for invalid container port")
 	}
@@ -157,7 +139,7 @@ func TestStartPortForwardRequiresPortForwardPermission(t *testing.T) {
 	fixture := newOperationsCoordinatorFixture(t)
 	app := fixture.runtime
 	operations := fixture.coordinator
-	setTestAppRuntimeReady(t, app, context.Background())
+	setTestAppRuntimeReady(t, app.Lifecycle, context.Background())
 	operations.portForwardSessions = make(map[string]*portForwardSessionInternal)
 
 	pod := &corev1.Pod{
@@ -175,7 +157,7 @@ func TestStartPortForwardRequiresPortForwardPermission(t *testing.T) {
 	}
 	fakeClient := fake.NewClientset(pod)
 	denySelfSubjectAccessReviews(fakeClient, "portforward denied")
-	app.clusterClients = map[string]*clusterClients{
+	app.ClusterRuntime.clusterClients = map[string]*clusterClients{
 		portForwardClusterID: {
 			meta:              ClusterMeta{ID: portForwardClusterID, Name: "ctx"},
 			kubeconfigPath:    "/path",
@@ -185,14 +167,10 @@ func TestStartPortForwardRequiresPortForwardPermission(t *testing.T) {
 		},
 	}
 
-	_, err := operations.startPortForward(portForwardClusterID, PortForwardRequest{
-		Namespace:     "default",
-		TargetKind:    "Pod",
-		TargetGroup:   "",
-		TargetVersion: "v1",
-		TargetName:    "pod-1",
-		ContainerPort: 8080,
-	})
+	_, err := operations.startPortForwardAction(
+		objectActionTarget(portForwardClusterID, "", "v1", "Pod", "default", "pod-1"),
+		ObjectActionPortForwardOptions{ContainerPort: 8080},
+	)
 	if err == nil || !strings.Contains(err.Error(), "portforward denied") {
 		t.Fatalf("expected port-forward permission denial, got %v", err)
 	}
@@ -273,9 +251,9 @@ func TestStopPortForward_NotFound(t *testing.T) {
 	fixture := newOperationsCoordinatorFixture(t)
 	app := fixture.runtime
 	operations := fixture.coordinator
-	setTestAppRuntimeReady(t, app, context.Background())
+	setTestAppRuntimeReady(t, app.Lifecycle, context.Background())
 	operations.portForwardSessions = make(map[string]*portForwardSessionInternal)
-	app.eventEmitter = func(context.Context, string, ...interface{}) {}
+	app.Lifecycle.eventEmitter = func(context.Context, string, ...interface{}) {}
 
 	err := operations.StopPortForward("nonexistent-session")
 	if err == nil {
@@ -287,11 +265,11 @@ func TestStopPortForward_Success(t *testing.T) {
 	fixture := newOperationsCoordinatorFixture(t)
 	app := fixture.runtime
 	operations := fixture.coordinator
-	setTestAppRuntimeReady(t, app, context.Background())
+	setTestAppRuntimeReady(t, app.Lifecycle, context.Background())
 	operations.portForwardSessions = make(map[string]*portForwardSessionInternal)
 
 	var statusEvents []PortForwardStatusEvent
-	app.eventEmitter = func(_ context.Context, name string, args ...interface{}) {
+	app.Lifecycle.eventEmitter = func(_ context.Context, name string, args ...interface{}) {
 		if name == portForwardStatusEventName && len(args) == 1 {
 			if ev, ok := args[0].(PortForwardStatusEvent); ok {
 				statusEvents = append(statusEvents, ev)
@@ -340,11 +318,11 @@ func TestPortForwardLifecycleFinishTerminalIsIdempotent(t *testing.T) {
 	fixture := newOperationsCoordinatorFixture(t)
 	app := fixture.runtime
 	operations := fixture.coordinator
-	setTestAppRuntimeReady(t, app, context.Background())
+	setTestAppRuntimeReady(t, app.Lifecycle, context.Background())
 	operations.portForwardSessions = make(map[string]*portForwardSessionInternal)
 
 	portForwardListEvents := 0
-	app.eventEmitter = func(_ context.Context, name string, _ ...interface{}) {
+	app.Lifecycle.eventEmitter = func(_ context.Context, name string, _ ...interface{}) {
 		if name == portForwardListEventName {
 			portForwardListEvents++
 		}
@@ -394,12 +372,12 @@ func TestPortForwardLifecycleStopForRuntimeIsIdempotent(t *testing.T) {
 	fixture := newOperationsCoordinatorFixture(t)
 	app := fixture.runtime
 	operations := fixture.coordinator
-	setTestAppRuntimeReady(t, app, context.Background())
+	setTestAppRuntimeReady(t, app.Lifecycle, context.Background())
 	operations.portForwardSessions = make(map[string]*portForwardSessionInternal)
 
 	var statusEvents []PortForwardStatusEvent
 	portForwardListEvents := 0
-	app.eventEmitter = func(_ context.Context, name string, args ...interface{}) {
+	app.Lifecycle.eventEmitter = func(_ context.Context, name string, args ...interface{}) {
 		switch name {
 		case portForwardStatusEventName:
 			if len(args) == 1 {
@@ -422,10 +400,10 @@ func TestPortForwardLifecycleStopForRuntimeIsIdempotent(t *testing.T) {
 	}
 	operations.portForwardSessions[session.ID] = session
 
-	if err := operations.stopPortForwardForRuntime(session.ID, "cluster disconnected"); err != nil {
+	if err := operations.portForwardLifecycle().stopForRuntime(session.ID, "cluster disconnected"); err != nil {
 		t.Fatalf("unexpected cleanup error: %v", err)
 	}
-	if err := operations.stopPortForwardForRuntime(session.ID, "cluster disconnected"); err != nil {
+	if err := operations.portForwardLifecycle().stopForRuntime(session.ID, "cluster disconnected"); err != nil {
 		t.Fatalf("expected repeated runtime cleanup to be ignored, got %v", err)
 	}
 
@@ -450,10 +428,10 @@ func TestRunPortForwarderUnregistersRuntimeOperationOnTerminalError(t *testing.T
 	fixture := newOperationsCoordinatorFixture(t)
 	app := fixture.runtime
 	operations := fixture.coordinator
-	setTestAppRuntimeReady(t, app, context.Background())
+	setTestAppRuntimeReady(t, app.Lifecycle, context.Background())
 	operations.portForwardSessions = make(map[string]*portForwardSessionInternal)
-	app.clusterClients = make(map[string]*clusterClients)
-	app.eventEmitter = func(context.Context, string, ...interface{}) {}
+	app.ClusterRuntime.clusterClients = make(map[string]*clusterClients)
+	app.Lifecycle.eventEmitter = func(context.Context, string, ...interface{}) {}
 
 	session := &portForwardSessionInternal{
 		PortForwardSession: PortForwardSession{
@@ -489,9 +467,9 @@ func TestOperationsCoordinatorStopClusterCleansPortForwards(t *testing.T) {
 	fixture := newOperationsCoordinatorFixture(t)
 	app := fixture.runtime
 	operations := fixture.coordinator
-	setTestAppRuntimeReady(t, app, context.Background())
+	setTestAppRuntimeReady(t, app.Lifecycle, context.Background())
 	operations.portForwardSessions = make(map[string]*portForwardSessionInternal)
-	app.eventEmitter = func(context.Context, string, ...interface{}) {}
+	app.Lifecycle.eventEmitter = func(context.Context, string, ...interface{}) {}
 
 	// Add sessions for two clusters.
 	session1 := &portForwardSessionInternal{
@@ -699,10 +677,10 @@ func TestEmitPortForwardStatusGuards(t *testing.T) {
 	fixture := newOperationsCoordinatorFixture(t)
 	app := fixture.runtime
 	operations := fixture.coordinator
-	setTestAppRuntimeReady(t, app, context.Background())
+	setTestAppRuntimeReady(t, app.Lifecycle, context.Background())
 
 	calls := 0
-	app.eventEmitter = func(_ context.Context, _ string, _ ...interface{}) {
+	app.Lifecycle.eventEmitter = func(_ context.Context, _ string, _ ...interface{}) {
 		calls++
 	}
 

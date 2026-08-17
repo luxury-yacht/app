@@ -217,15 +217,15 @@ func TestClusterLifecycleConcurrentAccess(t *testing.T) {
 }
 
 func TestClusterWorkspaceStateIncludesLifecycle(t *testing.T) {
-	app := newTestAppWithDefaults(t)
+	app := newWorkspaceCoordinatorTestFixture(t)
 
-	require.Empty(t, app.GetClusterWorkspaceState().Clusters)
+	require.Empty(t, app.Workspace.GetClusterWorkspaceState().Clusters)
 
 	emitter, _ := collectingEmitter()
-	app.clusterLifecycle = newClusterLifecycleWithSlowThreshold(emitter, time.Minute)
-	app.clusterLifecycle.SetState("cluster-a", ClusterStateReady)
+	app.ClusterRuntime.clusterLifecycle = newClusterLifecycleWithSlowThreshold(emitter, time.Minute)
+	app.ClusterRuntime.clusterLifecycle.SetState("cluster-a", ClusterStateReady)
 
-	states := app.GetClusterWorkspaceState().Clusters
+	states := app.Workspace.GetClusterWorkspaceState().Clusters
 	require.Len(t, states, 1)
 	require.Equal(t, ClusterStateReady, states["cluster-a"].Lifecycle)
 }

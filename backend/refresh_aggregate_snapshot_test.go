@@ -293,8 +293,7 @@ func TestWireNamespacesReadinessObserverFlipsReadyForLateSubsystems(t *testing.T
 	runtimeManager := &ClusterRuntimeManager{clusterLifecycle: lifecycle}
 	refreshCoordinator := newRefreshCoordinator()
 	refreshCoordinator.ClusterRuntimeManager = runtimeManager
-	app := &App{ClusterRuntimeManager: runtimeManager, RefreshCoordinator: refreshCoordinator}
-	app.refreshAggregates.Store(&refreshAggregateHandlers{snapshot: aggregate})
+	refreshCoordinator.refreshAggregates.Store(&refreshAggregateHandlers{snapshot: aggregate})
 	aggregate.onNamespaceSnapshot = func(clusterID string) {
 		state := lifecycle.GetState(clusterID)
 		if state == ClusterStateLoading || state == ClusterStateLoadingSlow {
@@ -305,7 +304,7 @@ func TestWireNamespacesReadinessObserverFlipsReadyForLateSubsystems(t *testing.T
 	// A subsystem built after initial setup — exactly what the selector-open
 	// and auth-recovery paths produce.
 	subsystem := &system.Subsystem{NamespacesDoorbell: &system.NamespacesDoorbellObserver{}}
-	app.wireNamespacesReadinessObserver("cluster-b", subsystem)
+	refreshCoordinator.wireNamespacesReadinessObserver("cluster-b", subsystem)
 
 	// The tracker settles and the notifier rings its final doorbell.
 	subsystem.NamespacesDoorbell.Invoke("ns-1", "stores finished settling")
@@ -342,8 +341,7 @@ func TestNamespacesReadinessSweepHealsDroppedSettleRing(t *testing.T) {
 	runtimeManager := &ClusterRuntimeManager{clusterLifecycle: lifecycle}
 	refreshCoordinator := newRefreshCoordinator()
 	refreshCoordinator.ClusterRuntimeManager = runtimeManager
-	app := &App{ClusterRuntimeManager: runtimeManager, RefreshCoordinator: refreshCoordinator}
-	app.refreshAggregates.Store(&refreshAggregateHandlers{snapshot: aggregate})
+	refreshCoordinator.refreshAggregates.Store(&refreshAggregateHandlers{snapshot: aggregate})
 	aggregate.onNamespaceSnapshot = func(clusterID string) {
 		if lifecycle.GetState(clusterID) == ClusterStateLoading {
 			lifecycle.SetState(clusterID, ClusterStateReady)
@@ -351,7 +349,7 @@ func TestNamespacesReadinessSweepHealsDroppedSettleRing(t *testing.T) {
 	}
 
 	subsystem := &system.Subsystem{NamespacesDoorbell: &system.NamespacesDoorbellObserver{}}
-	app.sweepNamespacesReadiness(map[string]*system.Subsystem{"cluster-a": subsystem})
+	refreshCoordinator.sweepNamespacesReadiness(map[string]*system.Subsystem{"cluster-a": subsystem})
 
 	require.Eventually(t, func() bool {
 		return lifecycle.GetState("cluster-a") == ClusterStateReady
@@ -373,25 +371,24 @@ func TestTransitionClusterToLoadingKeepsReadyClustersReady(t *testing.T) {
 	runtimeManager := &ClusterRuntimeManager{clusterLifecycle: lifecycle}
 	refreshCoordinator := newRefreshCoordinator()
 	refreshCoordinator.ClusterRuntimeManager = runtimeManager
-	app := &App{ClusterRuntimeManager: runtimeManager, RefreshCoordinator: refreshCoordinator}
 
 	// Re-warm of a ready cluster: no demotion.
 	lifecycle.SetState("cluster-ready", ClusterStateReady)
-	app.transitionClusterToLoading("cluster-ready")
+	refreshCoordinator.transitionClusterToLoading("cluster-ready")
 	require.Equal(t, ClusterStateReady, lifecycle.GetState("cluster-ready"),
 		"a ready cluster must stay ready through a rebuild (re-warm serving is continuous)")
 
 	// Fresh/connecting/recovering clusters still enter loading.
 	lifecycle.SetState("cluster-new", ClusterStateConnected)
-	app.transitionClusterToLoading("cluster-new")
+	refreshCoordinator.transitionClusterToLoading("cluster-new")
 	require.Equal(t, ClusterStateLoading, lifecycle.GetState("cluster-new"))
 
 	lifecycle.SetState("cluster-auth", ClusterStateAuthFailed)
-	app.transitionClusterToLoading("cluster-auth")
+	refreshCoordinator.transitionClusterToLoading("cluster-auth")
 	require.Equal(t, ClusterStateLoading, lifecycle.GetState("cluster-auth"))
 
 	// Unknown state (first build): loading.
-	app.transitionClusterToLoading("cluster-unknown")
+	refreshCoordinator.transitionClusterToLoading("cluster-unknown")
 	require.Equal(t, ClusterStateLoading, lifecycle.GetState("cluster-unknown"))
 }
 
