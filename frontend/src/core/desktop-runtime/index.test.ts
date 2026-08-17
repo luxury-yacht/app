@@ -32,6 +32,7 @@ vi.mock('@wailsio/runtime', () => ({
 import * as desktopRuntime from './index';
 import {
   closeWindow,
+  type DesktopEventName,
   type DesktopEventPayload,
   desktopRuntimeAvailable,
   getEnvironment,
@@ -109,5 +110,13 @@ describe('desktop runtime adapter', () => {
     };
 
     expect(desktopRuntimeAvailable()).toBe(true);
+  });
+
+  it('accepts only generated application event names', () => {
+    expectTypeOf<'cluster:scope:changed'>().toMatchTypeOf<DesktopEventName>();
+    expectTypeOf<'connection-status'>().not.toMatchTypeOf<DesktopEventName>();
+    expectTypeOf<DesktopEventPayload<'cluster:scope:changed'>>().toEqualTypeOf<{
+      clusterId: string;
+    }>();
   });
 });

@@ -33,7 +33,8 @@ type Capture struct {
 }
 
 var (
-	global *Capture // global capture instance
+	global   *Capture // global capture instance
+	initOnce sync.Once
 	// callbackMu guards package-level callbacks that are read from capture goroutines and set by tests/app init.
 	callbackMu   sync.RWMutex
 	eventEmitter func(string)                       // function to emit events
@@ -72,19 +73,21 @@ var (
 
 // Init installs a stderr capture for klog/k8s client noise.
 func Init() {
-	global = &Capture{buffer: &bytes.Buffer{}}
+	initOnce.Do(func() {
+		global = &Capture{buffer: &bytes.Buffer{}}
 
-	klogFlags := flag.NewFlagSet("klog", flag.ContinueOnError)
-	klog.InitFlags(klogFlags)
-	// Opt into the new klog behavior so that -stderrthreshold is honored even
-	// when -logtostderr=true (the default).
-	// Ref: kubernetes/klog#212, kubernetes/klog#432
-	klogFlags.Set("legacy_stderr_threshold_behavior", "false")
-	klogFlags.Set("stderrthreshold", "INFO")
-	klogFlags.Set("logtostderr", "true")
-	klogFlags.Set("v", "2")
+		klogFlags := flag.NewFlagSet("klog", flag.ContinueOnError)
+		klog.InitFlags(klogFlags)
+		// Opt into the new klog behavior so that -stderrthreshold is honored even
+		// when -logtostderr=true (the default).
+		// Ref: kubernetes/klog#212, kubernetes/klog#432
+		klogFlags.Set("legacy_stderr_threshold_behavior", "false")
+		klogFlags.Set("stderrthreshold", "INFO")
+		klogFlags.Set("logtostderr", "true")
+		klogFlags.Set("v", "2")
 
-	global.start()
+		global.start()
+	})
 }
 
 // Start begins capturing stderr output.
@@ -329,6 +332,15 @@ func isExpectedCondition(lower string) bool {
 	return matchAnyPattern(lower, expectedConditionPatterns)
 }
 
+type enhancedError struct {
+	cause   error
+	message string
+}
+
+func (e enhancedError) Error() string { return e.message }
+
+func (e enhancedError) Unwrap() error { return e.cause }
+
 // Enhance augments an error with recent stderr output when helpful.
 func Enhance(err error) error {
 	if err == nil {
@@ -347,9 +359,9 @@ func Enhance(err error) error {
 	}
 
 	if !strings.Contains(extra, orig) && !strings.Contains(orig, extra) {
-		return fmt.Errorf("%s. STDERR: %s", orig, extra)
+		return enhancedError{cause: err, message: fmt.Sprintf("%s. STDERR: %s", orig, extra)}
 	}
-	return fmt.Errorf("%s", extra)
+	return enhancedError{cause: err, message: extra}
 }
 
 // CaptureWithCluster prefixes a message with the cluster ID and captures it.

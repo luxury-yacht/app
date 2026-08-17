@@ -17,7 +17,7 @@ the completed `v2` rewrite plan.
   `querypage_typed.go` (`resolveTypedSnapshotPageViaStore`, `resolveMaintainedDirect`,
   `typedMaintainedStore`); `backend/objectcatalog/` for Browse.
 - **Lifecycle / memory:** `backend.RefreshCoordinator` in
-  `backend/app_refresh_*.go`, with governor policy in
+  `backend/refresh_*.go`, with governor policy in
   `backend/refresh/system/governor.go` and spill in
   `backend/refresh/domain/maintained_stores.go`. Its reset path unpublishes
   request/stream routing and stops producers before clearing cache and spill
@@ -114,7 +114,7 @@ the completed `v2` rewrite plan.
 ## Lifecycle & governor
 
 - **Foreground / Background / Cold** per cluster (`system/governor.go`,
-  `app_refresh_governor.go`). Foreground and Background both keep the subsystem
+  `refresh_governor.go`). Foreground and Background both keep the subsystem
   live; metrics polling follows cluster-scoped frontend lease demand rather than
   governor visibility. A memory-pressure poll (`runtime.ReadMemStats` HeapInuse vs budget — **not**
   `GOMEMLIMIT`) collapses the warm set under pressure and `FreeOSMemory`s.
@@ -125,7 +125,7 @@ the completed `v2` rewrite plan.
   re-warm unroutes then closes the mappings safely. Cold clusters do not run object-catalog
   discovery, capability checks, or sync loops against their stopped feeds; the catalog
   restarts as part of re-warm. Starting points:
-  `domain/maintained_stores.go`, `querypage/columnstore_mmap.go`, `app_refresh_spill.go`.
+  `domain/maintained_stores.go`, `querypage/columnstore_mmap.go`, `refresh_spill.go`.
 - **Cold has a server-owned entry gate.** A desired Cold tier stays unapplied while
   the live subsystem builds settled `namespaces` and `cluster-overview` snapshots
   for its cluster scope. The namespace build uses the aggregate lifecycle callback,

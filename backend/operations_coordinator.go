@@ -228,7 +228,8 @@ func (a operationsClusterAccessFuncs) FetchPodWithRetry(
 func newApplicationOperationsCoordinator(
 	runtimeManager *ClusterRuntimeManager,
 	refreshProjection *refreshResourceProjection,
-	lifecycle *ApplicationLifecycle,
+	contextProvider func() context.Context,
+	emitEvent func(string, ...interface{}),
 	logger *Logger,
 ) *OperationsCoordinator {
 	return NewOperationsCoordinator(OperationsCoordinatorDependencies{
@@ -245,8 +246,8 @@ func newApplicationOperationsCoordinator(
 			},
 		},
 		Permissions: defaultOperationsPermissionChecker{},
-		Context:     lifecycle.CtxOrBackground,
-		EmitEvent:   lifecycle.emitEvent,
+		Context:     contextProvider,
+		EmitEvent:   emitEvent,
 		Logger:      logger,
 		DrainStore:  nodemaintenance.GlobalStore(),
 	})

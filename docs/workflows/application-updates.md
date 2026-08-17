@@ -131,8 +131,8 @@ publication; do not rely on an in-band transition signed only by that key.
 
 ## Starting points and validation
 
-- Runtime composition: `main.go`, `backend/app_updates_config.go`
-- Coordinator and GitHub adapter: `backend/internal/appupdates`, `backend/app_update_provider.go`
+- Runtime composition: `main.go`, `backend/update_coordinator_config.go`
+- Coordinator and GitHub adapter: `backend/internal/appupdates`, `backend/update_provider.go`
 - Eligibility and durable state: `internal/updateidentity`, `internal/updatestate`, `internal/updatetemp`
 - Shell surfaces: `frontend/src/ui/status`, `frontend/src/ui/modals/AboutModal.tsx`, `frontend/src/core/backend-api`
 - Release tooling: `cmd/project/updater_release.go`, `cmd/project/release.go`, `.github/workflows/release.yml`

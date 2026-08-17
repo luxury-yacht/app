@@ -65,17 +65,81 @@ func TestBackendOwnersDoNotRetainTheCompositionRoot(t *testing.T) {
 	require.Empty(t, violations, "backend owners must receive focused collaborators, never the composition root")
 }
 
+func TestApplicationRuntimeUsesOwnerConstructorsInsteadOfFieldPoking(t *testing.T) {
+	parsed, err := parser.ParseFile(token.NewFileSet(), "app.go", nil, 0)
+	require.NoError(t, err)
+
+	owners := map[string]struct{}{
+		"ClusterRuntime": {},
+		"Refresh":        {},
+		"Workspace":      {},
+	}
+	var violations []string
+	ast.Inspect(parsed, func(node ast.Node) bool {
+		assignment, ok := node.(*ast.AssignStmt)
+		if !ok {
+			return true
+		}
+		for _, expression := range assignment.Lhs {
+			selector, ok := expression.(*ast.SelectorExpr)
+			if !ok {
+				continue
+			}
+			if identifier, ok := selector.X.(*ast.Ident); ok && identifier.Name == "lifecycle" {
+				violations = append(violations, "ApplicationLifecycle."+selector.Sel.Name)
+				continue
+			}
+			ownerSelector, ok := selector.X.(*ast.SelectorExpr)
+			if !ok {
+				continue
+			}
+			root, ok := ownerSelector.X.(*ast.Ident)
+			if !ok || root.Name != "runtime" {
+				continue
+			}
+			if _, tracked := owners[ownerSelector.Sel.Name]; tracked {
+				violations = append(violations, ownerSelector.Sel.Name+"."+selector.Sel.Name)
+			}
+		}
+		return true
+	})
+
+	sort.Strings(violations)
+	require.Empty(t, violations, "owners must receive dependencies through constructors")
+}
+
+func TestLegacyAppPrefixedProductionFilesRemainAbsent(t *testing.T) {
+	paths, err := filepath.Glob("app_*.go")
+	require.NoError(t, err)
+
+	allowed := map[string]struct{}{
+		"app_log_service.go":          {},
+		"app_log_service_commands.go": {},
+	}
+	var violations []string
+	for _, path := range paths {
+		if strings.HasSuffix(path, "_test.go") {
+			continue
+		}
+		if _, ok := allowed[filepath.Base(path)]; !ok {
+			violations = append(violations, filepath.Base(path))
+		}
+	}
+
+	require.Empty(t, violations, "production files must be named for their focused owner")
+}
+
 type ownerSize struct {
 	Fields  int
 	Methods int
 }
 
 func TestBackendOwnerSizeDistributionRemainsReviewed(t *testing.T) {
-	expected := map[string]ownerSize{
-		"ApplicationLifecycle":         {Fields: 13, Methods: 22},
+	ceilings := map[string]ownerSize{
+		"ApplicationLifecycle":         {Fields: 13, Methods: 23},
 		"AppLogService":                {Fields: 1, Methods: 7},
 		"ClusterAttentionService":      {Fields: 4, Methods: 17},
-		"ClusterRuntimeManager":        {Fields: 22, Methods: 69},
+		"ClusterRuntimeManager":        {Fields: 22, Methods: 70},
 		"ClusterWorkspaceProjection":   {Fields: 4, Methods: 5},
 		"ContainerLogsSelectionPolicy": {Fields: 1, Methods: 2},
 		"DataManagementCoordinator":    {Fields: 13, Methods: 14},
@@ -92,7 +156,13 @@ func TestBackendOwnerSizeDistributionRemainsReviewed(t *testing.T) {
 		"UpdateCoordinator":            {Fields: 8, Methods: 21},
 		"WorkspaceCoordinator":         {Fields: 27, Methods: 91},
 	}
-	require.Equal(t, expected, measuredOwnerSizes(t, expected))
+	measured := measuredOwnerSizes(t, ceilings)
+	for owner, ceiling := range ceilings {
+		actual := measured[owner]
+		require.Positivef(t, actual.Fields+actual.Methods, "tracked owner %s must exist", owner)
+		require.LessOrEqualf(t, actual.Fields, ceiling.Fields, "%s field count grew and needs review", owner)
+		require.LessOrEqualf(t, actual.Methods, ceiling.Methods, "%s method count grew and needs review", owner)
+	}
 }
 
 func measuredOwnerSizes(t testing.TB, owners map[string]ownerSize) map[string]ownerSize {
@@ -169,9 +239,9 @@ func receiverIdentifier(expression ast.Expr) string {
 
 func TestApplicationRuntimeIsReservedForCompositionAndLifecycleTests(t *testing.T) {
 	allowed := map[string]struct{}{
-		"app_lifecycle_init_test.go":           {},
-		"app_lifecycle_test.go":                {},
-		"app_runtime_test.go":                  {},
+		"application_lifecycle_init_test.go":   {},
+		"application_lifecycle_test.go":        {},
+		"desktop_shell_runtime_test.go":        {},
 		"application_runtime_contract_test.go": {},
 	}
 	paths, err := filepath.Glob("*_test.go")

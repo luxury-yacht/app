@@ -1,5 +1,5 @@
 /*
- * backend/app_permissions.go
+ * backend/resource_gateway_permissions.go
  *
  * Wails endpoint for batch permission evaluation. Uses per-namespace SSRR
  * (SelfSubjectRulesReview) caching with SSAR (SelfSubjectAccessReview)

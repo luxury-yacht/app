@@ -361,7 +361,7 @@ func TestHandleClusterAuthRecoveryProgress_CarriesErrorClass(t *testing.T) {
 
 	var progressEvents []ClusterAuthProgressEvent
 	var mu sync.Mutex
-	app.Lifecycle.eventEmitter = func(_ context.Context, name string, args ...interface{}) {
+	app.Lifecycle.signalState().eventEmitter = func(_ context.Context, name string, args ...interface{}) {
 		if name != "cluster:auth:progress" || len(args) == 0 {
 			return
 		}
@@ -410,7 +410,7 @@ func TestHandleClusterAuthRecoveryProgress_CarriesExecCommand(t *testing.T) {
 
 	var progressEvents []ClusterAuthProgressEvent
 	var mu sync.Mutex
-	app.Lifecycle.eventEmitter = func(_ context.Context, name string, args ...interface{}) {
+	app.Lifecycle.signalState().eventEmitter = func(_ context.Context, name string, args ...interface{}) {
 		if name != "cluster:auth:progress" || len(args) == 0 {
 			return
 		}

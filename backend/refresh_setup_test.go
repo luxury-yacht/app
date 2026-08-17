@@ -1,5 +1,5 @@
 /*
- * backend/app_refresh_setup_test.go
+ * backend/refresh_setup_test.go
  *
  * Tests for refresh subsystem setup orchestration.
  */
@@ -78,7 +78,7 @@ func TestBuildSubsystemsInSelectionOrderRunsConcurrentlyAndPreservesOrder(t *tes
 // limiter without ever calling back into settings loading — containerLogsTargetLimiterMu
 // is a LEAF lock; the settings paths push the configured limit via SetLimit after load.
 func TestSharedContainerLogsTargetLimiterDoesNotDeadlockBeforeSettingsLoad(t *testing.T) {
-	refreshCoordinator := newRefreshCoordinator() // settings are not yet loaded
+	refreshCoordinator := newRefreshCoordinator(RefreshCoordinatorDependencies{}) // settings are not yet loaded
 
 	done := make(chan *containerlogsstream.GlobalTargetLimiter, 1)
 	go func() {

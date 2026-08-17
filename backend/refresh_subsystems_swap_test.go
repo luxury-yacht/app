@@ -1,5 +1,5 @@
 /*
- * backend/app_refresh_subsystems_swap_test.go
+ * backend/refresh_subsystems_swap_test.go
  *
  * Tests for per-cluster subsystem replacement.
  */

@@ -1,5 +1,5 @@
 /*
- * backend/app_lifecycle.go
+ * backend/application_lifecycle.go
  *
  * Manages the lifecycle of the backend application.
  */
@@ -12,7 +12,6 @@ import (
 	"log"
 	"strings"
 	"sync"
-	"sync/atomic"
 	"time"
 
 	"github.com/luxury-yacht/app/backend/internal/applog"
@@ -43,10 +42,8 @@ const beforeCloseSelectionFlushTimeout = 2 * time.Second
 // collaborators needed to order startup and shutdown. It is a focused owner,
 // not the application composition root.
 type ApplicationLifecycle struct {
-	appDone      <-chan struct{}
-	runtimeReady atomic.Bool
-	preQuitOnce  sync.Once
-	eventEmitter func(context.Context, string, ...interface{})
+	signals     *applicationRuntimeSignals
+	preQuitOnce sync.Once
 
 	desktopShell   *DesktopShell
 	appLogs        *AppLogService
@@ -57,6 +54,43 @@ type ApplicationLifecycle struct {
 	workspace      *WorkspaceCoordinator
 	operations     *OperationsCoordinator
 	updates        *UpdateCoordinator
+}
+
+type ApplicationLifecycleDependencies struct {
+	DesktopShell   *DesktopShell
+	AppLogs        *AppLogService
+	Preferences    *PreferencesService
+	ErrorReporting *ErrorReportingService
+	ClusterRuntime *ClusterRuntimeManager
+	Refresh        *RefreshCoordinator
+	Workspace      *WorkspaceCoordinator
+	Operations     *OperationsCoordinator
+	Updates        *UpdateCoordinator
+}
+
+func newApplicationLifecycle(
+	signals *applicationRuntimeSignals,
+	dependencies ApplicationLifecycleDependencies,
+) *ApplicationLifecycle {
+	if signals == nil {
+		signals = newApplicationRuntimeSignals(nil)
+	}
+	appLogs := dependencies.AppLogs
+	if appLogs == nil {
+		appLogs = NewAppLogService(NewLogger(1000))
+	}
+	return &ApplicationLifecycle{
+		signals:        signals,
+		desktopShell:   dependencies.DesktopShell,
+		appLogs:        appLogs,
+		preferences:    dependencies.Preferences,
+		errorReporting: dependencies.ErrorReporting,
+		clusterRuntime: dependencies.ClusterRuntime,
+		refresh:        dependencies.Refresh,
+		workspace:      dependencies.Workspace,
+		operations:     dependencies.Operations,
+		updates:        dependencies.Updates,
+	}
 }
 
 // ServiceStartup performs bounded, non-UI process initialization before native
@@ -72,22 +106,6 @@ func (a *ApplicationLifecycle) ServiceStartup(ctx context.Context, _ application
 	a.setupEnvironment()
 	a.appLogs.logger.Debug("Environment setup completed", logsources.App)
 	return nil
-}
-
-func (a *WorkspaceCoordinator) consumeClusterRuntimeIntent(intent ClusterRuntimeIntent) {
-	if !a.acceptClusterRuntimeIntent(intent) {
-		return
-	}
-	switch intent.Kind {
-	case ClusterRuntimeIntentKubeconfigSourceChanged:
-		a.handleKubeconfigChange(intent.Paths)
-	case ClusterRuntimeIntentAuthRebuild:
-		if command, ok := newClusterAuthStateCommand(intent.ClusterID, a.clusterAuthDisplayName(intent.ClusterID), intent.AuthState, intent.Diagnostic); ok {
-			a.dispatchClusterAuthMutation(intent, command)
-		}
-	case ClusterRuntimeIntentTransportRebuild:
-		a.runClusterTransportRebuild(intent.ClusterID, intent.Cause, nil)
-	}
 }
 
 // WindowRuntimeReady runs interactive initialization once the webview runtime
@@ -118,22 +136,7 @@ func (a *ApplicationLifecycle) WindowRuntimeReady(windowName string, restoreGeom
 	return true
 }
 
-func (m *ClusterRuntimeManager) initializeClusterLifecycle() {
-	lifecycle := newClusterLifecycle(func(clusterID string, state, previousState ClusterLifecycleState) {
-		// An empty previousState means "no previous state" (first transition).
-		m.emitEvent(clusterLifecycleEventName, ClusterLifecycleEvent{
-			ClusterID:     clusterID,
-			State:         state,
-			PreviousState: string(previousState),
-		})
-	})
-	lifecycle.setSnapshotChangeObserver(m.projection.markClusterWorkspaceChanged)
-	m.clusterLifecycle = lifecycle
-}
-
 func (a *ApplicationLifecycle) configureStartupErrorCapture() {
-	errorcapture.Init()
-	errorcapture.InstallUnhandledErrorDedup()
 	errorcapture.SetEventEmitter(func(message string) {
 		// Note: Auth state management is now per-cluster via transport wrappers.
 		// Stderr errors don't have cluster context, so we only emit to frontend
@@ -199,20 +202,6 @@ func (a *ApplicationLifecycle) checkStartupBetaExpiry(windowName string) bool {
 		return false
 	}
 	return true
-}
-
-func (s *DesktopShell) presentExpiredBetaPrompt(prompt expiredBetaPrompt) {
-	if s == nil || s.application == nil {
-		return
-	}
-	dialog := s.application.Dialog.Question().SetTitle(prompt.Title).SetMessage(prompt.Message)
-	download := dialog.AddButton(prompt.DownloadLabel).SetAsDefault().OnClick(prompt.OnDownload)
-	quit := dialog.AddButton(prompt.QuitLabel).SetAsCancel().OnClick(prompt.OnQuit)
-	dialog.SetDefaultButton(download).SetCancelButton(quit)
-	if window, err := s.workspaceWindow(prompt.WindowName); err == nil {
-		dialog.AttachToWindow(window)
-	}
-	dialog.Show()
 }
 
 func (a *ApplicationLifecycle) configureStartupLogging() {
@@ -360,26 +349,6 @@ func (a *ApplicationLifecycle) ReleaseWorkspaceWindow(windowID string) {
 	if a != nil && a.workspace != nil {
 		a.workspace.ReleaseWorkspaceWindow(windowID)
 	}
-}
-
-// anyClusterAuthInvalid returns true if any cluster has an auth state that is not Valid.
-// Used to suppress auth error logging when we know auth issues exist.
-func (a *ClusterRuntimeManager) anyClusterAuthInvalid() bool {
-	if a == nil {
-		return false
-	}
-	a.clusterClientsMu.Lock()
-	defer a.clusterClientsMu.Unlock()
-
-	for _, clients := range a.clusterClients {
-		if clients == nil || clients.authManager == nil {
-			continue
-		}
-		if !clients.authManager.IsValid() {
-			return true
-		}
-	}
-	return false
 }
 
 // containsAuthPattern checks if a lowercased message contains auth-related patterns.

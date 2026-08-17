@@ -537,7 +537,7 @@ func TestStartupBetaExpiryReportsAndStopsInteractiveStartup(t *testing.T) {
 
 	reporter := &recordingErrorReporter{}
 	app := NewApplicationRuntime(nil, reporter)
-	app.Lifecycle.eventEmitter = func(context.Context, string, ...interface{}) {}
+	app.Lifecycle.signalState().eventEmitter = func(context.Context, string, ...interface{}) {}
 	updates := &fakeApplicationUpdateCoordinator{}
 	app.Updates.coordinator = updates
 	var prompt expiredBetaPrompt

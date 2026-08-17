@@ -34,7 +34,7 @@ func TestShellEventWriterEmits(t *testing.T) {
 	operations := fixture.coordinator
 	setTestAppRuntimeReady(t, app.Lifecycle, context.Background())
 	events := make([]ShellOutputEvent, 0, 1)
-	app.Lifecycle.eventEmitter = func(_ context.Context, name string, args ...interface{}) {
+	app.Lifecycle.signalState().eventEmitter = func(_ context.Context, name string, args ...interface{}) {
 		if name == shellOutputEventName && len(args) == 1 {
 			if ev, ok := args[0].(ShellOutputEvent); ok {
 				events = append(events, ev)
@@ -77,7 +77,7 @@ func TestShellSessionLifecycleHelpers(t *testing.T) {
 	}
 	operations.shellSessions["sess"] = sess
 
-	app.Lifecycle.eventEmitter = func(context.Context, string, ...interface{}) {}
+	app.Lifecycle.signalState().eventEmitter = func(context.Context, string, ...interface{}) {}
 
 	readCh := make(chan string, 1)
 	go func() {
@@ -102,7 +102,7 @@ func TestShellSessionLifecycleHelpers(t *testing.T) {
 	}
 
 	events := make([]ShellStatusEvent, 0, 1)
-	app.Lifecycle.eventEmitter = func(_ context.Context, name string, args ...interface{}) {
+	app.Lifecycle.signalState().eventEmitter = func(_ context.Context, name string, args ...interface{}) {
 		if name == shellStatusEventName && len(args) == 1 {
 			if ev, ok := args[0].(ShellStatusEvent); ok {
 				events = append(events, ev)
@@ -162,7 +162,7 @@ func TestShellSessionLifecycleFinishStreamIsIdempotent(t *testing.T) {
 
 	var statusEvents []ShellStatusEvent
 	listEvents := 0
-	app.Lifecycle.eventEmitter = func(_ context.Context, name string, args ...interface{}) {
+	app.Lifecycle.signalState().eventEmitter = func(_ context.Context, name string, args ...interface{}) {
 		switch name {
 		case shellStatusEventName:
 			if len(args) == 1 {
@@ -222,7 +222,7 @@ func TestShellSessionLifecycleCloseForRuntimeIsIdempotent(t *testing.T) {
 
 	var statusEvents []ShellStatusEvent
 	listEvents := 0
-	app.Lifecycle.eventEmitter = func(_ context.Context, name string, args ...interface{}) {
+	app.Lifecycle.signalState().eventEmitter = func(_ context.Context, name string, args ...interface{}) {
 		switch name {
 		case shellStatusEventName:
 			if len(args) == 1 {
@@ -379,7 +379,7 @@ func TestOperationsCoordinatorStopClusterCleansShellSessions(t *testing.T) {
 
 	statusEvents := make([]ShellStatusEvent, 0)
 	listEvents := make([][]ShellSessionInfo, 0)
-	app.Lifecycle.eventEmitter = func(_ context.Context, name string, args ...interface{}) {
+	app.Lifecycle.signalState().eventEmitter = func(_ context.Context, name string, args ...interface{}) {
 		if len(args) != 1 {
 			return
 		}
@@ -458,7 +458,7 @@ func TestEmitShellEventsGuards(t *testing.T) {
 	setTestAppRuntimeReady(t, app.Lifecycle, context.Background())
 
 	calls := 0
-	app.Lifecycle.eventEmitter = func(_ context.Context, _ string, _ ...interface{}) {
+	app.Lifecycle.signalState().eventEmitter = func(_ context.Context, _ string, _ ...interface{}) {
 		calls++
 	}
 

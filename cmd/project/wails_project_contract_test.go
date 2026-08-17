@@ -263,7 +263,7 @@ func TestNewWindowUsesTheInProcessPeerRegistry(t *testing.T) {
 func TestWailsApplicationIsInjectedDirectlyWithoutDesktopAdapter(t *testing.T) {
 	mainSource := readTestFile(t, repositoryPath("main.go"))
 	windowSource := readTestFile(t, repositoryPath("internal", "appwindow", "registry.go"))
-	runtimeSource := readTestFile(t, repositoryPath("backend", "app_runtime.go"))
+	runtimeSource := readTestFile(t, repositoryPath("backend", "desktop_shell_runtime.go"))
 	menuSource := readTestFile(t, repositoryPath("backend", "menu.go"))
 	_, desktopErr := os.Stat(repositoryPath("internal", "desktop"))
 	require.NoError(t, validateDirectWailsComposition(mainSource, windowSource, runtimeSource, menuSource, desktopErr == nil))
@@ -349,7 +349,7 @@ func TestApplicationRuntimeComposesLeafOwners(t *testing.T) {
 func TestDirectWailsCompositionContractRejectsBoundaryRegressions(t *testing.T) {
 	mainSource := readTestFile(t, repositoryPath("main.go"))
 	windowSource := readTestFile(t, repositoryPath("internal", "appwindow", "registry.go"))
-	runtimeSource := readTestFile(t, repositoryPath("backend", "app_runtime.go"))
+	runtimeSource := readTestFile(t, repositoryPath("backend", "desktop_shell_runtime.go"))
 	menuSource := readTestFile(t, repositoryPath("backend", "menu.go"))
 
 	tests := map[string]struct {
@@ -460,15 +460,15 @@ func TestWailsTransportEventsAndPeerHooksHaveOneCompositionOwner(t *testing.T) {
 		},
 		"degraded health event producer": {
 			marker: "m.emitEvent(clusterHealthDegradedEventName",
-			owners: []string{"backend/app_heartbeat.go"},
+			owners: []string{"backend/cluster_runtime_heartbeat.go"},
 		},
 		"healthy health event producer": {
 			marker: "m.emitEvent(clusterHealthHealthyEventName",
-			owners: []string{"backend/app_heartbeat.go"},
+			owners: []string{"backend/cluster_runtime_heartbeat.go"},
 		},
 		"scope event producer": {
 			marker: "a.emitEvent(clusterScopeChangedEventName",
-			owners: []string{"backend/app_cluster_settings.go"},
+			owners: []string{"backend/workspace_namespace_scope.go"},
 		},
 		"peer runtime-ready hook": {
 			marker: "window.OnWindowEvent(events.Common.WindowRuntimeReady",

@@ -11,7 +11,6 @@ import (
 	"github.com/luxury-yacht/app/backend/objectcatalog"
 	"github.com/luxury-yacht/app/backend/refresh/telemetry"
 	"github.com/luxury-yacht/app/backend/resources/common"
-	"k8s.io/apimachinery/pkg/runtime/schema"
 )
 
 // resourceRetryTelemetry is the retry-only telemetry seam used by resource
@@ -231,25 +230,6 @@ func (g *ResourceGateway) withResourcePolicies(deps common.Dependencies, cluster
 	return deps
 }
 
-type resourceGatewayCatalogResolver struct {
-	clusterID string
-	lookup    func(string) *objectcatalog.Service
-}
-
-func (r resourceGatewayCatalogResolver) ResolveResourceForGVK(
-	ctx context.Context,
-	gvk schema.GroupVersionKind,
-) (common.ResolvedResource, bool, error) {
-	if r.lookup == nil {
-		return common.ResolvedResource{}, false, nil
-	}
-	service := r.lookup(r.clusterID)
-	if service == nil {
-		return common.ResolvedResource{}, false, nil
-	}
-	return service.ResolveResourceForGVK(ctx, gvk)
-}
-
 func (g *ResourceGateway) objectCatalogServiceForCluster(clusterID string) *objectcatalog.Service {
 	if g == nil {
 		return nil
@@ -304,7 +284,11 @@ func (g *ResourceGateway) retryTelemetry() resourceRetryTelemetry {
 	if g == nil {
 		return nil
 	}
-	return g.refreshProjection.currentTelemetry()
+	recorder := g.refreshProjection.currentTelemetry()
+	if recorder == nil {
+		return nil
+	}
+	return recorder
 }
 
 func (g *ResourceGateway) resourceRetryDependencies() resourceRetryDependencies {
@@ -320,11 +304,14 @@ func (g *ResourceGateway) resourceRetryDependencies() resourceRetryDependencies 
 	}
 }
 
-func (g *ResourceGateway) logResourceFetchError(err error, message, clusterID string) {
+func (g *ResourceGateway) logResourceFetchError(err error, message, clusterID, clusterName string) {
 	if g == nil || g.logger == nil {
 		return
 	}
-	g.logger.ErrorWithCause(err, message, logsources.ResourceLoader, clusterID, g.clusterNameForID(clusterID))
+	if clusterName == "" {
+		clusterName = g.clusterNameForID(clusterID)
+	}
+	g.logger.ErrorWithCause(err, message, logsources.ResourceLoader, clusterID, clusterName)
 }
 
 func (g *ResourceGateway) clearCaches() {

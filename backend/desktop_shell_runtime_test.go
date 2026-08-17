@@ -29,7 +29,7 @@ func TestSetTestAppRuntimeReadySetsContextAndReadiness(t *testing.T) {
 func TestDesktopRuntimeRequiresExplicitWindowReadiness(t *testing.T) {
 	events := []desktopEvent{}
 	app := NewApplicationRuntime(nil)
-	app.Lifecycle.eventEmitter = func(_ context.Context, name string, data ...interface{}) {
+	app.Lifecycle.signalState().eventEmitter = func(_ context.Context, name string, data ...interface{}) {
 		events = append(events, desktopEvent{name: name, data: data})
 	}
 	app.Lifecycle.setApplicationContext(context.Background())
@@ -130,7 +130,7 @@ func TestNilApplicationLifecycleUsesBackgroundContext(t *testing.T) {
 
 func TestEmitEventDoesNotAllocateLifecycleContext(t *testing.T) {
 	app := NewApplicationRuntime(nil)
-	app.Lifecycle.eventEmitter = func(context.Context, string, ...interface{}) {}
+	app.Lifecycle.signalState().eventEmitter = func(context.Context, string, ...interface{}) {}
 	app.Lifecycle.setApplicationContext(context.Background())
 	require.True(t, app.Lifecycle.markRuntimeReady())
 
@@ -143,7 +143,7 @@ func TestEmitEventDoesNotAllocateLifecycleContext(t *testing.T) {
 func TestEmitEventRequiresRuntimeReadiness(t *testing.T) {
 	app := NewApplicationRuntime(nil)
 	called := false
-	app.Lifecycle.eventEmitter = func(context.Context, string, ...interface{}) {
+	app.Lifecycle.signalState().eventEmitter = func(context.Context, string, ...interface{}) {
 		called = true
 	}
 

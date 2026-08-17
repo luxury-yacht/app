@@ -61,7 +61,7 @@ Settings-specific contract:
 - `frontend/src/core/settings`
 - `frontend/src/core/app-state-access`
 - `backend/preferences_service.go`
-- `backend/app_settings.go`
+- `backend/preferences_settings.go`
 - `backend/runtime_setting_policies.go`
 - `backend/data_management_coordinator.go`
 - `backend/desktop_shell.go`

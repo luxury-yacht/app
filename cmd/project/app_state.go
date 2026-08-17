@@ -13,7 +13,7 @@ import (
 // cache dir (API discovery, maintained-store spill, diagnostic dumps).
 //
 // These must resolve the same way the backend resolves them — see
-// getSettingsFilePath and cacheDirPath in backend/app_settings.go, which join
+// getSettingsFilePath and cacheDirPath in backend/preferences_settings.go, which join
 // the app name onto os.UserConfigDir and os.UserCacheDir. Those bases differ
 // per platform (~/Library/... on macOS, ~/.config and ~/.cache on Linux), so a
 // hardcoded path resets nothing on the platforms it does not match.

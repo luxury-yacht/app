@@ -1,5 +1,5 @@
 /*
- * backend/app_heartbeat_test.go
+ * backend/cluster_runtime_heartbeat_test.go
  *
  * Tests for the application's per-cluster heartbeat functionality.
  * startHeartbeatLoop drives periodic calls to runHeartbeatIteration,
@@ -59,7 +59,7 @@ func TestPerClusterHeartbeat(t *testing.T) {
 	// Track emitted events
 	emittedEvents := make(map[string][]ClusterHealthEvent)
 	var eventsMu sync.Mutex
-	app.Lifecycle.eventEmitter = func(_ context.Context, name string, args ...interface{}) {
+	app.Lifecycle.signalState().eventEmitter = func(_ context.Context, name string, args ...interface{}) {
 		eventsMu.Lock()
 		defer eventsMu.Unlock()
 		if len(args) > 0 {
@@ -154,7 +154,7 @@ func TestPerClusterHeartbeatSkipsInvalidAuth(t *testing.T) {
 	// Track emitted events
 	emittedEvents := make(map[string][]ClusterHealthEvent)
 	var eventsMu sync.Mutex
-	app.Lifecycle.eventEmitter = func(_ context.Context, name string, args ...interface{}) {
+	app.Lifecycle.signalState().eventEmitter = func(_ context.Context, name string, args ...interface{}) {
 		eventsMu.Lock()
 		defer eventsMu.Unlock()
 		if len(args) > 0 {
@@ -235,7 +235,7 @@ func TestPerClusterHeartbeatReportsToAuthManager(t *testing.T) {
 	setTestAppRuntimeReady(t, app.Lifecycle, ctx)
 
 	// Track emitted events (required by the heartbeat implementation)
-	app.Lifecycle.eventEmitter = func(_ context.Context, _ string, _ ...interface{}) {}
+	app.Lifecycle.signalState().eventEmitter = func(_ context.Context, _ string, _ ...interface{}) {}
 
 	// Create a cluster that returns 401 Unauthorized
 	authFailDisco := &heartbeatDiscovery{
@@ -298,7 +298,7 @@ func TestPerClusterHeartbeatConnectivityDoesNotAffectAuth(t *testing.T) {
 	defer cancel()
 	setTestAppRuntimeReady(t, app.Lifecycle, ctx)
 
-	app.Lifecycle.eventEmitter = func(_ context.Context, _ string, _ ...interface{}) {}
+	app.Lifecycle.signalState().eventEmitter = func(_ context.Context, _ string, _ ...interface{}) {}
 
 	// Create a cluster with a connectivity failure (connection refused)
 	connFailDisco := &heartbeatDiscovery{
@@ -350,7 +350,7 @@ func TestPerClusterHeartbeatEmitsDegradedEvent(t *testing.T) {
 	// Track emitted events
 	emittedEvents := make(map[string][]ClusterHealthEvent)
 	var eventsMu sync.Mutex
-	app.Lifecycle.eventEmitter = func(_ context.Context, name string, args ...interface{}) {
+	app.Lifecycle.signalState().eventEmitter = func(_ context.Context, name string, args ...interface{}) {
 		eventsMu.Lock()
 		defer eventsMu.Unlock()
 		if len(args) > 0 {
@@ -590,7 +590,7 @@ func TestStartHeartbeatLoopStopsOnContextCancel(t *testing.T) {
 	setTestAppRuntimeReady(t, app.Lifecycle, bgCtx)
 
 	// No-op event emitter
-	app.Lifecycle.eventEmitter = func(_ context.Context, _ string, _ ...interface{}) {}
+	app.Lifecycle.signalState().eventEmitter = func(_ context.Context, _ string, _ ...interface{}) {}
 
 	// Empty cluster clients — runHeartbeatIteration will be a no-op.
 	app.ClusterRuntime.clusterClients = map[string]*clusterClients{}
@@ -626,7 +626,7 @@ func TestStartHeartbeatLoopRunsImmediately(t *testing.T) {
 	// Track how many times runHeartbeatIteration executes by counting emitted events.
 	var iterationCount int
 	var mu sync.Mutex
-	app.Lifecycle.eventEmitter = func(_ context.Context, _ string, _ ...interface{}) {
+	app.Lifecycle.signalState().eventEmitter = func(_ context.Context, _ string, _ ...interface{}) {
 		mu.Lock()
 		iterationCount++
 		mu.Unlock()

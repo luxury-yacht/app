@@ -253,7 +253,7 @@ func TestStopPortForward_NotFound(t *testing.T) {
 	operations := fixture.coordinator
 	setTestAppRuntimeReady(t, app.Lifecycle, context.Background())
 	operations.portForwardSessions = make(map[string]*portForwardSessionInternal)
-	app.Lifecycle.eventEmitter = func(context.Context, string, ...interface{}) {}
+	app.Lifecycle.signalState().eventEmitter = func(context.Context, string, ...interface{}) {}
 
 	err := operations.StopPortForward("nonexistent-session")
 	if err == nil {
@@ -269,7 +269,7 @@ func TestStopPortForward_Success(t *testing.T) {
 	operations.portForwardSessions = make(map[string]*portForwardSessionInternal)
 
 	var statusEvents []PortForwardStatusEvent
-	app.Lifecycle.eventEmitter = func(_ context.Context, name string, args ...interface{}) {
+	app.Lifecycle.signalState().eventEmitter = func(_ context.Context, name string, args ...interface{}) {
 		if name == portForwardStatusEventName && len(args) == 1 {
 			if ev, ok := args[0].(PortForwardStatusEvent); ok {
 				statusEvents = append(statusEvents, ev)
@@ -322,7 +322,7 @@ func TestPortForwardLifecycleFinishTerminalIsIdempotent(t *testing.T) {
 	operations.portForwardSessions = make(map[string]*portForwardSessionInternal)
 
 	portForwardListEvents := 0
-	app.Lifecycle.eventEmitter = func(_ context.Context, name string, _ ...interface{}) {
+	app.Lifecycle.signalState().eventEmitter = func(_ context.Context, name string, _ ...interface{}) {
 		if name == portForwardListEventName {
 			portForwardListEvents++
 		}
@@ -377,7 +377,7 @@ func TestPortForwardLifecycleStopForRuntimeIsIdempotent(t *testing.T) {
 
 	var statusEvents []PortForwardStatusEvent
 	portForwardListEvents := 0
-	app.Lifecycle.eventEmitter = func(_ context.Context, name string, args ...interface{}) {
+	app.Lifecycle.signalState().eventEmitter = func(_ context.Context, name string, args ...interface{}) {
 		switch name {
 		case portForwardStatusEventName:
 			if len(args) == 1 {
@@ -431,7 +431,7 @@ func TestRunPortForwarderUnregistersRuntimeOperationOnTerminalError(t *testing.T
 	setTestAppRuntimeReady(t, app.Lifecycle, context.Background())
 	operations.portForwardSessions = make(map[string]*portForwardSessionInternal)
 	app.ClusterRuntime.clusterClients = make(map[string]*clusterClients)
-	app.Lifecycle.eventEmitter = func(context.Context, string, ...interface{}) {}
+	app.Lifecycle.signalState().eventEmitter = func(context.Context, string, ...interface{}) {}
 
 	session := &portForwardSessionInternal{
 		PortForwardSession: PortForwardSession{
@@ -469,7 +469,7 @@ func TestOperationsCoordinatorStopClusterCleansPortForwards(t *testing.T) {
 	operations := fixture.coordinator
 	setTestAppRuntimeReady(t, app.Lifecycle, context.Background())
 	operations.portForwardSessions = make(map[string]*portForwardSessionInternal)
-	app.Lifecycle.eventEmitter = func(context.Context, string, ...interface{}) {}
+	app.Lifecycle.signalState().eventEmitter = func(context.Context, string, ...interface{}) {}
 
 	// Add sessions for two clusters.
 	session1 := &portForwardSessionInternal{
@@ -680,7 +680,7 @@ func TestEmitPortForwardStatusGuards(t *testing.T) {
 	setTestAppRuntimeReady(t, app.Lifecycle, context.Background())
 
 	calls := 0
-	app.Lifecycle.eventEmitter = func(_ context.Context, _ string, _ ...interface{}) {
+	app.Lifecycle.signalState().eventEmitter = func(_ context.Context, _ string, _ ...interface{}) {
 		calls++
 	}
 

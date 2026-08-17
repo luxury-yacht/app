@@ -31,7 +31,7 @@ Read:
 - `backend/refresh/containerlogsstream`
 - `backend/resources/pods/logs.go`
 - `backend/resources/nodes/logs.go`
-- `backend/app_logs.go`
+- `backend/app_log_service_commands.go`
 - `backend/shell_sessions.go`
 - `backend/resources/pods/debug.go`
 - `backend/portforward*.go`
@@ -40,7 +40,7 @@ Read:
 - `backend/refresh/snapshot/service.go`
 - cluster lifecycle cleanup orchestrated by `WorkspaceCoordinator` and
   `ApplicationLifecycle` in `backend/cluster_clients.go`,
-  `backend/kubeconfigs.go`, and `backend/app_lifecycle.go`
+  `backend/kubeconfigs.go`, and `backend/application_lifecycle.go`
 
 ## Frontend Entry Points
 

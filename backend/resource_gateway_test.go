@@ -62,7 +62,7 @@ func TestResourceGatewayNarrowCollaboratorDefaultsAndDelegation(t *testing.T) {
 			transportFailureCalled = true
 		},
 		resourceResolverForCluster: func(clusterID string) common.ResourceResolver {
-			return resourceGatewayCatalogResolver{clusterID: clusterID, lookup: func(string) *objectcatalog.Service { return catalog }}
+			return clusterRuntimeResourceResolver{clusterID: clusterID, catalogService: func(string) *objectcatalog.Service { return catalog }}
 		},
 		refreshProjection: refreshProjection,
 	})
@@ -96,20 +96,29 @@ func TestResourceGatewayNarrowCollaboratorDefaultsAndDelegation(t *testing.T) {
 	gateway.emitEvent("resource:test")
 	gateway.recordClusterTransportSuccess("cluster-a")
 	gateway.recordClusterTransportFailure("cluster-a", "failure", errors.New("boom"))
-	gateway.logResourceFetchError(errors.New("boom"), "fetch failed", "cluster-a")
+	gateway.logResourceFetchError(errors.New("boom"), "fetch failed", "cluster-a", "")
 	if !eventCalled || !transportSuccessCalled || !transportFailureCalled {
 		t.Fatalf("collaborator calls: event=%t success=%t failure=%t", eventCalled, transportSuccessCalled, transportFailureCalled)
 	}
 	gateway.clearCaches()
 
-	resolver := resourceGatewayCatalogResolver{}
+	resolver := clusterRuntimeResourceResolver{}
 	if _, ok, err := resolver.ResolveResourceForGVK(context.Background(), corev1.SchemeGroupVersion.WithKind("Pod")); err != nil || ok {
 		t.Fatalf("resolver without catalog = (ok=%t, err=%v)", ok, err)
 	}
 }
 
+func TestResourceGatewayRetryTelemetryIsNilUntilRefreshPublishesRecorder(t *testing.T) {
+	gateway := newResourceGateway(resourceGatewayDependencies{
+		refreshProjection: newRefreshResourceProjection(),
+	})
+
+	require.True(t, gateway.retryTelemetry() == nil)
+	require.True(t, gateway.resourceRetryDependencies().telemetry() == nil)
+}
+
 func TestRefreshCoordinatorPublishesCatalogAndTelemetryToResourceProjection(t *testing.T) {
-	refresh := newRefreshCoordinator()
+	refresh := newRefreshCoordinator(RefreshCoordinatorDependencies{})
 	catalog := objectcatalog.NewService(objectcatalog.Dependencies{
 		Common:    common.Dependencies{KubernetesClient: cgofake.NewClientset()},
 		ClusterID: "cluster-a",

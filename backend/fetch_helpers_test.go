@@ -102,28 +102,6 @@ func TestFetchResourceSkipsCacheWhenKeyEmpty(t *testing.T) {
 	require.Equal(t, 2, callCount)
 }
 
-func TestFetchResourceListErrorEmits(t *testing.T) {
-	fixture := newResourceGatewayFixture()
-	gateway := fixture.gateway
-	var emitted *BackendErrorEvent
-	fixture.emitEvent = func(name string, args ...interface{}) {
-		if name == "backend-error" && len(args) > 0 {
-			payload := args[0].(BackendErrorEvent)
-			emitted = &payload
-		}
-	}
-
-	_, err := FetchResourceList(gateway, "test-cluster", "Widget", "default", func() ([]string, error) {
-		return nil, errors.New("boom")
-	})
-
-	require.Error(t, err)
-	require.NotNil(t, emitted)
-	require.Equal(t, "test-cluster", emitted.ClusterID)
-	require.Equal(t, "Widget", emitted.ResourceKind)
-	require.Contains(t, emitted.Identifier, "namespace default")
-}
-
 func TestFetchNamespacedResourceRequiresObjectIdentity(t *testing.T) {
 	fixture := newResourceGatewayFixture()
 	gateway := fixture.gateway
@@ -177,9 +155,9 @@ func TestFetchResourceRetriesOnTransientError(t *testing.T) {
 	gateway := fixture.gateway
 	fixture.setTelemetryRecorder(telemetry.NewRecorder())
 
-	originalSleep := fetchRetrySleep
-	fetchRetrySleep = func(time.Duration) {}
-	t.Cleanup(func() { fetchRetrySleep = originalSleep })
+	originalSleep := contextSleep
+	contextSleep = func(context.Context, time.Duration) error { return nil }
+	t.Cleanup(func() { contextSleep = originalSleep })
 
 	callCount := 0
 	value, err := FetchResource(gateway, "", "Widget", "default/foo", func() (string, error) {
@@ -212,9 +190,9 @@ func TestFetchResourceExhaustsRetriesAndEmits(t *testing.T) {
 		}
 	}
 
-	originalSleep := fetchRetrySleep
-	fetchRetrySleep = func(time.Duration) {}
-	t.Cleanup(func() { fetchRetrySleep = originalSleep })
+	originalSleep := contextSleep
+	contextSleep = func(context.Context, time.Duration) error { return nil }
+	t.Cleanup(func() { contextSleep = originalSleep })
 
 	callCount := 0
 	value, err := FetchResource(gateway, "", "Widget", "default/foo", func() (string, error) {
@@ -248,10 +226,13 @@ func TestExecuteWithRetryValidatesInputs(t *testing.T) {
 }
 
 func TestExecuteWithRetryWithoutOptionalCallbacksUsesConfiguredSleep(t *testing.T) {
-	originalSleep := fetchRetrySleep
+	originalSleep := contextSleep
 	var delays []time.Duration
-	fetchRetrySleep = func(delay time.Duration) { delays = append(delays, delay) }
-	t.Cleanup(func() { fetchRetrySleep = originalSleep })
+	contextSleep = func(_ context.Context, delay time.Duration) error {
+		delays = append(delays, delay)
+		return nil
+	}
+	t.Cleanup(func() { contextSleep = originalSleep })
 
 	attempts := 0
 	value, err := executeWithRetry(context.Background(), resourceRetryDependencies{}, "cluster-a", "Widget", "demo", func(context.Context) (string, error) {
@@ -265,6 +246,47 @@ func TestExecuteWithRetryWithoutOptionalCallbacksUsesConfiguredSleep(t *testing.
 	require.NoError(t, err)
 	require.Equal(t, "ok", value)
 	require.Equal(t, []time.Duration{config.ResourceFetchRetryBaseDelay}, delays)
+}
+
+func TestExecuteWithRetryWithoutLoggerUsesContextSleepAndRecordsTelemetry(t *testing.T) {
+	recorder := telemetry.NewRecorder()
+	sleepErr := errors.New("sleep interrupted")
+	originalContextSleep := contextSleep
+	contextSleep = func(context.Context, time.Duration) error { return sleepErr }
+	t.Cleanup(func() { contextSleep = originalContextSleep })
+
+	_, err := executeWithRetry(
+		context.Background(),
+		resourceRetryDependencies{telemetry: func() resourceRetryTelemetry { return recorder }},
+		"cluster-a",
+		"Widget",
+		"demo",
+		func(context.Context) (string, error) { return "", io.EOF },
+	)
+
+	require.ErrorIs(t, err, sleepErr)
+	require.Equal(t, uint64(1), recorder.SnapshotSummary().Connection.RetryAttempts)
+}
+
+func TestDependencyInitializationFallsBackToGatewayLogger(t *testing.T) {
+	fixture := newResourceGatewayFixture()
+	deps := common.Dependencies{ClusterID: "cluster-a", ClusterName: "Cluster A"}
+
+	_, err := FetchClusterResource(
+		fixture.gateway,
+		deps,
+		"cluster-a",
+		"Widget",
+		"demo",
+		func(context.Context) (string, error) { return "unexpected", nil },
+	)
+
+	require.ErrorContains(t, err, "kubernetes client not initialized")
+	entries := fixture.logger.GetEntries()
+	require.Len(t, entries, 1)
+	require.Contains(t, entries[0].Message, "Kubernetes client not initialized for Widget fetch")
+	require.Equal(t, "cluster-a", entries[0].ClusterID)
+	require.Equal(t, "Cluster A", entries[0].ClusterName)
 }
 
 func TestExecuteWithRetryReturnsContextSleepFailure(t *testing.T) {

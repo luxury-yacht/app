@@ -19,18 +19,15 @@ type lifecycleOwnerFixture struct {
 func newLifecycleOwnerFixture(t testing.TB, reporters ...sentryreporting.Reporter) *lifecycleOwnerFixture {
 	t.Helper()
 	logs := NewAppLogService(NewLogger(1000, reporters...))
-	lifecycle := &ApplicationLifecycle{
-		appLogs: logs,
-		eventEmitter: func(context.Context, string, ...interface{}) {
-		},
-	}
+	signals := newApplicationRuntimeSignals(func(context.Context, string, ...interface{}) {})
 	fixture := &lifecycleOwnerFixture{
-		Lifecycle: lifecycle,
-		AppLogs:   logs,
+		AppLogs: logs,
 	}
-	fixture.DesktopShell = NewDesktopShell(nil, lifecycle.runtimeAvailable, lifecycle.emitEvent, logs.Logger())
-	lifecycle.desktopShell = fixture.DesktopShell
-	lifecycle.setupEnvironment()
+	fixture.DesktopShell = NewDesktopShell(nil, signals.runtimeAvailable, signals.emitEvent, logs.Logger())
+	fixture.Lifecycle = newApplicationLifecycle(signals, ApplicationLifecycleDependencies{
+		DesktopShell: fixture.DesktopShell, AppLogs: logs,
+	})
+	fixture.Lifecycle.setupEnvironment()
 	return fixture
 }
 
@@ -50,13 +47,11 @@ func newClusterRuntimeTestFixture(t testing.TB, reporters ...sentryreporting.Rep
 	preferences := NewPreferencesService(base.DesktopShell, nil, base.AppLogs.Logger())
 	projection := newClusterWorkspaceProjection()
 	containerLogsPolicy := NewContainerLogsSelectionPolicy(defaultObjPanelLogsTargetPerScopeLimit)
-	clusterRuntime := newClusterRuntimeManager()
-	clusterRuntime.discoveryRepository = preferences
-	clusterRuntime.logger = base.AppLogs.Logger()
-	clusterRuntime.containerLogsPolicy = containerLogsPolicy
-	clusterRuntime.projection = projection
-	clusterRuntime.emitEvent = base.Lifecycle.emitEvent
-	clusterRuntime.context = base.Lifecycle.CtxOrBackground
+	clusterRuntime := newClusterRuntimeManager(ClusterRuntimeManagerDependencies{
+		DiscoveryRepository: preferences, Logger: base.AppLogs.Logger(),
+		ContainerLogsPolicy: containerLogsPolicy, Projection: projection,
+		EmitEvent: base.Lifecycle.emitEvent, Context: base.Lifecycle.CtxOrBackground,
+	})
 	base.DesktopShell.ConfigureKubeconfigSearchPaths(preferences.KubeconfigSearchPaths)
 	base.Lifecycle.clusterRuntime = clusterRuntime
 	return &clusterRuntimeTestFixture{
@@ -82,22 +77,17 @@ func newRefreshCoordinatorTestFixture(t testing.TB, reporters ...sentryreporting
 	cluster := newClusterRuntimeTestFixture(t, reporters...)
 	permissionPolicy := NewPermissionFetchPolicy(defaultPermissionSSRRFetchConcurrency)
 	attention := NewClusterAttentionService(cluster.Preferences, cluster.AppLogs.Logger())
-	refreshCoordinator := newRefreshCoordinator()
-	refreshCoordinator.ClusterRuntimeManager = cluster.ClusterRuntime
-	refreshCoordinator.ClusterWorkspaceProjection = cluster.ClusterWorkspace
-	refreshCoordinator.attention = attention
-	refreshCoordinator.logger = cluster.AppLogs.Logger()
-	refreshCoordinator.preferences = cluster.Preferences
-	refreshCoordinator.containerLogsPolicy = cluster.ContainerLogsPolicy
-	refreshCoordinator.permissionFetchPolicy = permissionPolicy
-	refreshCoordinator.appLogs = cluster.AppLogs
-	refreshCoordinator.context = cluster.Lifecycle.CtxOrBackground
-	refreshCoordinator.runtimeAvailableFn = cluster.Lifecycle.runtimeAvailable
-	refreshCoordinator.emitEventFn = cluster.Lifecycle.emitEvent
-	refreshCoordinator.allowedNamespaces = func(clusterID string) []string {
-		namespaces, _ := cluster.Preferences.clusterAllowedNamespaces(clusterID)
-		return namespaces
-	}
+	refreshCoordinator := newRefreshCoordinator(RefreshCoordinatorDependencies{
+		ClusterRuntime: cluster.ClusterRuntime, ClusterWorkspace: cluster.ClusterWorkspace,
+		Attention: attention, Logger: cluster.AppLogs.Logger(), Preferences: cluster.Preferences,
+		ContainerLogsPolicy: cluster.ContainerLogsPolicy, PermissionFetchPolicy: permissionPolicy,
+		AppLogs: cluster.AppLogs, Context: cluster.Lifecycle.CtxOrBackground,
+		RuntimeAvailable: cluster.Lifecycle.runtimeAvailable, EmitEvent: cluster.Lifecycle.emitEvent,
+		AllowedNamespaces: func(clusterID string) []string {
+			namespaces, _ := cluster.Preferences.clusterAllowedNamespaces(clusterID)
+			return namespaces
+		},
+	})
 	refreshCoordinator.initGovernor()
 	cluster.Preferences.effects = NewSettingsEffectDispatcher(
 		nil,
@@ -131,7 +121,8 @@ func newWorkspaceCoordinatorTestFixture(t testing.TB, reporters ...sentryreporti
 	operations := newApplicationOperationsCoordinator(
 		refreshFixture.ClusterRuntime,
 		refreshFixture.Refresh.resourceProjection,
-		refreshFixture.Lifecycle,
+		refreshFixture.Lifecycle.CtxOrBackground,
+		refreshFixture.Lifecycle.emitEvent,
 		refreshFixture.AppLogs.Logger(),
 	)
 	resources := newResourceGateway(resourceGatewayDependencies{
@@ -156,18 +147,14 @@ func newWorkspaceCoordinatorTestFixture(t testing.TB, reporters ...sentryreporti
 		operations:                   operations,
 	})
 	refreshFixture.Refresh.resources = resources
-	workspace := newWorkspaceCoordinator()
-	workspace.ClusterRuntimeManager = refreshFixture.ClusterRuntime
-	workspace.ClusterWorkspaceProjection = refreshFixture.ClusterWorkspace
-	workspace.RefreshCoordinator = refreshFixture.Refresh
-	workspace.preferences = refreshFixture.Preferences
-	workspace.operations = operations
-	workspace.resources = resources
-	workspace.appLogs = refreshFixture.AppLogs
-	workspace.context = refreshFixture.Lifecycle.CtxOrBackground
-	workspace.runtimeAvailableFn = refreshFixture.Lifecycle.runtimeAvailable
-	workspace.emitEventFn = refreshFixture.Lifecycle.emitEvent
-	workspace.kubeClientInitializer = workspace.initKubernetesClient
+	workspace := newWorkspaceCoordinator(WorkspaceCoordinatorDependencies{
+		ClusterRuntime: refreshFixture.ClusterRuntime, ClusterWorkspace: refreshFixture.ClusterWorkspace,
+		Refresh: refreshFixture.Refresh, Preferences: refreshFixture.Preferences,
+		Operations: operations, Resources: resources, AppLogs: refreshFixture.AppLogs,
+		Context:          refreshFixture.Lifecycle.CtxOrBackground,
+		RuntimeAvailable: refreshFixture.Lifecycle.runtimeAvailable,
+		EmitEvent:        refreshFixture.Lifecycle.emitEvent,
+	})
 	refreshFixture.Lifecycle.workspace = workspace
 	refreshFixture.Lifecycle.operations = operations
 	return &workspaceCoordinatorTestFixture{

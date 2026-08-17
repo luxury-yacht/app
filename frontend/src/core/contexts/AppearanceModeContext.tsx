@@ -1,13 +1,12 @@
 /**
  * frontend/src/core/contexts/AppearanceModeContext.tsx
  *
- * Handles light, dark, and system appearance modes with persistence and backend sync.
+ * Handles light, dark, and system appearance modes with persisted preferences.
  * Applies the resolved light/dark mode to the document and listens for system changes.
- * Also listens for mode change events from the application menu.
+ * Also listens for mode changes from the frontend settings event bus.
  */
 import type React from 'react';
 import { createContext, type ReactNode, useCallback, useContext, useEffect, useState } from 'react';
-import { onEvent } from '@/core/desktop-runtime';
 import { eventBus } from '@/core/events';
 import { type AppearanceMode, getAppearanceModePreference } from '@/core/settings/appPreferences';
 
@@ -90,21 +89,10 @@ export const AppearanceModeProvider: React.FC<AppearanceModeProviderProps> = ({ 
 
     const unsubscribeAppearanceMode = eventBus.on('settings:appearance-mode', applyModePreference);
 
-    const handleBackendAppearanceModeChanged = () => {
-      window.location.reload();
-    };
-
-    const disposeAppearanceMode = onEvent(
-      'appearance-mode-changed',
-      handleBackendAppearanceModeChanged
-    );
-
     // Cleanup function
     return () => {
       mediaQuery.removeEventListener('change', handleSystemModeChange);
       unsubscribeAppearanceMode();
-
-      disposeAppearanceMode();
     };
   }, [applyResolvedMode]);
 

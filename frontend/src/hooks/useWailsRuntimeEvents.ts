@@ -8,10 +8,6 @@
 import { useCallback, useEffect, useMemo } from 'react';
 import type { ClusterHealthStatus } from '@/core/cluster-workspace/clusterWorkspaceStore';
 import { useClusterWorkspaceSnapshot } from '@/core/cluster-workspace/useClusterWorkspace';
-import {
-  type ConnectionStatusEvent,
-  useConnectionStatusActions,
-} from '@/core/connection/connectionStatus';
 import { onEvent } from '@/core/desktop-runtime';
 
 /**
@@ -80,25 +76,6 @@ export function useWailsRuntimeEvents(handlers: WailsRuntimeEventHandlers): void
     onToggleDiagnostics,
     onToggleObjectDiff,
   ]);
-}
-
-/**
- * Subscribes to connection status events from Wails runtime
- */
-export function useConnectionStatusListener(): void {
-  const { updateFromEvent } = useConnectionStatusActions();
-
-  useEffect(() => {
-    const handleConnectionStatus = (payload?: ConnectionStatusEvent) => {
-      updateFromEvent(payload);
-    };
-
-    const dispose = onEvent('connection-status', handleConnectionStatus);
-
-    return () => {
-      dispose();
-    };
-  }, [updateFromEvent]);
 }
 
 /**

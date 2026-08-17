@@ -19,7 +19,6 @@ import { ZoomProvider } from '@core/contexts/ZoomContext';
 import type { Decorator } from '@storybook/react';
 import { DockablePanelProvider } from '@ui/dockable';
 import { KeyboardProvider } from '@ui/shortcuts';
-import { ConnectionStatusProvider } from '@/core/connection/connectionStatus';
 
 let mountCounter = 0;
 
@@ -33,21 +32,19 @@ export const SidebarProvidersDecorator: Decorator = (Story) => {
     <ErrorProvider key={key}>
       <ZoomProvider>
         <KeyboardProvider>
-          <ConnectionStatusProvider>
-            <AuthErrorProvider>
-              <KubernetesProvider>
-                <ClusterLifecycleProvider>
-                  <FavoritesProvider>
-                    <DockablePanelProvider>
-                      <div style={{ height: '100vh', display: 'flex', flexDirection: 'column' }}>
-                        <Story />
-                      </div>
-                    </DockablePanelProvider>
-                  </FavoritesProvider>
-                </ClusterLifecycleProvider>
-              </KubernetesProvider>
-            </AuthErrorProvider>
-          </ConnectionStatusProvider>
+          <AuthErrorProvider>
+            <KubernetesProvider>
+              <ClusterLifecycleProvider>
+                <FavoritesProvider>
+                  <DockablePanelProvider>
+                    <div style={{ height: '100vh', display: 'flex', flexDirection: 'column' }}>
+                      <Story />
+                    </div>
+                  </DockablePanelProvider>
+                </FavoritesProvider>
+              </ClusterLifecycleProvider>
+            </KubernetesProvider>
+          </AuthErrorProvider>
         </KeyboardProvider>
       </ZoomProvider>
     </ErrorProvider>

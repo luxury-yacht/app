@@ -13,6 +13,13 @@ owners, and registers only that service with Wails. `ApplicationRuntime` is a
 reference-only composition result: it owns no behavior or mutable state, and no
 owner may retain a pointer to it.
 
+`NewApplicationRuntime` creates each stateful owner through a dependency
+constructor. The composition root must not create an empty owner and fill its
+private fields afterward. Cycles are broken with explicit one-way seams: Cluster
+Runtime starts with an unavailable discovery repository that Preferences replaces
+before startup work can run, and the refresh settings bridge retains values until
+Refresh is bound. Those are construction-time links, not general owner back-pointers.
+
 `DesktopService` owns the Wails command names, generated-binding reachability,
 the `/api/v2` transport entry point, and lifecycle delegation. It does not own
 application behavior. Its twelve command interfaces each correspond to one

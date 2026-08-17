@@ -101,7 +101,7 @@ func TestInitKubernetesClient_FailsWithInvalidSelection(t *testing.T) {
 
 // TestInitKubernetesClient_SuccessCase documents what would be needed for a full
 // success-path test. The existing TestInitKubernetesClientFailsWhenRefreshSubsystemFails
-// in app_lifecycle_test.go already exercises the success path up through the
+// in application_lifecycle_test.go already exercises the success path up through the
 // syncClusterClientPool call by pre-populating clusterClients and only failing
 // at the refresh subsystem stage. A true end-to-end success test would need:
 //   - A valid kubeconfig file on disk
@@ -109,5 +109,5 @@ func TestInitKubernetesClient_FailsWithInvalidSelection(t *testing.T) {
 //   - A working refresh subsystem (or mock via newRefreshSubsystemWithServices)
 //   - An object catalog that doesn't crash on start
 //
-// The existing test in app_lifecycle_test.go (TestInitKubernetesClientFailsWhenRefreshSubsystemFails)
+// The existing test in application_lifecycle_test.go (TestInitKubernetesClientFailsWhenRefreshSubsystemFails)
 // serves as a partial success-path safety net since it exercises the sync path.

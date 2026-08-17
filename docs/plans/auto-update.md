@@ -10,7 +10,7 @@ matrix must pass. The Phase 6 durable lifecycle, workflow, and release
 documentation is complete. Cross-platform acceptance remains the overall
 completion gate. Windows Authenticode certificate procurement is in progress.
 It does not block the macOS stage, but it remains a Windows enablement and
-overall-completion dependency (`backend/app_update_provider.go`;
+overall-completion dependency (`backend/update_provider.go`;
 `cmd/project/updater_release.go`; `cmd/project/release.go`;
 `.github/workflows/release.yml`).
 
@@ -100,7 +100,7 @@ Owner decisions recorded before implementation:
   the channel pointer: stable releases are ordinary releases and beta releases
   are prereleases. Build the release as a draft, upload all assets, then publish
   it as the final rollout step. Do not add a site, Pages, raw-branch, or separate
-  mutable-manifest dependency (`backend/app_update_provider.go`;
+  mutable-manifest dependency (`backend/update_provider.go`;
   `cmd/project/release.go`; `.github/workflows/release.yml`).
 
 ## Current state
@@ -117,11 +117,11 @@ temporary-directory flow (`go.mod:15`; pinned dependency sources
 
 The application-side updater foundation is implemented:
 
-- `backend/app_update_provider.go` wraps Wails' GitHub provider with exact
+- `backend/update_provider.go` wraps Wails' GitHub provider with exact
   updater-payload matching, fetches the selected release's sibling
   `updater.json`, and attaches its signed verification material only after the
   manifest matches the selected GitHub asset;
-- `backend/app_updates_config.go:47-113` resolves installation eligibility,
+- `backend/update_coordinator_config.go:47-113` resolves installation eligibility,
   reconciles application-owned update state, and composes the Wails updater
   before the application starts;
 - `backend/internal/appupdates/coordinator.go:21-179` owns typed status,
@@ -136,7 +136,7 @@ The legacy unauthenticated GitHub latest-release client and custom numeric
 version comparator have been removed. The approved Ed25519 public key is
 embedded from `backend/updater_public_key.pem`; its SHA-256 DER fingerprint is
 `5fb9230f10b42312008e6caa8c782e195a170970334b41d89b1c90e43820f15b`
-(`backend/app_updates_config.go:20-21`; `backend/app_updates_test.go:26-39`).
+(`backend/update_coordinator_config.go:20-21`; `backend/update_coordinator_commands_test.go:26-39`).
 The private key remains outside the repository in the protected
 `UPDATER_PRIVATE_KEY_PEM` Actions secret. The release helper uploads assets to a
 draft and publishes the release only after `gh release create` has returned
@@ -186,7 +186,7 @@ Automatic work is process-scoped, not window-scoped or cluster-scoped:
 1. For an eligible released desktop build, configure the updater and subscribe
    to its events before `application.Run`.
 2. Start the coordinator only after the first `WindowRuntimeReady`, preserving
-   the existing readiness guarantee in `backend/app_lifecycle.go:42-65`.
+   the existing readiness guarantee in `backend/application_lifecycle.go:42-65`.
 3. Run one silent `Updater.Check` immediately, then repeat every six hours.
 4. Suppress automatic checks for development builds, server builds, and builds
    without a valid release version or valid distribution identity. A valid
@@ -247,7 +247,7 @@ The shell action contract is:
    path opens About to its update section so checking, current, available, and
    error results have an immediate visible owner. Native-menu presentation
    reuses `ShowAbout` and its `emitCurrentWindowEvent("open-about")` path so only
-   the focused workspace peer opens About (`backend/app_settings.go:1400-1406`).
+   the focused workspace peer opens About (`backend/preferences_settings.go:1400-1406`).
 2. An automatic result never opens a modal. When a release is available, the
    status chip appears; activating it opens the same About update section and
    does not download.
@@ -363,7 +363,7 @@ writing durable state.
 
 Do not add an automatic-update Settings toggle in the first slice. The current
 application already performs an unconditional startup check
-(`backend/app_lifecycle.go:63`; `backend/app_update.go:53-62`). If an opt-out is
+(`backend/application_lifecycle.go:63`; `backend/app_update.go:53-62`). If an opt-out is
 later approved, implement it as a backend-owned preference described by the app
 settings schema and mutated through `UpdateAppPreferences`.
 
@@ -372,7 +372,7 @@ settings schema and mutated through `UpdateAppPreferences`.
 An expired beta remains notification-only. Today the first
 `WindowRuntimeReady` returns before `startUpdateCheck` when
 `checkStartupBetaExpiry` fails, then shows a dialog and quits
-(`backend/app_lifecycle.go:42-63,125-137`). Do not start a long-running updater
+(`backend/application_lifecycle.go:42-63,125-137`). Do not start a long-running updater
 flow inside that shutdown path.
 
 Replace the expiry dialog's passive instruction with an explicit
@@ -388,7 +388,7 @@ Use an application-owned adapter around
 owns public GitHub release discovery and artifact download. The adapter supplies
 the two contracts beta.8's provider does not combine: exact Luxury Yacht updater
 payload selection and application-pinned Ed25519 verification
-(`backend/app_update_provider.go`; pinned
+(`backend/update_provider.go`; pinned
 `pkg/updater/providers/github/github.go`).
 
 Every GitHub Release contains exactly one asset named `updater.json`. It is a
@@ -443,7 +443,7 @@ For a check, the adapter:
 Any absent, oversized, malformed, ambiguous, mismatched, or unverifiable
 manifest fails the check closed. The adapter never treats a DMG, NSIS installer,
 DEB, or RPM as a replaceable updater payload
-(`backend/app_update_provider.go`; `backend/app_update_provider_test.go`). See
+(`backend/update_provider.go`; `backend/update_provider_test.go`). See
 [cryptographic verification](https://v3.wails.io/guides/updater/#cryptographic-verification).
 
 Channel rules:
@@ -461,7 +461,7 @@ Channel rules:
 tested normalization boundary that passes Wails the same semantic version
 without the leading `v`. `cmd/project/build_metadata.go:57-68` copies the
 configured version verbatim into the embedded manifest, and
-`backend/app_version.go:42-58` copies that value into `backend.Version`; the new
+`backend/update_coordinator_version.go:42-58` copies that value into `backend.Version`; the new
 boundary normalizes that authoritative value exactly once for updater config,
 release manifests, skip persistence, and comparisons. Do not add a second
 version source or restore ldflag version injection.
@@ -797,7 +797,7 @@ size-bounded and sanitized before application-log ingestion.
 
 The current backend quit preparation always returns `true`; it cannot veto
 restart, though it may wait up to two seconds for selection persistence
-(`backend/app_lifecycle.go:26,222-252`). That bounded wait occurs inside Wails'
+(`backend/application_lifecycle.go:26,222-252`). That bounded wait occurs inside Wails'
 30-second helper wait for the parent process to exit
 (`pkg/updater/helper.go:103-116`). Test the bounded delay; do not describe a
 cancelled quit state that the current application cannot produce.
@@ -907,7 +907,7 @@ Implementation progress:
 - [x] Phase 1 — release identity and eligibility. The shared boundary, platform
   probes, GitHub release-manifest adapter, and explicit updater artifact naming and
   selection live in `internal/updateidentity`,
-  `backend/app_update_provider.go`, and `cmd/project`; their focused tests cover
+  `backend/update_provider.go`, and `cmd/project`; their focused tests cover
   the matrix below.
 - [x] Phase 2 — coordinator state machine. The process-owned coordinator,
   runtime-ready scheduler, explicit consent transitions, semantic broadcasts,

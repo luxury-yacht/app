@@ -3,8 +3,8 @@ import { getWindowIdentity, setWindowIdentity } from '@/core/window-identity';
 
 export { getWindowIdentity } from '@/core/window-identity';
 
-export type DesktopEventName = Events.WailsEventName;
-export type DesktopEventPayload<E extends DesktopEventName> = Events.WailsEventData<E>;
+export type DesktopEventName = keyof Events.CustomEvents;
+export type DesktopEventPayload<E extends DesktopEventName> = Events.CustomEvents[E];
 export type DesktopEventHandler<E extends DesktopEventName> = (
   payload: DesktopEventPayload<E>
 ) => void;

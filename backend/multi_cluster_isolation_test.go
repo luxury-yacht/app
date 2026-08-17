@@ -143,7 +143,7 @@ func TestIsolation_HeartbeatRunsIndependently(t *testing.T) {
 	// Track emitted events
 	emittedEvents := make(map[string][]ClusterHealthEvent)
 	var eventsMu sync.Mutex
-	app.Lifecycle.eventEmitter = func(_ context.Context, name string, args ...interface{}) {
+	app.Lifecycle.signalState().eventEmitter = func(_ context.Context, name string, args ...interface{}) {
 		eventsMu.Lock()
 		defer eventsMu.Unlock()
 		if len(args) > 0 {
@@ -451,7 +451,7 @@ func TestIsolation_HeartbeatSkipsInvalidAuthClusters(t *testing.T) {
 	// Track emitted events
 	emittedEvents := make(map[string][]ClusterHealthEvent)
 	var eventsMu sync.Mutex
-	app.Lifecycle.eventEmitter = func(_ context.Context, name string, args ...interface{}) {
+	app.Lifecycle.signalState().eventEmitter = func(_ context.Context, name string, args ...interface{}) {
 		eventsMu.Lock()
 		defer eventsMu.Unlock()
 		if len(args) > 0 {

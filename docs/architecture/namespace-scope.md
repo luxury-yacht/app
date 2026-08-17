@@ -130,7 +130,7 @@ rebuild absorbs later edits; one that already started queues a fresh one).
 The frontend must NOT refetch on save — the rebuild takes seconds and an
 immediate fetch caches the stale pre-rebuild snapshot. Instead the backend
 emits `cluster:scope:changed` after the rebuild
-(`performClusterScopeRebuild`, `backend/app_cluster_settings.go`); the
+(`performClusterScopeRebuild`, `backend/workspace_namespace_scope.go`); the
 orchestrator then clears every permission-denied scope latch (a scope
 rebuild is the one in-session permission epoch change —
 `resetPermissionDeniedScopedDomainStates`, otherwise denied scopes never

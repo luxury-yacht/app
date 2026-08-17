@@ -29,13 +29,13 @@ add/remove behavior.
 - `backend/workspace_coordinator.go`
 - `backend/cluster_runtime_intent.go`
 - `backend/cluster_workspace.go`
-- `backend/app_kubernetes_client.go`
+- `backend/workspace_cluster_clients.go`
 - `backend/kubeconfigs.go`
-- `backend/app_refresh_setup.go`
-- `backend/app_refresh_update.go`
-- `backend/app_refresh_subsystems.go`
-- `backend/app_refresh_recovery.go`
-- `backend/app_object_catalog.go`
+- `backend/refresh_setup.go`
+- `backend/refresh_update.go`
+- `backend/refresh_subsystems.go`
+- `backend/refresh_recovery.go`
+- `backend/refresh_object_catalog.go`
 - `backend/internal/authstate`
 
 ## Frontend Entry Points

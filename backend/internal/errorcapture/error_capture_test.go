@@ -190,10 +190,12 @@ func TestEnhanceAugmentsError(t *testing.T) {
 	defer func() { global = nil }()
 
 	c.captureIfInteresting("unauthorized for cluster foo")
-	err := Enhance(errors.New("refresh failed"))
+	cause := errors.New("refresh failed")
+	err := Enhance(cause)
 	if err == nil {
 		t.Fatalf("expected error to be returned")
 	}
+	require.ErrorIs(t, err, cause, "stderr context must not destroy the original error identity")
 
 	if !strings.Contains(err.Error(), "unauthorized for cluster foo") {
 		t.Fatalf("expected enhanced error to contain captured message, got %q", err.Error())

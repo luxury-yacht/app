@@ -45,11 +45,65 @@ type WorkspaceCoordinator struct {
 	scopeRebuildQueued           sync.Map
 }
 
-func newWorkspaceCoordinator() *WorkspaceCoordinator {
-	return &WorkspaceCoordinator{
-		workspaceSelections: make(map[string][]string),
-		clusterIntentLatest: make(map[clusterRuntimeIntentKey]uint64),
+type WorkspaceCoordinatorDependencies struct {
+	ClusterRuntime   *ClusterRuntimeManager
+	ClusterWorkspace *ClusterWorkspaceProjection
+	Refresh          *RefreshCoordinator
+	Preferences      *PreferencesService
+	Operations       *OperationsCoordinator
+	Resources        *ResourceGateway
+	AppLogs          *AppLogService
+	Context          func() context.Context
+	RuntimeAvailable func() bool
+	EmitEvent        func(string, ...interface{})
+}
+
+func newWorkspaceCoordinator(dependencies WorkspaceCoordinatorDependencies) *WorkspaceCoordinator {
+	appLogs := dependencies.AppLogs
+	if appLogs == nil {
+		appLogs = NewAppLogService(NewLogger(1000))
 	}
+	clusterWorkspace := dependencies.ClusterWorkspace
+	if clusterWorkspace == nil {
+		clusterWorkspace = newClusterWorkspaceProjection()
+	}
+	clusterRuntime := dependencies.ClusterRuntime
+	if clusterRuntime == nil {
+		clusterRuntime = newClusterRuntimeManager(ClusterRuntimeManagerDependencies{
+			Logger: appLogs.Logger(), Projection: clusterWorkspace,
+		})
+	}
+	preferences := dependencies.Preferences
+	if preferences == nil {
+		preferences = NewPreferencesService(nil, nil, appLogs.Logger())
+	}
+	refresh := dependencies.Refresh
+	if refresh == nil {
+		refresh = newRefreshCoordinator(RefreshCoordinatorDependencies{
+			ClusterRuntime: clusterRuntime, ClusterWorkspace: clusterWorkspace,
+			Preferences: preferences, AppLogs: appLogs,
+		})
+	}
+	contextProvider := dependencies.Context
+	if contextProvider == nil {
+		contextProvider = context.Background
+	}
+	workspace := &WorkspaceCoordinator{
+		ClusterRuntimeManager:      clusterRuntime,
+		ClusterWorkspaceProjection: clusterWorkspace,
+		RefreshCoordinator:         refresh,
+		preferences:                preferences,
+		operations:                 dependencies.Operations,
+		resources:                  dependencies.Resources,
+		appLogs:                    appLogs,
+		context:                    contextProvider,
+		runtimeAvailableFn:         dependencies.RuntimeAvailable,
+		emitEventFn:                dependencies.EmitEvent,
+		workspaceSelections:        make(map[string][]string),
+		clusterIntentLatest:        make(map[clusterRuntimeIntentKey]uint64),
+	}
+	workspace.kubeClientInitializer = workspace.initKubernetesClient
+	return workspace
 }
 
 func (w *WorkspaceCoordinator) CtxOrBackground() context.Context {

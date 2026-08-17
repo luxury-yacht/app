@@ -173,7 +173,7 @@ data-collection defaults with an application-owned privacy boundary:
   by scope type rather than namespace value. The final backend scrubber protects
   only that producer-owned capability-shape grammar before applying generic
   hostname and Kubernetes-object redaction to the surrounding failure text.
-- `backend/app_settings.go` persists `errorReportingEnabled`, and the
+- `backend/preferences_settings.go` persists `errorReportingEnabled`, and the
   post-commit settings dispatcher asks `ErrorReportingService` to switch the
   backend reporter only after the setting write succeeds. Missing settings use
   the documented default-on preference, but malformed/unreadable settings are

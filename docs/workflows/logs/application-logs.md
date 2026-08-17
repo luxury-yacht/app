@@ -24,7 +24,7 @@ Kubernetes container logs or node logs.
 
 - Process buffer, logger, frontend ingestion, sequence reads, clear operation,
   and typed event projection: `backend.AppLogService` in
-  `backend/app_log_service.go` and `backend/app_logs.go`
+  `backend/app_log_service.go` and `backend/app_log_service_commands.go`
 - Error capture bridge: `backend/internal/errorcapture`
 - Frontend app log client: `frontend/src/core/logging/appLogsClient.ts`
 - Application Logs panel: `frontend/src/ui/panels/app-logs`

@@ -7,6 +7,7 @@ import (
 	"time"
 
 	"github.com/luxury-yacht/app/backend/refresh/containerlogsstream"
+	"github.com/luxury-yacht/app/backend/refresh/snapshot"
 	"github.com/luxury-yacht/app/backend/refresh/system"
 	"github.com/luxury-yacht/app/backend/refresh/telemetry"
 )
@@ -23,7 +24,7 @@ type RefreshCoordinator struct {
 	preferences           *PreferencesService
 	containerLogsPolicy   *ContainerLogsSelectionPolicy
 	permissionFetchPolicy *PermissionFetchPolicy
-	resources             *ResourceGateway
+	resources             refreshResourceGateway
 	appLogs               *AppLogService
 	context               func() context.Context
 	runtimeAvailableFn    func() bool
@@ -70,13 +71,91 @@ type RefreshCoordinator struct {
 	objectCatalogEntries map[string]*objectCatalogEntry
 }
 
-func newRefreshCoordinator() *RefreshCoordinator {
+type refreshResourceGateway interface {
+	clearCaches()
+	objectDetailProvider() snapshot.ObjectDetailProvider
+	registerResponseCacheInvalidation(*system.Subsystem, string)
+}
+
+type RefreshCoordinatorDependencies struct {
+	ClusterRuntime        *ClusterRuntimeManager
+	ClusterWorkspace      *ClusterWorkspaceProjection
+	Attention             *ClusterAttentionService
+	Logger                *Logger
+	AllowedNamespaces     func(string) []string
+	Preferences           *PreferencesService
+	ContainerLogsPolicy   *ContainerLogsSelectionPolicy
+	PermissionFetchPolicy *PermissionFetchPolicy
+	Resources             refreshResourceGateway
+	AppLogs               *AppLogService
+	Context               func() context.Context
+	RuntimeAvailable      func() bool
+	EmitEvent             func(string, ...interface{})
+	ResourceProjection    *refreshResourceProjection
+}
+
+func newRefreshCoordinator(dependencies RefreshCoordinatorDependencies) *RefreshCoordinator {
+	logger := dependencies.Logger
+	if logger == nil {
+		logger = NewLogger(1000)
+	}
+	appLogs := dependencies.AppLogs
+	if appLogs == nil {
+		appLogs = NewAppLogService(logger)
+	}
+	clusterWorkspace := dependencies.ClusterWorkspace
+	if clusterWorkspace == nil {
+		clusterWorkspace = newClusterWorkspaceProjection()
+	}
+	clusterRuntime := dependencies.ClusterRuntime
+	if clusterRuntime == nil {
+		clusterRuntime = newClusterRuntimeManager(ClusterRuntimeManagerDependencies{
+			Logger: logger, Projection: clusterWorkspace,
+		})
+	}
+	preferences := dependencies.Preferences
+	if preferences == nil {
+		preferences = NewPreferencesService(nil, nil, logger)
+	}
+	attention := dependencies.Attention
+	if attention == nil {
+		attention = NewClusterAttentionService(preferences, logger)
+	}
+	containerLogsPolicy := dependencies.ContainerLogsPolicy
+	if containerLogsPolicy == nil {
+		containerLogsPolicy = NewContainerLogsSelectionPolicy(defaultObjPanelLogsTargetPerScopeLimit)
+	}
+	permissionFetchPolicy := dependencies.PermissionFetchPolicy
+	if permissionFetchPolicy == nil {
+		permissionFetchPolicy = NewPermissionFetchPolicy(defaultPermissionSSRRFetchConcurrency)
+	}
+	contextProvider := dependencies.Context
+	if contextProvider == nil {
+		contextProvider = context.Background
+	}
+	resourceProjection := dependencies.ResourceProjection
+	if resourceProjection == nil {
+		resourceProjection = newRefreshResourceProjection()
+	}
 	return &RefreshCoordinator{
-		refreshSubsystems:        make(map[string]*system.Subsystem),
-		refreshPermissionCancels: make(map[string]context.CancelFunc),
-		objectCatalogEntries:     make(map[string]*objectCatalogEntry),
-		resourceProjection:       newRefreshResourceProjection(),
-		metricsInterval:          time.Duration(defaultMetricsIntervalMs()) * time.Millisecond,
+		ClusterRuntimeManager:      clusterRuntime,
+		ClusterWorkspaceProjection: clusterWorkspace,
+		attention:                  attention,
+		logger:                     logger,
+		allowedNamespaces:          dependencies.AllowedNamespaces,
+		preferences:                preferences,
+		containerLogsPolicy:        containerLogsPolicy,
+		permissionFetchPolicy:      permissionFetchPolicy,
+		resources:                  dependencies.Resources,
+		appLogs:                    appLogs,
+		context:                    contextProvider,
+		runtimeAvailableFn:         dependencies.RuntimeAvailable,
+		emitEventFn:                dependencies.EmitEvent,
+		refreshSubsystems:          make(map[string]*system.Subsystem),
+		refreshPermissionCancels:   make(map[string]context.CancelFunc),
+		objectCatalogEntries:       make(map[string]*objectCatalogEntry),
+		resourceProjection:         resourceProjection,
+		metricsInterval:            time.Duration(defaultMetricsIntervalMs()) * time.Millisecond,
 	}
 }
 

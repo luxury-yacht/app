@@ -31,7 +31,6 @@ import { installTypingAssistPolicyObserver } from '@utils/inputAssistPolicy';
 import { applyLinkColor } from '@utils/linkColor';
 import { applyTintedPalette, isPaletteActive } from '@utils/paletteTint';
 import { setActivePermissionCluster } from '@/core/capabilities';
-import { ConnectionStatusProvider, useConnectionStatus } from '@/core/connection/connectionStatus';
 import { requestContextRefresh } from '@/core/data-access';
 import { eventBus } from '@/core/events';
 import {
@@ -46,7 +45,7 @@ import { autoApplyClusterTheme } from '@/core/settings/clusterThemeAutoApply';
 // Custom hooks
 import { useBackendErrorHandler } from '@/hooks/useBackendErrorHandler';
 import { useSidebarResize } from '@/hooks/useSidebarResize';
-import { useConnectionStatusListener, useWailsRuntimeEvents } from '@/hooks/useWailsRuntimeEvents';
+import { useWailsRuntimeEvents } from '@/hooks/useWailsRuntimeEvents';
 
 // Resolve the current active appearance mode from the document attribute.
 const resolveAppearanceMode = (): 'light' | 'dark' => {
@@ -78,7 +77,6 @@ const applyAppearanceOverrides = (mode: 'light' | 'dark') => {
  */
 function AppContent() {
   const viewState = useViewState();
-  const connectionStatus = useConnectionStatus();
   const { selectedClusterId, selectedClusterName } = useKubeconfig();
   const { isClusterReady } = useClusterLifecycle();
   const selectedClusterReady = selectedClusterId ? isClusterReady(selectedClusterId) : false;
@@ -138,9 +136,6 @@ function AppContent() {
   // Handle backend errors from Wails runtime
   useBackendErrorHandler();
 
-  // Handle connection status events from Wails runtime
-  useConnectionStatusListener();
-
   // Callbacks for UI actions
   const handleToggleAppLogsPanel = useCallback(() => {
     // App logs is an app-global tool panel (like Settings, About). Its
@@ -185,20 +180,13 @@ function AppContent() {
   }, [handleToggleAppLogsPanel]);
 
   // Handle manual refresh (Cmd+R)
-  const manualRefreshBlocked = ['offline', 'auth_failed', 'rebuilding'].includes(
-    connectionStatus.state
-  );
-
   const handleManualRefresh = useCallback(() => {
-    if (manualRefreshBlocked) {
-      return;
-    }
     requestContextRefresh({ reason: 'user' }).catch((error) => {
       errorHandler.handle(error instanceof Error ? error : new Error(String(error)), {
         source: 'manual-refresh',
       });
     });
-  }, [manualRefreshBlocked]);
+  }, []);
 
   return (
     <>
@@ -228,21 +216,19 @@ function App() {
       <ErrorProvider>
         <ZoomProvider>
           <KeyboardProvider>
-            <ConnectionStatusProvider>
-              <AuthErrorProvider>
-                <div className="app">
-                  <KubernetesProvider>
-                    <FavoritesProvider>
-                      <TabDragProvider>
-                        <DockablePanelProvider>
-                          <AppContent />
-                        </DockablePanelProvider>
-                      </TabDragProvider>
-                    </FavoritesProvider>
-                  </KubernetesProvider>
-                </div>
-              </AuthErrorProvider>
-            </ConnectionStatusProvider>
+            <AuthErrorProvider>
+              <div className="app">
+                <KubernetesProvider>
+                  <FavoritesProvider>
+                    <TabDragProvider>
+                      <DockablePanelProvider>
+                        <AppContent />
+                      </DockablePanelProvider>
+                    </TabDragProvider>
+                  </FavoritesProvider>
+                </KubernetesProvider>
+              </div>
+            </AuthErrorProvider>
           </KeyboardProvider>
         </ZoomProvider>
       </ErrorProvider>

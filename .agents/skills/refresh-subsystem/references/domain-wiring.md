@@ -9,9 +9,9 @@ Construction and lifecycle entry points:
 
 | Concern | Code landmarks |
 | --- | --- |
-| Per-cluster construction and readiness | `backend/app_refresh_setup.go`, `backend/refresh/system/manager.go` |
-| Selection changes and subsystem swaps | `backend/app_refresh_update.go`, `backend/app_refresh_subsystems.go` |
-| Teardown and auth recovery | `backend/app_refresh_recovery.go` |
+| Per-cluster construction and readiness | `backend/refresh_setup.go`, `backend/refresh/system/manager.go` |
+| Selection changes and subsystem swaps | `backend/refresh_update.go`, `backend/refresh_subsystems.go` |
+| Teardown and auth recovery | `backend/refresh_recovery.go` |
 
 Add the domain to `domainRegistrations()` in
 `backend/refresh/system/registrations.go`; dependencies determine order.

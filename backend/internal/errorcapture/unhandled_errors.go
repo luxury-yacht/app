@@ -25,6 +25,8 @@ import (
 // recurs, which is acceptable; unbounded growth from churning error text is not.
 const unhandledErrorSeenLimit = 256
 
+var installUnhandledErrorDedupOnce sync.Once
+
 type unhandledErrorDeduper struct {
 	mu   sync.Mutex
 	seen map[string]time.Time
@@ -68,18 +70,20 @@ func (d *unhandledErrorDeduper) shouldLog(key string, now time.Time) bool {
 // site), so suppression is the only observable difference. Call once at
 // startup, before clients are built.
 func InstallUnhandledErrorDedup() {
-	deduper := newUnhandledErrorDeduper()
-	utilruntime.ErrorHandlers = []utilruntime.ErrorHandler{
-		func(ctx context.Context, err error, msg string, keysAndValues ...interface{}) {
-			if !deduper.shouldLog(unhandledErrorKey(err, msg, keysAndValues...), time.Now()) {
-				return
-			}
-			// Mirrors apimachinery's default logError handler: this function
-			// runs at the same call depth, so the reported location stays the
-			// caller of HandleError*.
-			logger := klog.FromContext(ctx).WithCallDepth(3)
-			logger = klog.LoggerWithName(logger, "UnhandledError")
-			logger.Error(err, msg, keysAndValues...)
-		},
-	}
+	installUnhandledErrorDedupOnce.Do(func() {
+		deduper := newUnhandledErrorDeduper()
+		utilruntime.ErrorHandlers = []utilruntime.ErrorHandler{
+			func(ctx context.Context, err error, msg string, keysAndValues ...interface{}) {
+				if !deduper.shouldLog(unhandledErrorKey(err, msg, keysAndValues...), time.Now()) {
+					return
+				}
+				// Mirrors apimachinery's default logError handler: this function
+				// runs at the same call depth, so the reported location stays the
+				// caller of HandleError*.
+				logger := klog.FromContext(ctx).WithCallDepth(3)
+				logger = klog.LoggerWithName(logger, "UnhandledError")
+				logger.Error(err, msg, keysAndValues...)
+			},
+		}
+	})
 }

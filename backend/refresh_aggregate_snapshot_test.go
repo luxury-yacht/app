@@ -291,7 +291,7 @@ func TestWireNamespacesReadinessObserverFlipsReadyForLateSubsystems(t *testing.T
 		},
 	}
 	runtimeManager := &ClusterRuntimeManager{clusterLifecycle: lifecycle}
-	refreshCoordinator := newRefreshCoordinator()
+	refreshCoordinator := newRefreshCoordinator(RefreshCoordinatorDependencies{})
 	refreshCoordinator.ClusterRuntimeManager = runtimeManager
 	refreshCoordinator.refreshAggregates.Store(&refreshAggregateHandlers{snapshot: aggregate})
 	aggregate.onNamespaceSnapshot = func(clusterID string) {
@@ -339,7 +339,7 @@ func TestNamespacesReadinessSweepHealsDroppedSettleRing(t *testing.T) {
 		},
 	}
 	runtimeManager := &ClusterRuntimeManager{clusterLifecycle: lifecycle}
-	refreshCoordinator := newRefreshCoordinator()
+	refreshCoordinator := newRefreshCoordinator(RefreshCoordinatorDependencies{})
 	refreshCoordinator.ClusterRuntimeManager = runtimeManager
 	refreshCoordinator.refreshAggregates.Store(&refreshAggregateHandlers{snapshot: aggregate})
 	aggregate.onNamespaceSnapshot = func(clusterID string) {
@@ -369,7 +369,7 @@ func TestTransitionClusterToLoadingKeepsReadyClustersReady(t *testing.T) {
 	emitter, _ := collectingEmitter()
 	lifecycle := newClusterLifecycleWithSlowThreshold(emitter, time.Minute)
 	runtimeManager := &ClusterRuntimeManager{clusterLifecycle: lifecycle}
-	refreshCoordinator := newRefreshCoordinator()
+	refreshCoordinator := newRefreshCoordinator(RefreshCoordinatorDependencies{})
 	refreshCoordinator.ClusterRuntimeManager = runtimeManager
 
 	// Re-warm of a ready cluster: no demotion.

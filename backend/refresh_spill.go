@@ -12,7 +12,7 @@ import (
 	"github.com/luxury-yacht/app/backend/refresh/ingest"
 )
 
-// app_refresh_spill.go wires the querypage maintained-store spill into the governor's
+// refresh_spill.go wires the querypage maintained-store spill into the governor's
 // Cold/re-warm lifecycle: a Cold cluster's stores are flushed to disk before its heap is
 // reclaimed (spillClusterStores, from teardownClusterSubsystem), and a re-warm re-paints
 // the freshly-built stores from disk before the informers feed (restoreClusterStores, from

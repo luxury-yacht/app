@@ -62,13 +62,13 @@ validation errors. Frontend refresh code should not produce them.
 - Cluster Attention rules, persistence transactions, six Ignore/Restore
   commands, and the cluster-indexed live target registry:
   `backend.ClusterAttentionService` in `backend/cluster_attention_service.go`
-  and `backend/app_cluster_attention.go`. The service owns the Attention lock;
+  and `backend/cluster_attention_rules.go`. The service owns the Attention lock;
   it uses a narrow `PreferencesService` repository for persistence and never
   reaches through the refresh owner.
 - Cluster and workspace implementation: `backend/cluster_clients.go`,
   `backend/kubeconfigs.go`, `backend/cluster_workspace.go`
-- Refresh and object-catalog implementation: `backend/app_refresh_*.go`,
-  `backend/app_object_catalog.go`
+- Refresh and object-catalog implementation: `backend/refresh_*.go`,
+  `backend/refresh_object_catalog.go`
 - Frontend cluster-workspace state and runtime-event reconciliation:
   `frontend/src/core/cluster-workspace/clusterWorkspaceStore.ts`
 - Frontend selection/navigation UI:

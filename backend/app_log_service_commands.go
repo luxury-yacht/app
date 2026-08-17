@@ -1,5 +1,5 @@
 /*
- * backend/app_logs.go
+ * backend/app_log_service_commands.go
  *
  * Handles application logging functionality.
  */

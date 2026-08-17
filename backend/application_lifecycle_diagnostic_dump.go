@@ -1,7 +1,7 @@
 //go:build !windows
 
 /*
- * backend/app_diagnostic_dump.go
+ * backend/application_lifecycle_diagnostic_dump.go
  *
  * On-demand goroutine dump for diagnosing wedged states: `pkill -USR1 luxury-yacht`
  * writes every goroutine's stack to a file without stopping the app. Exists because

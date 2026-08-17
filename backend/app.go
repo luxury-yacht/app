@@ -5,6 +5,7 @@ import (
 	"fmt"
 
 	"github.com/luxury-yacht/app/backend/internal/appupdates"
+	"github.com/luxury-yacht/app/backend/internal/errorcapture"
 	"github.com/luxury-yacht/app/backend/resources/common"
 	"github.com/luxury-yacht/app/internal/sentry"
 	"github.com/wailsapp/wails/v3/pkg/application"
@@ -52,113 +53,109 @@ type applicationUpdateCoordinator interface {
 // NewApplicationRuntime composes focused backend owners around the concrete
 // Wails application without retaining behavior on the composition result.
 func NewApplicationRuntime(wailsApplication *application.App, reporters ...sentryreporting.Reporter) *ApplicationRuntime {
+	// Process-global Kubernetes logging must be installed before any owner can
+	// start a client or informer. Both installers are idempotent.
+	errorcapture.Init()
+	errorcapture.InstallUnhandledErrorDedup()
+
 	var reporter sentryreporting.Reporter
 	if len(reporters) > 0 {
 		reporter = reporters[0]
 	}
-	lifecycle := &ApplicationLifecycle{
-		appLogs: NewAppLogService(NewLogger(1000, reporters...)),
-		eventEmitter: func(_ context.Context, name string, data ...interface{}) {
+	appLogs := NewAppLogService(NewLogger(1000, reporters...))
+	signals := newApplicationRuntimeSignals(
+		func(_ context.Context, name string, data ...interface{}) {
 			if wailsApplication != nil {
 				wailsApplication.Event.Emit(name, data...)
 			}
 		},
-	}
-	runtime := &ApplicationRuntime{
-		Lifecycle:             lifecycle,
-		ClusterRuntime:        newClusterRuntimeManager(),
-		ClusterWorkspace:      newClusterWorkspaceProjection(),
-		Refresh:               newRefreshCoordinator(),
-		Workspace:             newWorkspaceCoordinator(),
-		AppLogs:               lifecycle.appLogs,
-		Favorites:             NewFavoritesService(),
-		UIState:               NewUIStateStore(),
-		ContainerLogsPolicy:   NewContainerLogsSelectionPolicy(defaultObjPanelLogsTargetPerScopeLimit),
-		PermissionFetchPolicy: NewPermissionFetchPolicy(defaultPermissionSSRRFetchConcurrency),
-	}
-	runtime.DesktopShell = NewDesktopShell(wailsApplication, lifecycle.runtimeAvailable, lifecycle.emitEvent, runtime.AppLogs.Logger())
-	runtime.Updates = NewUpdateCoordinator(runtime.DesktopShell, lifecycle.CtxOrBackground, lifecycle.emitEvent, runtime.AppLogs.Logger())
-	runtime.DesktopShell.ConfigureUpdateCheck(func() error {
-		_, err := runtime.Updates.CheckForUpdates()
+	)
+	clusterWorkspace := newClusterWorkspaceProjection()
+	containerLogsPolicy := NewContainerLogsSelectionPolicy(defaultObjPanelLogsTargetPerScopeLimit)
+	permissionFetchPolicy := NewPermissionFetchPolicy(defaultPermissionSSRRFetchConcurrency)
+	desktopShell := NewDesktopShell(wailsApplication, signals.runtimeAvailable, signals.emitEvent, appLogs.Logger())
+	updates := NewUpdateCoordinator(desktopShell, signals.CtxOrBackground, signals.emitEvent, appLogs.Logger())
+	desktopShell.ConfigureUpdateCheck(func() error {
+		_, err := updates.CheckForUpdates()
 		return err
 	})
-	runtime.ErrorReporting = NewErrorReportingService(reporter, lifecycle.CtxOrBackground, runtime.AppLogs.Logger())
-	runtime.Preferences = NewPreferencesService(
-		runtime.DesktopShell,
-		NewSettingsEffectDispatcher(runtime.ErrorReporting, runtime.ClusterRuntime, runtime.PermissionFetchPolicy, runtime.ContainerLogsPolicy, runtime.Refresh, runtime.AppLogs.Logger()),
-		runtime.AppLogs.Logger(),
+	errorReporting := NewErrorReportingService(reporter, signals.CtxOrBackground, appLogs.Logger())
+	refreshSettings := newRefreshSettingBridge(
+		defaultObjPanelLogsTargetGlobalLimit,
+		defaultMetricsIntervalMs(),
 	)
-	runtime.ClusterRuntime.discoveryRepository = runtime.Preferences
-	runtime.ClusterRuntime.logger = runtime.AppLogs.Logger()
-	runtime.ClusterRuntime.containerLogsPolicy = runtime.ContainerLogsPolicy
-	runtime.ClusterRuntime.projection = runtime.ClusterWorkspace
-	runtime.ClusterRuntime.emitEvent = lifecycle.emitEvent
-	runtime.ClusterRuntime.context = lifecycle.CtxOrBackground
-	runtime.DesktopShell.ConfigureKubeconfigSearchPaths(runtime.Preferences.KubeconfigSearchPaths)
-	runtime.Attention = NewClusterAttentionService(runtime.Preferences, runtime.AppLogs.Logger())
-	runtime.Refresh.ClusterRuntimeManager = runtime.ClusterRuntime
-	runtime.Refresh.ClusterWorkspaceProjection = runtime.ClusterWorkspace
-	runtime.Refresh.attention = runtime.Attention
-	runtime.Refresh.logger = runtime.AppLogs.Logger()
-	runtime.Refresh.preferences = runtime.Preferences
-	runtime.Refresh.containerLogsPolicy = runtime.ContainerLogsPolicy
-	runtime.Refresh.permissionFetchPolicy = runtime.PermissionFetchPolicy
-	runtime.Refresh.appLogs = runtime.AppLogs
-	runtime.Refresh.context = lifecycle.CtxOrBackground
-	runtime.Refresh.runtimeAvailableFn = lifecycle.runtimeAvailable
-	runtime.Refresh.emitEventFn = lifecycle.emitEvent
-	runtime.Refresh.allowedNamespaces = func(clusterID string) []string {
-		namespaces, err := runtime.Preferences.clusterAllowedNamespaces(clusterID)
-		if err != nil {
-			runtime.AppLogs.Logger().Warn(fmt.Sprintf("Could not read allowed namespaces for cluster %s (running cluster-wide): %v", clusterID, err), "Settings", clusterID, clusterID)
-			return nil
-		}
-		return namespaces
-	}
-	runtime.ErrorReporting.ConfigureInstallationTelemetry(runtime.Preferences)
-	lifecycle.setupEnvironment()
-	runtime.Refresh.initGovernor()
-	runtime.Operations = newApplicationOperationsCoordinator(runtime.ClusterRuntime, runtime.Refresh.resourceProjection, lifecycle, runtime.AppLogs.Logger())
-	runtime.Resources = newResourceGateway(resourceGatewayDependencies{
-		resolveClusterDependencies:       runtime.ClusterRuntime.resolveClusterDependencies,
-		resourceDependenciesForClusterID: runtime.ClusterRuntime.resourceDependenciesForClusterID,
-		context:                          lifecycle.CtxOrBackground,
-		emitEvent:                        lifecycle.emitEvent,
-		logger:                           runtime.AppLogs.Logger(),
-		clusterName:                      runtime.ClusterRuntime.clusterNameForID,
-		recordTransportSuccess:           runtime.ClusterRuntime.recordClusterTransportSuccess,
-		recordTransportFailure:           runtime.ClusterRuntime.recordClusterTransportFailure,
+	clusterRuntime := newClusterRuntimeManager(ClusterRuntimeManagerDependencies{
+		Logger: appLogs.Logger(), ContainerLogsPolicy: containerLogsPolicy,
+		Projection: clusterWorkspace, EmitEvent: signals.emitEvent, Context: signals.CtxOrBackground,
+	})
+
+	// Preferences pushes live settings to Cluster Runtime, while Cluster Runtime
+	// reads the persisted kubeconfig search-path repository. The manager starts
+	// with an explicit unavailable repository and is bound here before any
+	// discovery or settings load can run.
+	preferences := NewPreferencesService(
+		desktopShell,
+		NewSettingsEffectDispatcher(errorReporting, clusterRuntime, permissionFetchPolicy, containerLogsPolicy, refreshSettings, appLogs.Logger()),
+		appLogs.Logger(),
+	)
+	clusterRuntime.configureDiscoveryRepository(preferences)
+	desktopShell.ConfigureKubeconfigSearchPaths(preferences.KubeconfigSearchPaths)
+	attention := NewClusterAttentionService(preferences, appLogs.Logger())
+	resourceProjection := newRefreshResourceProjection()
+	operations := newApplicationOperationsCoordinator(
+		clusterRuntime, resourceProjection, signals.CtxOrBackground, signals.emitEvent, appLogs.Logger(),
+	)
+	resources := newResourceGateway(resourceGatewayDependencies{
+		resolveClusterDependencies:       clusterRuntime.resolveClusterDependencies,
+		resourceDependenciesForClusterID: clusterRuntime.resourceDependenciesForClusterID,
+		context:                          signals.CtxOrBackground,
+		emitEvent:                        signals.emitEvent,
+		logger:                           appLogs.Logger(),
+		clusterName:                      clusterRuntime.clusterNameForID,
+		recordTransportSuccess:           clusterRuntime.recordClusterTransportSuccess,
+		recordTransportFailure:           clusterRuntime.recordClusterTransportFailure,
 		resourceResolverForCluster: func(clusterID string) common.ResourceResolver {
 			return clusterRuntimeResourceResolver{
-				runtime:        runtime.ClusterRuntime,
-				clusterID:      clusterID,
-				catalogService: runtime.Refresh.resourceProjection.objectCatalogServiceForCluster,
+				runtime: clusterRuntime, clusterID: clusterID,
+				catalogService: resourceProjection.objectCatalogServiceForCluster,
 			}
 		},
-		refreshProjection:            runtime.Refresh.resourceProjection,
-		permissionFetchPolicy:        runtime.PermissionFetchPolicy,
-		containerLogsSelectionPolicy: runtime.ContainerLogsPolicy,
-		operations:                   runtime.Operations,
+		refreshProjection:            resourceProjection,
+		permissionFetchPolicy:        permissionFetchPolicy,
+		containerLogsSelectionPolicy: containerLogsPolicy,
+		operations:                   operations,
 	})
-	runtime.Refresh.resources = runtime.Resources
-	runtime.Workspace.ClusterRuntimeManager = runtime.ClusterRuntime
-	runtime.Workspace.ClusterWorkspaceProjection = runtime.ClusterWorkspace
-	runtime.Workspace.RefreshCoordinator = runtime.Refresh
-	runtime.Workspace.preferences = runtime.Preferences
-	runtime.Workspace.operations = runtime.Operations
-	runtime.Workspace.resources = runtime.Resources
-	runtime.Workspace.appLogs = runtime.AppLogs
-	runtime.Workspace.context = lifecycle.CtxOrBackground
-	runtime.Workspace.runtimeAvailableFn = lifecycle.runtimeAvailable
-	runtime.Workspace.emitEventFn = lifecycle.emitEvent
-	runtime.Workspace.kubeClientInitializer = runtime.Workspace.initKubernetesClient
-	workspace := runtime.Workspace
-	refreshCoordinator := runtime.Refresh
-	runtime.DataManagement = NewDataManagementCoordinator(DataManagementDependencies{
-		Preferences: runtime.Preferences, Favorites: runtime.Favorites, UIState: runtime.UIState,
-		Updates: runtime.Updates, Attention: runtime.Attention, ErrorReporting: runtime.ErrorReporting,
-		AppLogs: runtime.AppLogs, DesktopShell: runtime.DesktopShell,
-		RuntimeAvailable: lifecycle.runtimeAvailable, Context: lifecycle.CtxOrBackground,
+	refresh := newRefreshCoordinator(RefreshCoordinatorDependencies{
+		ClusterRuntime: clusterRuntime, ClusterWorkspace: clusterWorkspace,
+		Attention: attention, Logger: appLogs.Logger(),
+		AllowedNamespaces: func(clusterID string) []string {
+			namespaces, err := preferences.clusterAllowedNamespaces(clusterID)
+			if err != nil {
+				appLogs.Logger().Warn(fmt.Sprintf("Could not read allowed namespaces for cluster %s (running cluster-wide): %v", clusterID, err), "Settings", clusterID, clusterID)
+				return nil
+			}
+			return namespaces
+		},
+		Preferences: preferences, ContainerLogsPolicy: containerLogsPolicy,
+		PermissionFetchPolicy: permissionFetchPolicy, Resources: resources,
+		AppLogs: appLogs, Context: signals.CtxOrBackground,
+		RuntimeAvailable: signals.runtimeAvailable, EmitEvent: signals.emitEvent,
+		ResourceProjection: resourceProjection,
+	})
+
+	refreshSettings.Bind(refresh)
+	workspace := newWorkspaceCoordinator(WorkspaceCoordinatorDependencies{
+		ClusterRuntime: clusterRuntime, ClusterWorkspace: clusterWorkspace, Refresh: refresh,
+		Preferences: preferences, Operations: operations, Resources: resources, AppLogs: appLogs,
+		Context: signals.CtxOrBackground, RuntimeAvailable: signals.runtimeAvailable, EmitEvent: signals.emitEvent,
+	})
+	favorites := NewFavoritesService()
+	uiState := NewUIStateStore()
+	dataManagement := NewDataManagementCoordinator(DataManagementDependencies{
+		Preferences: preferences, Favorites: favorites, UIState: uiState,
+		Updates: updates, Attention: attention, ErrorReporting: errorReporting,
+		AppLogs: appLogs, DesktopShell: desktopShell,
+		RuntimeAvailable: signals.runtimeAvailable, Context: signals.CtxOrBackground,
 		WorkspaceMutation: func(name string, action func() error) error {
 			return workspace.runSelectionMutation(name, func(_ *selectionMutation) error { return action() })
 		},
@@ -166,26 +163,27 @@ func NewApplicationRuntime(wailsApplication *application.App, reporters ...sentr
 			if err := workspace.clearKubeconfigSelection(); err != nil {
 				return err
 			}
-			return refreshCoordinator.ResetRuntimeState()
+			return refresh.ResetRuntimeState()
 		},
 		SearchPathsChanged: workspace.refreshKubeconfigDiscoveryAfterSearchPathChange,
 	})
-	lifecycle.desktopShell = runtime.DesktopShell
-	lifecycle.preferences = runtime.Preferences
-	lifecycle.errorReporting = runtime.ErrorReporting
-	lifecycle.clusterRuntime = runtime.ClusterRuntime
-	lifecycle.refresh = runtime.Refresh
-	lifecycle.workspace = runtime.Workspace
-	lifecycle.operations = runtime.Operations
-	lifecycle.updates = runtime.Updates
-	return runtime
-}
+	lifecycle := newApplicationLifecycle(signals, ApplicationLifecycleDependencies{
+		DesktopShell: desktopShell, AppLogs: appLogs, Preferences: preferences,
+		ErrorReporting: errorReporting, ClusterRuntime: clusterRuntime, Refresh: refresh,
+		Workspace: workspace, Operations: operations, Updates: updates,
+	})
+	errorReporting.ConfigureInstallationTelemetry(preferences)
+	lifecycle.setupEnvironment()
+	refresh.initGovernor()
 
-func (a *ApplicationLifecycle) emitEvent(name string, args ...interface{}) {
-	if a == nil || a.eventEmitter == nil || !a.runtimeAvailable() {
-		return
+	return &ApplicationRuntime{
+		Lifecycle: lifecycle, ClusterRuntime: clusterRuntime, ClusterWorkspace: clusterWorkspace,
+		Refresh: refresh, Workspace: workspace, DesktopShell: desktopShell, AppLogs: appLogs,
+		Favorites: favorites, UIState: uiState, Preferences: preferences,
+		ErrorReporting: errorReporting, ContainerLogsPolicy: containerLogsPolicy,
+		PermissionFetchPolicy: permissionFetchPolicy, DataManagement: dataManagement,
+		Attention: attention, Resources: resources, Operations: operations, Updates: updates,
 	}
-	a.eventEmitter(a.CtxOrBackground(), name, args...)
 }
 
 // RetryAuth triggers a manual authentication recovery attempt for ALL clusters.

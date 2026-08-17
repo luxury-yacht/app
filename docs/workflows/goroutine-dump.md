@@ -10,9 +10,9 @@ reliably capturable, so SIGQUIT dumps are effectively lost.
   truthy — `ENABLE_GOROUTINE_DUMP=true wails3 dev` (or set it on a built
   binary's environment). Default off. Because a wedge may not
   reproduce on demand, relaunch with the flag *before* trying to reproduce.
-- Handler: `backend/app_diagnostic_dump.go` (unix-only; Windows no-op in
-  `backend/app_diagnostic_dump_windows.go`), armed by
-  `ApplicationLifecycle.ServiceStartup` (`backend/app_lifecycle.go`).
+- Handler: `backend/application_lifecycle_diagnostic_dump.go` (unix-only; Windows no-op in
+  `backend/application_lifecycle_diagnostic_dump_windows.go`), armed by
+  `ApplicationLifecycle.ServiceStartup` (`backend/application_lifecycle.go`).
 - Output: `os.UserCacheDir()/luxury-yacht/diagnostics/goroutines-<timestamp>.txt`
   (macOS: `~/Library/Caches/luxury-yacht/diagnostics/`).
 - It takes no application locks (`runtime.Stack` is runtime-level), so it works

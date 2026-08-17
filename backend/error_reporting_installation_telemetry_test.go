@@ -149,19 +149,44 @@ func TestMalformedAnonymizedIDIsReplacedInsteadOfReportedAsUserData(t *testing.T
 
 func TestInitializeErrorReportingDoesNotSynchronouslyEmitInstallationMetric(t *testing.T) {
 	setTestConfigEnv(t)
-	reporter := newRecordingInstallationReporter(true)
+	reporter := &coordinatedInstallationReporter{
+		recordingErrorReporter: &recordingErrorReporter{},
+		started:                make(chan struct{}),
+		release:                make(chan struct{}),
+		finished:               make(chan struct{}),
+	}
 	app := newSettingsEffectsTestFixture(t, reporter)
 
-	require.NoError(t, InitializeErrorReporting(app.Preferences, app.ErrorReporting))
-	require.NoError(t, InitializeErrorReporting(app.Preferences, app.ErrorReporting))
-
-	reporter.metricMu.Lock()
-	require.Empty(t, reporter.metrics)
-	reporter.metricMu.Unlock()
+	returned := make(chan error, 1)
+	go func() {
+		returned <- InitializeErrorReporting(app.Preferences, app.ErrorReporting)
+	}()
+	select {
+	case err := <-returned:
+		require.NoError(t, err)
+	case <-time.After(250 * time.Millisecond):
+		t.Fatal("error-reporting initialization waited for installation telemetry")
+	}
+	select {
+	case <-reporter.started:
+	case <-time.After(time.Second):
+		t.Fatal("scheduled installation telemetry did not start")
+	}
 
 	saved, err := app.Preferences.loadSettingsFile()
 	require.NoError(t, err)
 	require.False(t, saved.Telemetry.InstallationMetricReported)
+
+	close(reporter.release)
+	select {
+	case <-reporter.finished:
+	case <-time.After(time.Second):
+		t.Fatal("scheduled installation telemetry did not finish")
+	}
+	require.Eventually(t, func() bool {
+		acknowledged, loadErr := app.Preferences.loadSettingsFile()
+		return loadErr == nil && acknowledged.Telemetry.InstallationMetricReported
+	}, time.Second, 10*time.Millisecond)
 }
 
 func TestPostStartupInstallationRegistrationEmitsMetricOnce(t *testing.T) {

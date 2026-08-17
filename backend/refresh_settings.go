@@ -2,12 +2,6 @@ package backend
 
 import "time"
 
-func (m *ClusterRuntimeManager) SetKubernetesClientRateLimits(qps, burst int) {
-	if m != nil {
-		m.applyKubernetesClientRateLimits(qps, burst)
-	}
-}
-
 func (r *RefreshCoordinator) SetContainerLogsGlobalLimit(limit int) {
 	if r == nil {
 		return

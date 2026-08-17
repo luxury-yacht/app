@@ -38,7 +38,7 @@ Applies to Go code under `backend/`.
 
 - Service lives in `backend/objectcatalog` (`Service`, `Summary`) and its
   per-cluster lifecycle is owned by `backend.RefreshCoordinator` in
-  `backend/app_object_catalog.go`.
+  `backend/refresh_object_catalog.go`.
 - Browse snapshots are exposed through the `catalog` refresh domain in `backend/refresh/snapshot/catalog.go`.
 - Resource identity resolution is owned by `backend/objectcatalog/identity.go`.
   `backend/resources/common/resource_identity.go` contains only the shared
@@ -60,24 +60,24 @@ Applies to Go code under `backend/`.
 - Manual refresh entrypoint: `/api/v2/refresh/{domain}` in `backend/refresh/api/server.go`, backed by `ManualQueue` in `backend/refresh/types.go`.
 - Per-cluster stream endpoints are wired in `backend/refresh/system/streams.go`;
   `RefreshCoordinator` builds aggregate named-stream routing in
-  `backend/app_refresh_setup.go`, and `main.go` registers those streams before
+  `backend/refresh_setup.go`, and `main.go` registers those streams before
   the sole Wails service.
 - Diagnostics/telemetry sources: refresh domain telemetry in
   `backend/refresh/telemetry/recorder.go`; `RefreshCoordinator` catalog
-  diagnostics in `backend/app_object_catalog.go`.
+  diagnostics in `backend/refresh_object_catalog.go`.
 - Wedged backend (views stuck loading, suspected deadlock): capture a SIGUSR1
   goroutine dump before hypothesizing — opt in with
   `ENABLE_GOROUTINE_DUMP=true` at launch; see `docs/workflows/goroutine-dump.md`;
-  handler in `backend/app_diagnostic_dump.go`.
+  handler in `backend/application_lifecycle_diagnostic_dump.go`.
 - Lifecycle owner: `backend.RefreshCoordinator`, with subsystem setup in
-  `backend/app_refresh_setup.go`, selection updates in
-  `backend/app_refresh_update.go`, replacement helpers in
-  `backend/app_refresh_subsystems.go`, teardown/rebuild in
-  `backend/app_refresh_recovery.go`, and the atomically published service
-  handler in `backend/app_refresh_transport.go`.
+  `backend/refresh_setup.go`, selection updates in
+  `backend/refresh_update.go`, replacement helpers in
+  `backend/refresh_subsystems.go`, teardown/rebuild in
+  `backend/refresh_recovery.go`, and the atomically published service
+  handler in `backend/refresh_transport.go`.
 - Client lifecycle is owned by `backend.ClusterRuntimeManager`; selection and
   client/refresh orchestration belongs to `backend.WorkspaceCoordinator` in
-  `backend/app_kubernetes_client.go`.
+  `backend/workspace_cluster_clients.go`.
 - Multi-cluster refresh behavior is documented in
   `docs/architecture/multi-cluster.md`, `docs/architecture/data-freshness.md`,
   and `docs/architecture/refresh-system.md`.
@@ -99,7 +99,7 @@ Applies to Go code under `backend/`.
 - `backend.PreferencesService` owns persisted app preferences and their
   coalesced lazy-load state. Keep defaults, normalization, schema metadata,
   validation, Wails DTOs, and the six-route post-persistence settings-effect
-  dispatcher aligned in `backend/app_settings.go`.
+  dispatcher aligned in `backend/preferences_settings.go`.
 - `GetAppSettingsSchema` is the source of truth for backend-owned preference
   defaults, current values, bounds, enum values, validation hints, and
   runtime-side-effect flags. Keep schema coverage tests aligned with every

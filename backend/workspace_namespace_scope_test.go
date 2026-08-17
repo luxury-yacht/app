@@ -173,7 +173,7 @@ func TestPerformClusterScopeRebuildEmitsScopeChangedEvent(t *testing.T) {
 	app := newWorkspaceCoordinatorTestFixture(t)
 	setTestAppRuntimeReady(t, app.Lifecycle, context.Background())
 	var events []string
-	app.Lifecycle.eventEmitter = func(_ context.Context, name string, _ ...interface{}) {
+	app.Lifecycle.signalState().eventEmitter = func(_ context.Context, name string, _ ...interface{}) {
 		events = append(events, name)
 	}
 

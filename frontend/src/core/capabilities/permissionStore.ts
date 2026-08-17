@@ -374,7 +374,7 @@ const buildBatch = (
   for (const list of specLists) {
     for (const spec of list.specs) {
       // Resolve GVK at batch-build time so the backend receives a
-      // non-empty apiVersion (app_permissions.go now rejects queries
+      // non-empty apiVersion (resource_gateway_permissions.go now rejects queries
       // with missing Version). Built-in kinds fall through to
       // resolveBuiltinGroupVersion; CRD specs supply explicit
       // group/version.

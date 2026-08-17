@@ -95,7 +95,7 @@ shape, failure behavior, and diagnostics differ.
 - Refresh runtime policies: `backend/refresh/domainpermissions`
 - Refresh registration gates: `backend/refresh/system/registrations.go`
 - UI permission endpoint and request cache owner: `backend.ResourceGateway`
-  (`backend/app_permissions.go`, `backend/response_cache_permissions.go`)
+  (`backend/resource_gateway_permissions.go`, `backend/response_cache_permissions.go`)
 - UI permission fan-out policy: `backend/runtime_setting_policies.go`
 - Capability query types and rule matching: `backend/capabilities`
 - Frontend permission store/specs/hooks: `frontend/src/core/capabilities`

@@ -253,7 +253,7 @@ func TestCheckForUpdatesFromMenuOpensAboutBeforeStartingCheck(t *testing.T) {
 	setTestAppRuntimeReady(t, app.Lifecycle, context.Background())
 	app.Updates.coordinator = coordinator
 	events := make(chan string, 1)
-	app.Lifecycle.eventEmitter = func(_ context.Context, name string, _ ...interface{}) {
+	app.Lifecycle.signalState().eventEmitter = func(_ context.Context, name string, _ ...interface{}) {
 		events <- name
 	}
 
@@ -281,7 +281,7 @@ func TestWailsUpdateEventsProjectToOneApplicationBroadcast(t *testing.T) {
 		data []interface{}
 	}
 	var emitted []emittedEvent
-	app.Lifecycle.eventEmitter = func(_ context.Context, name string, data ...interface{}) {
+	app.Lifecycle.signalState().eventEmitter = func(_ context.Context, name string, data ...interface{}) {
 		emitted = append(emitted, emittedEvent{name: name, data: data})
 	}
 	coordinator := appupdates.New(appupdates.Dependencies{

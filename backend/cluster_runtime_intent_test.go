@@ -67,7 +67,7 @@ func TestClusterRuntimeIntentQueueStopClearsAndRejectsPendingWork(t *testing.T) 
 }
 
 func TestWorkspaceRejectsStaleClusterRuntimeIntentByKindAndCluster(t *testing.T) {
-	workspace := newWorkspaceCoordinator()
+	workspace := newWorkspaceCoordinator(WorkspaceCoordinatorDependencies{})
 	newer := ClusterRuntimeIntent{
 		Kind: ClusterRuntimeIntentAuthRebuild, ClusterID: "cluster-a", Generation: 2,
 	}

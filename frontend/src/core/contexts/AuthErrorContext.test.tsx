@@ -9,6 +9,7 @@
 import { act } from 'react';
 import * as ReactDOM from 'react-dom/client';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
+import type { DesktopEventHandler, DesktopEventName } from '@/core/desktop-runtime';
 import { requireValue } from '@/test-utils/requireValue';
 import {
   createWailsRuntimeHarness,
@@ -20,7 +21,7 @@ const runtimeHarnessRef = vi.hoisted(() => ({
 }));
 
 vi.mock('@/core/desktop-runtime', () => ({
-  onEvent: (eventName: string, handler: (payload: unknown) => void) =>
+  onEvent: <E extends DesktopEventName>(eventName: E, handler: DesktopEventHandler<E>) =>
     runtimeHarnessRef.current?.onEvent(eventName, handler) ?? (() => undefined),
 }));
 

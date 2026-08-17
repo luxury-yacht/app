@@ -57,7 +57,7 @@ overview, and any new doorbell-backed snapshot domain:
 5. Namespace readiness is server-owned. Pre-ready doorbells invoke the
    subsystem readiness build from the per-cluster chokepoint; post-settle notify
    is one-shot, aggregate refresh is atomic, and permission-denied builds still
-   notify ready. `sweepNamespacesReadiness` in `backend/app_refresh_setup.go`
+   notify ready. `sweepNamespacesReadiness` in `backend/refresh_setup.go`
    repairs rings missed before aggregate wiring exists.
 6. Skip informer resync echoes through `namespaceUpdateIsEcho` in
    `backend/refresh/snapshot/namespaces.go`.
@@ -71,12 +71,12 @@ overview, and any new doorbell-backed snapshot domain:
 ## Governor and retained-state lifecycle
 
 1. Re-warm through the construction chokepoint must not demote a ready cluster;
-   `transitionClusterToLoading` in `backend/app_refresh_setup.go` owns that gate.
+   `transitionClusterToLoading` in `backend/refresh_setup.go` owns that gate.
 2. Governor reconciliation publishes desired/planned tier before executor work,
    serializes executor actions, and publishes applied tier only after reaching
    it. Planned and applied maps encode different ordering contracts.
 3. Cold clusters do not start object catalogs. `startObjectCatalogForTarget` in
-   `backend/app_object_catalog.go` gates on the serialized planned tier; re-warm
+   `backend/refresh_object_catalog.go` gates on the serialized planned tier; re-warm
    publishes a live plan before building and does not report the tier reached
    until the catalog exists.
 4. Foreground activation replays current lifecycle truth after serialized
