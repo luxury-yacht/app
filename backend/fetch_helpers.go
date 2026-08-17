@@ -89,7 +89,9 @@ func FetchResourceWithSelection[T any](
 		return cached, nil
 	}
 	ctx, cancel := resourceFetchContext(boundary)
-	defer cancel()
+	if cancel != nil {
+		defer cancel()
+	}
 
 	var retryDependencies resourceRetryDependencies
 	if boundary != nil {
@@ -145,7 +147,7 @@ func resourceFetchContext(boundary resourceFetchBoundary) (context.Context, cont
 		ctx = boundary.CtxOrBackground()
 	}
 	if _, hasDeadline := ctx.Deadline(); hasDeadline {
-		return ctx, func() {}
+		return ctx, nil
 	}
 	return context.WithTimeout(ctx, config.ResourceFetchCallTimeout)
 }
