@@ -50,7 +50,7 @@
     "yaml": "^2.9.0"
   },
   "devDependencies": {
-    "@biomejs/biome": "^2.5.7",
+    "@biomejs/biome": "^2.5.8",
     "@sentry/vite-plugin": "^5.4.0",
     "@storybook/react": "^10.5.7",
     "@storybook/react-vite": "^10.5.7",
