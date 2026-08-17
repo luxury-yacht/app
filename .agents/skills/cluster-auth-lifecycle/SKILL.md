@@ -23,9 +23,10 @@ add/remove behavior.
 
 ## Backend Entry Points
 
-- `backend/phase5_owners.go` (`ClusterRuntimeManager`,
-  `ClusterWorkspaceProjection`, `RefreshCoordinator`, and
-  `WorkspaceCoordinator`)
+- `backend/cluster_runtime_manager.go`
+- `backend/cluster_workspace_projection.go`
+- `backend/refresh_coordinator.go`
+- `backend/workspace_coordinator.go`
 - `backend/cluster_runtime_intent.go`
 - `backend/cluster_workspace.go`
 - `backend/app_kubernetes_client.go`
