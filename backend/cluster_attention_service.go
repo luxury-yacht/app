@@ -6,7 +6,7 @@ import (
 	"github.com/luxury-yacht/app/backend/refresh/snapshot"
 )
 
-type attentionIndexTarget interface {
+type attentionIgnoreRulesSetter interface {
 	SetIgnoreRules(snapshot.AttentionIgnoreRules)
 }
 
@@ -14,18 +14,18 @@ type ClusterAttentionService struct {
 	mu          sync.Mutex
 	preferences *PreferencesService
 	logger      *Logger
-	targets     map[string]attentionIndexTarget
+	targets     map[string]attentionIgnoreRulesSetter
 }
 
 func NewClusterAttentionService(preferences *PreferencesService, logger *Logger) *ClusterAttentionService {
 	return &ClusterAttentionService{
 		preferences: preferences,
 		logger:      logger,
-		targets:     make(map[string]attentionIndexTarget),
+		targets:     make(map[string]attentionIgnoreRulesSetter),
 	}
 }
 
-func (s *ClusterAttentionService) RegisterTarget(clusterID string, target attentionIndexTarget) {
+func (s *ClusterAttentionService) RegisterTarget(clusterID string, target attentionIgnoreRulesSetter) {
 	if s == nil || clusterID == "" || target == nil {
 		return
 	}
@@ -35,7 +35,7 @@ func (s *ClusterAttentionService) RegisterTarget(clusterID string, target attent
 	s.mu.Unlock()
 }
 
-func (s *ClusterAttentionService) UnregisterTarget(clusterID string, target attentionIndexTarget) {
+func (s *ClusterAttentionService) UnregisterTarget(clusterID string, target attentionIgnoreRulesSetter) {
 	if s == nil || clusterID == "" {
 		return
 	}

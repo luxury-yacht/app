@@ -31,7 +31,7 @@ type menuController interface {
 	bringAllWindowsToFront()
 }
 
-type workspaceWindowCreatorTarget interface {
+type workspaceWindowCreatorConfigurer interface {
 	configureWorkspaceWindowCreator(func())
 }
 
@@ -95,7 +95,7 @@ func addFileMenu(appMenu *application.Menu, app menuController) {
 // ConfigureWorkspaceWindowCreator connects the native New Window command to
 // the process-owned peer window registry without exposing composition wiring as
 // a frontend service method.
-func ConfigureWorkspaceWindowCreator(target workspaceWindowCreatorTarget, create func()) {
+func ConfigureWorkspaceWindowCreator(target workspaceWindowCreatorConfigurer, create func()) {
 	if target != nil {
 		target.configureWorkspaceWindowCreator(create)
 	}

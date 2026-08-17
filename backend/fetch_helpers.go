@@ -85,24 +85,11 @@ func FetchResourceWithSelection[T any](
 	fetchFunc func(context.Context) (T, error),
 ) (T, error) {
 	var zero T
-	if boundary != nil {
-		if cached, ok := boundary.responseCacheLookup(selectionKey, cacheKey); ok {
-			if typed, ok := cached.(T); ok {
-				return typed, nil
-			}
-			// Cached value was the wrong type; evict and refetch.
-			boundary.responseCacheDelete(selectionKey, cacheKey)
-		}
+	if cached, ok := cachedResource[T](boundary, selectionKey, cacheKey); ok {
+		return cached, nil
 	}
-	ctx := context.Background()
-	if boundary != nil {
-		ctx = boundary.CtxOrBackground()
-	}
-	if _, hasDeadline := ctx.Deadline(); !hasDeadline {
-		var cancel context.CancelFunc
-		ctx, cancel = context.WithTimeout(ctx, config.ResourceFetchCallTimeout)
-		defer cancel()
-	}
+	ctx, cancel := resourceFetchContext(boundary)
+	defer cancel()
 
 	var retryDependencies resourceRetryDependencies
 	if boundary != nil {
@@ -132,6 +119,35 @@ func FetchResourceWithSelection[T any](
 		boundary.responseCacheStore(selectionKey, cacheKey, result)
 	}
 	return result, nil
+}
+
+func cachedResource[T any](boundary resourceFetchBoundary, selectionKey, cacheKey string) (T, bool) {
+	var zero T
+	if boundary == nil {
+		return zero, false
+	}
+	cached, ok := boundary.responseCacheLookup(selectionKey, cacheKey)
+	if !ok {
+		return zero, false
+	}
+	typed, ok := cached.(T)
+	if !ok {
+		// Cached value was the wrong type; evict and refetch.
+		boundary.responseCacheDelete(selectionKey, cacheKey)
+		return zero, false
+	}
+	return typed, true
+}
+
+func resourceFetchContext(boundary resourceFetchBoundary) (context.Context, context.CancelFunc) {
+	ctx := context.Background()
+	if boundary != nil {
+		ctx = boundary.CtxOrBackground()
+	}
+	if _, hasDeadline := ctx.Deadline(); hasDeadline {
+		return ctx, func() {}
+	}
+	return context.WithTimeout(ctx, config.ResourceFetchCallTimeout)
 }
 
 // FetchNamespacedResource handles the common pattern for namespace-scoped resources.

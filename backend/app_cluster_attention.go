@@ -164,13 +164,13 @@ func (s *ClusterAttentionService) mutateGlobalAttentionIgnoreRules(
 	return &cloned, nil
 }
 
-func (s *ClusterAttentionService) applyAttentionIgnoreRulesToTarget(target attentionIndexTarget, rules snapshot.AttentionIgnoreRules) {
+func (s *ClusterAttentionService) applyAttentionIgnoreRulesToTarget(target attentionIgnoreRulesSetter, rules snapshot.AttentionIgnoreRules) {
 	if target != nil {
 		target.SetIgnoreRules(rules)
 	}
 }
 
-func (s *ClusterAttentionService) syncTarget(clusterID string, target attentionIndexTarget) {
+func (s *ClusterAttentionService) syncTarget(clusterID string, target attentionIgnoreRulesSetter) {
 	rules, err := s.GetClusterAttentionIgnoreRules(clusterID)
 	if err != nil {
 		if s.logger != nil {

@@ -78,7 +78,7 @@ func TestBackendOwnerSizeDistributionRemainsReviewed(t *testing.T) {
 		"ClusterRuntimeManager":        {Fields: 22, Methods: 69},
 		"ClusterWorkspaceProjection":   {Fields: 4, Methods: 5},
 		"ContainerLogsSelectionPolicy": {Fields: 1, Methods: 2},
-		"DataManagementCoordinator":    {Fields: 13, Methods: 9},
+		"DataManagementCoordinator":    {Fields: 13, Methods: 14},
 		"DesktopService":               {Fields: 14, Methods: 91},
 		"DesktopShell":                 {Fields: 17, Methods: 44},
 		"ErrorReportingService":        {Fields: 7, Methods: 7},

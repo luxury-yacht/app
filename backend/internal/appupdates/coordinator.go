@@ -513,34 +513,42 @@ func (coordinator *Coordinator) check(ctx context.Context, includeSkippedVersion
 	previous = cloneSnapshot(coordinator.snapshot)
 	coordinator.inFlight = false
 	coordinator.checkIncludesSkippedVersion = false
-	var result Snapshot
-	if err != nil {
+	result, err := coordinator.finishCheckLocked(release, err, includeSkippedVersion)
+	coordinator.mu.Unlock()
+	coordinator.publishIfChanged(previous, result)
+	return result, err
+}
+
+// finishCheckLocked projects a completed update check while coordinator.mu is held.
+func (coordinator *Coordinator) finishCheckLocked(
+	release *updater.Release,
+	checkErr error,
+	includeSkippedVersion bool,
+) (Snapshot, error) {
+	if checkErr != nil {
 		coordinator.snapshot = coordinator.baseSnapshot(StatusCheckError)
-		coordinator.snapshot.Error = err.Error()
-		result = cloneSnapshot(coordinator.snapshot)
-	} else if release == nil {
+		coordinator.snapshot.Error = checkErr.Error()
+		return cloneSnapshot(coordinator.snapshot), checkErr
+	}
+	if release == nil {
 		coordinator.pending = nil
 		if !includeSkippedVersion && coordinator.skippedVersion != "" {
 			coordinator.snapshot = coordinator.baseSnapshot(StatusSkipped)
 		} else {
 			coordinator.snapshot = coordinator.baseSnapshot(StatusCurrent)
 		}
-		result = cloneSnapshot(coordinator.snapshot)
-	} else if validationErr := coordinator.validateRelease(release); validationErr != nil {
+		return cloneSnapshot(coordinator.snapshot), nil
+	}
+	if validationErr := coordinator.validateRelease(release); validationErr != nil {
 		coordinator.pending = nil
 		coordinator.snapshot = coordinator.baseSnapshot(StatusCheckError)
 		coordinator.snapshot.Error = validationErr.Error()
-		result = cloneSnapshot(coordinator.snapshot)
-		err = validationErr
-	} else {
-		copy := *release
-		coordinator.pending = &copy
-		coordinator.snapshot = coordinator.snapshotForRelease(StatusAvailable, release)
-		result = cloneSnapshot(coordinator.snapshot)
+		return cloneSnapshot(coordinator.snapshot), validationErr
 	}
-	coordinator.mu.Unlock()
-	coordinator.publishIfChanged(previous, result)
-	return result, err
+	copy := *release
+	coordinator.pending = &copy
+	coordinator.snapshot = coordinator.snapshotForRelease(StatusAvailable, release)
+	return cloneSnapshot(coordinator.snapshot), nil
 }
 
 func (coordinator *Coordinator) checkClient(
@@ -912,7 +920,7 @@ func runCoordinatorOperationError(
 	return err
 }
 
-type resettableUpdateState interface {
+type updateStateResetter interface {
 	Reset() error
 }
 
@@ -986,7 +994,7 @@ func (coordinator *Coordinator) Reset(ctx context.Context) error {
 	}
 
 	var err error
-	if state, ok := coordinator.updateState.(resettableUpdateState); ok {
+	if state, ok := coordinator.updateState.(updateStateResetter); ok {
 		err = state.Reset()
 	}
 	coordinator.mu.Lock()

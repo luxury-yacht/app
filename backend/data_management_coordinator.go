@@ -57,57 +57,77 @@ func (c *DataManagementCoordinator) ClearAppState() error {
 	if err := c.requireDataManagementContext(); err != nil {
 		return err
 	}
-	reset := func() error {
-		var failures []error
-		if c.workspaceMutation != nil && c.resetRuntime != nil {
-			failures = append(failures, c.workspaceMutation("clear-app-state", c.resetRuntime))
-		} else if c.resetRuntime != nil {
-			failures = append(failures, c.resetRuntime())
-		}
-		ctx := context.Background()
-		if c.context != nil {
-			ctx = c.context()
-		}
-		if c.updates != nil {
-			failures = append(failures, c.updates.Reset(ctx))
-		}
-		if c.favorites != nil {
-			failures = append(failures, c.favorites.Reset())
-		}
-		if c.uiState != nil {
-			failures = append(failures, c.uiState.Reset())
-		}
-		if c.preferences != nil {
-			failures = append(failures, c.preferences.Reset())
-		}
-		if c.searchPathsChanged != nil {
-			failures = append(failures, c.runWorkspaceMutation("reset-kubeconfig-search-paths", func() error {
-				c.searchPathsChanged()
-				return nil
-			}))
-		}
-		if c.attention != nil {
-			c.attention.ResetProjection()
-		}
-		if c.desktopShell != nil {
-			c.desktopShell.ResetProcessState()
-		}
-		if c.preferences != nil {
-			c.preferences.DispatchDefaults()
-		}
-		if c.appLogs != nil {
-			failures = append(failures, c.appLogs.ClearAppLogs())
-		}
-		failures = compactErrors(failures)
-		if len(failures) > 0 {
-			return fmt.Errorf("clear app state: %w", errors.Join(failures...))
-		}
+	if c.errorReporting != nil {
+		return c.errorReporting.WithInstallationTelemetryQuiesced(c.clearAppState)
+	}
+	return c.clearAppState()
+}
+
+func (c *DataManagementCoordinator) clearAppState() error {
+	failures := c.resetStoredOwners()
+	failures = append(failures, c.resetKubeconfigSearchPaths())
+	c.resetRuntimeProjections()
+	if c.appLogs != nil {
+		failures = append(failures, c.appLogs.ClearAppLogs())
+	}
+	failures = compactErrors(failures)
+	if len(failures) > 0 {
+		return fmt.Errorf("clear app state: %w", errors.Join(failures...))
+	}
+	return nil
+}
+
+func (c *DataManagementCoordinator) resetStoredOwners() []error {
+	failures := []error{c.resetClusterRuntime()}
+	ctx := context.Background()
+	if c.context != nil {
+		ctx = c.context()
+	}
+	if c.updates != nil {
+		failures = append(failures, c.updates.Reset(ctx))
+	}
+	if c.favorites != nil {
+		failures = append(failures, c.favorites.Reset())
+	}
+	if c.uiState != nil {
+		failures = append(failures, c.uiState.Reset())
+	}
+	if c.preferences != nil {
+		failures = append(failures, c.preferences.Reset())
+	}
+	return failures
+}
+
+func (c *DataManagementCoordinator) resetClusterRuntime() error {
+	if c.resetRuntime == nil {
 		return nil
 	}
-	if c.errorReporting != nil {
-		return c.errorReporting.WithInstallationTelemetryQuiesced(reset)
+	if c.workspaceMutation != nil {
+		return c.workspaceMutation("clear-app-state", c.resetRuntime)
 	}
-	return reset()
+	return c.resetRuntime()
+}
+
+func (c *DataManagementCoordinator) resetKubeconfigSearchPaths() error {
+	if c.searchPathsChanged == nil {
+		return nil
+	}
+	return c.runWorkspaceMutation("reset-kubeconfig-search-paths", func() error {
+		c.searchPathsChanged()
+		return nil
+	})
+}
+
+func (c *DataManagementCoordinator) resetRuntimeProjections() {
+	if c.attention != nil {
+		c.attention.ResetProjection()
+	}
+	if c.desktopShell != nil {
+		c.desktopShell.ResetProcessState()
+	}
+	if c.preferences != nil {
+		c.preferences.DispatchDefaults()
+	}
 }
 
 func compactErrors(values []error) []error {
